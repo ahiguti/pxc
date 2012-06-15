@@ -1,0 +1,42 @@
+
+namespace inherit;
+private import io;
+
+interface ifoo {
+  function int get_fx() const;
+  function int get_fy() const;
+}
+
+struct foo : ifoo : {
+  int fx;
+  int fy;
+  function int get_fx() const { return fx; }
+  function int get_fy() const { return fy; }
+}
+
+macro rfoo ref{foo};
+macro irfoo ref{ifoo};
+
+function void f1(rfoo& v)
+{
+  v->fx += 3;
+  v->fy += 3;
+}
+
+function int f2(irfoo v)
+{
+  return v->get_fx() * v->get_fy();
+}
+
+function void test1()
+{
+  rfoo x1 = foo(3, 4);
+  irfoo x = x1;
+  f1(x1);
+  int z = f2(x);
+  io::println(x->get_fx());
+  io::println(x->get_fy());
+  io::println(z);
+}
+
+test1();

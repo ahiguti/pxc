@@ -1,0 +1,29 @@
+
+namespace m_globals2;
+import meta;
+import io;
+
+struct bar {
+  int f1;
+  long f2;
+  function int hoge(int x, string y) {
+    return x;
+  }
+  function ref{string} fuga(int x, string y) {
+    ref{string} r = y;
+    return r;
+  }
+}
+
+macro ns_types meta::types{"m_globals2"};
+macro finfo{f} meta::concat{
+  f, ":",
+  meta::rettype{f}, ":",
+  meta::argtypes{f}};
+macro tinfo{t} meta::concat{
+  t, ":",
+  meta::field_names{t}, ":",
+  meta::field_types{t}, ":",
+  meta::metamap{meta::member_functions{t}, finfo}};
+io::println(meta::to_string{meta::metamap{ns_types, tinfo}});
+

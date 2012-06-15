@@ -1,0 +1,230 @@
+namespace io;
+public import meta;
+
+public extern "ioimpl::pxc_argv" vector{string} argv;
+
+public extern "O_RDONLY"	int O_RDONLY;
+public extern "O_WRONLY"	int O_WRONLY;
+public extern "O_RDWR"		int O_RDWR;
+public extern "O_CREAT"		int O_CREAT;
+public extern "O_EXCL"		int O_EXCL;
+public extern "O_NOTTY"		int O_NOTTY;
+public extern "O_TRUNC"		int O_TRUNC;
+public extern "O_APPEND"	int O_APPEND;
+public extern "O_NONBLOCK"	int O_NONBLOCK;
+public extern "O_SYNC"		int O_SYNC;
+public extern "O_FSYNC"		int O_FSYNC;
+public extern "O_ASYNC"		int O_ASYNC;
+
+public extern "SEEK_SET"	int SEEK_SET;
+public extern "SEEK_CUR"	int SEEK_CUR;
+public extern "SEEK_END"	int SEEK_END;
+
+public multithreaded extern "ioimpl::file_impl" typedef file_impl;
+public macro file ref{file_impl};
+
+public multithreaded extern "ioimpl::statbuf" struct statbuf {
+  ulong st_dev;
+  ulong st_ino;
+  ulong st_mode;
+  ulong st_nlink;
+  ulong st_uid;
+  ulong st_gid;
+  ulong st_rdev;
+  ulong st_size;
+  ulong st_blksize;
+  ulong st_blocks;
+  ulong st_atime;
+  ulong st_mtime;
+  ulong st_ctime;
+}
+
+public threaded extern "ioimpl::open"
+  function file open(string fn, int flags, int mode);
+public threaded extern "ioimpl::read"
+  function int read(file f, string& buf, uint len);
+public threaded extern "ioimpl::write"
+  function int write(file f, string buf);
+public threaded extern "ioimpl::lseek"
+  function ulong lseek(file f, ulong offset, int whence);
+public threaded extern "ioimpl::errno_file"
+  function int errno_file(file f);
+public threaded extern "ioimpl::stat"
+  function int stat(string fn, statbuf& buf);
+public threaded extern "ioimpl::errno_global"
+  function int errno();
+
+public threaded function file open_r(string fn)
+  { return open(fn, O_RDONLY, 0); }
+public threaded function file creat(string fn)
+  { return open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0); }
+public threaded function file open_w(string fn)
+  { return open(fn, O_WRONLY, 0); }
+public threaded function file open_a(string fn)
+  { return open(fn, O_WRONLY | O_APPEND, 0); }
+public threaded function int read_all(file f, string& buf) {
+  while (true) {
+    if ((int r = read(f, buf, 16384)) <= 0) {
+      return r;
+    }
+  }
+  return 0;
+}
+public threaded function int read_file(string fn, string& buf) {
+  file f = open_r(fn);
+  if (errno_file(f) != 0) { return -1; }
+  return read_all(f, buf);
+}
+public threaded function int write_file(string fn, string buf) {
+  file f = open_w(fn);
+  if (errno_file(f) != 0) { return -1; }
+  return write(f, buf);
+}
+
+public threaded function {t} void print(t x)
+{
+  if (meta::eq{meta::to_string{t}, "string"}) {
+    print_string(x);
+  } else {
+    print_string(meta::symbol{t, meta::concat{t, "_to_string"}}(x));
+  }
+}
+
+public threaded function {t} void println(t x)
+{
+  if (meta::eq{meta::to_string{t}, "string"}) {
+    println_string(x);
+  } else {
+    println_string(meta::symbol{t, meta::concat{t, "_to_string"}}(x));
+  }
+}
+
+private threaded extern "ioimpl::io_initialize"
+  function int io_initialize();
+private threaded extern "ioimpl::print_string"
+  function void print_string(string x);
+private threaded extern "ioimpl::println_string"
+  function void println_string(string x);
+
+io_initialize();
+
+extern "type" inline
+#include <stdio.h>
+#include <sys/types.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <sys/stat.h>
+#include <unistd.h>
+namespace ioimpl {
+typedef struct ::stat statbuf;
+struct file_impl;
+};
+
+extern "fdecl" inline
+namespace ioimpl {
+extern pxcrt::vector<pxcrt::string> pxc_argv;
+inline void print_string(const pxcrt::string& x) {
+  fwrite(x.data(), x.size(), 1, stdout);
+}
+inline void println_string(const pxcrt::string& x) {
+  print_string(x + "\n");
+}
+struct file_impl {
+  file_impl() : fd(-1), err(0) { }
+  ~file_impl() { if (fd >= 0) close(fd); }
+  int fd;
+  int err;
+private:
+  file_impl(const file_impl&);
+  file_impl& operator =(const file_impl&);
+};
+typedef pxcrt::rcptr< pxcrt::rcval<file_impl> > file_ptr;
+file_ptr open(const pxcrt::string& fn, int cr, int md);
+unsigned long long lseek(file_ptr::rawptr f, unsigned long long offset,
+  int whence);
+unsigned int read(file_ptr::rawptr f, pxcrt::string& buf, unsigned int len);
+unsigned int write(file_ptr::rawptr f, const pxcrt::string& buf);
+int stat(const pxcrt::string& fn, ioimpl::statbuf& buf);
+int errno_file(file_ptr::rawptr f);
+int errno_global();
+};
+
+extern "fdef" inline
+namespace ioimpl {
+#include <stdlib.h>
+#include <string.h>
+pxcrt::vector<pxcrt::string> pxc_argv;
+file_ptr open(const pxcrt::string& fn, int flags, int md)
+{
+  file_ptr f(new pxcrt::rcval<file_impl>());
+  file_impl& fref = f->value$z;
+  fref.fd = ::open(fn.c_str(), flags, md);
+  fref.err = (fref.fd < 0 ? errno : 0);
+  return f;
+}
+unsigned long long lseek(file_ptr::rawptr f, unsigned long long offset,
+  int whence)
+{
+  file_impl& fref = f->value$z;
+  const off_t r = ::lseek(fref.fd, offset, whence);
+  fref.err = (r == (off_t)-1) ? errno : 0;
+  return r;
+}
+unsigned int read(file_ptr::rawptr f, pxcrt::string& buf, unsigned int len)
+{
+  file_impl& fref = f->value$z;
+  const size_t oldsz = buf.size();
+  buf.resize(oldsz + len);
+  char *const ptr = &buf[oldsz];
+  const ssize_t rlen = ::read(fref.fd, ptr, len);
+  if (rlen >= 0) {
+    fref.err = 0;
+    buf.resize(oldsz + (rlen >= 0 ? rlen : 0));
+    return rlen;
+  } else {
+    buf.resize(oldsz);
+    fref.err = errno;
+    return 0;
+  }
+}
+unsigned int write(file_ptr::rawptr f, const pxcrt::string& buf)
+{
+  file_impl& fref = f->value$z;
+  const size_t sz = buf.size();
+  const char *const ptr = &buf[0];
+  const ssize_t wlen = ::write(fref.fd, ptr, sz);
+  fref.err = (wlen >= 0 ? 0 : errno);
+  return wlen;
+}
+int stat(const pxcrt::string& fn, ioimpl::statbuf& buf)
+{
+  return ::stat(fn.c_str(), &buf);
+}
+int errno_file(file_ptr::rawptr f)
+{
+  return f->value$z.err;
+}
+int errno_global()
+{
+  return errno;
+}
+void io_initialize()
+{
+  static int init_flag = 0;
+  if (!init_flag) {
+    init_flag = 1;
+  }
+  char buf[64];
+  int c = 0;
+  while (true) {
+    snprintf(buf, sizeof(buf), "PXC_ARG%d", c++);
+    const char *ent = getenv(buf);
+    if (ent == 0) {
+      break;
+    }
+    const pxcrt::string s(ent);
+    pxc_argv.push_back(s);
+  }
+}
+};
+

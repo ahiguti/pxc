@@ -1,0 +1,27 @@
+
+import meta;
+import io;
+
+function {f} meta::rettype{f} apply(meta::argtype{f, 0} x)
+{
+  return f(x);
+}
+
+struct foo {
+	int x;
+	function int n(int y) {
+		int oldx = x;
+		x = y;
+		return oldx;
+	}
+	function int m(int y) const {
+		function int nf(int z) {
+			return apply{n}(z); // error
+		}
+		return nf(y);
+	}
+}
+
+ref{foo} v = foo(10);
+io::println(v->m(20));
+

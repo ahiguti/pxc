@@ -1,0 +1,29 @@
+
+namespace ttest;
+import thread "";
+import io;
+
+function void hoge(int x) {
+  io::main.println(x);
+}
+
+multithreaded struct my_thread_obj {
+  int x;
+  int y;
+  io::ioref io;
+  function void main() {
+    io.println("my thread main");
+    io.println(x);
+    hoge(y); // error: calling global function
+    // io.println(hoge); // error
+    // io::main.println(y); // error
+  }
+}
+
+function void test1()
+{
+  thread_t thr = create_thread(my_thread_obj(123, 456, io::main));
+  thr.join();
+}
+
+test1();

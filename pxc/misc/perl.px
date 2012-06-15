@@ -1,0 +1,424 @@
+
+// vim:sw=2
+
+namespace perl;
+
+extern "cflags" "`perl -MConfig -e 'print $Config{ccflags}'`";
+extern "incdir" "`perl -MConfig -e 'print $Config{archlib}'`/CORE";
+
+extern "pxperl::perlsv" struct perlsv { }
+extern "pxperl::perlav" struct perlav { }
+extern "pxperl::perlhv" struct perlhv { }
+extern "pxperl::xswrap0" struct {t} xswrap0
+  { extern "xsnew" function void xsnew(string s); }
+extern "pxperl::xswrap1" struct {t} xswrap1
+  { extern "xsnew" function void xsnew(string s); }
+extern "pxperl::xswrap2" struct {t} xswrap2
+  { extern "xsnew" function void xsnew(string s); }
+
+extern "pxperl::sv_to_long" function long sv_to_long(perlsv x);
+extern "pxperl::long_to_sv" function perlsv long_to_sv(long x);
+
+extern "type" inline
+#include <EXTERN.h>
+#include <perl.h>
+#include <XSUB.h>
+namespace pxperl {
+struct perlsv {
+public:
+  struct reference { };
+  struct cobject { };
+  friend struct perlav;
+  friend struct perlhv;
+  perlsv();
+  perlsv(const perlsv& x);
+  explicit perlsv(SV *sv);
+  explicit perlsv(IV iv);
+  explicit perlsv(NV nv);
+  explicit perlsv(const char *cstr);
+  perlsv(const char *cstr, size_t len);
+  perlsv(const reference& dmy, SV *sv);
+  perlsv(const reference& dmy, AV *av);
+  perlsv(const reference& dmy, HV *hv);
+  perlsv(const cobject& dmy, void *ptr, const char *klass);
+  ~perlsv();
+  SV *get() const { return value; }
+  perlsv& operator =(const perlsv& sv);
+  void reset();
+  SV *get_rv() const;
+  void *get_cobject() const;
+private:
+  SV *value;
+};
+struct perlav {
+public:
+  perlav();
+  perlav(const perlav& x);
+  explicit perlav(AV *av);
+  perlav(SV **svs, size_t num);
+  perlav(IV *ivs, size_t num);
+  perlav(NV *nvs, size_t num);
+  perlav(const char *str, size_t slens, size_t num);
+  ~perlav();
+  perlav& operator =(const perlav& x);
+  AV *get() const { return value; }
+  size_t size() const;
+  SV *fetch(size_t idx) const;
+  void set_size(size_t idx);
+  bool store(size_t idx, SV *v);
+  bool store(size_t idx, IV iv);
+  bool store(size_t idx, NV nv);
+  bool store(size_t idx, const char *str);
+  bool store(size_t idx, const char *str, size_t len);
+private:
+  AV *value;
+};
+struct perlhv {
+  perlhv();
+  perlhv(const perlhv& x);
+  explicit perlhv(HV *hv);
+  ~perlhv();
+  HV *get() const { return value; }
+  perlhv& operator =(const perlhv& x);
+  SV *fetch(const char *key, size_t klen) const;
+  bool store(const char *key, size_t klen, SV *v);
+private:
+  HV *value;
+};
+template <typename F> struct xswrap0 {
+  static void call(pTHX_ CV *cv) {
+    dXSARGS;
+    perlsv rv = F().call$f();
+    SV *const rvraw = rv.get();
+    SvREFCNT_inc(rvraw);
+    ST(0) = sv_2mortal(rvraw);
+    XSRETURN(1);
+  }
+  static void xsnew(const pxcrt::string& name) {
+    newXS((char *)name.c_str(), &call, "pxperl");
+  }
+};
+template <typename F> struct xswrap1 {
+  static void call(pTHX_ CV *cv) {
+    dXSARGS;
+    perlsv arg0(items > 0 ? ST(0) : &PL_sv_undef);
+    perlsv rv = F().call$f(arg0);
+    SV *const rvraw = rv.get();
+    SvREFCNT_inc(rvraw);
+    ST(0) = sv_2mortal(rvraw);
+    XSRETURN(1);
+  }
+  static void xsnew(const pxcrt::string& name) {
+    newXS((char *)name.c_str(), &call, "pxperl");
+  }
+};
+template <typename F> struct xswrap2 {
+  static void call(pTHX_ CV *cv) {
+    dXSARGS;
+    perlsv arg0(items > 0 ? ST(0) : &PL_sv_undef);
+    perlsv arg1(items > 1 ? ST(1) : &PL_sv_undef);
+    perlsv rv = F().call$f(arg0, arg1);
+    SV *const rvraw = rv.get();
+    SvREFCNT_inc(rvraw);
+    ST(0) = sv_2mortal(rvraw);
+    XSRETURN(1);
+  }
+  static void xsnew(const pxcrt::string& name) {
+    newXS((char *)name.c_str(), &call, "pxperl");
+  }
+};
+long sv_to_long(const perlsv& x)
+{
+  // return SvIOK(x.get()) ? SvIV(x.get()) : 0;
+  return SvIV(x.get());
+}
+perlsv long_to_sv(long x)
+{
+  return perlsv((IV)x);
+}
+}; // namespace pxperl
+
+extern "fdef" inline
+namespace pxperl {
+perlsv::perlsv()
+  : value(&PL_sv_undef)
+{
+}
+perlsv::perlsv(const perlsv& x)
+  : value(x.value)
+{
+  SvREFCNT_inc(value);
+}
+perlsv::perlsv(SV *sv)
+  : value(sv ? sv : &PL_sv_undef)
+{
+  SvREFCNT_inc(value);
+}
+perlsv::perlsv(IV iv)
+  : value(newSViv(iv))
+{
+}
+perlsv::perlsv(NV nv)
+  : value(newSVnv(nv))
+{
+}
+perlsv::perlsv(const char *cstr)
+  : value(newSVpv(cstr, 0))
+{
+}
+perlsv::perlsv(const char *cstr, size_t len)
+  : value(newSVpvn(cstr, len))
+{
+}
+perlsv::perlsv(const reference&, SV *sv)
+{
+  value = newRV_inc(sv);
+}
+perlsv::perlsv(const reference&, AV *av)
+{
+  value = newRV_inc((SV *)av);
+}
+perlsv::perlsv(const reference&, HV *hv)
+{
+  value = newRV_inc((SV *)hv);
+}
+perlsv::perlsv(const cobject&, void *ptr, const char *klass)
+{
+}
+perlsv::~perlsv()
+{
+  SvREFCNT_dec(value);
+}
+perlsv&
+perlsv::operator =(const perlsv& x)
+{
+  if (x.value != value) {
+    SvREFCNT_dec(value);
+    value = x.value;
+    SvREFCNT_inc(value);
+  }
+  return *this;
+}
+void
+perlsv::reset()
+{
+  SvREFCNT_dec(value);
+  value = &PL_sv_undef;
+}
+SV *
+perlsv::get_rv() const
+{
+  return SvROK(value) ? SvRV(value) : 0;
+}
+void *
+perlsv::get_cobject() const
+{
+  SV *const rv = SvROK(value) ? SvRV(value) : 0;
+  return SvIOK(rv) ? reinterpret_cast<void *>(SvIV(rv)) : 0;
+}
+perlav::perlav()
+  : value(newAV())
+{
+}
+perlav::perlav(const perlav& x)
+  : value(x.value)
+{
+  SvREFCNT_inc(value);
+}
+perlav::perlav(AV *av)
+  : value(av)
+{
+  if (value) {
+    SvREFCNT_inc(value);
+  } else {
+    value = newAV();
+  }
+}
+perlav::perlav(SV **svs, size_t num)
+  : value(0)
+{
+  value = av_make(num, svs);
+}
+perlav::perlav(IV *ivs, size_t num)
+{
+  SV *svs[num ? num : 1];
+  for (size_t i = 0; i < num; ++i) {
+    svs[i] = newSViv(ivs[i]);
+  }
+  value = av_make(num, svs);
+  for (size_t i = 0; i < num; ++i) {
+    SvREFCNT_dec(svs[i]);
+  }
+}
+perlav::~perlav()
+{
+  SvREFCNT_dec(value);
+}
+perlav&
+perlav::operator =(const perlav& x)
+{
+  if (x.value != value) {
+    SvREFCNT_dec(value);
+    value = x.value;
+    SvREFCNT_inc(value);
+  }
+  return *this;
+}
+size_t
+perlav::size() const
+{
+  const long len = av_len(value);
+  return len + 1;
+}
+SV *
+perlav::fetch(size_t idx) const
+{
+  SV **svp = av_fetch(value, idx, 0);
+  return svp ? *svp : 0;
+}
+void
+perlav::set_size(size_t idx)
+{
+  if (idx != 0) {
+    av_extend(value, idx - 1);
+  }
+}
+bool
+perlav::store(size_t idx, SV *v)
+{
+  SvREFCNT_inc(v);
+  SV **svp = av_store(value, idx, v);
+  if (svp == 0) {
+    SvREFCNT_dec(v);
+  }
+  return svp != 0;
+}
+bool
+perlav::store(size_t idx, IV iv)
+{
+  SV *v = newSViv(iv);
+  SV **svp = av_store(value, idx, v);
+  if (svp == 0) {
+    SvREFCNT_dec(v);
+  }
+  return svp != 0;
+}
+bool
+perlav::store(size_t idx, NV nv)
+{
+  SV *v = newSVnv(nv);
+  SV **svp = av_store(value, idx, v);
+  if (svp == 0) {
+    SvREFCNT_dec(v);
+  }
+  return svp != 0;
+}
+bool
+perlav::store(size_t idx, const char *str)
+{
+  SV *v = newSVpv(str, 0);
+  SV **svp = av_store(value, idx, v);
+  if (svp == 0) {
+    SvREFCNT_dec(v);
+  }
+  return svp != 0;
+}
+bool
+perlav::store(size_t idx, const char *str, size_t slen)
+{
+  SV *v = newSVpvn(str, slen);
+  SV **svp = av_store(value, idx, v);
+  if (svp == 0) {
+    SvREFCNT_dec(v);
+  }
+  return svp != 0;
+}
+perlhv::perlhv()
+  : value(newHV())
+{
+}
+perlhv::perlhv(const perlhv& x)
+  : value(x.value)
+{
+  SvREFCNT_inc(value);
+}
+perlhv::perlhv(HV *hv)
+  : value(hv)
+{
+  if (value) {
+    SvREFCNT_inc(value);
+  } else {
+    value = newHV();
+  }
+}
+perlhv::~perlhv()
+{
+  SvREFCNT_dec(value);
+}
+perlhv&
+perlhv::operator =(const perlhv& x)
+{
+  if (x.value != value) {
+    SvREFCNT_inc(x.value);
+    SvREFCNT_dec(value);
+    value = x.value;
+  }
+  return *this;
+}
+SV *
+perlhv::fetch(const char *key, size_t klen) const
+{
+  SV **svp = hv_fetch(value, key, klen, 0);
+  return svp ? *svp : 0;
+}
+bool
+perlhv::store(const char *key, size_t klen, SV *v)
+{
+  SvREFCNT_inc(v);
+  SV **svp = hv_store(value, key, klen, v, 0);
+  if (svp == 0) {
+    SvREFCNT_dec(v);
+  }
+  return svp != 0;
+}
+}; // namespace pxperl
+
+struct {f} wrap0 {
+  function perlsv call() { return f(); }
+}
+struct {f} wrap1 {
+  function perlsv call(perlsv a0) { return f(a0); }
+}
+struct {f} wrap2 {
+  function perlsv call(perlsv a0, perlsv a1) { return f(a0, a1); }
+}
+
+function {f} void xsnew1(string name) {
+  xswrap1{wrap1{f}} o;
+  o.xsnew(name);
+}
+
+function {f} void xsnew2(string name) {
+  xswrap2{wrap2{f}} o;
+  o.xsnew(name);
+}
+
+// io::println("ok loaded");
+
+import io;
+
+function perlsv f1(perlsv x)
+{
+  io::println("f1 called!");
+  return x;
+}
+
+function perlsv f2(perlsv x, perlsv y)
+{
+  io::println("f2 called!");
+  return long_to_sv(sv_to_long(x) + sv_to_long(y));
+}
+
+xsnew1{f1}("hoge::f1");
+xsnew2{f2}("hoge::f2");
+

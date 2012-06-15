@@ -1,0 +1,30 @@
+
+namespace m_tparam;
+import meta;
+import io;
+
+function {t, s} int foo() {
+  return 3;
+}
+
+struct {t} bar {
+  int x;
+}
+
+struct baz {
+}
+
+macro name_np{s}
+  meta::concat{"(", meta::full_string{s}, ":", meta::num_tparams{s}, ")"};
+macro funcs{ns} meta::metamap{meta::functions{ns}, name_np};
+macro types{ns} meta::metamap{meta::types{ns}, name_np};
+macro ns_funcs funcs{"m_tparam"};
+macro ns_types types{"m_tparam"};
+io::println(meta::concat{"FUNC: ",  meta::full_string{ns_funcs}});
+io::println(meta::concat{"TYPE: ",  meta::full_string{ns_types}});
+
+macro inst foo{baz, baz};
+io::println(meta::concat{"INST: ",  meta::full_string{name_np{inst}}});
+io::println(meta::full_string{int});
+io::println(meta::full_string{tree_map{int,int}});
+

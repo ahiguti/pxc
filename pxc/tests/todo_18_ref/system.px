@@ -1,0 +1,108 @@
+
+namespace system;
+import meta;
+
+public multithreaded extern "pxcsystem::system" struct system { }
+public macro system_t tref{system};
+public multithreaded extern "pxcsystem::thread" struct thread { }
+public macro thread_t tref{thread};
+public threaded function {func} thread_t system_create_thread(
+  system_t sys, meta::argtype{func, 1} shared)
+{
+  macro targ meta::argtype{func, 1};
+  tref{thread_main} r = thread_main_impl{targ, func}(shared);
+  return system_create_thread_impl(sys, r);
+}
+public threaded extern "pxcsystem::thread_join"
+  function void thread_join(thread_t thr);
+public extern "pxcsystem::system_main" system_t system_main;
+
+private multithreaded interface thread_main {
+  function void main(system_t thrsys);
+}
+private multithreaded struct {tshared, func} thread_main_impl : thread_main : {
+  tshared shared;
+  function void main(system_t thrsys) {
+    func(thrsys, shared);
+  }
+}
+private macro thread_main_t tref{thread_main};
+private threaded extern "pxcsystem::system_create_thread_impl"
+  function thread_t system_create_thread_impl(system_t s, thread_main_t f);
+
+extern "type" inline
+namespace pxcsystem {
+struct system;
+struct thread;
+};
+
+extern "fdecl" inline
+namespace pxcsystem {
+typedef pxcrt::rcptr< pxcrt::trcval<system> > system_ptr;
+typedef pxcrt::rcptr< pxcrt::trcval<thread> > thread_ptr;
+typedef pxcrt::rcptr< system$n::thread_main$i > main_ptr;
+struct system { };
+struct thread {
+  thread() : tid(), need_join(false) { }
+  ~thread() { join(); }
+  void join();
+  pthread_t tid;
+  bool need_join;
+  main_ptr mptr;
+};
+thread_ptr system_create_thread_impl(system_ptr::rawptr s, main_ptr::rawptr m);
+void thread_join(thread_ptr::rawptr t);
+extern system_ptr system_main;
+};
+
+extern "fdef" inline
+#define DBG(x)
+namespace pxcsystem {
+system_ptr system_main;
+void *pxc_thread_start(void *arg)
+{
+  main_ptr::rawptr m = static_cast<main_ptr::rawptr>(arg);
+  pxcrt::lockobject lck(m->get_mutex$z()); /* lock the main object */
+  try {
+    m->main$f(system_main);
+  } catch (...) {
+    /* FIXME */
+  }
+  return 0;
+}
+thread_ptr system_create_thread_impl(system_ptr::rawptr s, main_ptr::rawptr m)
+{
+  thread_ptr thr = thread_ptr(pxcrt::boxing());
+  thread& impl = thr->value$z;
+  impl.mptr = m; /* root */
+  if (pthread_create(&impl.tid, 0, pxc_thread_start, m) != 0) {
+    thr = thread_ptr();
+    DBG(fprintf(stderr, "failed to create thread\n"));
+  } else {
+    DBG(fprintf(stderr, "create thread\n"));
+    impl.need_join = true;
+  }
+  return thr;
+}
+void thread_join(thread_ptr::rawptr t)
+{
+  if (t == 0) {
+    return;
+  }
+  pxcrt::lockobject lck(t->get_mutex$z());
+  t->value$z.join();
+}
+void thread::join()
+{
+  if (!need_join) {
+    DBG(fprintf(stderr, "no need to join\n"));
+    return;
+  }
+  DBG(fprintf(stderr, "join\n"));
+  const int e = pthread_join(tid, 0);
+  assert(e == 0);
+  need_join = false;
+}
+};
+#undef DBG
+

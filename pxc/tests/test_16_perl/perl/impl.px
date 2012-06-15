@@ -1,0 +1,675 @@
+
+// vim:sw=2
+
+namespace perl::impl;
+public import meta "";
+
+public extern "pxperl::perlsv" struct sv { }
+public extern "pxperl::perlav" struct av {
+  extern "fetch" function sv fetch(size_t idx) const;
+  extern "store" function bool store(size_t idx, sv val);
+  extern "size" function size_t size() const;
+  extern "resize" function void resize(size_t idx);
+  // TODO: shift, unshift, push, pop
+}
+public extern "pxperl::perlhv" struct hv {
+  extern "fetch" function sv fetch(string key) const;
+  extern "store" function bool store(string key, sv val);
+}
+
+public extern "pxperl::sv_to_int" function int sv_to_int(sv x);
+public extern "pxperl::int_to_sv" function sv int_to_sv(int x);
+public extern "pxperl::sv_to_long" function long sv_to_long(sv x);
+public extern "pxperl::long_to_sv" function sv long_to_sv(long x);
+public extern "pxperl::sv_to_double" function double sv_to_double(sv x);
+public extern "pxperl::double_to_sv" function sv double_to_sv(long x);
+public extern "pxperl::sv_to_string" function string sv_to_string(sv x);
+public extern "pxperl::string_to_sv" function sv string_to_sv(string x);
+
+public function {t} t sv_to_value(sv x) {
+  type_pl{t} o;
+  return o.from_perlsv(x);
+}
+
+public function {t} sv value_to_sv(t x) {
+  type_pl{t} o;
+  return o.to_perlsv(x);
+}
+
+public function {f} void xs_create_function() {
+  func_pl{func_px{f}} o;
+  o.xs_create_function(meta::nsname{f});
+}
+
+public function {t} void xs_create_type() {
+  type_pl{t} o;
+  o.xs_create_type(meta::full_string{t}); // TODO: when t has parameters?
+}
+
+public function {t} sv value_to_perlsv(t x)
+{
+  macro symstr concat{t, "_to_perlsv"};
+  macro sym symbol{t, symstr};
+  macro cat category{t};
+  macro fullname full_string{t};
+  sv r;
+  if (eq{fullname, "perl::impl::sv"}) {
+    r = x;
+  } else if (eq{meta::to_string{sym}, symstr}) {
+    r = sym(x);
+  } else if (eq{cat, "builtin"}) {
+    if (eq{fullname, "string"}) {
+      r = string_to_sv(x);
+    } else if (or{eq{fullname, "float"}, eq{fullname, "double"}}) {
+      r = double_to_sv(x);
+    } else if (or{eq{fullname, "int"}, eq{fullname, "bool"}}) {
+      r = int_to_sv(int(x));
+    } else if (eq{fullname, "unit"}) {
+      r = int_to_sv(0);
+    } else {
+      r = long_to_sv(long(x));
+    }
+  } else {
+    r = value_to_sv(x);
+  }
+  return r;
+}
+
+public function {t} t perlsv_to_value(sv x)
+{
+  macro symstr concat{"perlsv_to_", t};
+  macro sym symbol{t, symstr};
+  macro cat category{t};
+  macro fullname full_string{t};
+  if (eq{fullname, "perl::impl::sv"}) {
+    return x;
+  } else if (eq{meta::to_string{sym}, symstr}) {
+    return sym(x);
+  } else if (eq{cat, "builtin"}) {
+    if (eq{fullname, "string"}) {
+      return sv_to_string(x);
+    } else if (or{eq{fullname, "float"}, eq{fullname, "double"}}) {
+      return sv_to_double(x);
+    } else if (or{eq{fullname, "int"}, eq{fullname, "bool"}}) {
+      return t(sv_to_int(x));
+    } else if (eq{fullname, "unit"}) {
+      return unit();
+    } else {
+      return t(sv_to_long(x));
+    }
+  } else {
+    return sv_to_value{t}(x);
+  }
+}
+
+// private
+
+private extern "pxperl::perlsvarr" struct svarr {
+  extern "get" function sv get(size_t i) const;
+}
+
+private extern "pxperl::func_pl" struct {t} func_pl {
+  extern "xs_create_function" function void xs_create_function(string s);
+}
+
+private struct {f} func_px {
+  function sv call(svarr a) {
+    foreach (i : meta::seq{meta::argnum{f}};
+      j : perlsv_to_value{meta::argtype{f, i}}(a.get(i)); ",") {
+      if (eq{meta::full_string{meta::rettype{f}}, "void"}) {
+	f(j);
+	return sv();
+      } else {
+	return value_to_perlsv{meta::rettype{f}}(f(j));
+      }
+    }
+  }
+}
+
+private extern "pxperl::type_pl" "nocascade" struct {t} type_pl {
+  extern "to_perlsv" function sv to_perlsv(t x);
+  extern "from_perlsv" function t from_perlsv(sv x);
+  extern "xs_create_type" function void xs_create_type(string s);
+}
+
+// implementation
+
+extern "cflags" "`perl -MConfig -e 'print $Config{ccflags}'`";
+extern "incdir" "`perl -MConfig -e 'print $Config{archlib}'`/CORE";
+extern "ldflags" "`perl -MConfig -e 'print $Config{ldflags}'`";
+
+extern "type" inline
+#include <EXTERN.h>
+#include <perl.h>
+#include <XSUB.h>
+#include <list>
+// #include <typeinfo>
+#define DBG(x)
+namespace pxperl {
+struct perlsv {
+public:
+  struct reference { };
+  friend struct perlav;
+  friend struct perlhv;
+  perlsv();
+  perlsv(const perlsv& x);
+  explicit perlsv(SV *sv);
+  explicit perlsv(IV iv);
+  explicit perlsv(NV nv);
+  explicit perlsv(const char *cstr);
+  perlsv(const char *cstr, size_t len);
+  perlsv(const reference& dmy, SV *sv);
+  perlsv(const reference& dmy, AV *av);
+  perlsv(const reference& dmy, HV *hv);
+  ~perlsv();
+  SV *get() const { return value; }
+  perlsv& operator =(const perlsv& sv);
+  void reset();
+private:
+  /* TODO: can be simplified */
+  SV *value;
+  std::list<perlsv *>::iterator iter;
+};
+struct perlav {
+public:
+  perlav();
+  perlav(const perlav& x);
+  explicit perlav(AV *av);
+  ~perlav();
+  perlav& operator =(const perlav& x);
+  void reset();
+  AV *get() const { return value; }
+  size_t size() const;
+  perlsv fetch(size_t idx) const;
+  bool store(size_t idx, const perlsv& v);
+  void resize(size_t idx);
+private:
+  AV *value;
+  std::list<perlav *>::iterator iter;
+};
+struct perlhv {
+  perlhv();
+  perlhv(const perlhv& x);
+  explicit perlhv(HV *hv);
+  ~perlhv();
+  HV *get() const { return value; }
+  perlhv& operator =(const perlhv& x);
+  void reset();
+  perlsv fetch(const pxcrt::string& key) const;
+  bool store(const pxcrt::string& key, const perlsv& v);
+private:
+  HV *value;
+  std::list<perlhv *>::iterator iter;
+};
+struct perlsvarr {
+  perlsvarr(SV **arr, size_t sz) : arr(arr), sz(sz) { }
+  perlsvarr() : arr(0), sz(0) { } /* dummy */
+  perlsvarr(const perlsvarr&) : arr(0), sz(0) { } /* dummy */
+  perlsvarr& operator =(const perlsvarr&) { return *this; } /* dummy */
+  size_t size() const { return sz; }
+  perlsv get(size_t i) const {
+    return perlsv(i < sz ? arr[i] : 0);
+  }
+private:
+  SV **arr;
+  size_t sz;
+};
+template <typename F> struct func_pl {
+  static void call(pTHX_ CV *cv) { // throw(perl)
+    dXSARGS;
+    SV **const args = (SV **)alloca(sizeof(SV *) * items);
+    for (int i = 0; i < items; ++i) {
+      args[i] = ST(i);
+    }
+    SV *rvraw = 0;
+    try {
+      perlsv rv = F().call$f(perlsvarr(args, items));
+      rvraw = rv.get();
+      if (rvraw == 0) {
+	rvraw = &PL_sv_undef;
+      }
+      SvREFCNT_inc(rvraw);
+    } catch (const std::exception& e) {
+      croak(e.what());
+    }
+    ST(0) = sv_2mortal(rvraw);
+    XSRETURN(1);
+  }
+  static void xs_create_function(const pxcrt::string& name) {
+    if (func_cv != 0) { return; }
+    func_cv = newXS((char *)name.c_str(), &call,
+      "func_pl" /* must be a literal */);
+  }
+  static CV *func_cv;
+};
+template <typename F> CV *func_pl<F>::func_cv;
+template <typename T> struct type_pl {
+  static perlsv to_perlsv(const T& v) { // throws(c++)
+    SV *const objref = newSViv(0); // FIXME: throws(perl)
+    SV *const obj = newSVrv(objref, klass_name.c_str()); // FIXME: throws(perl)
+    IV value_iv = 0;
+    DBG(fprintf(stderr, "to_perlsv klass=%s typeid=%s\n", klass_name.c_str(),
+      typeid(T).name()));
+    if (sizeof(T) <= sizeof(IV)) {
+      DBG(fprintf(stderr, "to_perlsv klass=%s nobox\n", klass_name.c_str()));
+      new ((void *)&value_iv) T(v); // throws(c++)
+    } else {
+      DBG(fprintf(stderr, "to_perlsv klass=%s box\n", klass_name.c_str()));
+      value_iv = (IV)(void *)new T(v); // throws(c++)
+    }
+    sv_setiv(obj, value_iv);
+    DBG(fprintf(stderr, "to_perlsv klass=%s obj=%p objref=%p iv=%lx\n",
+      klass_name.c_str(), obj, objref, (unsigned long)value_iv));
+    SvREADONLY_on(obj);
+    return perlsv(objref);
+  }
+  static T from_perlsv(const perlsv& v) { // throws(c++)
+    IV value_iv = 0;
+    if (!get_value_iv(v.get(), value_iv)) {
+      throw std::runtime_error("from_perlsv"); // FIXME
+    }
+    if (sizeof(T) <= sizeof(IV)) {
+      DBG(fprintf(stderr, "from_perlsv klass=%s nobox\n", klass_name.c_str()));
+      return *(T *)(void *)&value_iv;
+    } else {
+      DBG(fprintf(stderr, "from_perlsv klass=%s box\n", klass_name.c_str()));
+      return *(T *)(void *)value_iv;
+    }
+  }
+  static void destr(pTHX_ CV *cv) { // throws(perl)
+    dXSARGS;
+    if (items < 1) {
+      Perl_croak(aTHX_ "destr: wrong number of args");
+    }
+    SV *const sv = ST(0);
+    IV value_iv = 0;
+    if (!get_value_iv(sv, value_iv)) {
+      Perl_croak(aTHX_ "destr: invlid argument");
+    }
+    if (sizeof(T) <= sizeof(IV)) {
+      DBG(fprintf(stderr, "destr klass=%s nobox\n", klass_name.c_str()));
+      T *const ptr = (T *)(void *)&value_iv;
+      ptr->~T();
+    } else {
+      DBG(fprintf(stderr, "destr klass=%s box\n", klass_name.c_str()));
+      T *const ptr = (T *)(void *)value_iv;
+      delete ptr;
+    }
+    XSRETURN_EMPTY;
+  }
+  static char to_hexchar(const int x) {
+    if (x < 10) {
+      return '0' + x;
+    } else if (x < 16) {
+      return 'a' + x - 10;
+    }
+    return '0';
+  }
+  static std::string generate_klass_name(const std::string& s) {
+    std::string r;
+    for (size_t i = 0; i < s.size(); ++i) {
+      const char ch = s[i];
+      if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+	(ch >= '0' && ch <= '9')) {
+	r.push_back(ch);
+      } else {
+	r.push_back('_');
+	r.push_back(to_hexchar((ch >> 4) & 0x0f));
+	r.push_back(to_hexchar((ch >> 0) & 0x0f));
+      }
+    }
+    return r;
+  }
+  static void xs_create_type(const pxcrt::string& name) { // throw(c++)
+    if (destr_cv != 0) { return; }
+    klass_name = generate_klass_name(name);
+    klass_stash = gv_stashpv(klass_name.c_str(), 1);
+    const std::string sd = klass_name + "::DESTROY";
+    DBG(fprintf(stderr, "CREATE TYPE %s %s stash=%p\n", name.c_str(),
+      klass_name.c_str(), klass_stash));
+    destr_cv = newXS((char *)sd.c_str(), &destr,
+      "type_pl" /* must be a literal */);
+  }
+  static bool get_value_iv(SV *sv, IV& r) { // no throw?
+    if (sv == 0 || !SvROK(sv)) {
+      DBG(fprintf(stderr, "get_value_iv: notrv %s sv=%p\n",
+	klass_name.c_str(), sv));
+      return false;
+    }
+    SV *const svt = SvRV(sv);
+    if (svt == 0 || !SvOBJECT(svt)) {
+      DBG(fprintf(stderr, "get_value_iv: notobj %s sv=%p svt=%p\n",
+	klass_name.c_str(), sv, svt));
+      return false;
+    }
+    HV *const stash = SvSTASH(svt);
+    if (stash == klass_stash) {
+      DBG(fprintf(stderr, "get_value_iv: stash eq %s sv=%p svt=%p\n",
+	klass_name.c_str(), sv, svt));
+    } else {
+      DBG(fprintf(stderr, "get_value_iv: stash ne %s sv=%p svt=%p\n",
+	klass_name.c_str(), sv, svt));
+      const char *const stname = HvNAME(stash);
+      if (stname == 0 || strcmp(klass_name.c_str(), stname)) {
+	DBG(fprintf(stderr,
+	  "get_value_iv: stash ne %s sv=%p svt=%p stname=%s\n",
+	  klass_name.c_str(), sv, svt, stname));
+	return false;
+      }
+    }
+    r = SvIV(svt);
+    DBG(fprintf(stderr, "get_value_iv: ok %s sv=%p svt=%p iv=%lx\n",
+      klass_name.c_str(), sv, svt, (unsigned long)r));
+    return true;
+  }
+  static pxcrt::string klass_name;
+  static HV *klass_stash;
+  static CV *destr_cv;
+};
+template <typename T> pxcrt::string type_pl<T>::klass_name;
+template <typename T> HV *type_pl<T>::klass_stash;
+template <typename T> CV *type_pl<T>::destr_cv;
+inline int sv_to_int(const perlsv& x)
+{
+  return x.get() ? SvIV(x.get()) : 0;
+}
+inline perlsv int_to_sv(int x)
+{
+  return perlsv((IV)x);
+}
+inline long long sv_to_long(const perlsv& x)
+{
+  return x.get() ? SvIV(x.get()) : 0;
+}
+inline perlsv long_to_sv(long long x)
+{
+  return perlsv((IV)x);
+}
+inline double sv_to_double(const perlsv& x)
+{
+  return x.get() ? SvNV(x.get()) : 0;
+}
+inline perlsv double_to_sv(double x)
+{
+  return perlsv((NV)x);
+}
+inline pxcrt::string sv_to_string(const perlsv& x)
+{
+  SV *const svp = x.get();
+  if (svp == 0) {
+    return pxcrt::string();
+  }
+  STRLEN len = 0;
+  char *const p = SvPV_nomg(svp, len);
+  return pxcrt::string(p, len);
+}
+inline perlsv string_to_sv(const pxcrt::string& s)
+{
+  return perlsv(s.data(), s.size());
+}
+#undef DBG
+}; // namespace pxperl
+
+extern "fdef" inline
+#define DBG(x)
+namespace pxperl {
+template <typename T> struct ptrlist_type {
+  static typename std::list<T *>::iterator insert(T *p) {
+    if (ptrlist == 0) {
+      ptrlist = new std::list<T *>();
+    }
+    return ptrlist->insert(ptrlist->end(), p);
+  }
+  static void erase(typename std::list<T *>::iterator iter) {
+    ptrlist->erase(iter);
+  }
+  static void detach_all() {
+    if (ptrlist != 0) {
+      for (typename std::list<T *>::iterator i = ptrlist->begin();
+	i != ptrlist->end(); ++i) {
+	(*i)->reset();
+      }
+    }
+  }
+  static std::list<T *> *ptrlist;
+};
+template <typename T> std::list<T *> *ptrlist_type<T>::ptrlist = 0; /* leaks */
+perlsv::perlsv()
+  : value(0)
+{
+  DBG(fprintf(stderr, "constr def %p %p %d\n", this, value, SvREFCNT(value)));
+  iter = ptrlist_type<perlsv>::insert(this);
+}
+perlsv::perlsv(const perlsv& x)
+  : value(x.value)
+{
+  SvREFCNT_inc(value);
+  DBG(fprintf(stderr, "constr cpy %p %p %d\n", this, value, SvREFCNT(value)));
+  iter = ptrlist_type<perlsv>::insert(this);
+}
+perlsv::perlsv(SV *sv)
+  : value(sv)
+{
+  SvREFCNT_inc(value);
+  DBG(fprintf(stderr, "constr sv %p %p %d\n", this, value, SvREFCNT(value)));
+  iter = ptrlist_type<perlsv>::insert(this);
+}
+perlsv::perlsv(IV iv)
+  : value(newSViv(iv))
+{
+  DBG(fprintf(stderr, "constr iv %p %p %d\n", this, value, SvREFCNT(value)));
+  iter = ptrlist_type<perlsv>::insert(this);
+}
+perlsv::perlsv(NV nv)
+  : value(newSVnv(nv))
+{
+  DBG(fprintf(stderr, "constr nv %p %p %d\n", this, value, SvREFCNT(value)));
+  iter = ptrlist_type<perlsv>::insert(this);
+}
+perlsv::perlsv(const char *cstr)
+  : value(newSVpv(cstr, 0))
+{
+  DBG(fprintf(stderr, "constr s %p %p %d\n", this, value, SvREFCNT(value)));
+  iter = ptrlist_type<perlsv>::insert(this);
+}
+perlsv::perlsv(const char *cstr, size_t len)
+  : value(newSVpvn(cstr, len))
+{
+  DBG(fprintf(stderr, "constr pv %p %p %d\n", this, value, SvREFCNT(value)));
+  iter = ptrlist_type<perlsv>::insert(this);
+}
+perlsv::perlsv(const reference&, SV *sv)
+{
+  value = newRV_inc(sv);
+  DBG(fprintf(stderr, "constr svrv %p %p %d\n", this, value, SvREFCNT(value)));
+  iter = ptrlist_type<perlsv>::insert(this);
+}
+perlsv::perlsv(const reference&, AV *av)
+{
+  value = newRV_inc((SV *)av);
+  DBG(fprintf(stderr, "constr avrv %p %p %d\n", this, value, SvREFCNT(value)));
+  iter = ptrlist_type<perlsv>::insert(this);
+}
+perlsv::perlsv(const reference&, HV *hv)
+{
+  value = newRV_inc((SV *)hv);
+  DBG(fprintf(stderr, "constr hvrv %p %p %d\n", this, value, SvREFCNT(value)));
+  iter = ptrlist_type<perlsv>::insert(this);
+}
+perlsv::~perlsv()
+{
+  DBG(fprintf(stderr, "destr %p %p %d\n", this, value, SvREFCNT(value)));
+  SvREFCNT_dec(value);
+  ptrlist_type<perlsv>::erase(iter);
+}
+perlsv&
+perlsv::operator =(const perlsv& x)
+{
+  if (x.value != value) {
+    SvREFCNT_inc(x.value);
+    SvREFCNT_dec(value);
+    value = x.value;
+  }
+  return *this;
+}
+void
+perlsv::reset()
+{
+  SvREFCNT_dec(value);
+  value = 0;
+}
+perlav::perlav()
+  : value(0)
+{
+  iter = ptrlist_type<perlav>::insert(this);
+}
+perlav::perlav(const perlav& x)
+  : value(x.value)
+{
+  SvREFCNT_inc(value);
+  iter = ptrlist_type<perlav>::insert(this);
+}
+perlav::perlav(AV *av)
+  : value(av)
+{
+  SvREFCNT_inc(value);
+  iter = ptrlist_type<perlav>::insert(this);
+}
+perlav::~perlav()
+{
+  SvREFCNT_dec(value);
+  ptrlist_type<perlav>::erase(iter);
+}
+perlav&
+perlav::operator =(const perlav& x)
+{
+  if (x.value != value) {
+    SvREFCNT_inc(x.value);
+    SvREFCNT_dec(value);
+    value = x.value;
+  }
+  return *this;
+}
+void
+perlav::reset()
+{
+  SvREFCNT_dec(value);
+  value = 0;
+}
+size_t
+perlav::size() const
+{
+  if (value == 0) return 0;
+  const long len = av_len(value);
+  return len + 1;
+}
+perlsv
+perlav::fetch(size_t idx) const
+{
+  SV *r = 0;
+  if (value != 0) {
+    SV **svp = av_fetch(value, idx, 0);
+    r = svp ? *svp : 0;
+  }
+  return perlsv(r);
+}
+bool
+perlav::store(size_t idx, const perlsv& v)
+{
+  if (value == 0) {
+    value = newAV();
+  }
+  SvREFCNT_inc(v.get());
+  SV **svp = av_store(value, idx, v.get());
+  if (svp == 0) {
+    SvREFCNT_dec(v.get());
+  }
+  return svp != 0;
+}
+void
+perlav::resize(size_t idx)
+{
+  if (value == 0) {
+    value = newAV();
+  }
+  if (idx != 0) {
+    av_extend(value, idx - 1);
+  }
+}
+perlhv::perlhv()
+  : value(newHV())
+{
+  iter = ptrlist_type<perlhv>::insert(this);
+}
+perlhv::perlhv(const perlhv& x)
+  : value(x.value)
+{
+  SvREFCNT_inc(value);
+  iter = ptrlist_type<perlhv>::insert(this);
+}
+perlhv::perlhv(HV *hv)
+  : value(hv)
+{
+  SvREFCNT_inc(value);
+  iter = ptrlist_type<perlhv>::insert(this);
+}
+perlhv::~perlhv()
+{
+  SvREFCNT_dec(value);
+  ptrlist_type<perlhv>::erase(iter);
+}
+perlhv&
+perlhv::operator =(const perlhv& x)
+{
+  if (x.value != value) {
+    SvREFCNT_inc(x.value);
+    SvREFCNT_dec(value);
+    value = x.value;
+  }
+  return *this;
+}
+void
+perlhv::reset()
+{
+  SvREFCNT_dec(value);
+  value = 0;
+}
+perlsv
+perlhv::fetch(const pxcrt::string& key) const
+{
+  SV *r = 0;
+  if (value != 0) {
+    SV **svp = hv_fetch(value, key.data(), key.size(), 0);
+    r = svp ? *svp : 0;
+  }
+  return perlsv(r);
+}
+bool
+perlhv::store(const pxcrt::string& key, const perlsv& v)
+{
+  if (v.get() == 0) {
+    return false;
+  }
+  if (value == 0) {
+    value = newHV();
+  }
+  SvREFCNT_inc(v.get());
+  SV **svp = hv_store(value, key.data(), key.size(), v.get(), 0);
+  if (svp == 0) {
+    SvREFCNT_dec(v.get());
+  }
+  return svp != 0;
+}
+void detach_perl()
+{
+  ptrlist_type<perlsv>::detach_all();
+  ptrlist_type<perlav>::detach_all();
+  ptrlist_type<perlhv>::detach_all();
+}
+}; // namespace pxperl
+extern "C" void detach_perl()
+{
+  pxperl::detach_perl();
+}
+#undef DBG
+

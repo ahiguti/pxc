@@ -1,0 +1,29 @@
+
+namespace erat3;
+import io;
+
+macro uivec vector{uint};
+macro uivecref ref{uivec};
+
+function uivecref eratosthenes(uint x)
+{
+  uivec sieve;
+  sieve.resize(x);
+  sieve[1] = 1;
+  uivecref ret = uivec();
+  for (uint i = 2; i < x; ++i) {
+    if (sieve[i] == 0) {
+      ret->push(i);
+      for (uint j = i * i; j < x; j += i) {
+	sieve[j] = 1;
+      }
+    }
+  }
+  return ret;
+}
+
+uivecref arr = eratosthenes(100000);
+for (uint i = 0; i < arr->size(); ++i) {
+  io::println((*arr)[i]);
+}
+
