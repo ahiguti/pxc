@@ -1,0 +1,264 @@
+namespace io;
+public import meta;
+
+public extern "pxcio::pxc_argv" vector{string} argv;
+public extern "pxcio::mainio" io main;
+
+public macro ioref tref{io};
+public macro fileref ref{file};
+
+public multithreaded extern "pxcio::statbuf" struct statbuf {
+  ulong st_dev;
+  ulong st_ino;
+  ulong st_mode;
+  ulong st_nlink;
+  ulong st_uid;
+  ulong st_gid;
+  ulong st_rdev;
+  ulong st_size;
+  ulong st_blksize;
+  ulong st_blocks;
+  ulong st_atime;
+  ulong st_mtime;
+  ulong st_ctime;
+}
+
+public extern "O_RDONLY"	int O_RDONLY;
+public extern "O_WRONLY"	int O_WRONLY;
+public extern "O_RDWR"		int O_RDWR;
+public extern "O_CREAT"		int O_CREAT;
+public extern "O_EXCL"		int O_EXCL;
+public extern "O_NOTTY"		int O_NOTTY;
+public extern "O_TRUNC"		int O_TRUNC;
+public extern "O_APPEND"	int O_APPEND;
+public extern "O_NONBLOCK"	int O_NONBLOCK;
+public extern "O_SYNC"		int O_SYNC;
+public extern "O_FSYNC"		int O_FSYNC;
+public extern "O_ASYNC"		int O_ASYNC;
+
+public extern "SEEK_SET"	int SEEK_SET;
+public extern "SEEK_CUR"	int SEEK_CUR;
+public extern "SEEK_END"	int SEEK_END;
+
+public threaded extern "pxcio::io_open"
+  function fileref io_open(ioref i, string fn, int flags, int mode);
+public threaded extern "pxcio::file_read"
+  function int file_read(fileref f, string& buf, uint len);
+public threaded extern "pxcio::file_write"
+  function int file_write(fileref f, string buf);
+public threaded extern "pxcio::file_lseek"
+  function ulong file_lseek(fileref f, ulong offset, int whence);
+public threaded extern "pxcio::file_errno"
+  function int file_errno(fileref f);
+public threaded extern "pxcio::io_stat"
+  function int io_stat(ioref i, string fn, statbuf& buf);
+public threaded extern "pxcio::io_errno"
+  function int io_errno(ioref i);
+public threaded extern "pxcio::io_sleep"
+  function uint io_sleep(ioref i, uint sec);
+
+public threaded function fileref io_open_r(ioref i, string fn)
+  { return io_open(i, fn, O_RDONLY, 0); }
+public threaded function fileref io_creat(ioref i, string fn)
+  { return io_open(i, fn, O_WRONLY | O_CREAT | O_TRUNC, 0); }
+public threaded function fileref io_open_w(ioref i, string fn)
+  { return io_open(i, fn, O_WRONLY, 0); }
+public threaded function fileref io_open_a(ioref i, string fn)
+  { return io_open(i, fn, O_WRONLY | O_APPEND, 0); }
+public threaded function int file_read_all(fileref f, string& buf) {
+  while (true) {
+    if ((int r = file_read(f, buf, 16384)) <= 0) {
+      return r;
+    }
+  }
+  return 0;
+}
+public threaded function int io_read_file(ioref i, string fn, string& buf) {
+  fileref f = io_open_r(i, fn);
+  if (file_errno(f) != 0) { return -1; }
+  return file_read_all(f, buf);
+}
+public threaded function int io_write_file(ioref i, string fn, string buf) {
+  fileref f = io_open_w(i, fn);
+  if (file_errno(f) != 0) { return -1; }
+  return file_write(f, buf);
+}
+
+public threaded function {t} void io_print(ioref i, t x)
+{
+  if (meta::eq{meta::to_string{t}, "string"}) {
+    io_print_string(i, x);
+  } else {
+    io_print_string(i, meta::symbol{t, meta::concat{t, "_to_string"}}(x));
+  }
+}
+
+public threaded function {t} void io_println(ioref i, t x)
+{
+  if (meta::eq{meta::to_string{t}, "string"}) {
+    io_println_string(i, x);
+  } else {
+    io_println_string(i, meta::symbol{t, meta::concat{t, "_to_string"}}(x));
+  }
+}
+
+public function {t} void print(t x)
+{
+  io_print(main, x);
+}
+
+public function {t} void println(t x)
+{
+  io_println(main, x);
+}
+
+public multithreaded extern "pxcio::io_impl" "linear" struct io { }
+public multithreaded extern "pxcio::file_impl" "linear" struct file { }
+
+private threaded extern "pxcio::io_initialize"
+  function int io_initialize(ioref i);
+private threaded extern "pxcio::io_print_string"
+  function void io_print_string(ioref i, string x);
+private threaded extern "pxcio::io_println_string"
+  function void io_println_string(ioref i, string x);
+
+io_initialize(main);
+
+extern "type" inline
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <sys/stat.h>
+#include <unistd.h>
+namespace pxcio {
+typedef struct ::stat statbuf;
+struct io_impl;
+struct file_impl;
+};
+
+extern "fdecl" inline
+namespace pxcio {
+extern pxcrt::vector<pxcrt::string> pxc_argv;
+extern pxcrt::rcptr< pxcrt::trcval<pxcio::io_impl> > mainio;
+struct io_impl {
+  io_impl() { }
+private:
+  io_impl(const io_impl&);
+  io_impl& operator =(const io_impl&);
+};
+struct file_impl {
+  file_impl() : fd(-1), err(0) { }
+  ~file_impl() { if (fd >= 0) close(fd); }
+  int fd;
+  int err;
+private:
+  file_impl(const file_impl&);
+  file_impl& operator =(const file_impl&);
+};
+typedef pxcrt::rcptr< pxcrt::trcval<io_impl> > io_ptr;
+typedef pxcrt::rcptr< pxcrt::rcval<file_impl> > file_ptr;
+file_ptr io_open(io_ptr::rawptr i, const pxcrt::string& fn, int flags, int md);
+unsigned long long file_lseek(file_ptr::rawptr f, unsigned long long offset,
+  int whence);
+unsigned int file_read(file_ptr::rawptr f, pxcrt::string& buf,
+  unsigned int len);
+unsigned int file_write(file_ptr::rawptr f, const pxcrt::string& buf);
+int io_stat(io_ptr::rawptr i, const pxcrt::string& fn, pxcio::statbuf& buf);
+int file_errno(file_ptr::rawptr f);
+int io_errno(io_ptr::rawptr i);
+unsigned int io_sleep(io_ptr::rawptr i, unsigned int sec);
+inline void io_print_string(io_ptr::rawptr i, const pxcrt::string& x) {
+  fwrite(x.data(), x.size(), 1, stdout);
+}
+inline void io_println_string(io_ptr::rawptr i, const pxcrt::string& x) {
+  io_print_string(i, x + "\n");
+}
+};
+
+extern "fdef" inline
+namespace pxcio {
+#include <stdlib.h>
+#include <string.h>
+pxcrt::vector<pxcrt::string> pxc_argv;
+pxcrt::rcptr< pxcrt::trcval<pxcio::io_impl> > mainio;
+file_ptr io_open(io_ptr::rawptr i, const pxcrt::string& fn, int flags, int md)
+{
+  file_ptr f(new pxcrt::rcval<file_impl>());
+  file_impl& fref = f->value$z;
+  fref.fd = ::open(fn.c_str(), flags, md);
+  fref.err = (fref.fd < 0 ? errno : 0);
+  return f;
+}
+unsigned long long file_lseek(file_ptr::rawptr f, unsigned long long offset,
+  int whence)
+{
+  file_impl& fref = f->value$z;
+  const off_t r = ::lseek(fref.fd, offset, whence);
+  fref.err = (r == (off_t)-1) ? errno : 0;
+  return r;
+}
+unsigned int file_read(file_ptr::rawptr f, pxcrt::string& buf,
+  unsigned int len)
+{
+  file_impl& fref = f->value$z;
+  const size_t oldsz = buf.size();
+  buf.resize(oldsz + len);
+  char *const ptr = &buf[oldsz];
+  const ssize_t rlen = ::read(fref.fd, ptr, len);
+  if (rlen >= 0) {
+    fref.err = 0;
+    buf.resize(oldsz + (rlen >= 0 ? rlen : 0));
+    return rlen;
+  } else {
+    buf.resize(oldsz);
+    fref.err = errno;
+    return 0;
+  }
+}
+unsigned int file_write(file_ptr::rawptr f, const pxcrt::string& buf)
+{
+  file_impl& fref = f->value$z;
+  const size_t sz = buf.size();
+  const char *const ptr = &buf[0];
+  const ssize_t wlen = ::write(fref.fd, ptr, sz);
+  fref.err = (wlen >= 0 ? 0 : errno);
+  return wlen;
+}
+int io_stat(io_ptr::rawptr i, const pxcrt::string& fn, pxcio::statbuf& buf)
+{
+  return ::stat(fn.c_str(), &buf);
+}
+int file_errno(file_ptr::rawptr f)
+{
+  return f->value$z.err;
+}
+int io_errno(io_ptr::rawptr i)
+{
+  return errno;
+}
+unsigned int io_sleep(io_ptr::rawptr i, unsigned int sec)
+{
+  return sleep(sec);
+}
+void io_initialize(io_ptr::rawptr i)
+{
+  static int init_flag = 0;
+  if (!init_flag) {
+    init_flag = 1;
+  }
+  char buf[64];
+  int c = 0;
+  while (true) {
+    snprintf(buf, sizeof(buf), "PXC_ARG%d", c++);
+    const char *ent = getenv(buf);
+    if (ent == 0) {
+      break;
+    }
+    const pxcrt::string s(ent);
+    pxc_argv.push_back(s);
+  }
+}
+};
+

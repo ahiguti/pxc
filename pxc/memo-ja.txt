@@ -1,0 +1,4336 @@
+---------------------------------------------------------------------
+直近FIXMEとTODO
+
+- 1. variant fieldがcall-by-constrefならrootできないように
+- 2. root周りをごっそり置き換え
+
+- convがある場合とroot
+- namespace義務付け
+- slice型変数を作れないように(noheap?)
+- fn_check_rootテスト
+- ref型の一時変数を作ったときにはnullで暫定初期化してよい
+- check_return_exprテスト
+- operatorと組み込み関数について整理
+- linear型の変数を宣言できないようになっているか
+- ユーザ定義constructorを持つ型のdefault constructible判定が正しいか
+- 型のパラメータにclosureやメソッドを使うと正しくエラーになるか？
+- if文がboolでなかった場合に行番号が出ない？
+- グローバルにユーザ定義コンストラクタを置けないのは、固定長配列の
+  要素としても持てないようにチェックしているか。
+- structコンストラクタに対するcheck_return_expr()
+- C構造体型変数の初期化コード吐かれていることを確認
+- 型パラメータの文字列と数値がescapeされているか確認
+- std::vector<bool>を使ってしまうとコンパイルできない
+- inline_cに色々装飾付けられるが、エラー
+
+---------------------------------------------------------------------
+TODO M1
+
+- slice
+- cflagsの与え方など確定
+- interfaceの配列のように、テンプレパラメータが具体型でないといけない
+  ケースのチェック。特にC++テンプレ型(固定長配列)。
+- 文字列リテラルのテスト
+
+---------------------------------------------------------------------
+TODO M2
+
+- multimap, set, multiset, list
+- foreach: multimap, set, multiset, list
+- 例外の整理とstacktrace
+- privateメンバ、コンストラクタ。抽象データ型は作れるように
+- 構造体や配列の初期化式
+
+---------------------------------------------------------------------
+TODO
+
+- pure関数ならrootを省略できるケース
+- multi-indexコンテナ
+- 条件変数を構造体に埋め込めるようにする？普通にfieldとしてユーザが
+  定義できるようにする？
+- interface名と同名のmethodを定義すると変になる？
+- メタ関数の評価が超遅いのは改善する？
+- generate_exe(done)
+- call traitがrawptrの型を作れるようにする? perlsvをそれにするべし
+- 配列のスライスを参照渡しできるように。文字列のsubstr。
+- call traitがbyvalueの型を作れるようにする?
+- constnessがポインタの指す先にも伝播するようにする?
+  (mtsafeの扱いとあわせて検討)
+- type safe bitmask
+- type safe enum
+- infoファイルのescape
+- getenv("HOME")だとsudoしたときに困らないか
+- block_id_nsは何に使うのか整理(動的にblockを作成してはならない理由)
+- コンテナforeachの中でcontinueやbreakを使えるように
+- const変数宣言
+- union fieldのrootをvectorと同様にするか？
+- ifdef?
+- namespace宣言が正しいかチェック?
+- 実行形式を生成してexecするようにする？
+- 複数ファイルコンパイル
+- coptionsのオプション取得にpkg-config的なものをサポート
+- pure(static?), synchronized
+- volatile?
+- constnessがref先にも影響するように?
+- boxing時の無駄なコピーを無くす
+- struct定義時に実装するinterfaceを明示しなくてよいようにできるか？
+  (implements宣言を分離。)
+- いつterm_tostr_instance_chain()を必要とするのか確認
+- interface型の一時変数を禁止(そもそもできない？)
+- namespace義務付け？
+- コンパイル全段階でatomicな更新を
+- 無名関数はテンプレート引数を持てない？(事実上無理、というか不要)
+- null値を持てないなrefとcref
+- macroの右辺をte以外の式も許可
+- aliasを展開後の式をコンパイル(って何？)
+- expr以外のterm、intなどをtermへ
+- 配列とmapのイテレート方法を考えよ
+- operator []をユーザ定義できるようにするには？
+- リテラルnull、複合型リテラル
+- const変数(varは変更可能だがconstは不可)
+- extern関数へのpointer渡し、const pointer渡し
+- extern enum
+- switch
+- 定数
+- 参照カウントデバッグ
+- リフレクションと文字列変換
+- stringbuffer(文字列を引数として渡すときはstring_refとcstrに)
+- string実装を複数(参照カウントしない版など)
+- unstableな値を返す関数(substringのように)
+- コンパイル整合性チェック(全モジュールmd5)
+- posixモジュール
+- 文字列との暗黙変換やめる
+- interface間の継承
+- this
+- ネストされたテンプレートは必要？
+- テンプレート引数に数値などを使えるように
+- instance化はconstness関係なしにおこなわれるが問題ないのか？
+- nonnullな参照型
+- テンプレート型の間のinherit(is_sub_type)
+- 関数型の変数を定義できないように？
+- import pxcrtするとエラー
+- マクロ 
+- namespaceの継承？
+- 上位シンボルとの衝突チェック?おきない？
+- variantテスト
+- variantのstabilizeテスト
+- interfaceのcloneは用意すべき？
+- mt safeにするために必要なものを整理
+- variantのfieldが全部unitのときはenumを生成したほうが性能良い
+- namespace宣言義務付け?
+- downcast
+- pure関数
+- 引数渡しの際のstableでない値をstable化(テスト)
+- リンカオプション指定
+- perl sv/av/hv
+- perl exception
+- restricted pointer (raw reference)
+- string optimization
+- ユーザ定義コンストラクタのより良いコード生成(C++フィールド初期化)
+- perl module
+
+---------------------------------------------------------------------
+DONE
+
+- main.printlnがエラー(done)
+- ioをmultithreaded方式に置き換え(done)
+- perlマーシャラ、参照でマーシャルするもの。(done)
+- 仮想関数を持つクラスにmutexを埋め込め(done)
+- 文字列リテラルのescapeがおかしい(done)
+- インタフェース型にデフォルトのダミー実装を入れる(done)
+- デフォルトコンストラクト可能でないものを定義したらエラーに(done)
+- ポインタnull排除(done)
+- pimplの中身のコンストラクタを禁止する手段を用意(done)
+- clone時にtype_of_this_exprをクリアする必要があるものをクリア(done)
+- threads(done)
+- グローバル変数にperlsvを置いていると終了時不正メモリアクセス(グロー
+  バルに置けないようにする)(done)
+- ref{foo} p = foo(...)を一時オブジェクト作らずにboxing(done)
+- '::'を@local使って実装(done)
+- インポートされた側を先にコンパイル(done)
+- 参照引数(done)
+- 分割コンパイルした際、コンパイル時に読まれたモジュールの違いにより
+  メタ関数の評価結果が変わってしまうと問題では？たとえばsymbolを探す
+  処理。 -> 変わらないようにする(done)
+- expr_foldfe(done)
+- macrodefの引数がシンボルテーブルに定義されてしまう(done)
+- tempvarを作るタイミングは正しいか？(done)
+  (部分式の評価順序はコンパイラが勝手に決める)
+- foreachの対象をrootしているか?(done)
+- 総称的to_stringに必要なメタ関数を用意(done)
+- 総称的な文字列への変換。io::println()を全ての型に対応。(done)
+- to_stringを基本型に制限(done)
+- if条件がメタ関数で、偽に評価されるときはブロックの中を消す(done)
+- foreach: structとvariant(done)
+- foreach: 引数の型チェック(done)
+- 固定長配列(done)
+- catchは常にconst参照で受けるのは大丈夫なのか？rootされているか？
+  (大丈夫。throwは常に引数をコピーするから)
+- 型定義順を再整理(C++テンプレートが絡むケース require_definition?)
+  (done)
+- ユーザ定義コンストラクタのある型の変数をglobalに定義できないように
+  (done)
+- profile(done)
+- ソース検索パス(done)
+- coptionsをinfファイルに書く(done)
+- coptionsをccコンパイル時に反映(done)
+- コンパイルの流れを確定(done)
+- 作業ディレクトリ決め(done)
+- 並列コンパイル防止lock(done)
+- infoを消す前にccとoとsoを消す(done)
+- md5sumコマンドと値が異なる理由(ファイル名も含めていた)
+- 型のテンプレ引数としてclosureやメンバ関数を指定するとエラーに(done)
+- 具体型からインタフェースrefへの変換を許可(done)
+- interfaceのメンバテンプレートは禁止(done)
+- extern struct型の変数の初期化されているか確認(done)
+- if (x) の型チェック(done)
+- interface, variant等もテンプレートパラメータ持てるように(done)
+- inheritに型パラメータを使えるように(done)
+- int i = i + 3 の初期化を漏らさないように (done)
+- ユーザ定義コンストラクタ (done)
+- argdeclはinterface型を持てるように(done)
+- upvalueの名前が(idだけだと)衝突するのでnsを付ける。(done)
+- up5.px (teを引くコンテキストが構造体の中になってしまっている？)(done)
+- up6.px (テンプレート引数不足をチェックできていない)(done)
+- up7.px (関数の中でマクロ定義したら動かない？)(done)
+- closureがテンプレート引数を持つケース(done)
+- テンプレート引数に関数オブジェクトがあるとき(done)
+- []の中を型チェックしてない？(done)
+- const method から nonconst methodを呼べないように(done)
+- non-const methodを呼ぶときにオブジェクトがconstであるか確認(done)
+- 生成コードにconst(done)
+- inheritの際にconstnessの一致をチェック(done)
+- foo{int}(x, y); expr_symbolとexpr_teを統一する？(done)
+- inheritされたときの実装チェックと型一致チェック(done)
+- メンバ関数をその下のネストされた関数から呼べるように(done)
+- 関数型の変数を定義したらエラーに(done)
+- nestされたstructの下側から上側のメンバ関数等を参照できないように
+  (done)
+- リファクタリング: tvmapを文字列キーに。(done)
+- リファクタリング: C++のテンプレートもinstantiate処理。(done)
+- eval整理(expr_teを返すのをやめる)(done)
+- refとcrefをexpr_structへ(done)
+- 「&」廃止(done)
+- externの文法統一(done)
+- 型パラ付き型もfoo()で自動インスタンス化できるように？(done)
+- typedefとctypeを分離してtypedefをaliasに改名(done)
+- alias(typedef)に引数を持てるように(done)
+- グローバル変数の寿命をグローバルに＆closureに渡す必要無し(done)
+- extern functionにCの名前を指定できるように(done)
+- termをimmutable参照型に(done)
+- エラーを投げる関数を統一(done)
+- extern function(定義が空)(done)
+- extern typedef(done)
+- extern struct(定義が空)(done)
+- 明示的キャスト(done)
+- コンパイラ/リンカオプション(-I, -L, -lxx) (done)
+  incdir, libdir, library
+- alias list(t) ref(cons(t)) (done)
+- '!'演算子(done)
+- 単項演算子の'case'(done)
+- double(done)
+- list*.px (done)
+- union.px (done)
+- 総称関数の自動マッチ(fib2.px)(done)
+- template(done)
+- 型名() でのオブジェクト作成を全ての型に(done)
+- 自動テストフォルダ作成(done)
+- define_variablesとcheck_typesに分ける。(done)
+- 全ての型式(のalias)でデフォルトコンストラクタを呼べるように。(だぶ
+  んdone)
+- expand_type_aliasの場所(型式のevalするタイミング)を明確に。(done)
+- r1636でエラーだったものが解消した理由調べよ(done)変数定義最適化が
+  効かないようにエンバグしたのが原因だった。
+- interface型の変数を宣言できないように(done)
+- implementsのメソッド実装チェック(done)
+- グローバル変数もupvalueに(done)
+- 直和型(done)
+- struct foo と namespace foo の衝突回避(done)
+- c++ 例外(done)
+- breakとcontinueの位置チェック(done)
+- returnがあるかチェック(done)
+- null参照外しエラーチェック(done)
+- vectorにempty()などのメソッドを定義(done)
+- foo.bar()をns::bar(foo)に自動で置き換える(done)
+- 明示的キャスト(done)
+- byref引数(done)
+- lvalue check(done)
+- crefからrefへの変換をエラーに(done)
+- typedef (alias)
+- interface
+- auto boxing (operator &廃止?)
+- メンバ関数が上位値を持ったらダメでは？(done)
+- メンバ関数の中で定義されているクロージャから同じ関数のメンバ関数を
+  よぶのは無理では？(done)
+
+---------------------------------------------------------------------
+Cの名前の使い方
+
+t$0 一時変数
+foo::bar$n namespace
+foo$f   関数名
+foo$f0  ローカルに定義された関数の関数オブジェクト(struct)名
+foo$fi  ローカルに定義された関数の関数オブジェクトインスタンス
+foo$s   構造体
+foo$s0  ローカルに定義された構造体
+foo$v   直和型のstruct名
+foo$v0  ローカルに定義された直和型のstruct名
+foo$i   インタフェースのstruct名
+foo$i0  ローカルに定義されたインタフェースのstruct名
+foo$    auto変数、グローバル変数、メンバ変数、関数引数
+foo$e   variantのenum要素
+foo$fe  foreachのkey, mapped値, guardオブジェクト
+$e      variantのenum
+this$up メンバ関数の下の関数からメンバ関数を呼ぶための上位this
+??      変数
+$ic     ネストされたテンプレートに使う
+str$ls  テンプレート引数の文字列リテラル
+100$li  テンプレート引数の数値リテラル
+aaa$c   名前空間の初期化関数
+aaa$cm  名前空間のエントリ
+
+構造体に追加することのある名前
+init$z 初期化補助関数
+conunt$z 参照カウンタ
+incref$z 参照カウンタ用
+decref$z 参照カウンタ用
+
+---------------------------------------------------------------------
+キモ
+
+- PerlのデータとC++のデータの両方を扱えること
+- Perl/C++とのデータやりとりでオーバヘッドが無いこと
+- Perlの例外とC++の例外の両方を安全に(リークせず)使えること
+- Perlの拡張として動き、動的コンパイル即実行できること
+- C++呼び出しが別途リンクせずにできること
+- C++のコードを書かない限りSEGVらないこと
+
+---------------------------------------------------------------------
+まあまあ重要
+
+- インタフェース
+- コンテナを使える(静的型付け)
+- スマートポインタ(静的型付け)
+- ある程度クロージャをサポート
+- C++のコードをインラインで書ける
+
+---------------------------------------------------------------------
+できればやりたい
+
+- string -> string_ref 最適化
+- restricted pointer と参照渡し
+
+---------------------------------------------------------------------
+割り切り
+
+- 配列の境界チェックはon/off?
+- 参照外しチェック(ぬるぽ)は毎回チェックorSEGVフック？
+- C++のキーワードは識別子の名前に使えない(連携しやすくするため)
+- スレッドは使えない(Perlに合わせて)(Perl使わないときはmt-safeに)
+- 参照カウント(Perlに合わせて)
+- コンテナにイテレータは無い(無効化の判断に困るため)
+
+---------------------------------------------------------------------
+文法
+
+function foo (x : int, y : int) : int
+{
+	return x + y;
+}
+
+int foo(int x, int y)
+{
+	return x + y;
+}
+
+
+var z : int;
+function foo (x : int) : int
+{
+	return x + z;
+}
+
+struct foo {
+	foo(int z) : z(z) { }
+	int operator ()(int x) {
+		return x + z;
+	}
+	int z;
+};
+
+global スコープの変数については、namespaceを
+前置した名前で登録する???
+
+
+ネストした関数の定義は、Cではトップレベルに定義する必要があるから、
+Cでの名前を適切に付けなければならない。またその関数の引数が使っている
+型の定義もトップレベルに出す必要があるので同様にCの名前を適切に
+付けなければならない。
+
+
+function foo(x : int, y : int) : int
+{
+        function test2(w : int) : int {
+                return x + w * 2;
+        }
+        var z : int = test2(y) + 3;
+        return x + z;
+}
+
+/* decl */
+struct test2$1;
+/* def */
+struct test2$1 {
+	int x;
+	test2$1(int x) : x(x) { }
+	int operator ()(int w) {
+		return x + w * 2;
+	}
+};
+
+int foo(int x, int y)
+{
+	test2$1 test2(x);
+	int z = test2(y) + 3;
+	return x + z;
+}
+
+式の型を決める方法。
+文の型 => void
+リテラル => そのリテラルの型
+シンボル => そのシンボルの型
+  関数の型は型式を作らねば
+foo() => 関数の返値の型
+
+関数の型を決めるには、各引数と返値の型がきまらねばならない。
+各引数の型は再帰を使わずに簡単に決まる
+ので関数の型も簡単に決まる。
+各種シンボル定義式について、そのシンボルの型は再帰無しに決められる。
+リテラルとシンボルの型が全て決まったら、全ての式を再帰的にシンボル
+解決、型決め、型チェックを実行する。
+
+fn_define_symbols();
+  (var式などの変数をシンボルテーブルに登録し重複定義チェック)
+fn_resolve_vardef_types();
+  (var式の型、functionの引数と返値の型を解決する)
+fn_resolve_symbols();
+  (全ての式に出現するシンボルを解決する)
+
+---------------------------------------------------------------------
+typedef
+
+typedef list "std::list" "array";
+typedef deque "std::deque" "array";
+typedef vector "std::vector" "array";
+typedef map "std::map" "map";
+typedef ref "std::map" "map";
+typedef ivector vector(int);
+typedef imap map(int, vector(int));
+
+展開する方法
+
+---------------------------------------------------------------------
+参照引数のalias制限
+
+void foo(vector<int>& v, int& e)
+{
+	v.push_back(3);
+	e = 3;
+}
+
+vector<int> v(10);
+foo(v, v[0]);
+
+
+---------------------------------------------------------------------
+コンテナ操作
+
+function size(c:list):ulong;
+function empty(c:list):bool;
+function append(c:list, v:0):void;
+function prepend(c:list, v:0):void;
+function pop_front(c:list(0)):0;
+function pop_back(c:list(0)):0;
+function get(c:list(0),i:ulong):0;
+function set(c:list(0),i:ulong, 0):void;
+
+---------------------------------------------------------------------
+型式
+
+typeexpr : int
+	 | symbol
+	 	(symbol resolves to a typedef, struct, or function), 
+	 | symbol '{' typeexpr_list '}'
+	 	(symbol resolves to a typedef)
+	
+typedef : 'typedef' symbol typeexpr
+
+---------------------------------------------------------------------
+左辺値としてのフィールドや配列要素
+
+bar_t func(const foo_t& f)
+{
+	...
+}
+
+foo.bar = func(foo);
+これが不正メモリアクセスを引き起こすケースがありうるか？
+ない。返値がコピーされてからfoo.barに代入される。
+
+void func(const foo_t& f, ptr<foo_t> fp)
+{
+	...
+}
+
+ptr<foo_t> fp;
+func(*fp, fp);
+これは(*fp)を無効化することがありうる。
+関数の引数にポインタを渡しているときは、同一ステートメント
+でそのポインタの指す先をconst参照渡ししてはだめ。
+
+---------------------------------------------------------------------
+モジュールインポートの芋蔓
+
+fooがbarをimportし、barがbazをimportする場合、fooはbazを読む必要が
+あるケース・無いケースは？
+(foo.px)
+namespace foo;
+private import bar;
+var b:bar::bartype;
+(bar.px)
+package bar;
+public struct bartype {
+	var x:baztype;
+};
+(baz.px)
+namespace baz;
+public struct baztype {
+	var x:int;
+};
+この場合は芋蔓。
+
+fooがbarをimportすると、barのpublicなimport先は芋蔓でimportする。
+barのprivateなimport先はimportしないがリンクする。
+
+---------------------------------------------------------------------
+コンパイラドライバ
+
+1. 指定されたpxファイルのimport先リストを作成
+2. そのimport先リストのおのおのについて、それのimport先リストを作成
+3. 繰り返し
+4. 各pxついて、
+   (1) そのpxファイル自身 - 主コンパイル対象
+   (2) public importで届くimport先リスト
+   (3) private importで届くimport先リスト
+   を作成
+5. 各pxについて、全import先pxのタイムスタンプが、出力.oのタイムスタ
+   ンプより真に古い場合はコンパイル不要、そうでないならコンパイラを
+   呼んで.o作成
+6. 全.oをlinkし実行形式作成
+7. 実行
+
+---------------------------------------------------------------------
+名前空間
+
+自分の属する名前空間のシンボルについては短い名前で解決できる。
+それ以外のpublic importした名前空間のglobalシンボルは長い名前で解決
+できる。
+set_namespace()
+  非グローバルブロックに自分の名前空間をセットする。
+名前を登録する処理:
+  グローバルスコープ:
+    名前空間付きでキーに登録
+  グローバルスコープ以外:
+    名前空間無しでキーに登録
+名前を引く処理:
+  グローバルスコープ以外:
+    フルを普通に引く。無いなら上へ
+  グローバルスコープ:
+    フルと短いのが同じ場合は名前空間を付ける
+    フルの名前を引く
+
+---------------------------------------------------------------------
+コンパイラドライバ(2)
+
+foo bar baz fubar
+fubarがfooとbarをimport
+fooがbazをimport
+fubarを実行したい
+importの末端から順にコンパイルして.o出力
+全てをリンクして.so出力
+
+---------------------------------------------------------------------
+パース処理モード
+
+1. コンパイルしてコード出力
+2. 宣言だけを読み取る
+3. namespaceの依存関係だけを取る
+
+---------------------------------------------------------------------
+変数定義箇所
+
+グローバルスコープのvarは頭のほう。emit_funcbodyではemitせず。
+structのスコープのvarはブロックの最初。
+functionスコープのvarはステートメントの先頭。
+
+---------------------------------------------------------------------
+テンプレート関数の引数型チェック
+
+convert_typeで型引数のn番にマッチする型を調べる
+全ての引数について
+
+---------------------------------------------------------------------
+C++の例外とperlのlongjmp
+
+perlの例外が投げられる可能性のある箇所でC++のデストラクタを漏らさない
+ようにするには？
+→perlの例外が投げられる可能性のあるフレームではPerlのスタックにC++の
+オブジェクトを置く？
+
+---------------------------------------------------------------------
+型の定義順？
+
+struct foo {
+  var x:bar;
+  function m(a:fubar):void;
+};
+struct bar {
+  var y:baz;
+  var z:(ref foo);
+};
+structフィールドにvar定義されている型はそのstructより前に定義が無ければ
+ならない。(ref foo)ならその必要は無い。
+すべてのテンプレート型が同様となるようにしなければならない?無理?
+template <typename T> struct abc {
+  T value;
+};
+abc<T>がTの定義を必要とする(≒sizeofが依存)ような場合はダメでは？
+たとえば固定長配列。
+テンプレート型がパラメータ型に「強く依存」するかどうかのフラグが要る。
+
+---------------------------------------------------------------------
+文法
+
+struct定義: struct, funcbody, global
+interface定義: struct, funcbody, global
+var定義: struct, funcbody, global
+func宣言: interface, global
+func定義: struct, funcbody, global
+typedef: struct, interface, funcbody, global
+inline_c: global
+namespace: global
+import: global
+それ以外はfuncbodyとglobal
+
+---------------------------------------------------------------------
+参照カウント
+
+全ての型(基本型も含む)はanyを実装する必要がある。anyの実装として、
+intやvoid *などのunion + vtableの形にするか？ あるいはintはbox化
+してC++のクラスにするか？
+
+---------------------------------------------------------------------
+スマートポインタの実装
+
+- 必要のないときは参照カウントを埋め込みたくない
+- インタフェースのvtableとあわせて最小限のサイズとなるように
+- 非インタフェースのポインタをインタフェースポインタに変換可能に
+- 関数引数はスマートポインタを値渡しするのではなく、カウント付きの
+  生ポインタを渡す(余計な増減を避けるため)
+
+インタフェースではない(インタフェースを実装していない)ポインタ: 
+struct foo {
+};
+template <typename T> struct refcnt_value {
+  size_t refcnt;
+  T value;
+  refcnt_value() : refcnt(1), value() { }
+};
+template <typename T> struct refcnt_ptr {
+  refcnt_ptr() : ptr(new refcnt_value<T>()) { }
+  explicit refcnt_ptr(const T& v) : ptr(new refcnt_value<T>(v)) { }
+  refcnt_ptr(refcnt_value<T> *p) : ptr(p) { ptr->add_ref(); }
+  refcnt_ptr(const refcnt_ptr& p) : ptr(p.ptr) { ptr->add_ref(); }
+  ~refcnt_ptr() { ptr->release(); }
+  refcnt_value<T> *ptr;
+};
+引数渡しのときはrefcnt_value<T> *を渡す。
+
+インタフェースのポインタ:
+struct irefcnt {
+  virtual ~irefcnt() { }
+  virtual void add_ref$() const = 0;
+  virtual release$() const = 0;
+};
+struct ifoo : public irefcnt {
+  virtual int foo(int x, int y) = 0;
+};
+struct cfoo : public ifoo {
+  size_t refcnt;
+  int foo(int x, int y) { return x + y; }
+};
+template <typename T> struct interface_ptr {
+  interface_ptr(T *p) : ptr(p) { ptr->add_ref(); }
+  interface_ptr(const interface_ptr& p) : ptr(p.ptr) { ptr->add_ref(); }
+  ~interface_ptr() { ptr->release(); }
+  T *ptr;
+}; // interface_ptrとrefcnt_ptrは共通化できる？
+
+- 構造体がなんらかのインタフェースを実装する場合はrefcntを埋め込み、
+  そうでない場合は埋め込まない。これは、継承を使わないときはrefcnt
+  のぶんサイズが大きくなるのを避け、またadd_ref/releaseが仮想関数
+  になるのを避ける(効果ある？)ため。
+- インタフェースを実装しない構造体のスマートポインタはrcptr<T>。
+  指す先はrcval<T>。
+- インタフェースを実装する構造体のスマートポインタはircptr<T>。
+  指す先はT。Tはircval_impl$を継承することによってT自体に参照カウント
+  が埋め込まれる。
+
+---------------------------------------------------------------------
+anyの実装
+
+- コード肥大化を避ける
+- sizeof(any)を無駄なく
+- 基本型を常にbox化するかどうか
+- irefcntを継承するものについてはidispatch的なものを用意すればよいか
+- 継承を使っていないものについてはrefcnt_value<T> *を持つ
+
+---------------------------------------------------------------------
+全ての型にデフォで用意する演算
+
+operator =
+operator ==
+operator <
+get_* (各基本型に対して)
+set_* (各基本型に対して)
+getprop
+setprop
+delprop
+getelem
+setelem
+getlen
+setlen
+invoke
+invokeself
+
+---------------------------------------------------------------------
+配列の伸長モード
+
+現在の長さより長いオフセットへのアクセス
+1. 読み出しはデフォルト値、書き込みを無視
+2. 伸ばす
+
+---------------------------------------------------------------------
+配列の要素が左辺値の場合の評価順序
+
+自動伸長のvectorのとき、
+a[i] = a[j];
+は片方の伸長がもう片方の参照を無効化してしまう。一度右辺値を
+無効化されないようにコピーしなければならない。(あるいは評価順序
+を工夫する？)
+無効化される恐れの無いのは？
+1. 自動伸長ではない場合。
+2. 左辺値がopaqueで、右辺のobjectと異なるものである場合
+
+---------------------------------------------------------------------
+opaqueオブジェクト？
+
+---------------------------------------------------------------------
+式の変更影響範囲をどう調べるか
+
+影響を及ぼされる==内部参照が無効化される。部分文字列関数のように、
+あるオブジェクトの内部参照を返すような関数もある。それらの関数が
+返した内部参照は、それを含むオブジェクトが変更された場合には無効化
+されてしまうから、それより前に安定なオブジェクトへコピーする必要
+がある。
+
+影響範囲の見積もり例:
+・値型のオブジェクトは、それの一部を更新しても他のオブジェクトに
+  影響を及ぼす可能性はない。
+・値型ではないオブジェクト(参照を含む可能性のあるオブジェクト)を
+  更新すると、他のオブジェクトに影響を及ぼす可能性がある。
+・値型しか使っていない関数を呼んでも他のオブジェクトに影響を及ぼす
+  可能性はない(pure関数)。pure関数は内部でpure関数を呼べる。
+
+内部参照を返すような関数や演算子の例:
+・operator []はコンテナの要素への参照を返す。これはコンテナ自体が
+  変更されれば(大抵は)無効化される。
+・構造体のフィールド参照 foo.fld は構造体への参照。これは構造体foo
+  が変更されれば無効化される。
+・文字列を返す関数はstring_refを返す。これは文字列自体が変更され
+  れば無効化される。
+
+無効化されるのは関数呼び出しの前か後か
+・関数呼び出しの引数に指定した参照がその関数によって無効化される
+  可能性があるような場合は、その関数自身がコピーを作るべきか。その
+  方針でダメなケースはあるか？ memcpyとmemmove？
+
+---------------------------------------------------------------------
+IO影響？
+
+
+---------------------------------------------------------------------
+pure関数をどのように増やすか
+
+---------------------------------------------------------------------
+out引数
+
+実装はnon-const参照渡し。ただしaliasがおきてはならない？
+
+---------------------------------------------------------------------
+upvalue
+
+通常関数ではないにもかかわらずlocalsに無い
+
+---------------------------------------------------------------------
+perlの例外
+
+perlの例外を投げる箇所でどうやってC++のデストラクタ呼ばせるか
+
+---------------------------------------------------------------------
+operator []
+
+そのままC++の[]にemitするかどうか。
+foo["xyz"] = foo["abc"];
+これはC++で安全なのか？ → 安全。理由は以下の通り。
+m[k] は (*((m.insert(value_type(k, data_type()))).first)).second と
+等価。mapのinsertはイテレータを無効化しない。
+
+では安全でないケースは？
+foo[]の左辺値取得がfooのイテレータを無効化するような場合。
+そのようなものは排除するか？
+- mapについては削除以外でイテレータを無効化することは無い
+
+---------------------------------------------------------------------
+懸垂ポインタ関連の整理
+
+言語としては、文の境界で全ての参照はopaqueである(一時的ではない)こと
+を保証する。
+  - 変数の型には生ポインタが無い。
+  - string_refは内部的に最適化過程で置き換えるもの。
+式の評価途中では一時的な参照を返すことがある。
+  - 配列や連想配列の要素の左辺値
+  - それらの部分オブジェクト(foo.bar)
+評価途中で無効化されないことをどのように保証するか？
+  - オブジェクトに代入演算子を適用すると、そのオブジェクトの内部への
+    参照は無効化される。そのようなものを右辺に適用して大丈夫か？
+      左辺値を取得すること自体は参照を無効化しない。それに代入を
+      適用することが問題ないのかということ。
+	(1) 各フィールドの代入が右辺を無効化しないこと
+	  →これは構造について再帰的に証明できる？
+	(2) 各フィールドの代入が他のフィールドの右辺を無効化しないこと
+      代入演算子
+      if (&x != this) {
+	a = x.a; // これはthis->aとその内部を無効化する
+	b = x.b;
+	c = x.c;
+      }
+      struct foo {
+	ptr<foo> a;
+	int b;
+	int c;
+      };
+      foo x;
+      x.a = new foo;
+      x = *x.a; // この代入は右辺がcall_traitsによりconst参照渡し
+      ?????????????????????????????????????????????????????????????
+  - オブジェクトのメソッドを呼び出すと、そのオブジェクトの内部への
+    参照は無効化される。呼び出しの引数が有効であることを保証するため
+    には、引数をopaqueにしなければならない。
+      foo->method(foo);
+
+---------------------------------------------------------------------
+代入の有効性(ポインタ)
+
+先にincrefしなければならない！ さもないとxが無効化される。
+以前のバージョンで間違っていたので注意！
+    if (x != ptr) {
+      x->incref$();
+      ptr->decref$();
+      ptr = x;
+    }
+呼び出された時点で*thisとxが有効ならば、指す先の型にかかわらずこの代入
+の実行後の*thisは有効。
+理由:
+  指す先が無効化されるのは、参照カウントが0になった場合だけ。
+  それはdecref()の実行後のみおきうる。decref()の実行後にptrの古い値
+  は無効になりうるが、xはptrと別のアドレスなのでxが無効にはなりえない。
+  したがってptr=x代入後の*ptrは有効。
+  ちなみにif判定をはずしても有効性にかわりはない。仮にptrとxが一致して
+  いるとしても、increfによって参照カウントが2以上になるのでdecrefで
+  0になることはありえないから。
+
+---------------------------------------------------------------------
+古い*thisは無効化される
+
+ptr<foo> x;
+func1(x->b, x = y); // x->bは x=yによって無効化されている
+代入式をトップレベル以外で実行するのは禁止しなければならない。
+単に代入がvoidを返すようにするだけではダメで、式評価の最後が
+代入になるようにせねばならない。
+
+FIXME: 正しいか確認せよ。間違いでは？
+
+---------------------------------------------------------------------
+代入の有効性(構造体)
+
+foo& operator =(const foo& x) {
+  if (this != &x) {
+    a = x.a;
+    b = x.b;
+    c = x.c;
+  }
+  return *this;
+}
+各a, b, cの型の代入演算子は有効である(未定義動作を引き起こさない)と
+仮定。スマートポインタ型については指す先の型にかかわらず有効。
+(コンテナについては？)
+このfoo型の代入演算子は有効か。
+
+struct foo {
+  vector<foo> a;
+  int b;
+};
+foo v;
+v = v.a[100];
+この代入の中では、
+a = x.a; // 古いv.aはクリアされる。xはすでに無効
+b = x.b; // 未定義
+
+---------------------------------------------------------------------
+式の無効化
+
+式は、別の式で表されるオブジェクトが書き換わる・無効化されること
+によって無効化される可能性がある。式がいつ無効化されるかは静的
+に決まる。
+・substringとrangeは、参照先コンテナ自体が書き換わると無効化。
+  ただしコンテナの要素が書き換わっても無効化されない(？)。
+・substringとrange以外の変数(auto変数、global変数、関数引数)は無効化
+  されない。(関数引数が参照渡しであっても無効化される可能性は無いが、
+  ただしポインタ経由の変更によって書き換わる可能性はある。)
+  (substringとrangeは構造体のフィールドにできない)
+・コンテナ要素は、依存するコンテナ自体が書き換わると無効化される
+  ことがある。無効化される範囲はコンテナによる。
+・構造体のフィールドは、その構造体自体が無効化されるまで有効。
+・ポインタの指す先は、そのポインタが書き換わると無効化。
+・ポインタの指す先は殆どの関数呼び出しによって書き換わる可能性
+  がある(指す先は複数個所のポインタから共有されていて、それ経由
+  で書き換わる可能性がある)。そのため、指す先の部分式は頻繁に無効
+  化される。 (*1)
+・メンバ関数の中では(thisは他のポインタから共有されている可能性が
+  あるから)インスタンス変数はポインタの先と同様に、殆どの関数呼び
+  出しによって書き換わる可能性がある。 (*1)
+・参照渡しされた引数は殆どの関数呼び出しによって書き換わる可能性が
+  ある。 (*1)
+
+(*1)の印を付けたものはいずれも、ポインタ経由の変更。
+
+(val/str/map/ref/struct/ifc/any)
+
+再整理:無効化による無効化
+・map/ref/structが無効化されると子は無効化
+・str/mapが無効化されると依存するsubstrとmaprangeは無効化
+
+再整理:更新による無効化
+・refが更新されると指す先は無効化
+・map全体が更新されると要素は無効化
+  - ただしもう少し緩和できる。std::mapはdeleteされるとき以外は無効化
+    しない。
+  - mapのいずれかの要素が更新されても自他要素の無効化はおきない
+・str/mapが更新されると依存するsubstrとmaprangeは無効化
+
+再整理:更新による更新
+・map/ref/structが更新されると子は更新
+
+再整理:ポインタ経由の更新による更新
+・左辺式に現れる一番内側のref/anyについては、その参照先となりうる
+  ref/anyの全てが更新される
+  (foo->bar.baz = xxx は、fooの指す先の型の全てのbar.bazを更新する)
+
+---------------------------------------------------------------------
+ある式eをある左辺値lvが無効化するかどうか判定する方法
+
+左辺値lvを取るような代入や関数呼び出しが、eを無効化するかどうかを
+判定する。funcが関数呼び出し。
+前提1: とりあえずstringrefとrangeは考慮しない
+前提2: 関数の返値はstructなどでも値を返す
+
+変数の種類: global, local, arg(upvalueもargと同じ？), member
+型の種類: simple, struct, ifc, map, rcptr, any
+式の種類: variable, tempval, field, elem, deref
+  (tempvalは関数の返値や算術演算結果と代入の左辺値)
+
+/* 式lvを左辺値とするような関数func呼び出しが、式eを無効化する可能性
+   があるかを返す */
+bool expr_invalidates(lv, func, e)
+{
+  if (e is a variable || e is a tempval) {
+    /* eの式の種類がvariableのときは無効化されない(前提1) */
+    /* eの式の種類がtempvalのときは無効化されない(前提2) */
+    return false;
+  } else if (e is a field) {
+    /* eの式の種類がfieldのときは、親(struct)が無効化される⇔無効化 */
+    return expr_invalidates(lv, func, e->parent);
+  } else if (e is an elem || e is a deref) {
+    /* eの式の種類がelemのときは、親(map)が更新される⇔無効化 */
+    /* eの式の種類がderefのときは、親(rcptr)が更新される⇔無効化 */
+    return expr_modifies(lv, func, e->parent);
+  } else {
+    /* ここにはこない */
+  }
+}
+
+/* 式lvを左辺値とするような関数func呼び出しが、式eを変更する可能性
+   があるかを返す */
+bool expr_modifies(lv, e, func)
+{
+  if (eはポインタ先又はその一部ではない) {
+    if (eはlvと一致又はその一部(配列添え字は同一視))) {
+      return true;
+    } else {
+      return false;
+    }
+  } else /* eはポインタ先又はその一部 */ {
+    /* ここの判定は遅そうなので常にtrueを返すのも良いかも。ここの
+       判定によって生成されるコードの性能にどれくらい差がでるのか
+       検討するべし */
+    if (funcはポインタ経由の書き込みをする可能性がある) {
+      return true;
+    } else {
+      mts = get_modtypes(lv->type);
+      if (mtsがanyかifcptrを含む) {
+	return true;
+      } else if (mtsがeを含む) {
+	return true;
+      } else {
+	return false;
+      }
+    }
+  }
+}
+
+set<texpr> get_modtypes(texpr)
+{
+  set<texpr> mts;
+  mts.insert(texpr);
+  for (t in children(texpr)) {
+    mts.append(get_modtypes(t));
+  }
+}
+
+lvの型に応じて、それが左辺値となったときに変更を及ぼす範囲が決まる。
+- lvの型の子孫にanyやifc ptrを含むときは全型のポインタ先を変更
+- lvの型の子孫にstruct ptrを含むときはそのstruct ptr先を変更
+  さらにそのstruct型について再帰的に影響範囲を得る
+- lv自身の全possible子孫を変更する(possible子孫: 配列添字を同一視)
+パターンとしては、
+- 全型のポインタ先を変更する
+- 特定structのポインタ先を変更する
+- ポインタ先変更はしない
+の3通りがある。いずれの場合も自分の全possible子孫は変更する。
+
+
+---------------------------------------------------------------------
+ある式eをある関数呼び出しが無効化するかどうか判定する方法
+
+関数の内部が不明のときは、使う左辺値以外に起因する無効化がおきる。
+・グローバル変数への書き込み
+・右辺値から辿ったポインタ経由の書き込み
+・upvalueから辿ったポインタ経由の書き込み
+HERE HERE HERE --------------------------------
+
+---------------------------------------------------------------------
+引数をコピーなしに参照渡しできるのはどのようなときか
+
+その引数が同一のステートメント内の式によって無効化される可能性がある
+ならばそれは一時オブジェクトにコピーを作る必要がある。
+
+---------------------------------------------------------------------
+関数呼び出しが何を無効化するか
+
+・readonlyな関数と演算子は何も無効化しない。
+  [],フィールド参照, 参照外し, 算術演算など
+・代入演算子は左辺を変更する。左辺のオブジェクトが書き換わると
+  無効化されるような式は無効化される。さらに、型がポインタかanyであ
+  るか、内部にポインタかanyを含むようなものであれば、「ポインタ経由
+  の書き換わり」が起きる。
+
+---------------------------------------------------------------------
+function attributesのpureとかconstとか
+
+`const'
+     Many functions do not examine any values except their arguments,
+     and have no effects except the return value.  Basically this is
+     just slightly more strict class than the `pure' attribute below,
+     since function is not allowed to read global memory.
+
+     Note that a function that has pointer arguments and examines the
+     data pointed to must _not_ be declared `const'.  Likewise, a
+     function that calls a non-`const' function usually must not be
+     `const'.  It does not make sense for a `const' function to return
+     `void'.
+
+`pure'
+     Many functions have no effects except the return value and their
+     return value depends only on the parameters and/or global
+     variables.  Such a function can be subject to common subexpression
+     elimination and loop optimization just as an arithmetic operator
+     would be.
+
+「ポインタの指す先を変更しない」属性が必要か？ pureでいい?
+
+---------------------------------------------------------------------
+無効化される範囲の見積もり
+
+代入などの左辺
+
+上位値として関数を参照しているが、現在のフレームのupvalueに
+登録されていないケースを探す
+各expr_symbolについて、その定義がfuncobjであるか見る。
+funcobjであれば、そのsymbolが現在のフレームのupvalueに
+入っているかを見る。入っていなかったらアウト
+
+---------------------------------------------------------------------
+【無効化判定単純化案1】 引数の生参照/生ポインタ渡しについて(素案)
+
+・struct型の引数はconst foo &で渡す。
+・ptr/cptr型の引数は生foo * constで渡す。
+・stableで無いか左辺値の一部であるような式を渡すときはそれぞれstruct
+  やptrへキャストすることによってstableなオブジェクトを一時的に作る。
+  (左辺値の一部であるときはstableであってもコピーするのは、これは左辺
+  とaliasしていないことを保証するため。さもないと呼ばれた先の関数の
+  中で左辺値として渡した参照経由で右辺が変更されうることになってしま
+  う。値渡しされた関数引数は(生ポインタ渡しでも)aliasされていないと決
+  めておけば、呼ばれた側ではそれらをstableとできるので都合が良い。)
+
+stableな式とは？
+・local変数はstableな式。
+・関数引数はstableな式。
+・upvalueはstableな式。
+・関数の返値はstableな式
+・stableな式のfieldはstableな式。
+・固定長配列のmappedは、固定長配列自体がstableならstable。
+・それ以外はstableでない。
+
+補足
+・メンバ関数内でのメンバフィールドはstableではない。これは*thisがポ
+  インタ経由で変更されうるから。
+
+stableではない式を左辺値として使えるのは、一つの文の中でその式だけが
+左辺値である場合のみ。かつ、呼ばれる関数が「ポインタの指す先を変更し
+ない」属性を持つ関数であるときのみ。
+
+---------------------------------------------------------------------
+【無効化判定単純化案1ベース】 Cへコンパイルされた関数の呼び出し規約
+
+渡しかた:
+・struct型の引数(右辺値)はconst foo &で渡す。
+・ptr/cptr型の引数(右辺値)は生foo * constで渡す。
+・左辺値はfoo &で渡す。
+・それ以外の引数(右辺値)はfooで渡す。
+
+呼ぶ側の要件:
+・stableでない式を左辺値として使えるのは、一つの文の中でその式だけが
+  左辺値である場合のみ。かつ、呼ばれる関数が「ポインタの指す先を変更
+  しない」属性を持つ関数であるときのみ。
+・生ポインタや生参照で渡すような右辺値引数については、もしそれが
+  stableな式でないか、あるいは文の中の左辺値のいずれか又はそれらの部
+  分式であるような場合には、コピー(一時オブジェクト)を作ってそれのポ
+  インタを渡すようにしなければならない。
+・左辺値は、同じ文の中の他の左辺値又はそれらの部分式であってはならな
+  い。(restrictedポインタになる)
+
+保証されること:
+・byref引数は関数の中で無効化されないことが保証される。またbyref引数
+  を変更しても、それ以外の(byref引数を含む)引数は変更されないことが
+  保証される。
+・生ポインタや生参照で渡された引数、byref引数についても、関数の中で
+  無効化されないことが保証される。
+
+---------------------------------------------------------------------
+【無効化判定単純化案1ベース】 演算子への引数はstable化必要か
+
+副作用を持つものについては必要。代入演算によって左辺が書き換わる際に、
+右辺がunstableなものであれば無効化しうる。
+
+---------------------------------------------------------------------
+【無効化判定単純化案ベース】 stringrefとrangeについて
+
+・関数がstringrefを返すときは、どの引数に取ったオブジェクトへのref
+  になるのか関数のシグニチャでわかるようにする。
+  function foo(x : string, y : string) : stringref refs x;
+・stringrefを受ける式がstringrefとして定義してよいのは、そのstringref
+  が有効なときだけ。そうでないならstringとして定義しなければならない。
+・stringrefが有効というのは以下の場合。
+  - 参照先が非ポインタのときは、stringrefの最後の参照までの間に参照先
+    が左辺又はその一部となることが無い場合にのみ、そのstringrefは有効。
+  - 参照先がポインタのときは、そのstringrefに代入した直後の式から、
+    stringrefの最後の参照までの間、全ての関数呼び出しがポインタ経由
+    変更しないような関数であり、かつ参照先が左辺又はその一部となるよ
+    うなことが無い場合にのみ、そのstringrefは有効。
+  - 参照先がポインタ的なものであるかどうかは隠蔽されることがあるから
+    全てポインタ的なものと思ったほうがよいか。あるいはポインタ的な
+    ものかどうかを区別する方法を提供するか。(stringはポインタ的でな
+    く、io::fileはポインタ的)
+
+FILEポインタの中のバッファを参照するようなstringref
+  function read_line(fp : io::file): stringref refs fp;
+これを呼ぶ例:
+  while (!io::is_eof(fp)) {
+    var line : stringref = io::read_line(fp);
+    io::print_line(outfp, line);
+  }
+
+---------------------------------------------------------------------
+左辺値を取る式
+
+・代入演算子の左辺は左辺値
+    = TOK_ADD_ASSIGN TOK_SUB_ASSIGN TOK_MUL_ASSIGN TOK_DIV_ASSIGN
+    TOK_MOD_ASSIGN TOK_OR_ASSIGN TOK_AND_ASSIGN TOK_XOR_ASSIGN
+・メソッド呼び出しの*this(「.」と「->」)へ適用される式は左辺値
+・byref引数へ適用される式は左辺値(TODO)
+
+三項演算子は左辺値にできない。
+
+---------------------------------------------------------------------
+左辺値にできる式
+
+・ローカル変数とグローバル変数は左辺値を持つ
+  (ただし関数型のときは持たない)
+  (関数引数、upvalueは持たない)
+・フィールド参照(op .)は、左が左辺値を持つとき左辺値を持つ
+・配列要素(op [])は、左が左辺値を持つとき左辺値を持つ
+・ポインタ参照先(op ->)は左がcrefでなくrefであれば左辺値を持つ
+・括弧でくくられた式は中身が左辺値を持つとき左辺値を持つ
+・var式は左辺値を持つ
+
+---------------------------------------------------------------------
+左辺値部分式チェック
+
+1. 各完全式について、左辺式を集める。
+   expr_stmtsのheadは完全式。forなどのblockの中は別完全式。forの3式は
+   それぞれ別完全式。括弧でくくられている場合もある。
+2. 各完全式の中の全ての(左辺式, 左辺式)の組について、右が左辺式の部分
+   式になっていないかチェック。なっていればエラー(can be aliased)。
+3. 各完全式の中の全ての(左辺式,式)の組について、式が左辺式の部分式に
+   なっていないかチェック。なっていればその式にmod_by_lvフラグを立て
+   る。
+
+---------------------------------------------------------------------
+【単純化案2】
+
+引数の要件:
+・渡された生ポインタは、呼ばれた関数の中で無効化される可能性があって
+  はならない。未知のalias経由で変更される可能性はあってもよいし、ポイ
+  ンタの指す先の一部が未知のaliasingによって無効化される可能性があっ
+  てもよいが、渡されたポインタ自体は無効化される可能性があってはなら
+  ない。
+・一方呼ばれた関数の中では、渡された引数が生ポインタであってもそれが
+  無効化されないことを仮定できる。その関数から別の関数を呼ぶ際にその
+  生ポインタを渡すことができるし、そのポインタの先のfieldも生ポインタ
+  でかまわない。
+
+もともとstableな式:
+・local変数、upvalue、関数引数、メンバ変数、global変数はstable。
+・関数の返値はstableである。
+・stableな式のfieldはstableである。
+・stableな式の参照外しはstableである。(本当か？)
+
+stableでないのは:
+・配列や連想配列のmappedはstableではない。これだけ？
+
+stable化:
+・右辺値はスマートポインタや構造体など安定型へキャストしてから引数を
+  渡す。
+・メソッドの(*this)やbyref引数が配列要素だった場合はどうするのか？
+  x[3].foo();
+  安定化のためにキャストするとコピーが作られてしまう。
+  →これはエラーにするしかないと思われる
+・配列要素やそのfieldを左辺とする代入は、
+  (1) 右辺を計算
+  (2) 左辺の代入先を計算
+  (3) 代入
+  の順序であればよさそう
+  x[3].fld = bar(...);
+  これは
+  v = bar(...);
+  x[3].fld = v;
+  とすればいいように思える。しかしこの代入がxを書き換えないことは保
+  証されるのか？ →される。次の項目参照。
+  分割しないとbar()の中の副作用でxが書き換えられ、x[3]が無効化される
+  可能性がある。よって分割は必須。
+
+---------------------------------------------------------------------
+しかしこの代入がxを書き換えないことは保証されるのか？
+
+xは無効化されないことは保証されている。しかし書き換わらないことは保証
+されていない。xの配列要素を書き換えることによってx自体が書き換わるよ
+うなことがあれば、x[3]は無効化されることになる。
+(そんなことがあったら配列使えない...)
+
+xの要素がxへの参照を間接的に持つことがありうるのは、ptrを使った場合
+のみ(vectorでは循環参照を作れないので起き得ない)。xの要素がptr先又は
+その子孫にxの参照を持つとき、xの要素への代入の影響はそのptrの
+decrementだけである。xは無効化されないことは保証されているので開放さ
+れることはありえない。またdecrementによって配列がリサイズされること
+もありえない。
+
+よってこの代入がxを書き換えないことは保証される。
+
+---------------------------------------------------------------------
+複雑な式の分解
+
+v = foo(bar(fubar(x), y), baz(z));
+↓
+t0 = fubar(x);
+t1 = bar(t0, y);
+t2 = baz(z);
+v = foo(t2, z);
+
+式文ならば複数の文を並べる。
+(複文にする？)
+
+分解する式: (副作用を持つものだけでよい)
+・関数呼び出し
+・代入演算子適用
+しない式: (副作用を持たないものはしない)
+・pure関数呼び出し
+・参照外し、配列要素参照
+・副作用を持たない全ての演算子適用
+
+--------------------------------------------------------------------
+stable化の実装
+
+・e1(e2, e3)
+  e1を左辺値としてstable化。
+  e1をstabilize_expr(lv=1, finside=1)。
+  e2とe3はstabilize_expr(false)。
+  一時変数作成。
+・e1 = e2 その他代入演算子。
+  e2をstabilize_rvalue()。e1はstable化しなくてよい。返値はstable
+  (副作用があるのでトップレベルでないなら一時変数を作る)。
+・++e1
+  stable化不要。返値stable(副作用があるのでトップレベルでないなら
+  一時変数を作る)。
+・e1 + e2その他算術・論理・比較演算子
+  stable化不要。返値は常にstable。
+・e1.e2
+  stable化不要。返値はe1がstableならstable。
+・e1->e2
+  stable化不要。返値はe1がstableならstable。
+・e1[e2]
+  stable化不要。返値は常にunstable。
+・&e1
+  stable化不要。返値は常にstable。
+・e1 ? e2 : e3
+  stable化不要。返値はe2とe3のどちらかがunstableならunstable。
+・シンボル、var、リテラル
+  常にstable。
+
+stabilize_rvalue()
+・stableでないなら一時変数化かスマポ化
+
+stabilize_lvalue()
+・stableなら何もしない
+・e1->e2
+  e1を一時変数化かスマポ化
+・e1.e2
+  e1をstabilize_lvalue()
+・*e1
+  e1を一時変数化かスマポ化
+・(e1)
+  e1をstabilize_lvalue()
+・それ以外
+  エラー
+
+懸垂ポインタを避けるためにstable化しなければならないのは
+・関数の引数(右辺値)、byref引数(左辺値)、*this(左辺値)
+
+懸垂ポインタを避けるために一時変数化が必要なのは
+・各種代入演算子の左辺が不安定のとき、右辺を一時変数化必要
+  (左辺への参照を右辺の評価が無効化してしまうのを避けるため)
+・各種代入演算子の左辺(ただし初期化代入なら不要)
+
+評価順序を固定するために一時変数化が必要なのは
+・代入演算子と副作用を持つ演算子の返す値(右辺値)
+
+右辺値のstable化は単にその箇所をスマポへキャストすればよい。
+右辺値のstable化は()と.を辿って*または->の引数をスマポへキャスト。
+
+--------------------------------------------------------------------
+stabilize_lvalue()
+
+左辺値をstable化する。foo[5].barはstable化できないのでエラー。
+foo[5]->barは、foo[5]を一時変数に取るとstable化できる。
+foo[5]->bar.bazはfoo[5]を一時変数に取るとよい。
+最後のopが「.」のときは部分式に下っていって「->」を見つけたらその
+左辺を一時変数にとるとstable化できる。「.」と括弧以外のopを見つけた
+らエラー。
+
+--------------------------------------------------------------------
+stabilize_rvalue()
+
+右辺値をstable化する。式を一時変数に取ればよい。
+
+---------------------------------------------------------------------
+変換を許可
+
+文字列と全ての型
+数値型同士
+構造体のコンストラクタ
+
+---------------------------------------------------------------------
+比較関数
+
+連想配列のキーにするために、operator <を全ての型に定義する必要がある。
+
+---------------------------------------------------------------------
+組み込みメソッド
+
+配列
+  a.empty();
+  a.size();
+  a.resize();
+  a.clear();
+  a.push();
+  a.pop();
+連想配列
+  m.empty();
+  m.size();
+  m.erase(T key);
+  m.exists(T key);
+  m.keys();
+  m.next(T key);
+  m.prev(T key);
+  m.clear();
+ポインタ
+  p.null();
+  p.reset();
+
+---------------------------------------------------------------------
+タイムスタンプが一致すれば内容が一致することを保証する方法
+
+一般には同一のファイルのst_mtimeが同一であっても読み込むタイミング
+によって内容が異なることがありうる。これは同一秒のうちに内容が変更
+されることがあるから。
+ただし、以下の条件下ではst_mtimeが一致すれば内容も一致することが
+保証される。
+  ・ (1) time (2) ファイル読み込み (3) stat を順に実行
+  ・ statの st_mtime が timeの時刻よりも真に小さい
+
+why?
+二つのプロセスが上の処理を実行したとき、st_mtimeが同一であり上の
+条件もみたしているとする。そのとき読んだファイルの内容が同一である
+ことを示す。
+読んだ内容が不一致と仮定(背理法)。st_mtimeは同一、timeの結果は
+それぞれst_mtimeより真に大きい。不一致があるならそのmtimeの時刻
+(かそれより前？※)にデータブロック書き込みが起き、読んだ2プロセス
+のいずれか一方ははその書き込みの前のデータを読んだことになる。そう
+なったプロセスについて、書き込みより同じか前の時刻にデータを読んだ
+のだから、データを読んだ時点の時刻はmtime時刻よりは同じか小さく、
+さらにデータを読むよりtime()を取ったほうが順序が前だから、その
+time()の値はmtime時刻より同じか小さい。これはtime()の結果が
+mtimeより真に大きいことと矛盾する。
+(↑まだ微妙に不安)
+
+---------------------------------------------------------------------
+variant
+
+variant foo {
+  function foo_int(x:int):foo;
+  function foo_string(x:string):foo;
+}
+
+struct foo {
+  enum foo$e { foo_int$e, foo_string$e };
+  union {
+    char foo_int$u[sizeof(int)];
+    char foo_string$u[sizeof(string)];
+  };
+  struct foo_int$s { };
+  struct foo_string$s { };
+  foo(foo_int$, int x) : 
+};
+
+---------------------------------------------------------------------
+expression
+
+op, funccall, symbol, literal
+このうちfunccall以外の式でvoidならエラーにするべき？
+・式文がsymbolかliteralであればエラー
+・opの左辺か右辺がvoidであればエラー
+・funccallの引数がvoidであればエラー
+
+---------------------------------------------------------------------
+コンパイル整合性チェック
+
+・各ソースを読むときは、mtimeから一秒以上経つまで待つ(タイムスタンプ
+  で更新チェックするため)
+・コンパイルされた.ccには、そのccをコンパイルした各ソースのタイムス
+  タンプのリストを記録する。
+・実行前に、各.soをdlopen/dlsymしてタイムスタンプが全一致しているか
+  確認する。
+
+---------------------------------------------------------------------
+部分ソースファイル
+
+ソースをコンパイルすると、そのソースをimportするものにとって必要な
+部分だけを切り出したファイルを生成する。他のソースからimportすると
+きにはそのファイルがあればそれを使う。
+
+---------------------------------------------------------------------
+テンプレート案1: モジュールに型引数
+
+namespace foo(tp);
+import bar(tp);
+--
+import foo(tp);
+
+---------------------------------------------------------------------
+テンプレート案2: モジュールに何でもパラメータ
+
+テンプレートというかマクロ？
+nssymを何でもパラメータとして取れる。つまりconst symbol？
+typedef, struct, interface, function, variant, 
+
+namespace foo(s);
+import bar;
+...
+bar(s)::
+
+namespace monoid{t1,t2};
+function sum(x:t1,f:f1):t2 {
+  var r:t2;
+  for (var i:ulong = 0; i < x.size(); ++i) {
+    r = f(r, x[i]);
+  }
+  return r;
+}
+
+namespace mon2{t};
+function sum2(x:vector(t)):t {
+  return monoid{vector(t),t}::sum(x);
+}
+
+namespace functional{f};
+
+ダメ？
+
+---------------------------------------------------------------------
+パラメトライズトタイプ(シンボル？)案
+
+struct pair(t,s) {
+  var first:t;
+  var second:s;
+  function add_first(v:t):void { first += v; }
+}
+
+struct hpair(t) {
+  var first:t;
+  var second:t;
+  function sum():t { return first + second; }
+}
+
+var z:pair(int,int);
+
+expr_structにtparamsを追加。
+expr_structにinstancesを追加。インスタンス化されたパラメータのリスト。
+fn_resolve_typeexprでstructにparamがあるケースを追加。
+
+タイプは作れないようにする？関数だけ作れるように？
+function sum(x:vector(0)):0
+{
+  var r:0;
+  foreach (i: x) {
+    r += i;
+  } 
+  return r;
+}
+
+
+---------------------------------------------------------------------
+型の計算はどこでやる？
+
+各式のtexprは最終的にはeval後のものでなくてはならない。
+
+- resolve_vartypes_oneでexpr_var, expr_argdeclsのtexprとexpr_funcdef
+  のrettypをexpand_type_aliasしている。
+- check_typeでデフォルトコンストラクタ呼び出しのために
+  expand_type_aliasしている。
+
+---------------------------------------------------------------------
+template 案2
+
+展開するタイミング？
+
+struct (tp) tbar {
+  var f1:tp;
+}
+struct (tp) tfoo {
+  var f1:int;
+  var f2:tbar(tp);
+}
+var x:tfoo(int);
+
+function (tp) ffoo(v:tp, w:vector(tp)) {
+  w.push_back(v);
+}
+
+---------------------------------------------------------------------
+template展開
+
+struct (T) foo {
+  var v:T;
+  function f1(x:T):T {
+    return x + v;
+  }
+  function (T2) f2(x:T2):void {
+    v = x;
+  }
+}
+
+---------------------------------------------------------------------
+templateコンパイルの流れ
+
+fn_compile_instantiated(e)
+{
+  eから再帰的に、instantiatedな部分だけを変数定義。
+  eから再帰的に型チェック
+  - 型チェックの際にuninstantiatedなもの(t)を参照していたら、
+    tをinstantiateし、fn_compile_instantiated(t_)する。
+}
+
+---------------------------------------------------------------------
+instantiate処理
+
+expr_struct等(e)をdeep cloneする(einst)。
+eとeinstのblockを取る
+einstのblockのtinfo.template_backrefをeのblockに
+eのinstancesにeinstを追加
+einstのtinfo.targsをセット
+fn_compile_instantiated(einst)実行
+
+ネストされたテンプレートのinstantiateは？
+struct (t1) foo {
+  struct (t2) bar {
+    ...
+  }
+}
+fooをdeep cloneする際に、barのtinfo.template_backrefをクローン元
+のものにsetし、クローン元のinstancesクローン先を追加する。また
+tinfo.template_instantiatedにfooのblockをセット。
+
+まとめ:
+・templateをインスタンス化する際にはその構造体以下をdeep cloneする。
+・deep cloneの際には、その構造体や下のtemplateについて、クローン
+  元とクローン先のtemplate_backrefとinstancesを互いにセット。また
+  クローン先の各templateノードについてtemplate_instantiatedを
+  クローン先の根元にセット。
+・クローン先の根元の、targsをセット。
+・クローン先を根元からfn_compile_instantiated()実行。
+
+---------------------------------------------------------------------
+upvalue整理
+
+・構造体はupvalueを持つことができない
+
+---------------------------------------------------------------------
+function body
+
+テンプレートの一部のときはコンパイルする。コードはinline関数を生成。
+そうでないときはコンパイルしない。
+
+---------------------------------------------------------------------
+型評価のタイミング
+
+
+変数の宣言   var x:hoge;
+引数と返値の宣言   foo(x:fuga):foo { ... }
+関数呼び出し形式   f(...)
+
+---------------------------------------------------------------------
+型式
+
+typedef, struct, variant, interface, funcdef, teが型定義式。
+
+get_texpr(): その式の型を返す
+  型定義式については、その式自体はvoid型なのでget_texpr()はvoidを返す。
+  tparamについてもvoidを返す。
+get_value_texpr(): 型定義式から型式を取得
+  型定義式については、symbol_defとしてその型定義式を指すような型式を
+  返す。get_value_texpr()は型定義式以外には定義されない。
+  - typedefにrhsがあればそのrhsを返す。
+  - teであればそのte自体を返す。
+
+---------------------------------------------------------------------
+シンボル評価
+
+まずresolve_nameし、それをsymbol_defへセット。
+symbol_defのesortが型であるか変数であるかを区別。
+var, argdeclが変数
+  - get_texpr()はsymbol_defのget_texpr()を返す。
+  - get_value_texpr()はvoidを返す。
+typedef, struct, variant, interface, funcdef, te, tparamsが型
+  - get_texpr()はvoidを返す。
+  - get_value_texpr()は、symbolまたはtparamのsymbol_defを
+    何段も辿ってtypedef(右辺がte)又はteになったところで
+    eval_type()。
+  - eval_type()の動作:
+    tparamのsymbol_defを辿る。先がtparam以外になるまで。
+    先が型定義式じゃなかったらエラー。
+    先の型定義式の
+
+---------------------------------------------------------------------
+emit整理
+
+emit_funcbody: (emit_exprのほうがよいか？)
+  pxcの式に対応するcの式をemitする。型・関数定義式については何もしな
+  いが、関数オブジェクトについてはそのインスタンス定義をemitする。
+  varについてはそのシンボルのc式をemitする(var宣言は宣言した変数を
+  値として持つため)。
+emit_cdecl: (emit_vardeclのほうがよいか？)
+  argdecls, var, funcdef(関数オブジェクトの場合のみ)について、その
+  変数を宣言/定義するコード(関数引数の宣言やupvalue定義に使う)を
+  emitする。argdeclsのときはcall traitsに応じて不安定オブジェクトを
+  emitすることもある。
+emit_symbol_str: (get_cname_strにする？)
+  argdecls, var, funcdef, typedef, struct, variant, interface, teに
+  ついて、対応するCの名前をemitする。グローバルなシンボルのときは
+  名前空間も付ける。teについては型引数も付けた長い名前を出す。
+emit_local_decl, emit_local_decl_optimized:
+  blockとstmtsについて、そのブロックのauto変数定義をemitする。
+emit_memberfunc_decl: (非メンバ関数にする？)
+  blockについてメンバ関数をemit。
+
+---------------------------------------------------------------------
+unification
+
+function (t) get(x:foo(t)):t {
+  return x.value;
+}
+var z:foo(int);
+get(z);
+
+getの引数はx:foo(t)とz:foo(int);
+呼ぶ側は常に具体型だから tがint
+b1がconcreteなブロック。tinfoのtparamsで具体型適用がわかる。
+対応する型パラメータidは、t0のtlargsの各head(te型)と上のtparamsの各
+エントリとを照合すればよい。head(te)のsymbol_defがexpr_tparamsのとき
+そのparamidのtvmapエントリに突っ込む。
+なので、
+具体型のほうのtparamsのparam_defをみれば、具体型の型引数適用がわかる。
+
+---------------------------------------------------------------------
+明示的キャスト
+
+・数値型同士の変換 var x:int = int(v);
+・ポインタのup/down cast(インタフェースから具体型へ)
+・
+
+---------------------------------------------------------------------
+リフレクション
+
+anyの実装 := (vtable, void *)
+
+---------------------------------------------------------------------
+switch/case
+
+union maybe {
+  var intval:int;
+  var longval:long;
+}
+case v.intval {
+}
+case v.longval {
+}
+
+if (case v.intval) {
+}
+
+---------------------------------------------------------------------
+file
+
+ファイルデスクリプタはリーク・多重closeを避けるために、必ず参照で
+持つ。dup2()は無理？
+ファイルデスクリプタ番号取得は許可してよい。ただし番号からfileオブジェ
+クトは作成不可。
+
+---------------------------------------------------------------------
+const
+
+const o_rdonly:int extern_c "O_RDONLY";
+const foo:int = 12;
+
+byval, bycref, byref, bycptr, byptrを用意する？
+bycptrとbyptrはCの関数専用。
+function foo(x:int byref, y:int bycref, z:int byptr)
+
+---------------------------------------------------------------------
+extern_c
+
+extern_c typedef file_impl "io::file_impl";
+io::file_impl型をinline_hで定義する
+
+extern_c struct timeval {
+  ulong tv_sec;
+  uint tv_usec;
+}
+フィールドのメンバは実際の型と異なっていてもよい。
+
+const o_rdonly:int extern_c "O_RDONLY";
+const foo:int = 12;
+
+bitmask open_flags {
+  o_rdonly,
+  o_wronly,
+  o_rdwr,
+  o_append,
+  o_async,
+  o_cloexec,
+  o_creat,
+  o_excl,
+  o_trunc,
+}
+
+extern_c "type" inline
+
+extern_c "fdecl" inline
+
+extern_c "fdef" inline
+
+
+
+---------------------------------------------------------------------
+posix
+
+全部io名前空間に入れる？
+
+process::
+_exit
+abort
+alarm
+exec
+getegid
+geteuid
+getenv
+getpid
+kill
+nice
+raise
+setgid
+setpgid
+setsid
+setuid
+sleep
+system
+wait
+waitpid
+
+io::
+access
+chdir
+chmod
+chown
+close
+closedir
+creat
+dup
+fcntl
+getcwd
+link
+lseek
+mkdir
+mkfifo
+pipe
+readdir
+remove
+rename
+rewinddir
+rmdir
+stat
+umask
+unlink
+
+error::
+errno
+
+time::
+clock
+gmtime
+mktime
+strftime
+time
+utime
+
+---------------------------------------------------------------------
+aliasに引数を持てるように
+
+alias list(t) ref(cons(t));
+var xs:list(int);
+evalすると: list(int)) => ref(cons(int))
+
+eval:
+左辺式のシンボル定義(この場合list)がaliasであったら、
+もし引数を持たないなら単純にrhsをevalすればよい。
+引数を持つなら、rhsの引数に仮引数のcloneを置き換えた式をつくり、それ
+をeval
+
+---------------------------------------------------------------------
+expr_teのsymbol_defがnull
+
+どこでsymbol_defをセットすべきなのか？
+expr_te::get_symbol_def()が何処から呼ばれるべきなのか。
+evalしたときに確定すればよい。
+
+---------------------------------------------------------------------
+Cのマクロ
+
+extern 型 名前 Cの名前
+extern int o_rdonly "O_RDONLY";
+
+---------------------------------------------------------------------
+コンパイル時評価式?
+
+alias foo{x} x * x
+alias hoge { name => 'abc', value => 123 }
+
+
+---------------------------------------------------------------------
+コンパイルの流れ
+
+.pxcは実行時のcwdに作る。cleanで消せる。
+
+
+---------------------------------------------------------------------
+明示キャスト
+
+int(x);
+funccallのfuncが型であって、引数が一個であって、その引数の型がfunc
+の型へ変換可能である場合、それは明示キャスト。
+
+---------------------------------------------------------------------
+eval
+
+struct expr_cmplx {
+  expr_i *ex;
+  std::list<expr_i *> args;
+};
+expr_cmplx eval_expr(const expr_cmplx& ec);
+コンパイル時に評価できる式を評価する。評価結果がCテンプレートの場合は
+返値にもargsが付く。それ以外のケースでは返値にargsは付かない。
+
+exの種類:
+expr_maのとき:
+  argsがあるとエラー。ないならmaのsymbol_defとtlargをexpr_cmplxに変換
+  し、再帰的にeval_expr()を呼び出す。
+expr_symbolのとき: 
+  symbol_defとargsを指定してeval_expr()
+expr_aliasのとき:
+  引数の数があっていることを確認して右辺に置き換え、さらにその式を
+  evalする。
+
+
+---------------------------------------------------------------------
+eval関連の従来の動作
+
+symbolのeval:
+symbol_defがaliasのとき、そのaliasが引数を取らないことを確認して、
+aliasの右辺をevalしたものを返す。
+symbol_defがteのとき、そのteをevalしたものを返す。
+symbol_defがtparamsのとき、そのtparamsのparam_defを返す。これはすでに
+eval済みのはず。
+それ以外のときはsymbol_defのget_value_texpr()を返す。
+
+teのeval:
+symbol_defがtparamsのとき、tparamsのparam_defがあればそれをevalした
+ものを返す。そうでないならparamidをセットしたteを作り、それを返す(こ
+れはtemplateのargsをインスタンス化する前に自動マッチさせるために必要)
+symbol_defがテンプレート型またはテンプレート関数のとき、それをインス
+タンス化して返す。
+symbol_defがaliasのとき、型引数を置換した式を作り、さらにそれをeval
+したものを返す。
+symbol_defがtypedefのとき、型引数を評価して新しいteを作り、それを返
+す。このteはこれ以上簡約できない。
+それ以外のときはエラー。
+
+
+---------------------------------------------------------------------
+引数の渡しかたと対応するC++コード
+
+function void foo(bar x);
+  // barが小さいときは値渡し、大きいときはconst bar&
+function void foo(bar& x);
+  // bar&
+function void foo(bar* x);
+  // const bar *
+function void foo(bar&* x);
+  // bar *
+'&'の意味がC++と違うのでいまいち？
+
+---------------------------------------------------------------------
+pimpl
+
+pimplイディオムを可能にするためには、コンテナを定義するのに中身の型
+の定義を必要かどうかのフラグを用意しなければならない。
+ポインタ ref(foo) -> fooの定義は要らない
+固定長配列 foo[30] -> fooの定義必要
+
+---------------------------------------------------------------------
+文字列型の種類
+
+rootされていない
+cstring_ref:  Cのnul終端文字列
+string_ref:  const char *のペア
+
+rootされている
+string_literal 文字列リテラル 常にnul終端
+std_string (gccの場合)参照カウントと固定のハイブリッド
+const_string 固定長 alloca()でスタックに文字列を格納できる
+const_cstring 固定長、常にnul終端
+string_buffer バッファ
+cstring_buffer バッファ、常にnul終端
+
+---------------------------------------------------------------------
+マクロ
+
+システムコールを実行し、エラーだったら例外を投げるマクロ？
+function int stat(string path, statbuf& buf);
+
+int r = stat(path, buf);
+if (r < 0) {
+  throw syscall_error("stat(" .. path .. ")");
+}
+
+function int {f, t0, t1} throw_on_error_2(t0 a0, t1 a1)
+{
+  if ((int r = f(a0, a1)) < 0) {
+    throw syscall_error("stat(" .. path .. ")");
+  }
+  return r;
+}
+
+---------------------------------------------------------------------
+リファクタリング: eval変更関連
+
+value_texprをなくす。funcや型exprのget_value_texpr()については、
+value_texprの代わりにthisを返す。
+型の一致はexpr_iのポインタ一致で判定。ただしte同士は値で判定。
+builtin_typeのtexpr_void等のエントリのかわりにtype_void等
+を用意。いずれtexpr_void等は消す。
+
+bool is_type(const expr_i *e): 型かどうかを判定。真になるのは、
+typedef, struct, variant, interface, te, enum(いずれ), bitmask(いずれ)。
+評価前の式をis_typeに指定してはならない。
+bool is_type_or_func(const expr_i *e): 型か関数なら真。
+
+check_typeの処理: symbolをcheck_typeするとevalされる。その結果は
+
+expr_telistはexpr_iのリストを保持するようにする。
+C++のテンプレートパラメータはparamidからcpptmpl_paramidに変更。
+apply_tvmapは、expr_telistのエントリがexpr_teであってcpptmpl_paramid
+が非負のときに置換を実行する。
+
+手順まとめ:
+- tvmap_typeのmappedをexpr_i*型に
+- builtin_typeのtexpr_xxxをexpr_i*型に
+- define_builtins(): eptrはexpr_typedef_newしたものを入れる。
+- type_of_this_expr改めtypeof_thisはexpr_i*型に。get_texpr()も同じ。
+- conv_toもexpr_i*型に
+- expr_telistはexpr_iのリストを持つようにする。
+- value_texprは無くし、get_value_texpr()は型と関数についてはthisを返す。
+あとはコンパイルを通す:
+- bool is_type(const expr_i *e); 型かどうかを判定。
+- bool is_type_or_func(const expr_i *e);
+- expr_i *eval_expr(expr_i *e);
+
+---------------------------------------------------------------------
+先にC++テンプレート型をexpr_structへ
+
+vector(done), map(done), ref, cref
+「&」で参照型を作るのは廃止。refかcrefを明示できないため。
+
+---------------------------------------------------------------------
+memo
+
+convert_typeの中、なんでunifyできないのか？
+(gdb) p get_typestr(tto, get_typestr_sort_strict)
+$5 = "pxcrt::rcptr<  >"
+(gdb) p get_typestr(tfrom, get_typestr_sort_strict)
+$6 = "pxcrt::rcptr< list$n::cons$s$tp1$int32_t >"
+
+ttoにはtparamがある。
+tfromは具体化されている(ref{cons{int}})
+
+(gdb) p *tto
+$9 = {<pxc::expr_i> = {_vptr.expr_i = 0x80af328, fname = 0x80e4350 "list6.px",
+    line = 10, type_of_this_expr = 0x80ca210, conv = convertion_e_none,
+    type_conv_to = 0x0, parent_expr = 0x80e5180, symtbl_lexical = 0x80e6850,
+    tempvar_id = -1, require_lvalue = false}, nssym = 0x80e4e68, fullsym =
+    "ref", ns = "list", tparamid = -1, tlarg = 0x80e50a8,
+  symbol_def = 0x80d8b20}
+(gdb) p *tfrom
+$10 = {<pxc::expr_i> = {_vptr.expr_i = 0x80af328,
+    fname = 0x80d82d8 "pxcrt.px", line = 41, type_of_this_expr = 0x80ca210,
+    conv = convertion_e_none, type_conv_to = 0x0, parent_expr = 0x0,
+    symtbl_lexical = 0x0, tempvar_id = -1, require_lvalue = false},
+  nssym = 0x80d83b0, fullsym = "ref", ns = "", tparamid = -1, tlarg = 0x0,
+  symbol_def = 0x80ee4d8}
+
+ttoはref{cons{t}}で、tparamid=0
+(gdb) p *tto->tlarg->head
+$15 = {<pxc::expr_i> = {_vptr.expr_i = 0x80af328,
+    fname = 0x80e4350 "list6.px", line = 10, type_of_this_expr = 0x80ca210,
+    conv = convertion_e_none, type_conv_to = 0x0, parent_expr = 0x80e50a8,
+    symtbl_lexical = 0x80e6850, tempvar_id = -1, require_lvalue = false},
+  nssym = 0x80e4ed0, fullsym = "cons", ns = "list", tparamid = -1,
+  tlarg = 0x80e4ff0, symbol_def = 0x80e4bd0}
+(gdb) p *tto->tlarg->head->tlarg->head
+$17 = {<pxc::expr_i> = {_vptr.expr_i = 0x80af328,
+    fname = 0x80e4350 "list6.px", line = 10, type_of_this_expr = 0x80ca210,
+    conv = convertion_e_none, type_conv_to = 0x0, parent_expr = 0x80e4ff0,
+    symtbl_lexical = 0x80e6850, tempvar_id = -1, require_lvalue = false},
+  nssym = 0x80e4f38, fullsym = "t", ns = "list", tparamid = -1, tlarg = 0x0,
+  symbol_def = 0x80e4d00}
+(gdb) p *(expr_tparams*)tto->tlarg->head->tlarg->head->symbol_def
+$20 = {<pxc::expr_i> = {_vptr.expr_i = 0x80aed88,
+    fname = 0x80e4350 "list6.px", line = 10, type_of_this_expr = 0x80ca210,
+    conv = convertion_e_none, type_conv_to = 0x0, parent_expr = 0x80e67f0,
+    symtbl_lexical = 0x80e6850, tempvar_id = -1, require_lvalue = false},
+  sym = 0x80e4ce0 "t", rest = 0x0, param_def = 0x0, tparamid = 0}
+
+efromのresolve_typeがtreeぽいteを返すべき？
+(gdb) p *(expr_symbol *)efrom
+$26 = {<pxc::expr_i> = {_vptr.expr_i = 0x80b17e8,
+    fname = 0x80e4350 "list6.px", line = 26, type_of_this_expr = 0x80ee520,
+    conv = convertion_e_none, type_conv_to = 0x0, parent_expr = 0x80e7c88,
+    symtbl_lexical = 0x80cb550, tempvar_id = -1, require_lvalue = false},
+  nssym = 0x80e7bd8, fullsym = "xs", sym_suffix = "", ns = "list",
+  symbol_def = 0x80e71e8, symbol_def_te = 0x0, symtbl_defined = 0x80cb550,
+  upvalue_flag = false, arg_hidden_this = 0x0, arg_hidden_this_ns = ""}
+
+あるいは型チェックの段階で
+
+---------------------------------------------------------------------
+コンパイル処理の流れ
+
+fn_compile():
+- fn_set_tree_and_define_consts()で、instance化されていないテンプレート
+  を除く全てのnodeに対して、シンボルをシンボルテーブルに定義する。
+    - define_const_symbols_one() : 型名や関数名シンボルを定義
+    - define_vars_one() : 変数(argdecls, var, extval)定義
+- fn_check_type()で、型チェック。
+    - check_type() : 式をevalしexpr_valueにセット、式の型を計算し
+      type_of_this_exprにセット
+      - symbol:
+          symbol_def = resolve_name()、それをeval、
+          eval結果が型か関数ならその結果をsymbol_defとsymbol_def_teにセット。
+          関数ならそれをtype_of_this_exprにもセット、型ならtype_of_this_expr
+          はvoid。型でも関数でもない(変数?)ならsymbol_defの型をそのまま
+          type_of_this_exprに。
+      - var, argdecl, extval:
+          resolve_texpr()の中で型式をeval、type_of_this_exprにセット。
+
+・評価するべき式はexpr_i、評価結果もexpr_i
+・termに変換するときにインスタンスから型式を再構成
+・結果を取得するときに型式からインスタンス化？
+・テンプレート型については、インスタンス化された型を返す。
+・インスタンス化されたlist{map{int,int}}から型式を返す関数:
+  void expand_instance(term& t, expr_i *e);
+  あるいはvalue_texpr()?
+・インスタンス化される前でも関数引数と返値の型は型式を作らねばならない。
+  その場合tparamの穴は無評価のままtparamにしておく。
+・展開結果を再評価するのはaliasのときだけ。
+・eval結果となるexprは、型、関数、var, argdecls, extval, 即値(未実装)
+  ただしインスタンス化される前の関数引数と返値についてはtparamも。
+  それらはそれ以上簡約できない。
+・void eval_expr(expr_i *e, term& t_r);
+  テンプレートはインスタンスを指すのではなく、型ツリーの形で返す。
+・expr_i *get_instance(const term& t);
+  型ツリーからテンプレートインスタンスを返す。
+・評価元はsymbolとteのみ。
+
+各esortのcheck_typeの動作:
+
+termのexprのesortに応じたeval動作:
+・型、関数、var, argdecls, extval, 即値 -> それ以上簡約できない。
+・symbol -> resolve_symdef()した結果に置き換える。
+・te -> tlargをそれぞれeval, resolve_symdef()してtermを作り、さらに
+  それをevalする。
+・alias -> 右辺の変数置換したtermを作り、それをevalする。
+
+とりあえず:
+expr_teをtermに置き換える。
+
+型や関数をインスタンス化したときのexprをtermに変換するときには
+テンプレート引数を展開することを忘れずに。
+
+テンプレ関数の自動型マッチ?
+
+テンプレートとインスタンスの関係:
+template_info
+  instances[] 自分の直接のインスタンスのリストを保持
+  instances_backref これはinstances[]の逆参照で、自分の直接のテン
+    プレを指す
+ネストされたテンプレートの型式はどうなる？
+  
+---------------------------------------------------------------------
+foreach
+
+vector{int} v;
+foreach e : v {
+}
+struct foo { int x; string y; };
+foo v;
+foreach t f : v {
+  s += tostring(f);
+}
+
+---------------------------------------------------------------------
+constメソッド
+
+constメソッドの中ではstructの各fieldはconst。
+constメソッドからconstメソッドを呼べる。
+constオブジェクトにたいしてconstメソッドを呼べる。
+
+struct foo {
+  int v;
+  struct bar {
+    int w;
+  }
+  function int m(int x) {
+    return x + v;
+  }
+}
+
+
+---------------------------------------------------------------------
+構造体のコンストラクタ
+
+struct {t} foo(int x, int y) {
+  int v = x + y;
+}
+
+---------------------------------------------------------------------
+nestされた関数、構造体
+
+---------------------------------------------------------------------
+オブジェクトカウンタ
+
+リークを確認するためのオブジェクトカウンタの実装。
+
+struct object_counter {
+  const char *name;
+  unsigned int num_constr;
+  unsigned int num_destr;
+  object_counter *next;
+};
+
+グローバルにリンクリストを用意
+object_counter *object_counter_list = 0;
+
+各構造体にobject_counterをstaticメンバとして埋め込む。
+各モジュールの初期化関数は、全ての型についてobject_counterを
+リンクリストに繋げる。すでに繋がっているobject_counterについては
+何もしない。
+
+---------------------------------------------------------------------
+コンパイル高速化下準備
+
+namespace宣言は先頭でなければならない。
+次にimport宣言のリスト。
+
+ソースが増えると二乗比例で遅くなるのを避けるためには、ライブラリ化す
+る手段は必要か。
+
+ライブラリ化:
+単一のpxがインタフェースとなって、それ以下の個々のpxをコンパイルしな
+くてもリンクできるようなもの。これがないと各pxをコンパイルするたびに、
+リンクする全てのpxを開かなければならなくなってしまう。
+
+---------------------------------------------------------------------
+モジュール初期化関数高速化
+
+初期化したかどうかをフラグに置くのはやめる。
+リンク前に初期化すべきモジュールと順序がわかるから、その順で初期化
+関数を呼び出すエントリ関数を出力。
+namespace io$n { void io$$nsmain(); };
+namespace erat3$n { void erat3$$nsmain(); };
+void erat3$$nsmain$c()
+{
+ io$n::io$$nsmain();
+ erat3$n::erat3$$nsmain();
+}
+ライブラリ化サポートすることを考えると今の実装(初期化フラグ)の
+ほうがよいか。ライブラリはその入り口だけを叩けばよいようにしなけ
+ればならず、それが依存するモジュールについての情報は外から見えない。
+そのため正確に全モジュールを一回だけ初期化するためにはフラグが要る。
+
+---------------------------------------------------------------------
+anyval
+
+rtti印が付いていたときだけ生成?
+
+基本型については
+- サイズ
+- コンストラクタ・デストラクタ
+- 文字列との相互変換関数
+struct
+- 各fieldのオフセットと型情報
+
+struct foo {
+};
+struct foo_tinfo {
+  list<string> foo_get_fields() {
+  }
+}
+
+struct typeinfo;
+enum typeinfo_sort {
+  tisort_ulong, tisort_long, tisort_string, tisort_array, tisort_map,
+  tisort_struct, tisort_variant, tisort_interface, tisort_function,
+};
+struct anyval {
+private:
+  const typeinfo *ti;
+  void *value;
+public:
+  anyval(); /* unit value */
+  anyval(const anyval& src);
+  anyval& operator =(const anyval& src);
+  anyval(const typeinfo *ti, void *value);
+  void copy(anyval& dst) const;
+  string to_string() const;
+  anyval get_elem(const anyval& idx);
+  void set_elem(const anyval& idx, const anyval& src);
+  anyval call(const string_ref& name, ...); /* anyval& s */
+};
+struct typeinfo {
+  const char *ti_name;
+  ulong ti_size;
+  enum typeinfo_sort ti_sort; /* int, string, array, map, function ... */
+  const typeinfo *ti_key;
+  const typeinfo *ti_mapped;
+  void (*ti_construct)(void *dst); /* remove? */
+  void (*ti_destruct)(void *dst);
+  void (*ti_copy)(void *dst, const void *src);
+  int (*ti_compare)(const void *src1, const void *src2);
+  string (*ti_to_string)(const void *src);
+  void (*ti_get_elem)(const void *src, const void *idx, void *elem_dst);
+  void (*ti_set_elem)(void *dst, const void *idx, const void *elem_src);
+  anyval (*ti_call)(const string_ref& name, ...); /* anyval& s */
+};
+
+・コンテナはcovariantにはしない。array{int}からarray{anyval}へは変換不可。
+・どのような型からもanyvalへ変換できる
+・anyvalからどのような型へも変換できるが、実行時例外を投げることがある
+  subtype関係を認識するのは難しいので、ぴったり同じ型へ戻さないとthrow？
+・メソッド呼出しについてはポインタを自動で参照外しする？
+・rootする方法は、単にコピー。それがrefであればカウント増加になる。
+  左辺値としてrootするのも常に成功する。
+・参照渡しはどうするか？
+  受け取れる型を指定できるようにするか。anyvalが指定されたら呼ばれた
+  側が型を決め、それ以外のときはその型を変更しないでキャストする。
+・callの引数は全て参照渡しにするか。
+
+ref{vector{int}} pvec = vector{int}();
+anyval x = pvec;
+
+anyval x;
+x->["abc"]->xyz = 3;
+  =>
+x.getelem("abc").setelem("xyz", 3);
+setelemを適用しようとしたobjectがポインタでなかったら例外を吐く。
+
+比較:
+- 同じ型ならti_compareで比較
+- 異なる型でti_sortが一致するなら、代表型へ変換してから比較
+- ti_sortも一致しないなら、「大きいほうの型」へ変換してから比較
+
+anyvalへの変換
+・基本型は自明
+・基本型以外でも値をコピーする。自動box化はしない。
+
+---------------------------------------------------------------------
+関数オブジェクト: 案1(テンプレート型にする)
+
+function string foo(int x, int y)
+{
+  return string(x + y);
+}
+func{string,int,int} f = foo;
+
+struct bar {
+  int v;
+  string foo(int x, int y) const {
+    return string(v + x + y);
+  }
+}
+func{string,int,int} f = bar.foo;
+
+参照渡しする関数は関数オブジェクトへキャストできない。
+メンバ関数は関数オブジェクトにできる。constメンバ関数もok。
+
+インタフェースを使う方式と比べると、名前をつけなくて良い点が違う。
+
+---------------------------------------------------------------------
+関数オブジェクト: 案2(インタフェースを使う)
+
+一個しかメソッドを持たないインタフェースは関数オブジェクト。
+
+interface ifoo {
+  string f(int x, int y);
+}
+struct sfoo {
+  function string f(int x, int y)
+  {
+    return string(x + y);
+  }
+}
+ref{ifoo} f = sfoo();
+f->f(10, 20);
+
+これを
+
+delegate string dfoo(int x, int y);
+function string f(int x, int y)
+{
+  return string(x + y);
+}
+dfoo df = f;
+df(10, 20);
+
+---------------------------------------------------------------------
+upvalue整理
+
+(1)structのメンバ関数を関数オブジェクトとして扱えること
+struct foo {
+  int y;
+  function int m(int z) {
+    function int nf(int w) {
+      return m(w);
+    }
+  }
+}
+メンバ関数を関数オブジェクトとして使えるためには、(this + メンバ関数)
+を保持した構造体を作る。
+struct moc {
+  ref<foo> upthis;
+  explicit moc(foo *upthis) : upthis(this) { }
+  int operator ()(int z) { return upthis->m(z); }
+};
+moc mo;
+
+(2)structのメンバ関数から上位値をアクセスできること
+
+int x;
+struct foo {
+  int y;
+  function int m(int z) {
+    return x + y + z;
+  }
+}
+
+(3)structとfunctionを相互にネストしてもよいこと
+
+
+---------------------------------------------------------------------
+upvalueの最適化
+
+・upvalueとして捕獲される変数は基本的にはbox化必要。
+・しかしupvalue捕獲されることによって寿命が変化しないとわかる場合には
+  box化せずに生参照でよい。
+・upvalueが生参照でよいかどうかをどのように判定するか。
+
+function {t, f} void array_foreach(t& v)
+{
+  ulong sz = v.size();
+  for (ulong i = 0; i < sz; ++i) {
+    f(v[i]);
+  }
+}
+
+function void foo(vector{int}& v) {
+  int x;
+  function void bar(int y) {
+    x += y;
+  }
+  array_foreach{vector{int}, bar}(v);
+  bar(3);
+}
+
+常に生参照でよい？関数は値として渡せないから。
+
+---------------------------------------------------------------------
+テンプレート引数に関数オブジェクト
+
+・関数のテンプレート引数に関数オブジェクトがあるときは、参照を実行時
+  に渡す必要がある。
+・インスタンス化した関数のシグニチャには頭に関数オブジェクトのリスト
+  を追加
+・インスタンス化した関数の呼出しにも頭に関数オブジェクトのリストを
+  追加
+・テンプレート型は関数オブジェクトを引数にはできない。これはその型の
+  インスタンスの寿命が関数オブジェクトよりも長いことがありうるため。
+  これをできるようにするには、関数オブジェクトの上位値をヒープに置く
+  必要がある。
+
+テンプレート関数自体が関数オブジェクト？ありうるのか？
+テンプレ引数に関数オブジェクトを持つテンプレ関数を テンプレ引数に指
+定したら何が起きる？
+
+---------------------------------------------------------------------
+クラスのテンプレ引数に関数オブジェクト？
+
+struct {f} foo {
+  bool compare(x, y) {
+    return f(x, y);
+  }
+}
+
+テンプレ型には関数オブジェクトを渡せない？
+
+function void foo(vector{int}& v) {
+  int x;
+  function void bar(int y) {
+    x += y;
+  }
+  foreach{vector{int}, bar}(v);
+}
+文法的には次が良いか。
+function void foo(vector{int}& v) {
+  int x;
+  v.foreach (int i) {
+    x += y;
+  } ();
+}
+後ろにセミコロンを付けず、{}もネストしない形式
+function void foo(vector{int}& v) {
+  int x;
+  v.foreach() do (int i) {
+    x += y;
+  }
+}
+
+・返値のvoidは省略できる
+・引数宣言も無ければ省略できる
+・function定義もdoと同様に返値は引数宣言を省略できるようにするか。
+
+---------------------------------------------------------------------
+テンプレ/upvalue/関数オブジェクト(案)
+
+・構造体はupvalueをアクセスできない。これは構造体インスタンスが上位値
+  の寿命を変えてしまうのを避けるため。
+・メンバ関数はテンプレ引数を持てない？
+・メンバ関数や非メンバ関数の下に関数オブジェクトを作れる。関数オブジェ
+  クトはupvalueをアクセスできる。
+・関数オブジェクトはテンプレ引数を持てない？(no)
+
+例:
+  int x;
+  function {t, f} void foo(t v) { x += f(v); }
+  function {t} t bar(t v) { return v * 2 + x; }
+  foo{int, bar{int}}(3);
+fooとbarはclosure。
+  struct foo_o {
+    int& x;
+    foo_o(int& x) : x(x) { }
+    int operator()(bar_o& bar_i, int v) { x += bar_i(v); }
+  };
+  struct bar_o {
+    int& x;
+    bar_o(int& x) : x(x) { }
+    int operator()(int v) { return v * 2 + x; }
+  };
+  int x = 0;
+  foo_o foo_i(x);
+  bar_o bar_i(x);
+  foo_i(bar_i, 3);
+
+例:
+  int x;
+  function {f} void apply(int x) { f(x); }
+  function {f} void foo(int v) { x += f(v); }
+  function int bar(int v) { return x + v; }
+  apply{foo{bar}}(3);
+fooとbarはclosure。
+  void apply(bar_o& bar_i, foo_o& foo_i, int x) {
+    foo_i(bar_i, x);
+  }
+  struct foo_o {
+    int& x;
+    foo_o(int& x) : x(x) { }
+    int operator()(bar_o& bar_i, int v) { x += bar_i(v); }
+  }
+  struct bar_o {
+    int& x;
+    bar_o(int& x) : x(x) { }
+  };
+  int x = 0;
+  foo_o foo_i(x);
+  bar_o bar_i(x);
+  apply(bar_i, foo_i, 3); // closureのobjを両方指定する必要あり
+
+---------------------------------------------------------------------
+関数が上位値を取るかどうかの判定
+
+・varやargdeclの上位値を取るかどうかの判定はupvaluesをみればよい。
+・funcdefを参照しているとき、その参照先がclosureであるかどうかは
+  判定できるか？ 再帰的に判定する必要がある？
+  typedef enum {
+    closure_e_unknown, closure_e_examining, closure_e_yes, closure_e_no }
+  closure_e;
+  closure_e check_closure(expr_funcdef *efd)
+  {
+    if (closure_esort が yes, no, examining) {
+      return efd->closure_esort;
+    }
+    if (varかargdeclのupvalueを持つ) {
+      closure_esort = yes;
+      return yes;
+    }
+    一時的にexaminingにする。
+    teかsymbolの全てについて {
+      if (それが関数のとき) {
+	その関数についてcheck_closure()
+	結果がyesなら自身もyesにしてbreak;
+      }
+    }
+    yesでなかったらnoにする。
+    return 結果
+  }
+  ダメじゃね？相互再帰呼出しで片方がbarがclosureのとき
+  barをチェック時に中でfooをチェック、fooは中でbarをチェックしexamining、
+  なのでfooはnoに変わってしまう。
+
+  (1) f calls g の対応を作る。gから引けるように。(called_from)
+  (2) varかargdeclのupvalueを持つ全ての関数について、is_closureを真にし、
+      そいつを呼んでいる全ての関数について再帰的にis_closureを真にする。
+      既にis_closureならそこから下は再帰的に辿る必要無し。
+
+---------------------------------------------------------------------
+closureの相互再帰呼出し
+
+呼び出す時点で両方のclosureが定義済みであれば相互再帰呼出しできる。
+・上位値のclosureであれば常に呼べる。なぜならその関数の引数として
+  そのclosureの参照が渡ってくるから。
+・同フレーム内のclosureについては、そのclosureが定義された位置が
+  呼び出された位置より前でなくてはならない。
+・今の実装おかしい。テンプレート引数でclosureを指定された場合と
+  そうでない場合に吐くコードが違う。-> それでいいのかも。テンプレ
+  引数ではない場合はcallee側のコンテキストで名前を引くが、テンプ
+  レ引数として指定された
+・C++の関数オブジェクト作るのをやめて、上位値は常に呼出し時に
+  参照渡しするようにするか。そうすれば関数オブジェクトを参照渡し
+  する必要は無くなる。ただし名前衝突を考える必要あり。ダメ？
+
+  int x = 0;
+  function int foo(int v) {
+    if (v <= 0) {
+      return 0;
+    }
+    x += v;
+    return bar(v - 1);
+  }
+  function int bar(int v) {
+    if (v <= 0) {
+      return 0;
+    }
+    x += v;
+    return foo(v - 1);
+  }
+  foo(5);
+
+  foo(int& x, int v) {
+    if (v <= 0) {
+      return 0;
+    }
+    x += v;
+    return bar(v - 1);
+  }
+  bar(int& x, int v) {
+    if (v <= 0) {
+      return 0;
+    }
+    x += v;
+    return foo(v - 1);
+  }
+
+・closureが抱える上位値(varとargdecls、closure)は、closureを定義した
+  箇所で関数オブジェクトを定義する際に引数として渡し、関数オブジェ
+  クトに抱えさせる。(コンテキストは定義された場所を参照しなければ
+  ならないので、これが正しい)
+・テンプレ関数への引数にclosureがあるときは、そのテンプレ関数を呼ぶ
+  ときに引数として渡す。(コンテキストは呼び出された場所だから、これ
+  が正しい)
+・関数がclosureであるかどうかはインスタンス化してからしかわからない。
+
+cl1.pxとcl2.pxの違い: recをclosure upvalueを認識するかどうか。
+instance化してからでないとclosureかどうか判定できない。
+
+---------------------------------------------------------------------
+closure実装変更案
+
+・上位値として参照するのはvarとargdeclだけ。
+・関数が上位値を必要とする(closure)場合は、その関数を呼び出されたとき
+  にそれら上位値の参照が渡される。closureを定義した箇所で関数オブジェ
+  クトを作る方式は止める。
+・各関数について、その関数が必要とする上位値のリストを作成する必要が
+  ある。作成方法は、その関数が直接参照している上位値に加えて、その関数
+  が呼んでいる全ての関数についての上位値リストを加えたもの(の閉包)。
+・ある関数が別の関数を呼ぶとき、呼ばれる側がclosureならば
+・upvalueとして参照される変数は、uniquenessのためにフレームidを付けた
+  C++変数名をemitする。
+・closureでない関数は本当に関数(pure function)である。ただし参照型を
+  使っていない場合だけ？ またCで定義された関数は隠れたupvalue参照を
+  している可能性がある。たとえばio::println()は標準出力を参照している。
+・emitすべき関数プロトタイプが、その関数の必要とする上位値がわからな
+  いと確定しないのは問題ないのか？
+  -> 他のモジュールへexportできるのはトップレベル関数だけ。それが
+  upvalueとして参照できるのはグローバル変数だけ。
+・そもそもclosureと呼ぶのはどうなのか？ 静的スコープではあるが、それを
+  他の環境へ持っていけるわけではない。
+  -> テンプレート引数として渡せば他の環境へもっていける。
+・構造体のさらに上位値を取ることはできない。メンバ関数はその構造体の
+  フィールドのみを上位値としてアクセスできる。
+・メンバ関数の下の定義した関数は普通の(upvalueを持ちうる)関数。
+
+
+移行プラン
+(1) まず上位値になる変数はblockidを付けた名前をemitするように変更
+(2) その関数が参照しているupvalueを調べる手段を用意
+(3) 呼出しの際にupvalueを引数に追加
+
+関数が必要とするupvalue
+・その関数が参照している自由変数はupvalue
+・その関数が呼ぶ全ての関数のupvalueも、その呼出ししている箇所の
+  関数のupvalue
+・推移閉包
+調べかた
+・各関数が直接参照している自由変数を調べる
+・各関数が呼んでいる関数を調べる
+・各関数の呼んでいる関数の閉包を計算
+・各関数の間接呼び出し関数の全てについて、呼び出し先の自由変数を
+  呼び出し元のupvalueに追加
+
+------
+func {f} baz (int z) { f(z); }
+foo() {
+  int x;
+  bar (int y) {
+    x += y;
+  }
+  baz{bar}(3);
+  print(x);
+}
+foo();
+
+bar (bring x); because bar uses x
+bazbar (bring x); because bazbar calls bar
+foo (bring x); because foo calls bazbar
+global (dontbring) foo;
+
+fがgを呼ぶとき、gのupvalueのうちgにないやつはfから運ばなければならぬ。
+
+各関数が何を運ぶことを要求するか:
+  その関数の各呼び出しfoo->barについて、barが要求するもののリストを作成
+  そのリストから、自分が持っている変数を削除
+  これがこの関数が要求する変数リスト。
+  これは無限再帰になりうる。
+
+関数が運ぶことを要求する変数リスト
+  自分のupvalueは必要。
+  自分が型引数を持つとき、その部分型が関数であれば、その関数のupvalueが
+  必要。
+
+---------------------------------------------------------------------
+テンプレ式のチェック
+
+テンプレ式はevalしただけでは完全性をチェックしない。これは関数呼び出し
+の自動マッチを行うときのため。完全性チェックするのは以下の箇所。
+(1) 関数呼び出しの自動マッチ実行後
+(2) varとargdeclの型チェック時
+
+---------------------------------------------------------------------
+macro強化案
+
+現在: macroの右辺はteで、foo{bar, baz{3}}のような式。macro展開は
+subst_term_tparamsで、右辺のtermの中のtparamを引数へと置換。
+
+(1) 右辺として
+
+---------------------------------------------------------------------
+構造体の多相foreach
+
+struct foo {
+  int v;
+  string w;
+};
+foo s;
+
+function {t} to_string(t x)
+{
+  string str;
+  if (meta::is_struct(t)) {
+    str += "{";
+    foreach (xt f : x) {
+      str += to_string(f);
+    } {
+      str += ",";
+    }
+    str += "}";
+  } else if (meta::is_variant(t)) {
+  } else if (meta::is_function(t)) {
+  }
+}
+
+---------------------------------------------------------------------
+行ベース読み込みの効率的処理
+
+再入防止用のフラグを用意して、コールバックから再入されたら例外を投げる
+struct {
+  ref{file} fp;
+  string_buffer read_buffer;
+  bool in_use; // 再入を防止するためのフラグ
+}
+非constなpublicメンバ関数は実行中in_useを立てる。もしすでに立っていた
+ら例外。こうすれば実行中は再入によるread_buffer変更の可能性は無くなる。
+
+
+---------------------------------------------------------------------
+テンプレ引数を持つ関数のupvalue?
+
+{
+  int v;
+  function {f} int apply() {
+    return f(v);
+  }
+  function int foo(int x) {
+    return x + 100;
+  }
+}
+
+---------------------------------------------------------------------
+upvalue
+
+上位値の定義場所によって渡しかたが変わる
+(1) メンバ変数: thisを渡す (this->x をemit)
+(2) auto変数: その変数の参照を渡す (x をemit)
+(3) グローバル変数: 何も渡さない (x をemit)
+
+メンバ関数の中で定義されたclosureから上位のメンバ関数を呼ぶには、
+そのクラスのthisを必要とする。structからさらに上の上位値へはアクセス
+できないから、候補となるthisは常に一個しかない。
+
+メンバ関数の下にさらに関数をネストした場合。
+struct foo {
+  int v;
+  function int m1() {
+  }
+  function int m2() {
+    function void n2() {
+      return m1();
+    }
+  }
+}
+n2にm2のthisを渡す。constかどうかのチェック必要。
+
+メンバフィールドにアクセスした場合。
+struct foo {
+  int v;
+  function int m2() {
+    function void n2() {
+      v += 3;
+    }
+  }
+}
+n2にm2のthisを渡す。constかどうかのチェック必要。
+
+上位メンバ関数を返す関数を用意。
+
+メンバ関数の下の関数は常にthisptrを渡すようにするか？
+
+function {f} typeof{f, 0} apply(typeof{f, 1} x)
+{
+  return f(x);
+}
+struct foo {
+  int v;
+  function int m1(int x) {
+    return x * x;
+  }
+  function int m2(int y) const {
+    return apply{m1}(y);
+  }
+}
+
+変数や関数をthis$up付きで参照するかどうかをどうやって判定？
+(1) その変数や関数がstructに定義されている(struct memberであること)
+(2) 参照しているコンテキストが、非メンバ関数であるか、別のstruct
+    のメンバ関数であること。
+(3) オブジェクトを指定して参照されていないこと。????
+
+テンプレ式でupvalueが渡った場合。
+struct foo {
+  function {t} bar() {
+  }
+  functtion baz() {
+    function fubar() {
+      bar{baz}();
+    }
+  }
+}
+他のstructのthisを渡す必要は無い。なぜならテンプレート引数には
+obj.funcを渡すことができないから。
+
+テンプレ関数インスタンスは、this以外に高々一つのstructコンテキ
+ストしか持たない。
+
+constnessチェック:
+function {f} apply() {
+  f();
+}
+struct foo {
+  function bar() {
+  }
+  function baz() const {
+    apply{bar}(); // constからnon-constを呼び出している
+  }
+}
+
+apply{bar}をインスタンス化するときに、applyがメンバ関数でなければ、
+instantiate_memfuncとしてbazをセット。
+apply{bar}インスタンスのコンパイル時、f()の呼び出しの箇所で、
+1. まずapply自身のmemfunc contextと比較して同じstructのメンバ同士であれば、
+   それでconstnessチェック
+2. そうでないならinstantiate_memfuncと比較して同じstructのメンバ同士で
+   あればそれでconstnessチェック
+
+------
+あるコンテキストのmemfunc contextは:
+1. もしそれがmemfuncの子孫ならそのmemfunc
+2. もしそれがinstantiate_memfuncを持つならそのmemfunc
+
+明示objの無い関数呼び出し箇所では、constnessを次のようにチェック
+1. もし呼び出し箇所のmemfunc contextと先のcontextが同じstructなら
+   それでconstnessチェック
+2. そうでないならinstantiate_memfuncと比較して同じstructならそれ
+   でconstnessチェック
+
+todo:
+tpup_methodにconstフラグ、
+constフラグが付いていたらconst参照のthis$up、
+呼び出し元と先のconstnessチェック
+
+---------------------------------------------------------------------
+multi-indexコンテナ
+
+
+---------------------------------------------------------------------
+モジュール依存するのはどういうとき？
+
+・public importとprivate importの使い分け
+・global entityが芋蔓するのはどういう場合か
+・pimplイディオム的に切り離す方法
+
+・関数
+function int foo(int x)
+{
+  bar z;
+  z.m(x);
+  up1 += x;
+}
+・引数や返値の型を芋蔓。返値の場合は型の定義も必要。
+・変数の型を芋蔓。型の定義も必要。
+・関数呼び出しの先の関数を芋蔓。メンバ関数やstatic関数なら定義は不要。
+  (non staticのときはupvalueを持つかもしれないので、その判断のために
+  関数本体の定義が必要。static/memberであればシグニチャだけで判断
+  できる)
+  -> global関数ならばupvalueは参照渡しする必要無いので、
+・参照するupvalueの変数を芋蔓。
+
+方針:
+・closureとfunctionの区別は付ける。これは副作用を持つかどうかの区別。
+  (staticキーワードをつければupvalue参照できないようにする？)
+・global変数はupvalueとして参照しても参照渡しするコードは吐かない。
+・debug用出力はclosureではないが副作用を持てる。自身はglobal変数を
+  参照するためにstaticではないが、static関数から呼ぶことを許可する。
+  コンパイラはそのような関数は副作用を持たないものと思って最適化し
+  てしまってよい。
+出力する関数のシグニチャについて:
+・メンバ関数のコンパイルされたC++コードもupvalue参照を引数に取らな
+  い。メンバ関数は属する構造体以外にupvalueを持たないから。global
+  変数も参照できない。
+・コンパイル対象以外の名前空間のglobal関数のコンパイル時にはblock
+  の中身は不要。global関数のコンパイルされたC++コードはupvalue参照
+  を引数に取らないから。
+・コンパイル対象以外の名前空間の非global関数についても、blockの中
+  身は不要。コンパイル対象以外の名前空間で呼ぶことの出来る関数は
+  global関数かglobal構造体のメンバ関数だけだから。
+・結局、コンパイル対象以外の名前空間の関数のblockの中身はコンパイ
+  ルしなくてよい。
+・pseudostatic functionはglobal変数を参照できるがstatic functionか
+  ら呼ぶことが出来る。これはデバッグ出力のような用途に使う。コンパ
+  イラはstaticと思って最適化してしまってよい。
+型の依存関係とコンパイル順序について:
+・強く依存: ある型の前に別の型を定義必要
+・弱く依存: ある型の前に別の型のプロトタイプを宣言必要
+・-> これはコンパイル時のstruct定義順に関係する。強いなら順序を考慮
+  しなければならない
+・-> どっちにせよimportのpublicが必要かどうかには関係ない
+・struct foo { bar v; } のときはfooはbarに強く依存
+・unionも同様
+・struct foo { vector{bar} v; } のときは強く依存*しない*
+・vector, ptrなどはパラメータ型に強く依存しないが固定長配列は強く依
+  存する。組み込み型定義にフラグを作る必要あり。
+・pxcで作ったtemplate型については、全インスタンスについて強依存関係
+  をチェック必要。
+依存関係の切り離しについて:
+・関数の中身は芋蔓しない
+・構造体フィールドは芋蔓する。切り離すにはインタフェースを使うしか
+  ない。pimplイディオムと比べて、仮想関数が必須なためにわずかに遅い。
+
+upvalue関連作業:
+・global変数をC++のシグニチャに含めないように変更(done)
+・upglo2.px upglo1::fooのシグニチャにupvalueが入らないように(done)
+・block->stmts = 0をコメントアウトしているのを元に戻す(done)
+・drop_nonexportsをコメントアウトしているのを元に戻す(done)
+構造体出力順序関連作業:
+・C++テンプレ型の「強依存」フラグ
+・構造体をsortする箇所を変更
+
+---------------------------------------------------------------------
+upvalueの命名規則整理
+
+namespace n1;
+function {f} void func1() {
+  int x;
+  function void c1() {
+    x += 1;
+  }
+  apply2{c1, f}();
+}
+functino {f1, f2} void apply2() {
+  f1();
+  f2();
+}
+
+namespace n2;
+function void testfunc() {
+  int x;
+  function void func2() {
+    x += 1;
+  }
+  func1{func2}();
+}
+
+このようにすればapply2には二つのnsの'x'がupvalueとして渡る。
+名前の衝突がおきないように名前空間をつける必要あり。
+
+---------------------------------------------------------------------
+配列要素とvariant要素のroot
+
+struct foo {
+}
+vector{foo} a;
+function void f1(foo x) {
+  ...
+}
+a.resize(100);
+f1(a[5]); // aの変更をガードする
+
+ガード付き要素参照(配列, 連想配列, variant)
+
+expr_opにneed_guardフラグを用意。
+ガードが必要なのは、mapとvector要素をrootするとき。
+
+---------------------------------------------------------------------
+vectorをreallocで実装？
+
+http://stackoverflow.com/questions/750336/is-stl-vector-a-better-version-of-realloc
+
+そもそもなんでvectorはresizeするときに一旦要素を全部destructする
+必要があるのか。要素の位置がrealloc等で移動してしまうことがないと
+仕様で保証されているのか。だとすれば何故？
+
+struct elem {
+  elem *thisptr; /* 自分自身の位置を覚えておく */
+  elem() : thisptr(this) { }
+};
+
+構造体の要素として、自分の要素への参照があった場合で、それをコンスト
+ラクタによって初期化しているような場合、もしreallocでオブジェクトを
+移動してしまうとそれは不正なオブジェクトになってしまう。
+
+だとすれば、構造体にポインタや参照を要素として持たせなければよい、
+ということではないか？ pxcなら可能。
+
+realloc-safeなオブジェクト？ メモリ領域が移動しても無効にならない
+ようなオブジェクト。
+
+---------------------------------------------------------------------
+なるべくヒープ使わない文字列実装・配列実装
+
+一定長のメモリ領域をstring型自体に埋め込んで、それに収まる場合は
+そこに置く。収まらない場合はヒープに置く。文字列だけでなく配列も。
+
+template <typename T, size_t bufsz> struct array0 {
+  size_t len;
+  char buffer[bufsz > sizeof(void *) ? bufsz : sizeof(void *)];
+  // デバッグ時に悲惨そう
+}
+
+template <typename T, size_t bufsz> struct array1 {
+  size_t len;
+  T *ptr; // 領域が無駄。ptrがbufferを指しているとrealloc-safeでない
+  T buffer[bufsz];
+};
+
+template <typename T, size_t bufsz> struct array2 {
+  size_t length;
+  union u { // union使うとTがpodじゃないとだめ。
+    T *ptr; // Tの配列じゃなくてalloc_sizeも含めるか
+    T buffer[bufsz]; // あるいはbufferをcharにするか
+  };
+};
+
+template <typename T, size_t bufsz> struct array3 {
+  size_t length;
+  union u {
+    char buffer[bufsz * sizeof(T)];
+    rawbuf *ptr; // alloc_lengthのうしろにバッファ
+  };
+};
+
+---------------------------------------------------------------------
+GC
+
+http://www.php.net/manual/en/features.gc.collecting-cycles.php
+http://www.research.ibm.com/people/d/dfb/papers/Bacon01Concurrent.pdf
+
+---------------------------------------------------------------------
+interface型の一時変数を禁止
+
+var, argdecl, 一時変数のようにオブジェクトを生成する必要がある場合
+の型として許可できないのは？
+- 関数など、is_typeが偽を返すもの。
+- interface型
+- tpdummy型
+- void型
+
+---------------------------------------------------------------------
+例外
+
+interface exception {
+  string get_id() const;      // 短い例外識別子
+  string get_message() const; // スタックトレースを含むメッセージ
+}
+
+throwできるのはexceptionを実装したものだけ。
+
+---------------------------------------------------------------------
+ユーザ定義コンストラクタ
+
+文法的には構造体が引数を取る感じで。
+struct foo(int x, baz) {
+}
+ユーザ定義コンストラクタがあると、デフォルトコンストラクタの動作が、
+ユーザ定義コンストラクタの各引数にデフォルト値を適用したものになる。
+
+ユーザ定義コンストラクタの引数が空の場合は、デフォルトコンストラクタ
+を生成しない。重複するから。
+
+---------------------------------------------------------------------
+ユーザ定義コンストラクタ高速化
+
+ユーザ定義コンストラクタを、C++のフィールド初期化式を使ったものに
+できるのは、各stmtがすべて「fld」又は「fld = ...」の形で、その中で
+自構造体のメンバ関数を呼んでいないこと。
+
+---------------------------------------------------------------------
+定義前に使用チェック
+
+そのstatementより前のstatementで定義されたものしか参照してはならない。
+さもないと評価順序の関係で未初期化が起きうる。
+
+---------------------------------------------------------------------
+例外の階層
+
+・pxcで投げた例外はスタックトレースを持たせる
+・C++の例外もcatchしたい
+・std::bad_allocもcatchしたい？
+・できればpxcの例外はstd::exception、std::logic_error等を継承したい
+・std::exceptionではない例外についてはcatchできなくていいか。
+
+菱形継承必要？
+exception
+  bad_alloc
+  logic_error
+    pxc_logic_error
+  runtime_error
+    pxc_runtime_error
+
+1. interfaceもextern対応する。
+2. throwされたときはobj.traceにスタックトレースを埋め込む
+
+---------------------------------------------------------------------
+例外投げるときのスタックトレース
+
+throwされたときはbacktrace(3)でアドレスの列を取る。
+catchして文字列に返すときは、dladdr()でシンボル、ファイル名、オフセッ
+トを求める。デバッグしたいときはこれらの情報から調べられる。
+
+C++シンボルのdemangle
+#include <cxxabi.h>
+abi::__cxa_demangle();
+
+---------------------------------------------------------------------
+モジュール初期化順序
+
+global変数の(デフォルト値への)初期化順序は決められない。
+(コンストラクタをユーザ定義しているとき問題おきる。コンストラクタの
+ ある型の変数をglobalにはできないようにするか？)
+しかし地の文の実行順序は制御できる。
+AからBをimportしている場合はBが先に地の文が実行される？
+importがサイクルになっていた場合は？
+
+struct foo(...) {
+}
+foo f;
+struct bar(...) {
+}
+bar b;
+コンストラクタの中で相手を参照すると不完全なオブジェクトを参照できて
+しまう。
+
+
+---------------------------------------------------------------------
+組み込み型整理
+
+組み込み型(pxcrt名前空間)
+- void
+- unit
+- bool, uchar, char, ushort, short, uint, int, ulong, long
+- float, double
+- string
+- ref, cref, vector, map
+型構成子
+- struct, union, interface
+
+---------------------------------------------------------------------
+コンパイル整合性チェック
+
+コンパイルした全モジュールが、コンパイルしたときに同一のバージョンの
+ソースを参照してコンパイルされたことを保証するための仕組み。
+
+pxcがcc生成段階で読み込んだ全てのモジュールについて、ソースのmd5を記
+録。compile mainのmd5も記録。
+foo.px (uses bar.px, baz.px)
+.pxc/foo_d01cbd5959e869a4cbfdc6e1951dafbf.cc <- foo.pxのコンパイル結果
+.pxc/foo_d01cbd5959e869a4cbfdc6e1951dafbf.o
+.pxc/foo_d01cbd5959e869a4cbfdc6e1951dafbf.deps
+depsの中身は
+294c2d0138da5f2b4ed7fda3d3655954 bar
+562c3e6e19584fd8f6ec132a15ca677d baz
+のようなフォーマット。
+md5だけでなくst_ctimeも記録するか？
+
+---------------------------------------------------------------------
+コンパイル処理
+
+プロファイルは環境変数$PXC_PROFILEでファイル指定する。無かったら
+/etc/pxc_profile.conf あたり。プロファイルの$pxcdirを見てコンパイル対
+象pxファイルを探す。複数のパスエントリから見つかったときはファイル連結。
+コンパイルされた.oなどは $workdir の下におく。
+$workdir = $HOME/.pxc_$プロファイル名/ 。直下にプロファイルのコピーを
+置く。
+
+コンパイルされたcc、o、infoは
+$workdir/foo_1300000000_d01cbd5959e869a4cbfdc6e1951dafbf.cc
+の下におく。二つ目はソースのうち一番新しいもののunixtime。三つ目はソー
+スを全て連結したmd5値(つけないほうがよい？)。
+
+---------------------------------------------------------------------
+プロファイル設定項目
+
+libpath = /usr/local/lib/pxc/:/usr/lib/pxc/
+srcpath = ~/lib/pxc/:.        # 更新チェックするフォルダ?
+workdir = .pxc
+coptions = -g -O2
+pragma debug_exit = 0         # exit時にデストラクタを実行
+pragma debug_count = 0        # オブジェクト生成消滅フック
+pragma debug_memory = 0       # メモリ使用開放フック
+pragma debug_exception = 0    # 例外処理フック
+pragma debug_pointer = 0      # ポインタがnocheckのときもチェック
+pragma debug_index = 0        # 配列がnocheckのときもチェック
+pragma debug_full = 0         # すべてのdebugプラグマを最大に
+
+---------------------------------------------------------------------
+コマンド行に指定されたファイルの取り扱い
+
+名前空間ではなくファイルで指定された場合はnamespace宣言を無視してpath
+から生成した名前空間に入れる？
+
+---------------------------------------------------------------------
+更新チェックとコンパイル
+
+- コンパイル対象に指定されたファイルをpxcコンパイルし、cc, o, infoを
+  出力。infoにはコンパイルした全モジュールのtimestampとmd5を出力。
+- さらに再帰的にimport対象のものをコンパイルし、cc, o, infoを出力。
+- 再帰的に到達する全srcがリンク対象ファイル。全srcの全import対象の
+  md5値をチェックし、不一致が無いか確認し、無いならリンク。
+- 各srcのmd5値を保持するmap<string, string>データをメモリ上に持つ。
+- workdir以下の各フォルダのreaddir結果(namespace名、timestamp, md5値)
+  はキャッシュする。ccやinfoを探すのに毎回readdirするのを避けるため。
+- コンパイルしてcc, o, infoを生成したら、古いバージョンのcc, o, info
+  はunlinkする。複数コンパイル走っていると他プロセスに消される可能性
+  はある。
+- 各名前空間ごとに持つ情報:
+  struct compiled_info{
+    time_t timestamp;
+    std::string md5;
+  };
+  struct nsinfo {
+    compiled_info self_info;
+    map<std::string, compiled_info> imports;
+  };
+  まずmainに指定されたモジュールをコンパイルし、再帰的にimportsも
+  コンパイル。
+
+や り な お し
+- 名前空間ごとのinfoのファイル名は単にfoo.infoとする。
+- infoファイルの最初の行は、
+    - infoファイルの2行目以降のmd5
+- infoファイルの2行目以降は(名前空間 src_timestamp md5)のリスト。
+  自分の名前空間(orファイル名)も含める。linkonlyは含めない。
+- ソース更新チェックの方法は、
+  - infoファイルを開く
+  - 各ソースファイルをstatしてst_ctimeが一番新しいものがinfoファイル
+    に書かれた値より新しいか調べる。
+  - 更新されていなければそのモジュールにsrc_not_modifiedフラグをon
+  - 全モジュールについて同じことをする
+  - 各モジュールの、全依存モジュールがdeps_not_modifiedであって、か
+    つ自モジュールもsrc_not_modifiedであれば、自モジュールの
+    deps_not_modifiedをonにする。そうでないならoff。
+  - もしdeps_not_modifiedでないならそのモジュールをccへコンパイル
+    しなおし、infoファイルも更新する。
+- モジュールのccへコンパイルをやり直す必要があるのは、以下のいずれか
+  - infoが無いとき
+  - infoの自エントリのsrc_timestampとstat結果が異なるとき。
+  - infoの各imports(linkonlyは除く)のidが最新のものと相違あったとき
+
+- load_file_and_add_source()の中
+  - infoを読んでみる。読めたらソースをstatして更新チェック。更新さ
+    れているかinfoが無いならソース更新フラグon。
+  - ソース更新フラグが立っていれば、ソースを読み直し、自モジュール
+    ソースチェックサムとタイムスタンプを計算。更新されていなければ
+    infoの内容の自モジュールのソースチェックサムとタイムスタンプを
+    利用。
+
+- compile_module_to_cc()の中
+  - そのモジュールの各importsについて、モジュールソースチェックサム
+    とタイムスタンプが、そのモジュールのinfoに書かれているもの
+    (imports_ids)と一致するか確認。一致しないものがひとつでもあるor
+    そもそもinfoが無いなら、imports_idsをセットする。
+  - 一致しないものがひとつでもあれば、そのモジュールのinfoチェック
+    サムを計算し、infoファイルを書き込む。さらにccをビルド。
+
+- info読み込み処理
+  - load_file_and_add_source
+    - mi.ns
+    - mi.aux_filename
+    - mi.sourcesに自モジュールのpxファイル名をセット
+      (nsとaux_filenameから計算できる)
+  - pxc_parse_file(importを調べるためにパースしている)
+    - そのファイルのnamespaceをmi.imports.main_nsにセット
+      (ファイル名で指定されたモジュールについての名前空間を知る)
+    - mi.imports.depsにimport_infoリストを追加
+      - import情報は、nsとpublic/private
+      - 'pxcrt'名前空間も常に追加される。
+  - get_module_info
+    - mi.ns にmi.imports.main_nsをセット
+- infoファイルに書く内容
+    - mi.info_checksum
+    - mi.ns
+    - mi.aux_filename
+    - mi.source_checksum
+    - mi.imports.deps
+      - ns
+      - private/public
+      - saved_source_checksumではなくて実際のそのnsのsource_checksum
+- ソース読み直し判定処理
+  - infoを読み込んで以下をセット
+    - mi.info_checksum, ns, aux_filename, source_checksum,
+    - imports.deps
+      - ns
+      - private/public
+      - saved_source_checksum
+  - mi.sourcesに自モジュールのpxファイル名をセット(従来通り)
+  - mi.source_checksumと各ファイルのstatを比較し、ファイルのほうが
+    あたらしければinfファイル削除、ソース読み直し。
+- cc生成しなおし判定処理
+  - 依存関係の末端から順になるよう再帰的に処理
+  - mi.imports.depsの各々について
+    - saved_source_checksumがall_modules_infoの実際のそのnsの
+      source_checksumと一致するか調べる
+    - 一つでも不一致があればcc生成しなおし
+  - cc生成しなおしたらinfも生成しなおし
+- exe生成しなおし判定処理
+  - リンクするファイルのうち一つでもcc生成しなおしたものがあれば
+    exe生成しなおし
+
+- 保証しなければならないのは、リンク内に含まれる A deps B であるような全ての組
+  (A,B)について、A.o生成時に使ったB.pxと、B.o生成時に使ったB.pxが同一の内容で
+  あること。
+- モジュールAの再コンパイルが必要なのは、
+  - Aのソースが更新された
+  - A dep BであるようなBのソースが更新された
+- モジュールAが再コンパイル必要なら、A dep BであるBのソースを読み直す必要が
+  ある。
+- ソースを読み直したら、実は更新されてた、というケースもタイミング的にありうる。
+- 再帰的に読み込む実装
+  - Aのinfを読む。infが無いかソースを要求されているならソースを読む。
+  - あるいはチェックサムのタイムスタンプから更新されていればソースを読む。
+  - infがあってソースを読んでないか、読んだがチェックサムが一致しているなら
+    src_not_modifiedをtrueにする。
+  - そのモジュールがsrc_not_modifiedでないなら、そのモジュールをコンパイル
+    しなければならないから、それのdepsは全てソースを要求する
+  - 
+
+- get_module_info_rec()の実装:
+  - まずA.infを読む。もし無いかcontentを要求されていればソースも読む。
+  - infが無いか、sourceと相違があるときはsrc_modifiedをtrueに。
+  - Aのdepsについて再帰的に、get_module_info_recを呼び出す。
+
+- まずinfを読んでみる。infとsourceのディスク上のタイムスタンプを比べて
+  更新があれば、ソースを読み込んでsource_modified = true。更新がなくても
+  reload_sourceが要求されていればソースを読み込んで、もし更新されていれば
+
+- モジュール読み込み状態は unmodified_not_loaded, unmodified_loaded,
+  modified_loaded 3種類
+  - source_unmodified
+  - source_modified
+  - source_loaded
+  - need_rebuild_cc(そのモジュールのccをリビルド必要ということ)
+- A deps BとなるAをBから引けるようにmapを作る(get_module_info_recの中で)
+- ルール: loadした結果modifiedだったら、それにdepしている全てをload必要
+- ルール: mainモジュールをcheck_recompile(public)
+- ルール: あるモジュールをcheck_recompile(public)すると、そのモジュールが
+  importしているものをcheck_recompile(p)。ここでpはそのimportがpublicか
+  privateか。
+- ルール: あるモジュールをcheck_recompile(private)すると、そのモジュール
+  がimportしているものはcheck_recompileしなくてよい。
+- ルール: check_recompile(?)されたものはソースの更新時刻をチェックし、
+  もしmodifiedならそのモジュールをsource_modified()する。
+- ルール: source_modified()されたモジュールはロードしなければならない。
+- ルール: ロードした結果更新されていたならsource_modified()する(相互再帰)
+- ルール: あるモジュールがsource_modified()なら、それをdepしているもの
+  をすべてneed_rebuild_ccにする
+
+- A dep Bとは、AのビルドソースにBが含まれるということ。A dep BのときBが
+  modifiedならAをrebuild必要。
+- まずdepマップを作成。(逆にも引けるようにする?)。作るにはまずmainから
+  infoを読み込み・更新チェック・必要ならソース読み込みし、depsを取得、
+  それのdepsを再帰的に処理。ついでにcycleチェック。これが
+  get_module_info_rec()。
+- mainから再帰的に、depsのチェックサムが一致しているかチェック。depsの
+  チェックサムに不一致があった場合は
+
+やりなおし
+- 基本的にはタイムスタンプだけでソース更新チェックできることを前提にし、
+  あとでチェックサム不一致がおきたらおきたモジュールだけを「強制ロード」
+  セットに入れて全ロードをやりなおす方向で。
+- info読み込み・更新チェック・必要ならソース読み込みし、depsを取得、
+  source_modifiedフラグをセット。mainからdepsについて再帰的に。
+  bool get_module_deps_rec(bool import_public)
+  再帰から帰ってきたときにひとつでもsource_modifiedがあれば、全depsを
+  再帰的にロードする。
+- mainからdepsについて再帰的に、
+
+やりなおし
+- get_module_info_rec()をdepsについて再帰的に実行し、ロードされたもの
+  があるかを返す。あったらもう一度やりなおし。
+  bool get_module_deps_rec(const std::string& ns, bool import_public,
+    bool require_source);
+  各moduleには以下のフラグを用意
+  - source_modified : そのモジュールのpxが変更された
+  - need_rebuild : そのモジュールのccをリビルド必要
+
+- とりあえずinfoを全部読むかソースから作成する
+- 各モジュールのdeps_transを作成。そのモジュールをコンパイルするのに
+  必要なpxの一覧。
+- 各モジュールについて、それ自身かdeps_transにsrc_modifiedがあれば、
+  自分と全deps_transについてソース読み込み。need_rebuildをon。
+- 各モジュールについて、チェックサムに食い違いがあれば、自分と全
+  deps_transについてソース読み込み。need_rebuildをon。
+- ソース読み込みがなくなるまで繰り返す。
+
+やりなおし
+- 直接importしてるものだけでなく、全depsをinfに書かねばならない。
+- 
+
+---------------------------------------------------------------------
+coptionsのinfへの保存
+
+pxからのo生成をスキップしてlinkするときにcoptionsのlibdirとlibsを必要
+とするので、それらをinfに書いておく。
+- mi.coptsには自モジュールのincdir等だけを書いておく。
+- incdirはpublic到達importのもののみについて取得すればよい。
+- libdirとlibsは全到達importについて取得。
+
+---------------------------------------------------------------------
+pure(static?)解析案
+
+- 関数にstatic宣言を付けると上位コンテキストにアクセスできない。ただ
+  しstatic関数は呼べる。
+- 構造体は常にstatic宣言したものとみなされる。
+- IOのように暗黙のグローバル変数をアクセスするものはsystemオブジェク
+  トをupvalueとして参照する。
+
+---------------------------------------------------------------------
+とりあえず作るライブラリ
+
+- argvを取得できるように(done)
+- 文字列のfindやsubstrなど
+- split, join的なもの
+- 正規表現
+
+---------------------------------------------------------------------
+テンプレートがある場合の型定義順序
+
+非テンプレ:
+struct foo {
+  bar b;
+}
+このときbarが先
+
+pxcテンプレ:
+struct {t} foo {
+  t x;
+}
+インスタンス毎に順序決める
+
+C++テンプレ:
+structo {t} vector {
+}
+依存無し。ただしfarrayのときのみ第一パラメタに依存。
+
+---------------------------------------------------------------------
+foreach的なもの
+
+mapped_typeがconstかどうかでコードを出し分ける必要がある
+(cguardxとguardx, const_iteratorとiterator)
+
+vector{string} arr;
+for (int i, string s : arr) {
+  ...
+}
+for (int i, string& s : arr) { // arrが変更可能でないとエラー
+  ...
+}
+for (int i : arr) {
+}
+
+# set, multiset, listのとき
+{
+  guardx ag$fe(setval);
+  for (const mapval_type::iterator i$fe = ag$fe.get().begin();
+    i$fe != ag$fe.get().end(); ++i$fe) {
+    const value_type i = *i$fe; // ユーザに見える変数
+  }
+}
+
+# map, multimapのとき
+{
+  guardx ag$fe(mapval);
+  for (const mapval_type::iterator i$fe = ag$fe.get().begin();
+    i$fe != ag$fe.get().end(); ++i$fe) {
+    const key_type i = i$fe->first; // ユーザに見える変数
+    mapped_type& v = i$fe->second; // ユーザに見える変数
+    ...
+  }
+}
+
+# 配列のとき
+{
+  guardx ag$fe(arr);
+  const key_type sz$fe = ag$fe.get().size();
+  for (key_type i = 0; i < sz$fe; ++i) { // iもユーザに見える変数
+    mapped_type& v = ag$fe.get()[i]; // vはユーザに見える変数
+    ...
+  }
+}
+
+key, mapped両方をbindできる: 
+- 配列(固定長、可変長)
+- map, multimap
+valueしかbindできない:
+- list
+- set, multiset
+
+---------------------------------------------------------------------
+ifdef?
+
+ifdef (int x : a[j]) { ... } // コンテナ要素
+ifdef (foo v : x.v) { ... }  // variantフィールド
+ifdef (foo x : *p) { ... } // 参照外し
+
+if文に統合するのとどちらが良いか?
+
+if (case int x : a[j]) { }
+このようにするとfalseになったときにxが未定義となってしまう。
+ブロック内で常にxが定義されていることを保証するためには、if文とは
+別の構文を用意するしかない。
+
+---------------------------------------------------------------------
+メモ: vimにpxファイルをjavascriptとして認識させる
+
+~/.vim/ftdetect/px.vim
+に
+au BufRead,BufNewFile *.px set filetype=javascript
+と書く。
+
+---------------------------------------------------------------------
+genericなto_string
+
+function {t} string to_string(t x)
+{
+  if (defined{t, "to_string"}) {
+    return x.symbol{"to_string"}();
+  }
+  macro ttos concat{string{t}, "_to_string"};
+  if (defined{ttos}) {
+    return symbol{ttos}}(x);
+  }
+  if (is_struct_or_union{t}) {
+    string s = "(";
+    foreach field_to_string(x) {
+      if (is_set) {
+	s += " " + name + ": ";
+	s += to_string{tfld}(fld);
+      }
+    }
+    s += " )";
+    return s;
+  }
+  return "-";
+}
+
+  ・ @concatは可変長引数。引数を全部繋げる。
+  ・ @symbolは可変長引数。2番目以降の引数を1番目に適用。
+  ・ if文の条件節がメタ関数で、偽に評価される場合は、そのブロックは
+     コンパイルせずに空ブロックをemitする。
+
+---------------------------------------------------------------------
+threadのサポート
+
+・コンパイラがupvalueを把握できることから、mt-safeかどうかのコンパイル
+  時チェックは可能なはず。整理せよ。
+・mt-safeの印にvolatileを使うか、テンプレートを使うか。
+・いっそ型装飾をユーザが自由に作れるとか。
+・ソース中で問題あるかどうか確認すべき箇所は grep THREAD
+
+- volatileメンバ関数は、非volatileメンバ関数も呼べる。volatileメンバ
+  関数の入口と出口でオブジェクトに付いているrecursive mutexを
+  lock/unlockする。
+- vref{hoge}は指す先がvolatileなshared pointer。
+- this->fooがshared pointerのときは、thisをロックしてもfooの指す先は
+  排他されない。したがって、構造体にvrefではないrefやcrefがあったなら
+  その構造体はvolatile装飾できない(volatileメンバを作れない)
+- 引数にvolatile装飾を付けられるようにする？
+- グローバル変数は？
+
+struct foo {
+  void hoge() volatile {
+  }
+  void fuga() {
+  }
+  ref{bar} b;
+};
+volatile参照から非volatile参照を取得するには、そのオブジェクトのlock
+が必要。
+
+- スレッド間で共有するものと、そうでないものに明確に分離する手段が
+  必要。
+  - 共有するものは全てvrefの指す先に持つ。
+  - vrefの指す先のオブジェクトは、それ以外のrefから指すことはできな
+    い。refとvrefはどちらの方向も代入不可。
+  - vrefの指す先へアクセスする際にはlockをかける。
+
+- スレッド間共有オブジェクト: vref{foo} x;
+- vrefを作れる要件は、指す先の型にに"monitor"属性が付いている
+  こと。
+- 型に"monitor"属性を付けられるのは、
+  - その構造体がfieldとして持つ参照が全てvrefであること。
+  - 全てのメンバ関数がmultithreadedであること
+
+メンバ関数がmtsafeであるためには？
+- メンバ関数については、vref以外の参照を参照外ししないこと
+- mtsafeではない関数を呼ばない
+
+非メンバ関数がmtsafeであるためには？
+- グローバル変数をアクセスしないこと
+- mtsafeではない関数を呼はない
+
+deadlock freeを保証するためには
+- vrefを参照外しするときにはobj->foo()の形に限定
+- vrefを参照外しする順序がlockをかける順序になる
+- vref{bar}の次にlockをかける可能性があるのは、barのfieldにvref
+  がある場合か、barのメソッドにvrefが引数で渡ってきた場合のみ？
+- コンパイル時にdeadlockするかどうかチェック
+- vrefの配列を作ると、同じ型を順序付けてアクセスしないとdeadlock
+  するケースがありうるが、その場合は順序付ける手段を用意？
+
+スレッド安全でない環境の
+
+---------------------------------------------------------------------
+structやunionに対するforeach
+
+string s;
+int cnt;
+foreach struct_field_to_string(obj, str, cnt);
+関数への引数は単なる変数でなければならない？
+foreach (bool cur) union_field_to_string(obj, cur, str, cnt);
+
+- check_typeの最初に、関数呼び出し式をfieldの数だけ展開し、第一引数
+  をobj.fldの形に置き換える
+- 関数呼び出しを展開後、作った式の各expr_iのparent_exprを更新しないと
+  気持ち悪いので更新する。
+- 出来上がったらblockをcheck_typeする。
+
+置換方法
+- fldfe->block->stmts->funccall->arg の部分を置き換える
+- まずfunccallをcloneしたものをつくり、fc0とする
+- funccall->arg をcheck_typeし、型を調べる。taとする。
+- taがstructであることを確認
+- 各fieldについて、
+  - fc0をcloneし、fcとする。
+  - fcの、argの部分の、「,」区切りの頭の式をxとすると、それを
+    「x . fld」に置き換える 
+- 全て連結したstmtsを作る
+- fldfe->block->stmtsを、新しく作ったstmtsで置き換える
+- blockをcheck_typeする
+
+等値判定のようなケース
+
+struct foo {
+  int p;
+  int q;
+  int r;
+}
+
+function bool foo_gt(foo x, foo y)
+{
+  if (x.p > y.p) return true;
+  if (x.p < y.p) return false;
+  if (x.q > y.q) return true;
+  if (x.q < y.q) return false;
+  if (x.r > y.p) return true;
+  if (x.r < y.p) return false;
+  return false;
+}
+
+function bool foo_gt(foo x, foo y)
+{
+  foreach (foo, fld) {
+    if (x.fld > y.fld) return true;
+    if (x.fld < y.fld) return false;
+  }
+  return false;
+}
+
+置換方法
+- fldfe->block->stmts の中のシンボルを置き換える
+- まずstmtsをcloneしたものをつくり、stl0とする
+- teをevalし、型を調べる。taとする。
+- taがstructかvariantであることを確認
+- taの各fieldについて、
+  - stl0をcloneし、stlとする。
+  - stlの、symbolで文字列がsymに一致するとき、それをfieldで置き換える
+- 全て連結したstmtsを作る
+- fldfe->block->stmtsを、新しく作ったstmtsで置き換える
+- blockをcheck_typeする
+
+---------------------------------------------------------------------
+constnessがポインタの指す先にも伝播
+
+- 式がconstであるか判定する関数を用意
+  - check_lvalueの例外投げない版を作る
+- ref変数は、その変数自体がlvalueを持たないときはtexprをcrefにする
+
+- *pがlvalueを要求されたときは、pがcrefではなくrefであることと、
+  pにlvalueを要求する
+- refを引数に渡すときはbyrefであるかのようにcheck_lvalueする。
+
+やりなおし
+
+- crefを無くす。そのかわりconstラッパーを作る。
+- ref型変数が左辺値を持つときのみrefの指す先も左辺値を持つ
+
+---------------------------------------------------------------------
+シンボルテーブルをなめて全ての型と関数について処理
+
+- リストを構成するメタ関数(termに新たなメタ型として「リスト」を作る)
+- 文字列によって指定された名前空間のimportsを取得するメタ関数
+- 名前空間の関数と型一覧を取得するメタ関数
+- 型のフィールド一覧を取得するメタ関数
+- 型のメンバ関数一覧を取得するメタ関数
+- メタ関数のデバグ用print関数
+
+---------------------------------------------------------------------
+関数引数と返値をマーシャルするwrapper
+
+struct {f} wrap2 {
+  function sv call(svarr a) {
+    return marshal_to_sv(f(
+      marshal_from_sv(a.get(0)),
+      marshal_from_sv(a.get(1))));
+  }
+}
+
+marshal_from_sv(a.get(i)) をカンマ区切りで並べたものを埋め込む。
+
+foreach (i : meta::argnames{f}; j : marshal_from_sv(a.get(i)); ",") {
+  return marshal_to_sv(f(j));
+}
+
+演算子の結合方向と優先順位に注意が必要。
+
+f(a, b, j, x, y)
+- jの親がopで、演算子が','であったら、それを一旦リストに展開して
+  再結合し、該当部分へ指定個数だけinsertする。
+- jの親がopで、'('であったら単純に埋め込む。
+- jの親がfunccallであれば単純に埋め込む
+- jの親がそれ以外であったら、'()'でくくる。
+
+処理
+- 各symsについて、embedexprの'i'をそのsymbolで置き換えた式を作る
+- ブロックの中身をなめて、jを探す。
+- jの親に応じて、foldした式を作り、jの位置をそれで置き換える
+- あとはfldfeと同じ
+
+---------------------------------------------------------------------
+pxのオブジェクトをperlへ参照でマーシャル
+
+生ポインタをSVへ
+  SV *const objref = newSViv(0);
+  SV *const obj = newSVrv(objref, klass); // klassは文字列
+  sv_setiv(obj, reinterpret_cast<IV>(ptr)); // ptrは生ポインタ
+  return obj;
+
+SVを生ポインタへ戻す
+  return (void *)(SvIV(SvRV(obj)));
+
+SVを生ポインタへ戻す(気休め程度の型チェック付き)
+  if (!sv || !SvROK(sv)) {
+    return 0;
+  }
+  SV *svtarget = SvRV(sv);
+  if (!svtarget || !SvOBJECT(svtarget)) {
+    return 0;
+  }
+  const char *stname = HvNAME(SvSTASH(svtarget));
+  /* memo: JSON::XSはstashをポインタ比較している */
+  if (stname == 0 || strcmp(stname, klass) != 0) {
+    return 0;
+  }
+  return (void *)SvIV(svtarget);
+
+sv_derived_from(sv, "クラス名")でインスタンスかどうか判定できる？
+
+px型に対するコンストラクタとデストラクタの生成
+newXS("HOGE::DESTROY", &hoge, file);
+
+---------------------------------------------------------------------
+高階メタ関数を作ることができるように
+
+macro foo bar{baz}
+と定義されている場合は、fooと書けばbar{baz}に展開される。
+macro foo{x} bar{x}
+と定義されている場合は、fooと書けばメタ関数自体を返す。
+
+- まず、型がvalidかどうか(型引数の個数が正しいか)のチェックをvarや
+  argdeclなどのある場所(teの場所？)でおこなうようにする
+- evalの中を、パラメータはあるが引数が無いケースではメタ関数適用せずに
+  メタ関数自体を返すように変更
+- foo{bar}{baz}のような連続適用を文法的に許容?
+
+引数が無い場合でも評価が必要なのはどういうケースか？
+- シンボルが引数無しマクロを指している
+- それだけ？
+
+macro foo bar{baz} のときに foo という式は評価されてbar{baz}になる
+macro foo bar{baz} のときに foo{x} を評価するとbar{baz}{x}になる - 後回し
+
+macro foo{x} bar{x} とときに foo を評価してもfooがかえる
+macro foo{x} bar{x} とときに foo{x} を評価するとbar{x}がかえる
+
+---------------------------------------------------------------------
+シンボル一覧取得
+
+// meta::functions{"io"} : 名前空間にある関数シンボルの一覧を取得
+// meta::types{"io"} : 名前空間にある型シンボルの一覧を取得
+TODO: 
+meta::symbols{"io"} : 名前空間にあるシンボルの一覧を取得
+meta::params{sym} : シンボルのテンプレートパラメータ取得
+
+---------------------------------------------------------------------
+テンプレートインスタンスのperlへのexport
+
+テンプレ引数を持つ関数や型をexportはしない。非テンプレートな型や関数
+が使っているインスタンスについては勝手にマーシャラがインスタンス化
+される。メタ関数を使ってインスタンス一覧を取得することは許可しない。
+なぜなら分割コンパイル時に不一致が起きうるから。
+
+exportするのは、
+- publicな非テンプレート関数
+- publicな非テンプレート型
+- exportする関数が使っている具体型(テンプレートインスタンスを含む)
+  - 関数の引数と返値に使っている型
+- exportする型が使っている具体型(テンプレートインスタンスを含む)
+  - 型のpublicフィールド
+
+型や関数の情報
+- tpnum (テンプレート引数の数)
+- argnum argtype argnames 関数の引数と返値 (done)
+- argname argtypes (TODO)
+- fields
+- member_functions
+
+メタ関数で推移閉包を取る方法
+(0) 非メンバ関数と型を全て取る。テンプレ型は含めない。これが初期集合。
+    imports_trで名前空間一覧取得、それを引数にしてsymbolsでシンボル取得
+    funcdef, typedef, struct, variant, interface
+    extvalやグローバル変数は？
+(1) 各関数とstructの引数型を含める。テンプレインスタンスのこともある。
+(2) structとunionのメンバフィールドの型を含める。
+(3) structとinterfaceのメンバ関数を含める。
+(4) (1)に戻る
+
+実装する必要があるもの:
+  symbols: 名前空間のシンボル一覧を返す
+  argtypes: 関数や構造体の引数リストを返す
+  member_functions: 構造体のメンバ関数一覧を返す
+  field_types: 構造体とunionのフィールド型一覧を返す
+  field_names: 構造体とunionのフィールド名一覧を返す(一応用意)
+  parent_symbol: そのシンボルの親(構造体又は名前空間)を返す(必要？)
+  num_tparams: テンプレートパラメータの個数
+macro nslist imports_tr{"testimports"};
+  # 名前空間のリスト
+macro syms symbols{nslist};
+  # グローバルシンボルのリスト
+macro symbol_uses{s} join{argtypes{s}, list{rettype{s}}, members{s}}
+  # そのシンボルが使うシンボル一覧
+macro symbols_use{ss} unique{join{ss, map{ss, symbol_uses}}}
+  # シンボル一覧が使うシンボル一覧
+macro symbols_use_tr_if{ss0, ss1}
+  metaif{eq{ss1, ss0}, ss0, symbols_use_tr{ss1, symbols_use{ss1}}};
+macro symbols_use_tr{ss}
+  symbols_use_tr_if{ss, symbols_use{ss}};
+  # 間接的にシンボル一覧が使うシンボル一覧
+
+macro closed_set{func, s}
+
+グローバル関数のリスト取得
+グローバル関数の引数と返値型
+グローバル型リスト取得
+ (1) 型のメンバ関数の引数と返値型
+ (2) 型のフィールドの型
+ (3) 型のテンプレ引数型
+
+
+---------------------------------------------------------------------
+dlcloseしてもデストラクタ呼ばれない？
+
+グローバル変数にperlsvを置くと、dlclose()時に呼ばれるのではなくプロ
+セス終了時にatexit的に呼ばれてしまう?
+perlsvをグローバルに置くことを禁止する？
+
+---------------------------------------------------------------------
+public
+
+名前空間指定/オブジェクト指定で引くことができる?
+extval    o?
+var       o todo
+argdecls  x
+tparams   x
+funcdef   o
+typedef   o
+macrodef  o
+struct    o
+variant   o
+interface o
+
+---------------------------------------------------------------------
+m_memofib.px
+
+check_type_symbol_commonをresolve_symdefだけでevalしないように変えて
+動くようにする。
+
+---------------------------------------------------------------------
+pxc to perl marshal
+
+intなどの整数型はIVに
+doubleなどはNVに
+refとcrefはRVに
+構造体はrefにbox化してRVに
+
+---------------------------------------------------------------------
+clang++ 3.0
+
+明示的デストラクタ呼出しがコンパイル通らない。そのためunionが使えない。
+
+---------------------------------------------------------------------
+box化
+
+ref{foo} = foo(x, y);
+- 引数が4つ以上のとき
+  - rcptr<foo> p = rcptr<foo>(foo(x, y));
+  - ircptr<ifoo> p = ircptr<foo>(foo(x, y));
+- 引数が3つ以内のとき
+  - rcptr<foo> p = rcptr<foo>(pxcrt::boxing(), x, y));
+  - ircptr<ifoo> p = ircptr<foo>(pxcrt::boxing(), x, y));
+    変換先の型ではなく、変換元のref型
+       foo(x, y)を吐くかわりに boxing(), x, y を吐く。boxされる値は
+       必ず括弧の中にemitされるから外側の括弧は不要。
+
+---------------------------------------------------------------------
+constnessをtransitiveにする？
+
+function void foo(ref{int} x)
+{
+  ref{int} y = x; // errorにするべき。引数はconstだから。
+  // あるいはref{int}を引数の型とした時点でエラーにするべきか。
+}
+
+---------------------------------------------------------------------
+const foo **p
+
+class foo { void modify(); };
+const foo x;
+foo *p;
+const foo **q = &p; // error
+*q = &x;
+p->modify();
+
+---------------------------------------------------------------------
+constが推移的ならcref{ref{foo}}に意味はあるか？
+
+cref{ref{foo}} cmf;
+ref{foo} mf = *cmf;
+変更できてしまうからダメ
+
+---------------------------------------------------------------------
+pure関数、pure型 (staticと呼ぶべきか？ local？ threadsafe？)
+
+pure関数: グローバル変数をアクセスせず、引数のみアクセスすること
+- グローバル変数にアクセスしない
+- pureではない関数を呼ばない
+- pureではない型の引数を取らない
+- pureではない型の値を返さない
+- (標準的ライブラリはすべてpureにしておく)
+- (IO処理はsystem型の変数を引数に取ってpure関数にできる)
+  sys.println(...);
+  system型もpure型
+
+pure型: メンバがすべてpure
+- struct, variant, interface, typedef
+- メンバフィールドの型が全てpure
+- メンバ関数がpure(ただしpureメンバ関数はstruct自体にはアクセス可)
+- pureなテンプレ型はpureではない型引数を取れるが、取った結果の型は
+  pureではなくなる
+- pureではないstructはpureなinterfaceを実装できない
+
+---------------------------------------------------------------------
+sref{t}型
+
+スレッド間で共有可能なデータ。tにはいくつか制約がある。制約の目的は、
+スレッドセーフではないデータをsref{t}から間接的にアクセスできてしまわ
+ないようにすること。
+- tはpureでなければならない
+- tがstructのとき、フィールドにsref以外のrefを持てない
+- tがinterfaceであってはならない(これはどうすればいいか？)
+  - 許すと、interfaceを実装するクラスにrefを持ててしまうから
+  - pureなstructはsref以外のrefは持てないようにして、tにinterface
+    を許すようにするか？
+  - pureだけでなくthreadsafe属性を用意するか。threadsafeなinterfaceは
+    sref以外の
+
+static interface {t} imain {
+  function void main(sref{t} shr);
+}
+static function {t} sref{thread} spawn(sref{imain{t}} tm, sref{t} shr);
+
+---------------------------------------------------------------------
+スレッド整理
+
+pure -> static
+sref -> tref/tcref
+
+- マルチスレッド共有可能な型: shareable
+  - 型にのみ付く属性
+  - グローバル変数にアクセスせず、tref/tcref以外の参照型を持たない
+- マルチスレッド共有可能ではないがスレッド内で使える: static
+  - 型と関数に付く属性
+  - グローバル変数にアクセスしない
+- スレッド内では使えない: non static
+  - 型と関数に付く属性
+  - グローバル変数にアクセスする
+
+- 関数をstaticにできる条件
+  - グローバル変数をアクセスしない
+  - staticではない型を使っていない
+  - staticではない関数を使っていない
+- 構造体をstaticにできる条件
+  - メンバ関数が全てstatic
+  - メンバフィールドが全てstatic型式
+- 型式がstaticである条件
+  - 型式の全ての要素型がstaticである(型パラメータを除いて)
+  - インスタンス化されれば型パラメータがなくり、全ての要素型がstatic
+    であることを要求する。
+
+そもそもstaticではない関数は必要なのか？
+グローバルのsystemを各スレッドに渡すにはどうすればよいか？
+
+system_t型変数はメインスレッド用にひとつglobalに存在
+生成されたスレッドへは必要ならsystem_t型変数を共有データとして渡す。
+system_tを渡さなかったら子スレッドでIOを全く実行できない。
+システムコールはちゃんとsystem_tがnullでないことをチェックする？
+マルチスレッドセーフではないシステムコールについては、systemに埋め込
+まれたmutexでガードする。
+
+型の正当性チェック:
+- 型式の中でtref/tcrefの指す先はshareableでなくてはならない
+  (型をevalした後にそのチェックを入れる)(DONE)
+argdecls/varの正当性チェック:
+- threadedなstruct/unionはthreadedかshareableではない型のfieldを持て
+  ない
+  (argdecls/varの型チェック時チェックする。argdecls/varのフレームが
+  threadedならば、その変数の型がthreaded or shareableであることをチ
+  ェック)(DONE)
+- shareableなstruct/unionはshareableではない型のfieldを持てない
+  (varの型チェック時にチェックする。そのフレームがshareableならば、
+  その変数がshareableであることをチェック。argdeclsについては
+  shareableでなくてもよい)(DONE)
+関数の正当性チェック:
+- threaded/shareable関数はthreadedではない型や関数を使ってはならない
+  - threadedな型とは、型式にthreaded/shareableでない型要素を含まない
+  (symbolやteの解決時にチェックする。解決したシンボルが型か関数の
+   とき、そのフレームがthreadded or shareableならば解決した型や関数
+   もthreadedな型や関数であることをチェック)(DONE)
+- threaded/shareable関数はグローバル変数をアクセスできない
+  (symbolやteの解決時にチェックする。解決したシンボルが変数のとき、
+   それがグローバル変数だったらエラー)(DONE)
+- threaded/shareableなstruct/unionはメンバ関数は暗黙にthreadedを要求
+structのinterface実装の正当性チェック:
+- threadedなinterfaceを実装できるのはthreadedかshareableなもののみ
+- shareableなinterfaceを実装できるのはshareableなもののみ
+  (structのchecktypeでチェック)(DONE)
+その他無駄な装飾排除:
+- 関数にはshareable装飾は不許可(冗長)
+  (funcdefのchecktypeでエラー検出)(DONE)
+- メンバ関数にはthreaded/shareable装飾は不許可(冗長)
+  (メンバ関数がthreaded/shareableかどうかは、structに付いた装飾で
+   決まる。メンバ関数自体に装飾を付けるとエラー。funcdefのchecktype
+   でエラー検出)(DONE)
+- macro, extvalには文法上装飾が付けられるが、付いていればエラー
+  (DONE)
+- inline_cに色々装飾付けられるが、エラー(DONE)
+
+作るもの:
+- フレームがthreaded/shareableであるかを返す関数(DONE)
+- termがthreaded/sharableであるか返す関数(DONE)
+
+---------------------------------------------------------------------
+テンプレートクラスのthreading属性
+
+テンプレ自体にthreading属性が付いていても、インスタンスの型式が
+threadedではない場合などには、インスタンスのthreading属性はthreaded
+属性を外す。さもないとメンバ関数の引数型にthreadedを要求してしまう。
+vectorのpush()とか。
+(DONE)
+
+---------------------------------------------------------------------
+pimplイディオムとsingletonなクラス
+
+systemなどはオブジェクトをデフォルトコンストラクトできない。
+implクラスをprivateにする。
+structのコンストラクタを呼ぶには、そのstructの全field型がpublicである
+必要がある。(TODO)
+unionのコンストラクタを呼ぶには、その最初のfield型がpublicである必要
+がある。(TODO)
+externなコンテナやポインタについては、その型のコンストラクタを呼ぶ
+のに型パラメータがpublicである必要があるかどうかは、cascadeであるか
+による(テンプレ型のコンストラクタがパラメータ型のコンストラクタを
+呼ぶかどうか)。
+- ポインタ -> 必要(ポインタnull排除したとして)
+- farray -> 必要
+- varray -> 不要
+
+---------------------------------------------------------------------
+ポインタnull排除
+
+インタフェースポインタ型をデフォルトコンストラクトできない。
+emit_local_decl_fastinitでemitできるような式で初期化しなければ、
+インタフェースポインタを定義できない。
+グローバル変数にインタフェースポインタを置けないということ。
+あるいはinterfaceにダミー実装を作るか？
+
+
+---------------------------------------------------------------------
+デフォルトコンストラクト
+
+デフォルトコンストラクト可能でないものを、代入式無しに定義したら
+エラーにしなければならない。
+foo x; // error
+foo x(a, b); // ok
+
+defaultを持つ(デフォルトコンストラクト可能)かどうか:
+- 基本型は可能
+- externなstructは、カテゴリによる
+  - ref等の参照型は、指す先の型がdefaultを持つなら持つ
+  - farrayは、要素型が持つなら持つ
+  - varrayは常に持つ
+- ユーザ定義コンストラクタの無いstructは、全fieldがdefaultを持つなら持つ
+- ユーザ定義コンストラクタの有るstructは、その全引数の型がdefaultを持つ
+  なら持つ
+- unionは、最初のfieldがdefaultを持つなら持つ
+- interfaceは持たない
+
+式中のexpr_varが、代入演算子の左辺になっているかをチェックする。
+ただし、ユーザ定義コンストラクタの無いstructのフィールド定義になっている
+ようなexpr_varについては、代入の左辺になっていなくてよい。
+
+---------------------------------------------------------------------
+関数に置き換える演算子
+
+==, 
+
+---------------------------------------------------------------------
+if文の静的評価
+
+else文が無くて常に偽と評価 -> 空文なのでemitしない
+どの節が実行されるか確定 -> その節だけを含む複文をemit、ただしその
+if文が複文の唯一の文であるならば'{}'はemitしない。
+
+---------------------------------------------------------------------
+slice
+
+function hoge(vector{int} o);
+vector{int} foo;
+hoge(foo[i..j]);
+slice式をemitすると、pxcrt::slice< pxcrt::vector<int> >(foo, i, j)
+sliceを受ける関数は、
+hoge(pxcrt::slice< pxcrt::vector<int> >
+
+コンテナ自体の(リサイズ等の)更新はしないけれども中身は書き換えるよう
+な引数を取りたいケースがある。それを単なるコンテナの参照渡しと区別
+するためには、スライスをpxcとしても独立した型とするべき？
+
+vector{t}, array{t, n} -> array_slice{t}
+deque{t} -> deque_slice{t}
+list{t} -> list_slice{t}
+tree_map{t} -> tree_map_slice{t}
+tree_multimap{t} -> tree_multimap_slice{t}
+hash_map{t} -> キーに順序が無いのでsliceを取る意味が無い
+tree_set{t} -> tree_set_slice{t}
+tree_multiset{t} -> tree_multiset_slice{t}
+
+コンテナの要素を追加・削除しないような関数引数はsliceで渡す。要素を
+書き換える場合はsliceをbyrefで渡す。
+
+emitするC++関数の引数としては、slice{t}の値渡しはconst slice{t} xで、
+参照渡しはslice{t} xで宣言する。
+
+---------------------------------------------------------------------
+配列の型名を決めよ
+
+farray{t, n}  固定長
+darray{t}     生成時にサイズを決める
+rarray{t}     リサイズ可能
+
+---------------------------------------------------------------------
+root再整理
+
+前提:
+・代入以外の演算子の実行はいかなる式をも無効化することはない
+
+fn_check_root
+・インスタンスや子ノードについて先にfn_check_root呼び出し
+  (子ノードについては、演算子などの場合には無駄ではないか？)
+・即値や変数は何もしなくてもrootされている
+・関数呼び出し
+  ・関数はobj.funcの形の場合があるので、objをroot
+  ・関数引数を全てroot
+  ・呼び出し結果はrootされている(現状では)
+・代入演算子
+  ・左辺が無効化されうる式(「[]」、「.」、「*」、「->」を含む？)で、
+    右辺が副作用を持つかもしれない式のときは、右辺を一時変数に入れる
+    (この処理を子ノードをrootしてから実行するのは、右辺を2回rootする
+    ことになり無駄ではないか？この処理を子ノードのrootより先にする？)
+
+やりなおし
+fn_check_root_calls -> fn_check_typeに統合？
+・式や文を再帰的に
+・インスタンスを持つ場合はそれらに対してfn_check_root_calls実行
+・全ての子ノードに対してfn_check_root_calls実行
+・...
+
+やりなおし
+fn_check_typeの中で下を実行
+・式が関数呼び出しのとき(root_funccall_args)
+  ・関数はobj.funcの形の場合があるので、objをroot_expr_if
+  ・関数引数を全てroot_expr_if
+・式が代入のとき(root_assign_op_args)
+  ・左辺がexpr_would_invalidate_other_exprなら右辺をroot_expr_if
+  ・右辺がexpr_would_invalidate_other_exprなら
+    ・もし左辺がvariant fieldならば右辺をtempvar作成
+    ・それ以外のときは左辺をroot_expr_if
+・foreachの変数
+
+expr_would_invalidate_other_expr
+・式を再帰的に辿り、代入式又は関数呼び出しがあるならtrue
+
+root_expr_if (参考: is_rooted)
+・カンマならarg1をroot_expr_if
+・代入演算子ならばarg0をroot_expr_if
+・可変長配列の[]ならばそこにneed_guardをつける
+・(実行時、コンパイル時)固定長配列の[]ならばarg0に対しroot_expr_if
+・structのdot/ARROWならばarg0に対しroot_expr_if
+・variantのdot/ARROWならばエラー？
+・三項演算子の'?'ならarg1をroot_expr_if
+・三項演算子の':'ならarg0とarg1をroot_expr_if
+・論理演算、算術演算は何もいらない
+・++, --, PTR_REF(廃止？)ならarg0をroot_expr_if
+・PTR_DEREFはarg0に対してtempvar作成
+・括弧はarg0をroot_expr_if
+・CASEは何もいらない
+
+---------------------------------------------------------------------
+sliceやrangeをヒープに持たせない
+
+expr_varの型が、sliceやrange、それを型パラメータとして含むような型で
+あればエラー
+
+---------------------------------------------------------------------
+sliceや参照変数をlocal変数として使えるようにする?
+
+int& x = p->foo[15];
+x = 32;
+
+ptr<???> t0(p);
+invguard<int> x_guard(t0->foo);
+int& x = foo[15];
+
+---------------------------------------------------------------------
+rootする箇所はすべて一時変数を作る形に
+
+rootに配慮が必要なケース:
+・arg0[arg1] が左辺値を要求するか、値渡し型ではない場合
+  -> コンテナの参照又はconst参照ををinvalidate_guard一時変数に置く
+・*arg0 の場合 -> arg0を一時変数
+・arg0.arg1 の場合
+  -> 右辺値: 値渡し型であってもなくてもフィールドを一時変数
+  -> 左辺値: copy-restoreするinvalidate_guard一時変数に置く(後で実装)
+
+---------------------------------------------------------------------
+

@@ -1,0 +1,37 @@
+
+namespace up2;
+import io;
+
+function {t, f} void values_vector(vector{t}& v)
+{
+  uint sz = v.size();
+  for (uint i = 0; i < sz; ++i) {
+    f(v[i]);
+  }
+}
+
+function {t, f} void keys_vector(vector{t}& v)
+{
+  uint sz = v.size();
+  for (uint i = 0; i < sz; ++i) {
+    f(i);
+  }
+}
+
+function void foo(vector{int}& v) {
+  int x;
+  // function {t} void m1(t y) { x += y; }
+  macro m2{t} function {t} void(t y) { x += y; };
+    // FIXME: anonymous function can't have template parameters
+  // values_vector{int, m1{int}}(v); // error
+  // m1{int}(15);
+  m2{t}(19); // FIXME: error
+  io::println(x);
+}
+
+vector{int} a.resize(101);
+for (int i = 0; i < a.size(); ++i) {
+  a[i] = i;
+}
+foo(a);
+

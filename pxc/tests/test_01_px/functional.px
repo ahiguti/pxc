@@ -1,0 +1,58 @@
+
+namespace functional;
+import io;
+
+function {tdst, f} void array_construct(tdst& dst, ulong sz)
+{
+  dst.resize(sz);
+  for (ulong i = 0; i < sz; ++i) {
+    dst[i] = f(i);
+  }
+}
+
+function {tsrc, tdst, f} void array_apply(tsrc src, tdst& dst)
+{
+  ulong sz = src.size();
+  dst.resize(sz);
+  for (ulong i = 0; i < sz; ++i) {
+    dst[i] = f(src[i]);
+  }
+}
+
+function {tsrc, tv, f} tv array_foldl(tsrc src, tv v)
+{
+  ulong sz = src.size();
+  tv r = v;
+  for (ulong i = 0; i < sz; ++i) {
+    r = f(r, src[i]);
+  }
+  return r;
+}
+
+function {tsrc, tv, f} tv array_foldr(tsrc src, tv v)
+{
+  ulong sz = src.size();
+  tv r = v;
+  for (ulong i = sz; i > 0; --i) {
+    r = f(src[i - 1], r);
+  }
+  return r;
+}
+
+function {t} t id(t v) { return v; }
+function {t} t square(t v) { return v * v; }
+function {t} t add(t x, t y) { return x + y; }
+
+function {t} void test1()
+{
+  macro vtype t;
+  macro arrtype vector{vtype};
+  array_construct{arrtype, id{vtype}}(arrtype x, 11);
+  array_apply{arrtype, arrtype, square{vtype}}(x, arrtype y);
+  vtype r1 = array_foldl{arrtype, vtype, add{vtype}}(y, 0);
+  vtype r2 = array_foldr{arrtype, vtype, add{vtype}}(y, 0);
+  io::println(r1);
+  io::println(r2);
+}
+test1{int}();
+

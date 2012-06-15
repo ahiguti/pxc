@@ -1,0 +1,26 @@
+
+namespace ttest;
+import thread "";
+import io;
+
+multithreaded struct my_thread_obj {
+  int i;
+  io::ioref io;
+  function void main() {
+    io.sleep(i % 5);
+    io.println(i);
+  }
+}
+
+vector{thread_t} thrs;
+for (size_t i = 0; i < 100; ++i) {
+  thrs.push(create_thread(my_thread_obj(i, io::main)));
+}
+foreach (size_t i, thread_t t : thrs) {
+  t.join();
+  string s = "joined ";
+  s.append(size_t_to_string(i));
+  io::main.println(s);
+}
+// thr.join();
+

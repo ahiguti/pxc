@@ -1,0 +1,48 @@
+
+namespace m_globals;
+import meta "";
+import io;
+
+function {t} int foo() {
+  return 3;
+}
+
+struct {t} bar {
+  function int mbar(vector{t} f) {
+    return 2;
+  }
+}
+
+function int baz(bar{ref{vector{int}}} v) {
+  return 3;
+}
+
+macro nslist imports_tr{"m_globals"};
+macro is_concrete{t} eq{num_tparams{t}, num_targs{t}};
+macro filter_concrete{fs} filter{fs, is_concrete};
+macro nsfuncs filter_concrete{join{metamap{nslist, functions}}};
+macro nstypes filter_concrete{join{metamap{nslist, types}}};
+macro atypes_one{f} join_all{list{rettype{f}}, argtypes{f}};
+macro atypes{fs} filter_concrete{join{metamap{fs, atypes_one}}};
+macro ftypes{ts} filter_concrete{join{metamap{ts, field_types}}};
+macro mfatypes{ts} atypes{join{metamap{ts, member_functions}}};
+macro tatypes{ts} filter_concrete{join{metamap{ts, targs}}};
+macro init_types uniq{join_all{nstypes, atypes{nsfuncs}}};
+macro step_types{ts}
+  uniq{join_all{ts, ftypes{ts}, mfatypes{ts}, tatypes{ts}}};
+macro rep_types{ts, tsn}
+  metaif{eq{ts, tsn}, ts, rep_types{tsn, step_types{tsn}}};
+macro all_types rep_types{init_types, step_types{init_types}};
+
+// io::println(concat{"NSFUNCS: ", nsfuncs});
+// io::println(concat{"NSTYPES: ", nstypes});
+// io::println(concat{"ATYPES: ", uniq{atypes{nsfuncs}}});
+// io::println(concat{"FTYPES: ", uniq{ftypes{nstypes}}});
+// io::println(concat{"MFATYPES: ", mfatypes{nstypes}});
+// io::println(concat{"TATYPES: ", tatypes{nstypes}});
+
+io::println(concat{"0: ", metamap{init_types, full_string}});
+// io::println(concat{"1: ", step_types{init_types}});
+// io::println(concat{"2: ", step_types{step_types{init_types}}});
+io::println(concat{"n: ", metamap{all_types, full_string}});
+

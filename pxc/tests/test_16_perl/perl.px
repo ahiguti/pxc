@@ -1,0 +1,39 @@
+
+// vim:sw=2
+
+namespace perl;
+public import perl::impl;
+public import perl::symbols;
+public import io;
+public import meta;
+
+public macro sv perl::impl::sv;
+public macro av perl::impl::av;
+public macro hv perl::impl::hv;
+public macro xs_create_function{f} perl::impl::xs_create_function{f};
+public macro xs_create_type{f} perl::impl::xs_create_type{f};
+public macro sv_to_int perl::impl::sv_to_int;
+public macro int_to_sv perl::impl::int_to_sv;
+public macro sv_to_value{t} perl::impl::sv_to_value{t};
+public macro value_to_sv{t} perl::impl::value_to_sv{t};
+
+public function {ns} void export_all()
+{
+  foreach (symbol : perl::symbols::all_functions{ns}) {
+    perl::xs_create_function{symbol}();
+  }
+  foreach (symbol : perl::symbols::all_types{ns}) {
+    perl::xs_create_type{symbol}();
+  }
+}
+
+public function {ns} void show_exports()
+{
+  foreach (symbol : perl::symbols::all_functions{ns}) {
+    io::println(meta::full_string{symbol});
+  }
+  foreach (symbol : perl::symbols::all_types{ns}) {
+    io::println(meta::full_string{symbol});
+  }
+}
+
