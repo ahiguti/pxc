@@ -152,18 +152,9 @@ struct unit {
   bool operator ==(const unit&) { return true; }
   bool operator <(const unit&) { return false; }
 };
-template <typename Tc>
-struct invguard {
-  Tc& data;
-  invguard(Tc& data) : data(data) { data.inc_invalidate_guard(); }
-  ~invguard() { data.dec_invalidate_guard(); }
-private:
-  invguard(const invguard&);
-  invguard& operator =(const invguard&);
-};
 template <typename T>
 struct vector {
-  template <typename Tc> friend struct invguard;
+  template <typename Tc> friend struct invalidate_guard;
   typedef T data_type;
   typedef typename std::vector<T>::size_type size_type;
   typedef typename std::vector<T>::iterator iterator;
@@ -245,30 +236,9 @@ struct farray {
 private:
   T v[len];
 };
-template <typename T>
-struct slice {
-  typedef size_t size_type;
-  template <typename Tx> slice(Tx& x, size_t ofs, size_t sz)
-    : v(x.rawarr() + std::min(x.size(), ofs)),
-      len(std::min(x.size(), ofs + sz)) { }
-  size_type size() const { return len; }
-  T& operator [](size_type idx) {
-    if (idx >= len) { throw_invalid_index(); }
-    return v[idx];
-  }
-  const T& operator [](size_type idx) const {
-    if (idx >= len) { throw_invalid_index(); }
-    return v[idx];
-  }
-  T *rawarr() { return v; }
-  const T *rawarr() const { return v; }
-private:
-  T *const v;
-  const size_t len;
-};
 template <typename Tk, typename Tm>
 struct map {
-  template <typename Tc> friend struct invguard;
+  template <typename Tc> friend struct invalidate_guard;
   typedef Tm data_type;
   typedef typename std::map<Tk, Tm>::size_type size_type;
   typedef typename std::map<Tk, Tm>::iterator iterator;
@@ -303,6 +273,93 @@ private:
 private:
   std::map<Tk, Tm> v;
   mutable size_t invalidate_guard_count;
+};
+template <typename T>
+struct slice {
+  typedef size_t size_type;
+  slice() : v(0), len(0) { }
+  template <typename Tc> slice(Tc& c, size_t ofs, size_t sz)
+    : v(c.rawarr() + std::min(c.size(), ofs)),
+      len(std::min(c.size(), ofs + sz)) { }
+  size_type size() const { return len; }
+  T& operator [](size_type idx) {
+    if (idx >= len) { throw_invalid_index(); }
+    return v[idx];
+  }
+  const T& operator [](size_type idx) const {
+    if (idx >= len) { throw_invalid_index(); }
+    return v[idx];
+  }
+  T *rawarr() { return v; }
+  const T *rawarr() const { return v; }
+  void inc_invalidate_guard() const { }
+  void dec_invalidate_guard() const { }
+private:
+  T *const v;
+  const size_t len;
+};
+template <typename Tc>
+struct invalidate_guard_nonnull {
+  invalidate_guard_nonnull(Tc& c) : c(&c) {
+    c.inc_invalidate_guard();
+  }
+  ~invalidate_guard_nonnull() {
+    c.dec_invalidate_guard();
+  }
+  Tc& get() const {
+    return c;
+  }
+private:
+  Tc& c;
+  invalidate_guard_nonnull(const invalidate_guard_nonnull&);
+  invalidate_guard_nonnull& operator =(const invalidate_guard_nonnull&);
+};
+template <typename Tc>
+struct invalidate_guard {
+  invalidate_guard() : cp(0) { }
+  invalidate_guard(Tc& c) : cp(&c) {
+    c.inc_invalidate_guard();
+  }
+  ~invalidate_guard() {
+    if (cp != 0) { cp->dec_invalidate_guard(); }
+  }
+  void set(Tc& c) {
+    if (cp != 0) { cp->dec_invalidate_guard(); }
+    cp = &c;
+  }
+  Tc& get() const {
+    return *cp;
+  }
+private:
+  Tc *cp;
+  invalidate_guard(const invalidate_guard&);
+  invalidate_guard& operator =(const invalidate_guard&);
+};
+template <typename T>
+struct refvar_nonnull {
+  refvar_nonnull(T& v) : v(&v) { }
+  T& get() const {
+    return v;
+  }
+private:
+  T& v;
+  refvar_nonnull(const refvar_nonnull&);
+  refvar_nonnull& operator =(const refvar_nonnull&);
+};
+template <typename T>
+struct refvar {
+  refvar() : vp(0) { }
+  refvar(T& v) : vp(&v) { }
+  void set(T& v) {
+    vp = &v;
+  }
+  T& get() const {
+    return *vp;
+  }
+private:
+  T *vp;
+  refvar(const refvar&);
+  refvar& operator =(const refvar&);
 };
 struct mutex {
   friend struct lockobject;

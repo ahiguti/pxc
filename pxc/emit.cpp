@@ -69,6 +69,23 @@ static bool is_block_stmt(expr_i *e)
   }
 }
 
+static bool inside_blockcond(expr_i *e)
+{
+  while (true) {
+    if (e == 0) {
+      break;
+    }
+    if (is_block_stmt(e)) {
+      return true;
+    }
+    if (e->get_esort() == expr_e_stmts) {
+       break;
+    }
+    e = e->parent_expr;
+  }
+  return false;
+}
+
 static std::string get_term_cname(const term& t)
 {
   return term_tostr(t, term_tostr_sort_cname);
@@ -98,38 +115,94 @@ static void emit_explicit_init_if(emit_context& em, const term& t)
   }
 }
 
-static void emit_tempvars_def(emit_context& em, expr_i *e, bool declonly,
-  bool commasep)
+enum tempvars_def_e {
+  tempvars_def_e_def,
+  tempvars_def_e_def_set,
+  tempvars_def_e_set,
+};
+
+static void emit_tempvars_def(emit_context& em, expr_i *e, tempvars_def_e td)
 {
   if (e == 0 || e->get_esort() == expr_e_block) {
     return;
   }
   const int n = e->get_num_children();
   for (int i = 0; i < n; ++i) {
-    emit_tempvars_def(em, e->get_child(i), declonly, commasep);
+    emit_tempvars_def(em, e->get_child(i), td);
   }
   if (e->tempvar_id < 0) {
     return;
   }
+  const bool need_invguard = false; // FIXME: implement
   const term te = e->type_conv_to.is_null()
     ? e->get_texpr() : e->type_conv_to;
-  if (!commasep) {
+  if (td == tempvars_def_e_def || td == tempvars_def_e_def_set) {
     em.set_file_line(e);
     em.indent('t');
-    emit_term(em, te);
-    em.puts(" ");
+    const std::string ts = get_term_cname(te);
+    const char *const tcname =
+      (td == tempvars_def_e_def_set)
+	? (need_invguard ? "invalidate_guard_nonnull" : "refvar_nonnull")
+	: (need_invguard ? "invalidate_guard" : "refvar");
+    switch (e->tempvar_passby) {
+    case passby_e_unspecified:
+      arena_error_throw(e, "internal error: passby_e_unspecified");
+      break;
+    case passby_e_value:
+      em.printf("%s ", ts.c_str());
+      break;
+    case passby_e_const_value:
+      if (td != tempvars_def_e_def) {
+	em.printf("const %s ", ts.c_str());
+      } else {
+	em.printf("%s ", ts.c_str());
+	  /* nonconst because we need to set later */
+      }
+      break;
+    case passby_e_reference:
+      if (need_invguard || td == tempvars_def_e_def) {
+	em.printf("pxcrt::%s<%s> ", tcname, ts.c_str());
+      } else {
+	em.printf("%s& ", ts.c_str());
+      }
+      break;
+    case passby_e_const_reference:
+      if (need_invguard || td == tempvars_def_e_def) {
+	em.printf("pxcrt::%s<const %s> ", tcname, ts.c_str());
+      } else {
+	em.printf("const %s& ", ts.c_str());
+      }
+      break;
+    }
   }
   em.printf("t$%d", e->tempvar_id);
-  if (!declonly) {
-    em.puts(" = ");
-    fn_emit_value(em, e, true);
-  } else {
+  if (td == tempvars_def_e_def_set || td == tempvars_def_e_set) {
+    if (e->tempvar_passby == passby_e_reference ||
+      e->tempvar_passby == passby_e_const_reference) {
+      if (td == tempvars_def_e_set) {
+	em.puts(".set(");
+	fn_emit_value(em, e, true);
+	em.puts(")");
+      } else if (need_invguard) {
+	em.puts("(");
+	fn_emit_value(em, e, true);
+	em.puts(")");
+      } else {
+	em.puts(" = ");
+	fn_emit_value(em, e, true);
+      }
+    } else {
+      em.puts(" = ");
+      fn_emit_value(em, e, true);
+    }
+  } else if (e->tempvar_passby == passby_e_value ||
+    e->tempvar_passby == passby_e_const_value) {
     emit_explicit_init_if(em, te);
   }
-  if (!commasep) {
-    em.puts(";\n");
-  } else {
+  if (td == tempvars_def_e_set) {
     em.puts(", ");
+  } else {
+    em.puts(";\n");
   }
 }
 
@@ -137,7 +210,7 @@ static void fn_emit_value_blockcond(emit_context& em, expr_i *e)
 {
   /* used for 'if (...)', 'for (...)', etc. */
   if (cur_stmt_has_tempvar(e)) {
-    emit_tempvars_def(em, e, false, true);
+    emit_tempvars_def(em, e, tempvars_def_e_set);
   }
   fn_emit_value(em, e);
 }
@@ -1392,10 +1465,11 @@ void expr_stmts::emit_value(emit_context& em)
 	    em.set_file_line(head);
 	    em.indent('s');
 	    em.puts("{\n");
-	    if (is_block_stmt(head)) {
-	      emit_tempvars_def(em, head, true, false); /* decl only */
+	    if (is_block_stmt(head)) { /* if, while, for etc. */
+	      emit_tempvars_def(em, head, tempvars_def_e_def);
+		/* values will be set later */
 	    } else {
-	      emit_tempvars_def(em, head, false, false); /* decl and set */
+	      emit_tempvars_def(em, head, tempvars_def_e_def_set);
 	    }
 	  }
 	  em.set_file_line(head);
@@ -1614,9 +1688,9 @@ void emit_array_elem_or_slice_expr(emit_context& em, expr_op *eop)
   if (eop->need_guard) {
     std::string tc = get_term_cname(eop->arg0->get_texpr());
     if (!eop->require_lvalue) {
-      em.puts("(pxcrt::invguard< const ");
+      em.puts("(pxcrt::invalidate_guard< const ");
     } else {
-      em.puts("(pxcrt::invguard< ");
+      em.puts("(pxcrt::invalidate_guard< ");
     }
     em.puts(tc);
     em.puts(" >(");
@@ -2103,24 +2177,31 @@ void expr_feach::emit_value(emit_context& em)
   em.puts("{\n");
   em.add_indent(1);
   em.indent('f');
+  const std::string cetstr = get_term_cname(ce->get_texpr());
   const bool mapped_byref_flag =
     block->argdecls != 0 && block->argdecls->rest != 0 &&
     block->argdecls->rest->byref_flag;
   if (mapped_byref_flag) {
-    em.puts("const pxcrt::invguard< ");
+    em.puts("");
   } else {
-    em.puts("const pxcrt::invguard< const ");
+    em.puts("const ");
   }
-  const std::string cetstr = get_term_cname(ce->get_texpr());
   em.puts(cetstr);
-  em.puts(" > ag$fe((");
-    /* two parens are necessary because the content can be a comma expr */
+  em.puts("& ag$fe = (");
   fn_emit_value_blockcond(em, ce);
-  em.puts("));\n");
+  em.puts(");\n");
+  em.indent('f');
+  if (mapped_byref_flag) {
+    em.puts("const pxcrt::invalidate_guard< ");
+  } else {
+    em.puts("const pxcrt::invalidate_guard< const ");
+  }
+  em.puts(cetstr);
+  em.puts(" > ag$fg(ag$fe);\n");
   const term& cet = ce->get_texpr();
   if (is_categ_array(cet)) {
     em.indent('f');
-    em.puts("const size_t sz$fe = ag$fe.data.size();\n");
+    em.puts("const size_t sz$fe = ag$fe.size();\n");
     em.indent('f');
     em.puts("for (");
     expr_argdecls *const adk = block->argdecls;
@@ -2134,7 +2215,7 @@ void expr_feach::emit_value(emit_context& em)
     em.indent('f');
     expr_argdecls *const adm = adk->rest;
     adm->emit_cdecl(em, true, adm->byref_flag);
-    em.puts(" = ag$fe.data");
+    em.puts(" = ag$fe");
     em.puts("[");
     adk->emit_symbol(em);
     em.puts("];\n");
@@ -2153,8 +2234,7 @@ void expr_feach::emit_value(emit_context& em)
     } else {
       em.puts("::const_iterator ");
     }
-    em.puts("i$fe = ag$fe.data.begin(); i$fe != ag$fe.data.end();"
-      " ++i$fe) {\n");
+    em.puts("i$fe = ag$fe.begin(); i$fe != ag$fe.end(); ++i$fe) {\n");
     em.add_indent(1);
     em.indent('f');
     expr_argdecls *const adk = block->argdecls;
@@ -2345,8 +2425,6 @@ void expr_try::emit_value(emit_context& em)
   em.puts(" catch (const ");
   assert(cblock->argdecls);
   /* don't use call-traits. always catch by const reference. */
-  // FIXME: rooted?
-  // YES, it's always rooted because 'throw x' always copies x.
   emit_term(em, cblock->argdecls->get_texpr());
   em.puts("& ");
   cblock->argdecls->emit_symbol(em);
@@ -2363,7 +2441,16 @@ void fn_emit_value(emit_context& em, expr_i *e, bool expand_tempvar)
     return;
   }
   if (e->tempvar_id >= 0 && !expand_tempvar) {
-    em.printf("t$%d", e->tempvar_id);
+    if (inside_blockcond(e)) {
+      if (e->tempvar_passby == passby_e_reference ||
+	e->tempvar_passby == passby_e_const_reference) {
+	em.printf("(t$%d.get())", e->tempvar_id);
+      } else {
+	em.printf("t$%d", e->tempvar_id);
+      }
+    } else {
+      em.printf("t$%d", e->tempvar_id);
+    }
     return;
   }
   switch (e->conv) {
@@ -2374,6 +2461,7 @@ void fn_emit_value(emit_context& em, expr_i *e, bool expand_tempvar)
     {
       /* emit ptr<te> instead of type_conv_to, so that fast boxing works. */
       const term& te = e->get_texpr();
+      em.puts("(");
       if (is_interface_pointer(e->type_conv_to)) {
 	em.puts("pxcrt::rcptr< ");
 	emit_term(em, te);
@@ -2388,22 +2476,25 @@ void fn_emit_value(emit_context& em, expr_i *e, bool expand_tempvar)
 	emit_term(em, te);
 	em.puts(" > >");
       }
+      em.puts("(");
+      e->emit_value(em);
+      em.puts("))");
     }
-    em.puts("(");
-    e->emit_value(em);
-    em.puts(")");
     break;
   case conversion_e_cast:
     if (is_smallpod_type(e->type_conv_to)) {
-      em.puts("(");
+      em.puts("((");
       emit_term(em, e->type_conv_to);
       em.puts(")");
+      em.puts("(");
+      e->emit_value(em);
+      em.puts("))");
     } else {
       emit_term(em, e->type_conv_to);
+      em.puts("(");
+      e->emit_value(em);
+      em.puts(")");
     }
-    em.puts("(");
-    e->emit_value(em);
-    em.puts(")");
     break;
   }
 }

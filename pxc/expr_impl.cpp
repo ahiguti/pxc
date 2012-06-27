@@ -29,7 +29,7 @@ namespace pxc {
 expr_i::expr_i(const char *fn, int line)
   : fname(fn), line(line), type_of_this_expr(), conv(conversion_e_none),
     type_conv_to(), parent_expr(0), symtbl_lexical(0), tempvar_id(-1),
-    require_lvalue(false)
+    tempvar_passby(passby_e_unspecified), require_lvalue(false)
 {
   expr_arena.push_back(this);
   type_of_this_expr = builtins.type_void;
@@ -228,7 +228,7 @@ static term& resolve_texpr_symbol_common(expr_i *e)
 {
   symbol_common *const sc = e->get_sdef();
   assert(sc);
-  sc->resolve_symdef(); // FIXME
+  // sc->resolve_symdef(); // FIXME remove?
   assert(sc->get_symdef() != 0); // FIXME?
   if (!e->type_of_this_expr.is_null()) {
     DBG_TE1(fprintf(stderr, "resolve_texpr_symbol_common cached: %p -> %s\n",

@@ -25,6 +25,7 @@
 #define DBG_UP(x)
 #define DBG_FLDFE(x)
 #define DBG_CHECKROOT(x)
+#define DBG_TMPVAR(x)
 
 namespace pxc {
 
@@ -2084,7 +2085,7 @@ static bool is_assign_op(int op)
   return false;
 }
 
-static void rvalue_store_tempvar(expr_i *e)
+static void rvalue_store_tempvar(expr_i *e, const char *dbgmsg)
 {
   if (e->tempvar_id >= 0) {
     return;
@@ -2092,6 +2093,9 @@ static void rvalue_store_tempvar(expr_i *e)
   symbol_table *lookup = find_current_symbol_table(e);
   assert(lookup);
   e->tempvar_id = lookup->generate_tempvar();
+  e->tempvar_passby = passby_e_const_value; // FIXME: implement
+  DBG_TMPVAR(fprintf(stderr, "tempvar for %s (%s)\n", e->dump(0).c_str(),
+    dbgmsg));
 }
 
 static bool check_need_guard(expr_i *earr, expr_i *eelem, bool lvalue)
@@ -2111,6 +2115,15 @@ static bool root_nothrow(expr_i *e, bool lvalue_flag, bool checkonly_flag)
 {
   expr_op *const eop = dynamic_cast<expr_op *>(e);
   if (eop == 0 || e->tempvar_id >= 0) {
+    return true;
+  }
+  const call_trait_e ect = get_call_trait(e->resolve_texpr());
+  if (!lvalue_flag &&
+    (ect == call_trait_e_value || ect == call_trait_e_raw_pointer)) {
+    if (!checkonly_flag) {
+      rvalue_store_tempvar(eop, "value/rawptr rvalue");
+	/* ROOT */
+    }
     return true;
   }
   switch (eop->op) {
@@ -2152,25 +2165,13 @@ static bool root_nothrow(expr_i *e, bool lvalue_flag, bool checkonly_flag)
   case TOK_PTR_DEREF:
     if (!checkonly_flag) {
       /* copy the pointer and own a refcount */
-      rvalue_store_tempvar(eop->arg0);
+      rvalue_store_tempvar(eop->arg0, "ptrderef");
 	/* ROOT */
     }
     return true;
   case '[':
-    if (get_call_trait(eop->arg0->resolve_texpr()) == call_trait_e_value
-      && !lvalue_flag) {
-      /* if lvalue is not required and copying is cheep, create a tempvar
-       * rather than guarding the array */
-      if (!checkonly_flag) {
-	rvalue_store_tempvar(eop->arg0);
-      }
-      return true;
-    }
-    if (
-      root_nothrow(eop->arg0, lvalue_flag, true) &&
-      root_nothrow(eop->arg1, lvalue_flag, true)) {
+    if (root_nothrow(eop->arg0, lvalue_flag, true)) {
       root_nothrow(eop->arg0, lvalue_flag, checkonly_flag);
-      root_nothrow(eop->arg1, lvalue_flag, checkonly_flag);
       if (!checkonly_flag) {
 	eop->need_guard = check_need_guard(eop->arg0, e, lvalue_flag);
 	  /* ROOT */
@@ -2203,7 +2204,8 @@ static void root_rvalue(expr_i *e)
   switch (ct) {
   case call_trait_e_raw_pointer:
   case call_trait_e_const_ref_nonconst_ref:
-    rvalue_store_tempvar(e); /* only variant field can reach here */
+    rvalue_store_tempvar(e, "root_rvalue");
+      /* only variant field can reach here */
     break;
   case call_trait_e_value:
     break;
@@ -2352,7 +2354,7 @@ void fn_check_root(expr_i *e)
 	if (!root_nothrow(eo->arg0, true, true)) {
 	  /* lhs is a variant field. make tempvar for rhs, so that rhs is
 	   * evaluated before lhs.  */
-	  rvalue_store_tempvar(eo->arg1);
+	  rvalue_store_tempvar(eo->arg1, "variant assign");
 	}
       }
     }

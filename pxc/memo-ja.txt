@@ -4,6 +4,9 @@
 - 1. variant fieldがcall-by-constrefならrootできないように
 - 2. root周りをごっそり置き換え
 
+- 自動変換が入ったら左辺値を取れないように(check_lvalue)
+- expr_feach::emit(): mapに対するemit
+- 情報をロスするような自動変換は止める
 - convがある場合とroot
 - namespace義務付け
 - slice型変数を作れないように(noheap?)
@@ -279,6 +282,7 @@ foo$i   インタフェースのstruct名
 foo$i0  ローカルに定義されたインタフェースのstruct名
 foo$    auto変数、グローバル変数、メンバ変数、関数引数
 foo$e   variantのenum要素
+foo$fg  foreachのguardオブジェクト
 foo$fe  foreachのkey, mapped値, guardオブジェクト
 $e      variantのenum
 this$up メンバ関数の下の関数からメンバ関数を呼ぶための上位this
@@ -4325,12 +4329,33 @@ int& x = foo[15];
 rootする箇所はすべて一時変数を作る形に
 
 rootに配慮が必要なケース:
+・*arg0 の場合 -> arg0をtempvar作成
 ・arg0[arg1] が左辺値を要求するか、値渡し型ではない場合
-  -> コンテナの参照又はconst参照ををinvalidate_guard一時変数に置く
-・*arg0 の場合 -> arg0を一時変数
-・arg0.arg1 の場合
-  -> 右辺値: 値渡し型であってもなくてもフィールドを一時変数
-  -> 左辺値: copy-restoreするinvalidate_guard一時変数に置く(後で実装)
+  -> tempvarを作成し、tempvar_guard_containerフラグをセット
+・arg0.arg1 が左辺値を要求するか、値渡し型ではない場合
+  -> tempvarを作成し、tempvar_guard_unionフラグをセット
+
+一時変数オブジェクトはTe, const Te, Te&, const Te&のいずれかの型で、
+参照型については同時にガードelem_invguard<Tc>をemitする。
+(一時変数が非constの値というのは不要か？)
+
+参照変数を許可した後では、変数はT, T&, const T&のいずれかの型で、
+参照型については同時にガードelem_invguard<Tc>をemitする。
+
+一時変数についての移行手順:
+0. 初期化をあとから出来るfoo&を作る(if条件式の中の式を一時変数に置く
+のに使う)(done)
+1. まずtempvar_idに加えてtempvar_semaを用意、constness/参照かどうかを
+区別する。(var_value, var_constval, var_ref, var_constref)
+2. 一時変数をemitするとき、それがvar_ref又はvar_constrefであった
+場合、vectorなどの型であればelem_invguard<Tc>をemitする。
+3. need_guardフラグを立てるかわりに、var_ref/var_constrefなtempvarを
+作るように書き換える。
+4. need_guardフラグ削除
+
+const_value, value: 無変更
+const_reference, reference: blockcondのときはreftmpvarでwrap,
+そうでないときは無変更
 
 ---------------------------------------------------------------------
 

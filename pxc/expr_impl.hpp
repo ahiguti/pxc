@@ -258,6 +258,14 @@ private:
   term evaluated;
 };
 
+enum passby_e {
+  passby_e_unspecified, /* const_value or const_reference */
+  passby_e_const_value,
+  passby_e_value,
+  passby_e_const_reference,
+  passby_e_reference,
+};
+
 struct expr_i {
   expr_i(const char *fn, int line);
   virtual ~expr_i() { }
@@ -303,6 +311,7 @@ public:
   expr_i *parent_expr;
   symbol_table *symtbl_lexical;
   int tempvar_id;
+  passby_e tempvar_passby : 3;
   bool require_lvalue : 1;
 };
 
