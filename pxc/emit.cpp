@@ -69,13 +69,32 @@ static bool is_block_stmt(expr_i *e)
   }
 }
 
+static bool is_condblock_stmt(expr_i *e)
+{
+  if (e == 0) {
+    return false;
+  }
+  switch (e->get_esort()) {
+  case expr_e_if:
+  case expr_e_while:
+  case expr_e_for:
+    return true;
+  default:
+  /* feach, fldfe, and foldfe don't use fn_emit_value_blockcond */
+  /* case expr_e_feach: */
+  /* case expr_e_fldfe: */
+  /* case expr_e_foldfe: */
+    return false;
+  }
+}
+
 static bool inside_blockcond(expr_i *e)
 {
   while (true) {
     if (e == 0) {
       break;
     }
-    if (is_block_stmt(e)) {
+    if (is_condblock_stmt(e)) {
       return true;
     }
     if (e->get_esort() == expr_e_stmts) {
@@ -133,9 +152,9 @@ static void emit_tempvars_def(emit_context& em, expr_i *e, tempvars_def_e td)
   if (e->tempvar_id < 0) {
     return;
   }
-  const bool need_invguard = false; // FIXME: implement
   const term te = e->type_conv_to.is_null()
     ? e->get_texpr() : e->type_conv_to;
+  const bool need_invguard = type_has_invalidate_guard(te);
   if (td == tempvars_def_e_def || td == tempvars_def_e_def_set) {
     em.set_file_line(e);
     em.indent('t');
@@ -161,14 +180,14 @@ static void emit_tempvars_def(emit_context& em, expr_i *e, tempvars_def_e td)
       break;
     case passby_e_reference:
       if (need_invguard || td == tempvars_def_e_def) {
-	em.printf("pxcrt::%s<%s> ", tcname, ts.c_str());
+	em.printf("pxcrt::%s< %s > ", tcname, ts.c_str());
       } else {
 	em.printf("%s& ", ts.c_str());
       }
       break;
     case passby_e_const_reference:
       if (need_invguard || td == tempvars_def_e_def) {
-	em.printf("pxcrt::%s<const %s> ", tcname, ts.c_str());
+	em.printf("pxcrt::%s< const %s > ", tcname, ts.c_str());
       } else {
 	em.printf("const %s& ", ts.c_str());
       }
@@ -208,7 +227,7 @@ static void emit_tempvars_def(emit_context& em, expr_i *e, tempvars_def_e td)
 
 static void fn_emit_value_blockcond(emit_context& em, expr_i *e)
 {
-  /* used for 'if (...)', 'for (...)', etc. */
+  /* expressions inside if(...), for(...), while(...) */
   if (cur_stmt_has_tempvar(e)) {
     emit_tempvars_def(em, e, tempvars_def_e_set);
   }
@@ -1465,7 +1484,7 @@ void expr_stmts::emit_value(emit_context& em)
 	    em.set_file_line(head);
 	    em.indent('s');
 	    em.puts("{\n");
-	    if (is_block_stmt(head)) { /* if, while, for etc. */
+	    if (is_condblock_stmt(head)) { /* if, while, for */
 	      emit_tempvars_def(em, head, tempvars_def_e_def);
 		/* values will be set later */
 	    } else {
@@ -1685,19 +1704,6 @@ void expr_block::emit_memberfunc_decl(emit_context& em, bool pure_virtual)
 
 void emit_array_elem_or_slice_expr(emit_context& em, expr_op *eop)
 {
-  if (eop->need_guard) {
-    std::string tc = get_term_cname(eop->arg0->get_texpr());
-    if (!eop->require_lvalue) {
-      em.puts("(pxcrt::invalidate_guard< const ");
-    } else {
-      em.puts("(pxcrt::invalidate_guard< ");
-    }
-    em.puts(tc);
-    em.puts(" >(");
-    fn_emit_value(em, eop->arg0);
-    em.puts("), ");
-  } else {
-  }
   if (eop->arg1 != 0 && eop->arg1->get_esort() == expr_e_op &&
     ptr_down_cast<expr_op>(eop->arg1)->op == TOK_SLICE) {
     expr_op *const sliop = ptr_down_cast<expr_op>(eop->arg1);
@@ -1715,9 +1721,6 @@ void emit_array_elem_or_slice_expr(emit_context& em, expr_op *eop)
     em.puts("[");
     fn_emit_value(em, eop->arg1);
     em.puts("]");
-  }
-  if (eop->need_guard) {
-    em.puts(")");
   }
 }
 
@@ -2024,7 +2027,8 @@ static bool esort_noemit_funcbody(expr_i *e)
     return true;
   default:
     /* expr_e_if, expr_e_var, expr_e_op for example */
-    DBG_IF(fprintf(stderr, "esort_noemit_funcbody: false %s\n", e->dump(0).c_str()));
+    DBG_IF(fprintf(stderr, "esort_noemit_funcbody: false %s\n",
+      e->dump(0).c_str()));
     return false;
   }
 }
@@ -2139,7 +2143,10 @@ void expr_if::emit_value(emit_context& em)
     fn_emit_value(em, rest);
   } else if (block2 != 0) {
     if (cond_static == 0 && can_omit_brace(this)) {
+      em.puts("/* staticif-else */\n");
       block2->emit_value_nobrace(em);
+      em.indent('b');
+      em.puts("/* staticif-else end */");
     } else {
       fn_emit_value(em, block2);
     }
@@ -2188,18 +2195,20 @@ void expr_feach::emit_value(emit_context& em)
   }
   em.puts(cetstr);
   em.puts("& ag$fe = (");
-  fn_emit_value_blockcond(em, ce);
+  fn_emit_value(em, ce);
   em.puts(");\n");
-  em.indent('f');
-  if (mapped_byref_flag) {
-    em.puts("const pxcrt::invalidate_guard< ");
-  } else {
-    em.puts("const pxcrt::invalidate_guard< const ");
+  if (type_has_invalidate_guard(ce->get_texpr())) {
+    em.indent('f');
+    if (mapped_byref_flag) {
+      em.puts("const pxcrt::invalidate_guard< ");
+    } else {
+      em.puts("const pxcrt::invalidate_guard< const ");
+    }
+    em.puts(cetstr);
+    em.puts(" > ag$fg(ag$fe);\n");
   }
-  em.puts(cetstr);
-  em.puts(" > ag$fg(ag$fe);\n");
   const term& cet = ce->get_texpr();
-  if (is_categ_array(cet)) {
+  if (is_array_family(cet) || is_cm_slice_family(cet)) {
     em.indent('f');
     em.puts("const size_t sz$fe = ag$fe.size();\n");
     em.indent('f');
@@ -2225,7 +2234,7 @@ void expr_feach::emit_value(emit_context& em)
     em.add_indent(-1);
     em.indent('f');
     em.puts("}\n");
-  } else if (is_categ_map(cet)) {
+  } else if (is_map_family(cet)) {
     em.indent('f');
     em.puts("for (");
     em.puts(cetstr);
@@ -2441,13 +2450,16 @@ void fn_emit_value(emit_context& em, expr_i *e, bool expand_tempvar)
     return;
   }
   if (e->tempvar_id >= 0 && !expand_tempvar) {
-    if (inside_blockcond(e)) {
-      if (e->tempvar_passby == passby_e_reference ||
-	e->tempvar_passby == passby_e_const_reference) {
-	em.printf("(t$%d.get())", e->tempvar_id);
-      } else {
-	em.printf("t$%d", e->tempvar_id);
-      }
+    const term te = e->type_conv_to.is_null()
+      ? e->get_texpr() : e->type_conv_to;
+    const bool need_invguard = type_has_invalidate_guard(te);
+      /* wrapped by invalid_guard<> */
+    const bool inside_blc = inside_blockcond(e);
+      /* wrapped by refvar<> */
+    if ((need_invguard || inside_blc) &&
+      (e->tempvar_passby == passby_e_reference ||
+      e->tempvar_passby == passby_e_const_reference)) {
+      em.printf("(t$%d.get())", e->tempvar_id);
     } else {
       em.printf("t$%d", e->tempvar_id);
     }

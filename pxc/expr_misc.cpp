@@ -294,7 +294,7 @@ bool is_compatible_pointer(const term& t0, const term& t1)
 
 call_trait_e get_call_trait(const term& t)
 {
-  if (is_pointer(t)) { 
+  if (is_cm_pointer_family(t)) { 
     return call_trait_e_raw_pointer;
   } else if (is_smallpod_type(t)) {
     return call_trait_e_value;
@@ -369,12 +369,12 @@ bool is_interface_pointer(const term& t)
   return is_interface_or_impl(tt);
 }
 
-bool is_pointer(const term& t)
+bool is_cm_pointer_family(const term& t)
 {
-  return !get_pointer_target(t).is_null();
+  return is_pointer_category(get_category(t));
 }
 
-bool is_const_pointer(const term& t)
+bool is_const_pointer_family(const term& t)
 {
   const std::string cat = get_category(t);
   if (cat == "tcref" || cat == "cref") {
@@ -383,16 +383,33 @@ bool is_const_pointer(const term& t)
   return false;
 }
 
-bool is_categ_array(const term& t)
+bool is_array_family(const term& t)
 {
   const std::string cat = get_category(t);
   return cat == "varray" || cat == "farray";
 }
 
-bool is_categ_map(const term& t)
+bool is_map_family(const term& t)
 {
   const std::string cat = get_category(t);
   return cat == "map";
+}
+
+bool is_const_slice_family(const term& t)
+{
+  const std::string cat = get_category(t);
+  return cat == "cslice";
+}
+
+bool is_cm_slice_family(const term& t)
+{
+  const std::string cat = get_category(t);
+  return cat == "slice" || cat == "cslice";
+}
+
+bool is_weak_value_type(const term& t)
+{
+  return is_cm_slice_family(t); /* slices are weak */
 }
 
 const bool has_userdef_constr_internal(const term& t,
@@ -445,10 +462,19 @@ bool has_userdef_constr(const term& t)
   return has_userdef_constr_internal(t, checked);
 }
 
+bool type_has_invalidate_guard(const term& t)
+{
+  const std::string cat = get_category(t);
+  if (cat == "varray" || cat == "map") {
+    return true;
+  }
+  return false;
+}
+
 bool type_allow_feach(const term& t)
 {
   const std::string cat = get_category(t);
-  if (cat == "varray" || cat == "farray" || cat == "map") {
+  if (cat == "varray" || cat == "farray" || cat == "map" || cat == "slice") {
     return true;
   }
   return false;
@@ -665,7 +691,7 @@ std::string term_tostr(const term& t, term_tostr_sort s)
   case term_tostr_sort_strict:
   case term_tostr_sort_cname:
   case term_tostr_sort_cname_tparam:
-    if (is_pointer(t)) {
+    if (is_cm_pointer_family(t)) {
       const std::string cat = get_category(t);
       if (s == term_tostr_sort_cname_tparam) {
 	rstr += "pxcrt$$" + cat;
@@ -939,7 +965,9 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
     return true;
   }
   #endif
-  if (is_pointer(tconvto) &&
+  #if 0
+  // TODO: disable auto boxing
+  if (is_cm_pointer_family(tconvto) &&
     is_sub_type(tfrom, get_pointer_target(tconvto))) {
     /* auto boxing */
     efrom->conv = conversion_e_boxing;
@@ -947,7 +975,20 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
     DBG_CONV(fprintf(stderr, "convert: auto boxing\n"));
     return true;
   }
-  if (is_pointer(tconvto) &&
+  #endif
+  if (is_cm_slice_family(tconvto) && is_cm_slice_family(tfrom) &&
+    (is_const_slice_family(tconvto) || !is_const_slice_family(tfrom))) {
+    /* slice to cslice */
+    const term_list *const tta = tconvto.get_args();
+    const term_list *const tfa = tfrom.get_args();
+    if (tta != 0 && tfa != 0 && tta->front() == tfa->front()) {
+      DBG_CONV(fprintf(stderr, "convert: slice\n"));
+      return true;
+    }
+  }
+  #if 0
+  #endif
+  if (is_cm_pointer_family(tconvto) &&
     is_sub_type(get_pointer_target(tfrom), get_pointer_target(tconvto)) &&
     is_compatible_pointer(tfrom, tconvto)) {
     /* ref to cref or tref to tcref */
