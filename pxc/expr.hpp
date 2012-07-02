@@ -44,6 +44,14 @@ enum attribute_e {
   attribute_15             = 15,
 };
 
+enum passby_e {
+  passby_e_unspecified, /* const_value or const_reference */
+  passby_e_const_value,
+  passby_e_value,
+  passby_e_const_reference,
+  passby_e_reference,
+};
+
 struct expr_i;
 
 expr_i *expr_te_new(const char *fn, int line, expr_i *nssym, expr_i *arg);
@@ -62,7 +70,7 @@ expr_i *expr_symbol_new(const char *fn, int line, expr_i *nssym);
 expr_i *expr_nssym_new(const char *fn, int line, expr_i *prefix,
   const char *sym);
 expr_i *expr_var_new(const char *fn, int line, const char *sym, expr_i *typ,
-  attribute_e visi);
+  passby_e passby, attribute_e visi);
 expr_i *expr_extval_new(const char *fn, int line, const char *sym,
   expr_i *typ, const char *cname, attribute_e visi);
 expr_i *expr_argdecls_new(const char *fn, int line, const char *sym,

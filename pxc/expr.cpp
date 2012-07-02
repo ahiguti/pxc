@@ -45,8 +45,8 @@ expr_i *expr_nssym_new(const char *fn, int line, expr_i *prefix,
 expr_i *expr_symbol_new(const char *fn, int line, expr_i *nssym)
 { return new expr_symbol(fn, line, nssym); }
 expr_i *expr_var_new(const char *fn, int line, const char *sym,
-  expr_i *type_uneval, attribute_e attr)
-{ return new expr_var(fn, line, sym, type_uneval, attr); }
+  expr_i *type_uneval, passby_e passby, attribute_e attr)
+{ return new expr_var(fn, line, sym, type_uneval, passby, attr); }
 expr_i *expr_extval_new(const char *fn, int line, const char *sym,
   expr_i *type_uneval, const char *cname, attribute_e attr)
 { return new expr_extval(fn, line, sym, type_uneval, cname, attr); }

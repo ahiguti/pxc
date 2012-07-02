@@ -97,6 +97,7 @@ static compile_mode cur_mode;
 %token<void_val> TOK_SWITCH
 %token<void_val> TOK_CASE
 %token<void_val> TOK_CONST
+%token<void_val> TOK_MUTABLE
 
 %type<expr_val> toplevel_stmt_list
 %type<expr_val> toplevel_stmt
@@ -159,6 +160,7 @@ static compile_mode cur_mode;
 %type<expr_val> mul_expr
 %type<expr_val> unary_expr
 %type<expr_val> postfix_expr
+%type<expr_val> vardef_expr
 %type<expr_val> primary_expr
 %type<expr_val> array_index_expr
 
@@ -513,10 +515,10 @@ c_extval_stmt
 visi_vardef_stmt
 	: TOK_PRIVATE type_expr TOK_SYMBOL ';'
 	  { $$ = expr_var_new(cur_fname, @1.first_line, $3, $2,
-		attribute_private); }
+		passby_e_unspecified, attribute_private); }
 	| TOK_PUBLIC type_expr TOK_SYMBOL ';'
 	  { $$ = expr_var_new(cur_fname, @1.first_line, $3, $2,
-		attribute_public); }
+		passby_e_unspecified, attribute_public); }
 	;
 argdecl_list
 	:
@@ -741,13 +743,39 @@ postfix_expr
 			expr_op_new(cur_fname, @1.first_line, TOK_PTR_DEREF,
 				$1, 0), 0),
 		$3); }
+	| vardef_expr
+	  { $$ = $1; }
+	/*
 	| type_expr TOK_SYMBOL
 	  { $$ = expr_var_new(cur_fname, @1.first_line, $2, $1,
-		attribute_unknown); }
+		passby_e_unspecified, attribute_unknown); }
+	*/
 	/*
 	| postfix_expr '(' opt_expression ')' TOK_DO
 		'(' argdecl_list ')' opt_cv '{' function_body_stmt_list '}'
 	  { $$ = 0; }
+	*/
+	;
+vardef_expr
+	: type_expr TOK_SYMBOL
+	  { $$ = expr_var_new(cur_fname, @1.first_line, $2, $1,
+		passby_e_unspecified, attribute_unknown); }
+	| type_expr TOK_CONST TOK_SYMBOL
+	  { $$ = expr_var_new(cur_fname, @1.first_line, $3, $1,
+		passby_e_const_value, attribute_unknown); }
+	| type_expr TOK_MUTABLE TOK_SYMBOL
+	  { $$ = expr_var_new(cur_fname, @1.first_line, $3, $1,
+		passby_e_value, attribute_unknown); }
+	| type_expr TOK_CONST '&' TOK_SYMBOL
+	  { $$ = expr_var_new(cur_fname, @1.first_line, $4, $1,
+		passby_e_const_reference, attribute_unknown); }
+	| type_expr TOK_MUTABLE '&' TOK_SYMBOL
+	  { $$ = expr_var_new(cur_fname, @1.first_line, $4, $1,
+		passby_e_reference, attribute_unknown); }
+	/*
+	| type_expr '&' TOK_SYMBOL
+	  { $$ = expr_var_new(cur_fname, @1.first_line, $3, $1,
+		passby_e_reference, attribute_unknown); }
 	*/
 	;
 array_index_expr

@@ -42,6 +42,7 @@ extern int count_newline(const char *str);
 "function"		{ return TOK_FUNCTION; }
 "var"			{ return TOK_VAR; }
 "const"			{ return TOK_CONST; }
+"mutable"		{ return TOK_MUTABLE; }
 "typedef"		{ return TOK_TYPEDEF; }
 "macro"			{ return TOK_MACRO; }
 "struct"		{ return TOK_STRUCT; }

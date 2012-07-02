@@ -193,11 +193,15 @@ bool is_interface(const term& t);
 bool is_interface_or_impl(const term& t);
 bool is_noninterface_pointer(const term& t);
 bool is_interface_pointer(const term& t);
-bool is_const_pointer(const term& t);
-bool is_pointer(const term& t);
-bool is_categ_array(const term& t);
-bool is_categ_map(const term& t);
+bool is_const_pointer_family(const term& t);
+bool is_cm_pointer_family(const term& t);
+bool is_array_family(const term& t);
+bool is_map_family(const term& t);
+bool is_const_slice_family(const term& t);
+bool is_cm_slice_family(const term& t);
+bool is_weak_value_type(const term& t);
 bool has_userdef_constr(const term& t);
+bool type_has_invalidate_guard(const term& t);
 bool type_allow_feach(const term& t);
 bool is_compatible_pointer(const term&t0, const term& t1);
 std::string get_category(const term& t);
@@ -258,14 +262,6 @@ private:
   term evaluated;
 };
 
-enum passby_e {
-  passby_e_unspecified, /* const_value or const_reference */
-  passby_e_const_value,
-  passby_e_value,
-  passby_e_const_reference,
-  passby_e_reference,
-};
-
 struct expr_i {
   expr_i(const char *fn, int line);
   virtual ~expr_i() { }
@@ -312,6 +308,7 @@ public:
   symbol_table *symtbl_lexical;
   int tempvar_id;
   passby_e tempvar_passby : 3;
+  bool tempvar_extent_block : 1;
   bool require_lvalue : 1;
 };
 
@@ -508,7 +505,7 @@ public:
 
 struct expr_var : public expr_i {
   expr_var(const char *fn, int line, const char *sym, expr_i *type_uneval,
-    attribute_e attr);
+    passby_e passby, attribute_e attr);
   expr_i *clone() const; // { return new expr_var(*this); }
   expr_e get_esort() const { return expr_e_var; }
   int get_num_children() const { return 1; }
@@ -532,6 +529,7 @@ public:
   const char *const sym;
   expr_te *type_uneval;
   std::string ns;
+  passby_e passby;
   attribute_e attr;
 };
 
@@ -730,7 +728,6 @@ struct expr_op : public expr_i {
 public:
   const int op;
   expr_i *arg0, *arg1;
-  bool need_guard : 1;
 };
 
 struct expr_funccall : public expr_i {

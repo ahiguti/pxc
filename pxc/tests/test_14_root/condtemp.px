@@ -1,0 +1,26 @@
+
+import io;
+
+function int inc(int& x, int y)
+{
+  return (++x) + y;
+}
+
+function int bar(vector{int}& p)
+{
+  return p[0];
+}
+
+function int foo(vector{int}& p)
+{
+  if (inc(p[3], bar(p)) == 1000) { // calling bar() can possibly invalidate p[3]
+    return 3;
+  }
+  return 5;
+}
+
+vector{int} p;
+p.resize(10);
+p[3] = 999;
+int a = foo(p);
+io::println(a);
