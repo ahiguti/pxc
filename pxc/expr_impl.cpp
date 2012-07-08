@@ -29,7 +29,6 @@ namespace pxc {
 expr_i::expr_i(const char *fn, int line)
   : fname(fn), line(line), type_of_this_expr(), conv(conversion_e_none),
     type_conv_to(), parent_expr(0), symtbl_lexical(0), tempvar_id(-1),
-    tempvar_passby(passby_e_unspecified), tempvar_extent_block(false),
     require_lvalue(false)
 {
   expr_arena.push_back(this);
@@ -40,8 +39,7 @@ expr_i::expr_i(const expr_i& e)
   : fname(e.fname), line(e.line), type_of_this_expr(e.type_of_this_expr),
     conv(e.conv), type_conv_to(e.type_conv_to), parent_expr(e.parent_expr),
     symtbl_lexical(e.symtbl_lexical), tempvar_id(e.tempvar_id),
-    tempvar_passby(e.tempvar_passby),
-    tempvar_extent_block(e.tempvar_extent_block),
+    tempvar_varinfo(e.tempvar_varinfo),
     require_lvalue(e.require_lvalue)
 {
   expr_arena.push_back(this);
@@ -643,9 +641,10 @@ term& expr_symbol::resolve_texpr()
 expr_var::expr_var(const char *fn, int line, const char *sym,
   expr_i *type_uneval, passby_e passby, attribute_e attr)
   : expr_i(fn, line), sym(sym),
-    type_uneval(ptr_down_cast<expr_te>(type_uneval)), passby(passby),
+    type_uneval(ptr_down_cast<expr_te>(type_uneval)),
     attr(attr)
 {
+  varinfo.passby = passby;
   type_of_this_expr.clear(); /* resolve_texpr() */
 }
 

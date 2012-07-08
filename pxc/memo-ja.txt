@@ -1,14 +1,15 @@
 ---------------------------------------------------------------------
 直近FIXMEとTODO
 
-- blockcond変数はdefault-constructibleなものでないとダメ。
+- test_14_root/refvar.px
 - test_14_root/condtemp.px refvarが無いエラーになるように
+- blockcond変数はdefault-constructibleなものでないとダメ。
 - テスト: fn_check_root廃止、rootはchecktypeの中で。
 - 引数のpassby指定
 - 変数のpassby指定
 - 構造体にslice等のweak型を含む型のfieldを置けないように
   is_weak_type()
-- コンテナからスライスへの変換の短い表記 x[::]
+- コンテナからスライスへの変換の短い表記 x[..]
 - 自動変換が入ったら左辺値を取れないように(check_lvalue)
 - expr_feach::emit(): mapに対するemit
 - fn_check_rootテスト
@@ -48,6 +49,9 @@ TODO M2
 ---------------------------------------------------------------------
 TODO
 
+- arr.resize()のように参照引数が一個だけでthreadedならinvguardしなく
+  てよい。
+- 定義前参照の可能性を解消
 - namespace義務付け
 - 情報をロスするような自動変換は止める
 - pure関数ならrootを省略できるケース
@@ -4427,6 +4431,12 @@ for (int i = 0; i < 100; ++i, int z = 100) {
 blockcond変数はdefault-constructibleなものでないとダメ。
 
 ---------------------------------------------------------------------
+定義・参照順序問題
+
+式評価順序が確定していないと、名前付き変数を定義した箇所と参照してい
+る箇所の前後関係が確定せず、初期化前に参照されてしまうことがおきうる。
+
+---------------------------------------------------------------------
 block scopeの参照
 
 - rootするときに文スコープかblockスコープかを区別。
@@ -4474,10 +4484,101 @@ block scopeの参照
     if (t1 = foo(...), (*t2)
     }
 
-最も一般的な形としては、一つの文は次の形にemitされる
+現状: expr_stmts::emit_valueの中、一時変数があるなら文スコープ
+  ブロックを作り、その中で一時変数を定義している。blockcondでなければ
+  定義即代入し、blockcondであれば定義だけする。blockcondであるケース
+  については、if等のemit_valueの中で、条件式をemit_valueではなく
+  emit_value_blockcondを実行するようになっていて、その
+  emit_value_blockcond は一時変数の代入をする式をカンマ区切りでemitする。
+  名前つき変数を定義即代入するのは、一時変数をまったく持たない場合で、
+  かつ構造体のコンストラクタでない場合のみ。
+
+ブロックスコープの(一時)変数と文スコープの一時変数が両方存在し、代入
+順序も混じることがある。
+
+分離定義が必要ないのはどのようなケースか？
+(case1) その文で定義する全ての(一時)変数がブロックスコープで、またその
+  文はblockcondでもない。
+  -> (一時)変数の定義順に、定義即代入をemit。文スコープ複文は作らなくて
+    良い。
+(case2) その文で定義する全ての一時変数が文スコープで、またその文は
+  blockcondでもない。ちなみに名前付き変数は文スコープにはなりえない。
+  -> 文スコープ複文を作り、その中に一時変数の定義順に、定義即代入をemit。
+(それ以外)
+  ->
+  (1) ブロックスコープの変数を順に定義。一時変数と名前付き変数の別なし
+      に定義順に。
+  (2) 文スコープ複文を作り、その中に文スコープ一時変数を順に定義。
+  (3) 文をemit。
+
+rootまわりの変更
+- コンテナ要素やsliceをrootすると、コンテナ自体をrootし、そのコンテナ式に
+  need_invalidate_guardフラグを付ける。
+- コンテナ型一時変数は、need_invalidate_guardの有無でinvalidate_guardで
+  wrapするかどうかを決める
+
+値型変数でinvalidate guard必要な場合は？
+
+参照型名前付き変数・一時変数のためのwrapper
+(1) guard_elementsならばinvalidate_guardでwrapする。その式が
+    定義代入分離必要ならばinvalidate_guard, そうでないなら
+    invalidate_guard_nonnullを使う。アクセスにはx.get()を使う。
+(2) それ以外のものについては、定義代入分離必要ならポインタ T * を使う。
+    そうでないならT &を使う
+
+一時変数又は名前付き変数につける情報
+struct variable_flags {
+  passby_e passby; /* 値/参照、constness */
+  bool inside_blockcond; /* if (...) などの条件式の中かどうか */
+  bool guard_elements; /* コンテナの要素を無効化しないようガード */
+  bool scope_block; /* 文ではなくブロックスコープ(名前付きなら常に真) */
+};
+
+一時変数又は名前付き変数のemit型
+- 参照型変数、ガードつき、代入分離  refvar_igrd<T> x      x.get()
+- 参照型変数、ガードつき、即代入    refvar_igrd_nn<T> x   x.get()
+- 値型変数、ガードつき、代入分離    valvar_igrd<T> x      x.get()
+- 値型変数、ガードつき、即代入      valvar_igrd_nn<T> x   x.get() 
+- 参照型変数、代入分離              T *x                  *x      x = &x;
+- 参照型変数、即代入                T& x                  x
+- 値型変数、代入分離                T x                   x
+- 値型変数、即代入                  T x                   x
+
+rootまわり
+int& x = foo[3];
+代入の左辺がvarのとき、
+- byrefなvarだった場合、右辺はblockスコープのbyrefを要求する。
+- const byrefなら右辺はblockスコープのconst byrefを要求。
+- byvalやconst byvalならば何も要求しない。
+
+root要求(root_nothrow改めadd_root_requirement)
+- lvalue_flag改めreq_reference: 参照でなければならないかどうか
+# - req_value: 値でなければならないかどうか。
+#   -> いらない。直接store_tempvar使う
+- req_block: ブロック末まで有効性を必要とするかどうか
+# - req_elems: 要素についても有効性を保つ必要があるかどうか
+#   -> いらない。要素をrootしたときに直接store_tempvar使う
+
+移行手順:
+(0) シンボルがupvalueであるかどうか判定できるようにする
+  symbol_commonにupvalueかどうかのフラグを記録しておく
+    -> 既にあった (upvalue_flag)
+(1) 定義代入分離のための型と操作一式を決める
+    -> done
+(2) 名前付き変数にvariable_infoを持たせる。
+    -> done
+(3) 一時変数にscope/statement scopeの別、root周りを対応。
+    root要求にlvalueの区別ではなくpassbyの区別と要求scopeを渡すように。
+    (root_nothrowを変更?)
+(4) 左辺値要求にscopeの別をつけ、それに応じて一時変数のscope別をセット
+(5) upvalueとして参照している箇所についてはwrapperを使わないように変更
+
+
+(case1) 最も一般的な形としては、一つの文は次の形にemitされる。blockcond
+のときはこのようにしなければならない。(ifであればもっと最適化できる？)
 /* その式の中のblockスコープの一時変数を定義 */
 int t1 = 0;
-/* その式の中で定義される名前つき変数を定義 */
+/* その式の中で定義される名前つき変数(fieldを除く)を定義 */
 int v1 = 0;
 {
   /* その式の中の一時変数を定義 */
@@ -4487,15 +4588,37 @@ int v1 = 0;
   v1 = baz(t1, t2);
 }
 
-現状: expr_stmts::emit_valueの中、一時変数があるなら文スコープ
-ブロックを作り、その中で一時変数を定義している。blockcondでなければ
-定義即代入し、blockcondであれば定義だけする。blockcondであるケース
-については、if等のemit_valueの中で、条件式をemit_valueではなく
-emit_value_blockcondを実行するようになっていて、そのemit_value_blockcond
-は一時変数の代入をする式をカンマ区切りでemitする。
-名前つき変数を定義即代入するのは、一時変数をまったく持たない場合で、
-かつ構造体のコンストラクタでない場合のみ。
+(case2) blockcondではなく、structでもなく、一時/名前付き変数がすべて
+blockスコープの場合。このとき全ての変数は即代入の形にできる。
+int t1 = ...;
+int t2 = bar(t1, ...);
+int v1 = baz(t1, t2);
 
-先に変数の定義が必要なのは、どういうケースなのか？
-- その変数がblockcondで定義されている
-- 
+(case3) blockcondではなく、structでもなく、blockスコープ変数が全く
+ない場合。このときも全ての変数は即代入の形にできる。
+{
+int t1 = ...;
+bar(t1, ...);
+}
+
+(case4) blockcondではないとき。このときは文スコープの一時変数だけは
+即代入の形にできる。
+
+
+課題: 即代入の連鎖をどのようにemitするか？
+(式を代入連鎖にどのように置き換えるかという問題)
+- tempvarを持つ式はそこでぶった切る
+- var代入(代入演算子で左辺がvar)ならそこでぶった切る
+- それ以外のvarならそこでぶった切る
+- ぶった切った木の枝を葉から順にemit
+  - 枝のtopがtempvarなら int t1 = ... の形をemit
+  - 枝のtopがvar代入なら int v1 = ... の形をemit
+  - 枝のtopがvarなら int v1 をemit (定義分離されていれば不要)
+  - 右辺の ... をemitするときには枝の切り口で変数名をemit
+
+処理の流れ
+1. その式が定義分離無しでemitできる形かどうか調べる
+2. 各変数が定義分離するか/fieldであるかどうかを調べる
+3. ぶった切る箇所(expr)と定義分離するかどうかのリストを作る
+4. ぶった切った枝を葉から順にemitする
+

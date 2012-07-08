@@ -104,10 +104,10 @@ static bool is_slice_op(const expr_i *e)
     ptr_down_cast<const expr_op>(e)->op == TOK_SLICE);
 }
 
-static bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thr_flag)
+static bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
 {
   /* check if a0 is a valid lvalue expression */
-  if (thr_flag) {
+  if (thro_flg) {
     a0->require_lvalue = true;
   }
   if (a0->get_sdef() != 0) {
@@ -132,7 +132,7 @@ static bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thr_flag)
 	  if (ptr_down_cast<expr_funcdef>(efd)->is_const) {
 	    DBG_LV(fprintf(stderr, "expr_has_lvalue %s 1 false\n",
 	      a0->dump(0).c_str()));
-	    if (!thr_flag) {
+	    if (!thro_flg) {
 	      return false;
 	    }
 	    arena_error_push(epos,
@@ -152,7 +152,7 @@ static bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thr_flag)
       if (!ead->byref_flag) {
 	DBG_LV(fprintf(stderr, "expr_has_lvalue %s 2 false\n",
 	  a0->dump(0).c_str()));
-	if (!thr_flag) {
+	if (!thro_flg) {
 	  return false;
 	}
 	arena_error_push(epos, "argument '%s' can not be modified",
@@ -161,7 +161,7 @@ static bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thr_flag)
     } else {
       DBG_LV(fprintf(stderr, "expr_has_lvalue %s 3 false\n",
 	a0->dump(0).c_str()));
-      if (!thr_flag) {
+      if (!thro_flg) {
 	return false;
       }
       arena_error_push(epos, "symbol '%s' can not be modified",
@@ -177,13 +177,13 @@ static bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thr_flag)
     case '.':
     case TOK_ARROW:
       /* expr 'foo.bar' has an lvalue iff foo has an lvalue */
-      return expr_has_lvalue(aop, aop->arg0, thr_flag);
+      return expr_has_lvalue(aop, aop->arg0, thro_flg);
     case '[':
       /* expr 'foo[]' has an lvalue iff foo has an lvalue */
       if (is_slice_op(aop->arg1)) {
 	DBG_LV(fprintf(stderr, "expr_has_lvalue %s 5 false\n",
 	  a0->dump(0).c_str()));
-	if (!thr_flag) {
+	if (!thro_flg) {
 	  return false;
 	}
 	arena_error_push(epos, "slice expression can not be modified");
@@ -192,7 +192,7 @@ static bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thr_flag)
 	if (is_const_slice_family(tc)) {
 	  DBG_LV(fprintf(stderr, "expr_has_lvalue %s 6 false\n",
 	    a0->dump(0).c_str()));
-	  if (!thr_flag) {
+	  if (!thro_flg) {
 	    return false;
 	  }
 	  arena_error_push(epos, "const slice element can not be modified");
@@ -201,18 +201,18 @@ static bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thr_flag)
 	    a0->dump(0).c_str()));
 	  return true;
 	} else {
-	  return expr_has_lvalue(aop, aop->arg0, thr_flag);
+	  return expr_has_lvalue(aop, aop->arg0, thro_flg);
 	}
       }
     case '(':
       /* expr '(foo)' has an lvalue iff foo has an lvalue */
-      return expr_has_lvalue(aop, aop->arg0, thr_flag);
+      return expr_has_lvalue(aop, aop->arg0, thro_flg);
     case TOK_PTR_DEREF:
       #if 0
       /* expr '*foo' has an lvalue iff foo has an lvalue */
       /* enable this? constness should be transitive? */
       /* if so, we need to reject copying ref{foo} if rhs has no lvalue */
-      if (!expr_has_lvalue(aop, aop->arg0, thr_flag)) {
+      if (!expr_has_lvalue(aop, aop->arg0, thro_flg)) {
 	return false;
       }
       #endif
@@ -220,7 +220,7 @@ static bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thr_flag)
       if (is_const_pointer_family(aop->arg0->resolve_texpr())) {
 	DBG_LV(fprintf(stderr, "expr_has_lvalue %s 8 false\n",
 	  a0->dump(0).c_str()));
-	if (!thr_flag) {
+	if (!thro_flg) {
 	  return false;
 	}
 	arena_error_push(epos, "can not modify data via a const reference");
@@ -233,7 +233,7 @@ static bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thr_flag)
     }
     DBG_LV(fprintf(stderr, "expr_has_lvalue %s 10 false\n",
       a0->dump(0).c_str()));
-    if (!thr_flag) {
+    if (!thro_flg) {
       return false;
     }
     arena_error_push(epos, "can not be modified"); // FIXME: error message
@@ -246,7 +246,7 @@ static bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thr_flag)
   }
   DBG_LV(fprintf(stderr, "expr_has_lvalue %s 12 false\n",
     a0->dump(0).c_str()));
-  if (!thr_flag) {
+  if (!thro_flg) {
     return false;
   }
   arena_error_push(epos, "can not be modified"); // FIXME: error message
@@ -847,45 +847,60 @@ static void check_variant_field(const expr_op *eop, expr_i *a0)
   return;
 }
 
-static void store_tempvar(expr_i *e, passby_e passby, const char *dbgmsg)
+static void store_tempvar(expr_i *e, passby_e passby, bool blockscope_flag,
+  bool guard_elements, const char *dbgmsg)
 {
   if (e->tempvar_id >= 0) {
-    if (e->tempvar_passby == passby) {
+  //  if (e->tempvar_passby == passby) {
   //    return;
-    }
-    abort();
+  //  }
+    abort(); // FIXME FIXME FIXME HERE HERE HERE
   }
-  symbol_table *lookup = find_current_symbol_table(e);
-  assert(lookup);
-  e->tempvar_id = lookup->generate_tempvar();
-  e->tempvar_passby = passby;
+  if (e->tempvar_id < 0) {
+    symbol_table *lookup = find_current_symbol_table(e);
+    assert(lookup);
+    e->tempvar_id = lookup->generate_tempvar();
+  }
+  e->tempvar_varinfo.passby = passby;
+  e->tempvar_varinfo.guard_elements = guard_elements;
+  e->tempvar_varinfo.scope_block = blockscope_flag;
   DBG_TMPVAR(fprintf(stderr, "tempvar for %s pass=%d (%s)\n",
     e->dump(0).c_str(), (int)passby, dbgmsg));
 }
 
-static void rvalue_store_tempvar(expr_i *e, const char *dbgmsg)
+static void store_tempvar_constval(expr_i *e, bool blockscope_flag,
+  const char *dbgmsg)
 {
-  return store_tempvar(e, passby_e_const_value, dbgmsg);
+  return store_tempvar(e, passby_e_const_value, blockscope_flag, false,
+    dbgmsg);
 }
 
-static bool root_nothrow(expr_i *e, bool lvalue_flag, bool checkonly_flag)
+static bool add_root_requirement(expr_i *e, bool lvalue_flag,
+  bool blockscope_flag, bool checkonly_flag)
 {
   expr_op *const eop = dynamic_cast<expr_op *>(e);
-  if (eop == 0 || e->tempvar_id >= 0) {
+  if (eop == 0) {
     return true;
   }
+  #if 0
+  if (e->tempvar_id >= 0) {
+    /* FIXME */
+    return true;
+  }
+  #endif
   const call_trait_e ect = get_call_trait(e->resolve_texpr());
   if (!lvalue_flag && !is_weak_value_type(e->resolve_texpr()) &&
     (ect == call_trait_e_value || ect == call_trait_e_raw_pointer)) {
     if (!checkonly_flag) {
-      rvalue_store_tempvar(eop, "value/rawptr rvalue");
+      store_tempvar_constval(eop, blockscope_flag, "value/rawptr rvalue");
 	/* ROOT */
     }
     return true;
   }
   switch (eop->op) {
   case ',':
-    return root_nothrow(eop->arg1, lvalue_flag, checkonly_flag);
+    return add_root_requirement(eop->arg1, lvalue_flag, blockscope_flag,
+      checkonly_flag);
   case '=':
   case TOK_ADD_ASSIGN:
   case TOK_SUB_ASSIGN:
@@ -898,15 +913,19 @@ static bool root_nothrow(expr_i *e, bool lvalue_flag, bool checkonly_flag)
   case TOK_INC:
   case TOK_DEC:
   case TOK_PTR_REF:
-    return root_nothrow(eop->arg0, lvalue_flag, checkonly_flag);
+    return add_root_requirement(eop->arg0, lvalue_flag, blockscope_flag,
+      checkonly_flag);
   case '?':
-    return root_nothrow(eop->arg1, lvalue_flag, checkonly_flag);
+    return add_root_requirement(eop->arg1, lvalue_flag, blockscope_flag,
+      checkonly_flag);
   case ':':
     if (
-      root_nothrow(eop->arg0, lvalue_flag, true) &&
-      root_nothrow(eop->arg1, lvalue_flag, true)) {
-      root_nothrow(eop->arg0, lvalue_flag, checkonly_flag);
-      root_nothrow(eop->arg1, lvalue_flag, checkonly_flag);
+      add_root_requirement(eop->arg0, lvalue_flag, blockscope_flag, true) &&
+      add_root_requirement(eop->arg1, lvalue_flag, blockscope_flag, true)) {
+      add_root_requirement(eop->arg0, lvalue_flag, blockscope_flag,
+	checkonly_flag);
+      add_root_requirement(eop->arg1, lvalue_flag, blockscope_flag,
+	checkonly_flag);
       return true;
     }
     return false;
@@ -914,55 +933,59 @@ static bool root_nothrow(expr_i *e, bool lvalue_flag, bool checkonly_flag)
   case TOK_ARROW:
     if (is_variant(eop->arg0->resolve_texpr())) {
       /* variant field cant be rooted here. this is the only case
-       * root_nothrow cant root an expression */
+       * add_root_requirement cant root an expression */
       return false;
     } else {
-      return root_nothrow(eop->arg0, lvalue_flag, checkonly_flag);
+      return add_root_requirement(eop->arg0, lvalue_flag, blockscope_flag,
+	checkonly_flag);
     }
   case TOK_PTR_DEREF:
     if (!checkonly_flag) {
       /* copy the pointer and own a refcount */
-      rvalue_store_tempvar(eop->arg0, "ptrderef");
+      store_tempvar_constval(eop->arg0, blockscope_flag, "ptrderef");
 	/* ROOT */
     }
     return true;
   case '[':
-    if (root_nothrow(eop->arg0, lvalue_flag, true)) {
+    if (add_root_requirement(eop->arg0, lvalue_flag, blockscope_flag, true)) {
       const bool container_lvalue = expr_has_lvalue(eop->arg0, eop->arg0,
 	false);
-      root_nothrow(eop->arg0, container_lvalue, checkonly_flag);
+      add_root_requirement(eop->arg0, container_lvalue, blockscope_flag,
+	checkonly_flag);
       if (!checkonly_flag) {
 	store_tempvar(eop->arg0,
-	  container_lvalue ? passby_e_reference : passby_e_const_reference,
-	  "arrelem");
+	  container_lvalue ?
+	    passby_e_mutable_reference : passby_e_const_reference,
+	  blockscope_flag, true, "arrelem");
       }
       return true;
     }
     return false;
   case '(':
-    return root_nothrow(eop->arg0, lvalue_flag, checkonly_flag);
+    return add_root_requirement(eop->arg0, lvalue_flag, blockscope_flag,
+      checkonly_flag);
   default:
     return true;
   }
 }
 
-static void root_lvalue(expr_i *e)
+static void root_expr_reference(expr_i *e)
 {
-  if (!root_nothrow(e, true, false)) {
+  if (!add_root_requirement(e, true, false, false)) {
     arena_error_push(e, "can not root an lvalue");
   }
 }
 
-static void root_rvalue(expr_i *e)
+static void root_expr_reference_or_value(expr_i *e)
 {
-  if (root_nothrow(e, false, false)) {
+  if (add_root_requirement(e, false, false, false)) {
     return;
   }
   call_trait_e ct = get_call_trait(e->resolve_texpr());
   switch (ct) {
   case call_trait_e_raw_pointer:
   case call_trait_e_const_ref_nonconst_ref:
-    rvalue_store_tempvar(e, "root_rvalue");
+    store_tempvar_constval(e, false, "root_expr_reference_or_value");
       /* only variant field can reach here */
     break;
   case call_trait_e_value:
@@ -1300,14 +1323,22 @@ void expr_op::check_type(symbol_table *lookup)
     /* root expressions if necessary */
     if (expr_would_invalidate_other_expr(arg0)) {
       /* lhs can invalidate rhs expression */
-      root_rvalue(arg1);
+      root_expr_reference_or_value(arg1);
     }
     if (expr_would_invalidate_other_expr(arg1)) {
       /* rhs can invalidate lhs expression */
-      if (!root_nothrow(arg0, true, true)) {
+      if (!add_root_requirement(arg0, true, false, true)) {
 	/* lhs is a variant field. make tempvar for rhs, so that rhs is
 	 * evaluated before lhs.  */
-	rvalue_store_tempvar(arg1, "variant assign");
+	store_tempvar_constval(arg1, false, "variant assign");
+      }
+    }
+    if (arg0->get_esort() == expr_e_var) {
+      expr_var *const ev = ptr_down_cast<expr_var>(arg0);
+      if (is_passby_cm_reference(ev->varinfo.passby)) {
+	const bool lvalue_flag = is_passby_mutable(ev->varinfo.passby);
+	add_root_requirement(arg1, lvalue_flag, true, false);
+	// FIXME FIXME FIXME HERE HERE HERE test test
       }
     }
   }
@@ -1395,9 +1426,9 @@ void expr_funccall::check_type(symbol_table *lookup)
       /* check lvalue and root argument expressions */
       if (ad->byref_flag) {
 	check_lvalue(this, *j);
-	root_lvalue(*j);
+	root_expr_reference(*j);
       } else {
-	root_rvalue(*j);
+	root_expr_reference_or_value(*j);
       }
       ++j;
       ad = ad->rest;
@@ -1409,9 +1440,9 @@ void expr_funccall::check_type(symbol_table *lookup)
       expr_i *const thisexpr = ptr_down_cast<expr_op>(func)->arg0;
       if (!efd->is_const) {
 	check_lvalue(this, thisexpr);
-	root_lvalue(thisexpr);
+	root_expr_reference(thisexpr);
       } else {
-	root_rvalue(thisexpr);
+	root_expr_reference_or_value(thisexpr);
       }
     }
     if (j != arglist.end()) {
@@ -1537,14 +1568,14 @@ void expr_funccall::check_type(symbol_table *lookup)
 	    arena_error_push(this, "invalid conversion from %s to %s",
 	      s0.c_str(), s1.c_str());
 	  }
-	  root_rvalue(j); /* root the arg */
+	  root_expr_reference_or_value(j); /* root the arg */
 	  type_of_this_expr = func_te;
 	} else {
 	  /* func_te has a tparam. expr is the form ref(x). */
 	  term_list tl;
 	  tl.push_back(j->resolve_texpr());
 	  term rt(func_te.get_expr(), tl);
-	  root_rvalue(j); /* root the arg */
+	  root_expr_reference_or_value(j); /* root the arg */
 	  /* need not to eval rt, because it' always irreducible. */
 	  type_of_this_expr = rt;
 	}
@@ -1578,9 +1609,9 @@ void expr_funccall::check_type(symbol_table *lookup)
 	}
 	if (ad->byref_flag) {
 	  check_lvalue(this, *j);
-	  root_lvalue(*j);
+	  root_expr_reference(*j);
 	} else {
-	  root_rvalue(*j);
+	  root_expr_reference_or_value(*j);
 	}
 	++j;
 	ad = ad->rest;
@@ -1611,7 +1642,7 @@ void expr_funccall::check_type(symbol_table *lookup)
 	  arena_error_push(this, "  initializing argument %u of '%s'",
 	    argcnt, est->sym);
 	}
-	root_rvalue(*j);
+	root_expr_reference_or_value(*j);
 	++i;
 	++j;
 	++argcnt;
@@ -1789,9 +1820,9 @@ void expr_feach::check_type(symbol_table *lookup)
   }
   if (block->argdecls->rest->byref_flag) {
     check_lvalue(this, ce);
-    root_lvalue(ce);
+    root_expr_reference(ce);
   } else {
-    root_rvalue(ce);
+    root_expr_reference_or_value(ce);
   }
 }
 
@@ -2443,15 +2474,15 @@ static symbol_common *root_funcobj(expr_i *fobj)
   // FIXME: doubtful: userdef constr for struct?
   if (fdef == 0 || !fdef->is_virtual_or_member_function()) {
     if (fdef != 0 && right_sc->arg_hidden_this == 0) {
-      root_rvalue(fobj);
+      root_expr_reference_or_value(fobj);
     }
     return right_sc;
   }
   if (fdef->is_const) {
-    root_rvalue(eop->arg0); /* obj part of obj.method(...) */
+    root_expr_reference_or_value(eop->arg0); /* obj part of obj.method(...) */
   } else {
     check_lvalue(eop->arg0, eop->arg0);
-    root_lvalue(eop->arg0); /* obj part of obj.method(...) */
+    root_expr_reference(eop->arg0); /* obj part of obj.method(...) */
   }
   return right_sc;
 }
@@ -2520,9 +2551,9 @@ void fn_check_root(expr_i *e)
       }
       if (c < byref_flags.size() && byref_flags[c]) {
 	check_lvalue(*i, *i);
-	root_lvalue(*i);
+	root_expr_reference(*i);
       } else {
-	root_rvalue(*i);
+	root_expr_reference_or_value(*i);
       }
       ++c;
     }
@@ -2532,14 +2563,14 @@ void fn_check_root(expr_i *e)
       /* lhs ?= rhs */
       if (expr_would_invalidate_other_expr(eo->arg0)) {
 	/* lhs can invalidate rhs expression */
-	root_rvalue(eo->arg1);
+	root_expr_reference_or_value(eo->arg1);
       }
       if (expr_would_invalidate_other_expr(eo->arg1)) {
 	/* rhs can invalidate lhs expression */
-	if (!root_nothrow(eo->arg0, true, true)) {
+	if (!add_root_requirement(eo->arg0, true, false, true)) {
 	  /* lhs is a variant field. make tempvar for rhs, so that rhs is
 	   * evaluated before lhs.  */
-	  rvalue_store_tempvar(eo->arg1, "variant assign");
+	  store_tempvar_constval(eo->arg1, "variant assign");
 	}
       }
     }
@@ -2547,9 +2578,9 @@ void fn_check_root(expr_i *e)
     expr_feach *const fe = ptr_down_cast<expr_feach>(e);
     if (fe->block->argdecls->rest->byref_flag) {
       check_lvalue(fe, fe->ce);
-      root_lvalue(fe->ce); // FIXME: test
+      root_expr_reference(fe->ce); // FIXME: test
     } else {
-      root_rvalue(fe->ce); // FIXME: test
+      root_expr_reference_or_value(fe->ce); // FIXME: test
     }
   }
 #endif

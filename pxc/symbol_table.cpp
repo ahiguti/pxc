@@ -77,20 +77,6 @@ expr_i *symbol_table::resolve_name_nothrow(const std::string& fullname,
   return v.edef;
 }
 
-#if 0
-expr_i *symbol_table::resolve_name_nothrow_noprivate(
-  const std::string& fullname, const std::string& curns, bool& is_global_r,
-  bool& is_upvalue_r, bool& is_memfld_r)
-{
-  localvar_info v = resolve_name_nothrow_internal(fullname, curns, is_global_r,
-    is_upvalue_r, is_memfld_r);
-  if (v.is_private()) {
-    return 0;
-  }
-  return v.edef;
-}
-#endif
-
 localvar_info symbol_table::resolve_name_nothrow_internal(
   const std::string& fullname,
   const std::string& curns, bool& is_global_r, bool& is_upvalue_r,

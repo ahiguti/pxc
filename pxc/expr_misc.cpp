@@ -1840,5 +1840,29 @@ void check_inherit_threading(expr_struct *est)
   }
 }
 
+bool is_passby_cm_value(passby_e passby)
+{
+  return passby == passby_e_const_value
+    || passby == passby_e_mutable_value;
+}
+
+bool is_passby_cm_reference(passby_e passby)
+{
+  return passby == passby_e_const_reference
+    || passby == passby_e_mutable_reference;
+}
+
+bool is_passby_const(passby_e passby)
+{
+  return passby == passby_e_const_value
+    || passby == passby_e_const_reference;
+}
+
+bool is_passby_mutable(passby_e passby)
+{
+  return passby == passby_e_mutable_value
+    || passby == passby_e_mutable_reference;
+}
+
 }; 
 

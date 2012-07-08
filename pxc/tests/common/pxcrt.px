@@ -165,8 +165,10 @@ struct unit {
 };
 template <typename T>
 struct vector {
-  template <typename Tc> friend struct invalidate_guard_nonnull;
-  template <typename Tc> friend struct invalidate_guard;
+  template <typename Tc> friend struct refvar_igrd_nn;
+  template <typename Tc> friend struct refvar_igrd;
+  template <typename Tc> friend struct valvar_igrd_nn;
+  template <typename Tc> friend struct valvar_igrd;
   typedef T data_type;
   typedef typename std::vector<T>::size_type size_type;
   typedef typename std::vector<T>::iterator iterator;
@@ -250,8 +252,10 @@ private:
 };
 template <typename Tk, typename Tm>
 struct map {
-  template <typename Tc> friend struct invalidate_guard_nonnull;
-  template <typename Tc> friend struct invalidate_guard;
+  template <typename Tc> friend struct refvar_igrd_nn;
+  template <typename Tc> friend struct refvar_igrd;
+  template <typename Tc> friend struct valvar_igrd_nn;
+  template <typename Tc> friend struct valvar_igrd;
   typedef Tm data_type;
   typedef typename std::map<Tk, Tm>::size_type size_type;
   typedef typename std::map<Tk, Tm>::iterator iterator;
@@ -289,8 +293,10 @@ private:
 };
 template <typename T>
 struct slice {
-  template <typename Tc> friend struct invalidate_guard_nonnull;
-  template <typename Tc> friend struct invalidate_guard;
+  template <typename Tc> friend struct refvar_igrd_nn;
+  template <typename Tc> friend struct refvar_igrd;
+  template <typename Tc> friend struct valvar_igrd_nn;
+  template <typename Tc> friend struct valvar_igrd;
   typedef size_t size_type;
   slice() : v(0), len(0) { }
   template <typename Tc> slice(Tc& c, size_t o1, size_t o2) {
@@ -305,6 +311,7 @@ struct slice {
     return v[idx];
   }
   T *rawarr() const { return v; }
+private:
   void inc_invalidate_guard() const { }
   void dec_invalidate_guard() const { }
 private:
@@ -313,8 +320,10 @@ private:
 };
 template <typename T>
 struct cslice {
-  template <typename Tc> friend struct invalidate_guard_nonnull;
-  template <typename Tc> friend struct invalidate_guard;
+  template <typename Tc> friend struct refvar_igrd_nn;
+  template <typename Tc> friend struct refvar_igrd;
+  template <typename Tc> friend struct valvar_igrd_nn;
+  template <typename Tc> friend struct valvar_igrd;
   typedef size_t size_type;
   cslice() : v(0), len(0) { }
   cslice(const slice<T>& x) : v(x.rawarr()), len(x.size()){ }
@@ -330,6 +339,7 @@ struct cslice {
     return v[idx];
   }
   const T *rawarr() const { return v; }
+private:
   void inc_invalidate_guard() const { }
   void dec_invalidate_guard() const { }
 private:
@@ -337,11 +347,11 @@ private:
   size_t len;
 };
 template <typename Tc>
-struct invalidate_guard_nonnull {
-  invalidate_guard_nonnull(Tc& c) : c(c) {
+struct refvar_igrd_nn {
+  refvar_igrd_nn(Tc& c) : c(c) {
     c.inc_invalidate_guard();
   }
-  ~invalidate_guard_nonnull() {
+  ~refvar_igrd_nn() {
     c.dec_invalidate_guard();
   }
   Tc& get() const {
@@ -349,16 +359,16 @@ struct invalidate_guard_nonnull {
   }
 private:
   Tc& c;
-  invalidate_guard_nonnull(const invalidate_guard_nonnull&);
-  invalidate_guard_nonnull& operator =(const invalidate_guard_nonnull&);
+  refvar_igrd_nn(const refvar_igrd_nn&);
+  refvar_igrd_nn& operator =(const refvar_igrd_nn&);
 };
 template <typename Tc>
-struct invalidate_guard {
-  invalidate_guard() : cp(0) { }
-  invalidate_guard(Tc& c) : cp(&c) {
+struct refvar_igrd {
+  refvar_igrd() : cp(0) { }
+  refvar_igrd(Tc& c) : cp(&c) {
     c.inc_invalidate_guard();
   }
-  ~invalidate_guard() {
+  ~refvar_igrd() {
     if (cp != 0) { cp->dec_invalidate_guard(); }
   }
   void set(Tc& c) {
@@ -370,35 +380,45 @@ struct invalidate_guard {
   }
 private:
   Tc *cp;
-  invalidate_guard(const invalidate_guard&);
-  invalidate_guard& operator =(const invalidate_guard&);
+  refvar_igrd(const refvar_igrd&);
+  refvar_igrd& operator =(const refvar_igrd&);
 };
-// template <typename T>
-// struct refvar_nonnull {
-//   refvar_nonnull(T& v) : v(&v) { }
-//   T& get() const {
-//     return v;
-//   }
-// private:
-//   T& v;
-//   refvar_nonnull(const refvar_nonnull&);
-//   refvar_nonnull& operator =(const refvar_nonnull&);
-// };
-// template <typename T>
-// struct refvar {
-//   refvar() : vp(0) { }
-//   refvar(T& v) : vp(&v) { }
-//   void set(T& v) {
-//     vp = &v;
-//   }
-//   T& get() const {
-//     return *vp;
-//   }
-// private:
-//   T *vp;
-//   refvar(const refvar&);
-//   refvar& operator =(const refvar&);
-// };
+template <typename Tc>
+struct valvar_igrd_nn {
+  valvar_igrd_nn(const Tc& x) : c(x) {
+    c.inc_invalidate_guard();
+  }
+  ~valvar_igrd_nn() {
+    c.dec_invalidate_guard();
+  }
+  Tc& get() const {
+    return c;
+  }
+private:
+  Tc c;
+  valvar_igrd_nn(const valvar_igrd_nn&);
+  valvar_igrd_nn& operator =(const valvar_igrd_nn&);
+};
+template <typename Tc>
+struct valvar_igrd {
+  valvar_igrd() : c() {
+    c.inc_invalidate_guard();
+  }
+  valvar_igrd(const Tc& x) : c(x) {
+    c.inc_invalidate_guard();
+  }
+  void set(const Tc& x) {
+    c = x;
+    c.inc_invalidate_guard();
+  }
+  Tc& get() const {
+    return c;
+  }
+private:
+  Tc c;
+  valvar_igrd(const valvar_igrd&);
+  valvar_igrd& operator =(const valvar_igrd&);
+};
 struct mutex {
   friend struct lockobject;
   mutex() {

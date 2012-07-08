@@ -102,6 +102,15 @@ enum funccall_e {
   funccall_e_struct_constructor,
 };
 
+struct variable_info {
+  passby_e passby : 3; /* value/reference, constness */
+  bool inside_blockcond : 1; /* this variable is defined inside a if (...) */
+  bool guard_elements : 1; /* guard from invalidating container elems */
+  bool scope_block : 1; /* block scope or statement scope */
+  variable_info () : passby(passby_e_mutable_value), inside_blockcond(false),
+    guard_elements(false), scope_block(false) { }
+};
+
 struct symbol_table;
 
 struct expr_stmts;
@@ -232,6 +241,10 @@ bool is_type_or_func_esort(expr_e es);
 bool is_global_var(const expr_i *e);
 bool is_ancestor_symtbl(symbol_table *st1, symbol_table *st2);
 void check_inherit_threading(expr_struct *est);
+bool is_passby_cm_value(passby_e passby);
+bool is_passby_cm_reference(passby_e passby);
+bool is_passby_const(passby_e passby);
+bool is_passby_mutable(passby_e passby);
 
 void emit_code(const std::string& dest_filename, expr_block *gl_block,
   generate_main_e gmain);
@@ -307,8 +320,9 @@ public:
   expr_i *parent_expr;
   symbol_table *symtbl_lexical;
   int tempvar_id;
-  passby_e tempvar_passby : 3;
-  bool tempvar_extent_block : 1;
+  variable_info tempvar_varinfo;
+  // passby_e tempvar_passby : 3;
+  // bool tempvar_extent_block : 1;
   bool require_lvalue : 1;
 };
 
@@ -529,7 +543,8 @@ public:
   const char *const sym;
   expr_te *type_uneval;
   std::string ns;
-  passby_e passby;
+  variable_info varinfo;
+  // passby_e passby; // FIXME: remove
   attribute_e attr;
 };
 
@@ -982,8 +997,8 @@ public:
   bool ext_decl : 1;
   bool no_def : 1;
   term value_texpr;
-  /* following flds are used when this function has template parameter
-   * functions and they need upvalues. */
+  /* following tpup_* flds are used when this function instance has
+   * template parameter functions and they need upvalues. */
   typedef std::vector<expr_i *> tpup_vec_type;
   typedef std::set<expr_i *> tpup_set_type;
   tpup_vec_type tpup_vec;
