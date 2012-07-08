@@ -161,13 +161,10 @@ static void emit_tempvars_def(emit_context& em, expr_i *e, tempvars_def_e td)
     const std::string ts = get_term_cname(te);
     const char *const tcname =
       (td == tempvars_def_e_def_set)
-	? (need_invguard ? "invalidate_guard_nonnull" : "refvar_nonnull")
-	: (need_invguard ? "invalidate_guard" : "refvar");
-    switch (e->tempvar_passby) {
-    case passby_e_unspecified:
-      arena_error_throw(e, "internal error: passby_e_unspecified");
-      break;
-    case passby_e_value:
+	? (need_invguard ? "refvar_igrd_nn" : "refvar_nn")
+	: (need_invguard ? "refvar_igrd" : "refvar");
+    switch (e->tempvar_varinfo.passby) {
+    case passby_e_mutable_value:
       em.printf("%s ", ts.c_str());
       break;
     case passby_e_const_value:
@@ -178,7 +175,7 @@ static void emit_tempvars_def(emit_context& em, expr_i *e, tempvars_def_e td)
 	  /* nonconst because we need to set later */
       }
       break;
-    case passby_e_reference:
+    case passby_e_mutable_reference:
       if (need_invguard || td == tempvars_def_e_def) {
 	em.printf("pxcrt::%s< %s > ", tcname, ts.c_str());
       } else {
@@ -196,8 +193,7 @@ static void emit_tempvars_def(emit_context& em, expr_i *e, tempvars_def_e td)
   }
   em.printf("t$%d", e->tempvar_id);
   if (td == tempvars_def_e_def_set || td == tempvars_def_e_set) {
-    if (e->tempvar_passby == passby_e_reference ||
-      e->tempvar_passby == passby_e_const_reference) {
+    if (is_passby_cm_reference(e->tempvar_varinfo.passby)) {
       if (td == tempvars_def_e_set) {
 	em.puts(".set(");
 	fn_emit_value(em, e, true);
@@ -214,8 +210,7 @@ static void emit_tempvars_def(emit_context& em, expr_i *e, tempvars_def_e td)
       em.puts(" = ");
       fn_emit_value(em, e, true);
     }
-  } else if (e->tempvar_passby == passby_e_value ||
-    e->tempvar_passby == passby_e_const_value) {
+  } else if (is_passby_cm_value(e->tempvar_varinfo.passby)) {
     emit_explicit_init_if(em, te);
   }
   if (td == tempvars_def_e_set) {
@@ -2036,7 +2031,7 @@ static bool esort_noemit_funcbody(expr_i *e)
 static bool can_omit_brace(const expr_if *ei)
 {
   /* FIXME: TEST */
-  DBG_IF(fprintf(stderr, "can_omit_brace %s :::::::\n", ei->dump(0).c_str()));
+  DBG_IF(fprintf(stderr, "can_omit_brace [%s]\n", ei->dump(0).c_str()));
   if (ei->cond_static == -1) {
     DBG_IF(fprintf(stderr, "1: false\n"));
     return false;
@@ -2200,9 +2195,9 @@ void expr_feach::emit_value(emit_context& em)
   if (type_has_invalidate_guard(ce->get_texpr())) {
     em.indent('f');
     if (mapped_byref_flag) {
-      em.puts("const pxcrt::invalidate_guard< ");
+      em.puts("const pxcrt::refvar_igrd< ");
     } else {
-      em.puts("const pxcrt::invalidate_guard< const ");
+      em.puts("const pxcrt::refvar_igrd< const ");
     }
     em.puts(cetstr);
     em.puts(" > ag$fg(ag$fe);\n");
@@ -2457,8 +2452,7 @@ void fn_emit_value(emit_context& em, expr_i *e, bool expand_tempvar)
     const bool inside_blc = inside_blockcond(e);
       /* wrapped by refvar<> */
     if ((need_invguard || inside_blc) &&
-      (e->tempvar_passby == passby_e_reference ||
-      e->tempvar_passby == passby_e_const_reference)) {
+      is_passby_cm_reference(e->tempvar_varinfo.passby)) {
       em.printf("(t$%d.get())", e->tempvar_id);
     } else {
       em.printf("t$%d", e->tempvar_id);

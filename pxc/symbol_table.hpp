@@ -101,11 +101,6 @@ public:
   expr_i *resolve_name_nothrow(const std::string& fullname,
     bool no_private, const std::string& curns, bool& is_global_r,
     bool& is_upvalue_r, bool& is_memfld_r);
-  #if 0
-  expr_i *resolve_name_nothrow_noprivate(const std::string& fullname,
-    const std::string& curns, bool& is_global_r, bool& is_upvalue_r,
-    bool& is_memfld_r);
-  #endif
   expr_i *resolve_name(const std::string& fullname, const std::string& curns,
     expr_i *e, bool& is_global_r, bool& is_upvalue_r);
   void clear_symbols();
