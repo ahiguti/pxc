@@ -1,6 +1,10 @@
 ---------------------------------------------------------------------
 直近FIXMEとTODO
 
+---------------------------------------------------------------------
+それなりに直近FIXMEとTODO
+
+- gcc-4.4.4のバグ？ -Wswitch-enumが効いていない しばらくgcc34を使う
 - test_14_root/refvar.px
 - test_14_root/condtemp.px refvarが無いエラーになるように
 - blockcond変数はdefault-constructibleなものでないとダメ。
@@ -4574,36 +4578,6 @@ root要求(root_nothrow改めadd_root_requirement)
 (5) upvalueとして参照している箇所についてはwrapperを使わないように変更
 
 
-(case1) 最も一般的な形としては、一つの文は次の形にemitされる。blockcond
-のときはこのようにしなければならない。(ifであればもっと最適化できる？)
-/* その式の中のblockスコープの一時変数を定義 */
-int t1 = 0;
-/* その式の中で定義される名前つき変数(fieldを除く)を定義 */
-int v1 = 0;
-{
-  /* その式の中の一時変数を定義 */
-  int t2 = 0;
-  /* 式のリストをemit */
-  t2 = bar(t1, ...);
-  v1 = baz(t1, t2);
-}
-
-(case2) blockcondではなく、structでもなく、一時/名前付き変数がすべて
-blockスコープの場合。このとき全ての変数は即代入の形にできる。
-int t1 = ...;
-int t2 = bar(t1, ...);
-int v1 = baz(t1, t2);
-
-(case3) blockcondではなく、structでもなく、blockスコープ変数が全く
-ない場合。このときも全ての変数は即代入の形にできる。
-{
-int t1 = ...;
-bar(t1, ...);
-}
-
-(case4) blockcondではないとき。このときは文スコープの一時変数だけは
-即代入の形にできる。
-
 
 課題: 即代入の連鎖をどのようにemitするか？
 (式を代入連鎖にどのように置き換えるかという問題)
@@ -4614,11 +4588,126 @@ bar(t1, ...);
   - 枝のtopがtempvarなら int t1 = ... の形をemit
   - 枝のtopがvar代入なら int v1 = ... の形をemit
   - 枝のtopがvarなら int v1 をemit (定義分離されていれば不要)
-  - 右辺の ... をemitするときには枝の切り口で変数名をemit
+- 右辺の ... をemitするときには枝の切り口で変数名をemit
+- assignment式のリストのようなもの。static single assignmentではない。
+- assignmentの形としては、以下がある
+  - 一時変数の初期化代入 int t1 = ...
+  - 名前付き変数の初期化代入 int v1 = ...
+  - 名前付き変数の初期化 int v1 = 0;
+  - それ以外の式 ifなども含む
 
-処理の流れ
-1. その式が定義分離無しでemitできる形かどうか調べる
-2. 各変数が定義分離するか/fieldであるかどうかを調べる
-3. ぶった切る箇所(expr)と定義分離するかどうかのリストを作る
-4. ぶった切った枝を葉から順にemitする
+asgnstmt列の作成
+- 式がblockcondかどうかを調べる
+- 式をassignment形式の列に直す
+  enum asgnstmt_e {
+    asgnstmt_e_stmtscope_tmpvar, // 文スコープの一時変数をセット
+    asgnstmt_e_blockscope_tmpvar, // ブロックスコープ一時変数セット
+    asgnstmt_e_namedvar_defset, // 名前付き変数セット
+    asgnstmt_e_namedvar_def, // 名前付き変数定義だけ
+    asgnstmt_e_other, // それ以外 ifなども含む
+  };
+  struct asgnstmt {
+    expr_i *top;
+    asgnstmt_e astmt;
+  };
+  これのリストをstmtsに付ける。expr_iにasgnstmt_top_flagを付け、
+  切り出すポイントでtrueをセットする。
+
+emitの場合分け
+(1) blockcondではなく、変数が全てblockスコープのとき。
+  (stmt_e_all_blockscope)
+  このときは全て即代入の形にemitできる。field変数は定義いらない。
+  int t1 = ...;
+  int t2 = bar(t1, ...);
+  int v1 = baz(t1, t2);
+(2) blockcondではなく、変数が全てstmtスコープのとき。
+  (stmt_e_all_stmtscope)
+  このときは複文の中に全て即代入の形にemitできる。
+  {
+  int t1 = ...;
+  bar(t1, ...);
+  }
+  このケースは(3)の特別な場合なので場合わけしなくてよい
+(3) blockcondではなく、スコープが混在するとき。
+  (stmt_e_mixed_scope)
+  このときはまず複文の外側にblockスコープ変数を定義だけやり(field
+  変数は定義いらない)、stmtスコープ変数は即代入の形にemitできる。
+  int t1 = 0;
+  int v1 = 0;
+  {
+  int t2 = bar(t1, ...);
+  v1 = baz(t1, t2);
+  }
+(4) blockcondのとき。
+  (stmt_e_blockcond)
+  このときは変数は一切即代入にできない。複文の外側にblockスコープ、
+  内側にstmtスコープ変数を定義する。
+  int t1 = 0;
+  int v1 = 0;
+  {
+  int v2 = 0;
+  if (...) {
+  }
+  }
+
+blockcondの生成
+- expr_if等のemit_valueから、cond式の
+- 
+
+移行:
+(1) emit_cdeclをひとつの関数に?
+(2) emit_valueで枝を(一時)変数としてemitするときに、どの種類のwrapper
+    を使うべきか判断できるようにしなければならない。
+    - guardを持っているかどうか -> x.get()
+    - 代入分離かどうか -> (*x)
+    fn_emit_valueに引数として渡す？ 運ぶべき情報:
+    - blockcondかどうか(==stmtスコープを代入分離するかどうか)
+    - blockスコープを代入分離するかどうか
+    - struct { bool is_blockcond; bool sep_blockscope_var; }
+(3) emit_valueでのvarを指すシンボルのemit
+    - upvalueとして参照するなら x のまま
+    - ( guardを持っているなら x.get() -> 名前付き変数ではありえない )
+    - 代入分離なら (*x)
+      - 名前付き変数は常にblockスコープ。blockスコープを代入分離するか
+        どうかはcontextが運んでくる
+    - それ以外なら x
+(4) fn_emit_valueでのtempvarのemit
+    - guardを持っているなら x.get()
+    - 代入分離なら (*x)
+      - blockスコープかどうかと、contextが運んでくる情報をもとに分離
+        するかどうか判断
+    - それ以外なら x
+(5) emit_one_statementでの変数のemit
+    - 場合わけ判定しcontextのis_blockcondとsep_blockscope_varをセット
+(6) emit_one_asgnstmt
+    - asgnstmt_eの値に応じて代入式などをemit
+
+emit_one_statement
+emit_context_stmtをセットした上で以下の場合分け
+(1) stmtが式で、stmtスコープが無く全てblockスコープの場合
+  asgnstmt_listをそのままemitすればよい
+(2) stmtが式で、stmtスコープが有る場合
+  blockスコープ変数の定義だけをemitし、'{'の中にasgnstmt_listをemit
+(3) ifなどのcondblockを持つ式の場合
+  変数の定義をemitし、emit_blockcond()を呼ぶ。
+  emit_blockcondの中では、blockcond式の部分についてはemit_asgnstmt_list
+  を','区切りでemitし、その後emit_context_stmtをresetし、block本体を
+  emit_valueする。
+
+emit_sep_vardefs(emit_context& em, const asgnstmt_list& asl,
+  bool emit_blockscope_vars)
+{
+  aslのうち、asgnstmt_e_var_defまたはasgnstmt_e_var_defsetのものについて、
+  変数の定義をemitする。ただしスコープがemit_blockscope_varsの指定と一致
+  するものだけ。
+}
+
+emit_asgnstmt_list(emit_context& em, const asgnstmt_list& asl, expr_i *eprev,
+  expr_i *e)
+{
+  eprev以降、e以前のasgnstmtをemitする。
+  asgnstmt_e_var_defsetのとき、もしそのcontextがstruct_or_globalならば
+  変数の定義は無しに代入だけemitする。これはfieldやグローバル変数は既に
+  別途定義されているから。
+}
 

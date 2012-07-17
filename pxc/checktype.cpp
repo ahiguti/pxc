@@ -28,6 +28,7 @@
 #define DBG_TMPVAR(x)
 #define DBG_LV(x)
 #define DBG_SLICE(x)
+#define DBG_ASGN(x)
 
 namespace pxc {
 
@@ -638,7 +639,8 @@ static bool is_default_constructible(const term& typ, expr_i *pos, size_t depth)
 
 static void check_default_construct(term& typ, expr_var *ev, const char *sym)
 {
-  expr_struct *est = dynamic_cast<expr_struct *>(get_current_block_expr(ev->symtbl_lexical));
+  expr_struct *est = dynamic_cast<expr_struct *>(
+    get_current_block_expr(ev->symtbl_lexical));
   if (est != 0 && !est->has_userdefined_constr()) {
     /* if ev is a field of a struct wo userdefined constr, it's not
      * necessary to be default-constructible. */
@@ -687,10 +689,61 @@ void expr_extval::check_type(symbol_table *lookup)
   /* type_of_this_expr */
 }
 
+static void build_asgnstmt_list(asgnstmt_list& lst, expr_i *top, expr_i *e)
+{
+  if (e == 0) {
+    return;
+  }
+  if (e->get_esort() == expr_e_block) {
+    return;
+  }
+  const int num_children = e->get_num_children();
+  for (int i = 0; i < num_children; ++i) {
+    build_asgnstmt_list(lst, top, e->get_child(i));
+  }
+  if (e->asgnstmt_top) {
+    return; /* set by a child */
+  }
+  if (e->get_esort() == expr_e_var) {
+    expr_i *p = e->parent_expr;
+    assert(p);
+    expr_op *op = dynamic_cast<expr_op *>(p);
+    if (op != 0 && op->op == '=' && op->arg0 == e) {
+      /* e is the lhs of var x = ... */
+      p->asgnstmt_top = true; /* set parent's asgnstmt_top */
+      asgnstmt ast(p, asgnstmt_e_var_defset);
+      lst.push_back(ast);
+      DBG_ASGN(fprintf(stderr, "asgn var_defset %s\n", p->dump(0).c_str()));
+    } else {
+      /* e is a var definithion without explicit initialization */
+      e->asgnstmt_top = true;
+      asgnstmt ast(e, asgnstmt_e_var_def);
+      lst.push_back(ast);
+      DBG_ASGN(fprintf(stderr, "asgn var_def %s\n", e->dump(0).c_str()));
+    }
+    return;
+  }
+  if (e->tempvar_id >= 0) {
+    e->asgnstmt_top = true;
+    asgnstmt ast(e, e->tempvar_varinfo.scope_block
+      ? asgnstmt_e_blockscope_tempvar : asgnstmt_e_stmtscope_tempvar);
+    lst.push_back(ast);
+    DBG_ASGN(fprintf(stderr, "asgn var_tmpvar %s\n", e->dump(0).c_str()));
+    return;
+  }
+  if (e == top) {
+    e->asgnstmt_top = true;
+    asgnstmt ast(e, asgnstmt_e_other);
+    lst.push_back(ast);
+    DBG_ASGN(fprintf(stderr, "asgn var_other %s\n", e->dump(0).c_str()));
+  }
+}
+
 void expr_stmts::check_type(symbol_table *lookup)
 {
   fn_check_type(head, lookup);
   fn_check_type(rest, lookup);
+  build_asgnstmt_list(this->asts, head, head);
   switch (head->get_esort()) {
   case expr_e_int_literal:
   case expr_e_float_literal:
@@ -850,6 +903,7 @@ static void check_variant_field(const expr_op *eop, expr_i *a0)
 static void store_tempvar(expr_i *e, passby_e passby, bool blockscope_flag,
   bool guard_elements, const char *dbgmsg)
 {
+  assert(passby != passby_e_unspecified);
   if (e->tempvar_id >= 0) {
   //  if (e->tempvar_passby == passby) {
   //    return;

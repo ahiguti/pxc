@@ -29,7 +29,7 @@ namespace pxc {
 expr_i::expr_i(const char *fn, int line)
   : fname(fn), line(line), type_of_this_expr(), conv(conversion_e_none),
     type_conv_to(), parent_expr(0), symtbl_lexical(0), tempvar_id(-1),
-    require_lvalue(false)
+    require_lvalue(false), asgnstmt_top(false)
 {
   expr_arena.push_back(this);
   type_of_this_expr = builtins.type_void;
@@ -40,7 +40,7 @@ expr_i::expr_i(const expr_i& e)
     conv(e.conv), type_conv_to(e.type_conv_to), parent_expr(e.parent_expr),
     symtbl_lexical(e.symtbl_lexical), tempvar_id(e.tempvar_id),
     tempvar_varinfo(e.tempvar_varinfo),
-    require_lvalue(e.require_lvalue)
+    require_lvalue(e.require_lvalue), asgnstmt_top(e.asgnstmt_top)
 {
   expr_arena.push_back(this);
 }
