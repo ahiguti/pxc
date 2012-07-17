@@ -45,7 +45,7 @@ enum attribute_e {
 };
 
 enum passby_e {
-//  passby_e_unspecified, /* const_value or const_reference */
+  passby_e_unspecified, /* const_value or const_reference */
   passby_e_mutable_value,
   passby_e_const_value,
   passby_e_mutable_reference,

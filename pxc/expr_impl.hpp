@@ -104,10 +104,9 @@ enum funccall_e {
 
 struct variable_info {
   passby_e passby : 3; /* value/reference, constness */
-  bool inside_blockcond : 1; /* this variable is defined inside a if (...) */
   bool guard_elements : 1; /* guard from invalidating container elems */
   bool scope_block : 1; /* block scope or statement scope */
-  variable_info () : passby(passby_e_mutable_value), inside_blockcond(false),
+  variable_info () : passby(passby_e_unspecified),
     guard_elements(false), scope_block(false) { }
 };
 
@@ -299,8 +298,8 @@ struct expr_i {
   virtual void check_type(symbol_table *lookup) = 0;
   virtual std::string emit_symbol_str() const { return std::string(); }
   virtual void emit_symbol(emit_context& em) const { }
-  virtual void emit_cdecl(emit_context& em, bool is_argdecl, bool byref)
-    const { }
+  // virtual void emit_cdecl(emit_context& em, bool is_argdecl, bool byref)
+  //   const { }
 public:
   const term& get_texpr() const { return type_of_this_expr; }
   const term& get_conv_to() const { return type_conv_to; }
@@ -324,6 +323,7 @@ public:
   // passby_e tempvar_passby : 3;
   // bool tempvar_extent_block : 1;
   bool require_lvalue : 1;
+  bool asgnstmt_top : 1;
 };
 
 struct expr_te : public expr_i {
@@ -536,7 +536,7 @@ struct expr_var : public expr_i {
   void check_type(symbol_table *lookup);
   std::string emit_symbol_str() const;
   void emit_symbol(emit_context& em) const;
-  void emit_cdecl(emit_context& em, bool is_argdecl, bool byref) const;
+  // void emit_cdecl(emit_context& em, bool is_argdecl, bool byref) const;
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
@@ -578,6 +578,23 @@ public:
   attribute_e attr;
 };
 
+enum asgnstmt_e {
+  asgnstmt_e_other,
+  asgnstmt_e_stmtscope_tempvar,
+  asgnstmt_e_blockscope_tempvar,
+  asgnstmt_e_var_defset,
+  asgnstmt_e_var_def,
+};
+
+struct asgnstmt {
+  expr_i *top;
+  asgnstmt_e astmt;
+  asgnstmt() : top(0), astmt(asgnstmt_e_other) { }
+  asgnstmt(expr_i *top, asgnstmt_e astmt) : top(top), astmt(astmt) { }
+};
+
+typedef std::list<asgnstmt> asgnstmt_list;
+
 struct expr_stmts : public expr_i {
   expr_stmts(const char *fn, int line, expr_i *head, expr_i *rest);
   expr_i *clone() const { return new expr_stmts(*this); }
@@ -595,6 +612,7 @@ struct expr_stmts : public expr_i {
   void emit_local_decl(emit_context& em);
   std::string dump(int indent) const;
 public:
+  asgnstmt_list asts;
   expr_i *head;
   expr_stmts *rest; /* can be modified */
 };
@@ -646,7 +664,7 @@ struct expr_argdecls : public expr_i {
   void check_type(symbol_table *lookup);
   std::string emit_symbol_str() const;
   void emit_symbol(emit_context& em) const;
-  void emit_cdecl(emit_context& em, bool is_argdecl, bool byref) const;
+  // void emit_cdecl(emit_context& em, bool is_argdecl, bool byref) const;
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:

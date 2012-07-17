@@ -100,6 +100,21 @@ void emit_context::set_file_line(const expr_i *e)
   #endif
 }
 
+void emit_context::set_stmt_context(const emit_context_stmt& s)
+{
+  sct = s;
+}
+
+void emit_context::reset_stmt_context()	
+{
+  sct = emit_context_stmt();
+}
+
+const emit_context_stmt& emit_context::get_stmt_context() const
+{
+  return sct;
+}
+
 void emit_context::printf(const char *format, ...)
 {
   va_list ap;
