@@ -22,6 +22,11 @@
 #define DBG_FOBJ(x)
 #define DBG_FOI(x)
 #define DBG_IF(x)
+#define DBG_ASTMT(x)
+
+// FIXME
+// #undef MS_EMIT_1
+#define MS_EMIT_1
 
 namespace pxc {
 
@@ -78,10 +83,10 @@ static bool is_condblock_stmt(expr_i *e)
   case expr_e_if:
   case expr_e_while:
   case expr_e_for:
+  case expr_e_feach:
     return true;
   default:
-  /* feach, fldfe, and foldfe don't use fn_emit_value_blockcond */
-  /* case expr_e_feach: */
+  /* fldfe and foldfe: don't use fn_emit_value_blockcond */
   /* case expr_e_fldfe: */
   /* case expr_e_foldfe: */
     return false;
@@ -259,6 +264,7 @@ enum tempvars_def_e {
   tempvars_def_e_set,
 };
 
+// FIXME: to be removed
 static void emit_tempvars_def(emit_context& em, expr_i *e, tempvars_def_e td)
 {
   if (e == 0 || e->get_esort() == expr_e_block) {
@@ -340,15 +346,6 @@ static void emit_tempvars_def(emit_context& em, expr_i *e, tempvars_def_e td)
   } else {
     em.puts(";\n");
   }
-}
-
-static void fn_emit_value_blockcond(emit_context& em, expr_i *e)
-{
-  /* expressions inside if(...), for(...), while(...) */
-  if (cur_stmt_has_tempvar(e)) {
-    emit_tempvars_def(em, e, tempvars_def_e_set);
-  }
-  fn_emit_value(em, e);
 }
 
 template <typename T> static std::string get_type_cname_w_ns(T e)
@@ -1091,18 +1088,6 @@ static void emit_thisptr_argdecl(emit_context& em, expr_struct *est,
   em.puts("& this$up");
 }
 
-#if 0
-static bool is_global_var(expr_i *e)
-{
-  expr_var *const ev = dynamic_cast<expr_var *>(e);
-  if (ev == 0) {
-    return false;
-  }
-  symbol_table *const stbl = ev->symtbl_lexical;
-  return (stbl->get_lexical_parent() == 0);
-}
-#endif
-
 static void emit_function_argdecls(emit_context& em, expr_funcdef *efd)
 {
   bool is_first = true;
@@ -1390,6 +1375,381 @@ static bool is_field_w_explicit_obj(const expr_i *e)
   return (eop->op == '.' || eop->op == TOK_ARROW);
 }
 
+static bool cur_block_is_struct(expr_i *e)
+{
+  symbol_table *stbl = e->symtbl_lexical;
+  return stbl->block_esort == expr_e_struct;
+}
+
+static bool cur_block_is_global(expr_i *e)
+{
+  symbol_table *stbl = e->symtbl_lexical;
+  return stbl->get_lexical_parent() == 0;
+}
+
+static bool esort_noemit_funcbody(expr_i *e)
+{
+  switch (e->get_esort()) {
+  case expr_e_typedef:
+  case expr_e_macrodef:
+  case expr_e_ns:
+  case expr_e_inline_c:
+  case expr_e_extval:
+  case expr_e_struct:
+  case expr_e_variant:
+  case expr_e_interface:
+  case expr_e_funcdef:
+    return true;
+  default:
+    /* expr_e_if, expr_e_var, expr_e_op for example */
+    DBG_IF(fprintf(stderr, "esort_noemit_funcbody: false %s\n",
+      e->dump(0).c_str()));
+    return false;
+  }
+}
+
+static void emit_named_or_temp_var(emit_context& em, const term& t,
+  const variable_info& vi, bool defset_sep_flag,
+  const std::string& var_csymbol, bool emit_def, expr_i *rhs,
+    bool rhs_expand_tempvar)
+{
+  const bool flg_emit_defset = emit_def && rhs != 0;
+  const bool flg_emit_def = emit_def && rhs == 0;
+  const bool flg_emit_set = (!emit_def) && rhs != 0;
+  const bool flg_emit_get = (!emit_def) && rhs == 0;
+  const std::string s0 = term_tostr_cname(t);
+  const std::string cs0 =
+    std::string(is_passby_const(vi.passby) ? "const " : "")
+    + s0;
+  if (vi.guard_elements) {
+    const std::string wr = is_passby_cm_reference(vi.passby)
+      ? (defset_sep_flag ? "pxcrt::refvar_igrd" : "pxcrt::refvar_igrd_nn")
+      : (defset_sep_flag ? "pxcrt::valvar_igrd" : "pxcrt::valvar_igrd_nn");
+    const std::string tstr = wr + "< " + cs0 + " > ";
+    if (flg_emit_get) {
+      em.puts("(" + var_csymbol + ".get())");
+    } else if (flg_emit_set) {
+      em.puts("(" + var_csymbol + ".set(");
+      fn_emit_value(em, rhs, rhs_expand_tempvar);
+      em.puts("))");
+    } else if (flg_emit_defset) {
+      em.puts(tstr + var_csymbol);
+      em.puts("(");
+      fn_emit_value(em, rhs, rhs_expand_tempvar);
+      em.puts(")");
+    } else {
+      assert(flg_emit_def);
+      em.puts(tstr + var_csymbol);
+    }
+  } else if (!is_passby_cm_reference(vi.passby)) {
+    const std::string tstr = (defset_sep_flag ? s0  : cs0) + " ";
+    if (flg_emit_get) {
+      em.puts(var_csymbol);
+    } else if (flg_emit_set) {
+      em.puts(var_csymbol + " = ");
+      fn_emit_value(em, rhs, rhs_expand_tempvar);
+    } else if (flg_emit_defset) {
+      em.puts(tstr + var_csymbol + " = ");
+      fn_emit_value(em, rhs, rhs_expand_tempvar);
+    } else {
+      assert(flg_emit_def);
+      em.puts(tstr + var_csymbol);
+      emit_explicit_init_if(em, t);
+    }
+  } else if (defset_sep_flag) { /* passby_cm_reference */
+    const std::string tstr = cs0 + " *";
+    if (flg_emit_get) {
+      em.puts("(*" + var_csymbol + ")");
+    } else if (flg_emit_set) {
+      em.puts("(*(" + var_csymbol + " = &(");
+      fn_emit_value(em, rhs, rhs_expand_tempvar);
+      em.puts(")))");
+    } else if (flg_emit_defset) {
+      abort();
+    } else {
+      assert(flg_emit_def);
+      em.puts(tstr + var_csymbol);
+      em.puts(" = 0");
+    }
+  } else { /* passby_cm_reference, not sep */
+    const std::string tstr = cs0 + "& ";
+    if (flg_emit_get) {
+      em.puts(var_csymbol);
+    } else if (flg_emit_set) {
+      abort();
+    } else if (flg_emit_defset) {
+      em.puts(tstr + var_csymbol + " = ");
+      fn_emit_value(em, rhs, rhs_expand_tempvar);
+    } else {
+      assert(flg_emit_def);
+      abort();
+    }
+  }
+}
+
+static std::string csymbol_tempvar(int tempvar_id)
+{
+  return std::string("t") + long_to_string(tempvar_id);
+}
+
+static void emit_sep_vardef_one(emit_context& em, expr_var *ev, expr_i *etv,
+  bool emit_blockscope_vars)
+{
+  const variable_info *vi = 0;
+  std::string var_csymbol;
+  term t;
+  if (ev != 0) {
+    vi = &ev->varinfo;
+    var_csymbol = csymbol_var(ev, true);
+    t = ev->get_texpr();
+  } else {
+    assert(etv != 0);
+    assert(etv->tempvar_id >= 0);
+    vi = &etv->tempvar_varinfo;
+    var_csymbol = csymbol_tempvar(etv->tempvar_id);
+    t = etv->type_conv_to.is_null() ? etv->get_texpr() : etv->type_conv_to;
+  }
+  const bool defset_sep_flag = true;
+  const bool emit_def = true;
+  emit_named_or_temp_var(em, t, *vi, defset_sep_flag, var_csymbol,
+    emit_def, 0, false);
+}
+
+static void emit_sep_vardefs(emit_context& em, const asgnstmt_list& asts,
+  bool emit_blockscope_vars)
+{
+  asgnstmt_e tv_to_emit = emit_blockscope_vars
+    ? asgnstmt_e_blockscope_tempvar : asgnstmt_e_stmtscope_tempvar;
+  asgnstmt_list::const_iterator i;
+  bool first_flag = true;
+  for (i = asts.begin(); i != asts.end(); ++i) {
+    const asgnstmt& ast = *i;
+    if (ast.astmt == asgnstmt_e_other) {
+      DBG_ASTMT(fprintf(stderr, "emit_sep_vardefs: skip 0 %s\n",
+	ast.top->dump(0).c_str()));
+      continue;
+    } else if (
+      (ast.astmt == asgnstmt_e_blockscope_tempvar ||
+       ast.astmt == asgnstmt_e_stmtscope_tempvar) &&
+      ast.astmt != tv_to_emit) {
+      DBG_ASTMT(fprintf(stderr, "emit_sep_vardefs: skip 1 %s\n",
+	ast.top->dump(0).c_str()));
+      continue;
+    } else if (
+      (ast.astmt == asgnstmt_e_var_defset ||
+       ast.astmt == asgnstmt_e_var_def) &&
+      em.get_stmt_context().is_struct_or_global_block) {
+      DBG_ASTMT(fprintf(stderr, "emit_sep_vardefs: skip 2 %s\n",
+	ast.top->dump(0).c_str()));
+      continue;
+    }
+    DBG_ASTMT(fprintf(stderr, "emit_sep_vardefs: emit %s\n",
+      ast.top->dump(0).c_str()));
+    if (first_flag) {
+      em.set_file_line(ast.top);
+      em.indent('b');
+      first_flag = false;
+    }
+    if (ast.astmt == tv_to_emit) { /* tempvar */
+      emit_sep_vardef_one(em, 0, ast.top, emit_blockscope_vars);
+    } else if (ast.astmt == asgnstmt_e_var_def) {
+      expr_var *const ev = ptr_down_cast<expr_var>(ast.top);
+      emit_sep_vardef_one(em, ev, 0, emit_blockscope_vars);
+    } else if (ast.astmt == asgnstmt_e_var_defset) {
+      expr_op *const eop = ptr_down_cast<expr_op>(ast.top);
+      expr_var *const ev = ptr_down_cast<expr_var>(eop->arg0);
+      emit_sep_vardef_one(em, ev, 0, emit_blockscope_vars);
+    } else {
+      abort();
+    }
+    em.puts("; // sep_vardef\n");
+  }
+}
+
+static void emit_asgnstmt_list(emit_context& em, const asgnstmt_list& asts,
+  int bid)
+{
+  const emit_context_stmt& sct = em.get_stmt_context();
+  bool first_flag = true;
+  for (asgnstmt_list::const_iterator i = asts.begin(); i != asts.end(); ++i) {
+    DBG_ASTMT(fprintf(stderr, "emit_asgnstmt_list %s\n",
+      i->top->dump(0).c_str()));
+    if (bid != i->blockcond_id) {
+      DBG_ASTMT(fprintf(stderr, "emit_asgnstmt_list skip %d %d\n",
+	i->blockcond_id, bid));
+      continue;
+    }
+    if (i->astmt == asgnstmt_e_var_def && sct.sep_blockscope_var) {
+      DBG_ASTMT(fprintf(stderr, "emit_asgnstmt_list skip vardef\n"));
+      continue;
+    }
+    if (!sct.is_blockcond) {
+      em.set_file_line(i->top);
+      em.indent('b');
+    }
+    if (!first_flag && sct.is_blockcond) {
+      em.puts(", ");
+    }
+    first_flag = false;
+    bool need_semicolon = true;
+    DBG_ASTMT(fprintf(stderr, "emit_asgnstmt_list astmt=%d\n", (int)i->astmt));
+    switch (i->astmt) {
+    case asgnstmt_e_var_defset:
+      {
+	const expr_op *const eop = ptr_down_cast<const expr_op>(i->top);
+	const expr_var *const ev = ptr_down_cast<const expr_var>(eop->arg0);
+	const bool defset_sep_flag = sct.sep_blockscope_var;
+	const std::string var_csymbol = csymbol_var(ev, true);
+	const bool emit_def = !defset_sep_flag;
+	emit_named_or_temp_var(em, ev->get_texpr(), ev->varinfo,
+	  defset_sep_flag, var_csymbol, emit_def, eop->arg1, false);
+      }
+      break;
+    case asgnstmt_e_var_def:
+      {
+	const expr_var *const ev = ptr_down_cast<const expr_var>(i->top);
+	assert(!sct.sep_blockscope_var);
+	const bool defset_sep_flag = false;
+	const std::string var_csymbol = csymbol_var(ev, true);
+	const bool emit_def = true;
+	emit_named_or_temp_var(em, ev->get_texpr(), ev->varinfo,
+	  defset_sep_flag, var_csymbol, emit_def, 0, false);
+      }
+      break;
+    case asgnstmt_e_blockscope_tempvar:
+      {
+	expr_i *const e = i->top;
+	const term& t = e->type_conv_to.is_null()
+	  ? e->get_texpr() : e->type_conv_to;
+	const bool defset_sep_flag = sct.sep_blockscope_var;
+	const std::string var_csymbol = csymbol_tempvar(e->tempvar_id);
+	const bool emit_def = !defset_sep_flag;
+	emit_named_or_temp_var(em, t, e->tempvar_varinfo,
+	  defset_sep_flag, var_csymbol, emit_def, e, true);
+      }
+      break;
+    case asgnstmt_e_stmtscope_tempvar:
+      {
+	expr_i *const e = i->top;
+	const bool defset_sep_flag = sct.is_blockcond;
+	const std::string var_csymbol = csymbol_tempvar(e->tempvar_id);
+	const bool emit_def = !defset_sep_flag;
+	emit_named_or_temp_var(em, e->get_texpr(), e->tempvar_varinfo,
+	  defset_sep_flag, var_csymbol, emit_def, e, true);
+      }
+      break;
+    case asgnstmt_e_other:
+      fn_emit_value(em, i->top);
+      need_semicolon = !is_block_stmt(i->top);
+      break;
+    }
+    if (!sct.is_blockcond) {
+      if (need_semicolon) {
+	em.puts(";");
+      }
+      em.puts(" // asgnstmt\n");
+    }
+  }
+}
+
+static void emit_one_statement(emit_context& em, expr_stmts *stmts)
+{
+  const bool is_struct_constr = cur_block_is_struct(stmts);
+  const bool is_global_block = cur_block_is_global(stmts);
+  const bool is_condblock = is_condblock_stmt(stmts->head);
+  bool has_stmt_scope_var = false;
+  bool has_block_scope_var = false;
+  asgnstmt_list::const_iterator i;
+  for (i = stmts->asts.begin(); i != stmts->asts.end(); ++i) {
+    switch (i->astmt) {
+    case asgnstmt_e_stmtscope_tempvar:
+      has_stmt_scope_var = true;
+      break;
+    case asgnstmt_e_blockscope_tempvar:
+    case asgnstmt_e_var_defset:
+    case asgnstmt_e_var_def:
+      has_block_scope_var = true;
+      break;
+    case asgnstmt_e_other:
+      break;
+    }
+  }
+  const bool blockscope_defset_sep =
+    is_condblock || has_stmt_scope_var || is_struct_constr || is_global_block;
+
+  DBG_ASTMT(fprintf(stderr, "emit_one_statement %s\n",
+    stmts->head->dump(0).c_str()));
+
+  emit_context_stmt sct;
+  sct.stmt = stmts;
+  sct.is_blockcond = is_condblock;
+  sct.sep_blockscope_var = blockscope_defset_sep;
+  sct.is_struct_or_global_block = is_struct_constr || is_global_block;
+    // FIXME: unused? remove?
+  stmt_context_scoped scoped(em, sct);
+
+  if (!blockscope_defset_sep) {
+    /* (1) block vars are defset-direct. no stmt var. */
+    DBG_ASTMT(fprintf(stderr, "emit_one_statement (1) len=%d\n",
+      (int)stmts->asts.size()));
+    emit_asgnstmt_list(em, stmts->asts, -1);
+  } else if (!is_condblock) {
+    /* (2) block vars are defset-sep. stmt vars are defset-direct. */
+    DBG_ASTMT(fprintf(stderr, "emit_one_statement (2)\n"));
+    if (!is_struct_constr && !is_global_block) {
+      /* emit block var defs */
+      emit_sep_vardefs(em, stmts->asts, true);
+      DBG_ASTMT(fprintf(stderr, "emit_one_statement (2-1)\n"));
+    }
+    /* emit asgnstmt_list */
+    em.set_file_line(stmts->head);
+    em.indent('s');
+    em.puts("{ // local\n");
+    em.add_indent(1);
+    emit_asgnstmt_list(em, stmts->asts, -1);
+    em.add_indent(-1);
+    em.indent('s');
+    em.puts("} // endlocal\n");
+  } else {
+    /* (3) condblock. all vars are defset-sep. */
+    /* emit block var defs */
+    DBG_ASTMT(fprintf(stderr, "emit_one_statement (3)\n"));
+    emit_sep_vardefs(em, stmts->asts, true);
+    /* emit stmt var defs */
+    if (has_stmt_scope_var) {
+      DBG_ASTMT(fprintf(stderr, "emit_one_statement (3-1)\n"));
+      em.set_file_line(stmts->head);
+      em.indent('s');
+      em.puts("{\n");
+      em.add_indent(1);
+      emit_sep_vardefs(em, stmts->asts, false);
+    }
+    /* emit stmt (if, while, etc.) */
+    fn_emit_value(em, stmts->head);
+    if (has_stmt_scope_var) {
+      em.set_file_line(stmts->head);
+      em.add_indent(-1);
+      em.indent('s');
+      em.puts("}\n");
+    }
+  }
+}
+
+static void fn_emit_value_blockcond(emit_context& em, expr_i *e, int bid)
+{
+  /* expressions inside if(...), for(...), while(...), foreach(...) */
+  #ifdef MS_EMIT_1
+  const emit_context_stmt& sct = em.get_stmt_context();
+  expr_stmts *const stmts = ptr_down_cast<expr_stmts>(sct.stmt);
+  emit_asgnstmt_list(em, stmts->asts, bid);
+  #else
+  if (cur_stmt_has_tempvar(e)) {
+    emit_tempvars_def(em, e, tempvars_def_e_set);
+  }
+  fn_emit_value(em, e);
+  #endif
+}
+
 static void emit_value_symdef_common(emit_context& em, symbol_common& sdef,
   const expr_i *e)
 {
@@ -1432,6 +1792,18 @@ static void emit_value_symdef_common(emit_context& em, symbol_common& sdef,
     em.puts(")");
     return;
   }
+  #ifdef MS_EMIT_1
+  if (!sdef.upvalue_flag && edef->get_esort() == expr_e_var) {
+    expr_var *const ev = ptr_down_cast<expr_var>(edef);
+    const emit_context_stmt& sct = em.get_stmt_context();
+    const bool defset_sep_flag = sct.sep_blockscope_var;
+    const std::string var_csymbol = csymbol_var(ev, false);
+    const bool emit_def = false;
+    emit_named_or_temp_var(em, ev->get_texpr(), ev->varinfo, defset_sep_flag,
+      var_csymbol, emit_def, 0, false);
+    return;
+  }
+  #endif
   fn_emit_value(em, edef);
 }
 
@@ -1495,156 +1867,15 @@ void expr_extval::emit_value(emit_context& em)
   this->emit_symbol(em);
 }
 
-static bool cur_block_is_struct(expr_i *e)
-{
-  symbol_table *stbl = e->symtbl_lexical;
-  return stbl->block_esort == expr_e_struct;
-}
-
-static bool cur_block_is_global(expr_i *e)
-{
-  symbol_table *stbl = e->symtbl_lexical;
-  return stbl->get_lexical_parent() == 0;
-}
-
-static bool esort_noemit_funcbody(expr_i *e)
-{
-  switch (e->get_esort()) {
-  case expr_e_typedef:
-  case expr_e_macrodef:
-  case expr_e_ns:
-  case expr_e_inline_c:
-  case expr_e_extval:
-  case expr_e_struct:
-  case expr_e_variant:
-  case expr_e_interface:
-  case expr_e_funcdef:
-    return true;
-  default:
-    /* expr_e_if, expr_e_var, expr_e_op for example */
-    DBG_IF(fprintf(stderr, "esort_noemit_funcbody: false %s\n",
-      e->dump(0).c_str()));
-    return false;
-  }
-}
-
-static void emit_sep_vardef_one(emit_context& em, expr_var *ev, expr_i *etv,
-  bool emit_blockscope_vars)
-{
-  if (ev != 0) {
-  } else {
-    assert(etv != 0);
-  }
-  // FIXME HERE HERE HERE
-}
-
-static void emit_sep_vardefs(emit_context& em, const asgnstmt_list& asts,
-  bool emit_blockscope_vars)
-{
-  asgnstmt_e tv_to_emit = emit_blockscope_vars
-    ? asgnstmt_e_blockscope_tempvar : asgnstmt_e_stmtscope_tempvar;
-  asgnstmt_list::const_iterator i;
-  for (i = asts.begin(); i != asts.end(); ++i) {
-    const asgnstmt& ast = *i;
-    if (ast.astmt == asgnstmt_e_var_def) {
-      expr_var *const ev = ptr_down_cast<expr_var>(ast.top);
-      emit_sep_vardef_one(em, ev, 0, emit_blockscope_vars);
-    } else if (ast.astmt == asgnstmt_e_var_defset) {
-      expr_op *const eop = ptr_down_cast<expr_op>(ast.top);
-      expr_var *const ev = ptr_down_cast<expr_var>(eop->arg0);
-      emit_sep_vardef_one(em, ev, 0, emit_blockscope_vars);
-    } else if (ast.astmt == tv_to_emit) { /* tempvar */
-      emit_sep_vardef_one(em, 0, ast.top, emit_blockscope_vars);
-    } else {
-      continue;
-    }
-  }
-}
-
-static void emit_asgnstmt_list(emit_context& em, const asgnstmt_list& asts,
-  expr_i *eprev, expr_i *e)
-{
-  // FIXME HERE HERE HERE
-}
-
-static void emit_one_statement(emit_context& em, expr_stmts *stmts)
-{
-  const bool is_struct_constr = cur_block_is_struct(stmts);
-  const bool is_global_block = cur_block_is_global(stmts);
-  const bool is_condblock = is_condblock_stmt(stmts->head);
-  bool has_stmt_scope_var = false;
-  bool has_block_scope_var = false;
-  asgnstmt_list::const_iterator i;
-  for (i = stmts->asts.begin(); i != stmts->asts.end(); ++i) {
-    switch (i->astmt) {
-    case asgnstmt_e_stmtscope_tempvar:
-      has_stmt_scope_var = true;
-      break;
-    case asgnstmt_e_blockscope_tempvar:
-    case asgnstmt_e_var_defset:
-    case asgnstmt_e_var_def:
-      has_block_scope_var = true;
-      break;
-    case asgnstmt_e_other:
-      break;
-    }
-  }
-  const bool blockscope_defset_sep =
-    is_condblock || has_stmt_scope_var || is_struct_constr || is_global_block;
-
-  emit_context_stmt sct;
-  sct.is_blockcond = is_condblock;
-  sct.sep_blockscope_var = blockscope_defset_sep;
-  sct.is_struct_or_global_block = is_struct_constr || is_global_block;
-  stmt_context_scoped scoped(em, sct);
-
-  if (!blockscope_defset_sep) {
-    /* (1) block vars are defset-direct. no stmt var. */
-    emit_asgnstmt_list(em, stmts->asts, 0, 0);
-  } else if (!is_condblock) {
-    /* (2) block vars are defset-sep. stmt vars are defset-direct. */
-    if (!is_struct_constr || !is_global_block) {
-      /* emit block var defs */
-      emit_sep_vardefs(em, stmts->asts, true);
-    }
-    /* emit asgnstmt_list */
-    em.set_file_line(stmts->head);
-    em.add_indent(1);
-    em.indent('s');
-    em.puts("{\n");
-    emit_asgnstmt_list(em, stmts->asts, 0, 0);
-    em.add_indent(-1);
-    em.indent('s');
-    em.puts("}\n");
-  } else {
-    /* (3) condblock. all vars are defset-sep. */
-    /* emit block var defs */
-    emit_sep_vardefs(em, stmts->asts, true);
-    /* emit stmt var defs */
-    if (has_stmt_scope_var) {
-      em.set_file_line(stmts->head);
-      em.add_indent(1);
-      em.indent('s');
-      em.puts("{\n");
-      emit_sep_vardefs(em, stmts->asts, false);
-    }
-    /* emit stmt */
-    fn_emit_value(em, stmts->head);
-    if (has_stmt_scope_var) {
-      em.set_file_line(stmts->head);
-      em.add_indent(-1);
-      em.indent('s');
-      em.puts("}\n");
-    }
-  }
-}
-
 void expr_stmts::emit_value(emit_context& em)
 {
   if (head == 0) {
     assert(rest == 0);
     return;
   }
+  #ifdef MS_EMIT_1
+  emit_one_statement(em, this);
+  #else
   const bool is_struct_block = cur_block_is_struct(this);
   const bool has_tv = cur_stmt_has_tempvar(head);
   const bool is_condblock = is_condblock_stmt(head); /* if, while, for */
@@ -1684,6 +1915,7 @@ void expr_stmts::emit_value(emit_context& em)
       }
     }
   }
+  #endif
   if (rest != 0) {
     fn_emit_value(em, rest);
   }
@@ -1745,7 +1977,7 @@ bool expr_stmts::emit_local_decl_fastinit(emit_context& em)
     em.puts(" = ");
     fn_emit_value(em, eop->arg1);
   }
-  em.puts(";\n");
+  em.puts("; // localdecl_fastinit\n");
   return true;
 }
 
@@ -1836,7 +2068,7 @@ void expr_block::emit_local_decl(emit_context& em, bool is_funcbody)
     em.set_file_line(e);
     em.indent('b');
     emit_var_cdecl(em, e, false, false); // e->emit_cdecl(em, false, false);
-    em.puts(";\n");
+    em.puts("; // localdecl\n");
   }
 }
 
@@ -2256,7 +2488,7 @@ void expr_if::emit_value(emit_context& em)
   } else {
     /* if (cond) { block1 } [else] */
     em.puts("if (");
-    fn_emit_value_blockcond(em, cond);
+    fn_emit_value_blockcond(em, cond, bid_offset);
     em.puts(") ");
     fn_emit_value(em, block1);
     if (rest != 0) {
@@ -2283,7 +2515,7 @@ void expr_if::emit_value(emit_context& em)
 void expr_while::emit_value(emit_context& em)
 {
   em.puts("while (");
-  fn_emit_value_blockcond(em, cond);
+  fn_emit_value_blockcond(em, cond, bid_offset);
   em.puts(") ");
   fn_emit_value(em, block);
 }
@@ -2292,15 +2524,15 @@ void expr_for::emit_value(emit_context& em)
 {
   em.puts("for (");
   if (e0) {
-    fn_emit_value_blockcond(em, e0);
+    fn_emit_value_blockcond(em, e0, bid_offset);
   }
   em.puts("; ");
   if (e1) {
-    fn_emit_value_blockcond(em, e1);
+    fn_emit_value_blockcond(em, e1, bid_offset + 1);
   }
   em.puts("; ");
   if (e2) {
-    fn_emit_value_blockcond(em, e2);
+    fn_emit_value_blockcond(em, e2, bid_offset + 2);
   }
   em.puts(") ");
   fn_emit_value(em, block);
@@ -2322,7 +2554,7 @@ void expr_feach::emit_value(emit_context& em)
   }
   em.puts(cetstr);
   em.puts("& ag$fe = (");
-  fn_emit_value(em, ce);
+  fn_emit_value_blockcond(em, ce, bid_offset);
   em.puts(");\n");
   if (type_has_invalidate_guard(ce->get_texpr())) {
     em.indent('f');
@@ -2581,6 +2813,20 @@ void fn_emit_value(emit_context& em, expr_i *e, bool expand_tempvar)
   if (e == 0) {
     return;
   }
+  #ifdef MS_EMIT_1
+  if (e->tempvar_id >= 0 && !expand_tempvar) {
+    const variable_info& vi = e->tempvar_varinfo;
+    const std::string var_csymbol = csymbol_tempvar(e->tempvar_id);
+    const term& t = e->type_conv_to.is_null()
+      ? e->get_texpr() : e->type_conv_to;
+    const bool defset_sep_flag = false; /* either is ok */
+    const bool emit_def = false;
+    /* emit 'get' for the temp var */
+    emit_named_or_temp_var(em, t, vi,
+      defset_sep_flag, var_csymbol, emit_def, 0, false);
+    return;
+  }
+  #else
   if (e->tempvar_id >= 0 && !expand_tempvar) {
     const term te = e->type_conv_to.is_null()
       ? e->get_texpr() : e->type_conv_to;
@@ -2596,6 +2842,7 @@ void fn_emit_value(emit_context& em, expr_i *e, bool expand_tempvar)
     }
     return;
   }
+  #endif
   switch (e->conv) {
   case conversion_e_none:
     e->emit_value(em);

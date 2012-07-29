@@ -29,6 +29,7 @@
 #define DBG_LV(x)
 #define DBG_SLICE(x)
 #define DBG_ASGN(x)
+#define DBG_STT(x)
 
 namespace pxc {
 
@@ -689,51 +690,67 @@ void expr_extval::check_type(symbol_table *lookup)
   /* type_of_this_expr */
 }
 
-static void build_asgnstmt_list(asgnstmt_list& lst, expr_i *top, expr_i *e)
+static int get_next_bid(asgnstmt_list& lst)
+{
+  if (lst.empty()) {
+    return 0;
+  }
+  return lst.back().blockcond_id + 1;
+}
+
+static void build_asgnstmt_list(asgnstmt_list& lst, int bid, expr_i *top,
+  expr_i *e)
 {
   if (e == 0) {
     return;
   }
-  if (e->get_esort() == expr_e_block) {
+  if (!e->has_expr_to_emit()) {
     return;
   }
-  const int num_children = e->get_num_children();
-  for (int i = 0; i < num_children; ++i) {
-    build_asgnstmt_list(lst, top, e->get_child(i));
+  if (!e->single_asgnstmt()) {
+    const int num_children = e->get_num_children();
+    for (int i = 0; i < num_children; ++i) {
+      build_asgnstmt_list(lst, bid, top, e->get_child(i));
+    }
+    if (e->get_esort() == expr_e_var) {
+      expr_i *p = e->parent_expr;
+      assert(p);
+      expr_op *op = dynamic_cast<expr_op *>(p);
+      if (op != 0 && op->op == '=' && op->arg0 == e) {
+	/* e is the lhs of var x = ... */
+      } else {
+	/* e is a var definithion without explicit initialization */
+	e->asgnstmt_top = true;
+	asgnstmt ast(e, asgnstmt_e_var_def, bid);
+	lst.push_back(ast);
+	DBG_ASGN(fprintf(stderr, "asgn var_def %s\n", e->dump(0).c_str()));
+      }
+    }
+    if (e->get_esort() == expr_e_op) {
+      expr_op *op = ptr_down_cast<expr_op>(e);
+      if (op->op == '=' && op->arg0->get_esort() == expr_e_var) {
+	/* var x = ... */
+	e->asgnstmt_top = true; /* set parent's asgnstmt_top */
+	asgnstmt ast(e, asgnstmt_e_var_defset, bid);
+	lst.push_back(ast);
+	DBG_ASGN(fprintf(stderr, "asgn var_defset %s\n", e->dump(0).c_str()));
+      }
+    }
+    if (e->tempvar_id >= 0) {
+      e->asgnstmt_top = true;
+      asgnstmt ast(e, e->tempvar_varinfo.scope_block
+	? asgnstmt_e_blockscope_tempvar : asgnstmt_e_stmtscope_tempvar,
+	bid);
+      lst.push_back(ast);
+      DBG_ASGN(fprintf(stderr, "asgn var_tmpvar %s\n", e->dump(0).c_str()));
+    }
   }
   if (e->asgnstmt_top) {
-    return; /* set by a child */
-  }
-  if (e->get_esort() == expr_e_var) {
-    expr_i *p = e->parent_expr;
-    assert(p);
-    expr_op *op = dynamic_cast<expr_op *>(p);
-    if (op != 0 && op->op == '=' && op->arg0 == e) {
-      /* e is the lhs of var x = ... */
-      p->asgnstmt_top = true; /* set parent's asgnstmt_top */
-      asgnstmt ast(p, asgnstmt_e_var_defset);
-      lst.push_back(ast);
-      DBG_ASGN(fprintf(stderr, "asgn var_defset %s\n", p->dump(0).c_str()));
-    } else {
-      /* e is a var definithion without explicit initialization */
-      e->asgnstmt_top = true;
-      asgnstmt ast(e, asgnstmt_e_var_def);
-      lst.push_back(ast);
-      DBG_ASGN(fprintf(stderr, "asgn var_def %s\n", e->dump(0).c_str()));
-    }
-    return;
-  }
-  if (e->tempvar_id >= 0) {
-    e->asgnstmt_top = true;
-    asgnstmt ast(e, e->tempvar_varinfo.scope_block
-      ? asgnstmt_e_blockscope_tempvar : asgnstmt_e_stmtscope_tempvar);
-    lst.push_back(ast);
-    DBG_ASGN(fprintf(stderr, "asgn var_tmpvar %s\n", e->dump(0).c_str()));
     return;
   }
   if (e == top) {
     e->asgnstmt_top = true;
-    asgnstmt ast(e, asgnstmt_e_other);
+    asgnstmt ast(e, asgnstmt_e_other, bid);
     lst.push_back(ast);
     DBG_ASGN(fprintf(stderr, "asgn var_other %s\n", e->dump(0).c_str()));
   }
@@ -743,7 +760,17 @@ void expr_stmts::check_type(symbol_table *lookup)
 {
   fn_check_type(head, lookup);
   fn_check_type(rest, lookup);
-  build_asgnstmt_list(this->asts, head, head);
+  const int bids = head->get_num_blockcond();
+  if (bids == 0) {
+    build_asgnstmt_list(this->asts, -1, head, head);
+#if 0
+  } else {
+    for (int i = 0; i < bids; ++i) {
+      expr_i *const c = head->get_child(i);
+      build_asgnstmt_list(this->asts, i, c, c);
+    }
+#endif
+  }
   switch (head->get_esort()) {
   case expr_e_int_literal:
   case expr_e_float_literal:
@@ -910,6 +937,9 @@ static void store_tempvar(expr_i *e, passby_e passby, bool blockscope_flag,
   //  }
     abort(); // FIXME FIXME FIXME HERE HERE HERE
   }
+  DBG_STT(fprintf(stderr, "store_tempvar passby=%d blocksc=%d g=%d %s\n",
+    (int)passby, (int)blockscope_flag, (int)guard_elements,
+    e->dump(0).c_str()));
   if (e->tempvar_id < 0) {
     symbol_table *lookup = find_current_symbol_table(e);
     assert(lookup);
@@ -1824,6 +1854,11 @@ void expr_if::check_type(symbol_table *lookup)
       rest = 0;
     }
   }
+  expr_stmts *const stmts = ptr_down_cast<expr_stmts>(
+    find_parent(this, expr_e_stmts));
+  this->bid_offset = get_next_bid(stmts->asts);
+    /* nonzero if there is an else-if */
+  build_asgnstmt_list(stmts->asts, this->bid_offset, cond, cond);
   fn_check_type(block1, lookup);
   fn_check_type(block2, lookup);
   fn_check_type(rest, lookup);
@@ -1833,6 +1868,10 @@ void expr_while::check_type(symbol_table *lookup)
 {
   fn_check_type(cond, lookup);
   check_bool_expr(0, cond);
+  expr_stmts *const stmts = ptr_down_cast<expr_stmts>(
+    find_parent(this, expr_e_stmts));
+  this->bid_offset = get_next_bid(stmts->asts); /* always 0 */
+  build_asgnstmt_list(stmts->asts, this->bid_offset, cond, cond);
   fn_check_type(block, lookup);
 }
 
@@ -1841,6 +1880,12 @@ void expr_for::check_type(symbol_table *lookup)
   fn_check_type(e0, lookup);
   fn_check_type(e1, lookup);
   fn_check_type(e2, lookup);
+  expr_stmts *const stmts = ptr_down_cast<expr_stmts>(
+    find_parent(this, expr_e_stmts));
+  this->bid_offset = get_next_bid(stmts->asts); /* always 0 */
+  build_asgnstmt_list(stmts->asts, this->bid_offset + 0, e0, e0);
+  build_asgnstmt_list(stmts->asts, this->bid_offset + 1, e1, e1);
+  build_asgnstmt_list(stmts->asts, this->bid_offset + 2, e2, e2);
   fn_check_type(block, lookup);
 }
 
@@ -1878,6 +1923,10 @@ void expr_feach::check_type(symbol_table *lookup)
   } else {
     root_expr_reference_or_value(ce);
   }
+  expr_stmts *const stmts = ptr_down_cast<expr_stmts>(
+    find_parent(this, expr_e_stmts));
+  this->bid_offset = get_next_bid(stmts->asts); /* always 0 */
+  build_asgnstmt_list(stmts->asts, this->bid_offset, ce, ce);
 }
 
 static expr_i *deep_clone_expr(expr_i *e)

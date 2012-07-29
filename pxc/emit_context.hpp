@@ -19,12 +19,15 @@
 
 namespace pxc {
 
+struct expr_stmts;
+
 struct emit_context_stmt {
+  expr_stmts *stmt;
   bool is_blockcond : 1;
   bool sep_blockscope_var : 1;
   bool is_struct_or_global_block : 1;
-  emit_context_stmt() : is_blockcond(false), sep_blockscope_var(false),
-    is_struct_or_global_block(false) { }
+  emit_context_stmt() : stmt(0), is_blockcond(false),
+    sep_blockscope_var(false), is_struct_or_global_block(false) { }
 };
 
 struct emit_context {
@@ -55,15 +58,17 @@ private:
 struct stmt_context_scoped {
   stmt_context_scoped(emit_context& em, const emit_context_stmt& sct)
     : em(em) {
+    prev = em.get_stmt_context();
     em.set_stmt_context(sct);
   }
   ~stmt_context_scoped() {
-    em.reset_stmt_context();
+    em.set_stmt_context(prev);
   }
 private:
   stmt_context_scoped(const stmt_context_scoped&);
   stmt_context_scoped& operator =(const stmt_context_scoped&);
 private:
+  emit_context_stmt prev;
   emit_context& em;
 };
 
