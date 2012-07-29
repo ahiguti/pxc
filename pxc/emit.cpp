@@ -2960,16 +2960,7 @@ void emit_code(const std::string& dest_filename, expr_block *gl_block,
     } else if (gmain == generate_main_exe) {
       em.puts("int main()\n{\n");
     }
-    em.printf(" try { %s$c(); } catch (const std::exception& e) {\n",
-      mainfn.c_str());
-    em.puts("  std::string mess(e.what());\n");
-    em.puts("  if (!mess.empty() && mess[mess.size() - 1] != \'\\n\') {\n");
-    em.puts("    mess += \"\\n\";\n");
-    em.puts("  }\n");
-    em.puts("  write(2, mess.data(), mess.size());\n");
-    em.puts("  return 1;\n");
-    em.puts(" }\n");
-    em.puts(" return 0;\n");
+    em.printf(" return pxcrt::main_nothrow(& %s$c);\n", mainfn.c_str());
     em.puts("}\n");
   }
   em.puts("}; /* extern \"C\" */\n");
