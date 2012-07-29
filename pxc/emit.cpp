@@ -1702,14 +1702,16 @@ static void emit_one_statement(emit_context& em, expr_stmts *stmts)
       DBG_ASTMT(fprintf(stderr, "emit_one_statement (2-1)\n"));
     }
     /* emit asgnstmt_list */
-    em.set_file_line(stmts->head);
-    em.indent('s');
-    em.puts("{ // local\n");
-    em.add_indent(1);
-    emit_asgnstmt_list(em, stmts->asts, -1);
-    em.add_indent(-1);
-    em.indent('s');
-    em.puts("} // endlocal\n");
+    if (!stmts->asts.empty()) {
+      em.set_file_line(stmts->head);
+      em.indent('s');
+      em.puts("{ // local\n");
+      em.add_indent(1);
+      emit_asgnstmt_list(em, stmts->asts, -1);
+      em.add_indent(-1);
+      em.indent('s');
+      em.puts("} // endlocal\n");
+    }
   } else {
     /* (3) condblock. all vars are defset-sep. */
     /* emit block var defs */
@@ -1725,10 +1727,13 @@ static void emit_one_statement(emit_context& em, expr_stmts *stmts)
       emit_sep_vardefs(em, stmts->asts, false);
     }
     /* emit stmt (if, while, etc.) */
+    em.set_file_line(stmts->head);
+    em.indent('s');
     fn_emit_value(em, stmts->head);
+    em.puts("\n");
     if (has_stmt_scope_var) {
-      em.set_file_line(stmts->head);
       em.add_indent(-1);
+      em.set_file_line(stmts->head);
       em.indent('s');
       em.puts("}\n");
     }
