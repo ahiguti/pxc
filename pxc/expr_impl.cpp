@@ -881,7 +881,8 @@ expr_if::expr_if(const char *fn, int line, expr_i *cond, expr_i *b1,
     block1(ptr_down_cast<expr_block>(b1)),
     block2(ptr_down_cast<expr_block>(b2)),
     rest(ptr_down_cast<expr_if>(rest)),
-    cond_static(-1)
+    cond_static(-1),
+    bid_offset(-1)
 {
 }
 
@@ -906,7 +907,7 @@ std::string expr_if::dump(int indent) const
 
 expr_while::expr_while(const char *fn, int line, expr_i *cond, expr_i *block)
   : expr_i(fn, line), cond(cond),
-    block(ptr_down_cast<expr_block>(block))
+    block(ptr_down_cast<expr_block>(block)), bid_offset(-1)
 {
 }
 
@@ -923,7 +924,7 @@ std::string expr_while::dump(int indent) const
 expr_for::expr_for(const char *fn, int line, expr_i *e0, expr_i *e1,
   expr_i *e2, expr_i *block)
   : expr_i(fn, line), e0(e0), e1(e1), e2(e2),
-    block(ptr_down_cast<expr_block>(block))
+    block(ptr_down_cast<expr_block>(block)), bid_offset(-1)
 {
 }
 
@@ -942,7 +943,8 @@ std::string expr_for::dump(int indent) const
 }
 
 expr_feach::expr_feach(const char *fn, int line, expr_i *ce, expr_i *block)
-  : expr_i(fn, line), ce(ce), block(ptr_down_cast<expr_block>(block))
+  : expr_i(fn, line), ce(ce), block(ptr_down_cast<expr_block>(block)),
+    bid_offset(-1)
 {
 }
 

@@ -371,9 +371,10 @@ struct refvar_igrd {
   ~refvar_igrd() {
     if (cp != 0) { cp->dec_invalidate_guard(); }
   }
-  void set(Tc& c) {
+  Tc& set(Tc& c) {
     if (cp != 0) { cp->dec_invalidate_guard(); }
     cp = &c;
+    return c;
   }
   Tc& get() const {
     return *cp;
@@ -407,9 +408,10 @@ struct valvar_igrd {
   valvar_igrd(const Tc& x) : c(x) {
     c.inc_invalidate_guard();
   }
-  void set(const Tc& x) {
+  Tc& set(const Tc& x) {
     c = x;
     c.inc_invalidate_guard();
+    return c;
   }
   Tc& get() const {
     return c;

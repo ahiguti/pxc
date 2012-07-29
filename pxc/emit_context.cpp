@@ -102,11 +102,13 @@ void emit_context::set_file_line(const expr_i *e)
 
 void emit_context::set_stmt_context(const emit_context_stmt& s)
 {
+// if (s.stmt) { fprintf(stderr, "set_stmt_context %p %s\n", s.stmt, s.stmt->dump(0).c_str()); }
   sct = s;
 }
 
 void emit_context::reset_stmt_context()	
 {
+// if (sct.stmt) { fprintf(stderr, "reset_stmt_context %p\n", sct.stmt, sct.stmt->dump(0).c_str()); }
   sct = emit_context_stmt();
 }
 
