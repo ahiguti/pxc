@@ -74,7 +74,7 @@ expr_i *expr_var_new(const char *fn, int line, const char *sym, expr_i *typ,
 expr_i *expr_extval_new(const char *fn, int line, const char *sym,
   expr_i *typ, const char *cname, attribute_e visi);
 expr_i *expr_argdecls_new(const char *fn, int line, const char *sym,
-  expr_i *typ, bool byref_flag, expr_i *rest);
+  expr_i *typ, passby_e passby, expr_i *rest);
 expr_i *expr_stmts_new(const char *fn, int line, expr_i *head, expr_i *rest);
 expr_i *expr_block_new(const char *fn, int line, expr_i *tparams,
   expr_i *inherit, expr_i *argdecls, expr_i *rettyp, expr_i *stmts);

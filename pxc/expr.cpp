@@ -11,7 +11,8 @@
 
 // vim:sw=2:ts=8:ai
 
-#include "expr_impl.hpp"
+#include "expr_misc.hpp"
+#include "checktype.hpp"
 #include "emit.hpp"
 #include "auto_free.hpp"
 #include "util.hpp"
@@ -53,8 +54,8 @@ expr_i *expr_extval_new(const char *fn, int line, const char *sym,
 expr_i *expr_stmts_new(const char *fn, int line, expr_i *head, expr_i *rest)
 { return new expr_stmts(fn, line, head, rest); }
 expr_i *expr_argdecls_new(const char *fn, int line, const char *sym,
-  expr_i *type_uneval, bool byref_flag, expr_i *rest)
-{ return new expr_argdecls(fn, line, sym, type_uneval, byref_flag, rest); }
+  expr_i *type_uneval, passby_e passby, expr_i *rest)
+{ return new expr_argdecls(fn, line, sym, type_uneval, passby, rest); }
 expr_i *expr_block_new(const char *fn, int line, expr_i *tparams,
   expr_i *inherit, expr_i *argdecls, expr_i *rettype, expr_i *stmts)
 { return new expr_block(fn, line, tparams, inherit, argdecls, rettype,

@@ -11,7 +11,7 @@
 
 // vim:sw=2:ts=8:ai
 
-#include "expr_impl.hpp"
+#include "expr_misc.hpp"
 #include "term.hpp"
 #include "emit.hpp"
 #include "eval.hpp"
@@ -93,6 +93,7 @@ static bool is_condblock_stmt(expr_i *e)
   }
 }
 
+#ifndef MS_EMIT_1
 static bool inside_blockcond(expr_i *e)
 {
   while (true) {
@@ -109,6 +110,7 @@ static bool inside_blockcond(expr_i *e)
   }
   return false;
 }
+#endif
 
 static std::string get_term_cname(const term& t)
 {
@@ -140,29 +142,39 @@ static void emit_explicit_init_if(emit_context& em, const term& t)
 }
 
 static void emit_typestr_call_traits(emit_context& em, const term& te,
-  bool byref_flag)
+  passby_e passby)
 {
-  switch (get_call_trait(te)) {
-  case call_trait_e_raw_pointer:
-    if (!byref_flag) {
+  switch (passby) {
+  case passby_e_mutable_value:
+    emit_term(em, te);
+    break;
+  case passby_e_const_value:
+    em.puts("const ");
+    emit_term(em, te);
+    break;
+  case passby_e_mutable_reference:
+    emit_term(em, te);
+    em.puts("& ");
+    break;
+  case passby_e_const_reference:
+    em.puts("const ");
+    emit_term(em, te);
+    em.puts("& ");
+    break;
+  case passby_e_unspecified:
+    switch (get_call_trait(te)) {
+    case call_trait_e_raw_pointer:
       emit_term(em, te);
       em.puts("::rawptr const");
-    } else {
+      break;
+    case call_trait_e_const_ref_nonconst_ref:
+      em.puts("const ");
       emit_term(em, te);
       em.puts("&");
-    }
-    break;
-  case call_trait_e_const_ref_nonconst_ref:
-    if (!byref_flag) {
-      em.puts("const ");
-    }
-    emit_term(em, te);
-    em.puts("&");
-    break;
-  case call_trait_e_value:
-    emit_term(em, te);
-    if (byref_flag) {
-      em.puts("&");
+      break;
+    case call_trait_e_value:
+      emit_term(em, te);
+      break;
     }
     break;
   }
@@ -219,40 +231,43 @@ static std::string csymbol_var(const expr_var *ev, bool cdecl)
   }
 }
 
-// FIXME: for expr_argdecls also?
 static void emit_var_cdecl(emit_context& em, const expr_var *ev,
-  bool is_argdecl, bool byref)
+  bool is_argdecl, bool force_byref)
 {
   if (is_argdecl) { /* used for emitting struct constructor */
-    emit_typestr_call_traits(em, ev->type_of_this_expr, byref);
-      /* byref is true when it's passed as an upvalue */
+    passby_e passby = ev->varinfo.passby;
+    if (force_byref) {
+      switch (passby) {
+      case passby_e_unspecified:
+      case passby_e_const_value:
+	passby = passby_e_const_reference;
+	break;
+      case passby_e_mutable_value:
+	passby = passby_e_mutable_reference;
+	break;
+      case passby_e_const_reference:
+      case passby_e_mutable_reference:
+	break;
+      }
+    }
+    emit_typestr_call_traits(em, ev->type_of_this_expr, passby);
+      /* passby becomes by-ref when it's passed as an upvalue */
   } else {
     emit_term(em, ev->type_of_this_expr);
-    #if 0
-    if (byref) {
-      em.puts("&");
-    }
-    #endif
   }
   em.puts(" ");
   em.puts(csymbol_var(ev, true));
 }
 
 static void emit_arg_cdecl(emit_context& em, const expr_argdecls *ad,
-  bool is_argdecl)
+  bool is_argdecl, bool force_byref)
 {
   if (is_argdecl) {
-    emit_typestr_call_traits(em, ad->type_of_this_expr, ad->byref_flag);
+    emit_typestr_call_traits(em, ad->type_of_this_expr, ad->passby);
   } else {
     /* used for calling the user-defined constructor from the default
      * constructor */
     emit_term(em, ad->type_of_this_expr);
-    #if 0
-    if (byref) { // FIXME: is this possible?
-      abort();
-      em.puts("&");
-    }
-    #endif
   }
   em.puts(" ");
   ad->emit_symbol(em);
@@ -409,7 +424,7 @@ static void emit_argdecls(emit_context& em, expr_argdecls *ads, bool is_first)
     } else {
       em.puts(", ");
     }
-    emit_typestr_call_traits(em, a->get_texpr(), a->byref_flag);
+    emit_typestr_call_traits(em, a->get_texpr(), a->passby);
     em.puts(" ");
     a->emit_symbol(em);
   }
@@ -548,7 +563,7 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
 	if (i != flds.begin()) {
 	  em.puts(", ");
 	}
-	emit_var_cdecl(em, *i, true, false); // (*i)->emit_cdecl(em, true, false);
+	emit_var_cdecl(em, *i, true, false);
       }
       em.puts(")");
       emit_struct_constr_initializer(em, est, flds, false);
@@ -1104,10 +1119,8 @@ static void emit_function_argdecls(emit_context& em, expr_funcdef *efd)
     }
     if ((*i)->get_esort() == expr_e_var) {
       emit_var_cdecl(em, ptr_down_cast<expr_var>(*i), true, true);
-	// (*i)->emit_cdecl(em, true, true);
     } else {
-      emit_arg_cdecl(em, ptr_down_cast<expr_argdecls>(*i), true);
-	// (*i)->emit_cdecl(em, true, true);
+      emit_arg_cdecl(em, ptr_down_cast<expr_argdecls>(*i), true, true);
     }
   }
   /* upvalue thisptr */
@@ -1194,7 +1207,7 @@ static void emit_struct_constr_one(emit_context& em, expr_struct *est,
   if (emit_default_constr) {
     for (expr_argdecls *a = est->block->argdecls; a; a = a->rest) {
       em.indent('b');
-      emit_arg_cdecl(em, a, false); // a->emit_cdecl(em, false, false);
+      emit_arg_cdecl(em, a, false, false);
       emit_explicit_init_if(em, a->get_texpr());
       em.puts(";\n");
     }
@@ -1685,7 +1698,6 @@ static void emit_one_statement(emit_context& em, expr_stmts *stmts)
   sct.is_blockcond = is_condblock;
   sct.sep_blockscope_var = blockscope_defset_sep;
   sct.is_struct_or_global_block = is_struct_constr || is_global_block;
-    // FIXME: unused? remove?
   stmt_context_scoped scoped(em, sct);
 
   if (!blockscope_defset_sep) {
@@ -1832,26 +1844,6 @@ void expr_var::emit_symbol(emit_context& em) const
   em.puts(emit_symbol_str());
 }
 
-#if 0
-void expr_var::emit_cdecl(emit_context& em, bool is_argdecl, bool byref) const
-{
-  emit_var_cdecl(em, this, is_argdecl, byref);
-  #if 0
-  if (is_argdecl) {
-    emit_typestr_call_traits(em, type_of_this_expr, byref);
-  } else {
-    emit_term(em, type_of_this_expr);
-    if (byref) {
-      em.puts("&");
-    }
-  }
-  em.puts(" ");
-  em.puts(csymbol_var(this, true));
-  // this->emit_symbol(em);
-  #endif
-}
-#endif
-
 void expr_var::emit_value(emit_context& em)
 {
   this->emit_symbol(em);
@@ -1978,7 +1970,7 @@ bool expr_stmts::emit_local_decl_fastinit(emit_context& em)
   } else 
   #endif
   {
-    emit_var_cdecl(em, ev, false, false); // ev->emit_cdecl(em, false, false);
+    emit_var_cdecl(em, ev, false, false);
     em.puts(" = ");
     fn_emit_value(em, eop->arg1);
   }
@@ -2004,7 +1996,7 @@ static void emit_global_vars(emit_context& em, expr_block *gl_blk)
     if (!is_main_ns) {
       em.puts("extern ");
     }
-    emit_var_cdecl(em, e, false, false); // e->emit_cdecl(em, false, false);
+    emit_var_cdecl(em, e, false, false);
     if (is_main_ns) {
       emit_explicit_init_if(em, e->get_texpr());
     }
@@ -2032,7 +2024,7 @@ void expr_stmts::emit_local_decl(emit_context& em)
     if (e == 0) { continue; }
     em.set_file_line(e);
     em.indent('b');
-    emit_var_cdecl(em, e, false, false); // e->emit_cdecl(em, false, false);
+    emit_var_cdecl(em, e, false, false);
     emit_explicit_init_if(em, e->get_texpr());
     em.puts(";\n");
   }
@@ -2072,7 +2064,7 @@ void expr_block::emit_local_decl(emit_context& em, bool is_funcbody)
     }
     em.set_file_line(e);
     em.indent('b');
-    emit_var_cdecl(em, e, false, false); // e->emit_cdecl(em, false, false);
+    emit_var_cdecl(em, e, false, false);
     em.puts("; // localdecl\n");
   }
 }
@@ -2543,16 +2535,58 @@ void expr_for::emit_value(emit_context& em)
   fn_emit_value(em, block);
 }
 
+static bool arg_passby_byref(expr_argdecls *ad)
+{
+  const passby_e passby = ad->passby;
+  switch (passby) {
+  case passby_e_const_value:
+  case passby_e_mutable_value:
+    return false;
+  case passby_e_const_reference:
+  case passby_e_mutable_reference:
+    return false;
+  case passby_e_unspecified:
+    switch (get_call_trait(ad->get_texpr())) {
+    case call_trait_e_raw_pointer:
+    case call_trait_e_value:
+      return false;
+    case call_trait_e_const_ref_nonconst_ref:
+      return true;
+    }
+  }
+  abort();
+  return false;
+}
+
+static bool arg_passby_mutable(expr_argdecls *ad)
+{
+  const passby_e passby = ad->passby;
+  switch (passby) {
+  case passby_e_const_value:
+  case passby_e_const_reference:
+    return false;
+  case passby_e_mutable_value:
+  case passby_e_mutable_reference:
+    return true;
+  case passby_e_unspecified:
+    return false;
+  }
+  abort();
+  return false;
+}
+
 void expr_feach::emit_value(emit_context& em)
 {
   em.puts("{\n");
   em.add_indent(1);
   em.indent('f');
+  assert(block->argdecls != 0);
+  assert(block->argdecls->rest != 0);
+  expr_argdecls *const mapped = block->argdecls->rest;
   const std::string cetstr = get_term_cname(ce->get_texpr());
-  const bool mapped_byref_flag =
-    block->argdecls != 0 && block->argdecls->rest != 0 &&
-    block->argdecls->rest->byref_flag;
-  if (mapped_byref_flag) {
+  const bool mapped_byref_flag = arg_passby_byref(mapped);
+  const bool mapped_mutable_flag = arg_passby_mutable(mapped);
+  if (mapped_mutable_flag) {
     em.puts("");
   } else {
     em.puts("const ");
@@ -2563,10 +2597,10 @@ void expr_feach::emit_value(emit_context& em)
   em.puts(");\n");
   if (type_has_invalidate_guard(ce->get_texpr())) {
     em.indent('f');
-    if (mapped_byref_flag) {
-      em.puts("const pxcrt::refvar_igrd< ");
+    if (mapped_mutable_flag) {
+      em.puts("const pxcrt::refvar_igrd_nn< ");
     } else {
-      em.puts("const pxcrt::refvar_igrd< const ");
+      em.puts("const pxcrt::refvar_igrd_nn< const ");
     }
     em.puts(cetstr);
     em.puts(" > ag$fg(ag$fe);\n");
@@ -2578,7 +2612,7 @@ void expr_feach::emit_value(emit_context& em)
     em.indent('f');
     em.puts("for (");
     expr_argdecls *const adk = block->argdecls;
-    emit_arg_cdecl(em, adk, true); // adk->emit_cdecl(em, true, adk->byref_flag);
+    emit_arg_cdecl(em, adk, true, false);
     em.puts(" = 0; ");
     adk->emit_symbol(em);
     em.puts(" != sz$fe; ++");
@@ -2587,7 +2621,7 @@ void expr_feach::emit_value(emit_context& em)
     em.add_indent(1);
     em.indent('f');
     expr_argdecls *const adm = adk->rest;
-    emit_arg_cdecl(em, adm, true); // adm->emit_cdecl(em, true, adm->byref_flag);
+    emit_arg_cdecl(em, adm, true, false);
     em.puts(" = ag$fe");
     em.puts("[");
     adk->emit_symbol(em);
@@ -2602,7 +2636,7 @@ void expr_feach::emit_value(emit_context& em)
     em.indent('f');
     em.puts("for (");
     em.puts(cetstr);
-    if (mapped_byref_flag) {
+    if (mapped_mutable_flag) {
       em.puts("::iterator ");
     } else {
       em.puts("::const_iterator ");
@@ -2611,11 +2645,11 @@ void expr_feach::emit_value(emit_context& em)
     em.add_indent(1);
     em.indent('f');
     expr_argdecls *const adk = block->argdecls;
-    emit_arg_cdecl(em, adk, true); // adk->emit_cdecl(em, true, adk->byref_flag);
+    emit_arg_cdecl(em, adk, true, false);
     em.puts(" = i$fe->first;\n");
     expr_argdecls *const adm = adk->rest;
     em.indent('f');
-    emit_arg_cdecl(em, adm, true); // adm->emit_cdecl(em, true, adm->byref_flag);
+    emit_arg_cdecl(em, adm, true, false);
     em.puts(" = i$fe->second;\n");
     em.indent('f');
     fn_emit_value(em, block);
@@ -2917,8 +2951,10 @@ void emit_code(const std::string& dest_filename, expr_block *gl_block,
   emit_global_vars(em, gl_block);
   em.puts("/* function definitions */\n");
   emit_function_def(em);
+  em.finish_ns();
   /* main */
   em.puts("/* package main */\n");
+  em.start_ns();
   em.set_file_line(gl_block);
   const std::string mainfn = arena_get_ns_main_funcname(main_namespace);
   em.set_ns(main_namespace);

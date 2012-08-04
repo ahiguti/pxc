@@ -90,9 +90,9 @@ enum conversion_e {
 };
 
 enum call_trait_e {
-  call_trait_e_raw_pointer,
-  call_trait_e_const_ref_nonconst_ref,
-  call_trait_e_value,
+  call_trait_e_raw_pointer, /* pass-by-value, eliminates incref/decref */
+  call_trait_e_const_ref_nonconst_ref, /* pass-by-const-reference */
+  call_trait_e_value, /* pass-by-value */
 };
 
 enum funccall_e {
@@ -140,113 +140,6 @@ struct template_info {
 typedef std::list<std::string> nsalias_entries;
 typedef std::map<std::pair<std::string, std::string>, nsalias_entries>
   nsaliases_type;
-
-/* begin: global variables */
-extern expr_arena_type expr_arena;
-extern str_arena_type str_arena;
-extern topvals_type topvals;
-extern expr_block *global_block;
-extern loaded_namespaces_type loaded_namespaces;
-extern builtins_type builtins;
-extern errors_type cur_errors;
-extern std::string main_namespace;
-extern int compile_phase;
-extern nsaliases_type nsaliases;
-/* end: global variables */
-
-void fn_append_coptions(expr_i *e, coptions& copt_append);
-void fn_set_namespace(expr_i *e, const std::string& n, int& block_id_ns);
-void fn_set_tree_and_define_static(expr_i *e, expr_i *p, symbol_table *symtbl,
-  expr_stmts *stmt, bool is_template);
-void fn_update_tree(expr_i *e, expr_i *p, symbol_table *symtbl,
-  const std::string& curns);
-void fn_check_type(expr_i *e, symbol_table *symtbl);
-void fn_check_final(expr_i *e);
-void fn_emit_value(emit_context& em, expr_i *e, bool expand_tempvar = false);
-void fn_check_root(expr_i *e);
-void fn_check_closure(expr_i *e);
-void fn_compile(expr_i *e, expr_i *p, bool is_template);
-expr_i *fn_drop_non_exports(expr_i *e);
-void add_tparam_upvalues_funcdef(expr_funcdef *efd);
-
-void print_space(int n, char c, FILE *fp = stdout);
-std::string space_string(int n, char c);
-std::string dump_expr(int indent, expr_i *e);
-std::string get_full_name(expr_i *nssym);
-std::string to_short_name(const std::string& fullname);
-std::string get_namespace_part(const std::string& fullname);
-bool has_namespace(const std::string& name);
-std::string term_tostr(const term& t, term_tostr_sort s);
-std::string term_tostr_cname(const term& t);
-std::string term_tostr_human(const term& t);
-std::string term_tostr_list(const term_list& tl, term_tostr_sort s);
-std::string term_tostr_list_cname(const term_list& tl);
-std::string term_tostr_list_human(const term_list& tl);
-bool is_type(const term& t);
-bool is_void_type(const term& t);
-bool is_unit_type(const term& t);
-bool is_bool_type(const term& t);
-bool is_numeric_type(const term& t);
-bool is_smallpod_type(const term& t);
-bool is_string_type(const term& t);
-bool is_integral_type(const term& t);
-bool is_same_type(const term& t0, const term& t1);
-bool is_sub_type(const term& t0, const term& t1);
-bool is_tpdummy_type(const term& t);
-bool is_function(const term& t);
-bool is_ctypedef(const term& t);
-bool is_struct(const term& t);
-bool is_variant(const term& t);
-bool is_interface(const term& t);
-bool is_interface_or_impl(const term& t);
-bool is_noninterface_pointer(const term& t);
-bool is_interface_pointer(const term& t);
-bool is_const_pointer_family(const term& t);
-bool is_cm_pointer_family(const term& t);
-bool is_array_family(const term& t);
-bool is_map_family(const term& t);
-bool is_const_slice_family(const term& t);
-bool is_cm_slice_family(const term& t);
-bool is_weak_value_type(const term& t);
-bool has_userdef_constr(const term& t);
-bool type_has_invalidate_guard(const term& t);
-bool type_allow_feach(const term& t);
-bool is_compatible_pointer(const term&t0, const term& t1);
-std::string get_category(const term& t);
-term get_pointer_target(const term& t);
-call_trait_e get_call_trait(const term& t);
-bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap);
-#if 0
-std::string ulong_to_string(unsigned long long v);
-std::string long_to_string(long long v);
-#endif
-const char *tok_string(const expr_i *e, int tok);
-int count_newline(const char *str);
-symbol_table *get_current_frame_symtbl(symbol_table *lookup);
-expr_i *get_current_frame_expr(symbol_table *lookup);
-  /* funcdef, struct, interface */
-expr_i *get_current_block_expr(symbol_table *lookup);
-bool is_threaded_context(symbol_table *lookup);
-bool is_multithr_context(symbol_table *lookup);
-bool term_is_threaded(const term& t);
-bool term_is_multithr(const term& t);
-expr_funcdef *get_up_member_func(symbol_table *lookup);
-expr_i *find_parent(expr_i *e, expr_e t);
-const expr_i *find_parent_const(const expr_i *e, expr_e t); // FIXME: remove
-symbol_table *find_current_symbol_table(expr_i *e);
-expr_i *get_op_rhs(expr_i *e, int op);
-bool is_type_esort(expr_e es);
-bool is_type_or_func_esort(expr_e es);
-bool is_global_var(const expr_i *e);
-bool is_ancestor_symtbl(symbol_table *st1, symbol_table *st2);
-void check_inherit_threading(expr_struct *est);
-bool is_passby_cm_value(passby_e passby);
-bool is_passby_cm_reference(passby_e passby);
-bool is_passby_const(passby_e passby);
-bool is_passby_mutable(passby_e passby);
-
-void emit_code(const std::string& dest_filename, expr_block *gl_block,
-  generate_main_e gmain);
 
 struct symbol_common {
   symbol_common(expr_i *parent_expr)
@@ -299,8 +192,6 @@ struct expr_i {
   virtual void check_type(symbol_table *lookup) = 0;
   virtual std::string emit_symbol_str() const { return std::string(); }
   virtual void emit_symbol(emit_context& em) const { }
-  // virtual void emit_cdecl(emit_context& em, bool is_argdecl, bool byref)
-  //   const { }
   virtual bool has_expr_to_emit() const = 0;
   virtual bool single_asgnstmt() const = 0;
 public:
@@ -323,8 +214,6 @@ public:
   symbol_table *symtbl_lexical;
   int tempvar_id;
   variable_info tempvar_varinfo;
-  // passby_e tempvar_passby : 3;
-  // bool tempvar_extent_block : 1;
   bool require_lvalue : 1;
   bool asgnstmt_top : 1;
 };
@@ -401,6 +290,7 @@ public:
 };
 
 struct expr_ns : public expr_i {
+  /* 'namespace' or 'import' */
   expr_ns(const char *fn, int line, expr_i *nssym, bool import, bool pub,
     const char *nsalias);
   expr_i *clone() const { return new expr_ns(*this); }
@@ -516,7 +406,6 @@ public:
 struct expr_symbol : public expr_i {
   expr_symbol(const char *fn, int line, expr_i *nssym);
   expr_i *clone() const;
-  // expr_i *clone() const { return new expr_symbol(*this); }
   expr_e get_esort() const { return expr_e_symbol; }
   int get_num_children() const { return 1; }
   expr_i *get_child(int i) { return i == 0 ? nssym : 0; }
@@ -543,7 +432,7 @@ public:
 struct expr_var : public expr_i {
   expr_var(const char *fn, int line, const char *sym, expr_i *type_uneval,
     passby_e passby, attribute_e attr);
-  expr_i *clone() const; // { return new expr_var(*this); }
+  expr_i *clone() const;
   expr_e get_esort() const { return expr_e_var; }
   int get_num_children() const { return 1; }
   expr_i *get_child(int i) { return i == 0 ? type_uneval : 0; }
@@ -561,7 +450,6 @@ struct expr_var : public expr_i {
   bool single_asgnstmt() const { return false; }
   std::string emit_symbol_str() const;
   void emit_symbol(emit_context& em) const;
-  // void emit_cdecl(emit_context& em, bool is_argdecl, bool byref) const;
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
@@ -676,7 +564,7 @@ public:
 
 struct expr_argdecls : public expr_i {
   expr_argdecls(const char *fn, int line, const char *sym, expr_i *type_uneval,
-    bool byref_flag, expr_i *rest);
+    passby_e passby, expr_i *rest);
   expr_i *clone() const;
   expr_e get_esort() const { return expr_e_argdecls; }
   int get_num_children() const { return 2; }
@@ -699,49 +587,16 @@ struct expr_argdecls : public expr_i {
   bool single_asgnstmt() const { return false; }
   std::string emit_symbol_str() const;
   void emit_symbol(emit_context& em) const;
-  // void emit_cdecl(emit_context& em, bool is_argdecl, bool byref) const;
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
   const char *const sym;
   std::string ns;
   expr_te *type_uneval;
-  bool byref_flag;
+  passby_e passby;
+  // bool byref_flag; // FIXME: remove
   expr_argdecls *rest;
 };
-
-#if 0
-struct expr_inherit : public expr_i {
-  expr_inherit(const char *fn, int line, expr_i *sym, expr_i *rest);
-  expr_i *clone() const { return new expr_inherit(*this); }
-  expr_e get_esort() const { return expr_e_inherit; }
-  int get_num_children() const { return 2; }
-  expr_i *get_child(int i) {
-    if (i == 0) { return nssym; }
-    else if (i == 1) { return rest; }
-    return 0;
-  }
-  void set_child(int i, expr_i *e) {
-    if (i == 0) { nssym = ptr_down_cast<expr_nssym>(e); }
-    else if (i == 1) { rest = ptr_down_cast<expr_inherit>(e); }
-  }
-  void set_namespace_one(const std::string& n) { ns = n; }
-  std::string get_ns() const { return ns; }
-  void check_type(symbol_table *lookup);
-  void emit_value(emit_context& em) { }
-  std::string dump(int indent) const;
-  const expr_i *get_symdef() const;
-  expr_i *resolve_symdef();
-  void set_symdef(expr_i *e) { symbol_def = e; }
-public:
-  expr_nssym *nssym;
-  std::string ns;
-  expr_inherit *rest;
-  const std::string fullsym;
-private:
-  expr_i *symbol_def;
-};
-#endif
 
 struct expr_block : public expr_i {
   expr_block(const char *fn, int line, expr_i *tparams, expr_i *inherit,
@@ -1063,9 +918,6 @@ struct expr_funcdef : public expr_i {
   bool has_expr_to_emit() const { return false; }
   bool single_asgnstmt() const { return false; }
   void emit_symbol(emit_context& em) const;
-  #if 0
-  void emit_cdecl(emit_context& em, bool is_argdecl, bool byref) const;
-  #endif
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:

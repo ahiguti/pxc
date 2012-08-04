@@ -12,7 +12,8 @@
 // vim:sw=2:ts=8:ai
 
 #include <vector>
-#include "expr_impl.hpp"
+#include "expr_misc.hpp"
+#include "checktype.hpp"
 #include "eval.hpp"
 #include "util.hpp"
 

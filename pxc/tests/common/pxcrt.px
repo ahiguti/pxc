@@ -550,11 +550,11 @@ struct rcptr { /* T must have an intrusive count */
   typedef T *rawptr;
   template <typename Tx> friend struct rcptr;
   rcptr() : ptr(new T()) { }
-  rcptr(const rcptr& x) : ptr(x.ptr) { ptr->incref$z(); }
-  rcptr(T *x) : ptr(x) { ptr->incref$z(); }
+  rcptr(const rcptr& x) : ptr(x.ptr) { if (ptr) ptr->incref$z(); }
+  rcptr(T *x) : ptr(x) { if (ptr) ptr->incref$z(); }
   /* ref{foo} to ref{ifoo} */
   template <typename Tx> rcptr(const rcptr<Tx>& x) : ptr(x.get()) {
-    ptr->incref$z();
+    if (ptr) ptr->incref$z();
   }
   /* boxing foo to ref{ifoo} */
   template <typename Tx> explicit rcptr(const Tx& x) : ptr(new T(x)) { }
@@ -579,15 +579,13 @@ struct rcptr { /* T must have an intrusive count */
   operator T *() const { return ptr; }
   T *get() const { return ptr; }
   T& operator *() const { return *ptr; }
-  // T& operator *() { return *ptr; }
   T *operator ->() const { return ptr; }
-  // T *operator ->() { return ptr; }
 private:
   T *ptr;
 private:
   rcptr& set(T *x) {
-    x->incref$z();
-    ptr->decref$z();
+    if (x) x->incref$z();
+    if (ptr) ptr->decref$z();
     ptr = x;
     return *this;
   }
@@ -596,11 +594,13 @@ struct invalid_index : public std::logic_error { invalid_index(); };
 struct invalid_field : public std::logic_error { invalid_field(); };
 struct null_dereference : public std::logic_error { null_dereference(); };
 struct would_invalidate : public std::logic_error { would_invalidate(); };
-struct virtual_function_call : public std::logic_error { virtual_function_call(); };
+struct virtual_function_call : public std::logic_error
+  { virtual_function_call(); };
 }; // namespace pxcrt
 
 extern "fdecl" inline
 namespace pxcrt {
+#if 0
 template <typename T> inline void deref(T& ptr) // TODO: remove
 {
   // if (ptr == 0) throw_null_dereference();
@@ -617,6 +617,7 @@ template <typename T> inline void deref(const T *ptr) // TODO: remove
 {
   // if (ptr == 0) throw_null_dereference();
 }
+#endif
 string void_to_string(void);
 string unit_to_string(unit v);
 string bool_to_string(bool v);

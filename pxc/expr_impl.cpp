@@ -11,7 +11,7 @@
 
 // vim:sw=2:ts=8:ai
 
-#include "expr_impl.hpp"
+#include "expr_misc.hpp"
 #include "eval.hpp"
 #include "util.hpp"
 
@@ -992,10 +992,10 @@ std::string expr_foldfe::dump(int indent) const
 
 
 expr_argdecls::expr_argdecls(const char *fn, int line, const char *sym,
-  expr_i *type_uneval, bool byref_flag, expr_i *rest)
+  expr_i *type_uneval, passby_e passby, expr_i *rest)
   : expr_i(fn, line), sym(sym),
-    type_uneval(ptr_down_cast<expr_te>(type_uneval)),
-    byref_flag(byref_flag), rest(ptr_down_cast<expr_argdecls>(rest))
+    type_uneval(ptr_down_cast<expr_te>(type_uneval)), passby(passby),
+    rest(ptr_down_cast<expr_argdecls>(rest))
 {
   type_of_this_expr.clear();
 }
