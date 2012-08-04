@@ -9,16 +9,17 @@
  */
 
 
-#ifndef PXC_EMIT_HPP
-#define PXC_EMIT_HPP
+#ifndef PXC_CHECKTYPE_HPP
+#define PXC_CHECKTYPE_HPP
 
 #include "expr_impl.hpp"
 
 namespace pxc {
 
-void emit_code(const std::string& dest_filename, expr_block *gl_block,
-  generate_main_e gmain);
-void fn_emit_value(emit_context& em, expr_i *e, bool expand_tempvar = false);
+void fn_check_type(expr_i *e, symbol_table *symtbl);
+void fn_check_root(expr_i *e);
+void fn_check_closure(expr_i *e);
+void add_tparam_upvalues_funcdef(expr_funcdef *efd);
 
 };
 

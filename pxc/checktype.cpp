@@ -12,7 +12,8 @@
 // vim:sw=2:ts=8:ai
 
 #include <vector>
-#include "expr_impl.hpp"
+#include "expr_misc.hpp"
+#include "checktype.hpp"
 #include "eval.hpp"
 #include "util.hpp"
 #include <signal.h>
@@ -33,7 +34,7 @@
 
 namespace pxc {
 
-std::string op_message(expr_op *eop)
+static std::string op_message(expr_op *eop)
 {
   if (eop == 0) {
     return std::string();
@@ -151,7 +152,7 @@ static bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
     } else if (astyp == expr_e_argdecls) {
       expr_argdecls *const ead = ptr_down_cast<expr_argdecls>(
 	sc->resolve_symdef());
-      if (!ead->byref_flag) {
+      if (!is_passby_mutable(ead->passby)) {
 	DBG_LV(fprintf(stderr, "expr_has_lvalue %s 2 false\n",
 	  a0->dump(0).c_str()));
 	if (!thro_flg) {
@@ -1508,8 +1509,10 @@ void expr_funccall::check_type(symbol_table *lookup)
 	  argcnt, efd->sym);
       }
       /* check lvalue and root argument expressions */
-      if (ad->byref_flag) {
-	check_lvalue(this, *j);
+      if (is_passby_cm_reference(ad->passby)) {
+	if (is_passby_mutable(ad->passby)) {
+	  check_lvalue(this, *j);
+	}
 	root_expr_reference(*j);
       } else {
 	root_expr_reference_or_value(*j);
@@ -1691,8 +1694,10 @@ void expr_funccall::check_type(symbol_table *lookup)
 	  arena_error_push(this, "  initializing argument %u of '%s'",
 	    argcnt, est->sym);
 	}
-	if (ad->byref_flag) {
-	  check_lvalue(this, *j);
+	if (is_passby_cm_reference(ad->passby)) {
+	  if (is_passby_mutable(ad->passby)) {
+	    check_lvalue(this, *j);
+	  }
 	  root_expr_reference(*j);
 	} else {
 	  root_expr_reference_or_value(*j);
@@ -1917,8 +1922,10 @@ void expr_feach::check_type(symbol_table *lookup)
       term_tostr_human(ta1).c_str(),
       term_tostr_human(telm).c_str());
   }
-  if (block->argdecls->rest->byref_flag) {
-    check_lvalue(this, ce);
+  if (is_passby_cm_reference(block->argdecls->rest->passby)) {
+    if (is_passby_mutable(block->argdecls->rest->passby)) {
+      check_lvalue(this, ce);
+    }
     root_expr_reference(ce);
   } else {
     root_expr_reference_or_value(ce);

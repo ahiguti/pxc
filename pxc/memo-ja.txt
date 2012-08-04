@@ -1,41 +1,54 @@
 ---------------------------------------------------------------------
 直近FIXMEとTODO
 
----------------------------------------------------------------------
-それなりに直近FIXMEとTODO
-
-- rcptr無駄に指す先をアロケートしてしまわないように
-- gcc-4.4.4のバグ？ -Wswitch-enumが効いていない しばらくgcc34を使う
-- test_14_root/refvar.px
-- test_14_root/condtemp.px refvarが無いエラーになるように
-- blockcond変数はdefault-constructibleなものでないとダメ。
-- テスト: fn_check_root廃止、rootはchecktypeの中で。
-- 引数のpassby指定
-- 変数のpassby指定
+- pimplイディオムが使えることを確認
+- boxing自動変換を廃止
+- 短絡boxingを再び有効に
+- namespace義務付け
+  - private namespace
+- 引数のconst/mutable参照渡し/値渡し明示。
+- add_root_requirement()するケースの整理、複数要求がある場合の処理。
+  - 関数に引数を参照渡ししている箇所では一時変数にしないとC++が困る
+- expr_feach::emit(): mapに対するemit
 - 構造体にslice等のweak型を含む型のfieldを置けないように
   is_weak_type()
-- コンテナからスライスへの変換の短い表記 x[..]
-- 自動変換が入ったら左辺値を取れないように(check_lvalue)
-- expr_feach::emit(): mapに対するemit
-- fn_check_rootテスト
-- ref型の一時変数を作ったときにはnullで暫定初期化してよい
-- check_return_exprテスト
 - operatorと組み込み関数について整理。大小比較は全型に？
+  - tree_mapに必要
+- tree_map_range
+- type categoryの整理
+
+---------------------------------------------------------------------
+FIXMEとTODO
+
+- rcptr無駄に指す先をアロケートしてしまわないように
+  - ref型の一時変数を作ったときにはnullで暫定初期化してよい
+- test_14_root/refvar.px
+- test_14_root/condtemp.px refvarが無いエラーになるように
+- コンテナからスライスへの変換の短い表記 x[..]
+- 自動変換が入ったら左辺値を取れないように?(check_lvalue)
+- if文がboolでなかった場合のエラーメッセージに行番号が出ない？
+- structコンストラクタに対するcheck_return_expr()
+- std::vector<bool>を使ってしまうと要素への参照が取れない
+
+---------------------------------------------------------------------
+TEST TODO
+
+- tpupを引数で参照渡しするときのconstnessが正しいコードを吐いているか
 - linear型の変数を宣言できないようになっているか
+- fn_check_rootテスト
+- check_return_exprテスト
+- テスト: fn_check_root廃止、rootはchecktypeの中で。
 - ユーザ定義constructorを持つ型のdefault constructible判定が正しいか
 - 型のパラメータにclosureやメソッドを使うと正しくエラーになるか？
-- if文がboolでなかった場合のエラーメッセージに行番号が出ない？
 - グローバルにユーザ定義コンストラクタを置けないのは、固定長配列の
   要素としても持てないようにチェックしているか。
   has_userdef_constr()
-- structコンストラクタに対するcheck_return_expr()
 - 型パラメータの文字列と数値がescapeされているか確認
-- std::vector<bool>を使ってしまうとコンパイルできない
-- inline_cに色々装飾付けられるが、エラー
 
 ---------------------------------------------------------------------
 TODO M1
 
+- gcc-4.4.4のバグ？ -Wswitch-enumが効いていない しばらくgcc34を使う
 - slice
 - cflagsの与え方など確定
 - interfaceの配列のように、テンプレパラメータが具体型でないといけない
@@ -54,10 +67,10 @@ TODO M2
 ---------------------------------------------------------------------
 TODO
 
+- inline_cに色々装飾付けられるが、エラー
 - arr.resize()のように参照引数が一個だけでthreadedならinvguardしなく
   てよい。
 - 定義前参照の可能性を解消
-- namespace義務付け
 - 情報をロスするような自動変換は止める
 - pure関数ならrootを省略できるケース
 - multi-indexコンテナ
@@ -94,7 +107,7 @@ TODO
 - interface型の一時変数を禁止(そもそもできない？)
 - namespace義務付け？
 - コンパイル全段階でatomicな更新を
-- 無名関数はテンプレート引数を持てない？(事実上無理、というか不要)
+- 無名関数はテンプレート引数を持てない？
 - null値を持てないなrefとcref
 - macroの右辺をte以外の式も許可
 - aliasを展開後の式をコンパイル(って何？)

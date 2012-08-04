@@ -13,6 +13,8 @@
 
 #include <vector>
 #include "eval.hpp"
+#include "checktype.hpp"
+#include "expr_misc.hpp"
 #include "util.hpp"
 
 #define DBG_UP(x)
@@ -467,7 +469,7 @@ static term eval_meta_argbyref(term_list& tlev)
     ad = ad->rest;
   }
   if (ad != 0) {
-    return term(ad->byref_flag ? 1 : 0);
+    return term(is_passby_cm_reference(ad->passby) ? 1 : 0);
   }
   return term();
 }
