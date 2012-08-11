@@ -1,24 +1,26 @@
 ---------------------------------------------------------------------
-直近FIXMEとTODO
+FIXME/TODO M1
 
-- pimplイディオムが使えることを確認
-- boxing自動変換を廃止
-- 短絡boxingを再び有効に
-- namespace義務付け
-  - private namespace
-- 引数のconst/mutable参照渡し/値渡し明示。
-- add_root_requirement()するケースの整理、複数要求がある場合の処理。
-  - 関数に引数を参照渡ししている箇所では一時変数にしないとC++が困る
-- expr_feach::emit(): mapに対するemit
 - 構造体にslice等のweak型を含む型のfieldを置けないように
-  is_weak_type()
+  is_weak_type() あるいはヒープに置けなければそれでよい？
 - operatorと組み込み関数について整理。大小比較は全型に？
   - tree_mapに必要
 - tree_map_range
+- 短絡boxingを再び有効に
+- add_root_requirement()するケースの整理、複数要求がある場合の処理。
+  - 関数に引数を参照渡ししている箇所では一時変数にしないとC++が困る
+- expr_feach::emit(): mapに対するemit
+- list, set
 - type categoryの整理
 
+1. variantタグからintへの変換を実装し、それを使いgenericなcompareを
+   つくる
+2. tree_mapのキー比較はgeneric::compareを使う
+3. tree_map_rangeを実装
+4. tree_mapに対するforeach実装
+
 ---------------------------------------------------------------------
-FIXMEとTODO
+TEST TODO M1
 
 - rcptr無駄に指す先をアロケートしてしまわないように
   - ref型の一時変数を作ったときにはnullで暫定初期化してよい
@@ -26,12 +28,11 @@ FIXMEとTODO
 - test_14_root/condtemp.px refvarが無いエラーになるように
 - コンテナからスライスへの変換の短い表記 x[..]
 - 自動変換が入ったら左辺値を取れないように?(check_lvalue)
-- if文がboolでなかった場合のエラーメッセージに行番号が出ない？
 - structコンストラクタに対するcheck_return_expr()
 - std::vector<bool>を使ってしまうと要素への参照が取れない
 
 ---------------------------------------------------------------------
-TEST TODO
+TEST TODO M2
 
 - tpupを引数で参照渡しするときのconstnessが正しいコードを吐いているか
 - linear型の変数を宣言できないようになっているか
@@ -46,8 +47,9 @@ TEST TODO
 - 型パラメータの文字列と数値がescapeされているか確認
 
 ---------------------------------------------------------------------
-TODO M1
+FIXME/TODO M3
 
+- call traitがvalueの型を作れるようにする？
 - gcc-4.4.4のバグ？ -Wswitch-enumが効いていない しばらくgcc34を使う
 - slice
 - cflagsの与え方など確定
@@ -56,8 +58,12 @@ TODO M1
 - 文字列リテラルのテスト
 
 ---------------------------------------------------------------------
-TODO M2
+FIXME/TODO M4
 
+- namespace義務付け
+  - private namespace. 親namespaceからのみシンボルが参照できる.
+- boxing自動変換を廃止
+- pimplイディオムが使えることを確認
 - multimap, set, multiset, list
 - foreach: multimap, set, multiset, list
 - 例外の整理とstacktrace
@@ -160,6 +166,10 @@ TODO
 ---------------------------------------------------------------------
 DONE
 
+- if文がboolでなかった場合のエラーメッセージに行番号が出ない？(done)
+- variantのtagからintへの変換(done)
+- test_22_error/tparam.px (done)
+- 引数のconst/mutable参照渡し/値渡し明示。(done)
 - integralやpointer downcast以外の自動変換を止める？(done)
 - foreachをsliceにも(done)
 - main.printlnがエラー(done)
@@ -4725,3 +4735,39 @@ emit_asgnstmt_list(emit_context& em, const asgnstmt_list& asl, expr_i *eprev,
   別途定義されているから。
 }
 
+---------------------------------------------------------------------
+参照やweak型を返す関数
+
+- 参照やweak型を返すような関数はexternなコンテナ型のメンバ関数のみ
+  許可する? 帰ってきたデータをrootするには、そのコンテナを
+  invalidate_guardする。
+- ユーザ定義関数で参照やweak型を返せるようにするには、
+  案1: returnした式が第一引数のobject由来(そのobjectをroot/invguard
+    している間は返す式も有効)であることをコンパイラが確認せねばなら
+    ない。
+  案2: returnした式は引数由来であることをコンパイラが確認。呼び出し
+    元は全引数をroot/invguardする。
+- 参照(or weak)返値zが引数x由来であるとは、xをroot/invguardしている
+  間はzが有効であること。
+  - x自身
+  - xのslice, range, 直接要素 (要素の要素はダメ)
+  - それらのstruct field (variantはダメ)
+  - それらの固定長配列要素
+
+
+---------------------------------------------------------------------
+weak型の制限
+
+案1:
+- returnで返すのは不可? これを許可するには依存オブジェクトをコンパイ
+  ラが知らなければならない
+- 返値型として使えない
+- 初期化以外の代入不可? 型が一致していても依存するオブジェクトが異な
+  るかもしれないから。
+- 構造体のフィールドには置けない。
+- extern template classの引数には使えない
+
+案2:
+- weak型変数は全て依存する式が決まっている。
+- 同じ式に依存するweak型変数どうしは代入可能
+- 返値型として使った場合は第一引数に依存。

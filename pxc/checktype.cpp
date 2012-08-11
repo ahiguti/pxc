@@ -73,7 +73,7 @@ static void check_bool_expr(expr_op *eop, expr_i *a0)
   }
   const std::string s0 = term_tostr(a0->resolve_texpr(),
     term_tostr_sort_humanreadable);
-  arena_error_push(eop, "bool type expected (got: %s) %s",
+  arena_error_push(eop != 0 ? eop : a0, "bool type expected (got: %s) %s",
     s0.c_str(), op_message(eop).c_str());
 }
 
@@ -85,7 +85,7 @@ static void check_integral_expr(expr_op *eop, expr_i *a0)
   }
   const std::string s0 = term_tostr(a0->resolve_texpr(),
     term_tostr_sort_humanreadable);
-  arena_error_push(eop, "integral type expected (got: %s) %s",
+  arena_error_push(eop != 0 ? eop : a0, "integral type expected (got: %s) %s",
     s0.c_str(), op_message(eop).c_str());
 }
 
@@ -97,7 +97,7 @@ static void check_numeric_expr(expr_op *eop, expr_i *a0)
   }
   const std::string s0 = term_tostr(a0->resolve_texpr(),
     term_tostr_sort_humanreadable);
-  arena_error_push(eop, "numeric type expected (got: %s) %s",
+  arena_error_push(eop != 0 ? eop : a0, "numeric type expected (got: %s) %s",
     s0.c_str(), op_message(eop).c_str());
 }
 
@@ -305,7 +305,7 @@ static term get_array_elem_texpr(expr_op *eop, term& t0)
 	return tparams->param_def;
       } else if (std::string(est->category) == "cslice") {
 	return tparams->param_def;
-      } else if (std::string(est->category) == "map") {
+      } else if (std::string(est->category) == "tree_map") {
 	if (tparams->rest != 0) {
 	  return tparams->rest->param_def;
 	}
@@ -332,7 +332,7 @@ static term get_array_index_texpr(expr_op *eop, term& t0)
 	return builtins.type_size_t;
       } else if (std::string(est->category) == "cslice") {
 	return builtins.type_size_t;
-      } else if (std::string(est->category) == "map") {
+      } else if (std::string(est->category) == "tree_map") {
 	if (tparams->rest != 0) {
 	  return tparams->param_def;
 	}
@@ -540,6 +540,10 @@ static void check_var_type(term& typ, expr_i *e, const char *sym,
     arena_error_push(e, "interface type '%s' for variable or field '%s'",
       term_tostr_human(typ).c_str(), sym);
   }
+  if (term_has_unevaluated_expr(typ)) {
+    arena_error_push(e, "variable or field '%s' has an invalid type '%s'",
+      sym, term_tostr_human(typ).c_str());
+  }
   if (term_has_tparam(typ)) {
     arena_error_push(e,
       "internal error: variable or field '%s' has an unbound type parameter",
@@ -592,7 +596,7 @@ static bool is_default_constructible(const term& typ, expr_i *pos, size_t depth)
       return (args == 0 || args->empty()) ? false
 	: is_default_constructible(args->front(), pos, depth);
     }
-    if (cat == "varray" || cat == "map" || cat == "nocascade") {
+    if (cat == "varray" || cat == "tree_map" || cat == "nocascade") {
       return true;
     }
     if (cat != "" || est->cname != 0) {
@@ -1127,7 +1131,6 @@ void expr_op::check_type(symbol_table *lookup)
   fn_check_type(arg0, lookup);
   if (op == '.' || op == TOK_ARROW) {
     term t = arg0->resolve_texpr();
-    // expr_i *tedef = te->resolve_symdef();
     symbol_table *symtbl = 0;
     symbol_table *parent_symtbl = 0;
     std::string arg0_ns;
@@ -1176,7 +1179,6 @@ void expr_op::check_type(symbol_table *lookup)
       expr_typedef *const etd = ptr_down_cast<expr_typedef>(einst);
       if (is_cm_pointer_family(t)) {
 	t = get_pointer_target(t);
-	// tedef = te->resolve_symdef();
 	arg0_ns = einst->get_ns();
 	if (arg0_ns.empty()) {
 	  arg0_ns = "pxcrt";
@@ -1235,8 +1237,6 @@ void expr_op::check_type(symbol_table *lookup)
 	no_private, ns.c_str(), is_global_dummy, is_upvalue_dummy,
 	is_memfld_dummy);
       if (fo != 0) {
-	// expr_funcdef *efd = dynamic_cast<expr_funcdef *>(fo);
-	// if (efd != 0 && !efd->is_virtual_or_member_function()) { }
 	DBG(fprintf(stderr, "found %s\n", sc->fullsym.c_str()));
 	sc->arg_hidden_this = arg0;
 	sc->arg_hidden_this_ns = arg0_ns;

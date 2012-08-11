@@ -234,9 +234,11 @@ static std::string csymbol_var(const expr_var *ev, bool cdecl)
 static void emit_var_cdecl(emit_context& em, const expr_var *ev,
   bool is_argdecl, bool force_byref)
 {
-  if (is_argdecl) { /* used for emitting struct constructor */
+  if (is_argdecl) {
+    /* used for emitting struct constructors and function upvalue args */
     passby_e passby = ev->varinfo.passby;
     if (force_byref) {
+      /* used for emitting function upvalue args */
       switch (passby) {
       case passby_e_unspecified:
       case passby_e_const_value:
@@ -945,7 +947,7 @@ static std::list<expr_i *> get_dep_tparams(expr_struct *est)
     cat == "tref" ||
     cat == "tcref" ||
     cat == "varray" ||
-    cat == "map") {
+    cat == "tree_map") {
     /* no dep */
   } else {
     if (args != 0) {
@@ -2535,6 +2537,7 @@ void expr_for::emit_value(emit_context& em)
   fn_emit_value(em, block);
 }
 
+#if 0
 static bool arg_passby_byref(expr_argdecls *ad)
 {
   const passby_e passby = ad->passby;
@@ -2557,6 +2560,7 @@ static bool arg_passby_byref(expr_argdecls *ad)
   abort();
   return false;
 }
+#endif
 
 static bool arg_passby_mutable(expr_argdecls *ad)
 {
@@ -2584,7 +2588,9 @@ void expr_feach::emit_value(emit_context& em)
   assert(block->argdecls->rest != 0);
   expr_argdecls *const mapped = block->argdecls->rest;
   const std::string cetstr = get_term_cname(ce->get_texpr());
-  const bool mapped_byref_flag = arg_passby_byref(mapped);
+  #if 0
+  const bool mapped_byref_flag = arg_passby_byref(mapped); // TODO: remove?
+  #endif
   const bool mapped_mutable_flag = arg_passby_mutable(mapped);
   if (mapped_mutable_flag) {
     em.puts("");

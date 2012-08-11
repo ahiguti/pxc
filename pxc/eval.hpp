@@ -34,6 +34,7 @@ term eval_local_lookup(const term& t, const std::string& name, expr_i *pos);
   /* returns t::foo */
 
 bool term_has_tparam(const term& t);
+bool term_has_unevaluated_expr(const term& t);
 expr_i *term_get_instance(term& t);
 const expr_i *term_get_instance_const(const term& t);
 
