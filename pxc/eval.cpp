@@ -204,9 +204,9 @@ expr_i *instantiate_template(expr_i *tmpl_root, term_list& args_move,
     arena_error_throw_pushed();
     return re;
   } catch (const std::exception& e) {
-    std::string s = e.what();
-    s = std::string(pos->fname) + ":" + ulong_to_string(pos->line)
-      + ": (instantiated from here) [" + k + "]\n" + s;
+    std::string m = e.what();
+    std::string s = std::string(pos->fname) + ":" + ulong_to_string(pos->line)
+      + ": (instantiated from here) [" + k + "]\n" + m;
     throw std::runtime_error(s);
   }
 }
@@ -370,6 +370,18 @@ static term eval_meta_apply(term_list& tlev, env_type& env,
   rtargs.insert(rtargs.begin(), tlev.begin() + 1, tlev.end());
   term rt(t0expr, rtargs);
   return eval_term_internal(rt, env, depth + 1, pos);
+}
+
+static term eval_meta_error(term_list& tlev, env_type& env,
+  size_t depth, expr_i *pos)
+{
+  if (tlev.size() < 1) {
+    return term();
+  }
+  const std::string m = meta_term_to_string(tlev.front(), true);
+  std::string s = std::string(pos->fname) + ":" + ulong_to_string(pos->line)
+    + ": " + m + "\n";
+  throw std::runtime_error(s);
 }
 
 static term eval_meta_argnum(term_list& tlev)
@@ -1316,6 +1328,8 @@ static term eval_metafunction(const std::string& name, term_list& tlev,
       r = eval_meta_symbol(tlev, env, depth, pos);
     } else if (name == "@apply") {
       r = eval_meta_apply(tlev, env, depth, pos);
+    } else if (name == "@error") {
+      r = eval_meta_error(tlev, env, depth, pos);
     }
   } catch (const std::exception& e) {
     std::string s = e.what();
@@ -1411,7 +1425,7 @@ static term eval_metafunction_lazy(const std::string& name, const term& t,
     }
   } catch (const std::exception& e) {
     std::string s = e.what();
-    s = std::string(pos->fname) + ":" + ulong_to_string(pos->line)
+    s += std::string(pos->fname) + ":" + ulong_to_string(pos->line)
       + ": (while evaluating expression: "
       + term_tostr(t, term_tostr_sort_humanreadable) + ")\n";
     throw std::runtime_error(s);
@@ -1753,6 +1767,27 @@ bool term_has_tparam(const term& t)
   }
   for (term_list::const_iterator i = targs->begin(); i != targs->end(); ++i) {
     if (term_has_tparam(*i)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool term_has_unevaluated_expr(const term& t)
+{
+  expr_i *const texpr = t.get_expr();
+  const term_list *const targs = t.get_args();
+  if (texpr == 0) {
+    return false;
+  }
+  if (texpr->get_esort() == expr_e_macrodef) {
+    return true;
+  }
+  if (targs == 0) {
+    return false;
+  }
+  for (term_list::const_iterator i = targs->begin(); i != targs->end(); ++i) {
+    if (term_has_unevaluated_expr(*i)) {
       return true;
     }
   }

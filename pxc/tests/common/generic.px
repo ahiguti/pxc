@@ -4,9 +4,10 @@ public import meta "m";
 
 public threaded function {t} int compare(t x, t y)
 {
-  macro symstr concat{t, "_compare"};
+  macro symstr m::concat{t, "_compare"};
   macro sym m::symbol{t, symstr};
-  if (eq{m::to_string{sym}, symstr}) {
+  macro cat m::category{t};
+  if (m::eq{m::to_string{sym}, symstr}) {
     return sym(x, y);
   } else if (m::eq{cat, "farray"}) {
     size_t const sz = m::at{t, 1};
@@ -33,6 +34,8 @@ public threaded function {t} int compare(t x, t y)
       return 1;
     }
     return 0;
+  } else if (m::eq{cat, "tree_map"}) {
+    return m::error{"not implemented"};
   } else if (m::eq{cat, "struct"}) {
     foreach (name, fld : t) {
       int const c = compare(x.fld, y.fld);
@@ -41,8 +44,22 @@ public threaded function {t} int compare(t x, t y)
       }
     }
     return 0;
+  } else if (m::eq{cat, "union"}) {
+    int const tc = compare(union_tag(x), union_tag(y));
+    if (tc != 0) {
+      return tc;
+    }
+    foreach (name, fld : t) {
+      if (case x.fld) {
+	int const c = compare(x.fld, y.fld);
+	if (c != 0) {
+	  return c;
+	}
+      }
+    }
+    return 0;
   } else {
-    // compile error
+    return m::error{m::concat{"not implemented for type '", t, "'"}};
   }
 }
 
@@ -65,7 +82,7 @@ public threaded function {t} string to_string(t x)
     }
     s.append("}");
     return s;
-  } else if (m::eq{cat, "map"}) {
+  } else if (m::eq{cat, "tree_map"}) {
     string s = "{";
     bool first = true;
     foreach (m::at{t, 0} k, m::at{t, 1} v : x) {
@@ -81,8 +98,8 @@ public threaded function {t} string to_string(t x)
     }
     s.append("}");
     return s;
-  } else if (m::or{m::eq{cat, "ref"}, m::eq{cat, "cref"}, m::eq{cat, "tref"},
-    m::eq{cat, "tcref"}}) {
+  } else if (m::or{m::eq{cat, "ref"}, m::eq{cat, "cref"},
+      m::eq{cat, "tref"}, m::eq{cat, "tcref"}}) {
     string s = "{";
     s.append(to_string(*x));
     s = "}";
@@ -117,4 +134,24 @@ public threaded function {t} string to_string(t x)
     return "-";
   }
 }
+
+public threaded function {t} uint union_tag(t x)
+{
+  if (m::eq{m::category{t}, "union"}) {
+    return union_tag_impl(x);
+  } else {
+    return m::error{"invalid type"};
+  }
+}
+
+private threaded extern "generic::union_tag_impl"
+  function {t} uint union_tag_impl(t x);
+
+extern "fdecl" inline
+namespace generic {
+template <typename T> unsigned int union_tag_impl(const T& x)
+{
+  return x.$e;
+}
+};
 

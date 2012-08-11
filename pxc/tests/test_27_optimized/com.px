@@ -1,0 +1,36 @@
+
+import generic;
+
+function bool less_int_simple(int x, int y)
+{
+  return x < y;
+}
+
+// expected to generate the same object code as less_int_simple
+// when c++ optimization is enabled
+function bool less_int_generic(int x, int y)
+{
+  return generic::compare{int}(x, y) < 0;
+}
+
+// 00000000 <$n::less_int_simple$f(int, int)>:
+//    0:   55                      push   %ebp
+//    1:   89 e5                   mov    %esp,%ebp
+//    3:   8b 45 0c                mov    0xc(%ebp),%eax
+//    6:   39 45 08                cmp    %eax,0x8(%ebp)
+//    9:   5d                      pop    %ebp
+//    a:   0f 9c c0                setl   %al
+//    d:   c3                      ret
+//    e:   66 90                   xchg   %ax,%ax
+
+// 00000010 <$n::less_int_generic$f(int, int)>:
+//   10:   55                      push   %ebp
+//   11:   89 e5                   mov    %esp,%ebp
+//   13:   8b 45 0c                mov    0xc(%ebp),%eax
+//   16:   39 45 08                cmp    %eax,0x8(%ebp)
+//   19:   5d                      pop    %ebp
+//   1a:   0f 9c c0                setl   %al
+//   1d:   c3                      ret
+//   1e:   66 90                   xchg   %ax,%ax
+
+

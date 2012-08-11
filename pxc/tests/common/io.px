@@ -1,7 +1,10 @@
-namespace io;
-public import meta;
 
-public extern "pxcio::pxc_argv" vector{string} argv;
+namespace io;
+
+public import meta;
+public import container;
+
+public extern "pxcio::pxc_argv" container::vector{string} argv;
 public extern "pxcio::mainio" ioref main;
 
 public macro ioref tref{io};
@@ -28,7 +31,6 @@ public extern "O_WRONLY"	int O_WRONLY;
 public extern "O_RDWR"		int O_RDWR;
 public extern "O_CREAT"		int O_CREAT;
 public extern "O_EXCL"		int O_EXCL;
-// public extern "O_NOTTY"		int O_NOTTY;
 public extern "O_TRUNC"		int O_TRUNC;
 public extern "O_APPEND"	int O_APPEND;
 public extern "O_NONBLOCK"	int O_NONBLOCK;
@@ -84,32 +86,37 @@ public threaded function int io_write_file(ioref i, string fn, string buf) {
   return file_write(f, buf);
 }
 
-public threaded function {t} void io_print(ioref i, t x)
+public threaded function {t} void io_stdout_print(ioref i, t x)
 {
   if (meta::eq{meta::to_string{t}, "string"}) {
-    io_print_string(i, x);
+    io_stdout_print_string(i, x);
   } else {
-    io_print_string(i, meta::symbol{t, meta::concat{t, "_to_string"}}(x));
+    io_stdout_print_string(i,
+      meta::symbol{t, meta::concat{t, "_to_string"}}(x));
   }
 }
 
-public threaded function {t} void io_println(ioref i, t x)
+public threaded function {t} void io_stdout_println(ioref i, t x)
 {
   if (meta::eq{meta::to_string{t}, "string"}) {
-    io_println_string(i, x);
+    string s = x;
+    s.append("\n");
+    io_stdout_print_string(i, s);
   } else {
-    io_println_string(i, meta::symbol{t, meta::concat{t, "_to_string"}}(x));
+    string s = meta::symbol{t, meta::concat{t, "_to_string"}}(x);
+    s.append("\n");
+    io_stdout_print_string(i, s);
   }
 }
 
 public function {t} void print(t x)
 {
-  io_print(main, x);
+  io_stdout_print(main, x);
 }
 
 public function {t} void println(t x)
 {
-  io_println(main, x);
+  io_stdout_println(main, x);
 }
 
 public multithreaded extern "pxcio::io_impl" "linear" struct io { }
@@ -117,10 +124,8 @@ public multithreaded extern "pxcio::file_impl" "linear" struct file { }
 
 private threaded extern "pxcio::io_initialize"
   function int io_initialize(ioref i);
-private threaded extern "pxcio::io_print_string"
-  function void io_print_string(ioref i, string x);
-private threaded extern "pxcio::io_println_string"
-  function void io_println_string(ioref i, string x);
+private threaded extern "pxcio::io_stdout_print_string"
+  function void io_stdout_print_string(ioref i, string x);
 
 io_initialize(main);
 
@@ -140,7 +145,7 @@ struct file_impl;
 
 extern "fdecl" inline
 namespace pxcio {
-extern pxcrt::vector<pxcrt::string> pxc_argv;
+extern container::vector<pxcrt::string> pxc_argv;
 extern pxcrt::rcptr< pxcrt::trcval<pxcio::io_impl> > mainio;
 struct io_impl {
   io_impl() { }
@@ -169,11 +174,8 @@ int io_stat(io_ptr::rawptr i, const pxcrt::string& fn, pxcio::statbuf& buf);
 int file_errno(file_ptr::rawptr f);
 int io_errno(io_ptr::rawptr i);
 unsigned int io_sleep(io_ptr::rawptr i, unsigned int sec);
-inline void io_print_string(io_ptr::rawptr i, const pxcrt::string& x) {
+inline void io_stdout_print_string(io_ptr::rawptr i, const pxcrt::string& x) {
   fwrite(x.data(), x.size(), 1, stdout);
-}
-inline void io_println_string(io_ptr::rawptr i, const pxcrt::string& x) {
-  io_print_string(i, x + "\n");
 }
 };
 
@@ -181,7 +183,7 @@ extern "fdef" inline
 namespace pxcio {
 #include <stdlib.h>
 #include <string.h>
-pxcrt::vector<pxcrt::string> pxc_argv;
+container::vector<pxcrt::string> pxc_argv;
 pxcrt::rcptr< pxcrt::trcval<pxcio::io_impl> > mainio;
 file_ptr io_open(io_ptr::rawptr i, const pxcrt::string& fn, int flags, int md)
 {

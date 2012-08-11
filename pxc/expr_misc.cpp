@@ -393,7 +393,7 @@ bool is_array_family(const term& t)
 bool is_map_family(const term& t)
 {
   const std::string cat = get_category(t);
-  return cat == "map";
+  return cat == "tree_map";
 }
 
 bool is_const_slice_family(const term& t)
@@ -466,7 +466,7 @@ bool has_userdef_constr(const term& t)
 bool type_has_invalidate_guard(const term& t)
 {
   const std::string cat = get_category(t);
-  if (cat == "varray" || cat == "map") {
+  if (cat == "varray" || cat == "tree_map") {
     return true;
   }
   return false;
@@ -475,7 +475,8 @@ bool type_has_invalidate_guard(const term& t)
 bool type_allow_feach(const term& t)
 {
   const std::string cat = get_category(t);
-  if (cat == "varray" || cat == "farray" || cat == "map" || cat == "slice") {
+  if (cat == "varray" || cat == "farray" || cat == "tree_map"
+    || cat == "slice") {
     return true;
   }
   return false;

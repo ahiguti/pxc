@@ -249,6 +249,7 @@ void arena_error_throw_pushed()
     s += (*i);
     s += "\n";
   }
+  cur_errors.clear();
   throw std::runtime_error(s);
 }
 
