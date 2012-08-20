@@ -7,12 +7,12 @@ WriteMakefile(
     VERSION_FROM      => 'lib/PXC/Loader.pm', # finds $VERSION
     PREREQ_PM         => {}, # e.g., Module::Name => 1.1
     ($] >= 5.005 ?     ## Add these new keywords supported since 5.005
-      (ABSTRACT_FROM  => 'lib/PXC/Loader.pm', # retrieve abstract from module
-       AUTHOR         => 'Akira Higuchi <a@localdomain>') : ()),
+      (AUTHOR         => 'Akira Higuchi <a@localdomain>') : ()),
     LIBS              => ['-ldl'], # e.g., '-lm'
     DEFINE            => '', # e.g., '-DHAVE_SOMETHING'
-    CC                => 'g++ -O -g -fPIC',
-    LD                => 'g++ -O -g -fPIC',
+    CC                => 'g++ -fPIC',
+    OPTIMIZE          => '-O -g -Wno-unused',
+    LD                => 'g++ -fPIC',
     INC               => '-I.', # e.g., '-I. -I/usr/include/other'
 	# Un-comment this if you add C files to link with later:
     # OBJECT            => '$(O_FILES)', # link all the C files too

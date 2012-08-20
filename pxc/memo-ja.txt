@@ -1,14 +1,17 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- add_root_requirement()するケースの整理、複数要求がある場合の処理。
+  - 関数に引数を参照渡ししている箇所では一時変数にしないとC++が困る
+- sliceの要素がlvalueを要してもslice自体はlvalueいらず、sliceかcslice
+  であるかによってlvalueを持つかが決まる(check_lvalueの修正)
+  - add_root_requirementの'[]'についても同様の修正必要(FIXME印を見よ)
 - 構造体にslice等のweak型を含む型のfieldを置けないように
   is_weak_type() あるいはヒープに置けなければそれでよい？
 - operatorと組み込み関数について整理。大小比較は全型に？
   - tree_mapに必要
 - tree_map_range
 - 短絡boxingを再び有効に
-- add_root_requirement()するケースの整理、複数要求がある場合の処理。
-  - 関数に引数を参照渡ししている箇所では一時変数にしないとC++が困る
 - expr_feach::emit(): mapに対するemit
 - list, set
 - type categoryの整理
@@ -73,6 +76,7 @@ FIXME/TODO M4
 ---------------------------------------------------------------------
 TODO
 
+- テンプレート引数にtrueが使えない？
 - inline_cに色々装飾付けられるが、エラー
 - arr.resize()のように参照引数が一個だけでthreadedならinvguardしなく
   てよい。
@@ -4771,3 +4775,50 @@ weak型の制限
 - weak型変数は全て依存する式が決まっている。
 - 同じ式に依存するweak型変数どうしは代入可能
 - 返値型として使った場合は第一引数に依存。
+
+---------------------------------------------------------------------
+for文emit改良できる？
+
+for (int i = 0; i < 100; ++i) {
+  ...
+}
+
+{
+  int i = 0;
+  while (true) {
+    if (i < 100) {
+      break;
+    }
+    ... // この中でcontinueするときの処理をどうするか？
+    ++i;
+  }
+}
+
+---------------------------------------------------------------------
+store_tempvar周り整理
+
+store_tempvar*: 式を一時変数に取る
+- add_root_requirementから
+  - 式の型が小さい型のconst値のとき値を一時変数に取る
+  - operator * のときポインタのコピーを一時変数に取る
+  - operator [] のときガードつきでコンテナの参照を一時変数に取る
+- root_stmtscope_reference_or_valueから
+  - 式を参照でrootできないとき(variant fieldのとき起きる)にその式の
+    値を一時変数に取る
+- expr_op::check_typeから
+  - 代入演算子のときで左辺がrootできない(variant fieldの)ときに右辺
+    の値を一時変数に取る
+- 以上
+
+add_root_requirement: 式の無効化対策をする
+- add_root_requirementから演算子式の構造について再帰的に呼ばれる
+- root_stmtscope_reference*から呼ばれる
+- expr_op::check_typeから代入演算子のケースでいろいろ呼ばれる
+- 以上 
+
+root_stmtscope_reference*:
+- expr_funccall::check_typeから各引数に対して呼ばれる
+- expr_feach::check_typeからコンテナに対して呼ばれる
+- expr_op::check_typeから代入演算子のケースで呼ばれる
+- 以上
+
