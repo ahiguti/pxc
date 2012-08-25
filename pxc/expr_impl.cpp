@@ -645,6 +645,7 @@ expr_var::expr_var(const char *fn, int line, const char *sym,
     attr(attr)
 {
   varinfo.passby = passby;
+  varinfo.scope_block = true;
   type_of_this_expr.clear(); /* resolve_texpr() */
 }
 

@@ -251,6 +251,18 @@ bool is_integral_type(const term& t)
     t == builtins.type_size_t;
 }
 
+bool is_unsigned_integral_type(const term& t)
+{
+  /* TODO: slow */
+  return
+    t == builtins.type_bool ||
+    t == builtins.type_uchar ||
+    t == builtins.type_ushort ||
+    t == builtins.type_uint ||
+    t == builtins.type_ulong ||
+    t == builtins.type_size_t;
+}
+
 std::string get_category(const term& t)
 {
   const expr_struct *est = dynamic_cast<const expr_struct *>(
@@ -264,12 +276,12 @@ std::string get_category(const term& t)
 
 static bool is_pointer_category(const std::string& cat)
 {
-  return (cat == "cref" || cat == "ref" || cat == "tcref" || cat == "tref");
+  return (cat == "cptr" || cat == "ptr" || cat == "tcptr" || cat == "tptr");
 }
 
 static bool is_threaded_pointer_category(const std::string& cat)
 {
-  return (cat == "tcref" || cat == "tref");
+  return (cat == "tcptr" || cat == "tptr");
 }
 
 term get_pointer_target(const term& t)
@@ -378,7 +390,7 @@ bool is_cm_pointer_family(const term& t)
 bool is_const_pointer_family(const term& t)
 {
   const std::string cat = get_category(t);
-  if (cat == "tcref" || cat == "cref") {
+  if (cat == "tcptr" || cat == "cptr") {
     return true;
   }
   return false;
@@ -701,7 +713,7 @@ std::string term_tostr(const term& t, term_tostr_sort s)
 	if (is_interface_pointer(t)) {
 	  rstr += "pxcrt::rcptr";
 	} else {
-	  if (cat == "tcref" || cat == "tref") {
+	  if (cat == "tcptr" || cat == "tptr") {
 	    rstr += "pxcrt::rcptr<pxcrt::trcval";
 	  } else {
 	    rstr += "pxcrt::rcptr<pxcrt::rcval";
@@ -870,7 +882,7 @@ static bool check_tvmap(tvmap_type& tvmap, const std::string& sym,
   const term& t)
 {
   DBG_CONV(fprintf(stderr, "check_tvmap sym=%s t=%s\n",
-    sym, term_tostr(t, term_tostr_strict).c_str()));
+    sym.c_str(), term_tostr_human(t).c_str()));
   tvmap_type::iterator i = tvmap.find(sym);
   if (i != tvmap.end()) {
     if (!is_same_type(i->second, t)) {
@@ -892,9 +904,11 @@ static bool unify_type_list(
   const term_list& tl1 /* no tparam */,
   tvmap_type& tvmap)
 {
+  #if 0
   DBG_CONV(fprintf(stderr, "unify_type_list: tl0=%p tl1=%p\n",
     term_tostr_list(tl0, term_tostr_sort_strict).c_str(),
     term_tostr_list(tparams, term_tostr_sort_strict).c_str()));
+  #endif
   term_list::const_iterator i0= tl0.begin();
   term_list::const_iterator i1= tl1.begin();
   for (; i0 != tl0.end() && i1 != tl1.end(); ++i0, ++i1) {
@@ -910,9 +924,11 @@ static bool unify_type(
   const term& t1 /* no tparam */,
   tvmap_type& tvmap)
 {
+  #if 0
   DBG_CONV(fprintf(stderr, "unify_template: tl0=%p tl1=%p\n",
     term_tostr_list(tl0, term_tostr_sort_strict).c_str(),
     term_tostr_list(tparams, term_tostr_sort_strict).c_str()));
+  #endif
   if (t0.get_expr()->get_esort() == expr_e_tparams) {
     const expr_tparams *const t0tp = ptr_down_cast<const expr_tparams>(
       t0.get_expr()); /* outer tparam */
@@ -928,8 +944,8 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
   term& tfrom = efrom->resolve_texpr();
   DBG_CONV(fprintf(stderr, "convert efrom=%s from=%s to=%s\n",
     efrom->dump(0).c_str(),
-    term_tostr(tfrom, term_tostr_sort_strict).c_str(),
-    term_tostr(tto, term_tostr_sort_strict).c_str()));
+    term_tostr_human(tfrom).c_str(),
+    term_tostr_human(tto).c_str()));
   if (is_same_type(tfrom, tto)) {
     DBG_CONV(fprintf(stderr, "convert: same type\n"));
     return true;
@@ -985,6 +1001,8 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
     const term_list *const tfa = tfrom.get_args();
     if (tta != 0 && tfa != 0 && tta->front() == tfa->front()) {
       DBG_CONV(fprintf(stderr, "convert: slice\n"));
+      efrom->conv = conversion_e_subtype;
+      efrom->type_conv_to = tconvto;
       return true;
     }
   }
@@ -993,7 +1011,7 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
   if (is_cm_pointer_family(tconvto) &&
     is_sub_type(get_pointer_target(tfrom), get_pointer_target(tconvto)) &&
     is_compatible_pointer(tfrom, tconvto)) {
-    /* ref to cref or tref to tcref */
+    /* ptr to cptr or tptr to tcptr */
     const expr_struct *const es_to = dynamic_cast<const expr_struct *>(
       tconvto.get_expr());
     const expr_struct *const es_from = dynamic_cast<const expr_struct *>(
@@ -1006,18 +1024,24 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
       cat_from = es_from->category;
     }
     if (!cat_to.empty() && !cat_from.empty() &&
-      (cat_to == "cref" || cat_from == "ref")) {
-      DBG_CONV(fprintf(stderr, "convert: (struct) ref to cref\n"));
+      (cat_to == "cptr" || cat_from == "ptr")) {
+      DBG_CONV(fprintf(stderr, "convert: (struct) ptr to cptr\n"));
+      efrom->conv = conversion_e_subtype;
+      efrom->type_conv_to = tconvto;
       return true;
     }
     if (!cat_to.empty() && !cat_from.empty() &&
-      (cat_to == "tcref" || cat_from == "tref")) {
-      DBG_CONV(fprintf(stderr, "convert: (struct) tref to tcref\n"));
+      (cat_to == "tcptr" || cat_from == "tptr")) {
+      DBG_CONV(fprintf(stderr, "convert: (struct) tptr to tcptr\n"));
+      efrom->conv = conversion_e_subtype;
+      efrom->type_conv_to = tconvto;
       return true;
     }
   }
   if (is_sub_type(tfrom, tconvto)) {
     DBG_CONV(fprintf(stderr, "convert: sub type\n"));
+    efrom->conv = conversion_e_subtype;
+    efrom->type_conv_to = tconvto;
     return true;
   }
   DBG_CONV(fprintf(stderr, "convert: failed\n"));
@@ -1678,7 +1702,7 @@ static void check_use_before_def(expr_i *e)
 
 static void check_type_threading_te(const term& te, expr_i *pos)
 {
-  /* check if tref target is multithreaded */
+  /* check if tptr target is multithreaded */
   term rte;
   const expr_i *e = te.get_expr();
   const term_list *args = te.get_args();

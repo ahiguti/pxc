@@ -1,11 +1,21 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- add_root_requirement()するケースの整理、複数要求がある場合の処理。
-  - 関数に引数を参照渡ししている箇所では一時変数にしないとC++が困る
+- mutable&渡しの際にinterfaceへのupcastがあったらエラーになる問題
+- fooが構造体のとき foo f(100) ってどういう意味になるのか？
+- interfaceへの代入はエラーにする
+- globalやstructには参照変数などは置けないように
+- add_root_requirementのFIXME
+- ptrも初期化を強制し、デフォルトコンストラクタはnullptrにする
+- 「参照型の制約」実装
+- x[i]の型が単純でかつ参照要求ではないなら結果を一時変数に置いてguard
+  を除去
+- passing_root_requirementのFIXME
 - sliceの要素がlvalueを要してもslice自体はlvalueいらず、sliceかcslice
   であるかによってlvalueを持つかが決まる(check_lvalueの修正)
   - add_root_requirementの'[]'についても同様の修正必要(FIXME印を見よ)
+- add_root_requirement()するケースの整理、複数要求がある場合の処理。
+  - 関数に引数を参照渡ししている箇所では一時変数にしないとC++が困る
 - 構造体にslice等のweak型を含む型のfieldを置けないように
   is_weak_type() あるいはヒープに置けなければそれでよい？
 - operatorと組み込み関数について整理。大小比較は全型に？
@@ -26,7 +36,7 @@ FIXME/TODO M1
 TEST TODO M1
 
 - rcptr無駄に指す先をアロケートしてしまわないように
-  - ref型の一時変数を作ったときにはnullで暫定初期化してよい
+  - ptr型の一時変数を作ったときにはnullで暫定初期化してよい
 - test_14_root/refvar.px
 - test_14_root/condtemp.px refvarが無いエラーになるように
 - コンテナからスライスへの変換の短い表記 x[..]
@@ -109,7 +119,7 @@ TODO
 - coptionsのオプション取得にpkg-config的なものをサポート
 - pure(static?), synchronized
 - volatile?
-- constnessがref先にも影響するように?
+- constnessがptr先にも影響するように?
 - boxing時の無駄なコピーを無くす
 - struct定義時に実装するinterfaceを明示しなくてよいようにできるか？
   (implements宣言を分離。)
@@ -118,7 +128,7 @@ TODO
 - namespace義務付け？
 - コンパイル全段階でatomicな更新を
 - 無名関数はテンプレート引数を持てない？
-- null値を持てないなrefとcref
+- null値を持てないなptrとcptr
 - macroの右辺をte以外の式も許可
 - aliasを展開後の式をコンパイル(って何？)
 - expr以外のterm、intなどをtermへ
@@ -189,7 +199,7 @@ DONE
 - threads(done)
 - グローバル変数にperlsvを置いていると終了時不正メモリアクセス(グロー
   バルに置けないようにする)(done)
-- ref{foo} p = foo(...)を一時オブジェクト作らずにboxing(done)
+- ptr{foo} p = foo(...)を一時オブジェクト作らずにboxing(done)
 - '::'を@local使って実装(done)
 - インポートされた側を先にコンパイル(done)
 - 参照引数(done)
@@ -224,7 +234,7 @@ DONE
 - infoを消す前にccとoとsoを消す(done)
 - md5sumコマンドと値が異なる理由(ファイル名も含めていた)
 - 型のテンプレ引数としてclosureやメンバ関数を指定するとエラーに(done)
-- 具体型からインタフェースrefへの変換を許可(done)
+- 具体型からインタフェースptrへの変換を許可(done)
 - interfaceのメンバテンプレートは禁止(done)
 - extern struct型の変数の初期化されているか確認(done)
 - if (x) の型チェック(done)
@@ -253,7 +263,7 @@ DONE
 - リファクタリング: tvmapを文字列キーに。(done)
 - リファクタリング: C++のテンプレートもinstantiate処理。(done)
 - eval整理(expr_teを返すのをやめる)(done)
-- refとcrefをexpr_structへ(done)
+- ptrとcptrをexpr_structへ(done)
 - 「&」廃止(done)
 - externの文法統一(done)
 - 型パラ付き型もfoo()で自動インスタンス化できるように？(done)
@@ -269,7 +279,7 @@ DONE
 - 明示的キャスト(done)
 - コンパイラ/リンカオプション(-I, -L, -lxx) (done)
   incdir, libdir, library
-- alias list(t) ref(cons(t)) (done)
+- alias list(t) ptr(cons(t)) (done)
 - '!'演算子(done)
 - 単項演算子の'case'(done)
 - double(done)
@@ -299,7 +309,7 @@ DONE
 - 明示的キャスト(done)
 - byref引数(done)
 - lvalue check(done)
-- crefからrefへの変換をエラーに(done)
+- cptrからptrへの変換をエラーに(done)
 - typedef (alias)
 - interface
 - auto boxing (operator &廃止?)
@@ -468,7 +478,7 @@ typedef list "std::list" "array";
 typedef deque "std::deque" "array";
 typedef vector "std::vector" "array";
 typedef map "std::map" "map";
-typedef ref "std::map" "map";
+typedef ptr "std::map" "map";
 typedef ivector vector(int);
 typedef imap map(int, vector(int));
 
@@ -641,10 +651,10 @@ struct foo {
 };
 struct bar {
   var y:baz;
-  var z:(ref foo);
+  var z:(ptr foo);
 };
 structフィールドにvar定義されている型はそのstructより前に定義が無ければ
-ならない。(ref foo)ならその必要は無い。
+ならない。(ptr foo)ならその必要は無い。
 すべてのテンプレート型が同様となるようにしなければならない?無理?
 template <typename T> struct abc {
   T value;
@@ -970,14 +980,14 @@ b = x.b; // 未定義
 
 (*1)の印を付けたものはいずれも、ポインタ経由の変更。
 
-(val/str/map/ref/struct/ifc/any)
+(val/str/map/ptr/struct/ifc/any)
 
 再整理:無効化による無効化
-・map/ref/structが無効化されると子は無効化
+・map/ptr/structが無効化されると子は無効化
 ・str/mapが無効化されると依存するsubstrとmaprangeは無効化
 
 再整理:更新による無効化
-・refが更新されると指す先は無効化
+・ptrが更新されると指す先は無効化
 ・map全体が更新されると要素は無効化
   - ただしもう少し緩和できる。std::mapはdeleteされるとき以外は無効化
     しない。
@@ -985,11 +995,11 @@ b = x.b; // 未定義
 ・str/mapが更新されると依存するsubstrとmaprangeは無効化
 
 再整理:更新による更新
-・map/ref/structが更新されると子は更新
+・map/ptr/structが更新されると子は更新
 
 再整理:ポインタ経由の更新による更新
-・左辺式に現れる一番内側のref/anyについては、その参照先となりうる
-  ref/anyの全てが更新される
+・左辺式に現れる一番内側のptr/anyについては、その参照先となりうる
+  ptr/anyの全てが更新される
   (foo->bar.baz = xxx は、fooの指す先の型の全てのbar.bazを更新する)
 
 ---------------------------------------------------------------------
@@ -1201,7 +1211,7 @@ stableではない式を左辺値として使えるのは、一つの文の中�
 ---------------------------------------------------------------------
 【無効化判定単純化案ベース】 stringrefとrangeについて
 
-・関数がstringrefを返すときは、どの引数に取ったオブジェクトへのref
+・関数がstringrefを返すときは、どの引数に取ったオブジェクトへのptr
   になるのか関数のシグニチャでわかるようにする。
   function foo(x : string, y : string) : stringref refs x;
 ・stringrefを受ける式がstringrefとして定義してよいのは、そのstringref
@@ -1245,7 +1255,7 @@ FILEポインタの中のバッファを参照するようなstringref
   (関数引数、upvalueは持たない)
 ・フィールド参照(op .)は、左が左辺値を持つとき左辺値を持つ
 ・配列要素(op [])は、左が左辺値を持つとき左辺値を持つ
-・ポインタ参照先(op ->)は左がcrefでなくrefであれば左辺値を持つ
+・ポインタ参照先(op ->)は左がcptrでなくptrであれば左辺値を持つ
 ・括弧でくくられた式は中身が左辺値を持つとき左辺値を持つ
 ・var式は左辺値を持つ
 
@@ -1910,9 +1920,9 @@ utime
 ---------------------------------------------------------------------
 aliasに引数を持てるように
 
-alias list(t) ref(cons(t));
+alias list(t) ptr(cons(t));
 var xs:list(int);
-evalすると: list(int)) => ref(cons(int))
+evalすると: list(int)) => ptr(cons(int))
 
 eval:
 左辺式のシンボル定義(この場合list)がaliasであったら、
@@ -2017,7 +2027,7 @@ pimpl
 
 pimplイディオムを可能にするためには、コンテナを定義するのに中身の型
 の定義を必要かどうかのフラグを用意しなければならない。
-ポインタ ref(foo) -> fooの定義は要らない
+ポインタ ptr(foo) -> fooの定義は要らない
 固定長配列 foo[30] -> fooの定義必要
 
 ---------------------------------------------------------------------
@@ -2091,8 +2101,8 @@ apply_tvmapは、expr_telistのエントリがexpr_teであってcpptmpl_paramid
 ---------------------------------------------------------------------
 先にC++テンプレート型をexpr_structへ
 
-vector(done), map(done), ref, cref
-「&」で参照型を作るのは廃止。refかcrefを明示できないため。
+vector(done), map(done), ptr, cptr
+「&」で参照型を作るのは廃止。ptrかcptrを明示できないため。
 
 ---------------------------------------------------------------------
 memo
@@ -2104,24 +2114,24 @@ $5 = "pxcrt::rcptr<  >"
 $6 = "pxcrt::rcptr< list$n::cons$s$tp1$int32_t >"
 
 ttoにはtparamがある。
-tfromは具体化されている(ref{cons{int}})
+tfromは具体化されている(ptr{cons{int}})
 
 (gdb) p *tto
 $9 = {<pxc::expr_i> = {_vptr.expr_i = 0x80af328, fname = 0x80e4350 "list6.px",
     line = 10, type_of_this_expr = 0x80ca210, conv = convertion_e_none,
     type_conv_to = 0x0, parent_expr = 0x80e5180, symtbl_lexical = 0x80e6850,
     tempvar_id = -1, require_lvalue = false}, nssym = 0x80e4e68, fullsym =
-    "ref", ns = "list", tparamid = -1, tlarg = 0x80e50a8,
+    "ptr", ns = "list", tparamid = -1, tlarg = 0x80e50a8,
   symbol_def = 0x80d8b20}
 (gdb) p *tfrom
 $10 = {<pxc::expr_i> = {_vptr.expr_i = 0x80af328,
     fname = 0x80d82d8 "pxcrt.px", line = 41, type_of_this_expr = 0x80ca210,
     conv = convertion_e_none, type_conv_to = 0x0, parent_expr = 0x0,
     symtbl_lexical = 0x0, tempvar_id = -1, require_lvalue = false},
-  nssym = 0x80d83b0, fullsym = "ref", ns = "", tparamid = -1, tlarg = 0x0,
+  nssym = 0x80d83b0, fullsym = "ptr", ns = "", tparamid = -1, tlarg = 0x0,
   symbol_def = 0x80ee4d8}
 
-ttoはref{cons{t}}で、tparamid=0
+ttoはptr{cons{t}}で、tparamid=0
 (gdb) p *tto->tlarg->head
 $15 = {<pxc::expr_i> = {_vptr.expr_i = 0x80af328,
     fname = 0x80e4350 "list6.px", line = 10, type_of_this_expr = 0x80ca210,
@@ -2370,14 +2380,14 @@ struct typeinfo {
 ・anyvalからどのような型へも変換できるが、実行時例外を投げることがある
   subtype関係を認識するのは難しいので、ぴったり同じ型へ戻さないとthrow？
 ・メソッド呼出しについてはポインタを自動で参照外しする？
-・rootする方法は、単にコピー。それがrefであればカウント増加になる。
+・rootする方法は、単にコピー。それがptrであればカウント増加になる。
   左辺値としてrootするのも常に成功する。
 ・参照渡しはどうするか？
   受け取れる型を指定できるようにするか。anyvalが指定されたら呼ばれた
   側が型を決め、それ以外のときはその型を変更しないでキャストする。
 ・callの引数は全て参照渡しにするか。
 
-ref{vector{int}} pvec = vector{int}();
+ptr{vector{int}} pvec = vector{int}();
 anyval x = pvec;
 
 anyval x;
@@ -2431,7 +2441,7 @@ struct sfoo {
     return string(x + y);
   }
 }
-ref{ifoo} f = sfoo();
+ptr{ifoo} f = sfoo();
 f->f(10, 20);
 
 これを
@@ -2459,7 +2469,7 @@ struct foo {
 メンバ関数を関数オブジェクトとして使えるためには、(this + メンバ関数)
 を保持した構造体を作る。
 struct moc {
-  ref<foo> upthis;
+  ptr<foo> upthis;
   explicit moc(foo *upthis) : upthis(this) { }
   int operator ()(int z) { return upthis->m(z); }
 };
@@ -2833,7 +2843,7 @@ function {t} to_string(t x)
 
 再入防止用のフラグを用意して、コールバックから再入されたら例外を投げる
 struct {
-  ref{file} fp;
+  ptr{file} fp;
   string_buffer read_buffer;
   bool in_use; // 再入を防止するためのフラグ
 }
@@ -3257,7 +3267,7 @@ bar b;
 - bool, uchar, char, ushort, short, uint, int, ulong, long
 - float, double
 - string
-- ref, cref, vector, map
+- ptr, cptr, vector, map
 型構成子
 - struct, union, interface
 
@@ -3679,7 +3689,7 @@ threadのサポート
   lock/unlockする。
 - vref{hoge}は指す先がvolatileなshared pointer。
 - this->fooがshared pointerのときは、thisをロックしてもfooの指す先は
-  排他されない。したがって、構造体にvrefではないrefやcrefがあったなら
+  排他されない。したがって、構造体にvrefではないptrやcptrがあったなら
   その構造体はvolatile装飾できない(volatileメンバを作れない)
 - 引数にvolatile装飾を付けられるようにする？
 - グローバル変数は？
@@ -3689,7 +3699,7 @@ struct foo {
   }
   void fuga() {
   }
-  ref{bar} b;
+  ptr{bar} b;
 };
 volatile参照から非volatile参照を取得するには、そのオブジェクトのlock
 が必要。
@@ -3697,8 +3707,8 @@ volatile参照から非volatile参照を取得するには、そのオブジェ�
 - スレッド間で共有するものと、そうでないものに明確に分離する手段が
   必要。
   - 共有するものは全てvrefの指す先に持つ。
-  - vrefの指す先のオブジェクトは、それ以外のrefから指すことはできな
-    い。refとvrefはどちらの方向も代入不可。
+  - vrefの指す先のオブジェクトは、それ以外のptrから指すことはできな
+    い。ptrとvrefはどちらの方向も代入不可。
   - vrefの指す先へアクセスする際にはlockをかける。
 
 - スレッド間共有オブジェクト: vref{foo} x;
@@ -3800,16 +3810,16 @@ constnessがポインタの指す先にも伝播
 
 - 式がconstであるか判定する関数を用意
   - check_lvalueの例外投げない版を作る
-- ref変数は、その変数自体がlvalueを持たないときはtexprをcrefにする
+- ptr変数は、その変数自体がlvalueを持たないときはtexprをcptrにする
 
-- *pがlvalueを要求されたときは、pがcrefではなくrefであることと、
+- *pがlvalueを要求されたときは、pがcptrではなくptrであることと、
   pにlvalueを要求する
-- refを引数に渡すときはbyrefであるかのようにcheck_lvalueする。
+- ptrを引数に渡すときはbyrefであるかのようにcheck_lvalueする。
 
 やりなおし
 
-- crefを無くす。そのかわりconstラッパーを作る。
-- ref型変数が左辺値を持つときのみrefの指す先も左辺値を持つ
+- cptrを無くす。そのかわりconstラッパーを作る。
+- ptr型変数が左辺値を持つときのみptrの指す先も左辺値を持つ
 
 ---------------------------------------------------------------------
 シンボルテーブルをなめて全ての型と関数について処理
@@ -4016,8 +4026,8 @@ pxc to perl marshal
 
 intなどの整数型はIVに
 doubleなどはNVに
-refとcrefはRVに
-構造体はrefにbox化してRVに
+ptrとcptrはRVに
+構造体はptrにbox化してRVに
 
 ---------------------------------------------------------------------
 clang++ 3.0
@@ -4027,24 +4037,24 @@ clang++ 3.0
 ---------------------------------------------------------------------
 box化
 
-ref{foo} = foo(x, y);
+ptr{foo} = foo(x, y);
 - 引数が4つ以上のとき
   - rcptr<foo> p = rcptr<foo>(foo(x, y));
   - ircptr<ifoo> p = ircptr<foo>(foo(x, y));
 - 引数が3つ以内のとき
   - rcptr<foo> p = rcptr<foo>(pxcrt::boxing(), x, y));
   - ircptr<ifoo> p = ircptr<foo>(pxcrt::boxing(), x, y));
-    変換先の型ではなく、変換元のref型
+    変換先の型ではなく、変換元のptr型
        foo(x, y)を吐くかわりに boxing(), x, y を吐く。boxされる値は
        必ず括弧の中にemitされるから外側の括弧は不要。
 
 ---------------------------------------------------------------------
 constnessをtransitiveにする？
 
-function void foo(ref{int} x)
+function void foo(ptr{int} x)
 {
-  ref{int} y = x; // errorにするべき。引数はconstだから。
-  // あるいはref{int}を引数の型とした時点でエラーにするべきか。
+  ptr{int} y = x; // errorにするべき。引数はconstだから。
+  // あるいはptr{int}を引数の型とした時点でエラーにするべきか。
 }
 
 ---------------------------------------------------------------------
@@ -4058,10 +4068,10 @@ const foo **q = &p; // error
 p->modify();
 
 ---------------------------------------------------------------------
-constが推移的ならcref{ref{foo}}に意味はあるか？
+constが推移的ならcptr{ptr{foo}}に意味はあるか？
 
-cref{ref{foo}} cmf;
-ref{foo} mf = *cmf;
+cptr{ptr{foo}} cmf;
+ptr{foo} mf = *cmf;
 変更できてしまうからダメ
 
 ---------------------------------------------------------------------
@@ -4092,10 +4102,10 @@ sref{t}型
 スレッドセーフではないデータをsref{t}から間接的にアクセスできてしまわ
 ないようにすること。
 - tはpureでなければならない
-- tがstructのとき、フィールドにsref以外のrefを持てない
+- tがstructのとき、フィールドにsref以外のptrを持てない
 - tがinterfaceであってはならない(これはどうすればいいか？)
-  - 許すと、interfaceを実装するクラスにrefを持ててしまうから
-  - pureなstructはsref以外のrefは持てないようにして、tにinterface
+  - 許すと、interfaceを実装するクラスにptrを持ててしまうから
+  - pureなstructはsref以外のptrは持てないようにして、tにinterface
     を許すようにするか？
   - pureだけでなくthreadsafe属性を用意するか。threadsafeなinterfaceは
     sref以外の
@@ -4109,11 +4119,11 @@ static function {t} sref{thread} spawn(sref{imain{t}} tm, sref{t} shr);
 スレッド整理
 
 pure -> static
-sref -> tref/tcref
+sref -> tptr/tcptr
 
 - マルチスレッド共有可能な型: shareable
   - 型にのみ付く属性
-  - グローバル変数にアクセスせず、tref/tcref以外の参照型を持たない
+  - グローバル変数にアクセスせず、tptr/tcptr以外の参照型を持たない
 - マルチスレッド共有可能ではないがスレッド内で使える: static
   - 型と関数に付く属性
   - グローバル変数にアクセスしない
@@ -4144,7 +4154,7 @@ system_tを渡さなかったら子スレッドでIOを全く実行できない�
 まれたmutexでガードする。
 
 型の正当性チェック:
-- 型式の中でtref/tcrefの指す先はshareableでなくてはならない
+- 型式の中でtptr/tcptrの指す先はshareableでなくてはならない
   (型をevalした後にそのチェックを入れる)(DONE)
 argdecls/varの正当性チェック:
 - threadedなstruct/unionはthreadedかshareableではない型のfieldを持て
@@ -4232,7 +4242,7 @@ foo x(a, b); // ok
 defaultを持つ(デフォルトコンストラクト可能)かどうか:
 - 基本型は可能
 - externなstructは、カテゴリによる
-  - ref等の参照型は、指す先の型がdefaultを持つなら持つ
+  - ptr等の参照型は、指す先の型がdefaultを持つなら持つ
   - farrayは、要素型が持つなら持つ
   - varrayは常に持つ
 - ユーザ定義コンストラクタの無いstructは、全fieldがdefaultを持つなら持つ
@@ -4821,4 +4831,34 @@ root_stmtscope_reference*:
 - expr_feach::check_typeからコンテナに対して呼ばれる
 - expr_op::check_typeから代入演算子のケースで呼ばれる
 - 以上
+
+f1(v[0..100]);
+引数をrootする際にそれがsliceなのでv自体をguardする
+
+slice{foo} x = v[0..100];
+左辺が変数参照なのでblockscope
+
+代入の左辺が参照変数又はslice変数に捕獲されるかどうかを見る。捕獲
+されていればその右辺はblockscope byrefでrootされなければならない。
+
+(slice{f} x = 15) = z; // ダメ？
+
+---------------------------------------------------------------------
+weak型(参照/slice/range型)の制約
+
+- sliceの参照変数 slice{foo} & x は許可しない(done)。引数も同様(done)。
+- 参照変数やslice変数は foo & x = ... の形(代入の左辺)としてしか
+  定義できない(done)。
+- 同様にslice/rangeは slice{foo} x = ...の形(代入の左辺)としてしか
+  定義できない(done)
+- 構造体/variantのフィールドにはweak型(参照変数、slice, range)は
+  持てない(done)。C++テンプレ型の引数にも持てない(done)。
+- slice/range同士の代入は当分不許可(done)。returnも不許可(done)。
+  - あとで同じobjectへのalias同士であれば代入可にする
+  - あとでreturnにもつかえるように
+
+- 関連TODO
+  - x[]が左辺値を持つかどうかの判定、xがsliceやrangeのときは
+    cslice/slice, crange/rangeの区別で判定する(done)
+  - *xをslice/rangeについてもつかえるように
 

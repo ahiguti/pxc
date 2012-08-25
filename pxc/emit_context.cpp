@@ -152,5 +152,10 @@ std::string to_c_ns(const std::string& ns)
   return r;
 }
 
+emit_expr_info& emit_context::get_expr_info(const expr_i *key)
+{
+  return eeimap[key];
+}
+
 };
 

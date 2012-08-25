@@ -2,13 +2,13 @@
 namespace thread;
 
 public multithreaded extern "pxcthread::thread_impl" struct thread { }
-public macro thread_t tref{thread};
+public macro thread_t tptr{thread};
 public threaded extern "pxcthread::thread_join"
   function void thread_join(thread_t thr);
 public threaded function {targs} thread_t create_thread(targs args)
 {
   macro impl_t thrdata_impl{targs};
-  tref{thrdata} r = tref(impl_t(args));
+  tptr{thrdata} r = tptr(impl_t(args));
   return create_thread_impl(r);
 }
 
@@ -22,7 +22,7 @@ private multithreaded struct {targs} thrdata_impl : thrdata : {
   }
 }
 private threaded extern "pxcthread::create_thread_impl"
-  function thread_t create_thread_impl(tref{thrdata} f);
+  function thread_t create_thread_impl(tptr{thrdata} f);
 
 extern "type" inline
 namespace pxcthread {
@@ -35,6 +35,7 @@ typedef pxcrt::rcptr< pxcrt::trcval<thread_impl> > thread_ptr;
 typedef pxcrt::rcptr< thread$n::thrdata$i > thrdata_ptr;
 struct thread_impl {
   thread_impl(thrdata_ptr::rawptr m) : tid(), need_join(false), mptr(m) { }
+  thread_impl() : tid(), need_join(false), mptr() { }
   ~thread_impl() { join(); }
   void join();
   pthread_t tid;
