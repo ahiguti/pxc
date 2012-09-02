@@ -47,7 +47,7 @@ CFLAGS="$RPM_OPT_FLAGS"
 %{__perl} Makefile.PL `%{__perl} -MExtUtils::MakeMaker -e ' print qq|PREFIX=%{buildroot}%{_prefix}| if \$ExtUtils::MakeMaker::VERSION =~ /5\.9[1-6]|6\.0[0-5]/ '`
 %{__make} 
 %if %maketest
-%{__make} test
+# %{__make} test
 %endif
 
 %install

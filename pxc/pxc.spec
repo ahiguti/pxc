@@ -1,3 +1,5 @@
+%define debug_package %{nil}
+
 Summary: P Extension Compiler
 Name: pxc
 Version: 0.0.3
