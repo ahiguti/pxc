@@ -5,10 +5,10 @@ public import meta;
 public import container;
 
 public extern "pxcio::pxc_argv" container::vector{string} argv;
-public extern "pxcio::mainio" ioref main;
+public extern "pxcio::mainio" ioptr main;
 
-public macro ioref tref{io};
-public macro fileref ref{file};
+public macro ioptr tptr{io};
+public macro fileptr ptr{file};
 
 public multithreaded extern "pxcio::statbuf" struct statbuf {
   ulong st_dev;
@@ -43,31 +43,31 @@ public extern "SEEK_CUR"	int SEEK_CUR;
 public extern "SEEK_END"	int SEEK_END;
 
 public threaded extern "pxcio::io_open"
-  function fileref io_open(ioref i, string fn, int flags, int mode);
+  function fileptr io_open(ioptr i, string fn, int flags, int mode);
 public threaded extern "pxcio::file_read"
-  function int file_read(fileref f, string& buf, uint len);
+  function int file_read(fileptr f, string& buf, uint len);
 public threaded extern "pxcio::file_write"
-  function int file_write(fileref f, string buf);
+  function int file_write(fileptr f, string buf);
 public threaded extern "pxcio::file_lseek"
-  function ulong file_lseek(fileref f, ulong offset, int whence);
+  function ulong file_lseek(fileptr f, ulong offset, int whence);
 public threaded extern "pxcio::file_errno"
-  function int file_errno(fileref f);
+  function int file_errno(fileptr f);
 public threaded extern "pxcio::io_stat"
-  function int io_stat(ioref i, string fn, statbuf& buf);
+  function int io_stat(ioptr i, string fn, statbuf& buf);
 public threaded extern "pxcio::io_errno"
-  function int io_errno(ioref i);
+  function int io_errno(ioptr i);
 public threaded extern "pxcio::io_sleep"
-  function uint io_sleep(ioref i, uint sec);
+  function uint io_sleep(ioptr i, uint sec);
 
-public threaded function fileref io_open_r(ioref i, string fn)
+public threaded function fileptr io_open_r(ioptr i, string fn)
   { return io_open(i, fn, O_RDONLY, 0); }
-public threaded function fileref io_creat(ioref i, string fn)
+public threaded function fileptr io_creat(ioptr i, string fn)
   { return io_open(i, fn, O_WRONLY | O_CREAT | O_TRUNC, 0); }
-public threaded function fileref io_open_w(ioref i, string fn)
+public threaded function fileptr io_open_w(ioptr i, string fn)
   { return io_open(i, fn, O_WRONLY, 0); }
-public threaded function fileref io_open_a(ioref i, string fn)
+public threaded function fileptr io_open_a(ioptr i, string fn)
   { return io_open(i, fn, O_WRONLY | O_APPEND, 0); }
-public threaded function int file_read_all(fileref f, string& buf) {
+public threaded function int file_read_all(fileptr f, string& buf) {
   while (true) {
     if ((int r = file_read(f, buf, 16384)) <= 0) {
       return r;
@@ -75,18 +75,18 @@ public threaded function int file_read_all(fileref f, string& buf) {
   }
   return 0;
 }
-public threaded function int io_read_file(ioref i, string fn, string& buf) {
-  fileref f = io_open_r(i, fn);
+public threaded function int io_read_file(ioptr i, string fn, string& buf) {
+  fileptr f = io_open_r(i, fn);
   if (file_errno(f) != 0) { return -1; }
   return file_read_all(f, buf);
 }
-public threaded function int io_write_file(ioref i, string fn, string buf) {
-  fileref f = io_open_w(i, fn);
+public threaded function int io_write_file(ioptr i, string fn, string buf) {
+  fileptr f = io_open_w(i, fn);
   if (file_errno(f) != 0) { return -1; }
   return file_write(f, buf);
 }
 
-public threaded function {t} void io_stdout_print(ioref i, t x)
+public threaded function {t} void io_stdout_print(ioptr i, t x)
 {
   if (meta::eq{meta::to_string{t}, "string"}) {
     io_stdout_print_string(i, x);
@@ -96,7 +96,7 @@ public threaded function {t} void io_stdout_print(ioref i, t x)
   }
 }
 
-public threaded function {t} void io_stdout_println(ioref i, t x)
+public threaded function {t} void io_stdout_println(ioptr i, t x)
 {
   if (meta::eq{meta::to_string{t}, "string"}) {
     string s = x;
@@ -123,9 +123,9 @@ public multithreaded extern "pxcio::io_impl" "linear" struct io { }
 public multithreaded extern "pxcio::file_impl" "linear" struct file { }
 
 private threaded extern "pxcio::io_initialize"
-  function int io_initialize(ioref i);
+  function int io_initialize(ioptr i);
 private threaded extern "pxcio::io_stdout_print_string"
-  function void io_stdout_print_string(ioref i, string x);
+  function void io_stdout_print_string(ioptr i, string x);
 
 io_initialize(main);
 

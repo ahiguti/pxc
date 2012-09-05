@@ -8,12 +8,12 @@ struct {t} vector {
   public macro mapped_type t;
   public macro range_type slice{t};
   public macro crange_type cslice{t};
-  public extern "size" function size_t size() const;
   public extern "empty" function bool empty() const;
+  public extern "size" function size_t size() const;
   public extern "resize" function void resize(size_t v);
   public extern "clear" function void clear();
-  public extern "push_back" function void push(t v);
-  public extern "pop_back" function t pop();
+  public extern "push_back" function void push_back(t v);
+  public extern "pop_back" function t pop_back();
 }
 
 public multithreaded extern "container::farray" "farray"
@@ -22,8 +22,8 @@ struct {t, n} farray {
   public macro mapped_type t;
   public macro range_type slice{t};
   public macro crange_type cslice{t};
-  public extern "size" function size_t size() const;
   public extern "empty" function bool empty() const;
+  public extern "size" function size_t size() const;
 }
 
 public multithreaded extern "container::slice" "slice"
@@ -32,8 +32,8 @@ struct {t} slice {
   public macro mapped_type t;
   public macro range_type slice{t};
   public macro crange_type cslice{t};
-  public extern "size" function size_t size() const;
   public extern "empty" function bool empty() const;
+  public extern "size" function size_t size() const;
 }
 
 public multithreaded extern "container::cslice" "cslice"
@@ -42,6 +42,7 @@ struct {t} cslice {
   public macro mapped_type t;
   public macro range_type cslice{t};
   public macro crange_type cslice{t};
+  public extern "empty" function bool empty() const;
   public extern "size" function size_t size() const;
 }
 
@@ -62,8 +63,8 @@ struct {t, s, f} tree_map_compare {
   public macro mapped_type s;
   public macro range_type tree_map_range{t, s};
   public macro crange_type tree_map_crange{t, s};
-  public extern "size" function size_t size() const;
   public extern "empty" function bool empty() const;
+  public extern "size" function size_t size() const;
   public extern "clear" function void clear();
 }
 
@@ -73,7 +74,9 @@ struct {t, s, f} tree_map_compare_range {
   public macro mapped_type s;
   public macro range_type tree_map_compare_range{t, s, f};
   public macro crange_type tree_map_compare_crange{t, s, f};
+  public extern "empty" function bool empty() const;
   public extern "size" function size_t size() const;
+  public extern "next" function void next();
 }
 
 private multithreaded extern "container::tree_map_range" "tree_map_crange"
@@ -82,7 +85,9 @@ struct {t, s, f} tree_map_compare_crange {
   public macro mapped_type s;
   public macro range_type tree_map_compare_crange{t, s, f};
   public macro crange_type tree_map_compare_crange{t, s, f};
+  public extern "empty" function bool empty() const;
   public extern "size" function size_t size() const;
+  public extern "next" function void next();
 }
 
 extern "type" inline
@@ -101,14 +106,15 @@ struct vector {
   typedef typename std::vector<T>::iterator iterator;
   typedef typename std::vector<T>::const_iterator const_iterator;
   vector() : invalidate_guard_count(0) { }
+  vector(size_t len) : v(len), invalidate_guard_count(0) { }
   vector(const vector& x) : v(x.v), invalidate_guard_count(0) { }
   vector& operator =(const vector& x) {
     check_resize();
     v = x.v;
     return *this;
   }
-  size_type size() const { return v.size(); }
   bool empty() const { return v.empty(); }
+  size_type size() const { return v.size(); }
   T& operator [](size_type idx) {
     if (idx >= v.size()) { pxcrt::throw_invalid_index(); }
     return v[idx];
@@ -160,8 +166,8 @@ template <typename T, size_t len>
 struct farray {
   typedef size_t size_type;
   farray() : v() { }
-  size_t size() const { return len; }
   bool empty() const { return len == 0; }
+  size_t size() const { return len; }
   T& operator [](size_type idx) {
     if (idx >= len) { pxcrt::throw_invalid_index(); }
     return v[idx];
@@ -196,9 +202,6 @@ struct slice {
   }
   T *rawarr() const { return v; }
 private:
-  void inc_invalidate_guard() const { }
-  void dec_invalidate_guard() const { }
-private:
   T *v;
   size_t len;
 };
@@ -223,9 +226,6 @@ struct cslice {
     return v[idx];
   }
   const T *rawarr() const { return v; }
-private:
-  void inc_invalidate_guard() const { }
-  void dec_invalidate_guard() const { }
 private:
   const T *v;
   size_t len;

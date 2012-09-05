@@ -77,10 +77,10 @@ public threaded extern "pxcrt::string_compare"
   function int string_compare(string x, string y);
   // FIXME
 
-public multithreaded extern "pxcrt::ref" "ref" struct {t} ref { } 
-public multithreaded extern "pxcrt::cref" "cref" struct {t} cref { }
-public multithreaded extern "pxcrt::tref" "tref" struct {t} tref { }
-public multithreaded extern "pxcrt::tcref" "tcref" struct {t} tcref { }
+public multithreaded extern "pxcrt::ptr" "ptr" struct {t} ptr { } 
+public multithreaded extern "pxcrt::cptr" "cptr" struct {t} cptr { }
+public multithreaded extern "pxcrt::tptr" "tptr" struct {t} tptr { }
+public multithreaded extern "pxcrt::tcptr" "tcptr" struct {t} tcptr { }
 
 public multithreaded extern "pxcrt::invalid_index" ""
   struct invalid_index { }
@@ -329,11 +329,11 @@ struct rcptr { /* T must have an intrusive count */
   rcptr() : ptr(new T()) { }
   rcptr(const rcptr& x) : ptr(x.ptr) { if (ptr) ptr->incref$z(); }
   rcptr(T *x) : ptr(x) { if (ptr) ptr->incref$z(); }
-  /* ref{foo} to ref{ifoo} */
+  /* ptr{foo} to ptr{ifoo} */
   template <typename Tx> rcptr(const rcptr<Tx>& x) : ptr(x.get()) {
     if (ptr) ptr->incref$z();
   }
-  /* boxing foo to ref{ifoo} */
+  /* boxing foo to ptr{ifoo} */
   template <typename Tx> explicit rcptr(const Tx& x) : ptr(new T(x)) { }
   /* boxing */
   explicit rcptr(const boxing& c) : ptr(new T()) { }

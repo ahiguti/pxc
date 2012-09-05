@@ -86,6 +86,7 @@ enum conversion_e {
   conversion_e_to_string,
   conversion_e_from_string,
   #endif
+  conversion_e_subtype,
   conversion_e_boxing,
 };
 

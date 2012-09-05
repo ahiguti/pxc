@@ -1018,7 +1018,7 @@ static term eval_meta_category(term_list& tlev)
     if (!s.empty() && s[0] == '@') {
       return term("metafunction");
     }
-    /* farray, varray, map, ref, cref, ... */
+    /* farray, varray, map, ptr, cptr, ... */
     return term(s);
   }
   if (est != 0) {
