@@ -50,6 +50,7 @@ bool is_numeric_type(const term& t);
 bool is_smallpod_type(const term& t);
 bool is_string_type(const term& t);
 bool is_integral_type(const term& t);
+bool is_unsigned_integral_type(const term& t);
 bool is_same_type(const term& t0, const term& t1);
 bool is_sub_type(const term& t0, const term& t1);
 bool is_tpdummy_type(const term& t);

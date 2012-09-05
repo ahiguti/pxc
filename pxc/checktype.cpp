@@ -31,6 +31,7 @@
 #define DBG_SLICE(x)
 #define DBG_ASGN(x)
 #define DBG_STT(x)
+#define DBG_CON(x)
 
 namespace pxc {
 
@@ -77,6 +78,19 @@ static void check_bool_expr(expr_op *eop, expr_i *a0)
     s0.c_str(), op_message(eop).c_str());
 }
 
+static void check_unsigned_integral_expr(expr_op *eop, expr_i *a0)
+{
+  const term t = a0->resolve_texpr();
+  if (is_unsigned_integral_type(t)) {
+    return;
+  }
+  const std::string s0 = term_tostr(a0->resolve_texpr(),
+    term_tostr_sort_humanreadable);
+  arena_error_push(eop != 0 ? eop : a0,
+    "unsigned integral type expected (got: %s) %s",
+    s0.c_str(), op_message(eop).c_str());
+}
+
 static void check_integral_expr(expr_op *eop, expr_i *a0)
 {
   const term t = a0->resolve_texpr();
@@ -109,9 +123,16 @@ static bool is_slice_op(const expr_i *e)
 
 static bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
 {
+  DBG_LV(fprintf(stderr, "expr_has_lvalue: expr=%s\n", a0->dump(0).c_str()));
   /* check if a0 is a valid lvalue expression */
   if (thro_flg) {
-    a0->require_lvalue = true;
+    a0->require_lvalue = true; // used for unions
+  }
+  if (a0->conv != conversion_e_none) {
+    if (!thro_flg) {
+      return false;
+    }
+    arena_error_push(a0, "can not be modified because of a conversion");
   }
   if (a0->get_sdef() != 0) {
     /* symbol or te */
@@ -149,6 +170,16 @@ static bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
 	  #endif
 	}
       }
+      expr_var *const ev = ptr_down_cast<expr_var>(sc->resolve_symdef());
+      if (is_passby_const(ev->varinfo.passby)) {
+	DBG_LV(fprintf(stderr, "expr_has_lvalue %s 1.1 false\n",
+	  a0->dump(0).c_str()));
+	if (!thro_flg) {
+	  return false;
+	}
+	arena_error_push(epos, "variable '%s' can not be modified",
+	  sc->fullsym.c_str());
+      }
     } else if (astyp == expr_e_argdecls) {
       expr_argdecls *const ead = ptr_down_cast<expr_argdecls>(
 	sc->resolve_symdef());
@@ -183,6 +214,7 @@ static bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
       return expr_has_lvalue(aop, aop->arg0, thro_flg);
     case '[':
       /* expr 'foo[]' has an lvalue iff foo has an lvalue */
+      DBG_LV(fprintf(stderr, "expr_has_lvalue: op[] 0\n"));
       if (is_slice_op(aop->arg1)) {
 	DBG_LV(fprintf(stderr, "expr_has_lvalue %s 5 false\n",
 	  a0->dump(0).c_str()));
@@ -191,6 +223,7 @@ static bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
 	}
 	arena_error_push(epos, "slice expression can not be modified");
       } else {
+	DBG_LV(fprintf(stderr, "expr_has_lvalue: op[] 0-1\n"));
 	const term tc = aop->arg0->resolve_texpr();
 	if (is_const_slice_family(tc)) {
 	  DBG_LV(fprintf(stderr, "expr_has_lvalue %s 6 false\n",
@@ -214,12 +247,12 @@ static bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
       #if 0
       /* expr '*foo' has an lvalue iff foo has an lvalue */
       /* enable this? constness should be transitive? */
-      /* if so, we need to reject copying ref{foo} if rhs has no lvalue */
+      /* if so, we need to reject copying ptr{foo} if rhs has no lvalue */
       if (!expr_has_lvalue(aop, aop->arg0, thro_flg)) {
 	return false;
       }
       #endif
-      /* expr '*foo' has an lvalue iff foo is a non-const ref */
+      /* expr '*foo' has an lvalue iff foo is a non-const ptr */
       if (is_const_pointer_family(aop->arg0->resolve_texpr())) {
 	DBG_LV(fprintf(stderr, "expr_has_lvalue %s 8 false\n",
 	  a0->dump(0).c_str()));
@@ -243,6 +276,7 @@ static bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
     return false;
   }
   if (a0->get_esort() == expr_e_var) {
+    /* var definition expr */
     DBG_LV(fprintf(stderr, "expr_has_lvalue %s 11 true\n",
       a0->dump(0).c_str()));
     return true; /* ok */
@@ -429,7 +463,7 @@ void expr_var::define_vars_one(expr_stmts *stmt)
 }
 
 static bool check_term_validity(const term& t, bool allow_nontype,
-  bool allow_local_func, expr_i *pos, std::string& err_mess_r)
+  bool allow_local_func, bool allow_weak, expr_i *pos, std::string& err_mess_r)
 {
   DBG_CTV(fprintf(stderr, "CTV %s\n", term_tostr_human(t).c_str()));
   expr_i *const e = t.get_expr();
@@ -455,8 +489,14 @@ static bool check_term_validity(const term& t, bool allow_nontype,
       return false;
     }
   }
+  if (!allow_weak && is_weak_value_type(t)) {
+    err_mess_r = "(template parameter '" + term_tostr_human(t) +
+      "' is a weak type)";
+    return false;
+  }
   const bool tp_allow_nontype = true;
   const bool tp_allow_local_func = !is_type(t);
+  const bool tp_allow_weak = false;
   const term_list *tl = t.get_args();
   const size_t tlarg_len = tl != 0 ? tl->size() : 0;
   expr_block *const ttbl = e ? e->get_template_block() : 0;
@@ -492,7 +532,7 @@ static bool check_term_validity(const term& t, bool allow_nontype,
 	  return false;
 	}
 	if (!check_term_validity(tl->front(), tp_allow_nontype,
-	  tp_allow_local_func, pos, err_mess_r)) {
+	  tp_allow_local_func, tp_allow_weak, pos, err_mess_r)) {
 	  return false;
 	}
 	const term& t2nd = *(++tl->begin());
@@ -515,8 +555,8 @@ static bool check_term_validity(const term& t, bool allow_nontype,
   }
   if (tl != 0) {
     for (term_list::const_iterator i = tl->begin(); i != tl->end(); ++i) {
-      if (!check_term_validity(*i, tp_allow_nontype, tp_allow_local_func, pos,
-	err_mess_r)) {
+      if (!check_term_validity(*i, tp_allow_nontype, tp_allow_local_func,
+	tp_allow_weak, pos, err_mess_r)) {
 	return false;
       }
     }
@@ -529,7 +569,7 @@ static void check_var_type(term& typ, expr_i *e, const char *sym,
   bool allow_interface)
 {
   std::string err_mess;
-  if (!check_term_validity(typ, false, false, e, err_mess)) {
+  if (!check_term_validity(typ, false, false, true, e, err_mess)) {
     arena_error_push(e, "invalid type '%s' for variable or field '%s' %s",
       term_tostr_human(typ).c_str(), sym, err_mess.c_str());
   }
@@ -556,12 +596,22 @@ static void check_var_type(term& typ, expr_i *e, const char *sym,
       term_tostr_human(typ).c_str(), sym);
   }
   if (cur != 0 && e->get_esort() == expr_e_var &&
-    (cur->block_esort == expr_e_struct || cur->block_esort == expr_e_variant)
-    && is_multithr_context(cur) && !term_is_multithr(typ)) {
-    arena_error_push(e,
-      "type '%s' for field '%s' is not multithreaded",
-      term_tostr_human(typ).c_str(), sym);
-    /* note: argdecls need not to be multithreaded */
+    (cur->block_esort == expr_e_struct || cur->block_esort == expr_e_variant)) {
+    expr_var *const ev = ptr_down_cast<expr_var>(e);
+    if (is_weak_value_type(typ)) {
+      arena_error_push(e,
+	"type '%s' for field '%s' is a weak type",
+	term_tostr_human(typ).c_str(), sym);
+    }
+    if (is_passby_cm_reference(ev->varinfo.passby)) {
+      arena_error_push(e, "field '%s' can't be a reference", sym);
+    }
+    if (is_multithr_context(cur) && !term_is_multithr(typ)) {
+      arena_error_push(e,
+	"type '%s' for field '%s' is not multithreaded",
+	term_tostr_human(typ).c_str(), sym);
+      /* note: argdecls need not to be multithreaded */
+    }
   }
 }
 
@@ -670,6 +720,14 @@ void expr_var::check_type(symbol_table *lookup)
     ptr_down_cast<expr_op>(parent_expr)->op != '=') {
     /* requires default constructor */
     check_default_construct(typ, this, sym);
+    if (is_passby_cm_reference(varinfo.passby)) {
+      arena_error_push(this, "reference variable '%s' is not initialized",
+	sym);
+    }
+    if (is_weak_value_type(typ)) {
+      arena_error_push(this, "weak type variable '%s' is not initialized",
+	sym);
+    }
   }
   /* type_of_this_expr */
 }
@@ -849,7 +907,15 @@ static void check_return_expr_block(expr_funcdef *fdef, expr_block *block)
 
 static void check_return_expr(expr_funcdef *fdef)
 {
-  if (is_void_type(fdef->get_rettype())) {
+  const term& typ = fdef->get_rettype();
+  std::string err_mess;
+  if (!check_term_validity(typ, false, false,
+    false, /* weak type is not allowed */
+    fdef, err_mess)) {
+    arena_error_push(fdef, "invalid return type '%s' %s",
+      term_tostr_human(typ).c_str(), err_mess.c_str());
+  }
+  if (is_void_type(typ)) {
     return; /* returning void */
   }
   if (fdef->no_def) {
@@ -937,10 +1003,8 @@ static void store_tempvar(expr_i *e, passby_e passby, bool blockscope_flag,
 {
   assert(passby != passby_e_unspecified);
   if (e->tempvar_id >= 0) {
-  //  if (e->tempvar_passby == passby) {
-  //    return;
-  //  }
-    abort(); // FIXME FIXME FIXME HERE HERE HERE
+    arena_error_throw(e,
+      "internal compiler error: can not create temp variable");
   }
   DBG_STT(fprintf(stderr, "store_tempvar passby=%d blocksc=%d g=%d %s\n",
     (int)passby, (int)blockscope_flag, (int)guard_elements,
@@ -964,25 +1028,43 @@ static void store_tempvar_constval(expr_i *e, bool blockscope_flag,
     dbgmsg);
 }
 
-static bool add_root_requirement(expr_i *e, bool lvalue_flag,
+static bool add_root_requirement(expr_i *e, bool byref_flag,
   bool blockscope_flag, bool checkonly_flag)
 {
-  expr_op *const eop = dynamic_cast<expr_op *>(e);
-  if (eop == 0) {
-    return true;
+  switch (e->get_esort()) {
+  case expr_e_var:
+  case expr_e_te:
+  case expr_e_symbol:
+  case expr_e_extval:
+  case expr_e_int_literal:
+  case expr_e_float_literal:
+  case expr_e_bool_literal:
+  case expr_e_str_literal:
+    return true; /* always rooted */
+  default:
+    break;
   }
   const call_trait_e ect = get_call_trait(e->resolve_texpr());
-  if (!lvalue_flag && !is_weak_value_type(e->resolve_texpr()) &&
+  if (!byref_flag && !is_weak_value_type(e->resolve_texpr()) &&
     (ect == call_trait_e_value || ect == call_trait_e_raw_pointer)) {
+    /* simple value type */
     if (!checkonly_flag) {
-      store_tempvar_constval(eop, blockscope_flag, "value/rawptr rvalue");
+      store_tempvar_constval(e, blockscope_flag, "value/rawptr rvalue");
 	/* ROOT */
     }
     return true;
   }
+  if (byref_flag && e->conv != conversion_e_none) {
+    // abort();
+    return false;
+  }
+  expr_op *const eop = dynamic_cast<expr_op *>(e);
+  if (eop == 0) {
+    return false;
+  }
   switch (eop->op) {
   case ',':
-    return add_root_requirement(eop->arg1, lvalue_flag, blockscope_flag,
+    return add_root_requirement(eop->arg1, byref_flag, blockscope_flag,
       checkonly_flag);
   case '=':
   case TOK_ADD_ASSIGN:
@@ -996,18 +1078,18 @@ static bool add_root_requirement(expr_i *e, bool lvalue_flag,
   case TOK_INC:
   case TOK_DEC:
   case TOK_PTR_REF:
-    return add_root_requirement(eop->arg0, lvalue_flag, blockscope_flag,
+    return add_root_requirement(eop->arg0, byref_flag, blockscope_flag,
       checkonly_flag);
   case '?':
-    return add_root_requirement(eop->arg1, lvalue_flag, blockscope_flag,
+    return add_root_requirement(eop->arg1, byref_flag, blockscope_flag,
       checkonly_flag);
   case ':':
     if (
-      add_root_requirement(eop->arg0, lvalue_flag, blockscope_flag, true) &&
-      add_root_requirement(eop->arg1, lvalue_flag, blockscope_flag, true)) {
-      add_root_requirement(eop->arg0, lvalue_flag, blockscope_flag,
+      add_root_requirement(eop->arg0, byref_flag, blockscope_flag, true) &&
+      add_root_requirement(eop->arg1, byref_flag, blockscope_flag, true)) {
+      add_root_requirement(eop->arg0, byref_flag, blockscope_flag,
 	checkonly_flag);
-      add_root_requirement(eop->arg1, lvalue_flag, blockscope_flag,
+      add_root_requirement(eop->arg1, byref_flag, blockscope_flag,
 	checkonly_flag);
       return true;
     }
@@ -1015,11 +1097,10 @@ static bool add_root_requirement(expr_i *e, bool lvalue_flag,
   case '.':
   case TOK_ARROW:
     if (is_variant(eop->arg0->resolve_texpr())) {
-      /* variant field cant be rooted here. this is the only case
-       * add_root_requirement cant root an expression */
+      /* variant field cant be rooted here. */
       return false;
     } else {
-      return add_root_requirement(eop->arg0, lvalue_flag, blockscope_flag,
+      return add_root_requirement(eop->arg0, byref_flag, blockscope_flag,
 	checkonly_flag);
     }
   case TOK_PTR_DEREF:
@@ -1031,17 +1112,25 @@ static bool add_root_requirement(expr_i *e, bool lvalue_flag,
     return true;
   case '[':
     {
-      const bool container_lvalue = expr_has_lvalue(eop->arg0, eop->arg0,
-	false); // FIXME: this is ok only if eop->arg0 is a container
-	        // FIXME: when eop->arg0 is a slice/cslice
-      if (add_root_requirement(eop->arg0, container_lvalue, blockscope_flag,
+      if (is_cm_slice_family(eop->arg0->resolve_texpr())) {
+	return true;
+      }
+      if (byref_flag && is_cm_slice_family(e->resolve_texpr())) {
+	return false;
+      }
+      const bool container_byref = true;
+      if (add_root_requirement(eop->arg0, container_byref, blockscope_flag,
 	true)) {
-	add_root_requirement(eop->arg0, container_lvalue, blockscope_flag,
+	add_root_requirement(eop->arg0, container_byref, blockscope_flag,
 	  checkonly_flag);
 	if (!checkonly_flag) {
+	  DBG_CON(fprintf(stderr, "%s op[] container blockscope=%d\n",
+	    eop->dump(0).c_str(), (int)blockscope_flag));
+	  const bool con_lv = expr_has_lvalue(eop->arg0, eop->arg0, false);
+	  DBG_CON(fprintf(stderr, "op[] container=%s lvalue=%d\n",
+	    eop->arg0->dump(0).c_str(), (int)con_lv));
 	  store_tempvar(eop->arg0,
-	    container_lvalue ?
-	      passby_e_mutable_reference : passby_e_const_reference,
+	    con_lv ? passby_e_mutable_reference : passby_e_const_reference,
 	    blockscope_flag, true, "arrelem");
 	}
 	return true;
@@ -1049,23 +1138,23 @@ static bool add_root_requirement(expr_i *e, bool lvalue_flag,
     }
     return false;
   case '(':
-    return add_root_requirement(eop->arg0, lvalue_flag, blockscope_flag,
+    return add_root_requirement(eop->arg0, byref_flag, blockscope_flag,
       checkonly_flag);
   default:
     return true;
   }
 }
 
-static void root_stmtscope_reference(expr_i *e)
+static void root_byref(expr_i *e, bool blockscope_flag)
 {
-  if (!add_root_requirement(e, true, false, false)) {
+  if (!add_root_requirement(e, true, blockscope_flag, false)) {
     arena_error_push(e, "can not root an lvalue");
   }
 }
 
-static void root_stmtscope_reference_or_value(expr_i *e)
+static void root_byref_or_byval(expr_i *e, bool blockscope_flag)
 {
-  if (add_root_requirement(e, false, false, false)) {
+  if (add_root_requirement(e, false, blockscope_flag, false)) {
     return;
   }
   call_trait_e ct = get_call_trait(e->resolve_texpr());
@@ -1124,6 +1213,20 @@ static bool expr_would_invalidate_other_expr(expr_i *e)
   return false;
 }
 
+static void passing_root_requirement(const term& typ, passby_e passby,
+  expr_i *epos, expr_i *e, bool blockscope_flag)
+{
+  // FIXME: passby_e_unspecified
+  if (is_passby_cm_reference(passby)) {
+    if (is_passby_mutable(passby)) {
+      check_lvalue(epos, e);
+    }
+    root_byref(e, blockscope_flag);
+  } else {
+    root_byref_or_byval(e, blockscope_flag);
+  }
+}
+
 void expr_op::check_type(symbol_table *lookup)
 {
   fn_check_type(arg0, lookup);
@@ -1148,7 +1251,7 @@ void expr_op::check_type(symbol_table *lookup)
       /* vector_size, map_size etc */
       arg1_sym_prefix = es->sym + std::string("_");
       if (is_cm_pointer_family(t)) {
-	/* if t is a ref{foo}, find 'foo_funcname' from foo's namespace */
+	/* if t is a ptr{foo}, find 'foo_funcname' from foo's namespace */
 	term t1 = get_pointer_target(t);
 	expr_i *const einst1 = term_get_instance(t1);
 	expr_struct *const es1 = dynamic_cast<expr_struct *>(einst1);
@@ -1406,7 +1509,7 @@ void expr_op::check_type(symbol_table *lookup)
     /* root expressions if necessary */
     if (expr_would_invalidate_other_expr(arg0)) {
       /* lhs can invalidate rhs expression */
-      root_stmtscope_reference_or_value(arg1);
+      root_byref_or_byval(arg1, false);
     }
     if (expr_would_invalidate_other_expr(arg1)) {
       /* rhs can invalidate lhs expression */
@@ -1416,11 +1519,31 @@ void expr_op::check_type(symbol_table *lookup)
 	store_tempvar_constval(arg1, false, "variant assign");
       }
     }
+    DBG_CON(fprintf(stderr, "arg0: %s\n", arg0->dump(0).c_str()));
     if (arg0->get_esort() == expr_e_var) {
+      if (op != '=') {
+	arena_error_throw(this, "invalid expression (invalid assignment)");
+      }
       expr_var *const ev = ptr_down_cast<expr_var>(arg0);
-      if (is_passby_cm_reference(ev->varinfo.passby)) {
-	const bool lvalue_flag = is_passby_mutable(ev->varinfo.passby);
-	add_root_requirement(arg1, lvalue_flag, true, false);
+      if (ev->varinfo.passby == passby_e_mutable_reference) {
+	/* foo mutable & x = ... requires rhs to have lvalue */
+	check_lvalue(this, arg1);
+      }
+      if (is_passby_cm_reference(ev->varinfo.passby) ||
+	is_weak_value_type(ev->resolve_texpr())) {
+	/* block scope root */
+	DBG_CON(fprintf(stderr, "block scope root rhs %s\n",
+	  arg1->dump(0).c_str()));
+	const bool byref_flag = is_passby_cm_reference(ev->varinfo.passby);
+	if (!add_root_requirement(arg1, byref_flag, true, false)) {
+	  arena_error_throw(arg1, "cannot root expression");
+	}
+      }
+    } else {
+      /* lhs is not a vardef */
+      if (is_weak_value_type(arg0->resolve_texpr())) {
+	arena_error_throw(this, "invalid assignment ('%s' is a weak type)",
+	  term_tostr_human(arg0->resolve_texpr()).c_str());
       }
     }
   }
@@ -1506,14 +1629,8 @@ void expr_funccall::check_type(symbol_table *lookup)
 	  argcnt, efd->sym);
       }
       /* check lvalue and root argument expressions */
-      if (is_passby_cm_reference(ad->passby)) {
-	if (is_passby_mutable(ad->passby)) {
-	  check_lvalue(this, *j);
-	}
-	root_stmtscope_reference(*j);
-      } else {
-	root_stmtscope_reference_or_value(*j);
-      }
+      passing_root_requirement(ad->resolve_texpr(), ad->passby, this, *j,
+	false);
       ++j;
       ad = ad->rest;
       ++argcnt;
@@ -1522,12 +1639,9 @@ void expr_funccall::check_type(symbol_table *lookup)
       efd->is_virtual_or_member_function()) {
       /* check lvalue and root the foo of foo.bar(...) */
       expr_i *const thisexpr = ptr_down_cast<expr_op>(func)->arg0;
-      if (!efd->is_const) {
-	check_lvalue(this, thisexpr);
-	root_stmtscope_reference(thisexpr);
-      } else {
-	root_stmtscope_reference_or_value(thisexpr);
-      }
+      passing_root_requirement(thisexpr->resolve_texpr(),
+	efd->is_const ? passby_e_const_reference : passby_e_mutable_reference,
+	this, thisexpr, false);
     }
     if (j != arglist.end()) {
       arena_error_push(this, "too many argument for '%s'", efd->sym);
@@ -1552,8 +1666,8 @@ void expr_funccall::check_type(symbol_table *lookup)
       }
       if (real_func_expr != 0 && real_func_expr->get_sdef() != 0) {
 	std::string err_mess;
-	if (!check_term_validity(einst->get_value_texpr(), true, true, this,
-	  err_mess)) {
+	if (!check_term_validity(einst->get_value_texpr(), true, true, true,
+	  this, err_mess)) {
 	  arena_error_push(this, "incomplete template expression: '%s' %s",
 	    term_tostr_human(einst->get_value_texpr()).c_str(),
 	    err_mess.c_str());
@@ -1567,8 +1681,8 @@ void expr_funccall::check_type(symbol_table *lookup)
       }
     } else {
       std::string err_mess;
-      if (!check_term_validity(efd->get_value_texpr(), true, true, this,
-	err_mess)) {
+      if (!check_term_validity(efd->get_value_texpr(), true, true, true,
+	this, err_mess)) {
 	// abort();
 	arena_error_push(this, "incomplete template expression: '%s' %s",
 	  term_tostr_human(efd->get_value_texpr()).c_str(), err_mess.c_str());
@@ -1622,12 +1736,12 @@ void expr_funccall::check_type(symbol_table *lookup)
     tvmap_type tvmap;
     expr_struct *est = ptr_down_cast<expr_struct>(func_inst);
     if (est->cname != 0) {
+      typedef std::list<expr_i *> arglist_type;
+      arglist_type arglist;
+      append_hidden_this(func, arglist);
+      append_comma_sep_list(arg, arglist);
       if (is_cm_pointer_family(func_te)) {
 	/* value to pointer */
-	typedef std::list<expr_i *> arglist_type;
-	arglist_type arglist;
-	append_hidden_this(func, arglist);
-	append_comma_sep_list(arg, arglist);
 	if (arglist.size() != 1) {
 	  arena_error_push(this, "too many argument for '%s'", est->sym);
 	}
@@ -1652,17 +1766,28 @@ void expr_funccall::check_type(symbol_table *lookup)
 	    arena_error_push(this, "invalid conversion from %s to %s",
 	      s0.c_str(), s1.c_str());
 	  }
-	  root_stmtscope_reference_or_value(j); /* root the arg */
+	  passing_root_requirement(j->resolve_texpr(), passby_e_unspecified,
+	    this, j, false); /* root the arg */
 	  type_of_this_expr = func_te;
 	} else {
-	  /* func_te has a tparam. expr is the form ref(x). */
+	  /* func_te has a tparam. expr is the form ptr(x). */
 	  term_list tl;
 	  tl.push_back(j->resolve_texpr());
 	  term rt(func_te.get_expr(), tl);
-	  root_stmtscope_reference_or_value(j); /* root the arg */
+	  passing_root_requirement(j->resolve_texpr(), passby_e_unspecified,
+	    this, j, false); /* root the arg */
 	  /* need not to eval rt, because it' always irreducible. */
 	  type_of_this_expr = rt;
 	}
+	funccall_sort = funccall_e_struct_constructor;
+	return;
+      } else if (get_category(func_te) == "varray") {
+	if (arglist.size() != 1) {
+	  arena_error_push(this, "too many argument for '%s'", est->sym);
+	}
+	expr_i *const j = arglist.front();
+	check_unsigned_integral_expr(0, j);
+	type_of_this_expr = func_te;
 	funccall_sort = funccall_e_struct_constructor;
 	return;
       } else {
@@ -1691,14 +1816,8 @@ void expr_funccall::check_type(symbol_table *lookup)
 	  arena_error_push(this, "  initializing argument %u of '%s'",
 	    argcnt, est->sym);
 	}
-	if (is_passby_cm_reference(ad->passby)) {
-	  if (is_passby_mutable(ad->passby)) {
-	    check_lvalue(this, *j);
-	  }
-	  root_stmtscope_reference(*j);
-	} else {
-	  root_stmtscope_reference_or_value(*j);
-	}
+	passing_root_requirement(ad->resolve_texpr(), ad->passby, this, *j,
+	  false);
 	++j;
 	ad = ad->rest;
 	++argcnt;
@@ -1728,7 +1847,8 @@ void expr_funccall::check_type(symbol_table *lookup)
 	  arena_error_push(this, "  initializing argument %u of '%s'",
 	    argcnt, est->sym);
 	}
-	root_stmtscope_reference_or_value(*j);
+	passing_root_requirement((*i)->resolve_texpr(), passby_e_unspecified,
+	  this, *j, false);
 	++i;
 	++j;
 	++argcnt;
@@ -1919,14 +2039,8 @@ void expr_feach::check_type(symbol_table *lookup)
       term_tostr_human(ta1).c_str(),
       term_tostr_human(telm).c_str());
   }
-  if (is_passby_cm_reference(block->argdecls->rest->passby)) {
-    if (is_passby_mutable(block->argdecls->rest->passby)) {
-      check_lvalue(this, ce);
-    }
-    root_stmtscope_reference(ce);
-  } else {
-    root_stmtscope_reference_or_value(ce);
-  }
+  passing_root_requirement(block->argdecls->rest->resolve_texpr(),
+    block->argdecls->rest->passby, this, ce, false);
   expr_stmts *const stmts = ptr_down_cast<expr_stmts>(
     find_parent(this, expr_e_stmts));
   this->bid_offset = get_next_bid(stmts->asts); /* always 0 */

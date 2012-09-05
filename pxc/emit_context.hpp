@@ -30,6 +30,11 @@ struct emit_context_stmt {
     sep_blockscope_var(false), is_struct_or_global_block(false) { }
 };
 
+struct emit_expr_info {
+  bool defset_sep : 1;
+  emit_expr_info() : defset_sep(false) { }
+};
+
 struct emit_context {
   emit_context(const std::string& dest_filename);
   void start_ns();
@@ -44,12 +49,14 @@ struct emit_context {
   void printf(const char *format, ...) __attribute__((format (printf, 2, 3)));
   void puts(const char *str);
   void puts(const std::string& str);
+  emit_expr_info& get_expr_info(const expr_i *key);
 private:
   auto_fp fp;
   int cur_indent;
   std::string cur_ns;
   std::string dest_filename;
   emit_context_stmt sct;
+  std::map<const expr_i *, emit_expr_info> eeimap;
 private:
   emit_context(const emit_context&);
   emit_context& operator =(const emit_context&);
