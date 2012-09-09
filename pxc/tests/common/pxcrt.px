@@ -132,9 +132,13 @@ struct refvar_igrd_nn {
   ~refvar_igrd_nn() {
     c.dec_invalidate_guard();
   }
-  Tc& get() const {
+  Tc& get() {
     return c;
   }
+  typename Tc::range_type get_range()
+    { return typename Tc::range_type(c); }
+  typename Tc::crange_type get_crange()
+    { return typename Tc::crange_type(c); }
 private:
   Tc& c;
   refvar_igrd_nn(const refvar_igrd_nn&);
@@ -154,9 +158,13 @@ struct refvar_igrd {
     cp = &c;
     return c;
   }
-  Tc& get() const {
+  Tc& get() {
     return *cp;
   }
+  typename Tc::range_type get_range()
+    { return typename Tc::range_type(*cp); }
+  typename Tc::crange_type get_crange()
+    { return typename Tc::crange_type(*cp); }
 private:
   Tc *cp;
   refvar_igrd(const refvar_igrd&);
@@ -170,7 +178,7 @@ struct valvar_igrd_nn {
   ~valvar_igrd_nn() {
     c.dec_invalidate_guard();
   }
-  Tc& get() const {
+  Tc& get() {
     return c;
   }
 private:
@@ -191,9 +199,13 @@ struct valvar_igrd {
     c.inc_invalidate_guard();
     return c;
   }
-  Tc& get() const {
+  Tc& get() {
     return c;
   }
+  typename Tc::range_type get_range()
+    { return typename Tc::range_type(c); }
+  typename Tc::crange_type get_crange()
+    { return typename Tc::crange_type(c); }
 private:
   Tc c;
   valvar_igrd(const valvar_igrd&);

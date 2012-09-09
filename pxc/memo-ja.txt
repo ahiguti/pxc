@@ -1,46 +1,36 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- mutable&渡しの際にinterfaceへのupcastがあったらエラーになる問題
-- fooが構造体のとき foo f(100) ってどういう意味になるのか？
+- 関数でないものでもoperator ()を適用できてしまう
+- interface実装の引数byref等が一致しているかチェック
+- interface型を値で持てないように
+- コンテナのfind()を作るためにはweak型を返す関数を作れないといけない
+- ptrも初期化を強制し、デフォルトコンストラクタはnullptrにする
+- rcptr無駄に指す先をアロケートしてしまわないように
+  - ptr型の一時変数を作ったときにはnullで暫定初期化してよい
+- test_01_px/i1_fixme : 仮想関数の実装を後ろに回さないといけないが、
+  そもそも、ptrの指し先アロケートを廃止して仮想関数のダミー実装を必要
+  なくすようにするべし
+- 短絡boxingを再び有効に
+- expr_feach::emit(): map, rangeに対するemit
+- list, set
 - interfaceへの代入はエラーにする
 - globalやstructには参照変数などは置けないように
 - add_root_requirementのFIXME
-- ptrも初期化を強制し、デフォルトコンストラクタはnullptrにする
-- 「参照型の制約」実装
 - x[i]の型が単純でかつ参照要求ではないなら結果を一時変数に置いてguard
   を除去
-- passing_root_requirementのFIXME
-- sliceの要素がlvalueを要してもslice自体はlvalueいらず、sliceかcslice
-  であるかによってlvalueを持つかが決まる(check_lvalueの修正)
-  - add_root_requirementの'[]'についても同様の修正必要(FIXME印を見よ)
-- add_root_requirement()するケースの整理、複数要求がある場合の処理。
-  - 関数に引数を参照渡ししている箇所では一時変数にしないとC++が困る
 - 構造体にslice等のweak型を含む型のfieldを置けないように
   is_weak_type() あるいはヒープに置けなければそれでよい？
-- operatorと組み込み関数について整理。大小比較は全型に？
-  - tree_mapに必要
-- tree_map_range
-- 短絡boxingを再び有効に
-- expr_feach::emit(): mapに対するemit
-- list, set
+- fooが構造体のとき foo f(100) ってどういう意味になるのか？
 - type categoryの整理
-
-1. variantタグからintへの変換を実装し、それを使いgenericなcompareを
-   つくる
-2. tree_mapのキー比較はgeneric::compareを使う
-3. tree_map_rangeを実装
-4. tree_mapに対するforeach実装
 
 ---------------------------------------------------------------------
 TEST TODO M1
 
-- rcptr無駄に指す先をアロケートしてしまわないように
-  - ptr型の一時変数を作ったときにはnullで暫定初期化してよい
+- 「参照型の制約」実装
+- operatorと組み込み関数について整理。大小比較は全型に？
 - test_14_root/refvar.px
 - test_14_root/condtemp.px refvarが無いエラーになるように
-- コンテナからスライスへの変換の短い表記 x[..]
-- 自動変換が入ったら左辺値を取れないように?(check_lvalue)
 - structコンストラクタに対するcheck_return_expr()
 - std::vector<bool>を使ってしまうと要素への参照が取れない
 
@@ -86,6 +76,7 @@ FIXME/TODO M4
 ---------------------------------------------------------------------
 TODO
 
+- ptrをconst byvalで渡すときは生ポインタで受ける?
 - テンプレート引数にtrueが使えない？
 - inline_cに色々装飾付けられるが、エラー
 - arr.resize()のように参照引数が一個だけでthreadedならinvguardしなく
@@ -180,6 +171,14 @@ TODO
 ---------------------------------------------------------------------
 DONE
 
+- 引数のpassby_e_unspecified(call trait)をやめる(done)
+- コンテナからrangeへの自動変換(done)
+- mutable&渡しの際にinterfaceへのupcastがあったらエラーになる問題(done)
+- sliceの要素がlvalueを要してもslice自体はlvalueいらず、sliceかcslice
+  であるかによってlvalueを持つかが決まる(check_lvalueの修正)(done)
+  - add_root_requirementの'[]'についても同様の修正必要(FIXME印を見よ)
+- add_root_requirement()するケースの整理、複数要求がある場合の処理。(done)
+- 自動変換が入ったら左辺値を取れないように?(check_lvalue)(done)
 - if文がboolでなかった場合のエラーメッセージに行番号が出ない？(done)
 - variantのtagからintへの変換(done)
 - test_22_error/tparam.px (done)
@@ -4861,4 +4860,17 @@ weak型(参照/slice/range型)の制約
   - x[]が左辺値を持つかどうかの判定、xがsliceやrangeのときは
     cslice/slice, crange/rangeの区別で判定する(done)
   - *xをslice/rangeについてもつかえるように
+
+---------------------------------------------------------------------
+引数のcall traitをやめる
+
+int x -> mutable value
+int const x -> const value
+int& x -> mutable reference
+int const& x -> const reference
+
+foo(t x)をよぶときに引数としてa[i]を指定したとき、引数a[i]をrootする
+手段としてはbyrefでもbyvalでもどちらでもよいが、これは小さい型のとき
+はbyvalで、そうでないときはbyrefに。
+
 

@@ -10,6 +10,7 @@ fi
 
 total=0
 err=0
+errnames=''
 for i in $TESTS; do
   bn=`basename $i .px`
   echo "$i";
@@ -23,18 +24,21 @@ for i in $TESTS; do
   if ! diff -u $bn.log $bn.exp 2>&1; then
     echo "$bn failed";
     err=$((err + 1))
+    errnames="$errnames $bn"
     # exit 1
   elif [ -f "$bn.exp2" ]; then
     if ! diff -u $bn.log2 $bn.exp2 2>&1; then
       echo "$bn failed";
       err=$((err + 1))
+      errnames="$errnames $bn"
       # exit 1
     fi
   fi
   total=$((total + 1))
 done
 if [ "$err" != 0 ]; then
-  echo "FAILED $err/$total"
+  echo "FAILED$errnames"
+  echo "FAILED $err of $total"
   exit 1
 fi
 echo "OK."

@@ -45,7 +45,6 @@ enum attribute_e {
 };
 
 enum passby_e {
-  passby_e_unspecified, /* const_value or const_reference */
   passby_e_mutable_value,
   passby_e_const_value,
   passby_e_mutable_reference,
@@ -101,8 +100,6 @@ expr_i *expr_typedef_new(const char *fn, int line, const char *sym,
   unsigned int num_tparams, attribute_e visi);
 expr_i *expr_macrodef_new(const char *fn, int line, const char *sym,
   expr_i *tparams, expr_i *rhs, attribute_e visi);
-expr_i *expr_inherit_new(const char *fn, int line, expr_i *nssym,
-  expr_i *rest);
 expr_i *expr_struct_new(const char *fn, int line, const char *sym,
   const char *cname, const char *category, expr_i *block, attribute_e visi);
 expr_i *expr_variant_new(const char *fn, int line, const char *sym,

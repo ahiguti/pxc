@@ -1156,47 +1156,6 @@ std::string expr_macrodef::dump(int indent) const
   return std::string("macro ") + sym + " " + dump_expr(indent, get_rhs());
 }
 
-#if 0
-expr_inherit::expr_inherit(const char *fn, int line, expr_i *nssym,
-  expr_i *rest)
-  : expr_i(fn, line), nssym(ptr_down_cast<expr_nssym>(nssym)),
-    rest(ptr_down_cast<expr_inherit>(rest)), fullsym(get_full_name(nssym)),
-    symbol_def(0)
-{
-}
-
-expr_i *expr_inherit::resolve_symdef()
-{
-  if (symbol_def == 0) {
-    bool is_global = false, is_upvalue = false;
-    symbol_def = symtbl_lexical->resolve_name(fullsym, ns, this, is_global,
-      is_upvalue);
-    if (symbol_def->get_esort() != expr_e_interface) {
-      arena_error_throw(this, "'%s' is not an interface", fullsym.c_str());
-    }
-  }
-  return symbol_def;
-}
-
-const expr_i *expr_inherit::get_symdef() const
-{
-  if (symbol_def == 0) {
-    arena_error_throw(this, "internal error: expr_inherit::get_symdef");
-  }
-  return symbol_def;
-}
-
-std::string expr_inherit::dump(int indent) const
-{
-  std::string r = fullsym;
-  if (rest != 0) {
-    r += " ";
-    r += dump_expr(indent, rest);
-  }
-  return r;
-}
-#endif
-
 expr_struct::expr_struct(const char *fn, int line, const char *sym,
   const char *cname, const char *category, expr_i *block, attribute_e attr)
   : expr_i(fn, line), sym(sym), cname(cname), category(category),
