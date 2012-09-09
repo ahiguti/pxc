@@ -65,9 +65,10 @@ bool is_interface_pointer(const term& t);
 bool is_const_pointer_family(const term& t);
 bool is_cm_pointer_family(const term& t);
 bool is_array_family(const term& t);
+bool is_container_family(const term& t);
 bool is_map_family(const term& t);
-bool is_const_slice_family(const term& t);
-bool is_cm_slice_family(const term& t);
+bool is_const_range_family(const term& t);
+bool is_cm_range_family(const term& t);
 bool is_weak_value_type(const term& t);
 bool has_userdef_constr(const term& t);
 bool type_has_invalidate_guard(const term& t);
@@ -105,6 +106,13 @@ bool is_passby_cm_value(passby_e passby);
 bool is_passby_cm_reference(passby_e passby);
 bool is_passby_const(passby_e passby);
 bool is_passby_mutable(passby_e passby);
+
+bool is_range_op(const expr_i *e);
+bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg);
+term get_pointer_deref_texpr(expr_op *eop, const term& t);
+term get_array_range_texpr(expr_op *eop, expr_i *ec, term& ect);
+term get_array_elem_texpr(expr_op *eop, term& t0);
+term get_array_index_texpr(expr_op *eop, term& t0);
 
 void fn_append_coptions(expr_i *e, coptions& copt_append);
 void fn_set_namespace(expr_i *e, const std::string& n, int& block_id_ns);

@@ -16,6 +16,7 @@ force:
 	    echo -n "FORCE ... "; \
 	    $(MAKE) accept; \
 	    if ! ./run.sh; then \
+	      echo "$$i failed"; \
 	      exit 1; \
 	    fi; \
 	  else \
@@ -35,6 +36,7 @@ test:
 	  if [ -f ./DONE ]; then \
 	    echo "skip"; \
 	  elif ! ./run.sh; then \
+	    echo "$$i failed"; \
 	    exit 1; \
 	  else \
 	    echo "success"; \

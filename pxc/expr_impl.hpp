@@ -86,7 +86,9 @@ enum conversion_e {
   conversion_e_to_string,
   conversion_e_from_string,
   #endif
-  conversion_e_subtype,
+  conversion_e_subtype_obj, /* foo to ifoo etc. */
+  conversion_e_subtype_ptr, /* ptr{foo} to cptr{foo} etc. */
+  conversion_e_container_range, /* vector{foo} to range{foo} etc. */
   conversion_e_boxing,
 };
 
@@ -107,7 +109,7 @@ struct variable_info {
   passby_e passby : 3; /* value/reference, constness */
   bool guard_elements : 1; /* guard from invalidating container elems */
   bool scope_block : 1; /* block scope or statement scope */
-  variable_info () : passby(passby_e_unspecified),
+  variable_info () : passby(passby_e_const_reference),
     guard_elements(false), scope_block(false) { }
 };
 
@@ -595,7 +597,6 @@ public:
   std::string ns;
   expr_te *type_uneval;
   passby_e passby;
-  // bool byref_flag; // FIXME: remove
   expr_argdecls *rest;
 };
 

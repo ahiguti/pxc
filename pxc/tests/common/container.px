@@ -34,6 +34,7 @@ struct {t} slice {
   public macro crange_type cslice{t};
   public extern "empty" function bool empty() const;
   public extern "size" function size_t size() const;
+  public extern "next" function void next();
 }
 
 public multithreaded extern "container::cslice" "cslice"
@@ -44,6 +45,7 @@ struct {t} cslice {
   public macro crange_type cslice{t};
   public extern "empty" function bool empty() const;
   public extern "size" function size_t size() const;
+  public extern "next" function void next();
 }
 
 public macro tree_map{t, s}
@@ -75,7 +77,6 @@ struct {t, s, f} tree_map_compare_range {
   public macro range_type tree_map_compare_range{t, s, f};
   public macro crange_type tree_map_compare_crange{t, s, f};
   public extern "empty" function bool empty() const;
-  public extern "size" function size_t size() const;
   public extern "next" function void next();
 }
 
@@ -86,7 +87,6 @@ struct {t, s, f} tree_map_compare_crange {
   public macro range_type tree_map_compare_crange{t, s, f};
   public macro crange_type tree_map_compare_crange{t, s, f};
   public extern "empty" function bool empty() const;
-  public extern "size" function size_t size() const;
   public extern "next" function void next();
 }
 
@@ -96,6 +96,8 @@ extern "type" inline
 #include <stdint.h>
 #include <stdio.h>
 namespace container {
+template <typename T> struct slice;
+template <typename T> struct cslice;
 template <typename T>
 struct vector {
   template <typename Tc> friend struct pxcrt::refvar_igrd_nn;
@@ -105,6 +107,8 @@ struct vector {
   typedef typename std::vector<T>::size_type size_type;
   typedef typename std::vector<T>::iterator iterator;
   typedef typename std::vector<T>::const_iterator const_iterator;
+  typedef slice<T> range_type;
+  typedef cslice<T> crange_type;
   vector() : invalidate_guard_count(0) { }
   vector(size_t len) : v(len), invalidate_guard_count(0) { }
   vector(const vector& x) : v(x.v), invalidate_guard_count(0) { }
@@ -189,6 +193,7 @@ struct slice {
   template <typename Tc> friend struct pxcrt::valvar_igrd;
   typedef size_t size_type;
   slice() : v(0), len(0) { }
+  explicit slice(vector<T>& x) : v(x.rawarr()), len(x.size()) { }
   template <typename Tc> slice(Tc& c, size_t o1, size_t o2) {
     if (o2 > c.size()) { o2 = c.size(); }
     if (o1 > o2) { o1 = o2; }
@@ -199,6 +204,10 @@ struct slice {
   T& operator [](size_type idx) const {
     if (idx >= len) { pxcrt::throw_invalid_index(); }
     return v[idx];
+  }
+  T& operator *() const {
+    if (len == 0) { pxcrt::throw_invalid_index(); }
+    return *v;
   }
   T *rawarr() const { return v; }
 private:
@@ -214,6 +223,7 @@ struct cslice {
   typedef size_t size_type;
   cslice() : v(0), len(0) { }
   cslice(const slice<T>& x) : v(x.rawarr()), len(x.size()){ }
+  explicit cslice(const vector<T>& x) : v(x.rawarr()), len(x.size()) { }
   template <typename Tc> cslice(const Tc& c, size_t o1, size_t o2) {
     if (o2 > c.size()) { o2 = c.size(); }
     if (o1 > o2) { o1 = o2; }
@@ -224,6 +234,10 @@ struct cslice {
   const T& operator [](size_type idx) const {
     if (idx >= len) { pxcrt::throw_invalid_index(); }
     return v[idx];
+  }
+  const T& operator *() const {
+    if (len == 0) { pxcrt::throw_invalid_index(); }
+    return *v;
   }
   const T *rawarr() const { return v; }
 private:
@@ -237,6 +251,8 @@ struct compare_less {
     return f.call$f(x, y) < 0;
   }
 };
+template <typename Tk, typename Tm, typename Tf> struct tree_map_range;
+template <typename Tk, typename Tm, typename Tf> struct tree_map_crange;
 template <typename Tk, typename Tm, typename Tf>
 struct tree_map_compare {
   template <typename Tc> friend struct pxcrt::refvar_igrd_nn;
@@ -247,6 +263,8 @@ struct tree_map_compare {
   typedef typename map_type::size_type size_type;
   typedef typename map_type::iterator iterator;
   typedef typename map_type::const_iterator const_iterator;
+  typedef tree_map_range<Tk, Tm, compare_less<Tf> > range_type;
+  typedef tree_map_crange<Tk, Tm, compare_less<Tf> > crange_type;
   tree_map_compare() : invalidate_guard_count(0) { }
   tree_map_compare(const tree_map_compare& x)
     : v(x.v), invalidate_guard_count(0) { }
@@ -280,20 +298,40 @@ private:
   mutable size_t invalidate_guard_count;
 };
 template <typename Tk, typename Tm, typename Tf>
-struct tree_map_compare_range {
-  template <typename Tc> friend struct pxcrt::refvar_igrd_nn;
-  template <typename Tc> friend struct pxcrt::refvar_igrd;
-  template <typename Tc> friend struct pxcrt::valvar_igrd_nn;
-  template <typename Tc> friend struct pxcrt::valvar_igrd;
+struct tree_map_range {
   typedef std::map< Tk, Tm, compare_less<Tf> > map_type;
   typedef typename map_type::iterator iterator;
-  typedef typename map_type::const_iterator const_iterator;
-  tree_map_compare_range() : start(), finish() { }
-  template <typename Ti> tree_map_compare_range(const Ti& st, const Ti& fi)
-    : start(st), finish(fi) { }
+  tree_map_range() : start(), finish() { }
+  explicit tree_map_range(map_type& c) : start(c.begin()), finish(c.end()) { }
+  bool empty() const { return start == finish; }
+  Tk& operator *() const {
+    if (start == finish) { pxcrt::throw_invalid_index(); }
+    return *start;
+  }
+  void next() {
+    if (start == finish) { pxcrt::throw_invalid_index(); }
+    ++start;
+  }
 private:
-  void inc_invalidate_guard() const { }
-  void dec_invalidate_guard() const { }
+  iterator start;
+  iterator finish;
+};
+template <typename Tk, typename Tm, typename Tf>
+struct tree_map_crange {
+  typedef std::map< Tk, Tm, compare_less<Tf> > map_type;
+  typedef typename map_type::const_iterator iterator;
+  tree_map_crange() : start(), finish() { }
+  explicit tree_map_crange(const map_type& c)
+    : start(c.begin()), finish(c.end()) { }
+  bool empty() const { return start == finish; }
+  const Tk& operator *() const {
+    if (start == finish) { pxcrt::throw_invalid_index(); }
+    return *start;
+  }
+  void next() {
+    if (start == finish) { pxcrt::throw_invalid_index(); }
+    ++start;
+  }
 private:
   iterator start;
   iterator finish;

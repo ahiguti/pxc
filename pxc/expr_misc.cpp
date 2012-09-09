@@ -30,6 +30,8 @@
 #define DBG_COPT(x)
 #define DBG_SYMTBL(x)
 #define DBG_THR(x)
+#define DBG_LV(x)
+#define DBG_SLICE(x)
 
 namespace pxc {
 
@@ -408,21 +410,27 @@ bool is_map_family(const term& t)
   return cat == "tree_map";
 }
 
-bool is_const_slice_family(const term& t)
+bool is_const_range_family(const term& t)
 {
   const std::string cat = get_category(t);
-  return cat == "cslice";
+  return cat == "cslice" || cat == "tree_map_crange";
 }
 
-bool is_cm_slice_family(const term& t)
+bool is_cm_range_family(const term& t)
 {
   const std::string cat = get_category(t);
-  return cat == "slice" || cat == "cslice";
+  return cat == "slice" || cat == "cslice"
+    || cat == "tree_map_range" || cat == "tree_map_crange";
 }
 
 bool is_weak_value_type(const term& t)
 {
-  return is_cm_slice_family(t); /* slices are weak */
+  return is_cm_range_family(t); /* range types are weak */
+}
+
+bool is_container_family(const term& t)
+{
+  return is_array_family(t) || is_map_family(t); // TODO
 }
 
 const bool has_userdef_constr_internal(const term& t,
@@ -487,8 +495,10 @@ bool type_has_invalidate_guard(const term& t)
 bool type_allow_feach(const term& t)
 {
   const std::string cat = get_category(t);
-  if (cat == "varray" || cat == "farray" || cat == "tree_map"
-    || cat == "slice") {
+  if (
+    cat == "varray" || cat == "farray" || cat == "tree_map"
+    || cat == "slice" || cat == "cslice"
+    || cat == "tree_map_range" || cat == "tree_map_crange") {
     return true;
   }
   return false;
@@ -994,20 +1004,35 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
     return true;
   }
   #endif
-  if (is_cm_slice_family(tconvto) && is_cm_slice_family(tfrom) &&
-    (is_const_slice_family(tconvto) || !is_const_slice_family(tfrom))) {
-    /* slice to cslice */
+  if (is_cm_range_family(tconvto) && is_cm_range_family(tfrom) &&
+    (is_const_range_family(tconvto) || !is_const_range_family(tfrom))) {
+    /* range to crange */
     const term_list *const tta = tconvto.get_args();
     const term_list *const tfa = tfrom.get_args();
     if (tta != 0 && tfa != 0 && tta->front() == tfa->front()) {
-      DBG_CONV(fprintf(stderr, "convert: slice\n"));
-      efrom->conv = conversion_e_subtype;
+      DBG_CONV(fprintf(stderr, "convert: range\n"));
+      efrom->conv = conversion_e_subtype_ptr;
       efrom->type_conv_to = tconvto;
       return true;
     }
   }
-  #if 0
-  #endif
+  if (is_container_family(tfrom) && is_cm_range_family(tconvto)) {
+    DBG_CONV(fprintf(stderr, "convert: range? %s -> %s\n",
+      term_tostr_human(tfrom).c_str(), term_tostr_human(tconvto).c_str()));
+    const term tra = get_array_range_texpr(0, efrom, tfrom);
+    if (is_const_range_family(tra) && !is_const_range_family(tconvto)) {
+      DBG_CONV(fprintf(stderr, "convert: auto range constness\n"));
+      return false;
+    }
+    const term_list *const tta = tconvto.get_args();
+    const term_list *const tfa = tra.get_args();
+    if (tta != 0 && tfa != 0 && tta->front() == tfa->front()) {
+      DBG_CONV(fprintf(stderr, "convert: auto range\n"));
+      efrom->conv = conversion_e_container_range;
+      efrom->type_conv_to = tconvto;
+      return true;
+    }
+  }
   if (is_cm_pointer_family(tconvto) &&
     is_sub_type(get_pointer_target(tfrom), get_pointer_target(tconvto)) &&
     is_compatible_pointer(tfrom, tconvto)) {
@@ -1026,21 +1051,21 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
     if (!cat_to.empty() && !cat_from.empty() &&
       (cat_to == "cptr" || cat_from == "ptr")) {
       DBG_CONV(fprintf(stderr, "convert: (struct) ptr to cptr\n"));
-      efrom->conv = conversion_e_subtype;
+      efrom->conv = conversion_e_subtype_ptr;
       efrom->type_conv_to = tconvto;
       return true;
     }
     if (!cat_to.empty() && !cat_from.empty() &&
       (cat_to == "tcptr" || cat_from == "tptr")) {
       DBG_CONV(fprintf(stderr, "convert: (struct) tptr to tcptr\n"));
-      efrom->conv = conversion_e_subtype;
+      efrom->conv = conversion_e_subtype_ptr;
       efrom->type_conv_to = tconvto;
       return true;
     }
   }
   if (is_sub_type(tfrom, tconvto)) {
     DBG_CONV(fprintf(stderr, "convert: sub type\n"));
-    efrom->conv = conversion_e_subtype;
+    efrom->conv = conversion_e_subtype_obj;
     efrom->type_conv_to = tconvto;
     return true;
   }
@@ -1888,6 +1913,266 @@ bool is_passby_mutable(passby_e passby)
 {
   return passby == passby_e_mutable_value
     || passby == passby_e_mutable_reference;
+}
+
+bool is_range_op(const expr_i *e)
+{
+  return (e != 0 && e->get_esort() == expr_e_op &&
+    ptr_down_cast<const expr_op>(e)->op == TOK_SLICE);
+}
+
+bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
+{
+  DBG_LV(fprintf(stderr, "expr_has_lvalue: expr=%s\n", a0->dump(0).c_str()));
+  /* check if a0 is a valid lvalue expression */
+  if (thro_flg) {
+    a0->require_lvalue = true; // used for unions
+  }
+  if (a0->conv != conversion_e_none && a0->conv != conversion_e_subtype_obj) {
+    if (!thro_flg) {
+      return false;
+    }
+    arena_error_push(a0, "can not be modified because of a conversion");
+  }
+  if (a0->get_sdef() != 0) {
+    /* symbol or te */
+    symbol_common *const sc = a0->get_sdef();
+    const bool upvalue_flag = sc->upvalue_flag;
+    const expr_e astyp = sc->resolve_symdef()->get_esort();
+    if (astyp == expr_e_var) {
+      if (upvalue_flag) {
+	symbol_table *symtbl = find_current_symbol_table(sc->resolve_symdef());
+	assert(symtbl);
+	expr_block *bl = symtbl->block_backref;
+	assert(bl);
+	if (bl->parent_expr != 0 &&
+	  bl->parent_expr->get_esort() == expr_e_struct) {
+	  /* as->symbol_def is an instance variable */
+	  expr_i *efd = a0;
+	  while (efd->get_esort() != expr_e_funcdef) {
+	    efd = efd->parent_expr;
+	    assert(efd);
+	  }
+	  if (ptr_down_cast<expr_funcdef>(efd)->is_const) {
+	    DBG_LV(fprintf(stderr, "expr_has_lvalue %s 1 false\n",
+	      a0->dump(0).c_str()));
+	    if (!thro_flg) {
+	      return false;
+	    }
+	    arena_error_push(epos,
+	      "field '%s' can not be modified from a const member function",
+	      sc->fullsym.c_str());
+	  }
+	} else {
+	  #if 0
+	  arena_error_push(epos, "upvalue '%s' can not be modified",
+	    sc->fullsym.c_str());
+	  #endif
+	}
+      }
+      expr_var *const ev = ptr_down_cast<expr_var>(sc->resolve_symdef());
+      #if 0
+      if (is_passby_const(ev->varinfo.passby)) {
+      #endif
+      if (!is_passby_mutable(ev->varinfo.passby)) {
+	DBG_LV(fprintf(stderr, "expr_has_lvalue %s 1.1 false\n",
+	  a0->dump(0).c_str()));
+	if (!thro_flg) {
+	  return false;
+	}
+	arena_error_push(epos, "variable '%s' can not be modified",
+	  sc->fullsym.c_str());
+      }
+    } else if (astyp == expr_e_argdecls) {
+      expr_argdecls *const ead = ptr_down_cast<expr_argdecls>(
+	sc->resolve_symdef());
+      if (!is_passby_mutable(ead->passby)) {
+	DBG_LV(fprintf(stderr, "expr_has_lvalue %s 2 false\n",
+	  a0->dump(0).c_str()));
+	if (!thro_flg) {
+	  return false;
+	}
+	arena_error_push(epos, "argument '%s' can not be modified",
+	  sc->fullsym.c_str());
+      }
+    } else {
+      DBG_LV(fprintf(stderr, "expr_has_lvalue %s 3 false\n",
+	a0->dump(0).c_str()));
+      if (!thro_flg) {
+	return false;
+      }
+      arena_error_push(epos, "symbol '%s' can not be modified",
+	sc->fullsym.c_str());
+    }
+    DBG_LV(fprintf(stderr, "expr_has_lvalue %s 4 true\n",
+      a0->dump(0).c_str()));
+    return true;
+  }
+  if (a0->get_esort() == expr_e_op) {
+    const expr_op *const aop = ptr_down_cast<const expr_op>(a0);
+    switch (aop->op) {
+    case '.':
+    case TOK_ARROW:
+      /* expr 'foo.bar' has an lvalue iff foo has an lvalue */
+      return expr_has_lvalue(aop, aop->arg0, thro_flg);
+    case '[':
+      /* expr 'foo[]' has an lvalue iff foo has an lvalue */
+      DBG_LV(fprintf(stderr, "expr_has_lvalue: op[] 0\n"));
+      if (is_range_op(aop->arg1)) {
+	DBG_LV(fprintf(stderr, "expr_has_lvalue %s 5 false\n",
+	  a0->dump(0).c_str()));
+	if (!thro_flg) {
+	  return false;
+	}
+	arena_error_push(epos, "range expression can not be modified");
+      } else {
+	DBG_LV(fprintf(stderr, "expr_has_lvalue: op[] 0-1\n"));
+	const term tc = aop->arg0->resolve_texpr();
+	if (is_const_range_family(tc)) {
+	  DBG_LV(fprintf(stderr, "expr_has_lvalue %s 6 false\n",
+	    a0->dump(0).c_str()));
+	  if (!thro_flg) {
+	    return false;
+	  }
+	  arena_error_push(epos, "const range element can not be modified");
+	} else if (is_cm_range_family(tc)) {
+	  DBG_LV(fprintf(stderr, "expr_has_lvalue %s 7 true\n",
+	    a0->dump(0).c_str()));
+	  return true;
+	} else {
+	  return expr_has_lvalue(aop, aop->arg0, thro_flg);
+	}
+      }
+    case '(':
+      /* expr '(foo)' has an lvalue iff foo has an lvalue */
+      return expr_has_lvalue(aop, aop->arg0, thro_flg);
+    case TOK_PTR_DEREF:
+      #if 0
+      /* expr '*foo' has an lvalue iff foo has an lvalue */
+      /* enable this? constness should be transitive? */
+      /* if so, we need to reject copying ptr{foo} if rhs has no lvalue */
+      if (!expr_has_lvalue(aop, aop->arg0, thro_flg)) {
+	return false;
+      }
+      #endif
+      /* expr '*foo' has an lvalue iff foo is a non-const ptr */
+      if (is_const_pointer_family(aop->arg0->resolve_texpr())) {
+	DBG_LV(fprintf(stderr, "expr_has_lvalue %s 8 false\n",
+	  a0->dump(0).c_str()));
+	if (!thro_flg) {
+	  return false;
+	}
+	arena_error_push(epos, "can not modify data via a const reference");
+      }
+      DBG_LV(fprintf(stderr, "expr_has_lvalue %s 9 true\n",
+	a0->dump(0).c_str()));
+      return true; /* ok */
+    default:
+      break;
+    }
+    DBG_LV(fprintf(stderr, "expr_has_lvalue %s 10 false\n",
+      a0->dump(0).c_str()));
+    if (!thro_flg) {
+      return false;
+    }
+    arena_error_push(epos, "can not be modified"); // FIXME: error message
+    return false;
+  }
+  if (a0->get_esort() == expr_e_var) {
+    /* var definition expr */
+    DBG_LV(fprintf(stderr, "expr_has_lvalue %s 11 true\n",
+      a0->dump(0).c_str()));
+    return true; /* ok */
+  }
+  DBG_LV(fprintf(stderr, "expr_has_lvalue %s 12 false\n",
+    a0->dump(0).c_str()));
+  if (!thro_flg) {
+    return false;
+  }
+  arena_error_push(epos, "can not be modified"); // FIXME: error message
+  return false;
+}
+
+term get_pointer_deref_texpr(expr_op *eop, const term& t)
+{
+  const term tg = get_pointer_target(t);
+  if (tg.is_null()) {
+    arena_error_throw(eop, "invalid dereference");
+    return builtins.type_void;
+  }
+  return tg;
+}
+
+term get_array_range_texpr(expr_op *eop, expr_i *ec, term& ect)
+{
+  bool nonconst = false;
+  if (expr_has_lvalue(ec, ec, false)) {
+    expr_has_lvalue(ec, ec, true);
+    nonconst = true;
+  }
+  term slt = eval_local_lookup(ect,
+    nonconst ? "range_type" : "crange_type", eop);
+  if (slt.is_null()) {
+    arena_error_throw(eop, "cannot apply '[ :: ]'");
+    return builtins.type_void;
+  }
+  DBG_SLICE(fprintf(stderr, "range: %s %s -> %s\n", ec->dump(0).c_str(),
+    term_tostr_human(ect).c_str(), term_tostr_human(slt).c_str()));
+  return slt;
+}
+
+term get_array_elem_texpr(expr_op *eop, term& t0)
+{
+  /* extern struct? */
+  expr_i *const einst = term_get_instance(t0);
+  const expr_struct *const est = dynamic_cast<const expr_struct *>(einst);
+  if (est != 0) {
+    const expr_tparams *tparams = est->block->tinfo.tparams;
+    if (tparams != 0) {
+      if (std::string(est->category) == "varray") {
+	return tparams->param_def;
+      } else if (std::string(est->category) == "farray") {
+	return tparams->param_def;
+      } else if (std::string(est->category) == "slice") {
+	return tparams->param_def;
+      } else if (std::string(est->category) == "cslice") {
+	return tparams->param_def;
+      } else if (std::string(est->category) == "tree_map") {
+	if (tparams->rest != 0) {
+	  return tparams->rest->param_def;
+	}
+      }
+    }
+  }
+  arena_error_throw(eop, "cannot apply '[]'");
+  return builtins.type_void;
+}
+
+term get_array_index_texpr(expr_op *eop, term& t0)
+{
+  /* extern struct? */
+  expr_i *const einst = term_get_instance(t0);
+  const expr_struct *const est = dynamic_cast<const expr_struct *>(einst);
+  if (est != 0) {
+    const expr_tparams *tparams = est->block->tinfo.tparams;
+    if (tparams != 0) {
+      if (std::string(est->category) == "varray") {
+	return builtins.type_size_t;
+      } else if (std::string(est->category) == "farray") {
+	return builtins.type_size_t;
+      } else if (std::string(est->category) == "slice") {
+	return builtins.type_size_t;
+      } else if (std::string(est->category) == "cslice") {
+	return builtins.type_size_t;
+      } else if (std::string(est->category) == "tree_map") {
+	if (tparams->rest != 0) {
+	  return tparams->param_def;
+	}
+      }
+    }
+  }
+  arena_error_throw(eop, "cannot apply '[]'");
+  return builtins.type_void;
 }
 
 }; 

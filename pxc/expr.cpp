@@ -98,10 +98,6 @@ expr_i *expr_typedef_new(const char *fn, int line, const char *sym,
 expr_i *expr_macrodef_new(const char *fn, int line, const char *sym,
   expr_i *tparams, expr_i *rhs, attribute_e attr)
 { return new expr_macrodef(fn, line, sym, tparams, rhs, attr); }
-#if 0
-expr_i *expr_inherit_new(const char *fn, int line, expr_i *nssym, expr_i *rest)
-{ return new expr_inherit(fn, line, nssym, rest); }
-#endif
 expr_i *expr_struct_new(const char *fn, int line, const char *sym,
   const char *cname, const char *category, expr_i *block, attribute_e attr)
 { return new expr_struct(fn, line, sym, cname, category, block, attr); }

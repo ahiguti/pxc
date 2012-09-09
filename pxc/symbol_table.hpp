@@ -48,7 +48,6 @@ enum expr_e {
   expr_e_funcdef,
   expr_e_typedef,
   expr_e_macrodef,
-  expr_e_inherit, // FIXME: remove?
   expr_e_struct,
   expr_e_variant,
   expr_e_interface,
