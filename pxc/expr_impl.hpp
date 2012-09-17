@@ -203,6 +203,8 @@ public:
 private:
   virtual void emit_value(emit_context& em) = 0;
   friend void fn_emit_value(emit_context& em, expr_i *e, bool expand_tempvar);
+    // FIXME: remove?
+  friend void emit_value_internal(emit_context& em, expr_i *e);
 protected:
   expr_i(const expr_i&);
 private:

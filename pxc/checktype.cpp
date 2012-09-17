@@ -745,6 +745,7 @@ static void check_variant_field(const expr_op *eop, expr_i *a0)
 static passby_e merge_passby(passby_e p1, passby_e p2)
 {
   const bool byval = is_passby_cm_value(p1) || is_passby_cm_value(p2);
+    /* byval requirement is stronger than byref */
   const bool mut = is_passby_mutable(p1) || is_passby_mutable(p2);
   return byval
     ? (mut ? passby_e_mutable_value : passby_e_const_value)
@@ -763,6 +764,12 @@ static void store_tempvar(expr_i *e, passby_e passby, bool blockscope_flag,
     symbol_table *lookup = find_current_symbol_table(e);
     assert(lookup);
     e->tempvar_id = lookup->generate_tempvar();
+  } else {
+    if (is_passby_cm_value(e->tempvar_varinfo.passby) !=
+      is_passby_cm_value(passby)) {
+      // abort(); // FIXME
+      /* in this case, it will be rooted by value. test_25_slice/val.pl . */
+    }
   }
   e->tempvar_varinfo.passby = merge_passby(e->tempvar_varinfo.passby, passby);
   e->tempvar_varinfo.guard_elements |= guard_elements;
@@ -819,6 +826,13 @@ static bool add_root_requirement(expr_i *e, bool byref_flag,
     return true; /* always rooted */
   default:
     break;
+  }
+  if (e->get_esort() == expr_e_op) {
+    expr_op *const eop = ptr_down_cast<expr_op>(e);
+    if (eop->op == '=' && eop->arg0->get_esort() == expr_e_var) {
+      /* foo x = ... */
+      return true; /* always rooted */
+    }
   }
   const call_trait_e ect = get_call_trait(e->resolve_texpr());
   if (!byref_flag && !is_weak_value_type(e->resolve_texpr()) &&
@@ -1099,11 +1113,12 @@ void expr_op::check_type(symbol_table *lookup)
     DBG(fprintf(stderr,
       "sym=%s rhs_sym_ns=%s symtbl=%p parent_symtbl=%p\n",
       sc->fullsym.c_str(), sc->ns.c_str(), symtbl, parent_symtbl));
-    /* lookup member field */
     bool no_private = true;
     if (is_ancestor_symtbl(symtbl, symtbl_lexical)) {
       no_private = false; /* allow private field */
     }
+    /* lookup without arg1_sym_prefix */
+    /* lookup member field */
     if (symtbl != 0 && symtbl->resolve_name_nothrow(sc->fullsym, no_private,
       sc->ns, is_global_dummy, is_upvalue_dummy, is_memfld_dummy) != 0) {
       /* symbol is defined as a field */
@@ -1111,8 +1126,13 @@ void expr_op::check_type(symbol_table *lookup)
 	sc->ns.c_str()));
       fn_check_type(arg1, symtbl);
       type_of_this_expr = arg1->resolve_texpr();
-      expr_i *const fo = type_of_this_expr.get_expr();
-      expr_funcdef *const fo_efd = dynamic_cast<expr_funcdef *>(fo);
+      // expr_i *const fo = type_of_this_expr.get_expr();
+      const expr_i *const fo = sc->get_symdef();
+#if 0
+fprintf(stderr, "fo? term=%s sym=%s arg1=%s\n", term_tostr_human(type_of_this_expr).c_str(), sc->fullsym.c_str(), arg1->dump(0).c_str()); // FIXME
+#endif
+      const expr_funcdef *const fo_efd =
+	dynamic_cast<const expr_funcdef *>(fo);
       if (fo_efd != 0 && !fo_efd->is_virtual_or_member_function()) {
 	arena_error_throw(this, "can not apply '%s'", tok_string(this, op));
 	return;
@@ -1120,6 +1140,7 @@ void expr_op::check_type(symbol_table *lookup)
       assert(!type_of_this_expr.is_null());
       return;
     } else if (parent_symtbl != 0) {
+      /* lookup with arg1_sym_prefix */
       /* find non-member function (vector_size, map_size etc.) */
       const std::string funcname_w_prefix = arg1_sym_prefix + sc->fullsym;
       symtbl = parent_symtbl;
@@ -1134,6 +1155,9 @@ void expr_op::check_type(symbol_table *lookup)
 	is_memfld_dummy);
       if (fo != 0) {
 	DBG(fprintf(stderr, "found %s\n", sc->fullsym.c_str()));
+#if 0
+fprintf(stderr, "arg_hidden_this %s\n", arg0->dump(0).c_str());
+#endif
 	sc->arg_hidden_this = arg0;
 	sc->arg_hidden_this_ns = arg0_ns;
 	sc->sym_prefix = arg1_sym_prefix;
@@ -1399,12 +1423,20 @@ void expr_funccall::check_type(symbol_table *lookup)
     arena_error_throw(arg, "expression '%s' is of type void",
       arg->dump(0).c_str());
   }
-  term& func_te = func->resolve_texpr();
-  symbol_common *const sc = func->get_sdef();
-  term *const evaluated_ptr =  sc ? (&sc->resolve_evaluated()) : 0;
-  if (is_void_type(func_te) && evaluated_ptr != 0) {
-    /* type name */
-    func_te = *evaluated_ptr;
+  term func_te;
+  if (func->get_sdef() != 0) {
+    symbol_common *const sc = func->get_sdef();
+    func_te = sc->resolve_evaluated();
+  } else if (func->get_esort() == expr_e_op) {
+    expr_op *const eop = ptr_down_cast<expr_op>(func);
+    symbol_common *const sc = eop->arg1->get_sdef();
+    if (sc != 0 && (eop->op == '.' || eop->op == TOK_ARROW)) {
+      func_te = sc->resolve_evaluated();
+    }
+  }
+  if (func_te.is_null()) {
+    arena_error_throw(func, "expression '%s' is not a function",
+      func->dump(0).c_str());
   }
   if (term_has_tparam(func_te)) {
     arena_error_throw(func,

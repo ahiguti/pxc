@@ -5,7 +5,8 @@ import test_common "";
 function {tdst, f} void array_construct(tdst& dst, ulong sz)
 {
   dst.resize(sz);
-  for (ulong i = 0; i < sz; ++i) {
+  ulong i;
+  for (i = 0; i < sz; ++i) {
     dst[i] = f(i);
   }
 }
@@ -14,7 +15,8 @@ function {tsrc, tdst, f} void array_apply(tsrc src, tdst& dst)
 {
   ulong sz = src.size();
   dst.resize(sz);
-  for (ulong i = 0; i < sz; ++i) {
+  ulong i;
+  for (i = 0; i < sz; ++i) {
     dst[i] = f(src[i]);
   }
 }
@@ -23,7 +25,8 @@ function {tsrc, tv, f} tv array_foldl(tsrc src, tv v)
 {
   ulong sz = src.size();
   tv r = v;
-  for (ulong i = 0; i < sz; ++i) {
+  ulong i;
+  for (i = 0; i < sz; ++i) {
     r = f(r, src[i]);
   }
   return r;
@@ -33,7 +36,8 @@ function {tsrc, tv, f} tv array_foldr(tsrc src, tv v)
 {
   ulong sz = src.size();
   tv r = v;
-  for (ulong i = sz; i > 0; --i) {
+  ulong i;
+  for (i = sz; i > 0; --i) {
     r = f(src[i - 1], r);
   }
   return r;
@@ -42,12 +46,14 @@ function {tsrc, tv, f} tv array_foldr(tsrc src, tv v)
 function {t} void test1()
 {
   macro arrtype vector{t};
+  arrtype x;
   array_construct{arrtype,
     function t(t v) { return v; }
-  }(arrtype x, 11);
+  }(x, 11);
+  arrtype y;
   array_apply{arrtype, arrtype,
     function t(t v) { return v * v; }
-  }(x, arrtype y);
+  }(x, y);
   t r1 = array_foldl{arrtype, t,
     function t(t x, t y) { return x + y; }
   }(y, 0);
