@@ -267,7 +267,8 @@ static term& resolve_texpr_symbol_common(expr_i *e)
     #endif
   } else if (is_function(evaluated)) {
     /* function symbol has the value of function */
-    e->type_of_this_expr = evaluated;
+    // e->type_of_this_expr = evaluated;
+    e->type_of_this_expr = builtins.type_void;
     DBG_TE1(fprintf(stderr,
       "resolve_texpr_symbol_common tote: '%s' %p -> function\n",
       term_tostr_human(evaluated).c_str(), e));
@@ -287,6 +288,18 @@ static term& resolve_texpr_symbol_common(expr_i *e)
     #if 0
     fn_check_type(ev, lookup);
     #endif
+    switch (ev->get_esort()) {
+    case expr_e_var:
+    case expr_e_argdecls:
+    case expr_e_extval:
+    case expr_e_int_literal:
+    case expr_e_float_literal:
+    case expr_e_bool_literal:
+    case expr_e_str_literal:
+      break;
+    default:
+      abort();
+    }
     e->type_of_this_expr = ev->resolve_texpr();
     DBG_TE1(fprintf(stderr,
       "resolve_texpr_symbol_common tote: '%s' %p -> other\n",

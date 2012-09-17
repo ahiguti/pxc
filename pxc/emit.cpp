@@ -1661,6 +1661,7 @@ static void emit_asgnstmt_list(emit_context& em, const asgnstmt_list& asts,
   }
 }
 
+// FIXME: remove
 static void emit_one_statement(emit_context& em, expr_stmts *stmts)
 {
   const bool is_struct_constr = cur_block_is_struct(stmts);
@@ -1857,13 +1858,53 @@ void expr_extval::emit_value(emit_context& em)
   this->emit_symbol(em);
 }
 
+static bool is_split_point(expr_i *e)
+{
+  if (e->tempvar_id >= 0 && e->tempvar_varinfo.scope_block) {
+    return true;
+  } else if (e->get_esort() == expr_e_op) {
+    expr_op *const eop = ptr_down_cast<expr_op>(e);
+    if (eop->op == '=' && eop->arg0->get_esort() == expr_e_var) {
+      /* var x = ... */
+      return true;
+    }
+  } else if (e->get_esort() == expr_e_var) {
+    expr_op *const eop = dynamic_cast<expr_op *>(e->parent_expr);
+    if (eop == 0 || eop->op != '=') {
+      /* var x but not var x = ... */
+      return true;
+    }
+  }
+  return false;
+}
+
+static void split_expr_rec(expr_i *e, std::list<expr_i *>& es)
+{
+  const int n = e->get_num_children();
+  for (int i = 0; i < n; ++i) {
+    expr_i *const c = e->get_child(i);
+    split_expr_rec(c, es);
+  }
+  if (is_split_point(e)) {
+    es.push_back(e);
+  }
+}
+
+static void split_expr(expr_i *e, std::list<expr_i *>& es)
+{
+  split_expr_rec(e, es);
+  if (es.empty() || es.back() != e) {
+    es.push_back(e);
+  }
+}
+
 void expr_stmts::emit_value(emit_context& em)
 {
   if (head == 0) {
     assert(rest == 0);
     return;
   }
-  emit_one_statement(em, this);
+  emit_one_statement(em, this); // FIXME: remove
   if (rest != 0) {
     fn_emit_value(em, rest);
   }
@@ -2695,13 +2736,109 @@ void expr_try::emit_value(emit_context& em)
   }
 }
 
+static void emit_var_or_tempvar(emit_context& em, const term& tbase,
+  const term& tconvto, const variable_info& vi, const std::string& var_csymbol,
+  expr_i *rhs)
+{
+  const bool emit_tempcvar = (var_csymbol.empty());
+  const bool rhs_expand = false;
+  const std::string s0 = term_tostr_cname(tconvto.is_null() ? tbase : tconvto);
+  const std::string cs0 =
+    std::string(is_passby_const(vi.passby) ? "const " : "") + s0;
+  if (vi.guard_elements) {
+    const std::string base_s0 = term_tostr_cname(tbase);
+    const std::string base_cs0 =
+      std::string(is_cm_range_family(tconvto)
+	? (is_const_range_family(tconvto) ? "const " : "")
+	: (is_passby_const(vi.passby) ? "const " : ""))
+      + base_s0;
+    const std::string wr = is_passby_cm_reference(vi.passby)
+      ? "pxcrt::refvar_igrd_nn" : "pxcrt::valvar_igrd_nn";
+    const std::string tstr = wr + "< " + base_cs0 + " > ";
+    if (emit_tempcvar || rhs == 0) {
+      /* tempcvar or cvar-get */
+      em.puts("(");
+      if (emit_tempcvar) {
+	fn_emit_value(em, rhs, rhs_expand);
+      } else {
+	em.puts(var_csymbol);
+      }
+      if (is_const_range_family(tconvto)) {
+	em.puts(".get_crange())");
+      } else if (is_cm_range_family(tconvto)) {
+	em.puts(".get_range())");
+      } else {
+	em.puts(".get())");
+      }
+    } else {
+      /* cvar-def */
+      if (is_smallpod_type(tbase)) {
+	em.puts(tstr + var_csymbol);
+	em.puts(" = ");
+	fn_emit_value(em, rhs, rhs_expand);
+      } else {
+	em.puts(tstr + var_csymbol);
+	em.puts("((");
+	fn_emit_value(em, rhs, rhs_expand);
+	em.puts("))");
+      }
+    }
+  } else if (!is_passby_cm_reference(vi.passby)) {
+    /* no guard, pass by value */
+    const std::string tstr = cs0;
+    if (emit_tempcvar) {
+      /* tempcvar */
+      em.puts(cs0 + "(");
+      fn_emit_value(em, rhs, rhs_expand);
+      em.puts(")");
+    } else if (rhs == 0) {
+      /* cvar-get */
+      em.puts(var_csymbol);
+    } else {
+      /* cvar-def */
+      if (is_smallpod_type(tbase)) {
+	em.puts(cs0 + var_csymbol + " = ");
+	fn_emit_value(em, rhs, rhs_expand);
+      } else {
+	em.puts(cs0 + var_csymbol + "((");
+	fn_emit_value(em, rhs, rhs_expand);
+	em.puts("))");
+      }
+    }
+  } else {
+    /* no guard, pass by reference */
+    const std::string tstr = cs0 + "& ";
+    if (emit_tempcvar) {
+      abort();
+    } else if (rhs == 0) {
+      /* cvar-get */
+      em.puts(var_csymbol);
+    } else {
+      /* cvar-def */ 
+      em.puts(tstr + var_csymbol + " = ");
+      fn_emit_value(em, rhs, rhs_expand);
+    }
+  }
+}
+
+
+void emit_value_internal(emit_context& em, expr_i *e)
+{
+  #ifdef MS_EMIT_1
+  e->emit_value(em);
+  #else
+  // FIXME: create tempvar if e has stmtscope tempvar
+  e->emit_value(em);
+  #endif
+}
+
 void fn_emit_value(emit_context& em, expr_i *e, bool expand_tempvar)
 {
   if (e == 0) {
     return;
   }
   #ifdef MS_EMIT_1
-  if (e->tempvar_id >= 0 && !expand_tempvar) {
+  if (!expand_tempvar && e->tempvar_id >= 0) {
     const variable_info& vi = e->tempvar_varinfo;
     const std::string var_csymbol = csymbol_tempvar(e->tempvar_id);
     const term tbase = e->get_texpr();
@@ -2713,7 +2850,41 @@ void fn_emit_value(emit_context& em, expr_i *e, bool expand_tempvar)
       defset_sep_flag, var_csymbol, emit_def, 0, false);
     return;
   }
+  expr_op *const eop = dynamic_cast<expr_op *>(e);
+  if (eop != 0 && eop->op == '=' && eop->arg0->get_esort() == expr_e_var) {
+    expr_var *const evar = ptr_down_cast<expr_var>(eop->arg0);
+    fn_emit_value(em, evar);
+    return;
+  }
   #else
+  if (!expand_tempvar && is_split_point(e)) {
+    /* emit variable */
+    expr_var *ev = 0;
+    const varinfo *vi = 0;
+    std::string var_csymbol;
+    if (e->tempvar_id >= 0 && e->tempvar_varinfo.scope_block) {
+      ev = 0;
+      vi = &e->tempvar_varinfo;
+      var_csymbol = csymbol_tempvar(e->tempvar_id);
+    } else if (e->get_esort() == expr_e_op) {
+      ev = ptr_down_cast<expr_var>(ptr_down_cast<expr_op>(e)->arg0);
+      vi = &ev->varinfo;
+      var_csymbol = csymbol_var(ev, true);
+    } else if (e->get_esort() == expr_e_var) {
+      ev = ptr_down_cast<expr_var>(e);
+      vi = &ev->varinfo;
+      var_csymbol = csymbol_var(ev, true);
+    } else {
+      abort();
+    }
+    if (expand_tempvar) {
+      emit_var_or_tempvar(em, e->get_texpr(), e->type_conv_to, *vi,
+	var_csymbol, 0);
+    } else {
+    }
+    // FIXME: HERE HERE HERE
+  }
+  #if 0
   if (e->tempvar_id >= 0 && !expand_tempvar) {
     #if 0
     const term te = e->type_conv_to.is_null()
@@ -2733,24 +2904,15 @@ void fn_emit_value(emit_context& em, expr_i *e, bool expand_tempvar)
     return;
   }
   #endif
+  #endif
   switch (e->conv) {
   case conversion_e_none:
   case conversion_e_subtype_ptr:
   case conversion_e_subtype_obj:
-    e->emit_value(em);
+    emit_value_internal(em, e);
     break;
   case conversion_e_container_range:
-    {
-      #if 0
-      std::string tc = get_term_cname(e->type_conv_to);
-      em.puts(tc);
-      em.puts("(");
-      #endif
-      e->emit_value(em);
-      #if 0
-      em.puts(")");
-      #endif
-    }
+    emit_value_internal(em, e);
     break;
   case conversion_e_boxing:
     {
@@ -2772,7 +2934,7 @@ void fn_emit_value(emit_context& em, expr_i *e, bool expand_tempvar)
 	em.puts(" > >");
       }
       em.puts("(");
-      e->emit_value(em);
+      emit_value_internal(em, e);
       em.puts("))");
     }
     break;
@@ -2782,12 +2944,12 @@ void fn_emit_value(emit_context& em, expr_i *e, bool expand_tempvar)
       emit_term(em, e->type_conv_to);
       em.puts(")");
       em.puts("(");
-      e->emit_value(em);
+      emit_value_internal(em, e);
       em.puts("))");
     } else {
       emit_term(em, e->type_conv_to);
       em.puts("(");
-      e->emit_value(em);
+      emit_value_internal(em, e);
       em.puts(")");
     }
     break;
