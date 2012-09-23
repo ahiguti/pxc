@@ -265,9 +265,9 @@ static bool check_term_validity(const term& t, bool allow_nontype,
       return false;
     }
     expr_struct *const est = dynamic_cast<expr_struct *>(e);
-    if (est != 0 && est->category) {
-      const std::string cat(est->category);
-      if (cat == "farray") {
+    if (est != 0 && est->typecat != typecat_e_none) {
+      const typecat_e cat = est->typecat;
+      if (cat == typecat_e_farray) {
 	if (tlarg_len != 2) {
 	  DBG_CTV(fprintf(stderr, "CTV %s false 5\n",
 	    term_tostr_human(t).c_str()));
@@ -359,7 +359,8 @@ static void check_var_type(term& typ, expr_i *e, const char *sym,
   }
 }
 
-static bool is_default_constructible(const term& typ, expr_i *pos, size_t depth)
+static bool is_default_constructible(const term& typ, expr_i *pos,
+  size_t depth)
 {
   expr_i *const expr = typ.get_expr();
   const term_list *const args = typ.get_args();
@@ -378,22 +379,26 @@ static bool is_default_constructible(const term& typ, expr_i *pos, size_t depth)
   }
   if (esort == expr_e_struct) {
     expr_struct *const est = ptr_down_cast<expr_struct>(expr);
-    const std::string cat(est->category ? est->category : "");
+    const typecat_e cat = est->typecat;
     if (is_cm_pointer_family(typ)) {
+      return false;
+#if 0
       return (args == 0 || args->empty()) ? false
 	: is_default_constructible(args->front(), pos, depth);
+#endif
     }
-    if (cat == "linear") {
+    if (cat == typecat_e_linear) {
       return false;
     }
-    if (cat == "farray") {
+    if (cat == typecat_e_farray) {
       return (args == 0 || args->empty()) ? false
 	: is_default_constructible(args->front(), pos, depth);
     }
-    if (cat == "varray" || cat == "tree_map" || cat == "nocascade") {
+    if (cat == typecat_e_varray || cat == typecat_e_tree_map ||
+      cat == typecat_e_nocascade) {
       return true;
     }
-    if (cat != "" || est->cname != 0) {
+    if (cat != typecat_e_none || est->cname != 0) {
       /* extern c struct */
       for (term_list::const_iterator i = args->begin(); i != args->end(); ++i) {
 	if (!is_default_constructible(*i, pos, depth)) {
@@ -439,11 +444,16 @@ static bool is_default_constructible(const term& typ, expr_i *pos, size_t depth)
 
 static void check_default_construct(term& typ, expr_var *ev, const char *sym)
 {
-  expr_struct *est = dynamic_cast<expr_struct *>(
-    get_current_block_expr(ev->symtbl_lexical));
+  expr_i *const cbexpr = get_current_block_expr(ev->symtbl_lexical);
+  expr_struct *est = dynamic_cast<expr_struct *>(cbexpr);
   if (est != 0 && !est->has_userdefined_constr()) {
     /* if ev is a field of a struct wo userdefined constr, it's not
      * necessary to be default-constructible. */
+    return;
+  }
+  expr_variant *eva = dynamic_cast<expr_variant *>(cbexpr);
+  if (eva != 0 && eva->get_first_field() != ev) {
+    /* only 1st field of variant need to be default-constructible */
     return;
   }
   if (!is_default_constructible(typ, ev, 0)) {
@@ -497,87 +507,10 @@ void expr_extval::check_type(symbol_table *lookup)
   /* type_of_this_expr */
 }
 
-static int get_next_bid(asgnstmt_list& lst)
-{
-  if (lst.empty()) {
-    return 0;
-  }
-  return lst.back().blockcond_id + 1;
-}
-
-static void build_asgnstmt_list(asgnstmt_list& lst, int bid, expr_i *top,
-  expr_i *e)
-{
-  if (e == 0) {
-    return;
-  }
-  if (!e->has_expr_to_emit()) {
-    return;
-  }
-  if (!e->single_asgnstmt()) {
-    const int num_children = e->get_num_children();
-    for (int i = 0; i < num_children; ++i) {
-      build_asgnstmt_list(lst, bid, top, e->get_child(i));
-    }
-    if (e->get_esort() == expr_e_var) {
-      expr_i *p = e->parent_expr;
-      assert(p);
-      expr_op *op = dynamic_cast<expr_op *>(p);
-      if (op != 0 && op->op == '=' && op->arg0 == e) {
-	/* e is the lhs of var x = ... */
-      } else {
-	/* e is a var definithion without explicit initialization */
-	e->asgnstmt_top = true;
-	asgnstmt ast(e, asgnstmt_e_var_def, bid);
-	lst.push_back(ast);
-	DBG_ASGN(fprintf(stderr, "asgn var_def %s\n", e->dump(0).c_str()));
-      }
-    }
-    if (e->get_esort() == expr_e_op) {
-      expr_op *op = ptr_down_cast<expr_op>(e);
-      if (op->op == '=' && op->arg0->get_esort() == expr_e_var) {
-	/* var x = ... */
-	e->asgnstmt_top = true; /* set parent's asgnstmt_top */
-	asgnstmt ast(e, asgnstmt_e_var_defset, bid);
-	lst.push_back(ast);
-	DBG_ASGN(fprintf(stderr, "asgn var_defset %s\n", e->dump(0).c_str()));
-      }
-    }
-    if (e->tempvar_id >= 0) {
-      e->asgnstmt_top = true;
-      asgnstmt ast(e, e->tempvar_varinfo.scope_block
-	? asgnstmt_e_blockscope_tempvar : asgnstmt_e_stmtscope_tempvar,
-	bid);
-      lst.push_back(ast);
-      DBG_ASGN(fprintf(stderr, "asgn var_tmpvar %s\n", e->dump(0).c_str()));
-    }
-  }
-  if (e->asgnstmt_top) {
-    return;
-  }
-  if (e == top) {
-    e->asgnstmt_top = true;
-    asgnstmt ast(e, asgnstmt_e_other, bid);
-    lst.push_back(ast);
-    DBG_ASGN(fprintf(stderr, "asgn var_other %s\n", e->dump(0).c_str()));
-  }
-}
-
 void expr_stmts::check_type(symbol_table *lookup)
 {
   fn_check_type(head, lookup);
   fn_check_type(rest, lookup);
-  const int bids = head->get_num_blockcond();
-  if (bids == 0) {
-    build_asgnstmt_list(this->asts, -1, head, head);
-#if 0
-  } else {
-    for (int i = 0; i < bids; ++i) {
-      expr_i *const c = head->get_child(i);
-      build_asgnstmt_list(this->asts, i, c, c);
-    }
-#endif
-  }
   switch (head->get_esort()) {
   case expr_e_int_literal:
   case expr_e_float_literal:
@@ -760,6 +693,16 @@ static void store_tempvar(expr_i *e, passby_e passby, bool blockscope_flag,
   DBG_STT(fprintf(stderr, "store_tempvar passby=%d blocksc=%d g=%d %s\n",
     (int)passby, (int)blockscope_flag, (int)guard_elements,
     e->dump(0).c_str()));
+// FIXME
+#if 0
+if (e->get_sdef() != 0) {
+symbol_common *sym = e->get_sdef();
+const expr_i *d = sym->get_symdef();
+if (d->get_esort() == expr_e_var || d->get_esort() == expr_e_argdecls) {
+  abort();
+}
+}
+#endif
   if (e->tempvar_id < 0) {
     symbol_table *lookup = find_current_symbol_table(e);
     assert(lookup);
@@ -1038,8 +981,8 @@ static void passing_root_requirement(passby_e passby, expr_i *epos,
 
 void expr_op::check_type(symbol_table *lookup)
 {
-  fn_check_type(arg0, lookup);
   if (op == '.' || op == TOK_ARROW) {
+    fn_check_type(arg0, lookup);
     term t = arg0->resolve_texpr();
     symbol_table *symtbl = 0;
     symbol_table *parent_symtbl = 0;
@@ -1176,7 +1119,9 @@ fprintf(stderr, "arg_hidden_this %s\n", arg0->dump(0).c_str());
       return;
     }
   } else {
-    fn_check_type(arg1, lookup);
+    /* other ops */
+    fn_check_type(arg1, lookup); /* arg1 first. must for type inference */
+    fn_check_type(arg0, lookup);
     /* type_of_this_expr */
   }
   switch (op) {
@@ -1623,7 +1568,7 @@ void expr_funccall::check_type(symbol_table *lookup)
 	}
 	funccall_sort = funccall_e_struct_constructor;
 	return;
-      } else if (get_category(func_te) == "varray") {
+      } else if (get_category(func_te) == typecat_e_varray) {
 	if (arglist.size() != 1) {
 	  arena_error_push(this, "too many argument for '%s'", est->sym);
 	}
@@ -1816,11 +1761,6 @@ void expr_if::check_type(symbol_table *lookup)
       rest = 0;
     }
   }
-  expr_stmts *const stmts = ptr_down_cast<expr_stmts>(
-    find_parent(this, expr_e_stmts));
-  this->bid_offset = get_next_bid(stmts->asts);
-    /* nonzero if there is an else-if */
-  build_asgnstmt_list(stmts->asts, this->bid_offset, cond, cond);
   fn_check_type(block1, lookup);
   fn_check_type(block2, lookup);
   fn_check_type(rest, lookup);
@@ -1830,10 +1770,6 @@ void expr_while::check_type(symbol_table *lookup)
 {
   fn_check_type(cond, lookup);
   check_bool_expr(0, cond);
-  expr_stmts *const stmts = ptr_down_cast<expr_stmts>(
-    find_parent(this, expr_e_stmts));
-  this->bid_offset = get_next_bid(stmts->asts); /* always 0 */
-  build_asgnstmt_list(stmts->asts, this->bid_offset, cond, cond);
   fn_check_type(block, lookup);
 }
 
@@ -1842,13 +1778,18 @@ void expr_for::check_type(symbol_table *lookup)
   fn_check_type(e0, lookup);
   fn_check_type(e1, lookup);
   fn_check_type(e2, lookup);
-  expr_stmts *const stmts = ptr_down_cast<expr_stmts>(
-    find_parent(this, expr_e_stmts));
-  this->bid_offset = get_next_bid(stmts->asts); /* always 0 */
-  build_asgnstmt_list(stmts->asts, this->bid_offset + 0, e0, e0);
-  build_asgnstmt_list(stmts->asts, this->bid_offset + 1, e1, e1);
-  build_asgnstmt_list(stmts->asts, this->bid_offset + 2, e2, e2);
   fn_check_type(block, lookup);
+}
+
+void expr_forrange::check_type(symbol_table *lookup)
+{
+  fn_check_type(r0, lookup);
+  fn_check_type(r1, lookup);
+  fn_check_type(block, lookup);
+  term& ta0 = block->argdecls->resolve_texpr();
+  if (!is_integral_type(ta0)) {
+    arena_error_push(block->argdecls, "integral type expected");
+  }
 }
 
 void expr_feach::check_type(symbol_table *lookup)
@@ -1879,11 +1820,7 @@ void expr_feach::check_type(symbol_table *lookup)
       term_tostr_human(ta1).c_str(),
       term_tostr_human(telm).c_str());
   }
-  passing_root_requirement(block->argdecls->rest->passby, this, ce, false);
-  expr_stmts *const stmts = ptr_down_cast<expr_stmts>(
-    find_parent(this, expr_e_stmts));
-  this->bid_offset = get_next_bid(stmts->asts); /* always 0 */
-  build_asgnstmt_list(stmts->asts, this->bid_offset, ce, ce);
+  passing_root_requirement(block->argdecls->rest->passby, this, ce, true);
 }
 
 static expr_i *deep_clone_expr(expr_i *e)

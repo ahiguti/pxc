@@ -1,19 +1,11 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-式の分割関連
-- &&などのように式を遅延評価する演算子を含む式で、分割によって先行
-  評価されてしまうことがある。
-
 ポインタまわり
-- test_01_px/i1_fixme : 仮想関数の実装を後ろに回さないといけないが、
-  そもそも、ptrの指し先アロケートを廃止して仮想関数のダミー実装を必要
-  なくすようにするべし
-- ptrも初期化を強制し、デフォルトコンストラクタはnullptrにする
-- variantの最初のフィールドにはptrを置けないように
-- rcptr無駄に指す先をアロケートしてしまわないように
-  - ptr型の一時変数を作ったときにはnullで暫定初期化してよい
 - 短絡boxingを再び有効に
+
+copyableのチェック
+- interfaceなどのようにcopyableではないものをコピーしたときのエラー
 
 funccallのエラーチェック
 - 関数でないものでもoperator ()を適用できてしまう
@@ -38,10 +30,10 @@ weak型まわり
 
 ifのスコープまわり
 - if (...) 内で定義した変数のスコープをローカルに
-- forやifでの定義初期化分離をなくす
 - if (int x : foo[k]) { ... }
 
 - type categoryの整理
+- Cコードの字下げ
 
 ---------------------------------------------------------------------
 TEST TODO M1
@@ -190,6 +182,14 @@ TODO
 ---------------------------------------------------------------------
 DONE
 
+- test_01_px/i1_fixme : 仮想関数の実装を後ろに回さないといけないが、
+  そもそも、ptrの指し先アロケートを廃止して仮想関数のダミー実装を必要
+  なくすようにするべし(done)
+- variantの最初のフィールドにはptrを置けないように(done)
+- ポインタをdefault_constructibleではなくす。(done)
+  ただしグローバル変数と構造体メンバについてはnull初期化せざるをえない
+- c++実装のデフォルトコンストラクタをnull初期化するように(done)
+- forやifでの定義初期化分離をなくす(done)
 - foo(int x = bar())
   これをemitするのにbar()呼び出しを2回おこなっている
   int x = bar()を独立させたので参照時には単に「x」とするべし
@@ -5015,4 +5015,30 @@ pxc的な順序での定義-参照順序が正しくても初期化前参照に�
 手順:
 - まずパーザをいじって変数定義を式文の頭だけに制限
 - statementをemitする際に
+
+static void emit_var_or_tempvar(emit_context& em, const term& tbase,
+  const term& tconvto, const variable_info& vi,
+  const std::string& var_csymbol, expr_i *rhs, bool dont_emit_def);
+名前付き変数か一時変数を定義・初期化するコードをemitする。これが
+呼ばれるのはblockscopeの変数・一時変数の箇所(split_point)と一時C
+オブジェクト
+tbaseとtconvtoが異なるのはコンテナからrangeに変換するケースだけ。
+viにpassbyなどの情報がある。var_csymbolはC変数の名前で、一時変数
+なら「t2」など、
+
+名前付き変数: 定義をemitするためにfn_emit_valueがexpand_composite=true
+  で呼ばれる。右辺についてfn_emit_valueがexpand_composite=falseで呼ばれる
+  利用される箇所からはexpand_composite=falseで呼ばれる
+分離tempvar: 定義をemitするためにfn_emit_valueがexpand_composite=true
+  で呼ばれる。定義の右辺としてfn_emit_valueがtempvar_rhs=trueで呼ばれる。
+  参照されるときはexpand_composite=falseで呼ばれる
+非分離tempvar: expand_composite=falseで呼ばれる。定義の右辺として
+  tempvar_rhs=trueで呼ばれる
+
+---------------------------------------------------------------------
+ポインタまわり
+
+- ポインタをdefault_constructibleではなくす。(done)
+  ただしグローバル変数と構造体メンバについてはnull初期化せざるをえない
+- c++実装のデフォルトコンストラクタをnull初期化するように(done)
 

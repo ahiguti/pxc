@@ -265,30 +265,77 @@ bool is_unsigned_integral_type(const term& t)
     t == builtins.type_size_t;
 }
 
-std::string get_category(const term& t)
+typecat_e get_category(const term& t)
 {
   const expr_struct *est = dynamic_cast<const expr_struct *>(
     t.get_expr());
   std::string cat;
-  if (est != 0 && est->category != 0) {
-    return est->category;
+  if (est != 0) {
+    return est->typecat;
   }
-  return std::string();
+  return typecat_e_none;
 }
 
-static bool is_pointer_category(const std::string& cat)
+typecat_e get_category_from_string(const std::string& s)
 {
-  return (cat == "cptr" || cat == "ptr" || cat == "tcptr" || cat == "tptr");
+  if (s == "ptr") return typecat_e_ptr;
+  if (s == "cptr") return typecat_e_cptr;
+  if (s == "tptr") return typecat_e_tptr;
+  if (s == "tcptr") return typecat_e_tcptr;
+  if (s == "varray") return typecat_e_varray;
+  if (s == "farray") return typecat_e_farray;
+  if (s == "slice") return typecat_e_slice;
+  if (s == "cslice") return typecat_e_cslice;
+  if (s == "tree_map") return typecat_e_tree_map;
+  if (s == "tree_map_range") return typecat_e_tree_map_range;
+  if (s == "tree_map_crange") return typecat_e_tree_map_crange;
+  if (s == "linear") return typecat_e_linear;
+  if (s == "nocascade") return typecat_e_nocascade;
+  return typecat_e_none;
 }
 
-static bool is_threaded_pointer_category(const std::string& cat)
+std::string get_category_string(typecat_e cat)
 {
-  return (cat == "tcptr" || cat == "tptr");
+  switch (cat) {
+  case typecat_e_none: return "";
+  case typecat_e_ptr: return "ptr";
+  case typecat_e_cptr: return "cptr";
+  case typecat_e_tptr: return "tptr";
+  case typecat_e_tcptr: return "tcptr";
+  case typecat_e_varray: return "varray";
+  case typecat_e_farray: return "farray";
+  case typecat_e_slice: return "slice";
+  case typecat_e_cslice: return "cslice";
+  case typecat_e_tree_map: return "tree_map";
+  case typecat_e_tree_map_range: return "tree_map_range";
+  case typecat_e_tree_map_crange: return "tree_map_crange";
+  case typecat_e_linear: return "linear";
+  case typecat_e_nocascade: return "nocascade";
+  }
+  abort();
+}
+
+static bool is_pointer_category(const typecat_e cat)
+{
+  switch (cat) {
+  case typecat_e_ptr:
+  case typecat_e_cptr:
+  case typecat_e_tptr:
+  case typecat_e_tcptr:
+    return true;
+  default:
+    return false;
+  }
+}
+
+static bool is_threaded_pointer_category(const typecat_e cat)
+{
+  return cat == typecat_e_tptr || cat == typecat_e_tcptr;
 }
 
 term get_pointer_target(const term& t)
 {
-  std::string cat = get_category(t);
+  const typecat_e cat = get_category(t);
   if (is_pointer_category(cat)) {
     const term_list *args = t.get_args();
     if (args != 0 && !args->empty()) {
@@ -300,8 +347,8 @@ term get_pointer_target(const term& t)
 
 bool is_compatible_pointer(const term& t0, const term& t1)
 {
-  const std::string c0 = get_category(t0);
-  const std::string c1 = get_category(t1);
+  const typecat_e c0 = get_category(t0);
+  const typecat_e c1 = get_category(t1);
   bool thr0 = is_threaded_pointer_category(c0);
   bool thr1 = is_threaded_pointer_category(c1);
   return thr0 == thr1;
@@ -391,36 +438,33 @@ bool is_cm_pointer_family(const term& t)
 
 bool is_const_pointer_family(const term& t)
 {
-  const std::string cat = get_category(t);
-  if (cat == "tcptr" || cat == "cptr") {
-    return true;
-  }
-  return false;
+  const typecat_e cat = get_category(t);
+  return cat == typecat_e_tcptr || cat == typecat_e_cptr;
 }
 
 bool is_array_family(const term& t)
 {
-  const std::string cat = get_category(t);
-  return cat == "varray" || cat == "farray";
+  const typecat_e cat = get_category(t);
+  return cat == typecat_e_varray || cat == typecat_e_farray;
 }
 
 bool is_map_family(const term& t)
 {
-  const std::string cat = get_category(t);
-  return cat == "tree_map";
+  const typecat_e cat = get_category(t);
+  return cat == typecat_e_tree_map;
 }
 
 bool is_const_range_family(const term& t)
 {
-  const std::string cat = get_category(t);
-  return cat == "cslice" || cat == "tree_map_crange";
+  const typecat_e cat = get_category(t);
+  return cat == typecat_e_cslice || cat == typecat_e_tree_map_crange;
 }
 
 bool is_cm_range_family(const term& t)
 {
-  const std::string cat = get_category(t);
-  return cat == "slice" || cat == "cslice"
-    || cat == "tree_map_range" || cat == "tree_map_crange";
+  const typecat_e cat = get_category(t);
+  return cat == typecat_e_slice || cat == typecat_e_cslice ||
+    cat == typecat_e_tree_map_range || cat == typecat_e_tree_map_crange;
 }
 
 bool is_weak_value_type(const term& t)
@@ -446,8 +490,8 @@ const bool has_userdef_constr_internal(const term& t,
     if (est->has_userdefined_constr()) {
       return true;
     }
-    if (est->category != 0) {
-      if (std::string(est->category) == "farray") {
+    if (est->typecat != typecat_e_none) {
+      if (est->typecat == typecat_e_farray) {
 	const term_list *const tl = t.get_args();
 	if (tl != 0 && !tl->empty()) {
 	  return has_userdef_constr_internal(tl->front(), checked);
@@ -485,8 +529,8 @@ bool has_userdef_constr(const term& t)
 
 bool type_has_invalidate_guard(const term& t)
 {
-  const std::string cat = get_category(t);
-  if (cat == "varray" || cat == "tree_map") {
+  const typecat_e cat = get_category(t);
+  if (cat == typecat_e_varray || cat == typecat_e_tree_map) {
     return true;
   }
   return false;
@@ -494,14 +538,19 @@ bool type_has_invalidate_guard(const term& t)
 
 bool type_allow_feach(const term& t)
 {
-  const std::string cat = get_category(t);
-  if (
-    cat == "varray" || cat == "farray" || cat == "tree_map"
-    || cat == "slice" || cat == "cslice"
-    || cat == "tree_map_range" || cat == "tree_map_crange") {
+  const typecat_e cat = get_category(t);
+  switch (cat) {
+  case typecat_e_varray:
+  case typecat_e_farray:
+  case typecat_e_tree_map:
+  case typecat_e_slice:
+  case typecat_e_cslice:
+  case typecat_e_tree_map_range:
+  case typecat_e_tree_map_crange:
     return true;
+  default:
+    return false;
   }
-  return false;
 }
 
 static std::string term_tostr_tparams(const expr_tparams *tp,
@@ -716,7 +765,7 @@ std::string term_tostr(const term& t, term_tostr_sort s)
   case term_tostr_sort_cname:
   case term_tostr_sort_cname_tparam:
     if (is_cm_pointer_family(t)) {
-      const std::string cat = get_category(t);
+      const std::string cat = get_category_string(get_category(t));
       if (s == term_tostr_sort_cname_tparam) {
 	rstr += "pxcrt$$" + cat;
       } else {
@@ -1041,22 +1090,23 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
       tconvto.get_expr());
     const expr_struct *const es_from = dynamic_cast<const expr_struct *>(
       tfrom.get_expr());
-    std::string cat_to, cat_from;
-    if (es_to != 0 && es_to->category != 0) {
-      cat_to = es_to->category;
+    typecat_e cat_to = typecat_e_none;
+    typecat_e cat_from = typecat_e_none;
+    if (es_to != 0) {
+      cat_to = es_to->typecat;
     }
-    if (es_from != 0 && es_from->category != 0) {
-      cat_from = es_from->category;
+    if (es_from != 0) {
+      cat_from = es_from->typecat;
     }
-    if (!cat_to.empty() && !cat_from.empty() &&
-      (cat_to == "cptr" || cat_from == "ptr")) {
+    if (cat_to != typecat_e_none && cat_from != typecat_e_none &&
+      (cat_to == typecat_e_cptr || cat_from == typecat_e_ptr)) {
       DBG_CONV(fprintf(stderr, "convert: (struct) ptr to cptr\n"));
       efrom->conv = conversion_e_subtype_ptr;
       efrom->type_conv_to = tconvto;
       return true;
     }
-    if (!cat_to.empty() && !cat_from.empty() &&
-      (cat_to == "tcptr" || cat_from == "tptr")) {
+    if (cat_to != typecat_e_none && cat_from != typecat_e_none &&
+      (cat_to == typecat_e_tcptr || cat_from == typecat_e_tptr)) {
       DBG_CONV(fprintf(stderr, "convert: (struct) tptr to tcptr\n"));
       efrom->conv = conversion_e_subtype_ptr;
       efrom->type_conv_to = tconvto;
@@ -1373,6 +1423,8 @@ static void fn_check_syntax_one(expr_i *e)
 	break;
       case expr_e_while:
       case expr_e_for:
+      case expr_e_forrange:
+      case expr_e_feach:
 	ok = true;
 	p = 0;
 	break;
@@ -1638,6 +1690,8 @@ static bool check_use_before_def_checkpoint(expr_i *e)
   case expr_e_if:
   case expr_e_while:
   case expr_e_for:
+  case expr_e_forrange:
+  case expr_e_feach:
   case expr_e_try:
     return true;
   default:
@@ -1715,6 +1769,7 @@ static void check_use_before_def_one(varmap_type& uvars,
   }
 }
 
+// FIXME: correct?
 static void check_use_before_def(expr_i *e)
 {
   expr_block *const bl = dynamic_cast<expr_block *>(e);
@@ -1736,9 +1791,8 @@ static void check_type_threading_te(const term& te, expr_i *pos)
       check_type_threading_te(*i, pos);
     }
     const expr_struct *est = dynamic_cast<const expr_struct *>(e);
-    if (est != 0 && est->category != 0 && !args->empty()) {
-      const std::string cat = est->category;
-      if (is_threaded_pointer_category(cat)) {
+    if (est != 0 && est->typecat != typecat_e_none && !args->empty()) {
+      if (is_threaded_pointer_category(est->typecat)) {
 	const term& tgt = args->front();
 	if (!term_is_multithr(tgt)) {
 	  arena_error_throw(pos, "'%s' is not a multithreaded type",
@@ -2129,6 +2183,21 @@ term get_array_elem_texpr(expr_op *eop, term& t0)
   if (est != 0) {
     const expr_tparams *tparams = est->block->tinfo.tparams;
     if (tparams != 0) {
+      switch (est->typecat) {
+      case typecat_e_varray:
+      case typecat_e_farray:
+      case typecat_e_slice:
+      case typecat_e_cslice:
+	return tparams->param_def;
+      case typecat_e_tree_map:
+	if (tparams->rest != 0) {
+	  return tparams->rest->param_def;
+	}
+	break;
+      default:
+	break;
+      }
+      #if 0
       if (std::string(est->category) == "varray") {
 	return tparams->param_def;
       } else if (std::string(est->category) == "farray") {
@@ -2142,6 +2211,7 @@ term get_array_elem_texpr(expr_op *eop, term& t0)
 	  return tparams->rest->param_def;
 	}
       }
+      #endif
     }
   }
   arena_error_throw(eop, "cannot apply '[]'");
@@ -2156,6 +2226,21 @@ term get_array_index_texpr(expr_op *eop, term& t0)
   if (est != 0) {
     const expr_tparams *tparams = est->block->tinfo.tparams;
     if (tparams != 0) {
+      switch (est->typecat) {
+      case typecat_e_varray:
+      case typecat_e_farray:
+      case typecat_e_slice:
+      case typecat_e_cslice:
+	return builtins.type_size_t;
+      case typecat_e_tree_map:
+	if (tparams->rest != 0) {
+	  return tparams->param_def;
+	}
+	break;
+      default:
+	break;
+      }
+      #if 0
       if (std::string(est->category) == "varray") {
 	return builtins.type_size_t;
       } else if (std::string(est->category) == "farray") {
@@ -2169,6 +2254,7 @@ term get_array_index_texpr(expr_op *eop, term& t0)
 	  return tparams->param_def;
 	}
       }
+      #endif
     }
   }
   arena_error_throw(eop, "cannot apply '[]'");

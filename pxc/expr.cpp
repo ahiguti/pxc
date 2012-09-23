@@ -46,8 +46,8 @@ expr_i *expr_nssym_new(const char *fn, int line, expr_i *prefix,
 expr_i *expr_symbol_new(const char *fn, int line, expr_i *nssym)
 { return new expr_symbol(fn, line, nssym); }
 expr_i *expr_var_new(const char *fn, int line, const char *sym,
-  expr_i *type_uneval, passby_e passby, attribute_e attr)
-{ return new expr_var(fn, line, sym, type_uneval, passby, attr); }
+  expr_i *type_uneval, passby_e passby, attribute_e attr, expr_i *rhs_ref)
+{ return new expr_var(fn, line, sym, type_uneval, passby, attr, rhs_ref); }
 expr_i *expr_extval_new(const char *fn, int line, const char *sym,
   expr_i *type_uneval, const char *cname, attribute_e attr)
 { return new expr_extval(fn, line, sym, type_uneval, cname, attr); }
@@ -75,6 +75,9 @@ expr_i *expr_while_new(const char *fn, int line, expr_i *cond, expr_i *block)
 expr_i *expr_for_new(const char *fn, int line, expr_i *e0, expr_i *e1,
   expr_i *e2, expr_i *block)
 { return new expr_for(fn, line, e0, e1, e2, block); }
+expr_i *expr_forrange_new(const char *fn, int line, expr_i *r0, expr_i *r1,
+  expr_i *block)
+{ return new expr_forrange(fn, line, r0, r1, block); }
 expr_i *expr_feach_new(const char *fn, int line, expr_i *ce, expr_i *block)
 { return new expr_feach(fn, line, ce, block); }
 expr_i *expr_fldfe_new(const char *fn, int line, const char *namesym,

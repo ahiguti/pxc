@@ -1013,8 +1013,8 @@ static term eval_meta_category(term_list& tlev)
   }
   expr_i *const einst = term_get_instance(tlev[0]);
   expr_struct *const est = dynamic_cast<expr_struct *>(einst);
-  if (est != 0 && est->category != 0) {
-    const std::string s(est->category);
+  if (est != 0 && est->typecat_str != 0) {
+    const std::string s(est->typecat_str);
     if (!s.empty() && s[0] == '@') {
       return term("metafunction");
     }
@@ -1657,20 +1657,20 @@ static term eval_term_internal2(const term& t, env_type& env, size_t depth,
   }
   /* builtin template metafunction? */
   expr_struct *const es = dynamic_cast<expr_struct *>(texpr);
-  if (es != 0 && es->category != 0 &&
-    std::string(es->category).substr(0, 1) == "@") {
+  if (es != 0 && es->typecat_str != 0 &&
+    std::string(es->typecat_str).substr(0, 1) == "@") {
     if (tlarg_len == 0) {
       return t; /* no argument is supplied yet */
     }
-    if (std::string(es->category).substr(0, 2) == "@@") {
-      return eval_metafunction_lazy(es->category, t, env, depth, pos);
+    if (std::string(es->typecat_str).substr(0, 2) == "@@") {
+      return eval_metafunction_lazy(es->typecat_str, t, env, depth, pos);
     } else {
       term_list tlev = eval_term_list_internal(targs, env, depth + 1, pos);
       if (has_unbound_tparam(tlev)) {
 	DBG_EVAL(fprintf(stderr, "EVALI2 : has ubound tparam\n"));
 	return t; /* incomplete expr */
       }
-      return eval_metafunction(es->category, tlev, t, env, depth, pos);
+      return eval_metafunction(es->typecat_str, tlev, t, env, depth, pos);
     }
   }
   /* type or func without targ (no instantiaton) */
