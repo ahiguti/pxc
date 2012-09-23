@@ -29,7 +29,7 @@ namespace pxc {
 expr_i::expr_i(const char *fn, int line)
   : fname(fn), line(line), type_of_this_expr(), conv(conversion_e_none),
     type_conv_to(), parent_expr(0), symtbl_lexical(0), tempvar_id(-1),
-    require_lvalue(false), asgnstmt_top(false)
+    require_lvalue(false)
 {
   expr_arena.push_back(this);
   type_of_this_expr = builtins.type_void;
@@ -40,7 +40,7 @@ expr_i::expr_i(const expr_i& e)
     conv(e.conv), type_conv_to(e.type_conv_to), parent_expr(e.parent_expr),
     symtbl_lexical(e.symtbl_lexical), tempvar_id(e.tempvar_id),
     tempvar_varinfo(e.tempvar_varinfo),
-    require_lvalue(e.require_lvalue), asgnstmt_top(e.asgnstmt_top)
+    require_lvalue(e.require_lvalue)
 {
   expr_arena.push_back(this);
 }
@@ -652,10 +652,10 @@ term& expr_symbol::resolve_texpr()
 }
 
 expr_var::expr_var(const char *fn, int line, const char *sym,
-  expr_i *type_uneval, passby_e passby, attribute_e attr)
+  expr_i *type_uneval, passby_e passby, attribute_e attr, expr_i *rhs_ref)
   : expr_i(fn, line), sym(sym),
     type_uneval(ptr_down_cast<expr_te>(type_uneval)),
-    attr(attr)
+    attr(attr), rhs_ref(rhs_ref)
 {
   varinfo.passby = passby;
   varinfo.scope_block = true;
@@ -673,7 +673,16 @@ term&
 expr_var::resolve_texpr()
 {
   if (type_of_this_expr.is_null()) {
-    type_of_this_expr = eval_expr(type_uneval);
+    if (type_uneval != 0) {
+      type_of_this_expr = eval_expr(type_uneval);
+    } else if (rhs_ref) {
+      /* rhs_ref is already resolved because check_type() for operator = 
+       * always checks rhs first. */
+      type_of_this_expr = rhs_ref->resolve_texpr();
+    }
+    if (type_of_this_expr.is_null()) {
+      arena_error_throw(this, "internal error: expr_var::resove_texpr");
+    }
   }
   return type_of_this_expr;
 }
@@ -729,6 +738,9 @@ std::string expr_stmts::dump(int indent) const
     case expr_e_if:
     case expr_e_while:
     case expr_e_for:
+    case expr_e_forrange:
+    case expr_e_feach:
+    case expr_e_fldfe:
     case expr_e_funcdef:
       r += "\n";
       break;
@@ -895,8 +907,7 @@ expr_if::expr_if(const char *fn, int line, expr_i *cond, expr_i *b1,
     block1(ptr_down_cast<expr_block>(b1)),
     block2(ptr_down_cast<expr_block>(b2)),
     rest(ptr_down_cast<expr_if>(rest)),
-    cond_static(-1),
-    bid_offset(-1)
+    cond_static(-1)
 {
 }
 
@@ -921,7 +932,7 @@ std::string expr_if::dump(int indent) const
 
 expr_while::expr_while(const char *fn, int line, expr_i *cond, expr_i *block)
   : expr_i(fn, line), cond(cond),
-    block(ptr_down_cast<expr_block>(block)), bid_offset(-1)
+    block(ptr_down_cast<expr_block>(block))
 {
 }
 
@@ -938,7 +949,7 @@ std::string expr_while::dump(int indent) const
 expr_for::expr_for(const char *fn, int line, expr_i *e0, expr_i *e1,
   expr_i *e2, expr_i *block)
   : expr_i(fn, line), e0(e0), e1(e1), e2(e2),
-    block(ptr_down_cast<expr_block>(block)), bid_offset(-1)
+    block(ptr_down_cast<expr_block>(block))
 {
 }
 
@@ -956,9 +967,29 @@ std::string expr_for::dump(int indent) const
   return r;
 }
 
+expr_forrange::expr_forrange(const char *fn, int line, expr_i *r0, expr_i *r1,
+  expr_i *block)
+  : expr_i(fn, line),
+    r0(ptr_down_cast<expr_int_literal>(r0)),
+    r1(ptr_down_cast<expr_int_literal>(r1)),
+    block(ptr_down_cast<expr_block>(block))
+{
+}
+
+std::string expr_forrange::dump(int indent) const
+{
+  std::string r = "for (";
+  r += dump_expr(indent, r0);
+  r += " .. ";
+  r += dump_expr(indent, r1);
+  r += ")\n";
+  r += space_string(indent, 'f');
+  r += dump_expr(indent, block);
+  return r;
+}
+
 expr_feach::expr_feach(const char *fn, int line, expr_i *ce, expr_i *block)
-  : expr_i(fn, line), ce(ce), block(ptr_down_cast<expr_block>(block)),
-    bid_offset(-1)
+  : expr_i(fn, line), ce(ce), block(ptr_down_cast<expr_block>(block))
 {
 }
 
@@ -1143,16 +1174,23 @@ std::string expr_funcdef::dump(int indent) const
 expr_typedef::expr_typedef(const char *fn, int line, const char *sym,
   const char *cname, const char *category, bool is_pod,
   unsigned int num_tparams, attribute_e attr)
-  : expr_i(fn, line), sym(sym), cname(cname), category(category),
-    is_pod(is_pod), num_tparams(num_tparams), attr(attr), value_texpr()
+  : expr_i(fn, line), sym(sym), cname(cname), typecat_str(category),
+    is_pod(is_pod), num_tparams(num_tparams), attr(attr), value_texpr(),
+    typecat(typecat_e_none)
 {
   value_texpr = term(this);
+}
+
+void expr_typedef::set_namespace_one(const std::string& n)
+{
+  ns = n;
+  typecat = get_category_from_string(typecat_str ? typecat_str : "");
 }
 
 std::string expr_typedef::dump(int indent) const
 {
   return std::string("tyepdef ") + sym + " " + (cname != 0 ? cname : sym)
-    + " " + (category != 0 ? category : "");
+    + " " + (typecat_str != 0 ? typecat_str : "");
 }
 
 expr_macrodef::expr_macrodef(const char *fn, int line, const char *sym,
@@ -1171,9 +1209,9 @@ std::string expr_macrodef::dump(int indent) const
 
 expr_struct::expr_struct(const char *fn, int line, const char *sym,
   const char *cname, const char *category, expr_i *block, attribute_e attr)
-  : expr_i(fn, line), sym(sym), cname(cname), category(category),
+  : expr_i(fn, line), sym(sym), cname(cname), typecat_str(category),
     block(ptr_down_cast<expr_block>(block)),
-    attr(attr), value_texpr()
+    attr(attr), value_texpr(), typecat(typecat_e_none)
 {
   assert(block);
   this->block->symtbl.block_esort = expr_e_struct;
@@ -1185,6 +1223,12 @@ expr_struct *expr_struct::clone() const
   expr_struct *cpy = new expr_struct(*this);
   cpy->value_texpr = term(cpy);
   return cpy;
+}
+
+void expr_struct::set_namespace_one(const std::string& n)
+{
+  ns = n;
+  typecat = get_category_from_string(typecat_str ? typecat_str : "");
 }
 
 void expr_struct::get_fields(std::list<expr_var *>& flds_r) const
@@ -1250,6 +1294,20 @@ void expr_variant::get_fields(std::list<expr_var *>& flds_r) const
     if (e == 0) { continue; }
     flds_r.push_back(e);
   }
+}
+expr_var *expr_variant::get_first_field() const
+{
+  symbol_table& symtbl = block->symtbl;
+  symbol_table::local_names_type::const_iterator i;
+  for (i = symtbl.local_names.begin(); i != symtbl.local_names.end(); ++i) {
+    const symbol_table::locals_type::const_iterator iter
+      = symtbl.locals.find(*i);
+    assert(iter != symtbl.locals.end());
+    expr_var *const e = dynamic_cast<expr_var *>(iter->second.edef);
+    if (e == 0) { continue; }
+    return e;
+  }
+  return 0;
 }
 
 std::string expr_variant::dump(int indent) const

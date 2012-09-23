@@ -69,7 +69,7 @@ expr_i *expr_symbol_new(const char *fn, int line, expr_i *nssym);
 expr_i *expr_nssym_new(const char *fn, int line, expr_i *prefix,
   const char *sym);
 expr_i *expr_var_new(const char *fn, int line, const char *sym, expr_i *typ,
-  passby_e passby, attribute_e visi);
+  passby_e passby, attribute_e visi, expr_i *rhs_ref);
 expr_i *expr_extval_new(const char *fn, int line, const char *sym,
   expr_i *typ, const char *cname, attribute_e visi);
 expr_i *expr_argdecls_new(const char *fn, int line, const char *sym,
@@ -85,6 +85,8 @@ expr_i *expr_if_new(const char *fn, int line, expr_i *cond, expr_i *b1,
 expr_i *expr_while_new(const char *fn, int line, expr_i *cond, expr_i *block);
 expr_i *expr_for_new(const char *fn, int line, expr_i *e0, expr_i *e1,
   expr_i *e2, expr_i *block);
+expr_i *expr_forrange_new(const char *fn, int line, expr_i *r0, expr_i *r1,
+  expr_i *block);
 expr_i *expr_feach_new(const char *fn, int line, expr_i *ce, expr_i *block);
 expr_i *expr_fldfe_new(const char *fn, int line, const char *namesym,
   const char *fldsym, expr_i *te, expr_i *stmts);

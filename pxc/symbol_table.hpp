@@ -40,6 +40,7 @@ enum expr_e {
   expr_e_if,
   expr_e_while,
   expr_e_for,
+  expr_e_forrange,
   expr_e_feach,
   expr_e_fldfe,
   expr_e_foldfe,
