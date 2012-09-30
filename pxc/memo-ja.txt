@@ -1,5 +1,21 @@
+
+0930 298
 ---------------------------------------------------------------------
 FIXME/TODO M1
+
+- add_root_requirementのcheckonly廃止、
+  - variant fieldはmutable&でrootできないようにする
+  - variant fieldはconst&でrootされるとコピーを作る
+  - variant fieldへの代入はset関数呼び出しに置き換える
+
+weak型まわり
+- externならweak又はrefを返すメンバ関数を許可、thisをrootする(done)
+- globalやstructには参照変数などは置けないように
+- 構造体にslice等のweak型を含む型のfieldを置けないように
+  is_weak_type() あるいはヒープに置けなければそれでよい？
+- weak型を初期化以外の代入の左辺にできないように
+  - weak型を参照渡しできないように？ 代入の左辺にできなければチェック
+    不要？
 
 ポインタまわり
 - 短絡boxingを再び有効に
@@ -8,29 +24,23 @@ copyableのチェック
 - interfaceなどのようにcopyableではないものをコピーしたときのエラー
 
 funccallのエラーチェック
-- 関数でないものでもoperator ()を適用できてしまう
-- fooが構造体のとき foo f(100) ってどういう意味になるのか？
+- 関数でないものでもoperator ()を適用できてしまう(done)
 
 interfaceまわり
 - interface実装の引数byref等が一致しているかチェック
 - interface型を値で持てないように
 - interfaceへの代入はエラーにする
-
-weak型まわり
-- コンテナのfind()を作るためにはweak型を返す関数を作れないといけない
-  - externならweak又はrefを返すメンバ関数を許可、thisをrootする
-- globalやstructには参照変数などは置けないように
-- 構造体にslice等のweak型を含む型のfieldを置けないように
-  is_weak_type() あるいはヒープに置けなければそれでよい？
+- interfaceの仮想関数の引数型は先に定義しなくていいのか？
 
 コンテナまわり
+- rangeに対するoperator *
 - expr_feach::emit(): map, rangeに対するemit
 - list, set
 
 
-ifのスコープまわり
-- if (...) 内で定義した変数のスコープをローカルに
-- if (int x : foo[k]) { ... }
+if-defined構文
+- if (int const& x : foo[k]) { ... }
+- if (int v : foo.fld) { ... } // unionのフィールドは左辺値取れない
 
 - type categoryの整理
 - Cコードの字下げ
@@ -5041,4 +5051,20 @@ viにpassbyなどの情報がある。var_csymbolはC変数の名前で、一時
 - ポインタをdefault_constructibleではなくす。(done)
   ただしグローバル変数と構造体メンバについてはnull初期化せざるをえない
 - c++実装のデフォルトコンストラクタをnull初期化するように(done)
+
+---------------------------------------------------------------------
+byrefをperlから呼ぶ
+
+function hoge foo() { ... }
+hogeを返す関数はref{hoge}をsvにつっこむ。
+
+- pxcの各型について、それがperlで値型にするか参照型にするかを決める。
+- ptrやweak型は値型でも参照型でもなく、perlからは利用できない型。
+- 値型については、その型をbyref渡し引数にとるような関数呼び出しについ
+  て、変更内容は失われる。
+- 参照型を返すような関数はperlに渡すときにptrで自動box化される。
+- perlから呼び出せる関数
+  - 返値がptr{参照型}またはcptr{参照型}はok、それ以外のポインタ型は不可
+  - それ以外のperlで利用できない型を返値の型式に含むときは呼び出し不可
+  - perlで利用できない型を引数の型式に含むときは呼び出し不可
 

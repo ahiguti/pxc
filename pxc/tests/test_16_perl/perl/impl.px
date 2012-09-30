@@ -1,7 +1,7 @@
 
 // vim:sw=2
 
-namespace perl::impl;
+private namespace perl::impl;
 public import meta "";
 
 public extern "pxperl::perlsv" struct sv { }
@@ -13,25 +13,28 @@ public extern "pxperl::perlav" struct av {
   // TODO: shift, unshift, push, pop
 }
 public extern "pxperl::perlhv" struct hv {
-  extern "fetch" function sv fetch(string key) const;
-  extern "store" function bool store(string key, sv val);
+  extern "fetch" function sv fetch(string const& key) const;
+  extern "store" function bool store(string const& key, sv const& val);
 }
 
-public extern "pxperl::sv_to_int" function int sv_to_int(sv x);
 public extern "pxperl::int_to_sv" function sv int_to_sv(int x);
-public extern "pxperl::sv_to_long" function long sv_to_long(sv x);
 public extern "pxperl::long_to_sv" function sv long_to_sv(long x);
-public extern "pxperl::sv_to_double" function double sv_to_double(sv x);
-public extern "pxperl::double_to_sv" function sv double_to_sv(long x);
-public extern "pxperl::sv_to_string" function string sv_to_string(sv x);
-public extern "pxperl::string_to_sv" function sv string_to_sv(string x);
+public extern "pxperl::double_to_sv" function sv double_to_sv(double x);
+public extern "pxperl::string_to_sv" function sv string_to_sv(string const& x);
 
-public function {t} t sv_to_value(sv x) {
+public extern "pxperl::sv_to_bool" function bool sv_to_bool(sv const& x);
+public extern "pxperl::sv_to_int" function int sv_to_int(sv const& x);
+public extern "pxperl::sv_to_long" function long sv_to_long(sv const& x);
+public extern "pxperl::sv_to_float" function double sv_to_float(sv const& x);
+public extern "pxperl::sv_to_double" function double sv_to_double(sv const& x);
+public extern "pxperl::sv_to_string" function string sv_to_string(sv const& x);
+
+public function {t} t sv_to_value(sv const& x) {
   type_pl{t} o;
   return o.from_perlsv(x);
 }
 
-public function {t} sv value_to_sv(t x) {
+public function {t} sv value_to_sv(t const& x) {
   type_pl{t} o;
   return o.to_perlsv(x);
 }
@@ -46,7 +49,7 @@ public function {t} void xs_create_type() {
   o.xs_create_type(meta::full_string{t}); // TODO: when t has parameters?
 }
 
-public function {t} sv value_to_perlsv(t x)
+public function {t} sv value_to_perlsv(t const& x)
 {
   macro symstr concat{t, "_to_perlsv"};
   macro sym symbol{t, symstr};
@@ -75,24 +78,29 @@ public function {t} sv value_to_perlsv(t x)
   return r;
 }
 
-public function {t} t perlsv_to_value(sv x)
+public function {t} t perlsv_to_value(sv const& x)
 {
-  macro symstr concat{"perlsv_to_", t};
-  macro sym symbol{t, symstr};
+  macro symstr1 concat{"perlsv_to_", t};
+  macro sym1 symbol{t, symstr1}; // t's namespace
+  macro symstr2 concat{"sv_to_", t};
+  macro sym2 symbol{sv, symstr2}; // this namespace
   macro cat category{t};
   macro fullname full_string{t};
   if (eq{fullname, "perl::impl::sv"}) {
     return x;
-  } else if (eq{meta::to_string{sym}, symstr}) {
-    return sym(x);
+  } else if (eq{meta::to_string{sym1}, symstr1}) {
+    return sym1(x);
+  } else if (eq{meta::to_string{sym2}, symstr2}) {
+    return sym2(x);
   } else if (eq{cat, "builtin"}) {
-    if (eq{fullname, "string"}) {
-      return sv_to_string(x);
-    } else if (or{eq{fullname, "float"}, eq{fullname, "double"}}) {
-      return sv_to_double(x);
-    } else if (or{eq{fullname, "int"}, eq{fullname, "bool"}}) {
-      return t(sv_to_int(x));
-    } else if (eq{fullname, "unit"}) {
+//    if (eq{fullname, "string"}) {
+//      return sv_to_string(x);
+//    } else if (or{eq{fullname, "float"}, eq{fullname, "double"}}) {
+//      return sv_to_double(x);
+//    } else if (or{eq{fullname, "int"}, eq{fullname, "bool"}}) {
+//      return t(sv_to_int(x));
+//    } else
+    if (eq{fullname, "unit"}) {
       return unit();
     } else {
       return t(sv_to_long(x));
@@ -109,11 +117,11 @@ private extern "pxperl::perlsvarr" struct svarr {
 }
 
 private extern "pxperl::func_pl" struct {t} func_pl {
-  extern "xs_create_function" function void xs_create_function(string s);
+  extern "xs_create_function" function void xs_create_function(string const& s);
 }
 
 private struct {f} func_px {
-  function sv call(svarr a) {
+  function sv call(svarr const& a) {
     foreach (i : meta::seq{meta::argnum{f}};
       j : perlsv_to_value{meta::argtype{f, i}}(a.get(i)); ",") {
       if (eq{meta::full_string{meta::rettype{f}}, "void"}) {
@@ -127,10 +135,13 @@ private struct {f} func_px {
 }
 
 private extern "pxperl::type_pl" "nocascade" struct {t} type_pl {
-  extern "to_perlsv" function sv to_perlsv(t x);
-  extern "from_perlsv" function t from_perlsv(sv x);
-  extern "xs_create_type" function void xs_create_type(string s);
+  extern "to_perlsv" function sv to_perlsv(t const& x);
+  extern "from_perlsv" function t from_perlsv(sv const& x);
+  extern "xs_create_type" function void xs_create_type(string const& s);
 }
+
+private extern "pxperl::nocpy_wptr" "wptr" struct {t} nocpy_wptr { }
+private extern "pxperl::cpy_wptr" "wptr" struct {t} cpy_wptr { }
 
 // implementation
 
@@ -369,29 +380,41 @@ template <typename T> struct type_pl {
 template <typename T> pxcrt::string type_pl<T>::klass_name;
 template <typename T> HV *type_pl<T>::klass_stash;
 template <typename T> CV *type_pl<T>::destr_cv;
-inline int sv_to_int(const perlsv& x)
-{
-  return x.get() ? SvIV(x.get()) : 0;
-}
 inline perlsv int_to_sv(int x)
 {
   return perlsv((IV)x);
-}
-inline long long sv_to_long(const perlsv& x)
-{
-  return x.get() ? SvIV(x.get()) : 0;
 }
 inline perlsv long_to_sv(long long x)
 {
   return perlsv((IV)x);
 }
+inline perlsv double_to_sv(double x)
+{
+  return perlsv((NV)x);
+}
+inline perlsv string_to_sv(const pxcrt::string& s)
+{
+  return perlsv(s.data(), s.size());
+}
+inline bool sv_to_bool(const perlsv& x)
+{
+  return x.get() ? SvIV(x.get()) : 0;
+}
+inline int sv_to_int(const perlsv& x)
+{
+  return x.get() ? SvIV(x.get()) : 0;
+}
+inline long long sv_to_long(const perlsv& x)
+{
+  return x.get() ? SvIV(x.get()) : 0;
+}
 inline double sv_to_double(const perlsv& x)
 {
   return x.get() ? SvNV(x.get()) : 0;
 }
-inline perlsv double_to_sv(double x)
+inline float sv_to_float(const perlsv& x)
 {
-  return perlsv((NV)x);
+  return x.get() ? SvNV(x.get()) : 0;
 }
 inline pxcrt::string sv_to_string(const perlsv& x)
 {
@@ -402,10 +425,6 @@ inline pxcrt::string sv_to_string(const perlsv& x)
   STRLEN len = 0;
   char *const p = SvPV_nomg(svp, len);
   return pxcrt::string(p, len);
-}
-inline perlsv string_to_sv(const pxcrt::string& s)
-{
-  return perlsv(s.data(), s.size());
 }
 #undef DBG
 }; // namespace pxperl

@@ -586,9 +586,9 @@ static void check_return_expr(expr_funcdef *fdef)
 {
   const term& typ = fdef->get_rettype();
   std::string err_mess;
-  if (!check_term_validity(typ, false, false,
-    false, /* weak type is not allowed */
-    fdef, err_mess)) {
+  const bool allow_weak = fdef->no_def && fdef->is_member_function();
+    /* allows weak type if fdef is a extern c function */
+  if (!check_term_validity(typ, false, false, allow_weak, fdef, err_mess)) {
     arena_error_push(fdef, "invalid return type '%s' %s",
       term_tostr_human(typ).c_str(), err_mess.c_str());
   }
@@ -726,7 +726,28 @@ static void store_tempvar_constval(expr_i *e, bool blockscope_flag,
     dbgmsg);
 }
 
-static bool add_root_requirement_container_guard(expr_i *e,
+#if 0
+static bool is_always_rooted(expr_e s)
+{
+  switch (s) {
+  case expr_e_var:
+  case expr_e_te:
+  case expr_e_symbol:
+  case expr_e_extval:
+  case expr_e_int_literal:
+  case expr_e_float_literal:
+  case expr_e_bool_literal:
+  case expr_e_str_literal:
+    DBG_ROOT(fprintf(stderr, "always rooted\n"));
+    return true; /* always rooted */
+  default:
+    break;
+  }
+  return false;
+}
+#endif
+
+static bool add_root_requirement_container_elements(expr_i *e,
   bool blockscope_flag, bool checkonly_flag);
 
 static bool add_root_requirement(expr_i *e, bool byref_flag,
@@ -749,27 +770,36 @@ static bool add_root_requirement(expr_i *e, bool byref_flag,
   }
   if (e->conv == conversion_e_container_range) {
     /* same as foo[a..b] */
-    if (!add_root_requirement_container_guard(e, blockscope_flag,
+    if (!add_root_requirement_container_elements(e, blockscope_flag,
       checkonly_flag)) {
       DBG_ROOT(fprintf(stderr, "add_root_requirement: container range f\n"));
       return false;
     }
-    byref_flag = true;
+    byref_flag = true; /* e itself must be rooted byref */
   }
-  switch (e->get_esort()) {
-  case expr_e_var:
-  case expr_e_te:
-  case expr_e_symbol:
-  case expr_e_extval:
-  case expr_e_int_literal:
-  case expr_e_float_literal:
-  case expr_e_bool_literal:
-  case expr_e_str_literal:
+  if (e->get_esort() == expr_e_funccall &&
+    is_weak_value_type(e->resolve_texpr())) {
+    /* function returning weak type. only allowed for extern c function. */
+    expr_funccall *const efc = ptr_down_cast<expr_funccall>(e);
+    expr_op *const eop = dynamic_cast<expr_op *>(efc->func);
+    if (eop == 0 || (eop->op != '.' && eop->op != TOK_ARROW)) {
+      arena_error_throw(eop,
+	"internal error: non-member function returning weak");
+    }
+    if (!add_root_requirement_container_elements(eop->arg0, blockscope_flag, 
+      checkonly_flag)) {
+      DBG_ROOT(fprintf(stderr, "add_root_requirement: weakret func\n"));
+      return false;
+    }
+    byref_flag = true; /* e itself must be rooted byref */
+  }
+  #if 0
+  // FIXME: remove?
+  if (is_always_rooted(e->get_esort())) { 
     DBG_ROOT(fprintf(stderr, "add_root_requirement: always rooted\n"));
     return true; /* always rooted */
-  default:
-    break;
   }
+  #endif
   if (e->get_esort() == expr_e_op) {
     expr_op *const eop = ptr_down_cast<expr_op>(e);
     if (eop->op == '=' && eop->arg0->get_esort() == expr_e_var) {
@@ -777,27 +807,37 @@ static bool add_root_requirement(expr_i *e, bool byref_flag,
       return true; /* always rooted */
     }
   }
-  const call_trait_e ect = get_call_trait(e->resolve_texpr());
-  if (!byref_flag && !is_weak_value_type(e->resolve_texpr()) &&
-    (ect == call_trait_e_value || ect == call_trait_e_raw_pointer)) {
-    /* simple value type */
-    if (!checkonly_flag) {
-      store_tempvar_constval(e, blockscope_flag, "value/rawptr rvalue");
-	/* ROOT */
+  #if 0
+  if (!byref_flag && !is_weak_value_type(e->resolve_texpr())) {
+    const call_trait_e ect = get_call_trait(e->resolve_texpr());
+    if (ect == call_trait_e_value || ect == call_trait_e_raw_pointer) {
+      /* simple value type */
+      if (!checkonly_flag) {
+	store_tempvar_constval(e, blockscope_flag, "value/rawptr rvalue");
+	  /* ROOT */
+      }
+      DBG_ROOT(fprintf(stderr, "add_root_requirement: simple value type\n"));
+      return true;
+    } else {
+      /* cant root because it's a large object */
+      // FIXME: test
+      DBG_ROOT(fprintf(stderr, "add_root_requirement: large copy\n"));
+      return false;
     }
-    DBG_ROOT(fprintf(stderr, "add_root_requirement: simple value type\n"));
-    return true;
   }
+  #endif
   expr_op *const eop = dynamic_cast<expr_op *>(e);
   if (eop == 0) {
-    /* funccall etc. */
+    /* funccall etc. rooted already. */
     DBG_ROOT(fprintf(stderr, "add_root_requirement: not an op\n"));
+    #if 0
     const bool has_lv = expr_has_lvalue(e, e, false);
     if (!checkonly_flag) {
       store_tempvar(e,
 	has_lv ? passby_e_mutable_value : passby_e_const_value,
 	blockscope_flag, false, "miscexpr");
     }
+    #endif
     return true;
   }
   DBG_ROOT(fprintf(stderr, "add_root_requirement: op\n"));
@@ -855,19 +895,32 @@ static bool add_root_requirement(expr_i *e, bool byref_flag,
     }
     return true;
   case '[':
+    #if 0
     if (is_cm_range_family(eop->arg0->resolve_texpr())) {
       return true;
     }
+    #endif
     if (byref_flag && is_cm_range_family(e->resolve_texpr())) {
       return false;
     }
+    #if 0
+    #endif
 #if 0
 fprintf(stderr, "container_guard %s byref=%d\n", e->dump(0).c_str(),
   (int)byref_flag);
 abort();
 #endif
-    return add_root_requirement_container_guard(eop->arg0, blockscope_flag,
-	checkonly_flag);
+    if (!add_root_requirement(eop->arg0, byref_flag, blockscope_flag,
+      checkonly_flag)) {
+      return false;
+    }
+    if (byref_flag || is_cm_range_family(e->resolve_texpr())) {
+      /* v[k] is required byref, or v[..] is required. need to guard. */
+      return add_root_requirement_container_elements(eop->arg0,
+	blockscope_flag, checkonly_flag);
+    }
+    /* by value */
+    return true;
   case '(':
     return add_root_requirement(eop->arg0, byref_flag, blockscope_flag,
       checkonly_flag);
@@ -876,30 +929,40 @@ abort();
   }
 }
 
-static bool add_root_requirement_container_guard(expr_i *econ,
+static bool add_root_requirement_container_elements(expr_i *econ,
   bool blockscope_flag, bool checkonly_flag)
 {
+  /* this function makes econ elements valid */
   DBG_CON(fprintf(stderr, "%s op[] container blockscope=%d\n",
     econ->dump(0).c_str(), (int)blockscope_flag));
+  #if 0
   const bool container_byref = true; /* always byref */
-  if (econ->conv != conversion_e_container_range) {
+  if (econ->conv != conversion_e_container_range) { /* avoid infinite
+						     * recursion */
+    #if 0
     if (!add_root_requirement(econ, container_byref, blockscope_flag, true)) {
       return false;
     }
-    if (!checkonly_flag) {
-      add_root_requirement(econ, container_byref, blockscope_flag,
-	checkonly_flag);
+    #endif
+    if (!add_root_requirement(econ, container_byref, blockscope_flag,
+	checkonly_flag)) {
+      return false;
     }
   }
+  #endif
   if (!checkonly_flag) {
     const bool con_lv = expr_has_lvalue(econ, econ, false);
     const bool guard_elements =
       type_has_invalidate_guard(econ->resolve_texpr());
     DBG_CON(fprintf(stderr, "op[] container=%s lvalue=%d\n",
       econ->dump(0).c_str(), (int)con_lv));
-    store_tempvar(econ,
-      con_lv ? passby_e_mutable_reference : passby_e_const_reference,
-      blockscope_flag, guard_elements, "arrelem");
+    if (!guard_elements) {
+      /* nothing to do */
+    } else {
+      store_tempvar(econ,
+	con_lv ? passby_e_mutable_reference : passby_e_const_reference,
+	blockscope_flag, guard_elements, "arrelem");
+    }
   }
   return true;
 }
@@ -915,9 +978,10 @@ static void root_byref_or_byval(expr_i *e, bool blockscope_flag)
 {
   call_trait_e ct = get_call_trait(e->resolve_texpr());
   if (ct != call_trait_e_value &&
-    add_root_requirement(e, true, blockscope_flag, true)) {
+    // add_root_requirement(e, true, blockscope_flag, true)) {
+    add_root_requirement(e, true, blockscope_flag, false)) {
     /* if it can root by ref, do so. */
-    add_root_requirement(e, true, blockscope_flag, false);
+///    add_root_requirement(e, true, blockscope_flag, false);
   } else {
     /* otherwise, root by value */
     add_root_requirement(e, false, blockscope_flag, false);
@@ -1322,6 +1386,8 @@ fprintf(stderr, "arg_hidden_this %s\n", arg0->dump(0).c_str());
     } else {
       /* lhs is not a vardef */
       if (is_weak_value_type(arg0->resolve_texpr())) {
+	/* 'w1 = w2' is not allowed for weak types, because these variables
+	 * may depend different objects */
 	arena_error_throw(this, "invalid assignment ('%s' is a weak type)",
 	  term_tostr_human(arg0->resolve_texpr()).c_str());
       }

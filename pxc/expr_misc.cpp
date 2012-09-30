@@ -302,6 +302,8 @@ std::string get_category_string(typecat_e cat)
   case typecat_e_cptr: return "cptr";
   case typecat_e_tptr: return "tptr";
   case typecat_e_tcptr: return "tcptr";
+  case typecat_e_wptr: return "wptr";
+  case typecat_e_wcptr: return "wcptr";
   case typecat_e_varray: return "varray";
   case typecat_e_farray: return "farray";
   case typecat_e_slice: return "slice";
@@ -322,10 +324,17 @@ static bool is_pointer_category(const typecat_e cat)
   case typecat_e_cptr:
   case typecat_e_tptr:
   case typecat_e_tcptr:
+  case typecat_e_wptr:
+  case typecat_e_wcptr:
     return true;
   default:
     return false;
   }
+}
+
+static bool is_weak_pointer_category(const typecat_e cat)
+{
+  return cat == typecat_e_wptr || cat == typecat_e_wcptr;
 }
 
 static bool is_threaded_pointer_category(const typecat_e cat)
@@ -469,7 +478,7 @@ bool is_cm_range_family(const term& t)
 
 bool is_weak_value_type(const term& t)
 {
-  return is_cm_range_family(t); /* range types are weak */
+  return is_cm_range_family(t) || is_weak_pointer_category(get_category(t));
 }
 
 bool is_container_family(const term& t)
@@ -2190,6 +2199,8 @@ term get_array_elem_texpr(expr_op *eop, term& t0)
       case typecat_e_cslice:
 	return tparams->param_def;
       case typecat_e_tree_map:
+      case typecat_e_tree_map_range:
+      case typecat_e_tree_map_crange:
 	if (tparams->rest != 0) {
 	  return tparams->rest->param_def;
 	}
