@@ -22,7 +22,7 @@ group:     System Environment/Libraries
 buildroot: %{_tmppath}/%{name}-%{version}-%(id -u -n)
 prefix:    %(echo %{_prefix})
 source:    perl-PXC-Loader.tar.gz
-Requires: pxc
+Requires:  pxc
 
 %description
 Stub documentation for PXC-Loader, created by h2xs. It looks like the

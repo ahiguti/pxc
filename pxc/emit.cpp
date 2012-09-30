@@ -479,8 +479,192 @@ static void emit_deinitialize_variant_field(emit_context& em,
     em.puts("$p()->");
     emit_term(em, fld->get_texpr());
     em.puts("::~");
-    em.puts(to_short_name(get_term_cname(fld->get_texpr())));
+    const std::string shortname = to_short_name(get_term_cname(fld->get_texpr()));
+    const std::string shortname_wo_tp = shortname.substr(0, shortname.find('<'));
+    em.puts(shortname_wo_tp);
     em.puts("()");
+  }
+}
+
+static void emit_variant_aux_functions(emit_context& em, const expr_variant *ev, bool declonly)
+{
+  typedef std::list<expr_var *> flds_type;
+  flds_type flds;
+  ev->get_fields(flds);
+  flds_type::const_iterator i;
+  bool has_non_unit = false;
+  bool has_non_smallpod = false;
+  for (i = flds.begin(); i != flds.end(); ++i) {
+    if (!is_unit_type((*i)->get_texpr())) {
+      has_non_unit = true;
+    }
+    if (!is_smallpod_type((*i)->get_texpr())) {
+      has_non_smallpod = true;
+    }
+  }
+  const std::string name_c = get_type_cname_wo_ns(ev);
+  em.set_ns(ev->ns);
+  /* init */
+  em.set_file_line(ev);
+  em.indent('b');
+  em.puts("void ");
+  if (!declonly) {
+    em.puts(name_c);
+    em.puts("::");
+  }
+  em.puts("init$(const ");
+  em.puts(name_c);
+  em.puts(" & x)");
+  if (declonly) {
+    em.puts(";");
+  } else {
+    em.puts(" {\n");
+    em.add_indent(1);
+    em.set_file_line(ev);
+    em.indent('b');
+    em.puts("$e = x.$e;\n");
+    if (has_non_unit) {
+      em.set_file_line(ev);
+      em.indent('b');
+      em.puts("switch ($e) {\n");
+      for (i = flds.begin(); i != flds.end(); ++i) {
+	em.set_file_line(*i);
+	em.indent('b');
+	em.puts("case ");
+	(*i)->emit_symbol(em);
+	em.puts("$e: ");
+	emit_initialize_variant_field(em, ev, *i, true);
+	em.puts("; break;\n");
+      }
+      em.set_file_line(ev);
+      em.indent('b');
+      em.puts("}\n");
+    }
+    em.add_indent(-1);
+    em.set_file_line(ev);
+    em.indent('b');
+    em.puts("};\n");
+  }
+  /* deinit */
+  em.set_file_line(ev);
+  em.indent('b');
+  em.puts("void ");
+  if (!declonly) {
+    em.puts(name_c);
+    em.puts("::");
+  }
+  em.puts("deinit$()");
+  if (declonly) {
+    em.puts(";\n");
+  } else {
+    em.puts(" {\n");
+    em.add_indent(1);
+    if (has_non_smallpod) {
+      em.set_file_line(ev);
+      em.indent('b');
+      em.puts("switch ($e) {\n");
+      for (i = flds.begin(); i != flds.end(); ++i) {
+	em.set_file_line(*i);
+	em.indent('b');
+	em.puts("case ");
+	(*i)->emit_symbol(em);
+	em.puts("$e: ");
+	emit_deinitialize_variant_field(em, ev, *i);
+	em.puts("; break;\n");
+      }
+      em.set_file_line(ev);
+      em.indent('b');
+      em.puts("}\n");
+    }
+    em.add_indent(-1);
+    em.set_file_line(ev);
+    em.indent('b');
+    em.puts("};\n");
+  }
+  /* rvalue */
+  for (i = flds.begin(); i != flds.end(); ++i) {
+    em.set_file_line(*i);
+    em.indent('b');
+    em.puts("const ");
+    emit_term(em, (*i)->get_texpr());
+    em.puts("& ");
+    if (!declonly) {
+      em.puts(name_c);
+      em.puts("::");
+    }
+    (*i)->emit_symbol(em);
+    em.puts("$r() const");
+    if (declonly) {
+      em.puts(";\n");
+    } else {
+      em.puts(" {\n");
+      em.add_indent(1);
+      em.set_file_line(*i);
+      em.indent('b');
+      em.puts("if ($e != ");
+      (*i)->emit_symbol(em);
+      em.puts("$e) { pxcrt::throw_invalid_field(); }\n");
+      em.set_file_line(*i);
+      em.indent('b');
+      if (!is_unit_type((*i)->get_texpr())) {
+	em.puts("return *");
+	(*i)->emit_symbol(em);
+	em.puts("$p();\n");
+      } else {
+	/* null reference */
+	em.puts("return *(const ");
+	emit_term(em, (*i)->get_texpr());
+	em.puts(" *)(const void *)0;\n");
+      }
+      em.add_indent(-1);
+      em.set_file_line(*i);
+      em.indent('b');
+      em.puts("}\n");
+    }
+  }
+  /* lvalue */
+  for (i = flds.begin(); i != flds.end(); ++i) {
+    em.set_file_line(*i);
+    em.indent('b');
+    emit_term(em, (*i)->get_texpr());
+    em.puts("& ");
+    if (!declonly) {
+      em.puts(name_c);
+      em.puts("::");
+    }
+    (*i)->emit_symbol(em);
+    em.puts("$l()");
+    if (declonly) {
+      em.puts(";\n");
+    } else {
+      em.puts(" {\n");
+      em.add_indent(1);
+      em.set_file_line(*i);
+      em.indent('b');
+      em.puts("if ($e != ");
+      (*i)->emit_symbol(em);
+      em.puts("$e) { deinit$(); $e = ");
+      (*i)->emit_symbol(em);
+      em.puts("$e; ");
+      emit_initialize_variant_field(em, ev, *i, false);
+      em.puts("; }\n");
+      em.set_file_line(*i);
+      em.indent('b');
+      if (!is_unit_type((*i)->get_texpr())) {
+	em.puts("return *");
+	(*i)->emit_symbol(em);
+	em.puts("$p();\n");
+      } else {
+	/* null reference */
+	em.puts("return *(");
+	emit_term(em, (*i)->get_texpr());
+	em.puts(" *)(void *)0;\n");
+      }
+      em.add_indent(-1);
+      em.set_file_line(*i);
+      em.indent('b');
+      em.puts("}\n");
+    }
   }
 }
 
@@ -505,7 +689,7 @@ static void emit_variant_def_one(emit_context& em, const expr_variant *ev,
   flds_type flds;
   ev->get_fields(flds);
   flds_type::const_iterator i;
-  /* enum */
+  /* enum part */
   em.set_file_line(ev);
   em.indent('b');
   em.puts("enum {");
@@ -528,7 +712,7 @@ static void emit_variant_def_one(emit_context& em, const expr_variant *ev,
     }
   }
   if (has_non_unit) {
-    /* union */
+    /* union part */
     em.set_file_line(ev);
     em.indent('b');
     em.puts("union {\n");
@@ -608,63 +792,6 @@ static void emit_variant_def_one(emit_context& em, const expr_variant *ev,
   em.set_file_line(ev);
   em.indent('b');
   em.puts("};\n");
-  /* init */
-  em.set_file_line(ev);
-  em.indent('b');
-  em.puts("void init$(const ");
-  em.puts(name_c);
-  em.puts(" & x) {\n");
-  em.add_indent(1);
-  em.set_file_line(ev);
-  em.indent('b');
-  em.puts("$e = x.$e;\n");
-  if (has_non_unit) {
-    em.set_file_line(ev);
-    em.indent('b');
-    em.puts("switch ($e) {\n");
-    for (i = flds.begin(); i != flds.end(); ++i) {
-      em.set_file_line(*i);
-      em.indent('b');
-      em.puts("case ");
-      (*i)->emit_symbol(em);
-      em.puts("$e: ");
-      emit_initialize_variant_field(em, ev, *i, true);
-      em.puts("; break;\n");
-    }
-    em.set_file_line(ev);
-    em.indent('b');
-    em.puts("}\n");
-  }
-  em.add_indent(-1);
-  em.set_file_line(ev);
-  em.indent('b');
-  em.puts("};\n");
-  /* deinit */
-  em.set_file_line(ev);
-  em.indent('b');
-  em.puts("void deinit$() {\n");
-  em.add_indent(1);
-  if (has_non_smallpod) {
-    em.set_file_line(ev);
-    em.indent('b');
-    em.puts("switch ($e) {\n");
-    for (i = flds.begin(); i != flds.end(); ++i) {
-      em.set_file_line(*i);
-      em.indent('b');
-      em.puts("case ");
-      (*i)->emit_symbol(em);
-      em.puts("$e: ");
-      emit_deinitialize_variant_field(em, ev, *i);
-      em.puts("; break;\n");
-    }
-    em.set_file_line(ev);
-    em.indent('b');
-    em.puts("}\n");
-  }
-  em.add_indent(-1);
-  em.set_file_line(ev);
-  em.indent('b');
-  em.puts("};\n");
   /* destructor */
   em.set_file_line(ev);
   em.indent('b');
@@ -685,73 +812,8 @@ static void emit_variant_def_one(emit_context& em, const expr_variant *ev,
   em.puts("& operator =(const ");
   em.puts(name_c);
   em.puts("& x) { if (this != &x) { deinit$(); init$(x); } return *this; }\n");
-  /* rvalue */
-  for (i = flds.begin(); i != flds.end(); ++i) {
-    em.set_file_line(*i);
-    em.indent('b');
-    em.puts("const ");
-    emit_term(em, (*i)->get_texpr());
-    em.puts("& ");
-    (*i)->emit_symbol(em);
-    em.puts("$r() const {\n");
-    em.add_indent(1);
-    em.set_file_line(*i);
-    em.indent('b');
-    em.puts("if ($e != ");
-    (*i)->emit_symbol(em);
-    em.puts("$e) { pxcrt::throw_invalid_field(); }\n");
-    em.set_file_line(*i);
-    em.indent('b');
-    if (!is_unit_type((*i)->get_texpr())) {
-      em.puts("return *");
-      (*i)->emit_symbol(em);
-      em.puts("$p();\n");
-    } else {
-      /* null reference */
-      em.puts("return *(const ");
-      emit_term(em, (*i)->get_texpr());
-      em.puts(" *)(const void *)0;\n");
-    }
-    em.add_indent(-1);
-    em.set_file_line(*i);
-    em.indent('b');
-    em.puts("}\n");
-  }
-  /* lvalue */
-  for (i = flds.begin(); i != flds.end(); ++i) {
-    em.set_file_line(*i);
-    em.indent('b');
-    emit_term(em, (*i)->get_texpr());
-    em.puts("& ");
-    (*i)->emit_symbol(em);
-    em.puts("$l() {\n");
-    em.add_indent(1);
-    em.set_file_line(*i);
-    em.indent('b');
-    em.puts("if ($e != ");
-    (*i)->emit_symbol(em);
-    em.puts("$e) { deinit$(); $e = ");
-    (*i)->emit_symbol(em);
-    em.puts("$e; ");
-    emit_initialize_variant_field(em, ev, *i, false);
-    em.puts("; }\n");
-    em.set_file_line(*i);
-    em.indent('b');
-    if (!is_unit_type((*i)->get_texpr())) {
-      em.puts("return *");
-      (*i)->emit_symbol(em);
-      em.puts("$p();\n");
-    } else {
-      /* null reference */
-      em.puts("return *(");
-      emit_term(em, (*i)->get_texpr());
-      em.puts(" *)(void *)0;\n");
-    }
-    em.add_indent(-1);
-    em.set_file_line(*i);
-    em.indent('b');
-    em.puts("}\n");
-  }
+  /* init/deinit and getter functions (declonly) */
+  emit_variant_aux_functions(em, ev, true);
   /* */
   em.add_indent(-1);
   em.puts("};\n");
@@ -783,6 +845,8 @@ static std::list<expr_i *> get_dep_tparams(expr_struct *est)
     cat == typecat_e_cptr ||
     cat == typecat_e_tptr ||
     cat == typecat_e_tcptr ||
+    cat == typecat_e_wptr ||
+    cat == typecat_e_wcptr ||
     cat == typecat_e_varray ||
     cat == typecat_e_tree_map) {
     /* no dep */
@@ -855,23 +919,91 @@ static void sort_types(sorted_exprs& c, expr_i *e)
   c.pset.insert(e);
 }
 
-static void emit_inline_c(emit_context& em, const std::string& posstr,
-  bool is_decl)
+static void emit_struct_constr_one(emit_context& em, expr_struct *est,
+  bool emit_default_constr)
 {
-  for (expr_arena_type::iterator i = expr_arena.begin();
-    i != expr_arena.end(); ++i) {
-    expr_inline_c *const ei = dynamic_cast<expr_inline_c *>(*i);
-    if (ei == 0) { continue; }
-    if (ei->posstr != posstr) { continue; }
-    if (!is_decl && ei->declonly) { continue; }
-    const std::string cstr(ei->cstr);
-    em.set_file_line(ei);
-    em.puts("/* inline */\n");
-    em.puts(cstr.c_str());
-    if (cstr.size() > 0 && cstr[cstr.size() - 1] != '\n') {
-      em.puts("\n");
+  if (!is_compiled(est->block)) {
+    return;
+  }
+  if (elist_length(est->block->argdecls) == 0 && !emit_default_constr) {
+    return;
+  }
+  const std::string name_c = get_type_cname_wo_ns(est);
+  typedef std::list<expr_var *> flds_type;
+  flds_type flds;
+  est->get_fields(flds);
+  flds_type::const_iterator i;
+  em.set_ns(est->ns);
+  /* user defined constructor */
+  em.set_file_line(est);
+  em.indent('b');
+  em.puts(name_c);
+  em.puts("::");
+  em.puts(name_c);
+  em.puts("(");
+  if (!emit_default_constr) {
+    emit_argdecls(em, est->block->argdecls, true);
+  }
+  em.puts(") ");
+  emit_struct_constr_initializer(em, est, flds, true);
+  em.puts(" {\n");
+  em.add_indent(1);
+  if (emit_default_constr) {
+    for (expr_argdecls *a = est->block->argdecls; a; a = a->rest) {
+      em.indent('b');
+      emit_arg_cdecl(em, a, false, false);
+      emit_explicit_init_if(em, a->get_texpr());
+      em.puts(";\n");
     }
   }
+  em.indent('b');
+  em.puts("this->init$z(");
+  bool is_first = true;
+  for (expr_argdecls *a = est->block->argdecls; a; a = a->rest) {
+    if (is_first) {
+      is_first = false;
+    } else {
+      em.puts(", ");
+    }
+    a->emit_symbol(em);
+  }
+  em.puts(");\n");
+  em.add_indent(-1);
+  em.indent('b');
+  em.puts("}\n");
+}
+
+static void emit_struct_constr_aux(emit_context& em, expr_struct *est)
+{
+  if (!is_compiled(est->block)) {
+    return;
+  }
+  const std::string name_c = get_type_cname_wo_ns(est);
+  typedef std::list<expr_var *> flds_type;
+  flds_type flds;
+  est->get_fields(flds);
+  flds_type::const_iterator i;
+  em.set_ns(est->ns);
+  /* user defined constructor */
+  em.set_file_line(est);
+  em.indent('b');
+  em.puts("void ");
+  em.puts(name_c);
+  em.puts("::init$z");
+  em.puts("(");
+  emit_argdecls(em, est->block->argdecls, true);
+  em.puts(") ");
+  fn_emit_value(em, est->block);
+  em.puts("\n");
+}
+
+static void emit_variant_aux_defs(emit_context& em, expr_variant *ev)
+{
+  if (!is_compiled(ev->block)) {
+    return;
+  }
+  /* init/deinit and getter functions (definitions) */
+  emit_variant_aux_functions(em, ev, false);
 }
 
 static void emit_type_definitions(emit_context& em)
@@ -928,6 +1060,20 @@ static void emit_type_definitions(emit_context& em)
     if (ev != 0) {
       const bool proto_only = false;
       emit_variant_def_one(em, ev, proto_only);
+    }
+  }
+  /* aux function definitions */
+  for (std::list<expr_i *>::iterator i = c.sorted.begin();
+    i != c.sorted.end(); ++i) {
+    expr_struct *const est = dynamic_cast<expr_struct *>(*i);
+    if (est != 0 && est->has_userdefined_constr()) {
+      emit_struct_constr_one(em, est, true);
+      emit_struct_constr_one(em, est, false);
+      emit_struct_constr_aux(em, est);
+    }
+    expr_variant *const ev = dynamic_cast<expr_variant *>(*i);
+    if (ev != 0) {
+      emit_variant_aux_defs(em, ev);
     }
   }
 }
@@ -1017,78 +1163,6 @@ static void emit_vardecl(emit_context& em, const expr_i *e)
 }
 #endif
 
-static void emit_struct_constr_one(emit_context& em, expr_struct *est,
-  bool emit_default_constr)
-{
-  if (elist_length(est->block->argdecls) == 0 && !emit_default_constr) {
-    return;
-  }
-  const std::string name_c = get_type_cname_wo_ns(est);
-  typedef std::list<expr_var *> flds_type;
-  flds_type flds;
-  est->get_fields(flds);
-  flds_type::const_iterator i;
-  em.set_ns(est->ns);
-  /* user defined constructor */
-  em.set_file_line(est);
-  em.indent('b');
-  em.puts(name_c);
-  em.puts("::");
-  em.puts(name_c);
-  em.puts("(");
-  if (!emit_default_constr) {
-    emit_argdecls(em, est->block->argdecls, true);
-  }
-  em.puts(") ");
-  emit_struct_constr_initializer(em, est, flds, true);
-  em.puts(" {\n");
-  em.add_indent(1);
-  if (emit_default_constr) {
-    for (expr_argdecls *a = est->block->argdecls; a; a = a->rest) {
-      em.indent('b');
-      emit_arg_cdecl(em, a, false, false);
-      emit_explicit_init_if(em, a->get_texpr());
-      em.puts(";\n");
-    }
-  }
-  em.indent('b');
-  em.puts("this->init$z(");
-  bool is_first = true;
-  for (expr_argdecls *a = est->block->argdecls; a; a = a->rest) {
-    if (is_first) {
-      is_first = false;
-    } else {
-      em.puts(", ");
-    }
-    a->emit_symbol(em);
-  }
-  em.puts(");\n");
-  em.add_indent(-1);
-  em.indent('b');
-  em.puts("}\n");
-}
-
-static void emit_struct_constr_aux(emit_context& em, expr_struct *est)
-{
-  const std::string name_c = get_type_cname_wo_ns(est);
-  typedef std::list<expr_var *> flds_type;
-  flds_type flds;
-  est->get_fields(flds);
-  flds_type::const_iterator i;
-  em.set_ns(est->ns);
-  /* user defined constructor */
-  em.set_file_line(est);
-  em.indent('b');
-  em.puts("void ");
-  em.puts(name_c);
-  em.puts("::init$z");
-  em.puts("(");
-  emit_argdecls(em, est->block->argdecls, true);
-  em.puts(") ");
-  fn_emit_value(em, est->block);
-  em.puts("\n");
-}
-
 static void emit_function_def_one(emit_context& em, expr_funcdef *efd)
 {
   if ((efd->ext_decl && !efd->block->tinfo.template_descent) || efd->no_def) {
@@ -1143,12 +1217,18 @@ static void emit_function_def(emit_context& em)
     if (efd != 0 && is_compiled(efd->block)) {
       emit_function_def_one(em, efd);
     }
+    #if 0
     expr_struct *const est = dynamic_cast<expr_struct *>(*i);
     if (est != 0 && est->has_userdefined_constr()) {
       emit_struct_constr_one(em, est, true);
       emit_struct_constr_one(em, est, false);
       emit_struct_constr_aux(em, est);
     }
+    expr_variant *const ev = dynamic_cast<expr_variant *>(*i);
+    if (ev != 0) {
+      emit_variant_constr_aux(em, ev);
+    }
+    #endif
   }
 }
 
@@ -2510,6 +2590,25 @@ void fn_emit_value(emit_context& em, expr_i *e, bool expand_composite,
       em.puts(")");
     }
     break;
+  }
+}
+
+static void emit_inline_c(emit_context& em, const std::string& posstr,
+  bool is_decl)
+{
+  for (expr_arena_type::iterator i = expr_arena.begin();
+    i != expr_arena.end(); ++i) {
+    expr_inline_c *const ei = dynamic_cast<expr_inline_c *>(*i);
+    if (ei == 0) { continue; }
+    if (ei->posstr != posstr) { continue; }
+    if (!is_decl && ei->declonly) { continue; }
+    const std::string cstr(ei->cstr);
+    em.set_file_line(ei);
+    em.puts("/* inline */\n");
+    em.puts(cstr.c_str());
+    if (cstr.size() > 0 && cstr[cstr.size() - 1] != '\n') {
+      em.puts("\n");
+    }
   }
 }
 

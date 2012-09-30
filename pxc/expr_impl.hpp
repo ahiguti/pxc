@@ -107,19 +107,21 @@ enum funccall_e {
 
 enum typecat_e {
   typecat_e_none,
-  typecat_e_ptr,
-  typecat_e_cptr,
-  typecat_e_tptr,
-  typecat_e_tcptr,
-  typecat_e_varray,
-  typecat_e_farray,
-  typecat_e_slice,
-  typecat_e_cslice,
-  typecat_e_tree_map,
-  typecat_e_tree_map_range,
-  typecat_e_tree_map_crange,
-  typecat_e_linear,
-  typecat_e_nocascade,
+  typecat_e_ptr,             /* shared pointer */
+  typecat_e_cptr,            /* shared pointer, const target */
+  typecat_e_tptr,            /* multithread-shared pointer */
+  typecat_e_tcptr,           /* multithread-shared pointer, const target */
+  typecat_e_wptr,            /* raw pointer (WEAK) */
+  typecat_e_wcptr,           /* raw pointer, const target (WEAK) */
+  typecat_e_varray,          /* resizable array */
+  typecat_e_farray,          /* fixed size array */
+  typecat_e_slice,           /* array slice (WEAK) */
+  typecat_e_cslice,          /* array slice, const elements (WEAK) */
+  typecat_e_tree_map,        /* rb-tree map */
+  typecat_e_tree_map_range,  /* range on tree_map (WEAK) */
+  typecat_e_tree_map_crange, /* range on tree_map, const elements (WEAK) */
+  typecat_e_linear,          /* linear (noncopyable) type */
+  typecat_e_nocascade,       /* default-constructible even when tparam's not */
 };
 
 struct variable_info {
