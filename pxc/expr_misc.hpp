@@ -62,7 +62,7 @@ bool is_interface(const term& t);
 bool is_interface_or_impl(const term& t);
 bool is_noninterface_pointer(const term& t);
 bool is_interface_pointer(const term& t);
-bool is_const_pointer_family(const term& t);
+bool is_const_or_immutable_pointer_family(const term& t);
 bool is_cm_pointer_family(const term& t);
 bool is_array_family(const term& t);
 bool is_container_family(const term& t);
@@ -78,7 +78,6 @@ typecat_e get_category(const term& t);
 typecat_e get_category_from_string(const std::string& s);
 std::string get_category_string(typecat_e cat);
 term get_pointer_target(const term& t);
-call_trait_e get_call_trait(const term& t);
 bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap);
 #if 0
 std::string ulong_to_string(unsigned long long v);

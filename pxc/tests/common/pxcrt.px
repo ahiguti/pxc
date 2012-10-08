@@ -2,17 +2,17 @@
 namespace pxcrt;
 
 public threaded extern "pxcrt::string_size"
-  function size_t string_size(string s);
+  function size_t string_size(string const& s);
 public threaded extern "pxcrt::string_empty"
-  function bool string_empty(string s);
+  function bool string_empty(string const& s);
 public threaded extern "pxcrt::string_resize"
   function void string_resize(string& s, size_t len);
 public threaded extern "pxcrt::string_clear"
   function void string_clear(string& s);
 public threaded extern "pxcrt::string_append"
-  function void string_append(string& s, string v);
+  function void string_append(string& s, string const& v);
 public threaded extern "pxcrt::string_prepend"
-  function void string_prepend(string& s, string v);
+  function void string_prepend(string& s, string const& v);
 
 public threaded extern "pxcrt::unit_to_string"
   function string unit_to_string(unit x);
@@ -42,53 +42,55 @@ public threaded extern "pxcrt::double_to_string"
   function string double_to_string(double x);
 
 public threaded extern "pxcrt::string_to_void"
-  function void string_to_void(string x);
+  function void string_to_void(string const& x);
 public threaded extern "pxcrt::string_to_unit"
-  function unit string_to_unit(string x);
+  function unit string_to_unit(string const& x);
 public threaded extern "pxcrt::string_to_bool"
-  function bool string_to_bool(string x);
+  function bool string_to_bool(string const& x);
 public threaded extern "pxcrt::string_to_uchar"
-  function uchar string_to_ucahr(string x);
+  function uchar string_to_ucahr(string const& x);
 public threaded extern "pxcrt::string_to_char"
-  function char string_to_char(string x);
+  function char string_to_char(string const& x);
 public threaded extern "pxcrt::string_to_ushort"
-  function ushort string_to_ushort(string x);
+  function ushort string_to_ushort(string const& x);
 public threaded extern "pxcrt::string_to_short"
-  function short string_to_short(string x);
+  function short string_to_short(string const& x);
 public threaded extern "pxcrt::string_to_uint"
-  function uint string_to_uint(string x);
+  function uint string_to_uint(string const& x);
 public threaded extern "pxcrt::string_to_int"
-  function int string_to_int(string x);
+  function int string_to_int(string const& x);
 public threaded extern "pxcrt::string_to_ulong"
-  function ulong string_to_ulong(string x);
+  function ulong string_to_ulong(string const& x);
 public threaded extern "pxcrt::string_to_long"
-  function long string_to_long(string x);
+  function long string_to_long(string const& x);
 public threaded extern "pxcrt::string_to_size_t"
-  function size_t string_to_size_t(string x);
+  function size_t string_to_size_t(string const& x);
 public threaded extern "pxcrt::string_to_float"
-  function float string_to_float(string x);
+  function float string_to_float(string const& x);
 public threaded extern "pxcrt::string_to_double"
-  function double string_to_double(string x);
+  function double string_to_double(string const& x);
 
 public threaded extern "pxcrt::int_compare"
   function int int_compare(int x, int y);
   // FIXME
 public threaded extern "pxcrt::string_compare"
-  function int string_compare(string x, string y);
+  function int string_compare(string const& x, string const& y);
   // FIXME
 
-public multithreaded extern "pxcrt::ptr" "ptr" struct {t} ptr { } 
-public multithreaded extern "pxcrt::cptr" "cptr" struct {t} cptr { }
+public threaded extern "pxcrt::ptr" "ptr" struct {t} ptr { } 
+public threaded extern "pxcrt::cptr" "cptr" struct {t} cptr { }
+// public valuetype extern "pxcrt::iptr" "iptr" struct {t} iptr { }
 public multithreaded extern "pxcrt::tptr" "tptr" struct {t} tptr { }
 public multithreaded extern "pxcrt::tcptr" "tcptr" struct {t} tcptr { }
+// public tsvaluetype extern "pxcrt::tiptr" "tiptr" struct {t} tiptr { }
 
-public multithreaded extern "pxcrt::invalid_index" ""
+public mtvaluetype extern "pxcrt::invalid_index" ""
   struct invalid_index { }
-public multithreaded extern "pxcrt::invalid_field" ""
+public mtvaluetype extern "pxcrt::invalid_field" ""
   struct invalid_field { }
-public multithreaded extern "pxcrt::null_dereference" ""
+public mtvaluetype extern "pxcrt::null_dereference" ""
   struct null_dereference { }
-public multithreaded extern "pxcrt::would_invalidate" ""
+public mtvaluetype extern "pxcrt::would_invalidate" ""
   struct would_invalidate { }
 
 extern "type" inline
@@ -121,8 +123,8 @@ struct tpdummy;
 struct unit {
   unit() { }
   unit(int) { }
-  bool operator ==(const unit&) { return true; }
-  bool operator <(const unit&) { return false; }
+  bool operator ==(const unit&) const { return true; }
+  bool operator <(const unit&) const { return false; }
 };
 template <typename Tc>
 struct refvar_igrd_nn {
@@ -263,75 +265,51 @@ private:
   lockobject(lockobject&);
   lockobject& operator =(lockobject&);
 };
+struct nomutex { };
+struct mtcount {
+  mtcount() : count$z(1) { }
+  void incref$z() { __sync_fetch_and_add(&count$z, 1); } /* gcc >= 4 */
+  bool decref$z() { return (__sync_fetch_and_add(&count$z, -1) == 1); }
+private:
+  long count$z;
+};
+struct stcount {
+  stcount() : count$z(1) { }
+  void incref$z() { ++count$z; }
+  bool decref$z() { return (--count$z == 0); }
+private:
+  long count$z;
+};
 struct boxing { };
 template <typename T>
-struct trcval {
-  trcval() : count$z(1), value$z() {
+struct rcval { /* single threaded, mutable and immutable */
+  rcval() : value$z() {
     DBG_RC(fprintf(stdout, "c1 %p\n", this));
   }
-  explicit trcval(const T& v) : count$z(1), value$z(v) {
+  explicit rcval(const T& v) : value$z(v) {
     DBG_RC(fprintf(stdout, "c2 %p\n", this));
   }
   template <typename T0>
-  trcval(const T0& a0)
-    : count$z(1), value$z(a0) { }
+  rcval(const T0& a0) : value$z(a0) { }
   template <typename T0, typename T1>
-  trcval(const T0& a0, const T1& a1)
-    : count$z(1), value$z(a0, a1) { }
+  rcval(const T0& a0, const T1& a1) : value$z(a0, a1) { }
   template <typename T0, typename T1, typename T2>
-  trcval(const T0& a0, const T1& a1, const T2& a2)
-    : count$z(1), value$z(a0, a1, a2) { }
+  rcval(const T0& a0, const T1& a1, const T2& a2) : value$z(a0, a1, a2) { }
   void incref$z() const {
     DBG_RC(fprintf(stdout, "%p %ld +1\n", this, count$z));
-    __sync_fetch_and_add(&count$z, 1); /* gcc >= 4 */
+    count$z.incref$z();
   }
   void decref$z() const {
     DBG_RC(fprintf(stdout, "%p %ld -1\n", this, count$z));
-    if (__sync_fetch_and_add(&count$z, -1) == 1) { /* gcc >= 4 */
+    if (count$z.decref$z()) {
       delete this;
       DBG_RC(fprintf(stdout, "d  %p\n", this));
     }
   }
-  pxcrt::mutex& get_mutex$z() const { return mutex$z; }
+  nomutex& get_mutex$z() const { return mutex$z; }
 private:
-  mutable long count$z;
-  mutable pxcrt::mutex mutex$z;
-public:
-  T value$z;
-private:
-  trcval(const trcval&);
-  trcval& operator =(const trcval&);
-};
-template <typename T>
-struct rcval {
-  rcval() : count$z(1), value$z() {
-    DBG_RC(fprintf(stdout, "c1 %p\n", this));
-  }
-  explicit rcval(const T& v) : count$z(1), value$z(v) {
-    DBG_RC(fprintf(stdout, "c2 %p\n", this));
-  }
-  template <typename T0>
-  rcval(const T0& a0)
-    : count$z(1), value$z(a0) { }
-  template <typename T0, typename T1>
-  rcval(const T0& a0, const T1& a1)
-    : count$z(1), value$z(a0, a1) { }
-  template <typename T0, typename T1, typename T2>
-  rcval(const T0& a0, const T1& a1, const T2& a2)
-    : count$z(1), value$z(a0, a1, a2) { }
-  void incref$z() const {
-    DBG_RC(fprintf(stdout, "%p %ld +1\n", this, count$z));
-    ++count$z;
-  }
-  void decref$z() const {
-    DBG_RC(fprintf(stdout, "%p %ld -1\n", this, count$z));
-    if (--count$z == 0) {
-      delete this;
-      DBG_RC(fprintf(stdout, "d  %p\n", this));
-    }
-  }
-private:
-  mutable long count$z;
+  mutable stcount count$z;
+  mutable nomutex mutex$z;
 public:
   T value$z;
 private:
@@ -339,8 +317,78 @@ private:
   rcval& operator =(const rcval&);
 };
 template <typename T>
+struct trcval { /* multithreaded, mutable */
+  trcval() : value$z() {
+    DBG_RC(fprintf(stdout, "c1 %p\n", this));
+  }
+  explicit trcval(const T& v) : value$z(v) {
+    DBG_RC(fprintf(stdout, "c2 %p\n", this));
+  }
+  template <typename T0>
+  trcval(const T0& a0) : value$z(a0) { }
+  template <typename T0, typename T1>
+  trcval(const T0& a0, const T1& a1) : value$z(a0, a1) { }
+  template <typename T0, typename T1, typename T2>
+  trcval(const T0& a0, const T1& a1, const T2& a2) : value$z(a0, a1, a2) { }
+  void incref$z() const {
+    DBG_RC(fprintf(stdout, "%p %ld +1\n", this, count$z));
+    count$z.incref$z();
+  }
+  void decref$z() const {
+    DBG_RC(fprintf(stdout, "%p %ld -1\n", this, count$z));
+    if (count$z.decref$z()) {
+      delete this;
+      DBG_RC(fprintf(stdout, "d  %p\n", this));
+    }
+  }
+  mutex& get_mutex$z() const { return mutex$z; }
+private:
+  mutable mtcount count$z;
+  mutable mutex mutex$z;
+public:
+  T value$z;
+private:
+  trcval(const trcval&);
+  trcval& operator =(const trcval&);
+};
+template <typename T>
+struct tircval { /* multithreded, immutable */
+  tircval() : value$z() {
+    DBG_RC(fprintf(stdout, "c1 %p\n", this));
+  }
+  explicit tircval(const T& v) : value$z(v) {
+    DBG_RC(fprintf(stdout, "c2 %p\n", this));
+  }
+  template <typename T0>
+  tircval(const T0& a0) : value$z(a0) { }
+  template <typename T0, typename T1>
+  tircval(const T0& a0, const T1& a1) : value$z(a0, a1) { }
+  template <typename T0, typename T1, typename T2>
+  tircval(const T0& a0, const T1& a1, const T2& a2) : value$z(a0, a1, a2) { }
+  void incref$z() const {
+    DBG_RC(fprintf(stdout, "%p %ld +1\n", this, count$z));
+    count$z.incref$z();
+  }
+  void decref$z() const {
+    DBG_RC(fprintf(stdout, "%p %ld -1\n", this, count$z));
+    if (count$z.decref$z()) {
+      delete this;
+      DBG_RC(fprintf(stdout, "d  %p\n", this));
+    }
+  }
+  mutex& get_mutex$z() const { return mutex$z; }
+private:
+  mutable mtcount count$z;
+  mutable nomutex mutex$z;
+public:
+  T value$z;
+private:
+  tircval(const tircval&);
+  tircval& operator =(const tircval&);
+};
+template <typename T>
 struct rcptr { /* T must have an intrusive count */
-  typedef T *rawptr;
+  typedef T value_type;
   template <typename Tx> friend struct rcptr;
   rcptr() : ptr(0) { }
   rcptr(const rcptr& x) : ptr(x.ptr) { if (ptr) ptr->incref$z(); }
@@ -393,34 +441,6 @@ struct virtual_function_call : public std::logic_error
 
 extern "fdecl" inline
 namespace pxcrt {
-string void_to_string(void);
-string unit_to_string(unit v);
-string bool_to_string(bool v);
-string uchar_to_string(unsigned char v);
-string char_to_string(char v);
-string ushort_to_string(unsigned short v);
-string short_to_string(short v);
-string uint_to_string(unsigned int v);
-string int_to_string(int v);
-string ulong_to_string(unsigned long long v);
-string long_to_string(long long v);
-string size_t_to_string(size_t v);
-string double_to_string(double v);
-string float_to_string(float v);
-void string_to_void(const string& v);
-unit string_to_unit(const string& v);
-bool string_to_bool(const string& v);
-unsigned char string_to_uchar(const string& v);
-char string_to_char(const string& v);
-unsigned short string_to_ushort(const string& v);
-short string_to_short(const string& v);
-unsigned int string_to_uint(const string& v);
-int string_to_int(const string& v);
-unsigned long long string_to_ulong(const string& v);
-long long string_to_long(const string& v);
-size_t string_to_size_t(const string& v);
-double string_to_double(const string& v);
-float string_to_float(const string& v);
 inline int int_compare(int x, int y) { return x < y ? -1 : x > y ? 1 : 0; }
   // FIXME
 inline int string_compare(const std::string& x, const std::string& y)
@@ -459,16 +479,16 @@ string bool_to_string(bool v)
   static const string str_f("false");
   return v ? str_t : str_f;
 }
-string uchar_to_string(unsigned char v)
+string uchar_to_string(uint8_t v)
 {
   char buf[4];
-  const int len = snprintf(buf, sizeof(buf), "%hhu", v);
+  const int len = snprintf(buf, sizeof(buf), "%hhu", (unsigned char)v);
   return string(buf, buf + len);
 }
-string char_to_string(char v)
+string char_to_string(int8_t v)
 {
   char buf[4];
-  const int len = snprintf(buf, sizeof(buf), "%hhd", v);
+  const int len = snprintf(buf, sizeof(buf), "%hhd", (char)v);
   return string(buf, buf + len);
 }
 string ushort_to_string(unsigned short v)
@@ -495,16 +515,16 @@ string int_to_string(int v)
   const int len = snprintf(buf, sizeof(buf), "%d", v);
   return string(buf, buf + len);
 }
-string ulong_to_string(unsigned long long v)
+string ulong_to_string(uint64_t v)
 {
   char buf[32];
-  const int len = snprintf(buf, sizeof(buf), "%llu", v);
+  const int len = snprintf(buf, sizeof(buf), "%llu", (unsigned long long)v);
   return string(buf, buf + len);
 }
-string long_to_string(long long v)
+string long_to_string(int64_t v)
 {
   char buf[32];
-  const int len = snprintf(buf, sizeof(buf), "%lld", v);
+  const int len = snprintf(buf, sizeof(buf), "%lld", (long long)v);
   return string(buf, buf + len);
 }
 string size_t_to_string(size_t v)
@@ -546,11 +566,11 @@ bool string_to_bool(const string& v)
   }
   return true;
 }
-unsigned char string_to_uchar(const string& v)
+uint8_t string_to_uchar(const string& v)
 {
   return strtoul(v.c_str(), 0, 10);
 }
-char string_to_char(const string& v)
+int8_t string_to_char(const string& v)
 {
   return strtol(v.c_str(), 0, 10);
 }
@@ -570,11 +590,11 @@ int string_to_int(const string& v)
 {
   return strtol(v.c_str(), 0, 10);
 }
-unsigned long long string_to_ulong(const string& v)
+uint64_t string_to_ulong(const string& v)
 {
   return strtoull(v.c_str(), 0, 10);
 }
-long long string_to_long(const string& v)
+int64_t string_to_long(const string& v)
 {
   return strtoll(v.c_str(), 0, 10);
 }

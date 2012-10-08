@@ -195,8 +195,7 @@ void expr_symbol::check_type(symbol_table *lookup)
 
 void expr_inline_c::check_type(symbol_table *lookup)
 {
-  if ((this->get_attribute() & (attribute_threaded | attribute_multithr))
-    != 0) {
+  if ((this->get_attribute() & attribute_threaded) != 0) {
     arena_error_throw(this, "invalid attribute for an inline expression");
   }
 }
@@ -350,12 +349,15 @@ static void check_var_type(term& typ, expr_i *e, const char *sym,
     if (is_passby_cm_reference(ev->varinfo.passby)) {
       arena_error_push(e, "field '%s' can't be a reference", sym);
     }
+// FIXME: not effective?
+#if 0
     if (is_multithr_context(cur) && !term_is_multithr(typ)) {
       arena_error_push(e,
 	"type '%s' for field '%s' is not multithreaded",
 	term_tostr_human(typ).c_str(), sym);
       /* note: argdecls need not to be multithreaded */
     }
+#endif
   }
 }
 
@@ -493,8 +495,7 @@ void expr_extval::define_vars_one(expr_stmts *stmt)
 
 void expr_extval::check_type(symbol_table *lookup)
 {
-  if ((this->get_attribute() & (attribute_threaded | attribute_multithr))
-    != 0) {
+  if ((this->get_attribute() & attribute_threaded) != 0) {
     arena_error_throw(this, "invalid attribute for an external value");
   }
   if (is_void_type(resolve_texpr())) {
@@ -693,16 +694,6 @@ static void store_tempvar(expr_i *e, passby_e passby, bool blockscope_flag,
   DBG_STT(fprintf(stderr, "store_tempvar passby=%d blocksc=%d g=%d %s\n",
     (int)passby, (int)blockscope_flag, (int)guard_elements,
     e->dump(0).c_str()));
-// FIXME
-#if 0
-if (e->get_sdef() != 0) {
-symbol_common *sym = e->get_sdef();
-const expr_i *d = sym->get_symdef();
-if (d->get_esort() == expr_e_var || d->get_esort() == expr_e_argdecls) {
-  abort();
-}
-}
-#endif
   if (e->tempvar_id < 0) {
     symbol_table *lookup = find_current_symbol_table(e);
     assert(lookup);
@@ -710,7 +701,6 @@ if (d->get_esort() == expr_e_var || d->get_esort() == expr_e_argdecls) {
   } else {
     if (is_passby_cm_value(e->tempvar_varinfo.passby) !=
       is_passby_cm_value(passby)) {
-      // abort(); // FIXME
       /* in this case, it will be rooted by value. test_25_slice/val.pl . */
     }
   }
@@ -719,63 +709,57 @@ if (d->get_esort() == expr_e_var || d->get_esort() == expr_e_argdecls) {
   e->tempvar_varinfo.scope_block |= blockscope_flag;
 }
 
+#if 0
 static void store_tempvar_constval(expr_i *e, bool blockscope_flag,
   const char *dbgmsg)
 {
   return store_tempvar(e, passby_e_const_value, blockscope_flag, false,
     dbgmsg);
 }
-
-#if 0
-static bool is_always_rooted(expr_e s)
-{
-  switch (s) {
-  case expr_e_var:
-  case expr_e_te:
-  case expr_e_symbol:
-  case expr_e_extval:
-  case expr_e_int_literal:
-  case expr_e_float_literal:
-  case expr_e_bool_literal:
-  case expr_e_str_literal:
-    DBG_ROOT(fprintf(stderr, "always rooted\n"));
-    return true; /* always rooted */
-  default:
-    break;
-  }
-  return false;
-}
 #endif
 
-static bool add_root_requirement_container_elements(expr_i *e,
-  bool blockscope_flag, bool checkonly_flag);
+static bool add_root_requirement_container_elements(expr_i *econ,
+  bool blockscope_flag)
+{
+  /* this function makes econ elements valid */
+  DBG_CON(fprintf(stderr, "%s op[] container blockscope=%d\n",
+    econ->dump(0).c_str(), (int)blockscope_flag));
+  const bool con_lv = expr_has_lvalue(econ, econ, false);
+  const bool guard_elements =
+    type_has_invalidate_guard(econ->resolve_texpr());
+  DBG_CON(fprintf(stderr, "op[] container=%s lvalue=%d\n",
+    econ->dump(0).c_str(), (int)con_lv));
+  if (!guard_elements) {
+    /* nothing to do */
+  } else {
+    store_tempvar(econ,
+      con_lv ? passby_e_mutable_reference : passby_e_const_reference,
+      blockscope_flag, guard_elements, "arrelem");
+  }
+  return true;
+}
 
-static bool add_root_requirement(expr_i *e, bool byref_flag,
-  bool blockscope_flag, bool checkonly_flag)
+static bool add_root_requirement(expr_i *e, passby_e passby,
+  bool blockscope_flag)
 {
   /* this function makes e valid while the current statement (or block if
    * blockscope_flag is true) is terminated. if e is a weak value (eg.,
    * range types), the object e refer to is also rooted. */
-  if (byref_flag &&
+  if (passby == passby_e_mutable_reference &&
     e->conv != conversion_e_none && e->conv != conversion_e_subtype_obj) {
-    if (e->conv == conversion_e_cast &&
-      (e->get_esort() == expr_e_int_literal ||
-	e->get_esort() == expr_e_float_literal)) {
-      /* safe */
-    } else {
-      /* cant root because of conversion-by-value */
-      DBG_ROOT(fprintf(stderr, "add_root_requirement: byref conv\n"));
-      return false;
-    }
+    /* cant root because of conversion-by-value */
+    DBG_ROOT(fprintf(stderr, "add_root_requirement: byref conv\n"));
+    return false;
   }
   if (e->conv == conversion_e_container_range) {
     /* same as foo[a..b] */
-    if (!add_root_requirement_container_elements(e, blockscope_flag,
-      checkonly_flag)) {
+    if (!add_root_requirement_container_elements(e, blockscope_flag)) {
       DBG_ROOT(fprintf(stderr, "add_root_requirement: container range f\n"));
       return false;
     }
-    byref_flag = true; /* e itself must be rooted byref */
+    /* e is a container. e itself must be rooted byref. */
+    passby = is_const_range_family(e->type_conv_to)
+      ? passby_e_const_reference : passby_e_mutable_reference;
   }
   if (e->get_esort() == expr_e_funccall &&
     is_weak_value_type(e->resolve_texpr())) {
@@ -786,20 +770,11 @@ static bool add_root_requirement(expr_i *e, bool byref_flag,
       arena_error_throw(eop,
 	"internal error: non-member function returning weak");
     }
-    if (!add_root_requirement_container_elements(eop->arg0, blockscope_flag, 
-      checkonly_flag)) {
+    if (!add_root_requirement_container_elements(eop->arg0, blockscope_flag)) {
       DBG_ROOT(fprintf(stderr, "add_root_requirement: weakret func\n"));
       return false;
     }
-    byref_flag = true; /* e itself must be rooted byref */
   }
-  #if 0
-  // FIXME: remove?
-  if (is_always_rooted(e->get_esort())) { 
-    DBG_ROOT(fprintf(stderr, "add_root_requirement: always rooted\n"));
-    return true; /* always rooted */
-  }
-  #endif
   if (e->get_esort() == expr_e_op) {
     expr_op *const eop = ptr_down_cast<expr_op>(e);
     if (eop->op == '=' && eop->arg0->get_esort() == expr_e_var) {
@@ -807,44 +782,16 @@ static bool add_root_requirement(expr_i *e, bool byref_flag,
       return true; /* always rooted */
     }
   }
-  #if 0
-  if (!byref_flag && !is_weak_value_type(e->resolve_texpr())) {
-    const call_trait_e ect = get_call_trait(e->resolve_texpr());
-    if (ect == call_trait_e_value || ect == call_trait_e_raw_pointer) {
-      /* simple value type */
-      if (!checkonly_flag) {
-	store_tempvar_constval(e, blockscope_flag, "value/rawptr rvalue");
-	  /* ROOT */
-      }
-      DBG_ROOT(fprintf(stderr, "add_root_requirement: simple value type\n"));
-      return true;
-    } else {
-      /* cant root because it's a large object */
-      // FIXME: test
-      DBG_ROOT(fprintf(stderr, "add_root_requirement: large copy\n"));
-      return false;
-    }
-  }
-  #endif
   expr_op *const eop = dynamic_cast<expr_op *>(e);
   if (eop == 0) {
     /* funccall etc. rooted already. */
     DBG_ROOT(fprintf(stderr, "add_root_requirement: not an op\n"));
-    #if 0
-    const bool has_lv = expr_has_lvalue(e, e, false);
-    if (!checkonly_flag) {
-      store_tempvar(e,
-	has_lv ? passby_e_mutable_value : passby_e_const_value,
-	blockscope_flag, false, "miscexpr");
-    }
-    #endif
     return true;
   }
   DBG_ROOT(fprintf(stderr, "add_root_requirement: op\n"));
   switch (eop->op) {
   case ',':
-    return add_root_requirement(eop->arg1, byref_flag, blockscope_flag,
-      checkonly_flag);
+    return add_root_requirement(eop->arg1, passby, blockscope_flag);
   case '=':
   case TOK_ADD_ASSIGN:
   case TOK_SUB_ASSIGN:
@@ -857,29 +804,33 @@ static bool add_root_requirement(expr_i *e, bool byref_flag,
   case TOK_INC:
   case TOK_DEC:
   case TOK_PTR_REF:
-    return add_root_requirement(eop->arg0, byref_flag, blockscope_flag,
-      checkonly_flag);
+    return add_root_requirement(eop->arg0, passby, blockscope_flag);
   case '?':
-    return add_root_requirement(eop->arg1, byref_flag, blockscope_flag,
-      checkonly_flag);
+    return add_root_requirement(eop->arg1, passby, blockscope_flag);
   case ':':
-    if (
-      add_root_requirement(eop->arg0, byref_flag, blockscope_flag, true) &&
-      add_root_requirement(eop->arg1, byref_flag, blockscope_flag, true)) {
-      add_root_requirement(eop->arg0, byref_flag, blockscope_flag,
-	checkonly_flag);
-      add_root_requirement(eop->arg1, byref_flag, blockscope_flag,
-	checkonly_flag);
-      return true;
-    }
-    return false;
+    // FIXME: test
+    return add_root_requirement(eop->arg0, passby, blockscope_flag)
+       && add_root_requirement(eop->arg1, passby, blockscope_flag);
   case '.':
   case TOK_ARROW:
-    if (is_variant(eop->arg0->resolve_texpr()) && byref_flag) {
-      return false;
+    if (is_variant(eop->arg0->resolve_texpr())) {
+      /* variant field */
+      if (passby == passby_e_mutable_reference) {
+	arena_error_push(e, "can not root a variant field");
+	  // FIXME? push here?
+	DBG_ROOT(fprintf(stderr, "add_root_requirement: variant field\n"));
+	// abort();
+	return false;
+      } else {
+	#if 0
+	store_tempvar_constval(eop, blockscope_flag, "vfld");
+	#endif
+	store_tempvar(eop, passby_e_const_value, blockscope_flag, false,
+	  "vfld"); /* ROOT */
+      }
     } else {
-      return add_root_requirement(eop->arg0, byref_flag, blockscope_flag,
-	checkonly_flag);
+      /* struct field */
+      return add_root_requirement(eop->arg0, passby, blockscope_flag);
     }
   case TOK_PTR_DEREF:
     if (is_cm_range_family(eop->arg0->resolve_texpr())) {
@@ -887,104 +838,49 @@ static bool add_root_requirement(expr_i *e, bool byref_flag,
       return true;
     } else {
       /* pointers */
-      if (!checkonly_flag) {
-	/* copy the pointer and own a refcount */
-	store_tempvar_constval(eop->arg0, blockscope_flag, "ptrderef");
-	  /* ROOT */
-      }
+      /* copy the pointer and own a refcount */
+      #if 0
+      store_tempvar_constval(eop->arg0, blockscope_flag, "ptrderef");
+      #endif
+      store_tempvar(eop->arg0, passby_e_const_value, blockscope_flag, false,
+	"ptrderef"); /* ROOT */
     }
     return true;
   case '[':
     #if 0
-    if (is_cm_range_family(eop->arg0->resolve_texpr())) {
-      return true;
-    }
-    #endif
+    // FIXME: why?
     if (byref_flag && is_cm_range_family(e->resolve_texpr())) {
+      DBG_ROOT(fprintf(stderr, "add_root_requirement: op[]\n"));
       return false;
     }
-    #if 0
     #endif
-#if 0
-fprintf(stderr, "container_guard %s byref=%d\n", e->dump(0).c_str(),
-  (int)byref_flag);
-abort();
-#endif
-    if (!add_root_requirement(eop->arg0, byref_flag, blockscope_flag,
-      checkonly_flag)) {
+    /* root the container or range object */
+    if (!add_root_requirement(eop->arg0, passby, blockscope_flag)) {
+      DBG_ROOT(fprintf(stderr, "add_root_requirement: op[]base\n"));
+      // abort();
       return false;
     }
-    if (byref_flag || is_cm_range_family(e->resolve_texpr())) {
+    if (is_passby_cm_reference(passby) ||
+      is_cm_range_family(e->resolve_texpr())) {
       /* v[k] is required byref, or v[..] is required. need to guard. */
-      return add_root_requirement_container_elements(eop->arg0,
-	blockscope_flag, checkonly_flag);
+      const bool r = add_root_requirement_container_elements(eop->arg0,
+	blockscope_flag);
+      DBG_ROOT(fprintf(stderr, "add_root_requirement: op[]container\n"));
+      return r;
     }
     /* by value */
     return true;
   case '(':
-    return add_root_requirement(eop->arg0, byref_flag, blockscope_flag,
-      checkonly_flag);
+    return add_root_requirement(eop->arg0, passby, blockscope_flag);
   default:
     return true;
   }
 }
 
-static bool add_root_requirement_container_elements(expr_i *econ,
-  bool blockscope_flag, bool checkonly_flag)
+static void check_expr_root(expr_i *e, passby_e passby, bool blockscope_flag)
 {
-  /* this function makes econ elements valid */
-  DBG_CON(fprintf(stderr, "%s op[] container blockscope=%d\n",
-    econ->dump(0).c_str(), (int)blockscope_flag));
-  #if 0
-  const bool container_byref = true; /* always byref */
-  if (econ->conv != conversion_e_container_range) { /* avoid infinite
-						     * recursion */
-    #if 0
-    if (!add_root_requirement(econ, container_byref, blockscope_flag, true)) {
-      return false;
-    }
-    #endif
-    if (!add_root_requirement(econ, container_byref, blockscope_flag,
-	checkonly_flag)) {
-      return false;
-    }
-  }
-  #endif
-  if (!checkonly_flag) {
-    const bool con_lv = expr_has_lvalue(econ, econ, false);
-    const bool guard_elements =
-      type_has_invalidate_guard(econ->resolve_texpr());
-    DBG_CON(fprintf(stderr, "op[] container=%s lvalue=%d\n",
-      econ->dump(0).c_str(), (int)con_lv));
-    if (!guard_elements) {
-      /* nothing to do */
-    } else {
-      store_tempvar(econ,
-	con_lv ? passby_e_mutable_reference : passby_e_const_reference,
-	blockscope_flag, guard_elements, "arrelem");
-    }
-  }
-  return true;
-}
-
-static void root_byref(expr_i *e, bool blockscope_flag)
-{
-  if (!add_root_requirement(e, true, blockscope_flag, false)) {
-    arena_error_push(e, "can not root an lvalue"); // TODO: message: 'byref'
-  }
-}
-
-static void root_byref_or_byval(expr_i *e, bool blockscope_flag)
-{
-  call_trait_e ct = get_call_trait(e->resolve_texpr());
-  if (ct != call_trait_e_value &&
-    // add_root_requirement(e, true, blockscope_flag, true)) {
-    add_root_requirement(e, true, blockscope_flag, false)) {
-    /* if it can root by ref, do so. */
-///    add_root_requirement(e, true, blockscope_flag, false);
-  } else {
-    /* otherwise, root by value */
-    add_root_requirement(e, false, blockscope_flag, false);
+  if (!add_root_requirement(e, passby, blockscope_flag)) {
+    arena_error_push(e, "can not root"); // FIXME:
   }
 }
 
@@ -1032,15 +928,23 @@ static bool expr_would_invalidate_other_expr(expr_i *e)
   return false;
 }
 
+static expr_i *get_variant_object_if_vfld(expr_i *e)
+{
+  expr_op *const eop = dynamic_cast<expr_op *>(e);
+  if (eop != 0 && (eop->op == '.' || eop->op == TOK_ARROW) &&
+    is_variant(eop->arg0->resolve_texpr())) {
+    return eop->arg0;
+  }
+  return 0;
+}
+
 static void passing_root_requirement(passby_e passby, expr_i *epos,
   expr_i *e, bool blockscope_flag)
 {
   if (is_passby_cm_reference(passby) && is_passby_mutable(passby)) {
     check_lvalue(epos, e);
-    root_byref(e, blockscope_flag);
-  } else {
-    root_byref_or_byval(e, blockscope_flag);
   }
+  check_expr_root(e, passby, blockscope_flag);
 }
 
 void expr_op::check_type(symbol_table *lookup)
@@ -1135,9 +1039,6 @@ void expr_op::check_type(symbol_table *lookup)
       type_of_this_expr = arg1->resolve_texpr();
       // expr_i *const fo = type_of_this_expr.get_expr();
       const expr_i *const fo = sc->get_symdef();
-#if 0
-fprintf(stderr, "fo? term=%s sym=%s arg1=%s\n", term_tostr_human(type_of_this_expr).c_str(), sc->fullsym.c_str(), arg1->dump(0).c_str()); // FIXME
-#endif
       const expr_funcdef *const fo_efd =
 	dynamic_cast<const expr_funcdef *>(fo);
       if (fo_efd != 0 && !fo_efd->is_virtual_or_member_function()) {
@@ -1162,9 +1063,6 @@ fprintf(stderr, "fo? term=%s sym=%s arg1=%s\n", term_tostr_human(type_of_this_ex
 	is_memfld_dummy);
       if (fo != 0) {
 	DBG(fprintf(stderr, "found %s\n", sc->fullsym.c_str()));
-#if 0
-fprintf(stderr, "arg_hidden_this %s\n", arg0->dump(0).c_str());
-#endif
 	sc->arg_hidden_this = arg0;
 	sc->arg_hidden_this_ns = arg0_ns;
 	sc->sym_prefix = arg1_sym_prefix;
@@ -1270,17 +1168,6 @@ fprintf(stderr, "arg_hidden_this %s\n", arg0->dump(0).c_str());
     check_lvalue(this, arg0);
     type_of_this_expr = arg0->resolve_texpr();
     break;
-  // TODO: remove
-  #if 0
-  case TOK_PTR_REF:
-    type_of_this_expr = get_pointer_ref_texpr(this, arg0->resolve_texpr());
-    break;
-  #endif
-  #if 0
-  case TOK_PTR_DEREF:
-    type_of_this_expr = get_pointer_deref_texpr(this, arg0->resolve_texpr());
-    break;
-  #endif
   case TOK_CASE:
     check_variant_field(this, arg0);
     type_of_this_expr = builtins.type_bool;
@@ -1352,14 +1239,20 @@ fprintf(stderr, "arg_hidden_this %s\n", arg0->dump(0).c_str());
     /* root expressions if necessary */
     if (expr_would_invalidate_other_expr(arg0)) {
       /* lhs can invalidate rhs expression */
-      root_byref_or_byval(arg1, false);
+      check_expr_root(arg1, passby_e_const_reference, false);
+      // root_byref_or_byval(arg1, false);
     }
     if (expr_would_invalidate_other_expr(arg1)) {
       /* rhs can invalidate lhs expression */
-      if (!add_root_requirement(arg0, true, false, true)) {
-	/* lhs is a variant field? make tempvar for rhs, so that rhs is
-	 * evaluated before lhs.  */
-	store_tempvar_constval(arg1, false, "variant assign");
+      expr_i *const evo = get_variant_object_if_vfld(arg0);
+      if (evo != 0) {
+        /* lhs is a variant field. root the variant object. */
+	check_expr_root(evo, passby_e_mutable_reference, false);
+	// root_byref_or_byval(evo, false);
+      } else {
+	/* lhs is not a variant field. root the lhs. */
+	check_expr_root(arg0, passby_e_mutable_reference, false);
+	// root_byref_or_byval(arg0, false);
       }
     }
     DBG_CON(fprintf(stderr, "arg0: %s\n", arg0->dump(0).c_str()));
@@ -1374,11 +1267,10 @@ fprintf(stderr, "arg_hidden_this %s\n", arg0->dump(0).c_str());
       }
       if (is_passby_cm_reference(ev->varinfo.passby) ||
 	is_weak_value_type(ev->resolve_texpr())) {
-	/* block scope root */
+	/* require block scope root */
 	DBG_CON(fprintf(stderr, "block scope root rhs %s\n",
 	  arg1->dump(0).c_str()));
-	const bool byref_flag = is_passby_cm_reference(ev->varinfo.passby);
-	if (!add_root_requirement(arg1, byref_flag, true, false)) {
+	if (!add_root_requirement(arg1, ev->varinfo.passby, true)) {
 	  arena_error_throw(arg1, "cannot root expression '%s'",
 	    arg1->dump(0).c_str());
 	}
@@ -1812,22 +1704,49 @@ void expr_special::check_type(symbol_table *lookup)
 void expr_if::check_type(symbol_table *lookup)
 {
   fn_check_type(cond, lookup);
-  check_bool_expr(0, cond);
-  /* if cond is a metafunction and it evaluates to false, drop the 'then'
-   * clause. */
-  symbol_common *const sdef = cond->get_sdef();
-  if (sdef != 0) {
-    const term& tev = sdef->resolve_evaluated();
-    if (tev == term(0LL)) {
-      cond_static = 0;
-      block1->stmts = 0;
-    } else if (tev == term(1LL)) {
-      cond_static = 1;
-      block2 = 0;
-      rest = 0;
+  if (block1->argdecls == 0) {
+    /* if (..) */
+    check_bool_expr(0, cond);
+    /* if cond is a metafunction and it evaluates to false, drop the 'then'
+     * clause. */
+    symbol_common *const sdef = cond->get_sdef();
+    if (sdef != 0) {
+      const term& tev = sdef->resolve_evaluated();
+      if (tev == term(0LL)) {
+	cond_static = 0;
+	block1->stmts = 0;
+      } else if (tev == term(1LL)) {
+	cond_static = 1;
+	block2 = 0;
+	rest = 0;
+      }
     }
   }
   fn_check_type(block1, lookup);
+  if (block1->argdecls != 0) {
+    /* if (var x : m[key]) */
+    term tce;
+    if (cond->get_esort() == expr_e_op &&
+      ptr_down_cast<expr_op>(cond)->op == '[') {
+      tce = ptr_down_cast<expr_op>(cond)->arg0->resolve_texpr();
+    }
+    if (!is_map_family(tce)) {
+      const std::string s0 = term_tostr(cond->resolve_texpr(),
+	term_tostr_sort_humanreadable);
+      arena_error_push(this, "map type expected (got: %s)", s0.c_str());
+      return;
+    }
+    term telm = get_array_elem_texpr(0, tce);
+    assert(elist_length(block1->argdecls) == 1);
+    term& ta = block1->argdecls->resolve_texpr();
+    if (!is_same_type(telm, ta)) {
+      arena_error_push(this, "invalid type for '%s' (got: %s, expected: %s)",
+	block1->argdecls->sym,
+	term_tostr_human(ta).c_str(),
+	term_tostr_human(telm).c_str());
+    }
+    passing_root_requirement(block1->argdecls->passby, this, cond, true);
+  }
   fn_check_type(block2, lookup);
   fn_check_type(rest, lookup);
 }
@@ -2323,11 +2242,10 @@ void expr_argdecls::check_type(symbol_table *lookup)
 void expr_funcdef::check_type(symbol_table *lookup)
 {
   if ((this->get_attribute() & attribute_multithr) != 0) {
-    arena_error_throw(this,
-      "attribute 'multithreaded' is invalid for a function");
+    arena_error_throw(this, "invalid attribute for a function");
   }
   if (this->is_virtual_or_member_function() &&
-    (this->get_attribute() & (attribute_threaded | attribute_multithr)) != 0) {
+    (this->get_attribute() & attribute_threaded) != 0) {
     arena_error_throw(this,
       "invalid attribute for a member/virtual function");
   }
@@ -2345,8 +2263,7 @@ void expr_typedef::check_type(symbol_table *lookup)
 
 void expr_macrodef::check_type(symbol_table *lookup)
 {
-  if ((this->get_attribute() & (attribute_threaded | attribute_multithr))
-    != 0) {
+  if ((this->get_attribute() & attribute_threaded) != 0) {
     arena_error_throw(this, "invalid attribute for a macro");
   }
   fn_check_type(block, lookup);

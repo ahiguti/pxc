@@ -41,7 +41,7 @@ struct emit_context {
   void finish_ns();
   void add_indent(int v);
   void indent(char ch);
-  void set_ns(const std::string& ns);
+  void set_ns(const std::string& ns, bool ns_extc = false);
   void set_file_line(const expr_i *e);
   void set_stmt_context(const emit_context_stmt& sct);
   const emit_context_stmt& get_stmt_context() const;
@@ -54,6 +54,7 @@ private:
   auto_fp fp;
   int cur_indent;
   std::string cur_ns;
+  bool cur_ns_extc;
   std::string dest_filename;
   emit_context_stmt sct;
   std::map<const expr_i *, emit_expr_info> eeimap;

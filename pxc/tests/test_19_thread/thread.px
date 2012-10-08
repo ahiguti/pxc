@@ -4,11 +4,10 @@ namespace thread;
 public multithreaded extern "pxcthread::thread_impl" struct thread { }
 public macro thread_t tptr{thread};
 public threaded extern "pxcthread::thread_join"
-  function void thread_join(thread_t thr);
-public threaded function {targs} thread_t create_thread(targs args)
+  function void thread_join(thread_t const& thr);
+public threaded function {targs} thread_t create_thread(targs const& args)
 {
-  macro impl_t thrdata_impl{targs};
-  tptr{thrdata} r = tptr(impl_t(args));
+  tptr{thrdata} r = tptr(thrdata_impl{targs}(args));
   return create_thread_impl(r);
 }
 
@@ -22,7 +21,7 @@ private multithreaded struct {targs} thrdata_impl : thrdata : {
   }
 }
 private threaded extern "pxcthread::create_thread_impl"
-  function thread_t create_thread_impl(tptr{thrdata} f);
+  function thread_t create_thread_impl(tptr{thrdata} const& f);
 
 extern "type" inline
 namespace pxcthread {
@@ -33,8 +32,9 @@ extern "fdecl" inline
 namespace pxcthread {
 typedef pxcrt::rcptr< pxcrt::trcval<thread_impl> > thread_ptr;
 typedef pxcrt::rcptr< thread$n::thrdata$i > thrdata_ptr;
+typedef thread$n::thrdata$i *thrdata_rawptr;
 struct thread_impl {
-  thread_impl(thrdata_ptr::rawptr m) : tid(), need_join(false), mptr(m) { }
+  thread_impl(thrdata_ptr const& m) : tid(), need_join(false), mptr(m) { }
   thread_impl() : tid(), need_join(false), mptr() { }
   ~thread_impl() { join(); }
   void join();
@@ -45,8 +45,8 @@ private:
   thread_impl(const thread_impl&);
   thread_impl& operator =(const thread_impl&);
 };
-thread_ptr create_thread_impl(thrdata_ptr::rawptr m);
-void thread_join(thread_ptr::rawptr t);
+thread_ptr create_thread_impl(thrdata_ptr const& m);
+void thread_join(thread_ptr const& t);
 };
 
 extern "fdef" inline
@@ -54,7 +54,7 @@ extern "fdef" inline
 namespace pxcthread {
 void *pxc_thread_child_main(void *arg)
 {
-  thrdata_ptr::rawptr m = static_cast<thrdata_ptr::rawptr>(arg);
+  thrdata_rawptr m = static_cast<thrdata_rawptr>(arg);
   /* pxcrt::lockobject lck(m->get_mutex$z()); */ /* not necessary */
   try {
     m->main$f();
@@ -63,12 +63,11 @@ void *pxc_thread_child_main(void *arg)
   }
   return 0;
 }
-thread_ptr create_thread_impl(thrdata_ptr::rawptr m)
+thread_ptr create_thread_impl(thrdata_ptr const& m)
 {
   thread_ptr thr = thread_ptr(pxcrt::boxing(), m);
   thread_impl& impl = thr->value$z;
-  // impl.mptr = m; /* root */
-  if (pthread_create(&impl.tid, 0, pxc_thread_child_main, m) != 0) {
+  if (pthread_create(&impl.tid, 0, pxc_thread_child_main, m.get()) != 0) {
     DBG(fprintf(stderr, "failed to create thread\n"));
   } else {
     DBG(fprintf(stderr, "create thread\n"));
@@ -76,7 +75,7 @@ thread_ptr create_thread_impl(thrdata_ptr::rawptr m)
   }
   return thr;
 }
-void thread_join(thread_ptr::rawptr t)
+void thread_join(thread_ptr const& t)
 {
   if (t == 0) {
     return;

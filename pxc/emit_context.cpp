@@ -18,7 +18,7 @@
 namespace pxc {
 
 emit_context::emit_context(const std::string& dest_filename)
-  : fp(fopen(dest_filename.c_str(), "w")), cur_indent(0)
+  : fp(fopen(dest_filename.c_str(), "w")), cur_indent(0), cur_ns_extc(false)
 {
   if (fp.get() == 0) {
     arena_error_throw(0, "-:0: failed to open %s: errno=%d\n",
@@ -35,6 +35,7 @@ void emit_context::indent(char ch)
 {
   for (int i = 0; i < cur_indent; ++i) {
     fputc(' ', fp.get());
+    // fputc(ch, fp.get());
   }
 }
 
@@ -49,11 +50,19 @@ void emit_context::start_ns()
       size_t delim = cur_ns.find("::", pos);
       if (delim != cur_ns.npos) {
 	s = cur_ns.substr(pos, delim);
-	this->printf("namespace %s$n { ", s.c_str());
+	if (cur_ns_extc) {
+	  this->printf("namespace %s { ", s.c_str());
+	} else {
+	  this->printf("namespace %s$n { ", s.c_str());
+	}
 	pos = delim + 2;
       } else {
 	s = cur_ns.substr(pos);
-	this->printf("namespace %s$n { ", s.c_str());
+	if (cur_ns_extc) {
+	  this->printf("namespace %s { ", s.c_str());
+	} else {
+	  this->printf("namespace %s$n { ", s.c_str());
+	}
 	break;
       }
     }
@@ -81,13 +90,14 @@ void emit_context::finish_ns()
   }
 }
 
-void emit_context::set_ns(const std::string& ns)
+void emit_context::set_ns(const std::string& ns, bool ns_extc)
 {
-  if (ns == cur_ns) {
+  if (ns == cur_ns && cur_ns_extc == ns_extc) {
     return;
   }
   finish_ns();
   cur_ns = ns;
+  cur_ns_extc = ns_extc;
   start_ns();
   this->indent('n');
 }

@@ -1,30 +1,32 @@
 
-0930 298
+1001 299
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- add_root_requirementのcheckonly廃止、
-  - variant fieldはmutable&でrootできないようにする
-  - variant fieldはconst&でrootされるとコピーを作る
-  - variant fieldへの代入はset関数呼び出しに置き換える
+threadまわり
+- threadまわりの仕様整理せよ
+- threadedなclosureがupvalueとして非threadedな型を使えてしまわないか
+- immutableの仕様きめよ
+  guard countがmtsafeでないのはどうするか
+- iptr, valuetype
+
+コンテナまわり
+- expr_feach::emit(): map, rangeに対するemit
+- list, set
+
+ポインタまわり
+- 短絡boxingを再び有効に
 
 weak型まわり
 - externならweak又はrefを返すメンバ関数を許可、thisをrootする(done)
 - globalやstructには参照変数などは置けないように
 - 構造体にslice等のweak型を含む型のfieldを置けないように
   is_weak_type() あるいはヒープに置けなければそれでよい？
-- weak型を初期化以外の代入の左辺にできないように
-  - weak型を参照渡しできないように？ 代入の左辺にできなければチェック
-    不要？
-
-ポインタまわり
-- 短絡boxingを再び有効に
+- weak型を初期化以外の代入の左辺にできないように(done)
 
 copyableのチェック
 - interfaceなどのようにcopyableではないものをコピーしたときのエラー
-
-funccallのエラーチェック
-- 関数でないものでもoperator ()を適用できてしまう(done)
+  - argdeclsとvar, store_tempvar
 
 interfaceまわり
 - interface実装の引数byref等が一致しているかチェック
@@ -32,18 +34,23 @@ interfaceまわり
 - interfaceへの代入はエラーにする
 - interfaceの仮想関数の引数型は先に定義しなくていいのか？
 
-コンテナまわり
-- rangeに対するoperator *
-- expr_feach::emit(): map, rangeに対するemit
-- list, set
-
+- 整数の暗黙変換を安全なものだけに制限
+- check_overflow
 
 if-defined構文
-- if (int const& x : foo[k]) { ... }
+- if (int const& x : foo[k]) { ... } のif-defined構文(done)
 - if (int v : foo.fld) { ... } // unionのフィールドは左辺値取れない
 
+- string_to_ などをpxcrtから追い出す
+- int_compareなどの比較関数を無くし、基本型は > で比較するように
+
+- C++が定義する関数については宣言だけはemitする
+  (誤った宣言で問題を起こさないようにするため)
+  template関数と型については未実装
+
 - type categoryの整理
-- Cコードの字下げ
+
+- 決定済みの仕様をメモに蓄積
 
 ---------------------------------------------------------------------
 TEST TODO M1
@@ -97,6 +104,11 @@ FIXME/TODO M4
 ---------------------------------------------------------------------
 TODO
 
+- tptr/tcptrのロックをreader/writerロックに。そのためにはguard count
+  をatomicにしなければならないのでやめたほうがよい？ immutable ptrも
+  同じようにguard countを考慮必要。
+- add_root_requirement_container_elementsのexpr_has_lvalue止め?
+- 代入演算子は値を返さないようにすると少し速くできる
 - ptrをconst byvalで渡すときは生ポインタで受ける?
 - テンプレート引数にtrueが使えない？
 - inline_cに色々装飾付けられるが、エラー
@@ -192,6 +204,11 @@ TODO
 ---------------------------------------------------------------------
 DONE
 
+- require_lvalue廃止(done)
+- variant fieldへの代入はset関数呼び出しに置き換える(done)
+- rangeに対するoperator * (done)
+- add_root_requirementのcheckonly廃止(done)
+- 関数でないものでもoperator ()を適用できてしまう(done)
 - test_01_px/i1_fixme : 仮想関数の実装を後ろに回さないといけないが、
   そもそも、ptrの指し先アロケートを廃止して仮想関数のダミー実装を必要
   なくすようにするべし(done)
@@ -376,6 +393,7 @@ str$ls  テンプレート引数の文字列リテラル
 100$li  テンプレート引数の数値リテラル
 aaa$c   名前空間の初期化関数
 aaa$cm  名前空間のエントリ
+i$it    if(v:c[k])が使うイテレータ
 
 構造体に追加することのある名前
 init$z 初期化補助関数
@@ -5067,4 +5085,53 @@ hogeを返す関数はref{hoge}をsvにつっこむ。
   - 返値がptr{参照型}またはcptr{参照型}はok、それ以外のポインタ型は不可
   - それ以外のperlで利用できない型を返値の型式に含むときは呼び出し不可
   - perlで利用できない型を引数の型式に含むときは呼び出し不可
+
+---------------------------------------------------------------------
+emitの字下げルール
+
+emit_function_def_oneのようなトップレベルにemitする関数は行単位の
+出力をする。
+それいがいにも /* line */ のついたところは行単位出力
+
+---------------------------------------------------------------------
+immutableの仕様きめよ
+
+guard countがmtsafeでないのはどうするか。vectorとtree_mapにresizeでき
+ない版を作るか？
+
+vectorやtree_mapはtptr内で(ロックされることにより)共有可能だが、
+tiptr内でロックなし共有ができない。これはconstメンバ関数が何らかの
+書き換え(privateなカウンタなど)をするような型では同様に問題になる。
+
+解決法としては
+(1) そういう型はhidden_mutableとでも印をつけてtiptrで共有不可にする
+(2) そういうカウンタをatomicにする(std::stringはそうしている)
+
+構造体の属性
+- threaded: 全メンバ関数がthreaded
+  treadedな関数が利用できる型。スレッド内では利用可能な型。
+- multithreaded: 全メンバ関数がthreaded、全フィールドがmultithreaded
+  ロックで排他すればスレッド間共有できる。tptr/tcptr/tiptr以外のポイ
+  ンタを含まない。
+- valuetype: 全メンバ関数がthreaded、全フィールドがvaluetype。参照透過。
+  iptr/tiptr以外のポインタを含まない。
+- mtvaluetype: == multithreaded & valuetype
+- tsvaluetype: 全メンバ関数がthreaded、全フィールドがtsvaluetype
+  thread-safeなvaluetype。immutableならロックなしでスレッド間共有できる。
+  mutableならreader-writerロックでスレッド間共有できる。tiptr以外の
+  ポインタを含まない。
+
+tsvaluetype > mtvaluetype
+mtvaluetype > valuetype
+mtvaluetype > multithreaded
+valuetype > threaded
+multithreaded > threaded
+
+ptr/cptrはthreaded
+tptr/tcptrはmultithreaded
+iptrはvaluetype
+tiptrはtsvaluetype
+
+隠されたカウンタなどを持っていない値型はtsvaluetype
+vectorやtree_mapはmtvaluetype
 

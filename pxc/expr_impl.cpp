@@ -28,8 +28,7 @@ namespace pxc {
 
 expr_i::expr_i(const char *fn, int line)
   : fname(fn), line(line), type_of_this_expr(), conv(conversion_e_none),
-    type_conv_to(), parent_expr(0), symtbl_lexical(0), tempvar_id(-1),
-    require_lvalue(false)
+    type_conv_to(), parent_expr(0), symtbl_lexical(0), tempvar_id(-1)
 {
   expr_arena.push_back(this);
   type_of_this_expr = builtins.type_void;
@@ -39,8 +38,7 @@ expr_i::expr_i(const expr_i& e)
   : fname(e.fname), line(e.line), type_of_this_expr(e.type_of_this_expr),
     conv(e.conv), type_conv_to(e.type_conv_to), parent_expr(e.parent_expr),
     symtbl_lexical(e.symtbl_lexical), tempvar_id(e.tempvar_id),
-    tempvar_varinfo(e.tempvar_varinfo),
-    require_lvalue(e.require_lvalue)
+    tempvar_varinfo(e.tempvar_varinfo)
 {
   expr_arena.push_back(this);
 }
@@ -192,6 +190,7 @@ static void symdef_check_threading_attr_type_or_func(expr_i *e,
       "type or function '%s' for symbol '%s' is not threaded",
       term_tostr_human(t).c_str(), sc->fullsym.c_str());
   }
+  // FIXME: term_is_valuetype
   if (is_multithr_context(cur) && !term_is_multithr(t)) {
     arena_error_push(e,
       "type or function '%s' for symbol '%s' is not multithreaded",

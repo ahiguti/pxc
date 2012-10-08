@@ -2,7 +2,7 @@
 namespace container;
 public import generic;
 
-public multithreaded extern "container::vector" "varray"
+public mtvaluetype extern "container::vector" "varray"
 struct {t} vector {
   public macro key_type size_t;
   public macro mapped_type t;
@@ -10,13 +10,14 @@ struct {t} vector {
   public macro crange_type cslice{t};
   public extern "empty" function bool empty() const;
   public extern "size" function size_t size() const;
-  public extern "resize" function void resize(size_t i, t v);
+  public extern "resize" function void resize(size_t i, t const& v);
   public extern "clear" function void clear();
-  public extern "push_back" function void push_back(t v);
+  public extern "push_back" function void push_back(t const& v);
   public extern "pop_back" function t pop_back();
+  public extern "reserve" function void reserve(size_t i);
 }
 
-public multithreaded extern "container::farray" "farray"
+public tsvaluetype extern "container::farray" "farray"
 struct {t, n} farray {
   public macro key_type size_t;
   public macro mapped_type t;
@@ -26,7 +27,7 @@ struct {t, n} farray {
   public extern "size" function size_t size() const;
 }
 
-public multithreaded extern "container::slice" "slice"
+public tsvaluetype extern "container::slice" "slice"
 struct {t} slice {
   public macro key_type size_t;
   public macro mapped_type t;
@@ -37,7 +38,7 @@ struct {t} slice {
   public extern "next" function void next();
 }
 
-public multithreaded extern "container::cslice" "cslice"
+public tsvaluetype extern "container::cslice" "cslice"
 struct {t} cslice {
   public macro key_type size_t;
   public macro mapped_type t;
@@ -55,11 +56,12 @@ public macro tree_map_range{t, s}
 public macro tree_map_crange{t, s}
   tree_map_compare_crange{t, s, compare_function_object{t}};
 
-private multithreaded struct {t} compare_function_object {
-  public function int call(t x, t y) { return generic::compare(x, y); }
+private tsvaluetype struct {t} compare_function_object {
+  public function int call(t const& x, t const& y) const
+    { return generic::compare(x, y); }
 }
 
-private multithreaded extern "container::tree_map_compare" "tree_map"
+private mtvaluetype extern "container::tree_map_compare" "tree_map"
 struct {t, s, f} tree_map_compare {
   public macro key_type t;
   public macro mapped_type s;
@@ -68,12 +70,13 @@ struct {t, s, f} tree_map_compare {
   public extern "empty" function bool empty() const;
   public extern "size" function size_t size() const;
   public extern "clear" function void clear();
-  public extern "equal_crange" function crange_type equal_crange(t const& k)
-    const;
-  public extern "equal_range" function range_type equal_range(t const& k);
+  public extern "equal_crange"
+    function crange_type equal_crange(t const& k) const;
+  public extern "equal_range"
+    function range_type equal_range(t const& k);
 }
 
-private multithreaded extern "container::tree_map_range" "tree_map_range"
+private mtvaluetype extern "container::tree_map_range" "tree_map_range"
 struct {t, s, f} tree_map_compare_range {
   public macro key_type t;
   public macro mapped_type s;
@@ -83,7 +86,7 @@ struct {t, s, f} tree_map_compare_range {
   public extern "next" function void next();
 }
 
-private multithreaded extern "container::tree_map_crange" "tree_map_crange"
+private mtvaluetype extern "container::tree_map_crange" "tree_map_crange"
 struct {t, s, f} tree_map_compare_crange {
   public macro key_type t;
   public macro mapped_type s;
@@ -130,7 +133,7 @@ struct vector {
     if (idx >= v.size()) { pxcrt::throw_invalid_index(); }
     return v[idx];
   }
-  void resize(size_type sz, T x) {
+  void resize(size_type sz, T const& x) {
     check_resize();
     v.resize(sz, x);
   }
@@ -138,7 +141,7 @@ struct vector {
     check_resize();
     v.clear();
   }
-  void push_back(T x) {
+  void push_back(T const& x) {
     check_resize();
     v.push_back(x);
   }
@@ -148,6 +151,10 @@ struct vector {
     const T r = v.back();
     v.pop_back();
     return r;
+  }
+  void reserve(size_type sz) {
+    check_resize();
+    v.reserve(sz);
   }
   iterator begin() { return v.begin(); }
   const_iterator begin() const { return v.begin(); }
@@ -255,7 +262,8 @@ private:
 template <typename Tf>
 struct compare_less {
   Tf f;
-  template <typename Tk> inline bool operator ()(const Tk& x, const Tk& y) {
+  template <typename Tk>
+  inline bool operator () (const Tk& x, const Tk& y) const {
     return f.call$f(x, y) < 0;
   }
 };
