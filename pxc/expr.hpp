@@ -29,19 +29,10 @@ enum attribute_e {
   attribute_unknown        = 0,
   attribute_private        = 1,
   attribute_public         = 2,
-  attribute_3              = 3,
   attribute_threaded       = 4,
-  attribute_5              = 5,
-  attribute_6              = 6,
-  attribute_7              = 7,
   attribute_multithr       = 8,
-  attribute_9              = 9,
-  attribute_10             = 10,
-  attribute_11             = 11,
-  attribute_12             = 12,
-  attribute_13             = 13,
-  attribute_14             = 14,
-  attribute_15             = 15,
+  attribute_valuetype      = 16,
+  attribute_tsvaluetype    = 32,
 };
 
 enum passby_e {

@@ -280,8 +280,12 @@ typecat_e get_category_from_string(const std::string& s)
 {
   if (s == "ptr") return typecat_e_ptr;
   if (s == "cptr") return typecat_e_cptr;
+  if (s == "iptr") return typecat_e_iptr;
   if (s == "tptr") return typecat_e_tptr;
   if (s == "tcptr") return typecat_e_tcptr;
+  if (s == "tiptr") return typecat_e_tiptr;
+  // if (s == "wptr") return typecat_e_wptr;
+  // if (s == "wcptr") return typecat_e_wcptr;
   if (s == "varray") return typecat_e_varray;
   if (s == "farray") return typecat_e_farray;
   if (s == "slice") return typecat_e_slice;
@@ -300,10 +304,12 @@ std::string get_category_string(typecat_e cat)
   case typecat_e_none: return "";
   case typecat_e_ptr: return "ptr";
   case typecat_e_cptr: return "cptr";
+  case typecat_e_iptr: return "iptr";
   case typecat_e_tptr: return "tptr";
   case typecat_e_tcptr: return "tcptr";
-  case typecat_e_wptr: return "wptr";
-  case typecat_e_wcptr: return "wcptr";
+  case typecat_e_tiptr: return "tiptr";
+  // case typecat_e_wptr: return "wptr";
+  // case typecat_e_wcptr: return "wcptr";
   case typecat_e_varray: return "varray";
   case typecat_e_farray: return "farray";
   case typecat_e_slice: return "slice";
@@ -322,24 +328,29 @@ static bool is_pointer_category(const typecat_e cat)
   switch (cat) {
   case typecat_e_ptr:
   case typecat_e_cptr:
+  case typecat_e_iptr:
   case typecat_e_tptr:
   case typecat_e_tcptr:
-  case typecat_e_wptr:
-  case typecat_e_wcptr:
+  case typecat_e_tiptr:
+  // case typecat_e_wptr:
+  // case typecat_e_wcptr:
     return true;
   default:
     return false;
   }
 }
 
+#if 0
 static bool is_weak_pointer_category(const typecat_e cat)
 {
   return cat == typecat_e_wptr || cat == typecat_e_wcptr;
 }
+#endif
 
 static bool is_threaded_pointer_category(const typecat_e cat)
 {
-  return cat == typecat_e_tptr || cat == typecat_e_tcptr;
+  return cat == typecat_e_tptr || cat == typecat_e_tcptr
+    || cat == typecat_e_tiptr;
 }
 
 term get_pointer_target(const term& t)
@@ -354,25 +365,13 @@ term get_pointer_target(const term& t)
   return term();
 }
 
-bool is_compatible_pointer(const term& t0, const term& t1)
+bool is_same_threading_pointer(const term& t0, const term& t1)
 {
   const typecat_e c0 = get_category(t0);
   const typecat_e c1 = get_category(t1);
   bool thr0 = is_threaded_pointer_category(c0);
   bool thr1 = is_threaded_pointer_category(c1);
   return thr0 == thr1;
-}
-
-call_trait_e get_call_trait(const term& t)
-{
-  if (is_cm_pointer_family(t)) { 
-    return call_trait_e_raw_pointer;
-  } else if (is_smallpod_type(t)) {
-    return call_trait_e_value;
-  } else {
-    return call_trait_e_const_ref_nonconst_ref;
-  }
-  // FIXME: slice{t}
 }
 
 bool is_function(const term& t)
@@ -445,10 +444,11 @@ bool is_cm_pointer_family(const term& t)
   return is_pointer_category(get_category(t));
 }
 
-bool is_const_pointer_family(const term& t)
+bool is_const_or_immutable_pointer_family(const term& t)
 {
   const typecat_e cat = get_category(t);
-  return cat == typecat_e_tcptr || cat == typecat_e_cptr;
+  return cat == typecat_e_tcptr || cat == typecat_e_cptr ||
+    cat == typecat_e_tiptr || cat == typecat_e_iptr;
 }
 
 bool is_array_family(const term& t)
@@ -478,7 +478,7 @@ bool is_cm_range_family(const term& t)
 
 bool is_weak_value_type(const term& t)
 {
-  return is_cm_range_family(t) || is_weak_pointer_category(get_category(t));
+  return is_cm_range_family(t) /* || is_weak_pointer_category(get_category(t)) */;
 }
 
 bool is_container_family(const term& t)
@@ -774,19 +774,22 @@ std::string term_tostr(const term& t, term_tostr_sort s)
   case term_tostr_sort_cname:
   case term_tostr_sort_cname_tparam:
     if (is_cm_pointer_family(t)) {
-      const std::string cat = get_category_string(get_category(t));
+      const typecat_e cat = get_category(t);
+      const std::string catstr = get_category_string(cat);
       if (s == term_tostr_sort_cname_tparam) {
-	rstr += "pxcrt$$" + cat;
+	rstr += "pxcrt$$" + catstr;
       } else {
 	if (is_interface_pointer(t)) {
 	  rstr += "pxcrt::rcptr";
 	} else {
-	  if (cat == "tcptr" || cat == "tptr") {
-	    rstr += "pxcrt::rcptr<pxcrt::trcval";
+	  if (cat == typecat_e_tcptr || cat == typecat_e_tptr) {
+	    rstr += "pxcrt::rcptr< pxcrt::trcval";
+	  } else if (cat == typecat_e_tiptr) {
+	    rstr += "pxcrt::rcptr< pxcrt::tircval";
 	  } else {
-	    rstr += "pxcrt::rcptr<pxcrt::rcval";
+	    rstr += "pxcrt::rcptr< pxcrt::rcval";
 	  }
-	  rstr_post = " >";
+	  rstr_post = " >"; // need additional '>'
 	}
       }
     } else if (cname != 0) {
@@ -1091,10 +1094,10 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
       return true;
     }
   }
-  if (is_cm_pointer_family(tconvto) &&
+  if (is_cm_pointer_family(tconvto) && is_cm_pointer_family(tfrom) &&
     is_sub_type(get_pointer_target(tfrom), get_pointer_target(tconvto)) &&
-    is_compatible_pointer(tfrom, tconvto)) {
-    /* ptr to cptr or tptr to tcptr */
+    is_same_threading_pointer(tfrom, tconvto)) {
+    /* ptr/iptr to cptr or tptr/tiptr to tcptr */
     const expr_struct *const es_to = dynamic_cast<const expr_struct *>(
       tconvto.get_expr());
     const expr_struct *const es_from = dynamic_cast<const expr_struct *>(
@@ -1244,7 +1247,7 @@ static attribute_e get_expr_threading_attribute(const expr_i *e)
 bool is_threaded_context(symbol_table *cur)
 {
   attribute_e attr = get_expr_threading_attribute(get_current_frame_expr(cur));
-  return (attr & (attribute_threaded | attribute_multithr)) != 0;
+  return (attr & attribute_threaded) != 0;
 }
 
 bool is_multithr_context(symbol_table *cur)
@@ -1263,9 +1266,8 @@ static bool check_term_threading_attribute(const term& t, bool req_multithr)
   if (e == 0) {
     return true;
   }
-  // const attribute_e attr = e->get_attribute();
   const attribute_e attr = get_expr_threading_attribute(e);
-  if ((attr & (attribute_threaded | attribute_multithr)) == 0) {
+  if ((attr & attribute_threaded) == 0) {
     DBG_THR(fprintf(stderr, "thr %s %s attr=%d 1\n",
       term_tostr_human(t).c_str(), e->dump(0).c_str(), (int)attr));
     return false;
@@ -1945,8 +1947,7 @@ void check_inherit_threading(expr_struct *est)
         term_tostr_human(est_te).c_str(), term_tostr_human(te).c_str());
     }
     if (term_is_threaded(te) &&
-      (est->get_attribute() & (attribute_threaded | attribute_multithr))
-        == 0) {
+      (est->get_attribute() & attribute_threaded) == 0) {
       arena_error_throw(est,
         "struct '%s' can't implement '%s' because it's not threaded",
         term_tostr_human(est_te).c_str(), term_tostr_human(te).c_str());
@@ -1988,9 +1989,6 @@ bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
 {
   DBG_LV(fprintf(stderr, "expr_has_lvalue: expr=%s\n", a0->dump(0).c_str()));
   /* check if a0 is a valid lvalue expression */
-  if (thro_flg) {
-    a0->require_lvalue = true; // used for unions
-  }
   if (a0->conv != conversion_e_none && a0->conv != conversion_e_subtype_obj) {
     if (!thro_flg) {
       return false;
@@ -2119,7 +2117,7 @@ bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
       }
       #endif
       /* expr '*foo' has an lvalue iff foo is a non-const ptr */
-      if (is_const_pointer_family(aop->arg0->resolve_texpr())) {
+      if (is_const_or_immutable_pointer_family(aop->arg0->resolve_texpr())) {
 	DBG_LV(fprintf(stderr, "expr_has_lvalue %s 8 false\n",
 	  a0->dump(0).c_str()));
 	if (!thro_flg) {

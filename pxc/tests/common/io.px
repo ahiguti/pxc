@@ -43,51 +43,54 @@ public extern "SEEK_CUR"	int SEEK_CUR;
 public extern "SEEK_END"	int SEEK_END;
 
 public threaded extern "pxcio::io_open"
-  function fileptr io_open(ioptr i, string fn, int flags, int mode);
+  function fileptr io_open(ioptr const& i, string const& fn, int flags,
+    int mode);
 public threaded extern "pxcio::file_read"
-  function int file_read(fileptr f, string& buf, uint len);
+  function size_t file_read(fileptr const& f, string& buf, size_t len);
 public threaded extern "pxcio::file_write"
-  function int file_write(fileptr f, string buf);
+  function size_t file_write(fileptr const& f, string const& buf);
 public threaded extern "pxcio::file_lseek"
-  function ulong file_lseek(fileptr f, ulong offset, int whence);
+  function ulong file_lseek(fileptr const& f, ulong offset, int whence);
 public threaded extern "pxcio::file_errno"
-  function int file_errno(fileptr f);
+  function int file_errno(fileptr const& f);
 public threaded extern "pxcio::io_stat"
-  function int io_stat(ioptr i, string fn, statbuf& buf);
+  function int io_stat(ioptr const& i, string const& fn, statbuf& buf);
 public threaded extern "pxcio::io_errno"
-  function int io_errno(ioptr i);
+  function int io_errno(ioptr const& i);
 public threaded extern "pxcio::io_sleep"
-  function uint io_sleep(ioptr i, uint sec);
+  function uint io_sleep(ioptr const& i, uint sec);
 
-public threaded function fileptr io_open_r(ioptr i, string fn)
+public threaded function fileptr io_open_r(ioptr const& i, string const& fn)
   { return io_open(i, fn, O_RDONLY, 0); }
-public threaded function fileptr io_creat(ioptr i, string fn)
+public threaded function fileptr io_creat(ioptr const& i, string const& fn)
   { return io_open(i, fn, O_WRONLY | O_CREAT | O_TRUNC, 0); }
-public threaded function fileptr io_open_w(ioptr i, string fn)
+public threaded function fileptr io_open_w(ioptr const& i, string const& fn)
   { return io_open(i, fn, O_WRONLY, 0); }
-public threaded function fileptr io_open_a(ioptr i, string fn)
+public threaded function fileptr io_open_a(ioptr const& i, string const& fn)
   { return io_open(i, fn, O_WRONLY | O_APPEND, 0); }
-public threaded function int file_read_all(fileptr f, string& buf) {
+public threaded function int file_read_all(fileptr const& f, string& buf) {
   while (true) {
-    int r = file_read(f, buf, 16384);
-    if (r <= 0) {
-      return r;
+    size_t r = file_read(f, buf, 16384);
+    if (r == 0) {
+      return file_errno(f);
     }
   }
   return 0;
 }
-public threaded function int io_read_file(ioptr i, string fn, string& buf) {
+public threaded function int io_read_file(ioptr const& i, string const& fn,
+  string& buf) {
   fileptr f = io_open_r(i, fn);
-  if (file_errno(f) != 0) { return -1; }
+  if (file_errno(f) != 0) { return file_errno(f); }
   return file_read_all(f, buf);
 }
-public threaded function int io_write_file(ioptr i, string fn, string buf) {
+public threaded function int io_write_file(ioptr const& i, string const& fn,
+  string const& buf) {
   fileptr f = io_open_w(i, fn);
-  if (file_errno(f) != 0) { return -1; }
+  if (file_errno(f) != 0) { return file_errno(f); }
   return file_write(f, buf);
 }
 
-public threaded function {t} void io_stdout_print(ioptr i, t x)
+public threaded function {t} void io_stdout_print(ioptr const& i, t const& x)
 {
   if (meta::eq{meta::to_string{t}, "string"}) {
     io_stdout_print_string(i, x);
@@ -97,7 +100,7 @@ public threaded function {t} void io_stdout_print(ioptr i, t x)
   }
 }
 
-public threaded function {t} void io_stdout_println(ioptr i, t x)
+public threaded function {t} void io_stdout_println(ioptr const& i, t const& x)
 {
   if (meta::eq{meta::to_string{t}, "string"}) {
     string s = x;
@@ -110,12 +113,12 @@ public threaded function {t} void io_stdout_println(ioptr i, t x)
   }
 }
 
-public function {t} void print(t x)
+public function {t} void print(t const& x)
 {
   io_stdout_print(main, x);
 }
 
-public function {t} void println(t x)
+public function {t} void println(t const& x)
 {
   io_stdout_println(main, x);
 }
@@ -124,9 +127,9 @@ public multithreaded extern "pxcio::io_impl" "linear" struct io { }
 public multithreaded extern "pxcio::file_impl" "linear" struct file { }
 
 private threaded extern "pxcio::io_initialize"
-  function int io_initialize(ioptr i);
+  function int io_initialize(ioptr const& i);
 private threaded extern "pxcio::io_stdout_print_string"
-  function void io_stdout_print_string(ioptr i, string x);
+  function void io_stdout_print_string(ioptr const& i, string const& x);
 
 io_initialize(main);
 
@@ -146,8 +149,6 @@ struct file_impl;
 
 extern "fdecl" inline
 namespace pxcio {
-extern container::vector<pxcrt::string> pxc_argv;
-extern pxcrt::rcptr< pxcrt::trcval<pxcio::io_impl> > mainio;
 struct io_impl {
   io_impl() { }
 private:
@@ -165,53 +166,54 @@ private:
 };
 typedef pxcrt::rcptr< pxcrt::trcval<io_impl> > io_ptr;
 typedef pxcrt::rcptr< pxcrt::rcval<file_impl> > file_ptr;
-file_ptr io_open(io_ptr::rawptr i, const pxcrt::string& fn, int flags, int md);
-unsigned long long file_lseek(file_ptr::rawptr f, unsigned long long offset,
-  int whence);
-unsigned int file_read(file_ptr::rawptr f, pxcrt::string& buf,
-  unsigned int len);
-unsigned int file_write(file_ptr::rawptr f, const pxcrt::string& buf);
-int io_stat(io_ptr::rawptr i, const pxcrt::string& fn, pxcio::statbuf& buf);
-int file_errno(file_ptr::rawptr f);
-int io_errno(io_ptr::rawptr i);
-unsigned int io_sleep(io_ptr::rawptr i, unsigned int sec);
-inline void io_stdout_print_string(io_ptr::rawptr i, const pxcrt::string& x) {
-  fwrite(x.data(), x.size(), 1, stdout);
-}
+extern container::vector<pxcrt::string> pxc_argv;
+extern io_ptr mainio;
 };
 
 extern "fdef" inline
 namespace pxcio {
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 container::vector<pxcrt::string> pxc_argv;
-pxcrt::rcptr< pxcrt::trcval<pxcio::io_impl> > mainio;
-file_ptr io_open(io_ptr::rawptr i, const pxcrt::string& fn, int flags, int md)
+io_ptr mainio;
+file_ptr io_open(io_ptr const& i, pxcrt::string const& fn, int flags, int md)
 {
-  file_ptr f(new pxcrt::rcval<file_impl>());
+  file_ptr f(new file_ptr::value_type());
   file_impl& fref = f->value$z;
   fref.fd = ::open(fn.c_str(), flags, md);
   fref.err = (fref.fd < 0 ? errno : 0);
   return f;
 }
-unsigned long long file_lseek(file_ptr::rawptr f, unsigned long long offset,
+unsigned long long file_lseek(file_ptr const& f, unsigned long long offset,
   int whence)
 {
   file_impl& fref = f->value$z;
+  if (fref.err != 0) {
+    return 0;
+  }
   const off_t r = ::lseek(fref.fd, offset, whence);
   fref.err = (r == (off_t)-1) ? errno : 0;
   return r;
 }
-unsigned int file_read(file_ptr::rawptr f, pxcrt::string& buf,
-  unsigned int len)
+size_t file_read(file_ptr const& f, pxcrt::string& buf, size_t len)
 {
   file_impl& fref = f->value$z;
+  if (fref.err != 0 || len < 0) {
+    return 0;
+  }
+  if (len > SSIZE_MAX) {
+    len = SSIZE_MAX;
+  }
   const size_t oldsz = buf.size();
+  const size_t newsz = oldsz + len;
+  if (newsz < oldsz) {
+    throw std::bad_alloc();
+  }
   buf.resize(oldsz + len);
   char *const ptr = &buf[oldsz];
   const ssize_t rlen = ::read(fref.fd, ptr, len);
   if (rlen >= 0) {
-    fref.err = 0;
     buf.resize(oldsz + (rlen >= 0 ? rlen : 0));
     return rlen;
   } else {
@@ -220,32 +222,42 @@ unsigned int file_read(file_ptr::rawptr f, pxcrt::string& buf,
     return 0;
   }
 }
-unsigned int file_write(file_ptr::rawptr f, const pxcrt::string& buf)
+size_t file_write(file_ptr const& f, pxcrt::string const& buf)
 {
   file_impl& fref = f->value$z;
-  const size_t sz = buf.size();
+  if (fref.err != 0) {
+    return 0;
+  }
+  size_t sz = buf.size();
+  if (sz > SSIZE_MAX) {
+    sz = SSIZE_MAX;
+  }
   const char *const ptr = &buf[0];
   const ssize_t wlen = ::write(fref.fd, ptr, sz);
   fref.err = (wlen >= 0 ? 0 : errno);
   return wlen;
 }
-int io_stat(io_ptr::rawptr i, const pxcrt::string& fn, pxcio::statbuf& buf)
+int io_stat(io_ptr const& i, pxcrt::string const& fn, pxcio::statbuf& buf)
 {
   return ::stat(fn.c_str(), &buf);
 }
-int file_errno(file_ptr::rawptr f)
+int file_errno(file_ptr const& f)
 {
   return f->value$z.err;
 }
-int io_errno(io_ptr::rawptr i)
+int io_errno(io_ptr const& i)
 {
   return errno;
 }
-unsigned int io_sleep(io_ptr::rawptr i, unsigned int sec)
+unsigned int io_sleep(io_ptr const& i, unsigned int sec)
 {
   return sleep(sec);
 }
-void io_initialize(io_ptr::rawptr i)
+void io_stdout_print_string(io_ptr const& i, pxcrt::string const& x)
+{
+  fwrite(x.data(), x.size(), 1, stdout);
+}
+int io_initialize(io_ptr const& i)
 {
   static int init_flag = 0;
   if (!init_flag) {
@@ -262,6 +274,7 @@ void io_initialize(io_ptr::rawptr i)
     const pxcrt::string s(ent);
     pxc_argv.push_back(s);
   }
+  return 0;
 }
 };
 

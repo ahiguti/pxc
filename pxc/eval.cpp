@@ -158,10 +158,12 @@ static expr_i *instantiate_template_internal(expr_i *tmpl_root,
   /* downgrade threading attribute if necessary */
   // FIXME: test
   attribute_e nattr = attribute_e(rcpy->get_attribute()
-    & ~(attribute_threaded | attribute_multithr));
+    & ~(attribute_threaded | attribute_multithr | attribute_valuetype));
+  // FIXME: term_is_valuetype
   if (term_is_multithr(rt)) {
-    nattr = attribute_e(nattr | attribute_multithr);
-  } else if (term_is_threaded(rt)) {
+    nattr = attribute_e(nattr | attribute_threaded | attribute_multithr);
+  }
+  if (term_is_threaded(rt)) {
     nattr = attribute_e(nattr | attribute_threaded);
   }
   rcpy->set_attribute(nattr);

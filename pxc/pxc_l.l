@@ -53,6 +53,9 @@ extern int count_newline(const char *str);
 "extern"		{ return TOK_EXTERN; }
 "threaded"		{ return TOK_THREADED; }
 "multithreaded"		{ return TOK_MULTITHR; }
+"valuetype"		{ return TOK_VALUETYPE; }
+"mtvaluetype"		{ return TOK_MTVALUETYPE; }
+"tsvaluetype"		{ return TOK_TSVALUETYPE; }
 {NUM}+U			{ yylval.str_val = pxc::arena_strdup(yytext);
 			  return TOK_UINTLIT; }
 {NUM}+			{ yylval.str_val = pxc::arena_strdup(yytext);

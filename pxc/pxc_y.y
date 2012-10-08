@@ -45,6 +45,9 @@ static compile_mode cur_mode;
 %token<void_val> TOK_EXTERN
 %token<void_val> TOK_THREADED
 %token<void_val> TOK_MULTITHR
+%token<void_val> TOK_VALUETYPE
+%token<void_val> TOK_MTVALUETYPE
+%token<void_val> TOK_TSVALUETYPE
 %token<void_val> TOK_NAMESPACE
 %token<void_val> TOK_NSDELIM
 %token<void_val> TOK_IMPORT
@@ -118,6 +121,8 @@ static compile_mode cur_mode;
 %type<expr_val> body_stmt
 %type<expr_val> expression_stmt
 %type<expr_val> if_stmt
+%type<expr_val> elseif_stmt
+%type<expr_val> ifdef_argdecl
 %type<expr_val> try_stmt
 %type<expr_val> catch_stmt
 %type<expr_val> ext_stmt
@@ -337,21 +342,39 @@ expression_stmt
 	;
 if_stmt
 	: TOK_IF '(' expression ')' '{' function_body_stmt_list '}'
+		elseif_stmt
 	  { $$ = expr_if_new(cur_fname, @1.first_line, $3,
 		expr_block_new(cur_fname, @1.first_line, 0, 0, 0, 0, $6),
-		0, 0); }
+		0, $8); }
 	| TOK_IF '(' expression ')' '{' function_body_stmt_list '}'
 		TOK_ELSE '{' function_body_stmt_list '}'
 	  { $$ = expr_if_new(cur_fname, @1.first_line, $3,
 		expr_block_new(cur_fname, @1.first_line, 0, 0, 0, 0, $6),
 		expr_block_new(cur_fname, @1.first_line, 0, 0, 0, 0, $10),
 		0); }
-	| TOK_IF '(' expression ')' '{' function_body_stmt_list '}'
-	  TOK_ELSE if_stmt
-	  { $$ = expr_if_new(cur_fname, @1.first_line, $3,
-		expr_block_new(cur_fname, @1.first_line, 0, 0, 0, 0, $6),
-		0, $9); }
+	| TOK_IF '(' ifdef_argdecl ':' expression ')'
+		'{' function_body_stmt_list '}' elseif_stmt
+	  { $$ = expr_if_new(cur_fname, @1.first_line, $5,
+		expr_block_new(cur_fname, @1.first_line, 0, 0, $3, 0, $8),
+		0, $10); }
+	| TOK_IF '(' ifdef_argdecl ':' expression ')'
+		'{' function_body_stmt_list '}'
+		TOK_ELSE '{' function_body_stmt_list '}'
+	  { $$ = expr_if_new(cur_fname, @1.first_line, $5,
+		expr_block_new(cur_fname, @1.first_line, 0, 0, $3, 0, $8),
+		expr_block_new(cur_fname, @1.first_line, 0, 0, 0, 0, $12),
+		0); }
 	;
+elseif_stmt
+	:
+	  { $$ = 0; }
+	| TOK_ELSE if_stmt
+	  { $$ = $2; }
+	;
+ifdef_argdecl
+	: type_expr TOK_SYMBOL
+	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $2, $1,
+			passby_e_const_value, 0); }
 try_stmt
 	: TOK_TRY '{' function_body_stmt_list '}' TOK_CATCH '('
 		type_expr TOK_SYMBOL ')' '{' function_body_stmt_list '}'
@@ -446,7 +469,15 @@ opt_attribute_threading
 	| TOK_THREADED
 		{ $$ = attribute_threaded; }
 	| TOK_MULTITHR
-		{ $$ = attribute_multithr; }
+		{ $$ = attribute_e(attribute_threaded | attribute_multithr); }
+	| TOK_VALUETYPE
+		{ $$ = attribute_e(attribute_threaded | attribute_valuetype); }
+	| TOK_MTVALUETYPE
+		{ $$ = attribute_e(attribute_threaded | attribute_multithr
+			| attribute_valuetype); }
+	| TOK_TSVALUETYPE
+		{ $$ = attribute_e(attribute_threaded | attribute_multithr
+			| attribute_valuetype | attribute_tsvaluetype); }
 	;
 struct_stmt
 	: opt_attribute TOK_STRUCT opt_tparams_expr TOK_SYMBOL

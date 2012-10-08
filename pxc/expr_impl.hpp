@@ -109,10 +109,12 @@ enum typecat_e {
   typecat_e_none,
   typecat_e_ptr,             /* shared pointer */
   typecat_e_cptr,            /* shared pointer, const target */
+  typecat_e_iptr,            /* shared pointer, immutable target */
   typecat_e_tptr,            /* multithread-shared pointer */
   typecat_e_tcptr,           /* multithread-shared pointer, const target */
-  typecat_e_wptr,            /* raw pointer (WEAK) */
-  typecat_e_wcptr,           /* raw pointer, const target (WEAK) */
+  typecat_e_tiptr,           /* multithread-shared pointer, immutable target */
+  // typecat_e_wptr,            /* raw pointer (WEAK) */
+  // typecat_e_wcptr,           /* raw pointer, const target (WEAK) */
   typecat_e_varray,          /* resizable array */
   typecat_e_farray,          /* fixed size array */
   typecat_e_slice,           /* array slice (WEAK) */
@@ -238,7 +240,6 @@ public:
   symbol_table *symtbl_lexical;
   int tempvar_id;
   variable_info tempvar_varinfo;
-  bool require_lvalue : 1;
 };
 
 struct expr_te : public expr_i {
@@ -952,8 +953,8 @@ private:
   term rettype_eval;
 public:
   expr_block *block;
-  bool ext_decl : 1;
-  bool no_def : 1;
+  bool ext_decl : 1;  /* imported function and block may be null */
+  bool no_def : 1;    /* extern c function or virtual function decl */
   term value_texpr;
   /* following tpup_* flds are used when this function instance has
    * template parameter functions and they need upvalues. */
