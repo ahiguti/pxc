@@ -10,6 +10,8 @@ public extern "pxcio::mainio" ioptr main;
 public macro ioptr tptr{io};
 public macro fileptr ptr{file};
 
+public tsvaluetype extern "pxcio::off_t" "uint" struct off_t { }
+
 public multithreaded extern "pxcio::statbuf" struct statbuf {
   ulong st_dev;
   ulong st_ino;
@@ -50,7 +52,7 @@ public threaded extern "pxcio::file_read"
 public threaded extern "pxcio::file_write"
   function size_t file_write(fileptr const& f, string const& buf);
 public threaded extern "pxcio::file_lseek"
-  function ulong file_lseek(fileptr const& f, ulong offset, int whence);
+  function off_t file_lseek(fileptr const& f, off_t offset, int whence);
 public threaded extern "pxcio::file_errno"
   function int file_errno(fileptr const& f);
 public threaded extern "pxcio::io_stat"
@@ -145,6 +147,7 @@ namespace pxcio {
 typedef struct ::stat statbuf;
 struct io_impl;
 struct file_impl;
+typedef ::off_t off_t;
 };
 
 extern "fdecl" inline
@@ -185,8 +188,7 @@ file_ptr io_open(io_ptr const& i, pxcrt::string const& fn, int flags, int md)
   fref.err = (fref.fd < 0 ? errno : 0);
   return f;
 }
-unsigned long long file_lseek(file_ptr const& f, unsigned long long offset,
-  int whence)
+off_t file_lseek(file_ptr const& f, off_t offset, int whence)
 {
   file_impl& fref = f->value$z;
   if (fref.err != 0) {

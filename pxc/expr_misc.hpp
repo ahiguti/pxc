@@ -47,7 +47,9 @@ bool is_void_type(const term& t);
 bool is_unit_type(const term& t);
 bool is_bool_type(const term& t);
 bool is_numeric_type(const term& t);
-bool is_smallpod_type(const term& t);
+// bool is_smallpod_type(const term& t);
+bool is_possibly_pod(const term& t);
+bool is_possibly_nonpod(const term& t);
 bool is_string_type(const term& t);
 bool is_integral_type(const term& t);
 bool is_unsigned_integral_type(const term& t);
@@ -89,10 +91,12 @@ symbol_table *get_current_frame_symtbl(symbol_table *lookup);
 expr_i *get_current_frame_expr(symbol_table *lookup);
   /* funcdef, struct, interface */
 expr_i *get_current_block_expr(symbol_table *lookup);
-bool is_threaded_context(symbol_table *lookup);
-bool is_multithr_context(symbol_table *lookup);
-bool term_is_threaded(const term& t);
-bool term_is_multithr(const term& t);
+bool is_threaded_context(symbol_table *lookup); // FIXME get_context_threading
+bool is_multithr_context(symbol_table *lookup); // FIXME get_context_threading
+attribute_e get_context_threading_attribute(symbol_table *lookup);
+bool term_is_threaded(const term& t); // FIXME: get_term_threading
+bool term_is_multithr(const term& t); // FIXME: get_term_threading
+attribute_e get_term_threading_attribute(const term& t);
 expr_funcdef *get_up_member_func(symbol_table *lookup);
 expr_i *find_parent(expr_i *e, expr_e t);
 const expr_i *find_parent_const(const expr_i *e, expr_e t); // FIXME: remove

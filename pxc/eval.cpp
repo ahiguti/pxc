@@ -156,9 +156,12 @@ static expr_i *instantiate_template_internal(expr_i *tmpl_root,
   const term rt(tmpl_root, args_move);
   rcpy->set_value_texpr(rt);
   /* downgrade threading attribute if necessary */
-  // FIXME: test
   attribute_e nattr = attribute_e(rcpy->get_attribute()
-    & ~(attribute_threaded | attribute_multithr | attribute_valuetype));
+    & ~(attribute_threaded | attribute_multithr |
+      attribute_valuetype | attribute_tsvaluetype));
+  nattr = attribute_e(nattr | get_term_threading_attribute(rt));
+#if 0
+  // FIXME: test
   // FIXME: term_is_valuetype
   if (term_is_multithr(rt)) {
     nattr = attribute_e(nattr | attribute_threaded | attribute_multithr);
@@ -166,6 +169,7 @@ static expr_i *instantiate_template_internal(expr_i *tmpl_root,
   if (term_is_threaded(rt)) {
     nattr = attribute_e(nattr | attribute_threaded);
   }
+#endif
   rcpy->set_attribute(nattr);
   DBG_ATTR(fprintf(stderr, "%s: attr %d\n", term_tostr_human(rt).c_str(),
     nattr));

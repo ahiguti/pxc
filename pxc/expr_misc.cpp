@@ -220,16 +220,54 @@ bool is_bool_type(const term& t)
 
 bool is_numeric_type(const term& t)
 {
-  return is_integral_type(t) ||
+  if (is_integral_type(t) ||
     t == builtins.type_double ||
-    t == builtins.type_float;
+    t == builtins.type_float) {
+    return true;
+  }
+  const typecat_e cat = get_category(t);
+  return cat == typecat_e_int || cat == typecat_e_uint;
 }
 
-bool is_smallpod_type(const term& t)
+static bool is_builtin_pod(const term& t)
 {
   const expr_typedef *const td = dynamic_cast<const expr_typedef *>(
     t.get_expr());
   return td != 0 && td->is_pod;
+}
+
+bool is_possibly_pod(const term& t)
+{
+  if (is_builtin_pod(t)) {
+    return true;
+  }
+  const typecat_e cat = get_category(t);
+  switch (cat) {
+  case typecat_e_int:
+  case typecat_e_uint:
+  case typecat_e_float:
+    return true;
+  default:
+    break;
+  }
+  return false;
+}
+
+bool is_possibly_nonpod(const term& t)
+{
+  if (is_builtin_pod(t)) {
+    return false;
+  }
+  const typecat_e cat = get_category(t);
+  switch (cat) {
+  case typecat_e_int:
+  case typecat_e_uint:
+  case typecat_e_float:
+    return false;
+  default:
+    break;
+  }
+  return true;
 }
 
 bool is_string_type(const term& t)
@@ -237,10 +275,9 @@ bool is_string_type(const term& t)
   return t == builtins.type_string;
 }
 
-bool is_integral_type(const term& t)
+bool is_pod_integral_type(const term& t)
 {
-  /* TODO: slow */
-  return
+  if (
     t == builtins.type_bool ||
     t == builtins.type_uchar ||
     t == builtins.type_char ||
@@ -249,20 +286,36 @@ bool is_integral_type(const term& t)
     t == builtins.type_uint ||
     t == builtins.type_int ||
     t == builtins.type_ulong ||
-    t == builtins.type_long ||
-    t == builtins.type_size_t;
+    t == builtins.type_long
+    ) {
+    return true;
+  }
+  const typecat_e cat = get_category(t);
+  return cat == typecat_e_int || cat == typecat_e_uint;
+}
+
+bool is_integral_type(const term& t)
+{
+  if (is_pod_integral_type(t)) {
+    return true;
+  }
+  const typecat_e cat = get_category(t);
+  return cat == typecat_e_int || cat == typecat_e_uint;
 }
 
 bool is_unsigned_integral_type(const term& t)
 {
-  /* TODO: slow */
-  return
+  if (
     t == builtins.type_bool ||
     t == builtins.type_uchar ||
     t == builtins.type_ushort ||
     t == builtins.type_uint ||
-    t == builtins.type_ulong ||
-    t == builtins.type_size_t;
+    t == builtins.type_ulong
+    ) {
+    return true;
+  }
+  const typecat_e cat = get_category(t);
+  return cat == typecat_e_uint;
 }
 
 typecat_e get_category(const term& t)
@@ -284,8 +337,10 @@ typecat_e get_category_from_string(const std::string& s)
   if (s == "tptr") return typecat_e_tptr;
   if (s == "tcptr") return typecat_e_tcptr;
   if (s == "tiptr") return typecat_e_tiptr;
-  // if (s == "wptr") return typecat_e_wptr;
-  // if (s == "wcptr") return typecat_e_wcptr;
+  if (s == "int") return typecat_e_int;
+  if (s == "uint") return typecat_e_uint;
+  if (s == "float") return typecat_e_float;
+  if (s == "numeric") return typecat_e_numeric;
   if (s == "varray") return typecat_e_varray;
   if (s == "farray") return typecat_e_farray;
   if (s == "slice") return typecat_e_slice;
@@ -295,6 +350,8 @@ typecat_e get_category_from_string(const std::string& s)
   if (s == "tree_map_crange") return typecat_e_tree_map_crange;
   if (s == "linear") return typecat_e_linear;
   if (s == "nocascade") return typecat_e_nocascade;
+  // if (s == "wptr") return typecat_e_wptr;
+  // if (s == "wcptr") return typecat_e_wcptr;
   return typecat_e_none;
 }
 
@@ -308,8 +365,10 @@ std::string get_category_string(typecat_e cat)
   case typecat_e_tptr: return "tptr";
   case typecat_e_tcptr: return "tcptr";
   case typecat_e_tiptr: return "tiptr";
-  // case typecat_e_wptr: return "wptr";
-  // case typecat_e_wcptr: return "wcptr";
+  case typecat_e_int: return "int";
+  case typecat_e_uint: return "uint";
+  case typecat_e_float: return "float";
+  case typecat_e_numeric: return "numeric";
   case typecat_e_varray: return "varray";
   case typecat_e_farray: return "farray";
   case typecat_e_slice: return "slice";
@@ -319,6 +378,8 @@ std::string get_category_string(typecat_e cat)
   case typecat_e_tree_map_crange: return "tree_map_crange";
   case typecat_e_linear: return "linear";
   case typecat_e_nocascade: return "nocascade";
+  // case typecat_e_wptr: return "wptr";
+  // case typecat_e_wcptr: return "wcptr";
   }
   abort();
 }
@@ -351,6 +412,11 @@ static bool is_threaded_pointer_category(const typecat_e cat)
 {
   return cat == typecat_e_tptr || cat == typecat_e_tcptr
     || cat == typecat_e_tiptr;
+}
+
+static bool is_immutable_pointer_category(const typecat_e cat)
+{
+  return cat == typecat_e_iptr || typecat_e_tiptr;
 }
 
 term get_pointer_target(const term& t)
@@ -1229,6 +1295,18 @@ expr_i *get_current_block_expr(symbol_table *cur)
   return e;
 }
 
+static attribute_e get_threading_attribute_mask(expr_e e)
+{
+  if (is_type_esort(e)) {
+    return attribute_e(attribute_threaded | attribute_multithr |
+      attribute_valuetype | attribute_tsvaluetype);
+  } else if (e == expr_e_funcdef) {
+    return attribute_threaded;
+  } else {
+    return attribute_unknown;
+  }
+}
+
 static attribute_e get_expr_threading_attribute(const expr_i *e)
 {
   if (e == 0) {
@@ -1241,25 +1319,51 @@ static attribute_e get_expr_threading_attribute(const expr_i *e)
       e = esd;
     }
   }
-  return e->get_attribute();
+  attribute_e attr = e->get_attribute();
+  return attribute_e(attr & get_threading_attribute_mask(e->get_esort()));
+}
+
+attribute_e get_context_threading_attribute(symbol_table *cur)
+{
+  expr_i *const fe = get_current_frame_expr(cur);
+  return get_expr_threading_attribute(fe);
 }
 
 bool is_threaded_context(symbol_table *cur)
 {
-  attribute_e attr = get_expr_threading_attribute(get_current_frame_expr(cur));
+  attribute_e attr = get_context_threading_attribute(cur);
   return (attr & attribute_threaded) != 0;
 }
 
 bool is_multithr_context(symbol_table *cur)
 {
-  expr_i *const fe = get_current_frame_expr(cur);
-  if (fe != 0 && fe->get_esort() == expr_e_funcdef) {
-    return false;
-  }
-  attribute_e attr = get_expr_threading_attribute(fe);
+  attribute_e attr = get_context_threading_attribute(cur);
   return (attr & attribute_multithr) != 0;
 }
 
+attribute_e get_term_threading_attribute(const term& t)
+{
+  const expr_i *const e = t.get_expr();
+  if (e == 0) {
+    return attribute_unknown;
+  }
+  int attr = get_expr_threading_attribute(e);
+  const term_list *const args = t.get_args();
+  if (args == 0) {
+    return attribute_e(attr);
+  }
+  for (term_list::const_iterator i = args->begin(); i != args->end(); ++i) {
+    const expr_i *const ce = i->get_expr();
+    if (ce == 0) {
+      continue;
+    }
+    int mask = get_threading_attribute_mask(ce->get_esort());
+    attr &= (get_term_threading_attribute(*i) | ~mask);
+  }
+  return attribute_e(attr);
+}
+
+#if 0
 static bool check_term_threading_attribute(const term& t, bool req_multithr)
 {
   const expr_i *const e = t.get_expr();
@@ -1300,6 +1404,7 @@ bool term_is_multithr(const term& t)
 {
   return check_term_threading_attribute(t, true);
 }
+#endif
 
 expr_funcdef *get_up_member_func(symbol_table *cur)
 {
@@ -1803,12 +1908,22 @@ static void check_type_threading_te(const term& te, expr_i *pos)
     }
     const expr_struct *est = dynamic_cast<const expr_struct *>(e);
     if (est != 0 && est->typecat != typecat_e_none && !args->empty()) {
-      if (is_threaded_pointer_category(est->typecat)) {
-	const term& tgt = args->front();
-	if (!term_is_multithr(tgt)) {
-	  arena_error_throw(pos, "'%s' is not a multithreaded type",
-	    term_tostr_human(tgt).c_str());
-	}
+      const term& tgt = args->front();
+      const attribute_e attr = get_term_threading_attribute(tgt);
+      if (is_threaded_pointer_category(est->typecat) &&
+	attr & attribute_multithr == 0) {
+	arena_error_throw(pos, "pointer target '%s' is not multithreaded",
+	  term_tostr_human(tgt).c_str());
+      }
+      if (is_immutable_pointer_category(est->typecat) &&
+	attr & attribute_valuetype == 0) {
+	arena_error_throw(pos, "pointer target '%s' is not valuetype",
+	  term_tostr_human(tgt).c_str());
+      }
+      if (est->typecat == typecat_e_tiptr &&
+	attr & attribute_valuetype == 0) {
+	arena_error_throw(pos, "pointer target '%s' is not tsvaluetype",
+	  term_tostr_human(tgt).c_str());
       }
     }
   }
@@ -1940,6 +2055,15 @@ void check_inherit_threading(expr_struct *est)
     symbol_common *sd = inh->head->get_sdef();
     assert(sd);
     term& te = sd->resolve_evaluated();
+    const attribute_e iattr = get_term_threading_attribute(te);
+    const attribute_e estattr = est->get_attribute();
+    if ((iattr & estattr) != iattr) {
+      arena_error_throw(est,
+        "struct '%s' can't implement '%s' because it has weaker "
+	"threading attributes",
+        term_tostr_human(est_te).c_str(), term_tostr_human(te).c_str());
+    }
+    #if 0
     if (term_is_multithr(te) &&
       (est->get_attribute() & attribute_multithr) == 0) {
       arena_error_throw(est,
@@ -1952,6 +2076,7 @@ void check_inherit_threading(expr_struct *est)
         "struct '%s' can't implement '%s' because it's not threaded",
         term_tostr_human(est_te).c_str(), term_tostr_human(te).c_str());
     }
+    #endif
   }
 }
 
@@ -2240,7 +2365,14 @@ term get_array_index_texpr(expr_op *eop, term& t0)
       case typecat_e_farray:
       case typecat_e_slice:
       case typecat_e_cslice:
-	return builtins.type_size_t;
+	{
+	  term t = eval_local_lookup(t0, "key_type", eop);
+	  if (t.is_null()) {
+	    arena_error_throw(eop, "key_type not found");
+	    return builtins.type_void;
+	  }
+	  return t;
+	}
       case typecat_e_tree_map:
 	if (tparams->rest != 0) {
 	  return tparams->param_def;
@@ -2249,21 +2381,6 @@ term get_array_index_texpr(expr_op *eop, term& t0)
       default:
 	break;
       }
-      #if 0
-      if (std::string(est->category) == "varray") {
-	return builtins.type_size_t;
-      } else if (std::string(est->category) == "farray") {
-	return builtins.type_size_t;
-      } else if (std::string(est->category) == "slice") {
-	return builtins.type_size_t;
-      } else if (std::string(est->category) == "cslice") {
-	return builtins.type_size_t;
-      } else if (std::string(est->category) == "tree_map") {
-	if (tparams->rest != 0) {
-	  return tparams->param_def;
-	}
-      }
-      #endif
     }
   }
   arena_error_throw(eop, "cannot apply '[]'");

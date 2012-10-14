@@ -333,11 +333,14 @@ static void check_var_type(term& typ, expr_i *e, const char *sym,
       sym);
   }
   symbol_table *const cur = get_current_frame_symtbl(e->symtbl_lexical);
-  if (cur != 0 && is_threaded_context(cur) && !term_is_threaded(typ)) {
-    arena_error_push(e,
-      "type '%s' for variable or field '%s' is not threaded",
-      term_tostr_human(typ).c_str(), sym);
-  }
+// FIXME: not effective?
+#if 0
+//  if (cur != 0 && is_threaded_context(cur) && !term_is_threaded(typ)) {
+//    arena_error_push(e,
+//      "type '%s' for variable or field '%s' is not threaded",
+//      term_tostr_human(typ).c_str(), sym);
+//  }
+#endif
   if (cur != 0 && e->get_esort() == expr_e_var &&
     (cur->block_esort == expr_e_struct || cur->block_esort == expr_e_variant)) {
     expr_var *const ev = ptr_down_cast<expr_var>(e);
@@ -351,12 +354,12 @@ static void check_var_type(term& typ, expr_i *e, const char *sym,
     }
 // FIXME: not effective?
 #if 0
-    if (is_multithr_context(cur) && !term_is_multithr(typ)) {
-      arena_error_push(e,
-	"type '%s' for field '%s' is not multithreaded",
-	term_tostr_human(typ).c_str(), sym);
-      /* note: argdecls need not to be multithreaded */
-    }
+//    if (is_multithr_context(cur) && !term_is_multithr(typ)) {
+//      arena_error_push(e,
+//	"type '%s' for field '%s' is not multithreaded",
+//	term_tostr_human(typ).c_str(), sym);
+//      /* note: argdecls need not to be multithreaded */
+//    }
 #endif
   }
 }
@@ -384,10 +387,6 @@ static bool is_default_constructible(const term& typ, expr_i *pos,
     const typecat_e cat = est->typecat;
     if (is_cm_pointer_family(typ)) {
       return false;
-#if 0
-      return (args == 0 || args->empty()) ? false
-	: is_default_constructible(args->front(), pos, depth);
-#endif
     }
     if (cat == typecat_e_linear) {
       return false;
@@ -410,6 +409,8 @@ static bool is_default_constructible(const term& typ, expr_i *pos,
       return true;
     }
     if (est->has_userdefined_constr()) {
+      return false;
+#if 0
       expr_argdecls *ads = est->block->argdecls;
       for (; ads != 0; ads = ads->rest) {
 	term& ctyp = ads->resolve_texpr();
@@ -417,6 +418,8 @@ static bool is_default_constructible(const term& typ, expr_i *pos,
 	  return false;
 	}
       }
+#endif
+#if 0
     } else {
       typedef std::list<expr_var *> fields_type;
       fields_type flds;
@@ -427,6 +430,7 @@ static bool is_default_constructible(const term& typ, expr_i *pos,
 	  return false;
 	}
       }
+#endif
     }
     return true;
   }
@@ -447,12 +451,15 @@ static bool is_default_constructible(const term& typ, expr_i *pos,
 static void check_default_construct(term& typ, expr_var *ev, const char *sym)
 {
   expr_i *const cbexpr = get_current_block_expr(ev->symtbl_lexical);
+#if 0
+// FIXME: remove.
   expr_struct *est = dynamic_cast<expr_struct *>(cbexpr);
   if (est != 0 && !est->has_userdefined_constr()) {
     /* if ev is a field of a struct wo userdefined constr, it's not
      * necessary to be default-constructible. */
     return;
   }
+#endif
   expr_variant *eva = dynamic_cast<expr_variant *>(cbexpr);
   if (eva != 0 && eva->get_first_field() != ev) {
     /* only 1st field of variant need to be default-constructible */
@@ -468,10 +475,16 @@ void expr_var::check_type(symbol_table *lookup)
 {
   term& typ = resolve_texpr();
   check_var_type(typ, this, sym, false);
-  if (is_global_var(this) && has_userdef_constr(typ)) {
-    arena_error_push(this, "user-defined constructor is not allowed for a "
-      "global variable '%s'", sym);
+// FIXME: enable this!
+#if 0
+  const attribute_e tattr = get_term_threading_attribute(typ);
+  if (is_global_var(this) && (tattr & attribute_threaded) == 0) {
+    // FIXME: test
+    arena_error_push(this,
+      "type '%s' for global variable '%s' is not threaded",
+      term_tostr_human(typ).c_str(), sym);
   }
+#endif
   if (parent_expr->get_esort() != expr_e_op ||
     ptr_down_cast<expr_op>(parent_expr)->op != '=') {
     /* requires default constructor */
@@ -1327,6 +1340,7 @@ void expr_funccall::check_type(symbol_table *lookup)
       arg->dump(0).c_str());
   }
   term func_te;
+  bool memfunc_w_explicit_obj = false;
   if (func->get_sdef() != 0) {
     symbol_common *const sc = func->get_sdef();
     func_te = sc->resolve_evaluated();
@@ -1335,6 +1349,7 @@ void expr_funccall::check_type(symbol_table *lookup)
     symbol_common *const sc = eop->arg1->get_sdef();
     if (sc != 0 && (eop->op == '.' || eop->op == TOK_ARROW)) {
       func_te = sc->resolve_evaluated();
+      memfunc_w_explicit_obj = true;
     }
   }
   if (func_te.is_null()) {
@@ -1451,6 +1466,11 @@ void expr_funccall::check_type(symbol_table *lookup)
 	  "calling a non-const member function '%s' from a const "
 	  "member function", term_tostr_human(efd->value_texpr).c_str());
       }
+    }
+    if (efd->is_virtual_or_member_function() && !memfunc_w_explicit_obj &&
+      symtbl_lexical->block_esort == expr_e_struct) {
+      arena_error_push(this,
+	"calling member function from a constructor");
     }
     DBG(fprintf(stderr,
       "expr=[%s] type_of_this_expr=[%s] tvmap.size()=%d "
@@ -2269,10 +2289,63 @@ void expr_macrodef::check_type(symbol_table *lookup)
   fn_check_type(block, lookup);
 }
 
+#if 0
+static void check_constr_calling_memfunc(expr_struct *est, expr_i *e)
+{
+  int n = e->get_num_children();
+  if (e->get_esort() == expr_e_funccall) {
+    expr_
+  }
+  for (int i = 0; i < n; ++i) {
+    check_constr_calling_memfunc(est, e->get_child(i));
+  }
+}
+#endif
+
+static void check_constr_restrictions(expr_struct *est)
+{
+  if (est->block == 0 || est->block->stmts == 0) {
+    return;
+  }
+  expr_stmts *st = est->block->stmts;
+  for (; st != 0; st = st->rest) {
+    expr_i *const e = st->head;
+    bool ok = false;
+    switch (e->get_esort()) {
+    case expr_e_var:
+      ok = true;
+      break;
+    case expr_e_op:
+      {
+	expr_op *const eop = ptr_down_cast<expr_op>(e);
+	if (eop->op == '=' && eop->arg0->get_esort() == expr_e_var) {
+	  ok = true;
+	}
+      }
+      break;
+    case expr_e_funcdef:
+    case expr_e_struct:
+    case expr_e_variant:
+    case expr_e_macrodef:
+      ok = true;
+      break;
+    default:
+      break;
+    }
+    if (!ok) {
+      arena_error_push(e, "invalid statement");
+    }
+    #if 0
+    check_constr_calling_memfunc(est, e);
+    #endif
+  }
+}
+
 void expr_struct::check_type(symbol_table *lookup)
 {
   fn_check_type(block, lookup);
   check_inherit_threading(this);
+  check_constr_restrictions(this);
 }
 
 void expr_variant::check_type(symbol_table *lookup)

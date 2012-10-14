@@ -182,6 +182,41 @@ static void symdef_check_threading_attr_type_or_func(expr_i *e,
   symbol_common *sc, term& t)
 {
   symbol_table *const cur = get_current_frame_symtbl(e->symtbl_lexical);
+  if (cur == 0) {
+    return;
+  }
+  const attribute_e cattr = get_context_threading_attribute(cur);
+  const attribute_e tattr = get_term_threading_attribute(t);
+  if ((tattr & attribute_threaded) == 0 && (cattr & attribute_threaded) != 0) {
+    arena_error_push(e,
+      "type or function '%s' for symbol '%s' is not threaded",
+      term_tostr_human(t).c_str(), sc->fullsym.c_str());
+  }
+  if (is_type_esort(e->get_esort())) {
+    if ((tattr & attribute_multithr) == 0 &&
+      (cattr & attribute_multithr) != 0) {
+      arena_error_push(e,
+	"type '%s' for symbol '%s' is not multithreaded",
+	term_tostr_human(t).c_str(), sc->fullsym.c_str());
+    }
+    if ((tattr & attribute_valuetype) == 0 &&
+      (cattr & attribute_valuetype) != 0) {
+      arena_error_push(e,
+	"type '%s' for symbol '%s' is not valuetype",
+	term_tostr_human(t).c_str(), sc->fullsym.c_str());
+    }
+    if ((tattr & attribute_tsvaluetype) == 0 &&
+      (cattr & attribute_tsvaluetype) != 0) {
+      arena_error_push(e,
+	"type '%s' for symbol '%s' is not tsvaluetype",
+	term_tostr_human(t).c_str(), sc->fullsym.c_str());
+    }
+    // FIXME: valuetype and tsvaluetype
+  }
+#if 0
+fprintf(stderr, "%s c=%x t=%x\n", term_tostr_human(t).c_str(), (int)cattr, (int)tattr); // FIXME
+#endif
+  #if 0
   if (cur == 0 || !is_threaded_context(cur)) {
     return;
   }
@@ -196,6 +231,7 @@ static void symdef_check_threading_attr_type_or_func(expr_i *e,
       "type or function '%s' for symbol '%s' is not multithreaded",
       term_tostr_human(t).c_str(), sc->fullsym.c_str());
   }
+  #endif
 }
 
 static void symdef_check_threading_attr_var(expr_i *e, symbol_common *sc,
@@ -203,20 +239,10 @@ static void symdef_check_threading_attr_var(expr_i *e, symbol_common *sc,
 {
   symbol_table *const cur = get_current_frame_symtbl(e->symtbl_lexical);
   if (cur == 0 || !is_threaded_context(cur)) {
-#if 0
-fprintf(stderr, "symdef_check_threading_attr_var: %s : not threaded\n",
-  sc->fullsym.c_str());
-#endif
+    /* no need to check */
     return;
   }
-#if 0
-fprintf(stderr, "symdef_check_threading_attr_var: %s : threaded def_expr=%s\n",
-  sc->fullsym.c_str(), def_expr->dump(0).c_str());
-#endif
   if (is_global_var(def_expr)) {
-#if 0
-fprintf(stderr, "global var!\n");
-#endif
     const expr_var *const ev = ptr_down_cast<const expr_var>(def_expr);
     arena_error_push(e,
       "global variable '%s' can't be used from a threaded context",

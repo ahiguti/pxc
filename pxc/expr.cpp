@@ -285,7 +285,6 @@ static const builtin_typedefs_type builtin_typedefs[] = {
   { "int", "int32_t", 0, true, 0, &builtins.type_int },
   { "ulong", "uint64_t", 0, true, 0, &builtins.type_ulong },
   { "long", "int64_t", 0, true, 0, &builtins.type_long },
-  { "size_t", "size_t", 0, true, 0, &builtins.type_size_t },
   { "float", "float", 0, true, 0, &builtins.type_float },
   { "double", "double", 0, true, 0, &builtins.type_double },
   { "string", "pxcrt::string", 0, false, 0, &builtins.type_string },
@@ -301,7 +300,8 @@ static void define_builtins()
     expr_i *const etd = expr_typedef_new("BUILTIN", 0, be->name, be->cname,
       be->category, be->is_pod, be->num_tparams,
       attribute_e(attribute_public |
-	attribute_threaded | attribute_multithr | attribute_valuetype));
+	attribute_threaded | attribute_multithr | attribute_valuetype |
+	attribute_tsvaluetype));
     (*be->tptr) = etd->get_value_texpr();
     stmts = expr_stmts_new("", 0, etd, stmts);
   }
@@ -318,7 +318,8 @@ static void define_builtins()
       arena_strdup("@local"),
       expr_block_new("BUILDIN", 0, 0, 0, 0, 0, 0),
       attribute_e(attribute_public |
-	attribute_threaded | attribute_multithr | attribute_valuetype));
+	attribute_threaded | attribute_multithr | attribute_valuetype |
+	attribute_tsvaluetype));
     stmts = expr_stmts_new("", 0, est, stmts);
     est = expr_struct_new("BUILTIN", 0,
       arena_strdup("@list"),
@@ -326,7 +327,8 @@ static void define_builtins()
       arena_strdup("@list"),
       expr_block_new("BUILDIN", 0, 0, 0, 0, 0, 0),
       attribute_e(attribute_public |
-	attribute_threaded | attribute_multithr | attribute_valuetype));
+	attribute_threaded | attribute_multithr | attribute_valuetype |
+	attribute_tsvaluetype));
     stmts = expr_stmts_new("", 0, est, stmts);
   }  
   topvals.push_front(stmts);
