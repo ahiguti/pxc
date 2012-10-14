@@ -1,0 +1,24 @@
+
+namespace mtchk;
+import test_common "";
+
+tsvaluetype struct bar {
+  int z;
+}
+
+tsvaluetype struct foo(bar const& bx) {
+  int x;
+  int y;
+  bar b;
+  vector{bar} bv; // error: not tsvaluetype
+  tiptr{bar} bp = tiptr(bx);
+  function int getbz() const { return bp->z; }
+}
+
+function void t1() {
+  foo f = foo(bar(55));
+  println(f.getbz());
+}
+
+t1();
+

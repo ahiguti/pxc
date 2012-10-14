@@ -3,16 +3,33 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- 組み込み型削減
+  typecat_e_int, uint, float, numeric
+  とりあえずsize_tを組み込みから外す
+
 threadまわり
 - threadまわりの仕様整理せよ
 - threadedなclosureがupvalueとして非threadedな型を使えてしまわないか
 - immutableの仕様きめよ
   guard countがmtsafeでないのはどうするか
 - iptr, valuetype
+- multithreaded structのコンストラクタ引数はmultithreaded型でなくても
+  よい。
+- closureのthread属性？
+
+- global変数はthreadedな型を持たねばならない。初期化順序の問題が起きない
+  ように。expr_var::check_typeの中のif 0を有効化せよ。
+
+- default-constructible と has-userdefined-constr について整理しなおし。
+  - default-constructibleではない型のデフォルトコンストラクタをemit
+    しているのはおかしい？
+- defconでない型を引数無しで呼んだらエラーにせよ
+- コンストラクタからメンバ関数を呼べてしまうのをエラーにせよ(done)
 
 コンテナまわり
 - expr_feach::emit(): map, rangeに対するemit
-- list, set
+
+- namespace宣言義務付け
 
 ポインタまわり
 - 短絡boxingを再び有効に
@@ -50,7 +67,7 @@ if-defined構文
 
 - type categoryの整理
 
-- 決定済みの仕様をメモに蓄積
+- 決定済みの仕様をメモに蓄積、テストケースと関連付け。
 
 ---------------------------------------------------------------------
 TEST TODO M1
@@ -104,6 +121,7 @@ FIXME/TODO M4
 ---------------------------------------------------------------------
 TODO
 
+- list, set
 - tptr/tcptrのロックをreader/writerロックに。そのためにはguard count
   をatomicにしなければならないのでやめたほうがよい？ immutable ptrも
   同じようにguard countを考慮必要。
@@ -5134,4 +5152,33 @@ tiptrはtsvaluetype
 
 隠されたカウンタなどを持っていない値型はtsvaluetype
 vectorやtree_mapはmtvaluetype
+
+---------------------------------------------------------------------
+default-constructible?
+
+ポインタ型はdefault-constructibleではない
+linear型はdefault-constructibleではない
+variant型はdefcon(最初のフィールドがdefconかどうかチェックされるから)
+udconを持たないstruct型はdefcon(全フィールドdefconかどうかチェックされ
+  るから)
+udconを持つstruct型はdefconでない
+
+defconでない型を引数無しで呼んだらエラーにせよ
+
+---------------------------------------------------------------------
+has-userdef-constr?
+
+structの引数が空でないならudconを持つ
+struct foo {
+  int x;
+  int y;
+}
+struct foo {
+  foo(int x0, int y0) : x(x0), y(y0) { }
+  foo() : x(int()), y(int()) { } // やめる？
+}
+
+userdef-constrの効率よい初期化を吐けるかどうかの判定:
+(1) 各stmtがsplitされないものであること
+// (2) argdeclとfieldに同じ名前のものが無いこと
 

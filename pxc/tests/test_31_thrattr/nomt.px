@@ -1,0 +1,23 @@
+
+namespace mtchk;
+import test_common "";
+
+mtvaluetype struct bar {
+  int z;
+}
+
+multithreaded struct foo(bar const& bx) {
+  int x;
+  int y;
+  bar b;
+  ptr{bar} bp = ptr(bx); // error: not multithreaded
+  function int getbz() const { return bp->z; }
+}
+
+function void t1() {
+  foo f = foo(bar(55));
+  println(f.getbz());
+}
+
+t1();
+

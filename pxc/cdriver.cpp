@@ -413,11 +413,16 @@ static void load_source_and_calc_checksum(const parser_options& po,
 	  break;
 	}
       }
+      /* reload the source file because it is possibly modified after we
+       * stat()ed the file first. it is safe to set PSC_TIMESTAMP_MARGIN zero
+       * if the system clock is never be skewed. */
       sleep(1);
-      /* retry */
     }
     src_mask |= src_mask_bit;
     md5.update(i->content);
+    if (loaded) {
+      break;
+    }
   }
   if (!loaded) {
     arena_error_throw(0,

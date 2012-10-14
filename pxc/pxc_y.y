@@ -486,10 +486,10 @@ struct_stmt
 		expr_block_new(cur_fname, @2.first_line, $3, $5, 0, 0, $7),
 		$1); }
 	| opt_attribute TOK_STRUCT opt_tparams_expr TOK_SYMBOL
-		opt_inherit_expr '(' argdecl_list ')'
+		'(' argdecl_list ')' opt_inherit_expr
 		'{' struct_body_stmt_list '}'
 	  { $$ = expr_struct_new(cur_fname, @2.first_line, $4, 0, 0,
-		expr_block_new(cur_fname, @2.first_line, $3, $5, $7, 0, $10),
+		expr_block_new(cur_fname, @2.first_line, $3, $8, $6, 0, $10),
 		$1); }
 	;
 c_struct_stmt
@@ -554,6 +554,16 @@ visi_vardef_stmt
 	| TOK_PUBLIC type_expr TOK_SYMBOL ';'
 	  { $$ = expr_var_new(cur_fname, @1.first_line, $3, $2,
 		passby_e_mutable_value, attribute_public, 0); }
+	| TOK_PRIVATE type_expr TOK_SYMBOL '=' assign_expr ';'
+	  { $$ = expr_op_new(cur_fname, @1.first_line, '=',
+		expr_var_new(cur_fname, @1.first_line, $3, $2,
+			passby_e_mutable_value, attribute_private, $5),
+		$5); }
+	| TOK_PUBLIC type_expr TOK_SYMBOL '=' assign_expr ';'
+	  { $$ = expr_op_new(cur_fname, @1.first_line, '=',
+		expr_var_new(cur_fname, @1.first_line, $3, $2,
+			passby_e_mutable_value, attribute_public, $5),
+		$5); }
 	;
 vardef_stmt
 	: vardef_expr ';'

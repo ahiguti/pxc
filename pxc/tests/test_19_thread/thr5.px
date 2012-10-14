@@ -3,10 +3,10 @@ namespace ttest;
 import thread "";
 import io;
 
-multithreaded struct my_thread_obj {
+multithreaded struct my_thread_obj (io::ioptr iop) {
   int x;
   int y;
-  io::ioptr io;
+  io::ioptr io = iop;
   function void main() {
     io.stdout_println("my thread main");
     io.stdout_println(x);
@@ -17,7 +17,7 @@ multithreaded struct my_thread_obj {
 function void test1()
 {
   io::ioptr i = tptr(io::io()); // error: io is not default-constructible
-  thread_t thr = create_thread(my_thread_obj(123, 456, io::main));
+  thread_t thr = create_thread(my_thread_obj(io::main));
   thr.join();
 }
 

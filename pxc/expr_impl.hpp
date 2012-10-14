@@ -66,7 +66,6 @@ struct builtins_type {
   term type_int;
   term type_ulong;
   term type_long;
-  term type_size_t;
   term type_float;
   term type_double;
   term type_string;
@@ -106,24 +105,28 @@ enum funccall_e {
 };
 
 enum typecat_e {
-  typecat_e_none,
-  typecat_e_ptr,             /* shared pointer */
-  typecat_e_cptr,            /* shared pointer, const target */
-  typecat_e_iptr,            /* shared pointer, immutable target */
-  typecat_e_tptr,            /* multithread-shared pointer */
-  typecat_e_tcptr,           /* multithread-shared pointer, const target */
-  typecat_e_tiptr,           /* multithread-shared pointer, immutable target */
-  // typecat_e_wptr,            /* raw pointer (WEAK) */
-  // typecat_e_wcptr,           /* raw pointer, const target (WEAK) */
-  typecat_e_varray,          /* resizable array */
-  typecat_e_farray,          /* fixed size array */
-  typecat_e_slice,           /* array slice (WEAK) */
-  typecat_e_cslice,          /* array slice, const elements (WEAK) */
-  typecat_e_tree_map,        /* rb-tree map */
-  typecat_e_tree_map_range,  /* range on tree_map (WEAK) */
-  typecat_e_tree_map_crange, /* range on tree_map, const elements (WEAK) */
-  typecat_e_linear,          /* linear (noncopyable) type */
-  typecat_e_nocascade,       /* default-constructible even when tparam's not */
+  typecat_e_none,             /* unknown */
+  typecat_e_ptr,              /* shared pointer */
+  typecat_e_cptr,             /* shared pointer, const target */
+  typecat_e_iptr,             /* shared pointer, immutable target */
+  typecat_e_tptr,             /* multithread-shared pointer */
+  typecat_e_tcptr,            /* multithread-shared pointer, const target */
+  typecat_e_tiptr,            /* multithread-shared pointer, immutable tgt */
+  typecat_e_int,              /* int/long etc */
+  typecat_e_uint,             /* unsigned int/long etc, */
+  typecat_e_float,            /* float/double etc, */
+  typecat_e_numeric,          /* other numeric types */
+  typecat_e_varray,           /* resizable array */
+  typecat_e_farray,           /* fixed size array */
+  typecat_e_slice,            /* array slice (WEAK) */
+  typecat_e_cslice,           /* array slice, const elements (WEAK) */
+  typecat_e_tree_map,         /* rb-tree map */
+  typecat_e_tree_map_range,   /* range on tree_map (WEAK) */
+  typecat_e_tree_map_crange,  /* range on tree_map, const elements (WEAK) */
+  typecat_e_linear,           /* linear (noncopyable) type */
+  typecat_e_nocascade,        /* default-constructible even when tparam's not */
+  // typecat_e_wptr,             /* raw pointer (WEAK) */
+  // typecat_e_wcptr,            /* raw pointer, const target (WEAK) */
 };
 
 struct variable_info {

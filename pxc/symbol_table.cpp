@@ -120,8 +120,8 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
 	}
 	if (!is_const) {
 	  is_upvalue_r = true;
-	  if (block_esort != expr_e_funcdef) {
-	    /* structs and interfaces cant have an upvalue */
+	  if (block_esort != expr_e_funcdef && !is_global_r) {
+	    /* structs and interfaces cant have an upvalue ex globals */
 	    v = localvar_info();
 	  } else {
 	    upvalues[fullname] = v;
