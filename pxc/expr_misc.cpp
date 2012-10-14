@@ -250,6 +250,10 @@ bool is_possibly_pod(const term& t)
   default:
     break;
   }
+  const expr_struct *est = dynamic_cast<const expr_struct *>(t.get_expr());
+  if (est != 0 && est->cname != 0) {
+    return true;
+  }
   return false;
 }
 
