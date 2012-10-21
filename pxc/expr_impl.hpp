@@ -56,7 +56,6 @@ typedef std::map<std::string, term> tvmap_type;
 struct builtins_type {
   term type_void;
   term type_unit;
-  term type_tpdummy;
   term type_bool;
   term type_uchar;
   term type_char;
@@ -69,6 +68,7 @@ struct builtins_type {
   term type_float;
   term type_double;
   term type_string;
+  term type_tpdummy;
 };
 
 enum term_tostr_sort {

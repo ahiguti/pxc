@@ -6,12 +6,11 @@ all:
 
 force:
 	export CXX="$(CXX)"; \
-	export SUNJDK="$(SUNJDK)"; \
 	for i in test_*; do \
 	  pushd $$i > /dev/null; \
-	  echo "[$$i]"; \
+	  echo "[$$i] "; \
 	  if [ -f ./DONE ]; then \
-	    echo "skip"; \
+	    echo " skip"; \
 	  elif ! ./run.sh; then \
 	    echo -n "FORCE ... "; \
 	    $(MAKE) accept; \
@@ -20,7 +19,7 @@ force:
 	      exit 1; \
 	    fi; \
 	  else \
-	    echo "success"; \
+	    echo -n ""; \
 	  fi; \
 	  touch ./DONE; \
 	  popd > /dev/null; \
@@ -29,17 +28,16 @@ force:
 
 test:
 	export CXX="$(CXX)"; \
-	export SUNJDK="$(SUNJDK)"; \
 	for i in test_*; do \
 	  pushd $$i > /dev/null; \
-	  echo "[$$i]"; \
+	  echo -n "[$$i] "; \
 	  if [ -f ./DONE ]; then \
 	    echo "skip"; \
 	  elif ! ./run.sh; then \
 	    echo "$$i failed"; \
 	    exit 1; \
 	  else \
-	    echo "success"; \
+	    echo -n ""; \
 	  fi; \
 	  touch ./DONE; \
 	  popd > /dev/null; \

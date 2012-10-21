@@ -160,16 +160,6 @@ static expr_i *instantiate_template_internal(expr_i *tmpl_root,
     & ~(attribute_threaded | attribute_multithr |
       attribute_valuetype | attribute_tsvaluetype));
   nattr = attribute_e(nattr | get_term_threading_attribute(rt));
-#if 0
-  // FIXME: test
-  // FIXME: term_is_valuetype
-  if (term_is_multithr(rt)) {
-    nattr = attribute_e(nattr | attribute_threaded | attribute_multithr);
-  }
-  if (term_is_threaded(rt)) {
-    nattr = attribute_e(nattr | attribute_threaded);
-  }
-#endif
   rcpy->set_attribute(nattr);
   DBG_ATTR(fprintf(stderr, "%s: attr %d\n", term_tostr_human(rt).c_str(),
     nattr));
@@ -219,18 +209,21 @@ expr_i *instantiate_template(expr_i *tmpl_root, term_list& args_move,
 
 typedef std::map<std::string, term> env_type;
 
-static term eval_term_internal(const term& t, env_type& env, size_t depth,
-  expr_i *pos);
+static term eval_term_internal(const term& t, bool targs_evaluated,
+  env_type& env, size_t depth, expr_i *pos);
 
-static term_list eval_term_list_internal(const term_list *tl, env_type& env,
-  size_t depth, expr_i *pos)
+static term_list eval_term_list_internal(const term_list *tl,
+  bool targs_evaluated, env_type& env, size_t depth, expr_i *pos)
 {
   if (tl == 0) {
     return term_list();
   }
+  if (targs_evaluated) {
+    return *tl;
+  }
   term_list r;
   for (term_list::const_iterator i = tl->begin(); i != tl->end(); ++i) {
-    r.push_back(eval_term_internal(*i, env, depth, pos));
+    r.push_back(eval_term_internal(*i, false, env, depth, pos));
   }
   return r;
 }
@@ -309,7 +302,7 @@ static term eval_meta_local(term_list& tlev, env_type& env,
   term_list rtargs;
   rtargs.insert(rtargs.begin(), tlev.begin() + 2, tlev.end());
   term rt(rsym, rtargs);
-  return eval_term_internal(rt, env, depth + 1, pos);
+  return eval_term_internal(rt, true, env, depth + 1, pos);
 }
 
 static term eval_meta_symbol(term_list& tlev, env_type& env,
@@ -330,9 +323,11 @@ static term eval_meta_symbol(term_list& tlev, env_type& env,
   symbol_table *const symtbl = &global_block->symtbl;
   assert(symtbl);
   std::string sym_ns = typexpr->get_ns();
+  #if 0
   if (sym_ns.empty()) {
-    sym_ns = "pxcrt";
+    sym_ns = "builtin"; // FIXME
   }
+  #endif
   if (loaded_namespaces.find(sym_ns) == loaded_namespaces.end()) {
     /* namespace sym_ns is not loaded. error. */
     /* note that metafunctions must be always pure functional, or generated
@@ -353,12 +348,6 @@ static term eval_meta_symbol(term_list& tlev, env_type& env,
     return term(0LL);
   }
   return term(rsym);
-  #if 0
-  term_list rtargs;
-  rtargs.insert(rtargs.begin(), tlev.begin() + 2, tlev.end());
-  term rt(rsym, rtargs);
-  return eval_term_internal(rt, env, depth + 1, pos);
-  #endif
 }
 
 static term eval_meta_apply(term_list& tlev, env_type& env,
@@ -375,7 +364,7 @@ static term eval_meta_apply(term_list& tlev, env_type& env,
   term_list rtargs;
   rtargs.insert(rtargs.begin(), tlev.begin() + 1, tlev.end());
   term rt(t0expr, rtargs);
-  return eval_term_internal(rt, env, depth + 1, pos);
+  return eval_term_internal(rt, true, env, depth + 1, pos);
 }
 
 static term eval_meta_error(term_list& tlev, env_type& env,
@@ -651,6 +640,9 @@ static term eval_meta_types(term_list& tlev)
     if (lv.has_attrib_private() || e->get_ns() != name) {
       continue;
     }
+    if (e == builtins.type_tpdummy.get_expr()) {
+      continue;
+    }
     bool is_type_flag = false;
     switch (e->get_esort()) {
     case expr_e_typedef:
@@ -855,13 +847,15 @@ static term eval_meta_seq(term_list& tlev)
   return term(tl);
 }
 
-static term eval_meta_join(term_list& tlev)
+static term eval_meta_join(term_list& tlev, expr_i *pos)
 {
   if (tlev.size() != 1) {
+    arena_error_throw(pos, "join: invalid number of arguments");
     return term();
   }
   const term& t = tlev[0];
   if (!t.is_metalist()) {
+    arena_error_throw(pos, "join: invalid argument");
     return term();
   }
   const term_list& tl = *t.get_metalist();
@@ -869,6 +863,8 @@ static term eval_meta_join(term_list& tlev)
   for (term_list::const_iterator i = tl.begin(); i != tl.end(); ++i) {
     const term_list *const il = i->get_metalist();
     if (il == 0) {
+      arena_error_throw(pos, "join: invalid argument: %s",
+	term_tostr_human(*i).c_str());
       return term();
     }
     rtl.insert(rtl.end(), il->begin(), il->end());
@@ -1185,7 +1181,7 @@ static term eval_meta_map(term_list& tlev, env_type& env, size_t depth,
     term_list itl;
     itl.push_back(*i);
     term it(t1.get_expr(), itl);
-    term tc = eval_term_internal(it, env, depth + 1, pos);
+    term tc = eval_term_internal(it, true, env, depth + 1, pos);
     rtl.push_back(tc);
   }
   return term(rtl);
@@ -1214,7 +1210,7 @@ static term eval_meta_filter(term_list& tlev, env_type& env, size_t depth,
     term_list itl;
     itl.push_back(*i);
     term it(t1.get_expr(), itl);
-    term tc = eval_term_internal(it, env, depth + 1, pos);
+    term tc = eval_term_internal(it, true, env, depth + 1, pos);
     const long long  v = meta_term_to_long(tc);
     if (v != 0) {
       rtl.push_back(*i);
@@ -1238,7 +1234,35 @@ static term eval_metafunction(const std::string& name, term_list& tlev,
   DBG_META(fprintf(stderr, "eval_metafunction: %s\n", name.c_str()));
   term r;
   try {
-    if (name == "@list") {
+    if (name == "@0void") {
+      r = builtins.type_void;
+    } else if (name == "@0unit") {
+      r = builtins.type_unit;
+    } else if (name == "@0bool") {
+      r = builtins.type_bool;
+    } else if (name == "@0uchar") {
+      r = builtins.type_uchar;
+    } else if (name == "@0char") {
+      r = builtins.type_char;
+    } else if (name == "@0ushort") {
+      r = builtins.type_ushort;
+    } else if (name == "@0short") {
+      r = builtins.type_short;
+    } else if (name == "@0uint") {
+      r = builtins.type_uint;
+    } else if (name == "@0int") {
+      r = builtins.type_int;
+    } else if (name == "@0ulong") {
+      r = builtins.type_ulong;
+    } else if (name == "@0long") {
+      r = builtins.type_long;
+    } else if (name == "@0float") {
+      r = builtins.type_float;
+    } else if (name == "@0double") {
+      r = builtins.type_double;
+    } else if (name == "@0string") {
+      r = builtins.type_string;
+    } else if (name == "@list") {
       r = eval_meta_list(tlev);
     } else if (name == "@at") {
       r = eval_meta_at(tlev);
@@ -1247,7 +1271,7 @@ static term eval_metafunction(const std::string& name, term_list& tlev,
     } else if (name == "@seq") {
       r = eval_meta_seq(tlev);
     } else if (name == "@join") {
-      r = eval_meta_join(tlev);
+      r = eval_meta_join(tlev, pos);
     } else if (name == "@join_all") {
       r = eval_meta_join_all(tlev);
     } else if (name == "@join_tail") {
@@ -1353,30 +1377,46 @@ static term eval_metafunction(const std::string& name, term_list& tlev,
   return r;
 }
 
-static term eval_meta_metaif(const term& t, env_type& env, size_t depth,
-  expr_i *pos)
+static term eval_if_unevaluated(const term& t, bool evaluated_flag,
+  env_type& env, size_t depth, expr_i *pos)
+{
+  if (evaluated_flag) {
+    return t;
+  } else {
+    return eval_term_internal(t, false, env, depth, pos);
+  }
+}
+
+static term eval_meta_metaif(const term& t, bool targs_evaluated,
+  env_type& env, size_t depth, expr_i *pos)
 {
   const term_list *args = t.get_args();
   if (args == 0) {
+    arena_error_throw(pos, "metaif: invalid argument");
     return term();
   }
   const size_t num_args = args->size();
   if (num_args != 3) {
+    arena_error_throw(pos, "metaif: invalid number of arguments (got: %zu)",
+      num_args);
     return term();
   }
-  term tc = eval_term_internal((*args)[0], env, depth + 1, pos);
+  term tc = eval_if_unevaluated((*args)[0], targs_evaluated, env, depth + 1,
+    pos);
   if (has_unbound_tparam(tc)) {
     return t; /* incomplete expr */
   }
   const bool c = term_truth_value(tc);
   if (c) {
-    return eval_term_internal((*args)[1], env, depth + 1, pos);
+    return eval_if_unevaluated((*args)[1], targs_evaluated, env, depth + 1,
+      pos);
   } else {
-    return eval_term_internal((*args)[2], env, depth + 1, pos);
+    return eval_if_unevaluated((*args)[2], targs_evaluated, env, depth + 1,
+      pos);
   }
 }
 
-static term eval_meta_or(const term& t, env_type& env,
+static term eval_meta_or(const term& t, bool targs_evaluated, env_type& env,
   size_t depth, expr_i *pos)
 {
   const term_list *args = t.get_args();
@@ -1384,7 +1424,7 @@ static term eval_meta_or(const term& t, env_type& env,
     return term(0LL);
   }
   for (term_list::const_iterator i = args->begin(); i != args->end(); ++i) {
-    term tc = eval_term_internal(*i, env, depth + 1, pos);
+    term tc = eval_if_unevaluated(*i, targs_evaluated, env, depth + 1, pos);
     if (has_unbound_tparam(tc)) {
       return t;
     }
@@ -1395,15 +1435,15 @@ static term eval_meta_or(const term& t, env_type& env,
   return term(0LL);
 }
 
-static term eval_meta_and(const term& t, env_type& env, size_t depth,
-  expr_i *pos)
+static term eval_meta_and(const term& t, bool targs_evaluated, env_type& env,
+  size_t depth, expr_i *pos)
 {
   const term_list *args = t.get_args();
   if (args == 0) {
     return term(1LL);
   }
   for (term_list::const_iterator i = args->begin(); i != args->end(); ++i) {
-    term tc = eval_term_internal(*i, env, depth + 1, pos);
+    term tc = eval_if_unevaluated(*i, targs_evaluated, env, depth + 1, pos);
     if (has_unbound_tparam(tc)) {
       return t;
     }
@@ -1415,19 +1455,17 @@ static term eval_meta_and(const term& t, env_type& env, size_t depth,
 }
 
 static term eval_metafunction_lazy(const std::string& name, const term& t,
-  env_type& env, size_t depth, expr_i *pos)
+  bool targs_evaluated, env_type& env, size_t depth, expr_i *pos)
 {
   DBG_META(fprintf(stderr, "eval_metafunction_lazy: %s\n", name.c_str()));
   term r;
   try {
     if (name == "@@metaif") {
-      r = eval_meta_metaif(t, env, depth, pos);
+      r = eval_meta_metaif(t, targs_evaluated, env, depth, pos);
     } else if (name == "@@or") {
-      r = eval_meta_or(t, env, depth, pos);
+      r = eval_meta_or(t, targs_evaluated, env, depth, pos);
     } else if (name == "@@and") {
-      r = eval_meta_and(t, env, depth, pos);
-    } else if (name == "@@local") {
-      abort(); // FIXME
+      r = eval_meta_and(t, targs_evaluated, env, depth, pos);
     }
   } catch (const std::exception& e) {
     std::string s = e.what();
@@ -1445,43 +1483,8 @@ static term eval_metafunction_lazy(const std::string& name, const term& t,
 
 struct depth_error { };
 
-static term eval_term_internal(const term& t, env_type& env, size_t depth,
-  expr_i *pos);
-
-#if 0
-static term eval_te(expr_i *te, env_type& env, size_t depth, expr_i *pos);
-static term te_to_term(expr_i *te, env_type& env, size_t depth, expr_i *pos);
-#endif
-
-#if 0
-static term te_to_term_local_lookup(expr_te *te, env_type& env, size_t depth,
-  expr_i *pos)
-{
-  /* operator ::{te1, te2} */
-  assert(te->tlarg);
-  assert(te->tlarg->head);
-  term te1 = eval_te(te->tlarg->head, env, depth, pos);
-  expr_i *const teinst = term_get_instance(te1);
-  // FIXME: check attribute
-  // check_attribute_public(teinst, this);
-  expr_block *const bl = teinst->get_template_block();
-  if (bl == 0) {
-    arena_error_throw(0, "can not apply '::' for '%s'",
-      term_tostr_human(te1).c_str());
-  }
-  symbol_table *const lookup = &bl->symtbl;
-  assert(te->tlarg->rest);
-  expr_te *te2 = dynamic_cast<expr_te *>(te->tlarg->rest->head);
-  assert(te2);
-  expr_i *texpr = te2->resolve_symdef(lookup);
-  term_list targs;
-  for (expr_telist *tl = te2->tlarg; tl != 0; tl = tl->rest) {
-    targs.push_back(te_to_term(tl->head, env, depth, pos));
-  }
-  term nt(texpr, targs);
-  return eval_term_internal(nt, env, depth + 1, pos);
-}
-#endif
+static term eval_term_internal(const term& t, bool targs_evaluated,
+  env_type& env, size_t depth, expr_i *pos);
 
 static term te_to_term(expr_i *te, env_type& env, size_t depth, expr_i *pos)
 {
@@ -1489,39 +1492,14 @@ static term te_to_term(expr_i *te, env_type& env, size_t depth, expr_i *pos)
   term_list targs;
   expr_te *const tete = dynamic_cast<expr_te *>(te);
   if (tete != 0) {
-#if 0
-    if (tete->nssym->prefix == 0 && tete->nssym->sym[0] == ':') {
-// FIXME: lazy evaluation
-      return te_to_term_local_lookup(tete, env, depth, pos);
-    }
-#endif
-#if 0
-fprintf(stderr, "te_to_term tete->resolve_symdef %p begin\n", tete);
-#endif
     texpr = tete->resolve_symdef(tete->symtbl_lexical);
-#if 0
-fprintf(stderr, "te_to_term tete->resolve_symdef %p end\n", tete);
-#endif
     for (expr_telist *tl = tete->tlarg; tl != 0; tl = tl->rest) {
       targs.push_back(te_to_term(tl->head, env, depth, pos));
     }
   } else {
     texpr = te;
-#if 0
-fprintf(stderr, "te p=%p e=%d dump='%s'\n", texpr, texpr->get_esort(), texpr->dump(0).c_str()); // FIXME
-if (texpr->dump(0).empty()) abort();
-#endif
   }
   term r(texpr, targs);
-#if 0
-if (tete){
-fprintf(stderr, "te_to_term tete=%p '%s' symdef=%p term='%s'\n", tete, tete->dump(0).c_str(), texpr, term_tostr_human(r).c_str()); //FIXME
-if (texpr->get_esort() == expr_e_tparams) {
-expr_tparams *tp = ptr_down_cast<expr_tparams>(texpr);
-fprintf(stderr, "symdef(tparams)=%p param_def='%s'\n", texpr, term_tostr_human(tp->param_def).c_str());
-}
-}
-#endif
   DBG_TETERM(fprintf(stderr, "te_to_term: [%s](%s:%d) -> [%s]\n",
     te->dump(0).c_str(), te->fname, te->line,
     term_tostr_human(r).c_str()));
@@ -1532,49 +1510,44 @@ static term eval_te(expr_i *te, env_type& env, size_t depth, expr_i *pos)
 {
   term nt = te_to_term(te, env, depth + 1, pos);
   DBG_EVAL(fprintf(stderr, "EVALI2 sort te\n"));
-  return eval_term_internal(nt, env, depth + 1, pos);
+  return eval_term_internal(nt, false, env, depth + 1, pos);
 }
 
-static term eval_term_internal2(const term& t, env_type& env, size_t depth,
-  expr_i *pos)
+static term eval_term_internal2(const term& tm, bool targs_evaluated,
+  env_type& env, size_t depth, expr_i *pos)
 {
   DBG_INST(fprintf(stderr, "eval_te [%s]\n",
-    term_tostr(t, term_tostr_sort_strict).c_str()));
+    term_tostr(tm, term_tostr_sort_strict).c_str()));
   if (depth >= 10000) { /* TODO */
     arena_error_throw(pos, "recursion depth limit is exceeded");
   }
-  expr_i *const texpr = t.get_expr();
+  expr_i *const texpr = tm.get_expr();
   if (texpr == 0) {
-    return t;
+    return tm;
   }
-  const term_list *const targs = t.get_args();
+  const term_list *const targs = tm.get_args();
   const size_t tlarg_len = targs != 0 ? targs->size() : 0;
   switch (texpr->get_esort()) {
   case expr_e_te:
     {
       if (tlarg_len > 0) {
-	arena_error_throw(pos, "too may template arguments: '%s'",
-	  term_tostr(t, term_tostr_sort_humanreadable).c_str());
+	arena_error_throw(pos, "too many template arguments: '%s'",
+	  term_tostr(tm, term_tostr_sort_humanreadable).c_str());
       }
       expr_te *const te = ptr_down_cast<expr_te>(texpr);
       return eval_te(te, env, depth + 1, pos);
-      #if 0
-      const term nt = te_to_term(te);
-      DBG_EVAL(fprintf(stderr, "EVALI2 sort te\n"));
-      return eval_term_internal(nt, env, depth + 1, pos);
-      #endif
     }
     break;
   case expr_e_symbol:
     {
       if (tlarg_len > 0) {
-	arena_error_throw(pos, "too may template arguments: '%s'",
-	  term_tostr(t, term_tostr_sort_humanreadable).c_str());
+	arena_error_throw(pos, "too many template arguments: '%s'",
+	  term_tostr(tm, term_tostr_sort_humanreadable).c_str());
       }
       expr_symbol *const esym = ptr_down_cast<expr_symbol>(texpr);
       expr_i *const symdef = esym->sdef.resolve_symdef();
       const term nt(symdef);
-      return eval_term_internal(nt, env, depth + 1, pos);
+      return eval_term_internal(nt, false, env, depth + 1, pos);
     }
     break;
   case expr_e_tparams:
@@ -1582,17 +1555,17 @@ static term eval_term_internal2(const term& t, env_type& env, size_t depth,
       expr_tparams *const tp = ptr_down_cast<expr_tparams>(texpr);
       env_type::const_iterator iter = env.find(tp->sym);
       if (iter != env.end()) {
-	return iter->second;
+	return iter->second; /* macro variable, evaluated */
       }
       if (!tp->param_def.is_null()) {
 	DBG_NEWTE(fprintf(stderr, "tparam %p concrete\n", tp));
 	/* TODO: need to eval? */
 	DBG_EVAL(fprintf(stderr, "EVALI2 sort tparams pdef\n"));
-	return eval_term_internal(tp->param_def, env, depth + 1, pos);
+	return eval_term_internal(tp->param_def, false, env, depth + 1, pos);
       }
       DBG_EVAL(fprintf(stderr, "EVALI2 sort tparams nopdef (tp=%p)\n",
 	tp));
-      return t;
+      return tm; /* unbound tparam */
     }
     break;
   case expr_e_macrodef:
@@ -1600,37 +1573,49 @@ static term eval_term_internal2(const term& t, env_type& env, size_t depth,
       expr_macrodef *const ta = ptr_down_cast<expr_macrodef>(texpr);
       const size_t aplen = elist_length(ta->get_tparams());
       if (aplen != 0 && tlarg_len == 0) {
-	return t; /* no argument is supplied yet */
+	return tm; /* no argument is supplied yet */
       }
-      if (aplen < tlarg_len) {
-	arena_error_throw(pos, "too many template arguments");
+      if (aplen == 0 && tlarg_len > 0) {
+	/* macro wo arg. evaluate the macro wo arg and apply tlarg. */
+      } else if (aplen < tlarg_len) {
+	arena_error_throw(pos, "too many macro arguments");
       } else if (aplen > tlarg_len) {
-	arena_error_throw(pos, "too few template arguments");
+	arena_error_throw(pos, "too few macro arguments");
       }
       symbol_common *const sc = ta->get_rhs()->get_sdef();
-      if (aplen == 0) {
+      if (aplen == 0 && tlarg_len == 0) {
 	/* this macro has no param. if it's evaluated already, we use
 	 * the evaluated value. */
 	if (sc != 0 && !sc->resolve_evaluated().is_null()) {
 	  return sc->resolve_evaluated();
 	}
       }
+      if (aplen == 0 && tlarg_len > 0) {
+	/* macro wo arg. evaluate the macro wo arg and apply tlarg. */
+	term ev = eval_te(ta->get_rhs(), env, depth + 1, pos);
+	expr_i *const ebase = ev.get_expr();
+	if (ebase == 0) {
+	  arena_error_throw(pos, "malformed macro");
+	}
+	term_list tlev = eval_term_list_internal(targs, targs_evaluated, env,
+	  depth + 1, pos);
+	term nte(ebase, tlev);
+	if (has_unbound_tparam(tlev)) {
+	  DBG_EVAL(fprintf(stderr, "EVALI2 : has ubound tparam\n"));
+	  return nte; /* incomplete expr, ebase is replaced. */
+	}
+	return eval_term_internal(nte, true, env, depth + 1, pos);
+      }
+      /* macro w arg */
       env_type nenv = env;
       expr_tparams *tpms = ta->get_tparams();
       for (term_list::const_iterator i = targs->begin(); i != targs->end();
 	++i, tpms = tpms->rest) {
 	nenv[std::string(tpms->sym)] =
-	  eval_term_internal(*i, env, depth + 1, pos);
+	  eval_if_unevaluated(*i, targs_evaluated, env, depth + 1, pos);
+	  /* TODO: check unbound expr? */
       }
       return eval_te(ta->get_rhs(), nenv, depth + 1, pos);
-      #if 0
-      term rhs = ta->rhs_term;
-      if (rhs.is_null()) {
-	rhs = ta->rhs_term = te_to_term(ta->get_rhs());
-      }
-      const term rt = eval_term_internal(rhs, nenv, depth + 1, pos);
-      return rt;
-      #endif
     }
     break;
   case expr_e_typedef:
@@ -1638,7 +1623,7 @@ static term eval_term_internal2(const term& t, env_type& env, size_t depth,
       arena_error_throw(pos, "too many template arguments");
     }
     DBG_EVAL(fprintf(stderr, "EVALI2 sort typedef\n"));
-    return t;
+    return tm;
     break;
   case expr_e_int_literal:
     if (targs != 0 && !targs->empty()) {
@@ -1659,24 +1644,28 @@ static term eval_term_internal2(const term& t, env_type& env, size_t depth,
     }
     break;
   default:
+    DBG_EVAL(fprintf(stderr, "EVALI2 others\n"));
     break;
   }
   /* builtin template metafunction? */
   expr_struct *const es = dynamic_cast<expr_struct *>(texpr);
   if (es != 0 && es->typecat_str != 0 &&
     std::string(es->typecat_str).substr(0, 1) == "@") {
-    if (tlarg_len == 0) {
-      return t; /* no argument is supplied yet */
-    }
     if (std::string(es->typecat_str).substr(0, 2) == "@@") {
-      return eval_metafunction_lazy(es->typecat_str, t, env, depth, pos);
-    } else {
-      term_list tlev = eval_term_list_internal(targs, env, depth + 1, pos);
+      return eval_metafunction_lazy(es->typecat_str, tm, targs_evaluated, env,
+	depth, pos);
+    }
+    if (tlarg_len == 0 && std::string(es->typecat_str).substr(0, 2) != "@0") {
+      return tm; /* no argument is supplied yet */
+    }
+    {
+      term_list tlev = eval_term_list_internal(targs, targs_evaluated, env,
+	depth + 1, pos);
       if (has_unbound_tparam(tlev)) {
 	DBG_EVAL(fprintf(stderr, "EVALI2 : has ubound tparam\n"));
-	return t; /* incomplete expr */
+	return tm; /* incomplete expr */
       }
-      return eval_metafunction(es->typecat_str, tlev, t, env, depth, pos);
+      return eval_metafunction(es->typecat_str, tlev, tm, env, depth, pos);
     }
   }
   /* type or func without targ (no instantiaton) */
@@ -1689,19 +1678,20 @@ static term eval_term_internal2(const term& t, env_type& env, size_t depth,
     const size_t tparams_len = ttbl->tinfo.is_uninstantiated()
       ? elist_length(ttbl->tinfo.tparams) : 0;
     if (tparams_len != 0 && tlarg_len == 0) {
-      return t; /* no argument is supplied yet */
+      return tm; /* no argument is supplied yet */
     }
     if (tlarg_len > tparams_len) {
       arena_error_throw(pos, "too many template arguments: '%s'",
-	term_tostr(t, term_tostr_sort_humanreadable).c_str());
+	term_tostr(tm, term_tostr_sort_humanreadable).c_str());
     } else if (tlarg_len < tparams_len) {
       arena_error_throw(pos, "too few template arguments: '%s'",
-	term_tostr(t, term_tostr_sort_humanreadable).c_str());
+	term_tostr(tm, term_tostr_sort_humanreadable).c_str());
     }
     if (tparams_len != 0) {
-      term_list tlev = eval_term_list_internal(targs, env, depth + 1, pos);
-      DBG_INST(fprintf(stderr, "instantiate t=%s evaluated_args=%s\n",
-	term_tostr_human(t).c_str(),
+      term_list tlev = eval_term_list_internal(targs, targs_evaluated, env,
+	depth + 1, pos);
+      DBG_INST(fprintf(stderr, "instantiate tm=%s evaluated_args=%s\n",
+	term_tostr_human(tm).c_str(),
 	term_tostr_list_human(tlev).c_str()));
       if (!has_unbound_tparam(tlev)) {
 	DBG_INST(fprintf(stderr, "instantiate!\n"));
@@ -1716,36 +1706,42 @@ static term eval_term_internal2(const term& t, env_type& env, size_t depth,
       /* not instantiate yet */
     }
     DBG_EVAL(fprintf(stderr, "EVALI2 sort tmpl not-instantiated\n"));
-    return t;
+    return tm;
   }
-  return t;
+  return tm;
 }
 
-static term eval_term_internal(const term& t, env_type& env, size_t depth,
-  expr_i *pos)
+static term eval_term_internal(const term& tm, bool targs_evaluated,
+  env_type& env, size_t depth, expr_i *pos)
 {
   DBG_EVAL(fprintf(stderr, "EVALI %s BEGIN\n",
-    term_tostr_human(t).c_str()));
-  const term r = eval_term_internal2(t, env, depth, pos);
-  DBG_EVAL(fprintf(stderr, "EVALI %s => %s\n",
-    term_tostr_human(t).c_str(),
-    term_tostr_human(r).c_str()));
-  return r;
-}
-
+    term_tostr_human(tm).c_str()));
+  try {
+    const term r = eval_term_internal2(tm, targs_evaluated, env, depth, pos);
+    DBG_EVAL(fprintf(stderr, "EVALI %s => %s\n",
+      term_tostr_human(tm).c_str(),
+      term_tostr_human(r).c_str()));
+    return r;
 #if 0
-term eval_term(const term& t, expr_i *pos)
-{
-  env_type env;
-  return eval_term_internal(t, env, 0, pos);
-}
+  } catch (const std::exception& e) {
+    std::string s = e.what();
+    s += std::string(pos->fname) + ":" + ulong_to_string(pos->line)
+      + ": (while evaluating expression: "
+      + term_tostr(tm, term_tostr_sort_humanreadable) + ")\n";
+    throw std::runtime_error(s);
 #endif
+  } catch (...) {
+    throw;
+  }
+}
 
 term eval_expr(expr_i *e)
 {
-  const term t(e);
+  DBG_EVAL(fprintf(stderr, "eval %s\n", e->dump(0).c_str()));
+  const term tm(e);
   env_type env;
-  return eval_term_internal(t, env, 0, e);
+  term t = eval_term_internal(tm, false, env, 0, e);
+  return t;
 }
 
 term eval_local_lookup(const term& t, const std::string& name, expr_i *pos)

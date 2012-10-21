@@ -274,12 +274,14 @@ bool is_possibly_nonpod(const term& t)
   return true;
 }
 
+#if 0
 bool is_string_type(const term& t)
 {
   return t == builtins.type_string;
 }
+#endif
 
-bool is_pod_integral_type(const term& t)
+static bool is_pod_integral_type(const term& t)
 {
   if (
     t == builtins.type_bool ||
@@ -632,6 +634,18 @@ bool type_allow_feach(const term& t)
   }
 }
 
+bool is_copyable(const term& t)
+{
+  if (is_interface(t)) {
+    return false;
+  }
+  const typecat_e cat = get_category(t);
+  if (cat == typecat_e_linear) {
+    return false;
+  }
+  return true;
+}
+
 static std::string term_tostr_tparams(const expr_tparams *tp,
   term_tostr_sort s)
 {
@@ -696,10 +710,13 @@ static std::string term_tostr_instance_chain(const expr_block *bl,
 
 static std::string tparam_str_long(long long v, term_tostr_sort s)
 {
-  if (s == term_tostr_sort_cname || s == term_tostr_sort_humanreadable) {
+  if (s == term_tostr_sort_cname) {
+    return long_to_string(v) + "LL";
+  } else if (s == term_tostr_sort_humanreadable) {
     return long_to_string(v);
+  } else {
+    return escape_hex_non_alnum(long_to_string(v)) + "$li";
   }
-  return escape_hex_non_alnum(long_to_string(v)) + "$li";
 }
 
 static std::string tparam_str_string(const std::string& v, term_tostr_sort s)
@@ -1311,7 +1328,7 @@ static attribute_e get_threading_attribute_mask(expr_e e)
   }
 }
 
-static attribute_e get_expr_threading_attribute(const expr_i *e)
+attribute_e get_expr_threading_attribute(const expr_i *e)
 {
   if (e == 0) {
     return attribute_unknown;
@@ -1321,6 +1338,10 @@ static attribute_e get_expr_threading_attribute(const expr_i *e)
     const expr_struct *esd = efd->is_member_function();
     if (esd != 0) {
       e = esd;
+    }
+    const expr_interface *ei = efd->is_virtual_function();
+    if (ei != 0) {
+      e = ei;
     }
   }
   attribute_e attr = e->get_attribute();
@@ -1432,6 +1453,20 @@ expr_funcdef *get_up_member_func(symbol_table *cur)
   }
   return efd;
 }
+
+#if 0
+expr_i *get_up_frame(expr_funcdef *efd)
+{
+  symbol_table *cur = efd->block->symtbl.get_lexical_parent();
+  while (cur) {
+    if (cur->block_esort != expr_e_block) {
+      return cur;
+    }
+    cur = cur->get_lexical_parent();
+  }
+  return 0;
+}
+#endif
 
 std::string dump_expr(int indent, expr_i *e)
 {
@@ -1730,8 +1765,8 @@ static void check_upvalue_memfunc(expr_i *e)
   #endif
 }
 
-static bool check_function_arity(const expr_interface *ei, expr_funcdef *efd,
-  expr_struct *est, expr_funcdef *efd_impl)
+static bool check_function_argtypes(const expr_interface *ei,
+  expr_funcdef *efd, expr_struct *est, expr_funcdef *efd_impl)
 {
   if (!is_same_type(efd->get_rettype(), efd_impl->get_rettype())) {
     return false;
@@ -1743,6 +1778,9 @@ static bool check_function_arity(const expr_interface *ei, expr_funcdef *efd,
   expr_argdecls *a1 = efd_impl->block->argdecls;
   while (a0 != 0 && a1 != 0) {
     if (!is_same_type(a0->resolve_texpr(), a1->resolve_texpr())) {
+      return false;
+    }
+    if (a0->passby != a1->passby) {
       return false;
     }
     a0 = a0->rest;
@@ -1775,7 +1813,7 @@ static void check_interface_impl_one(expr_struct *est, expr_telist *ih)
       continue;
     }
     expr_funcdef *const efd_impl = ptr_down_cast<expr_funcdef>(j->second.edef);
-    if (!check_function_arity(ei, efd, est, efd_impl)) {
+    if (!check_function_argtypes(ei, efd, est, efd_impl)) {
       arena_error_push(efd_impl, "function type mismatch");
       continue;
     }
@@ -1962,6 +2000,11 @@ void fn_check_final(expr_i *e)
       return;
     }
   }
+  expr_macrodef *const ma = dynamic_cast<expr_macrodef *>(e);
+  if (ma != 0) {
+    /* don't check macro body */
+    return;
+  }
   /* check children */
   for (int i = 0; i < num; ++i) {
     expr_i *c = e->get_child(i);
@@ -2064,7 +2107,7 @@ void check_inherit_threading(expr_struct *est)
     if ((iattr & estattr) != iattr) {
       arena_error_throw(est,
         "struct '%s' can't implement '%s' because it has weaker "
-	"threading attributes",
+	"threading attribute",
         term_tostr_human(est_te).c_str(), term_tostr_human(te).c_str());
     }
     #if 0

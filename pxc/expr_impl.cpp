@@ -270,9 +270,9 @@ static term& resolve_texpr_symbol_common(expr_i *e)
     term_tostr_human(evaluated).c_str()));
   if (evaluated.is_long()) {
     /* int literal */
-    e->type_of_this_expr = builtins.type_int;
+    e->type_of_this_expr = builtins.type_long;
     DBG_TE1(fprintf(stderr,
-      "resolve_texpr_symbol_common tote: '%s' %p -> int\n",
+      "resolve_texpr_symbol_common tote: '%s' %p -> long\n",
       term_tostr_human(evaluated).c_str(), e));
   } else if (evaluated.is_string()) {
     /* string literal */
@@ -447,9 +447,21 @@ expr_int_literal::resolve_texpr()
 {
   if (type_of_this_expr.is_null()) {
     if (is_unsigned) {
-      type_of_this_expr = builtins.type_ulong;
+      const char *p = str;
+      for (; *p != 0 && *p != 'L'; ++p) { }
+      if (*p == 'L') {
+	type_of_this_expr = builtins.type_ulong;
+      } else {
+	type_of_this_expr = builtins.type_uint;
+      }
     } else {
-      type_of_this_expr = builtins.type_long;
+      const char *p = str;
+      for (; *p != 0 && *p != 'L'; ++p) { }
+      if (*p == 'L') {
+	type_of_this_expr = builtins.type_long;
+      } else {
+	type_of_this_expr = builtins.type_int;
+      }
     }
   }
   return type_of_this_expr;

@@ -2,9 +2,10 @@
 namespace io;
 
 public import meta;
-public import container;
+public import type::builtin "";
+public import type::container;
 
-public extern "pxcio::pxc_argv" container::vector{string} argv;
+public extern "pxcio::pxc_argv" type::container::vector{string} argv;
 public extern "pxcio::mainio" ioptr main;
 
 public macro ioptr tptr{io};
@@ -94,7 +95,7 @@ public threaded function int io_write_file(ioptr const& i, string const& fn,
 
 public threaded function {t} void io_stdout_print(ioptr const& i, t const& x)
 {
-  if (meta::eq{meta::to_string{t}, "string"}) {
+  if (meta::eq{t, type::builtin::string}) {
     io_stdout_print_string(i, x);
   } else {
     io_stdout_print_string(i,
@@ -104,7 +105,7 @@ public threaded function {t} void io_stdout_print(ioptr const& i, t const& x)
 
 public threaded function {t} void io_stdout_println(ioptr const& i, t const& x)
 {
-  if (meta::eq{meta::to_string{t}, "string"}) {
+  if (meta::eq{t, type::builtin::string}) {
     string s = x;
     s.append("\n");
     io_stdout_print_string(i, s);
@@ -167,18 +168,18 @@ typedef pxcrt::rcptr< pxcrt::rcval<file_impl> > file_ptr;
 
 extern "fdecl" inline
 namespace pxcio {
-extern container::vector<pxcrt::string> pxc_argv;
+extern container::vector<pxcrt::bt_string> pxc_argv;
 extern io_ptr mainio;
 };
 
 extern "fdef" inline
 namespace pxcio {
 #include <stdlib.h>
-#include <string.h>
 #include <limits.h>
-container::vector<pxcrt::string> pxc_argv;
+container::vector<pxcrt::bt_string> pxc_argv;
 io_ptr mainio;
-file_ptr io_open(io_ptr const& i, pxcrt::string const& fn, int flags, int md)
+file_ptr io_open(io_ptr const& i, pxcrt::bt_string const& fn,
+  pxcrt::bt_int flags, pxcrt::bt_int md)
 {
   file_ptr f(new file_ptr::value_type());
   file_impl& fref = f->value$z;
@@ -186,7 +187,7 @@ file_ptr io_open(io_ptr const& i, pxcrt::string const& fn, int flags, int md)
   fref.err = (fref.fd < 0 ? errno : 0);
   return f;
 }
-off_t file_lseek(file_ptr const& f, off_t offset, int whence)
+off_t file_lseek(file_ptr const& f, off_t offset, pxcrt::bt_int whence)
 {
   file_impl& fref = f->value$z;
   if (fref.err != 0) {
@@ -196,7 +197,8 @@ off_t file_lseek(file_ptr const& f, off_t offset, int whence)
   fref.err = (r == (off_t)-1) ? errno : 0;
   return r;
 }
-size_t file_read(file_ptr const& f, pxcrt::string& buf, size_t len)
+pxcrt::size_type file_read(file_ptr const& f, pxcrt::bt_string& buf,
+  pxcrt::size_type len)
 {
   file_impl& fref = f->value$z;
   if (fref.err != 0 || len < 0) {
@@ -222,7 +224,7 @@ size_t file_read(file_ptr const& f, pxcrt::string& buf, size_t len)
     return 0;
   }
 }
-size_t file_write(file_ptr const& f, pxcrt::string const& buf)
+size_t file_write(file_ptr const& f, pxcrt::bt_string const& buf)
 {
   file_impl& fref = f->value$z;
   if (fref.err != 0) {
@@ -237,27 +239,28 @@ size_t file_write(file_ptr const& f, pxcrt::string const& buf)
   fref.err = (wlen >= 0 ? 0 : errno);
   return wlen;
 }
-int io_stat(io_ptr const& i, pxcrt::string const& fn, pxcio::statbuf& buf)
+pxcrt::bt_int io_stat(io_ptr const& i, pxcrt::bt_string const& fn,
+  pxcio::statbuf& buf)
 {
   return ::stat(fn.c_str(), &buf);
 }
-int file_errno(file_ptr const& f)
+pxcrt::bt_int file_errno(file_ptr const& f)
 {
   return f->value$z.err;
 }
-int io_errno(io_ptr const& i)
+pxcrt::bt_int io_errno(io_ptr const& i)
 {
   return errno;
 }
-unsigned int io_sleep(io_ptr const& i, unsigned int sec)
+pxcrt::bt_uint io_sleep(io_ptr const& i, pxcrt::bt_uint sec)
 {
   return sleep(sec);
 }
-void io_stdout_print_string(io_ptr const& i, pxcrt::string const& x)
+void io_stdout_print_string(io_ptr const& i, pxcrt::bt_string const& x)
 {
   fwrite(x.data(), x.size(), 1, stdout);
 }
-int io_initialize(io_ptr const& i)
+pxcrt::bt_int io_initialize(io_ptr const& i)
 {
   static int init_flag = 0;
   if (!init_flag) {
@@ -271,7 +274,7 @@ int io_initialize(io_ptr const& i)
     if (ent == 0) {
       break;
     }
-    const pxcrt::string s(ent);
+    const pxcrt::bt_string s(ent);
     pxc_argv.push_back(s);
   }
   return 0;

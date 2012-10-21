@@ -6,6 +6,7 @@ public import perl::impl;
 public import perl::symbols;
 public import io;
 public import meta;
+private import type::builtin "";
 
 public macro sv perl::impl::sv;
 public macro av perl::impl::av;
@@ -23,7 +24,9 @@ public function {ns} void export_all()
     perl::xs_create_function{symbol}();
   }
   foreach (symbol : perl::symbols::all_types{ns}) {
-    perl::xs_create_type{symbol}();
+    if (meta::not{meta::eq{symbol, void}}) {
+      perl::xs_create_type{symbol}();
+    }
   }
 }
 

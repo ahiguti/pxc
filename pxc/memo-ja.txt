@@ -3,9 +3,19 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- test_16_perl/perl/symbols.pxでvoidを除外しないと動かないのを直す
+
+
 - 組み込み型削減
   typecat_e_int, uint, float, numeric
-  とりあえずsize_tを組み込みから外す
+- size_tを組み込みから外す(done)
+- デフォルト名前空間からint等の基本型を消す(done)
+- マクロ展開後の数値は何型？ long型。test_02_type/tmplint.px
+- eval.cppの sym_ns = "builtin" 削除 (done)
+- symbol_table.cppの pname = "builtin::" + fullname 削除 (done)
+- 組み込み型は名前空間"type::builtin"に属するように(done)
+- stringとsize_tはcontainerへ移す
+- pxcrt を compiler::runtimeへ
 
 threadまわり
 - threadまわりの仕様整理せよ
@@ -29,7 +39,11 @@ threadまわり
 コンテナまわり
 - expr_feach::emit(): map, rangeに対するemit
 
+namespaceまわり
 - namespace宣言義務付け
+- fooの全てのpublicシンボルをbarのシンボルとしてアクセスできるように
+  するためのimport構文 -> やめる？ macro定義のほうがよい？
+- import元を制限する構文
 
 ポインタまわり
 - 短絡boxingを再び有効に
@@ -42,17 +56,15 @@ weak型まわり
 - weak型を初期化以外の代入の左辺にできないように(done)
 
 copyableのチェック
-- interfaceなどのようにcopyableではないものをコピーしたときのエラー
-  - argdeclsとvar, store_tempvar
+- interfaceなどのようにcopyableではないものをコピーしたときのエラー(done)
+- byrefであればintrface型もvarとtempvarに許容(done)
 
 interfaceまわり
-- interface実装の引数byref等が一致しているかチェック
-- interface型を値で持てないように
-- interfaceへの代入はエラーにする
 - interfaceの仮想関数の引数型は先に定義しなくていいのか？
+- test_03/interf_constr3_1_fixme.px1
 
 - 整数の暗黙変換を安全なものだけに制限
-- check_overflow
+- check_overflow pragma?
 
 if-defined構文
 - if (int const& x : foo[k]) { ... } のif-defined構文(done)
@@ -121,6 +133,7 @@ FIXME/TODO M4
 ---------------------------------------------------------------------
 TODO
 
+- evalのエラーメッセージ改善
 - list, set
 - tptr/tcptrのロックをreader/writerロックに。そのためにはguard count
   をatomicにしなければならないのでやめたほうがよい？ immutable ptrも
@@ -222,6 +235,12 @@ TODO
 ---------------------------------------------------------------------
 DONE
 
+- 非メンバ関数にconst装飾つけるとエラーにならない(done)
+- interface型を値で持てないように(done)
+- interfaceへの代入はエラーにする(done)
+- ptr{foo} = ptr(foo(...))で型推論してくれないのを直せ(done)
+- ptr{ifoo}(foo(...))のようにインタフェースへのポインタを構築しようと
+  するとエラーにせよ(done)
 - require_lvalue廃止(done)
 - variant fieldへの代入はset関数呼び出しに置き換える(done)
 - rangeに対するoperator * (done)
@@ -386,6 +405,12 @@ DONE
   よぶのは無理では？(done)
 
 ---------------------------------------------------------------------
+廃案
+
+- evalのhas_unbound_tparam()のときに未評価のまま返すのをやめよ
+  -> マクロの部分的評価を実現するには必要
+
+---------------------------------------------------------------------
 Cの名前の使い方
 
 t$0 一時変数
@@ -427,7 +452,7 @@ decref$z 参照カウンタ用
 - Perlの例外とC++の例外の両方を安全に(リークせず)使えること
 - Perlの拡張として動き、動的コンパイル即実行できること
 - C++呼び出しが別途リンクせずにできること
-- C++のコードを書かない限りSEGVらないこと
+- C++のコードを書かない限りSEGVらないこと -> stack詰んだ場合は許容
 
 ---------------------------------------------------------------------
 まあまあ重要
@@ -447,12 +472,12 @@ decref$z 参照カウンタ用
 ---------------------------------------------------------------------
 割り切り
 
-- 配列の境界チェックはon/off?
-- 参照外しチェック(ぬるぽ)は毎回チェックorSEGVフック？
+- 配列の境界チェックはon/off? -> 常にon
+- 参照外しチェック(ぬるぽ)は毎回チェックorSEGVフック？ -> null廃止
 - C++のキーワードは識別子の名前に使えない(連携しやすくするため)
 - スレッドは使えない(Perlに合わせて)(Perl使わないときはmt-safeに)
 - 参照カウント(Perlに合わせて)
-- コンテナにイテレータは無い(無効化の判断に困るため)
+- コンテナにイテレータは無い(無効化の判断に困るため) -> かわりにrange
 
 ---------------------------------------------------------------------
 文法
@@ -5181,4 +5206,16 @@ struct foo {
 userdef-constrの効率よい初期化を吐けるかどうかの判定:
 (1) 各stmtがsplitされないものであること
 // (2) argdeclとfieldに同じ名前のものが無いこと
+
+---------------------------------------------------------------------
+高階メタ関数
+
+macro funcs meta::metamap{meta::types{"meta"}, meta::to_string};
+
+metamap{types{"meta"}, to_string}のeval
+f = to_stringをeval
+a = types{"meta"}をeval
+aがリストでなかったらエラー
+aの各要素iについて
+  fへ引数iを適用した式をeval、ただしiはeval済み
 

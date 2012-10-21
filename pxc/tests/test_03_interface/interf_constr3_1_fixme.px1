@@ -1,0 +1,32 @@
+import test_common "";
+
+namespace interf_ptr;
+import io;
+
+interface ifoo {
+  function void m1() const;
+}
+
+struct foo : ifoo : {
+  function void m1() const {
+    io::println("m1");
+  }
+}
+
+function void test2(ptr{ifoo} x)
+{
+  x->m1();
+}
+
+struct bar(int x) {
+  ptr{ifoo} fp = ptr{ifoo}(foo());
+}
+
+function void test1()
+{
+  bar b = bar(0);
+  // ptr{ifoo} f = foo();
+  test2(b.fp);
+}
+
+test1();
