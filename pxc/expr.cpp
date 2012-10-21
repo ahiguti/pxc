@@ -274,21 +274,21 @@ struct builtin_typedefs_type {
 };
 
 static const builtin_typedefs_type builtin_typedefs[] = {
-  { "void", "void", 0, true, 0, &builtins.type_void },
-  { "unit", "pxcrt::unit", 0, true, 0, &builtins.type_unit },
-  { "bool", "bool", 0, true, 0, &builtins.type_bool },
-  { "uchar", "uint8_t", 0, true, 0, &builtins.type_uchar },
-  { "char", "int8_t", 0, true, 0, &builtins.type_char },
-  { "ushort", "uint16_t", 0, true, 0, &builtins.type_ushort },
-  { "short", "int16_t", 0, true, 0, &builtins.type_short },
-  { "uint", "uint32_t", 0, true, 0, &builtins.type_uint },
-  { "int", "int32_t", 0, true, 0, &builtins.type_int },
-  { "ulong", "uint64_t", 0, true, 0, &builtins.type_ulong },
-  { "long", "int64_t", 0, true, 0, &builtins.type_long },
-  { "float", "float", 0, true, 0, &builtins.type_float },
-  { "double", "double", 0, true, 0, &builtins.type_double },
-  { "string", "pxcrt::string", 0, false, 0, &builtins.type_string },
-  { "tpdummy", "pxcrt::tpdummy", 0, false, 0, &builtins.type_tpdummy },
+  { "bt_void", "void", 0, true, 0, &builtins.type_void },
+  { "bt_unit", "pxcrt::bt_unit", 0, true, 0, &builtins.type_unit },
+  { "bt_bool", "pxcrt::bt_bool", 0, true, 0, &builtins.type_bool },
+  { "bt_uchar", "pxcrt::bt_uchar", 0, true, 0, &builtins.type_uchar },
+  { "bt_char", "pxcrt::bt_char", 0, true, 0, &builtins.type_char },
+  { "bt_ushort", "pxcrt::bt_ushort", 0, true, 0, &builtins.type_ushort },
+  { "bt_short", "pxcrt::bt_short", 0, true, 0, &builtins.type_short },
+  { "bt_uint", "pxcrt::bt_uint", 0, true, 0, &builtins.type_uint },
+  { "bt_int", "pxcrt::bt_int", 0, true, 0, &builtins.type_int },
+  { "bt_ulong", "pxcrt::bt_ulong", 0, true, 0, &builtins.type_ulong },
+  { "bt_long", "pxcrt::bt_long", 0, true, 0, &builtins.type_long },
+  { "bt_float", "pxcrt::bt_float", 0, true, 0, &builtins.type_float },
+  { "bt_double", "pxcrt::bt_double", 0, true, 0, &builtins.type_double },
+  { "bt_string", "pxcrt::bt_string", 0, false, 0, &builtins.type_string },
+  { "bt_tpdummy", "pxcrt::bt_tpdummy", 0, false, 0, &builtins.type_tpdummy },
 };
 
 static void define_builtins()
@@ -309,7 +309,14 @@ static void define_builtins()
     i != expr_arena.end(); ++i) {
     (*i)->set_texpr(builtins.type_void);
   }
+  /* set namespace */
+  {
+    int block_id_ns = 0;
+    fn_set_namespace(stmts, "type::builtin", block_id_ns);
+  }
+  topvals.push_front(stmts);
   /* stubs for builtin metafunctions */
+  stmts = 0;
   {
     expr_i *est = 0;
     est = expr_struct_new("BUILTIN", 0,
@@ -325,7 +332,7 @@ static void define_builtins()
       arena_strdup("@list"),
       arena_strdup("@list"),
       arena_strdup("@list"),
-      expr_block_new("BUILDIN", 0, 0, 0, 0, 0, 0),
+      expr_block_new("BUILTIN", 0, 0, 0, 0, 0, 0),
       attribute_e(attribute_public |
 	attribute_threaded | attribute_multithr | attribute_valuetype |
 	attribute_tsvaluetype));
@@ -405,8 +412,8 @@ void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
 void arena_init()
 {
   arena_clear();
-  define_builtins();
   compile_phase = 0;
+  define_builtins();
 }
 
 void arena_compile(const std::string& dest_filename, coptions& copt_apnd,

@@ -50,7 +50,9 @@ bool is_numeric_type(const term& t);
 // bool is_smallpod_type(const term& t);
 bool is_possibly_pod(const term& t);
 bool is_possibly_nonpod(const term& t);
+#if 0
 bool is_string_type(const term& t);
+#endif
 bool is_integral_type(const term& t);
 bool is_unsigned_integral_type(const term& t);
 bool is_same_type(const term& t0, const term& t1);
@@ -76,6 +78,7 @@ bool has_userdef_constr(const term& t);
 bool type_has_invalidate_guard(const term& t);
 bool type_allow_feach(const term& t);
 bool is_compatible_pointer(const term&t0, const term& t1);
+bool is_copyable(const term& t);
 typecat_e get_category(const term& t);
 typecat_e get_category_from_string(const std::string& s);
 std::string get_category_string(typecat_e cat);
@@ -93,11 +96,13 @@ expr_i *get_current_frame_expr(symbol_table *lookup);
 expr_i *get_current_block_expr(symbol_table *lookup);
 bool is_threaded_context(symbol_table *lookup); // FIXME get_context_threading
 bool is_multithr_context(symbol_table *lookup); // FIXME get_context_threading
+attribute_e get_expr_threading_attribute(const expr_i *e);
 attribute_e get_context_threading_attribute(symbol_table *lookup);
 bool term_is_threaded(const term& t); // FIXME: get_term_threading
 bool term_is_multithr(const term& t); // FIXME: get_term_threading
 attribute_e get_term_threading_attribute(const term& t);
 expr_funcdef *get_up_member_func(symbol_table *lookup);
+// expr_i *get_up_struct(expr_funcdef *efd); // struct, funcdef etc. skips block.
 expr_i *find_parent(expr_i *e, expr_e t);
 const expr_i *find_parent_const(const expr_i *e, expr_e t); // FIXME: remove
 symbol_table *find_current_symbol_table(expr_i *e);

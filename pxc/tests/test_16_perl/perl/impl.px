@@ -2,6 +2,7 @@
 // vim:sw=2
 
 private namespace perl::impl;
+public import type::builtin "";
 public import meta "";
 
 public extern "pxperl::perlsv" struct sv { }
@@ -60,18 +61,20 @@ public function {t} sv value_to_perlsv(t const& x)
     r = x;
   } else if (eq{meta::to_string{sym}, symstr}) {
     r = sym(x);
-  } else if (eq{cat, "builtin"}) {
-    if (eq{fullname, "string"}) {
-      r = string_to_sv(x);
-    } else if (or{eq{fullname, "float"}, eq{fullname, "double"}}) {
-      r = double_to_sv(x);
-    } else if (or{eq{fullname, "int"}, eq{fullname, "bool"}}) {
-      r = int_to_sv(int(x));
-    } else if (eq{fullname, "unit"}) {
-      r = int_to_sv(0);
-    } else {
-      r = long_to_sv(long(x));
-    }
+  } else if (eq{t, string}) {
+    r = string_to_sv(x);
+  } else if (or{eq{t, float}, eq{t, double}}) {
+    r = double_to_sv(x);
+  } else if (or{eq{t, long}, eq{t, ulong}}) {
+    r = long_to_sv(long(x));
+  } else if (or{eq{t, int}, eq{t, uint}}) {
+    r = int_to_sv(int(x));
+  } else if (or{eq{t, short}, eq{t, ushort}}) {
+    r = int_to_sv(int(x));
+  } else if (or{eq{t, char}, eq{t, uchar}}) {
+    r = int_to_sv(int(x));
+  } else if (eq{t, unit}) {
+    r = int_to_sv(0);
   } else {
     r = value_to_sv(x);
   }
@@ -82,29 +85,26 @@ public function {t} t perlsv_to_value(sv const& x)
 {
   macro symstr1 concat{"perlsv_to_", t};
   macro sym1 symbol{t, symstr1}; // t's namespace
-  macro symstr2 concat{"sv_to_", t};
-  macro sym2 symbol{sv, symstr2}; // this namespace
   macro cat category{t};
   macro fullname full_string{t};
   if (eq{fullname, "perl::impl::sv"}) {
     return x;
   } else if (eq{meta::to_string{sym1}, symstr1}) {
     return sym1(x);
-  } else if (eq{meta::to_string{sym2}, symstr2}) {
-    return sym2(x);
-  } else if (eq{cat, "builtin"}) {
-//    if (eq{fullname, "string"}) {
-//      return sv_to_string(x);
-//    } else if (or{eq{fullname, "float"}, eq{fullname, "double"}}) {
-//      return sv_to_double(x);
-//    } else if (or{eq{fullname, "int"}, eq{fullname, "bool"}}) {
-//      return t(sv_to_int(x));
-//    } else
-    if (eq{fullname, "unit"}) {
-      return unit();
-    } else {
-      return t(sv_to_long(x));
-    }
+  } else if (eq{t, string}) {
+    return sv_to_string(x);
+  } else if (or{eq{t, float}, eq{t, double}}) {
+    return sv_to_double(x);
+  } else if (or{eq{t, long}, eq{t, ulong}}) {
+    return sv_to_long(x);
+  } else if (or{eq{t, int}, eq{t, uint}}) {
+    return sv_to_int(x);
+  } else if (or{eq{t, short}, eq{t, ushort}}) {
+    return sv_to_int(x);
+  } else if (or{eq{t, char}, eq{t, uchar}}) {
+    return sv_to_int(x);
+  } else if (eq{t, unit}) {
+    return unit();
   } else {
     return sv_to_value{t}(x);
   }
@@ -206,8 +206,8 @@ struct perlhv {
   HV *get() const { return value; }
   perlhv& operator =(const perlhv& x);
   void reset();
-  perlsv fetch(const pxcrt::string& key) const;
-  bool store(const pxcrt::string& key, const perlsv& v);
+  perlsv fetch(const pxcrt::bt_string& key) const;
+  bool store(const pxcrt::bt_string& key, const perlsv& v);
 private:
   HV *value;
   std::list<perlhv *>::iterator iter;
@@ -246,7 +246,7 @@ template <typename F> struct func_pl {
     ST(0) = sv_2mortal(rvraw);
     XSRETURN(1);
   }
-  static void xs_create_function(const pxcrt::string& name) {
+  static void xs_create_function(const pxcrt::bt_string& name) {
     if (func_cv != 0) { return; }
     func_cv = newXS((char *)name.c_str(), &call,
       "func_pl" /* must be a literal */);
@@ -331,7 +331,7 @@ template <typename T> struct type_pl {
     }
     return r;
   }
-  static void xs_create_type(const pxcrt::string& name) { // throw(c++)
+  static void xs_create_type(const pxcrt::bt_string& name) { // throw(c++)
     if (destr_cv != 0) { return; }
     klass_name = generate_klass_name(name);
     klass_stash = gv_stashpv(klass_name.c_str(), 1);
@@ -373,11 +373,11 @@ template <typename T> struct type_pl {
       klass_name.c_str(), sv, svt, (unsigned long)r));
     return true;
   }
-  static pxcrt::string klass_name;
+  static pxcrt::bt_string klass_name;
   static HV *klass_stash;
   static CV *destr_cv;
 };
-template <typename T> pxcrt::string type_pl<T>::klass_name;
+template <typename T> pxcrt::bt_string type_pl<T>::klass_name;
 template <typename T> HV *type_pl<T>::klass_stash;
 template <typename T> CV *type_pl<T>::destr_cv;
 inline perlsv int_to_sv(int x)
@@ -392,7 +392,7 @@ inline perlsv double_to_sv(double x)
 {
   return perlsv((NV)x);
 }
-inline perlsv string_to_sv(const pxcrt::string& s)
+inline perlsv string_to_sv(const pxcrt::bt_string& s)
 {
   return perlsv(s.data(), s.size());
 }
@@ -416,15 +416,15 @@ inline float sv_to_float(const perlsv& x)
 {
   return x.get() ? SvNV(x.get()) : 0;
 }
-inline pxcrt::string sv_to_string(const perlsv& x)
+inline pxcrt::bt_string sv_to_string(const perlsv& x)
 {
   SV *const svp = x.get();
   if (svp == 0) {
-    return pxcrt::string();
+    return pxcrt::bt_string();
   }
   STRLEN len = 0;
   char *const p = SvPV_nomg(svp, len);
-  return pxcrt::string(p, len);
+  return pxcrt::bt_string(p, len);
 }
 #undef DBG
 }; // namespace pxperl
@@ -654,7 +654,7 @@ perlhv::reset()
   value = 0;
 }
 perlsv
-perlhv::fetch(const pxcrt::string& key) const
+perlhv::fetch(const pxcrt::bt_string& key) const
 {
   SV *r = 0;
   if (value != 0) {
@@ -664,7 +664,7 @@ perlhv::fetch(const pxcrt::string& key) const
   return perlsv(r);
 }
 bool
-perlhv::store(const pxcrt::string& key, const perlsv& v)
+perlhv::store(const pxcrt::bt_string& key, const perlsv& v)
 {
   if (v.get() == 0) {
     return false;

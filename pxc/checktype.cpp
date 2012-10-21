@@ -121,6 +121,18 @@ static void check_lvalue(const expr_i *epos, expr_i *a0)
   expr_has_lvalue(epos, a0, true);
 }
 
+static void check_copyable(const expr_op *eop, expr_i *a0)
+{
+  const term t = a0->resolve_texpr();
+  if (is_copyable(t)) {
+    return;
+  }
+  const std::string s0 = term_tostr(a0->resolve_texpr(),
+    term_tostr_sort_humanreadable);
+  arena_error_push(eop != 0 ? eop : a0, "type '%s' is not copyable",
+    s0.c_str());
+}
+
 static void append_hidden_this(expr_i *e, std::list<expr_i *>& lst)
 {
   expr_i *rhs = get_op_rhs(e, '.');
@@ -309,7 +321,7 @@ static bool check_term_validity(const term& t, bool allow_nontype,
 }
 
 static void check_var_type(term& typ, expr_i *e, const char *sym,
-  bool allow_interface)
+  bool byref_flag)
 {
   std::string err_mess;
   if (!check_term_validity(typ, false, false, true, e, err_mess)) {
@@ -319,8 +331,8 @@ static void check_var_type(term& typ, expr_i *e, const char *sym,
   if (is_void_type(typ)) {
     arena_error_push(e, "variable or field '%s' declared void", sym);
   }
-  if (!allow_interface && is_interface(typ)) {
-    arena_error_push(e, "interface type '%s' for variable or field '%s'",
+  if (!byref_flag && !is_copyable(typ)) {
+    arena_error_push(e, "noncopyable type '%s' for variable or field '%s'",
       term_tostr_human(typ).c_str(), sym);
   }
   if (term_has_unevaluated_expr(typ)) {
@@ -474,7 +486,7 @@ static void check_default_construct(term& typ, expr_var *ev, const char *sym)
 void expr_var::check_type(symbol_table *lookup)
 {
   term& typ = resolve_texpr();
-  check_var_type(typ, this, sym, false);
+  check_var_type(typ, this, sym, is_passby_cm_reference(varinfo.passby));
 // FIXME: enable this!
 #if 0
   const attribute_e tattr = get_term_threading_attribute(typ);
@@ -720,16 +732,12 @@ static void store_tempvar(expr_i *e, passby_e passby, bool blockscope_flag,
   e->tempvar_varinfo.passby = merge_passby(e->tempvar_varinfo.passby, passby);
   e->tempvar_varinfo.guard_elements |= guard_elements;
   e->tempvar_varinfo.scope_block |= blockscope_flag;
+  if (is_passby_cm_value(e->tempvar_varinfo.passby) &&
+    !is_copyable(e->resolve_texpr())) {
+    arena_error_throw(e,
+      "internal error: failed to root because it's not copyable");
+  }
 }
-
-#if 0
-static void store_tempvar_constval(expr_i *e, bool blockscope_flag,
-  const char *dbgmsg)
-{
-  return store_tempvar(e, passby_e_const_value, blockscope_flag, false,
-    dbgmsg);
-}
-#endif
 
 static bool add_root_requirement_container_elements(expr_i *econ,
   bool blockscope_flag)
@@ -835,9 +843,6 @@ static bool add_root_requirement(expr_i *e, passby_e passby,
 	// abort();
 	return false;
       } else {
-	#if 0
-	store_tempvar_constval(eop, blockscope_flag, "vfld");
-	#endif
 	store_tempvar(eop, passby_e_const_value, blockscope_flag, false,
 	  "vfld"); /* ROOT */
       }
@@ -852,9 +857,6 @@ static bool add_root_requirement(expr_i *e, passby_e passby,
     } else {
       /* pointers */
       /* copy the pointer and own a refcount */
-      #if 0
-      store_tempvar_constval(eop->arg0, blockscope_flag, "ptrderef");
-      #endif
       store_tempvar(eop->arg0, passby_e_const_value, blockscope_flag, false,
 	"ptrderef"); /* ROOT */
     }
@@ -1119,6 +1121,7 @@ void expr_op::check_type(symbol_table *lookup)
   case '=':
     check_type_convert_to_lhs(this, arg1, arg0->resolve_texpr());
     check_lvalue(this, arg0);
+    check_copyable(this, arg1);
     type_of_this_expr = arg0->resolve_texpr();
     break;
   case '?':
@@ -1496,7 +1499,8 @@ void expr_funccall::check_type(symbol_table *lookup)
     }
     return;
   }
-  if (func_inst->get_esort() == expr_e_struct) {
+  // if (func_inst->get_esort() == expr_e_struct) {
+  if (func_inst != 0 && func_inst->get_esort() == expr_e_struct) {
     /* struct constructor */
     tvmap_type tvmap;
     expr_struct *est = ptr_down_cast<expr_struct>(func_inst);
@@ -1525,6 +1529,10 @@ void expr_funccall::check_type(symbol_table *lookup)
 	if (al != 0 && !al->empty()) {
 	  /* func_te is concrete */
 	  term tg = get_pointer_target(func_te);
+	  if (is_interface(tg)) {
+	    arena_error_push(this, "pointer target is an interface: %s",
+	      term_tostr_human(func_te).c_str());
+	  }
 	  if (!convert_type(j, tg, tvmap)) {
 	    const std::string s0 = term_tostr_human(j->resolve_texpr());
 	    const std::string s1 = term_tostr_human(tg);
@@ -2252,7 +2260,7 @@ void expr_argdecls::check_type(symbol_table *lookup)
   if (fr != 0) {
     expr_block *const tbl = fr->get_template_block();
     if (!tbl->tinfo.is_uninstantiated()) {
-      check_var_type(typ, this, sym, true);
+      check_var_type(typ, this, sym, is_passby_cm_reference(passby));
     }
   }
   fn_check_type(rest, lookup);
@@ -2261,13 +2269,30 @@ void expr_argdecls::check_type(symbol_table *lookup)
 
 void expr_funcdef::check_type(symbol_table *lookup)
 {
+  if (this->is_const && !this->is_virtual_or_member_function()) {
+    arena_error_throw(this, "non-member/virtual function can not be const");
+  }
   if ((this->get_attribute() & attribute_multithr) != 0) {
+    // FIXME: valuetype, tsvaluetype
     arena_error_throw(this, "invalid attribute for a function");
   }
   if (this->is_virtual_or_member_function() &&
     (this->get_attribute() & attribute_threaded) != 0) {
     arena_error_throw(this,
       "invalid attribute for a member/virtual function");
+  }
+  if (!this->is_virtual_or_member_function() &&
+    (this->get_attribute() & attribute_threaded) != 0) {
+    symbol_table *parent = this->block->symtbl.get_lexical_parent();
+    expr_i *fr = get_current_frame_expr(parent);
+    if (fr != 0 && fr->get_esort() == expr_e_funcdef) {
+      if ((get_expr_threading_attribute(fr) & attribute_threaded) == 0) {
+	arena_error_throw(this, "parent function is not threaded");
+      }
+    } else if (fr != 0) {
+      arena_error_throw(this,
+	"internal error: threaded function in an invalid context");
+    }
   }
   if (ext_decl && !block->tinfo.template_descent) {
     /* external and not template. stmts are not necessary. */

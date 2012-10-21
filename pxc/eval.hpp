@@ -21,15 +21,8 @@ namespace pxc {
 term apply_tvmap(const term& t, const tvmap_type& tvmap);
 expr_i *instantiate_template(expr_i *tmpl_root, term_list& args_move,
   expr_i *pos);
-#if 0
-term eval_term(const term& t, expr_i *pos);
-#endif
-#if 0
-term eval_type_expr_symbol(expr_symbol *sym, expr_i *symdef);
-term eval_type_expr_te(expr_te *te); // FIXME: impl
-#endif
-term eval_expr(expr_i *e);
 
+term eval_expr(expr_i *e);
 term eval_local_lookup(const term& t, const std::string& name, expr_i *pos);
   /* returns t::foo */
 

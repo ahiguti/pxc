@@ -1,0 +1,30 @@
+
+private namespace symbols;
+import meta "";
+import type::builtin "";
+
+private macro nslist{ns} imports_tr{ns};
+private macro is_concrete{t}
+  and{eq{num_tparams{t}, num_targs{t}}, not{eq{t, void}}};
+private macro filter_concrete{fs} filter{fs, is_concrete};
+private macro has_byref_iter{f, n, i}
+  metaif{eq{n, i}, 0, or{argbyref{f, i}, has_byref_iter{f, n, add{i, 1}}}};
+private macro norefarg{f} not{has_byref_iter{f, argnum{f}, 0}};
+private macro filter_norefarg{fs} filter{fs, norefarg};
+private macro nsfuncs{ns}
+  filter_norefarg{filter_concrete{join{metamap{nslist{ns}, functions}}}};
+private macro nstypes{ns} filter_concrete{join{metamap{nslist{ns}, types}}};
+private macro atypes_one{f} join_all{list{rettype{f}}, argtypes{f}};
+private macro atypes{fs} filter_concrete{join{metamap{fs, atypes_one}}};
+private macro ftypes{ts} filter_concrete{join{metamap{ts, field_types}}};
+private macro mfatypes{ts} atypes{join{metamap{ts, member_functions}}};
+private macro tatypes{ts} filter_concrete{join{metamap{ts, targs}}};
+private macro init_types{ns} uniq{join_all{nstypes{ns}, atypes{nsfuncs{ns}}}};
+private macro step_types{ts}
+  uniq{join_all{ts, ftypes{ts}, mfatypes{ts}, tatypes{ts}}};
+private macro rep_types{ts, tsn}
+  metaif{eq{ts, tsn}, ts, rep_types{tsn, step_types{tsn}}};
+
+public macro all_functions{ns} metamap{nsfuncs{ns}, full_string};
+public macro all_types{ns} rep_types{init_types, step_types{init_types{ns}}};
+

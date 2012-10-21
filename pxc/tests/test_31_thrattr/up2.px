@@ -1,0 +1,34 @@
+namespace up2;
+import test_common "";
+
+mtvaluetype struct bar {
+  int z;
+}
+
+threaded function {f} int fts(int x)
+{
+  int r = f(3 + x);
+  return r;
+}
+
+multithreaded struct foo(bar const& bx) {
+  int x;
+  int y;
+  bar b;
+  function int getbz() const {
+    threaded function int foo(int x) {
+      io::println(x); // error: not threaded
+      return x;
+    }
+    int x = fts{foo}(5);
+    return x;
+  }
+}
+
+function void t1() {
+  foo f = foo(bar(55));
+  println(f.getbz());
+}
+
+t1();
+
