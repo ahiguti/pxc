@@ -1,0 +1,41 @@
+namespace io::system;
+public import type::builtin "";
+public import meta::builtin m;
+
+public macro systemptr tptr{system_impl};
+public extern "pxcio::system" systemptr system;
+public multithreaded extern "pxcio::system_impl" "linear"
+  struct system_impl { }
+private extern "pxcio::io_system_init" function void io_system_init();
+
+io_system_init();
+
+extern "type" inline
+namespace pxcio {
+struct system_impl {
+  system_impl() { }
+private:
+  system_impl(const system_impl&);
+  system_impl& operator =(const system_impl&);
+};
+typedef pxcrt::rcptr< pxcrt::trcval<system_impl> > systemptr;
+};
+
+extern "fdecl" inline
+namespace pxcio {
+extern systemptr system;
+};
+
+extern "fdef" inline
+namespace pxcio {
+systemptr system;
+void io_system_init()
+{
+  static int init_flag = 0;
+  if (!init_flag) {
+    init_flag = 1;
+    system = systemptr(pxcrt::boxing());
+  }
+}
+};
+

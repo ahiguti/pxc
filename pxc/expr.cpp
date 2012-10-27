@@ -388,10 +388,13 @@ void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
     }
     e = ptr_down_cast<expr_stmts>(e)->rest;
   }
-  /* add pxcrt */
-  if (nsstr != "pxcrt") {
+  if (topval != 0 && nsstr.empty()) {
+    arena_error_push(topval, "no namespace declaration");
+  }
+  /* add compiler/runtime */
+  if (nsstr != "compiler::runtime") {
     import_info ii;
-    ii.ns = "pxcrt";
+    ii.ns = "compiler::runtime";
     ii.import_public = true;
     imports_r.deps.push_back(ii);
   }

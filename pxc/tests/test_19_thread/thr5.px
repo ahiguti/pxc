@@ -2,23 +2,23 @@ import test_common "";
 
 namespace ttest;
 import thread "";
-import io;
 
-multithreaded struct my_thread_obj (io::ioptr iop) {
+multithreaded struct my_thread_obj (io::system::systemptr sys0) {
   int x;
   int y;
-  io::ioptr io = iop;
+  io::system::systemptr sys = sys0;
   function void main() {
-    io.stdout_println("my thread main");
-    io.stdout_println(x);
-    io.stdout_println(y);
+    io::standard::stdout_println(sys, "my thread main");
+    io::standard::stdout_println(sys, x);
+    io::standard::stdout_println(sys, y);
   }
 }
 
 function void test1()
 {
-  io::ioptr i = io::ioptr(io::io()); // error: io is not default-constructible
-  thread_t thr = create_thread(my_thread_obj(io::main));
+  io::system::systemptr i = io::system::systemptr(io::system::system_impl());
+    // error: system_impl is not default-constructible
+  threadptr thr = thread_create(my_thread_obj(i));
   thr.join();
 }
 

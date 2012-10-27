@@ -123,7 +123,8 @@ enum typecat_e {
   typecat_e_tree_map,         /* rb-tree map */
   typecat_e_tree_map_range,   /* range on tree_map (WEAK) */
   typecat_e_tree_map_crange,  /* range on tree_map, const elements (WEAK) */
-  typecat_e_linear,           /* linear (noncopyable) type */
+  typecat_e_linear,           /* noncopyable, nodefaultcon */
+  typecat_e_noncopyable,      /* noncopyable */
   typecat_e_nocascade,        /* default-constructible even when tparam's not */
   // typecat_e_wptr,             /* raw pointer (WEAK) */
   // typecat_e_wcptr,            /* raw pointer, const target (WEAK) */

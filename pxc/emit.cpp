@@ -863,9 +863,7 @@ static void emit_variant_aux_functions(emit_context& em,
 	em.puts("$p();\n");
       } else {
 	/* null reference */
-	em.puts("return *(const ");
-	emit_term(em, (*i)->get_texpr());
-	em.puts(" *)(const void *)0;\n");
+	em.puts("return ::pxcrt::unit_value;\n");
       }
       em.add_indent(-1);
       em.set_file_line(*i);
@@ -914,10 +912,7 @@ static void emit_variant_aux_functions(emit_context& em,
 	(*i)->emit_symbol(em);
 	em.puts("$p());\n");
       } else {
-	/* null reference */
-	em.puts("return *(");
-	emit_term(em, (*i)->get_texpr());
-	em.puts(" *)(void *)0;\n");
+	em.puts("return ::pxcrt::unit_value;\n");
       }
       em.add_indent(-1);
       em.set_file_line(*i);
@@ -1987,7 +1982,9 @@ void expr_op::emit_value(emit_context& em)
     break;
   }
   fn_emit_value(em, arg0);
+  em.puts(" ");
   em.puts(tok_string(this, op));
+  em.puts(" ");
   fn_emit_value(em, arg1);
 }
 
@@ -2414,7 +2411,7 @@ void expr_feach::emit_value(emit_context& em)
     em.puts(" > ag$fg(ag$fe);\n");
   }
   const term& cet = ce->get_texpr();
-  if (is_array_family(cet) || is_cm_range_family(cet)) {
+  if (is_array_family(cet) || is_cm_slice_family(cet)) {
     em.indent('f');
     em.puts("const size_t sz$fe = ag$fe.size();\n");
     em.indent('f');
@@ -2440,7 +2437,7 @@ void expr_feach::emit_value(emit_context& em)
     em.add_indent(-1);
     em.indent('f');
     em.puts("}\n");
-  } else if (is_map_family(cet)) {
+  } else if (is_map_family(cet) || is_cm_maprange_family(cet)) {
     em.indent('f');
     em.puts("for (");
     em.puts(cetstr);
@@ -2466,7 +2463,7 @@ void expr_feach::emit_value(emit_context& em)
     em.indent('f');
     em.puts("}\n");
   } else {
-    // FIXME: set, multiset, multimap, list
+    abort();
   }
   em.add_indent(-1);
   em.indent('f');

@@ -148,7 +148,7 @@ void emit_context::puts(const std::string& str)
 std::string to_c_ns(const std::string& ns)
 {
   size_t pos = 0;
-  std::string r;
+  std::string r = "::";
   while (true) {
     size_t delim = ns.find("::", pos);
     if (delim != ns.npos) {

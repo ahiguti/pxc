@@ -1,0 +1,80 @@
+namespace serialize::string;
+public import type::builtin "";
+public import meta::builtin m;
+
+public threaded function {t} string to_string(t const& x)
+{
+  macro symstr m::concat{t, "_to_string"};
+  macro sym m::symbol{t, symstr};
+  macro cat m::category{t};
+  if (m::eq{t, type::builtin::string}) {
+    return x;
+  } else if (m::eq{m::to_string{sym}, symstr}) {
+    return sym(x);
+  } else if (m::eq{cat, "uint"}) {
+    return bt_ulong_to_string(ulong(x));
+  } else if (m::eq{cat, "int"}) {
+    return bt_long_to_string(long(x));
+  } else if (m::or{m::eq{cat, "varray"}, m::eq{cat, "farray"}}) {
+    string s = "{";
+    foreach (size_t i, m::at{t, 0} v : x) {
+      if (i != 0) {
+	s.append(",");
+      }
+      s.append(to_string(v));
+    }
+    s.append("}");
+    return s;
+  } else if (m::eq{cat, "tree_map"}) {
+    string s = "{";
+    bool first = true;
+    foreach (m::at{t, 0} k, m::at{t, 1} v : x) {
+      if (first) {
+	first = false;
+      } else {
+	s.append(",");
+      }
+      s.append(to_string(k));
+      s.append(":");
+      s.append(to_string(v));
+      s.append(")");
+    }
+    s.append("}");
+    return s;
+  } else if (m::or{m::eq{cat, "ptr"}, m::eq{cat, "cptr"},
+      m::eq{cat, "tptr"}, m::eq{cat, "tcptr"}}) {
+    string s = "{";
+    s.append(to_string(*x));
+    s = "}";
+    return s;
+  } else if (m::eq{cat, "struct"}) {
+    string s = "{";
+    bool first = true;
+    foreach (name, fld : t) {
+      if (first) {
+	first = false;
+      } else {
+	s.append(",");
+      }
+      s.append(name);
+      s.append(":");
+      s.append(to_string(x.fld));
+    }
+    s.append("}");
+    return s;
+  } else if (m::eq{cat, "union"}) {
+    string s = "{";
+    foreach (name, fld : t) {
+      if (case x.fld) {
+	s.append(name);
+	s.append(":");
+	s.append(to_string(x.fld));
+      }
+    }
+    s.append("}");
+    return s;
+  } else {
+    return "-";
+  }
+}
+

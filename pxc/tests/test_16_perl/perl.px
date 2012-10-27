@@ -4,8 +4,7 @@
 namespace perl;
 public import perl::impl;
 public import perl::symbols;
-public import io;
-public import meta;
+public import meta::builtin m;
 private import type::builtin "";
 
 public macro sv perl::impl::sv;
@@ -24,19 +23,17 @@ public function {ns} void export_all()
     perl::xs_create_function{symbol}();
   }
   foreach (symbol : perl::symbols::all_types{ns}) {
-    if (meta::not{meta::eq{symbol, void}}) {
-      perl::xs_create_type{symbol}();
-    }
+    perl::xs_create_type{symbol}();
   }
 }
 
 public function {ns} void show_exports()
 {
   foreach (symbol : perl::symbols::all_functions{ns}) {
-    io::println(meta::full_string{symbol});
+    println(m::full_string{symbol});
   }
   foreach (symbol : perl::symbols::all_types{ns}) {
-    io::println(meta::full_string{symbol});
+    println(m::full_string{symbol});
   }
 }
 

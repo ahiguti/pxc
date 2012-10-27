@@ -44,6 +44,32 @@ test:
 	done; \
 	exit 0;
 
+valgrind:
+	rm -f valgrind.log
+	for i in `find . -name "*.exe"`; do \
+	  valgrind $$i > /dev/null 2>> valgrind.log; \
+	done; \
+	fgrep 'ERROR SUMMARY' valgrind.log | \
+	fgrep -v 'ERROR SUMMARY: 0 errors'; \
+	exit 0;
+
+efence:
+	rm -f efence.log
+	for i in `find . -name "*.exe"`; do \
+	  echo -n "$$i: " >> efence.log; \
+	  env EF_PROTECT_BELOW=0 ef $$i > /dev/null 2>> efence.log; \
+	done; \
+	for i in `find . -name "*.exe"`; do \
+	  echo -n "$$i: " >> efence.log; \
+	  env EF_PROTECT_BELOW=1 ef $$i > /dev/null 2>> efence.log; \
+	done; \
+	exit 0;
+
+debug:
+	env TEST_PXC_PROF=../common/pxc_debug.profile \
+	  TEST_PXC_DYNAMIC_PROF=../common/pxc_debug_dynamic.profile \
+	  $(MAKE) test
+
 retest: clean test
 
 clean:
@@ -59,7 +85,7 @@ cleanlogs:
 	  popd > /dev/null; \
 	done; \
 	exit 0;
-	rm -f all.log
+	rm -f all.log valgrind.log efence.log
 	rm -f test_*/*.log
 	rm -f test_*/*.out
 	rm -f test_*/*.dll

@@ -1,20 +1,18 @@
-import test_common "";
-
 namespace ttest;
+import test_common "";
 import thread "";
-import io;
 
-struct my_thread_obj(int x0, int y0, io::ioptr const& io0) {
+struct my_thread_obj(int x0, int y0, io::system::systemptr const& sys0) {
   int x = x0;
   int y = y0;
-  io::ioptr io = io0;
+  io::system::systemptr sys = sys0;
   function void main() {
-    io.stdout_println("my thread main");
-    io.stdout_println(x);
+    io::standard::stdout_println(sys, "my thread main");
+    io::standard::stdout_println(sys, x);
   }
 }
 
-thread_t thr = create_thread(my_thread_obj(123, 456, io::main));
+threadptr thr = thread_create(my_thread_obj(123, 456, io::system::system));
   // error: my_thread_obj is not threaded
 thr.join();
 

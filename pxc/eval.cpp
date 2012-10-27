@@ -643,6 +643,14 @@ static term eval_meta_types(term_list& tlev)
     if (e == builtins.type_tpdummy.get_expr()) {
       continue;
     }
+    expr_struct *const est = dynamic_cast<expr_struct *>(e);
+    if (est != 0 && est->typecat_str != 0) {
+      const std::string s(est->typecat_str);
+      if (!s.empty() && s[0] == '@') {
+	/* builtin metafunction */
+	continue;
+      }
+    }
     bool is_type_flag = false;
     switch (e->get_esort()) {
     case expr_e_typedef:
@@ -1083,6 +1091,7 @@ static term eval_meta_eq(term_list& tlev)
     for (term_list::const_iterator i = ++tlev.begin(); i != tlev.end(); ++i) {
       if (t != *i) {
 	v = 0;
+//fprintf(stderr, "%s != %s\n", term_tostr_human(t).c_str(), term_tostr_human(*i).c_str());
 	break;
       }
     }

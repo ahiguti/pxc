@@ -3,18 +3,28 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- test_16_perl/perl/symbols.pxでvoidを除外しないと動かないのを直す
+- コンストラクタへの引数がメンバ関数から見えてしまわないか？
 
+- unionがunitだけでできていたときmudflapが怒る
 
-- 組み込み型削減
-  typecat_e_int, uint, float, numeric
-- size_tを組み込みから外す(done)
-- デフォルト名前空間からint等の基本型を消す(done)
-- マクロ展開後の数値は何型？ long型。test_02_type/tmplint.px
-- eval.cppの sym_ns = "builtin" 削除 (done)
-- symbol_table.cppの pname = "builtin::" + fullname 削除 (done)
-- 組み込み型は名前空間"type::builtin"に属するように(done)
-- stringとsize_tはcontainerへ移す
+- 文字列型再考
+  - std::stringはc_str()があるのでnul終端が速い
+  - なるべく多くの処理をcslice{uchar}で
+  - nul終端文字列: cstring 実装は単なるstd::string
+  - cstringのsliceを取るときにc_str()でnul終端する
+  - nul終端文字列リテラル: strlit 文字列リテラルはこの型をもつ
+  - strlitのcsliceを
+  - posix apiはnul終端文字列を取るものが多い
+
+- if (!x) がsyntax error (done)
+- foreachのmappedをconst参照で受けられるように
+
+- c++名前空間を::始まりで指定しないと途中の名前空間にマッチしてしまう
+  (done)
+
+- catch は常にconst byref?
+
+- stringとsize_tはcontainerへ移す?
 - pxcrt を compiler::runtimeへ
 
 threadまわり
@@ -38,7 +48,10 @@ threadまわり
 - コンストラクタからメンバ関数を呼べてしまうのをエラーにせよ(done)
 
 コンテナまわり
-- expr_feach::emit(): map, rangeに対するemit
+- expr_feach::emit(): map, rangeに対するemit (done)
+- foreach 参照渡し、constの組み合わせをすべてサポート?
+  - keyは常にconst値or参照、mappedはconstまたはmutable参照でよいのでは？
+  - keyがconst値であるかconst参照であるかは、意味的に差が起き得ない？
 
 namespaceまわり
 - namespace宣言義務付け
@@ -72,7 +85,7 @@ if-defined構文
 - if (int v : foo.fld) { ... } // unionのフィールドは左辺値取れない
 
 - string_to_ などをpxcrtから追い出す
-- int_compareなどの比較関数を無くし、基本型は > で比較するように
+- int_compareなどの比較関数を無くし、基本型は > で比較するように(done)
 
 - C++が定義する関数については宣言だけはemitする
   (誤った宣言で問題を起こさないようにするため)
@@ -134,6 +147,8 @@ FIXME/TODO M4
 ---------------------------------------------------------------------
 TODO
 
+- fork()したときにファイルデスクリプタをどうするか？
+- blockscopeのlockobject - 19/blkscope_lock.px
 - evalのエラーメッセージ改善
 - list, set
 - tptr/tcptrのロックをreader/writerロックに。そのためにはguard count
@@ -236,6 +251,16 @@ TODO
 ---------------------------------------------------------------------
 DONE
 
+- 25/val.px 関数の返値をblockscope rootしていない (done)
+- farrayからsliceへの暗黙変換するとエラー(done)
+- size_tを組み込みから外す(done)
+- デフォルト名前空間からint等の基本型を消す(done)
+- マクロ展開後の数値は何型？ long型。test_02_type/tmplint.px (done)
+- eval.cppの sym_ns = "builtin" 削除 (done)
+- symbol_table.cppの pname = "builtin::" + fullname 削除 (done)
+- 組み込み型は名前空間"type::builtin"に属するように(done)
+- test_16_perl/perl/symbols.pxでvoidを除外しないと動かないのを直す
+  (done)
 - 非メンバ関数にconst装飾つけるとエラーにならない(done)
 - interface型を値で持てないように(done)
 - interfaceへの代入はエラーにする(done)
@@ -5219,4 +5244,24 @@ a = types{"meta"}をeval
 aがリストでなかったらエラー
 aの各要素iについて
   fへ引数iを適用した式をeval、ただしiはeval済み
+
+---------------------------------------------------------------------
+寿命が問題になるのはどういう式か
+
+- ポインタの参照先への参照は無効化されうる
+- コンテナ要素/範囲は無効化されうる
+- union要素は無効化されうる
+
+- 一時オブジェクトは文末で無効化される
+
+---------------------------------------------------------------------
+文字列型再考
+- なるべく多くの処理をcslice{uchar}で
+- cstring: nul終端文字列 実装は単なるstd::string
+- cstringのslice/csliceを取るときにc_str()でnul終端する
+  cstring_sliceとcstring_cslice
+- strlit: nul終端文字列リテラル 文字列リテラルはこの型をもつ
+- strlitのcsliceはcstring_cslice
+- cstring_csliceはcslice{uchar}に変換できる(不要？)
+- 文字列への変換は
 
