@@ -3,7 +3,7 @@
 
 private namespace perl::impl;
 public import type::builtin "";
-public import meta "";
+public import meta::builtin "";
 
 public extern "pxperl::perlsv" struct sv { }
 public extern "pxperl::perlav" struct av {
@@ -42,12 +42,13 @@ public function {t} sv value_to_sv(t const& x) {
 
 public function {f} void xs_create_function() {
   func_pl{func_px{f}} o;
-  o.xs_create_function(meta::nsname{f});
+  o.xs_create_function(meta::builtin::nsname{f});
 }
 
 public function {t} void xs_create_type() {
   type_pl{t} o;
-  o.xs_create_type(meta::full_string{t}); // TODO: when t has parameters?
+  o.xs_create_type(meta::builtin::full_string{t});
+    // TODO: when t has parameters?
 }
 
 public function {t} sv value_to_perlsv(t const& x)
@@ -59,7 +60,7 @@ public function {t} sv value_to_perlsv(t const& x)
   sv r;
   if (eq{fullname, "perl::impl::sv"}) {
     r = x;
-  } else if (eq{meta::to_string{sym}, symstr}) {
+  } else if (eq{meta::builtin::to_string{sym}, symstr}) {
     r = sym(x);
   } else if (eq{t, string}) {
     r = string_to_sv(x);
@@ -89,7 +90,7 @@ public function {t} t perlsv_to_value(sv const& x)
   macro fullname full_string{t};
   if (eq{fullname, "perl::impl::sv"}) {
     return x;
-  } else if (eq{meta::to_string{sym1}, symstr1}) {
+  } else if (eq{meta::builtin::to_string{sym1}, symstr1}) {
     return sym1(x);
   } else if (eq{t, string}) {
     return sv_to_string(x);
@@ -122,13 +123,13 @@ private extern "pxperl::func_pl" struct {t} func_pl {
 
 private struct {f} func_px {
   function sv call(svarr const& a) {
-    foreach (i : meta::seq{meta::argnum{f}};
-      j : perlsv_to_value{meta::argtype{f, i}}(a.get(i)); ",") {
-      if (eq{meta::full_string{meta::rettype{f}}, "void"}) {
+    foreach (i : meta::builtin::seq{meta::builtin::argnum{f}};
+      j : perlsv_to_value{meta::builtin::argtype{f, i}}(a.get(i)); ",") {
+      if (eq{meta::builtin::full_string{meta::builtin::rettype{f}}, "void"}) {
 	f(j);
 	return sv();
       } else {
-	return value_to_perlsv{meta::rettype{f}}(f(j));
+	return value_to_perlsv{meta::builtin::rettype{f}}(f(j));
       }
     }
   }

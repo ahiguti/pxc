@@ -1,0 +1,103 @@
+namespace regex::posix;
+import type::builtin "";
+import type::container "";
+
+public tsvaluetype extern "int" "int" struct cflags_t { }
+public tsvaluetype extern "int" "int" struct eflags_t { }
+public tsvaluetype extern "::regoff_t" "int" struct regoff_t { }
+public tsvaluetype extern "::regmatch_t" struct regmatch_t {
+  regoff_t rm_so;
+  regoff_t rm_eo;
+}
+public extern "REG_EXTENDED"      cflags_t REG_EXTENDED;
+public extern "REG_ICASE"         cflags_t REG_ICASE;
+public extern "REG_NOSUB"         cflags_t REG_NOSUB;
+public extern "REG_NEWLINE"       cflags_t REG_NEWLINE;
+public extern "REG_NOTBOL"        eflags_t REG_NOTBOL;
+public extern "REG_NOTEOL"        eflags_t REG_NOTEOL;
+
+public threaded extern "pregex::regex_compile" function
+  bool regex_compile(regex& re, string const& s, cflags_t cflags);
+public threaded extern "pregex::regex_exec" function
+  bool regex_exec(regex& re, string const& s,
+    slice{regmatch_t} const& ma, eflags_t eflags);
+public threaded extern "pregex::regex_compiled" function
+  bool regex_compiled(regex const& re);
+public threaded extern "pregex::regex_error_code" function
+  int regex_error_code(regex const& re);
+public threaded extern "pregex::regex_error_string" function
+  string regex_error_string(regex const& re);
+
+private valuetype extern "pregex::posix_re" "noncopyable" struct regex { }
+
+extern "type" inline
+#include <sys/types.h>
+#include <regex.h>
+namespace pregex {
+struct posix_re {
+  posix_re() : value(), error_code(0), compiled(false) { }
+  ~posix_re() { if (compiled) { ::regfree(&value); } }
+public:
+  ::regex_t value;
+  int error_code;
+  bool compiled;
+private:
+  posix_re(const posix_re&);
+  posix_re& operator =(const posix_re&);
+};
+};
+
+extern "fdecl" inline
+namespace pregex {
+};
+
+extern "fdef" inline
+namespace pregex {
+pxcrt::bt_bool regex_compile(posix_re& re, pxcrt::bt_string const& s,
+  int cflags)
+{
+  if (re.compiled) {
+    ::regfree(&re.value);
+    re.error_code = 0;
+    re.compiled = false;
+  }
+  const int r = ::regcomp(&re.value, s.c_str(), cflags);
+  re.error_code = r;
+  if (r == 0) {
+    re.compiled = true;
+    return true;
+  }
+  return false;
+}
+pxcrt::bt_bool regex_exec(posix_re& re, pxcrt::bt_string const& s,
+  container::slice<regmatch_t> const& ma, int eflags)
+{
+  if (!re.compiled) {
+    return false;
+  }
+  const int r = ::regexec(&re.value, s.c_str(), ma.size(), ma.rawarr(),
+    eflags);
+  re.error_code = r;
+  return (r == 0);
+}
+pxcrt::bt_bool regex_compiled(posix_re const& re)
+{
+  return re.compiled;
+}
+int regex_error_code(posix_re const& re)
+{
+  return re.error_code;
+}
+pxcrt::bt_string regex_error_string(posix_re const& re)
+{
+  size_t sz = ::regerror(re.error_code, &re.value, 0, 0);
+  pxcrt::bt_string s;
+  s.resize(sz);
+  ::regerror(re.error_code, &re.value, &s[0], sz);
+  if (sz > 0) {
+    s.resize(sz - 1);
+  }
+  return s;
+}
+};
+

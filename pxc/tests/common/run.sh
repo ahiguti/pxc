@@ -8,15 +8,24 @@ else
   TESTS=`echo *.px | sort`
 fi
 
+if [ "$TEST_PXC_PROF" == "" ]; then
+  TEST_PXC_PROF=../common/pxc.profile
+fi
+
 total=0
 err=0
 errnames=''
+export MUDFLAP_OPTIONS=-viol-segv
 for i in $TESTS; do
   bn=`basename $i .px`
+  # echo "$bn";
   echo -n ".";
   if [ "$i" != "pxcrt.px" ]; then
-    ../../pxc --no-realpath -w .pxc -p ../common/pxc.profile "$i" \
+    ../../pxc --no-realpath -w .pxc -p "$TEST_PXC_PROF" "$i" \
     	> $bn.log 2> $bn.log2
+    if [ ! "$?" ]; then
+      echo "$bn failed"
+    fi
   else
     touch $bn.log
   fi

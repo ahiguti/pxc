@@ -1,0 +1,25 @@
+namespace retest;
+import type::builtin "";
+import type::container "";
+import regex::posix "";
+import io::standard "";
+
+function void t1()
+{
+  regex re;
+  farray{regmatch_t, 3} m;
+  re.compile("\\([a-z]\\+\\)\\([0-9]\\+\\)", 0);
+  if (re.exec("abc", m, 0)) {
+    foreach (size_t i, regmatch_t& e : m) {
+      println(int(e.rm_so));
+      println(int(e.rm_eo));
+    }
+  } else {
+    println("failed");
+    println(re.error_code());
+    println(re.error_string());
+  }
+}
+
+t1();
+

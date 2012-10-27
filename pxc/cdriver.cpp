@@ -160,7 +160,8 @@ static std::string get_info_filename(const parser_options& po,
   return get_work_filename(po, mi, false) + ".inf";
 }
 
-static bool check_source_timestamp(const parser_options& po, module_info& mi)
+static bool check_source_timestamp(const parser_options& po, module_info& mi,
+  const std::string& info_filename)
 {
   bool not_modified = true;
   unsigned long long src_mask = 0;
@@ -179,27 +180,33 @@ static bool check_source_timestamp(const parser_options& po, module_info& mi)
 	  fn.c_str(), errno);
       }
       if (sbuf.st_ctime > mi.source_checksum.timestamp) {
-	DBG_INF(fprintf(stderr,
-	  "check_source_timestamp %s: st_ctime=%lu checksum=%lu\n",
-	  fn.c_str(), (unsigned long)sbuf.st_ctime,
-	  (unsigned long)mi.source_checksum.timestamp));
+	if (po.verbose > 1) {
+	  fprintf(stderr,
+	    "check_source_timestamp %s: st_ctime=%lu checksum=%lu\n",
+	    fn.c_str(), (unsigned long)sbuf.st_ctime,
+	    (unsigned long)mi.source_checksum.timestamp);
+	}
 	not_modified = false;
       }
       if (sbuf.st_mtime > mi.source_checksum.timestamp) {
-	DBG_INF(fprintf(stderr,
-	  "check_source_timestamp %s: st_mtime=%lu checksum=%lu\n",
-	  fn.c_str(), (unsigned long)sbuf.st_mtime,
-	  (unsigned long)mi.source_checksum.timestamp));
+	if (po.verbose > 1) {
+	  fprintf(stderr,
+	    "check_source_timestamp %s: st_mtime=%lu checksum=%lu\n",
+	    fn.c_str(), (unsigned long)sbuf.st_mtime,
+	    (unsigned long)mi.source_checksum.timestamp);
+	}
 	not_modified = false;
       }
+      src_mask |= src_mask_bit;
       break;
     }
-    src_mask |= src_mask_bit;
   }
   if (src_mask != mi.src_mask) {
-    DBG_INF(fprintf(stderr,
-      "check_source_timestamp (%s,%s): src_mask=%llu mi.src_mask=%llu\n",
-      mi.ns.c_str(), mi.aux_filename.c_str(), src_mask, mi.src_mask));
+    if (po.verbose > 1) {
+      fprintf(stderr,
+	"check_source_timestamp (%s,%s): src_mask=%llu mi.src_mask=%llu\n",
+	mi.ns.c_str(), mi.aux_filename.c_str(), src_mask, mi.src_mask);
+    }
     return false;
   }
   return not_modified;
@@ -263,7 +270,7 @@ static bool load_infofile(const parser_options& po, module_info& mi)
 	fprintf(stderr, "'%s': source_checksum: %s\n", info_filename.c_str(),
 	  checksum_string(mi.source_checksum).c_str());
       }
-      if (!check_source_timestamp(po, mi)) {
+      if (!check_source_timestamp(po, mi, info_filename)) {
 	DBG_INF(fprintf(stderr, "load_infofile: %s timestamp\n",
 	  info_filename.c_str()));
 	if (po.verbose > 1) {
@@ -418,9 +425,9 @@ static void load_source_and_calc_checksum(const parser_options& po,
        * if the system clock is never be skewed. */
       sleep(1);
     }
-    src_mask |= src_mask_bit;
     md5.update(i->content);
     if (loaded) {
+      src_mask |= src_mask_bit;
       break;
     }
   }

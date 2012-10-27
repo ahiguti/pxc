@@ -813,6 +813,10 @@ unary_expr
 	  { $$ = expr_op_new(cur_fname, @1.first_line, TOK_INC, $2, 0); }
 	| TOK_DEC unary_expr
 	  { $$ = expr_op_new(cur_fname, @1.first_line, TOK_DEC, $2, 0); }
+	| '!' unary_expr
+	  { $$ = expr_op_new(cur_fname, @1.first_line, '!', $2, 0); }
+	| '~' unary_expr
+	  { $$ = expr_op_new(cur_fname, @1.first_line, '~', $2, 0); }
 	| '*' unary_expr
 	  { $$ = expr_op_new(cur_fname, @1.first_line, TOK_PTR_DEREF, $2, 0); }
 	| '+' unary_expr

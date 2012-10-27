@@ -165,15 +165,6 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
 	    break;
 	  }
 	}
-	#if 0
-	/* try 'pxcrt' */
-	pname = "builtin::" + fullname;
-	j = locals.find(pname);
-	if (j != locals.end()) {
-	  v = j->second;
-	  break;
-	}
-	#endif
       } else {
 	const std::string nspart = get_namespace_part(fullname);
 	const std::string shortname = to_short_name(fullname);

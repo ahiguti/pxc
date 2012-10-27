@@ -1,0 +1,23 @@
+namespace retest;
+import type::builtin "";
+import type::container "";
+import regex::posix "";
+import io::standard "";
+
+function void t1() {
+  regexptr p = regex_compile("\\([a-z]\\+\\)\\([0-9]\\+\\)", 0);
+  vector{regmatch_t} m;
+  m.resize(3, regmatch_t());
+  bool r = regex_exec(p, "abc1234", m, 0);
+  if (r != true) {
+    println("failed");
+    println(regex_error_code(p));
+  } else {
+    foreach (size_t i, regmatch_t& e : m) {
+      println(int(e.rm_so));
+      println(int(e.rm_eo));
+    }
+  }
+}
+
+t1();

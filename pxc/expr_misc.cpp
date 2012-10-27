@@ -91,6 +91,8 @@ const char *tok_string(const expr_i *e, int tok)
   case '=': return "=";
   case '?': return "?";
   case ':': return ":";
+  case '!': return "!";
+  case '~': return "~";
   case '|': return "|";
   case '^': return "^";
   case '&': return "&";
@@ -247,6 +249,8 @@ bool is_possibly_pod(const term& t)
   case typecat_e_uint:
   case typecat_e_float:
     return true;
+  case typecat_e_noncopyable:
+    return false; /* default constructible but noncopyable */
   default:
     break;
   }
@@ -268,6 +272,8 @@ bool is_possibly_nonpod(const term& t)
   case typecat_e_uint:
   case typecat_e_float:
     return false;
+  case typecat_e_noncopyable:
+    return true; /* default constructible but noncopyable */
   default:
     break;
   }
@@ -355,6 +361,7 @@ typecat_e get_category_from_string(const std::string& s)
   if (s == "tree_map_range") return typecat_e_tree_map_range;
   if (s == "tree_map_crange") return typecat_e_tree_map_crange;
   if (s == "linear") return typecat_e_linear;
+  if (s == "noncopyable") return typecat_e_noncopyable;
   if (s == "nocascade") return typecat_e_nocascade;
   // if (s == "wptr") return typecat_e_wptr;
   // if (s == "wcptr") return typecat_e_wcptr;
@@ -383,6 +390,7 @@ std::string get_category_string(typecat_e cat)
   case typecat_e_tree_map_range: return "tree_map_range";
   case typecat_e_tree_map_crange: return "tree_map_crange";
   case typecat_e_linear: return "linear";
+  case typecat_e_noncopyable: return "noncopyable";
   case typecat_e_nocascade: return "nocascade";
   // case typecat_e_wptr: return "wptr";
   // case typecat_e_wcptr: return "wcptr";
@@ -523,16 +531,35 @@ bool is_const_or_immutable_pointer_family(const term& t)
     cat == typecat_e_tiptr || cat == typecat_e_iptr;
 }
 
+bool is_threaded_pointer_family(const term& t)
+{
+  const typecat_e cat = get_category(t);
+  return cat == typecat_e_tptr || cat == typecat_e_tcptr ||
+    cat == typecat_e_tiptr;
+}
+
 bool is_array_family(const term& t)
 {
   const typecat_e cat = get_category(t);
   return cat == typecat_e_varray || cat == typecat_e_farray;
 }
 
+bool is_cm_slice_family(const term& t)
+{
+  const typecat_e cat = get_category(t);
+  return cat == typecat_e_slice || cat == typecat_e_cslice;
+}
+
 bool is_map_family(const term& t)
 {
   const typecat_e cat = get_category(t);
   return cat == typecat_e_tree_map;
+}
+
+bool is_cm_maprange_family(const term& t)
+{
+  const typecat_e cat = get_category(t);
+  return cat == typecat_e_tree_map_range || cat == typecat_e_tree_map_crange;
 }
 
 bool is_const_range_family(const term& t)
@@ -640,7 +667,7 @@ bool is_copyable(const term& t)
     return false;
   }
   const typecat_e cat = get_category(t);
-  if (cat == typecat_e_linear) {
+  if (cat == typecat_e_linear || cat == typecat_e_noncopyable) {
     return false;
   }
   return true;
@@ -2421,6 +2448,7 @@ term get_array_index_texpr(expr_op *eop, term& t0)
 	  return t;
 	}
       case typecat_e_tree_map:
+      case typecat_e_tree_map_range:
 	if (tparams->rest != 0) {
 	  return tparams->param_def;
 	}
