@@ -806,8 +806,8 @@ struct expr_forrange : public expr_i {
     return 0;
   }
   void set_child(int i, expr_i *e) {
-    if (i == 0) { r0 = ptr_down_cast<expr_int_literal>(e); }
-    else if (i == 1) { r1 = ptr_down_cast<expr_int_literal>(e); }
+    if (i == 0) { r0 = e; }
+    else if (i == 1) { r1 = e; }
     else if (i == 2) { block = ptr_down_cast<expr_block>(e); }
   }
   void check_type(symbol_table *lookup);
@@ -815,8 +815,8 @@ struct expr_forrange : public expr_i {
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
-  expr_int_literal *r0;
-  expr_int_literal *r1;
+  expr_i *r0;
+  expr_i *r1;
   expr_block *block;
 };
 

@@ -1887,6 +1887,8 @@ void expr_forrange::check_type(symbol_table *lookup)
   if (!is_integral_type(ta0)) {
     arena_error_push(block->argdecls, "integral type expected");
   }
+  check_type_convert_to_lhs(0, r0, ta0);
+  check_type_convert_to_lhs(0, r1, ta0);
 }
 
 void expr_feach::check_type(symbol_table *lookup)

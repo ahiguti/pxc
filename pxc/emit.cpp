@@ -528,7 +528,7 @@ static bool esort_noemit_funcbody(expr_i *e)
 static bool can_emit_fast_constr(const expr_struct *est)
 {
   if (est->block == 0 || est->block->stmts == 0) {
-    return false;
+    return true;
   }
   expr_stmts *stmts = est->block->stmts;
   for (; stmts != 0; stmts = stmts->rest) {
@@ -2415,8 +2415,15 @@ void expr_feach::emit_value(emit_context& em)
     em.indent('f');
     em.puts("const size_t sz$fe = ag$fe.size();\n");
     em.indent('f');
-    em.puts("for (");
+    if (!mapped_mutable_flag) {
+      em.puts("const ");
+    }
     expr_argdecls *const adk = block->argdecls;
+    expr_argdecls *const adm = adk->rest;
+    em.puts(get_term_cname(adm->get_texpr()));
+    em.puts(" *const ar$fe = ag$fe.rawarr();\n");
+    em.indent('f');
+    em.puts("for (");
     emit_arg_cdecl(em, adk, false, false); /* always mutable */
     em.puts(" = 0; ");
     adk->emit_symbol(em);
@@ -2425,9 +2432,8 @@ void expr_feach::emit_value(emit_context& em)
     em.puts(") {\n");
     em.add_indent(1);
     em.indent('f');
-    expr_argdecls *const adm = adk->rest;
     emit_arg_cdecl(em, adm, true, false);
-    em.puts(" = ag$fe");
+    em.puts(" = ar$fe"); /* raw ponter. no need to perform range check. */
     em.puts("[");
     adk->emit_symbol(em);
     em.puts("];\n");

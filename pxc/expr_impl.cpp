@@ -1006,10 +1006,7 @@ std::string expr_for::dump(int indent) const
 
 expr_forrange::expr_forrange(const char *fn, int line, expr_i *r0, expr_i *r1,
   expr_i *block)
-  : expr_i(fn, line),
-    r0(ptr_down_cast<expr_int_literal>(r0)),
-    r1(ptr_down_cast<expr_int_literal>(r1)),
-    block(ptr_down_cast<expr_block>(block))
+  : expr_i(fn, line), r0(r0), r1(r1), block(ptr_down_cast<expr_block>(block))
 {
 }
 
