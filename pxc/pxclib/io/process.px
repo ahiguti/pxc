@@ -1,0 +1,43 @@
+namespace io::process;
+public import type::builtin "";
+public import type::array;
+
+public extern "pxcio::pxc_argv" type::array::vector{string} argv;
+
+private extern "pxcio::io_process_init" function void io_process_init();
+
+io_process_init();
+
+extern "type" inline
+namespace pxcio {
+};
+
+extern "fdecl" inline
+namespace pxcio {
+extern array::vector<pxcrt::bt_string> pxc_argv;
+};
+
+extern "fdef" inline
+namespace pxcio {
+#include <stdlib.h>
+array::vector<pxcrt::bt_string> pxc_argv;
+void io_process_init()
+{
+  static int init_flag = 0;
+  if (!init_flag) {
+    init_flag = 1;
+    char buf[64];
+    int c = 0;
+    while (true) {
+      snprintf(buf, sizeof(buf), "PXC_ARG%d", c++);
+      const char *ent = getenv(buf);
+      if (ent == 0) {
+	break;
+      }
+      const pxcrt::bt_string s(ent);
+      pxc_argv.push_back(s);
+    }
+  }
+}
+};
+

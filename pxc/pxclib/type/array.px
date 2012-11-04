@@ -1,0 +1,216 @@
+namespace type::array;
+public import type::builtin "";
+
+public mtvaluetype extern "array::vector" "varray"
+struct {t} vector {
+  public macro key_type size_t;
+  public macro mapped_type t;
+  public macro range_type slice{t};
+  public macro crange_type cslice{t};
+  public extern "empty" function bool empty() const;
+  public extern "size" function size_t size() const;
+  public extern "resize" function void resize(size_t i, t const& v);
+  public extern "clear" function void clear();
+  public extern "push_back" function void push_back(t const& v);
+  public extern "pop_back" function t pop_back();
+  public extern "reserve" function void reserve(size_t i);
+}
+
+public tsvaluetype extern "array::farray" "farray"
+struct {t, n} farray {
+  public macro key_type size_t;
+  public macro mapped_type t;
+  public macro range_type slice{t};
+  public macro crange_type cslice{t};
+  public extern "empty" function bool empty() const;
+  public extern "size" function size_t size() const;
+}
+
+public tsvaluetype extern "array::slice" "slice"
+struct {t} slice {
+  public macro key_type size_t;
+  public macro mapped_type t;
+  public macro range_type slice{t};
+  public macro crange_type cslice{t};
+  public extern "empty" function bool empty() const;
+  public extern "size" function size_t size() const;
+  public extern "next" function void next();
+}
+
+public tsvaluetype extern "array::cslice" "cslice"
+struct {t} cslice {
+  public macro key_type size_t;
+  public macro mapped_type t;
+  public macro range_type cslice{t};
+  public macro crange_type cslice{t};
+  public extern "empty" function bool empty() const;
+  public extern "size" function size_t size() const;
+  public extern "next" function void next();
+}
+
+extern "type" inline
+#include <vector>
+#include <stdint.h>
+#include <stdio.h>
+namespace array {
+template <typename T> struct slice;
+template <typename T> struct cslice;
+template <typename T>
+struct vector {
+  template <typename Tc> friend struct pxcrt::refvar_igrd_nn;
+  template <typename Tc> friend struct pxcrt::refvar_igrd;
+  template <typename Tc> friend struct pxcrt::valvar_igrd_nn;
+  template <typename Tc> friend struct pxcrt::valvar_igrd;
+  typedef typename std::vector<T>::size_type size_type;
+  typedef typename std::vector<T>::iterator iterator;
+  typedef typename std::vector<T>::const_iterator const_iterator;
+  typedef slice<T> range_type;
+  typedef cslice<T> crange_type;
+  vector() : invalidate_guard_count(0) { }
+  vector(size_t len) : v(len), invalidate_guard_count(0) { }
+  vector(const vector& x) : v(x.v), invalidate_guard_count(0) { }
+  vector& operator =(const vector& x) {
+    check_resize();
+    v = x.v;
+    return *this;
+  }
+  bool empty() const { return v.empty(); }
+  size_type size() const { return v.size(); }
+  T& operator [](size_type idx) {
+    if (idx >= v.size()) { pxcrt::throw_invalid_index(); }
+    return v[idx];
+  }
+  const T& operator [](size_type idx) const {
+    if (idx >= v.size()) { pxcrt::throw_invalid_index(); }
+    return v[idx];
+  }
+  void resize(size_type sz, T const& x) {
+    check_resize();
+    v.resize(sz, x);
+  }
+  void clear() {
+    check_resize();
+    v.clear();
+  }
+  void push_back(T const& x) {
+    check_resize();
+    v.push_back(x);
+  }
+  T pop_back() {
+    check_resize();
+    if (v.empty()) { pxcrt::throw_invalid_index(); }
+    const T r = v.back();
+    v.pop_back();
+    return r;
+  }
+  void reserve(size_type sz) {
+    check_resize();
+    v.reserve(sz);
+  }
+  iterator begin() { return v.begin(); }
+  const_iterator begin() const { return v.begin(); }
+  iterator end() { return v.end(); }
+  const_iterator end() const { return v.end(); }
+  T *rawarr() { return &v[0]; }
+  const T *rawarr() const { return &v[0]; }
+private:
+  void check_resize() {
+    if (invalidate_guard_count != 0) { pxcrt::throw_would_invalidate(); }
+  }
+  void inc_invalidate_guard() const {
+    ++invalidate_guard_count;
+  }
+  void dec_invalidate_guard() const {
+    --invalidate_guard_count;
+  }
+private:
+  std::vector<T> v;
+  mutable size_t invalidate_guard_count;
+};
+template <typename T, size_t len>
+struct farray {
+  typedef size_t size_type;
+  farray() : v() { }
+  bool empty() const { return len == 0; }
+  size_t size() const { return len; }
+  T& operator [](size_type idx) {
+    if (idx >= len) { pxcrt::throw_invalid_index(); }
+    return v[idx];
+  }
+  const T& operator [](size_type idx) const {
+    if (idx >= len) { pxcrt::throw_invalid_index(); }
+    return v[idx];
+  }
+  T *rawarr() { return v; }
+  const T *rawarr() const { return v; }
+private:
+  T v[len];
+};
+template <typename T>
+struct slice {
+  template <typename Tc> friend struct pxcrt::refvar_igrd_nn;
+  template <typename Tc> friend struct pxcrt::refvar_igrd;
+  template <typename Tc> friend struct pxcrt::valvar_igrd_nn;
+  template <typename Tc> friend struct pxcrt::valvar_igrd;
+  typedef size_t size_type;
+  slice() : v(0), len(0) { }
+  explicit slice(vector<T>& x) : v(x.rawarr()), len(x.size()) { }
+  template <typename Ta, size_t sz>
+  slice(farray<Ta, sz>& x) : v(x.rawarr()), len(sz) { }
+  template <typename Tc> slice(Tc& c, size_t o1, size_t o2) {
+    if (o2 > c.size()) { o2 = c.size(); }
+    if (o1 > o2) { o1 = o2; }
+    v = c.rawarr() + o1;
+    len = o2 - o1;
+  }
+  size_type size() const { return len; }
+  void next() {
+    if (len == 0) { pxcrt::throw_invalid_index(); }
+    ++v;
+    --len;
+  }
+  T& operator [](size_type idx) const {
+    if (idx >= len) { pxcrt::throw_invalid_index(); }
+    return v[idx];
+  }
+  T& operator *() const {
+    if (len == 0) { pxcrt::throw_invalid_index(); }
+    return *v;
+  }
+  T *rawarr() const { return v; }
+private:
+  T *v;
+  size_t len;
+};
+template <typename T>
+struct cslice {
+  template <typename Tc> friend struct pxcrt::refvar_igrd_nn;
+  template <typename Tc> friend struct pxcrt::refvar_igrd;
+  template <typename Tc> friend struct pxcrt::valvar_igrd_nn;
+  template <typename Tc> friend struct pxcrt::valvar_igrd;
+  typedef size_t size_type;
+  cslice() : v(0), len(0) { }
+  cslice(const slice<T>& x) : v(x.rawarr()), len(x.size()){ }
+  explicit cslice(const vector<T>& x) : v(x.rawarr()), len(x.size()) { }
+  template <typename Tc> cslice(const Tc& c, size_t o1, size_t o2) {
+    if (o2 > c.size()) { o2 = c.size(); }
+    if (o1 > o2) { o1 = o2; }
+    v = c.rawarr() + o1;
+    len = o2 - o1;
+  }
+  size_type size() const { return len; }
+  const T& operator [](size_type idx) const {
+    if (idx >= len) { pxcrt::throw_invalid_index(); }
+    return v[idx];
+  }
+  const T& operator *() const {
+    if (len == 0) { pxcrt::throw_invalid_index(); }
+    return *v;
+  }
+  const T *rawarr() const { return v; }
+private:
+  const T *v;
+  size_t len;
+};
+}; // namespace vector
+
