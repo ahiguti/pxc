@@ -281,7 +281,7 @@ body_stmt
 		'{' function_body_stmt_list '}'
 	  { $$ = expr_for_new(cur_fname, @1.first_line, $3, $5, $7,
 		expr_block_new(cur_fname, @1.first_line, 0, 0, 0, 0, $10)); }
-	| TOK_FOR '(' forrange_argdecl ':' int_literal TOK_SLICE int_literal
+	| TOK_FOR '(' forrange_argdecl ':' expression TOK_SLICE expression 
 		')' '{' function_body_stmt_list '}'
 	  { $$ = expr_forrange_new(cur_fname, @1.first_line, $5, $7,
 		expr_block_new(cur_fname, @1.first_line, 0, 0, $3, 0, $10)); }

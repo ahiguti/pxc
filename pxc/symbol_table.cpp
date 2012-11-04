@@ -134,6 +134,11 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
 	  /* calling member function from an internal struct */
 	  v = localvar_info();
 	}
+	if (v.edef != 0 && v.edef->get_esort() == expr_e_argdecls &&
+	  v.edef->symtbl_lexical->block_esort == expr_e_struct) {
+	  /* struct argument is not visible from member functions */
+	  v = localvar_info();
+	}
       }
       if (v.edef != 0) {
 	break;

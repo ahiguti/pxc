@@ -3,29 +3,17 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- コンストラクタへの引数がメンバ関数から見えてしまわないか？
+- foreachの中ではoperator []の範囲チェック不要 (done)
+
+- vectorの実装を自前でやるべきか検討
 
 - unionがunitだけでできていたときmudflapが怒る
 
 - 文字列型再考
-  - std::stringはc_str()があるのでnul終端が速い
-  - なるべく多くの処理をcslice{uchar}で
-  - nul終端文字列: cstring 実装は単なるstd::string
-  - cstringのsliceを取るときにc_str()でnul終端する
-  - nul終端文字列リテラル: strlit 文字列リテラルはこの型をもつ
-  - strlitのcsliceを
-  - posix apiはnul終端文字列を取るものが多い
-
-- if (!x) がsyntax error (done)
-- foreachのmappedをconst参照で受けられるように
-
-- c++名前空間を::始まりで指定しないと途中の名前空間にマッチしてしまう
-  (done)
+- stringとsize_tはcontainerへ移す?
+- stringのrangeを取れるように(ucharの配列参照)
 
 - catch は常にconst byref?
-
-- stringとsize_tはcontainerへ移す?
-- pxcrt を compiler::runtimeへ
 
 threadまわり
 - threadまわりの仕様整理せよ
@@ -33,8 +21,9 @@ threadまわり
   -> test_31_thrattr/up*.px (done)
 - closureのthread属性？ -> test_31_thrattr/up*.px (done)
 - immutableの仕様きめよ
-  guard countがmtsafeでないのはどうするか
-- iptr, valuetype
+- guard countがmtsafeでないのはどうするか -> valuetypeとtsvaluetype
+  (done)
+- iptr, valuetype (done)
 - multithreaded structのコンストラクタ引数はmultithreaded型でなくても
   よい。
 
@@ -48,10 +37,6 @@ threadまわり
 - コンストラクタからメンバ関数を呼べてしまうのをエラーにせよ(done)
 
 コンテナまわり
-- expr_feach::emit(): map, rangeに対するemit (done)
-- foreach 参照渡し、constの組み合わせをすべてサポート?
-  - keyは常にconst値or参照、mappedはconstまたはmutable参照でよいのでは？
-  - keyがconst値であるかconst参照であるかは、意味的に差が起き得ない？
 
 namespaceまわり
 - namespace宣言義務付け
@@ -147,6 +132,9 @@ FIXME/TODO M4
 ---------------------------------------------------------------------
 TODO
 
+- foreach 参照渡し、constの組み合わせをすべてサポート?
+  - keyは常にconst値or参照、mappedはconstまたはmutable参照でよいのでは？
+  - keyがconst値であるかconst参照であるかは、意味的に差が起き得ない？
 - fork()したときにファイルデスクリプタをどうするか？
 - blockscopeのlockobject - 19/blkscope_lock.px
 - evalのエラーメッセージ改善
@@ -251,6 +239,13 @@ TODO
 ---------------------------------------------------------------------
 DONE
 
+- コンストラクタへの引数がメンバ関数から見えてしまわないか？
+  07/strarg.px (done)
+- expr_feach::emit(): map, rangeに対するemit (done)
+- pxcrt を compiler::runtimeへ (done)
+- c++名前空間を::始まりで指定しないと途中の名前空間にマッチしてしまう
+  (done)
+- if (!x) がsyntax error (done)
 - 25/val.px 関数の返値をblockscope rootしていない (done)
 - farrayからsliceへの暗黙変換するとエラー(done)
 - size_tを組み込みから外す(done)

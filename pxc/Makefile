@@ -29,18 +29,19 @@ retest:
 
 clean:
 	rm -f *.o pxc pxc_y.output
-	cd tests; $(MAKE) clean
+	cd tests && $(MAKE) clean
+	cd misc && $(MAKE) clean
 
 cleanall: clean
 	rm -f pxc_y.cpp pxc_y.hpp pxc_l.cpp
 
-install:
-	mkdir -p $(INSTALL_PREFIX)/bin/
-	mkdir -p $(INSTALL_PREFIX)/share/pxc/
-	install -m 755 pxc $(INSTALL_PREFIX)/bin/
-	install -m 644 tests/common/*.px $(INSTALL_PREFIX)/share/pxc/
+#install:
+#	mkdir -p $(INSTALL_PREFIX)/bin/
+#	mkdir -p $(INSTALL_PREFIX)/share/pxc/
+#	install -m 755 pxc $(INSTALL_PREFIX)/bin/
+#	install -m 644 tests/common/*.px $(INSTALL_PREFIX)/share/pxc/
 
-uninstall:
-	rm -rf $(INSTALL_PREFIX)/bin/pxc
-	rm -rf $(INSTALL_PREFIX)/share/pxc/
+#uninstall:
+#	rm -rf $(INSTALL_PREFIX)/bin/pxc
+#	rm -rf $(INSTALL_PREFIX)/share/pxc/
 
