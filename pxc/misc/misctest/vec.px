@@ -1,0 +1,33 @@
+#!/usr/bin/pxc 
+
+namespace vec;
+import common "";
+
+function {t} ulong test_vector(size_t len, bool reserve_first)
+{
+  len = (len == 0) ? 1000 : len;
+  t v;
+  for (size_t i : 0 .. len) {
+    v.push_back(uchar(i));
+  }
+  ulong r;
+  for (size_t i, uchar x : v) {
+    r += x;
+  }
+  return r;
+}
+
+function void test_main()
+{
+  ulong r;
+  size_t len;
+  int a0 = argv.size() > 0 ? type::builtin::string_to_bt_int(argv[0]) : 0;
+  int a1 = argv.size() > 1 ? type::builtin::string_to_bt_int(argv[1]) : 0;
+  for (size_t i : 0 .. 1000000) {
+    r += test_vector{vector{uchar}}(a0, bool(a1));
+  }
+  println(r);
+}
+
+test_main();
+
