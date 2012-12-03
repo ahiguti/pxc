@@ -1,0 +1,83 @@
+namespace type::impl::stdvector;
+
+extern "type" inline
+#include <vector>
+#include <stdint.h>
+#include <stdio.h>
+namespace array {
+template <typename T> struct slice;
+template <typename T> struct cslice;
+template <typename T>
+struct stdvector {
+  template <typename Tc> friend struct pxcrt::refvar_igrd_nn;
+  template <typename Tc> friend struct pxcrt::refvar_igrd;
+  template <typename Tc> friend struct pxcrt::valvar_igrd_nn;
+  template <typename Tc> friend struct pxcrt::valvar_igrd;
+  typedef typename std::vector<T>::size_type size_type;
+  typedef typename std::vector<T>::iterator iterator;
+  typedef typename std::vector<T>::const_iterator const_iterator;
+  typedef slice<T> range_type;
+  typedef cslice<T> crange_type;
+  stdvector() : invalidate_guard_count(0) { }
+  stdvector(size_t len) : v(len), invalidate_guard_count(0) { }
+  stdvector(const stdvector& x) : v(x.v), invalidate_guard_count(0) { }
+  stdvector& operator =(const stdvector& x) {
+    check_resize();
+    v = x.v;
+    return *this;
+  }
+  bool empty() const { return v.empty(); }
+  size_type size() const { return v.size(); }
+  T& operator [](size_type idx) {
+    if (idx >= v.size()) { pxcrt::throw_invalid_index(); }
+    return v[idx];
+  }
+  const T& operator [](size_type idx) const {
+    if (idx >= v.size()) { pxcrt::throw_invalid_index(); }
+    return v[idx];
+  }
+  void resize(size_type sz, T const& x) {
+    check_resize();
+    v.resize(sz, x);
+  }
+  void clear() {
+    check_resize();
+    v.clear();
+  }
+  void push_back(T const& x) {
+    check_resize();
+    v.push_back(x);
+  }
+  T pop_back() {
+    check_resize();
+    if (v.empty()) { pxcrt::throw_invalid_index(); }
+    const T r = v.back();
+    v.pop_back();
+    return r;
+  }
+  void reserve(size_type sz) {
+    check_resize();
+    v.reserve(sz);
+  }
+  iterator begin() { return v.begin(); }
+  const_iterator begin() const { return v.begin(); }
+  iterator end() { return v.end(); }
+  const_iterator end() const { return v.end(); }
+  T *rawarr() { return &v[0]; }
+  const T *rawarr() const { return &v[0]; }
+private:
+  void check_resize() {
+    if (invalidate_guard_count != 0) { pxcrt::throw_would_invalidate(); }
+  }
+  void inc_invalidate_guard() const {
+    ++invalidate_guard_count;
+  }
+  void dec_invalidate_guard() const {
+    --invalidate_guard_count;
+  }
+private:
+  std::vector<T> v;
+  mutable size_t invalidate_guard_count;
+};
+}; // namespace array
+
