@@ -1,0 +1,202 @@
+namespace type::impl::pxcvector;
+
+extern "type" inline
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <boost/type_traits/is_pod.hpp>
+namespace array {
+template <typename T> struct slice;
+template <typename T> struct cslice;
+template <typename T> struct is_trivially_copyable {
+  enum { value = boost::is_pod<T>::value };
+};
+template <typename T>
+struct pxcvector {
+  template <typename Tc> friend struct pxcrt::refvar_igrd_nn;
+  template <typename Tc> friend struct pxcrt::refvar_igrd;
+  template <typename Tc> friend struct pxcrt::valvar_igrd_nn;
+  template <typename Tc> friend struct pxcrt::valvar_igrd;
+  typedef size_t size_type;
+  typedef T *iterator;
+  typedef const T *const_iterator;
+  typedef slice<T> range_type;
+  typedef cslice<T> crange_type;
+  pxcvector() : start(0), valid_len(0), alloc_len(0), invalidate_guard_count(0)
+    { }
+  ~pxcvector() { deinit(); }
+  pxcvector(const pxcvector& x) : invalidate_guard_count(0) { init(x); }
+  pxcvector& operator =(const pxcvector& x) {
+    check_resize();
+    if (&x != this) {
+      deinit();
+      init(x);
+    }
+    return *this;
+  }
+  bool empty() const { return valid_len == 0; }
+  size_type size() const { return valid_len; }
+  T& operator [](size_type idx) {
+    if (idx >= valid_len) { pxcrt::throw_invalid_index(); }
+    return start[idx];
+  }
+  const T& operator [](size_type idx) const {
+    if (idx >= valid_len) { pxcrt::throw_invalid_index(); }
+    return start[idx];
+  }
+  void resize(size_type sz, T const& x) {
+    check_resize();
+    if (sz > valid_len) {
+      reserve_internal(sz);
+      while (valid_len < sz) {
+	new (start + valid_len) T(x); /* copy constructor */
+	++valid_len;
+      }
+    } else {
+      while (valid_len > sz) {
+	(start + valid_len - 1)->T::~T(); /* destructor */
+	--valid_len;
+      }
+    }
+  }
+  void clear() {
+    check_resize();
+    clear_internal();
+  }
+  void push_back(T const& x) {
+    check_resize();
+    reserve_internal(valid_len + 1);
+    if (is_trivially_copyable<T>::value) {
+      start[valid_len] = x;
+    } else {
+      new (start + valid_len) T(x); /* copy constructor */
+    }
+    ++valid_len;
+  }
+  T pop_back() {
+    check_resize();
+    if (empty()) { pxcrt::throw_invalid_index(); }
+    const T r = start[valid_len - 1];
+    if (!is_trivially_copyable<T>::value) {
+      (start + valid_len - 1)->T::~T(); /* destructor */
+    }
+    --valid_len;
+    return r;
+  }
+  void reserve(size_type sz) {
+    check_resize();
+    reserve_internal(sz);
+  }
+  iterator begin() { return start; }
+  const_iterator begin() const { return start; }
+  iterator end() { return start + valid_len; }
+  const_iterator end() const { return start + valid_len; }
+  T *rawarr() { return start; }
+  const T *rawarr() const { return start; }
+private:
+  void deinit() {
+    clear_internal();
+    free(start);
+  }
+  void clear_internal() {
+    if (is_trivially_copyable<T>::value) {
+      valid_len = 0;
+    } else {
+      while (valid_len > 0) {
+	(start + valid_len - 1)->T::~T(); /* destructor */
+	--valid_len;
+      }
+    }
+  }
+  void init(const pxcvector& x) {
+    start = static_cast<T *>(malloc(x.valid_len * sizeof(T)));
+    if (start == 0) {
+      throw std::bad_alloc();
+    }
+    alloc_len = x.alloc_len;
+    if (is_trivially_copyable<T>::value) {
+      memcpy(start, x.start, x.valid_len * sizeof(T));
+      valid_len = x.valid_len;
+    } else {
+      size_type idx = 0;
+      try {
+	while (idx < x.valid_len) {
+	  new (start + idx) T(x.start[idx]); /* constructor */
+	  ++idx;
+	}
+      } catch (...) {
+	while (idx > 0) {
+	  (start + idx - 1)->T::~T(); /* destructor */
+	  --idx;
+	}
+	free(start);
+	throw;
+      }
+    }
+    valid_len = x.valid_len;
+  }
+  void reserve_internal(size_type len) {
+    if (len <= alloc_len) {
+      return;
+    }
+    size_type nl = alloc_len;
+    do {
+      const size_type nl_n = (nl >= 1) ? (nl * 2) : 1;
+      const size_type max_len = ((size_t)-1) / sizeof(T);
+      if (nl_n <= nl || nl_n > max_len) {
+        throw std::bad_alloc(); /* overflow */
+      }
+      nl = nl_n;
+    } while (nl < len);
+    T *p = 0;
+    if (is_trivially_copyable<T>::value) {
+      p = static_cast<T *>(realloc(start, nl * sizeof(T)));
+      if (p == 0) {
+        throw std::bad_alloc();
+      }
+    } else {
+      p = static_cast<T *>(malloc(nl * sizeof(T)));
+      if (p == 0) {
+	throw std::bad_alloc();
+      }
+      size_type idx = 0;
+      try {
+	for (; idx < valid_len; ++idx) {
+	  new (p + idx) T(start[idx]); /* copy constructor */
+	}
+      } catch (...) {
+	while (idx > 0) {
+	  (start + idx - 1)->T::~T(); /* destructor */
+	  --idx;
+	}
+	free(p);
+	throw;
+      }
+      idx = valid_len;
+      while (idx > 0) {
+	(start + idx - 1)->T::~T(); /* destructor */
+	--idx;
+      }
+      free(start);
+    }
+    start = p;
+    alloc_len = nl;
+  }
+  void check_resize() {
+    if (invalidate_guard_count != 0) { pxcrt::throw_would_invalidate(); }
+  }
+  void inc_invalidate_guard() const {
+    ++invalidate_guard_count;
+  }
+  void dec_invalidate_guard() const {
+    --invalidate_guard_count;
+  }
+private:
+  T *start;
+  size_type valid_len;
+  size_type alloc_len;
+  mutable size_type invalidate_guard_count;
+};
+}; // namespace array
+
