@@ -3,15 +3,20 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- foreachの中ではoperator []の範囲チェック不要 (done)
+文字列型再考
+- stringはpodvector<uchar>を抱える。rep共有はやらない。
+- nul終端文字列を必要とする場合のために常にnul終端しておく?
+  それとも1byte常に余分に割り当てておいてc_str()で埋める?
+  nul終端文字列使わない？
+- string_slice/cstring_sliceもslice/cslice
+- nul終端なslice: slicez{t}/cslicez{t}
+- ソース埋め込み文字列としてstring_literal型を用意。これは
+- stringとsize_tはcontainerへ移す
 
-- vectorの実装を自前でやるべきか検討
-
-- unionがunitだけでできていたときmudflapが怒る
-
-- 文字列型再考
-- stringとsize_tはcontainerへ移す?
-- stringのrangeを取れるように(ucharの配列参照)
+- global変数にweak型は使えないようにせよ(11/fe_sli.px mudflap)(done)
+- std::mapで foo["abc"] = "xyz" するとmudflapが怒る
+- unionがunitだけでできていたときmudflapが怒る(バージョン？)
+  (STLのバグ？)
 
 - catch は常にconst byref?
 
@@ -239,6 +244,7 @@ TODO
 ---------------------------------------------------------------------
 DONE
 
+- foreachの中ではoperator []の範囲チェック不要 (done)
 - コンストラクタへの引数がメンバ関数から見えてしまわないか？
   07/strarg.px (done)
 - expr_feach::emit(): map, rangeに対するemit (done)

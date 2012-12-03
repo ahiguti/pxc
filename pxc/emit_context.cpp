@@ -49,7 +49,7 @@ void emit_context::start_ns()
       std::string s;
       size_t delim = cur_ns.find("::", pos);
       if (delim != cur_ns.npos) {
-	s = cur_ns.substr(pos, delim);
+	s = cur_ns.substr(pos, delim - pos);
 	if (cur_ns_extc) {
 	  this->printf("namespace %s { ", s.c_str());
 	} else {
@@ -152,7 +152,7 @@ std::string to_c_ns(const std::string& ns)
   while (true) {
     size_t delim = ns.find("::", pos);
     if (delim != ns.npos) {
-      r += ns.substr(pos, delim) + "$n::";
+      r += ns.substr(pos, delim - pos) + "$n::";
       pos = delim + 2;
     } else {
       r += ns.substr(pos) + "$n";
