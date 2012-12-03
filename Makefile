@@ -30,7 +30,7 @@ installrpms: uninstallrpms rpms
 	sudo rpm -U dist/RPMS/*/*.rpm
 
 uninstallrpms:
-	- sudo rpm -e perl-PXC-Loader 
+	- sudo rpm -e perl-PXC-Loader
 	- sudo rpm -e perl-PXC-Loader-debuginfo
 	- sudo rpm -e pxc
 	- sudo rpm -e pxc-debuginfo

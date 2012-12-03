@@ -323,13 +323,13 @@ forrange_argdecl
 foreach_argdecl
 	: type_expr TOK_SYMBOL ',' type_expr TOK_SYMBOL
 	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $2, $1,
-			passby_e_const_value, 
+			passby_e_const_reference,
 		expr_argdecls_new(cur_fname, @1.first_line, $5, $4,
 			passby_e_const_reference, 0));
 		}
-	| type_expr TOK_SYMBOL ',' type_expr '&' TOK_SYMBOL
+	| type_expr TOK_SYMBOL ',' type_expr TOK_MUTABLE TOK_SYMBOL
 	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $2, $1,
-			passby_e_const_value, 
+			passby_e_const_reference,
 		expr_argdecls_new(cur_fname, @1.first_line, $6, $4,
 			passby_e_mutable_reference, 0));
 		}

@@ -496,6 +496,11 @@ void expr_var::check_type(symbol_table *lookup)
   }
   check_var_type(typ, this, sym, is_passby_cm_reference(varinfo.passby),
     defcon);
+  if (is_global_var(this) && is_weak_value_type(typ)) {
+    arena_error_push(this,
+      "type '%s' for global variable '%s' is a waek type",
+      term_tostr_human(typ).c_str(), sym);
+  }
 // FIXME: enable this!
 #if 0
   const attribute_e tattr = get_term_threading_attribute(typ);
