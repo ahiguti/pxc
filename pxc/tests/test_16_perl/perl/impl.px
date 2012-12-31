@@ -249,7 +249,8 @@ template <typename F> struct func_pl {
   }
   static void xs_create_function(const pxcrt::bt_string& name) {
     if (func_cv != 0) { return; }
-    func_cv = newXS((char *)name.c_str(), &call,
+    std::string s(name.data(), name.size());
+    func_cv = newXS((char *)s.c_str(), &call,
       "func_pl" /* must be a literal */);
   }
   static CV *func_cv;
@@ -317,7 +318,7 @@ template <typename T> struct type_pl {
     }
     return '0';
   }
-  static std::string generate_klass_name(const std::string& s) {
+  static std::string generate_klass_name(const pxcrt::bt_string& s) {
     std::string r;
     for (size_t i = 0; i < s.size(); ++i) {
       const char ch = s[i];
@@ -374,11 +375,11 @@ template <typename T> struct type_pl {
       klass_name.c_str(), sv, svt, (unsigned long)r));
     return true;
   }
-  static pxcrt::bt_string klass_name;
+  static std::string klass_name;
   static HV *klass_stash;
   static CV *destr_cv;
 };
-template <typename T> pxcrt::bt_string type_pl<T>::klass_name;
+template <typename T> std::string type_pl<T>::klass_name;
 template <typename T> HV *type_pl<T>::klass_stash;
 template <typename T> CV *type_pl<T>::destr_cv;
 inline perlsv int_to_sv(int x)
@@ -425,7 +426,7 @@ inline pxcrt::bt_string sv_to_string(const perlsv& x)
   }
   STRLEN len = 0;
   char *const p = SvPV_nomg(svp, len);
-  return pxcrt::bt_string(p, len);
+  return pxcrt::bt_string(p, p + len);
 }
 #undef DBG
 }; // namespace pxperl

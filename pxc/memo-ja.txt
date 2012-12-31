@@ -3,6 +3,8 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- 演算子の一通りテスト作成。コンテナ含め。
+
 文字列型再考
 - stringはpodvector<uchar>を抱える。rep共有はやらない。
 - nul終端文字列を必要とする場合のために常にnul終端しておく?
@@ -5256,13 +5258,17 @@ aの各要素iについて
 - 一時オブジェクトは文末で無効化される
 
 ---------------------------------------------------------------------
-文字列型再考
-- なるべく多くの処理をcslice{uchar}で
-- cstring: nul終端文字列 実装は単なるstd::string
-- cstringのslice/csliceを取るときにc_str()でnul終端する
-  cstring_sliceとcstring_cslice
-- strlit: nul終端文字列リテラル 文字列リテラルはこの型をもつ
-- strlitのcsliceはcstring_cslice
-- cstring_csliceはcslice{uchar}に変換できる(不要？)
-- 文字列への変換は
+文字列型再考 案2
+- nul終端文字列使わない方向で
+- 文字列リテラルはpxcではcslice{uchar}, c++ではstrlit
+- 文字列はpxcstring, これはpxcvector{uchar}の別名
+- open(2)のようなnul終端文字列を必要とする箇所はコピーを作る
+移行手順
+1 ioからc_str()削除(done)
+2 bt_stringをstd::stringからvector<char>的なものに(done)
+3 bt_stringのslice, key, mappedを取れるように
+  - いまここ
+4 strlit実装(cslice{uchar})、組み込み型に
+5 組み込み型のsliceを取れるようにする
+5 文字列リテラルをstringからcslice{uchar}に 
 
