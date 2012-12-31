@@ -61,7 +61,8 @@ pxcrt::bt_bool regex_compile(posix_re& re, pxcrt::bt_string const& s,
     re.error_code = 0;
     re.compiled = false;
   }
-  const int r = ::regcomp(&re.value, s.c_str(), cflags);
+  std::string ss(s.data(), s.size());
+  const int r = ::regcomp(&re.value, ss.c_str(), cflags);
   re.error_code = r;
   if (r == 0) {
     re.compiled = true;
@@ -70,12 +71,13 @@ pxcrt::bt_bool regex_compile(posix_re& re, pxcrt::bt_string const& s,
   return false;
 }
 pxcrt::bt_bool regex_exec(posix_re& re, pxcrt::bt_string const& s,
-  array::slice<regmatch_t> const& ma, int eflags)
+  pxcrt::slice<regmatch_t> const& ma, int eflags)
 {
   if (!re.compiled) {
     return false;
   }
-  const int r = ::regexec(&re.value, s.c_str(), ma.size(), ma.rawarr(),
+  std::string ss(s.data(), s.size());
+  const int r = ::regexec(&re.value, ss.c_str(), ma.size(), ma.rawarr(),
     eflags);
   re.error_code = r;
   return (r == 0);
@@ -92,10 +94,10 @@ pxcrt::bt_string regex_error_string(posix_re const& re)
 {
   size_t sz = ::regerror(re.error_code, &re.value, 0, 0);
   pxcrt::bt_string s;
-  s.resize(sz);
+  s.resize(sz, 0);
   ::regerror(re.error_code, &re.value, &s[0], sz);
   if (sz > 0) {
-    s.resize(sz - 1);
+    s.resize(sz - 1, 0);
   }
   return s;
 }

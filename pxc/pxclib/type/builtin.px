@@ -30,6 +30,8 @@ public threaded extern "pxcrt::string_empty"
   function bool bt_string_empty(string const& s);
 public threaded extern "pxcrt::string_resize"
   function void bt_string_resize(string& s, size_t len);
+public threaded extern "pxcrt::string_substring"
+  function bt_string bt_string_substring(string const& s, size_t o1, size_t o2);
 public threaded extern "pxcrt::string_clear"
   function void bt_string_clear(string& s);
 public threaded extern "pxcrt::string_append"
@@ -123,7 +125,6 @@ typedef ::uint64_t bt_ulong;
 typedef ::int64_t bt_long;
 typedef float bt_float;
 typedef double bt_double;
-typedef std::string bt_string;
 struct bt_tpdummy;
 typedef ::size_t size_type; // FIXME
 int main_nothrow(void (*main_f)(void));
@@ -345,24 +346,31 @@ private:
 
 extern "fdecl" inline
 namespace pxcrt {
-inline size_t string_size(const std::string& s)
+inline size_t string_size(const bt_string& s)
   { return s.size(); }
-inline bool string_empty(const std::string& s)
+inline bool string_empty(const bt_string& s)
   { return s.empty(); }
-inline void string_resize(std::string& s, unsigned long long len)
-  { s.resize(len); }
-inline void string_clear(std::string& s)
+inline void string_resize(bt_string& s, size_t len)
+  { s.resize(len, 0); }
+inline bt_string string_substring(const bt_string& s, size_t o1, size_t o2)
+  {
+    if (o2 <= o1) o2 = o1;
+    return bt_string(s.data() + o1, s.data() + o2);
+  }
+inline void string_clear(bt_string& s)
   { s.clear(); }
-inline void string_append(std::string& s, const std::string& x)
-  { s += x; }
-inline void string_prepend(std::string& s, const std::string& x)
-  { s.insert(s.begin(), x.begin(), x.end()); }
+inline void string_append(bt_string& s, const bt_string& x)
+  { s.append(x.begin(), x.end()); }
+inline void string_prepend(bt_string& s, const bt_string& x)
+  { s.prepend(x.begin(), x.end()); }
 }; // namespace pxcrt
 
 extern "fdef" inline
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <boost/lexical_cast.hpp>
+#include <boost/range/iterator_range.hpp>
 namespace pxcrt {
 const bt_unit unit_value = bt_unit();
 bt_string void_to_string(void)
@@ -451,7 +459,7 @@ bt_unit string_to_unit(const bt_string& v)
 }
 bt_bool string_to_bool(const bt_string& v)
 {
-  const bt_string::size_type len = v.size();
+  const size_type len = v.size();
   if (len == 4 && memcmp(v.data(), "true", 4) == 0) {
     return true;
   }
@@ -463,27 +471,33 @@ bt_bool string_to_bool(const bt_string& v)
   }
   return true;
 }
+template <typename Tt, typename Tf> inline Tt
+string_to_numeric_tmpl(const Tf& a)
+{
+  return boost::lexical_cast<Tt>(
+    boost::make_iterator_range(a.data(), a.data() + a.size()));
+}
 bt_uchar string_to_uchar(const bt_string& v)
-  { return strtoul(v.c_str(), 0, 10); }
+  { return string_to_numeric_tmpl<bt_uchar, bt_string>(v); }
 bt_char string_to_char(const bt_string& v)
-  { return strtol(v.c_str(), 0, 10); }
+  { return string_to_numeric_tmpl<bt_char, bt_string>(v); }
 bt_ushort string_to_ushort(const bt_string& v)
-  { return strtoul(v.c_str(), 0, 10); }
+  { return string_to_numeric_tmpl<bt_ushort, bt_string>(v); }
 bt_short string_to_short(const bt_string& v)
-  { return strtol(v.c_str(), 0, 10); }
+  { return string_to_numeric_tmpl<bt_short, bt_string>(v); }
 bt_uint string_to_uint(const bt_string& v)
-  { return strtoul(v.c_str(), 0, 10); }
+  { return string_to_numeric_tmpl<bt_uint, bt_string>(v); }
 bt_int string_to_int(const bt_string& v)
-  { return strtol(v.c_str(), 0, 10); }
+  { return string_to_numeric_tmpl<bt_int, bt_string>(v); }
 bt_ulong string_to_ulong(const bt_string& v)
-  { return strtoull(v.c_str(), 0, 10); }
+  { return string_to_numeric_tmpl<bt_ulong, bt_string>(v); }
 bt_long string_to_long(const bt_string& v)
-  { return strtoll(v.c_str(), 0, 10); }
+  { return string_to_numeric_tmpl<bt_long, bt_string>(v); }
 bt_double string_to_double(const bt_string& v)
-  { return atof(v.c_str()); }
+  { return string_to_numeric_tmpl<bt_double, bt_string>(v); }
 bt_float string_to_float(const bt_string& v)
-  { return atof(v.c_str()); }
+  { return string_to_numeric_tmpl<bt_float, bt_string>(v); }
 size_t string_to_size_t(const bt_string& v)
-  { return strtoull(v.c_str(), 0, 10); }
+  { return string_to_numeric_tmpl<size_t, bt_string>(v); }
 }; // namespace pxcrt
 

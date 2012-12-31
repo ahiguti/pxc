@@ -7,22 +7,20 @@ extern "type" inline
 #include <string.h>
 #include <boost/type_traits/is_pod.hpp>
 namespace array {
-template <typename T> struct slice;
-template <typename T> struct cslice;
+// template <typename T> struct slice;
+// template <typename T> struct cslice;
 template <typename T> struct is_trivially_copyable {
   enum { value = boost::is_pod<T>::value };
 };
 template <typename T>
 struct pxcvector {
   template <typename Tc> friend struct pxcrt::refvar_igrd_nn;
-  template <typename Tc> friend struct pxcrt::refvar_igrd;
   template <typename Tc> friend struct pxcrt::valvar_igrd_nn;
-  template <typename Tc> friend struct pxcrt::valvar_igrd;
   typedef size_t size_type;
   typedef T *iterator;
   typedef const T *const_iterator;
-  typedef slice<T> range_type;
-  typedef cslice<T> crange_type;
+  typedef pxcrt::slice<T> range_type;
+  typedef pxcrt::cslice<T> crange_type;
   pxcvector() : start(0), valid_len(0), alloc_len(0), invalidate_guard_count(0)
     { }
   ~pxcvector() { deinit(); }
