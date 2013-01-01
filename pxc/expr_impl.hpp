@@ -72,6 +72,21 @@ struct builtins_type {
   term type_tpdummy;
 };
 
+struct type_attribute {
+  int significant_bits_min; /* 8 for uchar, 7 for char */
+  int significant_bits_max; /* ditto */
+  bool is_numeric : 1;
+  bool is_integral : 1;
+  bool is_signed : 1;
+  type_attribute() : significant_bits_min(0), significant_bits_max(0),
+    is_numeric(false), is_integral(false), is_signed(false) { }
+  type_attribute(int sbmin, int sbmax, bool is_numeric, bool is_integral,
+    bool is_signed)
+    : significant_bits_min(sbmin), significant_bits_max(sbmax),
+      is_numeric(is_numeric), is_integral(is_integral), is_signed(is_signed)
+      { }
+};
+
 enum term_tostr_sort {
   term_tostr_sort_humanreadable,
   term_tostr_sort_strict,
@@ -1004,6 +1019,7 @@ public:
   const bool is_pod;
   const unsigned int num_tparams;
   attribute_e attr;
+  type_attribute tattr;
   term value_texpr;
   typecat_e typecat; // TODO: unused
 };

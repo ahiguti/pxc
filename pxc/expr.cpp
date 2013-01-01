@@ -270,26 +270,42 @@ struct builtin_typedefs_type {
   const char *category;
   bool is_pod;
   unsigned int num_tparams;
+  type_attribute tattr;
   term *tptr;
 };
 
 static const builtin_typedefs_type builtin_typedefs[] = {
-  { "bt_void", "void", 0, true, 0, &builtins.type_void },
-  { "bt_unit", "pxcrt::bt_unit", 0, true, 0, &builtins.type_unit },
-  { "bt_bool", "pxcrt::bt_bool", 0, true, 0, &builtins.type_bool },
-  { "bt_uchar", "pxcrt::bt_uchar", 0, true, 0, &builtins.type_uchar },
-  { "bt_char", "pxcrt::bt_char", 0, true, 0, &builtins.type_char },
-  { "bt_ushort", "pxcrt::bt_ushort", 0, true, 0, &builtins.type_ushort },
-  { "bt_short", "pxcrt::bt_short", 0, true, 0, &builtins.type_short },
-  { "bt_uint", "pxcrt::bt_uint", 0, true, 0, &builtins.type_uint },
-  { "bt_int", "pxcrt::bt_int", 0, true, 0, &builtins.type_int },
-  { "bt_ulong", "pxcrt::bt_ulong", 0, true, 0, &builtins.type_ulong },
-  { "bt_long", "pxcrt::bt_long", 0, true, 0, &builtins.type_long },
-  { "bt_size_t", "pxcrt::bt_size_t", 0, true, 0, &builtins.type_size_t},
-  { "bt_float", "pxcrt::bt_float", 0, true, 0, &builtins.type_float },
-  { "bt_double", "pxcrt::bt_double", 0, true, 0, &builtins.type_double },
+  { "bt_void", "void", 0, true, 0,
+    type_attribute(0, 0, false, false, false), &builtins.type_void },
+  { "bt_unit", "pxcrt::bt_unit", 0, true, 0,
+    type_attribute(0, 0, false, false, false), &builtins.type_unit },
+  { "bt_bool", "pxcrt::bt_bool", 0, true, 0,
+    type_attribute(1, 1, false, false, false), &builtins.type_bool },
+  { "bt_uchar", "pxcrt::bt_uchar", 0, true, 0,
+    type_attribute(8, 8, true, true, false), &builtins.type_uchar },
+  { "bt_char", "pxcrt::bt_char", 0, true, 0,
+    type_attribute(7, 7, true, true, true), &builtins.type_char },
+  { "bt_ushort", "pxcrt::bt_ushort", 0, true, 0,
+    type_attribute(16, 16, true, true, false), &builtins.type_ushort },
+  { "bt_short", "pxcrt::bt_short", 0, true, 0,
+    type_attribute(15, 15, true, true, true), &builtins.type_short },
+  { "bt_uint", "pxcrt::bt_uint", 0, true, 0,
+    type_attribute(32, 32, true, true, false), &builtins.type_uint },
+  { "bt_int", "pxcrt::bt_int", 0, true, 0,
+    type_attribute(31, 31, true, true, true), &builtins.type_int },
+  { "bt_ulong", "pxcrt::bt_ulong", 0, true, 0,
+    type_attribute(64, 64, true, true, false), &builtins.type_ulong },
+  { "bt_long", "pxcrt::bt_long", 0, true, 0,
+    type_attribute(63, 63, true, true, true), &builtins.type_long },
+  { "bt_size_t", "pxcrt::bt_size_t", 0, true, 0,
+    type_attribute(32, 64, true, true, false), &builtins.type_size_t},
+  { "bt_float", "pxcrt::bt_float", 0, true, 0,
+    type_attribute(23, 23, true, false, true), &builtins.type_float },
+  { "bt_double", "pxcrt::bt_double", 0, true, 0,
+    type_attribute(52, 52, true, false, true), &builtins.type_double },
 //  { "bt_string", "pxcrt::bt_string", 0, false, 0, &builtins.type_string },
-  { "bt_tpdummy", "pxcrt::bt_tpdummy", 0, false, 0, &builtins.type_tpdummy },
+  { "bt_tpdummy", "pxcrt::bt_tpdummy", 0, false, 0,
+    type_attribute(0, 0, false, false, false), &builtins.type_tpdummy },
 };
 
 static void define_builtins()
@@ -298,11 +314,13 @@ static void define_builtins()
   const size_t num = sizeof(builtin_typedefs) / sizeof(builtin_typedefs[0]);
   for (size_t i = 0; i < num; ++i) {
     const builtin_typedefs_type *const be = builtin_typedefs + i;
-    expr_i *const etd = expr_typedef_new("BUILTIN", 0, be->name, be->cname,
-      be->category, be->is_pod, be->num_tparams,
-      attribute_e(attribute_public |
-	attribute_threaded | attribute_multithr | attribute_valuetype |
-	attribute_tsvaluetype));
+    expr_typedef *const etd = ptr_down_cast<expr_typedef>(
+      expr_typedef_new("BUILTIN", 0, be->name,
+	be->cname, be->category, be->is_pod, be->num_tparams,
+	attribute_e(attribute_public |
+	  attribute_threaded | attribute_multithr | attribute_valuetype |
+	  attribute_tsvaluetype)));
+    etd->tattr = be->tattr;
     (*be->tptr) = etd->get_value_texpr();
     stmts = expr_stmts_new("", 0, etd, stmts);
   }

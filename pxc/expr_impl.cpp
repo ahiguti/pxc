@@ -1209,8 +1209,8 @@ expr_typedef::expr_typedef(const char *fn, int line, const char *sym,
   const char *cname, const char *category, bool is_pod,
   unsigned int num_tparams, attribute_e attr)
   : expr_i(fn, line), sym(sym), cname(cname), typecat_str(category),
-    is_pod(is_pod), num_tparams(num_tparams), attr(attr), value_texpr(),
-    typecat(typecat_e_none)
+    is_pod(is_pod), num_tparams(num_tparams), attr(attr), tattr(),
+    value_texpr(), typecat(typecat_e_none)
 {
   value_texpr = term(this);
 }
