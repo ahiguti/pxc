@@ -65,6 +65,7 @@ struct builtins_type {
   term type_int;
   term type_ulong;
   term type_long;
+  term type_size_t;
   term type_float;
   term type_double;
   term type_string;

@@ -1016,6 +1016,18 @@ static term eval_meta_concat(term_list& tlev)
   return term(s);
 }
 
+static term eval_meta_attribute(term_list& tlev)
+{
+  if (tlev.size() != 2) {
+    return term();
+  }
+  std::string s = meta_term_to_string(tlev[1], false);
+  if (s == "weak") {
+    return term(is_weak_value_type(tlev[0]));
+  }
+  return term();
+}
+
 static term eval_meta_category(term_list& tlev)
 {
   if (tlev.size() != 1) {
@@ -1265,6 +1277,8 @@ static term eval_metafunction(const std::string& name, term_list& tlev,
       r = builtins.type_ulong;
     } else if (name == "@0long") {
       r = builtins.type_long;
+    } else if (name == "@0size_t") {
+      r = builtins.type_size_t;
     } else if (name == "@0float") {
       r = builtins.type_float;
     } else if (name == "@0double") {
@@ -1337,6 +1351,8 @@ static term eval_metafunction(const std::string& name, term_list& tlev,
       r = eval_meta_concat(tlev);
     } else if (name == "@category") {
       r = eval_meta_category(tlev);
+    } else if (name == "@attribute") {
+      r = eval_meta_attribute(tlev);
     } else if (name == "@nsname") {
       r = eval_meta_nsname(tlev);
     } else if (name == "@not") {

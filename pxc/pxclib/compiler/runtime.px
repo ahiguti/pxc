@@ -9,11 +9,69 @@ public mtvaluetype extern "pxcrt::null_dereference" ""
 public mtvaluetype extern "pxcrt::would_invalidate" ""
   struct would_invalidate { }
 
+public extern "@0void" "@0void" struct void { }
+public extern "@0bool" "@0bool" struct bool { }
+public extern "@0char" "@0char" struct char { }
+public extern "@0uchar" "@0uchar" struct uchar { }
+public extern "@0size_t" "@0size_t" struct size_t { }
+public tsvaluetype extern "pxcrt::slice" "slice"
+struct {t} slice {
+  public macro key_type size_t;
+  public macro mapped_type t;
+  public macro range_type slice{t};
+  public macro crange_type cslice{t};
+  public extern "empty" function bool empty() const;
+  public extern "size" function size_t size() const;
+  public extern "next" function void next();
+}
+public tsvaluetype extern "pxcrt::cslice" "cslice"
+struct {t} cslice {
+  public macro key_type size_t;
+  public macro mapped_type t;
+  public macro range_type cslice{t};
+  public macro crange_type cslice{t};
+  public extern "empty" function bool empty() const;
+  public extern "size" function size_t size() const;
+  public extern "next" function void next();
+}
+public mtvaluetype extern "pxcrt::bt_string" "varray"
+struct bt_string {
+  public macro key_type size_t;
+  public macro mapped_type uchar;
+  public macro range_type slice{char};
+  public macro crange_type cslice{char};
+  public extern "empty" function bool empty() const;
+  public extern "size" function size_t size() const;
+  public extern "resize" function void resize(size_t i, char const& v);
+  public extern "clear" function void clear();
+  public extern "push_back" function void push_back(char const& v);
+  public extern "pop_back" function uchar pop_back();
+  public extern "reserve" function void reserve(size_t i);
+  public extern "append" function void append(crange_type const& v);
+}
+
 extern "type" inline
 #include <stdexcept>
 #include <vector>
 #include <string.h>
+#include <stdint.h>
 namespace pxcrt {
+struct bt_unit { };
+extern const bt_unit unit_value;
+typedef bool bt_bool;
+typedef ::uint8_t bt_uchar;
+// typedef ::int8_t bt_char;
+typedef char bt_char;
+typedef ::uint16_t bt_ushort;
+typedef ::int16_t bt_short;
+typedef ::uint32_t bt_uint;
+typedef ::int32_t bt_int;
+typedef ::uint64_t bt_ulong;
+typedef ::int64_t bt_long;
+typedef ::size_t bt_size_t;
+typedef float bt_float;
+typedef double bt_double;
+struct bt_tpdummy;
 void throw_invalid_index() __attribute__((noreturn));
 void throw_null_dereference() __attribute__((noreturn));
 void throw_invalid_field() __attribute__((noreturn));
@@ -64,23 +122,22 @@ template <typename T>
 struct slice {
   template <typename Tc> friend struct pxcrt::refvar_igrd_nn;
   template <typename Tc> friend struct pxcrt::valvar_igrd_nn;
-  typedef size_t size_type;
   slice() : v(0), len(0) { }
-  slice(T *ptr, size_t o) : v(ptr), len(o) { }
+  slice(T *ptr, bt_size_t o) : v(ptr), len(o) { }
   template <typename Tc> slice(Tc& c) : v(c.rawarr()), len(c.size()) { }
-  template <typename Tc> slice(Tc& c, size_t o1, size_t o2) {
+  template <typename Tc> slice(Tc& c, bt_size_t o1, bt_size_t o2) {
     if (o2 > c.size()) { o2 = c.size(); }
     if (o1 > o2) { o1 = o2; }
     v = c.rawarr() + o1;
     len = o2 - o1;
   }
-  size_type size() const { return len; }
+  bt_size_t size() const { return len; }
   void next() {
     if (len == 0) { pxcrt::throw_invalid_index(); }
     ++v;
     --len;
   }
-  T& operator [](size_type idx) const {
+  T& operator [](bt_size_t idx) const {
     if (idx >= len) { pxcrt::throw_invalid_index(); }
     return v[idx];
   }
@@ -91,29 +148,28 @@ struct slice {
   T *rawarr() const { return v; }
 private:
   T *v;
-  size_t len;
+  bt_size_t len;
 };
 template <typename T>
 struct cslice {
   template <typename Tc> friend struct pxcrt::refvar_igrd_nn;
   template <typename Tc> friend struct pxcrt::valvar_igrd_nn;
-  typedef size_t size_type;
   cslice() : v(0), len(0) { }
-  cslice(const T *ptr, size_t o) : v(ptr), len(o) { }
+  cslice(const T *ptr, bt_size_t o) : v(ptr), len(o) { }
   template <typename Tc> cslice(const Tc& c) : v(c.rawarr()), len(c.size()) { }
-  template <typename Tc> cslice(const Tc& c, size_t o1, size_t o2) {
+  template <typename Tc> cslice(const Tc& c, bt_size_t o1, bt_size_t o2) {
     if (o2 > c.size()) { o2 = c.size(); }
     if (o1 > o2) { o1 = o2; }
     v = c.rawarr() + o1;
     len = o2 - o1;
   }
-  size_type size() const { return len; }
+  bt_size_t size() const { return len; }
   void next() {
     if (len == 0) { pxcrt::throw_invalid_index(); }
     ++v;
     --len;
   }
-  const T& operator [](size_type idx) const {
+  const T& operator [](bt_size_t idx) const {
     if (idx >= len) { pxcrt::throw_invalid_index(); }
     return v[idx];
   }
@@ -124,7 +180,7 @@ struct cslice {
   const T *rawarr() const { return v; }
 private:
   const T *v;
-  size_t len;
+  bt_size_t len;
 };
 template <typename T>
 struct stdvector {
@@ -182,6 +238,9 @@ struct stdvector {
     v.pop_back();
     return r;
   }
+  void append(const crange_type& x) {
+    v.insert(v.end(), x.rawarr(), x.rawarr() + x.size());
+  }
   void append(const const_iterator& start, const const_iterator& finish) {
     v.insert(v.end(), start, finish);
   }
@@ -212,7 +271,7 @@ private:
   }
 private:
   std::vector<T> v;
-  mutable size_t invalidate_guard_count;
+  mutable size_type invalidate_guard_count;
 };
 template<typename T>
 inline bool operator ==(const stdvector<T>& x, const stdvector<T>& y)
@@ -228,8 +287,6 @@ struct would_invalidate : public std::logic_error { would_invalidate(); };
 struct virtual_function_call : public std::logic_error
   { virtual_function_call(); };
 }; // namespace pxcrt
-
-
 
 extern "fdef" inline
 #include <string>

@@ -285,9 +285,10 @@ static const builtin_typedefs_type builtin_typedefs[] = {
   { "bt_int", "pxcrt::bt_int", 0, true, 0, &builtins.type_int },
   { "bt_ulong", "pxcrt::bt_ulong", 0, true, 0, &builtins.type_ulong },
   { "bt_long", "pxcrt::bt_long", 0, true, 0, &builtins.type_long },
+  { "bt_size_t", "pxcrt::bt_size_t", 0, true, 0, &builtins.type_size_t},
   { "bt_float", "pxcrt::bt_float", 0, true, 0, &builtins.type_float },
   { "bt_double", "pxcrt::bt_double", 0, true, 0, &builtins.type_double },
-  { "bt_string", "pxcrt::bt_string", 0, false, 0, &builtins.type_string },
+//  { "bt_string", "pxcrt::bt_string", 0, false, 0, &builtins.type_string },
   { "bt_tpdummy", "pxcrt::bt_tpdummy", 0, false, 0, &builtins.type_tpdummy },
 };
 
@@ -339,6 +340,21 @@ static void define_builtins()
     stmts = expr_stmts_new("", 0, est, stmts);
   }  
   topvals.push_front(stmts);
+}
+
+static void define_builtin_string(expr_stmts *stmts_runtime)
+{
+  for (expr_stmts *st = stmts_runtime; st != 0; st = st->rest) {
+    expr_struct *def = dynamic_cast<expr_struct *>(st->head);
+    if (def == 0) {
+      continue;
+    }
+    if (std::string(def->sym) == "bt_string") {
+      builtins.type_string = def->get_value_texpr();
+      return;
+    }
+  }
+  abort();
 }
 
 void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
@@ -442,6 +458,8 @@ void arena_compile(const std::string& dest_filename, coptions& copt_apnd,
   expr_i *const global = expr_block_new("", 0, 0, 0, 0, 0, e);
   expr_block *const gl_block = ptr_down_cast<expr_block>(global);
   global_block = gl_block;
+  /* define bt_string */
+  define_builtin_string(e);
   /* compile */
   fn_append_coptions(global, copt_apnd);
   compile_phase = 2;
