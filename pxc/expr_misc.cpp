@@ -1126,6 +1126,48 @@ static bool unify_type(
   return false;
 }
 
+static int num_bits_min(const term& t)
+{
+  expr_typedef *const etd = dynamic_cast<expr_typedef *>(t.get_expr());
+  if (etd == 0) {
+    return 0;
+  }
+  return etd->tattr.significant_bits_min;
+}
+
+static int num_bits_max(const term& t)
+{
+  expr_typedef *const etd = dynamic_cast<expr_typedef *>(t.get_expr());
+  if (etd == 0) {
+    return 0;
+  }
+  return etd->tattr.significant_bits_max;
+}
+
+static bool numeric_convertible(const term& tfrom, const term& tto)
+{
+  if (!is_numeric_type(tfrom) || !is_numeric_type(tto)) {
+    return false;
+  }
+  if (tto == tfrom) {
+    return true;
+  }
+  if (get_category(tfrom) != get_category(tto)) {
+    return false; /* none(builtin), int, uint */
+  }
+  if (is_unsigned_integral_type(tfrom) != is_unsigned_integral_type(tto)) {
+    return false; /* different signedness */
+  }
+  const typecat_e cat = get_category(tfrom);
+  if (cat != typecat_e_none) {
+    return true; /* user defined type */
+  }
+  /* builtin type */
+  int to_min = num_bits_min(tto);
+  int from_max = num_bits_max(tfrom);
+  return to_min >= from_max;
+}
+
 bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
 {
   term& tfrom = efrom->resolve_texpr();
@@ -1150,6 +1192,8 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
   } else {
     tconvto = tto;
   }
+  // TODO: enable this
+  // if (numeric_convertible(tfrom, tconvto)) {
   if (is_numeric_type(tfrom) && is_numeric_type(tconvto)) {
     efrom->conv = conversion_e_cast;
     efrom->type_conv_to = tconvto;
