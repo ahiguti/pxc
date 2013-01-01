@@ -11,9 +11,12 @@ public extern "@0uint" "@0uint" struct uint { }
 public extern "@0int" "@0int" struct int { }
 public extern "@0ulong" "@0ulong" struct ulong { }
 public extern "@0long" "@0long" struct long { }
+public extern "@0size_t" "@0size_t" struct size_t { }
 public extern "@0float" "@0float" struct float { }
 public extern "@0double" "@0double" struct double { }
 public extern "@0string" "@0string" struct string { }
+public macro slice{t} compiler::runtime::slice{t};
+public macro cslice{t} compiler::runtime::cslice{t};
 
 public threaded extern "pxcrt::ptr" "ptr" struct {t} ptr { } 
 public threaded extern "pxcrt::cptr" "cptr" struct {t} cptr { }
@@ -22,8 +25,6 @@ public multithreaded extern "pxcrt::tptr" "tptr" struct {t} tptr { }
 public multithreaded extern "pxcrt::tcptr" "tcptr" struct {t} tcptr { }
 public tsvaluetype extern "pxcrt::tiptr" "tiptr" struct {t} tiptr { }
 
-public tsvaluetype extern "pxcrt::size_type" "uint" struct size_t { }
-
 public threaded extern "pxcrt::string_size"
   function size_t bt_string_size(string const& s);
 public threaded extern "pxcrt::string_empty"
@@ -31,7 +32,7 @@ public threaded extern "pxcrt::string_empty"
 public threaded extern "pxcrt::string_resize"
   function void bt_string_resize(string& s, size_t len);
 public threaded extern "pxcrt::string_substring"
-  function bt_string bt_string_substring(string const& s, size_t o1, size_t o2);
+  function string bt_string_substring(string const& s, size_t o1, size_t o2);
 public threaded extern "pxcrt::string_clear"
   function void bt_string_clear(string& s);
 public threaded extern "pxcrt::string_append"
@@ -59,12 +60,12 @@ public threaded extern "pxcrt::ulong_to_string"
   function string bt_ulong_to_string(ulong x);
 public threaded extern "pxcrt::long_to_string"
   function string bt_long_to_string(long x);
+public threaded extern "pxcrt::size_t_to_string"
+  function string bt_size_t_to_string(size_t x);
 public threaded extern "pxcrt::float_to_string"
   function string bt_float_to_string(float x);
 public threaded extern "pxcrt::double_to_string"
   function string bt_double_to_string(double x);
-public threaded extern "pxcrt::size_t_to_string"
-  function string size_t_to_string(size_t x);
 
 public threaded extern "pxcrt::string_to_unit"
   function unit bt_string_to_bt_unit(string const& x);
@@ -112,22 +113,6 @@ extern "type" inline
 #define DBG_MTX(x)
 #endif
 namespace pxcrt {
-struct bt_unit { };
-extern const bt_unit unit_value;
-typedef bool bt_bool;
-typedef ::uint8_t bt_uchar;
-typedef ::int8_t bt_char;
-typedef ::uint16_t bt_ushort;
-typedef ::int16_t bt_short;
-typedef ::uint32_t bt_uint;
-typedef ::int32_t bt_int;
-typedef ::uint64_t bt_ulong;
-typedef ::int64_t bt_long;
-typedef float bt_float;
-typedef double bt_double;
-struct bt_tpdummy;
-typedef ::size_t size_type; // FIXME
-int main_nothrow(void (*main_f)(void));
 struct mutex {
   friend struct lockobject;
   mutex() {
@@ -346,13 +331,14 @@ private:
 
 extern "fdecl" inline
 namespace pxcrt {
-inline size_t string_size(const bt_string& s)
+inline bt_size_t string_size(const bt_string& s)
   { return s.size(); }
 inline bool string_empty(const bt_string& s)
   { return s.empty(); }
-inline void string_resize(bt_string& s, size_t len)
+inline void string_resize(bt_string& s, bt_size_t len)
   { s.resize(len, 0); }
-inline bt_string string_substring(const bt_string& s, size_t o1, size_t o2)
+inline bt_string string_substring(const bt_string& s, bt_size_t o1,
+  bt_size_t o2)
   {
     if (o2 <= o1) o2 = o1;
     return bt_string(s.data() + o1, s.data() + o2);
@@ -447,7 +433,7 @@ bt_string float_to_string(bt_float v)
   const int len = snprintf(buf, sizeof(buf), "%f", double(v));
   return bt_string(buf, buf + len);
 }
-bt_string size_t_to_string(size_type v)
+bt_string size_t_to_string(bt_size_t v)
 {
   char buf[32];
   const int len = snprintf(buf, sizeof(buf), "%zu", (size_t)v);
@@ -459,7 +445,7 @@ bt_unit string_to_unit(const bt_string& v)
 }
 bt_bool string_to_bool(const bt_string& v)
 {
-  const size_type len = v.size();
+  const bt_size_t len = v.size();
   if (len == 4 && memcmp(v.data(), "true", 4) == 0) {
     return true;
   }
@@ -497,7 +483,7 @@ bt_double string_to_double(const bt_string& v)
   { return string_to_numeric_tmpl<bt_double, bt_string>(v); }
 bt_float string_to_float(const bt_string& v)
   { return string_to_numeric_tmpl<bt_float, bt_string>(v); }
-size_t string_to_size_t(const bt_string& v)
-  { return string_to_numeric_tmpl<size_t, bt_string>(v); }
+bt_size_t string_to_size_t(const bt_string& v)
+  { return string_to_numeric_tmpl<bt_size_t, bt_string>(v); }
 }; // namespace pxcrt
 

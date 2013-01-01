@@ -298,7 +298,8 @@ static bool is_pod_integral_type(const term& t)
     t == builtins.type_uint ||
     t == builtins.type_int ||
     t == builtins.type_ulong ||
-    t == builtins.type_long
+    t == builtins.type_long ||
+    t == builtins.type_size_t
     ) {
     return true;
   }
@@ -322,7 +323,8 @@ bool is_unsigned_integral_type(const term& t)
     t == builtins.type_uchar ||
     t == builtins.type_ushort ||
     t == builtins.type_uint ||
-    t == builtins.type_ulong
+    t == builtins.type_ulong ||
+    t == builtins.type_size_t
     ) {
     return true;
   }
@@ -2373,7 +2375,7 @@ term get_array_range_texpr(expr_op *eop, expr_i *ec, term& ect)
   term slt = eval_local_lookup(ect,
     nonconst ? "range_type" : "crange_type", eop);
   if (slt.is_null()) {
-    arena_error_throw(eop, "cannot apply '[ :: ]'");
+    arena_error_throw(eop, "cannot apply '[ .. ]'");
     return builtins.type_void;
   }
   DBG_SLICE(fprintf(stderr, "range: %s %s -> %s\n", ec->dump(0).c_str(),
@@ -2383,6 +2385,9 @@ term get_array_range_texpr(expr_op *eop, expr_i *ec, term& ect)
 
 term get_array_elem_texpr(expr_op *eop, term& t0)
 {
+  if (t0 == builtins.type_string) {
+    return builtins.type_uchar;
+  }
   /* extern struct? */
   expr_i *const einst = term_get_instance(t0);
   const expr_struct *const est = dynamic_cast<const expr_struct *>(einst);
@@ -2428,6 +2433,9 @@ term get_array_elem_texpr(expr_op *eop, term& t0)
 
 term get_array_index_texpr(expr_op *eop, term& t0)
 {
+  if (t0 == builtins.type_string) {
+    return builtins.type_size_t;
+  }
   /* extern struct? */
   expr_i *const einst = term_get_instance(t0);
   const expr_struct *const est = dynamic_cast<const expr_struct *>(einst);
