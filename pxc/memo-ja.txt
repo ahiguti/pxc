@@ -3,28 +3,29 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- darrayは代入不可
+- 型定義順依存を調べるために再帰的型を定義するテストを作る
+- pxcvectorなどのインラインメンバ関数は"type"ではなく"fdecl"に移さ
+  ないと型定義順依存がおきる -> そんなことはない。メンバ関数ごとに
+  インスタンス化される
+- realloc-safeかどうかpxcで判断し、それに応じて使うコンテナ実装を
+  切り替える
+
+- tsvaluetype darray実装
+
 - 浮動小数点数がieee754, 整数が2の補数であることを仮定している
 - 数値型の変換チェック numeric_convertible
 
-- bt_stringの中で返すsize_tはto_string動かないのでは？
-- string以外のコンテナにもappend
-- pxcのcharはc++のcharではなくint8_t
-- stringをcharではなくuchar
-- sliceからコンテナへ変換できないのか？
+- expr.cppで組み込み型にtype::builtinをセットしているのをやめて、
+  serializeなどではtype::builtinではない名前空間を使うようにする
+
+- public extern "@0void" "@0void" struct void { } こういうの無くす?
+
+- pxcvectorとtree_mapのsliceからコンストラクタ
+- pxcvectorのappend
 
 - 演算子の一通りテスト作成。コンテナ含め。
 
-文字列型再考
-- stringはpodvector<uchar>を抱える。rep共有はやらない。
-- nul終端文字列を必要とする場合のために常にnul終端しておく?
-  それとも1byte常に余分に割り当てておいてc_str()で埋める?
-  nul終端文字列使わない？
-- string_slice/cstring_sliceもslice/cslice
-- nul終端なslice: slicez{t}/cslicez{t}
-- ソース埋め込み文字列としてstring_literal型を用意。これは
-- stringとsize_tはcontainerへ移す
-
-- global変数にweak型は使えないようにせよ(11/fe_sli.px mudflap)(done)
 - std::mapで foo["abc"] = "xyz" するとmudflapが怒る
 - unionがunitだけでできていたときmudflapが怒る(バージョン？)
   (STLのバグ？)
@@ -56,8 +57,6 @@ threadまわり
 
 namespaceまわり
 - namespace宣言義務付け
-- fooの全てのpublicシンボルをbarのシンボルとしてアクセスできるように
-  するためのimport構文 -> やめる？ macro定義のほうがよい？
 - import元を制限する構文
 
 ポインタまわり
@@ -70,9 +69,6 @@ weak型まわり
   is_weak_type() あるいはヒープに置けなければそれでよい？
 - weak型を初期化以外の代入の左辺にできないように(done)
 
-copyableのチェック
-- interfaceなどのようにcopyableではないものをコピーしたときのエラー(done)
-- byrefであればintrface型もvarとtempvarに許容(done)
 
 interfaceまわり
 - interfaceの仮想関数の引数型は先に定義しなくていいのか？
@@ -85,11 +81,8 @@ if-defined構文
 - if (int const& x : foo[k]) { ... } のif-defined構文(done)
 - if (int v : foo.fld) { ... } // unionのフィールドは左辺値取れない
 
-- string_to_ などをpxcrtから追い出す
-- int_compareなどの比較関数を無くし、基本型は > で比較するように(done)
-
-- C++が定義する関数については宣言だけはemitする
-  (誤った宣言で問題を起こさないようにするため)
+- C++が定義する関数については宣言だけはemitする(誤った宣言で問題を起
+  こさないようにするため)(done)
   template関数と型については未実装
 
 - type categoryの整理
@@ -255,6 +248,14 @@ TODO
 ---------------------------------------------------------------------
 DONE
 
+- int_compareなどの比較関数を無くし、基本型は > で比較するように(done)
+- global変数にweak型は使えないようにせよ(11/fe_sli.px mudflap)(done)
+- interfaceなどのようにcopyableではないものをコピーしたときのエラー(done)
+- byrefであればintrface型もvarとtempvarに許容(done)
+- string以外のコンテナにもappend(done)
+- pxcのcharはc++のcharではなくint8_t(done)
+- stringをcharではなくuchar(done)
+- sliceからコンテナへ変換(done)
 - foreachの中ではoperator []の範囲チェック不要 (done)
 - コンストラクタへの引数がメンバ関数から見えてしまわないか？
   07/strarg.px (done)
@@ -5214,7 +5215,7 @@ iptrはvaluetype
 tiptrはtsvaluetype
 
 隠されたカウンタなどを持っていない値型はtsvaluetype
-vectorやtree_mapはmtvaluetype
+vectorやtree_mapはguard countを持っているからmtvaluetype
 
 ---------------------------------------------------------------------
 default-constructible?
@@ -5267,17 +5268,58 @@ aの各要素iについて
 - 一時オブジェクトは文末で無効化される
 
 ---------------------------------------------------------------------
+コンテナ初期化をシンプルに書けるように
+
+int x = 3;
+vector{int} v = { x, x * 2, x * 3 };
+{ }式の型は、{ }の中の最初の要素の型を要素型とする固定長配列
+
+---------------------------------------------------------------------
 文字列型再考 案2
+
 - nul終端文字列使わない方向で
 - 文字列リテラルはpxcではcslice{uchar}, c++ではstrlit
 - 文字列はpxcstring, これはpxcvector{uchar}の別名
 - open(2)のようなnul終端文字列を必要とする箇所はコピーを作る
+- stringとstrlitを分けるメリット:
+  - strlitはguardが要らない。
+  - pxc的にstrlitであることをコンパイラが知ることでテンプレート
+    引数でも同様のメリットが享受できる。
+
 移行手順
 1 ioからc_str()削除(done)
 2 bt_stringをstd::stringからvector<char>的なものに(done)
 3 bt_stringのslice, key, mappedを取れるように
-  - いまここ
-4 strlit実装(cslice{uchar})、組み込み型に
-5 組み込み型のsliceを取れるようにする
-5 文字列リテラルをstringからcslice{uchar}に 
+4 sliceからコンテナへ自動変換できるように
+5 strlit実装(cslice{uchar})、組み込み型にし、stringへの自動変換
+6 組み込み型のsliceを取れるようにする
+7 文字列リテラルをstringからcslice{uchar}に。charでなく。
+8 string/strlitにoperatorを定義
+9 ioなどをslice使うように変更
+10 stringの実装を速く(podvector{uchar})
+
+---------------------------------------------------------------------
+インタフェース改善
+
+一つの型が一つのインタフェースを実装する方法(vtable)を複数持てるように
+interface ifoo {
+  void hoge();
+  void fuga();
+}
+struct abc {
+  void hoge1();
+  void fuga1();
+  void hoge2();
+  void fuga2();
+}
+implementation abc_as_ifoo1 {
+  abc : ifoo;
+  hoge1 : hoge;
+  fuga1 : fuga;
+}
+implementation abc_as_ifoo2 {
+  abc : ifoo;
+  hoge2 : hoge;
+  fuga2 : fuga;
+}
 

@@ -8,7 +8,11 @@ public threaded function {t} string to_string(t const& x)
   macro sym1 m::symbol{t, symstr}; // t's namespace
   macro sym2 m::symbol{to_string, symstr}; // our namespace // TODO
   macro cat m::category{t};
-  if (m::eq{t, type::builtin::string}) {
+  if (m::or{
+    m::eq{t, type::builtin::string},
+    m::eq{t, type::builtin::strlit},
+    m::eq{t, type::builtin::cslice{type::builtin::uchar}},
+    m::eq{t, type::builtin::slice{type::builtin::uchar}}}) {
     return x;
   } else if (m::eq{m::to_string{sym1}, symstr}) {
     return sym1(x);

@@ -69,6 +69,9 @@ struct builtins_type {
   term type_float;
   term type_double;
   term type_string;
+  term type_strlit;
+  term type_slice;
+  term type_cslice;
   term type_tpdummy;
 };
 
@@ -133,7 +136,8 @@ enum typecat_e {
   typecat_e_float,            /* float/double etc, */
   typecat_e_numeric,          /* other numeric types */
   typecat_e_varray,           /* resizable array */
-  typecat_e_farray,           /* fixed size array */
+  typecat_e_darray,           /* dynamically allocated array */
+  typecat_e_farray,           /* fixed size array, fixed at compile time */
   typecat_e_slice,            /* array slice (WEAK) */
   typecat_e_cslice,           /* array slice, const elements (WEAK) */
   typecat_e_tree_map,         /* rb-tree map */
@@ -417,9 +421,9 @@ struct expr_str_literal : public expr_i {
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
-  const char *const raw_value;
+  const char *const raw_value; /* escaped */
   bool valid_flag;
-  std::string value;
+  std::string value; /* not escaped */
 };
 
 struct expr_nssym : public expr_i {

@@ -3,7 +3,7 @@ public import type::builtin "";
 // public import type::impl::stdvector;
 public import type::impl::pxcvector;
 public import type::impl::farray;
-// public import type::impl::slice;
+public import type::impl::darray;
 
 public mtvaluetype extern "pxcrt::stdvector" "varray"
 struct {t} stdvector {
@@ -17,6 +17,8 @@ struct {t} stdvector {
   public extern "clear" function void clear();
   public extern "push_back" function void push_back(t const& v);
   public extern "pop_back" function t pop_back();
+  // FIXME: implement
+  // public extern "append" function void append(crange_type const& v);
   public extern "reserve" function void reserve(size_t i);
 }
 
@@ -32,11 +34,23 @@ struct {t} pxcvector {
   public extern "clear" function void clear();
   public extern "push_back" function void push_back(t const& v);
   public extern "pop_back" function t pop_back();
+  // FIXME: implement
+  // public extern "append" function void append(crange_type const& v);
   public extern "reserve" function void reserve(size_t i);
 }
 
 public tsvaluetype extern "array::farray" "farray"
 struct {t, n} farray {
+  public macro key_type size_t;
+  public macro mapped_type t;
+  public macro range_type slice{t};
+  public macro crange_type cslice{t};
+  public extern "empty" function bool empty() const;
+  public extern "size" function size_t size() const;
+}
+
+public tsvaluetype extern "array::darray" "darray"
+struct {t} darray {
   public macro key_type size_t;
   public macro mapped_type t;
   public macro range_type slice{t};

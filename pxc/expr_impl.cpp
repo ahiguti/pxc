@@ -211,7 +211,6 @@ static void symdef_check_threading_attr_type_or_func(expr_i *e,
 	"type '%s' for symbol '%s' is not tsvaluetype",
 	term_tostr_human(t).c_str(), sc->fullsym.c_str());
     }
-    // FIXME: valuetype and tsvaluetype
   }
 #if 0
 fprintf(stderr, "%s c=%x t=%x\n", term_tostr_human(t).c_str(), (int)cattr, (int)tattr); // FIXME
@@ -276,7 +275,7 @@ static term& resolve_texpr_symbol_common(expr_i *e)
       term_tostr_human(evaluated).c_str(), e));
   } else if (evaluated.is_string()) {
     /* string literal */
-    e->type_of_this_expr = builtins.type_string;
+    e->type_of_this_expr = builtins.type_strlit;
     DBG_TE1(fprintf(stderr,
       "resolve_texpr_symbol_common tote: '%s' %p -> string\n",
     term_tostr_human(evaluated).c_str(), e));
@@ -392,10 +391,16 @@ std::string expr_telist::dump(int indent) const
   return r;
 }
 
-expr_inline_c::expr_inline_c(const char *fn, int line, const char *posstr,
+expr_inline_c::expr_inline_c(const char *fn, int line, const char *label,
   const char *cstr, bool declonly)
-  : expr_i(fn, line), posstr(posstr), cstr(cstr), declonly(declonly)
+  : expr_i(fn, line), posstr(label), cstr(cstr), declonly(declonly)
 {
+  if (posstr != "type" && posstr != "fdecl" && posstr != "fdef" &&
+    posstr != "incdir" && posstr != "link" && posstr != "cflags" &&
+    posstr != "ldflags") {
+    arena_error_push(this,
+      "invalid label '%s'", posstr.c_str());
+  }
 }
 
 std::string expr_inline_c::dump(int indent) const
@@ -625,7 +630,7 @@ term&
 expr_str_literal::resolve_texpr()
 {
   if (type_of_this_expr.is_null()) {
-    type_of_this_expr = builtins.type_string;
+    type_of_this_expr = builtins.type_strlit;
   }
   return type_of_this_expr;
 }

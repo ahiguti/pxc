@@ -367,12 +367,21 @@ static void define_builtin_string(expr_stmts *stmts_runtime)
     if (def == 0) {
       continue;
     }
-    if (std::string(def->sym) == "bt_string") {
+    const std::string s(def->sym);
+    if (s == "bt_string") {
       builtins.type_string = def->get_value_texpr();
-      return;
+    } else if (s == "bt_strlit") {
+      builtins.type_strlit = def->get_value_texpr();
+    } else if (s == "bt_slice") {
+      builtins.type_slice = def->get_value_texpr();
+    } else if (s == "bt_cslice") {
+      builtins.type_cslice = def->get_value_texpr();
     }
   }
-  abort();
+  assert(!builtins.type_string.is_null());
+  assert(!builtins.type_strlit.is_null());
+  assert(!builtins.type_slice.is_null());
+  assert(!builtins.type_cslice.is_null());
 }
 
 void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
