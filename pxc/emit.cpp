@@ -1110,6 +1110,7 @@ static std::list<expr_i *> get_dep_tparams(expr_struct *est)
     cat == typecat_e_tcptr ||
     // cat == typecat_e_wptr ||
     // cat == typecat_e_wcptr ||
+    cat == typecat_e_darray ||
     cat == typecat_e_varray ||
     cat == typecat_e_tree_map) {
     /* no dep */
@@ -1487,7 +1488,9 @@ void expr_bool_literal::emit_value(emit_context& em)
 
 void expr_str_literal::emit_value(emit_context& em)
 {
+  em.puts("pxcrt::bt_strlit(");
   em.puts(escape_c_str_literal(value));
+  em.puts(")");
 }
 
 static bool is_field_w_explicit_obj(const expr_i *e)
@@ -1519,8 +1522,14 @@ static std::string csymbol_tempvar(int tempvar_id)
 static void emit_value_symdef_common(emit_context& em, symbol_common& sdef,
   const expr_i *e)
 {
-  if (sdef.get_evaluated().is_long() || sdef.get_evaluated().is_string()) {
+  if (sdef.get_evaluated().is_long()) {
     em.puts(term_tostr_cname(sdef.get_evaluated()));
+    return;
+  }
+  if (sdef.get_evaluated().is_string()) {
+    em.puts("pxcrt::bt_strlit(");
+    em.puts(term_tostr_cname(sdef.get_evaluated()));
+    em.puts(")");
     return;
   }
   if (is_type(sdef.get_evaluated()) || is_function(sdef.get_evaluated())) {

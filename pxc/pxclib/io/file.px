@@ -2,22 +2,23 @@ namespace io::file;
 public import type::builtin "";
 public import type::array "";
 public import io::system "";
+public import compiler::util "";
 public import meta::builtin m;
 
 public multithreaded extern "pxcio::file_impl" "noncopyable" struct file { }
 public macro fileptr ptr{file};
 
-public tsvaluetype extern "::off_t" "int" struct off_t { } // SQUAD?
-public tsvaluetype extern "::dev_t" "uint" struct dev_t { } // UQUAD
-public tsvaluetype extern "::ino_t" "uint" struct ino_t { } // ULONGWORD
-public tsvaluetype extern "::mode_t " "uint" struct mode_t { } // U32
-public tsvaluetype extern "::nlink_t" "uint" struct nlink_t { } // UWORD
-public tsvaluetype extern "::uid_t" "uint" struct uid_t { } // U32
-public tsvaluetype extern "::gid_t" "uint" struct gid_t { } // U32
+public tsvaluetype extern "::off_t" "int" struct off_t { }         // SQUAD?
+public tsvaluetype extern "::dev_t" "uint" struct dev_t { }        // UQUAD
+public tsvaluetype extern "::ino_t" "uint" struct ino_t { }        // ULONGWORD
+public tsvaluetype extern "::mode_t " "uint" struct mode_t { }     // U32
+public tsvaluetype extern "::nlink_t" "uint" struct nlink_t { }    // UWORD
+public tsvaluetype extern "::uid_t" "uint" struct uid_t { }        // U32
+public tsvaluetype extern "::gid_t" "uint" struct gid_t { }        // U32
 public tsvaluetype extern "::blksize_t" "int" struct blksize_t { } // SLONGWORD
-public tsvaluetype extern "::blkcnt_t" "int" struct blkcnt_t { } // SQUAD?
-public tsvaluetype extern "::time_t" "int" struct time_t { } // SLONG
-public tsvaluetype extern "::ssize_t" "int" struct ssize_t { } // SWORD?
+public tsvaluetype extern "::blkcnt_t" "int" struct blkcnt_t { }   // SQUAD?
+public tsvaluetype extern "::time_t" "int" struct time_t { }       // SLONG
+public tsvaluetype extern "::ssize_t" "int" struct ssize_t { }     // SWORD?
 
 public tsvaluetype extern "int" "int" struct open_flags_t { }
 public tsvaluetype extern "int" "int" struct whence_t { }
@@ -54,23 +55,19 @@ public extern "SEEK_SET"	whence_t SEEK_SET;
 public extern "SEEK_CUR"	whence_t SEEK_CUR;
 public extern "SEEK_END"	whence_t SEEK_END;
 
-// private macro cslice type::array::cslice{uchar};
-// private macro slice  type::array::slice{uchar};
-// private macro vector type::array::pxcvector{uchar};
-
 public threaded extern "pxcio::file_open" function
-  int file_open(file& f, systemptr const& sys, string const& fn,
+  int file_open(file& f, systemptr const& sys, cslice{uchar} const& fn,
     open_flags_t flags, mode_t mode);
 public threaded extern "pxcio::file_read" function
-  size_t file_read(file& f, string& buf);
+  size_t file_read(file& f, slice{uchar} const& buf);
 public threaded extern "pxcio::file_write" function
-  size_t file_write(file& f, cslice{char} const& buf);
+  size_t file_write(file& f, cslice{uchar} const& buf);
 public threaded extern "pxcio::file_lseek" function
   off_t file_lseek(file& f, off_t offset, whence_t whence);
 public threaded extern "pxcio::file_errno" function
   int file_errno(file const& f);
 public threaded extern "pxcio::system_stat" function
-  int system_stat(systemptr const& sys, string const& fn, statbuf& buf);
+  int system_stat(systemptr const& sys, cslice{uchar} const& fn, statbuf& buf);
 public threaded extern "pxcio::system_errno" function
   int system_errno(systemptr const& sys);
 public threaded extern "pxcio::system_sleep" function
@@ -81,29 +78,22 @@ size_t file_read_all(file& f, string& buf)
 {
   size_t r = 0;
   while (true) {
-    // size_t const cur = buf.size();
-    // buf.resize(cur + 16384, 0);
-    // size_t e = file_read(f, buf[cur .. cur + 16384]);
-    // r += e;
-    // buf.resize(cur + e, 0);
-    // FIXME: slow
-    string s;
-    s.resize(4096, 0);
-    size_t e = file_read(f, s);
-    s.resize(e, 0);
-    buf.append(s);
+    size_t const cur = buf.size();
+    buf.resize(cur + 16384, 0);
+    size_t e = file_read(f, buf[cur .. cur + 16384]);
+    r += e;
+    buf.resize(cur + e, 0);
     if (e == 0) { break; }
   }
   return r;
 }
 public threaded function
-size_t file_write_all(file& f, cslice{char} const& buf)
+size_t file_write_all(file& f, cslice{uchar} const& buf)
 {
   size_t curpos = 0;
   size_t endpos = buf.size();
   while (curpos != endpos) {
     size_t wlen = file_write(f, buf[curpos .. endpos]);
-    // size_t wlen = file_write(f, buf.substring(curpos, endpos));
     if (wlen == 0) {
       break;
     }
@@ -112,7 +102,8 @@ size_t file_write_all(file& f, cslice{char} const& buf)
   return curpos;
 }
 public threaded function
-size_t system_read_file(systemptr const& sys, string const& fn, string& buf)
+size_t system_read_file(systemptr const& sys, cslice{uchar} const& fn,
+  string& buf)
 {
   buf.clear();
   file f;
@@ -122,8 +113,8 @@ size_t system_read_file(systemptr const& sys, string const& fn, string& buf)
   return f.read_all(buf);
 }
 public threaded function
-size_t system_write_file(systemptr const& sys, string const& fn,
-  string const& buf)
+size_t system_write_file(systemptr const& sys, cslice{uchar} const& fn,
+  cslice{uchar} const& buf)
 {
   file f;
   if (f.open(sys, fn, O_WRONLY | O_CREAT | O_TRUNC, 6*8*8 + 6*8 + 6) != 0) {
@@ -168,14 +159,11 @@ namespace pxcio {
 #include <stdlib.h>
 #include <limits.h>
 #include <string>
-typedef pxcrt::bt_string string;
-// typedef array::cslice<bt_uchar> cslice;
-// typedef array::slice<bt_uchar> slice;
-bt_int file_open(file_impl& f, systemptr const& sys, string const& fn,
-  int flags, ::mode_t md)
+bt_int file_open(file_impl& f, systemptr const& sys,
+  bt_cslice< bt_uchar> const& fn, int flags, ::mode_t md)
 {
-  int fd = ::open(std::string((const char*)fn.rawarr(), fn.size()).c_str(),
-    flags, md);
+  PXCRT_ALLOCA_NTSTRING(fn_nt, fn);
+  int fd = ::open(fn_nt.get(), flags, md);
   f.reset(fd);
   f.err = (fd < 0 ? errno : 0);
   return errno;
@@ -189,24 +177,24 @@ bt_int file_open(file_impl& f, systemptr const& sys, string const& fn,
   f.err = (r == (off_t)-1) ? errno : 0;
   return r;
 }
-::size_t file_read(file_impl& f, string& buf)
+bt_size_t file_read(file_impl& f, bt_slice<bt_uchar> const& buf)
 {
-  size_t sz = buf.size();
+  bt_size_t sz = buf.size();
   if (sz > SSIZE_MAX) {
     sz = SSIZE_MAX;
   }
-  char *const ptr = (char*)buf.rawarr();
+  char *const ptr = reinterpret_cast<char *>(buf.rawarr());
   const ssize_t rlen = ::read(f.get(), ptr, sz);
   f.err = rlen < 0 ? errno : 0;
   return rlen < 0 ? 0 : rlen;
 }
-::size_t file_write(file_impl& f, const pxcrt::cslice<pxcrt::bt_char> & buf)
+bt_size_t file_write(file_impl& f, bt_cslice<bt_uchar> const& buf)
 {
-  size_t sz = buf.size();
+  bt_size_t sz = buf.size();
   if (sz > SSIZE_MAX) {
     sz = SSIZE_MAX;
   }
-  const char *const ptr = (const char*)&buf[0];
+  const unsigned char *const ptr = buf.rawarr();
   const ssize_t wlen = ::write(f.get(), ptr, sz);
   f.err = wlen < 0 ? errno : 0;
   return wlen < 0 ? 0 : wlen;
@@ -215,11 +203,11 @@ bt_int file_errno(file_impl const& f)
 {
   return f.err;
 }
-bt_int system_stat(systemptr const& sys, string const& fn,
+bt_int system_stat(systemptr const& sys, bt_cslice<bt_uchar> const& fn,
   pxcio::statbuf& buf)
 {
-  const int e = ::stat(
-    std::string((const char*)fn.rawarr(), fn.size()).c_str(), &buf);
+  PXCRT_ALLOCA_NTSTRING(fn_nt, fn);
+  const int e = ::stat(fn_nt.get(), &buf);
   return e != 0 ? errno : 0;
 }
 bt_int system_errno(systemptr const& sys)

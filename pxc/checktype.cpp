@@ -279,6 +279,7 @@ static bool check_term_validity(const term& t, bool allow_nontype,
     if (est != 0 && est->typecat != typecat_e_none) {
       const typecat_e cat = est->typecat;
       if (cat == typecat_e_farray) {
+	#if 0
 	if (tlarg_len != 2) {
 	  DBG_CTV(fprintf(stderr, "CTV %s false 5\n",
 	    term_tostr_human(t).c_str()));
@@ -286,22 +287,27 @@ static bool check_term_validity(const term& t, bool allow_nontype,
 	    "' is not an integer)";
 	  return false;
 	}
-	if (!check_term_validity(tl->front(), tp_allow_nontype,
-	  tp_allow_local_func, tp_allow_weak, pos, err_mess_r)) {
-	  return false;
-	}
-	const term& t2nd = *(++tl->begin());
-	if (!t2nd.is_long()) {
-	  err_mess_r = "(2nd template parameter must be an integer literal)";
-	  return false;
-	}
-	#if 0
-	const expr_i *const e2nd = t2nd.get_expr();
-	if (e2nd == 0 || e2nd->get_esort() != expr_e_int_literal) {
-	  err_mess_r = "(2nd template parameter must be an integer literal)";
-	  return false;
-	}
 	#endif
+	if (tlarg_len >= 1) {
+	  if (!check_term_validity(tl->front(), tp_allow_nontype,
+	    tp_allow_local_func, tp_allow_weak, pos, err_mess_r)) {
+	    return false;
+	  }
+	}
+	if (tlarg_len >= 2) {
+	  const term& t2nd = *(++tl->begin());
+	  if (!t2nd.is_long()) {
+	    err_mess_r = "(2nd template parameter must be an integer literal)";
+	    return false;
+	  }
+	  #if 0
+	  const expr_i *const e2nd = t2nd.get_expr();
+	  if (e2nd == 0 || e2nd->get_esort() != expr_e_int_literal) {
+	    err_mess_r = "(2nd template parameter must be an integer literal)";
+	    return false;
+	  }
+	  #endif
+	}
 	DBG_CTV(fprintf(stderr, "CTV %s true 6\n",
 	  term_tostr_human(t).c_str()));
 	return true;
@@ -406,6 +412,9 @@ static bool is_default_constructible(const term& typ, expr_i *pos,
     if (cat == typecat_e_farray) {
       return (args == 0 || args->empty()) ? false
 	: is_default_constructible(args->front(), pos, depth);
+    }
+    if (cat == typecat_e_darray) {
+      return false;
     }
     if (cat == typecat_e_varray || cat == typecat_e_tree_map ||
       cat == typecat_e_nocascade) {
@@ -1641,6 +1650,15 @@ void expr_funccall::check_type(symbol_table *lookup)
 	  /* need not to eval rt, because it' always irreducible. */
 	  type_of_this_expr = rt;
 	}
+	funccall_sort = funccall_e_struct_constructor;
+	return;
+      } else if (get_category(func_te) == typecat_e_darray) {
+	if (arglist.size() != 1) {
+	  arena_error_push(this, "too many argument for '%s'", est->sym);
+	}
+	expr_i *const j = arglist.front();
+	check_unsigned_integral_expr(0, j);
+	type_of_this_expr = func_te;
 	funccall_sort = funccall_e_struct_constructor;
 	return;
       } else if (get_category(func_te) == typecat_e_varray) {

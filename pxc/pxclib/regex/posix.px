@@ -1,6 +1,7 @@
 namespace regex::posix;
 import type::builtin "";
 import type::array "";
+import compiler::util "";
 
 public tsvaluetype extern "int" "int" struct cflags_t { }
 public tsvaluetype extern "int" "int" struct eflags_t { }
@@ -34,6 +35,7 @@ extern "type" inline
 #include <sys/types.h>
 #include <regex.h>
 namespace pregex {
+using namespace pxcrt;
 struct posix_re {
   posix_re() : value(), error_code(0), compiled(false) { }
   ~posix_re() { if (compiled) { ::regfree(&value); } }
@@ -53,16 +55,15 @@ namespace pregex {
 
 extern "fdef" inline
 namespace pregex {
-pxcrt::bt_bool regex_compile(posix_re& re, pxcrt::bt_string const& s,
-  int cflags)
+bt_bool regex_compile(posix_re& re, bt_string const& s, int cflags)
 {
   if (re.compiled) {
     ::regfree(&re.value);
     re.error_code = 0;
     re.compiled = false;
   }
-  std::string ss(s.data(), s.size());
-  const int r = ::regcomp(&re.value, ss.c_str(), cflags);
+  PXCRT_ALLOCA_NTSTRING(s_nt, s);
+  const int r = ::regcomp(&re.value, s_nt.get(), cflags);
   re.error_code = r;
   if (r == 0) {
     re.compiled = true;
@@ -70,19 +71,19 @@ pxcrt::bt_bool regex_compile(posix_re& re, pxcrt::bt_string const& s,
   }
   return false;
 }
-pxcrt::bt_bool regex_exec(posix_re& re, pxcrt::bt_string const& s,
-  pxcrt::slice<regmatch_t> const& ma, int eflags)
+bt_bool regex_exec(posix_re& re, bt_string const& s,
+  bt_slice<regmatch_t> const& ma, int eflags)
 {
   if (!re.compiled) {
     return false;
   }
-  std::string ss(s.data(), s.size());
-  const int r = ::regexec(&re.value, ss.c_str(), ma.size(), ma.rawarr(),
+  PXCRT_ALLOCA_NTSTRING(s_nt, s);
+  const int r = ::regexec(&re.value, s_nt.get(), ma.size(), ma.rawarr(),
     eflags);
   re.error_code = r;
   return (r == 0);
 }
-pxcrt::bt_bool regex_compiled(posix_re const& re)
+bt_bool regex_compiled(posix_re const& re)
 {
   return re.compiled;
 }
@@ -90,12 +91,12 @@ int regex_error_code(posix_re const& re)
 {
   return re.error_code;
 }
-pxcrt::bt_string regex_error_string(posix_re const& re)
+bt_string regex_error_string(posix_re const& re)
 {
   size_t sz = ::regerror(re.error_code, &re.value, 0, 0);
-  pxcrt::bt_string s;
+  bt_string s;
   s.resize(sz, 0);
-  ::regerror(re.error_code, &re.value, &s[0], sz);
+  ::regerror(re.error_code, &re.value, reinterpret_cast<char *>(&s[0]), sz);
   if (sz > 0) {
     s.resize(sz - 1, 0);
   }

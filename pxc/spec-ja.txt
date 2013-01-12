@@ -1,26 +1,21 @@
 
 thread関連制約の強さ: valuetype > threaded, multithreaded > threaded
 (valuetypeかmultithreadedならばthreadedでもある)
-
 - 型がthreaded/multithreaded/valuetypeであるのは
   - struct/union/interfaceがt/m/v以上装飾がついている
   - かつ、テンプレパラメータがt/m/v型やt関数であること
-
 - 関数がthreadedであるのは
   - 非メンバ関数についてはthreaded装飾、メンバ関数については
     struct/interfaceがthreaded以上装飾がついている
   - かつ、テンプレパラメータがt/m/v型やt関数であること
-
 - threaded装飾されたstruct/unionについての制約
   - threaded装飾struct等のfieldの型はthreaded以上must
   - multithreaded装飾struct等のfieldの型はmultithreaded以上must  
   - valuetype装飾struct等のfieldの型はvaluetype以上must
-
 - threaded装飾された関数とt/m/v装飾された型のメンバ関数についての制約
   - 呼べる関数はthreadedな関数だけ
   - 変数・引数・返値の型はthreadedな型だけ
   - グローバル変数をアクセスできない
-
 - ポインタ
   - ptr/cptr/iptrはthreaded装飾されている
   - tptr/tcptr/tiptrはmultithreaded装飾されている
@@ -30,8 +25,85 @@ thread関連制約の強さ: valuetype > threaded, multithreaded > threaded
   - iptr -> cptr は代入可能ではない(実装上の理由)
   - tptr->ptr, tcptr->cptr, tiptr->iptr は代入可能ではない(実装上の理由)
   - tiptr -> tcptr は代入可能ではない(実装上の理由)
-
 - ポインタの型パラメータについての制約
   - tptr/tcptrの型パラメータはmultithreaded以上must
   - iptr/tiptrの型パラメータはvaluetype(以上)must
+
+thread関連(やりなおし)
+- thread関連装飾
+  - threaded関数: 子スレッドでも利用できる関数
+      グローバル変数にアクセスしない
+      threadedではない関数を呼ばない
+      引数や変数はthreaded型でなければならない
+      closureはthreadedでないものも定義できるが呼べない
+  - threaded型: 子スレッドでも利用できる型
+      thread間で渡すことはできないが中では利用できる型
+      メンバ関数は暗黙裡にthreaded関数になる
+  - multithreaded型: 複数スレッドから利用可能な型
+      暗黙裡にthreaded
+      tptrが指せる
+      fieldにはtptr/tiptrを持てる
+  - valuetype型: immutableにできる型(値型)
+      暗黙裡にthreaded
+      iptrが指せる
+      fieldにはiptr/tiptrを持てる
+  - mtvaluetype型: multithreadedかつvaluetype
+      暗黙裡にmultithreadedかつvaluetype
+      tptrとiptrが指せる
+      fieldにはtiptrを持てる
+  - tsvaluetype型: 
+      暗黙裡にmtvaluetype
+      tiptrが指せる
+  - mtvaluetypeとtsvaluetypeの違いは、constメンバ関数を非同期に安全に
+    呼べるかどうか。constメンバ関数がmutableフィールドを書き換えるような
+    場合はmtvaluetype、そうでないならtsvaluetypeにできる。tiptrは
+    dereference時に指す先をlockしない。
+  - テンプレ型については、テンプレ型に付いた装飾とと型引数の最も弱い装飾
+    を持つ
+
+- コンテナ実装
+  - 型カテゴリ
+    - farray: 固定長配列
+    - varray: 動的リサイズ可能な配列
+    - darray: 作成時にサイズ指定可能な配列(未実装)
+    - slice: 配列のslice(weak)
+    - cslice: 配列のslice(weak)、要素がconst
+    - tree_map: ソートされた連想配列
+    - tree_map_range: tree_mapの範囲(weak)
+    - tree_map_crange: tree_mapの範囲(weak)、要素がconst
+    - hash_map: ソートされない連想配列(未実装)
+    - hash_map_range: hash_mapの範囲(weak)
+    - hash_map_crange: hash_mapの範囲(weak)、要素がconst
+  - pxcクラスに対する要件 - 全カテゴリ共通
+    - macro key_type
+    - macro mapped_type
+    - macro range_type
+    - macro crange_type
+      (これらは要素やrange式の実装に使う)
+  - C++クラスに対する要件 - 全カテゴリ共通
+    - typedef ... key_type;
+    - typedef ... mapped_type;
+    - typedef ... range_type;
+    - typedef ... crange_type;
+    - typedef ... iterator; (foreachなどが使う)
+    - typedef ... const_iterator;
+    - デフォルト&コピーコンストラクタ
+    - range_typeとcrange_typeからのコンストラクタ
+    - operator =
+    - operator [] constとnon-const
+  - C++クラスに対する要件 - weakではないもの
+    - template <typename Tc> friend struct refvar_igrd_nn;
+    - template <typename Tc> friend struct valvar_igrd_nn;
+    - void inc_invalidate_guard() const
+    - void dec_invalidate_guard() const
+      (これらはresizeにより要素への参照を無効化されないようにガード
+       するときに使う)
+  - C++クラスに対する要件 - 列コンテナとslice
+    - T *rawarr()
+    - const T *rawarr() const
+    - size_type size() const
+  - C++クラスに対する要件 - 連想配列 
+    - iterator find(const key_type& k)
+    - const_iterator find(const key_type& k) const
+      (これらは if (x : c) ... 文が使う)
 

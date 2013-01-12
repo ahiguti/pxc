@@ -1285,6 +1285,8 @@ static term eval_metafunction(const std::string& name, term_list& tlev,
       r = builtins.type_double;
     } else if (name == "@0string") {
       r = builtins.type_string;
+    } else if (name == "@0strlit") {
+      r = builtins.type_strlit;
     } else if (name == "@list") {
       r = eval_meta_list(tlev);
     } else if (name == "@at") {

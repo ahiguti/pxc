@@ -1,5 +1,6 @@
 #!/bin/bash
 
+unset LC_ALL LC_COLLATE LC_CTYPE LC_MESSAGES LC_MONETARY LC_NUMERIC LC_TIME
 unset LANG
 
 if [ "$1" != "" ]; then

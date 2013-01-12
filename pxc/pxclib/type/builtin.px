@@ -15,8 +15,9 @@ public extern "@0size_t" "@0size_t" struct size_t { }
 public extern "@0float" "@0float" struct float { }
 public extern "@0double" "@0double" struct double { }
 public extern "@0string" "@0string" struct string { }
-public macro slice{t} compiler::runtime::slice{t};
-public macro cslice{t} compiler::runtime::cslice{t};
+public extern "@0strlit" "@0strlit" struct strlit { }
+public macro slice{t} compiler::runtime::bt_slice{t};
+public macro cslice{t} compiler::runtime::bt_cslice{t};
 
 public threaded extern "pxcrt::ptr" "ptr" struct {t} ptr { } 
 public threaded extern "pxcrt::cptr" "cptr" struct {t} cptr { }
@@ -53,7 +54,7 @@ public threaded extern "pxcrt::double_to_string"
   function string bt_double_to_string(double x);
 
 public threaded extern "pxcrt::string_to_unit"
-  function unit bt_string_to_bt_unit(string const& x);
+  function unit string_to_bt_unit(string const& x);
 public threaded extern "pxcrt::string_to_bool"
   function bool string_to_bt_bool(string const& x);
 public threaded extern "pxcrt::string_to_uchar"
@@ -336,75 +337,75 @@ bt_string unit_to_string(bt_unit x)
 }
 bt_string bool_to_string(bt_bool v)
 {
-  static const bt_string str_t("true");
-  static const bt_string str_f("false");
+  static const bt_strlit str_t("true");
+  static const bt_strlit str_f("false");
   return v ? str_t : str_f;
 }
 bt_string uchar_to_string(bt_uchar v)
 {
   char buf[4];
   const int len = snprintf(buf, sizeof(buf), "%hhu", (unsigned char)v);
-  return bt_string(buf, buf + len);
+  return bt_string(reinterpret_cast<unsigned char *>(buf), len);
 }
 bt_string char_to_string(bt_char v)
 {
   char buf[4];
   const int len = snprintf(buf, sizeof(buf), "%hhd", (char)v);
-  return bt_string(buf, buf + len);
+  return bt_string(reinterpret_cast<unsigned char *>(buf), len);
 }
 bt_string ushort_to_string(bt_ushort v)
 {
   char buf[8];
   const int len = snprintf(buf, sizeof(buf), "%hu", v);
-  return bt_string(buf, buf + len);
+  return bt_string(reinterpret_cast<unsigned char *>(buf), len);
 }
 bt_string short_to_string(bt_short v)
 {
   char buf[8];
   const int len = snprintf(buf, sizeof(buf), "%hd", v);
-  return bt_string(buf, buf + len);
+  return bt_string(reinterpret_cast<unsigned char *>(buf), len);
 }
 bt_string uint_to_string(bt_uint v)
 {
   char buf[16];
   const int len = snprintf(buf, sizeof(buf), "%u", v);
-  return bt_string(buf, buf + len);
+  return bt_string(reinterpret_cast<unsigned char *>(buf), len);
 }
 bt_string int_to_string(bt_int v)
 {
   char buf[16];
   const int len = snprintf(buf, sizeof(buf), "%d", v);
-  return bt_string(buf, buf + len);
+  return bt_string(reinterpret_cast<unsigned char *>(buf), len);
 }
 bt_string ulong_to_string(bt_ulong v)
 {
   char buf[32];
   const int len = snprintf(buf, sizeof(buf), "%llu", (unsigned long long)v);
-  return bt_string(buf, buf + len);
+  return bt_string(reinterpret_cast<unsigned char *>(buf), len);
 }
 bt_string long_to_string(bt_long v)
 {
   char buf[32];
   const int len = snprintf(buf, sizeof(buf), "%lld", (long long)v);
-  return bt_string(buf, buf + len);
+  return bt_string(reinterpret_cast<unsigned char *>(buf), len);
 }
 bt_string double_to_string(bt_double v)
 {
   char buf[32];
   const int len = snprintf(buf, sizeof(buf), "%f", v);
-  return bt_string(buf, buf + len);
+  return bt_string(reinterpret_cast<unsigned char *>(buf), len);
 }
 bt_string float_to_string(bt_float v)
 {
   char buf[32];
   const int len = snprintf(buf, sizeof(buf), "%f", double(v));
-  return bt_string(buf, buf + len);
+  return bt_string(reinterpret_cast<unsigned char *>(buf), len);
 }
 bt_string size_t_to_string(bt_size_t v)
 {
   char buf[32];
   const int len = snprintf(buf, sizeof(buf), "%zu", (size_t)v);
-  return bt_string(buf, buf + len);
+  return bt_string(reinterpret_cast<unsigned char *>(buf), len);
 }
 bt_unit string_to_unit(const bt_string& v)
 {
@@ -413,13 +414,13 @@ bt_unit string_to_unit(const bt_string& v)
 bt_bool string_to_bool(const bt_string& v)
 {
   const bt_size_t len = v.size();
-  if (len == 4 && memcmp(v.data(), "true", 4) == 0) {
+  if (len == 4 && memcmp(v.rawarr(), "true", 4) == 0) {
     return true;
   }
-  if (len == 5 && memcmp(v.data(), "false", 5) == 0) {
+  if (len == 5 && memcmp(v.rawarr(), "false", 5) == 0) {
     return false;
   }
-  if (len == 1 && v.data()[0] == '0') {
+  if (len == 1 && v.rawarr()[0] == '0') {
     return false;
   }
   return true;
@@ -427,8 +428,9 @@ bt_bool string_to_bool(const bt_string& v)
 template <typename Tt, typename Tf> inline Tt
 string_to_numeric_tmpl(const Tf& a)
 {
-  return boost::lexical_cast<Tt>(
-    boost::make_iterator_range(a.data(), a.data() + a.size()));
+  const char *const p = reinterpret_cast<const char *>(a.rawarr());
+  const typename Tf::size_type len = a.size();
+  return boost::lexical_cast<Tt>(boost::make_iterator_range(p, p + len));
 }
 bt_uchar string_to_uchar(const bt_string& v)
   { return string_to_numeric_tmpl<bt_uchar, bt_string>(v); }

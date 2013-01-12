@@ -249,8 +249,8 @@ template <typename F> struct func_pl {
   }
   static void xs_create_function(const pxcrt::bt_string& name) {
     if (func_cv != 0) { return; }
-    std::string s(name.data(), name.size());
-    func_cv = newXS((char *)s.c_str(), &call,
+    std::string s(reinterpret_cast<const char *>(name.rawarr()), name.size());
+    func_cv = newXS(const_cast<char *>(s.c_str()), &call,
       "func_pl" /* must be a literal */);
   }
   static CV *func_cv;
@@ -396,7 +396,7 @@ inline perlsv double_to_sv(double x)
 }
 inline perlsv string_to_sv(const pxcrt::bt_string& s)
 {
-  return perlsv(s.data(), s.size());
+  return perlsv(reinterpret_cast<const char *>(s.rawarr()), s.size());
 }
 inline bool sv_to_bool(const perlsv& x)
 {
@@ -425,8 +425,9 @@ inline pxcrt::bt_string sv_to_string(const perlsv& x)
     return pxcrt::bt_string();
   }
   STRLEN len = 0;
-  char *const p = SvPV_nomg(svp, len);
-  return pxcrt::bt_string(p, p + len);
+  const unsigned char *const p = reinterpret_cast<const unsigned char *>(
+    SvPV_nomg(svp, len));
+  return pxcrt::bt_string(p, len);
 }
 #undef DBG
 }; // namespace pxperl
@@ -660,7 +661,8 @@ perlhv::fetch(const pxcrt::bt_string& key) const
 {
   SV *r = 0;
   if (value != 0) {
-    SV **svp = hv_fetch(value, key.data(), key.size(), 0);
+    SV **svp = hv_fetch(value, reinterpret_cast<const char *>(key.rawarr()),
+      key.size(), 0);
     r = svp ? *svp : 0;
   }
   return perlsv(r);
@@ -675,7 +677,8 @@ perlhv::store(const pxcrt::bt_string& key, const perlsv& v)
     value = newHV();
   }
   SvREFCNT_inc(v.get());
-  SV **svp = hv_store(value, key.data(), key.size(), v.get(), 0);
+  SV **svp = hv_store(value, reinterpret_cast<const char *>(key.rawarr()),
+    key.size(), v.get(), 0);
   if (svp == 0) {
     SvREFCNT_dec(v.get());
   }

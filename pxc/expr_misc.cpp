@@ -356,6 +356,7 @@ typecat_e get_category_from_string(const std::string& s)
   if (s == "float") return typecat_e_float;
   if (s == "numeric") return typecat_e_numeric;
   if (s == "varray") return typecat_e_varray;
+  if (s == "darray") return typecat_e_darray;
   if (s == "farray") return typecat_e_farray;
   if (s == "slice") return typecat_e_slice;
   if (s == "cslice") return typecat_e_cslice;
@@ -385,6 +386,7 @@ std::string get_category_string(typecat_e cat)
   case typecat_e_float: return "float";
   case typecat_e_numeric: return "numeric";
   case typecat_e_varray: return "varray";
+  case typecat_e_darray: return "darray";
   case typecat_e_farray: return "farray";
   case typecat_e_slice: return "slice";
   case typecat_e_cslice: return "cslice";
@@ -543,7 +545,8 @@ bool is_threaded_pointer_family(const term& t)
 bool is_array_family(const term& t)
 {
   const typecat_e cat = get_category(t);
-  return cat == typecat_e_varray || cat == typecat_e_farray;
+  return cat == typecat_e_varray || cat == typecat_e_darray ||
+    cat == typecat_e_farray;
 }
 
 bool is_cm_slice_family(const term& t)
@@ -651,6 +654,7 @@ bool type_allow_feach(const term& t)
   const typecat_e cat = get_category(t);
   switch (cat) {
   case typecat_e_varray:
+  case typecat_e_darray:
   case typecat_e_farray:
   case typecat_e_tree_map:
   case typecat_e_slice:
@@ -1200,6 +1204,12 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
     DBG_CONV(fprintf(stderr, "convert: numeric cast\n"));
     return true;
   }
+  if (tfrom == builtins.type_strlit && tto == builtins.type_string) {
+    DBG_CONV(fprintf(stderr, "convert: range\n"));
+    efrom->conv = conversion_e_subtype_obj;
+    efrom->type_conv_to = tconvto;
+    return true;
+  }
   #if 0
   if (is_string_type(tfrom)) {
     efrom->conv = conversion_e_from_string;
@@ -1238,6 +1248,7 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
     }
   }
   if (is_container_family(tfrom) && is_cm_range_family(tconvto)) {
+    /* container to range */
     DBG_CONV(fprintf(stderr, "convert: range? %s -> %s\n",
       term_tostr_human(tfrom).c_str(), term_tostr_human(tconvto).c_str()));
     const term tra = get_array_range_texpr(0, efrom, tfrom);
@@ -1248,8 +1259,20 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
     const term_list *const tta = tconvto.get_args();
     const term_list *const tfa = tra.get_args();
     if (tta != 0 && tfa != 0 && tta->front() == tfa->front()) {
-      DBG_CONV(fprintf(stderr, "convert: auto range\n"));
+      DBG_CONV(fprintf(stderr, "convert: auto container to range\n"));
       efrom->conv = conversion_e_container_range;
+      efrom->type_conv_to = tconvto;
+      return true;
+    }
+  }
+  if (is_cm_range_family(tfrom) && is_container_family(tconvto)) {
+    /* range to container */
+    const term tra = get_array_range_texpr(0, 0, tconvto);
+    const term_list *const tfa = tfrom.get_args();
+    const term_list *const tta = tra.get_args();
+    if (tta != 0 && tfa != 0 && tta->front() == tfa->front()) {
+      DBG_CONV(fprintf(stderr, "convert: auto range to container\n"));
+      efrom->conv = conversion_e_subtype_obj;
       efrom->type_conv_to = tconvto;
       return true;
     }
@@ -2409,10 +2432,10 @@ term get_pointer_deref_texpr(expr_op *eop, const term& t)
   return tg;
 }
 
-term get_array_range_texpr(expr_op *eop, expr_i *ec, term& ect)
+term get_array_range_texpr(expr_op *eop, expr_i *ec /* nullable */, term& ect)
 {
   bool nonconst = false;
-  if (expr_has_lvalue(ec, ec, false)) {
+  if (ec != 0 && expr_has_lvalue(ec, ec, false)) {
     expr_has_lvalue(ec, ec, true);
     nonconst = true;
   }
@@ -2422,14 +2445,15 @@ term get_array_range_texpr(expr_op *eop, expr_i *ec, term& ect)
     arena_error_throw(eop, "cannot apply '[ .. ]'");
     return builtins.type_void;
   }
-  DBG_SLICE(fprintf(stderr, "range: %s %s -> %s\n", ec->dump(0).c_str(),
+  DBG_SLICE(fprintf(stderr, "range: %s %s -> %s\n",
+    ec != 0 ? ec->dump(0).c_str() : "",
     term_tostr_human(ect).c_str(), term_tostr_human(slt).c_str()));
   return slt;
 }
 
 term get_array_elem_texpr(expr_op *eop, term& t0)
 {
-  if (t0 == builtins.type_string) {
+  if (t0 == builtins.type_string || t0 == builtins.type_strlit) {
     return builtins.type_uchar;
   }
   /* extern struct? */
@@ -2440,6 +2464,7 @@ term get_array_elem_texpr(expr_op *eop, term& t0)
     if (tparams != 0) {
       switch (est->typecat) {
       case typecat_e_varray:
+      case typecat_e_darray:
       case typecat_e_farray:
       case typecat_e_slice:
       case typecat_e_cslice:
@@ -2477,7 +2502,7 @@ term get_array_elem_texpr(expr_op *eop, term& t0)
 
 term get_array_index_texpr(expr_op *eop, term& t0)
 {
-  if (t0 == builtins.type_string) {
+  if (t0 == builtins.type_string || t0 == builtins.type_strlit) {
     return builtins.type_size_t;
   }
   /* extern struct? */
@@ -2488,6 +2513,7 @@ term get_array_index_texpr(expr_op *eop, term& t0)
     if (tparams != 0) {
       switch (est->typecat) {
       case typecat_e_varray:
+      case typecat_e_darray:
       case typecat_e_farray:
       case typecat_e_slice:
       case typecat_e_cslice:

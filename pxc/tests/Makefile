@@ -4,28 +4,6 @@ SHELL=/bin/bash
 all:
 	$(MAKE) test | tee all.log
 
-force:
-	export CXX="$(CXX)"; \
-	for i in test_*; do \
-	  pushd $$i > /dev/null; \
-	  echo "[$$i] "; \
-	  if [ -f ./DONE ]; then \
-	    echo " skip"; \
-	  elif ! ./run.sh; then \
-	    echo -n "FORCE ... "; \
-	    $(MAKE) accept; \
-	    if ! ./run.sh; then \
-	      echo "$$i failed"; \
-	      exit 1; \
-	    fi; \
-	  else \
-	    echo -n ""; \
-	  fi; \
-	  touch ./DONE; \
-	  popd > /dev/null; \
-	done; \
-	exit 0;
-
 test:
 	export CXX="$(CXX)"; \
 	for i in test_*; do \
@@ -66,7 +44,8 @@ efence:
 	exit 0;
 
 debug:
-	env TEST_PXC_PROF=../common/pxc_debug.profile \
+	env \
+	  TEST_PXC_PROF=../common/pxc_debug.profile \
 	  TEST_PXC_DYNAMIC_PROF=../common/pxc_debug_dynamic.profile \
 	  $(MAKE) test
 
