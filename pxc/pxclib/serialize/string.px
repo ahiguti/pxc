@@ -22,7 +22,12 @@ public threaded function {t} string to_string(t const& x)
     return bt_ulong_to_string(ulong(x));
   } else if (m::eq{cat, "int"}) {
     return bt_long_to_string(long(x));
-  } else if (m::or{m::eq{cat, "varray"}, m::eq{cat, "farray"}}) {
+  } else if (m::or{
+    m::eq{cat, "varray"},
+    m::eq{cat, "farray"},
+    m::eq{cat, "darray"},
+    m::eq{cat, "slice"},
+    m::eq{cat, "cslice"}}) {
     string s = "{";
     foreach (size_t i, m::at{t, 0} v : x) {
       if (i != 0) {
@@ -32,7 +37,10 @@ public threaded function {t} string to_string(t const& x)
     }
     s.append("}");
     return s;
-  } else if (m::eq{cat, "tree_map"}) {
+  } else if (m::or{
+    m::eq{cat, "tree_map"},
+    m::eq{cat, "tree_map_range"},
+    m::eq{cat, "tree_map_crange"}}) {
     string s = "{";
     bool first = true;
     foreach (m::at{t, 0} k, m::at{t, 1} v : x) {
@@ -84,5 +92,4 @@ public threaded function {t} string to_string(t const& x)
     return "-";
   }
 }
-
 
