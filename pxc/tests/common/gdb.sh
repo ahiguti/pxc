@@ -7,3 +7,4 @@ fi
 export MUDFLAP_OPTIONS=-viol-segv
 
 exec gdb --args ../../pxc --no-realpath -w .pxc -p "$TEST_PXC_PROF" $*
+

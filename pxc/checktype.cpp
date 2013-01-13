@@ -1294,7 +1294,6 @@ void expr_op::check_type(symbol_table *lookup)
 	: term();
       if (arg1 != 0 && is_range_op(arg1)) {
 	/* array slice */
-	// TODO: tree_map_range
 	expr_op *const eoprange = ptr_down_cast<expr_op>(arg1);
 	expr_i *const range_begin = eoprange->arg0;
 	expr_i *const range_end = eoprange->arg1;
@@ -1312,6 +1311,9 @@ void expr_op::check_type(symbol_table *lookup)
 	}
 	type_of_this_expr = get_array_range_texpr(this, arg0,
 	  arg0->resolve_texpr());
+	if (type_of_this_expr.is_null()) {
+	  arena_error_throw(this, "using an array without type parameter");
+	}
       } else {
 	/* array element */
 	if (is_map_family(arg0->resolve_texpr())) {
@@ -1330,6 +1332,9 @@ void expr_op::check_type(symbol_table *lookup)
 	  check_type_convert_to_lhs(this, arg1, idxt);
 	}
 	type_of_this_expr = get_array_elem_texpr(this, arg0->resolve_texpr());
+	if (type_of_this_expr.is_null()) {
+	  arena_error_throw(this, "using an array without type parameter");
+	}
       }
     }
     break;
@@ -1653,17 +1658,36 @@ void expr_funccall::check_type(symbol_table *lookup)
 	funccall_sort = funccall_e_struct_constructor;
 	return;
       } else if (get_category(func_te) == typecat_e_darray) {
-	if (arglist.size() != 1) {
-	  arena_error_push(this, "too many argument for '%s'", est->sym);
+	if (arglist.size() < 2) {
+	  arena_error_throw(this, "too few argument for '%s'", est->sym);
+	} else if (arglist.size() > 2) {
+	  arena_error_throw(this, "too many argument for '%s'", est->sym);
 	}
-	expr_i *const j = arglist.front();
-	check_unsigned_integral_expr(0, j);
+	check_unsigned_integral_expr(0, arglist.front());
+	expr_i *const j = *(++arglist.begin());
+	const term_list *const arr_te_targs = func_te.get_args();
+	if (arr_te_targs == 0 || arr_te_targs->size() != 1) {
+	  arena_error_throw(this, "using an array without type parameter");
+	}
+	term tto = (*arr_te_targs)[0];
+	if (!convert_type(j, tto, tvmap)) {
+	  const std::string s0 = term_tostr_human(j->resolve_texpr());
+	  const std::string s1 = term_tostr_human(tto);
+	  arena_error_push(this, "invalid conversion from %s to %s",
+	    s0.c_str(), s1.c_str());
+	  arena_error_push(this, "  initializing argument %u of '%s'",
+	    0, est->sym);
+	}
 	type_of_this_expr = func_te;
 	funccall_sort = funccall_e_struct_constructor;
 	return;
       } else if (get_category(func_te) == typecat_e_varray) {
+	const term_list *const arr_te_targs = func_te.get_args();
+	if (arr_te_targs == 0 || arr_te_targs->size() != 1) {
+	  arena_error_throw(this, "using an array without type parameter");
+	}
 	if (arglist.size() != 1) {
-	  arena_error_push(this, "too many argument for '%s'", est->sym);
+	  arena_error_throw(this, "too many argument for '%s'", est->sym);
 	}
 	expr_i *const j = arglist.front();
 	check_unsigned_integral_expr(0, j);

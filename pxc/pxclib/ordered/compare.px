@@ -15,7 +15,7 @@ public threaded function {t} int compare(t const& x, t const& y)
   } else if (m::or{
     m::eq{cat, "builtin"}, m::eq{cat, "int"}, m::eq{cat, "uint"},
     m::eq{cat, "float"}, m::eq{cat, "numeric"},
-    m::eq{t, type::builtin::string}}) {
+    m::eq{t, type::builtin::string}, m::eq{t, type::builtin::strlit}}) {
     return x < y ? -1 : x > y ? 1 : 0;
   } else if (m::eq{cat, "farray"}) {
     size_t const sz = m::at{t, 1};
@@ -27,7 +27,7 @@ public threaded function {t} int compare(t const& x, t const& y)
       }
     }
     return 0;
-  } else if (m::eq{cat, "varray"}) {
+  } else if (m::or{m::eq{cat, "varray"}, m::eq{cat, "darray"}}) {
     size_t const xsz = x.size();
     size_t const ysz = y.size();
     size_t const sz = xsz < ysz ? xsz : ysz;
