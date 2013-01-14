@@ -3,63 +3,31 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- 型定義順依存を調べるために再帰的型を定義するテストを作る
-
-- expr.cppで組み込み型にtype::builtinをセットしているのをやめて、
-  serializeなどではtype::builtinではない名前空間を使うようにする
+- 全ポインタ型とinterfaceの組み合わせ(モニタ等埋め込みが正しいか)確認
 
 - pxcvectorとtree_mapのsliceからコンストラクタ
 - pxcvectorのappend
 
-- 演算子の一通りテスト作成。コンテナ含め。
+- C++名前空間をすべて絶対参照で
 
-- std::mapで foo["abc"] = "xyz" するとmudflapが怒る
-- unionがunitだけでできていたときmudflapが怒る(バージョン？)
-  (STLのバグ？)
+- 整数の暗黙変換を安全なものだけに制限
 
-- 仕様決め: catch は常にconst byref?
-
-threadまわり
-- threadまわりの仕様整理せよ
-- immutableの仕様きめよ
-- multithreaded structのコンストラクタ引数はmultithreaded型でなくても
-  よい。
-
-- global変数はthreadedな型を持たねばならない。初期化順序の問題が起きない
-  ように。expr_var::check_typeの中のif 0を有効化せよ。
+- expr.cppで組み込み型にtype::builtinをセットしているのをやめて、
+  serializeなどではtype::builtinではない名前空間を使うようにする
 
 - default-constructible と has-userdefined-constr について整理しなおし。
   - default-constructibleではない型のデフォルトコンストラクタをemit
     しているのはおかしい？
 - defconでない型を引数無しで呼んだらエラーにせよ
 
-namespaceまわり
-- namespace宣言義務付け
-- import元を制限する構文
-
-ポインタまわり
-- 短絡boxingを再び有効に
-
 weak型まわり
 - globalやstructには参照変数などは置けないように
 - 構造体にslice等のweak型を含む型のfieldを置けないように
 
-interfaceまわり
-- interfaceの仮想関数の引数型は先に定義しなくていいのか？
-- test_03/interf_constr3_1_fixme.px1
-
-- 整数の暗黙変換を安全なものだけに制限
-- check_overflow pragma?
-
-if-defined構文
-- if (int v : foo.fld) { ... } // unionのフィールドは左辺値取れない
-
-- C++が定義する関数については宣言だけはemitする(誤った宣言で問題を起
-  こさないようにするため) -> 非template関数については実装済み。
-  template関数と型については未実装
-
-- type categoryの整理
-
+実装が不明確なところ
+- threadまわりの仕様再整理せよ
+- 演算子の一通りテスト作成。コンテナ含め。
+- type categoryの仕様文書化
 - 決定済みの仕様をメモに蓄積、テストケースと関連付け。
 
 ---------------------------------------------------------------------
@@ -114,6 +82,15 @@ FIXME/TODO M4
 ---------------------------------------------------------------------
 TODO
 
+- block-scope lock is not implemented これを出す条件は何?
+- multithreaded structのコンストラクタ引数はmultithreaded型でなくても
+  よい?
+- import元を制限する構文(実装を隠すのに便利)
+- check_overflow pragma? 実行時にオーバーフローを検出
+- if (int v : foo.fld) { ... } // unionのフィールドは左辺値取れない
+- C++が定義する関数については宣言だけはemitする(誤った宣言で問題を起
+  こさないようにするため) -> 非template関数については実装済み。
+  template関数と型については未実装
 - public extern "@0void" "@0void" struct void { } こういうの無くす?
 - realloc-safeかどうかpxcで判断し、それに応じて使うコンテナ実装を
   切り替える?
@@ -227,10 +204,26 @@ ARGUABLE
 - 数値型の変換チェック numeric_convertible
   - 現在の実装は浮動小数点数がieee754, 整数が2の補数であることを
     仮定している
+interfaceまわり
+- interfaceの仮想関数の引数型は先に定義しなくていいのか？
+- test_03/interf_constr3_1_fixme.px1
+- 型定義順依存を調べるために再帰的型を定義するテストを作る
+- std::mapで foo["abc"] = "xyz" するとmudflapが怒る
+- unionがunitだけでできていたときmudflapが怒る(バージョン？)
+  (STLのバグ？)
+- 仕様決め: catch は常にconst byref?
 
 ---------------------------------------------------------------------
 DONE
 
+- iptr/tiptr実装できている？(done)
+- namespace宣言義務付け(done)
+- foo{bar}: fooがtsvaluetypeでbarがthreadedな「関数」だった場合この型式
+  は何装飾？ -> tsvaluetypeのまま。get_term_threading_attribute() は
+  そのようになっているように見える。(done)
+- global変数はthreadedな型を持たねばならない。初期化順序の問題が起きない
+  ように。expr_var::check_typeの中のif 0を有効化せよ。(done)
+- 短絡boxingを再び有効に(done)
 - externならweak又はrefを返すメンバ関数を許可、thisをrootする(done)
 - weak型を初期化以外の代入の左辺にできないように(done)
 - pxcvectorなどのインラインメンバ関数は"type"ではなく"fdecl"に移さ

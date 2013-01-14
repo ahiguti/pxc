@@ -535,7 +535,13 @@ bool is_const_or_immutable_pointer_family(const term& t)
     cat == typecat_e_tiptr || cat == typecat_e_iptr;
 }
 
-bool is_threaded_pointer_family(const term& t)
+bool is_immutable_pointer_family(const term& t)
+{
+  const typecat_e cat = get_category(t);
+  return cat == typecat_e_tiptr || cat == typecat_e_iptr;
+}
+
+bool is_multithreaded_pointer_family(const term& t)
 {
   const typecat_e cat = get_category(t);
   return cat == typecat_e_tptr || cat == typecat_e_tcptr ||
@@ -1765,6 +1771,46 @@ void fn_update_tree(expr_i *e, expr_i *p, symbol_table *symtbl,
   }
 }
 
+static void check_type_validity_common(expr_i *e, const term& t)
+{
+  const term_list *tl = t.get_args();
+  if (tl == 0 || tl->empty())  {
+    return;
+  }
+  for (term_list::const_iterator i = tl->begin(); i != tl->end(); ++i) {
+    check_type_validity_common(e, *i);
+  }
+  if (!is_cm_pointer_family(t)) {
+    return;
+  }
+  const expr_i *const tgt = tl->front().get_expr();
+  if (tgt == 0) {
+    arena_error_throw(e, "internal error (check_type_validity_common)");
+  }
+  const bool is_mtptr = is_multithreaded_pointer_family(t);
+  const bool is_imptr = is_immutable_pointer_family(t);
+  const attribute_e attr = tgt->get_attribute();
+  #if 0
+  fprintf(stderr, "ctvc %s mt=%d im=%d attr=%x\n", term_tostr_human(t).c_str(),
+    (int)is_mtptr, (int)is_imptr, (int)attr); // FIXME  
+  #endif
+  if (is_mtptr && is_imptr && (attr & attribute_tsvaluetype) == 0) {
+    arena_error_throw(e,
+      "invalid type: '%s' (pointer target is not a tsvaluetype)",
+      term_tostr_human(t).c_str());
+  }
+  if (is_imptr && (attr & attribute_valuetype) == 0) {
+    arena_error_throw(e,
+      "invalid type: '%s' (pointer target is not a valuetype)",
+      term_tostr_human(t).c_str());
+  }
+  if (is_mtptr && (attr & attribute_multithr) == 0) {
+    arena_error_throw(e,
+      "invalid type: '%s' (pointer target is not a multithreaded type)",
+      term_tostr_human(t).c_str());
+  }
+}
+
 void fn_check_type(expr_i *e, symbol_table *symtbl)
 {
   if (e == 0) {
@@ -1773,6 +1819,7 @@ void fn_check_type(expr_i *e, symbol_table *symtbl)
   DBG_CT(fprintf(stderr, "fn_check_type begin %p expr=%s\n",
     e, e->dump(0).c_str()));
   e->check_type(symtbl);
+  check_type_validity_common(e, e->get_texpr());
   DBG_CT(fprintf(stderr, "fn_check_type end %p expr=%s -> type=%s\n",
     e, e->dump(0).c_str(),
     term_tostr(e->get_texpr(), term_tostr_sort_strict).c_str()));
