@@ -1395,6 +1395,12 @@ void expr_op::check_type(symbol_table *lookup)
 	arena_error_throw(this, "invalid assignment ('%s' is a weak type)",
 	  term_tostr_human(arg0->resolve_texpr()).c_str());
       }
+      if (!is_assignable(arg0->resolve_texpr())) {
+	/* 'v1 = v2' is not allowed. darray for example. */
+	arena_error_throw(this,
+	  "invalid assignment ('%s' is not an assignable type)",
+	  term_tostr_human(arg0->resolve_texpr()).c_str());
+      }
     }
   } else if (arg0 != 0 && arg1 != 0 && unknown_eval_order) {
     if (expr_would_invalidate_other_expr(arg0)) {
