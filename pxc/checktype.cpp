@@ -510,16 +510,12 @@ void expr_var::check_type(symbol_table *lookup)
       "type '%s' for global variable '%s' is a waek type",
       term_tostr_human(typ).c_str(), sym);
   }
-// FIXME: enable this!
-#if 0
   const attribute_e tattr = get_term_threading_attribute(typ);
   if (is_global_var(this) && (tattr & attribute_threaded) == 0) {
-    // FIXME: test
     arena_error_push(this,
       "type '%s' for global variable '%s' is not threaded",
       term_tostr_human(typ).c_str(), sym);
   }
-#endif
   if (defcon) {
     /* requires default constructor */
     check_default_construct(typ, this, sym);
@@ -930,7 +926,7 @@ static void add_root_requirement(expr_i *e, passby_e passby,
     } else {
       /* pointers */
       if (blockscope_flag &&
-	is_threaded_pointer_family(eop->arg0->resolve_texpr())) {
+	is_multithreaded_pointer_family(eop->arg0->resolve_texpr())) {
 	arena_error_throw(e, "block-scope lock is not implemented");
       }
       /* copy the pointer and own a refcount */

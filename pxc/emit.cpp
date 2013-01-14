@@ -2088,6 +2088,30 @@ static size_t comma_sep_length(expr_i *e)
   return len;
 }
 
+static expr_funccall *can_emit_fast_boxing(expr_funccall *func)
+{
+  if (func->funccall_sort != funccall_e_struct_constructor) {
+    return 0;
+  }
+  if (!is_cm_pointer_family(func->get_texpr())) {
+    return 0;
+  }
+  if (comma_sep_length(func->arg) != 1) {
+    return 0;
+  }
+  expr_funccall *cfunc = dynamic_cast<expr_funccall *>(func->arg);
+  if (cfunc == 0 || cfunc->conv != conversion_e_none) {
+    return 0;
+  }
+  if (cfunc->funccall_sort != funccall_e_struct_constructor) {
+    return 0;
+  }
+  if (comma_sep_length(cfunc->arg) > 3) {
+    return 0;
+  }
+  return cfunc;
+}
+
 void expr_funccall::emit_value(emit_context& em)
 {
   expr_i *fld = get_op_rhs(func, '.');
@@ -2101,22 +2125,24 @@ void expr_funccall::emit_value(emit_context& em)
     em.puts("(");
     bool is_first = !emit_func_upvalue_args(em, fld, symtbl_lexical);
     if (!is_first) {
-      em.puts(",");
+      em.puts(" , ");
     }
     fn_emit_value(em, sc->arg_hidden_this);
     if (arg != 0) {
-      em.puts(", ");
+      em.puts(" , ");
       fn_emit_value(em, arg);
     }
     em.puts(")");
+#if 0
   } else if (funccall_sort != funccall_e_funccall &&
     conv == conversion_e_boxing && comma_sep_length(arg) <= 3) {
     /* fast boxing */
     em.puts("pxcrt::boxing()");
     if (arg != 0) {
-      em.puts(",");
+      em.puts(" , ");
       fn_emit_value(em, arg);
     }
+#endif
   } else {
     /* function(...) */
     switch (funccall_sort) {
@@ -2129,15 +2155,28 @@ void expr_funccall::emit_value(emit_context& em)
       emit_term(em, get_texpr());
       break;
     }
-    em.puts("(");
-    bool is_first = !emit_func_upvalue_args(em, func, symtbl_lexical);
-    if (arg != 0) {
-      if (!is_first) {
-	em.puts(",");
+    expr_funccall *fast_boxing_cfunc = can_emit_fast_boxing(this);
+    if (fast_boxing_cfunc != 0) {
+      /* fast boxing constructor */
+      em.puts("(");
+      em.puts("pxcrt::boxing()");
+      if (fast_boxing_cfunc->arg != 0) {
+	em.puts(" , ");
+	fn_emit_value(em, fast_boxing_cfunc->arg);
       }
-      fn_emit_value(em, arg);
+      em.puts(")");
+    } else {
+      /* function or constructor */
+      em.puts("(");
+      bool is_first = !emit_func_upvalue_args(em, func, symtbl_lexical);
+      if (arg != 0) {
+	if (!is_first) {
+	  em.puts(" , ");
+	}
+	fn_emit_value(em, arg);
+      }
+      em.puts(")");
     }
-    em.puts(")");
   }
 }
 
