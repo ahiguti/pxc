@@ -669,11 +669,28 @@ bool type_allow_feach(const term& t)
 
 bool is_copyable(const term& t)
 {
+  /* return true iff copy constructor is allowed */
   if (is_interface(t)) {
     return false;
   }
   const typecat_e cat = get_category(t);
   if (cat == typecat_e_linear || cat == typecat_e_noncopyable) {
+    return false;
+  }
+  return true;
+}
+
+bool is_assignable(const term& t)
+{
+  /* returns true iff 'operator =' is allowed */
+  if (!is_copyable(t)) {
+    return false;
+  }
+  if (is_weak_value_type(t)) {
+    return false;
+  }
+  const typecat_e cat = get_category(t);
+  if (cat == typecat_e_darray) {
     return false;
   }
   return true;

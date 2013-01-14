@@ -82,6 +82,7 @@ bool type_has_invalidate_guard(const term& t);
 bool type_allow_feach(const term& t);
 bool is_compatible_pointer(const term&t0, const term& t1);
 bool is_copyable(const term& t);
+bool is_assignable(const term& t);
 typecat_e get_category(const term& t);
 typecat_e get_category_from_string(const std::string& s);
 std::string get_category_string(typecat_e cat);

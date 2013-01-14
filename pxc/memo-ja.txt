@@ -3,22 +3,10 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- darrayは代入不可
 - 型定義順依存を調べるために再帰的型を定義するテストを作る
-- pxcvectorなどのインラインメンバ関数は"type"ではなく"fdecl"に移さ
-  ないと型定義順依存がおきる -> ない。メンバ関数ごとにインスタンス
-  化される
-
-- tsvaluetype darray実装(done)
-
-- 数値型の変換チェック numeric_convertible
-  - 現在の実装は浮動小数点数がieee754, 整数が2の補数であることを
-    仮定している
 
 - expr.cppで組み込み型にtype::builtinをセットしているのをやめて、
   serializeなどではtype::builtinではない名前空間を使うようにする
-
-- public extern "@0void" "@0void" struct void { } こういうの無くす?
 
 - pxcvectorとtree_mapのsliceからコンストラクタ
 - pxcvectorのappend
@@ -29,17 +17,11 @@ FIXME/TODO M1
 - unionがunitだけでできていたときmudflapが怒る(バージョン？)
   (STLのバグ？)
 
-- catch は常にconst byref?
+- 仕様決め: catch は常にconst byref?
 
 threadまわり
 - threadまわりの仕様整理せよ
-- threadedなclosureがupvalueとして非threadedな型を使えてしまわないか
-  -> test_31_thrattr/up*.px (done)
-- closureのthread属性？ -> test_31_thrattr/up*.px (done)
 - immutableの仕様きめよ
-- guard countがmtsafeでないのはどうするか -> valuetypeとtsvaluetype
-  (done)
-- iptr, valuetype (done)
 - multithreaded structのコンストラクタ引数はmultithreaded型でなくても
   よい。
 
@@ -50,9 +32,6 @@ threadまわり
   - default-constructibleではない型のデフォルトコンストラクタをemit
     しているのはおかしい？
 - defconでない型を引数無しで呼んだらエラーにせよ
-- コンストラクタからメンバ関数を呼べてしまうのをエラーにせよ(done)
-
-コンテナまわり
 
 namespaceまわり
 - namespace宣言義務付け
@@ -62,12 +41,8 @@ namespaceまわり
 - 短絡boxingを再び有効に
 
 weak型まわり
-- externならweak又はrefを返すメンバ関数を許可、thisをrootする(done)
 - globalやstructには参照変数などは置けないように
 - 構造体にslice等のweak型を含む型のfieldを置けないように
-  is_weak_type() あるいはヒープに置けなければそれでよい？
-- weak型を初期化以外の代入の左辺にできないように(done)
-
 
 interfaceまわり
 - interfaceの仮想関数の引数型は先に定義しなくていいのか？
@@ -77,11 +52,10 @@ interfaceまわり
 - check_overflow pragma?
 
 if-defined構文
-- if (int const& x : foo[k]) { ... } のif-defined構文(done)
 - if (int v : foo.fld) { ... } // unionのフィールドは左辺値取れない
 
 - C++が定義する関数については宣言だけはemitする(誤った宣言で問題を起
-  こさないようにするため)(done)
+  こさないようにするため) -> 非template関数については実装済み。
   template関数と型については未実装
 
 - type categoryの整理
@@ -140,6 +114,7 @@ FIXME/TODO M4
 ---------------------------------------------------------------------
 TODO
 
+- public extern "@0void" "@0void" struct void { } こういうの無くす?
 - realloc-safeかどうかpxcで判断し、それに応じて使うコンテナ実装を
   切り替える?
 - foreach 参照渡し、constの組み合わせをすべてサポート?
@@ -247,8 +222,30 @@ TODO
 - perl module
 
 ---------------------------------------------------------------------
+ARGUABLE
+
+- 数値型の変換チェック numeric_convertible
+  - 現在の実装は浮動小数点数がieee754, 整数が2の補数であることを
+    仮定している
+
+---------------------------------------------------------------------
 DONE
 
+- externならweak又はrefを返すメンバ関数を許可、thisをrootする(done)
+- weak型を初期化以外の代入の左辺にできないように(done)
+- pxcvectorなどのインラインメンバ関数は"type"ではなく"fdecl"に移さ
+  ないと型定義順依存がおきる -> ない。メンバ関数ごとにインスタンス
+  化される(done)
+- darrayは代入不可(done)
+- threadedなclosureがupvalueとして非threadedな型を使えてしまわないか
+  -> test_31_thrattr/up*.px (done)
+- closureのthread属性？ -> test_31_thrattr/up*.px (done)
+- guard countがmtsafeでないのはどうするか -> valuetypeとtsvaluetype
+  (done)
+- iptr, valuetype (done)
+- コンストラクタからメンバ関数を呼べてしまうのをエラーにせよ(done)
+- tsvaluetype darray実装(done)
+- if (int const& x : foo[k]) { ... } のif-defined構文(done)
 - int_compareなどの比較関数を無くし、基本型は > で比較するように(done)
 - global変数にweak型は使えないようにせよ(11/fe_sli.px mudflap)(done)
 - interfaceなどのようにcopyableではないものをコピーしたときのエラー(done)
