@@ -1,0 +1,106 @@
+namespace type::impl::darray;
+public import type::impl::array_common;
+
+extern "type" inline
+namespace array {
+template <typename T>
+struct darray {
+  template <typename Tc> friend struct pxcrt::refvar_igrd_nn;
+  template <typename Tc> friend struct pxcrt::valvar_igrd_nn;
+  typedef pxcrt::bt_size_t size_type;
+  typedef T *iterator;
+  typedef const T *const_iterator;
+  typedef pxcrt::bt_slice<T> range_type;
+  typedef pxcrt::bt_cslice<T> crange_type;
+  ~darray() { deinit(); }
+  darray(size_type len, const T& val) { init(len, val); }
+  darray(const darray& x) { init(x); }
+  bool empty() const { return valid_len == 0; }
+  size_type size() const { return valid_len; }
+  T& operator [](size_type idx) {
+    if (idx >= valid_len) { pxcrt::throw_invalid_index(); }
+    return start[idx];
+  }
+  const T& operator [](size_type idx) const {
+    if (idx >= valid_len) { pxcrt::throw_invalid_index(); }
+    return start[idx];
+  }
+  iterator begin() { return start; }
+  const_iterator begin() const { return start; }
+  iterator end() { return start + valid_len; }
+  const_iterator end() const { return start + valid_len; }
+  T *rawarr() { return start; }
+  const T *rawarr() const { return start; }
+private:
+  void deinit() {
+    if (is_trivially_copyable<T>::value) {
+      /* nothing to do */
+    } else {
+      for (size_type i = valid_len; i > 0; --i) {
+	(start + i - 1)->T::~T(); /* destructor */
+      }
+    }
+    free(start);
+  }
+  void init(size_type len, const T& val) {
+    start = static_cast<T *>(malloc(len * sizeof(T)));
+    valid_len = len;
+    if (start == 0) {
+      throw std::bad_alloc();
+    }
+    if (is_trivially_copyable<T>::value) {
+      for (size_type idx = 0; idx < len; ++idx) {
+	start[idx] = val;
+      }
+    } else {
+      /* uninitialized_fill_n */
+      size_type idx = 0;
+      try {
+	while (idx < len) {
+	  new (start + idx) T(val); /* constructor */
+	  ++idx;
+	}
+      } catch (...) {
+	while (idx > 0) {
+	  (start + idx - 1)->T::~T(); /* destructor */
+	  --idx;
+	}
+	free(start);
+	throw;
+      }
+    }
+  }
+  void init(const darray& x) {
+    start = static_cast<T *>(malloc(x.valid_len * sizeof(T)));
+    valid_len = x.valid_len;
+    if (start == 0) {
+      throw std::bad_alloc();
+    }
+    if (is_trivially_copyable<T>::value) {
+      memcpy(start, x.start, x.valid_len * sizeof(T));
+    } else {
+      /* uninitialized_copy */
+      size_type idx = 0;
+      try {
+	while (idx < x.valid_len) {
+	  new (start + idx) T(x.start[idx]); /* constructor */
+	  ++idx;
+	}
+      } catch (...) {
+	while (idx > 0) {
+	  (start + idx - 1)->T::~T(); /* destructor */
+	  --idx;
+	}
+	free(start);
+	throw;
+      }
+    }
+  }
+private:
+  T *start;
+  size_type valid_len;
+  darray(); /* not allowed */
+  darray& operator =(const darray& x); /* not allowed */
+};
+}; // namespace array
+
