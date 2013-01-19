@@ -12,6 +12,7 @@
 // vim:sw=2:ts=8:ai
 
 #include "expr_misc.hpp"
+#include "sort_dep.hpp"
 #include "term.hpp"
 #include "emit.hpp"
 #include "eval.hpp"
@@ -25,11 +26,6 @@
 #define DBG_ASTMT(x)
 
 namespace pxc {
-
-static bool is_compiled(const expr_block *bl)
-{
-  return !bl->tinfo.is_uninstantiated();
-}
 
 static bool cur_stmt_has_tempvar(expr_i *e)
 {
@@ -475,8 +471,34 @@ static bool has_blockscope_tempvar(expr_i *e)
   return false;
 }
 
+static bool is_vardefset(expr_i *e)
+{
+  if (e->get_esort() == expr_e_op) {
+    expr_op *const eop = ptr_down_cast<expr_op>(e);
+    if (eop->op == '=' && eop->arg0->get_esort() == expr_e_var) {
+      /* var x = ... */
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool is_vardefdefault(expr_i *e)
+{
+  if (e->get_esort() == expr_e_var) {
+    expr_op *const eop = dynamic_cast<expr_op *>(e->parent_expr);
+    if (eop == 0 || eop->op != '=') {
+      /* var x but not var x = ... */
+      return true;
+    }
+  }
+  return false;
+}
+
 static bool is_vardef_or_vardefset(expr_i *e)
 {
+  return is_vardefdefault(e) || is_vardefset(e);
+#if 0
   if (e->get_esort() == expr_e_op) {
     expr_op *const eop = ptr_down_cast<expr_op>(e);
     if (eop->op == '=' && eop->arg0->get_esort() == expr_e_var) {
@@ -491,6 +513,7 @@ static bool is_vardef_or_vardefset(expr_i *e)
     }
   }
   return false;
+#endif
 }
 
 static bool is_single_vardef_or_vardefset(expr_i *e)
@@ -537,6 +560,7 @@ static bool can_emit_fast_constr(const expr_struct *est)
       continue;
     }
     if (!is_single_vardef_or_vardefset(e)) {
+      abort(); // not allowed currently
       return false;
     }
   }
@@ -1082,6 +1106,7 @@ static void emit_variant_aux_defs(emit_context& em, expr_variant *ev)
   emit_variant_aux_functions(em, ev, false);
 }
 
+#if 0
 struct sorted_exprs {
   std::list<expr_i *> sorted;
   std::set<expr_i *> pset;
@@ -1106,8 +1131,10 @@ static std::list<expr_i *> get_dep_tparams(expr_struct *est)
   } else if (
     cat == typecat_e_ptr ||
     cat == typecat_e_cptr ||
+    cat == typecat_e_iptr ||
     cat == typecat_e_tptr ||
     cat == typecat_e_tcptr ||
+    cat == typecat_e_tiptr ||
     // cat == typecat_e_wptr ||
     // cat == typecat_e_wcptr ||
     cat == typecat_e_darray ||
@@ -1182,6 +1209,7 @@ static void sort_types(sorted_exprs& c, expr_i *e)
   c.sorted.push_back(e);
   c.pset.insert(e);
 }
+#endif
 
 static void emit_type_definitions(emit_context& em)
 {
@@ -1190,7 +1218,7 @@ static void emit_type_definitions(emit_context& em)
     i != expr_arena.end(); ++i) {
     expr_i *const e = *i;
     if (e->get_esort() == expr_e_struct || e->get_esort() == expr_e_variant) {
-      sort_types(c, e);
+      sort_dep(c, e);
     }
   }
   /* proto */
@@ -1239,7 +1267,9 @@ static void emit_type_definitions(emit_context& em)
       emit_variant_def_one(em, ev, proto_only);
     }
   }
-  /* aux function definitions */
+  #if 0
+  // FIXME: remove
+  /* struct constr and aux function definitions */
   for (std::list<expr_i *>::iterator i = c.sorted.begin();
     i != c.sorted.end(); ++i) {
     expr_struct *const est = dynamic_cast<expr_struct *>(*i);
@@ -1253,6 +1283,7 @@ static void emit_type_definitions(emit_context& em)
       emit_variant_aux_defs(em, ev);
     }
   }
+  #endif
 }
 
 static void emit_thisptr_argdecl(emit_context& em, expr_struct *est,
@@ -1410,18 +1441,16 @@ static void emit_function_def(emit_context& em)
     if (efd != 0 && is_compiled(efd->block)) {
       emit_function_def_one(em, efd);
     }
-    #if 0
     expr_struct *const est = dynamic_cast<expr_struct *>(*i);
-    if (est != 0 && est->has_userdefined_constr()) {
+    if (est != 0 && est->cname == 0) {
       emit_struct_constr_one(em, est, true);
       emit_struct_constr_one(em, est, false);
       emit_struct_constr_aux(em, est);
     }
     expr_variant *const ev = dynamic_cast<expr_variant *>(*i);
     if (ev != 0) {
-      emit_variant_constr_aux(em, ev);
+      emit_variant_aux_defs(em, ev);
     }
-    #endif
   }
 }
 
@@ -1674,6 +1703,25 @@ static void split_expr(expr_i *e, std::deque<expr_i *>& es)
     es.push_back(e);
   }
 }
+
+#if 0
+static bool is_vardef_constructor(expr_i *e)
+{
+  expr_op *const eop = ptr_down_cast<expr_op>(e);
+  if (eop == 0) {
+    return false;
+  }
+  if (eop->op != '=' || eop->arg0->get_esort() != expr_e_var) {
+    return false;
+  }
+  expr_funccall *const fc = dynamic_cast<expr_funccall *>(eop->arg1);
+  if (fc == 0 || fc->conv != conversion_e_none ||
+    fc->funccall_sort != funccall_e_struct_constructor) {
+    return false;
+  }
+  return true;
+}
+#endif
 
 static void emit_split_expr(emit_context& em, expr_i *e, bool noemit_last)
 {
@@ -2686,6 +2734,41 @@ void expr_try::emit_value(emit_context& em)
   }
 }
 
+static void emit_comma_sep_list_with_paren(emit_context& em, expr_i *e)
+{
+  assert(e != 0);
+  expr_op *const eop = dynamic_cast<expr_op *>(e);
+  if (eop == 0 || eop->op != ',') {
+    em.puts("(");
+    fn_emit_value(em, e);
+    em.puts(")");
+    return;
+  }
+  em.puts("(");
+  fn_emit_value(em, eop->arg0);
+  em.puts("), ");
+  emit_comma_sep_list_with_paren(em, eop->arg1);
+}
+
+static void emit_vardef_constructor(emit_context& em, expr_i *e,
+  const term& typ, const std::string& cs0, const std::string& var_csymbol)
+{
+  expr_op *const eop = ptr_down_cast<expr_op>(e);
+  expr_funccall *const fc = ptr_down_cast<expr_funccall>(eop->arg1);
+  em.puts(cs0 + " " + var_csymbol);
+  if (fc->arg == 0) {
+    /* foo x */
+    emit_explicit_init_if(em, typ);
+  } else {
+    /* foo x((a0), (a1), ...) */
+    em.puts("(");
+    /* to avoid ambiguity with function declaration, we need to append
+     * parens for each argument. */
+    emit_comma_sep_list_with_paren(em, fc->arg);
+    em.puts(")");
+  }
+}
+
 enum emit_var_e {
   emit_var_defset,
   emit_var_set,
@@ -2693,7 +2776,7 @@ enum emit_var_e {
   emit_var_tempobj,
 };
 
-static void emit_var_or_tempvar(emit_context& em, const term& tbase,
+static void emit_var_or_tempvar(emit_context& em, expr_i *e, const term& tbase,
   const term& tconvto, const variable_info& vi, const std::string& var_csymbol,
   expr_i *rhs, emit_var_e emv, bool is_unnamed)
 {
@@ -2770,8 +2853,13 @@ static void emit_var_or_tempvar(emit_context& em, const term& tbase,
 	emit_explicit_init_if(em, tconvto.is_null() ? tbase : tconvto);
       } else {
 	/* defset */
-	em.puts(cs0 + " " + var_csymbol + " = ");
-	fn_emit_value(em, rhs, false, is_unnamed);
+	if (!is_unnamed && is_vardef_constructor(e)) {
+	  /* foo x((a0), (a1), ...) */
+	  emit_vardef_constructor(em, e, tbase, cs0, var_csymbol);
+	} else {
+	  em.puts(cs0 + " " + var_csymbol + " = ");
+	  fn_emit_value(em, rhs, false, is_unnamed);
+	}
       }
     }
   } else {
@@ -2795,6 +2883,10 @@ void emit_value_internal(emit_context& em, expr_i *e)
 
 void fn_emit_value(emit_context& em, expr_i *e, bool expand_composite,
   bool var_rhs)
+  /* if var_rhs is true, e is a tempvar and fn_emit_value emits the rhs
+   * of it instead of the variable name. if expand_composite is true
+   * and e is a split point, fn_emit_value emits var (or tempvar)
+   * defnintion instead of the variable name. */
 {
   if (e == 0) {
     return;
@@ -2819,12 +2911,14 @@ void fn_emit_value(emit_context& em, expr_i *e, bool expand_composite,
       var_csymbol = "";
       emv = emit_var_tempobj;
     } else if (split_flag && e->get_esort() == expr_e_op) {
+      /* vardefset */
       ev = ptr_down_cast<expr_var>(ptr_down_cast<expr_op>(e)->arg0);
       rhs = ptr_down_cast<expr_op>(e)->arg1;
       vi = &ev->varinfo;
       var_csymbol = csymbol_var(ev, true);
       emv = expand_composite ? emit_var_defset: emit_var_get;
     } else if (split_flag && e->get_esort() == expr_e_var) {
+      /* vardef */
       ev = ptr_down_cast<expr_var>(e);
       rhs = 0;
       vi = &ev->varinfo;
@@ -2856,7 +2950,7 @@ void fn_emit_value(emit_context& em, expr_i *e, bool expand_composite,
       (int)vi->guard_elements, (int)vi->passby, (int)e->get_esort());
     raise(SIGTRAP);
     #endif
-    emit_var_or_tempvar(em, e->get_texpr(), e->type_conv_to, *vi,
+    emit_var_or_tempvar(em, e, e->get_texpr(), e->type_conv_to, *vi,
       var_csymbol, rhs, emv, ev == 0);
     return;
   }

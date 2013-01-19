@@ -14,6 +14,7 @@
 #include <vector>
 #include "expr_misc.hpp"
 #include "checktype.hpp"
+#include "sort_dep.hpp"
 #include "eval.hpp"
 #include "util.hpp"
 
@@ -25,7 +26,6 @@
 #define DBG_CONV(x)
 #define DBG_NEWTE(x)
 #define DBG_INST(x)
-#define DBG_CT(x)
 #define DBG_COMPILE(x)
 #define DBG_COPT(x)
 #define DBG_SYMTBL(x)
@@ -332,15 +332,19 @@ bool is_unsigned_integral_type(const term& t)
   return cat == typecat_e_uint;
 }
 
-typecat_e get_category(const term& t)
+static typecat_e get_category(const expr_i *e)
 {
-  const expr_struct *est = dynamic_cast<const expr_struct *>(
-    t.get_expr());
+  const expr_struct *est = dynamic_cast<const expr_struct *>(e);
   std::string cat;
   if (est != 0) {
     return est->typecat;
   }
   return typecat_e_none;
+}
+
+typecat_e get_category(const term& t)
+{
+  return get_category(t.get_expr());
 }
 
 typecat_e get_category_from_string(const std::string& s)
@@ -579,16 +583,27 @@ bool is_const_range_family(const term& t)
   return cat == typecat_e_cslice || cat == typecat_e_tree_map_crange;
 }
 
-bool is_cm_range_family(const term& t)
+static bool is_cm_range_family(expr_i *e)
 {
-  const typecat_e cat = get_category(t);
+  const typecat_e cat = get_category(e);
   return cat == typecat_e_slice || cat == typecat_e_cslice ||
     cat == typecat_e_tree_map_range || cat == typecat_e_tree_map_crange;
 }
 
+bool is_cm_range_family(const term& t)
+{
+  return is_cm_range_family(t.get_expr());
+}
+
+static bool is_weak_value_type(expr_i *e)
+{
+  return is_cm_range_family(e)
+    /* || is_weak_pointer_category(get_category(e)) */;
+}
+
 bool is_weak_value_type(const term& t)
 {
-  return is_cm_range_family(t) /* || is_weak_pointer_category(get_category(t)) */;
+  return is_weak_value_type(t.get_expr());
 }
 
 bool is_container_family(const term& t)
@@ -673,8 +688,30 @@ bool type_allow_feach(const term& t)
   }
 }
 
+static bool is_copyable_type_one(expr_i *e)
+{
+  if (e->get_esort() == expr_e_interface) {
+    return false;
+  }
+  const typecat_e cat = get_category(e);
+  if (cat == typecat_e_linear || cat == typecat_e_noncopyable) {
+    return false;
+  }
+  return true;
+}
+
 bool is_copyable(const term& t)
 {
+  sorted_exprs c;
+  sort_dep(c, t.get_expr());
+  for (std::list<expr_i *>::iterator i = c.sorted.begin();
+    i != c.sorted.end(); ++i) {
+    if (!is_copyable_type_one(*i)) {
+      return false;
+    }
+  }
+  return true;
+#if 0
   /* return true iff copy constructor is allowed */
   if (is_interface(t)) {
     return false;
@@ -684,10 +721,36 @@ bool is_copyable(const term& t)
     return false;
   }
   return true;
+#endif
+}
+
+static bool is_assignable_type_one(expr_i *e)
+{
+  if (!is_copyable_type_one(e)) {
+    return false;
+  }
+  if (is_weak_value_type(e)) {
+    return false;
+  }
+  const typecat_e cat = get_category(e);
+  if (cat == typecat_e_darray) {
+    return false;
+  }
+  return true;
 }
 
 bool is_assignable(const term& t)
 {
+  sorted_exprs c;
+  sort_dep(c, t.get_expr());
+  for (std::list<expr_i *>::iterator i = c.sorted.begin();
+    i != c.sorted.end(); ++i) {
+    if (!is_assignable_type_one(*i)) {
+      return false;
+    }
+  }
+  return true;
+#if 0
   /* returns true iff 'operator =' is allowed */
   if (!is_copyable(t)) {
     return false;
@@ -700,6 +763,7 @@ bool is_assignable(const term& t)
     return false;
   }
   return true;
+#endif
 }
 
 static std::string term_tostr_tparams(const expr_tparams *tp,
@@ -1771,6 +1835,7 @@ void fn_update_tree(expr_i *e, expr_i *p, symbol_table *symtbl,
   }
 }
 
+#if 0
 static void check_type_validity_common(expr_i *e, const term& t)
 {
   const term_list *tl = t.get_args();
@@ -1824,6 +1889,7 @@ void fn_check_type(expr_i *e, symbol_table *symtbl)
     e, e->dump(0).c_str(),
     term_tostr(e->get_texpr(), term_tostr_sort_strict).c_str()));
 }
+#endif
 
 template <typename T> T *find_parent_tmpl(T *e, expr_e t)
 {
@@ -2602,6 +2668,28 @@ term get_array_index_texpr(expr_op *eop, term& t0)
   }
   arena_error_throw(eop, "cannot apply '[]'");
   return builtins.type_void;
+}
+
+bool is_vardef_constructor(expr_i *e)
+{
+  expr_op *const eop = ptr_down_cast<expr_op>(e);
+  if (eop == 0) {
+    return false;
+  }
+  if (eop->op != '=' || eop->arg0->get_esort() != expr_e_var) {
+    return false;
+  }
+  expr_funccall *const fc = dynamic_cast<expr_funccall *>(eop->arg1);
+  if (fc == 0 || fc->conv != conversion_e_none ||
+    fc->funccall_sort != funccall_e_struct_constructor) {
+    return false;
+  }
+  return true;
+}
+
+bool is_compiled(const expr_block *bl)
+{
+  return !bl->tinfo.is_uninstantiated();
 }
 
 }; 

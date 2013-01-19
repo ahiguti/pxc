@@ -1,0 +1,40 @@
+namespace io::impl;
+public import type::builtin "";
+public import meta::builtin m;
+
+public macro ioptr tptr{io_impl};
+public extern "pxcio::io" ioptr io;
+public multithreaded extern "pxcio::io_impl" "linear" struct io_impl { }
+private extern "pxcio::io_init" function void io_init();
+
+io_init();
+
+extern "type" inline
+namespace pxcio {
+struct io_impl {
+  io_impl() { }
+private:
+  io_impl(const io_impl&);
+  io_impl& operator =(const io_impl&);
+};
+typedef pxcrt::rcptr< pxcrt::trcval<io_impl> > ioptr;
+};
+
+extern "fdecl" inline
+namespace pxcio {
+extern ioptr io;
+};
+
+extern "fdef" inline
+namespace pxcio {
+ioptr io;
+void io_init()
+{
+  static int init_flag = 0;
+  if (!init_flag) {
+    init_flag = 1;
+    io = ioptr(pxcrt::boxing());
+  }
+}
+};
+

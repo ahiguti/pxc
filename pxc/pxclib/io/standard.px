@@ -1,11 +1,11 @@
 namespace io::standard;
 public import type::builtin "";
-public import io::system "";
+public import io "";
 public import serialize::string;
 public import meta::builtin m;
 
 public threaded function {t}
-void stdout_print(systemptr const& sys, t const& x)
+void stdout_print(ioptr const& sys, t const& x)
 {
   if (m::eq{t, type::builtin::string}) {
     stdout_print_string(sys, x);
@@ -15,7 +15,7 @@ void stdout_print(systemptr const& sys, t const& x)
 }
 
 public threaded function {t}
-void stdout_println(systemptr const& sys, t const& x)
+void stdout_println(ioptr const& sys, t const& x)
 {
   if (m::eq{t, type::builtin::string}) {
     string s = x;
@@ -31,18 +31,18 @@ void stdout_println(systemptr const& sys, t const& x)
 public function {t}
 void print(t const& x)
 {
-  stdout_print(system, x);
+  stdout_print(io, x);
 }
 
 public function {t}
 void println(t const& x)
 {
-  stdout_println(system, x);
+  stdout_println(io, x);
 }
 
 
 private threaded extern "pxcio::stdout_print_string"
-  function void stdout_print_string(systemptr const& sys, string const& x);
+  function void stdout_print_string(ioptr const& sys, string const& x);
 
 extern "type" inline
 namespace pxcio {
@@ -55,7 +55,7 @@ namespace pxcio {
 extern "fdef" inline
 namespace pxcio {
 #include <stdio.h>
-void stdout_print_string(systemptr const& sys, pxcrt::bt_string const& x)
+void stdout_print_string(ioptr const& sys, pxcrt::bt_string const& x)
 {
   ::fwrite(x.rawarr(), x.size(), 1, stdout);
 }

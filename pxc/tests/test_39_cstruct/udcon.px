@@ -1,0 +1,30 @@
+namespace udcon;
+import test_common "";
+
+public valuetype extern "udcon::foo" "noncopyable"
+struct foo(int x, string const& y) {
+  public extern "get_int" function int get_int() const;
+  public extern "get_string" function string get_string() const;
+}
+
+extern "type" inline
+namespace udcon {
+struct foo {
+  pxcrt::bt_int intval;
+  pxcrt::bt_string strval;
+  foo(pxcrt::bt_int x, pxcrt::bt_string const& y)
+    : intval(x), strval(y) { }
+  pxcrt::bt_int get_int() const { return intval; }
+  pxcrt::bt_string get_string() const { return strval; }
+  foo(const foo&);
+  foo& operator =(const foo&);
+};
+};
+
+function void t1() {
+  foo x = foo(33, "abcdef");
+  println(x.get_int());
+  println(x.get_string());
+}
+
+t1();

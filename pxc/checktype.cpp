@@ -33,6 +33,7 @@
 #define DBG_STT(x)
 #define DBG_CON(x)
 #define DBG_ROOT(x)
+#define DBG_CT(x)
 
 namespace pxc {
 
@@ -327,7 +328,7 @@ static bool check_term_validity(const term& t, bool allow_nontype,
 }
 
 static void check_var_type(term& typ, expr_i *e, const char *sym,
-  bool byref_flag, bool defcon_flag)
+  bool byref_flag, bool need_copyable)
 {
   std::string err_mess;
   if (!check_term_validity(typ, false, false, true, e, err_mess)) {
@@ -337,7 +338,7 @@ static void check_var_type(term& typ, expr_i *e, const char *sym,
   if (is_void_type(typ)) {
     arena_error_push(e, "variable or field '%s' declared void", sym);
   }
-  if (!byref_flag && !defcon_flag && !is_copyable(typ)) {
+  if (!byref_flag && need_copyable && !is_copyable(typ)) {
     arena_error_push(e, "noncopyable type '%s' for variable or field '%s'",
       term_tostr_human(typ).c_str(), sym);
   }
@@ -498,13 +499,17 @@ static void check_default_construct(term& typ, expr_var *ev, const char *sym)
 void expr_var::check_type(symbol_table *lookup)
 {
   term& typ = resolve_texpr();
-  bool defcon = false;
-  if (parent_expr->get_esort() != expr_e_op ||
-    ptr_down_cast<expr_op>(parent_expr)->op != '=') {
-    defcon = true;
+  bool need_defcon = true;
+  bool need_copyable = false;
+  expr_op *const parent_eop = dynamic_cast<expr_op *>(parent_expr);
+  if (parent_eop != 0 && parent_eop->op == '=') {
+    need_defcon = false;
+    if (!is_vardef_constructor(parent_eop)) {
+      need_copyable = true;
+    }
   }
   check_var_type(typ, this, sym, is_passby_cm_reference(varinfo.passby),
-    defcon);
+    need_copyable);
   if (is_global_var(this) && is_weak_value_type(typ)) {
     arena_error_push(this,
       "type '%s' for global variable '%s' is a waek type",
@@ -516,7 +521,7 @@ void expr_var::check_type(symbol_table *lookup)
       "type '%s' for global variable '%s' is not threaded",
       term_tostr_human(typ).c_str(), sym);
   }
-  if (defcon) {
+  if (need_defcon) {
     /* requires default constructor */
     check_default_construct(typ, this, sym);
     if (is_passby_cm_reference(varinfo.passby)) {
@@ -1200,7 +1205,9 @@ void expr_op::check_type(symbol_table *lookup)
   case '=':
     check_type_convert_to_lhs(this, arg1, arg0->resolve_texpr());
     check_lvalue(this, arg0);
-    check_copyable(this, arg1);
+    if (!is_vardef_constructor(this)) {
+      check_copyable(this, arg1);
+    }
     type_of_this_expr = arg0->resolve_texpr();
     break;
   case '?':
@@ -1609,7 +1616,39 @@ void expr_funccall::check_type(symbol_table *lookup)
     /* struct constructor */
     tvmap_type tvmap;
     expr_struct *est = ptr_down_cast<expr_struct>(func_inst);
-    if (est->cname != 0) {
+    if (est->has_userdefined_constr()) {
+      /* user defined constructor */
+      expr_argdecls *ad = est->block->argdecls;
+      typedef std::list<expr_i *> arglist_type;
+      arglist_type arglist;
+      append_comma_sep_list(arg, arglist);
+      unsigned int argcnt = 1;
+      arglist_type::iterator j = arglist.begin();
+      while (j != arglist.end() && ad != 0) {
+	DBG(fprintf(stderr, "convert_type(%s -> %s)\n",
+	  term_tostr((*j)->resolve_texpr(), term_tostr_sort_humanreadable)
+	    .c_str(),
+	  term_tostr(ad->resolve_texpr(), term_tostr_sort_humanreadable)
+	    .c_str()));
+	if (!convert_type(*j, ad->resolve_texpr(), tvmap)) {
+	  const std::string s0 = term_tostr_human((*j)->resolve_texpr());
+	  const std::string s1 = term_tostr_human(ad->resolve_texpr());
+	  arena_error_push(this, "invalid conversion from %s to %s",
+	    s0.c_str(), s1.c_str());
+	  arena_error_push(this, "  initializing argument %u of '%s'",
+	    argcnt, est->sym);
+	}
+	passing_root_requirement(ad->passby, this, *j, false);
+	++j;
+	ad = ad->rest;
+	++argcnt;
+      }
+      if (j != arglist.end()) {
+	arena_error_push(this, "too many argument for '%s'", est->sym);
+      } else if (ad != 0) {
+	arena_error_push(this, "too few argument for '%s'", est->sym);
+      }
+    } else if (est->cname != 0) {
       typedef std::list<expr_i *> arglist_type;
       arglist_type arglist;
       append_hidden_this(func, arglist);
@@ -1699,38 +1738,6 @@ void expr_funccall::check_type(symbol_table *lookup)
       } else {
 	arena_error_push(this,
 	  "can't call a constructor for an extern struct '%s'", est->sym);
-      }
-    } else if (est->has_userdefined_constr()) {
-      /* user defined constructor */
-      expr_argdecls *ad = est->block->argdecls;
-      typedef std::list<expr_i *> arglist_type;
-      arglist_type arglist;
-      append_comma_sep_list(arg, arglist);
-      unsigned int argcnt = 1;
-      arglist_type::iterator j = arglist.begin();
-      while (j != arglist.end() && ad != 0) {
-	DBG(fprintf(stderr, "convert_type(%s -> %s)\n",
-	  term_tostr((*j)->resolve_texpr(), term_tostr_sort_humanreadable)
-	    .c_str(),
-	  term_tostr(ad->resolve_texpr(), term_tostr_sort_humanreadable)
-	    .c_str()));
-	if (!convert_type(*j, ad->resolve_texpr(), tvmap)) {
-	  const std::string s0 = term_tostr_human((*j)->resolve_texpr());
-	  const std::string s1 = term_tostr_human(ad->resolve_texpr());
-	  arena_error_push(this, "invalid conversion from %s to %s",
-	    s0.c_str(), s1.c_str());
-	  arena_error_push(this, "  initializing argument %u of '%s'",
-	    argcnt, est->sym);
-	}
-	passing_root_requirement(ad->passby, this, *j, false);
-	++j;
-	ad = ad->rest;
-	++argcnt;
-      }
-      if (j != arglist.end()) {
-	arena_error_push(this, "too many argument for '%s'", est->sym);
-      } else if (ad != 0) {
-	arena_error_push(this, "too few argument for '%s'", est->sym);
       }
     } else {
       /* plain constructor */
@@ -2395,7 +2402,7 @@ void expr_argdecls::check_type(symbol_table *lookup)
   if (fr != 0) {
     expr_block *const tbl = fr->get_template_block();
     if (!tbl->tinfo.is_uninstantiated()) {
-      check_var_type(typ, this, sym, is_passby_cm_reference(passby), false);
+      check_var_type(typ, this, sym, is_passby_cm_reference(passby), true);
     }
   }
   fn_check_type(rest, lookup);
@@ -2638,6 +2645,70 @@ void fn_check_root(expr_i *e)
 // TODO: remove this func
 #if 0
 #endif
+}
+
+static void check_type_validity_common(expr_i *e, const term& t)
+{
+  const term_list *tl = t.get_args();
+  if (tl != 0 && !tl->empty()) {
+    for (term_list::const_iterator i = tl->begin(); i != tl->end(); ++i) {
+      check_type_validity_common(e, *i);
+    }
+  }
+  if (is_cm_pointer_family(t)) {
+    if (tl == 0 || tl->empty()) {
+      return;
+    }
+    const expr_i *const tgt = tl->front().get_expr();
+    if (tgt == 0) {
+      arena_error_throw(e, "internal error (check_type_validity_common)");
+    }
+    const bool is_mtptr = is_multithreaded_pointer_family(t);
+    const bool is_imptr = is_immutable_pointer_family(t);
+    const attribute_e attr = tgt->get_attribute();
+    #if 0
+    fprintf(stderr, "ctvc %s mt=%d im=%d attr=%x\n", term_tostr_human(t).c_str(),
+      (int)is_mtptr, (int)is_imptr, (int)attr); // FIXME  
+    #endif
+    if (is_mtptr && is_imptr && (attr & attribute_tsvaluetype) == 0) {
+      arena_error_throw(e,
+	"invalid type: '%s' (pointer target is not a tsvaluetype)",
+	term_tostr_human(t).c_str());
+    }
+    if (is_imptr && (attr & attribute_valuetype) == 0) {
+      arena_error_throw(e,
+	"invalid type: '%s' (pointer target is not a valuetype)",
+	term_tostr_human(t).c_str());
+    }
+    if (is_mtptr && (attr & attribute_multithr) == 0) {
+      arena_error_throw(e,
+	"invalid type: '%s' (pointer target is not a multithreaded type)",
+	term_tostr_human(t).c_str());
+    }
+  } else if (is_container_family(t) || is_cm_range_family(t)) {
+    if (tl == 0 || tl->empty()) {
+      return;
+    }
+    const term& te = tl->front();
+    if (!is_copyable(te)) {
+      arena_error_push(e, "type '%s' is not copyable",
+	term_tostr_human(te).c_str());
+    }
+  }
+}
+
+void fn_check_type(expr_i *e, symbol_table *symtbl)
+{
+  if (e == 0) {
+    return;
+  }
+  DBG_CT(fprintf(stderr, "fn_check_type begin %p expr=%s\n",
+    e, e->dump(0).c_str()));
+  e->check_type(symtbl);
+  check_type_validity_common(e, e->get_texpr());
+  DBG_CT(fprintf(stderr, "fn_check_type end %p expr=%s -> type=%s\n",
+    e, e->dump(0).c_str(),
+    term_tostr(e->get_texpr(), term_tostr_sort_strict).c_str()));
 }
 
 };

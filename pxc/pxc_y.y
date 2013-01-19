@@ -144,6 +144,7 @@ static compile_mode cur_mode;
 %type<expr_val> visi_vardef_stmt
 %type<expr_val> argdecl_list
 %type<expr_val> argdecl_list_trail
+%type<expr_val> opt_argdecl_list
 %type<expr_val> forrange_argdecl
 %type<expr_val> foreach_argdecl
 %type<expr_val> type_expr
@@ -494,17 +495,25 @@ struct_stmt
 	;
 c_struct_stmt
 	: opt_attribute TOK_EXTERN TOK_STRLIT TOK_STRUCT
-		opt_tparams_expr TOK_SYMBOL '{' c_struct_body_stmt_list '}'
+		opt_tparams_expr TOK_SYMBOL opt_argdecl_list '{'
+		c_struct_body_stmt_list '}'
 	  { $$ = expr_struct_new(cur_fname, @2.first_line, $6,
 		arena_dequote_strdup($3), 0,
-		expr_block_new(cur_fname, @2.first_line, $5, 0, 0, 0, $8),
+		expr_block_new(cur_fname, @2.first_line, $5, 0, $7, 0, $9),
 		$1); }
 	| opt_attribute TOK_EXTERN TOK_STRLIT TOK_STRLIT TOK_STRUCT
-		opt_tparams_expr TOK_SYMBOL '{' c_struct_body_stmt_list '}'
+		opt_tparams_expr TOK_SYMBOL opt_argdecl_list '{'
+		c_struct_body_stmt_list '}'
 	  { $$ = expr_struct_new(cur_fname, @2.first_line, $7,
 		arena_dequote_strdup($3), arena_dequote_strdup($4),
-		expr_block_new(cur_fname, @2.first_line, $6, 0, 0, 0, $9),
+		expr_block_new(cur_fname, @2.first_line, $6, 0, $8, 0, $10),
 		$1); }
+	;
+opt_argdecl_list
+	:
+	  { $$ = 0; }
+	| '(' argdecl_list ')'
+	  { $$ = $2; }
 	;
 variant_stmt
 	: opt_attribute TOK_VARIANT opt_tparams_expr TOK_SYMBOL '{'

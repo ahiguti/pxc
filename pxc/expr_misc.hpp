@@ -129,6 +129,9 @@ term get_pointer_deref_texpr(expr_op *eop, const term& t);
 term get_array_range_texpr(expr_op *eop, expr_i *ec, term& ect);
 term get_array_elem_texpr(expr_op *eop, term& t0);
 term get_array_index_texpr(expr_op *eop, term& t0);
+bool is_vardef_constructor(expr_i *e);
+
+bool is_compiled(const expr_block *bl);
 
 void fn_append_coptions(expr_i *e, coptions& copt_append);
 void fn_set_namespace(expr_i *e, const std::string& n, int& block_id_ns);

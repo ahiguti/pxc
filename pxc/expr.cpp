@@ -360,8 +360,12 @@ static void define_builtins()
   topvals.push_front(stmts);
 }
 
-static void define_builtin_string(expr_stmts *stmts_runtime)
+static bool define_builtin_string(expr_stmts *stmts_runtime)
 {
+  builtins.type_string = builtins.type_void;
+  builtins.type_strlit = builtins.type_void;
+  builtins.type_slice = builtins.type_void;
+  builtins.type_cslice = builtins.type_void;
   for (expr_stmts *st = stmts_runtime; st != 0; st = st->rest) {
     expr_struct *def = dynamic_cast<expr_struct *>(st->head);
     if (def == 0) {
@@ -378,10 +382,17 @@ static void define_builtin_string(expr_stmts *stmts_runtime)
       builtins.type_cslice = def->get_value_texpr();
     }
   }
-  assert(!builtins.type_string.is_null());
-  assert(!builtins.type_strlit.is_null());
-  assert(!builtins.type_slice.is_null());
-  assert(!builtins.type_cslice.is_null());
+  if (builtins.type_string == builtins.type_void || 
+    builtins.type_strlit == builtins.type_void ||
+    builtins.type_slice == builtins.type_void ||
+    builtins.type_cslice == builtins.type_void) {
+#if 0
+    arena_error_throw(stmts_runtime,
+      "missing builtin type (import type::builtin?)");
+#endif
+    return false;
+  }
+  return true;
 }
 
 void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
@@ -434,6 +445,8 @@ void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
   if (topval != 0 && nsstr.empty()) {
     arena_error_push(topval, "no namespace declaration");
   }
+#if 0
+  // TODO: ok to remove
   /* add compiler/runtime */
   if (nsstr != "compiler::runtime") {
     import_info ii;
@@ -441,6 +454,7 @@ void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
     ii.import_public = true;
     imports_r.deps.push_back(ii);
   }
+#endif
   if (!nsstr.empty()) {
     int block_id_ns = 0;
     fn_set_namespace(topval, nsstr, block_id_ns);
@@ -486,7 +500,11 @@ void arena_compile(const std::string& dest_filename, coptions& copt_apnd,
   expr_block *const gl_block = ptr_down_cast<expr_block>(global);
   global_block = gl_block;
   /* define bt_string */
-  define_builtin_string(e);
+  if (!define_builtin_string(e)) {
+    #if 0
+    return; /* compier::impl::* ? */
+    #endif
+  }
   /* compile */
   fn_append_coptions(global, copt_apnd);
   compile_phase = 2;

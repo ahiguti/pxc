@@ -29,6 +29,10 @@ valgrind:
 	done; \
 	fgrep 'ERROR SUMMARY' valgrind.log | \
 	fgrep -v 'ERROR SUMMARY: 0 errors'; \
+	fgrep 'definitely lost' valgrind.log | \
+	fgrep -v 'bytes in 0 blocks'; \
+	fgrep 'indirectly lost' valgrind.log | \
+	fgrep -v 'bytes in 0 blocks'; \
 	exit 0;
 
 efence:
