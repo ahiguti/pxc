@@ -1,12 +1,11 @@
 namespace io::file;
 public import type::builtin "";
 public import type::array "";
-public import io::system "";
+public import io "";
 public import compiler::util "";
 public import meta::builtin m;
 
 public multithreaded extern "pxcio::file_impl" "noncopyable" struct file { }
-public macro fileptr ptr{file};
 
 public tsvaluetype extern "::off_t" "int" struct off_t { }         // SQUAD?
 public tsvaluetype extern "::dev_t" "uint" struct dev_t { }        // UQUAD
@@ -56,34 +55,33 @@ public extern "SEEK_CUR"	whence_t SEEK_CUR;
 public extern "SEEK_END"	whence_t SEEK_END;
 
 public threaded extern "pxcio::file_open" function
-  int file_open(file& f, systemptr const& sys, cslice{uchar} const& fn,
+  int file_open(file& f, ioptr const& sys, cslice{uchar} const& fn,
     open_flags_t flags, mode_t mode);
 public threaded extern "pxcio::file_read" function
   size_t file_read(file& f, slice{uchar} const& buf);
+public threaded extern "pxcio::file_read_append" function
+  size_t file_read_append(file& f, string& buf, size_t len);
 public threaded extern "pxcio::file_write" function
   size_t file_write(file& f, cslice{uchar} const& buf);
 public threaded extern "pxcio::file_lseek" function
   off_t file_lseek(file& f, off_t offset, whence_t whence);
 public threaded extern "pxcio::file_errno" function
   int file_errno(file const& f);
-public threaded extern "pxcio::system_stat" function
-  int system_stat(systemptr const& sys, cslice{uchar} const& fn, statbuf& buf);
-public threaded extern "pxcio::system_errno" function
-  int system_errno(systemptr const& sys);
-public threaded extern "pxcio::system_sleep" function
-  uint system_sleep(systemptr const& sys, uint sec);
+public threaded extern "pxcio::io_stat" function
+  int io_stat(ioptr const& sys, cslice{uchar} const& fn, statbuf& buf);
+public threaded extern "pxcio::io_errno" function
+  int io_errno(ioptr const& sys);
+public threaded extern "pxcio::io_sleep" function
+  uint io_sleep(ioptr const& sys, uint sec);
 
 public threaded function
 size_t file_read_all(file& f, string& buf)
 {
   size_t r = 0;
   while (true) {
-    size_t const cur = buf.size();
-    buf.resize(cur + 16384, 0);
-    size_t e = file_read(f, buf[cur .. cur + 16384]);
-    r += e;
-    buf.resize(cur + e, 0);
+    size_t e = file_read_append(f, buf, 16384);
     if (e == 0) { break; }
+    r += e;
   }
   return r;
 }
@@ -102,7 +100,7 @@ size_t file_write_all(file& f, cslice{uchar} const& buf)
   return curpos;
 }
 public threaded function
-size_t system_read_file(systemptr const& sys, cslice{uchar} const& fn,
+size_t io_read_file(ioptr const& sys, cslice{uchar} const& fn,
   string& buf)
 {
   buf.clear();
@@ -113,7 +111,7 @@ size_t system_read_file(systemptr const& sys, cslice{uchar} const& fn,
   return f.read_all(buf);
 }
 public threaded function
-size_t system_write_file(systemptr const& sys, cslice{uchar} const& fn,
+size_t io_write_file(ioptr const& sys, cslice{uchar} const& fn,
   cslice{uchar} const& buf)
 {
   file f;
@@ -136,8 +134,8 @@ using namespace pxcrt;
 typedef struct ::stat statbuf;
 struct file_impl {
   file_impl() : fd(-1), err(0) { }
-  ~file_impl() { if (fd >= 0) close(fd); }
-  void reset(int f) { if (fd >= 0) close(fd); fd = f; err = 0; }
+  ~file_impl() { if (fd > 2) close(fd); }
+  void reset(int f) { if (fd > 2) close(fd); fd = f; err = 0; }
   int get() { return fd; }
 private:
   int fd;
@@ -147,7 +145,6 @@ private:
   file_impl(const file_impl&);
   file_impl& operator =(const file_impl&);
 };
-typedef rcptr< rcval<file_impl> > fileptr;
 };
 
 extern "fdecl" inline
@@ -159,7 +156,7 @@ namespace pxcio {
 #include <stdlib.h>
 #include <limits.h>
 #include <string>
-bt_int file_open(file_impl& f, systemptr const& sys,
+bt_int file_open(file_impl& f, ioptr const& sys,
   bt_cslice< bt_uchar> const& fn, int flags, ::mode_t md)
 {
   PXCRT_ALLOCA_NTSTRING(fn_nt, fn);
@@ -183,9 +180,27 @@ bt_size_t file_read(file_impl& f, bt_slice<bt_uchar> const& buf)
   if (sz > SSIZE_MAX) {
     sz = SSIZE_MAX;
   }
-  char *const ptr = reinterpret_cast<char *>(buf.rawarr());
+  void *const ptr = buf.rawarr();
   const ssize_t rlen = ::read(f.get(), ptr, sz);
   f.err = rlen < 0 ? errno : 0;
+  return rlen < 0 ? 0 : rlen;
+}
+bt_size_t file_read_append(file_impl& f, bt_string& buf, size_t len)
+{
+  bt_size_t sz = len;
+  if (sz > SSIZE_MAX) {
+    sz = SSIZE_MAX;
+  }
+  const bt_size_t osz = buf.size();
+  bt_size_t nsz = osz + sz;
+  if (nsz < nsz) {
+    throw std::bad_alloc(); /* overflow */
+  }
+  buf.reserve(nsz);
+  void *const ptr = buf.rawarr() + osz;
+  const ssize_t rlen = ::read(f.get(), ptr, sz);
+  f.err = rlen < 0 ? errno : 0;
+  buf.rawarr_initialized(osz + rlen);
   return rlen < 0 ? 0 : rlen;
 }
 bt_size_t file_write(file_impl& f, bt_cslice<bt_uchar> const& buf)
@@ -203,18 +218,18 @@ bt_int file_errno(file_impl const& f)
 {
   return f.err;
 }
-bt_int system_stat(systemptr const& sys, bt_cslice<bt_uchar> const& fn,
+bt_int io_stat(ioptr const& sys, bt_cslice<bt_uchar> const& fn,
   pxcio::statbuf& buf)
 {
   PXCRT_ALLOCA_NTSTRING(fn_nt, fn);
   const int e = ::stat(fn_nt.get(), &buf);
   return e != 0 ? errno : 0;
 }
-bt_int system_errno(systemptr const& sys)
+bt_int io_errno(ioptr const& sys)
 {
   return errno;
 }
-bt_uint system_sleep(systemptr const& sys, bt_uint sec)
+bt_uint io_sleep(ioptr const& sys, bt_uint sec)
 {
   return ::sleep(sec);
 }

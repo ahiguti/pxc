@@ -3,10 +3,22 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- 全ポインタ型とinterfaceの組み合わせ(モニタ等埋め込みが正しいか)確認
 
-- pxcvectorとtree_mapのsliceからコンストラクタ
-- pxcvectorのappend
+- ユーザ定義コンストラクタ内に書ける文についての制限を決め
+  - フィールド定義文は他の文より前
+  - フィールド定義文ではメンバ関数を呼べない
+  - メンバ関数は呼んでよい。フィールド定義後なら。
+  - threaded以上の型ならグローバル変数にあくせすできないことを確認
+- defconでない型(linear?)を引数無しで呼んだらエラーにせよ
+
+- darrayのalloca使った実装
+
+- ユーザ定義コンストラクタのある型の変数をglobalに定義できないように
+  -> これはthreadedであればよいのでは。
+
+- 汎用総称関数にthreadedを付ける
+
+- 演算子を総称関数に自動で置き換え、ユーザが演算子定義できるように
 
 - C++名前空間をすべて絶対参照で
 
@@ -14,11 +26,6 @@ FIXME/TODO M1
 
 - expr.cppで組み込み型にtype::builtinをセットしているのをやめて、
   serializeなどではtype::builtinではない名前空間を使うようにする
-
-- default-constructible と has-userdefined-constr について整理しなおし。
-  - default-constructibleではない型のデフォルトコンストラクタをemit
-    しているのはおかしい？
-- defconでない型を引数無しで呼んだらエラーにせよ
 
 weak型まわり
 - globalやstructには参照変数などは置けないように
@@ -29,6 +36,7 @@ weak型まわり
 - 演算子の一通りテスト作成。コンテナ含め。
 - type categoryの仕様文書化
 - 決定済みの仕様をメモに蓄積、テストケースと関連付け。
+- 全ポインタ型とinterfaceの組み合わせ(モニタ等埋め込みが正しいか)確認
 
 ---------------------------------------------------------------------
 TEST TODO M1
@@ -90,7 +98,7 @@ TODO
 - if (int v : foo.fld) { ... } // unionのフィールドは左辺値取れない
 - C++が定義する関数については宣言だけはemitする(誤った宣言で問題を起
   こさないようにするため) -> 非template関数については実装済み。
-  template関数と型については未実装
+  template関数と型がexternな場合については未実装
 - public extern "@0void" "@0void" struct void { } こういうの無くす?
 - realloc-safeかどうかpxcで判断し、それに応じて使うコンテナ実装を
   切り替える?
@@ -216,6 +224,14 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- ユーザ定義コンストラクタのemitを関数プロトタイプ群の後にしないと
+  未定義関数を呼ぶことになる(done)
+- is_copyableとis_assignableは構造体のフィールドにも制限を受ける(done)
+- コンテナにnoncopyableな型は使えないように(done)
+- pxcvectorとtree_mapのsliceからコンストラクタ(done)
+- pxcvectorのappend(done)
+- noncopyable/linearを引数付きコンストラクタで構築する方法(done)
+- extern structにユーザ定義コンストラクタ(done)
 - iptr/tiptr実装できている？(done)
 - namespace宣言義務付け(done)
 - foo{bar}: fooがtsvaluetypeでbarがthreadedな「関数」だった場合この型式
@@ -338,8 +354,6 @@ DONE
 - catchは常にconst参照で受けるのは大丈夫なのか？rootされているか？
   (大丈夫。throwは常に引数をコピーするから)
 - 型定義順を再整理(C++テンプレートが絡むケース require_definition?)
-  (done)
-- ユーザ定義コンストラクタのある型の変数をglobalに定義できないように
   (done)
 - profile(done)
 - ソース検索パス(done)
@@ -5313,4 +5327,50 @@ implementation abc_as_ifoo2 {
   hoge2 : hoge;
   fuga2 : fuga;
 }
+
+---------------------------------------------------------------------
+弱ポインタ
+
+弱ポインタは強ポインタへの生ポインタを参照カウントで共有する。
+強ポインタの指す先のオブジェクトに、デストラクタで弱参照が持っている
+生ポインタを0にするフックを埋め込む
+template <typename Tsptr> struct raw_pointer : noncopyable {
+  Tsptr rawptr;
+  bool invalid;
+  ~raw_ptr(const Tsptr& p) : rawptr(p), invalid(false) {
+    rawptr->release(); // 参照カウントを減らす
+  }
+  Tsptr to_strong() const {
+    if (invalid) {
+      throw invalid_weak_dereference();
+    }
+    return *rawptr;
+  }
+};
+template <typename Twptr> struct weak_pointer_owner : noncopyable {
+  Twptr wop; // Twptrはraw_pointerを指すポインタ型でなければならない
+  weak_pointer_owner(const typename T::value_type& sptr)
+    : wop(boxing, sptr) { } // sptrは強ポインタ。それをさらにboxing。
+  ~weakptr_owner() {
+    wop->invalid = true; // 強参照がなくなった。
+  }
+  Twptr to_weak() const {
+    return wop;
+  }
+}; /* これを強ポインタの指す先に埋め込む */
+struct foo {
+  weak_pointer_owner < ptr < ptr<foo> > > woo;
+};
+weak_pointer_ownerはオブジェクトが解放される前に解放されなければ
+ならない。
+
+---------------------------------------------------------------------
+デバグ用フレーム
+
+struct pxc_frame {
+  pxc_frame *caller;
+  std::vector<var_info> vars;
+};
+関数の入り口でスレッドローカルの"pxc_frame"から上位フレームを
+取得する。変数の定義の直後に情報をvarsへpush。
 

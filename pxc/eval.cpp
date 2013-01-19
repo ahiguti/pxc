@@ -379,6 +379,26 @@ static term eval_meta_error(term_list& tlev, env_type& env,
   throw std::runtime_error(s);
 }
 
+static term eval_meta_is_copyable_type(term_list& tlev)
+{
+  if (tlev.size() != 1) {
+    return term();
+  }
+  term& ttyp = tlev[0];
+  const long long r = is_copyable(ttyp);
+  return term(r);
+}
+
+static term eval_meta_is_assignable_type(term_list& tlev)
+{
+  if (tlev.size() != 1) {
+    return term();
+  }
+  term& ttyp = tlev[0];
+  const long long r = is_assignable(ttyp);
+  return term(r);
+}
+
 static term eval_meta_argnum(term_list& tlev)
 {
   if (tlev.size() != 1) {
@@ -1255,6 +1275,7 @@ static term eval_metafunction(const std::string& name, term_list& tlev,
   DBG_META(fprintf(stderr, "eval_metafunction: %s\n", name.c_str()));
   term r;
   try {
+    /* TODO: use std::map */
     if (name == "@0void") {
       r = builtins.type_void;
     } else if (name == "@0unit") {
@@ -1325,6 +1346,10 @@ static term eval_metafunction(const std::string& name, term_list& tlev,
       r = eval_meta_types(tlev);
     } else if (name == "@member_functions") {
       r = eval_meta_member_functions(tlev);
+    } else if (name == "@is_copyable_type") {
+      r = eval_meta_is_copyable_type(tlev);
+    } else if (name == "@is_assignable_type") {
+      r = eval_meta_is_assignable_type(tlev);
     } else if (name == "@field_types") {
       r = eval_meta_field_types(tlev);
     } else if (name == "@field_names") {
