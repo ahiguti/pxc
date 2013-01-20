@@ -1,0 +1,31 @@
+namespace ud13;
+import test_common "";
+
+extern "ud13::nodef" "linear" struct nodef(int v) {
+}
+
+extern "type" inline
+namespace ud13 {
+struct nodef {
+  nodef(int x) { }
+};
+};
+
+// foo is not default-constructible because nodef is not
+struct foo(int x) {
+  nodef nd = nodef(x);
+  function int get() const {
+    return 3;
+  }
+}
+
+function void t2(foo const& f)
+{
+  println(f.get());
+}
+
+function void t1() {
+  t2(foo()); // error becuase foo is not default-constructible
+}
+
+t1();

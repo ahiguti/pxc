@@ -438,7 +438,7 @@ static bool is_threaded_pointer_category(const typecat_e cat)
 
 static bool is_immutable_pointer_category(const typecat_e cat)
 {
-  return cat == typecat_e_iptr || typecat_e_tiptr;
+  return cat == typecat_e_iptr || cat == typecat_e_tiptr;
 }
 
 term get_pointer_target(const term& t)
@@ -2179,17 +2179,17 @@ static void check_type_threading_te(const term& te, expr_i *pos)
       const term& tgt = args->front();
       const attribute_e attr = get_term_threading_attribute(tgt);
       if (is_threaded_pointer_category(est->typecat) &&
-	attr & attribute_multithr == 0) {
+	(attr & attribute_multithr) == 0) {
 	arena_error_throw(pos, "pointer target '%s' is not multithreaded",
 	  term_tostr_human(tgt).c_str());
       }
       if (is_immutable_pointer_category(est->typecat) &&
-	attr & attribute_valuetype == 0) {
+	(attr & attribute_valuetype) == 0) {
 	arena_error_throw(pos, "pointer target '%s' is not valuetype",
 	  term_tostr_human(tgt).c_str());
       }
       if (est->typecat == typecat_e_tiptr &&
-	attr & attribute_valuetype == 0) {
+	(attr & attribute_valuetype) == 0) {
 	arena_error_throw(pos, "pointer target '%s' is not tsvaluetype",
 	  term_tostr_human(tgt).c_str());
       }
@@ -2685,6 +2685,84 @@ bool is_vardef_constructor(expr_i *e)
     return false;
   }
   return true;
+}
+
+static bool has_blockscope_tempvar(expr_i *e)
+{
+  if (e == 0) {
+    return false;
+  }
+  if (e->tempvar_id >= 0 && e->tempvar_varinfo.scope_block) {
+    return true;
+  }
+  const int n = e->get_num_children();
+  for (int i = 0; i < n; ++i) {
+    expr_i *const c = e->get_child(i);
+    if (has_blockscope_tempvar(c)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool is_vardefset(expr_i *e)
+{
+  if (e->get_esort() == expr_e_op) {
+    expr_op *const eop = ptr_down_cast<expr_op>(e);
+    if (eop->op == '=' && eop->arg0->get_esort() == expr_e_var) {
+      /* var x = ... */
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool is_vardefdefault(expr_i *e)
+{
+  if (e->get_esort() == expr_e_var) {
+    expr_op *const eop = dynamic_cast<expr_op *>(e->parent_expr);
+    if (eop == 0 || eop->op != '=') {
+      /* var x but not var x = ... */
+      return true;
+    }
+  }
+  return false;
+}
+
+bool is_vardef_or_vardefset(expr_i *e)
+{
+  return is_vardefdefault(e) || is_vardefset(e);
+#if 0
+  const bool r = is_vardefdefault(e) || is_vardefset(e);
+  if (!r) {
+    return false;
+  }
+  if (has_blockscope_tempvar(e)) {
+    /* impossible for udcon because structs can not have weak fields. */
+    abort();
+    return false;
+  }
+  return true;
+#endif
+}
+
+bool is_noexec_expr(expr_i *e)
+{ 
+  switch (e->get_esort()) {
+  case expr_e_typedef:
+  case expr_e_macrodef:
+  case expr_e_ns:
+  case expr_e_inline_c:
+  case expr_e_extval:
+  case expr_e_struct:
+  case expr_e_variant:
+  case expr_e_interface:
+  case expr_e_funcdef:
+    return true;
+  default:
+    /* expr_e_if, expr_e_var, expr_e_op for example */
+    return false;
+  }
 }
 
 bool is_compiled(const expr_block *bl)
