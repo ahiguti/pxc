@@ -4,13 +4,6 @@
 FIXME/TODO M1
 
 
-- ユーザ定義コンストラクタ内に書ける文についての制限を決め
-  - フィールド定義文は他の文より前
-  - フィールド定義文ではメンバ関数を呼べない
-  - メンバ関数は呼んでよい。フィールド定義後なら。
-  - threaded以上の型ならグローバル変数にあくせすできないことを確認
-- defconでない型(linear?)を引数無しで呼んだらエラーにせよ
-
 - darrayのalloca使った実装
 
 - ユーザ定義コンストラクタのある型の変数をglobalに定義できないように
@@ -224,6 +217,8 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- ユーザ定義コンストラクタ内に書ける文についての制限を決め(done)
+- defconでない型(linear?)を引数無しで呼んだらエラーにせよ(done)
 - ユーザ定義コンストラクタのemitを関数プロトタイプ群の後にしないと
   未定義関数を呼ぶことになる(done)
 - is_copyableとis_assignableは構造体のフィールドにも制限を受ける(done)
@@ -5373,4 +5368,31 @@ struct pxc_frame {
 };
 関数の入り口でスレッドローカルの"pxc_frame"から上位フレームを
 取得する。変数の定義の直後に情報をvarsへpush。
+
+---------------------------------------------------------------------
+ユーザ定義コンストラクタ内に書ける文についての制限
+- フィールド定義文は他の文より前
+- フィールド定義文ではメンバ関数を呼べないがフィールド定義後なら呼べる
+- threaded以上の型ならグローバル変数にあくせすできないことを確認(test)
+test_07_constr/ud*.pxにいくつかテストがある
+
+(0) チェックする箇所: check_constr_restrictions()
+(1) まずstmtがフィールド定義文であるかどうかを判定する関数を作る
+  - emit.cpp: is_single_vardef_or_vardefset()が近い
+(2) 自メンバ関数を呼んでいるかどうかを判定する関数を作る
+  - check_constr_calling_memfunc()が近い
+  - 現状expr_funccall::check_typeにある
+    if (efd->is_virtual_or_member_function() && !memfunc_w_explicit_obj &&
+      symtbl_lexical->block_esort == expr_e_struct) {
+      arena_error_push(this,
+        "calling member function from a constructor");
+    }
+(3) 最初の非フィールド定義文を返す関数を作る
+(4) チェック関数の動作(check_constr_restrictions)
+  - 最初のフィールド定義文でないstmtのポインタを取る
+  - そのポインタよりあとにフィールド定義文があればエラー
+  - フィールド定義文なら自メンバ関数をよんでいないことをチェック
+(5) emitの動作
+  - フィールド定義文でないものが見つかるまでの部分は初期化式としてemit
+  - 残りの部分はstmtsをemitするだけ
 

@@ -319,7 +319,7 @@ static bool struct_need_c_constr(const expr_struct *est)
   const expr_stmts *const st = bl->stmts;
   while (st != 0) {
     const expr_i *const e = st->head;
-    if (e != 0 && !esort_noemit_funcbody(e->get_esort())) {
+    if (e != 0 && !is_noexec_expr(e->get_esort())) {
       return true;
     }
     st = st->rest;
@@ -453,6 +453,7 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
   em.puts("};\n");
 }
 
+#if 0
 static bool has_blockscope_tempvar(expr_i *e)
 {
   if (e == 0) {
@@ -498,22 +499,6 @@ static bool is_vardefdefault(expr_i *e)
 static bool is_vardef_or_vardefset(expr_i *e)
 {
   return is_vardefdefault(e) || is_vardefset(e);
-#if 0
-  if (e->get_esort() == expr_e_op) {
-    expr_op *const eop = ptr_down_cast<expr_op>(e);
-    if (eop->op == '=' && eop->arg0->get_esort() == expr_e_var) {
-      /* var x = ... */
-      return true;
-    }
-  } else if (e->get_esort() == expr_e_var) {
-    expr_op *const eop = dynamic_cast<expr_op *>(e->parent_expr);
-    if (eop == 0 || eop->op != '=') {
-      /* var x but not var x = ... */
-      return true;
-    }
-  }
-  return false;
-#endif
 }
 
 static bool is_single_vardef_or_vardefset(expr_i *e)
@@ -522,12 +507,16 @@ static bool is_single_vardef_or_vardefset(expr_i *e)
     return false;
   }
   if (has_blockscope_tempvar(e)) {
+    /* not reached because structs can not have weak fields. */
+    abort();
     return false;
   }
   return true;
 }
+#endif
 
-static bool esort_noemit_funcbody(expr_i *e)
+#if 0
+bool is_noexec_expr(expr_i *e)
 {
   switch (e->get_esort()) {
   case expr_e_typedef:
@@ -542,12 +531,14 @@ static bool esort_noemit_funcbody(expr_i *e)
     return true;
   default:
     /* expr_e_if, expr_e_var, expr_e_op for example */
-    DBG_IF(fprintf(stderr, "esort_noemit_funcbody: false %s\n",
+    DBG_IF(fprintf(stderr, "is_noexec_expr: false %s\n",
       e->dump(0).c_str()));
     return false;
   }
 }
+#endif
 
+// TODO: remove. always returns true.
 static bool can_emit_fast_constr(const expr_struct *est)
 {
   if (est->block == 0 || est->block->stmts == 0) {
@@ -556,13 +547,15 @@ static bool can_emit_fast_constr(const expr_struct *est)
   expr_stmts *stmts = est->block->stmts;
   for (; stmts != 0; stmts = stmts->rest) {
     expr_i *const e = stmts->head;
-    if (e == 0 || esort_noemit_funcbody(e)) {
+    if (e == 0 || is_noexec_expr(e)) {
       continue;
     }
+    #if 0
     if (!is_single_vardef_or_vardefset(e)) {
       abort(); // not allowed currently
       return false;
     }
+    #endif
   }
   return true;
 }
@@ -580,7 +573,10 @@ static void emit_struct_constr_one(emit_context& em, expr_struct *est,
   flds_type::const_iterator i;
   if (est->has_userdefined_constr()) {
     /* user defined constructor */
-    if (elist_length(est->block->argdecls) == 0 && !emit_default_constr) {
+    if (emit_default_constr) {
+      return;
+    }
+    if (elist_length(est->block->argdecls) == 0) {
       return;
     }
     em.set_ns(est->ns);
@@ -596,10 +592,23 @@ static void emit_struct_constr_one(emit_context& em, expr_struct *est,
     }
     em.puts(")");
     if (can_emit_fast_constr(est) && !emit_default_constr) {
-      /* fast init constructor */
+      /* fast init userdef constructor */
       emit_struct_constr_initializer(em, est, flds, false, true);
-      em.puts(" { }\n");
+      em.puts(" {\n");
+      em.add_indent(1);
+      expr_stmts *st = est->block->stmts;
+      for (; st != 0; st = st->rest) {
+	expr_i *e = st->head;
+	if (!is_vardef_or_vardefset(e) && !is_noexec_expr(e)) {
+	  break;
+	}
+      }
+      fn_emit_value(em, st);
+      em.add_indent(-1);
+      em.indent('b');
+      em.puts("}\n");
     } else {
+      abort(); // not reached
       emit_struct_constr_initializer(em, est, flds, true, false);
       em.puts(" {\n");
       em.add_indent(1);
@@ -1267,23 +1276,6 @@ static void emit_type_definitions(emit_context& em)
       emit_variant_def_one(em, ev, proto_only);
     }
   }
-  #if 0
-  // FIXME: remove
-  /* struct constr and aux function definitions */
-  for (std::list<expr_i *>::iterator i = c.sorted.begin();
-    i != c.sorted.end(); ++i) {
-    expr_struct *const est = dynamic_cast<expr_struct *>(*i);
-    if (est != 0 && est->cname == 0) {
-      emit_struct_constr_one(em, est, true);
-      emit_struct_constr_one(em, est, false);
-      emit_struct_constr_aux(em, est);
-    }
-    expr_variant *const ev = dynamic_cast<expr_variant *>(*i);
-    if (ev != 0) {
-      emit_variant_aux_defs(em, ev);
-    }
-  }
-  #endif
 }
 
 static void emit_thisptr_argdecl(emit_context& em, expr_struct *est,
@@ -1445,7 +1437,9 @@ static void emit_function_def(emit_context& em)
     if (est != 0 && est->cname == 0) {
       emit_struct_constr_one(em, est, true);
       emit_struct_constr_one(em, est, false);
+      #if 0
       emit_struct_constr_aux(em, est);
+      #endif
     }
     expr_variant *const ev = dynamic_cast<expr_variant *>(*i);
     if (ev != 0) {
@@ -1748,7 +1742,7 @@ void expr_stmts::emit_value(emit_context& em)
     assert(rest == 0);
     return;
   }
-  if (esort_noemit_funcbody(head)) {
+  if (is_noexec_expr(head)) {
     /* nothing to emit */
   } else if (!is_block_stmt(head)) {
     emit_split_expr(em, head, false); /* line */
@@ -2284,7 +2278,7 @@ static bool can_omit_brace(const expr_if *ei)
     /* pbl is the block containing ei */
     expr_stmts *st = pbl->stmts;
     while (st != 0) {
-      if (!esort_noemit_funcbody(st->head)) {
+      if (!is_noexec_expr(st->head)) {
 	if (st->head->get_esort() != expr_e_if ||
 	  ptr_down_cast<expr_if>(st->head) != ei) {
 	  /* another statement is found in the block */

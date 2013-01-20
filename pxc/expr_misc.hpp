@@ -130,6 +130,8 @@ term get_array_range_texpr(expr_op *eop, expr_i *ec, term& ect);
 term get_array_elem_texpr(expr_op *eop, term& t0);
 term get_array_index_texpr(expr_op *eop, term& t0);
 bool is_vardef_constructor(expr_i *e);
+bool is_vardef_or_vardefset(expr_i *e);
+bool is_noexec_expr(expr_i *e);
 
 bool is_compiled(const expr_block *bl);
 

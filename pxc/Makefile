@@ -1,6 +1,7 @@
 
 LANG=C
-CXX = g++34
+#CXX = g++34
+CXX = g++
 CXXFLAGS = -Wall -g -O0
 OBJS =	pxc_y.o pxc_l.o expr.o expr_impl.o expr_misc.o eval.o checktype.o \
 	term.o emit.o emit_context.o symbol_table.o cdriver.o \

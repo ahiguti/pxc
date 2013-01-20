@@ -1385,7 +1385,9 @@ void expr_op::check_type(symbol_table *lookup)
       }
       if (is_passby_cm_reference(ev->varinfo.passby) ||
 	is_weak_value_type(ev->resolve_texpr())) {
-	/* require block scope root */
+	/* require block scope root on rhs because the variable is a weak
+	 * variable and is required to be valid while the block is finished.
+	 * this is the only case a block scope tempvar is required. */
 	DBG_CON(fprintf(stderr, "block scope root rhs %s\n",
 	  arg1->dump(0).c_str()));
 	add_root_requirement(arg1, ev->varinfo.passby, true);
@@ -1446,6 +1448,23 @@ static expr_i *create_tpfunc_texpr(expr_i *e, const tvmap_type& tvm,
   return instantiate_template(e, telist, inst_pos);
 }
 
+term get_func_te_for_funccall(expr_i *func, bool& memfunc_w_explicit_obj_r)
+{
+  memfunc_w_explicit_obj_r = false;
+  if (func->get_sdef() != 0) {
+    symbol_common *const sc = func->get_sdef();
+    return sc->resolve_evaluated();
+  } else if (func->get_esort() == expr_e_op) {
+    expr_op *const eop = ptr_down_cast<expr_op>(func);
+    symbol_common *const sc = eop->arg1->get_sdef();
+    if (sc != 0 && (eop->op == '.' || eop->op == TOK_ARROW)) {
+      memfunc_w_explicit_obj_r = true;
+      return sc->resolve_evaluated();
+    }
+  }
+  return term();
+}
+
 void expr_funccall::check_type(symbol_table *lookup)
 {
   fn_check_type(func, lookup);
@@ -1454,19 +1473,8 @@ void expr_funccall::check_type(symbol_table *lookup)
     arena_error_throw(arg, "expression '%s' is of type void",
       arg->dump(0).c_str());
   }
-  term func_te;
   bool memfunc_w_explicit_obj = false;
-  if (func->get_sdef() != 0) {
-    symbol_common *const sc = func->get_sdef();
-    func_te = sc->resolve_evaluated();
-  } else if (func->get_esort() == expr_e_op) {
-    expr_op *const eop = ptr_down_cast<expr_op>(func);
-    symbol_common *const sc = eop->arg1->get_sdef();
-    if (sc != 0 && (eop->op == '.' || eop->op == TOK_ARROW)) {
-      func_te = sc->resolve_evaluated();
-      memfunc_w_explicit_obj = true;
-    }
-  }
+  term func_te = get_func_te_for_funccall(func, memfunc_w_explicit_obj);
   if (func_te.is_null()) {
     arena_error_throw(func, "expression '%s' is not a function",
       func->dump(0).c_str());
@@ -1581,11 +1589,6 @@ void expr_funccall::check_type(symbol_table *lookup)
 	  "calling a non-const member function '%s' from a const "
 	  "member function", term_tostr_human(efd->value_texpr).c_str());
       }
-    }
-    if (efd->is_virtual_or_member_function() && !memfunc_w_explicit_obj &&
-      symtbl_lexical->block_esort == expr_e_struct) {
-      arena_error_push(this,
-	"calling member function from a constructor");
     }
     DBG(fprintf(stderr,
       "expr=[%s] type_of_this_expr=[%s] tvmap.size()=%d "
@@ -2456,18 +2459,27 @@ void expr_macrodef::check_type(symbol_table *lookup)
   fn_check_type(block, lookup);
 }
 
-#if 0
-static void check_constr_calling_memfunc(expr_struct *est, expr_i *e)
+static void check_udcon_vardef_calling_memfunc(expr_struct *est, expr_i *e)
 {
+  if (e == 0) {
+    return;
+  }
   int n = e->get_num_children();
   if (e->get_esort() == expr_e_funccall) {
-    expr_
+    expr_funccall *fc = ptr_down_cast<expr_funccall>(e);
+    bool w_explicit_obj = false;
+    term func_te = get_func_te_for_funccall(fc->func, w_explicit_obj);
+    expr_i *const func_inst = term_get_instance(func_te);
+    expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(func_inst);
+    if (efd != 0 && efd->is_virtual_or_member_function() && !w_explicit_obj) {
+      arena_error_push(e,
+	"calling member function before field initialization");
+    }
   }
   for (int i = 0; i < n; ++i) {
-    check_constr_calling_memfunc(est, e->get_child(i));
+    check_udcon_vardef_calling_memfunc(est, e->get_child(i));
   }
 }
-#endif
 
 static void check_constr_restrictions(expr_struct *est)
 {
@@ -2475,8 +2487,20 @@ static void check_constr_restrictions(expr_struct *est)
     return;
   }
   expr_stmts *st = est->block->stmts;
+  expr_i *exec_found = 0;
   for (; st != 0; st = st->rest) {
     expr_i *const e = st->head;
+    if (is_vardef_or_vardefset(e)) {
+      if (exec_found != 0) {
+	arena_error_push(e, "invalid statement before field initialization");
+      }
+      check_udcon_vardef_calling_memfunc(est, e);
+    } else if (!is_noexec_expr(e)) {
+      if (exec_found == 0) {
+	exec_found = e;
+      }
+    }
+    #if 0
     bool ok = false;
     switch (e->get_esort()) {
     case expr_e_var:
@@ -2502,6 +2526,7 @@ static void check_constr_restrictions(expr_struct *est)
     if (!ok) {
       arena_error_push(e, "invalid statement");
     }
+    #endif
     #if 0
     check_constr_calling_memfunc(est, e);
     #endif
