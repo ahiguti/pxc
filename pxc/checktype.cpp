@@ -93,28 +93,42 @@ static void check_unsigned_integral_expr(expr_op *eop, expr_i *a0)
     s0.c_str(), op_message(eop).c_str());
 }
 
-static void check_integral_expr(expr_op *eop, expr_i *a0)
+static void check_type_common(expr_op *eop, expr_i *a0,
+  bool (*func)(const term& t), const char *mess)
 {
   const term t = a0->resolve_texpr();
-  if (is_integral_type(t)) {
+  if (func(t)) {
     return;
   }
   const std::string s0 = term_tostr(a0->resolve_texpr(),
     term_tostr_sort_humanreadable);
-  arena_error_push(eop != 0 ? eop : a0, "integral type expected (got: %s) %s",
-    s0.c_str(), op_message(eop).c_str());
+  arena_error_push(eop != 0 ? eop : a0, "%s expected (got: %s) %s",
+    mess, s0.c_str(), op_message(eop).c_str());
+}
+
+static void check_integral_expr(expr_op *eop, expr_i *a0)
+{
+  return check_type_common(eop, a0, is_integral_type, "integral type");
+}
+
+static void check_boolean_algebra(expr_op *eop, expr_i *a0)
+{
+  return check_type_common(eop, a0, is_boolean_algebra, "boolean algebra");
+}
+
+static void check_equality_type(expr_op *eop, expr_i *a0)
+{
+  return check_type_common(eop, a0, is_equality_type, "equality type");
+}
+
+static void check_ordered_type(expr_op *eop, expr_i *a0)
+{
+  return check_type_common(eop, a0, is_ordered_type, "ordered type");
 }
 
 static void check_numeric_expr(expr_op *eop, expr_i *a0)
 {
-  const term t = a0->resolve_texpr();
-  if (is_numeric_type(t)) {
-    return;
-  }
-  const std::string s0 = term_tostr(a0->resolve_texpr(),
-    term_tostr_sort_humanreadable);
-  arena_error_push(eop != 0 ? eop : a0, "numeric type expected (got: %s) %s",
-    s0.c_str(), op_message(eop).c_str());
+  return check_type_common(eop, a0, is_numeric_type, "numeric type");
 }
 
 static void check_lvalue(const expr_i *epos, expr_i *a0)
@@ -219,7 +233,7 @@ void expr_var::define_vars_one(expr_stmts *stmt)
 }
 
 static bool check_term_validity(const term& t, bool allow_nontype,
-  bool allow_local_func, bool allow_weak, expr_i *pos, std::string& err_mess_r)
+  bool allow_local_func, bool allow_ephemeral, expr_i *pos, std::string& err_mess_r)
 {
   DBG_CTV(fprintf(stderr, "CTV %s\n", term_tostr_human(t).c_str()));
   expr_i *const e = t.get_expr();
@@ -245,14 +259,14 @@ static bool check_term_validity(const term& t, bool allow_nontype,
       return false;
     }
   }
-  if (!allow_weak && is_weak_value_type(t)) {
+  if (!allow_ephemeral && is_ephemeral_value_type(t)) {
     err_mess_r = "(template parameter '" + term_tostr_human(t) +
-      "' is a weak type)";
+      "' is an ephemeral type)";
     return false;
   }
   const bool tp_allow_nontype = true;
   const bool tp_allow_local_func = !is_type(t);
-  const bool tp_allow_weak = false;
+  const bool tp_allow_ephemeral = false;
   const term_list *tl = t.get_args();
   const size_t tlarg_len = tl != 0 ? tl->size() : 0;
   expr_block *const ttbl = e ? e->get_template_block() : 0;
@@ -291,7 +305,7 @@ static bool check_term_validity(const term& t, bool allow_nontype,
 	#endif
 	if (tlarg_len >= 1) {
 	  if (!check_term_validity(tl->front(), tp_allow_nontype,
-	    tp_allow_local_func, tp_allow_weak, pos, err_mess_r)) {
+	    tp_allow_local_func, tp_allow_ephemeral, pos, err_mess_r)) {
 	    return false;
 	  }
 	}
@@ -318,7 +332,7 @@ static bool check_term_validity(const term& t, bool allow_nontype,
   if (tl != 0) {
     for (term_list::const_iterator i = tl->begin(); i != tl->end(); ++i) {
       if (!check_term_validity(*i, tp_allow_nontype, tp_allow_local_func,
-	tp_allow_weak, pos, err_mess_r)) {
+	tp_allow_ephemeral, pos, err_mess_r)) {
 	return false;
       }
     }
@@ -363,9 +377,9 @@ static void check_var_type(term& typ, expr_i *e, const char *sym,
   if (cur != 0 && e->get_esort() == expr_e_var &&
     (cur->block_esort == expr_e_struct || cur->block_esort == expr_e_variant)) {
     expr_var *const ev = ptr_down_cast<expr_var>(e);
-    if (is_weak_value_type(typ)) {
+    if (is_ephemeral_value_type(typ)) {
       arena_error_push(e,
-	"type '%s' for field '%s' is a weak type",
+	"type '%s' for field '%s' is an ephemeral type",
 	term_tostr_human(typ).c_str(), sym);
     }
     if (is_passby_cm_reference(ev->varinfo.passby)) {
@@ -510,9 +524,9 @@ void expr_var::check_type(symbol_table *lookup)
   }
   check_var_type(typ, this, sym, is_passby_cm_reference(varinfo.passby),
     need_copyable);
-  if (is_global_var(this) && is_weak_value_type(typ)) {
+  if (is_global_var(this) && is_ephemeral_value_type(typ)) {
     arena_error_push(this,
-      "type '%s' for global variable '%s' is a waek type",
+      "type '%s' for global variable '%s' is an ephemeral type",
       term_tostr_human(typ).c_str(), sym);
   }
   const attribute_e tattr = get_term_threading_attribute(typ);
@@ -528,20 +542,20 @@ void expr_var::check_type(symbol_table *lookup)
       arena_error_push(this, "reference variable '%s' is not initialized",
 	sym);
     }
-    if (is_weak_value_type(typ)) {
-      arena_error_push(this, "weak type variable '%s' is not initialized",
+    if (is_ephemeral_value_type(typ)) {
+      arena_error_push(this, "ephemeral type variable '%s' is not initialized",
 	sym);
     }
   }
   /* type_of_this_expr */
 }
 
-void expr_extval::define_vars_one(expr_stmts *stmt)
+void expr_enumval::define_vars_one(expr_stmts *stmt)
 {
   symtbl_lexical->define_name(sym, ns, this, attr, stmt);
 }
 
-void expr_extval::check_type(symbol_table *lookup)
+void expr_enumval::check_type(symbol_table *lookup)
 {
   if ((this->get_attribute() & attribute_threaded) != 0) {
     arena_error_throw(this, "invalid attribute for an external value");
@@ -553,6 +567,8 @@ void expr_extval::check_type(symbol_table *lookup)
     arena_error_push(this,
       "external value '%s' declared to be of an interface type", sym);
   }
+  fn_check_type(value, lookup);
+  fn_check_type(rest, lookup);
   /* type_of_this_expr */
 }
 
@@ -635,9 +651,9 @@ static void check_return_expr(expr_funcdef *fdef)
 {
   const term& typ = fdef->get_rettype();
   std::string err_mess;
-  const bool allow_weak = fdef->no_def && fdef->is_member_function();
-    /* allows weak type if fdef is a extern c function */
-  if (!check_term_validity(typ, false, false, allow_weak, fdef, err_mess)) {
+  const bool allow_ephemeral = fdef->no_def && fdef->is_member_function();
+    /* allows ephemeral type if fdef is a extern c function */
+  if (!check_term_validity(typ, false, false, allow_ephemeral, fdef, err_mess)) {
     arena_error_push(fdef, "invalid return type '%s' %s",
       term_tostr_human(typ).c_str(), err_mess.c_str());
   }
@@ -800,7 +816,7 @@ static void add_root_requirement(expr_i *e, passby_e passby,
   bool blockscope_flag)
 {
   /* this function makes e valid while the current statement (or block if
-   * blockscope_flag is true) is terminated. if e is a weak value (eg.,
+   * blockscope_flag is true) is terminated. if e is an ephemeral value (eg.,
    * range types), the object e refer to is also rooted. */
   if (e->conv == conversion_e_container_range) {
     /* convert from container to range */
@@ -828,13 +844,13 @@ static void add_root_requirement(expr_i *e, passby_e passby,
     return;
   }
   if (e->get_esort() == expr_e_funccall &&
-    is_weak_value_type(e->resolve_texpr())) {
-    /* function returning weak type. only allowed for extern c function. */
+    is_ephemeral_value_type(e->resolve_texpr())) {
+    /* function returning ephemeral type. only allowed for extern c function. */
     expr_funccall *const efc = ptr_down_cast<expr_funccall>(e);
     expr_op *const eop = dynamic_cast<expr_op *>(efc->func);
     if (eop == 0 || (eop->op != '.' && eop->op != TOK_ARROW)) {
       arena_error_throw(eop,
-	"internal error: non-member function returning weak type");
+	"internal error: non-member function returning ephemeral type");
     }
     /* 'this' object is a container. root the object and it's elements */
     add_root_requirement_container_elements(eop->arg0, blockscope_flag);
@@ -1192,7 +1208,7 @@ void expr_op::check_type(symbol_table *lookup)
   case TOK_OR_ASSIGN:
   case TOK_AND_ASSIGN:
   case TOK_XOR_ASSIGN:
-    check_integral_expr(this, arg0);
+    check_boolean_algebra(this, arg0);
     /* FALLTHRU */
   case TOK_ADD_ASSIGN:
   case TOK_SUB_ASSIGN:
@@ -1212,7 +1228,7 @@ void expr_op::check_type(symbol_table *lookup)
     break;
   case '?':
     check_bool_expr(this, arg0);
-    type_of_this_expr = arg0->resolve_texpr();
+    type_of_this_expr = arg1->resolve_texpr();
     unknown_eval_order = false;
     break;
   case ':':
@@ -1223,19 +1239,20 @@ void expr_op::check_type(symbol_table *lookup)
   case TOK_LOR:
   case TOK_LAND:
     check_bool_expr(this, arg0);
-    check_bool_expr(this, arg1);
+    check_type_convert_to_lhs(this, arg1, arg0->resolve_texpr());
     type_of_this_expr = builtins.type_bool;
     unknown_eval_order = false;
     break;
   case '|':
   case '^':
   case '&':
-    check_integral_expr(this, arg0);
-    check_integral_expr(this, arg1);
+    check_boolean_algebra(this, arg0);
+    check_type_convert_to_lhs(this, arg1, arg0->resolve_texpr());
     type_of_this_expr = arg0->resolve_texpr();
     break;
   case TOK_EQ:
   case TOK_NE:
+    check_equality_type(this, arg0);
     check_type_convert_to_lhs(this, arg1, arg0->resolve_texpr());
     type_of_this_expr = builtins.type_bool;
     break;
@@ -1243,6 +1260,7 @@ void expr_op::check_type(symbol_table *lookup)
   case '>':
   case TOK_LE:
   case TOK_GE:
+    check_ordered_type(this, arg0);
     check_type_convert_to_lhs(this, arg1, arg0->resolve_texpr());
     type_of_this_expr = builtins.type_bool;
     break;
@@ -1258,7 +1276,6 @@ void expr_op::check_type(symbol_table *lookup)
   case '/':
   case '%':
     check_numeric_expr(this, arg0);
-    check_numeric_expr(this, arg1);
     check_type_convert_to_lhs(this, arg1, arg0->resolve_texpr());
     type_of_this_expr = arg0->resolve_texpr();
     break;
@@ -1282,7 +1299,7 @@ void expr_op::check_type(symbol_table *lookup)
     type_of_this_expr = builtins.type_bool;
     break;
   case '~':
-    check_integral_expr(this, arg0);
+    check_boolean_algebra(this, arg0);
     type_of_this_expr = arg0->resolve_texpr();
     break;
   case TOK_PTR_DEREF:
@@ -1384,8 +1401,8 @@ void expr_op::check_type(symbol_table *lookup)
 	check_lvalue(this, arg1);
       }
       if (is_passby_cm_reference(ev->varinfo.passby) ||
-	is_weak_value_type(ev->resolve_texpr())) {
-	/* require block scope root on rhs because the variable is a weak
+	is_ephemeral_value_type(ev->resolve_texpr())) {
+	/* require block scope root on rhs because the variable is an ephemeral
 	 * variable and is required to be valid while the block is finished.
 	 * this is the only case a block scope tempvar is required. */
 	DBG_CON(fprintf(stderr, "block scope root rhs %s\n",
@@ -1394,10 +1411,11 @@ void expr_op::check_type(symbol_table *lookup)
       }
     } else {
       /* lhs is not a vardef */
-      if (is_weak_value_type(arg0->resolve_texpr())) {
-	/* 'w1 = w2' is not allowed for weak types, because these variables
+      if (is_ephemeral_value_type(arg0->resolve_texpr())) {
+	/* 'w1 = w2' is not allowed for ephemeral types, because these variables
 	 * may depend different objects */
-	arena_error_throw(this, "invalid assignment ('%s' is a weak type)",
+	arena_error_throw(this,
+	  "invalid assignment ('%s' is an ephemeral type)",
 	  term_tostr_human(arg0->resolve_texpr()).c_str());
       }
       if (!is_assignable(arg0->resolve_texpr())) {
@@ -1702,6 +1720,7 @@ void expr_funccall::check_type(symbol_table *lookup)
 	funccall_sort = funccall_e_struct_constructor;
 	return;
       } else if (get_category(func_te) == typecat_e_darray) {
+	/* darray constructor */
 	if (arglist.size() < 2) {
 	  arena_error_throw(this, "too few argument for '%s'", est->sym);
 	} else if (arglist.size() > 2) {
@@ -1726,6 +1745,7 @@ void expr_funccall::check_type(symbol_table *lookup)
 	funccall_sort = funccall_e_struct_constructor;
 	return;
       } else if (get_category(func_te) == typecat_e_varray) {
+	/* varray constructor */
 	const term_list *const arr_te_targs = func_te.get_args();
 	if (arr_te_targs == 0 || arr_te_targs->size() != 1) {
 	  arena_error_throw(this, "using an array without type parameter");
@@ -1738,6 +1758,22 @@ void expr_funccall::check_type(symbol_table *lookup)
 	type_of_this_expr = func_te;
 	funccall_sort = funccall_e_struct_constructor;
 	return;
+      } else if (is_numeric_type(func_te)) {
+	/* explicit conversion to external numeric type */
+	if (arglist.size() < 1) {
+	  arena_error_throw(this, "too few argument for '%s'", est->sym);
+	} else if (arglist.size() > 1) {
+	  arena_error_throw(this, "too many argument for '%s'", est->sym);
+	}
+	expr_i *const j = arglist.front();
+	if (!convert_type(j, func_te, tvmap)) {
+	  const std::string s0 = term_tostr_human(j->resolve_texpr());
+	  const std::string s1 = term_tostr_human(func_te);
+	  arena_error_push(this, "invalid conversion from %s to %s",
+	    s0.c_str(), s1.c_str());
+	}
+	type_of_this_expr = func_te;
+	funccall_sort = funccall_e_struct_constructor;
       } else {
 	arena_error_push(this,
 	  "can't call a constructor for an extern struct '%s'", est->sym);
@@ -2128,7 +2164,7 @@ void check_genericfe_syntax(expr_i *e)
   case expr_e_inline_c:
   case expr_e_ns:
   case expr_e_var:
-  case expr_e_extval:
+  case expr_e_enumval:
   // case expr_e_block:
   case expr_e_feach:
   case expr_e_fldfe:
@@ -2449,6 +2485,7 @@ void expr_funcdef::check_type(symbol_table *lookup)
 
 void expr_typedef::check_type(symbol_table *lookup)
 {
+  fn_check_type(enumvals, lookup);
 }
 
 void expr_macrodef::check_type(symbol_table *lookup)

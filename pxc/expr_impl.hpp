@@ -133,6 +133,8 @@ enum typecat_e {
   typecat_e_tiptr,            /* multithread-shared pointer, immutable tgt */
   typecat_e_int,              /* int/long etc */
   typecat_e_uint,             /* unsigned int/long etc, */
+  typecat_e_enum,             /* c-defined enum */
+  typecat_e_bitmask,          /* c-defined bitmask */
   typecat_e_float,            /* float/double etc, */
   typecat_e_numeric,          /* other numeric types */
   typecat_e_varray,           /* resizable array */
@@ -499,15 +501,22 @@ public:
   expr_i *rhs_ref;
 };
 
-struct expr_extval : public expr_i {
-  expr_extval(const char *fn, int line, const char *sym, expr_i *type_uneval,
-    const char *cname, attribute_e attr);
-  expr_i *clone() const; //  { return new expr_extval(*this); }
-  expr_e get_esort() const { return expr_e_extval; }
-  int get_num_children() const { return 1; }
-  expr_i *get_child(int i) { return i == 0 ? type_uneval : 0; }
+struct expr_enumval : public expr_i {
+  expr_enumval(const char *fn, int line, const char *sym, expr_i *type_uneval,
+    const char *cname, expr_i *val, attribute_e attr, expr_i *rest);
+  expr_i *clone() const; //  { return new expr_enumval(*this); }
+  expr_e get_esort() const { return expr_e_enumval; }
+  int get_num_children() const { return 3; }
+  expr_i *get_child(int i) {
+    if (i == 0) { return type_uneval; }
+    else if (i == 1) { return value; }
+    else if (i == 2) { return rest; }
+    return 0;
+  }
   void set_child(int i, expr_i *e) {
     if (i == 0) { type_uneval = ptr_down_cast<expr_te>(e); }
+    if (i == 1) { value = e; }
+    if (i == 2) { rest = ptr_down_cast<expr_enumval>(e); }
   }
   void set_namespace_one(const std::string& n) { ns = n; }
   std::string get_ns() const { return ns; }
@@ -526,8 +535,10 @@ public:
   const char *const sym;
   expr_te *type_uneval;
   const char *const cname;
-  std::string ns;
+  expr_i *value;
   attribute_e attr;
+  expr_enumval *rest;
+  std::string ns;
 };
 
 #if 0
@@ -993,13 +1004,15 @@ public:
 
 struct expr_typedef : public expr_i {
   expr_typedef(const char *fn, int line, const char *sym,
-    const char *cname, const char *category, bool is_pod,
-    unsigned int num_tparams, attribute_e attr);
+    const char *cname, const char *category, bool is_enum, bool is_bitmask,
+    expr_i *enumvals, unsigned int num_tparams, attribute_e attr);
   expr_i *clone() const { return new expr_typedef(*this); }
   expr_e get_esort() const { return expr_e_typedef; }
-  int get_num_children() const { return 0; }
-  expr_i *get_child(int i) { return 0; }
-  void set_child(int i, expr_i *e) { }
+  int get_num_children() const { return 1; }
+  expr_i *get_child(int i) { return i == 0 ? enumvals : 0; }
+  void set_child(int i, expr_i *e) {
+    if (i == 0) { enumvals = ptr_down_cast<expr_enumval>(e); }
+  }
   const term& get_value_texpr() { return value_texpr; }
   void set_value_texpr(const term& t) { value_texpr = t; }
   void set_namespace_one(const std::string& n);
@@ -1020,7 +1033,9 @@ public:
   std::string ns;
   const char *const cname;
   const char *const typecat_str; // TODO: unused
-  const bool is_pod;
+  bool is_enum : 1;
+  bool is_bitmask : 1;
+  expr_enumval *enumvals;
   const unsigned int num_tparams;
   attribute_e attr;
   type_attribute tattr;

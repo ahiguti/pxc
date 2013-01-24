@@ -1,0 +1,31 @@
+namespace numeric::positional;
+public import type::builtin "";
+public import numeric::cast "";
+public import container::algorithm;
+
+public threaded function {t} void integral_to_decimal(t v, string& buf)
+{
+  if (v == 0) {
+    buf.push_back(48);
+    return;
+  }
+  size_t pos0 = 0;
+  size_t pos = buf.size();
+  if (v < 0) {
+    buf.push_back(45);
+    pos0 = 1;
+    while (v != 0) {
+      t rem = v % 10;
+      v /= 10;
+      buf.push_back(- static_cast{uchar, t}(rem) + 48);
+    }
+  } else {
+    while (v != 0) {
+      t rem = v % 10;
+      v /= 10;
+      buf.push_back(static_cast{uchar, t}(rem) + 48);
+    }
+  }
+  container::algorithm::reverse(buf[pos0 .. buf.size()]);
+}
+

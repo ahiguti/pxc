@@ -102,6 +102,8 @@ static compile_mode cur_mode;
 %token<void_val> TOK_CONST
 %token<void_val> TOK_MUTABLE
 %token<void_val> TOK_AUTO
+%token<void_val> TOK_ENUM
+%token<void_val> TOK_BITMASK
 
 %type<expr_val> toplevel_stmt_list
 %type<expr_val> toplevel_stmt
@@ -138,9 +140,10 @@ static compile_mode cur_mode;
 %type<expr_val> variant_stmt
 %type<expr_val> opt_inherit_expr
 %type<expr_val> interface_stmt
-%type<expr_val> c_typedef_stmt
+%type<expr_val> enum_stmt
+%type<expr_val> enum_value_list
 %type<expr_val> macrodef_stmt
-%type<expr_val> c_extval_stmt
+%type<expr_val> c_enumval_stmt
 %type<expr_val> visi_vardef_stmt
 %type<expr_val> argdecl_list
 %type<expr_val> argdecl_list_trail
@@ -186,10 +189,10 @@ toplevel_stmt
 	: body_stmt
 	| ext_stmt
 	| c_funcdecl_stmt
-	| c_typedef_stmt
 	| c_struct_stmt
-	| c_extval_stmt
+	| c_enumval_stmt
 	| defs_stmt
+	| enum_stmt
 	| visi_vardef_stmt
 	;
 defs_stmt
@@ -535,26 +538,32 @@ interface_stmt
 		expr_block_new(cur_fname, @2.first_line, $3, 0, 0, 0, $6),
 		$1); }
 	;
-c_typedef_stmt
-	: opt_attribute TOK_EXTERN TOK_STRLIT TOK_TYPEDEF TOK_SYMBOL ';'
-	  { $$ = expr_typedef_new(cur_fname, @2.first_line, $5,
-		arena_dequote_strdup($3), "",
-		false, 0, $1); }
-	| opt_attribute TOK_EXTERN TOK_STRLIT TOK_TYPEDEF TOK_SYMBOL
-		TOK_STRLIT ';'
-	  { $$ = expr_typedef_new(cur_fname, @2.first_line, $5,
-		arena_dequote_strdup($3),
-		arena_dequote_strdup($6),
-		false, 0, $1); }
+enum_stmt
+	: opt_attribute TOK_ENUM TOK_SYMBOL '{' enum_value_list '}'
+	  { $$ = expr_typedef_new(cur_fname, @2.first_line, $3,
+		0, 0, true, false, $5, 0, $1); }
+	| opt_attribute TOK_BITMASK TOK_SYMBOL '{' enum_value_list '}'
+	  { $$ = expr_typedef_new(cur_fname, @2.first_line, $3,
+		0, 0, false, true, $5, 0, $1); }
+	;
+enum_value_list
+	:
+	  { $$ = 0; }
+	| TOK_SYMBOL '=' int_literal
+	  { $$ = expr_enumval_new(cur_fname, @1.first_line, $1, 0,
+		0, $3, attribute_public, 0); }
+	| TOK_SYMBOL '=' int_literal ',' enum_value_list
+	  { $$ = expr_enumval_new(cur_fname, @1.first_line, $1, 0,
+		0, $3, attribute_public, $5); }
+	;
+c_enumval_stmt
+	: opt_attribute TOK_EXTERN TOK_STRLIT type_expr TOK_SYMBOL ';'
+	 { $$ = expr_enumval_new(cur_fname, @2.first_line, $5, $4,
+		arena_dequote_strdup($3), 0, $1, 0); }
 	;
 macrodef_stmt
 	: opt_attribute TOK_MACRO TOK_SYMBOL opt_tparams_expr type_arg ';'
 	  { $$ = expr_macrodef_new(cur_fname, @2.first_line, $3, $4, $5, $1); }
-	;
-c_extval_stmt
-	: opt_attribute TOK_EXTERN TOK_STRLIT type_expr TOK_SYMBOL ';'
-	 { $$ = expr_extval_new(cur_fname, @2.first_line, $5, $4,
-		arena_dequote_strdup($3), $1); }
 	;
 visi_vardef_stmt
 	: TOK_PRIVATE type_expr TOK_SYMBOL ';'

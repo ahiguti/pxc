@@ -32,7 +32,7 @@ enum expr_e {
   expr_e_symbol,
   expr_e_nssym,
   expr_e_var,
-  expr_e_extval,
+  expr_e_enumval,
   expr_e_stmts,
   expr_e_block,
   expr_e_op,

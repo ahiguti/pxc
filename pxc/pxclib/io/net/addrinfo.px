@@ -1,0 +1,165 @@
+namespace io::net::addrinfo;
+public import type::builtin "";
+public import compiler::util "";
+
+public tsvaluetype extern "int" "enum" struct family_t { }
+public tsvaluetype extern "int" "enum" struct ai_socktype_t { }
+public tsvaluetype extern "int" "enum" struct ai_protocol_t { }
+public tsvaluetype extern "int" "bitmask" struct ai_flags_t { }
+public tsvaluetype extern "int" "int" struct gai_error_t { } // FIXME: enum
+
+public extern "AF_UNSPEC"	family_t AF_UNSPEC;
+public extern "AF_INET"		family_t AF_INET;
+public extern "AF_INET6"	family_t AF_INET6;
+public extern "AF_UNIX"		family_t AF_UNIX;
+public extern "0"		ai_socktype_t SOCK_UNSPEC;
+public extern "SOCK_STREAM"	ai_socktype_t SOCK_STREAM;
+public extern "SOCK_DGRAM"	ai_socktype_t SOCK_DGRAM;
+public extern "0"		ai_protocol_t PROTO_UNSPEC;
+public extern "IPPROTO_TCP"	ai_protocol_t IPPROTO_TCP;
+public extern "IPPROTO_UDP"	ai_protocol_t IPPROTO_UDP;
+public extern "AI_PASSIVE"	ai_flags_t AI_PASSIVE;
+
+public multithreaded extern "pxcio::addrinfo"
+struct addrinfo(
+  cslice{uchar} const& node,
+  cslice{uchar} const& service,
+  family_t ai_family,
+  ai_socktype_t ai_socktype,
+  ai_protocol_t ai_protocol,
+  ai_flags_t ai_flags) {
+  public extern "get_error" function gai_error_t get_error() const;
+  public extern "get_error_string" function string get_error_string() const;
+  public extern "get_sockaddr" function sockaddr_storage get_sockaddr() const;
+  public extern "get_canonname" function string get_canonname() const;
+  public extern "empty" function bool empty() const;
+  public extern "next" function void next();
+}
+
+public tsvaluetype extern "pxcio::sockaddr_storage" struct sockaddr_storage {
+  public extern "get_family" function family_t get_family() const;
+  public extern "get_in_port" function ushort get_in_port() const;
+  public extern "get_in_addr" function uint get_in_addr() const;
+}
+
+extern "type" inline
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <netinet/in.h>
+namespace pxcio {
+using namespace pxcrt;
+typedef bt_cslice<bt_uchar> strref;
+struct sockaddr_storage {
+  sockaddr_storage() : sto() { }
+  int get_family() const;
+  bt_uint get_in_addr() const;
+  bt_ushort get_in_port() const;
+  ::sockaddr_storage sto;
+};
+struct addrinfo {
+  addrinfo(strref const& node, strref const& service, int ai_family,
+    int ai_socktype, int ai_protocol, int ai_flags);
+  ~addrinfo();
+  int get_error() const;
+  bt_string get_error_string() const;
+  bt_bool empty() const;
+  void next();
+  sockaddr_storage get_sockaddr() const;
+  bt_string get_canonname() const;
+private:
+  addrinfo(const addrinfo&);
+  addrinfo& operator =(const addrinfo&);
+  ::addrinfo *ai;
+  ::addrinfo *cur;
+  int err;
+};
+}; //namespace pxcio
+
+extern "fdef" inline
+namespace pxcio {
+addrinfo::addrinfo(strref const& node, strref const& service,
+  int ai_family, int ai_socktype, int ai_protocol, int ai_flags)
+  : ai(0), cur(0), err(0)
+{
+  ::addrinfo hints = { };
+  hints.ai_family = ai_family;
+  hints.ai_socktype = ai_socktype;
+  hints.ai_protocol = ai_protocol;
+  hints.ai_flags = ai_flags;
+  PXCRT_ALLOCA_NTSTRING(node_nt, node);
+  if (service.empty()) {
+    hints.ai_flags |= AI_NUMERICSERV;
+    err = ::getaddrinfo(node_nt.get(), "0", &hints, &ai);
+  } else {
+    PXCRT_ALLOCA_NTSTRING(service_nt, service);
+    err = ::getaddrinfo(node_nt.get(), service_nt.get(), &hints, &ai);
+  }
+  cur = ai;
+}
+addrinfo::~addrinfo()
+{
+  if (ai != 0) {
+    ::freeaddrinfo(ai);
+  }
+}
+int addrinfo::get_error() const
+{
+  return err;
+}
+bt_string addrinfo::get_error_string() const
+{
+  const char *s = gai_strerror(err);
+  bt_string r(reinterpret_cast<const bt_uchar *>(s), strlen(s));
+  return r;
+}
+bt_bool addrinfo::empty() const
+{
+  return cur == 0;
+}
+void addrinfo::next()
+{
+  if (cur == 0) {
+    return;
+  }
+  cur = cur->ai_next;
+}
+sockaddr_storage addrinfo::get_sockaddr() const
+{
+  sockaddr_storage r;
+  if (cur != 0) {
+    memcpy(&r.sto, cur->ai_addr, cur->ai_addrlen);
+  }
+  return r;
+}
+bt_string addrinfo::get_canonname() const
+{
+  const char *s = cur != 0 ? cur->ai_canonname : 0;
+  if (s == 0) {
+    s = "";
+  }
+  bt_string r(reinterpret_cast<const bt_uchar *>(s), strlen(s));
+  return r;
+}
+int sockaddr_storage::get_family() const
+{
+  return sto.ss_family;
+}
+bt_uint sockaddr_storage::get_in_addr() const
+{
+  if (sto.ss_family != AF_INET) {
+    return 0;
+  }
+  const sockaddr_in *p = reinterpret_cast<const sockaddr_in *>(&sto);
+  return ntohl(p->sin_addr.s_addr);
+}
+bt_ushort sockaddr_storage::get_in_port() const
+{
+  if (sto.ss_family != AF_INET) {
+    return 0;
+  }
+  const sockaddr_in *p = reinterpret_cast<const sockaddr_in *>(&sto);
+  return ntohs(p->sin_port);
+}
+}; // namespace pxcio
+
