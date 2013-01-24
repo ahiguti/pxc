@@ -48,9 +48,11 @@ expr_i *expr_symbol_new(const char *fn, int line, expr_i *nssym)
 expr_i *expr_var_new(const char *fn, int line, const char *sym,
   expr_i *type_uneval, passby_e passby, attribute_e attr, expr_i *rhs_ref)
 { return new expr_var(fn, line, sym, type_uneval, passby, attr, rhs_ref); }
-expr_i *expr_extval_new(const char *fn, int line, const char *sym,
-  expr_i *type_uneval, const char *cname, attribute_e attr)
-{ return new expr_extval(fn, line, sym, type_uneval, cname, attr); }
+expr_i *expr_enumval_new(const char *fn, int line, const char *sym,
+  expr_i *type_uneval, const char *cname, expr_i *value, attribute_e attr,
+  expr_i *rest)
+{ return new expr_enumval(fn, line, sym, type_uneval, cname, value, attr,
+  rest); }
 expr_i *expr_stmts_new(const char *fn, int line, expr_i *head, expr_i *rest)
 { return new expr_stmts(fn, line, head, rest); }
 expr_i *expr_argdecls_new(const char *fn, int line, const char *sym,
@@ -94,10 +96,10 @@ expr_i *expr_funcdef_new(const char *fn, int line, const char *sym,
 { return new expr_funcdef(fn, line, sym, cname, is_const, block, ext_decl,
   extc_decl, attr); }
 expr_i *expr_typedef_new(const char *fn, int line, const char *sym,
-  const char *cname, const char *category, bool is_pod,
-  unsigned int num_tpara, attribute_e attr)
-{ return new expr_typedef(fn, line, sym, cname, category, is_pod, num_tpara,
-  attr); }
+  const char *cname, const char *category, bool is_enum, bool is_bitmask,
+  expr_i *enumvals, unsigned int num_tpara, attribute_e attr)
+{ return new expr_typedef(fn, line, sym, cname, category, is_enum, is_bitmask,
+  enumvals, num_tpara, attr); }
 expr_i *expr_macrodef_new(const char *fn, int line, const char *sym,
   expr_i *tparams, expr_i *rhs, attribute_e attr)
 { return new expr_macrodef(fn, line, sym, tparams, rhs, attr); }
@@ -304,7 +306,7 @@ static const builtin_typedefs_type builtin_typedefs[] = {
   { "bt_double", "pxcrt::bt_double", 0, true, 0,
     type_attribute(52, 52, true, false, true), &builtins.type_double },
 //  { "bt_string", "pxcrt::bt_string", 0, false, 0, &builtins.type_string },
-  { "bt_tpdummy", "pxcrt::bt_tpdummy", 0, false, 0,
+  { "bt_tpdummy", "pxcrt::bt_tpdummy", 0, true, 0,
     type_attribute(0, 0, false, false, false), &builtins.type_tpdummy },
 };
 
@@ -316,7 +318,7 @@ static void define_builtins()
     const builtin_typedefs_type *const be = builtin_typedefs + i;
     expr_typedef *const etd = ptr_down_cast<expr_typedef>(
       expr_typedef_new("BUILTIN", 0, be->name,
-	be->cname, be->category, be->is_pod, be->num_tparams,
+	be->cname, be->category, false, false, 0, be->num_tparams,
 	attribute_e(attribute_public |
 	  attribute_threaded | attribute_multithr | attribute_valuetype |
 	  attribute_tsvaluetype)));

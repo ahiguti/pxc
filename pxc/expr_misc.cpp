@@ -222,20 +222,67 @@ bool is_bool_type(const term& t)
 
 bool is_numeric_type(const term& t)
 {
-  if (is_integral_type(t) ||
-    t == builtins.type_double ||
-    t == builtins.type_float) {
+  return (is_integral_type(t) || is_float_type(t));
+}
+
+bool is_enum(const term& t)
+{
+  expr_typedef *etd = dynamic_cast<expr_typedef *>(t.get_expr());
+  if (etd != 0) {
+    return etd->is_enum;
+  }
+  const typecat_e cat = get_category(t);
+  return cat == typecat_e_enum;
+}
+
+bool is_bitmask(const term& t)
+{
+  expr_typedef *etd = dynamic_cast<expr_typedef *>(t.get_expr());
+  if (etd != 0) {
+    return etd->is_bitmask;
+  }
+  const typecat_e cat = get_category(t);
+  return cat == typecat_e_bitmask;
+}
+
+bool is_boolean_algebra(const term& t)
+{
+  if (is_bool_type(t) || is_bitmask(t) || is_integral_type(t)) {
     return true;
   }
   const typecat_e cat = get_category(t);
-  return cat == typecat_e_int || cat == typecat_e_uint;
+  return cat == typecat_e_int || cat == typecat_e_uint
+    || cat == typecat_e_bitmask;
 }
 
 static bool is_builtin_pod(const term& t)
 {
   const expr_typedef *const td = dynamic_cast<const expr_typedef *>(
     t.get_expr());
-  return td != 0 && td->is_pod;
+  return td != 0;
+}
+
+bool is_equality_type(const term& t)
+{
+  if (is_ordered_type(t)) {
+    return true;
+  }
+  if (is_cm_pointer_family(t)) {
+    return true;
+  }
+  return false;
+}
+
+bool is_ordered_type(const term& t)
+{
+  if (is_numeric_type(t)) {
+  // if (is_builtin_pod(t)) {
+    return true;
+  }
+  if (t == builtins.type_string || t == builtins.type_strlit) {
+    return true;
+  }
+  return false;
 }
 
 bool is_possibly_pod(const term& t)
@@ -247,6 +294,8 @@ bool is_possibly_pod(const term& t)
   switch (cat) {
   case typecat_e_int:
   case typecat_e_uint:
+  case typecat_e_enum:
+  case typecat_e_bitmask:
   case typecat_e_float:
     return true;
   case typecat_e_noncopyable:
@@ -270,6 +319,8 @@ bool is_possibly_nonpod(const term& t)
   switch (cat) {
   case typecat_e_int:
   case typecat_e_uint:
+  case typecat_e_enum:
+  case typecat_e_bitmask:
   case typecat_e_float:
     return false;
   case typecat_e_noncopyable:
@@ -332,6 +383,11 @@ bool is_unsigned_integral_type(const term& t)
   return cat == typecat_e_uint;
 }
 
+bool is_float_type(const term& t)
+{
+  return t == builtins.type_double || t == builtins.type_float;
+}
+
 static typecat_e get_category(const expr_i *e)
 {
   const expr_struct *est = dynamic_cast<const expr_struct *>(e);
@@ -357,6 +413,8 @@ typecat_e get_category_from_string(const std::string& s)
   if (s == "tiptr") return typecat_e_tiptr;
   if (s == "int") return typecat_e_int;
   if (s == "uint") return typecat_e_uint;
+  if (s == "enum") return typecat_e_enum;
+  if (s == "bitmask") return typecat_e_bitmask;
   if (s == "float") return typecat_e_float;
   if (s == "numeric") return typecat_e_numeric;
   if (s == "varray") return typecat_e_varray;
@@ -387,6 +445,8 @@ std::string get_category_string(typecat_e cat)
   case typecat_e_tiptr: return "tiptr";
   case typecat_e_int: return "int";
   case typecat_e_uint: return "uint";
+  case typecat_e_enum: return "enum";
+  case typecat_e_bitmask: return "bitmask";
   case typecat_e_float: return "float";
   case typecat_e_numeric: return "numeric";
   case typecat_e_varray: return "varray";
@@ -424,7 +484,7 @@ static bool is_pointer_category(const typecat_e cat)
 }
 
 #if 0
-static bool is_weak_pointer_category(const typecat_e cat)
+static bool is_ephemeral_pointer_category(const typecat_e cat)
 {
   return cat == typecat_e_wptr || cat == typecat_e_wcptr;
 }
@@ -595,15 +655,15 @@ bool is_cm_range_family(const term& t)
   return is_cm_range_family(t.get_expr());
 }
 
-static bool is_weak_value_type(expr_i *e)
+static bool is_ephemeral_value_type(expr_i *e)
 {
   return is_cm_range_family(e)
-    /* || is_weak_pointer_category(get_category(e)) */;
+    /* || is_ephemeral_pointer_category(get_category(e)) */;
 }
 
-bool is_weak_value_type(const term& t)
+bool is_ephemeral_value_type(const term& t)
 {
-  return is_weak_value_type(t.get_expr());
+  return is_ephemeral_value_type(t.get_expr());
 }
 
 bool is_container_family(const term& t)
@@ -729,7 +789,7 @@ static bool is_assignable_type_one(expr_i *e)
   if (!is_copyable_type_one(e)) {
     return false;
   }
-  if (is_weak_value_type(e)) {
+  if (is_ephemeral_value_type(e)) {
     return false;
   }
   const typecat_e cat = get_category(e);
@@ -755,7 +815,7 @@ bool is_assignable(const term& t)
   if (!is_copyable(t)) {
     return false;
   }
-  if (is_weak_value_type(t)) {
+  if (is_ephemeral_value_type(t)) {
     return false;
   }
   const typecat_e cat = get_category(t);
@@ -909,11 +969,17 @@ std::string term_tostr(const term& t, term_tostr_sort s)
       esort_char = 'i';
       break;
     case expr_e_typedef:
-      sym = ptr_down_cast<const expr_typedef>(tdef)->sym;
-      ns = ptr_down_cast<const expr_typedef>(tdef)->ns;
-      cname = ptr_down_cast<const expr_typedef>(tdef)->cname;
-      esort_char = 0;
-      self_block = 0;
+      {
+	const expr_typedef *etd = ptr_down_cast<const expr_typedef>(tdef);
+	if (etd->is_enum || etd->is_bitmask) {
+	  return "int";
+	}
+	sym = etd->sym;
+	ns = etd->ns;
+	cname = etd->cname;
+	esort_char = 't';
+	self_block = 0;
+      }
       break;
     case expr_e_macrodef:
       sym = ptr_down_cast<const expr_macrodef>(tdef)->sym;
@@ -1235,8 +1301,31 @@ static int num_bits_max(const term& t)
   return etd->tattr.significant_bits_max;
 }
 
-static bool numeric_convertible(const term& tfrom, const term& tto)
+static bool numeric_convertible(expr_i *efrom, const term& tfrom,
+  const term& tto)
 {
+  symbol_common *sdef = efrom->get_sdef();
+  if (sdef != 0) {
+    term& ev = sdef->resolve_evaluated();
+    if (ev.is_long() && is_numeric_type(tto)) {
+      return true; /* compile-time long constant to numeric */
+    }
+    if (ev.is_long() && ev.get_long() == 0 && is_bitmask(tto)) {
+      return true; /* zero to bitmask */
+    }
+  }
+  if (efrom->get_esort() == expr_e_int_literal) {
+    if (is_integral_type(tto)) {
+      return true; /* int literal to integral type */
+    }
+    expr_int_literal *eint = ptr_down_cast<expr_int_literal>(efrom);
+    if (eint->get_signed() == 0 && is_bitmask(tto)) {
+      return true; /* zero to bitmask */
+    }
+  }
+  if (efrom->get_esort() == expr_e_float_literal && is_float_type(tto)) {
+    return true; /* float literal to float type */
+  }
   if (!is_numeric_type(tfrom) || !is_numeric_type(tto)) {
     return false;
   }
@@ -1244,16 +1333,22 @@ static bool numeric_convertible(const term& tfrom, const term& tto)
     return true;
   }
   if (get_category(tfrom) != get_category(tto)) {
-    return false; /* none(builtin), int, uint */
+    return false; /* none(builtin), int, uint, enum, bitmask */
   }
   if (is_unsigned_integral_type(tfrom) != is_unsigned_integral_type(tto)) {
     return false; /* different signedness */
   }
   const typecat_e cat = get_category(tfrom);
   if (cat != typecat_e_none) {
-    return true; /* user defined type */
+    return false; /* user defined type */
   }
   /* builtin type */
+  if (is_enum(tfrom) || is_bitmask(tfrom) || is_enum(tto) || is_bitmask(tto)) {
+    return false;
+  }
+  if (is_integral_type(tfrom) != is_integral_type(tto)) {
+    return false; /* integral <=> floating */
+  }
   int to_min = num_bits_min(tto);
   int from_max = num_bits_max(tfrom);
   return to_min >= from_max;
@@ -1284,8 +1379,8 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
     tconvto = tto;
   }
   // TODO: enable this
-  // if (numeric_convertible(tfrom, tconvto)) {
-  if (is_numeric_type(tfrom) && is_numeric_type(tconvto)) {
+  if (numeric_convertible(efrom, tfrom, tconvto)) {
+  // if (is_numeric_type(tfrom) && is_numeric_type(tconvto)) {
     efrom->conv = conversion_e_cast;
     efrom->type_conv_to = tconvto;
     DBG_CONV(fprintf(stderr, "convert: numeric cast\n"));
@@ -1293,7 +1388,7 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
   }
   if (tfrom == builtins.type_strlit && tto == builtins.type_string) {
     DBG_CONV(fprintf(stderr, "convert: range\n"));
-    efrom->conv = conversion_e_subtype_obj;
+    efrom->conv = conversion_e_cast;
     efrom->type_conv_to = tconvto;
     return true;
   }
@@ -1435,7 +1530,7 @@ expr_i *fn_drop_non_exports(expr_i *e) {
     case expr_e_funcdef:
     case expr_e_typedef:
     case expr_e_macrodef:
-    case expr_e_extval:
+    case expr_e_enumval:
     case expr_e_inline_c:
     case expr_e_var:
       is_export = true;
@@ -2332,7 +2427,7 @@ void check_inherit_threading(expr_struct *est)
     const attribute_e estattr = est->get_attribute();
     if ((iattr & estattr) != iattr) {
       arena_error_throw(est,
-        "struct '%s' can't implement '%s' because it has weaker "
+        "struct '%s' can't implement '%s' because it has incompatible "
 	"threading attribute",
         term_tostr_human(est_te).c_str(), term_tostr_human(te).c_str());
     }
@@ -2738,7 +2833,7 @@ bool is_vardef_or_vardefset(expr_i *e)
     return false;
   }
   if (has_blockscope_tempvar(e)) {
-    /* impossible for udcon because structs can not have weak fields. */
+    /* impossible for udcon because structs can not have ephemeral fields. */
     abort();
     return false;
   }
@@ -2753,7 +2848,7 @@ bool is_noexec_expr(expr_i *e)
   case expr_e_macrodef:
   case expr_e_ns:
   case expr_e_inline_c:
-  case expr_e_extval:
+  case expr_e_enumval:
   case expr_e_struct:
   case expr_e_variant:
   case expr_e_interface:

@@ -48,6 +48,8 @@ extern int count_newline(const char *str);
 "struct"		{ return TOK_STRUCT; }
 "union"			{ return TOK_VARIANT; }
 "interface"		{ return TOK_INTERFACE; }
+"enum"			{ return TOK_ENUM; }
+"bitmask"		{ return TOK_BITMASK; }
 "true"			{ yylval.int_val = 1; return TOK_BOOLLIT; }
 "false"			{ yylval.int_val = 0; return TOK_BOOLLIT; }
 "extern"		{ return TOK_EXTERN; }

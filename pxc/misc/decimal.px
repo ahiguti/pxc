@@ -1,0 +1,58 @@
+#!/usr/bin/pxc
+
+namespace decimal;
+import common "";
+import numeric::positional;
+
+function void test1()
+{
+  string s;
+  for (int i : -10000000 .. 10000000) {
+    s.resize(0, 0);
+    numeric::positional::integral_to_decimal(i, s);
+  }
+}
+
+function void test2()
+{
+  for (int i : -10000000 .. 10000000) {
+    string s;
+    numeric::positional::integral_to_decimal(i, s);
+  }
+}
+
+function void test3()
+{
+  for (int i : -10000000 .. 10000000) {
+    string s = type::builtin::bt_int_to_string(i);
+  }
+}
+
+function void test4()
+{
+  string s;
+  for (int i : -10000000 .. 10000000) {
+    s.resize(0, 0);
+    numeric::positional::integral_to_decimal(i, s);
+    string s2 = type::builtin::bt_int_to_string(i);
+    if (s != s2) {
+      println("mismatch");
+      return;
+    }
+  }
+  println("ok");
+}
+
+string arg = argv.size() > 0 ? argv[0] : "";
+if (arg == "1") {
+  test1();
+} else if (arg == "2") {
+  test2();
+} else if (arg == "3") {
+  test3();
+} else if (arg == "4") {
+  test4();
+} else {
+  println("unknown test");
+}
+

@@ -2,15 +2,17 @@ namespace io::file;
 public import type::builtin "";
 public import type::array "";
 public import io "";
+public import io::errno "";
 public import compiler::util "";
 public import meta::builtin m;
 
 public multithreaded extern "pxcio::file_impl" "noncopyable" struct file { }
+public macro fileptr tptr{file};
 
 public tsvaluetype extern "::off_t" "int" struct off_t { }         // SQUAD?
 public tsvaluetype extern "::dev_t" "uint" struct dev_t { }        // UQUAD
 public tsvaluetype extern "::ino_t" "uint" struct ino_t { }        // ULONGWORD
-public tsvaluetype extern "::mode_t " "uint" struct mode_t { }     // U32
+public tsvaluetype extern "::mode_t " "bitmask" struct mode_t { }  // U32
 public tsvaluetype extern "::nlink_t" "uint" struct nlink_t { }    // UWORD
 public tsvaluetype extern "::uid_t" "uint" struct uid_t { }        // U32
 public tsvaluetype extern "::gid_t" "uint" struct gid_t { }        // U32
@@ -19,8 +21,8 @@ public tsvaluetype extern "::blkcnt_t" "int" struct blkcnt_t { }   // SQUAD?
 public tsvaluetype extern "::time_t" "int" struct time_t { }       // SLONG
 public tsvaluetype extern "::ssize_t" "int" struct ssize_t { }     // SWORD?
 
-public tsvaluetype extern "int" "int" struct open_flags_t { }
-public tsvaluetype extern "int" "int" struct whence_t { }
+public tsvaluetype extern "int" "bitmask" struct open_flags_t { }
+public tsvaluetype extern "int" "enum" struct whence_t { }
 
 public tsvaluetype extern "pxcio::statbuf" struct statbuf {
   dev_t st_dev;
@@ -54,8 +56,21 @@ public extern "SEEK_SET"	whence_t SEEK_SET;
 public extern "SEEK_CUR"	whence_t SEEK_CUR;
 public extern "SEEK_END"	whence_t SEEK_END;
 
+public extern "S_IRWXU"		mode_t S_IRWXU;
+public extern "S_IRUSR"		mode_t S_IRUSR;
+public extern "S_IWUSR"		mode_t S_IWUSR;
+public extern "S_IXUSR"		mode_t S_IXUSR;
+public extern "S_IRWXG"		mode_t S_IRWXG;
+public extern "S_IRGRP"		mode_t S_IRGRP;
+public extern "S_IWGRP"		mode_t S_IWGRP;
+public extern "S_IXGRP"		mode_t S_IXGRP;
+public extern "S_IRWXO"		mode_t S_IRWXO;
+public extern "S_IROTH"		mode_t S_IROTH;
+public extern "S_IWOTH"		mode_t S_IWOTH;
+public extern "S_IXOTH"		mode_t S_IXOTH;
+
 public threaded extern "pxcio::file_open" function
-  int file_open(file& f, ioptr const& sys, cslice{uchar} const& fn,
+  errno_t file_open(file& f, ioptr const& sys, cslice{uchar} const& fn,
     open_flags_t flags, mode_t mode);
 public threaded extern "pxcio::file_read" function
   size_t file_read(file& f, slice{uchar} const& buf);
@@ -66,11 +81,11 @@ public threaded extern "pxcio::file_write" function
 public threaded extern "pxcio::file_lseek" function
   off_t file_lseek(file& f, off_t offset, whence_t whence);
 public threaded extern "pxcio::file_errno" function
-  int file_errno(file const& f);
+  errno_t file_errno(file const& f);
 public threaded extern "pxcio::io_stat" function
-  int io_stat(ioptr const& sys, cslice{uchar} const& fn, statbuf& buf);
+  errno_t io_stat(ioptr const& sys, cslice{uchar} const& fn, statbuf& buf);
 public threaded extern "pxcio::io_errno" function
-  int io_errno(ioptr const& sys);
+  errno_t io_errno(ioptr const& sys);
 public threaded extern "pxcio::io_sleep" function
   uint io_sleep(ioptr const& sys, uint sec);
 
@@ -115,7 +130,8 @@ size_t io_write_file(ioptr const& sys, cslice{uchar} const& fn,
   cslice{uchar} const& buf)
 {
   file f;
-  if (f.open(sys, fn, O_WRONLY | O_CREAT | O_TRUNC, 6*8*8 + 6*8 + 6) != 0) {
+  if (f.open(sys, fn, O_WRONLY | O_CREAT | O_TRUNC,
+    S_IRWXU | S_IRWXG | S_IRWXO) != 0) {
     return 0;
   }
   return f.write_all(buf);
@@ -132,9 +148,10 @@ extern "type" inline
 namespace pxcio {
 using namespace pxcrt;
 typedef struct ::stat statbuf;
+typedef int errno_t;
 struct file_impl {
   file_impl() : fd(-1), err(0) { }
-  ~file_impl() { if (fd > 2) close(fd); }
+  ~file_impl() { if (fd > 2) close(fd); } /* don't close standard in/out/err */
   void reset(int f) { if (fd > 2) close(fd); fd = f; err = 0; }
   int get() { return fd; }
 private:
@@ -156,7 +173,7 @@ namespace pxcio {
 #include <stdlib.h>
 #include <limits.h>
 #include <string>
-bt_int file_open(file_impl& f, ioptr const& sys,
+errno_t file_open(file_impl& f, ioptr const& sys,
   bt_cslice< bt_uchar> const& fn, int flags, ::mode_t md)
 {
   PXCRT_ALLOCA_NTSTRING(fn_nt, fn);
@@ -214,18 +231,18 @@ bt_size_t file_write(file_impl& f, bt_cslice<bt_uchar> const& buf)
   f.err = wlen < 0 ? errno : 0;
   return wlen < 0 ? 0 : wlen;
 }
-bt_int file_errno(file_impl const& f)
+errno_t file_errno(file_impl const& f)
 {
   return f.err;
 }
-bt_int io_stat(ioptr const& sys, bt_cslice<bt_uchar> const& fn,
+errno_t io_stat(ioptr const& sys, bt_cslice<bt_uchar> const& fn,
   pxcio::statbuf& buf)
 {
   PXCRT_ALLOCA_NTSTRING(fn_nt, fn);
   const int e = ::stat(fn_nt.get(), &buf);
   return e != 0 ? errno : 0;
 }
-bt_int io_errno(ioptr const& sys)
+errno_t io_errno(ioptr const& sys)
 {
   return errno;
 }

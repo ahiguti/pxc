@@ -107,7 +107,7 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
 	case expr_e_struct:
 	case expr_e_variant:
 	case expr_e_interface:
-	case expr_e_extval:
+	case expr_e_enumval:
 	case expr_e_tparams:
 	  is_const = true;
 	  break;

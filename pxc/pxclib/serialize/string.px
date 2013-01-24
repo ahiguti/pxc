@@ -1,6 +1,8 @@
 namespace serialize::string;
 public import type::builtin "";
 public import meta::builtin m;
+public import numeric::cast n;
+public import numeric::positional n;
 
 public threaded function {t} string to_string(t const& x)
 {
@@ -18,10 +20,14 @@ public threaded function {t} string to_string(t const& x)
     return sym1(x);
   } else if (m::eq{m::to_string{sym2}, symstr}) {
     return sym2(x);
-  } else if (m::eq{cat, "uint"}) {
-    return bt_ulong_to_string(ulong(x));
-  } else if (m::eq{cat, "int"}) {
-    return bt_long_to_string(long(x));
+  } else if (n::is_integral{t}) {
+    string s;
+    n::integral_to_decimal(x, s);
+    return s;
+  // } else if (m::eq{cat, "uint"}) {
+  //   return bt_ulong_to_string(n::numeric_cast{ulong, t}(x)); // TODO
+  // } else if (m::eq{cat, "int"}) {
+  //   return bt_long_to_string(n::numeric_cast{long, t}(x)); // TODO
   } else if (m::or{
     m::eq{cat, "varray"},
     m::eq{cat, "farray"},

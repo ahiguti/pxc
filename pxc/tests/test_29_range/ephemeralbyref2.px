@@ -1,0 +1,25 @@
+
+namespace ephemeralbyref;
+import test_common "";
+
+function size_t foo(slice{int}& sl)
+{
+  size_t r = sl.size();
+  sl.next();
+  vector{int} v2;
+  slice{int} sl2 = v2;
+  sl = sl2; // error: sl and sl2 refere different object
+  return r;
+}
+
+function void t1()
+{
+  vector{int} v;
+  v.resize(30, 0);
+  v[10] = 5;
+  slice{int} sl = v;
+  size_t len = foo(sl);
+  println(len);
+}
+
+t1();

@@ -61,8 +61,9 @@ expr_i *expr_nssym_new(const char *fn, int line, expr_i *prefix,
   const char *sym);
 expr_i *expr_var_new(const char *fn, int line, const char *sym, expr_i *typ,
   passby_e passby, attribute_e visi, expr_i *rhs_ref);
-expr_i *expr_extval_new(const char *fn, int line, const char *sym,
-  expr_i *typ, const char *cname, attribute_e visi);
+expr_i *expr_enumval_new(const char *fn, int line, const char *sym,
+  expr_i *typ, const char *cname, expr_i *value, attribute_e visi,
+  expr_i *rest);
 expr_i *expr_argdecls_new(const char *fn, int line, const char *sym,
   expr_i *typ, passby_e passby, expr_i *rest);
 expr_i *expr_stmts_new(const char *fn, int line, expr_i *head, expr_i *rest);
@@ -89,8 +90,8 @@ expr_i *expr_funcdef_new(const char *fn, int line, const char *sym,
   const char *cname, bool is_const, expr_i *block, bool ext_decl,
   bool extc_decl, attribute_e visi);
 expr_i *expr_typedef_new(const char *fn, int line, const char *sym,
-  const char *cname, const char *category, bool is_pod,
-  unsigned int num_tparams, attribute_e visi);
+  const char *cname, const char *category, bool is_enum, bool is_bitmask,
+  expr_i *enumvals, unsigned int num_tparams, attribute_e visi);
 expr_i *expr_macrodef_new(const char *fn, int line, const char *sym,
   expr_i *tparams, expr_i *rhs, attribute_e visi);
 expr_i *expr_struct_new(const char *fn, int line, const char *sym,

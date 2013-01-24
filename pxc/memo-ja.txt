@@ -1,28 +1,37 @@
 
-0113 407
+0125 440
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- to_stringは文字列へ追加する形へ
+- 16進、8進、文字リテラル
+- enum, bitmaskのコンパイル時リフレクション
+- external int/uintを整数リテラルからコンストラクトできない
+- 算術演算子は左右どちらへも変換できるように
+
+- 範囲チェックを非デバッグ時に無効化するプラグマ
+
+ephemeral型まわり
+- test: globalやstructには参照変数などは置けないように
+- test: 構造体にslice等のephemeral型を含む型のfieldを置けないように
+
+- structコンストラクタに対するcheck_return_expr()
+
+- too many argument for ... を共通化
+
+---------------------------------------------------------------------
+FIXME/TODO M2
+
+
+- weak pointerと区別するためにslice等はweak型と呼ばずにephemeral型と
+  よぶ(done)
 
 - darrayのalloca使った実装
 
-
-- 汎用総称関数にthreadedを付ける
-
-- 演算子を総称関数に自動で置き換え、ユーザが演算子定義できるように
-
 - C++名前空間をすべて絶対参照で
-
-- enum/bitmask型
-
-- 整数の暗黙変換を安全なものだけに制限
 
 - expr.cppで組み込み型にtype::builtinをセットしているのをやめて、
   serializeなどではtype::builtinではない名前空間を使うようにする
-
-weak型まわり
-- globalやstructには参照変数などは置けないように
-- 構造体にslice等のweak型を含む型のfieldを置けないように
 
 実装が不明確なところ
 - threadまわりの仕様再整理せよ
@@ -32,57 +41,51 @@ weak型まわり
 - 全ポインタ型とinterfaceの組み合わせ(モニタ等埋め込みが正しいか)確認
 
 ---------------------------------------------------------------------
-TEST TODO M1
+TEST TODO M3
 
-- 「参照型の制約」実装
-- operatorと組み込み関数について整理。大小比較は全型に？
 - test_14_root/refvar.px
 - test_14_root/condtemp.px refvarが無いエラーになるように
-- structコンストラクタに対するcheck_return_expr()
 - std::vector<bool>を使ってしまうと要素への参照が取れない
 
 ---------------------------------------------------------------------
-TEST TODO M2
+TEST TODO M4
 
 - tpupを引数で参照渡しするときのconstnessが正しいコードを吐いているか
-- linear型の変数を宣言できないようになっているか
 - fn_check_rootテスト
 - check_return_exprテスト
 - テスト: fn_check_root廃止、rootはchecktypeの中で。
 - ユーザ定義constructorを持つ型のdefault constructible判定が正しいか
 - 型のパラメータにclosureやメソッドを使うと正しくエラーになるか？
-- グローバルにユーザ定義コンストラクタを置けないのは、固定長配列の
-  要素としても持てないようにチェックしているか。
-  has_userdef_constr()
 - 型パラメータの文字列と数値がescapeされているか確認
 
 ---------------------------------------------------------------------
-FIXME/TODO M3
+FIXME/TODO M5
 
-- call traitがvalueの型を作れるようにする？
 - gcc-4.4.4のバグ？ -Wswitch-enumが効いていない しばらくgcc34を使う
-- slice
 - cflagsの与え方など確定
 - interfaceの配列のように、テンプレパラメータが具体型でないといけない
   ケースのチェック。特にC++テンプレ型(固定長配列)。
 - 文字列リテラルのテスト
 
 ---------------------------------------------------------------------
-FIXME/TODO M4
+FIXME/TODO M6
 
-- namespace義務付け
-  - private namespace. 親namespaceからのみシンボルが参照できる.
-- boxing自動変換を廃止
-- pimplイディオムが使えることを確認
+- private namespace. 親namespaceからのみシンボルが参照できる.
 - multimap, set, multiset, list
 - foreach: multimap, set, multiset, list
 - 例外の整理とstacktrace
-- privateメンバ、コンストラクタ。抽象データ型は作れるように
 - 構造体や配列の初期化式
 
 ---------------------------------------------------------------------
 TODO
 
+- intの範囲を超えるenum/bitmask
+- 構造体の中でenumを定義できるようにする？
+- enumのint値を省略できるように
+- enum int値に型式を書けるように
+- enumがエラーメッセージではintとして見えてしまう
+- mutexのlock保持スレッドを記録する実装
+- 演算子を総称関数に自動で置き換え、ユーザが演算子定義できるように
 - block-scope lock is not implemented これを出す条件は何?
 - multithreaded structのコンストラクタ引数はmultithreaded型でなくても
   よい?
@@ -217,6 +220,15 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- privateメンバ、コンストラクタ。抽象データ型は作れるように(done)
+- slice(done)
+- boxing自動変換を廃止(done)
+- namespace義務付け(done)
+- pimplイディオムが使えることを確認(done)
+- operatorと組み込み関数について整理。大小比較は全型に？(done)
+- linear型の変数を宣言できないようになっているか(done)
+- enum/bitmask型(done)
+- 整数の暗黙変換を安全なものだけに制限(done)
 - threadedではない型の変数をglobalに定義できないように(グローバル変数
   が初期化される前にそれをアクセスしてしまえないようにするため)(done)
 - ユーザ定義コンストラクタ内に書ける文についての制限を決め(done)
@@ -237,8 +249,8 @@ DONE
 - global変数はthreadedな型を持たねばならない。初期化順序の問題が起きない
   ように。expr_var::check_typeの中のif 0を有効化せよ。(done)
 - 短絡boxingを再び有効に(done)
-- externならweak又はrefを返すメンバ関数を許可、thisをrootする(done)
-- weak型を初期化以外の代入の左辺にできないように(done)
+- externならephemeral又はrefを返すメンバ関数を許可、thisをrootする(done)
+- ephemeral型を初期化以外の代入の左辺にできないように(done)
 - pxcvectorなどのインラインメンバ関数は"type"ではなく"fdecl"に移さ
   ないと型定義順依存がおきる -> ない。メンバ関数ごとにインスタンス
   化される(done)
@@ -253,7 +265,7 @@ DONE
 - tsvaluetype darray実装(done)
 - if (int const& x : foo[k]) { ... } のif-defined構文(done)
 - int_compareなどの比較関数を無くし、基本型は > で比較するように(done)
-- global変数にweak型は使えないようにせよ(11/fe_sli.px mudflap)(done)
+- global変数にephemeral型は使えないようにせよ(11/fe_sli.px mudflap)(done)
 - interfaceなどのようにcopyableではないものをコピーしたときのエラー(done)
 - byrefであればintrface型もvarとtempvarに許容(done)
 - string以外のコンテナにもappend(done)
@@ -459,6 +471,8 @@ foo::bar$n namespace
 foo$f   関数名
 foo$f0  ローカルに定義された関数の関数オブジェクト(struct)名
 foo$fi  ローカルに定義された関数の関数オブジェクトインスタンス
+foo$t   typedef(enum, bitmask)の名前
+foo$t0  typedef(enum, bitmask)のenum要素
 foo$s   構造体
 foo$s0  ローカルに定義された構造体
 foo$v   直和型のstruct名
@@ -4885,18 +4899,18 @@ emit_asgnstmt_list(emit_context& em, const asgnstmt_list& asl, expr_i *eprev,
 }
 
 ---------------------------------------------------------------------
-参照やweak型を返す関数
+参照やephemeral型を返す関数
 
-- 参照やweak型を返すような関数はexternなコンテナ型のメンバ関数のみ
+- 参照やephemeral型を返すような関数はexternなコンテナ型のメンバ関数のみ
   許可する? 帰ってきたデータをrootするには、そのコンテナを
   invalidate_guardする。
-- ユーザ定義関数で参照やweak型を返せるようにするには、
+- ユーザ定義関数で参照やephemeral型を返せるようにするには、
   案1: returnした式が第一引数のobject由来(そのobjectをroot/invguard
     している間は返す式も有効)であることをコンパイラが確認せねばなら
     ない。
   案2: returnした式は引数由来であることをコンパイラが確認。呼び出し
     元は全引数をroot/invguardする。
-- 参照(or weak)返値zが引数x由来であるとは、xをroot/invguardしている
+- 参照(or ephemeral)返値zが引数x由来であるとは、xをroot/invguardしている
   間はzが有効であること。
   - x自身
   - xのslice, range, 直接要素 (要素の要素はダメ)
@@ -4905,7 +4919,7 @@ emit_asgnstmt_list(emit_context& em, const asgnstmt_list& asl, expr_i *eprev,
 
 
 ---------------------------------------------------------------------
-weak型の制限
+ephemeral型の制限
 
 案1:
 - returnで返すのは不可? これを許可するには依存オブジェクトをコンパイ
@@ -4917,8 +4931,8 @@ weak型の制限
 - extern template classの引数には使えない
 
 案2:
-- weak型変数は全て依存する式が決まっている。
-- 同じ式に依存するweak型変数どうしは代入可能
+- ephemeral型変数は全て依存する式が決まっている。
+- 同じ式に依存するephemeral型変数どうしは代入可能
 - 返値型として使った場合は第一引数に依存。
 
 ---------------------------------------------------------------------
@@ -4979,14 +4993,14 @@ slice{foo} x = v[0..100];
 (slice{f} x = 15) = z; // ダメ？
 
 ---------------------------------------------------------------------
-weak型(参照/slice/range型)の制約
+ephemeral型(参照/slice/range型)の制約
 
 - sliceの参照変数 slice{foo} & x は許可しない(done)。引数も同様(done)。
 - 参照変数やslice変数は foo & x = ... の形(代入の左辺)としてしか
   定義できない(done)。
 - 同様にslice/rangeは slice{foo} x = ...の形(代入の左辺)としてしか
   定義できない(done)
-- 構造体/variantのフィールドにはweak型(参照変数、slice, range)は
+- 構造体/variantのフィールドにはephemeral型(参照変数、slice, range)は
   持てない(done)。C++テンプレ型の引数にも持てない(done)。
 - slice/range同士の代入は当分不許可(done)。returnも不許可(done)。
   - あとで同じobjectへのalias同士であれば代入可にする
@@ -5051,7 +5065,7 @@ foo x = ...
 のみを許可するのはどういうケースか。
 
 - byrefのとき
-- weak型のとき
+- ephemeral型のとき
 - ptr型のとき
 
 ただしvariantの最初ではないfieldについては初期化しなくてよい。
@@ -5161,7 +5175,7 @@ function hoge foo() { ... }
 hogeを返す関数はref{hoge}をsvにつっこむ。
 
 - pxcの各型について、それがperlで値型にするか参照型にするかを決める。
-- ptrやweak型は値型でも参照型でもなく、perlからは利用できない型。
+- ptrやephemeral型は値型でも参照型でもなく、perlからは利用できない型。
 - 値型については、その型をbyref渡し引数にとるような関数呼び出しについ
   て、変更内容は失われる。
 - 参照型を返すような関数はperlに渡すときにptrで自動box化される。
@@ -5406,4 +5420,12 @@ enum/bitmask型
 - enumは算術演算子はすべて不可
 - bitmaskはブール代数演算はok。
   - topとbottomも使える
+
+---------------------------------------------------------------------
+perlマーシャラ再考
+
+- pxcオブジェクトは基本型も全てperlのrefでwrapして持てるようにする
+- byrefなpxc関数引数はそのオブジェクトを引数に与える必要がある
+- 基本型byvalかconstbyrefなpxc関数引数はperlのスカラから自動変換可
+
 

@@ -315,7 +315,7 @@ static term& resolve_texpr_symbol_common(expr_i *e)
     switch (ev->get_esort()) {
     case expr_e_var:
     case expr_e_argdecls:
-    case expr_e_extval:
+    case expr_e_enumval:
     case expr_e_int_literal:
     case expr_e_float_literal:
     case expr_e_bool_literal:
@@ -734,34 +734,47 @@ std::string expr_var::dump(int indent) const
   return "var " + dump_expr(indent, type_uneval);
 }
 
-expr_extval::expr_extval(const char *fn, int line, const char *sym,
-  expr_i *type_uneval, const char *cname, attribute_e attr)
+expr_enumval::expr_enumval(const char *fn, int line, const char *sym,
+  expr_i *type_uneval, const char *cname, expr_i *val, attribute_e attr,
+  expr_i *rest)
   : expr_i(fn, line), sym(sym),
     type_uneval(ptr_down_cast<expr_te>(type_uneval)), cname(cname),
-    attr(attr)
+    value(val), attr(attr),
+    rest(ptr_down_cast<expr_enumval>(rest))
 {
   type_of_this_expr.clear(); /* resolve_texpr() */
 }
 
-expr_i *expr_extval::clone() const
+expr_i *expr_enumval::clone() const
 {
-  expr_extval *r = new expr_extval(*this);
+  expr_enumval *r = new expr_enumval(*this);
   r->type_of_this_expr.clear();
   return r;
 }
 
 term&
-expr_extval::resolve_texpr()
+expr_enumval::resolve_texpr()
 {
   if (type_of_this_expr.is_null()) {
-    type_of_this_expr = eval_expr(type_uneval);
+    if (type_uneval == 0) {
+      expr_i *p = parent_expr;
+      if (p->get_esort() == expr_e_enumval) {
+	type_of_this_expr = p->resolve_texpr();
+      } else if (p->get_esort() == expr_e_typedef) {
+	type_of_this_expr = p->get_value_texpr();
+      } else {
+	abort();
+      }
+    } else {
+      type_of_this_expr = eval_expr(type_uneval);
+    }
   }
   return type_of_this_expr;
 }
 
-std::string expr_extval::dump(int indent) const
+std::string expr_enumval::dump(int indent) const
 {
-  return "extern " + dump_expr(indent, type_uneval);
+  return "enumval " + dump_expr(indent, type_uneval);
 }
 
 expr_stmts::expr_stmts(const char *fn, int line, expr_i *head, expr_i *rest)
@@ -1211,10 +1224,12 @@ std::string expr_funcdef::dump(int indent) const
 }
 
 expr_typedef::expr_typedef(const char *fn, int line, const char *sym,
-  const char *cname, const char *category, bool is_pod,
-  unsigned int num_tparams, attribute_e attr)
+  const char *cname, const char *category, bool is_enum, bool is_bitmask,
+  expr_i *enumvals, unsigned int num_tparams, attribute_e attr)
   : expr_i(fn, line), sym(sym), cname(cname), typecat_str(category),
-    is_pod(is_pod), num_tparams(num_tparams), attr(attr), tattr(),
+    is_enum(is_enum), is_bitmask(is_bitmask),
+    enumvals(ptr_down_cast<expr_enumval>(enumvals)),
+    num_tparams(num_tparams), attr(attr), tattr(),
     value_texpr(), typecat(typecat_e_none)
 {
   value_texpr = term(this);

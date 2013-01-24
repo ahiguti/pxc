@@ -1,0 +1,79 @@
+namespace numeric::cast;
+public import type::builtin "";
+public import meta::builtin m;
+
+public macro is_numeric{t} is_numeric_cat{t, m::category{t}};
+public macro is_integral{t} is_integral_cat{t, m::category{t}};
+public macro is_floatnum{t} is_floatnum_cat{t, m::category{t}};
+
+public threaded function {tto, tfrom} tto numeric_cast(tfrom const& x)
+{
+  if (m::and{is_numeric{tfrom}, is_numeric{tto}}) {
+    numeric_cast_impl{tto, tfrom} c;
+    return c.convert(x);
+  } else {
+    return m::error{"invalid numeric cast"};
+  }
+}
+
+public threaded function {tto, tfrom} tto static_cast(tfrom const& x)
+{
+  if (m::and{is_numeric{tfrom}, is_numeric{tto}}) {
+    static_cast_impl{tto, tfrom} c;
+    return c.convert(x);
+  } else {
+    return m::error{"invalid numeric cast"};
+  }
+}
+
+private macro is_integral_cat{t, cat}
+  m::or{
+    m::eq{t, type::builtin::uchar},
+    m::eq{t, type::builtin::char},
+    m::eq{t, type::builtin::ushort},
+    m::eq{t, type::builtin::short},
+    m::eq{t, type::builtin::uint},
+    m::eq{t, type::builtin::int},
+    m::eq{t, type::builtin::ulong},
+    m::eq{t, type::builtin::long},
+    m::eq{t, type::builtin::size_t},
+    m::eq{cat, "uint"},
+    m::eq{cat, "int"}};
+
+private macro is_floatnum_cat{t, cat}
+  m::or{
+    m::eq{t, type::builtin::float},
+    m::eq{t, type::builtin::double},
+    m::eq{cat, "float"}};
+
+private macro is_numeric_cat{t, cat}
+  m::or{
+    is_integral_cat{t, cat},
+    is_floatnum_cat{t, cat},
+    m::eq{cat, "numeric"}};
+
+private threaded extern "numeric::numeric_cast_impl"
+struct {tto, tfrom} numeric_cast_impl {
+  extern "convert" function tto convert(tfrom const& x);
+}
+
+private threaded extern "numeric::static_cast_impl"
+struct {tto, tfrom} static_cast_impl {
+  extern "convert" function tto convert(tfrom const& x);
+}
+
+extern "type" inline
+#include <boost/cast.hpp>
+namespace numeric {
+template <typename Tto, typename Tfrom> struct numeric_cast_impl {
+  Tto convert(Tfrom const& x) const {
+    return boost::numeric_cast<Tto>(x);
+  }
+};
+template <typename Tto, typename Tfrom> struct static_cast_impl {
+  Tto convert(Tfrom const& x) const {
+    return static_cast<Tto>(x);
+  }
+};
+}; // namespace numeric
+

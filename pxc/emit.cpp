@@ -507,7 +507,7 @@ static bool is_single_vardef_or_vardefset(expr_i *e)
     return false;
   }
   if (has_blockscope_tempvar(e)) {
-    /* not reached because structs can not have weak fields. */
+    /* not reached because structs can not have ephemeral fields. */
     abort();
     return false;
   }
@@ -523,7 +523,7 @@ bool is_noexec_expr(expr_i *e)
   case expr_e_macrodef:
   case expr_e_ns:
   case expr_e_inline_c:
-  case expr_e_extval:
+  case expr_e_enumval:
   case expr_e_struct:
   case expr_e_variant:
   case expr_e_interface:
@@ -670,6 +670,7 @@ static void emit_struct_constr_one(emit_context& em, expr_struct *est,
   }
 }
 
+#if 0
 // TODO: remove
 static void emit_struct_constr_aux(emit_context& em, expr_struct *est)
 {
@@ -697,6 +698,7 @@ static void emit_struct_constr_aux(emit_context& em, expr_struct *est)
   fn_emit_value(em, est->block);
   em.puts("\n");
 }
+#endif
 
 static void emit_initialize_variant_field(emit_context& em,
   const expr_variant *ev, const expr_var *fld, bool copy_flag, bool set_flag)
@@ -1571,8 +1573,6 @@ static void emit_value_symdef_common(emit_context& em, symbol_common& sdef,
     em.puts(s);
     return;
   }
-  DBG_EMIT_SYM(fprintf(stderr, "SYM NOTE %s\n",
-    sdef.symbol_def->emit_symbol_str().c_str()));
   expr_i *const edef = sdef.get_evaluated().get_expr();
   // FIXME: when necessary?
   if (is_field_w_explicit_obj(e)) { /* TODO: not smart? */
@@ -1635,19 +1635,39 @@ void expr_var::emit_value(emit_context& em)
   this->emit_symbol(em);
 }
 
-std::string expr_extval::emit_symbol_str() const
+std::string expr_enumval::emit_symbol_str() const
 {
+  abort();
   return std::string(cname);
 }
 
-void expr_extval::emit_symbol(emit_context& em) const
+void expr_enumval::emit_symbol(emit_context& em) const
 {
-  em.puts(emit_symbol_str());
+  #if 0
+  abort();
+  #endif
+  // em.puts(emit_symbol_str());
+  if (cname == 0) {
+    assert(value != 0);
+    fn_emit_value(em, value);
+  } else {
+    em.puts(std::string(cname));
+  }
+  #if 0
+  #endif
 }
 
-void expr_extval::emit_value(emit_context& em)
+void expr_enumval::emit_value(emit_context& em)
 {
   this->emit_symbol(em);
+  #if 0
+  if (cname == 0) {
+    assert(value != 0);
+    fn_emit_value(em, value);
+  } else {
+    em.puts(std::string(cname));
+  }
+  #endif
 }
 
 static bool is_split_point(expr_i *e)
@@ -2622,6 +2642,7 @@ std::string expr_typedef::emit_symbol_str() const
 
 void expr_typedef::emit_symbol(emit_context& em) const
 {
+  abort();
   em.puts(emit_symbol_str());
 }
 
@@ -2638,6 +2659,7 @@ std::string expr_macrodef::emit_symbol_str() const
 
 void expr_macrodef::emit_symbol(emit_context& em) const
 {
+  abort();
   em.puts(emit_symbol_str());
 }
 
@@ -2738,11 +2760,31 @@ static void emit_comma_sep_list_with_paren(emit_context& em, expr_i *e)
     em.puts(")");
     return;
   }
+  /* eop is comma */
+  emit_comma_sep_list_with_paren(em, eop->arg0);
+  em.puts(", ");
+  em.puts("(");
+  fn_emit_value(em, eop->arg1);
+  em.puts(")");
+}
+
+#if 0
+static void emit_comma_sep_list_with_paren(emit_context& em, expr_i *e)
+{
+  assert(e != 0);
+  expr_op *const eop = dynamic_cast<expr_op *>(e);
+  if (eop == 0 || eop->op != ',') {
+    em.puts("(");
+    fn_emit_value(em, e);
+    em.puts(")");
+    return;
+  }
   em.puts("(");
   fn_emit_value(em, eop->arg0);
   em.puts("), ");
   emit_comma_sep_list_with_paren(em, eop->arg1);
 }
+#endif
 
 static void emit_vardef_constructor(emit_context& em, expr_i *e,
   const term& typ, const std::string& cs0, const std::string& var_csymbol)

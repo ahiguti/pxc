@@ -2,21 +2,22 @@
 namespace functional;
 import test_common "";
 import meta::builtin m;
+import numeric::cast "";
 
-function {tdst, f} void array_construct(tdst& dst, ulong sz)
+function {tdst, f} void array_construct(tdst& dst, size_t sz)
 {
   dst.resize(sz, m::rettype{f}());
-  ulong i;
+  size_t i;
   for (i = 0; i < sz; ++i) {
-    dst[i] = f(i);
+    dst[i] = f(numeric_cast{m::argtype{f, 0}, size_t}(i));
   }
 }
 
 function {tsrc, tdst, f} void array_apply(tsrc src, tdst& dst)
 {
-  ulong sz = src.size();
+  size_t sz = src.size();
   dst.resize(sz, m::rettype{f}());
-  ulong i;
+  size_t i;
   for (i = 0; i < sz; ++i) {
     dst[i] = f(src[i]);
   }
@@ -24,9 +25,9 @@ function {tsrc, tdst, f} void array_apply(tsrc src, tdst& dst)
 
 function {tsrc, tv, f} tv array_foldl(tsrc src, tv v)
 {
-  ulong sz = src.size();
+  size_t sz = src.size();
   tv r = v;
-  ulong i;
+  size_t i;
   for (i = 0; i < sz; ++i) {
     r = f(r, src[i]);
   }
@@ -35,9 +36,9 @@ function {tsrc, tv, f} tv array_foldl(tsrc src, tv v)
 
 function {tsrc, tv, f} tv array_foldr(tsrc src, tv v)
 {
-  ulong sz = src.size();
+  size_t sz = src.size();
   tv r = v;
-  ulong i;
+  size_t i;
   for (i = sz; i > 0; --i) {
     r = f(src[i - 1], r);
   }

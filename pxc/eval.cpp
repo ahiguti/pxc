@@ -1042,8 +1042,8 @@ static term eval_meta_attribute(term_list& tlev)
     return term();
   }
   std::string s = meta_term_to_string(tlev[1], false);
-  if (s == "weak") {
-    return term(is_weak_value_type(tlev[0]));
+  if (s == "ephemeral") {
+    return term(is_ephemeral_value_type(tlev[0]));
   }
   return term();
 }
@@ -1081,8 +1081,8 @@ static term eval_meta_category(term_list& tlev)
     return term("variable");
   case expr_e_argdecls:
     return term("argument");
-  case expr_e_extval:
-    return term("extvalue");
+  case expr_e_enumval:
+    return term("enumvalue");
   default:
     break;
   }
