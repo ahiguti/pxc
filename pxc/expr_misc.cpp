@@ -936,7 +936,7 @@ std::string term_tostr(const term& t, term_tostr_sort s)
   }
   const char *sym = 0;
   const char *cname = 0;
-  std::string ns;
+  std::string uniqns;
   const expr_block *self_block = 0;
   char esort_char = 0;
   expr_tparams *tparams = 0;
@@ -950,7 +950,7 @@ std::string term_tostr(const term& t, term_tostr_sort s)
       sym = ptr_down_cast<const expr_struct>(tdef)->sym;
       self_block = ptr_down_cast<const expr_struct>(tdef)->block;
       tparams = self_block->tinfo.tparams;
-      ns = ptr_down_cast<const expr_struct>(tdef)->ns;
+      uniqns = ptr_down_cast<const expr_struct>(tdef)->uniqns;
       cname = ptr_down_cast<const expr_struct>(tdef)->cname;
       esort_char = 's';
       break;
@@ -958,14 +958,14 @@ std::string term_tostr(const term& t, term_tostr_sort s)
       sym = ptr_down_cast<const expr_variant>(tdef)->sym;
       self_block = ptr_down_cast<const expr_variant>(tdef)->block;
       tparams = self_block->tinfo.tparams;
-      ns = ptr_down_cast<const expr_variant>(tdef)->ns;
+      uniqns = ptr_down_cast<const expr_variant>(tdef)->uniqns;
       esort_char = 'v';
       break;
     case expr_e_interface:
       sym = ptr_down_cast<const expr_interface>(tdef)->sym;
       self_block = ptr_down_cast<const expr_interface>(tdef)->block;
       tparams = self_block->tinfo.tparams;
-      ns = ptr_down_cast<const expr_interface>(tdef)->ns;
+      uniqns = ptr_down_cast<const expr_interface>(tdef)->uniqns;
       esort_char = 'i';
       break;
     case expr_e_typedef:
@@ -975,7 +975,7 @@ std::string term_tostr(const term& t, term_tostr_sort s)
 	  return "int";
 	}
 	sym = etd->sym;
-	ns = etd->ns;
+	uniqns = etd->uniqns;
 	cname = etd->cname;
 	esort_char = 't';
 	self_block = 0;
@@ -983,7 +983,7 @@ std::string term_tostr(const term& t, term_tostr_sort s)
       break;
     case expr_e_macrodef:
       sym = ptr_down_cast<const expr_macrodef>(tdef)->sym;
-      ns = ptr_down_cast<const expr_macrodef>(tdef)->ns;
+      uniqns = ptr_down_cast<const expr_macrodef>(tdef)->uniqns;
       tparams = ptr_down_cast<const expr_macrodef>(tdef)->get_tparams();
       esort_char = 0;
       self_block = 0;
@@ -998,7 +998,7 @@ std::string term_tostr(const term& t, term_tostr_sort s)
 	tparams = self_block->tinfo.tparams;
 	is_virtual_or_member_function_flag
 	  = efd->is_virtual_or_member_function();
-	ns = efd->ns;
+	uniqns = efd->uniqns;
 	if (efd->is_virtual_or_member_function()) {
 	  append_block_id_if_local = false;
 	}
@@ -1038,8 +1038,8 @@ std::string term_tostr(const term& t, term_tostr_sort s)
   std::string rstr, rstr_post;
   switch (s) {
   case term_tostr_sort_humanreadable:
-    if (!ns.empty()) {
-      rstr += ns + "::";
+    if (!uniqns.empty()) {
+      rstr += uniqns + "::";
     }
     rstr += sym ? sym : "[noname]";
     break;
@@ -1073,9 +1073,9 @@ std::string term_tostr(const term& t, term_tostr_sort s)
     } else {
       rstr = "";
       if (s == term_tostr_sort_cname_tparam || s == term_tostr_sort_strict) {
-	rstr += replace_char(ns, ':', '$') + "$n$$";
+	rstr += replace_char(uniqns, ':', '$') + "$n$$";
       } else /* if (st_defined->get_lexical_parent() == 0) */ {
-	rstr += to_c_ns(ns) + "::";
+	rstr += to_c_ns(uniqns) + "::";
       }
       if (sym != 0) {
 	rstr += sym;
@@ -1788,12 +1788,13 @@ void fn_append_coptions(expr_i *e, coptions& copt_apnd)
   }
 }
 
-void fn_set_namespace(expr_i *e, const std::string& n, int& block_id_ns)
+void fn_set_namespace(expr_i *e, const std::string& uniqns,
+  const std::string& injectns, int& block_id_ns)
 {
   if (e == 0) {
     return;
   }
-  e->set_namespace_one(n);
+  e->set_unique_namespace_one(uniqns, injectns);
   expr_block *const bl = dynamic_cast<expr_block *>(e);
   if (bl != 0) {
     assert(compile_phase == 0);
@@ -1805,7 +1806,7 @@ void fn_set_namespace(expr_i *e, const std::string& n, int& block_id_ns)
   const int num = e->get_num_children();
   for (int i = 0; i < num; ++i) {
     expr_i *c = e->get_child(i);
-    fn_set_namespace(c, n, block_id_ns);
+    fn_set_namespace(c, uniqns, injectns, block_id_ns);
   }
 }
 
@@ -1909,14 +1910,14 @@ void fn_set_tree_and_define_static(expr_i *e, expr_i *p, symbol_table *symtbl,
 }
 
 void fn_update_tree(expr_i *e, expr_i *p, symbol_table *symtbl,
-  const std::string& curns)
+  const std::string& curns_u, const std::string& curns_i)
 {
   if (e == 0) {
     return;
   }
   e->parent_expr = p;
   e->symtbl_lexical = symtbl;
-  e->set_namespace_one(curns);
+  e->set_unique_namespace_one(curns_u, curns_i);
   DBG_SYMTBL(fprintf(stderr, "fn_update_tree: set %p-> symtbl_lexical  = %p\n",
     e, symtbl));
   if (e->get_esort() == expr_e_block) {
@@ -1926,7 +1927,7 @@ void fn_update_tree(expr_i *e, expr_i *p, symbol_table *symtbl,
   const int num = e->get_num_children();
   for (int i = 0; i < num; ++i) {
     expr_i *c = e->get_child(i);
-    fn_update_tree(c, e, symtbl, curns);
+    fn_update_tree(c, e, symtbl, curns_u, curns_i);
   }
 }
 

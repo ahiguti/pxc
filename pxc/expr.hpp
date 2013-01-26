@@ -50,7 +50,7 @@ expr_i *expr_telist_new(const char *fn, int line, expr_i *head, expr_i *rest);
 expr_i *expr_inline_c_new(const char *fn, int lin, const char *posstr,
   const char *cstr, bool declonly);
 expr_i *expr_ns_new(const char *fn, int line, expr_i *nssym, bool import,
-  bool pub, const char *nsalias);
+  bool pub, const char *nsalias, expr_i *inject_nssym);
 expr_i *expr_int_literal_new(const char *fn, int line, const char *str,
   bool is_unsigned);
 expr_i *expr_float_literal_new(const char *fn, int line, const char *str);
@@ -132,7 +132,7 @@ struct import_info {
 struct imports_type {
   typedef std::list<import_info> deps_type;
   deps_type deps;
-  std::string main_ns; /* set by arena_append_topval */
+  std::string main_unique_namespace; /* set by arena_append_topval */
 };
 
 struct coptions {

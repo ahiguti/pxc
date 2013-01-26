@@ -32,7 +32,7 @@ typedef std::map<std::string, checksum_type> depsrc_checksum_type;
 
 struct module_info {
   typedef std::list<source_file_info> source_files_type;
-  std::string ns;
+  std::string unique_namespace;
   std::string aux_filename;
   source_files_type source_files;
   imports_type imports; /* direct imports */
@@ -49,7 +49,7 @@ struct module_info {
   bool source_modified;
   bool need_rebuild;
   std::string get_name() const {
-    return aux_filename.empty() ? ns : aux_filename;
+    return aux_filename.empty() ? unique_namespace : aux_filename;
   }
   module_info() : src_mask(0), source_loaded(false), source_modified(false),
     need_rebuild(false) { }

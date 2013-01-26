@@ -154,6 +154,7 @@ static compile_mode cur_mode;
 %type<expr_val> type_arg_list
 %type<expr_val> type_arg
 %type<expr_val> nssym_expr
+%type<expr_val> opt_nssym_expr
 %type<expr_val> symbol_expr
 %type<expr_val> expression
 %type<expr_val> opt_expression
@@ -402,18 +403,24 @@ catch_stmt
 		0, $7), $9); }
 	;
 ext_stmt
-	: TOK_NAMESPACE nssym_expr ';'
-	  { $$ = expr_ns_new(cur_fname, @1.first_line, $2, false, false, 0); }
-	| TOK_PRIVATE TOK_NAMESPACE nssym_expr ';'
-	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, false, false, 0); }
-	| TOK_PUBLIC TOK_NAMESPACE nssym_expr ';'
-	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, false, true, 0); }
+	: TOK_NAMESPACE nssym_expr opt_nssym_expr';'
+	  { $$ = expr_ns_new(cur_fname, @1.first_line, $2, false, false, 0,
+		$3); }
+	| TOK_PRIVATE TOK_NAMESPACE nssym_expr opt_nssym_expr ';'
+	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, false, false, 0,
+		$4); }
+	| TOK_PUBLIC TOK_NAMESPACE nssym_expr opt_nssym_expr ';'
+	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, false, true, 0,
+		$4); }
 	| TOK_IMPORT nssym_expr opt_nsalias ';'
-	  { $$ = expr_ns_new(cur_fname, @1.first_line, $2, true, false, $3); }
+	  { $$ = expr_ns_new(cur_fname, @1.first_line, $2, true, false, $3,
+		0); }
 	| TOK_PRIVATE TOK_IMPORT nssym_expr opt_nsalias ';'
-	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, true, false, $4); }
+	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, true, false, $4,
+		0); }
 	| TOK_PUBLIC TOK_IMPORT nssym_expr opt_nsalias ';'
-	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, true, true, $4); }
+	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, true, true, $4,
+		0); }
 	| opt_attribute /* dummy */ TOK_EXTERN TOK_STRLIT TOK_INLINE
 	  { $$ = expr_inline_c_new(cur_fname, @2.first_line,
 		arena_dequote_strdup($3), arena_decode_inline_strdup($4),
@@ -698,6 +705,12 @@ nssym_expr
 	  { $$ = expr_nssym_new(cur_fname, @1.first_line, 0, $1); }
 	| nssym_expr TOK_NSDELIM TOK_SYMBOL
 	  { $$ = expr_nssym_new(cur_fname, @1.first_line, $1, $3); }
+	;
+opt_nssym_expr
+	:
+	  { $$ = 0; }
+	| nssym_expr
+	  { $$ = $1; }
 	;
 expression
 	: assign_expr

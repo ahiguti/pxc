@@ -29,8 +29,8 @@ expr_i *expr_inline_c_new(const char *fn, int line, const char *posstr,
   const char *cstr, bool declonly)
 { return new expr_inline_c(fn, line, posstr, cstr, declonly); }
 expr_i *expr_ns_new(const char *fn, int line, expr_i *nssym, bool import,
-  bool pub, const char *nsalias)
-{ return new expr_ns(fn, line, nssym, import, pub, nsalias); }
+  bool pub, const char *nsalias, expr_i *inject_nssym)
+{ return new expr_ns(fn, line, nssym, import, pub, nsalias, inject_nssym); }
 expr_i *expr_int_literal_new(const char *fn, int line, const char *str,
   bool is_unsigned)
 { return new expr_int_literal(fn, line, str, is_unsigned); }
@@ -126,18 +126,23 @@ expr_i *expr_te_local_chain_new(expr_i *te1, expr_i *te2)
   std::string s = escape_c_str_literal(tte2->nssym->sym);
   char *const te2expr = arena_strdup(s.c_str());
   return expr_te_new(te1->fname, te1->line,
-    expr_nssym_new(te1->fname, te1->line, 0, "@local"),
-    expr_telist_new(te1->fname, te1->line,
-      te1,
-      expr_telist_new(te2->fname, te2->line,
-	expr_str_literal_new(te2->fname, te2->line, te2expr),
-	tte2->tlarg)));
+    expr_nssym_new(te1->fname, te1->line,
+      expr_nssym_new(te1->fname, te1->line,
+	expr_nssym_new(te1->fname, te1->line, 0,
+	  "type"), "builtin"), "@local"),
+      expr_telist_new(te1->fname, te1->line,
+	te1,
+	expr_telist_new(te2->fname, te2->line,
+	  expr_str_literal_new(te2->fname, te2->line, te2expr),
+	  tte2->tlarg)));
 }
 
 expr_i *expr_metalist_new(expr_i *tl)
 {
   return expr_te_new(tl->fname, tl->line,
-    expr_nssym_new(tl->fname, tl->line, 0, "@list"),
+    expr_nssym_new(tl->fname, tl->line,
+      expr_nssym_new(tl->fname, tl->line,
+	expr_nssym_new(tl->fname, tl->line, 0, "type"), "builtin"), "@list"),
     tl);
 }
 
@@ -333,7 +338,7 @@ static void define_builtins()
   /* set namespace */
   {
     int block_id_ns = 0;
-    fn_set_namespace(stmts, "type::builtin", block_id_ns);
+    fn_set_namespace(stmts, "type::builtin", "type::builtin", block_id_ns);
   }
   topvals.push_front(stmts);
   /* stubs for builtin metafunctions */
@@ -359,6 +364,11 @@ static void define_builtins()
 	attribute_tsvaluetype));
     stmts = expr_stmts_new("", 0, est, stmts);
   }  
+  /* set namespace */
+  {
+    int block_id_ns = 0;
+    fn_set_namespace(stmts, "type::builtin", "type::builtin", block_id_ns);
+  }
   topvals.push_front(stmts);
 }
 
@@ -423,52 +433,48 @@ void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
     }
   }
   expr_i *e = topval;
-  std::string nsstr;
+  std::string uniqns;
+  std::string injectns;
   /* find namespace decl */
   while (e != 0) {
     expr_i *stmt = ptr_down_cast<expr_stmts>(e)->head;
     if (stmt->get_esort() == expr_e_ns) {
       expr_ns *ns = ptr_down_cast<expr_ns>(stmt);
       if (!ns->import) {
-	if (!nsstr.empty()) {
+	if (!uniqns.empty()) {
 	  arena_error_push(ns, "duplicate namespace declaration");
 	}
-	nsstr = ns->nsstr;
-	imports_r.main_ns = nsstr;
+	uniqns = ns->uniq_nsstr;
+	injectns = ns->inject_nsstr;
+	imports_r.main_unique_namespace = uniqns;
       } else {
 	import_info ii;
-	ii.ns = ns->nsstr;
+	ii.ns = ns->uniq_nsstr;
 	ii.import_public = ns->pub;
 	imports_r.deps.push_back(ii);
       }
     }
     e = ptr_down_cast<expr_stmts>(e)->rest;
   }
-  if (topval != 0 && nsstr.empty()) {
+  if (topval != 0 && uniqns.empty()) {
     arena_error_push(topval, "no namespace declaration");
   }
-#if 0
-  // TODO: ok to remove
-  /* add compiler/runtime */
-  if (nsstr != "compiler::runtime") {
-    import_info ii;
-    ii.ns = "compiler::runtime";
-    ii.import_public = true;
-    imports_r.deps.push_back(ii);
-  }
-#endif
-  if (!nsstr.empty()) {
+  if (!uniqns.empty()) {
     int block_id_ns = 0;
-    fn_set_namespace(topval, nsstr, block_id_ns);
+    if (injectns.empty()) {
+      injectns = uniqns;
+    }
+    fn_set_namespace(topval, uniqns, injectns, block_id_ns);
   }
   if (is_main) {
-    main_namespace = nsstr;
+    main_namespace = uniqns;
   } else {
     topval = fn_drop_non_exports(topval);
   }
   topvals.push_back(topval);
-  loaded_namespaces[imports_r.main_ns] = imports_r;
-  DBG(fprintf(stderr, "namespace %s loaded\n", imports_r.main_ns.c_str()));
+  loaded_namespaces[imports_r.main_unique_namespace] = imports_r;
+  DBG(fprintf(stderr, "namespace %s loaded\n",
+    imports_r.main_unique_namespace.c_str()));
 }
 
 void arena_init()

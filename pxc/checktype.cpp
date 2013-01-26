@@ -229,7 +229,7 @@ void expr_inline_c::check_type(symbol_table *lookup)
 
 void expr_var::define_vars_one(expr_stmts *stmt)
 {
-  symtbl_lexical->define_name(sym, ns, this, attr, stmt);
+  symtbl_lexical->define_name(sym, injectns, this, attr, stmt);
 }
 
 static bool check_term_validity(const term& t, bool allow_nontype,
@@ -552,7 +552,7 @@ void expr_var::check_type(symbol_table *lookup)
 
 void expr_enumval::define_vars_one(expr_stmts *stmt)
 {
-  symtbl_lexical->define_name(sym, ns, this, attr, stmt);
+  symtbl_lexical->define_name(sym, injectns, this, attr, stmt);
 }
 
 void expr_enumval::check_type(symbol_table *lookup)
@@ -1079,7 +1079,7 @@ void expr_op::check_type(symbol_table *lookup)
     term t = arg0->resolve_texpr();
     symbol_table *symtbl = 0;
     symbol_table *parent_symtbl = 0;
-    std::string arg0_ns;
+    std::string arg0_uniqns;
     symbol_common *const sc = arg1->get_sdef();
       /* always a symbol */
     std::string arg1_sym_prefix;
@@ -1089,7 +1089,7 @@ void expr_op::check_type(symbol_table *lookup)
       /* resolve using the context of the struct */
       symtbl = &es->block->symtbl;
       parent_symtbl = symtbl->get_lexical_parent();
-      arg0_ns = es->ns;
+      arg0_uniqns = es->uniqns;
       /* vector_size, map_size etc */
       arg1_sym_prefix = es->sym + std::string("_");
       if (is_cm_pointer_family(t)) {
@@ -1098,7 +1098,7 @@ void expr_op::check_type(symbol_table *lookup)
 	expr_i *const einst1 = term_get_instance(t1);
 	expr_struct *const es1 = dynamic_cast<expr_struct *>(einst1);
 	if (es1 != 0) {
-	  arg0_ns = es1->ns;
+	  arg0_uniqns = es1->uniqns;
 	  arg1_sym_prefix = es1->sym + std::string("_");
 	}
 	DBG(fprintf(stderr, "ptr target = %s", einst1->dump(0).c_str()));
@@ -1108,23 +1108,23 @@ void expr_op::check_type(symbol_table *lookup)
       /* resolve using the context of the variant */
       symtbl = &ev->block->symtbl;
       parent_symtbl = symtbl->get_lexical_parent();
-      arg0_ns = ev->ns;
+      arg0_uniqns = ev->uniqns;
     } else if (einst->get_esort() == expr_e_interface) {
       expr_interface *const ei = ptr_down_cast<expr_interface>(einst);
       /* resolve using the context of the interface */
       symtbl = &ei->block->symtbl;
       parent_symtbl = symtbl->get_lexical_parent();
-      arg0_ns = ei->ns;
+      arg0_uniqns = ei->uniqns;
     } else if (einst->get_esort() == expr_e_typedef) {
       expr_typedef *const etd = ptr_down_cast<expr_typedef>(einst);
       if (is_cm_pointer_family(t)) {
 	t = get_pointer_target(t);
-	arg0_ns = einst->get_ns();
+	arg0_uniqns = einst->get_unique_namespace();
 	parent_symtbl = einst->symtbl_lexical;
 	DBG(fprintf(stderr, "ptr target = %s", einst->dump(0).c_str()));
       } else {
 	symtbl = 0;
-	arg0_ns = etd->ns;
+	arg0_uniqns = etd->uniqns;
 	/* size_vector, size_map etc */
 	// TODO: UNUSED. remove.
 	arg1_sym_prefix = etd->sym + std::string("_");
@@ -1144,7 +1144,7 @@ void expr_op::check_type(symbol_table *lookup)
     /* lookup without arg1_sym_prefix */
     /* lookup member field */
     if (symtbl != 0 && symtbl->resolve_name_nothrow(sc->fullsym, no_private,
-      sc->ns, is_global_dummy, is_upvalue_dummy, is_memfld_dummy) != 0) {
+      sc->uniqns, is_global_dummy, is_upvalue_dummy, is_memfld_dummy) != 0) {
       /* symbol is defined as a field */
       DBG(fprintf(stderr, "found fld '%s' ns=%s\n", sc->fullsym.c_str(),
 	sc->ns.c_str()));
@@ -1165,19 +1165,19 @@ void expr_op::check_type(symbol_table *lookup)
       /* find non-member function (vector_size, map_size etc.) */
       const std::string funcname_w_prefix = arg1_sym_prefix + sc->fullsym;
       symtbl = parent_symtbl;
-      const std::string ns = arg0_ns;
+      const std::string uniqns = arg0_uniqns;
       DBG(fprintf(stderr,
 	"trying non-member arg0=%s fullsym=%s ns=%s symtbl=%p\n",
-	arg0->dump(0).c_str(), sc->fullsym.c_str(), ns.c_str(),
+	arg0->dump(0).c_str(), sc->fullsym.c_str(), uniqns.c_str(),
 	symtbl));
       no_private = false;
       expr_i *const fo = symtbl->resolve_name_nothrow(funcname_w_prefix,
-	no_private, ns.c_str(), is_global_dummy, is_upvalue_dummy,
+	no_private, uniqns.c_str(), is_global_dummy, is_upvalue_dummy,
 	is_memfld_dummy);
       if (fo != 0) {
 	DBG(fprintf(stderr, "found %s\n", sc->fullsym.c_str()));
 	sc->arg_hidden_this = arg0;
-	sc->arg_hidden_this_ns = arg0_ns;
+	sc->arg_hidden_this_ns = arg0_uniqns;
 	sc->sym_prefix = arg1_sym_prefix;
 	fn_check_type(arg1, symtbl); /* expr_symbol::check_type */
 	type_of_this_expr = arg1->resolve_texpr();
@@ -2286,7 +2286,7 @@ void expr_fldfe::check_type(symbol_table *lookup)
     }
   }
   this->stmts = cstmts;
-  fn_update_tree(this->stmts, this, lookup, ns);
+  fn_update_tree(this->stmts, this, lookup, uniqns, injectns);
   DBG_FLDFE(fprintf(stderr, "%s\n", this->stmts->dump(0).c_str()));
   fn_check_type(stmts, lookup);
 }
@@ -2425,13 +2425,13 @@ void expr_foldfe::check_type(symbol_table *lookup)
       foldop);
   }
   subst_foldfe(this, stmts, ees, fop);
-  fn_update_tree(this->stmts, this, lookup, ns);
+  fn_update_tree(this->stmts, this, lookup, uniqns, injectns);
   fn_check_type(stmts, lookup);
 }
 
 void expr_argdecls::define_vars_one(expr_stmts *stmt)
 {
-  symtbl_lexical->define_name(sym, ns, this, attribute_private, stmt);
+  symtbl_lexical->define_name(sym, injectns, this, attribute_private, stmt);
 }
 
 void expr_argdecls::check_type(symbol_table *lookup)

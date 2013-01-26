@@ -55,7 +55,8 @@ expr_i *symbol_common::resolve_symdef(symbol_table *lookup)
   /* called when te is eval()ed */
   if (symbol_def == 0) {
     bool is_global = false, is_upvalue = false;
-    const std::string lookup_ns = arg_hidden_this ? arg_hidden_this_ns : ns;
+    const std::string lookup_ns =
+      arg_hidden_this ? arg_hidden_this_ns : uniqns;
     if (lookup == 0) {
       lookup = parent_expr->symtbl_lexical;
     }
@@ -411,19 +412,23 @@ std::string expr_inline_c::dump(int indent) const
   return r;
 }
 
-expr_ns::expr_ns(const char *fn, int line, expr_i *nssym, bool import,
-  bool pub, const char *nsalias)
-  : expr_i(fn, line), nssym(nssym), nsstr(get_full_name(nssym)),
-    import(import), pub(pub), nsalias(nsalias)
+expr_ns::expr_ns(const char *fn, int line, expr_i *uniq_nssym, bool import,
+  bool pub, const char *nsalias, expr_i *inject_nssym)
+  : expr_i(fn, line), uniq_nssym(uniq_nssym),
+    uniq_nsstr(get_full_name(uniq_nssym)),
+    import(import), pub(pub), nsalias(nsalias), inject_nssym(inject_nssym),
+    inject_nsstr(get_full_name(inject_nssym))
 {
 }
 
-void expr_ns::set_namespace_one(const std::string& n)
+void expr_ns::set_unique_namespace_one(const std::string& u,
+  const std::string& i)
 {
   if (nsalias != 0) {
+    /* import foo bar */
     const std::string astr(nsalias);
-    nsalias_entries& e = nsaliases[std::make_pair(n, astr)];
-    e.push_back(nsstr);
+    nsalias_entries& e = nsaliases[std::make_pair(u, astr)];
+    e.push_back(uniq_nsstr);
   }
 }
 
@@ -431,12 +436,12 @@ std::string expr_ns::dump(int indent) const
 {
   if (import) {
     if (pub) {
-      return "public import " + nsstr;
+      return "public import " + uniq_nsstr;
     } else {
-      return "private import " + nsstr;
+      return "private import " + uniq_nsstr;
     }
   } else {
-    return "namespace " + nsstr;
+    return "namespace " + uniq_nsstr;
   }
 }
 
@@ -1235,9 +1240,11 @@ expr_typedef::expr_typedef(const char *fn, int line, const char *sym,
   value_texpr = term(this);
 }
 
-void expr_typedef::set_namespace_one(const std::string& n)
+void expr_typedef::set_unique_namespace_one(const std::string& u,
+  const std::string& i)
 {
-  ns = n;
+  uniqns = u;
+  injectns = i;
   typecat = get_category_from_string(typecat_str ? typecat_str : "");
 }
 
@@ -1279,9 +1286,11 @@ expr_struct *expr_struct::clone() const
   return cpy;
 }
 
-void expr_struct::set_namespace_one(const std::string& n)
+void expr_struct::set_unique_namespace_one(const std::string& u,
+  const std::string& i)
 {
-  ns = n;
+  uniqns = u;
+  injectns = i;
   typecat = get_category_from_string(typecat_str ? typecat_str : "");
 }
 
