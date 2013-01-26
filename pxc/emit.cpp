@@ -112,9 +112,9 @@ static void emit_typestr_call_traits(emit_context& em, const term& te,
   }
 }
 
-static std::string csymbol_encode_ns(const std::string& ns)
+static std::string csymbol_encode_ns(const std::string& uniqns)
 {
-  std::string c = ns;
+  std::string c = uniqns;
   unsigned int cnt = 0;
   for (size_t i = 0; i < c.size(); ++i) {
     if (c[i] == ':') {
@@ -125,15 +125,15 @@ static std::string csymbol_encode_ns(const std::string& ns)
   return c + "$ns" + ulong_to_string(cnt / 2);
 }
 
-static std::string c_namespace_str_prefix(const std::string& ns)
+static std::string c_namespace_str_prefix(const std::string& uniqns)
 {
   std::string r;
-  if (ns.empty()) {
+  if (uniqns.empty()) {
     return r;
   }
-  for (size_t i = 0; i < ns.size(); ++i) {
-    r.push_back(ns[i]);
-    if (i > 0 && ns[i] == ':' && ns[i - 1] == ':') {
+  for (size_t i = 0; i < uniqns.size(); ++i) {
+    r.push_back(uniqns[i]);
+    if (i > 0 && uniqns[i] == ':' && uniqns[i - 1] == ':') {
       r += "$n";
     }
   }
@@ -154,10 +154,10 @@ static std::string csymbol_var(const expr_var *ev, bool cdecl)
   if (fr == 0 || fr->get_esort() == expr_e_funcdef) {
     /* global frame or a function frame */
     std::string nsp = (!cdecl && is_global_var(ev))
-      ? c_namespace_str_prefix(ev->ns) : "";
+      ? c_namespace_str_prefix(ev->uniqns) : "";
     return nsp + std::string(ev->sym) + "$"
 	  + ulong_to_string(ev->symtbl_lexical->block_backref->block_id_ns)
-	  + "$" + csymbol_encode_ns(ev->ns);
+	  + "$" + csymbol_encode_ns(ev->uniqns);
   } else {
     return std::string(ev->sym) + "$";
   }
@@ -223,7 +223,7 @@ static void emit_interface_def_one(emit_context& em, expr_interface *ei,
   if (!is_compiled(ei->block)) {
     return;
   }
-  em.set_ns(ei->ns);
+  em.set_ns(ei->uniqns);
   em.set_file_line(ei);
   em.puts("struct ");
   const std::string name_c = get_type_cname_wo_ns(ei);
@@ -334,7 +334,7 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
   if (!is_compiled(est->block)) {
     return;
   }
-  em.set_ns(est->ns);
+  em.set_ns(est->uniqns);
   em.set_file_line(est);
   em.puts("struct ");
   const std::string name_c = get_type_cname_wo_ns(est);
@@ -579,7 +579,7 @@ static void emit_struct_constr_one(emit_context& em, expr_struct *est,
     if (elist_length(est->block->argdecls) == 0) {
       return;
     }
-    em.set_ns(est->ns);
+    em.set_ns(est->uniqns);
     em.set_file_line(est);
     em.indent('b');
     em.puts(name_c);
@@ -643,7 +643,7 @@ static void emit_struct_constr_one(emit_context& em, expr_struct *est,
       return;
     }
     flds_type::const_iterator i;
-    em.set_ns(est->ns);
+    em.set_ns(est->uniqns);
     em.set_file_line(est);
     em.indent('b');
     em.puts(name_c);
@@ -685,7 +685,7 @@ static void emit_struct_constr_aux(emit_context& em, expr_struct *est)
   flds_type flds;
   est->get_fields(flds);
   flds_type::const_iterator i;
-  em.set_ns(est->ns);
+  em.set_ns(est->uniqns);
   /* user defined constructor */
   em.set_file_line(est);
   em.indent('b');
@@ -784,7 +784,7 @@ static void emit_variant_aux_functions(emit_context& em,
     }
   }
   const std::string name_c = get_type_cname_wo_ns(ev);
-  em.set_ns(ev->ns);
+  em.set_ns(ev->uniqns);
   /* init */
   em.set_file_line(ev);
   em.indent('b');
@@ -963,7 +963,7 @@ static void emit_variant_def_one(emit_context& em, const expr_variant *ev,
   if (!is_compiled(ev->block)) {
     return;
   }
-  em.set_ns(ev->ns);
+  em.set_ns(ev->uniqns);
   em.set_file_line(ev);
   em.puts("struct ");
   const std::string name_c = get_type_cname_wo_ns(ev);
@@ -1339,10 +1339,10 @@ static void emit_function_decl_one(emit_context& em, expr_funcdef *efd,
 	const bool ns_extc = true;
 	em.set_ns(cname.substr(0, pos), ns_extc);
       } else {
-	em.set_ns(efd->ns);
+	em.set_ns(efd->uniqns);
       }
     } else {
-      em.set_ns(efd->ns);
+      em.set_ns(efd->uniqns);
     }
   }
   {
@@ -1385,9 +1385,9 @@ static void emit_function_def_one(emit_context& em, expr_funcdef *efd)
   }
   if (efd->is_member_function()) {
     expr_struct *const est = efd->is_member_function();
-    em.set_ns(est->ns);
+    em.set_ns(est->uniqns);
   } else {
-    em.set_ns(efd->ns);
+    em.set_ns(efd->uniqns);
   }
   if (efd->is_member_function()) {
     emit_function_decl_one(em, efd, false, true);
@@ -1419,7 +1419,7 @@ static void emit_function_decl(emit_context& em)
     }
     expr_ns *const ens = dynamic_cast<expr_ns *>(*i);
     if (ens != 0 && ens->import) {
-      const std::string fn = arena_get_ns_main_funcname(ens->nsstr);
+      const std::string fn = arena_get_ns_main_funcname(ens->uniq_nsstr);
       em.finish_ns();
       em.printf("extern \"C\" void %s$c();\n", fn.c_str());
       em.start_ns();
@@ -1458,7 +1458,7 @@ static void emit_import_init(emit_context& em, const std::string& main_ns)
     i != expr_arena.end(); ++i) {
     expr_ns *const ens = dynamic_cast<expr_ns *>(*i);
     if (ens != 0 && ens->import) {
-      const std::string fn = arena_get_ns_main_funcname(ens->nsstr);
+      const std::string fn = arena_get_ns_main_funcname(ens->uniq_nsstr);
       if (ss.find(fn) != ss.end()) {
 	continue;
       }
@@ -1479,12 +1479,12 @@ void expr_ns::emit_value(emit_context& em)
 {
   if (import) {
     if (pub) {
-      em.printf("/* public import %s */", nsstr.c_str());
+      em.printf("/* public import %s */", uniq_nsstr.c_str());
     } else {
-      em.printf("/* private import %s */", nsstr.c_str());
+      em.printf("/* private import %s */", uniq_nsstr.c_str());
     }
   } else {
-    em.printf("/* namespace %s */", nsstr.c_str());
+    em.printf("/* namespace %s */", uniq_nsstr.c_str());
   }
 }
 
@@ -1788,8 +1788,8 @@ static void emit_global_vars(emit_context& em, expr_block *gl_blk)
     const expr_var *const e = dynamic_cast<const expr_var *>(
       iter->second.edef);
     if (e == 0) { continue; }
-    const bool is_main_ns = (e->ns == main_namespace);
-    em.set_ns(e->ns);
+    const bool is_main_ns = (e->uniqns == main_namespace);
+    em.set_ns(e->uniqns);
     em.set_file_line(e);
     em.indent('b');
     if (!is_main_ns) {
@@ -2672,7 +2672,7 @@ std::string expr_struct::emit_symbol_str() const
 {
   abort();
   if (symtbl_lexical->get_lexical_parent() == 0) {
-    return to_c_ns(ns) + sym + "$s";
+    return to_c_ns(uniqns) + sym + "$s";
   } else {
     return std::string(sym) + "$s"
       + ulong_to_string(symtbl_lexical->block_backref->block_id_ns);
@@ -2693,7 +2693,7 @@ std::string expr_variant::emit_symbol_str() const
 {
   abort();
   if (symtbl_lexical->get_lexical_parent() == 0) {
-    return to_c_ns(ns) + sym + "$v";
+    return to_c_ns(uniqns) + sym + "$v";
   } else {
     return std::string(sym) + "$v"
       + ulong_to_string(symtbl_lexical->block_backref->block_id_ns);
@@ -2714,7 +2714,7 @@ std::string expr_interface::emit_symbol_str() const
 {
   abort();
   if (symtbl_lexical->get_lexical_parent() == 0) {
-    return to_c_ns(ns) + sym + "$i";
+    return to_c_ns(uniqns) + sym + "$i";
   } else {
     return std::string(sym) + "$i"
       + ulong_to_string(symtbl_lexical->block_backref->block_id_ns);

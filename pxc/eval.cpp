@@ -322,7 +322,7 @@ static term eval_meta_symbol(term_list& tlev, env_type& env,
   }
   symbol_table *const symtbl = &global_block->symtbl;
   assert(symtbl);
-  std::string sym_ns = typexpr->get_ns();
+  std::string sym_ns = typexpr->get_unique_namespace();
   #if 0
   if (sym_ns.empty()) {
     sym_ns = "builtin"; // FIXME
@@ -630,7 +630,7 @@ static term eval_meta_functions(term_list& tlev)
     assert(j != symtbl->locals.end());
     const localvar_info& lv = j->second;
     expr_i *const e = lv.edef;
-    if (lv.has_attrib_private() || e->get_ns() != name) {
+    if (lv.has_attrib_private() || e->get_unique_namespace() != name) {
       continue;
     }
     if (e->get_esort() == expr_e_funcdef) {
@@ -657,7 +657,7 @@ static term eval_meta_types(term_list& tlev)
     assert(j != symtbl->locals.end());
     const localvar_info& lv = j->second;
     expr_i *const e = lv.edef;
-    if (lv.has_attrib_private() || e->get_ns() != name) {
+    if (lv.has_attrib_private() || e->get_unique_namespace() != name) {
       continue;
     }
     if (e == builtins.type_tpdummy.get_expr()) {

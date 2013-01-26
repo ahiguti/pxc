@@ -109,8 +109,8 @@ static std::string get_work_filename(const parser_options& po,
     fn = escape_hex_non_alnum(fn);
     fn = "fn/" + fn;
   } else {
-    assert(!mi.ns.empty());
-    fn = "ns/" + mi.ns;
+    assert(!mi.unique_namespace.empty());
+    fn = "ns/" + mi.unique_namespace;
   }
   std::string dn, bn, r;
   size_t delim = fn.rfind('/');
@@ -205,7 +205,8 @@ static bool check_source_timestamp(const parser_options& po, module_info& mi,
     if (po.verbose > 1) {
       fprintf(stderr,
 	"check_source_timestamp (%s,%s): src_mask=%llu mi.src_mask=%llu\n",
-	mi.ns.c_str(), mi.aux_filename.c_str(), src_mask, mi.src_mask);
+	mi.unique_namespace.c_str(), mi.aux_filename.c_str(),
+	src_mask, mi.src_mask);
     }
     return false;
   }
@@ -261,7 +262,7 @@ static bool load_infofile(const parser_options& po, module_info& mi)
   while (line != sa.end()) {
     if (line->size() == 6 && (*line)[0] == "self") {
       /* self: self ns fn src_timestamp src_md5 src_mask */
-      mi.ns = (*line)[1];
+      mi.unique_namespace = (*line)[1];
       mi.aux_filename = (*line)[2];
       mi.source_checksum.timestamp = ulong_from_string_hexadecimal((*line)[3]);
       mi.source_checksum.md5sum = from_hexadecimal((*line)[4]);
@@ -365,7 +366,7 @@ static void get_module_deps_from_source(module_info& mi)
   arena_error_throw_pushed();
   arena_clear();
   if (!mi.aux_filename.empty()) {
-    mi.ns = mi.imports.main_ns;
+    mi.unique_namespace = mi.imports.main_unique_namespace;
   }
 }
 
@@ -435,7 +436,7 @@ static void load_source_and_calc_checksum(const parser_options& po,
     arena_error_throw(0,
       "-:-: failed to load namespace '%s'\n"
       "-:-: (tried files: %s)\n",
-      mi.ns.c_str(), notfound_fnlist.c_str());
+      mi.unique_namespace.c_str(), notfound_fnlist.c_str());
   }
   mi.source_checksum.timestamp = tstamp;
   mi.source_checksum.md5sum = md5.final();
@@ -516,7 +517,7 @@ static void get_module_info_rec(const parser_options& po,
   if (ami.modules.find(modname) == ami.modules.end()) {
     /* create a new module_info */
     module_info& mi = ami.modules[modname];
-    mi.ns = ns;
+    mi.unique_namespace = ns;
     mi.aux_filename = aux_fn;
     mi.source_files.clear();
     if (!aux_fn.empty()) {
@@ -603,7 +604,7 @@ static void generate_info_file(const parser_options& po,
   std::string str;
   time_t info_ts = 0;
   /* self: ns fn src_timestamp src_md5 src_mask */
-  str += "self\t" + mi.ns + "\t" + mi.aux_filename + "\t" +
+  str += "self\t" + mi.unique_namespace + "\t" + mi.aux_filename + "\t" +
     ulong_to_string_hexadecimal(mi.source_checksum.timestamp) + "\t" +
     to_hexadecimal(mi.source_checksum.md5sum) + "\t" +
     ulong_to_string_hexadecimal(mi.src_mask) + "\n";
@@ -753,12 +754,23 @@ static void compile_module_to_cc_srcs(const parser_options& po,
   arena_init(); /* TODO: RAII */
   for (strlist::const_iterator i = mi_main.cc_srcs_ord.begin();
     i != mi_main.cc_srcs_ord.end(); ++i) {
-    imports_type imports_dummy;
+    imports_type cursrc_imports;
     module_info& mi = get_modinfo_by_name(ami, *i);
     source_info si;
     si.minfo = &mi;
     si.mode = &mi == &mi_main ? compile_mode_main : compile_mode_import;
-    pxc_parse_file(si, imports_dummy);
+    pxc_parse_file(si, cursrc_imports);
+    if (mi.unique_namespace != cursrc_imports.main_unique_namespace) {
+      arena_error_throw(0,
+	"-:0: invalid namespace declaration '%s' for expected namespace '%s'",
+	cursrc_imports.main_unique_namespace.c_str(),
+	mi.unique_namespace.c_str());
+    }
+    #if 0
+    fprintf(stderr, "src=%s mins=%s srcns=%s\n", i->c_str(),
+      mi.unique_namespace.c_str(),
+      cursrc_imports.main_unique_namespace.c_str());
+    #endif
   }
   arena_error_throw_pushed();
   /* remove old files */
@@ -1053,7 +1065,7 @@ static int compile_and_execute(parser_options& po,
       mi.cc_srcs.clear();
       mi.cc_srcs_ord.clear();
       get_indirect_imports(ami,
-	!mi.aux_filename.empty() ? mi.aux_filename : mi.ns,
+	!mi.aux_filename.empty() ? mi.aux_filename : mi.unique_namespace,
 	false, true, mi.cc_srcs, mi.cc_srcs_ord);
       loaded |= check_need_rebuild(po, ami, mi);
     }
@@ -1074,7 +1086,8 @@ static int compile_and_execute(parser_options& po,
   if (po.no_execute) {
     return 0;
   }
-  const std::string sn = arena_get_ns_main_funcname(mi_main.ns) + "$cm";
+  const std::string sn = arena_get_ns_main_funcname(mi_main.unique_namespace)
+    + "$cm";
   if (po.show_out) {
     fprintf(stdout, "%s\t%s\n", exe_fn.c_str(), sn.c_str());
     fprintf(stdout, "(close stdin to exit)\n");
