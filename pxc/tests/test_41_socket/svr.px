@@ -1,0 +1,65 @@
+namespace svr;
+import test_common "";
+import io "";
+import io::file "";
+import io::errno "";
+import io::net::addrinfo "";
+import io::net::socket "";
+import thread "";
+
+multithreaded struct server_thread(ioptr const& i, tptr{bool} const& rp,
+  tptr{string} const& s)
+{
+  ioptr const iop = i;
+  tptr{bool} readyp = rp;
+  tptr{string} str_r = s;
+  function void main()
+  {
+    var err = errno_t();
+    var ai = addrinfo(iop, "localhost", "9999", AF_INET, SOCK_STREAM,
+      PROTO_UNSPEC, AI_PASSIVE);
+    var sf = socket_factory(iop, true, ai.get_sockaddr(), SOCK_STREAM,
+      PROTO_UNSPEC, 1024, err);
+    *readyp = true;
+    var peer_addr = sockaddr_storage();
+    var sock = socket(sf, peer_addr, err);
+    string s;
+    size_t len = 10;
+    sock.read_append(s, len);
+    *str_r = s;
+  }
+}
+
+multithreaded struct client_thread(ioptr const& i, tptr{bool} const& rp)
+{
+  ioptr const iop = i;
+  tptr{bool} readyp = rp;
+  function void main()
+  {
+    while (!*readyp) { // TODO: condition variable
+      io_usleep(iop, 1);
+    }
+    var err = errno_t();
+    var ai = addrinfo(iop, "localhost", "9999", AF_INET, SOCK_STREAM,
+      PROTO_UNSPEC, 0);
+    var sf = socket_factory(iop, false, ai.get_sockaddr(), SOCK_STREAM,
+      PROTO_UNSPEC, 0, err);
+    var peer_addr = sockaddr_storage();
+    var sock = socket(sf, peer_addr, err);
+    size_t len;
+    sock.write("hoge", len);
+  }
+}
+
+function void t1()
+{
+  var readyp = tptr(bool(false));
+  var strp = tptr(string());
+  var sthr = thread_create(server_thread(io::io, readyp, strp));
+  var cthr = thread_create(client_thread(io::io, readyp));
+  sthr.join();
+  cthr.join();
+  println(*strp);
+}
+
+t1();
