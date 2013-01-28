@@ -1,6 +1,7 @@
 namespace io::net::addrinfo;
 public import type::builtin "";
 public import compiler::util "";
+public import io "";
 
 public tsvaluetype extern "int" "enum" struct family_t { }
 public tsvaluetype extern "int" "enum" struct socktype_t { }
@@ -19,9 +20,12 @@ public extern "0"		protocol_t PROTO_UNSPEC;
 public extern "IPPROTO_TCP"	protocol_t IPPROTO_TCP;
 public extern "IPPROTO_UDP"	protocol_t IPPROTO_UDP;
 public extern "AI_PASSIVE"	ai_flags_t AI_PASSIVE;
+public extern "AI_NUMERICHOST"	ai_flags_t AI_NUMERICHOST;
+public extern "AI_NUMERICSERV"	ai_flags_t AI_NUMERICSERV;
 
 public multithreaded extern "pxcio::addrinfo"
 struct addrinfo(
+  ioptr const& iop,
   cslice{uchar} const& node,
   cslice{uchar} const& service,
   family_t ai_family,
@@ -49,17 +53,20 @@ extern "type" inline
 #include <netinet/in.h>
 namespace pxcio {
 using namespace pxcrt;
-typedef bt_cslice<bt_uchar> strref;
 struct sockaddr_storage {
   sockaddr_storage() : sto() { }
   int get_family() const;
   bt_uint get_in_addr() const;
   bt_ushort get_in_port() const;
+  ::sockaddr *get_sockaddr() { return reinterpret_cast< ::sockaddr *>(&sto); }
+  const ::sockaddr *get_sockaddr() const
+    { return reinterpret_cast<const ::sockaddr *>(&sto); }
+  socklen_t get_socklen() const { return sizeof(sto); }
   ::sockaddr_storage sto;
 };
 struct addrinfo {
-  addrinfo(strref const& node, strref const& service, int ai_family,
-    int ai_socktype, int ai_protocol, int ai_flags);
+  addrinfo(ioptr const& iop, cstrref const& node, cstrref const& service,
+    int ai_family, int ai_socktype, int ai_protocol, int ai_flags);
   ~addrinfo();
   int get_error() const;
   bt_string get_error_string() const;
@@ -67,6 +74,7 @@ struct addrinfo {
   void next();
   sockaddr_storage get_sockaddr() const;
   bt_string get_canonname() const;
+  const ::addrinfo *get_cur() const { return cur; }
 private:
   addrinfo(const addrinfo&);
   addrinfo& operator =(const addrinfo&);
@@ -78,8 +86,9 @@ private:
 
 extern "fdef" inline
 namespace pxcio {
-addrinfo::addrinfo(strref const& node, strref const& service,
-  int ai_family, int ai_socktype, int ai_protocol, int ai_flags)
+addrinfo::addrinfo(ioptr const& iop, cstrref const& node,
+  cstrref const& service, int ai_family, int ai_socktype, int ai_protocol,
+  int ai_flags)
   : ai(0), cur(0), err(0)
 {
   ::addrinfo hints = { };
@@ -126,7 +135,7 @@ void addrinfo::next()
 }
 sockaddr_storage addrinfo::get_sockaddr() const
 {
-  sockaddr_storage r;
+  sockaddr_storage r = sockaddr_storage();
   if (cur != 0) {
     memcpy(&r.sto, cur->ai_addr, cur->ai_addrlen);
   }
