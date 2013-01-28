@@ -6,7 +6,9 @@ public import io::errno "";
 public import compiler::util "";
 public import meta::builtin m;
 
-public multithreaded extern "pxcio::file_impl" "noncopyable" struct file { }
+public multithreaded extern "pxcio::file_impl" "linear"
+  struct file(ioptr const& iop, cslice{uchar} const& fn, open_flags_t flags,
+    mode_t mode, errno_t& err_r) { }
 public macro fileptr tptr{file};
 
 public tsvaluetype extern "::off_t" "int" struct off_t { }         // SQUAD?
@@ -69,34 +71,31 @@ public extern "S_IROTH"		mode_t S_IROTH;
 public extern "S_IWOTH"		mode_t S_IWOTH;
 public extern "S_IXOTH"		mode_t S_IXOTH;
 
-public threaded extern "pxcio::file_open" function
-  errno_t file_open(file& f, ioptr const& sys, cslice{uchar} const& fn,
-    open_flags_t flags, mode_t mode);
 public threaded extern "pxcio::file_read" function
-  size_t file_read(file& f, slice{uchar} const& buf);
+  errno_t file_read(file& f, slice{uchar} const& buf, size_t& len_r);
 public threaded extern "pxcio::file_read_append" function
-  size_t file_read_append(file& f, string& buf, size_t len);
+  errno_t file_read_append(file& f, string& buf, size_t& len_inout);
 public threaded extern "pxcio::file_write" function
-  size_t file_write(file& f, cslice{uchar} const& buf);
+  errno_t file_write(file& f, cslice{uchar} const& buf, size_t& len_inout);
 public threaded extern "pxcio::file_lseek" function
-  off_t file_lseek(file& f, off_t offset, whence_t whence);
-public threaded extern "pxcio::file_errno" function
-  errno_t file_errno(file const& f);
+  errno_t file_lseek(file& f, off_t& offset_inout, whence_t whence);
+
 public threaded extern "pxcio::io_stat" function
-  errno_t io_stat(ioptr const& sys, cslice{uchar} const& fn, statbuf& buf);
+  errno_t io_stat(ioptr const& iop, cslice{uchar} const& fn, statbuf& buf);
 public threaded extern "pxcio::io_errno" function
-  errno_t io_errno(ioptr const& sys);
+  errno_t io_errno(ioptr const& iop);
 public threaded extern "pxcio::io_sleep" function
-  uint io_sleep(ioptr const& sys, uint sec);
+  uint io_sleep(ioptr const& iop, uint sec);
 
 public threaded function
 size_t file_read_all(file& f, string& buf)
 {
   size_t r = 0;
   while (true) {
-    size_t e = file_read_append(f, buf, 16384);
-    if (e == 0) { break; }
-    r += e;
+    size_t rlen = 16384;
+    errno_t e = file_read_append(f, buf, rlen);
+    if (rlen == 0) { break; }
+    r += rlen;
   }
   return r;
 }
@@ -106,7 +105,8 @@ size_t file_write_all(file& f, cslice{uchar} const& buf)
   size_t curpos = 0;
   size_t endpos = buf.size();
   while (curpos != endpos) {
-    size_t wlen = file_write(f, buf[curpos .. endpos]);
+    size_t wlen;
+    errno_t e = file_write(f, buf[curpos .. endpos], wlen);
     if (wlen == 0) {
       break;
     }
@@ -115,25 +115,21 @@ size_t file_write_all(file& f, cslice{uchar} const& buf)
   return curpos;
 }
 public threaded function
-size_t io_read_file(ioptr const& sys, cslice{uchar} const& fn,
+size_t io_read_file(ioptr const& iop, cslice{uchar} const& fn,
   string& buf)
 {
   buf.clear();
-  file f;
-  if (f.open(sys, fn, O_RDONLY, 0) != 0) {
-    return 0;
-  }
+  errno_t e;
+  file f = file(iop, fn, O_RDONLY, 0, e);
   return f.read_all(buf);
 }
 public threaded function
-size_t io_write_file(ioptr const& sys, cslice{uchar} const& fn,
+size_t io_write_file(ioptr const& iop, cslice{uchar} const& fn,
   cslice{uchar} const& buf)
 {
-  file f;
-  if (f.open(sys, fn, O_WRONLY | O_CREAT | O_TRUNC,
-    S_IRWXU | S_IRWXG | S_IRWXO) != 0) {
-    return 0;
-  }
+  errno_t e;
+  file f = file(iop, fn, O_WRONLY | O_CREAT | O_TRUNC,
+    S_IRWXU | S_IRWXG | S_IRWXO, e);
   return f.write_all(buf);
 }
 
@@ -149,23 +145,30 @@ namespace pxcio {
 using namespace pxcrt;
 typedef struct ::stat statbuf;
 typedef int errno_t;
-struct file_impl {
-  file_impl() : fd(-1), err(0) { }
-  ~file_impl() { if (fd > 2) close(fd); } /* don't close standard in/out/err */
-  void reset(int f) { if (fd > 2) close(fd); fd = f; err = 0; }
-  int get() { return fd; }
+struct auto_file {
+  auto_file(int fd) : fd(fd) { }
+  ~auto_file() { if (fd > 2) close(fd); } /* don't close stdin/out/err */
+  int get() const { return fd; }
 private:
-  int fd;
+  const int fd;
+  auto_file(const auto_file&);
+  auto_file& operator =(const auto_file&);
+};
+struct file_impl : public auto_file {
+  file_impl(ioptr const& iop, bt_cslice<bt_uchar> const& fn, int flags,
+    ::mode_t md, errno_t& err_r);
+  file_impl(ioptr const& iop, int fd); /* must not be used from pxc */
 public:
   int err;
-private:
-  file_impl(const file_impl&);
-  file_impl& operator =(const file_impl&);
 };
 };
 
 extern "fdecl" inline
 namespace pxcio {
+errno_t file_lseek_impl(int fd, ::off_t& offset_inout, int whence);
+errno_t file_read_impl(int fd, bt_slice<bt_uchar> const& buf, size_t& len_r);
+errno_t file_read_append_impl(int fd, bt_string& buf, size_t& len_inout);
+errno_t file_write_impl(int fd, bt_cslice<bt_uchar> const& buf, size_t& len_r);
 };
 
 extern "fdef" inline
@@ -173,38 +176,44 @@ namespace pxcio {
 #include <stdlib.h>
 #include <limits.h>
 #include <string>
-errno_t file_open(file_impl& f, ioptr const& sys,
-  bt_cslice< bt_uchar> const& fn, int flags, ::mode_t md)
+int file_open_impl(bt_cslice< bt_uchar> const& fn, int flags, ::mode_t md)
 {
   PXCRT_ALLOCA_NTSTRING(fn_nt, fn);
   int fd = ::open(fn_nt.get(), flags, md);
-  f.reset(fd);
-  f.err = (fd < 0 ? errno : 0);
-  return errno;
+  return fd;
 }
-::off_t file_lseek(file_impl& f, ::off_t offset, int whence)
+file_impl::file_impl(ioptr const& iop, bt_cslice<bt_uchar> const& fn,
+  int flags, ::mode_t md, errno_t& err_r)
+  : auto_file(file_open_impl(fn, flags, md))
 {
-  if (f.err != 0) {
-    return 0;
-  }
-  const ::off_t r = ::lseek(f.get(), offset, whence);
-  f.err = (r == (off_t)-1) ? errno : 0;
-  return r;
+  err_r = get() < 0 ? errno : 0;
 }
-bt_size_t file_read(file_impl& f, bt_slice<bt_uchar> const& buf)
+file_impl::file_impl(ioptr const& iop, int fd)
+  : auto_file(fd)
+{
+}
+errno_t file_read_impl(int fd, bt_slice<bt_uchar> const& buf, size_t& len_r)
 {
   bt_size_t sz = buf.size();
   if (sz > SSIZE_MAX) {
     sz = SSIZE_MAX;
   }
   void *const ptr = buf.rawarr();
-  const ssize_t rlen = ::read(f.get(), ptr, sz);
-  f.err = rlen < 0 ? errno : 0;
-  return rlen < 0 ? 0 : rlen;
+  const ssize_t rlen = ::read(fd, ptr, sz);
+  if (rlen < 0) {
+    len_r = 0;
+    return errno;
+  }
+  len_r = rlen;
+  return 0;
 }
-bt_size_t file_read_append(file_impl& f, bt_string& buf, size_t len)
+errno_t file_read(file_impl& f, bt_slice<bt_uchar> const& buf, size_t& len_r)
 {
-  bt_size_t sz = len;
+  return file_read_impl(f.get(), buf, len_r);
+}
+errno_t file_read_append_impl(int fd, bt_string& buf, size_t& len_inout)
+{
+  bt_size_t sz = len_inout;
   if (sz > SSIZE_MAX) {
     sz = SSIZE_MAX;
   }
@@ -215,38 +224,59 @@ bt_size_t file_read_append(file_impl& f, bt_string& buf, size_t len)
   }
   buf.reserve(nsz);
   void *const ptr = buf.rawarr() + osz;
-  const ssize_t rlen = ::read(f.get(), ptr, sz);
-  f.err = rlen < 0 ? errno : 0;
+  const ssize_t rlen = ::read(fd, ptr, sz);
+  if (rlen < 0) {
+    len_inout = 0;
+    return errno;
+  }
   buf.rawarr_initialized(osz + rlen);
-  return rlen < 0 ? 0 : rlen;
+  len_inout = rlen;
+  return 0;
 }
-bt_size_t file_write(file_impl& f, bt_cslice<bt_uchar> const& buf)
+errno_t file_read_append(file_impl& f, bt_string& buf, size_t& len_inout)
+{
+  return file_read_append_impl(f.get(), buf, len_inout);
+}
+errno_t file_write_impl(int fd, bt_cslice<bt_uchar> const& buf, size_t& len_r)
 {
   bt_size_t sz = buf.size();
   if (sz > SSIZE_MAX) {
     sz = SSIZE_MAX;
   }
   const unsigned char *const ptr = buf.rawarr();
-  const ssize_t wlen = ::write(f.get(), ptr, sz);
-  f.err = wlen < 0 ? errno : 0;
-  return wlen < 0 ? 0 : wlen;
+  const ssize_t wlen = ::write(fd, ptr, sz);
+  if (wlen < 0) {
+    len_r = 0;
+    return errno;
+  }
+  len_r = wlen;
+  return 0;
 }
-errno_t file_errno(file_impl const& f)
+errno_t file_write(file_impl& f, bt_cslice<bt_uchar> const& buf, size_t& len_r)
 {
-  return f.err;
+  return file_write_impl(f.get(), buf, len_r);
 }
-errno_t io_stat(ioptr const& sys, bt_cslice<bt_uchar> const& fn,
+errno_t file_lseek_impl(int fd, ::off_t& offset_inout, int whence)
+{
+  offset_inout = ::lseek(fd, offset_inout, whence);
+  return (offset_inout == (off_t)-1) ? errno : 0;
+}
+errno_t file_lseek(file_impl& f, ::off_t& offset_inout, int whence)
+{
+  return file_lseek_impl(f.get(), offset_inout, whence);
+}
+errno_t io_stat(ioptr const& iop, bt_cslice<bt_uchar> const& fn,
   pxcio::statbuf& buf)
 {
   PXCRT_ALLOCA_NTSTRING(fn_nt, fn);
   const int e = ::stat(fn_nt.get(), &buf);
   return e != 0 ? errno : 0;
 }
-errno_t io_errno(ioptr const& sys)
+errno_t io_errno(ioptr const& iop)
 {
   return errno;
 }
-bt_uint io_sleep(ioptr const& sys, bt_uint sec)
+bt_uint io_sleep(ioptr const& iop, bt_uint sec)
 {
   return ::sleep(sec);
 }

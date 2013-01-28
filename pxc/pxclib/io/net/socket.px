@@ -1,0 +1,132 @@
+namespace io::net::socket;
+public import io::file;
+public import io::net::addrinfo ai;
+
+public multithreaded extern "pxcio::socket_factory" "linear"
+  struct socket_factory(ioptr& iop, const ai::addrinfo& addr, uint backlog,
+    errno_t& err_r) { }
+public multithreaded extern "pxcio::socket" "linear"
+  struct socket(socket_factory& sf, ai::sockaddr_storage& addr_r) { }
+
+public threaded extern "pxcio::socket_read" function
+  errno_t socket_read(socket& f, slice{uchar} const& buf, size_t& len_r);
+public threaded extern "pxcio::socket_read_append" function
+  errno_t socket_read_append(socket& f, string& buf, size_t& len_inout);
+public threaded extern "pxcio::socket_write" function
+  errno_t socket_write(socket& f, cslice{uchar} const& buf, size_t& len_inout);
+
+extern "type" inline
+namespace pxcio {
+struct socket_factory : public auto_file {
+  socket_factory(ioptr const& iop, addrinfo const& ai, pxcrt::bt_uint backlog,
+    errno_t& err_r);
+private:
+  const bool passive_flag;
+  int domain;
+  int socktype;
+  int protocol;
+  sockaddr_storage saddr;
+  socklen_t saddrlen;
+};
+struct socket : public auto_file {
+  socket(socket_factory& sf, ::sockaddr_storage& addr_r, errno_t& err_r);
+};
+};
+
+extern "fdecl" inline
+namespace pxcio {
+};
+
+extern "fdef" inline
+namespace pxcio {
+static int is_passive(addrinfo const& addr)
+{
+  ::addrinfo *const ai = addr.cur;
+  return ai != 0 && (ai->ai_flags & AI_PASSIVE) != 0;
+}
+static int socket_factory_create(addrinfo const& addr, int backlog,
+  errno_t& err_r)
+{
+  err_r = 0;
+  ::addrinfo *const ai = addr.cur;
+  if (ai == 0) {
+    err_r = EINVAL;
+    return -1;
+  }
+  if (is_passive(addr)) {
+    int fd = ::socket(ai->ai_famliy, ai->ai_socktype, ai->ai_protocol);
+    if (fd < 0) {
+      err_r = errno;
+      return -1;
+    }
+    int v = 0;
+    v = ::bind(fd, ai->ai_addr, ai->addrlen);
+    if (v != 0) {
+      err_r = errno;
+      close(fd);
+      return -1;
+    }
+    v = ::listen(fd, backlog);
+    if (v != 0) {
+      err_r = errno;
+      close(fd);
+      return -1;
+    }
+    return fd;
+  } else {
+    return -1;
+  }
+}
+socket_factory::socket_factory(ioptr const& iop, addrinfo const& addr,
+  int backlog, errno_t& err_r)
+  : auto_file(socket_factory_create(ai, backlog, errr)),
+    passive_flag(is_passive(ai)), domain(AF_UNSPEC), socktype(0), protocol(0),
+    saddr(), saddrlen(0)
+{
+  if (err_r != 0) {
+    return;
+  }
+  ::addrinfo *const ai = addr.cur;
+  domain = ai->ai_family;
+  socktype = ai->ai_socktype;
+  protocol = ai->ai_protocol;
+  memcpy(&saddr, ai->ai_addr, ai->ai_addrlen);
+  saddrlen = ai->ai_addrlen;
+}
+static int socket_create(socket_factory& sf, ::sockaddr_storage& addr,
+  errno_t& err_r)
+{
+  if (sf.domain == AF_UNSPEC) {
+    err_r = EINVAL;
+    return -1;
+  }
+  if (sf.passive_flag) {
+    socklen_t len = sizeof(addr);
+    int fd = ::accept(sf.get(), &addr, &len);
+  } else {
+    int fd = ::socket(domain, socktype, protocol);
+    if (fd < 0) {
+      err_r = errno;
+      return -1;
+    }
+    int v = ::connect(fd, &saddr, saddrlen);
+  }
+}
+socket::socket(socket_factory& sf, ::sockaddr_storage& addr, errno_t& err_r)
+  : auto_file(socket_create(sf, addr, err_r))
+{
+}
+errno_t socket_read(socket& s, bt_slice<bt_uchar> const& buf, size_t& len_r)
+{
+  return file_read_impl(s.get(), buf, len_r);
+}
+errno_t socket_read_append(socket& s, bt_string& buf, size_t& len_inout)
+{
+  return file_read_append_impl(s.get(), buf, len_inout);
+}
+errno_t socket_write(socket& s, bt_slice<bt_uchar> const& buf, size_t& len_r)
+{
+  return file_write_impl(s.get(), buf, len_r);
+}
+};
+
