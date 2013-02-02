@@ -1,0 +1,29 @@
+namespace error;
+public import type::builtin "";
+
+public tsvaluetype enum policy_t {
+  policy_first = 0,
+  policy_overwrite = 1,
+  policy_throw = 2,
+}
+
+public tsvaluetype struct {t} error_handler(policy_t p) {
+  private policy_t policy = p;
+  private t value;
+  public function t get() const { return value; }
+  public function void reset() { value = t(); }
+  public function void set(t x) {
+    if (policy == policy_first) {
+      if (value == t()) {
+	value = x;
+      }
+    } else if (policy == policy_overwrite) {
+      value = x;
+    } else if (policy == policy_throw) {
+      if (x != t()) {
+	throw x;
+      }
+    }
+  }
+}
+

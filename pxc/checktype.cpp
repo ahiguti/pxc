@@ -34,6 +34,7 @@
 #define DBG_CON(x)
 #define DBG_ROOT(x)
 #define DBG_CT(x)
+#define DBG_TPUP(x)
 
 namespace pxc {
 
@@ -1593,20 +1594,23 @@ void expr_funccall::check_type(symbol_table *lookup)
     funccall_sort = funccall_e_funccall;
     expr_funcdef *const caller_memfunc = get_up_member_func(symtbl_lexical);
     if (caller_memfunc != 0 && caller_memfunc->is_const) {
-      expr_struct *const caller_memfunc_struct =
-	caller_memfunc->is_member_function(); /* IMF OK */
       const bool call_wo_obj = func->get_esort() != expr_e_op;
       if (call_wo_obj && efd->is_virtual_or_member_function() &&
 	!efd->is_const) {
 	arena_error_throw(this,
 	  "calling a non-const member function from a const member function");
       }
+      #if 0
+      expr_struct *const caller_memfunc_struct =
+	caller_memfunc->is_member_function(); /* IMF OK */
+      /* moved to check_tpup_thisptr_constness() */
       if (efd->tpup_thisptr == caller_memfunc_struct &&
 	!efd->tpup_thisptr_nonconst) {
 	arena_error_throw(this,
 	  "calling a non-const member function '%s' from a const "
 	  "member function", term_tostr_human(efd->value_texpr).c_str());
       }
+      #endif
     }
     DBG(fprintf(stderr,
       "expr=[%s] type_of_this_expr=[%s] tvmap.size()=%d "
@@ -2480,7 +2484,10 @@ void expr_funcdef::check_type(symbol_table *lookup)
     block->stmts = 0;
   }
   fn_check_type(block, lookup);
+  #if 0
+  // moved to fn_compile. need to be executed after all functions are compiled.
   add_tparam_upvalues_funcdef(this);
+  #endif
 }
 
 void expr_typedef::check_type(symbol_table *lookup)
@@ -2601,7 +2608,7 @@ static bool is_struct_member(expr_i *edef)
   return efr != 0 && efr->get_esort() == expr_e_struct;
 }
 
-static void add_tparam_upvalues_tp(expr_funcdef *efd, const term& t)
+static void add_tparam_upvalues_tp_internal(expr_funcdef *efd, const term& t)
 {
   expr_i *const texpr = t.get_expr();
   if (texpr == 0) {
@@ -2619,6 +2626,8 @@ static void add_tparam_upvalues_tp(expr_funcdef *efd, const term& t)
 	continue;
       }
       if (efd->tpup_set.find(e) == efd->tpup_set.end()) {
+	DBG_TPUP(fprintf(stderr, "TPUP %s tp %s\n", efd->dump(0).c_str(),
+	  e->dump(0).c_str()));
 	efd->tpup_set.insert(e);
 	efd->tpup_vec.push_back(e);
       }
@@ -2646,14 +2655,29 @@ static void add_tparam_upvalues_tp(expr_funcdef *efd, const term& t)
   if (targs != 0) {
     term_list::const_iterator j;
     for (j = targs->begin(); j != targs->end(); ++j) {
-      add_tparam_upvalues_tp(efd, *j);
+      add_tparam_upvalues_tp_internal(efd, *j);
     }
   }
 }
 
-void add_tparam_upvalues_funcdef(expr_funcdef *efd)
+void add_tparam_upvalues_funcdef_tparam(expr_funcdef *efd)
+{
+  /* tparam upvalues */
+  term& t = efd->value_texpr;
+  const term_list *const targs = t.get_args();
+  if (targs == 0 || targs->empty()) {
+    return;
+  }
+  term_list::const_iterator j;
+  for (j = targs->begin(); j != targs->end(); ++j) {
+    add_tparam_upvalues_tp_internal(efd, *j);
+  }
+}
+
+void add_tparam_upvalues_funcdef_direct(expr_funcdef *efd)
 {
   /* direct upvalues */
+  DBG_TPUP(fprintf(stderr, "TPUP %s\n", efd->dump(0).c_str()));
   efd->tpup_set.clear();
   efd->tpup_vec.clear();
   const symbol_table::locals_type& upvalues = efd->block->symtbl.upvalues;
@@ -2664,6 +2688,8 @@ void add_tparam_upvalues_funcdef(expr_funcdef *efd)
       continue;
     }
     if (efd->tpup_set.find(e) == efd->tpup_set.end()) {
+      DBG_TPUP(fprintf(stderr, "TPUP %s direct %s\n", efd->dump(0).c_str(),
+	e->dump(0).c_str()));
       efd->tpup_set.insert(e);
       efd->tpup_vec.push_back(e);
     }
@@ -2683,15 +2709,26 @@ void add_tparam_upvalues_funcdef(expr_funcdef *efd)
       }
     }
   }
-  /* tparam upvalues */
-  term& t = efd->value_texpr;
-  const term_list *const targs = t.get_args();
-  if (targs == 0 || targs->empty()) {
-    return;
-  }
-  term_list::const_iterator j;
-  for (j = targs->begin(); j != targs->end(); ++j) {
-    add_tparam_upvalues_tp(efd, *j);
+}
+
+void check_tpup_thisptr_constness(expr_funccall *fc)
+{
+  bool memfunc_w_explicit_obj = false;
+  term func_te = get_func_te_for_funccall(fc->func, memfunc_w_explicit_obj);
+  expr_i *const func_inst = term_get_instance(func_te);
+  if (is_function(func_te)) {
+    expr_funcdef *efd = ptr_down_cast<expr_funcdef>(func_inst);
+    expr_funcdef *const caller_memfunc = get_up_member_func(fc->symtbl_lexical);
+    if (caller_memfunc != 0 && caller_memfunc->is_const) {
+      expr_struct *const caller_memfunc_struct =
+        caller_memfunc->is_member_function(); /* IMF OK */
+      if (efd->tpup_thisptr == caller_memfunc_struct &&
+        !efd->tpup_thisptr_nonconst) {
+        arena_error_throw(fc,
+          "calling a non-const member function '%s' from a const "
+          "member function", term_tostr_human(efd->value_texpr).c_str());
+      }
+    }
   }
 }
 

@@ -2,12 +2,12 @@ namespace io::net::addrinfo;
 public import type::builtin "";
 public import compiler::util "";
 public import io "";
+public import error;
 
 public tsvaluetype extern "int" "enum" struct family_t { }
 public tsvaluetype extern "int" "enum" struct socktype_t { }
 public tsvaluetype extern "int" "enum" struct protocol_t { }
 public tsvaluetype extern "int" "bitmask" struct ai_flags_t { }
-public tsvaluetype extern "int" "int" struct gai_error_t { } // FIXME: enum
 
 public extern "AF_UNSPEC"	family_t AF_UNSPEC;
 public extern "AF_INET"		family_t AF_INET;
@@ -23,17 +23,15 @@ public extern "AI_PASSIVE"	ai_flags_t AI_PASSIVE;
 public extern "AI_NUMERICHOST"	ai_flags_t AI_NUMERICHOST;
 public extern "AI_NUMERICSERV"	ai_flags_t AI_NUMERICSERV;
 
+public tsvaluetype extern "int" "enum" struct gai_error_t { }
+public macro gai_eh error::error_handler{gai_error_t};
+public threaded extern "pxcio::gai_error_t_append_to_string"
+  function void gai_error_t_append_to_string(gai_error_t x, string& s);
+
 public multithreaded extern "pxcio::addrinfo"
-struct addrinfo(
-  ioptr const& iop,
-  cslice{uchar} const& node,
-  cslice{uchar} const& service,
-  family_t ai_family,
-  socktype_t ai_socktype,
-  protocol_t ai_protocol,
-  ai_flags_t ai_flags) {
-  public extern "get_error" function gai_error_t get_error() const;
-  public extern "get_error_string" function string get_error_string() const;
+struct addrinfo(ioptr const& iop, cslice{uchar} const& node,
+  cslice{uchar} const& service, family_t ai_family, socktype_t ai_socktype,
+  protocol_t ai_protocol, ai_flags_t ai_flags, gai_eh& eh) {
   public extern "get_sockaddr" function sockaddr_storage get_sockaddr() const;
   public extern "get_canonname" function string get_canonname() const;
   public extern "empty" function bool empty() const;
@@ -51,6 +49,8 @@ extern "type" inline
 #include <sys/socket.h>
 #include <netdb.h>
 #include <netinet/in.h>
+namespace error$n
+  { struct error_handler$s$tp1$io$$net$$addrinfo$n$$gai_error_t$s; };
 namespace pxcio {
 using namespace pxcrt;
 struct sockaddr_storage {
@@ -64,12 +64,12 @@ struct sockaddr_storage {
   socklen_t get_socklen() const { return sizeof(sto); }
   ::sockaddr_storage sto;
 };
+typedef ::error$n::error_handler$s$tp1$io$$net$$addrinfo$n$$gai_error_t$s
+  gai_eh;
 struct addrinfo {
   addrinfo(ioptr const& iop, cstrref const& node, cstrref const& service,
-    int ai_family, int ai_socktype, int ai_protocol, int ai_flags);
+    int ai_family, int ai_socktype, int ai_protocol, int ai_flags, gai_eh& eh);
   ~addrinfo();
-  int get_error() const;
-  bt_string get_error_string() const;
   bt_bool empty() const;
   void next();
   sockaddr_storage get_sockaddr() const;
@@ -80,16 +80,22 @@ private:
   addrinfo& operator =(const addrinfo&);
   ::addrinfo *ai;
   ::addrinfo *cur;
-  int err;
 };
 }; //namespace pxcio
 
 extern "fdef" inline
 namespace pxcio {
+using namespace pxcrt;
+inline void gai_eh_set(gai_eh& eh, int err) { eh.set$f(err); }
+void gai_error_t_append_to_string(int err, bt_string& s)
+{
+  const char *p = gai_strerror(err);
+  s.append(reinterpret_cast<const bt_uchar *>(p), strlen(p));
+}
 addrinfo::addrinfo(ioptr const& iop, cstrref const& node,
   cstrref const& service, int ai_family, int ai_socktype, int ai_protocol,
-  int ai_flags)
-  : ai(0), cur(0), err(0)
+  int ai_flags, gai_eh& eh)
+  : ai(0), cur(0)
 {
   ::addrinfo hints = { };
   hints.ai_family = ai_family;
@@ -97,12 +103,20 @@ addrinfo::addrinfo(ioptr const& iop, cstrref const& node,
   hints.ai_protocol = ai_protocol;
   hints.ai_flags = ai_flags;
   PXCRT_ALLOCA_NTSTRING(node_nt, node);
+  int err = 0;
   if (service.empty()) {
     hints.ai_flags |= AI_NUMERICSERV;
     err = ::getaddrinfo(node_nt.get(), "0", &hints, &ai);
   } else {
     PXCRT_ALLOCA_NTSTRING(service_nt, service);
     err = ::getaddrinfo(node_nt.get(), service_nt.get(), &hints, &ai);
+  }
+  if (err != 0) {
+    if (ai != 0) {
+      ::freeaddrinfo(ai);
+      ai = 0;
+    }
+    gai_eh_set(eh, err);
   }
   cur = ai;
 }
@@ -111,16 +125,6 @@ addrinfo::~addrinfo()
   if (ai != 0) {
     ::freeaddrinfo(ai);
   }
-}
-int addrinfo::get_error() const
-{
-  return err;
-}
-bt_string addrinfo::get_error_string() const
-{
-  const char *s = gai_strerror(err);
-  bt_string r(reinterpret_cast<const bt_uchar *>(s), strlen(s));
-  return r;
 }
 bt_bool addrinfo::empty() const
 {

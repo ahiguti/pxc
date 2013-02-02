@@ -1,5 +1,8 @@
 namespace compiler::runtime;
-public import compiler::impl::runtime;
+public import compiler::impl::main;
+public import compiler::impl::exception;
+public import compiler::impl::invguard;
+public import compiler::impl::string;
 
 public mtvaluetype extern "pxcrt::invalid_index" ""
   struct invalid_index { }
@@ -24,6 +27,7 @@ struct {t} bt_slice {
   public macro crange_type bt_cslice{t};
   public extern "empty" function bool empty() const;
   public extern "size" function size_t size() const;
+  public extern "find" function size_t find(size_t offset, t const& v) const;
   public extern "next" function void next();
 }
 
@@ -35,6 +39,7 @@ struct {t} bt_cslice {
   public macro crange_type bt_cslice{t};
   public extern "empty" function bool empty() const;
   public extern "size" function size_t size() const;
+  public extern "find" function size_t find(size_t offset, t const& v) const;
   public extern "next" function void next();
 }
 
@@ -46,12 +51,17 @@ struct bt_string {
   public macro crange_type bt_cslice{uchar};
   public extern "empty" function bool empty() const;
   public extern "size" function size_t size() const;
+  public extern "find" function size_t find(size_t offset, uchar const& v)
+    const;
   public extern "resize" function void resize(size_t i, uchar const& v);
   public extern "clear" function void clear();
   public extern "push_back" function void push_back(uchar const& v);
   public extern "pop_back" function uchar pop_back();
   public extern "reserve" function void reserve(size_t i);
   public extern "append" function void append(crange_type const& v);
+  public extern "insert" function void insert(size_t pos,
+    crange_type const& v);
+  public extern "erase" function void erase(size_t first, size_t last);
 }
 
 public tsvaluetype extern "pxcrt::bt_strlit" "farray"
@@ -62,6 +72,8 @@ struct bt_strlit {
   public macro crange_type bt_cslice{uchar};
   public extern "empty" function bool empty() const;
   public extern "size" function size_t size() const;
+  public extern "find" function size_t find(size_t offset, uchar const& v)
+    const;
 }
 
 public macro strref bt_slice{uchar};

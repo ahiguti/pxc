@@ -457,12 +457,16 @@ expr_int_literal::resolve_texpr()
 {
   if (type_of_this_expr.is_null()) {
     if (is_unsigned) {
-      const char *p = str;
-      for (; *p != 0 && *p != 'L'; ++p) { }
-      if (*p == 'L') {
-	type_of_this_expr = builtins.type_ulong;
+      if (str[0] == '\'') {
+	type_of_this_expr = builtins.type_uchar;
       } else {
-	type_of_this_expr = builtins.type_uint;
+	const char *p = str;
+	for (; *p != 0 && *p != 'L'; ++p) { }
+	if (*p == 'L') {
+	  type_of_this_expr = builtins.type_ulong;
+	} else {
+	  type_of_this_expr = builtins.type_uint;
+	}
       }
     } else {
       const char *p = str;
@@ -480,13 +484,19 @@ expr_int_literal::resolve_texpr()
 unsigned long long
 expr_int_literal::get_unsigned() const
 {
-  return strtoull(str, 0, 10);
+  if (str[0] == '\'') {
+    return static_cast<unsigned char>(str[1]); /* character */
+  }
+  return strtoull(str, 0, 0); /* decimal, hexadecimal, or octal */
 }
 
 long long
 expr_int_literal::get_signed() const
 {
-  return strtoll(str, 0, 10);
+  if (str[0] == '\'') {
+    return str[1]; /* character */
+  }
+  return strtoll(str, 0, 0); /* decimal, hexadecimal, or octal */
 }
 
 std::string expr_int_literal::dump(int indent) const

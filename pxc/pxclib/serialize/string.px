@@ -6,48 +6,45 @@ public import numeric::positional n;
 
 public threaded function {t} string to_string(t const& x)
 {
-  macro symstr m::concat{t, "_to_string"};
-  macro sym1 m::symbol{t, symstr}; // t's namespace
-  macro sym2 m::symbol{to_string, symstr}; // our namespace // TODO
+  string s;
+  append_to_string(x, s);
+  return s;
+}
+
+public threaded function {t} void append_to_string(t const& x, string& s)
+{
+  macro symstr m::concat{t, "_append_to_string"};
+  macro sym m::symbol{t, symstr}; // t's namespace
   macro cat m::category{t};
   if (m::or{
     m::eq{t, type::builtin::string},
     m::eq{t, type::builtin::strlit},
     m::eq{t, type::builtin::cslice{type::builtin::uchar}},
     m::eq{t, type::builtin::slice{type::builtin::uchar}}}) {
-    return x;
-  } else if (m::eq{m::to_string{sym1}, symstr}) {
-    return sym1(x);
-  } else if (m::eq{m::to_string{sym2}, symstr}) {
-    return sym2(x);
+    s.append(x);
+  } else if (m::eq{m::to_string{sym}, symstr}) {
+    sym(x, s);
   } else if (n::is_integral{t}) {
-    string s;
     n::integral_to_decimal(x, s);
-    return s;
-  // } else if (m::eq{cat, "uint"}) {
-  //   return bt_ulong_to_string(n::numeric_cast{ulong, t}(x)); // TODO
-  // } else if (m::eq{cat, "int"}) {
-  //   return bt_long_to_string(n::numeric_cast{long, t}(x)); // TODO
   } else if (m::or{
     m::eq{cat, "varray"},
     m::eq{cat, "farray"},
     m::eq{cat, "darray"},
     m::eq{cat, "slice"},
     m::eq{cat, "cslice"}}) {
-    string s = "{";
+    s.append("{");
     foreach (size_t i, m::at{t, 0} v : x) {
       if (i != 0) {
 	s.append(",");
       }
-      s.append(to_string(v));
+      append_to_string(v, s);
     }
     s.append("}");
-    return s;
   } else if (m::or{
     m::eq{cat, "tree_map"},
     m::eq{cat, "tree_map_range"},
     m::eq{cat, "tree_map_crange"}}) {
-    string s = "{";
+    s.append("{");
     bool first = true;
     foreach (m::at{t, 0} k, m::at{t, 1} v : x) {
       if (first) {
@@ -55,21 +52,19 @@ public threaded function {t} string to_string(t const& x)
       } else {
 	s.append(",");
       }
-      s.append(to_string(k));
+      append_to_string(k, s);
       s.append(":");
-      s.append(to_string(v));
+      append_to_string(v, s);
       s.append(")");
     }
     s.append("}");
-    return s;
   } else if (m::or{m::eq{cat, "ptr"}, m::eq{cat, "cptr"},
       m::eq{cat, "tptr"}, m::eq{cat, "tcptr"}}) {
-    string s = "{";
-    s.append(to_string(*x));
+    s.append("{");
+    append_to_string(*x, s);
     s.append("}");
-    return s;
   } else if (m::eq{cat, "struct"}) {
-    string s = "{";
+    s.append("{");
     bool first = true;
     foreach (name, fld : t) {
       if (first) {
@@ -79,23 +74,21 @@ public threaded function {t} string to_string(t const& x)
       }
       s.append(name);
       s.append(":");
-      s.append(to_string(x.fld));
+      append_to_string(x.fld, s);
     }
     s.append("}");
-    return s;
   } else if (m::eq{cat, "union"}) {
-    string s = "{";
+    s.append("{");
     foreach (name, fld : t) {
       if (case x.fld) {
 	s.append(name);
 	s.append(":");
-	s.append(to_string(x.fld));
+	append_to_string(x.fld, s);
       }
     }
     s.append("}");
-    return s;
   } else {
-    return "-";
+    s.append("-");
   }
 }
 

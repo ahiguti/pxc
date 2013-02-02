@@ -267,6 +267,9 @@ bool is_equality_type(const term& t)
   if (is_ordered_type(t)) {
     return true;
   }
+  if (is_enum(t)) {
+    return true;
+  }
   if (is_cm_pointer_family(t)) {
     return true;
   }
@@ -1065,11 +1068,13 @@ std::string term_tostr(const term& t, term_tostr_sort s)
 	  rstr_post = " >"; // need additional '>'
 	}
       }
-    } else if (cname != 0) {
+    } else if (cname != 0 && s == term_tostr_sort_cname) {
       rstr = cname;
+      #if 0
       if (s != term_tostr_sort_cname) {
 	rstr = replace_char(rstr, ':', '$');
       }
+      #endif
     } else {
       rstr = "";
       if (s == term_tostr_sort_cname_tparam || s == term_tostr_sort_strict) {
@@ -1387,7 +1392,7 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
     return true;
   }
   if (tfrom == builtins.type_strlit && tto == builtins.type_string) {
-    DBG_CONV(fprintf(stderr, "convert: range\n"));
+    DBG_CONV(fprintf(stderr, "convert: strlit to string\n"));
     efrom->conv = conversion_e_cast;
     efrom->type_conv_to = tconvto;
     return true;
@@ -1500,6 +1505,57 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
   return false;
 }
 
+static void execute_rec_incl_instances(expr_i *e, void (*f)(expr_i *))
+{
+  if (e == 0) {
+    return;
+  }
+  f(e);
+  expr_block *const bl = dynamic_cast<expr_block *>(e);
+  if (bl != 0) {
+    template_info& ti = bl->tinfo;
+    for (template_info::instances_type::iterator i = ti.instances.begin();
+      i != ti.instances.end(); ++i) {
+      execute_rec_incl_instances(i->second->parent_expr, f);
+    }
+    if (ti.is_uninstantiated()) {
+      /* don't check children of an uninstantiated block */
+      return;
+    }
+  }
+  const int num = e->get_num_children();
+  for (int i = 0; i < num; ++i) {
+    expr_i *c = e->get_child(i);
+    execute_rec_incl_instances(c, f);
+  }
+}
+
+static void check_template_upvalues_direct_one(expr_i *e)
+{
+  expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(e);
+  if (efd != 0) {
+    add_tparam_upvalues_funcdef_direct(efd);
+  }
+}
+
+void fn_check_template_upvalues_direct(expr_i *e)
+{
+  execute_rec_incl_instances(e, check_template_upvalues_direct_one);
+}
+
+static void check_template_upvalues_tparam_one(expr_i *e)
+{
+  expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(e);
+  if (efd != 0) {
+    add_tparam_upvalues_funcdef_tparam(efd);
+  }
+}
+
+void fn_check_template_upvalues_tparam(expr_i *e)
+{
+  execute_rec_incl_instances(e, check_template_upvalues_tparam_one);
+}
+
 void fn_compile(expr_i *e, expr_i *p, bool is_template)
 {
   if (e == 0) {
@@ -1512,6 +1568,11 @@ void fn_compile(expr_i *e, expr_i *p, bool is_template)
   arena_error_throw_pushed();
   fn_check_type(e, e->symtbl_lexical);
     /* calls fn_compile recursively if a template is instantiated */
+  #if 0
+  // move to expr.cpp
+  fn_check_template_upvalues_direct(e);
+  fn_check_template_upvalues_tparam(e);
+  #endif
   arena_error_throw_pushed();
   DBG_COMPILE(fprintf(stderr, "compile %p(%s:%d) end\n", e, e->fname,
     e->line));
@@ -2309,7 +2370,10 @@ void fn_check_final(expr_i *e)
   check_upvalue_funcobj(e);
   check_upvalue_memfunc(e);
   check_use_before_def(e);
-  const int num = e->get_num_children();
+  if (e->get_esort() == expr_e_funccall) {
+    check_tpup_thisptr_constness(ptr_down_cast<expr_funccall>(e));
+  }
+  /* check instances */
   expr_block *const bl = dynamic_cast<expr_block *>(e);
   if (bl != 0) {
     template_info& ti = bl->tinfo;
@@ -2328,6 +2392,7 @@ void fn_check_final(expr_i *e)
     return;
   }
   /* check children */
+  const int num = e->get_num_children();
   for (int i = 0; i < num; ++i) {
     expr_i *c = e->get_child(i);
     fn_check_final(c);

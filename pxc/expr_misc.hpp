@@ -148,6 +148,8 @@ void fn_set_tree_and_define_static(expr_i *e, expr_i *p, symbol_table *symtbl,
   expr_stmts *stmt, bool is_template);
 void fn_update_tree(expr_i *e, expr_i *p, symbol_table *symtbl,
   const std::string& curns_u, const std::string& curns_i);
+void fn_check_template_upvalues_direct(expr_i *e);
+void fn_check_template_upvalues_tparam(expr_i *e);
 void fn_check_final(expr_i *e);
 void fn_compile(expr_i *e, expr_i *p, bool is_template);
 expr_i *fn_drop_non_exports(expr_i *e);

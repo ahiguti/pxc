@@ -24,6 +24,9 @@
 #define DBG_FOI(x)
 #define DBG_IF(x)
 #define DBG_ASTMT(x)
+#define DBG_CEFB(x)
+#define DBG_EVC(x)
+#define DBG_FBC(x)
 
 namespace pxc {
 
@@ -538,28 +541,6 @@ bool is_noexec_expr(expr_i *e)
 }
 #endif
 
-// TODO: remove. always returns true.
-static bool can_emit_fast_constr(const expr_struct *est)
-{
-  if (est->block == 0 || est->block->stmts == 0) {
-    return true;
-  }
-  expr_stmts *stmts = est->block->stmts;
-  for (; stmts != 0; stmts = stmts->rest) {
-    expr_i *const e = stmts->head;
-    if (e == 0 || is_noexec_expr(e)) {
-      continue;
-    }
-    #if 0
-    if (!is_single_vardef_or_vardefset(e)) {
-      abort(); // not allowed currently
-      return false;
-    }
-    #endif
-  }
-  return true;
-}
-
 static void emit_struct_constr_one(emit_context& em, expr_struct *est,
   bool emit_default_constr)
 {
@@ -588,10 +569,9 @@ static void emit_struct_constr_one(emit_context& em, expr_struct *est,
     em.puts("(");
     if (!emit_default_constr) {
       emit_argdecls(em, est->block->argdecls, true);
-      assert(can_emit_fast_constr(est));
     }
     em.puts(")");
-    if (can_emit_fast_constr(est) && !emit_default_constr) {
+    if (!emit_default_constr) {
       /* fast init userdef constructor */
       emit_struct_constr_initializer(em, est, flds, false, true);
       em.puts(" {\n");
@@ -740,6 +720,17 @@ static void emit_initialize_variant_field(emit_context& em,
   }
 }
 
+static std::string destructor_cstr(const term& typ)
+{
+  std::string s = term_tostr_cname(typ);
+  s += "::~";
+  const std::string shortname = to_short_name(get_term_cname(typ));
+  const std::string shortname_wo_tp =
+    shortname.substr(0, shortname.find('<'));
+  s += shortname_wo_tp;
+  return s;
+}
+
 static void emit_deinitialize_variant_field(emit_context& em,
   const expr_variant *ev, const expr_var *fld)
 {
@@ -751,6 +742,8 @@ static void emit_deinitialize_variant_field(emit_context& em,
     /* destructor */
     fld->emit_symbol(em);
     em.puts("$p()->");
+    em.puts(destructor_cstr(fld->get_texpr()));
+    #if 0
     emit_term(em, fld->get_texpr());
     em.puts("::~");
     const std::string shortname =
@@ -758,6 +751,7 @@ static void emit_deinitialize_variant_field(emit_context& em,
     const std::string shortname_wo_tp =
       shortname.substr(0, shortname.find('<'));
     em.puts(shortname_wo_tp);
+    #endif
     em.puts("()");
   } else {
     /* known to be a pod */
@@ -2150,30 +2144,6 @@ static size_t comma_sep_length(expr_i *e)
   return len;
 }
 
-static expr_funccall *can_emit_fast_boxing(expr_funccall *func)
-{
-  if (func->funccall_sort != funccall_e_struct_constructor) {
-    return 0;
-  }
-  if (!is_cm_pointer_family(func->get_texpr())) {
-    return 0;
-  }
-  if (comma_sep_length(func->arg) != 1) {
-    return 0;
-  }
-  expr_funccall *cfunc = dynamic_cast<expr_funccall *>(func->arg);
-  if (cfunc == 0 || cfunc->conv != conversion_e_none) {
-    return 0;
-  }
-  if (cfunc->funccall_sort != funccall_e_struct_constructor) {
-    return 0;
-  }
-  if (comma_sep_length(cfunc->arg) > 3) {
-    return 0;
-  }
-  return cfunc;
-}
-
 void expr_funccall::emit_value(emit_context& em)
 {
   expr_i *fld = get_op_rhs(func, '.');
@@ -2195,18 +2165,9 @@ void expr_funccall::emit_value(emit_context& em)
       fn_emit_value(em, arg);
     }
     em.puts(")");
-#if 0
-  } else if (funccall_sort != funccall_e_funccall &&
-    conv == conversion_e_boxing && comma_sep_length(arg) <= 3) {
-    /* fast boxing */
-    em.puts("pxcrt::boxing()");
-    if (arg != 0) {
-      em.puts(" , ");
-      fn_emit_value(em, arg);
-    }
-#endif
   } else {
     /* function(...) */
+    /* function or constructor */
     switch (funccall_sort) {
     case funccall_e_funccall:
       emit_function_expr(em, func);
@@ -2217,28 +2178,15 @@ void expr_funccall::emit_value(emit_context& em)
       emit_term(em, get_texpr());
       break;
     }
-    expr_funccall *fast_boxing_cfunc = can_emit_fast_boxing(this);
-    if (fast_boxing_cfunc != 0) {
-      /* fast boxing constructor */
-      em.puts("(");
-      em.puts("pxcrt::boxing()");
-      if (fast_boxing_cfunc->arg != 0) {
+    em.puts("(");
+    bool is_first = !emit_func_upvalue_args(em, func, symtbl_lexical);
+    if (arg != 0) {
+      if (!is_first) {
 	em.puts(" , ");
-	fn_emit_value(em, fast_boxing_cfunc->arg);
       }
-      em.puts(")");
-    } else {
-      /* function or constructor */
-      em.puts("(");
-      bool is_first = !emit_func_upvalue_args(em, func, symtbl_lexical);
-      if (arg != 0) {
-	if (!is_first) {
-	  em.puts(" , ");
-	}
-	fn_emit_value(em, arg);
-      }
-      em.puts(")");
+      fn_emit_value(em, arg);
     }
+    em.puts(")");
   }
 }
 
@@ -2786,11 +2734,120 @@ static void emit_comma_sep_list_with_paren(emit_context& em, expr_i *e)
 }
 #endif
 
+static void emit_vardef_constructor_fast_boxing(emit_context& em,
+  expr_i *e, const term& typ, const std::string& cs0,
+  const std::string& var_csymbol, expr_funccall *fc,
+  expr_funccall *fast_boxing_cfunc)
+{
+  /* var x = ptr(type(args, ....)) */
+  const term& otyp = (*typ.get_args())[0];
+  const std::string otyp_cstr = term_tostr_cname(otyp); /* foo */
+  DBG_FBC(fprintf(stderr, "type=%s atyp=%s\n", term_tostr_human(typ).c_str(),
+    term_tostr_human(otyp).c_str()));
+  if (!is_interface_or_impl(otyp)) {
+    const std::string varp0 = var_csymbol + "p0";
+    const std::string varp1 = var_csymbol + "p1";
+    const typecat_e cat = get_category(typ);
+    std::string rcval_cstr;
+    std::string count_type_cstr;
+    if (cat == typecat_e_tptr || cat == typecat_e_tcptr) {
+      rcval_cstr = "::pxcrt::trcval";
+      count_type_cstr = "::pxcrt::mtcount";
+    } else if (cat == typecat_e_tiptr) {
+      rcval_cstr = "::pxcrt::tircval";
+      count_type_cstr = "::pxcrt::mtcount";
+    } else { /* ptr cptr iptr */
+      rcval_cstr = "::pxcrt::rcval";
+      count_type_cstr = "::pxcrt::stcount";
+    }
+    const std::string otypcnt_cstr = rcval_cstr + "< " + otyp_cstr + " >";
+      /* rcval<foo> */
+    em.puts("::pxcrt::uninit_mem< " + otypcnt_cstr + " > *const " + varp0
+      + " = new ::pxcrt::uninit_mem< " + otypcnt_cstr + " >;\n");
+    em.indent('x');
+    em.puts(otypcnt_cstr + "*const " + varp1 + " = reinterpret_cast< "
+      + otypcnt_cstr + " * >(" + varp0 + ");\n");
+    em.indent('x');
+    em.puts("try {\n");
+    em.indent('x');
+    em.puts("new (&" + varp1 + "->value$z) " + otyp_cstr + "(");
+    fn_emit_value(em, fast_boxing_cfunc->arg);
+    em.puts(");\n");
+    em.indent('x');
+    em.puts("new (&" + varp1 + "->count$z) " + count_type_cstr
+      + "(); /* nothrow */\n");
+    if (is_multithreaded_pointer_family(typ)) {
+      em.indent('x');
+      em.puts("try {\n");
+      em.indent('x');
+      em.puts("new (&" + varp1 + "->mutex$z) pxcrt::mutex();\n");
+      em.indent('x');
+      em.puts("} catch (...) {\n");
+      em.indent('x');
+      em.puts(varp1 + "->value$z." + destructor_cstr(otyp) + "();\n");
+      em.indent('x');
+      em.puts("throw;\n");
+      em.indent('x');
+      em.puts("}\n");
+    }
+    em.indent('x');
+    em.puts("} catch (...) {\n");
+    em.indent('x');
+    em.puts("delete " + varp0 + ";\n");
+    em.indent('x');
+    em.puts("throw;\n");
+    em.indent('x');
+    em.puts("}\n");
+    em.indent('x');
+    em.puts(cs0 + " " + var_csymbol);
+    em.puts("((" + varp1 + "))");
+  } else {
+    em.puts(cs0 + " " + var_csymbol);
+    em.puts("(new " + otyp_cstr + "(");
+    fn_emit_value(em, fast_boxing_cfunc->arg);
+    em.puts("))");
+  }
+}
+
+static expr_funccall *can_emit_fast_boxing(expr_funccall *func)
+{
+  if (func->funccall_sort != funccall_e_struct_constructor) {
+    DBG_CEFB(fprintf(stderr, "cefb %s 1\n", func->dump(0).c_str()));
+    return 0;
+  }
+  if (!is_cm_pointer_family(func->get_texpr())) {
+    DBG_CEFB(fprintf(stderr, "cefb %s 2 %s\n", func->dump(0).c_str(),
+      term_tostr_human(func->get_texpr()).c_str()));
+    return 0;
+  }
+  if (comma_sep_length(func->arg) != 1) {
+    DBG_CEFB(fprintf(stderr, "cefb %s 3\n", func->dump(0).c_str()));
+    return 0;
+  }
+  expr_funccall *cfunc = dynamic_cast<expr_funccall *>(func->arg);
+  if (cfunc == 0 || cfunc->conv != conversion_e_none) {
+    DBG_CEFB(fprintf(stderr, "cefb %s 4\n", func->dump(0).c_str()));
+    return 0;
+  }
+  if (cfunc->funccall_sort != funccall_e_struct_constructor) {
+    DBG_CEFB(fprintf(stderr, "cefb %s 5\n", func->dump(0).c_str()));
+    return 0;
+  }
+  return cfunc;
+}
+
 static void emit_vardef_constructor(emit_context& em, expr_i *e,
   const term& typ, const std::string& cs0, const std::string& var_csymbol)
 {
+  /* var x = type(args, ....) */
+  DBG_EVC(fprintf(stderr, "evc %s\n", e->dump(0).c_str()));
   expr_op *const eop = ptr_down_cast<expr_op>(e);
   expr_funccall *const fc = ptr_down_cast<expr_funccall>(eop->arg1);
+  expr_funccall *const fast_boxing_cfunc = can_emit_fast_boxing(fc);
+  if (fast_boxing_cfunc) {
+    return emit_vardef_constructor_fast_boxing(em, e, typ, cs0, var_csymbol,
+      fc, fast_boxing_cfunc);
+  }
   em.puts(cs0 + " " + var_csymbol);
   if (fc->arg == 0) {
     /* foo x */

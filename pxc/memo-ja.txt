@@ -1,18 +1,37 @@
 
-0125 440
+0202 463
 ---------------------------------------------------------------------
 FIXME/TODO M1
+
+- 16進、8進、文字リテラル
+
+- 可変長引数の代わりとなる演算子を決めよ。 cout << ... のようなもの。
+
+- line_fixme.px1: upvalueを取れていない(done)
+
+- structのコンストラクタがexternのとき、引数がnoncopyableであっても
+  pxcエラーチェックできずC++エラーになってしまう。引数がcopyableであ
+  ることを要請する手段が必要。(ただしptr{file}のようにfast boxingで
+  きるときはnoncopyableでもよいことに注意)
+  -> これはstatic_assertがあれば実現できる
+  
+- pxcvectorにstringと同じだけのメソッド定義
+
+- extern enumを型パラメータにしたときのエンコードがintになってしまう
+  と衝突するのでダメ(done)
+- io::fileはerrno_t参照を引数にとる(done)
+- error{errno_t}(done)
+- socket_factoryにaddrinfoを埋め込む?
 
 - fileのfdはimmutableにする。そうでないとaccept()でロックが要る
 - namespace injectして問題になるケースはあるか
 
 - to_stringは文字列へ追加する形へ
-- 16進、8進、文字リテラル
 - enum, bitmaskのコンパイル時リフレクション
 - external int/uintを整数リテラルからコンストラクトできない
 - 算術演算子は左右どちらへも変換できるように
 
-- 範囲チェックを非デバッグ時に無効化するプラグマ
+- 配列範囲チェックを非デバッグ時等に無効化するプラグマ
 
 ephemeral型まわり
 - test: globalやstructには参照変数などは置けないように
@@ -483,6 +502,8 @@ foo$v0  ローカルに定義された直和型のstruct名
 foo$i   インタフェースのstruct名
 foo$i0  ローカルに定義されたインタフェースのstruct名
 foo$    auto変数、グローバル変数、メンバ変数、関数引数
+foo$ns0 auto変数、グローバル変数、関数引数？ 名前空間付き
+foo$ns0p0 fast boxingコンストラクタが使う生ポインタ
 foo$e   variantのenum要素
 foo$fg  foreachのguardオブジェクト
 foo$fe  foreachのkey, mapped値, guardオブジェクト
@@ -5431,4 +5452,61 @@ perlマーシャラ再考
 - byrefなpxc関数引数はそのオブジェクトを引数に与える必要がある
 - 基本型byvalかconstbyrefなpxc関数引数はperlのスカラから自動変換可
 
+---------------------------------------------------------------------
+awk的なもの
+
+- streamから行を切り出す関数
+- 行についてfoldするmonoid構造
+  - 行から列を切り出す関数(デリミタ分割 or 正規表現)
+  - 特定列からkey, mappedの値を取り出す
+  - key, mappedの値をtree_map{string, int}に足し込む
+- 得られた値を出力
+  - tree_map{string, int}をmappedの値が大きい順に出力
+例
+- 改行区切りで行を切り出し
+- 一文字以上のスペース区切りで列を切り出し
+- 列1をkeyに、型はstring
+- 列2をkeyに、型はint
+- 列3をmappedに、型はdouble
+- カウンタをmappedに、型はint
+
+---------------------------------------------------------------------
+ptrのコピー不要コンストラクタ
+
+var x = ptr(foo(a, b, c));
+ptr<foo> x(new foo(a, b, c));   --- ok
+これは例外がなげられてもリークしない。
+
+bar(ptr(foo(a, b, c)), baz())
+bar(ptr<foo>(new foo(a, b, c)), baz())   --- NG
+これは評価順によってはbazが例外を投げるとnewしたfooをリークすることがある。
+
+したがって、初期化代入式でのみfooをコピーしないでptr{foo}構築が可能。
+そうでない場合はfooがcopyableであることを要求・チェックせねばならない。
+
+継承を使っていない型については参照カウントを埋め込む必要がある。
+rcval<foo>などを、fooのコピー無しに構築。
+char *p = new char[sizeof(rcval<foo>)];
+rcval<foo> *rawp = reinterpret_cast< rcval<foo> >(p);
+try {
+  new (&rawp->value$z) foo(a, b, c);
+  /* trcvalのときmutexも初期化 */
+  try {
+    new (&rawp->mutex$z) mutex();
+  } catch (...) {
+    rawp->value$z.foo::~foo();
+    throw;
+  }
+} catch (...) {
+  delete [] p;
+  throw;
+}
+rawp->count$z = 1;
+rcptr< rcval<foo> > x((rawp)); /* 例外は投げられない */
+new char[]で確保したメモリをrcval<foo>のdeleteで開放するのが多少
+きもちわるい。newを置き換えたら問題起こす？
+
+継承を使っている型については、単純にnewした生ポインタをポインタの
+コンストラクタに渡せばよい。
+ircptr<foo> x(new foo(a, b, c));
 
