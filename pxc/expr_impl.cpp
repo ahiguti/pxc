@@ -485,6 +485,23 @@ unsigned long long
 expr_int_literal::get_unsigned() const
 {
   if (str[0] == '\'') {
+    if (str[1] == '\\') {
+      switch (str[2]) {
+      case 'a': return '\a';
+      case 'b': return '\b';
+      case 'f': return '\f';
+      case 'n': return '\n';
+      case 'r': return '\r';
+      case 't': return '\t';
+      case 'v': return '\v';
+      case '\'': return '\'';
+      case '\"': return '\"';
+      case '\\': return '\\';
+      case '\?': return '\?';
+      case '0': return '\0';
+      default: return str[2];
+      }
+    }
     return static_cast<unsigned char>(str[1]); /* character */
   }
   return strtoull(str, 0, 0); /* decimal, hexadecimal, or octal */
@@ -494,7 +511,7 @@ long long
 expr_int_literal::get_signed() const
 {
   if (str[0] == '\'') {
-    return str[1]; /* character */
+    return get_unsigned();
   }
   return strtoll(str, 0, 0); /* decimal, hexadecimal, or octal */
 }
