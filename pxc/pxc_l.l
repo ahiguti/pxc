@@ -2,6 +2,7 @@ NUM		[0-9]
 HDNUM		[0-9a-fA-F]
 AL		[a-zA-Z_]
 ALNUM		[0-9a-zA-Z_]
+ESCCH		[abfnrtv\'\"\\\?\0]
 NOEL		([^\n]|\n[^\n])
 %{
 
@@ -59,7 +60,7 @@ extern int count_newline(const char *str);
 "valuetype"		{ return TOK_VALUETYPE; }
 "mtvaluetype"		{ return TOK_MTVALUETYPE; }
 "tsvaluetype"		{ return TOK_TSVALUETYPE; }
-\'(\\.|[^\\'])\'	{ yylval.str_val = pxc::arena_strdup(yytext);
+\'(\\{ESCCH}|[^\\'])\'	{ yylval.str_val = pxc::arena_strdup(yytext);
 			  return TOK_UINTLIT; }
 {NUM}+UL?		{ yylval.str_val = pxc::arena_strdup(yytext);
 			  return TOK_UINTLIT; }
