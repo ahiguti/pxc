@@ -8,32 +8,30 @@ public import io::net::addrinfo "";
 public multithreaded extern "pxcio::socket_factory" "linear"
   struct socket_factory(ioptr const& iop, bool passive,
     sockaddr_storage const& addr, socktype_t socktype, protocol_t protocol,
-    uint backlog, errno_t& err_r) { }
+    uint backlog, errno_eh& eh) { }
 public multithreaded extern "pxcio::socket" "linear"
   struct socket(socket_factory& sf, sockaddr_storage& addr_r,
-    errno_t& err_r) { }
+    errno_eh& ej) { }
 
 public threaded extern "pxcio::socket_read" function
-  errno_t socket_read(socket& f, strref const& buf, size_t& len_r);
-public threaded extern "pxcio::socket_read_append" function
-  errno_t socket_read_append(socket& f, string& buf, size_t& len_inout);
+  size_t socket_read(socket& f, string& buf, size_t len, errno_eh& eh);
 public threaded extern "pxcio::socket_write" function
-  errno_t socket_write(socket& f, cstrref const& buf, size_t& len_r);
+  size_t socket_write(socket& f, cstrref const& buf, errno_eh& eh);
 
 extern "type" inline
 namespace pxcio {
 struct socket_factory {
   socket_factory(ioptr const& iop, bt_bool passive,
     sockaddr_storage const& addr, int socktype, int protocol, bt_uint backlog,
-    errno_t& err_r);
+    errno_eh& eh);
   const bool passive;
-  sockaddr_storage addr;
-  int socktype;
-  int protocol;
-  auto_file listener;
+  const sockaddr_storage addr;
+  const int socktype;
+  const int protocol;
+  const auto_file listener;
 };
 struct socket : public auto_file {
-  socket(socket_factory& sf, sockaddr_storage& addr_r, errno_t& err_r);
+  socket(socket_factory& sf, sockaddr_storage& addr_r, errno_eh& eh);
 };
 };
 
@@ -44,26 +42,25 @@ namespace pxcio {
 extern "fdef" inline
 namespace pxcio {
 static int socket_factory_create(bool passive, sockaddr_storage const& addr,
-  int socktype, int protocol, int backlog, errno_t& err_r)
+  int socktype, int protocol, int backlog, errno_eh& eh)
 {
-  err_r = 0;
   if (passive) {
     int fd = ::socket(addr.get_family(), socktype, protocol);
     if (fd < 0) {
-      err_r = errno;
+      ioeh_set(eh, errno);
       return -1;
     }
     int v = 0;
     v = ::bind(fd, addr.get_sockaddr(), addr.get_socklen());
     if (v != 0) {
-      err_r = errno;
       close(fd);
+      ioeh_set(eh, errno);
       return -1;
     }
     v = ::listen(fd, backlog);
     if (v != 0) {
-      err_r = errno;
       close(fd);
+      ioeh_set(eh, errno);
       return -1;
     }
     return fd;
@@ -73,53 +70,49 @@ static int socket_factory_create(bool passive, sockaddr_storage const& addr,
 }
 socket_factory::socket_factory(ioptr const& iop, bt_bool passive,
   sockaddr_storage const& addr, int socktype, int protocol, bt_uint backlog,
-  errno_t& err_r)
+  errno_eh& eh)
   : passive(passive), addr(addr), socktype(socktype), protocol(protocol),
     listener(socket_factory_create(
-      passive, addr, socktype, protocol, backlog, err_r))
+      passive, addr, socktype, protocol, backlog, eh))
 {
 }
 static int socket_create(socket_factory& sf, sockaddr_storage& addr_r,
-  errno_t& err_r)
+  errno_eh& eh)
 {
   if (sf.passive) {
     socklen_t len = addr_r.get_socklen();
     int fd = ::accept(sf.listener.get(), addr_r.get_sockaddr(), &len);
     if (fd < 0) {
-      err_r = errno;
+      ioeh_set(eh, errno);
       return -1;
     }
     return fd;
   } else {
     int fd = ::socket(sf.addr.get_family(), sf.socktype, sf.protocol);
     if (fd < 0) {
-      err_r = errno;
+      ioeh_set(eh, errno);
       return -1;
     }
     int v = ::connect(fd, sf.addr.get_sockaddr(), sf.addr.get_socklen());
     if (v != 0) {
-      err_r = errno;
       close(fd);
+      ioeh_set(eh, errno);
       return -1;
     }
     return fd;
   }
 }
-socket::socket(socket_factory& sf, sockaddr_storage& addr_r, errno_t& err_r)
-  : auto_file(socket_create(sf, addr_r, err_r))
+socket::socket(socket_factory& sf, sockaddr_storage& addr_r, errno_eh& eh)
+  : auto_file(socket_create(sf, addr_r, eh))
 {
 }
-errno_t socket_read(socket& s, strref const& buf, size_t& len_r)
+size_t socket_read(socket& s, bt_string& buf, size_t len, errno_eh& eh)
 {
-  return file_read_impl(s.get(), buf, len_r);
+  return file_read_impl(s.get(), buf, len, eh);
 }
-errno_t socket_read_append(socket& s, bt_string& buf, size_t& len_inout)
+size_t socket_write(socket& s, cstrref const& buf, errno_eh& eh)
 {
-  return file_read_append_impl(s.get(), buf, len_inout);
-}
-errno_t socket_write(socket& s, cstrref const& buf, size_t& len_r)
-{
-  return file_write_impl(s.get(), buf, len_r);
+  return file_write_impl(s.get(), buf, eh);
 }
 };
 

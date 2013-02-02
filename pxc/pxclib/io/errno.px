@@ -1,12 +1,31 @@
 namespace io::errno;
 public import io::impl;
 public import type::builtin "";
+public import error "";
 
-public tsvaluetype extern "int" "int" struct errno_t { } // TODO: enum
-public threaded extern "pxcio::errno_t_to_string_append"
-  function void errno_t_to_string_append(errno_t e, string& buf_apnd); // TODO
+public tsvaluetype extern "int" "enum" struct errno_t { }
+public threaded extern "pxcio::errno_t_append_to_string"
+  function void errno_t_append_to_string(errno_t e, string& s);
 
-public extern "E2BIG"	errno_t E2BIG;
-// ...
+public macro errno_eh error::error_handler{errno_t};
 
+public extern "0" errno_t EOK;
+
+extern "fdef" inline
+namespace pxcio {
+using namespace pxcrt;
+void errno_t_append_to_string(int err, bt_string& s)
+{
+  #if (_POSIX_C_SOURCE >= 200112L || _XOPEN_SOURCE >= 600) && ! _GNU_SOURCE
+  /* XSI version */
+  char buf[257];
+  int len = strerror_r(err, buf, 256);
+  const char *p = buf;
+  #else
+  /* GNU version */
+  const char *p = strerror_r(err, 0, 0);
+  #endif
+  s.append(reinterpret_cast<const bt_uchar *>(p), strlen(p));
+}
+}; // namespace pxcio
 

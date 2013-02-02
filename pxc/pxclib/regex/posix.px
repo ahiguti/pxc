@@ -5,6 +5,7 @@ import compiler::util "";
 
 public tsvaluetype extern "int" "bitmask" struct cflags_t { }
 public tsvaluetype extern "int" "bitmask" struct eflags_t { }
+public tsvaluetype extern "int" "enum"    struct regerror_t { }
 public tsvaluetype extern "::regoff_t" "int" struct regoff_t { }
 public tsvaluetype extern "::regmatch_t" struct regmatch_t {
   regoff_t rm_so;
@@ -16,20 +17,16 @@ public extern "REG_NOSUB"         cflags_t REG_NOSUB;
 public extern "REG_NEWLINE"       cflags_t REG_NEWLINE;
 public extern "REG_NOTBOL"        eflags_t REG_NOTBOL;
 public extern "REG_NOTEOL"        eflags_t REG_NOTEOL;
+public extern "0"                 regerror_t REG_OK;
+public extern "REG_NOMATCH"       regerror_t REG_NOMATCH;
 
-public threaded extern "pregex::regex_compile" function
-  bool regex_compile(regex& re, string const& s, cflags_t cflags);
+public valuetype extern "pregex::posix_re" "linear"
+  struct regex(cstrref const& s, cflags_t cflags, regerror_t& err_r) { }
 public threaded extern "pregex::regex_exec" function
-  bool regex_exec(regex& re, string const& s,
+  regerror_t regex_exec(regex& re, cstrref const& s,
     slice{regmatch_t} const& ma, eflags_t eflags);
-public threaded extern "pregex::regex_compiled" function
-  bool regex_compiled(regex const& re);
-public threaded extern "pregex::regex_error_code" function
-  int regex_error_code(regex const& re);
 public threaded extern "pregex::regex_error_string" function
-  string regex_error_string(regex const& re);
-
-private valuetype extern "pregex::posix_re" "noncopyable" struct regex { }
+  string regex_error_string(regex const& re, regerror_t err);
 
 extern "type" inline
 #include <sys/types.h>
@@ -37,12 +34,10 @@ extern "type" inline
 namespace pregex {
 using namespace pxcrt;
 struct posix_re {
-  posix_re() : value(), error_code(0), compiled(false) { }
-  ~posix_re() { if (compiled) { ::regfree(&value); } }
+  posix_re(cstrref const& s, int cflags, int& err_r);
+  ~posix_re();
 public:
   ::regex_t value;
-  int error_code;
-  bool compiled;
 private:
   posix_re(const posix_re&);
   posix_re& operator =(const posix_re&);
@@ -55,50 +50,32 @@ namespace pregex {
 
 extern "fdef" inline
 namespace pregex {
-bt_bool regex_compile(posix_re& re, bt_string const& s, int cflags)
+posix_re::posix_re(cstrref const& s, int cflags, int& err_r)
 {
-  if (re.compiled) {
-    ::regfree(&re.value);
-    re.error_code = 0;
-    re.compiled = false;
-  }
   PXCRT_ALLOCA_NTSTRING(s_nt, s);
-  const int r = ::regcomp(&re.value, s_nt.get(), cflags);
-  re.error_code = r;
-  if (r == 0) {
-    re.compiled = true;
-    return true;
-  }
-  return false;
+  const int r = ::regcomp(&value, s_nt.get(), cflags);
+  err_r = r;
 }
-bt_bool regex_exec(posix_re& re, bt_string const& s,
+posix_re::~posix_re()
+{
+  ::regfree(&value);
+}
+int regex_exec(posix_re& re, cstrref const& s,
   bt_slice<regmatch_t> const& ma, int eflags)
 {
-  if (!re.compiled) {
-    return false;
-  }
   PXCRT_ALLOCA_NTSTRING(s_nt, s);
   const int r = ::regexec(&re.value, s_nt.get(), ma.size(), ma.rawarr(),
     eflags);
-  re.error_code = r;
-  return (r == 0);
+  return r;
 }
-bt_bool regex_compiled(posix_re const& re)
+bt_string regex_error_string(posix_re const& re, int err)
 {
-  return re.compiled;
-}
-int regex_error_code(posix_re const& re)
-{
-  return re.error_code;
-}
-bt_string regex_error_string(posix_re const& re)
-{
-  size_t sz = ::regerror(re.error_code, &re.value, 0, 0);
+  size_t sz = ::regerror(err, &re.value, 0, 0);
   bt_string s;
-  s.resize(sz, 0);
-  ::regerror(re.error_code, &re.value, reinterpret_cast<char *>(&s[0]), sz);
+  s.reserve(sz);
+  ::regerror(err, &re.value, reinterpret_cast<char *>(&s[0]), sz);
   if (sz > 0) {
-    s.resize(sz - 1, 0);
+    s.rawarr_initialized(sz - 1);
   }
   return s;
 }

@@ -1,0 +1,39 @@
+namespace compiler::impl::exception;
+
+extern "type" inline
+#include <stdexcept>
+namespace pxcrt {
+void throw_bad_alloc() __attribute__((noreturn, noinline));
+void throw_invalid_index() __attribute__((noreturn, noinline));
+void throw_null_dereference() __attribute__((noreturn, noinline));
+void throw_invalid_field() __attribute__((noreturn, noinline));
+void throw_would_invalidate() __attribute__((noreturn, noinline));
+void throw_virtual_function_call() __attribute__((noreturn, noinline));
+struct invalid_index : public std::logic_error
+  { invalid_index(); };
+struct invalid_field : public std::logic_error
+  { invalid_field(); };
+struct null_dereference : public std::logic_error
+  { null_dereference(); };
+struct would_invalidate : public std::logic_error
+  { would_invalidate(); };
+struct virtual_function_call : public std::logic_error
+  { virtual_function_call(); };
+}; // namespace pxcrt
+
+extern "fdef" inline
+namespace pxcrt {
+invalid_index::invalid_index() : std::logic_error("invalid_index") { }
+invalid_field::invalid_field() : std::logic_error("invalid_field") { }
+null_dereference::null_dereference() : std::logic_error("null_dereference") { }
+would_invalidate::would_invalidate() : std::logic_error("would_invalidate") { }
+virtual_function_call::virtual_function_call()
+  : std::logic_error("virtual_function_call") { }
+void throw_bad_alloc() { throw std::bad_alloc(); }
+void throw_invalid_index() { throw invalid_index(); }
+void throw_invalid_field() { throw invalid_field(); }
+void throw_null_dereference() { throw null_dereference(); }
+void throw_would_invalidate() { throw would_invalidate(); }
+void throw_virtual_function_call() { throw virtual_function_call(); }
+}; // namespace pxcrt
+

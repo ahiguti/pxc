@@ -1,0 +1,27 @@
+namespace line;
+import common "";
+import io::file "";
+import io::buffered;
+import serialize::string "";
+
+function void t1()
+{
+  string buffer;
+  var msg = "x";
+  var eh = io::errno::errno_eh(error::policy_first);
+  var f = file(io::io, "hoge2.txt", io::file::O_RDONLY, 0, eh);
+  io::buffered::stream_foreach{file, parse_line}(f, buffer, 10, 4096, eh);
+  function void parse_line(cslice{uchar} const& line) {
+    string s = "cb ";
+    s.append(msg); // upvalue
+    s.append(" len=");
+    s.append(to_string(line.size()));
+    s.append(" [");
+    s.append(line);
+    s.append("]");
+    println(s);
+  }
+}
+
+t1();
+

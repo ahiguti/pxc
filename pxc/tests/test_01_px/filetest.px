@@ -1,21 +1,21 @@
-import test_common "";
+import common "";
 namespace filetest;
 
 function void ft1()
 {
-  io::errno::errno_t e;
-  var f = io::file::file(io::io, "hoge.txt", io::file::O_RDONLY, 0, e);
+  var eh = io::errno::errno_eh(error::policy_throw);
+  var f = io::file::file(io::io, "hoge.txt", io::file::O_RDONLY, 0, eh);
   string s;
-  s.resize(3, 0);
-  size_t len;
-  f.read(s, len);
+  size_t len = 3;
+  f.read(s, len, eh);
   println(s);
 }
 
 function void ft2()
 {
   string s;
-  io::file::io_read_file(io::io, "hoge.txt", s);
+  var eh = io::errno::errno_eh(error::policy_throw);
+  io::file::io_read_file(io::io, "hoge.txt", s, eh);
   print(s);
 }
 

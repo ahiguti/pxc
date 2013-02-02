@@ -523,6 +523,9 @@ void arena_compile(const std::string& dest_filename, coptions& copt_apnd,
   compile_phase = 5;
   fn_check_root(global);
   compile_phase = 6;
+  fn_check_template_upvalues_direct(global);
+  fn_check_template_upvalues_tparam(global);
+  arena_error_throw_pushed();
   fn_check_final(global);
   arena_error_throw_pushed();
   compile_phase = 7;

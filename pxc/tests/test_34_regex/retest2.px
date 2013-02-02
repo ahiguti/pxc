@@ -1,21 +1,26 @@
 namespace retest;
-import test_common "";
+import common "";
 import regex::posix "";
 
 function void t1()
 {
-  regex re;
+  regerror_t err;
+  var re = regex("([a-z]+)([0-9]+)", REG_EXTENDED, err);
+  if (err != REG_OK) {
+    println(re.error_string(err));
+    return;
+  }
   farray{regmatch_t, 3} m;
-  re.compile("\\([a-z]\\+\\)\\([0-9]\\+\\)", 0);
-  if (re.exec("abc", m, 0)) {
+  err = re.exec("abc", m, 0);
+  if (err == REG_OK) {
     foreach (size_t i, regmatch_t mutable e : m) {
       println(numeric_cast{int, regex::posix::regoff_t}(e.rm_so));
       println(numeric_cast{int, regex::posix::regoff_t}(e.rm_eo));
     }
   } else {
     println("failed");
-    println(re.error_code());
-    println(re.error_string());
+    // println(re.error_code());
+    // println(re.error_string());
   }
 }
 

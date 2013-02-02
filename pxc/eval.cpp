@@ -183,10 +183,14 @@ static expr_i *instantiate_template_internal(expr_i *tmpl_root,
     term_tostr(rt, term_tostr_sort_cname).c_str(),
     term_tostr(rcpy->get_value_texpr(), term_tostr_sort_cname).c_str()
     ));
+  #if 0
+  // moved to expr.cpp
   /* add tparam upvalues */
   if (rcpy->get_esort() == expr_e_funcdef) {
-    add_tparam_upvalues_funcdef(ptr_down_cast<expr_funcdef>(rcpy));
+    add_tparam_upvalues_funcdef_direct(ptr_down_cast<expr_funcdef>(rcpy));
+    add_tparam_upvalues_funcdef_tparam(ptr_down_cast<expr_funcdef>(rcpy));
   }
+  #endif
   return rcpy;
 }
 

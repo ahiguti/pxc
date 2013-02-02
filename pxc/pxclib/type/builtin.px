@@ -29,59 +29,39 @@ public multithreaded extern "pxcrt::tptr" "tptr" struct {t} tptr { }
 public multithreaded extern "pxcrt::tcptr" "tcptr" struct {t} tcptr { }
 public tsvaluetype extern "pxcrt::tiptr" "tiptr" struct {t} tiptr { }
 
-public threaded extern "pxcrt::unit_to_string"
-  function string bt_unit_to_string(unit x);
-public threaded extern "pxcrt::bool_to_string"
-  function string bt_bool_to_string(bool x);
-public threaded extern "pxcrt::uchar_to_string"
-  function string bt_uchar_to_string(uchar x);
-public threaded extern "pxcrt::char_to_string"
-  function string bt_char_to_string(char x);
-public threaded extern "pxcrt::ushort_to_string"
-  function string bt_ushort_to_string(ushort x);
-public threaded extern "pxcrt::short_to_string"
-  function string bt_short_to_string(short x);
-public threaded extern "pxcrt::uint_to_string"
-  function string bt_uint_to_string(uint x);
-public threaded extern "pxcrt::int_to_string"
-  function string bt_int_to_string(int x);
-public threaded extern "pxcrt::ulong_to_string"
-  function string bt_ulong_to_string(ulong x);
-public threaded extern "pxcrt::long_to_string"
-  function string bt_long_to_string(long x);
-public threaded extern "pxcrt::size_t_to_string"
-  function string bt_size_t_to_string(size_t x);
-public threaded extern "pxcrt::float_to_string"
-  function string bt_float_to_string(float x);
-public threaded extern "pxcrt::double_to_string"
-  function string bt_double_to_string(double x);
+public threaded extern "pxcrt::bool_append_to_string"
+  function void bt_bool_append_to_string(bool x, string& s);
+public threaded extern "pxcrt::float_append_to_string"
+  function void bt_float_append_to_string(float x, string& s);
+public threaded extern "pxcrt::double_append_to_string"
+  function void bt_double_append_to_string(double x, string& s);
 
 public threaded extern "pxcrt::string_to_unit"
-  function unit string_to_bt_unit(string const& x);
+  function unit string_to_bt_unit(cstrref const& x);
 public threaded extern "pxcrt::string_to_bool"
-  function bool string_to_bt_bool(string const& x);
+  function bool string_to_bt_bool(cstrref const& x);
 public threaded extern "pxcrt::string_to_uchar"
-  function uchar string_to_bt_ucahr(string const& x);
+  function uchar string_to_bt_ucahr(cstrref const& x);
 public threaded extern "pxcrt::string_to_char"
-  function char string_to_bt_char(string const& x);
+  function char string_to_bt_char(cstrref const& x);
 public threaded extern "pxcrt::string_to_ushort"
-  function ushort string_to_bt_ushort(string const& x);
+  function ushort string_to_bt_ushort(cstrref const& x);
 public threaded extern "pxcrt::string_to_short"
-  function short string_to_bt_short(string const& x);
+  function short string_to_bt_short(cstrref const& x);
 public threaded extern "pxcrt::string_to_uint"
-  function uint string_to_bt_uint(string const& x);
+  function uint string_to_bt_uint(cstrref const& x);
 public threaded extern "pxcrt::string_to_int"
-  function int string_to_bt_int(string const& x);
+  function int string_to_bt_int(cstrref const& x);
 public threaded extern "pxcrt::string_to_ulong"
-  function ulong string_to_bt_ulong(string const& x);
+  function ulong string_to_bt_ulong(cstrref const& x);
 public threaded extern "pxcrt::string_to_long"
-  function long string_to_bt_long(string const& x);
+  function long string_to_bt_long(cstrref const& x);
 public threaded extern "pxcrt::string_to_float"
-  function float string_to_bt_float(string const& x);
+  function float string_to_bt_float(cstrref const& x);
 public threaded extern "pxcrt::string_to_double"
-  function double string_to_bt_double(string const& x);
+  function double string_to_bt_double(cstrref const& x);
 public threaded extern "pxcrt::string_to_size_t"
-  function size_t string_to_bt_size_t(string const& x);
+  function size_t string_to_bt_size_t(cstrref const& x);
 
 extern "type" inline
 #include <string>
@@ -165,16 +145,17 @@ struct stcount {
 private:
   long count$z;
 };
-struct boxing { };
+template <typename T> struct uninit_mem { char value[sizeof(T)]; };
 template <typename T>
 struct rcval { /* single threaded, mutable and immutable */
+  /* note: fast boxing constr skips *rcval constructor */
   rcval() : value$z() {
     DBG_RC(fprintf(stdout, "c1 %p\n", this));
   }
   explicit rcval(const T& v) : value$z(v) {
     DBG_RC(fprintf(stdout, "c2 %p\n", this));
   }
-  template <typename T0>
+  template <typename T0> explicit
   rcval(const T0& a0) : value$z(a0) { }
   template <typename T0, typename T1>
   rcval(const T0& a0, const T1& a1) : value$z(a0, a1) { }
@@ -191,10 +172,8 @@ struct rcval { /* single threaded, mutable and immutable */
       DBG_RC(fprintf(stdout, "d  %p\n", this));
     }
   }
-  nomutex& get_mutex$z() const { return mutex$z; }
-private:
+public:
   mutable stcount count$z;
-  mutable nomutex mutex$z;
 public:
   T value$z;
 private:
@@ -209,7 +188,7 @@ struct trcval { /* multithreaded, mutable */
   explicit trcval(const T& v) : value$z(v) {
     DBG_RC(fprintf(stdout, "c2 %p\n", this));
   }
-  template <typename T0>
+  template <typename T0> explicit
   trcval(const T0& a0) : value$z(a0) { }
   template <typename T0, typename T1>
   trcval(const T0& a0, const T1& a1) : value$z(a0, a1) { }
@@ -227,7 +206,7 @@ struct trcval { /* multithreaded, mutable */
     }
   }
   mutex& get_mutex$z() const { return mutex$z; }
-private:
+public:
   mutable mtcount count$z;
   mutable mutex mutex$z;
 public:
@@ -244,7 +223,7 @@ struct tircval { /* multithreded, immutable */
   explicit tircval(const T& v) : value$z(v) {
     DBG_RC(fprintf(stdout, "c2 %p\n", this));
   }
-  template <typename T0>
+  template <typename T0> explicit
   tircval(const T0& a0) : value$z(a0) { }
   template <typename T0, typename T1>
   tircval(const T0& a0, const T1& a1) : value$z(a0, a1) { }
@@ -262,7 +241,7 @@ struct tircval { /* multithreded, immutable */
     }
   }
   mutex& get_mutex$z() const { return mutex$z; }
-private:
+public:
   mutable mtcount count$z;
   mutable nomutex mutex$z;
 public:
@@ -276,25 +255,14 @@ struct rcptr { /* T must have an intrusive count */
   typedef T value_type;
   template <typename Tx> friend struct rcptr;
   rcptr() : ptr(0) { }
+  rcptr(T *rawptr) : ptr(rawptr) { } /* for fast boxing constr */
   rcptr(const rcptr& x) : ptr(x.ptr) { if (ptr) ptr->incref$z(); }
-  /* rcptr(T *x) : ptr(x) { if (ptr) ptr->incref$z(); } */
   /* ptr{foo} to ptr{ifoo} */
   template <typename Tx> rcptr(const rcptr<Tx>& x) : ptr(x.get()) {
     if (ptr) ptr->incref$z();
   }
   /* boxing foo to ptr{ifoo} */
   template <typename Tx> explicit rcptr(const Tx& x) : ptr(new T(x)) { }
-  /* boxing */
-  rcptr(const boxing& c) : ptr(new T()) { }
-  template <typename T0>
-  rcptr(const boxing& c, const T0& a0)
-    : ptr(new T(a0)) { }
-  template <typename T0, typename T1>
-  rcptr(const boxing& c, const T0& a0, const T1& a1)
-    : ptr(new T(a0, a1)) { }
-  template <typename T0, typename T1, typename T2>
-  rcptr(const boxing& c, const T0& a0, const T1& a1, const T2& a2)
-    : ptr(new T(a0, a1, a2)) { }
   ~rcptr() { if (ptr) ptr->decref$z(); }
   rcptr& operator =(T *x) { return set(x); }
   template <typename Tx> rcptr& operator =(Tx *x) { return set(x); }
@@ -329,85 +297,23 @@ extern "fdef" inline
 #include <boost/lexical_cast.hpp>
 #include <boost/range/iterator_range.hpp>
 namespace pxcrt {
-bt_string void_to_string(void)
-{
-  return bt_string();
-}
-bt_string unit_to_string(bt_unit x)
-{
-  return bt_string();
-}
-bt_string bool_to_string(bt_bool v)
+void bool_append_to_string(bt_bool v, bt_string& s)
 {
   static const bt_strlit str_t("true");
   static const bt_strlit str_f("false");
-  return v ? str_t : str_f;
+  s.append(v ? str_t : str_f);
 }
-bt_string uchar_to_string(bt_uchar v)
-{
-  char buf[4];
-  const int len = snprintf(buf, sizeof(buf), "%hhu", (unsigned char)v);
-  return bt_string(reinterpret_cast<unsigned char *>(buf), len);
-}
-bt_string char_to_string(bt_char v)
-{
-  char buf[4];
-  const int len = snprintf(buf, sizeof(buf), "%hhd", (char)v);
-  return bt_string(reinterpret_cast<unsigned char *>(buf), len);
-}
-bt_string ushort_to_string(bt_ushort v)
-{
-  char buf[8];
-  const int len = snprintf(buf, sizeof(buf), "%hu", v);
-  return bt_string(reinterpret_cast<unsigned char *>(buf), len);
-}
-bt_string short_to_string(bt_short v)
-{
-  char buf[8];
-  const int len = snprintf(buf, sizeof(buf), "%hd", v);
-  return bt_string(reinterpret_cast<unsigned char *>(buf), len);
-}
-bt_string uint_to_string(bt_uint v)
-{
-  char buf[16];
-  const int len = snprintf(buf, sizeof(buf), "%u", v);
-  return bt_string(reinterpret_cast<unsigned char *>(buf), len);
-}
-bt_string int_to_string(bt_int v)
-{
-  char buf[16];
-  const int len = snprintf(buf, sizeof(buf), "%d", v);
-  return bt_string(reinterpret_cast<unsigned char *>(buf), len);
-}
-bt_string ulong_to_string(bt_ulong v)
-{
-  char buf[32];
-  const int len = snprintf(buf, sizeof(buf), "%llu", (unsigned long long)v);
-  return bt_string(reinterpret_cast<unsigned char *>(buf), len);
-}
-bt_string long_to_string(bt_long v)
-{
-  char buf[32];
-  const int len = snprintf(buf, sizeof(buf), "%lld", (long long)v);
-  return bt_string(reinterpret_cast<unsigned char *>(buf), len);
-}
-bt_string double_to_string(bt_double v)
+void double_append_to_string(bt_double v, bt_string& s)
 {
   char buf[32];
   const int len = snprintf(buf, sizeof(buf), "%f", v);
-  return bt_string(reinterpret_cast<unsigned char *>(buf), len);
+  s.append(reinterpret_cast<const unsigned char *>(buf), len);
 }
-bt_string float_to_string(bt_float v)
+void float_append_to_string(bt_float v, bt_string& s)
 {
   char buf[32];
   const int len = snprintf(buf, sizeof(buf), "%f", double(v));
-  return bt_string(reinterpret_cast<unsigned char *>(buf), len);
-}
-bt_string size_t_to_string(bt_size_t v)
-{
-  char buf[32];
-  const int len = snprintf(buf, sizeof(buf), "%zu", (size_t)v);
-  return bt_string(reinterpret_cast<unsigned char *>(buf), len);
+  s.append(reinterpret_cast<const unsigned char *>(buf), len);
 }
 bt_unit string_to_unit(const bt_string& v)
 {
@@ -431,30 +337,30 @@ template <typename Tt, typename Tf> inline Tt
 string_to_numeric_tmpl(const Tf& a)
 {
   const char *const p = reinterpret_cast<const char *>(a.rawarr());
-  const typename Tf::size_type len = a.size();
+  const size_t len = a.size();
   return boost::lexical_cast<Tt>(boost::make_iterator_range(p, p + len));
 }
-bt_uchar string_to_uchar(const bt_string& v)
-  { return string_to_numeric_tmpl<bt_uchar, bt_string>(v); }
-bt_char string_to_char(const bt_string& v)
-  { return string_to_numeric_tmpl<bt_char, bt_string>(v); }
-bt_ushort string_to_ushort(const bt_string& v)
-  { return string_to_numeric_tmpl<bt_ushort, bt_string>(v); }
-bt_short string_to_short(const bt_string& v)
-  { return string_to_numeric_tmpl<bt_short, bt_string>(v); }
-bt_uint string_to_uint(const bt_string& v)
-  { return string_to_numeric_tmpl<bt_uint, bt_string>(v); }
-bt_int string_to_int(const bt_string& v)
-  { return string_to_numeric_tmpl<bt_int, bt_string>(v); }
-bt_ulong string_to_ulong(const bt_string& v)
-  { return string_to_numeric_tmpl<bt_ulong, bt_string>(v); }
-bt_long string_to_long(const bt_string& v)
-  { return string_to_numeric_tmpl<bt_long, bt_string>(v); }
-bt_double string_to_double(const bt_string& v)
-  { return string_to_numeric_tmpl<bt_double, bt_string>(v); }
-bt_float string_to_float(const bt_string& v)
-  { return string_to_numeric_tmpl<bt_float, bt_string>(v); }
-bt_size_t string_to_size_t(const bt_string& v)
-  { return string_to_numeric_tmpl<bt_size_t, bt_string>(v); }
+bt_uchar string_to_uchar(const cstrref& v)
+  { return string_to_numeric_tmpl<bt_uchar, cstrref>(v); }
+bt_char string_to_char(const cstrref& v)
+  { return string_to_numeric_tmpl<bt_char, cstrref>(v); }
+bt_ushort string_to_ushort(const cstrref& v)
+  { return string_to_numeric_tmpl<bt_ushort, cstrref>(v); }
+bt_short string_to_short(const cstrref& v)
+  { return string_to_numeric_tmpl<bt_short, cstrref>(v); }
+bt_uint string_to_uint(const cstrref& v)
+  { return string_to_numeric_tmpl<bt_uint, cstrref>(v); }
+bt_int string_to_int(const cstrref& v)
+  { return string_to_numeric_tmpl<bt_int, cstrref>(v); }
+bt_ulong string_to_ulong(const cstrref& v)
+  { return string_to_numeric_tmpl<bt_ulong, cstrref>(v); }
+bt_long string_to_long(const cstrref& v)
+  { return string_to_numeric_tmpl<bt_long, cstrref>(v); }
+bt_double string_to_double(const cstrref& v)
+  { return string_to_numeric_tmpl<bt_double, cstrref>(v); }
+bt_float string_to_float(const cstrref& v)
+  { return string_to_numeric_tmpl<bt_float, cstrref>(v); }
+bt_size_t string_to_size_t(const cstrref& v)
+  { return string_to_numeric_tmpl<bt_size_t, cstrref>(v); }
 }; // namespace pxcrt
 

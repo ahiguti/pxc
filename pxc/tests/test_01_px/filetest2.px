@@ -1,26 +1,33 @@
-import test_common "";
+import common "";
 namespace filetest;
 
-function void ft1()
+function void ft1(string const& fn)
 {
-  string fn = "hoge.txt";
+  println("ft1");
+  var eh = io::errno::errno_eh(error::policy_first);
   io::file::statbuf stbuf;
-  io::errno::errno_t r = io::file::io_stat(io::io, fn, stbuf);
-  if (r != 0) {
+  io::file::io_stat(io::io, fn, stbuf, eh);
+  if (eh.get() != io::errno::EOK) {
     print("failed to stat: ");
     println(fn);
+    print("error = ");
+    println(eh.get());
   } else {
     println(stbuf.st_size);
   }
 }
 
-function void ft2()
+function void ft2(string const& fn)
 {
+  println("ft2");
+  var eh = io::errno::errno_eh(error::policy_first);
   string s;
-  io::file::io_read_file(io::io, "hoge.txt", s);
+  io::file::io_read_file(io::io, fn, s, eh);
   print(s);
 }
 
-ft1();
-ft2();
+ft1("hoge.txt");
+ft2("hoge.txt");
+ft1("hoge2.txt");
+ft2("hoge2.txt");
 
