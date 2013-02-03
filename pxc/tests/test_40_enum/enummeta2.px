@@ -1,0 +1,56 @@
+namespace enummeta;
+import common "";
+
+enum foo {
+  foo1 = 1,
+  foo2 = 2,
+  foo3 = 3,
+  foo4 = 4,
+}
+
+bitmask bar {
+  bar01 = 1,
+  bar02 = 2,
+  bar04 = 4,
+  bar08 = 8,
+  bar10 = 0x10,
+  bar20 = 0x20,
+  bar40 = 0x40,
+}
+
+function {t} string enum_to_string(t v)
+{
+  foreach (name, sym : meta::builtin::values{t}) {
+    if (v == sym) {
+      return name;
+    }
+  }
+  return "?";
+}
+
+function {t} string bitmask_to_string(t v)
+{
+  string s;
+  if (v == 0) {
+    return "0";
+  }
+  foreach (name, sym : meta::builtin::values{t}) {
+    if ((v & sym) != 0) {
+      if (!s.empty()) {
+	s.append("|");
+      }
+      s.append(name);
+    }
+  }
+  return s;
+}
+
+function void test1() {
+  foo f = foo2;
+  println(enum_to_string(f));
+  bar b = bar04 | bar20;
+  println(bitmask_to_string(b));
+}
+
+test1();
+
