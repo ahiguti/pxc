@@ -2582,6 +2582,10 @@ void expr_struct::check_type(symbol_table *lookup)
   fn_check_type(block, lookup);
   check_inherit_threading(this);
   check_constr_restrictions(this);
+  if (typecat_str != 0 && typecat_str[0] != '@' && typecat_str[0] != 0 &&
+    typecat == typecat_e_none) {
+    arena_error_throw(this, "invalid type category: \'%s\'", typecat_str);
+  }
 }
 
 void expr_variant::check_type(symbol_table *lookup)

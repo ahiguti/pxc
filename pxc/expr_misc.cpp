@@ -232,7 +232,7 @@ bool is_enum(const term& t)
     return etd->is_enum;
   }
   const typecat_e cat = get_category(t);
-  return cat == typecat_e_enum;
+  return cat == typecat_e_extenum;
 }
 
 bool is_bitmask(const term& t)
@@ -242,7 +242,7 @@ bool is_bitmask(const term& t)
     return etd->is_bitmask;
   }
   const typecat_e cat = get_category(t);
-  return cat == typecat_e_bitmask;
+  return cat == typecat_e_extbitmask;
 }
 
 bool is_boolean_algebra(const term& t)
@@ -251,8 +251,8 @@ bool is_boolean_algebra(const term& t)
     return true;
   }
   const typecat_e cat = get_category(t);
-  return cat == typecat_e_int || cat == typecat_e_uint
-    || cat == typecat_e_bitmask;
+  return cat == typecat_e_extint || cat == typecat_e_extuint
+    || cat == typecat_e_extbitmask;
 }
 
 static bool is_builtin_pod(const term& t)
@@ -267,7 +267,7 @@ bool is_equality_type(const term& t)
   if (is_ordered_type(t)) {
     return true;
   }
-  if (is_enum(t)) {
+  if (is_enum(t) || is_bitmask(t)) {
     return true;
   }
   if (is_cm_pointer_family(t)) {
@@ -295,11 +295,11 @@ bool is_possibly_pod(const term& t)
   }
   const typecat_e cat = get_category(t);
   switch (cat) {
-  case typecat_e_int:
-  case typecat_e_uint:
-  case typecat_e_enum:
-  case typecat_e_bitmask:
-  case typecat_e_float:
+  case typecat_e_extint:
+  case typecat_e_extuint:
+  case typecat_e_extenum:
+  case typecat_e_extbitmask:
+  case typecat_e_extfloat:
     return true;
   case typecat_e_noncopyable:
     return false; /* default constructible but noncopyable */
@@ -320,11 +320,11 @@ bool is_possibly_nonpod(const term& t)
   }
   const typecat_e cat = get_category(t);
   switch (cat) {
-  case typecat_e_int:
-  case typecat_e_uint:
-  case typecat_e_enum:
-  case typecat_e_bitmask:
-  case typecat_e_float:
+  case typecat_e_extint:
+  case typecat_e_extuint:
+  case typecat_e_extenum:
+  case typecat_e_extbitmask:
+  case typecat_e_extfloat:
     return false;
   case typecat_e_noncopyable:
     return true; /* default constructible but noncopyable */
@@ -358,7 +358,7 @@ static bool is_pod_integral_type(const term& t)
     return true;
   }
   const typecat_e cat = get_category(t);
-  return cat == typecat_e_int || cat == typecat_e_uint;
+  return cat == typecat_e_extint || cat == typecat_e_extuint;
 }
 
 bool is_integral_type(const term& t)
@@ -367,7 +367,7 @@ bool is_integral_type(const term& t)
     return true;
   }
   const typecat_e cat = get_category(t);
-  return cat == typecat_e_int || cat == typecat_e_uint;
+  return cat == typecat_e_extint || cat == typecat_e_extuint;
 }
 
 bool is_unsigned_integral_type(const term& t)
@@ -383,7 +383,7 @@ bool is_unsigned_integral_type(const term& t)
     return true;
   }
   const typecat_e cat = get_category(t);
-  return cat == typecat_e_uint;
+  return cat == typecat_e_extuint;
 }
 
 bool is_float_type(const term& t)
@@ -414,12 +414,12 @@ typecat_e get_category_from_string(const std::string& s)
   if (s == "tptr") return typecat_e_tptr;
   if (s == "tcptr") return typecat_e_tcptr;
   if (s == "tiptr") return typecat_e_tiptr;
-  if (s == "int") return typecat_e_int;
-  if (s == "uint") return typecat_e_uint;
-  if (s == "enum") return typecat_e_enum;
-  if (s == "bitmask") return typecat_e_bitmask;
-  if (s == "float") return typecat_e_float;
-  if (s == "numeric") return typecat_e_numeric;
+  if (s == "extint") return typecat_e_extint;
+  if (s == "extuint") return typecat_e_extuint;
+  if (s == "extenum") return typecat_e_extenum;
+  if (s == "extbitmask") return typecat_e_extbitmask;
+  if (s == "extfloat") return typecat_e_extfloat;
+  if (s == "extnumeric") return typecat_e_extnumeric;
   if (s == "varray") return typecat_e_varray;
   if (s == "darray") return typecat_e_darray;
   if (s == "farray") return typecat_e_farray;
@@ -446,12 +446,12 @@ std::string get_category_string(typecat_e cat)
   case typecat_e_tptr: return "tptr";
   case typecat_e_tcptr: return "tcptr";
   case typecat_e_tiptr: return "tiptr";
-  case typecat_e_int: return "int";
-  case typecat_e_uint: return "uint";
-  case typecat_e_enum: return "enum";
-  case typecat_e_bitmask: return "bitmask";
-  case typecat_e_float: return "float";
-  case typecat_e_numeric: return "numeric";
+  case typecat_e_extint: return "extint";
+  case typecat_e_extuint: return "extuint";
+  case typecat_e_extenum: return "extenum";
+  case typecat_e_extbitmask: return "extbitmask";
+  case typecat_e_extfloat: return "extfloat";
+  case typecat_e_extnumeric: return "extnumeric";
   case typecat_e_varray: return "varray";
   case typecat_e_darray: return "darray";
   case typecat_e_farray: return "farray";
@@ -974,8 +974,10 @@ std::string term_tostr(const term& t, term_tostr_sort s)
     case expr_e_typedef:
       {
 	const expr_typedef *etd = ptr_down_cast<const expr_typedef>(tdef);
-	if (etd->is_enum || etd->is_bitmask) {
-	  return "int";
+	if (s == term_tostr_sort_cname) {
+	  if (etd->is_enum || etd->is_bitmask) {
+	    return "int";
+	  }
 	}
 	sym = etd->sym;
 	uniqns = etd->uniqns;
@@ -1028,6 +1030,18 @@ std::string term_tostr(const term& t, term_tostr_sort s)
 	const expr_tparams *const etp = ptr_down_cast<const expr_tparams>(
 	  tdef);
 	return "[param " + std::string(etp->sym) + "]";
+      }
+      break;
+    case expr_e_enumval:
+      {
+	const expr_enumval *const eev = ptr_down_cast<const expr_enumval>(
+	  tdef);
+	sym = eev->sym;
+	uniqns = eev->uniqns;
+	tparams = 0;
+	esort_char = 0;
+	self_block = 0;
+	esort_char = 'a';
       }
       break;
     default:

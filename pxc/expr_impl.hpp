@@ -131,12 +131,12 @@ enum typecat_e {
   typecat_e_tptr,             /* multithread-shared pointer */
   typecat_e_tcptr,            /* multithread-shared pointer, const target */
   typecat_e_tiptr,            /* multithread-shared pointer, immutable tgt */
-  typecat_e_int,              /* int/long etc */
-  typecat_e_uint,             /* unsigned int/long etc, */
-  typecat_e_enum,             /* c-defined enum */
-  typecat_e_bitmask,          /* c-defined bitmask */
-  typecat_e_float,            /* float/double etc, */
-  typecat_e_numeric,          /* other numeric types */
+  typecat_e_extint,           /* c-defined int/long etc */
+  typecat_e_extuint,          /* c-defined unsigned int/long etc, */
+  typecat_e_extenum,          /* c-defined enum */
+  typecat_e_extbitmask,       /* c-defined bitmask */
+  typecat_e_extfloat,         /* c-defined float/double etc, */
+  typecat_e_extnumeric,       /* c-defined other numeric types */
   typecat_e_varray,           /* resizable array */
   typecat_e_darray,           /* dynamically allocated array */
   typecat_e_farray,           /* fixed size array, fixed at compile time */

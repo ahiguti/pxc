@@ -819,6 +819,31 @@ static term eval_meta_targs(term_list& tlev)
   return term(*targs);
 }
 
+static term eval_meta_values(term_list& tlev)
+{
+  if (tlev.size() != 1) {
+    return term();
+  }
+  expr_i *const einst = term_get_instance(tlev[0]);
+  if (einst == 0) {
+    return term();
+  }
+  if (einst->get_esort() != expr_e_typedef) {
+    return term();
+  }
+  expr_typedef *const etd = ptr_down_cast<expr_typedef>(einst);
+  if (!etd->is_enum && !etd->is_bitmask) {
+    return term();
+  }
+  expr_enumval *vals = etd->enumvals;
+  term_list tl;
+  while (vals != 0) {
+    tl.push_back(term(vals));
+    vals = vals->rest;
+  }
+  return term(tl);
+}
+
 static term eval_meta_list(term_list& tlev)
 {
   return term(tlev);
@@ -1076,6 +1101,14 @@ static term eval_meta_category(term_list& tlev)
   case expr_e_interface:
     return term("interface");
   case expr_e_typedef:
+    {
+      expr_typedef *const etd = ptr_down_cast<expr_typedef>(einst);
+      if (etd->is_enum) {
+	return term("enum");
+      } else if (etd->is_bitmask) {
+	return term("bitmask");
+      }
+    }
     return term("builtin");
   case expr_e_macrodef:
     return term("macro");
@@ -1364,6 +1397,8 @@ static term eval_metafunction(const std::string& name, term_list& tlev,
       r = eval_meta_num_targs(tlev);
     } else if (name == "@targs") {
       r = eval_meta_targs(tlev);
+    } else if (name == "@values") {
+      r = eval_meta_values(tlev);
     } else if (name == "@is_type") {
       r = eval_meta_is_type(tlev);
     } else if (name == "@is_function") {
