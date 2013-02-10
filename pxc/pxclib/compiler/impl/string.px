@@ -7,6 +7,7 @@ extern "type" inline
 #include <stdexcept>
 #include <string.h>
 #include <stdint.h>
+#include <limits>
 #include <boost/type_traits/is_pod.hpp>
 #include <boost/static_assert.hpp>
 namespace pxcrt {
@@ -221,9 +222,7 @@ struct podvector {
   }
   void push_back(T const& x) {
     check_resize();
-    reserve_internal(valid_len + 1);
-    start[valid_len] = x;
-    ++valid_len;
+    push_back_internal(x);
   }
   T pop_back() {
     check_resize();
@@ -269,12 +268,28 @@ public: /* public, but does not check safety */
   const_iterator end() const { return start + valid_len; }
   T *rawarr() { return start; }
   const T *rawarr() const { return start; }
-  void rawarr_initialized(size_type len) {
+  template <size_t mul> T *reserve_back(size_type len) {
+    check_resize();
+    if (len >= ::std::numeric_limits<size_type>::max() / mul) {
+      pxcrt::throw_bad_alloc(); /* overflow */
+    }
+    const size_type osz = valid_len;
+    const size_type nsz = osz + len * mul;
+    if (nsz < osz) {
+      pxcrt::throw_bad_alloc(); /* overflow */
+    }
+    reserve_internal(nsz);
+    return start + osz;
+  }
+  void rawarr_set_valid_len(size_type len) {
     valid_len = len;
   }
   void append(const T *ptr, size_type len) {
     check_resize();
     append_internal(ptr, len);
+  }
+  void check_resize() {
+    if (invalidate_guard_count != 0) { pxcrt::throw_would_invalidate(); }
   }
 private:
   void clear_internal() {
@@ -288,6 +303,11 @@ private:
     alloc_len = len;
     memcpy(start, ptr, len * sizeof(T));
     valid_len = len;
+  }
+  void push_back_internal(T const& x) {
+    reserve_internal(valid_len + 1);
+    start[valid_len] = x;
+    ++valid_len;
   }
   void append_internal(const T *ptr, size_type len) {
     /* TODO: use insert_internal? */
@@ -342,9 +362,6 @@ private:
     }
     start = p;
     alloc_len = nl;
-  }
-  void check_resize() {
-    if (invalidate_guard_count != 0) { pxcrt::throw_would_invalidate(); }
   }
   void inc_invalidate_guard() const {
     ++invalidate_guard_count;

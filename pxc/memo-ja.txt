@@ -3,19 +3,22 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- union の初期化を一発でできる構文を用意
+
+- object counter
 
 - structのコンストラクタがexternのとき、引数がnoncopyableであっても
   pxcエラーチェックできずC++エラーになってしまう。引数がcopyableであ
   ることを要請する手段が必要。(ただしptr{file}のようにfast boxingで
   きるときはnoncopyableでもよいことに注意)
-  -> これはstatic_assertがあれば実現できる
+  -> struct等にmacro __check__が定義されていればevalする
+  -> ポインタについては引数型はcopyableでなくてよい
+  -> それ以外のテンプレ型についてはcopyableを要請
+  -> farray, darrayはdefconも要請
   
 - pxcvectorにstringと同じだけのメソッド定義
 
 - socket_factoryにaddrinfoを埋め込む?
-
-- fileのfdはimmutableにする。そうでないとaccept()でロックが要る
-- namespace injectして問題になるケースはあるか
 
 - enum, bitmaskのコンパイル時リフレクション
 - external int/uintを整数リテラルからコンストラクトできない
@@ -228,6 +231,12 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- type familyに改名(done)
+- struct foo { function {t} void bar() { ... } } がtest_symbols通らない
+  (done)
+- fldfe: フィールドの型を取れるように(done)
+- fileのfdはimmutableにする。そうでないとaccept()でロックが要る(done)
+- injectns使うと分割コンパイルで不整合がおきうる。無効化する。(done)
 - generate_exe(done)
 - weak pointerと区別するためにslice等はweak型と呼ばずにephemeral型と
   よぶ(done)
@@ -544,7 +553,13 @@ decref$z 参照カウンタ用
 - 配列の境界チェックはon/off? -> 常にon
 - 参照外しチェック(ぬるぽ)は毎回チェックorSEGVフック？ -> null廃止
 - C++のキーワードは識別子の名前に使えない(連携しやすくするため)
-- スレッドは使えない(Perlに合わせて)(Perl使わないときはmt-safeに)
-- 参照カウント(Perlに合わせて)
-- コンテナにイテレータは無い(無効化の判断に困るため) -> かわりにrange
+- スレッドは使えない -> mtsafeチェックして使えるように
+- 参照カウント
+- コンテナにイテレータは無い -> かわりにrange
+
+---------------------------------------------------------------------
+injectns使うと分割コンパイルで不整合がおきうる。
+
+Bar inject Fooのとき、BarをimportするかどうかによってFooに対する
+名前引き結果が異なってしまう。
 

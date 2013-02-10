@@ -207,19 +207,14 @@ size_t file_read_impl(int fd, bt_string& buf, size_t len, errno_eh& eh)
   if (sz > SSIZE_MAX) {
     sz = SSIZE_MAX;
   }
-  const bt_size_t osz = buf.size();
-  bt_size_t nsz = osz + sz;
-  if (nsz < nsz) {
-    throw std::bad_alloc(); /* overflow */
-  }
-  buf.reserve(nsz);
-  void *const ptr = buf.rawarr() + osz;
+  bt_size_t osz = buf.size();
+  void *const ptr = buf.reserve_back<1>(sz);
   const ssize_t rlen = ::read(fd, ptr, sz);
   if (rlen < 0) {
     ioeh_set(eh, errno);
     return 0;
   }
-  buf.rawarr_initialized(osz + rlen);
+  buf.rawarr_set_valid_len(osz + rlen);
   return rlen;
 }
 size_t file_read(file_impl& f, bt_string& buf, size_t len, errno_eh& eh)

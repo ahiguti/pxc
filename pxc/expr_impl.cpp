@@ -1088,9 +1088,11 @@ std::string expr_feach::dump(int indent) const
 }
 
 expr_fldfe::expr_fldfe(const char *fn, int line, const char *namesym,
-  const char *fldsym, expr_i *te, expr_i *stmts)
+  const char *fldsym, const char *idxsym, expr_i *te, expr_i *stmts)
   : expr_i(fn, line), namesym(namesym), fldsym(fldsym),
-    te(ptr_down_cast<expr_te>(te)), stmts(ptr_down_cast<expr_stmts>(stmts))
+    idxsym(idxsym),
+    te(ptr_down_cast<expr_te>(te)),
+    stmts(ptr_down_cast<expr_stmts>(stmts))
 {
 }
 
@@ -1209,9 +1211,13 @@ expr_interface *expr_funcdef::is_virtual_function() const
   return dynamic_cast<expr_interface *>(fr);
 }
 
-bool expr_funcdef::is_virtual_or_member_function() const
+expr_i *expr_funcdef::is_virtual_or_member_function() const
 {
-  return is_member_function() || is_virtual_function();
+  expr_i *r = is_member_function();
+  if (r != 0) {
+    return r;
+  }
+  return is_virtual_function();
 }
 
 #if 0
@@ -1256,13 +1262,13 @@ std::string expr_funcdef::dump(int indent) const
 }
 
 expr_typedef::expr_typedef(const char *fn, int line, const char *sym,
-  const char *cname, const char *category, bool is_enum, bool is_bitmask,
+  const char *cname, const char *family, bool is_enum, bool is_bitmask,
   expr_i *enumvals, unsigned int num_tparams, attribute_e attr)
-  : expr_i(fn, line), sym(sym), cname(cname), typecat_str(category),
+  : expr_i(fn, line), sym(sym), cname(cname), typefamily_str(family),
     is_enum(is_enum), is_bitmask(is_bitmask),
     enumvals(ptr_down_cast<expr_enumval>(enumvals)),
     num_tparams(num_tparams), attr(attr), tattr(),
-    value_texpr(), typecat(typecat_e_none)
+    value_texpr(), typefamily(typefamily_e_none)
 {
   value_texpr = term(this);
 }
@@ -1272,13 +1278,13 @@ void expr_typedef::set_unique_namespace_one(const std::string& u,
 {
   uniqns = u;
   injectns = i;
-  typecat = get_category_from_string(typecat_str ? typecat_str : "");
+  typefamily = get_family_from_string(typefamily_str ? typefamily_str : "");
 }
 
 std::string expr_typedef::dump(int indent) const
 {
   return std::string("tyepdef ") + sym + " " + (cname != 0 ? cname : sym)
-    + " " + (typecat_str != 0 ? typecat_str : "");
+    + " " + (typefamily_str != 0 ? typefamily_str : "");
 }
 
 expr_macrodef::expr_macrodef(const char *fn, int line, const char *sym,
@@ -1296,10 +1302,10 @@ std::string expr_macrodef::dump(int indent) const
 }
 
 expr_struct::expr_struct(const char *fn, int line, const char *sym,
-  const char *cname, const char *category, expr_i *block, attribute_e attr)
-  : expr_i(fn, line), sym(sym), cname(cname), typecat_str(category),
+  const char *cname, const char *family, expr_i *block, attribute_e attr)
+  : expr_i(fn, line), sym(sym), cname(cname), typefamily_str(family),
     block(ptr_down_cast<expr_block>(block)),
-    attr(attr), value_texpr(), typecat(typecat_e_none)
+    attr(attr), value_texpr(), typefamily(typefamily_e_none)
 {
   assert(block);
   this->block->symtbl.block_esort = expr_e_struct;
@@ -1318,7 +1324,7 @@ void expr_struct::set_unique_namespace_one(const std::string& u,
 {
   uniqns = u;
   injectns = i;
-  typecat = get_category_from_string(typecat_str ? typecat_str : "");
+  typefamily = get_family_from_string(typefamily_str ? typefamily_str : "");
 }
 
 void expr_struct::get_fields(std::list<expr_var *>& flds_r) const

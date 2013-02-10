@@ -37,6 +37,7 @@
 #define DBG_METACONCAT(x)
 #define DBG_METALOCAL(x)
 #define DBG_ATTR(x)
+#define DBG_TYPEOF(x)
 
 namespace pxc {
 
@@ -668,8 +669,8 @@ static term eval_meta_types(term_list& tlev)
       continue;
     }
     expr_struct *const est = dynamic_cast<expr_struct *>(e);
-    if (est != 0 && est->typecat_str != 0) {
-      const std::string s(est->typecat_str);
+    if (est != 0 && est->typefamily_str != 0) {
+      const std::string s(est->typefamily_str);
       if (!s.empty() && s[0] == '@') {
 	/* builtin metafunction */
 	continue;
@@ -1077,15 +1078,15 @@ static term eval_meta_attribute(term_list& tlev)
   return term();
 }
 
-static term eval_meta_category(term_list& tlev)
+static term eval_meta_family(term_list& tlev)
 {
   if (tlev.size() != 1) {
     return term();
   }
   expr_i *const einst = term_get_instance(tlev[0]);
   expr_struct *const est = dynamic_cast<expr_struct *>(einst);
-  if (est != 0 && est->typecat_str != 0) {
-    const std::string s(est->typecat_str);
+  if (est != 0 && est->typefamily_str != 0) {
+    const std::string s(est->typefamily_str);
     if (!s.empty() && s[0] == '@') {
       return term("metafunction");
     }
@@ -1415,8 +1416,8 @@ static term eval_metafunction(const std::string& name, term_list& tlev,
       r = eval_meta_full_string(tlev);
     } else if (name == "@concat") {
       r = eval_meta_concat(tlev);
-    } else if (name == "@category") {
-      r = eval_meta_category(tlev);
+    } else if (name == "@family") {
+      r = eval_meta_family(tlev);
     } else if (name == "@attribute") {
       r = eval_meta_attribute(tlev);
     } else if (name == "@nsname") {
@@ -1545,6 +1546,26 @@ static term eval_meta_and(const term& t, bool targs_evaluated, env_type& env,
   return term(1LL);
 }
 
+static term eval_meta_typeof(const term& t, bool targs_evaluated,
+  env_type& env, size_t depth, expr_i *pos)
+{
+  const term_list *args = t.get_args();
+  if (args == 0 || args->size() != 1) {
+    arena_error_throw(pos, "typeof: invalid argument");
+    return term();
+  }
+  const term& t0 = args->front();
+  expr_i *const e0 = t0.get_expr();
+  if (e0 == 0) { /* TODO: integer etc */
+    arena_error_throw(pos, "typeof: invalid argument");
+    return term();
+  }
+  term rt = e0->resolve_texpr();
+  DBG_TYPEOF(fprintf(stderr, "eval_meta_typeof: %s -> %s\n",
+    term_tostr_human(t).c_str(), term_tostr_human(rt).c_str()));
+  return rt;
+}
+
 static term eval_metafunction_lazy(const std::string& name, const term& t,
   bool targs_evaluated, env_type& env, size_t depth, expr_i *pos)
 {
@@ -1557,6 +1578,8 @@ static term eval_metafunction_lazy(const std::string& name, const term& t,
       r = eval_meta_or(t, targs_evaluated, env, depth, pos);
     } else if (name == "@@and") {
       r = eval_meta_and(t, targs_evaluated, env, depth, pos);
+    } else if (name == "@@typeof") {
+      r = eval_meta_typeof(t, targs_evaluated, env, depth, pos);
     }
   } catch (const std::exception& e) {
     std::string s = e.what();
@@ -1740,13 +1763,13 @@ static term eval_term_internal2(const term& tm, bool targs_evaluated,
   }
   /* builtin template metafunction? */
   expr_struct *const es = dynamic_cast<expr_struct *>(texpr);
-  if (es != 0 && es->typecat_str != 0 &&
-    std::string(es->typecat_str).substr(0, 1) == "@") {
-    if (std::string(es->typecat_str).substr(0, 2) == "@@") {
-      return eval_metafunction_lazy(es->typecat_str, tm, targs_evaluated, env,
+  if (es != 0 && es->typefamily_str != 0 &&
+    std::string(es->typefamily_str).substr(0, 1) == "@") {
+    if (std::string(es->typefamily_str).substr(0, 2) == "@@") {
+      return eval_metafunction_lazy(es->typefamily_str, tm, targs_evaluated, env,
 	depth, pos);
     }
-    if (tlarg_len == 0 && std::string(es->typecat_str).substr(0, 2) != "@0") {
+    if (tlarg_len == 0 && std::string(es->typefamily_str).substr(0, 2) != "@0") {
       return tm; /* no argument is supplied yet */
     }
     {
@@ -1756,7 +1779,7 @@ static term eval_term_internal2(const term& tm, bool targs_evaluated,
 	DBG_EVAL(fprintf(stderr, "EVALI2 : has ubound tparam\n"));
 	return tm; /* incomplete expr */
       }
-      return eval_metafunction(es->typecat_str, tlev, tm, env, depth, pos);
+      return eval_metafunction(es->typefamily_str, tlev, tm, env, depth, pos);
     }
   }
   /* type or func without targ (no instantiaton) */

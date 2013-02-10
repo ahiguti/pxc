@@ -299,12 +299,17 @@ body_stmt
 		'{' function_body_stmt_list '}'
 	  { $$ = expr_feach_new(cur_fname, @1.first_line, $5,
 		expr_block_new(cur_fname, @1.first_line, 0, 0, $3, 0, $8)); }
+	| TOK_FOREACH '(' TOK_SYMBOL ',' TOK_SYMBOL ',' TOK_SYMBOL
+		':' type_expr ')'  '{' function_body_stmt_list '}'
+	  { $$ = expr_fldfe_new(cur_fname, @1.first_line, $3, $7, $5, $9,
+		$12); }
 	| TOK_FOREACH '(' TOK_SYMBOL ',' TOK_SYMBOL ':' type_expr ')'  
 		'{' function_body_stmt_list '}'
-	  { $$ = expr_fldfe_new(cur_fname, @1.first_line, $3, $5, $7, $10); }
+	  { $$ = expr_fldfe_new(cur_fname, @1.first_line, $3, $5, 0, $7,
+		$10); }
 	| TOK_FOREACH '(' TOK_SYMBOL ':' type_expr ')'  
 		'{' function_body_stmt_list '}'
-	  { $$ = expr_fldfe_new(cur_fname, @1.first_line, 0, $3, $5, $8); }
+	  { $$ = expr_fldfe_new(cur_fname, @1.first_line, 0, $3, 0, $5, $8); }
 	| TOK_FOREACH '(' TOK_SYMBOL ':' type_expr ';' TOK_SYMBOL ':'
 		expression ';' TOK_STRLIT ')'
 		'{' function_body_stmt_list '}'
@@ -709,8 +714,12 @@ nssym_expr
 opt_nssym_expr
 	:
 	  { $$ = 0; }
+	/*
+	 inject ns is disabled because it can cause confliction among
+	 separatedly compiled modules
 	| nssym_expr
 	  { $$ = $1; }
+	*/
 	;
 expression
 	: assign_expr

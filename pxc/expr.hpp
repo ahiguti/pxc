@@ -81,7 +81,7 @@ expr_i *expr_forrange_new(const char *fn, int line, expr_i *r0, expr_i *r1,
   expr_i *block);
 expr_i *expr_feach_new(const char *fn, int line, expr_i *ce, expr_i *block);
 expr_i *expr_fldfe_new(const char *fn, int line, const char *namesym,
-  const char *fldsym, expr_i *te, expr_i *stmts);
+  const char *fldsym, const char *idxsym, expr_i *te, expr_i *stmts);
 expr_i *expr_foldfe_new(const char *fn, int line, const char *itersym,
   expr_i *valueste, const char *embedsym, expr_i *embedexpr,
   const char *foldop, expr_i *stmts);
@@ -90,12 +90,12 @@ expr_i *expr_funcdef_new(const char *fn, int line, const char *sym,
   const char *cname, bool is_const, expr_i *block, bool ext_decl,
   bool extc_decl, attribute_e visi);
 expr_i *expr_typedef_new(const char *fn, int line, const char *sym,
-  const char *cname, const char *category, bool is_enum, bool is_bitmask,
+  const char *cname, const char *family, bool is_enum, bool is_bitmask,
   expr_i *enumvals, unsigned int num_tparams, attribute_e visi);
 expr_i *expr_macrodef_new(const char *fn, int line, const char *sym,
   expr_i *tparams, expr_i *rhs, attribute_e visi);
 expr_i *expr_struct_new(const char *fn, int line, const char *sym,
-  const char *cname, const char *category, expr_i *block, attribute_e visi);
+  const char *cname, const char *family, expr_i *block, attribute_e visi);
 expr_i *expr_variant_new(const char *fn, int line, const char *sym,
   expr_i *block, attribute_e visi);
 expr_i *expr_interface_new(const char *fn, int line, const char *sym,

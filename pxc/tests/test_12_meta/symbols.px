@@ -15,10 +15,12 @@ private macro nsfuncs{ns}
   filter_norefarg{filter_concrete{join{metamap{nslist{ns}, functions}}}};
 private macro nstypes{ns} filter_concrete{join{metamap{nslist{ns}, types}}};
 private macro atypes_one{f} join_all{list{rettype{f}}, argtypes{f}};
-private macro atypes{fs} filter_concrete{join{metamap{fs, atypes_one}}};
-private macro ftypes{ts} filter_concrete{join{metamap{ts, field_types}}};
+private macro atypes{fs}
+  filter_concrete{join{metamap{filter_concrete{fs}, atypes_one}}};
+private macro ftypes{ts}
+  filter_concrete{join{metamap{ts, field_types}}};
 private macro mfatypes{ts} atypes{join{metamap{ts, member_functions}}};
-private macro tatypes{ts} filter_concrete{join{metamap{ts, targs}}};
+private macro tatypes{ts} join{metamap{ts, targs}};
 private macro init_types{ns} uniq{join_all{nstypes{ns}, atypes{nsfuncs{ns}}}};
 private macro step_types{ts}
   uniq{join_all{ts, ftypes{ts}, mfatypes{ts}, tatypes{ts}}};

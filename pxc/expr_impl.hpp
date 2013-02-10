@@ -123,33 +123,33 @@ enum funccall_e {
   funccall_e_struct_constructor,
 };
 
-enum typecat_e {
-  typecat_e_none,             /* unknown */
-  typecat_e_ptr,              /* shared pointer */
-  typecat_e_cptr,             /* shared pointer, const target */
-  typecat_e_iptr,             /* shared pointer, immutable target */
-  typecat_e_tptr,             /* multithread-shared pointer */
-  typecat_e_tcptr,            /* multithread-shared pointer, const target */
-  typecat_e_tiptr,            /* multithread-shared pointer, immutable tgt */
-  typecat_e_extint,           /* c-defined int/long etc */
-  typecat_e_extuint,          /* c-defined unsigned int/long etc, */
-  typecat_e_extenum,          /* c-defined enum */
-  typecat_e_extbitmask,       /* c-defined bitmask */
-  typecat_e_extfloat,         /* c-defined float/double etc, */
-  typecat_e_extnumeric,       /* c-defined other numeric types */
-  typecat_e_varray,           /* resizable array */
-  typecat_e_darray,           /* dynamically allocated array */
-  typecat_e_farray,           /* fixed size array, fixed at compile time */
-  typecat_e_slice,            /* array slice (WEAK) */
-  typecat_e_cslice,           /* array slice, const elements (WEAK) */
-  typecat_e_tree_map,         /* rb-tree map */
-  typecat_e_tree_map_range,   /* range on tree_map (WEAK) */
-  typecat_e_tree_map_crange,  /* range on tree_map, const elements (WEAK) */
-  typecat_e_linear,           /* noncopyable, nodefaultcon */
-  typecat_e_noncopyable,      /* noncopyable */
-  typecat_e_nocascade,        /* default-constructible even when tparam's not */
-  // typecat_e_wptr,             /* raw pointer (WEAK) */
-  // typecat_e_wcptr,            /* raw pointer, const target (WEAK) */
+enum typefamily_e {
+  typefamily_e_none,             /* unknown */
+  typefamily_e_ptr,              /* shared pointer */
+  typefamily_e_cptr,             /* shared pointer, const target */
+  typefamily_e_iptr,             /* shared pointer, immutable target */
+  typefamily_e_tptr,             /* multithread-shared pointer */
+  typefamily_e_tcptr,            /* multithread-shared pointer, const target */
+  typefamily_e_tiptr,            /* multithread-shared pointer, immutable tgt */
+  typefamily_e_extint,           /* c-defined int/long etc */
+  typefamily_e_extuint,          /* c-defined unsigned int/long etc, */
+  typefamily_e_extenum,          /* c-defined enum */
+  typefamily_e_extbitmask,       /* c-defined bitmask */
+  typefamily_e_extfloat,         /* c-defined float/double etc, */
+  typefamily_e_extnumeric,       /* c-defined other numeric types */
+  typefamily_e_varray,           /* resizable array */
+  typefamily_e_darray,           /* dynamically allocated array */
+  typefamily_e_farray,           /* fixed size array, fixed at compile time */
+  typefamily_e_slice,            /* array slice (WEAK) */
+  typefamily_e_cslice,           /* array slice, const elements (WEAK) */
+  typefamily_e_tree_map,         /* rb-tree map */
+  typefamily_e_tree_map_range,   /* range on tree_map (WEAK) */
+  typefamily_e_tree_map_crange,  /* range on tree_map, const elements (WEAK) */
+  typefamily_e_linear,           /* noncopyable, nodefaultcon */
+  typefamily_e_noncopyable,      /* noncopyable */
+  typefamily_e_nocascade,        /* default-constructible even when tparam's not */
+  // typefamily_e_wptr,             /* raw pointer (WEAK) */
+  // typefamily_e_wcptr,            /* raw pointer, const target (WEAK) */
 };
 
 struct variable_info {
@@ -895,7 +895,7 @@ public:
 
 struct expr_fldfe : public expr_i {
   expr_fldfe(const char *fn, int line, const char *namesym,
-    const char *fldsym, expr_i *te, expr_i *stmts);
+    const char *fldsym, const char *idxsym, expr_i *te, expr_i *stmts);
   expr_i *clone() const { return new expr_fldfe(*this); }
   expr_e get_esort() const { return expr_e_fldfe; }
   int get_num_children() const { return 2; }
@@ -920,6 +920,7 @@ public:
   std::string injectns;
   const char *namesym;
   const char *fldsym;
+  const char *idxsym;
   expr_te *te;
   expr_stmts *stmts;
 };
@@ -979,7 +980,7 @@ struct expr_funcdef : public expr_i {
     /* NOTE: can be used only after compiled */
   expr_struct *is_member_function() const;
   expr_interface *is_virtual_function() const;
-  bool is_virtual_or_member_function() const;
+  expr_i *is_virtual_or_member_function() const;
   #if 0
   expr_funcdef *is_member_function_descent();
   #endif
@@ -1028,7 +1029,7 @@ public:
 
 struct expr_typedef : public expr_i {
   expr_typedef(const char *fn, int line, const char *sym,
-    const char *cname, const char *category, bool is_enum, bool is_bitmask,
+    const char *cname, const char *family, bool is_enum, bool is_bitmask,
     expr_i *enumvals, unsigned int num_tparams, attribute_e attr);
   expr_i *clone() const { return new expr_typedef(*this); }
   expr_e get_esort() const { return expr_e_typedef; }
@@ -1057,7 +1058,7 @@ public:
   std::string uniqns;
   std::string injectns;
   const char *const cname;
-  const char *const typecat_str; // TODO: unused
+  const char *const typefamily_str; // TODO: unused
   bool is_enum : 1;
   bool is_bitmask : 1;
   expr_enumval *enumvals;
@@ -1065,7 +1066,7 @@ public:
   attribute_e attr;
   type_attribute tattr;
   term value_texpr;
-  typecat_e typecat; // TODO: unused
+  typefamily_e typefamily; // TODO: unused
 };
 
 struct expr_macrodef : public expr_i {
@@ -1108,7 +1109,7 @@ public:
 
 struct expr_struct : public expr_i {
   expr_struct(const char *fn, int line, const char *sym, const char *cname,
-    const char *category, expr_i *block, attribute_e attr);
+    const char *family, expr_i *block, attribute_e attr);
   expr_struct *clone() const;
   expr_e get_esort() const { return expr_e_struct; }
   int get_num_children() const { return 1; }
@@ -1142,11 +1143,11 @@ public:
   std::string uniqns;
   std::string injectns;
   const char *const cname;
-  const char *const typecat_str;
+  const char *const typefamily_str;
   expr_block *block;
   attribute_e attr;
   term value_texpr;
-  typecat_e typecat;
+  typefamily_e typefamily;
 };
 
 struct expr_variant : public expr_i {

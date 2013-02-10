@@ -2,9 +2,9 @@ namespace numeric::cast;
 public import type::builtin "";
 public import meta::builtin m;
 
-public macro is_numeric{t} is_numeric_cat{t, m::category{t}};
-public macro is_integral{t} is_integral_cat{t, m::category{t}};
-public macro is_floatnum{t} is_floatnum_cat{t, m::category{t}};
+public macro is_numeric{t} is_numeric_family{t, m::family{t}};
+public macro is_integral{t} is_integral_family{t, m::family{t}};
+public macro is_floatnum{t} is_floatnum_family{t, m::family{t}};
 
 public threaded function {tto, tfrom} tto numeric_cast(tfrom const& x)
 {
@@ -26,7 +26,7 @@ public threaded function {tto, tfrom} tto static_cast(tfrom const& x)
   }
 }
 
-private macro is_integral_cat{t, cat}
+private macro is_integral_family{t, fam}
   m::or{
     m::eq{t, type::builtin::uchar},
     m::eq{t, type::builtin::char},
@@ -37,20 +37,20 @@ private macro is_integral_cat{t, cat}
     m::eq{t, type::builtin::ulong},
     m::eq{t, type::builtin::long},
     m::eq{t, type::builtin::size_t},
-    m::eq{cat, "extuint"},
-    m::eq{cat, "extint"}};
+    m::eq{fam, "extuint"},
+    m::eq{fam, "extint"}};
 
-private macro is_floatnum_cat{t, cat}
+private macro is_floatnum_family{t, fam}
   m::or{
     m::eq{t, type::builtin::float},
     m::eq{t, type::builtin::double},
-    m::eq{cat, "extfloat"}};
+    m::eq{fam, "extfloat"}};
 
-private macro is_numeric_cat{t, cat}
+private macro is_numeric_family{t, fam}
   m::or{
-    is_integral_cat{t, cat},
-    is_floatnum_cat{t, cat},
-    m::eq{cat, "extnumeric"}};
+    is_integral_family{t, fam},
+    is_floatnum_family{t, fam},
+    m::eq{fam, "extnumeric"}};
 
 private threaded extern "numeric::numeric_cast_impl"
 struct {tto, tfrom} numeric_cast_impl {

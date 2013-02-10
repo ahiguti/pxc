@@ -892,7 +892,7 @@ static void emit_variant_aux_functions(emit_context& em,
 	em.puts("$p();\n");
       } else {
 	/* null reference */
-	em.puts("return ::pxcrt::unit_value;\n");
+	em.puts("return pxcrt::unit_value;\n");
       }
       em.add_indent(-1);
       em.set_file_line(*i);
@@ -941,7 +941,7 @@ static void emit_variant_aux_functions(emit_context& em,
 	(*i)->emit_symbol(em);
 	em.puts("$p());\n");
       } else {
-	em.puts("return ::pxcrt::unit_value;\n");
+	em.puts("return pxcrt::unit_value;\n");
       }
       em.add_indent(-1);
       em.set_file_line(*i);
@@ -1127,24 +1127,24 @@ static std::list<expr_i *> get_dep_tparams(expr_struct *est)
   const term& te = est->get_value_texpr();
   const term_list *const args = te.get_args();
   size_t argslen = args != 0 ? args->size() : 0;
-  const typecat_e cat = est->typecat;
-  if (cat == typecat_e_farray) {
+  const typefamily_e cat = est->typefamily;
+  if (cat == typefamily_e_farray) {
     if (argslen != 0) {
       term t = (*args)[0]; /* TODO: avoid copying */
       r.push_back(term_get_instance(t));
     }
   } else if (
-    cat == typecat_e_ptr ||
-    cat == typecat_e_cptr ||
-    cat == typecat_e_iptr ||
-    cat == typecat_e_tptr ||
-    cat == typecat_e_tcptr ||
-    cat == typecat_e_tiptr ||
-    // cat == typecat_e_wptr ||
-    // cat == typecat_e_wcptr ||
-    cat == typecat_e_darray ||
-    cat == typecat_e_varray ||
-    cat == typecat_e_tree_map) {
+    cat == typefamily_e_ptr ||
+    cat == typefamily_e_cptr ||
+    cat == typefamily_e_iptr ||
+    cat == typefamily_e_tptr ||
+    cat == typefamily_e_tcptr ||
+    cat == typefamily_e_tiptr ||
+    // cat == typefamily_e_wptr ||
+    // cat == typefamily_e_wcptr ||
+    cat == typefamily_e_darray ||
+    cat == typefamily_e_varray ||
+    cat == typefamily_e_tree_map) {
     /* no dep */
   } else {
     if (args != 0) {
@@ -1197,8 +1197,8 @@ static void sort_types(sorted_exprs& c, expr_i *e)
       sort_types(c, *i);
     }
     #if 0
-    if (est != 0 && est->category != 0 &&
-      std::string(est->category) == "farray") {
+    if (est != 0 && est->family != 0 &&
+      std::string(est->family) == "farray") {
       /* fixed-size array requires its first param to be a complete type */
       const term& te = est->get_value_texpr();
       const term_list *const args = te.get_args();
@@ -1966,10 +1966,10 @@ void expr_op::emit_value(emit_context& em)
     return;
   case TOK_PTR_DEREF:
     {
-      const typecat_e cat = get_category(arg0->get_texpr());
+      const typefamily_e cat = get_family(arg0->get_texpr());
       if (is_noninterface_pointer(arg0->get_texpr())) {
 	em.puts("(");
-	if (cat == typecat_e_tptr || cat == typecat_e_tcptr) {
+	if (cat == typefamily_e_tptr || cat == typefamily_e_tcptr) {
 	  em.puts("pxcrt::lockobject((");
 	  fn_emit_value(em, arg0);
 	  em.puts(")->get_mutex$z()),");
@@ -1978,7 +1978,7 @@ void expr_op::emit_value(emit_context& em)
 	em.puts(")->value$z");
       } else {
 	em.puts("*(");
-	if (cat == typecat_e_tptr || cat == typecat_e_tcptr) {
+	if (cat == typefamily_e_tptr || cat == typefamily_e_tcptr) {
 	  em.puts("pxcrt::lockobject((");
 	  fn_emit_value(em, arg0);
 	  em.puts(")->get_mutex$z()),");
@@ -2747,23 +2747,23 @@ static void emit_vardef_constructor_fast_boxing(emit_context& em,
   if (!is_interface_or_impl(otyp)) {
     const std::string varp0 = var_csymbol + "p0";
     const std::string varp1 = var_csymbol + "p1";
-    const typecat_e cat = get_category(typ);
+    const typefamily_e cat = get_family(typ);
     std::string rcval_cstr;
     std::string count_type_cstr;
-    if (cat == typecat_e_tptr || cat == typecat_e_tcptr) {
-      rcval_cstr = "::pxcrt::trcval";
-      count_type_cstr = "::pxcrt::mtcount";
-    } else if (cat == typecat_e_tiptr) {
-      rcval_cstr = "::pxcrt::tircval";
-      count_type_cstr = "::pxcrt::mtcount";
+    if (cat == typefamily_e_tptr || cat == typefamily_e_tcptr) {
+      rcval_cstr = "pxcrt::trcval";
+      count_type_cstr = "pxcrt::mtcount";
+    } else if (cat == typefamily_e_tiptr) {
+      rcval_cstr = "pxcrt::tircval";
+      count_type_cstr = "pxcrt::mtcount";
     } else { /* ptr cptr iptr */
-      rcval_cstr = "::pxcrt::rcval";
-      count_type_cstr = "::pxcrt::stcount";
+      rcval_cstr = "pxcrt::rcval";
+      count_type_cstr = "pxcrt::stcount";
     }
     const std::string otypcnt_cstr = rcval_cstr + "< " + otyp_cstr + " >";
       /* rcval<foo> */
-    em.puts("::pxcrt::uninit_mem< " + otypcnt_cstr + " > *const " + varp0
-      + " = new ::pxcrt::uninit_mem< " + otypcnt_cstr + " >;\n");
+    em.puts("pxcrt::uninit_mem< " + otypcnt_cstr + " > *const " + varp0
+      + " = new pxcrt::uninit_mem< " + otypcnt_cstr + " >;\n");
     em.indent('x');
     em.puts(otypcnt_cstr + "*const " + varp1 + " = reinterpret_cast< "
       + otypcnt_cstr + " * >(" + varp0 + ");\n");
@@ -3066,10 +3066,10 @@ void fn_emit_value(emit_context& em, expr_i *e, bool expand_composite,
 	emit_term(em, te);
 	em.puts(" >");
       } else {
-	const typecat_e cat = get_category(e->type_conv_to);
-	if (cat == typecat_e_tptr || cat == typecat_e_tcptr) {
+	const typefamily_e cat = get_family(e->type_conv_to);
+	if (cat == typefamily_e_tptr || cat == typefamily_e_tcptr) {
 	  em.puts("pxcrt::rcptr< pxcrt::trcval<");
-	} else if (cat == typecat_e_tiptr) {
+	} else if (cat == typefamily_e_tiptr) {
 	  em.puts("pxcrt::rcptr< pxcrt::tircval<");
 	} else {
 	  em.puts("pxcrt::rcptr< pxcrt::rcval<");

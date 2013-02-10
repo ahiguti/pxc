@@ -375,13 +375,13 @@ static void load_source_and_calc_checksum(const parser_options& po,
 {
   time_t tstamp = 0;
   md5_context md5;
-  bool loaded = false;
   unsigned long long src_mask = 0;
   unsigned long long src_mask_bit = 1;
   module_info::source_files_type::iterator i;
   std::string notfound_fnlist;
   for (i = mi.source_files.begin(); i != mi.source_files.end();
     ++i, src_mask_bit <<= 1) {
+    bool loaded = false;
     const std::string& fn = i->filename;
     if (po.verbose > 0) {
       fprintf(stderr, "loading source %s\n", fn.c_str());
@@ -429,10 +429,10 @@ static void load_source_and_calc_checksum(const parser_options& po,
     md5.update(i->content);
     if (loaded) {
       src_mask |= src_mask_bit;
-      break;
+      // break;
     }
   }
-  if (!loaded) {
+  if (src_mask == 0) {
     arena_error_throw(0,
       "-:-: failed to load namespace '%s'\n"
       "-:-: (tried files: %s)\n",

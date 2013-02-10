@@ -1,0 +1,53 @@
+namespace maybe;
+import type::builtin "";
+import meta::builtin m;
+import common "";
+
+tsvaluetype union {t} maybe {
+  unit nothing;
+  t just;
+}
+
+threaded function {t} maybe{t} maybe_just(t const& x)
+{
+  maybe{t} r;
+  r.just = x;
+  return r;
+}
+
+threaded function {t} maybe{t} maybe_nothing()
+{
+  maybe{t} r;
+  r.nothing = unit();
+  return r;
+}
+
+threaded function {f} maybe{m::rettype{f}}
+maybe_map(maybe{m::argtype{f, 0}} const& x)
+{
+  if (case x.nothing) {
+    return maybe_nothing{m::rettype{f}}();
+  } else {
+    return maybe_just{m::rettype{f}}(f(x.just));
+  }
+}
+
+function int mul2(int x)
+{
+  return x * 2;
+}
+
+function void t1()
+{
+  maybe{int} x0 = maybe_just(3);
+  maybe{int} y0 = maybe_map{mul2}(x0);
+  maybe{int} x1 = maybe_nothing{int}();
+  maybe{int} y1 = maybe_map{mul2}(x1);
+  println(x0);
+  println(y0);
+  println(x1);
+  println(y1);
+}
+
+t1();
+

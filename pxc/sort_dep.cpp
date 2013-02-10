@@ -26,22 +26,22 @@ static std::list<expr_i *> get_dep_tparams(expr_struct *est)
   const term& te = est->get_value_texpr();
   const term_list *const args = te.get_args();
   size_t argslen = args != 0 ? args->size() : 0;
-  const typecat_e cat = est->typecat;
-  if (cat == typecat_e_farray) {
+  const typefamily_e cat = est->typefamily;
+  if (cat == typefamily_e_farray) {
     if (argslen != 0) {
       term t = (*args)[0]; /* TODO: avoid copying */
       r.push_back(term_get_instance(t));
     }
   } else if (
-    cat == typecat_e_ptr ||
-    cat == typecat_e_cptr ||
-    cat == typecat_e_iptr ||
-    cat == typecat_e_tptr ||
-    cat == typecat_e_tcptr ||
-    cat == typecat_e_tiptr ||
-    cat == typecat_e_darray ||
-    cat == typecat_e_varray ||
-    cat == typecat_e_tree_map) {
+    cat == typefamily_e_ptr ||
+    cat == typefamily_e_cptr ||
+    cat == typefamily_e_iptr ||
+    cat == typefamily_e_tptr ||
+    cat == typefamily_e_tcptr ||
+    cat == typefamily_e_tiptr ||
+    cat == typefamily_e_darray ||
+    cat == typefamily_e_varray ||
+    cat == typefamily_e_tree_map) {
     /* no dep */
   } else {
     if (args != 0) {

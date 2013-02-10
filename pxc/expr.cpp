@@ -83,8 +83,8 @@ expr_i *expr_forrange_new(const char *fn, int line, expr_i *r0, expr_i *r1,
 expr_i *expr_feach_new(const char *fn, int line, expr_i *ce, expr_i *block)
 { return new expr_feach(fn, line, ce, block); }
 expr_i *expr_fldfe_new(const char *fn, int line, const char *namesym,
-  const char *fldsym, expr_i *te, expr_i *stmts)
-{ return new expr_fldfe(fn, line, namesym, fldsym, te, stmts); }
+  const char *fldsym, const char *idxsym, expr_i *te, expr_i *stmts)
+{ return new expr_fldfe(fn, line, namesym, fldsym, idxsym, te, stmts); }
 expr_i *expr_foldfe_new(const char *fn, int line, const char *itersym,
   expr_i *valueste, const char *embedsym, expr_i *embedexpr,
   const char *foldop, expr_i *stmts)
@@ -96,16 +96,16 @@ expr_i *expr_funcdef_new(const char *fn, int line, const char *sym,
 { return new expr_funcdef(fn, line, sym, cname, is_const, block, ext_decl,
   extc_decl, attr); }
 expr_i *expr_typedef_new(const char *fn, int line, const char *sym,
-  const char *cname, const char *category, bool is_enum, bool is_bitmask,
+  const char *cname, const char *family, bool is_enum, bool is_bitmask,
   expr_i *enumvals, unsigned int num_tpara, attribute_e attr)
-{ return new expr_typedef(fn, line, sym, cname, category, is_enum, is_bitmask,
+{ return new expr_typedef(fn, line, sym, cname, family, is_enum, is_bitmask,
   enumvals, num_tpara, attr); }
 expr_i *expr_macrodef_new(const char *fn, int line, const char *sym,
   expr_i *tparams, expr_i *rhs, attribute_e attr)
 { return new expr_macrodef(fn, line, sym, tparams, rhs, attr); }
 expr_i *expr_struct_new(const char *fn, int line, const char *sym,
-  const char *cname, const char *category, expr_i *block, attribute_e attr)
-{ return new expr_struct(fn, line, sym, cname, category, block, attr); }
+  const char *cname, const char *family, expr_i *block, attribute_e attr)
+{ return new expr_struct(fn, line, sym, cname, family, block, attr); }
 expr_i *expr_variant_new(const char *fn, int line, const char *sym,
   expr_i *block, attribute_e attr)
 { return new expr_variant(fn, line, sym, block, attr); }
@@ -274,7 +274,7 @@ std::string arena_get_ns_main_funcname(const std::string& nsstr)
 struct builtin_typedefs_type {
   const char *name;
   const char *cname;
-  const char *category;
+  const char *family;
   bool is_pod;
   unsigned int num_tparams;
   type_attribute tattr;
@@ -323,7 +323,7 @@ static void define_builtins()
     const builtin_typedefs_type *const be = builtin_typedefs + i;
     expr_typedef *const etd = ptr_down_cast<expr_typedef>(
       expr_typedef_new("BUILTIN", 0, be->name,
-	be->cname, be->category, false, false, 0, be->num_tparams,
+	be->cname, be->family, false, false, 0, be->num_tparams,
 	attribute_e(attribute_public |
 	  attribute_threaded | attribute_multithr | attribute_valuetype |
 	  attribute_tsvaluetype)));
@@ -463,6 +463,10 @@ void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
     int block_id_ns = 0;
     if (injectns.empty()) {
       injectns = uniqns;
+    } else {
+      /* inject ns is disabled because it can cause confliction among
+       * separatedly compiled modules */
+      abort();
     }
     fn_set_namespace(topval, uniqns, injectns, block_id_ns);
   }
