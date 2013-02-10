@@ -31,7 +31,7 @@ static compile_mode cur_mode;
 	int void_val;
 	int int_val;
 	pxc::attribute_e visi_val;
-	char *str_val;
+	const char *str_val;
 	struct expr_i *expr_val;
 }
 
@@ -440,8 +440,8 @@ opt_nsalias
 	  { $$ = 0; }
 	| TOK_SYMBOL
 	  { $$ = $1; }
-	| TOK_STRLIT
-	  { $$ = arena_dequote_strdup($1); }
+	| '-'
+	  { $$ = ""; }
 	;
 funcdef_stmt
 	: opt_attribute TOK_FUNCTION opt_tparams_expr type_expr TOK_SYMBOL

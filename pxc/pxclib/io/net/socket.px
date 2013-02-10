@@ -1,26 +1,55 @@
 namespace io::net::socket;
-public import type::builtin "";
-public import io "";
-public import io::file "";
-public import io::errno "";
-public import io::net::addrinfo "";
+public import type::builtin -;
+public import io -;
+public import io::file -;
+public import io::errno -;
+public import io::net::addrinfo ai;
+
+public macro socket_factory_ptr tptr{socket_factory};
 
 public multithreaded extern "pxcio::socket_factory" "linear"
   struct socket_factory(ioptr const& iop, bool passive,
-    sockaddr_storage const& addr, socktype_t socktype, protocol_t protocol,
-    uint backlog, errno_eh& eh) { }
-public multithreaded extern "pxcio::socket" "linear"
-  struct socket(socket_factory& sf, sockaddr_storage& addr_r,
-    errno_eh& ej) { }
+    ai::sockaddr_storage const& addr, ai::socktype_t socktype,
+    ai::protocol_t protocol, uint backlog, errno_eh& eh) { }
 
+public multithreaded extern "pxcio::socket" "linear"
+  struct socket(socket_factory_ptr const& sfp, ai::sockaddr_storage& addr_r,
+    errno_eh& ej) { }
 public threaded extern "pxcio::socket_read" function
   size_t socket_read(socket& f, string& buf, size_t len, errno_eh& eh);
 public threaded extern "pxcio::socket_write" function
   size_t socket_write(socket& f, cstrref const& buf, errno_eh& eh);
 
+public threaded function socket_factory_ptr socket_acceptor(ioptr const& iop,
+  cstrref const& host, cstrref const& service, ai::family_t family,
+  ai::socktype_t socktype, uint backlog)
+{
+  var gaieh = ai::gai_eh(error::policy_throw);
+  var ioeh = errno_eh(error::policy_throw);
+  var ai = ai::addrinfo(iop, host, service, family, socktype, ai::PROTO_UNSPEC, 
+    ai::AI_PASSIVE, gaieh);
+  var sfp = tptr(socket_factory(iop, true, ai.get_sockaddr(), socktype,
+    ai::PROTO_UNSPEC, backlog, ioeh));
+  return sfp;
+}
+
+public threaded function socket_factory_ptr socket_connector(ioptr const& iop,
+  cstrref const& host, cstrref const& service, ai::family_t family,
+  ai::socktype_t socktype)
+{
+  var gaieh = ai::gai_eh(error::policy_throw);
+  var ioeh = errno_eh(error::policy_throw);
+  var ai = ai::addrinfo(iop, host, service, family, socktype, ai::PROTO_UNSPEC, 
+    0, gaieh);
+  var sfp = tptr(socket_factory(iop, false, ai.get_sockaddr(), socktype,
+    ai::PROTO_UNSPEC, 0, ioeh));
+  return sfp;
+}
+
 extern "type" inline
 namespace pxcio {
 struct socket_factory {
+  /* NOTE: must be immutable. see socket_create(). */
   socket_factory(ioptr const& iop, bt_bool passive,
     sockaddr_storage const& addr, int socktype, int protocol, bt_uint backlog,
     errno_eh& eh);
@@ -30,8 +59,10 @@ struct socket_factory {
   const int protocol;
   const auto_file listener;
 };
+typedef pxcrt::rcptr< pxcrt::trcval<socket_factory> > socket_factory_ptr;
 struct socket : public auto_file {
-  socket(socket_factory& sf, sockaddr_storage& addr_r, errno_eh& eh);
+  socket(socket_factory_ptr const& sfp, sockaddr_storage& addr_r,
+    errno_eh& eh);
 };
 };
 
@@ -76,9 +107,11 @@ socket_factory::socket_factory(ioptr const& iop, bt_bool passive,
       passive, addr, socktype, protocol, backlog, eh))
 {
 }
-static int socket_create(socket_factory& sf, sockaddr_storage& addr_r,
-  errno_eh& eh)
+static int socket_create(socket_factory_ptr const& sfp,
+  sockaddr_storage& addr_r, errno_eh& eh)
 {
+  socket_factory& sf = sfp->value$z;
+    /* no need to lock sfp because socket_factory is always immutable */
   if (sf.passive) {
     socklen_t len = addr_r.get_socklen();
     int fd = ::accept(sf.listener.get(), addr_r.get_sockaddr(), &len);
@@ -102,8 +135,9 @@ static int socket_create(socket_factory& sf, sockaddr_storage& addr_r,
     return fd;
   }
 }
-socket::socket(socket_factory& sf, sockaddr_storage& addr_r, errno_eh& eh)
-  : auto_file(socket_create(sf, addr_r, eh))
+socket::socket(socket_factory_ptr const& sfp, sockaddr_storage& addr_r,
+  errno_eh& eh)
+  : auto_file(socket_create(sfp, addr_r, eh))
 {
 }
 size_t socket_read(socket& s, bt_string& buf, size_t len, errno_eh& eh)

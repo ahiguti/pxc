@@ -4,6 +4,7 @@ AL		[a-zA-Z_]
 ALNUM		[0-9a-zA-Z_]
 ESCCH		[abfnrtv\'\"\\\?\0]
 NOEL		([^\n]|\n[^\n])
+NOEC		([^\*]|\*[^\/])
 %{
 
 #include <string.h>
@@ -101,6 +102,7 @@ extern int count_newline(const char *str);
 inline\n{NOEL}*\n\n	{ yylval.str_val = pxc::arena_strdup(yytext);
 			  yylloc.first_line += pxc::count_newline(yytext);
 			  return TOK_INLINE; }
+\/\*{NOEC}*\*\/		{ yylloc.first_line += pxc::count_newline(yytext); }
 [ \t]
 (#|\/\/).*$
 .			{ return yytext[0]; }
