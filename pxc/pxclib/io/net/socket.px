@@ -10,7 +10,8 @@ public macro socket_factory_ptr tptr{socket_factory};
 public multithreaded extern "pxcio::socket_factory" "linear"
   struct socket_factory(ioptr const& iop, bool passive,
     ai::sockaddr_storage const& addr, ai::socktype_t socktype,
-    ai::protocol_t protocol, uint backlog, errno_eh& eh) { }
+    ai::protocol_t protocol, uint listen_backlog, uint connect_timeout_sec,
+    errno_eh& eh) { }
 
 public multithreaded extern "pxcio::socket" "linear"
   struct socket(socket_factory_ptr const& sfp, ai::sockaddr_storage& addr_r,
@@ -19,6 +20,10 @@ public threaded extern "pxcio::socket_read" function
   size_t socket_read(socket& f, string& buf, size_t len, errno_eh& eh);
 public threaded extern "pxcio::socket_write" function
   size_t socket_write(socket& f, cstrref const& buf, errno_eh& eh);
+public threaded extern "pxcio::socket_set_recv_timeout" function
+  void socket_set_recv_timeout(socket& f, uint sec, errno_eh& eh);
+public threaded extern "pxcio::socket_set_send_timeout" function
+  void socket_set_send_timeout(socket& f, uint sec, errno_eh& eh);
 
 public threaded function socket_factory_ptr socket_acceptor(ioptr const& iop,
   cstrref const& host, cstrref const& service, ai::family_t family,
@@ -29,20 +34,20 @@ public threaded function socket_factory_ptr socket_acceptor(ioptr const& iop,
   var ai = ai::addrinfo(iop, host, service, family, socktype, ai::PROTO_UNSPEC, 
     ai::AI_PASSIVE, gaieh);
   var sfp = tptr(socket_factory(iop, true, ai.get_sockaddr(), socktype,
-    ai::PROTO_UNSPEC, backlog, ioeh));
+    ai::PROTO_UNSPEC, backlog, 0, ioeh));
   return sfp;
 }
 
 public threaded function socket_factory_ptr socket_connector(ioptr const& iop,
   cstrref const& host, cstrref const& service, ai::family_t family,
-  ai::socktype_t socktype)
+  ai::socktype_t socktype, uint timeout_sec)
 {
   var gaieh = ai::gai_eh(error::policy_throw);
   var ioeh = errno_eh(error::policy_throw);
   var ai = ai::addrinfo(iop, host, service, family, socktype, ai::PROTO_UNSPEC, 
     0, gaieh);
   var sfp = tptr(socket_factory(iop, false, ai.get_sockaddr(), socktype,
-    ai::PROTO_UNSPEC, 0, ioeh));
+    ai::PROTO_UNSPEC, 0, timeout_sec, ioeh));
   return sfp;
 }
 
@@ -52,11 +57,12 @@ struct socket_factory {
   /* NOTE: must be immutable. see socket_create(). */
   socket_factory(ioptr const& iop, bt_bool passive,
     sockaddr_storage const& addr, int socktype, int protocol, bt_uint backlog,
-    errno_eh& eh);
+    bt_uint timeout_sec, errno_eh& eh);
   const bool passive;
   const sockaddr_storage addr;
   const int socktype;
   const int protocol;
+  const bt_uint timeout_sec;
   const auto_file listener;
 };
 typedef pxcrt::rcptr< pxcrt::trcval<socket_factory> > socket_factory_ptr;
@@ -73,24 +79,26 @@ namespace pxcio {
 extern "fdef" inline
 namespace pxcio {
 static int socket_factory_create(bool passive, sockaddr_storage const& addr,
-  int socktype, int protocol, int backlog, errno_eh& eh)
+  int socktype, int protocol, int backlog, int timeout_sec, errno_eh& eh)
 {
   if (passive) {
     int fd = ::socket(addr.get_family(), socktype, protocol);
-    if (fd < 0) {
-      ioeh_set(eh, errno);
-      return -1;
-    }
-    int v = 0;
-    v = ::bind(fd, addr.get_sockaddr(), addr.get_socklen());
-    if (v != 0) {
-      close(fd);
-      ioeh_set(eh, errno);
-      return -1;
-    }
-    v = ::listen(fd, backlog);
-    if (v != 0) {
-      close(fd);
+    int e = 0;
+    do {
+      if (fd < 0) {
+	e = -1;
+	break;
+      }
+      e = ::bind(fd, addr.get_sockaddr(), addr.get_socklen());
+      if (e != 0) {
+	break;
+      }
+      e = ::listen(fd, backlog);
+    } while (0);
+    if (e != 0) {
+      if (fd >= 0) {
+	close(fd);
+      }
       ioeh_set(eh, errno);
       return -1;
     }
@@ -101,10 +109,11 @@ static int socket_factory_create(bool passive, sockaddr_storage const& addr,
 }
 socket_factory::socket_factory(ioptr const& iop, bt_bool passive,
   sockaddr_storage const& addr, int socktype, int protocol, bt_uint backlog,
-  errno_eh& eh)
+  bt_uint timeout_sec, errno_eh& eh)
   : passive(passive), addr(addr), socktype(socktype), protocol(protocol),
-    listener(socket_factory_create(
-      passive, addr, socktype, protocol, backlog, eh))
+    timeout_sec(timeout_sec),
+    listener(socket_factory_create(passive, addr, socktype, protocol, backlog,
+      timeout_sec, eh))
 {
 }
 static int socket_create(socket_factory_ptr const& sfp,
@@ -121,14 +130,27 @@ static int socket_create(socket_factory_ptr const& sfp,
     }
     return fd;
   } else {
+    int e = 0;
     int fd = ::socket(sf.addr.get_family(), sf.socktype, sf.protocol);
-    if (fd < 0) {
-      ioeh_set(eh, errno);
-      return -1;
-    }
-    int v = ::connect(fd, sf.addr.get_sockaddr(), sf.addr.get_socklen());
-    if (v != 0) {
-      close(fd);
+    do {
+      if (fd < 0) {
+	e = -1;
+	break;
+      }
+      if (sf.timeout_sec != 0) {
+	struct ::timeval tv = { 0 };
+	tv.tv_sec = sf.timeout_sec;
+	e = ::setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+	if (e != 0) {
+	  break;
+	}
+      }
+      e = ::connect(fd, sf.addr.get_sockaddr(), sf.addr.get_socklen());
+    } while (0);
+    if (e != 0) {
+      if (fd >= 0) {
+	close(fd);
+      }
       ioeh_set(eh, errno);
       return -1;
     }
@@ -147,6 +169,26 @@ size_t socket_read(socket& s, bt_string& buf, size_t len, errno_eh& eh)
 size_t socket_write(socket& s, cstrref const& buf, errno_eh& eh)
 {
   return file_write_impl(s.get(), buf, eh);
+}
+static void setsockopt_common(int fd, int level, int optname, const void *val,
+  socklen_t valsz, errno_eh& eh)
+{
+  const int e = ::setsockopt(fd, level, optname, val, valsz);
+  if (e != 0) {
+    ioeh_set(eh, errno);
+  }
+}
+void socket_set_recv_timeout(socket& s, bt_uint sec, errno_eh& eh)
+{
+  struct ::timeval tv = { 0 };
+  tv.tv_sec = sec;
+  setsockopt_common(s.get(), SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv), eh);
+}
+void socket_set_send_timeout(socket& s, bt_uint sec, errno_eh& eh)
+{
+  struct ::timeval tv = { 0 };
+  tv.tv_sec = sec;
+  setsockopt_common(s.get(), SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv), eh);
 }
 };
 
