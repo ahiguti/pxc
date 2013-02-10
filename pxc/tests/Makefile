@@ -22,11 +22,16 @@ test:
 	done; \
 	exit 0;
 
-valgrind:
+valgrind: valgrind-run valgrind-check
+
+valgrind-run:
 	rm -f valgrind.log
 	for i in `find . -name "*.exe"`; do \
 	  valgrind $$i > /dev/null 2>> valgrind.log; \
 	done; \
+	exit 0;
+
+valgrind-check:
 	fgrep 'ERROR SUMMARY' valgrind.log | \
 	fgrep -v 'ERROR SUMMARY: 0 errors'; \
 	fgrep 'definitely lost' valgrind.log | \

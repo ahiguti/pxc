@@ -292,9 +292,9 @@ static bool check_term_validity(const term& t, bool allow_nontype,
       return false;
     }
     expr_struct *const est = dynamic_cast<expr_struct *>(e);
-    if (est != 0 && est->typecat != typecat_e_none) {
-      const typecat_e cat = est->typecat;
-      if (cat == typecat_e_farray) {
+    if (est != 0 && est->typefamily != typefamily_e_none) {
+      const typefamily_e cat = est->typefamily;
+      if (cat == typefamily_e_farray) {
 	#if 0
 	if (tlarg_len != 2) {
 	  DBG_CTV(fprintf(stderr, "CTV %s false 5\n",
@@ -418,25 +418,25 @@ static bool is_default_constructible(const term& typ, expr_i *pos,
   }
   if (esort == expr_e_struct) {
     expr_struct *const est = ptr_down_cast<expr_struct>(expr);
-    const typecat_e cat = est->typecat;
+    const typefamily_e cat = est->typefamily;
     if (is_cm_pointer_family(typ)) {
       return false;
     }
-    if (cat == typecat_e_linear) {
+    if (cat == typefamily_e_linear) {
       return false;
     }
-    if (cat == typecat_e_farray) {
+    if (cat == typefamily_e_farray) {
       return (args == 0 || args->empty()) ? false
 	: is_default_constructible(args->front(), pos, depth);
     }
-    if (cat == typecat_e_darray) {
+    if (cat == typefamily_e_darray) {
       return false;
     }
-    if (cat == typecat_e_varray || cat == typecat_e_tree_map ||
-      cat == typecat_e_nocascade) {
+    if (cat == typefamily_e_varray || cat == typefamily_e_tree_map ||
+      cat == typefamily_e_nocascade) {
       return true;
     }
-    if (cat != typecat_e_none || est->cname != 0) {
+    if (cat != typefamily_e_none || est->cname != 0) {
       /* extern c struct */
       for (term_list::const_iterator i = args->begin(); i != args->end(); ++i) {
 	if (!is_default_constructible(*i, pos, depth)) {
@@ -1592,14 +1592,31 @@ void expr_funccall::check_type(symbol_table *lookup)
       type_of_this_expr = apply_tvmap(efd->get_rettype(), tvmap);
     }
     funccall_sort = funccall_e_funccall;
+    const bool call_wo_obj = func->get_esort() != expr_e_op;
     expr_funcdef *const caller_memfunc = get_up_member_func(symtbl_lexical);
-    if (caller_memfunc != 0 && caller_memfunc->is_const) {
-      const bool call_wo_obj = func->get_esort() != expr_e_op;
-      if (call_wo_obj && efd->is_virtual_or_member_function() &&
-	!efd->is_const) {
+    if (call_wo_obj && caller_memfunc != 0 && caller_memfunc->is_const) {
+      if (efd->is_virtual_or_member_function() && !efd->is_const) {
 	arena_error_throw(this,
 	  "calling a non-const member function from a const member function");
       }
+    }
+    if (call_wo_obj) {
+      /* caller's struct context */
+      expr_i *const caller_memfunc_parent
+	= caller_memfunc != 0
+	  ? caller_memfunc->is_virtual_or_member_function()
+	    /* caller is in a member function or its local function. */
+	  : get_current_frame_expr(symtbl_lexical);
+	    /* caller is not a member function. can be a struct constr. */
+      /* callee's struct context */
+      expr_i *const callee_memfunc_parent
+	= efd->is_virtual_or_member_function();
+      if (callee_memfunc_parent != 0 &&
+	caller_memfunc_parent != callee_memfunc_parent) {
+	arena_error_throw(this,
+	  "calling a member function without an object");
+      }
+    }
       #if 0
       expr_struct *const caller_memfunc_struct =
 	caller_memfunc->is_member_function(); /* IMF OK */
@@ -1611,7 +1628,6 @@ void expr_funccall::check_type(symbol_table *lookup)
 	  "member function", term_tostr_human(efd->value_texpr).c_str());
       }
       #endif
-    }
     DBG(fprintf(stderr,
       "expr=[%s] type_of_this_expr=[%s] tvmap.size()=%d "
       "arglist.size()=%d funccall\n",
@@ -1723,7 +1739,7 @@ void expr_funccall::check_type(symbol_table *lookup)
 	}
 	funccall_sort = funccall_e_struct_constructor;
 	return;
-      } else if (get_category(func_te) == typecat_e_darray) {
+      } else if (get_family(func_te) == typefamily_e_darray) {
 	/* darray constructor */
 	if (arglist.size() < 2) {
 	  arena_error_throw(this, "too few argument for '%s'", est->sym);
@@ -1748,7 +1764,7 @@ void expr_funccall::check_type(symbol_table *lookup)
 	type_of_this_expr = func_te;
 	funccall_sort = funccall_e_struct_constructor;
 	return;
-      } else if (get_category(func_te) == typecat_e_varray) {
+      } else if (get_family(func_te) == typefamily_e_varray) {
 	/* varray constructor */
 	const term_list *const arr_te_targs = func_te.get_args();
 	if (arr_te_targs == 0 || arr_te_targs->size() != 1) {
@@ -2168,6 +2184,8 @@ void check_genericfe_syntax(expr_i *e)
   case expr_e_inline_c:
   case expr_e_ns:
   case expr_e_var:
+    /* var is not allowed because it requires block_id_ns which is not
+     * generated inside a generic foreach block */
   case expr_e_enumval:
   // case expr_e_block:
   case expr_e_feach:
@@ -2256,7 +2274,7 @@ void expr_fldfe::check_type(symbol_table *lookup)
     if (est != 0) {
       est->get_fields(flds);
     } else if (ev != 0) {
-      est->get_fields(flds);
+      ev->get_fields(flds);
     } else {
       arena_error_push(this, "invalid argument for 'foreach': '%s'",
 	term_tostr_human(typ).c_str());
@@ -2271,7 +2289,9 @@ void expr_fldfe::check_type(symbol_table *lookup)
       arena_error_push(this, "(not a type nor a metalist)");
   }
   expr_stmts *cstmts = 0;
-  for (strlist::reverse_iterator i = syms.rbegin(); i != syms.rend(); ++i) {
+  size_t idx = syms.size() - 1;
+  for (strlist::reverse_iterator i = syms.rbegin(); i != syms.rend();
+    ++i, --idx) {
     expr_stmts *const st = ptr_down_cast<expr_stmts>(deep_clone_expr(st0));
     DBG_FLDFE(fprintf(stderr, "replace n=%s fld=%s dst=%s\n",
       (this->namesym ? this->namesym : ""), this->fldsym, i->c_str()));
@@ -2279,6 +2299,10 @@ void expr_fldfe::check_type(symbol_table *lookup)
     subst_symbol_name(st, this->fldsym, term(dststr), true);
     if (this->namesym != 0) {
       subst_symbol_name(st, this->namesym, term(dststr), false);
+    }
+    if (this->idxsym != 0) {
+      term idxt(idx);
+      subst_symbol_name(st, this->idxsym, term(idx), false);
     }
     expr_stmts *s = st;
     while (s != 0 && s->rest != 0) {
@@ -2582,9 +2606,9 @@ void expr_struct::check_type(symbol_table *lookup)
   fn_check_type(block, lookup);
   check_inherit_threading(this);
   check_constr_restrictions(this);
-  if (typecat_str != 0 && typecat_str[0] != '@' && typecat_str[0] != 0 &&
-    typecat == typecat_e_none) {
-    arena_error_throw(this, "invalid type category: \'%s\'", typecat_str);
+  if (typefamily_str != 0 && typefamily_str[0] != '@' && typefamily_str[0] != 0 &&
+    typefamily == typefamily_e_none) {
+    arena_error_throw(this, "invalid type family: \'%s\'", typefamily_str);
   }
 }
 

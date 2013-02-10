@@ -91,9 +91,9 @@ bool type_allow_feach(const term& t);
 bool is_compatible_pointer(const term&t0, const term& t1);
 bool is_copyable(const term& t);
 bool is_assignable(const term& t);
-typecat_e get_category(const term& t);
-typecat_e get_category_from_string(const std::string& s);
-std::string get_category_string(typecat_e cat);
+typefamily_e get_family(const term& t);
+typefamily_e get_family_from_string(const std::string& s);
+std::string get_family_string(typefamily_e cat);
 term get_pointer_target(const term& t);
 bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap);
 #if 0

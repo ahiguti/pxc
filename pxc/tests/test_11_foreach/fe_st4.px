@@ -1,0 +1,46 @@
+namespace fe_st;
+import common "";
+import meta::builtin m;
+
+
+function {t} void field_to_string(size_t idx, string const& name,
+  string const& ftstr, t const& fld, string& str_r)
+{
+  str_r.append(" ");
+  serialize::string::append_to_string(idx, str_r);
+  str_r.append(" ");
+  serialize::string::append_to_string(name, str_r);
+  str_r.append(" ");
+  serialize::string::append_to_string(ftstr, str_r);
+  str_r.append(" ");
+  serialize::string::append_to_string(m::to_string{m::typeof{fld}}, str_r);
+  str_r.append(" ");
+  serialize::string::append_to_string(fld, str_r);
+}
+
+struct foo {
+  int x;
+  long y;
+  string z;
+}
+
+function void test()
+{
+  foo f;
+  f.x = 20;
+  f.y = 35;
+  f.z = "abc";
+  println(m::to_string{m::typeof{f}});
+  int i;
+  string s = "(";
+  foreach (name, idx, fldsym : foo) {
+    // macro ftstr m::to_string{m::at{m::field_types{foo}, idx}};
+    field_to_string(idx, name, m::to_string{m::at{m::field_types{foo}, idx}},
+      f.fldsym, s);
+  }
+  s.append(" )");
+  println(s);
+}
+
+test();
+

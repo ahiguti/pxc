@@ -231,8 +231,8 @@ bool is_enum(const term& t)
   if (etd != 0) {
     return etd->is_enum;
   }
-  const typecat_e cat = get_category(t);
-  return cat == typecat_e_extenum;
+  const typefamily_e cat = get_family(t);
+  return cat == typefamily_e_extenum;
 }
 
 bool is_bitmask(const term& t)
@@ -241,8 +241,8 @@ bool is_bitmask(const term& t)
   if (etd != 0) {
     return etd->is_bitmask;
   }
-  const typecat_e cat = get_category(t);
-  return cat == typecat_e_extbitmask;
+  const typefamily_e cat = get_family(t);
+  return cat == typefamily_e_extbitmask;
 }
 
 bool is_boolean_algebra(const term& t)
@@ -250,9 +250,9 @@ bool is_boolean_algebra(const term& t)
   if (is_bool_type(t) || is_bitmask(t) || is_integral_type(t)) {
     return true;
   }
-  const typecat_e cat = get_category(t);
-  return cat == typecat_e_extint || cat == typecat_e_extuint
-    || cat == typecat_e_extbitmask;
+  const typefamily_e cat = get_family(t);
+  return cat == typefamily_e_extint || cat == typefamily_e_extuint
+    || cat == typefamily_e_extbitmask;
 }
 
 static bool is_builtin_pod(const term& t)
@@ -293,15 +293,15 @@ bool is_possibly_pod(const term& t)
   if (is_builtin_pod(t)) {
     return true;
   }
-  const typecat_e cat = get_category(t);
+  const typefamily_e cat = get_family(t);
   switch (cat) {
-  case typecat_e_extint:
-  case typecat_e_extuint:
-  case typecat_e_extenum:
-  case typecat_e_extbitmask:
-  case typecat_e_extfloat:
+  case typefamily_e_extint:
+  case typefamily_e_extuint:
+  case typefamily_e_extenum:
+  case typefamily_e_extbitmask:
+  case typefamily_e_extfloat:
     return true;
-  case typecat_e_noncopyable:
+  case typefamily_e_noncopyable:
     return false; /* default constructible but noncopyable */
   default:
     break;
@@ -318,15 +318,15 @@ bool is_possibly_nonpod(const term& t)
   if (is_builtin_pod(t)) {
     return false;
   }
-  const typecat_e cat = get_category(t);
+  const typefamily_e cat = get_family(t);
   switch (cat) {
-  case typecat_e_extint:
-  case typecat_e_extuint:
-  case typecat_e_extenum:
-  case typecat_e_extbitmask:
-  case typecat_e_extfloat:
+  case typefamily_e_extint:
+  case typefamily_e_extuint:
+  case typefamily_e_extenum:
+  case typefamily_e_extbitmask:
+  case typefamily_e_extfloat:
     return false;
-  case typecat_e_noncopyable:
+  case typefamily_e_noncopyable:
     return true; /* default constructible but noncopyable */
   default:
     break;
@@ -357,8 +357,8 @@ static bool is_pod_integral_type(const term& t)
     ) {
     return true;
   }
-  const typecat_e cat = get_category(t);
-  return cat == typecat_e_extint || cat == typecat_e_extuint;
+  const typefamily_e cat = get_family(t);
+  return cat == typefamily_e_extint || cat == typefamily_e_extuint;
 }
 
 bool is_integral_type(const term& t)
@@ -366,8 +366,8 @@ bool is_integral_type(const term& t)
   if (is_pod_integral_type(t)) {
     return true;
   }
-  const typecat_e cat = get_category(t);
-  return cat == typecat_e_extint || cat == typecat_e_extuint;
+  const typefamily_e cat = get_family(t);
+  return cat == typefamily_e_extint || cat == typefamily_e_extuint;
 }
 
 bool is_unsigned_integral_type(const term& t)
@@ -382,8 +382,8 @@ bool is_unsigned_integral_type(const term& t)
     ) {
     return true;
   }
-  const typecat_e cat = get_category(t);
-  return cat == typecat_e_extuint;
+  const typefamily_e cat = get_family(t);
+  return cat == typefamily_e_extuint;
 }
 
 bool is_float_type(const term& t)
@@ -391,95 +391,95 @@ bool is_float_type(const term& t)
   return t == builtins.type_double || t == builtins.type_float;
 }
 
-static typecat_e get_category(const expr_i *e)
+static typefamily_e get_family(const expr_i *e)
 {
   const expr_struct *est = dynamic_cast<const expr_struct *>(e);
   std::string cat;
   if (est != 0) {
-    return est->typecat;
+    return est->typefamily;
   }
-  return typecat_e_none;
+  return typefamily_e_none;
 }
 
-typecat_e get_category(const term& t)
+typefamily_e get_family(const term& t)
 {
-  return get_category(t.get_expr());
+  return get_family(t.get_expr());
 }
 
-typecat_e get_category_from_string(const std::string& s)
+typefamily_e get_family_from_string(const std::string& s)
 {
-  if (s == "ptr") return typecat_e_ptr;
-  if (s == "cptr") return typecat_e_cptr;
-  if (s == "iptr") return typecat_e_iptr;
-  if (s == "tptr") return typecat_e_tptr;
-  if (s == "tcptr") return typecat_e_tcptr;
-  if (s == "tiptr") return typecat_e_tiptr;
-  if (s == "extint") return typecat_e_extint;
-  if (s == "extuint") return typecat_e_extuint;
-  if (s == "extenum") return typecat_e_extenum;
-  if (s == "extbitmask") return typecat_e_extbitmask;
-  if (s == "extfloat") return typecat_e_extfloat;
-  if (s == "extnumeric") return typecat_e_extnumeric;
-  if (s == "varray") return typecat_e_varray;
-  if (s == "darray") return typecat_e_darray;
-  if (s == "farray") return typecat_e_farray;
-  if (s == "slice") return typecat_e_slice;
-  if (s == "cslice") return typecat_e_cslice;
-  if (s == "tree_map") return typecat_e_tree_map;
-  if (s == "tree_map_range") return typecat_e_tree_map_range;
-  if (s == "tree_map_crange") return typecat_e_tree_map_crange;
-  if (s == "linear") return typecat_e_linear;
-  if (s == "noncopyable") return typecat_e_noncopyable;
-  if (s == "nocascade") return typecat_e_nocascade;
-  // if (s == "wptr") return typecat_e_wptr;
-  // if (s == "wcptr") return typecat_e_wcptr;
-  return typecat_e_none;
+  if (s == "ptr") return typefamily_e_ptr;
+  if (s == "cptr") return typefamily_e_cptr;
+  if (s == "iptr") return typefamily_e_iptr;
+  if (s == "tptr") return typefamily_e_tptr;
+  if (s == "tcptr") return typefamily_e_tcptr;
+  if (s == "tiptr") return typefamily_e_tiptr;
+  if (s == "extint") return typefamily_e_extint;
+  if (s == "extuint") return typefamily_e_extuint;
+  if (s == "extenum") return typefamily_e_extenum;
+  if (s == "extbitmask") return typefamily_e_extbitmask;
+  if (s == "extfloat") return typefamily_e_extfloat;
+  if (s == "extnumeric") return typefamily_e_extnumeric;
+  if (s == "varray") return typefamily_e_varray;
+  if (s == "darray") return typefamily_e_darray;
+  if (s == "farray") return typefamily_e_farray;
+  if (s == "slice") return typefamily_e_slice;
+  if (s == "cslice") return typefamily_e_cslice;
+  if (s == "tree_map") return typefamily_e_tree_map;
+  if (s == "tree_map_range") return typefamily_e_tree_map_range;
+  if (s == "tree_map_crange") return typefamily_e_tree_map_crange;
+  if (s == "linear") return typefamily_e_linear;
+  if (s == "noncopyable") return typefamily_e_noncopyable;
+  if (s == "nocascade") return typefamily_e_nocascade;
+  // if (s == "wptr") return typefamily_e_wptr;
+  // if (s == "wcptr") return typefamily_e_wcptr;
+  return typefamily_e_none;
 }
 
-std::string get_category_string(typecat_e cat)
+std::string get_family_string(typefamily_e cat)
 {
   switch (cat) {
-  case typecat_e_none: return "";
-  case typecat_e_ptr: return "ptr";
-  case typecat_e_cptr: return "cptr";
-  case typecat_e_iptr: return "iptr";
-  case typecat_e_tptr: return "tptr";
-  case typecat_e_tcptr: return "tcptr";
-  case typecat_e_tiptr: return "tiptr";
-  case typecat_e_extint: return "extint";
-  case typecat_e_extuint: return "extuint";
-  case typecat_e_extenum: return "extenum";
-  case typecat_e_extbitmask: return "extbitmask";
-  case typecat_e_extfloat: return "extfloat";
-  case typecat_e_extnumeric: return "extnumeric";
-  case typecat_e_varray: return "varray";
-  case typecat_e_darray: return "darray";
-  case typecat_e_farray: return "farray";
-  case typecat_e_slice: return "slice";
-  case typecat_e_cslice: return "cslice";
-  case typecat_e_tree_map: return "tree_map";
-  case typecat_e_tree_map_range: return "tree_map_range";
-  case typecat_e_tree_map_crange: return "tree_map_crange";
-  case typecat_e_linear: return "linear";
-  case typecat_e_noncopyable: return "noncopyable";
-  case typecat_e_nocascade: return "nocascade";
-  // case typecat_e_wptr: return "wptr";
-  // case typecat_e_wcptr: return "wcptr";
+  case typefamily_e_none: return "";
+  case typefamily_e_ptr: return "ptr";
+  case typefamily_e_cptr: return "cptr";
+  case typefamily_e_iptr: return "iptr";
+  case typefamily_e_tptr: return "tptr";
+  case typefamily_e_tcptr: return "tcptr";
+  case typefamily_e_tiptr: return "tiptr";
+  case typefamily_e_extint: return "extint";
+  case typefamily_e_extuint: return "extuint";
+  case typefamily_e_extenum: return "extenum";
+  case typefamily_e_extbitmask: return "extbitmask";
+  case typefamily_e_extfloat: return "extfloat";
+  case typefamily_e_extnumeric: return "extnumeric";
+  case typefamily_e_varray: return "varray";
+  case typefamily_e_darray: return "darray";
+  case typefamily_e_farray: return "farray";
+  case typefamily_e_slice: return "slice";
+  case typefamily_e_cslice: return "cslice";
+  case typefamily_e_tree_map: return "tree_map";
+  case typefamily_e_tree_map_range: return "tree_map_range";
+  case typefamily_e_tree_map_crange: return "tree_map_crange";
+  case typefamily_e_linear: return "linear";
+  case typefamily_e_noncopyable: return "noncopyable";
+  case typefamily_e_nocascade: return "nocascade";
+  // case typefamily_e_wptr: return "wptr";
+  // case typefamily_e_wcptr: return "wcptr";
   }
   abort();
 }
 
-static bool is_pointer_category(const typecat_e cat)
+static bool is_pointer_family(const typefamily_e cat)
 {
   switch (cat) {
-  case typecat_e_ptr:
-  case typecat_e_cptr:
-  case typecat_e_iptr:
-  case typecat_e_tptr:
-  case typecat_e_tcptr:
-  case typecat_e_tiptr:
-  // case typecat_e_wptr:
-  // case typecat_e_wcptr:
+  case typefamily_e_ptr:
+  case typefamily_e_cptr:
+  case typefamily_e_iptr:
+  case typefamily_e_tptr:
+  case typefamily_e_tcptr:
+  case typefamily_e_tiptr:
+  // case typefamily_e_wptr:
+  // case typefamily_e_wcptr:
     return true;
   default:
     return false;
@@ -487,27 +487,27 @@ static bool is_pointer_category(const typecat_e cat)
 }
 
 #if 0
-static bool is_ephemeral_pointer_category(const typecat_e cat)
+static bool is_ephemeral_pointer_family(const typefamily_e cat)
 {
-  return cat == typecat_e_wptr || cat == typecat_e_wcptr;
+  return cat == typefamily_e_wptr || cat == typefamily_e_wcptr;
 }
 #endif
 
-static bool is_threaded_pointer_category(const typecat_e cat)
+static bool is_threaded_pointer_family(const typefamily_e cat)
 {
-  return cat == typecat_e_tptr || cat == typecat_e_tcptr
-    || cat == typecat_e_tiptr;
+  return cat == typefamily_e_tptr || cat == typefamily_e_tcptr
+    || cat == typefamily_e_tiptr;
 }
 
-static bool is_immutable_pointer_category(const typecat_e cat)
+static bool is_immutable_pointer_family(const typefamily_e cat)
 {
-  return cat == typecat_e_iptr || cat == typecat_e_tiptr;
+  return cat == typefamily_e_iptr || cat == typefamily_e_tiptr;
 }
 
 term get_pointer_target(const term& t)
 {
-  const typecat_e cat = get_category(t);
-  if (is_pointer_category(cat)) {
+  const typefamily_e cat = get_family(t);
+  if (is_pointer_family(cat)) {
     const term_list *args = t.get_args();
     if (args != 0 && !args->empty()) {
       return *args->begin();
@@ -518,10 +518,10 @@ term get_pointer_target(const term& t)
 
 bool is_same_threading_pointer(const term& t0, const term& t1)
 {
-  const typecat_e c0 = get_category(t0);
-  const typecat_e c1 = get_category(t1);
-  bool thr0 = is_threaded_pointer_category(c0);
-  bool thr1 = is_threaded_pointer_category(c1);
+  const typefamily_e c0 = get_family(t0);
+  const typefamily_e c1 = get_family(t1);
+  bool thr0 = is_threaded_pointer_family(c0);
+  bool thr1 = is_threaded_pointer_family(c1);
   return thr0 == thr1;
 }
 
@@ -592,65 +592,65 @@ bool is_interface_pointer(const term& t)
 
 bool is_cm_pointer_family(const term& t)
 {
-  return is_pointer_category(get_category(t));
+  return is_pointer_family(get_family(t));
 }
 
 bool is_const_or_immutable_pointer_family(const term& t)
 {
-  const typecat_e cat = get_category(t);
-  return cat == typecat_e_tcptr || cat == typecat_e_cptr ||
-    cat == typecat_e_tiptr || cat == typecat_e_iptr;
+  const typefamily_e cat = get_family(t);
+  return cat == typefamily_e_tcptr || cat == typefamily_e_cptr ||
+    cat == typefamily_e_tiptr || cat == typefamily_e_iptr;
 }
 
 bool is_immutable_pointer_family(const term& t)
 {
-  const typecat_e cat = get_category(t);
-  return cat == typecat_e_tiptr || cat == typecat_e_iptr;
+  const typefamily_e cat = get_family(t);
+  return cat == typefamily_e_tiptr || cat == typefamily_e_iptr;
 }
 
 bool is_multithreaded_pointer_family(const term& t)
 {
-  const typecat_e cat = get_category(t);
-  return cat == typecat_e_tptr || cat == typecat_e_tcptr ||
-    cat == typecat_e_tiptr;
+  const typefamily_e cat = get_family(t);
+  return cat == typefamily_e_tptr || cat == typefamily_e_tcptr ||
+    cat == typefamily_e_tiptr;
 }
 
 bool is_array_family(const term& t)
 {
-  const typecat_e cat = get_category(t);
-  return cat == typecat_e_varray || cat == typecat_e_darray ||
-    cat == typecat_e_farray;
+  const typefamily_e cat = get_family(t);
+  return cat == typefamily_e_varray || cat == typefamily_e_darray ||
+    cat == typefamily_e_farray;
 }
 
 bool is_cm_slice_family(const term& t)
 {
-  const typecat_e cat = get_category(t);
-  return cat == typecat_e_slice || cat == typecat_e_cslice;
+  const typefamily_e cat = get_family(t);
+  return cat == typefamily_e_slice || cat == typefamily_e_cslice;
 }
 
 bool is_map_family(const term& t)
 {
-  const typecat_e cat = get_category(t);
-  return cat == typecat_e_tree_map;
+  const typefamily_e cat = get_family(t);
+  return cat == typefamily_e_tree_map;
 }
 
 bool is_cm_maprange_family(const term& t)
 {
-  const typecat_e cat = get_category(t);
-  return cat == typecat_e_tree_map_range || cat == typecat_e_tree_map_crange;
+  const typefamily_e cat = get_family(t);
+  return cat == typefamily_e_tree_map_range || cat == typefamily_e_tree_map_crange;
 }
 
 bool is_const_range_family(const term& t)
 {
-  const typecat_e cat = get_category(t);
-  return cat == typecat_e_cslice || cat == typecat_e_tree_map_crange;
+  const typefamily_e cat = get_family(t);
+  return cat == typefamily_e_cslice || cat == typefamily_e_tree_map_crange;
 }
 
 static bool is_cm_range_family(expr_i *e)
 {
-  const typecat_e cat = get_category(e);
-  return cat == typecat_e_slice || cat == typecat_e_cslice ||
-    cat == typecat_e_tree_map_range || cat == typecat_e_tree_map_crange;
+  const typefamily_e cat = get_family(e);
+  return cat == typefamily_e_slice || cat == typefamily_e_cslice ||
+    cat == typefamily_e_tree_map_range || cat == typefamily_e_tree_map_crange;
 }
 
 bool is_cm_range_family(const term& t)
@@ -661,7 +661,7 @@ bool is_cm_range_family(const term& t)
 static bool is_ephemeral_value_type(expr_i *e)
 {
   return is_cm_range_family(e)
-    /* || is_ephemeral_pointer_category(get_category(e)) */;
+    /* || is_ephemeral_pointer_family(get_family(e)) */;
 }
 
 bool is_ephemeral_value_type(const term& t)
@@ -687,8 +687,8 @@ const bool has_userdef_constr_internal(const term& t,
     if (est->has_userdefined_constr()) {
       return true;
     }
-    if (est->typecat != typecat_e_none) {
-      if (est->typecat == typecat_e_farray) {
+    if (est->typefamily != typefamily_e_none) {
+      if (est->typefamily == typefamily_e_farray) {
 	const term_list *const tl = t.get_args();
 	if (tl != 0 && !tl->empty()) {
 	  return has_userdef_constr_internal(tl->front(), checked);
@@ -726,8 +726,8 @@ bool has_userdef_constr(const term& t)
 
 bool type_has_invalidate_guard(const term& t)
 {
-  const typecat_e cat = get_category(t);
-  if (cat == typecat_e_varray || cat == typecat_e_tree_map) {
+  const typefamily_e cat = get_family(t);
+  if (cat == typefamily_e_varray || cat == typefamily_e_tree_map) {
     return true;
   }
   return false;
@@ -735,16 +735,16 @@ bool type_has_invalidate_guard(const term& t)
 
 bool type_allow_feach(const term& t)
 {
-  const typecat_e cat = get_category(t);
+  const typefamily_e cat = get_family(t);
   switch (cat) {
-  case typecat_e_varray:
-  case typecat_e_darray:
-  case typecat_e_farray:
-  case typecat_e_tree_map:
-  case typecat_e_slice:
-  case typecat_e_cslice:
-  case typecat_e_tree_map_range:
-  case typecat_e_tree_map_crange:
+  case typefamily_e_varray:
+  case typefamily_e_darray:
+  case typefamily_e_farray:
+  case typefamily_e_tree_map:
+  case typefamily_e_slice:
+  case typefamily_e_cslice:
+  case typefamily_e_tree_map_range:
+  case typefamily_e_tree_map_crange:
     return true;
   default:
     return false;
@@ -756,8 +756,8 @@ static bool is_copyable_type_one(expr_i *e)
   if (e->get_esort() == expr_e_interface) {
     return false;
   }
-  const typecat_e cat = get_category(e);
-  if (cat == typecat_e_linear || cat == typecat_e_noncopyable) {
+  const typefamily_e cat = get_family(e);
+  if (cat == typefamily_e_linear || cat == typefamily_e_noncopyable) {
     return false;
   }
   return true;
@@ -779,8 +779,8 @@ bool is_copyable(const term& t)
   if (is_interface(t)) {
     return false;
   }
-  const typecat_e cat = get_category(t);
-  if (cat == typecat_e_linear || cat == typecat_e_noncopyable) {
+  const typefamily_e cat = get_family(t);
+  if (cat == typefamily_e_linear || cat == typefamily_e_noncopyable) {
     return false;
   }
   return true;
@@ -795,8 +795,8 @@ static bool is_assignable_type_one(expr_i *e)
   if (is_ephemeral_value_type(e)) {
     return false;
   }
-  const typecat_e cat = get_category(e);
-  if (cat == typecat_e_darray) {
+  const typefamily_e cat = get_family(e);
+  if (cat == typefamily_e_darray) {
     return false;
   }
   return true;
@@ -821,8 +821,8 @@ bool is_assignable(const term& t)
   if (is_ephemeral_value_type(t)) {
     return false;
   }
-  const typecat_e cat = get_category(t);
-  if (cat == typecat_e_darray) {
+  const typefamily_e cat = get_family(t);
+  if (cat == typefamily_e_darray) {
     return false;
   }
   return true;
@@ -1029,7 +1029,7 @@ std::string term_tostr(const term& t, term_tostr_sort s)
       {
 	const expr_tparams *const etp = ptr_down_cast<const expr_tparams>(
 	  tdef);
-	return "[param " + std::string(etp->sym) + "]";
+	return "#" + std::string(etp->sym);
       }
       break;
     case expr_e_enumval:
@@ -1045,7 +1045,7 @@ std::string term_tostr(const term& t, term_tostr_sort s)
       }
       break;
     default:
-      return "[unknown " + ulong_to_string(tdef->get_esort()) + "]";
+      return "[" + ulong_to_string(tdef->get_esort()) + "]";
     }
   }
   symbol_table *const st_defined = tdef->symtbl_lexical;
@@ -1064,17 +1064,17 @@ std::string term_tostr(const term& t, term_tostr_sort s)
   case term_tostr_sort_cname:
   case term_tostr_sort_cname_tparam:
     if (is_cm_pointer_family(t)) {
-      const typecat_e cat = get_category(t);
-      const std::string catstr = get_category_string(cat);
+      const typefamily_e cat = get_family(t);
+      const std::string catstr = get_family_string(cat);
       if (s == term_tostr_sort_cname_tparam) {
 	rstr += "pxcrt$$" + catstr;
       } else {
 	if (is_interface_pointer(t)) {
 	  rstr += "pxcrt::rcptr";
 	} else {
-	  if (cat == typecat_e_tcptr || cat == typecat_e_tptr) {
+	  if (cat == typefamily_e_tcptr || cat == typefamily_e_tptr) {
 	    rstr += "pxcrt::rcptr< pxcrt::trcval";
-	  } else if (cat == typecat_e_tiptr) {
+	  } else if (cat == typefamily_e_tiptr) {
 	    rstr += "pxcrt::rcptr< pxcrt::tircval";
 	  } else {
 	    rstr += "pxcrt::rcptr< pxcrt::rcval";
@@ -1351,14 +1351,14 @@ static bool numeric_convertible(expr_i *efrom, const term& tfrom,
   if (tto == tfrom) {
     return true;
   }
-  if (get_category(tfrom) != get_category(tto)) {
+  if (get_family(tfrom) != get_family(tto)) {
     return false; /* none(builtin), int, uint, enum, bitmask */
   }
   if (is_unsigned_integral_type(tfrom) != is_unsigned_integral_type(tto)) {
     return false; /* different signedness */
   }
-  const typecat_e cat = get_category(tfrom);
-  if (cat != typecat_e_none) {
+  const typefamily_e cat = get_family(tfrom);
+  if (cat != typefamily_e_none) {
     return false; /* user defined type */
   }
   /* builtin type */
@@ -1486,23 +1486,23 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
       tconvto.get_expr());
     const expr_struct *const es_from = dynamic_cast<const expr_struct *>(
       tfrom.get_expr());
-    typecat_e cat_to = typecat_e_none;
-    typecat_e cat_from = typecat_e_none;
+    typefamily_e cat_to = typefamily_e_none;
+    typefamily_e cat_from = typefamily_e_none;
     if (es_to != 0) {
-      cat_to = es_to->typecat;
+      cat_to = es_to->typefamily;
     }
     if (es_from != 0) {
-      cat_from = es_from->typecat;
+      cat_from = es_from->typefamily;
     }
-    if (cat_to != typecat_e_none && cat_from != typecat_e_none &&
-      (cat_to == typecat_e_cptr || cat_from == typecat_e_ptr)) {
+    if (cat_to != typefamily_e_none && cat_from != typefamily_e_none &&
+      (cat_to == typefamily_e_cptr || cat_from == typefamily_e_ptr)) {
       DBG_CONV(fprintf(stderr, "convert: (struct) ptr to cptr\n"));
       efrom->conv = conversion_e_subtype_ptr;
       efrom->type_conv_to = tconvto;
       return true;
     }
-    if (cat_to != typecat_e_none && cat_from != typecat_e_none &&
-      (cat_to == typecat_e_tcptr || cat_from == typecat_e_tptr)) {
+    if (cat_to != typefamily_e_none && cat_from != typefamily_e_none &&
+      (cat_to == typefamily_e_tcptr || cat_from == typefamily_e_tptr)) {
       DBG_CONV(fprintf(stderr, "convert: (struct) tptr to tcptr\n"));
       efrom->conv = conversion_e_subtype_ptr;
       efrom->type_conv_to = tconvto;
@@ -2346,20 +2346,20 @@ static void check_type_threading_te(const term& te, expr_i *pos)
       check_type_threading_te(*i, pos);
     }
     const expr_struct *est = dynamic_cast<const expr_struct *>(e);
-    if (est != 0 && est->typecat != typecat_e_none && !args->empty()) {
+    if (est != 0 && est->typefamily != typefamily_e_none && !args->empty()) {
       const term& tgt = args->front();
       const attribute_e attr = get_term_threading_attribute(tgt);
-      if (is_threaded_pointer_category(est->typecat) &&
+      if (is_threaded_pointer_family(est->typefamily) &&
 	(attr & attribute_multithr) == 0) {
 	arena_error_throw(pos, "pointer target '%s' is not multithreaded",
 	  term_tostr_human(tgt).c_str());
       }
-      if (is_immutable_pointer_category(est->typecat) &&
+      if (is_immutable_pointer_family(est->typefamily) &&
 	(attr & attribute_valuetype) == 0) {
 	arena_error_throw(pos, "pointer target '%s' is not valuetype",
 	  term_tostr_human(tgt).c_str());
       }
-      if (est->typecat == typecat_e_tiptr &&
+      if (est->typefamily == typefamily_e_tiptr &&
 	(attr & attribute_valuetype) == 0) {
 	arena_error_throw(pos, "pointer target '%s' is not tsvaluetype",
 	  term_tostr_human(tgt).c_str());
@@ -2767,16 +2767,16 @@ term get_array_elem_texpr(expr_op *eop, term& t0)
   if (est != 0) {
     const expr_tparams *tparams = est->block->tinfo.tparams;
     if (tparams != 0) {
-      switch (est->typecat) {
-      case typecat_e_varray:
-      case typecat_e_darray:
-      case typecat_e_farray:
-      case typecat_e_slice:
-      case typecat_e_cslice:
+      switch (est->typefamily) {
+      case typefamily_e_varray:
+      case typefamily_e_darray:
+      case typefamily_e_farray:
+      case typefamily_e_slice:
+      case typefamily_e_cslice:
 	return tparams->param_def;
-      case typecat_e_tree_map:
-      case typecat_e_tree_map_range:
-      case typecat_e_tree_map_crange:
+      case typefamily_e_tree_map:
+      case typefamily_e_tree_map_range:
+      case typefamily_e_tree_map_crange:
 	if (tparams->rest != 0) {
 	  return tparams->rest->param_def;
 	}
@@ -2785,15 +2785,15 @@ term get_array_elem_texpr(expr_op *eop, term& t0)
 	break;
       }
       #if 0
-      if (std::string(est->category) == "varray") {
+      if (std::string(est->family) == "varray") {
 	return tparams->param_def;
-      } else if (std::string(est->category) == "farray") {
+      } else if (std::string(est->family) == "farray") {
 	return tparams->param_def;
-      } else if (std::string(est->category) == "slice") {
+      } else if (std::string(est->family) == "slice") {
 	return tparams->param_def;
-      } else if (std::string(est->category) == "cslice") {
+      } else if (std::string(est->family) == "cslice") {
 	return tparams->param_def;
-      } else if (std::string(est->category) == "tree_map") {
+      } else if (std::string(est->family) == "tree_map") {
 	if (tparams->rest != 0) {
 	  return tparams->rest->param_def;
 	}
@@ -2816,12 +2816,12 @@ term get_array_index_texpr(expr_op *eop, term& t0)
   if (est != 0) {
     const expr_tparams *tparams = est->block->tinfo.tparams;
     if (tparams != 0) {
-      switch (est->typecat) {
-      case typecat_e_varray:
-      case typecat_e_darray:
-      case typecat_e_farray:
-      case typecat_e_slice:
-      case typecat_e_cslice:
+      switch (est->typefamily) {
+      case typefamily_e_varray:
+      case typefamily_e_darray:
+      case typefamily_e_farray:
+      case typefamily_e_slice:
+      case typefamily_e_cslice:
 	{
 	  term t = eval_local_lookup(t0, "key_type", eop);
 	  if (t.is_null()) {
@@ -2830,8 +2830,8 @@ term get_array_index_texpr(expr_op *eop, term& t0)
 	  }
 	  return t;
 	}
-      case typecat_e_tree_map:
-      case typecat_e_tree_map_range:
+      case typefamily_e_tree_map:
+      case typefamily_e_tree_map_range:
 	if (tparams->rest != 0) {
 	  return tparams->param_def;
 	}

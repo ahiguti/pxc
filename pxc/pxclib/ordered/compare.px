@@ -7,17 +7,17 @@ public threaded function {t} int compare(t const& x, t const& y)
 {
   macro symstr m::concat{t, "_compare"};
   macro sym m::symbol{t, symstr};
-  macro cat m::category{t};
+  macro fam m::family{t};
   if (m::eq{m::to_string{sym}, symstr}) {
     return sym(x, y);
   } else if (m::eq{t, type::builtin::unit}) {
     return 0;
   } else if (m::or{
-    m::eq{cat, "builtin"}, m::eq{cat, "int"}, m::eq{cat, "uint"},
-    m::eq{cat, "float"}, m::eq{cat, "numeric"},
+    m::eq{fam, "builtin"}, m::eq{fam, "int"}, m::eq{fam, "uint"},
+    m::eq{fam, "float"}, m::eq{fam, "numeric"},
     m::eq{t, type::builtin::string}, m::eq{t, type::builtin::strlit}}) {
     return x < y ? -1 : x > y ? 1 : 0;
-  } else if (m::eq{cat, "farray"}) {
+  } else if (m::eq{fam, "farray"}) {
     size_t const sz = m::at{t, 1};
     size_t i = 0;
     for (i = 0; i < n; ++i) {
@@ -27,7 +27,7 @@ public threaded function {t} int compare(t const& x, t const& y)
       }
     }
     return 0;
-  } else if (m::or{m::eq{cat, "varray"}, m::eq{cat, "darray"}}) {
+  } else if (m::or{m::eq{fam, "varray"}, m::eq{fam, "darray"}}) {
     size_t const xsz = x.size();
     size_t const ysz = y.size();
     size_t const sz = xsz < ysz ? xsz : ysz;
@@ -44,9 +44,9 @@ public threaded function {t} int compare(t const& x, t const& y)
       return 1;
     }
     return 0;
-  } else if (m::eq{cat, "tree_map"}) {
+  } else if (m::eq{fam, "tree_map"}) {
     return m::error{"not implemented for tree_map"};
-  } else if (m::eq{cat, "struct"}) {
+  } else if (m::eq{fam, "struct"}) {
     foreach (name, fld : t) {
       int const c = compare(x.fld, y.fld);
       if (c != 0) {
@@ -54,7 +54,7 @@ public threaded function {t} int compare(t const& x, t const& y)
       }
     }
     return 0;
-  } else if (m::eq{cat, "union"}) {
+  } else if (m::eq{fam, "union"}) {
     int const tc = compare(union_tag(x), union_tag(y));
     if (tc != 0) {
       return tc;
