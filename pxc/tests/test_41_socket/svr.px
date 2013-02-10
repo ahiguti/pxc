@@ -5,6 +5,7 @@ import io::file -;
 import io::errno -;
 import io::net::addrinfo -;
 import io::net::socket -;
+import io::signal -;
 import thread -;
 
 multithreaded struct server_thread(ioptr const& i, tptr{bool} const& rp,
@@ -36,7 +37,8 @@ multithreaded struct client_thread(ioptr const& i, tptr{bool} const& rp)
   {
     while (!*readyp) { io_usleep(iop, 1); } // TODO: condition variable
     var ioeh = errno_eh(error::policy_throw);
-    var sf = socket_connector(iop, "localhost", "9999", AF_INET, SOCK_STREAM);
+    var sf = socket_connector(iop, "localhost", "9999", AF_INET, SOCK_STREAM,
+      10);
     var peer_addr = sockaddr_storage();
     var sock = socket(sf, peer_addr, ioeh);
     sock.write("hoge", ioeh);
@@ -45,6 +47,8 @@ multithreaded struct client_thread(ioptr const& i, tptr{bool} const& rp)
 
 function void t1()
 {
+  var ioeh = errno_eh(error::policy_throw);
+  signal(io::io, SIGPIPE, SIG_IGN, ioeh);
   var readyp = tptr(bool(false));
   var strp = tptr(string());
   var sthr = thread_create(server_thread(io::io, readyp, strp));

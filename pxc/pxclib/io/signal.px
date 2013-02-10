@@ -1,0 +1,33 @@
+namespace io::signal;
+public import type::builtin -;
+public import io -;
+public import io::errno -;
+public import io::file -;
+public import error -;
+
+public tsvaluetype extern "int" "extenum" struct signo_t { }
+public extern "SIGPIPE" signo_t SIGPIPE;
+
+public tsvaluetype extern "sighandler_t" "extenum" struct sighandler_t { }
+public extern "SIG_DFL" sighandler_t SIG_DFL;
+public extern "SIG_IGN" sighandler_t SIG_IGN;
+public extern "pxcio::no_op_handler" sighandler_t SIG_NO_OP;
+
+public extern "pxcio::set_signal_handler" function
+void signal(ioptr const& iop, signo_t sig, sighandler_t handler, errno_eh& eh);
+
+extern "type" inline
+#include <signal.h>
+
+extern "fdef" inline
+namespace pxcio {
+void set_signal_handler(ioptr const& iop, int sig, sighandler_t h,
+  errno_eh& eh)
+{
+  const sighandler_t r = ::signal(sig, h);
+  if (r == SIG_ERR) {
+    ioeh_set(eh, errno);
+  }
+}
+};
+
