@@ -939,9 +939,6 @@ static void add_root_requirement(expr_i *e, passby_e passby,
     }
     return;
   case TOK_PTR_DEREF:
-    #if 0
-    fprintf(stderr, "root deref %s %s\n", eop->dump(0).c_str(), term_tostr_human(eop->arg0->resolve_texpr()).c_str());
-    #endif
     if (is_cm_range_family(eop->arg0->resolve_texpr())) {
       /* range dereference. root the range object. */
       add_root_requirement(eop->arg0, passby_e_const_value, blockscope_flag);
@@ -963,12 +960,16 @@ static void add_root_requirement(expr_i *e, passby_e passby,
       ? passby_e_const_reference : passby_e_mutable_reference,
       blockscope_flag);
     if (is_passby_cm_reference(passby) ||
-      is_cm_range_family(e->resolve_texpr())) {
+      (eop->arg1 != 0 && is_range_op(eop->arg1))) {
+      #if 0
+      // FIXME: remove this: // is_cm_range_family(e->resolve_texpr())) {
+      #endif
       /* v[k] is required byref, or v[..] is required. need to guard. */
       add_root_requirement_container_elements(eop->arg0, blockscope_flag);
     } else {
       /* by value */
       if (blockscope_flag) {
+	/* named variable. need to guard. */
 	store_tempvar(eop, passby, blockscope_flag, false, "elemval");
       }
     }
