@@ -312,25 +312,6 @@ static void emit_struct_constr_initializer(emit_context& em,
   }
 }
 
-#if 0
-static bool struct_need_c_constr(const expr_struct *est)
-{
-  const expr_block *const bl = est->block;
-  if (bl == 0) {
-    return false;
-  }
-  const expr_stmts *const st = bl->stmts;
-  while (st != 0) {
-    const expr_i *const e = st->head;
-    if (e != 0 && !is_noexec_expr(e->get_esort())) {
-      return true;
-    }
-    st = st->rest;
-  }
-  return false;
-}
-#endif
-
 static void emit_struct_def_one(emit_context& em, const expr_struct *est,
   bool proto_only)
 {
@@ -354,11 +335,6 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
       } else {
 	em.puts(", ");
       }
-      #if 0
-      const expr_interface *const ihdef = ptr_down_cast<const expr_interface>(
-	term_get_instance(ih->head->get_texpr()));
-      em.puts(get_type_cname_w_ns(ihdef));
-      #endif
       em.puts(term_tostr_cname(ih->head->get_sdef()->get_evaluated()));
       ih = ih->rest;
     }
@@ -428,10 +404,6 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
     em.puts("inline ");
     em.puts(name_c);
     em.puts("();\n");
-    #if 0
-    emit_struct_constr_initializer(em, est, flds, true);
-    em.puts(" { }\n");
-    #endif
     /* struct constructor */
     if (!flds.empty()) {
       em.set_file_line(est);
@@ -446,100 +418,11 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
 	emit_var_cdecl(em, *i, true, false);
       }
       em.puts(");\n");
-      #if 0
-      emit_struct_constr_initializer(em, est, flds, false);
-      em.puts(" { }\n");
-      #endif
     }
   }
   em.add_indent(-1);
   em.puts("};\n");
 }
-
-#if 0
-static bool has_blockscope_tempvar(expr_i *e)
-{
-  if (e == 0) {
-    return false;
-  }
-  if (e->tempvar_id >= 0 && e->tempvar_varinfo.scope_block) {
-    return true;
-  }
-  const int n = e->get_num_children();
-  for (int i = 0; i < n; ++i) {
-    expr_i *const c = e->get_child(i);
-    if (has_blockscope_tempvar(c)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-static bool is_vardefset(expr_i *e)
-{
-  if (e->get_esort() == expr_e_op) {
-    expr_op *const eop = ptr_down_cast<expr_op>(e);
-    if (eop->op == '=' && eop->arg0->get_esort() == expr_e_var) {
-      /* var x = ... */
-      return true;
-    }
-  }
-  return false;
-}
-
-static bool is_vardefdefault(expr_i *e)
-{
-  if (e->get_esort() == expr_e_var) {
-    expr_op *const eop = dynamic_cast<expr_op *>(e->parent_expr);
-    if (eop == 0 || eop->op != '=') {
-      /* var x but not var x = ... */
-      return true;
-    }
-  }
-  return false;
-}
-
-static bool is_vardef_or_vardefset(expr_i *e)
-{
-  return is_vardefdefault(e) || is_vardefset(e);
-}
-
-static bool is_single_vardef_or_vardefset(expr_i *e)
-{
-  if (!is_vardef_or_vardefset(e)) {
-    return false;
-  }
-  if (has_blockscope_tempvar(e)) {
-    /* not reached because structs can not have ephemeral fields. */
-    abort();
-    return false;
-  }
-  return true;
-}
-#endif
-
-#if 0
-bool is_noexec_expr(expr_i *e)
-{
-  switch (e->get_esort()) {
-  case expr_e_typedef:
-  case expr_e_macrodef:
-  case expr_e_ns:
-  case expr_e_inline_c:
-  case expr_e_enumval:
-  case expr_e_struct:
-  case expr_e_variant:
-  case expr_e_interface:
-  case expr_e_funcdef:
-    return true;
-  default:
-    /* expr_e_if, expr_e_var, expr_e_op for example */
-    DBG_IF(fprintf(stderr, "is_noexec_expr: false %s\n",
-      e->dump(0).c_str()));
-    return false;
-  }
-}
-#endif
 
 static void emit_struct_constr_one(emit_context& em, expr_struct *est,
   bool emit_default_constr)
@@ -650,36 +533,6 @@ static void emit_struct_constr_one(emit_context& em, expr_struct *est,
   }
 }
 
-#if 0
-// TODO: remove
-static void emit_struct_constr_aux(emit_context& em, expr_struct *est)
-{
-  if (!is_compiled(est->block)) {
-    return;
-  }
-  if (!est->has_userdefined_constr()) {
-    return;
-  }
-  const std::string name_c = get_type_cname_wo_ns(est);
-  typedef std::list<expr_var *> flds_type;
-  flds_type flds;
-  est->get_fields(flds);
-  flds_type::const_iterator i;
-  em.set_ns(est->uniqns);
-  /* user defined constructor */
-  em.set_file_line(est);
-  em.indent('b');
-  em.puts("void ");
-  em.puts(name_c);
-  em.puts("::init$z");
-  em.puts("(");
-  emit_argdecls(em, est->block->argdecls, true);
-  em.puts(") ");
-  fn_emit_value(em, est->block);
-  em.puts("\n");
-}
-#endif
-
 static void emit_initialize_variant_field(emit_context& em,
   const expr_variant *ev, const expr_var *fld, bool copy_flag, bool set_flag)
 {
@@ -743,15 +596,6 @@ static void emit_deinitialize_variant_field(emit_context& em,
     fld->emit_symbol(em);
     em.puts("$p()->");
     em.puts(destructor_cstr(fld->get_texpr()));
-    #if 0
-    emit_term(em, fld->get_texpr());
-    em.puts("::~");
-    const std::string shortname =
-      to_short_name(get_term_cname(fld->get_texpr()));
-    const std::string shortname_wo_tp =
-      shortname.substr(0, shortname.find('<'));
-    em.puts(shortname_wo_tp);
-    #endif
     em.puts("()");
   } else {
     /* known to be a pod */
@@ -860,14 +704,8 @@ static void emit_variant_aux_functions(emit_context& em,
   for (i = flds.begin(); i != flds.end(); ++i) {
     em.set_file_line(*i);
     em.indent('b');
-    #if 0
-    em.puts("const ");
-    #endif
     emit_term(em, (*i)->get_texpr());
     em.puts(" ");
-    #if 0
-    em.puts("& ");
-    #endif
     if (!declonly) {
       em.puts(name_c);
       em.puts("::");
@@ -906,9 +744,6 @@ static void emit_variant_aux_functions(emit_context& em,
     em.indent('b');
     emit_term(em, (*i)->get_texpr());
     em.puts(" ");
-    #if 0
-    em.puts("& ");
-    #endif
     if (!declonly) {
       em.puts(name_c);
       em.puts("::");
@@ -924,11 +759,6 @@ static void emit_variant_aux_functions(emit_context& em,
       em.add_indent(1);
       em.set_file_line(*i);
       em.indent('b');
-      #if 0
-      em.puts("if ($e != ");
-      (*i)->emit_symbol(em);
-      em.puts("$e) ");
-      #endif
       em.puts("{ deinit$(); $e = ");
       (*i)->emit_symbol(em);
       em.puts("$e; ");
@@ -1052,11 +882,6 @@ static void emit_variant_def_one(emit_context& em, const expr_variant *ev,
   em.indent('b');
   em.puts(name_c);
   em.puts("()");
-  #if 0
-  if (ev->inherit) {
-    em.puts(" : count$z(1)");
-  }
-  #endif
   em.puts(" {\n");
   em.add_indent(1);
   for (i = flds.begin(); i != flds.end(); ++i) {
@@ -1110,111 +935,6 @@ static void emit_variant_aux_defs(emit_context& em, expr_variant *ev)
   /* init/deinit and getter functions (definitions) */
   emit_variant_aux_functions(em, ev, false);
 }
-
-#if 0
-struct sorted_exprs {
-  std::list<expr_i *> sorted;
-  std::set<expr_i *> pset;
-  std::set<expr_i *> parents;
-};
-
-static std::list<expr_i *> get_dep_tparams(expr_struct *est)
-{
-  std::list<expr_i *> r;
-  if (est == 0) {
-    return r;
-  }
-  const term& te = est->get_value_texpr();
-  const term_list *const args = te.get_args();
-  size_t argslen = args != 0 ? args->size() : 0;
-  const typefamily_e cat = est->typefamily;
-  if (cat == typefamily_e_farray) {
-    if (argslen != 0) {
-      term t = (*args)[0]; /* TODO: avoid copying */
-      r.push_back(term_get_instance(t));
-    }
-  } else if (
-    cat == typefamily_e_ptr ||
-    cat == typefamily_e_cptr ||
-    cat == typefamily_e_iptr ||
-    cat == typefamily_e_tptr ||
-    cat == typefamily_e_tcptr ||
-    cat == typefamily_e_tiptr ||
-    // cat == typefamily_e_wptr ||
-    // cat == typefamily_e_wcptr ||
-    cat == typefamily_e_darray ||
-    cat == typefamily_e_varray ||
-    cat == typefamily_e_tree_map) {
-    /* no dep */
-  } else {
-    if (args != 0) {
-      for (term_list::const_iterator i = args->begin(); i != args->end();
-	++i) {
-	term t = *i; /* TODO: avoid copying */
-	r.push_back(term_get_instance(t));
-      }
-    }
-  }
-  return r;
-}
-
-static void sort_types(sorted_exprs& c, expr_i *e)
-{
-  if (e == 0) {
-    return;
-  }
-  if (c.pset.find(e) != c.pset.end()) {
-    return;
-  }
-  if (c.parents.find(e) != c.parents.end()) {
-    arena_error_throw(e, "a type dependency cycle is found");
-  }
-  c.parents.insert(e);
-  expr_block *block = 0;
-  expr_struct *const est = dynamic_cast<expr_struct *>(e);
-  if (est != 0) {
-    block = est->block;
-  }
-  expr_variant *const ev = dynamic_cast<expr_variant *>(e);
-  if (ev != 0) {
-    block = ev->block;
-  }
-  if (block != 0 && is_compiled(block)) {
-    const symbol_table& st = block->symtbl;
-    symbol_table::locals_type::const_iterator i;
-    for (i = st.locals.begin(); i != st.locals.end(); ++i) {
-      expr_var *const ev = dynamic_cast<expr_var *>(i->second.edef);
-      if (ev == 0) {
-	continue;
-      }
-      term te = ev->get_texpr(); /* TODO: eliminate copying */
-      expr_i *const einst = term_get_instance(te);
-      sort_types(c, einst);
-    }
-    typedef std::list<expr_i *> deps_type;
-    deps_type deps = get_dep_tparams(est);
-    for (deps_type::iterator i = deps.begin(); i != deps.end(); ++i) {
-      sort_types(c, *i);
-    }
-    #if 0
-    if (est != 0 && est->family != 0 &&
-      std::string(est->family) == "farray") {
-      /* fixed-size array requires its first param to be a complete type */
-      const term& te = est->get_value_texpr();
-      const term_list *const args = te.get_args();
-      assert(args);
-      assert(!args->empty());
-      term tp = args->front(); /* TODO: eliminate copying */
-      expr_i *const einst = term_get_instance(tp);
-      sort_types(c, einst);
-    }
-    #endif
-  }
-  c.parents.erase(e);
-  c.sorted.push_back(e);
-  c.pset.insert(e);
-}
-#endif
 
 static void emit_type_definitions(emit_context& em)
 {
@@ -1319,12 +1039,6 @@ static void emit_function_argdecls(emit_context& em, expr_funcdef *efd)
 static void emit_function_decl_one(emit_context& em, expr_funcdef *efd,
   bool set_ns, bool memfunc_ext)
 {
-  #if 0
-  if (efd->no_def && !efd->is_virtual_function()) {
-    em.puts("/* nodef */");
-    return; /* external C function */
-  }
-  #endif
   if (set_ns) {
     if (efd->cname != 0) {
       std::string cname = efd->cname;
@@ -1362,15 +1076,6 @@ static void emit_function_decl_one(emit_context& em, expr_funcdef *efd,
     }
   }
 }
-
-#if 0
-static void emit_vardecl(emit_context& em, const expr_i *e)
-{
-  em.puts(term_tostr(e->get_texpr(), term_tostr_sort_cname));
-  em.puts(" ");
-  e->emit_symbol(em);
-}
-#endif
 
 static void emit_function_def_one(emit_context& em, expr_funcdef *efd)
 {
@@ -1433,9 +1138,6 @@ static void emit_function_def(emit_context& em)
     if (est != 0 && est->cname == 0) {
       emit_struct_constr_one(em, est, true);
       emit_struct_constr_one(em, est, false);
-      #if 0
-      emit_struct_constr_aux(em, est);
-      #endif
     }
     expr_variant *const ev = dynamic_cast<expr_variant *>(*i);
     if (ev != 0) {
@@ -1571,11 +1273,8 @@ static void emit_value_symdef_common(emit_context& em, symbol_common& sdef,
   // FIXME: when necessary?
   if (is_field_w_explicit_obj(e)) { /* TODO: not smart? */
     edef->emit_symbol(em);
-    //fn_emit_value(em, edef);
     return;
   }
-  #if 0
-  #endif
   /* check if it's an imported member field */
   expr_i *const def_fr = get_current_frame_expr(edef->symtbl_lexical);
   expr_struct *const def_est = dynamic_cast<expr_struct *>(def_fr);
@@ -1585,23 +1284,10 @@ static void emit_value_symdef_common(emit_context& em, symbol_common& sdef,
     def_est != use_efd->is_member_function()) {
     em.puts("(this$up.");
     edef->emit_symbol(em);
-    // fn_emit_value(em, edef);
     em.puts(")");
     return;
   }
-  #if 0
-  if (!sdef.upvalue_flag && edef->get_esort() == expr_e_var) {
-    expr_var *const ev = ptr_down_cast<expr_var>(edef);
-    const bool defset_sep_flag = em.get_expr_info(ev).defset_sep;
-    const std::string var_csymbol = csymbol_var(ev, false);
-    const bool emit_def = false;
-    emit_named_or_temp_var(em, ev->get_texpr(), ev->type_conv_to,
-      ev->varinfo, defset_sep_flag, var_csymbol, emit_def, 0, false);
-    return;
-  }
-  #endif
   edef->emit_symbol(em);
-  // fn_emit_value(em, edef);
 }
 
 void expr_te::emit_value(emit_context& em)
@@ -1637,31 +1323,17 @@ std::string expr_enumval::emit_symbol_str() const
 
 void expr_enumval::emit_symbol(emit_context& em) const
 {
-  #if 0
-  abort();
-  #endif
-  // em.puts(emit_symbol_str());
   if (cname == 0) {
     assert(value != 0);
     fn_emit_value(em, value);
   } else {
     em.puts(std::string(cname));
   }
-  #if 0
-  #endif
 }
 
 void expr_enumval::emit_value(emit_context& em)
 {
   this->emit_symbol(em);
-  #if 0
-  if (cname == 0) {
-    assert(value != 0);
-    fn_emit_value(em, value);
-  } else {
-    em.puts(std::string(cname));
-  }
-  #endif
 }
 
 static bool is_split_point(expr_i *e)
@@ -1671,21 +1343,6 @@ static bool is_split_point(expr_i *e)
   } else if (is_vardef_or_vardefset(e)) {
     return true;
   }
-  #if 0
-  } else if (e->get_esort() == expr_e_op) {
-    expr_op *const eop = ptr_down_cast<expr_op>(e);
-    if (eop->op == '=' && eop->arg0->get_esort() == expr_e_var) {
-      /* var x = ... */
-      return true;
-    }
-  } else if (e->get_esort() == expr_e_var) {
-    expr_op *const eop = dynamic_cast<expr_op *>(e->parent_expr);
-    if (eop == 0 || eop->op != '=') {
-      /* var x but not var x = ... */
-      return true;
-    }
-  }
-  #endif
   return false;
 }
 
@@ -1711,25 +1368,6 @@ static void split_expr(expr_i *e, std::deque<expr_i *>& es)
     es.push_back(e);
   }
 }
-
-#if 0
-static bool is_vardef_constructor(expr_i *e)
-{
-  expr_op *const eop = ptr_down_cast<expr_op>(e);
-  if (eop == 0) {
-    return false;
-  }
-  if (eop->op != '=' || eop->arg0->get_esort() != expr_e_var) {
-    return false;
-  }
-  expr_funccall *const fc = dynamic_cast<expr_funccall *>(eop->arg1);
-  if (fc == 0 || fc->conv != conversion_e_none ||
-    fc->funccall_sort != funccall_e_struct_constructor) {
-    return false;
-  }
-  return true;
-}
-#endif
 
 static void emit_split_expr(emit_context& em, expr_i *e, bool noemit_last)
 {
@@ -2340,9 +1978,6 @@ void expr_if::emit_value(emit_context& em)
       em.puts("}");
     } else {
       /* note: blockscope var is not allowed in cond */
-      #if 0
-      emit_split_expr(em, cond, true);
-      #endif
       em.puts("if (");
       fn_emit_value(em, cond);
       em.puts(") ");
@@ -2716,24 +2351,6 @@ static void emit_comma_sep_list_with_paren(emit_context& em, expr_i *e)
   em.puts(")");
 }
 
-#if 0
-static void emit_comma_sep_list_with_paren(emit_context& em, expr_i *e)
-{
-  assert(e != 0);
-  expr_op *const eop = dynamic_cast<expr_op *>(e);
-  if (eop == 0 || eop->op != ',') {
-    em.puts("(");
-    fn_emit_value(em, e);
-    em.puts(")");
-    return;
-  }
-  em.puts("(");
-  fn_emit_value(em, eop->arg0);
-  em.puts("), ");
-  emit_comma_sep_list_with_paren(em, eop->arg1);
-}
-#endif
-
 static void emit_vardef_constructor_fast_boxing(emit_context& em,
   expr_i *e, const term& typ, const std::string& cs0,
   const std::string& var_csymbol, expr_funccall *fc,
@@ -2914,13 +2531,6 @@ static void emit_var_or_tempvar(emit_context& em, expr_i *e, const term& tbase,
     /* no guard, pass by value */
     if (emv == emit_var_tempobj) {
       assert(rhs != 0);
-      #if 0
-      if (is_smallpod_type(tbase)) {
-	em.puts("((" + s0 + ")(");
-	fn_emit_value(em, rhs, false, is_unnamed);
-	em.puts("))");
-      } else
-      #endif
       {
 	em.puts(s0 + "(");
 	fn_emit_value(em, rhs, false, is_unnamed);
@@ -3017,14 +2627,6 @@ void fn_emit_value(emit_context& em, expr_i *e, bool expand_composite,
       vi = &ev->varinfo;
       var_csymbol = csymbol_var(ev, true);
       emv = expand_composite ? emit_var_defset: emit_var_get;
-    #if 0
-    } else if (split_flag && e->tempvar_id >= 0) {
-      ev = 0;
-      rhs = e;
-      vi = &e->tempvar_varinfo;
-      var_csymbol = csymbol_tempvar(e->tempvar_id);
-      emv = expand_composite ? emit_var_defset : emit_var_get;
-    #endif
     } else {
       abort();
     }
@@ -3034,15 +2636,6 @@ void fn_emit_value(emit_context& em, expr_i *e, bool expand_composite,
        * emit set instead of defset */
       emv = emit_var_set;
     }
-    #if 0
-    fprintf(stderr,
-      "emit_var_or_tempvar %s %s line=%d emv=%d rhs=%s sp=%d tid=%d "
-      "grd=%d passby=%d esort=%d\n",
-      e->dump(0).c_str(), var_csymbol.c_str(), e->line, (int)emv,
-      rhs ? rhs->dump(0).c_str() : "", (int)split_flag, e->tempvar_id,
-      (int)vi->guard_elements, (int)vi->passby, (int)e->get_esort());
-    raise(SIGTRAP);
-    #endif
     emit_var_or_tempvar(em, e, e->get_texpr(), e->type_conv_to, *vi,
       var_csymbol, rhs, emv, ev == 0);
     return;
@@ -3083,16 +2676,6 @@ void fn_emit_value(emit_context& em, expr_i *e, bool expand_composite,
     }
     break;
   case conversion_e_cast:
-    #if 0
-    if (is_smallpod_type(e->type_conv_to)) {
-      em.puts("((");
-      emit_term(em, e->type_conv_to);
-      em.puts(")");
-      em.puts("(");
-      emit_value_internal(em, e);
-      em.puts("))");
-    } else
-    #endif
     {
       emit_term(em, e->type_conv_to);
       em.puts("(");
