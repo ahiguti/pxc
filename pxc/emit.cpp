@@ -64,6 +64,7 @@ static bool is_block_stmt(expr_i *e)
   case expr_e_feach:
   case expr_e_fldfe:
   case expr_e_foldfe:
+  case expr_e_try:
     return true;
   default:
     return false;
@@ -1346,7 +1347,7 @@ static bool is_split_point(expr_i *e)
   return false;
 }
 
-static void split_expr_rec(expr_i *e, std::deque<expr_i *>& es)
+static void split_expr_rec(expr_i *e, std::vector<expr_i *>& es)
 {
   const int n = e->get_num_children();
   for (int i = 0; i < n; ++i) {
@@ -1361,7 +1362,7 @@ static void split_expr_rec(expr_i *e, std::deque<expr_i *>& es)
   }
 }
 
-static void split_expr(expr_i *e, std::deque<expr_i *>& es)
+static void split_expr(expr_i *e, std::vector<expr_i *>& es)
 {
   split_expr_rec(e, es);
   if (es.empty() || es.back() != e) {
@@ -1372,7 +1373,7 @@ static void split_expr(expr_i *e, std::deque<expr_i *>& es)
 static void emit_split_expr(emit_context& em, expr_i *e, bool noemit_last)
 {
   /* line */
-  typedef std::deque<expr_i *> es_type;
+  typedef std::vector<expr_i *> es_type;
   es_type es;
   split_expr(e, es);
   for (es_type::iterator i = es.begin(); i != es.end(); ++i) {
@@ -1947,9 +1948,9 @@ void expr_if::emit_value(emit_context& em)
 	is_passby_cm_reference(mapped->passby)) {
 	em.indent('I');
 	if (mapped_mutable_flag) {
-	  em.puts("const pxcrt::refvar_igrd_nn< ");
+	  em.puts("const pxcrt::guard_ref< ");
 	} else {
-	  em.puts("const pxcrt::refvar_igrd_nn< const ");
+	  em.puts("const pxcrt::guard_ref< const ");
 	}
 	em.puts(cetstr);
 	em.puts(" > ag$fg(ag$fe);\n");
@@ -2096,9 +2097,9 @@ void expr_feach::emit_value(emit_context& em)
   if (type_has_invalidate_guard(ce->get_texpr())) {
     em.indent('f');
     if (mapped_mutable_flag) {
-      em.puts("const pxcrt::refvar_igrd_nn< ");
+      em.puts("const pxcrt::guard_ref< ");
     } else {
-      em.puts("const pxcrt::refvar_igrd_nn< const ");
+      em.puts("const pxcrt::guard_ref< const ");
     }
     em.puts(cetstr);
     em.puts(" > ag$fg(ag$fe);\n");
@@ -2501,7 +2502,7 @@ static void emit_var_or_tempvar(emit_context& em, expr_i *e, const term& tbase,
 	: (is_passby_const(vi.passby) ? "const " : ""))
       + base_s0;
     const std::string wr = is_passby_cm_reference(vi.passby)
-      ? "pxcrt::refvar_igrd_nn" : "pxcrt::valvar_igrd_nn";
+      ? "pxcrt::guard_ref" : "pxcrt::guard_val";
     const std::string tstr = wr + "< " + base_cs0 + " > ";
     if (emv == emit_var_get || emv == emit_var_tempobj) {
       em.puts("(");

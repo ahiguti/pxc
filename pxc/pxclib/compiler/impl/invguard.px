@@ -4,11 +4,11 @@ public import compiler::impl::main;
 extern "type" inline
 namespace pxcrt {
 template <typename Tc>
-struct refvar_igrd_nn {
-  refvar_igrd_nn(Tc& c) : c(c) {
+struct guard_ref {
+  guard_ref(Tc& c) : c(c) {
     c.inc_invalidate_guard();
   }
-  ~refvar_igrd_nn() {
+  ~guard_ref() {
     c.dec_invalidate_guard();
   }
   Tc& get() {
@@ -20,15 +20,15 @@ struct refvar_igrd_nn {
     { return typename Tc::crange_type(c); }
 private:
   Tc& c;
-  refvar_igrd_nn(const refvar_igrd_nn&);
-  refvar_igrd_nn& operator =(const refvar_igrd_nn&);
+  guard_ref(const guard_ref&);
+  guard_ref& operator =(const guard_ref&);
 };
 template <typename Tc>
-struct valvar_igrd_nn {
-  valvar_igrd_nn(const Tc& x) : c(x) {
+struct guard_val {
+  guard_val(const Tc& x) : c(x) {
     c.inc_invalidate_guard();
   }
-  ~valvar_igrd_nn() {
+  ~guard_val() {
     c.dec_invalidate_guard();
   }
   Tc& get() {
@@ -40,8 +40,8 @@ struct valvar_igrd_nn {
     { return typename Tc::crange_type(c); }
 private:
   Tc c;
-  valvar_igrd_nn(const valvar_igrd_nn&);
-  valvar_igrd_nn& operator =(const valvar_igrd_nn&);
+  guard_val(const guard_val&);
+  guard_val& operator =(const guard_val&);
 };
 }; // namespace pxcrt
 
