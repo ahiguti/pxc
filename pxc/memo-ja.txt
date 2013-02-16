@@ -3,17 +3,27 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- threadのmain関数の中でmultithreadedではない型を使うとエラーになって
+  しまう(done)
+- lockobject{int} lck = sobj;  これが通るように
+
+- foo[x] = 3; でfooをguardしてしまうのは直したい。
+
+- byvalueを要求されたら参照を返す関数のかわりに値を返す関数をemit
+  無効化されるのを防ぐため。
+- rangeの参照外し、値を返すバージョン
+
+ためしにany型作ってみる
+
 guardまわりシンプル化
-- invalidate guardとmutex lockを共通化
-  - どちらもguard_ref/guard_valを使う
-- split point分割はもはや不要では？ -> 必要。blockscope var。
+- invalidate guardとmutex lockを共通化(done)
 - condition variableのwaitを実現
   - waitする際にはmutexをlock済みでなければならない
   - 先にinvalidate guardとmutex lockを共通化し、guardにwaitメソッド
 
-- socket_factory整理
-- setsockopt
-- signal SIGHUP
+- interfaceを実装すると常にmutex埋め込むのは無くせないか
+
+- injectns消す
 
 - union の初期化を一発でできる構文を用意
 
@@ -56,7 +66,7 @@ FIXME/TODO M2
 実装が不明確なところ
 - threadまわりの仕様再整理せよ
 - 演算子の一通りテスト作成。コンテナ含め。
-- type categoryの仕様文書化
+- type familyの仕様文書化
 - 決定済みの仕様をメモに蓄積、テストケースと関連付け。
 - 全ポインタ型とinterfaceの組み合わせ(モニタ等埋め込みが正しいか)確認
 
@@ -108,7 +118,6 @@ TODO
 - enumがエラーメッセージではintとして見えてしまう
 - mutexのlock保持スレッドを記録する実装
 - 演算子を総称関数に自動で置き換え、ユーザが演算子定義できるように
-- block-scope lock is not implemented これを出す条件は何?
 - multithreaded structのコンストラクタ引数はmultithreaded型でなくても
   よい?
 - import元を制限する構文(実装を隠すのに便利)
@@ -241,6 +250,11 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- socket_factory整理(done)
+- signal SIGHUP(done)
+- get_mutex廃止(done)
+- lockobject廃止(done)
+- block-scope lock (done)
 - type familyに改名(done)
 - struct foo { function {t} void bar() { ... } } がtest_symbols通らない
   (done)
@@ -578,4 +592,77 @@ condition variableのwaitをどのような文法で実現するか
 
 waitする際にはmutexをlock済みでなければならない
 
+条件変数を構造体に埋め込む
+struct foo {
+  compiler::runtime::condition cond;
+};
+foo& obj = *ptr;
+obj.cond.wait();
+
+---------------------------------------------------------------------
+guardまわりシンプル化
+
+現状:
+  - checktype.cpp: add_root_requirementのTOK_PTR_DEREFのケース、
+    スマポをstore_tempvarすることにより参照無効化を防止している
+  - emit.cpp: expr_op::emit_valueのTOK_PTR_DEREFのケース、tptrかtcptr
+    ならばlockobjectを作り、その中の参照を返している。interfaceか
+    どうかでコード出しわけ。
+    非インタフェース: (lockobject((p)->get_mutex$z()), p)->value$z
+    インタフェース:   *(lockobject((p)->get_mutex$z()), p)
+
+    配列要素:
+      guard_ref< vector<int> > t0((vec));
+      int& elem = (t0.get())[15];
+    guard_refのコンストラクタ・デストラクタでvec.inc_invalidate_guard()
+    とvec.dec_invalidate_guard()を呼んでいる。ポインタ型はC++では全て
+    rcptr<>なので、rcptrクラスにinc_invalidate_guard/decを定義し、その
+    中でptr->incref$z()とptr->decref$z()を呼べばよい。
+    rootするためにポインタをaddref必要なときはguard_val、そうでないとき
+    はguard_refを使う。
+      guard_ref<T>
+      guard_ref<const T>
+      guard_val<T>
+      guard_val<const T>
+
+    rcptrにinc_invalidate_guard/decを追加する。
+
+    guard_ref/valのget()はコンテナ自体を返すことに注意。
+
+
+---------------------------------------------------------------------
+演算子・関数呼び出しを組み合わせたときのroot必要の判断
+
+副作用を持つ関数又は演算子を呼ぶと、呼ぶ前に有効であった参照を無効化
+する可能性がある。C++は部分式の評価順序が決まっていないから、どのよう
+な順で評価されても無効化されない場合以外はrootせねばならない。
+
+・pure関数は副作用を持たない。pure関数は以下の条件を満たす関数:
+  - threaded関数
+  - 引数(メンバ関数のときはthisも含み、closureのときは上位値も含む)が
+    全てtsvaluetype型、mutable参照以外の渡しかた
+・pureではない関数はすべて副作用を持つ可能性があることを考慮すべし
+・副作用をもつ演算子:
+  - 代入演算子
+  - +=のような副作用付き演算子
+foo(bar(), baz())
+
+---------------------------------------------------------------------
+演算子の左辺・右辺のroot方針
+
+x + y の左辺と右辺はconst_valueかconst_refのどちらでrootしてもよい。
+値でrootするとコピーのコストがかかることがあり、参照でrootすると
+配列のガードのコストがかかることがある。
+
+---------------------------------------------------------------------
+配列要素やunionフィールドなどをbyvalueで取得する安全な方法
+
+mapped_type(arr[idx]) という式は、副作用を持つ式の一部として評価
+された場合、評価順によっては、arr[idx]評価後にその参照を無効化される
+可能性がある。そのため参照を返す演算子/関数のかわりに値を返すものを
+用意し、それを呼ぶようにする。
+ポインタ参照外し: deref(), deref_value$z()
+variant field: value$$r() これは常に値を返すのでok
+配列要素: get_value(idx)
+rangeの参照外し: 常に有効なのでok
 

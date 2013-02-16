@@ -414,6 +414,8 @@ typefamily_e get_family_from_string(const std::string& s)
   if (s == "tptr") return typefamily_e_tptr;
   if (s == "tcptr") return typefamily_e_tcptr;
   if (s == "tiptr") return typefamily_e_tiptr;
+  if (s == "lockobject") return typefamily_e_lockobject;
+  if (s == "clockobject") return typefamily_e_clockobject;
   if (s == "extint") return typefamily_e_extint;
   if (s == "extuint") return typefamily_e_extuint;
   if (s == "extenum") return typefamily_e_extenum;
@@ -446,6 +448,8 @@ std::string get_family_string(typefamily_e cat)
   case typefamily_e_tptr: return "tptr";
   case typefamily_e_tcptr: return "tcptr";
   case typefamily_e_tiptr: return "tiptr";
+  case typefamily_e_lockobject: return "lockobject";
+  case typefamily_e_clockobject: return "clockobject";
   case typefamily_e_extint: return "extint";
   case typefamily_e_extuint: return "extuint";
   case typefamily_e_extenum: return "extenum";
@@ -463,8 +467,6 @@ std::string get_family_string(typefamily_e cat)
   case typefamily_e_linear: return "linear";
   case typefamily_e_noncopyable: return "noncopyable";
   case typefamily_e_nocascade: return "nocascade";
-  // case typefamily_e_wptr: return "wptr";
-  // case typefamily_e_wcptr: return "wcptr";
   }
   abort();
 }
@@ -478,20 +480,13 @@ static bool is_pointer_family(const typefamily_e cat)
   case typefamily_e_tptr:
   case typefamily_e_tcptr:
   case typefamily_e_tiptr:
-  // case typefamily_e_wptr:
-  // case typefamily_e_wcptr:
+  case typefamily_e_lockobject:
+  case typefamily_e_clockobject:
     return true;
   default:
     return false;
   }
 }
-
-#if 0
-static bool is_ephemeral_pointer_family(const typefamily_e cat)
-{
-  return cat == typefamily_e_wptr || cat == typefamily_e_wcptr;
-}
-#endif
 
 static bool is_threaded_pointer_family(const typefamily_e cat)
 {
@@ -502,6 +497,32 @@ static bool is_threaded_pointer_family(const typefamily_e cat)
 static bool is_immutable_pointer_family(const typefamily_e cat)
 {
   return cat == typefamily_e_iptr || cat == typefamily_e_tiptr;
+}
+
+bool pointer_conversion_allowed(const typefamily_e from,
+  const typefamily_e to)
+{
+  switch (from) {
+  case typefamily_e_ptr:
+    return to == from || to == typefamily_e_cptr;
+  case typefamily_e_cptr:
+    return to == from;
+  case typefamily_e_iptr:
+    return to == from || to == typefamily_e_cptr;
+  case typefamily_e_tptr:
+    return to == from || to == typefamily_e_tcptr
+      || to == typefamily_e_lockobject || to == typefamily_e_clockobject;
+  case typefamily_e_tcptr:
+    return to == from || to == typefamily_e_clockobject;
+  case typefamily_e_tiptr:
+    return to == from;
+  case typefamily_e_lockobject:
+    return false;
+  case typefamily_e_clockobject:
+    return false;
+  default:
+    return false;
+  }
 }
 
 term get_pointer_target(const term& t)
@@ -516,6 +537,7 @@ term get_pointer_target(const term& t)
   return term();
 }
 
+#if 0
 bool is_same_threading_pointer(const term& t0, const term& t1)
 {
   const typefamily_e c0 = get_family(t0);
@@ -524,6 +546,7 @@ bool is_same_threading_pointer(const term& t0, const term& t1)
   bool thr1 = is_threaded_pointer_family(c1);
   return thr0 == thr1;
 }
+#endif
 
 bool is_function(const term& t)
 {
@@ -599,7 +622,8 @@ bool is_const_or_immutable_pointer_family(const term& t)
 {
   const typefamily_e cat = get_family(t);
   return cat == typefamily_e_tcptr || cat == typefamily_e_cptr ||
-    cat == typefamily_e_tiptr || cat == typefamily_e_iptr;
+    cat == typefamily_e_clockobject || cat == typefamily_e_tiptr ||
+    cat == typefamily_e_iptr;
 }
 
 bool is_immutable_pointer_family(const term& t)
@@ -613,6 +637,18 @@ bool is_multithreaded_pointer_family(const term& t)
   const typefamily_e cat = get_family(t);
   return cat == typefamily_e_tptr || cat == typefamily_e_tcptr ||
     cat == typefamily_e_tiptr;
+}
+
+bool is_cm_lockobject_family(const term& t)
+{
+  const typefamily_e cat = get_family(t);
+  return cat == typefamily_e_lockobject || cat == typefamily_e_clockobject;
+}
+
+static bool is_cm_lockobject_family(expr_i *e)
+{
+  const typefamily_e cat = get_family(e);
+  return cat == typefamily_e_lockobject || cat == typefamily_e_clockobject;
 }
 
 bool is_array_family(const term& t)
@@ -637,7 +673,8 @@ bool is_map_family(const term& t)
 bool is_cm_maprange_family(const term& t)
 {
   const typefamily_e cat = get_family(t);
-  return cat == typefamily_e_tree_map_range || cat == typefamily_e_tree_map_crange;
+  return cat == typefamily_e_tree_map_range ||
+    cat == typefamily_e_tree_map_crange;
 }
 
 bool is_const_range_family(const term& t)
@@ -660,8 +697,8 @@ bool is_cm_range_family(const term& t)
 
 static bool is_ephemeral_value_type(expr_i *e)
 {
-  return is_cm_range_family(e)
-    /* || is_ephemeral_pointer_family(get_family(e)) */;
+  return is_cm_range_family(e);
+  // || is_cm_lockobject_family(e);
 }
 
 bool is_ephemeral_value_type(const term& t)
@@ -727,7 +764,11 @@ bool has_userdef_constr(const term& t)
 bool type_has_invalidate_guard(const term& t)
 {
   const typefamily_e cat = get_family(t);
-  if (cat == typefamily_e_varray || cat == typefamily_e_tree_map) {
+  if (
+    cat == typefamily_e_varray ||
+    cat == typefamily_e_tree_map ||
+    cat == typefamily_e_tptr ||
+    cat == typefamily_e_tcptr) {
     return true;
   }
   return false;
@@ -757,6 +798,9 @@ static bool is_copyable_type_one(expr_i *e)
     return false;
   }
   const typefamily_e cat = get_family(e);
+  if (is_cm_lockobject_family(e)) {
+    return false;
+  }
   if (cat == typefamily_e_linear || cat == typefamily_e_noncopyable) {
     return false;
   }
@@ -1069,7 +1113,16 @@ std::string term_tostr(const term& t, term_tostr_sort s)
       if (s == term_tostr_sort_cname_tparam) {
 	rstr += "pxcrt$$" + catstr;
       } else {
-	if (is_interface_pointer(t)) {
+	if (is_cm_lockobject_family(t)) {
+	  const std::string s = (cat == typefamily_e_lockobject)
+	    ? "pxcrt::lockobject" : "pxcrt::clockobject";
+	  if (is_interface_pointer(t)) {
+	    rstr += s;
+	  } else {
+	    rstr += s + "< pxcrt::trcval";
+	    rstr_post = " >";
+	  }
+	} else if (is_interface_pointer(t)) {
 	  rstr += "pxcrt::rcptr";
 	} else {
 	  if (cat == typefamily_e_tcptr || cat == typefamily_e_tptr) {
@@ -1479,9 +1532,10 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
     }
   }
   if (is_cm_pointer_family(tconvto) && is_cm_pointer_family(tfrom) &&
-    is_sub_type(get_pointer_target(tfrom), get_pointer_target(tconvto)) &&
-    is_same_threading_pointer(tfrom, tconvto)) {
-    /* ptr/iptr to cptr or tptr/tiptr to tcptr */
+    is_sub_type(get_pointer_target(tfrom), get_pointer_target(tconvto))
+    // && is_same_threading_pointer(tfrom, tconvto)
+    ) {
+    /* ptr/iptr to cptr etc */
     const expr_struct *const es_to = dynamic_cast<const expr_struct *>(
       tconvto.get_expr());
     const expr_struct *const es_from = dynamic_cast<const expr_struct *>(
@@ -1494,6 +1548,13 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
     if (es_from != 0) {
       cat_from = es_from->typefamily;
     }
+    if (pointer_conversion_allowed(cat_from, cat_to)) {
+      DBG_CONV(fprintf(stderr, "convert: (struct) ptr\n"));
+      efrom->conv = conversion_e_subtype_ptr;
+      efrom->type_conv_to = tconvto;
+      return true;
+    }
+    #if 0
     if (cat_to != typefamily_e_none && cat_from != typefamily_e_none &&
       (cat_to == typefamily_e_cptr || cat_from == typefamily_e_ptr)) {
       DBG_CONV(fprintf(stderr, "convert: (struct) ptr to cptr\n"));
@@ -1508,6 +1569,7 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
       efrom->type_conv_to = tconvto;
       return true;
     }
+    #endif
   }
   if (is_sub_type(tfrom, tconvto)) {
     DBG_CONV(fprintf(stderr, "convert: sub type\n"));
@@ -1686,18 +1748,19 @@ attribute_e get_expr_threading_attribute(const expr_i *e)
   if (e == 0) {
     return attribute_unknown;
   }
-  const expr_funcdef *efd = dynamic_cast<const expr_funcdef *>(e);
+  const expr_i *eattr = e;
+  const expr_funcdef *efd = dynamic_cast<const expr_funcdef *>(eattr);
   if (efd != 0) {
     const expr_struct *esd = efd->is_member_function();
     if (esd != 0) {
-      e = esd;
+      eattr = esd;
     }
     const expr_interface *ei = efd->is_virtual_function();
     if (ei != 0) {
-      e = ei;
+      eattr = ei;
     }
   }
-  attribute_e attr = e->get_attribute();
+  attribute_e attr = eattr->get_attribute();
   return attribute_e(attr & get_threading_attribute_mask(e->get_esort()));
 }
 

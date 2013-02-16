@@ -1161,7 +1161,6 @@ static term eval_meta_eq(term_list& tlev)
     for (term_list::const_iterator i = ++tlev.begin(); i != tlev.end(); ++i) {
       if (t != *i) {
 	v = 0;
-//fprintf(stderr, "%s != %s\n", term_tostr_human(t).c_str(), term_tostr_human(*i).c_str());
 	break;
       }
     }
@@ -1766,10 +1765,11 @@ static term eval_term_internal2(const term& tm, bool targs_evaluated,
   if (es != 0 && es->typefamily_str != 0 &&
     std::string(es->typefamily_str).substr(0, 1) == "@") {
     if (std::string(es->typefamily_str).substr(0, 2) == "@@") {
-      return eval_metafunction_lazy(es->typefamily_str, tm, targs_evaluated, env,
-	depth, pos);
+      return eval_metafunction_lazy(es->typefamily_str, tm, targs_evaluated,
+	env, depth, pos);
     }
-    if (tlarg_len == 0 && std::string(es->typefamily_str).substr(0, 2) != "@0") {
+    if (tlarg_len == 0 &&
+      std::string(es->typefamily_str).substr(0, 2) != "@0") {
       return tm; /* no argument is supplied yet */
     }
     {
