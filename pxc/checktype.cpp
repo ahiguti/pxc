@@ -35,6 +35,7 @@
 #define DBG_ROOT(x)
 #define DBG_CT(x)
 #define DBG_TPUP(x)
+#define DBG_DEFCON(x)
 
 namespace pxc {
 
@@ -422,6 +423,11 @@ static bool is_default_constructible(const term& typ, expr_i *pos,
     if (is_cm_pointer_family(typ)) {
       return false;
     }
+    #if 0
+    if (is_cm_lockobject_family(typ)) {
+      return false;
+    }
+    #endif
     if (cat == typefamily_e_linear) {
       return false;
     }
@@ -447,27 +453,6 @@ static bool is_default_constructible(const term& typ, expr_i *pos,
     }
     if (est->has_userdefined_constr()) {
       return false;
-#if 0
-      expr_argdecls *ads = est->block->argdecls;
-      for (; ads != 0; ads = ads->rest) {
-	term& ctyp = ads->resolve_texpr();
-	if (!is_default_constructible(ctyp, pos, depth)) {
-	  return false;
-	}
-      }
-#endif
-#if 0
-    } else {
-      typedef std::list<expr_var *> fields_type;
-      fields_type flds;
-      est->get_fields(flds);
-      for (fields_type::iterator i = flds.begin(); i != flds.end(); ++i) {
-	term& ctyp = (*i)->resolve_texpr();
-	if (!is_default_constructible(ctyp, pos, depth)) {
-	  return false;
-	}
-      }
-#endif
     }
     return true;
   }
@@ -769,14 +754,18 @@ static void store_tempvar(expr_i *e, passby_e passby, bool blockscope_flag,
       /* in this case, it will be rooted by value. test_25_slice/val.pl . */
     }
   }
+  // if (guard_elements) { abort(); } // FIXME
   e->tempvar_varinfo.passby = merge_passby(e->tempvar_varinfo.passby, passby);
   e->tempvar_varinfo.guard_elements |= guard_elements;
   e->tempvar_varinfo.scope_block |= blockscope_flag;
+  #if 0
   if (is_passby_cm_value(e->tempvar_varinfo.passby) &&
     !is_copyable(e->resolve_texpr())) {
+    /* reaches here if expr is a lockobject constructor */
     arena_error_throw(e,
       "internal error: failed to root because it's not copyable");
   }
+  #endif
 }
 
 static void add_root_requirement_container_elements(expr_i *econ,
@@ -816,6 +805,14 @@ static void check_ephemeral_object(expr_i *e, passby_e passby,
 static void add_root_requirement(expr_i *e, passby_e passby,
   bool blockscope_flag)
 {
+  if (e == 0) {
+    return;
+  }
+  #if 0
+  fprintf(stderr, "add_root_req %s passby=%d bl=%d\n", e->dump(0).c_str(),
+    (int)passby, (int)blockscope_flag); 
+  // if (e->dump(0) == "[lockobject(([int]))](sobj)") { abort(); }
+  #endif
   /* this function makes e valid while the current statement (or block if
    * blockscope_flag is true) is terminated. if e is an ephemeral value (eg.,
    * range types), the object e refer to is also rooted. */
@@ -835,6 +832,7 @@ static void add_root_requirement(expr_i *e, passby_e passby,
       arena_error_throw(e,
 	"can not root by mutable reference because of conversion");
     }
+    #if 0
     /* this expr has a rooted rvalue because of conversion. */
     if (blockscope_flag) {
       store_tempvar(e,
@@ -843,23 +841,27 @@ static void add_root_requirement(expr_i *e, passby_e passby,
 	false, "conv"); /* ROOT */
     }
     return;
+    #endif
+    /* thru */
   }
   if (e->get_esort() == expr_e_funccall &&
     is_ephemeral_value_type(e->resolve_texpr())) {
     /* function returning ephemeral type. only allowed for extern c function. */
     expr_funccall *const efc = ptr_down_cast<expr_funccall>(e);
     expr_op *const eop = dynamic_cast<expr_op *>(efc->func);
-    if (eop == 0 || (eop->op != '.' && eop->op != TOK_ARROW)) {
-      arena_error_throw(eop,
-	"internal error: non-member function returning ephemeral type");
-    }
-    /* 'this' object is a container. root the object and it's elements */
-    add_root_requirement_container_elements(eop->arg0, blockscope_flag);
-    add_root_requirement(eop->arg0,
-      is_passby_const(passby)
-      ? passby_e_const_reference : passby_e_mutable_reference,
-      blockscope_flag);
-    return;
+//    if (efc->funccall_sort != funccall_e_struct_constructor) {
+      if (eop == 0 || (eop->op != '.' && eop->op != TOK_ARROW)) {
+	arena_error_throw(eop,
+	  "internal error: non-member function returning ephemeral type");
+      }
+      /* 'this' object is a container. root the object and it's elements */
+      add_root_requirement_container_elements(eop->arg0, blockscope_flag);
+      add_root_requirement(eop->arg0,
+	is_passby_const(passby)
+	? passby_e_const_reference : passby_e_mutable_reference,
+	blockscope_flag);
+      return;
+//    }
   }
   if (e->get_esort() == expr_e_op) {
     expr_op *const eop = ptr_down_cast<expr_op>(e);
@@ -880,12 +882,13 @@ static void add_root_requirement(expr_i *e, passby_e passby,
   }
   expr_op *const eop = dynamic_cast<expr_op *>(e);
   if (eop == 0) {
-    /* not a operator */
+    /* not a operator. this expr returns a value instead of reference. */
     if (blockscope_flag) {
       store_tempvar(e,
 	is_passby_const(passby)
 	? passby_e_const_value : passby_e_mutable_value, blockscope_flag,
 	false, "nonop"); /* ROOT */
+    } else {
     }
     return;
   }
@@ -944,34 +947,52 @@ static void add_root_requirement(expr_i *e, passby_e passby,
       add_root_requirement(eop->arg0, passby_e_const_value, blockscope_flag);
     } else {
       /* pointers */
+      #if 0
       if (blockscope_flag &&
 	is_multithreaded_pointer_family(eop->arg0->resolve_texpr())) {
 	arena_error_throw(e, "block-scope lock is not implemented");
       }
-      /* copy the pointer and own a refcount */
-      store_tempvar(eop->arg0, passby_e_const_value, blockscope_flag, false,
-	"ptrderef"); /* ROOT */
+      #endif
+      /* copy the pointer in order to own a refcount */
+      const bool guard_elements = type_has_invalidate_guard(
+	eop->arg0->resolve_texpr());
+      #if 0
+      fprintf(stderr, "%s: guard=%d\n",
+	term_tostr_human(eop->arg0->resolve_texpr()).c_str(),
+	(int)guard_elements);
+      #endif
+      store_tempvar(eop->arg0, passby_e_const_value, blockscope_flag,
+	guard_elements, "ptrderef"); /* ROOT */
     }
     return;
   case '[':
     /* root the container or range object */
-    add_root_requirement(eop->arg0,
-      is_passby_const(passby)
-      ? passby_e_const_reference : passby_e_mutable_reference,
-      blockscope_flag);
+    {
+      passby_e container_passby = passby_e_const_value;
+      if (is_cm_range_family(eop->arg0->resolve_texpr())) {
+	container_passby = passby_e_const_value;
+      } else {
+	container_passby = is_passby_const(passby)
+	  ? passby_e_const_reference : passby_e_mutable_reference;
+      }
+      add_root_requirement(eop->arg0, container_passby, blockscope_flag);
+      #if 0
+	(is_passby_const(passby) ||
+	  is_cm_range_family(eop->arg0->resolve_texpr()))
+	? passby_e_const_reference : passby_e_mutable_reference,
+	blockscope_flag);
+      #endif
+    }
     if (is_passby_cm_reference(passby) ||
       (eop->arg1 != 0 && is_range_op(eop->arg1))) {
-      #if 0
-      // FIXME: remove this: // is_cm_range_family(e->resolve_texpr())) {
-      #endif
       /* v[k] is required byref, or v[..] is required. need to guard. */
       add_root_requirement_container_elements(eop->arg0, blockscope_flag);
     } else {
       /* by value */
-      if (blockscope_flag) {
+//      if (blockscope_flag) {
 	/* named variable. need to guard. */
 	store_tempvar(eop, passby, blockscope_flag, false, "elemval");
-      }
+//      }
     }
     return;
   case '(':
@@ -1028,7 +1049,26 @@ static bool is_assign_op(int op)
   return false;
 }
 
-static bool expr_would_invalidate_other_expr(expr_i *e)
+static bool is_assign_incdec_op(int op)
+{
+  return (is_assign_op(op) || op == TOK_INC || op == TOK_DEC);
+}
+
+// FIXME: use this to optimize
+#if 0
+static bool expr_is_subexpression(expr_i *e)
+{
+  if (e == 0) {
+    return false;
+  }
+  expr_i *const ep = e->parent_expr;
+  if (ep == 0) {
+    return false;
+  }
+  return ep->is_expression();
+}
+
+static bool expr_can_have_side_effect(expr_i *e)
 {
   /* returns true if e contains an assignment op or it calls an impure
    * function */
@@ -1039,7 +1079,7 @@ static bool expr_would_invalidate_other_expr(expr_i *e)
     return true;
   } else if (e->get_esort() == expr_e_op) {
     expr_op *const eo = ptr_down_cast<expr_op>(e);
-    if (is_assign_op(eo->op)) {
+    if (is_assign_incdec_op(eo->op)) {
       return true;
     }
   } else if (e->get_esort() == expr_e_block) {
@@ -1048,12 +1088,13 @@ static bool expr_would_invalidate_other_expr(expr_i *e)
   }
   const int num_children = e->get_num_children();
   for (int i = 0; i < num_children; ++i) {
-    if (expr_would_invalidate_other_expr(e->get_child(i))) {
+    if (expr_can_have_side_effect(e->get_child(i))) {
       return true;
     }
   }
   return false;
 }
+#endif
 
 static expr_i *get_variant_object_if_vfld(expr_i *e)
 {
@@ -1071,6 +1112,30 @@ static void passing_root_requirement(passby_e passby, expr_i *epos,
   if (is_passby_cm_reference(passby) && is_passby_mutable(passby)) {
     check_lvalue(epos, e);
   }
+  add_root_requirement(e, passby, blockscope_flag);
+}
+
+static bool is_copying_preferred(const term& t)
+{
+  if (!is_type(t)) {
+    return false;
+  }
+  if (!is_copyable(t)) {
+    return false;
+  }
+  if (is_ctypedef(t) || is_enum(t) || is_bitmask(t) || is_numeric_type(t)) {
+    return true;
+  }
+  return false;
+}
+
+static void passing_root_requirement_fast(expr_i *epos, expr_i *e,
+  bool blockscope_flag)
+{
+  /* passby const_value or const_reference */
+  term t = e->resolve_texpr();
+  passby_e const passby = is_copying_preferred(t)
+    ? passby_e_const_value : passby_e_const_reference;
   add_root_requirement(e, passby, blockscope_flag);
 }
 
@@ -1201,7 +1266,7 @@ void expr_op::check_type(symbol_table *lookup)
     fn_check_type(arg0, lookup);
     /* type_of_this_expr */
   }
-  bool unknown_eval_order = true;
+  bool unknown_eval_order = true; // FIXME: remove. unused.
   switch (op) {
   case ',':
     type_of_this_expr = arg1 ?  arg1->resolve_texpr() : arg0->resolve_texpr();
@@ -1308,6 +1373,12 @@ void expr_op::check_type(symbol_table *lookup)
   case '[':
     if (op == TOK_PTR_DEREF && is_cm_pointer_family(arg0->resolve_texpr())) {
       /* pointer types */
+      #if 0
+      if (type_has_invalidate_guard(arg0->resolve_texpr())) {
+	/* threaded pointer dereference. copy the ptr and lock it */
+	passing_root_requirement(passby_e_const_value, this, this, false);
+      }
+      #endif
       type_of_this_expr = get_pointer_deref_texpr(this, arg0->resolve_texpr());
     } else {
       /* containers or ranges */
@@ -1372,28 +1443,17 @@ void expr_op::check_type(symbol_table *lookup)
     type_of_this_expr = arg0->resolve_texpr();
     break;
   }
-  if (is_assign_op(op)) {
-    /* root expressions if necessary */
-    if (expr_would_invalidate_other_expr(arg0)) {
-      /* lhs can invalidate rhs expression */
-      add_root_requirement(arg1, passby_e_const_reference, false);
-      // root_byref_or_byval(arg1, false);
-    }
-    if (expr_would_invalidate_other_expr(arg1)) {
-      /* rhs can invalidate lhs expression */
-      expr_i *const evo = get_variant_object_if_vfld(arg0);
-      if (evo != 0) {
-        /* lhs is a variant field. root the variant object. */
-	add_root_requirement(evo, passby_e_mutable_reference, false);
-	// root_byref_or_byval(evo, false);
-      } else {
-	/* lhs is not a variant field. root the lhs. */
-	add_root_requirement(arg0, passby_e_mutable_reference, false);
-	// root_byref_or_byval(arg0, false);
-      }
-    }
+  /* rooting */
+  if (op == TOK_PTR_DEREF && is_cm_pointer_family(arg0->resolve_texpr()) &&
+    type_has_invalidate_guard(arg0->resolve_texpr())) {
+    /* threaded pointer dereference. copy the ptr and lock it */
+    passing_root_requirement(passby_e_const_value, this, this, false);
+  }
+  if (is_assign_incdec_op(op)) {
+    /* arg0 is an lvalue */
     DBG_CON(fprintf(stderr, "arg0: %s\n", arg0->dump(0).c_str()));
     if (arg0->get_esort() == expr_e_var) {
+      /* var x = ... */
       if (op != '=') {
 	arena_error_throw(this, "invalid expression (invalid assignment)");
       }
@@ -1410,9 +1470,11 @@ void expr_op::check_type(symbol_table *lookup)
 	DBG_CON(fprintf(stderr, "block scope root rhs %s\n",
 	  arg1->dump(0).c_str()));
 	add_root_requirement(arg1, ev->varinfo.passby, true);
+      } else {
+	/* no need to root arg1 because lhs is a variable */
       }
     } else {
-      /* lhs is not a vardef */
+      /* asign op, lhs is not a vardef */
       if (is_ephemeral_value_type(arg0->resolve_texpr())) {
 	/* 'w1 = w2' is not allowed for ephemeral types, because these variables
 	 * may depend different objects */
@@ -1426,13 +1488,25 @@ void expr_op::check_type(symbol_table *lookup)
 	  "invalid assignment ('%s' is not an assignable type)",
 	  term_tostr_human(arg0->resolve_texpr()).c_str());
       }
+      if (arg1 != 0) {
+	passing_root_requirement_fast(this, arg1, false);
+      }
+      expr_i *const evo = get_variant_object_if_vfld(arg0);
+      if (evo != 0) {
+	/* lhs is a variant field. root the variant object. */
+	add_root_requirement(evo, passby_e_mutable_reference, false);
+      } else {
+	/* lhs is not a variant field. root the lhs. */
+	add_root_requirement(arg0, passby_e_mutable_reference, false);
+      }
     }
-  } else if (arg0 != 0 && arg1 != 0 && unknown_eval_order) {
-    if (expr_would_invalidate_other_expr(arg0)) {
-      add_root_requirement(arg1, passby_e_const_reference, false);
+  } else {
+    /* not an assign op */
+    if (arg0 != 0) {
+      passing_root_requirement_fast(this, arg0, false);
     }
-    if (expr_would_invalidate_other_expr(arg1)) {
-      add_root_requirement(arg0, passby_e_const_reference, false);
+    if (arg1 != 0) {
+      passing_root_requirement_fast(this, arg1, false);
     }
   }
   if (arg0 != 0 && is_void_type(arg0->resolve_texpr())) {
@@ -1488,7 +1562,20 @@ term get_func_te_for_funccall(expr_i *func, bool& memfunc_w_explicit_obj_r)
 void expr_funccall::check_type(symbol_table *lookup)
 {
   fn_check_type(func, lookup);
-  fn_check_type(arg, lookup);
+  /* check args */
+  {
+    /* can't use fn_check_type(arg, lookup) because it assumes arg as
+     * comma ops */
+    typedef std::list<expr_i *> arglist_type;
+    arglist_type arglist;
+    append_comma_sep_list(arg, arglist);
+    for (arglist_type::const_iterator i = arglist.begin(); i != arglist.end();
+      ++i) {
+      fn_check_type(*i, lookup);
+    }
+  }
+  DBG_DEFCON(fprintf(stderr, "expr=[%s] expr_funccall::check_type\n",
+    this->dump(0).c_str()));
   if (arg != 0 && is_void_type(arg->resolve_texpr())) {
     arena_error_throw(arg, "expression '%s' is of type void",
       arg->dump(0).c_str());
@@ -1506,6 +1593,7 @@ void expr_funccall::check_type(symbol_table *lookup)
   }
   const term_list *const func_te_args = func_te.get_args();
   expr_i *const func_inst = term_get_instance(func_te);
+  /* TODO: fix the copy-paste of passing_root_requirement calls */
   if (is_function(func_te)) {
     /* function call */
     expr_funcdef *efd = ptr_down_cast<expr_funcdef>(func_inst);
@@ -1643,7 +1731,7 @@ void expr_funccall::check_type(symbol_table *lookup)
     /* default constructor */
     type_of_this_expr = func_te;
     funccall_sort = funccall_e_default_constructor;
-    DBG(fprintf(stderr, "expr=[%s] type_of_this_expr=[%s] defcon\n",
+    DBG_DEFCON(fprintf(stderr, "expr=[%s] type_of_this_expr=[%s] defcon\n",
       this->dump(0).c_str(),
       term_tostr(type_of_this_expr, term_tostr_sort_cname).c_str()));
     if (!is_default_constructible(func_te, this, 0)) {
@@ -1696,21 +1784,28 @@ void expr_funccall::check_type(symbol_table *lookup)
       append_hidden_this(func, arglist);
       append_comma_sep_list(arg, arglist);
       if (is_cm_pointer_family(func_te)) {
-	/* value to pointer */
 	if (arglist.size() != 1) {
 	  arena_error_push(this, "too many argument for '%s'", est->sym);
 	}
-	#if 0
-	expr_tparams *tp = 0;
-	if (al != 0 && !al->empty()) {
-	  tp = dynamic_cast<expr_tparams *>(al->begin()->get_expr());
-	}
-	if (tp != 0) {
-	  /* func_te has a tparam */
-	  tvmap[tp->sym] = arglist.front()->resolve_texpr();
-	} else {
-	#endif
 	expr_i *const j = arglist.front();
+	if (is_cm_pointer_family(j->resolve_texpr())) {
+#if 0
+fprintf(stderr, "ptr to ptr? %s\n", dump(0).c_str());
+#endif
+	  term tgto = get_pointer_target(func_te);
+	  term tgfrom = get_pointer_target(j->resolve_texpr());
+	  if (tgto == tgfrom &&
+	    pointer_conversion_allowed(
+	      get_family(j->resolve_texpr()), get_family(func_te))) {
+	    /* pointer from another pointer */
+	    passing_root_requirement(passby_e_const_reference, this, j, false);
+	      /* root the arg */
+	    type_of_this_expr = func_te;
+	    funccall_sort = funccall_e_struct_constructor;
+	    return;
+	  }
+	}
+	/* value to pointer */
 	const term_list *const al = func_te.get_args();
 	if (al != 0 && !al->empty()) {
 	  /* func_te is concrete */
@@ -1729,7 +1824,7 @@ void expr_funccall::check_type(symbol_table *lookup)
 	    /* root the arg */
 	  type_of_this_expr = func_te;
 	} else {
-	  /* func_te has a tparam. expr is the form ptr(x). */
+	  /* func_te has a tparam. expr is of the form ptr(x). */
 	  term_list tl;
 	  tl.push_back(j->resolve_texpr());
 	  term rt(func_te.get_expr(), tl);
@@ -1762,6 +1857,8 @@ void expr_funccall::check_type(symbol_table *lookup)
 	  arena_error_push(this, "  initializing argument %u of '%s'",
 	    0, est->sym);
 	}
+	passing_root_requirement_fast(this, j, false);
+	  /* root the arg. */
 	type_of_this_expr = func_te;
 	funccall_sort = funccall_e_struct_constructor;
 	return;
@@ -1776,6 +1873,8 @@ void expr_funccall::check_type(symbol_table *lookup)
 	}
 	expr_i *const j = arglist.front();
 	check_unsigned_integral_expr(0, j);
+	passing_root_requirement_fast(this, j, false);
+	  /* root the arg. */
 	type_of_this_expr = func_te;
 	funccall_sort = funccall_e_struct_constructor;
 	return;
@@ -1793,6 +1892,8 @@ void expr_funccall::check_type(symbol_table *lookup)
 	  arena_error_push(this, "invalid conversion from %s to %s",
 	    s0.c_str(), s1.c_str());
 	}
+	passing_root_requirement_fast(this, j, false);
+	  /* root the arg. */
 	type_of_this_expr = func_te;
 	funccall_sort = funccall_e_struct_constructor;
       } else {
@@ -1879,7 +1980,9 @@ void expr_funccall::check_type(symbol_table *lookup)
       arena_error_push(this, "  initializing argument %u of '%s'",
 	1, s1.c_str());
     }
-    /* need not to root (*j) */
+    /* need not to root (*j) */ /* <---- WHY? */
+    passing_root_requirement_fast(this, *j, false);
+      /* root the arg. */
     type_of_this_expr = convto;
     funccall_sort = funccall_e_explicit_conversion;
     DBG(fprintf(stderr, "expr=[%s] type_of_this_expr=[%s] explicit conv\n",

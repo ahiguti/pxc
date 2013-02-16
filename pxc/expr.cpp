@@ -166,25 +166,6 @@ char *arena_dequote_strdup(const char *str)
   str_arena.push_back(ptr);
   memcpy(ptr, str + 1, len - 2);
   ptr[len - 2] = '\0';
-  #if 0
-  const char *p = str;
-  const char *const endp = str + len;
-  char *wp = ptr;
-  for (; p != endp; ++p) {
-    const char ch = *p;
-    if (ch == '"') {
-      continue;
-    }
-    if (ch == '\\' && p + 1 != endp) {
-      ++p;
-    }
-    if (ch == 0) {
-      continue;
-    }
-    *wp++ = ch;
-  }
-  *wp = '\0';
-  #endif
   return ptr;
 }
 

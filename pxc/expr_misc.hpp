@@ -76,6 +76,7 @@ bool is_const_or_immutable_pointer_family(const term& t);
 bool is_cm_pointer_family(const term& t);
 bool is_const_or_immutable_pointer_family(const term& t);
 bool is_immutable_pointer_family(const term& t);
+bool is_cm_lockobject_family(const term& t);
 bool is_multithreaded_pointer_family(const term& t);
 bool is_array_family(const term& t);
 bool is_cm_slice_family(const term& t);
@@ -95,6 +96,7 @@ typefamily_e get_family(const term& t);
 typefamily_e get_family_from_string(const std::string& s);
 std::string get_family_string(typefamily_e cat);
 term get_pointer_target(const term& t);
+bool pointer_conversion_allowed(const typefamily_e f, const typefamily_e t);
 bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap);
 #if 0
 std::string ulong_to_string(unsigned long long v);

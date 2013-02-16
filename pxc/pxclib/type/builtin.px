@@ -29,6 +29,11 @@ public multithreaded extern "pxcrt::tptr" "tptr" struct {t} tptr { }
 public multithreaded extern "pxcrt::tcptr" "tcptr" struct {t} tcptr { }
 public tsvaluetype extern "pxcrt::tiptr" "tiptr" struct {t} tiptr { }
 
+public mtvaluetype extern "pxcrt::lockobject" "lockobject"
+  struct {t} lockobject { }
+public mtvaluetype extern "pxcrt::clockobject" "clockobject"
+  struct {t} clockobject { }
+
 public threaded extern "pxcrt::bool_append_to_string"
   function void bt_bool_append_to_string(bool x, string& s);
 public threaded extern "pxcrt::float_append_to_string"
@@ -83,7 +88,6 @@ extern "type" inline
 #endif
 namespace pxcrt {
 struct mutex {
-  friend struct lockobject;
   mutex() {
     init();
   }
@@ -121,24 +125,14 @@ private:
 private:
   pthread_mutex_t mtx;
 };
-struct lockobject {
-  lockobject(mutex& x) : m(x) { m.lock(); }
-  ~lockobject() { m.unlock(); }
-private:
-  mutex& m;
-private:
-  lockobject(lockobject&);
-  lockobject& operator =(lockobject&);
-};
-struct nomutex { };
-struct mtcount {
+struct mtcount { /* reference counter for multi-threaded objects */ 
   mtcount() : count$z(1) { }
   void incref$z() { __sync_fetch_and_add(&count$z, 1); } /* gcc >= 4 */
   bool decref$z() { return (__sync_fetch_and_add(&count$z, -1) == 1); }
 private:
   long count$z;
 };
-struct stcount {
+struct stcount { /* reference counter for single-threaded objects */
   stcount() : count$z(1) { }
   void incref$z() { ++count$z; }
   bool decref$z() { return (--count$z == 0); }
@@ -146,9 +140,12 @@ private:
   long count$z;
 };
 template <typename T> struct uninit_mem { char value[sizeof(T)]; };
+/* NOTE: emit_vardef_constructor_fast_boxing() depends on the internals
+ * of rcval/trcval/tircval. */
 template <typename T>
-struct rcval { /* single threaded, mutable and immutable */
-  /* note: fast boxing constr skips *rcval constructor */
+struct rcval {
+  /* rcval: single threaded, mutable and immutable */
+  typedef T value_type;
   rcval() : value$z() {
     DBG_RC(fprintf(stdout, "c1 %p\n", this));
   }
@@ -172,6 +169,8 @@ struct rcval { /* single threaded, mutable and immutable */
       DBG_RC(fprintf(stdout, "d  %p\n", this));
     }
   }
+  void lock$z() const { }
+  void unlock$z() const { }
 public:
   mutable stcount count$z;
 public:
@@ -181,7 +180,9 @@ private:
   rcval& operator =(const rcval&);
 };
 template <typename T>
-struct trcval { /* multithreaded, mutable */
+struct trcval {
+  /* trcval: multithreaded, mutable */
+  typedef T value_type;
   trcval() : value$z() {
     DBG_RC(fprintf(stdout, "c1 %p\n", this));
   }
@@ -205,7 +206,8 @@ struct trcval { /* multithreaded, mutable */
       DBG_RC(fprintf(stdout, "d  %p\n", this));
     }
   }
-  mutex& get_mutex$z() const { return mutex$z; }
+  void lock$z() const { mutex$z.lock(); }
+  void unlock$z() const { mutex$z.unlock(); }
 public:
   mutable mtcount count$z;
   mutable mutex mutex$z;
@@ -216,7 +218,9 @@ private:
   trcval& operator =(const trcval&);
 };
 template <typename T>
-struct tircval { /* multithreded, immutable */
+struct tircval {
+  /* tircval: multithreded, immutable */
+  typedef T value_type;
   tircval() : value$z() {
     DBG_RC(fprintf(stdout, "c1 %p\n", this));
   }
@@ -240,10 +244,10 @@ struct tircval { /* multithreded, immutable */
       DBG_RC(fprintf(stdout, "d  %p\n", this));
     }
   }
-  mutex& get_mutex$z() const { return mutex$z; }
+  void lock$z() const { }
+  void unlock$z() const { }
 public:
   mutable mtcount count$z;
-  mutable nomutex mutex$z;
 public:
   T value$z;
 private:
@@ -252,7 +256,8 @@ private:
 };
 template <typename T>
 struct rcptr { /* T must have an intrusive count */
-  typedef T value_type;
+  typedef void range_type; /* guard object requires this */
+  typedef void crange_type; /* guard object requires this */
   template <typename Tx> friend struct rcptr;
   rcptr() : ptr(0) { }
   rcptr(T *rawptr) : ptr(rawptr) { } /* for fast boxing constr */
@@ -270,10 +275,11 @@ struct rcptr { /* T must have an intrusive count */
   template <typename Tx> rcptr& operator =(const rcptr<Tx>& x) {
     return set(x.ptr);
   }
-  operator T *() const { return ptr; }
   T *get() const { return ptr; }
   T& operator *() const { return *ptr; }
   T *operator ->() const { return ptr; }
+  void inc_invalidate_guard() const { ptr->lock$z(); }
+  void dec_invalidate_guard() const { ptr->unlock$z(); }
 private:
   T *ptr;
 private:
@@ -284,6 +290,28 @@ private:
     return *this;
   }
 };
+template <typename T> struct lockobject
+{
+  lockobject(const rcptr<T>& p) : ptr(p), objref(*p) { objref.lock$z(); }
+  ~lockobject() { objref.unlock$z(); }
+  T *get() const { return &objref; }
+  T& operator *() const { return objref; }
+  T *operator ->() const { return &objref; }
+private:
+  lockobject(const lockobject&);
+  lockobject& operator =(const lockobject&);
+private:
+  rcptr<T> ptr;
+  T& objref;
+};
+template <typename T> typename T::value_type deref_value$z(const rcptr<T>& p)
+{
+  return p->value$z;
+}
+template <typename T> T deref(const rcptr<T>& p)
+{
+  return *p;
+}
 }; // namespace pxcrt
 
 extern "fdecl" inline

@@ -131,6 +131,8 @@ enum typefamily_e {
   typefamily_e_tptr,             /* multithread-shared pointer */
   typefamily_e_tcptr,            /* multithread-shared pointer, const target */
   typefamily_e_tiptr,            /* multithread-shared pointer, immutable tgt */
+  typefamily_e_lockobject,       /* lock object (local) */
+  typefamily_e_clockobject,      /* lock object, const reference (local) */
   typefamily_e_extint,           /* c-defined int/long etc */
   typefamily_e_extuint,          /* c-defined unsigned int/long etc, */
   typefamily_e_extenum,          /* c-defined enum */
@@ -140,16 +142,14 @@ enum typefamily_e {
   typefamily_e_varray,           /* resizable array */
   typefamily_e_darray,           /* dynamically allocated array */
   typefamily_e_farray,           /* fixed size array, fixed at compile time */
-  typefamily_e_slice,            /* array slice (WEAK) */
-  typefamily_e_cslice,           /* array slice, const elements (WEAK) */
+  typefamily_e_slice,            /* array slice (local) */
+  typefamily_e_cslice,           /* array slice, const elements (local) */
   typefamily_e_tree_map,         /* rb-tree map */
-  typefamily_e_tree_map_range,   /* range on tree_map (WEAK) */
-  typefamily_e_tree_map_crange,  /* range on tree_map, const elements (WEAK) */
+  typefamily_e_tree_map_range,   /* range on tree_map (local) */
+  typefamily_e_tree_map_crange,  /* range on tree_map, const elements (local) */
   typefamily_e_linear,           /* noncopyable, nodefaultcon */
   typefamily_e_noncopyable,      /* noncopyable */
-  typefamily_e_nocascade,        /* default-constructible even when tparam's not */
-  // typefamily_e_wptr,             /* raw pointer (WEAK) */
-  // typefamily_e_wcptr,            /* raw pointer, const target (WEAK) */
+  typefamily_e_nocascade,        /* defcon even when tparam's not */
 };
 
 struct variable_info {
@@ -245,6 +245,7 @@ struct expr_i {
   virtual std::string emit_symbol_str() const { return std::string(); }
   virtual void emit_symbol(emit_context& em) const { }
   virtual bool has_expr_to_emit() const = 0;
+  virtual bool is_expression() const = 0;
 public:
   const term& get_texpr() const { return type_of_this_expr; }
   const term& get_conv_to() const { return type_conv_to; }
@@ -283,6 +284,7 @@ public:
   std::string get_unique_namespace() const { return sdef.uniqns; }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return true; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
   virtual symbol_common *get_sdef() { return &sdef; }
@@ -313,6 +315,7 @@ public:
   }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return true; }
   void emit_value(emit_context& em) { }
   std::string dump(int indent) const;
 public:
@@ -330,6 +333,7 @@ struct expr_inline_c : public expr_i {
   void set_child(int i, expr_i *e) { }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return false; }
+  bool is_expression() const { return false; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
@@ -358,6 +362,7 @@ struct expr_ns : public expr_i {
   void set_unique_namespace_one(const std::string& u, const std::string& i);
   void check_type(symbol_table *lookup) { }
   bool has_expr_to_emit() const { return false; }
+  bool is_expression() const { return false; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
@@ -383,6 +388,7 @@ struct expr_int_literal : public expr_i {
   term& resolve_texpr();
   void check_type(symbol_table *lookup) { }
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return true; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
@@ -400,6 +406,7 @@ struct expr_float_literal : public expr_i {
   double get_value() const;
   void check_type(symbol_table *lookup) { }
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return true; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
@@ -416,6 +423,7 @@ struct expr_bool_literal : public expr_i {
   term& resolve_texpr();
   void check_type(symbol_table *lookup) { }
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return true; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
@@ -432,6 +440,7 @@ struct expr_str_literal : public expr_i {
   term& resolve_texpr();
   void check_type(symbol_table *lookup) { }
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return true; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
@@ -449,6 +458,7 @@ struct expr_nssym : public expr_i {
   void set_child(int i, expr_i *e) { if (i == 0) { prefix = e; } }
   void check_type(symbol_table *lookup) { }
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return true; }
   void emit_value(emit_context& em) { }
   std::string dump(int indent) const;
 public:
@@ -470,6 +480,7 @@ struct expr_symbol : public expr_i {
   std::string get_unique_namespace() const { return sdef.uniqns; }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return true; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
   virtual symbol_common *get_sdef() { return &sdef; }
@@ -501,6 +512,7 @@ struct expr_var : public expr_i {
   void define_vars_one(expr_stmts *stmt);
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return true; }
   std::string emit_symbol_str() const;
   void emit_symbol(emit_context& em) const;
   void emit_value(emit_context& em);
@@ -542,6 +554,7 @@ struct expr_enumval : public expr_i {
   void define_vars_one(expr_stmts *stmt);
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return false; }
+  bool is_expression() const { return false; }
   std::string emit_symbol_str() const;
   void emit_symbol(emit_context& em) const;
   // void emit_cdecl(emit_context& em, bool is_argdecl) const;
@@ -592,6 +605,7 @@ struct expr_stmts : public expr_i {
   void set_rest(expr_stmts *v) { rest = v; }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return false; }
   void emit_value(emit_context& em);
   bool emit_local_decl_fastinit(emit_context& em);
   void emit_local_decl(emit_context& em);
@@ -620,6 +634,7 @@ struct expr_tparams : public expr_i {
   std::string dump(int indent) const;
   void check_type(symbol_table *lookup) { }
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return true; }
   void emit_value(emit_context& em) { }
 public:
   const char *sym;
@@ -649,6 +664,7 @@ struct expr_argdecls : public expr_i {
   term& resolve_texpr();
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return false; }
   std::string emit_symbol_str() const;
   void emit_symbol(emit_context& em) const;
   void emit_value(emit_context& em);
@@ -685,6 +701,7 @@ struct expr_block : public expr_i {
   }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return false; }
   void emit_value(emit_context& em);
   void emit_value_nobrace(emit_context& em);
   void emit_local_decl(emit_context& em, bool is_funcbody);
@@ -712,6 +729,7 @@ struct expr_op : public expr_i {
   }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return true; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
@@ -731,6 +749,7 @@ struct expr_funccall : public expr_i {
   }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return true; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
@@ -751,6 +770,7 @@ struct expr_special : public expr_i {
   const char *tok_str() const;
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return false; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
@@ -780,6 +800,7 @@ struct expr_if : public expr_i {
   }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return false; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
@@ -803,6 +824,7 @@ struct expr_while : public expr_i {
   }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return false; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
@@ -832,6 +854,7 @@ struct expr_for : public expr_i {
   }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return false; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
@@ -861,6 +884,7 @@ struct expr_forrange : public expr_i {
   }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return false; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
@@ -886,6 +910,7 @@ struct expr_feach : public expr_i {
   }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return false; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
@@ -913,6 +938,7 @@ struct expr_fldfe : public expr_i {
   std::string get_unique_namespace() const { return uniqns; }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return false; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
@@ -946,6 +972,7 @@ struct expr_foldfe : public expr_i {
   std::string get_unique_namespace() const { return uniqns; }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return false; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
@@ -1000,6 +1027,7 @@ struct expr_funcdef : public expr_i {
   void check_type(symbol_table *lookup);
   std::string emit_symbol_str() const;
   bool has_expr_to_emit() const { return false; }
+  bool is_expression() const { return false; }
   void emit_symbol(emit_context& em) const;
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
@@ -1049,6 +1077,7 @@ struct expr_typedef : public expr_i {
   }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return false; }
+  bool is_expression() const { return false; }
   std::string emit_symbol_str() const;
   void emit_symbol(emit_context& em) const;
   void emit_value(emit_context& em);
@@ -1092,6 +1121,7 @@ struct expr_macrodef : public expr_i {
   }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return false; }
+  bool is_expression() const { return false; }
   std::string emit_symbol_str() const;
   void emit_symbol(emit_context& em) const;
   void emit_value(emit_context& em);
@@ -1133,6 +1163,7 @@ struct expr_struct : public expr_i {
   }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return false; }
+  bool is_expression() const { return false; }
   std::string emit_symbol_str() const;
   void emit_symbol(emit_context& em) const;
   void emit_value(emit_context& em);
@@ -1175,6 +1206,7 @@ struct expr_variant : public expr_i {
   }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return false; }
+  bool is_expression() const { return false; }
   std::string emit_symbol_str() const;
   void emit_symbol(emit_context& em) const;
   void emit_value(emit_context& em);
@@ -1211,6 +1243,7 @@ struct expr_interface : public expr_i {
   }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return false; }
+  bool is_expression() const { return false; }
   std::string emit_symbol_str() const;
   void emit_symbol(emit_context& em) const;
   void emit_value(emit_context& em);
@@ -1244,6 +1277,7 @@ struct expr_try : public expr_i {
   std::string dump(int indent) const;
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
+  bool is_expression() const { return false; }
   void emit_value(emit_context& em);
 public:
   expr_block *tblock; /* try */

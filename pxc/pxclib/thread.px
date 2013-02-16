@@ -56,7 +56,7 @@ namespace pxcthread {
 void *pxc_thread_child_main(void *arg)
 {
   thrdata_rawptr m = static_cast<thrdata_rawptr>(arg);
-  /* pxcrt::lockobject lck(m->get_mutex$z()); */ /* not necessary */
+  /* no need to lock m */
   try {
     m->main$f();
   } catch (...) {
@@ -78,11 +78,11 @@ thread_ptr thread_create_impl(thrdata_ptr const& m)
 }
 void thread_join(thread_ptr const& t)
 {
-  if (t == 0) {
+  if (t.get() == 0) {
     return;
   }
-  pxcrt::lockobject lck(t->get_mutex$z());
-  t->value$z.join();
+  pxcrt::guard_val<thread_ptr> grd(t);
+  grd.get()->value$z.join();
 }
 void thread_impl::join()
 {

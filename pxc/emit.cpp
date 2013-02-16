@@ -251,11 +251,29 @@ static void emit_interface_def_one(emit_context& em, expr_interface *ei,
   em.puts("virtual void decref$z() const { }\n");
   em.set_file_line(ei);
   em.indent('b');
-  em.puts("virtual size_t get$z() const { return 0; }\n");
+  em.puts("virtual size_t get_count$z() const { return 0; }\n");
   em.set_file_line(ei);
   em.indent('b');
   em.puts("virtual pxcrt::mutex& get_mutex$z() const "
     "{ pxcrt::throw_virtual_function_call(); }\n");
+  #if 0
+  em.set_file_line(ei);
+  em.indent('b');
+  em.puts("typedef ");
+  em.puts(name_c);
+  em.puts(" value_type;\n");
+  #endif
+  #if 0
+  em.set_file_line(ei);
+  em.indent('b');
+  em.puts("const ");
+  em.puts(name_c);
+  em.puts("& get$z() const { return *this; }\n");
+  em.set_file_line(ei);
+  em.indent('b');
+  em.puts(name_c);
+  em.puts("& get$z() { return *this; }\n");
+  #endif
   expr_block *const bl = ei->block;
   const bool is_funcbody = false;
   bl->emit_local_decl(em, is_funcbody);
@@ -355,7 +373,13 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
     em.puts("pxcrt::mutex& get_mutex$z() const { return mutex$z; }\n");
     em.set_file_line(est);
     em.indent('b');
-    em.puts("size_t get$z() const { return count$z; }\n");
+    em.puts("void lock$z() const { mutex$z.lock(); }\n");
+    em.set_file_line(est);
+    em.indent('b');
+    em.puts("void unlock$z() const { mutex$z.unlock(); }\n");
+    em.set_file_line(est);
+    em.indent('b');
+    em.puts("size_t get_count$z() const { return count$z; }\n");
     em.set_file_line(est);
     em.indent('b');
     em.puts("mutable long count$z;\n");
@@ -1540,6 +1564,16 @@ void expr_block::emit_memberfunc_decl(emit_context& em, bool pure_virtual)
   }
 }
 
+static bool need_to_emit_expr_returning_value(expr_i *e)
+{
+  /* need to emit function returning a value rather than a reference, in order
+   * not to be invalidated. for example, vec[idx] returns an reference and it
+   * can be invalidated when another expression is evaluated before it is 
+   * used. in this case, we need to emit vec.value_at(idx) which returns a
+   * value. */
+  return (e->tempvar_id >= 0 && is_passby_cm_value(e->tempvar_varinfo.passby));
+}
+
 void emit_array_elem_or_range_expr(emit_context& em, expr_op *eop)
 {
   if (eop->arg1 != 0 && eop->arg1->get_esort() == expr_e_op &&
@@ -1554,6 +1588,12 @@ void emit_array_elem_or_range_expr(emit_context& em, expr_op *eop)
     em.puts(", ");
     fn_emit_value(em, rangeop->arg1);
     em.puts(")");
+  } else if (need_to_emit_expr_returning_value(eop)) {
+    em.puts("(");
+    fn_emit_value(em, eop->arg0);
+    em.puts(".value_at(");
+    fn_emit_value(em, eop->arg1);
+    em.puts("))");
   } else {
     fn_emit_value(em, eop->arg0);
     em.puts("[");
@@ -1604,27 +1644,35 @@ void expr_op::emit_value(emit_context& em)
     em.puts(")");
     return;
   case TOK_PTR_DEREF:
-    {
-      const typefamily_e cat = get_family(arg0->get_texpr());
-      if (is_noninterface_pointer(arg0->get_texpr())) {
-	em.puts("(");
-	if (cat == typefamily_e_tptr || cat == typefamily_e_tcptr) {
-	  em.puts("pxcrt::lockobject((");
-	  fn_emit_value(em, arg0);
-	  em.puts(")->get_mutex$z()),");
-	}
+    if (is_noninterface_pointer(arg0->get_texpr())) {
+      /* non-interface pointer dereference */
+      if (need_to_emit_expr_returning_value(this)) {
+	em.puts("(pxcrt::deref_value$z(");
 	fn_emit_value(em, arg0);
-	em.puts(")->value$z");
+	em.puts("))");
       } else {
-	em.puts("*(");
-	if (cat == typefamily_e_tptr || cat == typefamily_e_tcptr) {
-	  em.puts("pxcrt::lockobject((");
-	  fn_emit_value(em, arg0);
-	  em.puts(")->get_mutex$z()),");
-	}
+	em.puts("((");
 	fn_emit_value(em, arg0);
-	em.puts(")");
+	em.puts(")->value$z)");
       }
+    } else if (is_cm_pointer_family(arg0->get_texpr())) {
+      /* interface pointer dereference */
+      if (need_to_emit_expr_returning_value(this)) {
+	em.puts("(pxcrt::deref(");
+	fn_emit_value(em, arg0);
+	em.puts("))");
+      } else {
+	em.puts("(*(");
+	fn_emit_value(em, arg0);
+	em.puts("))");
+      }
+    } else {
+      /* range dereference */
+      assert(is_cm_range_family(arg0->get_texpr()));
+      /* safe to return ref because range object is always rooted. */
+      em.puts("(*(");
+      fn_emit_value(em, arg0);
+      em.puts("))");
     }
     return;
   case '.':
@@ -1635,7 +1683,11 @@ void expr_op::emit_value(emit_context& em)
       em.puts(".");
       fn_emit_value(em, arg1);
       /* note: we don't reach here if expr is part of foo.fld = ... */
-      em.puts("$r())");
+      if (need_to_emit_expr_returning_value(this)) {
+	em.puts("$r())"); /* $r() always returns a value rather than a ref */
+      } else {
+	em.puts("$r())");
+      }
     } else {
       fn_emit_value(em, arg0);
       em.puts(".");
@@ -2357,6 +2409,7 @@ static void emit_vardef_constructor_fast_boxing(emit_context& em,
   const std::string& var_csymbol, expr_funccall *fc,
   expr_funccall *fast_boxing_cfunc)
 {
+  /* NOTE: this function depends on the internals of rcval/trcval/tircval. */
   /* var x = ptr(type(args, ....)) */
   const term& otyp = (*typ.get_args())[0];
   const std::string otyp_cstr = term_tostr_cname(otyp); /* foo */
@@ -2557,6 +2610,9 @@ static void emit_var_or_tempvar(emit_context& em, expr_i *e, const term& tbase,
 	emit_explicit_init_if(em, tconvto.is_null() ? tbase : tconvto);
       } else {
 	/* defset */
+#if 0
+fprintf(stderr, "defset %s\n", e->dump(0).c_str()); // FIXME
+#endif
 	if (!is_unnamed && is_vardef_constructor(e)) {
 	  /* foo x((a0), (a1), ...) */
 	  emit_vardef_constructor(em, e, tbase, cs0, var_csymbol);
