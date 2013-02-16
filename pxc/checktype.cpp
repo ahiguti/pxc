@@ -1054,8 +1054,6 @@ static bool is_assign_incdec_op(int op)
   return (is_assign_op(op) || op == TOK_INC || op == TOK_DEC);
 }
 
-// FIXME: use this to optimize
-#if 0
 static bool expr_is_subexpression(expr_i *e)
 {
   if (e == 0) {
@@ -1094,7 +1092,6 @@ static bool expr_can_have_side_effect(expr_i *e)
   }
   return false;
 }
-#endif
 
 static expr_i *get_variant_object_if_vfld(expr_i *e)
 {
@@ -1266,11 +1263,9 @@ void expr_op::check_type(symbol_table *lookup)
     fn_check_type(arg0, lookup);
     /* type_of_this_expr */
   }
-  bool unknown_eval_order = true; // FIXME: remove. unused.
   switch (op) {
   case ',':
     type_of_this_expr = arg1 ?  arg1->resolve_texpr() : arg0->resolve_texpr();
-    unknown_eval_order = false;
     break;
   case TOK_OR_ASSIGN:
   case TOK_AND_ASSIGN:
@@ -1296,19 +1291,16 @@ void expr_op::check_type(symbol_table *lookup)
   case '?':
     check_bool_expr(this, arg0);
     type_of_this_expr = arg1->resolve_texpr();
-    unknown_eval_order = false;
     break;
   case ':':
     check_type_convert_to_lhs(this, arg1, arg0->resolve_texpr());
     type_of_this_expr = arg0->resolve_texpr();
-    unknown_eval_order = false;
     break;
   case TOK_LOR:
   case TOK_LAND:
     check_bool_expr(this, arg0);
     check_type_convert_to_lhs(this, arg1, arg0->resolve_texpr());
     type_of_this_expr = builtins.type_bool;
-    unknown_eval_order = false;
     break;
   case '|':
   case '^':
@@ -1373,12 +1365,6 @@ void expr_op::check_type(symbol_table *lookup)
   case '[':
     if (op == TOK_PTR_DEREF && is_cm_pointer_family(arg0->resolve_texpr())) {
       /* pointer types */
-      #if 0
-      if (type_has_invalidate_guard(arg0->resolve_texpr())) {
-	/* threaded pointer dereference. copy the ptr and lock it */
-	passing_root_requirement(passby_e_const_value, this, this, false);
-      }
-      #endif
       type_of_this_expr = get_pointer_deref_texpr(this, arg0->resolve_texpr());
     } else {
       /* containers or ranges */
@@ -1476,8 +1462,8 @@ void expr_op::check_type(symbol_table *lookup)
     } else {
       /* asign op, lhs is not a vardef */
       if (is_ephemeral_value_type(arg0->resolve_texpr())) {
-	/* 'w1 = w2' is not allowed for ephemeral types, because these variables
-	 * may depend different objects */
+	/* 'w1 = w2' is not allowed for ephemeral types, because these
+	 * variables may depend different objects */
 	arena_error_throw(this,
 	  "invalid assignment ('%s' is an ephemeral type)",
 	  term_tostr_human(arg0->resolve_texpr()).c_str());
@@ -1489,15 +1475,23 @@ void expr_op::check_type(symbol_table *lookup)
 	  term_tostr_human(arg0->resolve_texpr()).c_str());
       }
       if (arg1 != 0) {
-	passing_root_requirement_fast(this, arg1, false);
+	if (expr_is_subexpression(this) ||
+	  (arg0 != 0 && expr_can_have_side_effect(arg0))) {
+	  /* arg1 can be invalidated by arg0 or other expr */
+	  passing_root_requirement_fast(this, arg1, false);
+	}
       }
-      expr_i *const evo = get_variant_object_if_vfld(arg0);
-      if (evo != 0) {
-	/* lhs is a variant field. root the variant object. */
-	add_root_requirement(evo, passby_e_mutable_reference, false);
-      } else {
-	/* lhs is not a variant field. root the lhs. */
-	add_root_requirement(arg0, passby_e_mutable_reference, false);
+      if (expr_is_subexpression(this) ||
+	(arg1 != 0 && expr_can_have_side_effect(arg1))) {
+	/* arg0 can be invalidated by arg1 or other expr */
+	expr_i *const evo = get_variant_object_if_vfld(arg0);
+	if (evo != 0) {
+	  /* lhs is a variant field. root the variant object. */
+	  add_root_requirement(evo, passby_e_mutable_reference, false);
+	} else {
+	  /* lhs is not a variant field. root the lhs. */
+	  add_root_requirement(arg0, passby_e_mutable_reference, false);
+	}
       }
     }
   } else {
