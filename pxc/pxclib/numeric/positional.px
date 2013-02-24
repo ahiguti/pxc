@@ -1,7 +1,10 @@
 namespace numeric::positional;
 public import type::builtin -;
+public import serialize::parse_error -;
+public import error -;
 public import numeric::cast -;
-public import container::algorithm;
+public import numeric::limit lim;
+public import container::algorithm algo;
 
 public threaded function {t} void integral_to_decimal(t v, string& buf)
 {
@@ -25,11 +28,99 @@ public threaded function {t} void integral_to_decimal(t v, string& buf)
       buf.push_back(static_cast{uchar, t}(rem) + 48);
     }
   }
-  container::algorithm::reverse(buf[pos0 .. buf.size()]);
+  algo::reverse(buf[pos0 .. buf.size()]);
 }
 
-public threaded function {t} t decimal_to_integral(cstrref& buf)
+public threaded function {t} t decimal_to_integral_nocheck(cstrref const& buf)
 {
-  t v = 0;
+  if (buf.size() == 0) {
+    return t();
+  }
+  uchar const ch = buf[0];
+  if (buf[0] == '-') {
+    return decimal_to_integral_nocheck_internal{t, 1}(buf[1 .. buf.size()]);
+  } else if (buf[0] == '+') {
+    return decimal_to_integral_nocheck_internal{t, 0}(buf[1 .. buf.size()]);
+  }
+  return decimal_to_integral_nocheck_internal{t, 0}(buf);
+}
+
+private threaded function {t, negative} t
+decimal_to_integral_nocheck_internal(cstrref const& buf)
+{
+  t r;
+  foreach (size_t idx, uchar v : buf) {
+    if (v >= '0' && v <= '9') {
+      r *= 10;
+      t const dig = static_cast{t, uchar}(v - '0');
+      if (negative) {
+	r -= dig;
+      } else {
+	r += dig;
+      }
+    } else {
+      break;
+    }
+  }
+  return r;
+}
+
+public threaded function {t} t
+decimal_to_integral(cstrref const& buf, error_handler{parse_error}& eh)
+{
+  if (buf.size() == 0) {
+    eh.set(parse_error_invalid);
+    return t();
+  }
+  uchar const ch = buf[0];
+  if (buf[0] == '-') {
+    return decimal_to_integral_internal{t, 1}(buf[1 .. buf.size()], eh);
+  } else if (buf[0] == '+') {
+    return decimal_to_integral_internal{t, 0}(buf[1 .. buf.size()], eh);
+  }
+  return decimal_to_integral_internal{t, 0}(buf, eh);
+}
+
+private threaded function {t, negative} t
+decimal_to_integral_internal(cstrref const& buf,
+  error_handler{parse_error}& eh)
+{
+  t r;
+  foreach (size_t idx, uchar v : buf) {
+    if (v >= '0' && v <= '9') {
+      if (negative) {
+	if (r < (lim::lowest{t}() / 10)) {
+	  eh.set(parse_error_overflow);
+	  break;
+	}
+      } else {
+	if (r > (lim::highest{t}() / 10)) {
+	  eh.set(parse_error_overflow);
+	  break;
+	}
+      }
+      r *= 10;
+      t const dig = static_cast{t, uchar}(v - '0');
+      if (negative) {
+	t const nr = r - dig;
+	if (nr > r) {
+	  eh.set(parse_error_overflow);
+	  break;
+	}
+	r = nr;
+      } else {
+	t const nr = r + dig;
+	if (nr < r) {
+	  eh.set(parse_error_overflow);
+	  break;
+	}
+	r = nr;
+      }
+    } else {
+      eh.set(parse_error_invalid);
+      break;
+    }
+  }
+  return r;
 }
 

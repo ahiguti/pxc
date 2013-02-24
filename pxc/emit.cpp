@@ -245,35 +245,31 @@ static void emit_interface_def_one(emit_context& em, expr_interface *ei,
   em.puts("() { }\n");
   em.set_file_line(ei);
   em.indent('b');
-  em.puts("virtual void incref$z() const { }\n");
+  em.puts("virtual void incref$z() const = 0;\n");
   em.set_file_line(ei);
   em.indent('b');
-  em.puts("virtual void decref$z() const { }\n");
+  em.puts("virtual void decref$z() const = 0;\n");
   em.set_file_line(ei);
   em.indent('b');
-  em.puts("virtual size_t get_count$z() const { return 0; }\n");
-  em.set_file_line(ei);
-  em.indent('b');
-  em.puts("virtual pxcrt::mutex& get_mutex$z() const "
-    "{ pxcrt::throw_virtual_function_call(); }\n");
-  #if 0
-  em.set_file_line(ei);
-  em.indent('b');
-  em.puts("typedef ");
-  em.puts(name_c);
-  em.puts(" value_type;\n");
-  #endif
-  #if 0
-  em.set_file_line(ei);
-  em.indent('b');
-  em.puts("const ");
-  em.puts(name_c);
-  em.puts("& get$z() const { return *this; }\n");
-  em.set_file_line(ei);
-  em.indent('b');
-  em.puts(name_c);
-  em.puts("& get$z() { return *this; }\n");
-  #endif
+  em.puts("virtual size_t get_count$z() const = 0;\n");
+  const bool multithr = (ei->get_attribute() & attribute_multithr) != 0;
+  if (multithr) {
+    em.set_file_line(ei);
+    em.indent('b');
+    em.puts("virtual void lock$z() const = 0;\n");
+    em.set_file_line(ei);
+    em.indent('b');
+    em.puts("virtual void unlock$z() const = 0;\n");
+    em.set_file_line(ei);
+    em.indent('b');
+    em.puts("virtual void wait$z() const = 0;\n");
+    em.set_file_line(ei);
+    em.indent('b');
+    em.puts("virtual void notify_one$z() const = 0;\n");
+    em.set_file_line(ei);
+    em.indent('b');
+    em.puts("virtual void notify_all$z() const = 0;\n");
+  }
   expr_block *const bl = ei->block;
   const bool is_funcbody = false;
   bl->emit_local_decl(em, is_funcbody);
@@ -361,31 +357,48 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
   em.puts(" {\n");
   em.add_indent(1);
   if (est->block->inherit != 0) {
-    em.set_file_line(est);
-    em.indent('b');
-    em.puts("void incref$z() const { __sync_fetch_and_add(&count$z, 1); }\n");
-    em.set_file_line(est);
-    em.indent('b');
-    em.puts("void decref$z() const "
-      "{ if (__sync_fetch_and_add(&count$z, -1) == 1) delete this; }\n");
-    em.set_file_line(est);
-    em.indent('b');
-    em.puts("pxcrt::mutex& get_mutex$z() const { return mutex$z; }\n");
-    em.set_file_line(est);
-    em.indent('b');
-    em.puts("void lock$z() const { mutex$z.lock(); }\n");
-    em.set_file_line(est);
-    em.indent('b');
-    em.puts("void unlock$z() const { mutex$z.unlock(); }\n");
+    const bool multithr = (est->get_attribute() & attribute_multithr) != 0;
+    if (multithr) {
+      em.set_file_line(est);
+      em.indent('b');
+      em.puts("void incref$z() const "
+	"{ __sync_fetch_and_add(&count$z, 1); }\n");
+      em.set_file_line(est);
+      em.indent('b');
+      em.puts("void decref$z() const "
+	"{ if (__sync_fetch_and_add(&count$z, -1) == 1) delete this; }\n");
+      em.set_file_line(est);
+      em.indent('b');
+      em.puts("void lock$z() const { monitor$z.mtx.lock(); }\n");
+      em.set_file_line(est);
+      em.indent('b');
+      em.puts("void unlock$z() const { monitor$z.mtx.unlock(); }\n");
+      em.set_file_line(est);
+      em.indent('b');
+      em.puts("void wait$z() const { monitor$z.cond.wait(monitor$z.mtx); }\n");
+      em.set_file_line(est);
+      em.indent('b');
+      em.puts("void notify_one$z() const { monitor$z.cond.notify_one(); }\n");
+      em.set_file_line(est);
+      em.indent('b');
+      em.puts("void notify_all$z() const { monitor$z.cond.notify_all(); }\n");
+      em.set_file_line(est);
+      em.indent('b');
+      em.puts("mutable pxcrt::monitor monitor$z;\n");
+    } else {
+      em.set_file_line(est);
+      em.indent('b');
+      em.puts("void incref$z() const { ++count$z; }\n");
+      em.set_file_line(est);
+      em.indent('b');
+      em.puts("void decref$z() const { if (--count$z == 0) delete this; }\n");
+    }
     em.set_file_line(est);
     em.indent('b');
     em.puts("size_t get_count$z() const { return count$z; }\n");
     em.set_file_line(est);
     em.indent('b');
     em.puts("mutable long count$z;\n");
-    em.set_file_line(est);
-    em.indent('b');
-    em.puts("mutable pxcrt::mutex mutex$z;\n");
   }
   expr_block *const bl = est->block;
   const bool is_funcbody = false;
@@ -2451,7 +2464,7 @@ static void emit_vardef_constructor_fast_boxing(emit_context& em,
       em.indent('x');
       em.puts("try {\n");
       em.indent('x');
-      em.puts("new (&" + varp1 + "->mutex$z) pxcrt::mutex();\n");
+      em.puts("new (&" + varp1 + "->monitor$z) pxcrt::monitor();\n");
       em.indent('x');
       em.puts("} catch (...) {\n");
       em.indent('x');

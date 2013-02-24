@@ -1,0 +1,58 @@
+namespace toint;
+import common -;
+import numeric::positional -;
+import error -;
+import meta::builtin m;
+import serialize::parse_error -;
+
+function {t} void test_one(cstrref const& str)
+{
+  error_handler{parse_error} eh = error_handler{parse_error}(policy_first);
+  t const x = decimal_to_integral{t}(str, eh);
+  string s = m::to_string{t};
+  s.append(" ");
+  s.append(str);
+  s.append(" ");
+  if (eh.get() != parse_error_ok) {
+    s.append("ng");
+  } else {
+    s.append("ok ");
+    s.append(to_string(x));
+  }
+  println(s);
+}
+
+function void t1()
+{
+  test_one{ushort}("12345");
+  test_one{ushort}("65529");
+  test_one{ushort}("65530");
+  test_one{ushort}("65534");
+  test_one{ushort}("65535");
+  test_one{ushort}("65536");
+  test_one{ushort}("65540");
+  test_one{ushort}("65541");
+  test_one{ushort}("100000");
+  test_one{ushort}("655340");
+  test_one{ushort}("0");
+  test_one{ushort}("-1");
+  test_one{short}("12345");
+  test_one{short}("32759");
+  test_one{short}("32760");
+  test_one{short}("32766");
+  test_one{short}("32767");
+  test_one{short}("32768");
+  test_one{short}("327670");
+  test_one{short}("0");
+  test_one{short}("-1");
+  test_one{short}("-32759");
+  test_one{short}("-32760");
+  test_one{short}("-32766");
+  test_one{short}("-32767");
+  test_one{short}("-32768");
+  test_one{short}("-32769");
+  test_one{short}("-327680");
+}
+
+t1();
+

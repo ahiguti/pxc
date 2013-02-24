@@ -22,10 +22,9 @@ private extern "pxcio::iostd_init" function void iostd_init();
 
 iostd_init();
 
-public threaded function {t}
-void file_print(file& f, t const& x)
+public threaded function {t} void file_print(file& f, t const& x)
 {
-  ioeh_t eh = ioeh_t(error::policy_overwrite);
+  ioeh_t eh = ioeh_t(error::policy_throw);
   if (m::eq{t, type::builtin::string}) {
     f.write_all(x, eh);
   } else {
@@ -33,10 +32,9 @@ void file_print(file& f, t const& x)
   }
 }
 
-public threaded function {t}
-void file_println(file& f, t const& x)
+public threaded function {t} void file_println(file& f, t const& x)
 {
-  ioeh_t eh = ioeh_t(error::policy_overwrite);
+  ioeh_t eh = ioeh_t(error::policy_throw);
   if (m::eq{t, type::builtin::string}) {
     string s = x;
     s.append("\n");
@@ -48,17 +46,10 @@ void file_println(file& f, t const& x)
   }
 }
 
-public function {t}
-void print(t const& x)
-{
-  file_print(*stdout, x);
-}
-
-public function {t}
-void println(t const& x)
-{
-  file_println(*stdout, x);
-}
+public function {t} void print(t const& x)
+  { file_print(*stdout, x); }
+public function {t} void println(t const& x)
+  { file_println(*stdout, x); }
 
 extern "type" inline
 namespace pxcio {

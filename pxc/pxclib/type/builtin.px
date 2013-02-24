@@ -30,9 +30,17 @@ public multithreaded extern "pxcrt::tcptr" "tcptr" struct {t} tcptr { }
 public tsvaluetype extern "pxcrt::tiptr" "tiptr" struct {t} tiptr { }
 
 public mtvaluetype extern "pxcrt::lockobject" "lockobject"
-  struct {t} lockobject { }
+struct {t} lockobject {
+  public extern "wait" function void wait();
+  public extern "notify_one" function void notify_one();
+  public extern "notify_all" function void notify_all();
+}
 public mtvaluetype extern "pxcrt::clockobject" "clockobject"
-  struct {t} clockobject { }
+struct {t} clockobject {
+  public extern "wait" function void wait();
+  public extern "notify_one" function void notify_one();
+  public extern "notify_all" function void notify_all();
+}
 
 public threaded extern "pxcrt::bool_append_to_string"
   function void bt_bool_append_to_string(bool x, string& s);
@@ -74,6 +82,7 @@ extern "type" inline
 #include <stdexcept>
 #include <stdio.h>
 #include <pthread.h>
+#include <errno.h>
 #include <assert.h>
 #include <unistd.h>
 #ifdef PXCRT_DBG_RC
@@ -86,8 +95,15 @@ extern "type" inline
 #else
 #define DBG_MTX(x)
 #endif
+#ifdef PXCRT_DBG_COND
+#define DBG_COND(x) x
+#else
+#define DBG_COND(x)
+#endif
 namespace pxcrt {
+struct condition_variable;
 struct mutex {
+  friend struct condition_variable;
   mutex() {
     init();
   }
@@ -119,24 +135,74 @@ private:
     const int e = pthread_mutex_init(&mtx, &mattr);
     pthread_mutexattr_destroy(&mattr);
     if (e != 0) {
-      throw std::runtime_error("pthread_mutex_init"); // FIXME
+      throw std::runtime_error("pthread_mutex_init"); // TODO
     }
   }
 private:
   pthread_mutex_t mtx;
 };
+struct condition_variable {
+  condition_variable() {
+    init();
+  }
+  condition_variable(const condition_variable&) {
+    init();
+  }
+  condition_variable& operator =(const condition_variable&) {
+    return *this;
+  }
+  ~condition_variable() {
+    DBG_COND(fprintf(stderr, "cond destroy %p\n", &cond));
+    const int __attribute__((unused)) e = pthread_cond_destroy(&cond);
+    assert(e == 0);
+  }
+  void wait(mutex& mtx) {
+    const int __attribute__((unused)) e = pthread_cond_wait(&cond, &mtx.mtx);
+    assert(e == 0);
+  }
+  bool timedwait(mutex& mtx, const ::timespec& ts) {
+    const int e = pthread_cond_timedwait(&cond, &mtx.mtx, &ts);
+    if (e == ETIMEDOUT) {
+      return false;
+    }
+    assert(e == 0);
+    return true;
+  }
+  void notify_one() {
+    const int __attribute__((unused)) e = pthread_cond_signal(&cond);
+    assert(e == 0);
+  }
+  void notify_all() {
+    const int __attribute__((unused)) e = pthread_cond_broadcast(&cond);
+    assert(e == 0);
+  }
+private:
+  void init() {
+    const int e = pthread_cond_init(&cond, 0);
+    DBG_COND(fprintf(stderr, "cond init %p %d\n", &cond, e));
+    if (e != 0) {
+      throw std::runtime_error("pthread_cond_init"); // TODO
+    }
+  }
+private:
+  pthread_cond_t cond;
+};
+struct monitor {
+  mutex mtx;
+  condition_variable cond;
+};
 struct mtcount { /* reference counter for multi-threaded objects */ 
   mtcount() : count$z(1) { }
   void incref$z() { __sync_fetch_and_add(&count$z, 1); } /* gcc >= 4 */
   bool decref$z() { return (__sync_fetch_and_add(&count$z, -1) == 1); }
-private:
+public:
   long count$z;
 };
 struct stcount { /* reference counter for single-threaded objects */
   stcount() : count$z(1) { }
   void incref$z() { ++count$z; }
   bool decref$z() { return (--count$z == 0); }
-private:
+public:
   long count$z;
 };
 template <typename T> struct uninit_mem { char value[sizeof(T)]; };
@@ -159,18 +225,22 @@ struct rcval {
   template <typename T0, typename T1, typename T2>
   rcval(const T0& a0, const T1& a1, const T2& a2) : value$z(a0, a1, a2) { }
   void incref$z() const {
-    DBG_RC(fprintf(stdout, "%p %ld +1\n", this, count$z));
+    DBG_RC(fprintf(stdout, "%p %ld +1\n", this, get_count$z()));
     count$z.incref$z();
   }
   void decref$z() const {
-    DBG_RC(fprintf(stdout, "%p %ld -1\n", this, count$z));
+    DBG_RC(fprintf(stdout, "%p %ld -1\n", this, get_count$z()));
     if (count$z.decref$z()) {
       delete this;
       DBG_RC(fprintf(stdout, "d  %p\n", this));
     }
   }
-  void lock$z() const { }
-  void unlock$z() const { }
+  size_t get_count$z() const { return count$z.count$z; }
+  // void lock$z() const { }
+  // void unlock$z() const { }
+  // void wait$z() const { }
+  // void notify_one$z() const { }
+  // void notify_all$z() const { }
 public:
   mutable stcount count$z;
 public:
@@ -196,21 +266,25 @@ struct trcval {
   template <typename T0, typename T1, typename T2>
   trcval(const T0& a0, const T1& a1, const T2& a2) : value$z(a0, a1, a2) { }
   void incref$z() const {
-    DBG_RC(fprintf(stdout, "%p %ld +1\n", this, count$z));
+    DBG_RC(fprintf(stdout, "%p %ld +1\n", this, get_count$z()));
     count$z.incref$z();
   }
   void decref$z() const {
-    DBG_RC(fprintf(stdout, "%p %ld -1\n", this, count$z));
+    DBG_RC(fprintf(stdout, "%p %ld -1\n", this, get_count$z()));
     if (count$z.decref$z()) {
       delete this;
       DBG_RC(fprintf(stdout, "d  %p\n", this));
     }
   }
-  void lock$z() const { mutex$z.lock(); }
-  void unlock$z() const { mutex$z.unlock(); }
+  size_t get_count$z() const { return count$z.count$z; }
+  void lock$z() const { monitor$z.mtx.lock(); }
+  void unlock$z() const { monitor$z.mtx.unlock(); }
+  void wait$z() const { monitor$z.cond.wait(monitor$z.mtx); }
+  void notify_one$z() const { monitor$z.cond.notify_one(); }
+  void notify_all$z() const { monitor$z.cond.notify_all(); }
 public:
   mutable mtcount count$z;
-  mutable mutex mutex$z;
+  mutable monitor monitor$z;
 public:
   T value$z;
 private:
@@ -244,8 +318,10 @@ struct tircval {
       DBG_RC(fprintf(stdout, "d  %p\n", this));
     }
   }
-  void lock$z() const { }
-  void unlock$z() const { }
+  size_t get_count$z() const { return count$z.count$z; }
+  // void lock$z() const { }
+  // void unlock$z() const { }
+  // void wait$z() const { }
 public:
   mutable mtcount count$z;
 public:
@@ -297,12 +373,33 @@ template <typename T> struct lockobject
   T *get() const { return &objref; }
   T& operator *() const { return objref; }
   T *operator ->() const { return &objref; }
+  void wait() { objref.wait$z(); }
+  void notify_one() { objref.notify_one$z(); }
+  void notify_all() { objref.notify_all$z(); }
 private:
   lockobject(const lockobject&);
   lockobject& operator =(const lockobject&);
 private:
   rcptr<T> ptr;
   T& objref;
+};
+template <typename T> struct clockobject
+{
+  clockobject(const rcptr<const T>& p) : ptr(p), objref(*p)
+    { objref.lock$z(); }
+  ~clockobject() { objref.unlock$z(); }
+  const T *get() const { return &objref; }
+  const T& operator *() const { return objref; }
+  const T *operator ->() const { return &objref; }
+  void wait() { objref.wait$z(); }
+  void notify_one() { objref.notify_one$z(); }
+  void notify_all() { objref.notify_all$z(); }
+private:
+  clockobject(const clockobject&);
+  clockobject& operator =(const clockobject&);
+private:
+  rcptr<const T> ptr;
+  const T& objref;
 };
 template <typename T> typename T::value_type deref_value$z(const rcptr<T>& p)
 {
@@ -333,15 +430,27 @@ void bool_append_to_string(bt_bool v, bt_string& s)
 }
 void double_append_to_string(bt_double v, bt_string& s)
 {
-  char buf[32];
-  const int len = snprintf(buf, sizeof(buf), "%f", v);
-  s.append(reinterpret_cast<const unsigned char *>(buf), len);
+  const size_t osz = s.size();
+  char *buf = reinterpret_cast<char *>(s.reserve_back<1>(10));
+  int len = snprintf(buf, 10, "%f", v);
+  if (len < 0) {
+    return;
+  }
+  if (len < 10) {
+    s.rawarr_set_valid_len(osz + len);
+    return;
+  }
+  const int alen = len;
+  buf = reinterpret_cast<char *>(s.reserve_back<1>(alen + 1));
+  len = snprintf(buf, alen + 1, "%f", v);
+  if (len < 0) {
+    return;
+  }
+  s.rawarr_set_valid_len(osz + len);
 }
 void float_append_to_string(bt_float v, bt_string& s)
 {
-  char buf[32];
-  const int len = snprintf(buf, sizeof(buf), "%f", double(v));
-  s.append(reinterpret_cast<const unsigned char *>(buf), len);
+  double_append_to_string(v, s);
 }
 bt_unit string_to_unit(const bt_string& v)
 {

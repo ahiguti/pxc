@@ -3,24 +3,24 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- threadのmain関数の中でmultithreadedではない型を使うとエラーになって
-  しまう(done)
-- lockobject{int} lck = sobj;  これが通るように
+- awk的なもの
 
-- foo[x] = 3; でfooをguardしてしまうのは直したい。(done)
+- from_stringを用意してbuiltin.pxのstring_to_*を削除。
+
+- 浮動小数点数のio
+
+- vectorのinsertとeraseテスト
+
+- meta::builtin::symbolで引くときの可視性はlexical contextで。
 
 - byvalueを要求されたら参照を返す関数のかわりに値を返す関数をemit
-  無効化されるのを防ぐため。
+  無効化されるのを防ぐため。-> 確認
 
 ためしにany型作ってみる
 
-guardまわりシンプル化
-- invalidate guardとmutex lockを共通化(done)
-- condition variableのwaitを実現
-  - waitする際にはmutexをlock済みでなければならない
-  - 先にinvalidate guardとmutex lockを共通化し、guardにwaitメソッド
 
-- interfaceを実装すると常にmutex埋め込むのは無くせないか
+- lockobject{int} lck = sobj;  これが通るように
+- var lck = lockobject(sobj); これも
 
 - injectns消す
 
@@ -38,11 +38,14 @@ guardまわりシンプル化
   -> farray, darrayはdefconも要請
   
 - pxcvectorにstringと同じだけのメソッド定義
+  - insertとerase(done)
+  - findはいらない？
 
 - enum, bitmaskのコンパイル時リフレクション
 - external int/uintを整数リテラルからコンストラクトできない
 - 算術演算子は左右どちらへも変換できるように
 
+- std::set_new_handlerでstd::bad_allocではなくpxcrt::bad_allocを投げる
 
 ephemeral型まわり
 - test: globalやstructには参照変数などは置けないように
@@ -249,6 +252,15 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- floatのto_stringおかしい(done)
+- interfaceのlock/unlock/wait(done)
+- interfaceを実装すると常にmutex埋め込むのは無くせないか(done)
+- invalidate guardとmutex lockを共通化(done)
+- condition variableのwaitを実現(done)
+- cond_signal/broadcast(done)
+- threadのmain関数の中でmultithreadedではない型を使うとエラーになって
+  しまう(done)
+- foo[x] = 3; でfooをguardしてしまうのは直したい。(done)
 - socket_factory整理(done)
 - signal SIGHUP(done)
 - get_mutex廃止(done)
@@ -664,4 +676,34 @@ mapped_type(arr[idx]) という式は、副作用を持つ式の一部として�
 variant field: value$$r() これは常に値を返すのでok
 配列要素: get_value(idx)
 rangeの参照外し: 常に有効なのでok
+
+---------------------------------------------------------------------
+interfaceのlock/unlock/wait
+- 実装クラスがmultithreadedならmonitorを埋め込む。tsvaluetypeであっ
+  てもmonitorが必要。tptrが指すことができるから。非interfaceな型に
+  ついてはrcval/trcvalのラップ使い分けによってtiptrがmonitorを埋め込
+  むのを避けられるが、interfaceではできない。
+- lock$z, unlock$z, wait$z, notify_one$z, notify_all$zを仮想関数に
+  し、実装クラスがmultithreadedならmonitorにたいして処理実行、そう
+  でないならnoop。-> multithreadedでないならlock$zなどの関数を用意
+  しない。
+
+---------------------------------------------------------------------
+awk的なもの
+
+行の型をXとすると、Xのmonoid構造についてのfold演算の結果を取る処理。
+
+行を分割
+各カラムを各々の型に変換
+インデックス構築
+
+x: string, y: int
+
+合計
+  int sum;
+  foreach { sum += y; }
+キーごとの合計
+  tree_map{string, int} m;
+  foreach { m[x] += y; }
+
 

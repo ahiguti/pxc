@@ -1,0 +1,36 @@
+namespace numeric::limit;
+import type::builtin -;
+
+public threaded function {t} t lowest()
+  { limit_impl{t} obj; return obj.lowest(); }
+public threaded function {t} t highest()
+  { limit_impl{t} obj; return obj.highest(); }
+public threaded function {t} t smallest()
+  { limit_impl{t} obj; return obj.smallest(); }
+
+private tsvaluetype extern "numeric::limit_impl" struct {t} limit_impl {
+  extern "lowest" function t lowest() const;
+  extern "highest" function t highest() const;
+  extern "smallest" function t smallest() const;
+}
+
+extern "type" inline
+#include <boost/type_traits.hpp>
+#include <boost/numeric/conversion/bounds.hpp>
+#include <boost/limits.hpp>
+namespace numeric {
+template <typename T, bool arith> struct limit_impl_arithmetic;
+template <typename T> struct limit_impl_arithmetic <T, true> {
+  static T lowest() { return ::boost::numeric::bounds<T>::lowest(); }
+  static T highest() { return ::boost::numeric::bounds<T>::highest(); }
+  static T smallest() { return ::boost::numeric::bounds<T>::smallest(); }
+};
+template <typename T> struct limit_impl_arithmetic <T, false> {
+  static T lowest() { return T(); }
+  static T highest() { return T(); }
+  static T smallest() { return T(); }
+};
+template <typename T> struct limit_impl
+  : public limit_impl_arithmetic<T, ::boost::is_arithmetic<T>::value > { };
+}; // namespace numeric
+
