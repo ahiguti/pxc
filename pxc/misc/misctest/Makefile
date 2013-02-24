@@ -2,7 +2,8 @@
 CXX = g++ -std=c++0x
 CXXFLAGS = -g -O3 -DNDEBUG
 
-all: vec mftest
+all: vec
+#mftest
 
 vec: vec.cpp
 	$(CXX) $(CXXFLAGS) vec.cpp -o vec

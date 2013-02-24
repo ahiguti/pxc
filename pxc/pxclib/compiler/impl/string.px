@@ -347,8 +347,7 @@ private:
     if (pos >= valid_len) {
       pos = valid_len;
     }
-    const size_type olen = valid_len;
-    const size_type nlen = olen + len;
+    const size_type nlen = valid_len + len;
     if (nlen < valid_len) {
       pxcrt::throw_bad_alloc();
     }
@@ -356,16 +355,13 @@ private:
     if (pos < valid_len) {
       memmove(start + pos + len, start + pos, (valid_len - pos) * sizeof(T));
     }
-    memcpy(start + olen, ptr, len * sizeof(T));
+    memcpy(start + pos, ptr, len * sizeof(T));
     valid_len = nlen;
   }
   void reserve_internal(size_type len) {
     if (len <= alloc_len) {
       return;
     }
-    reserve_internal_noinline(len);
-  }
-  void __attribute__((noinline)) reserve_internal_noinline(size_type len) {
     size_type nl = alloc_len;
     do {
       const size_type nl_n = (nl >= 1) ? (nl * 2) : 1;

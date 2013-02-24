@@ -88,7 +88,7 @@ initialize_1(T *ptr, const T& x)
   }
 }
 template <typename T> inline T *
-reserve_n(T *ptr, size_t olen, size_t nlen)
+reserve_n(T *ptr, size_t vlen, size_t nlen)
 {
   if (is_trivially_copyable<T>::value) {
     void *p = realloc(ptr, nlen * sizeof(T));
@@ -99,14 +99,36 @@ reserve_n(T *ptr, size_t olen, size_t nlen)
   } else {
     T *p = allocate_uninitialized<T>(nlen);
     try {
-      initialize_copy_n(p, olen, ptr);
+      initialize_copy_n(p, vlen, ptr);
     } catch (...) {
       free(p);
       throw;
     }
-    deinitialize_n(ptr, olen);
+    deinitialize_n(ptr, vlen);
     free(ptr);
     return p;
+  }
+}
+template <typename T> inline void
+copy_n(T *ptr, size_t len, const T *src)
+{
+  if (is_trivially_copyable<T>::value) {
+    memcpy(ptr, src, len * sizeof(T));
+  } else {
+    for (size_t i = 0; i < len; ++i) {
+      ptr[i] = src[i];
+    }
+  }
+}
+template <typename T> inline void
+copy_backward_n(T *ptr, size_t len, const T *src)
+{
+  if (is_trivially_copyable<T>::value) {
+    memmove(ptr, src, len * sizeof(T));
+  } else {
+    for (size_t i = len; i > 0; --i) {
+      ptr[i - 1] = src[i - 1];
+    }
   }
 }
 }; // namespace array

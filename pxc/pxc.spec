@@ -9,7 +9,8 @@ License: BSD
 Source: %{name}.tar.gz
 Packager: Akira Higuchi ( https://github.com/ahiguti )
 BuildRoot: /var/tmp/%{name}-%{version}-root
-# Requires: gcc-c++
+BuildRequires: gcc-c++, boost-devel
+Requires: gcc-c++, boost-devel
 
 %description
 
