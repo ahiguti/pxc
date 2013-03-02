@@ -1,0 +1,57 @@
+namespace fpdecimal;
+import common -;
+import serialization::positional -;
+import numeric::cast -;
+import meta::builtin m;
+import serialization::parse_error -;
+import error -;
+
+function {t} void test_fp(double v)
+{
+  string s = m::to_string{t};
+  s.append(" ");
+  fp_to_decimal(static_cast{t, double}(v), s);
+  println(s);
+}
+
+function {t} void test_parse(cstrref const& str)
+{
+  t const v = decimal_to_fp_nocheck{t}(str);
+  string s = m::to_string{t};
+  s.append(" ");
+  s.append(str);
+  s.append(" ");
+  fp_to_decimal(static_cast{t, double}(v), s);
+  println(s);
+}
+
+function {t} void test_parse_chk(cstrref const& str)
+{
+  error_handler{parse_error} eh = error_handler{parse_error}(policy_first);
+  t const v = decimal_to_fp{t}(str, eh);
+  string s = m::to_string{t};
+  s.append(" ");
+  s.append(str);
+  s.append(" ");
+  fp_to_decimal(static_cast{t, double}(v), s);
+  println(s);
+}
+
+function {t} void t1()
+{
+
+  test_fp{t}(1.25);
+  test_fp{t}(-1.25);
+  test_fp{t}(1.0 / 3.0);
+  test_fp{t}(-1.0 / 3.0);
+  test_parse{t}("1.25");
+  test_parse{t}("-1.25");
+  test_parse{t}("0.33333333");
+  test_parse{t}("-0.33333333");
+  test_parse_chk{t}("1.25");
+}
+
+
+t1{float}();
+t1{double}();
+

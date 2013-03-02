@@ -3,15 +3,36 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- 例外まわりの仕様きめよ。errnoを投げられたときとか。
+
+- プロセスをforkしてpipe経由で通信するパターン
+  - バイト列の通信(popen的なもの)
+  - ORB的なもの
+
+- 名前空間整理
+
+- numeric/positionalからserialize/numericへ移動
+
+- globalにdefconでない型の変数を置くとエラー
+
+- test_07_constr/ud4fixme.px ユーザ定義コンストラクタが無いのに実行文
+  をstructに書くとエラーになる。
+  -> udconでなければ実行文を書けないようにする(done)
+  -> 引数が空のudconを作れるようにする。そのような型はdefcon。
+
+- tagged unionの実装がstrict-aliasing rulesを破っている。これを直す
+  にはC++11のunionが必要。-fno-strict-aliasつけておく。C++11前提に
+  するならunrestricted unionを使ってtagged union実装する。
+  -> may_alias属性を付ければC++11要らないが、gccの警告が動作怪しい。
+  -> std::mapの中でもstrict aliasing警告出る...
+    struct compare{bool operator()(const int&x, const int&y)
+      { return x<y; } };
+    (http://gcc.gnu.org/bugzilla/show_bug.cgi?id=42087
+     Bug 42087 - stl::map breaks strict-aliasing rules)
+
 - awk的なもの
 
 - from_stringを用意してbuiltin.pxのstring_to_*を削除。
-
-- 浮動小数点数のio
-
-- vectorのinsertとeraseテスト
-
-- meta::builtin::symbolで引くときの可視性はlexical contextで。
 
 - byvalueを要求されたら参照を返す関数のかわりに値を返す関数をemit
   無効化されるのを防ぐため。-> 確認
@@ -252,6 +273,10 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- 浮動小数点数のserialize(done)
+- vectorのinsertとeraseテスト(done)
+- prefix省略したシンボルを引くとき、テンプレートのインスタンス化の
+  際にテンプレートを定義した側のルールで引いているか。(done)
 - floatのto_stringおかしい(done)
 - interfaceのlock/unlock/wait(done)
 - interfaceを実装すると常にmutex埋め込むのは無くせないか(done)

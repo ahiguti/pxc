@@ -1,0 +1,67 @@
+namespace numeric::fpmath;
+import numeric::integral -;
+import numeric::fp -;
+import meta::builtin m;
+
+public tsvaluetype extern "int" "extenum" struct fpclass_t { }
+public extern "FP_NAN"		fpclass_t FP_NAN;
+public extern "FP_INFINITE"	fpclass_t FP_INFINITE;
+public extern "FP_ZERO"		fpclass_t FP_ZERO;
+public extern "FP_SUBNORMAL"	fpclass_t FP_SUBNORMAL;
+public extern "FP_NORMAL"	fpclass_t FP_NORMAL;
+
+public threaded function {t} fpclass_t fpclassify(t x)
+{ return m::symbol{fpclass_t, m::concat{"fpclassify_", t}}(x); }
+public threaded function {t} t frexp(t x, int& exp)
+{ return m::symbol{fpclass_t, m::concat{"frexp_", t}}(x, exp); }
+public threaded function {t} t ldexp(t x, int exp)
+{ return m::symbol{fpclass_t, m::concat{"ldexp_", t}}(x, exp); }
+public threaded function {t} bool signbit(t x)
+{ return m::symbol{fpclass_t, m::concat{"signbit_", t}}(x); }
+public threaded function {t} t modf(t x, t& ir)
+{ return m::symbol{fpclass_t, m::concat{"modf_", t}}(x, ir); }
+
+public threaded extern "numeric::fpclassify_double" function
+  fpclass_t fpclassify_bt_double(double x);
+public threaded extern "numeric::fpclassify_float" function
+  fpclass_t fpclassify_bt_float(float x);
+public threaded extern "numeric::signbit_double" function
+  bool signbit_bt_double(double x);
+public threaded extern "numeric::signbit_float" function
+  bool signbit_bt_float(float x);
+public threaded extern "numeric::frexp_double" function
+  double frexp_bt_double(double x, int& exp);
+public threaded extern "numeric::frexp_float" function
+  float frexp_bt_float(float x, int& exp);
+public threaded extern "numeric::ldexp_double" function
+  double ldexp_bt_double(double x, int exp);
+public threaded extern "numeric::ldexp_float" function
+  float ldexp_bt_float(float x, int exp);
+public threaded extern "numeric::modf_double" function
+  double modf_bt_double(double x, double& exp);
+public threaded extern "numeric::modf_double" function
+  float modf_bt_float(float x, float& exp);
+
+extern "type" inline
+#include <math.h>
+namespace numeric {
+}; // namespace numeric
+
+extern "fdef" inline
+#include <boost/static_assert.hpp>
+#include <float.h>
+namespace numeric {
+BOOST_STATIC_ASSERT((FLT_RADIX == 2));
+using namespace pxcrt;
+bt_int fpclassify_double(bt_double x) { return fpclassify(x); }
+bt_int fpclassify_float(bt_float x) { return fpclassify(x); }
+bt_bool signbit_double(bt_double x) { return signbit(x) != 0; }
+bt_bool signbit_float(bt_float x) { return signbit(x) != 0; }
+bt_double frexp_double(bt_double x, bt_int& exp) { return ::frexp(x, &exp); }
+bt_float frexp_float(bt_float x, bt_int& exp) { return ::frexpf(x, &exp); }
+bt_double ldexp_double(bt_double x, bt_int exp) { return ::ldexp(x, exp); }
+bt_float ldexp_float(bt_float x, bt_int exp) { return ::ldexpf(x, exp); }
+bt_double modf_double(bt_double x, bt_double& ir) { return ::modf(x, &ir); }
+bt_float modf_float(bt_float x, bt_float& ir) { return ::modff(x, &ir); }
+}; // namespace numeric
+

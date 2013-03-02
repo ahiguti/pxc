@@ -15,22 +15,34 @@ multithreaded struct server_thread(ioptr const& i, tptr{bool} const& rp,
   ioptr const iop = i;
   tptr{bool} readyp = rp;
   tptr{string} str_r = s;
+  function void notify()
+  {
+    var lck = lockobject{bool}(readyp);
+    *lck = true;
+    lck.notify_one();
+  }
   function void main()
   {
-    var ioeh = errno_eh(error::policy_throw);
-    var sf = socket_acceptor(iop, "localhost", "9999", AF_INET, SOCK_STREAM,
-      1024);
-    {
-      var lck = lockobject{bool}(readyp);
-      *lck = true;
-      lck.notify_one();
+    try {
+      file_println(*get_stderr(iop), "svr");
+      var sf = socket_acceptor(iop, "localhost", "9999", AF_INET, SOCK_STREAM,
+	1024); // TODO: fix EADDRINUSE
+      file_println(*get_stderr(iop), "accepted");
+      notify();
+      var ioeh = errno_eh(error::policy_throw);
+      var peer_addr = sockaddr_storage();
+      var sock = socket(sf, peer_addr, ioeh);
+      string s;
+      size_t len = 10;
+      sock.read(s, len, ioeh);
+      *str_r = s;
+    } catch (exception::builtin::exception e) {
+      file_println(*get_stderr(iop), "thrown");
+      notify();
+    } catch (io::errno::errno_t e) {
+      file_println(*get_stderr(iop), "thrown errno");
+      notify();
     }
-    var peer_addr = sockaddr_storage();
-    var sock = socket(sf, peer_addr, ioeh);
-    string s;
-    size_t len = 10;
-    sock.read(s, len, ioeh);
-    *str_r = s;
   }
 }
 
@@ -47,6 +59,7 @@ multithreaded struct client_thread(ioptr const& i, tptr{bool} const& rp)
 	lck.wait();
       }
     }
+    file_println(*get_stderr(iop), "got notification");
     var ioeh = errno_eh(error::policy_throw);
     var sf = socket_connector(iop, "localhost", "9999", AF_INET, SOCK_STREAM,
       10);

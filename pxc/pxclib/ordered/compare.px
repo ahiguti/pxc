@@ -1,6 +1,8 @@
-
 namespace ordered::compare;
-public import type::builtin -;
+public import numeric::integral -;
+public import numeric::fp -;
+public import numeric::union_tag -;
+public import container::string -;
 public import meta::builtin m;
 
 public threaded function {t} int compare(t const& x, t const& y)
@@ -10,12 +12,12 @@ public threaded function {t} int compare(t const& x, t const& y)
   macro fam m::family{t};
   if (m::eq{m::to_string{sym}, symstr}) {
     return sym(x, y);
-  } else if (m::eq{t, type::builtin::unit}) {
+  } else if (m::eq{t, unit}) {
     return 0;
   } else if (m::or{
     m::eq{fam, "builtin"}, m::eq{fam, "int"}, m::eq{fam, "uint"},
     m::eq{fam, "float"}, m::eq{fam, "numeric"},
-    m::eq{t, type::builtin::string}, m::eq{t, type::builtin::strlit}}) {
+    m::eq{t, string}, m::eq{t, strlit}}) {
     return x < y ? -1 : x > y ? 1 : 0;
   } else if (m::eq{fam, "farray"}) {
     size_t const sz = m::at{t, 1};

@@ -224,8 +224,20 @@ void expr_symbol::check_type(symbol_table *lookup)
 
 void expr_inline_c::check_type(symbol_table *lookup)
 {
+  fn_check_type(value, symtbl_lexical);
   if ((this->get_attribute() & attribute_threaded) != 0) {
     arena_error_throw(this, "invalid attribute for an inline expression");
+  }
+  if (value != 0) {
+    const term tv = eval_expr(value);
+    const long long v = meta_term_to_long(tv);
+    if (v != 0) {
+      if (posstr == "disable_bounds_checking") {
+	symtbl_lexical->pragma.disable_bounds_checking = true;
+      } else if (posstr == "disable_guard") {
+	symtbl_lexical->pragma.disable_guard = true; // not implemented yet
+      }
+    }
   }
 }
 
@@ -268,7 +280,7 @@ static bool check_term_validity(const term& t, bool allow_nontype,
   }
   const bool tp_allow_nontype = true;
   const bool tp_allow_local_func = !is_type(t);
-  const bool tp_allow_ephemeral = false;
+  const bool tp_allow_ephemeral = !is_type(t);
   const term_list *tl = t.get_args();
   const size_t tlarg_len = tl != 0 ? tl->size() : 0;
   expr_block *const ttbl = e ? e->get_template_block() : 0;
@@ -471,6 +483,12 @@ static bool is_default_constructible(const term& typ, expr_i *pos,
     return false;
   }
   return true;
+}
+
+// TODO: move to another file
+bool is_default_constructible(const term& typ)
+{
+  return is_default_constructible(typ, typ.get_expr(), 0);
 }
 
 static void check_default_construct(term& typ, expr_var *ev, const char *sym)
@@ -2652,18 +2670,26 @@ static void check_constr_restrictions(expr_struct *est)
   if (est->block == 0 || est->block->stmts == 0) {
     return;
   }
+  const bool has_udcon = est->has_userdefined_constr();
   expr_stmts *st = est->block->stmts;
   expr_i *exec_found = 0;
   for (; st != 0; st = st->rest) {
     expr_i *const e = st->head;
     if (is_vardef_or_vardefset(e)) {
-      if (exec_found != 0) {
+      if (!has_udcon && e->get_esort() != expr_e_var) {
+	/* plain struct allows vardef only */
+	arena_error_push(e, "invalid statement");
+      } else if (exec_found != 0) {
 	arena_error_push(e, "invalid statement before field initialization");
       }
       check_udcon_vardef_calling_memfunc(est, e);
     } else if (!is_noexec_expr(e)) {
       if (exec_found == 0) {
 	exec_found = e;
+      }
+      if (!has_udcon) {
+	/* plain struct allows vardef only */
+	arena_error_push(e, "invalid statement");
       }
     }
     #if 0

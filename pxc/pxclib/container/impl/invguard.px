@@ -1,0 +1,51 @@
+namespace container::impl::invguard;
+private import numeric::integral;
+
+extern "type" inline
+namespace pxcrt {
+template <typename Tc>
+struct guard_ref {
+  guard_ref(Tc& c) : c(c) {
+    c.inc_invalidate_guard();
+  }
+  ~guard_ref() {
+    c.dec_invalidate_guard();
+  }
+  Tc& get() {
+    return c;
+  }
+  typename Tc::range_type get_range()
+    { return typename Tc::range_type(c); }
+  typename Tc::crange_type get_crange()
+    { return typename Tc::crange_type(c); }
+private:
+  Tc& c;
+  guard_ref(const guard_ref&);
+  guard_ref& operator =(const guard_ref&);
+};
+template <typename Tc>
+struct guard_val {
+  guard_val(const Tc& x) : c(x) {
+    c.inc_invalidate_guard();
+  }
+  ~guard_val() {
+    c.dec_invalidate_guard();
+  }
+  Tc& get() {
+    return c;
+  }
+  typename Tc::range_type get_range()
+    { return typename Tc::range_type(c); }
+  typename Tc::crange_type get_crange()
+    { return typename Tc::crange_type(c); }
+private:
+  Tc c;
+  guard_val(const guard_val&);
+  guard_val& operator =(const guard_val&);
+};
+}; // namespace pxcrt
+
+extern "fdef" inline
+namespace pxcrt {
+}; // namespace pxcrt
+

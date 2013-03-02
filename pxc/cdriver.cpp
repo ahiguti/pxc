@@ -51,7 +51,8 @@ struct profile_settings {
   std::string cflags;
   std::string ldflags;
   bool generate_dynamic; /* TODO */
-  profile_settings() : generate_dynamic(false) { }
+  bool show_warnings;
+  profile_settings() : generate_dynamic(false), show_warnings(false) { }
 };
 
 typedef std::list<source_info> sources_type;
@@ -71,7 +72,8 @@ struct parser_options {
   std::string argv0;
   time_t argv0_ctime;
   parser_options() : verbose(0), clean_flag(false), no_build(false),
-    no_update(false), no_execute(false), no_realpath(false), show_out(false),
+    no_update(false), no_execute(false), no_realpath(false),
+    show_out(false),
     argv0_ctime(0) { }
 };
 
@@ -721,11 +723,11 @@ static void compile_cxx_all(const parser_options& po,
   /*
   #ifdef __APPLE__
   std::string cmd = po.profile.cxx + " " + po.profile.cflags
-    + " -g -Wall -fPIC -undefined dynamic_lookup -bundle -bundle_loader "
+    + " -g -fPIC -undefined dynamic_lookup -bundle -bundle_loader "
     + po.argv0 + " -o '" + ofn + "' -lpthread";
   #else
   std::string cmd = po.profile.cxx + " " + po.profile.cflags
-    + " -g -Wall -fPIC -shared -o '" + ofn + "' -lpthread";
+    + " -g -fPIC -shared -o '" + ofn + "' -lpthread";
   #endif
   */
   std::string cmd = po.profile.cxx + " " + po.profile.cflags + " " + genopt
@@ -742,7 +744,7 @@ static void compile_cxx_all(const parser_options& po,
   if (r != 0) {
     arena_error_throw(0, "%s\n%s", cmd.c_str(), obuf.c_str());
   }
-  if (po.verbose > 0) {
+  if (po.verbose > 0 || (po.profile.show_warnings && !obuf.empty())) {
     fprintf(stderr, "%s\n%s", cmd.c_str(), obuf.c_str());
   }
 }
@@ -802,14 +804,14 @@ static void compile_module_to_cc_srcs(const parser_options& po,
     const std::string incdir_str = make_cxx_opts(
       mi_main.self_copts.incdir, "-I");
     const std::string cmd = po.profile.cxx + " " + po.profile.cflags
-      + " -g -Wall -fPIC"
+      + " -g -fPIC"
       + cflags_str + incdir_str + " -I. -c '" + cfn + "' -o '" + ofn + "'";
     std::string obuf;
     int r = popen_cmd(cmd + " 2>&1", obuf);
     if (r != 0) {
       arena_error_throw(0, "%s\n%s", cmd.c_str(), obuf.c_str());
     }
-    if (po.verbose > 0) {
+    if (po.verbose > 0 || (po.profile.show_warnings && !obuf.empty())) {
       fprintf(stderr, "%s\n%s", cmd.c_str(), obuf.c_str());
     }
   }
@@ -1028,10 +1030,17 @@ static void load_profile(parser_options& po)
     ? iter->second : "g++";
   iter = po.profile.mapval.find("cflags");
   po.profile.cflags = iter != po.profile.mapval.end()
-    ? iter->second : "-g -O3 -DNDEBUG";
+    ? iter->second
+    : "-g -O3 -DNDEBUG -Wall -Wno-unused -Wno-attributes";
+    /* note: adding -Wno-attributes is a workaround for that gcc warns
+     * when attribute(("may_alias")) is specified for a struct. */
   iter = po.profile.mapval.find("ldflags");
   po.profile.ldflags = iter != po.profile.mapval.end()
     ? iter->second : "";
+  iter = po.profile.mapval.find("show_warnings");
+  if (iter != po.profile.mapval.end()) {
+    po.profile.show_warnings = true;
+  }
 }
 
 static void check_profile_md5sum(const parser_options& po)
@@ -1177,6 +1186,10 @@ static int prepare_options(parser_options& po, int argc, char **argv)
 	po.no_update = true;
       } else if (s == "--no-execute") {
 	po.no_execute = true;
+      #if 0
+      } else if (s == "--show-warnings" || s == "-W") {
+	po.show_c_warnings = true;
+      #endif
       } else if (s == "--show-out") {
 	po.show_out = true;
       } else if (s == "--no-realpath") {

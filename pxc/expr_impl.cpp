@@ -393,12 +393,20 @@ std::string expr_telist::dump(int indent) const
 }
 
 expr_inline_c::expr_inline_c(const char *fn, int line, const char *label,
-  const char *cstr, bool declonly)
-  : expr_i(fn, line), posstr(label), cstr(cstr), declonly(declonly)
+  const char *cstr, bool declonly, expr_i *val)
+  : expr_i(fn, line), posstr(label), cstr(cstr), declonly(declonly), value(val)
 {
-  if (posstr != "type" && posstr != "fdecl" && posstr != "fdef" &&
-    posstr != "incdir" && posstr != "link" && posstr != "cflags" &&
-    posstr != "ldflags") {
+  if (
+    posstr != "type" &&
+    posstr != "fdecl" &&
+    posstr != "fdef" &&
+    posstr != "incdir" &&
+    posstr != "link" &&
+    posstr != "cflags" &&
+    posstr != "ldflags" &&
+    posstr != "disable_bounds_checking" &&
+    posstr != "disable_guard"
+    ) {
     arena_error_push(this,
       "invalid label '%s'", posstr.c_str());
   }

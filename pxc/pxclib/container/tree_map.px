@@ -1,0 +1,53 @@
+namespace container::tree_map;
+public import numeric::integral -;
+public import ordered::compare;
+public import container::impl::stdmap;
+public import container::impl::stdmap_range;
+
+public macro tree_map{t, s}
+  tree_map_compare{t, s, compare_function_object{t}};
+public macro tree_map_range{t, s}
+  tree_map_compare_range{t, s, compare_function_object{t}};
+public macro tree_map_crange{t, s}
+  tree_map_compare_crange{t, s, compare_function_object{t}};
+
+private tsvaluetype struct {t} compare_function_object {
+  public function int call(t const& x, t const& y) const
+    { return ordered::compare::compare(x, y); }
+}
+
+private mtvaluetype extern "tree_map::tree_map_compare" "tree_map"
+struct {t, s, f} tree_map_compare {
+  public macro key_type t;
+  public macro mapped_type s;
+  public macro range_type tree_map_range{t, s};
+  public macro crange_type tree_map_crange{t, s};
+  public extern "empty" function bool empty() const;
+  public extern "size" function size_t size() const;
+  public extern "clear" function void clear();
+  public extern "equal_crange"
+    function crange_type equal_crange(t const& k) const;
+  public extern "equal_range"
+    function range_type equal_range(t const& k);
+}
+
+private mtvaluetype extern "tree_map::tree_map_range" "tree_map_range"
+struct {t, s, f} tree_map_compare_range {
+  public macro key_type t;
+  public macro mapped_type s;
+  public macro range_type tree_map_compare_range{t, s, f};
+  public macro crange_type tree_map_compare_crange{t, s, f};
+  public extern "empty" function bool empty() const;
+  public extern "next" function void next();
+}
+
+private mtvaluetype extern "tree_map::tree_map_crange" "tree_map_crange"
+struct {t, s, f} tree_map_compare_crange {
+  public macro key_type t;
+  public macro mapped_type s;
+  public macro range_type tree_map_compare_crange{t, s, f};
+  public macro crange_type tree_map_compare_crange{t, s, f};
+  public extern "empty" function bool empty() const;
+  public extern "next" function void next();
+}
+
