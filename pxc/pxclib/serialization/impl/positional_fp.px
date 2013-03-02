@@ -1,0 +1,96 @@
+namespace serialization::impl::positional_fp;
+public import numeric::integral -;
+public import numeric::fp -;
+public import container::string -;
+public import serialization::parse_error -;
+public import error -;
+public import numeric::cast -;
+public import numeric::limit lim;
+public import numeric::fp -;
+public import container::algorithm algo;
+public import meta::builtin m;
+public import container::impl::util;
+
+public threaded function {t} void fp_to_decimal(t x, string& buf)
+{ m::symbol{fp_to_decimal, m::concat{"fp_to_decimal_", t}}(x, buf); }
+public threaded function {t} t decimal_to_fp_nocheck(cstrref const& buf)
+{ return m::symbol{decimal_to_fp_nocheck,
+  m::concat{"decimal_to_fp_nocheck_", t}}(buf); }
+public threaded function {t} t
+decimal_to_fp(cstrref const& buf, error_handler{parse_error}& eh)
+{ return m::symbol{decimal_to_fp, m::concat{"decimal_to_fp_", t}}(buf, eh); }
+
+public threaded extern "serialization::fp_to_decimal_bt_float" function
+  void fp_to_decimal_bt_float(float v, string& buf);
+public threaded extern "serialization::fp_to_decimal_bt_double" function
+  void fp_to_decimal_bt_double(double v, string& buf);
+public threaded extern "serialization::decimal_to_fp_nocheck_bt_float" function
+  float decimal_to_fp_nocheck_bt_float(cstrref const& buf);
+public threaded extern "serialization::decimal_to_fp_nocheck_bt_double" function
+  double decimal_to_fp_nocheck_bt_double(cstrref const& buf);
+public threaded extern "serialization::decimal_to_fp_bt_float" function float
+  decimal_to_fp_bt_float(cstrref const& buf, error_handler{parse_error}& eh);
+public threaded extern "serialization::decimal_to_fp_bt_double" function double
+  decimal_to_fp_bt_double(cstrref const& buf, error_handler{parse_error}& eh);
+
+extern "fdef" inline
+namespace serialization {
+using namespace pxcrt;
+static void fp_to_decimal_internal(const char *fmt, bt_double x, bt_string& s)
+{
+  const size_t osz = s.size();
+  char *buf = reinterpret_cast<char *>(s.reserve_back<1>(10));
+  int len = snprintf(buf, 10, fmt, x);
+  if (len < 0) {
+    return;
+  }
+  if (len < 10) {
+    s.rawarr_set_valid_len(osz + len);
+    return;
+  }
+  const int alen = len;
+  buf = reinterpret_cast<char *>(s.reserve_back<1>(alen + 1));
+  len = snprintf(buf, alen + 1, fmt, x);
+  if (len < 0) {
+    return;
+  }
+  s.rawarr_set_valid_len(osz + len);
+}
+void fp_to_decimal_bt_double(bt_double x, bt_string& buf)
+{ fp_to_decimal_internal("%.16f", x, buf); }
+void fp_to_decimal_bt_float(bt_float x, bt_string& buf)
+{ fp_to_decimal_internal("%.7f", x, buf); }
+bt_double decimal_to_fp_nocheck_bt_double(cstrref const& buf)
+{
+  PXCRT_ALLOCA_NTSTRING(buf_nt, buf);
+  double r = 0;
+  sscanf(buf_nt.get(), "%lf", &r);
+  return r;
+}
+bt_float decimal_to_fp_nocheck_bt_float(cstrref const& buf)
+{
+  PXCRT_ALLOCA_NTSTRING(buf_nt, buf);
+  float r = 0;
+  sscanf(buf_nt.get(), "%f", &r);
+  return r;
+}
+typedef error$n::error_handler$s$tp1$serialization$$parse_error$n$$parse_error$t
+  eh_t;
+bt_double decimal_to_fp_bt_double(cstrref const& buf, eh_t& eh)
+{
+  PXCRT_ALLOCA_NTSTRING(buf_nt, buf);
+  double r = 0;
+  int n = 0;
+  sscanf(buf_nt.get(), "%lf%n", &r, &n);
+  return r;
+}
+bt_float decimal_to_fp_bt_float(cstrref const& buf, eh_t& eh)
+{
+  PXCRT_ALLOCA_NTSTRING(buf_nt, buf);
+  double r = 0;
+  int n = 0;
+  sscanf(buf_nt.get(), "%lf%n", &r, &n);
+  return r;
+}
+}; // namespace serialization
+

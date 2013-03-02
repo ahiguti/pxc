@@ -1,0 +1,24 @@
+namespace numeric::union_tag;
+public import numeric::integral -;
+public import meta::builtin m;
+
+public threaded function {t} uint union_tag(t const& x)
+{
+  if (m::eq{m::family{t}, "union"}) {
+    return union_tag_impl(x);
+  } else {
+    return m::error{m::concat{"not implemented for type '", t, "'"}};
+  }
+}
+
+private threaded extern "pxcrt::union_tag_impl"
+  function {t} uint union_tag_impl(t const& x);
+
+extern "fdecl" inline
+namespace pxcrt {
+template <typename T> unsigned int union_tag_impl(const T& x)
+{
+  return x.$e;
+}
+};
+

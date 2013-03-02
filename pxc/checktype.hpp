@@ -22,6 +22,7 @@ void fn_check_closure(expr_i *e);
 void add_tparam_upvalues_funcdef_direct(expr_funcdef *efd);
 void add_tparam_upvalues_funcdef_tparam(expr_funcdef *efd);
 void check_tpup_thisptr_constness(expr_funccall *fc);
+bool is_default_constructible(const term& typ);
 
 };
 

@@ -1,9 +1,10 @@
 namespace io::standard;
-public import type::builtin -;
+public import numeric::integral -;
+public import container::string -;
 public import io -;
 public import io::file -;
 public import io::errno -;
-public import serialize::string;
+public import serialization::string;
 public import meta::builtin m;
 
 public extern "pxcio::stdin" fileptr stdin;
@@ -25,22 +26,22 @@ iostd_init();
 public threaded function {t} void file_print(file& f, t const& x)
 {
   ioeh_t eh = ioeh_t(error::policy_throw);
-  if (m::eq{t, type::builtin::string}) {
+  if (m::eq{t, string}) {
     f.write_all(x, eh);
   } else {
-    f.write_all(serialize::string::to_string(x), eh);
+    f.write_all(serialization::string::to_string(x), eh);
   }
 }
 
 public threaded function {t} void file_println(file& f, t const& x)
 {
   ioeh_t eh = ioeh_t(error::policy_throw);
-  if (m::eq{t, type::builtin::string}) {
+  if (m::eq{t, string}) {
     string s = x;
     s.append("\n");
     f.write_all(s, eh);
   } else {
-    string s = serialize::string::to_string(x);
+    string s = serialization::string::to_string(x);
     s.append("\n");
     f.write_all(s, eh);
   }

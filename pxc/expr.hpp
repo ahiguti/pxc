@@ -48,7 +48,7 @@ expr_i *expr_te_new(const char *fn, int line, expr_i *nssym, expr_i *arg);
 expr_i *expr_te_anonfunc_new(const char *fn, int line, expr_i *fdef);
 expr_i *expr_telist_new(const char *fn, int line, expr_i *head, expr_i *rest);
 expr_i *expr_inline_c_new(const char *fn, int lin, const char *posstr,
-  const char *cstr, bool declonly);
+  const char *cstr, bool declonly, expr_i *val);
 expr_i *expr_ns_new(const char *fn, int line, expr_i *nssym, bool import,
   bool pub, const char *nsalias, expr_i *inject_nssym);
 expr_i *expr_int_literal_new(const char *fn, int line, const char *str,

@@ -1,5 +1,5 @@
 incdir=../pxclib:../pxclib_test:.
-cflags=-g -O -p
+cflags=-g -O -p -Werror -Wall -Wno-unused -Wno-attribute
 # -fmudflapth
 # ldflags=-lmudflapth
 # cflags=-DPXCRT_DBG_RC

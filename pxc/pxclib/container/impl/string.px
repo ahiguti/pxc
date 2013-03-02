@@ -1,0 +1,433 @@
+namespace container::impl::string;
+private import numeric::integral;
+private import container::impl::invguard;
+
+extern "type" inline
+#include <stdexcept>
+#include <string.h>
+#include <stdint.h>
+#include <limits>
+#include <boost/type_traits/is_pod.hpp>
+#include <boost/static_assert.hpp>
+namespace pxcrt {
+template <typename T> bt_size_t array_find(const T *start, bt_size_t len,
+  bt_size_t offset, T const& value)
+{
+  if (offset >= len) {
+    return len;
+  }
+  if (sizeof(T) == 1) {
+    const T *const p = static_cast<const T *>(
+      ::memchr(start + offset, value, len - offset));
+    return p != 0 ? (p - start) : len;
+  } else {
+    bt_size_t i = offset;
+    for (; i < len && start[i] != value; ++i) { }
+    return i;
+  }
+}
+template <typename T> typename T::mapped_type get_elem_value(const T& c,
+  bt_size_t offset)
+{
+  return c[offset];
+}
+template <typename T> typename T::mapped_type get_elem_value_nochek(const T& c,
+  bt_size_t offset)
+{
+  return c.rawarr()[offset];
+}
+template <typename T>
+struct bt_slice {
+  typedef T mapped_type;
+  bt_slice() : v(0), len(0) { }
+  bt_slice(T *ptr, bt_size_t o) : v(ptr), len(o) { }
+  template <typename Tc> bt_slice(Tc& c) : v(c.rawarr()), len(c.size()) { }
+  template <typename Tc> bt_slice(Tc& c, bt_size_t o1, bt_size_t o2) {
+    if (o2 > c.size()) { o2 = c.size(); }
+    if (o1 > o2) { o1 = o2; }
+    v = c.rawarr() + o1;
+    len = o2 - o1;
+  }
+  bt_bool empty() const { return len == 0; }
+  bt_size_t size() const { return len; }
+  bt_size_t find(bt_size_t offset, T const& value) const {
+    return array_find(v, len, offset, value);
+  }
+  void next() {
+    if (len == 0) { pxcrt::throw_invalid_index(); }
+    ++v;
+    --len;
+  }
+  T& operator [](bt_size_t idx) const {
+    if (idx >= len) { pxcrt::throw_invalid_index(); }
+    return v[idx];
+  }
+  T& operator *() const {
+    if (len == 0) { pxcrt::throw_invalid_index(); }
+    return *v;
+  }
+  T value_at(bt_size_t idx) const {
+    if (idx >= len) { pxcrt::throw_invalid_index(); }
+    return v[idx];
+  }
+  T deref_value() const {
+    if (len == 0) { pxcrt::throw_invalid_index(); }
+    return *v;
+  }
+  T *rawarr() const { return v; }
+private:
+  bt_slice& operator =(const bt_slice&); /* not allowed */
+private:
+  T *v;
+  bt_size_t len;
+};
+template <typename T>
+struct bt_cslice {
+  typedef T mapped_type;
+  bt_cslice() : v(0), len(0) { }
+  bt_cslice(const T *ptr, bt_size_t o) : v(ptr), len(o) { }
+  template <typename Tc> bt_cslice(const Tc& c)
+    : v(c.rawarr()), len(c.size()) { }
+  template <typename Tc> bt_cslice(const Tc& c, bt_size_t o1, bt_size_t o2) {
+    if (o2 > c.size()) { o2 = c.size(); }
+    if (o1 > o2) { o1 = o2; }
+    v = c.rawarr() + o1;
+    len = o2 - o1;
+  }
+  bt_bool empty() const { return len == 0; }
+  bt_size_t size() const { return len; }
+  bt_size_t find(bt_size_t offset, T const& value) const {
+    return array_find(v, len, offset, value);
+  }
+  void next() {
+    if (len == 0) { pxcrt::throw_invalid_index(); }
+    ++v;
+    --len;
+  }
+  const T& operator [](bt_size_t idx) const {
+    if (idx >= len) { pxcrt::throw_invalid_index(); }
+    return v[idx];
+  }
+  const T& operator *() const {
+    if (len == 0) { pxcrt::throw_invalid_index(); }
+    return *v;
+  }
+  T value_at(bt_size_t idx) const {
+    if (idx >= len) { pxcrt::throw_invalid_index(); }
+    return v[idx];
+  }
+  T deref_value() const {
+    if (len == 0) { pxcrt::throw_invalid_index(); }
+    return *v;
+  }
+  const T *rawarr() const { return v; }
+private:
+  bt_cslice& operator =(const bt_cslice&); /* not allowed */
+private:
+  const T *v;
+  bt_size_t len;
+};
+struct bt_strlit {
+  typedef bt_uchar mapped_type;
+  typedef bt_uchar char_type;
+  typedef size_t size_type;
+  typedef const char_type *iterator;
+  typedef const char_type *const_iterator;
+  typedef bt_cslice<char_type> range_type;
+  typedef bt_cslice<char_type> crange_type;
+  template <size_type n> bt_strlit(const char (& ptr)[n])
+    : ptr(reinterpret_cast<const char_type *>(ptr)), len(n - 1) { }
+  const_iterator begin() const { return ptr; }
+  const_iterator end() const { return ptr + len; }
+  const char_type *data() const { return ptr; }
+  const char_type *rawarr() const { return ptr; }
+  bool empty() const { return len == 0; }
+  size_type size() const { return len; }
+  const char_type& operator [](size_type idx) {
+    if (idx >= len) { pxcrt::throw_invalid_index(); }
+    return ptr[idx];
+  }
+  const char_type& operator [](size_type idx) const {
+    if (idx >= len) { pxcrt::throw_invalid_index(); }
+    return ptr[idx];
+  }
+  bool eq(const bt_strlit& x) const {
+    return len == x.len && memcmp(ptr, x.ptr, len) == 0;
+  }
+  bool lt(const bt_strlit& x) const {
+    const size_t clen = std::min(len, x.len);
+    const int c = memcmp(ptr, x.ptr, clen);
+    if (c < 0) {
+      return true;
+    } else if (c == 0 && len < clen) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+  bt_size_t find(bt_size_t offset, char_type const& value) const {
+    return array_find(ptr, len, offset, value);
+  }
+private:
+  const char_type *const ptr; /* must be a literal */
+  const size_t len;
+};
+inline bool operator ==(const bt_strlit& x, const bt_strlit& y)
+  { return x.eq(y); }
+inline bool operator !=(const bt_strlit& x, const bt_strlit& y)
+  { return !x.eq(y); }
+inline bool operator <(const bt_strlit& x, const bt_strlit& y)
+  { return x.lt(y); }
+inline bool operator >(const bt_strlit& x, const bt_strlit& y)
+  { return y.lt(x); }
+inline bool operator <=(const bt_strlit& x, const bt_strlit& y)
+  { return !y.lt(x); }
+inline bool operator >=(const bt_strlit& x, const bt_strlit& y)
+  { return !x.lt(y); }
+template <typename T>
+struct podvector {
+  BOOST_STATIC_ASSERT((boost::is_pod<T>::value));
+  template <typename Tc> friend struct pxcrt::guard_ref;
+  template <typename Tc> friend struct pxcrt::guard_val;
+  typedef T mapped_type;
+  typedef bt_size_t size_type;
+  typedef T *iterator;
+  typedef const T *const_iterator;
+  typedef bt_slice<T> range_type;
+  typedef bt_cslice<T> crange_type;
+  podvector() : start(0), valid_len(0), alloc_len(0), invalidate_guard_count(0)
+    { }
+  ~podvector() { free(start); }
+  podvector(const podvector& x) : invalidate_guard_count(0)
+    { init(x.start, x.valid_len); }
+  podvector(const T *ptr, size_type len) : invalidate_guard_count(0)
+    { init(ptr, len); }
+  podvector(const bt_slice<T>& x) : invalidate_guard_count(0)
+    { init(x.rawarr(), x.size()); }
+  podvector(const bt_cslice<T>& x) : invalidate_guard_count(0)
+    { init(x.rawarr(), x.size()); }
+  podvector(const bt_strlit& x) : invalidate_guard_count(0)
+    { init(x.rawarr(), x.size()); } /* T must be bt_uchar */
+  podvector& operator =(const podvector& x) {
+    check_resize();
+    if (&x != this) {
+      valid_len = 0;
+      append_internal(x.start, x.valid_len);
+    }
+    return *this;
+  }
+  bool empty() const { return valid_len == 0; }
+  size_type size() const { return valid_len; }
+  T& operator [](size_type idx) {
+    if (idx >= valid_len) { pxcrt::throw_invalid_index(); }
+    return start[idx];
+  }
+  const T& operator [](size_type idx) const {
+    if (idx >= valid_len) { pxcrt::throw_invalid_index(); }
+    return start[idx];
+  }
+  void resize(size_type sz, T const& x) {
+    check_resize();
+    if (sz > valid_len) {
+      reserve_internal(sz);
+      for (; valid_len < sz; ++valid_len) {
+	start[valid_len] = x;
+      }
+    }
+    valid_len = sz;
+  }
+  void erase(size_type first, size_type last) {
+    check_resize();
+    if (last >= valid_len) {
+      last = valid_len;
+    }
+    if (first >= last) {
+      return;
+    }
+    if (last < valid_len) {
+      ::memmove(start + first, start + last, (valid_len - last) * sizeof(T));
+    }
+    valid_len -= (last - first);
+  }
+  void clear() {
+    check_resize();
+    clear_internal();
+  }
+  void push_back(T const& x) {
+    check_resize();
+    push_back_internal(x);
+  }
+  T pop_back() {
+    check_resize();
+    if (empty()) { pxcrt::throw_invalid_index(); }
+    const T r = start[valid_len - 1];
+    --valid_len;
+    return r;
+  }
+  void reserve(size_type sz) {
+    check_resize();
+    reserve_internal(sz);
+  }
+  bool eq(const podvector& x) const {
+    return valid_len == x.valid_len &&
+      memcmp(start, x.start, valid_len * sizeof(T)) == 0;
+  }
+  bool lt(const podvector& x) const {
+    const size_t clen = std::min(valid_len, x.valid_len);
+    const int c = memcmp(start, x.start, clen * sizeof(T));
+    if (c < 0) {
+      return true;
+    } else if (c == 0 && valid_len < clen) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+  bt_size_t find(bt_size_t offset, T const& value) const {
+    return array_find(start, valid_len, offset, value);
+  }
+  void append(const crange_type& x) {
+    check_resize();
+    append_internal(x.rawarr(), x.size());
+  }
+  void insert(size_type pos, const crange_type& x) {
+    check_resize();
+    insert_internal(pos, x.rawarr(), x.size());
+  }
+public: /* public, but does not check safety */
+  iterator begin() { return start; }
+  const_iterator begin() const { return start; }
+  iterator end() { return start + valid_len; }
+  const_iterator end() const { return start + valid_len; }
+  T *rawarr() { return start; }
+  const T *rawarr() const { return start; }
+  template <size_t mul> T *reserve_back(size_type len) {
+    check_resize();
+    if (len >= ::std::numeric_limits<size_type>::max() / mul) {
+      pxcrt::throw_bad_alloc(); /* overflow */
+    }
+    const size_type osz = valid_len;
+    const size_type nsz = osz + len * mul;
+    if (nsz < osz) {
+      pxcrt::throw_bad_alloc(); /* overflow */
+    }
+    reserve_internal(nsz);
+    return start + osz;
+  }
+  void rawarr_set_valid_len(size_type len) {
+    valid_len = len;
+  }
+  void append(const T *ptr, size_type len) {
+    check_resize();
+    append_internal(ptr, len);
+  }
+  void check_resize() {
+    if (invalidate_guard_count != 0) { pxcrt::throw_would_invalidate(); }
+  }
+private:
+  void clear_internal() {
+    valid_len = 0;
+  }
+  void init(const T *ptr, size_type len) {
+    start = static_cast<T *>(malloc(len * sizeof(T)));
+    if (start == 0) {
+      pxcrt::throw_bad_alloc();
+    }
+    alloc_len = len;
+    memcpy(start, ptr, len * sizeof(T));
+    valid_len = len;
+  }
+  void push_back_internal(T const& x) {
+    reserve_internal(valid_len + 1);
+    start[valid_len] = x;
+    ++valid_len;
+  }
+  void append_internal(const T *ptr, size_type len) {
+    /* TODO: use insert_internal? */
+    const size_type olen = valid_len;
+    const size_type nlen = olen + len;
+    if (nlen < valid_len) {
+      pxcrt::throw_bad_alloc();
+    }
+    reserve_internal(nlen);
+    memcpy(start + olen, ptr, len * sizeof(T));
+    valid_len = nlen;
+  }
+  void insert_internal(size_type pos, const T *ptr, size_type len) {
+    if (len == 0) {
+      return;
+    }
+    if (pos >= valid_len) {
+      pos = valid_len;
+    }
+    const size_type nlen = valid_len + len;
+    if (nlen < valid_len) {
+      pxcrt::throw_bad_alloc();
+    }
+    reserve_internal(nlen);
+    if (pos < valid_len) {
+      memmove(start + pos + len, start + pos, (valid_len - pos) * sizeof(T));
+    }
+    memcpy(start + pos, ptr, len * sizeof(T));
+    valid_len = nlen;
+  }
+  void reserve_internal(size_type len) {
+    if (len <= alloc_len) {
+      return;
+    }
+    size_type nl = alloc_len;
+    do {
+      const size_type nl_n = (nl >= 1) ? (nl * 2) : 1;
+      const size_type max_len = ((size_t)-1) / sizeof(T);
+      if (nl_n <= nl || nl_n > max_len) {
+	pxcrt::throw_bad_alloc(); /* overflow */
+      }
+      nl = nl_n;
+    } while (nl < len);
+    T *p = 0;
+    p = static_cast<T *>(realloc(start, nl * sizeof(T)));
+    if (p == 0) {
+      pxcrt::throw_bad_alloc();
+    }
+    start = p;
+    alloc_len = nl;
+  }
+  void inc_invalidate_guard() const {
+    ++invalidate_guard_count;
+  }
+  void dec_invalidate_guard() const {
+    --invalidate_guard_count;
+  }
+private:
+  T *start;
+  size_type valid_len;
+  size_type alloc_len;
+  mutable size_type invalidate_guard_count;
+};
+template <typename T> inline
+bool operator ==(const podvector<T>& x, const podvector<T>& y)
+  { return x.eq(y); }
+template <typename T> inline
+bool operator !=(const podvector<T>& x, const podvector<T>& y)
+  { return !x.eq(y); }
+template <typename T> inline
+bool operator <(const podvector<T>& x, const podvector<T>& y)
+  { return x.lt(y); }
+template <typename T> inline
+bool operator >(const podvector<T>& x, const podvector<T>& y)
+  { return y.lt(x); }
+template <typename T> inline
+bool operator <=(const podvector<T>& x, const podvector<T>& y)
+  { return !y.lt(x); }
+template <typename T> inline
+bool operator >=(const podvector<T>& x, const podvector<T>& y)
+  { return !x.lt(y); }
+typedef podvector<bt_uchar> bt_string;
+typedef bt_slice<bt_uchar> strref;
+typedef bt_cslice<bt_uchar> cstrref;
+}; // namespace pxcrt
+
+extern "fdef" inline
+namespace pxcrt {
+}; // namespace pxcrt
+

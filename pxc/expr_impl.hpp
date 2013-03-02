@@ -325,12 +325,12 @@ public:
 
 struct expr_inline_c : public expr_i {
   expr_inline_c(const char *fn, int line, const char *posstr,
-    const char *cstr, bool declonly);
+    const char *cstr, bool declonly, expr_i *val);
   expr_i *clone() const { return new expr_inline_c(*this); }
   expr_e get_esort() const { return expr_e_inline_c; }
-  int get_num_children() const { return 0; }
-  expr_i *get_child(int i) { return 0; }
-  void set_child(int i, expr_i *e) { }
+  int get_num_children() const { return 1; }
+  expr_i *get_child(int i) { return i == 0 ? value : 0; }
+  void set_child(int i, expr_i *e) { if (i ==0) { value = e; } }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return false; }
   bool is_expression() const { return false; }
@@ -341,6 +341,7 @@ public:
   const char *const cstr;
   int pos;
   bool declonly;
+  expr_i *value; /* for pragma */
 };
 
 struct expr_ns : public expr_i {

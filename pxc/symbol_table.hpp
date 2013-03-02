@@ -83,6 +83,12 @@ struct localvar_info {
   localvar_info() : edef(0), attr(attribute_unknown), stmt(0) { }
 };
 
+struct ext_pragma {
+  bool disable_bounds_checking : 1;
+  bool disable_guard : 1;
+  ext_pragma() : disable_bounds_checking(false), disable_guard(false) { }
+};
+
 struct symbol_table {
   symbol_table(expr_block *block_backref);
   expr_block *block_backref;
@@ -94,6 +100,7 @@ struct symbol_table {
   bool require_thisup : 1; /* uses a member field as upvalue */
   expr_e block_esort; /* funcdef, struct, etc. */
   int tempvar_id_count;
+  ext_pragma pragma;
 public:
   symbol_table *get_lexical_parent() const;
   void define_name(const std::string& shortname, const std::string& ns,

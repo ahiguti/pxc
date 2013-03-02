@@ -1,0 +1,137 @@
+namespace container::impl::array_common;
+public import numeric::integral;
+public import container::impl::invguard;
+public import container::impl::string;
+
+extern "type" inline
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <boost/type_traits/is_pod.hpp>
+namespace array {
+/* alternative to uninitialized_* functions. optimized for pod types. */
+template <typename T> struct is_trivially_copyable {
+  enum { value = boost::is_pod<T>::value };
+};
+template <typename T> inline void
+deallocate_uninitialized(T *ptr)
+{
+  free(ptr);
+}
+template <typename T> inline T *
+allocate_uninitialized(size_t len)
+{
+  void *p = malloc(len * sizeof(T));
+  if (p == 0) {
+    throw std::bad_alloc();
+  }
+  return static_cast<T *>(p);
+}
+template <typename T> inline void
+deinitialize_n(T *ptr, size_t len)
+{
+  if (!is_trivially_copyable<T>::value) {
+    for (T *p = ptr + len; p != ptr; --p) {
+      (p - 1)->T::~T();
+    }
+  }
+}
+template <typename T> inline void
+deinitialize_1(T *ptr)
+{
+  if (!is_trivially_copyable<T>::value) {
+    ptr->T::~T();
+  }
+}
+template <typename T> inline void
+initialize_fill_n(T *ptr, size_t len, const T& x)
+{
+  if (is_trivially_copyable<T>::value) {
+    for (size_t i = 0; i < len; ++i) {
+      ptr[i] = x;
+    }
+  } else {
+    size_t i = 0;
+    try {
+      for (; i < len; ++i) {
+	new (ptr + i) T(x);
+      }
+    } catch (...) {
+      deinitialize_n(ptr, i);
+      throw;
+    }
+  }
+}
+template <typename T> inline void
+initialize_copy_n(T *ptr, size_t len, const T *src)
+{
+  if (is_trivially_copyable<T>::value) {
+    memcpy(ptr, src, len * sizeof(T));
+  } else {
+    size_t i = 0;
+    try {
+      for (; i < len; ++i) {
+	new (ptr + i) T(src[i]);
+      }
+    } catch (...) {
+      deinitialize_n(ptr, i);
+      throw;
+    }
+  }
+}
+template <typename T> inline void
+initialize_1(T *ptr, const T& x)
+{
+  if (is_trivially_copyable<T>::value) {
+    *ptr = x;
+  } else {
+    new (ptr) T(x);
+  }
+}
+template <typename T> inline T *
+reserve_n(T *ptr, size_t vlen, size_t nlen)
+{
+  if (is_trivially_copyable<T>::value) {
+    void *p = realloc(ptr, nlen * sizeof(T));
+    if (p == 0) {
+      throw std::bad_alloc();
+    }
+    return static_cast<T *>(p);
+  } else {
+    T *p = allocate_uninitialized<T>(nlen);
+    try {
+      initialize_copy_n(p, vlen, ptr);
+    } catch (...) {
+      free(p);
+      throw;
+    }
+    deinitialize_n(ptr, vlen);
+    free(ptr);
+    return p;
+  }
+}
+template <typename T> inline void
+copy_n(T *ptr, size_t len, const T *src)
+{
+  if (is_trivially_copyable<T>::value) {
+    memcpy(ptr, src, len * sizeof(T));
+  } else {
+    for (size_t i = 0; i < len; ++i) {
+      ptr[i] = src[i];
+    }
+  }
+}
+template <typename T> inline void
+copy_backward_n(T *ptr, size_t len, const T *src)
+{
+  if (is_trivially_copyable<T>::value) {
+    memmove(ptr, src, len * sizeof(T));
+  } else {
+    for (size_t i = len; i > 0; --i) {
+      ptr[i - 1] = src[i - 1];
+    }
+  }
+}
+}; // namespace array
+

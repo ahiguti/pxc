@@ -13,6 +13,7 @@
 
 #include "expr_misc.hpp"
 #include "sort_dep.hpp"
+#include "checktype.hpp"
 #include "term.hpp"
 #include "emit.hpp"
 #include "eval.hpp"
@@ -408,12 +409,14 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
   bl->emit_memberfunc_decl(em, false);
   if (est->has_userdefined_constr()) {
     /* user defined constructor */
+    #if 0
     /* default constructor */
     em.set_file_line(est);
     em.indent('b');
     em.puts("inline ");
     em.puts(name_c);
     em.puts("();\n");
+    #endif
     /* with args */
     if (elist_length(est->block->argdecls) != 0) {
       em.set_file_line(est);
@@ -437,11 +440,13 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
     est->get_fields(flds);
     flds_type::const_iterator i;
     /* default constructor */
-    em.set_file_line(est);
-    em.indent('b');
-    em.puts("inline ");
-    em.puts(name_c);
-    em.puts("();\n");
+    if (is_default_constructible(est->get_texpr())) {
+      em.set_file_line(est);
+      em.indent('b');
+      em.puts("inline ");
+      em.puts(name_c);
+      em.puts("();\n");
+    }
     /* struct constructor */
     if (!flds.empty()) {
       em.set_file_line(est);
@@ -488,11 +493,13 @@ static void emit_struct_constr_one(emit_context& em, expr_struct *est,
     em.puts("::");
     em.puts(name_c);
     em.puts("(");
-    if (!emit_default_constr) {
+    // if (!emit_default_constr) {
       emit_argdecls(em, est->block->argdecls, true);
-    }
+    // }
     em.puts(")");
+#if 0
     if (!emit_default_constr) {
+#endif
       /* fast init userdef constructor */
       emit_struct_constr_initializer(em, est, flds, false, true);
       em.puts(" {\n");
@@ -508,6 +515,7 @@ static void emit_struct_constr_one(emit_context& em, expr_struct *est,
       em.add_indent(-1);
       em.indent('b');
       em.puts("}\n");
+#if 0
     } else {
       abort(); // not reached
       emit_struct_constr_initializer(em, est, flds, true, false);
@@ -538,6 +546,7 @@ static void emit_struct_constr_one(emit_context& em, expr_struct *est,
       em.indent('b');
       em.puts("}\n");
     }
+#endif
   } else {
     /* no pxc usedefined */
     if (flds.empty() && !emit_default_constr) {
@@ -863,6 +872,23 @@ static void emit_variant_def_one(emit_context& em, const expr_variant *ev,
     }
   }
   if (has_non_unit) {
+    /* field may_alias typedefs */
+    for (i = flds.begin(); i != flds.end(); ++i) {
+      if (is_unit_type((*i)->get_texpr())) {
+	continue;
+      }
+      /* we need to add 'may_alias' attribute to let gcc know about the
+       * potential aliasing. note that -Wno-attribute should be set in
+       * order to avoid 'ignoreing attribute to foo after definition'
+       * warnings. */
+      em.set_file_line(*i);
+      em.indent('b');
+      em.puts("typedef ");
+      emit_term(em, (*i)->get_texpr());
+      em.puts(" __attribute__((may_alias)) ");
+      (*i)->emit_symbol(em);
+      em.puts("$ut;\n");
+    }
     /* union part */
     em.set_file_line(ev);
     em.indent('b');
@@ -874,11 +900,21 @@ static void emit_variant_def_one(emit_context& em, const expr_variant *ev,
       }
       em.set_file_line(*i);
       em.indent('b');
+      #if 0
+      // C++11 unrestricted union
+      emit_term(em, (*i)->get_texpr());
+      em.puts(" ");
+      (*i)->emit_symbol(em);
+      em.puts(";\n");
+      #endif
+      #if 1
       em.puts("char ");
       (*i)->emit_symbol(em);
       em.puts("$u[sizeof(");
-      emit_term(em, (*i)->get_texpr());
-      em.puts(")];\n");
+      (*i)->emit_symbol(em);
+      // emit_term(em, (*i)->get_texpr());
+      em.puts("$ut)];\n");
+      #endif
     }
     em.add_indent(-1);
     em.set_file_line(ev);
@@ -892,24 +928,28 @@ static void emit_variant_def_one(emit_context& em, const expr_variant *ev,
       /* const */
       em.set_file_line(*i);
       em.indent('b');
-      emit_term(em, (*i)->get_texpr());
-      em.puts(" const *");
+      // emit_term(em, (*i)->get_texpr());
+      (*i)->emit_symbol(em);
+      em.puts("$ut const *");
       (*i)->emit_symbol(em);
       em.puts("$p() const { return (");
-      emit_term(em, (*i)->get_texpr());
-      em.puts(" const *)(void *)");
+      // emit_term(em, (*i)->get_texpr());
+      (*i)->emit_symbol(em);
+      em.puts("$ut const *)");
       em.puts("$u.");
       (*i)->emit_symbol(em);
       em.puts("$u; }\n");
       /* non-const */
       em.set_file_line(*i);
       em.indent('b');
-      emit_term(em, (*i)->get_texpr());
-      em.puts(" *");
+      // emit_term(em, (*i)->get_texpr());
+      (*i)->emit_symbol(em);
+      em.puts("$ut *");
       (*i)->emit_symbol(em);
       em.puts("$p() { return (");
-      emit_term(em, (*i)->get_texpr());
-      em.puts(" *)(void *)");
+      // emit_term(em, (*i)->get_texpr());
+      (*i)->emit_symbol(em);
+      em.puts("$ut *)");
       em.puts("$u.");
       (*i)->emit_symbol(em);
       em.puts("$u; }\n");
@@ -1095,7 +1135,7 @@ static void emit_function_decl_one(emit_context& em, expr_funcdef *efd,
     /* a simple function, a member function, or a virtual function */
     const std::string name_c = get_type_cname_wo_ns(efd);
     DBG_DECL(fprintf(stderr, "decl_one nam_c=%s\n", name_c.c_str()));
-    if (efd->block->tinfo.template_descent) {
+    if (efd->block->tinfo.template_descent && !efd->is_virtual_function()) {
       em.puts("inline ");
     }
     expr_struct *const esd = efd->is_member_function();
@@ -1174,7 +1214,9 @@ static void emit_function_def(emit_context& em)
     }
     expr_struct *const est = dynamic_cast<expr_struct *>(*i);
     if (est != 0 && est->cname == 0) {
-      emit_struct_constr_one(em, est, true);
+      if (is_default_constructible(est->get_texpr())) {
+	emit_struct_constr_one(em, est, true);
+      }
       emit_struct_constr_one(em, est, false);
     }
     expr_variant *const ev = dynamic_cast<expr_variant *>(*i);
@@ -1589,6 +1631,7 @@ static bool need_to_emit_expr_returning_value(expr_i *e)
 
 void emit_array_elem_or_range_expr(emit_context& em, expr_op *eop)
 {
+  const term& ct = eop->arg0->get_texpr();
   if (eop->arg1 != 0 && eop->arg1->get_esort() == expr_e_op &&
     ptr_down_cast<expr_op>(eop->arg1)->op == TOK_SLICE) {
     expr_op *const rangeop = ptr_down_cast<expr_op>(eop->arg1);
@@ -1602,16 +1645,37 @@ void emit_array_elem_or_range_expr(emit_context& em, expr_op *eop)
     fn_emit_value(em, rangeop->arg1);
     em.puts(")");
   } else if (need_to_emit_expr_returning_value(eop)) {
-    em.puts("(");
-    fn_emit_value(em, eop->arg0);
-    em.puts(".value_at(");
-    fn_emit_value(em, eop->arg1);
-    em.puts("))");
+    if (is_array_family(ct) || is_cm_slice_family(ct)) {
+      if (eop->symtbl_lexical->pragma.disable_bounds_checking) {
+	em.puts("pxcrt::get_elem_value_nocheck(");
+      } else {
+	em.puts("pxcrt::get_elem_value(");
+      }
+      fn_emit_value(em, eop->arg0);
+      em.puts(",");
+      fn_emit_value(em, eop->arg1);
+      em.puts(")");
+    } else { /* map and map_range */
+      em.puts("(");
+      fn_emit_value(em, eop->arg0);
+      em.puts(".value_at(");
+      fn_emit_value(em, eop->arg1);
+      em.puts("))");
+    }
   } else {
-    fn_emit_value(em, eop->arg0);
-    em.puts("[");
-    fn_emit_value(em, eop->arg1);
-    em.puts("]");
+    if ((is_array_family(ct) || is_cm_slice_family(ct)) &&
+      eop->symtbl_lexical->pragma.disable_bounds_checking) {
+      em.puts("(");
+      fn_emit_value(em, eop->arg0);
+      em.puts(".rawarr()[");
+      fn_emit_value(em, eop->arg1);
+      em.puts("])");
+    } else {
+      fn_emit_value(em, eop->arg0);
+      em.puts("[");
+      fn_emit_value(em, eop->arg1);
+      em.puts("]");
+    }
   }
 }
 

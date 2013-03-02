@@ -1,0 +1,65 @@
+namespace container::impl::stdmap_range;
+public import container::impl::stdmap;
+
+extern "type" inline
+namespace tree_map {
+template <typename Tk, typename Tm, typename Tf>
+struct tree_map_range {
+  typedef tree_map_compare<Tk, Tm, Tf> tree_map_type;
+  typedef typename tree_map_type::iterator iterator;
+  typedef typename tree_map_type::const_iterator const_iterator;
+  tree_map_range() : start(), finish() { }
+  explicit tree_map_range(tree_map_type& c)
+    : start(c.begin()), finish(c.end()) { }
+  tree_map_range(const iterator& i0, const iterator& i1)
+    : start(i0), finish(i1) { }
+  template <typename Tc> tree_map_range(Tc& c, const Tk& k0,
+    const Tk& k1) : start(c.find(k0)), finish(c.find(k1)) {
+  }
+  bool empty() const { return start == finish; }
+  Tm& operator *() const {
+    if (start == finish) { pxcrt::throw_invalid_index(); }
+    return start->second;
+  }
+  void next() {
+    if (start == finish) { pxcrt::throw_invalid_index(); }
+    ++start;
+  }
+  iterator begin() const { return start; }
+  iterator end() const { return finish; }
+private:
+  iterator start;
+  iterator finish;
+};
+template <typename Tk, typename Tm, typename Tf>
+struct tree_map_crange {
+  typedef tree_map_compare<Tk, Tm, Tf> tree_map_type;
+  typedef typename tree_map_type::const_iterator iterator;
+  typedef typename tree_map_type::const_iterator const_iterator;
+  tree_map_crange() : start(), finish() { }
+  explicit tree_map_crange(const tree_map_type& c)
+    : start(c.begin()), finish(c.end()) { }
+  tree_map_crange(const iterator& i0, const iterator& i1)
+    : start(i0), finish(i1) { }
+  tree_map_crange(const tree_map_range<Tk, Tm, Tf>& r)
+    : start(r.begin()), finish(r.end()) { }
+  template <typename Tc> tree_map_crange(const Tc& c, const Tk& k0,
+    const Tk& k1) : start(c.find(k0)), finish(c.find(k1)) {
+  }
+  bool empty() const { return start == finish; }
+  const Tm& operator *() const {
+    if (start == finish) { pxcrt::throw_invalid_index(); }
+    return start->second;
+  }
+  void next() {
+    if (start == finish) { pxcrt::throw_invalid_index(); }
+    ++start;
+  }
+  const_iterator begin() const { return start; }
+  const_iterator end() const { return finish; }
+private:
+  const_iterator start;
+  const_iterator finish;
+};
+}; // namespace tree_map
+

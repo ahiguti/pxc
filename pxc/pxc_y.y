@@ -269,6 +269,10 @@ function_body_stmt_list
 function_body_stmt
 	: body_stmt
 	| defs_stmt
+	| TOK_EXTERN TOK_STRLIT type_arg ';'
+	  { $$ = expr_inline_c_new(cur_fname, @1.first_line,
+		arena_dequote_strdup($2), "", false, $3); }
+	  /* for pragma */
 	;
 body_stmt
 	: expression_stmt
@@ -429,11 +433,11 @@ ext_stmt
 	| opt_attribute /* dummy */ TOK_EXTERN TOK_STRLIT TOK_INLINE
 	  { $$ = expr_inline_c_new(cur_fname, @2.first_line,
 		arena_dequote_strdup($3), arena_decode_inline_strdup($4),
-		cur_mode != compile_mode_main); }
+		cur_mode != compile_mode_main, 0); }
 	| opt_attribute /* dummy */ TOK_EXTERN TOK_STRLIT TOK_STRLIT ';'
 	  { $$ = expr_inline_c_new(cur_fname, @2.first_line,
 		arena_dequote_strdup($3), arena_dequote_strdup($4),
-		cur_mode != compile_mode_main); }
+		cur_mode != compile_mode_main, 0); }
 	;
 opt_nsalias
 	:

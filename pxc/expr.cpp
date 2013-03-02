@@ -26,8 +26,8 @@ expr_i *expr_te_new(const char *fn, int line, expr_i *nssym, expr_i *tlarg)
 expr_i *expr_telist_new(const char *fn, int line, expr_i *head, expr_i *rest)
 { return new expr_telist(fn, line, head, rest); }
 expr_i *expr_inline_c_new(const char *fn, int line, const char *posstr,
-  const char *cstr, bool declonly)
-{ return new expr_inline_c(fn, line, posstr, cstr, declonly); }
+  const char *cstr, bool declonly, expr_i *val)
+{ return new expr_inline_c(fn, line, posstr, cstr, declonly, val); }
 expr_i *expr_ns_new(const char *fn, int line, expr_i *nssym, bool import,
   bool pub, const char *nsalias, expr_i *inject_nssym)
 { return new expr_ns(fn, line, nssym, import, pub, nsalias, inject_nssym); }
@@ -129,7 +129,7 @@ expr_i *expr_te_local_chain_new(expr_i *te1, expr_i *te2)
     expr_nssym_new(te1->fname, te1->line,
       expr_nssym_new(te1->fname, te1->line,
 	expr_nssym_new(te1->fname, te1->line, 0,
-	  "type"), "builtin"), "@local"),
+	  "meta"), "builtin"), "@local"),
       expr_telist_new(te1->fname, te1->line,
 	te1,
 	expr_telist_new(te2->fname, te2->line,
@@ -319,7 +319,7 @@ static void define_builtins()
   /* set namespace */
   {
     int block_id_ns = 0;
-    fn_set_namespace(stmts, "type::builtin", "type::builtin", block_id_ns);
+    fn_set_namespace(stmts, "meta::builtin", "meta::builtin", block_id_ns);
   }
   topvals.push_front(stmts);
   /* stubs for builtin metafunctions */
@@ -330,7 +330,7 @@ static void define_builtins()
       arena_strdup("@local"),
       arena_strdup("@local"),
       arena_strdup("@local"),
-      expr_block_new("BUILDIN", 0, 0, 0, 0, 0, 0),
+      expr_block_new("BUILTIN", 0, 0, 0, 0, 0, 0),
       attribute_e(attribute_public |
 	attribute_threaded | attribute_multithr | attribute_valuetype |
 	attribute_tsvaluetype));
@@ -348,7 +348,7 @@ static void define_builtins()
   /* set namespace */
   {
     int block_id_ns = 0;
-    fn_set_namespace(stmts, "type::builtin", "type::builtin", block_id_ns);
+    fn_set_namespace(stmts, "meta::builtin", "meta::builtin", block_id_ns);
   }
   topvals.push_front(stmts);
 }
@@ -365,13 +365,14 @@ static bool define_builtin_string(expr_stmts *stmts_runtime)
       continue;
     }
     const std::string s(def->sym);
-    if (s == "bt_string") {
+    const std::string ns(def->get_unique_namespace());
+    if (s == "string" && ns == "container::string") {
       builtins.type_string = def->get_value_texpr();
-    } else if (s == "bt_strlit") {
+    } else if (s == "strlit" && ns == "container::string") {
       builtins.type_strlit = def->get_value_texpr();
-    } else if (s == "bt_slice") {
+    } else if (s == "slice" && ns == "container::array") {
       builtins.type_slice = def->get_value_texpr();
-    } else if (s == "bt_cslice") {
+    } else if (s == "cslice" && ns == "container::array") {
       builtins.type_cslice = def->get_value_texpr();
     }
   }
@@ -379,10 +380,6 @@ static bool define_builtin_string(expr_stmts *stmts_runtime)
     builtins.type_strlit == builtins.type_void ||
     builtins.type_slice == builtins.type_void ||
     builtins.type_cslice == builtins.type_void) {
-#if 0
-    arena_error_throw(stmts_runtime,
-      "missing builtin type (import type::builtin?)");
-#endif
     return false;
   }
   return true;

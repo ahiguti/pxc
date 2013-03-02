@@ -2,14 +2,56 @@
 
 namespace decimal;
 import common -;
-import numeric::positional;
+import serialization::positional -;
+import numeric::cast -;
+import container::algorithm algo;
+
+public threaded function {t} size_t my_integral_to_decimal(t v,
+  strref const& buf)
+{
+  size_t const buflen = buf.size();
+  if (v == 0) {
+    extern "disable_bounds_checking" 1;
+    if (buflen <= 0) { return 0; }
+    buf[0] = '0';
+    return 1;
+  }
+  size_t pos0 = 0;
+  size_t pos = 0;
+  if (v < 0) {
+    extern "disable_bounds_checking" 1;
+    if (buflen <= 0) { return 0; }
+    buf[0] = '-';
+    pos0 = 1;
+    pos = 1;
+    while (v != 0) {
+      extern "disable_bounds_checking" 1;
+      if (pos >= buflen) { return 0; }
+      t rem = v % 10;
+      v /= 10;
+      buf[pos] = - static_cast{uchar, t}(rem) + '0';
+     ++pos;
+    }
+  } else {
+    while (v != 0) {
+      extern "disable_bounds_checking" 1;
+      if (pos >= buflen) { return 0; }
+      t rem = v % 10;
+      v /= 10;
+      buf[pos] = static_cast{uchar, t}(rem) + '0';
+      ++pos;
+    }
+  }
+  algo::reverse(buf[pos0 .. pos]);
+  return pos;
+}
 
 function void test1()
 {
   string s;
   for (int i : -10000000 .. 10000000) {
     s.resize(0, 0);
-    numeric::positional::integral_to_decimal(i, s);
+    integral_to_decimal(i, s);
   }
 }
 
@@ -17,7 +59,7 @@ function void test2()
 {
   for (int i : -10000000 .. 10000000) {
     string s;
-    numeric::positional::integral_to_decimal(i, s);
+    integral_to_decimal(i, s);
   }
 }
 
@@ -30,10 +72,21 @@ function void test3()
 
 function void test4()
 {
+  string s = "00000000000000000000";
+  for (int i : -10000000 .. 10000000) {
+    size_t const len = my_integral_to_decimal(i, s);
+//    string s1 = s[0 .. len];
+//    println(len);
+//    println(s1);
+  }
+}
+
+function void test5()
+{
   string s;
   for (int i : -10000000 .. 10000000) {
     s.resize(0, 0);
-    numeric::positional::integral_to_decimal(i, s);
+    integral_to_decimal(i, s);
     string s2 = to_string(i);
     if (s != s2) {
       println("mismatch");
@@ -52,6 +105,8 @@ if (arg == "1") {
   test3();
 } else if (arg == "4") {
   test4();
+} else if (arg == "5") {
+  test5();
 } else {
   println("unknown test");
 }
