@@ -7,9 +7,9 @@ public import io::errno -;
 public import serialization::string;
 public import meta::builtin m;
 
-public extern "pxcio::stdin" fileptr stdin;
-public extern "pxcio::stdout" fileptr stdout;
-public extern "pxcio::stderr" fileptr stderr;
+public extern "pxcio::pxc_stdin" fileptr stdin;
+public extern "pxcio::pxc_stdout" fileptr stdout;
+public extern "pxcio::pxc_stderr" fileptr stderr;
 public threaded extern "pxcio::get_stdin"
   function fileptr get_stdin(ioptr const& iop);
 public threaded extern "pxcio::get_stdout"
@@ -59,27 +59,27 @@ namespace pxcio {
 extern "fdecl" inline
 namespace pxcio {
 typedef pxcrt::rcptr< pxcrt::trcval<file_impl> > fileptr;
-extern fileptr stdin;
-extern fileptr stdout;
-extern fileptr stderr;
+extern fileptr pxc_stdin;
+extern fileptr pxc_stdout;
+extern fileptr pxc_stderr;
 };
 
 extern "fdef" inline
 namespace pxcio {
-fileptr stdin;
-fileptr stdout;
-fileptr stderr;
-fileptr get_stdin(ioptr const& iop) { return stdin; }
-fileptr get_stdout(ioptr const& iop) { return stdout; }
-fileptr get_stderr(ioptr const& iop) { return stderr; }
+fileptr pxc_stdin;
+fileptr pxc_stdout;
+fileptr pxc_stderr;
+fileptr get_stdin(ioptr const& iop) { return pxc_stdin; }
+fileptr get_stdout(ioptr const& iop) { return pxc_stdout; }
+fileptr get_stderr(ioptr const& iop) { return pxc_stderr; }
 void iostd_init()
 {
   static int init_flag = 0;
   if (!init_flag) {
     init_flag = 1;
-    stdin = fileptr(new pxcrt::trcval<file_impl>(io, 0));
-    stdout = fileptr(new pxcrt::trcval<file_impl>(io, 1));
-    stderr = fileptr(new pxcrt::trcval<file_impl>(io, 2));
+    pxc_stdin = fileptr(new pxcrt::trcval<file_impl>(io, 0));
+    pxc_stdout = fileptr(new pxcrt::trcval<file_impl>(io, 1));
+    pxc_stderr = fileptr(new pxcrt::trcval<file_impl>(io, 2));
   }
 }
 };

@@ -6,6 +6,7 @@ extern "type" inline
 #include <stdexcept>
 #include <string.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <limits>
 #include <boost/type_traits/is_pod.hpp>
 #include <boost/static_assert.hpp>
@@ -50,6 +51,8 @@ struct bt_slice {
   }
   bt_bool empty() const { return len == 0; }
   bt_size_t size() const { return len; }
+  T get(bt_size_t i) const { return (i < len) ? v[i] : T(); } // TODO: defcon
+  void set(bt_size_t i, T value) const { if (i < len) v[i] = value; }
   bt_size_t find(bt_size_t offset, T const& value) const {
     return array_find(v, len, offset, value);
   }
@@ -96,6 +99,7 @@ struct bt_cslice {
   }
   bt_bool empty() const { return len == 0; }
   bt_size_t size() const { return len; }
+  T get(bt_size_t i) const { return (i < len) ? v[i] : T(); } // TODO: defcon
   bt_size_t find(bt_size_t offset, T const& value) const {
     return array_find(v, len, offset, value);
   }
@@ -263,6 +267,12 @@ struct podvector {
     const T r = start[valid_len - 1];
     --valid_len;
     return r;
+  }
+  T get(size_type i) {
+    return (i < valid_len) ? start[i] : T();
+  }
+  void set(size_type i, T v) {
+    if (i < valid_len) start[i] = v;
   }
   void reserve(size_type sz) {
     check_resize();
