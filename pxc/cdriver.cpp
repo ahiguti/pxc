@@ -470,10 +470,14 @@ static void load_source_content(const parser_options& po, module_info& mi)
   }
   module_info mi_copy = mi;
   load_source_and_calc_checksum(po, mi_copy);
+  if (po.verbose > 1) {
+    fprintf(stderr, "%s: loaded context\n", mi.get_name().c_str());
+  }
   if (mi.source_checksum != mi_copy.source_checksum) {
     source_modified = true;
     if (po.verbose > 1) {
-      fprintf(stderr, "%s: loaded contet: source modified: info:%s disk:%s\n",
+      fprintf(stderr, "%s: loaded contet: source modified: "
+	"info-chksum:%s disk-chksum:%s\n",
 	mi.get_name().c_str(),
 	checksum_string(mi.source_checksum).c_str(),
 	checksum_string(mi_copy.source_checksum).c_str());
@@ -491,13 +495,17 @@ static void load_source_info(const parser_options& po, module_info& mi)
 {
   if (mi.source_checksum.timestamp == 0) {
     if (!load_infofile(po, mi)) {
-      DBG_MOD(fprintf(stderr, "load_source_info (%s,%s): no info file\n",
-	mi.ns.c_str(), mi.aux_filename.c_str()));
+      if (po.verbose > 1) {
+	fprintf(stderr, "load_source_info (%s,%s): no info file\n",
+	  mi.get_name().c_str(), mi.aux_filename.c_str());
+      }
       load_source_content(po, mi);
       mi.source_modified = true;
     } else {
-      DBG_MOD(fprintf(stderr, "load_source_info (%s,%s): found info file\n",
-	mi.ns.c_str(), mi.aux_filename.c_str()));
+      if (po.verbose > 1) {
+	fprintf(stderr, "load_source_info (%s,%s): found info file\n",
+	  mi.get_name().c_str(), mi.aux_filename.c_str());
+      }
     }
   }
 }
@@ -844,7 +852,9 @@ static void compile_module_to_cc(const parser_options& po,
   strlist link_srcs_ord;
   get_indirect_imports(ami, modname, true, true, link_srcs, link_srcs_ord);
   module_info& mi_main = get_modinfo_by_name(ami, modname);
-  DBG(fprintf(stderr, "COMPILE %s\n", fn.c_str()));
+  if (po.verbose > 1) {
+    fprintf(stderr, "COMPILE %s\n", modname.c_str());
+  }
   mi_main.cc_srcs = cc_srcs;
   mi_main.cc_srcs_ord = cc_srcs_ord;
   mi_main.link_srcs = link_srcs;
@@ -865,8 +875,12 @@ static bool compile_modules_rec(const parser_options& po,
       const import_info& ii = *i;
       modified |= compile_modules_rec(po, ami, ii.ns, generate_main_none);
     }
+    #if 0
     if (md.need_rebuild || modified) {
       /* TODO: don't rebuild cc if !md.need_rebuild */
+      compile_module_to_cc(po, ami, modname, gmain);
+    #endif
+    if (md.need_rebuild) {
       compile_module_to_cc(po, ami, modname, gmain);
       modified = true;	    
       md.need_rebuild = false;
@@ -947,6 +961,11 @@ static bool check_need_rebuild(const parser_options& po,
 	load_source_content(po, mi_dep);
 	loaded = true;
       }
+    }
+  } else {
+    if (po.verbose > 0) {
+      fprintf(stderr, "%s: need not to rebuild\n",
+	mi.get_name().c_str());
     }
   }
   return loaded;
