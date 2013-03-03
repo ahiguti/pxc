@@ -31,6 +31,16 @@ bool term_has_unevaluated_expr(const term& t);
 expr_i *term_get_instance(term& t);
 const expr_i *term_get_instance_const(const term& t);
 
+/* internal */
+typedef std::map<std::string, term> env_type;
+term eval_term_internal(const term& t, bool targs_evaluated, env_type& env,
+  size_t depth, expr_i *pos);;
+bool has_unbound_tparam(const term& t);
+bool has_unbound_tparam(const term_list& tl);
+term eval_if_unevaluated(const term& t, bool evaluated_flag, env_type& env,
+  size_t depth, expr_i *pos);
+
+
 };
 
 #endif

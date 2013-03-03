@@ -11,30 +11,34 @@ public threaded function {t} size_t my_integral_to_decimal(t v,
 {
   size_t const buflen = buf.size();
   if (v == 0) {
+    extern "disable_bounds_checking" 1;
     if (buflen <= 0) { return 0; }
-    buf.set(0, '0');
+    buf[0] = '0';
     return 1;
   }
   size_t pos0 = 0;
   size_t pos = 0;
   if (v < 0) {
+    extern "disable_bounds_checking" 1;
     if (buflen <= 0) { return 0; }
-    buf.set(0, '-');
+    buf[0] = '-';
     pos0 = 1;
     pos = 1;
     while (v != 0) {
+      extern "disable_bounds_checking" 1;
       if (pos >= buflen) { return 0; }
       t rem = v % 10;
       v /= 10;
-      buf.set(pos, - static_cast{uchar, t}(rem) + '0');
+      buf[pos] = - static_cast{uchar, t}(rem) + '0';
      ++pos;
     }
   } else {
     while (v != 0) {
+      extern "disable_bounds_checking" 1;
       if (pos >= buflen) { return 0; }
       t rem = v % 10;
       v /= 10;
-      buf.set(pos, static_cast{uchar, t}(rem) + '0');
+      buf[pos] = static_cast{uchar, t}(rem) + '0';
       ++pos;
     }
   }

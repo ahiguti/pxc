@@ -862,14 +862,18 @@ static void emit_variant_def_one(emit_context& em, const expr_variant *ev,
   }
   em.puts("} $e;\n");
   bool has_non_unit = false;
+  #if 0
   bool has_non_smallpod = false;
+  #endif
   for (i = flds.begin(); i != flds.end(); ++i) {
     if (!is_unit_type((*i)->get_texpr())) {
       has_non_unit = true;
     }
+    #if 0
     if (is_possibly_nonpod((*i)->get_texpr())) {
       has_non_smallpod = true;
     }
+    #endif
   }
   if (has_non_unit) {
     /* field may_alias typedefs */
