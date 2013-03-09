@@ -134,9 +134,9 @@ bool is_passby_mutable(passby_e passby);
 bool is_range_op(const expr_i *e);
 bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg);
 term get_pointer_deref_texpr(expr_op *eop, const term& t);
-term get_array_range_texpr(expr_op *eop, expr_i *ec, term& ect);
-term get_array_elem_texpr(expr_op *eop, term& t0);
-term get_array_index_texpr(expr_op *eop, term& t0);
+term get_array_range_texpr(expr_op *eop, expr_i *ec, const term& ect);
+term get_array_elem_texpr(expr_op *eop, const term& t0);
+term get_array_index_texpr(expr_op *eop, const term& t0);
 bool is_vardef_constructor(expr_i *e);
 bool is_vardef_or_vardefset(expr_i *e);
 bool is_noexec_expr(expr_i *e);
@@ -146,6 +146,7 @@ bool is_compiled(const expr_block *bl);
 void fn_append_coptions(expr_i *e, coptions& copt_append);
 void fn_set_namespace(expr_i *e, const std::string& uniqns,
   const std::string& injectns, int& block_id_ns);
+void fn_set_generated_code(expr_i *e);
 void fn_set_tree_and_define_static(expr_i *e, expr_i *p, symbol_table *symtbl,
   expr_stmts *stmt, bool is_template);
 void fn_update_tree(expr_i *e, expr_i *p, symbol_table *symtbl,

@@ -68,8 +68,8 @@ term apply_tvmap(const term& t, const tvmap_type& tvmap)
   return term(t.get_expr(), args);
 }
 
-static expr_i *deep_clone_template(expr_i *e, expr_block *instantiate_root,
-  const std::string& k, bool set_instantiated_flag)
+static expr_i *deep_clone_rec(expr_i *e, expr_block *instantiate_root,
+  bool set_instantiated_flag)
 {
   if (e == 0) {
     return 0;
@@ -91,13 +91,6 @@ static expr_i *deep_clone_template(expr_i *e, expr_block *instantiate_root,
     }
     ebcpy->tinfo.instantiated = set_instantiated_flag;
   }
-  #if 0
-  symbol_common *const sdef = ecpy->get_sdef();
-  if (sdef != 0) {
-    sdef->set_symdef(0); // FIXME: remove
-    sdef->set_evaluated(term()); // FIXME: remove
-  }
-  #endif
   if (ecpy->get_esort() == expr_e_tparams) {
     DBG_CLONE3(fprintf(stderr, "deep_clone src tparams %p paramdef %p\n", e,
       ptr_down_cast<expr_tparams>(e)->param_def.get_expr()));
@@ -107,11 +100,16 @@ static expr_i *deep_clone_template(expr_i *e, expr_block *instantiate_root,
   const int num = ecpy->get_num_children();
   for (int i = 0; i < num; ++i) {
     expr_i *const c = ecpy->get_child(i);
-    expr_i *const ccpy = deep_clone_template(c, instantiate_root, k,
+    expr_i *const ccpy = deep_clone_rec(c, instantiate_root,
       set_instantiated_flag);
     ecpy->set_child(i, ccpy);
   }
   return ecpy;
+}
+
+expr_i *deep_clone_template(expr_i *e, expr_block *instantiate_root)
+{
+  return deep_clone_rec(e, instantiate_root, true);
 }
 
 static expr_i *instantiate_template_internal(expr_i *tmpl_root,
@@ -132,7 +130,7 @@ static expr_i *instantiate_template_internal(expr_i *tmpl_root,
     return r;
   }
   /* deep clone */
-  expr_i *const rcpy = deep_clone_template(tmpl_root, tmpl_block, k, true);
+  expr_i *const rcpy = deep_clone_template(tmpl_root, tmpl_block);
   DBG_TMPL(fprintf(stderr, "instantiate %s %p => %p\n", k.c_str(), tmpl_root,
     rcpy));
   /* set tmpl <-> inst mapping */
@@ -165,9 +163,6 @@ static expr_i *instantiate_template_internal(expr_i *tmpl_root,
   rcpy->set_attribute(nattr);
   DBG_ATTR(fprintf(stderr, "%s: attr %d\n", term_tostr_human(rt).c_str(),
     nattr));
-  if (rcpy->get_esort() == expr_e_struct) {
-    check_inherit_threading(ptr_down_cast<expr_struct>(rcpy));
-  }
   /* compile instantiated part */
   assert(rcpy->symtbl_lexical != 0);
   const int num = rcpy->get_num_children();
@@ -185,14 +180,12 @@ static expr_i *instantiate_template_internal(expr_i *tmpl_root,
     term_tostr(rt, term_tostr_sort_cname).c_str(),
     term_tostr(rcpy->get_value_texpr(), term_tostr_sort_cname).c_str()
     ));
-  #if 0
-  // moved to expr.cpp
-  /* add tparam upvalues */
-  if (rcpy->get_esort() == expr_e_funcdef) {
-    add_tparam_upvalues_funcdef_direct(ptr_down_cast<expr_funcdef>(rcpy));
-    add_tparam_upvalues_funcdef_tparam(ptr_down_cast<expr_funcdef>(rcpy));
+  /* check the rcpy itself */
+  if (rcpy->get_esort() == expr_e_struct) {
+    /* tree must be updated before check_inherit_threading because inherit
+     * base may use tparam. */
+    check_inherit_threading(ptr_down_cast<expr_struct>(rcpy));
   }
-  #endif
   return rcpy;
 }
 

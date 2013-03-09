@@ -281,7 +281,7 @@ static void emit_interface_def_one(emit_context& em, expr_interface *ei,
 
 static void emit_argdecls(emit_context& em, expr_argdecls *ads, bool is_first)
 {
-  for (expr_argdecls *a = ads; a; a = a->rest) {
+  for (expr_argdecls *a = ads; a; a = a->get_rest()) {
     if (is_first) {
       is_first = false;
     } else {
@@ -418,20 +418,20 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
     em.puts("();\n");
     #endif
     /* with args */
-    if (elist_length(est->block->argdecls) != 0) {
+    if (argdecls_length(est->block->get_argdecls()) != 0) {
       em.set_file_line(est);
       em.indent('b');
       em.puts("inline ");
       em.puts(name_c);
       em.puts("(");
-      emit_argdecls(em, est->block->argdecls, true);
+      emit_argdecls(em, est->block->get_argdecls(), true);
       em.puts(");\n");
     }
     /* initializer aux func */
     em.set_file_line(est);
     em.indent('b');
     em.puts("inline void init$z(");
-    emit_argdecls(em, est->block->argdecls, true);
+    emit_argdecls(em, est->block->get_argdecls(), true);
     em.puts(");\n");
   } else {
     /* get field list */
@@ -483,7 +483,7 @@ static void emit_struct_constr_one(emit_context& em, expr_struct *est,
     if (emit_default_constr) {
       return;
     }
-    if (elist_length(est->block->argdecls) == 0) {
+    if (argdecls_length(est->block->get_argdecls()) == 0) {
       return;
     }
     em.set_ns(est->uniqns);
@@ -494,7 +494,7 @@ static void emit_struct_constr_one(emit_context& em, expr_struct *est,
     em.puts(name_c);
     em.puts("(");
     // if (!emit_default_constr) {
-      emit_argdecls(em, est->block->argdecls, true);
+      emit_argdecls(em, est->block->get_argdecls(), true);
     // }
     em.puts(")");
 #if 0
@@ -1115,7 +1115,7 @@ static void emit_function_argdecls(emit_context& em, expr_funcdef *efd)
     }
     emit_thisptr_argdecl(em, efd->tpup_thisptr, !efd->tpup_thisptr_nonconst);
   }
-  emit_argdecls(em, efd->block->argdecls, is_first);
+  emit_argdecls(em, efd->block->get_argdecls(), is_first);
 }
 
 static void emit_function_decl_one(emit_context& em, expr_funcdef *efd,
@@ -1683,6 +1683,32 @@ void emit_array_elem_or_range_expr(emit_context& em, expr_op *eop)
   }
 }
 
+bool emit_op_memcmp(emit_context& em, expr_op *eop)
+{
+  const term& te = eop->arg0->get_texpr();
+  if (is_array_family(te) || is_cm_slice_family(te)) {
+    const char *fn = "";
+    switch (eop->op) {
+    case TOK_EQ: fn = "eq_memcmp"; break;
+    case TOK_NE: fn = "ne_memcmp"; break;
+    case '>':    fn = "gt_memcmp"; break;
+    case '<':    fn = "lt_memcmp"; break;
+    case TOK_GE: fn = "ge_memcmp"; break;
+    case TOK_LE: fn = "le_memcmp"; break;
+    default:
+      abort();
+    }
+    em.puts(fn);
+    em.puts("(");
+    fn_emit_value(em, eop->arg0);
+    em.puts(",");
+    fn_emit_value(em, eop->arg1);
+    em.puts(")");
+    return true;
+  }
+  return false;
+}
+
 void expr_op::emit_value(emit_context& em)
 {
   switch (op) {
@@ -1813,6 +1839,16 @@ void expr_op::emit_value(emit_context& em)
 	  return;
 	}
       }
+    }
+    break;
+  case TOK_EQ:
+  case TOK_NE:
+  case '<':
+  case '>':
+  case TOK_GE:
+  case TOK_LE:
+    if (emit_op_memcmp(em, this)) {
+      return;
     }
     break;
   default:
@@ -2060,7 +2096,7 @@ void expr_if::emit_value(emit_context& em)
       const term& tcon = econ->get_texpr();
       assert(type_allow_feach(tcon));
       const std::string cetstr = get_term_cname(tcon);
-      expr_argdecls *const mapped = block1->argdecls;
+      expr_argdecls *const mapped = block1->get_argdecls();
       assert(mapped != 0);
       has_own_block = true;
       em.puts("{\n");
@@ -2176,7 +2212,7 @@ void expr_for::emit_value(emit_context& em)
 
 void expr_forrange::emit_value(emit_context& em)
 {
-  expr_argdecls *arg = block->argdecls;
+  expr_argdecls *arg = block->get_argdecls();
   em.puts("for (");
   emit_arg_cdecl(em, arg, false, false); /* always mutable */
   em.puts(" = ");
@@ -2212,9 +2248,9 @@ void expr_feach::emit_value(emit_context& em)
   em.puts("{\n");
   em.add_indent(1);
   em.indent('f');
-  assert(block->argdecls != 0);
-  assert(block->argdecls->rest != 0);
-  expr_argdecls *const mapped = block->argdecls->rest;
+  assert(block->get_argdecls() != 0);
+  assert(block->get_argdecls()->rest != 0);
+  expr_argdecls *const mapped = block->get_argdecls()->get_rest();
   const std::string cetstr = get_term_cname(ce->get_texpr());
   emit_split_expr(em, ce, true);
   const bool mapped_mutable_flag = arg_passby_mutable(mapped);
@@ -2245,8 +2281,8 @@ void expr_feach::emit_value(emit_context& em)
     if (!mapped_mutable_flag) {
       em.puts("const ");
     }
-    expr_argdecls *const adk = block->argdecls;
-    expr_argdecls *const adm = adk->rest;
+    expr_argdecls *const adk = block->get_argdecls();
+    expr_argdecls *const adm = adk->get_rest();
     em.puts(get_term_cname(adm->get_texpr()));
     em.puts(" *const ar$fe = ag$fe.rawarr();\n");
     em.indent('f');
@@ -2282,10 +2318,10 @@ void expr_feach::emit_value(emit_context& em)
     em.puts("i$fe = ag$fe.begin(); i$fe != ag$fe.end(); ++i$fe) {\n");
     em.add_indent(1);
     em.indent('f');
-    expr_argdecls *const adk = block->argdecls;
+    expr_argdecls *const adk = block->get_argdecls();
     emit_arg_cdecl(em, adk, true, false);
     em.puts(" = i$fe->first;\n");
-    expr_argdecls *const adm = adk->rest;
+    expr_argdecls *const adm = adk->get_rest();
     em.indent('f');
     emit_arg_cdecl(em, adm, true, false);
     em.puts(" = i$fe->second;\n");

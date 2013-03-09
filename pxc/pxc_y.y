@@ -104,6 +104,7 @@ static compile_mode cur_mode;
 %token<void_val> TOK_AUTO
 %token<void_val> TOK_ENUM
 %token<void_val> TOK_BITMASK
+%token<void_val> TOK_EXPAND
 
 %type<expr_val> toplevel_stmt_list
 %type<expr_val> toplevel_stmt
@@ -218,6 +219,11 @@ opt_tparams_expr
 struct_body_stmt_list
 	:
 	  { $$ = 0; }
+	| TOK_EXPAND '(' TOK_SYMBOL ':' type_expr ')' struct_body_stmt
+		struct_body_stmt_list
+	  { $$ = expr_stmts_new(cur_fname, @1.first_line,
+		expr_expand_new(cur_fname, @1.first_line, $3, $5, $7,
+			expand_e_statement, 0), $8); }
 	| struct_body_stmt struct_body_stmt_list
 	  { $$ = expr_stmts_new(cur_fname, @1.first_line, $1, $2); }
 	;
@@ -645,11 +651,12 @@ vardef_expr
 argdecl_list
 	:
 	  { $$ = 0; }
+	| TOK_EXPAND '(' TOK_SYMBOL ':' type_expr ')' argdecl_list_trail
+	  { $$ = expr_expand_new(cur_fname, @1.first_line, $3, $5, 0,
+		expand_e_argdecls, $7); }
 	| type_expr TOK_SYMBOL argdecl_list_trail
 	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $2, $1,
 		passby_e_mutable_value, $3); }
-	/*
-	*/
 	/*
 	| type_expr TOK_AUTO TOK_SYMBOL argdecl_list_trail
 	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $3, $1,
@@ -725,21 +732,24 @@ opt_nssym_expr
 	  { $$ = $1; }
 	*/
 	;
-expression
-	: assign_expr
-	  { $$ = $1; }
-	| expression ',' assign_expr
-	  { $$ = expr_op_new(cur_fname, @1.first_line, ',', $1, $3); }
-	;
 opt_expression
 	:
 	  { $$ = 0; }
 	| expression
 	  { $$ = $1; }
 	;
+expression
+	: assign_expr
+	  { $$ = $1; }
+	| expression ',' assign_expr
+	  { $$ = expr_op_new(cur_fname, @1.first_line, ',', $1, $3); }
+	;
 assign_expr
 	: cond_expr
 	  { $$ = $1; }
+	| TOK_EXPAND '(' TOK_SYMBOL ':' type_expr ';' assign_expr ')'
+	  { $$ = expr_expand_new(cur_fname, @1.first_line, $3, $5, $7,
+		expand_e_comma, 0); }
 	| unary_expr '=' assign_expr
 	  { $$ = expr_op_new(cur_fname, @1.first_line, '=', $1, $3); }
 	| unary_expr TOK_ADD_ASSIGN assign_expr

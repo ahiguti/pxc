@@ -39,8 +39,11 @@ template <typename T1, typename T2> T1 *ptr_down_cast(T2 *v)
 }
 
 template <typename T> size_t elist_length(T *p)
+{ return p == 0 ? 0 : elist_length(p->rest) + 1; }
+
+template <typename T> size_t argdecls_length(T *p)
 {
-  return p == 0 ? 0 : elist_length(p->rest) + 1;
+  return p == 0 ? 0 : argdecls_length(p->get_rest()) + 1;
 }
 
 struct expr_te;
@@ -104,7 +107,7 @@ enum conversion_e {
   conversion_e_to_string,
   conversion_e_from_string,
   #endif
-  conversion_e_subtype_obj, /* foo to ifoo etc. */
+  conversion_e_subtype_obj, /* foo to ifoo etc. converted value has lvalue. */
   conversion_e_subtype_ptr, /* ptr{foo} to cptr{foo} etc. */
   conversion_e_container_range, /* vector{foo} to range{foo} etc. */
   conversion_e_boxing,
@@ -656,7 +659,7 @@ struct expr_argdecls : public expr_i {
   }
   void set_child(int i, expr_i *e) {
     if (i == 0) { type_uneval = ptr_down_cast<expr_te>(e); }
-    else if (i == 1) { rest = ptr_down_cast<expr_argdecls>(e); }
+    else if (i == 1) { rest = e; }
   }
   void set_unique_namespace_one(const std::string& u, const std::string& i)
     { uniqns = u; injectns = i; }
@@ -664,6 +667,7 @@ struct expr_argdecls : public expr_i {
   void define_vars_one(expr_stmts *stmt);
   term& resolve_texpr();
   void check_type(symbol_table *lookup);
+  expr_argdecls *get_rest() const;
   bool has_expr_to_emit() const { return true; }
   bool is_expression() const { return false; }
   std::string emit_symbol_str() const;
@@ -671,12 +675,12 @@ struct expr_argdecls : public expr_i {
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
-  const char *const sym;
+  const char *sym;
   std::string uniqns;
   std::string injectns;
   expr_te *type_uneval;
   passby_e passby;
-  expr_argdecls *rest;
+  expr_i *rest;
 };
 
 struct expr_block : public expr_i {
@@ -696,11 +700,12 @@ struct expr_block : public expr_i {
   void set_child(int i, expr_i *e) {
     if (i == 0) { tinfo.tparams = ptr_down_cast<expr_tparams>(e); }
     else if (i == 1) { inherit = ptr_down_cast<expr_telist>(e); }
-    else if (i == 2) { argdecls = ptr_down_cast<expr_argdecls>(e); }
+    else if (i == 2) { argdecls = e; }
     else if (i == 3) { rettype_uneval = ptr_down_cast<expr_te>(e); }
     else if (i == 4) { stmts = ptr_down_cast<expr_stmts>(e); }
   }
   void check_type(symbol_table *lookup);
+  expr_argdecls *get_argdecls() const;
   bool has_expr_to_emit() const { return true; }
   bool is_expression() const { return false; }
   void emit_value(emit_context& em);
@@ -712,7 +717,7 @@ public:
   template_info tinfo;
   unsigned int block_id_ns;
   expr_telist *inherit;
-  expr_argdecls *argdecls;
+  expr_i *argdecls; /* expr_argdecls or expr_expand */
   expr_te *rettype_uneval;
   expr_stmts *stmts;
   symbol_table symtbl;
@@ -987,6 +992,40 @@ public:
   expr_stmts *stmts;
 };
 
+struct expr_expand : public expr_i {
+  expr_expand(const char *fn, int line, const char *itersym,
+    expr_i *valueste, expr_i *baseexpr, expand_e ex, expr_i *rest);
+  expr_i *clone() const;
+  expr_e get_esort() const { return expr_e_expand; }
+  int get_num_children() const { return 2; }
+  expr_i *get_child(int i) {
+    if (i == 0) { return valueste; }
+    if (i == 1) { return rest; }
+    return 0;
+  }
+  void set_child(int i, expr_i *e) {
+    if (i == 0) { valueste = ptr_down_cast<expr_te>(e); }
+    if (i == 1) { rest = e; }
+  }
+  void set_unique_namespace_one(const std::string& u, const std::string& i)
+    { uniqns = u; injectns = i; }
+  std::string get_unique_namespace() const { return uniqns; }
+  void check_type(symbol_table *lookup);
+  bool has_expr_to_emit() const { return false; }
+  bool is_expression() const { return false; }
+  void emit_value(emit_context& em) { }
+  std::string dump(int indent) const;
+public:
+  std::string uniqns;
+  std::string injectns;
+  const char *itersym;
+  expr_te *valueste;
+  expr_i *baseexpr;
+  expand_e ex;
+  expr_i *rest;
+  expr_i *generated_expr;
+};
+
 struct expr_funcdef : public expr_i {
   expr_funcdef(const char *fn, int line, const char *sym, const char *cname,
     bool is_const, expr_i *block, bool ext_decl, bool no_def,
@@ -1033,7 +1072,7 @@ struct expr_funcdef : public expr_i {
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
-  const char *const sym;
+  const char *sym;
   std::string uniqns;
   std::string injectns;
   const char *const cname;

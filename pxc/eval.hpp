@@ -39,6 +39,7 @@ bool has_unbound_tparam(const term& t);
 bool has_unbound_tparam(const term_list& tl);
 term eval_if_unevaluated(const term& t, bool evaluated_flag, env_type& env,
   size_t depth, expr_i *pos);
+expr_i *deep_clone_template(expr_i *e, expr_block *instantiate_root);
 
 
 };

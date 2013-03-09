@@ -42,6 +42,12 @@ enum passby_e {
   passby_e_const_reference,
 };
 
+enum expand_e {
+  expand_e_comma,
+  expand_e_argdecls,
+  expand_e_statement,
+};
+
 struct expr_i;
 
 expr_i *expr_te_new(const char *fn, int line, expr_i *nssym, expr_i *arg);
@@ -85,6 +91,8 @@ expr_i *expr_fldfe_new(const char *fn, int line, const char *namesym,
 expr_i *expr_foldfe_new(const char *fn, int line, const char *itersym,
   expr_i *valueste, const char *embedsym, expr_i *embedexpr,
   const char *foldop, expr_i *stmts);
+expr_i *expr_expand_new(const char *fn, int line, const char *itersym,
+  expr_i *valueste, expr_i *baseexpr, expand_e ex, expr_i *rest);
 expr_i *expr_special_new(const char *fn, int line, int tok, expr_i *arg);
 expr_i *expr_funcdef_new(const char *fn, int line, const char *sym,
   const char *cname, bool is_const, expr_i *block, bool ext_decl,

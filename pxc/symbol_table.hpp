@@ -44,6 +44,7 @@ enum expr_e {
   expr_e_feach,
   expr_e_fldfe,
   expr_e_foldfe,
+  expr_e_expand,
   expr_e_special,
   expr_e_argdecls,
   expr_e_funcdef,

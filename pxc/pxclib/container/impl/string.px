@@ -127,11 +127,11 @@ struct bt_cslice {
   const T *rawarr() const { return v; }
 private:
   bt_cslice& operator =(const bt_cslice&); /* not allowed */
-private:
+protected:
   const T *v;
   bt_size_t len;
 };
-struct bt_strlit {
+struct bt_strlit : public bt_cslice<bt_uchar> {
   typedef bt_uchar mapped_type;
   typedef bt_uchar char_type;
   typedef size_t size_type;
@@ -140,54 +140,11 @@ struct bt_strlit {
   typedef bt_cslice<char_type> range_type;
   typedef bt_cslice<char_type> crange_type;
   template <size_type n> bt_strlit(const char (& ptr)[n])
-    : ptr(reinterpret_cast<const char_type *>(ptr)), len(n - 1) { }
-  const_iterator begin() const { return ptr; }
-  const_iterator end() const { return ptr + len; }
-  const char_type *data() const { return ptr; }
-  const char_type *rawarr() const { return ptr; }
-  bool empty() const { return len == 0; }
-  size_type size() const { return len; }
-  const char_type& operator [](size_type idx) {
-    if (idx >= len) { pxcrt::throw_invalid_index(); }
-    return ptr[idx];
-  }
-  const char_type& operator [](size_type idx) const {
-    if (idx >= len) { pxcrt::throw_invalid_index(); }
-    return ptr[idx];
-  }
-  bool eq(const bt_strlit& x) const {
-    return len == x.len && memcmp(ptr, x.ptr, len) == 0;
-  }
-  bool lt(const bt_strlit& x) const {
-    const size_t clen = std::min(len, x.len);
-    const int c = memcmp(ptr, x.ptr, clen);
-    if (c < 0) {
-      return true;
-    } else if (c == 0 && len < clen) {
-      return true;
-    } else {
-      return false;
-    }
-  }
+    : bt_cslice(reinterpret_cast<const char_type *>(ptr), n - 1) { }
   bt_size_t find(bt_size_t offset, char_type const& value) const {
-    return array_find(ptr, len, offset, value);
+    return array_find(v, len, offset, value);
   }
-private:
-  const char_type *const ptr; /* must be a literal */
-  const size_t len;
 };
-inline bool operator ==(const bt_strlit& x, const bt_strlit& y)
-  { return x.eq(y); }
-inline bool operator !=(const bt_strlit& x, const bt_strlit& y)
-  { return !x.eq(y); }
-inline bool operator <(const bt_strlit& x, const bt_strlit& y)
-  { return x.lt(y); }
-inline bool operator >(const bt_strlit& x, const bt_strlit& y)
-  { return y.lt(x); }
-inline bool operator <=(const bt_strlit& x, const bt_strlit& y)
-  { return !y.lt(x); }
-inline bool operator >=(const bt_strlit& x, const bt_strlit& y)
-  { return !x.lt(y); }
 template <typename T>
 struct podvector {
   BOOST_STATIC_ASSERT((boost::is_pod<T>::value));
@@ -277,21 +234,6 @@ struct podvector {
   void reserve(size_type sz) {
     check_resize();
     reserve_internal(sz);
-  }
-  bool eq(const podvector& x) const {
-    return valid_len == x.valid_len &&
-      memcmp(start, x.start, valid_len * sizeof(T)) == 0;
-  }
-  bool lt(const podvector& x) const {
-    const size_t clen = std::min(valid_len, x.valid_len);
-    const int c = memcmp(start, x.start, clen * sizeof(T));
-    if (c < 0) {
-      return true;
-    } else if (c == 0 && valid_len < clen) {
-      return true;
-    } else {
-      return false;
-    }
   }
   bt_size_t find(bt_size_t offset, T const& value) const {
     return array_find(start, valid_len, offset, value);
@@ -414,24 +356,39 @@ private:
   size_type alloc_len;
   mutable size_type invalidate_guard_count;
 };
-template <typename T> inline
-bool operator ==(const podvector<T>& x, const podvector<T>& y)
-  { return x.eq(y); }
-template <typename T> inline
-bool operator !=(const podvector<T>& x, const podvector<T>& y)
-  { return !x.eq(y); }
-template <typename T> inline
-bool operator <(const podvector<T>& x, const podvector<T>& y)
-  { return x.lt(y); }
-template <typename T> inline
-bool operator >(const podvector<T>& x, const podvector<T>& y)
-  { return y.lt(x); }
-template <typename T> inline
-bool operator <=(const podvector<T>& x, const podvector<T>& y)
-  { return !y.lt(x); }
-template <typename T> inline
-bool operator >=(const podvector<T>& x, const podvector<T>& y)
-  { return !x.lt(y); }
+template <typename Tx, typename Ty> inline bool
+eq_memcmp(const Tx& x, const Ty& y)
+{
+  BOOST_STATIC_ASSERT((
+    sizeof(typename Tx::mapped_type) == sizeof(typename Ty::mapped_type)));
+  return x.size() == y.size() &&
+    memcmp(x.rawarr(), y.rawarr(),
+      x.size() * sizeof(typename Tx::mapped_type)) == 0;
+}
+template <typename Tx, typename Ty> inline bool
+lt_memcmp(const Tx& x, const Ty& y)
+{
+  BOOST_STATIC_ASSERT((
+    sizeof(typename Tx::mapped_type) == sizeof(typename Ty::mapped_type)));
+  const size_t clen = std::min(x.size(), y.size());
+  const int c = memcmp(x.rawarr(), y.rawarr(),
+    clen * sizeof(typename Tx::mapped_type));
+  if (c < 0) {
+    return true;
+  } else if (c == 0 && x.size() < clen) {
+    return true;
+  } else {
+    return false;
+  }
+}
+template <typename Tx, typename Ty> inline bool
+ne_memcmp(const Tx& x, const Tx& y) { return !eq_memcmp(x, y); }
+template <typename Tx, typename Ty> inline bool
+gt_memcmp(const Tx& x, const Ty& y) { return lt_memcmp(y, x); }
+template <typename Tx, typename Ty> inline bool
+le_memcmp(const Tx& x, const Ty& y) { return !lt_memcmp(y, x); }
+template <typename Tx, typename Ty> inline bool
+ge_memcmp(const Tx& x, const Tx& y) { return !lt_memcmp(x, y); }
 typedef podvector<bt_uchar> bt_string;
 typedef bt_slice<bt_uchar> strref;
 typedef bt_cslice<bt_uchar> cstrref;

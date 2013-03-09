@@ -1078,7 +1078,7 @@ static int compile_and_execute(parser_options& po,
   const std::string& fn)
 {
   mkdir_hier(po.work_dir);
-  filelock_lockobj lock(po.work_dir + "/lock");
+  filelock_lockobj lock(po.work_dir + "_lock");
   load_profile(po);
   check_profile_md5sum(po);
   all_modules_info ami;
@@ -1251,7 +1251,21 @@ static int prepare_options(parser_options& po, int argc, char **argv)
       po.src_filename.c_str());
     return 1;
   }
-  po.work_dir += "/" + escape_hex_non_alnum(po.profile_name);
+  po.work_dir += "/" + escape_hex_non_alnum(po.profile_name) + ".pxcwork";
+  return 0;
+}
+
+static int clean_workdir(const std::string& dn)
+{
+  if (dn.size() < 8 || dn.substr(dn.size() - 8) != ".pxcwork") {
+    /* for safety */
+    fprintf(stderr, "internal error: invalid working directory: '%s'\n", 
+      dn.c_str());
+    return 1;
+  }
+  fprintf(stderr, "cleaning: '%s'\n", dn.c_str());
+  filelock_lockobj lock(dn + "_lock");
+  unlink_recursive(dn); /* throws */
   return 0;
 }
 
@@ -1262,6 +1276,12 @@ static int cdriver_main(int argc, char **argv)
     int r = prepare_options(po, argc, argv);
     if (r != 0) {
       return r;
+    }
+    if (po.clean_flag) {
+      r = clean_workdir(po.work_dir);
+      if (r != 0) {
+	return r;
+      }
     }
     if (!po.src_filename.empty()) {
       std::string fn = po.src_filename;

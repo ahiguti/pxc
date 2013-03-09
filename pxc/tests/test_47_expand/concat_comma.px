@@ -1,0 +1,38 @@
+namespace concat_argdecls;
+import common -;
+import meta::builtin m;
+
+function string foo(string a, string b, string c, string d, string e)
+{
+  string r;
+  r.append(a);
+  r.append(b);
+  r.append(c);
+  r.append(d);
+  r.append(e);
+  return r;
+}
+
+function string bar()
+{
+  return "bar";
+}
+
+function void test1() {
+  string a = "a";
+  string b = "b";
+  string c = "c";
+  string d = "d";
+  string e = "e";
+  println(foo(expand(s : m::list{"a", "b", "c", "d", "e"}; s)));
+  println(foo(a, expand(s : m::list{"b", "c", "d", "e"}; s)));
+  println(foo(a, expand(s : m::list{"b", "c", "d"}; s), e));
+  println(foo(expand(s : m::list{"a", "b", "c", "d"}; s), e));
+  println(foo(a, expand(s : m::list; s), b, c, d, e));
+  println(foo(expand(s : m::list; s), a, b, c, d, e));
+  println(bar(expand(s : m::list; s)));
+  println(bar(expand(s : m::list; s), expand(s : m::list; s)));
+}
+
+test1();
+

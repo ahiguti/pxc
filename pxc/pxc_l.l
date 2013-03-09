@@ -61,6 +61,7 @@ extern int count_newline(const char *str);
 "valuetype"		{ return TOK_VALUETYPE; }
 "mtvaluetype"		{ return TOK_MTVALUETYPE; }
 "tsvaluetype"		{ return TOK_TSVALUETYPE; }
+"expand"		{ return TOK_EXPAND; }
 \'(\\{ESCCH}|[^\\'])\'	{ yylval.str_val = pxc::arena_strdup(yytext);
 			  return TOK_UINTLIT; }
 {NUM}+UL?		{ yylval.str_val = pxc::arena_strdup(yytext);
