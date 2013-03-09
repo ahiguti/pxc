@@ -1,0 +1,53 @@
+#!/usr/bin/pxc
+namespace variant;
+import common -;
+
+macro strlit container::string::strlit;
+
+multithreaded union variant {
+  unit unitval;
+  long longval;
+  ulong ulongval;
+  double doubleval;
+  string stringval;
+  tptr{iinvoke} tptrval;
+}
+
+multithreaded interface iinvoke {
+  function variant invoke(cstrref const& name, cslice{variant} const& args);
+}
+
+multithreaded struct foo {
+  int val;
+  function void add(int x) { val += x; }
+  function int get() const { return val; }
+}
+
+multithreaded struct foo_iinvoke : iinvoke : {
+  foo value;
+  function variant invoke(cstrref const& name, cslice{variant} const& args) {
+    variant r;
+    if (name == "add") {
+      value.add(numeric::cast::static_cast{int, long}(args[0].longval));
+    } else if (name == "get") {
+      r.longval = value.get();
+    }
+    return r;
+  }
+}
+
+function void test1() {
+  variant v;
+  v.longval = 3;
+  v.stringval = "abc";
+  println(v);
+  v.tptrval = tptr{foo_iinvoke}(foo_iinvoke(foo(99)));
+  farray{variant, 1} arg;
+  arg[0].longval = 9;
+  v.tptrval->invoke("add", arg);
+  variant x = v.tptrval->invoke("get", arg[0 .. 0]);
+  println(x);
+}
+
+test1();
+

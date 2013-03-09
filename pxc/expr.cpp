@@ -90,6 +90,9 @@ expr_i *expr_foldfe_new(const char *fn, int line, const char *itersym,
   const char *foldop, expr_i *stmts)
 { return new expr_foldfe(fn, line, itersym, valueste, embedsym, embedexpr,
   foldop, stmts); }
+expr_i *expr_expand_new(const char *fn, int line, const char *itersym,
+  expr_i *valueste, expr_i *baseexpr, expand_e ex, expr_i *rest)
+{ return new expr_expand(fn, line, itersym, valueste, baseexpr, ex, rest); }
 expr_i *expr_funcdef_new(const char *fn, int line, const char *sym,
   const char *cname, bool is_const, expr_i *block, bool ext_decl,
   bool extc_decl, attribute_e attr)
@@ -438,7 +441,6 @@ void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
     arena_error_push(topval, "no namespace declaration");
   }
   if (!uniqns.empty()) {
-    int block_id_ns = 0;
     if (injectns.empty()) {
       injectns = uniqns;
     } else {
@@ -446,11 +448,14 @@ void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
        * separatedly compiled modules */
       abort();
     }
+    int block_id_ns = 0;
     fn_set_namespace(topval, uniqns, injectns, block_id_ns);
   }
   if (is_main) {
     main_namespace = uniqns;
   } else {
+    /* fn_set_namespace() must be before fn_drop_non_exports(), or it
+     * can cause inconsistency of block_id_ns among compilation units. */
     topval = fn_drop_non_exports(topval);
   }
   topvals.push_back(topval);
@@ -512,6 +517,7 @@ void arena_compile(const std::string& dest_filename, coptions& copt_apnd,
   arena_error_throw_pushed();
   compile_phase = 7;
   emit_code(dest_filename, gl_block, gmain);
+  arena_error_throw_pushed();
   compile_phase = 8;
 }
 

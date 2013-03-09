@@ -1,0 +1,31 @@
+namespace e3;
+import common -;
+import meta::builtin m;
+
+interface ifoo {
+  function string hoge(string x);
+  function string fuga(string x);
+}
+
+macro mf_str{t} m::metamap{m::member_functions{t}, meta::builtin::to_string};
+
+struct foo : ifoo : {
+  expand(fsym : mf_str{ifoo})
+  function string fsym(string argx) {
+    string s = ""; // m::to_string(fsym);
+    s.append(":");
+    s.append(argx);
+    return s;
+  }
+}
+/*
+*/
+
+function void test1() {
+  println(m::full_string{m::member_functions{ifoo}});
+  ptr{ifoo} p = ptr{foo}(foo());
+  println(p->hoge("A"));
+  println(p->hoge("B"));
+}
+
+test1();

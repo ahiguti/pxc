@@ -41,34 +41,6 @@
 
 namespace pxc {
 
-#if 0
-bool has_unbound_tparam(const term& t)
-{
-  if (is_tpdummy_type(t)) {
-    return true;
-  }
-  expr_tparams *const tp = dynamic_cast<expr_tparams *>(t.get_expr());
-  if (tp != 0 && tp->param_def.is_null()) {
-    return true;
-  }
-  const term_list *const cargs = t.get_args();
-  if (cargs != 0 && has_unbound_tparam(*cargs)) {
-    return true;
-  }
-  return false;
-}
-
-bool has_unbound_tparam(const term_list& tl)
-{
-  for (term_list::const_iterator i = tl.begin(); i != tl.end(); ++i) {
-    if (has_unbound_tparam(*i)) {
-      return true;
-    }
-  }
-  return false;
-}
-#endif
-
 static bool term_truth_value(const term& t)
 {
   if (t.is_null()) {
@@ -95,10 +67,11 @@ static term eval_meta_local(term_list& tlev, env_type& env,
   expr_i *const einst = term_get_instance(typ);
   expr_block *const bl = einst->get_template_block();
   if (einst == 0 || bl == 0) {
-    return term();
+    arena_error_throw(pos, "meta_local: invalid type '%s'",
+      term_tostr_human(typ).c_str());
   }
   if (name.find(':') != name.npos) {
-    return term(); /* invalid name */
+    arena_error_throw(pos, "meta_local: invalid name '%s'", name.c_str());
   }
   symbol_table *const symtbl = &bl->symtbl;
   assert(symtbl);
@@ -107,7 +80,7 @@ static term eval_meta_local(term_list& tlev, env_type& env,
   bool is_global = false, is_upvalue = false, is_memfld = false;
   expr_i *const rsym = symtbl->resolve_name_nothrow(name, no_private, sym_ns,
     is_global, is_upvalue, is_memfld);
-  DBG_METASYM(fprintf(stderr, "meta_symbol name=[%s] ns=[%s] rsym=%p\n",
+  DBG_METASYM(fprintf(stderr, "meta_local name=[%s] ns=[%s] rsym=%p\n",
     name.c_str(), sym_ns.c_str(), rsym));
   if (rsym == 0) {
     return term(); /* not found */
@@ -121,26 +94,30 @@ static term eval_meta_local(term_list& tlev, env_type& env,
 static term eval_meta_symbol(term_list& tlev, env_type& env,
   size_t depth, expr_i *pos)
 {
-  if (tlev.size() < 2) {
+  if (tlev.size() < 1) {
     return term();
   }
-  term& typ = tlev[0];
-  const std::string name = meta_term_to_string(tlev[1], false);
-  expr_i *const typexpr = typ.get_expr();
-  if (typexpr == 0 || !is_type_or_func_esort(typexpr->get_esort())) {
-    return term();
-  }
+  const std::string name = meta_term_to_string(tlev[0], false);
   if (name.find(':') != name.npos) {
-    return term(); /* invalid name */
+    arena_error_throw(pos, "meta_symbol: invalid name '%s'", name.c_str());
+  }
+  std::string sym_ns;
+  bool no_private = true;
+  if (tlev.size() == 2) {
+    /* find symbol from the specified symtbl */
+    term& typ = tlev[1];
+    expr_i *const typexpr = typ.get_expr();
+    if (typexpr == 0 || !is_type_or_func_esort(typexpr->get_esort())) {
+      arena_error_throw(pos, "meta_symbol: invalid type '%s'",
+	term_tostr_human(typ).c_str());
+    }
+    sym_ns = typexpr->get_unique_namespace();
+  } else {
+    /* find symbol from the current symtbl */
+    sym_ns = pos->get_unique_namespace();
   }
   symbol_table *const symtbl = &global_block->symtbl;
   assert(symtbl);
-  std::string sym_ns = typexpr->get_unique_namespace();
-  #if 0
-  if (sym_ns.empty()) {
-    sym_ns = "builtin"; // FIXME
-  }
-  #endif
   if (loaded_namespaces.find(sym_ns) == loaded_namespaces.end()) {
     /* namespace sym_ns is not loaded. error. */
     /* note that metafunctions must be always pure functional, or generated
@@ -149,9 +126,9 @@ static term eval_meta_symbol(term_list& tlev, env_type& env,
        to avoid such inconsistency. */
     DBG(fprintf(stderr, "not loaded: [%s] term=[%s]\n", sym_ns.c_str(),
       term_tostr_human(typ).c_str()));
-    arena_error_throw(0, "namespace '%s' not imported", sym_ns.c_str());
+    arena_error_throw(pos, "meta_symbol: namespace '%s' not imported",
+      sym_ns.c_str());
   }
-  const bool no_private = true;
   bool is_global = false, is_upvalue = false, is_memfld = false;
   expr_i *const rsym = symtbl->resolve_name_nothrow(name, no_private, sym_ns,
     is_global, is_upvalue, is_memfld);
@@ -227,8 +204,8 @@ static term eval_meta_argnum(term_list& tlev)
   DBG_METAARGTYPE(fprintf(stderr, "t.expr=%p inst=%p\n", t.expr, einst));
   if (einst->get_esort() == expr_e_funcdef) {
     expr_funcdef *const efd = ptr_down_cast<expr_funcdef>(einst);
-    expr_argdecls *ad = efd->block->argdecls;
-    const long long len = elist_length(ad);
+    expr_argdecls *ad = efd->block->get_argdecls();
+    const long long len = argdecls_length(ad);
     return term(len);
   } else {
     /* not a function */
@@ -276,9 +253,9 @@ static term eval_meta_argtype(term_list& tlev)
   DBG_METAARGTYPE(fprintf(stderr, "t.expr=%p inst=%p\n", t.expr, einst));
   expr_block *block = einst->get_template_block();
   DBG_METAARGTYPE(fprintf(stderr, "arg %d\n", n));
-  expr_argdecls *ad = block->argdecls;
+  expr_argdecls *ad = block->get_argdecls();
   for (int i = 0; i < n && ad != 0; ++i) {
-    ad = ad->rest;
+    ad = ad->get_rest();
   }
   if (ad != 0) {
     return ad->resolve_texpr();
@@ -304,9 +281,9 @@ static term eval_meta_argbyref(term_list& tlev)
   DBG_METAARGTYPE(fprintf(stderr, "t.expr=%p inst=%p\n", t.expr, einst));
   expr_block *block = einst->get_template_block();
   DBG_METAARGTYPE(fprintf(stderr, "arg %d\n", n));
-  expr_argdecls *ad = block->argdecls;
+  expr_argdecls *ad = block->get_argdecls();
   for (int i = 0; i < n && ad != 0; ++i) {
-    ad = ad->rest;
+    ad = ad->get_rest();
   }
   if (ad != 0) {
     return term(is_passby_cm_reference(ad->passby) ? 1 : 0);
@@ -330,7 +307,8 @@ static term eval_meta_argtypes(term_list& tlev)
   expr_block *block = einst->get_template_block();
   DBG_METAARGTYPE(fprintf(stderr, "arg %d\n", n));
   term_list tl;
-  for (expr_argdecls *ad = block->argdecls; ad != 0; ad = ad->rest) {
+  for (expr_argdecls *ad = block->get_argdecls(); ad != 0;
+    ad = ad->get_rest()) {
     tl.push_back(ad->resolve_texpr());
   }
   return term(tl);
@@ -352,10 +330,42 @@ static term eval_meta_argnames(term_list& tlev)
   expr_block *block = einst->get_template_block();
   DBG_METAARGTYPE(fprintf(stderr, "arg %d\n", n));
   term_list tl;
-  expr_argdecls *ad = block->argdecls;
-  for (; ad != 0; ad = ad->rest) {
+  expr_argdecls *ad = block->get_argdecls();
+  for (; ad != 0; ad = ad->get_rest()) {
     const std::string s(ad->sym);
     tl.push_back(term(s));
+  }
+  return term(tl);
+}
+
+static term eval_meta_args(term_list& tlev)
+{
+  if (tlev.size() != 1) {
+    return term();
+  }
+  term& ttyp = tlev[0];
+  expr_i *const ttypexpr = ttyp.get_expr();
+  if (ttypexpr == 0 ||
+    !is_type_or_func_esort(ttypexpr->get_esort())) {
+    return term();
+  }
+  expr_i *const einst = term_get_instance(ttyp);
+  DBG_METAARGTYPE(fprintf(stderr, "t.expr=%p inst=%p\n", t.expr, einst));
+  expr_block *block = einst->get_template_block();
+  DBG_METAARGTYPE(fprintf(stderr, "arg %d\n", n));
+  term_list tl;
+  expr_argdecls *ad = block->get_argdecls();
+  long long idx = 0;
+  for (; ad != 0; ad = ad->get_rest(), ++idx) {
+    term_list rec;
+    const std::string s(ad->sym);
+    rec.push_back(term(idx)); /* index */
+    rec.push_back(term(s)); /* name */
+    rec.push_back(ad->resolve_texpr()); /* type */
+    rec.push_back(term(is_passby_cm_reference(ad->passby))); /* byref */
+    rec.push_back(term(is_passby_mutable(ad->passby))); /* mutable */
+    term e(rec);
+    tl.push_back(e);
   }
   return term(tl);
 }
@@ -512,9 +522,16 @@ static term eval_meta_member_functions(term_list& tlev)
     return term();
   }
   term_list tl;
+  symbol_table *symtbl = 0;
   expr_struct *const est = dynamic_cast<expr_struct *>(einst);
   if (est != 0) {
-    symbol_table *const symtbl = &est->block->symtbl;
+    symtbl = &est->block->symtbl;
+  }
+  expr_interface *const ei = dynamic_cast<expr_interface *>(einst);
+  if (ei != 0) {
+    symtbl = &ei->block->symtbl;
+  }
+  if (symtbl != 0) {
     symbol_table::local_names_type::const_iterator i;
     for (i = symtbl->local_names.begin(); i != symtbl->local_names.end();
       ++i) {
@@ -874,6 +891,27 @@ static term eval_meta_concat(term_list& tlev)
   return term(s);
 }
 
+static term eval_meta_substring(term_list& tlev)
+{
+  if (tlev.size() < 2 || tlev.size() > 3) {
+    return term();
+  }
+  const std::string s = meta_term_to_string(tlev[0], false);
+  long i0 = meta_term_to_long(tlev[1]);
+  if (i0 < 0) {
+    i0 = 0;
+  }
+  if (tlev.size() == 3) {
+    const long i1 = meta_term_to_long(tlev[2]);
+    if (i1 <= i0) {
+      return term(std::string());
+    }
+    return term(s.substr(i0, i1 - i0));
+  } else {
+    return term(s.substr(i0));
+  }
+}
+
 static term eval_meta_attribute(term_list& tlev)
 {
   if (tlev.size() != 2) {
@@ -1181,6 +1219,8 @@ term eval_metafunction_strict(const std::string& name, term_list& tlev,
       r = eval_meta_argtypes(tlev);
     } else if (name == "@argnames") {
       r = eval_meta_argnames(tlev);
+    } else if (name == "@args") {
+      r = eval_meta_args(tlev);
     } else if (name == "@imports") {
       r = eval_meta_imports(tlev);
     } else if (name == "@imports_tr") {
@@ -1223,6 +1263,8 @@ term eval_metafunction_strict(const std::string& name, term_list& tlev,
       r = eval_meta_full_string(tlev);
     } else if (name == "@concat") {
       r = eval_meta_concat(tlev);
+    } else if (name == "@substring") {
+      r = eval_meta_substring(tlev);
     } else if (name == "@family") {
       r = eval_meta_family(tlev);
     } else if (name == "@attribute") {

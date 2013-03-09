@@ -3,6 +3,32 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- cstrrefとstrlitの == 
+- slice/cslice/pxcvectorに ==, < 等を実装
+
+- fn_check_type lookupがsymtbl_lexicalと異なるのはfoo.barのbarシンボ
+  ルの場合だけ？ そうであればfn_check_typeの引数からlookupを削除する
+  方向で。
+
+- @expand, リストの真ん中に埋め込めるようにする?
+- @expand、文字列に置換するかシンボルに置換するかは文脈で決める？
+- @expand型foreachを整理、不要なものを削除
+
+- block_id_nsをなくせないか
+  - ローカル関数をテンプレートパラメータに渡してインスタンス化した
+    場合にインスタンス同士を区別するためにblock_id_nsが必要
+  - 変数を上位値として渡した場合に名前の衝突を避けるのにblock_id_ns
+    が必要
+  - 方針: @expandによって生成したコードにはblock_id_ns=0をセット
+    する。もしblock_id_ns==0なブロック上のシンボルをテンプレート
+    引数に使ってしまったらエラー。
+  
+
+- ccだけ吐くモード -> androidに必要
+- ヘッダファイルを吐くモード
+
+- meta::symbolを何とかせよ(done)
+
 - 例外まわりの仕様きめよ。errnoを投げられたときとか。
 
 - プロセスをforkしてpipe経由で通信するパターン
@@ -731,4 +757,96 @@ x: string, y: int
   tree_map{string, int} m;
   foreach { m[x] += y; }
 
+---------------------------------------------------------------------
+serialize
+
+unit: 何も書かない
+整数: nnnxxxxx 上の3bitに後続バイト長さ。ただし111のときは後続8バイト
+enum/bitmask: 整数と同じ
+浮動小数点数: べた
+配列: 最初に長さを整数エンコードで書く。残りは各要素を詰める
+  ただし要素型が2byte以下のときは要素固定長で
+連想配列: 配列と同じ
+構造体: 各フィールドを詰める
+union: 最初にタグ、次に要素
+
+---------------------------------------------------------------------
+汎用展開マクロ
+
+@expand(sym : metalist) expr
+exprが式であるか、文であるか、引数宣言であるか等によって結合方法
+は判断する。式ならカンマ区切り、文ならstmts, 引数宣言ならargdecls。
+struct proxy_stub{ifoo} : ifoo : {
+  ptr{invoke} handle;
+  @expand(funcsym : functions) function rettype{local{ifoo, funcsym}}
+  funcsym(
+    @expand(sym : seq{argnum{local{ifoo, funcsym}}, "a"})
+    argtype{local{ifoo, funcsym}, substr{sym, 1}} sym)
+  {
+    var rci = remotee_call_info(to_string{sym}, *handle);
+    @expand(sym : seq{argnum{local{ifoo, funcsym}}, "a"}) rci.argument(sym);
+    rci.call();
+    if (ne{rettype{local{ifoo, funcsym}}, void}) {
+      var rv = rci.retval();
+      return rv;
+    }
+  }
+}
+
+---------------------------------------------------------------------
+ORBに必要なもの
+
+・参照でmarshalすることができるのはインタフェースだけ
+  それ以外はdynamic_object interfaceを使えば参照でmarshal可能
+  dynamic_objectはIDispatch的なもの
+  interfaece ifoo {
+    function int foo(int x);
+    function string bar(string x, string y);
+  }
+・リモート呼び出しでインタフェースを実装するクラス(stub)
+  struct proxy_stub{ifoo} : ifoo : {
+    ptr{invoke} handle;
+    function int foo(int x) {
+      xs = serialize(x);
+      rs = remote_call(xs);
+      return deserialize(rs);
+    }
+    function string bar(string x, string y) {
+      xs = serialize(x);
+      ys = serialize(y);
+      rs = remote_call(xs, ys);
+      return deserialize(rs);
+    }
+  }
+  これは現状pxcのリフレクションでは実装できない。
+  struct proxy_stub{ifoo} : ifoo : {
+    ptr{invoke} handle;
+    function foreach (func : ifoo) {
+    }
+  }
+・サーバ側でリクエストを受けてオブジェクトへメソッド呼び出しを実行
+  (skeleton)
+  - serverは接続毎にオブジェクトプールを持ち、リクエストを受けたら
+    対象のオブジェクトに対してメソッドを実行し、レスポンスを返す
+  struct proxy_skeleton{ifoo} : skeleton: {
+    ptr{ifoo} realobject;
+    function void invoke(skeleton_invoke& argret) {
+      if (argret.func_id == 0) {
+	x = deserialize(argret.arg[0]);
+	r = realobject->foo(x);
+	argret.ret = serialize(r);
+      }
+    }
+  }
+  これはpxcのリフレクションで実装できる
+ 
+- @expandの実装
+- strseq: seqの各々に文字列prefixを付ける
+- foldfe, fldfeを廃止
+
+@expandのfoldは、式の場合はcomma_op連結を作り、argdeclsのときはargdecls
+を作り、stmtsのときはstmtsを作る。
+@expand 式 のケース
+  a, b, @expand, d, e
+  この場合expandはcomma opの子であり、そのheadになっている
 

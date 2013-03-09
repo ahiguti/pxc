@@ -1,0 +1,92 @@
+namespace concat_argdecls;
+import common -;
+import meta::builtin m;
+
+macro xy m::list{
+  m::list{0, "x", string, 0, 0},
+  m::list{0, "y", string, 0, 0}};
+
+macro vw m::list{
+  m::list{0, "v", string, 0, 0},
+  m::list{0, "w", string, 0, 0}};
+
+macro em m::list;
+
+function string foo(string a, string b, expand(s : xy), string c, string d)
+{
+  string r;
+  r.append(a);
+  r.append(b);
+  r.append(x);
+  r.append(y);
+  r.append(c);
+  r.append(d);
+  return r;
+}
+
+function string bar(string a, expand(s : xy))
+{
+  string r;
+  r.append(a);
+  r.append(x);
+  r.append(y);
+  return r;
+}
+
+function string baz(expand(s : xy), string a)
+{
+  string r;
+  r.append(x);
+  r.append(y);
+  r.append(a);
+  return r;
+}
+
+function string fubar(string a, expand(s : xy), string b, expand(s : vw),
+  string c)
+{
+  string r;
+  r.append(a);
+  r.append(x);
+  r.append(y);
+  r.append(b);
+  r.append(v);
+  r.append(w);
+  r.append(c);
+  return r;
+}
+
+function string hoge(expand(s : em), string a)
+{ return a; }
+
+function string fuga(string a, expand(s : em))
+{ return a; }
+
+function string m1(string a, expand(s : em), string b)
+{
+  string r;
+  r.append(a);
+  r.append(b);
+  return r;
+}
+
+function string m2(string a, expand(s : em), expand(s : em), string b)
+{
+  string r;
+  r.append(a);
+  r.append(b);
+  return r;
+}
+
+function void test1() {
+  println(foo("a", "b", "x", "y", "c", "d"));
+  println(bar("a", "x", "y"));
+  println(baz("x", "y", "a"));
+  println(fubar("a", "x", "y", "b", "v", "w", "c"));
+  println(hoge("a"));
+  println(fuga("a"));
+  println(m1("a", "b"));
+  println(m2("a", "b"));
+}
+
+test1();

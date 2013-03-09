@@ -1,0 +1,77 @@
+namespace concat_argdecls;
+import common -;
+import meta::builtin m;
+
+macro xy m::list{
+  m::list{0, "x", string, 0, 0},
+  m::list{0, "y", string, 0, 0}};
+
+macro vw m::list{
+  m::list{0, "v", string, 0, 0},
+  m::list{0, "w", string, 0, 0}};
+
+struct foo {
+  expand(s: m::list{"f", "g"}) function string s() { return m::to_string{s}; }
+}
+
+struct bar {
+  function string a() { return "a"; }
+  expand(s: m::list{"f", "g"}) function string s() { return m::to_string{s}; }
+}
+
+struct baz {
+  expand(s: m::list{"f", "g"}) function string s() { return m::to_string{s}; }
+  function string z() { return "z"; }
+}
+
+struct s1 {
+  function string a() { return "a"; }
+  expand(s: m::list) function string s() { return m::to_string{s}; }
+  function string z() { return "z"; }
+}
+
+struct s2 {
+  function string a() { return "a"; }
+  expand(s: m::list) function string s() { return m::to_string{s}; }
+}
+
+struct s3 {
+  expand(s: m::list) function string s() { return m::to_string{s}; }
+  function string z() { return "z"; }
+}
+
+struct s4 {
+  expand(s: m::list) function string s() { return m::to_string{s}; }
+}
+
+struct s5 {
+  expand(s: m::list) function string s() { return m::to_string{s}; }
+  expand(s2: m::list) function string s2() { return m::to_string{s2}; }
+}
+/*
+*/
+
+function void test1() {
+  foo f;
+  println(f.f());
+  println(f.g());
+  bar b;
+  println(b.a());
+  println(b.f());
+  println(b.g());
+  baz z;
+  println(z.f());
+  println(z.g());
+  println(z.z());
+  s1 v1;
+  println(v1.a());
+  println(v1.z());
+  s2 v2;
+  println(v2.a());
+  s3 v3;
+  println(v3.z());
+  s4 v4;
+  s5 v5;
+}
+
+test1();
