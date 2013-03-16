@@ -59,9 +59,10 @@ expr_i *expr_argdecls_new(const char *fn, int line, const char *sym,
   expr_i *type_uneval, passby_e passby, expr_i *rest)
 { return new expr_argdecls(fn, line, sym, type_uneval, passby, rest); }
 expr_i *expr_block_new(const char *fn, int line, expr_i *tparams,
-  expr_i *inherit, expr_i *argdecls, expr_i *rettype, expr_i *stmts)
+  expr_i *inherit, expr_i *argdecls, expr_i *rettype, passby_e ret_passby,
+  expr_i *stmts)
 { return new expr_block(fn, line, tparams, inherit, argdecls, rettype,
-  stmts); }
+  ret_passby, stmts); }
 expr_i *expr_op_new(const char *fn, int line, int op, expr_i *arg0,
   expr_i *arg1)
 { return new expr_op(fn, line, op, arg0, arg1); }
@@ -107,8 +108,10 @@ expr_i *expr_macrodef_new(const char *fn, int line, const char *sym,
   expr_i *tparams, expr_i *rhs, attribute_e attr)
 { return new expr_macrodef(fn, line, sym, tparams, rhs, attr); }
 expr_i *expr_struct_new(const char *fn, int line, const char *sym,
-  const char *cname, const char *family, expr_i *block, attribute_e attr)
-{ return new expr_struct(fn, line, sym, cname, family, block, attr); }
+  const char *cname, const char *family, expr_i *block, attribute_e attr,
+  bool has_udcon)
+{ return new expr_struct(fn, line, sym, cname, family, block, attr,
+  has_udcon); }
 expr_i *expr_variant_new(const char *fn, int line, const char *sym,
   expr_i *block, attribute_e attr)
 { return new expr_variant(fn, line, sym, block, attr); }
@@ -333,19 +336,19 @@ static void define_builtins()
       arena_strdup("@local"),
       arena_strdup("@local"),
       arena_strdup("@local"),
-      expr_block_new("BUILTIN", 0, 0, 0, 0, 0, 0),
+      expr_block_new("BUILTIN", 0, 0, 0, 0, 0, passby_e_mutable_value, 0),
       attribute_e(attribute_public |
 	attribute_threaded | attribute_multithr | attribute_valuetype |
-	attribute_tsvaluetype));
+	attribute_tsvaluetype), false);
     stmts = expr_stmts_new("", 0, est, stmts);
     est = expr_struct_new("BUILTIN", 0,
       arena_strdup("@list"),
       arena_strdup("@list"),
       arena_strdup("@list"),
-      expr_block_new("BUILTIN", 0, 0, 0, 0, 0, 0),
+      expr_block_new("BUILTIN", 0, 0, 0, 0, 0, passby_e_mutable_value, 0),
       attribute_e(attribute_public |
 	attribute_threaded | attribute_multithr | attribute_valuetype |
-	attribute_tsvaluetype));
+	attribute_tsvaluetype), false);
     stmts = expr_stmts_new("", 0, est, stmts);
   }  
   /* set namespace */
@@ -491,7 +494,8 @@ void arena_compile(const std::string& dest_filename, coptions& copt_apnd,
     last->set_rest(e);
     e = stmts;
   }
-  expr_i *const global = expr_block_new("", 0, 0, 0, 0, 0, e);
+  expr_i *const global = expr_block_new("", 0, 0, 0, 0, 0,
+    passby_e_mutable_value, e);
   expr_block *const gl_block = ptr_down_cast<expr_block>(global);
   global_block = gl_block;
   /* define bt_string */

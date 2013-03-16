@@ -409,31 +409,15 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
   bl->emit_memberfunc_decl(em, false);
   if (est->has_userdefined_constr()) {
     /* user defined constructor */
-    #if 0
-    /* default constructor */
     em.set_file_line(est);
     em.indent('b');
     em.puts("inline ");
     em.puts(name_c);
-    em.puts("();\n");
-    #endif
-    /* with args */
-    if (argdecls_length(est->block->get_argdecls()) != 0) {
-      em.set_file_line(est);
-      em.indent('b');
-      em.puts("inline ");
-      em.puts(name_c);
-      em.puts("(");
-      emit_argdecls(em, est->block->get_argdecls(), true);
-      em.puts(");\n");
-    }
-    /* initializer aux func */
-    em.set_file_line(est);
-    em.indent('b');
-    em.puts("inline void init$z(");
+    em.puts("(");
     emit_argdecls(em, est->block->get_argdecls(), true);
     em.puts(");\n");
   } else {
+    /* plain struct */
     /* get field list */
     typedef std::list<expr_var *> flds_type;
     flds_type flds;
@@ -480,12 +464,6 @@ static void emit_struct_constr_one(emit_context& em, expr_struct *est,
   flds_type::const_iterator i;
   if (est->has_userdefined_constr()) {
     /* user defined constructor */
-    if (emit_default_constr) {
-      return;
-    }
-    if (argdecls_length(est->block->get_argdecls()) == 0) {
-      return;
-    }
     em.set_ns(est->uniqns);
     em.set_file_line(est);
     em.indent('b');
@@ -493,60 +471,23 @@ static void emit_struct_constr_one(emit_context& em, expr_struct *est,
     em.puts("::");
     em.puts(name_c);
     em.puts("(");
-    // if (!emit_default_constr) {
-      emit_argdecls(em, est->block->get_argdecls(), true);
-    // }
+    emit_argdecls(em, est->block->get_argdecls(), true);
     em.puts(")");
-#if 0
-    if (!emit_default_constr) {
-#endif
-      /* fast init userdef constructor */
-      emit_struct_constr_initializer(em, est, flds, false, true);
-      em.puts(" {\n");
-      em.add_indent(1);
-      expr_stmts *st = est->block->stmts;
-      for (; st != 0; st = st->rest) {
-	expr_i *e = st->head;
-	if (!is_vardef_or_vardefset(e) && !is_noexec_expr(e)) {
-	  break;
-	}
+    /* fast init userdef constructor */
+    emit_struct_constr_initializer(em, est, flds, false, true);
+    em.puts(" {\n");
+    em.add_indent(1);
+    expr_stmts *st = est->block->stmts;
+    for (; st != 0; st = st->rest) {
+      expr_i *e = st->head;
+      if (!is_vardef_or_vardefset(e) && !is_noexec_expr(e)) {
+	break;
       }
-      fn_emit_value(em, st);
-      em.add_indent(-1);
-      em.indent('b');
-      em.puts("}\n");
-#if 0
-    } else {
-      abort(); // not reached
-      emit_struct_constr_initializer(em, est, flds, true, false);
-      em.puts(" {\n");
-      em.add_indent(1);
-      if (emit_default_constr) {
-	/* emit zero'ed arguments for constr */
-	for (expr_argdecls *a = est->block->argdecls; a; a = a->rest) {
-	  em.indent('b');
-	  emit_arg_cdecl(em, a, false, false);
-	  emit_explicit_init_if(em, a->get_texpr());
-	  em.puts(";\n");
-	}
-      }
-      em.indent('b');
-      em.puts("this->init$z(");
-      bool is_first = true;
-      for (expr_argdecls *a = est->block->argdecls; a; a = a->rest) {
-	if (is_first) {
-	  is_first = false;
-	} else {
-	  em.puts(", ");
-	}
-	a->emit_symbol(em);
-      }
-      em.puts(");\n");
-      em.add_indent(-1);
-      em.indent('b');
-      em.puts("}\n");
     }
-#endif
+    fn_emit_value(em, st);
+    em.add_indent(-1);
+    em.indent('b');
+    em.puts("}\n");
   } else {
     /* no pxc usedefined */
     if (flds.empty() && !emit_default_constr) {
@@ -565,7 +506,7 @@ static void emit_struct_constr_one(emit_context& em, expr_struct *est,
       em.puts(")");
       emit_struct_constr_initializer(em, est, flds, true, false);
     } else {
-      /* struct constructor */
+      /* struct fields constructor */
       for (i = flds.begin(); i != flds.end(); ++i) {
 	if (i != flds.begin()) {
 	  em.puts(", ");
@@ -1218,9 +1159,11 @@ static void emit_function_def(emit_context& em)
     }
     expr_struct *const est = dynamic_cast<expr_struct *>(*i);
     if (est != 0 && est->cname == 0) {
-      if (is_default_constructible(est->get_texpr())) {
+      if (!est->has_userdefined_constr()) {
+	/* default constr for plain struct */
 	emit_struct_constr_one(em, est, true);
       }
+      /* udcon or struct field constr */
       emit_struct_constr_one(em, est, false);
     }
     expr_variant *const ev = dynamic_cast<expr_variant *>(*i);

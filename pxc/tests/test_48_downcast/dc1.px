@@ -1,0 +1,25 @@
+namespace dc1;
+import common -;
+import downcast -;
+
+interface ifoo {
+  function int f(int x);
+}
+
+struct foo : ifoo : {
+  function int f(int x) { return x * 2; }
+}
+
+function void t1()
+{
+  foo f;
+  ifoo mutable& fi = f;
+  int z = fi.f(5);
+  println(z);
+  foo mutable& ff = downcast_mutable{foo, ifoo}(fi);
+  int w = ff.f(3);
+  println(w);
+}
+
+t1();
+

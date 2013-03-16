@@ -1,0 +1,33 @@
+namespace dc1;
+import common -;
+import downcast -;
+
+interface ifoo {
+  function int f(int x);
+}
+
+struct foo : ifoo : {
+  function int f(int x) { return x * 2; }
+}
+
+function ptr{ifoo} bar()
+{
+  ptr{ifoo} f = ptr(foo());
+  return f;
+}
+
+
+function void t1()
+{
+  foo mutable& ff = downcast_mutable{foo, ifoo}(*bar());
+    // tempvar is generated
+  int w = ff.f(3);
+  println(w);
+  foo const& ff2 = downcast_const{foo, ifoo}(*bar());
+    // tempvar is generated
+  int w2 = ff.f(9);
+  println(w2);
+}
+
+t1();
+

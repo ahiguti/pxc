@@ -244,11 +244,10 @@ static term eval_meta_argtype(term_list& tlev)
   term& tnum = tlev[1];
   expr_i *const ttypexpr = ttyp.get_expr();
   if (ttypexpr == 0 ||
-    !is_type_or_func_esort(ttypexpr->get_esort()) ||
-    !tnum.is_long() || tnum.get_long() < 0) {
+    !is_type_or_func_esort(ttypexpr->get_esort())) {
     return term();
   }
-  const long long n = tnum.get_long();
+  const long long n = meta_term_to_long(tnum);
   expr_i *const einst = term_get_instance(ttyp);
   DBG_METAARGTYPE(fprintf(stderr, "t.expr=%p inst=%p\n", t.expr, einst));
   expr_block *block = einst->get_template_block();

@@ -863,14 +863,17 @@ std::string expr_stmts::dump(int indent) const
 }
 
 expr_block::expr_block(const char *fn, int line, expr_i *tparams,	
-  expr_i *inherit, expr_i *argdecls, expr_i *rettype_uneval, expr_i *stmts)
+  expr_i *inherit, expr_i *argdecls, expr_i *rettype_uneval,
+  passby_e ret_passby, expr_i *stmts)
   : expr_i(fn, line), block_id_ns(0),
     inherit(ptr_down_cast<expr_telist>(inherit)),
     argdecls(argdecls),
     rettype_uneval(ptr_down_cast<expr_te>(rettype_uneval)),
+    ret_passby(ret_passby),
     stmts(ptr_down_cast<expr_stmts>(stmts)),
     symtbl(this)
 {
+  /* NOTE: ret_passby is not implemented yet */
   tinfo.tparams = ptr_down_cast<expr_tparams>(tparams);
 }
 
@@ -1345,7 +1348,7 @@ expr_macrodef::expr_macrodef(const char *fn, int line, const char *sym,
   expr_i *tparams, expr_i *rhs, attribute_e attr)
   : expr_i(fn, line), sym(sym),
     block(ptr_down_cast<expr_block>(expr_block_new(fn, line, tparams, 0, 0, 0,
-      expr_stmts_new(fn, line, rhs, 0)))),
+      passby_e_mutable_value, expr_stmts_new(fn, line, rhs, 0)))),
     attr(attr)
 {
 }
@@ -1356,10 +1359,12 @@ std::string expr_macrodef::dump(int indent) const
 }
 
 expr_struct::expr_struct(const char *fn, int line, const char *sym,
-  const char *cname, const char *family, expr_i *block, attribute_e attr)
+  const char *cname, const char *family, expr_i *block, attribute_e attr,
+  bool has_udcon)
   : expr_i(fn, line), sym(sym), cname(cname), typefamily_str(family),
     block(ptr_down_cast<expr_block>(block)),
-    attr(attr), value_texpr(), typefamily(typefamily_e_none)
+    attr(attr), value_texpr(), typefamily(typefamily_e_none),
+    has_udcon(has_udcon)
 {
   assert(block);
   this->block->symtbl.block_esort = expr_e_struct;
@@ -1399,7 +1404,8 @@ void expr_struct::get_fields(std::list<expr_var *>& flds_r) const
 
 bool expr_struct::has_userdefined_constr() const
 {
-  return block != 0 && block->argdecls != 0;
+  // return block != 0 && block->argdecls != 0;
+  return has_udcon;
 }
 
 std::string expr_struct::dump(int indent) const

@@ -23,6 +23,7 @@ void add_tparam_upvalues_funcdef_direct(expr_funcdef *efd);
 void add_tparam_upvalues_funcdef_tparam(expr_funcdef *efd);
 void check_tpup_thisptr_constness(expr_funccall *fc);
 bool is_default_constructible(const term& typ);
+term get_func_te_for_funccall(expr_i *func, bool& memfunc_w_explicit_obj_r);
 
 };
 
