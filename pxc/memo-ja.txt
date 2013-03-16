@@ -1,16 +1,22 @@
 
-0202 463
+0310 573
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- cstrrefとstrlitの == 
-- slice/cslice/pxcvectorに ==, < 等を実装
+- variant(COM的な)を実装してみる
+  - structに空引数udconを許可せねばならない(done)
+  - 変数定義をexpandで生成できるようにせねばならない
+    variantから具体型への変換した結果を保持する変数。passbyも
+    ものによってはmutable byref。右辺も場合によって式を出し分ける。
+
+- 演算子オーバーロードは、組み込み型以外のopに対して関数呼び出し式を
+  evalすることによって実装チェック、その関数を呼ぶようにemit。
 
 - fn_check_type lookupがsymtbl_lexicalと異なるのはfoo.barのbarシンボ
   ルの場合だけ？ そうであればfn_check_typeの引数からlookupを削除する
   方向で。
 
-- @expand, リストの真ん中に埋め込めるようにする?
+- @expand, リストの真ん中に埋め込めるようにする?(done)
 - @expand、文字列に置換するかシンボルに置換するかは文脈で決める？
 - @expand型foreachを整理、不要なものを削除
 
@@ -27,7 +33,6 @@ FIXME/TODO M1
 - ccだけ吐くモード -> androidに必要
 - ヘッダファイルを吐くモード
 
-- meta::symbolを何とかせよ(done)
 
 - 例外まわりの仕様きめよ。errnoを投げられたときとか。
 
@@ -299,6 +304,10 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- dynamic_cast相当のdowncastが必要。iinvokeからfoo_iinvokeへdowncast
+  しないと元オブジェクトを取り出せない。(done)
+- externな関数は返値をbyrefで返せるように。downcastを実装(done)
+- meta::symbolを何とかせよ(done)
 - 浮動小数点数のserialize(done)
 - vectorのinsertとeraseテスト(done)
 - prefix省略したシンボルを引くとき、テンプレートのインスタンス化の
@@ -849,4 +858,14 @@ ORBに必要なもの
 @expand 式 のケース
   a, b, @expand, d, e
   この場合expandはcomma opの子であり、そのheadになっている
+
+---------------------------------------------------------------------
+expand 文
+
+- expand(i, sym : metalist) [ stmt_list ]
+- metalistは行列になっていて、各行は次のフォーマット
+  { symstr, stmtnum, ... }
+- metalistの各行について、stmt_listのうちのstmtnum番目の式を取り出し、
+  そのstmt中のiをその行で置き換え、またsymをsymstrという名前のシンボル
+  で置き換えたstmtを作り、それらを連結したstmtsで置き換える
 

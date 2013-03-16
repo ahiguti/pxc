@@ -1,0 +1,28 @@
+namespace downcast;
+import numeric::integral -;
+
+public threaded extern "pxcrt::downcast_const"
+function {tto, tfrom} tto const& downcast_const(tfrom const& x);
+
+public threaded extern "pxcrt::downcast_mutable"
+function {tto, tfrom} tto& downcast_mutable(tfrom& x);
+
+public threaded extern "pxcrt::instanceof"
+function {t, tobj} bool instanceof(tobj const& x);
+
+extern "type" inline
+namespace pxcrt {
+template <typename Tto, typename Tfrom> Tto const&
+downcast_const(Tfrom const& from) {
+  return dynamic_cast<Tto const&>(from);
+}
+template <typename Tto, typename Tfrom> Tto&
+downcast_mutable(Tfrom& from) {
+  return dynamic_cast<Tto&>(from);
+}
+template <typename T, typename Tobj> bool
+instanceof(Tobj const& x) {
+  return dynamic_cast<T const *>(&x) != 0;
+}
+};
+

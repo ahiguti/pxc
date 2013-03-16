@@ -685,7 +685,8 @@ public:
 
 struct expr_block : public expr_i {
   expr_block(const char *fn, int line, expr_i *tparams, expr_i *inherit,
-    expr_i *argdecls, expr_i *rettype_uneval, expr_i *stmts);
+    expr_i *argdecls, expr_i *rettype_uneval, passby_e ret_passby,
+    expr_i *stmts);
   expr_block *clone() const;
   expr_e get_esort() const { return expr_e_block; }
   int get_num_children() const { return 5; }
@@ -719,6 +720,7 @@ public:
   expr_telist *inherit;
   expr_i *argdecls; /* expr_argdecls or expr_expand */
   expr_te *rettype_uneval;
+  passby_e ret_passby;
   expr_stmts *stmts;
   symbol_table symtbl;
 };
@@ -1179,7 +1181,7 @@ public:
 
 struct expr_struct : public expr_i {
   expr_struct(const char *fn, int line, const char *sym, const char *cname,
-    const char *family, expr_i *block, attribute_e attr);
+    const char *family, expr_i *block, attribute_e attr, bool has_udcon);
   expr_struct *clone() const;
   expr_e get_esort() const { return expr_e_struct; }
   int get_num_children() const { return 1; }
@@ -1219,6 +1221,7 @@ public:
   attribute_e attr;
   term value_texpr;
   typefamily_e typefamily;
+  bool has_udcon;
 };
 
 struct expr_variant : public expr_i {

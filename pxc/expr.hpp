@@ -74,7 +74,8 @@ expr_i *expr_argdecls_new(const char *fn, int line, const char *sym,
   expr_i *typ, passby_e passby, expr_i *rest);
 expr_i *expr_stmts_new(const char *fn, int line, expr_i *head, expr_i *rest);
 expr_i *expr_block_new(const char *fn, int line, expr_i *tparams,
-  expr_i *inherit, expr_i *argdecls, expr_i *rettyp, expr_i *stmts);
+  expr_i *inherit, expr_i *argdecls, expr_i *rettyp, passby_e ret_passby,
+  expr_i *stmts);
 expr_i *expr_op_new(const char *fn, int line, int op, expr_i *arg0,
   expr_i *arg1);
 expr_i *expr_funccall_new(const char *fn, int line, expr_i *func, expr_i *arg);
@@ -103,7 +104,8 @@ expr_i *expr_typedef_new(const char *fn, int line, const char *sym,
 expr_i *expr_macrodef_new(const char *fn, int line, const char *sym,
   expr_i *tparams, expr_i *rhs, attribute_e visi);
 expr_i *expr_struct_new(const char *fn, int line, const char *sym,
-  const char *cname, const char *family, expr_i *block, attribute_e visi);
+  const char *cname, const char *family, expr_i *block, attribute_e visi,
+  bool has_udcon);
 expr_i *expr_variant_new(const char *fn, int line, const char *sym,
   expr_i *block, attribute_e visi);
 expr_i *expr_interface_new(const char *fn, int line, const char *sym,

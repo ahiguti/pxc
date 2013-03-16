@@ -2818,6 +2818,16 @@ bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
       a0->dump(0).c_str()));
     return true; /* ok */
   }
+  if (a0->get_esort() == expr_e_funccall) {
+    expr_funccall *const fc = ptr_down_cast<expr_funccall>(a0);
+    bool dmy = false;
+    term te = get_func_te_for_funccall(fc->func, dmy);
+    expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(
+      term_get_instance(te));
+    if (efd != 0 && efd->block->ret_passby == passby_e_mutable_reference) {
+      return true;
+    }
+  }
   DBG_LV(fprintf(stderr, "expr_has_lvalue %s 12 false\n",
     a0->dump(0).c_str()));
   if (!thro_flg) {
