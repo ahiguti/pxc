@@ -37,6 +37,8 @@
 #define DBG_TPUP(x)
 #define DBG_DEFCON(x)
 #define DBG_EP(x)
+#define DBG_RECHAIN(x)
+#define DBG_SETCHILD(x)
 
 namespace pxc {
 
@@ -576,6 +578,12 @@ void expr_enumval::check_type(symbol_table *lookup)
 void expr_stmts::check_type(symbol_table *lookup)
 {
   fn_check_type(head, lookup);
+  if (rest != 0 && rest->parent_expr != this) {
+    /* this happenes when head is a expr_expand. in this case, rest has
+     * moved to the rest of the generated expr. */
+    DBG_RECHAIN(fprintf(stderr, "RE-CHAINED\n"));
+    return;
+  }
   fn_check_type(rest, lookup);
   switch (head->get_esort()) {
   case expr_e_int_literal:
@@ -2226,12 +2234,24 @@ static expr_i *create_te_from_string(const std::string& s, expr_i *pos)
   return te;
 }
 
+static void set_child_parent(expr_i *parent, int pos, expr_i *child)
+{
+  DBG_SETCHILD(fprintf(stderr, "scp p=%p pos=%d oc=%p nc=%p\n", parent, pos,
+    parent->get_child(pos), child));
+  parent->set_child(pos, child);
+  if (child != 0) {
+    child->parent_expr = parent;
+  }
+}
+
 static expr_i *subst_symbol_name_rec(expr_i *e, expr_i *parent, int parent_pos,
   const std::string& src, const term& dst, bool to_symbol /* true */)
 {
   if (e == 0) {
     return 0;
   }
+  DBG_EP(fprintf(stderr, "subst_symbol_name_rec: %s %d\n",
+    e->dump(0).c_str(), (int)e->get_esort()));
   expr_symbol *sy = dynamic_cast<expr_symbol *>(e);
   expr_te *te = dynamic_cast<expr_te *>(e);
   expr_funcdef *fd = dynamic_cast<expr_funcdef *>(e);
@@ -2239,17 +2259,20 @@ static expr_i *subst_symbol_name_rec(expr_i *e, expr_i *parent, int parent_pos,
     expr_nssym *nsy = sy->nssym;
     assert(nsy != 0);
     if (nsy->prefix == 0 && std::string(nsy->sym) == src) {
+      DBG_EP(fprintf(stderr, "found '%s' expr_symbol\n", src.c_str()));
       if (dst.is_long()) {
 	expr_i *lit = expr_int_literal_new(nsy->fname, nsy->line,
 	  arena_strdup(long_to_string(dst.get_long()).c_str()),
 	  dst.get_long() < 0);
 	if (parent != 0) {
+	  // set_child_parent(parent, parent_pos, lit);
 	  parent->set_child(parent_pos, lit);
 	}
 	return lit;
       } else if (to_symbol) {
 	expr_i *sycpy = create_symbol_from_string(dst.get_string(), sy);
 	if (parent != 0) {
+	  // set_child_parent(parent, parent_pos, sycpy);
 	  parent->set_child(parent_pos, sycpy);
 	}
 	return sycpy;
@@ -2258,6 +2281,7 @@ static expr_i *subst_symbol_name_rec(expr_i *e, expr_i *parent, int parent_pos,
 	  arena_strdup(escape_c_str_literal(dst.get_string()).c_str()));
 	DBG_FLDFE(fprintf(stderr, "lit: %s\n", lit->dump(0).c_str()));
 	if (parent != 0) {
+	  // set_child_parent(parent, parent_pos, lit);
 	  parent->set_child(parent_pos, lit);
 	}
 	return lit;
@@ -2267,11 +2291,13 @@ static expr_i *subst_symbol_name_rec(expr_i *e, expr_i *parent, int parent_pos,
     expr_nssym *nsy = te->nssym;
     assert(nsy != 0);
     if (nsy->prefix == 0 && std::string(nsy->sym) == src) {
+      DBG_EP(fprintf(stderr, "found '%s' expr_te\n", src.c_str()));
       if (dst.is_long()) {
 	expr_i *lit = expr_int_literal_new(nsy->fname, nsy->line,
 	  arena_strdup(long_to_string(dst.get_long()).c_str()),
 	  dst.get_long() < 0);
 	if (parent != 0) {
+	  // set_child_parent(parent, parent_pos, lit);
 	  parent->set_child(parent_pos, lit);
 	}
 	return lit;
@@ -2279,7 +2305,8 @@ static expr_i *subst_symbol_name_rec(expr_i *e, expr_i *parent, int parent_pos,
       } else if (to_symbol) {
 	expr_i *tecpy = create_te_from_string(dst.get_string(), te);
 	if (parent != 0) {
-	  parent->set_child(parent_pos, tecpy);
+	  // set_child_parent(parent, parent_pos, tecpy);
+	  kparent->set_child(parent_pos, tecpy);
 	}
 	return tecpy;
       #endif
@@ -2288,6 +2315,7 @@ static expr_i *subst_symbol_name_rec(expr_i *e, expr_i *parent, int parent_pos,
 	  arena_strdup(escape_c_str_literal(dst.get_string()).c_str()));
 	DBG_FLDFE(fprintf(stderr, "lit: %s\n", lit->dump(0).c_str()));
 	if (parent != 0) {
+	  // set_child_parent(parent, parent_pos, lit);
 	  parent->set_child(parent_pos, lit);
 	}
 	return lit;
@@ -2705,15 +2733,7 @@ static expr_i *chain_exprlist(exprlist_type const& ees, expand_e ex)
   }
 }
 
-static void set_child_parent(expr_i *parent, int pos, expr_i *child)
-{
-  parent->set_child(pos, child);
-  if (child != 0) {
-    child->parent_expr = parent;
-  }
-}
-
-static void check_tree(expr_i *e)
+static void assert_valid_tree(expr_i *e)
 {
   #ifndef NDEBUG
   if (e == 0) {
@@ -2726,13 +2746,29 @@ static void check_tree(expr_i *e)
       continue;
     }
     assert(c->parent_expr == e);
-    check_tree(c);
+    assert_valid_tree(c);
   }
+  #endif
+}
+
+static void assert_is_child(expr_i *e, expr_i *p)
+{
+  #ifndef NDEBUG
+  int n = p->get_num_children();
+  for (int i = 0; i < n; ++i) {
+    expr_i *c = p->get_child(i);
+    if (e == c) {
+      return;
+    }
+  }
+  abort();
   #endif
 }
 
 void expr_expand::check_type(symbol_table *lookup)
 {
+  assert_is_child(this, parent_expr);
+  assert_is_child(parent_expr, parent_expr->parent_expr);
   #if 0
   fprintf(stderr, "expand: %s\n", baseexpr->dump(0).c_str());
   #endif
@@ -2776,9 +2812,9 @@ void expr_expand::check_type(symbol_table *lookup)
       term symte;
       expr_i *baseexpr_cur = 0;
       if (ent != 0) {
-	/* te is of the form {{"foo", 3}, {"bar", 2}} and baseexpr is of type
-	 * expr_stmts */
-	if (ent->size() == 2) {
+	/* te is of the form {{"foo", 3, ...}, {"bar", 2, ...}} and baseexpr
+	 * is of type expr_stmts */
+	if (ent->size() >= 2) {
 	  symte = (*ent)[0];
 	  if ((*ent)[1].is_long()) {
 	    const int idx = (*ent)[1].get_long();
@@ -2797,7 +2833,9 @@ void expr_expand::check_type(symbol_table *lookup)
       } else {
 	/* te is of the form {"foo", "bar"} and baseexpr is a single stmt */
 	symte = te;
-	if (baseexpr->get_esort() != expr_e_stmts) {
+	if (baseexpr->get_esort() == expr_e_stmts) {
+	  baseexpr_cur = ptr_down_cast<expr_stmts>(baseexpr)->head;
+	} else {
 	  baseexpr_cur = baseexpr;
 	}
       }
@@ -2807,6 +2845,7 @@ void expr_expand::check_type(symbol_table *lookup)
       }
       se = deep_clone_expr(baseexpr_cur);
       se = subst_symbol_name_rec(se, 0, 0, itersym, symte, true);
+      DBG_EP(fprintf(stderr, "itersym = %s\n", itersym));
       DBG_EP(fprintf(stderr, "subst = %s\n", se->dump(0).c_str()));
     } else {
       assert(ex == expand_e_comma);
@@ -2839,7 +2878,8 @@ void expr_expand::check_type(symbol_table *lookup)
       }
     }
     if (i == n) {
-      arena_error_throw(this, "expand: internal error: not a child expr");
+      arena_error_throw(this,
+	"expand stmts: internal error: not a child expr");
     }
     set_child_parent(p, i, generated_expr);
     gparent_pos = i;
@@ -2864,7 +2904,8 @@ void expr_expand::check_type(symbol_table *lookup)
       }
     }
     if (i == n) {
-      arena_error_throw(this, "expand: internal error: not a child expr");
+      arena_error_throw(this,
+	"expand argdecls: internal error: not a child expr");
     }
     set_child_parent(p, i, generated_expr);
     gparent = p;
@@ -2914,7 +2955,7 @@ void expr_expand::check_type(symbol_table *lookup)
 	  arena_error_throw(this, "expand: internal error: not a child expr");
 	}
 	set_child_parent(gpp, i, ntop);
-	check_tree(gpp);
+	assert_valid_tree(gpp);
 	fn_check_type(ntop, lookup);
       } else if (ex == expand_e_statement) {
 	expr_stmts *st = ptr_down_cast<expr_stmts>(generated_expr);
@@ -2924,7 +2965,9 @@ void expr_expand::check_type(symbol_table *lookup)
 	}
 	st->rest = ptr_down_cast<expr_stmts>(rest_expr);
 	rest_expr->parent_expr = st;
-	check_tree(generated_expr);
+	DBG_RECHAIN(fprintf(stderr, "RE-CHAIN genrest rest_expr=%p\n",
+	  rest_expr));
+	assert_valid_tree(generated_expr);
 	fn_check_type(generated_expr, lookup);
       } else if (ex == expand_e_argdecls) {
 	expr_argdecls *ad = ptr_down_cast<expr_argdecls>(generated_expr);
@@ -2934,13 +2977,17 @@ void expr_expand::check_type(symbol_table *lookup)
 	}
 	ad->rest = ptr_down_cast<expr_argdecls>(rest_expr);
 	rest_expr->parent_expr = ad;
-	check_tree(generated_expr);
+	assert_valid_tree(generated_expr);
 	fn_check_type(generated_expr, lookup);
       } else {
 	abort();
       }
     } else {
       /* generated_expr != 0 && rest_expr == 0 */
+      assert_is_child(generated_expr, generated_expr->parent_expr);
+      assert_is_child(generated_expr->parent_expr,
+	generated_expr->parent_expr->parent_expr);
+      assert_valid_tree(generated_expr);
       fn_check_type(generated_expr, lookup);
     }
   } else {
@@ -2959,7 +3006,7 @@ void expr_expand::check_type(symbol_table *lookup)
 	  arena_error_throw(this, "expand: internal error: not a child expr");
 	}
 	set_child_parent(gpp, i, rest_expr);
-	check_tree(rest_expr);
+	assert_valid_tree(rest_expr);
 	fn_check_type(rest_expr, lookup);
 	#if 0
 	fprintf(stderr, "rest_expr = %s\n", gpp->dump(0).c_str());
@@ -2991,11 +3038,16 @@ void expr_expand::check_type(symbol_table *lookup)
     } else {
       set_child_parent(gparent, gparent_pos, rest_expr);
       if (ex == expand_e_argdecls) {
-	/* need to check rest_expr here because it is child of this expr */
-	check_tree(rest_expr);
+	/* need to check rest_expr here because it is a child of this expr */
+	assert_valid_tree(rest_expr);
 	fn_check_type(rest_expr, lookup);
       } else {
-	/* rest_expr will be checked by parent */
+	/* rest_expr is removed from the original parent. we need to call
+	 * check_type here. */
+	DBG_RECHAIN(fprintf(stderr, "RE-CHAIN emptygen rest_expr=%p\n",
+	  rest_expr));
+	assert_valid_tree(rest_expr);
+	fn_check_type(rest_expr, lookup);
       }
     }
   }

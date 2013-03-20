@@ -3,6 +3,8 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- is_expand_dummyはtoplevelまでたどる必要がある
+
 - variant(COM的な)を実装してみる
   - structに空引数udconを許可せねばならない(done)
   - 変数定義をexpandで生成できるようにせねばならない
@@ -868,4 +870,17 @@ expand 文
 - metalistの各行について、stmt_listのうちのstmtnum番目の式を取り出し、
   そのstmt中のiをその行で置き換え、またsymをsymstrという名前のシンボル
   で置き換えたstmtを作り、それらを連結したstmtsで置き換える
+
+---------------------------------------------------------------------
+variant
+
+関数引数の個数だけseqを生成
+metamapで、各要素に対して{"a0", passby}のリストを作る
+
+macro f m::local{t, m::to_string{fsym}};
+macro arginfo{args, n}
+  m::list{
+    m::concat{"a", m::at{args, 0}}, 
+    m::add{m::mul{m::at{args, 3}, 2}, m::at{args, 4}}};
+macro arginfo_list m::metamap{m::args{f}, arginfo};
 

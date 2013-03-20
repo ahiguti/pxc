@@ -70,23 +70,24 @@ multithreaded struct foo_iinvoke : iinvoke : {
   }
 }
 
-private macro mfuncstr{t} m::metamap{m::member_functions{t}, m::to_string};
-private macro seqstr{n} m::metamap{m::seq{n}, m::to_string};
 
 multithreaded struct {t} stub_iinvoke : iinvoke : {
   t value;
   function variant invoke(cstrref const& name, cslice{variant} const& args) {
-    expand(fsym : mfuncstr{t})
-    if (m::to_string{fsym} == name) {
-      macro f m::local{t, m::to_string{fsym}};
-      if (m::eq{m::rettype{f}, void}) {
-	value.fsym(expand(i : seqstr{m::argnum{f}};
-	  from_variant{m::argtype{f, i}}(args[m::to_int{i}])));
-	return variant();
-      } else {
-	return to_variant{m::rettype{f}}(
+    macro mfuncstr{t} m::metamap{m::member_functions{t}, m::to_string};
+    macro seqstr{n} m::metamap{m::seq{n}, m::to_string};
+    expand(fsym : mfuncstr{t}) {
+      if (m::to_string{fsym} == name) {
+	macro f m::local{t, m::to_string{fsym}};
+	if (m::eq{m::rettype{f}, void}) {
 	  value.fsym(expand(i : seqstr{m::argnum{f}};
-	    from_variant{m::argtype{f, i}}(args[m::to_int{i}]))));
+	    from_variant{m::argtype{f, i}}(args[m::to_int{i}])));
+	  return variant();
+	} else {
+	  return to_variant{m::rettype{f}}(
+	    value.fsym(expand(i : seqstr{m::argnum{f}};
+	      from_variant{m::argtype{f, i}}(args[m::to_int{i}]))));
+	}
       }
     }
     return variant();
