@@ -1,0 +1,170 @@
+#!/usr/bin/env pxc
+namespace variant;
+import common -;
+import meta::builtin m;
+import numeric::cast n;
+
+macro strlit container::string::strlit;
+
+multithreaded union variant {
+  unit unitval;
+  long longval;
+  double doubleval;
+  string stringval;
+  tptr{iinvoke} tptrval;
+}
+
+multithreaded interface iinvoke {
+  function variant invoke(cstrref const& name, cslice{variant} const& args);
+}
+
+threaded function {t} variant to_variant(t const& x)
+{
+  macro is_string_family{t}
+    m::or{
+      m::eq{t, string},
+      m::eq{t, strlit},
+      m::eq{t, strref},
+      m::eq{t, cstrref}};
+  variant r;
+  if (m::eq{t, unit}) {
+    r.unitval = unit();
+  } else if (n::is_integral{t}) {
+    r.longval = n::static_cast{long, t}(x);
+  } else if (n::is_fp{t}) {
+    r.doubleval = x;
+  } else if (is_string_family{t}) {
+    r.stringval = x;
+  } else if (m::eq{t, variant}) {
+    r = x;
+  } else if (m::eq{t, tptr{iinvoke}}) {
+    r.tptrval = x;
+  } else {
+    // TODO
+  }
+  return r;
+}
+
+threaded function {t} t from_variant(variant const& x)
+{
+  return t(); // TODO
+}
+
+multithreaded struct foo {
+  int val;
+  function void add(int x) { val += x; }
+  function int get() const { return val; }
+  function int func1(int& x, long const& y) {
+    x = val;
+    val += n::static_cast{int, long}(y);
+    return val;
+  }
+}
+
+// TODO: generic
+multithreaded struct foo_iinvoke : iinvoke : {
+  foo value;
+  function variant invoke(cstrref const& name, cslice{variant} const& args) {
+    variant r;
+    if (name == "add") {
+      value.add(numeric::cast::static_cast{int, long}(args[0].longval));
+    } else if (name == "get") {
+      r.longval = value.get();
+    }
+    return r;
+  }
+}
+
+
+/*
+multithreaded struct {t} stub_iinvoke : iinvoke : {
+  t value;
+  function variant invoke(cstrref const& name, cslice{variant} const& args) {
+    macro mfuncstr{t} m::metamap{m::member_functions{t}, m::to_string};
+    macro seqstr{n} m::metamap{m::seq{n}, m::to_string};
+    expand(fsym : mfuncstr{t}) {
+      if (m::to_string{fsym} == name) {
+	macro f m::local{t, m::to_string{fsym}};
+	if (m::eq{m::rettype{f}, void}) {
+	  value.fsym(expand(i : seqstr{m::argnum{f}};
+	    from_variant{m::argtype{f, i}}(args[m::to_int{i}])));
+	  return variant();
+	} else {
+	  return to_variant{m::rettype{f}}(
+	    value.fsym(expand(i : seqstr{m::argnum{f}};
+	      from_variant{m::argtype{f, i}}(args[m::to_int{i}]))));
+	}
+      }
+    }
+    return variant();
+  }
+}
+*/
+
+function void test1() {
+  variant v;
+  v.longval = 3;
+  v.stringval = "abc";
+  println(v);
+  v.tptrval = tptr{foo_iinvoke}(foo_iinvoke(foo(99)));
+  farray{variant, 1} arg;
+  arg[0].longval = 9;
+  v.tptrval->invoke("add", arg);
+  variant x = v.tptrval->invoke("get", arg[0 .. 0]);
+  println(x);
+  // stub_iinvoke{foo} fi;
+}
+
+function void test2() {
+  macro prefix_a{x} m::concat{"a", x};
+  macro ss m::metamap{m::seq{5}, prefix_a};
+  macro drop_1{x} m::substring{x, 1};
+  macro sss m::metamap{ss, drop_1};
+  println(m::to_string{sss});
+}
+
+function {t} void dump_arginfo()
+{
+  macro mfuncstr{t} m::metamap{m::member_functions{t}, m::to_string};
+  macro seqstr{n} m::metamap{m::seq{n}, m::to_string};
+  macro argexp{arg}
+    m::list{
+      m::concat{"a", m::at{arg, 0}}, // a0, a1, a2, ...
+      m::add{m::mul{m::at{arg, 3}, 2}, m::at{arg, 4}} // byref * 2 + mutable
+    };
+  macro argexp_list{fsym}
+    m::metamap{
+      m::args{m::local{t, m::to_string{fsym}}},
+      argexp
+    };
+  macro args_ae{fsym, ae}
+    m::at{m::args{m::local{t, fsym}}, m::to_int{m::substring{ae, 1}}};
+  macro argtype_ae{fsym, ae} m::at{args_ae{fsym, ae}, 2};
+  expand(fsym : mfuncstr{t}) {
+    expand(ae : argexp_list{fsym}) {
+      println(m::concat{
+	"funcname=", m::to_string{fsym}, " pass=mv name=", ae,
+	" type=", argtype_ae{fsym, ae}});
+      println(m::concat{
+	"funcname=", m::to_string{fsym}, " pass=cv name=", ae, 
+	" type=", argtype_ae{fsym, ae}});
+      println(m::concat{
+	"funcname=", m::to_string{fsym}, " pass=mr name=", ae, 
+	" type=", argtype_ae{fsym, ae}});
+      println(m::concat{
+	"funcname=", m::to_string{fsym}, " pass=cr name=", ae, 
+	" type=", argtype_ae{fsym, ae}});
+    }
+    // println(m::concat{fsym, ": ", argexp_list{fsym}});
+  }
+}
+
+function void test3()
+{
+  dump_arginfo{foo}();
+}
+
+test1();
+# test2();
+test3();
+
