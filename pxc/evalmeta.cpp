@@ -1081,10 +1081,10 @@ static term eval_meta_lt(term_list& tlev)
   return term(meta_term_to_long(tlev[0]) < meta_term_to_long(tlev[1]));
 }
 
-static term eval_meta_map(term_list& tlev, env_type& env, size_t depth,
+static term eval_meta_metamap(term_list& tlev, env_type& env, size_t depth,
   expr_i *pos)
 {
-  if (tlev.size() != 2) {
+  if (tlev.size() < 2) {
     return term();
   }
   const term& t0 = tlev[0]; /* list */
@@ -1102,6 +1102,7 @@ static term eval_meta_map(term_list& tlev, env_type& env, size_t depth,
   term_list rtl;
   for (term_list::const_iterator i = tl.begin(); i != tl.end(); ++i) {
     term_list itl;
+    itl.insert(itl.end(), tlev.begin() + 2, tlev.end()); /* opt_binds */
     itl.push_back(*i);
     term it(t1.get_expr(), itl);
     term tc = eval_term_internal(it, true, env, depth + 1, pos);
@@ -1288,8 +1289,8 @@ term eval_metafunction_strict(const std::string& name, term_list& tlev,
       r = eval_meta_gt(tlev);
     } else if (name == "@lt") {
       r = eval_meta_lt(tlev);
-    } else if (name == "@map") {
-      r = eval_meta_map(tlev, env, depth, pos);
+    } else if (name == "@metamap") {
+      r = eval_meta_metamap(tlev, env, depth, pos);
     } else if (name == "@filter") {
       r = eval_meta_filter(tlev, env, depth, pos);
     } else if (name == "@local") {

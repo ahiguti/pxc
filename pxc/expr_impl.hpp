@@ -999,15 +999,17 @@ struct expr_expand : public expr_i {
     expr_i *valueste, expr_i *baseexpr, expand_e ex, expr_i *rest);
   expr_i *clone() const;
   expr_e get_esort() const { return expr_e_expand; }
-  int get_num_children() const { return 2; }
+  int get_num_children() const { return 3; }
   expr_i *get_child(int i) {
     if (i == 0) { return valueste; }
-    if (i == 1) { return rest; }
+    if (i == 1) { return baseexpr; }
+    if (i == 2) { return rest; }
     return 0;
   }
   void set_child(int i, expr_i *e) {
     if (i == 0) { valueste = ptr_down_cast<expr_te>(e); }
-    if (i == 1) { rest = e; }
+    if (i == 1) { baseexpr = e; }
+    if (i == 2) { rest = e; }
   }
   void set_unique_namespace_one(const std::string& u, const std::string& i)
     { uniqns = u; injectns = i; }
