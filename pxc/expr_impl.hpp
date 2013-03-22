@@ -522,7 +522,7 @@ struct expr_var : public expr_i {
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
-  const char *const sym;
+  const char *sym;
   expr_te *type_uneval;
   std::string uniqns;
   std::string injectns;

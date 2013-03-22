@@ -648,11 +648,10 @@ static void check_return_expr_block(expr_funcdef *fdef, expr_block *block)
     return;
   } else if (last_stmt->get_esort() == expr_e_special) {
     expr_special *const esp = ptr_down_cast<expr_special>(last_stmt);
-    if (esp->tok == TOK_RETURN) {
+    if (esp->tok == TOK_RETURN || esp->tok == TOK_THROW) {
       return; /* ok */
     }
   }
-  // FIXME: try - catch
   arena_error_push(error_pos, "control reaches end of non-void function");
 }
 
@@ -2255,6 +2254,7 @@ static expr_i *subst_symbol_name_rec(expr_i *e, expr_i *parent, int parent_pos,
   expr_symbol *sy = dynamic_cast<expr_symbol *>(e);
   expr_te *te = dynamic_cast<expr_te *>(e);
   expr_funcdef *fd = dynamic_cast<expr_funcdef *>(e);
+  expr_var *ev = dynamic_cast<expr_var *>(e);
   if (sy != 0) {
     expr_nssym *nsy = sy->nssym;
     assert(nsy != 0);
@@ -2324,6 +2324,10 @@ static expr_i *subst_symbol_name_rec(expr_i *e, expr_i *parent, int parent_pos,
   } else if (fd != 0) {
     if (std::string(fd->sym) == src) {
       fd->sym = arena_strdup(dst.get_string().c_str());
+    }
+  } else if (ev != 0) {
+    if (std::string(ev->sym) == src) {
+      ev->sym = arena_strdup(dst.get_string().c_str());
     }
   }
   int num = e->get_num_children();

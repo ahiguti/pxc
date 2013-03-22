@@ -148,7 +148,7 @@ void fn_set_namespace(expr_i *e, const std::string& uniqns,
   const std::string& injectns, int& block_id_ns);
 void fn_set_generated_code(expr_i *e);
 void fn_set_tree_and_define_static(expr_i *e, expr_i *p, symbol_table *symtbl,
-  expr_stmts *stmt, bool is_template);
+  expr_stmts *stmt, bool is_template_descent, bool is_expand_base = false);
 void fn_update_tree(expr_i *e, expr_i *p, symbol_table *symtbl,
   const std::string& curns_u, const std::string& curns_i);
 void fn_check_template_upvalues_direct(expr_i *e);

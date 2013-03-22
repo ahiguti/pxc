@@ -3,7 +3,18 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- is_expand_dummyはtoplevelまでたどる必要がある
+- 名前空間にbuiltinを使うのを止める -> とりあえずcommonにし、大きく
+  なってきたら分離
+
+- stringをpxcvectorに統合
+
+- interface間の継承
+
+- serialization -> conversion
+  downcastもconversionの下へ?
+  -> 変換関数は各型の下へ入れるのがよいのでは？
+
+- is_expand_dummyはtoplevelまでたどる必要がある?
 
 - variant(COM的な)を実装してみる
   - structに空引数udconを許可せねばならない(done)
@@ -306,6 +317,7 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- control reaches end of ... は最後がthrowだったらok(done)
 - dynamic_cast相当のdowncastが必要。iinvokeからfoo_iinvokeへdowncast
   しないと元オブジェクトを取り出せない。(done)
 - externな関数は返値をbyrefで返せるように。downcastを実装(done)
@@ -883,4 +895,17 @@ macro arginfo{args, n}
     m::concat{"a", m::at{args, 0}}, 
     m::add{m::mul{m::at{args, 3}, 2}, m::at{args, 4}}};
 macro arginfo_list m::metamap{m::args{f}, arginfo};
+
+invokeが取るvariant型引数を型付けられた引数に変換する:
+byvalならばfrom_variantで変換した値を保持
+byrefならばiinvokeの中身をdowncastして参照を保持
+sliceを引数にとる関数を呼ぶときは何に変換するのか？
+
+from_variantの動作:
+- tがintegral, fp, 文字列ならば極力変換
+- tptrvalの指す先をtにdowncastして返す
+
+to_variantの動作:
+- tがintegral, fp, 文字列ならばそのまま格納
+- それ以外はtptrvalにbox化
 

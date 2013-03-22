@@ -1,0 +1,69 @@
+namespace serialization::serialize;
+public import numeric::integral -;
+public import container::string -;
+public import meta::builtin m;
+public import meta::family mf;
+
+public threaded function {tmpl, t} void serialize(t const& x,
+  m::local{tmpl, "target_type"}& o)
+{
+  macro fam m::family{t};
+  if (m::not{m::eq{m::local{tmpl, "specialized_func", t}, 0}}) {
+    m::local{tmpl, "specialized_func", t}(x, o);
+  } else if (mf::is_array_family{fam}) {
+    m::local{tmpl, "array_begin"}(o);
+    foreach (size_t i, m::at{t, 0} v : x) {
+      if (i != 0) {
+	m::local{tmpl, "array_sep"}(o);
+      }
+      serialize{tmpl, m::at{t, 0}}(v, o);
+    }
+    m::local{tmpl, "array_end"}(o);
+  } else if (mf::is_map_family{fam}) {
+    m::local{tmpl, "map_begin"}(o);
+    bool first = true;
+    foreach (m::at{t, 0} k, m::at{t, 1} v : x) {
+      if (first) {
+	first = false;
+      } else {
+	m::local{tmpl, "map_sep"}(o);
+      }
+      m::local{tmpl, "map_entry_begin"}(o);
+      serialize{tmpl, m::at{t, 0}}(k, o);
+      m::local{tmpl, "map_entry_sep"}(o);
+      serialize{tmpl, m::at{t, 1}}(v, o);
+      m::local{tmpl, "map_entry_end"}(o);
+    }
+    m::local{tmpl, "map_end"}(o);
+  } else if (mf::is_pointer_family{fam}) {
+    m::local{tmpl, "pointer_begin"}(o);
+    serialize{tmpl, m::at{t, 0}}(*x, o);
+    m::local{tmpl, "pointer_end"}(o);
+  } else if (mf::is_struct_family{fam}) {
+    m::local{tmpl, "struct_begin"}(o);
+    foreach (name, idx, fld : t) {
+      if (idx != 0) {
+	m::local{tmpl, "struct_sep"}(o);
+      }
+      m::local{tmpl, "struct_entry_begin"}(o);
+      m::local{tmpl, "struct_field_name"}(name, o);
+      m::local{tmpl, "struct_entry_sep"}(o);
+      serialize{tmpl, m::at{m::field_types{t}, idx}}(x.fld, o);
+      m::local{tmpl, "struct_entry_end"}(o);
+    }
+    m::local{tmpl, "struct_end"}(o);
+  } else if (mf::is_union_family{fam}) {
+    m::local{tmpl, "union_begin"}(o);
+    foreach (name, idx, fld : t) {
+      if (case x.fld) {
+	m::local{tmpl, "union_field_name"}(name, o);
+	m::local{tmpl, "union_entry_sep"}(o);
+	serialize{tmpl, m::at{m::field_types{t}, idx}}(x.fld, o);
+      }
+    }
+    m::local{tmpl, "union_end"}(o);
+  } else {
+    m::local{tmpl, "unknown", t}(x, o);
+  }
+}
+

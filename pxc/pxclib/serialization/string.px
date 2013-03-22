@@ -6,104 +6,56 @@ public import meta::family mf;
 public import numeric::cast n;
 public import serialization::positional p;
 public import serialization::builtin b;
-public import serialization::json_encode j;
+public import serialization::url_encode u;
+// public import serialization::json_encode j;
+public import serialization::serialize -;
 
-public threaded function {tmpl, t} void serialize(t const& x,
-  m::local{tmpl, "target_type"}& o)
+public macro is_string_family{t}
+    m::or{
+      m::eq{t, string},
+      m::eq{t, strlit},
+      m::eq{t, strref},
+      m::eq{t, cstrref}};
+
+threaded function {t} void string_append_escape(t const& x, string& v)
 {
-  macro fam m::family{t};
-  if (m::not{m::eq{m::local{tmpl, "specialized_func", t}, 0}}) {
-    m::local{tmpl, "specialized_func", t}(x, o);
-  } else if (mf::is_array_family{fam}) {
-    m::local{tmpl, "array_begin"}(o);
-    foreach (size_t i, m::at{t, 0} v : x) {
-      if (i != 0) {
-	m::local{tmpl, "array_sep"}(o);
-      }
-      serialize{tmpl, m::at{t, 0}}(v, o);
-    }
-    m::local{tmpl, "array_end"}(o);
-  } else if (mf::is_map_family{fam}) {
-    m::local{tmpl, "map_begin"}(o);
-    bool first = true;
-    foreach (m::at{t, 0} k, m::at{t, 1} v : x) {
-      if (first) {
-	first = false;
-      } else {
-	m::local{tmpl, "map_sep"}(o);
-      }
-      m::local{tmpl, "map_entry_begin"}(o);
-      serialize{tmpl, m::at{t, 0}}(k, o);
-      m::local{tmpl, "map_entry_sep"}(o);
-      serialize{tmpl, m::at{t, 1}}(v, o);
-      m::local{tmpl, "map_entry_end"}(o);
-    }
-    m::local{tmpl, "map_end"}(o);
-  } else if (mf::is_pointer_family{fam}) {
-    m::local{tmpl, "pointer_begin"}(o);
-    serialize{tmpl, m::at{t, 0}}(*x, o);
-    m::local{tmpl, "pointer_end"}(o);
-  } else if (mf::is_struct_family{fam}) {
-    m::local{tmpl, "struct_begin"}(o);
-    foreach (name, idx, fld : t) {
-      if (idx != 0) {
-	m::local{tmpl, "struct_sep"}(o);
-      }
-      m::local{tmpl, "struct_entry_begin"}(o);
-      m::local{tmpl, "struct_field_name"}(name, o);
-      m::local{tmpl, "struct_entry_sep"}(o);
-      serialize{tmpl, m::at{m::field_types{t}, idx}}(x.fld, o);
-      m::local{tmpl, "struct_entry_end"}(o);
-    }
-    m::local{tmpl, "struct_end"}(o);
-  } else if (mf::is_union_family{fam}) {
-    m::local{tmpl, "union_begin"}(o);
-    foreach (name, idx, fld : t) {
-      if (case x.fld) {
-	m::local{tmpl, "union_field_name"}(name, o);
-	m::local{tmpl, "union_entry_sep"}(o);
-	serialize{tmpl, m::at{m::field_types{t}, idx}}(x.fld, o);
-      }
-    }
-    m::local{tmpl, "union_end"}(o);
-  } else {
-    m::local{tmpl, "unknown", t}(x, o);
-  }
+  // j::json_encode(x, v);
+  v.push_back('"');
+  u::url_encode(v, x);
+  v.push_back('"');
 }
-
-threaded function {t} void string_append_to_string(t const& x, string& v)
-{ v.append(x); } // { j::json_encode(x, v); }
+threaded function {t} void string_append_noescape(t const& x, string& v)
+{
+  v.append(x);
+}
 threaded function void string_append_brace_open(string& v)
 { v.push_back('{'); }
 threaded function void string_append_brace_close(string& v)
 { v.push_back('}'); }
 threaded function void string_append_comma(string& v)
 { v.push_back(','); }
-threaded function void string_append_colon(string& v)
-{ v.push_back(':'); }
+threaded function void string_append_equal(string& v)
+{ v.push_back('='); }
 threaded function void string_append_none(string& v)
 { } 
-threaded function {t} void string_append_dash(t const& x, string& v)
-{ v.push_back('-'); }
+threaded function {t} void string_append_star(t const& x, string& v)
+{ v.push_back('*'); }
+threaded function {t} void string_append_unknown(t const& x, string& v)
+{ v.push_back('?'); }
 
 threaded struct deftmpl {
   macro target_type string;
   macro symstr{t} m::concat{t, "_append_to_string"};
   macro sym{t} m::symbol{symstr{t}, t};
-  macro is_string_family{t}
-    m::or{
-      m::eq{t, string},
-      m::eq{t, strlit},
-      m::eq{t, strref},
-      m::eq{t, cstrref}};
   macro has_specialized_symbol{t} m::eq{m::to_string{sym{t}}, symstr{t}};
   macro specialized_func{t}
-    m::metaif{is_string_family{t}, string_append_to_string{t},
     m::metaif{has_specialized_symbol{t}, sym{t},
+    m::metaif{is_string_family{t}, string_append_escape{t},
     m::metaif{n::is_integral{t}, p::integral_to_decimal,
     m::metaif{n::is_fp{t}, p::fp_to_decimal,
     m::metaif{m::eq{t, bool}, b::bool_to_string,
-    0}}}}};
+    m::metaif{m::eq{t, unit}, string_append_star,
+    0}}}}}};
   macro array_begin string_append_brace_open;
   macro array_end string_append_brace_close;
   macro array_sep string_append_comma;
@@ -112,7 +64,7 @@ threaded struct deftmpl {
   macro map_sep string_append_comma;
   macro map_entry_begin string_append_none;
   macro map_entry_end string_append_none;
-  macro map_entry_sep string_append_colon;
+  macro map_entry_sep string_append_equal;
   macro pointer_begin string_append_brace_open;
   macro pointer_end string_append_brace_close;
   macro struct_begin string_append_brace_open;
@@ -120,24 +72,28 @@ threaded struct deftmpl {
   macro struct_sep string_append_comma;
   macro struct_entry_begin string_append_none;
   macro struct_entry_end string_append_none;
-  macro struct_entry_sep string_append_colon;
-  macro struct_field_name string_append_to_string;
+  macro struct_entry_sep string_append_equal;
+  macro struct_field_name string_append_noescape;
   macro union_begin string_append_brace_open;
   macro union_end string_append_brace_close;
-  macro union_entry_sep string_append_colon;
-  macro union_field_name string_append_to_string;
-  macro unknown{fam} string_append_dash;
+  macro union_entry_sep string_append_equal;
+  macro union_field_name string_append_noescape;
+  macro unknown{fam} string_append_unknown;
 }
 
-public threaded function {t} void append_to_string(t const& x, string& out)
+public threaded function {t} void serialize_to_string(t const& x, string& out)
 {
   serialize{deftmpl, t}(x, out);
 }
 
 public threaded function {t} string to_string(t const& x)
 {
-  string s;
-  append_to_string(x, s);
-  return s;
+  if (is_string_family{t}) {
+    return x;
+  } else {
+    string s;
+    serialize_to_string(x, s);
+    return s;
+  }
 }
 

@@ -3,8 +3,14 @@ public import numeric::integral -;
 public import numeric::fp -;
 public import meta::builtin m;
 
-public macro is_numeric{t} is_numeric_family{t, m::family{t}};
-public macro is_integral{t} is_integral_family{t, m::family{t}};
+public macro is_numeric{t}
+  is_numeric_family{t, m::family{t}};
+public macro is_integral{t}
+  is_integral_family{t, m::family{t}};
+public macro is_signed_integral{t}
+  is_signed_integral_family{t, m::family{t}};
+public macro is_unsigned_integral{t}
+  is_unsigned_integral_family{t, m::family{t}};
 public macro is_fp{t} is_fp_family{t, m::family{t}};
 
 public threaded function {tto, tfrom} tto numeric_cast(tfrom const& x)
@@ -27,19 +33,27 @@ public threaded function {tto, tfrom} tto static_cast(tfrom const& x)
   }
 }
 
-private macro is_integral_family{t, fam}
+private macro is_signed_integral_family{t, fam}
+  m::or{
+    m::eq{t, char},
+    m::eq{t, short},
+    m::eq{t, int},
+    m::eq{t, long},
+    m::eq{fam, "extint"}};
+
+private macro is_unsigned_integral_family{t, fam}
   m::or{
     m::eq{t, uchar},
-    m::eq{t, char},
     m::eq{t, ushort},
-    m::eq{t, short},
     m::eq{t, uint},
-    m::eq{t, int},
     m::eq{t, ulong},
-    m::eq{t, long},
     m::eq{t, size_t},
-    m::eq{fam, "extuint"},
-    m::eq{fam, "extint"}};
+    m::eq{fam, "extuint"}};
+
+private macro is_integral_family{t, fam}
+  m::or{
+    is_signed_integral_family{t, fam},
+    is_unsigned_integral_family{t, fam}};
 
 private macro is_fp_family{t, fam}
   m::or{
