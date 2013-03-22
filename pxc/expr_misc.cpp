@@ -2049,7 +2049,7 @@ static void fn_check_syntax_one(expr_i *e)
 }
 
 void fn_set_tree_and_define_static(expr_i *e, expr_i *p, symbol_table *symtbl,
-  expr_stmts *stmt, bool is_template_descent)
+  expr_stmts *stmt, bool is_template_descent, bool is_expand_base)
 {
   if (e == 0) {
     return;
@@ -2059,8 +2059,10 @@ void fn_set_tree_and_define_static(expr_i *e, expr_i *p, symbol_table *symtbl,
   DBG_SYMTBL(fprintf(stderr, "fn_set_tree_: set %p-> symtbl_lexical  = %p\n",
     e, symtbl));
   fn_check_syntax_one(e);
-  e->define_const_symbols_one();
-  e->define_vars_one(stmt);
+  if (!is_expand_base) {
+    e->define_const_symbols_one();
+    e->define_vars_one(stmt);
+  }
   if (e->get_esort() == expr_e_block) {
     expr_block *const eb = ptr_down_cast<expr_block>(e);
     symtbl = &eb->symtbl;
@@ -2074,10 +2076,15 @@ void fn_set_tree_and_define_static(expr_i *e, expr_i *p, symbol_table *symtbl,
   if (e->get_esort() == expr_e_stmts) {
     stmt = ptr_down_cast<expr_stmts>(e);
   }
+  expr_i *expand_base = 0;
+  if (e->get_esort() == expr_e_expand) {
+    expand_base = ptr_down_cast<expr_expand>(e)->baseexpr;
+  }
   const int num = e->get_num_children();
   for (int i = 0; i < num; ++i) {
     expr_i *c = e->get_child(i);
-    fn_set_tree_and_define_static(c, e, symtbl, stmt, is_template_descent);
+    fn_set_tree_and_define_static(c, e, symtbl, stmt, is_template_descent,
+      (is_expand_base || c == expand_base));
   }
 }
 
