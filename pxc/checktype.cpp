@@ -2778,6 +2778,9 @@ void expr_expand::check_type(symbol_table *lookup)
   #endif
   fn_check_type(valueste, lookup);
   const term& vtyp = valueste->sdef.resolve_evaluated();
+  if (has_unbound_tparam(vtyp)) {
+    return; /* not instantiated */
+  }
   const term_list *const targs = vtyp.is_metalist() ? vtyp.get_metalist()
     : vtyp.get_args();
   if (targs == 0) {

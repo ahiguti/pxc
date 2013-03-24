@@ -326,13 +326,15 @@ static term eval_meta_argnames(term_list& tlev)
   }
   expr_i *const einst = term_get_instance(ttyp);
   DBG_METAARGTYPE(fprintf(stderr, "t.expr=%p inst=%p\n", t.expr, einst));
-  expr_block *block = einst->get_template_block();
-  DBG_METAARGTYPE(fprintf(stderr, "arg %d\n", n));
   term_list tl;
-  expr_argdecls *ad = block->get_argdecls();
-  for (; ad != 0; ad = ad->get_rest()) {
-    const std::string s(ad->sym);
-    tl.push_back(term(s));
+  expr_block *block = einst->get_template_block();
+  if (block != 0) {
+    DBG_METAARGTYPE(fprintf(stderr, "arg %d\n", n));
+    expr_argdecls *ad = block->get_argdecls();
+    for (; ad != 0; ad = ad->get_rest()) {
+      const std::string s(ad->sym);
+      tl.push_back(term(s));
+    }
   }
   return term(tl);
 }
@@ -350,21 +352,23 @@ static term eval_meta_args(term_list& tlev)
   }
   expr_i *const einst = term_get_instance(ttyp);
   DBG_METAARGTYPE(fprintf(stderr, "t.expr=%p inst=%p\n", t.expr, einst));
-  expr_block *block = einst->get_template_block();
-  DBG_METAARGTYPE(fprintf(stderr, "arg %d\n", n));
   term_list tl;
-  expr_argdecls *ad = block->get_argdecls();
-  long long idx = 0;
-  for (; ad != 0; ad = ad->get_rest(), ++idx) {
-    term_list rec;
-    const std::string s(ad->sym);
-    rec.push_back(term(idx)); /* index */
-    rec.push_back(term(s)); /* name */
-    rec.push_back(ad->resolve_texpr()); /* type */
-    rec.push_back(term(is_passby_cm_reference(ad->passby))); /* byref */
-    rec.push_back(term(is_passby_mutable(ad->passby))); /* mutable */
-    term e(rec);
-    tl.push_back(e);
+  expr_block *block = einst->get_template_block();
+  if (block != 0) {
+    DBG_METAARGTYPE(fprintf(stderr, "arg %d\n", n));
+    expr_argdecls *ad = block->get_argdecls();
+    long long idx = 0;
+    for (; ad != 0; ad = ad->get_rest(), ++idx) {
+      term_list rec;
+      const std::string s(ad->sym);
+      rec.push_back(term(idx)); /* index */
+      rec.push_back(term(s)); /* name */
+      rec.push_back(ad->resolve_texpr()); /* type */
+      rec.push_back(term(is_passby_cm_reference(ad->passby))); /* byref */
+      rec.push_back(term(is_passby_mutable(ad->passby))); /* mutable */
+      term e(rec);
+      tl.push_back(e);
+    }
   }
   return term(tl);
 }

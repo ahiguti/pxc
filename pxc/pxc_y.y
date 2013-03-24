@@ -223,12 +223,12 @@ struct_body_stmt_list
 	  { $$ = expr_stmts_new(cur_fname, @1.first_line,
 		expr_expand_new(cur_fname, @1.first_line, $3, $5, $7,
 			expand_e_statement, 0), $8); }
-	/*
 	| TOK_EXPAND '(' TOK_SYMBOL ':' type_expr ')' '{'
 		struct_body_stmt_list '}' struct_body_stmt_list
 	  { $$ = expr_stmts_new(cur_fname, @1.first_line,
 		expr_expand_new(cur_fname, @1.first_line, $3, $5, $8,
 			expand_e_statement, 0), $10); }
+	/*
 	*/
 	| struct_body_stmt struct_body_stmt_list
 	  { $$ = expr_stmts_new(cur_fname, @1.first_line, $1, $2); }

@@ -1,0 +1,53 @@
+namespace vtest1;
+import variant -;
+import common -;
+import meta::builtin m;
+import numeric::cast n;
+import exception::builtin -;
+import serialization::positional -;
+import downcast -;
+
+multithreaded struct foo(int x) {
+  int val = x;
+  function void add(int x) { val += x; }
+  function int get() const { return val; }
+  function int func1(int& x, long const& y) {
+    x = val;
+    val += n::static_cast{int, long}(y);
+    return val;
+  }
+}
+
+function void test1() {
+  variant v;
+  v.longval = 3;
+  v.stringval = "abc";
+  println(v);
+  v.tptrval = tptr{stub_iinvoke{foo}}(stub_iinvoke{foo}(foo(99)));
+  farray{variant, 1} arg;
+  arg[0].longval = 9;
+  v.tptrval->invoke("add", arg); // 99 + 9
+  variant x = v.tptrval->invoke("get", arg[0 .. 0]);
+  println(x);
+  var fi = stub_iinvoke{foo}(foo(33));
+}
+
+function void test2() {
+  macro prefix_a{x} m::concat{"a", x};
+  macro ss m::metamap{m::seq{5}, prefix_a};
+  macro drop_1{x} m::substring{x, 1};
+  macro sss m::metamap{ss, drop_1};
+  println(m::to_string{sss});
+}
+
+function void test3()
+{
+  var f = stub_iinvoke{foo}(foo(123));
+  println(m::full_string{to_non_ephemeral{cslice{int}}});
+  // dump_arginfo{foo}();
+}
+
+test1();
+# test2();
+test3();
+
