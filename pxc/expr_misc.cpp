@@ -3061,20 +3061,15 @@ bool is_noexec_expr(expr_i *e)
 static bool is_expand_dummy(const expr_block *bl)
 {
   expr_i *p = bl->parent_expr;
-  if (p == 0) {
-    return false;
+  while (true) {
+    if (p == 0) {
+      return false;
+    }
+    if (p->get_esort() == expr_e_expand) {
+      return true;
+    }
+    p = p->parent_expr;
   }
-  if (p->get_esort() == expr_e_expand) {
-    return true;
-  }
-  p = p->parent_expr;
-  if (p == 0) {
-    return false;
-  }
-  if (p->get_esort() == expr_e_expand) {
-    return true;
-  }
-  return false;
 }
 
 bool is_compiled(const expr_block *bl)

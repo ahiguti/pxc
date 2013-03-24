@@ -64,7 +64,7 @@ clean:
 	$(MAKE) cleanlogs > /dev/null
 
 cleanlogs:
-	for i in test_*; do \
+	for i in test_* skip_*; do \
 	  pushd $$i > /dev/null; \
 	  if [ -f Makefile ]; then \
 	    $(MAKE) clean; \

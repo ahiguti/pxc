@@ -5,17 +5,27 @@ public import meta::builtin m;
 
 public macro is_numeric{t}
   is_numeric_family{t, m::family{t}};
+public macro is_numeric_enum_bitmask{t}
+  is_numeric_enum_bitmask_family{t, m::family{t}};
 public macro is_integral{t}
   is_integral_family{t, m::family{t}};
+public macro is_integral_enum_bitmask{t}
+  is_integral_enum_bitmask_family{t, m::family{t}};
 public macro is_signed_integral{t}
   is_signed_integral_family{t, m::family{t}};
 public macro is_unsigned_integral{t}
   is_unsigned_integral_family{t, m::family{t}};
+public macro is_unsigned_integral_enum_bitmask{t}
+  is_unsigned_integral_enum_bitmask_family{t, m::family{t}};
+public macro is_enum{t}
+  is_enum_family{t, m::family{t}};
+public macro is_bitmask{t}
+  is_bitmask_family{t, m::family{t}};
 public macro is_fp{t} is_fp_family{t, m::family{t}};
 
 public threaded function {tto, tfrom} tto numeric_cast(tfrom const& x)
 {
-  if (m::and{is_numeric{tfrom}, is_numeric{tto}}) {
+  if (m::and{is_numeric_enum_bitmask{tfrom}, is_numeric_enum_bitmask{tto}}) {
     numeric_cast_impl{tto, tfrom} c;
     return c.convert(x);
   } else {
@@ -25,7 +35,7 @@ public threaded function {tto, tfrom} tto numeric_cast(tfrom const& x)
 
 public threaded function {tto, tfrom} tto static_cast(tfrom const& x)
 {
-  if (m::and{is_numeric{tfrom}, is_numeric{tto}}) {
+  if (m::and{is_numeric_enum_bitmask{tfrom}, is_numeric_enum_bitmask{tto}}) {
     static_cast_impl{tto, tfrom} c;
     return c.convert(x);
   } else {
@@ -50,10 +60,32 @@ private macro is_unsigned_integral_family{t, fam}
     m::eq{t, size_t},
     m::eq{fam, "extuint"}};
 
+private macro is_enum_family{t, fam}
+  m::or{
+    m::eq{fam, "enum"},
+    m::eq{fam, "extenum"}};
+
+private macro is_bitmask_family{t, fam}
+  m::or{
+    m::eq{fam, "bitmask"},
+    m::eq{fam, "extbitmask"}};
+
+private macro is_unsigned_integral_enum_bitmask_family{t, fam}
+  m::or{
+    is_unsigned_integral_family{t, fam},
+    is_enum_family{t, fam},
+    is_bitmask_family{t, fam}};
+
 private macro is_integral_family{t, fam}
   m::or{
     is_signed_integral_family{t, fam},
     is_unsigned_integral_family{t, fam}};
+
+private macro is_integral_enum_bitmask_family{t, fam}
+  m::or{
+    is_integral_family{t, fam},
+    is_enum_family{t, fam},
+    is_bitmask_family{t, fam}};
 
 private macro is_fp_family{t, fam}
   m::or{
@@ -66,6 +98,12 @@ private macro is_numeric_family{t, fam}
     is_integral_family{t, fam},
     is_fp_family{t, fam},
     m::eq{fam, "extnumeric"}};
+
+private macro is_numeric_enum_bitmask_family{t, fam}
+  m::or{
+    is_numeric_family{t, fam},
+    is_enum_family{t, fam},
+    is_bitmask_family{t, fam}};
 
 private threaded extern "numeric::numeric_cast_impl"
 struct {tto, tfrom} numeric_cast_impl {

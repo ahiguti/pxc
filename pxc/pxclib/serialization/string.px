@@ -10,7 +10,7 @@ public import serialization::url_encode u;
 // public import serialization::json_encode j;
 public import serialization::serialize -;
 
-public macro is_string_family{t}
+public macro is_string_family_type{t}
     m::or{
       m::eq{t, string},
       m::eq{t, strlit},
@@ -50,7 +50,7 @@ threaded struct deftmpl {
   macro has_specialized_symbol{t} m::eq{m::to_string{sym{t}}, symstr{t}};
   macro specialized_func{t}
     m::metaif{has_specialized_symbol{t}, sym{t},
-    m::metaif{is_string_family{t}, string_append_escape{t},
+    m::metaif{is_string_family_type{t}, string_append_escape{t},
     m::metaif{n::is_integral{t}, p::integral_to_decimal,
     m::metaif{n::is_fp{t}, p::fp_to_decimal,
     m::metaif{m::eq{t, bool}, b::bool_to_string,
@@ -88,7 +88,7 @@ public threaded function {t} void serialize_to_string(t const& x, string& out)
 
 public threaded function {t} string to_string(t const& x)
 {
-  if (is_string_family{t}) {
+  if (is_string_family_type{t}) {
     return x;
   } else {
     string s;

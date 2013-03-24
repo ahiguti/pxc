@@ -614,10 +614,12 @@ static void emit_variant_aux_functions(emit_context& em,
   /* init */
   em.set_file_line(ev);
   em.indent('b');
-  em.puts("void ");
   if (!declonly) {
+    em.puts("void ");
     em.puts(name_c);
     em.puts("::");
+  } else {
+    em.puts("inline void ");
   }
   em.puts("init$(const ");
   em.puts(name_c);
@@ -655,10 +657,12 @@ static void emit_variant_aux_functions(emit_context& em,
   /* deinit */
   em.set_file_line(ev);
   em.indent('b');
-  em.puts("void ");
   if (!declonly) {
+    em.puts("void ");
     em.puts(name_c);
     em.puts("::");
+  } else {
+    em.puts("inline void ");
   }
   em.puts("deinit$()");
   if (declonly) {
@@ -692,6 +696,9 @@ static void emit_variant_aux_functions(emit_context& em,
   for (i = flds.begin(); i != flds.end(); ++i) {
     em.set_file_line(*i);
     em.indent('b');
+    if (declonly) {
+      em.puts("inline ");
+    }
     emit_term(em, (*i)->get_texpr());
     em.puts(" ");
     if (!declonly) {
@@ -730,6 +737,9 @@ static void emit_variant_aux_functions(emit_context& em,
   for (i = flds.begin(); i != flds.end(); ++i) {
     em.set_file_line(*i);
     em.indent('b');
+    if (declonly) {
+      em.puts("inline ");
+    }
     emit_term(em, (*i)->get_texpr());
     em.puts(" ");
     if (!declonly) {
