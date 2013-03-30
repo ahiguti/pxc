@@ -92,8 +92,10 @@ expr_i *expr_foldfe_new(const char *fn, int line, const char *itersym,
 { return new expr_foldfe(fn, line, itersym, valueste, embedsym, embedexpr,
   foldop, stmts); }
 expr_i *expr_expand_new(const char *fn, int line, const char *itersym,
-  expr_i *valueste, expr_i *baseexpr, expand_e ex, expr_i *rest)
-{ return new expr_expand(fn, line, itersym, valueste, baseexpr, ex, rest); }
+  const char *idxsym, expr_i *valueste, expr_i *baseexpr, expand_e ex,
+  expr_i *rest)
+{ return new expr_expand(fn, line, itersym, idxsym, valueste, baseexpr, ex,
+  rest); }
 expr_i *expr_funcdef_new(const char *fn, int line, const char *sym,
   const char *cname, bool is_const, expr_i *block, bool ext_decl,
   bool extc_decl, attribute_e attr)
@@ -135,7 +137,7 @@ expr_i *expr_te_local_chain_new(expr_i *te1, expr_i *te2)
     expr_nssym_new(te1->fname, te1->line,
       expr_nssym_new(te1->fname, te1->line,
 	expr_nssym_new(te1->fname, te1->line, 0,
-	  "meta"), "builtin"), "@local"),
+	  "meta"), "common"), "@local"),
       expr_telist_new(te1->fname, te1->line,
 	te1,
 	expr_telist_new(te2->fname, te2->line,
@@ -148,7 +150,7 @@ expr_i *expr_metalist_new(expr_i *tl)
   return expr_te_new(tl->fname, tl->line,
     expr_nssym_new(tl->fname, tl->line,
       expr_nssym_new(tl->fname, tl->line,
-	expr_nssym_new(tl->fname, tl->line, 0, "type"), "builtin"), "@list"),
+	expr_nssym_new(tl->fname, tl->line, 0, "type"), "common"), "@list"),
     tl);
 }
 
@@ -325,7 +327,7 @@ static void define_builtins()
   /* set namespace */
   {
     int block_id_ns = 0;
-    fn_set_namespace(stmts, "meta::builtin", "meta::builtin", block_id_ns);
+    fn_set_namespace(stmts, "meta::common", "meta::common", block_id_ns);
   }
   topvals.push_front(stmts);
   /* stubs for builtin metafunctions */
@@ -354,7 +356,7 @@ static void define_builtins()
   /* set namespace */
   {
     int block_id_ns = 0;
-    fn_set_namespace(stmts, "meta::builtin", "meta::builtin", block_id_ns);
+    fn_set_namespace(stmts, "meta::common", "meta::common", block_id_ns);
   }
   topvals.push_front(stmts);
 }

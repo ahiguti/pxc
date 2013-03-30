@@ -5,6 +5,8 @@ unset LANG
 
 if [ "$1" != "" ]; then
   TESTS="$1"
+  shift
+  OPTS=$*
 else
   TESTS=`echo *.px | sort`
 fi
@@ -22,7 +24,7 @@ for i in $TESTS; do
   # echo "$bn";
   echo -n ".";
   if [ "$i" != "pxcrt.px" ]; then
-    ../../pxc --no-realpath -w .pxc -p "$TEST_PXC_PROF" "$i" \
+    ../../pxc --no-realpath -w .pxc -p "$TEST_PXC_PROF" $OPTS "$i" \
     	> $bn.log 2> $bn.log2
     if [ ! "$?" ]; then
       echo "$bn failed"

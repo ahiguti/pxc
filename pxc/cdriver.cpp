@@ -757,6 +757,19 @@ static void compile_cxx_all(const parser_options& po,
   }
 }
 
+static std::string get_expected_namespace_for_file(std::string fn)
+{
+  const size_t sl = fn.rfind('/');
+  if (sl != fn.npos) {
+    fn = fn.substr(sl + 1);
+  }
+  const size_t dot = fn.rfind('.');
+  if (dot != fn.npos) {
+    fn = fn.substr(0, dot);
+  }
+  return fn;
+}
+
 static void compile_module_to_cc_srcs(const parser_options& po,
   all_modules_info& ami, module_info& mi_main, generate_main_e gmain)
 {
@@ -776,10 +789,20 @@ static void compile_module_to_cc_srcs(const parser_options& po,
 	cursrc_imports.main_unique_namespace.c_str(),
 	mi.unique_namespace.c_str());
     }
+    if (si.mode == compile_mode_main && !mi.aux_filename.empty()) {
+      const std::string exns = get_expected_namespace_for_file(
+	mi.aux_filename);
+      if (cursrc_imports.main_unique_namespace != exns) {
+	arena_error_throw(0,
+	  "-:0: invalid namespace declaration '%s' for '%s'",
+	  cursrc_imports.main_unique_namespace.c_str(),
+	  mi.aux_filename.c_str());
+      }
+    }
     #if 0
-    fprintf(stderr, "src=%s mins=%s srcns=%s\n", i->c_str(),
+    fprintf(stderr, "src=%s mins=%s srcns=%s fn=%s\n", i->c_str(),
       mi.unique_namespace.c_str(),
-      cursrc_imports.main_unique_namespace.c_str());
+      cursrc_imports.main_unique_namespace.c_str(), mi.aux_filename.c_str());
     #endif
   }
   arena_error_throw_pushed();

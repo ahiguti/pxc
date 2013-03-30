@@ -1,6 +1,6 @@
 namespace foldfe_block;
 import common -;
-import meta::builtin m;
+import meta::common m;
 
 function int foo(int x) { return x * 2; }
 function int bar(int x) { return x * 3; }
@@ -10,10 +10,16 @@ function void t1()
 {
   int v = 10;
   int r = 0;
-  foreach (func : m::list{"foo", "bar", "baz"}) {
-    function void hoge() {
+  int x = 0;
+  expand (func : m::list{"foo", "bar", "baz"}) {
+    {
+      function void func() { // error: can't use this func
+	x += 1;
+      }
+      func();
     }
   }
+  println(x);
 }
 
 t1();

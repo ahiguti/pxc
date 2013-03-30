@@ -1,9 +1,9 @@
 namespace variant;
 import common -;
-import meta::builtin m;
+import meta::common m;
 import numeric::cast n;
-import exception::builtin -;
-import serialization::positional -;
+import exception::common -;
+import string::positional -;
 import downcast -;
 
 public multithreaded union variant {
@@ -12,10 +12,10 @@ public multithreaded union variant {
   ulong ulongval;
   double doubleval;
   string stringval;
-  tptr{iinvoke} tptrval;
+  tptr{idynamic} tptrval;
 }
 
-public multithreaded interface iinvoke {
+public multithreaded interface idynamic {
   function variant invoke(cstrref const& name, cslice{variant} const& args);
 }
 
@@ -53,10 +53,10 @@ public threaded function {t} variant to_variant(t const& x)
     r.stringval = x;
   } else if (m::eq{t, variant}) {
     r = x;
-  } else if (m::eq{t, tptr{iinvoke}}) {
+  } else if (m::eq{t, tptr{idynamic}}) {
     r.tptrval = x;
   } else {
-    r.tptrval = tptr{stub_iinvoke{t}}(stub_iinvoke{t}(x));
+    r.tptrval = tptr{stub_idynamic{t}}(stub_idynamic{t}(x));
   }
   return r;
 }
@@ -103,67 +103,67 @@ public threaded function {t} t from_variant(variant const& x)
     }
   } else if (m::eq{t, variant}) {
     return x;
-  } else if (m::eq{t, tptr{iinvoke}}) {
+  } else if (m::eq{t, tptr{idynamic}}) {
     return x.tptrval;
   } else {
-    return downcast_mutable{stub_iinvoke{t}, iinvoke}(*(x.tptrval)).value;
+    return downcast_mutable{stub_idynamic{t}, idynamic}(*(x.tptrval)).value;
   }
   throw invalid_field();
 }
 
-private macro stub_iinvoke_args{t}
+private macro stub_idynamic_args{t}
   m::metaif{
     m::is_copyable_type{t},
     m::list{m::list{0, "x", t, 0, 1}},
     m::args{t}};
+private macro argexp{arg}
+  m::list{
+    argname{arg}, // a0, a1, a2, ...
+    m::add{m::mul{m::at{arg, 3}, 2}, m::at{arg, 4}}}; // byref * 2 + mutable
+private macro argname{arg} m::concat{"a", m::at{arg, 0}};
+private macro argnames{t, fsym}
+  m::metamap{m::args{m::local{t, m::to_string{fsym}}}, argname};
+private macro seqstr{n} m::metamap{m::seq{n}, m::to_string};
+private macro mfuncstr{t} m::metamap{m::member_functions{t}, m::to_string};
+private macro argexp_list{t, fsym}
+  m::metamap{m::args{m::local{t, m::to_string{fsym}}}, argexp};
+private macro argtype_noneph{t, fsym, idx}
+  to_non_ephemeral{m::at{m::at{m::args{m::local{t, fsym}}, idx}, 2}};
 
 public multithreaded struct {t}
-stub_iinvoke(expand(a : stub_iinvoke_args{t})) : iinvoke :
+stub_idynamic(expand(a : stub_idynamic_args{t})) : idynamic :
 {
   expand(dummy : m::list{m::list{"dummy", m::is_copyable_type{t}}}) {
     t value = t(expand(a : m::argnames{t}; a));
     t value = x;
   }
-  macro mfuncstr{t} m::metamap{m::member_functions{t}, m::to_string};
-  macro seqstr{n} m::metamap{m::seq{n}, m::to_string};
-  macro argname{arg} m::concat{"a", m::at{arg, 0}};
-  macro argnames{fsym}
-    m::metamap{m::args{m::local{t, m::to_string{fsym}}}, argname};
-  macro argexp{arg}
-    m::list{
-      argname{arg}, // a0, a1, a2, ...
-      m::add{m::mul{m::at{arg, 3}, 2}, m::at{arg, 4}}}; // byref * 2 + mutable
-  macro argexp_list{fsym}
-    m::metamap{m::args{m::local{t, m::to_string{fsym}}}, argexp};
-  macro args_ae{fsym, ae}
-    m::at{m::args{m::local{t, fsym}}, m::to_int{m::substring{ae, 1}}};
-  macro argtype_ae{fsym, ae} m::at{args_ae{fsym, ae}, 2};
-  macro argtype_noneph{fsym, ae} to_non_ephemeral{argtype_ae{fsym, ae}};
   function variant invoke(cstrref const& name, cslice{variant} const& args) {
     expand(fsym : mfuncstr{t}) {
       if (m::to_string{fsym} == name) {
-	expand(ae : argexp_list{fsym}) {
+	expand(ae, idx : argexp_list{t, fsym}) {
 	  /* const value */
-	  argtype_noneph{fsym, ae} ae = from_variant{argtype_noneph{fsym, ae}}(
-	    args[m::to_int{m::substring{ae, 1}}]);
+	  argtype_noneph{t, fsym, idx} ae =
+	    from_variant{argtype_noneph{t, fsym, idx}}(args[idx]);
 	  /* mutable value */
-	  argtype_noneph{fsym, ae} ae = from_variant{argtype_noneph{fsym, ae}}(
-	    args[m::to_int{m::substring{ae, 1}}]);
+	  argtype_noneph{t, fsym, idx} ae =
+	    from_variant{argtype_noneph{t, fsym, idx}}(args[idx]);
 	  /* const reference */
-	  argtype_noneph{fsym, ae} const& ae =
-	    downcast_const{stub_iinvoke{argtype_noneph{fsym, ae}}, iinvoke}(
-	      *(args[m::to_int{m::substring{ae, 1}}].tptrval)).value;
+	  argtype_noneph{t, fsym, idx} const& ae =
+	    downcast_const{
+	      stub_idynamic{argtype_noneph{t, fsym, idx}}, idynamic
+	    }(*(args[idx].tptrval)).value;
 	  /* mutable reference */
-	  argtype_noneph{fsym, ae} mutable& ae =
-	    downcast_mutable{stub_iinvoke{argtype_noneph{fsym, ae}}, iinvoke}(
-	      *(args[m::to_int{m::substring{ae, 1}}].tptrval)).value;
+	  argtype_noneph{t, fsym, idx} mutable& ae =
+	    downcast_mutable{
+	      stub_idynamic{argtype_noneph{t, fsym, idx}}, idynamic
+	    }(*(args[idx].tptrval)).value;
 	}
 	if (m::eq{m::rettype{m::local{t, m::to_string{fsym}}}, void}) {
-	  value.fsym(expand(a : argnames{fsym}; a));
+	  value.fsym(expand(a : argnames{t, fsym}; a));
 	  return variant();
 	} else {
 	  return to_variant{m::rettype{m::local{t, m::to_string{fsym}}}}(
-	    value.fsym(expand(a : argnames{fsym}; a)));
+	    value.fsym(expand(a : argnames{t, fsym}; a)));
 	}
       }
     }

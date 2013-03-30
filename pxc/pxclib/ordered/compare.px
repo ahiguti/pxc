@@ -3,7 +3,7 @@ public import numeric::integral -;
 public import numeric::fp -;
 public import numeric::union_tag -;
 public import container::string -;
-public import meta::builtin m;
+public import meta::common m;
 
 public threaded function {t} int compare(t const& x, t const& y)
 {
@@ -49,10 +49,12 @@ public threaded function {t} int compare(t const& x, t const& y)
   } else if (m::eq{fam, "tree_map"}) {
     return m::error{"not implemented for tree_map"};
   } else if (m::eq{fam, "struct"}) {
-    foreach (name, fld : t) {
-      int const c = compare(x.fld, y.fld);
-      if (c != 0) {
-	return c;
+    expand (fld, idx : m::field_names{t}) {
+      {
+	int const c = compare(x.fld, y.fld);
+	if (c != 0) {
+	  return c;
+	}
       }
     }
     return 0;
@@ -61,11 +63,13 @@ public threaded function {t} int compare(t const& x, t const& y)
     if (tc != 0) {
       return tc;
     }
-    foreach (name, fld : t) {
-      if (case x.fld) {
-	int const c = compare(x.fld, y.fld);
-	if (c != 0) {
-	  return c;
+    expand (fld, idex : m::field_names{t}) {
+      {
+	if (case x.fld) {
+	  int const c = compare(x.fld, y.fld);
+	  if (c != 0) {
+	    return c;
+	  }
 	}
       }
     }

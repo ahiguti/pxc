@@ -1,7 +1,7 @@
-namespace serialization::serialize;
+namespace string::serialize;
 public import numeric::integral -;
 public import container::string -;
-public import meta::builtin m;
+public import meta::common m;
 public import meta::family mf;
 
 public threaded function {tmpl, t} void serialize(t const& x,
@@ -41,22 +41,24 @@ public threaded function {tmpl, t} void serialize(t const& x,
     m::local{tmpl, "pointer_end"}(o);
   } else if (mf::is_struct_family{fam}) {
     m::local{tmpl, "struct_begin"}(o);
-    foreach (name, idx, fld : t) {
-      if (idx != 0) {
-	m::local{tmpl, "struct_sep"}(o);
+    expand (fld, idx : m::field_names{t}) {
+      {
+	if (idx != 0) {
+	  m::local{tmpl, "struct_sep"}(o);
+	}
+	m::local{tmpl, "struct_entry_begin"}(o);
+	m::local{tmpl, "struct_field_name"}(m::to_string{fld}, o);
+	m::local{tmpl, "struct_entry_sep"}(o);
+	serialize{tmpl, m::at{m::field_types{t}, idx}}(x.fld, o);
+	m::local{tmpl, "struct_entry_end"}(o);
       }
-      m::local{tmpl, "struct_entry_begin"}(o);
-      m::local{tmpl, "struct_field_name"}(name, o);
-      m::local{tmpl, "struct_entry_sep"}(o);
-      serialize{tmpl, m::at{m::field_types{t}, idx}}(x.fld, o);
-      m::local{tmpl, "struct_entry_end"}(o);
     }
     m::local{tmpl, "struct_end"}(o);
   } else if (mf::is_union_family{fam}) {
     m::local{tmpl, "union_begin"}(o);
-    foreach (name, idx, fld : t) {
+    expand (fld, idx : m::field_names{t}) {
       if (case x.fld) {
-	m::local{tmpl, "union_field_name"}(name, o);
+	m::local{tmpl, "union_field_name"}(m::to_string{fld}, o);
 	m::local{tmpl, "union_entry_sep"}(o);
 	serialize{tmpl, m::at{m::field_types{t}, idx}}(x.fld, o);
       }

@@ -1,13 +1,13 @@
 namespace fe_st2;
 import common -;
-import meta::builtin m;
+import meta::common m;
 
 function {t} void field_to_string(string n, t fld, string& str_r)
 {
   str_r.append("(");
   str_r.append(n);
   str_r.append(" : ");
-  serialization::string::serialize_to_string(fld, str_r);
+  string::conversion::serialize_to_string(fld, str_r);
   // str_r.append(m::symbol{t, m::concat{t, "_to_string"}}(fld));
   str_r.append(")");
 }
@@ -24,9 +24,14 @@ function void test()
   f.y = 35;
   int i;
   string s = "(";
+  expand (fld, idx : m::field_names{foo}) {
+    field_to_string(m::to_string{fld}, f.fld, s);
+  }
+  /*
   foreach (n, fld : foo) {
     field_to_string(n, f.fld, s);
   }
+  */
   s.append(" )");
   println(s);
 }

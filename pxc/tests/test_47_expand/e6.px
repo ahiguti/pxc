@@ -1,6 +1,6 @@
-namespace e3;
+namespace e6;
 import common -;
-import meta::builtin m;
+import meta::common m;
 
 interface ifoo {
   function string hoge(string x);
@@ -12,18 +12,19 @@ interface ibar {
   function string xyz(string x);
 }
 
-macro mf_str{t} m::metamap{m::member_functions{t}, meta::builtin::to_string};
+macro mf_str{t} m::metamap{m::member_functions{t}, meta::common::to_string};
 
 struct {ityp} foo : ityp : {
-  expand(fsym : mf_str{ityp})
-  function string fsym(expand(arg : m::args{m::local{ityp, fsym}})) {
-    string s = m::to_string{fsym};
-    s.append(":");
-    s.append(x);
-    s.append(":");
-    macro mf m::local{ityp, fsym};
-    s.append(m::full_string{m::argtypes{mf}});
-    return s;
+  expand(fsym : mf_str{ityp}) {
+    function string fsym(expand(arg : m::args{m::local{ityp, fsym}})) {
+      string s = m::to_string{fsym};
+      s.append(":");
+      s.append(x);
+      s.append(":");
+      macro mf m::local{ityp, fsym};
+      s.append(m::full_string{m::argtypes{mf}});
+      return s;
+    }
   }
 }
 /*
