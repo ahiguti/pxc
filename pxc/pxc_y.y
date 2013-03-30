@@ -120,6 +120,7 @@ static compile_mode cur_mode;
 %type<expr_val> interface_body_stmt_list
 %type<expr_val> interface_body_stmt
 %type<expr_val> function_body_stmt_list
+%type<str_val> opt_symbol
 %type<expr_val> function_body_stmt
 %type<expr_val> body_stmt
 %type<expr_val> expression_stmt
@@ -218,18 +219,11 @@ opt_tparams_expr
 struct_body_stmt_list
 	:
 	  { $$ = 0; }
-	| TOK_EXPAND '(' TOK_SYMBOL ':' type_expr ')' struct_body_stmt
-		struct_body_stmt_list
-	  { $$ = expr_stmts_new(cur_fname, @1.first_line,
-		expr_expand_new(cur_fname, @1.first_line, $3, $5, $7,
-			expand_e_statement, 0), $8); }
-	| TOK_EXPAND '(' TOK_SYMBOL ':' type_expr ')' '{'
+	| TOK_EXPAND '(' TOK_SYMBOL opt_symbol ':' type_expr ')' '{'
 		struct_body_stmt_list '}' struct_body_stmt_list
 	  { $$ = expr_stmts_new(cur_fname, @1.first_line,
-		expr_expand_new(cur_fname, @1.first_line, $3, $5, $8,
-			expand_e_statement, 0), $10); }
-	/*
-	*/
+		expr_expand_new(cur_fname, @1.first_line, $3, $4, $6, $9,
+			expand_e_statement, 0), $11); }
 	| struct_body_stmt struct_body_stmt_list
 	  { $$ = expr_stmts_new(cur_fname, @1.first_line, $1, $2); }
 	;
@@ -275,20 +269,19 @@ interface_body_stmt
 function_body_stmt_list
 	:
 	  { $$ = 0; }
-	/*
-	| TOK_EXPAND '(' TOK_SYMBOL ':' type_expr ')' function_body_stmt
-		function_body_stmt_list
-	  { $$ = expr_stmts_new(cur_fname, @1.first_line,
-		expr_expand_new(cur_fname, @1.first_line, $3, $5, $7,
-			expand_e_statement, 0), $8); }
-	*/
-	| TOK_EXPAND '(' TOK_SYMBOL ':' type_expr ')' '{'
+	| TOK_EXPAND '(' TOK_SYMBOL opt_symbol ':' type_expr ')' '{'
 		function_body_stmt_list '}' function_body_stmt_list
 	  { $$ = expr_stmts_new(cur_fname, @1.first_line,
-		expr_expand_new(cur_fname, @1.first_line, $3, $5, $8,
-			expand_e_statement, 0), $10); }
+		expr_expand_new(cur_fname, @1.first_line, $3, $4, $6, $9,
+			expand_e_statement, 0), $11); }
 	| function_body_stmt function_body_stmt_list
 	  { $$ = expr_stmts_new(cur_fname, @1.first_line, $1, $2); }
+	;
+opt_symbol
+	:
+	  { $$ = 0; }
+	| ',' TOK_SYMBOL
+	  { $$ = $2; }
 	;
 function_body_stmt
 	: body_stmt
@@ -333,6 +326,7 @@ body_stmt
 	  { $$ = expr_feach_new(cur_fname, @1.first_line, $5,
 		expr_block_new(cur_fname, @1.first_line, 0, 0, $3, 0,
 			passby_e_mutable_value, $8)); }
+	/*
 	| TOK_FOREACH '(' TOK_SYMBOL ',' TOK_SYMBOL ',' TOK_SYMBOL
 		':' type_expr ')'  '{' function_body_stmt_list '}'
 	  { $$ = expr_fldfe_new(cur_fname, @1.first_line, $3, $7, $5, $9,
@@ -349,6 +343,7 @@ body_stmt
 		'{' function_body_stmt_list '}'
 	  { $$ = expr_foldfe_new(cur_fname, @1.first_line, $3, $5, $7, $9,
 		arena_dequote_strdup($11), $14); }
+	*/
 	| TOK_BREAK ';'
 	  { $$ = expr_special_new(cur_fname, @1.first_line, TOK_BREAK, 0); }
 	| TOK_CONTINUE ';'
@@ -717,7 +712,7 @@ argdecl_list
 	:
 	  { $$ = 0; }
 	| TOK_EXPAND '(' TOK_SYMBOL ':' type_expr ')' argdecl_list_trail
-	  { $$ = expr_expand_new(cur_fname, @1.first_line, $3, $5, 0,
+	  { $$ = expr_expand_new(cur_fname, @1.first_line, $3, 0, $5, 0,
 		expand_e_argdecls, $7); }
 	| type_expr TOK_SYMBOL argdecl_list_trail
 	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $2, $1,
@@ -813,8 +808,9 @@ expression
 assign_expr
 	: cond_expr
 	  { $$ = $1; }
-	| TOK_EXPAND '(' TOK_SYMBOL ':' type_expr ';' assign_expr ')'
-	  { $$ = expr_expand_new(cur_fname, @1.first_line, $3, $5, $7,
+	| TOK_EXPAND '(' TOK_SYMBOL opt_symbol ':' type_expr ';'
+		assign_expr ')'
+	  { $$ = expr_expand_new(cur_fname, @1.first_line, $3, $4, $6, $8,
 		expand_e_comma, 0); }
 	| unary_expr '=' assign_expr
 	  { $$ = expr_op_new(cur_fname, @1.first_line, '=', $1, $3); }

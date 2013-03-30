@@ -1,10 +1,10 @@
-namespace vtest1;
+namespace vtest2;
 import variant -;
 import common -;
-import meta::builtin m;
+import meta::common m;
 import numeric::cast n;
-import exception::builtin -;
-import serialization::positional -;
+import exception::common -;
+import string::positional -;
 import downcast -;
 
 multithreaded struct foo(int x) {
@@ -18,18 +18,28 @@ multithreaded struct foo(int x) {
   }
 }
 
+function variant io(cslice{variant} const& args)
+{
+  return to_variant{io::ioptr}(io::io);
+}
+
+function variant io_file_open(cslice{variant} const& args)
+{
+  return variant();
+}
+
 function void test1() {
   variant v;
   v.longval = 3;
   v.stringval = "abc";
   println(v);
-  v.tptrval = tptr{stub_iinvoke{foo}}(stub_iinvoke{foo}(foo(99)));
+  v.tptrval = tptr{stub_idynamic{foo}}(stub_idynamic{foo}(foo(99)));
   farray{variant, 1} arg;
   arg[0].longval = 9;
   v.tptrval->invoke("add", arg); // 99 + 9
   variant x = v.tptrval->invoke("get", arg[0 .. 0]);
   println(x);
-  var fi = stub_iinvoke{foo}(foo(33));
+  var fi = stub_idynamic{foo}(foo(33));
 }
 
 function void test2() {
@@ -42,7 +52,7 @@ function void test2() {
 
 function void test3()
 {
-  var f = stub_iinvoke{foo}(foo(123));
+  var f = stub_idynamic{foo}(foo(123));
   println(m::full_string{to_non_ephemeral{cslice{int}}});
   // dump_arginfo{foo}();
 }

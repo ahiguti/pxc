@@ -1,14 +1,17 @@
 namespace test_symbols1;
 import common -;
 import symbols;
+import meta::common m;
 
 public function {ns} void show_exports()
 {
-  foreach (symbol : symbols::all_functions{ns}) {
-    println(meta::builtin::full_string{symbol});
+  macro allfuncs symbols::all_functions{ns};
+  macro alltypes symbols::all_types{ns};
+  expand (idx : m::seq{m::size{allfuncs}}) {
+    println(m::full_string{m::at{allfuncs, idx}});
   }
-  foreach (symbol : symbols::all_types{ns}) {
-    println(meta::builtin::full_string{symbol});
+  expand (idx : m::seq{m::size{alltypes}}) {
+    println(m::full_string{m::at{alltypes, idx}});
   }
 }
 

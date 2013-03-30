@@ -996,7 +996,8 @@ public:
 
 struct expr_expand : public expr_i {
   expr_expand(const char *fn, int line, const char *itersym,
-    expr_i *valueste, expr_i *baseexpr, expand_e ex, expr_i *rest);
+    const char *idxsym, expr_i *valueste, expr_i *baseexpr, expand_e ex,
+    expr_i *rest);
   expr_i *clone() const;
   expr_e get_esort() const { return expr_e_expand; }
   int get_num_children() const { return 3; }
@@ -1023,6 +1024,7 @@ public:
   std::string uniqns;
   std::string injectns;
   const char *itersym;
+  const char *idxsym;
   expr_te *valueste;
   expr_i *baseexpr;
   expand_e ex;

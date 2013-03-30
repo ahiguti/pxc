@@ -2784,17 +2784,22 @@ void expr_expand::check_type(symbol_table *lookup)
   const term_list *const targs = vtyp.is_metalist() ? vtyp.get_metalist()
     : vtyp.get_args();
   if (targs == 0) {
-    arena_error_throw(valueste, "invalid parameter for 'expand' : '%s'",
+    arena_error_throw(valueste,
+      "invalid parameter for 'expand' : '%s' (metalist expected)",
       term_tostr_human(vtyp).c_str());
   }
   exprlist_type ees;
-  for (term_list::const_iterator i = targs->begin(); i != targs->end(); ++i) {
+  long long idx = 0;
+  for (term_list::const_iterator i = targs->begin(); i != targs->end();
+    ++i, ++idx) {
     const term& te = *i;
     expr_i *se = 0;
     if (ex == expand_e_argdecls) {
       const term_list *const ent = te.get_metalist();
       if (ent == 0 || ent->size() != 5) {
-	arena_error_throw(valueste, "invalid parameter for 'expand' : '%s'",
+	arena_error_throw(valueste,
+	  "invalid parameter for 'expand' : '%s' "
+	  "(must be a metalist of size 5)",
 	  term_tostr_human(te).c_str());
       }
       const std::string name = (*ent)[1].get_string();
@@ -2824,13 +2829,14 @@ void expr_expand::check_type(symbol_table *lookup)
 	if (ent->size() >= 2) {
 	  symte = (*ent)[0];
 	  if ((*ent)[1].is_long()) {
-	    const int idx = (*ent)[1].get_long();
-	    if (idx >= 0 && baseexpr->get_esort() == expr_e_stmts) {
+	    const int stnum = (*ent)[1].get_long();
+	    if (stnum >= 0 && baseexpr->get_esort() == expr_e_stmts) {
 	      DBG_EP(fprintf(stderr, "metalist 2 long stmts ent = %p\n", ent));
 	      expr_stmts *cur = ptr_down_cast<expr_stmts>(baseexpr);
-	      for (int i = 0; i < idx && cur != 0; ++i, cur = cur->rest) { }
+	      for (int i = 0; i < stnum && cur != 0; ++i, cur = cur->rest) { }
 	      if (cur == 0) {
-		arena_error_throw(valueste, "expand: index %d not found", idx);
+		arena_error_throw(valueste,
+		  "expand: statement number %d not found", stnum);
 	      }
 	      baseexpr_cur = cur->head;
 	      DBG_EP(fprintf(stderr, "baseexpr_cur = %p\n", baseexpr_cur));
@@ -2846,21 +2852,29 @@ void expr_expand::check_type(symbol_table *lookup)
 	  baseexpr_cur = baseexpr;
 	}
       }
+      #if 0
       if (!symte.is_string() || baseexpr_cur == 0) {
 	arena_error_throw(valueste, "invalid parameter for 'expand' : '%s'",
 	  term_tostr_human(vtyp).c_str());
       }
+      #endif
       se = deep_clone_expr(baseexpr_cur);
       se = subst_symbol_name_rec(se, 0, 0, itersym, symte, true);
+      if (idxsym != 0) {
+	const term tidx = term(idx);
+	se = subst_symbol_name_rec(se, 0, 0, idxsym, tidx, true);
+      }
       DBG_EP(fprintf(stderr, "itersym = %s\n", itersym));
       DBG_EP(fprintf(stderr, "subst = %s\n", se->dump(0).c_str()));
     } else {
       assert(ex == expand_e_comma);
       se = deep_clone_expr(baseexpr);
+      #if 0
       if (!te.is_string() || te.get_string().empty()) {
 	arena_error_throw(valueste, "invalid parameter for 'expand' : '%s'",
 	  term_tostr_human(vtyp).c_str());
       }
+      #endif
       se = subst_symbol_name_rec(se, 0, 0, itersym, te, true);
     }
     ees.push_back(se);
@@ -3415,6 +3429,8 @@ static void check_type_validity_common(expr_i *e, const term& t)
 
 void fn_check_type(expr_i *e, symbol_table *symtbl)
 {
+  /* note: symtbl is different from symtbl_lexical if e is a field symbol.
+   * see expr_op::check_type for details. */
   if (e == 0) {
     return;
   }

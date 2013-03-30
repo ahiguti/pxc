@@ -1151,8 +1151,9 @@ std::string expr_foldfe::dump(int indent) const
 }
 
 expr_expand::expr_expand(const char *fn, int line, const char *itersym,
-  expr_i *valueste, expr_i *baseexpr, expand_e ex, expr_i *rest)
-  : expr_i(fn, line), itersym(itersym),
+  const char *idxsym, expr_i *valueste, expr_i *baseexpr, expand_e ex,
+  expr_i *rest)
+  : expr_i(fn, line), itersym(itersym), idxsym(idxsym),
     valueste(ptr_down_cast<expr_te>(valueste)), baseexpr(baseexpr), ex(ex),
     rest(rest), generated_expr(0)
 {

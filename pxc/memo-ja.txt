@@ -3,20 +3,17 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- objectを返す関数をiinvokeしたらどうすればよいか
+- expandのbaseexprが空だとしぬ
 
-- 名前空間にbuiltinを使うのを止める -> とりあえずcommonにし、大きく
-  なってきたら分離
+- expand型foreachを整理、不要なものを削除
+
+- expand(sym, idx : ... ) のようにindexを渡さないと使いにくい(done)
+
+- objectを返す関数をiinvokeしたらどうすればよいか
 
 - stringをpxcvectorに統合
 
 - interface間の継承
-
-- serialization -> conversion
-  downcastもconversionの下へ?
-  -> 変換関数は各型の下へ入れるのがよいのでは？
-
-- is_expand_dummyはtoplevelまでたどる必要がある(done)
 
 - variant(COM的な)を実装してみる
   - structに空引数udconを許可せねばならない(done)
@@ -27,27 +24,8 @@ FIXME/TODO M1
 - 演算子オーバーロードは、組み込み型以外のopに対して関数呼び出し式を
   evalすることによって実装チェック、その関数を呼ぶようにemit。
 
-- fn_check_type lookupがsymtbl_lexicalと異なるのはfoo.barのbarシンボ
-  ルの場合だけ？ そうであればfn_check_typeの引数からlookupを削除する
-  方向で。
-
-- @expand, リストの真ん中に埋め込めるようにする?(done)
-- @expand、文字列に置換するかシンボルに置換するかは文脈で決める？
-- @expand型foreachを整理、不要なものを削除
-
-- block_id_nsをなくせないか
-  - ローカル関数をテンプレートパラメータに渡してインスタンス化した
-    場合にインスタンス同士を区別するためにblock_id_nsが必要
-  - 変数を上位値として渡した場合に名前の衝突を避けるのにblock_id_ns
-    が必要
-  - 方針: @expandによって生成したコードにはblock_id_ns=0をセット
-    する。もしblock_id_ns==0なブロック上のシンボルをテンプレート
-    引数に使ってしまったらエラー。
-  
-
 - ccだけ吐くモード -> androidに必要
 - ヘッダファイルを吐くモード
-
 
 - 例外まわりの仕様きめよ。errnoを投げられたときとか。
 
@@ -178,6 +156,7 @@ FIXME/TODO M6
 ---------------------------------------------------------------------
 TODO
 
+- meta lambda
 - 可変長引数の代わりとなる演算子を決めよ。 cout << ... のようなもの。
 - 配列範囲チェックを非デバッグ時等に無効化するプラグマ?
 - intの範囲を超えるenum/bitmask
@@ -315,10 +294,24 @@ interfaceまわり
 - unionがunitだけでできていたときmudflapが怒る(バージョン？)
   (STLのバグ？)
 - 仕様決め: catch は常にconst byref?
+- block_id_nsをなくせないか
+  - なくせない
+  - ローカル関数をテンプレートパラメータに渡してインスタンス化した
+    場合にインスタンス同士を区別するためにblock_id_nsが必要
+  - 変数を上位値として渡した場合に名前の衝突を避けるのにblock_id_ns
+    が必要
+  - 方針: @expandによって生成したコードにはblock_id_ns=0をセット
+    する。もしblock_id_ns==0なブロック上のシンボルをテンプレート
+    引数に使ってしまったらエラー。現状そのように実装している。
 
 ---------------------------------------------------------------------
 DONE
 
+- expand、文字列に置換するかシンボルに置換するかは文脈で決める(done)
+- expand, リストの真ん中に埋め込めるようにする?(done)
+- is_expand_dummyはtoplevelまでたどる必要がある(done)
+- 名前空間にbuiltinを使うのを止める -> とりあえずcommonにし、大きく
+  なってきたら分離(done)
 - control reaches end of ... は最後がthrowだったらok(done)
 - dynamic_cast相当のdowncastが必要。iinvokeからfoo_iinvokeへdowncast
   しないと元オブジェクトを取り出せない。(done)

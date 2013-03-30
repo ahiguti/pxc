@@ -4,8 +4,8 @@ public import container::string -;
 public import io -;
 public import io::file -;
 public import io::errno -;
-public import serialization::string;
-public import meta::builtin m;
+public import string::conversion;
+public import meta::common m;
 
 public extern "pxcio::pxc_stdin" fileptr stdin;
 public extern "pxcio::pxc_stdout" fileptr stdout;
@@ -29,7 +29,7 @@ public threaded function {t} void file_print(file& f, t const& x)
   if (m::eq{t, string}) {
     f.write_all(x, eh);
   } else {
-    f.write_all(serialization::string::to_string(x), eh);
+    f.write_all(string::conversion::to_string(x), eh);
   }
 }
 
@@ -41,7 +41,7 @@ public threaded function {t} void file_println(file& f, t const& x)
     s.append("\n");
     f.write_all(s, eh);
   } else {
-    string s = serialization::string::to_string(x);
+    string s = string::conversion::to_string(x);
     s.append("\n");
     f.write_all(s, eh);
   }

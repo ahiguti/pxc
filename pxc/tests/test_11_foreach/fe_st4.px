@@ -1,22 +1,22 @@
-namespace fe_st;
+namespace fe_st4;
 import common -;
-import meta::builtin m;
+import meta::common m;
 
 
 function {t} void field_to_string(size_t idx, string const& name,
   string const& ftstr, t const& fld, string& str_r)
 {
   str_r.append(" ");
-  serialization::string::serialize_to_string(idx, str_r);
+  string::conversion::serialize_to_string(idx, str_r);
   str_r.append(" ");
-  serialization::string::serialize_to_string(name, str_r);
+  string::conversion::serialize_to_string(name, str_r);
   str_r.append(" ");
-  serialization::string::serialize_to_string(ftstr, str_r);
+  string::conversion::serialize_to_string(ftstr, str_r);
   str_r.append(" ");
-  serialization::string::serialize_to_string(m::to_string{m::typeof{fld}},
+  string::conversion::serialize_to_string(m::to_string{m::typeof{fld}},
     str_r);
   str_r.append(" ");
-  serialization::string::serialize_to_string(fld, str_r);
+  string::conversion::serialize_to_string(fld, str_r);
 }
 
 struct foo {
@@ -34,10 +34,11 @@ function void test()
   println(m::to_string{m::typeof{f}});
   int i;
   string s = "(";
-  foreach (name, idx, fldsym : foo) {
+  expand (fld, idx : m::field_names{foo}) {
     // macro ftstr m::to_string{m::at{m::field_types{foo}, idx}};
-    field_to_string(idx, name, m::to_string{m::at{m::field_types{foo}, idx}},
-      f.fldsym, s);
+    field_to_string(idx, m::to_string{fld},
+      m::to_string{m::at{m::field_types{foo}, idx}},
+      f.fld, s);
   }
   s.append(" )");
   println(s);

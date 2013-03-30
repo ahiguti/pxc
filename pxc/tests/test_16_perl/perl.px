@@ -4,7 +4,7 @@
 namespace perl;
 public import perl::impl;
 public import perl::symbols;
-public import meta::builtin m;
+public import meta::common m;
 private import numeric::integral -;
 
 public macro sv perl::impl::sv;
@@ -19,21 +19,25 @@ public macro value_to_sv{t} perl::impl::value_to_sv{t};
 
 public function {ns} void export_all()
 {
-  foreach (symbol : perl::symbols::all_functions{ns}) {
-    perl::xs_create_function{symbol}();
+  macro allfuncs perl::symbols::all_functions{ns};
+  macro alltypes perl::symbols::all_types{ns};
+  expand (i : m::seq{m::size{allfuncs}}) {
+    perl::xs_create_function{m::at{allfuncs, i}}();
   }
-  foreach (symbol : perl::symbols::all_types{ns}) {
-    perl::xs_create_type{symbol}();
+  expand (i : m::seq{m::size{alltypes}}) {
+    perl::xs_create_type{m::at{alltypes, i}}();
   }
 }
 
 public function {ns} void show_exports()
 {
-  foreach (symbol : perl::symbols::all_functions{ns}) {
-    println(m::full_string{symbol});
+  macro allfuncs perl::symbols::all_functions{ns};
+  macro alltypes perl::symbols::all_types{ns};
+  expand (i : m::seq{m::size{allfuncs}}) {
+    println(m::full_string{m::at{allfuncs, i}});
   }
-  foreach (symbol : perl::symbols::all_types{ns}) {
-    println(m::full_string{symbol});
+  expand (i : m::seq{m::size{alltypes}}) {
+    println(m::full_string{m::at{alltypes, i}});
   }
 }
 

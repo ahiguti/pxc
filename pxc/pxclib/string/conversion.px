@@ -1,14 +1,29 @@
-namespace serialization::string;
+namespace string::conversion;
 public import numeric::integral -;
 public import container::string -;
-public import meta::builtin m;
+public import meta::common m;
 public import meta::family mf;
 public import numeric::cast n;
-public import serialization::positional p;
-public import serialization::builtin b;
-public import serialization::url_encode u;
-// public import serialization::json_encode j;
-public import serialization::serialize -;
+public import string::positional p;
+public import string::serialize -;
+public import string::url_encode u;
+// public import string::json_encode j;
+
+public threaded function {t} string to_string(t const& x)
+{
+  if (is_string_family_type{t}) {
+    return x;
+  } else {
+    string s;
+    serialize_to_string(x, s);
+    return s;
+  }
+}
+
+public threaded function {t} void serialize_to_string(t const& x, string& out)
+{
+  serialize{deftmpl, t}(x, out);
+}
 
 public macro is_string_family_type{t}
     m::or{
@@ -17,33 +32,42 @@ public macro is_string_family_type{t}
       m::eq{t, strref},
       m::eq{t, cstrref}};
 
-threaded function {t} void string_append_escape(t const& x, string& v)
+public threaded function void bool_to_string(bool v, string& buf)
+{
+  if (v) {
+    buf.append("true");
+  } else {
+    buf.append("false");
+  }
+}
+
+private threaded function {t} void string_append_escape(t const& x, string& v)
 {
   // j::json_encode(x, v);
   v.push_back('"');
   u::url_encode(v, x);
   v.push_back('"');
 }
-threaded function {t} void string_append_noescape(t const& x, string& v)
+private threaded function {t} void string_append_noesc(t const& x, string& v)
 {
   v.append(x);
 }
-threaded function void string_append_brace_open(string& v)
+private threaded function void string_append_brace_open(string& v)
 { v.push_back('{'); }
-threaded function void string_append_brace_close(string& v)
+private threaded function void string_append_brace_close(string& v)
 { v.push_back('}'); }
-threaded function void string_append_comma(string& v)
+private threaded function void string_append_comma(string& v)
 { v.push_back(','); }
-threaded function void string_append_equal(string& v)
+private threaded function void string_append_equal(string& v)
 { v.push_back('='); }
-threaded function void string_append_none(string& v)
+private threaded function void string_append_none(string& v)
 { } 
-threaded function {t} void string_append_star(t const& x, string& v)
+private threaded function {t} void string_append_star(t const& x, string& v)
 { v.push_back('*'); }
-threaded function {t} void string_append_unknown(t const& x, string& v)
+private threaded function {t} void string_append_unknown(t const& x, string& v)
 { v.push_back('?'); }
 
-threaded struct deftmpl {
+private threaded struct deftmpl {
   macro target_type string;
   macro symstr{t} m::concat{t, "_append_to_string"};
   macro sym{t} m::symbol{symstr{t}, t};
@@ -53,7 +77,7 @@ threaded struct deftmpl {
     m::metaif{is_string_family_type{t}, string_append_escape{t},
     m::metaif{n::is_integral{t}, p::integral_to_decimal,
     m::metaif{n::is_fp{t}, p::fp_to_decimal,
-    m::metaif{m::eq{t, bool}, b::bool_to_string,
+    m::metaif{m::eq{t, bool}, bool_to_string,
     m::metaif{m::eq{t, unit}, string_append_star,
     0}}}}}};
   macro array_begin string_append_brace_open;
@@ -73,27 +97,11 @@ threaded struct deftmpl {
   macro struct_entry_begin string_append_none;
   macro struct_entry_end string_append_none;
   macro struct_entry_sep string_append_equal;
-  macro struct_field_name string_append_noescape;
+  macro struct_field_name string_append_noesc;
   macro union_begin string_append_brace_open;
   macro union_end string_append_brace_close;
   macro union_entry_sep string_append_equal;
-  macro union_field_name string_append_noescape;
+  macro union_field_name string_append_noesc;
   macro unknown{fam} string_append_unknown;
-}
-
-public threaded function {t} void serialize_to_string(t const& x, string& out)
-{
-  serialize{deftmpl, t}(x, out);
-}
-
-public threaded function {t} string to_string(t const& x)
-{
-  if (is_string_family_type{t}) {
-    return x;
-  } else {
-    string s;
-    serialize_to_string(x, s);
-    return s;
-  }
 }
 

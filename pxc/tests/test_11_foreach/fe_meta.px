@@ -1,6 +1,6 @@
 namespace fe_meta;
 import common -;
-import meta::builtin m;
+import meta::common m;
 
 
 function {t} void field_to_string(string n, t fld, string& str_r)
@@ -8,7 +8,7 @@ function {t} void field_to_string(string n, t fld, string& str_r)
   str_r.append("(");
   str_r.append(n);
   str_r.append(" : ");
-  serialization::string::serialize_to_string(fld, str_r);
+  string::conversion::serialize_to_string(fld, str_r);
   //m::symbol{t, m::concat{t, "_serialize_to_string"}}(fld, str_r);
   str_r.append(")");
 }
@@ -24,9 +24,14 @@ function string test()
   v.x = 100;
   v.y = 200;
   string s;
+  expand (sym : m::list{"y", "y", "x"}) {
+    field_to_string(m::to_string{sym}, v.sym, s);
+  }
+  /*
   foreach (name, sym : m::list{"y", "y", "x"}) {
     field_to_string(name, v.sym, s);
   }
+  */
   return s;
 }
 
