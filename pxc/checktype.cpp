@@ -2788,6 +2788,9 @@ void expr_expand::check_type(symbol_table *lookup)
       "invalid parameter for 'expand' : '%s' (metalist expected)",
       term_tostr_human(vtyp).c_str());
   }
+  if (ex != expand_e_argdecls && baseexpr == 0) {
+    arena_error_throw(this, "empty base expression for 'expand'");
+  }
   exprlist_type ees;
   long long idx = 0;
   for (term_list::const_iterator i = targs->begin(); i != targs->end();
