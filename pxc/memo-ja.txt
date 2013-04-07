@@ -3,23 +3,17 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- expandのbaseexprが空だとしぬ
-
-- expand型foreachを整理、不要なものを削除
-
-- expand(sym, idx : ... ) のようにindexを渡さないと使いにくい(done)
-
-- objectを返す関数をiinvokeしたらどうすればよいか
-
-- stringをpxcvectorに統合
-
-- interface間の継承
-
 - variant(COM的な)を実装してみる
   - structに空引数udconを許可せねばならない(done)
   - 変数定義をexpandで生成できるようにせねばならない
     variantから具体型への変換した結果を保持する変数。passbyも
     ものによってはmutable byref。右辺も場合によって式を出し分ける。
+
+- expand型foreachを削除
+
+- stringをpxcvectorに統合
+
+- interface間の継承
 
 - 演算子オーバーロードは、組み込み型以外のopに対して関数呼び出し式を
   evalすることによって実装チェック、その関数を呼ぶようにemit。
@@ -307,6 +301,9 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- expandのbaseexprが空だとしぬ(done)
+- expand型foreachをexpandで置き換え(done)
+- expand(sym, idx : ... ) のようにindexを渡さないと使いにくい(done)
 - expand、文字列に置換するかシンボルに置換するかは文脈で決める(done)
 - expand, リストの真ん中に埋め込めるようにする?(done)
 - is_expand_dummyはtoplevelまでたどる必要がある(done)
@@ -903,4 +900,38 @@ from_variantの動作:
 to_variantの動作:
 - tがintegral, fp, 文字列ならばそのまま格納
 - それ以外はtptrvalにbox化
+
+関数呼び出し
+interface icall { variant call(cslice{variant} const& args); }
+struct stub_func{f} <icall> { ... }
+- variant call(...) の実装はstub_iinvokeのinvokeとほぼ同様
+
+コンストラクタ呼び出し
+struct stub_constr{t} <icall> { ... }
+- 関数と同じように構造体のコンストラクタを呼べるように
+- noncopyableな型については、stub_idynamic{t}のコンストラクタは
+  tと同じコンストラクタ引数を持ち、中でそのままtを構築するのに使う
+- copyableな型については、stub_idynamic{t}のコンストラクタはtで、
+  そのままコピーコンストラクトする。このようにしないとtを返す関数
+  の結果からstub_idynamic{t}オブジェクトを構築できなくて困る。
+- variant版構造体コンストラクタの実装:
+  - copyableな型なら v.tptrval = tptr(stub_idynamic{t}(t(...)));
+  - noncopyablenなら v.tptrval = tptr(stub_idynamic{t}(...));
+- 非メンバ関数呼び出しとコンストラクタ呼び出しは共通のコードで。
+  - 名前空間の関数と型を呼び出せる
+- struct以外の型: typedef, union, enum, bitmask
+- enumやbitmaskの値(enumval)も関数のように呼び出せるように
+- グローバル変数は
+
+variant型だと実行できない処理:
+- 参照外し
+- 左辺値を返す配列要素、range
+- 参照を返す関数
+どのように代替するか？なくても困らないか？
+
+サポートしない機能:
+- 参照を返す関数。たとえばdowncastなど。
+- ephemeral型。range、sliceなど。これらの型を引数に取る関数はかわりに
+  コンテナを指定すればよい。
+- 配列要素への参照。
 

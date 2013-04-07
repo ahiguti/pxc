@@ -321,11 +321,13 @@ body_stmt
 		expr_block_new(cur_fname, @1.first_line, 0, 0, $3, 0,
 			passby_e_mutable_value, $8)); }
 	/* TODO: remove? */
+	/*
 	| TOK_FOREACH '(' foreach_argdecl ':' expression ')'
 		'{' function_body_stmt_list '}'
 	  { $$ = expr_feach_new(cur_fname, @1.first_line, $5,
 		expr_block_new(cur_fname, @1.first_line, 0, 0, $3, 0,
 			passby_e_mutable_value, $8)); }
+	*/
 	/*
 	| TOK_FOREACH '(' TOK_SYMBOL ',' TOK_SYMBOL ',' TOK_SYMBOL
 		':' type_expr ')'  '{' function_body_stmt_list '}'
