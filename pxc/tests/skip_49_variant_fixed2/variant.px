@@ -1,0 +1,217 @@
+namespace variant;
+import common -;
+import meta::common m;
+import numeric::cast n;
+import exception::common -;
+import string::positional -;
+import downcast -;
+
+public threaded union variant {
+  unit unitval;
+  long longval;
+  ulong ulongval;
+  double doubleval;
+  string stringval;
+  ptr{idynamic} ptrval;
+}
+
+public threaded interface idynamic {
+  function variant invoke(cstrref const& name, cslice{variant} const& args);
+}
+
+private metafunction is_string_family_type{t}
+  m::or{
+    m::eq{t, string},
+    m::eq{t, strlit},
+    m::eq{t, strref},
+    m::eq{t, cstrref}};
+
+private metafunction is_range_type{t}
+  m::or{
+    m::eq{m::family{t}, "slice"},
+    m::eq{m::family{t}, "cslice"},
+    m::eq{m::family{t}, "tree_map_range"},
+    m::eq{m::family{t}, "tree_map_crange"}};
+
+private metafunction to_non_ephemeral{t}
+  m::cond{is_string_family_type{t}, string,
+  m::cond{is_range_type{t}, m::local{t, "non_ephemeral_type"},
+  t}};
+
+public threaded function {t} variant to_variant(t const& x)
+{
+  variant r;
+  if (m::eq{t, unit}) {
+    r.unitval = unit();
+  } else if (n::is_signed_integral{t}) {
+    r.longval = n::static_cast{long, t}(x);
+  } else if (n::is_unsigned_integral{t}) {
+    r.ulongval = n::static_cast{ulong, t}(x);
+  } else if (n::is_fp{t}) {
+    r.doubleval = x;
+  } else if (is_string_family_type{t}) {
+    r.stringval = x;
+  } else if (m::eq{t, variant}) {
+    r = x;
+  } else if (m::eq{t, ptr{idynamic}}) {
+    r.ptrval = x;
+  } else {
+    r.ptrval = ptr{stub_object{t}}(stub_object{t}(x));
+  }
+  return r;
+}
+
+public threaded function {t} t from_variant(variant const& x)
+{
+  if (m::eq{t, unit}) {
+    return unit();
+  } else if (n::is_integral_enum_bitmask{t}) {
+    if (case x.longval) {
+      return n::static_cast{t, long}(x.longval);
+    } else if (case x.ulongval) {
+      return n::static_cast{t, ulong}(x.ulongval);
+    } else if (case x.doubleval) {
+      return n::static_cast{t, double}(x.doubleval);
+    } else if (case x.stringval) {
+      return decimal_to_integral_nocheck{t}(x.stringval);
+    } else if (case x.unitval) {
+      return 0;
+    }
+  } else if (n::is_fp{t}) {
+    if (case x.doubleval) {
+      return n::static_cast{t, double}(x.doubleval);
+    } else if (case x.longval) {
+      return n::static_cast{t, long}(x.longval);
+    } else if (case x.ulongval) {
+      return n::static_cast{t, ulong}(x.ulongval);
+    } else if (case x.stringval) {
+      return decimal_to_fp_nocheck{t}(x.stringval);
+    } else if (case x.unitval) {
+      return 0.0;
+    }
+  } else if (m::eq{t, string}) {
+    if (case x.stringval) {
+      return x.stringval;
+    } else if (case x.longval) {
+      return to_string(x.longval);
+    } else if (case x.ulongval) {
+      return to_string(x.ulongval);
+    } else if (case x.doubleval) {
+      return to_string(x.doubleval);
+    } else if (case x.unitval) {
+      return to_string(x.unitval);
+    }
+  } else if (m::eq{t, variant}) {
+    return x;
+  } else if (m::eq{t, ptr{idynamic}}) {
+    return x.ptrval;
+  } else {
+    return downcast_mutable{stub_object{t}, idynamic}(*(x.ptrval)).value;
+  }
+  throw invalid_field();
+}
+
+private metafunction stub_object_args{t}
+  m::cond{
+    m::is_copyable_type{t},
+    m::list{m::list{0, "x", t, 0, 1}},
+    m::args{t}};
+private metafunction argexp{arg}
+  m::list{
+    generate_argname{arg}, // a0, a1, a2, ...
+    m::add{m::mul{m::at{arg, 3}, 2}, m::at{arg, 4}}}; // byref * 2 + mutable
+private metafunction generate_argname{arg} m::concat{"a", m::at{arg, 0}};
+private metafunction mf_argnames{t, fsym}
+  m::map{m::args{m::local{t, m::to_string{fsym}}}, generate_argname};
+private metafunction seqstr{n} m::map{m::seq{n}, m::to_string};
+private metafunction mf_str{t} m::map{m::member_functions{t}, m::to_string};
+private metafunction mf_argexp_list{t, fsym}
+  m::map{m::args{m::local{t, m::to_string{fsym}}}, argexp};
+private metafunction mf_argtype_noneph{t, fsym, idx}
+  to_non_ephemeral{m::at{m::at{m::args{m::local{t, fsym}}, idx}, 2}};
+private metafunction func_argnames{f} m::map{m::args{f}, generate_argname};
+private metafunction func_argexp_list{f} m::map{m::args{f}, argexp};
+private metafunction func_argtype_noneph{f, idx}
+  to_non_ephemeral{m::at{m::at{m::args{f}, idx}, 2}};
+
+public threaded struct {t}
+stub_object(expand(a : stub_object_args{t})) : idynamic :
+{
+  expand(dummy : m::list{m::list{"dummy", m::is_copyable_type{t}}}) {
+    t value = t(expand(a : m::argnames{t}; a));
+    t value = x;
+  }
+  function variant invoke(cstrref const& name, cslice{variant} const& args) {
+    expand(fsym, idx : mf_str{t}) {
+      if (m::to_string{fsym} == name) {
+	return variant_invoke{t, idx, 0}(value, args);
+      }
+    }
+    return variant(); // TODO: throw
+  }
+}
+
+public threaded function {tobj, methodidx, fsym} variant variant_invoke(
+  expand(s : m::cond{
+    m::is_type{tobj},
+    m::list{m::list{0, "obj", tobj, 1, 1}},
+    m::list}),
+  cslice{variant} const& args)
+{
+  metafunction f m::cond{
+    m::is_type{tobj},
+    m::at{m::member_functions{tobj}, methodidx},
+    fsym};
+  expand(ae, idx : func_argexp_list{f}) {
+    /* const value */
+    func_argtype_noneph{f, idx} ae =
+      from_variant{func_argtype_noneph{f, idx}}(args[idx]);
+    /* mutable value */
+    func_argtype_noneph{f, idx} ae =
+      from_variant{func_argtype_noneph{f, idx}}(args[idx]);
+    /* const reference */
+    func_argtype_noneph{f, idx} const& ae =
+      downcast_const{
+	stub_object{func_argtype_noneph{f, idx}}, idynamic
+      }(*(args[idx].ptrval)).value;
+    /* mutable reference */
+    func_argtype_noneph{f, idx} mutable& ae =
+      downcast_mutable{
+	stub_object{func_argtype_noneph{f, idx}}, idynamic
+      }(*(args[idx].ptrval)).value;
+  }
+  if (m::is_type{tobj}) {
+    expand (sym : m::list{m::list{m::to_string{f}, 0}}) {
+      if (m::eq{m::rettype{f}, void}) {
+	obj.sym(expand(a : func_argnames{f}; a));
+	return variant();
+      } else {
+	return to_variant{m::rettype{f}}(
+	  obj.sym(expand(a : func_argnames{f}; a)));
+      }
+    }
+  } else {
+    if (m::eq{m::rettype{f}, void}) {
+      f(expand(a : func_argnames{f}; a));
+      return variant();
+    } else if (m::or{m::is_function{f}, m::is_copyable_type{f}}) {
+      return to_variant{m::rettype{f}}(f(expand(a : func_argnames{f}; a)));
+    } else {
+      variant r;
+      r.ptrval = ptr{stub_object{f}}(
+	stub_object{f}(expand(a : func_argnames{f}; a)));
+      return r;
+    }
+  }
+}
+
+public threaded struct {f} stub_function : idynamic :
+{
+  function variant invoke(cstrref const& name, cslice{variant} const& args) {
+    if (!name.empty()) {
+      return variant(); // TODO: throw
+    }
+    return variant_invoke{0, 0, f}(args);
+  }
+} 
+

@@ -32,6 +32,7 @@
 #define DBG_THR(x)
 #define DBG_LV(x)
 #define DBG_SLICE(x)
+#define DBG_CALLEE(x)
 
 namespace pxc {
 
@@ -576,9 +577,9 @@ bool is_struct(const term& t)
   return tsd != 0;
 }
 
-bool is_variant(const term& t)
+bool is_dunion(const term& t)
 {
-  const expr_variant *const tv = dynamic_cast<const expr_variant *>(
+  const expr_dunion *const tv = dynamic_cast<const expr_dunion *>(
     t.get_expr());
   return tv != 0;
 }
@@ -750,7 +751,7 @@ const bool has_userdef_constr_internal(const term& t,
       return f;
     }
   }
-  const expr_variant *const eva = dynamic_cast<const expr_variant *>(einst);
+  const expr_dunion *const eva = dynamic_cast<const expr_dunion *>(einst);
   if (eva != 0) {
     std::list<expr_var *>flds;
     eva->get_fields(flds);
@@ -983,7 +984,7 @@ std::string term_tostr(const term& t, term_tostr_sort s)
     return tparam_str_list(*t.get_metalist(), s);
   }
   const expr_i *const tdef = t.get_expr();
-    /* expr_struct, expr_variant, expr_interface, expr_typedef, expr_macrodef,
+    /* expr_struct, expr_dunion, expr_interface, expr_typedef, expr_metafdef,
      * or expr_funcdef */
   if (tdef == 0) {
     return std::string();
@@ -1008,11 +1009,11 @@ std::string term_tostr(const term& t, term_tostr_sort s)
       cname = ptr_down_cast<const expr_struct>(tdef)->cname;
       esort_char = 's';
       break;
-    case expr_e_variant:
-      sym = ptr_down_cast<const expr_variant>(tdef)->sym;
-      self_block = ptr_down_cast<const expr_variant>(tdef)->block;
+    case expr_e_dunion:
+      sym = ptr_down_cast<const expr_dunion>(tdef)->sym;
+      self_block = ptr_down_cast<const expr_dunion>(tdef)->block;
       tparams = self_block->tinfo.tparams;
-      uniqns = ptr_down_cast<const expr_variant>(tdef)->uniqns;
+      uniqns = ptr_down_cast<const expr_dunion>(tdef)->uniqns;
       esort_char = 'v';
       break;
     case expr_e_interface:
@@ -1037,10 +1038,10 @@ std::string term_tostr(const term& t, term_tostr_sort s)
 	self_block = 0;
       }
       break;
-    case expr_e_macrodef:
-      sym = ptr_down_cast<const expr_macrodef>(tdef)->sym;
-      uniqns = ptr_down_cast<const expr_macrodef>(tdef)->uniqns;
-      tparams = ptr_down_cast<const expr_macrodef>(tdef)->get_tparams();
+    case expr_e_metafdef:
+      sym = ptr_down_cast<const expr_metafdef>(tdef)->sym;
+      uniqns = ptr_down_cast<const expr_metafdef>(tdef)->uniqns;
+      tparams = ptr_down_cast<const expr_metafdef>(tdef)->get_tparams();
       esort_char = 0;
       self_block = 0;
       esort_char = 'a';
@@ -1080,7 +1081,10 @@ std::string term_tostr(const term& t, term_tostr_sort s)
       {
 	const expr_tparams *const etp = ptr_down_cast<const expr_tparams>(
 	  tdef);
-	return "#" + std::string(etp->sym);
+	sym = etp->sym;
+	esort_char = 0;
+	self_block = 0;
+	esort_char = 'x';
       }
       break;
     case expr_e_enumval:
@@ -1279,6 +1283,30 @@ bool is_same_type(const term& t0, const term& t1)
   return t0 == t1;
 }
 
+bool implements_interface(const expr_struct *est, const expr_interface *ei)
+{
+  expr_block::inherit_list_type::const_iterator i;
+  for (i = est->block->inherit_transitive.begin();
+    i != est->block->inherit_transitive.end(); ++i) {
+    if (*i == ei) {
+      return true;
+    }
+  }
+  return false;
+  #if 0
+  // FIXME inherit_transitive
+  const expr_telist *ih = est->block->inherit;
+  while (ih != 0) {
+    if (term_get_instance_const(ih->head->get_sdef()->resolve_evaluated())
+      == ei) {
+      return true;
+    }
+    ih = ih->rest;
+  }
+  return false;
+  #endif
+}
+
 bool is_sub_type(const term& t0, const term& t1)
 {
   DBG_SUB(fprintf(stderr, "is_sub_type: arg: %s %s\n",
@@ -1298,9 +1326,13 @@ bool is_sub_type(const term& t0, const term& t1)
     DBG_SUB(fprintf(stderr, "is_sub_type: tdef null\n"));
     return false;
   }
+  const expr_interface *const ti = dynamic_cast<const expr_interface *>(
+    term_get_instance_const(t1));
+  if (ti == 0) {
+    return false;
+  }
+  return implements_interface(tdef, ti);
   #if 0
-  const expr_i *const t1inst = term_get_instance_const(t1);
-  #endif
   expr_telist *ih = tdef->block->inherit;
   while (ih != 0) {
     if (ih->head->get_sdef()->resolve_evaluated() == t1) {
@@ -1317,6 +1349,7 @@ bool is_sub_type(const term& t0, const term& t1)
   }
   DBG_SUB(fprintf(stderr, "is_sub_type: none matched\n"));
   return false;
+  #endif
 }
 
 static bool check_tvmap(tvmap_type& tvmap, const std::string& sym,
@@ -1621,11 +1654,49 @@ static void execute_rec_incl_instances(expr_i *e, void (*f)(expr_i *))
   }
 }
 
+#if 0
+static void calc_callee_rec(expr_funcdef *efd, std::set<expr_funcdef *>& s,
+  expr_funcdef::callee_vec_type& trv, expr_funcdef::callee_set_type& trs)
+{
+  if (s.find(efd) != s.end()) {
+    return;
+  }
+  s.insert(efd);
+  for (expr_funcdef::callee_vec_type::const_iterator i
+    = efd->callee_vec.begin(); i != efd->callee_vec.end(); ++i) {
+    calc_callee_rec(*i, s, trv, trs);
+    if (trs.find(*i) == trs.end()) {
+      trv.push_back(*i);
+      trs.insert(*i);
+      DBG_CALLEE(fprintf(stderr, "%s calls %s\n", efd->sym, (*i)->sym));
+    }
+  }
+  s.erase(efd);
+}
+
+static void calc_callee_tr(expr_funcdef *efd)
+{
+  if (efd->callee_vec.empty() || !efd->callee_vec_tr.empty()) {
+    /* already done */
+  }
+  /* TODO: too slow */
+  std::set<expr_funcdef *> s;
+  expr_funcdef::callee_vec_type trv;
+  expr_funcdef::callee_set_type trs;
+  calc_callee_rec(efd, s, trv, trs);
+  efd->callee_vec_tr.swap(trv);
+  efd->callee_set_tr.swap(trs);
+}
+#endif
+
 static void check_template_upvalues_direct_one(expr_i *e)
 {
   expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(e);
   if (efd != 0) {
     add_tparam_upvalues_funcdef_direct(efd);
+    #if 0
+    calc_callee_tr(efd);
+    #endif
   }
 }
 
@@ -1677,11 +1748,11 @@ expr_i *fn_drop_non_exports(expr_i *e) {
     bool is_export = false;
     switch (h->get_esort()) {
     case expr_e_struct:
-    case expr_e_variant:
+    case expr_e_dunion:
     case expr_e_interface:
     case expr_e_funcdef:
     case expr_e_typedef:
-    case expr_e_macrodef:
+    case expr_e_metafdef:
     case expr_e_enumval:
     case expr_e_inline_c:
     case expr_e_var:
@@ -1711,7 +1782,7 @@ symbol_table *get_current_frame_symtbl(symbol_table *cur)
 {
   while (cur) {
     if (cur->block_esort != expr_e_block) {
-      return cur; /* funcdef, struct, variant, or interface */
+      return cur; /* funcdef, struct, dunion, or interface */
     }
     cur = cur->get_lexical_parent();
   }
@@ -1971,6 +2042,7 @@ void fn_set_generated_code(expr_i *e)
   if (e == 0) {
     return;
   }
+  e->generated_flag = true;
   expr_block *const bl = dynamic_cast<expr_block *>(e);
   if (bl != 0) {
     bl->block_id_ns = 0; /* mark as a generated block */
@@ -1991,7 +2063,7 @@ static void fn_check_syntax_one(expr_i *e)
     stmts = est->block->stmts;
   }
   #endif
-  expr_variant *const ev = dynamic_cast<expr_variant *>(e);
+  expr_dunion *const ev = dynamic_cast<expr_dunion *>(e);
   if (ev != 0) {
     stmts = ev->block->stmts;
   }
@@ -2003,7 +2075,7 @@ static void fn_check_syntax_one(expr_i *e)
       case expr_e_struct:
       case expr_e_interface:
       case expr_e_typedef:
-      case expr_e_macrodef:
+      case expr_e_metafdef:
 	break;
       case expr_e_funcdef:
 	if (ev == 0) {
@@ -2267,7 +2339,7 @@ static void check_upvalue_memfunc(expr_i *e)
 }
 
 static bool check_function_argtypes(const expr_interface *ei,
-  expr_funcdef *efd, expr_struct *est, expr_funcdef *efd_impl)
+  expr_funcdef *efd, expr_funcdef *efd_impl)
 {
   if (!is_same_type(efd->get_rettype(), efd_impl->get_rettype())) {
     return false;
@@ -2290,33 +2362,43 @@ static bool check_function_argtypes(const expr_interface *ei,
   return (a0 == 0 && a1 == 0);
 }
 
-static void check_interface_impl_one(expr_struct *est, expr_telist *ih)
+static void check_interface_impl_one(expr_i *esub, expr_block *esub_block,
+  expr_i *esuper)
 {
-  const expr_interface *const ei = dynamic_cast<const expr_interface *>(
-    term_get_instance_const(ih->head->get_sdef()->resolve_evaluated()));
-  if (ei == 0) {
-    arena_error_push(ih, "type '%s' is not an interface",
-      term_tostr_human(ih->head->get_texpr()).c_str());
+  const expr_interface *const ei_super =
+    dynamic_cast<const expr_interface *>(esuper);
+  if (ei_super == 0) {
+    arena_error_push(esub, "type '%s' is not an interface",
+      term_tostr_human(esub->get_texpr()).c_str());
     return;
   }
-  const symbol_table& symtbl = ei->block->symtbl;
+  const symbol_table& symtbl = ei_super->block->symtbl;
   symbol_table::locals_type::const_iterator i, j;
   for (i = symtbl.locals.begin(); i != symtbl.locals.end(); ++i) {
     expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(i->second.edef);
     if (efd == 0) {
       continue;
     }
-    j = est->block->symtbl.locals.find(i->first);
-    if (j == est->block->symtbl.locals.end() ||
-      j->second.edef->get_esort() != expr_e_funcdef) {
-      arena_error_push(est, "method '%s' is not implemented",
-	i->first.c_str());
-      continue;
+    j = esub_block->symtbl.locals.find(i->first);
+    if (esub->get_esort() == expr_e_struct) {
+      if (j == esub_block->symtbl.locals.end() ||
+	j->second.edef->get_esort() != expr_e_funcdef) {
+	arena_error_push(esub, "method '%s' is not implemented",
+	  i->first.c_str());
+	continue;
+      }
+    } else if (esub->get_esort() == expr_e_interface) {
+      if (j != esub_block->symtbl.locals.end()) {
+	arena_error_push(esub, "can not override '%s'", i->first.c_str());
+      }
     }
-    expr_funcdef *const efd_impl = ptr_down_cast<expr_funcdef>(j->second.edef);
-    if (!check_function_argtypes(ei, efd, est, efd_impl)) {
-      arena_error_push(efd_impl, "function type mismatch");
-      continue;
+    if (j != esub_block->symtbl.locals.end()) {
+      expr_funcdef *const efd_impl =
+	ptr_down_cast<expr_funcdef>(j->second.edef);
+      if (!check_function_argtypes(ei_super, efd, efd_impl)) {
+	arena_error_push(efd_impl, "function type mismatch");
+	continue;
+      }
     }
   }
 }
@@ -2324,16 +2406,22 @@ static void check_interface_impl_one(expr_struct *est, expr_telist *ih)
 static void check_interface_impl(expr_i *e)
 {
   expr_struct *const est = dynamic_cast<expr_struct *>(e);
-  if (est == 0) {
+  expr_interface *const ei = dynamic_cast<expr_interface *>(e);
+  expr_block *block = 0;
+  if (est != 0) {
+    block = est->block;
+  } else if (ei != 0) {
+    block = ei->block;
+  } else {
     return;
   }
-  if (est->block->tinfo.is_uninstantiated()) {
+  if (block->tinfo.is_uninstantiated()) {
     return;
   }
-  expr_telist *i = est->block->inherit;
-  while (i != 0) {
-    check_interface_impl_one(est, i);
-    i = i->rest;
+  expr_block::inherit_list_type::iterator i;
+  for (i = block->inherit_transitive.begin();
+    i != block->inherit_transitive.end(); ++i) {
+    check_interface_impl_one(e, block, *i);
   }
 }
 
@@ -2507,7 +2595,7 @@ void fn_check_final(expr_i *e)
       return;
     }
   }
-  expr_macrodef *const ma = dynamic_cast<expr_macrodef *>(e);
+  expr_metafdef *const ma = dynamic_cast<expr_metafdef *>(e);
   if (ma != 0) {
     /* don't check macro body */
     return;
@@ -2548,10 +2636,10 @@ bool is_type_esort(expr_e e)
 {
   switch (e) {
   case expr_e_typedef:
-  case expr_e_macrodef:
+  case expr_e_metafdef:
   case expr_e_te:
   case expr_e_struct:
-  case expr_e_variant:
+  case expr_e_dunion:
   case expr_e_interface:
   case expr_e_tparams:
     return true;
@@ -2565,10 +2653,10 @@ bool is_type_or_func_esort(expr_e e)
 {
   switch (e) {
   case expr_e_typedef:
-  case expr_e_macrodef:
+  case expr_e_metafdef:
   case expr_e_te:
   case expr_e_struct:
-  case expr_e_variant:
+  case expr_e_dunion:
   case expr_e_interface:
   case expr_e_funcdef:
   case expr_e_tparams:
@@ -2602,36 +2690,22 @@ bool is_ancestor_symtbl(symbol_table *st1, symbol_table *st2)
   return false;
 }
 
-void check_inherit_threading(expr_struct *est)
+void check_inherit_threading(expr_i *einst, expr_block *block)
 {
-  const term& est_te = est->get_value_texpr();
-  expr_telist *inh = est->block->inherit;
+  const term& inst_te = einst->get_value_texpr();
+  expr_telist *inh = block->inherit;
   for (; inh != 0; inh = inh->rest) {
     symbol_common *sd = inh->head->get_sdef();
     assert(sd);
     term& te = sd->resolve_evaluated();
     const attribute_e iattr = get_term_threading_attribute(te);
-    const attribute_e estattr = est->get_attribute();
-    if ((iattr & estattr) != iattr) {
-      arena_error_throw(est,
-        "struct '%s' can't implement '%s' because it has incompatible "
+    const attribute_e eattr = einst->get_attribute();
+    if ((iattr & eattr) != iattr) {
+      arena_error_throw(einst,
+        "type '%s' can't inherit '%s' because it has incompatible "
 	"threading attribute",
-        term_tostr_human(est_te).c_str(), term_tostr_human(te).c_str());
+        term_tostr_human(inst_te).c_str(), term_tostr_human(te).c_str());
     }
-    #if 0
-    if (term_is_multithr(te) &&
-      (est->get_attribute() & attribute_multithr) == 0) {
-      arena_error_throw(est,
-        "struct '%s' can't implement '%s' because it's not multithreaded",
-        term_tostr_human(est_te).c_str(), term_tostr_human(te).c_str());
-    }
-    if (term_is_threaded(te) &&
-      (est->get_attribute() & attribute_threaded) == 0) {
-      arena_error_throw(est,
-        "struct '%s' can't implement '%s' because it's not threaded",
-        term_tostr_human(est_te).c_str(), term_tostr_human(te).c_str());
-    }
-    #endif
   }
 }
 
@@ -2679,10 +2753,15 @@ bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
     /* symbol or te */
     symbol_common *const sc = a0->get_sdef();
     const bool upvalue_flag = sc->upvalue_flag;
+    term& tev = sc->resolve_evaluated();
+    expr_i *const eev = term_get_instance(tev);
+    expr_e astyp = eev != 0 ? eev->get_esort() : expr_e_metafdef /* dummy */;
+    #if 0
     const expr_e astyp = sc->resolve_symdef()->get_esort();
+    #endif
     if (astyp == expr_e_var) {
       if (upvalue_flag) {
-	symbol_table *symtbl = find_current_symbol_table(sc->resolve_symdef());
+	symbol_table *symtbl = find_current_symbol_table(eev);
 	assert(symtbl);
 	expr_block *bl = symtbl->block_backref;
 	assert(bl);
@@ -2711,7 +2790,7 @@ bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
 	  #endif
 	}
       }
-      expr_var *const ev = ptr_down_cast<expr_var>(sc->resolve_symdef());
+      expr_var *const ev = ptr_down_cast<expr_var>(eev);
       #if 0
       if (is_passby_const(ev->varinfo.passby)) {
       #endif
@@ -2725,8 +2804,7 @@ bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
 	  sc->fullsym.c_str());
       }
     } else if (astyp == expr_e_argdecls) {
-      expr_argdecls *const ead = ptr_down_cast<expr_argdecls>(
-	sc->resolve_symdef());
+      expr_argdecls *const ead = ptr_down_cast<expr_argdecls>(eev);
       if (!is_passby_mutable(ead->passby)) {
 	DBG_LV(fprintf(stderr, "expr_has_lvalue %s 2 false\n",
 	  a0->dump(0).c_str()));
@@ -3043,12 +3121,12 @@ bool is_noexec_expr(expr_i *e)
 { 
   switch (e->get_esort()) {
   case expr_e_typedef:
-  case expr_e_macrodef:
+  case expr_e_metafdef:
   case expr_e_ns:
   case expr_e_inline_c:
   case expr_e_enumval:
   case expr_e_struct:
-  case expr_e_variant:
+  case expr_e_dunion:
   case expr_e_interface:
   case expr_e_funcdef:
     return true;

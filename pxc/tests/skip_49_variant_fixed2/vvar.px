@@ -1,0 +1,43 @@
+namespace vvar;
+import variant -;
+import common -;
+import meta::common m;
+import numeric::cast n;
+import exception::common -;
+import string::positional -;
+import downcast -;
+
+threaded function string foo(int x, string y)
+{
+  y.append(to_string(x));
+  return y;
+}
+
+mtvaluetype struct bar(int x, string y)
+{
+  string value = y;
+  value.append(to_string(x));
+  function string m1(string z) const {
+    string r = value;
+    r.append(z);
+    return r;
+  }
+}
+
+function {ns} void test1() {
+  metafunction vars m::global_variables{ns};
+  expand (name, idx : m::map{vars, m::at1}) {
+    println(
+      m::concat{
+      	m::to_string{ns},
+	" ",
+	m::to_string{name},
+	": ",
+	m::to_string{m::at4{m::at{vars, idx}}}});
+  }
+}
+
+test1{"io::file"}();
+test1{"io::impl"}();
+test1{"io::process"}();
+

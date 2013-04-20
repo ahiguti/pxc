@@ -49,9 +49,9 @@ enum expr_e {
   expr_e_argdecls,
   expr_e_funcdef,
   expr_e_typedef,
-  expr_e_macrodef,
+  expr_e_metafdef,
   expr_e_struct,
-  expr_e_variant,
+  expr_e_dunion,
   expr_e_interface,
   expr_e_try,
   expr_e_throw,
@@ -62,11 +62,11 @@ struct expr_block;
 struct expr_stmts;
 struct expr_funcdef;
 struct expr_struct;
-struct expr_variant;
+struct expr_dunion;
 struct expr_interface;
 
 struct localvar_info {
-  expr_i *edef; /* expr_var, expr_typedef, expr_macrodef, expr_struct,
+  expr_i *edef; /* expr_var, expr_typedef, expr_metafdef, expr_struct,
 		  expr_interface, expr_funcdef, or expr_argdecl */
   attribute_e attr;
   expr_stmts *stmt;

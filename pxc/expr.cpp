@@ -106,17 +106,17 @@ expr_i *expr_typedef_new(const char *fn, int line, const char *sym,
   expr_i *enumvals, unsigned int num_tpara, attribute_e attr)
 { return new expr_typedef(fn, line, sym, cname, family, is_enum, is_bitmask,
   enumvals, num_tpara, attr); }
-expr_i *expr_macrodef_new(const char *fn, int line, const char *sym,
+expr_i *expr_metafdef_new(const char *fn, int line, const char *sym,
   expr_i *tparams, expr_i *rhs, attribute_e attr)
-{ return new expr_macrodef(fn, line, sym, tparams, rhs, attr); }
+{ return new expr_metafdef(fn, line, sym, tparams, rhs, attr); }
 expr_i *expr_struct_new(const char *fn, int line, const char *sym,
   const char *cname, const char *family, expr_i *block, attribute_e attr,
   bool has_udcon)
 { return new expr_struct(fn, line, sym, cname, family, block, attr,
   has_udcon); }
-expr_i *expr_variant_new(const char *fn, int line, const char *sym,
+expr_i *expr_dunion_new(const char *fn, int line, const char *sym,
   expr_i *block, attribute_e attr)
-{ return new expr_variant(fn, line, sym, block, attr); }
+{ return new expr_dunion(fn, line, sym, block, attr); }
 expr_i *expr_interface_new(const char *fn, int line, const char *sym,
   expr_i *block, attribute_e attr)
 { return new expr_interface(fn, line, sym, block, attr); }
@@ -299,7 +299,6 @@ static const builtin_typedefs_type builtin_typedefs[] = {
     type_attribute(23, 23, true, false, true), &builtins.type_float },
   { "bt_double", "pxcrt::bt_double", 0, true, 0,
     type_attribute(52, 52, true, false, true), &builtins.type_double },
-//  { "bt_string", "pxcrt::bt_string", 0, false, 0, &builtins.type_string },
   { "bt_tpdummy", "pxcrt::bt_tpdummy", 0, true, 0,
     type_attribute(0, 0, false, false, false), &builtins.type_tpdummy },
 };

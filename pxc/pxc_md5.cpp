@@ -143,96 +143,96 @@ md5_context::update_block_ch(const unsigned char x[64])
   }
 }
 
-#define macro_f(x, y, z) ((x & y) | ((~x) & z))
-#define macro_g(x, y, z) ((x & z) | (y & (~z)))
-#define macro_h(x, y, z) (x ^ y ^ z)
-#define macro_i(x, y, z) (y ^ (x | (~z)))
+#define md5_mcr_f(x, y, z) ((x & y) | ((~x) & z))
+#define md5_mcr_g(x, y, z) ((x & z) | (y & (~z)))
+#define md5_mcr_h(x, y, z) (x ^ y ^ z)
+#define md5_mcr_i(x, y, z) (y ^ (x | (~z)))
 
-#define macro_rotate_left(v, n) ((v << n) | (v >> (32 - n)))
+#define md5_mcr_rotate_left(v, n) ((v << n) | (v >> (32 - n)))
 
-#define macro_x1(var, arg1, arg2, arg3) \
+#define md5_mcr_x1(var, arg1, arg2, arg3) \
  (var = (var + arg1 + arg2 + arg3) & 0xffffffffUL)
-#define macro_x2(var1, var2, var3) \
- (var1 = (var2 + macro_rotate_left(var1, var3)) & 0xffffffffUL)
+#define md5_mcr_x2(var1, var2, var3) \
+ (var1 = (var2 + md5_mcr_rotate_left(var1, var3)) & 0xffffffffUL)
 
-#define macro_r1(a, b, c, d, o, s, v) \
-  (macro_x1(a, macro_f(b, c, d), x[o], 0x##v##UL), macro_x2(a, b, s))
-#define macro_r2(a, b, c, d, o, s, v) \
-  (macro_x1(a, macro_g(b, c, d), x[o], 0x##v##UL), macro_x2(a, b, s))
-#define macro_r3(a, b, c, d, o, s, v) \
-  (macro_x1(a, macro_h(b, c, d), x[o], 0x##v##UL), macro_x2(a, b, s))
-#define macro_r4(a, b, c, d, o, s, v) \
-  (macro_x1(a, macro_i(b, c, d), x[o], 0x##v##UL), macro_x2(a, b, s))
+#define md5_mcr_r1(a, b, c, d, o, s, v) \
+  (md5_mcr_x1(a, md5_mcr_f(b, c, d), x[o], 0x##v##UL), md5_mcr_x2(a, b, s))
+#define md5_mcr_r2(a, b, c, d, o, s, v) \
+  (md5_mcr_x1(a, md5_mcr_g(b, c, d), x[o], 0x##v##UL), md5_mcr_x2(a, b, s))
+#define md5_mcr_r3(a, b, c, d, o, s, v) \
+  (md5_mcr_x1(a, md5_mcr_h(b, c, d), x[o], 0x##v##UL), md5_mcr_x2(a, b, s))
+#define md5_mcr_r4(a, b, c, d, o, s, v) \
+  (md5_mcr_x1(a, md5_mcr_i(b, c, d), x[o], 0x##v##UL), md5_mcr_x2(a, b, s))
 
 void
 md5_context::update_block(const unsigned long x[16])
 {
   unsigned long a = ma, b = mb, c = mc, d = md;
 
-  macro_r1(a,b,c,d, 0, 7,d76aa478);
-  macro_r1(d,a,b,c, 1,12,e8c7b756);
-  macro_r1(c,d,a,b, 2,17,242070db);
-  macro_r1(b,c,d,a, 3,22,c1bdceee);
-  macro_r1(a,b,c,d, 4, 7,f57c0faf);
-  macro_r1(d,a,b,c, 5,12,4787c62a);
-  macro_r1(c,d,a,b, 6,17,a8304613);
-  macro_r1(b,c,d,a, 7,22,fd469501);
-  macro_r1(a,b,c,d, 8, 7,698098d8);
-  macro_r1(d,a,b,c, 9,12,8b44f7af);
-  macro_r1(c,d,a,b,10,17,ffff5bb1);
-  macro_r1(b,c,d,a,11,22,895cd7be);
-  macro_r1(a,b,c,d,12, 7,6b901122);
-  macro_r1(d,a,b,c,13,12,fd987193);
-  macro_r1(c,d,a,b,14,17,a679438e);
-  macro_r1(b,c,d,a,15,22,49b40821);
-  macro_r2(a,b,c,d, 1, 5,f61e2562);
-  macro_r2(d,a,b,c, 6, 9,c040b340);
-  macro_r2(c,d,a,b,11,14,265e5a51);
-  macro_r2(b,c,d,a, 0,20,e9b6c7aa);
-  macro_r2(a,b,c,d, 5, 5,d62f105d);
-  macro_r2(d,a,b,c,10, 9,02441453);
-  macro_r2(c,d,a,b,15,14,d8a1e681);
-  macro_r2(b,c,d,a, 4,20,e7d3fbc8);
-  macro_r2(a,b,c,d, 9, 5,21e1cde6);
-  macro_r2(d,a,b,c,14, 9,c33707d6);
-  macro_r2(c,d,a,b, 3,14,f4d50d87);
-  macro_r2(b,c,d,a, 8,20,455a14ed);
-  macro_r2(a,b,c,d,13, 5,a9e3e905);
-  macro_r2(d,a,b,c, 2, 9,fcefa3f8);
-  macro_r2(c,d,a,b, 7,14,676f02d9);
-  macro_r2(b,c,d,a,12,20,8d2a4c8a);
-  macro_r3(a,b,c,d, 5, 4,fffa3942);
-  macro_r3(d,a,b,c, 8,11,8771f681);
-  macro_r3(c,d,a,b,11,16,6d9d6122);
-  macro_r3(b,c,d,a,14,23,fde5380c);
-  macro_r3(a,b,c,d, 1, 4,a4beea44);
-  macro_r3(d,a,b,c, 4,11,4bdecfa9);
-  macro_r3(c,d,a,b, 7,16,f6bb4b60);
-  macro_r3(b,c,d,a,10,23,bebfbc70);
-  macro_r3(a,b,c,d,13, 4,289b7ec6);
-  macro_r3(d,a,b,c, 0,11,eaa127fa);
-  macro_r3(c,d,a,b, 3,16,d4ef3085);
-  macro_r3(b,c,d,a, 6,23,04881d05);
-  macro_r3(a,b,c,d, 9, 4,d9d4d039);
-  macro_r3(d,a,b,c,12,11,e6db99e5);
-  macro_r3(c,d,a,b,15,16,1fa27cf8);
-  macro_r3(b,c,d,a, 2,23,c4ac5665);
-  macro_r4(a,b,c,d, 0, 6,f4292244);
-  macro_r4(d,a,b,c, 7,10,432aff97);
-  macro_r4(c,d,a,b,14,15,ab9423a7);
-  macro_r4(b,c,d,a, 5,21,fc93a039);
-  macro_r4(a,b,c,d,12, 6,655b59c3);
-  macro_r4(d,a,b,c, 3,10,8f0ccc92);
-  macro_r4(c,d,a,b,10,15,ffeff47d);
-  macro_r4(b,c,d,a, 1,21,85845dd1);
-  macro_r4(a,b,c,d, 8, 6,6fa87e4f);
-  macro_r4(d,a,b,c,15,10,fe2ce6e0);
-  macro_r4(c,d,a,b, 6,15,a3014314);
-  macro_r4(b,c,d,a,13,21,4e0811a1);
-  macro_r4(a,b,c,d, 4, 6,f7537e82);
-  macro_r4(d,a,b,c,11,10,bd3af235);
-  macro_r4(c,d,a,b, 2,15,2ad7d2bb);
-  macro_r4(b,c,d,a, 9,21,eb86d391);
+  md5_mcr_r1(a,b,c,d, 0, 7,d76aa478);
+  md5_mcr_r1(d,a,b,c, 1,12,e8c7b756);
+  md5_mcr_r1(c,d,a,b, 2,17,242070db);
+  md5_mcr_r1(b,c,d,a, 3,22,c1bdceee);
+  md5_mcr_r1(a,b,c,d, 4, 7,f57c0faf);
+  md5_mcr_r1(d,a,b,c, 5,12,4787c62a);
+  md5_mcr_r1(c,d,a,b, 6,17,a8304613);
+  md5_mcr_r1(b,c,d,a, 7,22,fd469501);
+  md5_mcr_r1(a,b,c,d, 8, 7,698098d8);
+  md5_mcr_r1(d,a,b,c, 9,12,8b44f7af);
+  md5_mcr_r1(c,d,a,b,10,17,ffff5bb1);
+  md5_mcr_r1(b,c,d,a,11,22,895cd7be);
+  md5_mcr_r1(a,b,c,d,12, 7,6b901122);
+  md5_mcr_r1(d,a,b,c,13,12,fd987193);
+  md5_mcr_r1(c,d,a,b,14,17,a679438e);
+  md5_mcr_r1(b,c,d,a,15,22,49b40821);
+  md5_mcr_r2(a,b,c,d, 1, 5,f61e2562);
+  md5_mcr_r2(d,a,b,c, 6, 9,c040b340);
+  md5_mcr_r2(c,d,a,b,11,14,265e5a51);
+  md5_mcr_r2(b,c,d,a, 0,20,e9b6c7aa);
+  md5_mcr_r2(a,b,c,d, 5, 5,d62f105d);
+  md5_mcr_r2(d,a,b,c,10, 9,02441453);
+  md5_mcr_r2(c,d,a,b,15,14,d8a1e681);
+  md5_mcr_r2(b,c,d,a, 4,20,e7d3fbc8);
+  md5_mcr_r2(a,b,c,d, 9, 5,21e1cde6);
+  md5_mcr_r2(d,a,b,c,14, 9,c33707d6);
+  md5_mcr_r2(c,d,a,b, 3,14,f4d50d87);
+  md5_mcr_r2(b,c,d,a, 8,20,455a14ed);
+  md5_mcr_r2(a,b,c,d,13, 5,a9e3e905);
+  md5_mcr_r2(d,a,b,c, 2, 9,fcefa3f8);
+  md5_mcr_r2(c,d,a,b, 7,14,676f02d9);
+  md5_mcr_r2(b,c,d,a,12,20,8d2a4c8a);
+  md5_mcr_r3(a,b,c,d, 5, 4,fffa3942);
+  md5_mcr_r3(d,a,b,c, 8,11,8771f681);
+  md5_mcr_r3(c,d,a,b,11,16,6d9d6122);
+  md5_mcr_r3(b,c,d,a,14,23,fde5380c);
+  md5_mcr_r3(a,b,c,d, 1, 4,a4beea44);
+  md5_mcr_r3(d,a,b,c, 4,11,4bdecfa9);
+  md5_mcr_r3(c,d,a,b, 7,16,f6bb4b60);
+  md5_mcr_r3(b,c,d,a,10,23,bebfbc70);
+  md5_mcr_r3(a,b,c,d,13, 4,289b7ec6);
+  md5_mcr_r3(d,a,b,c, 0,11,eaa127fa);
+  md5_mcr_r3(c,d,a,b, 3,16,d4ef3085);
+  md5_mcr_r3(b,c,d,a, 6,23,04881d05);
+  md5_mcr_r3(a,b,c,d, 9, 4,d9d4d039);
+  md5_mcr_r3(d,a,b,c,12,11,e6db99e5);
+  md5_mcr_r3(c,d,a,b,15,16,1fa27cf8);
+  md5_mcr_r3(b,c,d,a, 2,23,c4ac5665);
+  md5_mcr_r4(a,b,c,d, 0, 6,f4292244);
+  md5_mcr_r4(d,a,b,c, 7,10,432aff97);
+  md5_mcr_r4(c,d,a,b,14,15,ab9423a7);
+  md5_mcr_r4(b,c,d,a, 5,21,fc93a039);
+  md5_mcr_r4(a,b,c,d,12, 6,655b59c3);
+  md5_mcr_r4(d,a,b,c, 3,10,8f0ccc92);
+  md5_mcr_r4(c,d,a,b,10,15,ffeff47d);
+  md5_mcr_r4(b,c,d,a, 1,21,85845dd1);
+  md5_mcr_r4(a,b,c,d, 8, 6,6fa87e4f);
+  md5_mcr_r4(d,a,b,c,15,10,fe2ce6e0);
+  md5_mcr_r4(c,d,a,b, 6,15,a3014314);
+  md5_mcr_r4(b,c,d,a,13,21,4e0811a1);
+  md5_mcr_r4(a,b,c,d, 4, 6,f7537e82);
+  md5_mcr_r4(d,a,b,c,11,10,bd3af235);
+  md5_mcr_r4(c,d,a,b, 2,15,2ad7d2bb);
+  md5_mcr_r4(b,c,d,a, 9,21,eb86d391);
 
   ma += a, mb += b, mc += c, md += d;
   ma &= 0xffffffffUL;

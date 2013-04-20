@@ -392,7 +392,7 @@ static void check_var_type(term& typ, expr_i *e, const char *sym,
 //  }
 #endif
   if (cur != 0 && e->get_esort() == expr_e_var &&
-    (cur->block_esort == expr_e_struct || cur->block_esort == expr_e_variant)) {
+    (cur->block_esort == expr_e_struct || cur->block_esort == expr_e_dunion)) {
     expr_var *const ev = ptr_down_cast<expr_var>(e);
     if (is_ephemeral_value_type(typ)) {
       arena_error_push(e,
@@ -467,8 +467,8 @@ static bool is_default_constructible(const term& typ, expr_i *pos,
     }
     return true;
   }
-  if (esort == expr_e_variant) {
-    expr_variant *const ev = ptr_down_cast<expr_variant>(expr);
+  if (esort == expr_e_dunion) {
+    expr_dunion *const ev = ptr_down_cast<expr_dunion>(expr);
     typedef std::list<expr_var *> fields_type;
     fields_type flds;
     ev->get_fields(flds);
@@ -502,9 +502,9 @@ static void check_default_construct(term& typ, expr_var *ev, const char *sym)
     return;
   }
 #endif
-  expr_variant *eva = dynamic_cast<expr_variant *>(cbexpr);
+  expr_dunion *eva = dynamic_cast<expr_dunion *>(cbexpr);
   if (eva != 0 && eva->get_first_field() != ev) {
-    /* only 1st field of variant need to be default-constructible */
+    /* only 1st field of dunion need to be default-constructible */
     return;
   }
   if (!is_default_constructible(typ, ev, 0)) {
@@ -592,7 +592,7 @@ void expr_stmts::check_type(symbol_table *lookup)
   case expr_e_str_literal:
   case expr_e_symbol:
     if (parent_expr != 0 && parent_expr->parent_expr != 0 &&
-      parent_expr->parent_expr->get_esort() == expr_e_macrodef) {
+      parent_expr->parent_expr->get_esort() == expr_e_metafdef) {
       /* ok for macro rhs */
     } else {
       arena_error_push(this, "invalid statement");
@@ -678,6 +678,31 @@ static void check_return_expr(expr_funcdef *fdef)
   check_return_expr_block(fdef, fdef->block);
 }
 
+static void calc_inherit_transitive_rec(expr_i *pos,
+  expr_block::inherit_list_type& lst, std::set<expr_i *>& s,
+  std::set<expr_i *>& p, expr_telist *inh)
+{
+  for (expr_telist *i = inh; i != 0; i = i->rest) {
+    term t = i->head->get_sdef()->resolve_evaluated();
+    expr_i *const einst = term_get_instance(t);
+    if (p.find(einst) != p.end()) {
+      arena_error_throw(pos, "%s: inheritance loop detected",
+	term_tostr_human(t).c_str());
+    } else if (s.find(einst) != s.end()) {
+      /* skip */
+    } else {
+      lst.push_back(einst);
+      s.insert(einst);
+      expr_interface *ei = ptr_down_cast<expr_interface>(einst);
+      if (ei->block->inherit != 0) {
+	p.insert(einst);
+	calc_inherit_transitive_rec(pos, lst, s, p, ei->block->inherit);
+	p.erase(einst);
+      }
+    }
+  }
+}
+
 void expr_block::check_type(symbol_table *lookup)
 {
   DBG_CT_BLOCK(fprintf(stderr, "%s: %p\n", __PRETTY_FUNCTION__, this));
@@ -695,10 +720,13 @@ void expr_block::check_type(symbol_table *lookup)
       expr_funcdef *efd = ptr_down_cast<expr_funcdef>(parent_expr);
       check_return_expr(efd);
     } // FIXME: check_return_expr for struct constructor?
+    std::set<expr_i *> s;
+    std::set<expr_i *> p; /* parents */
+    calc_inherit_transitive_rec(this, inherit_transitive, s, p, inherit);
   }
 }
 
-static void check_variant_field(const expr_op *eop, expr_i *a0)
+static void check_dunion_field(const expr_op *eop, expr_i *a0)
 {
   expr_i *val = 0;
   expr_i *fld = 0;
@@ -720,7 +748,7 @@ static void check_variant_field(const expr_op *eop, expr_i *a0)
     }
   }
   do {
-    if (val == 0 || !is_variant(val->resolve_texpr())) {
+    if (val == 0 || !is_dunion(val->resolve_texpr())) {
       break;
     }
     expr_symbol *const fldsym = dynamic_cast<expr_symbol *>(fld);
@@ -737,7 +765,7 @@ static void check_variant_field(const expr_op *eop, expr_i *a0)
     if (bl == 0) {
       break;
     }
-    expr_variant *const vari = dynamic_cast<expr_variant *>(bl->parent_expr);
+    expr_dunion *const vari = dynamic_cast<expr_dunion *>(bl->parent_expr);
     if (vari == 0) {
       break;
     }
@@ -840,6 +868,15 @@ term get_func_te_for_funccall(expr_i *func,
     }
   }
   return term();
+}
+
+static bool is_vararg_function(expr_i *e)
+{
+  expr_funcdef *efd = dynamic_cast<expr_funcdef *>(e);
+  if (efd == 0) {
+    return false;
+  }
+  return efd->block != 0 && efd->block->is_expand_argdecls();
 }
 
 static void add_root_requirement(expr_i *e, passby_e passby,
@@ -991,11 +1028,11 @@ static void add_root_requirement(expr_i *e, passby_e passby,
   #endif
   case '.':
   case TOK_ARROW:
-    if (is_variant(eop->arg0->resolve_texpr())) {
-      /* variant field */
+    if (is_dunion(eop->arg0->resolve_texpr())) {
+      /* dunion field */
       if (passby == passby_e_mutable_reference) {
-	arena_error_throw(e, "can not root a variant field");
-	DBG_ROOT(fprintf(stderr, "add_root_requirement: variant field\n"));
+	arena_error_throw(e, "can not root an union field");
+	DBG_ROOT(fprintf(stderr, "add_root_requirement: dunion field\n"));
       } else {
 	store_tempvar(eop, passby_e_const_value, blockscope_flag, false,
 	  "vfld"); /* ROOT */
@@ -1157,11 +1194,11 @@ static bool expr_can_have_side_effect(expr_i *e)
   return false;
 }
 
-static expr_i *get_variant_object_if_vfld(expr_i *e)
+static expr_i *get_dunion_object_if_vfld(expr_i *e)
 {
   expr_op *const eop = dynamic_cast<expr_op *>(e);
   if (eop != 0 && (eop->op == '.' || eop->op == TOK_ARROW) &&
-    is_variant(eop->arg0->resolve_texpr())) {
+    is_dunion(eop->arg0->resolve_texpr())) {
     return eop->arg0;
   }
   return 0;
@@ -1231,18 +1268,20 @@ void expr_op::check_type(symbol_table *lookup)
 	}
 	DBG(fprintf(stderr, "ptr target = %s", einst1->dump(0).c_str()));
       }
-    } else if (einst->get_esort() == expr_e_variant) {
-      expr_variant *const ev = ptr_down_cast<expr_variant>(einst);
-      /* resolve using the context of the variant */
+    } else if (einst->get_esort() == expr_e_dunion) {
+      expr_dunion *const ev = ptr_down_cast<expr_dunion>(einst);
+      /* resolve using the context of the dunion */
       symtbl = &ev->block->symtbl;
       parent_symtbl = symtbl->get_lexical_parent();
       arg0_uniqns = ev->uniqns;
+      arg1_sym_prefix = ev->sym + std::string("_");
     } else if (einst->get_esort() == expr_e_interface) {
       expr_interface *const ei = ptr_down_cast<expr_interface>(einst);
       /* resolve using the context of the interface */
       symtbl = &ei->block->symtbl;
       parent_symtbl = symtbl->get_lexical_parent();
       arg0_uniqns = ei->uniqns;
+      arg1_sym_prefix = ei->sym + std::string("_");
     } else if (einst->get_esort() == expr_e_typedef) {
       expr_typedef *const etd = ptr_down_cast<expr_typedef>(einst);
       if (is_cm_pointer_family(t)) {
@@ -1264,7 +1303,7 @@ void expr_op::check_type(symbol_table *lookup)
     bool is_memfld_dummy = false;
     DBG(fprintf(stderr,
       "sym=%s rhs_sym_ns=%s symtbl=%p parent_symtbl=%p\n",
-      sc->fullsym.c_str(), sc->ns.c_str(), symtbl, parent_symtbl));
+      sc->fullsym.c_str(), sc->uniqns.c_str(), symtbl, parent_symtbl));
     bool no_private = true;
     if (is_ancestor_symtbl(symtbl, symtbl_lexical)) {
       no_private = false; /* allow private field */
@@ -1275,7 +1314,7 @@ void expr_op::check_type(symbol_table *lookup)
       sc->uniqns, is_global_dummy, is_upvalue_dummy, is_memfld_dummy) != 0) {
       /* symbol is defined as a field */
       DBG(fprintf(stderr, "found fld '%s' ns=%s\n", sc->fullsym.c_str(),
-	sc->ns.c_str()));
+	sc->uniqns.c_str()));
       fn_check_type(arg1, symtbl);
       type_of_this_expr = arg1->resolve_texpr();
       // expr_i *const fo = type_of_this_expr.get_expr();
@@ -1283,7 +1322,9 @@ void expr_op::check_type(symbol_table *lookup)
       const expr_funcdef *const fo_efd =
 	dynamic_cast<const expr_funcdef *>(fo);
       if (fo_efd != 0 && !fo_efd->is_virtual_or_member_function()) {
-	arena_error_throw(this, "can not apply '%s'", tok_string(this, op));
+	arena_error_throw(this, "can not apply '%s' "
+	  "('%s' is not a member function)",
+	  tok_string(this, op), sc->fullsym.c_str());
 	return;
       }
       assert(!type_of_this_expr.is_null());
@@ -1313,12 +1354,14 @@ void expr_op::check_type(symbol_table *lookup)
 	return;
       } else {
 	DBG(fprintf(stderr, "func %s notfound [%s] [%s])",
-	  funcname_w_prefix.c_str(), ns.c_str(), arg0_ns.c_str()));
-	arena_error_throw(this, "can not apply '%s'", tok_string(this, op));
+	  funcname_w_prefix.c_str(), uniqns.c_str(), arg0_uniqns.c_str()));
+	arena_error_throw(this, "can not apply '%s' (function '%s' not found)",
+	  tok_string(this, op), funcname_w_prefix.c_str());
 	return;
       }
     } else {
-      arena_error_throw(this, "can not apply '%s'", tok_string(this, op));
+      arena_error_throw(this, "can not apply '%s' (field not found)",
+	tok_string(this, op));
       return;
     }
   } else {
@@ -1414,7 +1457,7 @@ void expr_op::check_type(symbol_table *lookup)
     type_of_this_expr = arg0->resolve_texpr();
     break;
   case TOK_CASE:
-    check_variant_field(this, arg0);
+    check_dunion_field(this, arg0);
     type_of_this_expr = builtins.type_bool;
     break;
   case '!':
@@ -1548,12 +1591,12 @@ void expr_op::check_type(symbol_table *lookup)
       if (expr_is_subexpression(this) ||
 	(arg1 != 0 && expr_can_have_side_effect(arg1))) {
 	/* arg0 can be invalidated by arg1 or other expr */
-	expr_i *const evo = get_variant_object_if_vfld(arg0);
+	expr_i *const evo = get_dunion_object_if_vfld(arg0);
 	if (evo != 0) {
-	  /* lhs is a variant field. root the variant object. */
+	  /* lhs is a dunion field. root the dunion object. */
 	  add_root_requirement(evo, passby_e_mutable_reference, false);
 	} else {
-	  /* lhs is not a variant field. root the lhs. */
+	  /* lhs is not a dunion field. root the lhs. */
 	  add_root_requirement(arg0, passby_e_mutable_reference, false);
 	}
       }
@@ -1600,6 +1643,97 @@ static expr_i *create_tpfunc_texpr(expr_i *e, const tvmap_type& tvm,
   return instantiate_template(e, telist, inst_pos);
 }
 
+static void set_type_inference_result_for_funccall(expr_funccall *efc,
+  expr_i *einst)
+{
+  expr_i *func = efc->func;
+  expr_i *real_func_expr = 0;
+  if (func->get_esort() == expr_e_op) {
+    /* foo.bar(...) */
+    expr_op *const func_op = ptr_down_cast<expr_op>(func);
+    if (func_op->arg1 != 0) {
+      real_func_expr = func_op->arg1;
+    }
+  } else {
+    /* foo(...) */
+    real_func_expr = func;
+  }
+  if (real_func_expr != 0 && real_func_expr->get_sdef() != 0) {
+    std::string err_mess;
+    if (!check_term_validity(einst->get_value_texpr(), true, true, true,
+      efc, err_mess)) {
+      arena_error_push(efc, "incomplete template expression: '%s' %s",
+	term_tostr_human(einst->get_value_texpr()).c_str(),
+	err_mess.c_str());
+    }
+    real_func_expr->get_sdef()->set_evaluated(einst->get_value_texpr());
+      /* set auto-matching result */
+  } else {
+    arena_error_throw(efc, "not a template function");
+  }
+}
+
+static size_t get_tparam_length(expr_i *e)
+{
+  expr_block *const ttbl = e != 0 ? e->get_template_block() : 0;
+  if (ttbl == 0) {
+    return 0;
+  }
+  return elist_length(ttbl->tinfo.tparams);
+}
+
+static void check_passing_memfunc_rec(expr_funccall *fc,
+  expr_struct *caller_up_est, const term& te)
+{
+  const expr_i *const einst = term_get_instance_const(te);
+  if (einst != 0 && einst->get_esort() == expr_e_funcdef) {
+    const expr_i *const estv = ptr_down_cast<const expr_funcdef>(einst)
+      ->is_virtual_or_member_function();
+    if (estv != 0) {
+      if (caller_up_est == 0) {
+	arena_error_throw(fc, "passing invalid member function '%s'",
+	  term_tostr_human(te).c_str());
+      }
+      if (estv->get_esort() == expr_e_struct) {
+	if (caller_up_est != estv) {
+	  arena_error_throw(fc, "passing invalid member function '%s'",
+	    term_tostr_human(te).c_str());
+	}
+      #if 0
+      } else {
+	const expr_interface *const ei =
+	  ptr_down_cast<const expr_interface>(estv);
+	if (!implements_interface(caller_up_est, ei)) {
+	  arena_error_throw(fc, "passing invalid member function");
+	}
+      #endif
+      }
+    }
+  }
+  const term_list *tl = te.get_args_or_metalist();
+  if (tl != 0) {
+    for (term_list::const_iterator i = tl->begin(); i != tl->end(); ++i) {
+      check_passing_memfunc_rec(fc, caller_up_est, *i);
+    }
+  }
+}
+
+static void check_passing_memfunc(expr_funccall *fc, const term& te)
+{
+  /* issue an error if a foreign member function is passed as a template
+   * parameter, which is caused by meta::common::local{...} . */
+  expr_funcdef *const efd = get_up_member_func(fc->symtbl_lexical);
+  expr_struct *est = 0;
+  if (efd != 0) {
+    est = efd->is_member_function();
+  } else {
+    est = dynamic_cast<expr_struct *>(
+      get_current_frame_expr(fc->symtbl_lexical));
+      /* nonzero if fc is inside a constr */
+  }
+  check_passing_memfunc_rec(fc, est, te);
+}
+
 void expr_funccall::check_type(symbol_table *lookup)
 {
   fn_check_type(func, lookup);
@@ -1632,12 +1766,54 @@ void expr_funccall::check_type(symbol_table *lookup)
       "termplate expression '%s' has an unbound type parameter",
       term_tostr_human(func_te).c_str());
   }
+  if (is_vararg_function(func_te.get_expr()) &&
+    func_te.get_args()->size() == 0 &&
+    get_tparam_length(func_te.get_expr()) != 0) {
+    /* type inference for generic vararg function */
+    term_list tl;
+    typedef std::list<expr_i *> arglist_type;
+    arglist_type arglist;
+    append_hidden_this(func, arglist);
+    append_comma_sep_list(arg, arglist);
+    for (arglist_type::const_iterator i = arglist.begin(); i != arglist.end();
+      ++i) {
+      tl.push_back((*i)->resolve_texpr());
+    }
+    term tml(tl); /* metalist */
+    term_list tl2;
+    tl2.push_back(tml);
+    func_te = eval_term(term(func_te.get_expr(), tl2));
+    set_type_inference_result_for_funccall(this, term_get_instance(func_te));
+  }
+  if (!memfunc_w_explicit_obj) {
+    symbol_common *esym = func->get_sdef();
+    if (esym != 0 && esym->get_symdef()->get_esort() == expr_e_tparams) {
+      /* func is passed as a template parameter. ok even when func is a
+       * foreign member function. */
+      /* noop */
+    } else {
+      check_passing_memfunc(this, func_te);
+    }
+  }
   const term_list *const func_te_args = func_te.get_args();
   expr_i *const func_inst = term_get_instance(func_te);
   /* TODO: fix the copy-paste of passing_root_requirement calls */
   if (is_function(func_te)) {
     /* function call */
     expr_funcdef *efd = ptr_down_cast<expr_funcdef>(func_inst);
+    /* add callee_funcs */
+    expr_i *const fr = get_current_frame_expr(symtbl_lexical);
+    if (fr != 0 && fr->get_esort() == expr_e_funcdef &&
+      func->get_esort() != expr_e_op) { /* add non-local lookup only. TBD. */
+      expr_funcdef *const curfd = ptr_down_cast<expr_funcdef>(fr);
+      if (curfd->callee_set.find(efd) == curfd->callee_set.end()) {
+	curfd->callee_set.insert(efd);
+	curfd->callee_vec.push_back(efd);
+	#if 0
+	fprintf(stderr, "%s calls %s (direct)\n", curfd->sym, efd->sym);
+	#endif
+      }
+    }
     expr_argdecls *ad = efd->block->get_argdecls();
     typedef std::list<expr_i *> arglist_type;
     arglist_type arglist;
@@ -1685,32 +1861,9 @@ void expr_funccall::check_type(symbol_table *lookup)
       /* instantiate template function automatically */
       DBG(fprintf(stderr, "func is uninstantiated\n"));
       expr_i *const einst = create_tpfunc_texpr(efd, tvmap, this);
-      expr_i *real_func_expr = 0;
-      if (func->get_esort() == expr_e_op) {
-	/* foo.bar(...) */
-	expr_op *const func_op = ptr_down_cast<expr_op>(func);
-	if (func_op->arg1 != 0) {
-	  real_func_expr = func_op->arg1;
-	}
-      } else {
-	/* foo(...) */
-	real_func_expr = func;
-      }
-      if (real_func_expr != 0 && real_func_expr->get_sdef() != 0) {
-	std::string err_mess;
-	if (!check_term_validity(einst->get_value_texpr(), true, true, true,
-	  this, err_mess)) {
-	  arena_error_push(this, "incomplete template expression: '%s' %s",
-	    term_tostr_human(einst->get_value_texpr()).c_str(),
-	    err_mess.c_str());
-	}
-	real_func_expr->get_sdef()->set_evaluated(einst->get_value_texpr());
-	  /* set auto-matching result */
-	expr_funcdef *efd_inst = ptr_down_cast<expr_funcdef>(einst);
-	type_of_this_expr = efd_inst->get_rettype();
-      } else {
-	arena_error_throw(this, "not a template function");
-      }
+      set_type_inference_result_for_funccall(this, einst);
+      expr_funcdef *efd_inst = ptr_down_cast<expr_funcdef>(einst);
+      type_of_this_expr = efd_inst->get_rettype();
     } else {
       std::string err_mess;
       if (!check_term_validity(efd->get_value_texpr(), true, true, true,
@@ -1741,7 +1894,13 @@ void expr_funccall::check_type(symbol_table *lookup)
       /* callee's struct context */
       expr_i *const callee_memfunc_parent
 	= efd->is_virtual_or_member_function();
-      if (callee_memfunc_parent != 0 &&
+      if (caller_memfunc_parent == 0 ||
+	caller_memfunc_parent->get_esort() != expr_e_struct) {
+	/* if caller is not inside a struct context, it's a function which
+	 * takes callee as a template parameter. if so, callee should be
+	 * called without an object. */
+	/* noop */
+      } else if (callee_memfunc_parent != 0 &&
 	caller_memfunc_parent != callee_memfunc_parent) {
 	arena_error_throw(this,
 	  "calling a member function without an object");
@@ -2436,9 +2595,9 @@ void check_genericfe_syntax(expr_i *e)
   case expr_e_argdecls:
   case expr_e_funcdef:
   case expr_e_typedef:
-  case expr_e_macrodef:
+  case expr_e_metafdef:
   case expr_e_struct:
-  case expr_e_variant:
+  case expr_e_dunion:
   case expr_e_interface:
   case expr_e_try:
     arena_error_push(e, "not allowed in a generic foreach block: '%s'",
@@ -2511,7 +2670,7 @@ void expr_fldfe::check_type(symbol_table *lookup)
     fields_type flds;
     const expr_struct *const est = dynamic_cast<const expr_struct *>(
       term_get_instance_const(typ));
-    const expr_variant *const ev = dynamic_cast<const expr_variant *>(
+    const expr_dunion *const ev = dynamic_cast<const expr_dunion *>(
       term_get_instance_const(typ));
     if (est != 0) {
       est->get_fields(flds);
@@ -2799,16 +2958,16 @@ void expr_expand::check_type(symbol_table *lookup)
     expr_i *se = 0;
     if (ex == expand_e_argdecls) {
       const term_list *const ent = te.get_metalist();
-      if (ent == 0 || ent->size() != 5) {
+      if (ent == 0 || ent->size() != 4) {
 	arena_error_throw(valueste,
 	  "invalid parameter for 'expand' : '%s' "
-	  "(must be a metalist of size 5)",
+	  "(must be a metalist of size 4)",
 	  term_tostr_human(te).c_str());
       }
-      const std::string name = (*ent)[1].get_string();
-      const term typ = (*ent)[2];
-      const long long pass_byref = (*ent)[3].get_long();
-      const long long arg_mutable = (*ent)[4].get_long();
+      const std::string name = (*ent)[0].get_string();
+      const term typ = (*ent)[1];
+      const long long pass_byref = (*ent)[2].get_long();
+      const long long arg_mutable = (*ent)[3].get_long();
       expr_argdecls *ad = ptr_down_cast<expr_argdecls>(
 	expr_argdecls_new(this->fname, this->line, "dummy",
 	expr_te_new(this->fname, this->line,
@@ -2879,6 +3038,9 @@ void expr_expand::check_type(symbol_table *lookup)
       }
       #endif
       se = subst_symbol_name_rec(se, 0, 0, itersym, te, true);
+    }
+    if (se == 0) {
+      arena_error_throw(valueste, "expanded to a null expression");
     }
     ees.push_back(se);
   }
@@ -3142,7 +3304,7 @@ void expr_typedef::check_type(symbol_table *lookup)
   fn_check_type(enumvals, lookup);
 }
 
-void expr_macrodef::check_type(symbol_table *lookup)
+void expr_metafdef::check_type(symbol_table *lookup)
 {
   if ((this->get_attribute() & attribute_threaded) != 0) {
     arena_error_throw(this, "invalid attribute for a macro");
@@ -3188,7 +3350,7 @@ static void check_constr_restrictions(expr_struct *est)
     if (is_vardef_or_vardefset(e)) {
       if (!has_udcon && e->get_esort() != expr_e_var) {
 	/* plain struct allows vardef only */
-	arena_error_push(e, "invalid statement");
+	arena_error_push(e, "invalid statement (field definition expected)");
       } else if (exec_found != 0) {
 	arena_error_push(e, "invalid statement before field initialization");
       }
@@ -3199,7 +3361,7 @@ static void check_constr_restrictions(expr_struct *est)
       }
       if (!has_udcon) {
 	/* plain struct allows vardef only */
-	arena_error_push(e, "invalid statement");
+	arena_error_push(e, "invalid statement for a plain struct body");
       }
     }
   }
@@ -3208,7 +3370,7 @@ static void check_constr_restrictions(expr_struct *est)
 void expr_struct::check_type(symbol_table *lookup)
 {
   fn_check_type(block, lookup);
-  check_inherit_threading(this);
+  check_inherit_threading(this, this->get_template_block());
   if (!block->tinfo.is_uninstantiated()) {
     check_constr_restrictions(this);
   }
@@ -3218,7 +3380,7 @@ void expr_struct::check_type(symbol_table *lookup)
   }
 }
 
-void expr_variant::check_type(symbol_table *lookup)
+void expr_dunion::check_type(symbol_table *lookup)
 {
   fn_check_type(block, lookup);
 }
@@ -3226,6 +3388,7 @@ void expr_variant::check_type(symbol_table *lookup)
 void expr_interface::check_type(symbol_table *lookup)
 {
   fn_check_type(block, lookup);
+  check_inherit_threading(this, this->get_template_block());
 }
 
 void expr_try::check_type(symbol_table *lookup)
@@ -3242,6 +3405,52 @@ static bool is_struct_member(expr_i *edef)
   return efr != 0 && efr->get_esort() == expr_e_struct;
 }
 
+static void add_func_upvalues_callee(expr_funcdef *efd, expr_funcdef *tefd)
+{
+  symbol_table& symtbl = tefd->block->symtbl;
+  symbol_table::locals_type::const_iterator j;
+  /* upvalues required by tefd */
+  for (j = symtbl.upvalues.begin(); j != symtbl.upvalues.end(); ++j) {
+    expr_i *const e = j->second.edef;
+    if (is_struct_member(e)) {
+      continue;
+    }
+    if (e->symtbl_lexical == &efd->block->symtbl) {
+      /* this variable is defined in efd itself */
+      continue;
+    }
+    if (efd->tpup_set.find(e) == efd->tpup_set.end()) {
+      DBG_TPUP(fprintf(stderr, "TPUP fn=%s tp up=%s tparam=%s\n", efd->sym,
+	e->dump(0).c_str(), tefd->sym));
+      efd->tpup_set.insert(e);
+      efd->tpup_vec.push_back(e);
+    }
+  }
+  /* is tefd memberfunc descent? */
+  if (tefd->block->symtbl.require_thisup) {
+    expr_funcdef *const up_memfunc = get_up_member_func(
+      &tefd->block->symtbl);
+    if (up_memfunc) {
+      /* yes, it's a memberfunc descent */
+      expr_struct *const up_est = up_memfunc->is_member_function();
+	/* IMF ?? */
+      assert(up_est);
+      if (efd->is_member_function() != up_est) { /* IMF ?? */
+	if (efd->tpup_thisptr != 0 && efd->tpup_thisptr != up_est) {
+	  arena_error_throw(tefd, "internal error: up_memfunc (indirect)");
+	}
+	DBG_TPUP(fprintf(stderr, "TPUP_THISPTR internal efd=%s callee=%s\n",
+	  efd->sym, tefd->sym));
+	efd->tpup_thisptr = up_est;
+	efd->tpup_thisptr_nonconst |= (!up_memfunc->is_const);
+      }
+    }
+  }
+}
+#if 0
+#endif
+
+#if 1
 static void add_tparam_upvalues_tp_internal(expr_funcdef *efd, const term& t)
 {
   expr_i *const texpr = t.get_expr();
@@ -3260,8 +3469,8 @@ static void add_tparam_upvalues_tp_internal(expr_funcdef *efd, const term& t)
 	continue;
       }
       if (efd->tpup_set.find(e) == efd->tpup_set.end()) {
-	DBG_TPUP(fprintf(stderr, "TPUP %s tp %s\n", efd->dump(0).c_str(),
-	  e->dump(0).c_str()));
+	DBG_TPUP(fprintf(stderr, "TPUP fn=%s tp up=%s tparam=%s\n", efd->sym,
+	  e->dump(0).c_str(), tefd->sym));
 	efd->tpup_set.insert(e);
 	efd->tpup_vec.push_back(e);
       }
@@ -3279,6 +3488,8 @@ static void add_tparam_upvalues_tp_internal(expr_funcdef *efd, const term& t)
 	  if (efd->tpup_thisptr != 0 && efd->tpup_thisptr != up_est) {
 	    arena_error_throw(tefd, "internal error: up_memfunc (indirect)");
 	  }
+	  DBG_TPUP(fprintf(stderr, "TPUP_THISPTR internal efd=%s\n",
+	    efd->sym));
 	  efd->tpup_thisptr = up_est;
 	  efd->tpup_thisptr_nonconst |= (!up_memfunc->is_const);
 	}
@@ -3293,9 +3504,17 @@ static void add_tparam_upvalues_tp_internal(expr_funcdef *efd, const term& t)
     }
   }
 }
+#endif
 
 void add_tparam_upvalues_funcdef_tparam(expr_funcdef *efd)
 {
+  for (expr_funcdef::callee_vec_type::const_iterator i =
+    efd->callee_vec.begin(); i != efd->callee_vec.end(); ++i) {
+    add_func_upvalues_callee(efd, *i);
+  }
+#if 0
+#endif
+#if 1
   /* tparam upvalues */
   term& t = efd->value_texpr;
   const term_list *const targs = t.get_args();
@@ -3306,12 +3525,15 @@ void add_tparam_upvalues_funcdef_tparam(expr_funcdef *efd)
   for (j = targs->begin(); j != targs->end(); ++j) {
     add_tparam_upvalues_tp_internal(efd, *j);
   }
+#endif
 }
 
 void add_tparam_upvalues_funcdef_direct(expr_funcdef *efd)
 {
   /* direct upvalues */
-  DBG_TPUP(fprintf(stderr, "TPUP %s\n", efd->dump(0).c_str()));
+  #if 0
+  DBG_TPUP(fprintf(stderr, "TPUP enter %s\n", efd->sym));
+  #endif
   efd->tpup_set.clear();
   efd->tpup_vec.clear();
   const symbol_table::locals_type& upvalues = efd->block->symtbl.upvalues;
@@ -3322,7 +3544,7 @@ void add_tparam_upvalues_funcdef_direct(expr_funcdef *efd)
       continue;
     }
     if (efd->tpup_set.find(e) == efd->tpup_set.end()) {
-      DBG_TPUP(fprintf(stderr, "TPUP %s direct %s\n", efd->dump(0).c_str(),
+      DBG_TPUP(fprintf(stderr, "TPUP fn=%s direct up=%s\n", efd->sym,
 	e->dump(0).c_str()));
       efd->tpup_set.insert(e);
       efd->tpup_vec.push_back(e);
@@ -3338,6 +3560,8 @@ void add_tparam_upvalues_funcdef_direct(expr_funcdef *efd)
 	if (efd->tpup_thisptr != 0 && efd->tpup_thisptr != up_est) {
 	  arena_error_throw(efd, "internal error: up_memfunc (indirect)");
 	}
+	DBG_TPUP(fprintf(stderr, "TPUP_THISPTR direct efd=%s\n",
+	  efd->dump(0).c_str()));
 	efd->tpup_thisptr = up_est;
 	efd->tpup_thisptr_nonconst |= (!up_memfunc->is_const);
       }

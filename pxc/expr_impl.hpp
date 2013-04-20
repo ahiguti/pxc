@@ -265,13 +265,14 @@ private:
 public:
   const char *fname;
   const int line;
-  term type_of_this_expr; // FIXME: remove?
+  term type_of_this_expr; /* TODO: remove? */
   conversion_e conv;
   term type_conv_to;
   expr_i *parent_expr;
   symbol_table *symtbl_lexical;
   int tempvar_id;
   variable_info tempvar_varinfo;
+  bool generated_flag : 1; /* this expr is generated using expand */
 };
 
 struct expr_te : public expr_i {
@@ -707,6 +708,9 @@ struct expr_block : public expr_i {
   }
   void check_type(symbol_table *lookup);
   expr_argdecls *get_argdecls() const;
+  bool is_expand_argdecls() const {
+    return argdecls != 0 && argdecls->get_esort() == expr_e_expand;
+  }
   bool has_expr_to_emit() const { return true; }
   bool is_expression() const { return false; }
   void emit_value(emit_context& em);
@@ -723,6 +727,8 @@ public:
   passby_e ret_passby;
   expr_stmts *stmts;
   symbol_table symtbl;
+  typedef std::vector<expr_i *> inherit_list_type;
+  inherit_list_type inherit_transitive;
 };
 
 struct expr_op : public expr_i {
@@ -1090,6 +1096,14 @@ public:
   bool ext_decl : 1;  /* imported function and block may be null */
   bool no_def : 1;    /* extern c function or virtual function decl */
   term value_texpr;
+  typedef std::vector<expr_funcdef *> callee_vec_type;
+  typedef std::set<expr_funcdef *> callee_set_type;
+  callee_vec_type callee_vec;
+  callee_set_type callee_set;
+  #if 0
+  callee_vec_type callee_vec_tr;
+  callee_set_type callee_set_tr;
+  #endif
   /* following tpup_* flds are used when this function instance has
    * template parameter functions and they need upvalues. */
   typedef std::vector<expr_i *> tpup_vec_type;
@@ -1144,11 +1158,11 @@ public:
   typefamily_e typefamily; // TODO: unused
 };
 
-struct expr_macrodef : public expr_i {
-  expr_macrodef(const char *fn, int line, const char *sym, expr_i *tparams,
+struct expr_metafdef : public expr_i {
+  expr_metafdef(const char *fn, int line, const char *sym, expr_i *tparams,
     expr_i *rhs, attribute_e attr);
-  expr_i *clone() const { return new expr_macrodef(*this); }
-  expr_e get_esort() const { return expr_e_macrodef; }
+  expr_i *clone() const { return new expr_metafdef(*this); }
+  expr_e get_esort() const { return expr_e_metafdef; }
   int get_num_children() const { return 1; }
   expr_i *get_child(int i) {
     if (i == 0) { return block; }
@@ -1228,11 +1242,11 @@ public:
   bool has_udcon;
 };
 
-struct expr_variant : public expr_i {
-  expr_variant(const char *fn, int line, const char *sym, expr_i *block,
+struct expr_dunion : public expr_i {
+  expr_dunion(const char *fn, int line, const char *sym, expr_i *block,
     attribute_e attr);
   expr_i *clone() const;
-  expr_e get_esort() const { return expr_e_variant; }
+  expr_e get_esort() const { return expr_e_dunion; }
   int get_num_children() const { return 1; }
   expr_i *get_child(int i) { return i == 0 ? block : 0; }
   void set_child(int i, expr_i *e) {

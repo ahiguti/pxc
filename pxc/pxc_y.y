@@ -66,9 +66,9 @@ static compile_mode cur_mode;
 %token<void_val> TOK_FUNCTION
 %token<void_val> TOK_VAR
 %token<void_val> TOK_TYPEDEF
-%token<void_val> TOK_MACRO
+%token<void_val> TOK_METAFUNCTION
 %token<void_val> TOK_STRUCT
-%token<void_val> TOK_VARIANT
+%token<void_val> TOK_UNION
 %token<void_val> TOK_INTERFACE
 %token<void_val> TOK_LOR
 %token<void_val> TOK_LAND
@@ -115,8 +115,8 @@ static compile_mode cur_mode;
 %type<expr_val> struct_body_stmt
 %type<expr_val> c_struct_body_stmt_list
 %type<expr_val> c_struct_body_stmt
-%type<expr_val> variant_body_stmt_list
-%type<expr_val> variant_body_stmt
+%type<expr_val> dunion_body_stmt_list
+%type<expr_val> dunion_body_stmt
 %type<expr_val> interface_body_stmt_list
 %type<expr_val> interface_body_stmt
 %type<expr_val> function_body_stmt_list
@@ -139,12 +139,12 @@ static compile_mode cur_mode;
 %type<visi_val> opt_attribute_threading
 %type<expr_val> c_struct_stmt
 %type<expr_val> struct_stmt
-%type<expr_val> variant_stmt
+%type<expr_val> dunion_stmt
 %type<expr_val> opt_inherit_expr
 %type<expr_val> interface_stmt
 %type<expr_val> enum_stmt
 %type<expr_val> enum_value_list
-%type<expr_val> macrodef_stmt
+%type<expr_val> metafdef_stmt
 %type<expr_val> c_enumval_stmt
 %type<expr_val> visi_vardef_stmt
 %type<expr_val> argdecl_list
@@ -200,9 +200,9 @@ toplevel_stmt
 defs_stmt
 	: funcdef_stmt
 	| struct_stmt
-	| variant_stmt
+	| dunion_stmt
 	| interface_stmt
-	| macrodef_stmt
+	| metafdef_stmt
 	;
 tparam_list
 	: TOK_SYMBOL
@@ -241,15 +241,15 @@ c_struct_body_stmt_list
 c_struct_body_stmt
 	: expression_stmt /* only vardef is allowed */
 	| c_funcdecl_stmt
-	| macrodef_stmt
+	| metafdef_stmt
 	;
-variant_body_stmt_list
+dunion_body_stmt_list
 	:
 	  { $$ = 0; }
-	| variant_body_stmt variant_body_stmt_list
+	| dunion_body_stmt dunion_body_stmt_list
 	  { $$ = expr_stmts_new(cur_fname, @1.first_line, $1, $2); }
 	;
-variant_body_stmt
+dunion_body_stmt
 	: expression_stmt /* only vardef is allowed */
 	| defs_stmt
 	;
@@ -262,9 +262,9 @@ interface_body_stmt_list
 interface_body_stmt
 	: funcdecl_stmt
 	| struct_stmt
-	| variant_stmt
+	| dunion_stmt
 	| interface_stmt
-	| macrodef_stmt
+	| metafdef_stmt
 	;
 function_body_stmt_list
 	:
@@ -600,10 +600,10 @@ c_struct_stmt
 			passby_e_mutable_value, $12),
 		$1, true); }
 	;
-variant_stmt
-	: opt_attribute TOK_VARIANT opt_tparams_expr TOK_SYMBOL '{'
-		variant_body_stmt_list '}'
-	  { $$ = expr_variant_new(cur_fname, @2.first_line, $4,
+dunion_stmt
+	: opt_attribute TOK_UNION opt_tparams_expr TOK_SYMBOL '{'
+		dunion_body_stmt_list '}'
+	  { $$ = expr_dunion_new(cur_fname, @2.first_line, $4,
 		expr_block_new(cur_fname, @2.first_line, $3, 0, 0, 0,
 			passby_e_mutable_value, $6),
 		$1); }
@@ -611,15 +611,15 @@ variant_stmt
 opt_inherit_expr
 	:
 	  { $$ = 0; }
-	| ':' type_arg_list ':'
+	| '<' type_arg_list '>'
 	  { $$ = $2; }
 	;
 interface_stmt
-	: opt_attribute TOK_INTERFACE opt_tparams_expr TOK_SYMBOL '{'
-		interface_body_stmt_list '}'
+	: opt_attribute TOK_INTERFACE opt_tparams_expr TOK_SYMBOL
+		opt_inherit_expr '{' interface_body_stmt_list '}'
 	  { $$ = expr_interface_new(cur_fname, @2.first_line, $4,
-		expr_block_new(cur_fname, @2.first_line, $3, 0, 0, 0,
-			passby_e_mutable_value, $6),
+		expr_block_new(cur_fname, @2.first_line, $3, $5, 0, 0,
+			passby_e_mutable_value, $7),
 		$1); }
 	;
 enum_stmt
@@ -645,9 +645,10 @@ c_enumval_stmt
 	 { $$ = expr_enumval_new(cur_fname, @2.first_line, $5, $4,
 		arena_dequote_strdup($3), 0, $1, 0); }
 	;
-macrodef_stmt
-	: opt_attribute TOK_MACRO TOK_SYMBOL opt_tparams_expr type_arg ';'
-	  { $$ = expr_macrodef_new(cur_fname, @2.first_line, $3, $4, $5, $1); }
+metafdef_stmt
+	: opt_attribute TOK_METAFUNCTION TOK_SYMBOL opt_tparams_expr
+		type_arg ';'
+	  { $$ = expr_metafdef_new(cur_fname, @2.first_line, $3, $4, $5, $1); }
 	;
 visi_vardef_stmt
 	: TOK_PRIVATE type_expr TOK_SYMBOL ';'
@@ -713,9 +714,9 @@ vardef_expr
 argdecl_list
 	:
 	  { $$ = 0; }
-	| TOK_EXPAND '(' TOK_SYMBOL ':' type_expr ')' argdecl_list_trail
-	  { $$ = expr_expand_new(cur_fname, @1.first_line, $3, 0, $5, 0,
-		expand_e_argdecls, $7); }
+	| TOK_EXPAND '(' type_expr ')' argdecl_list_trail
+	  { $$ = expr_expand_new(cur_fname, @1.first_line, 0, 0, $3, 0,
+		expand_e_argdecls, $5); }
 	| type_expr TOK_SYMBOL argdecl_list_trail
 	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $2, $1,
 		passby_e_mutable_value, $3); }

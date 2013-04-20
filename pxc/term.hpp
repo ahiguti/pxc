@@ -125,6 +125,13 @@ struct term {
     term_metalist *const tm = get_term_metalist();
     return tm != 0 ? &tm->v : 0;
   }
+  const term_list *get_args_or_metalist() const {
+    const term_list *r = get_args();
+    if (r == 0) {
+      r = get_metalist();
+    }
+    return r;
+  }
   long get_long() const {
     term_long *const ti = get_term_long();
     return ti != 0 ? ti->v : 0;

@@ -222,6 +222,20 @@ template <typename T> static std::string get_type_cname_wo_ns(T e)
   return to_short_name(term_tostr(e->value_texpr, term_tostr_sort_cname));
 }
 
+static void emit_inherit(emit_context& em, expr_block *block)
+{
+  expr_telist *ih = block->inherit;
+  while (ih != 0) {
+    if (ih == block->inherit) {
+      em.puts(" : ");
+    } else {
+      em.puts(", ");
+    }
+    em.puts(term_tostr_cname(ih->head->get_sdef()->get_evaluated()));
+    ih = ih->rest;
+  }
+}
+
 static void emit_interface_def_one(emit_context& em, expr_interface *ei,
   bool proto_only)
 {
@@ -237,6 +251,7 @@ static void emit_interface_def_one(emit_context& em, expr_interface *ei,
     em.puts(";\n");
     return;
   }
+  emit_inherit(em, ei->block);
   em.puts(" {\n");
   em.add_indent(1);
   em.set_file_line(ei);
@@ -343,6 +358,8 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
     em.puts(";\n");
     return;
   }
+  emit_inherit(em, est->block);
+  #if 0
   if (est->block->inherit != 0) {
     expr_telist *ih = est->block->inherit;
     while (ih != 0) {
@@ -355,6 +372,7 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
       ih = ih->rest;
     }
   }
+  #endif
   em.puts(" {\n");
   em.add_indent(1);
   if (est->block->inherit != 0) {
@@ -521,8 +539,8 @@ static void emit_struct_constr_one(emit_context& em, expr_struct *est,
   }
 }
 
-static void emit_initialize_variant_field(emit_context& em,
-  const expr_variant *ev, const expr_var *fld, bool copy_flag, bool set_flag)
+static void emit_initialize_dunion_field(emit_context& em,
+  const expr_dunion *ev, const expr_var *fld, bool copy_flag, bool set_flag)
 {
   if (is_unit_type(fld->get_texpr())) {
     em.puts("/* unit */");
@@ -572,8 +590,8 @@ static std::string destructor_cstr(const term& typ)
   return s;
 }
 
-static void emit_deinitialize_variant_field(emit_context& em,
-  const expr_variant *ev, const expr_var *fld)
+static void emit_deinitialize_dunion_field(emit_context& em,
+  const expr_dunion *ev, const expr_var *fld)
 {
   if (is_unit_type(fld->get_texpr())) {
     em.puts("/* unit */");
@@ -592,8 +610,8 @@ static void emit_deinitialize_variant_field(emit_context& em,
   }
 }
 
-static void emit_variant_aux_functions(emit_context& em,
-  const expr_variant *ev, bool declonly)
+static void emit_dunion_aux_functions(emit_context& em,
+  const expr_dunion *ev, bool declonly)
 {
   typedef std::list<expr_var *> flds_type;
   flds_type flds;
@@ -642,7 +660,7 @@ static void emit_variant_aux_functions(emit_context& em,
 	em.puts("case ");
 	(*i)->emit_symbol(em);
 	em.puts("$e: ");
-	emit_initialize_variant_field(em, ev, *i, true, false);
+	emit_initialize_dunion_field(em, ev, *i, true, false);
 	em.puts("; break;\n");
       }
       em.set_file_line(ev);
@@ -680,7 +698,7 @@ static void emit_variant_aux_functions(emit_context& em,
 	em.puts("case ");
 	(*i)->emit_symbol(em);
 	em.puts("$e: ");
-	emit_deinitialize_variant_field(em, ev, *i);
+	emit_deinitialize_dunion_field(em, ev, *i);
 	em.puts("; break;\n");
       }
       em.set_file_line(ev);
@@ -760,7 +778,7 @@ static void emit_variant_aux_functions(emit_context& em,
       em.puts("{ deinit$(); $e = ");
       (*i)->emit_symbol(em);
       em.puts("$e; ");
-      emit_initialize_variant_field(em, ev, *i, false, true);
+      emit_initialize_dunion_field(em, ev, *i, false, true);
       em.puts("; }\n");
       em.set_file_line(*i);
       em.indent('b');
@@ -779,7 +797,7 @@ static void emit_variant_aux_functions(emit_context& em,
   }
 }
 
-static void emit_variant_def_one(emit_context& em, const expr_variant *ev,
+static void emit_dunion_def_one(emit_context& em, const expr_dunion *ev,
   bool proto_only)
 {
   if (!is_compiled(ev->block)) {
@@ -925,7 +943,7 @@ static void emit_variant_def_one(emit_context& em, const expr_variant *ev,
     em.puts("$e;\n");
     em.set_file_line(*i);
     em.indent('b');
-    emit_initialize_variant_field(em, ev, *i, false, false);
+    emit_initialize_dunion_field(em, ev, *i, false, false);
     em.puts(";\n");
     break; /* first field only */
   }
@@ -954,19 +972,19 @@ static void emit_variant_def_one(emit_context& em, const expr_variant *ev,
   em.puts(name_c);
   em.puts("& x) { if (this != &x) { deinit$(); init$(x); } return *this; }\n");
   /* init/deinit and getter functions (declonly) */
-  emit_variant_aux_functions(em, ev, true);
+  emit_dunion_aux_functions(em, ev, true);
   /* */
   em.add_indent(-1);
   em.puts("};\n");
 }
 
-static void emit_variant_aux_defs(emit_context& em, expr_variant *ev)
+static void emit_dunion_aux_defs(emit_context& em, expr_dunion *ev)
 {
   if (!is_compiled(ev->block)) {
     return;
   }
   /* init/deinit and getter functions (definitions) */
-  emit_variant_aux_functions(em, ev, false);
+  emit_dunion_aux_functions(em, ev, false);
 }
 
 static void emit_type_definitions(emit_context& em)
@@ -975,7 +993,7 @@ static void emit_type_definitions(emit_context& em)
   for (expr_arena_type::iterator i = expr_arena.begin();
     i != expr_arena.end(); ++i) {
     expr_i *const e = *i;
-    if (e->get_esort() == expr_e_struct || e->get_esort() == expr_e_variant) {
+    if (e->get_esort() == expr_e_struct || e->get_esort() == expr_e_dunion) {
       sort_dep(c, e);
     }
   }
@@ -997,10 +1015,10 @@ static void emit_type_definitions(emit_context& em)
 	emit_struct_def_one(em, est, proto_only);
       }
     }
-    const expr_variant *const ev = dynamic_cast<const expr_variant *>(*i);
+    const expr_dunion *const ev = dynamic_cast<const expr_dunion *>(*i);
     if (ev != 0) {
       const bool proto_only = true;
-      emit_variant_def_one(em, ev, proto_only);
+      emit_dunion_def_one(em, ev, proto_only);
     }
   }
   /* definitions */
@@ -1019,10 +1037,10 @@ static void emit_type_definitions(emit_context& em)
       const bool proto_only = false;
       emit_struct_def_one(em, est, proto_only);
     }
-    const expr_variant *const ev = dynamic_cast<const expr_variant *>(*i);
+    const expr_dunion *const ev = dynamic_cast<const expr_dunion *>(*i);
     if (ev != 0) {
       const bool proto_only = false;
-      emit_variant_def_one(em, ev, proto_only);
+      emit_dunion_def_one(em, ev, proto_only);
     }
   }
 }
@@ -1176,9 +1194,9 @@ static void emit_function_def(emit_context& em)
       /* udcon or struct field constr */
       emit_struct_constr_one(em, est, false);
     }
-    expr_variant *const ev = dynamic_cast<expr_variant *>(*i);
+    expr_dunion *const ev = dynamic_cast<expr_dunion *>(*i);
     if (ev != 0) {
-      emit_variant_aux_defs(em, ev);
+      emit_dunion_aux_defs(em, ev);
     }
   }
 }
@@ -1737,7 +1755,7 @@ void expr_op::emit_value(emit_context& em)
     return;
   case '.':
   case TOK_ARROW:
-    if (is_variant(arg0->get_texpr())) {
+    if (is_dunion(arg0->get_texpr())) {
       em.puts("(");
       fn_emit_value(em, arg0);
       em.puts(".");
@@ -1780,10 +1798,10 @@ void expr_op::emit_value(emit_context& em)
       expr_i *a = arg0;
       expr_op *aop = dynamic_cast<expr_op *>(a);
       if (aop != 0 && (aop->op == '.' || aop->op == TOK_ARROW)) {
-	if (is_variant(aop->arg0->get_texpr())) {
-	  /* setting variant field */
+	if (is_dunion(aop->arg0->get_texpr())) {
+	  /* setting dunion field */
 	  em.puts("(");
-	  fn_emit_value(em, aop->arg0); /* variant object */
+	  fn_emit_value(em, aop->arg0); /* dunion object */
 	  em.puts(".");
 	  fn_emit_value(em, aop->arg1); /* field name */
 	  em.puts("$l(");
@@ -1853,6 +1871,19 @@ static bool emit_func_upvalue_args(emit_context& em, expr_i *func,
 	== efd->tpup_thisptr) {
       em.puts("*this");
     } else {
+      #if 0
+      if (caller_fr_expr == 0) {
+	em.puts("/* F */");
+      } else if (caller_fr_expr->get_esort() != expr_e_funcdef) {
+	em.puts("/* S */");
+      } else if (ptr_down_cast<expr_funcdef>(caller_fr_expr)
+	->is_member_function() != efd->tpup_thisptr) {
+	em.puts("/* M */");
+	abort();
+      } else {
+	em.puts("/* ? */");
+      }
+      #endif
       em.puts("this$up");
     }
   }
@@ -2357,21 +2388,21 @@ void expr_typedef::emit_value(emit_context& em)
   em.printf("/* typedef %s */", sym);
 }
 
-std::string expr_macrodef::emit_symbol_str() const
+std::string expr_metafdef::emit_symbol_str() const
 {
   abort();
   return std::string();
 }
 
-void expr_macrodef::emit_symbol(emit_context& em) const
+void expr_metafdef::emit_symbol(emit_context& em) const
 {
   abort();
   em.puts(emit_symbol_str());
 }
 
-void expr_macrodef::emit_value(emit_context& em)
+void expr_metafdef::emit_value(emit_context& em)
 {
-  em.printf("/* macrodef %s */", sym);
+  em.printf("/* metafdef %s */", sym);
 }
 
 std::string expr_struct::emit_symbol_str() const
@@ -2395,7 +2426,7 @@ void expr_struct::emit_value(emit_context& em)
   em.printf("/* struct %s */", sym);
 }
 
-std::string expr_variant::emit_symbol_str() const
+std::string expr_dunion::emit_symbol_str() const
 {
   abort();
   if (symtbl_lexical->get_lexical_parent() == 0) {
@@ -2406,14 +2437,14 @@ std::string expr_variant::emit_symbol_str() const
   }
 }
 
-void expr_variant::emit_symbol(emit_context& em) const
+void expr_dunion::emit_symbol(emit_context& em) const
 {
   em.puts(emit_symbol_str());
 }
 
-void expr_variant::emit_value(emit_context& em)
+void expr_dunion::emit_value(emit_context& em)
 {
-  em.printf("/* variant %s */", sym);
+  em.printf("/* dunion %s */", sym);
 }
 
 std::string expr_interface::emit_symbol_str() const

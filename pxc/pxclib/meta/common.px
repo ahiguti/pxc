@@ -1,25 +1,24 @@
 namespace meta::common;
 
-// builtin metafunctions
+public extern "@error" "@error" struct {x} error { }
 
 public extern "@is_type" "@is_type" struct {x} is_type { }
 public extern "@is_function" "@is_function" struct {x} is_function { }
-public extern "@is_macro" "@is_macro" struct {x} is_macro { }
+public extern "@is_metafunction" "@is_metafunction"
+  struct {x} is_metafunction { }
 public extern "@is_int" "@is_int" struct {x} is_int { }
 public extern "@is_string" "@is_string" struct {x} is_string { }
 public extern "@eq" "@eq" struct {x, y} eq { }
 public extern "@not" "@not" struct {x} not { }
 
 public extern "@imports" "@imports" struct {ns} imports { }
-public extern "@imports_tr" "@imports_tr" struct {ns} imports_tr { }
 public extern "@functions" "@functions" struct {ns} functions { }
 public extern "@types" "@types" struct {ns} types { }
-// public extern "@macros" "@macros" struct {ns} macros { }
-
-public extern "@error" "@error" struct {x} error { }
+public extern "@global_variables" "@global_variables"
+  struct {ns} global_variables { }
+  /* list{list{idx, name, typ, byref(=0), mutable}} */
 
 public extern "@local" "@local" struct {t, n, opt_args} local { }
-
 public extern "@symbol" "@symbol" struct {name, opt_t} symbol { }
 public extern "@attribute" "@attribute" struct {t} attribute { }
 public extern "@family" "@family" struct {t} family { }
@@ -28,14 +27,12 @@ public extern "@num_tparams" "@num_tparams" struct {x} num_tparams { }
 public extern "@num_targs" "@num_targs" struct {x} num_targs { }
 public extern "@targs" "@targs" struct {x} targs { }
 public extern "@values" "@values" struct {x} values { }
+public extern "@typeof" "@typeof" struct {x} typeof { }
 
 public extern "@rettype" "@rettype" struct {f} rettype { }
-// public extern "@retbyref" "@retbyref" struct {f} retbyref { }
 public extern "@argnum" "@argnum" struct {f, i} argnum { }
 public extern "@argtype" "@argtype" struct {f, i} argtype { }
 public extern "@argbyref" "@argbyref" struct {f, i} argbyref { }
-// public extern "@argmutable" "@argmutable" struct {f, i} argmutable { }
-
 public extern "@argtypes" "@argtypes" struct {f} argtypes { }
 public extern "@argnames" "@argnames" struct {f} argnames { }
 public extern "@args" "@args" struct {f} args { }
@@ -50,8 +47,6 @@ public extern "@field_types" "@field_types" struct {t} field_types { }
 public extern "@field_names" "@field_names" struct {t} field_names { }
 public extern "@member_functions" "@member_functions"
   struct {t} member_functions { }
-// public extern "@member_macros" "@member_macros"
-//   struct {t} member_macros { }
 
 public extern "@apply" "@apply" struct {mf, lst} apply { }
 
@@ -63,23 +58,23 @@ public extern "@concat" "@concat" struct {x} concat { }
 public extern "@index" "@index" struct {x, y} index { }
 public extern "@substring" "@substring" struct {x, i, j} substring { }
 
-public extern "@@metaif" "@@metaif" struct {c, x, y} metaif { }
+public extern "@@cond" "@@cond" struct {c, x, y} cond { }
 public extern "@@or" "@@or" struct {x, y} or { }
 public extern "@@and" "@@and" struct {x, y} and { }
 public extern "@@quote" "@@quote" struct {x} quote { }
-public extern "@@typeof" "@@typeof" struct {x} typeof { }
 
 public extern "@list" "@list" struct {x, y} list { }
 public extern "@size" "@size" struct {x} size { }
 public extern "@at" "@at" struct {lst, idx} at { }
 public extern "@seq" "@seq" struct {x, y} seq { }
-public extern "@metamap" "@metamap" struct {lst, mf, opt_bind} metamap { }
+public extern "@map" "@map" struct {lists, mf, args} map { }
+  /* map{list_0, ... , lst_n, func, arg_0, ... , arg_n} */
 public extern "@filter" "@filter" struct {lst, f} filter { }
-public extern "@join" "@join" struct {lstlst} join { }
-public extern "@join_all" "@join_all" struct {lstlst} join_all { }
-public extern "@join_tail" "@join_tail" struct {lisplist} join_tail { }
-public extern "@uniq" "@uniq" struct {lst} uniq { }
-// public extern "@foldl" "@foldl" struct {lst, mf, zero} foldl { }
+public extern "@join" "@join" struct {list_of_lists} join { }
+public extern "@join_all" "@join_all" struct {lst1, lst2} join_all { }
+public extern "@join_tail" "@join_tail" struct {cons} join_tail { }
+public extern "@sort" "@sort" struct {lst} sort { }
+public extern "@unique" "@unique" struct {lst} unique { }
 
 public extern "@add" "@add" struct {x, y} add { }
 public extern "@sub" "@sub" struct {x, y} sub { }
@@ -90,4 +85,29 @@ public extern "@gt" "@gt" struct {x, y} gt { }
 public extern "@lt" "@lt" struct {x, y} lt { }
 public extern "@ge" "@ge" struct {x, y} ge { }
 public extern "@le" "@le" struct {x, y} le { }
+
+public metafunction at0{lst} at{lst, 0};
+public metafunction at1{lst} at{lst, 1};
+public metafunction at2{lst} at{lst, 2};
+public metafunction at3{lst} at{lst, 3};
+public metafunction at4{lst} at{lst, 4};
+public metafunction at5{lst} at{lst, 5};
+public metafunction at6{lst} at{lst, 6};
+public metafunction at7{lst} at{lst, 7};
+public metafunction at8{lst} at{lst, 8};
+public metafunction at9{lst} at{lst, 9};
+
+private metafunction fix_step{v0, v1, f}
+  cond{eq{v0, v1}, v0, fix_step{v1, f{v1}, f}};
+public metafunction fix{v, f} fix_step{v, f{v}, f};
+
+private metafunction is_import_pub{ent} eq{at1{ent}, 0};
+private metafunction imports_name_pub{ns}
+  map{filter{imports{ns}, is_import_pub}, at0};
+private metafunction imports_name{ns} map{imports{ns}, at0};
+private metafunction imports_init{ns}
+  sort{unique{join_all{list{ns}, imports_name{ns}}}};
+private metafunction imports_step{lst}
+  sort{unique{join_all{lst, join{map{lst, imports_name_pub}}}}};
+public metafunction imports_transitive{ns} fix{imports_init{ns}, imports_step};
 
