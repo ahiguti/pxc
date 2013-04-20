@@ -17,32 +17,32 @@ function int baz(bar{ref{vector{int}}} v) {
   return 3;
 }
 
-macro nslist imports_tr{"m_globals"};
-macro is_concrete{t} eq{num_tparams{t}, num_targs{t}};
-macro filter_concrete{fs} filter{fs, is_concrete};
-macro nsfuncs filter_concrete{join{metamap{nslist, functions}}};
-macro nstypes filter_concrete{join{metamap{nslist, types}}};
-macro atypes_one{f} join_all{list{rettype{f}}, argtypes{f}};
-macro atypes{fs} filter_concrete{join{metamap{fs, atypes_one}}};
-macro ftypes{ts} filter_concrete{join{metamap{ts, field_types}}};
-macro mfatypes{ts} atypes{join{metamap{ts, member_functions}}};
-macro tatypes{ts} filter_concrete{join{metamap{ts, targs}}};
-macro init_types uniq{join_all{nstypes, atypes{nsfuncs}}};
-macro step_types{ts}
-  uniq{join_all{ts, ftypes{ts}, mfatypes{ts}, tatypes{ts}}};
-macro rep_types{ts, tsn}
-  metaif{eq{ts, tsn}, ts, rep_types{tsn, step_types{tsn}}};
-macro all_types rep_types{init_types, step_types{init_types}};
+metafunction nslist imports_tr{"m_globals"};
+metafunction is_concrete{t} eq{num_tparams{t}, num_targs{t}};
+metafunction filter_concrete{fs} filter{fs, is_concrete};
+metafunction nsfuncs filter_concrete{join{map{nslist, functions}}};
+metafunction nstypes filter_concrete{join{map{nslist, types}}};
+metafunction atypes_one{f} join_all{list{rettype{f}}, argtypes{f}};
+metafunction atypes{fs} filter_concrete{join{map{fs, atypes_one}}};
+metafunction ftypes{ts} filter_concrete{join{map{ts, field_types}}};
+metafunction mfatypes{ts} atypes{join{map{ts, member_functions}}};
+metafunction tatypes{ts} filter_concrete{join{map{ts, targs}}};
+metafunction init_types unique{join_all{nstypes, atypes{nsfuncs}}};
+metafunction step_types{ts}
+  unique{join_all{ts, ftypes{ts}, mfatypes{ts}, tatypes{ts}}};
+metafunction rep_types{ts, tsn}
+  cond{eq{ts, tsn}, ts, rep_types{tsn, step_types{tsn}}};
+metafunction all_types rep_types{init_types, step_types{init_types}};
 
 // println(concat{"NSFUNCS: ", nsfuncs});
 // println(concat{"NSTYPES: ", nstypes});
-// println(concat{"ATYPES: ", uniq{atypes{nsfuncs}}});
-// println(concat{"FTYPES: ", uniq{ftypes{nstypes}}});
+// println(concat{"ATYPES: ", unique{atypes{nsfuncs}}});
+// println(concat{"FTYPES: ", unique{ftypes{nstypes}}});
 // println(concat{"MFATYPES: ", mfatypes{nstypes}});
 // println(concat{"TATYPES: ", tatypes{nstypes}});
 
-println(concat{"0: ", metamap{init_types, full_string}});
+println(concat{"0: ", map{init_types, full_string}});
 // println(concat{"1: ", step_types{init_types}});
 // println(concat{"2: ", step_types{step_types{init_types}}});
-println(concat{"n: ", metamap{all_types, full_string}});
+println(concat{"n: ", map{all_types, full_string}});
 

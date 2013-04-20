@@ -30,6 +30,7 @@
 #define DBG_NEWTE(x)
 #define DBG_INST(x)
 #define DBG_EVAL(x)
+#define DBG_MACRO(x)
 #define DBG_COMPILE(x)
 #define DBG_TETERM(x)
 #define DBG_META(x)
@@ -86,7 +87,7 @@ static expr_i *deep_clone_rec(expr_i *e, expr_block *instantiate_root,
     if (ebcpy->tinfo.tparams != 0 &&
       dynamic_cast<expr_block *>(e) != instantiate_root) {
       /* found a nested template */
-      /* note: macrodef block must be instantiated even if it has a tparam */
+      /* note: metafdef block must be instantiated even if it has a tparam */
       set_instantiated_flag = false;
     }
     ebcpy->tinfo.instantiated = set_instantiated_flag;
@@ -181,11 +182,9 @@ static expr_i *instantiate_template_internal(expr_i *tmpl_root,
     term_tostr(rcpy->get_value_texpr(), term_tostr_sort_cname).c_str()
     ));
   /* check the rcpy itself */
-  if (rcpy->get_esort() == expr_e_struct) {
-    /* tree must be updated before check_inherit_threading because inherit
-     * base may use tparam. */
-    check_inherit_threading(ptr_down_cast<expr_struct>(rcpy));
-  }
+  /* tree must be updated before check_inherit_threading because inherit
+   * base may use tparam. */
+  check_inherit_threading(rcpy, rcpy->get_template_block());
   return rcpy;
 }
 
@@ -193,15 +192,17 @@ expr_i *instantiate_template(expr_i *tmpl_root, term_list& args_move,
   expr_i *pos)
 {
   arena_error_throw_pushed(); /* it's necessary! */
-  const std::string k = term_tostr_list_human(args_move);
   try {
     expr_i *const re = instantiate_template_internal(tmpl_root, args_move);
     arena_error_throw_pushed();
     return re;
   } catch (const std::exception& e) {
+    term_list tl = args_move;
+    term t(tmpl_root, tl);
+    const std::string k = term_tostr_human(t);
     std::string m = e.what();
     std::string s = std::string(pos->fname) + ":" + ulong_to_string(pos->line)
-      + ": (instantiated from here) [" + k + "]\n" + m;
+      + ": (instantiated from here) instantiating " + k + "\n" + m;
     throw std::runtime_error(s);
   }
 }
@@ -271,7 +272,10 @@ static term te_to_term(expr_i *te, env_type& env, size_t depth, expr_i *pos)
     for (expr_telist *tl = tete->tlarg; tl != 0; tl = tl->rest) {
       targs.push_back(te_to_term(tl->head, env, depth, pos));
     }
+    DBG_TETERM(fprintf(stderr, "te_to_term: tete!=0 %s targslen=%d\n",
+      tete->dump(0).c_str(), (int)targs.size()));
   } else {
+    DBG_TETERM(fprintf(stderr, "te_to_term: tete=0\n"));
     texpr = te;
   }
   term r(texpr, targs);
@@ -284,7 +288,8 @@ static term te_to_term(expr_i *te, env_type& env, size_t depth, expr_i *pos)
 static term eval_te(expr_i *te, env_type& env, size_t depth, expr_i *pos)
 {
   term nt = te_to_term(te, env, depth + 1, pos);
-  DBG_EVAL(fprintf(stderr, "EVALI2 sort te\n"));
+  DBG_EVAL(fprintf(stderr, "EVALI2 sort te=%s %s\n",
+    te->dump(0).c_str(), term_tostr_human(nt).c_str()));
   return eval_term_internal(nt, false, env, depth + 1, pos);
 }
 
@@ -328,26 +333,48 @@ static term eval_term_internal2(const term& tm, bool targs_evaluated,
   case expr_e_tparams:
     {
       expr_tparams *const tp = ptr_down_cast<expr_tparams>(texpr);
+      term tbase;
       env_type::const_iterator iter = env.find(tp->sym);
       if (iter != env.end()) {
-	return iter->second; /* macro variable, evaluated */
-      }
-      if (!tp->param_def.is_null()) {
+	DBG_EVAL(fprintf(stderr, "EVALI2 sort tparams env %s => %s\n",
+	  tp->sym, term_tostr_human(iter->second).c_str()));
+	tbase = iter->second; /* macro variable, evaluated */
+      } else if (!tp->param_def.is_null()) {
 	DBG_NEWTE(fprintf(stderr, "tparam %p concrete\n", tp));
 	/* TODO: need to eval? */
 	DBG_EVAL(fprintf(stderr, "EVALI2 sort tparams pdef\n"));
-	return eval_term_internal(tp->param_def, false, env, depth + 1, pos);
+	tbase = eval_term_internal(tp->param_def, false, env, depth + 1, pos);
+      } else {
+	DBG_EVAL(fprintf(stderr, "EVALI2 sort tparams nopdef (tp=%p)\n",
+	  tp));
+	return tm; /* unbound tparam */
       }
-      DBG_EVAL(fprintf(stderr, "EVALI2 sort tparams nopdef (tp=%p)\n",
-	tp));
-      return tm; /* unbound tparam */
+      if (tbase.is_expr() && tlarg_len > 0) {
+	/* apply tlarg. */
+	if (tbase.get_args() != 0 && tbase.get_args()->size() != 0) {
+	  arena_error_throw(pos, "too many template arguments: '%s'",
+	    term_tostr(tm, term_tostr_sort_humanreadable).c_str());
+	}
+	term_list tlev = eval_term_list_internal(targs, targs_evaluated, env,
+	  depth + 1, pos);
+	term nte(tbase.get_expr(), tlev);
+	if (has_unbound_tparam(tlev)) {
+	  DBG_EVAL(fprintf(stderr, "EVALI2 : has ubound tparam\n"));
+	  return nte; /* incomplete expr, ebase is replaced. */
+	}
+	return eval_term_internal(nte, true, env, depth + 1, pos);
+      } else {
+	return tbase;
+      }
     }
     break;
-  case expr_e_macrodef:
+  case expr_e_metafdef:
     {
-      expr_macrodef *const ta = ptr_down_cast<expr_macrodef>(texpr);
+      expr_metafdef *const ta = ptr_down_cast<expr_metafdef>(texpr);
       const size_t aplen = elist_length(ta->get_tparams());
       if (aplen != 0 && tlarg_len == 0) {
+	DBG_MACRO(fprintf(stderr, "MACRO %s wo arg\n", 
+	  term_tostr_human(tm).c_str()));
 	return tm; /* no argument is supplied yet */
       }
       if (aplen == 0 && tlarg_len > 0) {
@@ -357,6 +384,8 @@ static term eval_term_internal2(const term& tm, bool targs_evaluated,
       } else if (aplen > tlarg_len) {
 	arena_error_throw(pos, "too few macro arguments");
       }
+      DBG_MACRO(fprintf(stderr, "MACRO %s\n", 
+	term_tostr_human(tm).c_str()));
       symbol_common *const sc = ta->get_rhs()->get_sdef();
       if (aplen == 0 && tlarg_len == 0) {
 	/* this macro has no param. if it's evaluated already, we use
@@ -389,8 +418,14 @@ static term eval_term_internal2(const term& tm, bool targs_evaluated,
 	nenv[std::string(tpms->sym)] =
 	  eval_if_unevaluated(*i, targs_evaluated, env, depth + 1, pos);
 	  /* TODO: check unbound expr? */
+	DBG_MACRO(fprintf(stderr, "MACRO nenv %s: %s => %s\n", tpms->sym,
+	  term_tostr_human(*i).c_str(),
+	  term_tostr_human(nenv[std::string(tpms->sym)]).c_str()));
       }
-      return eval_te(ta->get_rhs(), nenv, depth + 1, pos);
+      const term r = eval_te(ta->get_rhs(), nenv, depth + 1, pos);
+      DBG_MACRO(fprintf(stderr, "MACRO rhs=%s => %s\n",
+	ta->get_rhs()->dump(0).c_str(), term_tostr_human(r).c_str()));
+      return r;
     }
     break;
   case expr_e_typedef:
@@ -521,6 +556,13 @@ term eval_expr(expr_i *e)
   return t;
 }
 
+term eval_term(const term& t)
+{
+  env_type env;
+  term tr = eval_term_internal(t, false, env, 0, t.get_expr());
+  return tr;
+}
+
 bool term_has_tparam(const term& t)
 {
   expr_i *const texpr = t.get_expr();
@@ -549,7 +591,7 @@ bool term_has_unevaluated_expr(const term& t)
   if (texpr == 0) {
     return false;
   }
-  if (texpr->get_esort() == expr_e_macrodef) {
+  if (texpr->get_esort() == expr_e_metafdef) {
     return true;
   }
   if (targs == 0) {

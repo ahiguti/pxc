@@ -72,7 +72,7 @@ void sort_dep(sorted_exprs& c, expr_i *e)
   if (est != 0) {
     block = est->block;
   }
-  expr_variant *const ev = dynamic_cast<expr_variant *>(e);
+  expr_dunion *const ev = dynamic_cast<expr_dunion *>(e);
   if (ev != 0) {
     block = ev->block;
   }

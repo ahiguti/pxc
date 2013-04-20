@@ -7,7 +7,7 @@ import exception::builtin -;
 import serialization::positional -;
 import downcast -;
 
-macro strlit container::string::strlit;
+metafunction strlit container::string::strlit;
 
 multithreaded union variant {
   unit unitval;
@@ -22,23 +22,23 @@ multithreaded interface iinvoke {
   function variant invoke(cstrref const& name, cslice{variant} const& args);
 }
 
-macro is_string_family_type{t}
+metafunction is_string_family_type{t}
   m::or{
     m::eq{t, string},
     m::eq{t, strlit},
     m::eq{t, strref},
     m::eq{t, cstrref}};
 
-macro is_range_type{t}
+metafunction is_range_type{t}
   m::or{
     m::eq{m::family{t}, "slice"},
     m::eq{m::family{t}, "cslice"},
     m::eq{m::family{t}, "tree_map_range"},
     m::eq{m::family{t}, "tree_map_crange"}};
 
-macro to_non_ephemeral{t}
-  m::metaif{is_string_family_type{t}, string,
-  m::metaif{is_range_type{t}, m::local{t, "non_ephemeral_type"},
+metafunction to_non_ephemeral{t}
+  m::cond{is_string_family_type{t}, string,
+  m::cond{is_range_type{t}, m::local{t, "non_ephemeral_type"},
   t}};
 
 threaded function {t} variant to_variant(t const& x)
@@ -125,21 +125,21 @@ multithreaded struct foo {
 
 multithreaded struct {t} stub_iinvoke : iinvoke : {
   t value;
-  macro mfuncstr{t} m::metamap{m::member_functions{t}, m::to_string};
-  macro seqstr{n} m::metamap{m::seq{n}, m::to_string};
-  macro argname{arg} m::concat{"a", m::at{arg, 0}};
-  macro argnames{fsym}
-    m::metamap{m::args{m::local{t, m::to_string{fsym}}}, argname};
-  macro argexp{arg}
+  metafunction mfuncstr{t} m::map{m::member_functions{t}, m::to_string};
+  metafunction seqstr{n} m::map{m::seq{n}, m::to_string};
+  metafunction argname{arg} m::concat{"a", m::at{arg, 0}};
+  metafunction argnames{fsym}
+    m::map{m::args{m::local{t, m::to_string{fsym}}}, argname};
+  metafunction argexp{arg}
     m::list{
       argname{arg}, // a0, a1, a2, ...
       m::add{m::mul{m::at{arg, 3}, 2}, m::at{arg, 4}}}; // byref * 2 + mutable
-  macro argexp_list{fsym}
-    m::metamap{m::args{m::local{t, m::to_string{fsym}}}, argexp};
-  macro args_ae{fsym, ae}
+  metafunction argexp_list{fsym}
+    m::map{m::args{m::local{t, m::to_string{fsym}}}, argexp};
+  metafunction args_ae{fsym, ae}
     m::at{m::args{m::local{t, fsym}}, m::to_int{m::substring{ae, 1}}};
-  macro argtype_ae{fsym, ae} m::at{args_ae{fsym, ae}, 2};
-  macro argtype_noneph{fsym, ae} to_non_ephemeral{argtype_ae{fsym, ae}};
+  metafunction argtype_ae{fsym, ae} m::at{args_ae{fsym, ae}, 2};
+  metafunction argtype_noneph{fsym, ae} to_non_ephemeral{argtype_ae{fsym, ae}};
   function variant invoke(cstrref const& name, cslice{variant} const& args) {
     expand(fsym : mfuncstr{t}) {
       if (m::to_string{fsym} == name) {
@@ -177,7 +177,7 @@ function void test1() {
   v.longval = 3;
   v.stringval = "abc";
   println(v);
-  macro foo_iinvoke stub_iinvoke{foo};
+  metafunction foo_iinvoke stub_iinvoke{foo};
   v.tptrval = tptr{foo_iinvoke}(foo_iinvoke(foo(99)));
   farray{variant, 1} arg;
   arg[0].longval = 9;
@@ -188,10 +188,10 @@ function void test1() {
 }
 
 function void test2() {
-  macro prefix_a{x} m::concat{"a", x};
-  macro ss m::metamap{m::seq{5}, prefix_a};
-  macro drop_1{x} m::substring{x, 1};
-  macro sss m::metamap{ss, drop_1};
+  metafunction prefix_a{x} m::concat{"a", x};
+  metafunction ss m::map{m::seq{5}, prefix_a};
+  metafunction drop_1{x} m::substring{x, 1};
+  metafunction sss m::map{ss, drop_1};
   println(m::to_string{sss});
 }
 

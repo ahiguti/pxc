@@ -1,0 +1,32 @@
+namespace va2;
+import common -;
+import meta::common m;
+
+metafunction argname{i} m::concat{"a", i};
+metafunction arginfo{lst, i} m::list{argname{i}, m::at{lst, i}, 1, 0};
+
+function {lst} string
+vafunc(expand(m::map{m::seq{m::size{lst}}, arginfo, lst}))
+{
+  string r;
+  expand(arg, idx : m::map{m::seq{m::size{lst}}, argname}) {
+    r.append(to_string(arg));
+  }
+  return r;
+}
+
+function void test1()
+{
+  int a = 10;
+  string b = "[abc]";
+  double c = 12.5;
+  // string s = vafunc{m::list{int, string, double}}(a, b, c);
+  string s = vafunc(a, b, c);
+  println(s);
+  // string s2 = vafunc{m::list{string, int}}(b, a);
+  string s2 = vafunc(b, a);
+  println(s2);
+}
+
+test1();
+

@@ -21,6 +21,7 @@ all: pxc
 pxc_y.o: pxc_y.cpp
 
 pxc_l.o: pxc_l.cpp
+	$(CXX) -c $(CXXFLAGS) -Wno-sign-compare $^
 
 pxc: $(OBJS)
 	cd tests; $(MAKE) clean

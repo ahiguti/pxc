@@ -25,7 +25,7 @@ public threaded function {t} void serialize_to_string(t const& x, string& out)
   serialize{deftmpl, t}(x, out);
 }
 
-public macro is_string_family_type{t}
+public metafunction is_string_family_type{t}
     m::or{
       m::eq{t, string},
       m::eq{t, strlit},
@@ -68,40 +68,40 @@ private threaded function {t} void string_append_unknown(t const& x, string& v)
 { v.push_back('?'); }
 
 private threaded struct deftmpl {
-  macro target_type string;
-  macro symstr{t} m::concat{t, "_append_to_string"};
-  macro sym{t} m::symbol{symstr{t}, t};
-  macro has_specialized_symbol{t} m::eq{m::to_string{sym{t}}, symstr{t}};
-  macro specialized_func{t}
-    m::metaif{has_specialized_symbol{t}, sym{t},
-    m::metaif{is_string_family_type{t}, string_append_escape{t},
-    m::metaif{n::is_integral{t}, p::integral_to_decimal,
-    m::metaif{n::is_fp{t}, p::fp_to_decimal,
-    m::metaif{m::eq{t, bool}, bool_to_string,
-    m::metaif{m::eq{t, unit}, string_append_star,
+  metafunction target_type string;
+  metafunction symstr{t} m::concat{t, "_append_to_string"};
+  metafunction sym{t} m::symbol{symstr{t}, t};
+  metafunction has_specialized_symbol{t} m::eq{m::to_string{sym{t}}, symstr{t}};
+  metafunction specialized_func{t}
+    m::cond{has_specialized_symbol{t}, sym{t},
+    m::cond{is_string_family_type{t}, string_append_escape{t},
+    m::cond{n::is_integral{t}, p::integral_to_decimal,
+    m::cond{n::is_fp{t}, p::fp_to_decimal,
+    m::cond{m::eq{t, bool}, bool_to_string,
+    m::cond{m::eq{t, unit}, string_append_star,
     0}}}}}};
-  macro array_begin string_append_brace_open;
-  macro array_end string_append_brace_close;
-  macro array_sep string_append_comma;
-  macro map_begin string_append_brace_open;
-  macro map_end string_append_brace_close;
-  macro map_sep string_append_comma;
-  macro map_entry_begin string_append_none;
-  macro map_entry_end string_append_none;
-  macro map_entry_sep string_append_equal;
-  macro pointer_begin string_append_brace_open;
-  macro pointer_end string_append_brace_close;
-  macro struct_begin string_append_brace_open;
-  macro struct_end string_append_brace_close;
-  macro struct_sep string_append_comma;
-  macro struct_entry_begin string_append_none;
-  macro struct_entry_end string_append_none;
-  macro struct_entry_sep string_append_equal;
-  macro struct_field_name string_append_noesc;
-  macro union_begin string_append_brace_open;
-  macro union_end string_append_brace_close;
-  macro union_entry_sep string_append_equal;
-  macro union_field_name string_append_noesc;
-  macro unknown{fam} string_append_unknown;
+  metafunction array_begin string_append_brace_open;
+  metafunction array_end string_append_brace_close;
+  metafunction array_sep string_append_comma;
+  metafunction map_begin string_append_brace_open;
+  metafunction map_end string_append_brace_close;
+  metafunction map_sep string_append_comma;
+  metafunction map_entry_begin string_append_none;
+  metafunction map_entry_end string_append_none;
+  metafunction map_entry_sep string_append_equal;
+  metafunction pointer_begin string_append_brace_open;
+  metafunction pointer_end string_append_brace_close;
+  metafunction struct_begin string_append_brace_open;
+  metafunction struct_end string_append_brace_close;
+  metafunction struct_sep string_append_comma;
+  metafunction struct_entry_begin string_append_none;
+  metafunction struct_entry_end string_append_none;
+  metafunction struct_entry_sep string_append_equal;
+  metafunction struct_field_name string_append_noesc;
+  metafunction union_begin string_append_brace_open;
+  metafunction union_end string_append_brace_close;
+  metafunction union_entry_sep string_append_equal;
+  metafunction union_field_name string_append_noesc;
+  metafunction unknown{fam} string_append_unknown;
 }
 

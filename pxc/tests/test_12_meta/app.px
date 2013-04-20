@@ -1,0 +1,15 @@
+namespace app;
+import common -;
+import meta::common m;
+
+metafunction next_upto_5{x} m::cond{m::gt{x, 4}, x, m::add{x, 1}};
+
+metafunction fix_step{v0, v1, f}
+  m::cond{m::eq{v0, v1}, v0, fix_step{v1, f{v1}, f}};
+
+function void test1()
+{
+  println(m::to_string{fix_step{0, 1, next_upto_5}});
+}
+
+test1();

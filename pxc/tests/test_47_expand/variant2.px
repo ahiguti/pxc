@@ -4,7 +4,7 @@ import common -;
 import meta::common m;
 import numeric::cast n;
 
-macro strlit container::string::strlit;
+metafunction strlit container::string::strlit;
 
 multithreaded union variant {
   unit unitval;
@@ -20,7 +20,7 @@ multithreaded interface iinvoke {
 
 threaded function {t} variant to_variant(t const& x)
 {
-  macro is_string_family{t}
+  metafunction is_string_family{t}
     m::or{
       m::eq{t, string},
       m::eq{t, strlit},
@@ -62,7 +62,7 @@ multithreaded struct foo {
 }
 
 // TODO: generic
-multithreaded struct foo_iinvoke : iinvoke : {
+multithreaded struct foo_iinvoke < iinvoke > {
   foo value;
   function variant invoke(cstrref const& name, cslice{variant} const& args) {
     variant r;
@@ -80,11 +80,11 @@ multithreaded struct foo_iinvoke : iinvoke : {
 multithreaded struct {t} stub_iinvoke : iinvoke : {
   t value;
   function variant invoke(cstrref const& name, cslice{variant} const& args) {
-    macro mfuncstr{t} m::metamap{m::member_functions{t}, m::to_string};
-    macro seqstr{n} m::metamap{m::seq{n}, m::to_string};
+    metafunction mfuncstr{t} m::map{m::member_functions{t}, m::to_string};
+    metafunction seqstr{n} m::map{m::seq{n}, m::to_string};
     expand(fsym : mfuncstr{t}) {
       if (m::to_string{fsym} == name) {
-	macro f m::local{t, m::to_string{fsym}};
+	metafunction f m::local{t, m::to_string{fsym}};
 	if (m::eq{m::rettype{f}, void}) {
 	  value.fsym(expand(i : seqstr{m::argnum{f}};
 	    from_variant{m::argtype{f, i}}(args[m::to_int{i}])));
@@ -116,30 +116,31 @@ function void test1() {
 }
 
 function void test2() {
-  macro prefix_a{x} m::concat{"a", x};
-  macro ss m::metamap{m::seq{5}, prefix_a};
-  macro drop_1{x} m::substring{x, 1};
-  macro sss m::metamap{ss, drop_1};
+  metafunction prefix_a{x} m::concat{"a", x};
+  metafunction ss m::map{m::seq{5}, prefix_a};
+  metafunction drop_1{x} m::substring{x, 1};
+  metafunction sss m::map{ss, drop_1};
   println(m::to_string{sss});
 }
 
 function {t} void dump_arginfo()
 {
-  macro mfuncstr{t} m::metamap{m::member_functions{t}, m::to_string};
-  macro seqstr{n} m::metamap{m::seq{n}, m::to_string};
-  macro argexp{arg}
+  metafunction mfuncstr{t} m::map{m::member_functions{t}, m::to_string};
+  metafunction seqstr{n} m::map{m::seq{n}, m::to_string};
+  metafunction argexp{idx, arg}
     m::list{
-      m::concat{"a", m::at{arg, 0}}, // a0, a1, a2, ...
-      m::add{m::mul{m::at{arg, 3}, 2}, m::at{arg, 4}} // byref * 2 + mutable
+      m::concat{"a", idx}, // a0, a1, a2, ...
+      m::add{m::mul{m::at{arg, 2}, 2}, m::at{arg, 3}} // byref * 2 + mutable
     };
-  macro argexp_list{fsym}
-    m::metamap{
+  metafunction argexp_list{fsym}
+    m::map{
+      m::seq{m::size{m::args{m::local{t, m::to_string{fsym}}}}},
       m::args{m::local{t, m::to_string{fsym}}},
       argexp
     };
-  macro args_ae{fsym, ae}
+  metafunction args_ae{fsym, ae}
     m::at{m::args{m::local{t, fsym}}, m::to_int{m::substring{ae, 1}}};
-  macro argtype_ae{fsym, ae} m::at{args_ae{fsym, ae}, 2};
+  metafunction argtype_ae{fsym, ae} m::at{args_ae{fsym, ae}, 1};
   expand(fsym : mfuncstr{t}) {
     expand(ae : argexp_list{fsym}) {
       println(m::concat{

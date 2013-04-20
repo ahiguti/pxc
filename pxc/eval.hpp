@@ -23,6 +23,7 @@ expr_i *instantiate_template(expr_i *tmpl_root, term_list& args_move,
   expr_i *pos);
 
 term eval_expr(expr_i *e);
+term eval_term(const term& t);
 term eval_local_lookup(const term& t, const std::string& name, expr_i *pos);
   /* returns t::foo */
 

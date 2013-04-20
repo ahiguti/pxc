@@ -3,17 +3,12 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- variant(COM的な)を実装してみる
-  - structに空引数udconを許可せねばならない(done)
-  - 変数定義をexpandで生成できるようにせねばならない
-    variantから具体型への変換した結果を保持する変数。passbyも
-    ものによってはmutable byref。右辺も場合によって式を出し分ける。
+- metaif -> cond (done)
+- metamap -> map (done)
+
+- variant: 基本型をbyrefで取る関数を呼んでも変更後の値を取れない
 
 - expand型foreachを削除
-
-- stringをpxcvectorに統合
-
-- interface間の継承
 
 - 演算子オーバーロードは、組み込み型以外のopに対して関数呼び出し式を
   evalすることによって実装チェック、その関数を呼ぶようにemit。
@@ -30,6 +25,8 @@ FIXME/TODO M1
 - 名前空間整理
 
 - numeric/positionalからserialize/numericへ移動
+
+- stringをpxcvectorに統合?
 
 - globalにdefconでない型の変数を置くとエラー
 
@@ -301,6 +298,28 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- variant: グローバル変数、関数(done)
+- meta argsとglobal_variablesが最初にindex値を入れているのをやめる
+  (done)
+- expand argdeclsが最初にindex値を期待しているのをやめる(done)
+- meta typeofはlazyである必要ないのでは(done)
+- variant: structに空引数udconを許可せねばならない(done)
+- variant: 変数定義をexpandで生成できるようにせねばならない(done)
+- 推移的に実装しているインタフェースについてfunc実装確認(done)
+- expr_misc check_interface_impl() (done)
+- expr_misc implements_interface() (done)
+- interface間継承でthreading属性のチェックしていることをテスト(done)
+- interface間継承で同名の関数を宣言するとエラー(done)
+- meta::common::functionsなどの結果は、その名前空間をコンパイル中で
+  あれば変化してしまうことがある。コンパイル単位の間で一貫性を保証
+  するにはどうすればよいか。-> expandによって生成されたシンボルは
+  メタ関数からは見えないようにする(done)
+- macro -> metafunction に改名すべし(done)
+- expr_variant -> expr_dunion に改名すべし(done)
+- argdeclへのexpandはシンボルを指定する必要がないので消す(done)
+- skip_variant_fixme2 (done)
+- 可変長引数関数はmetalistをメタ引数に取る関数で実現できる。自動
+  マッチさせる方法を考えよ。(done)
 - expandのbaseexprが空だとしぬ(done)
 - expand型foreachをexpandで置き換え(done)
 - expand(sym, idx : ... ) のようにindexを渡さないと使いにくい(done)
@@ -773,19 +792,6 @@ x: string, y: int
   foreach { m[x] += y; }
 
 ---------------------------------------------------------------------
-serialize
-
-unit: 何も書かない
-整数: nnnxxxxx 上の3bitに後続バイト長さ。ただし111のときは後続8バイト
-enum/bitmask: 整数と同じ
-浮動小数点数: べた
-配列: 最初に長さを整数エンコードで書く。残りは各要素を詰める
-  ただし要素型が2byte以下のときは要素固定長で
-連想配列: 配列と同じ
-構造体: 各フィールドを詰める
-union: 最初にタグ、次に要素
-
----------------------------------------------------------------------
 汎用展開マクロ
 
 @expand(sym : metalist) expr
@@ -876,6 +882,16 @@ expand 文
   で置き換えたstmtを作り、それらを連結したstmtsで置き換える
 
 ---------------------------------------------------------------------
+可変長引数関数
+
+function {ts} foo(expand(i, sym : names{ts})) {
+  ...
+}
+呼ぶときには
+foo(x, y, z)
+とやるとtsがx, y, zの型のリストとしてfooをインスタンス化する
+
+---------------------------------------------------------------------
 variant
 
 関数引数の個数だけseqを生成
@@ -934,4 +950,93 @@ variant型だと実行できない処理:
 - ephemeral型。range、sliceなど。これらの型を引数に取る関数はかわりに
   コンテナを指定すればよい。
 - 配列要素への参照。
+
+
+
+---------------------------------------------------------------------
+関数が必要とする上位変数の計算
+
+- 関数の中身をchecktypeするときに、フレーム(funcdef/struct)のcallee_list
+  にfunccall先を書いてゆく。
+- 関数がどのupvalueを必要としているかは、自分が参照しているupvalueに
+  加えて、推移的にcallee_listにあるupvalueを加えたものになる。
+- メンバ関数やその子孫の関数は、参照しなくてもthisをupvalueとして必要
+  になる。constメンバ関数かどうかでthisをconstにするかどうかを決める。
+  struct内の実行文(=コンストラクタ)もthisをupvalueとして必要。
+- this以外の上位変数がconstかどうかは単純にその変数自体がconstかどうか
+  で決まる。this(とメンバ変数)がconstかどうかはthisupがconstかどうかも
+  影響。
+- 依存するthisのクラスがそもそも呼び出し元と先で異なるような場合はコン
+  パイルエラー。meta式によってメンバ関数を取得した場合に起きうる。
+- 関数を呼ぶ時点でupvalueが定義されていないといけない。これは各関数呼び
+  出し箇所について、推移的上位変数のうち自分と同一のblockで定義されてい
+  るものが、その呼び出し箇所よりも前の文に定義があることをチェックする。
+
+手順:
+- 関数呼び出しのすべてについてcallee_vecに呼び出し先funcdefを書く。
+- 各funcdefについて、callee_vecを推移的にたどり、callee_vec_transitiveを
+  作る。相互再帰に注意。callee_vec_tr_doneフラグをtrueに。
+- 各funcdefについて
+
+function void x()
+{
+  int z;
+  function void baz() { z = 3; }
+  function void foo() {
+    twice{baz}();
+  }
+}
+fooがbarを呼び、barがbazを呼び、bazがclosureのとき
+
+呼び出しのチェインのうち、どこでその変数を定義しているか判定
+- 呼び出し元のframeがその変数の定義しているframeと一致する箇所。
+
+tpupにはその関数が参照しているupvalueのリストが入る
+- add_..._direct()ではそのfuncdefのbodyの中で参照している上位変数
+- add_..._tparam()ではそのfuncdefのテンプレ引数関数が参照している
+
+---------------------------------------------------------------------
+例外ツリー
+
+std::exceptionをpxcのインタフェースにする。
+interface exception { }
+interface logic_error { }
+interface runtime_error { }
+
+---------------------------------------------------------------------
+リモートオブジェクト
+
+var svr = tptr(object_server{foo}());
+multithreaded struct foo {
+  function tptr{ibar} create_skeleton(client_info const& ci);
+}
+multithreaded interface ibar {
+  function int hoge(int x);
+  function tptr{ibar} fuga(ibaz& x);
+}
+struct stub{ibar} <ibar> {
+  orb_client orb;
+  function int hoge(int x) {
+    return orb_client_call{int, m::list{m::list{int, 0}}}(orb, x);
+  }
+}
+stub{ibar}
+リモート化可能なインタフェースは、各メソッドが以下を満たす必要がある。
+- 参照引数にはリモート化可能なインタフェースしか使われていない
+- 返値は値渡し可能な型
+リモート化可能な型:
+
+
+---------------------------------------------------------------------
+serialize
+
+unit: 何も書かない
+整数: nnnxxxxx 上の3bitに後続バイト長さ。ただし111のときは後続8バイト
+enum/bitmask: 整数と同じ
+浮動小数点数: べた
+配列: 最初に長さを整数エンコードで書く。残りは各要素を詰める
+  ただし要素型が2byte以下のときは要素固定長で
+連想配列: 配列と同じ
+構造体: 各フィールドを詰める
+union: 最初にタグ、次に要素
 

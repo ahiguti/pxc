@@ -103,9 +103,9 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
 	switch (v.edef->get_esort()) {
 	case expr_e_funcdef:
 	case expr_e_typedef:
-	case expr_e_macrodef:
+	case expr_e_metafdef:
 	case expr_e_struct:
-	case expr_e_variant:
+	case expr_e_dunion:
 	case expr_e_interface:
 	case expr_e_enumval:
 	case expr_e_tparams:

@@ -28,7 +28,8 @@ namespace pxc {
 
 expr_i::expr_i(const char *fn, int line)
   : fname(fn), line(line), type_of_this_expr(), conv(conversion_e_none),
-    type_conv_to(), parent_expr(0), symtbl_lexical(0), tempvar_id(-1)
+    type_conv_to(), parent_expr(0), symtbl_lexical(0), tempvar_id(-1),
+    generated_flag(false)
 {
   expr_arena.push_back(this);
   type_of_this_expr = builtins.type_void;
@@ -1345,7 +1346,7 @@ std::string expr_typedef::dump(int indent) const
     + " " + (typefamily_str != 0 ? typefamily_str : "");
 }
 
-expr_macrodef::expr_macrodef(const char *fn, int line, const char *sym,
+expr_metafdef::expr_metafdef(const char *fn, int line, const char *sym,
   expr_i *tparams, expr_i *rhs, attribute_e attr)
   : expr_i(fn, line), sym(sym),
     block(ptr_down_cast<expr_block>(expr_block_new(fn, line, tparams, 0, 0, 0,
@@ -1354,7 +1355,7 @@ expr_macrodef::expr_macrodef(const char *fn, int line, const char *sym,
 {
 }
 
-std::string expr_macrodef::dump(int indent) const
+std::string expr_metafdef::dump(int indent) const
 {
   return std::string("macro ") + sym + " " + dump_expr(indent, get_rhs());
 }
@@ -1420,24 +1421,24 @@ std::string expr_struct::dump(int indent) const
   return r;
 }
 
-expr_variant::expr_variant(const char *fn, int line, const char *sym,
+expr_dunion::expr_dunion(const char *fn, int line, const char *sym,
   expr_i *block, attribute_e attr)
   : expr_i(fn, line), sym(sym),
     block(ptr_down_cast<expr_block>(block)), attr(attr), value_texpr()
 {
   assert(block);
-  this->block->symtbl.block_esort = expr_e_variant;
+  this->block->symtbl.block_esort = expr_e_dunion;
   value_texpr = term(this);
 }
 
-expr_i *expr_variant::clone() const
+expr_i *expr_dunion::clone() const
 {
-  expr_variant *cpy = new expr_variant(*this);
+  expr_dunion *cpy = new expr_dunion(*this);
   cpy->value_texpr = term(cpy);
   return cpy;
 }
 
-void expr_variant::get_fields(std::list<expr_var *>& flds_r) const
+void expr_dunion::get_fields(std::list<expr_var *>& flds_r) const
 {
   /* copy of expr_struct::get_fields */
   flds_r.clear();
@@ -1452,7 +1453,7 @@ void expr_variant::get_fields(std::list<expr_var *>& flds_r) const
     flds_r.push_back(e);
   }
 }
-expr_var *expr_variant::get_first_field() const
+expr_var *expr_dunion::get_first_field() const
 {
   symbol_table& symtbl = block->symtbl;
   symbol_table::local_names_type::const_iterator i;
@@ -1467,9 +1468,9 @@ expr_var *expr_variant::get_first_field() const
   return 0;
 }
 
-std::string expr_variant::dump(int indent) const
+std::string expr_dunion::dump(int indent) const
 {
-  std::string r = std::string("variant ") + sym + "\n";
+  std::string r = std::string("dunion ") + sym + "\n";
   r += dump_expr(indent, block);
   return r;
 }

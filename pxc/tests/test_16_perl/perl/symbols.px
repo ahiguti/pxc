@@ -3,31 +3,32 @@ private namespace perl::symbols;
 import meta::common -;
 import numeric::integral -;
 
-private macro nslist{ns} imports_tr{ns};
-private macro is_concrete{t}
+private metafunction nslist{ns} imports_transitive{ns};
+private metafunction is_concrete{t}
   and{eq{num_tparams{t}, num_targs{t}}, not{eq{t, void}},
     not{attribute{t, "ephemeral"}}};
-private macro filter_concrete{fs} filter{fs, is_concrete};
-private macro has_byref_iter{f, n, i}
-  metaif{eq{n, i}, 0, or{argbyref{f, i}, has_byref_iter{f, n, add{i, 1}}}};
-private macro norefarg{f} not{has_byref_iter{f, argnum{f}, 0}};
-private macro filter_norefarg{fs} filter{fs, norefarg};
-private macro nsfuncs{ns}
-  filter_norefarg{filter_concrete{join{metamap{nslist{ns}, functions}}}};
-private macro nstypes{ns} filter_concrete{join{metamap{nslist{ns}, types}}};
-private macro atypes_one{f} join_all{list{rettype{f}}, argtypes{f}};
-private macro atypes{fs} filter_concrete{join{metamap{fs, atypes_one}}};
-private macro ftypes{ts} filter_concrete{join{metamap{ts, field_types}}};
-private macro mfatypes{ts} atypes{join{metamap{ts, member_functions}}};
-private macro tatypes{ts} filter_concrete{join{metamap{ts, targs}}};
-private macro is_nonvoid{t} not{eq{t, void}};
-private macro init_types{ns} uniq{join_all{nstypes{ns}, atypes{nsfuncs{ns}}}};
-private macro step_types{ts}
-  uniq{join_all{ts, ftypes{ts}, mfatypes{ts}, tatypes{ts}}};
-private macro rep_types{ts, tsn}
-  metaif{eq{ts, tsn}, ts, rep_types{tsn, step_types{tsn}}};
+private metafunction filter_concrete{fs} filter{fs, is_concrete};
+private metafunction has_byref_iter{f, n, i}
+  cond{eq{n, i}, 0, or{argbyref{f, i}, has_byref_iter{f, n, add{i, 1}}}};
+private metafunction norefarg{f} not{has_byref_iter{f, argnum{f}, 0}};
+private metafunction filter_norefarg{fs} filter{fs, norefarg};
+private metafunction nsfuncs{ns}
+  filter_norefarg{filter_concrete{join{map{nslist{ns}, functions}}}};
+private metafunction nstypes{ns} filter_concrete{join{map{nslist{ns}, types}}};
+private metafunction atypes_one{f} join_all{list{rettype{f}}, argtypes{f}};
+private metafunction atypes{fs} filter_concrete{join{map{fs, atypes_one}}};
+private metafunction ftypes{ts} filter_concrete{join{map{ts, field_types}}};
+private metafunction mfatypes{ts} atypes{join{map{ts, member_functions}}};
+private metafunction tatypes{ts} filter_concrete{join{map{ts, targs}}};
+private metafunction is_nonvoid{t} not{eq{t, void}};
+private metafunction init_types{ns}
+  unique{join_all{nstypes{ns}, atypes{nsfuncs{ns}}}};
+private metafunction step_types{ts}
+  unique{join_all{ts, ftypes{ts}, mfatypes{ts}, tatypes{ts}}};
+private metafunction rep_types{ts, tsn}
+  cond{eq{ts, tsn}, ts, rep_types{tsn, step_types{tsn}}};
 
-public macro all_functions{ns} nsfuncs{ns};
-public macro all_types{ns}
+public metafunction all_functions{ns} nsfuncs{ns};
+public metafunction all_types{ns}
   rep_types{init_types{ns}, step_types{init_types{ns}}};
 
