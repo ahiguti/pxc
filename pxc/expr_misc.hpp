@@ -138,7 +138,7 @@ term get_pointer_deref_texpr(expr_op *eop, const term& t);
 term get_array_range_texpr(expr_op *eop, expr_i *ec, const term& ect);
 term get_array_elem_texpr(expr_op *eop, const term& t0);
 term get_array_index_texpr(expr_op *eop, const term& t0);
-bool is_vardef_constructor(expr_i *e);
+bool is_vardef_constructor_or_byref(expr_i *e, bool incl_byref);
 bool is_vardef_or_vardefset(expr_i *e);
 bool is_noexec_expr(expr_i *e);
 

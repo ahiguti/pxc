@@ -6,12 +6,12 @@ import string::conversion -;
 
 function void t1()
 {
-  string buffer;
   var msg = "x";
-  var eh = io::errno::errno_eh(error::policy_first);
-  var f = file(io::io, "hoge2.txt", io::file::O_RDONLY, 0, eh);
-  io::buffered::stream_foreach{file, parse_line}(f, buffer, '\n', 4096, eh);
-  function void parse_line(cslice{uchar} const& line) {
+  var eh = io::errno::errno_handler(error::handle_keep);
+  var f = io_open(io::system, "hoge2.txt", io::file::O_RDONLY, 0, eh);
+  io::buffered::stream_foreach{file, parse_line}(f, '\n', 4096, eh);
+  function bool parse_line(cslice{uchar}& line) {
+    line.pop_back(1);
     string s = "cb ";
     s.append(msg); // upvalue
     s.append(" len=");
@@ -20,6 +20,7 @@ function void t1()
     s.append(line);
     s.append("]");
     println(s);
+    return true;
   }
 }
 

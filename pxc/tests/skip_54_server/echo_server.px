@@ -1,0 +1,64 @@
+namespace echo_server;
+import common -;
+import io -;
+import io::file -;
+import io::errno -;
+import io::standard -;
+import io::buffered -;
+import string::conversion -;
+import io::net::addrinfo -;
+import io::net::socket -;
+import io::signal -;
+import exception::common -;
+import error -;
+import thread -;
+
+threaded function void echo_server_worker(socket_acceptor const& acc)
+{
+  var peer_addr = sockaddr_storage();
+  var eh = errno_handler(handle_keep);
+  while (true) {
+    try {
+      var conn = accept(acc, peer_addr, eh);
+      stream_foreach{file, parse_line}(conn, '\n', 4096, eh);
+      threaded function bool parse_line(cslice{uchar} const& line) {
+	conn.write(line, eh);
+	return true;
+      }
+    } catch (exception e) {
+      /* ignore */
+    }
+  }
+}
+
+multithreaded struct echo_server_worker_thread(socket_acceptor const& a)
+{
+  socket_acceptor acc = a;
+  function void main() {
+    echo_server_worker(acc);
+  }
+}
+
+function void echo_server(echo_server_args const& args)
+{
+  var eh = errno_handler(handle_throw);
+  signal(system, SIGPIPE, SIG_IGN, eh);
+  var acc = create_acceptor(system, args.host, args.port, AF_INET,
+    SOCK_STREAM, args.listen_backlog, 0);
+  var targs = echo_server_worker_thread(acc);
+  vector{thread} threads;
+  for (size_t i : 0 .. args.num_workers) {
+    threads.push_back(thread_create(targs));
+  }
+}
+
+struct echo_server_args ()
+{
+  string host = "127.0.0.1";
+  string port = "9999";
+  uint listen_backlog = 1024;
+  uint num_workers = 10;
+}
+
+echo_server(echo_server_args());
+

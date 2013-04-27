@@ -37,7 +37,8 @@ public function {t} variant to_variant(t const& x)
   } else if (m::eq{t, ptr{idynamic}}) {
     r.ptrval = x;
   } else {
-    r.ptrval = ptr{stub_object{t}}(stub_object{t}(x));
+    metafunction ts to_non_ephemeral{t};
+    r.ptrval = ptr{stub_object{ts}}(stub_object{ts}(x));
   }
   return r;
 }
@@ -95,9 +96,13 @@ public function {t} t from_variant(variant const& x)
 /* wraps an object of type t */
 public struct {t}
 stub_object(expand(stub_object_args{t})) < idynamic >
+  /* if t is noncopyable, stub_object{t} requires same constr args as t.
+   * if copyable, stub_object{t} requires t as constr arg. */
 {
   expand(dummy : m::list{m::list{"dummy", m::is_copyable_type{t}}}) {
+    /* noncopyable */
     t value = t(expand(a : m::argnames{t}; a));
+    /* copyable */
     t value = x;
   }
   function variant invoke(cstrref const& name, cslice{variant} const& args) {
@@ -140,6 +145,64 @@ public struct {varname, ns, mutable_flag} stub_variable < idynamic >
 	return variant(); // TODO: throw
       }
     }
+  }
+}
+
+private metafunction is_concrete{t}
+  m::and{m::eq{m::num_tparams{t}, m::num_targs{t}}, m::not{m::eq{t, void}},
+      m::not{m::attribute{t, "ephemeral"}}};
+private metafunction filter_concrete{fs} m::filter{fs, is_concrete};
+private metafunction is_constructible{t}
+  m::not{m::and{
+    m::or{m::eq{m::family{t}, "linear"}, m::eq{m::family{t}, "nodefault"}},
+    m::eq{m::size{m::args{t}}, 0}}};
+private metafunction filter_constructible{ts} m::filter{ts, is_constructible};
+
+private function {ns} void
+prepare_namespace_map(tree_map{string, variant}& elems)
+{
+  metafunction funcs filter_concrete{m::functions{ns}};
+  expand (name, idx : funcs) {
+    {
+      metafunction f m::at{funcs, idx};
+      variant x;
+      x.ptrval = ptr{stub_function{f}}(stub_function{f}());
+      elems[m::to_string{f}] = x;
+      // println(m::concat{"func (", ns, "): ", m::to_string{f}});
+    }
+  }
+  metafunction types filter_constructible{filter_concrete{m::types{ns}}};
+  expand (name, idx : types) {
+    {
+      metafunction t m::at{types, idx};
+      variant x;
+      x.ptrval = ptr{stub_function{t}}(stub_function{t}());
+      elems[m::to_string{t}] = x;
+      // println(m::to_string{t});
+    }
+  }
+  metafunction vars m::global_variables{ns};
+  expand (name, idx : m::map{vars, m::at0}) {
+    {
+      variant x;
+      x.ptrval = ptr{stub_variable{name, ns, m::at1{m::at{vars, idx}}}}(
+	stub_variable{name, ns, m::at1{m::at{vars, idx}}}());
+      elems[m::to_string{name}] = x;
+      // println(m::to_string{name});
+    }
+  }
+}
+
+/* wraps a namespace */
+public struct {ns} stub_namespace () < idynamic >
+{
+  tree_map{string, variant} elems;
+  prepare_namespace_map{ns}(elems);
+  function variant invoke(cstrref const& name, cslice{variant} const& args) {
+    if (variant e : elems[name]) {
+      return e.ptrval->invoke("", args);
+    }
+    return variant(); // TODO: throw
   }
 }
 
@@ -217,9 +280,10 @@ private function {tobj, methodidx, fsym} variant variant_invoke_impl(
     } else if (m::or{m::is_function{f}, m::is_copyable_type{f}}) {
       return to_variant{m::rettype{f}}(f(expand(a : func_argnames{f}; a)));
     } else {
-      variant r;
-      r.ptrval = ptr{stub_object{f}}(
+      ptr{stub_object{f}} p = ptr{stub_object{f}}(
 	stub_object{f}(expand(a : func_argnames{f}; a)));
+      variant r;
+      r.ptrval = p;
       return r;
     }
   }

@@ -7,14 +7,14 @@ function void hoge(int x) {
 }
 
 multithreaded struct my_thread_obj(int x0, int y0,
-  io::ioptr const& sys0) {
+  io::io const& sys0) {
   int x = x0;
   int y = y0;
-  io::ioptr sys = sys0;
+  io::io sys = sys0;
   function void main() {
-    io::file::fileptr stdout = io::standard::get_stdout(sys);
-    io::standard::file_println(*stdout, "my thread main");
-    io::standard::file_println(*stdout, x);
+    io::file::file stdout = io::standard::get_stdout(sys);
+    io::standard::file_println(stdout, "my thread main");
+    io::standard::file_println(stdout, x);
     hoge(y); // error: calling global function
     // io.stdout_println(hoge); // error
     // io::main.stdout_println(y); // error
@@ -23,7 +23,7 @@ multithreaded struct my_thread_obj(int x0, int y0,
 
 function void test1()
 {
-  threadptr thr = thread_create(my_thread_obj(123, 456, io::io));
+  thread thr = thread_create(my_thread_obj(123, 456, io::system));
   thr.join();
 }
 

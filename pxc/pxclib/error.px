@@ -1,25 +1,25 @@
 namespace error;
 public import numeric::integral -;
 
-public tsvaluetype enum policy_t {
-  policy_first = 0,
-  policy_overwrite = 1,
-  policy_throw = 2,
+public tsvaluetype enum handle_t {
+  handle_keep = 0,
+  handle_overwrite = 1,
+  handle_throw = 2,
 }
 
-public tsvaluetype struct {t} error_handler(policy_t p) {
-  private policy_t policy = p;
+public tsvaluetype struct {t} error_handler(handle_t h) {
+  private handle_t handle = h;
   private t value;
   public function t get() const { return value; }
   public function void reset() { value = t(); }
   public function void set(t x) {
-    if (policy == policy_first) {
+    if (handle == handle_keep) {
       if (value == t()) {
 	value = x;
       }
-    } else if (policy == policy_overwrite) {
+    } else if (handle == handle_overwrite) {
       value = x;
-    } else if (policy == policy_throw) {
+    } else if (handle == handle_throw) {
       if (x != t()) {
 	throw x;
       }

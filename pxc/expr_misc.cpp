@@ -440,6 +440,7 @@ typefamily_e get_family_from_string(const std::string& s)
   if (s == "tree_map_crange") return typefamily_e_tree_map_crange;
   if (s == "linear") return typefamily_e_linear;
   if (s == "noncopyable") return typefamily_e_noncopyable;
+  if (s == "nodefault") return typefamily_e_nodefault;
   if (s == "nocascade") return typefamily_e_nocascade;
   // if (s == "wptr") return typefamily_e_wptr;
   // if (s == "wcptr") return typefamily_e_wcptr;
@@ -474,6 +475,7 @@ std::string get_family_string(typefamily_e cat)
   case typefamily_e_tree_map_crange: return "tree_map_crange";
   case typefamily_e_linear: return "linear";
   case typefamily_e_noncopyable: return "noncopyable";
+  case typefamily_e_nodefault: return "nodefault";
   case typefamily_e_nocascade: return "nocascade";
   }
   abort();
@@ -3041,7 +3043,7 @@ term get_array_index_texpr(expr_op *eop, const term& t0)
   return builtins.type_void;
 }
 
-bool is_vardef_constructor(expr_i *e)
+bool is_vardef_constructor_or_byref(expr_i *e, bool incl_byref)
 {
   expr_op *const eop = ptr_down_cast<expr_op>(e);
   if (eop == 0) {
@@ -3050,12 +3052,20 @@ bool is_vardef_constructor(expr_i *e)
   if (eop->op != '=' || eop->arg0->get_esort() != expr_e_var) {
     return false;
   }
+  if (incl_byref) {
+    expr_var *evar = ptr_down_cast<expr_var>(eop->arg0);
+    if (is_passby_cm_reference(evar->varinfo.passby)) {
+      return true;
+    }
+  }
   expr_funccall *const fc = dynamic_cast<expr_funccall *>(eop->arg1);
-  if (fc == 0 || fc->conv != conversion_e_none ||
-    fc->funccall_sort != funccall_e_struct_constructor) {
+  if (fc == 0 || fc->conv != conversion_e_none) {
     return false;
   }
-  return true;
+  if (fc->funccall_sort == funccall_e_struct_constructor) {
+    return true;
+  }
+  return false;
 }
 
 static bool has_blockscope_tempvar(expr_i *e)

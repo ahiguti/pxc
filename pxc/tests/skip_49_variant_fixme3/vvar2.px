@@ -1,0 +1,62 @@
+namespace vvar2;
+import variant -;
+import common -;
+import meta::common m;
+import numeric::cast n;
+import exception::common -;
+import string::positional -;
+import downcast -;
+
+public threaded function string foo(int x, string y)
+{
+  y.append(to_string(x));
+  return y;
+}
+
+mtvaluetype struct bar(int x, string y)
+{
+  string value = y;
+  value.append(to_string(x));
+  function string m1(string z) const {
+    string r = value;
+    r.append(z);
+    return r;
+  }
+}
+
+function {ns} void test1() {
+  metafunction vars m::global_variables{ns};
+  expand (name, idx : m::map{vars, m::at0}) {
+    println(
+      m::concat{
+      	m::to_string{ns},
+	" ",
+	m::to_string{name},
+	": ",
+	m::to_string{m::at3{m::at{vars, idx}}}});
+  }
+}
+
+function {ns} variant nsobj() {
+  variant n;
+  n.ptrval = ptr(stub_namespace{ns}());
+  return n;
+}
+
+function void test2() {
+  var n = nsobj{"vvar2"}();
+  variant x = n.invoke("foo", 10, "abc");
+  println(x);
+}
+
+function void test3() {
+  var io = nsobj{"io::file"}();
+  var io_file = nsobj{"io::file"}();
+}
+
+// test1{"io::file"}();
+// test1{"io::impl"}();
+// test1{"io::process"}();
+
+test2();
+

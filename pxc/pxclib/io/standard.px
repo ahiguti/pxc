@@ -7,15 +7,15 @@ public import io::errno -;
 public import string::conversion;
 public import meta::common m;
 
-public extern "pxcio::pxc_stdin" fileptr stdin;
-public extern "pxcio::pxc_stdout" fileptr stdout;
-public extern "pxcio::pxc_stderr" fileptr stderr;
+public extern "pxcio::pxc_stdin"  file stdin;
+public extern "pxcio::pxc_stdout" file stdout;
+public extern "pxcio::pxc_stderr" file stderr;
 public threaded extern "pxcio::get_stdin"
-  function fileptr get_stdin(ioptr const& iop);
+  function file get_stdin(io const& iop);
 public threaded extern "pxcio::get_stdout"
-  function fileptr get_stdout(ioptr const& iop);
+  function file get_stdout(io const& iop);
 public threaded extern "pxcio::get_stderr"
-  function fileptr get_stderr(ioptr const& iop);
+  function file get_stderr(io const& iop);
 
 private metafunction ioeh_t error::error_handler{errno_t};
 
@@ -23,34 +23,34 @@ private extern "pxcio::iostd_init" function void iostd_init();
 
 iostd_init();
 
-public threaded function {t} void file_print(file& f, t const& x)
+public threaded function {t} void file_print(file const& f, t const& x)
 {
-  ioeh_t eh = ioeh_t(error::policy_throw);
+  ioeh_t eh = ioeh_t(error::handle_throw);
   if (m::eq{t, string}) {
-    f.write_all(x, eh);
+    file_write_all(f, x, eh);
   } else {
-    f.write_all(string::conversion::to_string(x), eh);
+    file_write_all(f, string::conversion::to_string(x), eh);
   }
 }
 
-public threaded function {t} void file_println(file& f, t const& x)
+public threaded function {t} void file_println(file const& f, t const& x)
 {
-  ioeh_t eh = ioeh_t(error::policy_throw);
+  ioeh_t eh = ioeh_t(error::handle_throw);
   if (m::eq{t, string}) {
     string s = x;
     s.append("\n");
-    f.write_all(s, eh);
+    file_write_all(f, s, eh);
   } else {
     string s = string::conversion::to_string(x);
     s.append("\n");
-    f.write_all(s, eh);
+    file_write_all(f, s, eh);
   }
 }
 
 public function {t} void print(t const& x)
-  { file_print(*stdout, x); }
+  { file_print(stdout, x); }
 public function {t} void println(t const& x)
-  { file_println(*stdout, x); }
+  { file_println(stdout, x); }
 
 extern "type" inline
 namespace pxcio {
@@ -58,28 +58,27 @@ namespace pxcio {
 
 extern "fdecl" inline
 namespace pxcio {
-typedef pxcrt::rcptr< pxcrt::trcval<file_impl> > fileptr;
-extern fileptr pxc_stdin;
-extern fileptr pxc_stdout;
-extern fileptr pxc_stderr;
+extern file pxc_stdin;
+extern file pxc_stdout;
+extern file pxc_stderr;
 };
 
 extern "fdef" inline
 namespace pxcio {
-fileptr pxc_stdin;
-fileptr pxc_stdout;
-fileptr pxc_stderr;
-fileptr get_stdin(ioptr const& iop) { return pxc_stdin; }
-fileptr get_stdout(ioptr const& iop) { return pxc_stdout; }
-fileptr get_stderr(ioptr const& iop) { return pxc_stderr; }
+file pxc_stdin;
+file pxc_stdout;
+file pxc_stderr;
+file get_stdin(io const& iop)  { return pxc_stdin;  }
+file get_stdout(io const& iop) { return pxc_stdout; }
+file get_stderr(io const& iop) { return pxc_stderr; }
 void iostd_init()
 {
   static int init_flag = 0;
   if (!init_flag) {
     init_flag = 1;
-    pxc_stdin = fileptr(new pxcrt::trcval<file_impl>(io, 0));
-    pxc_stdout = fileptr(new pxcrt::trcval<file_impl>(io, 1));
-    pxc_stderr = fileptr(new pxcrt::trcval<file_impl>(io, 2));
+    pxc_stdin  = create_file(0);
+    pxc_stdout = create_file(1);
+    pxc_stderr = create_file(2);
   }
 }
 };

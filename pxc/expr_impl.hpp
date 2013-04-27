@@ -152,6 +152,7 @@ enum typefamily_e {
   typefamily_e_tree_map_crange,  /* range on tree_map, const elements (local) */
   typefamily_e_linear,           /* noncopyable, nodefaultcon */
   typefamily_e_noncopyable,      /* noncopyable */
+  typefamily_e_nodefault,        /* nodefaultcon */
   typefamily_e_nocascade,        /* defcon even when tparam's not */
 };
 

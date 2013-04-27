@@ -3,17 +3,15 @@ public import numeric::integral -;
 public import pointer -;
 public import container::impl::array_common;
 
-public metafunction threadptr tptr{thread};
-public threaded extern "pxcthread::thread_join"
-  function void thread_join(threadptr const& thr);
-public threaded function {targs} threadptr thread_create(targs const& args)
+public multithreaded extern "pxcthread::thread_ptr" struct thread { }
+public threaded function {targs} thread thread_create(targs const& args)
 {
   tptr{thrdata} r = tptr{thrdata_impl{targs}}(thrdata_impl{targs}(args));
   return thread_create_impl(r);
 }
+public threaded extern "pxcthread::thread_join"
+  function void thread_join(thread const& thr);
 
-private multithreaded extern "pxcthread::thread_impl" "linear"
-  struct thread { }
 private multithreaded interface thrdata {
   function void main();
 }
@@ -24,29 +22,29 @@ private multithreaded struct {targs} thrdata_impl(targs const& a) < thrdata > {
   }
 }
 private threaded extern "pxcthread::thread_create_impl"
-  function threadptr thread_create_impl(tptr{thrdata} const& f);
+  function thread thread_create_impl(tptr{thrdata} const& f);
 
 extern "type" inline
 namespace pxcthread {
-struct thread_impl;
+struct thread_rep;
+typedef pxcrt::rcptr< pxcrt::trcval<thread_rep> > thread_ptr;
 };
 
 extern "fdecl" inline
 namespace pxcthread {
-typedef pxcrt::rcptr< pxcrt::trcval<thread_impl> > thread_ptr;
 typedef pxcrt::rcptr< thread$n::thrdata$i > thrdata_ptr;
 typedef thread$n::thrdata$i *thrdata_rawptr;
-struct thread_impl {
-  thread_impl(thrdata_ptr const& m) : tid(), need_join(false), mptr(m) { }
-  thread_impl() : tid(), need_join(false), mptr() { }
-  ~thread_impl() { join(); }
+struct thread_rep {
+  thread_rep(thrdata_ptr const& m) : tid(), need_join(false), mptr(m) { }
+  thread_rep() : tid(), need_join(false), mptr() { }
+  ~thread_rep() { join(); }
   void join();
   pthread_t tid;
   bool need_join;
   thrdata_ptr mptr;
 private:
-  thread_impl(const thread_impl&);
-  thread_impl& operator =(const thread_impl&);
+  thread_rep(const thread_rep&);
+  thread_rep& operator =(const thread_rep&);
 };
 thread_ptr thread_create_impl(thrdata_ptr const& m);
 void thread_join(thread_ptr const& t);
@@ -68,8 +66,8 @@ void *pxc_thread_child_main(void *arg)
 }
 thread_ptr thread_create_impl(thrdata_ptr const& m)
 {
-  thread_ptr thr(new pxcrt::trcval<thread_impl>(m));
-  thread_impl& impl = thr->value$z;
+  thread_ptr thr(new pxcrt::trcval<thread_rep>(m));
+  thread_rep& impl = thr->value$z;
   if (pthread_create(&impl.tid, 0, pxc_thread_child_main, m.get()) != 0) {
     DBG(fprintf(stderr, "failed to create thread\n"));
   } else {
@@ -86,7 +84,7 @@ void thread_join(thread_ptr const& t)
   pxcrt::guard_val<thread_ptr> grd(t);
   grd.get()->value$z.join();
 }
-void thread_impl::join()
+void thread_rep::join()
 {
   if (!need_join) {
     DBG(fprintf(stderr, "no need to join\n"));

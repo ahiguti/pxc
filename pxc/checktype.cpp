@@ -442,7 +442,7 @@ static bool is_default_constructible(const term& typ, expr_i *pos,
     if (is_cm_pointer_family(typ)) {
       return false;
     }
-    if (cat == typefamily_e_linear) {
+    if (cat == typefamily_e_linear || cat == typefamily_e_nodefault) {
       return false;
     }
     if (cat == typefamily_e_farray) {
@@ -521,7 +521,8 @@ void expr_var::check_type(symbol_table *lookup)
   expr_op *const parent_eop = dynamic_cast<expr_op *>(parent_expr);
   if (parent_eop != 0 && parent_eop->op == '=') {
     need_defcon = false;
-    if (!is_vardef_constructor(parent_eop)) {
+    const bool incl_byref = true;
+    if (!is_vardef_constructor_or_byref(parent_eop, incl_byref)) {
       need_copyable = true;
     }
   }
@@ -1340,9 +1341,18 @@ void expr_op::check_type(symbol_table *lookup)
 	arg0->dump(0).c_str(), sc->fullsym.c_str(), uniqns.c_str(),
 	symtbl));
       no_private = false;
-      expr_i *const fo = symtbl->resolve_name_nothrow(funcname_w_prefix,
-	no_private, uniqns.c_str(), is_global_dummy, is_upvalue_dummy,
+      expr_i *fo = symtbl->resolve_name_nothrow(funcname_w_prefix,
+	no_private, uniqns, is_global_dummy, is_upvalue_dummy,
 	is_memfld_dummy);
+      if (fo == 0) {
+	/* try using the caller's context */
+	symtbl = this->symtbl_lexical;
+	arg0_uniqns = sc->uniqns;
+	const std::string uniqns = arg0_uniqns;
+	fo = symtbl->resolve_name_nothrow(funcname_w_prefix,
+	  no_private, uniqns, is_global_dummy, is_upvalue_dummy,
+	  is_memfld_dummy);
+      }
       if (fo != 0) {
 	DBG(fprintf(stderr, "found %s\n", sc->fullsym.c_str()));
 	sc->arg_hidden_this = arg0;
@@ -1390,8 +1400,11 @@ void expr_op::check_type(symbol_table *lookup)
   case '=':
     check_type_convert_to_lhs(this, arg1, arg0->resolve_texpr());
     check_lvalue(this, arg0);
-    if (!is_vardef_constructor(this)) {
-      check_copyable(this, arg1);
+    {
+      const bool incl_byref = true;
+      if (!is_vardef_constructor_or_byref(this, incl_byref)) {
+	check_copyable(this, arg1);
+      }
     }
     type_of_this_expr = arg0->resolve_texpr();
     break;
