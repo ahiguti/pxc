@@ -1,0 +1,91 @@
+namespace string::deserialize;
+public import numeric::integral -;
+public import container::string -;
+public import meta::common m;
+public import meta::family mf;
+
+public threaded function {tpl, t} t deserialize(
+  m::local{tpl, "source_type"}& s)
+{
+  metafunction fam m::family{t};
+  if (m::not{m::eq{m::local{tpl, "specialized_func", t}, 0}}) {
+    return m::local{tpl, "specialized_func", t}(s);
+  } else if (mf::is_array_family{fam}) {
+    /* TODO: farray, darray */
+    t r;
+    m::local{tpl, "array_begin"}(s);
+    while (true) {
+      if (m::local{tpl, "array_end"}(s)) {
+	break;
+      }
+      m::at{t, 0} e = deserialize{tpl, m::at{t, 0}}(s);
+      r.push_back(e);
+      m::local{tpl, "array_sep"}(s);
+    }
+    return r;
+  } else if (mf::is_map_family{fam}) {
+    t r;
+    m::local{tpl, "map_begin"}(s);
+    while (true) {
+      if (m::local{tpl, "map_end"}(s)) {
+	break;
+      }
+      m::local{tpl, "map_entry_begin"}(s);
+      m::at{t, 0} k = deserialize{tpl, m::at{t, 0}}(s);
+      m::local{tpl, "map_entry_sep"}(s);
+      m::at{t, 1} m = deserialize{tpl, m::at{t, 1}}(s);
+      m::local{tpl, "map_entry_end"}(s);
+      r[k] = m;
+      m::local{tpl, "map_sep"}(s);
+    }
+  } else if (mf::is_pointer_family{fam}) {
+    m::local{tpl, "pointer_begin"}(s);
+    t r = t(deserialize{tpl, m::at{t, 0}}(s));
+    m::local{tpl, "pointer_end"}(s);
+    return r;
+  } else if (mf::is_struct_family{fam}) {
+    t r;
+    m::local{tpl, "struct_begin"}(s);
+    while (true) {
+      if (m::local{tpl, "struct_end"}(s)) {
+	break;
+      }
+      m::local{tpl, "struct_entry_begin"}(s);
+      m::local{tpl, "source_type"} s0 = s;
+      m::local{tpl, "struct_field_name"}(s, s0);
+      m::local{tpl, "struct_entry_sep"}(s);
+      /* TODO: slow */
+      expand (fld, idx : m::field_names{t}) {
+	if (s0 == m::to_string{fld}) {
+	  r.fld = deserialize{tpl, m::at{m::field_types{t}, idx}}(s);
+	}
+      }
+      m::local{tpl, "struct_entry_end"}(s);
+    }
+    return r;
+  } else if (mf::is_union_family{fam}) {
+    t r;
+    m::local{tpl, "union_begin"}(s);
+    while (true) {
+      if (m::local{tpl, "union_end"}(s)) {
+	break;
+      }
+      m::local{tpl, "union_entry_begin"}(s);
+      m::local{tpl, "source_type"} s0 = s;
+      m::local{tpl, "union_field_name"}(s, s0);
+      m::local{tpl, "union_entry_sep"}(s);
+      expand (fld, idx : m::field_names{t}) {
+	if (s0 == m::to_string{fld}) {
+	  r.fld = deserialize{tpl, m::at{m::field_types{t}, idx}}(s);
+	}
+      }
+      m::local{tpl, "union_entry_end"}(s);
+    }
+    return r;
+  } else {
+    t r;
+    m::local{tpl, "unknown", t}(s);
+    return r;
+  }
+}
+

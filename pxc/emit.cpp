@@ -222,7 +222,7 @@ template <typename T> static std::string get_type_cname_wo_ns(T e)
   return to_short_name(term_tostr(e->value_texpr, term_tostr_sort_cname));
 }
 
-static void emit_inherit(emit_context& em, expr_block *block)
+static void emit_inherit(emit_context& em, expr_block *block, bool inh_virtual)
 {
   expr_telist *ih = block->inherit;
   while (ih != 0) {
@@ -230,6 +230,9 @@ static void emit_inherit(emit_context& em, expr_block *block)
       em.puts(" : ");
     } else {
       em.puts(", ");
+    }
+    if (inh_virtual) {
+      em.puts("virtual ");
     }
     em.puts(term_tostr_cname(ih->head->get_sdef()->get_evaluated()));
     ih = ih->rest;
@@ -251,7 +254,7 @@ static void emit_interface_def_one(emit_context& em, expr_interface *ei,
     em.puts(";\n");
     return;
   }
-  emit_inherit(em, ei->block);
+  emit_inherit(em, ei->block, true);
   em.puts(" {\n");
   em.add_indent(1);
   em.set_file_line(ei);
@@ -329,9 +332,20 @@ static void emit_struct_constr_initializer(emit_context& em,
     } else if (emit_fast_init) {
       expr_op *const p = dynamic_cast<expr_op *>(e->parent_expr);
       if (p != 0 && p->op == '=') {
-	em.puts("(");
-	fn_emit_value(em, p->arg1);
-	em.puts(")");
+	expr_funccall *efc = dynamic_cast<expr_funccall *>(p->arg1);
+	if (efc != 0 && efc->funccall_sort == funccall_e_struct_constructor &&
+	  p->arg1->conv == conversion_e_none) {
+	  /* if p->arg1 is a constructor call and no conv is performed, don't
+	   * emit an explicit call to the constructor in order to avoid copy
+	   * construction. */
+	  em.puts("(");
+	  fn_emit_value(em, efc->arg);
+	  em.puts(")");
+	} else {
+	  em.puts("(");
+	  fn_emit_value(em, p->arg1);
+	  em.puts(")");
+	}
       } else {
 	em.puts("()");
       }
@@ -358,21 +372,7 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
     em.puts(";\n");
     return;
   }
-  emit_inherit(em, est->block);
-  #if 0
-  if (est->block->inherit != 0) {
-    expr_telist *ih = est->block->inherit;
-    while (ih != 0) {
-      if (ih == est->block->inherit) {
-	em.puts(" : ");
-      } else {
-	em.puts(", ");
-      }
-      em.puts(term_tostr_cname(ih->head->get_sdef()->get_evaluated()));
-      ih = ih->rest;
-    }
-  }
-  #endif
+  emit_inherit(em, est->block, false);
   em.puts(" {\n");
   em.add_indent(1);
   if (est->block->inherit != 0) {
@@ -2711,10 +2711,8 @@ static void emit_var_or_tempvar(emit_context& em, expr_i *e, const term& tbase,
 	emit_explicit_init_if(em, tconvto.is_null() ? tbase : tconvto);
       } else {
 	/* defset */
-#if 0
-fprintf(stderr, "defset %s\n", e->dump(0).c_str()); // FIXME
-#endif
-	if (!is_unnamed && is_vardef_constructor(e)) {
+	const bool incl_byref = false;
+	if (!is_unnamed && is_vardef_constructor_or_byref(e, incl_byref)) {
 	  /* foo x((a0), (a1), ...) */
 	  emit_vardef_constructor(em, e, tbase, cs0, var_csymbol);
 	} else {

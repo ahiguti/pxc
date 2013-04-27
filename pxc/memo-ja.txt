@@ -3,10 +3,35 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- metaif -> cond (done)
-- metamap -> map (done)
+- decimal_to_integralなどを, cstrref&を取って先頭だけ読む方式に
 
-- variant: 基本型をbyrefで取る関数を呼んでも変更後の値を取れない
+- 菱形継承でc++エラーになるはず。interface間継承はvirtualに(done)
+
+- interface間継承のupcastがコンパイルエラーになる
+
+- from_string仕様きめ
+
+- string/util.px split
+
+- create_fooに統一する？
+
+- obj.func は、その場所からプレフィックス無しでtobj_funcという名前が
+  引ければそれに解決する(done)
+
+- tagged unionの$eと$uをやめる。gdbで見るとき困る。
+
+- variant: pointerの参照外しは、その先がcopyableであるときだけ可能。
+- variant: pxc側の継承を反映させられないか。
+- variant: オブジェクト参照を取る関数を、ポインタを渡して自動参照外し
+  して実行できるようにできないか
+  - stub_struct{t}へidynamicからdowncastし、それの.valueを取っている
+  - そのかわりにstub_struct{ptr{t}}へidynamicからdowncastし、それの
+    .valueを取り、それを参照外ししたい。
+
+- downcastは多相型でないとc++でエラーになるはず
+
+- ptr(foo(...)) の式が変数定義の右辺ではないとき、fooのコピーコンスト
+  ラクタを要求してしまう(skip_49_variant_fixme3)
 
 - expand型foreachを削除
 
@@ -298,6 +323,11 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- nodefconファミリが必要。コンストラクトできないがコピー可能。(done)
+- metaif -> cond (done)
+- metamap -> map (done)
+- コンストラクタの中のフィールド定義でnoncopyableな型のフィールド定義
+  でコピーコンストラクタ使ってしまっている(done)
 - variant: グローバル変数、関数(done)
 - meta argsとglobal_variablesが最初にindex値を入れているのをやめる
   (done)
@@ -1039,4 +1069,17 @@ enum/bitmask: 整数と同じ
 連想配列: 配列と同じ
 構造体: 各フィールドを詰める
 union: 最初にタグ、次に要素
+
+---------------------------------------------------------------------
+from_string
+
+引数には読み込みバッファの末尾までを渡す。パース失敗したら残りの長さ
+を例外に含める。
+
+string "hoge"
+number 0.1
+struct, union {fldname0 = value0, fldname1 = value1}
+pointer {value}
+map {key0 = value0, key1 = value1}
+array {value0, value1}
 

@@ -8,10 +8,9 @@ public import io::errno -;
 public import meta::common m;
 public import error;
 
-public multithreaded extern "pxcio::file_impl" "linear"
-  struct file(ioptr const& iop, cstrref const& fn, open_flags_t flags,
-    mode_t mode, errno_eh& eh) { }
-public metafunction fileptr tptr{file};
+public multithreaded extern "pxcio::file" "nodefault" struct file { }
+  /* while file is implemented as an immutable pointer, it's hidden to pxc.
+   * pxc assumes immuable pointers have no side effects. */
 
 public tsvaluetype extern "::off_t" "extint" struct off_t { }        //SQUAD?
 public tsvaluetype extern "::dev_t" "extuint" struct dev_t { }       //UQUAD
@@ -24,7 +23,6 @@ public tsvaluetype extern "::blksize_t" "extint" struct blksize_t { }//SLONGWORD
 public tsvaluetype extern "::blkcnt_t" "extint" struct blkcnt_t { }  //SQUAD?
 public tsvaluetype extern "::time_t" "extint" struct time_t { }      //SLONG
 public tsvaluetype extern "::ssize_t" "extint" struct ssize_t { }    //SWORD?
-
 public tsvaluetype extern "int" "extbitmask" struct open_flags_t { }
 public tsvaluetype extern "int" "extenum" struct whence_t { }
 
@@ -55,11 +53,9 @@ public extern "O_NONBLOCK"	open_flags_t O_NONBLOCK;
 public extern "O_SYNC"		open_flags_t O_SYNC;
 public extern "O_FSYNC"		open_flags_t O_FSYNC;
 public extern "O_ASYNC"		open_flags_t O_ASYNC;
-
 public extern "SEEK_SET"	whence_t SEEK_SET;
 public extern "SEEK_CUR"	whence_t SEEK_CUR;
 public extern "SEEK_END"	whence_t SEEK_END;
-
 public extern "S_IRWXU"		mode_t S_IRWXU;
 public extern "S_IRUSR"		mode_t S_IRUSR;
 public extern "S_IWUSR"		mode_t S_IWUSR;
@@ -73,40 +69,42 @@ public extern "S_IROTH"		mode_t S_IROTH;
 public extern "S_IWOTH"		mode_t S_IWOTH;
 public extern "S_IXOTH"		mode_t S_IXOTH;
 
+public threaded extern "pxcio::io_open" function
+  file io_open(io const& iop, cstrref const& fn, open_flags_t flags,
+    mode_t md, errno_handler& eh);
 public threaded extern "pxcio::file_read" function
-  size_t file_read(file& f, string& buf, size_t len, errno_eh& eh);
+  size_t file_read(file const& f, string& buf, size_t len, errno_handler& eh);
 public threaded extern "pxcio::file_write" function
-  size_t file_write(file& f, cstrref const& buf, errno_eh& eh);
+  size_t file_write(file const& f, cstrref const& buf, errno_handler& eh);
 public threaded extern "pxcio::file_lseek" function
-  off_t file_lseek(file& f, off_t offset, whence_t whence,
-    errno_eh& eh);
-
+  off_t file_lseek(file const& f, off_t offset, whence_t whence,
+    errno_handler& eh);
 public threaded extern "pxcio::io_stat" function
-  void io_stat(ioptr const& iop, cstrref const& fn, statbuf& buf,
-    errno_eh& eh);
+  void io_stat(io const& iop, cstrref const& fn, statbuf& buf,
+    errno_handler& eh);
 public threaded extern "pxcio::io_sleep" function
-  uint io_sleep(ioptr const& iop, uint sec);
+  uint io_sleep(io const& iop, uint sec);
 public threaded extern "pxcio::io_usleep" function
-  uint io_usleep(ioptr const& iop, uint usec);
+  uint io_usleep(io const& iop, uint usec);
 
-public threaded function {t}
-size_t stream_read_all(t& f, string& buf, errno_eh& eh)
+public threaded function
+size_t file_read_all(file const& f, string& buf, errno_handler& eh)
 {
   size_t r = 0;
   while (true) {
-    size_t const rlen = f.read(buf, 16384, eh);
+    size_t const rlen = file_read(f, buf, 16384, eh);
     if (rlen == 0) { break; }
     r += rlen;
   }
   return r;
 }
-public threaded function {t}
-size_t stream_write_all(t& f, cstrref const& buf, errno_eh& eh)
+public threaded function
+size_t file_write_all(file const& f, cstrref const& buf, errno_handler& eh)
 {
   size_t curpos = 0;
   size_t endpos = buf.size();
   while (curpos != endpos) {
-    size_t const wlen = f.write(buf[curpos .. endpos], eh);
+    size_t const wlen = file_write(f, buf[curpos .. endpos], eh);
     if (wlen == 0) { break; }
     curpos += wlen;
   }
@@ -114,31 +112,20 @@ size_t stream_write_all(t& f, cstrref const& buf, errno_eh& eh)
 }
 
 public threaded function
-size_t file_read_all(file& f, string& buf, errno_eh& eh)
-{
-  return stream_read_all(f, buf, eh);
-}
-public threaded function
-size_t file_write_all(file& f, cstrref const& buf, errno_eh& eh)
-{
-  return stream_write_all(f, buf, eh);
-}
-
-public threaded function
-size_t io_read_file(ioptr const& iop, cstrref const& fn,
-  string& buf, errno_eh& eh)
+size_t io_read_file(io const& iop, cstrref const& fn,
+  string& buf, errno_handler& eh)
 {
   buf.clear();
-  file f = file(iop, fn, O_RDONLY, 0, eh);
-  return f.read_all(buf, eh);
+  file f = io_open(iop, fn, O_RDONLY, 0, eh);
+  return file_read_all(f, buf, eh);
 }
 public threaded function
-size_t io_write_file(ioptr const& iop, cstrref const& fn, cstrref const& buf,
-  errno_eh& eh)
+size_t io_write_file(io const& iop, cstrref const& fn, cstrref const& buf,
+  errno_handler& eh)
 {
-  file f = file(iop, fn, O_WRONLY | O_CREAT | O_TRUNC,
+  file f = io_open(iop, fn, O_WRONLY | O_CREAT | O_TRUNC,
     S_IRWXU | S_IRWXG | S_IRWXO, eh);
-  return f.write_all(buf, eh);
+  return file_write_all(f, buf, eh);
 }
 
 extern "type" inline
@@ -154,29 +141,23 @@ namespace pxcio {
 using namespace pxcrt;
 typedef struct ::stat statbuf;
 typedef int errno_t;
-struct auto_file {
-  auto_file(int fd) : fd(fd) { }
-  ~auto_file() { if (fd > 2) close(fd); } /* don't close stdin/out/err */
+struct file_rep {
+  file_rep(int fd) : fd(fd) { }
+  ~file_rep() { if (fd > 2) close(fd); } /* don't close stdin/out/err */
   int get() const { return fd; }
 private:
   const int fd;
-  auto_file(const auto_file&);
-  auto_file& operator =(const auto_file&);
+  file_rep(const file_rep&);
+  file_rep& operator =(const file_rep&);
 };
-typedef ::error$n::error_handler$s$tp1$io$$errno$n$$errno_t$s errno_eh;
-struct file_impl : public auto_file {
-  file_impl(ioptr const& iop, cstrref const& fn, int flags, ::mode_t md,
-    errno_eh& eh);
-  file_impl(ioptr const& iop, int fd); /* must not be used from pxc */
-};
+typedef ::pxcrt::rcptr< pxcrt::tircval<file_rep> > file;
+typedef ::error$n::error_handler$s$tp1$io$$errno$n$$errno_t$s errno_handler;
 };
 
 extern "fdecl" inline
 namespace pxcio {
-size_t file_read_impl(int fd, bt_string& buf, size_t len, errno_eh& eh);
-size_t file_write_impl(int fd, cstrref const& buf, errno_eh& eh);
-off_t file_lseek_impl(int fd, ::off_t offset, int whence, errno_eh& eh);
-inline void ioeh_set(errno_eh& eh, int e) { eh.set$f(e); }
+inline void ioeh_set(errno_handler& eh, int e) { eh.set$f(e); }
+file create_file(int fd);
 };
 
 extern "fdef" inline
@@ -186,24 +167,40 @@ namespace pxcio {
 #include <string>
 int file_open_impl(cstrref const& fn, int flags, ::mode_t md)
 {
+  if (fn.size() == 1) {
+    if (fn[0] == '0') { return 0; }
+    if (fn[0] == '1') { return 1; }
+    if (fn[0] == '2') { return 2; }
+  }
   PXCRT_ALLOCA_NTSTRING(fn_nt, fn);
   int fd = ::open(fn_nt.get(), flags, md);
   return fd;
 }
-file_impl::file_impl(ioptr const& iop, cstrref const& fn,
-  int flags, ::mode_t md, errno_eh& eh)
-  : auto_file(file_open_impl(fn, flags, md))
+file create_file(int fd)
 {
-  if (get() < 0) {
-    ioeh_set(eh, errno);
+  try {
+    tircval<file_rep> *p = new tircval<file_rep>(fd); /* throw */
+    file r(p);
+    return r;
+  } catch (...) {
+    if (fd < 2) {
+      file_rep f(fd); /* closes fd */
+    }
+    throw;
   }
 }
-file_impl::file_impl(ioptr const& iop, int fd)
-  : auto_file(fd)
+file io_open(io const& iop, cstrref const& fn, int flags, ::mode_t md,
+  errno_handler& eh)
 {
+  const int fd = file_open_impl(fn, flags, md);
+  if (fd < 0) {
+    ioeh_set(eh, errno);
+  }
+  return create_file(fd);
 }
-size_t file_read_impl(int fd, bt_string& buf, size_t len, errno_eh& eh)
+size_t file_read(file const& f, bt_string& buf, size_t len, errno_handler& eh)
 {
+  int const fd = f->value$z.get();
   bt_size_t sz = len;
   if (sz > SSIZE_MAX) {
     sz = SSIZE_MAX;
@@ -218,12 +215,9 @@ size_t file_read_impl(int fd, bt_string& buf, size_t len, errno_eh& eh)
   buf.rawarr_set_valid_len(osz + rlen);
   return rlen;
 }
-size_t file_read(file_impl& f, bt_string& buf, size_t len, errno_eh& eh)
+size_t file_write(file const& f, cstrref const& buf, errno_handler& eh)
 {
-  return file_read_impl(f.get(), buf, len, eh);
-}
-size_t file_write_impl(int fd, cstrref const& buf, errno_eh& eh)
-{
+  int const fd = f->value$z.get();
   bt_size_t sz = buf.size();
   if (sz > SSIZE_MAX) {
     sz = SSIZE_MAX;
@@ -236,12 +230,10 @@ size_t file_write_impl(int fd, cstrref const& buf, errno_eh& eh)
   }
   return wlen;
 }
-size_t file_write(file_impl& f, cstrref const& buf, errno_eh& eh)
+off_t file_lseek(file const& f, ::off_t offset, int whence,
+  errno_handler& eh)
 {
-  return file_write_impl(f.get(), buf, eh);
-}
-off_t file_lseek_impl(int fd, ::off_t offset, int whence, errno_eh& eh)
-{
+  int const fd = f->value$z.get();
   off_t r = ::lseek(fd, offset, whence);
   if (r == (off_t)-1) {
     ioeh_set(eh, errno);
@@ -249,12 +241,8 @@ off_t file_lseek_impl(int fd, ::off_t offset, int whence, errno_eh& eh)
   }
   return r;
 }
-off_t file_lseek(file_impl& f, ::off_t offset, int whence, errno_eh& eh)
-{
-  return file_lseek_impl(f.get(), offset, whence, eh);
-}
-void io_stat(ioptr const& iop, cstrref const& fn, pxcio::statbuf& buf,
-  errno_eh& eh)
+void io_stat(io const& iop, cstrref const& fn, pxcio::statbuf& buf,
+  errno_handler& eh)
 {
   PXCRT_ALLOCA_NTSTRING(fn_nt, fn);
   const int e = ::stat(fn_nt.get(), &buf);
@@ -263,11 +251,11 @@ void io_stat(ioptr const& iop, cstrref const& fn, pxcio::statbuf& buf,
     return;
   }
 }
-bt_uint io_sleep(ioptr const& iop, bt_uint sec)
+bt_uint io_sleep(io const& iop, bt_uint sec)
 {
   return ::sleep(sec);
 }
-bt_uint io_usleep(ioptr const& iop, bt_uint usec)
+bt_uint io_usleep(io const& iop, bt_uint usec)
 {
   return ::usleep(usec);
 }

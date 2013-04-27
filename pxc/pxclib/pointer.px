@@ -136,14 +136,14 @@ struct monitor {
   mutex mtx;
   condition_variable cond;
 };
-struct mtcount { /* reference counter for multi-threaded objects */ 
+struct mtcount { /* reference counter for multi-threaded shared objects */ 
   mtcount() : count$z(1) { }
   void incref$z() { __sync_fetch_and_add(&count$z, 1); } /* gcc >= 4 */
   bool decref$z() { return (__sync_fetch_and_add(&count$z, -1) == 1); }
 public:
   long count$z;
 };
-struct stcount { /* reference counter for single-threaded objects */
+struct stcount { /* reference counter for single-threaded shared objects */
   stcount() : count$z(1) { }
   void incref$z() { ++count$z; }
   bool decref$z() { return (--count$z == 0); }

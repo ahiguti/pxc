@@ -1,6 +1,25 @@
 namespace io;
-public import io::impl;
 
-public metafunction io io::impl::io;
-public metafunction ioptr io::impl::ioptr;
+public multithreaded extern "pxcio::io" "nodefault" struct io { }
+  /* io is used to indicate that functions have side effect against
+   * the os and other resources. */
+
+public extern "pxcio::io_system" io system; /* global io singleton */
+
+extern "type" inline
+namespace pxcio {
+struct io {
+  io(int const dummy) { } /* disable default constructor */
+};
+};
+
+extern "fdecl" inline
+namespace pxcio {
+extern io io_system;
+};
+
+extern "fdef" inline
+namespace pxcio {
+io io_system(0);
+};
 

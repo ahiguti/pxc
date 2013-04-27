@@ -4,68 +4,68 @@ public import container::string -;
 public import meta::common m;
 public import meta::family mf;
 
-public threaded function {tmpl, t} void serialize(t const& x,
-  m::local{tmpl, "target_type"}& o)
+public threaded function {tpl, t} void serialize(t const& x,
+  m::local{tpl, "target_type"}& o)
 {
   metafunction fam m::family{t};
-  if (m::not{m::eq{m::local{tmpl, "specialized_func", t}, 0}}) {
-    m::local{tmpl, "specialized_func", t}(x, o);
+  if (m::not{m::eq{m::local{tpl, "specialized_func", t}, 0}}) {
+    m::local{tpl, "specialized_func", t}(x, o);
   } else if (mf::is_array_family{fam}) {
-    m::local{tmpl, "array_begin"}(o);
+    m::local{tpl, "array_begin"}(o);
     for (size_t i, m::at{t, 0} v : x) {
       if (i != 0) {
-	m::local{tmpl, "array_sep"}(o);
+	m::local{tpl, "array_sep"}(o);
       }
-      serialize{tmpl, m::at{t, 0}}(v, o);
+      serialize{tpl, m::at{t, 0}}(v, o);
     }
-    m::local{tmpl, "array_end"}(o);
+    m::local{tpl, "array_end"}(o);
   } else if (mf::is_map_family{fam}) {
-    m::local{tmpl, "map_begin"}(o);
+    m::local{tpl, "map_begin"}(o);
     bool first = true;
     for (m::at{t, 0} k, m::at{t, 1} v : x) {
       if (first) {
 	first = false;
       } else {
-	m::local{tmpl, "map_sep"}(o);
+	m::local{tpl, "map_sep"}(o);
       }
-      m::local{tmpl, "map_entry_begin"}(o);
-      serialize{tmpl, m::at{t, 0}}(k, o);
-      m::local{tmpl, "map_entry_sep"}(o);
-      serialize{tmpl, m::at{t, 1}}(v, o);
-      m::local{tmpl, "map_entry_end"}(o);
+      m::local{tpl, "map_entry_begin"}(o);
+      serialize{tpl, m::at{t, 0}}(k, o);
+      m::local{tpl, "map_entry_sep"}(o);
+      serialize{tpl, m::at{t, 1}}(v, o);
+      m::local{tpl, "map_entry_end"}(o);
     }
-    m::local{tmpl, "map_end"}(o);
+    m::local{tpl, "map_end"}(o);
   } else if (mf::is_pointer_family{fam}) {
-    m::local{tmpl, "pointer_begin"}(o);
-    serialize{tmpl, m::at{t, 0}}(*x, o);
-    m::local{tmpl, "pointer_end"}(o);
+    m::local{tpl, "pointer_begin"}(o);
+    serialize{tpl, m::at{t, 0}}(*x, o);
+    m::local{tpl, "pointer_end"}(o);
   } else if (mf::is_struct_family{fam}) {
-    m::local{tmpl, "struct_begin"}(o);
+    m::local{tpl, "struct_begin"}(o);
     expand (fld, idx : m::field_names{t}) {
       {
 	if (idx != 0) {
-	  m::local{tmpl, "struct_sep"}(o);
+	  m::local{tpl, "struct_sep"}(o);
 	}
-	m::local{tmpl, "struct_entry_begin"}(o);
-	m::local{tmpl, "struct_field_name"}(m::to_string{fld}, o);
-	m::local{tmpl, "struct_entry_sep"}(o);
-	serialize{tmpl, m::at{m::field_types{t}, idx}}(x.fld, o);
-	m::local{tmpl, "struct_entry_end"}(o);
+	m::local{tpl, "struct_entry_begin"}(o);
+	m::local{tpl, "struct_field_name"}(m::to_string{fld}, o);
+	m::local{tpl, "struct_entry_sep"}(o);
+	serialize{tpl, m::at{m::field_types{t}, idx}}(x.fld, o);
+	m::local{tpl, "struct_entry_end"}(o);
       }
     }
-    m::local{tmpl, "struct_end"}(o);
+    m::local{tpl, "struct_end"}(o);
   } else if (mf::is_union_family{fam}) {
-    m::local{tmpl, "union_begin"}(o);
+    m::local{tpl, "union_begin"}(o);
     expand (fld, idx : m::field_names{t}) {
       if (case x.fld) {
-	m::local{tmpl, "union_field_name"}(m::to_string{fld}, o);
-	m::local{tmpl, "union_entry_sep"}(o);
-	serialize{tmpl, m::at{m::field_types{t}, idx}}(x.fld, o);
+	m::local{tpl, "union_field_name"}(m::to_string{fld}, o);
+	m::local{tpl, "union_entry_sep"}(o);
+	serialize{tpl, m::at{m::field_types{t}, idx}}(x.fld, o);
       }
     }
-    m::local{tmpl, "union_end"}(o);
+    m::local{tpl, "union_end"}(o);
   } else {
-    m::local{tmpl, "unknown", t}(x, o);
+    m::local{tpl, "unknown", t}(x, o);
   }
 }
 

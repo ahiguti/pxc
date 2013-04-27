@@ -1,0 +1,69 @@
+namespace vfunc;
+import variant -;
+import common -;
+import meta::common m;
+import numeric::cast n;
+import exception::common -;
+import string::positional -;
+import downcast -;
+
+public int var1 = 987;
+public string var2 = "xyz";
+
+threaded function string foo(int x, string y)
+{
+  y.append(to_string(x));
+  return y;
+}
+
+mtvaluetype struct bar(int x, string y)
+{
+  string value = y;
+  value.append(to_string(x));
+  function string m1(string z) const {
+    string r = value;
+    r.append(z);
+    return r;
+  }
+}
+
+function void test1() {
+  variant v;
+  v.ptrval = ptr{stub_function{foo}}(stub_function{foo}());
+  farray{variant, 2} arg;
+  arg[0].longval = 9;
+  arg[1].stringval = "abc";
+  variant x = v.ptrval->invoke("", arg); // x = foo(9, "abc")
+  println(x);
+}
+
+function void test2() {
+  variant v;
+  v.ptrval = ptr{stub_function{bar}}(stub_function{bar}());
+  farray{variant, 2} arg;
+  arg[0].longval = 9;
+  arg[1].stringval = "abc";
+  variant x = v.ptrval->invoke("", arg); // x = bar(9, "abc")
+  arg[0].stringval = "xyz";
+  variant y = x.ptrval->invoke("m1", arg); // y = x.m1("xyz")
+  println(y);
+}
+
+function void test3() {
+  variant v;
+  v.ptrval = ptr{stub_variable{"var1", "vfunc", 1}}
+    (stub_variable{"var1", "vfunc", 1}());
+  farray{variant, 0} arg0;
+  variant x = v.ptrval->invoke("", arg0); // x = var1
+  println(x);
+  farray{variant, 1} arg1;
+  arg1[0] = to_variant(345);
+  v.ptrval->invoke("", arg1); // var1 = 345
+  variant y = v.ptrval->invoke("", arg0); // y = var1
+  println(y);
+}
+
+test1();
+test2();
+test3();
+

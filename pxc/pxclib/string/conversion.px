@@ -6,8 +6,8 @@ public import meta::family mf;
 public import numeric::cast n;
 public import string::positional p;
 public import string::serialize -;
+public import string::deserialize -;
 public import string::url_encode u;
-// public import string::json_encode j;
 
 public threaded function {t} string to_string(t const& x)
 {
@@ -22,7 +22,7 @@ public threaded function {t} string to_string(t const& x)
 
 public threaded function {t} void serialize_to_string(t const& x, string& out)
 {
-  serialize{deftmpl, t}(x, out);
+  serialize{serialize_tpl, t}(x, out);
 }
 
 public metafunction is_string_family_type{t}
@@ -43,7 +43,6 @@ public threaded function void bool_to_string(bool v, string& buf)
 
 private threaded function {t} void string_append_escape(t const& x, string& v)
 {
-  // j::json_encode(x, v);
   v.push_back('"');
   u::url_encode(v, x);
   v.push_back('"');
@@ -67,11 +66,12 @@ private threaded function {t} void string_append_star(t const& x, string& v)
 private threaded function {t} void string_append_unknown(t const& x, string& v)
 { v.push_back('?'); }
 
-private threaded struct deftmpl {
+private threaded struct serialize_tpl {
   metafunction target_type string;
   metafunction symstr{t} m::concat{t, "_append_to_string"};
   metafunction sym{t} m::symbol{symstr{t}, t};
-  metafunction has_specialized_symbol{t} m::eq{m::to_string{sym{t}}, symstr{t}};
+  metafunction has_specialized_symbol{t}
+    m::eq{m::to_string{sym{t}}, symstr{t}};
   metafunction specialized_func{t}
     m::cond{has_specialized_symbol{t}, sym{t},
     m::cond{is_string_family_type{t}, string_append_escape{t},
@@ -104,4 +104,49 @@ private threaded struct deftmpl {
   metafunction union_field_name string_append_noesc;
   metafunction unknown{fam} string_append_unknown;
 }
+
+/*
+private threaded function {t} t string_expect_integral(cstrref& s)
+{
+}
+
+private threaded struct deserialize_tpl {
+  metafunction source_type cstrref;
+  metafunction symstr{t} m::concat{t, "_parse_from_string"};
+  metafunction sym{t} m::symbol{symstr{t}, t};
+  metafunction has_specialized_symbol{t}
+    m::eq{m::to_string{sym{t}}, symstr{t}};
+  metafunction specialized_func{t}
+    m::cond{has_specialized_symbol{t}, sym{t},
+    m::cond{is_string_family_type{t}, string_expect_unescape{t},
+    m::cond{n::is_integral{t}, p::decimal_to_integral,
+    m::cond{n::is_fp{t}, p::decimal_to_fp,
+    m::cond{m::eq{t, bool}, string_to_bool,
+    m::cond{m::eq{t, unit}, string_append_star,
+    0}}}}}};
+  metafunction array_begin string_append_brace_open;
+  metafunction array_end string_append_brace_close;
+  metafunction array_sep string_append_comma;
+  metafunction map_begin string_append_brace_open;
+  metafunction map_end string_append_brace_close;
+  metafunction map_sep string_append_comma;
+  metafunction map_entry_begin string_append_none;
+  metafunction map_entry_end string_append_none;
+  metafunction map_entry_sep string_append_equal;
+  metafunction pointer_begin string_append_brace_open;
+  metafunction pointer_end string_append_brace_close;
+  metafunction struct_begin string_append_brace_open;
+  metafunction struct_end string_append_brace_close;
+  metafunction struct_sep string_append_comma;
+  metafunction struct_entry_begin string_append_none;
+  metafunction struct_entry_end string_append_none;
+  metafunction struct_entry_sep string_append_equal;
+  metafunction struct_field_name string_append_noesc;
+  metafunction union_begin string_append_brace_open;
+  metafunction union_end string_append_brace_close;
+  metafunction union_entry_sep string_append_equal;
+  metafunction union_field_name string_append_noesc;
+  metafunction unknown{fam} string_append_unknown;
+}
+*/
 
