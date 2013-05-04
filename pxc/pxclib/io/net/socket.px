@@ -16,28 +16,28 @@ public multithreaded extern "pxcio::socket_factory" "linear"
   struct socket_factory(io const& iop, bool passive,
     ai::sockaddr_storage const& addr, ai::socktype_t socktype,
     ai::protocol_t protocol, uint listen_backlog, uint connect_timeout_sec,
-    errno_handler& eh) { }
+    errno_t& ern) { }
 
 public threaded extern "pxcio::accept" function
   file accept(socket_acceptor const& sfp, ai::sockaddr_storage& addr_r,
-    errno_handler& ej);
+    errno_t& ern);
 public threaded extern "pxcio::connect" function
-  file connect(socket_connector const& sfp, errno_handler& ej);
+  file connect(socket_connector const& sfp, errno_t& ern);
 public threaded extern "pxcio::socket_set_recv_timeout" function
-  void socket_set_recv_timeout(file const& f, uint sec, errno_handler& eh);
+  void socket_set_recv_timeout(file const& f, uint sec, errno_t& ern);
 public threaded extern "pxcio::socket_set_send_timeout" function
-  void socket_set_send_timeout(file const& f, uint sec, errno_handler& eh);
+  void socket_set_send_timeout(file const& f, uint sec, errno_t& ern);
 
 public threaded function socket_acceptor create_acceptor(io const& iop,
   cstrref const& host, cstrref const& service, ai::family_t family,
   ai::socktype_t socktype, uint backlog, uint timeout_sec)
 {
-  var gaieh = ai::gai_eh(error::handle_throw);
-  var ioeh = errno_handler(error::handle_throw);
+  ai::gai_error_t gaie;
+  io::errno::errno_t ern;
   var ai = ai::addrinfo(iop, host, service, family, socktype, ai::PROTO_UNSPEC, 
-    ai::AI_PASSIVE, gaieh);
+    ai::AI_PASSIVE, gaie);
   var sfp = create_socket_acceptor(iop, ai.get_sockaddr(), socktype,
-    ai::PROTO_UNSPEC, backlog, timeout_sec, ioeh);
+    ai::PROTO_UNSPEC, backlog, timeout_sec, ern);
   return sfp;
 }
 
@@ -45,12 +45,12 @@ public threaded function socket_connector create_connector(io const& iop,
   cstrref const& host, cstrref const& service, ai::family_t family,
   ai::socktype_t socktype, uint timeout_sec)
 {
-  var gaieh = ai::gai_eh(error::handle_throw);
-  var ioeh = errno_handler(error::handle_throw);
+  ai::gai_error_t gaie;
+  io::errno::errno_t ern;
   var ai = ai::addrinfo(iop, host, service, family, socktype, ai::PROTO_UNSPEC, 
-    0, gaieh);
+    0, gaie);
   var sfp = create_socket_connector(iop, ai.get_sockaddr(), socktype,
-    ai::PROTO_UNSPEC, timeout_sec, ioeh);
+    ai::PROTO_UNSPEC, timeout_sec, ern);
   return sfp;
 }
 
@@ -58,18 +58,18 @@ private threaded extern "pxcio::create_socket_acceptor" function
   socket_acceptor create_socket_acceptor(io const& iop,
     ai::sockaddr_storage const& addr, ai::socktype_t socktype,
     ai::protocol_t protocol, uint listen_backlog, uint accept_timeout_sec,
-    errno_handler& eh);
+    errno_t& ern);
 private threaded extern "pxcio::create_socket_connector" function
   socket_connector create_socket_connector(io const& iop,
     ai::sockaddr_storage const& addr, ai::socktype_t socktype,
-    ai::protocol_t protocol, uint connect_timeout_sec, errno_handler& eh);
+    ai::protocol_t protocol, uint connect_timeout_sec, errno_t& ern);
 
 extern "type" inline
 namespace pxcio {
 struct socket_acceptor_rep {
   /* NOTE: must be immutable. */
   socket_acceptor_rep(sockaddr_storage const& addr, int socktype,
-    int protocol, bt_uint backlog, bt_uint timeout_sec, errno_handler& eh);
+    int protocol, bt_uint backlog, bt_uint timeout_sec, errno_t& ern);
   const sockaddr_storage addr;
   const int socktype;
   const int protocol;
@@ -79,7 +79,7 @@ struct socket_acceptor_rep {
 struct socket_connector_rep {
   /* NOTE: must be immutable. */
   socket_connector_rep(sockaddr_storage const& addr, int socktype,
-    int protocol, bt_uint timeout_sec, errno_handler& eh);
+    int protocol, bt_uint timeout_sec, errno_t& ern);
   const sockaddr_storage addr;
   const int socktype;
   const int protocol;
@@ -96,7 +96,7 @@ namespace pxcio {
 extern "fdef" inline
 namespace pxcio {
 static int socket_acceptor_fd(sockaddr_storage const& addr,
-  int socktype, int protocol, int backlog, int timeout_sec, errno_handler& eh)
+  int socktype, int protocol, int backlog, int timeout_sec, errno_t& ern)
 {
   int fd = ::socket(addr.get_family(), socktype, protocol);
   int e = 0;
@@ -115,55 +115,55 @@ static int socket_acceptor_fd(sockaddr_storage const& addr,
     if (fd >= 0) {
       close(fd);
     }
-    ioeh_set(eh, errno);
+    errno_set(ern, errno);
     return -1;
   }
   return fd;
 }
 socket_acceptor_rep::socket_acceptor_rep(sockaddr_storage const& addr,
   int socktype, int protocol, bt_uint backlog, bt_uint timeout_sec,
-  errno_handler& eh)
+  errno_t& ern)
   : addr(addr), socktype(socktype), protocol(protocol),
     timeout_sec(timeout_sec),
     listener(create_file(socket_acceptor_fd(addr, socktype, protocol, backlog,
-      timeout_sec, eh)))
+      timeout_sec, ern)))
 {
 }
 socket_acceptor create_socket_acceptor(::pxcio::io const& iop,
   sockaddr_storage const& addr, int socktype, int protocol, bt_uint backlog,
-  bt_uint timeout_sec, errno_handler& eh)
+  bt_uint timeout_sec, errno_t& ern)
 {
   socket_acceptor sa(new pxcrt::tircval<socket_acceptor_rep>(
-    socket_acceptor_rep(addr, socktype, protocol, backlog, timeout_sec, eh)));
+    socket_acceptor_rep(addr, socktype, protocol, backlog, timeout_sec, ern)));
   return sa;
 }
 socket_connector_rep::socket_connector_rep(sockaddr_storage const& addr,
-  int socktype, int protocol, bt_uint timeout_sec, errno_handler& eh)
+  int socktype, int protocol, bt_uint timeout_sec, errno_t& ern)
   : addr(addr), socktype(socktype), protocol(protocol),
     timeout_sec(timeout_sec)
 {
 }
 socket_connector create_socket_connector(::pxcio::io const& iop,
   sockaddr_storage const& addr, int socktype, int protocol,
-  bt_uint timeout_sec, errno_handler& eh)
+  bt_uint timeout_sec, errno_t& ern)
 {
   socket_connector sc(new pxcrt::tircval<socket_connector_rep>(
-    socket_connector_rep(addr, socktype, protocol, timeout_sec, eh)));
+    socket_connector_rep(addr, socktype, protocol, timeout_sec, ern)));
   return sc;
 }
 file accept(socket_acceptor const& sfp, sockaddr_storage& addr_r,
-  errno_handler& eh)
+  errno_t& ern)
 {
   socket_acceptor_rep& sf = sfp->value$z;
   socklen_t len = addr_r.get_socklen();
   int fd = ::accept(sf.listener->value$z.get(), addr_r.get_sockaddr(), &len);
   if (fd < 0) {
-    ioeh_set(eh, errno);
+    errno_set(ern, errno);
     fd = -1;
   }
   return create_file(fd);
 }
-file connect(socket_connector const& sfp, errno_handler& eh)
+file connect(socket_connector const& sfp, errno_t& ern)
 {
   socket_connector_rep& sf = sfp->value$z;
   int e = 0;
@@ -187,32 +187,32 @@ file connect(socket_connector const& sfp, errno_handler& eh)
     if (fd >= 0) {
       close(fd);
     }
-    ioeh_set(eh, errno);
+    errno_set(ern, errno);
     fd = -1;
   }
   return create_file(fd);
 }
 static void setsockopt_common(int fd, int level, int optname, const void *val,
-  socklen_t valsz, errno_handler& eh)
+  socklen_t valsz, errno_t& ern)
 {
   const int e = ::setsockopt(fd, level, optname, val, valsz);
   if (e != 0) {
-    ioeh_set(eh, errno);
+    errno_set(ern, errno);
   }
 }
-void socket_set_recv_timeout(file const& f, bt_uint sec, errno_handler& eh)
+void socket_set_recv_timeout(file const& f, bt_uint sec, errno_t& ern)
 {
   struct ::timeval tv = { 0 };
   tv.tv_sec = sec;
   setsockopt_common(f->value$z.get(), SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv),
-    eh);
+    ern);
 }
-void socket_set_send_timeout(file const& f, bt_uint sec, errno_handler& eh)
+void socket_set_send_timeout(file const& f, bt_uint sec, errno_t& ern)
 {
   struct ::timeval tv = { 0 };
   tv.tv_sec = sec;
   setsockopt_common(f->value$z.get(), SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv),
-    eh);
+    ern);
 }
 };
 

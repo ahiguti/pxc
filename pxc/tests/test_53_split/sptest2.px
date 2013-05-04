@@ -1,0 +1,39 @@
+namespace sptest2;
+import split -;
+import common -;
+import io::file -;
+import io::errno -;
+import io::buffered -;
+import string::conversion -;
+import meta::common m;
+
+function void t1()
+{
+  string buffer;
+  var msg = "x";
+  errno_t err;
+  var f = system.open("hoge3.txt", io::file::O_RDONLY, 0, err);
+  stream_foreach{file, parse_line}(f, '\n', 4096, err);
+  function bool parse_line(cslice{uchar} line) {
+    line.pop_back(1);
+    string s = "cb ";
+    s.append(msg); // upvalue
+    s.append(" len=");
+    s.append(to_string(line.size()));
+    s.append(" [");
+    s.append(line);
+    s.append("]");
+    println(s);
+    string keystr;
+    int intval;
+    double dblval;
+    split(line, '\t', keystr, intval, dblval);
+    println(keystr);
+    println(intval);
+    println(dblval);
+    return true;
+  }
+}
+
+t1();
+

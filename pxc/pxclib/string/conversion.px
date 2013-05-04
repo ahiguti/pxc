@@ -25,14 +25,24 @@ public threaded function {t} void serialize_to_string(t const& x, string& out)
   serialize{serialize_tpl, t}(x, out);
 }
 
-public metafunction is_string_family_type{t}
-    m::or{
-      m::eq{t, string},
-      m::eq{t, strlit},
-      m::eq{t, strref},
-      m::eq{t, cstrref}};
+public threaded function {t} t from_string(cstrref const& s)
+{
+  if (is_string_family_type{t}) {
+    return s;
+  } else {
+    cstrref s1 = s;
+    size_t epos;
+    return deserialize_from_string{t}(s1, epos);
+  }
+}
 
-public threaded function void bool_to_string(bool v, string& buf)
+public threaded function {t} t deserialize_from_string(cstrref& s,
+  size_t& epos_r)
+{
+  return deserialize{deserialize_tpl, t}(s, epos_r);
+}
+
+private threaded function void bool_to_string(bool v, string& buf)
 {
   if (v) {
     buf.append("true");
@@ -105,11 +115,126 @@ private threaded struct serialize_tpl {
   metafunction unknown{fam} string_append_unknown;
 }
 
-/*
-private threaded function {t} t string_expect_integral(cstrref& s)
+private threaded function void set_error_pos(size_t& epos, size_t pos)
+{
+  if (epos == 0) {
+    epos = pos +1;
+  }
+}
+private threaded function void string_parse_none(cstrref& s, size_t& epos)
 {
 }
-
+private threaded function {lit} bool string_parse_literal_cond(cstrref& s)
+{
+  size_t const sz = lit.size();
+  if (s.size() > sz && s[0 .. sz] == lit) {
+    s.pop_front(sz);
+    return true;
+  } else {
+    return false;
+  }
+}
+private threaded function string string_parse_string_unescape(cstrref& s,
+  size_t& epos)
+{
+  string r;
+  if (s.size() >= 2 && s[0] == '"') {
+    s.pop_front(1);
+    size_t const i = s.find(0, '"');
+    if (i != s.size() && u::url_decode(r, s[0 .. i])) {
+      s.pop_front(i + 1);
+    } else {
+      set_error_pos(epos, s.size());
+    }
+  } else {
+    set_error_pos(epos, s.size());
+  }
+  return r;
+}
+private threaded function {t} t string_parse_integral(cstrref& s, size_t& epos)
+{
+  size_t const sz = s.size();
+  t const r = p::decimal_to_integral{t}(s);
+  if (s.size() == sz) {
+    set_error_pos(epos, sz);
+  }
+  return r;
+}
+private threaded function {t} t string_parse_fp(cstrref& s, size_t& epos)
+{
+  size_t const sz = s.size();
+  t const r = p::decimal_to_fp{t}(s);
+  if (s.size() == sz) {
+    set_error_pos(epos, sz);
+  }
+  return r;
+}
+private threaded function bool string_parse_bool(cstrref& s, size_t& epos)
+{
+  if (string_parse_literal_cond{"true"}(s)) {
+    return true;
+  } else if (string_parse_literal_cond{"false"}(s)) {
+    return false;
+  } else {
+    set_error_pos(epos, s.size());
+    return false;
+  }
+}
+private threaded function void string_parse_symbol(cstrref& s0, cstrref& s,
+  size_t& epos)
+{
+  size_t const sz = s0.size();
+  size_t i = 0;
+  while (i < sz) {
+    uchar const ch = s0[i];
+    if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_') {
+      /* ok */
+    } else {
+      break;
+    }
+    ++i;
+  }
+  if (i == 0) {
+    set_error_pos(epos, s.size());
+  } else {
+    s0.pop_back(sz - i);
+    s.pop_front(i);
+  }
+}
+private threaded function void string_parse_char(cstrref& s, uchar ch,
+  size_t& epos)
+{
+  if (s.size() > 0 && s[0] == ch) {
+    s.pop_front(1);
+  } else {
+    set_error_pos(epos, s.size());
+  }
+}
+private threaded function bool string_parse_char_cond(cstrref& s, uchar ch)
+{
+  if (s.size() > 0 && s[0] == ch) {
+    s.pop_front(1);
+    return true;
+  } else {
+    return false;
+  }
+}
+private threaded function void string_parse_star(cstrref& s, size_t& epos)
+{ string_parse_char(s, '*', epos); }
+private threaded function void string_parse_brace_open(cstrref& s,
+  size_t& epos)
+{ string_parse_char(s, '{', epos); }
+private threaded function void string_parse_brace_close(cstrref& s,
+  size_t& epos)
+{ string_parse_char(s, '}', epos); }
+private threaded function bool string_parse_brace_close_cond(cstrref& s)
+{ return string_parse_char_cond(s, '}'); }
+private threaded function void string_parse_comma(cstrref& s, size_t& epos)
+{ string_parse_char(s, ',', epos); }
+private threaded function void string_parse_equal(cstrref& s, size_t& epos)
+{ string_parse_char(s, '=', epos); }
+private threaded function void string_parse_unknown(cstrref& s, size_t& epos)
+{ string_parse_char(s, '?', epos); }
 private threaded struct deserialize_tpl {
   metafunction source_type cstrref;
   metafunction symstr{t} m::concat{t, "_parse_from_string"};
@@ -118,35 +243,37 @@ private threaded struct deserialize_tpl {
     m::eq{m::to_string{sym{t}}, symstr{t}};
   metafunction specialized_func{t}
     m::cond{has_specialized_symbol{t}, sym{t},
-    m::cond{is_string_family_type{t}, string_expect_unescape{t},
-    m::cond{n::is_integral{t}, p::decimal_to_integral,
-    m::cond{n::is_fp{t}, p::decimal_to_fp,
-    m::cond{m::eq{t, bool}, string_to_bool,
-    m::cond{m::eq{t, unit}, string_append_star,
+    m::cond{is_string_family_type{t}, string_parse_string_unescape,
+    m::cond{n::is_integral{t}, string_parse_integral{t},
+    m::cond{n::is_fp{t}, string_parse_fp{t},
+    m::cond{m::eq{t, bool}, string_parse_bool,
+    m::cond{m::eq{t, unit}, string_parse_star,
     0}}}}}};
-  metafunction array_begin string_append_brace_open;
-  metafunction array_end string_append_brace_close;
-  metafunction array_sep string_append_comma;
-  metafunction map_begin string_append_brace_open;
-  metafunction map_end string_append_brace_close;
-  metafunction map_sep string_append_comma;
-  metafunction map_entry_begin string_append_none;
-  metafunction map_entry_end string_append_none;
-  metafunction map_entry_sep string_append_equal;
-  metafunction pointer_begin string_append_brace_open;
-  metafunction pointer_end string_append_brace_close;
-  metafunction struct_begin string_append_brace_open;
-  metafunction struct_end string_append_brace_close;
-  metafunction struct_sep string_append_comma;
-  metafunction struct_entry_begin string_append_none;
-  metafunction struct_entry_end string_append_none;
-  metafunction struct_entry_sep string_append_equal;
-  metafunction struct_field_name string_append_noesc;
-  metafunction union_begin string_append_brace_open;
-  metafunction union_end string_append_brace_close;
-  metafunction union_entry_sep string_append_equal;
-  metafunction union_field_name string_append_noesc;
-  metafunction unknown{fam} string_append_unknown;
+  metafunction array_begin string_parse_brace_open;
+  metafunction array_end_cond string_parse_brace_close_cond;
+  metafunction array_sep string_parse_comma;
+  metafunction map_begin string_parse_brace_open;
+  metafunction map_end_cond string_parse_brace_close_cond;
+  metafunction map_sep string_parse_comma;
+  metafunction map_entry_begin string_parse_none;
+  metafunction map_entry_end string_parse_none;
+  metafunction map_entry_sep string_parse_equal;
+  metafunction pointer_begin string_parse_brace_open;
+  metafunction pointer_end string_parse_brace_close;
+  metafunction struct_begin string_parse_brace_open;
+  metafunction struct_end_cond string_parse_brace_close_cond;
+  metafunction struct_sep string_parse_comma;
+  metafunction struct_entry_begin string_parse_none;
+  metafunction struct_entry_end string_parse_none;
+  metafunction struct_entry_sep string_parse_equal;
+  metafunction struct_field_name string_parse_symbol;
+  metafunction union_begin string_parse_brace_open;
+  metafunction union_end_cond string_parse_brace_close_cond;
+  metafunction union_sep string_parse_comma;
+  metafunction union_entry_begin string_parse_none;
+  metafunction union_entry_end string_parse_none;
+  metafunction union_entry_sep string_parse_equal;
+  metafunction union_field_name string_parse_symbol;
+  metafunction unknown{fam} string_parse_unknown;
 }
-*/
 

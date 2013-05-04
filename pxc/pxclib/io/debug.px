@@ -1,0 +1,30 @@
+namespace io::debug;
+import numeric::integral -;
+import container::string -;
+
+public threaded function {t} void debug_log(cstrref const& msg, t const& x)
+{
+  string s = msg;
+  s.push_back('\t');
+  if (is_string_family_type{t}) {
+    s.append(x);
+  } else {
+    string::conversion::serialize_to_string(x, s);
+  }
+  s.push_back('\n');
+  debug_log_internal(s);
+}
+
+private threaded extern "pxcio::debug_log_internal"
+  function void debug_log_internal(cstrref const& s);
+
+extern "fdef" inline
+#include <unistd.h>
+namespace pxcio {
+using namespace pxcrt;
+void debug_log_internal(cstrref const& s)
+{
+  write(2, s.rawarr(), s.size());
+}
+};
+

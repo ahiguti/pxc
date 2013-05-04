@@ -45,6 +45,7 @@ public extern "@is_asignable_type" "@is_asignable_type"
 
 public extern "@field_types" "@field_types" struct {t} field_types { }
 public extern "@field_names" "@field_names" struct {t} field_names { }
+public extern "@fields" "@fields" struct {t} fields { }
 public extern "@member_functions" "@member_functions"
   struct {t} member_functions { }
 
@@ -65,6 +66,7 @@ public extern "@@quote" "@@quote" struct {x} quote { }
 
 public extern "@list" "@list" struct {x, y} list { }
 public extern "@size" "@size" struct {x} size { }
+public extern "@slice" "@slice" struct {lst, i0, i1} slice { }
 public extern "@at" "@at" struct {lst, idx} at { }
 public extern "@seq" "@seq" struct {x, y} seq { }
 public extern "@map" "@map" struct {lists, mf, args} map { }
@@ -86,6 +88,8 @@ public extern "@lt" "@lt" struct {x, y} lt { }
 public extern "@ge" "@ge" struct {x, y} ge { }
 public extern "@le" "@le" struct {x, y} le { }
 
+public metafunction ne{x, y} not{eq{x, y}};
+
 public metafunction at0{lst} at{lst, 0};
 public metafunction at1{lst} at{lst, 1};
 public metafunction at2{lst} at{lst, 2};
@@ -96,18 +100,26 @@ public metafunction at6{lst} at{lst, 6};
 public metafunction at7{lst} at{lst, 7};
 public metafunction at8{lst} at{lst, 8};
 public metafunction at9{lst} at{lst, 9};
+public metafunction empty{lst} eq{size{lst}, 0};
 
-private metafunction fix_step{v0, v1, f}
-  cond{eq{v0, v1}, v0, fix_step{v1, f{v1}, f}};
-public metafunction fix{v, f} fix_step{v, f{v}, f};
+public metafunction fix{v, f} fix_iter{v, f{v}, f};
+  private metafunction fix_iter{v0, v1, f}
+    cond{eq{v0, v1}, v0, fix_iter{v1, f{v1}, f}};
 
-private metafunction is_import_pub{ent} eq{at1{ent}, 0};
-private metafunction imports_name_pub{ns}
-  map{filter{imports{ns}, is_import_pub}, at0};
-private metafunction imports_name{ns} map{imports{ns}, at0};
-private metafunction imports_init{ns}
-  sort{unique{join_all{list{ns}, imports_name{ns}}}};
-private metafunction imports_step{lst}
-  sort{unique{join_all{lst, join{map{lst, imports_name_pub}}}}};
-public metafunction imports_transitive{ns} fix{imports_init{ns}, imports_step};
+public metafunction imports_transitive{ns} fix{imports_init{ns}, imports_iter};
+  private metafunction is_import_pub{ent} eq{at1{ent}, 0};
+  private metafunction imports_name_pub{ns}
+    map{filter{imports{ns}, is_import_pub}, at0};
+  private metafunction imports_name{ns} map{imports{ns}, at0};
+  private metafunction imports_init{ns}
+    sort{unique{join_all{list{ns}, imports_name{ns}}}};
+  private metafunction imports_iter{lst}
+    sort{unique{join_all{lst, join{map{lst, imports_name_pub}}}}};
+
+public metafunction field_type{t, fname}
+  field_type_iter{field_types{t}, field_names{t}, fname};
+  private metafunction field_type_iter{tlst, nlst, n}
+    cond{eq{at0{nlst}, n},
+      at0{tlst},
+      field_type_iter{slice{tlst, 1}, slice{nlst, 1}, n}};
 

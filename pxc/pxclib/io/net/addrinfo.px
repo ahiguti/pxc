@@ -3,7 +3,6 @@ public import numeric::integral -;
 public import container::string -;
 public import container::array -;
 public import io -;
-public import error;
 
 public tsvaluetype extern "int" "extenum" struct family_t { }
 public tsvaluetype extern "int" "extenum" struct socktype_t { }
@@ -25,14 +24,13 @@ public extern "AI_NUMERICHOST"	ai_flags_t AI_NUMERICHOST;
 public extern "AI_NUMERICSERV"	ai_flags_t AI_NUMERICSERV;
 
 public tsvaluetype extern "int" "extenum" struct gai_error_t { }
-public metafunction gai_eh error::error_handler{gai_error_t};
 public threaded extern "pxcio::gai_error_t_append_to_string"
   function void gai_error_t_append_to_string(gai_error_t x, string& s);
 
 public multithreaded extern "pxcio::addrinfo"
 struct addrinfo(io const& iop, cslice{uchar} const& node,
   cslice{uchar} const& service, family_t ai_family, socktype_t ai_socktype,
-  protocol_t ai_protocol, ai_flags_t ai_flags, gai_eh& eh) {
+  protocol_t ai_protocol, ai_flags_t ai_flags, gai_error_t& gaie) {
   public extern "get_sockaddr" function sockaddr_storage get_sockaddr() const;
   public extern "get_canonname" function string get_canonname() const;
   public extern "empty" function bool empty() const;
@@ -50,8 +48,6 @@ extern "type" inline
 #include <sys/socket.h>
 #include <netdb.h>
 #include <netinet/in.h>
-namespace error$n
-  { struct error_handler$s$tp1$io$$net$$addrinfo$n$$gai_error_t$s; };
 namespace pxcio {
 using namespace pxcrt;
 struct sockaddr_storage {
@@ -65,11 +61,9 @@ struct sockaddr_storage {
   socklen_t get_socklen() const { return sizeof(sto); }
   ::sockaddr_storage sto;
 };
-typedef ::error$n::error_handler$s$tp1$io$$net$$addrinfo$n$$gai_error_t$s
-  gai_eh;
 struct addrinfo {
   addrinfo(::pxcio::io const& iop, cstrref const& node, cstrref const& service,
-    int ai_family, int ai_socktype, int ai_protocol, int ai_flags, gai_eh& eh);
+    int ai_family, int ai_socktype, int ai_protocol, int ai_flags, int& gaie);
   ~addrinfo();
   bt_bool empty() const;
   void next();
@@ -87,7 +81,7 @@ private:
 extern "fdef" inline
 namespace pxcio {
 using namespace pxcrt;
-inline void gai_eh_set(gai_eh& eh, int err) { eh.set$f(err); }
+inline void gaie_set(int& gaie, int err) { if (gaie == 0) { gaie = err; } }
 void gai_error_t_append_to_string(int err, bt_string& s)
 {
   const char *p = gai_strerror(err);
@@ -95,7 +89,7 @@ void gai_error_t_append_to_string(int err, bt_string& s)
 }
 addrinfo::addrinfo(::pxcio::io const& iop, cstrref const& node,
   cstrref const& service, int ai_family, int ai_socktype, int ai_protocol,
-  int ai_flags, gai_eh& eh)
+  int ai_flags, int& gaie)
   : ai(0), cur(0)
 {
   ::addrinfo hints = { };
@@ -117,7 +111,7 @@ addrinfo::addrinfo(::pxcio::io const& iop, cstrref const& node,
       ::freeaddrinfo(ai);
       ai = 0;
     }
-    gai_eh_set(eh, err);
+    gaie_set(gaie, err);
   }
   cur = ai;
 }

@@ -496,8 +496,11 @@ static term eval_term_internal2(const term& tm, bool targs_evaluated,
       arena_error_throw(pos, "too many template arguments: '%s'",
 	term_tostr(tm, term_tostr_sort_humanreadable).c_str());
     } else if (tlarg_len < tparams_len) {
+      return tm; /* not filled yet */ 
+#if 0
       arena_error_throw(pos, "too few template arguments: '%s'",
 	term_tostr(tm, term_tostr_sort_humanreadable).c_str());
+#endif
     }
     if (tparams_len != 0) {
       term_list tlev = eval_term_list_internal(targs, targs_evaluated, env,
