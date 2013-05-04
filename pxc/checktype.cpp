@@ -1780,8 +1780,7 @@ void expr_funccall::check_type(symbol_table *lookup)
       term_tostr_human(func_te).c_str());
   }
   if (is_vararg_function(func_te.get_expr()) &&
-    func_te.get_args()->size() == 0 &&
-    get_tparam_length(func_te.get_expr()) != 0) {
+    func_te.get_args()->size() < get_tparam_length(func_te.get_expr())) {
     /* type inference for generic vararg function */
     term_list tl;
     typedef std::list<expr_i *> arglist_type;
@@ -1793,7 +1792,7 @@ void expr_funccall::check_type(symbol_table *lookup)
       tl.push_back((*i)->resolve_texpr());
     }
     term tml(tl); /* metalist */
-    term_list tl2;
+    term_list tl2 = *func_te.get_args();
     tl2.push_back(tml);
     func_te = eval_term(term(func_te.get_expr(), tl2));
     set_type_inference_result_for_funccall(this, term_get_instance(func_te));
@@ -1809,25 +1808,13 @@ void expr_funccall::check_type(symbol_table *lookup)
     }
   }
   const term_list *const func_te_args = func_te.get_args();
-  expr_i *const func_inst = term_get_instance(func_te);
+  expr_i *const func_p_inst = term_get_instance(func_te);
+    /* possibly instantiated */
   /* TODO: fix the copy-paste of passing_root_requirement calls */
   if (is_function(func_te)) {
     /* function call */
-    expr_funcdef *efd = ptr_down_cast<expr_funcdef>(func_inst);
-    /* add callee_funcs */
-    expr_i *const fr = get_current_frame_expr(symtbl_lexical);
-    if (fr != 0 && fr->get_esort() == expr_e_funcdef &&
-      func->get_esort() != expr_e_op) { /* add non-local lookup only. TBD. */
-      expr_funcdef *const curfd = ptr_down_cast<expr_funcdef>(fr);
-      if (curfd->callee_set.find(efd) == curfd->callee_set.end()) {
-	curfd->callee_set.insert(efd);
-	curfd->callee_vec.push_back(efd);
-	#if 0
-	fprintf(stderr, "%s calls %s (direct)\n", curfd->sym, efd->sym);
-	#endif
-      }
-    }
-    expr_argdecls *ad = efd->block->get_argdecls();
+    expr_funcdef *efd_p_inst = ptr_down_cast<expr_funcdef>(func_p_inst);
+    expr_argdecls *ad = efd_p_inst->block->get_argdecls();
     typedef std::list<expr_i *> arglist_type;
     arglist_type arglist;
     append_hidden_this(func, arglist);
@@ -1848,7 +1835,7 @@ void expr_funccall::check_type(symbol_table *lookup)
 	arena_error_push(this, "invalid conversion from %s to %s",
 	  s0.c_str(), s1.c_str());
 	arena_error_push(this, "  initializing argument %u of '%s'",
-	  argcnt, efd->sym);
+	  argcnt, efd_p_inst->sym);
       }
       /* check lvalue and root argument expressions */
       passing_root_requirement(ad->passby, this, *j, false);
@@ -1857,41 +1844,45 @@ void expr_funccall::check_type(symbol_table *lookup)
       ++argcnt;
     }
     if (func->get_esort() == expr_e_op &&
-      efd->is_virtual_or_member_function()) {
+      efd_p_inst->is_virtual_or_member_function()) {
       /* check lvalue and root the foo of foo.bar(...) */
       expr_i *const thisexpr = ptr_down_cast<expr_op>(func)->arg0;
       passing_root_requirement(
-	efd->is_const ? passby_e_const_reference : passby_e_mutable_reference,
+	efd_p_inst->is_const
+	  ? passby_e_const_reference : passby_e_mutable_reference,
 	this, thisexpr, false);
     }
     if (j != arglist.end()) {
-      arena_error_push(this, "too many argument for '%s'", efd->sym);
+      arena_error_push(this, "too many argument for '%s'", efd_p_inst->sym);
     } else if (ad != 0) {
-      arena_error_push(this, "too few argument for '%s'", efd->sym);
+      arena_error_push(this, "too few argument for '%s'", efd_p_inst->sym);
     }
-    if (efd->block->tinfo.has_tparams() &&
+    expr_i *einst = 0;
+    if (efd_p_inst->block->tinfo.has_tparams() &&
       (func_te_args == 0 || func_te_args->empty())) {
       /* instantiate template function automatically */
       DBG(fprintf(stderr, "func is uninstantiated\n"));
-      expr_i *const einst = create_tpfunc_texpr(efd, tvmap, this);
+      einst = create_tpfunc_texpr(efd_p_inst, tvmap, this);
       set_type_inference_result_for_funccall(this, einst);
       expr_funcdef *efd_inst = ptr_down_cast<expr_funcdef>(einst);
       type_of_this_expr = efd_inst->get_rettype();
     } else {
+      einst = efd_p_inst;
       std::string err_mess;
-      if (!check_term_validity(efd->get_value_texpr(), true, true, true,
+      if (!check_term_validity(efd_p_inst->get_value_texpr(), true, true, true,
 	this, err_mess)) {
-	// abort();
 	arena_error_push(this, "incomplete template expression: '%s' %s",
-	  term_tostr_human(efd->get_value_texpr()).c_str(), err_mess.c_str());
+	  term_tostr_human(efd_p_inst->get_value_texpr()).c_str(),
+	  err_mess.c_str());
       }
-      type_of_this_expr = apply_tvmap(efd->get_rettype(), tvmap);
+      type_of_this_expr = apply_tvmap(efd_p_inst->get_rettype(), tvmap);
     }
     funccall_sort = funccall_e_funccall;
     const bool call_wo_obj = func->get_esort() != expr_e_op;
     expr_funcdef *const caller_memfunc = get_up_member_func(symtbl_lexical);
     if (call_wo_obj && caller_memfunc != 0 && caller_memfunc->is_const) {
-      if (efd->is_virtual_or_member_function() && !efd->is_const) {
+      if (efd_p_inst->is_virtual_or_member_function() &&
+	!efd_p_inst->is_const) {
 	arena_error_throw(this,
 	  "calling a non-const member function from a const member function");
       }
@@ -1906,7 +1897,7 @@ void expr_funccall::check_type(symbol_table *lookup)
 	    /* caller is not a member function. can be a struct constr. */
       /* callee's struct context */
       expr_i *const callee_memfunc_parent
-	= efd->is_virtual_or_member_function();
+	= efd_p_inst->is_virtual_or_member_function();
       if (caller_memfunc_parent == 0 ||
 	caller_memfunc_parent->get_esort() != expr_e_struct) {
 	/* if caller is not inside a struct context, it's a function which
@@ -1919,17 +1910,17 @@ void expr_funccall::check_type(symbol_table *lookup)
 	  "calling a member function without an object");
       }
     }
-      #if 0
-      expr_struct *const caller_memfunc_struct =
-	caller_memfunc->is_member_function(); /* IMF OK */
-      /* moved to check_tpup_thisptr_constness() */
-      if (efd->tpup_thisptr == caller_memfunc_struct &&
-	!efd->tpup_thisptr_nonconst) {
-	arena_error_throw(this,
-	  "calling a non-const member function '%s' from a const "
-	  "member function", term_tostr_human(efd->value_texpr).c_str());
+    /* add callee_funcs */
+    expr_i *const fr = get_current_frame_expr(symtbl_lexical);
+    if (fr != 0 && fr->get_esort() == expr_e_funcdef &&
+      func->get_esort() != expr_e_op) { /* add non-local lookup only. TBD. */
+      expr_funcdef *const efd_inst = ptr_down_cast<expr_funcdef>(einst);
+      expr_funcdef *const curfd = ptr_down_cast<expr_funcdef>(fr);
+      if (curfd->callee_set.find(efd_inst) == curfd->callee_set.end()) {
+	curfd->callee_set.insert(efd_inst);
+	curfd->callee_vec.push_back(efd_inst);
       }
-      #endif
+    }
     DBG(fprintf(stderr,
       "expr=[%s] type_of_this_expr=[%s] tvmap.size()=%d "
       "arglist.size()=%d funccall\n",
@@ -1954,14 +1945,13 @@ void expr_funccall::check_type(symbol_table *lookup)
     }
     return;
   }
-  // if (func_inst->get_esort() == expr_e_struct) {
-  if (func_inst != 0 && func_inst->get_esort() == expr_e_struct) {
+  if (func_p_inst != 0 && func_p_inst->get_esort() == expr_e_struct) {
     /* struct constructor */
     tvmap_type tvmap;
-    expr_struct *est = ptr_down_cast<expr_struct>(func_inst);
-    if (est->has_userdefined_constr()) {
+    expr_struct *est_p_inst = ptr_down_cast<expr_struct>(func_p_inst);
+    if (est_p_inst->has_userdefined_constr()) {
       /* user defined constructor */
-      expr_argdecls *ad = est->block->get_argdecls();
+      expr_argdecls *ad = est_p_inst->block->get_argdecls();
       typedef std::list<expr_i *> arglist_type;
       arglist_type arglist;
       append_comma_sep_list(arg, arglist);
@@ -1979,7 +1969,7 @@ void expr_funccall::check_type(symbol_table *lookup)
 	  arena_error_push(this, "invalid conversion from %s to %s",
 	    s0.c_str(), s1.c_str());
 	  arena_error_push(this, "  initializing argument %u of '%s'",
-	    argcnt, est->sym);
+	    argcnt, est_p_inst->sym);
 	}
 	passing_root_requirement(ad->passby, this, *j, false);
 	++j;
@@ -1987,24 +1977,22 @@ void expr_funccall::check_type(symbol_table *lookup)
 	++argcnt;
       }
       if (j != arglist.end()) {
-	arena_error_push(this, "too many argument for '%s'", est->sym);
+	arena_error_push(this, "too many argument for '%s'", est_p_inst->sym);
       } else if (ad != 0) {
-	arena_error_push(this, "too few argument for '%s'", est->sym);
+	arena_error_push(this, "too few argument for '%s'", est_p_inst->sym);
       }
-    } else if (est->cname != 0) {
+    } else if (est_p_inst->cname != 0) {
       typedef std::list<expr_i *> arglist_type;
       arglist_type arglist;
       append_hidden_this(func, arglist);
       append_comma_sep_list(arg, arglist);
       if (is_cm_pointer_family(func_te)) {
 	if (arglist.size() != 1) {
-	  arena_error_push(this, "too many argument for '%s'", est->sym);
+	  arena_error_push(this, "too many argument for '%s'",
+	    est_p_inst->sym);
 	}
 	expr_i *const j = arglist.front();
 	if (is_cm_pointer_family(j->resolve_texpr())) {
-#if 0
-fprintf(stderr, "ptr to ptr? %s\n", dump(0).c_str());
-#endif
 	  term tgto = get_pointer_target(func_te);
 	  term tgfrom = get_pointer_target(j->resolve_texpr());
 	  if (tgto == tgfrom &&
@@ -2051,9 +2039,10 @@ fprintf(stderr, "ptr to ptr? %s\n", dump(0).c_str());
       } else if (get_family(func_te) == typefamily_e_darray) {
 	/* darray constructor */
 	if (arglist.size() < 2) {
-	  arena_error_throw(this, "too few argument for '%s'", est->sym);
+	  arena_error_throw(this, "too few argument for '%s'", est_p_inst->sym);
 	} else if (arglist.size() > 2) {
-	  arena_error_throw(this, "too many argument for '%s'", est->sym);
+	  arena_error_throw(this, "too many argument for '%s'",
+	    est_p_inst->sym);
 	}
 	check_unsigned_integral_expr(0, arglist.front());
 	expr_i *const j = *(++arglist.begin());
@@ -2068,7 +2057,7 @@ fprintf(stderr, "ptr to ptr? %s\n", dump(0).c_str());
 	  arena_error_push(this, "invalid conversion from %s to %s",
 	    s0.c_str(), s1.c_str());
 	  arena_error_push(this, "  initializing argument %u of '%s'",
-	    0, est->sym);
+	    0, est_p_inst->sym);
 	}
 	passing_root_requirement_fast(this, j, false);
 	  /* root the arg. */
@@ -2082,7 +2071,8 @@ fprintf(stderr, "ptr to ptr? %s\n", dump(0).c_str());
 	  arena_error_throw(this, "using an array without type parameter");
 	}
 	if (arglist.size() != 1) {
-	  arena_error_throw(this, "too many argument for '%s'", est->sym);
+	  arena_error_throw(this, "too many argument for '%s'",
+	    est_p_inst->sym);
 	}
 	expr_i *const j = arglist.front();
 	check_unsigned_integral_expr(0, j);
@@ -2094,9 +2084,11 @@ fprintf(stderr, "ptr to ptr? %s\n", dump(0).c_str());
       } else if (is_numeric_type(func_te)) {
 	/* explicit conversion to external numeric type */
 	if (arglist.size() < 1) {
-	  arena_error_throw(this, "too few argument for '%s'", est->sym);
+	  arena_error_throw(this, "too few argument for '%s'",
+	    est_p_inst->sym);
 	} else if (arglist.size() > 1) {
-	  arena_error_throw(this, "too many argument for '%s'", est->sym);
+	  arena_error_throw(this, "too many argument for '%s'",
+	    est_p_inst->sym);
 	}
 	expr_i *const j = arglist.front();
 	if (!convert_type(j, func_te, tvmap)) {
@@ -2111,13 +2103,14 @@ fprintf(stderr, "ptr to ptr? %s\n", dump(0).c_str());
 	funccall_sort = funccall_e_struct_constructor;
       } else {
 	arena_error_push(this,
-	  "can't call a constructor for an extern struct '%s'", est->sym);
+	  "can't call a constructor for an extern struct '%s'",
+	    est_p_inst->sym);
       }
     } else {
       /* plain constructor */
       typedef std::list<expr_var *> flds_type;
       flds_type flds;
-      est->get_fields(flds);
+      est_p_inst->get_fields(flds);
       typedef std::list<expr_i *> arglist_type;
       arglist_type arglist;
       append_comma_sep_list(arg, arglist);
@@ -2131,7 +2124,7 @@ fprintf(stderr, "ptr to ptr? %s\n", dump(0).c_str());
 	  arena_error_push(this, "invalid conversion from %s to %s",
 	    s0.c_str(), s1.c_str());
 	  arena_error_push(this, "  initializing argument %u of '%s'",
-	    argcnt, est->sym);
+	    argcnt, est_p_inst->sym);
 	}
 	passing_root_requirement(passby_e_const_reference, this, *j, false);
 	++i;
@@ -2139,16 +2132,16 @@ fprintf(stderr, "ptr to ptr? %s\n", dump(0).c_str());
 	++argcnt;
       }
       if (j != arglist.end()) {
-	arena_error_push(this, "too many argument for '%s'", est->sym);
+	arena_error_push(this, "too many argument for '%s'", est_p_inst->sym);
       } else if (i != flds.end() && !arglist.empty()) {
-	arena_error_push(this, "too few argument for '%s'", est->sym);
+	arena_error_push(this, "too few argument for '%s'", est_p_inst->sym);
       }
     }
-    if (est->block->tinfo.has_tparams() &&
+    if (est_p_inst->block->tinfo.has_tparams() &&
       (func_te_args == 0 || func_te_args->empty())) {
       /* instantiate template struct automatically */
       DBG(fprintf(stderr, "type is uninstantiated\n"));
-      expr_i *const einst = create_tpfunc_texpr(est, tvmap, this);
+      expr_i *const einst = create_tpfunc_texpr(est_p_inst, tvmap, this);
       expr_i *real_func_expr = func;
       if (real_func_expr != 0 && real_func_expr->get_sdef() != 0) {
 	real_func_expr->get_sdef()->set_evaluated(einst->get_value_texpr());
@@ -2159,7 +2152,7 @@ fprintf(stderr, "ptr to ptr? %s\n", dump(0).c_str());
 	arena_error_throw(this, "not a template type");
       }
     } else {
-      type_of_this_expr = apply_tvmap(est->value_texpr, tvmap);
+      type_of_this_expr = apply_tvmap(est_p_inst->value_texpr, tvmap);
     }
     funccall_sort = funccall_e_struct_constructor;
     DBG(fprintf(stderr, "expr=[%s] type_of_this_expr=[%s] strcon\n",

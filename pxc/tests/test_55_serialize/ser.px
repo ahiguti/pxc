@@ -1,0 +1,32 @@
+namespace ser;
+import common -;
+import string::deserialize -;
+import string::conversion -;
+
+struct foo {
+  int x;
+  string y;
+}
+
+function void t1()
+{
+  vector{foo} a;
+  a.push_back(foo(55, "abc"));
+  a.push_back(foo(88, "xyz"));
+  println(a);
+  string s = to_string(a);
+  cstrref sr = s;
+  size_t epos;
+  vector{foo} b = deserialize_from_string{vector{foo}}(sr, epos);
+  println(b);
+  if (epos == 0) {
+    println("no error");
+  }
+  string s1 = to_string(b);
+  if (s == s1) {
+    println("string eq");
+  }
+}
+
+t1();
+

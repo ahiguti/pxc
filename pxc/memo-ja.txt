@@ -3,30 +3,17 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- decimal_to_integralなどを, cstrref&を取って先頭だけ読む方式に
+- まずmarshal by reference無しのRPC作る
 
-- 菱形継承でc++エラーになるはず。interface間継承はvirtualに(done)
+- meta::common::fields(done)
 
 - interface間継承のupcastがコンパイルエラーになる
-
-- from_string仕様きめ
 
 - string/util.px split
 
 - create_fooに統一する？
 
-- obj.func は、その場所からプレフィックス無しでtobj_funcという名前が
-  引ければそれに解決する(done)
-
 - tagged unionの$eと$uをやめる。gdbで見るとき困る。
-
-- variant: pointerの参照外しは、その先がcopyableであるときだけ可能。
-- variant: pxc側の継承を反映させられないか。
-- variant: オブジェクト参照を取る関数を、ポインタを渡して自動参照外し
-  して実行できるようにできないか
-  - stub_struct{t}へidynamicからdowncastし、それの.valueを取っている
-  - そのかわりにstub_struct{ptr{t}}へidynamicからdowncastし、それの
-    .valueを取り、それを参照外ししたい。
 
 - downcastは多相型でないとc++でエラーになるはず
 
@@ -76,9 +63,6 @@ FIXME/TODO M1
 
 - byvalueを要求されたら参照を返す関数のかわりに値を返す関数をemit
   無効化されるのを防ぐため。-> 確認
-
-ためしにany型作ってみる
-
 
 - lockobject{int} lck = sobj;  これが通るように
 - var lck = lockobject(sobj); これも
@@ -172,6 +156,8 @@ FIXME/TODO M6
 ---------------------------------------------------------------------
 TODO
 
+- expandを再帰的に展開できるようにすればbinary searchのインライン化
+  が可能になるか？
 - meta lambda
 - 可変長引数の代わりとなる演算子を決めよ。 cout << ... のようなもの。
 - 配列範囲チェックを非デバッグ時等に無効化するプラグマ?
@@ -323,6 +309,12 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- deserialize: e_rはエラー時の残り長さ+1の値をセットする(done)
+- decimal_to_integralなどを, cstrref&を取って先頭だけ読む方式に(done)
+- 菱形継承でc++エラーになるはず。interface間継承はvirtualに(done)
+- from_string仕様きめ(done)
+- obj.func は、その場所からプレフィックス無しでtobj_funcという名前が
+  引ければそれに解決する(done)
 - nodefconファミリが必要。コンストラクトできないがコピー可能。(done)
 - metaif -> cond (done)
 - metamap -> map (done)
@@ -845,63 +837,6 @@ struct proxy_stub{ifoo} : ifoo : {
 }
 
 ---------------------------------------------------------------------
-ORBに必要なもの
-
-・参照でmarshalすることができるのはインタフェースだけ
-  それ以外はdynamic_object interfaceを使えば参照でmarshal可能
-  dynamic_objectはIDispatch的なもの
-  interfaece ifoo {
-    function int foo(int x);
-    function string bar(string x, string y);
-  }
-・リモート呼び出しでインタフェースを実装するクラス(stub)
-  struct proxy_stub{ifoo} : ifoo : {
-    ptr{invoke} handle;
-    function int foo(int x) {
-      xs = serialize(x);
-      rs = remote_call(xs);
-      return deserialize(rs);
-    }
-    function string bar(string x, string y) {
-      xs = serialize(x);
-      ys = serialize(y);
-      rs = remote_call(xs, ys);
-      return deserialize(rs);
-    }
-  }
-  これは現状pxcのリフレクションでは実装できない。
-  struct proxy_stub{ifoo} : ifoo : {
-    ptr{invoke} handle;
-    function foreach (func : ifoo) {
-    }
-  }
-・サーバ側でリクエストを受けてオブジェクトへメソッド呼び出しを実行
-  (skeleton)
-  - serverは接続毎にオブジェクトプールを持ち、リクエストを受けたら
-    対象のオブジェクトに対してメソッドを実行し、レスポンスを返す
-  struct proxy_skeleton{ifoo} : skeleton: {
-    ptr{ifoo} realobject;
-    function void invoke(skeleton_invoke& argret) {
-      if (argret.func_id == 0) {
-	x = deserialize(argret.arg[0]);
-	r = realobject->foo(x);
-	argret.ret = serialize(r);
-      }
-    }
-  }
-  これはpxcのリフレクションで実装できる
- 
-- @expandの実装
-- strseq: seqの各々に文字列prefixを付ける
-- foldfe, fldfeを廃止
-
-@expandのfoldは、式の場合はcomma_op連結を作り、argdeclsのときはargdecls
-を作り、stmtsのときはstmtsを作る。
-@expand 式 のケース
-  a, b, @expand, d, e
-  この場合expandはcomma opの子であり、そのheadになっている
-
----------------------------------------------------------------------
 expand 文
 
 - expand(i, sym : metalist) [ stmt_list ]
@@ -1058,7 +993,136 @@ stub{ibar}
 
 
 ---------------------------------------------------------------------
-serialize
+from_string
+
+引数には読み込みバッファの末尾までを渡す。パース失敗したら残りの長さ
+を例外に含める。
+
+string "hoge"
+number 0.1
+struct, union {fldname0 = value0, fldname1 = value1}
+pointer {value}
+map {key0 = value0, key1 = value1}
+array {value0, value1}
+
+---------------------------------------------------------------------
+from_stringを変更に強くする
+
+stringは引用符使わない
+
+structはfield名の順にserializeする。
+deserializeの際にもfield名の順に。
+expand (fld : fields) {
+  fldname = deserialize_symbol();
+  if (fldname < fld) {
+    このデータは空読み。
+  } else if (fldname > fld) {
+    fldnameをunreadして次のfldへ。
+  } else {
+    このデータをdeserialize。
+  }
+}
+
+---------------------------------------------------------------------
+ORBに必要なもの
+
+・参照でmarshalすることができるのはインタフェースだけ
+  それ以外はdynamic_object interfaceを使えば参照でmarshal可能
+  dynamic_objectはIDispatch的なもの
+  interfaece ifoo {
+    function int foo(int x);
+    function string bar(string x, string y);
+  }
+・参照でmarshalするかどうかは、remote interfaceを実装しているかどうか
+  で決める。remote interface自体は何もメソッドを持たない。
+・リモート呼び出しでインタフェースを実装するクラス(stub)
+  interface ifoo {
+    function int foo(int x);
+    function string bar(string x, string y);
+  }
+  interface stub { /* からっぽ */ }
+  struct stub_ifoo <ifoo, stub> {
+    ptr{orb_handle} const hnd;
+    function int foo(int x) {
+      marshal{int}(*hnd, x);
+      remote_call(*hnd, "foo");
+      int r = unmarshal{int}(*hnd);
+      remote_call_end(*hnd);
+      return r;
+    }
+    function string bar(string x, string y) {
+      marshal{string}(*hnd, x);
+      marshal{string}(*hnd, y);
+      remote_call(*hnd, "bar");
+      string r = unmarshal{int}(*hnd);
+      remote_call_end(*hnd);
+      return r;
+    }
+  }
+・サーバ側でリクエストを受けてオブジェクトへメソッド呼び出しを実行
+  (skeleton)
+  interface skeleton {
+    function void inovoke(orb_handle& hnd);
+  }
+  struct skeleton_ifoo <skeleton> {
+    ptr{ifoo} const realobject;
+    function void invoke(orb_handle& hnd) {
+      if (req.method_id == "foo") {
+	x = unmarshal{tx}(hnd);
+	r = realobject->foo(x);
+	marshal{tr}(hnd, r);
+      }
+    }
+  }
+・保持関係
+  - stubはconnを共有保持。逆方向は弱参照を持つ(stub pool)。
+  - connはskeletonを占有保持。(skeleton pool)。
+・TCPでlisten, acceptし、接続毎にスレッド一本。 
+  - 接続を受けるとクライアントからのリクエストを待つ。
+  - 接続毎にskeleton poolを持っている。接続直後は空。
+    skeleton poolはskeletenオブジェクトへの強参照を持っている。
+  - 接続毎にstub poolを持っている。接続直後は空。stub poolはオブジェクト
+    への弱参照を持っている。
+  - メソッド呼出に含まれる情報:
+    - thisのobject id(空なら
+    - 引数のリスト
+    - 返答が必要かどうかのフラグ
+    - メソッド名(文字列？)
+  - メソッド返答に含まれる情報:
+    - 返値または例外の値
+    - 参照渡し引数のリスト(あとで実装)
+    - 返値であるか例外であるか
+  - メソッド呼び出しのほかに、オブジェクト削除リクエストも来る
+    - object idが指定される。指定されたオブジェクトをプールから削除
+    - これは相手側でデストラクタが呼ばれたときに呼ばれる
+    - これには返答は無い
+・stubのメソッド実装(リモート呼び出し)
+  - 引数をハンドルにmarshal
+  - remote_call実行
+  - 返値をunmarshal
+  - remote_call_end実行
+・skeletonのinvoke実装(リモートからの呼び出し)
+  - 引数をunmarshal
+  - realobjectへメソッド実行
+  - 返値をmarshal
+・orbサーバには引数としてmultithreadedなfactoryオブジェクトを渡す。
+  接続毎にfactoryからインスタンスを作る。
+  multithreaded interface {t} factory{t} {
+    function ptr{t} create();
+  };
+  tはremoteを継承するインタフェース。接続を受けるとこれを一つ作り、
+  skeleton poolへ入れ、そのidをクライアントに返す。
+・orbクライアントには引数として接続先情報(host, serv)を取る。テンプレ
+  引数としてinitial instanceの型(interface)を取る。
+  function ptr{t} connect(address const& addr);
+  - まずorbを作る。それはskeleton poolとstub poolを持つ。
+  - addrへ接続しinitial instanceのidを得る。
+  - stubを作る。
+・orbクラサバ共通なのはskeleton poolとstub poolを持つこと。
+
+
+---------------------------------------------------------------------
+型情報無しserialize
 
 unit: 何も書かない
 整数: nnnxxxxx 上の3bitに後続バイト長さ。ただし111のときは後続8バイト
@@ -1073,13 +1137,8 @@ union: 最初にタグ、次に要素
 ---------------------------------------------------------------------
 from_string
 
-引数には読み込みバッファの末尾までを渡す。パース失敗したら残りの長さ
-を例外に含める。
-
-string "hoge"
-number 0.1
-struct, union {fldname0 = value0, fldname1 = value1}
-pointer {value}
-map {key0 = value0, key1 = value1}
-array {value0, value1}
+・構造体のフィールド順序を名前順に固定し、deserializeを速くする
+・mapと構造体を互換に
+・数値と文字列を互換に
+・不要値を読み飛ばす
 

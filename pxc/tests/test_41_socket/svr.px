@@ -29,12 +29,12 @@ multithreaded struct server_thread(io const& i, tptr{bool} const& rp,
 	1024, 0); // TODO: fix EADDRINUSE
       file_println(get_stderr(iop), "accepted");
       notify();
-      var ioeh = errno_handler(error::handle_throw);
+      errno_t ern;
       var peer_addr = sockaddr_storage();
-      var sock = accept(sf, peer_addr, ioeh);
+      var sock = accept(sf, peer_addr, ern);
       string s;
       size_t len = 10;
-      sock.read(s, len, ioeh);
+      sock.read(s, len, ern);
       *str_r = s;
     } catch (exception::common::exception e) {
       file_println(get_stderr(iop), "thrown");
@@ -60,18 +60,18 @@ multithreaded struct client_thread(io const& i, tptr{bool} const& rp)
       }
     }
     file_println(get_stderr(iop), "got notification");
-    var ioeh = errno_handler(error::handle_throw);
+    errno_t ern;
     var sf = create_connector(iop, "localhost", "9999", AF_INET, SOCK_STREAM,
       10);
-    var sock = connect(sf, ioeh);
-    sock.write("hoge", ioeh);
+    var sock = connect(sf, ern);
+    sock.write("hoge", ern);
   }
 }
 
 function void t1()
 {
-  var ioeh = errno_handler(error::handle_throw);
-  signal(io::system, SIGPIPE, SIG_IGN, ioeh);
+  errno_t ern;
+  signal(io::system, SIGPIPE, SIG_IGN, ern);
   var readyp = tptr(bool(false));
   var strp = tptr(string());
   var sthr = thread_create(server_thread(io::system, readyp, strp));

@@ -3,7 +3,6 @@ public import numeric::integral -;
 public import io -;
 public import io::errno -;
 public import io::file -;
-public import error -;
 
 public tsvaluetype extern "int" "extenum" struct signo_t { }
 public extern "SIGPIPE" signo_t SIGPIPE;
@@ -14,19 +13,18 @@ public extern "SIG_IGN" sighandler_t SIG_IGN;
 public extern "pxcio::no_op_handler" sighandler_t SIG_NO_OP;
 
 public extern "pxcio::set_signal_handler" function
-void signal(io const& iop, signo_t sig, sighandler_t handler, errno_handler& eh);
+void signal(io const& iop, signo_t sig, sighandler_t handler, errno_t& ern);
 
 extern "type" inline
 #include <signal.h>
 
 extern "fdef" inline
 namespace pxcio {
-void set_signal_handler(io const& iop, int sig, sighandler_t h,
-  errno_handler& eh)
+void set_signal_handler(io const& iop, int sig, sighandler_t h, errno_t& ern)
 {
   const sighandler_t r = ::signal(sig, h);
   if (r == SIG_ERR) {
-    ioeh_set(eh, errno);
+    errno_set(ern, errno);
   }
 }
 };

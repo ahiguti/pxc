@@ -104,7 +104,7 @@ static term eval_meta_symbol(term_list& tlev, env_type& env,
   }
   std::string sym_ns;
   bool no_private = true;
-  if (tlev.size() == 2) {
+  if (tlev.size() >= 2) {
     /* find symbol from the specified symtbl */
     term& typ = tlev[1];
     if (typ.is_string()) {
@@ -648,6 +648,33 @@ static term eval_meta_field_names(term_list& tlev)
   return term(tl);
 }
 
+static term eval_meta_fields(term_list& tlev)
+{
+  if (tlev.size() != 1) {
+    return term();
+  }
+  std::list<expr_var *> flds;
+  expr_i *const einst = term_get_instance(tlev[0]);
+  expr_struct *const est = dynamic_cast<expr_struct *>(einst);
+  if (est != 0) {
+    est->get_fields(flds);
+  }
+  expr_dunion *const ev = dynamic_cast<expr_dunion *>(einst);
+  if (ev != 0) {
+    ev->get_fields(flds);
+  }
+  term_list tl;
+  for (std::list<expr_var *>::const_iterator i = flds.begin(); i != flds.end();
+    ++i) {
+    term_list tl1;
+    tl1.push_back(term(std::string((*i)->sym)));
+    tl1.push_back((*i)->resolve_texpr());
+    term t1(tl1);
+    tl.push_back(t1);
+  }
+  return term(tl);
+}
+
 static term eval_meta_num_tparams(term_list& tlev)
 {
   if (tlev.size() != 1) {
@@ -791,7 +818,8 @@ static term eval_meta_slice(term_list& tlev)
   if (targs->size() <= v0) {
     v0 = targs->size();
   }
-  unsigned long long v1 = meta_term_to_long(tlev[1]);
+  unsigned long long v1 =
+    (tlev.size() == 3) ? meta_term_to_long(tlev[2]) : targs->size();
   if (targs->size() <= v1) {
     v1 = targs->size();
   }
@@ -917,6 +945,33 @@ static term eval_meta_unique(term_list& tlev)
   }
   return term(rtl);
 }
+
+#if 0
+static term eval_meta_slice(term_list& tlev)
+{
+  if (tlev.size() != 2 && tlev.size() != 3) {
+    return term();
+  }
+  const term& t = tlev[0];
+  if (!t.is_metalist()) {
+    return term();
+  }
+  const term_list& tl = *t.get_metalist();
+  long long i0 = meta_term_to_long(t);
+  long long i1 = meta_term_to_long(t);
+  if (i0 > tl.size()) {
+    i0 = tl.size();
+  }
+  if (i1 < i0) {
+    i1 = i0;
+  }
+  if (i1 > tl.size()) {
+    i1 = tl.size();
+  }
+  const term_list rtl(tl.begin() + i0, tl.begin() + i1);
+  return term(rtl);
+}
+#endif
 
 static term eval_meta_is_type(term_list& tlev)
 {
@@ -1339,6 +1394,10 @@ term eval_metafunction_strict(const std::string& name, term_list& tlev,
       r = eval_meta_sort(tlev);
     } else if (name == "@unique") {
       r = eval_meta_unique(tlev);
+    #if 0
+    } else if (name == "@slice") {
+      r = eval_meta_slice(tlev);
+    #endif
     } else if (name == "@rettype") {
       r = eval_meta_rettype(tlev);
     } else if (name == "@argnum") {
@@ -1371,6 +1430,8 @@ term eval_metafunction_strict(const std::string& name, term_list& tlev,
       r = eval_meta_field_types(tlev);
     } else if (name == "@field_names") {
       r = eval_meta_field_names(tlev);
+    } else if (name == "@fields") {
+      r = eval_meta_fields(tlev);
     } else if (name == "@num_tparams") {
       r = eval_meta_num_tparams(tlev);
     } else if (name == "@num_targs") {

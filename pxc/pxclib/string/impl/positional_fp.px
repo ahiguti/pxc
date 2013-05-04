@@ -2,8 +2,6 @@ namespace string::impl::positional_fp;
 public import numeric::integral -;
 public import numeric::fp -;
 public import container::string -;
-public import string::parse_error -;
-public import error -;
 public import numeric::cast -;
 public import numeric::limit lim;
 public import numeric::fp -;
@@ -16,8 +14,8 @@ public threaded function {t} void fp_to_decimal(t x, string& buf)
 public threaded function {t} t decimal_to_fp_nocheck(cstrref const& buf)
 { return m::symbol{m::concat{"decimal_to_fp_nocheck_", t}}(buf); }
 public threaded function {t} t
-decimal_to_fp(cstrref const& buf, error_handler{parse_error}& eh)
-{ return m::symbol{m::concat{"decimal_to_fp_", t}}(buf, eh); }
+decimal_to_fp(cstrref& buf)
+{ return m::symbol{m::concat{"decimal_to_fp_", t}}(buf); }
 
 public threaded extern "string::fp_to_decimal_bt_float" function
   void fp_to_decimal_bt_float(float v, string& buf);
@@ -27,10 +25,10 @@ public threaded extern "string::decimal_to_fp_nocheck_bt_float" function
   float decimal_to_fp_nocheck_bt_float(cstrref const& buf);
 public threaded extern "string::decimal_to_fp_nocheck_bt_double" function
   double decimal_to_fp_nocheck_bt_double(cstrref const& buf);
-public threaded extern "string::decimal_to_fp_bt_float" function float
-  decimal_to_fp_bt_float(cstrref const& buf, error_handler{parse_error}& eh);
-public threaded extern "string::decimal_to_fp_bt_double" function double
-  decimal_to_fp_bt_double(cstrref const& buf, error_handler{parse_error}& eh);
+public threaded extern "string::decimal_to_fp_bt_float" function
+  float decimal_to_fp_bt_float(cstrref& buf);
+public threaded extern "string::decimal_to_fp_bt_double" function
+  double decimal_to_fp_bt_double(cstrref& buf);
 
 extern "fdef" inline
 namespace string {
@@ -55,40 +53,67 @@ static void fp_to_decimal_internal(const char *fmt, bt_double x, bt_string& s)
   }
   s.rawarr_set_valid_len(osz + len);
 }
+static cstrref get_decimal_part(cstrref const& buf)
+{
+  const size_t n = buf.size();
+  const bt_uchar *const p = buf.rawarr();
+  size_t i = 0;
+  for (; i < n; ++i) {
+    const bt_uchar ch = p[i];
+    if ((ch >= '0' && ch <= '9') ||
+      /*
+      (ch >= 'a' && ch <= 'z') ||
+      (ch >= 'A' && ch <= 'Z') ||
+      */
+      ch == '+' || ch == '-' || ch == '.') {
+    } else {
+      break;
+    }
+  }
+  return cstrref(p, i);
+}
 void fp_to_decimal_bt_double(bt_double x, bt_string& buf)
 { fp_to_decimal_internal("%.16f", x, buf); }
 void fp_to_decimal_bt_float(bt_float x, bt_string& buf)
 { fp_to_decimal_internal("%.7f", x, buf); }
 bt_double decimal_to_fp_nocheck_bt_double(cstrref const& buf)
 {
-  PXCRT_ALLOCA_NTSTRING(buf_nt, buf);
+  cstrref pbuf = get_decimal_part(buf);
+  PXCRT_ALLOCA_NTSTRING(buf_nt, pbuf);
   double r = 0;
   sscanf(buf_nt.get(), "%lf", &r);
   return r;
 }
 bt_float decimal_to_fp_nocheck_bt_float(cstrref const& buf)
 {
-  PXCRT_ALLOCA_NTSTRING(buf_nt, buf);
+  cstrref pbuf = get_decimal_part(buf);
+  PXCRT_ALLOCA_NTSTRING(buf_nt, pbuf);
   float r = 0;
   sscanf(buf_nt.get(), "%f", &r);
   return r;
 }
-typedef error$n::error_handler$s$tp1$string$$parse_error$n$$parse_error$t
-  eh_t;
-bt_double decimal_to_fp_bt_double(cstrref const& buf, eh_t& eh)
+bt_double decimal_to_fp_bt_double(cstrref& buf)
 {
+  cstrref pbuf = get_decimal_part(buf);
   PXCRT_ALLOCA_NTSTRING(buf_nt, buf);
   double r = 0;
   int n = 0;
   sscanf(buf_nt.get(), "%lf%n", &r, &n);
+  if (n > 0) {
+    buf.pop_front(n);
+  }
   return r;
 }
-bt_float decimal_to_fp_bt_float(cstrref const& buf, eh_t& eh)
+bt_float decimal_to_fp_bt_float(cstrref& buf)
 {
+  cstrref pbuf = get_decimal_part(buf);
   PXCRT_ALLOCA_NTSTRING(buf_nt, buf);
-  double r = 0;
+  float r = 0;
   int n = 0;
-  sscanf(buf_nt.get(), "%lf%n", &r, &n);
+  sscanf(buf_nt.get(), "%f%n", &r, &n);
+  if (n > 0) {
+    buf.pop_front(n);
+  }
   return r;
 }
 }; // namespace string

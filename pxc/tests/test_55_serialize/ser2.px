@@ -1,0 +1,60 @@
+namespace ser2;
+import common -;
+import string::deserialize -;
+import string::conversion -;
+import meta::common m;
+
+function {t} void test_one(t const& value)
+{
+  string const s = to_string(value);
+  println(s);
+  cstrref sr = s;
+  size_t epos;
+  t x = deserialize_from_string{t}(sr, epos);
+  string const s1 = to_string(x);
+  println(s1);
+  if (epos != 0) {
+    println(epos);
+  } else if (s != s1) {
+    println("not equal");
+  } else {
+    println("ok");
+  }
+}
+
+threaded function {t, fldname} t
+create_union(m::field_type{t, fldname} const& x)
+{
+  t r;
+  expand (fld : m::list{fldname}) {
+    r.fld = x;
+  }
+  return r;
+}
+
+struct foo {
+  int x;
+  string y;
+}
+
+union bar {
+  int x;
+  string y;
+}
+
+function void t1()
+{
+  vector{ptr{foo}} a;
+  a.push_back(ptr(foo(55, "abc")));
+  a.push_back(ptr(foo(88, "xyz")));
+  test_one(a);
+  tree_map{string, bar} b;
+  var x1 = create_union{bar, "x"}(300);
+  var x2 = create_union{bar, "y"}("hoge");
+  b["a"] = x1;
+  b["b"] = x2;
+  test_one(b);
+}
+
+t1();
+

@@ -17,33 +17,31 @@ public threaded extern "pxcio::get_stdout"
 public threaded extern "pxcio::get_stderr"
   function file get_stderr(io const& iop);
 
-private metafunction ioeh_t error::error_handler{errno_t};
-
 private extern "pxcio::iostd_init" function void iostd_init();
 
 iostd_init();
 
 public threaded function {t} void file_print(file const& f, t const& x)
 {
-  ioeh_t eh = ioeh_t(error::handle_throw);
-  if (m::eq{t, string}) {
-    file_write_all(f, x, eh);
+  errno_t e;
+  if (is_string_family_type{t}) {
+    file_write_all(f, x, e);
   } else {
-    file_write_all(f, string::conversion::to_string(x), eh);
+    file_write_all(f, string::conversion::to_string(x), e);
   }
 }
 
 public threaded function {t} void file_println(file const& f, t const& x)
 {
-  ioeh_t eh = ioeh_t(error::handle_throw);
-  if (m::eq{t, string}) {
+  errno_t e;
+  if (is_string_family_type{t}) {
     string s = x;
     s.append("\n");
-    file_write_all(f, s, eh);
+    file_write_all(f, s, e);
   } else {
     string s = string::conversion::to_string(x);
     s.append("\n");
-    file_write_all(f, s, eh);
+    file_write_all(f, s, e);
   }
 }
 
