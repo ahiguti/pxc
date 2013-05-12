@@ -118,8 +118,8 @@ expr_i *expr_dunion_new(const char *fn, int line, const char *sym,
   expr_i *block, attribute_e attr)
 { return new expr_dunion(fn, line, sym, block, attr); }
 expr_i *expr_interface_new(const char *fn, int line, const char *sym,
-  expr_i *block, attribute_e attr)
-{ return new expr_interface(fn, line, sym, block, attr); }
+  const char *cname, expr_i *block, attribute_e attr)
+{ return new expr_interface(fn, line, sym, cname, block, attr); }
 expr_i *expr_try_new(const char *fn, int line, expr_i *tblock, expr_i *cblock,
   expr_i *rest)
 { return new expr_try(fn, line, tblock, cblock, rest); }

@@ -3,6 +3,13 @@ public import numeric::integral -;
 public import container::string -;
 public import meta::common m;
 public import meta::family mf;
+public import numeric::cast -;
+public import io::debug -;
+
+private metafunction field_names_sorted{t}
+  m::map{m::sort{m::fields{t}}, m::at0};
+private metafunction field_types_sorted{t}
+  m::map{m::sort{m::fields{t}}, m::at1};
 
 public threaded function {tpl, t} void serialize(t const& x,
   m::local{tpl, "target_type"}& o)
@@ -28,11 +35,9 @@ public threaded function {tpl, t} void serialize(t const& x,
       } else {
 	m::local{tpl, "map_sep"}(o);
       }
-      m::local{tpl, "map_entry_begin"}(o);
       serialize{tpl, m::at{t, 0}}(k, o);
       m::local{tpl, "map_entry_sep"}(o);
       serialize{tpl, m::at{t, 1}}(v, o);
-      m::local{tpl, "map_entry_end"}(o);
     }
     m::local{tpl, "map_end"}(o);
   } else if (mf::is_pointer_family{fam}) {
@@ -41,16 +46,14 @@ public threaded function {tpl, t} void serialize(t const& x,
     m::local{tpl, "pointer_end"}(o);
   } else if (mf::is_struct_family{fam}) {
     m::local{tpl, "struct_begin"}(o);
-    expand (fld, idx : m::field_names{t}) {
+    expand (fld, idx : field_names_sorted{t}) {
       {
 	if (idx != 0) {
 	  m::local{tpl, "struct_sep"}(o);
 	}
-	m::local{tpl, "struct_entry_begin"}(o);
 	m::local{tpl, "struct_field_name"}(m::to_string{fld}, o);
 	m::local{tpl, "struct_entry_sep"}(o);
-	serialize{tpl, m::at{m::field_types{t}, idx}}(x.fld, o);
-	m::local{tpl, "struct_entry_end"}(o);
+	serialize{tpl, m::at{field_types_sorted{t}, idx}}(x.fld, o);
       }
     }
     m::local{tpl, "struct_end"}(o);
@@ -66,6 +69,149 @@ public threaded function {tpl, t} void serialize(t const& x,
     m::local{tpl, "union_end"}(o);
   } else {
     m::local{tpl, "unknown", t}(x, o);
+  }
+}
+
+public threaded function {tpl, t} t
+deserialize(m::local{tpl, "source_type"}& s)
+{
+  metafunction fam m::family{t};
+  if (m::not{m::eq{m::local{tpl, "specialized_func", t}, 0}}) {
+    return m::local{tpl, "specialized_func", t}(s);
+  } else if (mf::is_array_family{fam}) {
+    /* TODO: farray, darray */
+    t r;
+    if (m::local{tpl, "array_begin_cond"}(s)) {
+      bool is_first = true;
+      while (true) {
+	if (s.empty() || m::local{tpl, "array_end_cond"}(s)) {
+	  break;
+	}
+	if (is_first) {
+	  is_first = false;
+	} else {
+	  m::local{tpl, "array_sep_cond"}(s);
+	}
+	m::at{t, 0} ent = deserialize{tpl, m::at{t, 0}}(s);
+	r.push_back(ent);
+      }
+    } else {
+      m::local{tpl, "value_skip"}(s);
+    }
+    return r;
+  } else if (mf::is_map_family{fam}) {
+    t r;
+    if (s.empty() || m::local{tpl, "map_begin_cond"}(s)) {
+      bool is_first = true;
+      while (true) {
+	if (m::local{tpl, "map_end_cond"}(s)) {
+	  break;
+	}
+	if (is_first) {
+	  is_first = false;
+	} else {
+	  m::local{tpl, "map_sep_cond"}(s);
+	}
+	m::at{t, 0} k = deserialize{tpl, m::at{t, 0}}(s);
+	if (!m::local{tpl, "map_entry_sep_cond"}(s)) {
+	  m::local{tpl, "map_end_skip"}(s);
+	  break;
+	}
+	m::at{t, 1} m = deserialize{tpl, m::at{t, 1}}(s);
+	r[k] = m;
+      }
+    } else {
+      m::local{tpl, "value_skip"}(s);
+    }
+    return r;
+  } else if (mf::is_pointer_family{fam}) {
+    if (m::local{tpl, "pointer_begin_cond"}(s)) {
+      t r = t(deserialize{tpl, m::at{t, 0}}(s));
+      m::local{tpl, "pointer_end_skip"}(s);
+      return r;
+    } else {
+      cstrref s0 = s;
+      s0.pop_back(s0.size());
+      t r = t(deserialize{tpl, m::at{t, 0}}(s0));
+      return r;
+    }
+  } else if (mf::is_struct_family{fam}) {
+    t r;
+    if (m::local{tpl, "struct_begin_cond"}(s)) {
+      expand (fld, idx : field_names_sorted{t}) {
+	{
+	  if (!m::local{tpl, "struct_end_peek_cond"}(s)) {
+	    bool found = true;
+	    while (true) {
+	      m::local{tpl, "struct_sep_cond"}(s);
+	      m::local{tpl, "source_type"} s0 = s;
+	      m::local{tpl, "struct_field_name_peek"}(s0);
+	      // debug_log("expect:", m::to_string{fld});
+	      // debug_log("got:", s0);
+	      if (s0 == m::to_string{fld}) {
+		break;
+	      } else if (s0 > m::to_string{fld}) {
+		found = false;
+		break;
+	      }
+	      s.pop_front(s0.size());
+	      m::local{tpl, "struct_entry_sep_cond"}(s);
+	      m::local{tpl, "value_skip"}(s);
+	      // debug_log("skip result: ", s);
+	      if (s.empty() || m::local{tpl, "struct_end_peek_cond"}(s)) {
+		found = false;
+		break;
+	      }
+	    }
+	    if (found) {
+	      s.pop_front(m::strlen{m::to_string{fld}});
+	      m::local{tpl, "struct_entry_sep_cond"}(s);
+	      r.fld = deserialize{tpl, m::at{field_types_sorted{t}, idx}}(s);
+	    }
+	  }
+	}
+      }
+      m::local{tpl, "struct_end_skip"}(s);
+    } else {
+      m::local{tpl, "value_skip"}(s);
+    }
+    return r;
+  } else if (mf::is_union_family{fam}) {
+    t r;
+    if (m::local{tpl, "union_begin_cond"}(s)) {
+      bool is_first = true;
+      while (true) {
+	if (s.empty() || m::local{tpl, "union_end_cond"}(s)) {
+	  break;
+	}
+	if (is_first) {
+	  is_first = false;
+	} else {
+	  if (!m::local{tpl, "union_sep_cond"}(s)) {
+	    m::local{tpl, "union_end_skip"}(s);
+	    break;
+	  }
+	}
+	m::local{tpl, "source_type"} s0 = s;
+	m::local{tpl, "union_field_name"}(s0, s);
+	if (!m::local{tpl, "union_entry_sep_cond"}(s)) {
+	  m::local{tpl, "union_end_skip"}(s);
+	  break;
+	}
+	expand (fld, idx : m::field_names{t}) {
+	  if (s0 == m::to_string{fld}) {
+	    r.fld = deserialize{tpl, m::at{m::field_types{t}, idx}}(s);
+	  }
+	}
+      }
+    } else {
+      m::local{tpl, "value_skip"}(s);
+    }
+    return r;
+  } else {
+    t r;
+    m::local{tpl, "unknown", t}(s);
+    return r;
   }
 }
 

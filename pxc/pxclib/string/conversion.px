@@ -6,8 +6,7 @@ public import meta::family mf;
 public import numeric::cast n;
 public import string::positional p;
 public import string::serialize -;
-public import string::deserialize -;
-public import string::url_encode u;
+public import string::minimal_encode e;
 
 public threaded function {t} string to_string(t const& x)
 {
@@ -31,31 +30,27 @@ public threaded function {t} t from_string(cstrref const& s)
     return s;
   } else {
     cstrref s1 = s;
-    size_t epos;
-    return deserialize_from_string{t}(s1, epos);
+    return deserialize_from_string{t}(s1);
   }
 }
 
-public threaded function {t} t deserialize_from_string(cstrref& s,
-  size_t& epos_r)
+public threaded function {t} t deserialize_from_string(cstrref& s)
 {
-  return deserialize{deserialize_tpl, t}(s, epos_r);
+  return deserialize{deserialize_tpl, t}(s);
 }
 
 private threaded function void bool_to_string(bool v, string& buf)
 {
   if (v) {
-    buf.append("true");
+    buf.append("1");
   } else {
-    buf.append("false");
+    buf.append("0");
   }
 }
 
 private threaded function {t} void string_append_escape(t const& x, string& v)
 {
-  v.push_back('"');
-  u::url_encode(v, x);
-  v.push_back('"');
+  e::minimal_encode(v, x);
 }
 private threaded function {t} void string_append_noesc(t const& x, string& v)
 {
@@ -65,10 +60,8 @@ private threaded function void string_append_brace_open(string& v)
 { v.push_back('{'); }
 private threaded function void string_append_brace_close(string& v)
 { v.push_back('}'); }
-private threaded function void string_append_comma(string& v)
-{ v.push_back(','); }
-private threaded function void string_append_equal(string& v)
-{ v.push_back('='); }
+private threaded function void string_append_sep(string& v)
+{ v.push_back('|'); }
 private threaded function void string_append_none(string& v)
 { } 
 private threaded function {t} void string_append_star(t const& x, string& v)
@@ -92,123 +85,102 @@ private threaded struct serialize_tpl {
     0}}}}}};
   metafunction array_begin string_append_brace_open;
   metafunction array_end string_append_brace_close;
-  metafunction array_sep string_append_comma;
+  metafunction array_sep string_append_sep;
   metafunction map_begin string_append_brace_open;
   metafunction map_end string_append_brace_close;
-  metafunction map_sep string_append_comma;
-  metafunction map_entry_begin string_append_none;
-  metafunction map_entry_end string_append_none;
-  metafunction map_entry_sep string_append_equal;
+  metafunction map_sep string_append_sep;
+  metafunction map_entry_sep string_append_sep;
   metafunction pointer_begin string_append_brace_open;
   metafunction pointer_end string_append_brace_close;
   metafunction struct_begin string_append_brace_open;
   metafunction struct_end string_append_brace_close;
-  metafunction struct_sep string_append_comma;
-  metafunction struct_entry_begin string_append_none;
-  metafunction struct_entry_end string_append_none;
-  metafunction struct_entry_sep string_append_equal;
+  metafunction struct_sep string_append_sep;
+  metafunction struct_entry_sep string_append_sep;
   metafunction struct_field_name string_append_noesc;
   metafunction union_begin string_append_brace_open;
   metafunction union_end string_append_brace_close;
-  metafunction union_entry_sep string_append_equal;
+  metafunction union_entry_sep string_append_sep;
   metafunction union_field_name string_append_noesc;
   metafunction unknown{fam} string_append_unknown;
 }
 
-private threaded function void set_error_pos(size_t& epos, size_t pos)
+private threaded function size_t token_length(cstrref const& s)
 {
-  if (epos == 0) {
-    epos = pos +1;
-  }
-}
-private threaded function void string_parse_none(cstrref& s, size_t& epos)
-{
-}
-private threaded function {lit} bool string_parse_literal_cond(cstrref& s)
-{
-  size_t const sz = lit.size();
-  if (s.size() > sz && s[0 .. sz] == lit) {
-    s.pop_front(sz);
-    return true;
-  } else {
-    return false;
-  }
-}
-private threaded function string string_parse_string_unescape(cstrref& s,
-  size_t& epos)
-{
-  string r;
-  if (s.size() >= 2 && s[0] == '"') {
-    s.pop_front(1);
-    size_t const i = s.find(0, '"');
-    if (i != s.size() && u::url_decode(r, s[0 .. i])) {
-      s.pop_front(i + 1);
-    } else {
-      set_error_pos(epos, s.size());
+  for (size_t i, uchar ch : s) {
+    if (ch == '{') {
+      if (i == 0) {
+	return find_brace_close(s[1 .. s.size()]) + 1;
+      } else {
+	return i;
+      }
     }
-  } else {
-    set_error_pos(epos, s.size());
-  }
-  return r;
-}
-private threaded function {t} t string_parse_integral(cstrref& s, size_t& epos)
-{
-  size_t const sz = s.size();
-  t const r = p::decimal_to_integral{t}(s);
-  if (s.size() == sz) {
-    set_error_pos(epos, sz);
-  }
-  return r;
-}
-private threaded function {t} t string_parse_fp(cstrref& s, size_t& epos)
-{
-  size_t const sz = s.size();
-  t const r = p::decimal_to_fp{t}(s);
-  if (s.size() == sz) {
-    set_error_pos(epos, sz);
-  }
-  return r;
-}
-private threaded function bool string_parse_bool(cstrref& s, size_t& epos)
-{
-  if (string_parse_literal_cond{"true"}(s)) {
-    return true;
-  } else if (string_parse_literal_cond{"false"}(s)) {
-    return false;
-  } else {
-    set_error_pos(epos, s.size());
-    return false;
-  }
-}
-private threaded function void string_parse_symbol(cstrref& s0, cstrref& s,
-  size_t& epos)
-{
-  size_t const sz = s0.size();
-  size_t i = 0;
-  while (i < sz) {
-    uchar const ch = s0[i];
-    if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_') {
-      /* ok */
-    } else {
-      break;
+    if (ch == '}' || ch == '|') {
+      return i;
     }
-    ++i;
   }
-  if (i == 0) {
-    set_error_pos(epos, s.size());
-  } else {
-    s0.pop_back(sz - i);
-    s.pop_front(i);
+  return s.size();
+}
+private threaded function size_t find_brace_close(cstrref const& s)
+{
+  size_t level = 1;
+  for (size_t i, uchar ch : s) {
+    if (ch == '}') {
+      if (--level == 0) {
+	return i + 1;
+      }
+    } else if (ch == '{') {
+      ++level;
+    }
+  }
+  return s.size();
+}
+private threaded function {t, f} t string_parse_token(cstrref& s)
+{
+  size_t const toklen = token_length(s);
+  cstrref stok = s[0 .. toklen];
+  s.pop_front(toklen);
+  return f(stok);
+}
+private threaded function string string_parse_string_unescape(cstrref& s)
+{
+  return string_parse_token{string, str_decode}(s);
+  threaded function string str_decode(cstrref const& stok) {
+    string r;
+    e::minimal_decode(r, stok);
+    return r;
   }
 }
-private threaded function void string_parse_char(cstrref& s, uchar ch,
-  size_t& epos)
+private threaded function {t} t string_parse_integral(cstrref& s)
 {
-  if (s.size() > 0 && s[0] == ch) {
-    s.pop_front(1);
-  } else {
-    set_error_pos(epos, s.size());
+  return string_parse_token{t, p::decimal_to_integral{t}}(s);
+}
+private threaded function {t} t string_parse_fp(cstrref& s)
+{
+  return string_parse_token{t, p::decimal_to_fp{t}}(s);
+}
+private threaded function bool string_parse_bool(cstrref& s)
+{
+  return string_parse_token{bool, parse_bool}(s);
+  threaded function bool parse_bool(cstrref const& stok) {
+    if (stok.empty() || stok == "0") {
+      return false;
+    } else {
+      return true;
+    }
   }
+}
+private threaded function void string_parse_symbol_peek(cstrref& stok)
+{
+  size_t const sz = stok.size();
+  size_t const toklen = token_length(stok);
+  stok.pop_back(sz - toklen);
+}
+private threaded function void string_parse_symbol(cstrref& stok, cstrref& s)
+{
+  size_t const sz = stok.size();
+  size_t const toklen = token_length(stok);
+  stok.pop_back(sz - toklen);
+  s.pop_front(toklen);
 }
 private threaded function bool string_parse_char_cond(cstrref& s, uchar ch)
 {
@@ -219,22 +191,33 @@ private threaded function bool string_parse_char_cond(cstrref& s, uchar ch)
     return false;
   }
 }
-private threaded function void string_parse_star(cstrref& s, size_t& epos)
-{ string_parse_char(s, '*', epos); }
-private threaded function void string_parse_brace_open(cstrref& s,
-  size_t& epos)
-{ string_parse_char(s, '{', epos); }
-private threaded function void string_parse_brace_close(cstrref& s,
-  size_t& epos)
-{ string_parse_char(s, '}', epos); }
+private threaded function void string_parse_brace_close_skip(cstrref& s)
+{
+  size_t level = 1;
+  for (size_t i, uchar ch : s) {
+    if (ch == '}') {
+      if (--level == 0) {
+	s.pop_front(i + 1);
+	return;
+      }
+    } else if (ch == '{') {
+      ++level;
+    }
+  }
+}
+private threaded function void string_parse_token_skip(cstrref& s)
+{
+  size_t const toklen = token_length(s);
+  s.pop_front(toklen);
+}
+private threaded function bool string_parse_brace_open_cond(cstrref& s)
+{ return string_parse_char_cond(s, '{'); }
+private threaded function bool string_parse_brace_close_peek_cond(cstrref& s)
+{ return s.size() > 0 && s[0] == '}'; }
 private threaded function bool string_parse_brace_close_cond(cstrref& s)
 { return string_parse_char_cond(s, '}'); }
-private threaded function void string_parse_comma(cstrref& s, size_t& epos)
-{ string_parse_char(s, ',', epos); }
-private threaded function void string_parse_equal(cstrref& s, size_t& epos)
-{ string_parse_char(s, '=', epos); }
-private threaded function void string_parse_unknown(cstrref& s, size_t& epos)
-{ string_parse_char(s, '?', epos); }
+private threaded function bool string_parse_sep_cond(cstrref& s)
+{ return string_parse_char_cond(s, '|'); }
 private threaded struct deserialize_tpl {
   metafunction source_type cstrref;
   metafunction symstr{t} m::concat{t, "_parse_from_string"};
@@ -242,38 +225,37 @@ private threaded struct deserialize_tpl {
   metafunction has_specialized_symbol{t}
     m::eq{m::to_string{sym{t}}, symstr{t}};
   metafunction specialized_func{t}
-    m::cond{has_specialized_symbol{t}, sym{t},
+    m::cond{has_specialized_symbol{t}, string_parse_token{t, sym{t}},
     m::cond{is_string_family_type{t}, string_parse_string_unescape,
     m::cond{n::is_integral{t}, string_parse_integral{t},
     m::cond{n::is_fp{t}, string_parse_fp{t},
     m::cond{m::eq{t, bool}, string_parse_bool,
-    m::cond{m::eq{t, unit}, string_parse_star,
+    m::cond{m::eq{t, unit}, string_parse_token_skip,
     0}}}}}};
-  metafunction array_begin string_parse_brace_open;
+  metafunction array_begin_cond string_parse_brace_open_cond;
   metafunction array_end_cond string_parse_brace_close_cond;
-  metafunction array_sep string_parse_comma;
-  metafunction map_begin string_parse_brace_open;
+  metafunction array_end_skip string_parse_brace_close_skip;
+  metafunction array_sep_cond string_parse_sep_cond;
+  metafunction map_begin_cond string_parse_brace_open_cond;
   metafunction map_end_cond string_parse_brace_close_cond;
-  metafunction map_sep string_parse_comma;
-  metafunction map_entry_begin string_parse_none;
-  metafunction map_entry_end string_parse_none;
-  metafunction map_entry_sep string_parse_equal;
-  metafunction pointer_begin string_parse_brace_open;
-  metafunction pointer_end string_parse_brace_close;
-  metafunction struct_begin string_parse_brace_open;
-  metafunction struct_end_cond string_parse_brace_close_cond;
-  metafunction struct_sep string_parse_comma;
-  metafunction struct_entry_begin string_parse_none;
-  metafunction struct_entry_end string_parse_none;
-  metafunction struct_entry_sep string_parse_equal;
-  metafunction struct_field_name string_parse_symbol;
-  metafunction union_begin string_parse_brace_open;
+  metafunction map_end_skip string_parse_brace_close_skip;
+  metafunction map_sep_cond string_parse_sep_cond;
+  metafunction map_entry_sep_cond string_parse_sep_cond;
+  metafunction pointer_begin_cond string_parse_brace_open_cond;
+  metafunction pointer_end_skip string_parse_brace_close_skip;
+  metafunction struct_begin_cond string_parse_brace_open_cond;
+  metafunction struct_end_peek_cond string_parse_brace_close_peek_cond;
+  metafunction struct_end_skip string_parse_brace_close_skip;
+  metafunction struct_sep_cond string_parse_sep_cond;
+  metafunction struct_entry_sep_cond string_parse_sep_cond;
+  metafunction struct_field_name_peek string_parse_symbol_peek;
+  metafunction union_begin_cond string_parse_brace_open_cond;
   metafunction union_end_cond string_parse_brace_close_cond;
-  metafunction union_sep string_parse_comma;
-  metafunction union_entry_begin string_parse_none;
-  metafunction union_entry_end string_parse_none;
-  metafunction union_entry_sep string_parse_equal;
+  metafunction union_end_skip string_parse_brace_close_skip;
+  metafunction union_sep_cond string_parse_sep_cond;
+  metafunction union_entry_sep_cond string_parse_sep_cond;
   metafunction union_field_name string_parse_symbol;
-  metafunction unknown{fam} string_parse_unknown;
+  metafunction unknown{fam} string_parse_token_skip;
+  metafunction value_skip string_parse_token_skip;
 }
 

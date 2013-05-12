@@ -60,7 +60,7 @@ static void check_type_convert_to_lhs(expr_op *eop, expr_i *efrom, term& tto)
       term_tostr_sort_humanreadable);
     const std::string sto = term_tostr(tto,
       term_tostr_sort_humanreadable);
-    arena_error_push(efrom, "cannot convert from '%s' to '%s' %s",
+    arena_error_push(efrom, "can not convert from '%s' to '%s' %s",
       sfrom.c_str(), sto.c_str(), op_message(eop).c_str());
   }
 }
@@ -606,6 +606,17 @@ void expr_stmts::check_type(symbol_table *lookup)
 
 static void check_return_expr_block(expr_funcdef *fdef, expr_block *block)
 {
+  expr_i *last_stmt = 0;
+  for (expr_stmts *st = block->stmts; st != 0; st = st->rest) {
+    expr_i *e = st->head;
+    if (e->get_esort() == expr_e_expand) {
+      abort(); // already extracted
+    }
+    if (!is_noexec_expr(e)) {
+      last_stmt = e;
+    }
+  }
+  #if 0
   expr_stmts *est = block->stmts;
   if (est != 0) {
     while (est->rest != 0) {
@@ -616,6 +627,7 @@ static void check_return_expr_block(expr_funcdef *fdef, expr_block *block)
   if (est != 0) {
     last_stmt = est->head;
   }
+  #endif
   expr_i *error_pos = last_stmt != 0 ? last_stmt : block;
   if (last_stmt == 0) {
     /* error */
@@ -725,6 +737,7 @@ void expr_block::check_type(symbol_table *lookup)
     std::set<expr_i *> p; /* parents */
     calc_inherit_transitive_rec(this, inherit_transitive, s, p, inherit);
   }
+  compiled_flag = true;
 }
 
 static void check_dunion_field(const expr_op *eop, expr_i *a0)
@@ -2232,7 +2245,7 @@ void expr_special::check_type(symbol_table *lookup)
 	term_tostr_sort_humanreadable);
       const std::string s1 = term_tostr(arg->resolve_texpr(),
 	term_tostr_sort_humanreadable);
-      arena_error_push(this, "cannot convert from '%s' to '%s'",
+      arena_error_push(this, "can not convert from '%s' to '%s'",
 	s1.c_str(), s0.c_str());
     }
   }

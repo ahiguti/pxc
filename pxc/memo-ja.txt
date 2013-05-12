@@ -3,19 +3,21 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- 文法の変更 struct exter "hoge" hoge { }
+
+- mainでget_stack_trace()
+
+- threadのmainまで例外が飛んできたらどうするか
+
+- interface extern
+
 - まずmarshal by reference無しのRPC作る
-
-- meta::common::fields(done)
-
-- interface間継承のupcastがコンパイルエラーになる
 
 - string/util.px split
 
 - create_fooに統一する？
 
 - tagged unionの$eと$uをやめる。gdbで見るとき困る。
-
-- downcastは多相型でないとc++でエラーになるはず
 
 - ptr(foo(...)) の式が変数定義の右辺ではないとき、fooのコピーコンスト
   ラクタを要求してしまう(skip_49_variant_fixme3)
@@ -309,6 +311,12 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- downcastは多相型でないとc++でエラーになるはず(done)
+- interface間継承のupcastがコンパイルエラーになる(done)
+- serializeのfieldを名前順に(done)
+- is_expand_dummy削除(done)
+- 関数の最後にfunction定義があると、control reaches ... になる(done)
+- meta::common::fields(done)
 - deserialize: e_rはエラー時の残り長さ+1の値をセットする(done)
 - decimal_to_integralなどを, cstrref&を取って先頭だけ読む方式に(done)
 - 菱形継承でc++エラーになるはず。interface間継承はvirtualに(done)
@@ -969,6 +977,67 @@ interface logic_error { }
 interface runtime_error { }
 
 ---------------------------------------------------------------------
+型情報無しserialize
+
+unit: 何も書かない
+整数: nnnxxxxx 上の3bitに後続バイト長さ。ただし111のときは後続8バイト
+enum/bitmask: 整数と同じ
+浮動小数点数: べた
+配列: 最初に長さを整数エンコードで書く。残りは各要素を詰める
+  ただし要素型が2byte以下のときは要素固定長で
+連想配列: 配列と同じ
+構造体: 各フィールドを詰める
+union: 最初にタグ、次に要素
+
+---------------------------------------------------------------------
+from_string
+
+引数には読み込みバッファの末尾までを渡す。パース失敗したら残りの長さ
+を例外に含める。
+
+string "hoge"
+number 0.1
+struct, union {fldname0=value0,fldname1=value1}
+pointer {value}
+map {key0=value0,key1=value1}
+array {value0,value1}
+
+トークン区切りは'{', '}', '=', ','の4つ
+
+・文字列をquoteするのをやめる
+・エラーになってもトークン区切りまでは読み飛ばす
+・'='をやめて','区切りにする(done)
+・構造体のフィールド順序を名前順に固定し、deserializeを速くする
+・mapと構造体を互換に
+・数値と文字列を互換に
+・不要値を読み飛ばす
+
+pointer_endは該当する'}'まで読み飛ばす
+
+文字列、数値のパース
+- まずトークン区切り記号を探す
+- もし'{'だったら対応する'}'まで読み飛ばし、最初の要素をパースする
+- それ以外だったら区切り文字の前までをパースし値を返す
+
+---------------------------------------------------------------------
+from_stringを変更に強くする
+
+stringは引用符使わない
+
+structはfield名の順にserializeする。
+deserializeの際にもfield名の順に。
+expand (fld : fields) {
+  fldname = deserialize_symbol();
+  if (fldname < fld) {
+    このデータは空読み。
+  } else if (fldname > fld) {
+    fldnameをunreadして次のfldへ。
+  } else {
+    このデータをdeserialize。
+  }
+}
+
+---------------------------------------------------------------------
 リモートオブジェクト
 
 var svr = tptr(object_server{foo}());
@@ -991,37 +1060,6 @@ stub{ibar}
 - 返値は値渡し可能な型
 リモート化可能な型:
 
-
----------------------------------------------------------------------
-from_string
-
-引数には読み込みバッファの末尾までを渡す。パース失敗したら残りの長さ
-を例外に含める。
-
-string "hoge"
-number 0.1
-struct, union {fldname0 = value0, fldname1 = value1}
-pointer {value}
-map {key0 = value0, key1 = value1}
-array {value0, value1}
-
----------------------------------------------------------------------
-from_stringを変更に強くする
-
-stringは引用符使わない
-
-structはfield名の順にserializeする。
-deserializeの際にもfield名の順に。
-expand (fld : fields) {
-  fldname = deserialize_symbol();
-  if (fldname < fld) {
-    このデータは空読み。
-  } else if (fldname > fld) {
-    fldnameをunreadして次のfldへ。
-  } else {
-    このデータをdeserialize。
-  }
-}
 
 ---------------------------------------------------------------------
 ORBに必要なもの
@@ -1120,25 +1158,23 @@ ORBに必要なもの
   - stubを作る。
 ・orbクラサバ共通なのはskeleton poolとstub poolを持つこと。
 
+非メンバ関数のskeleton
+  interface skeleton {
+    function void inovoke(cstrref const& req, string& res);
+  }
+  struct skeleton_foo <skeleton> {
+    function void invoke(cstrref& req, string& res) {
+      x = unmarshal{tx}(req);
+      y = unmarshal{ty}(req);
+      r = foo(x, y);
+      marshal{tr}(res, r);
+    }
+  }
 
 ---------------------------------------------------------------------
-型情報無しserialize
+例外を整理
 
-unit: 何も書かない
-整数: nnnxxxxx 上の3bitに後続バイト長さ。ただし111のときは後続8バイト
-enum/bitmask: 整数と同じ
-浮動小数点数: べた
-配列: 最初に長さを整数エンコードで書く。残りは各要素を詰める
-  ただし要素型が2byte以下のときは要素固定長で
-連想配列: 配列と同じ
-構造体: 各フィールドを詰める
-union: 最初にタグ、次に要素
+C++の例外はstd::exception。what()を持つ。
+std::bad_alloc
 
----------------------------------------------------------------------
-from_string
-
-・構造体のフィールド順序を名前順に固定し、deserializeを速くする
-・mapと構造体を互換に
-・数値と文字列を互換に
-・不要値を読み飛ばす
 

@@ -872,7 +872,7 @@ expr_block::expr_block(const char *fn, int line, expr_i *tparams,
     rettype_uneval(ptr_down_cast<expr_te>(rettype_uneval)),
     ret_passby(ret_passby),
     stmts(ptr_down_cast<expr_stmts>(stmts)),
-    symtbl(this)
+    symtbl(this), compiled_flag(false)
 {
   /* NOTE: ret_passby is not implemented yet */
   tinfo.tparams = ptr_down_cast<expr_tparams>(tparams);
@@ -1476,9 +1476,9 @@ std::string expr_dunion::dump(int indent) const
 }
 
 expr_interface::expr_interface(const char *fn, int line, const char *sym,
-  expr_i *block, attribute_e attr)
-  : expr_i(fn, line), sym(sym), block(ptr_down_cast<expr_block>(block)),
-    attr(attr), value_texpr()
+  const char *cname, expr_i *block, attribute_e attr)
+  : expr_i(fn, line), sym(sym), cname(cname),
+    block(ptr_down_cast<expr_block>(block)), attr(attr), value_texpr()
 {
   assert(block);
   this->block->symtbl.block_esort = expr_e_interface;

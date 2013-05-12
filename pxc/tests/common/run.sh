@@ -33,9 +33,9 @@ for i in $TESTS; do
     touch $bn.log
   fi
   bn=`basename $i .px`
-  if ! diff -u $bn.log $bn.exp > /dev/null 2>&1; then
+  if ! diff -u $bn.exp $bn.log > /dev/null 2>&1; then
     echo
-    diff -u $bn.log $bn.exp 2>&1
+    diff -u $bn.exp $bn.log 2>&1
     echo "error output:"
     cat $bn.log2 2> /dev/null
     echo "$bn failed"
@@ -43,9 +43,9 @@ for i in $TESTS; do
     errnames="$errnames $bn"
     # exit 1
   elif [ -f "$bn.exp2" ]; then
-    if ! diff -u $bn.log2 $bn.exp2 > /dev/null 2>&1; then
+    if ! diff -u $bn.exp2 $bn.log2 > /dev/null 2>&1; then
       echo
-      diff -u $bn.log2 $bn.exp2 2>&1
+      diff -u $bn.exp2 $bn.log2 2>&1
       echo "$bn failed";
       err=$((err + 1))
       errnames="$errnames $bn"

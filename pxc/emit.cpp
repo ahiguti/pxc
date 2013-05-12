@@ -79,7 +79,11 @@ static std::string get_term_cname(const term& t)
 
 static void emit_term(emit_context& em, const term& t)
 {
-  em.puts(get_term_cname(t));
+  std::string s = get_term_cname(t);
+  if (s.empty()) {
+    abort();
+  }
+  em.puts(s);
 }
 
 static void emit_explicit_init_if(emit_context& em, const term& t)
@@ -243,6 +247,9 @@ static void emit_interface_def_one(emit_context& em, expr_interface *ei,
   bool proto_only)
 {
   if (!is_compiled(ei->block)) {
+    return;
+  }
+  if (!proto_only && ei->cname != 0) {
     return;
   }
   em.set_ns(ei->uniqns);
