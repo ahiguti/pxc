@@ -137,11 +137,13 @@ static compile_mode cur_mode;
 %type<int_val> opt_cv
 %type<visi_val> opt_attribute
 %type<visi_val> opt_attribute_threading
+%type<str_val>  opt_strlit
 %type<expr_val> c_struct_stmt
 %type<expr_val> struct_stmt
 %type<expr_val> dunion_stmt
 %type<expr_val> opt_inherit_expr
 %type<expr_val> interface_stmt
+%type<str_val>  opt_extern
 %type<expr_val> enum_stmt
 %type<expr_val> enum_value_list
 %type<expr_val> metafdef_stmt
@@ -553,19 +555,29 @@ opt_attribute_threading
 			| attribute_valuetype | attribute_tsvaluetype); }
 	;
 struct_stmt
-	: opt_attribute TOK_STRUCT opt_tparams_expr TOK_SYMBOL
-		opt_inherit_expr '{' struct_body_stmt_list '}'
-	  { $$ = expr_struct_new(cur_fname, @2.first_line, $4, 0, 0,
-		expr_block_new(cur_fname, @2.first_line, $3, $5, 0, 0,
-			passby_e_mutable_value, $7),
+	: opt_attribute TOK_STRUCT opt_extern opt_strlit opt_tparams_expr
+		TOK_SYMBOL opt_inherit_expr '{' struct_body_stmt_list '}'
+	  { $$ = expr_struct_new(cur_fname, @2.first_line, $6,
+		$3 != 0 ? arena_dequote_strdup($3) : 0,
+		$4 != 0 ? arena_dequote_strdup($4) : 0,
+		expr_block_new(cur_fname, @2.first_line, $5, $7, 0, 0,
+			passby_e_mutable_value, $9),
 		$1, false); }
-	| opt_attribute TOK_STRUCT opt_tparams_expr TOK_SYMBOL
-		'(' argdecl_list ')' opt_inherit_expr
+	| opt_attribute TOK_STRUCT opt_extern opt_strlit opt_tparams_expr
+		TOK_SYMBOL '(' argdecl_list ')' opt_inherit_expr
 		'{' struct_body_stmt_list '}'
-	  { $$ = expr_struct_new(cur_fname, @2.first_line, $4, 0, 0,
-		expr_block_new(cur_fname, @2.first_line, $3, $8, $6, 0,
-			passby_e_mutable_value, $10),
+	  { $$ = expr_struct_new(cur_fname, @2.first_line, $6,
+		$3 != 0 ? arena_dequote_strdup($3) : 0,
+		$4 != 0 ? arena_dequote_strdup($4) : 0,
+		expr_block_new(cur_fname, @2.first_line, $5, $10, $8, 0,
+			passby_e_mutable_value, $12),
 		$1, true); }
+	;
+opt_strlit
+	:
+	  { $$ = 0; }
+	| TOK_STRLIT
+	  { $$ = $1; }
 	;
 c_struct_stmt
 	: opt_attribute TOK_EXTERN TOK_STRLIT TOK_STRUCT
@@ -615,12 +627,19 @@ opt_inherit_expr
 	  { $$ = $2; }
 	;
 interface_stmt
-	: opt_attribute TOK_INTERFACE opt_tparams_expr TOK_SYMBOL
+	: opt_attribute TOK_INTERFACE opt_extern opt_tparams_expr TOK_SYMBOL
 		opt_inherit_expr '{' interface_body_stmt_list '}'
-	  { $$ = expr_interface_new(cur_fname, @2.first_line, $4,
-		expr_block_new(cur_fname, @2.first_line, $3, $5, 0, 0,
-			passby_e_mutable_value, $7),
+	  { $$ = expr_interface_new(cur_fname, @2.first_line, $5,
+		$3 != 0 ? arena_dequote_strdup($3) : 0,
+		expr_block_new(cur_fname, @2.first_line, $4, $6, 0, 0,
+			passby_e_mutable_value, $8),
 		$1); }
+	;
+opt_extern
+	:
+	  { $$ = 0; }
+	| TOK_EXTERN TOK_STRLIT
+	  { $$ = $2; }
 	;
 enum_stmt
 	: opt_attribute TOK_ENUM TOK_SYMBOL '{' enum_value_list '}'

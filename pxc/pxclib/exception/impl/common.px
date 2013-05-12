@@ -1,42 +1,99 @@
 namespace exception::impl::common;
+import numeric::integral -;
+import container::string -;
 
 extern "type" inline
 #include <stdexcept>
+#include <vector>
 namespace pxcrt {
 void throw_invalid_index() __attribute__((noreturn));
 void throw_null_dereference() __attribute__((noreturn));
 void throw_invalid_field() __attribute__((noreturn));
 void throw_would_invalidate() __attribute__((noreturn));
-void throw_virtual_function_call() __attribute__((noreturn));
 void throw_bad_alloc() __attribute__((noreturn));
-struct invalid_index : public std::logic_error
-  { invalid_index(); };
-struct invalid_field : public std::logic_error
-  { invalid_field(); };
-struct null_dereference : public std::logic_error
-  { null_dereference(); };
-struct would_invalidate : public std::logic_error
-  { would_invalidate(); };
-struct virtual_function_call : public std::logic_error
-  { virtual_function_call(); };
-struct bad_alloc : public std::bad_alloc
-  { bad_alloc(); };
+struct stack_trace {
+  stack_trace();
+  virtual ~stack_trace() throw() { }
+  std::vector<void *> trace;
+};
+struct logic_error_st : virtual stack_trace, std::logic_error
+  { logic_error_st(const char *w); };
+struct runtime_error_st : virtual stack_trace, std::runtime_error
+  { runtime_error_st(const char *w); };
+struct bad_alloc_st : virtual stack_trace, std::bad_alloc
+  { bad_alloc_st(); };
+struct invalid_index : logic_error_st { invalid_index(); };
+struct invalid_field : logic_error_st { invalid_field(); };
+struct would_invalidate : logic_error_st { would_invalidate(); };
+}; // namespace pxcrt
+
+extern "fdecl" inline
+namespace pxcrt {
+bt_string get_stack_trace(std::exception const& ex);
 }; // namespace pxcrt
 
 extern "fdef" inline
+#include <execinfo.h>
 namespace pxcrt {
-invalid_index::invalid_index() : std::logic_error("invalid_index") { }
-invalid_field::invalid_field() : std::logic_error("invalid_field") { }
-null_dereference::null_dereference() : std::logic_error("null_dereference") { }
-would_invalidate::would_invalidate() : std::logic_error("would_invalidate") { }
-bad_alloc::bad_alloc() : std::bad_alloc() { }
-virtual_function_call::virtual_function_call()
-  : std::logic_error("virtual_function_call") { }
+logic_error_st::logic_error_st(const char *w) : std::logic_error(w) { }
+runtime_error_st::runtime_error_st(const char *w) : std::runtime_error(w) { }
+bad_alloc_st::bad_alloc_st() { }
+invalid_index::invalid_index() : logic_error_st("invalid_index") { }
+invalid_field::invalid_field() : logic_error_st("invalid_field") { }
+would_invalidate::would_invalidate() : logic_error_st("would_invalidate") { }
+void throw_bad_alloc() { throw bad_alloc_st(); }
 void throw_invalid_index() { throw invalid_index(); }
 void throw_invalid_field() { throw invalid_field(); }
-void throw_null_dereference() { throw null_dereference(); }
 void throw_would_invalidate() { throw would_invalidate(); }
-void throw_virtual_function_call() { throw virtual_function_call(); }
-void throw_bad_alloc() { throw bad_alloc(); }
+size_t stack_trace_limit = static_cast<size_t>(-1);
+stack_trace::stack_trace()
+{
+  if (stack_trace_limit != 0) {
+    size_t n = std::min(static_cast<size_t>(5), stack_trace_limit);
+    while (true) {
+      trace.resize(n);
+      backtrace(&trace[0], trace.size());
+      if (trace[trace.size() - 1] == 0) {
+	while (trace[trace.size() - 1] == 0) {
+	  trace.resize(trace.size() - 1);
+	}
+	break;
+      }
+      size_t n2 = std::min(n * 2, stack_trace_limit);
+      if (n2 <= n) {
+	break;
+      }
+      n = n2;
+    }
+  }
+}
+struct auto_free {
+  auto_free(void *ptr) : ptr(ptr) { }
+  ~auto_free() { free(ptr); }
+private:
+  auto_free(const auto_free&);
+  auto_free& operator =(const auto_free&);
+  void *ptr;
+};
+bt_string get_stack_trace(std::exception const& exc)
+{
+  const stack_trace *const st = dynamic_cast<const stack_trace *>(&exc);
+  if (st == 0 || st->trace.empty()) {
+    return bt_string();
+  }
+  std::vector<void *> const& tr = st->trace; 
+  char **syms = backtrace_symbols(&tr[0], tr.size());
+  if (syms == 0) {
+    throw_bad_alloc();
+  }
+  auto_free af(syms);
+  bt_string r;
+  for (size_t i = 0; i < tr.size(); ++i) {
+    r.append(cstrref(
+      reinterpret_cast<const bt_uchar *>(syms[i]), strlen(syms[i])));
+    r.push_back('\n');
+  }
+  return r;
+}
 }; // namespace pxcrt
 

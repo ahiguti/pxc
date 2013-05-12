@@ -883,6 +883,19 @@ bool is_assignable(const term& t)
 #endif
 }
 
+bool is_polymorphic(const term& t)
+{
+  const expr_i *const einst = term_get_instance_const(t);
+  if (einst->get_esort() == expr_e_interface) {
+    return true;
+  }
+  const expr_struct *const est = dynamic_cast<const expr_struct *>(einst);
+  if (est != 0 && est->block->inherit != 0) {
+    return true;
+  }
+  return false;
+}
+
 static std::string term_tostr_tparams(const expr_tparams *tp,
   term_tostr_sort s)
 {
@@ -1023,6 +1036,7 @@ std::string term_tostr(const term& t, term_tostr_sort s)
       self_block = ptr_down_cast<const expr_interface>(tdef)->block;
       tparams = self_block->tinfo.tparams;
       uniqns = ptr_down_cast<const expr_interface>(tdef)->uniqns;
+      cname = ptr_down_cast<const expr_interface>(tdef)->cname;
       esort_char = 'i';
       break;
     case expr_e_typedef:
@@ -1285,28 +1299,16 @@ bool is_same_type(const term& t0, const term& t1)
   return t0 == t1;
 }
 
-bool implements_interface(const expr_struct *est, const expr_interface *ei)
+bool implements_interface(const expr_block *blk, const expr_interface *ei)
 {
   expr_block::inherit_list_type::const_iterator i;
-  for (i = est->block->inherit_transitive.begin();
-    i != est->block->inherit_transitive.end(); ++i) {
+  for (i = blk->inherit_transitive.begin();
+    i != blk->inherit_transitive.end(); ++i) {
     if (*i == ei) {
       return true;
     }
   }
   return false;
-  #if 0
-  // FIXME inherit_transitive
-  const expr_telist *ih = est->block->inherit;
-  while (ih != 0) {
-    if (term_get_instance_const(ih->head->get_sdef()->resolve_evaluated())
-      == ei) {
-      return true;
-    }
-    ih = ih->rest;
-  }
-  return false;
-  #endif
 }
 
 bool is_sub_type(const term& t0, const term& t1)
@@ -1322,18 +1324,22 @@ bool is_sub_type(const term& t0, const term& t1)
     DBG_SUB(fprintf(stderr, "is_sub_type: null\n"));
     return false;
   }
-  const expr_struct *const tdef = dynamic_cast<const expr_struct *>(
-    term_get_instance_const(t0));
-  if (tdef == 0) {
-    DBG_SUB(fprintf(stderr, "is_sub_type: tdef null\n"));
+  const expr_i *const t0inst = term_get_instance_const(t0);
+  const expr_struct *const t0est = dynamic_cast<const expr_struct *>(t0inst);
+  const expr_interface *const t0ei = dynamic_cast<const expr_interface *>(
+    t0inst);
+  const expr_block *t0blk =
+    (t0est != 0) ? t0est->block : (t0ei != 0) ? t0ei->block : 0;
+  if (t0blk == 0) {
+    DBG_SUB(fprintf(stderr, "is_sub_type: t0blk null\n"));
     return false;
   }
-  const expr_interface *const ti = dynamic_cast<const expr_interface *>(
+  const expr_interface *const t1ei = dynamic_cast<const expr_interface *>(
     term_get_instance_const(t1));
-  if (ti == 0) {
+  if (t1ei == 0) {
     return false;
   }
-  return implements_interface(tdef, ti);
+  return implements_interface(t0blk, t1ei);
   #if 0
   expr_telist *ih = tdef->block->inherit;
   while (ih != 0) {
@@ -1777,7 +1783,6 @@ expr_i *fn_drop_non_exports(expr_i *e) {
   }
   sl[sl.size() - 1]->rest = 0;
   return sl[0];
-  return e;
 }
 
 symbol_table *get_current_frame_symtbl(symbol_table *cur)
@@ -3146,6 +3151,7 @@ bool is_noexec_expr(expr_i *e)
   }
 }
 
+#if 0
 static bool is_expand_dummy(const expr_block *bl)
 {
   expr_i *p = bl->parent_expr;
@@ -3159,12 +3165,13 @@ static bool is_expand_dummy(const expr_block *bl)
     p = p->parent_expr;
   }
 }
+#endif
 
 bool is_compiled(const expr_block *bl)
 {
-  /* instantiated and not a expand dummy */
   // return !bl->tinfo.is_uninstantiated() && bl->symtbl_lexical != 0;
-  return !bl->tinfo.is_uninstantiated() && !is_expand_dummy(bl);
+  return !bl->tinfo.is_uninstantiated() /* && !is_expand_dummy(bl) */
+    && bl->compiled_flag;
 }
 
 }; 

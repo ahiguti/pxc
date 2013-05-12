@@ -194,6 +194,16 @@ static term eval_meta_is_assignable_type(term_list& tlev)
   return term(r);
 }
 
+static term eval_meta_is_polymorphic_type(term_list& tlev)
+{
+  if (tlev.size() != 1) {
+    return term();
+  }
+  term& ttyp = tlev[0];
+  const long long r = is_polymorphic(ttyp);
+  return term(r);
+}
+
 static term eval_meta_argnum(term_list& tlev)
 {
   if (tlev.size() != 1) {
@@ -1076,6 +1086,16 @@ static term eval_meta_substring(term_list& tlev)
   }
 }
 
+static term eval_meta_strlen(term_list& tlev)
+{
+  if (tlev.size() != 1) {
+    return term();
+  }
+  const std::string s = meta_term_to_string(tlev[0], false);
+  const long v = s.size();
+  return term(v);
+}
+
 static term eval_meta_attribute(term_list& tlev)
 {
   if (tlev.size() != 2) {
@@ -1426,6 +1446,8 @@ term eval_metafunction_strict(const std::string& name, term_list& tlev,
       r = eval_meta_is_copyable_type(tlev);
     } else if (name == "@is_assignable_type") {
       r = eval_meta_is_assignable_type(tlev);
+    } else if (name == "@is_polymorphic_type") {
+      r = eval_meta_is_polymorphic_type(tlev);
     } else if (name == "@field_types") {
       r = eval_meta_field_types(tlev);
     } else if (name == "@field_names") {
@@ -1460,6 +1482,8 @@ term eval_metafunction_strict(const std::string& name, term_list& tlev,
       r = eval_meta_concat(tlev);
     } else if (name == "@substring") {
       r = eval_meta_substring(tlev);
+    } else if (name == "@strlen") {
+      r = eval_meta_strlen(tlev);
     } else if (name == "@family") {
       r = eval_meta_family(tlev);
     } else if (name == "@attribute") {

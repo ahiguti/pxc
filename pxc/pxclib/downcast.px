@@ -1,14 +1,21 @@
 namespace downcast;
 import numeric::integral -;
+import meta::common m;
 
-public threaded extern "pxcrt::downcast_const"
-function {tto, tfrom} tto const& downcast_const(tfrom const& x);
+public threaded extern "pxcrt::downcast_const" function {tto, tfrom}
+check_polymorphic{tto, tfrom} const& downcast_const(tfrom const& x);
 
-public threaded extern "pxcrt::downcast_mutable"
-function {tto, tfrom} tto& downcast_mutable(tfrom& x);
+public threaded extern "pxcrt::downcast_mutable" function {tto, tfrom}
+check_polymorphic{tto, tfrom}& downcast_mutable(tfrom& x);
 
 public threaded extern "pxcrt::instanceof"
-function {t, tobj} bool instanceof(tobj const& x);
+function {t, tobj} bool instanceof(check_polymorphic{tobj, t} const& x);
+
+private metafunction check_polymorphic{t1, t2}
+  m::cond{
+    m::and{m::is_polymorphic_type{t1}, m::is_polymorphic_type{t2}},
+    t1,
+    m::error{"polymorphic type expected"}};
 
 extern "type" inline
 namespace pxcrt {

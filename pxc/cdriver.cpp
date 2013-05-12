@@ -1073,7 +1073,7 @@ static void load_profile(parser_options& po)
   iter = po.profile.mapval.find("cflags");
   po.profile.cflags = iter != po.profile.mapval.end()
     ? iter->second
-    : "-g -O3 -DNDEBUG -Wall -Wno-unused -Wno-attributes";
+    : "-rdynamic -g -O3 -DNDEBUG -Wall -Wno-unused -Wno-attributes";
     /* note: adding -Wno-attributes is a workaround for that gcc warns
      * when attribute(("may_alias")) is specified for a struct. */
   iter = po.profile.mapval.find("ldflags");

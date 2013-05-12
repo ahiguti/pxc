@@ -730,6 +730,7 @@ public:
   symbol_table symtbl;
   typedef std::vector<expr_i *> inherit_list_type;
   inherit_list_type inherit_transitive;
+  bool compiled_flag : 1;
 };
 
 struct expr_op : public expr_i {
@@ -1283,8 +1284,8 @@ public:
 };
 
 struct expr_interface : public expr_i {
-  expr_interface(const char *fn, int line, const char *sym, expr_i *block,
-    attribute_e attr);
+  expr_interface(const char *fn, int line, const char *sym, const char *cname,
+    expr_i *block, attribute_e attr);
   expr_i *clone() const;
   expr_e get_esort() const { return expr_e_interface; }
   int get_num_children() const { return 1; }
@@ -1314,6 +1315,7 @@ public:
   const char *const sym;
   std::string uniqns;
   std::string injectns;
+  const char *const cname;
   expr_block *block;
   attribute_e attr;
   term value_texpr;
