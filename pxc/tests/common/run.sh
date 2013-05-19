@@ -2,6 +2,7 @@
 
 unset LC_ALL LC_COLLATE LC_CTYPE LC_MESSAGES LC_MONETARY LC_NUMERIC LC_TIME
 unset LANG
+ulimit -c 0
 
 if [ "$1" != "" ]; then
   TESTS="$1"

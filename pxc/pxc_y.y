@@ -113,8 +113,6 @@ static compile_mode cur_mode;
 %type<expr_val> opt_tparams_expr
 %type<expr_val> struct_body_stmt_list
 %type<expr_val> struct_body_stmt
-%type<expr_val> c_struct_body_stmt_list
-%type<expr_val> c_struct_body_stmt
 %type<expr_val> dunion_body_stmt_list
 %type<expr_val> dunion_body_stmt
 %type<expr_val> interface_body_stmt_list
@@ -138,7 +136,6 @@ static compile_mode cur_mode;
 %type<visi_val> opt_attribute
 %type<visi_val> opt_attribute_threading
 %type<str_val>  opt_strlit
-%type<expr_val> c_struct_stmt
 %type<expr_val> struct_stmt
 %type<expr_val> dunion_stmt
 %type<expr_val> opt_inherit_expr
@@ -192,8 +189,8 @@ toplevel_stmt_list
 toplevel_stmt
 	: body_stmt
 	| ext_stmt
-	| c_funcdecl_stmt
-	| c_struct_stmt
+	/* | c_funcdecl_stmt */
+	/* | c_struct_stmt */
 	| c_enumval_stmt
 	| defs_stmt
 	| enum_stmt
@@ -201,6 +198,7 @@ toplevel_stmt
 	;
 defs_stmt
 	: funcdef_stmt
+	| c_funcdecl_stmt
 	| struct_stmt
 	| dunion_stmt
 	| interface_stmt
@@ -233,17 +231,6 @@ struct_body_stmt
 	: expression_stmt /* only vardef is allowed ?? */
 	| defs_stmt
 	| visi_vardef_stmt
-	;
-c_struct_body_stmt_list
-	:
-	  { $$ = 0; }
-	| c_struct_body_stmt c_struct_body_stmt_list
-	  { $$ = expr_stmts_new(cur_fname, @1.first_line, $1, $2); }
-	;
-c_struct_body_stmt
-	: expression_stmt /* only vardef is allowed */
-	| c_funcdecl_stmt
-	| metafdef_stmt
 	;
 dunion_body_stmt_list
 	:
@@ -492,26 +479,26 @@ funcdef_stmt
 		cur_mode != compile_mode_main, false, $1); }
 	;
 c_funcdecl_stmt
-	: opt_attribute TOK_EXTERN TOK_STRLIT TOK_FUNCTION opt_tparams_expr
+	: opt_attribute TOK_FUNCTION TOK_EXTERN TOK_STRLIT opt_tparams_expr
 		type_expr TOK_SYMBOL '(' argdecl_list ')' opt_cv ';'
 	  { $$ = expr_funcdef_new(cur_fname, @2.first_line, $7,
-		arena_dequote_strdup($3), $11,
+		arena_dequote_strdup($4), $11,
 		expr_block_new(cur_fname, @2.first_line, $5, 0, $9, $6,
 			passby_e_mutable_value, 0),
 		false, true, $1); }
-	| opt_attribute TOK_EXTERN TOK_STRLIT TOK_FUNCTION opt_tparams_expr
+	| opt_attribute TOK_FUNCTION TOK_EXTERN TOK_STRLIT opt_tparams_expr
 		type_expr TOK_CONST '&' TOK_SYMBOL '(' argdecl_list ')'
 		opt_cv ';'
 	  { $$ = expr_funcdef_new(cur_fname, @2.first_line, $9,
-		arena_dequote_strdup($3), $13,
+		arena_dequote_strdup($4), $13,
 		expr_block_new(cur_fname, @2.first_line, $5, 0, $11, $6,
 			passby_e_const_reference, 0),
 		false, true, $1); }
-	| opt_attribute TOK_EXTERN TOK_STRLIT TOK_FUNCTION opt_tparams_expr
+	| opt_attribute TOK_FUNCTION TOK_EXTERN TOK_STRLIT opt_tparams_expr
 		type_expr '&' TOK_SYMBOL '(' argdecl_list ')'
 		opt_cv ';'
 	  { $$ = expr_funcdef_new(cur_fname, @2.first_line, $8,
-		arena_dequote_strdup($3), $12,
+		arena_dequote_strdup($4), $12,
 		expr_block_new(cur_fname, @2.first_line, $5, 0, $10, $6,
 			passby_e_mutable_reference, 0),
 		false, true, $1); }
@@ -578,39 +565,6 @@ opt_strlit
 	  { $$ = 0; }
 	| TOK_STRLIT
 	  { $$ = $1; }
-	;
-c_struct_stmt
-	: opt_attribute TOK_EXTERN TOK_STRLIT TOK_STRUCT
-		opt_tparams_expr TOK_SYMBOL '{' c_struct_body_stmt_list '}'
-	  { $$ = expr_struct_new(cur_fname, @2.first_line, $6,
-		arena_dequote_strdup($3), 0,
-		expr_block_new(cur_fname, @2.first_line, $5, 0, 0, 0,
-			passby_e_mutable_value, $8),
-		$1, false); }
-	| opt_attribute TOK_EXTERN TOK_STRLIT TOK_STRUCT
-		opt_tparams_expr TOK_SYMBOL '(' argdecl_list ')' '{'
-		c_struct_body_stmt_list '}'
-	  { $$ = expr_struct_new(cur_fname, @2.first_line, $6,
-		arena_dequote_strdup($3), 0,
-		expr_block_new(cur_fname, @2.first_line, $5, 0, $8, 0,
-			passby_e_mutable_value, $11),
-		$1, true); }
-	| opt_attribute TOK_EXTERN TOK_STRLIT TOK_STRLIT TOK_STRUCT
-		opt_tparams_expr TOK_SYMBOL '{'
-		c_struct_body_stmt_list '}'
-	  { $$ = expr_struct_new(cur_fname, @2.first_line, $7,
-		arena_dequote_strdup($3), arena_dequote_strdup($4),
-		expr_block_new(cur_fname, @2.first_line, $6, 0, 0, 0,
-			passby_e_mutable_value, $9),
-		$1, false); }
-	| opt_attribute TOK_EXTERN TOK_STRLIT TOK_STRLIT TOK_STRUCT
-		opt_tparams_expr TOK_SYMBOL '(' argdecl_list ')' '{'
-		c_struct_body_stmt_list '}'
-	  { $$ = expr_struct_new(cur_fname, @2.first_line, $7,
-		arena_dequote_strdup($3), arena_dequote_strdup($4),
-		expr_block_new(cur_fname, @2.first_line, $6, 0, $9, 0,
-			passby_e_mutable_value, $12),
-		$1, true); }
 	;
 dunion_stmt
 	: opt_attribute TOK_UNION opt_tparams_expr TOK_SYMBOL '{'
