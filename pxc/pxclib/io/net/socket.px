@@ -7,25 +7,25 @@ public import io::file -;
 public import io::errno -;
 public import io::net::addrinfo ai;
 
-public multithreaded extern "pxcio::socket_acceptor" "nodefault"
-  struct socket_acceptor { }
-public multithreaded extern "pxcio::socket_connector" "nodefault"
-  struct socket_connector { }
+public multithreaded struct extern "pxcio::socket_acceptor" "nodefault"
+  socket_acceptor { }
+public multithreaded struct extern "pxcio::socket_connector" "nodefault"
+  socket_connector { }
 
-public multithreaded extern "pxcio::socket_factory" "linear"
-  struct socket_factory(io const& iop, bool passive,
+public multithreaded struct extern "pxcio::socket_factory" "linear"
+  socket_factory(io const& iop, bool passive,
     ai::sockaddr_storage const& addr, ai::socktype_t socktype,
     ai::protocol_t protocol, uint listen_backlog, uint connect_timeout_sec,
     errno_t& ern) { }
 
-public threaded extern "pxcio::accept" function
+public threaded function extern "pxcio::accept"
   file accept(socket_acceptor const& sfp, ai::sockaddr_storage& addr_r,
     errno_t& ern);
-public threaded extern "pxcio::connect" function
+public threaded function extern "pxcio::connect"
   file connect(socket_connector const& sfp, errno_t& ern);
-public threaded extern "pxcio::socket_set_recv_timeout" function
+public threaded function extern "pxcio::socket_set_recv_timeout"
   void socket_set_recv_timeout(file const& f, uint sec, errno_t& ern);
-public threaded extern "pxcio::socket_set_send_timeout" function
+public threaded function extern "pxcio::socket_set_send_timeout"
   void socket_set_send_timeout(file const& f, uint sec, errno_t& ern);
 
 public threaded function socket_acceptor create_acceptor(io const& iop,
@@ -54,13 +54,11 @@ public threaded function socket_connector create_connector(io const& iop,
   return sfp;
 }
 
-private threaded extern "pxcio::create_socket_acceptor" function
-  socket_acceptor create_socket_acceptor(io const& iop,
+private threaded function extern "pxcio::create_socket_acceptor"   socket_acceptor create_socket_acceptor(io const& iop,
     ai::sockaddr_storage const& addr, ai::socktype_t socktype,
     ai::protocol_t protocol, uint listen_backlog, uint accept_timeout_sec,
     errno_t& ern);
-private threaded extern "pxcio::create_socket_connector" function
-  socket_connector create_socket_connector(io const& iop,
+private threaded function extern "pxcio::create_socket_connector"   socket_connector create_socket_connector(io const& iop,
     ai::sockaddr_storage const& addr, ai::socktype_t socktype,
     ai::protocol_t protocol, uint connect_timeout_sec, errno_t& ern);
 

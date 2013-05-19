@@ -11,6 +11,7 @@ void throw_null_dereference() __attribute__((noreturn));
 void throw_invalid_field() __attribute__((noreturn));
 void throw_would_invalidate() __attribute__((noreturn));
 void throw_bad_alloc() __attribute__((noreturn));
+void set_stack_trace_limit(size_t sz);
 struct stack_trace {
   stack_trace();
   virtual ~stack_trace() throw() { }
@@ -25,6 +26,7 @@ struct bad_alloc_st : virtual stack_trace, std::bad_alloc
 struct invalid_index : logic_error_st { invalid_index(); };
 struct invalid_field : logic_error_st { invalid_field(); };
 struct would_invalidate : logic_error_st { would_invalidate(); };
+int main_nothrow(void (*main_f)(void));
 }; // namespace pxcrt
 
 extern "fdecl" inline
@@ -33,6 +35,8 @@ bt_string get_stack_trace(std::exception const& ex);
 }; // namespace pxcrt
 
 extern "fdef" inline
+#include <string>
+#include <unistd.h>
 #include <execinfo.h>
 namespace pxcrt {
 logic_error_st::logic_error_st(const char *w) : std::logic_error(w) { }
@@ -46,6 +50,7 @@ void throw_invalid_index() { throw invalid_index(); }
 void throw_invalid_field() { throw invalid_field(); }
 void throw_would_invalidate() { throw would_invalidate(); }
 size_t stack_trace_limit = static_cast<size_t>(-1);
+void set_stack_trace_limit(size_t sz) { stack_trace_limit = sz; }
 stack_trace::stack_trace()
 {
   if (stack_trace_limit != 0) {
@@ -94,6 +99,30 @@ bt_string get_stack_trace(std::exception const& exc)
     r.push_back('\n');
   }
   return r;
+}
+int main_nothrow(void (*main_f)(void))
+{
+  try {
+    try {
+      (*main_f)();
+    } catch (const std::exception& e) {
+      std::string mess(e.what());
+      if (!mess.empty() && mess[mess.size() - 1] != '\n') {
+	mess += "\n";
+      }
+      bt_string st = get_stack_trace(e);
+      mess.insert(mess.end(), st.begin(), st.end());
+      ::write(2, mess.data(), mess.size());
+      // ::abort();
+      ::_exit(1);
+    }
+  } catch (...) {
+    const char *const mess = "main: uncaught exception\n";
+    ::write(2, mess, strlen(mess));
+    // ::abort();
+    ::_exit(1);
+  }
+  return 0;
 }
 }; // namespace pxcrt
 
