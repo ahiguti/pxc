@@ -1,0 +1,34 @@
+namespace ot2;
+import common -;
+import orb -;
+
+public threaded function int foo(int x, int y)
+{
+  return x + y;
+}
+
+public threaded function string bar(cstrref const& x, cstrref const& y)
+{
+  string s = x;
+  s.append(y);
+  return s;
+}
+
+threaded function string do_call(cstrref ibuf)
+{
+  ns_functions fs = create_ns_functions{"ot2"}();
+  string obuf;
+  call_ns_function(fs, ibuf, obuf);
+  return obuf;
+}
+
+private function void t1()
+{
+  string s1 = do_call("foo\t15\t20");
+  string s2 = do_call("bar\t15\t20");
+  println(s1);
+  println(s2);
+}
+
+t1();
+

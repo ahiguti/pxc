@@ -778,7 +778,7 @@ expr_var::resolve_texpr()
       type_of_this_expr = rhs_ref->resolve_texpr();
     }
     if (type_of_this_expr.is_null()) {
-      arena_error_throw(this, "internal error: expr_var::resove_texpr");
+      arena_error_throw(this, "type inference failed for variable '%s'", sym);
     }
   }
   return type_of_this_expr;

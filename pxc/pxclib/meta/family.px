@@ -1,5 +1,7 @@
 namespace meta::family;
-import meta::common m;
+public import numeric::integral -;
+public import container::string -;
+public import meta::common m;
 
 public metafunction is_array_family{fam}
   m::or{
@@ -26,4 +28,23 @@ public metafunction is_pointer_family{fam}
 
 public metafunction is_struct_family{fam} m::eq{fam, "struct"};
 public metafunction is_union_family{fam} m::eq{fam, "union"};
+
+public metafunction is_string_family_type{t}
+  m::or{
+    m::eq{t, string},
+    m::eq{t, strlit},
+    m::eq{t, strref},
+    m::eq{t, cstrref}};
+
+public metafunction is_range_type{t}
+  m::or{
+    m::eq{m::family{t}, "slice"},
+    m::eq{m::family{t}, "cslice"},
+    m::eq{m::family{t}, "tree_map_range"},
+    m::eq{m::family{t}, "tree_map_crange"}};
+
+public metafunction to_non_ephemeral_type{t}
+  m::cond{is_string_family_type{t}, string,
+  m::cond{is_range_type{t}, m::local{t, "non_ephemeral_type"},
+  t}};
 

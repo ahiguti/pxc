@@ -138,6 +138,9 @@ static void check_numeric_expr(expr_op *eop, expr_i *a0)
 
 static void check_lvalue(const expr_i *epos, expr_i *a0)
 {
+  #if 0
+  fprintf(stderr, "check_lvalue: %s %d\n", a0->dump(0).c_str(), (int)a0->conv);
+  #endif
   expr_has_lvalue(epos, a0, true);
 }
 
@@ -234,12 +237,14 @@ void expr_inline_c::check_type(symbol_table *lookup)
   if (value != 0) {
     const term tv = eval_expr(value);
     const long long v = meta_term_to_long(tv);
-    if (v != 0) {
-      if (posstr == "disable_bounds_checking") {
-	symtbl_lexical->pragma.disable_bounds_checking = true;
-      } else if (posstr == "disable_guard") {
-	symtbl_lexical->pragma.disable_guard = true; // not implemented yet
-      }
+    if (posstr == "disable_bounds_checking") {
+      symtbl_lexical->pragma.disable_bounds_checking = v;
+    } else if (posstr == "disable_guard") {
+      symtbl_lexical->pragma.disable_guard = v; // not implemented yet
+    } else if (posstr == "trace_meta") {
+      symtbl_lexical->pragma.trace_meta = v;
+    } else {
+      arena_error_throw(this, "invalid inline expression");
     }
   }
 }
@@ -3026,7 +3031,7 @@ void expr_expand::check_type(symbol_table *lookup)
 	}
       } else {
 	/* te is of the form {"foo", "bar"} and baseexpr is a single stmt */
-	symte = te;
+	symte = te; /* TODO: convert to string */
 	if (baseexpr->get_esort() == expr_e_stmts) {
 	  baseexpr_cur = ptr_down_cast<expr_stmts>(baseexpr)->head;
 	} else {
@@ -3116,6 +3121,7 @@ void expr_expand::check_type(symbol_table *lookup)
     gparent = p;
     gparent_pos = i;
   }
+  /* re-chain */
   if (generated_expr != 0) {
     fn_set_generated_code(generated_expr); /* mark block_id_ns = 0 */
     fn_update_tree(generated_expr, gparent, lookup, uniqns, injectns);

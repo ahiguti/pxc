@@ -1588,14 +1588,16 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
     }
   }
   DBG_CONV(fprintf(stderr, "P6\n"));
-  if (is_cm_range_family(tfrom) && is_container_family(tconvto)) {
+  if (is_cm_range_family(tfrom) && is_container_family(tconvto) &&
+    tconvto != builtins.type_strlit) {
     /* range to container */
     const term tra = get_array_range_texpr(0, 0, tconvto);
     const term_list *const tfa = tfrom.get_args();
     const term_list *const tta = tra.get_args();
     if (tta != 0 && tfa != 0 && tta->front() == tfa->front()) {
       DBG_CONV(fprintf(stderr, "convert: auto range to container\n"));
-      efrom->conv = conversion_e_subtype_obj;
+      // efrom->conv = conversion_e_subtype_obj; // FIXME: remove
+      efrom->conv = conversion_e_cast;
       efrom->type_conv_to = tconvto;
       return true;
     }
