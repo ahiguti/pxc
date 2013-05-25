@@ -130,14 +130,14 @@ thread関連(やりなおし)
   整数の範囲を指定。(expr_forrange_new)
   - for (type v : expr1 .. expr2) { ... }
   コンテナ要素イテレート。(expr_feach_new)
-  - foreach (ktype k, mtype m : expr1) { ... }
-  struct/unionフィールド。(expr_fldfe_new)
+  - for (ktype k, mtype m : expr1) { ... }
+  (廃止)struct/unionフィールド。(expr_fldfe_new)
   - foreach (sym : expr1) { ... } // expr1はstruct/union型変数
   - foreach (name, sym : expr1) { ... }
   - foreach (name, idx, sym : expr1) { ... }
-  metaexprの各要素についてイテレート(expr_fldfe_new)
+  (廃止)metaexprの各要素についてイテレート(expr_fldfe_new)
   - foreach (sym : metaexpr) { ... }
-  式をfoldする。(expr_foldfe_new)
+  (廃止)式をfoldする。(expr_foldfe_new)
   - foreach (sym1 : metaexpr ; sym2 : expr1 ; "=") { ... }
     metaexpr(リスト)の要素について、expr1の中のsym1をその
     メタリスト要素の各々で置き換えた式を作り、それを演算子
@@ -150,12 +150,15 @@ thread関連(やりなおし)
   - rangeを返す関数はメンバ関数でなくてはならず、返すrangeはthis
     が有効であるかぎりは有効であるようなものでなければならない
 
-- 文に対するexpand
-  expand(name, idx : metalist) {
-    stmt0;
-    stmt1;
-    stmt2;
-    ...
-  }
-  nameには
+- expand文
+  expand(sym, idx : metalist) { stmt0; stmt1; stmt2; ...  }
+  symとidxはシンボル。metalistは
+    list{list{"arg0", s0}, list{"arg1", s1}, ...}
+  の形か、あるいは
+    list{"arg0", "arg1", ...}
+  の形。s0等はステートメント番号。
+  metalistの各要素について、s_i番めの文stmt_iを、文中のsymをarg_iで
+  置き換え、またidxをiで置き換えた文を作り、それを連結したものが
+  expand文の位置に展開される。symを置換する際には、それがテンプレ式
+  の中であればメタ文字列、そうでないならシンボルに置き換わる。
 

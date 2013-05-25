@@ -1,0 +1,35 @@
+namespace ot1;
+import common -;
+import orb -;
+
+public threaded function int foo(int x, int y)
+{
+  return x + y;
+}
+
+public threaded function string bar(cstrref const& x, cstrref const& y)
+{
+  string s = x;
+  s.append(y);
+  return s;
+}
+
+function void t1()
+{
+  {
+    string ibuf = "1\t2";
+    string obuf;
+    cstrref ibufref = ibuf;
+    call_function{foo}(ibufref, obuf);
+    println(obuf);
+  }
+  {
+    string ibuf = "abc\txyz";
+    string obuf;
+    cstrref ibufref = ibuf;
+    call_function{bar}(ibufref, obuf);
+    println(obuf);
+  }
+}
+
+t1();
