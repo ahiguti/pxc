@@ -17,22 +17,33 @@ struct stack_trace {
   virtual ~stack_trace() throw() { }
   std::vector<void *> trace;
 };
-struct logic_error_st : virtual stack_trace, std::logic_error
-  { logic_error_st(const char *w); };
-struct runtime_error_st : virtual stack_trace, std::runtime_error
-  { runtime_error_st(const char *w); };
-struct bad_alloc_st : virtual stack_trace, std::bad_alloc
-  { bad_alloc_st(); };
-struct invalid_index : logic_error_st { invalid_index(); };
-struct invalid_field : logic_error_st { invalid_field(); };
-struct would_invalidate : logic_error_st { would_invalidate(); };
+struct logic_error_st : virtual stack_trace, std::logic_error {
+  logic_error_st(const char *w);
+};
+struct runtime_error_st : virtual stack_trace, std::runtime_error {
+  runtime_error_st(const char *w);
+};
+struct bad_alloc_st : virtual stack_trace, std::bad_alloc {
+  bad_alloc_st();
+};
+struct invalid_index : logic_error_st {
+  invalid_index();
+};
+struct invalid_field : logic_error_st {
+  invalid_field();
+};
+struct would_invalidate : logic_error_st {
+  would_invalidate();
+};
 int main_nothrow(void (*main_f)(void));
 }; // namespace pxcrt
+;
 
 extern "fdecl" inline
 namespace pxcrt {
 bt_string get_stack_trace(std::exception const& ex);
 }; // namespace pxcrt
+;
 
 extern "fdef" inline
 #include <string>
@@ -125,4 +136,5 @@ int main_nothrow(void (*main_f)(void))
   return 0;
 }
 }; // namespace pxcrt
+;
 

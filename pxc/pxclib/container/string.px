@@ -7,6 +7,13 @@ public import meta::common m;
 public metafunction strref slice{uchar};
 public metafunction cstrref cslice{uchar};
 
+public metafunction is_string_family_type{t}
+    m::or{
+      m::eq{t, string},
+      m::eq{t, strlit},
+      m::eq{t, strref},
+      m::eq{t, cstrref}};
+
 public mtvaluetype struct extern "pxcrt::bt_string" "varray" string {
   public metafunction key_type size_t;
   public metafunction mapped_type uchar;
@@ -37,10 +44,12 @@ public tsvaluetype struct extern "pxcrt::bt_strlit" "farray" strlit {
   public function extern "find" size_t find(size_t o, uchar const& v) const;
 }
 
-public metafunction is_string_family_type{t}
-    m::or{
-      m::eq{t, string},
-      m::eq{t, strlit},
-      m::eq{t, strref},
-      m::eq{t, cstrref}};
+public threaded function extern "pxcrt::memcmp_string"
+  int memcmp_string(string const& x, string const& y);
+public threaded function extern "pxcrt::memcmp_strlit"
+  int memcmp_strlit(strlit const& x, strlit const& y);
+public threaded function extern "pxcrt::memcmp_strref"
+  int memcmp_strref(strref const& x, strref const& y);
+public threaded function extern "pxcrt::memcmp_cstrref"
+  int memcmp_cstrref(cstrref const& x, cstrref const& y);
 

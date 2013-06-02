@@ -16,18 +16,19 @@ public threaded function string bar(cstrref const& x, cstrref const& y)
 
 threaded function string do_call(cstrref ibuf)
 {
-  ns_functions fs = create_ns_functions{"ot2"}();
-  string obuf;
-  call_ns_function(fs, ibuf, obuf);
-  return obuf;
+  orb o;
+  o.funcs = create_ns_functions{"ot2"}();
+  o.rbuf = ibuf;
+  call_ns_function(o, 0);
+  return o.wbuf;
 }
 
 private function void t1()
 {
   string s1 = do_call("foo\t15\t20");
   string s2 = do_call("bar\t15\t20");
-  println(s1);
-  println(s2);
+  print(s1);
+  print(s2);
 }
 
 t1();
