@@ -3,7 +3,7 @@ HDNUM		[0-9a-fA-F]
 AL		[a-zA-Z_]
 ALNUM		[0-9a-zA-Z_]
 ESCCH		[abfnrtv\'\"\\\?\0]
-NOEL		([^\n]|\n[^\n])
+NOEI		(\n|[^\;\n].*\n)
 NOEC		([^\*]|\*[^\/])
 %{
 
@@ -100,7 +100,7 @@ extern int count_newline(const char *str);
 "::"			{ return TOK_NSDELIM; }
 ".."			{ return TOK_SLICE; }
 "\n"			{ yylloc.first_line++; }
-inline\n{NOEL}*\n\n	{ yylval.str_val = pxc::arena_strdup(yytext);
+inline\n{NOEI}*\;\n	{ yylval.str_val = pxc::arena_strdup(yytext);
 			  yylloc.first_line += pxc::count_newline(yytext);
 			  return TOK_INLINE; }
 \/\*{NOEC}*\*\/		{ yylloc.first_line += pxc::count_newline(yytext); }

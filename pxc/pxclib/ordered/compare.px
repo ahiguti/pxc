@@ -15,10 +15,21 @@ public threaded function {t} int compare(t const& x, t const& y)
     return sym(x, y);
   } else if (m::eq{t, unit}) {
     return 0;
+  } else if (mf::is_string_family_type{t}) {
+    if (m::eq{t, string}) {
+      return memcmp_string(x, y);
+    } else if (m::eq{t, strlit}) {
+      return memcmp_strlit(x, y);
+    } else if (m::eq{t, strref}) {
+      return memcmp_strref(x, y);
+    } else if (m::eq{t, cstrref}) {
+      return memcmp_cstrref(x, y);
+    } else {
+      return m::error{"internal error"};
+    }
   } else if (m::or{
     m::eq{fam, "builtin"}, m::eq{fam, "int"}, m::eq{fam, "uint"},
-    m::eq{fam, "float"}, m::eq{fam, "numeric"},
-    mf::is_string_family_type{t}}) {
+    m::eq{fam, "float"}, m::eq{fam, "numeric"}}) {
     return x < y ? -1 : x > y ? 1 : 0;
   } else if (m::eq{fam, "farray"}) {
     size_t const sz = m::at{t, 1};

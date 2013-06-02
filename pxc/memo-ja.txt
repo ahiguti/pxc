@@ -3,15 +3,18 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- cの予約語(intとか)にメソッド名などがかぶったとき
+
+- 関数呼び出しをexpandする - blockのかわりに
+
+- inheritsに同じものを複数回指定するとどうなるか？
+
+- rpc: remoteハンドルに対して関数を呼び出す
+  orb { ns_functions funcs; string rbuf; string wbuf; } のように
+
 - orb: exceptions
 
-- for文やcatchなど、const refなど装飾を整理
-
-- operator = for strlit (done)
-
 - trace_meta should not be an extern pragma
-
-- strref, cstrref -> string& へ変換できてしまう 
 
 - まずmarshal by reference無しのRPC作る
 
@@ -31,8 +34,6 @@ FIXME/TODO M1
 
 - ccだけ吐くモード -> androidに必要
 - ヘッダファイルを吐くモード
-
-- 例外まわりの仕様きめよ。errnoを投げられたときとか。
 
 - プロセスをforkしてpipe経由で通信するパターン
   - バイト列の通信(popen的なもの)
@@ -313,6 +314,9 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- inline C syntax (done)
+- operator = for strlit (done)
+- for文やcatchなど、const refなど装飾を整理 (done)
 - threadのmainまで例外が飛んできたらどうするか (done)
 - interface extern (done)
 - mainでget_stack_trace() (done)
@@ -1176,6 +1180,11 @@ ORBに必要なもの
       marshal{tr}(res, r);
     }
   }
+非メンバ関数のstub
+各関数ごとにstubを作るか、nsごとにstubを作るか
+function int foo(int x, int y);
+function int stub_foo(orb& o, int x, int y) { ... }
+function {f} rettype{f} remote_function(orb& o, argtypes{f}) { ... }
 
 ---------------------------------------------------------------------
 RPC1
@@ -1187,10 +1196,43 @@ function {t} t unmarshal(cstrref& buf)
   tab区切りで引数を取り出し、unmarshalする。取り出した引数はbufから
   pop_frontする。
 
-バイナリサーチで関数を見つけるロジック
-cstrref s;
-expand (...) {
-  if (s == fname) {
-    ...
+リモート可能な関数・メソッドは？
+- 引数と返値がすべてmarshal/unmarshalできればok
+- remoteを実装する型へのポインタは参照でmarshalされる
+- (option) remoteを実装する型のみmutable byrefで受けられる
+
+関数呼び出し
+  F foo 10 20
+メソッド呼び出し
+  M %1 bar 10 20
+リターン
+  R 50
+例外
+  T hogefuga
+
+struct orb {
+  ns_functions our_funcs;
+  string rbuf;
+  string wbuf;
+  void expect_response()
+  {
+    while (true) {
+      write_and_read(); // wbufを書いてrbufへ読む
+      if (is_request()) {
+	dispatch();
+      } else {
+	break;
+      }
+    }
+  }
+  void dispatch()
+  {
+    cslice req = rbuf[ .. ]; // リクエスト一つを切り出す
+    read_token(req, 'F');
+    call_ns_function(our_funcs, req, wbuf); // 中でreqを消す
   }
 }
+
+各orbにはbyref型マーシャラの配列を持っていて、各objectのskeletonには
+その型に応じたマーシャラのidが同時に記録されている。
+

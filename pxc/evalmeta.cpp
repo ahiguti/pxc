@@ -930,7 +930,7 @@ static term eval_meta_sort(term_list& tlev)
   }
   const term_list& tl = *t.get_metalist();
   term_list rtl = tl;
-  std::sort(rtl.begin(), rtl.end());
+  std::stable_sort(rtl.begin(), rtl.end());
   return term(rtl);
 }
 

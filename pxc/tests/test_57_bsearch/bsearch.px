@@ -2,21 +2,21 @@ namespace bsearch;
 import common -;
 import meta::common m;
 
+private metafunction cidx{lst} m::div{m::size{lst}, 2};
+private metafunction toph{lst} m::slice{lst, 0, cidx{lst}};
+private metafunction both{lst} m::slice{lst, m::add{cidx{lst}, 1}};
+
 function {lst} void bsinl(int x)
 {
-  metafunction lsz m::size{lst};
-  if (m::gt{lsz, 0}) {
-    metafunction cidx m::div{lsz, 2};
-    metafunction lst0 m::slice{lst, 0, cidx};
-    metafunction lst1 m::slice{lst, m::add{cidx, 1}};
-    if (x == m::at{lst, cidx}) {
+  if (m::gt{m::size{lst}, 0}) {
+    if (x == m::at{lst, cidx{lst}}) {
       string s = "found: ";
       s.append(to_string(x));
       println(s);
-    } else if (x < m::at{lst, cidx}) {
-      bsinl{lst0}(x);
+    } else if (x < m::at{lst, cidx{lst}}) {
+      bsinl{toph{lst}}(x);
     } else {
-      bsinl{lst1}(x);
+      bsinl{both{lst}}(x);
     }
   } else {
     string s = "notfound: ";

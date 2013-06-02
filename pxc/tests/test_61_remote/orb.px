@@ -1,47 +1,91 @@
 namespace orb;
-import common -;
-import string::conversion -;
-import ordered::compare -;
-import meta::common m;
-import meta::family mf;
+public import common -;
+public import string::conversion -;
+public import ordered::compare -;
+public import exception::common -;
+public import downcast -;
+public import meta::common m;
+public import meta::family mf;
 
-public valuetype interface i_marshal_fcall
-{
-  function void call(cstrref& ibuf, string& obuf) const;
+public threaded struct orb {
+  ns_functions funcs;
+  vector{methods} mets;
+  string rbuf;
+  string wbuf;
 }
 
-public valuetype struct {f} marshal_fcall <i_marshal_fcall>
+public threaded interface remote { }
+
+public threaded function void execute(orb& o)
 {
-  function void call(cstrref& ibuf, string& obuf) const {
-    expand (fsym, idx : func_argexp_list{f}) {
-      func_argtype_ne{f, idx} fsym =
-	unmarshal_value{func_argtype_ne{f, idx}}(ibuf);
-    }
-    if (m::ne{m::rettype{f}, void}) {
-      m::rettype{f} r = f(expand(a : func_argnames{f}; a));
-      marshal_value(obuf, r);
+  try {
+    uchar req = o.rbuf[0];
+    if (req == 'F') {
+      call_ns_function(o, 2);
     } else {
-      f(expand(a : func_argnames{f}; a));
+      o.wbuf.append("T\tunknown_request\n");
     }
+  } catch (runtime_error e) {
+    o.wbuf.clear();
+    o.wbuf.append("T\t");
+    string s = "runtime_error\n";
+    string tr = get_stack_trace(e);
+    s.append(tr);
+    serialize_to_string{string}(s, o.wbuf);
+    o.wbuf.append("\n");
   }
 }
 
-/* FIXME: remove */
-public threaded function {f} void call_function(cstrref& ibuf, string& obuf)
+public threaded function void call_ns_function(orb& o, size_t const rbuf_pos)
 {
-  marshal_fcall{f} m;
-  m.call(ibuf, obuf);
+  ns_functions_slice fs = o.funcs;
+  size_t const delimpos = o.rbuf.find(rbuf_pos, '\t');
+  size_t const rbuf_args_pos =
+    delimpos < o.rbuf.size() ? delimpos + 1 : delimpos;
+  size_t const p = binary_search{func_entry, cstrref, compare_func_entry}(
+    fs, o.rbuf[rbuf_pos .. delimpos]);
+  if (p < fs.size()) {
+    fs[p].func->call(o, rbuf_args_pos);
+  } else {
+    o.wbuf.append("T\tfunction_not_found\n");
+  }
+}
+
+public threaded function void call_method(orb& o, size_t const rbuf_pos,
+  size_t tid, remote& obj)
+{
+  methods_slice ms = o.mets[tid];
+  size_t const delimpos = o.rbuf.find(rbuf_pos, '\t');
+  size_t const rbuf_args_pos =
+    delimpos < o.rbuf.size() ? delimpos + 1 : delimpos;
+  size_t const p = binary_search{method_entry, cstrref, compare_method_entry}(
+    ms, o.rbuf[rbuf_pos .. delimpos]);
+  if (p < ms.size()) {
+    ms[p].method->call(o, rbuf_args_pos, obj);
+  } else {
+    o.wbuf.append("T\tmethod_not_found\n");
+  }
 }
 
 public threaded struct func_entry (strlit const& k,
-  iptr{i_marshal_fcall} const& f)
+  ptr{i_marshal_fcall} const& f)
 {
   strlit name = k;
-  iptr{i_marshal_fcall} func = f;
+  ptr{i_marshal_fcall} func = f;
+}
+
+public threaded struct method_entry (strlit const& k,
+  ptr{i_marshal_method} const& f)
+{
+  strlit name = k;
+  ptr{i_marshal_method} method = f;
 }
 
 public metafunction ns_functions vector{func_entry};
 public metafunction ns_functions_slice cslice{func_entry};
+
+public metafunction methods vector{method_entry};
+public metafunction methods_slice cslice{method_entry};
 
 public threaded function {ns} ns_functions create_ns_functions()
 {
@@ -50,12 +94,83 @@ public threaded function {ns} ns_functions create_ns_functions()
     {
       strlit k = m::to_string{fsym};
       metafunction fc marshal_fcall{m::symbol{fsym, ns}};
-      iptr{i_marshal_fcall} p = iptr{fc}(fc());
+      ptr{i_marshal_fcall} p = ptr{fc}(fc());
       func_entry e = func_entry(k, p);
       fs.push_back(e);
     }
   }
   return fs;
+}
+
+public threaded function {t} methods create_methods()
+{
+  methods ms;
+  expand (fsym, idx : m::map{member_functions_sorted{t}, m::to_string}) {
+    {
+      strlit k = m::to_string{fsym};
+      metafunction mt marshal_method{t, idx};
+      ptr{i_marshal_method} p = ptr{mt}(mt());
+      method_entry e = method_entry(k, p);
+      ms.push_back(e);
+    }
+  }
+  return ms;
+}
+
+private threaded interface i_marshal_fcall
+{
+  function void call(orb& o, size_t pos) const;
+}
+
+private threaded struct {f} marshal_fcall <i_marshal_fcall>
+{
+  function void call(orb& o, size_t pos) const {
+    expand (asym, idx : func_argexp_list{f}) {
+      func_argtype_ne{f, idx} asym =
+	unmarshal_value{func_argtype_ne{f, idx}}(o.rbuf, pos);
+    }
+    o.rbuf.clear();
+    if (m::ne{m::rettype{f}, void}) {
+      m::rettype{f} r = f(expand(a : func_argnames{f}; a));
+      o.wbuf.append("R\t");
+      marshal_value(o.wbuf, r);
+      o.wbuf.append("\n");
+    } else {
+      o.wbuf.append("R\t");
+      f(expand(a : func_argnames{f}; a));
+      o.wbuf.append("\n");
+    }
+  }
+}
+
+private threaded interface i_marshal_method
+{
+  function void call(orb& o, size_t pos, remote& obj) const;
+}
+
+private threaded struct {t, mi} marshal_method <i_marshal_method>
+{
+  function void call(orb& o, size_t pos, remote& obj) const {
+    t mutable& objt = downcast_mutable{t, remote}(obj);
+    metafunction f m::at{member_functions_sorted{t}, mi};
+    expand (asym, idx : func_argexp_list{f}) {
+      func_argtype_ne{f, idx} asym =
+	unmarshal_value{func_argtype_ne{f, idx}}(o.rbuf, pos);
+    }
+    o.rbuf.clear();
+    expand (fsym : m::list{m::list{m::to_string{f}, 0}}) {
+      if (m::ne{m::rettype{f}, void}) {
+	m::rettype{f} r = objt.fsym(expand(a : func_argnames{f}; a));
+	o.wbuf.append("R\t");
+	marshal_value(o.wbuf, r);
+	o.wbuf.append("\n");
+      } else {
+	o.wbuf.append("R\t");
+	obj.fsym(expand(a : func_argnames{f}; a));
+	o.wbuf.append("\n");
+      }
+    }
+  }
 }
 
 private threaded function {t, tk, cmp} size_t binary_search(cslice{t} const& s,
@@ -64,7 +179,7 @@ private threaded function {t, tk, cmp} size_t binary_search(cslice{t} const& s,
   size_t first = 0;
   size_t last = s.size();
   while (last - first > 0) {
-    extern "disable_bounds_checking" 1;
+    extern "disable_bounds_checking" 1; /* s[middle] is always safe */
     size_t const middle = first + ((last - first) >> 1);
     int const c = cmp(s[middle], k);
     if (c < 0) {
@@ -84,24 +199,17 @@ private threaded function int compare_func_entry(func_entry const& ent,
   return compare{cstrref}(ent.name, k);
 }
 
-public threaded function void call_ns_function(ns_functions_slice const& fs,
-  cstrref& ibuf, string& obuf)
+private threaded function int compare_method_entry(method_entry const& ent,
+  cstrref const& k)
 {
-  size_t delimpos = ibuf.find(0, '\t');
-  cstrref tok = ibuf[0 .. delimpos];
-  ibuf.pop_front(delimpos < ibuf.size() ? delimpos + 1 : delimpos);
-  size_t const p = binary_search{
-    func_entry, cstrref, compare_func_entry}(fs, tok);  
-  if (p < fs.size()) {
-    fs[p].func->call(ibuf, obuf);
-  }
+  return compare{cstrref}(ent.name, k);
 }
 
-private threaded function {t} t unmarshal_value(cstrref& buf)
+private threaded function {t} t unmarshal_value(string const& buf, size_t& pos)
 {
-  size_t delimpos = buf.find(0, '\t');
-  cstrref tok = buf[0 .. delimpos];
-  buf.pop_front(delimpos < buf.size() ? delimpos + 1 : delimpos);
+  size_t delimpos = buf.find(pos, '\t');
+  cstrref tok = buf[pos .. delimpos];
+  pos = delimpos < buf.size() ? delimpos + 1 : delimpos;
   return deserialize_from_string{t}(tok);
 }
 
@@ -109,6 +217,12 @@ private threaded function {t} void marshal_value(string& buf, t const& x)
 {
   serialize_to_string{t}(x, buf);
 }
+
+private metafunction member_functions_sorted{t}
+  sort_by_string{m::member_functions{t}};
+private metafunction sort_by_string{lst}
+  m::map{m::sort{m::map{lst, string_and_value}}, m::at1};
+private metafunction string_and_value{v} m::list{m::to_string{v}, v};
 
 private metafunction func_argexp_list{f}
   m::map{m::seq{m::size{m::args{f}}}, argexp};
