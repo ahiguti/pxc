@@ -427,7 +427,7 @@ term eval_apply(const term& tm, const term_list& args,
     /* chain of term_bind */
     expr_i *tp = cur->get_bind_tparam();
     while (tp != 0) {
-      if (!cur->get_bind_is_upvalue()) {
+      if (!*cur->get_bind_is_upvalue()) {
 	++nbind;
       }
       cur = cur->get_bind_next();
