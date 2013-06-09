@@ -1348,16 +1348,23 @@ std::string expr_typedef::dump(int indent) const
 
 expr_metafdef::expr_metafdef(const char *fn, int line, const char *sym,
   expr_i *tparams, expr_i *rhs, attribute_e attr)
-  : expr_i(fn, line), sym(sym),
+  : expr_i(fn, line), sym(sym != 0 ? sym : ""),
     block(ptr_down_cast<expr_block>(expr_block_new(fn, line, tparams, 0, 0, 0,
       passby_e_mutable_value, expr_stmts_new(fn, line, rhs, 0)))),
     attr(attr)
 {
 }
 
+expr_i *expr_metafdef::clone() const
+{
+  expr_metafdef *cpy = new expr_metafdef(*this);
+  cpy->rhs_term = term(); /* clear cached rhs term */
+  return cpy;
+}
+
 std::string expr_metafdef::dump(int indent) const
 {
-  return std::string("macro ") + sym + " " + dump_expr(indent, get_rhs());
+  return std::string("macro '") + sym + "' " + dump_expr(indent, get_rhs());
 }
 
 expr_struct::expr_struct(const char *fn, int line, const char *sym,

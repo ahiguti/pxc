@@ -14,6 +14,7 @@
 #include "evalmeta.hpp"
 #include <vector>
 #include <algorithm>
+#include <sys/time.h>
 #include "checktype.hpp"
 #include "expr_misc.hpp"
 #include "util.hpp"
@@ -56,8 +57,7 @@ static bool term_truth_value(const term& t)
   return true;
 }
 
-static term eval_meta_local(term_list& tlev, env_type& env,
-  size_t depth, expr_i *pos)
+static term eval_meta_local(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() < 2) {
     return term();
@@ -89,11 +89,10 @@ static term eval_meta_local(term_list& tlev, env_type& env,
   term_list rtargs;
   rtargs.insert(rtargs.begin(), tlev.begin() + 2, tlev.end());
   term rt(rsym, rtargs);
-  return eval_term_internal(rt, true, env, depth + 1, pos);
+  return eval_term_internal(rt, true, ectx, pos);
 }
 
-static term eval_meta_symbol(term_list& tlev, env_type& env,
-  size_t depth, expr_i *pos)
+static term eval_meta_symbol(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() < 1) {
     return term();
@@ -145,8 +144,7 @@ static term eval_meta_symbol(term_list& tlev, env_type& env,
   return term(rsym);
 }
 
-static term eval_meta_apply(term_list& tlev, env_type& env,
-  size_t depth, expr_i *pos)
+static term eval_meta_apply(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() < 1) {
     return term();
@@ -159,11 +157,10 @@ static term eval_meta_apply(term_list& tlev, env_type& env,
   term_list rtargs;
   rtargs.insert(rtargs.begin(), tlev.begin() + 1, tlev.end());
   term rt(t0expr, rtargs);
-  return eval_term_internal(rt, true, env, depth + 1, pos);
+  return eval_term_internal(rt, true, ectx, pos);
 }
 
-static term eval_meta_error(term_list& tlev, env_type& env,
-  size_t depth, expr_i *pos)
+static term eval_meta_error(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() < 1) {
     return term();
@@ -174,7 +171,8 @@ static term eval_meta_error(term_list& tlev, env_type& env,
   throw std::runtime_error(s);
 }
 
-static term eval_meta_is_copyable_type(term_list& tlev)
+static term eval_meta_is_copyable_type(term_list& tlev, eval_context& ectx,
+  expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -184,7 +182,8 @@ static term eval_meta_is_copyable_type(term_list& tlev)
   return term(r);
 }
 
-static term eval_meta_is_assignable_type(term_list& tlev)
+static term eval_meta_is_assignable_type(term_list& tlev, eval_context& ectx,
+  expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -194,7 +193,8 @@ static term eval_meta_is_assignable_type(term_list& tlev)
   return term(r);
 }
 
-static term eval_meta_is_polymorphic_type(term_list& tlev)
+static term eval_meta_is_polymorphic_type(term_list& tlev, eval_context& ectx,
+  expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -204,7 +204,7 @@ static term eval_meta_is_polymorphic_type(term_list& tlev)
   return term(r);
 }
 
-static term eval_meta_argnum(term_list& tlev)
+static term eval_meta_argnum(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -228,7 +228,7 @@ static term eval_meta_argnum(term_list& tlev)
   return term();
 }
 
-static term eval_meta_rettype(term_list& tlev)
+static term eval_meta_rettype(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -250,7 +250,7 @@ static term eval_meta_rettype(term_list& tlev)
   return term();
 }
 
-static term eval_meta_argtype(term_list& tlev)
+static term eval_meta_argtype(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 2) {
     return term();
@@ -277,7 +277,8 @@ static term eval_meta_argtype(term_list& tlev)
   return term();
 }
 
-static term eval_meta_argbyref(term_list& tlev)
+static term eval_meta_argbyref(term_list& tlev, eval_context& ectx,
+  expr_i *pos)
 {
   if (tlev.size() != 2) {
     return term();
@@ -305,7 +306,8 @@ static term eval_meta_argbyref(term_list& tlev)
   return term();
 }
 
-static term eval_meta_argtypes(term_list& tlev)
+static term eval_meta_argtypes(term_list& tlev, eval_context& ectx,
+  expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -328,7 +330,8 @@ static term eval_meta_argtypes(term_list& tlev)
   return term(tl);
 }
 
-static term eval_meta_argnames(term_list& tlev)
+static term eval_meta_argnames(term_list& tlev, eval_context& ectx,
+  expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -354,7 +357,7 @@ static term eval_meta_argnames(term_list& tlev)
   return term(tl);
 }
 
-static term eval_meta_args(term_list& tlev)
+static term eval_meta_args(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -387,7 +390,7 @@ static term eval_meta_args(term_list& tlev)
   return term(tl);
 }
 
-static term eval_meta_imports(term_list& tlev)
+static term eval_meta_imports(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -432,7 +435,8 @@ static void get_imports_rec(std::deque<std::string>& lst, strset& se,
   lst.push_back(n);
 }
 
-static term eval_meta_functions(term_list& tlev)
+static term eval_meta_functions(term_list& tlev, eval_context& ectx,
+  expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -465,7 +469,7 @@ static term eval_meta_functions(term_list& tlev)
   return term(tl);
 }
 
-static term eval_meta_types(term_list& tlev)
+static term eval_meta_types(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -518,7 +522,8 @@ static term eval_meta_types(term_list& tlev)
   return term(tl);
 }
 
-static term eval_meta_global_variables(term_list& tlev)
+static term eval_meta_global_variables(term_list& tlev, eval_context& ectx,
+  expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -569,7 +574,8 @@ static term eval_meta_global_variables(term_list& tlev)
   return term(tl);
 }
 
-static term eval_meta_member_functions(term_list& tlev)
+static term eval_meta_member_functions(term_list& tlev, eval_context& ectx,
+  expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -611,7 +617,8 @@ static term eval_meta_member_functions(term_list& tlev)
   return term(tl);
 }
 
-static term eval_meta_field_types(term_list& tlev)
+static term eval_meta_field_types(term_list& tlev, eval_context& ectx,
+  expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -635,7 +642,8 @@ static term eval_meta_field_types(term_list& tlev)
   return term(tl);
 }
 
-static term eval_meta_field_names(term_list& tlev)
+static term eval_meta_field_names(term_list& tlev, eval_context& ectx,
+  expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -658,7 +666,7 @@ static term eval_meta_field_names(term_list& tlev)
   return term(tl);
 }
 
-static term eval_meta_fields(term_list& tlev)
+static term eval_meta_fields(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -685,7 +693,8 @@ static term eval_meta_fields(term_list& tlev)
   return term(tl);
 }
 
-static term eval_meta_num_tparams(term_list& tlev)
+static term eval_meta_num_tparams(term_list& tlev, eval_context& ectx,
+  expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -704,7 +713,8 @@ static term eval_meta_num_tparams(term_list& tlev)
   return term(tparams_len);
 }
 
-static term eval_meta_num_targs(term_list& tlev)
+static term eval_meta_num_targs(term_list& tlev, eval_context& ectx,
+  expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -719,7 +729,7 @@ static term eval_meta_num_targs(term_list& tlev)
   return term(v);
 }
 
-static term eval_meta_targs(term_list& tlev)
+static term eval_meta_targs(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -733,7 +743,7 @@ static term eval_meta_targs(term_list& tlev)
   return term(*targs);
 }
 
-static term eval_meta_values(term_list& tlev)
+static term eval_meta_values(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -758,7 +768,7 @@ static term eval_meta_values(term_list& tlev)
   return term(tl);
 }
 
-static term eval_meta_typeof(term_list& tlev, expr_i *pos)
+static term eval_meta_typeof(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
     arena_error_throw(pos, "typeof: invalid argument");
@@ -775,12 +785,12 @@ static term eval_meta_typeof(term_list& tlev, expr_i *pos)
   return rt;
 }
 
-static term eval_meta_list(term_list& tlev)
+static term eval_meta_list(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   return term(tlev);
 }
 
-static term eval_meta_at(term_list& tlev)
+static term eval_meta_at(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 2) {
     return term();
@@ -798,7 +808,7 @@ static term eval_meta_at(term_list& tlev)
   return (*targs)[v];
 }
 
-static term eval_meta_size(term_list& tlev)
+static term eval_meta_size(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -813,7 +823,7 @@ static term eval_meta_size(term_list& tlev)
   return term(v);
 }
 
-static term eval_meta_slice(term_list& tlev)
+static term eval_meta_slice(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 2 && tlev.size() != 3) {
     return term();
@@ -840,7 +850,7 @@ static term eval_meta_slice(term_list& tlev)
   return term(tl);
 }
 
-static term eval_meta_seq(term_list& tlev)
+static term eval_meta_seq(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1 && tlev.size() != 2) {
     return term();
@@ -862,7 +872,7 @@ static term eval_meta_seq(term_list& tlev)
   return term(tl);
 }
 
-static term eval_meta_join(term_list& tlev, expr_i *pos)
+static term eval_meta_join(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
     arena_error_throw(pos, "join: invalid number of arguments");
@@ -887,7 +897,8 @@ static term eval_meta_join(term_list& tlev, expr_i *pos)
   return term(rtl);
 }
 
-static term eval_meta_join_all(term_list& tlev)
+static term eval_meta_join_all(term_list& tlev, eval_context& ectx,
+  expr_i *pos)
 {
   term_list rtl;
   for (term_list::const_iterator i = tlev.begin(); i != tlev.end(); ++i) {
@@ -900,7 +911,8 @@ static term eval_meta_join_all(term_list& tlev)
   return term(rtl);
 }
 
-static term eval_meta_join_tail(term_list& tlev)
+static term eval_meta_join_tail(term_list& tlev, eval_context& ectx,
+  expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -919,7 +931,7 @@ static term eval_meta_join_tail(term_list& tlev)
   return term(rtl);
 }
 
-static term eval_meta_sort(term_list& tlev)
+static term eval_meta_sort(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -934,7 +946,7 @@ static term eval_meta_sort(term_list& tlev)
   return term(rtl);
 }
 
-static term eval_meta_unique(term_list& tlev)
+static term eval_meta_unique(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -957,7 +969,7 @@ static term eval_meta_unique(term_list& tlev)
 }
 
 #if 0
-static term eval_meta_slice(term_list& tlev)
+static term eval_meta_slice(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 2 && tlev.size() != 3) {
     return term();
@@ -983,7 +995,7 @@ static term eval_meta_slice(term_list& tlev)
 }
 #endif
 
-static term eval_meta_is_type(term_list& tlev)
+static term eval_meta_is_type(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -992,7 +1004,8 @@ static term eval_meta_is_type(term_list& tlev)
   return term(v);
 }
 
-static term eval_meta_is_function(term_list& tlev)
+static term eval_meta_is_function(term_list& tlev, eval_context& ectx,
+  expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -1001,7 +1014,7 @@ static term eval_meta_is_function(term_list& tlev)
   return term(v);
 }
 
-static term eval_meta_is_int(term_list& tlev)
+static term eval_meta_is_int(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -1010,7 +1023,8 @@ static term eval_meta_is_int(term_list& tlev)
   return term(v);
 }
 
-static term eval_meta_is_string(term_list& tlev)
+static term eval_meta_is_string(term_list& tlev, eval_context& ectx,
+  expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -1019,7 +1033,7 @@ static term eval_meta_is_string(term_list& tlev)
   return term(v);
 }
 
-static term eval_meta_to_int(term_list& tlev)
+static term eval_meta_to_int(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -1031,7 +1045,8 @@ static term eval_meta_to_int(term_list& tlev)
   return term(meta_term_to_long(t));
 }
 
-static term eval_meta_to_string(term_list& tlev)
+static term eval_meta_to_string(term_list& tlev, eval_context& ectx,
+  expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -1043,7 +1058,8 @@ static term eval_meta_to_string(term_list& tlev)
   return term(meta_term_to_string(t, false));
 }
 
-static term eval_meta_full_string(term_list& tlev)
+static term eval_meta_full_string(term_list& tlev, eval_context& ectx,
+  expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -1055,7 +1071,7 @@ static term eval_meta_full_string(term_list& tlev)
   return term(meta_term_to_string(t, true));
 }
 
-static term eval_meta_concat(term_list& tlev)
+static term eval_meta_concat(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   std::string s;
   for (term_list::iterator i = tlev.begin(); i != tlev.end(); ++i) {
@@ -1065,7 +1081,8 @@ static term eval_meta_concat(term_list& tlev)
   return term(s);
 }
 
-static term eval_meta_substring(term_list& tlev)
+static term eval_meta_substring(term_list& tlev, eval_context& ectx,
+  expr_i *pos)
 {
   if (tlev.size() < 2 || tlev.size() > 3) {
     return term();
@@ -1086,7 +1103,7 @@ static term eval_meta_substring(term_list& tlev)
   }
 }
 
-static term eval_meta_strlen(term_list& tlev)
+static term eval_meta_strlen(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -1096,7 +1113,8 @@ static term eval_meta_strlen(term_list& tlev)
   return term(v);
 }
 
-static term eval_meta_attribute(term_list& tlev)
+static term eval_meta_attribute(term_list& tlev, eval_context& ectx,
+  expr_i *pos)
 {
   if (tlev.size() != 2) {
     return term();
@@ -1108,7 +1126,7 @@ static term eval_meta_attribute(term_list& tlev)
   return term();
 }
 
-static term eval_meta_family(term_list& tlev)
+static term eval_meta_family(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -1160,7 +1178,7 @@ static term eval_meta_family(term_list& tlev)
   return term("unknown");
 }
 
-static term eval_meta_nsname(term_list& tlev)
+static term eval_meta_nsname(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -1174,7 +1192,7 @@ static term eval_meta_nsname(term_list& tlev)
   return term(s);
 }
 
-static term eval_meta_not(term_list& tlev)
+static term eval_meta_not(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -1183,7 +1201,7 @@ static term eval_meta_not(term_list& tlev)
   return term(c ? 0LL : 1LL);
 }
 
-static term eval_meta_eq(term_list& tlev)
+static term eval_meta_eq(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   /* TODO: lazy? */
   int v = 1;
@@ -1201,7 +1219,7 @@ static term eval_meta_eq(term_list& tlev)
   return term(v);
 }
 
-static term eval_meta_add(term_list& tlev)
+static term eval_meta_add(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   long long v = 0;
   for (term_list::iterator i = tlev.begin(); i != tlev.end(); ++i) {
@@ -1210,7 +1228,7 @@ static term eval_meta_add(term_list& tlev)
   return term(v);
 }
 
-static term eval_meta_sub(term_list& tlev)
+static term eval_meta_sub(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 2) {
     return term();
@@ -1218,7 +1236,7 @@ static term eval_meta_sub(term_list& tlev)
   return term(meta_term_to_long(tlev[0]) - meta_term_to_long(tlev[1]));
 }
 
-static term eval_meta_mul(term_list& tlev)
+static term eval_meta_mul(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   long long v = 1;
   for (term_list::iterator i = tlev.begin(); i != tlev.end(); ++i) {
@@ -1227,7 +1245,7 @@ static term eval_meta_mul(term_list& tlev)
   return term(v);
 }
 
-static term eval_meta_div(term_list& tlev)
+static term eval_meta_div(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 2) {
     return term();
@@ -1240,7 +1258,7 @@ static term eval_meta_div(term_list& tlev)
   return term(v0 / v1);
 }
 
-static term eval_meta_mod(term_list& tlev)
+static term eval_meta_mod(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 2) {
     return term();
@@ -1253,7 +1271,7 @@ static term eval_meta_mod(term_list& tlev)
   return term(v0 % v1);
 }
 
-static term eval_meta_gt(term_list& tlev)
+static term eval_meta_gt(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 2) {
     return term();
@@ -1261,7 +1279,7 @@ static term eval_meta_gt(term_list& tlev)
   return term(meta_term_to_long(tlev[0]) > meta_term_to_long(tlev[1]));
 }
 
-static term eval_meta_lt(term_list& tlev)
+static term eval_meta_lt(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 2) {
     return term();
@@ -1269,8 +1287,7 @@ static term eval_meta_lt(term_list& tlev)
   return term(meta_term_to_long(tlev[0]) < meta_term_to_long(tlev[1]));
 }
 
-static term eval_meta_map(term_list& tlev, env_type& env, size_t depth,
-  expr_i *pos)
+static term eval_meta_map(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   /* map{list_0, ... , lst_n, func, arg_0, ... , arg_n} */
   size_t fidx = 0;
@@ -1284,11 +1301,13 @@ static term eval_meta_map(term_list& tlev, env_type& env, size_t depth,
     return term();
   }
   const term& tfunc = tlev[fidx]; /* function */
+  #if 0
   if (!tfunc.is_expr() ||
     (tfunc.get_args() != 0 && !tfunc.get_args()->empty())) {
     arena_error_throw(0, "not a symbol: '%s'",
       term_tostr_human(tfunc).c_str());
   }
+  #endif
   term_list rtl;
   size_t cur = 0;
   while (true) {
@@ -1306,16 +1325,18 @@ static term eval_meta_map(term_list& tlev, env_type& env, size_t depth,
     if (done) {
       break;
     }
+    term tc = eval_apply(tfunc, itl, true, ectx, pos);
+    #if 0
     term it(tfunc.get_expr(), itl);
-    term tc = eval_term_internal(it, true, env, depth + 1, pos);
+    term tc = eval_term_internal(it, true, ectx, pos);
+    #endif
     rtl.push_back(tc);
     ++cur;
   }
   return term(rtl);
 }
 
-static term eval_meta_filter(term_list& tlev, env_type& env, size_t depth,
-  expr_i *pos)
+static term eval_meta_filter(term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 2) {
     return term();
@@ -1325,19 +1346,24 @@ static term eval_meta_filter(term_list& tlev, env_type& env, size_t depth,
   if (!t0.is_metalist()) {
     arena_error_throw(0, "not a list: '%s'", term_tostr_human(t0).c_str());
   }
+  #if 0
   if (!t1.is_expr()) {
     arena_error_throw(0, "not a symbol: '%s'", term_tostr_human(t1).c_str());
   }
   if (t1.get_args() != 0 && !t1.get_args()->empty()) {
     arena_error_throw(0, "not a symbol: '%s'", term_tostr_human(t1).c_str());
   }
+  #endif
   const term_list& tl = *t0.get_metalist();
   term_list rtl;
   for (term_list::const_iterator i = tl.begin(); i != tl.end(); ++i) {
     term_list itl;
     itl.push_back(*i);
+    term tc = eval_apply(t1, itl, true, ectx, pos);
+    #if 0
     term it(t1.get_expr(), itl);
-    term tc = eval_term_internal(it, true, env, depth + 1, pos);
+    term tc = eval_term_internal(it, true, ectx, pos);
+    #endif
     const long long  v = meta_term_to_long(tc);
     if (v != 0) {
       rtl.push_back(*i);
@@ -1356,7 +1382,7 @@ static term compose_term(const term& t, term_list& tlev)
 }
 
 term eval_metafunction_strict(const std::string& name, term_list& tlev,
-  const term& t, env_type& env, size_t depth, expr_i *pos)
+  const term& t, eval_context& ectx, expr_i *pos)
 {
   DBG_META(fprintf(stderr, "eval_metafunction_strict: %s\n", name.c_str()));
   term r;
@@ -1395,131 +1421,131 @@ term eval_metafunction_strict(const std::string& name, term_list& tlev,
     } else if (name == "@0strlit") {
       r = builtins.type_strlit;
     } else if (name == "@list") {
-      r = eval_meta_list(tlev);
+      r = eval_meta_list(tlev, ectx, pos);
     } else if (name == "@at") {
-      r = eval_meta_at(tlev);
+      r = eval_meta_at(tlev, ectx, pos);
     } else if (name == "@size") {
-      r = eval_meta_size(tlev);
+      r = eval_meta_size(tlev, ectx, pos);
     } else if (name == "@slice") {
-      r = eval_meta_slice(tlev);
+      r = eval_meta_slice(tlev, ectx, pos);
     } else if (name == "@seq") {
-      r = eval_meta_seq(tlev);
+      r = eval_meta_seq(tlev, ectx, pos);
     } else if (name == "@join") {
-      r = eval_meta_join(tlev, pos);
+      r = eval_meta_join(tlev, ectx, pos);
     } else if (name == "@join_all") {
-      r = eval_meta_join_all(tlev);
+      r = eval_meta_join_all(tlev, ectx, pos);
     } else if (name == "@join_tail") {
-      r = eval_meta_join_tail(tlev);
+      r = eval_meta_join_tail(tlev, ectx, pos);
     } else if (name == "@sort") {
-      r = eval_meta_sort(tlev);
+      r = eval_meta_sort(tlev, ectx, pos);
     } else if (name == "@unique") {
-      r = eval_meta_unique(tlev);
+      r = eval_meta_unique(tlev, ectx, pos);
     #if 0
     } else if (name == "@slice") {
-      r = eval_meta_slice(tlev);
+      r = eval_meta_slice(tlev, ectx, pos);
     #endif
     } else if (name == "@rettype") {
-      r = eval_meta_rettype(tlev);
+      r = eval_meta_rettype(tlev, ectx, pos);
     } else if (name == "@argnum") {
-      r = eval_meta_argnum(tlev);
+      r = eval_meta_argnum(tlev, ectx, pos);
     } else if (name == "@argtype") {
-      r = eval_meta_argtype(tlev);
+      r = eval_meta_argtype(tlev, ectx, pos);
     } else if (name == "@argbyref") {
-      r = eval_meta_argbyref(tlev);
+      r = eval_meta_argbyref(tlev, ectx, pos);
     } else if (name == "@argtypes") {
-      r = eval_meta_argtypes(tlev);
+      r = eval_meta_argtypes(tlev, ectx, pos);
     } else if (name == "@argnames") {
-      r = eval_meta_argnames(tlev);
+      r = eval_meta_argnames(tlev, ectx, pos);
     } else if (name == "@args") {
-      r = eval_meta_args(tlev);
+      r = eval_meta_args(tlev, ectx, pos);
     } else if (name == "@imports") {
-      r = eval_meta_imports(tlev);
+      r = eval_meta_imports(tlev, ectx, pos);
     } else if (name == "@functions") {
-      r = eval_meta_functions(tlev);
+      r = eval_meta_functions(tlev, ectx, pos);
     } else if (name == "@types") {
-      r = eval_meta_types(tlev);
+      r = eval_meta_types(tlev, ectx, pos);
     } else if (name == "@global_variables") {
-      r = eval_meta_global_variables(tlev);
+      r = eval_meta_global_variables(tlev, ectx, pos);
     } else if (name == "@member_functions") {
-      r = eval_meta_member_functions(tlev);
+      r = eval_meta_member_functions(tlev, ectx, pos);
     } else if (name == "@is_copyable_type") {
-      r = eval_meta_is_copyable_type(tlev);
+      r = eval_meta_is_copyable_type(tlev, ectx, pos);
     } else if (name == "@is_assignable_type") {
-      r = eval_meta_is_assignable_type(tlev);
+      r = eval_meta_is_assignable_type(tlev, ectx, pos);
     } else if (name == "@is_polymorphic_type") {
-      r = eval_meta_is_polymorphic_type(tlev);
+      r = eval_meta_is_polymorphic_type(tlev, ectx, pos);
     } else if (name == "@field_types") {
-      r = eval_meta_field_types(tlev);
+      r = eval_meta_field_types(tlev, ectx, pos);
     } else if (name == "@field_names") {
-      r = eval_meta_field_names(tlev);
+      r = eval_meta_field_names(tlev, ectx, pos);
     } else if (name == "@fields") {
-      r = eval_meta_fields(tlev);
+      r = eval_meta_fields(tlev, ectx, pos);
     } else if (name == "@num_tparams") {
-      r = eval_meta_num_tparams(tlev);
+      r = eval_meta_num_tparams(tlev, ectx, pos);
     } else if (name == "@num_targs") {
-      r = eval_meta_num_targs(tlev);
+      r = eval_meta_num_targs(tlev, ectx, pos);
     } else if (name == "@targs") {
-      r = eval_meta_targs(tlev);
+      r = eval_meta_targs(tlev, ectx, pos);
     } else if (name == "@values") {
-      r = eval_meta_values(tlev);
+      r = eval_meta_values(tlev, ectx, pos);
     } else if (name == "@typeof") {
-      r = eval_meta_typeof(tlev, pos);
+      r = eval_meta_typeof(tlev, ectx, pos);
     } else if (name == "@is_type") {
-      r = eval_meta_is_type(tlev);
+      r = eval_meta_is_type(tlev, ectx, pos);
     } else if (name == "@is_function") {
-      r = eval_meta_is_function(tlev);
+      r = eval_meta_is_function(tlev, ectx, pos);
     } else if (name == "@is_int") {
-      r = eval_meta_is_int(tlev);
+      r = eval_meta_is_int(tlev, ectx, pos);
     } else if (name == "@is_string") {
-      r = eval_meta_is_string(tlev);
+      r = eval_meta_is_string(tlev, ectx, pos);
     } else if (name == "@to_int") {
-      r = eval_meta_to_int(tlev);
+      r = eval_meta_to_int(tlev, ectx, pos);
     } else if (name == "@to_string") {
-      r = eval_meta_to_string(tlev);
+      r = eval_meta_to_string(tlev, ectx, pos);
     } else if (name == "@full_string") {
-      r = eval_meta_full_string(tlev);
+      r = eval_meta_full_string(tlev, ectx, pos);
     } else if (name == "@concat") {
-      r = eval_meta_concat(tlev);
+      r = eval_meta_concat(tlev, ectx, pos);
     } else if (name == "@substring") {
-      r = eval_meta_substring(tlev);
+      r = eval_meta_substring(tlev, ectx, pos);
     } else if (name == "@strlen") {
-      r = eval_meta_strlen(tlev);
+      r = eval_meta_strlen(tlev, ectx, pos);
     } else if (name == "@family") {
-      r = eval_meta_family(tlev);
+      r = eval_meta_family(tlev, ectx, pos);
     } else if (name == "@attribute") {
-      r = eval_meta_attribute(tlev);
+      r = eval_meta_attribute(tlev, ectx, pos);
     } else if (name == "@nsname") {
-      r = eval_meta_nsname(tlev);
+      r = eval_meta_nsname(tlev, ectx, pos);
     } else if (name == "@not") {
-      r = eval_meta_not(tlev);
+      r = eval_meta_not(tlev, ectx, pos);
     } else if (name == "@eq") {
-      r = eval_meta_eq(tlev);
+      r = eval_meta_eq(tlev, ectx, pos);
     } else if (name == "@add") {
-      r = eval_meta_add(tlev);
+      r = eval_meta_add(tlev, ectx, pos);
     } else if (name == "@sub") {
-      r = eval_meta_sub(tlev);
+      r = eval_meta_sub(tlev, ectx, pos);
     } else if (name == "@mul") {
-      r = eval_meta_mul(tlev);
+      r = eval_meta_mul(tlev, ectx, pos);
     } else if (name == "@div") {
-      r = eval_meta_div(tlev);
+      r = eval_meta_div(tlev, ectx, pos);
     } else if (name == "@mod") {
-      r = eval_meta_mod(tlev);
+      r = eval_meta_mod(tlev, ectx, pos);
     } else if (name == "@gt") {
-      r = eval_meta_gt(tlev);
+      r = eval_meta_gt(tlev, ectx, pos);
     } else if (name == "@lt") {
-      r = eval_meta_lt(tlev);
+      r = eval_meta_lt(tlev, ectx, pos);
     } else if (name == "@map") {
-      r = eval_meta_map(tlev, env, depth, pos);
+      r = eval_meta_map(tlev, ectx, pos);
     } else if (name == "@filter") {
-      r = eval_meta_filter(tlev, env, depth, pos);
+      r = eval_meta_filter(tlev, ectx, pos);
     } else if (name == "@local") {
-      r = eval_meta_local(tlev, env, depth, pos);
+      r = eval_meta_local(tlev, ectx, pos);
     } else if (name == "@symbol") {
-      r = eval_meta_symbol(tlev, env, depth, pos);
+      r = eval_meta_symbol(tlev, ectx, pos);
     } else if (name == "@apply") {
-      r = eval_meta_apply(tlev, env, depth, pos);
+      r = eval_meta_apply(tlev, ectx, pos);
     } else if (name == "@error") {
-      r = eval_meta_error(tlev, env, depth, pos);
+      r = eval_meta_error(tlev, ectx, pos);
     }
   } catch (const std::exception& e) {
     std::string s = e.what();
@@ -1540,20 +1566,8 @@ term eval_metafunction_strict(const std::string& name, term_list& tlev,
   return r;
 }
 
-#if 0
-static term eval_if_unevaluated(const term& t, bool evaluated_flag,
-  env_type& env, size_t depth, expr_i *pos)
-{
-  if (evaluated_flag) {
-    return t;
-  } else {
-    return eval_term_internal(t, false, env, depth, pos);
-  }
-}
-#endif
-
 static term eval_meta_cond(const term& t, bool targs_evaluated,
-  env_type& env, size_t depth, expr_i *pos)
+  eval_context& ectx, expr_i *pos)
 {
   const term_list *args = t.get_args();
   if (args == 0) {
@@ -1566,31 +1580,28 @@ static term eval_meta_cond(const term& t, bool targs_evaluated,
       num_args);
     return term();
   }
-  term tc = eval_if_unevaluated((*args)[0], targs_evaluated, env, depth + 1,
-    pos);
-  if (has_unbound_tparam(tc)) {
+  term tc = eval_if_unevaluated((*args)[0], targs_evaluated, ectx, pos);
+  if (has_unbound_tparam(tc, ectx)) {
     return t; /* incomplete expr */
   }
   const bool c = term_truth_value(tc);
   if (c) {
-    return eval_if_unevaluated((*args)[1], targs_evaluated, env, depth + 1,
-      pos);
+    return eval_if_unevaluated((*args)[1], targs_evaluated, ectx, pos);
   } else {
-    return eval_if_unevaluated((*args)[2], targs_evaluated, env, depth + 1,
-      pos);
+    return eval_if_unevaluated((*args)[2], targs_evaluated, ectx, pos);
   }
 }
 
-static term eval_meta_or(const term& t, bool targs_evaluated, env_type& env,
-  size_t depth, expr_i *pos)
+static term eval_meta_or(const term& t, bool targs_evaluated,
+  eval_context& ectx, expr_i *pos)
 {
   const term_list *args = t.get_args();
   if (args == 0) {
     return term(0LL);
   }
   for (term_list::const_iterator i = args->begin(); i != args->end(); ++i) {
-    term tc = eval_if_unevaluated(*i, targs_evaluated, env, depth + 1, pos);
-    if (has_unbound_tparam(tc)) {
+    term tc = eval_if_unevaluated(*i, targs_evaluated, ectx, pos);
+    if (has_unbound_tparam(tc, ectx)) {
       return t;
     }
     if (term_truth_value(tc)) {
@@ -1600,16 +1611,16 @@ static term eval_meta_or(const term& t, bool targs_evaluated, env_type& env,
   return term(0LL);
 }
 
-static term eval_meta_and(const term& t, bool targs_evaluated, env_type& env,
-  size_t depth, expr_i *pos)
+static term eval_meta_and(const term& t, bool targs_evaluated,
+  eval_context& ectx, expr_i *pos)
 {
   const term_list *args = t.get_args();
   if (args == 0) {
     return term(1LL);
   }
   for (term_list::const_iterator i = args->begin(); i != args->end(); ++i) {
-    term tc = eval_if_unevaluated(*i, targs_evaluated, env, depth + 1, pos);
-    if (has_unbound_tparam(tc)) {
+    term tc = eval_if_unevaluated(*i, targs_evaluated, ectx, pos);
+    if (has_unbound_tparam(tc, ectx)) {
       return t;
     }
     if (!term_truth_value(tc)) {
@@ -1619,18 +1630,48 @@ static term eval_meta_and(const term& t, bool targs_evaluated, env_type& env,
   return term(1LL);
 }
 
+double gettimeofday_double()
+{
+  struct timeval tv;
+  gettimeofday(&tv, 0);
+  double rv = tv.tv_usec;
+  rv /= 1000000;
+  rv += tv.tv_sec;
+  return rv;
+}
+
+static term eval_meta_timing(const term& t, bool targs_evaluated,
+  eval_context& ectx, expr_i *pos)
+{
+  const term_list *args = t.get_args();
+  if (args == 0) {
+    return term(0LL);
+  }
+  term tc;
+  for (term_list::const_iterator i = args->begin(); i != args->end(); ++i) {
+    double const t1 = gettimeofday_double();
+    tc = eval_if_unevaluated(*i, targs_evaluated, ectx, pos);
+    double const t2 = gettimeofday_double();
+    fprintf(stderr, "%.06f\t%s\t=>\t%s\n",
+      t2 - t1, term_tostr_human(*i).c_str(), term_tostr_human(tc).c_str());
+  }
+  return tc;
+}
+
 term eval_metafunction_lazy(const std::string& name, const term& t,
-  bool targs_evaluated, env_type& env, size_t depth, expr_i *pos)
+  bool targs_evaluated, eval_context& ectx, expr_i *pos)
 {
   DBG_META(fprintf(stderr, "eval_metafunction_lazy: %s\n", name.c_str()));
   term r;
   try {
     if (name == "@@cond") {
-      r = eval_meta_cond(t, targs_evaluated, env, depth, pos);
+      r = eval_meta_cond(t, targs_evaluated, ectx, pos);
     } else if (name == "@@or") {
-      r = eval_meta_or(t, targs_evaluated, env, depth, pos);
+      r = eval_meta_or(t, targs_evaluated, ectx, pos);
     } else if (name == "@@and") {
-      r = eval_meta_and(t, targs_evaluated, env, depth, pos);
+      r = eval_meta_and(t, targs_evaluated, ectx, pos);
+    } else if (name == "@@timing") {
+      r = eval_meta_timing(t, targs_evaluated, ectx, pos);
     }
   } catch (const std::exception& e) {
     std::string s = e.what();
@@ -1648,11 +1689,11 @@ term eval_metafunction_lazy(const std::string& name, const term& t,
 
 term eval_local_lookup(const term& t, const std::string& name, expr_i *pos)
 {
-  env_type env;
+  eval_context ectx;
   term_list tl;
   tl.push_back(t);
   tl.push_back(term(name));
-  term r = eval_meta_local(tl, env, 0, pos);
+  term r = eval_meta_local(tl, ectx, pos);
   return r;
 }
 

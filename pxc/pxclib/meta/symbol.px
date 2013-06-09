@@ -1,0 +1,38 @@
+
+namespace meta::symbol;
+import meta::common -;
+import numeric::integral -;
+
+public metafunction functions_for_ns{ns}
+  filter_concrete{join{map{imports_transitive{ns}, functions}}};
+public metafunction types_for_ns{ns}
+  filter_concrete{join{map{imports_transitive{ns}, types}}};
+public metafunction dependent_types_for_ns{ns}
+  fix{types_used_in_ns{ns}, direct_dependent_types_for_types};
+
+private metafunction is_concrete{t}
+  and{eq{num_tparams{t}, num_targs{t}}, not{eq{t, void}}};
+private metafunction filter_concrete{fs} filter{fs, is_concrete};
+
+private metafunction argret_types_for_function{f}
+  join_all{list{rettype{f}}, argtypes{f}};
+private metafunction argret_types_for_functions{fs}
+  filter_concrete{join{map{fs, argret_types_for_function}}};
+private metafunction field_types_for_types{ts}
+  filter_concrete{join{map{ts, field_types}}};
+private metafunction memberfunc_argret_types_for_types{ts}
+  argret_types_for_functions{join{map{ts, member_functions}}};
+private metafunction param_types_for_types{ts}
+  filter_concrete{join{map{ts, targs}}};
+
+private metafunction types_used_in_ns{ns}
+  unique{join_all{
+    types_for_ns{ns},
+    argret_types_for_functions{functions_for_ns{ns}}}};
+private metafunction direct_dependent_types_for_types{ts}
+  unique{join_all{
+    ts,
+    field_types_for_types{ts},
+    memberfunc_argret_types_for_types{ts},
+    param_types_for_types{ts}}};
+

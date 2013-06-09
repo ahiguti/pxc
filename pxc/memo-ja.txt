@@ -3,9 +3,20 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- cの予約語(intとか)にメソッド名などがかぶったとき
+- has_unbound_tparam, term_has_unevaluated_exprの意味を整理
 
-- 関数呼び出しをexpandする - blockのかわりに
+- term_tostrのterm_bindとterm_lambda
+
+- termの同一性とterm_tostr_strictの同一性は一致しなければならない
+  シンボル生成にterm_tostr_strictを使っているから。
+
+- metafunctionはlexical contextを持つようにする(done)
+
+- term.cpp: operator <のlambdaはtparamsも比較
+
+- 関数呼び出しをexpandする? - blockのかわりに
+
+- インスタンス化しないときにargsの型を評価するのをやめる?
 
 - inheritsに同じものを複数回指定するとどうなるか？
 
@@ -314,6 +325,7 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- cの予約語(intとか)にメソッド名などがかぶったとき(done)
 - inline C syntax (done)
 - operator = for strlit (done)
 - for文やcatchなど、const refなど装飾を整理 (done)
@@ -681,6 +693,7 @@ str$ls  テンプレート引数の文字列リテラル
 aaa$c   名前空間の初期化関数
 aaa$cm  名前空間のエントリ
 i$it    if(v:c[k])が使うイテレータ
+$p$XXX$q$YYY$r$ テンプレート引数 {XXX,YYY}
 
 構造体に追加することのある名前
 init$z 初期化補助関数
@@ -1235,4 +1248,123 @@ struct orb {
 
 各orbにはbyref型マーシャラの配列を持っていて、各objectのskeletonには
 その型に応じたマーシャラのidが同時に記録されている。
+
+---------------------------------------------------------------------
+lambda
+
+lambda{x} lambda{y} add{x, y}
+x := 3を適用
+=> lambda{y} add{3, y}
+y := 5を適用
+=> add{3, 5}
+=> 8
+
+lambda抽象がすべて外れた時まで適用を遅らせる
+lambda{f} lambda{x} lambda{y} f{x, y}
+f := add
+=> lambda{x} lambda{y} f{x, y} ( f := add )
+x := 3
+=> lambda{y} f{x, y} ( f := add, x := 3 )
+y := 5
+=> f{x, y} ( f := add, x := 3, y := 5 )
+ここで適用？
+
+各lambda式について、自身のlambda変数だけでなく上位のlambda変数について
+も値を保持しなければならない
+termを構築する際に、上位lambda変数を再帰的に渡す
+
+lambda{y} f{x, y}
+  引数: y
+  上位変数: f, x
+  適用: ()
+  式: f{x, y}
+
+lambda{x} lambda{y} f{x, y}
+  引数: x
+  上位変数: f
+  適用: ()
+  式: lambda{y} f{x, y}
+
+lambda{f} lambda{x} lambda{y} f{x, y}
+  引数: f: 
+  上位変数: なし
+  適用: ()
+  式: lambda{x} lambda{y} f{x, y}
+
+lambda適用時の処理
+lambda{f} lambda{x} lambda{y} f{x, y}  .  add
+f := add をバインドして 中身をevalする。
+結果は
+  (f := add) lambda{x} lambda{y} f{x, y}
+x := 3 をバインドし、中身をevalする
+結果は
+  (f := add, x := 3) lambda{y} f{x, y}
+y := 5 をバインドし、中身をevalする
+結果は
+  (f := add, x := 3, y := 5) f{x, y}
+  頭が
+  => add{3, y}
+
+lambda抽象式を値として返すときには、その上位値のバインドを
+同時に保持しておかねばならない
+
+lambda_bindというtermを作る?
+
+# evalの処理
+# termがterm_lambdaまたはterm_bindだった場合の処理を追加
+# termがargsを持たない場合
+#   - 現在のbindをwrapしたtermを返す
+# termがargsを持つ場合、それはlambda適用である
+#   - 引数にargsを適用するようなbindを作る。
+#   - さらに上位変数のbindを持つ場合はそれも加える。
+#   - できあがったbindをpushして式をevalする
+
+(1) eval_contextにbindを追加。term_bindへのポインタ。eval_contextのbindは、
+現在評価中の式のlexical contextがmetafdefの中の式であるときに、その位置の
+変数のbind一覧がセットされるもの。再帰的に別の式をevalするときは退避復旧
+する必要あり。
+
+(2)
+eval_apply_internal(term x, term_list args, eval_context c, bool args_evd)
+{
+  xは評価済み。yはargs_evdなら評価済み。
+  xがterm_lambdaかterm_bindなら
+    lambda式の引数にargsの各々を代入するようなbindをxにかぶせる
+    もしbindの深さがlambda抽象の深さに一致したら
+      簡約可能なので、そのbindをctxにセットしてxのlambda右辺を
+      eval_term_internalする
+    そうでないなら
+      まだbind不足で簡約できないからbindをかぶせたtermをそのまま返す
+  xがexprなら
+    そのexprにargsをつけたtermを作り、eval_term_internalする
+  xがそれ以外なら
+    エラー
+}
+
+(3)
+metafdef_to_term(expr_metafdef *mf, ...)
+{
+  rhsをte_to_term()する
+  lambdaに引数があるときは
+    引数とrhs式をセットしたterm_lambdaを作り、それを返す
+  引数が無いとき
+    rhs式をそのまま返す
+}
+
+(4) tparamsのevalにたいして、param_defがnullだったらeval_contextのbindから
+探す処理を追加。
+(local_tparams_bindingはあとで削除。)
+(変更後はmetafdef引数のtparamsはparam_defが常にnullになる。)
+
+(5)
+ここから一気に。
+te_to_term(expr_i *te, ...)の処理
+teがexpr_teじゃないとき、もしそれがmetafdefなら、metafdef_to_term()
+を呼ぶように変更
+
+(6)
+eval_term_internal2()
+case expr_e_metafdefの場合
+  expr_metafdefをmetadef_to_term()で変換してevalし、それとargsを
+  eval_apply_internal()する。argsが無いときはそのまま返す。
 

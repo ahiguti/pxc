@@ -896,26 +896,30 @@ bool is_polymorphic(const term& t)
   return false;
 }
 
-static std::string term_tostr_tparams(const expr_tparams *tp,
+static std::string term_tostr_tparams(const expr_tparams *tp, bool show_values,
   term_tostr_sort s)
 {
-  const size_t len = elist_length(tp);
+  // const size_t len = elist_length(tp);
   std::string r;
   if (s == term_tostr_sort_cname) {
     r += "< ";
   } else if (s == term_tostr_sort_humanreadable) {
     r += "{";
   } else {
-    r += "$tp" + ulong_to_string(len) + "$";
+    r += "$p$";
   }
   while (tp != 0) {
-    r += term_tostr(tp->param_def, s);
+    if (show_values) {
+      r += term_tostr(tp->param_def, s);
+    } else {
+      r += std::string(tp->sym);
+    }
     if (tp->rest != 0) {
       if (s == term_tostr_sort_humanreadable ||
 	s == term_tostr_sort_cname) {
 	r += ",";
       } else {
-	r += "$";
+	r += "$q$";
       }
     }
     tp = tp->rest;
@@ -925,7 +929,7 @@ static std::string term_tostr_tparams(const expr_tparams *tp,
   } else if (s == term_tostr_sort_humanreadable) {
     r += "}";
   } else {
-    r += "";
+    r += "$r$";
   }
   return r;
 }
@@ -979,9 +983,40 @@ static std::string tparam_str_string(const std::string& v, term_tostr_sort s)
   return escape_hex_non_alnum(v) + "$ls";
 }
 
-static std::string tparam_str_list(const term_list& tl, term_tostr_sort s)
+static std::string tparam_str_metalist(const term_list& tl, term_tostr_sort s)
 {
-  return term_tostr_list(tl, s);
+  if (s == term_tostr_sort_humanreadable) {
+    return term_tostr_list(tl, s);
+  }
+  return "m$ll" + term_tostr_list(tl, s);
+}
+
+static std::string tparam_str_lambda(const term& t, term_tostr_sort s)
+{
+  const expr_tparams *tparams = static_cast<const expr_tparams *>(
+    t.get_lambda_tparams());
+  const term *bdy = t.get_lambda_body();
+  if (s == term_tostr_sort_humanreadable) {
+    const bool show_values = false;
+    return "metafunction" + term_tostr_tparams(tparams, show_values, s)
+      + term_tostr(*bdy, s);
+  }
+  const bool show_values = false;
+  return "m$lm" + term_tostr_tparams(tparams, show_values, s)
+    + term_tostr(*bdy, s);
+}
+
+static std::string tparam_str_bind(const term& t, term_tostr_sort s)
+{
+  const expr_tparams *tp = static_cast<const expr_tparams *>(
+    t.get_bind_tparam());
+  const term *tpval = t.get_bind_tpvalue();
+  const term *next = t.get_bind_next();
+  if (s == term_tostr_sort_humanreadable) {
+    return std::string("{") + std::string(tp->sym) + ":="
+      + term_tostr(*tpval, s) + "}" + term_tostr(*next, s);
+  }
+  return "m$lb$" + std::string(tp->sym) + "$" + term_tostr(*next, s);
 }
 
 std::string term_tostr(const term& t, term_tostr_sort s)
@@ -996,7 +1031,13 @@ std::string term_tostr(const term& t, term_tostr_sort s)
     return tparam_str_string(t.get_string(), s);
   }
   if (t.is_metalist()) {
-    return tparam_str_list(*t.get_metalist(), s);
+    return tparam_str_metalist(*t.get_metalist(), s);
+  }
+  if (t.is_lambda()) {
+    return tparam_str_lambda(t, s);
+  }
+  if (t.is_bind()) {
+    return tparam_str_bind(t, s);
   }
   const expr_i *const tdef = t.get_expr();
     /* expr_struct, expr_dunion, expr_interface, expr_typedef, expr_metafdef,
@@ -1231,7 +1272,9 @@ std::string term_tostr(const term& t, term_tostr_sort s)
   if (args != 0 && !args->empty()) {
     rstr += term_tostr_list(*args, schild);
   } else if (tparams != 0) {
-    const std::string tmplargs = term_tostr_tparams(tparams, schild);
+    const bool show_values = true;
+    const std::string tmplargs = term_tostr_tparams(tparams, show_values,
+      schild);
     DBG(fprintf(stderr, "cname=%s tmplargs=%s\n", cname, tmplargs.c_str()));
     rstr += tmplargs;
   }
@@ -1249,14 +1292,15 @@ std::string term_tostr_list(const term_list& tl, term_tostr_sort s)
     rstr += "< ";
   } else if (s == term_tostr_sort_cname_tparam
     || s == term_tostr_sort_strict) {
-    rstr += "$tp" + ulong_to_string(tl.size()) + "$";
+    rstr += "$p$";
   } else {
     rstr += "{";
   }
   for (term_list::const_iterator i = tl.begin(); i != tl.end(); ++i) {
     if (i != tl.begin()) {
-      if (s == term_tostr_sort_cname_tparam) {
-	rstr += "$";
+      if (s == term_tostr_sort_cname_tparam
+	|| s == term_tostr_sort_strict) {
+	rstr += "$q$";
       } else {
 	rstr += ",";
       }
@@ -1267,7 +1311,7 @@ std::string term_tostr_list(const term_list& tl, term_tostr_sort s)
     rstr += " >";
   } else if (s == term_tostr_sort_cname_tparam
     || s == term_tostr_sort_strict) {
-    rstr += "";
+    rstr += "$r$";
   } else {
     rstr += "}";
   }

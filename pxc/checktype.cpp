@@ -2961,11 +2961,13 @@ void expr_expand::check_type(symbol_table *lookup)
   #endif
   fn_check_type(valueste, lookup);
   const term& vtyp = valueste->sdef.resolve_evaluated();
-  if (has_unbound_tparam(vtyp)) {
+  eval_context ectx;
+  if (has_unbound_tparam(vtyp, ectx)) {
     return; /* not instantiated */
   }
   const term_list *const targs = vtyp.is_metalist() ? vtyp.get_metalist()
     : vtyp.get_args();
+    // FIXME: should be metalist 
   if (targs == 0) {
     arena_error_throw(valueste,
       "invalid parameter for 'expand' : '%s' (metalist expected)",

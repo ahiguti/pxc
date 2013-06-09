@@ -744,8 +744,9 @@ type_arg
 		expr_block_new(cur_fname, @1.first_line, $2, 0, $5, $3,
 			passby_e_mutable_value, $9),
 		cur_mode != compile_mode_main, false, attribute_private); }
-	/*
-	*/
+	| TOK_METAFUNCTION opt_tparams_expr type_arg
+	  { $$ = expr_metafdef_new(cur_fname, @1.first_line, 0, $2, $3,
+		attribute_private); }
 	;
 type_arg_list
 	: type_arg

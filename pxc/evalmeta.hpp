@@ -18,12 +18,10 @@
 
 namespace pxc {
 
-typedef std::map<std::string, term> env_type;
-
 term eval_metafunction_lazy(const std::string& name, const term& t,
-  bool targs_evaluated, env_type& env, size_t depth, expr_i *pos);
+  bool targs_evaluated, eval_context& ectx, expr_i *pos);
 term eval_metafunction_strict(const std::string& name, term_list& tlev,
-  const term& t, env_type& env, size_t depth, expr_i *pos);
+  const term& t, eval_context& ectx, expr_i *pos);
 term eval_local_lookup(const term& t, const std::string& name, expr_i *pos);
   /* returns t::foo */
 
