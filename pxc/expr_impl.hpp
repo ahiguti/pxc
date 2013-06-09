@@ -1163,7 +1163,7 @@ public:
 struct expr_metafdef : public expr_i {
   expr_metafdef(const char *fn, int line, const char *sym, expr_i *tparams,
     expr_i *rhs, attribute_e attr);
-  expr_i *clone() const { return new expr_metafdef(*this); }
+  expr_i *clone() const;
   expr_e get_esort() const { return expr_e_metafdef; }
   int get_num_children() const { return 1; }
   expr_i *get_child(int i) {
@@ -1179,7 +1179,9 @@ struct expr_metafdef : public expr_i {
   attribute_e get_attribute() const { return attr; }
   void set_attribute(attribute_e a) { attr = a; }
   void define_const_symbols_one() {
-    symtbl_lexical->define_name(sym, injectns, this, attr, 0);
+    if (sym[0] != '\0') {
+      symtbl_lexical->define_name(sym, injectns, this, attr, 0);
+    }
   }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return false; }
@@ -1196,7 +1198,7 @@ public:
   std::string injectns;
   expr_block *block;
   attribute_e attr;
-  term rhs_term; /* caches te_to_term() */ // FIXME: remove?
+  term rhs_term; /* caches te_to_term() */
 };
 
 struct expr_struct : public expr_i {

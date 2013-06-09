@@ -14,9 +14,148 @@
 
 namespace pxc {
 
+term::term(long long x)
+  : ptr(new term_long(x))
+{
+}
+
+term::term(const std::string& x)
+  : ptr(new term_string(x))
+{
+}
+
+term::term(const term_list& x)
+  : ptr(new term_metalist(x))
+{
+}
+
+term::term(expr_i *tpms, const term& t)
+  : ptr(new term_lambda(tpms, t))
+{
+}
+
+term::term(expr_i *tpm, const term& tpmv, bool is_up, const term& next)
+  : ptr(new term_bind(tpm, tpmv, is_up, next))
+{
+}
+
+term::term(expr_i *e)
+  : ptr(new term_expr(e))
+{
+}
+
+term::term(expr_i *e, term_list& a)
+  : ptr(new term_expr(e, a))
+{
+}
+
+expr_i *term::get_expr() const
+{
+  term_expr *const te = get_term_expr();
+  return te != 0 ? te->expr : 0;
+}
+
+const term_list *term::get_args() const
+{
+  term_expr *const te = get_term_expr();
+  return te != 0 ? &te->args : 0;
+}
+
+const term_list *term::get_metalist() const
+{
+  term_metalist *const tm = get_term_metalist();
+  return tm != 0 ? &tm->v : 0;
+}
+
+const term_list *term::get_args_or_metalist() const
+{
+  const term_list *r = get_args();
+  if (r == 0) {
+    r = get_metalist();
+  }
+  return r;
+}
+
+expr_i *term::get_lambda_tparams() const
+{
+  term_lambda *const tl = get_term_lambda();
+  return tl != 0 ? tl->tparams : 0;
+}
+
+const term *term::get_lambda_body() const
+{
+  term_lambda *const tl = get_term_lambda();
+  return tl != 0 ? &tl->v : 0;
+}
+
+expr_i *term::get_bind_tparam() const
+{
+  term_bind *const tb = get_term_bind();
+  return tb != 0 ? tb->tp : 0;
+}
+
+const term *term::get_bind_tpvalue() const
+{
+  term_bind *const tb = get_term_bind();
+  return tb != 0 ? &tb->tpv : 0;
+}
+
+const bool *term::get_bind_is_upvalue() const
+{
+  term_bind *const tb = get_term_bind();
+  return tb != 0 ? &tb->is_upvalue : 0;
+}
+
+const term *term::get_bind_next() const
+{
+  term_bind *const tb = get_term_bind();
+  return tb != 0 ? &tb->next : 0;
+}
+
+long term::get_long() const
+{
+  term_long *const ti = get_term_long();
+  return ti != 0 ? ti->v : 0;
+}
+
+std::string term::get_string() const
+{
+  term_string *const ts = get_term_string();
+  return ts != 0 ? ts->v : std::string();
+}
+
 term_metalist::term_metalist(const term_list& a)
   : v(a)
 {
+}
+
+term_expr *term::get_term_expr() const
+{
+  return dynamic_cast<term_expr *>(ptr);
+}
+term_metalist *term::get_term_metalist() const
+{
+  return dynamic_cast<term_metalist *>(ptr);
+}
+
+term_lambda *term::get_term_lambda() const
+{
+  return dynamic_cast<term_lambda *>(ptr);
+}
+
+term_bind *term::get_term_bind() const
+{
+  return dynamic_cast<term_bind *>(ptr);
+}
+
+term_long *term::get_term_long() const
+{
+  return dynamic_cast<term_long *>(ptr);
+}
+
+term_string *term::get_term_string() const
+{
+  return dynamic_cast<term_string *>(ptr);
 }
 
 ssize_t term_metalist::find(const term& x) const
@@ -56,6 +195,16 @@ ssize_t term_metalist_idx::find(const term& x) const
   return -1;
 }
 
+term_lambda::term_lambda(expr_i *tpms, const term& t)
+  : tparams(tpms), v(t)
+{
+}
+
+term_bind::term_bind(expr_i *tp, const term& tpv, bool is_up, const term& next)
+  : tp(tp), tpv(tpv), is_upvalue(is_up), next(next)
+{
+}
+
 template <typename T> bool term_eq(const term_i *x, const term_i *y)
 {
   const T *const px = static_cast<const T *>(x);
@@ -78,6 +227,18 @@ bool term::operator ==(const term& x) const
   case term_sort_long: return term_eq<term_long>(ptr, x.ptr);
   case term_sort_string: return term_eq<term_string>(ptr, x.ptr);
   case term_sort_metalist: return term_eq<term_metalist>(ptr, x.ptr);
+  case term_sort_lambda:
+    {
+      const term_lambda& tl0 = *static_cast<const term_lambda *>(ptr);
+      const term_lambda& tl1 = *static_cast<const term_lambda *>(x.ptr);
+      return tl0.tparams == tl1.tparams && tl0.v == tl1.v;
+    }
+  case term_sort_bind:
+    {
+      const term_bind& tb0 = *static_cast<const term_bind *>(ptr);
+      const term_bind& tb1 = *static_cast<const term_bind *>(x.ptr);
+      return tb0.tp == tb1.tp && tb0.tpv == tb1.tpv && tb0.next == tb1.next;
+    }
   case term_sort_expr:
     {
       const term_expr& te0 = *static_cast<const term_expr *>(ptr);
@@ -113,6 +274,36 @@ bool term::operator <(const term& x) const
   case term_sort_long: return term_lt<term_long>(ptr, x.ptr);
   case term_sort_string: return term_lt<term_string>(ptr, x.ptr);
   case term_sort_metalist: return term_lt<term_metalist>(ptr, x.ptr);
+  case term_sort_lambda:
+    {
+      const term_lambda& tl0 = *static_cast<const term_lambda *>(ptr);
+      const term_lambda& tl1 = *static_cast<const term_lambda *>(x.ptr);
+      expr_tparams *tp0 = dynamic_cast<expr_tparams *>(tl0.tparams);
+      expr_tparams *tp1 = dynamic_cast<expr_tparams *>(tl1.tparams);
+      while (tp0 != 0 || tp1 != 0) {
+	const std::string s0 = tp0 != 0 ? tp0->sym : "";
+	const std::string s1 = tp1 != 0 ? tp1->sym : "";
+	if (s0 < s1) { return true; }
+	if (s1 < s0) { return false; }
+	tp0 = tp0 != 0 ? tp0->rest : 0;
+	tp1 = tp1 != 0 ? tp1->rest : 0;
+      }
+      return tl0.v < tl1.v;
+    }
+  case term_sort_bind:
+    {
+      const term_bind& tb0 = *static_cast<const term_bind *>(ptr);
+      const term_bind& tb1 = *static_cast<const term_bind *>(x.ptr);
+      expr_tparams *tp0 = dynamic_cast<expr_tparams *>(tb0.tp);
+      expr_tparams *tp1 = dynamic_cast<expr_tparams *>(tb1.tp);
+      const std::string s0 = tp0 != 0 ? tp0->sym : "";
+      const std::string s1 = tp1 != 0 ? tp1->sym : "";
+      if (s0 < s1) { return true; }
+      if (s1 < s0) { return false; }
+      if (tb0.tpv < tb1.tpv) { return true; }
+      if (tb1.tpv < tb0.tpv) { return false; }
+      return tb0.next < tb1.next;
+    }
   case term_sort_expr:
     {
       /* TODO: slow */
@@ -126,7 +317,12 @@ bool term::operator <(const term& x) const
       if (s0 > s1) {
 	return false;
       }
-      return (*get_args()) < (*x.get_args());
+      term_list emp;
+      const term_list *a0 = get_args();
+      const term_list *a1 = x.get_args();
+      a0 = a0 != 0 ? a0 : &emp;
+      a1 = a1 != 0 ? a1 : &emp;
+      return (*a0) < (*a1);
     }
   }
   return false; /* not reached */

@@ -1,0 +1,20 @@
+namespace e5;
+import common -;
+import meta::common m;
+
+metafunction mymap{v, f} m::map{v, f};
+metafunction cateach{v, x} mymap{v, metafunction{y} m::concat{x, y}};
+
+metafunction mymap2{x, f} m::map{x, f};
+metafunction cateach2{v, x} mymap2{v, metafunction{y} m::concat{x, y}};
+  // x is not compromised by mymap2. metafunction args have lexical context.
+
+function void t1()
+{
+  string x = m::to_string{cateach{m::list{1, 2, 3}, 5}};
+  println(x);
+  string x2 = m::to_string{cateach2{m::list{1, 2, 3}, 5}};
+  println(x2);
+}
+
+t1();
