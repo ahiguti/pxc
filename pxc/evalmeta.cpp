@@ -150,6 +150,10 @@ static term eval_meta_apply(term_list& tlev, eval_context& ectx, expr_i *pos)
     return term();
   }
   term& t0 = tlev[0];
+  term_list rtargs;
+  rtargs.insert(rtargs.begin(), tlev.begin() + 1, tlev.end());
+  return eval_apply(t0, rtargs, true, ectx, pos);
+  #if 0
   expr_i *const t0expr = t0.get_expr();
   if (t0expr == 0) {
     return term();
@@ -158,6 +162,7 @@ static term eval_meta_apply(term_list& tlev, eval_context& ectx, expr_i *pos)
   rtargs.insert(rtargs.begin(), tlev.begin() + 1, tlev.end());
   term rt(t0expr, rtargs);
   return eval_term_internal(rt, true, ectx, pos);
+  #endif
 }
 
 static term eval_meta_error(term_list& tlev, eval_context& ectx, expr_i *pos)

@@ -1012,8 +1012,10 @@ static std::string tparam_str_bind(const term& t, term_tostr_sort s)
     t.get_bind_tparam());
   const term *tpval = t.get_bind_tpvalue();
   const term *next = t.get_bind_next();
+  const bool is_up = *t.get_bind_is_upvalue();
   if (s == term_tostr_sort_humanreadable) {
-    return std::string("{") + std::string(tp->sym) + ":="
+    return std::string("{") + std::string(tp->sym) +
+      (is_up ? "::=" : ":=")
       + term_tostr(*tpval, s) + "}" + term_tostr(*next, s);
   }
   return "m$lb$" + std::string(tp->sym) + "$" + term_tostr(*next, s);
