@@ -1,7 +1,28 @@
 
-0310 573
+0616 779
 ---------------------------------------------------------------------
 FIXME/TODO M1
+
+- 例外の使い方
+
+- test_61_remote
+
+- te_to_term -> expr_to_term
+  数値リテラルなどは変換してしまう
+  termにterm_applyを用意してexpr_to_termで可能な限り変換、
+  eval_apply_exprのswitchをなくす
+
+- cleanするときにフォルダがないとエラーになるのは無視するべき
+
+- fn_check_finalから無駄にresolve_texpr()されて遅い(done)
+
+- EVAL_LAZYのcycle可能性を除去 やめ
+
+- evalのtargs_evaluated除去
+  strictメタ関数からもう一度evalされたときにtargs_evaluatedがtrue
+  になるが、これらをnonstrictに変更すればよい？
+
+- evalのterm_listコンストラクトのコスト除去
 
 - has_unbound_tparam, term_has_unevaluated_exprの意味を整理
 
@@ -1061,6 +1082,180 @@ expand (fld : fields) {
 }
 
 ---------------------------------------------------------------------
+lambda
+
+lambda{x} lambda{y} add{x, y}
+x := 3を適用
+=> lambda{y} add{3, y}
+y := 5を適用
+=> add{3, 5}
+=> 8
+
+lambda抽象がすべて外れた時まで適用を遅らせる
+lambda{f} lambda{x} lambda{y} f{x, y}
+f := add
+=> lambda{x} lambda{y} f{x, y} ( f := add )
+x := 3
+=> lambda{y} f{x, y} ( f := add, x := 3 )
+y := 5
+=> f{x, y} ( f := add, x := 3, y := 5 )
+ここで適用？
+
+各lambda式について、自身のlambda変数だけでなく上位のlambda変数について
+も値を保持しなければならない
+termを構築する際に、上位lambda変数を再帰的に渡す
+
+lambda{y} f{x, y}
+  引数: y
+  上位変数: f, x
+  適用: ()
+  式: f{x, y}
+
+lambda{x} lambda{y} f{x, y}
+  引数: x
+  上位変数: f
+  適用: ()
+  式: lambda{y} f{x, y}
+
+lambda{f} lambda{x} lambda{y} f{x, y}
+  引数: f: 
+  上位変数: なし
+  適用: ()
+  式: lambda{x} lambda{y} f{x, y}
+
+lambda適用時の処理
+lambda{f} lambda{x} lambda{y} f{x, y}  .  add
+f := add をバインドして 中身をevalする。
+結果は
+  (f := add) lambda{x} lambda{y} f{x, y}
+x := 3 をバインドし、中身をevalする
+結果は
+  (f := add, x := 3) lambda{y} f{x, y}
+y := 5 をバインドし、中身をevalする
+結果は
+  (f := add, x := 3, y := 5) f{x, y}
+  頭が
+  => add{3, y}
+
+lambda抽象式を値として返すときには、その上位値のバインドを
+同時に保持しておかねばならない
+
+lambda_bindというtermを作る?
+
+# evalの処理
+# termがterm_lambdaまたはterm_bindだった場合の処理を追加
+# termがargsを持たない場合
+#   - 現在のbindをwrapしたtermを返す
+# termがargsを持つ場合、それはlambda適用である
+#   - 引数にargsを適用するようなbindを作る。
+#   - さらに上位変数のbindを持つ場合はそれも加える。
+#   - できあがったbindをpushして式をevalする
+
+(1) eval_contextにbindを追加。term_bindへのポインタ。eval_contextのbindは、
+現在評価中の式のlexical contextがmetafdefの中の式であるときに、その位置の
+変数のbind一覧がセットされるもの。再帰的に別の式をevalするときは退避復旧
+する必要あり。
+
+(2)
+eval_apply_internal(term x, term_list args, eval_context c, bool args_evd)
+{
+  xは評価済み。yはargs_evdなら評価済み。
+  xがterm_lambdaかterm_bindなら
+    lambda式の引数にargsの各々を代入するようなbindをxにかぶせる
+    もしbindの深さがlambda抽象の深さに一致したら
+      簡約可能なので、そのbindをctxにセットしてxのlambda右辺を
+      eval_term_internalする
+    そうでないなら
+      まだbind不足で簡約できないからbindをかぶせたtermをそのまま返す
+  xがexprなら
+    そのexprにargsをつけたtermを作り、eval_term_internalする
+  xがそれ以外なら
+    エラー
+}
+
+(3)
+metafdef_to_term(expr_metafdef *mf, ...)
+{
+  rhsをte_to_term()する
+  lambdaに引数があるときは
+    引数とrhs式をセットしたterm_lambdaを作り、それを返す
+  引数が無いとき
+    rhs式をそのまま返す
+}
+
+(4) tparamsのevalにたいして、param_defがnullだったらeval_contextのbindから
+探す処理を追加。
+(local_tparams_bindingはあとで削除。)
+(変更後はmetafdef引数のtparamsはparam_defが常にnullになる。)
+
+(5)
+ここから一気に。
+te_to_term(expr_i *te, ...)の処理
+teがexpr_teじゃないとき、もしそれがmetafdefなら、metafdef_to_term()
+を呼ぶように変更
+
+(6)
+eval_term_internal2()
+case expr_e_metafdefの場合
+  expr_metafdefをmetadef_to_term()で変換してevalし、それとargsを
+  eval_apply_internal()する。argsが無いときはそのまま返す。
+
+save_upvalue_bindはどこで実行するべきか
+lambda{lst} lambda{a} map{lst, lambda{x} add{x, a}}
+{lst:={1,2,3}} {a:=5} lambda{lst} lambda{a} map{lst, lambda{x} add{x, a}}
+-> map{{1,2,3}, lambda{x} add{x, 5}}
+evalするときにbindをectxにセット
+evalした結果にlambdaが含まれているとき、その中に上位値として参照する
+変数がectxのbindに含まれていることがあるが、それをeval後も覚えておく
+必要がある。evalした結果にlambdaが含まれているとき、そのlambdaは一度
+中でevalされているはず(eager evaluationなら?)。
+
+
+---------------------------------------------------------------------
+lambda lazy化
+
+term_bindにtpv_evaluated
+
+eval_apply:
+  lambda applicationで適用するたびにterm_bindをwrapするところ、
+  tpvをevalしてからセットしているのをevalせずにする
+  ectxにtpbindがあればそれをterm_bindに付ける。
+
+find_tparam_bind:
+  bindの中から見つかったら、それのtpv_evaluatedが空ならtpvをeval
+  する。その際にはtpbindをセット。
+
+cycleの可能性をなくすには
+tpv_evaluatedがmutableであるのが問題
+ectx.tpbind は upvalueだけでなく全ての変数束縛が入る
+- eval_term_with_bindでtpbindをセットしている
+  1. tparamsのparam_defがnullだった場合にそこから束縛値を取るが、
+     その際に遅延評価のために上位値をtpbindにセットしてから束縛値
+     を評価する
+  2. lambda適用が可能となった段階でtpbindにすべての変数束縛をセット
+     してからlambda右辺を評価する
+- find_tparam_bindでtpbindを参照している
+  これはtparamsの束縛値をさがすのに、tpbindの中から探すから。
+- save_upvalue_bind
+  lambda式のlexical contextを保存するのに、tpbindをイテレートし、
+  term_lambdaの直前にterm_bindを各上位変数についてかぶせる。
+  -> これはもし評価済みであれば評価済みの値をかぶせる？
+
+---------------------------------------------------------------------
+targs_evaluated
+
+除去して常にfalseであるような動作をするよう変更
+
+eval_term_list_internal()
+  trueなら評価、そうでないならそのまま
+eval_term_with_bind()
+  eval_term_internalにそのまま渡す
+eval_apply()
+  targs_evaluatedが偽なら引数を評価してからbindのチェインを作成
+eval_term_internal()
+eval_apply_expr()
+
+---------------------------------------------------------------------
 リモートオブジェクト
 
 var svr = tptr(object_server{foo}());
@@ -1250,121 +1445,39 @@ struct orb {
 その型に応じたマーシャラのidが同時に記録されている。
 
 ---------------------------------------------------------------------
-lambda
+RPC つぎ
 
-lambda{x} lambda{y} add{x, y}
-x := 3を適用
-=> lambda{y} add{3, y}
-y := 5を適用
-=> add{3, 5}
-=> 8
+61_remote/ot3.pxでメソッド呼びだしdone。
+リモートへ払い出したオブジェクトにidをふり、またmethodsテーブルの番号
+を保持し、ptr{obj}との3つ組をskeletonsにつっこむ。
+idは生ポインタにする。ポインタからidを引く処理を省略できる
 
-lambda抽象がすべて外れた時まで適用を遅らせる
-lambda{f} lambda{x} lambda{y} f{x, y}
-f := add
-=> lambda{x} lambda{y} f{x, y} ( f := add )
-x := 3
-=> lambda{y} f{x, y} ( f := add, x := 3 )
-y := 5
-=> f{x, y} ( f := add, x := 3, y := 5 )
-ここで適用？
+remoteオブジェクトのうち、stubはorbへの共有ポインタを持つ。
+orbがstubsとskeletons、methods_tblを持つ。
+stubsはリモート側の実オブジェクトに対して生成したstubの集まり。
+  map{size_t, size_t};
+    stubオブジェクトへの弱ポインタ -> リモート実オブジェクトのid
+    (stubはorbの強参照をもつので反対方向は弱参照)
+skeletonsはローカル側の実オブジェクトの集まり。
+  map{size_t, pair{ptr{remote}, size_t}};
+    リモートobject_id -> (実オブジェクト, methodsインデックス)
+methods_tblは
+  vector{methods};
+  各型についてのメソッドリスト。
+methodsは
+  vector{method_entry};
+  メソッドリスト。名前順にソートされている。
+method_entryは
+  { string name; ptr{i_marshal_method} method; };
 
-各lambda式について、自身のlambda変数だけでなく上位のlambda変数について
-も値を保持しなければならない
-termを構築する際に、上位lambda変数を再帰的に渡す
+marshal_referenceの動作
+  もしオブジェクトがstubsに入っているなら、そのidをシリアライズ
+  そうでないなら、skeletonsから探す＆登録、そのidをシリアライズ
+unmarshal_referenceの動作
+  もしidがstub印がついていれば、stubから探し、強ポインタへ変換
+    stubにないなら新たに作成
+  そうでないなら、skeletonsから探し、ポインタを返す
+    skeletonsにないならエラー
 
-lambda{y} f{x, y}
-  引数: y
-  上位変数: f, x
-  適用: ()
-  式: f{x, y}
-
-lambda{x} lambda{y} f{x, y}
-  引数: x
-  上位変数: f
-  適用: ()
-  式: lambda{y} f{x, y}
-
-lambda{f} lambda{x} lambda{y} f{x, y}
-  引数: f: 
-  上位変数: なし
-  適用: ()
-  式: lambda{x} lambda{y} f{x, y}
-
-lambda適用時の処理
-lambda{f} lambda{x} lambda{y} f{x, y}  .  add
-f := add をバインドして 中身をevalする。
-結果は
-  (f := add) lambda{x} lambda{y} f{x, y}
-x := 3 をバインドし、中身をevalする
-結果は
-  (f := add, x := 3) lambda{y} f{x, y}
-y := 5 をバインドし、中身をevalする
-結果は
-  (f := add, x := 3, y := 5) f{x, y}
-  頭が
-  => add{3, y}
-
-lambda抽象式を値として返すときには、その上位値のバインドを
-同時に保持しておかねばならない
-
-lambda_bindというtermを作る?
-
-# evalの処理
-# termがterm_lambdaまたはterm_bindだった場合の処理を追加
-# termがargsを持たない場合
-#   - 現在のbindをwrapしたtermを返す
-# termがargsを持つ場合、それはlambda適用である
-#   - 引数にargsを適用するようなbindを作る。
-#   - さらに上位変数のbindを持つ場合はそれも加える。
-#   - できあがったbindをpushして式をevalする
-
-(1) eval_contextにbindを追加。term_bindへのポインタ。eval_contextのbindは、
-現在評価中の式のlexical contextがmetafdefの中の式であるときに、その位置の
-変数のbind一覧がセットされるもの。再帰的に別の式をevalするときは退避復旧
-する必要あり。
-
-(2)
-eval_apply_internal(term x, term_list args, eval_context c, bool args_evd)
-{
-  xは評価済み。yはargs_evdなら評価済み。
-  xがterm_lambdaかterm_bindなら
-    lambda式の引数にargsの各々を代入するようなbindをxにかぶせる
-    もしbindの深さがlambda抽象の深さに一致したら
-      簡約可能なので、そのbindをctxにセットしてxのlambda右辺を
-      eval_term_internalする
-    そうでないなら
-      まだbind不足で簡約できないからbindをかぶせたtermをそのまま返す
-  xがexprなら
-    そのexprにargsをつけたtermを作り、eval_term_internalする
-  xがそれ以外なら
-    エラー
-}
-
-(3)
-metafdef_to_term(expr_metafdef *mf, ...)
-{
-  rhsをte_to_term()する
-  lambdaに引数があるときは
-    引数とrhs式をセットしたterm_lambdaを作り、それを返す
-  引数が無いとき
-    rhs式をそのまま返す
-}
-
-(4) tparamsのevalにたいして、param_defがnullだったらeval_contextのbindから
-探す処理を追加。
-(local_tparams_bindingはあとで削除。)
-(変更後はmetafdef引数のtparamsはparam_defが常にnullになる。)
-
-(5)
-ここから一気に。
-te_to_term(expr_i *te, ...)の処理
-teがexpr_teじゃないとき、もしそれがmetafdefなら、metafdef_to_term()
-を呼ぶように変更
-
-(6)
-eval_term_internal2()
-case expr_e_metafdefの場合
-  expr_metafdefをmetadef_to_term()で変換してevalし、それとargsを
-  eval_apply_internal()する。argsが無いときはそのまま返す。
+stubの動作
 

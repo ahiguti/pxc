@@ -24,18 +24,20 @@ term::term(const std::string& x)
 {
 }
 
-term::term(const term_list& x)
+term::term(const term_list_range& x)
   : ptr(new term_metalist(x))
 {
 }
 
-term::term(expr_i *tpms, const term& t)
-  : ptr(new term_lambda(tpms, t))
+term::term(const std::vector<expr_tparams *>& upvalues, expr_tparams *tpms,
+  const term& t)
+  : ptr(new term_lambda(upvalues, tpms, t))
 {
 }
 
-term::term(expr_i *tpm, const term& tpmv, bool is_up, const term& next)
-  : ptr(new term_bind(tpm, tpmv, is_up, next))
+term::term(expr_tparams *tpm, const term& tpmv, const term& tpmv_lexctx,
+  bool is_up, const term& next)
+  : ptr(new term_bind(tpm, tpmv, tpmv_lexctx, is_up, next))
 {
 }
 
@@ -44,7 +46,7 @@ term::term(expr_i *e)
 {
 }
 
-term::term(expr_i *e, term_list& a)
+term::term(expr_i *e, const term_list_range& a)
   : ptr(new term_expr(e, a))
 {
 }
@@ -76,7 +78,7 @@ const term_list *term::get_args_or_metalist() const
   return r;
 }
 
-expr_i *term::get_lambda_tparams() const
+expr_tparams *term::get_lambda_tparams() const
 {
   term_lambda *const tl = get_term_lambda();
   return tl != 0 ? tl->tparams : 0;
@@ -88,7 +90,7 @@ const term *term::get_lambda_body() const
   return tl != 0 ? &tl->v : 0;
 }
 
-expr_i *term::get_bind_tparam() const
+expr_tparams *term::get_bind_tparam() const
 {
   term_bind *const tb = get_term_bind();
   return tb != 0 ? tb->tp : 0;
@@ -124,8 +126,8 @@ std::string term::get_string() const
   return ts != 0 ? ts->v : std::string();
 }
 
-term_metalist::term_metalist(const term_list& a)
-  : v(a)
+term_metalist::term_metalist(const term_list_range& a)
+  : v(a.begin(), a.end())
 {
 }
 
@@ -171,17 +173,22 @@ ssize_t term_metalist::find(const term& x) const
 }
 
 term_metalist_idx::index_type term_metalist_idx::create_index(
-  const term_list& a)
+  const term_list_range& a)
 {
   term_metalist_idx::index_type idx;
+  for (size_t i = 0; i < a.size(); ++i) {
+    idx[a[i]] = i;
+  }
+  #if 0
   size_t c = 0;
   for (term_list::const_iterator i = a.begin(); i != a.end(); ++i, ++c) {
     idx[*i] = c;
   }
+  #endif
   return idx; /* expects return value optimization */
 }
 
-term_metalist_idx::term_metalist_idx(const term_list& a)
+term_metalist_idx::term_metalist_idx(const term_list_range& a)
   : term_metalist(a), index(create_index(a))
 {
 }
@@ -195,13 +202,15 @@ ssize_t term_metalist_idx::find(const term& x) const
   return -1;
 }
 
-term_lambda::term_lambda(expr_i *tpms, const term& t)
-  : tparams(tpms), v(t)
+term_lambda::term_lambda(const std::vector<expr_tparams *>& upvalues,
+  expr_tparams *tpms, const term& t)
+  : upvalues(upvalues), tparams(tpms), v(t)
 {
 }
 
-term_bind::term_bind(expr_i *tp, const term& tpv, bool is_up, const term& next)
-  : tp(tp), tpv(tpv), is_upvalue(is_up), next(next)
+term_bind::term_bind(expr_tparams *tp, const term& tpv, const term& tpv_lexctx,
+  bool is_up, const term& next)
+  : tp(tp), tpv(tpv), tpv_lexctx(tpv_lexctx), is_upvalue(is_up), next(next)
 {
 }
 
@@ -237,7 +246,9 @@ bool term::operator ==(const term& x) const
     {
       const term_bind& tb0 = *static_cast<const term_bind *>(ptr);
       const term_bind& tb1 = *static_cast<const term_bind *>(x.ptr);
-      return tb0.tp == tb1.tp && tb0.tpv == tb1.tpv && tb0.next == tb1.next;
+      return tb0.tp == tb1.tp && tb0.tpv == tb1.tpv &&
+	tb0.tpv_lexctx == tb1.tpv_lexctx &&
+	tb0.is_upvalue == tb1.is_upvalue && tb0.next == tb1.next;
     }
   case term_sort_expr:
     {
@@ -302,6 +313,10 @@ bool term::operator <(const term& x) const
       if (s1 < s0) { return false; }
       if (tb0.tpv < tb1.tpv) { return true; }
       if (tb1.tpv < tb0.tpv) { return false; }
+      if (tb0.tpv_lexctx < tb1.tpv_lexctx) { return true; }
+      if (tb1.tpv_lexctx < tb0.tpv_lexctx) { return false; }
+      if (tb0.is_upvalue < tb1.is_upvalue) { return true; }
+      if (tb1.is_upvalue < tb0.is_upvalue) { return false; }
       return tb0.next < tb1.next;
     }
   case term_sort_expr:

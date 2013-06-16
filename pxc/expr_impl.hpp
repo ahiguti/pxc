@@ -174,6 +174,13 @@ struct expr_telist;
 struct expr_tparams;
 struct expr_symbol;
 
+struct eval_context;
+typedef term (*builtin_strict_metafunc_t)(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos);
+typedef term (*builtin_nonstrict_metafunc_t)(expr_i *texpr,
+  const term_list_range& targs, bool targs_evaluated, eval_context& ectx,
+  expr_i *pos);
+
 struct template_info {
   typedef std::map<std::string, expr_block *> instances_type;
   expr_tparams *tparams;
@@ -1198,7 +1205,7 @@ public:
   std::string injectns;
   expr_block *block;
   attribute_e attr;
-  term rhs_term; /* caches te_to_term() */
+  term metafdef_term; /* caches metafdef_to_term() */
 };
 
 struct expr_struct : public expr_i {
@@ -1244,6 +1251,9 @@ public:
   term value_texpr;
   typefamily_e typefamily;
   bool has_udcon;
+  const term *builtin_typestub;
+  builtin_strict_metafunc_t metafunc_strict;
+  builtin_nonstrict_metafunc_t metafunc_nonstrict;
 };
 
 struct expr_dunion : public expr_i {
