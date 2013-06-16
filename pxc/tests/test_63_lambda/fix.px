@@ -1,0 +1,32 @@
+namespace fix;
+import common -;
+import meta::common m;
+
+metafunction fact{x}
+  m::cond{m::lt{x, 2}, x, m::mul{x, fact{m::sub{x, 1}}}};
+metafunction fib{x}
+  m::cond{m::lt{x, 2}, x,
+    m::add{fib{m::sub{x, 1}}, fib{m::sub{x, 2}}}};
+
+metafunction fix{f}
+  m::apply{
+    metafunction{g} metafunction{x} m::apply{f{g{g}}, x},
+    metafunction{g} metafunction{x} m::apply{f{g{g}}, x}};
+
+metafunction fact_i{f}
+  metafunction{x}
+    m::cond{m::lt{x, 2}, x, m::mul{x, f{m::sub{x, 1}}}};
+metafunction fib_i{f}
+  metafunction{x} 
+    m::cond{m::lt{x, 2}, x,
+      m::add{f{m::sub{x, 1}}, f{m::sub{x, 2}}}};
+
+function void t1()
+{
+  println(fact{10});
+  println(m::apply{fix{fact_i}, 10});
+  println(fib{10});
+  println(m::apply{fix{fib_i}, 10});
+}
+
+t1();

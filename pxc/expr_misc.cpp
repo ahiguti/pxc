@@ -1284,7 +1284,7 @@ std::string term_tostr(const term& t, term_tostr_sort s)
   return rstr;
 }
 
-std::string term_tostr_list(const term_list& tl, term_tostr_sort s)
+std::string term_tostr_list(const term_list_range& tl, term_tostr_sort s)
 {
   std::string rstr;
   if (tl.empty()) {
@@ -1298,7 +1298,7 @@ std::string term_tostr_list(const term_list& tl, term_tostr_sort s)
   } else {
     rstr += "{";
   }
-  for (term_list::const_iterator i = tl.begin(); i != tl.end(); ++i) {
+  for (const term *i = tl.begin(); i != tl.end(); ++i) {
     if (i != tl.begin()) {
       if (s == term_tostr_sort_cname_tparam
 	|| s == term_tostr_sort_strict) {
@@ -1330,12 +1330,12 @@ std::string term_tostr_human(const term& t)
   return term_tostr(t, term_tostr_sort_humanreadable);
 }
 
-std::string term_tostr_list_cname(const term_list& tl)
+std::string term_tostr_list_cname(const term_list_range& tl)
 {
   return term_tostr_list(tl, term_tostr_sort_cname);
 }
 
-std::string term_tostr_list_human(const term_list& tl)
+std::string term_tostr_list_human(const term_list_range& tl)
 {
   return term_tostr_list(tl, term_tostr_sort_humanreadable);
 }
@@ -2620,6 +2620,12 @@ static void check_type_threading_te(const term& te, expr_i *pos)
 
 static void check_type_threading(expr_i *e)
 {
+  if (e->get_esort() == expr_e_te &&
+    e->parent_expr != 0 && e->parent_expr->get_esort() == expr_e_telist) {
+    /* this te is a sub-expression. no need to check. avoid calling
+     * resolve_texpr() */
+    return;
+  }
   term& te = e->resolve_texpr();
   check_type_threading_te(te, e);
 }

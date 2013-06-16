@@ -8,9 +8,31 @@ metafunction fib{x}
     x,
     m::add{fib{m::sub{x, 1}}, fib{m::sub{x, 2}}}};
 
+/*
+metafunction fix{f}
+  m::apply{
+    metafunction{g} f{g{g}},
+    metafunction{g} f{g{g}}};
+*/
+metafunction fix{f}
+  m::apply{
+    metafunction{g, x} f{g{g}, x},
+    metafunction{g, x} f{g{g}, x}};
+
+metafunction fact_i{f}
+  metafunction{x}
+    m::cond{m::lt{x, 2}, x, m::mul{x, f{m::sub{x, 1}}}};
+metafunction fib_i{f, x}
+    m::cond{m::lt{x, 2}, x,
+      m::add{f{m::sub{x, 1}}, f{m::sub{x, 2}}}};
+
+
 function void t1() {
   expand (fsym, idx : m::seq{31}) {
     println(m::timing{fib{idx}});
+  }
+  expand (fsym, idx : m::seq{31}) {
+    println(m::timing{fix{fib_i, idx}});
   }
 }
 

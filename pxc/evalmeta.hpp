@@ -18,12 +18,14 @@
 
 namespace pxc {
 
-term eval_metafunction_lazy(const std::string& name, const term& t,
-  bool targs_evaluated, eval_context& ectx, expr_i *pos);
-term eval_metafunction_strict(const std::string& name, term_list& tlev,
-  const term& t, eval_context& ectx, expr_i *pos);
 term eval_local_lookup(const term& t, const std::string& name, expr_i *pos);
   /* returns t::foo */
+
+const term *find_builtin_typestub(const std::string& name);
+builtin_strict_metafunc_t find_builtin_strict_metafunction(
+  const std::string& name);
+builtin_nonstrict_metafunc_t find_builtin_nonstrict_metafunction(
+  const std::string& name);
 
 };
 

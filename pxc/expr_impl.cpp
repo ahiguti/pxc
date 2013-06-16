@@ -13,6 +13,7 @@
 
 #include "expr_misc.hpp"
 #include "eval.hpp"
+#include "evalmeta.hpp"
 #include "util.hpp"
 
 #define DBG(x)
@@ -91,10 +92,24 @@ fprintf(stderr, "set symdef %s %p\n", fullsym.c_str(), e); // FIXME
   symbol_def = e;
 }
 
+static bool cur_frame_uninstantiated(symbol_table *symtbl)
+{
+  expr_i *const fr = get_current_frame_expr(symtbl);
+  if (fr != 0) {
+    expr_block *const tbl = fr->get_template_block();
+    if (tbl->tinfo.is_uninstantiated()) {
+      return true;
+    }
+  }
+  return false;
+}
+
 term& symbol_common::resolve_evaluated()
 {
   if (evaluated.is_null()) {
-    evaluated = eval_expr(parent_expr);
+    const bool need_partial_eval = cur_frame_uninstantiated(
+      parent_expr->symtbl_lexical);
+    evaluated = eval_expr(parent_expr, need_partial_eval);
 #if 0
 fprintf(stderr, "resolve %s(%p) -> %s(%p)\n", parent_expr->dump(0).c_str(), parent_expr, term_tostr_human(evaluated).c_str(), evaluated.get_expr());
 if (fullsym == "ttt") {
@@ -1201,7 +1216,8 @@ term&
 expr_argdecls::resolve_texpr()
 {
   if (type_of_this_expr.is_null()) {
-    type_of_this_expr = eval_expr(type_uneval);
+    const bool need_partial_eval = cur_frame_uninstantiated(symtbl_lexical);
+    type_of_this_expr = eval_expr(type_uneval, need_partial_eval);
     DBG_TE(fprintf(stderr,
       "argdecls %p %s %s:%d resolve_texpr uneval=%p type_of_this_expr=%p\n",
       this, sym, fname, line, type_uneval, type_of_this_expr.expr.expr));
@@ -1303,7 +1319,8 @@ expr_funcdef *expr_funcdef::is_member_function_descent()
 const term& expr_funcdef::get_rettype()
 {
   if (rettype_eval.is_null()) {
-    rettype_eval = eval_expr(block->rettype_uneval);
+    const bool need_partial_eval = cur_frame_uninstantiated(symtbl_lexical);
+    rettype_eval = eval_expr(block->rettype_uneval, need_partial_eval);
   }
   return rettype_eval;
 }
@@ -1358,7 +1375,7 @@ expr_metafdef::expr_metafdef(const char *fn, int line, const char *sym,
 expr_i *expr_metafdef::clone() const
 {
   expr_metafdef *cpy = new expr_metafdef(*this);
-  cpy->rhs_term = term(); /* clear cached rhs term */
+  cpy->metafdef_term = term(); /* clear cached term */
   return cpy;
 }
 
@@ -1373,7 +1390,8 @@ expr_struct::expr_struct(const char *fn, int line, const char *sym,
   : expr_i(fn, line), sym(sym), cname(cname), typefamily_str(family),
     block(ptr_down_cast<expr_block>(block)),
     attr(attr), value_texpr(), typefamily(typefamily_e_none),
-    has_udcon(has_udcon)
+    has_udcon(has_udcon), builtin_typestub(0), metafunc_strict(0),
+    metafunc_nonstrict(0)
 {
   assert(block);
   this->block->symtbl.block_esort = expr_e_struct;
@@ -1393,6 +1411,11 @@ void expr_struct::set_unique_namespace_one(const std::string& u,
   uniqns = u;
   injectns = i;
   typefamily = get_family_from_string(typefamily_str ? typefamily_str : "");
+  if (typefamily_str != 0) {
+    builtin_typestub = find_builtin_typestub(typefamily_str);
+    metafunc_strict = find_builtin_strict_metafunction(typefamily_str);
+    metafunc_nonstrict = find_builtin_nonstrict_metafunction(typefamily_str);
+  }
 }
 
 void expr_struct::get_fields(std::list<expr_var *>& flds_r) const
