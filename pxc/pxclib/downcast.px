@@ -1,6 +1,8 @@
 namespace downcast;
-import numeric::integral -;
-import meta::common m;
+public import numeric::integral -;
+public import pointer -;
+public import meta::common m;
+public import meta::family mf;
 
 public threaded function extern "pxcrt::downcast_const" {tto, tfrom}
 check_polymorphic{tto, tfrom} const& downcast_const(tfrom const& x);
@@ -9,7 +11,10 @@ public threaded function extern "pxcrt::downcast_mutable" {tto, tfrom}
 check_polymorphic{tto, tfrom}& downcast_mutable(tfrom& x);
 
 public threaded function extern "pxcrt::instanceof" {t, tobj}
-  bool instanceof(check_polymorphic{tobj, t} const& x);
+bool instanceof(check_polymorphic{tobj, t} const& x);
+
+public threaded function extern "pxcrt::pointer_downcast" {tto, tfrom}
+check_pointer_downcast{tto, tfrom} pointer_downcast(tfrom const& x);
 
 private metafunction check_polymorphic{t1, t2}
   m::cond{
@@ -17,20 +22,42 @@ private metafunction check_polymorphic{t1, t2}
     t1,
     m::error{"polymorphic type expected"}};
 
-extern "type" inline
+private metafunction check_pointer_downcast{tto, tfrom}
+  m::cond{
+    m::and{
+      m::eq{m::family{tto}, m::family{tfrom}},
+      mf::is_pointer_family{m::family{tto}},
+      m::is_polymorphic_type{m::at0{tfrom}},
+      m::is_polymorphic_type{m::at0{tto}}},
+    tto,
+    m::error{"invalid pointer_downcast"}};
+
+extern "types" inline
 namespace pxcrt {
+
 template <typename Tto, typename Tfrom> Tto const&
 downcast_const(Tfrom const& from) {
   return dynamic_cast<Tto const&>(from);
 }
+
 template <typename Tto, typename Tfrom> Tto&
 downcast_mutable(Tfrom& from) {
   return dynamic_cast<Tto&>(from);
 }
+
 template <typename T, typename Tobj> bool
 instanceof(Tobj const& x) {
   return dynamic_cast<T const *>(&x) != 0;
 }
-};
+
+template <typename Tto, typename Tfrom> Tto
+pointer_downcast(Tfrom const& from) {
+  typename Tto::target_type& ref = dynamic_cast<typename Tto::target_type&>(
+    *(from.get()));
+  ref.incref$z();
+  return Tto(&ref);
+}
+
+}; // namespace pxcrt
 ;
 

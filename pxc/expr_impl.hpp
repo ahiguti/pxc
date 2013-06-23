@@ -726,6 +726,8 @@ struct expr_block : public expr_i {
   void emit_local_decl(emit_context& em, bool is_funcbody);
   void emit_memberfunc_decl(emit_context& em, bool pure_virtual);
   std::string dump(int indent) const;
+  typedef std::vector<expr_i *> inherit_list_type;
+  inherit_list_type& resolve_inherit_transitive();
 public:
   template_info tinfo;
   unsigned int block_id_ns;
@@ -735,9 +737,9 @@ public:
   passby_e ret_passby;
   expr_stmts *stmts;
   symbol_table symtbl;
-  typedef std::vector<expr_i *> inherit_list_type;
-  inherit_list_type inherit_transitive;
   bool compiled_flag : 1;
+private:
+  inherit_list_type inherit_transitive;
 };
 
 struct expr_op : public expr_i {
@@ -1082,7 +1084,12 @@ struct expr_funcdef : public expr_i {
   void define_const_symbols_one() {
     if (sym != 0) {
       symtbl_lexical->define_name(sym, injectns, this, attr, 0);
+    } else if (is_destructor()) {
+      symtbl_lexical->define_name("~", injectns, this, attr, 0);
     }
+  }
+  bool is_destructor() const {
+    return block->rettype_uneval == 0;
   }
   const term& get_rettype();
   void check_type(symbol_table *lookup);
@@ -1096,7 +1103,8 @@ public:
   const char *sym;
   std::string uniqns;
   std::string injectns;
-  const char *const cname;
+  const char *cname;
+    /* can be modified if this function overrides a function with cname */
   bool is_const;
 private:
   term rettype_eval;

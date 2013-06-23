@@ -1,7 +1,7 @@
 namespace container::impl::stdmap;
 public import container::impl::array_common;
 
-extern "type" inline
+extern "types" inline
 #include <map>
 #include <stdint.h>
 #include <stdio.h>
@@ -39,8 +39,13 @@ struct tree_map_compare {
     v = x.v;
     return *this;
   }
-  Tm& operator [](const Tk& k) { return v[k]; }
+  Tm& operator [](const Tk& k) {
+    /* no need to call check_resize() because v[k] never invalidate any
+     * iterators */
+    return v[k];
+  }
   Tm value_at(const Tk& k) { return v[k]; }
+  bool exists(const Tk& k) const { return v.find(k) != v.end(); }
   iterator find(const Tk& k) { return v.find(k); }
   const_iterator find(const Tk& k) const { return v.find(k); }
   crange_type equal_range(const Tk& k) const {
@@ -52,9 +57,9 @@ struct tree_map_compare {
     return range_type(r.first, r.second);
   }
   size_type size() const { return v.size(); }
-  void erase(const Tk& k) {
+  size_type erase(const Tk& k) {
     check_resize();
-    v.erase(k);
+    return v.erase(k);
   }
   void clear() {
     check_resize();

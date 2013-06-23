@@ -14,7 +14,7 @@ private metafunction filter_norefarg{fs} filter{fs, norefarg};
 private metafunction nsfuncs{ns}
   filter_norefarg{filter_concrete{join{map{nslist{ns}, functions}}}};
 private metafunction nstypes{ns} filter_concrete{join{map{nslist{ns}, types}}};
-private metafunction atypes_one{f} join_all{list{rettype{f}}, argtypes{f}};
+private metafunction atypes_one{f} joinv{list{rettype{f}}, argtypes{f}};
 private metafunction atypes{fs}
   filter_concrete{join{map{filter_concrete{fs}, atypes_one}}};
 private metafunction ftypes{ts}
@@ -22,9 +22,9 @@ private metafunction ftypes{ts}
 private metafunction mfatypes{ts} atypes{join{map{ts, member_functions}}};
 private metafunction tatypes{ts} join{map{ts, targs}};
 private metafunction init_types{ns}
-  unique{join_all{nstypes{ns}, atypes{nsfuncs{ns}}}};
+  unique{joinv{nstypes{ns}, atypes{nsfuncs{ns}}}};
 private metafunction step_types{ts}
-  unique{join_all{ts, ftypes{ts}, mfatypes{ts}, tatypes{ts}}};
+  unique{joinv{ts, ftypes{ts}, mfatypes{ts}, tatypes{ts}}};
 private metafunction rep_types{ts, tsn}
   cond{eq{ts, tsn}, ts, rep_types{tsn, step_types{tsn}}};
 

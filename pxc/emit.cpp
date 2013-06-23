@@ -268,7 +268,7 @@ static void emit_interface_def_one(emit_context& em, expr_interface *ei,
   em.indent('b');
   em.puts("virtual ~");
   em.puts(name_c);
-  em.puts("() { }\n");
+  em.puts("() throw() { }\n");
   em.set_file_line(ei);
   em.indent('b');
   em.puts("virtual void incref$z() const = 0;\n");
@@ -383,6 +383,15 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
   em.puts(" {\n");
   em.add_indent(1);
   if (est->block->inherit != 0) {
+    if (est->block->symtbl.locals.find("~")
+      == est->block->symtbl.locals.end()) { /* no userdefined destr */
+      /* nothrow destructor */
+      em.set_file_line(est);
+      em.indent('b');
+      em.puts("~");
+      em.puts(name_c);
+      em.puts("() throw() { }\n");
+    }
     const bool multithr = (est->get_attribute() & attribute_multithr) != 0;
     if (multithr) {
       em.set_file_line(est);
@@ -963,7 +972,7 @@ static void emit_dunion_def_one(emit_context& em, const expr_dunion *ev,
   em.indent('b');
   em.puts("~");
   em.puts(name_c);
-  em.puts("() { deinit$(); }\n");
+  em.puts("() throw() { deinit$(); }\n");
   /* copy constructor */
   em.set_file_line(ev);
   em.indent('b');
@@ -1119,18 +1128,28 @@ static void emit_function_decl_one(emit_context& em, expr_funcdef *efd,
       em.puts("inline ");
     }
     expr_struct *const esd = efd->is_member_function();
-    emit_term(em, efd->get_rettype());
-    em.puts(" ");
+    if (!efd->is_destructor()) {
+      emit_term(em, efd->get_rettype());
+      em.puts(" ");
+    }
     if (esd != 0 && memfunc_ext) {
       em.puts(get_type_cname_wo_ns(esd));
       em.puts("::");
     }
-    em.puts(name_c);
+    if (efd->is_destructor()) {
+      em.puts("~");
+      em.puts(get_type_cname_wo_ns(esd));
+    } else {
+      em.puts(name_c);
+    }
     em.puts("(");
     emit_function_argdecls(em, efd);
     em.puts(")");
     if (efd->is_const) {
       em.puts(" const");
+    }
+    if (efd->is_destructor()) {
+      em.puts(" throw ()");
     }
   }
 }
@@ -1149,8 +1168,20 @@ static void emit_function_def_one(emit_context& em, expr_funcdef *efd)
   if (efd->is_member_function()) {
     emit_function_decl_one(em, efd, false, true);
     em.puts(" ");
-    fn_emit_value(em, efd->block);
-    em.puts("\n");
+    if (efd->is_destructor()) {
+      em.puts("{\n");
+      em.add_indent(1);
+      em.indent('D');
+      em.puts("try ");
+      fn_emit_value(em, efd->block);
+      em.puts(" catch (...) { ::abort(); }\n");
+      em.add_indent(-1);
+      em.indent('D');
+      em.puts("}\n");
+    } else {
+      fn_emit_value(em, efd->block);
+      em.puts("\n");
+    }
   } else {
     emit_function_decl_one(em, efd, false, false);
     em.puts(" ");
@@ -2062,6 +2093,22 @@ static bool can_omit_brace(const expr_if *ei)
   return false;
 }
 
+// FIXME: remove and use is_passby_mutable() instead
+static bool arg_passby_mutable(expr_argdecls *ad)
+{
+  const passby_e passby = ad->passby;
+  switch (passby) {
+  case passby_e_const_value:
+  case passby_e_const_reference:
+    return false;
+  case passby_e_mutable_value:
+  case passby_e_mutable_reference:
+    return true;
+  }
+  abort();
+  return false;
+}
+
 void expr_if::emit_value(emit_context& em)
 {
   bool has_own_block = false;
@@ -2090,34 +2137,26 @@ void expr_if::emit_value(emit_context& em)
       expr_argdecls *const mapped = block1->get_argdecls();
       assert(mapped != 0);
       has_own_block = true;
+      /* resembles to expr_feach::emit_value() */
       em.puts("{\n");
       em.add_indent(1);
+      emit_split_expr(em, cond, true);
       em.indent('I');
-      const bool mapped_mutable_flag =
-	(mapped->passby == passby_e_mutable_reference);
-      if (mapped_mutable_flag) {
-	em.puts("");
-      } else {
-	em.puts("const ");
-      }
+      const bool mapped_mutable_ref =
+	mapped->passby == passby_e_mutable_reference;
       em.puts(cetstr);
-      em.puts("& ag$fe = (");
+      if (mapped_mutable_ref) {
+	/* only mutable ref requires the container to be mutable */
+	em.puts("&");
+      } else {
+	em.puts(" const&");
+      }
+      em.puts(" ag$fe = (");
       fn_emit_value(em, econ);
       em.puts(");\n");
-      if (type_has_invalidate_guard(tcon) &&
-	is_passby_cm_reference(mapped->passby)) {
-	em.indent('I');
-	if (mapped_mutable_flag) {
-	  em.puts("const pxcrt::guard_ref< ");
-	} else {
-	  em.puts("const pxcrt::guard_ref< const ");
-	}
-	em.puts(cetstr);
-	em.puts(" > ag$fg(ag$fe);\n");
-      }
       em.indent('I');
       em.puts(cetstr);
-      if (mapped_mutable_flag) {
+      if (mapped_mutable_ref) {
 	em.puts("::iterator");
       } else {
 	em.puts("::const_iterator");
@@ -2216,22 +2255,6 @@ void expr_forrange::emit_value(emit_context& em)
   arg->emit_symbol(em);
   em.puts(") ");
   fn_emit_value(em, block);
-}
-
-// FIXME: remove
-static bool arg_passby_mutable(expr_argdecls *ad)
-{
-  const passby_e passby = ad->passby;
-  switch (passby) {
-  case passby_e_const_value:
-  case passby_e_const_reference:
-    return false;
-  case passby_e_mutable_value:
-  case passby_e_mutable_reference:
-    return true;
-  }
-  abort();
-  return false;
 }
 
 void expr_feach::emit_value(emit_context& em)
@@ -2874,18 +2897,18 @@ void emit_code(const std::string& dest_filename, expr_block *gl_block,
   emit_context em(dest_filename);
   em.set_file_line(gl_block);
   em.puts("/* type definitions */\n");
-  emit_inline_c(em, "type", true);
+  emit_inline_c(em, "types", true);
   em.start_ns();
   emit_type_definitions(em);
   em.finish_ns();
   em.puts("/* inline c hdr */\n");
-  emit_inline_c(em, "fdecl", true);
+  emit_inline_c(em, "functions", true);
   em.puts("/* function prototype decls */\n");
   em.start_ns();
   emit_function_decl(em);
   em.finish_ns();
   em.puts("/* inline c */\n");
-  emit_inline_c(em, "fdef", false);
+  emit_inline_c(em, "implementation", false);
   em.start_ns();
   em.puts("/* global variables */\n");
   emit_global_vars(em, gl_block);

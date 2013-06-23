@@ -202,6 +202,18 @@ static term eval_meta_is_polymorphic_type(const term_list_range& tlev,
   return term(r);
 }
 
+static term eval_meta_inherits(const term_list_range& tlev, eval_context& ectx, 
+  expr_i *pos)
+{
+  if (tlev.size() != 2) {
+    return term();
+  }
+  const term& tderived = tlev[0];
+  const term& tbase = tlev[0];
+  const long long r = is_sub_type(tderived, tbase);
+  return term(r);
+}
+
 static term eval_meta_argnum(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
@@ -917,7 +929,7 @@ static term eval_meta_join(const term_list_range& tlev, eval_context& ectx,
   return term(rtl);
 }
 
-static term eval_meta_join_all(const term_list_range& tlev, eval_context& ectx,
+static term eval_meta_joinv(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
   term_list rtl;
@@ -1011,6 +1023,36 @@ static term eval_meta_is_function(const term_list_range& tlev,
   return term(v);
 }
 
+static term eval_meta_is_member_function(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos)
+{
+  if (tlev.size() != 1) {
+    return term();
+  }
+  const expr_funcdef *const efd = dynamic_cast<const expr_funcdef *>(
+    tlev[0].get_expr());
+  long long v = 0;
+  if (efd != 0) {
+    v = (efd->is_virtual_or_member_function() != 0);
+  }
+  return term(v);
+}
+
+static term eval_meta_is_const_member_function(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos)
+{
+  if (tlev.size() != 1) {
+    return term();
+  }
+  const expr_funcdef *const efd = dynamic_cast<const expr_funcdef *>(
+    tlev[0].get_expr());
+  long long v = 0;
+  if (efd != 0) {
+    v = (efd->is_virtual_or_member_function() != 0) && (efd->is_const);
+  }
+  return term(v);
+}
+
 static term eval_meta_is_int(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
@@ -1028,6 +1070,16 @@ static term eval_meta_is_string(const term_list_range& tlev,
     return term();
   }
   const long long v = tlev[0].is_string();
+  return term(v);
+}
+
+static term eval_meta_is_list(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos)
+{
+  if (tlev.size() != 1) {
+    return term();
+  }
+  const long long v = tlev[0].is_metalist();
   return term(v);
 }
 
@@ -1505,7 +1557,7 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@slice", &eval_meta_slice },
   { "@seq", &eval_meta_seq },
   { "@join", &eval_meta_join },
-  { "@join_all", &eval_meta_join_all },
+  { "@joinv", &eval_meta_joinv },
   { "@join_tail", &eval_meta_join_tail },
   { "@sort", &eval_meta_sort },
   { "@unique", &eval_meta_unique },
@@ -1524,6 +1576,7 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@is_copyable_type", &eval_meta_is_copyable_type },
   { "@is_assignable_type", eval_meta_is_assignable_type },
   { "@is_polymorphic_type", &eval_meta_is_polymorphic_type },
+  { "@inherits", &eval_meta_inherits },
   { "@field_types", &eval_meta_field_types },
   { "@field_names", &eval_meta_field_names },
   { "@fields", &eval_meta_fields },
@@ -1534,8 +1587,11 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@typeof", &eval_meta_typeof },
   { "@is_type", &eval_meta_is_type },
   { "@is_function", &eval_meta_is_function },
+  { "@is_member_function", &eval_meta_is_member_function },
+  { "@is_const_member_function", &eval_meta_is_const_member_function },
   { "@is_int", &eval_meta_is_int },
   { "@is_string", &eval_meta_is_string },
+  { "@is_list", &eval_meta_is_list},
   { "@to_int", &eval_meta_to_int },
   { "@to_string", &eval_meta_to_string },
   { "@full_string", &eval_meta_full_string },

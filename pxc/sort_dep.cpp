@@ -29,7 +29,12 @@ static std::list<expr_i *> get_dep_tparams(expr_struct *est)
   const typefamily_e cat = est->typefamily;
   if (cat == typefamily_e_farray) {
     if (argslen != 0) {
-      term t = (*args)[0]; /* TODO: avoid copying */
+      term t = (*args)[0]; /* elemnt type */
+      r.push_back(term_get_instance(t));
+    }
+  } else if (cat == typefamily_e_tree_map) {
+    if (argslen > 2) {
+      term t = (*args)[2]; /* compare funcobject */
       r.push_back(term_get_instance(t));
     }
   } else if (
@@ -40,8 +45,7 @@ static std::list<expr_i *> get_dep_tparams(expr_struct *est)
     cat == typefamily_e_tcptr ||
     cat == typefamily_e_tiptr ||
     cat == typefamily_e_darray ||
-    cat == typefamily_e_varray ||
-    cat == typefamily_e_tree_map) {
+    cat == typefamily_e_varray) {
     /* no dep */
   } else {
     if (args != 0) {

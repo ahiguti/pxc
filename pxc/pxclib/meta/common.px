@@ -4,10 +4,15 @@ public struct extern "@error" "@error" {x} error { }
 
 public struct extern "@is_type" "@is_type" {x} is_type { }
 public struct extern "@is_function" "@is_function" {x} is_function{ }
+public struct extern "@is_member_function" "@is_member_function" {x}
+  is_member_function{ }
+public struct extern "@is_const_member_function" "@is_const_member_function"
+  {x} is_const_member_function{ }
 public struct extern "@is_metafunction" "@is_metafunction" {x}
   is_metafunction { }
 public struct extern "@is_int" "@is_int" {x} is_int { }
 public struct extern "@is_string" "@is_string" {x} is_string { }
+public struct extern "@is_list" "@is_list" {x} is_list { }
 public struct extern "@eq" "@eq" {x, y} eq { }
 public struct extern "@not" "@not" {x} not { }
 
@@ -44,6 +49,7 @@ public struct extern "@is_asignable_type" "@is_asignable_type" {t}
   is_asignable_type { }
 public struct extern "@is_polymorphic_type" "@is_polymorphic_type" {t}
   is_polymorphic_type { }
+public struct extern "@inherits" "@inherits" {tderived, tbase} inherits { }
 
 public struct extern "@field_types" "@field_types" {t} field_types { }
 public struct extern "@field_names" "@field_names" {t} field_names { }
@@ -76,7 +82,7 @@ public struct extern "@map" "@map" {lists, mf, args} map { }
   /* map{list_0, ... , lst_n, func, arg_0, ... , arg_n} */
 public struct extern "@filter" "@filter" {lst, f} filter { }
 public struct extern "@join" "@join" {list_of_lists} join { }
-public struct extern "@join_all" "@join_all" {lst1, lst2} join_all { }
+public struct extern "@joinv" "@joinv" {lst1, lst2} joinv { }
 public struct extern "@join_tail" "@join_tail" {cons} join_tail { }
 public struct extern "@sort" "@sort" {lst} sort { }
 public struct extern "@unique" "@unique" {lst} unique { }
@@ -116,9 +122,9 @@ public metafunction imports_transitive{ns}
     map{filter{imports{ns}, is_import_pub}, at0};
   private metafunction imports_name{ns} map{imports{ns}, at0};
   private metafunction imports_init{ns}
-    sort{unique{join_all{list{ns}, imports_name{ns}}}};
+    sort{unique{joinv{list{ns}, imports_name{ns}}}};
   private metafunction imports_rec{lst}
-    sort{unique{join_all{lst, join{map{lst, imports_name_pub}}}}};
+    sort{unique{joinv{lst, join{map{lst, imports_name_pub}}}}};
 
 public metafunction field_type{t, fname}
   field_type_rec{field_types{t}, field_names{t}, fname};

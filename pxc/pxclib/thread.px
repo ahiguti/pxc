@@ -25,14 +25,14 @@ private multithreaded struct {targs} thrdata_impl(targs const& a) < thrdata > {
 private threaded function extern "pxcthread::thread_create_impl"
   thread thread_create_impl(tptr{thrdata} const& f);
 
-extern "type" inline
+extern "types" inline
 namespace pxcthread {
 struct thread_rep;
 typedef pxcrt::rcptr< pxcrt::trcval<thread_rep> > thread_ptr;
 };
 ;
 
-extern "fdecl" inline
+extern "functions" inline
 namespace pxcthread {
 typedef pxcrt::rcptr< thread$n::thrdata$i > thrdata_ptr;
 typedef thread$n::thrdata$i *thrdata_rawptr;
@@ -53,7 +53,7 @@ void thread_join(thread_ptr const& t);
 };
 ;
 
-extern "fdef" inline
+extern "implementation" inline
 #define DBG(x)
 namespace pxcthread {
 void *pxc_thread_child_main(void *arg)
@@ -68,7 +68,7 @@ void *pxc_thread_child_main(void *arg)
       if (!mess.empty() && mess[mess.size() - 1] != '\n') {
         mess += "\n";
       }
-      pxcrt::bt_string st = pxcrt::get_stack_trace(e);
+      pxcrt::bt_string st = pxcrt::exception_stack_trace(e);
       mess.insert(mess.end(), st.begin(), st.end());
       ::write(2, mess.data(), mess.size());
       //::abort();

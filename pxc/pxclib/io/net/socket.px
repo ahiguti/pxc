@@ -1,6 +1,7 @@
 namespace io::net::socket;
 public import numeric::integral -;
 public import container::string -;
+public import container::array -;
 public import pointer -;
 public import io -;
 public import io::file -;
@@ -28,6 +29,10 @@ public threaded function extern "pxcio::socket_set_recv_timeout"
 public threaded function extern "pxcio::socket_set_send_timeout"
   void socket_set_send_timeout(file const& f, uint sec, errno_t& ern);
 
+public threaded function extern "pxcio::socketpair"
+  farray{file, 2} socketpair(io const& iop, ai::family_t family,
+    ai::socktype_t socktype, ai::protocol_t protocol, errno_t& ern);
+
 public threaded function socket_acceptor create_acceptor(io const& iop,
   cstrref const& host, cstrref const& service, ai::family_t family,
   ai::socktype_t socktype, uint backlog, uint timeout_sec)
@@ -54,15 +59,17 @@ public threaded function socket_connector create_connector(io const& iop,
   return sfp;
 }
 
-private threaded function extern "pxcio::create_socket_acceptor"   socket_acceptor create_socket_acceptor(io const& iop,
+private threaded function extern "pxcio::create_socket_acceptor"
+  socket_acceptor create_socket_acceptor(io const& iop,
     ai::sockaddr_storage const& addr, ai::socktype_t socktype,
     ai::protocol_t protocol, uint listen_backlog, uint accept_timeout_sec,
     errno_t& ern);
-private threaded function extern "pxcio::create_socket_connector"   socket_connector create_socket_connector(io const& iop,
+private threaded function extern "pxcio::create_socket_connector"
+  socket_connector create_socket_connector(io const& iop,
     ai::sockaddr_storage const& addr, ai::socktype_t socktype,
     ai::protocol_t protocol, uint connect_timeout_sec, errno_t& ern);
 
-extern "type" inline
+extern "types" inline
 namespace pxcio {
 struct socket_acceptor_rep {
   /* NOTE: must be immutable. */
@@ -88,12 +95,12 @@ typedef pxcrt::rcptr< pxcrt::tircval<socket_connector_rep> > socket_connector;
 };
 ;
 
-extern "fdecl" inline
+extern "functions" inline
 namespace pxcio {
 };
 ;
 
-extern "fdef" inline
+extern "implementation" inline
 namespace pxcio {
 static int socket_acceptor_fd(sockaddr_storage const& addr,
   int socktype, int protocol, int backlog, int timeout_sec, errno_t& ern)
@@ -213,6 +220,20 @@ void socket_set_send_timeout(file const& f, bt_uint sec, errno_t& ern)
   tv.tv_sec = sec;
   setsockopt_common(f->value$z.get(), SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv),
     ern);
+}
+::array::farray<file, 2> socketpair(::pxcio::io const& iop, int family,
+  int typ, int protocol, errno_t& ern)
+{
+  int fds[2];
+  const int e = ::socketpair(family, typ, protocol, fds);
+  if (e != 0) {
+    errno_set(ern, errno);
+    fds[0] = fds[1] = -1;
+  }
+  ::array::farray<file, 2> r;
+  r[0] = create_file(fds[0]);
+  r[1] = create_file(fds[1]);
+  return r;
 }
 };
 ;

@@ -1,0 +1,37 @@
+namespace timing2;
+import common -;
+import orb -;
+
+public threaded function int foo(int x, int y)
+{
+  return x + y;
+}
+
+public threaded function string bar(cstrref const& x, cstrref const& y)
+{
+  string s = x;
+  s.append(y);
+  return s;
+}
+
+private threaded struct transport_dummy <orb_transport> {
+  function void send_receive(string& rbuf, string& wbuf) { }
+}
+
+private function void t2()
+{
+  ptr{orb} op = ptr(orb(ptr(transport_dummy())));
+  orb mutable& o = *op;
+  for (size_t i : 0 .. 1000000) {
+    o.rbuf = "foo\t1\t2";
+    call_ns_function_ni{"timing2"}(op, 0, o.rbuf.size());
+    // print(o.wbuf);
+    o.wbuf.clear();
+    o.rbuf = "bar\tabc\txyz";
+    call_ns_function_ni{"timing2"}(op, 0, o.rbuf.size());
+    // print(o.wbuf);
+  }
+  println("done");
+}
+
+t2();

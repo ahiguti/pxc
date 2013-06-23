@@ -1,0 +1,58 @@
+namespace mar2;
+import common -;
+import orb -;
+
+threaded interface ifoo <remote> {
+  function int m(int x);
+  function string mfhoge(string x, string y);
+  function string mffuga(cstrref const& x, string y) const;
+}
+
+threaded struct foo <ifoo> {
+  int v;
+  function int m(int x) { return x + v; }
+  function string mfhoge(string x, string y) {
+    string r = x;
+    r.append(y);
+    return r;
+  }
+  function string mffuga(cstrref const& x, string y) const {
+    string r = y;
+    r.append(x);
+    return r;
+  }
+}
+
+private threaded struct transport_dummy <orb_transport> {
+  function void send_receive(string& rbuf, string& wbuf) { }
+}
+
+
+private function void t1()
+{
+  ptr{orb} op = ptr{orb}(orb(ptr(transport_dummy())));
+  orb mutable& o = *op;
+  tree_map{int, string} ser;
+  for (int i : 0 .. 10) {
+    ptr{foo} p = ptr(foo());
+    p->v = i;
+    marshal_reference{ptr{ifoo}}(o, p);
+    string s = o.wbuf;
+    ser[i] = s;
+    o.wbuf.clear();
+    println(p);
+    // println(s);
+  }
+  for (int i : 0 .. 10) {
+    string s = ser[i];
+    o.rbuf = s;
+    size_t pos = 0;
+    size_t epos = o.rbuf.size();
+    // println(s);
+    ptr{ifoo} p = unmarshal_reference{ptr{ifoo}, 0}(op, pos, epos);
+    println(p->m(3));
+  }
+}
+
+t1();
+

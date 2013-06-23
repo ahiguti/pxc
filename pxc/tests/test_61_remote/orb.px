@@ -1,22 +1,88 @@
 namespace orb;
+public import ordered::compare -;
 public import common -;
 public import string::conversion -;
-public import ordered::compare -;
 public import exception::common -;
 public import downcast -;
 public import meta::common m;
 public import meta::family mf;
 
-public threaded struct orb {
-  ns_functions funcs;
-  vector{methods} mets;
+public threaded interface orb_transport {
+  function void send_receive(string& rbuf, string& wbuf);
+}
+
+public threaded struct orb(ptr{orb_transport} const& tr) {
+  ptr{orb_transport} transport = tr;
+  ns_functions funcs; // TODO: remove
+  vector{methods} mets; // TODO: remove
   string rbuf;
   string wbuf;
+  tree_map{size_t, skeleton_mapped} skeletons;
+    /* local realobject rawptr to realobject strong pointer */
+  tree_map{size_t, size_t} stubs_rtol;
+    /* remote realobject id to local stub rawptr */
+  tree_map{size_t, size_t} stubs_ltor;
+    /* local stub rawptr to remote realobject id */
+}
+
+public threaded union skeleton_mapped {
+  unit nothing;
+  ptr{call_method_table} real_object;
 }
 
 public threaded interface remote { }
 
+public threaded function void expect_response(ptr{orb} const& op)
+{
+  orb mutable& o = *op;
+  orb_transport mutable& tr = *o.transport;
+  while (true) {
+    tr.send_receive(o.rbuf, o.wbuf);
+    bool const executed_flag = execute_request(op);
+    if (!executed_flag) {
+      break;
+    }
+  }
+}
+
+public threaded function bool execute_request(ptr{orb} const& op)
+{
+  /* read one request from rbuf, execute it, and return true. return
+   * false if it's not an request. */
+  orb mutable& o = *op;
+  try {
+    uchar req = o.rbuf[0];
+    size_t const epos = o.rbuf.size() - 1;
+    if (req == 'M') {
+      size_t const objpos = 2;
+      size_t pos = objpos;
+      size_t const delim_pos = skip_token(o.rbuf, pos, epos);
+      cstrref objbuf = o.rbuf[objpos + 1 .. delim_pos];
+      size_t const val = deserialize_from_string{size_t}(objbuf);
+      if (skeleton_mapped mutable& m : o.skeletons[val]) {
+	m.real_object->call_method(o, pos, epos);
+      } else {
+	o.wbuf.append("T\tinvalid_object\n");
+      }
+    } else {
+      return false; /* not executed */
+    }
+  } catch (runtime_error e) {
+    o.wbuf.append("T\t");
+    string s = exception_what(e);
+    string tr = exception_stack_trace(e);
+    if (!tr.empty()) {
+      s.append("\n");
+      s.append(tr);
+    }
+    serialize_to_string{string}(s, o.wbuf);
+    o.wbuf.append("\n");
+  }
+  return true; /* executed */
+}
+
 public threaded function void execute(orb& o)
+// FIXME: remove
 {
   try {
     uchar req = o.rbuf[0];
@@ -28,9 +94,12 @@ public threaded function void execute(orb& o)
   } catch (runtime_error e) {
     o.wbuf.clear();
     o.wbuf.append("T\t");
-    string s = "runtime_error\n";
-    string tr = get_stack_trace(e);
-    s.append(tr);
+    string s = exception_what(e);
+    string tr = exception_stack_trace(e);
+    if (!tr.empty()) {
+      s.append("\n");
+      s.append(tr);
+    }
     serialize_to_string{string}(s, o.wbuf);
     o.wbuf.append("\n");
   }
@@ -50,11 +119,6 @@ private threaded function {ns, i0, i1} void call_ns_function_bs(orb& o,
   } else {
     metafunction fns m::sort{m::map{m::functions{ns}, m::to_string}};
     metafunction cidx m::add{i0, m::div{m::sub{i1, i0}, 2}};
-    /*
-    debug_log("tpos", tpos);
-    debug_log("tepos", tepos);
-    debug_log("name", o.rbuf[tpos .. tepos]);
-    */
     int const c = compare{cstrref}(o.rbuf[tpos .. tepos], m::at{fns, cidx});
     if (c == 0) {
       function_call{m::symbol{m::at{fns, cidx}, ns}}(o, apos, aepos);
@@ -90,11 +154,6 @@ private threaded function {t, i0, i1} void call_method_bs(
   } else {
     metafunction mf member_functions_sorted{t};
     metafunction cidx m::add{i0, m::div{m::sub{i1, i0}, 2}};
-    /*
-    debug_log("tpos", tpos);
-    debug_log("tepos", tepos);
-    debug_log("name", o.rbuf[tpos .. tepos]);
-    */
     int const c = compare{cstrref}(
       o.rbuf[tpos .. tepos], m::to_string{m::at{mf, cidx}});
     if (c == 0) {
@@ -104,6 +163,18 @@ private threaded function {t, i0, i1} void call_method_bs(
     } else {
       call_method_bs{t, cidx, i1}(o, obj, tpos, tepos, apos, aepos);
     }
+  }
+}
+
+private threaded interface call_method_table {
+  function void call_method(orb& o, size_t pos, size_t const epos);
+}
+
+private threaded struct {t} call_method_instance (ptr{t} const& p)
+  <call_method_table> {
+  ptr{t} objptr = p;
+  function void call_method(orb& o, size_t pos, size_t const epos) {
+    call_method_ni{t}(o, pos, epos, *objptr);
   }
 }
 
@@ -173,36 +244,218 @@ private threaded function {t} void marshal_value(string& buf, t const& x)
   serialize_to_string{t}(x, buf);
 }
 
-union skeleton_mapped {
-  unit nothing;
-  ptr{remote} real_object;
+private tsvaluetype struct extern "orb::rawptr_type" "extuint" rawptr_type { }
+private threaded function extern "orb::ptr_to_rawptr" rawptr_type
+ptr_to_rawptr(ptr{remote} const& p);
+private threaded function extern "orb::rawptr_to_ptr" ptr{remote}
+rawptr_to_ptr(rawptr_type rawptr);
+private threaded function extern "orb::size_t_to_rawptr" rawptr_type
+size_t_to_rawptr(size_t v);
+private threaded function extern "orb::rawptr_to_size_t" size_t
+rawptr_to_size_t(rawptr_type rawptr);
+
+extern "types" inline
+namespace orb {
+typedef void *rawptr_type;
+}; // namespace orb
+;
+
+extern "implementation" inline
+namespace orb {
+using namespace pxcrt;
+typedef ::orb$n::remote$i remote_type;
+rawptr_type ptr_to_rawptr(const rcptr<remote_type>& p)
+{
+  rawptr_type const rp = p.get();
+  return rp;
+}
+rcptr<remote_type> rawptr_to_ptr(rawptr_type rawptr)
+{
+  remote_type *const p = static_cast<remote_type *>(rawptr);
+  p->incref$z();
+  rcptr<remote_type> ptr(p);
+  return ptr;
+}
+rawptr_type size_t_to_rawptr(const bt_size_t v)
+{
+  return reinterpret_cast<rawptr_type>(v);
+}
+bt_size_t rawptr_to_size_t(rawptr_type rawptr)
+{
+  return reinterpret_cast<bt_size_t>(rawptr);
+}
+}; // namespace orb
+;
+
+private threaded struct {t} stub (ptr{orb} const& op, size_t robjid) <t> {
+  ptr{orb} shared_orb = op;
+  size_t remote_objid = robjid;
+  function ~ {
+    orb mutable& o = *shared_orb;
+    /* TODO: send remove request */
+    if (size_t local_objid : o.stubs_rtol[remote_objid]) {
+      o.stubs_ltor.erase(local_objid);
+      o.stubs_rtol.erase(remote_objid);
+    }
+  }
+  metafunction mfuncs m::member_functions{t};
+    /* TODO: const member functions */
+  metafunction mfis
+    m::map{
+      mfuncs,
+      metafunction{x}
+	m::list{m::to_string{x}, m::is_const_member_function{x}}};
+  expand (fsym, fidx: mfis) {
+    /* non-const member function */
+    function m::rettype{m::at{mfuncs, fidx}}
+      fsym(expand (replace_argnames{m::args{m::at{mfuncs, fidx}}}))
+    {
+      metafunction rtype m::rettype{m::at{mfuncs, fidx}};
+      metafunction args replace_argnames{m::args{m::at{mfuncs, fidx}}};
+      orb mutable& o = *shared_orb;
+      o.wbuf.append("M\t~");
+      serialize_to_string{size_t}(remote_objid, o.wbuf);
+      expand (asym, aidx: m::map{args, m::at0}) {
+	{
+	  o.wbuf.push_back('\t');
+	  marshal_type{m::at1{m::at{args, aidx}}}(o, asym);
+	}
+      }
+      o.wbuf.push_back('\n');
+      rtype const r = execute_expect_response{rtype}(shared_orb);
+      return r;
+    }
+    /* const member function */
+    function m::rettype{m::at{mfuncs, fidx}}
+      fsym(expand (replace_argnames{m::args{m::at{mfuncs, fidx}}})) const
+    {
+      metafunction rtype m::rettype{m::at{mfuncs, fidx}};
+      metafunction args replace_argnames{m::args{m::at{mfuncs, fidx}}};
+      orb mutable& o = *shared_orb;
+      o.wbuf.append("M\t~");
+      serialize_to_string{size_t}(remote_objid, o.wbuf);
+      expand (asym, aidx: m::map{args, m::at0}) {
+	{
+	  o.wbuf.push_back('\t');
+	  marshal_type{m::at1{m::at{args, aidx}}}(o, asym);
+	}
+      }
+      o.wbuf.push_back('\n');
+      rtype const r = execute_expect_response{rtype}(shared_orb);
+      return r;
+    }
+  }
+}
+
+public mtvaluetype struct orb_error(cstrref const& m) <runtime_error_st> {
+  string const mess = m;
+  function strlit what() const { return "orb_error"; }
+}
+
+private threaded function {t} t execute_expect_response(ptr{orb} const& op)
+{
+  expect_response(op);
+  orb mutable& o = *op;
+  uchar res = o.rbuf[0];
+  size_t pos = 2;
+  size_t const epos = o.rbuf.size() - 1;
+  if (res == 'R') {
+    t r = unmarshal_type{t}(op, pos, epos);
+    return r;
+  } else if (res == 'T') {
+    throw orb_error(o.rbuf[pos .. epos]);
+  } else {
+    throw orb_error("invalid_respose");
+  }
+}
+
+private metafunction replace_argnames{args}
+  /* replace arg names to 'a0', 'a1', ... */
+  m::map{m::seq{m::size{args}},
+    metafunction{i}
+      m::joinv{
+	m::list{m::concat{"a", i}},
+	m::slice{m::at{args, i}, 1}}};
+
+private threaded function {t} ptr{stub{t}} create_stub(ptr{orb} const& op,
+  size_t remote_objid)
+{
+  orb mutable& o = *op;
+  ptr{stub{t}} r = ptr{stub{t}}(stub{t}(op, remote_objid));
+  size_t const local_objid = rawptr_to_size_t(ptr_to_rawptr(r));
+  o.stubs_rtol[remote_objid] = local_objid; /* throw */
+  o.stubs_ltor[local_objid] = remote_objid; /* throw */
+  return r;
+}
+
+private threaded function {t} void marshal_type(orb& o, t const& x)
+{
+  if (type_byref{t}) {
+    marshal_reference(o, x);
+  } else {
+    marshal_value(o.wbuf, x);
+  }
+}
+
+private threaded function {t} t unmarshal_type(ptr{orb} const& op, size_t& pos,
+  size_t epos)
+{
+  if (type_byref{t}) {
+    return unmarshal_reference{t}(op, pos, epos);
+  } else {
+    return unmarshal_value{t}(op->rbuf, pos, epos);
+  }
 }
 
 private threaded function {t} void marshal_reference(orb& o, t const& x)
 {
-  size_t const rawptr = to_rawptr(x);
-  if (size_t remote_objid : o.stubs[rawptr]) {
-    o.wbuf.push_back('!');
-    serialize_to_string{size_t}(remote_objid, o.wbuf);
-  } else {
-    skeleton_mapped mutable& m = o.skeletons[rawptr];
-    if (case m.nothing) {
-      m.real_object = x;
-    }
+  rawptr_type const rawptr = ptr_to_rawptr(x);
+  size_t const ra = rawptr_to_size_t(rawptr);
+  if (size_t rmt : o.stubs_ltor[ra]) {
     o.wbuf.push_back('~');
-    serialize_to_string{size_t}(rawptr, o.wbuf);
+    serialize_to_string{size_t}(rmt, o.wbuf);
+  } else {
+    skeleton_mapped mutable& m = o.skeletons[ra];
+    if (case m.nothing) {
+      m.real_object = ptr{call_method_instance{m::at0{t}}}(
+	call_method_instance{m::at0{t}}(x));
+    }
+    o.wbuf.push_back('!');
+    serialize_to_string{size_t}(ra, o.wbuf);
   }
 }
 
-private threaded function {t} t unmarshal_reference(orb& o, size_t& pos,
-  size_t epos)
+private threaded function {t} t unmarshal_reference(ptr{orb} const& op,
+  size_t& pos, size_t epos)
 {
-  cstrref const buf = o.rbuf[pos, epos];
+  orb mutable& o = *op;
+  cstrref buf = o.rbuf[pos .. epos];
   if (buf.empty()) {
-    // FIXME: throw
+    throw runtime_error_template{"parse_error"}();
   }
   uchar const ch = buf[0];
-  // FIXME
+  buf.pop_front(1);
+  size_t const val = deserialize_from_string{size_t}(buf);
+  if (ch == '!') {
+    if (skeleton_mapped mutable& m : o.skeletons[val]) {
+      metafunction cmi_type call_method_instance{m::at0{t}};
+      ptr{cmi_type} cmip = pointer_downcast{
+	ptr{cmi_type}, ptr{call_method_table}}(m.real_object);
+      return cmip->objptr;
+    }
+    throw runtime_error_template{"skeleton_notfound"}();
+  } else if (ch == '~') {
+    if (size_t lp : o.stubs_rtol[val]) {
+      ptr{remote} r = rawptr_to_ptr(size_t_to_rawptr(lp));
+      return pointer_downcast{t, ptr{remote}}(r);
+    } else {
+      metafunction tgt m::at0{t};
+      ptr{tgt} r = create_stub{tgt}(op, val);
+      return r;
+    }
+  } else {
+    throw runtime_error_template{"parse_error"}();
+  }
 }
 
 private threaded function size_t skip_token(string const& buf, size_t& pos,
@@ -221,21 +474,27 @@ private threaded function size_t skip_token(string const& buf, size_t& pos,
 private metafunction member_functions_sorted{t}
   sort_by_string{m::member_functions{t}};
 private metafunction sort_by_string{lst}
-  m::map{m::sort{m::map{lst, string_and_value}}, m::at1};
-private metafunction string_and_value{v} m::list{m::to_string{v}, v};
+  m::map{
+    m::sort{m::map{lst, metafunction{v} m::list{m::to_string{v}, v}}},
+    m::at1};
 
 private metafunction func_argexp_list{f}
-  m::map{m::seq{m::size{m::args{f}}}, argexp};
-private metafunction argexp{idx}
-  m::list{m::concat{"a", idx}, 0};
+  m::map{
+    m::seq{m::size{m::args{f}}},
+    metafunction{i} m::list{m::concat{"a", i},
+      m::cond{type_byref{func_argtype_ne{f, i}}, 1, 0}}};
+private metafunction type_byref{t}
+  m::and{
+    m::eq{m::family{t}, "ptr"},
+    m::inherits{m::at0{t}, remote}};
 private metafunction func_argnames{f}
-  m::map{m::seq{m::size{m::args{f}}}, argname};
-private metafunction argname{idx}
-  m::concat{"a", idx};
+  m::map{
+    m::seq{m::size{m::args{f}}},
+    metafunction{idx} m::concat{"a", idx}};
 private metafunction func_argtype_ne{f, idx}
- mf::to_non_ephemeral_type{m::at{m::argtypes{f}, idx}};
+  mf::to_non_ephemeral_type{m::at{m::argtypes{f}, idx}};
 
-/* using function/method table */
+/* using function/method table */ /* TODO: remove */
 
 public threaded function void call_ns_function(orb& o, size_t const pos,
   size_t const epos)

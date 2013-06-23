@@ -3,6 +3,7 @@ public import exception::impl::common;
 public import numeric::integral -;
 public import container::string -;
 
+/* C++ exceptions */
 public mtvaluetype interface extern "std::exception"
   exception { }
 public mtvaluetype interface extern "std::logic_error"
@@ -12,15 +13,40 @@ public mtvaluetype interface extern "std::runtime_error"
 public mtvaluetype interface extern "std::bad_alloc"
   bad_alloc <exception> { }
 
-public mtvaluetype struct extern "pxcrt::invalid_index" ""
-  invalid_index <logic_error> { }
-public mtvaluetype struct extern "pxcrt::invalid_field" ""
-  invalid_field <logic_error> { }
-public mtvaluetype struct extern "pxcrt::would_invalidate" ""
-  would_invalidate <logic_error> { }
+/* PXC exceptions, with stack trace */
+public mtvaluetype interface extern "pxcrt::logic_error_st"
+  logic_error_st <logic_error>
+{ function extern "what_strlit" strlit what() const; }
+public mtvaluetype interface extern "pxcrt::runtime_error_st"
+  runtime_error_st <runtime_error>
+{ function extern "what_strlit" strlit what() const; }
+public mtvaluetype interface extern "pxcrt::bad_alloc_st"
+  bad_alloc_st <bad_alloc>
+{ function extern "what_strlit" strlit what() const; }
 
-public threaded function extern "pxcrt::get_stack_trace" string
-get_stack_trace(exception const& ex);
+/* builtin exceptions */
+public mtvaluetype struct extern "pxcrt::invalid_index" ""
+  invalid_index <logic_error_st>
+{ function extern "what_strlit" strlit what() const; }
+public mtvaluetype struct extern "pxcrt::invalid_field" ""
+  invalid_field <logic_error_st>
+{ function extern "what_strlit" strlit what() const; }
+public mtvaluetype struct extern "pxcrt::would_invalidate" ""
+  would_invalidate <logic_error_st>
+{ function extern "what_strlit" strlit what() const; }
+
+/* templates */
+public mtvaluetype struct {str} logic_error_template <logic_error_st>
+{ function strlit what() const { return str; } }
+public mtvaluetype struct {str} runtime_error_template <runtime_error_st>
+{ function strlit what() const { return str; } }
+public mtvaluetype struct {str} bad_alloc_template <bad_alloc_st>
+{ function strlit what() const { return str; } }
+
+public threaded function extern "pxcrt::exception_what" string
+exception_what(exception const& ex);
+public threaded function extern "pxcrt::exception_stack_trace" string
+exception_stack_trace(exception const& ex);
 
 public function extern "pxcrt::set_stack_trace_limit" void
 set_stack_trace_limit(size_t sz);

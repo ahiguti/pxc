@@ -8,8 +8,10 @@ public import io::errno -;
 public import meta::common m;
 
 public multithreaded struct extern "pxcio::file" "nodefault" file { }
-  /* while file is implemented as an immutable pointer, it's hidden to pxc.
-   * pxc assumes immuable pointers have no side effects. */
+  /* while file is implemented as an immutable pointer, it is defiend
+   * as 'multithreaded' instead of 'tsvaluetype'. pxc assumes immuable
+   * pointers can not have any side effects, and 'file' has side
+   * effects. */
 
 public tsvaluetype struct extern "::off_t" "extint" off_t { }        //SQUAD?
 public tsvaluetype struct extern "::dev_t" "extuint" dev_t { }       //UQUAD
@@ -123,7 +125,7 @@ size_t io_write_file(io const& iop, cstrref const& fn, cstrref const& buf,
   return file_write_all(f, buf, e_r);
 }
 
-extern "type" inline
+extern "types" inline
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -148,14 +150,14 @@ typedef ::pxcrt::rcptr< pxcrt::tircval<file_rep> > file;
 };
 ;
 
-extern "fdecl" inline
+extern "functions" inline
 namespace pxcio {
 inline void errno_set(errno_t& e_r, int e) { if (e_r == 0) { e_r = e; } }
 file create_file(int fd);
 };
 ;
 
-extern "fdef" inline
+extern "implementation" inline
 namespace pxcio {
 #include <stdlib.h>
 #include <limits.h>

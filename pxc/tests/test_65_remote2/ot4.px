@@ -1,0 +1,43 @@
+namespace ot4;
+import common -;
+import orb -;
+
+public threaded struct foo <remote> {
+  int intval;
+  string strval;
+  function int hoge(int x, int y) const {
+    return intval + x + y;
+  }
+  function string fuga(cstrref const& x, cstrref const& y) const {
+    string s = strval;
+    s.append(x);
+    s.append(y);
+    return s;
+  }
+}
+
+private threaded struct transport_dummy <orb_transport> {
+  function void send_receive(string& rbuf, string& wbuf) { }
+}
+
+threaded function string do_call(cstrref ibuf)
+{
+  ptr{orb} op = ptr(orb(ptr(transport_dummy())));
+  op->rbuf = ibuf;
+  foo fooval;
+  fooval.intval = 10;
+  fooval.strval = "str";
+  call_method_ni{foo}(op, 0, op->rbuf.size(), fooval);
+  return op->wbuf;
+}
+
+private function void t1()
+{
+  string s1 = do_call("hoge\t15\t20");
+  string s2 = do_call("fuga\t15\t20");
+  print(s1);
+  print(s2);
+}
+
+t1();
+

@@ -22,14 +22,14 @@ metafunction is_concrete{t} eq{num_tparams{t}, num_targs{t}};
 metafunction filter_concrete{fs} filter{fs, is_concrete};
 metafunction nsfuncs filter_concrete{join{map{nslist, functions}}};
 metafunction nstypes filter_concrete{join{map{nslist, types}}};
-metafunction atypes_one{f} join_all{list{rettype{f}}, argtypes{f}};
+metafunction atypes_one{f} joinv{list{rettype{f}}, argtypes{f}};
 metafunction atypes{fs} filter_concrete{join{map{fs, atypes_one}}};
 metafunction ftypes{ts} filter_concrete{join{map{ts, field_types}}};
 metafunction mfatypes{ts} atypes{join{map{ts, member_functions}}};
 metafunction tatypes{ts} filter_concrete{join{map{ts, targs}}};
-metafunction init_types unique{join_all{nstypes, atypes{nsfuncs}}};
+metafunction init_types unique{joinv{nstypes, atypes{nsfuncs}}};
 metafunction step_types{ts}
-  unique{join_all{ts, ftypes{ts}, mfatypes{ts}, tatypes{ts}}};
+  unique{joinv{ts, ftypes{ts}, mfatypes{ts}, tatypes{ts}}};
 metafunction rep_types{ts, tsn}
   cond{eq{ts, tsn}, ts, rep_types{tsn, step_types{tsn}}};
 metafunction all_types rep_types{init_types, step_types{init_types}};
