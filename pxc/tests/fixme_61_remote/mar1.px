@@ -1,0 +1,39 @@
+namespace mar1;
+import common -;
+import orb -;
+
+threaded interface ifoo <remote> {
+  function int m(int x);
+}
+
+threaded struct foo <ifoo> {
+  int v;
+  function int m(int x) { return x + v; }
+}
+
+private function void t1()
+{
+  orb o;
+  tree_map{int, string} ser;
+  for (int i : 0 .. 10) {
+    ptr{foo} p = ptr(foo());
+    p->v = i;
+    marshal_reference{ptr{ifoo}}(o, p);
+    string s = o.wbuf;
+    ser[i] = s;
+    o.wbuf.clear();
+    println(p);
+    println(s);
+  }
+  for (int i : 0 .. 10) {
+    string s = ser[i];
+    o.rbuf = s;
+    size_t pos = 0;
+    size_t epos = o.rbuf.size();
+    println(s);
+    ptr{ifoo} p = unmarshal_reference{ptr{ifoo}}(o, pos, epos);
+    println(p->m(0));
+  }
+}
+
+t1();

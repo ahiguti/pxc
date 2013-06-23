@@ -250,6 +250,7 @@ interface_body_stmt_list
 	;
 interface_body_stmt
 	: funcdecl_stmt
+	| c_funcdecl_stmt
 	| struct_stmt
 	| dunion_stmt
 	| interface_stmt
@@ -410,7 +411,17 @@ elseif_stmt
 ifdef_argdecl
 	: type_expr TOK_SYMBOL
 	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $2, $1,
+			passby_e_mutable_value, 0); }
+	| type_expr TOK_CONST TOK_SYMBOL
+	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $3, $1,
 			passby_e_const_value, 0); }
+	| type_expr TOK_CONST '&' TOK_SYMBOL
+	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $4, $1,
+			passby_e_const_reference, 0); }
+	| type_expr TOK_MUTABLE '&' TOK_SYMBOL
+	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $4, $1,
+			passby_e_mutable_reference, 0); }
+	;
 try_stmt
 	: TOK_TRY '{' function_body_stmt_list '}' TOK_CATCH '('
 		type_expr TOK_SYMBOL ')' '{' function_body_stmt_list '}'
@@ -476,6 +487,11 @@ funcdef_stmt
 	  { $$ = expr_funcdef_new(cur_fname, @2.first_line, $5, 0, $9,
 		expr_block_new(cur_fname, @2.first_line, $3, 0, $7, $4,
 			passby_e_mutable_value, $11),
+		cur_mode != compile_mode_main, false, $1); }
+	| opt_attribute TOK_FUNCTION '~' '{' function_body_stmt_list '}'
+	  { $$ = expr_funcdef_new(cur_fname, @2.first_line, 0, 0, false,
+		expr_block_new(cur_fname, @2.first_line, 0, 0, 0, 0,
+			passby_e_mutable_value, $5),
 		cur_mode != compile_mode_main, false, $1); }
 	;
 c_funcdecl_stmt

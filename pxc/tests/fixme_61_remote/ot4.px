@@ -1,0 +1,40 @@
+namespace ot4;
+import common -;
+import orb -;
+
+public threaded struct foo <remote> {
+  int intval;
+  string strval;
+  function int hoge(int x, int y) const {
+    return intval + x + y;
+  }
+  function string fuga(cstrref const& x, cstrref const& y) const {
+    string s = strval;
+    s.append(x);
+    s.append(y);
+    return s;
+  }
+}
+
+threaded function string do_call(cstrref ibuf)
+{
+  orb o;
+  o.mets.push_back(create_methods{foo}());
+  o.rbuf = ibuf;
+  foo fooval;
+  fooval.intval = 10;
+  fooval.strval = "str";
+  call_method_ni{foo}(o, 0, o.rbuf.size(), fooval);
+  return o.wbuf;
+}
+
+private function void t1()
+{
+  string s1 = do_call("hoge\t15\t20");
+  string s2 = do_call("fuga\t15\t20");
+  print(s1);
+  print(s2);
+}
+
+t1();
+

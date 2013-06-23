@@ -15,7 +15,7 @@ private metafunction is_concrete{t}
 private metafunction filter_concrete{fs} filter{fs, is_concrete};
 
 private metafunction argret_types_for_function{f}
-  join_all{list{rettype{f}}, argtypes{f}};
+  joinv{list{rettype{f}}, argtypes{f}};
 private metafunction argret_types_for_functions{fs}
   filter_concrete{join{map{fs, argret_types_for_function}}};
 private metafunction field_types_for_types{ts}
@@ -26,11 +26,11 @@ private metafunction param_types_for_types{ts}
   filter_concrete{join{map{ts, targs}}};
 
 private metafunction types_used_in_ns{ns}
-  unique{join_all{
+  unique{joinv{
     types_for_ns{ns},
     argret_types_for_functions{functions_for_ns{ns}}}};
 private metafunction direct_dependent_types_for_types{ts}
-  unique{join_all{
+  unique{joinv{
     ts,
     field_types_for_types{ts},
     memberfunc_argret_types_for_types{ts},

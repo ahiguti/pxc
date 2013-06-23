@@ -696,6 +696,8 @@ static void check_return_expr(expr_funcdef *fdef)
   check_return_expr_block(fdef, fdef->block);
 }
 
+#if 0
+// FIXME: remove. moved to expr_impl
 static void calc_inherit_transitive_rec(expr_i *pos,
   expr_block::inherit_list_type& lst, std::set<expr_i *>& s,
   std::set<expr_i *>& p, expr_telist *inh)
@@ -720,6 +722,7 @@ static void calc_inherit_transitive_rec(expr_i *pos,
     }
   }
 }
+#endif
 
 void expr_block::check_type(symbol_table *lookup)
 {
@@ -738,9 +741,12 @@ void expr_block::check_type(symbol_table *lookup)
       expr_funcdef *efd = ptr_down_cast<expr_funcdef>(parent_expr);
       check_return_expr(efd);
     } // FIXME: check_return_expr for struct constructor?
+    #if 0
+    // FIXME: remove. moved to expr_impl
     std::set<expr_i *> s;
     std::set<expr_i *> p; /* parents */
     calc_inherit_transitive_rec(this, inherit_transitive, s, p, inherit);
+    #endif
   }
   compiled_flag = true;
 }
@@ -1256,6 +1262,18 @@ static void passing_root_requirement_fast(expr_i *epos, expr_i *e,
   add_root_requirement(e, passby, blockscope_flag);
 }
 
+static bool is_ifdef_cond_expr(expr_op *eop)
+{
+  expr_if *const ei = dynamic_cast<expr_if *>(eop->parent_expr);
+  if (ei == 0) {
+    return false;
+  }
+  if (ei->block1->argdecls != 0 && ei->cond == eop) {
+    return true;
+  }
+  return false;
+}
+
 void expr_op::check_type(symbol_table *lookup)
 {
   if (op == '.' || op == TOK_ARROW) {
@@ -1534,8 +1552,13 @@ void expr_op::check_type(symbol_table *lookup)
       } else {
 	/* array element */
 	if (is_map_family(arg0->resolve_texpr())) {
-	  /* getting map element can cause implicit inserting */
-	  check_lvalue(this, arg0);
+	  if (!is_ifdef_cond_expr(this)) {
+	    /* getting map element can cause implicit inserting */
+	    check_lvalue(this, arg0);
+	  } else {
+	    /* if (x : m[i]) { ... } */
+	    /* m need not to have lvalue */
+	  }
 	}
 	if (op == TOK_PTR_DEREF) {
 	  if (!is_cm_range_family(arg0->resolve_texpr())) {
@@ -3138,16 +3161,13 @@ void expr_expand::check_type(symbol_table *lookup)
 	expr_i *cur = generated_expr;
 	expr_i *cur_parent = gparent;
 	int cur_parent_pos = gparent_pos;
-	expr_op *cur_parent_op = 0;
 	while (true) {
 	  expr_op *cur_op = dynamic_cast<expr_op *>(cur);
 	  if (cur_op == 0 || cur_op->op != ',') {
-	    cur_parent = cur_parent_op;
-	    assert(cur_parent_op->get_child(0) == cur);
-	    cur_parent_pos = 0;
 	    break;
 	  }
-	  cur_parent_op = cur_op;
+	  cur_parent = cur;
+	  cur_parent_pos = 0;
 	  cur = cur_op->arg0;
 	}
 	/* cur is the tail (left-most) non-comma expr */

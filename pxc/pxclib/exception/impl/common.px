@@ -1,67 +1,119 @@
 namespace exception::impl::common;
-import numeric::integral -;
-import container::string -;
+public import numeric::integral -;
+public import container::string -;
 
-extern "type" inline
+extern "types" inline
 #include <stdexcept>
 #include <vector>
 namespace pxcrt {
+
 void throw_invalid_index() __attribute__((noreturn));
 void throw_null_dereference() __attribute__((noreturn));
 void throw_invalid_field() __attribute__((noreturn));
 void throw_would_invalidate() __attribute__((noreturn));
 void throw_bad_alloc() __attribute__((noreturn));
 void set_stack_trace_limit(size_t sz);
+
 struct stack_trace {
   stack_trace();
   virtual ~stack_trace() throw() { }
+  virtual bt_strlit what_strlit() const = 0;
   std::vector<void *> trace;
 };
+
 struct logic_error_st : virtual stack_trace, std::logic_error {
-  logic_error_st(const char *w);
+  logic_error_st();
+  virtual const char *what() const throw();
+  virtual bt_strlit what_strlit() const;
 };
+
 struct runtime_error_st : virtual stack_trace, std::runtime_error {
-  runtime_error_st(const char *w);
+  runtime_error_st();
+  virtual const char *what() const throw();
+  virtual bt_strlit what_strlit() const;
 };
+
 struct bad_alloc_st : virtual stack_trace, std::bad_alloc {
   bad_alloc_st();
+  virtual const char *what() const throw();
+  virtual bt_strlit what_strlit() const;
 };
+
 struct invalid_index : logic_error_st {
-  invalid_index();
+  virtual bt_strlit what_strlit() const;
 };
+
 struct invalid_field : logic_error_st {
-  invalid_field();
+  virtual bt_strlit what_strlit() const;
 };
+
 struct would_invalidate : logic_error_st {
-  would_invalidate();
+  virtual bt_strlit what_strlit() const;
 };
+
 int main_nothrow(void (*main_f)(void));
+
 }; // namespace pxcrt
 ;
 
-extern "fdecl" inline
+extern "functions" inline
 namespace pxcrt {
-bt_string get_stack_trace(std::exception const& ex);
+
+bt_string exception_stack_trace(std::exception const& ex);
+
 }; // namespace pxcrt
 ;
 
-extern "fdef" inline
+extern "implementation" inline
 #include <string>
 #include <unistd.h>
 #include <execinfo.h>
 namespace pxcrt {
-logic_error_st::logic_error_st(const char *w) : std::logic_error(w) { }
-runtime_error_st::runtime_error_st(const char *w) : std::runtime_error(w) { }
-bad_alloc_st::bad_alloc_st() { }
-invalid_index::invalid_index() : logic_error_st("invalid_index") { }
-invalid_field::invalid_field() : logic_error_st("invalid_field") { }
-would_invalidate::would_invalidate() : logic_error_st("would_invalidate") { }
-void throw_bad_alloc() { throw bad_alloc_st(); }
-void throw_invalid_index() { throw invalid_index(); }
-void throw_invalid_field() { throw invalid_field(); }
-void throw_would_invalidate() { throw would_invalidate(); }
+
+logic_error_st::logic_error_st() : std::logic_error("logic_error")
+{ }
+const char *logic_error_st::what() const throw()
+{ return reinterpret_cast<const char *>(what_strlit().rawarr()); }
+bt_strlit logic_error_st::what_strlit() const
+{ return bt_strlit("logic_error"); }
+
+runtime_error_st::runtime_error_st() : std::runtime_error("runtime_error")
+{ }
+const char *runtime_error_st::what() const throw()
+{ return reinterpret_cast<const char *>(what_strlit().rawarr()); }
+bt_strlit runtime_error_st::what_strlit() const
+{ return bt_strlit("runtime_error"); }
+
+bad_alloc_st::bad_alloc_st()
+{ }
+const char *bad_alloc_st::what() const throw()
+{ return reinterpret_cast<const char *>(what_strlit().rawarr()); }
+bt_strlit bad_alloc_st::what_strlit() const
+{ return bt_strlit("bad_alloc"); }
+
+bt_strlit invalid_index::what_strlit() const
+{ return bt_strlit("invalid_index"); }
+bt_strlit invalid_field::what_strlit() const
+{ return bt_strlit("invalid_field"); }
+bt_strlit would_invalidate::what_strlit() const
+{ return bt_strlit("would_invalidate"); }
+
+void throw_bad_alloc()
+{ throw bad_alloc_st(); }
+void throw_invalid_index()
+{ throw invalid_index(); }
+void throw_invalid_field()
+{ throw invalid_field(); }
+void throw_would_invalidate()
+{ throw would_invalidate(); }
+
 size_t stack_trace_limit = static_cast<size_t>(-1);
-void set_stack_trace_limit(size_t sz) { stack_trace_limit = sz; }
+
+void set_stack_trace_limit(size_t sz)
+{
+  stack_trace_limit = sz;
+}
+
 stack_trace::stack_trace()
 {
   if (stack_trace_limit != 0) {
@@ -83,6 +135,7 @@ stack_trace::stack_trace()
     }
   }
 }
+
 struct auto_free {
   auto_free(void *ptr) : ptr(ptr) { }
   ~auto_free() { free(ptr); }
@@ -91,7 +144,20 @@ private:
   auto_free& operator =(const auto_free&);
   void *ptr;
 };
-bt_string get_stack_trace(std::exception const& exc)
+
+bt_string exception_what(std::exception const& exc)
+{
+  const stack_trace *const st = dynamic_cast<const stack_trace *>(&exc);
+  if (st == 0) {
+    const char *const s = exc.what();
+    const bt_uchar *const us = reinterpret_cast<const bt_uchar *>(s);
+    return bt_string(us, strlen(s));
+  } else {
+    return bt_string(st->what_strlit());
+  }
+}
+
+bt_string exception_stack_trace(std::exception const& exc)
 {
   const stack_trace *const st = dynamic_cast<const stack_trace *>(&exc);
   if (st == 0 || st->trace.empty()) {
@@ -111,6 +177,7 @@ bt_string get_stack_trace(std::exception const& exc)
   }
   return r;
 }
+
 int main_nothrow(void (*main_f)(void))
 {
   try {
@@ -121,7 +188,7 @@ int main_nothrow(void (*main_f)(void))
       if (!mess.empty() && mess[mess.size() - 1] != '\n') {
 	mess += "\n";
       }
-      bt_string st = get_stack_trace(e);
+      bt_string st = exception_stack_trace(e);
       mess.insert(mess.end(), st.begin(), st.end());
       ::write(2, mess.data(), mess.size());
       // ::abort();
@@ -135,6 +202,7 @@ int main_nothrow(void (*main_f)(void))
   }
   return 0;
 }
+
 }; // namespace pxcrt
 ;
 

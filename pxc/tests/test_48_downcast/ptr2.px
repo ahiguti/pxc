@@ -1,0 +1,27 @@
+namespace ptr2;
+import common -;
+import downcast -;
+
+interface ifoo {
+  function int f(int x);
+}
+
+struct foo < ifoo > {
+  function int f(int x) { return x * 2; }
+}
+
+struct bar < ifoo > {
+  function int f(int x) { return x * 3; }
+}
+
+function void t1()
+{
+  var p = ptr(foo());
+  ptr{ifoo} ip = p;
+  ptr{bar} q = pointer_downcast{ptr{bar}, ptr{ifoo}}(ip); // runtime error
+  int z = q->f(5);
+  println(z);
+}
+
+t1();
+

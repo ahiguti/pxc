@@ -1345,11 +1345,11 @@ bool is_same_type(const term& t0, const term& t1)
   return t0 == t1;
 }
 
-bool implements_interface(const expr_block *blk, const expr_interface *ei)
+bool implements_interface(expr_block *blk, const expr_interface *ei)
 {
+  expr_block::inherit_list_type& inh = blk->resolve_inherit_transitive();
   expr_block::inherit_list_type::const_iterator i;
-  for (i = blk->inherit_transitive.begin();
-    i != blk->inherit_transitive.end(); ++i) {
+  for (i = inh.begin(); i != inh.end(); ++i) {
     if (*i == ei) {
       return true;
     }
@@ -1374,7 +1374,7 @@ bool is_sub_type(const term& t0, const term& t1)
   const expr_struct *const t0est = dynamic_cast<const expr_struct *>(t0inst);
   const expr_interface *const t0ei = dynamic_cast<const expr_interface *>(
     t0inst);
-  const expr_block *t0blk =
+  expr_block *t0blk =
     (t0est != 0) ? t0est->block : (t0ei != 0) ? t0ei->block : 0;
   if (t0blk == 0) {
     DBG_SUB(fprintf(stderr, "is_sub_type: t0blk null\n"));
@@ -2397,24 +2397,43 @@ static bool check_function_argtypes(const expr_interface *ei,
   expr_funcdef *efd, expr_funcdef *efd_impl)
 {
   if (!is_same_type(efd->get_rettype(), efd_impl->get_rettype())) {
+    arena_error_push(efd_impl,
+      "return type mismatch (got: %s, expected: %s)",
+      term_tostr_human(efd->get_rettype()).c_str(),
+      term_tostr_human(efd_impl->get_rettype()).c_str());
     return false;
   }
   if (efd->is_const != efd_impl->is_const) {
+    arena_error_push(efd_impl, "wrong constness");
     return false;
   }
   expr_argdecls *a0 = efd->block->get_argdecls();
   expr_argdecls *a1 = efd_impl->block->get_argdecls();
   while (a0 != 0 && a1 != 0) {
     if (!is_same_type(a0->resolve_texpr(), a1->resolve_texpr())) {
+      arena_error_push(efd_impl,
+	"invalid type for '%s' (got: %s, expected: %s)",
+	a1->sym,
+	term_tostr_human(a1->resolve_texpr()).c_str(),
+	term_tostr_human(a0->resolve_texpr()).c_str());
       return false;
     }
     if (a0->passby != a1->passby) {
+      arena_error_push(efd_impl,
+	"argument '%s' must be passed by%s%s",
+	a1->sym,
+	is_passby_const(a0->passby) ? " const" : " mutable",
+	is_passby_cm_reference(a0->passby) ? " reference" : " value");
       return false;
     }
     a0 = a0->get_rest();
     a1 = a1->get_rest();
   }
-  return (a0 == 0 && a1 == 0);
+  if (a0 != 0 || a1 != 0) {
+    arena_error_push(efd_impl, "wrong number of arguments");
+    return false;
+  }
+  return true;
 }
 
 static void check_interface_impl_one(expr_i *esub, expr_block *esub_block,
@@ -2451,8 +2470,17 @@ static void check_interface_impl_one(expr_i *esub, expr_block *esub_block,
       expr_funcdef *const efd_impl =
 	ptr_down_cast<expr_funcdef>(j->second.edef);
       if (!check_function_argtypes(ei_super, efd, efd_impl)) {
+	#if 0
 	arena_error_push(efd_impl, "function type mismatch");
+	#endif
 	continue;
+      }
+      #if 0
+      fprintf(stderr, "%p %p %d:%s %d:%s\n", efd_impl, efd,
+	efd_impl->line, efd_impl->cname, efd->line, efd->cname);
+      #endif
+      if (efd->cname != 0 && efd_impl->cname == 0) {
+	efd_impl->cname = arena_strdup(efd->cname);
       }
     }
   }
@@ -2460,6 +2488,7 @@ static void check_interface_impl_one(expr_i *esub, expr_block *esub_block,
 
 static void check_interface_impl(expr_i *e)
 {
+  /* this function updates efd->cname if necessary */
   expr_struct *const est = dynamic_cast<expr_struct *>(e);
   expr_interface *const ei = dynamic_cast<expr_interface *>(e);
   expr_block *block = 0;
@@ -2473,9 +2502,9 @@ static void check_interface_impl(expr_i *e)
   if (block->tinfo.is_uninstantiated()) {
     return;
   }
+  expr_block::inherit_list_type& inh = block->resolve_inherit_transitive();
   expr_block::inherit_list_type::iterator i;
-  for (i = block->inherit_transitive.begin();
-    i != block->inherit_transitive.end(); ++i) {
+  for (i = inh.begin(); i != inh.end(); ++i) {
     check_interface_impl_one(e, block, *i);
   }
 }

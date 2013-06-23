@@ -427,9 +427,9 @@ expr_inline_c::expr_inline_c(const char *fn, int line, const char *label,
   : expr_i(fn, line), posstr(label), cstr(cstr), declonly(declonly), value(val)
 {
   if (
-    posstr != "type" &&
-    posstr != "fdecl" &&
-    posstr != "fdef" &&
+    posstr != "types" &&
+    posstr != "functions" &&
+    posstr != "implementation" &&
     posstr != "incdir" &&
     posstr != "link" &&
     posstr != "cflags" &&
@@ -905,6 +905,42 @@ expr_argdecls *expr_block::get_argdecls() const
   return ptr_down_cast<expr_argdecls>(argdecls);
 }
 
+static void calc_inherit_transitive_rec(expr_i *pos,
+  expr_block::inherit_list_type& lst, std::set<expr_i *>& s,
+  std::set<expr_i *>& p, expr_telist *inh)
+{
+  for (expr_telist *i = inh; i != 0; i = i->rest) {
+    term t = i->head->get_sdef()->resolve_evaluated();
+    expr_i *const einst = term_get_instance(t);
+    if (p.find(einst) != p.end()) {
+      arena_error_throw(pos, "%s: inheritance loop detected",
+        term_tostr_human(t).c_str());
+    } else if (s.find(einst) != s.end()) {
+      /* skip */
+    } else {
+      lst.push_back(einst);
+      s.insert(einst);
+      expr_interface *ei = ptr_down_cast<expr_interface>(einst);
+      if (ei->block->inherit != 0) {
+        p.insert(einst);
+        calc_inherit_transitive_rec(pos, lst, s, p, ei->block->inherit);
+        p.erase(einst);
+      }
+    }
+  }
+}
+
+expr_block::inherit_list_type& expr_block::resolve_inherit_transitive()
+{
+  if (inherit == 0 || !inherit_transitive.empty()) {
+    return inherit_transitive;
+  }
+  std::set<expr_i *> s;
+  std::set<expr_i *> p; /* parents */
+  calc_inherit_transitive_rec(this, inherit_transitive, s, p, inherit);
+  return inherit_transitive;
+}
+
 std::string expr_block::dump(int indent) const
 {
   std::string r;
@@ -1319,8 +1355,12 @@ expr_funcdef *expr_funcdef::is_member_function_descent()
 const term& expr_funcdef::get_rettype()
 {
   if (rettype_eval.is_null()) {
-    const bool need_partial_eval = cur_frame_uninstantiated(symtbl_lexical);
-    rettype_eval = eval_expr(block->rettype_uneval, need_partial_eval);
+    if (block->rettype_uneval == 0) {
+      rettype_eval = builtins.type_void;
+    } else {
+      const bool need_partial_eval = cur_frame_uninstantiated(symtbl_lexical);
+      rettype_eval = eval_expr(block->rettype_uneval, need_partial_eval);
+    }
   }
   return rettype_eval;
 }

@@ -3,6 +3,27 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- fixme_66/concat_comma2.px -> 47/fixed_comma.px (done)
+
+- 65/fixme_inherit.px inherit_transitiveを読む前に必ず計算しなければ
+  ならない -> 03/inherit_ok.px (done)
+
+- socketpair, orb
+
+- exceptionのwhat()はstrlitでなければならない。detail()を用意。
+
+- デストラクタ(done)
+
+- if (foo x : hoge[...]) コード生成おかしい fixme_64_remote (done)
+
+- if (foo x : ...) の値渡し、参照渡しを網羅 (done)
+- for (foo x : ...) の値渡し、参照渡しを網羅
+
+- cnameのあるメソッドをオーバーライドするとき、そっちもcnameを
+  吐く(done)
+
+- throw 型名 とやるとエラー
+
 - 例外の使い方
 
 - test_61_remote
@@ -1456,8 +1477,9 @@ remoteオブジェクトのうち、stubはorbへの共有ポインタを持つ�
 orbがstubsとskeletons、methods_tblを持つ。
 stubsはリモート側の実オブジェクトに対して生成したstubの集まり。
   map{size_t, size_t};
-    stubオブジェクトへの弱ポインタ -> リモート実オブジェクトのid
+    リモート実オブジェクトのid -> stubオブジェクトへの弱ポインタ
     (stubはorbの強参照をもつので反対方向は弱参照)
+    (反対向きはstubの中に持っている)
 skeletonsはローカル側の実オブジェクトの集まり。
   map{size_t, pair{ptr{remote}, size_t}};
     リモートobject_id -> (実オブジェクト, methodsインデックス)
@@ -1479,5 +1501,57 @@ unmarshal_referenceの動作
   そうでないなら、skeletonsから探し、ポインタを返す
     skeletonsにないならエラー
 
-stubの動作
+stubの中身
+struct {t} remote_stub <t> {
+  ptr{orb} shared_orb;
+  size_t remote_id;
+}
+
+次: func_argexp_list: 型がptr{remote}ならbyrefでマーシャル
+
+クライアントの動作
+wbufにリクエストを積む
+wbufをfileに書き込む
+wbufをクリア
+fileからrbufに読み出す
+rbufからレスポンスをパース(レスポンスで無かったら?)
+rbufをクリア
+return
+
+サーバの動作
+rbufからリクエストをパース
+引数をunmarshal
+メソッド実行
+返値をmarshal
+レスポンスをwbufに書く
+wbufからfileに書き込む
+
+pipeline化を許可するには、再帰の深さをリクエスト/レスポンスに含める。
+
+レスポンスを読む関数を作る。とりあえずpipeline化は不許可。
+expect_response()
+{
+  /* レスポンスを待つ番のときに呼ばれる */
+  while (true) {
+    send_writebuf_and_fill_readbuf();
+      /* wbufが空でないときは、rbufを空にする */
+    if (!is_request()) {
+      break;
+    }
+    execute_request();
+  }
+}
+
+execute_request()
+{
+  /* rbufにたまったリクエストを実行し、wbufにレスポンスを返す */
+  unmarshal args;
+  call method;
+  marshal retval;
+}
+
+サーバが接続を受けると特定クラスのインスタンスを作り、それを返値
+としてクライアントに返す。
+クライアントは接続からレスポンスを受け取り、それをunmarshalした
+stubオブジェクトを返す。
 
