@@ -1,49 +1,43 @@
 
-0616 779
+0623 800
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- fixme_66/concat_comma2.px -> 47/fixed_comma.px (done)
+- 再リンク必要なケースで漏らしている。間接的privateインポートしている
+  ファイルが更新されたとき、exeを再リンク必要だがされていない。
 
-- 65/fixme_inherit.px inherit_transitiveを読む前に必ず計算しなければ
-  ならない -> 03/inherit_ok.px (done)
+- 初期化関数を必要としないライブラリは初期化関数を呼ばないように
 
-- socketpair, orb
+- ptr(foo(...)) の式が変数定義の右辺ではないとき、fooのコピーコンスト
+  ラクタを要求してしまう(skip_49_variant_fixme3)
+
+- pxcvectorのpop_backまちがってる
+
+- 72/fixme_t1
+
+- なんでpxcvectorよりpodvectorのほうが遅い？
+
+- その他のコンテナ
+
+- 変数定義の文法を整理
+
+- 型推論をもっと有効に
+
+- テキスト処理
+
+- dunion: alignmentをどのように指定するか
+
+- デストラクタの例外は握りつぶす。ただしフックを呼べるようにする。
 
 - exceptionのwhat()はstrlitでなければならない。detail()を用意。
-
-- デストラクタ(done)
-
-- if (foo x : hoge[...]) コード生成おかしい fixme_64_remote (done)
 
 - if (foo x : ...) の値渡し、参照渡しを網羅 (done)
 - for (foo x : ...) の値渡し、参照渡しを網羅
 
-- cnameのあるメソッドをオーバーライドするとき、そっちもcnameを
-  吐く(done)
-
-- throw 型名 とやるとエラー
 
 - 例外の使い方
 
-- test_61_remote
-
-- te_to_term -> expr_to_term
-  数値リテラルなどは変換してしまう
-  termにterm_applyを用意してexpr_to_termで可能な限り変換、
-  eval_apply_exprのswitchをなくす
-
-- cleanするときにフォルダがないとエラーになるのは無視するべき
-
-- fn_check_finalから無駄にresolve_texpr()されて遅い(done)
-
-- EVAL_LAZYのcycle可能性を除去 やめ
-
-- evalのtargs_evaluated除去
-  strictメタ関数からもう一度evalされたときにtargs_evaluatedがtrue
-  になるが、これらをnonstrictに変更すればよい？
-
-- evalのterm_listコンストラクトのコスト除去
+- cleanするときにフォルダがないとエラーになるのは無視するべき(done)
 
 - has_unbound_tparam, term_has_unevaluated_exprの意味を整理
 
@@ -51,8 +45,6 @@ FIXME/TODO M1
 
 - termの同一性とterm_tostr_strictの同一性は一致しなければならない
   シンボル生成にterm_tostr_strictを使っているから。
-
-- metafunctionはlexical contextを持つようにする(done)
 
 - term.cpp: operator <のlambdaはtparamsも比較
 
@@ -77,9 +69,6 @@ FIXME/TODO M1
 
 - tagged unionの$eと$uをやめる。gdbで見るとき困る。
 
-- ptr(foo(...)) の式が変数定義の右辺ではないとき、fooのコピーコンスト
-  ラクタを要求してしまう(skip_49_variant_fixme3)
-
 - expand型foreachを削除
 
 - 演算子オーバーロードは、組み込み型以外のopに対して関数呼び出し式を
@@ -98,8 +87,6 @@ FIXME/TODO M1
 
 - stringをpxcvectorに統合?
 
-- globalにdefconでない型の変数を置くとエラー
-
 - test_07_constr/ud4fixme.px ユーザ定義コンストラクタが無いのに実行文
   をstructに書くとエラーになる。
   -> udconでなければ実行文を書けないようにする(done)
@@ -114,6 +101,10 @@ FIXME/TODO M1
       { return x<y; } };
     (http://gcc.gnu.org/bugzilla/show_bug.cgi?id=42087
      Bug 42087 - stl::map breaks strict-aliasing rules)
+  -> tagged unionの実装はstrict aliasing ruleを破ることはないのでは。
+     ある型のポインタと別の無関係型のポインタがaliasすることは無い、
+     というのはtagged unionの実装でも成り立つ。同時に別の型の中身が
+     有効となることはありえないから。
 
 - awk的なもの
 
@@ -367,6 +358,34 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- テンプレ引数の一部分だけを自動マッチ(done)
+- グローバルブロックについてはgeneratedなものはsymtblをenumuerate
+  しても見せない。enumerateした場合以外でも見せてはならない。コンパイ
+  ル前後で内容が変わる可能性があるから。どのみち現在はglobalブロック
+  でexpandは許容していないので二重の安全策。(done)
+- throw 型名 とやるとエラー(done)
+- グローバル変数はdefault-constructibleでなくてはならないようにする
+  (done)
+- ポインタのデフォルトコンストラクタを消し、nullチェックをなくす(done)
+- globalにdefconでない型の変数を置くとエラー(done)
+- unionの代入演算子は例外安全でない。フィールドへの代入も。(done)
+- ptrをnon nullableに(done)
+- union bodyのexpand (done)
+- generated symbolsがメタ関数から見えてしまっているのはいいのか？
+  いずれにせよcompiled_flagが真なブロックであることを確認すれば
+  generatedなものを見せても問題ない。(done)
+- threaded等のデグレードをm::listの中も探って適用 (done)
+- 65/sock2のようなケースでの循環参照を解消(skeletonsをクリア)(done)
+- fixme_66/concat_comma2.px -> 47/fixed_comma.px (done)
+- 65/fixme_inherit.px inherit_transitiveを読む前に必ず計算しなければ
+  ならない -> 03/inherit_ok.px (done)
+- socketpair, orb (done)
+- デストラクタ(done)
+- if (foo x : hoge[...]) コード生成おかしい fixme_64_remote (done)
+- cnameのあるメソッドをオーバーライドするとき、そっちもcnameを
+  吐く(done)
+- fn_check_finalから無駄にresolve_texpr()されて遅い(done)
+- metafunctionはlexical contextを持つようにする(done)
 - cの予約語(intとか)にメソッド名などがかぶったとき(done)
 - inline C syntax (done)
 - operator = for strlit (done)
@@ -1554,4 +1573,107 @@ execute_request()
 としてクライアントに返す。
 クライアントは接続からレスポンスを受け取り、それをunmarshalした
 stubオブジェクトを返す。
+
+サーバ側
+transportを引数にしてorbを作る
+初期realobjectをpush_return_valueする
+exchange_loopを回す
+
+クライアント側
+transportを引数にしてorbを作る
+exchange_loopを回す
+初期stubをpop_return_valueで取り出す
+
+
+---------------------------------------------------------------------
+nullable ptr
+
+union {
+  unit nothing;
+  ptr{foo} value;
+}
+fieldは二つであり、最初のフィールドはunit、二つめのフィールドはポインタ
+であること。
+
+union_tag関数の実装も変えねば。
+
+---------------------------------------------------------------------
+unionの代入演算子は例外安全でない。フィールドへの代入も。
+
+同じ問題がboost::variantでも。
+http://www.boost.org/doc/libs/1_53_0/doc/html/variant/design.html
+
+ヒープ使わないようにするには、unitなメンバを追加して、構築中に
+例外がなげればそのメンバにセットしてしまうのがよい。例外が起きたとき
+以外はそのメンバにセットされることはない。
+podなメンバが既に存在するときはメンバ追加しない。
+
+---------------------------------------------------------------------
+テーブルデータ処理
+
+fileから改行区切り、tabまたは空白で列区切り。
+
+列xをキーにして列yの値の総和を求め、多い順に出力
+1. keyとする列番号と型の一覧
+2. mappedとする列番号とモノイドの一覧
+3. 表示する順序
+
+---------------------------------------------------------------------
+変数定義の文法
+
+auto変数
+  int mutable& x
+  int mutable x
+  int const& x
+  int const x
+  int x
+  (以下は型推論)
+  mutable& x
+  mutable x
+  const& x
+  const x
+関数引数
+  全5種
+  int mutable& x
+  int mutable x
+  int const& x
+  int const x
+  int x
+フィールド
+  int mutable x
+  int const x
+  int x
+  (以下は型推論)
+  mutable x
+  const x
+forrange_argdecl
+  const_value
+foreach_argdecl
+  '&'は省略、mutableが明示されないとconst - FIXME
+  const_reference + const_reference
+  const_reference + mutable_reference
+ifdef_argdecl
+  関数引数と同じ全5種
+catch_stmt
+  暗黙裡にconst_reference
+
+---------------------------------------------------------------------
+初期化関数の無駄打ちをやめる
+
+1. private importとpimplイディオムが使えることを確認
+2. 名前空間の初期化有無を調べるようにする
+3. 初期化有無をinfファイルに書くようにする
+4. 初期化が有る時だけinitを吐くようにする
+
+---------------------------------------------------------------------
+再リンク要不要判定
+
+.oを作る前に、現在の.oのタイムスタンプよりsystem clockが真に大きくなる
+のを待つ。
+
+リンクする前に、リンク対象の.oのタイムスタンプ一覧を.lnkに書き込む。
+
+再リンク必要かどうかは、リンク対象の.oのタイムスタンプと.lnkの内容が
+一致しているかどうかで判断する。
+
 

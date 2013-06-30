@@ -6,20 +6,15 @@ public import io::file -;
 public import io::errno -;
 public import string::conversion;
 public import meta::common m;
+public import exception::common -;
+public import algebraic::common -;
 
-public extern "pxcio::pxc_stdin"  file stdin;
-public extern "pxcio::pxc_stdout" file stdout;
-public extern "pxcio::pxc_stderr" file stderr;
 public threaded function extern "pxcio::get_stdin"
   file get_stdin(io const& iop);
 public threaded function extern "pxcio::get_stdout"
   file get_stdout(io const& iop);
 public threaded function extern "pxcio::get_stderr"
   file get_stderr(io const& iop);
-
-private function extern "pxcio::iostd_init" void iostd_init();
-
-iostd_init();
 
 public threaded function {t} void file_print(file const& f, t const& x)
 {
@@ -46,41 +41,43 @@ public threaded function {t} void file_println(file const& f, t const& x)
 }
 
 public function {t} void print(t const& x)
-  { file_print(stdout, x); }
+  { file_print(get_stdout(io::system), x); }
 public function {t} void println(t const& x)
-  { file_println(stdout, x); }
+  { file_println(get_stdout(io::system), x); }
 
-extern "types" inline
-namespace pxcio {
-};
-;
+private extern "pxcio::stdin"  option{file} stdin;
+private extern "pxcio::stdout" option{file} stdout;
+private extern "pxcio::stderr" option{file} stderr;
 
-extern "functions" inline
-namespace pxcio {
-extern file pxc_stdin;
-extern file pxc_stdout;
-extern file pxc_stderr;
-};
-;
+private function extern "pxcio::iostd_init" void iostd_init();
+
+iostd_init();
 
 extern "implementation" inline
 namespace pxcio {
-file pxc_stdin;
-file pxc_stdout;
-file pxc_stderr;
-file get_stdin(io const& iop)  { return pxc_stdin;  }
-file get_stdout(io const& iop) { return pxc_stdout; }
-file get_stderr(io const& iop) { return pxc_stderr; }
+
+typedef ::algebraic$n::common$n::option$v$p$io$$file$n$$file$s$r$ optfile;
+
+/* these values are immutable after initialized, and multi-thread safe. */
+optfile pxc_stdin;
+optfile pxc_stdout;
+optfile pxc_stderr;
+
+file get_stdin(io const& iop)  { return pxc_stdin.some$$r(); }
+file get_stdout(io const& iop) { return pxc_stdout.some$$r(); }
+file get_stderr(io const& iop) { return pxc_stderr.some$$r(); }
+
 void iostd_init()
 {
   static int init_flag = 0;
   if (!init_flag) {
     init_flag = 1;
-    pxc_stdin  = create_file(0);
-    pxc_stdout = create_file(1);
-    pxc_stderr = create_file(2);
+    pxc_stdin .some$$l(create_file(0));
+    pxc_stdout.some$$l(create_file(1));
+    pxc_stderr.some$$l(create_file(2));
   }
 }
+
 };
 ;
 

@@ -70,17 +70,27 @@ public extern "S_IROTH"		mode_t S_IROTH;
 public extern "S_IWOTH"		mode_t S_IWOTH;
 public extern "S_IXOTH"		mode_t S_IXOTH;
 
-public threaded function extern "pxcio::io_open"   file io_open(io const& iop, cstrref const& fn, open_flags_t flags,
-    mode_t md, errno_t& e_r);
-public threaded function extern "pxcio::file_read"   size_t file_read(file const& f, string& buf, size_t len, errno_t& e_r);
-public threaded function extern "pxcio::file_write"   size_t file_write(file const& f, cstrref const& buf, errno_t& e_r);
-public threaded function extern "pxcio::file_lseek"   off_t file_lseek(file const& f, off_t offset, whence_t whence, errno_t& e_r);
-public threaded function extern "pxcio::io_stat"   void io_stat(io const& iop, cstrref const& fn, statbuf& buf, errno_t& e_r);
-public threaded function extern "pxcio::io_sleep"   uint io_sleep(io const& iop, uint sec);
-public threaded function extern "pxcio::io_usleep"   uint io_usleep(io const& iop, uint usec);
+public threaded function extern "pxcio::io_open"
+file io_open(io const& iop, cstrref const& fn, open_flags_t flags, mode_t md,
+  errno_t mutable& e_r);
+public threaded function extern "pxcio::file_read"
+size_t file_read(file const& f, string mutable& buf, size_t len,
+  errno_t mutable& e_r);
+public threaded function extern "pxcio::file_write"
+size_t file_write(file const& f, cstrref const& buf, errno_t mutable& e_r);
+public threaded function extern "pxcio::file_lseek"
+off_t file_lseek(file const& f, off_t offset, whence_t whence,
+  errno_t mutable& e_r);
+public threaded function extern "pxcio::io_stat"
+void io_stat(io const& iop, cstrref const& fn, statbuf mutable& buf,
+  errno_t mutable& e_r);
+public threaded function extern "pxcio::io_sleep"
+uint io_sleep(io const& iop, uint sec);
+public threaded function extern "pxcio::io_usleep"
+uint io_usleep(io const& iop, uint usec);
 
 public threaded function
-size_t file_read_all(file const& f, string& buf, errno_t& e_r)
+size_t file_read_all(file const& f, string mutable& buf, errno_t mutable& e_r)
 {
   size_t r = 0;
   while (true) {
@@ -91,7 +101,7 @@ size_t file_read_all(file const& f, string& buf, errno_t& e_r)
   return r;
 }
 public threaded function
-size_t file_write_all(file const& f, cstrref const& buf, errno_t& e_r)
+size_t file_write_all(file const& f, cstrref const& buf, errno_t mutable& e_r)
 {
   size_t curpos = 0;
   size_t endpos = buf.size();
@@ -104,7 +114,8 @@ size_t file_write_all(file const& f, cstrref const& buf, errno_t& e_r)
 }
 
 public threaded function
-size_t io_read_file(io const& iop, cstrref const& fn, string& buf, errno_t& e_r)
+size_t io_read_file(io const& iop, cstrref const& fn, string mutable& buf,
+  errno_t mutable& e_r)
 {
   buf.clear();
   file f = io_open(iop, fn, O_RDONLY, 0, e_r);
@@ -115,7 +126,7 @@ size_t io_read_file(io const& iop, cstrref const& fn, string& buf, errno_t& e_r)
 }
 public threaded function
 size_t io_write_file(io const& iop, cstrref const& fn, cstrref const& buf,
-  errno_t& e_r)
+  errno_t mutable& e_r)
 {
   file f = io_open(iop, fn, O_WRONLY | O_CREAT | O_TRUNC,
     S_IRWXU | S_IRWXG | S_IRWXO, e_r);
@@ -135,8 +146,10 @@ extern "types" inline
 #include <unistd.h>
 namespace pxcio {
 using namespace pxcrt;
+
 typedef struct ::stat statbuf;
 typedef int errno_t;
+
 struct file_rep {
   file_rep(int fd) : fd(fd) { }
   ~file_rep() { if (fd > 2) close(fd); } /* don't close stdin/out/err */
@@ -146,22 +159,29 @@ private:
   file_rep(const file_rep&);
   file_rep& operator =(const file_rep&);
 };
+
+/* immutable value, multi-thread safe refcount */
 typedef ::pxcrt::rcptr< pxcrt::tircval<file_rep> > file;
+
 };
 ;
 
 extern "functions" inline
 namespace pxcio {
+
 inline void errno_set(errno_t& e_r, int e) { if (e_r == 0) { e_r = e; } }
 file create_file(int fd);
+
 };
 ;
 
 extern "implementation" inline
 namespace pxcio {
+
 #include <stdlib.h>
 #include <limits.h>
 #include <string>
+
 int file_open_impl(cstrref const& fn, int flags, ::mode_t md)
 {
   if (fn.size() == 1) {
@@ -173,6 +193,7 @@ int file_open_impl(cstrref const& fn, int flags, ::mode_t md)
   int fd = ::open(fn_nt.get(), flags, md);
   return fd;
 }
+
 file create_file(int fd)
 {
   try {
@@ -186,6 +207,7 @@ file create_file(int fd)
     throw;
   }
 }
+
 file io_open(io const& iop, cstrref const& fn, int flags, ::mode_t md,
   errno_t& e_r)
 {
@@ -195,6 +217,7 @@ file io_open(io const& iop, cstrref const& fn, int flags, ::mode_t md,
   }
   return create_file(fd);
 }
+
 size_t file_read(file const& f, bt_string& buf, size_t len, errno_t& e_r)
 {
   int const fd = f->value$z.get();
@@ -212,6 +235,7 @@ size_t file_read(file const& f, bt_string& buf, size_t len, errno_t& e_r)
   buf.rawarr_set_valid_len(osz + rlen);
   return rlen;
 }
+
 size_t file_write(file const& f, cstrref const& buf, errno_t& e_r)
 {
   int const fd = f->value$z.get();
@@ -227,6 +251,7 @@ size_t file_write(file const& f, cstrref const& buf, errno_t& e_r)
   }
   return wlen;
 }
+
 off_t file_lseek(file const& f, ::off_t offset, int whence, errno_t& e_r)
 {
   int const fd = f->value$z.get();
@@ -237,6 +262,7 @@ off_t file_lseek(file const& f, ::off_t offset, int whence, errno_t& e_r)
   }
   return r;
 }
+
 void io_stat(io const& iop, cstrref const& fn, pxcio::statbuf& buf,
   errno_t& e_r)
 {
@@ -247,14 +273,17 @@ void io_stat(io const& iop, cstrref const& fn, pxcio::statbuf& buf,
     return;
   }
 }
+
 bt_uint io_sleep(io const& iop, bt_uint sec)
 {
   return ::sleep(sec);
 }
+
 bt_uint io_usleep(io const& iop, bt_uint usec)
 {
   return ::usleep(usec);
 }
+
 };
 ;
 

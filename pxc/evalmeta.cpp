@@ -143,6 +143,10 @@ static term eval_meta_symbol(const term_list_range& tlev, eval_context& ectx,
   if (rsym == 0 || !is_global) {
     return term(0LL);
   }
+  if (rsym->generated_flag) {
+    /* hide generated symbols in order to avoid inconsistency */
+    return term(0LL);
+  }
   return term(rsym);
 }
 
@@ -503,7 +507,7 @@ static term eval_meta_types(const term_list_range& tlev, eval_context& ectx,
     const localvar_info& lv = j->second;
     expr_i *const e = lv.edef;
     if (e->generated_flag) {
-      /* generated items must not be visible. */
+      /* hide generated symbols in order to avoid inconsistency */
       continue;
     }
     if (lv.has_attrib_private() || e->get_unique_namespace() != name) {
@@ -558,7 +562,7 @@ static term eval_meta_global_variables(const term_list_range& tlev,
     const localvar_info& lv = j->second;
     expr_i *const e = lv.edef;
     if (e->generated_flag) {
-      /* generated items must not be visible. */
+      /* hide generated symbols in order to avoid inconsistency */
       continue;
     }
     if (lv.has_attrib_private() || e->get_unique_namespace() != name) {
@@ -602,16 +606,23 @@ static term eval_meta_member_functions(const term_list_range& tlev,
     return term();
   }
   term_list tl;
-  symbol_table *symtbl = 0;
+  expr_block *blk = 0;
   expr_struct *const est = dynamic_cast<expr_struct *>(einst);
   if (est != 0) {
-    symtbl = &est->block->symtbl;
+    blk = est->block;
   }
   expr_interface *const ei = dynamic_cast<expr_interface *>(einst);
   if (ei != 0) {
-    symtbl = &ei->block->symtbl;
+    blk = ei->block;
   }
-  if (symtbl != 0) {
+  if (blk != 0) {
+    if (!blk->compiled_flag) {
+      const char *sym = est != 0 ? est->sym : ei->sym;
+      arena_error_throw(blk,
+	"failed to enumerate member functions of '%s' "
+	"which is not compiled yet", sym);
+    }
+    symbol_table *symtbl = &blk->symtbl;
     symbol_table::local_names_type::const_iterator i;
     for (i = symtbl->local_names.begin(); i != symtbl->local_names.end();
       ++i) {
@@ -619,10 +630,8 @@ static term eval_meta_member_functions(const term_list_range& tlev,
       assert(j != symtbl->locals.end());
       const localvar_info lv = j->second;
       expr_i *const e = lv.edef;
-      if (e->generated_flag) {
-	/* generated items must not be visible. */
-	continue;
-      }
+      /* no need to skip generated symbols because this metafunctions is
+       * allowed only for a compiled block. */
       if (lv.has_attrib_private()) {
 	continue;
       }

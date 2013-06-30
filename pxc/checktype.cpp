@@ -533,16 +533,19 @@ void expr_var::check_type(symbol_table *lookup)
   }
   check_var_type(typ, this, sym, is_passby_cm_reference(varinfo.passby),
     need_copyable);
-  if (is_global_var(this) && is_ephemeral_value_type(typ)) {
-    arena_error_push(this,
-      "type '%s' for global variable '%s' is an ephemeral type",
-      term_tostr_human(typ).c_str(), sym);
-  }
-  const attribute_e tattr = get_term_threading_attribute(typ);
-  if (is_global_var(this) && (tattr & attribute_threaded) == 0) {
-    arena_error_push(this,
-      "type '%s' for global variable '%s' is not threaded",
-      term_tostr_human(typ).c_str(), sym);
+  if (is_global_var(this)) {
+    if (is_ephemeral_value_type(typ)) {
+      arena_error_push(this,
+	"type '%s' for global variable '%s' is an ephemeral type",
+	term_tostr_human(typ).c_str(), sym);
+    }
+    const attribute_e tattr = get_term_threading_attribute(typ);
+    if ((tattr & attribute_threaded) == 0) {
+      arena_error_push(this,
+	"type '%s' for global variable '%s' is not threaded",
+	term_tostr_human(typ).c_str(), sym);
+    }
+    need_defcon = true;
   }
   if (need_defcon) {
     /* requires default constructor */
@@ -679,7 +682,8 @@ static void check_return_expr(expr_funcdef *fdef)
   std::string err_mess;
   const bool allow_ephemeral = fdef->no_def && fdef->is_member_function();
     /* allows ephemeral type if fdef is a extern c function */
-  if (!check_term_validity(typ, false, false, allow_ephemeral, fdef, err_mess)) {
+  if (!check_term_validity(typ, false, false, allow_ephemeral, fdef,
+    err_mess)) {
     arena_error_push(fdef, "invalid return type '%s' %s",
       term_tostr_human(typ).c_str(), err_mess.c_str());
   }
@@ -895,13 +899,15 @@ term get_func_te_for_funccall(expr_i *func,
   return term();
 }
 
-static bool is_vararg_function(expr_i *e)
+static bool is_vararg_function_or_struct(expr_i *e)
 {
-  expr_funcdef *efd = dynamic_cast<expr_funcdef *>(e);
-  if (efd == 0) {
-    return false;
+  expr_block *bl = 0;
+  if (e->get_esort() == expr_e_funcdef) {
+    bl = ptr_down_cast<expr_funcdef>(e)->block;
+  } else if (e->get_esort() == expr_e_struct) {
+    bl = ptr_down_cast<expr_struct>(e)->block;
   }
-  return efd->block != 0 && efd->block->is_expand_argdecls();
+  return bl != 0 && bl->is_expand_argdecls();
 }
 
 static void add_root_requirement(expr_i *e, passby_e passby,
@@ -1674,9 +1680,16 @@ void expr_op::check_type(symbol_table *lookup)
 }
 
 static term_list tparams_apply_tvmap(expr_i *e, expr_tparams *tp,
-  const tvmap_type& tvm)
+  const term_list *partial_targs, const tvmap_type& tvm)
 {
   term_list tl;
+  if (partial_targs != 0) {
+    for (term_list::const_iterator i = partial_targs->begin();
+      i != partial_targs->end() && tp != 0; ++i, tp = tp->rest) {
+      term iev = eval_term(*i);
+      tl.push_back(iev);
+    }
+  }
   for (; tp != 0; tp = tp->rest) {
     tvmap_type::const_iterator iter = tvm.find(tp->sym);
     if (iter == tvm.end()) {
@@ -1688,12 +1701,13 @@ static term_list tparams_apply_tvmap(expr_i *e, expr_tparams *tp,
   return tl;
 }
 
-static expr_i *create_tpfunc_texpr(expr_i *e, const tvmap_type& tvm,
-  expr_i *inst_pos)
+static expr_i *create_tpfunc_texpr(expr_i *e, const term_list *partial_targs,
+  const tvmap_type& tvm, expr_i *inst_pos)
 {
   expr_block *const bl = e->get_template_block();
   assert(bl);
-  term_list telist = tparams_apply_tvmap(e, bl->tinfo.tparams, tvm);
+  term_list telist = tparams_apply_tvmap(e, bl->tinfo.tparams, partial_targs,
+    tvm);
   return instantiate_template(e, telist, inst_pos);
 }
 
@@ -1739,9 +1753,11 @@ static size_t get_tparam_length(expr_i *e)
 static void check_passing_memfunc_rec(expr_funccall *fc,
   expr_struct *caller_up_est, const term& te)
 {
-  const expr_i *const einst = term_get_instance_const(te);
-  if (einst != 0 && einst->get_esort() == expr_e_funcdef) {
-    const expr_i *const estv = ptr_down_cast<const expr_funcdef>(einst)
+  // const expr_i *const einst = term_get_instance_const(te);
+  /* te can be an incomplete term. dont use term_get_instance(). */
+  const expr_i *const ee = te.get_expr();
+  if (ee != 0 && ee->get_esort() == expr_e_funcdef) {
+    const expr_i *const estv = ptr_down_cast<const expr_funcdef>(ee)
       ->is_virtual_or_member_function();
     if (estv != 0) {
       if (caller_up_est == 0) {
@@ -1815,22 +1831,29 @@ void expr_funccall::check_type(symbol_table *lookup)
     arena_error_throw(func, "expression '%s' is not a function",
       func->dump(0).c_str());
   }
-  if (term_has_tparam(func_te)) {
-    arena_error_throw(func,
-      "termplate expression '%s' has an unbound type parameter",
-      term_tostr_human(func_te).c_str());
+  {
+    eval_context ectx;
+    if (has_unbound_tparam(func_te, ectx)) {
+      arena_error_throw(func,
+	"termplate expression '%s' has an unbound type parameter",
+	term_tostr_human(func_te).c_str());
+    }
   }
-  if (is_vararg_function(func_te.get_expr()) &&
+  if (is_vararg_function_or_struct(func_te.get_expr()) &&
     func_te.get_args()->size() < get_tparam_length(func_te.get_expr())) {
     /* type inference for generic vararg function */
-    term_list tl;
     typedef std::list<expr_i *> arglist_type;
     arglist_type arglist;
     append_hidden_this(func, arglist);
     append_comma_sep_list(arg, arglist);
+    term_list tl;
     for (arglist_type::const_iterator i = arglist.begin(); i != arglist.end();
       ++i) {
-      tl.push_back((*i)->resolve_texpr());
+      const bool has_lv = expr_has_lvalue(*i, *i, false);
+      term_list ent;
+      ent.push_back((*i)->resolve_texpr());
+      ent.push_back(term(has_lv));
+      tl.push_back(term(ent));
     }
     term tml(tl); /* metalist */
     term_list tl2 = *func_te.get_args();
@@ -1849,8 +1872,8 @@ void expr_funccall::check_type(symbol_table *lookup)
     }
   }
   const term_list *const func_te_args = func_te.get_args();
-  expr_i *const func_p_inst = term_get_instance(func_te);
-    /* possibly instantiated */
+  expr_i *const func_p_inst = term_get_instance_if(func_te);
+    /* possibly instantiated. not instantiated if it's an incomplete te. */
   /* TODO: fix the copy-paste of passing_root_requirement calls */
   if (is_function(func_te)) {
     /* function call */
@@ -1899,14 +1922,23 @@ void expr_funccall::check_type(symbol_table *lookup)
       arena_error_push(this, "too few argument for '%s'", efd_p_inst->sym);
     }
     expr_i *einst = 0;
+    size_t const efd_num_tparams = elist_length(
+      efd_p_inst->block->tinfo.tparams);
+    size_t const num_targs = (func_te_args == 0) ? 0 : func_te_args->size();
+    if (efd_num_tparams > num_targs) {
+    /*
     if (efd_p_inst->block->tinfo.has_tparams() &&
       (func_te_args == 0 || func_te_args->empty())) {
+    */
       /* instantiate template function automatically */
       DBG(fprintf(stderr, "func is uninstantiated\n"));
-      einst = create_tpfunc_texpr(efd_p_inst, tvmap, this);
+      einst = create_tpfunc_texpr(efd_p_inst, func_te_args, tvmap, this);
       set_type_inference_result_for_funccall(this, einst);
       expr_funcdef *efd_inst = ptr_down_cast<expr_funcdef>(einst);
       type_of_this_expr = efd_inst->get_rettype();
+#if 0
+fprintf(stderr, "tote au %s\n", efd_inst->dump(0).c_str());
+#endif
     } else {
       einst = efd_p_inst;
       std::string err_mess;
@@ -1917,6 +1949,9 @@ void expr_funccall::check_type(symbol_table *lookup)
 	  err_mess.c_str());
       }
       type_of_this_expr = apply_tvmap(efd_p_inst->get_rettype(), tvmap);
+#if 0
+fprintf(stderr, "tote %s\n", einst->dump(0).c_str());
+#endif
     }
     funccall_sort = funccall_e_funccall;
     const bool call_wo_obj = func->get_esort() != expr_e_op;
@@ -2178,11 +2213,18 @@ void expr_funccall::check_type(symbol_table *lookup)
 	arena_error_push(this, "too few argument for '%s'", est_p_inst->sym);
       }
     }
+    size_t const est_num_tparams = elist_length(
+      est_p_inst->block->tinfo.tparams);
+    size_t const num_targs = (func_te_args == 0) ? 0 : func_te_args->size();
+    if (est_num_tparams > num_targs) {
+    /*
     if (est_p_inst->block->tinfo.has_tparams() &&
       (func_te_args == 0 || func_te_args->empty())) {
+    */
       /* instantiate template struct automatically */
       DBG(fprintf(stderr, "type is uninstantiated\n"));
-      expr_i *const einst = create_tpfunc_texpr(est_p_inst, tvmap, this);
+      expr_i *const einst = create_tpfunc_texpr(est_p_inst, func_te_args,
+	tvmap, this);
       expr_i *real_func_expr = func;
       if (real_func_expr != 0 && real_func_expr->get_sdef() != 0) {
 	real_func_expr->get_sdef()->set_evaluated(einst->get_value_texpr());
@@ -2263,10 +2305,12 @@ void expr_special::check_type(symbol_table *lookup)
       }
       return;
     }
+    #if 0
     if (is_void_type(rettyp)) {
       arena_error_push(this, "'return' with a value");
       return;
     }
+    #endif
     tvmap_type tvmap;
     if (!convert_type(arg, rettyp, tvmap)) {
       const std::string s0 = term_tostr(rettyp,
@@ -2275,6 +2319,10 @@ void expr_special::check_type(symbol_table *lookup)
 	term_tostr_sort_humanreadable);
       arena_error_push(this, "can not convert from '%s' to '%s'",
 	s1.c_str(), s0.c_str());
+    }
+  } else if (tok == TOK_THROW) {
+    if (is_void_type(arg->resolve_texpr())) {
+      arena_error_push(this, "can not throw a void value");
     }
   }
 }

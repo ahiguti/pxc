@@ -1,6 +1,7 @@
 namespace container::impl::string;
-private import numeric::integral;
-private import container::impl::invguard;
+public import numeric::integral;
+public import container::impl::invguard;
+public import container::impl::array_common;
 
 extern "types" inline
 #include <stdexcept>
@@ -96,6 +97,7 @@ private:
   T *v;
   bt_size_t len;
 };
+
 template <typename T>
 struct bt_cslice {
   typedef T mapped_type;
@@ -171,40 +173,46 @@ struct bt_strlit : public bt_cslice<bt_uchar> {
     return *this;
   }
 };
+
+using namespace array;
+
 template <typename T>
-struct podvector {
-  BOOST_STATIC_ASSERT((boost::is_pod<T>::value));
+struct pxcvector {
+  typedef T mapped_type;
   template <typename Tc> friend struct pxcrt::guard_ref;
   template <typename Tc> friend struct pxcrt::guard_val;
-  typedef T mapped_type;
-  typedef bt_size_t size_type;
+  typedef pxcrt::bt_size_t size_type;
   typedef T *iterator;
   typedef const T *const_iterator;
-  typedef bt_slice<T> range_type;
-  typedef bt_cslice<T> crange_type;
-  podvector() : start(0), valid_len(0), alloc_len(0), invalidate_guard_count(0)
+  typedef pxcrt::bt_slice<T> range_type;
+  typedef pxcrt::bt_cslice<T> crange_type;
+  pxcvector() : start(0), valid_len(0), alloc_len(0), invalidate_guard_count(0)
     { }
-  ~podvector() { free(start); }
-  podvector(const podvector& x) : invalidate_guard_count(0)
-    { init(x.start, x.valid_len); }
-  podvector(const T *ptr, size_type len) : invalidate_guard_count(0)
-    { init(ptr, len); }
-  podvector(const bt_slice<T>& x) : invalidate_guard_count(0)
-    { init(x.rawarr(), x.size()); }
-  podvector(const bt_cslice<T>& x) : invalidate_guard_count(0)
-    { init(x.rawarr(), x.size()); }
-  podvector(const bt_strlit& x) : invalidate_guard_count(0)
-    { init(x.rawarr(), x.size()); } /* T must be bt_uchar */
-  podvector& operator =(const podvector& x) {
+  ~pxcvector() {
+    deinitialize_n(start, valid_len);
+    deallocate_uninitialized(start);
+  }
+  pxcvector(const pxcvector& x)
+    { construct_internal(x.start, x.valid_len); }
+  pxcvector(const crange_type& x)
+    { construct_internal(x.rawarr(), x.size()); }
+  pxcvector(const range_type& x)
+    { construct_internal(x.rawarr(), x.size()); }
+  pxcvector(const T *ptr, size_type len)
+    { construct_internal(ptr, len); }
+  pxcvector& operator =(const pxcvector& x) {
     check_resize();
     if (&x != this) {
-      valid_len = 0;
+      clear_internal();
       append_internal(x.start, x.valid_len);
     }
     return *this;
   }
   bool empty() const { return valid_len == 0; }
   size_type size() const { return valid_len; }
+  bt_size_t find(bt_size_t offset, T const& value) const {
+    return array_find(start, valid_len, offset, value);
+  }
   T& operator [](size_type idx) {
     if (idx >= valid_len) { pxcrt::throw_invalid_index(); }
     return start[idx];
@@ -213,28 +221,21 @@ struct podvector {
     if (idx >= valid_len) { pxcrt::throw_invalid_index(); }
     return start[idx];
   }
+  #if 0
+  T value_at(size_type idx) const {
+    if (idx >= valid_len) { pxcrt::throw_invalid_index(); }
+    return start[idx];
+  }
+  #endif
   void resize(size_type sz, T const& x) {
     check_resize();
     if (sz > valid_len) {
       reserve_internal(sz);
-      for (; valid_len < sz; ++valid_len) {
-	start[valid_len] = x;
-      }
+      initialize_fill_n(start + valid_len, sz - valid_len, x);
+    } else {
+      deinitialize_n(start + sz, valid_len - sz);
     }
     valid_len = sz;
-  }
-  void erase(size_type first, size_type last) {
-    check_resize();
-    if (last >= valid_len) {
-      last = valid_len;
-    }
-    if (first >= last) {
-      return;
-    }
-    if (last < valid_len) {
-      ::memmove(start + first, start + last, (valid_len - last) * sizeof(T));
-    }
-    valid_len -= (last - first);
   }
   void clear() {
     check_resize();
@@ -242,37 +243,38 @@ struct podvector {
   }
   void push_back(T const& x) {
     check_resize();
-    push_back_internal(x);
+    reserve_internal(valid_len + 1);
+    initialize_1(start + valid_len, x);
+    ++valid_len;
   }
   T pop_back() {
     check_resize();
     if (empty()) { pxcrt::throw_invalid_index(); }
     const T r = start[valid_len - 1];
+    deinitialize_1(start + valid_len - 1);
     --valid_len;
     return r;
-  }
-  T get(size_type i) {
-    return (i < valid_len) ? start[i] : T();
-  }
-  void set(size_type i, T v) {
-    if (i < valid_len) start[i] = v;
   }
   void reserve(size_type sz) {
     check_resize();
     reserve_internal(sz);
   }
-  bt_size_t find(bt_size_t offset, T const& value) const {
-    return array_find(start, valid_len, offset, value);
-  }
   void append(const crange_type& x) {
     check_resize();
     append_internal(x.rawarr(), x.size());
+  }
+  void append(const T *ptr, size_type len) {
+    check_resize();
+    append_internal(ptr, len);
   }
   void insert(size_type pos, const crange_type& x) {
     check_resize();
     insert_internal(pos, x.rawarr(), x.size());
   }
-public: /* public, but does not check safety */
+  void erase(size_type first, size_type last) {
+    check_resize();
+    erase_internal(first, last);
+  }
   iterator begin() { return start; }
   const_iterator begin() const { return start; }
   iterator end() { return start + valid_len; }
@@ -295,59 +297,70 @@ public: /* public, but does not check safety */
   void rawarr_set_valid_len(size_type len) {
     valid_len = len;
   }
-  void append(const T *ptr, size_type len) {
-    check_resize();
-    append_internal(ptr, len);
-  }
-  void check_resize() {
-    if (invalidate_guard_count != 0) { pxcrt::throw_would_invalidate(); }
-  }
 private:
+  void construct_internal(const T *ptr, size_type len) {
+    invalidate_guard_count = 0;
+    alloc_len = valid_len = len;
+    start = allocate_uninitialized<T>(valid_len);
+    if (is_trivially_copyable<T>::value) {
+      initialize_copy_n(start, valid_len, ptr);
+    } else {
+      try {
+	initialize_copy_n(start, valid_len, ptr);
+      } catch (...) {
+	deallocate_uninitialized(start);
+	throw;
+      }
+    }
+  }
   void clear_internal() {
+    deinitialize_n(start, valid_len);
     valid_len = 0;
   }
-  void init(const T *ptr, size_type len) {
-    start = static_cast<T *>(malloc(len * sizeof(T)));
-    if (start == 0) {
-      pxcrt::throw_bad_alloc();
-    }
-    alloc_len = len;
-    memcpy(start, ptr, len * sizeof(T));
-    valid_len = len;
-  }
-  void push_back_internal(T const& x) {
-    reserve_internal(valid_len + 1);
-    start[valid_len] = x;
-    ++valid_len;
-  }
-  void append_internal(const T *ptr, size_type len) {
-    /* TODO: use insert_internal? */
-    const size_type olen = valid_len;
-    const size_type nlen = olen + len;
-    if (nlen < valid_len) {
-      pxcrt::throw_bad_alloc();
-    }
+  void append_internal(const T *p, size_type len) {
+    size_type nlen = valid_len + len;
     reserve_internal(nlen);
-    memcpy(start + olen, ptr, len * sizeof(T));
+    initialize_copy_n(start + valid_len, len, p);
     valid_len = nlen;
   }
-  void insert_internal(size_type pos, const T *ptr, size_type len) {
-    if (len == 0) {
+  void insert_internal(size_type pos, const T *p, size_type plen) {
+    if (plen == 0) {
       return;
     }
     if (pos >= valid_len) {
       pos = valid_len;
     }
-    const size_type nlen = valid_len + len;
-    if (nlen < valid_len) {
-      pxcrt::throw_bad_alloc();
+    const size_type vlen = valid_len;
+    const size_type nlen = vlen + plen;
+    if (nlen < vlen) {
+      pxcrt::throw_bad_alloc(); /* overflow */
     }
     reserve_internal(nlen);
-    if (pos < valid_len) {
-      memmove(start + pos + len, start + pos, (valid_len - pos) * sizeof(T));
+    if (vlen - pos >= plen) {
+      initialize_copy_n(start + valid_len, plen, start + vlen - plen);
+      valid_len = nlen;
+      copy_backward_n(start + pos + plen, vlen - plen - pos, start + pos);
+      copy_n(start + pos, plen, p);
+    } else {
+      initialize_copy_n(start + valid_len, plen - (vlen - pos),
+	p + (vlen - pos));
+      valid_len = pos + plen;
+      initialize_copy_n(start + valid_len, vlen - pos, start + pos);
+      valid_len = nlen;
+      copy_n(start + pos, vlen - pos, p);
     }
-    memcpy(start + pos, ptr, len * sizeof(T));
-    valid_len = nlen;
+  }
+  void erase_internal(size_type first, size_type last) {
+    if (last >= valid_len) {
+      last = valid_len;
+    }
+    if (first >= last) {
+      return;
+    }
+    const size_type elen = last - first;
+    copy_n(start + first, valid_len - last, start + last);
+    deinitialize_n(start + valid_len - elen, elen);
+    valid_len -= elen;
   }
   void reserve_internal(size_type len) {
     if (len <= alloc_len) {
@@ -358,17 +371,15 @@ private:
       const size_type nl_n = (nl >= 1) ? (nl * 2) : 1;
       const size_type max_len = ((size_t)-1) / sizeof(T);
       if (nl_n <= nl || nl_n > max_len) {
-	pxcrt::throw_bad_alloc(); /* overflow */
+        throw std::bad_alloc(); /* overflow */
       }
       nl = nl_n;
     } while (nl < len);
-    T *p = 0;
-    p = static_cast<T *>(realloc(start, nl * sizeof(T)));
-    if (p == 0) {
-      pxcrt::throw_bad_alloc();
-    }
-    start = p;
+    start = reserve_n(start, valid_len, nl);
     alloc_len = nl;
+  }
+  void check_resize() {
+    if (invalidate_guard_count != 0) { pxcrt::throw_would_invalidate(); }
   }
   void inc_invalidate_guard() const {
     ++invalidate_guard_count;
@@ -382,7 +393,8 @@ private:
   size_type alloc_len;
   mutable size_type invalidate_guard_count;
 };
-typedef podvector<bt_uchar> bt_string;
+
+typedef pxcvector<bt_uchar> bt_string;
 typedef bt_slice<bt_uchar> strref;
 typedef bt_cslice<bt_uchar> cstrref;
 template <typename Tx, typename Ty> inline int

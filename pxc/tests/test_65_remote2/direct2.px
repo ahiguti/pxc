@@ -38,7 +38,7 @@ public threaded struct foo <ifoo> {
 }
 
 private threaded struct transport_empty <orb_transport> {
-  function void send_receive(string& rbuf, string& wbuf) {
+  function void send_receive(string mutable& rbuf, string mutable& wbuf) {
     wbuf.clear();
     rbuf = "T\tempty_transport\n";
   }
@@ -46,7 +46,7 @@ private threaded struct transport_empty <orb_transport> {
 
 private threaded struct transport_direct(ptr{orb} const& p) <orb_transport> {
   ptr{orb} svr = p;
-  function void send_receive(string& rbuf, string& wbuf) {
+  function void send_receive(string mutable& rbuf, string mutable& wbuf) {
     svr->rbuf = wbuf;
     wbuf.clear();
     execute_request(svr);

@@ -235,6 +235,11 @@ struct_body_stmt
 dunion_body_stmt_list
 	:
 	  { $$ = 0; }
+	| TOK_EXPAND '(' TOK_SYMBOL opt_symbol ':' type_expr ')' '{'
+		dunion_body_stmt_list '}' dunion_body_stmt_list
+	  { $$ = expr_stmts_new(cur_fname, @1.first_line,
+		expr_expand_new(cur_fname, @1.first_line, $3, $4, $6, $9,
+			expand_e_statement, 0), $11); }
 	| dunion_body_stmt dunion_body_stmt_list
 	  { $$ = expr_stmts_new(cur_fname, @1.first_line, $1, $2); }
 	;
@@ -411,6 +416,9 @@ elseif_stmt
 ifdef_argdecl
 	: type_expr TOK_SYMBOL
 	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $2, $1,
+			passby_e_mutable_value, 0); }
+	| type_expr TOK_MUTABLE TOK_SYMBOL
+	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $3, $1,
 			passby_e_mutable_value, 0); }
 	| type_expr TOK_CONST TOK_SYMBOL
 	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $3, $1,
@@ -682,6 +690,13 @@ vardef_stmt
 		expr_var_new(cur_fname, @1.first_line, $4, 0,
 			passby_e_const_reference, attribute_unknown, $6),
 		$6); }
+	/*
+	| type_expr '&' TOK_SYMBOL '=' assign_expr ';'
+	  { $$ = expr_op_new(cur_fname, @1.first_line, '=',
+		expr_var_new(cur_fname, @1.first_line, $3, $1,
+			passby_e_mutable_reference, attribute_unknown, $5),
+		$5); }
+	*/
 	;
 vardef_expr
 	: type_expr TOK_SYMBOL
@@ -690,14 +705,38 @@ vardef_expr
 	| type_expr TOK_CONST TOK_SYMBOL
 	  { $$ = expr_var_new(cur_fname, @1.first_line, $3, $1,
 		passby_e_const_value, attribute_unknown, 0); }
+	| TOK_CONST type_expr TOK_SYMBOL
+	  { $$ = expr_var_new(cur_fname, @1.first_line, $3, $2,
+		passby_e_const_value, attribute_unknown, 0); }
 	| type_expr TOK_MUTABLE TOK_SYMBOL
 	  { $$ = expr_var_new(cur_fname, @1.first_line, $3, $1,
+		passby_e_mutable_value, attribute_unknown, 0); }
+	| TOK_MUTABLE type_expr TOK_SYMBOL
+	  { $$ = expr_var_new(cur_fname, @1.first_line, $3, $2,
 		passby_e_mutable_value, attribute_unknown, 0); }
 	| type_expr TOK_CONST '&' TOK_SYMBOL
 	  { $$ = expr_var_new(cur_fname, @1.first_line, $4, $1,
 		passby_e_const_reference, attribute_unknown, 0); }
+	| TOK_CONST type_expr '&' TOK_SYMBOL
+	  { $$ = expr_var_new(cur_fname, @1.first_line, $4, $2,
+		passby_e_const_reference, attribute_unknown, 0); }
 	| type_expr TOK_MUTABLE '&' TOK_SYMBOL
 	  { $$ = expr_var_new(cur_fname, @1.first_line, $4, $1,
+		passby_e_mutable_reference, attribute_unknown, 0); }
+	| TOK_MUTABLE type_expr '&' TOK_SYMBOL
+	  { $$ = expr_var_new(cur_fname, @1.first_line, $4, $2,
+		passby_e_mutable_reference, attribute_unknown, 0); }
+	| TOK_CONST TOK_SYMBOL
+	  { $$ = expr_var_new(cur_fname, @1.first_line, $2, 0,
+		passby_e_const_value, attribute_unknown, 0); }
+	| TOK_MUTABLE TOK_SYMBOL
+	  { $$ = expr_var_new(cur_fname, @1.first_line, $2, 0,
+		passby_e_mutable_value, attribute_unknown, 0); }
+	| TOK_CONST '&' TOK_SYMBOL
+	  { $$ = expr_var_new(cur_fname, @1.first_line, $3, 0,
+		passby_e_const_reference, attribute_unknown, 0); }
+	| TOK_MUTABLE '&' TOK_SYMBOL
+	  { $$ = expr_var_new(cur_fname, @1.first_line, $3, 0,
 		passby_e_mutable_reference, attribute_unknown, 0); }
 	;
 argdecl_list
@@ -720,9 +759,11 @@ argdecl_list
 	| type_expr TOK_MUTABLE TOK_SYMBOL argdecl_list_trail
 	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $3, $1,
 		passby_e_mutable_value, $4); }
+	/*
 	| type_expr '&' TOK_SYMBOL argdecl_list_trail
 	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $3, $1,
 		passby_e_mutable_reference, $4); }
+	*/
 	| type_expr TOK_CONST '&' TOK_SYMBOL argdecl_list_trail
 	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $4, $1,
 		passby_e_const_reference, $5); }
@@ -741,11 +782,16 @@ type_expr
 	  { $$ = expr_te_new(cur_fname, @1.first_line, $1, 0); }
 	| nssym_expr '{' type_arg_list '}'
 	  { $$ = expr_te_new(cur_fname, @1.first_line, $1, $3); }
-	| nssym_expr '{' type_arg_list '}' TOK_NSDELIM type_expr
+	| nssym_expr ':' type_expr
+	  { $$ = expr_te_local_chain_new(
+		expr_te_new(cur_fname, @1.first_line, $1, 0), $3); }
+	| nssym_expr '{' type_arg_list '}' ':' type_expr
 	  { $$ = expr_te_local_chain_new(
 		expr_te_new(cur_fname, @1.first_line, $1, $3), $6); }
+	/*
 	| '[' type_arg_list ']'
 	  { $$ = expr_metalist_new($2); }
+	*/
 	;
 type_arg
 	: type_expr

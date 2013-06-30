@@ -1,0 +1,135 @@
+namespace sock1;
+import common -;
+import io -;
+import io::file -;
+import io::errno -;
+import io::standard -;
+import io::net::addrinfo -;
+import io::net::socket -;
+import io::signal -;
+import thread -;
+import orb -;
+
+public threaded interface ifoo <remote> {
+  function int hoge(int x, int y) const;
+  function string fuga(cstrref const& x, cstrref const& y) const;
+  function ptr{ibar} create_bar(int x) const;
+}
+
+public threaded interface ibar <remote> {
+  function int m1(int y);
+}
+
+public threaded struct bar(int x0) <ibar> {
+  int x = x0;
+  function int m1(int y) {
+    return x * y;
+  }
+}
+
+public threaded struct foo <ifoo> {
+  int intval;
+  string strval;
+  function int hoge(int x, int y) const {
+    return intval + x + y;
+  }
+  function string fuga(cstrref const& x, cstrref const& y) const {
+    string s = strval;
+    s.append(x);
+    s.append(y);
+    return s;
+  }
+  function ptr{ibar} create_bar(int x) const {
+    ptr{bar} p = ptr{bar}(bar(x));
+    return p;
+  }
+}
+
+private threaded struct transport_file(file const& f0) <orb_transport> {
+  file const f = f0;
+  bool ok = true;
+  errno_t en;
+  function void send_receive(string mutable& rbuf, string mutable& wbuf) {
+    if (ok && !wbuf.empty()) {
+      size_t const wsize = f.write_all(wbuf, en);
+      if (wsize != wbuf.size()) {
+	ok = false;
+      }
+    }
+    wbuf.clear();
+    rbuf.clear();
+    while (ok) {
+      size_t const rsize = f.read(rbuf, 1024, en);
+      if (rbuf.size() > 0 && rbuf[rbuf.size() - 1] == '\n') {
+	break;
+      }
+      if (rsize == 0) {
+	ok = false;
+      }
+    }
+    if (!ok) {
+      rbuf.clear();
+      rbuf = "T\tio_error\n";
+    }
+  }
+}
+
+private threaded function ptr{orb} create_orb_file(file const& f)
+{
+  ptr{orb_transport} tf = ptr(transport_file(f));
+  return ptr(orb(tf));
+}
+
+private threaded function {tinterf, tklass} void orb_server_loop(file const& f)
+{
+  ptr{orb_transport} tf = ptr(transport_file(f));
+  ptr{orb} op = ptr(orb(tf));
+  ptr{tinterf} obj = ptr(tklass());
+  push_return_value(op, obj);
+  exchange_loop(op);
+}
+
+private threaded function {tinterf} ptr{tinterf} create_stub(file const& f)
+{
+  ptr{orb_transport} tf = ptr(transport_file(f));
+  ptr{orb} op = ptr(orb(tf));
+  exchange_loop(op);
+  return pop_return_value{ptr{tinterf}}(op);
+}
+
+private function void client_test_main(file const& f)
+{
+  var st = create_stub{ifoo}(f);
+  var z = st->hoge(5, 33);
+  var s = st->fuga("abc", "xyz");
+  var bp = st->create_bar(55);
+  var w = bp->m1(100);
+  println(z);
+  println(s);
+  println(w);
+}
+
+private multithreaded struct server_thread(io const& s, file const& f) {
+  io const sys = s;
+  file const sock = f;
+  function void main() {
+    orb_server_loop{ifoo, foo}(sock);
+  }
+}
+
+private function void main()
+{
+  errno_t ern;
+  signal(io::system, SIGPIPE, SIG_IGN, ern);
+  vector{file} spv;
+  {
+    var sp = socketpair(io::system, AF_UNIX, SOCK_STREAM, PROTO_UNSPEC, ern);
+    spv.append(sp);
+  }
+  var sthr = create_thread(server_thread(io::system, spv[1]));
+  client_test_main(spv[0]);
+  spv.clear();
+}
+
+main();
+

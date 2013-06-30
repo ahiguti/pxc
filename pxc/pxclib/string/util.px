@@ -2,12 +2,19 @@ namespace string::util;
 import common -;
 import meta::common m;
 
+private metafunction split_argname{i} m::concat{"a", i};
+private metafunction split_arginfo{lst, i}
+  m::list{
+    split_argname{i},            /* name */
+    m::at{lst, i},               /* type */
+    1,                           /* const */
+    m::cond{m::ge{i, 2}, 0, 1}}; /* byref */
 public threaded function {lst} void
-split(expand(m::map{m::seq{m::size{lst}}, arginfo, lst}))
+split(expand(m::map{m::seq{m::size{lst}}, split_arginfo, lst}))
 { 
   uchar const delim = a1;
   size_t pos = a0.find(delim);
-  expand(arg, idx : m::map{m::seq{2, m::size{lst}}, argname}) {
+  expand(arg, idx : m::map{m::seq{2, m::size{lst}}, split_argname}) {
     {
       size_t const p = a0.find(pos, delim);
       arg = from_string{m::at{tlist, m::add{idx, 2}}}(a0[pos .. p]);
@@ -16,11 +23,4 @@ split(expand(m::map{m::seq{m::size{lst}}, arginfo, lst}))
   }
 }
 
-private metafunction argname{i} m::concat{"a", i};
-private metafunction arginfo{lst, i}
-  m::list{
-    argname{i},
-    m::at{lst, i},
-    1,
-    m::cond{m::ge{i, 2}, 0, 1}};
 

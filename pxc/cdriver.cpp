@@ -1287,8 +1287,12 @@ static int clean_workdir(const std::string& dn)
     return 1;
   }
   fprintf(stderr, "cleaning: '%s'\n", dn.c_str());
-  filelock_lockobj lock(dn + "_lock");
-  unlink_recursive(dn); /* throws */
+  try {
+    filelock_lockobj lock(dn + "_lock"); /* throws */
+    unlink_recursive(dn); /* throws */
+  } catch (const std::exception& e) {
+    fprintf(stderr, "%s", e.what());
+  }
   return 0;
 }
 

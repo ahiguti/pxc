@@ -57,6 +57,9 @@ static void apply_tvmap_list(const term_list& src, term_list& dst,
 
 term apply_tvmap(const term& t, const tvmap_type& tvmap)
 {
+  if (t.get_expr() == 0) {
+    return t;
+  }
   const expr_tparams *const et = dynamic_cast<const expr_tparams *>(
     t.get_expr());
   const term_list *const targs = t.get_args();
@@ -957,7 +960,7 @@ bool term_has_unevaluated_expr(const term& t)
   return false;
 }
 
-static expr_i *term_get_instance_internal(const term& t)
+static expr_i *term_get_instance_internal(const term& t, bool throw_if_noinst)
 {
   expr_i *const texpr = t.get_expr();
   const term_list *const targs = t.get_args();
@@ -975,8 +978,12 @@ static expr_i *term_get_instance_internal(const term& t)
   const template_info::instances_type::const_iterator i =
     bl->tinfo.instances.find(k);
   if (i == bl->tinfo.instances.end()) {
-    arena_error_throw(0, "internal error: instance '%s' not found",
-      term_tostr_human(t).c_str());
+    if (throw_if_noinst) {
+      arena_error_throw(0, "internal error: instance '%s' not found",
+	term_tostr_human(t).c_str());
+    } else {
+      return texpr;
+    }
   }
   expr_i *const r = i->second->parent_expr;
   return r;
@@ -984,12 +991,17 @@ static expr_i *term_get_instance_internal(const term& t)
 
 expr_i *term_get_instance(term& t)
 {
-  return term_get_instance_internal(t);
+  return term_get_instance_internal(t, true);
+}
+
+expr_i *term_get_instance_if(term& t)
+{
+  return term_get_instance_internal(t, false);
 }
 
 const expr_i *term_get_instance_const(const term& t)
 {
-  return term_get_instance_internal(t);
+  return term_get_instance_internal(t, true);
 }
 
 }; 

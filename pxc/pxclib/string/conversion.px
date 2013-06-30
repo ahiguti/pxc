@@ -19,7 +19,8 @@ public threaded function {t} string to_string(t const& x)
   }
 }
 
-public threaded function {t} void serialize_to_string(t const& x, string& out)
+public threaded function {t} void serialize_to_string(t const& x,
+  string mutable& out)
 {
   serialize{serialize_tpl, t}(x, out);
 }
@@ -34,12 +35,12 @@ public threaded function {t} t from_string(cstrref const& s)
   }
 }
 
-public threaded function {t} t deserialize_from_string(cstrref& s)
+public threaded function {t} t deserialize_from_string(cstrref mutable& s)
 {
   return deserialize{deserialize_tpl, t}(s);
 }
 
-private threaded function void bool_to_string(bool v, string& buf)
+private threaded function void bool_to_string(bool v, string mutable& buf)
 {
   if (v) {
     buf.append("1");
@@ -48,25 +49,29 @@ private threaded function void bool_to_string(bool v, string& buf)
   }
 }
 
-private threaded function {t} void string_append_escape(t const& x, string& v)
+private threaded function {t} void string_append_escape(t const& x,
+  string mutable& v)
 {
   e::minimal_encode(v, x);
 }
-private threaded function {t} void string_append_noesc(t const& x, string& v)
+private threaded function {t} void string_append_noesc(t const& x,
+  string mutable& v)
 {
   v.append(x);
 }
-private threaded function void string_append_brace_open(string& v)
+private threaded function void string_append_brace_open(string mutable& v)
 { v.push_back('{'); }
-private threaded function void string_append_brace_close(string& v)
+private threaded function void string_append_brace_close(string mutable& v)
 { v.push_back('}'); }
-private threaded function void string_append_sep(string& v)
+private threaded function void string_append_sep(string mutable& v)
 { v.push_back('|'); }
-private threaded function void string_append_none(string& v)
+private threaded function void string_append_none(string mutable& v)
 { } 
-private threaded function {t} void string_append_star(t const& x, string& v)
+private threaded function {t} void string_append_star(t const& x,
+  string mutable& v)
 { v.push_back('*'); }
-private threaded function {t} void string_append_unknown(t const& x, string& v)
+private threaded function {t} void string_append_unknown(t const& x,
+  string mutable& v)
 { v.push_back('?'); }
 
 private threaded struct serialize_tpl {
@@ -134,14 +139,15 @@ private threaded function size_t find_brace_close(cstrref const& s)
   }
   return s.size();
 }
-private threaded function {t, f} t string_parse_token(cstrref& s)
+private threaded function {t, f} t string_parse_token(cstrref mutable& s)
 {
   size_t const toklen = token_length(s);
   cstrref stok = s[0 .. toklen];
   s.pop_front(toklen);
   return f(stok);
 }
-private threaded function string string_parse_string_unescape(cstrref& s)
+private threaded function string string_parse_string_unescape(
+  cstrref mutable& s)
 {
   return string_parse_token{string, str_decode}(s);
   threaded function string str_decode(cstrref const& stok) {
@@ -150,15 +156,15 @@ private threaded function string string_parse_string_unescape(cstrref& s)
     return r;
   }
 }
-private threaded function {t} t string_parse_integral(cstrref& s)
+private threaded function {t} t string_parse_integral(cstrref mutable& s)
 {
   return string_parse_token{t, p::decimal_to_integral{t}}(s);
 }
-private threaded function {t} t string_parse_fp(cstrref& s)
+private threaded function {t} t string_parse_fp(cstrref mutable& s)
 {
   return string_parse_token{t, p::decimal_to_fp{t}}(s);
 }
-private threaded function bool string_parse_bool(cstrref& s)
+private threaded function bool string_parse_bool(cstrref mutable& s)
 {
   return string_parse_token{bool, parse_bool}(s);
   threaded function bool parse_bool(cstrref const& stok) {
@@ -169,20 +175,22 @@ private threaded function bool string_parse_bool(cstrref& s)
     }
   }
 }
-private threaded function void string_parse_symbol_peek(cstrref& stok)
+private threaded function void string_parse_symbol_peek(cstrref mutable& stok)
 {
   size_t const sz = stok.size();
   size_t const toklen = token_length(stok);
   stok.pop_back(sz - toklen);
 }
-private threaded function void string_parse_symbol(cstrref& stok, cstrref& s)
+private threaded function void string_parse_symbol(cstrref mutable& stok,
+  cstrref mutable& s)
 {
   size_t const sz = stok.size();
   size_t const toklen = token_length(stok);
   stok.pop_back(sz - toklen);
   s.pop_front(toklen);
 }
-private threaded function bool string_parse_char_cond(cstrref& s, uchar ch)
+private threaded function bool string_parse_char_cond(cstrref mutable& s,
+  uchar ch)
 {
   if (s.size() > 0 && s[0] == ch) {
     s.pop_front(1);
@@ -191,7 +199,8 @@ private threaded function bool string_parse_char_cond(cstrref& s, uchar ch)
     return false;
   }
 }
-private threaded function void string_parse_brace_close_skip(cstrref& s)
+private threaded function void string_parse_brace_close_skip(
+  cstrref mutable& s)
 {
   size_t level = 1;
   for (size_t i, uchar ch : s) {
@@ -205,18 +214,20 @@ private threaded function void string_parse_brace_close_skip(cstrref& s)
     }
   }
 }
-private threaded function void string_parse_token_skip(cstrref& s)
+private threaded function void string_parse_token_skip(cstrref mutable& s)
 {
   size_t const toklen = token_length(s);
   s.pop_front(toklen);
 }
-private threaded function bool string_parse_brace_open_cond(cstrref& s)
+private threaded function bool string_parse_brace_open_cond(cstrref mutable& s)
 { return string_parse_char_cond(s, '{'); }
-private threaded function bool string_parse_brace_close_peek_cond(cstrref& s)
+private threaded function bool string_parse_brace_close_peek_cond(
+  cstrref mutable& s)
 { return s.size() > 0 && s[0] == '}'; }
-private threaded function bool string_parse_brace_close_cond(cstrref& s)
+private threaded function bool string_parse_brace_close_cond(
+  cstrref mutable& s)
 { return string_parse_char_cond(s, '}'); }
-private threaded function bool string_parse_sep_cond(cstrref& s)
+private threaded function bool string_parse_sep_cond(cstrref mutable& s)
 { return string_parse_char_cond(s, '|'); }
 private threaded struct deserialize_tpl {
   metafunction source_type cstrref;

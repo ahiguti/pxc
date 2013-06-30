@@ -6,58 +6,64 @@ extern "types" inline
 #include <stdint.h>
 #include <stdio.h>
 namespace tree_map {
+
 template <typename Tf>
 struct compare_less {
-  Tf f;
+  typedef Tf funcobj_type;
+  funcobj_type f;
   template <typename Tk>
   inline bool operator () (const Tk& x, const Tk& y) const {
     return f.call$f(x, y) < 0;
   }
 };
+
 template <typename Tk, typename Tm, typename Tf> struct tree_map_range;
 template <typename Tk, typename Tm, typename Tf> struct tree_map_crange;
-template <typename Tk, typename Tm, typename Tf>
-struct tree_map_compare {
+
+template <typename Tmap>
+struct with_guard {
   template <typename Tc> friend struct pxcrt::guard_ref;
   template <typename Tc> friend struct pxcrt::guard_val;
-  typedef std::map< Tk, Tm, compare_less<Tf> > map_type;
-  typedef Tm mapped_type;
+  typedef Tmap map_type;
+  typedef typename map_type::key_type key_type;
+  typedef typename map_type::mapped_type mapped_type;
+  typedef typename map_type::key_compare::funcobj_type funcobj_type;
   typedef typename map_type::size_type size_type;
   typedef typename map_type::iterator iterator;
   typedef typename map_type::const_iterator const_iterator;
-  typedef tree_map_range<Tk, Tm, Tf> range_type;
-  typedef tree_map_crange<Tk, Tm, Tf> crange_type;
-  tree_map_compare() : invalidate_guard_count(0) { }
-  tree_map_compare(const tree_map_compare& x)
+  typedef tree_map_range<key_type, mapped_type, funcobj_type> range_type;
+  typedef tree_map_crange<key_type, mapped_type, funcobj_type> crange_type;
+  with_guard() : invalidate_guard_count(0) { }
+  with_guard(const with_guard& x)
     : v(x.v), invalidate_guard_count(0) { }
-  tree_map_compare(const range_type& x)
+  with_guard(const range_type& x)
     : v(x.begin(), x.end()), invalidate_guard_count(0) { }
-  tree_map_compare(const crange_type& x)
+  with_guard(const crange_type& x)
     : v(x.begin(), x.end()), invalidate_guard_count(0) { }
-  tree_map_compare& operator =(const tree_map_compare& x) {
+  with_guard& operator =(const with_guard& x) {
     check_resize();
     v = x.v;
     return *this;
   }
-  Tm& operator [](const Tk& k) {
+  mapped_type& operator [](const key_type& k) {
     /* no need to call check_resize() because v[k] never invalidate any
      * iterators */
     return v[k];
   }
-  Tm value_at(const Tk& k) { return v[k]; }
-  bool exists(const Tk& k) const { return v.find(k) != v.end(); }
-  iterator find(const Tk& k) { return v.find(k); }
-  const_iterator find(const Tk& k) const { return v.find(k); }
-  crange_type equal_range(const Tk& k) const {
+  mapped_type value_at(const key_type& k) { return v[k]; }
+  bool exists(const key_type& k) const { return v.find(k) != v.end(); }
+  iterator find(const key_type& k) { return v.find(k); }
+  const_iterator find(const key_type& k) const { return v.find(k); }
+  crange_type equal_range(const key_type& k) const {
     const std::pair<const_iterator, const_iterator> r = v.equal_range(k);
     return crange_type(r.first, r.second);
   }
-  range_type equal_range(const Tk& k) {
+  range_type equal_range(const key_type& k) {
     const std::pair<iterator, iterator> r = v.equal_range(k);
     return range_type(r.first, r.second);
   }
   size_type size() const { return v.size(); }
-  size_type erase(const Tk& k) {
+  size_type erase(const key_type& k) {
     check_resize();
     return v.erase(k);
   }
@@ -79,6 +85,13 @@ private:
   map_type v;
   mutable size_t invalidate_guard_count;
 };
+
+template <typename Tk, typename Tm, typename Tf>
+struct tree_map_compare
+  : public with_guard< std::map< Tk, Tm, compare_less<Tf> > >
+{
+};
+
 }; // namespace tree_map
 ;
 

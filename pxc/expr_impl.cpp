@@ -767,7 +767,7 @@ expr_var::expr_var(const char *fn, int line, const char *sym,
   expr_i *type_uneval, passby_e passby, attribute_e attr, expr_i *rhs_ref)
   : expr_i(fn, line), sym(sym),
     type_uneval(ptr_down_cast<expr_te>(type_uneval)),
-    attr(attr), rhs_ref(rhs_ref)
+    attr(attr)
 {
   varinfo.passby = passby;
   varinfo.scope_block = true;
@@ -787,10 +787,13 @@ expr_var::resolve_texpr()
   if (type_of_this_expr.is_null()) {
     if (type_uneval != 0) {
       type_of_this_expr = eval_expr(type_uneval);
-    } else if (rhs_ref) {
-      /* rhs_ref is already resolved because check_type() for operator = 
-       * always checks rhs first. */
-      type_of_this_expr = rhs_ref->resolve_texpr();
+    } else {
+      if (parent_expr->get_esort() == expr_e_op) {
+	expr_op *eo = ptr_down_cast<expr_op>(parent_expr);
+	if (eo->op == '=' && eo->arg0 == this && eo->arg1 != 0) {
+	  type_of_this_expr = eo->arg1->resolve_texpr();
+	}
+      }
     }
     if (type_of_this_expr.is_null()) {
       arena_error_throw(this, "type inference failed for variable '%s'", sym);
@@ -1461,6 +1464,11 @@ void expr_struct::set_unique_namespace_one(const std::string& u,
 void expr_struct::get_fields(std::list<expr_var *>& flds_r) const
 {
   flds_r.clear();
+  if (!block->compiled_flag) {
+    arena_error_throw(this,
+      "failed to enumerate fields of struct '%s' which is not compiled yet",
+      this->sym);
+  }
   symbol_table& symtbl = block->symtbl;
   symbol_table::local_names_type::const_iterator i;
   for (i = symtbl.local_names.begin(); i != symtbl.local_names.end(); ++i) {
@@ -1469,6 +1477,13 @@ void expr_struct::get_fields(std::list<expr_var *>& flds_r) const
     assert(iter != symtbl.locals.end());
     expr_var *const e = dynamic_cast<expr_var *>(iter->second.edef);
     if (e == 0) { continue; }
+#if 0
+// FIXME
+    if (e->generated_flag) {
+fprintf(stderr, "got generated %p %s\n", e, e->dump(0).c_str());
+continue;
+    }
+#endif
     flds_r.push_back(e);
   }
 
@@ -1512,6 +1527,11 @@ void expr_dunion::get_fields(std::list<expr_var *>& flds_r) const
 {
   /* copy of expr_struct::get_fields */
   flds_r.clear();
+  if (!block->compiled_flag) {
+    arena_error_throw(this,
+      "failed to enumerate fields of union '%s' which is not compiled yet",
+      this->sym);
+  }
   symbol_table& symtbl = block->symtbl;
   symbol_table::local_names_type::const_iterator i;
   for (i = symtbl.local_names.begin(); i != symtbl.local_names.end(); ++i) {

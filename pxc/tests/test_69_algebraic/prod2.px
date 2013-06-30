@@ -1,0 +1,32 @@
+namespace prod2;
+import common -;
+import algebraic::common -;
+import meta::common m;
+
+struct foo(int x0, string y0)
+{
+  int x = x0;
+  string y = y0;
+}
+
+function {f} m::rettype{f} noarg() {
+  expand (sym, idx:
+    m::map{m::seq{m::size{m::args{f}}}, metafunction{x} m::concat{"a", x}}) {
+    m::at{m::argtypes{f}, idx} sym;
+  }
+  return f(expand (a:
+    m::map{
+      m::seq{m::size{m::args{f}}},
+      metafunction{x} m::concat{"a", x}}; a));
+}
+
+function void t1()
+{
+  var x = noarg{foo}();
+  x.x = 3;
+  x.y = "abc";
+  println(x);
+}
+
+t1();
+

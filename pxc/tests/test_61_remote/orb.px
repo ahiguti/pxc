@@ -8,7 +8,7 @@ public import meta::common m;
 public import meta::family mf;
 
 public threaded interface orb_transport {
-  function void send_receive(string& rbuf, string& wbuf);
+  function void send_receive(string mutable& rbuf, string mutable& wbuf);
 }
 
 public threaded struct orb(ptr{orb_transport} const& tr) {
@@ -81,7 +81,7 @@ public threaded function bool execute_request(ptr{orb} const& op)
   return true; /* executed */
 }
 
-public threaded function void execute(orb& o)
+public threaded function void execute(orb mutable& o)
 // FIXME: remove
 {
   try {
@@ -105,13 +105,13 @@ public threaded function void execute(orb& o)
   }
 }
 
-private threaded function void call_function_notfound(orb& o,
+private threaded function void call_function_notfound(orb mutable& o,
   size_t const tpos, size_t const tepos, size_t const apos, size_t const aepos)
 {
   o.wbuf.append("T\tfunction_not_found\n");
 }
 
-private threaded function {ns, i0, i1} void call_ns_function_bs(orb& o,
+private threaded function {ns, i0, i1} void call_ns_function_bs(orb mutable& o,
   size_t const tpos, size_t const tepos, size_t const apos, size_t const aepos)
 {
   if (m::eq{i0, i1}) {
@@ -130,7 +130,7 @@ private threaded function {ns, i0, i1} void call_ns_function_bs(orb& o,
   }
 }
 
-public threaded function {ns} void call_ns_function_ni(orb& o,
+public threaded function {ns} void call_ns_function_ni(orb mutable& o,
   size_t const pos, size_t const epos)
 {
   size_t args_pos = pos;
@@ -139,14 +139,15 @@ public threaded function {ns} void call_ns_function_ni(orb& o,
   call_ns_function_bs{ns, 0, m::size{fns}}(o, pos, delim_pos, args_pos, epos);
 }
 
-private threaded function void call_method_notfound(orb& o, remote& obj,
-  size_t const tpos, size_t const tepos, size_t const apos, size_t const aepos)
+private threaded function void call_method_notfound(orb mutable& o,
+  remote mutable& obj, size_t const tpos, size_t const tepos,
+  size_t const apos, size_t const aepos)
 {
   o.wbuf.append("T\tmethod_not_found\n");
 }
 
 private threaded function {t, i0, i1} void call_method_bs(
-  orb& o, remote& obj, size_t const tpos, size_t const tepos,
+  orb mutable& o, remote mutable& obj, size_t const tpos, size_t const tepos,
   size_t const apos, size_t const aepos)
 {
   if (m::eq{i0, i1}) {
@@ -167,19 +168,19 @@ private threaded function {t, i0, i1} void call_method_bs(
 }
 
 private threaded interface call_method_table {
-  function void call_method(orb& o, size_t pos, size_t const epos);
+  function void call_method(orb mutable& o, size_t pos, size_t const epos);
 }
 
 private threaded struct {t} call_method_instance (ptr{t} const& p)
   <call_method_table> {
   ptr{t} objptr = p;
-  function void call_method(orb& o, size_t pos, size_t const epos) {
+  function void call_method(orb mutable& o, size_t pos, size_t const epos) {
     call_method_ni{t}(o, pos, epos, *objptr);
   }
 }
 
-public threaded function {t} void call_method_ni(orb& o, size_t const pos,
-  size_t const epos, remote& obj)
+public threaded function {t} void call_method_ni(orb mutable& o,
+  size_t const pos, size_t const epos, remote mutable& obj)
 {
   size_t args_pos = pos;
   size_t const delim_pos = skip_token(o.rbuf, args_pos, epos);
@@ -187,7 +188,7 @@ public threaded function {t} void call_method_ni(orb& o, size_t const pos,
   call_method_bs{t, 0, m::size{mf}}(o, obj, pos, delim_pos, args_pos, epos);
 }
 
-private threaded function {f} void function_call(orb& o, size_t pos,
+private threaded function {f} void function_call(orb mutable& o, size_t pos,
   size_t epos)
 {
   expand (asym, idx : func_argexp_list{f}) {
@@ -206,8 +207,8 @@ private threaded function {f} void function_call(orb& o, size_t pos,
   }
 }
 
-private threaded function {t, mi} void method_call(orb& o, size_t pos,
-  size_t epos, remote& obj)
+private threaded function {t, mi} void method_call(orb mutable& o, size_t pos,
+  size_t epos, remote mutable& obj)
 {
   t mutable& objt = downcast_mutable{t, remote}(obj);
   metafunction f m::at{member_functions_sorted{t}, mi};
@@ -229,8 +230,8 @@ private threaded function {t, mi} void method_call(orb& o, size_t pos,
   }
 }
 
-private threaded function {t} t unmarshal_value(string const& buf, size_t& pos,
-  size_t epos)
+private threaded function {t} t unmarshal_value(string const& buf,
+  size_t mutable& pos, size_t epos)
 {
   size_t npos = pos;
   size_t const delim_pos = skip_token(buf, npos, epos);
@@ -239,7 +240,8 @@ private threaded function {t} t unmarshal_value(string const& buf, size_t& pos,
   return deserialize_from_string{t}(tok);
 }
 
-private threaded function {t} void marshal_value(string& buf, t const& x)
+private threaded function {t} void marshal_value(string mutable& buf,
+  t const& x)
 {
   serialize_to_string{t}(x, buf);
 }
@@ -388,7 +390,7 @@ private threaded function {t} ptr{stub{t}} create_stub(ptr{orb} const& op,
   return r;
 }
 
-private threaded function {t} void marshal_type(orb& o, t const& x)
+private threaded function {t} void marshal_type(orb mutable& o, t const& x)
 {
   if (type_byref{t}) {
     marshal_reference(o, x);
@@ -397,8 +399,8 @@ private threaded function {t} void marshal_type(orb& o, t const& x)
   }
 }
 
-private threaded function {t} t unmarshal_type(ptr{orb} const& op, size_t& pos,
-  size_t epos)
+private threaded function {t} t unmarshal_type(ptr{orb} const& op,
+  size_t mutable& pos, size_t epos)
 {
   if (type_byref{t}) {
     return unmarshal_reference{t}(op, pos, epos);
@@ -407,7 +409,8 @@ private threaded function {t} t unmarshal_type(ptr{orb} const& op, size_t& pos,
   }
 }
 
-private threaded function {t} void marshal_reference(orb& o, t const& x)
+private threaded function {t} void marshal_reference(orb mutable& o,
+  t const& x)
 {
   rawptr_type const rawptr = ptr_to_rawptr(x);
   size_t const ra = rawptr_to_size_t(rawptr);
@@ -426,7 +429,7 @@ private threaded function {t} void marshal_reference(orb& o, t const& x)
 }
 
 private threaded function {t} t unmarshal_reference(ptr{orb} const& op,
-  size_t& pos, size_t epos)
+  size_t mutable& pos, size_t epos)
 {
   orb mutable& o = *op;
   cstrref buf = o.rbuf[pos .. epos];
@@ -458,8 +461,8 @@ private threaded function {t} t unmarshal_reference(ptr{orb} const& op,
   }
 }
 
-private threaded function size_t skip_token(string const& buf, size_t& pos,
-  size_t epos)
+private threaded function size_t skip_token(string const& buf,
+  size_t mutable& pos, size_t epos)
 {
   size_t delim_pos = buf.find(pos, '\t');
   if (delim_pos < epos) {
@@ -496,8 +499,8 @@ private metafunction func_argtype_ne{f, idx}
 
 /* using function/method table */ /* TODO: remove */
 
-public threaded function void call_ns_function(orb& o, size_t const pos,
-  size_t const epos)
+public threaded function void call_ns_function(orb mutable& o,
+  size_t const pos, size_t const epos)
 {
   ns_functions_slice fs = o.funcs;
   size_t args_pos = pos;
@@ -511,8 +514,8 @@ public threaded function void call_ns_function(orb& o, size_t const pos,
   }
 }
 
-public threaded function void call_method(orb& o, size_t const pos,
-  size_t const epos, size_t tid, remote& obj)
+public threaded function void call_method(orb mutable& o, size_t const pos,
+  size_t const epos, size_t tid, remote mutable& obj)
 {
   methods_slice ms = o.mets[tid];
   size_t args_pos = pos;
@@ -578,24 +581,26 @@ public threaded function {t} methods create_methods()
 
 private threaded interface i_marshal_fcall
 {
-  function void call(orb& o, size_t pos, size_t epos) const;
+  function void call(orb mutable& o, size_t pos, size_t epos) const;
 }
 
 private threaded struct {f} marshal_fcall <i_marshal_fcall>
 {
-  function void call(orb& o, size_t pos, size_t epos) const {
+  function void call(orb mutable& o, size_t pos, size_t epos) const {
     function_call{f}(o, pos, epos);
   }
 }
 
 private threaded interface i_marshal_method
 {
-  function void call(orb& o, size_t pos, size_t epos, remote& obj) const;
+  function void call(orb mutable& o, size_t pos, size_t epos,
+    remote mutable& obj) const;
 }
 
 private threaded struct {t, mi} marshal_method <i_marshal_method>
 {
-  function void call(orb& o, size_t pos, size_t epos, remote& obj) const {
+  function void call(orb mutable& o, size_t pos, size_t epos,
+    remote mutable& obj) const {
     method_call{t, mi}(o, pos, epos, obj);
   }
 }

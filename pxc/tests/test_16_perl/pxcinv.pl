@@ -3,7 +3,7 @@
 use PXC::Loader;
 
 my $pxccmd = "../../pxc --no-realpath -w .pxc -p ../common/pxc_dynamic.profile";
-PXC::Loader::load($pxccmd, "./test1.px");
+PXC::Loader::load($pxccmd, "./test1_main.px");
 my $v1 = test1::f1("abc");
 my $v2 = test1::f2(33, "29");
 my $v3 = test1::f3(5, 10);
