@@ -1,0 +1,66 @@
+namespace uexc3;
+import common -;
+import exception::common -;
+
+struct extern "texc::texc" texc { }
+
+union foo {
+  string x;
+  int y;
+  texc z;
+}
+
+function void tfun()
+{
+  foo a;
+  a.x = "abc"; 
+  println("1");
+  texc t;
+  a.z = t;
+  println("2");
+  foo b;
+  b = a;
+  a = b;
+  b = a;
+  println("3");
+}
+
+function void t1()
+{
+  try {
+    tfun();
+  } catch (exception e) {
+    println("got exception");
+  }
+}
+
+extern "types" inline
+namespace texc {
+struct texc {
+  texc() {
+    hoge = "aaaaaaa";
+    count = 0;
+  }
+  texc(const texc& x) {
+    hoge = x.hoge;
+    count = x.count;
+    hoge += "ccc";
+    if (++count > 3) {
+      throw std::runtime_error("exc1");
+    }
+  }
+  texc& operator =(const texc& x) {
+    if (this != &x) {
+      hoge += "ccc";
+      throw std::runtime_error("exc2");
+    }
+    return *this;
+  }
+  std::string hoge;
+  int count;
+};
+};
+;
+
+t1();
+

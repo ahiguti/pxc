@@ -30,6 +30,8 @@ term eval_local_lookup(const term& t, const std::string& name, expr_i *pos);
 bool term_has_tparam(const term& t);
 bool term_has_unevaluated_expr(const term& t);
 expr_i *term_get_instance(term& t);
+expr_i *term_get_instance_if(term& t);
+  /* nothrow even when no instance is found */
 const expr_i *term_get_instance_const(const term& t);
 
 /* internal */

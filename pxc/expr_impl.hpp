@@ -538,7 +538,7 @@ public:
   variable_info varinfo;
   // passby_e passby; // FIXME: remove
   attribute_e attr;
-  expr_i *rhs_ref;
+  // expr_i *rhs_ref; // FIXME: remove
 };
 
 struct expr_enumval : public expr_i {

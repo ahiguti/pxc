@@ -606,6 +606,41 @@ static std::string destructor_cstr(const term& typ)
   return s;
 }
 
+static bool is_nullable_dunion(const expr_dunion *ev)
+{
+  typedef std::list<expr_var *> flds_type;
+  flds_type flds;
+  ev->get_fields(flds);
+  flds_type::const_iterator i = flds.begin();
+  if (i == flds.end()) {
+    return false;
+  }
+  if (!is_unit_type((*i)->get_texpr())) {
+    return false;
+  }
+  if (++i == flds.end()) {
+    return false;
+  }
+  if (!is_cm_pointer_family((*i)->get_texpr())) {
+    return false;
+  }
+  return true;
+}
+
+static expr_var *dunion_find_pod_field(const expr_dunion *ev)
+{
+  typedef std::list<expr_var *> flds_type;
+  flds_type flds;
+  ev->get_fields(flds);
+  flds_type::const_iterator i = flds.begin();
+  for (i = flds.begin(); i != flds.end(); ++i) {
+    if (!is_possibly_nonpod((*i)->get_texpr())) {
+      return *i;
+    }
+  }
+  return 0;
+}
+
 static void emit_deinitialize_dunion_field(emit_context& em,
   const expr_dunion *ev, const expr_var *fld)
 {
@@ -633,8 +668,10 @@ static void emit_dunion_aux_functions(emit_context& em,
   flds_type flds;
   ev->get_fields(flds);
   flds_type::const_iterator i;
+  const bool is_nullable = is_nullable_dunion(ev);
   bool has_non_unit = false;
   bool has_non_smallpod = false;
+  expr_var *const first_pod_field = dunion_find_pod_field(ev);
   for (i = flds.begin(); i != flds.end(); ++i) {
     if (!is_unit_type((*i)->get_texpr())) {
       has_non_unit = true;
@@ -663,25 +700,52 @@ static void emit_dunion_aux_functions(emit_context& em,
   } else {
     em.puts(" {\n");
     em.add_indent(1);
-    em.set_file_line(ev);
-    em.indent('b');
-    em.puts("$e = x.$e;\n");
     if (has_non_unit) {
+      if (!is_nullable) {
+	em.set_file_line(ev);
+	em.indent('b');
+	em.puts("_$e = ");
+	if (first_pod_field != 0) {
+	  first_pod_field->emit_symbol(em);
+	  em.puts("$e;\n");
+	} else {
+	  em.puts("invalid_value;\n");
+	}
+      }
       em.set_file_line(ev);
       em.indent('b');
-      em.puts("switch ($e) {\n");
+      em.puts("switch (x.get_$e()) {\n");
       for (i = flds.begin(); i != flds.end(); ++i) {
 	em.set_file_line(*i);
 	em.indent('b');
 	em.puts("case ");
 	(*i)->emit_symbol(em);
 	em.puts("$e: ");
-	emit_initialize_dunion_field(em, ev, *i, true, false);
+	if (is_nullable && i == flds.begin()) {
+	  flds_type::const_iterator j = i;
+	  ++j;
+	  em.puts("*(void **)(_$u.");
+	  (*j)->emit_symbol(em);
+	  em.puts("$u) = 0");
+	} else {
+	  emit_initialize_dunion_field(em, ev, *i, true, false);
+	    /* FIXME: not exception safe */
+	}
 	em.puts("; break;\n");
+      }
+      if (first_pod_field == 0) {
+	em.set_file_line(*i);
+	em.indent('b');
+	em.puts("case invalid_value: break;\n");
       }
       em.set_file_line(ev);
       em.indent('b');
       em.puts("}\n");
+    }
+    if (!is_nullable) {
+      em.set_file_line(ev);
+      em.indent('b');
+      em.puts("_$e = x._$e;\n");
     }
     em.add_indent(-1);
     em.set_file_line(ev);
@@ -707,7 +771,7 @@ static void emit_dunion_aux_functions(emit_context& em,
     if (has_non_smallpod) {
       em.set_file_line(ev);
       em.indent('b');
-      em.puts("switch ($e) {\n");
+      em.puts("switch (get_$e()) {\n");
       for (i = flds.begin(); i != flds.end(); ++i) {
 	em.set_file_line(*i);
 	em.indent('b');
@@ -715,7 +779,17 @@ static void emit_dunion_aux_functions(emit_context& em,
 	(*i)->emit_symbol(em);
 	em.puts("$e: ");
 	emit_deinitialize_dunion_field(em, ev, *i);
+	if (is_nullable && i != flds.begin()) {
+	  em.puts("; *(void **)(_$u.");
+	  (*i)->emit_symbol(em);
+	  em.puts("$u) = 0");
+	}
 	em.puts("; break;\n");
+      }
+      if (first_pod_field == 0) {
+	em.set_file_line(*i);
+	em.indent('b');
+	em.puts("case invalid_value: break;\n");
       }
       em.set_file_line(ev);
       em.indent('b');
@@ -748,9 +822,10 @@ static void emit_dunion_aux_functions(emit_context& em,
       em.add_indent(1);
       em.set_file_line(*i);
       em.indent('b');
-      em.puts("if ($e != ");
+      em.puts("if (get_$e() != ");
       (*i)->emit_symbol(em);
-      em.puts("$e) { pxcrt::throw_invalid_field(); }\n");
+      em.puts("$e)");
+      em.puts(" { pxcrt::throw_invalid_field(); }\n");
       em.set_file_line(*i);
       em.indent('b');
       if (!is_unit_type((*i)->get_texpr())) {
@@ -791,10 +866,22 @@ static void emit_dunion_aux_functions(emit_context& em,
       em.add_indent(1);
       em.set_file_line(*i);
       em.indent('b');
-      em.puts("{ deinit$(); $e = ");
-      (*i)->emit_symbol(em);
-      em.puts("$e; ");
+      em.puts("{ deinit$(); ");
+      if (!is_nullable) {
+	em.puts("_$e = ");
+	if (first_pod_field != 0) {
+	  first_pod_field->emit_symbol(em);
+	  em.puts("$e; ");
+	} else {
+	  em.puts("invalid_value; ");
+	}
+      }
       emit_initialize_dunion_field(em, ev, *i, false, true);
+      if (!is_nullable) {
+	em.puts("; _$e = ");
+	(*i)->emit_symbol(em);
+	em.puts("$e");
+      }
       em.puts("; }\n");
       em.set_file_line(*i);
       em.indent('b');
@@ -819,6 +906,7 @@ static void emit_dunion_def_one(emit_context& em, const expr_dunion *ev,
   if (!is_compiled(ev->block)) {
     return;
   }
+  const bool is_nullable = is_nullable_dunion(ev);
   em.set_ns(ev->uniqns);
   em.set_file_line(ev);
   em.puts("struct ");
@@ -830,22 +918,12 @@ static void emit_dunion_def_one(emit_context& em, const expr_dunion *ev,
   }
   em.puts(" {\n");
   em.add_indent(1);
+  expr_var *const first_pod_field = dunion_find_pod_field(ev);
   typedef std::list<expr_var *> flds_type;
   flds_type flds;
   ev->get_fields(flds);
   flds_type::const_iterator i;
-  /* enum part */
-  em.set_file_line(ev);
-  em.indent('b');
-  em.puts("enum {");
-  for (i = flds.begin(); i != flds.end(); ++i) {
-    if (i != flds.begin()) {
-      em.puts(", ");
-    }
-    (*i)->emit_symbol(em);
-    em.puts("$e");
-  }
-  em.puts("} $e;\n");
+  /* union part */
   bool has_non_unit = false;
   #if 0
   bool has_non_smallpod = false;
@@ -870,6 +948,10 @@ static void emit_dunion_def_one(emit_context& em, const expr_dunion *ev,
        * potential aliasing. note that -Wno-attribute should be set in
        * order to avoid 'ignoreing attribute to foo after definition'
        * warnings. */
+      /* correction. no need to worry about the strict aliasing rule,
+       * because only one type is valid at the same time for a tagged
+       * union value. the following 'may_alias' attribute is not
+       * necessary. */
       em.set_file_line(*i);
       em.indent('b');
       em.puts("typedef ");
@@ -878,7 +960,6 @@ static void emit_dunion_def_one(emit_context& em, const expr_dunion *ev,
       (*i)->emit_symbol(em);
       em.puts("$ut;\n");
     }
-    /* union part */
     em.set_file_line(ev);
     em.indent('b');
     em.puts("union {\n");
@@ -908,7 +989,7 @@ static void emit_dunion_def_one(emit_context& em, const expr_dunion *ev,
     em.add_indent(-1);
     em.set_file_line(ev);
     em.indent('b');
-    em.puts("} $u;\n");
+    em.puts("} _$u;\n");
     /* field pointer */
     for (i = flds.begin(); i != flds.end(); ++i) {
       if (is_unit_type((*i)->get_texpr())) {
@@ -925,7 +1006,7 @@ static void emit_dunion_def_one(emit_context& em, const expr_dunion *ev,
       // emit_term(em, (*i)->get_texpr());
       (*i)->emit_symbol(em);
       em.puts("$ut const *)");
-      em.puts("$u.");
+      em.puts("_$u.");
       (*i)->emit_symbol(em);
       em.puts("$u; }\n");
       /* non-const */
@@ -939,10 +1020,47 @@ static void emit_dunion_def_one(emit_context& em, const expr_dunion *ev,
       // emit_term(em, (*i)->get_texpr());
       (*i)->emit_symbol(em);
       em.puts("$ut *)");
-      em.puts("$u.");
+      em.puts("_$u.");
       (*i)->emit_symbol(em);
       em.puts("$u; }\n");
     }
+  }
+  /* enum part */
+  em.set_file_line(ev);
+  em.indent('b');
+  em.puts("typedef enum {");
+  for (i = flds.begin(); i != flds.end(); ++i) {
+    if (i != flds.begin()) {
+      em.puts(", ");
+    }
+    (*i)->emit_symbol(em);
+    em.puts("$e");
+  }
+  if (first_pod_field == 0) {
+    if (!flds.empty()) {
+      em.puts(", ");
+    }
+    em.puts("invalid_value");
+  }
+  em.puts("} type_$e;");
+  if (!is_nullable) {
+    em.puts(" type_$e _$e;");
+  }
+  em.puts("\n");
+  em.set_file_line(ev);
+  em.indent('b');
+  em.puts("inline type_$e get_$e() const { ");
+  if (is_nullable) {
+    flds_type::const_iterator j = ++flds.begin();
+    em.puts("return *(void **)(_$u.");
+    (*j)->emit_symbol(em);
+    em.puts("$u) == 0 ? ");
+    (*flds.begin())->emit_symbol(em);
+    em.puts("$e : ");
+    (*j)->emit_symbol(em);
+    em.puts("$e; }\n");
+  } else {
+    em.puts("return _$e; }\n");
   }
   /* default constructor */
   em.set_file_line(ev);
@@ -954,13 +1072,21 @@ static void emit_dunion_def_one(emit_context& em, const expr_dunion *ev,
   for (i = flds.begin(); i != flds.end(); ++i) {
     em.set_file_line(*i);
     em.indent('b');
-    em.puts("$e = ");
-    (*i)->emit_symbol(em);
-    em.puts("$e;\n");
-    em.set_file_line(*i);
-    em.indent('b');
-    emit_initialize_dunion_field(em, ev, *i, false, false);
-    em.puts(";\n");
+    if (is_nullable) {
+      flds_type::const_iterator j = i;
+      ++j;
+      em.puts("*(void **)(_$u.");
+      (*j)->emit_symbol(em);
+      em.puts("$u) = 0;\n");
+    } else {
+      em.puts("_$e = ");
+      (*i)->emit_symbol(em);
+      em.puts("$e;\n");
+      em.set_file_line(*i);
+      em.indent('b');
+      emit_initialize_dunion_field(em, ev, *i, false, false);
+      em.puts(";\n");
+    }
     break; /* first field only */
   }
   em.add_indent(-1);
@@ -987,6 +1113,7 @@ static void emit_dunion_def_one(emit_context& em, const expr_dunion *ev,
   em.puts("& operator =(const ");
   em.puts(name_c);
   em.puts("& x) { if (this != &x) { deinit$(); init$(x); } return *this; }\n");
+    /* FIXME: not exception safe */
   /* init/deinit and getter functions (declonly) */
   emit_dunion_aux_functions(em, ev, true);
   /* */
@@ -1823,7 +1950,7 @@ void expr_op::emit_value(emit_context& em)
       }
       em.puts("(");
       fn_emit_value(em, aop->arg0);
-      em.puts(".$e == ");
+      em.puts(".get_$e() == ");
       em.puts(term_tostr(aop->arg0->get_texpr(),
 	term_tostr_sort_cname));
       em.puts("::");

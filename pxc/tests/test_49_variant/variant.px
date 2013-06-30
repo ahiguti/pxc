@@ -159,7 +159,7 @@ private metafunction is_constructible{t}
 private metafunction filter_constructible{ts} m::filter{ts, is_constructible};
 
 private function {ns} void
-prepare_namespace_map(tree_map{string, variant}& elems)
+prepare_namespace_map(tree_map{string, variant} mutable& elems)
 {
   metafunction funcs filter_concrete{m::functions{ns}};
   expand (name, idx : funcs) {
@@ -211,7 +211,7 @@ variant_invoke(expand(m::map{m::seq{m::size{tlist}}, vi_arginfo, tlist}))
 {
   farray{variant, m::sub{m::size{tlist}, 2}} args;
   expand(arg, idx : m::map{m::seq{2, m::size{tlist}}, idx_argname}) {
-    args[idx] = to_variant{m::at{tlist, m::add{idx, 2}}}(arg);
+    args[idx] = to_variant{m::at0{m::at{tlist, m::add{idx, 2}}}}(arg);
   }
   return a0.ptrval->invoke(a1, args);
 }
@@ -345,6 +345,6 @@ private metafunction func_argexp_list{f}
   m::map{args_with_index{f}, argexp};
 private metafunction func_argtype_noneph{f, idx}
   to_non_ephemeral{m::at{m::at{args_with_index{f}, idx}, 2}};
-private metafunction vi_arginfo{tlist, i}
-  m::list{idx_argname{i}, m::at{tlist, i}, 1, 0};
+private metafunction vi_arginfo{tilist, i}
+  m::list{idx_argname{i}, m::at0{m::at{tilist, i}}, 1, 0};
 

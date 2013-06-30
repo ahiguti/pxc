@@ -1,0 +1,44 @@
+namespace transport_file;
+public import common -;
+public import io -;
+public import orb -;
+public import io::file -;
+public import io::errno -;
+
+public threaded struct transport_file(file const& f0) <orb_transport> {
+  private file f = f0;
+  private bool ok = true;
+  private errno_t en;
+  function void reset(file const& f0) {
+    f = f0;
+    ok = true;
+    en = EOK;
+  }
+  function errno_t get_error() const {
+    return ok ? EOK : en;
+  }
+  function void send_receive(string mutable& rbuf, string mutable& wbuf) {
+    if (ok && !wbuf.empty()) {
+      size_t const wsize = f.write_all(wbuf, en);
+      if (wsize != wbuf.size()) {
+	ok = false;
+      }
+    }
+    wbuf.clear();
+    rbuf.clear();
+    while (ok) {
+      size_t const rsize = f.read(rbuf, 4096, en);
+      if (rbuf.size() > 0 && rbuf[rbuf.size() - 1] == '\n') {
+	break;
+      }
+      if (rsize == 0) {
+	ok = false;
+      }
+    }
+    if (!ok) {
+      rbuf.clear();
+      rbuf = "T\tio_error\n";
+    }
+  }
+}
+

@@ -1457,7 +1457,9 @@ static bool unify_type(
     term_tostr_list(tl0, term_tostr_sort_strict).c_str(),
     term_tostr_list(tparams, term_tostr_sort_strict).c_str()));
   #endif
-  if (t0.get_expr()->get_esort() == expr_e_tparams) {
+  if (t0.get_expr() == 0) {
+    /* TODO */
+  } else if (t0.get_expr()->get_esort() == expr_e_tparams) {
     const expr_tparams *const t0tp = ptr_down_cast<const expr_tparams>(
       t0.get_expr()); /* outer tparam */
     return check_tvmap(tvmap, t0tp->sym, t1);
@@ -1908,7 +1910,10 @@ attribute_e get_expr_threading_attribute(const expr_i *e)
 attribute_e get_context_threading_attribute(symbol_table *cur)
 {
   expr_i *const fe = get_current_frame_expr(cur);
+  #if 0
   return get_expr_threading_attribute(fe);
+  #endif
+  return get_term_threading_attribute(fe->get_value_texpr());
 }
 
 bool is_threaded_context(symbol_table *cur)
@@ -1925,24 +1930,55 @@ bool is_multithr_context(symbol_table *cur)
 
 attribute_e get_term_threading_attribute(const term& t)
 {
+  const int thr_mask_all = attribute_e(
+    attribute_threaded | attribute_multithr |
+    attribute_valuetype | attribute_tsvaluetype);
+  int attr = 0;
   const expr_i *const e = t.get_expr();
   if (e == 0) {
-    return attribute_unknown;
+    attr = attribute_unknown;
+    if (t.is_metalist()) {
+      attr = thr_mask_all;
+    }
+  } else {
+    attr = get_expr_threading_attribute(e);
   }
-  int attr = get_expr_threading_attribute(e);
-  const term_list *const args = t.get_args();
+  const term_list *const args = t.get_args_or_metalist();
   if (args == 0) {
     return attribute_e(attr);
   }
   for (term_list::const_iterator i = args->begin(); i != args->end(); ++i) {
-    const expr_i *const ce = i->get_expr();
-    if (ce == 0) {
+    if (!i->is_expr() && !i->is_metalist()) {
       continue;
     }
-    int mask = get_threading_attribute_mask(ce->get_esort());
+    const expr_i *const ce = i->get_expr();
+    int mask = 0;
+    if (ce == 0) {
+      mask = thr_mask_all;
+    } else {
+      mask = get_threading_attribute_mask(ce->get_esort());
+    }
+#if 0
+fprintf(stderr, "%s >> %s pre %x\n", term_tostr_human(t).c_str(),
+  term_tostr_human(*i).c_str(), attr);
+#endif
+#if 0
+    // int mask = get_threading_attribute_mask(ce->get_esort());
+#endif
     attr &= (get_term_threading_attribute(*i) | ~mask);
+#if 0
+fprintf(stderr, "%s >> %s post %x\n", term_tostr_human(t).c_str(),
+  term_tostr_human(*i).c_str(), attr);
+#endif
   }
-  return attribute_e(attr);
+  attribute_e r = attribute_e(attr);
+#if 0
+if (term_tostr_human(t) == "algebraic::common::product_type{{meta::common::bt_int,container::string::string}}") {
+//abort();
+}
+fprintf(stderr, "%s %x\n", term_tostr_human(t).c_str(), attr);
+#endif
+  return r;
 }
 
 #if 0
@@ -2097,6 +2133,9 @@ void fn_set_generated_code(expr_i *e)
   if (e == 0) {
     return;
   }
+#if 0
+fprintf(stderr, "set generated %p %s\n", e, e->dump(0).c_str());
+#endif
   e->generated_flag = true;
   expr_block *const bl = dynamic_cast<expr_block *>(e);
   if (bl != 0) {
@@ -2131,6 +2170,7 @@ static void fn_check_syntax_one(expr_i *e)
       case expr_e_interface:
       case expr_e_typedef:
       case expr_e_metafdef:
+      case expr_e_expand:
 	break;
       case expr_e_funcdef:
 	if (ev == 0) {

@@ -22,6 +22,7 @@ clockobject {
 }
 
 extern "types" inline
+
 #include <string>
 #include <stdint.h>
 #include <stdexcept>
@@ -45,8 +46,11 @@ extern "types" inline
 #else
 #define DBG_COND(x)
 #endif
+
 namespace pxcrt {
+
 struct condition_variable;
+
 struct mutex {
   friend struct condition_variable;
   mutex() {
@@ -86,6 +90,7 @@ private:
 private:
   pthread_mutex_t mtx;
 };
+
 struct condition_variable {
   condition_variable() {
     init();
@@ -132,10 +137,12 @@ private:
 private:
   pthread_cond_t cond;
 };
+
 struct monitor {
   mutex mtx;
   condition_variable cond;
 };
+
 struct mtcount { /* reference counter for multi-threaded shared objects */ 
   mtcount() : count$z(1) { }
   void incref$z() { __sync_fetch_and_add(&count$z, 1); } /* gcc >= 4 */
@@ -143,6 +150,7 @@ struct mtcount { /* reference counter for multi-threaded shared objects */
 public:
   long count$z;
 };
+
 struct stcount { /* reference counter for single-threaded shared objects */
   stcount() : count$z(1) { }
   void incref$z() { ++count$z; }
@@ -150,9 +158,11 @@ struct stcount { /* reference counter for single-threaded shared objects */
 public:
   long count$z;
 };
+
 template <typename T> struct uninit_mem { char value[sizeof(T)]; };
 /* NOTE: emit_vardef_constructor_fast_boxing() depends on the internals
  * of rcval/trcval/tircval. */
+
 template <typename T>
 struct rcval {
   /* rcval: single threaded, mutable and immutable */
@@ -194,6 +204,7 @@ private:
   rcval(const rcval&);
   rcval& operator =(const rcval&);
 };
+
 template <typename T>
 struct trcval {
   /* trcval: multithreaded, mutable */
@@ -236,6 +247,7 @@ private:
   trcval(const trcval&);
   trcval& operator =(const trcval&);
 };
+
 template <typename T>
 struct tircval {
   /* tircval: multithreded, immutable */
@@ -275,22 +287,22 @@ private:
   tircval(const tircval&);
   tircval& operator =(const tircval&);
 };
+
 template <typename T>
 struct rcptr { /* T must have an intrusive count */
   typedef T target_type;
   typedef void range_type; /* guard object requires this */
   typedef void crange_type; /* guard object requires this */
   template <typename Tx> friend struct rcptr;
-  rcptr() : ptr(0) { }
   rcptr(T *rawptr) : ptr(rawptr) { } /* for fast boxing constr */
-  rcptr(const rcptr& x) : ptr(x.ptr) { if (ptr) ptr->incref$z(); }
+  rcptr(const rcptr& x) : ptr(x.ptr) { ptr->incref$z(); }
   /* ptr{foo} to ptr{ifoo} */
   template <typename Tx> rcptr(const rcptr<Tx>& x) : ptr(x.get()) {
-    if (ptr) ptr->incref$z();
+    ptr->incref$z();
   }
   /* boxing foo to ptr{ifoo} */
   template <typename Tx> explicit rcptr(const Tx& x) : ptr(new T(x)) { }
-  ~rcptr() { if (ptr) ptr->decref$z(); }
+  ~rcptr() { ptr->decref$z(); }
   rcptr& operator =(T *x) { return set(x); }
   template <typename Tx> rcptr& operator =(Tx *x) { return set(x); }
   rcptr& operator =(const rcptr& x) { return set(x.ptr); }
@@ -303,15 +315,16 @@ struct rcptr { /* T must have an intrusive count */
   void inc_invalidate_guard() const { ptr->lock$z(); }
   void dec_invalidate_guard() const { ptr->unlock$z(); }
 private:
-  T *ptr;
+  T *ptr; /* not nullable */
 private:
   rcptr& set(T *x) {
-    if (x) x->incref$z();
-    if (ptr) ptr->decref$z();
+    x->incref$z();
+    ptr->decref$z();
     ptr = x;
     return *this;
   }
 };
+
 template <typename T> struct lockobject
 {
   lockobject(const rcptr<T>& p) : ptr(p), objref(*p) { objref.lock$z(); }
@@ -329,6 +342,7 @@ private:
   rcptr<T> ptr;
   T& objref;
 };
+
 template <typename T> struct clockobject
 {
   clockobject(const rcptr<const T>& p) : ptr(p), objref(*p)
@@ -347,14 +361,17 @@ private:
   rcptr<const T> ptr;
   const T& objref;
 };
+
 template <typename T> typename T::value_type deref_value$z(const rcptr<T>& p)
 {
   return p->value$z;
 }
+
 template <typename T> T deref(const rcptr<T>& p)
 {
   return *p;
 }
+
 }; // namespace pxcrt
 ;
 

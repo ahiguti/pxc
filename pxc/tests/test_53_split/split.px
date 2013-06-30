@@ -12,9 +12,9 @@ public metafunction va_argdecls_mutable_ref{lst}
   m::map{m::seq{m::size{lst}}, va_arginfo_mutable_ref, lst};
 
 private metafunction va_arginfo_const_ref{lst, i}
-  m::list{va_argname{i}, m::at{lst, i}, 1, 0};
+  m::list{va_argname{i}, m::at0{m::at{lst, i}}, 1, 0};
 private metafunction va_arginfo_mutable_ref{lst, i}
-  m::list{va_argname{i}, m::at{lst, i}, 1, 1};
+  m::list{va_argname{i}, m::at0{m::at{lst, i}}, 1, 1};
 
 /* split(str, delim, ret0, ret1, ...) */
 public function {lst} bool split(expand(
@@ -33,12 +33,12 @@ public function {lst} bool split(expand(
 	++curpos;
       }
       size_t const dp = str.find(curpos, delim);
-      metafunction telem m::at{lst, m::add{idx, 2}};
+      metafunction telem m::at0{m::at{lst, m::add{idx, 2}}};
       if (container::string::is_string_family_type{telem}) {
 	arg = str[curpos .. dp];
       } else {
 	cstrref s1 = str[curpos .. dp];
-	arg = deserialize_from_string{m::at{lst, m::add{idx, 2}}}(s1);
+	arg = deserialize_from_string{m::at0{m::at{lst, m::add{idx, 2}}}}(s1);
       }
       curpos = dp;
     }

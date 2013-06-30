@@ -8,7 +8,7 @@ public import meta::common m;
 public import meta::family mf;
 
 public threaded interface orb_transport {
-  function void send_receive(string& rbuf, string& wbuf);
+  function void send_receive(string mutable& rbuf, string mutable& wbuf);
 }
 
 public threaded struct orb(ptr{orb_transport} const& tr) {
@@ -21,6 +21,11 @@ public threaded struct orb(ptr{orb_transport} const& tr) {
     /* remote realobject id to local stub rawptr */
   tree_map{size_t, size_t} stubs_ltor;
     /* local stub rawptr to remote realobject id */
+}
+
+public threaded function void orb_clear_skeletons(orb mutable& o)
+{
+  o.skeletons.clear();
 }
 
 public threaded union skeleton_mapped {
@@ -55,8 +60,11 @@ public threaded function bool execute_request(ptr{orb} const& op)
       size_t const objpos = 2;
       size_t pos = objpos;
       size_t const delim_pos = skip_token(o.rbuf, pos, epos);
-      cstrref objbuf = o.rbuf[objpos + 1 .. delim_pos];
-      size_t const val = deserialize_from_string{size_t}(objbuf);
+      size_t val;
+      {
+	cstrref objbuf = o.rbuf[objpos + 1 .. delim_pos];
+	val = deserialize_from_string{size_t}(objbuf);
+      }
       if (skeleton_mapped mutable& m : o.skeletons[val]) {
 	m.real_object->call_method(op, pos, epos);
       } else {
@@ -117,15 +125,15 @@ public threaded function {ns} void call_ns_function_ni(ptr{orb} const& op,
 }
 
 private threaded function void call_method_notfound(ptr{orb} const& op,
-  remote& obj, size_t const tpos, size_t const tepos, size_t const apos,
-  size_t const aepos)
+  remote mutable& obj, size_t const tpos, size_t const tepos,
+  size_t const apos, size_t const aepos)
 {
   op->wbuf.append("T\tmethod_not_found\n");
 }
 
 private threaded function {t, i0, i1} void call_method_bs(
-  ptr{orb} const& op, remote& obj, size_t const tpos, size_t const tepos,
-  size_t const apos, size_t const aepos)
+  ptr{orb} const& op, remote mutable& obj, size_t const tpos,
+  size_t const tepos, size_t const apos, size_t const aepos)
 {
   if (m::eq{i0, i1}) {
     call_method_notfound(op, obj, tpos, tepos, apos, aepos);
@@ -159,7 +167,7 @@ private threaded struct {t} call_method_instance (ptr{t} const& p)
 }
 
 public threaded function {t} void call_method_ni(ptr{orb} const& op,
-  size_t const pos, size_t const epos, remote& obj)
+  size_t const pos, size_t const epos, remote mutable& obj)
 {
   size_t args_pos = pos;
   size_t const delim_pos = skip_token(op->rbuf, args_pos, epos);
@@ -194,7 +202,7 @@ private threaded function {f} void function_call(ptr{orb} const& op,
 }
 
 private threaded function {t, mi} void method_call(ptr{orb} const& op,
-  size_t pos, size_t epos, remote& obj)
+  size_t pos, size_t epos, remote mutable& obj)
 {
   orb mutable& o = *op;
   t mutable& objt = downcast_mutable{t, remote}(obj);
@@ -210,15 +218,14 @@ private threaded function {t, mi} void method_call(ptr{orb} const& op,
       marshal_type{m::rettype{f}}(o, r);
       o.wbuf.append("\n");
     } else {
-      o.wbuf.append("R\t");
-      obj.fsym(expand(a : func_argnames{f}; a));
-      o.wbuf.append("\n");
+      objt.fsym(expand(a : func_argnames{f}; a));
+      o.wbuf.append("R\t\n");
     }
   }
 }
 
-private threaded function {t} t unmarshal_value(string const& buf, size_t& pos,
-  size_t epos)
+private threaded function {t} t unmarshal_value(string const& buf,
+  size_t mutable& pos, size_t epos)
 {
   size_t npos = pos;
   size_t const delim_pos = skip_token(buf, npos, epos);
@@ -227,7 +234,8 @@ private threaded function {t} t unmarshal_value(string const& buf, size_t& pos,
   return deserialize_from_string{t}(tok);
 }
 
-private threaded function {t} void marshal_value(string& buf, t const& x)
+private threaded function {t} void marshal_value(string mutable& buf,
+  t const& x)
 {
   serialize_to_string{t}(x, buf);
 }
@@ -277,8 +285,13 @@ stub_method_template(
     }
   }
   o.wbuf.push_back('\n');
-  rtype const r = exchange_and_pop_return_value{rtype}(op);
-  return r;
+  if (m::eq{rtype, void}) {
+    exchange_and_pop_return_value{rtype}(op);
+    return;
+  } else {
+    rtype const r = exchange_and_pop_return_value{rtype}(op);
+    return r;
+  }
 }
 
 private threaded struct {t} stub (ptr{orb} const& op, size_t robjid) <t> {
@@ -305,14 +318,24 @@ private threaded struct {t} stub (ptr{orb} const& op, size_t robjid) <t> {
     /* non-const member function */
     function m::rettype{m::at{mfuncs, fidx}}
       fsym(expand (args_replnames{fidx})) {
-      return stub_method_template{t, fidx}(
-	shared_orb, remote_objid, expand (a : argnames{fidx}; a));
+      if (m::eq{m::rettype{m::at{mfuncs, fidx}}, void}) {
+	stub_method_template{t, fidx}(
+	  shared_orb, remote_objid, expand (a : argnames{fidx}; a));
+      } else {
+	return stub_method_template{t, fidx}(
+	  shared_orb, remote_objid, expand (a : argnames{fidx}; a));
+      }
     }
     /* const member function */
     function m::rettype{m::at{mfuncs, fidx}}
       fsym(expand (replace_argnames{m::args{m::at{mfuncs, fidx}}})) const {
-      return stub_method_template{t, fidx}(
-	shared_orb, remote_objid, expand (a : argnames{fidx}; a));
+      if (m::eq{m::rettype{m::at{mfuncs, fidx}}, void}) {
+	stub_method_template{t, fidx}(
+	  shared_orb, remote_objid, expand (a : argnames{fidx}; a));
+      } else {
+	return stub_method_template{t, fidx}(
+	  shared_orb, remote_objid, expand (a : argnames{fidx}; a));
+      }
     }
   }
 }
@@ -329,8 +352,12 @@ private threaded function {t} t pop_return_value(ptr{orb} const& op)
   size_t pos = 2;
   size_t const epos = o.rbuf.size() - 1;
   if (res == 'R') {
-    t r = unmarshal_type{t}(op, pos, epos);
-    return r;
+    if (m::eq{t, void}) {
+      return;
+    } else {
+      t r = unmarshal_type{t}(op, pos, epos);
+      return r;
+    }
   } else if (res == 'T') {
     throw orb_error(o.rbuf[pos .. epos]);
   } else {
@@ -342,7 +369,11 @@ private threaded function {t} t exchange_and_pop_return_value(
   ptr{orb} const& op)
 {
   exchange_loop(op);
-  return pop_return_value{t}(op);
+  if (m::eq{t, void}) {
+    pop_return_value{t}(op);
+  } else {
+    return pop_return_value{t}(op);
+  }
 }
 
 private metafunction replace_argnames{args}
@@ -364,7 +395,7 @@ private threaded function {t} ptr{stub{t}} create_stub(ptr{orb} const& op,
   return r;
 }
 
-private threaded function {t} void marshal_type(orb& o, t const& x)
+private threaded function {t} void marshal_type(orb mutable& o, t const& x)
 {
   if (type_byref{t}) {
     marshal_reference(o, x);
@@ -373,8 +404,8 @@ private threaded function {t} void marshal_type(orb& o, t const& x)
   }
 }
 
-private threaded function {t} t unmarshal_type(ptr{orb} const& op, size_t& pos,
-  size_t epos)
+private threaded function {t} t unmarshal_type(ptr{orb} const& op,
+  size_t mutable& pos, size_t epos)
 {
   if (type_byref{t}) {
     return unmarshal_reference{t, 1}(op, pos, epos);
@@ -383,7 +414,8 @@ private threaded function {t} t unmarshal_type(ptr{orb} const& op, size_t& pos,
   }
 }
 
-private threaded function {t} void marshal_reference(orb& o, t const& x)
+private threaded function {t} void marshal_reference(orb mutable& o,
+  t const& x)
 {
   size_t const ra = ptr_to_rawptr(x);
   if (size_t rmt : o.stubs_ltor[ra]) {
@@ -401,7 +433,7 @@ private threaded function {t} void marshal_reference(orb& o, t const& x)
 }
 
 private threaded function {t, from_remote} t unmarshal_reference(
-  ptr{orb} const& op, size_t& pos, size_t epos)
+  ptr{orb} const& op, size_t mutable& pos, size_t epos)
 {
   orb mutable& o = *op;
   cstrref buf = o.rbuf[pos .. epos];
@@ -433,8 +465,8 @@ private threaded function {t, from_remote} t unmarshal_reference(
   }
 }
 
-private threaded function size_t skip_token(string const& buf, size_t& pos,
-  size_t epos)
+private threaded function size_t skip_token(string const& buf,
+  size_t mutable& pos, size_t epos)
 {
   size_t delim_pos = buf.find(pos, '\t');
   if (delim_pos < epos) {
@@ -457,7 +489,8 @@ private metafunction func_argexp_list{f}
   m::map{
     m::seq{m::size{m::args{f}}},
     metafunction{i} m::list{m::concat{"a", i},
-      m::cond{type_byref{func_argtype_ne{f, i}}, 1, 0}}};
+      0}};
+      // m::cond{type_byref{func_argtype_ne{f, i}}, 1, 0}}};
 private metafunction type_byref{t}
   m::and{
     m::eq{m::family{t}, "ptr"},

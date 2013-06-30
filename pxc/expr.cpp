@@ -215,8 +215,11 @@ void arena_error_throw(const expr_i *e, const char *format, ...)
   }
   va_end(ap);
   auto_free abuf(buf);
-  const std::string s(buf);
-  throw std::runtime_error(get_expr_info(e) + s + "\n");
+  std::string s(buf);
+  if (!s.empty() && s[s.size() - 1] != '\n') {
+    s += "\n";
+  }
+  throw std::runtime_error(get_expr_info(e) + s);
 }
 
 void arena_error_push(const expr_i *e, const char *format, ...)

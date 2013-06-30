@@ -2,7 +2,7 @@
 LANG=C
 #CXX = g++34
 CXX = g++
-#CXXFLAGS = -Wall -g -O
+#CXXFLAGS = -Wall -g -Os -DNDEBUG
 CXXFLAGS = -Wall -g -O3 -DNDEBUG
 #CXXFLAGS = -Wall -g -pg -O -DNDEBUG
 #CXXFLAGS = -Wall -g -O0

@@ -1,0 +1,63 @@
+namespace timing1;
+import common -;
+import exception::common -;
+import io -;
+import io::file -;
+import io::errno -;
+import io::standard -;
+import io::net::addrinfo -;
+import io::net::socket -;
+import io::signal -;
+import io::time -;
+import thread -;
+import orb -;
+import transport_file -;
+
+public threaded interface ibinop <remote> {
+  function int op(int x, int y);
+}
+
+public threaded struct binop_add <ibinop> {
+  function int op(int x, int y) {
+    return x + y;
+  }
+}
+
+private function void client_test_main(file const& f)
+{
+  var op = ptr(orb_handle{ibinop}(ptr(transport_file(f))));
+  var st = op->create_stub();
+  double const t0 = gettimeofday_double(io::system);
+  int z = 0;
+  for (int i : 0 .. 1000) {
+    for (int j : 0 .. 1000) {
+      z += st->op(i, j);
+    }
+  }
+  double const t1 = gettimeofday_double(io::system);
+  println(z);
+  debug_log("time", t1 - t0);
+}
+
+private multithreaded struct server_thread(io const& s, file const& f) {
+  io const sys = s;
+  file const sock = f;
+  function void main() {
+    var op = ptr(orb_handle{ibinop}(ptr(transport_file(sock))));
+    var obj = ptr(binop_add());
+    op->start_server(obj);
+  }
+}
+
+private function void main()
+{
+  errno_t ern;
+  signal(io::system, SIGPIPE, SIG_IGN, ern);
+  var spv = socketpair(io::system, AF_UNIX, SOCK_STREAM, PROTO_UNSPEC, ern);
+  var sthr = create_thread(server_thread(io::system, spv[1]));
+  client_test_main(spv[0]);
+  spv.clear();
+}
+
+main();
+

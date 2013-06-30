@@ -1,3 +1,37 @@
 namespace io::time;
-public import numeric::integral -;
+public import numeric::fp -;
+public import numeric::cast -;
+public import io::file -;
+
+public tsvaluetype struct extern "::suseconds_t" "extint" suseconds_t { }
+
+public tsvaluetype struct extern "::timeval" timeval {
+  time_t tv_sec;
+  suseconds_t tv_usec;
+}
+
+public threaded function extern "pxcio::gettimeofday" timeval
+  gettimeofday(io::io const& iop);
+
+public threaded function double gettimeofday_double(io::io const& iop)
+{
+  timeval tv = gettimeofday(iop);
+  double const rv = static_cast{double, time_t}(tv.tv_sec)
+    + static_cast{double, suseconds_t}(tv.tv_usec) / 1000000.0;
+  return rv;
+}
+
+extern "implementation" inline
+#include <sys/time.h>
+namespace pxcio {
+
+::timeval gettimeofday(io const& iop)
+{
+  ::timeval tv = { };
+  ::gettimeofday(&tv, 0); /* no need to check error */
+  return tv;
+}
+
+}; // namespace pxcio
+;
 
