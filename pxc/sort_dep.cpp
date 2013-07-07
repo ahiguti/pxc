@@ -68,7 +68,7 @@ void sort_dep(sorted_exprs& c, expr_i *e)
     return;
   }
   if (c.parents.find(e) != c.parents.end()) {
-    arena_error_throw(e, "a type dependency cycle is found");
+    arena_error_throw(e, "A type dependency cycle is found");
   }
   c.parents.insert(e);
   expr_block *block = 0;

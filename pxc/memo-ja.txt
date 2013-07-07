@@ -3,25 +3,28 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- 再リンク必要なケースで漏らしている。間接的privateインポートしている
-  ファイルが更新されたとき、exeを再リンク必要だがされていない。
+- in-placeにオブジェクト構築する方法を考えよ
+  - placement newに相当するもの？
+  - ptr(...)をそれにする
+  - push_back(...)
 
-- 初期化関数を必要としないライブラリは初期化関数を呼ばないように
+- io/standard join_string -> split::string_join
 
-- ptr(foo(...)) の式が変数定義の右辺ではないとき、fooのコピーコンスト
-  ラクタを要求してしまう(skip_49_variant_fixme3)
+- socket等のエラーチェック方法(done)
 
-- pxcvectorのpop_backまちがってる
+- 環境変数への読み書きを許可するか。たとえばjvmの中では自前のlockで
+  環境変数の排他処理しているはずで、もしpxcが自前のlockで排他処理
+  したとしても混ぜると問題がおきる。
+  - 初期化時に保存しておいた環境変数は常に読み出し可能
+  - 環境変数読み書きはthreadedではない
 
-- 72/fixme_t1
+- 変数定義の文法を整理
+
+- 副作用を持つ演算子を複数回使ったら怒る？
 
 - なんでpxcvectorよりpodvectorのほうが遅い？
 
 - その他のコンテナ
-
-- 変数定義の文法を整理
-
-- 型推論をもっと有効に
 
 - テキスト処理
 
@@ -36,8 +39,6 @@ FIXME/TODO M1
 
 
 - 例外の使い方
-
-- cleanするときにフォルダがないとエラーになるのは無視するべき(done)
 
 - has_unbound_tparam, term_has_unevaluated_exprの意味を整理
 
@@ -73,6 +74,7 @@ FIXME/TODO M1
 
 - 演算子オーバーロードは、組み込み型以外のopに対して関数呼び出し式を
   evalすることによって実装チェック、その関数を呼ぶようにemit。
+  代入演算子は値を持たないように(done)
 
 - ccだけ吐くモード -> androidに必要
 - ヘッダファイルを吐くモード
@@ -358,6 +360,20 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- --generate(done)
+- for文なども型推論(done)
+- cleanするときにフォルダがないとエラーになるのは無視するべき(done)
+- 配列をsliceからconstructできるように。特にstring("abc") (done)
+- ptr(foo(...)) の式が変数定義の右辺ではないとき、fooのコピーコンスト
+  ラクタを要求してしまう(skip_49_variant_fixme3)
+  変数定義の右辺以外でのptr構築を禁止、box()を使うよう強制。(done)
+- 再リンク必要なケースで漏らしている。間接的privateインポートしている
+  ファイルが更新されたとき、exeを再リンク必要だがされていない。
+  test_72_priimportでnspri.pxを書き換えれば再現できる。 (done)
+- エラーメッセージをきちんと文頭大文字に。(done)
+- pxcvectorのpop_backまちがってる(done)
+- 72/fixme_t1(done)
+- 型推論をもっと有効に(done)
 - テンプレ引数の一部分だけを自動マッチ(done)
 - グローバルブロックについてはgeneratedなものはsymtblをenumuerate
   しても見せない。enumerateした場合以外でも見せてはならない。コンパイ
@@ -1622,6 +1638,7 @@ fileから改行区切り、tabまたは空白で列区切り。
 変数定義の文法
 
 auto変数
+  全5種
   int mutable& x
   int mutable x
   int const& x
@@ -1639,23 +1656,25 @@ auto変数
   int const& x
   int const x
   int x
+  (型推論は無し)
 フィールド
+  全3種 参照渡しが無い
   int mutable x
   int const x
   int x
   (以下は型推論)
   mutable x
   const x
-forrange_argdecl
-  const_value
-foreach_argdecl
+forrange_argdecl [ for (i : 0 .. 100) { ... } ]
+  常に暗黙裡にconst_value
+foreach_argdecl [ for (k, v: arr) { ... } ]
   '&'は省略、mutableが明示されないとconst - FIXME
   const_reference + const_reference
   const_reference + mutable_reference
 ifdef_argdecl
   関数引数と同じ全5種
 catch_stmt
-  暗黙裡にconst_reference
+  常に暗黙裡にconst_reference?
 
 ---------------------------------------------------------------------
 初期化関数の無駄打ちをやめる
@@ -1666,14 +1685,30 @@ catch_stmt
 4. 初期化が有る時だけinitを吐くようにする
 
 ---------------------------------------------------------------------
-再リンク要不要判定
+in-placeオブジェクト構築
 
-.oを作る前に、現在の.oのタイムスタンプよりsystem clockが真に大きくなる
-のを待つ。
+struct foo { int x, int y };
+vector{foo} v;
+v.create_back(int x, int y) とされると、
+foo(x, y)がvの末尾で実行され、そこにfooオブジェクトが構築される。
+create_backはテンプレ
 
-リンクする前に、リンク対象の.oのタイムスタンプ一覧を.lnkに書き込む。
+function void create_back(int x, int y)
+{
+  size_t const sz = size();
+  foo mutable& p = push_back_uninitialized();
+    /* 末尾にスペースを用意しアドレスを返すが、foo未構築 */
+  extern "uninitialized" p = foo(x, y);
+    /* 代入式だがplacement newをemitする */
+    /* 例外投げることもあるが、vectorの場合はcatch不要 */
+  set_valid_length(sz + 1);
+}
 
-再リンク必要かどうかは、リンク対象の.oのタイムスタンプと.lnkの内容が
-一致しているかどうかで判断する。
+catch allほしくなる。
+
+extern "uninitialized"は、代入演算子のかわりにplacement newを
+emitせよ、という意味。
+代入演算子にplacement_newフラグを追加。
+  -> やめ。未初期化代入演算子を用意。
 
 

@@ -38,7 +38,7 @@ public threaded struct binop_add <ibinop> {
 
 private function void client_test_main(file const& f)
 {
-  var op = ptr(orb_handle{ifoo}(ptr(transport_file(f))));
+  var op = box{orb_handle{ifoo}}(box{transport_file}(f));
   var st = op->create_stub();
   farray{int, 10} arr;
   for (int i : 0 .. 10) { arr[i] = i + 1; }
@@ -51,7 +51,7 @@ private multithreaded struct server_thread(io const& s, file const& f) {
   io const sys = s;
   file const sock = f;
   function void main() {
-    var op = ptr(orb_handle{ifoo}(ptr(transport_file(sock))));
+    var op = box{orb_handle{ifoo}}(box{transport_file}(sock));
     var obj = ptr(foo());
     op->start_server(obj);
   }
@@ -59,12 +59,11 @@ private multithreaded struct server_thread(io const& s, file const& f) {
 
 private function void main()
 {
-  errno_t ern;
-  signal(io::system, SIGPIPE, SIG_IGN, ern);
-  var spv = socketpair(io::system, AF_UNIX, SOCK_STREAM, PROTO_UNSPEC, ern);
-  var sthr = create_thread(server_thread(io::system, spv[1]));
-  client_test_main(spv[0]);
-  spv.clear();
+  signal(io::system, SIGPIPE, SIG_IGN);
+  var sp = socketpair(io::system, AF_UNIX, SOCK_STREAM, PROTO_UNSPEC);
+  var sthr = create_thread(server_thread(io::system, sp.value.first));
+  client_test_main(sp.value.second);
+  sp.errno = errno_t(); /* closes fds */
 }
 
 main();

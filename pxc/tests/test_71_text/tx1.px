@@ -8,12 +8,11 @@ import io::standard -;
 import io::buffered -;
 import string::conversion -;
 
-function {t} errno_t parse_table(file const& fp, t mutable& tbl)
+function {t} void parse_table(file const& fp, t mutable& tbl)
 {
   t:key_type key;
   t:mapped_type mapped;
-  errno_t err;
-  stream_foreach{file, parse_line}(fp, '\n', 16384, err);
+  stream_foreach{file, parse_line}(fp, '\n', 16384);
   function bool parse_line(cstrref const& line) {
     size_t const sz = line.size();
     size_t cur = 0;
@@ -32,7 +31,6 @@ function {t} errno_t parse_table(file const& fp, t mutable& tbl)
     tbl.insert(key, mapped);
     return true;
   }
-  return err;
 }
 
 struct stbl {
@@ -54,10 +52,9 @@ struct stbl {
 }
 
 {
-  errno_t err;
-  var f = system.open("hoge3.txt", io::file::O_RDONLY, 0, err);
+  var f = system.open("hoge3.txt", io::file::O_RDONLY, 0);
   stbl tv;
-  parse_table(f, tv);
+  parse_table(f.value, tv);
   tv.dump();
 }
 

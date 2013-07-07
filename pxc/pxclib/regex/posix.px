@@ -12,6 +12,7 @@ public tsvaluetype struct extern "::regmatch_t" regmatch_t {
   regoff_t rm_so;
   regoff_t rm_eo;
 }
+
 public extern "REG_EXTENDED"      cflags_t REG_EXTENDED;
 public extern "REG_ICASE"         cflags_t REG_ICASE;
 public extern "REG_NOSUB"         cflags_t REG_NOSUB;
@@ -33,7 +34,9 @@ extern "types" inline
 #include <sys/types.h>
 #include <regex.h>
 namespace pregex {
+
 using namespace pxcrt;
+
 struct posix_re {
   posix_re(cstrref const& s, int cflags, int& err_r);
   ~posix_re();
@@ -43,26 +46,25 @@ private:
   posix_re(const posix_re&);
   posix_re& operator =(const posix_re&);
 };
-};
-;
 
-extern "functions" inline
-namespace pregex {
 };
 ;
 
 extern "implementation" inline
 namespace pregex {
+
 posix_re::posix_re(cstrref const& s, int cflags, int& err_r)
 {
   PXCRT_ALLOCA_NTSTRING(s_nt, s);
   const int r = ::regcomp(&value, s_nt.get(), cflags);
   err_r = r;
 }
+
 posix_re::~posix_re()
 {
   ::regfree(&value);
 }
+
 int regex_exec(posix_re& re, cstrref const& s,
   bt_slice<regmatch_t> const& ma, int eflags)
 {
@@ -71,6 +73,7 @@ int regex_exec(posix_re& re, cstrref const& s,
     eflags);
   return r;
 }
+
 bt_string regex_error_string(posix_re const& re, int err)
 {
   size_t sz = ::regerror(err, &re.value, 0, 0);
@@ -82,6 +85,7 @@ bt_string regex_error_string(posix_re const& re, int err)
   }
   return s;
 }
+
 };
 ;
 

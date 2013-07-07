@@ -1,9 +1,23 @@
 namespace io::process;
+public import io -;
 public import numeric::integral -;
 public import container::string -;
 public import container::array;
 
-public extern "pxcio::pxc_argv" container::array::pxcvector{string} argv;
+public tsvaluetype struct extern "::pid_t" "extint" pid_t { }
+
+public threaded function extern "pxcio::_exit" void _exit(io const& sys,
+  int status);
+public threaded function extern "pxcio::abort" void abort(io const& sys);
+public threaded function extern "pxcio::fork" pid_t fork(io const& sys);
+public threaded function extern "pxcio::wait" pid_t waitpid(io const& sys);
+
+public function extern "::exit" void exit(int status);
+
+public extern "pxcio::pxc_argv"
+container::array::pxcvector{string} argv;
+public extern "pxcio::pxc_environ"
+container::array::pxcvector{string} environ;
 
 private function extern "pxcio::io_process_init" void io_process_init();
 
@@ -12,6 +26,7 @@ io_process_init();
 extern "functions" inline
 namespace pxcio {
 extern pxcrt::pxcvector<pxcrt::bt_string> pxc_argv;
+extern pxcrt::pxcvector<pxcrt::bt_string> pxc_environ;
 };
 ;
 
@@ -19,26 +34,33 @@ extern "implementation" inline
 namespace pxcio {
 
 #include <stdlib.h>
+#include <unistd.h>
 
 pxcrt::pxcvector<pxcrt::bt_string> pxc_argv;
+pxcrt::pxcvector<pxcrt::bt_string> pxc_environ;
 
 void io_process_init()
 {
-  static int init_flag = 0;
-  if (!init_flag) {
-    init_flag = 1;
-    char buf[64];
-    int c = 0;
-    while (true) {
-      snprintf(buf, sizeof(buf), "PXC_ARG%d", c++);
-      const char *ent = getenv(buf);
-      if (ent == 0) {
-	break;
-      }
-      const unsigned char *uent = reinterpret_cast<const unsigned char *>(ent);
-      const pxcrt::bt_string s(uent, strlen(ent));
-      pxc_argv.push_back(s);
+  pxc_argv.clear();
+  char buf[64];
+  int c = 0;
+  while (true) {
+    snprintf(buf, sizeof(buf), "PXC_ARG%d", c++);
+    const char *ent = getenv(buf);
+    if (ent == 0) {
+      break;
     }
+    const unsigned char *uent = reinterpret_cast<const unsigned char *>(ent);
+    const pxcrt::bt_string s(uent, strlen(ent));
+    pxc_argv.push_back(s);
+    unsetenv(buf);
+  }
+  char **p = ::environ;
+  while (*p != 0) {
+    const unsigned char *uent = reinterpret_cast<const unsigned char *>(*p);
+    const pxcrt::bt_string s(uent, strlen(*p));
+    pxc_environ.push_back(s);
+    ++p;
   }
 }
 

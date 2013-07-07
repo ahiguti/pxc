@@ -55,7 +55,7 @@ void symbol_table::define_name(const std::string& shortname,
     local_names.push_back(name);
     return;
   }
-  arena_error_throw(e, "duplicated name %s (defined at %s:%d)",
+  arena_error_throw(e, "Duplicated name %s (defined at %s:%d)",
     name.c_str(), i->second.edef->fname, i->second.edef->line);
 }
 
@@ -124,6 +124,14 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
 	    /* structs and interfaces cant have an upvalue ex globals */
 	    v = localvar_info();
 	  } else {
+	    if (!is_global_r && v.edef != 0) {
+	      /* need to generate more verbose variable symbol */
+	      if (v.edef->get_esort() == expr_e_var) {
+		ptr_down_cast<expr_var>(v.edef)->used_as_upvalue = true;
+	      } else if (v.edef->get_esort() == expr_e_argdecls) {
+		ptr_down_cast<expr_argdecls>(v.edef)->used_as_upvalue = true;
+	      }
+	    }
 	    upvalues[fullname] = v;
 	    DBG(fprintf(stderr, "%p upvalue %s\n", this, fullname.c_str()));
 	  }
@@ -209,18 +217,18 @@ expr_i *symbol_table::resolve_name(const std::string& fullname,
     is_upvalue_r, is_memfld_r);
   if (v.edef == 0) {
     if (is_upvalue_r) {
-      arena_error_throw(e, "undefined symbol '%s' (default namespace: '%s')"
+      arena_error_throw(e, "Undefined symbol '%s' (default namespace: '%s')"
 	"(can not use '%s' as an upvalue)", fullname.c_str(),
 	curns.c_str(), fullname.c_str());
     } else {
-      arena_error_throw(e, "undefined symbol '%s' (default namespace: '%s')",
+      arena_error_throw(e, "Undefined symbol '%s' (default namespace: '%s')",
 	fullname.c_str(), curns.c_str());
     }
   }
   if (v.has_attrib_private()) {
     const std::string nspart = get_namespace_part(fullname);
     if (!nspart.empty()) {
-      arena_error_throw(v.edef, "symbol '%s' is private", fullname.c_str());
+      arena_error_throw(v.edef, "Symbol '%s' is private", fullname.c_str());
     }
   }
   return v.edef;

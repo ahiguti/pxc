@@ -8,5 +8,5 @@ sub fib {
   return $x < 2 ? $x : fib($x - 1) + fib($x - 2);
 }
 
-print fib(30) . "\n";
+print fib(40) . "\n";
 

@@ -51,7 +51,8 @@ private threaded struct transport_file(file const& f0) <orb_transport> {
   errno_t en;
   function void send_receive(string mutable& rbuf, string mutable& wbuf) {
     if (ok && !wbuf.empty()) {
-      size_t const wsize = f.write_all(wbuf, en);
+      size_t wsize;
+      f.write_all(wbuf, wsize);
       if (wsize != wbuf.size()) {
 	ok = false;
       }
@@ -59,7 +60,8 @@ private threaded struct transport_file(file const& f0) <orb_transport> {
     wbuf.clear();
     rbuf.clear();
     while (ok) {
-      size_t const rsize = f.read(rbuf, 1024, en);
+      size_t rsize = 1024;
+      f.read(rbuf, rsize);
       if (rbuf.size() > 0 && rbuf[rbuf.size() - 1] == '\n') {
 	break;
       }
@@ -76,8 +78,7 @@ private threaded struct transport_file(file const& f0) <orb_transport> {
 
 private threaded function ptr{orb} create_orb_file(file const& f)
 {
-  ptr{orb_transport} tf = ptr(transport_file(f));
-  return ptr(orb(tf));
+  return box{orb}(box{transport_file}(f));
 }
 
 private threaded function {tinterf, tklass} void orb_server_loop(file const& f)
@@ -120,15 +121,11 @@ private multithreaded struct server_thread(io const& s, file const& f) {
 private function void main()
 {
   errno_t ern;
-  signal(io::system, SIGPIPE, SIG_IGN, ern);
-  vector{file} spv;
-  {
-    var sp = socketpair(io::system, AF_UNIX, SOCK_STREAM, PROTO_UNSPEC, ern);
-    spv.append(sp);
-  }
-  var sthr = create_thread(server_thread(io::system, spv[1]));
-  client_test_main(spv[0]);
-  spv.clear();
+  signal(io::system, SIGPIPE, SIG_IGN);
+  var sp = socketpair(io::system, AF_UNIX, SOCK_STREAM, PROTO_UNSPEC);
+  var sthr = create_thread(server_thread(io::system, sp.value.first));
+  client_test_main(sp.value.second);
+  sp.errno = errno_t(); /* closes fds */
 }
 
 main();

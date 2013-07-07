@@ -430,7 +430,7 @@ void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
       expr_ns *ns = ptr_down_cast<expr_ns>(stmt);
       if (!ns->import) {
 	if (!uniqns.empty()) {
-	  arena_error_push(ns, "duplicate namespace declaration");
+	  arena_error_push(ns, "Duplicate namespace declaration");
 	}
 	uniqns = ns->uniq_nsstr;
 	injectns = ns->inject_nsstr;
@@ -445,7 +445,7 @@ void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
     e = ptr_down_cast<expr_stmts>(e)->rest;
   }
   if (topval != 0 && uniqns.empty()) {
-    arena_error_push(topval, "no namespace declaration");
+    arena_error_push(topval, "No namespace declaration");
   }
   if (!uniqns.empty()) {
     if (injectns.empty()) {

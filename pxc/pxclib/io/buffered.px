@@ -3,14 +3,18 @@ public import numeric::integral -;
 public import container::string -;
 public import io::errno -;
 
-threaded function {t, func} void stream_foreach(t const& stream, uchar delim,
-  size_t read_size, errno_t mutable& ern)
+threaded function {t, func} errno_t stream_foreach(t const& stream,
+  uchar delim, size_t read_size)
 {
   string buffer;
   bool cont_flag = true;
   while (cont_flag) {
     size_t pos = buffer.size();
-    size_t const rlen = stream.read(buffer, read_size, ern);
+    size_t rlen = read_size;
+    const e = stream.read(buffer, rlen);
+    if (e != EOK) {
+      return e;
+    }
     if (rlen == 0) {
       break;
     }
@@ -25,5 +29,6 @@ threaded function {t, func} void stream_foreach(t const& stream, uchar delim,
     }
     buffer.erase(0, pos);
   }
+  return EOK;
 }
 

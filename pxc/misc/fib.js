@@ -1,4 +1,4 @@
-#!/usr/local/bin/node
+#!/usr/bin/env node
 
 function fib(x) {
   return x <= 1 ? x : fib(x - 2) + fib(x - 1);

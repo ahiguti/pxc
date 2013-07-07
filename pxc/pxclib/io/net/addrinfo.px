@@ -22,6 +22,7 @@ public extern "IPPROTO_UDP"	protocol_t IPPROTO_UDP;
 public extern "AI_PASSIVE"	ai_flags_t AI_PASSIVE;
 public extern "AI_NUMERICHOST"	ai_flags_t AI_NUMERICHOST;
 public extern "AI_NUMERICSERV"	ai_flags_t AI_NUMERICSERV;
+public extern "0"               gai_error_t EAI_OK;
 
 public tsvaluetype struct extern "int" "extenum" gai_error_t { }
 public threaded function extern "pxcio::gai_error_t_append_to_string"
@@ -30,11 +31,13 @@ public threaded function extern "pxcio::gai_error_t_append_to_string"
 public multithreaded struct extern "pxcio::addrinfo"
 addrinfo(io const& iop, cslice{uchar} const& node,
   cslice{uchar} const& service, family_t ai_family, socktype_t ai_socktype,
-  protocol_t ai_protocol, ai_flags_t ai_flags, gai_error_t mutable& gaie) {
+  protocol_t ai_protocol, ai_flags_t ai_flags)
+{
   public function extern "get_sockaddr" sockaddr_storage get_sockaddr() const;
   public function extern "get_canonname" string get_canonname() const;
   public function extern "empty" bool empty() const;
   public function extern "next" void next();
+  public function extern "get_error" gai_error_t get_error() const;
 }
 
 public tsvaluetype struct extern "pxcio::sockaddr_storage" sockaddr_storage {
@@ -49,7 +52,9 @@ extern "types" inline
 #include <netdb.h>
 #include <netinet/in.h>
 namespace pxcio {
+
 using namespace pxcrt;
+
 struct sockaddr_storage {
   sockaddr_storage() : sto() { }
   int get_family() const;
@@ -61,12 +66,14 @@ struct sockaddr_storage {
   socklen_t get_socklen() const { return sizeof(sto); }
   ::sockaddr_storage sto;
 };
+
 struct addrinfo {
   addrinfo(::pxcio::io const& iop, cstrref const& node, cstrref const& service,
-    int ai_family, int ai_socktype, int ai_protocol, int ai_flags, int& gaie);
+    int ai_family, int ai_socktype, int ai_protocol, int ai_flags);
   ~addrinfo();
   bt_bool empty() const;
   void next();
+  int get_error() const;
   sockaddr_storage get_sockaddr() const;
   bt_string get_canonname() const;
   const ::addrinfo *get_cur() const { return cur; }
@@ -75,23 +82,26 @@ private:
   addrinfo& operator =(const addrinfo&);
   ::addrinfo *ai;
   ::addrinfo *cur;
+  int error;
 };
+
 }; //namespace pxcio
 ;
 
 extern "implementation" inline
 namespace pxcio {
 using namespace pxcrt;
-inline void gaie_set(int& gaie, int err) { if (gaie == 0) { gaie = err; } }
+
 void gai_error_t_append_to_string(int err, bt_string& s)
 {
   const char *p = gai_strerror(err);
   s.append(reinterpret_cast<const bt_uchar *>(p), strlen(p));
 }
+
 addrinfo::addrinfo(::pxcio::io const& iop, cstrref const& node,
   cstrref const& service, int ai_family, int ai_socktype, int ai_protocol,
-  int ai_flags, int& gaie)
-  : ai(0), cur(0)
+  int ai_flags)
+  : ai(0), cur(0), error(0)
 {
   ::addrinfo hints = { };
   hints.ai_family = ai_family;
@@ -112,20 +122,23 @@ addrinfo::addrinfo(::pxcio::io const& iop, cstrref const& node,
       ::freeaddrinfo(ai);
       ai = 0;
     }
-    gaie_set(gaie, err);
   }
   cur = ai;
+  error = err;
 }
+
 addrinfo::~addrinfo()
 {
   if (ai != 0) {
     ::freeaddrinfo(ai);
   }
 }
+
 bt_bool addrinfo::empty() const
 {
   return cur == 0;
 }
+
 void addrinfo::next()
 {
   if (cur == 0) {
@@ -133,6 +146,12 @@ void addrinfo::next()
   }
   cur = cur->ai_next;
 }
+
+int addrinfo::get_error() const
+{
+  return error;
+}
+
 sockaddr_storage addrinfo::get_sockaddr() const
 {
   sockaddr_storage r = sockaddr_storage();
@@ -141,6 +160,7 @@ sockaddr_storage addrinfo::get_sockaddr() const
   }
   return r;
 }
+
 bt_string addrinfo::get_canonname() const
 {
   const char *s = cur != 0 ? cur->ai_canonname : 0;
@@ -150,10 +170,12 @@ bt_string addrinfo::get_canonname() const
   bt_string r(reinterpret_cast<const bt_uchar *>(s), strlen(s));
   return r;
 }
+
 int sockaddr_storage::get_family() const
 {
   return sto.ss_family;
 }
+
 bt_uint sockaddr_storage::get_in_addr() const
 {
   if (sto.ss_family != AF_INET) {
@@ -162,6 +184,7 @@ bt_uint sockaddr_storage::get_in_addr() const
   const sockaddr_in *p = reinterpret_cast<const sockaddr_in *>(&sto);
   return ntohl(p->sin_addr.s_addr);
 }
+
 bt_ushort sockaddr_storage::get_in_port() const
 {
   if (sto.ss_family != AF_INET) {
@@ -170,6 +193,7 @@ bt_ushort sockaddr_storage::get_in_port() const
   const sockaddr_in *p = reinterpret_cast<const sockaddr_in *>(&sto);
   return ntohs(p->sin_port);
 }
+
 }; // namespace pxcio
 ;
 

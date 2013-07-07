@@ -1,17 +1,18 @@
-import common -;
 namespace filetest2;
+import common -;
+import io -;
+import io::errno -;
 
 function void ft1(string const& fn)
 {
   println("ft1");
-  io::errno::errno_t e;
   io::file::statbuf stbuf;
-  io::file::io_stat(io::system, fn, stbuf, e);
-  if (e != io::errno::EOK) {
+  io::file::io_stat(io::system, fn, stbuf);
+  if (system.get_errno() != EOK) {
     print("failed to stat: ");
     println(fn);
     print("error = ");
-    println(e);
+    println(system.get_errno());
   } else {
     println(stbuf.st_size);
   }
@@ -20,9 +21,8 @@ function void ft1(string const& fn)
 function void ft2(string const& fn)
 {
   println("ft2");
-  io::errno::errno_t e;
   string s;
-  io::file::io_read_file(io::system, fn, s, e);
+  io::file::io_read_file(io::system, fn, s);
   print(s);
 }
 

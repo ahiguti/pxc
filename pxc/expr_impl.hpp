@@ -386,6 +386,7 @@ public:
   const char *nsalias;
   expr_i *inject_nssym;
   const std::string inject_nsstr;
+  std::string src_uniq_nsstr; /* src_uniq_nsstr 'imports' uniq_nsstr */
 };
 
 struct expr_int_literal : public expr_i {
@@ -539,6 +540,7 @@ public:
   // passby_e passby; // FIXME: remove
   attribute_e attr;
   // expr_i *rhs_ref; // FIXME: remove
+  bool used_as_upvalue : 1;
 };
 
 struct expr_enumval : public expr_i {
@@ -690,6 +692,7 @@ public:
   expr_te *type_uneval;
   passby_e passby;
   expr_i *rest;
+  bool used_as_upvalue : 1;
 };
 
 struct expr_block : public expr_i {
@@ -781,6 +784,11 @@ public:
   expr_i *func;
   expr_i *arg;
   funccall_e funccall_sort;
+  #if 0
+  term auto_replace_term;
+    /* if nonnull, this term is emitted instead of the original one for some
+     * reason */
+  #endif
 };
 
 struct expr_special : public expr_i {
