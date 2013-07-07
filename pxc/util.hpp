@@ -86,6 +86,7 @@ int popen_cmd(const std::string& cmd, std::string& out_r);
 void unlink_recursive(const std::string& fn);
 void unlink_if(const std::string& fn);
 void rmdir_if(const std::string& fn);
+void copy_file(const std::string& ffrom, const std::string& fto);
 
 std::string get_home_directory();
 std::string escape_hex_controls(const std::string& str);

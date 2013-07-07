@@ -1,8 +1,10 @@
 namespace io::time;
+public import numeric::integral -;
 public import numeric::fp -;
 public import numeric::cast -;
-public import io::file -;
+public import io -;
 
+public tsvaluetype struct extern "::time_t" "extint" time_t { }      //SLONG
 public tsvaluetype struct extern "::suseconds_t" "extint" suseconds_t { }
 
 public tsvaluetype struct extern "::timeval" timeval {
@@ -21,6 +23,8 @@ public threaded function double gettimeofday_double(io::io const& iop)
   return rv;
 }
 
+private function extern "pxcio::time_init" void time_init();
+
 extern "implementation" inline
 #include <sys/time.h>
 namespace pxcio {
@@ -30,6 +34,11 @@ namespace pxcio {
   ::timeval tv = { };
   ::gettimeofday(&tv, 0); /* no need to check error */
   return tv;
+}
+
+void time_init()
+{
+  tzset();
 }
 
 }; // namespace pxcio

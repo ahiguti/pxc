@@ -202,7 +202,7 @@ const expr_i *expr_te::get_symdef() const
   return sdef.get_symdef();
   #if 0
   if (sdef.symbol_def == 0) {
-    arena_error_throw(this, "internal error: expr_te::get_symdef");
+    arena_error_throw(this, "Internal error: expr_te::get_symdef");
   }
   return sdef.symbol_def;
   #endif
@@ -219,26 +219,26 @@ static void symdef_check_threading_attr_type_or_func(expr_i *e,
   const attribute_e tattr = get_term_threading_attribute(t);
   if ((tattr & attribute_threaded) == 0 && (cattr & attribute_threaded) != 0) {
     arena_error_push(e,
-      "type or function '%s' for symbol '%s' is not threaded",
+      "Type or function '%s' for symbol '%s' is not threaded",
       term_tostr_human(t).c_str(), sc->fullsym.c_str());
   }
   if (is_type_esort(e->get_esort())) {
     if ((tattr & attribute_multithr) == 0 &&
       (cattr & attribute_multithr) != 0) {
       arena_error_push(e,
-	"type '%s' for symbol '%s' is not multithreaded",
+	"Type '%s' for symbol '%s' is not multithreaded",
 	term_tostr_human(t).c_str(), sc->fullsym.c_str());
     }
     if ((tattr & attribute_valuetype) == 0 &&
       (cattr & attribute_valuetype) != 0) {
       arena_error_push(e,
-	"type '%s' for symbol '%s' is not valuetype",
+	"Type '%s' for symbol '%s' is not valuetype",
 	term_tostr_human(t).c_str(), sc->fullsym.c_str());
     }
     if ((tattr & attribute_tsvaluetype) == 0 &&
       (cattr & attribute_tsvaluetype) != 0) {
       arena_error_push(e,
-	"type '%s' for symbol '%s' is not tsvaluetype",
+	"Type '%s' for symbol '%s' is not tsvaluetype",
 	term_tostr_human(t).c_str(), sc->fullsym.c_str());
     }
   }
@@ -251,13 +251,13 @@ fprintf(stderr, "%s c=%x t=%x\n", term_tostr_human(t).c_str(), (int)cattr, (int)
   }
   if (!term_is_threaded(t)) {
     arena_error_push(e,
-      "type or function '%s' for symbol '%s' is not threaded",
+      "Type or function '%s' for symbol '%s' is not threaded",
       term_tostr_human(t).c_str(), sc->fullsym.c_str());
   }
   // FIXME: term_is_valuetype
   if (is_multithr_context(cur) && !term_is_multithr(t)) {
     arena_error_push(e,
-      "type or function '%s' for symbol '%s' is not multithreaded",
+      "Type or function '%s' for symbol '%s' is not multithreaded",
       term_tostr_human(t).c_str(), sc->fullsym.c_str());
   }
   #endif
@@ -274,7 +274,7 @@ static void symdef_check_threading_attr_var(expr_i *e, symbol_common *sc,
   if (is_global_var(def_expr)) {
     const expr_var *const ev = ptr_down_cast<const expr_var>(def_expr);
     arena_error_push(e,
-      "global variable '%s' can't be used from a threaded context",
+      "Global variable '%s' can't be used from a threaded context",
       ev->sym);
   }
 }
@@ -317,7 +317,7 @@ static term& resolve_texpr_symbol_common(expr_i *e)
       term_tostr_human(evaluated).c_str(), e));
     // FIXME: metalist ???
     #if 0
-    arena_error_throw(e, "invalid metaexpression '%s'",
+    arena_error_throw(e, "Invalid metaexpression '%s'",
       term_tostr_human(evaluated).c_str());
     #endif
   } else if (is_function(evaluated)) {
@@ -438,7 +438,7 @@ expr_inline_c::expr_inline_c(const char *fn, int line, const char *label,
     posstr != "disable_guard"
     ) {
     arena_error_push(this,
-      "invalid label '%s'", posstr.c_str());
+      "Invalid label '%s'", posstr.c_str());
   }
 }
 
@@ -468,6 +468,7 @@ void expr_ns::set_unique_namespace_one(const std::string& u,
     nsalias_entries& e = nsaliases[std::make_pair(u, astr)];
     e.push_back(uniq_nsstr);
   }
+  src_uniq_nsstr = u;
 }
 
 std::string expr_ns::dump(int indent) const
@@ -767,7 +768,7 @@ expr_var::expr_var(const char *fn, int line, const char *sym,
   expr_i *type_uneval, passby_e passby, attribute_e attr, expr_i *rhs_ref)
   : expr_i(fn, line), sym(sym),
     type_uneval(ptr_down_cast<expr_te>(type_uneval)),
-    attr(attr)
+    attr(attr), used_as_upvalue(false)
 {
   varinfo.passby = passby;
   varinfo.scope_block = true;
@@ -788,6 +789,7 @@ expr_var::resolve_texpr()
     if (type_uneval != 0) {
       type_of_this_expr = eval_expr(type_uneval);
     } else {
+      /* type inference */
       if (parent_expr->get_esort() == expr_e_op) {
 	expr_op *eo = ptr_down_cast<expr_op>(parent_expr);
 	if (eo->op == '=' && eo->arg0 == this && eo->arg1 != 0) {
@@ -796,7 +798,7 @@ expr_var::resolve_texpr()
       }
     }
     if (type_of_this_expr.is_null()) {
-      arena_error_throw(this, "type inference failed for variable '%s'", sym);
+      arena_error_throw(this, "Type inference failed for variable '%s'", sym);
     }
   }
   return type_of_this_expr;
@@ -916,7 +918,7 @@ static void calc_inherit_transitive_rec(expr_i *pos,
     term t = i->head->get_sdef()->resolve_evaluated();
     expr_i *const einst = term_get_instance(t);
     if (p.find(einst) != p.end()) {
-      arena_error_throw(pos, "%s: inheritance loop detected",
+      arena_error_throw(pos, "%s: Inheritance loop detected",
         term_tostr_human(t).c_str());
     } else if (s.find(einst) != s.end()) {
       /* skip */
@@ -1234,7 +1236,7 @@ expr_argdecls::expr_argdecls(const char *fn, int line, const char *sym,
   expr_i *type_uneval, passby_e passby, expr_i *rest)
   : expr_i(fn, line), sym(sym),
     type_uneval(ptr_down_cast<expr_te>(type_uneval)), passby(passby),
-    rest(rest)
+    rest(rest), used_as_upvalue(false)
 {
   type_of_this_expr.clear();
 }
@@ -1255,8 +1257,43 @@ term&
 expr_argdecls::resolve_texpr()
 {
   if (type_of_this_expr.is_null()) {
-    const bool need_partial_eval = cur_frame_uninstantiated(symtbl_lexical);
-    type_of_this_expr = eval_expr(type_uneval, need_partial_eval);
+    if (type_uneval != 0) {
+      const bool need_partial_eval = cur_frame_uninstantiated(symtbl_lexical);
+      type_of_this_expr = eval_expr(type_uneval, need_partial_eval);
+    } else {
+      /* type inference */
+      expr_i *bl = parent_expr;
+      while (bl->get_esort() != expr_e_block) {
+	bl = bl->parent_expr;
+      }
+      expr_i *const ep = bl->parent_expr;
+      if (ep->get_esort() == expr_e_feach) {
+	expr_feach *const efe = ptr_down_cast<expr_feach>(ep);
+	const bool is_key = parent_expr->get_esort() != expr_e_argdecls;
+	if (is_key) {
+	  type_of_this_expr = get_array_index_texpr(0,
+	    efe->ce->resolve_texpr());
+	} else {
+	  type_of_this_expr = get_array_elem_texpr(0,
+	    efe->ce->resolve_texpr());
+	}
+      } else if (ep->get_esort() == expr_e_forrange) {
+	expr_forrange *const efr = ptr_down_cast<expr_forrange>(ep);
+	term& t0 = efr->r0->resolve_texpr();
+	term& t1 = efr->r1->resolve_texpr();
+	if (convert_type(efr->r1, t0)) {
+	  type_of_this_expr = t0;
+	} else if (convert_type(efr->r0, t1)) {
+	  type_of_this_expr = t1;
+	}
+      } else if (ep->get_esort() == expr_e_if) {
+	expr_if *const ei = ptr_down_cast<expr_if>(ep);
+	type_of_this_expr = ei->cond->resolve_texpr();
+      }
+    }
+    if (type_of_this_expr.is_null()) {
+      arena_error_throw(this, "Type inference failed for variable '%s'", sym);
+    }
     DBG_TE(fprintf(stderr,
       "argdecls %p %s %s:%d resolve_texpr uneval=%p type_of_this_expr=%p\n",
       this, sym, fname, line, type_uneval, type_of_this_expr.expr.expr));
@@ -1466,7 +1503,7 @@ void expr_struct::get_fields(std::list<expr_var *>& flds_r) const
   flds_r.clear();
   if (!block->compiled_flag) {
     arena_error_throw(this,
-      "failed to enumerate fields of struct '%s' which is not compiled yet",
+      "Failed to enumerate fields of struct '%s' which is not compiled yet",
       this->sym);
   }
   symbol_table& symtbl = block->symtbl;
@@ -1529,7 +1566,7 @@ void expr_dunion::get_fields(std::list<expr_var *>& flds_r) const
   flds_r.clear();
   if (!block->compiled_flag) {
     arena_error_throw(this,
-      "failed to enumerate fields of union '%s' which is not compiled yet",
+      "Failed to enumerate fields of union '%s' which is not compiled yet",
       this->sym);
   }
   symbol_table& symtbl = block->symtbl;

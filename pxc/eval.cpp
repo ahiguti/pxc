@@ -539,7 +539,7 @@ static term metafdef_to_term(expr_metafdef *mf, eval_context& ectx,
 struct eval_depth_inc {
   eval_depth_inc(eval_context& ec) : ec(ec) {
     if (++ec.depth > 3000) {
-      arena_error_throw(0, "recursion depth limit is exceeded");
+      arena_error_throw(0, "Recursion depth limit is exceeded");
     };
   }
   ~eval_depth_inc() { --ec.depth; }
@@ -658,7 +658,7 @@ term eval_apply(const term& tm, const term_list_range& args,
       term_tostr_human(r).c_str()));
     return r;
   }
-  arena_error_throw(pos, "can not apply: %s . %s",
+  arena_error_throw(pos, "Can not apply: %s . %s",
     term_tostr_human(tm).c_str(), term_tostr_list_human(args).c_str());
   return term();
 }
@@ -681,7 +681,7 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
   case expr_e_te:
     {
       if (targs.size() > 0) {
-	arena_error_throw(pos, "too many template arguments: '%s'",
+	arena_error_throw(pos, "Too many template arguments: '%s'",
 	  term_tostr_human(rebuild_term(tptr, texpr, targs)).c_str());
       }
       expr_te *const te = ptr_down_cast<expr_te>(texpr);
@@ -691,7 +691,7 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
   case expr_e_symbol:
     {
       if (targs.size() > 0) {
-	arena_error_throw(pos, "too many template arguments: '%s'",
+	arena_error_throw(pos, "Too many template arguments: '%s'",
 	  term_tostr_human(rebuild_term(tptr, texpr, targs)).c_str());
       }
       expr_symbol *const esym = ptr_down_cast<expr_symbol>(texpr);
@@ -739,7 +739,7 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
     break;
   case expr_e_typedef:
     if (!targs.empty()) {
-      arena_error_throw(pos, "too many template arguments");
+      arena_error_throw(pos, "Too many template arguments");
     }
     DBG_EVAL(fprintf(stderr, "EVALI2 sort typedef\n"));
     return rebuild_term(tptr, texpr, targs);
@@ -748,7 +748,7 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
   case expr_e_int_literal:
     abort();
     if (!targs.empty()) {
-      arena_error_throw(pos, "too many template arguments");
+      arena_error_throw(pos, "Too many template arguments");
     }
     DBG_EVAL(fprintf(stderr, "EVALI2 int literal\n"));
     // FIXME: unsigned?
@@ -757,7 +757,7 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
   case expr_e_str_literal:
     abort();
     if (!targs.empty()) {
-      arena_error_throw(pos, "too many template arguments");
+      arena_error_throw(pos, "Too many template arguments");
     }
     DBG_EVAL(fprintf(stderr, "EVALI2 str literal\n"));
     {
@@ -802,7 +802,7 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
 	throw std::runtime_error(s);
       }
       if (r.is_null()) {
-	arena_error_throw(pos, "invalid template expression: %s",
+	arena_error_throw(pos, "Invalid template expression: %s",
 	  term_tostr_human(term(texpr, tlev_range)).c_str());
       }
     } else {
@@ -821,7 +821,7 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
 	throw std::runtime_error(s);
       }
       if (r.is_null()) {
-	arena_error_throw(pos, "invalid template expression: %s",
+	arena_error_throw(pos, "Invalid template expression: %s",
 	  term_tostr_human(term(texpr, targs)).c_str());
       }
     }
@@ -840,12 +840,12 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
       return rebuild_term(tptr, texpr, targs); /* no argument is supplied yet */
     }
     if (targs.size() > tparams_len) {
-      arena_error_throw(pos, "too many template arguments: '%s'",
+      arena_error_throw(pos, "Too many template arguments: '%s'",
 	term_tostr_human(rebuild_term(tptr, texpr, targs)).c_str());
     } else if (targs.size() < tparams_len) {
       return rebuild_term(tptr, texpr, targs); /* not filled yet */ 
       #if 0
-      arena_error_throw(pos, "too few template arguments: '%s'",
+      arena_error_throw(pos, "Too few template arguments: '%s'",
 	term_tostr(tm, term_tostr_sort_humanreadable).c_str());
       #endif
     }
@@ -979,7 +979,7 @@ static expr_i *term_get_instance_internal(const term& t, bool throw_if_noinst)
     bl->tinfo.instances.find(k);
   if (i == bl->tinfo.instances.end()) {
     if (throw_if_noinst) {
-      arena_error_throw(0, "internal error: instance '%s' not found",
+      arena_error_throw(0, "Internal error: instance '%s' not found",
 	term_tostr_human(t).c_str());
     } else {
       return texpr;

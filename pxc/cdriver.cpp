@@ -69,11 +69,12 @@ struct parser_options {
   bool no_execute;
   bool no_realpath;
   bool show_out;
+  bool gen_out;
   std::string argv0;
   time_t argv0_ctime;
   parser_options() : verbose(0), clean_flag(false), no_build(false),
     no_update(false), no_execute(false), no_realpath(false),
-    show_out(false),
+    show_out(false), gen_out(false),
     argv0_ctime(0) { }
 };
 
@@ -178,7 +179,7 @@ static bool check_source_timestamp(const parser_options& po, module_info& mi,
 	if (errno == ENOENT) {
 	  break;
 	}
-	arena_error_throw(0, "%s:0: failed to stat: errno=%d\n",
+	arena_error_throw(0, "%s:0: Failed to stat: errno=%d\n",
 	  fn.c_str(), errno);
       }
       if (sbuf.st_ctime > mi.source_checksum.timestamp) {
@@ -230,7 +231,7 @@ static bool load_infofile(const parser_options& po, module_info& mi)
   struct stat sbuf;
   if (stat(cc_filename.c_str(), &sbuf) != 0) {
     if (errno != ENOENT) {
-      arena_error_throw(0, "%s:0: failed to stat: errno=%d\n",
+      arena_error_throw(0, "%s:0: Failed to stat: errno=%d\n",
 	cc_filename.c_str(), errno);
     }
     return false;
@@ -402,7 +403,7 @@ static void load_source_and_calc_checksum(const parser_options& po,
 	  notfound_fnlist += fn;
 	  break;
 	}
-	arena_error_throw(0, "-:-: failed to stat '%s': errno=%d\n",
+	arena_error_throw(0, "-:-: Failed to stat '%s': errno=%d\n",
 	  fn.c_str(), errno);
       }
       const std::string content = read_file_content(fn, true);
@@ -410,7 +411,7 @@ static void load_source_and_calc_checksum(const parser_options& po,
 	fprintf(stderr, "loading source %s: found\n", fn.c_str());
       }
       if (stat(fn.c_str(), &sbuf2) != 0) {
-	arena_error_throw(0, "-:-: failed to stat '%s': errno=%d\n",
+	arena_error_throw(0, "-:-: Failed to stat '%s': errno=%d\n",
 	  fn.c_str(), errno);
       }
       if (sbuf1.st_mtime == sbuf2.st_mtime &&
@@ -436,7 +437,7 @@ static void load_source_and_calc_checksum(const parser_options& po,
   }
   if (src_mask == 0) {
     arena_error_throw(0,
-      "-:-: failed to load namespace '%s'\n"
+      "-:-: Failed to load namespace '%s'\n"
       "-:-: (tried files: %s)\n",
       mi.unique_namespace.c_str(), notfound_fnlist.c_str());
   }
@@ -518,7 +519,7 @@ static void get_module_info_rec(const parser_options& po,
 {
   const std::string modname = aux_fn.empty() ? ns : aux_fn;
   if (ancestors.find(modname) != ancestors.end()) {
-    arena_error_throw(0, "-:0: a module dependency cycle is found: '%s'",
+    arena_error_throw(0, "-:-: A module dependency cycle is found: '%s'",
       modname.c_str()); /* TODO: message */
   }
   if (checked.find(modname) != checked.end()) {
@@ -558,7 +559,13 @@ static void get_module_info_rec(const parser_options& po,
   checked.insert(modname);
   for (imports_type::deps_type::const_iterator i = mi.imports.deps.begin();
     i != mi.imports.deps.end(); ++i) {
-    get_module_info_rec(po, i->ns, "", ami, ancestors, checked);
+    try {
+      get_module_info_rec(po, i->ns, "", ami, ancestors, checked);
+    } catch (const std::exception& e) {
+      std::string s = e.what();
+      s = "-:-: (imported from '" + modname + "')\n" + s;
+      throw std::runtime_error(s);
+    }
   }
   ancestors.erase(modname);
 }
@@ -705,6 +712,36 @@ static void get_coptions(const parser_options& po, all_modules_info& ami,
   }
 }
 
+static bool need_to_relink(const parser_options& po,
+  all_modules_info& ami, module_info& mi_main)
+{
+  const std::string ofn = po.profile.generate_dynamic ?
+    get_so_filename(po, mi_main) : get_exe_filename(po, mi_main);
+  struct stat osbuf;
+  if (stat(ofn.c_str(), &osbuf) != 0) {
+    if (errno == ENOENT) {
+      return true;
+    }
+    arena_error_throw(0, "%s:0: Failed to stat: errno=%d\n",
+      ofn.c_str(), errno);
+  }
+  const time_t ofn_time = std::min(osbuf.st_mtime, osbuf.st_ctime);
+  for (all_modules_info::modules_type::const_iterator i = ami.modules.begin();
+    i != ami.modules.end(); ++i) {
+    const std::string fn = get_o_filename(po, i->second);
+    struct stat sbuf;
+    if (stat(fn.c_str(), &sbuf) != 0) {
+      arena_error_throw(0, "%s:0: Failed to stat: errno=%d\n",
+	fn.c_str(), errno);
+    }
+    const time_t fn_time = std::max(sbuf.st_mtime, sbuf.st_ctime);
+    if (fn_time + PXC_TIMESTAMP_MARGIN >= ofn_time) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /* compiles cc files and generate a so file */
 static void compile_cxx_all(const parser_options& po,
   all_modules_info& ami, module_info& mi_main)
@@ -738,8 +775,9 @@ static void compile_cxx_all(const parser_options& po,
     + " -g -fPIC -shared -o '" + ofn + "' -lpthread";
   #endif
   */
+  const std::string ofn_tmp = ofn + ".tmp";
   std::string cmd = po.profile.cxx + " " + po.profile.cflags + " " + genopt
-    + " -o '" + ofn + "'";
+    + " -o '" + ofn_tmp + "'";
   for (all_modules_info::modules_type::const_iterator i = ami.modules.begin();
     i != ami.modules.end(); ++i) {
     const std::string fn = get_o_filename(po, i->second);
@@ -748,12 +786,17 @@ static void compile_cxx_all(const parser_options& po,
   cmd += ldflags_str + libdir_str + link_str + " " + po.profile.ldflags;
   int r = 0;
   std::string obuf;
+  tmpfile_guard g(ofn_tmp);
   r = popen_cmd(cmd + " 2>&1", obuf);
   if (r != 0) {
     arena_error_throw(0, "%s\n%s", cmd.c_str(), obuf.c_str());
   }
   if (po.verbose > 0 || (po.profile.show_warnings && !obuf.empty())) {
     fprintf(stderr, "%s\n%s", cmd.c_str(), obuf.c_str());
+  }
+  if (rename(ofn_tmp.c_str(), ofn.c_str()) != 0) {
+    arena_error_throw(0, "-:-: rename('%s', '%s') failed: errno=%d",
+      ofn_tmp.c_str(), ofn.c_str(), errno);
   }
 }
 
@@ -785,7 +828,7 @@ static void compile_module_to_cc_srcs(const parser_options& po,
     pxc_parse_file(si, cursrc_imports);
     if (mi.unique_namespace != cursrc_imports.main_unique_namespace) {
       arena_error_throw(0,
-	"-:0: invalid namespace declaration '%s' for expected namespace '%s'",
+	"-:-: Invalid namespace declaration '%s' for expected namespace '%s'",
 	cursrc_imports.main_unique_namespace.c_str(),
 	mi.unique_namespace.c_str());
     }
@@ -794,7 +837,7 @@ static void compile_module_to_cc_srcs(const parser_options& po,
 	mi.aux_filename);
       if (cursrc_imports.main_unique_namespace != exns) {
 	arena_error_throw(0,
-	  "-:0: invalid namespace declaration '%s' for '%s'",
+	  "-:-: Invalid namespace declaration '%s' for '%s'",
 	  cursrc_imports.main_unique_namespace.c_str(),
 	  mi.aux_filename.c_str());
       }
@@ -822,7 +865,7 @@ static void compile_module_to_cc_srcs(const parser_options& po,
     mi_main.self_copts = coptions();
     arena_compile(tmp_fn, mi_main.self_copts, gmain);
     if (rename(tmp_fn.c_str(), cc_filename.c_str()) != 0) {
-      arena_error_throw(0, "-:0: rename('%s', '%s') failed: errno=%d",
+      arena_error_throw(0, "-:-: rename('%s', '%s') failed: errno=%d",
 	tmp_fn.c_str(), cc_filename.c_str(), errno);
     }
   }
@@ -846,10 +889,6 @@ static void compile_module_to_cc_srcs(const parser_options& po,
       fprintf(stderr, "%s\n%s", cmd.c_str(), obuf.c_str());
     }
   }
-  /* compile to so or exe */
-  if (!mi_main.aux_filename.empty()) {
-    compile_cxx_all(po, ami, mi_main);
-  }
   /* generate info */
   {
     const std::string info_filename = get_info_filename(po, mi_main);
@@ -857,7 +896,7 @@ static void compile_module_to_cc_srcs(const parser_options& po,
     tmpfile_guard g(tmp_fn);
     generate_info_file(po, ami, mi_main, tmp_fn);
     if (rename(tmp_fn.c_str(), info_filename.c_str()) != 0) {
-      arena_error_throw(0, "-:0: rename('%s', '%s') failed: errno=%d",
+      arena_error_throw(0, "-:-: Failed to rename('%s', '%s'): errno=%d",
 	tmp_fn.c_str(), info_filename.c_str(), errno);
     }
   }
@@ -898,11 +937,6 @@ static bool compile_modules_rec(const parser_options& po,
       const import_info& ii = *i;
       modified |= compile_modules_rec(po, ami, ii.ns, generate_main_none);
     }
-    #if 0
-    if (md.need_rebuild || modified) {
-      /* TODO: don't rebuild cc if !md.need_rebuild */
-      compile_module_to_cc(po, ami, modname, gmain);
-    #endif
     if (md.need_rebuild) {
       compile_module_to_cc(po, ami, modname, gmain);
       modified = true;	    
@@ -910,7 +944,7 @@ static bool compile_modules_rec(const parser_options& po,
     }
   } catch (const std::exception& e) {
     std::string s = e.what();
-    s = "-:0: (while compiling '" + modname + "')\n" + s;
+    s = "-:-: (while compiling '" + modname + "')\n" + s;
     throw std::runtime_error(s);
   }
   return modified;
@@ -1007,11 +1041,11 @@ struct filelock_lockobj {
     if (afp.get() == 0) {
       auto_fp fp(fopen(fn.c_str(), "a"));
       if (fp.get() == 0) {
-	arena_error_throw(0, "-:0: failed to open '%s': errno=%d\n",
+	arena_error_throw(0, "-:-: Failed to open '%s': errno=%d\n",
 	  fn.c_str(), errno);
       }
       if (flock(fileno(fp.get()), LOCK_EX) != 0) {
-	arena_error_throw(0, "-:0: failed to lock '%s': errno=%d\n",
+	arena_error_throw(0, "-:-: Failed to lock '%s': errno=%d\n",
 	  fn.c_str(), errno);
       }
       afp = fp;
@@ -1130,9 +1164,31 @@ static int compile_and_execute(parser_options& po,
   if (exe_fn.size() > 0 && exe_fn[0] != '/') {
     exe_fn = "./" + exe_fn;
   }
+  /* compile to .o */
   if (!po.no_build && (!po.no_update || !file_exist(exe_fn))) {
     compile_modules_rec(po, ami, fn,
       po.profile.generate_dynamic ? generate_main_dl : generate_main_exe);
+  }
+  /* compile to exe or so */
+  if (need_to_relink(po, ami, mi_main)) {
+    compile_cxx_all(po, ami, mi_main);
+  }
+  if (po.gen_out) {
+    const std::string gen_out = po.src_filename +
+      (po.profile.generate_dynamic ? ".so" : ".exe");
+    const std::string ofn = po.profile.generate_dynamic ?
+      get_so_filename(po, mi_main) : get_exe_filename(po, mi_main);
+    const std::string ofn_tmp = gen_out + ".tmp";
+    tmpfile_guard g(ofn_tmp);
+    copy_file(ofn, ofn_tmp); /* throws */
+    if (chmod(ofn_tmp.c_str(), 0755) != 0) {
+      arena_error_throw(0, "-:-: chmod('%s') failed: errno=%d",
+	ofn_tmp.c_str(), errno);
+    }
+    if (rename(ofn_tmp.c_str(), gen_out.c_str()) != 0) {
+      arena_error_throw(0, "-:-: rename('%s', '%s') failed: errno=%d",
+	ofn_tmp.c_str(), gen_out.c_str(), errno);
+    }
   }
   if (po.no_execute) {
     return 0;
@@ -1152,7 +1208,10 @@ static int compile_and_execute(parser_options& po,
     char *e_argv[2];
     e_argv[0] = strdup(exe_fn.c_str());
     e_argv[1] = 0;
-    return execv(e_argv[0], e_argv);
+    execv(e_argv[0], e_argv);
+    fprintf(stderr, "Failed to execute '%s': errno=%d\n", exe_fn.c_str(),
+      errno);
+    return 2;
   } else {
     auto_dl dl(dlopen(exe_fn.c_str(), RTLD_NOW | RTLD_GLOBAL));
     lock.unlock();
@@ -1222,6 +1281,8 @@ static int prepare_options(parser_options& po, int argc, char **argv)
       } else if ((s == "--work-dir" || s == "-w") && i + 1 < argc) {
 	++i;
 	po.work_dir = argv[i];
+      } else if (s == "--generate" || s == "-g") {
+	po.gen_out = true;
       } else if (s == "--no-build") {
 	po.no_build = true;
       } else if (s == "--no-update") {
@@ -1253,8 +1314,14 @@ static int prepare_options(parser_options& po, int argc, char **argv)
       const std::string s = argv[i];
       setenv(buf, s.c_str(), 1);
     }
-    snprintf(buf, sizeof(buf), "PXC_ARG%d", c++);
-    unsetenv(buf);
+    while (true) {
+      snprintf(buf, sizeof(buf), "PXC_ARG%d", c++);
+      const char *p = getenv(buf);
+      if (p == 0) {
+	break;
+      }
+      unsetenv(buf);
+    }
   }
   if (po.work_dir.empty()) {
     po.work_dir = get_home_directory() + "/.pxc";

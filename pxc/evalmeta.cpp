@@ -69,11 +69,11 @@ static term eval_meta_local(const term_list_range& tlev, eval_context& ectx,
   expr_i *const einst = term_get_instance(typ);
   expr_block *const bl = einst->get_template_block();
   if (einst == 0 || bl == 0) {
-    arena_error_throw(pos, "meta_local: invalid type '%s'",
+    arena_error_throw(pos, "meta_local: Invalid type '%s'",
       term_tostr_human(typ).c_str());
   }
   if (name.find(':') != name.npos) {
-    arena_error_throw(pos, "meta_local: invalid name '%s'", name.c_str());
+    arena_error_throw(pos, "meta_local: Invalid name '%s'", name.c_str());
   }
   symbol_table *const symtbl = &bl->symtbl;
   assert(symtbl);
@@ -101,7 +101,7 @@ static term eval_meta_symbol(const term_list_range& tlev, eval_context& ectx,
   }
   const std::string name = meta_term_to_string(tlev[0], false);
   if (name.find(':') != name.npos) {
-    arena_error_throw(pos, "meta_symbol: invalid name '%s'", name.c_str());
+    arena_error_throw(pos, "meta_symbol: Invalid name '%s'", name.c_str());
   }
   std::string sym_ns;
   bool no_private = true;
@@ -113,7 +113,7 @@ static term eval_meta_symbol(const term_list_range& tlev, eval_context& ectx,
     } else {
       expr_i *const typexpr = typ.get_expr();
       if (typexpr == 0 || !is_type_or_func_esort(typexpr->get_esort())) {
-	arena_error_throw(pos, "meta_symbol: invalid type '%s'",
+	arena_error_throw(pos, "meta_symbol: Invalid type '%s'",
 	  term_tostr_human(typ).c_str());
       }
       sym_ns = typexpr->get_unique_namespace();
@@ -132,7 +132,7 @@ static term eval_meta_symbol(const term_list_range& tlev, eval_context& ectx,
        to avoid such inconsistency. */
     DBG(fprintf(stderr, "not loaded: [%s] term=[%s]\n", sym_ns.c_str(),
       term_tostr_human(typ).c_str()));
-    arena_error_throw(pos, "meta_symbol: namespace '%s' not imported",
+    arena_error_throw(pos, "meta_symbol: Namespace '%s' not imported",
       sym_ns.c_str());
   }
   bool is_global = false, is_upvalue = false, is_memfld = false;
@@ -417,7 +417,7 @@ static term eval_meta_imports(const term_list_range& tlev, eval_context& ectx,
   const std::string name = meta_term_to_string(tlev[0], false);
   loaded_namespaces_type::const_iterator iter = loaded_namespaces.find(name);
   if (iter == loaded_namespaces.end()) {
-    arena_error_throw(0, "namespace '%s' not imported", name.c_str());
+    arena_error_throw(0, "Namespace '%s' not imported", name.c_str());
   }
   const imports_type::deps_type& deps = iter->second.deps;
   term_list tl;
@@ -440,7 +440,7 @@ static void get_imports_rec(std::deque<std::string>& lst, strset& se,
   se.insert(n);
   loaded_namespaces_type::const_iterator iter = loaded_namespaces.find(n);
   if (iter == loaded_namespaces.end()) {
-    arena_error_throw(0, "internal error: namespace not found: '%s'",
+    arena_error_throw(0, "Internal error: namespace not found: '%s'",
       n.c_str());
   }
   const imports_type::deps_type& deps = iter->second.deps;
@@ -462,7 +462,7 @@ static term eval_meta_functions(const term_list_range& tlev,
   }
   const std::string name = meta_term_to_string(tlev[0], false);
   if (loaded_namespaces.find(name) == loaded_namespaces.end()) {
-    arena_error_throw(0, "namespace '%s' not imported", name.c_str());
+    arena_error_throw(0, "Namespace '%s' not imported", name.c_str());
   }
   symbol_table *const symtbl = &global_block->symtbl;
   symbol_table::local_names_type::const_iterator i;
@@ -496,7 +496,7 @@ static term eval_meta_types(const term_list_range& tlev, eval_context& ectx,
   }
   const std::string name = meta_term_to_string(tlev[0], false);
   if (loaded_namespaces.find(name) == loaded_namespaces.end()) {
-    arena_error_throw(0, "namespace '%s' not imported", name.c_str());
+    arena_error_throw(0, "Namespace '%s' not imported", name.c_str());
   }
   symbol_table *const symtbl = &global_block->symtbl;
   symbol_table::local_names_type::const_iterator i;
@@ -550,7 +550,7 @@ static term eval_meta_global_variables(const term_list_range& tlev,
   }
   const std::string name = meta_term_to_string(tlev[0], false);
   if (loaded_namespaces.find(name) == loaded_namespaces.end()) {
-    arena_error_throw(0, "namespace '%s' not imported", name.c_str());
+    arena_error_throw(0, "Namespace '%s' not imported", name.c_str());
   }
   symbol_table *const symtbl = &global_block->symtbl;
   symbol_table::local_names_type::const_iterator i;
@@ -619,7 +619,7 @@ static term eval_meta_member_functions(const term_list_range& tlev,
     if (!blk->compiled_flag) {
       const char *sym = est != 0 ? est->sym : ei->sym;
       arena_error_throw(blk,
-	"failed to enumerate member functions of '%s' "
+	"Failed to enumerate member functions of '%s' "
 	"which is not compiled yet", sym);
     }
     symbol_table *symtbl = &blk->symtbl;
@@ -805,13 +805,13 @@ static term eval_meta_typeof(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
   if (tlev.size() != 1) {
-    arena_error_throw(pos, "typeof: invalid argument");
+    arena_error_throw(pos, "typeof: Invalid argument");
     return term();
   }
   term ttyp = tlev[0];
   expr_i *const e0 = term_get_instance(ttyp);
   if (e0 == 0) { /* TODO: integer etc */
-    arena_error_throw(pos, "typeof: invalid argument");
+    arena_error_throw(pos, "typeof: Invalid argument");
     return term();
   }
   term rt = e0->resolve_texpr();
@@ -916,12 +916,12 @@ static term eval_meta_join(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
   if (tlev.size() != 1) {
-    arena_error_throw(pos, "join: invalid number of arguments");
+    arena_error_throw(pos, "join: Invalid number of arguments");
     return term();
   }
   const term& t = tlev[0];
   if (!t.is_metalist()) {
-    arena_error_throw(pos, "join: invalid argument");
+    arena_error_throw(pos, "join: Invalid argument");
     return term();
   }
   const term_list& tl = *t.get_metalist();
@@ -929,7 +929,7 @@ static term eval_meta_join(const term_list_range& tlev, eval_context& ectx,
   for (term_list::const_iterator i = tl.begin(); i != tl.end(); ++i) {
     const term_list *const il = i->get_metalist();
     if (il == 0) {
-      arena_error_throw(pos, "join: invalid argument: %s",
+      arena_error_throw(pos, "join: Invalid argument: %s",
 	term_tostr_human(*i).c_str());
       return term();
     }
@@ -1424,14 +1424,14 @@ static term eval_meta_filter(const term_list_range& tlev, eval_context& ectx,
   const term& t0 = tlev[0]; /* list */
   const term& t1 = tlev[1]; /* function */
   if (!t0.is_metalist()) {
-    arena_error_throw(0, "not a list: '%s'", term_tostr_human(t0).c_str());
+    arena_error_throw(0, "Not a list: '%s'", term_tostr_human(t0).c_str());
   }
   #if 0
   if (!t1.is_expr()) {
-    arena_error_throw(0, "not a symbol: '%s'", term_tostr_human(t1).c_str());
+    arena_error_throw(0, "Not a symbol: '%s'", term_tostr_human(t1).c_str());
   }
   if (t1.get_args() != 0 && !t1.get_args()->empty()) {
-    arena_error_throw(0, "not a symbol: '%s'", term_tostr_human(t1).c_str());
+    arena_error_throw(0, "Not a symbol: '%s'", term_tostr_human(t1).c_str());
   }
   #endif
   const term_list& tl = *t0.get_metalist();
@@ -1457,7 +1457,7 @@ static term eval_meta_cond(expr_i *texpr, const term_list_range& targs,
 {
   const size_t num_args = targs.size();
   if (num_args != 3) {
-    arena_error_throw(pos, "cond: invalid number of arguments (got: %zu)",
+    arena_error_throw(pos, "cond: Invalid number of arguments (got: %zu)",
       num_args);
     return term();
   }

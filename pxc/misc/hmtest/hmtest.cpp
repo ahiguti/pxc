@@ -3,8 +3,8 @@
 #include <tr1/unordered_map>
 #include <map>
 #include <stdio.h>
-#include <sparsehash/dense_hash_map>
-#include <sparsehash/sparse_hash_map>
+// #include <sparsehash/dense_hash_map>
+// #include <sparsehash/sparse_hash_map>
 #include <boost/unordered_map.hpp>
 
 struct hash_int {
@@ -13,9 +13,9 @@ struct hash_int {
   }
 };
 
-typedef google::dense_hash_map<int, int> map_type;
+// typedef google::dense_hash_map<int, int> map_type;
 // typedef google::sparse_hash_map<int, int> map_type;
-// typedef std::tr1::unordered_map<int, int, hash_int> map_type;
+typedef std::tr1::unordered_map<int, int, hash_int> map_type;
 // typedef boost::unordered_map<int, int> map_type;
 // typedef std::map<int, int> map_type;
 
@@ -31,7 +31,7 @@ static int test1(const map_type& m, int cnt, int v) {
 int main()
 {
   map_type m;
-  m.set_empty_key(-1);
+  // m.set_empty_key(-1);
   for (int i = 0; i < 100; ++i) {
     m.insert(std::make_pair(i, i));
   }

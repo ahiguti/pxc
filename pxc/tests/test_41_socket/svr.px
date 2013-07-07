@@ -29,12 +29,11 @@ multithreaded struct server_thread(io const& i, tptr{bool} const& rp,
 	1024, 0); // TODO: fix EADDRINUSE
       file_println(get_stderr(iop), "accepted");
       notify();
-      errno_t ern;
       var peer_addr = sockaddr_storage();
-      var sock = accept(sf, peer_addr, ern);
+      var sock = accept(sf.acceptor, peer_addr);
       string s;
       size_t len = 10;
-      sock.read(s, len, ern);
+      sock.value.read(s, len);
       *str_r = s;
     } catch (exception::common::exception e) {
       file_println(get_stderr(iop), "thrown");
@@ -60,18 +59,17 @@ multithreaded struct client_thread(io const& i, tptr{bool} const& rp)
       }
     }
     file_println(get_stderr(iop), "got notification");
-    errno_t ern;
     var sf = create_connector(iop, "localhost", "9999", AF_INET, SOCK_STREAM,
       10);
-    var sock = connect(sf, ern);
-    sock.write("hoge", ern);
+    var sock = connect(sf.connector);
+    size_t wlen = 0;
+    sock.value.write("hoge", wlen);
   }
 }
 
 function void t1()
 {
-  errno_t ern;
-  signal(io::system, SIGPIPE, SIG_IGN, ern);
+  signal(io::system, SIGPIPE, SIG_IGN);
   var readyp = tptr(bool(false));
   var strp = tptr(string());
   var sthr = create_thread(server_thread(io::system, readyp, strp));

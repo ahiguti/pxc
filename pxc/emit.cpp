@@ -160,7 +160,7 @@ static std::string csymbol_var(const expr_var *ev, bool cdecl)
       return std::string(ev->sym);
     }
   }
-  if (fr == 0 || fr->get_esort() == expr_e_funcdef) {
+  if (fr == 0 || (fr->get_esort() == expr_e_funcdef && ev->used_as_upvalue)) {
     /* global frame or a function frame */
     std::string nsp = (!cdecl && is_global_var(ev))
       ? c_namespace_str_prefix(ev->uniqns) : "";
@@ -595,8 +595,15 @@ static void emit_initialize_dunion_field(emit_context& em,
   }
 }
 
+static std::string dtor_typedef_name(const term& typ)
+{
+  return term_tostr(typ, term_tostr_sort_cname_tparam) + "$dtor";
+}
+
 static std::string destructor_cstr(const term& typ)
 {
+  return "~" + dtor_typedef_name(typ);
+  #if 0
   std::string s = term_tostr_cname(typ);
   s += "::~";
   const std::string shortname = to_short_name(get_term_cname(typ));
@@ -604,6 +611,7 @@ static std::string destructor_cstr(const term& typ)
     shortname.substr(0, shortname.find('<'));
   s += shortname_wo_tp;
   return s;
+  #endif
 }
 
 static bool is_nullable_dunion(const expr_dunion *ev)
@@ -769,6 +777,15 @@ static void emit_dunion_aux_functions(emit_context& em,
     em.puts(" {\n");
     em.add_indent(1);
     if (has_non_smallpod) {
+      for (i = flds.begin(); i != flds.end(); ++i) {
+	em.set_file_line(*i);
+	em.indent('b');
+	em.puts("typedef ");
+	em.puts(term_tostr_cname((*i)->get_texpr()));
+	em.puts(" ");
+	em.puts(dtor_typedef_name((*i)->get_texpr()));
+	em.puts(";\n");
+      }
       em.set_file_line(ev);
       em.indent('b');
       em.puts("switch (get_$e()) {\n");
@@ -983,7 +1000,11 @@ static void emit_dunion_def_one(emit_context& em, const expr_dunion *ev,
       em.puts("$u[sizeof(");
       (*i)->emit_symbol(em);
       // emit_term(em, (*i)->get_texpr());
-      em.puts("$ut)];\n");
+      em.puts("$ut)]");
+      em.puts(" __attribute__((may_alias, __aligned__(__alignof__(");
+      (*i)->emit_symbol(em);
+      em.puts("$ut))))");
+      em.puts(";\n");
       #endif
     }
     em.add_indent(-1);
@@ -1375,6 +1396,9 @@ static void emit_import_init(emit_context& em, const std::string& main_ns)
     expr_ns *const ens = dynamic_cast<expr_ns *>(*i);
     if (ens != 0 && ens->import) {
       const std::string fn = arena_get_ns_main_funcname(ens->uniq_nsstr);
+      if (ens->src_uniq_nsstr != main_ns) {
+	continue;
+      }
       if (ss.find(fn) != ss.end()) {
 	continue;
       }
@@ -1556,9 +1580,17 @@ void expr_enumval::emit_value(emit_context& em)
   this->emit_symbol(em);
 }
 
-static bool is_split_point(expr_i *e)
+static bool expr_blockscope_tempvar(expr_i *e)
 {
   if (e->tempvar_id >= 0 && e->tempvar_varinfo.scope_block) {
+    return true;
+  }
+  return false;
+}
+
+static bool is_split_point(expr_i *e)
+{
+  if (expr_blockscope_tempvar(e)) {
     return true;
   } else if (is_vardef_or_vardefset(e)) {
     return true;
@@ -1597,7 +1629,7 @@ static void emit_split_expr(emit_context& em, expr_i *e, bool noemit_last)
   split_expr(e, es);
   for (es_type::iterator i = es.begin(); i != es.end(); ++i) {
     expr_i *ie = *i;
-    if (noemit_last && ie == e) {
+    if (noemit_last && ie == e && !expr_blockscope_tempvar(e)) {
       break;
     }
     em.set_file_line(e);
@@ -2241,6 +2273,9 @@ void expr_if::emit_value(emit_context& em)
   bool has_own_block = false;
   if (cond_static == 0) {
     /* if (0) { ... } [else] */
+    if (rest == 0) {
+      em.puts("/* staticif empty */");
+    }
   } else if (cond_static == 1) {
     /* if (1) { block1 } */
     if (block1 != 0 && can_omit_brace(this)) {
@@ -2256,53 +2291,92 @@ void expr_if::emit_value(emit_context& em)
     /* if (cond) { block1 } [else] */
     if (block1->argdecls != 0) {
       expr_op *const eop = ptr_down_cast<expr_op>(cond);
-      assert(eop->op == '[');
-      expr_i *const econ = eop->arg0;
-      const term& tcon = econ->get_texpr();
-      assert(type_allow_feach(tcon));
-      const std::string cetstr = get_term_cname(tcon);
-      expr_argdecls *const mapped = block1->get_argdecls();
-      assert(mapped != 0);
-      has_own_block = true;
-      /* resembles to expr_feach::emit_value() */
-      em.puts("{\n");
-      em.add_indent(1);
-      emit_split_expr(em, cond, true);
-      em.indent('I');
-      const bool mapped_mutable_ref =
-	mapped->passby == passby_e_mutable_reference;
-      em.puts(cetstr);
-      if (mapped_mutable_ref) {
-	/* only mutable ref requires the container to be mutable */
-	em.puts("&");
-      } else {
+      if (eop->op == '[') {
+	expr_i *const econ = eop->arg0;
+	const term& tcon = econ->get_texpr();
+	assert(type_allow_feach(tcon));
+	const std::string cetstr = get_term_cname(tcon);
+	expr_argdecls *const mapped = block1->get_argdecls();
+	assert(mapped != 0);
+	has_own_block = true;
+	/* resembles to expr_feach::emit_value() */
+	em.puts("{\n");
+	em.add_indent(1);
+	emit_split_expr(em, econ, true);
+	em.indent('I');
+	const bool mapped_mutable_ref =
+	  mapped->passby == passby_e_mutable_reference;
+	em.puts(cetstr);
+	if (mapped_mutable_ref) {
+	  /* only mutable ref requires the container to be mutable */
+	  em.puts("&");
+	} else {
+	  em.puts(" const&");
+	}
+	em.puts(" ag$fe = (");
+	fn_emit_value(em, econ);
+	em.puts(");\n");
+	em.indent('I');
+	em.puts(cetstr);
+	if (mapped_mutable_ref) {
+	  em.puts("::iterator");
+	} else {
+	  em.puts("::const_iterator");
+	}
+	em.puts(" i$it = ag$fe.find(");
+	fn_emit_value(em, eop->arg1);
+	em.puts(");\n");
+	em.indent('I');
+	em.puts("if (i$it != ag$fe.end()) {\n");
+	em.add_indent(1);
+	em.indent('I');
+	emit_arg_cdecl(em, mapped, true, false);
+	em.puts(" = i$it->second;\n");
+	em.indent('I');
+	fn_emit_value(em, block1);
+	em.puts("\n");
+	em.add_indent(-1);
+	em.indent('I');
+	em.puts("}");
+      } else if (eop->op == '.' || eop->op == TOK_ARROW) {
+	expr_i *const eu = eop->arg0;
+	const term& tu = eu->get_texpr();
+	assert(is_dunion(tu));
+	const std::string utstr = get_term_cname(tu);
+	expr_argdecls *const arg = block1->get_argdecls();
+	assert(arg != 0);
+	has_own_block = true;
+	/* resembles to expr_feach::emit_value() */
+	em.puts("{\n");
+	em.add_indent(1);
+	emit_split_expr(em, eu, true);
+	em.indent('I');
+	em.puts(utstr);
 	em.puts(" const&");
-      }
-      em.puts(" ag$fe = (");
-      fn_emit_value(em, econ);
-      em.puts(");\n");
-      em.indent('I');
-      em.puts(cetstr);
-      if (mapped_mutable_ref) {
-	em.puts("::iterator");
+	em.puts(" ag$fe = (");
+	fn_emit_value(em, eu);
+	em.puts(");\n");
+	em.indent('I');
+	em.puts("if (ag$fe.get_$e() == ");
+	em.puts(term_tostr(eop->arg0->get_texpr(), term_tostr_sort_cname));
+	em.puts("::");
+	fn_emit_value(em, eop->arg1);
+	em.puts("$e) {\n");
+	em.add_indent(1);
+	em.indent('I');
+	emit_arg_cdecl(em, arg, true, false);
+	em.puts(" = ag$fe.");
+	fn_emit_value(em, eop->arg1);
+	em.puts("$r();\n");
+	em.indent('I');
+	fn_emit_value(em, block1);
+	em.puts("\n");
+	em.add_indent(-1);
+	em.indent('I');
+	em.puts("}");
       } else {
-	em.puts("::const_iterator");
+	abort();
       }
-      em.puts(" i$it = ag$fe.find(");
-      fn_emit_value(em, eop->arg1);
-      em.puts(");\n");
-      em.indent('I');
-      em.puts("if (i$it != ag$fe.end()) {\n");
-      em.add_indent(1);
-      em.indent('I');
-      emit_arg_cdecl(em, mapped, true, false);
-      em.puts(" = i$it->second;\n");
-      em.indent('I');
-      fn_emit_value(em, block1);
-      em.puts("\n");
-      em.add_indent(-1);
-      em.indent('I');
-      em.puts("}");
     } else {
       /* note: blockscope var is not allowed in cond */
       em.puts("if (");
@@ -2498,8 +2572,12 @@ void expr_foldfe::emit_value(emit_context& em)
 
 std::string expr_argdecls::emit_symbol_str() const
 {
-  return std::string(sym) + "$"
-      + ulong_to_string(symtbl_lexical->block_backref->block_id_ns);
+  std::string s = std::string(sym) + "$";
+  if (this->used_as_upvalue) {
+    s += ulong_to_string(symtbl_lexical->block_backref->block_id_ns);
+      + "$" + csymbol_encode_ns(this->uniqns);
+  }
+  return s;
 }
 
 void expr_argdecls::emit_symbol(emit_context& em) const
@@ -2712,6 +2790,12 @@ static void emit_vardef_constructor_fast_boxing(emit_context& em,
       em.puts("new (&" + varp1 + "->monitor$z) pxcrt::monitor();\n");
       em.indent('x');
       em.puts("} catch (...) {\n");
+      em.indent('x');
+      em.puts("typedef ");
+      em.puts(term_tostr_cname(otyp));
+      em.puts(" ");
+      em.puts(dtor_typedef_name(otyp));
+      em.puts(";\n");
       em.indent('x');
       em.puts(varp1 + "->value$z." + destructor_cstr(otyp) + "();\n");
       em.indent('x');
@@ -2949,8 +3033,10 @@ void fn_emit_value(emit_context& em, expr_i *e, bool expand_composite,
        * emit set instead of defset */
       emv = emit_var_set;
     }
-    emit_var_or_tempvar(em, e, e->get_texpr(), e->type_conv_to, *vi,
-      var_csymbol, rhs, emv, ev == 0);
+    const term& tbase = ev != 0 ? ev->get_texpr() : e->get_texpr();
+    const term& tconvto = ev != 0 ? ev->type_conv_to : e->type_conv_to;
+    emit_var_or_tempvar(em, e, tbase, tconvto, *vi, var_csymbol, rhs, emv,
+      ev == 0);
     return;
   }
   switch (e->conv) {

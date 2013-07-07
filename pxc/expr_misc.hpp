@@ -49,7 +49,7 @@ bool is_bool_type(const term& t);
 bool is_enum(const term& t);
 bool is_bitmask(const term& t);
 bool is_numeric_type(const term& t);
-bool is_boolean_algebra(const term& t);
+bool is_boolean_type(const term& t);
 bool is_equality_type(const term& t);
 bool is_ordered_type(const term& t);
 // bool is_smallpod_type(const term& t);
@@ -100,6 +100,7 @@ std::string get_family_string(typefamily_e cat);
 term get_pointer_target(const term& t);
 bool pointer_conversion_allowed(const typefamily_e f, const typefamily_e t);
 bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap);
+bool convert_type(expr_i *efrom, term& tto);
 #if 0
 std::string ulong_to_string(unsigned long long v);
 std::string long_to_string(long long v);

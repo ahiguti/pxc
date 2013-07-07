@@ -43,13 +43,13 @@ std::string read_file_content(const std::string& fn, bool err_thr)
     if (!err_thr) {
       return std::string();
     }
-    arena_error_throw(0, "%s:0: failed to open: errno=%d\n",
+    arena_error_throw(0, "%s:0: Failed to open: errno=%d\n",
       fn.c_str(), errno);
   }
   while (!feof(fp.get())) {
     const size_t r = fread(&buf[0], 1, buf.size(), fp.get());
     if (ferror(fp.get())) {
-      arena_error_throw(0, "%s:0: failed to read: errno=%d\n",
+      arena_error_throw(0, "%s:0: Failed to read: errno=%d\n",
 	fn.c_str(), errno);
     }
     s.append(&buf[0], r);
@@ -365,7 +365,7 @@ bool file_exist(const std::string& fn)
     return true;
   }
   if (errno != ENOENT) {
-    arena_error_throw(0, "-:0: stat('%s') failed: errno=%d",
+    arena_error_throw(0, "-:0: Failed to stat('%s'): errno=%d",
       fn.c_str(), errno);
   }
   return false;
@@ -386,7 +386,7 @@ void mkdir_hier(const std::string& d)
     return;
   }
   if (errno != ENOENT) {
-    arena_error_throw(0, "-:0: stat('%s') failed: errno=%d",
+    arena_error_throw(0, "-:0: Failed to stat('%s'): errno=%d",
       d_nosl.c_str(), errno);
   }
   while (len && d[len - 1] != '/') {
@@ -394,7 +394,8 @@ void mkdir_hier(const std::string& d)
   }
   mkdir_hier(d.substr(0, len));
   if (mkdir(d_nosl.c_str(), 0777) != 0) {
-    arena_error_throw(0, "-:0: mkdir failed: %s errno=%d", d.c_str(), errno);
+    arena_error_throw(0, "-:0: Failed to mkdir '%s': errno=%d", d.c_str(),
+      errno);
   }
 }
 
@@ -402,12 +403,12 @@ void write_file_content(const std::string& fn, const std::string& data)
 {
   auto_fp fp(fopen(fn.c_str(), "w"));
   if (fp.get() == 0) {
-    arena_error_throw(0, "%s:0: failed to open: errno=%d\n",
+    arena_error_throw(0, "%s:0: Failed to open: errno=%d\n",
       fn.c_str(), errno);
   }
   if (fwrite(data.data(), 1, data.size(), fp.get()) != data.size() ||
     fp.close() != 0) {
-    arena_error_throw(0, "%s:0: failed to write: errno=%d\n",
+    arena_error_throw(0, "%s:0: Failed to write: errno=%d\n",
       fn.c_str(), errno);
   }
 }
@@ -428,7 +429,7 @@ void unlink_recursive(const std::string& fn)
   struct stat sbuf;
   if (stat(fn.c_str(), &sbuf) != 0) {
     if (errno != ENOENT) {
-      arena_error_throw(0, "-:0: stat('%s') failed: errno=%d",
+      arena_error_throw(0, "-:0: Failed to stat('%s'): errno=%d",
 	fn.c_str(), errno);
     }
     return;
@@ -462,7 +463,7 @@ void unlink_recursive(const std::string& fn)
 void rmdir_if(const std::string& fn)
 {
   if (rmdir(fn.c_str()) != 0 && errno != ENOENT) {
-    arena_error_throw(0, "-:0: rmdir('%s') failed: errno=%d",
+    arena_error_throw(0, "-:0: Failed to rmdir('%s'): errno=%d",
       fn.c_str(), errno);
   }
 }
@@ -470,8 +471,43 @@ void rmdir_if(const std::string& fn)
 void unlink_if(const std::string& fn)
 {
   if (unlink(fn.c_str()) != 0 && errno != ENOENT) {
-    arena_error_throw(0, "-:0: unlink('%s') failed: errno=%d",
+    arena_error_throw(0, "-:0: Failed to unlink('%s'): errno=%d",
       fn.c_str(), errno);
+  }
+}
+
+void copy_file(const std::string& ffrom, const std::string& fto)
+{
+  auto_fp rfp(fopen(ffrom.c_str(), "r"));
+  if (rfp.get() == 0) {
+    arena_error_throw(0, "%s:0: Failed to open: errno=%d\n",
+      ffrom.c_str(), errno);
+  }
+  auto_fp wfp(fopen(fto.c_str(), "w"));
+  if (wfp.get() == 0) {
+    arena_error_throw(0, "%s:0: Failed to open: errno=%d\n",
+      fto.c_str(), errno);
+  }
+  std::vector<char> buf;
+  buf.resize(16384);
+  while (!feof(rfp.get())) {
+    size_t e = fread(&buf[0], 1, buf.size(), rfp.get());
+    if (ferror(rfp.get())) {
+      arena_error_throw(0, "%s:0: Failed to read: errno=%d\n",
+	ffrom.c_str(), errno);
+    }
+    if (e == 0) {
+      break;
+    }
+    e = fwrite(&buf[0], 1, buf.size(), wfp.get());
+    if (ferror(wfp.get()) || e != buf.size()) {
+      arena_error_throw(0, "%s:0: Failed to write: errno=%d\n",
+	fto.c_str(), errno);
+    }
+  }
+  if (wfp.close() != 0) {
+    arena_error_throw(0, "%s:0: Failed to write: errno=%d\n",
+      fto.c_str(), errno);
   }
 }
 
@@ -479,7 +515,7 @@ std::string get_home_directory()
 {
   const char *const s = getenv("HOME");
   if (s == 0) {
-    arena_error_throw(0, "-:0: environment variable HOME is not set\n");
+    arena_error_throw(0, "-:0: Environment variable HOME is not set\n");
   }
   return s;
 }

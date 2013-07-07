@@ -5,9 +5,11 @@ public import io -;
 public import io::file -;
 public import io::errno -;
 public import string::conversion;
+public import string::split -;
 public import meta::common m;
+public import meta::vararg v;
 public import exception::common -;
-public import algebraic::common -;
+public import algebraic -;
 
 public threaded function extern "pxcio::get_stdin"
   file get_stdin(io const& iop);
@@ -18,32 +20,66 @@ public threaded function extern "pxcio::get_stderr"
 
 public threaded function {t} void file_print(file const& f, t const& x)
 {
-  errno_t e;
+  size_t wlen;
   if (is_string_family_type{t}) {
-    file_write_all(f, x, e);
+    file_write_all(f, x, wlen);
   } else {
-    file_write_all(f, string::conversion::to_string(x), e);
+    file_write_all(f, string::conversion::to_string(x), wlen);
   }
 }
 
 public threaded function {t} void file_println(file const& f, t const& x)
 {
-  errno_t e;
+  size_t wlen;
   if (is_string_family_type{t}) {
     string s = x;
     s.append("\n");
-    file_write_all(f, s, e);
+    file_write_all(f, s, wlen);
   } else {
     string s = string::conversion::to_string(x);
     s.append("\n");
-    file_write_all(f, s, e);
+    file_write_all(f, s, wlen);
   }
 }
 
-public function {t} void print(t const& x)
-  { file_print(get_stdout(io::system), x); }
-public function {t} void println(t const& x)
-  { file_println(get_stdout(io::system), x); }
+/*
+private function {delim, tlist} string
+join_string(expand(v::arg_decls_bycref{tlist}))
+{
+  string s;
+  expand (a, i: v::arg_names{m::size{tlist}}) {
+    {
+      metafunction t m::at0{m::at{tlist, i}};
+      if (m::and{m::ne{i, 0}, m::ne{delim, ""}}) {
+	s.append(delim);
+      }
+      if (is_string_family_type{t}) {
+	s.append(a);
+      } else {
+	string::conversion::serialize_to_string{t}(a, s);
+      }
+    }
+  }
+  return s;
+}
+*/
+
+public function {tlist} void print(expand(v::arg_decls_bycref{tlist}))
+{
+  string s = string_join{"\t"}(
+    expand(a: v::arg_names{m::size{tlist}}; a));
+  size_t len;
+  file_write_all(get_stdout(io::system), s, len);
+}
+
+public function {tlist} void println(expand(v::arg_decls_bycref{tlist}))
+{
+  string s = string_join{"\t"}(
+    expand(a: v::arg_names{m::size{tlist}}; a));
+  s.append("\n");
+  size_t len;
+  file_write_all(get_stdout(io::system), s, len);
+}
 
 private extern "pxcio::stdin"  option{file} stdin;
 private extern "pxcio::stdout" option{file} stdout;
@@ -56,7 +92,7 @@ iostd_init();
 extern "implementation" inline
 namespace pxcio {
 
-typedef ::algebraic$n::common$n::option$v$p$io$$file$n$$file$s$r$ optfile;
+typedef ::algebraic$n::option$v$p$io$$file$n$$file$s$r$ optfile;
 
 /* these values are immutable after initialized, and multi-thread safe. */
 optfile pxc_stdin;

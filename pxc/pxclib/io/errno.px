@@ -1,23 +1,43 @@
 namespace io::errno;
 public import numeric::integral -;
 public import container::string -;
-public import io;
+public import io -;
 
 public tsvaluetype struct extern "int" "extenum" errno_t { }
+
+public threaded function extern "pxcio::io_get_errno"
+errno_t io_get_errno(io const& sys);
+public threaded function extern "pxcio::io_set_errno"
+void io_set_errno(io const& sys, errno_t e);
 public threaded function extern "pxcio::errno_t_append_to_string"
-  void errno_t_append_to_string(errno_t e, string mutable& s);
+void errno_t_append_to_string(errno_t e, string mutable& s);
+
+/*
 public threaded function void errno_t_set(errno_t mutable& e, errno_t val)
 {
   if (e == errno_t()) {
     e = val;
   }
 }
+*/
 
 public extern "0" errno_t EOK;
 
 extern "implementation" inline
+#include <errno.h>
 namespace pxcio {
 using namespace pxcrt;
+
+int io_get_errno(io const& sys)
+{
+  return errno;
+}
+
+void io_set_errno(io const& sys, int e)
+{
+  errno = e;
+}
+
 void errno_t_append_to_string(int err, bt_string& s)
 {
   char buf[257];
@@ -32,6 +52,7 @@ void errno_t_append_to_string(int err, bt_string& s)
   #endif
   s.append(reinterpret_cast<const bt_uchar *>(p), strlen(p));
 }
+
 }; // namespace pxcio
 ;
 
