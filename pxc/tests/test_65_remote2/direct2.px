@@ -32,7 +32,7 @@ public threaded struct foo <ifoo> {
     return s;
   }
   function ptr{ibar} create_bar(int x) const {
-    ptr{bar} p = ptr{bar}(bar(x));
+    ptr{bar} p = to_ptr{bar}(bar(x));
     return p;
   }
 }
@@ -57,11 +57,11 @@ private threaded struct transport_direct(ptr{orb} const& p) <orb_transport> {
 
 private function ptr{ifoo} create_wrapped()
 {
-  ptr{orb} svr = box{orb}(box{transport_empty}());
-  ptr{transport_direct} dt = ptr(transport_direct(svr));
-  ptr{orb} cli = ptr(orb(dt));
+  ptr{orb} svr = to_ptr{orb}(to_ptr{transport_empty}());
+  ptr{transport_direct} dt = to_ptr(transport_direct(svr));
+  ptr{orb} cli = to_ptr(orb(dt));
   /* create foo object */
-  ptr{ifoo} obj = ptr(foo());
+  ptr{ifoo} obj = to_ptr(foo());
   push_return_value(svr, obj);
   /* send to client */
   cli->rbuf = svr->wbuf;

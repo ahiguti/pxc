@@ -4,8 +4,8 @@ import io -;
 import io::file -;
 import io::errno -;
 import io::standard -;
-import io::net::addrinfo -;
-import io::net::socket -;
+import io::addrinfo -;
+import io::socket -;
 import io::signal -;
 import thread -;
 
@@ -17,7 +17,7 @@ multithreaded struct server_thread(io const& i, tptr{bool} const& rp,
   tptr{string} str_r = s;
   function void notify()
   {
-    var lck = lockobject{bool}(readyp);
+    var lck = lock_guard{bool}(readyp);
     *lck = true;
     lck.notify_one();
   }
@@ -30,12 +30,12 @@ multithreaded struct server_thread(io const& i, tptr{bool} const& rp,
       file_println(get_stderr(iop), "accepted");
       notify();
       var peer_addr = sockaddr_storage();
-      var sock = accept(sf.acceptor, peer_addr);
+      var sock = accept(sf.value, peer_addr);
       string s;
       size_t len = 10;
       sock.value.read(s, len);
       *str_r = s;
-    } catch (exception::common::exception e) {
+    } catch (exception::c_exception e) {
       file_println(get_stderr(iop), "thrown");
       notify();
     } catch (io::errno::errno_t e) {
@@ -52,7 +52,7 @@ multithreaded struct client_thread(io const& i, tptr{bool} const& rp)
   function void main()
   {
     {
-      var lck = clockobject{bool}(readyp);
+      var lck = lock_cguard{bool}(readyp);
       while (true) {
 	if (*lck) { break; }
 	lck.wait();
@@ -61,7 +61,7 @@ multithreaded struct client_thread(io const& i, tptr{bool} const& rp)
     file_println(get_stderr(iop), "got notification");
     var sf = create_connector(iop, "localhost", "9999", AF_INET, SOCK_STREAM,
       10);
-    var sock = connect(sf.connector);
+    var sock = connect(sf.value);
     size_t wlen = 0;
     sock.value.write("hoge", wlen);
   }
@@ -70,8 +70,8 @@ multithreaded struct client_thread(io const& i, tptr{bool} const& rp)
 function void t1()
 {
   signal(io::system, SIGPIPE, SIG_IGN);
-  var readyp = tptr(bool(false));
-  var strp = tptr(string());
+  var readyp = to_tptr(bool(false));
+  var strp = to_tptr(string());
   var sthr = create_thread(server_thread(io::system, readyp, strp));
   var cthr = create_thread(client_thread(io::system, readyp));
   sthr.join();

@@ -1,10 +1,10 @@
 namespace variant;
 import common -;
-import meta::common m;
+import meta m;
 import numeric::cast n;
-import exception::common -;
+import meta -;
 import string::positional -;
-import downcast -;
+import pointer -;
 
 public union variant {
   unit unitval;
@@ -38,7 +38,7 @@ public function {t} variant to_variant(t const& x)
     r.ptrval = x;
   } else {
     metafunction ts to_non_ephemeral{t};
-    r.ptrval = box{stub_object{ts}}(x);
+    r.ptrval = to_ptr{stub_object{ts}}(x);
   }
   return r;
 }
@@ -90,7 +90,7 @@ public function {t} t from_variant(variant const& x)
   } else {
     return downcast_mutable{stub_object{t}, idynamic}(*(x.ptrval)).value;
   }
-  throw invalid_field();
+  throw exception::invalid_field();
 }
 
 /* wraps an object of type t */
@@ -166,7 +166,7 @@ prepare_namespace_map(tree_map{string, variant} mutable& elems)
     {
       metafunction f m::at{funcs, idx};
       variant x;
-      x.ptrval = box{stub_function{f}}();
+      x.ptrval = to_ptr{stub_function{f}}();
       elems[m::to_string{f}] = x;
       // println(m::concat{"func (", ns, "): ", m::to_string{f}});
     }
@@ -176,7 +176,7 @@ prepare_namespace_map(tree_map{string, variant} mutable& elems)
     {
       metafunction t m::at{types, idx};
       variant x;
-      x.ptrval = box{stub_function{t}}();
+      x.ptrval = to_ptr{stub_function{t}}();
       elems[m::to_string{t}] = x;
       // println(m::to_string{t});
     }
@@ -185,7 +185,7 @@ prepare_namespace_map(tree_map{string, variant} mutable& elems)
   expand (name, idx : m::map{vars, m::at0}) {
     {
       variant x;
-      x.ptrval = box{stub_variable{name, ns, m::at1{m::at{vars, idx}}}}();
+      x.ptrval = to_ptr{stub_variable{name, ns, m::at1{m::at{vars, idx}}}}();
       elems[m::to_string{name}] = x;
       // println(m::to_string{name});
     }

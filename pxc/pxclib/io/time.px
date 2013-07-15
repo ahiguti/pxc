@@ -4,7 +4,7 @@ public import numeric::fp -;
 public import numeric::cast -;
 public import io -;
 
-public tsvaluetype struct extern "::time_t" "extint" time_t { }      //SLONG
+public tsvaluetype struct extern "std::time_t" "extint" time_t { }   //SLONG
 public tsvaluetype struct extern "::suseconds_t" "extint" suseconds_t { }
 
 public tsvaluetype struct extern "::timeval" timeval {
@@ -14,6 +14,7 @@ public tsvaluetype struct extern "::timeval" timeval {
 
 public threaded function extern "pxcio::gettimeofday" timeval
   gettimeofday(io::io const& iop);
+public threaded function extern "pxcio::time" time_t time(io::io const& iop);
 
 public threaded function double gettimeofday_double(io::io const& iop)
 {
@@ -25,8 +26,12 @@ public threaded function double gettimeofday_double(io::io const& iop)
 
 private function extern "pxcio::time_init" void time_init();
 
-extern "implementation" inline
+extern "functions" inline
+#include <ctime>
 #include <sys/time.h>
+;
+
+extern "implementation" inline
 namespace pxcio {
 
 ::timeval gettimeofday(io const& iop)
@@ -34,6 +39,11 @@ namespace pxcio {
   ::timeval tv = { };
   ::gettimeofday(&tv, 0); /* no need to check error */
   return tv;
+}
+
+std::time_t time(io const& iop)
+{
+  return std::time(0);
 }
 
 void time_init()

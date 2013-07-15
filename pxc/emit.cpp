@@ -732,9 +732,9 @@ static void emit_dunion_aux_functions(emit_context& em,
 	if (is_nullable && i == flds.begin()) {
 	  flds_type::const_iterator j = i;
 	  ++j;
-	  em.puts("*(void **)(_$u.");
+	  em.puts("*(void **)(");
 	  (*j)->emit_symbol(em);
-	  em.puts("$u) = 0");
+	  em.puts("$p()) = 0");
 	} else {
 	  emit_initialize_dunion_field(em, ev, *i, true, false);
 	    /* FIXME: not exception safe */
@@ -797,9 +797,9 @@ static void emit_dunion_aux_functions(emit_context& em,
 	em.puts("$e: ");
 	emit_deinitialize_dunion_field(em, ev, *i);
 	if (is_nullable && i != flds.begin()) {
-	  em.puts("; *(void **)(_$u.");
+	  em.puts("; *(void **)(");
 	  (*i)->emit_symbol(em);
-	  em.puts("$u) = 0");
+	  em.puts("$p()) = 0");
 	}
 	em.puts("; break;\n");
       }
@@ -1073,9 +1073,9 @@ static void emit_dunion_def_one(emit_context& em, const expr_dunion *ev,
   em.puts("inline type_$e get_$e() const { ");
   if (is_nullable) {
     flds_type::const_iterator j = ++flds.begin();
-    em.puts("return *(void **)(_$u.");
+    em.puts("return *(void **)(");
     (*j)->emit_symbol(em);
-    em.puts("$u) == 0 ? ");
+    em.puts("$p()) == 0 ? ");
     (*flds.begin())->emit_symbol(em);
     em.puts("$e : ");
     (*j)->emit_symbol(em);
@@ -1096,9 +1096,9 @@ static void emit_dunion_def_one(emit_context& em, const expr_dunion *ev,
     if (is_nullable) {
       flds_type::const_iterator j = i;
       ++j;
-      em.puts("*(void **)(_$u.");
+      em.puts("*(void **)(");
       (*j)->emit_symbol(em);
-      em.puts("$u) = 0;\n");
+      em.puts("$p()) = 0;\n");
     } else {
       em.puts("_$e = ");
       (*i)->emit_symbol(em);
@@ -2016,6 +2016,16 @@ void expr_op::emit_value(emit_context& em)
   case TOK_GE:
   case TOK_LE:
     if (emit_op_memcmp(em, this)) {
+      return;
+    }
+    break;
+  case TOK_EXTERN:
+    if (extop == "placement-new") {
+      em.puts("(new (&");
+      fn_emit_value(em, arg0);
+      em.puts(") ");
+      fn_emit_value(em, arg1);
+      em.puts(")");
       return;
     }
     break;

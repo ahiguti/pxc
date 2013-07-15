@@ -1,7 +1,7 @@
 namespace string::serialize;
 public import numeric::integral -;
-public import container::string -;
-public import meta::common m;
+public import container::array -;
+public import meta m;
 public import meta::family mf;
 public import numeric::cast -;
 public import io::debug -;
@@ -126,13 +126,13 @@ deserialize(m::local{tpl, "source_type"} mutable& s)
     return r;
   } else if (mf::is_pointer_family{fam}) {
     if (m::local{tpl, "pointer_begin_cond"}(s)) {
-      t r = t(deserialize{tpl, m::at{t, 0}}(s));
+      t r = pointer::box_pointer{t}(deserialize{tpl, m::at{t, 0}}(s));
       m::local{tpl, "pointer_end_skip"}(s);
       return r;
     } else {
       cstrref s0 = s;
       s0.pop_back(s0.size());
-      t r = t(deserialize{tpl, m::at{t, 0}}(s0));
+      t r = pointer::box_pointer{t}(deserialize{tpl, m::at{t, 0}}(s0));
       return r;
     }
   } else if (mf::is_struct_family{fam}) {

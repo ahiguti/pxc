@@ -27,6 +27,9 @@ static compile_mode cur_mode;
 
 %}
 
+/* %define parse.lac full */
+%error-verbose 
+
 %union {
 	int void_val;
 	int int_val;
@@ -135,6 +138,7 @@ static compile_mode cur_mode;
 %type<int_val> opt_cv
 %type<visi_val> opt_attribute
 %type<visi_val> opt_attribute_threading
+%type<int_val> opt_private
 %type<str_val>  opt_strlit
 %type<expr_val> struct_stmt
 %type<expr_val> dunion_stmt
@@ -156,7 +160,6 @@ static compile_mode cur_mode;
 %type<expr_val> type_arg_list
 %type<expr_val> type_arg
 %type<expr_val> nssym_expr
-%type<expr_val> opt_nssym_expr
 %type<expr_val> symbol_expr
 %type<expr_val> expression
 %type<expr_val> opt_expression
@@ -481,24 +484,18 @@ catch_stmt
 		0, passby_e_mutable_value, $7), $9); }
 	;
 ext_stmt
-	: TOK_NAMESPACE nssym_expr opt_nssym_expr';'
-	  { $$ = expr_ns_new(cur_fname, @1.first_line, $2, false, false, 0,
-		$3); }
-	| TOK_PRIVATE TOK_NAMESPACE nssym_expr opt_nssym_expr ';'
-	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, false, false, 0,
-		$4); }
-	| TOK_PUBLIC TOK_NAMESPACE nssym_expr opt_nssym_expr ';'
-	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, false, true, 0,
-		$4); }
+	: TOK_NAMESPACE nssym_expr ';'
+	  { $$ = expr_ns_new(cur_fname, @1.first_line, $2, false, false, 0); }
+	| TOK_PRIVATE TOK_NAMESPACE nssym_expr ';'
+	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, false, false, 0); }
+	| TOK_PUBLIC TOK_NAMESPACE nssym_expr ';'
+	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, false, true, 0); }
 	| TOK_IMPORT nssym_expr opt_nsalias ';'
-	  { $$ = expr_ns_new(cur_fname, @1.first_line, $2, true, false, $3,
-		0); }
+	  { $$ = expr_ns_new(cur_fname, @1.first_line, $2, true, false, $3); }
 	| TOK_PRIVATE TOK_IMPORT nssym_expr opt_nsalias ';'
-	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, true, false, $4,
-		0); }
+	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, true, false, $4); }
 	| TOK_PUBLIC TOK_IMPORT nssym_expr opt_nsalias ';'
-	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, true, true, $4,
-		0); }
+	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, true, true, $4); }
 	| opt_attribute /* dummy */ TOK_EXTERN TOK_STRLIT TOK_INLINE
 	  { $$ = expr_inline_c_new(cur_fname, @2.first_line,
 		arena_dequote_strdup($3), arena_decode_inline_strdup($4),
@@ -514,7 +511,11 @@ opt_nsalias
 	| TOK_SYMBOL
 	  { $$ = $1; }
 	| '-'
-	  { $$ = ""; }
+	  { $$ = "-"; }
+	| '+'
+	  { $$ = "+"; }
+	| '*'
+	  { $$ = "*"; }
 	;
 funcdef_stmt
 	: opt_attribute TOK_FUNCTION opt_tparams_expr type_expr TOK_SYMBOL
@@ -546,11 +547,11 @@ c_funcdecl_stmt
 			passby_e_const_reference, 0),
 		false, true, $1); }
 	| opt_attribute TOK_FUNCTION TOK_EXTERN TOK_STRLIT opt_tparams_expr
-		type_expr '&' TOK_SYMBOL '(' argdecl_list ')'
+		type_expr TOK_MUTABLE '&' TOK_SYMBOL '(' argdecl_list ')'
 		opt_cv ';'
-	  { $$ = expr_funcdef_new(cur_fname, @2.first_line, $8,
-		arena_dequote_strdup($4), $12,
-		expr_block_new(cur_fname, @2.first_line, $5, 0, $10, $6,
+	  { $$ = expr_funcdef_new(cur_fname, @2.first_line, $9,
+		arena_dequote_strdup($4), $13,
+		expr_block_new(cur_fname, @2.first_line, $5, 0, $11, $6,
 			passby_e_mutable_reference, 0),
 		false, true, $1); }
 	;
@@ -600,16 +601,24 @@ struct_stmt
 		$4 != 0 ? arena_dequote_strdup($4) : 0,
 		expr_block_new(cur_fname, @2.first_line, $5, $7, 0, 0,
 			passby_e_mutable_value, $9),
-		$1, false); }
+		$1, false, false); }
 	| opt_attribute TOK_STRUCT opt_extern opt_strlit opt_tparams_expr
-		TOK_SYMBOL '(' argdecl_list ')' opt_inherit_expr
+		TOK_SYMBOL opt_private '(' argdecl_list ')' opt_inherit_expr
 		'{' struct_body_stmt_list '}'
 	  { $$ = expr_struct_new(cur_fname, @2.first_line, $6,
 		$3 != 0 ? arena_dequote_strdup($3) : 0,
 		$4 != 0 ? arena_dequote_strdup($4) : 0,
-		expr_block_new(cur_fname, @2.first_line, $5, $10, $8, 0,
-			passby_e_mutable_value, $12),
-		$1, true); }
+		expr_block_new(cur_fname, @2.first_line, $5, $11, $9, 0,
+			passby_e_mutable_value, $13),
+		$1, true, $7 != 0 ? true : false); }
+	;
+opt_private
+	:
+	  { $$ = 0; }
+	| TOK_PUBLIC
+	  { $$ = 0; }
+	| TOK_PRIVATE
+	  { $$ = 1; }
 	;
 opt_strlit
 	:
@@ -851,16 +860,6 @@ nssym_expr
 	| nssym_expr TOK_NSDELIM TOK_SYMBOL
 	  { $$ = expr_nssym_new(cur_fname, @1.first_line, $1, $3); }
 	;
-opt_nssym_expr
-	:
-	  { $$ = 0; }
-	/*
-	 inject ns is disabled because it can cause confliction among
-	 separatedly compiled modules
-	| nssym_expr
-	  { $$ = $1; }
-	*/
-	;
 opt_expression
 	:
 	  { $$ = 0; }
@@ -906,6 +905,9 @@ assign_expr
 	| unary_expr TOK_XOR_ASSIGN assign_expr
 	  { $$ = expr_op_new(cur_fname, @1.first_line, TOK_XOR_ASSIGN,
 	  	$1, $3); }
+	| unary_expr TOK_EXTERN TOK_STRLIT assign_expr
+	  { $$ = expr_op_new(cur_fname, @1.first_line, TOK_EXTERN, $1, $4,
+		arena_dequote_strdup($3)); }
 	;
 cond_expr
 	: lor_expr

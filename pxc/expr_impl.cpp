@@ -222,7 +222,11 @@ static void symdef_check_threading_attr_type_or_func(expr_i *e,
       "Type or function '%s' for symbol '%s' is not threaded",
       term_tostr_human(t).c_str(), sc->fullsym.c_str());
   }
+  #if 0
+  // FIXME: remove
   if (is_type_esort(e->get_esort())) {
+  #endif
+  if (is_type(t)) {
     if ((tattr & attribute_multithr) == 0 &&
       (cattr & attribute_multithr) != 0) {
       arena_error_push(e,
@@ -451,20 +455,32 @@ std::string expr_inline_c::dump(int indent) const
 }
 
 expr_ns::expr_ns(const char *fn, int line, expr_i *uniq_nssym, bool import,
-  bool pub, const char *nsalias, expr_i *inject_nssym)
+  bool pub, const char *nsalias)
   : expr_i(fn, line), uniq_nssym(uniq_nssym),
     uniq_nsstr(get_full_name(uniq_nssym)),
-    import(import), pub(pub), nsalias(nsalias), inject_nssym(inject_nssym),
-    inject_nsstr(get_full_name(inject_nssym))
+    import(import), pub(pub), nsalias(nsalias)
 {
 }
 
-void expr_ns::set_unique_namespace_one(const std::string& u,
-  const std::string& i)
+void expr_ns::set_unique_namespace_one(const std::string& u)
 {
   if (nsalias != 0) {
-    /* import foo bar */
-    const std::string astr(nsalias);
+    assert(import); /* this must be a import statement */
+    /* this is an 'import uniq_nsstr nsalias' statement in namespace 'u' */
+    std::string astr(nsalias);
+    /* astr can be a word, "-", "+", or "*" */
+    if (astr == "+") {
+      nsextend_entries& e = nsextends[uniq_nsstr];
+      e.push_back(u);
+      astr = "";
+    } else if (astr == "*") {
+      nsextend_entries& e = nsextends[u];
+      e.push_back(uniq_nsstr);
+      astr = "";
+    } else if (astr == "-") {
+      astr = "";
+    }
+    /* 'u' imports 'uniq_nsstr' as prefix 'nsalias' */
     nsalias_entries& e = nsaliases[std::make_pair(u, astr)];
     e.push_back(uniq_nsstr);
   }
@@ -956,10 +972,16 @@ std::string expr_block::dump(int indent) const
   return r;
 }
 
-expr_op::expr_op(const char *fn, int line, int op, expr_i *arg0, expr_i *arg1)
-  : expr_i(fn, line), op(op), arg0(arg0), arg1(arg1)
+expr_op::expr_op(const char *fn, int line, int op, const char *extop,
+  expr_i *arg0, expr_i *arg1)
+  : expr_i(fn, line), op(op), extop(extop == 0 ? "" : extop), arg0(arg0),
+    arg1(arg1)
 {
   type_of_this_expr.clear(); /* check_type() */
+  if (this->extop != "" && this->extop != "placement-new") {
+    arena_error_throw(this, "Invalid external operator '%s'",
+      this->extop.c_str());
+  }
 }
 
 expr_i *expr_op::clone() const
@@ -1429,11 +1451,9 @@ expr_typedef::expr_typedef(const char *fn, int line, const char *sym,
   value_texpr = term(this);
 }
 
-void expr_typedef::set_unique_namespace_one(const std::string& u,
-  const std::string& i)
+void expr_typedef::set_unique_namespace_one(const std::string& u)
 {
   uniqns = u;
-  injectns = i;
   typefamily = get_family_from_string(typefamily_str ? typefamily_str : "");
 }
 
@@ -1466,12 +1486,12 @@ std::string expr_metafdef::dump(int indent) const
 
 expr_struct::expr_struct(const char *fn, int line, const char *sym,
   const char *cname, const char *family, expr_i *block, attribute_e attr,
-  bool has_udcon)
+  bool has_udcon, bool private_udcon)
   : expr_i(fn, line), sym(sym), cname(cname), typefamily_str(family),
     block(ptr_down_cast<expr_block>(block)),
     attr(attr), value_texpr(), typefamily(typefamily_e_none),
-    has_udcon(has_udcon), builtin_typestub(0), metafunc_strict(0),
-    metafunc_nonstrict(0)
+    has_udcon(has_udcon), private_udcon(private_udcon), builtin_typestub(0),
+    metafunc_strict(0), metafunc_nonstrict(0)
 {
   assert(block);
   this->block->symtbl.block_esort = expr_e_struct;
@@ -1485,11 +1505,9 @@ expr_struct *expr_struct::clone() const
   return cpy;
 }
 
-void expr_struct::set_unique_namespace_one(const std::string& u,
-  const std::string& i)
+void expr_struct::set_unique_namespace_one(const std::string& u)
 {
   uniqns = u;
-  injectns = i;
   typefamily = get_family_from_string(typefamily_str ? typefamily_str : "");
   if (typefamily_str != 0) {
     builtin_typestub = find_builtin_typestub(typefamily_str);

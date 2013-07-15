@@ -4,29 +4,86 @@ public import io -;
 public import io::errno -;
 public import io::file -;
 
-public tsvaluetype struct extern "int" "extenum" signo_t { }
-public extern "SIGPIPE" signo_t SIGPIPE;
+public tsvaluetype struct extern "int" "extenum" signal_t { }
+public extern "SIGHUP"  signal_t SIGHUP;
+public extern "SIGINT"  signal_t SIGINT;
+public extern "SIGQUIT" signal_t SIGQUIT;
+public extern "SIGILL"  signal_t SIGILL;
+public extern "SIGABRT" signal_t SIGABRT;
+public extern "SIGFPE"  signal_t SIGFPE;
+public extern "SIGKILL" signal_t SIGKILL;
+public extern "SIGSEGV" signal_t SIGSEGV;
+public extern "SIGPIPE" signal_t SIGPIPE;
+public extern "SIGALRM" signal_t SIGALRM;
+public extern "SIGTERM" signal_t SIGTERM;
+public extern "SIGUSR1" signal_t SIGUSR1;
+public extern "SIGUSR2" signal_t SIGUSR2;
+public extern "SIGCHLD" signal_t SIGCHLD;
+public extern "SIGCONT" signal_t SIGCONT;
+public extern "SIGSTOP" signal_t SIGSTOP;
+public extern "SIGTTIN" signal_t SIGTTIN;
+public extern "SIGTTOU" signal_t SIGTTOU;
+public extern "SIGBUS"  signal_t SIGBUS;
+public extern "SIGPOLL" signal_t SIGPOLL;
+public extern "SIGPROF" signal_t SIGPROF;
+public extern "SIGSYS"  signal_t SIGSYS;
+public extern "SIGTRAP" signal_t SIGTRAP;
+public extern "SIGURG"  signal_t SIGURG;
+public extern "SIGVTALRM"  signal_t SIGVTALRM;
+public extern "SIGXCPU" signal_t SIGXCPU;
+public extern "SIGXFSZ" signal_t SIGXFSZ;
+public extern "SIGWINCH" signal_t SIGWINCH;
 
 public tsvaluetype struct extern "sighandler_t" "extenum" sighandler_t { }
 public extern "SIG_DFL" sighandler_t SIG_DFL;
 public extern "SIG_IGN" sighandler_t SIG_IGN;
-public extern "pxcio::no_op_handler" sighandler_t SIG_NO_OP;
+public extern "pxcio::sighandler_set_signaled"
+  sighandler_t sighandler_set_signaled;
 
 public function extern "pxcio::set_signal_handler"
-bool signal(io const& iop, signo_t sig, sighandler_t handler);
+bool signal(io const& iop, signal_t sig, sighandler_t handler);
+public function extern "pxcio::get_signaled"
+bool get_signaled(io const& iop);
 
 extern "types" inline
-#include <signal.h>
+#include <csignal>
+;
+
+extern "functions" inline
+namespace pxcio {
+
+void sighandler_set_signaled(int sig);
+
+};
 ;
 
 extern "implementation" inline
 namespace pxcio {
+
+static volatile int v_signalled[256];
+
+void sighandler_set_signaled(int sig)
+{
+  if (sig >= 0 && sig < 256) {
+    v_signalled[sig] = 1;
+  }
+}
+
+bool get_signaled(io const& iop, int sig)
+{
+  if (sig >= 0 && sig < 256) {
+    return (v_signalled[sig] != 0);
+  }
+  return false;
+}
+
 bool set_signal_handler(io const& iop, int sig, sighandler_t h)
 {
   errno = 0;
-  const sighandler_t r = ::signal(sig, h);
+  const sighandler_t r = std::signal(sig, h);
   return (r != SIG_ERR);
 }
+
 };
 ;
 

@@ -29,8 +29,8 @@ expr_i *expr_inline_c_new(const char *fn, int line, const char *posstr,
   const char *cstr, bool declonly, expr_i *val)
 { return new expr_inline_c(fn, line, posstr, cstr, declonly, val); }
 expr_i *expr_ns_new(const char *fn, int line, expr_i *nssym, bool import,
-  bool pub, const char *nsalias, expr_i *inject_nssym)
-{ return new expr_ns(fn, line, nssym, import, pub, nsalias, inject_nssym); }
+  bool pub, const char *nsalias)
+{ return new expr_ns(fn, line, nssym, import, pub, nsalias); }
 expr_i *expr_int_literal_new(const char *fn, int line, const char *str,
   bool is_unsigned)
 { return new expr_int_literal(fn, line, str, is_unsigned); }
@@ -64,8 +64,8 @@ expr_i *expr_block_new(const char *fn, int line, expr_i *tparams,
 { return new expr_block(fn, line, tparams, inherit, argdecls, rettype,
   ret_passby, stmts); }
 expr_i *expr_op_new(const char *fn, int line, int op, expr_i *arg0,
-  expr_i *arg1)
-{ return new expr_op(fn, line, op, arg0, arg1); }
+  expr_i *arg1, const char *extop)
+{ return new expr_op(fn, line, op, extop, arg0, arg1); }
 expr_i *expr_funccall_new(const char *fn, int line, expr_i *func, expr_i *arg)
 { return new expr_funccall(fn, line, func, arg); }
 expr_i *expr_special_new(const char *fn, int line, int tok, expr_i *arg)
@@ -111,9 +111,9 @@ expr_i *expr_metafdef_new(const char *fn, int line, const char *sym,
 { return new expr_metafdef(fn, line, sym, tparams, rhs, attr); }
 expr_i *expr_struct_new(const char *fn, int line, const char *sym,
   const char *cname, const char *family, expr_i *block, attribute_e attr,
-  bool has_udcon)
+  bool has_udcon, bool private_udcon)
 { return new expr_struct(fn, line, sym, cname, family, block, attr,
-  has_udcon); }
+  has_udcon, private_udcon); }
 expr_i *expr_dunion_new(const char *fn, int line, const char *sym,
   expr_i *block, attribute_e attr)
 { return new expr_dunion(fn, line, sym, block, attr); }
@@ -135,9 +135,7 @@ expr_i *expr_te_local_chain_new(expr_i *te1, expr_i *te2)
   char *const te2expr = arena_strdup(s.c_str());
   return expr_te_new(te1->fname, te1->line,
     expr_nssym_new(te1->fname, te1->line,
-      expr_nssym_new(te1->fname, te1->line,
-	expr_nssym_new(te1->fname, te1->line, 0,
-	  "meta"), "common"), "@local"),
+      expr_nssym_new(te1->fname, te1->line, 0, "meta"), "@local"),
       expr_telist_new(te1->fname, te1->line,
 	te1,
 	expr_telist_new(te2->fname, te2->line,
@@ -151,6 +149,7 @@ expr_i *expr_metalist_new(expr_i *tl)
     expr_nssym_new(tl->fname, tl->line,
       expr_nssym_new(tl->fname, tl->line,
 	expr_nssym_new(tl->fname, tl->line, 0, "type"), "common"), "@list"),
+	// TODO: type::common does not exist
     tl);
 }
 
@@ -329,7 +328,7 @@ static void define_builtins()
   /* set namespace */
   {
     int block_id_ns = 0;
-    fn_set_namespace(stmts, "meta::common", "meta::common", block_id_ns);
+    fn_set_namespace(stmts, "meta", block_id_ns);
   }
   topvals.push_front(stmts);
   /* stubs for builtin metafunctions */
@@ -343,7 +342,7 @@ static void define_builtins()
       expr_block_new("BUILTIN", 0, 0, 0, 0, 0, passby_e_mutable_value, 0),
       attribute_e(attribute_public |
 	attribute_threaded | attribute_multithr | attribute_valuetype |
-	attribute_tsvaluetype), false);
+	attribute_tsvaluetype), false, false);
     stmts = expr_stmts_new("", 0, est, stmts);
     est = expr_struct_new("BUILTIN", 0,
       arena_strdup("@list"),
@@ -352,20 +351,19 @@ static void define_builtins()
       expr_block_new("BUILTIN", 0, 0, 0, 0, 0, passby_e_mutable_value, 0),
       attribute_e(attribute_public |
 	attribute_threaded | attribute_multithr | attribute_valuetype |
-	attribute_tsvaluetype), false);
+	attribute_tsvaluetype), false, false);
     stmts = expr_stmts_new("", 0, est, stmts);
   }  
   /* set namespace */
   {
     int block_id_ns = 0;
-    fn_set_namespace(stmts, "meta::common", "meta::common", block_id_ns);
+    fn_set_namespace(stmts, "meta", block_id_ns);
   }
   topvals.push_front(stmts);
 }
 
 static bool define_builtin_string(expr_stmts *stmts_runtime)
 {
-  builtins.type_string = builtins.type_void;
   builtins.type_strlit = builtins.type_void;
   builtins.type_slice = builtins.type_void;
   builtins.type_cslice = builtins.type_void;
@@ -376,9 +374,7 @@ static bool define_builtin_string(expr_stmts *stmts_runtime)
     }
     const std::string s(def->sym);
     const std::string ns(def->get_unique_namespace());
-    if (s == "string" && ns == "container::string") {
-      builtins.type_string = def->get_value_texpr();
-    } else if (s == "strlit" && ns == "container::string") {
+    if (s == "strlit" && ns == "container::array") {
       builtins.type_strlit = def->get_value_texpr();
     } else if (s == "slice" && ns == "container::array") {
       builtins.type_slice = def->get_value_texpr();
@@ -386,8 +382,7 @@ static bool define_builtin_string(expr_stmts *stmts_runtime)
       builtins.type_cslice = def->get_value_texpr();
     }
   }
-  if (builtins.type_string == builtins.type_void || 
-    builtins.type_strlit == builtins.type_void ||
+  if (builtins.type_strlit == builtins.type_void ||
     builtins.type_slice == builtins.type_void ||
     builtins.type_cslice == builtins.type_void) {
     return false;
@@ -422,7 +417,6 @@ void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
   }
   expr_i *e = topval;
   std::string uniqns;
-  std::string injectns;
   /* find namespace decl */
   while (e != 0) {
     expr_i *stmt = ptr_down_cast<expr_stmts>(e)->head;
@@ -433,7 +427,6 @@ void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
 	  arena_error_push(ns, "Duplicate namespace declaration");
 	}
 	uniqns = ns->uniq_nsstr;
-	injectns = ns->inject_nsstr;
 	imports_r.main_unique_namespace = uniqns;
       } else {
 	import_info ii;
@@ -448,15 +441,8 @@ void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
     arena_error_push(topval, "No namespace declaration");
   }
   if (!uniqns.empty()) {
-    if (injectns.empty()) {
-      injectns = uniqns;
-    } else {
-      /* inject ns is disabled because it can cause confliction among
-       * separatedly compiled modules */
-      abort();
-    }
     int block_id_ns = 0;
-    fn_set_namespace(topval, uniqns, injectns, block_id_ns);
+    fn_set_namespace(topval, uniqns, block_id_ns);
   }
   if (is_main) {
     main_namespace = uniqns;
@@ -476,6 +462,11 @@ void arena_init()
   arena_clear();
   compile_phase = 0;
   define_builtins();
+}
+
+void arena_set_recursion_limit(size_t v)
+{
+  recursion_limit = v;
 }
 
 void arena_compile(const std::string& dest_filename, coptions& copt_apnd,
@@ -531,21 +522,28 @@ void arena_compile(const std::string& dest_filename, coptions& copt_apnd,
 
 void arena_clear()
 {
+  /* must initialize all global variables. see expr_misc.hpp. */
   for (expr_arena_type::iterator i = expr_arena.begin();
     i != expr_arena.end(); ++i) {
     delete *i;
   }
+  expr_arena.clear();
   for (str_arena_type::iterator i = str_arena.begin();
     i != str_arena.end(); ++i) {
     free(*i);
   }
-  expr_arena.clear();
   str_arena.clear();
   topvals.clear();
+  global_block = 0;
   loaded_namespaces.clear();
+  expr_block_id = 1;
   builtins = builtins_type();
   cur_errors.clear();
   main_namespace = "";
+  compile_phase = 0;
+  recursion_limit = 3000;
+  nsaliases.clear();
+  nsextends.clear();
 }
 
 };

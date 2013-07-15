@@ -1,12 +1,12 @@
 namespace sock4;
 import common -;
-import exception::common -;
+import meta -;
 import io -;
 import io::file -;
 import io::errno -;
 import io::standard -;
-import io::net::addrinfo -;
-import io::net::socket -;
+import io::addrinfo -;
+import io::socket -;
 import io::signal -;
 import thread -;
 import orb -;
@@ -38,11 +38,11 @@ public threaded struct binop_add <ibinop> {
 
 private function void client_test_main(file const& f)
 {
-  var op = box{orb_handle{ifoo}}(box{transport_file}(f));
+  var op = to_ptr{orb_handle{ifoo}}(to_ptr{transport_file}(f));
   var st = op->create_stub();
   farray{int, 10} arr;
   for (int i : 0 .. 10) { arr[i] = i + 1; }
-  var o = ptr(binop_add());
+  var o = to_ptr(binop_add());
   var z = st->fold(arr, 0, o); /* o is called back from the server */
   println(z);
 }
@@ -51,8 +51,8 @@ private multithreaded struct server_thread(io const& s, file const& f) {
   io const sys = s;
   file const sock = f;
   function void main() {
-    var op = box{orb_handle{ifoo}}(box{transport_file}(sock));
-    var obj = ptr(foo());
+    var op = to_ptr{orb_handle{ifoo}}(to_ptr{transport_file}(sock));
+    var obj = to_ptr(foo());
     op->start_server(obj);
   }
 }

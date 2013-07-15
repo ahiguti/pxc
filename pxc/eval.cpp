@@ -538,7 +538,7 @@ static term metafdef_to_term(expr_metafdef *mf, eval_context& ectx,
 
 struct eval_depth_inc {
   eval_depth_inc(eval_context& ec) : ec(ec) {
-    if (++ec.depth > 3000) {
+    if (recursion_limit != 0 && ++ec.depth > recursion_limit) {
       arena_error_throw(0, "Recursion depth limit is exceeded");
     };
   }

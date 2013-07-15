@@ -1,7 +1,7 @@
 namespace numeric::fpmath;
 import numeric::integral -;
 import numeric::fp -;
-import meta::common m;
+import meta m;
 
 public tsvaluetype struct extern "int" "extenum" fpclass_t { }
 public extern "FP_NAN"		fpclass_t FP_NAN;
@@ -43,27 +43,37 @@ public threaded function extern "numeric::modf_double"
   float modf_bt_float(float x, float mutable& exp);
 
 extern "types" inline
-#include <math.h>
+#include <cmath>
+#include <cfloat>
 namespace numeric {
 }; // namespace numeric
 ;
 
-extern "implementation" inline
+extern "functions" inline
 #include <boost/static_assert.hpp>
-#include <float.h>
 namespace numeric {
 BOOST_STATIC_ASSERT((FLT_RADIX == 2));
 using namespace pxcrt;
-bt_int fpclassify_double(bt_double x) { return fpclassify(x); }
-bt_int fpclassify_float(bt_float x) { return fpclassify(x); }
-bt_bool signbit_double(bt_double x) { return signbit(x) != 0; }
-bt_bool signbit_float(bt_float x) { return signbit(x) != 0; }
-bt_double frexp_double(bt_double x, bt_int& exp) { return ::frexp(x, &exp); }
-bt_float frexp_float(bt_float x, bt_int& exp) { return ::frexpf(x, &exp); }
-bt_double ldexp_double(bt_double x, bt_int exp) { return ::ldexp(x, exp); }
-bt_float ldexp_float(bt_float x, bt_int exp) { return ::ldexpf(x, exp); }
-bt_double modf_double(bt_double x, bt_double& ir) { return ::modf(x, &ir); }
-bt_float modf_float(bt_float x, bt_float& ir) { return ::modff(x, &ir); }
+static inline bt_int fpclassify_double(bt_double x)
+{ return std::fpclassify(x); }
+static inline bt_int fpclassify_float(bt_float x)
+{ return std::fpclassify(x); }
+static inline bt_bool signbit_double(bt_double x)
+{ return std::signbit(x) != 0; }
+static inline bt_bool signbit_float(bt_float x)
+{ return std::signbit(x) != 0; }
+static inline bt_double frexp_double(bt_double x, bt_int& exp)
+{ return std::frexp(x, &exp); }
+static inline bt_float frexp_float(bt_float x, bt_int& exp)
+{ return std::frexp(x, &exp); }
+static inline bt_double ldexp_double(bt_double x, bt_int exp)
+{ return std::ldexp(x, exp); }
+static inline bt_float ldexp_float(bt_float x, bt_int exp)
+{ return std::ldexp(x, exp); }
+static inline bt_double modf_double(bt_double x, bt_double& ir)
+{ return std::modf(x, &ir); }
+static inline bt_float modf_float(bt_float x, bt_float& ir)
+{ return std::modf(x, &ir); }
 }; // namespace numeric
 ;
 

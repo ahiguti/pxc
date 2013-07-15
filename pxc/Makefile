@@ -5,6 +5,7 @@ CXX = g++
 #CXXFLAGS = -Wall -g -Os -DNDEBUG
 CXXFLAGS = -Wall -g -O3 -DNDEBUG
 #CXXFLAGS = -Wall -g -pg -O -DNDEBUG
+#CXXFLAGS = -Wall -g -O3
 #CXXFLAGS = -Wall -g -O0
 OBJS =	pxc_y.o pxc_l.o expr.o expr_impl.o expr_misc.o eval.o evalmeta.o \
 	checktype.o term.o emit.o emit_context.o symbol_table.o cdriver.o \
@@ -40,13 +41,19 @@ clean:
 cleanall: clean
 	rm -f pxc_y.cpp pxc_y.hpp pxc_l.cpp
 
-#install:
-#	mkdir -p $(INSTALL_PREFIX)/bin/
-#	mkdir -p $(INSTALL_PREFIX)/share/pxc/
-#	install -m 755 pxc $(INSTALL_PREFIX)/bin/
-#	install -m 644 tests/common/*.px $(INSTALL_PREFIX)/share/pxc/
+install:
+	mkdir -p $(INSTALL_PREFIX)/bin/
+	mkdir -p $(INSTALL_PREFIX)/etc/
+	mkdir -p $(INSTALL_PREFIX)/share/
+	rm -rf $(INSTALL_PREFIX)/bin/pxc
+	rm -rf $(INSTALL_PREFIX)/etc/pxc.profile
+	rm -rf $(INSTALL_PREFIX)/share/pxc
+	install -m 755 pxc $(INSTALL_PREFIX)/bin/
+	install -m 644 tests/common/pxc.profile $(INSTALL_PREFIX)/etc/
+	cp -a pxclib $(INSTALL_PREFIX)/share/pxc
 
-#uninstall:
-#	rm -rf $(INSTALL_PREFIX)/bin/pxc
-#	rm -rf $(INSTALL_PREFIX)/share/pxc/
+uninstall:
+	rm -rf $(INSTALL_PREFIX)/bin/pxc
+	rm -rf $(INSTALL_PREFIX)/etc/pxc.profile
+	rm -rf $(INSTALL_PREFIX)/share/pxc
 

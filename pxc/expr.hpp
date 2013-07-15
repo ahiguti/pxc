@@ -56,7 +56,7 @@ expr_i *expr_telist_new(const char *fn, int line, expr_i *head, expr_i *rest);
 expr_i *expr_inline_c_new(const char *fn, int lin, const char *posstr,
   const char *cstr, bool declonly, expr_i *val);
 expr_i *expr_ns_new(const char *fn, int line, expr_i *nssym, bool import,
-  bool pub, const char *nsalias, expr_i *inject_nssym);
+  bool pub, const char *nsalias);
 expr_i *expr_int_literal_new(const char *fn, int line, const char *str,
   bool is_unsigned);
 expr_i *expr_float_literal_new(const char *fn, int line, const char *str);
@@ -77,7 +77,7 @@ expr_i *expr_block_new(const char *fn, int line, expr_i *tparams,
   expr_i *inherit, expr_i *argdecls, expr_i *rettyp, passby_e ret_passby,
   expr_i *stmts);
 expr_i *expr_op_new(const char *fn, int line, int op, expr_i *arg0,
-  expr_i *arg1);
+  expr_i *arg1, const char *extop = 0);
 expr_i *expr_funccall_new(const char *fn, int line, expr_i *func, expr_i *arg);
 expr_i *expr_if_new(const char *fn, int line, expr_i *cond, expr_i *b1,
   expr_i *b2, expr_i *rest);
@@ -106,7 +106,7 @@ expr_i *expr_metafdef_new(const char *fn, int line, const char *sym,
   expr_i *tparams, expr_i *rhs, attribute_e visi);
 expr_i *expr_struct_new(const char *fn, int line, const char *sym,
   const char *cname, const char *family, expr_i *block, attribute_e visi,
-  bool has_udcon);
+  bool has_udcon, bool private_udcon);
 expr_i *expr_dunion_new(const char *fn, int line, const char *sym,
   expr_i *block, attribute_e visi);
 expr_i *expr_interface_new(const char *fn, int line, const char *sym,
@@ -182,6 +182,7 @@ enum generate_main_e {
 };
 
 void arena_init();
+void arena_set_recursion_limit(size_t v);
 void arena_clear();
 void arena_append_topval(const std::list<expr_i *>& topval, bool is_main,
   imports_type& imports_r);

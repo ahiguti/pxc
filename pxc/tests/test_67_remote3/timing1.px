@@ -1,12 +1,12 @@
 namespace timing1;
 import common -;
-import exception::common -;
+import meta -;
 import io -;
 import io::file -;
 import io::errno -;
 import io::standard -;
-import io::net::addrinfo -;
-import io::net::socket -;
+import io::addrinfo -;
+import io::socket -;
 import io::signal -;
 import io::time -;
 import thread -;
@@ -25,7 +25,7 @@ public threaded struct binop_add <ibinop> {
 
 private function void client_test_main(file const& f)
 {
-  var op = ptr(orb_handle{ibinop}(box{transport_file}(f)));
+  var op = to_ptr(orb_handle{ibinop}(to_ptr{transport_file}(f)));
   var st = op->create_stub();
   double const t0 = gettimeofday_double(io::system);
   int z = 0;
@@ -43,8 +43,8 @@ private multithreaded struct server_thread(io const& s, file const& f) {
   io const sys = s;
   file const sock = f;
   function void main() {
-    var op = box{orb_handle{ibinop}}(box{transport_file}(sock));
-    var obj = ptr(binop_add());
+    var op = to_ptr{orb_handle{ibinop}}(to_ptr{transport_file}(sock));
+    var obj = to_ptr(binop_add());
     op->start_server(obj);
   }
 }

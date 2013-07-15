@@ -4,17 +4,13 @@ public import container::impl::invguard;
 public import container::impl::array_common;
 
 extern "types" inline
-#include <stdexcept>
-#include <string.h>
-#include <stdint.h>
-#include <stdlib.h>
 #include <limits>
-#include <boost/type_traits/is_pod.hpp>
-#include <boost/static_assert.hpp>
 namespace pxcrt {
+
 void throw_bad_alloc();
 void throw_would_invalidate();
 void throw_invalid_index();
+
 template <typename T> bt_size_t array_find(const T *start, bt_size_t len,
   bt_size_t offset, T const& value)
 {
@@ -31,16 +27,19 @@ template <typename T> bt_size_t array_find(const T *start, bt_size_t len,
     return i;
   }
 }
+
 template <typename T> typename T::mapped_type get_elem_value(const T& c,
   bt_size_t offset)
 {
   return c[offset];
 }
+
 template <typename T> typename T::mapped_type get_elem_value_nochek(const T& c,
   bt_size_t offset)
 {
   return c.rawarr()[offset];
 }
+
 template <typename T>
 struct bt_slice {
   typedef T mapped_type;
@@ -154,6 +153,7 @@ protected:
   const T *v;
   bt_size_t len;
 };
+
 struct bt_strlit : public bt_cslice<bt_uchar> {
   typedef bt_uchar mapped_type;
   typedef bt_uchar char_type;
@@ -173,8 +173,6 @@ struct bt_strlit : public bt_cslice<bt_uchar> {
     return *this;
   }
 };
-
-using namespace array;
 
 template <typename T>
 struct pxcvector {
@@ -241,11 +239,30 @@ struct pxcvector {
     check_resize();
     clear_internal();
   }
+  template <typename Tc> friend Tc&
+  pxcvector_push_back_uninitialized(pxcvector<Tc>& v);
+  template <typename Tc> friend void
+  pxcvector_rawarr_set_valid_len(pxcvector<Tc>& v,
+    typename pxcvector<Tc>::size_type len);
   void push_back(T const& x) {
-    check_resize();
-    reserve_internal(valid_len + 1);
-    initialize_1(start + valid_len, x);
-    ++valid_len;
+    /* re-ordered for speed */
+    if (invalidate_guard_count == 0) {
+      /* valid_len + 1 never overflows */
+      if (valid_len + 1 < alloc_len) {
+	/* fast path */
+	initialize_1(start + valid_len, x);
+	valid_len++;
+	return;
+      } else {
+	/* slow path */
+	reserve_internal(valid_len + 1);
+	initialize_1(start + valid_len, x);
+	valid_len++;
+	return;
+      }
+    } else {
+      pxcrt::throw_would_invalidate();
+    }
   }
   T pop_back() {
     check_resize();
@@ -319,6 +336,9 @@ private:
   }
   void append_internal(const T *p, size_type len) {
     size_type nlen = valid_len + len;
+    if (nlen < valid_len) {
+      pxcrt::throw_bad_alloc(); /* overflow */
+    }
     reserve_internal(nlen);
     initialize_copy_n(start + valid_len, len, p);
     valid_len = nlen;
@@ -394,9 +414,36 @@ private:
   mutable size_type invalidate_guard_count;
 };
 
+template <typename T> inline T&
+pxcvector_push_back_uninitialized(pxcvector<T>& v)
+{
+  /* re-ordered for speed */
+  if (v.invalidate_guard_count == 0) {
+    /* valid_len + 1 never overflows */
+    if (v.valid_len + 1 < v.alloc_len) {
+      /* fast path */
+      return v.start[v.valid_len];
+    } else {
+      /* slow path */
+      v.reserve_internal(v.valid_len + 1);
+      return v.start[v.valid_len];
+    }
+  } else {
+    pxcrt::throw_would_invalidate();
+  }
+}
+
+template <typename T> inline void
+pxcvector_rawarr_set_valid_len(pxcvector<T>& v,
+  typename pxcvector<T>::size_type len)
+{
+  v.valid_len = len;
+}
+
 typedef pxcvector<bt_uchar> bt_string;
 typedef bt_slice<bt_uchar> strref;
 typedef bt_cslice<bt_uchar> cstrref;
+
 template <typename Tx, typename Ty> inline int
 compare_memcmp(const Tx& x, const Ty& y)
 {
@@ -419,6 +466,7 @@ compare_memcmp(const Tx& x, const Ty& y)
   }
   return 0;
 }
+
 template <typename Tx, typename Ty> inline bool
 eq_memcmp(const Tx& x, const Ty& y)
 {
@@ -428,6 +476,7 @@ eq_memcmp(const Tx& x, const Ty& y)
     memcmp(x.rawarr(), y.rawarr(),
       x.size() * sizeof(typename Tx::mapped_type)) == 0;
 }
+
 template <typename Tx, typename Ty> inline bool
 lt_memcmp(const Tx& x, const Ty& y)
 {
@@ -446,6 +495,7 @@ lt_memcmp(const Tx& x, const Ty& y)
     return false;
   }
 }
+
 template <typename Tx, typename Ty> inline bool
 ne_memcmp(const Tx& x, const Ty& y) { return !eq_memcmp(x, y); }
 template <typename Tx, typename Ty> inline bool
@@ -462,6 +512,14 @@ inline int memcmp_strref(const strref& x, const strref& y)
 { return compare_memcmp(x, y); }
 inline int memcmp_cstrref(const cstrref& x, const cstrref& y)
 { return compare_memcmp(x, y); }
+
+inline bt_string cstr_to_string(const char *cstr)
+{
+  return bt_string(
+    reinterpret_cast<const unsigned char *>(cstr),
+    strlen(cstr));
+}
+
 }; // namespace pxcrt
 ;
 

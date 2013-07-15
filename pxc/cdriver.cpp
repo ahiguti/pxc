@@ -52,7 +52,9 @@ struct profile_settings {
   std::string ldflags;
   bool generate_dynamic; /* TODO */
   bool show_warnings;
-  profile_settings() : generate_dynamic(false), show_warnings(false) { }
+  size_t recursion_limit;
+  profile_settings() : generate_dynamic(false), show_warnings(false),
+    recursion_limit(0) { }
 };
 
 typedef std::list<source_info> sources_type;
@@ -69,12 +71,13 @@ struct parser_options {
   bool no_execute;
   bool no_realpath;
   bool show_out;
+  bool gen_cc;
   bool gen_out;
   std::string argv0;
   time_t argv0_ctime;
   parser_options() : verbose(0), clean_flag(false), no_build(false),
     no_update(false), no_execute(false), no_realpath(false),
-    show_out(false), gen_out(false),
+    show_out(false), gen_cc(false), gen_out(false),
     argv0_ctime(0) { }
 };
 
@@ -109,7 +112,7 @@ static std::string get_work_filename(const parser_options& po,
   std::string fn;
   if (!mi.aux_filename.empty()) {
     fn = mi.aux_filename;
-    fn = escape_hex_non_alnum(fn);
+    fn = escape_hex_filename(fn);
     fn = "fn/" + fn;
   } else {
     assert(!mi.unique_namespace.empty());
@@ -357,17 +360,27 @@ static bool load_infofile(const parser_options& po, module_info& mi)
   return mi.source_checksum.timestamp != 0;
 }
 
+struct arena_guard {
+  arena_guard(const parser_options& po) {
+    arena_init();
+    arena_set_recursion_limit(po.profile.recursion_limit);
+  }
+  ~arena_guard() {
+    arena_clear();
+  }
+};
+
 /* opens a module and examine its imports */
-static void get_module_deps_from_source(module_info& mi)
+static void get_module_deps_from_source(const parser_options& po,
+  module_info& mi)
 {
   mi.imports.deps.clear();
   source_info si;
   si.minfo = &mi;
   si.mode = compile_mode_linkonly;
-  arena_init(); /* TODO: RAII */
+  arena_guard ag(po);
   pxc_parse_file(si, mi.imports);
   arena_error_throw_pushed();
-  arena_clear();
   if (!mi.aux_filename.empty()) {
     mi.unique_namespace = mi.imports.main_unique_namespace;
   }
@@ -444,7 +457,7 @@ static void load_source_and_calc_checksum(const parser_options& po,
   mi.source_checksum.timestamp = tstamp;
   mi.source_checksum.md5sum = md5.final();
   mi.src_mask = src_mask;
-  get_module_deps_from_source(mi);
+  get_module_deps_from_source(po, mi);
   DBG_SUM(fprintf(stderr, "ns=%s ts=%d\n", mi.ns.c_str(), (int)tstamp));
 }
 
@@ -813,11 +826,27 @@ static std::string get_expected_namespace_for_file(std::string fn)
   return fn;
 }
 
+static void copy_file_atomic(const std::string& src, const std::string& dst,
+  bool set_exec)
+{
+  const std::string tfn = src + ".tmp";
+  tmpfile_guard g(tfn);
+  copy_file(src, tfn); /* throws */
+  if (set_exec && chmod(tfn.c_str(), 0755) != 0) {
+    arena_error_throw(0, "-:-: chmod('%s') failed: errno=%d",
+      tfn.c_str(), errno);
+  }
+  if (rename(tfn.c_str(), dst.c_str()) != 0) {
+    arena_error_throw(0, "-:-: rename('%s', '%s') failed: errno=%d",
+      tfn.c_str(), dst.c_str(), errno);
+  }
+}
+
 static void compile_module_to_cc_srcs(const parser_options& po,
   all_modules_info& ami, module_info& mi_main, generate_main_e gmain)
 {
   prepare_workdir(po, ami, mi_main, mi_main.link_srcs);
-  arena_init(); /* TODO: RAII */
+  arena_guard ag(po);
   for (strlist::const_iterator i = mi_main.cc_srcs_ord.begin();
     i != mi_main.cc_srcs_ord.end(); ++i) {
     imports_type cursrc_imports;
@@ -868,6 +897,15 @@ static void compile_module_to_cc_srcs(const parser_options& po,
       arena_error_throw(0, "-:-: rename('%s', '%s') failed: errno=%d",
 	tmp_fn.c_str(), cc_filename.c_str(), errno);
     }
+    if (po.gen_cc) {
+      /* copy cc file */
+      std::string sfn = po.src_filename + ".gen/";
+      mkdir_hier(sfn);
+      size_t delim = cc_filename.rfind('/');
+      assert(delim != cc_filename.npos);
+      sfn += cc_filename.substr(delim);
+      copy_file_atomic(cc_filename, sfn, false);
+    }
   }
   /* compile to o */
   {
@@ -900,7 +938,6 @@ static void compile_module_to_cc_srcs(const parser_options& po,
 	tmp_fn.c_str(), info_filename.c_str(), errno);
     }
   }
-  arena_clear();
 }
 
 /* compiles px files and generate one cxx file */
@@ -1178,6 +1215,8 @@ static int compile_and_execute(parser_options& po,
       (po.profile.generate_dynamic ? ".so" : ".exe");
     const std::string ofn = po.profile.generate_dynamic ?
       get_so_filename(po, mi_main) : get_exe_filename(po, mi_main);
+    copy_file_atomic(ofn, gen_out, true);
+    #if 0
     const std::string ofn_tmp = gen_out + ".tmp";
     tmpfile_guard g(ofn_tmp);
     copy_file(ofn, ofn_tmp); /* throws */
@@ -1189,6 +1228,7 @@ static int compile_and_execute(parser_options& po,
       arena_error_throw(0, "-:-: rename('%s', '%s') failed: errno=%d",
 	ofn_tmp.c_str(), gen_out.c_str(), errno);
     }
+    #endif
   }
   if (po.no_execute) {
     return 0;
@@ -1281,6 +1321,8 @@ static int prepare_options(parser_options& po, int argc, char **argv)
       } else if ((s == "--work-dir" || s == "-w") && i + 1 < argc) {
 	++i;
 	po.work_dir = argv[i];
+      } else if (s == "--generate-cc") {
+	po.gen_cc = true;
       } else if (s == "--generate" || s == "-g") {
 	po.gen_out = true;
       } else if (s == "--no-build") {
@@ -1341,7 +1383,7 @@ static int prepare_options(parser_options& po, int argc, char **argv)
       po.src_filename.c_str());
     return 1;
   }
-  po.work_dir += "/" + escape_hex_non_alnum(po.profile_name) + ".pxcwork";
+  po.work_dir += "/" + escape_hex_filename(po.profile_name) + ".pxcwork";
   return 0;
 }
 

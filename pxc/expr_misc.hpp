@@ -22,11 +22,14 @@ extern str_arena_type str_arena;
 extern topvals_type topvals;
 extern expr_block *global_block;
 extern loaded_namespaces_type loaded_namespaces;
+extern unsigned int expr_block_id;
 extern builtins_type builtins;
 extern errors_type cur_errors;
 extern std::string main_namespace;
 extern int compile_phase;
+extern size_t recursion_limit;
 extern nsaliases_type nsaliases;
+extern nsextends_type nsextends;
 /* end: global variables */
 
 void print_space(int n, char c, FILE *fp = stdout);
@@ -55,9 +58,7 @@ bool is_ordered_type(const term& t);
 // bool is_smallpod_type(const term& t);
 bool is_possibly_pod(const term& t);
 bool is_possibly_nonpod(const term& t);
-#if 0
 bool is_string_type(const term& t);
-#endif
 bool is_integral_type(const term& t);
 bool is_unsigned_integral_type(const term& t);
 bool is_float_type(const term& t);
@@ -77,7 +78,7 @@ bool is_const_or_immutable_pointer_family(const term& t);
 bool is_cm_pointer_family(const term& t);
 bool is_const_or_immutable_pointer_family(const term& t);
 bool is_immutable_pointer_family(const term& t);
-bool is_cm_lockobject_family(const term& t);
+bool is_cm_lock_guard_family(const term& t);
 bool is_multithreaded_pointer_family(const term& t);
 bool is_array_family(const term& t);
 bool is_cm_slice_family(const term& t);
@@ -147,13 +148,12 @@ bool is_noexec_expr(expr_i *e);
 bool is_compiled(const expr_block *bl);
 
 void fn_append_coptions(expr_i *e, coptions& copt_append);
-void fn_set_namespace(expr_i *e, const std::string& uniqns,
-  const std::string& injectns, int& block_id_ns);
+void fn_set_namespace(expr_i *e, const std::string& uniqns, int& block_id_ns);
 void fn_set_generated_code(expr_i *e);
 void fn_set_tree_and_define_static(expr_i *e, expr_i *p, symbol_table *symtbl,
   expr_stmts *stmt, bool is_template_descent, bool is_expand_base = false);
 void fn_update_tree(expr_i *e, expr_i *p, symbol_table *symtbl,
-  const std::string& curns_u, const std::string& curns_i);
+  const std::string& curns_u);
 void fn_check_template_upvalues_direct(expr_i *e);
 void fn_check_template_upvalues_tparam(expr_i *e);
 void fn_check_final(expr_i *e);

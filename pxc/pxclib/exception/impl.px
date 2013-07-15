@@ -1,6 +1,6 @@
-namespace exception::impl::common;
+namespace exception::impl;
 public import numeric::integral -;
-public import container::string -;
+public import container::array -;
 
 extern "types" inline
 #include <stdexcept>
@@ -14,41 +14,38 @@ void throw_would_invalidate() __attribute__((noreturn));
 void throw_bad_alloc() __attribute__((noreturn));
 void set_stack_trace_limit(size_t sz);
 
-struct stack_trace {
-  stack_trace();
-  virtual ~stack_trace() throw() { }
-  virtual bt_strlit what_strlit() const = 0;
+struct exception {
+  exception();
+  virtual ~exception() throw() { }
+  virtual bt_string message() const = 0;
   std::vector<void *> trace;
 };
 
-struct logic_error_st : virtual stack_trace, std::logic_error {
-  logic_error_st();
-  virtual const char *what() const throw();
-  virtual bt_strlit what_strlit() const;
+struct logic_error : virtual exception, std::logic_error {
+  logic_error();
+  virtual bt_string message() const;
 };
 
-struct runtime_error_st : virtual stack_trace, std::runtime_error {
-  runtime_error_st();
-  virtual const char *what() const throw();
-  virtual bt_strlit what_strlit() const;
+struct runtime_error : virtual exception, std::runtime_error {
+  runtime_error();
+  virtual bt_string message() const;
 };
 
-struct bad_alloc_st : virtual stack_trace, std::bad_alloc {
-  bad_alloc_st();
-  virtual const char *what() const throw();
-  virtual bt_strlit what_strlit() const;
+struct bad_alloc : virtual exception, std::bad_alloc {
+  bad_alloc();
+  virtual bt_string message() const;
 };
 
-struct invalid_index : logic_error_st {
-  virtual bt_strlit what_strlit() const;
+struct invalid_index : logic_error {
+  virtual bt_string message() const;
 };
 
-struct invalid_field : logic_error_st {
-  virtual bt_strlit what_strlit() const;
+struct invalid_field : logic_error {
+  virtual bt_string message() const;
 };
 
-struct would_invalidate : logic_error_st {
-  virtual bt_strlit what_strlit() const;
+struct would_invalidate : logic_error {
+  virtual bt_string message() const;
 };
 
 int main_nothrow(void (*main_f)(void));
@@ -59,7 +56,8 @@ int main_nothrow(void (*main_f)(void));
 extern "functions" inline
 namespace pxcrt {
 
-bt_string exception_stack_trace(std::exception const& ex);
+bt_string c_exception_message(std::exception const& ex);
+bt_string c_exception_stack_trace(std::exception const& ex);
 
 }; // namespace pxcrt
 ;
@@ -67,39 +65,35 @@ bt_string exception_stack_trace(std::exception const& ex);
 extern "implementation" inline
 #include <string>
 #include <unistd.h>
+#ifdef __LINUX__
 #include <execinfo.h>
+#endif
 namespace pxcrt {
 
-logic_error_st::logic_error_st() : std::logic_error("logic_error")
+logic_error::logic_error() : std::logic_error("pxcrt::logic_error")
 { }
-const char *logic_error_st::what() const throw()
-{ return reinterpret_cast<const char *>(what_strlit().rawarr()); }
-bt_strlit logic_error_st::what_strlit() const
-{ return bt_strlit("logic_error"); }
+bt_string logic_error::message() const
+{ return cstr_to_string("logic_error"); }
 
-runtime_error_st::runtime_error_st() : std::runtime_error("runtime_error")
+runtime_error::runtime_error() : std::runtime_error("pxcrt::runtime_error")
 { }
-const char *runtime_error_st::what() const throw()
-{ return reinterpret_cast<const char *>(what_strlit().rawarr()); }
-bt_strlit runtime_error_st::what_strlit() const
-{ return bt_strlit("runtime_error"); }
+bt_string runtime_error::message() const
+{ return cstr_to_string("runtime_error"); }
 
-bad_alloc_st::bad_alloc_st()
+bad_alloc::bad_alloc()
 { }
-const char *bad_alloc_st::what() const throw()
-{ return reinterpret_cast<const char *>(what_strlit().rawarr()); }
-bt_strlit bad_alloc_st::what_strlit() const
-{ return bt_strlit("bad_alloc"); }
+bt_string bad_alloc::message() const
+{ return cstr_to_string("bad_alloc"); }
 
-bt_strlit invalid_index::what_strlit() const
-{ return bt_strlit("invalid_index"); }
-bt_strlit invalid_field::what_strlit() const
-{ return bt_strlit("invalid_field"); }
-bt_strlit would_invalidate::what_strlit() const
-{ return bt_strlit("would_invalidate"); }
+bt_string invalid_index::message() const
+{ return cstr_to_string("invalid_index"); }
+bt_string invalid_field::message() const
+{ return cstr_to_string("invalid_field"); }
+bt_string would_invalidate::message() const
+{ return cstr_to_string("would_invalidate"); }
 
 void throw_bad_alloc()
-{ throw bad_alloc_st(); }
+{ throw bad_alloc(); }
 void throw_invalid_index()
 { throw invalid_index(); }
 void throw_invalid_field()
@@ -114,8 +108,9 @@ void set_stack_trace_limit(size_t sz)
   stack_trace_limit = sz;
 }
 
-stack_trace::stack_trace()
+exception::exception()
 {
+#ifdef __LINUX__
   if (stack_trace_limit != 0) {
     size_t n = std::min(static_cast<size_t>(5), stack_trace_limit);
     while (true) {
@@ -134,6 +129,7 @@ stack_trace::stack_trace()
       n = n2;
     }
   }
+#endif
 }
 
 struct auto_free {
@@ -145,36 +141,38 @@ private:
   void *ptr;
 };
 
-bt_string exception_what(std::exception const& exc)
+bt_string c_exception_message(std::exception const& exc)
 {
-  const stack_trace *const st = dynamic_cast<const stack_trace *>(&exc);
-  if (st == 0) {
+  const exception *const e = dynamic_cast<const exception *>(&exc);
+  if (e == 0) {
     const char *const s = exc.what();
     const bt_uchar *const us = reinterpret_cast<const bt_uchar *>(s);
     return bt_string(us, strlen(s));
   } else {
-    return bt_string(st->what_strlit());
+    return e->message();
   }
 }
 
-bt_string exception_stack_trace(std::exception const& exc)
+bt_string c_exception_stack_trace(std::exception const& exc)
 {
-  const stack_trace *const st = dynamic_cast<const stack_trace *>(&exc);
-  if (st == 0 || st->trace.empty()) {
+  const exception *const e = dynamic_cast<const exception *>(&exc);
+  if (e== 0 || e->trace.empty()) {
     return bt_string();
   }
-  std::vector<void *> const& tr = st->trace; 
+  bt_string r;
+#ifdef __LINUX__
+  std::vector<void *> const& tr = e->trace; 
   char **syms = backtrace_symbols(&tr[0], tr.size());
   if (syms == 0) {
     throw_bad_alloc();
   }
   auto_free af(syms);
-  bt_string r;
   for (size_t i = 0; i < tr.size(); ++i) {
     r.append(cstrref(
       reinterpret_cast<const bt_uchar *>(syms[i]), strlen(syms[i])));
     r.push_back('\n');
   }
+#endif
   return r;
 }
 
@@ -184,11 +182,13 @@ int main_nothrow(void (*main_f)(void))
     try {
       (*main_f)();
     } catch (const std::exception& e) {
-      std::string mess(e.what());
+      std::string mess;
+      bt_string s0 = c_exception_message(e);
+      mess.insert(mess.end(), s0.begin(), s0.end());
       if (!mess.empty() && mess[mess.size() - 1] != '\n') {
 	mess += "\n";
       }
-      bt_string st = exception_stack_trace(e);
+      bt_string st = c_exception_stack_trace(e);
       mess.insert(mess.end(), st.begin(), st.end());
       ::write(2, mess.data(), mess.size());
       return 1;

@@ -39,6 +39,7 @@
 #define DBG_EP(x)
 #define DBG_RECHAIN(x)
 #define DBG_SETCHILD(x)
+#define DBG_VARIADIC(x)
 
 namespace pxc {
 
@@ -251,7 +252,7 @@ void expr_inline_c::check_type(symbol_table *lookup)
 
 void expr_var::define_vars_one(expr_stmts *stmt)
 {
-  symtbl_lexical->define_name(sym, injectns, this, attr, stmt);
+  symtbl_lexical->define_name(sym, uniqns, this, attr, stmt);
 }
 
 static bool check_term_validity(const term& t, bool allow_nontype,
@@ -564,7 +565,7 @@ void expr_var::check_type(symbol_table *lookup)
 
 void expr_enumval::define_vars_one(expr_stmts *stmt)
 {
-  symtbl_lexical->define_name(sym, injectns, this, attr, stmt);
+  symtbl_lexical->define_name(sym, uniqns, this, attr, stmt);
 }
 
 void expr_enumval::check_type(symbol_table *lookup)
@@ -840,7 +841,7 @@ static void store_tempvar(expr_i *e, passby_e passby, bool blockscope_flag,
   #if 0
   if (is_passby_cm_value(e->tempvar_varinfo.passby) &&
     !is_copyable(e->resolve_texpr())) {
-    /* reaches here if expr is a lockobject constructor */
+    /* reaches here if expr is a lock_guard constructor */
     arena_error_throw(e,
       "Internal error: failed to root because it's not copyable");
   }
@@ -925,7 +926,7 @@ static void add_root_requirement(expr_i *e, passby_e passby,
   #if 0
   fprintf(stderr, "add_root_req %s passby=%d bl=%d\n", e->dump(0).c_str(),
     (int)passby, (int)blockscope_flag); 
-  // if (e->dump(0) == "[lockobject(([int]))](sobj)") { abort(); }
+  // if (e->dump(0) == "[lock_guard(([int]))](sobj)") { abort(); }
   #endif
   if (e->conv == conversion_e_container_range) {
     /* convert from container to range */
@@ -980,21 +981,32 @@ static void add_root_requirement(expr_i *e, passby_e passby,
     expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(
       term_get_instance(te));
     if (efd != 0 && is_passby_cm_reference(efd->block->ret_passby)) {
-      expr_i *efcarg = efc->arg;
-      if (efcarg == 0) {
-	arena_error_throw(efc,
-	  "Invalid function call (no argument, returning reference)");
-      }
-      if (efcarg->get_esort() == expr_e_op &&
-	ptr_down_cast<expr_op>(efcarg)->op == ',') {
-	arena_error_throw(efc,
-	  "Invalid function call (multiple arguments, returning reference)");
-      }
       if (efd->is_virtual_or_member_function()) {
-	arena_error_throw(efc,
-	  "Invalid function call (member function, returning reference)");
+	/* member function */
+	if (memfunc_w_explicit_obj) {
+	  arena_error_throw(efc,
+	    "Invalid function call (explicit object, returning reference)");
+	}
+	/* member function call with implicit object. no need to root the
+	 * object. */
+      } else {
+	/* non-member function */
+	expr_i *efcarg = efc->arg;
+	if (efcarg == 0) {
+	  arena_error_throw(efc,
+	    "Invalid function call (no argument, returning reference)");
+	}
+	if (efcarg->get_esort() == expr_e_op &&
+	  ptr_down_cast<expr_op>(efcarg)->op == ',') {
+	  arena_error_throw(efc,
+	    "Invalid function call (multiple arguments, returning reference)");
+	}
+	if (efd->is_virtual_or_member_function()) {
+	  arena_error_throw(efc,
+	    "Invalid function call (member function, returning reference)");
+	}
+	add_root_requirement(efcarg, efd->block->ret_passby, blockscope_flag);
       }
-      add_root_requirement(efcarg, efd->block->ret_passby, blockscope_flag);
       return;
     }
   }
@@ -1167,7 +1179,7 @@ static void check_expr_root(expr_i *e, passby_e passby, bool blockscope_flag)
 }
 #endif
 
-static bool is_assign_op(int op)
+static bool is_assign_op(int op, const std::string& extop)
 {
   switch (op) {
   case '=':
@@ -1181,12 +1193,17 @@ static bool is_assign_op(int op)
   case TOK_XOR_ASSIGN:
     return true;
   }
+  if (op == TOK_EXTERN) {
+    if (extop == "placement-new") {
+      return true;
+    }
+  }
   return false;
 }
 
-static bool is_assign_incdec_op(int op)
+static bool is_assign_incdec_op(int op, const std::string& extop)
 {
-  return (is_assign_op(op) || op == TOK_INC || op == TOK_DEC);
+  return (is_assign_op(op, extop) || op == TOK_INC || op == TOK_DEC);
 }
 
 static bool expr_is_subexpression(expr_i *e)
@@ -1212,7 +1229,7 @@ static bool expr_can_have_side_effect(expr_i *e)
     return true;
   } else if (e->get_esort() == expr_e_op) {
     expr_op *const eo = ptr_down_cast<expr_op>(e);
-    if (is_assign_incdec_op(eo->op)) {
+    if (is_assign_incdec_op(eo->op, eo->extop)) {
       return true;
     }
   } else if (e->get_esort() == expr_e_block) {
@@ -1360,8 +1377,8 @@ void expr_op::check_type(symbol_table *lookup)
     }
     /* lookup without arg1_sym_prefix */
     /* lookup member field */
-    if (symtbl != 0 && symtbl->resolve_name_nothrow(sc->fullsym, no_private,
-      sc->uniqns, is_global_dummy, is_upvalue_dummy, is_memfld_dummy) != 0) {
+    if (symtbl != 0 && symtbl->resolve_name_nothrow_memfld(sc->fullsym,
+      no_private, sc->uniqns)) {
       /* symbol is defined as a field */
       DBG(fprintf(stderr, "found fld '%s' ns=%s\n", sc->fullsym.c_str(),
 	sc->uniqns.c_str()));
@@ -1390,9 +1407,15 @@ void expr_op::check_type(symbol_table *lookup)
 	arg0->dump(0).c_str(), sc->fullsym.c_str(), uniqns.c_str(),
 	symtbl));
       no_private = false;
+      #if 0
+      fprintf(stderr, "try %s uniqns=%s\n", funcname_w_prefix.c_str(),
+	uniqns.c_str());
+      #endif
       expr_i *fo = symtbl->resolve_name_nothrow(funcname_w_prefix,
 	no_private, uniqns, is_global_dummy, is_upvalue_dummy,
 	is_memfld_dummy);
+      #if 0
+      // FIXME: remove
       if (fo == 0) {
 	/* try using the caller's context */
 	symtbl = this->symtbl_lexical;
@@ -1402,6 +1425,7 @@ void expr_op::check_type(symbol_table *lookup)
 	  no_private, uniqns, is_global_dummy, is_upvalue_dummy,
 	  is_memfld_dummy);
       }
+      #endif
       if (fo != 0) {
 	DBG(fprintf(stderr, "found %s\n", sc->fullsym.c_str()));
 	sc->arg_hidden_this = arg0;
@@ -1604,6 +1628,9 @@ void expr_op::check_type(symbol_table *lookup)
   case '(':
     type_of_this_expr = arg0->resolve_texpr();
     break;
+  default:
+    type_of_this_expr = builtins.type_void;
+    break;
   }
   /* rooting */
   if (op == TOK_PTR_DEREF && is_cm_pointer_family(arg0->resolve_texpr()) &&
@@ -1611,7 +1638,7 @@ void expr_op::check_type(symbol_table *lookup)
     /* threaded pointer dereference. copy the ptr and lock it */
     passing_root_requirement(passby_e_const_value, this, this, false);
   }
-  if (is_assign_incdec_op(op)) {
+  if (is_assign_incdec_op(op, extop)) {
     /* arg0 is an lvalue */
     DBG_CON(fprintf(stderr, "arg0: %s\n", arg0->dump(0).c_str()));
     if (arg0->get_esort() == expr_e_var) {
@@ -1800,7 +1827,7 @@ static void check_passing_memfunc_rec(expr_funccall *fc,
 static void check_passing_memfunc(expr_funccall *fc, const term& te)
 {
   /* issue an error if a foreign member function is passed as a template
-   * parameter, which is caused by meta::common::local{...} . */
+   * parameter, which is caused by meta::local{...} . */
   expr_funcdef *const efd = get_up_member_func(fc->symtbl_lexical);
   expr_struct *est = 0;
   if (efd != 0) {
@@ -1815,6 +1842,13 @@ static void check_passing_memfunc(expr_funccall *fc, const term& te)
 
 static void check_ptr_constructor_syntax(expr_funccall *fc, const term& te)
 {
+  expr_i *curfr_expr = get_current_frame_expr(fc->symtbl_lexical);
+  if (curfr_expr == 0 || curfr_expr->get_unique_namespace() != "pointer") {
+    const std::string s0 = term_tostr_human(te);
+    arena_error_push(fc,
+      "Can not call a pointer constructor. Use to_ptr family instead.");
+  }
+  #if 0
   if (fc->parent_expr != 0 && fc->parent_expr->get_esort() == expr_e_op) {
     expr_op *const eop = ptr_down_cast<expr_op>(fc->parent_expr);
     if (eop->op == '=' && eop->arg0->get_esort() == expr_e_var) {
@@ -1842,6 +1876,7 @@ static void check_ptr_constructor_syntax(expr_funccall *fc, const term& te)
   #if 0
   arena_error_push(fc,
     "Pointer construction must be a right-hand-side of a variable assignment");
+  #endif
   #endif
 }
 
@@ -1887,19 +1922,35 @@ void expr_funccall::check_type(symbol_table *lookup)
     arglist_type arglist;
     append_hidden_this(func, arglist);
     append_comma_sep_list(arg, arglist);
-    term_list tl;
+    term_list tis;
     for (arglist_type::const_iterator i = arglist.begin(); i != arglist.end();
       ++i) {
       const bool has_lv = expr_has_lvalue(*i, *i, false);
       term_list ent;
       ent.push_back((*i)->resolve_texpr());
       ent.push_back(term(has_lv));
-      tl.push_back(term(ent));
+      tis.push_back(term(ent));
     }
-    term tml(tl); /* metalist */
-    term_list tl2 = *func_te.get_args();
-    tl2.push_back(tml);
-    func_te = eval_term(term(func_te.get_expr(), tl2));
+    term tis_ml(tis); /* metalist */
+    const size_t tplen = get_tparam_length(func_te.get_expr());
+    term_list tas; /* resolved targs */
+    if (func_te.get_args()->size() + 1 == tplen) {
+      tas = *func_te.get_args(); /* leading targs are explicitly specified */
+      tas.push_back(tis_ml);
+    } else if (func_te.get_args()->size() == 0 && tplen == 2
+      && tis.size() == 1) {
+      /* to_ptr(...) uses this case */
+      tas.push_back(arglist.front()->resolve_texpr());
+      tas.push_back(tis_ml);
+    } else {
+      arena_error_throw(this,
+	"Invalid template arguments for variadic template: '%s'",
+	  term_tostr_human(func_te).c_str());
+    }
+    const term t_un(func_te.get_expr(), tas);
+    func_te = eval_term(t_un);
+    DBG_VARIADIC(fprintf(stderr, "variadic %s -> %s\n",
+      term_tostr_human(t_un).c_str(), term_tostr_human(func_te).c_str()));
     set_type_inference_result_for_funccall(this, term_get_instance(func_te));
   }
   if (!memfunc_w_explicit_obj) {
@@ -2889,7 +2940,7 @@ void expr_fldfe::check_type(symbol_table *lookup)
   }
   this->stmts = cstmts;
   fn_set_generated_code(cstmts); /* mark block_id_ns = 0 */
-  fn_update_tree(this->stmts, this, lookup, uniqns, injectns);
+  fn_update_tree(this->stmts, this, lookup, uniqns);
   DBG_FLDFE(fprintf(stderr, "%s\n", this->stmts->dump(0).c_str()));
   fn_check_type(stmts, lookup);
 }
@@ -3029,7 +3080,7 @@ void expr_foldfe::check_type(symbol_table *lookup)
   }
   subst_foldfe(this, stmts, ees, fop);
   fn_set_generated_code(this->stmts); /* mark block_id_ns = 0 */
-  fn_update_tree(this->stmts, this, lookup, uniqns, injectns);
+  fn_update_tree(this->stmts, this, lookup, uniqns);
   fn_check_type(stmts, lookup);
 }
 
@@ -3275,7 +3326,7 @@ void expr_expand::check_type(symbol_table *lookup)
   /* re-chain */
   if (generated_expr != 0) {
     fn_set_generated_code(generated_expr); /* mark block_id_ns = 0 */
-    fn_update_tree(generated_expr, gparent, lookup, uniqns, injectns);
+    fn_update_tree(generated_expr, gparent, lookup, uniqns);
     assert(lookup != 0);
     const bool is_template_descent
       = lookup->block_backref->tinfo.template_descent;
@@ -3417,7 +3468,7 @@ void expr_argdecls::define_vars_one(expr_stmts *stmt)
   #if 0
   fprintf(stderr, "define %s\n", sym); // FIXME
   #endif
-  symtbl_lexical->define_name(sym, injectns, this, attribute_private, stmt);
+  symtbl_lexical->define_name(sym, uniqns, this, attribute_private, stmt);
 }
 
 void expr_argdecls::check_type(symbol_table *lookup)
