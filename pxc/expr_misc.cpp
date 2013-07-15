@@ -37,6 +37,7 @@
 namespace pxc {
 
 /* begin: global variables */
+/* note: arena_clear() must reset these vairables */
 expr_arena_type expr_arena;
 str_arena_type str_arena;
 topvals_type topvals;
@@ -47,7 +48,9 @@ builtins_type builtins;
 errors_type cur_errors;
 std::string main_namespace;
 int compile_phase = 0;
+size_t recursion_limit = 3000;
 nsaliases_type nsaliases;
+nsextends_type nsextends;
 /* end: global variables */
 
 void print_space(int n, char c, FILE *fp)
@@ -283,7 +286,10 @@ bool is_ordered_type(const term& t)
   // if (is_builtin_pod(t)) {
     return true;
   }
-  if (t == builtins.type_string || t == builtins.type_strlit) {
+  if (t == builtins.type_strlit) {
+    return true;
+  }
+  if (is_string_type(t)) {
     return true;
   }
   if (is_cm_slice_family(t) || is_array_family(t)) {
@@ -342,12 +348,17 @@ bool is_possibly_nonpod(const term& t)
   return true;
 }
 
-#if 0
 bool is_string_type(const term& t)
 {
-  return t == builtins.type_string;
+  const typefamily_e cat = get_family(t);
+  if (cat == typefamily_e_varray) {
+    const term& et = get_array_elem_texpr(0, t);
+    if (et == builtins.type_uchar) {
+      return true;
+    }
+  }
+  return false;
 }
-#endif
 
 static bool is_pod_integral_type(const term& t)
 {
@@ -422,8 +433,8 @@ typefamily_e get_family_from_string(const std::string& s)
   if (s == "tptr") return typefamily_e_tptr;
   if (s == "tcptr") return typefamily_e_tcptr;
   if (s == "tiptr") return typefamily_e_tiptr;
-  if (s == "lockobject") return typefamily_e_lockobject;
-  if (s == "clockobject") return typefamily_e_clockobject;
+  if (s == "lock_guard") return typefamily_e_lock_guard;
+  if (s == "lock_cguard") return typefamily_e_lock_cguard;
   if (s == "extint") return typefamily_e_extint;
   if (s == "extuint") return typefamily_e_extuint;
   if (s == "extenum") return typefamily_e_extenum;
@@ -457,8 +468,8 @@ std::string get_family_string(typefamily_e cat)
   case typefamily_e_tptr: return "tptr";
   case typefamily_e_tcptr: return "tcptr";
   case typefamily_e_tiptr: return "tiptr";
-  case typefamily_e_lockobject: return "lockobject";
-  case typefamily_e_clockobject: return "clockobject";
+  case typefamily_e_lock_guard: return "lock_guard";
+  case typefamily_e_lock_cguard: return "lock_cguard";
   case typefamily_e_extint: return "extint";
   case typefamily_e_extuint: return "extuint";
   case typefamily_e_extenum: return "extenum";
@@ -490,8 +501,8 @@ static bool is_pointer_family(const typefamily_e cat)
   case typefamily_e_tptr:
   case typefamily_e_tcptr:
   case typefamily_e_tiptr:
-  case typefamily_e_lockobject:
-  case typefamily_e_clockobject:
+  case typefamily_e_lock_guard:
+  case typefamily_e_lock_cguard:
     return true;
   default:
     return false;
@@ -521,14 +532,14 @@ bool pointer_conversion_allowed(const typefamily_e from,
     return to == from || to == typefamily_e_cptr;
   case typefamily_e_tptr:
     return to == from || to == typefamily_e_tcptr
-      || to == typefamily_e_lockobject || to == typefamily_e_clockobject;
+      || to == typefamily_e_lock_guard || to == typefamily_e_lock_cguard;
   case typefamily_e_tcptr:
-    return to == from || to == typefamily_e_clockobject;
+    return to == from || to == typefamily_e_lock_cguard;
   case typefamily_e_tiptr:
     return to == from;
-  case typefamily_e_lockobject:
+  case typefamily_e_lock_guard:
     return false;
-  case typefamily_e_clockobject:
+  case typefamily_e_lock_cguard:
     return false;
   default:
     return false;
@@ -632,7 +643,7 @@ bool is_const_or_immutable_pointer_family(const term& t)
 {
   const typefamily_e cat = get_family(t);
   return cat == typefamily_e_tcptr || cat == typefamily_e_cptr ||
-    cat == typefamily_e_clockobject || cat == typefamily_e_tiptr ||
+    cat == typefamily_e_lock_cguard || cat == typefamily_e_tiptr ||
     cat == typefamily_e_iptr;
 }
 
@@ -649,16 +660,16 @@ bool is_multithreaded_pointer_family(const term& t)
     cat == typefamily_e_tiptr;
 }
 
-bool is_cm_lockobject_family(const term& t)
+bool is_cm_lock_guard_family(const term& t)
 {
   const typefamily_e cat = get_family(t);
-  return cat == typefamily_e_lockobject || cat == typefamily_e_clockobject;
+  return cat == typefamily_e_lock_guard || cat == typefamily_e_lock_cguard;
 }
 
-static bool is_cm_lockobject_family(expr_i *e)
+static bool is_cm_lock_guard_family(expr_i *e)
 {
   const typefamily_e cat = get_family(e);
-  return cat == typefamily_e_lockobject || cat == typefamily_e_clockobject;
+  return cat == typefamily_e_lock_guard || cat == typefamily_e_lock_cguard;
 }
 
 bool is_array_family(const term& t)
@@ -708,7 +719,7 @@ bool is_cm_range_family(const term& t)
 static bool is_ephemeral_value_type(expr_i *e)
 {
   return is_cm_range_family(e);
-  // || is_cm_lockobject_family(e);
+  // || is_cm_lock_guard_family(e);
 }
 
 bool is_ephemeral_value_type(const term& t)
@@ -808,7 +819,7 @@ static bool is_copyable_type_one(expr_i *e)
     return false;
   }
   const typefamily_e cat = get_family(e);
-  if (is_cm_lockobject_family(e)) {
+  if (is_cm_lock_guard_family(e)) {
     return false;
   }
   if (cat == typefamily_e_linear || cat == typefamily_e_noncopyable) {
@@ -1180,12 +1191,12 @@ std::string term_tostr(const term& t, term_tostr_sort s)
     if (is_cm_pointer_family(t)) {
       const typefamily_e cat = get_family(t);
       const std::string catstr = get_family_string(cat);
-      if (s == term_tostr_sort_cname_tparam) {
+      if (s == term_tostr_sort_cname_tparam || s == term_tostr_sort_strict) {
 	rstr += "pxcrt$$" + catstr;
       } else {
-	if (is_cm_lockobject_family(t)) {
-	  const std::string s = (cat == typefamily_e_lockobject)
-	    ? "pxcrt::lockobject" : "pxcrt::clockobject";
+	if (is_cm_lock_guard_family(t)) {
+	  const std::string s = (cat == typefamily_e_lock_guard)
+	    ? "pxcrt::lock_guard" : "pxcrt::lock_cguard";
 	  if (is_interface_pointer(t)) {
 	    rstr += s;
 	  } else {
@@ -1579,7 +1590,7 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
     DBG_CONV(fprintf(stderr, "convert: numeric cast\n"));
     return true;
   }
-  if (tfrom == builtins.type_strlit && tto == builtins.type_string) {
+  if (tfrom == builtins.type_strlit && is_string_type(tto)) {
     DBG_CONV(fprintf(stderr, "convert: strlit to string\n"));
     efrom->conv = conversion_e_cast;
     efrom->type_conv_to = tconvto;
@@ -1979,7 +1990,7 @@ fprintf(stderr, "%s >> %s post %x\n", term_tostr_human(t).c_str(),
   }
   attribute_e r = attribute_e(attr);
 #if 0
-if (term_tostr_human(t) == "algebraic::common::product_type{{meta::common::bt_int,container::string::string}}") {
+if (term_tostr_human(t) == "algebraic::common::product_type{{meta::bt_int,container::string::string}}") {
 //abort();
 }
 fprintf(stderr, "%s %x\n", term_tostr_human(t).c_str(), attr);
@@ -2109,13 +2120,12 @@ void fn_append_coptions(expr_i *e, coptions& copt_apnd)
   }
 }
 
-void fn_set_namespace(expr_i *e, const std::string& uniqns,
-  const std::string& injectns, int& block_id_ns)
+void fn_set_namespace(expr_i *e, const std::string& uniqns, int& block_id_ns)
 {
   if (e == 0) {
     return;
   }
-  e->set_unique_namespace_one(uniqns, injectns);
+  e->set_unique_namespace_one(uniqns);
   expr_block *const bl = dynamic_cast<expr_block *>(e);
   if (bl != 0) {
     assert(compile_phase == 0);
@@ -2127,7 +2137,7 @@ void fn_set_namespace(expr_i *e, const std::string& uniqns,
   const int num = e->get_num_children();
   for (int i = 0; i < num; ++i) {
     expr_i *c = e->get_child(i);
-    fn_set_namespace(c, uniqns, injectns, block_id_ns);
+    fn_set_namespace(c, uniqns, block_id_ns);
   }
 }
 
@@ -2262,14 +2272,14 @@ void fn_set_tree_and_define_static(expr_i *e, expr_i *p, symbol_table *symtbl,
 }
 
 void fn_update_tree(expr_i *e, expr_i *p, symbol_table *symtbl,
-  const std::string& curns_u, const std::string& curns_i)
+  const std::string& curns_u)
 {
   if (e == 0) {
     return;
   }
   e->parent_expr = p;
   e->symtbl_lexical = symtbl;
-  e->set_unique_namespace_one(curns_u, curns_i);
+  e->set_unique_namespace_one(curns_u);
   DBG_SYMTBL(fprintf(stderr, "fn_update_tree: set %p-> symtbl_lexical  = %p\n",
     e, symtbl));
   if (e->get_esort() == expr_e_block) {
@@ -2279,7 +2289,7 @@ void fn_update_tree(expr_i *e, expr_i *p, symbol_table *symtbl,
   const int num = e->get_num_children();
   for (int i = 0; i < num; ++i) {
     expr_i *c = e->get_child(i);
-    fn_update_tree(c, e, symtbl, curns_u, curns_i);
+    fn_update_tree(c, e, symtbl, curns_u);
   }
 }
 
@@ -3090,7 +3100,7 @@ term get_array_range_texpr(expr_op *eop, expr_i *ec /* nullable */,
 
 term get_array_elem_texpr(expr_op *eop, const term& t0)
 {
-  if (t0 == builtins.type_string || t0 == builtins.type_strlit) {
+  if (t0 == builtins.type_strlit) {
     return builtins.type_uchar;
   }
   /* extern struct? */
@@ -3139,7 +3149,7 @@ term get_array_elem_texpr(expr_op *eop, const term& t0)
 
 term get_array_index_texpr(expr_op *eop, const term& t0)
 {
-  if (t0 == builtins.type_string || t0 == builtins.type_strlit) {
+  if (t0 == builtins.type_strlit) {
     return builtins.type_size_t;
   }
   /* extern struct? */

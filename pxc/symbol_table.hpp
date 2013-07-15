@@ -111,14 +111,16 @@ public:
   expr_i *resolve_name_nothrow(const std::string& fullname,
     bool no_private, const std::string& curns, bool& is_global_r,
     bool& is_upvalue_r, bool& is_memfld_r);
+  expr_i *resolve_name_nothrow_memfld(const std::string& fullname,
+    bool no_private, const std::string& curns);
   expr_i *resolve_name(const std::string& fullname, const std::string& curns,
     expr_i *e, bool& is_global_r, bool& is_upvalue_r);
   void clear_symbols();
   int generate_tempvar();
 private:
   localvar_info resolve_name_nothrow_internal(const std::string& fullname,
-    const std::string& curns, bool& is_global_r, bool& is_upvalue_r,
-    bool& is_memfld_r);
+    const std::string& curns, bool memfld_only, bool& is_global_r,
+    bool& is_upvalue_r, bool& is_memfld_r);
 };
 
 };

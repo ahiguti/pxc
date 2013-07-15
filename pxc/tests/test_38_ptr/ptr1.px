@@ -1,16 +1,17 @@
 namespace ptr1;
 import common -;
+import meta m;
 
 mtvaluetype struct foo(int x_, string const& s_) {
   int x = x_;
   string s = s_;
 }
 
-function {t} void t1() {
+function {con} void t1() {
   int const x = 30;
   string const s = "abc";
-  t const f = t(foo(x, s));
-  print(meta::common::full_string{t});
+  const f = m::apply{m::symbol{con}, foo, m::list{m::list{foo, 0}}}(foo(x, s));
+  print(meta::full_string{meta::typeof{f}});
   print(" ");
   print(f->x);
   print(" ");
@@ -19,10 +20,10 @@ function {t} void t1() {
   println(f);
 }
 
-t1{ptr{foo}}();
-t1{cptr{foo}}();
-t1{iptr{foo}}();
-t1{tptr{foo}}();
-t1{tcptr{foo}}();
+t1{"to_ptr"}();
+t1{"to_cptr"}();
+t1{"to_iptr"}();
+t1{"to_tptr"}();
+t1{"to_tcptr"}();
 // t1{tiptr{foo}}();
 

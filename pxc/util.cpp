@@ -557,6 +557,24 @@ std::string unescape_hex_controls(const std::string& str)
   return r;
 }
 
+std::string escape_hex_filename(const std::string& str)
+{
+  std::string r;
+  const size_t sz = str.size();
+  r.reserve(sz);
+  for (size_t i = 0; i < sz; ++i) {
+    const unsigned char c = str[i];
+    if (c < 0x20 || c == '%' || c == '/' || (c == '.' && i == 0)) {
+      r.push_back('%');
+      r.push_back(uchar_to_hexadecimal(c / 16));
+      r.push_back(uchar_to_hexadecimal(c % 16));
+    } else {
+      r.push_back(c);
+    }
+  }
+  return r;
+}
+
 static inline bool is_non_alnum(unsigned char c)
 {
   if (c >= '0' && c <= '9') {
@@ -580,8 +598,12 @@ std::string escape_hex_non_alnum(const std::string& str)
     const unsigned char c = str[i];
     if (is_non_alnum(c)) {
       r.push_back('_');
-      r.push_back(uchar_to_hexadecimal(c / 16));
-      r.push_back(uchar_to_hexadecimal(c % 16));
+      if (c == '_') {
+	r.push_back('_');
+      } else {
+	r.push_back(uchar_to_hexadecimal(c / 16));
+	r.push_back(uchar_to_hexadecimal(c % 16));
+      }
     } else {
       r.push_back(c);
     }
@@ -596,7 +618,9 @@ std::string unescape_hex_non_alnum(const std::string& str)
   r.reserve(sz);
   for (size_t i = 0; i < sz; ++i) {
     const unsigned char c = str[i];
-    if (c == '_' && i + 2 < sz) {
+    if (c == '_' && i + 1 < sz && str[i + 1] == '_') {
+      r.push_back('_');
+    } else if (c == '_' && i + 2 < sz) {
       const unsigned char c1 = uchar_from_hexadecimal(str[i + 1]);
       const unsigned char c2 = uchar_from_hexadecimal(str[i + 2]);
       r.push_back(c1 * 16 + c2);

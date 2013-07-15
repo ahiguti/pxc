@@ -2,10 +2,11 @@ namespace orb;
 public import ordered::compare -;
 public import common -;
 public import string::conversion -;
-public import exception::common -;
-public import downcast -;
-public import meta::common m;
+public import meta -;
+public import pointer -;
+public import meta m;
 public import meta::family mf;
+public import exception -;
 
 public threaded interface orb_transport {
   function void send_receive(string mutable& rbuf, string mutable& wbuf);
@@ -67,10 +68,10 @@ public threaded function bool execute_request(ptr{orb} const& op)
     } else {
       return false; /* not executed */
     }
-  } catch (runtime_error e) {
+  } catch (c_runtime_error e) {
     o.wbuf.append("T\t");
-    string s = exception_what(e);
-    string tr = exception_stack_trace(e);
+    string s = c_exception_message(e);
+    string tr = c_exception_stack_trace(e);
     if (!tr.empty()) {
       s.append("\n");
       s.append(tr);
@@ -91,11 +92,11 @@ public threaded function void execute(orb mutable& o)
     } else {
       o.wbuf.append("T\tunknown_request\n");
     }
-  } catch (runtime_error e) {
+  } catch (c_runtime_error e) {
     o.wbuf.clear();
     o.wbuf.append("T\t");
-    string s = exception_what(e);
-    string tr = exception_stack_trace(e);
+    string s = c_exception_message(e);
+    string tr = c_exception_stack_trace(e);
     if (!tr.empty()) {
       s.append("\n");
       s.append(tr);
@@ -349,9 +350,10 @@ private threaded struct {t} stub (ptr{orb} const& op, size_t robjid) <t> {
   }
 }
 
-public mtvaluetype struct orb_error(cstrref const& m) <runtime_error_st> {
+public mtvaluetype struct orb_error(cstrref const& m) <runtime_error>
+{
   string const mess = m;
-  function strlit what() const { return "orb_error"; }
+  function string message() const { return mess; }
 }
 
 private threaded function {t} t execute_expect_response(ptr{orb} const& op)
@@ -383,7 +385,7 @@ private threaded function {t} ptr{stub{t}} create_stub(ptr{orb} const& op,
   size_t remote_objid)
 {
   orb mutable& o = *op;
-  ptr{stub{t}} r = ptr{stub{t}}(stub{t}(op, remote_objid));
+  ptr{stub{t}} r = to_ptr{stub{t}}(stub{t}(op, remote_objid));
   size_t const local_objid = rawptr_to_size_t(ptr_to_rawptr(r));
   o.stubs_rtol[remote_objid] = local_objid; /* throw */
   o.stubs_ltor[local_objid] = remote_objid; /* throw */
@@ -420,7 +422,7 @@ private threaded function {t} void marshal_reference(orb mutable& o,
   } else {
     skeleton_mapped mutable& m = o.skeletons[ra];
     if (case m.nothing) {
-      m.real_object = box{call_method_instance{m::at0{t}}}(x);
+      m.real_object = to_ptr{call_method_instance{m::at0{t}}}(x);
     }
     o.wbuf.push_back('!');
     serialize_to_string{size_t}(ra, o.wbuf);
@@ -555,7 +557,7 @@ public threaded function {ns} ns_functions create_ns_functions()
     {
       strlit k = m::to_string{fsym};
       metafunction fc marshal_fcall{m::symbol{fsym, ns}};
-      ptr{i_marshal_fcall} p = ptr{fc}(fc());
+      ptr{i_marshal_fcall} p = to_ptr{fc}(fc());
       func_entry e = func_entry(k, p);
       fs.push_back(e);
     }
@@ -570,7 +572,7 @@ public threaded function {t} methods create_methods()
     {
       strlit k = m::to_string{fsym};
       metafunction mt marshal_method{t, idx};
-      ptr{i_marshal_method} p = ptr{mt}(mt());
+      ptr{i_marshal_method} p = to_ptr{mt}(mt());
       method_entry e = method_entry(k, p);
       ms.push_back(e);
     }

@@ -1,23 +1,110 @@
 namespace io::process;
-public import io -;
 public import numeric::integral -;
-public import container::string -;
-public import container::array;
+public import container::array -;
+public import meta -;
+public import io -;
+public import io::errno -;
+public import io::signal -;
+public import exception;
+
+public extern "pxcio::pxc_argv" vector{string} argv;
+public extern "pxcio::pxc_environ" vector{string} environ;
+
+public threaded function errno_t io_exit(io const& sys, int st)
+{
+  _exit_internal(sys, st);
+  return sys.get_errno();
+}
+
+public function errno_t exit(int st)
+{
+  exit_internal(io::system, st);
+  return io::system.get_errno();
+}
+
+public threaded function void io_abort(io const& sys)
+{
+  abort_internal(sys);
+}
 
 public tsvaluetype struct extern "::pid_t" "extint" pid_t { }
+public tsvaluetype struct extern "int" "extbitmask" wait_options_t { }
+public extern "WNOHANG" wait_options_t WNOHANG;
 
-public threaded function extern "pxcio::_exit" void _exit(io const& sys,
-  int status);
-public threaded function extern "pxcio::abort" void abort(io const& sys);
-public threaded function extern "pxcio::fork" pid_t fork(io const& sys);
-public threaded function extern "pxcio::wait" pid_t waitpid(io const& sys);
+public threaded function errno_or_value{pid_t} io_fork(io const& sys)
+{
+  pid_t const pid = fork_internal(sys);
+  errno_or_value{pid_t} r;
+  if (pid < 0) {
+    r.errno = sys.get_errno();
+  } else {
+    r.value = pid;
+  }
+  return r;
+}
 
-public function extern "::exit" void exit(int status);
+public tsvaluetype struct extern "int" "extint" status_t { }
 
-public extern "pxcio::pxc_argv"
-container::array::pxcvector{string} argv;
-public extern "pxcio::pxc_environ"
-container::array::pxcvector{string} environ;
+public tsvaluetype struct wait_t {
+  pid_t pid;
+  status_t status;
+}
+
+public threaded function errno_or_value{wait_t} io_wait(io const& sys,
+  status_t mutable& st_r)
+{
+  status_t st;
+  pid_t const pid = wait_internal(sys, st);
+  errno_or_value{wait_t} r;
+  if (pid < 0) {
+    r.errno = sys.get_errno();
+  } else {
+    r.value = wait_t(pid, st);
+  }
+  return r;
+}
+
+public threaded function errno_or_value{wait_t} io_waitpid(io const& sys,
+  pid_t p, wait_options_t opt)
+{
+  status_t st;
+  pid_t const pid = waitpid_internal(sys, p, st, opt);
+  errno_or_value{wait_t} r;
+  if (pid < 0) {
+    r.errno = sys.get_errno();
+  } else {
+    r.value = wait_t(pid, st);
+  }
+  return r;
+}
+
+public threaded function extern "pxcio::wifexited"
+bool WIFEXITED(status_t st);
+public threaded function extern "pxcio::wexitstatus"
+int WEXITSTATTUS(status_t st);
+public threaded function extern "pxcio::wifsignaled"
+bool WIFSIGNALED(status_t st);
+public threaded function extern "pxcio::wtermsig"
+signal_t WTERMSIG(status_t st);
+
+public threaded function extern "pxcio::execv"
+errno_t execv(io const& sys, cstrref const& path, vector{string} const& argv);
+public threaded function extern "pxcio::execvp"
+errno_t execvp(io const& sys, cstrref const& path, vector{string} const& argv);
+
+private threaded function extern "pxcio::_exit_internal"
+void _exit_internal(io const& sys, int status);
+private function extern "pxcio::exit_internal"
+void exit_internal(io const& sys, int status);
+private threaded function extern "pxcio::abort_internal"
+void abort_internal(io const& sys);
+private threaded function extern "pxcio::fork_internal"
+pid_t fork_internal(io const& sys);
+private threaded function extern "pxcio::wait_internal"
+pid_t wait_internal(io const& sys, status_t mutable& st_r);
+private threaded function extern "pxcio::waitpid_internal"
+pid_t waitpid_internal(io const& sys, pid_t pid, status_t mutable& st_r,
+  wait_options_t opt);
 
 private function extern "pxcio::io_process_init" void io_process_init();
 
@@ -25,24 +112,29 @@ io_process_init();
 
 extern "functions" inline
 namespace pxcio {
+
 extern pxcrt::pxcvector<pxcrt::bt_string> pxc_argv;
 extern pxcrt::pxcvector<pxcrt::bt_string> pxc_environ;
+
 };
 ;
 
 extern "implementation" inline
 namespace pxcio {
 
-#include <stdlib.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 pxcrt::pxcvector<pxcrt::bt_string> pxc_argv;
 pxcrt::pxcvector<pxcrt::bt_string> pxc_environ;
 
+using namespace pxcrt;
+
 void io_process_init()
 {
   pxc_argv.clear();
-  char buf[64];
+  char buf[32];
   int c = 0;
   while (true) {
     snprintf(buf, sizeof(buf), "PXC_ARG%d", c++);
@@ -62,6 +154,88 @@ void io_process_init()
     pxc_environ.push_back(s);
     ++p;
   }
+}
+
+void _exit_internal(io const& sys, bt_int st)
+{
+  _exit(st);
+}
+
+void exit_internal(io const& sys, bt_int st)
+{
+  exit(st);
+}
+
+void abort_internal(io const& sys)
+{
+  abort();
+}
+
+::pid_t fork_internal(io const& sys)
+{
+  return fork();
+}
+
+::pid_t wait_internal(io const& sys, int& st_r)
+{
+  return wait(&st_r);
+}
+
+::pid_t waitpid_internal(io const& sys, ::pid_t pid, int& st_r, int opt)
+{
+  return waitpid(pid, &st_r, opt);
+}
+
+bool wifexited(int st)
+{
+  return WIFEXITED(st) != 0;
+}
+
+int wexitstatus(int st)
+{
+  return WIFEXITED(st) ? WEXITSTATUS(st) : 0;
+}
+
+bool wifsignaled(int st)
+{
+  return WIFSIGNALED(st) != 0;
+}
+
+int wtermsig(int st)
+{
+  return WIFSIGNALED(st) ? WTERMSIG(st) : 0;
+}
+
+static int execv_internal(bool execvp_flag, cstrref const& path,
+  pxcvector<bt_string> const& argv)
+{
+  PXCRT_ALLOCA_NTSTRING(path_nt, path);
+  bt_string argv_nt[argv.size()];
+  char *argv_rp[argv.size() + 1];
+  for (size_t i = 0; i < argv.size(); ++i) {
+    argv_nt[i] = argv[i];
+    argv_nt[i].push_back('\0');
+    argv_rp[i] = reinterpret_cast<char *>(argv_nt[i].rawarr());
+  }
+  argv_rp[argv.size()] = 0;
+  if (execvp_flag) {
+    ::execvp(path_nt.get(), argv_rp);
+  } else {
+    ::execv(path_nt.get(), argv_rp);
+  }
+  return errno;
+}
+
+int execv(io const& sys, cstrref const& path,
+  pxcvector<bt_string> const& argv)
+{
+  return execv_internal(false, path, argv);
+}
+
+int execvp(io const& sys, cstrref const& file,
+  pxcvector<bt_string> const& argv)
+{
+  return execv_internal(true, file, argv);
 }
 
 };

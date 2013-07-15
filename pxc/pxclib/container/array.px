@@ -1,19 +1,18 @@
 namespace container::array;
 public import numeric::integral -;
-// public import container::impl::stdvector;
-// public import container::impl::pxcvector;
 public import container::impl::farray;
 public import container::impl::darray;
+public import container::impl::string;
 public import container::impl::invguard;
 public import container::impl::util;
-public import meta::common m;
+public import meta m;
 
-public tsvaluetype struct extern "pxcrt::bt_slice" "slice" {t} slice {
+public tsvaluetype struct extern "::pxcrt::bt_slice" "slice" {t} slice {
   public metafunction key_type size_t;
   public metafunction mapped_type t;
   public metafunction range_type slice{t};
   public metafunction crange_type slice{t};
-  public metafunction non_ephemeral_type pxcvector{t};
+  public metafunction non_ephemeral_type vector{t};
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
   public function extern "get" t get(size_t i) const;
@@ -24,12 +23,12 @@ public tsvaluetype struct extern "pxcrt::bt_slice" "slice" {t} slice {
   public function extern "pop_back" void pop_back(size_t i);
 }
 
-public tsvaluetype struct extern "pxcrt::bt_cslice" "cslice" {t} cslice {
+public tsvaluetype struct extern "::pxcrt::bt_cslice" "cslice" {t} cslice {
   public metafunction key_type size_t;
   public metafunction mapped_type t;
   public metafunction range_type cslice{t};
   public metafunction crange_type cslice{t};
-  public metafunction non_ephemeral_type pxcvector{t};
+  public metafunction non_ephemeral_type vector{t};
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
   public function extern "get" t get(size_t i) const;
@@ -39,28 +38,16 @@ public tsvaluetype struct extern "pxcrt::bt_cslice" "cslice" {t} cslice {
   public function extern "pop_back" void pop_back(size_t i);
 }
 
-public mtvaluetype struct extern "array::stdvector" "varray" {t} stdvector {
-  public metafunction key_type size_t;
-  public metafunction mapped_type t;
-  public metafunction range_type slice{t};
-  public metafunction crange_type cslice{t};
-  public function extern "empty" bool empty() const;
-  public function extern "size" size_t size() const;
-  public function extern "resize" void resize(size_t i, t const& v);
-  public function extern "clear" void clear();
-  public function extern "push_back" void push_back(t const& v);
-  public function extern "pop_back" t pop_back();
-  public function extern "append" void append(crange_type const& v);
-  public function extern "reserve" void reserve(size_t i);
-}
+public metafunction string vector{uchar};
 
-public mtvaluetype struct extern "pxcrt::pxcvector" "varray" {t} pxcvector {
+public mtvaluetype struct extern "::pxcrt::pxcvector" "varray" {t} vector {
   public metafunction key_type size_t;
   public metafunction mapped_type t;
   public metafunction range_type slice{t};
   public metafunction crange_type cslice{t};
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
+  public function extern "find" size_t find(size_t offset, t const& v) const;
   public function extern "resize" void resize(size_t i, t const& v);
   public function extern "clear" void clear();
   public function extern "push_back" void push_back(t const& v);
@@ -71,7 +58,30 @@ public mtvaluetype struct extern "pxcrt::pxcvector" "varray" {t} pxcvector {
   public function extern "erase" void erase(size_t first, size_t last);
 }
 
-public tsvaluetype struct extern "array::farray" "farray" {t, n} farray {
+/* in-place construction */
+public function {ts} void
+vector_construct_back(expand(construct_back_arg_decls{ts}))
+{
+  metafunction t m::at0{m::at0{m::at0{ts}}};
+  t mutable& x = vector_push_back_uninitialized(a0);
+  x extern "placement-new" t(expand(a: construct_back_arg_names{ts}; a));
+  vector_rawarr_set_valid_len(a0, a0.size() + 1);
+}
+
+private function extern "::pxcrt::pxcvector_push_back_uninitialized" {t}
+t mutable& vector_push_back_uninitialized(vector{t} mutable& v);
+private function extern "::pxcrt::pxcvector_rawarr_set_valid_len" {t}
+void vector_rawarr_set_valid_len(vector{t} mutable& v, size_t len);
+private metafunction construct_back_arg_decls{ts}
+  m::map{
+    m::seq{m::size{ts}},
+    metafunction{i}
+      m::list{m::concat{"a", i}, m::at0{m::at{ts, i}},
+	m::cond{m::eq{i, 0}, 1, 0}, 1}}; /* 1st arg is by mutable ref */
+private metafunction construct_back_arg_names{ts}
+  m::map{m::seq{1, m::size{ts}}, metafunction{i} m::concat{"a", i}};
+
+public tsvaluetype struct extern "::pxcrt::farray" "farray" {t, n} farray {
   public metafunction key_type size_t;
   public metafunction mapped_type t;
   public metafunction range_type slice{t};
@@ -80,7 +90,7 @@ public tsvaluetype struct extern "array::farray" "farray" {t, n} farray {
   public function extern "size" size_t size() const;
 }
 
-public tsvaluetype struct extern "array::darray" "darray" {t} darray {
+public tsvaluetype struct extern "::pxcrt::darray" "darray" {t} darray {
   public metafunction key_type size_t;
   public metafunction mapped_type t;
   public metafunction range_type slice{t};
@@ -88,4 +98,33 @@ public tsvaluetype struct extern "array::darray" "darray" {t} darray {
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
 }
+
+public metafunction strref slice{uchar};
+public metafunction cstrref cslice{uchar};
+
+public metafunction is_string_family_type{t}
+    m::or{
+      m::eq{t, string},
+      m::eq{t, strlit},
+      m::eq{t, strref},
+      m::eq{t, cstrref}};
+
+public tsvaluetype struct extern "::pxcrt::bt_strlit" "farray" strlit {
+  public metafunction key_type size_t;
+  public metafunction mapped_type uchar;
+  public metafunction range_type slice{uchar};
+  public metafunction crange_type cslice{uchar};
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "find" size_t find(size_t o, uchar const& v) const;
+}
+
+public threaded function extern "::pxcrt::memcmp_string"
+  int memcmp_string(string const& x, string const& y);
+public threaded function extern "::pxcrt::memcmp_strlit"
+  int memcmp_strlit(strlit const& x, strlit const& y);
+public threaded function extern "::pxcrt::memcmp_strref"
+  int memcmp_strref(strref const& x, strref const& y);
+public threaded function extern "::pxcrt::memcmp_cstrref"
+  int memcmp_cstrref(cstrref const& x, cstrref const& y);
 

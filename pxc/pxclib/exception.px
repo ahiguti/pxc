@@ -1,0 +1,67 @@
+namespace exception;
+public import exception::impl;
+public import numeric::integral -;
+public import container::array -;
+
+/* C++ exceptions */
+public mtvaluetype interface extern "std::exception"
+  c_exception { }
+public mtvaluetype interface extern "std::logic_error"
+  c_logic_error <c_exception> { }
+public mtvaluetype interface extern "std::runtime_error"
+  c_runtime_error <c_exception> { }
+public mtvaluetype interface extern "std::bad_alloc"
+  c_bad_alloc <c_exception> { }
+
+/* PXC exceptions, with stack trace */
+private mtvaluetype interface extern "pxcrt::exception"
+  exception /* inherits std::exception */
+{
+  function extern "message" string message() const;
+}
+public mtvaluetype interface extern "pxcrt::logic_error"
+  logic_error <exception> { } /* inherits std::logic_error */
+public mtvaluetype interface extern "pxcrt::runtime_error"
+  runtime_error <exception> { } /* inherits std::runtime_error */
+public mtvaluetype interface extern "pxcrt::bad_alloc"
+  bad_alloc <exception> { } /* inherits std::bad_alloc */
+
+/* builtin exceptions */
+public mtvaluetype struct extern "pxcrt::invalid_index" ""
+  invalid_index <logic_error>
+{ 
+  function extern "message" string message() const;
+}
+public mtvaluetype struct extern "pxcrt::invalid_field" ""
+  invalid_field <logic_error>
+{ 
+  function extern "message" string message() const;
+}
+public mtvaluetype struct extern "pxcrt::would_invalidate" ""
+  would_invalidate <logic_error>
+{ 
+  function extern "message" string message() const;
+}
+
+/* templates */
+public mtvaluetype struct {str} logic_error_template <logic_error>
+{
+  function string message() const { return str; }
+}
+public mtvaluetype struct {str} runtime_error_template <runtime_error>
+{
+  function string message() const { return str; }
+}
+public mtvaluetype struct {str} bad_alloc_template <bad_alloc>
+{
+  function string message() const { return str; }
+}
+
+public threaded function extern "pxcrt::c_exception_message" string
+c_exception_message(c_exception const& ex);
+public threaded function extern "pxcrt::c_exception_stack_trace" string
+c_exception_stack_trace(c_exception const& ex);
+
+public function extern "pxcrt::set_stack_trace_limit" void
+set_stack_trace_limit(size_t sz);
+

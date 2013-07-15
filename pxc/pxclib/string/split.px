@@ -1,13 +1,13 @@
 namespace string::split;
+import container::array +;
 import numeric::integral -;
-import container::string -;
 import string::conversion -;
-import meta::common m;
+import meta m;
 import meta::vararg va;
 import meta::family mf;
 
 public threaded function {delim, tlist} void
-string_split(expand(split_arg_decls{tlist}))
+vector_split(expand(split_arg_decls{tlist}))
 { 
   size_t pos = 0;
   expand(arg, idx : va::arg_names{m::size{tlist}}) {
@@ -21,8 +21,23 @@ string_split(expand(split_arg_decls{tlist}))
   }
 }
 
+public threaded function {tlist} void
+vector_concat(expand(concat_arg_decls{tlist}))
+{
+  expand (a, i: va::arg_names{m::size{tlist}}) {
+    if (m::ne{i, 0}) { 
+      metafunction t m::at0{m::at{tlist, i}};
+      if (mf::is_string_family_type{t}) {
+        a0.append(a);
+      } else {
+        string::conversion::serialize_to_string{t}(a, a0);
+      }
+    }
+  }
+}
+
 public threaded function {delim, tlist} string
-string_join(expand(va::arg_decls_bycref{tlist}))
+join(expand(va::arg_decls_bycref{tlist}))
 {
   string s;
   expand (a, i: va::arg_names{m::size{tlist}}) {
@@ -39,21 +54,6 @@ string_join(expand(va::arg_decls_bycref{tlist}))
     }
   }
   return s;
-}
-
-public threaded function {tlist} void
-string_concat(expand(concat_arg_decls{tlist}))
-{
-  expand (a, i: va::arg_names{m::size{tlist}}) {
-    if (m::ne{i, 0}) { 
-      metafunction t m::at0{m::at{tlist, i}};
-      if (mf::is_string_family_type{t}) {
-        a0.append(a);
-      } else {
-        string::conversion::serialize_to_string{t}(a, a0);
-      }
-    }
-  }
 }
 
 private metafunction split_arg_decls{tlist}

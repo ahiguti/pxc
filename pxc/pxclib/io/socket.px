@@ -1,25 +1,17 @@
-namespace io::net::socket;
+namespace io::socket;
 public import numeric::integral -;
-public import container::string -;
 public import container::array -;
 public import algebraic -;
 public import pointer -;
 public import io -;
 public import io::file -;
 public import io::errno -;
-public import io::net::addrinfo ai;
+public import io::addrinfo ai;
 
 public multithreaded struct extern "pxcio::socket_acceptor" "nodefault"
   socket_acceptor { }
 public multithreaded struct extern "pxcio::socket_connector" "nodefault"
   socket_connector { }
-
-/*
-public multithreaded struct extern "pxcio::socket_factory" "linear"
-  socket_factory(io const& iop, bool passive,
-    ai::sockaddr_storage const& addr, ai::socktype_t socktype,
-    ai::protocol_t protocol, uint listen_backlog, uint connect_timeout_sec) { }
-*/
 
 public threaded function open_t
 accept(socket_acceptor const& sfp, ai::sockaddr_storage mutable& addr_r)
@@ -49,28 +41,20 @@ connect(socket_connector const& sfp)
   return r;
 }
 
-private threaded function extern "pxcio::accept_internal"
-  file accept_internal(errno_t mutable& err_r, socket_acceptor const& sfp,
-    ai::sockaddr_storage mutable& addr_r);
-private threaded function extern "pxcio::connect_internal"
-  file connect_internal(errno_t mutable& err_r, socket_connector const& sfp);
-
 public threaded function extern "pxcio::socket_set_recv_timeout"
   errno_t socket_set_recv_timeout(file const& f, uint sec);
 public threaded function extern "pxcio::socket_set_send_timeout"
   errno_t socket_set_send_timeout(file const& f, uint sec);
 
-public multithreaded union socketpair_t {
-  errno_t errno;
-  pair{file, file} value;
-}
+public metafunction socketpair_t errno_or_value{pair{file, file}};
 
-public threaded function socketpair_t socketpair(io const& iop,
-  ai::family_t family, ai::socktype_t socktype, ai::protocol_t protocol)
+public threaded function socketpair_t
+socketpair(io const& iop, ai::family_t family, ai::socktype_t socktype,
+  ai::protocol_t protocol)
 {
   socketpair_t r;
   errno_t err = EOK;
-  pxcvector{file} v = socketpair_internal(iop, err, family, socktype,
+  vector{file} v = socketpair_internal(iop, err, family, socktype,
     protocol);
   if (err != EOK) {
     r.errno = err;
@@ -80,14 +64,10 @@ public threaded function socketpair_t socketpair(io const& iop,
   return r;
 }
 
-private threaded function extern "pxcio::socketpair_internal" pxcvector{file}
-socketpair_internal(io const& iop, errno_t mutable& err_r, ai::family_t family,
-  ai::socktype_t socktype, ai::protocol_t protocol);
-
 public multithreaded union create_acceptor_t {
   ai::gai_error_t gai_error;
   errno_t errno;
-  socket_acceptor acceptor;
+  socket_acceptor value;
 }
 
 public threaded function create_acceptor_t create_acceptor(io const& iop,
@@ -106,7 +86,7 @@ public threaded function create_acceptor_t create_acceptor(io const& iop,
     if (err != EOK) {
       r.errno = err;
     } else {
-      r.acceptor = sa;
+      r.value = sa;
     }
   }
   return r;
@@ -114,7 +94,7 @@ public threaded function create_acceptor_t create_acceptor(io const& iop,
 
 public multithreaded union create_connector_t {
   ai::gai_error_t gai_error;
-  socket_connector connector;
+  socket_connector value;
 }
 
 public threaded function create_connector_t create_connector(io const& iop,
@@ -126,7 +106,7 @@ public threaded function create_connector_t create_connector(io const& iop,
     ai::PROTO_UNSPEC, 0);
   if (ai.get_error() != ai::EAI_OK) {
   } else {
-    r.connector = create_socket_connector(iop, ai.get_sockaddr(), socktype,
+    r.value = create_socket_connector(iop, ai.get_sockaddr(), socktype,
       ai::PROTO_UNSPEC, timeout_sec);
   }
   return r;
@@ -141,6 +121,14 @@ private threaded function extern "pxcio::create_socket_connector"
   socket_connector create_socket_connector(io const& iop,
     ai::sockaddr_storage const& addr, ai::socktype_t socktype,
     ai::protocol_t protocol, uint connect_timeout_sec);
+private threaded function extern "pxcio::accept_internal"
+  file accept_internal(errno_t mutable& err_r, socket_acceptor const& sfp,
+    ai::sockaddr_storage mutable& addr_r);
+private threaded function extern "pxcio::connect_internal"
+  file connect_internal(errno_t mutable& err_r, socket_connector const& sfp);
+private threaded function extern "pxcio::socketpair_internal" vector{file}
+socketpair_internal(io const& iop, errno_t mutable& err_r, ai::family_t family,
+  ai::socktype_t socktype, ai::protocol_t protocol);
 
 extern "types" inline
 namespace pxcio {

@@ -2,8 +2,8 @@ namespace ordered::compare;
 public import numeric::integral -;
 public import numeric::fp -;
 public import numeric::union_tag -;
-public import container::string -;
-public import meta::common m;
+public import container::array -;
+public import meta m;
 public import meta::family mf;
 
 public threaded function {t} t min(t const& x, t const& y)
@@ -18,12 +18,10 @@ public threaded function {t} t max(t const& x, t const& y)
 
 public threaded function {t} int compare(t const& x, t const& y)
 {
-  metafunction symstr m::concat{t, "_compare"};
-  metafunction sym m::symbol{symstr, t};
+  /* this function must be a 'Strict Weak Ordering' because tree_map
+   * uses this as Compare for std::map */
   metafunction fam m::family{t};
-  if (m::eq{m::to_string{sym}, symstr}) {
-    return sym(x, y);
-  } else if (m::eq{t, unit}) {
+  if (m::eq{t, unit}) {
     return 0;
   } else if (mf::is_string_family_type{t}) {
     if (m::eq{t, string}) {

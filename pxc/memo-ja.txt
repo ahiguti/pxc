@@ -3,14 +3,41 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- in-placeにオブジェクト構築する方法を考えよ
-  - placement newに相当するもの？
-  - ptr(...)をそれにする
-  - push_back(...)
+- tree_mapのrange: k0 < k1にしてから lower_bound/upper_bound すれば
+  finishがstartからreachableであることが保証されるか？
 
-- io/standard join_string -> split::string_join
+- std::mapは比較関数がStrict Weak Orderingではなかったときに全てが
+  未定義になるのではないか？ 比較関数に勝手なユーザ定義関数を与えても
+  メモリ安全にするためには、std::map使えないのではないか？
+  - 比較関数はcompareに固定する。
+  - 比較関数をユーザ定義するにはexternを要求する。
 
-- socket等のエラーチェック方法(done)
+- rangeに対してはtruncate_front/truncate_backで統一？
+
+- tree_map_rangeにoperator []するとc++エラー
+
+- familyが同じであっても実装が違うときはconvert_typeはエラーを返す
+
+- vectorをarrayに改名
+
+- pointer実装を複数持てるように、相互に変換可能なptr/cptr/iptrを
+  取得する方法を用意。コンテナのrange_typeのように。
+
+- weak pointerをどう実現するか
+
+- pxcシンボルはextern "C"でよい
+
+- os依存部分を切り離す方法
+
+- evalの再帰上限調査
+
+- ioを一通り用意せよ
+
+- extern ... "source.cpp"
+
+- コンストラクタだけprivateにすることを許可せよ(private_udcon)
+
+- ptrはコンストラクタだけprivateに
 
 - 環境変数への読み書きを許可するか。たとえばjvmの中では自前のlockで
   環境変数の排他処理しているはずで、もしpxcが自前のlockで排他処理
@@ -32,13 +59,9 @@ FIXME/TODO M1
 
 - デストラクタの例外は握りつぶす。ただしフックを呼べるようにする。
 
-- exceptionのwhat()はstrlitでなければならない。detail()を用意。
-
 - if (foo x : ...) の値渡し、参照渡しを網羅 (done)
 - for (foo x : ...) の値渡し、参照渡しを網羅
 
-
-- 例外の使い方
 
 - has_unbound_tparam, term_has_unevaluated_exprの意味を整理
 
@@ -360,6 +383,14 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- ioはerrno_or_valueを使うように(done)
+- fn/の下のファイル名エンコード方法変更。_をエスケープしない(done)
+- 例外の仮想基底クラス整理(done)
+- socket等のエラーチェック方法(done)
+- stringをvector{uchar}に(done)
+- hoge/common.pxにするくらいならhoge.pxにせよ(done)
+- in-placeにオブジェクト構築する方法を考えよ (done)
+- io/standard join_string -> split::string_join (done)
 - --generate(done)
 - for文なども型推論(done)
 - cleanするときにフォルダがないとエラーになるのは無視するべき(done)
@@ -1711,4 +1742,74 @@ emitせよ、という意味。
 代入演算子にplacement_newフラグを追加。
   -> やめ。未初期化代入演算子を用意。
 
+
+---------------------------------------------------------------------
+例外クラスの継承
+
+logic_error_st/runtime_error_st/bad_alloc_st はそれぞれ
+std::logic_error等をnon-virtualな基底クラスにしている。
+これらの複数を継承するとexceptionへupcastできない。
+ ... std::exception is an ambiguous base of foo
+
+---------------------------------------------------------------------
+ioの下
+
+io::file
+  fcntl
+io::dir
+  unlink
+  opendir
+  readdir
+  mkdir
+  rmdir
+  stat
+  lstat
+  link
+  symlink
+  readlink
+  chdir
+io::process
+  _exit
+  exit
+  abort
+  execv
+  execvp
+
+---------------------------------------------------------------------
+メンバ関数的関数のlookup
+
+namespace xにstruct foo定義
+namespace y imports x
+yでfooのメンバ関数的な関数を定義したい
+
+namespace y;
+public import x +;
+function void foo_hoge() { ... }
+
+namespace xのadditional lookupsとしてyを登録する。
+x::foo_???のルックアップ時に、additional lookupsも探すようにする
+
+---------------------------------------------------------------------
+芋蔓importを楽に
+
+namespace y imports x
+xのすべてのシンボルをyのシンボルとして見えるようにしたい
+yをprefixなしでimportすればxもprefixなしで見えるようにしたい
+
+namespace foo;
+import bar -; // fooの中からprefixなしでbarのシンボルを参照できる
+import bar +; // fooをimportすると、bar::hogeとやるとfoo::hogeも探す
+import bar *; // fooをimportすると、foo::hogeとやるとbar::hogeも探す
+
+---------------------------------------------------------------------
+弱ポインタをどう実現するか
+
+strong+weakのカウンタ、strongのみのカウンタの二つを持つ。
+前者のカウンタが0になったときに開放される。
+後者のカウンタが0になると、指す先の値がnullに変わり、weakからstrong
+を作れなくなる。
+
+struct {t} strong {
+  ptr{t} p;
+}
 

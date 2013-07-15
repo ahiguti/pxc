@@ -1,13 +1,13 @@
 namespace io::file;
 public import numeric::integral -;
-public import container::string -;
 public import container::array -;
-public import exception::common -;
+public import meta -;
 public import pointer -;
-public import io -;
+public import io +;
 public import io::errno -;
 public import io::time -;
-public import meta::common m;
+public import meta m;
+public import exception;
 
 public multithreaded struct extern "pxcio::file" "nodefault" file { }
   /* while file is implemented as an immutable pointer, it is defiend
@@ -15,16 +15,16 @@ public multithreaded struct extern "pxcio::file" "nodefault" file { }
    * pointers can not have any side effects, and 'file' has side
    * effects. */
 
-public tsvaluetype struct extern "::off_t" "extint" off_t { }        //SQUAD?
-public tsvaluetype struct extern "::dev_t" "extuint" dev_t { }       //UQUAD
-public tsvaluetype struct extern "::ino_t" "extuint" ino_t { }       //ULONGWORD
-public tsvaluetype struct extern "::mode_t " "extbitmask" mode_t { } //U32
-public tsvaluetype struct extern "::nlink_t" "extuint" nlink_t { }   //UWORD
-public tsvaluetype struct extern "::uid_t" "extuint" uid_t { }       //U32
-public tsvaluetype struct extern "::gid_t" "extuint" gid_t { }       // U32
-public tsvaluetype struct extern "::blksize_t" "extint" blksize_t { }//SLONGWORD
-public tsvaluetype struct extern "::blkcnt_t" "extint" blkcnt_t { }  //SQUAD?
-public tsvaluetype struct extern "::ssize_t" "extint" ssize_t { }    //SWORD?
+public tsvaluetype struct extern "::off_t" "extint" off_t { }         //SQUAD?
+public tsvaluetype struct extern "::dev_t" "extuint" dev_t { }        //UQUAD
+public tsvaluetype struct extern "::ino_t" "extuint" ino_t { }        //ULONGW
+public tsvaluetype struct extern "::mode_t " "extbitmask" mode_t { }  //U32
+public tsvaluetype struct extern "::nlink_t" "extuint" nlink_t { }    //UWORD
+public tsvaluetype struct extern "::uid_t" "extuint" uid_t { }        //U32
+public tsvaluetype struct extern "::gid_t" "extuint" gid_t { }        // U32
+public tsvaluetype struct extern "::blksize_t" "extint" blksize_t { } //SLONGW
+public tsvaluetype struct extern "::blkcnt_t" "extint" blkcnt_t { }   //SQUAD?
+public tsvaluetype struct extern "::ssize_t" "extint" ssize_t { }     //SWORD?
 public tsvaluetype struct extern "int" "extbitmask" open_flags_t { }
 public tsvaluetype struct extern "int" "extenum" whence_t { }
 
@@ -71,10 +71,7 @@ public extern "S_IROTH"		mode_t S_IROTH;
 public extern "S_IWOTH"		mode_t S_IWOTH;
 public extern "S_IXOTH"		mode_t S_IXOTH;
 
-public multithreaded union open_t {
-  errno_t errno;
-  file value;
-}
+public metafunction open_t errno_or_value{file};
 
 public threaded function open_t
 io_open(io const& iop, cstrref const& fn, open_flags_t flags, mode_t md)
@@ -173,8 +170,6 @@ errno_t io_write_file(io const& iop, cstrref const& fn, cstrref const& buf,
 }
 
 extern "types" inline
-#include <stdio.h>
-#include <stdlib.h>
 #include <sys/types.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -210,10 +205,6 @@ file create_file(int fd); /* can be called from other io::* namespaces */
 
 extern "implementation" inline
 namespace pxcio {
-
-#include <stdlib.h>
-#include <limits.h>
-#include <string>
 
 typedef int errno_t;
 

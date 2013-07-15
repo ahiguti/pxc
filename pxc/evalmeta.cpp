@@ -1550,7 +1550,6 @@ static const builtin_typestub_entry builtin_typestub_entries[] = {
   { "@0size_t", &builtins.type_size_t },
   { "@0float", &builtins.type_float },
   { "@0double", &builtins.type_double },
-  { "@0string", &builtins.type_string },
   { "@0strlit", &builtins.type_strlit },
 };
 

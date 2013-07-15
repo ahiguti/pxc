@@ -1,14 +1,14 @@
 namespace io::standard;
 public import numeric::integral -;
-public import container::string -;
+public import container::array -;
 public import io -;
 public import io::file -;
 public import io::errno -;
 public import string::conversion;
 public import string::split -;
-public import meta::common m;
+public import meta m;
 public import meta::vararg v;
-public import exception::common -;
+public import meta -;
 public import algebraic -;
 
 public threaded function extern "pxcio::get_stdin"
@@ -42,31 +42,9 @@ public threaded function {t} void file_println(file const& f, t const& x)
   }
 }
 
-/*
-private function {delim, tlist} string
-join_string(expand(v::arg_decls_bycref{tlist}))
-{
-  string s;
-  expand (a, i: v::arg_names{m::size{tlist}}) {
-    {
-      metafunction t m::at0{m::at{tlist, i}};
-      if (m::and{m::ne{i, 0}, m::ne{delim, ""}}) {
-	s.append(delim);
-      }
-      if (is_string_family_type{t}) {
-	s.append(a);
-      } else {
-	string::conversion::serialize_to_string{t}(a, s);
-      }
-    }
-  }
-  return s;
-}
-*/
-
 public function {tlist} void print(expand(v::arg_decls_bycref{tlist}))
 {
-  string s = string_join{"\t"}(
+  string s = join{"\t"}(
     expand(a: v::arg_names{m::size{tlist}}; a));
   size_t len;
   file_write_all(get_stdout(io::system), s, len);
@@ -74,7 +52,7 @@ public function {tlist} void print(expand(v::arg_decls_bycref{tlist}))
 
 public function {tlist} void println(expand(v::arg_decls_bycref{tlist}))
 {
-  string s = string_join{"\t"}(
+  string s = join{"\t"}(
     expand(a: v::arg_names{m::size{tlist}}; a));
   s.append("\n");
   size_t len;
@@ -105,13 +83,9 @@ file get_stderr(io const& iop) { return pxc_stderr.some$$r(); }
 
 void iostd_init()
 {
-  static int init_flag = 0;
-  if (!init_flag) {
-    init_flag = 1;
-    pxc_stdin .some$$l(create_file(0));
-    pxc_stdout.some$$l(create_file(1));
-    pxc_stderr.some$$l(create_file(2));
-  }
+  pxc_stdin .some$$l(create_file(0));
+  pxc_stdout.some$$l(create_file(1));
+  pxc_stderr.some$$l(create_file(2));
 }
 
 };

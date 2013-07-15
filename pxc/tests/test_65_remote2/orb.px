@@ -2,10 +2,11 @@ namespace orb;
 public import ordered::compare -;
 public import common -;
 public import string::conversion -;
-public import exception::common -;
-public import downcast -;
-public import meta::common m;
+public import meta -;
+public import pointer -;
+public import meta m;
 public import meta::family mf;
+public import exception -;
 
 public threaded interface orb_transport {
   function void send_receive(string mutable& rbuf, string mutable& wbuf);
@@ -73,11 +74,11 @@ public threaded function bool execute_request(ptr{orb} const& op)
     } else {
       return false; /* not executed */
     }
-  } catch (runtime_error e) {
+  } catch (c_runtime_error e) {
     o.wbuf.clear();
     o.wbuf.append("T\t");
-    string s = exception_what(e);
-    string tr = exception_stack_trace(e);
+    string s = c_exception_message(e);
+    string tr = c_exception_stack_trace(e);
     if (!tr.empty()) {
       s.append("\n");
       s.append(tr);
@@ -340,9 +341,9 @@ private threaded struct {t} stub (ptr{orb} const& op, size_t robjid) <t> {
   }
 }
 
-public mtvaluetype struct orb_error(cstrref const& m) <runtime_error_st> {
+public mtvaluetype struct orb_error(cstrref const& m) <runtime_error> {
   string const mess = m;
-  function strlit what() const { return "orb_error"; }
+  function string message() const { return mess; }
 }
 
 private threaded function {t} t pop_return_value(ptr{orb} const& op)
@@ -388,7 +389,7 @@ private threaded function {t} ptr{stub{t}} create_stub(ptr{orb} const& op,
   size_t remote_objid)
 {
   orb mutable& o = *op;
-  ptr{stub{t}} r = ptr{stub{t}}(stub{t}(op, remote_objid));
+  ptr{stub{t}} r = to_ptr{stub{t}}(stub{t}(op, remote_objid));
   size_t const local_objid = ptr_to_rawptr(r);
   o.stubs_rtol[remote_objid] = local_objid; /* throw */
   o.stubs_ltor[local_objid] = remote_objid; /* throw */
@@ -424,7 +425,7 @@ private threaded function {t} void marshal_reference(orb mutable& o,
   } else {
     skeleton_mapped mutable& m = o.skeletons[ra];
     if (case m.nothing) {
-      m.real_object = box{call_method_instance{m::at0{t}}}(x);
+      m.real_object = to_ptr{call_method_instance{m::at0{t}}}(x);
     }
     o.wbuf.push_back('!');
     serialize_to_string{size_t}(ra, o.wbuf);

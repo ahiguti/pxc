@@ -2,10 +2,11 @@ namespace orb;
 public import ordered::compare -;
 public import common -;
 public import string::conversion -;
-public import exception::common -;
-public import downcast -;
-public import meta::common m;
+public import meta -;
+public import pointer -;
+public import meta m;
 public import meta::family mf;
+public import exception -;
 
 public threaded interface remote { }
 
@@ -15,7 +16,7 @@ public threaded interface orb_transport {
 
 public threaded struct {t} orb_handle(ptr{orb_transport} const& tr)
 {
-  private ptr{orb_rep} orep = ptr{orb_rep}(orb_rep(tr));
+  private ptr{orb_rep} orep = to_ptr{orb_rep}(orb_rep(tr));
   function ~ {
     /* need to clear skeletons in order to remove cyclic references */
     reset();
@@ -105,11 +106,11 @@ private threaded function bool execute_request(ptr{orb_rep} const& op)
     } else {
       return false; /* not executed */
     }
-  } catch (runtime_error e) {
+  } catch (c_runtime_error e) {
     o.wbuf.clear();
     o.wbuf.append("T\t");
-    mutable s = exception_what(e);
-    const tr = exception_stack_trace(e);
+    mutable s = c_exception_message(e);
+    const tr = c_exception_message(e);
     if (!tr.empty()) {
       s.append("\n");
       s.append(tr);
@@ -334,9 +335,9 @@ private threaded struct {t} stub (ptr{orb_rep} const& __op, size_t __robjid)
   }
 }
 
-private mtvaluetype struct orb_error(cstrref const& m) <runtime_error_st> {
+private mtvaluetype struct orb_error(cstrref const& m) <runtime_error> {
   string mess = m;
-  function strlit what() const { return "orb_error"; }
+  function string message() const { return mess; }
 }
 
 private threaded function {t} t pop_return_value(ptr{orb_rep} const& op)
@@ -382,7 +383,7 @@ private threaded function {t} ptr{stub{t}} create_stub(ptr{orb_rep} const& op,
   size_t remote_objid)
 {
   mutable& o = *op;
-  ptr{stub{t}} r = ptr{stub{t}}(stub{t}(op, remote_objid));
+  ptr{stub{t}} r = to_ptr{stub{t}}(stub{t}(op, remote_objid));
   const local_objid = ptr_to_rawptr(r);
   o.stubs_rtol[remote_objid] = local_objid; /* throw */
   o.stubs_ltor[local_objid] = remote_objid; /* throw */
@@ -423,7 +424,7 @@ private threaded function {t} void marshal_reference(orb_rep mutable& o,
       /* TODO: use skeletons_free_ids */
       id = o.skeletons.size();
       skeleton_mapped m;
-      m.real_object = box{call_method_instance{m::at0{t}}}(x);
+      m.real_object = to_ptr{call_method_instance{m::at0{t}}}(x);
       o.skeletons.push_back(m);
       o.skeletons_ptr_to_id[ra] = id;
     }

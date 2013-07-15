@@ -1,5 +1,8 @@
 namespace pointer;
 public import numeric::integral -;
+public import meta m;
+public import meta::vararg v;
+public import meta::family mf;
 
 public threaded      struct extern "pxcrt::ptr"   "ptr"   {t} ptr   { } 
 public threaded      struct extern "pxcrt::cptr"  "cptr"  {t} cptr  { }
@@ -8,28 +11,78 @@ public multithreaded struct extern "pxcrt::tptr"  "tptr"  {t} tptr  { }
 public multithreaded struct extern "pxcrt::tcptr" "tcptr" {t} tcptr { }
 public tsvaluetype   struct extern "pxcrt::tiptr" "tiptr" {t} tiptr { }
 
-public mtvaluetype struct extern "pxcrt::lockobject" "lockobject" {t}
-lockobject {
+public mtvaluetype struct extern "pxcrt::lock_guard" "lock_guard" {t}
+lock_guard {
   public function extern "wait" void wait();
   public function extern "notify_one" void notify_one();
   public function extern "notify_all" void notify_all();
 }
-public mtvaluetype struct extern "pxcrt::clockobject" "clockobject" {t}
-clockobject {
+public mtvaluetype struct extern "pxcrt::lock_cguard" "lock_cguard" {t}
+lock_cguard {
   public function extern "wait" void wait();
   public function extern "notify_one" void notify_one();
   public function extern "notify_all" void notify_all();
 }
+
+public threaded function {t, tis} ptr{t} to_ptr(expand(argdecls{tis}))
+{ return box_pointer{ptr{t}, tis}(expand(a: argnames{tis}; a)); }
+public threaded function {t, tis} cptr{t} to_cptr(expand(argdecls{tis}))
+{ return box_pointer{cptr{t}, tis}(expand(a: argnames{tis}; a)); }
+public threaded function {t, tis} iptr{t} to_iptr(expand(argdecls{tis}))
+{ return box_pointer{iptr{t}, tis}(expand(a: argnames{tis}; a)); }
+public threaded function {t, tis} tptr{t} to_tptr(expand(argdecls{tis}))
+{ return box_pointer{tptr{t}, tis}(expand(a: argnames{tis}; a)); }
+public threaded function {t, tis} tcptr{t} to_tcptr(expand(argdecls{tis}))
+{ return box_pointer{tcptr{t}, tis}(expand(a: argnames{tis}; a)); }
+public threaded function {t, tis} tiptr{t} to_tiptr(expand(argdecls{tis}))
+{ return box_pointer{tiptr{t}, tis}(expand(a: argnames{tis}; a)); }
+
+private metafunction argdecls{tis} v::arg_decls_bycref{tis};
+private metafunction argnames{tis} v::arg_names{m::size{tis}};
+
+public threaded function {tp, tis} tp box_pointer(expand(argdecls{tis}))
+{
+  if (m::eq{m::list{m::at0{tp}}, m::map{tis, m::at0}}) {
+    tp r = tp(a0);
+    return r;
+  } else {
+    tp r = tp(m::at0{tp}(expand(a: argnames{tis}; a)));
+    return r;
+  }
+}
+
+public threaded function extern "pxcrt::downcast_const" {tto, tfrom}
+check_polymorphic{tto, tfrom} const& downcast_const(tfrom const& x);
+
+public threaded function extern "pxcrt::downcast_mutable" {tto, tfrom}
+check_polymorphic{tto, tfrom} mutable& downcast_mutable(tfrom mutable& x);
+
+public threaded function extern "pxcrt::instanceof" {t, tobj}
+bool instanceof(check_polymorphic{tobj, t} const& x);
+
+public threaded function extern "pxcrt::pointer_downcast" {tto, tfrom}
+check_pointer_downcast{tto, tfrom} pointer_downcast(tfrom const& x);
+
+private metafunction check_polymorphic{t1, t2}
+  m::cond{
+    m::and{m::is_polymorphic_type{t1}, m::is_polymorphic_type{t2}},
+    t1,
+    m::error{"polymorphic type expected"}};
+
+private metafunction check_pointer_downcast{tto, tfrom}
+  m::cond{
+    m::and{
+      m::eq{m::family{tto}, m::family{tfrom}},
+      mf::is_pointer_family{m::family{tto}},
+      m::is_polymorphic_type{m::at0{tfrom}},
+      m::is_polymorphic_type{m::at0{tto}}},
+    tto,
+    m::error{"invalid pointer_downcast"}};
 
 extern "types" inline
-
 #include <string>
-#include <stdint.h>
-#include <stdexcept>
-#include <stdio.h>
 #include <pthread.h>
 #include <errno.h>
-#include <assert.h>
 #include <unistd.h>
 #ifdef PXCRT_DBG_RC
 #define DBG_RC(x) x
@@ -191,11 +244,11 @@ struct rcval {
     }
   }
   size_t get_count$z() const { return count$z.count$z; }
-  // void lock$z() const { }
-  // void unlock$z() const { }
-  // void wait$z() const { }
-  // void notify_one$z() const { }
-  // void notify_all$z() const { }
+  /* void lock$z() const { } */
+  /* void unlock$z() const { } */
+  /* void wait$z() const { } */
+  /* void notify_one$z() const { } */
+  /* void notify_all$z() const { } */
 public:
   mutable stcount count$z;
 public:
@@ -276,9 +329,9 @@ struct tircval {
     }
   }
   size_t get_count$z() const { return count$z.count$z; }
-  // void lock$z() const { }
-  // void unlock$z() const { }
-  // void wait$z() const { }
+  /* void lock$z() const { } */
+  /* void unlock$z() const { } */
+  /* void wait$z() const { } */
 public:
   mutable mtcount count$z;
 public:
@@ -325,10 +378,10 @@ private:
   }
 };
 
-template <typename T> struct lockobject
+template <typename T> struct lock_guard
 {
-  lockobject(const rcptr<T>& p) : ptr(p), objref(*p) { objref.lock$z(); }
-  ~lockobject() { objref.unlock$z(); }
+  lock_guard(const rcptr<T>& p) : ptr(p), objref(*p) { objref.lock$z(); }
+  ~lock_guard() { objref.unlock$z(); }
   T *get() const { return &objref; }
   T& operator *() const { return objref; }
   T *operator ->() const { return &objref; }
@@ -336,18 +389,18 @@ template <typename T> struct lockobject
   void notify_one() { objref.notify_one$z(); }
   void notify_all() { objref.notify_all$z(); }
 private:
-  lockobject(const lockobject&);
-  lockobject& operator =(const lockobject&);
+  lock_guard(const lock_guard&);
+  lock_guard& operator =(const lock_guard&);
 private:
   rcptr<T> ptr;
   T& objref;
 };
 
-template <typename T> struct clockobject
+template <typename T> struct lock_cguard
 {
-  clockobject(const rcptr<const T>& p) : ptr(p), objref(*p)
+  lock_cguard(const rcptr<const T>& p) : ptr(p), objref(*p)
     { objref.lock$z(); }
-  ~clockobject() { objref.unlock$z(); }
+  ~lock_cguard() { objref.unlock$z(); }
   const T *get() const { return &objref; }
   const T& operator *() const { return objref; }
   const T *operator ->() const { return &objref; }
@@ -355,8 +408,8 @@ template <typename T> struct clockobject
   void notify_one() { objref.notify_one$z(); }
   void notify_all() { objref.notify_all$z(); }
 private:
-  clockobject(const clockobject&);
-  clockobject& operator =(const clockobject&);
+  lock_cguard(const lock_cguard&);
+  lock_cguard& operator =(const lock_cguard&);
 private:
   rcptr<const T> ptr;
   const T& objref;
@@ -370,6 +423,29 @@ template <typename T> typename T::value_type deref_value$z(const rcptr<T>& p)
 template <typename T> T deref(const rcptr<T>& p)
 {
   return *p;
+}
+
+template <typename Tto, typename Tfrom> Tto const&
+downcast_const(Tfrom const& from) {
+  return dynamic_cast<Tto const&>(from);
+}
+
+template <typename Tto, typename Tfrom> Tto&
+downcast_mutable(Tfrom& from) {
+  return dynamic_cast<Tto&>(from);
+}
+
+template <typename T, typename Tobj> bool
+instanceof(Tobj const& x) {
+  return dynamic_cast<T const *>(&x) != 0;
+}
+
+template <typename Tto, typename Tfrom> Tto
+pointer_downcast(Tfrom const& from) {
+  typename Tto::target_type& ref = dynamic_cast<typename Tto::target_type&>(
+    *(from.get()));
+  ref.incref$z();
+  return Tto(&ref);
 }
 
 }; // namespace pxcrt
