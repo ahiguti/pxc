@@ -1,0 +1,150 @@
+namespace t2;
+import common -;
+import algebraic -;
+import io::time -;
+import meta m;
+
+metafunction nptr{t} option{ptr{t}};
+
+struct heaptm(int v, nptr{heaptm} const& f, nptr{heaptm} const& s) {
+  int value = 1; // v
+  nptr{heaptm} fst = f;
+  nptr{heaptm} snd = s;
+  function int sum() const {
+    int r = value;
+    if (const p : fst.some) { r += p->sum(); }
+    if (const p : snd.some) { r += p->sum(); }
+    return r;
+  }
+}
+
+function nptr{heaptm} create_tree(int depth)
+{
+  nptr{heaptm} r;
+  if (depth > 0) {
+    nptr{heaptm} f = create_tree(depth - 1);
+    nptr{heaptm} s = create_tree(depth - 1);
+    r.some = to_ptr{heaptm}(depth, f, s);
+  }
+  return r;
+}
+
+function int f1()
+{
+  int r = 0;
+  farray{nptr{heaptm}, 200} v;
+  for (int i : 0 .. 200) {
+    const t = create_tree(16);
+    v[i] = t;
+  }
+  for (int i : 0 .. 200) {
+    r += v[i].some->sum();
+  }
+  return r;
+}
+
+function extern "::f2" int f2();
+function extern "::f3" int f3();
+
+extern "implementation" inline
+#include <memory>
+
+struct heaptm {
+  heaptm() : value() { }
+  heaptm(int v, const std::shared_ptr<heaptm>& f,
+    const std::shared_ptr<heaptm>& s)
+    : value(1), first(f), second(s) { } // v
+  int sum() const {
+    int r = value;
+    if (first.get() != 0) { r += first->sum(); }
+    if (second.get() != 0) { r += second->sum(); }
+    return r;
+  }
+  int value;
+  std::shared_ptr<heaptm> first;
+  std::shared_ptr<heaptm> second;
+};
+
+static std::shared_ptr<heaptm> create_tree(int depth)
+{
+  if (depth > 0) {
+    std::shared_ptr<heaptm> f = create_tree(depth - 1);
+    std::shared_ptr<heaptm> s = create_tree(depth - 1);
+    return std::make_shared<heaptm>(depth, f, s);
+  } else {
+    return std::shared_ptr<heaptm>();
+  }
+}
+
+int f2()
+{
+  int r = 0;
+  std::shared_ptr<heaptm> v[200];
+  for (int i = 0; i < 200; ++i) {
+    v[i] = create_tree(16);
+  }
+  for (int i = 0; i < 200; ++i) {
+    r += v[i]->sum();
+  }
+  return r;
+}
+
+struct heaptm3 {
+  heaptm3() : value() { }
+  heaptm3(int v, std::unique_ptr<heaptm3>& f, std::unique_ptr<heaptm3>& s)
+    : value(1), first(std::move(f)), second(std::move(s)) { } // v
+  int sum() const {
+    int r = value;
+    if (first.get() != 0) { r += first->sum(); }
+    if (second.get() != 0) { r += second->sum(); }
+    return r;
+  }
+  int value;
+  std::unique_ptr<heaptm3> first;
+  std::unique_ptr<heaptm3> second;
+};
+
+static std::unique_ptr<heaptm3> create_tree3(int depth)
+{
+  if (depth > 0) {
+    std::unique_ptr<heaptm3> f = create_tree3(depth - 1);
+    std::unique_ptr<heaptm3> s = create_tree3(depth - 1);
+    std::unique_ptr<heaptm3> r(new heaptm3(depth, f, s));
+    return r;
+  } else {
+    return std::unique_ptr<heaptm3>();
+  }
+}
+
+int f3()
+{
+  int r = 0;
+  std::unique_ptr<heaptm3> v[200];
+  for (int i = 0; i < 200; ++i) {
+    v[i] = create_tree3(16);
+  }
+  for (int i = 0; i < 200; ++i) {
+    r += v[i]->sum();
+  }
+  return r;
+}
+
+;
+
+function {func} void do_test() {
+  double tsum = 0.0;
+  for (size_t i : 0 .. 20) {
+    const t0 = gettimeofday_double(system);
+    const r = func();
+    const t1 = gettimeofday_double(system);
+    println(m::full_string{func}, r, t1 - t0);
+    tsum += t1 - t0;
+  }
+  println(m::full_string{func}, "TOTAL", tsum);
+}
+
+do_test{f1}();
+do_test{f2}();
+do_test{f3}();
+
+

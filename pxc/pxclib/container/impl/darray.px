@@ -16,7 +16,7 @@ struct darray {
   typedef pxcrt::bt_cslice<T> crange_type;
   ~darray() {
     deinitialize_n(start, valid_len);
-    deallocate_uninitialized(start);
+    deallocate_uninitialized(start, valid_len);
   }
   darray(size_type len, const T& val) {
     valid_len = len;
@@ -27,7 +27,7 @@ struct darray {
       try {
 	initialize_fill_n(start, valid_len, val);
       } catch (...) {
-	deallocate_uninitialized(start);
+	deallocate_uninitialized(start, valid_len);
 	throw;
       }
     }
@@ -41,7 +41,7 @@ struct darray {
       try {
 	initialize_copy_n(start, valid_len, x.start);
       } catch (...) {
-	deallocate_uninitialized(start);
+	deallocate_uninitialized(start, valid_len);
 	throw;
       }
     }

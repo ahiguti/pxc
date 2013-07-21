@@ -1,5 +1,6 @@
 namespace io::process;
 public import numeric::integral -;
+public import numeric::cast -;
 public import container::array -;
 public import meta -;
 public import io -;
@@ -78,6 +79,19 @@ public threaded function errno_or_value{wait_t} io_waitpid(io const& sys,
   return r;
 }
 
+public threaded function errno_or_value{status_t} io_shell_exec(io const& sys,
+  cstrref const& cmd)
+{
+  int const st = shell_exec_internal(sys, cmd);
+  errno_or_value{status_t} r;
+  if (st < 0) {
+    r.errno = sys.get_errno();
+  } else {
+    r.value = static_cast{status_t}(st);
+  }
+  return r;
+}
+
 public threaded function extern "pxcio::wifexited"
 bool WIFEXITED(status_t st);
 public threaded function extern "pxcio::wexitstatus"
@@ -105,6 +119,8 @@ pid_t wait_internal(io const& sys, status_t mutable& st_r);
 private threaded function extern "pxcio::waitpid_internal"
 pid_t waitpid_internal(io const& sys, pid_t pid, status_t mutable& st_r,
   wait_options_t opt);
+private threaded function extern "pxcio::shell_exec_internal"
+int shell_exec_internal(io const& sys, cstrref const& cmd);
 
 private function extern "pxcio::io_process_init" void io_process_init();
 
@@ -236,6 +252,12 @@ int execvp(io const& sys, cstrref const& file,
   pxcvector<bt_string> const& argv)
 {
   return execv_internal(true, file, argv);
+}
+
+int shell_exec_internal(io const& sys, cstrref const& cmd)
+{
+  PXCRT_ALLOCA_NTSTRING(cmd_nt, cmd);
+  return std::system(cmd_nt.get());
 }
 
 };

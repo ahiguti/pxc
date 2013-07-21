@@ -296,6 +296,22 @@ static void emit_interface_def_one(emit_context& em, expr_interface *ei,
     em.indent('b');
     em.puts("virtual void notify_all$z() const = 0;\n");
   }
+  #if 0
+  em.set_file_line(ei);
+  em.indent('b');
+  em.puts("static ");
+  em.puts(name_c);
+  em.puts(" *allocate() { return pxcrt::allocate_single< ");
+  em.puts(name_c);
+  em.puts(" >(); }\n");
+  em.set_file_line(ei);
+  em.indent('b');
+  em.puts("static void deallocate(");
+  em.puts(name_c);
+  em.puts(" const *ptr) { pxcrt::deallocate_single< ");
+  em.puts(name_c);
+  em.puts(" >(ptr); }\n");
+  #endif
   expr_block *const bl = ei->block;
   const bool is_funcbody = false;
   bl->emit_local_decl(em, is_funcbody);
@@ -401,7 +417,23 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
       em.set_file_line(est);
       em.indent('b');
       em.puts("void decref$z() const "
-	"{ if (__sync_fetch_and_add(&count$z, -1) == 1) delete this; }\n");
+	"{ if (__sync_fetch_and_add(&count$z, -1) == 1) { this->~");
+      em.puts(name_c);
+      em.puts("(); this->deallocate(this); } }\n");
+      em.set_file_line(est);
+      em.indent('b');
+      em.puts("static ");
+      em.puts(name_c);
+      em.puts(" *allocate() { return pxcrt::allocate_single< ");
+      em.puts(name_c);
+      em.puts(" >(); }\n");
+      em.set_file_line(est);
+      em.indent('b');
+      em.puts("static void deallocate(");
+      em.puts(name_c);
+      em.puts(" const *ptr) { pxcrt::deallocate_single< ");
+      em.puts(name_c);
+      em.puts(" >(ptr); }\n");
       em.set_file_line(est);
       em.indent('b');
       em.puts("void lock$z() const { monitor$z.mtx.lock(); }\n");
@@ -426,7 +458,24 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
       em.puts("void incref$z() const { ++count$z; }\n");
       em.set_file_line(est);
       em.indent('b');
-      em.puts("void decref$z() const { if (--count$z == 0) delete this; }\n");
+      em.puts("void decref$z() const "
+	"{ if (--count$z == 0) { this->~");
+      em.puts(name_c);
+      em.puts("(); this->deallocate(this); } }\n");
+      em.set_file_line(est);
+      em.indent('b');
+      em.puts("static ");
+      em.puts(name_c);
+      em.puts(" *allocate() { return pxcrt::allocate_single< ");
+      em.puts(name_c);
+      em.puts(" >(); }\n");
+      em.set_file_line(est);
+      em.indent('b');
+      em.puts("static void deallocate(");
+      em.puts(name_c);
+      em.puts(" const *ptr) { pxcrt::deallocate_single< ");
+      em.puts(name_c);
+      em.puts(" >(ptr); }\n");
     }
     em.set_file_line(est);
     em.indent('b');
@@ -2762,7 +2811,9 @@ static void emit_vardef_constructor_fast_boxing(emit_context& em,
   DBG_FBC(fprintf(stderr, "type=%s atyp=%s\n", term_tostr_human(typ).c_str(),
     term_tostr_human(otyp).c_str()));
   if (!is_interface_or_impl(otyp)) {
+    #if 0
     const std::string varp0 = var_csymbol + "p0";
+    #endif
     const std::string varp1 = var_csymbol + "p1";
     const typefamily_e cat = get_family(typ);
     std::string rcval_cstr;
@@ -2779,11 +2830,15 @@ static void emit_vardef_constructor_fast_boxing(emit_context& em,
     }
     const std::string otypcnt_cstr = rcval_cstr + "< " + otyp_cstr + " >";
       /* rcval<foo> */
+    #if 0
     em.puts("pxcrt::uninit_mem< " + otypcnt_cstr + " > *const " + varp0
       + " = new pxcrt::uninit_mem< " + otypcnt_cstr + " >;\n");
     em.indent('x');
     em.puts(otypcnt_cstr + "*const " + varp1 + " = reinterpret_cast< "
       + otypcnt_cstr + " * >(" + varp0 + ");\n");
+    #endif
+    em.puts(otypcnt_cstr + "*const " + varp1 + " = "
+      + otypcnt_cstr + "::allocate();\n");
     em.indent('x');
     em.puts("try {\n");
     em.indent('x');
@@ -2816,7 +2871,8 @@ static void emit_vardef_constructor_fast_boxing(emit_context& em,
     em.indent('x');
     em.puts("} catch (...) {\n");
     em.indent('x');
-    em.puts("delete " + varp0 + ";\n");
+    em.puts("pxcrt::deallocate_single< " + otypcnt_cstr + " >(" + varp1
+      + ");\n");
     em.indent('x');
     em.puts("throw;\n");
     em.indent('x');
@@ -2826,7 +2882,7 @@ static void emit_vardef_constructor_fast_boxing(emit_context& em,
     em.puts("((" + varp1 + "))");
   } else {
     em.puts(cs0 + " " + var_csymbol);
-    em.puts("(new " + otyp_cstr + "(");
+    em.puts("(" + cs0 + "::create_rawptr(");
     fn_emit_value(em, fast_boxing_cfunc->arg);
     em.puts("))");
   }

@@ -53,6 +53,107 @@ nsaliases_type nsaliases;
 nsextends_type nsextends;
 /* end: global variables */
 
+static expr_i *string_to_nssym(expr_i *e, const std::string& str)
+{
+  expr_i *prefix = 0;
+  std::string::size_type pos = str.rfind(':');
+  std::string sym;
+  if (pos != str.npos) {
+    if (pos == 0 || str[pos - 1] != ':') {
+      return 0;
+    }
+    prefix = string_to_nssym(e, str.substr(0, pos - 1));
+    sym = str.substr(pos + 1);
+  } else {
+    sym = str;
+  }
+  for (size_t i = 0; i < sym.size(); ++i) {
+    char const ch = sym[i];
+    if (ch >= '0' && ch <= '9') {
+      /* digit */
+    } else if (ch >= 'a' && ch <= 'z') {
+      /* small */
+    } else if (ch >= 'A' && ch <= 'Z') {
+      /* capital */
+    } else if (ch == '_') {
+      /* underline */
+    } else {
+      return 0; /* invalid char */
+    }
+  }
+  return expr_nssym_new(e->fname, e->line, prefix, arena_strdup(sym.c_str()));
+}
+
+static expr_i *string_to_telist_internal(expr_i *e, const std::string& str,
+  size_t& pos);
+
+static expr_i *string_to_te_internal(expr_i *e, const std::string& str,
+  size_t& pos)
+{
+  const size_t sz = str.size();
+  size_t i = pos;
+  char ch = 0;
+  for (; i < sz; ++i) {
+    ch = str[i];
+    if (ch == '{' || ch == '}' || ch == ',') {
+      break;
+    }
+  }
+  if (i == pos) {
+    arena_error_throw(e, "Invalid expression '%s' at offset %zu", str.c_str(),
+      i);
+  }
+  const std::string tok = str.substr(pos, i - pos);
+  expr_i *targs = 0;
+  if (i != sz) {
+    if (ch == '{') {
+      size_t apos = i + 1;
+      targs = string_to_telist_internal(e, str, apos);
+      if (apos < sz && str[apos] == '}') {
+	i = apos + 1;
+      } else {
+	arena_error_throw(e, "Invalid expression '%s' at offset %zu",
+	  str.c_str(), apos);
+      }
+    }
+  }
+  expr_i *nssym = string_to_nssym(e, tok);
+  if (nssym == 0) {
+    arena_error_throw(e, "Invalid expression '%s' at offset %zu",
+      str.c_str(), pos);
+  }
+  pos = i;
+  return expr_te_new(e->fname, e->line, nssym, targs);
+}
+
+static expr_i *string_to_telist_internal(expr_i *e, const std::string& str,
+  size_t& pos)
+{
+  const size_t sz = str.size();
+  size_t i = pos;
+  if (i < sz && str[i] == '}') {
+    return 0;
+  }
+  expr_i *head = string_to_te_internal(e, str, i);
+  expr_i *rest = 0;
+  if (i < sz && str[i] == ',') {
+    ++i;
+    rest = string_to_telist_internal(e, str, i);
+  }
+  return expr_telist_new(e->fname, e->line, head, rest);
+}
+
+expr_i *string_to_te(expr_i *e, const std::string& str)
+{
+  size_t pos = 0;
+  expr_i *r = string_to_te_internal(e, str, pos);
+  if (pos != str.size()) {
+    arena_error_throw(e, "Invalid expression '%s' at offset %zu",
+      str.c_str(), pos);
+  }
+  return r;
+}
+
 void print_space(int n, char c, FILE *fp)
 {
   for (int i = 0; i < n; ++i) {
