@@ -32,6 +32,8 @@ extern nsaliases_type nsaliases;
 extern nsextends_type nsextends;
 /* end: global variables */
 
+expr_i *string_to_te(const std::string& str);
+
 void print_space(int n, char c, FILE *fp = stdout);
 std::string space_string(int n, char c);
 std::string dump_expr(int indent, expr_i *e);

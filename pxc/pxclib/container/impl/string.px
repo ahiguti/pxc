@@ -188,7 +188,7 @@ struct pxcvector {
     { }
   ~pxcvector() {
     deinitialize_n(start, valid_len);
-    deallocate_uninitialized(start);
+    deallocate_uninitialized(start, alloc_len);
   }
   pxcvector(const pxcvector& x)
     { construct_internal(x.start, x.valid_len); }
@@ -318,14 +318,14 @@ private:
   void construct_internal(const T *ptr, size_type len) {
     invalidate_guard_count = 0;
     alloc_len = valid_len = len;
-    start = allocate_uninitialized<T>(valid_len);
+    start = allocate_uninitialized<T>(alloc_len);
     if (is_trivially_copyable<T>::value) {
       initialize_copy_n(start, valid_len, ptr);
     } else {
       try {
 	initialize_copy_n(start, valid_len, ptr);
       } catch (...) {
-	deallocate_uninitialized(start);
+	deallocate_uninitialized(start, alloc_len);
 	throw;
       }
     }

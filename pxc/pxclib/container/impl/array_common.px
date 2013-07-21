@@ -14,7 +14,7 @@ template <typename T> struct is_trivially_copyable {
   enum { value = boost::is_pod<T>::value };
 };
 template <typename T> inline void
-deallocate_uninitialized(T *ptr)
+deallocate_uninitialized(T *ptr, size_t len)
 {
   free(ptr);
 }
@@ -102,11 +102,11 @@ reserve_n(T *ptr, size_t vlen, size_t nlen)
     try {
       initialize_copy_n(p, vlen, ptr);
     } catch (...) {
-      free(p);
+      deallocate_uninitialized<T>(p, nlen);
       throw;
     }
     deinitialize_n(ptr, vlen);
-    free(ptr);
+    deallocate_uninitialized<T>(ptr, vlen);
     return p;
   }
 }

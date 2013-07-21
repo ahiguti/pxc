@@ -85,12 +85,13 @@ void *pxc_thread_child_main(void *arg)
     ::write(2, mess, strlen(mess));
     // ::abort();
   }
+  pxcrt::clear_local_pool();
   return 0;
 }
 
 thread_ptr create_thread_impl(thrdata_ptr const& m)
 {
-  thread_ptr thr(new pxcrt::trcval<thread_rep>(m));
+  thread_ptr thr(thread_ptr::create_rawptr(m));
   thread_rep& impl = thr->value$z;
   if (pthread_create(&impl.tid, 0, pxc_thread_child_main, m.get()) != 0) {
     DBG(fprintf(stderr, "failed to create thread\n"));

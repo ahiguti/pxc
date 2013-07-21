@@ -1,0 +1,151 @@
+namespace t1;
+import common -;
+import numeric::cast -;
+import meta m;
+import io -;
+import io::time -;
+import algebraic -;
+
+struct foo {
+  int x;
+  int y;
+  int z;
+}
+
+function int p1()
+{
+  int r = 0;
+  for (int i : 0 .. 10000) {
+    for (int j : 0 .. 10000) {
+      const p = foo(i, j, i + j);
+      r += p.x;
+      r += p.y;
+      r += p.z;
+    }
+  }
+  return r;
+}
+
+function int p2()
+{
+  int r = 0;
+  for (int i : 0 .. 10000) {
+    for (int j : 0 .. 10000) {
+      const p = to_ptr{foo}(i, j, i + j);
+      r += p->x;
+      r += p->y;
+      r += p->z;
+    }
+  }
+  return r;
+}
+
+function int p3()
+{
+  int r = 0;
+  for (int i : 0 .. 10000) {
+    for (int j : 0 .. 10000) {
+      either{unit, foo} p;
+      p.second = foo(i, j, i + j);
+      r += p.second.x;
+      r += p.second.y;
+      r += p.second.z;
+    }
+  }
+  return r;
+}
+
+function int p4()
+{
+  int r = 0;
+  for (int i : 0 .. 10000) {
+    farray{foo, 10000} a;
+    for (int j : 0 .. 10000) {
+      a[j] = foo(i, j, i + j);
+    }
+    for (int j : 0 .. 10000) {
+      r += a[j].x;
+      r += a[j].y;
+      r += a[j].z;
+    }
+  }
+  return r;
+}
+
+function extern "::c1" int c1();
+function extern "::c2" int c2();
+function extern "::c3" int c3();
+
+extern "implementation" inline
+#include <memory>
+
+struct foo {
+  int x;
+  int y;
+  int z;
+  foo() : x(), y(), z() { }
+  foo(int x0, int y0, int z0) : x(x0), y(y0), z(z0) { }
+};
+
+int c1()
+{
+  int r = 0;
+  for (size_t i = 0; i < 10000; ++i) {
+    for (size_t j = 0; j < 10000; ++j) {
+      foo p(i, j, i + j);
+      r += p.x;
+      r += p.y;
+      r += p.z;
+    }
+  }
+  return r;
+}
+
+int c2()
+{
+  int r = 0;
+  for (size_t i = 0; i < 10000; ++i) {
+    for (size_t j = 0; j < 10000; ++j) {
+      std::shared_ptr<foo> p = std::make_shared<foo>(i, j, i + j);
+      r += p->x;
+      r += p->y;
+      r += p->z;
+    }
+  }
+  return r;
+}
+
+int c3()
+{
+  int r = 0;
+  for (size_t i = 0; i < 10000; ++i) {
+    for (size_t j = 0; j < 10000; ++j) {
+      std::shared_ptr<foo> p(new foo(i, j, i + j));
+      r += p->x;
+      r += p->y;
+      r += p->z;
+    }
+  }
+  return r;
+}
+
+;
+
+function {f} void timing()
+{
+  for (size_t i : 0 .. 3) {
+    const t0 = gettimeofday_double(system);
+    const r = f();
+    const t1 = gettimeofday_double(system);
+    println(m::full_string{f}, r, t1 - t0);
+  }
+}
+
+timing{p1}();
+timing{p2}();
+timing{p3}();
+timing{p4}();
+timing{c1}();
+timing{c2}();
+timing{c3}();
+

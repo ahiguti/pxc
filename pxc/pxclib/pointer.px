@@ -79,6 +79,9 @@ private metafunction check_pointer_downcast{tto, tfrom}
     tto,
     m::error{"invalid pointer_downcast"}};
 
+// private function extern "pxcrt::local_pool_init" void local_pool_init();
+// local_pool_init();
+
 extern "types" inline
 #include <string>
 #include <pthread.h>
@@ -100,7 +103,95 @@ extern "types" inline
 #define DBG_COND(x)
 #endif
 
+#include <cstdlib>
+
 namespace pxcrt {
+
+extern __thread void *local_pool_blocks;
+
+void clear_local_pool();
+
+template <size_t sz> struct local_pool {
+  static void *allocate() {
+    if (free_list != 0) {
+      void *r = free_list;
+      free_list = *(void **)free_list;
+//fprintf(stderr, "a %zu %p\n", sz, r);
+      return r;
+    }
+    extend();
+    void *r = free_list;
+    free_list = *(void **)free_list;
+//fprintf(stderr, "A %zu %p\n", sz, r);
+    return r;
+  }
+  static void deallocate(void *p) {
+//fprintf(stderr, "d %zu %p\n", sz, p);
+    append_free_list(p);
+  }
+  static void append_free_list(void *p) {
+    *(void **)p = free_list;
+    free_list = p;
+  }
+private:
+  static void extend() {
+//fprintf(stderr, "X %zu\n", sz);
+    char *b = (char *)malloc(sizeof(void *) + block_size);
+    *(void **)(b) = local_pool_blocks; /* segv if null */
+    local_pool_blocks = b;
+    b += sizeof(void *);
+    size_t const bsz = block_size / sz;
+    for (size_t i = 0; i < bsz; ++i) {
+      append_free_list(b + i * sz);
+    }
+  }
+private:
+  enum { block_size = 1024 * 127 };
+  static __thread void *free_list;
+};
+template <size_t sz> __thread void *local_pool<sz>::free_list = 0;
+
+template <bool is_small> struct local_pool_allocator;
+
+template <> struct local_pool_allocator<true> {
+  template <size_t sz> static void *allocate() {
+    enum { pool_block_sz = ((sz + 7) / 8) * 8 };
+    return local_pool<pool_block_sz>::allocate();
+  }
+  template <size_t sz> static void deallocate(void *ptr) {
+    enum { pool_block_sz = ((sz + 7) / 8) * 8 };
+    return local_pool<pool_block_sz>::deallocate(ptr);
+  }
+};
+
+template <> struct local_pool_allocator<false> {
+  template <size_t sz> static void *allocate() {
+    return malloc(sz);
+  }
+  template <size_t sz> static void deallocate(void *ptr) {
+    free(ptr);
+  }
+};
+
+template <typename T> static inline T *local_allocate() {
+  enum { is_small = sizeof(T) <= 64 ? true : false };
+  return static_cast<T *>(
+    local_pool_allocator<is_small>::template allocate<sizeof(T)>());
+}
+
+template <typename T> static inline void local_deallocate(const T *ptr) {
+  enum { is_small = sizeof(T) <= 64 ? true : false };
+  local_pool_allocator<is_small>::template deallocate<sizeof(T)>(
+    const_cast<T *>(ptr));
+}
+
+template <typename T> static inline T *allocate_single() {
+  return reinterpret_cast<T *>(malloc(sizeof(T)));
+}
+
+template <typename T> static inline void deallocate_single(const T *ptr) {
+  free(const_cast<T *>(ptr));
+}
 
 struct condition_variable;
 
@@ -212,10 +303,6 @@ public:
   long count$z;
 };
 
-template <typename T> struct uninit_mem { char value[sizeof(T)]; };
-/* NOTE: emit_vardef_constructor_fast_boxing() depends on the internals
- * of rcval/trcval/tircval. */
-
 template <typename T>
 struct rcval {
   /* rcval: single threaded, mutable and immutable */
@@ -239,7 +326,8 @@ struct rcval {
   void decref$z() const {
     DBG_RC(fprintf(stdout, "%p %ld -1\n", this, get_count$z()));
     if (count$z.decref$z()) {
-      delete this;
+      this->~rcval<T>();
+      this->deallocate(this);
       DBG_RC(fprintf(stdout, "d  %p\n", this));
     }
   }
@@ -249,6 +337,12 @@ struct rcval {
   /* void wait$z() const { } */
   /* void notify_one$z() const { } */
   /* void notify_all$z() const { } */
+  static rcval<T> *allocate() {
+    return local_allocate< rcval<T> >();
+  }
+  static void deallocate(const rcval<T> *ptr) {
+    local_deallocate< rcval<T> >(ptr);
+  }
 public:
   mutable stcount count$z;
 public:
@@ -281,7 +375,8 @@ struct trcval {
   void decref$z() const {
     DBG_RC(fprintf(stdout, "%p %ld -1\n", this, get_count$z()));
     if (count$z.decref$z()) {
-      delete this;
+      this->~trcval<T>();
+      this->deallocate(this);
       DBG_RC(fprintf(stdout, "d  %p\n", this));
     }
   }
@@ -291,6 +386,12 @@ struct trcval {
   void wait$z() const { monitor$z.cond.wait(monitor$z.mtx); }
   void notify_one$z() const { monitor$z.cond.notify_one(); }
   void notify_all$z() const { monitor$z.cond.notify_all(); }
+  static trcval<T> *allocate() {
+    return allocate_single< trcval<T> >();
+  }
+  static void deallocate(const trcval<T> *ptr) {
+    deallocate_single< trcval<T> >(ptr);
+  }
 public:
   mutable mtcount count$z;
   mutable monitor monitor$z;
@@ -324,7 +425,8 @@ struct tircval {
   void decref$z() const {
     DBG_RC(fprintf(stdout, "%p %ld -1\n", this, count$z));
     if (count$z.decref$z()) {
-      delete this;
+      this->~tircval<T>();
+      this->deallocate(this);
       DBG_RC(fprintf(stdout, "d  %p\n", this));
     }
   }
@@ -332,6 +434,12 @@ struct tircval {
   /* void lock$z() const { } */
   /* void unlock$z() const { } */
   /* void wait$z() const { } */
+  static tircval<T> *allocate() {
+    return allocate_single< tircval<T> >();
+  }
+  static void deallocate(const tircval<T> *ptr) {
+    deallocate_single< tircval<T> >(ptr);
+  }
 public:
   mutable mtcount count$z;
 public:
@@ -354,7 +462,8 @@ struct rcptr { /* T must have an intrusive count */
     ptr->incref$z();
   }
   /* boxing foo to ptr{ifoo} */
-  template <typename Tx> explicit rcptr(const Tx& x) : ptr(new T(x)) { }
+  template <typename Tx> explicit rcptr(const Tx& x)
+    : ptr(create_rawptr(x)) { }
   ~rcptr() { ptr->decref$z(); }
   rcptr& operator =(T *x) { return set(x); }
   template <typename Tx> rcptr& operator =(Tx *x) { return set(x); }
@@ -367,6 +476,16 @@ struct rcptr { /* T must have an intrusive count */
   T *operator ->() const { return ptr; }
   void inc_invalidate_guard() const { ptr->lock$z(); }
   void dec_invalidate_guard() const { ptr->unlock$z(); }
+  template <typename Tx> static inline T *create_rawptr(const Tx& x) {
+    T *p = T::allocate();
+    try {
+      new (p) T(x);
+    } catch (...) {
+      T::deallocate(p);
+      throw;
+    }
+    return p;
+  }
 private:
   T *ptr; /* not nullable */
 private:
@@ -458,6 +577,24 @@ namespace pxcrt {
 
 extern "implementation" inline
 namespace pxcrt {
+
+__thread void *local_pool_blocks;
+
+// void clear_local_pool() __attribute__((destructor(0)));
+void __attribute__((destructor(101))) clear_local_pool()
+{
+  while (local_pool_blocks != 0) {
+    void *next = *(void **)local_pool_blocks;
+    free(local_pool_blocks);
+    local_pool_blocks = next;
+  }
+}
+
+// void local_pool_init()
+// {
+//  std::atexit(clear_local_pool);
+// }
+
 }; // namespace pxcrt
 ;
 

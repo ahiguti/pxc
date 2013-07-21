@@ -3,6 +3,26 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- inline_cに埋め込み式
+
+- atexitでlocal_poolをクリアすると、その後でグローバル変数のデストラ
+  クタが走ると困る
+
+- tircvalのインタフェース版は作らないのか？
+
+- thread-local pool allocator - skip_76
+
+- os依存部分を切り離す方法
+
+- ioを一通り用意せよ
+
+- extern ... "source.cpp"
+
+- pointer実装を複数持てるように、相互に変換可能なptr/cptr/iptrを
+  取得する方法を用意。コンテナのrange_typeのように。
+
+- weak pointerをどう実現するか
+
 - tree_mapのrange: k0 < k1にしてから lower_bound/upper_bound すれば
   finishがstartからreachableであることが保証されるか？
 
@@ -20,20 +40,9 @@ FIXME/TODO M1
 
 - vectorをarrayに改名
 
-- pointer実装を複数持てるように、相互に変換可能なptr/cptr/iptrを
-  取得する方法を用意。コンテナのrange_typeのように。
-
-- weak pointerをどう実現するか
-
 - pxcシンボルはextern "C"でよい
 
-- os依存部分を切り離す方法
-
 - evalの再帰上限調査
-
-- ioを一通り用意せよ
-
-- extern ... "source.cpp"
 
 - コンストラクタだけprivateにすることを許可せよ(private_udcon)
 
@@ -1812,4 +1821,13 @@ strong+weakのカウンタ、strongのみのカウンタの二つを持つ。
 struct {t} strong {
   ptr{t} p;
 }
+
+---------------------------------------------------------------------
+thread-local pool allocator
+
+8, 16, 32, 48, 64byte用プールを用意
+(sz + 7) >> 3が
+1,  2,  3,  4,  5,  6,  7,  8, 9以上
+8, 16, 32, 32, 48, 48, 64, 64, ?
+
 
