@@ -21,111 +21,121 @@
 
 namespace pxc {
 
+static expr_i *arena_push(expr_i *e)
+{
+  expr_arena.push_back(e);
+  return e;
+}
+
 expr_i *expr_te_new(const char *fn, int line, expr_i *nssym, expr_i *tlarg)
-{ return new expr_te(fn, line, nssym, tlarg); }
+{ return arena_push(new expr_te(fn, line, nssym, tlarg)); }
 expr_i *expr_telist_new(const char *fn, int line, expr_i *head, expr_i *rest)
-{ return new expr_telist(fn, line, head, rest); }
+{ return arena_push(new expr_telist(fn, line, head, rest)); }
 expr_i *expr_inline_c_new(const char *fn, int line, const char *posstr,
   const char *cstr, bool declonly, expr_i *val)
-{ return new expr_inline_c(fn, line, posstr, cstr, declonly, val); }
+{ return arena_push(new expr_inline_c(fn, line, posstr, cstr, declonly,
+  val)); }
 expr_i *expr_ns_new(const char *fn, int line, expr_i *nssym, bool import,
   bool pub, const char *nsalias)
-{ return new expr_ns(fn, line, nssym, import, pub, nsalias); }
+{ return arena_push(new expr_ns(fn, line, nssym, import, pub, nsalias)); }
 expr_i *expr_int_literal_new(const char *fn, int line, const char *str,
   bool is_unsigned)
-{ return new expr_int_literal(fn, line, str, is_unsigned); }
+{ return arena_push(new expr_int_literal(fn, line, str, is_unsigned)); }
 expr_i *expr_float_literal_new(const char *fn, int line, const char *str)
-{ return new expr_float_literal(fn, line, str); }
+{ return arena_push(new expr_float_literal(fn, line, str)); }
 expr_i *expr_bool_literal_new(const char *fn, int line, bool v)
-{ return new expr_bool_literal(fn, line, v); }
+{ return arena_push(new expr_bool_literal(fn, line, v)); }
 expr_i *expr_str_literal_new(const char *fn, int line, const char *str)
-{ return new expr_str_literal(fn, line, str); }
+{ return arena_push(new expr_str_literal(fn, line, str)); }
 expr_i *expr_nssym_new(const char *fn, int line, expr_i *prefix,
   const char *sym)
-{ return new expr_nssym(fn, line, prefix, sym); }
+{ return arena_push(new expr_nssym(fn, line, prefix, sym)); }
 expr_i *expr_symbol_new(const char *fn, int line, expr_i *nssym)
-{ return new expr_symbol(fn, line, nssym); }
+{ return arena_push(new expr_symbol(fn, line, nssym)); }
 expr_i *expr_var_new(const char *fn, int line, const char *sym,
   expr_i *type_uneval, passby_e passby, attribute_e attr, expr_i *rhs_ref)
-{ return new expr_var(fn, line, sym, type_uneval, passby, attr, rhs_ref); }
+{ return arena_push(new expr_var(fn, line, sym, type_uneval, passby, attr,
+  rhs_ref)); }
 expr_i *expr_enumval_new(const char *fn, int line, const char *sym,
   expr_i *type_uneval, const char *cname, expr_i *value, attribute_e attr,
   expr_i *rest)
-{ return new expr_enumval(fn, line, sym, type_uneval, cname, value, attr,
-  rest); }
+{ return arena_push(new expr_enumval(fn, line, sym, type_uneval, cname, value,
+  attr, rest)); }
 expr_i *expr_stmts_new(const char *fn, int line, expr_i *head, expr_i *rest)
-{ return new expr_stmts(fn, line, head, rest); }
+{ return arena_push(new expr_stmts(fn, line, head, rest)); }
 expr_i *expr_argdecls_new(const char *fn, int line, const char *sym,
   expr_i *type_uneval, passby_e passby, expr_i *rest)
-{ return new expr_argdecls(fn, line, sym, type_uneval, passby, rest); }
+{ return arena_push(new expr_argdecls(fn, line, sym, type_uneval, passby,
+  rest)); }
 expr_i *expr_block_new(const char *fn, int line, expr_i *tparams,
   expr_i *inherit, expr_i *argdecls, expr_i *rettype, passby_e ret_passby,
   expr_i *stmts)
-{ return new expr_block(fn, line, tparams, inherit, argdecls, rettype,
-  ret_passby, stmts); }
+{ return arena_push(new expr_block(fn, line, tparams, inherit, argdecls,
+  rettype, ret_passby, stmts)); }
 expr_i *expr_op_new(const char *fn, int line, int op, expr_i *arg0,
   expr_i *arg1, const char *extop)
-{ return new expr_op(fn, line, op, extop, arg0, arg1); }
+{ return arena_push(new expr_op(fn, line, op, extop, arg0, arg1)); }
 expr_i *expr_funccall_new(const char *fn, int line, expr_i *func, expr_i *arg)
-{ return new expr_funccall(fn, line, func, arg); }
+{ return arena_push(new expr_funccall(fn, line, func, arg)); }
 expr_i *expr_special_new(const char *fn, int line, int tok, expr_i *arg)
-{ return new expr_special(fn, line, tok, arg); }
+{ return arena_push(new expr_special(fn, line, tok, arg)); }
 expr_i *expr_if_new(const char *fn, int line, expr_i *cond, expr_i *b1,
   expr_i *b2, expr_i *rest)
-{ return new expr_if(fn, line, cond, b1, b2, rest); }
+{ return arena_push(new expr_if(fn, line, cond, b1, b2, rest)); }
 expr_i *expr_while_new(const char *fn, int line, expr_i *cond, expr_i *block)
-{ return new expr_while(fn, line, cond, block); }
+{ return arena_push(new expr_while(fn, line, cond, block)); }
 expr_i *expr_for_new(const char *fn, int line, expr_i *e0, expr_i *e1,
   expr_i *e2, expr_i *block)
-{ return new expr_for(fn, line, e0, e1, e2, block); }
+{ return arena_push(new expr_for(fn, line, e0, e1, e2, block)); }
 expr_i *expr_forrange_new(const char *fn, int line, expr_i *r0, expr_i *r1,
   expr_i *block)
-{ return new expr_forrange(fn, line, r0, r1, block); }
+{ return arena_push(new expr_forrange(fn, line, r0, r1, block)); }
 expr_i *expr_feach_new(const char *fn, int line, expr_i *ce, expr_i *block)
-{ return new expr_feach(fn, line, ce, block); }
+{ return arena_push(new expr_feach(fn, line, ce, block)); }
 expr_i *expr_fldfe_new(const char *fn, int line, const char *namesym,
   const char *fldsym, const char *idxsym, expr_i *te, expr_i *stmts)
-{ return new expr_fldfe(fn, line, namesym, fldsym, idxsym, te, stmts); }
+{ return arena_push(new expr_fldfe(fn, line, namesym, fldsym, idxsym, te,
+  stmts)); }
 expr_i *expr_foldfe_new(const char *fn, int line, const char *itersym,
   expr_i *valueste, const char *embedsym, expr_i *embedexpr,
   const char *foldop, expr_i *stmts)
-{ return new expr_foldfe(fn, line, itersym, valueste, embedsym, embedexpr,
-  foldop, stmts); }
+{ return arena_push(new expr_foldfe(fn, line, itersym, valueste, embedsym,
+  embedexpr, foldop, stmts)); }
 expr_i *expr_expand_new(const char *fn, int line, const char *itersym,
   const char *idxsym, expr_i *valueste, expr_i *baseexpr, expand_e ex,
   expr_i *rest)
-{ return new expr_expand(fn, line, itersym, idxsym, valueste, baseexpr, ex,
-  rest); }
+{ return arena_push(new expr_expand(fn, line, itersym, idxsym, valueste,
+  baseexpr, ex, rest)); }
 expr_i *expr_funcdef_new(const char *fn, int line, const char *sym,
   const char *cname, bool is_const, expr_i *block, bool ext_decl,
   bool extc_decl, attribute_e attr)
-{ return new expr_funcdef(fn, line, sym, cname, is_const, block, ext_decl,
-  extc_decl, attr); }
+{ return arena_push(new expr_funcdef(fn, line, sym, cname, is_const, block,
+  ext_decl, extc_decl, attr)); }
 expr_i *expr_typedef_new(const char *fn, int line, const char *sym,
   const char *cname, const char *family, bool is_enum, bool is_bitmask,
   expr_i *enumvals, unsigned int num_tpara, attribute_e attr)
-{ return new expr_typedef(fn, line, sym, cname, family, is_enum, is_bitmask,
-  enumvals, num_tpara, attr); }
+{ return arena_push(new expr_typedef(fn, line, sym, cname, family, is_enum,
+  is_bitmask, enumvals, num_tpara, attr)); }
 expr_i *expr_metafdef_new(const char *fn, int line, const char *sym,
   expr_i *tparams, expr_i *rhs, attribute_e attr)
-{ return new expr_metafdef(fn, line, sym, tparams, rhs, attr); }
+{ return arena_push(new expr_metafdef(fn, line, sym, tparams, rhs, attr)); }
 expr_i *expr_struct_new(const char *fn, int line, const char *sym,
   const char *cname, const char *family, expr_i *block, attribute_e attr,
   bool has_udcon, bool private_udcon)
-{ return new expr_struct(fn, line, sym, cname, family, block, attr,
-  has_udcon, private_udcon); }
+{ return arena_push(new expr_struct(fn, line, sym, cname, family, block, attr,
+  has_udcon, private_udcon)); }
 expr_i *expr_dunion_new(const char *fn, int line, const char *sym,
   expr_i *block, attribute_e attr)
-{ return new expr_dunion(fn, line, sym, block, attr); }
+{ return arena_push(new expr_dunion(fn, line, sym, block, attr)); }
 expr_i *expr_interface_new(const char *fn, int line, const char *sym,
   const char *cname, expr_i *block, attribute_e attr)
-{ return new expr_interface(fn, line, sym, cname, block, attr); }
+{ return arena_push(new expr_interface(fn, line, sym, cname, block, attr)); }
 expr_i *expr_try_new(const char *fn, int line, expr_i *tblock, expr_i *cblock,
   expr_i *rest)
-{ return new expr_try(fn, line, tblock, cblock, rest); }
+{ return arena_push(new expr_try(fn, line, tblock, cblock, rest)); }
 expr_i *expr_tparams_new(const char *fn, int line, const char *sym,
   expr_i *rest)
-{ return new expr_tparams(fn, line, sym, rest); }
+{ return arena_push(new expr_tparams(fn, line, sym, rest)); }
 
 expr_i *expr_te_local_chain_new(expr_i *te1, expr_i *te2)
 {

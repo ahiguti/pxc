@@ -1229,6 +1229,7 @@ std::string term_tostr(const term& t, term_tostr_sort s)
 	uniqns = efd->uniqns;
 	if (efd->is_virtual_or_member_function()) {
 	  append_block_id_if_local = false;
+	  uniqns = "";
 	}
 	cname = efd->cname;
 	esort_char = 'f';
@@ -1326,7 +1327,10 @@ std::string term_tostr(const term& t, term_tostr_sort s)
       #endif
     } else {
       rstr = "";
-      if (s == term_tostr_sort_cname_tparam || s == term_tostr_sort_strict) {
+      if (is_virtual_or_member_function_flag) {
+	/* no ns prefix */
+      } else if (s == term_tostr_sort_cname_tparam ||
+	s == term_tostr_sort_strict) {
 	rstr += replace_char(uniqns, ':', '$') + "$n$$";
       } else /* if (st_defined->get_lexical_parent() == 0) */ {
 	rstr += to_c_ns(uniqns) + "::";
@@ -3378,13 +3382,14 @@ bool is_noexec_expr(expr_i *e)
   case expr_e_typedef:
   case expr_e_metafdef:
   case expr_e_ns:
-  case expr_e_inline_c:
   case expr_e_enumval:
   case expr_e_struct:
   case expr_e_dunion:
   case expr_e_interface:
   case expr_e_funcdef:
     return true;
+  case expr_e_inline_c:
+    return ptr_down_cast<expr_inline_c>(e)->posstr != "emit";
   default:
     /* expr_e_if, expr_e_var, expr_e_op for example */
     return false;

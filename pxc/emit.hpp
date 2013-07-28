@@ -20,6 +20,7 @@ void emit_code(const std::string& dest_filename, expr_block *gl_block,
   generate_main_e gmain);
 void fn_emit_value(emit_context& em, expr_i *e, bool expand_composite = false,
   bool var_rhs = false);
+std::string csymbol_var(const expr_var *ev, bool cdecl);
 
 };
 

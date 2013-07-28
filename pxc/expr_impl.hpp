@@ -172,6 +172,7 @@ struct expr_nssym;
 struct expr_telist;
 struct expr_tparams;
 struct expr_symbol;
+struct expr_var;
 
 struct eval_context;
 typedef term (*builtin_strict_metafunc_t)(const term_list_range& tlev,
@@ -229,6 +230,13 @@ private:
   term evaluated;
 };
 
+struct inline_c_element {
+  inline_c_element() : start(0), finish(0), te(0) { }
+  size_t start;
+  size_t finish;
+  expr_te *te;
+};
+
 struct expr_i {
   expr_i(const char *fn, int line);
   virtual ~expr_i() { }
@@ -256,6 +264,7 @@ struct expr_i {
   virtual void emit_symbol(emit_context& em) const { }
   virtual bool has_expr_to_emit() const = 0;
   virtual bool is_expression() const = 0;
+  virtual void get_fields(std::list<expr_var *>& flds_r) const { }
 public:
   const term& get_texpr() const { return type_of_this_expr; }
   const term& get_conv_to() const { return type_conv_to; }
@@ -338,9 +347,16 @@ struct expr_inline_c : public expr_i {
     const char *cstr, bool declonly, expr_i *val);
   expr_i *clone() const { return new expr_inline_c(*this); }
   expr_e get_esort() const { return expr_e_inline_c; }
-  int get_num_children() const { return 1; }
-  expr_i *get_child(int i) { return i == 0 ? value : 0; }
-  void set_child(int i, expr_i *e) { if (i ==0) { value = e; } }
+  int get_num_children() const { return 2; }
+  expr_i *get_child(int i) {
+    if (i == 0) { return value; }
+    else if (i == 1) { return te_list; }
+    return 0;
+  }
+  void set_child(int i, expr_i *e) {
+    if (i == 0) { value = e; }
+    else if (i == 1) { te_list = ptr_down_cast<expr_telist>(e); }
+  }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return false; }
   bool is_expression() const { return false; }
@@ -352,6 +368,9 @@ public:
   int pos;
   bool declonly;
   expr_i *value; /* for pragma */
+  term value_evaluated;
+  expr_telist *te_list; /* embedded type expressions */
+  std::vector<inline_c_element> elems;
 };
 
 struct expr_ns : public expr_i {

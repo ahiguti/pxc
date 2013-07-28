@@ -60,11 +60,11 @@ public mtvaluetype struct extern "::pxcrt::pxcvector" "varray" {t} vector {
 
 /* in-place construction */
 public function {ts} void
-vector_construct_back(expand(construct_back_arg_decls{ts}))
+vector_emplace_back(expand(emplace_back_arg_decls{ts}))
 {
   metafunction t m::at0{m::at0{m::at0{ts}}};
   t mutable& x = vector_push_back_uninitialized(a0);
-  x extern "placement-new" t(expand(a: construct_back_arg_names{ts}; a));
+  x extern "placement-new" t(expand(a: emplace_back_arg_names{ts}; a));
   vector_rawarr_set_valid_len(a0, a0.size() + 1);
 }
 
@@ -72,13 +72,13 @@ private function extern "::pxcrt::pxcvector_push_back_uninitialized" {t}
 t mutable& vector_push_back_uninitialized(vector{t} mutable& v);
 private function extern "::pxcrt::pxcvector_rawarr_set_valid_len" {t}
 void vector_rawarr_set_valid_len(vector{t} mutable& v, size_t len);
-private metafunction construct_back_arg_decls{ts}
+private metafunction emplace_back_arg_decls{ts}
   m::map{
     m::seq{m::size{ts}},
     metafunction{i}
       m::list{m::concat{"a", i}, m::at0{m::at{ts, i}},
 	m::cond{m::eq{i, 0}, 1, 0}, 1}}; /* 1st arg is by mutable ref */
-private metafunction construct_back_arg_names{ts}
+private metafunction emplace_back_arg_names{ts}
   m::map{m::seq{1, m::size{ts}}, metafunction{i} m::concat{"a", i}};
 
 public tsvaluetype struct extern "::pxcrt::farray" "farray" {t, n} farray {

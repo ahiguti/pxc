@@ -18,6 +18,7 @@
 #include "checktype.hpp"
 #include "expr_misc.hpp"
 #include "util.hpp"
+#include "emit.hpp"
 
 #define DBG_UP(x)
 #define DBG(x)
@@ -232,15 +233,10 @@ static term eval_meta_argnum(const term_list_range& tlev, eval_context& ectx,
   }
   expr_i *const einst = term_get_instance(ttyp);
   DBG_METAARGTYPE(fprintf(stderr, "t.expr=%p inst=%p\n", t.expr, einst));
-  if (einst->get_esort() == expr_e_funcdef) {
-    expr_funcdef *const efd = ptr_down_cast<expr_funcdef>(einst);
-    expr_argdecls *ad = efd->block->get_argdecls();
-    const long long len = argdecls_length(ad);
-    return term(len);
-  } else {
-    /* not a function */
-  }
-  return term();
+  expr_block *block = einst->get_template_block();
+  expr_argdecls *ad = block->get_argdecls();
+  const long long len = argdecls_length(ad);
+  return term(len);
 }
 
 static term eval_meta_rettype(const term_list_range& tlev, eval_context& ectx,
@@ -717,6 +713,7 @@ static term eval_meta_fields(const term_list_range& tlev, eval_context& ectx,
     term_list tl1;
     tl1.push_back(term(std::string((*i)->sym)));
     tl1.push_back((*i)->resolve_texpr());
+    tl1.push_back(term(is_passby_const((*i)->varinfo.passby)));
     term t1(tl1);
     tl.push_back(t1);
   }
@@ -1365,6 +1362,34 @@ static term eval_meta_lt(const term_list_range& tlev, eval_context& ectx,
   return term(meta_term_to_long(tlev[0]) < meta_term_to_long(tlev[1]));
 }
 
+static term eval_meta_csymbol(const term_list_range& tlev, eval_context& ectx,
+  expr_i *pos)
+{
+  if (tlev.size() == 1) {
+    const std::string s = term_tostr(tlev[0], term_tostr_sort_cname);
+    return term(s);
+  } else if (tlev.size() == 2) {
+    long fldnum = meta_term_to_long(tlev[1]);
+    const expr_i *const einst = term_get_instance_const(tlev[0]);
+    typedef std::list<expr_var *> flds_type;
+    flds_type flds;
+    einst->get_fields(flds);
+    long j = 0;
+    expr_var *v = 0;
+    for (flds_type::const_iterator i = flds.begin(); i != flds.end();
+      ++i, ++j) {
+      if (j == fldnum) {
+	v = *i;
+	break;
+      }
+    }
+    if (v != 0) {
+      return term(csymbol_var(v, false));
+    }
+  }
+  return term();
+}
+
 static term eval_meta_map(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
@@ -1413,6 +1438,27 @@ static term eval_meta_map(const term_list_range& tlev, eval_context& ectx,
     ++cur;
   }
   return term(rtl);
+}
+
+static term eval_meta_fold(const term_list_range& tlev, eval_context& ectx,
+  expr_i *pos)
+{
+  if (tlev.size() != 3) {
+    return term();
+  }
+  if (!tlev[0].is_metalist()) {
+    return term();
+  }
+  const term& mf = tlev[1];
+  term val = tlev[2];
+  const term_list& tl = *tlev[0].get_metalist();
+  for (term_list::const_iterator i = tl.begin(); i != tl.end(); ++i) {
+    term ta[2];
+    ta[0] = val;
+    ta[1] = *i;
+    val = eval_apply(mf, term_list_range(ta, 2), true, ectx, pos);
+  }
+  return val;
 }
 
 static term eval_meta_filter(const term_list_range& tlev, eval_context& ectx,
@@ -1618,7 +1664,9 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@mod", &eval_meta_mod },
   { "@gt", &eval_meta_gt },
   { "@lt", &eval_meta_lt },
+  { "@csymbol", &eval_meta_csymbol },
   { "@map", &eval_meta_map },
+  { "@fold", &eval_meta_fold },
   { "@filter", &eval_meta_filter },
   { "@local", &eval_meta_local },
   { "@symbol", &eval_meta_symbol },
