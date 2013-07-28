@@ -79,9 +79,6 @@ private metafunction check_pointer_downcast{tto, tfrom}
     tto,
     m::error{"invalid pointer_downcast"}};
 
-// private function extern "pxcrt::local_pool_init" void local_pool_init();
-// local_pool_init();
-
 extern "types" inline
 #include <string>
 #include <pthread.h>
@@ -102,6 +99,11 @@ extern "types" inline
 #else
 #define DBG_COND(x)
 #endif
+#ifdef PXCRT_DBG_POOL
+#define DBG_POOL(x) x
+#else
+#define DBG_POOL(x)
+#endif
 
 #include <cstdlib>
 
@@ -116,17 +118,17 @@ template <size_t sz> struct local_pool {
     if (free_list != 0) {
       void *r = free_list;
       free_list = *(void **)free_list;
-//fprintf(stderr, "a %zu %p\n", sz, r);
+      DBG_POOL(fprintf(stderr, "a %zu %p\n", sz, r));
       return r;
     }
     extend();
     void *r = free_list;
     free_list = *(void **)free_list;
-//fprintf(stderr, "A %zu %p\n", sz, r);
+    DBG_POOL(fprintf(stderr, "A %zu %p\n", sz, r));
     return r;
   }
   static void deallocate(void *p) {
-//fprintf(stderr, "d %zu %p\n", sz, p);
+    DBG_POOL(fprintf(stderr, "d %zu %p\n", sz, p));
     append_free_list(p);
   }
   static void append_free_list(void *p) {
@@ -135,18 +137,18 @@ template <size_t sz> struct local_pool {
   }
 private:
   static void extend() {
-//fprintf(stderr, "X %zu\n", sz);
-    char *b = (char *)malloc(sizeof(void *) + block_size);
+    DBG_POOL(fprintf(stderr, "X %zu\n", sz));
+    char *b = (char *)malloc(sizeof(void *) + pool_size);
     *(void **)(b) = local_pool_blocks; /* segv if null */
     local_pool_blocks = b;
     b += sizeof(void *);
-    size_t const bsz = block_size / sz;
+    size_t const bsz = pool_size / sz;
     for (size_t i = 0; i < bsz; ++i) {
       append_free_list(b + i * sz);
     }
   }
 private:
-  enum { block_size = 1024 * 127 };
+  enum { pool_size = 2000 };
   static __thread void *free_list;
 };
 template <size_t sz> __thread void *local_pool<sz>::free_list = 0;
@@ -580,7 +582,6 @@ namespace pxcrt {
 
 __thread void *local_pool_blocks;
 
-// void clear_local_pool() __attribute__((destructor(0)));
 void __attribute__((destructor(101))) clear_local_pool()
 {
   while (local_pool_blocks != 0) {
@@ -589,11 +590,6 @@ void __attribute__((destructor(101))) clear_local_pool()
     local_pool_blocks = next;
   }
 }
-
-// void local_pool_init()
-// {
-//  std::atexit(clear_local_pool);
-// }
 
 }; // namespace pxcrt
 ;

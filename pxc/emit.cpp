@@ -150,7 +150,7 @@ static std::string c_namespace_str_prefix(const std::string& uniqns)
   return r;
 }
 
-static std::string csymbol_var(const expr_var *ev, bool cdecl)
+std::string csymbol_var(const expr_var *ev, bool cdecl)
 {
   expr_i *fr = get_current_frame_expr(ev->symtbl_lexical);
   if (fr != 0 && fr->get_esort() == expr_e_struct) {
@@ -1461,7 +1461,11 @@ static void emit_import_init(emit_context& em, const std::string& main_ns)
 
 void expr_inline_c::emit_value(emit_context& em)
 {
-  em.puts("/* inline_c */");
+  if (posstr == "emit") {
+    em.puts(meta_term_to_string(value_evaluated, false));
+  } else {
+    em.puts("/* inline_c */");
+  }
 }
 
 void expr_ns::emit_value(emit_context& em)
@@ -3163,7 +3167,14 @@ static void emit_inline_c(emit_context& em, const std::string& posstr,
     const std::string cstr(ei->cstr);
     em.set_file_line(ei);
     em.puts("/* inline */\n");
-    em.puts(cstr.c_str());
+    size_t last_offset = 0;
+    for (size_t i = 0; i < ei->elems.size(); ++i) {
+      inline_c_element const& e = ei->elems[i];
+      em.puts(cstr.substr(last_offset, e.start - last_offset));
+      em.puts(meta_term_to_string(e.te->sdef.get_evaluated(), false));
+      last_offset = e.finish;
+    }
+    em.puts(cstr.substr(last_offset));
     if (cstr.size() > 0 && cstr[cstr.size() - 1] != '\n') {
       em.puts("\n");
     }

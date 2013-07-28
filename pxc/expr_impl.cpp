@@ -32,7 +32,10 @@ expr_i::expr_i(const char *fn, int line)
     type_conv_to(), parent_expr(0), symtbl_lexical(0), tempvar_id(-1),
     generated_flag(false)
 {
+  #if 0
+  // FIXME: remove. must be pushed after obj is successfully created
   expr_arena.push_back(this);
+  #endif
   type_of_this_expr = builtins.type_void;
 }
 
@@ -428,7 +431,8 @@ std::string expr_telist::dump(int indent) const
 
 expr_inline_c::expr_inline_c(const char *fn, int line, const char *label,
   const char *cstr, bool declonly, expr_i *val)
-  : expr_i(fn, line), posstr(label), cstr(cstr), declonly(declonly), value(val)
+  : expr_i(fn, line), posstr(label), cstr(cstr), declonly(declonly), value(val),
+    te_list(0)
 {
   if (
     posstr != "types" &&
@@ -439,10 +443,44 @@ expr_inline_c::expr_inline_c(const char *fn, int line, const char *label,
     posstr != "cflags" &&
     posstr != "ldflags" &&
     posstr != "disable_bounds_checking" &&
-    posstr != "disable_guard"
+    posstr != "disable_guard" &&
+    posstr != "emit"
     ) {
     arena_error_push(this,
       "Invalid label '%s'", posstr.c_str());
+  }
+  const size_t sz = strlen(cstr);
+  for (size_t i = 0; i + 3 < sz; ++i) {
+    if (cstr[i] != '%' || cstr[i + 1] != '{') {
+      continue;
+    }
+    size_t j = i + 2;
+    for (; j + 1 < sz; ++j) {
+      if (cstr[j] != '}' || cstr[j + 1] != '%') {
+	continue;
+      }
+      break;
+    }
+    if (j + 1 == sz) {
+      std::string mess(cstr + i);
+      for (size_t k = 0; k < mess.size(); ++k) {
+	if (mess[k] == '\n') mess[k] = ' ';
+      }
+      arena_error_push(this,
+	"Invalid embedded expression '%s'", mess.c_str());
+      break;
+    }
+    const std::string es(cstr + i + 2, j - i - 2);
+    expr_i *const te = string_to_te(this, es);
+    inline_c_element elem;
+    elem.start = i;
+    elem.finish = j + 2;
+    elem.te = ptr_down_cast<expr_te>(te);
+    te_list = ptr_down_cast<expr_telist>(
+      expr_telist_new(this->fname, this->line, te, te_list));
+    // fprintf(stderr, "embedded %s\n", te->dump(0).c_str());
+    elems.push_back(elem);
+    i = j + 1;
   }
 }
 

@@ -901,7 +901,7 @@ static void compile_module_to_cc_srcs(const parser_options& po,
       /* copy cc file */
       std::string sfn = po.src_filename + ".gen/";
       mkdir_hier(sfn);
-      size_t delim = cc_filename.rfind('/');
+      std::string::size_type delim = cc_filename.rfind('/');
       assert(delim != cc_filename.npos);
       sfn += cc_filename.substr(delim);
       copy_file_atomic(cc_filename, sfn, false);
@@ -940,24 +940,31 @@ static void compile_module_to_cc_srcs(const parser_options& po,
   }
 }
 
-/* compiles px files and generate one cxx file */
-static void compile_module_to_cc(const parser_options& po,
-  all_modules_info& ami, const std::string& modname, generate_main_e gmain)
+static void get_mi_srcs(const parser_options& po, all_modules_info& ami,
+  const std::string& modname)
 {
   strset cc_srcs;
   strlist cc_srcs_ord;
-  get_indirect_imports(ami, modname, false, true, cc_srcs, cc_srcs_ord);
   strset link_srcs;
   strlist link_srcs_ord;
+  get_indirect_imports(ami, modname, false, true, cc_srcs, cc_srcs_ord);
   get_indirect_imports(ami, modname, true, true, link_srcs, link_srcs_ord);
   module_info& mi_main = get_modinfo_by_name(ami, modname);
-  if (po.verbose > 1) {
-    fprintf(stderr, "COMPILE %s\n", modname.c_str());
-  }
   mi_main.cc_srcs = cc_srcs;
   mi_main.cc_srcs_ord = cc_srcs_ord;
   mi_main.link_srcs = link_srcs;
   mi_main.link_srcs_ord = link_srcs_ord;
+}
+
+/* compiles px files and generate one cxx file */
+static void compile_module_to_cc(const parser_options& po,
+  all_modules_info& ami, const std::string& modname, generate_main_e gmain)
+{
+  get_mi_srcs(po, ami, modname);
+  if (po.verbose > 1) {
+    fprintf(stderr, "COMPILE %s\n", modname.c_str());
+  }
+  module_info& mi_main = get_modinfo_by_name(ami, modname);
   compile_module_to_cc_srcs(po, ami, mi_main, gmain);
 }
 
@@ -1208,11 +1215,36 @@ static int compile_and_execute(parser_options& po,
   }
   /* compile to exe or so */
   if (need_to_relink(po, ami, mi_main)) {
+    get_mi_srcs(po, ami, fn);
+      /* need to set link_srcs for mi_main here because it is not set when
+       * compilation to cc/o is skipped */
     compile_cxx_all(po, ami, mi_main);
   }
   if (po.gen_out) {
-    const std::string gen_out = po.src_filename +
+    #if 1
+    std::string base_filename = po.src_filename;
+    if (base_filename.size() > 3 &&
+      base_filename.substr(base_filename.size() - 3) == ".px") {
+      base_filename = base_filename.substr(0, base_filename.size() - 3);
+    }
+    #if 0
+    std::string::size_type delim = base_filename.rfind('/');
+    if (delim != base_filename.npos) {
+      base_filename = base_filename.substr(delim + 1);
+    }
+    #endif
+    base_filename += (po.profile.generate_dynamic ? ".so" : ".exe");
+    #if 0
+    std::string dn = po.src_filename + ".gen/";
+    mkdir_hier(dn);
+    const std::string gen_out = dn + base_filename;
+    #endif
+    const std::string gen_out = base_filename;
+    #endif
+    #if 0
+    const std::string gen_out = src_filename +
       (po.profile.generate_dynamic ? ".so" : ".exe");
+    #endif
     const std::string ofn = po.profile.generate_dynamic ?
       get_so_filename(po, mi_main) : get_exe_filename(po, mi_main);
     copy_file_atomic(ofn, gen_out, true);
@@ -1325,11 +1357,11 @@ static int prepare_options(parser_options& po, int argc, char **argv)
 	po.gen_cc = true;
       } else if (s == "--generate" || s == "-g") {
 	po.gen_out = true;
-      } else if (s == "--no-build") {
+      } else if (s == "--no-build" || s == "-nb") {
 	po.no_build = true;
-      } else if (s == "--no-update") {
+      } else if (s == "--no-update" || s == "-nu") {
 	po.no_update = true;
-      } else if (s == "--no-execute") {
+      } else if (s == "--no-execute" || s == "-ne") {
 	po.no_execute = true;
       #if 0
       } else if (s == "--show-warnings" || s == "-W") {

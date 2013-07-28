@@ -232,18 +232,24 @@ void expr_symbol::check_type(symbol_table *lookup)
 void expr_inline_c::check_type(symbol_table *lookup)
 {
   fn_check_type(value, symtbl_lexical);
+  fn_check_type(te_list, symtbl_lexical);
+  for (size_t i = 0; i < elems.size(); ++i) {
+    elems[i].te->sdef.resolve_evaluated();
+  }
   if ((this->get_attribute() & attribute_threaded) != 0) {
     arena_error_throw(this, "Invalid attribute for an inline expression");
   }
   if (value != 0) {
-    const term tv = eval_expr(value);
-    const long long v = meta_term_to_long(tv);
+    value_evaluated = eval_expr(value);
+    const long long v = meta_term_to_long(value_evaluated);
     if (posstr == "disable_bounds_checking") {
       symtbl_lexical->pragma.disable_bounds_checking = v;
     } else if (posstr == "disable_guard") {
       symtbl_lexical->pragma.disable_guard = v; // not implemented yet
     } else if (posstr == "trace_meta") {
       symtbl_lexical->pragma.trace_meta = v;
+    } else if (posstr == "emit") {
+      /* nothing to do */
     } else {
       arena_error_throw(this, "Invalid inline expression");
     }

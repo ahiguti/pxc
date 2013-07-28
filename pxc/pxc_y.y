@@ -500,10 +500,12 @@ ext_stmt
 	  { $$ = expr_inline_c_new(cur_fname, @2.first_line,
 		arena_dequote_strdup($3), arena_decode_inline_strdup($4),
 		cur_mode != compile_mode_main, 0); }
+	  /* inlined c++ code */
 	| opt_attribute /* dummy */ TOK_EXTERN TOK_STRLIT TOK_STRLIT ';'
 	  { $$ = expr_inline_c_new(cur_fname, @2.first_line,
 		arena_dequote_strdup($3), arena_dequote_strdup($4),
 		cur_mode != compile_mode_main, 0); }
+	  /* c++ compilation flags */
 	;
 opt_nsalias
 	:
