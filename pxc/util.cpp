@@ -499,8 +499,9 @@ void copy_file(const std::string& ffrom, const std::string& fto)
     if (e == 0) {
       break;
     }
-    e = fwrite(&buf[0], 1, buf.size(), wfp.get());
-    if (ferror(wfp.get()) || e != buf.size()) {
+    size_t wrsize = e;
+    e = fwrite(&buf[0], 1, wrsize, wfp.get());
+    if (ferror(wfp.get()) || e != wrsize) {
       arena_error_throw(0, "%s:0: Failed to write: errno=%d\n",
 	fto.c_str(), errno);
     }

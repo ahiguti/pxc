@@ -3251,6 +3251,12 @@ void emit_code(const std::string& dest_filename, expr_block *gl_block,
     }
     em.printf(" return pxcrt::main_nothrow(& %s$c);\n", mainfn.c_str());
     em.puts("}\n");
+    if (gmain == generate_main_dl) {
+      /* another entry function */
+      em.puts("int pxc_library_init()\n{\n");
+      em.printf(" return pxcrt::main_nothrow(& %s$c);\n", mainfn.c_str());
+      em.puts("}\n");
+    }
   }
   em.puts("}; /* extern \"C\" */\n");
 }

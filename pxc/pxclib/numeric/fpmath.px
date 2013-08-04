@@ -42,6 +42,36 @@ public threaded function extern "numeric::modf_double"
 public threaded function extern "numeric::modf_double"
   float modf_bt_float(float x, float mutable& exp);
 
+private metafunction funcs_a1
+  m::list{
+    "sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh",
+    "exp", "log", "log10", "sqrt",
+    "ceil", "floor", "fabs"
+  };
+
+/* decls for "sin", "cos", ... */
+expand (fsym : funcs_a1) {
+  public threaded function extern "%" double fsym(double x);
+}
+/* decls for "sinf", "cosf", ... */
+expand (fsym : m::map{funcs_a1, metafunction{x} m::concat{x, "f"}}) {
+  public threaded function extern "%" float fsym(float x);
+}
+
+/* c++ defs for "sin", "sinf", ... */
+private metafunction emit_funcdefs
+  m::concat{
+    m::fold{
+      m::map{funcs_a1, metafunction{x} emit_funcdef_a1{x, "$f", double}},
+      m::concat, ""},
+    m::fold{
+      m::map{funcs_a1, metafunction{x} emit_funcdef_a1{x, "f$f", float}},
+      m::concat, ""}};
+private metafunction emit_funcdef_a1{f, fsuffix, typ}
+  m::concat{
+    "static inline ", m::csymbol{typ}, " ", f, fsuffix, "(", m::csymbol{typ},
+    " x) { return std::", f, "(x); }\n"};
+
 extern "types" inline
 #include <cmath>
 #include <cfloat>
@@ -75,5 +105,11 @@ static inline bt_double modf_double(bt_double x, bt_double& ir)
 static inline bt_float modf_float(bt_float x, bt_float& ir)
 { return std::modf(x, &ir); }
 }; // namespace numeric
+namespace numeric$n {
+namespace fpmath$n {
+using namespace pxcrt;
+%{emit_funcdefs}%
+}; // namespace fpmath$n
+}; // namespace numeric$n
 ;
 

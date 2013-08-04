@@ -3,4 +3,4 @@ all:
 
 clean:
 	rm -f *.so
-	rm -rf pyhello.px.gen/
+	rm -rf pxc_python.px.gen/

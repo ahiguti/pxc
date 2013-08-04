@@ -3,15 +3,33 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- toplevelの繋ぎかえ処理があるのでexpandがtoplevelの最初や最後にきて
+  はならない。ダミーのstatementを入れるか？
+
+- get_fields()はブロックをコンパイル前だったらエラーにしないと
+  symbolをイテレートしているメタ関数やそれから呼ばれるコンパイラ関数
+  は、ブロックをコンパイル前に実行されたらエラーにする
+
+- fpclassify等のdouble/float出し分けは末尾にfつけないのか？
+  -> つけない。こいつらはマクロであると定義されている。
+
+- extern "%" double cos(double x); 
+  pxcシンボル名をpxcが生成したものをそのまま使う
+
+- GLfloatとfloatの間の変換が超絶面倒なので何か考える
+
+- auto_ptrやQObjectのようなownership方式をどうやって実現するか
+  この方式は懸垂ポインタが起きないことをコンパイラが保証すること
+  は不可能なのでは？ コンサバgc？
+  - QObjectの削除はdeleteLaterのみを使えばイベントループに戻るとき
+    のみ無効化されるようにできる。イベントループ境界でQObjectポインタ
+    を保持できないようにすれば無効化はおきない。可能？
+
+- weak pointer (done)
+
 - py: defconではないときにno_initを付ける
 
-- csymbol: cのstructのfieldは$がつかない
-
 - ネストされたstructなどについてのterm_tostrは正しいのか？
-
-- extern "emit_global" : structの中に書くとglobalコンテキストにemit
-  テンプレートクラスのbodyに書く。どのccファイルに入るべきか？
-  いらない？
 
 - リンクだけ実行されたときldflagsが無視されている(done)
 
@@ -1841,8 +1859,15 @@ strong+weakのカウンタ、strongのみのカウンタの二つを持つ。
 後者のカウンタが0になると、指す先の値がnullに変わり、weakからstrong
 を作れなくなる。
 
+struct {t} weak_object {
+  public t value;
+    // tはデフォルト値を持つ型でなくてはならない
+  private size_t strong_refcount;
+    // strongがinc/decし、0でvalueをデフォルト値へリセット
+}
+
 struct {t} strong {
-  ptr{t} p;
+  t pointer; // t はweak_objectへのポインタ(ptr等)でなくてはならない
 }
 
 ---------------------------------------------------------------------
@@ -1853,4 +1878,25 @@ thread-local pool allocator
 1,  2,  3,  4,  5,  6,  7,  8, 9以上
 8, 16, 32, 32, 48, 48, 64, 64, ?
 
+
+---------------------------------------------------------------------
+
+pxc_python
+  function {t} void register_class()
+    型tを登録する。実装は、init_chainに初期化関数をpushする。
+    モジュールの地の文で呼ぶことを想定。
+  register_class{t}をCから呼ぶのはどうやるか？
+
+---------------------------------------------------------------------
+弱ポインタを使った例
+
+相互参照を含む複合オブジェクトをプールに作成
+struct node {
+  option{ptr{weak{node}}} next;
+  option{ptr{weak{node}}} prev;
+  string value;
+}
+struct object_pool {
+  vector{strong{ptr{weak{node}}}} pool;
+}
 

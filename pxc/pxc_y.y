@@ -188,6 +188,11 @@ static compile_mode cur_mode;
 toplevel_stmt_list
 	:
 	  { topval = $$ = 0; }
+	| TOK_EXPAND '(' TOK_SYMBOL opt_symbol ':' type_expr ')' '{'
+		toplevel_stmt_list '}' toplevel_stmt_list
+	  { topval = $$ = expr_stmts_new(cur_fname, @1.first_line,
+		expr_expand_new(cur_fname, @1.first_line, $3, $4, $6, $9,
+			expand_e_statement, 0), $11); }
 	| toplevel_stmt toplevel_stmt_list
 	  { topval = $$ = expr_stmts_new(cur_fname, @1.first_line, $1, $2); }
 	;

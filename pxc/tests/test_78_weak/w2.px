@@ -1,0 +1,39 @@
+namespace w2;
+import common -;
+import weak -;
+
+threaded struct node private () {
+  option{ptr{weak{node}}} next;
+  option{ptr{weak{node}}} prev;
+  string str;
+}
+
+threaded struct arena {
+  vector{strong{ptr{weak{node}}}} nodes;
+  function ptr{weak{node}} create() {
+    const p = to_ptr(weak(node()));
+    nodes.push_back(strong(p));
+    return p;
+  }
+}
+
+{
+  mutable option{ptr{weak{node}}} op;
+  {
+    arena ar;
+    const p0 = ar.create();
+    const p1 = ar.create();
+    const p2 = ar.create();
+    p0->value.str = "abc";
+    p1->value.str = "xyz";
+    p2->value.str = "hoge";
+    p0->value.next.some = p1;
+    p1->value.prev.some = p0;
+    p1->value.next.some = p2;
+    p2->value.prev.some = p1;
+    // println(ar); -- causes infinite recursion
+    op.some = p1;
+  }
+  println(op.some);
+}
+
