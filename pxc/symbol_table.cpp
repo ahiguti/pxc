@@ -13,8 +13,8 @@
 
 #include "expr_misc.hpp"
 
-#define DBG(x)
 #define DBG_DEF(x)
+#define DBG(x)
 #define DBG_EXT(x)
 
 namespace pxc {
@@ -183,6 +183,8 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
 	locals_type::const_iterator j = locals.find(pname);
 	if (j != locals.end()) {
 	  v = j->second;
+	  DBG_EXT(fprintf(stderr, "found curns %s %s %s\n", fullname.c_str(),
+	    curns.c_str(), pname.c_str()));
 	  break;
 	}
 	/* try nsextends of the curns */
@@ -192,9 +194,14 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
 	    for (nsextend_entries::const_iterator k = j->second.begin();
 	      k != j->second.end(); ++k) {
 	      pname = *k + "::" + fullname;
+#if 0
+fprintf(stderr, "try %s\n", pname.c_str());
+#endif
 	      locals_type::const_iterator jp = locals.find(pname);
 	      if (jp != locals.end()) {
 		v = jp->second;
+		DBG_EXT(fprintf(stderr, "found nsext curns %s %s %s\n",
+		  fullname.c_str(), curns.c_str(), pname.c_str()));
 		break;
 	      }
 	    }
@@ -210,9 +217,14 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
 	  for (nsalias_entries::const_iterator i = iter->second.begin();
 	    i != iter->second.end(); ++i) {
 	    pname = *i + "::" + fullname;
+#if 0
+fprintf(stderr, "try %s\n", pname.c_str());
+#endif
 	    locals_type::const_iterator ip = locals.find(pname);
 	    if (ip != locals.end()) {
 	      v = ip->second;
+	      DBG_EXT(fprintf(stderr, "found noprefix curns %s %s %s\n",
+		fullname.c_str(), curns.c_str(), pname.c_str()));
 	      break;
 	    }
 	    /* try nsextends of a noprefix import of curns */
@@ -224,6 +236,9 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
 		locals_type::const_iterator jp = locals.find(pname);
 		if (jp != locals.end()) {
 		  v = jp->second;
+		  DBG_EXT(fprintf(stderr,
+		    "found nsext noprefix curns %s %s %s\n",
+		    fullname.c_str(), curns.c_str(), pname.c_str()));
 		  break;
 		}
 	      }
@@ -237,6 +252,7 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
 	  }
 	}
       } else {
+	/* has_namespace(fullname) */
 	const std::string nspart = get_namespace_part(fullname);
 	const std::string shortname = to_short_name(fullname);
 	/* try namespace aliases */
@@ -285,10 +301,11 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
     }
     v = localvar_info();
   } while (0);
-  DBG(fprintf(stderr, "symtbl=%p (%s:%d) resolve fullname=%s %s v=%p\n", this,
+  DBG(fprintf(stderr,
+    "symtbl=%p (%s:%d) resolve fullname=%s curns=%s %s v=%p\n", this,
     block_backref->fname,
-    block_backref->line, fullname.c_str(), is_upvalue_r ? "up" : "",
-    v.edef));
+    block_backref->line, fullname.c_str(), curns.c_str(),
+    is_upvalue_r ? "up" : "-", v.edef));
   return v;
 }
 

@@ -581,7 +581,7 @@ static term eval_meta_global_variables(const term_list_range& tlev,
     }
     rec.push_back(term(name)); /* name */
     rec.push_back(e->resolve_texpr()); /* type */
-    rec.push_back(term(is_byref)); /* byref(0) */
+    rec.push_back(term(is_byref)); /* byref(=0) */
     rec.push_back(term(is_mutable)); /* mutable */
     term re(rec);
     tl.push_back(re);
@@ -659,6 +659,9 @@ static term eval_meta_field_types(const term_list_range& tlev,
   term_list tl;
   for (std::list<expr_var *>::const_iterator i = flds.begin(); i != flds.end();
     ++i) {
+    if (((*i)->get_attribute() & attribute_private) != 0) {
+      continue;
+    }
     term& t = (*i)->resolve_texpr();
     tl.push_back(t);
   }
@@ -685,6 +688,9 @@ static term eval_meta_field_names(const term_list_range& tlev,
   term_list tl;
   for (std::list<expr_var *>::const_iterator i = flds.begin(); i != flds.end();
     ++i) {
+    if (((*i)->get_attribute() & attribute_private) != 0) {
+      continue;
+    }
     tl.push_back(term(std::string((*i)->sym)));
   }
   return term(tl);
@@ -710,10 +716,14 @@ static term eval_meta_fields(const term_list_range& tlev, eval_context& ectx,
   term_list tl;
   for (std::list<expr_var *>::const_iterator i = flds.begin(); i != flds.end();
     ++i) {
+    if (((*i)->get_attribute() & attribute_private) != 0) {
+      continue;
+    }
     term_list tl1;
-    tl1.push_back(term(std::string((*i)->sym)));
-    tl1.push_back((*i)->resolve_texpr());
-    tl1.push_back(term(is_passby_const((*i)->varinfo.passby)));
+    tl1.push_back(term(std::string((*i)->sym))); /* name */
+    tl1.push_back((*i)->resolve_texpr()); /* type */
+    tl1.push_back(term(0LL)); /* byref(=0) */
+    tl1.push_back(term(is_passby_mutable((*i)->varinfo.passby))); /* mutable */
     term t1(tl1);
     tl.push_back(t1);
   }
@@ -1009,6 +1019,20 @@ static term eval_meta_unique(const term_list_range& tlev, eval_context& ectx,
   return term(rtl);
 }
 
+static term eval_meta_base(const term_list_range& tlev, eval_context& ectx,
+  expr_i *pos)
+{
+  if (tlev.size() != 1) {
+    return term();
+  }
+  const term& t = tlev[0];
+  if (!t.is_expr()) {
+    return term();
+  }
+  expr_i *const e = t.get_expr();
+  return term(e);
+}
+
 static term eval_meta_is_type(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
@@ -1160,6 +1184,35 @@ static term eval_meta_substring(const term_list_range& tlev,
   } else {
     return term(s.substr(i0));
   }
+}
+
+static term eval_meta_subst(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos)
+{
+  if (tlev.size() > 3) {
+    return term();
+  }
+  const std::string str = meta_term_to_string(tlev[0], false);
+  const std::string sfrom = meta_term_to_string(tlev[1], false);
+  const std::string sto = meta_term_to_string(tlev[2], false);
+  if (sfrom.size() == 0) {
+    return tlev[0];
+  }
+  const char *const str_ptr = str.data();
+  size_t str_size = str.size();
+  const char *const from_ptr = sfrom.data();
+  size_t from_size = sfrom.size();
+  size_t const midx = str_size - from_size;
+  std::string r;
+  for (size_t i = 0; i < str_size; ++i) {
+    if (i < midx && memcmp(str_ptr + i, from_ptr, from_size) == 0) {
+      r += sto;
+      i += from_size - 1;
+    } else {
+      r.push_back(str_ptr[i]);
+    }
+  }
+  return term(r);
 }
 
 static term eval_meta_strlen(const term_list_range& tlev, eval_context& ectx,
@@ -1615,6 +1668,7 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@join_tail", &eval_meta_join_tail },
   { "@sort", &eval_meta_sort },
   { "@unique", &eval_meta_unique },
+  { "@base", &eval_meta_base },
   { "@rettype", &eval_meta_rettype },
   { "@argnum", &eval_meta_argnum },
   { "@argtype", &eval_meta_argtype },
@@ -1651,6 +1705,7 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@full_string", &eval_meta_full_string },
   { "@concat", &eval_meta_concat },
   { "@substring", &eval_meta_substring },
+  { "@subst", &eval_meta_subst },
   { "@strlen", &eval_meta_strlen },
   { "@family", &eval_meta_family },
   { "@attribute", &eval_meta_attribute },

@@ -459,7 +459,26 @@ void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
   } else {
     /* fn_set_namespace() must be before fn_drop_non_exports(), or it
      * can cause inconsistency of block_id_ns among compilation units. */
-    topval = fn_drop_non_exports(topval);
+    expr_i *ntopval = fn_drop_non_exports(topval);
+    topval = ntopval;
+  }
+  /* error if first or last stmt is an 'expand' expression */
+  e = topval;
+  while (e != 0) {
+    expr_i *stmt = ptr_down_cast<expr_stmts>(e)->head;
+    if (stmt->get_esort() == expr_e_expand) {
+      if (e == topval) {
+	arena_error_push(e,
+	  "Implementation restriction: first statement of a namespace must "
+	  "not be an 'expand' statement");
+      }
+      if (ptr_down_cast<expr_stmts>(e)->rest == 0) {
+	arena_error_push(e,
+	  "Implementation restriction: last statement of a namespace must "
+	  "not be an 'expand' statement");
+      }
+    }
+    e = ptr_down_cast<expr_stmts>(e)->rest;
   }
   topvals.push_back(topval);
   loaded_namespaces[imports_r.main_unique_namespace] = imports_r;

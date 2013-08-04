@@ -373,6 +373,10 @@ std::string meta_term_to_string(const term& t, bool detail_flag)
     if (c != s.npos) {
       s = s.substr(c + 1); /* drop ns */
     }
+    size_t c2 = s.rfind('{');
+    if (c2 != s.npos) {
+      s = s.substr(0, c2);
+    }
     return s;
   }
 }

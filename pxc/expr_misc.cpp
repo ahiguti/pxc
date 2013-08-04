@@ -236,6 +236,7 @@ const char *tok_string(const expr_i *e, int tok)
   case TOK_XOR_ASSIGN: return "^=";
   case TOK_CASE: return "case";
   case TOK_SLICE: return "::";
+  case TOK_EXPAND: return "expand";
   default:
     arena_error_throw(e, "Internal error: unknown token %d", tok);
   }
@@ -508,7 +509,14 @@ bool is_unsigned_integral_type(const term& t)
 
 bool is_float_type(const term& t)
 {
-  return t == builtins.type_double || t == builtins.type_float;
+  if (t == builtins.type_double || t == builtins.type_float) {
+    return true;
+  }
+  const typefamily_e cat = get_family(t);
+  if (cat == typefamily_e_extfloat) {
+    return true;
+  }
+  return false;
 }
 
 static typefamily_e get_family(const expr_i *e)
@@ -1011,6 +1019,9 @@ bool is_polymorphic(const term& t)
 static std::string term_tostr_tparams(const expr_tparams *tp, bool show_values,
   term_tostr_sort s)
 {
+  if (tp == 0) {
+    return "";
+  }
   // const size_t len = elist_length(tp);
   std::string r;
   if (s == term_tostr_sort_cname) {
@@ -1318,7 +1329,8 @@ std::string term_tostr(const term& t, term_tostr_sort s)
 	  rstr_post = " >"; // need additional '>'
 	}
       }
-    } else if (cname != 0 && s == term_tostr_sort_cname) {
+    } else if (cname != 0 && strcmp(cname, "%") != 0 &&
+      s == term_tostr_sort_cname) {
       rstr = cname;
       #if 0
       if (s != term_tostr_sort_cname) {
@@ -1603,6 +1615,36 @@ static int num_bits_max(const term& t)
   return etd->tattr.significant_bits_max;
 }
 
+static bool is_int_literal(expr_i *e)
+{
+  if (e->get_esort() == expr_e_int_literal) {
+    return true;
+  }
+  if (e->get_esort() == expr_e_op) {
+    expr_op *const eop = ptr_down_cast<expr_op>(e);
+    if (eop->op == TOK_PLUS || eop->op == TOK_MINUS) {
+      /* unary op */
+      return is_int_literal(eop->arg0);
+    }
+  }
+  return false;
+}
+
+static bool is_float_literal(expr_i *e)
+{
+  if (e->get_esort() == expr_e_float_literal) {
+    return true;
+  }
+  if (e->get_esort() == expr_e_op) {
+    expr_op *const eop = ptr_down_cast<expr_op>(e);
+    if (eop->op == TOK_PLUS || eop->op == TOK_MINUS) {
+      /* unary op */
+      return is_float_literal(eop->arg0);
+    }
+  }
+  return false;
+}
+
 static bool numeric_convertible(expr_i *efrom, const term& tfrom,
   const term& tto)
 {
@@ -1616,7 +1658,8 @@ static bool numeric_convertible(expr_i *efrom, const term& tfrom,
       return true; /* zero to bitmask */
     }
   }
-  if (efrom->get_esort() == expr_e_int_literal) {
+  // if (efrom->get_esort() == expr_e_int_literal) {
+  if (is_int_literal(efrom)) {
     if (is_integral_type(tto)) {
       return true; /* int literal to integral type */
     }
@@ -1625,7 +1668,8 @@ static bool numeric_convertible(expr_i *efrom, const term& tfrom,
       return true; /* zero to bitmask */
     }
   }
-  if (efrom->get_esort() == expr_e_float_literal && is_float_type(tto)) {
+  // if (efrom->get_esort() == expr_e_float_literal && is_float_type(tto)) {
+  if (is_float_literal(efrom)) {
     return true; /* float literal to float type */
   }
   if (!is_numeric_type(tfrom) || !is_numeric_type(tto)) {
@@ -1936,6 +1980,7 @@ expr_i *fn_drop_non_exports(expr_i *e) {
     case expr_e_enumval:
     case expr_e_inline_c:
     case expr_e_var:
+    case expr_e_expand:
       is_export = true;
       break;
     default:

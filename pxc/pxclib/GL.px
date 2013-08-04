@@ -1,0 +1,82 @@
+namespace GL;
+import common -;
+import meta m;
+
+public tsvaluetype struct extern "GLbitfield" "extbitmask" GLbitfield { }
+public extern "GL_COLOR_BUFFER_BIT" GLbitfield GL_COLOR_BUFFER_BIT;
+public extern "GL_DEPTH_BUFFER_BIT" GLbitfield GL_DEPTH_BUFFER_BIT;
+public extern "GL_STENCIL_BUFFER_BIT" GLbitfield GL_STENCIL_BUFFER_BIT;
+
+public tsvaluetype struct extern "GLenum" "extenum" GLenum { }
+public extern "GL_TRIANGLES" GLenum GL_TRIANGLES;
+public extern "GL_FLAT" GLenum GL_FLAT;
+public extern "GL_QUAD_STRIP" GLenum GL_QUAD_STRIP;
+public extern "GL_QUADS" GLenum GL_QUADS;
+public extern "GL_SMOOTH" GLenum GL_SMOOTH;
+public extern "GL_PROJECTION" GLenum GL_PROJECTION;
+public extern "GL_MODELVIEW" GLenum GL_MODELVIEW;
+public extern "GL_LIGHT0" GLenum GL_LIGHT0;
+public extern "GL_CULL_FACE" GLenum GL_CULL_FACE;
+public extern "GL_LIGHTING" GLenum GL_LIGHTING;
+public extern "GL_DEPTH_TEST" GLenum GL_DEPTH_TEST;
+public extern "GL_COMPILE" GLenum GL_COMPILE;
+public extern "GL_FRONT" GLenum GL_FRONT;
+public extern "GL_AMBIENT_AND_DIFFUSE" GLenum GL_AMBIENT_AND_DIFFUSE;
+public extern "GL_NORMALIZE" GLenum GL_NORMALIZE;
+public extern "GL_POSITION" GLenum GL_POSITION;
+
+public function extern "glClear" void glClear(GLbitfield mask);
+public function extern "glPushMatrix" void glPushMatrix();
+public function extern "glPopMatrix" void glPopMatrix();
+public function extern "glLoadIdentity" void glLoadIdentity();
+public function extern "glBegin" void glBegin(GLenum mode);
+public function extern "glEnd" void glEnd();
+public function extern "glRotatef" void glRotatef(float angle, float x,
+  float y, float z);
+public function extern "glViewport" void glViewport(int x, int y, int width,
+  int height);
+public function extern "glMatrixMode" void glMatrixMode(GLenum mode);
+public function extern "glFrustum" void glFrustum(double left, double right,
+  double bottom, double top, double nearVal, double farVal);
+public function extern "gl::glLightfv4" void glLightfv4(GLenum light,
+  GLenum pname, farray{float, 4} const& params);
+public function extern "glTranslatef" void glTranslatef(float x, float y,
+  float z);
+public function extern "glVertex2f" void glVertex2f(float x, float y);
+public function extern "glEnable" void glEnable(GLenum cap);
+public function extern "glDisable" void glDisable(GLenum cap);
+public function extern "glGenLists" uint glGenLists(int range);
+public function extern "glNewList" void glNewList(uint list, GLenum mode);
+public function extern "glEndList" void glEndList();
+public function extern "glCallList" void glCallList(uint list);
+public function extern "glShadeModel" void glShadeModel(GLenum mode);
+public function extern "glNormal3f" void glNormal3f(float nx, float ny,
+  float nz);
+public function extern "glVertex3f" void glVertex3f(float x, float y, float z);
+public function extern "gl::glMaterialfv4" void glMaterialfv(GLenum face,
+  GLenum pname, farray{float, 4} const& params);
+
+extern "ldflags" "-lGL -lm";
+
+extern "types" inline
+#include <GL/gl.h>
+;
+
+private metafunction f4_sym m::csymbol{farray{float, 4}};
+
+extern "implementation" inline
+namespace gl {
+
+void glLightfv4(GLenum light, GLenum pname, %{f4_sym}% const& params)
+{
+  glLightfv(light, pname, params.rawarr());
+}
+
+void glMaterialfv4(GLenum face, GLenum pname, %{f4_sym}% const& params)
+{
+  glMaterialfv(face, pname, params.rawarr());
+}
+
+}; // namespace gl
+;
+
