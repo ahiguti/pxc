@@ -230,6 +230,11 @@ private:
   term evaluated;
 };
 
+struct cname_info {
+  cname_info(const char *s) : cname(s) { }
+  const char *cname;  
+};
+
 struct inline_c_element {
   inline_c_element() : start(0), finish(0), te(0) { }
   size_t start;
@@ -585,9 +590,10 @@ struct expr_enumval : public expr_i {
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
-  const char *const sym;
+  const char *sym;
   expr_te *type_uneval;
-  const char *const cname;
+  cname_info cnamei;
+  // const char *const cname;
   expr_i *value;
   attribute_e attr;
   expr_enumval *rest;
@@ -959,6 +965,7 @@ public:
   expr_block *block;
 };
 
+// FIXME: remove
 struct expr_fldfe : public expr_i {
   expr_fldfe(const char *fn, int line, const char *namesym,
     const char *fldsym, const char *idxsym, expr_i *te, expr_i *stmts);
@@ -990,6 +997,7 @@ public:
   expr_stmts *stmts;
 };
 
+// FIXME: remove
 struct expr_foldfe : public expr_i {
   expr_foldfe(const char *fn, int line, const char *itersym,
     expr_i *valueste, const char *embedsym, expr_i *embedexpr,
@@ -1111,7 +1119,8 @@ struct expr_funcdef : public expr_i {
 public:
   const char *sym;
   std::string uniqns;
-  const char *cname;
+  cname_info cnamei;
+  // const char *cname;
     /* can be modified if this function overrides a function with cname */
   bool is_const;
 private:
@@ -1170,7 +1179,8 @@ struct expr_typedef : public expr_i {
 public:
   const char *const sym;
   std::string uniqns;
-  const char *const cname;
+  cname_info cnamei;
+  // const char *const cname;
   const char *const typefamily_str; // TODO: unused
   bool is_enum : 1;
   bool is_bitmask : 1;
@@ -1257,7 +1267,8 @@ struct expr_struct : public expr_i {
 public:
   const char *const sym;
   std::string uniqns;
-  const char *const cname;
+  cname_info cnamei;
+  // const char *const cname;
   const char *const typefamily_str;
   expr_block *block;
   attribute_e attr;
@@ -1337,7 +1348,8 @@ struct expr_interface : public expr_i {
 public:
   const char *const sym;
   std::string uniqns;
-  const char *const cname;
+  cname_info cnamei;
+  // const char *const cname;
   expr_block *block;
   attribute_e attr;
   term value_texpr;

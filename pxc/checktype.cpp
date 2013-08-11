@@ -468,7 +468,7 @@ static bool is_default_constructible(const term& typ, expr_i *pos,
       cat == typefamily_e_nocascade) {
       return true;
     }
-    if (cat != typefamily_e_none || est->cname != 0) {
+    if (cat != typefamily_e_none || est->cnamei.cname != 0) {
       /* extern c struct */
       for (term_list::const_iterator i = args->begin(); i != args->end(); ++i) {
 	if (!is_default_constructible(*i, pos, depth)) {
@@ -569,8 +569,28 @@ void expr_var::check_type(symbol_table *lookup)
   /* type_of_this_expr */
 }
 
+static void eval_cname_info(cname_info& cnamei, expr_i *pos, const char *sym)
+{
+  const char *const c = cnamei.cname;
+  if (c == 0 || strchr(c, '%') == 0) {
+    return;
+  }
+  const size_t len = strlen(c);
+  std::string s;
+  for (size_t i = 0; i < len; ++i) {
+    const char ch = c[i];
+    if (ch != '%') {
+      s.push_back(ch);
+    } else {
+      s.insert(s.end(), sym, sym + strlen(sym));
+    }
+  }
+  cnamei.cname = arena_strdup(s.c_str());
+}
+
 void expr_enumval::define_vars_one(expr_stmts *stmt)
 {
+  eval_cname_info(cnamei, this, sym);
   symtbl_lexical->define_name(sym, uniqns, this, attr, stmt);
 }
 
@@ -2155,7 +2175,7 @@ fprintf(stderr, "tote %s\n", einst->dump(0).c_str());
       } else if (ad != 0) {
 	arena_error_push(this, "Too few argument for '%s'", est_p_inst->sym);
       }
-    } else if (est_p_inst->cname != 0) {
+    } else if (est_p_inst->cnamei.cname != 0) {
       typedef std::list<expr_i *> arglist_type;
       arglist_type arglist;
       append_hidden_this(func, arglist);
@@ -2644,6 +2664,8 @@ static expr_i *subst_symbol_name_rec(expr_i *e, expr_i *parent, int parent_pos,
   expr_te *te = dynamic_cast<expr_te *>(e);
   expr_funcdef *fd = dynamic_cast<expr_funcdef *>(e);
   expr_var *ev = dynamic_cast<expr_var *>(e);
+  expr_enumval *en = dynamic_cast<expr_enumval *>(e);
+  // TODO: expr_struct, expr_dunion, etc.
   if (sy != 0) {
     expr_nssym *nsy = sy->nssym;
     assert(nsy != 0);
@@ -2717,6 +2739,10 @@ static expr_i *subst_symbol_name_rec(expr_i *e, expr_i *parent, int parent_pos,
   } else if (ev != 0) {
     if (std::string(ev->sym) == src) {
       ev->sym = arena_strdup(dst.get_string().c_str());
+    }
+  } else if (en != 0) {
+    if (std::string(en->sym) == src) {
+      en->sym = arena_strdup(dst.get_string().c_str());
     }
   }
   int num = e->get_num_children();
@@ -2803,7 +2829,6 @@ static void subst_symbol_name(expr_i *e, const std::string& src,
     }
   }
 }
-
 
 void check_genericfe_syntax(expr_i *e)
 {
@@ -3493,6 +3518,7 @@ void expr_argdecls::check_type(symbol_table *lookup)
 
 void expr_funcdef::check_type(symbol_table *lookup)
 {
+  eval_cname_info(cnamei, this, sym);
   if (this->is_const && !this->is_virtual_or_member_function()) {
     arena_error_throw(this, "Non-member/virtual function can not be const");
   }
@@ -3531,6 +3557,7 @@ void expr_funcdef::check_type(symbol_table *lookup)
 
 void expr_typedef::check_type(symbol_table *lookup)
 {
+  eval_cname_info(cnamei, this, sym);
   fn_check_type(enumvals, lookup);
 }
 
@@ -3599,6 +3626,7 @@ static void check_constr_restrictions(expr_struct *est)
 
 void expr_struct::check_type(symbol_table *lookup)
 {
+  eval_cname_info(cnamei, this, sym);
   fn_check_type(block, lookup);
   check_inherit_threading(this, this->get_template_block());
   if (!block->tinfo.is_uninstantiated()) {
@@ -3617,6 +3645,7 @@ void expr_dunion::check_type(symbol_table *lookup)
 
 void expr_interface::check_type(symbol_table *lookup)
 {
+  eval_cname_info(cnamei, this, sym);
   fn_check_type(block, lookup);
   check_inherit_threading(this, this->get_template_block());
 }

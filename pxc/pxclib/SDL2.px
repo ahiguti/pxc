@@ -1,0 +1,262 @@
+namespace SDL2;
+import common -;
+import exception -;
+import meta m;
+
+extern "cflags" "`sdl2-config --cflags`";
+extern "ldflags" "`sdl2-config --libs`";
+
+public tsvaluetype struct extern "Uint32" "extbitmask" InitFlags { }
+expand(sym : m::map{m::list{
+  "AUDIO", "VIDEO", "CDROM", "TIMER", "EVERYTHING"
+}, metafunction{x} m::concat{"SDL_INIT_", x}}) {
+  public extern "%" InitFlags sym;
+}
+
+public tsvaluetype struct extern "Uint32" "extbitmask" WindowFlags { }
+expand(sym : m::map{m::list{
+  "FULLSCREEN", "OPENGL", "SHOWN", "HIDDEN", "BORDERLESS", "RESIZABLE",
+  "MINIMIZED", "MAXIMIZED", "INPUT_GRABBED", "INPUT_FOCUS", "MOUSE_FOCUS",
+  "FULLSCREEN_DESKTOP"
+}, metafunction{x} m::concat{"SDL_WINDOW_", x}}) {
+  public extern "%" WindowFlags sym;
+}
+
+public tsvaluetype struct extern "SDL_Event" Event { }
+public function extern "SDL2::Event_Type" EventType
+Event_Type(Event const& ev);
+public function extern "SDL2::Event_WindowEventID" WindowEventID
+Event_WindowEventID(Event const& ev);
+public function extern "SDL2::Event_WindowEventData1" int
+Event_WindowEventData1(Event const& ev);
+public function extern "SDL2::Event_WindowEventData2" int
+Event_WindowEventData2(Event const& ev);
+
+public tsvaluetype struct extern "SDL_WindowEventID" "extenum"
+WindowEventID { }
+expand (sym : m::map{m::list{
+  "MOVED", "RESIZED"
+}, metafunction{x} m::concat{"SDL_WINDOWEVENT_", x}}) {
+  public extern "%" WindowEventID sym;
+}
+
+public tsvaluetype struct extern "SDL_EventType" "extenum" EventType { }
+expand(sym : m::map{m::list{
+  "WINDOWEVENT", "QUIT"
+}, metafunction{x} m::concat{"SDL_", x}}) {
+  public extern "%" EventType sym;
+}
+
+public struct extern "SDL_Scancode" "extenum" Scancode { }
+expand (sym : m::map{m::list{
+  "UNKNOWN", "RIGHT", "LEFT", "DOWN", "UP", "ESCAPE", "SPACE"
+}, metafunction{x} m::concat{"SDL_SCANCODE_", x}}) {
+  public extern "%" Scancode sym;
+}
+
+public struct extern "SDL_GLattr" "extenum" GLattr { }
+public extern "SDL_GL_DOUBLEBUFFER" GLattr SDL_GL_DOUBLEBUFFER;
+
+public struct extern "SDL2::SDLContext" "linear"
+SDL(io::io const& sys, InitFlags flags) { }
+
+public struct extern "SDL2::Window" "linear"
+Window(SDL const& sdl, cstrref const& title, int x, int y, int w, int h,
+  WindowFlags flags) { }
+
+public struct extern "SDL2::GLContext" "linear"
+GLContext(SDL const& sdl, Window const& wnd) { }
+
+public struct extern "SDL2::KeyboardState" "linear"
+KeyboardState(SDL const& sdl) { }
+
+public function extern "SDL2::KeyboardState_Key" uint
+KeyboardState_Key(KeyboardState const& ks, Scancode code);
+
+public function extern "SDL2::PollEvent" bool
+SDL_PollEvent(SDL const& sdl, Event mutable& ev);
+
+public function extern "SDL2::GL_SetAttribute" void
+SDL_GL_SetAttribute(SDL const& sdl, GLattr attr, int value);
+public function extern "SDL2::GL_SwapWindow" void
+SDL_GL_SwapWindow(SDL const& sdl, Window const& wnd);
+public function extern "SDL2::GetTicks" uint
+SDL_GetTicks(SDL const& sdl);
+
+extern "types" inline
+#include <SDL.h>
+namespace SDL2 {
+using namespace pxcrt;
+
+struct SDLContext {
+  SDLContext(pxcio::io const& sys, Uint32 flags);
+  ~SDLContext();
+  SDLContext(SDLContext const& sdl);
+};
+
+struct Window {
+  Window(SDLContext const& sdl, cstrref const& title, bt_int x, bt_int y,
+    bt_int w, bt_int h, Uint32 flags);
+  ~Window();
+  Window(Window const&);
+  Window& operator =(Window const&);
+  SDLContext sdl;
+  ::SDL_Window *wnd;
+};
+
+struct GLContext {
+  GLContext(SDLContext const& sdl, Window const& wnd);
+  ~GLContext();
+  GLContext(GLContext const&);
+  GLContext& operator =(GLContext const&);
+  SDLContext sdl;
+  ::SDL_GLContext glctx;
+};
+
+struct KeyboardState {
+  KeyboardState(SDLContext const& sdl);
+  const Uint8 *keyboardstate;
+  int num;
+  KeyboardState(KeyboardState const&);
+  KeyboardState& operator =(KeyboardState const&);
+  SDLContext sdl;
+};
+
+}; // namespace SDL
+;
+
+extern "implementation" inline
+namespace SDL2 {
+using namespace pxcrt;
+
+static int sdl_init_cnt = 0;
+
+static void sdl_init_addref(Uint32 flags = 0)
+{
+  if (++sdl_init_cnt == 1) {
+    ::SDL_Init(flags);
+  }
+}
+
+static void sdl_init_decref()
+{
+  if (--sdl_init_cnt == 0) {
+    ::SDL_Quit();
+  }
+}
+
+static void sdl_throw(const char *mess)
+{
+  throw std::runtime_error(mess);
+}
+
+SDLContext::SDLContext(pxcio::io const& sys, Uint32 flags)
+{
+  sdl_init_addref(flags);
+}
+
+SDLContext::~SDLContext()
+{
+  sdl_init_decref();
+}
+
+SDLContext::SDLContext(SDLContext const& sdl)
+{
+  sdl_init_addref(0);
+}
+
+Window::Window(SDLContext const& sdl, cstrref const& title, bt_int x, bt_int y,
+  bt_int w, bt_int h, Uint32 flags)
+  : sdl(sdl), wnd()
+{
+  PXCRT_ALLOCA_NTSTRING(title_nt, title);
+  wnd = ::SDL_CreateWindow(title_nt.get(), x, y, w, h, flags);
+  if (wnd == 0) {
+    sdl_throw("SDL_CreateWindow");
+  }
+}
+
+Window::~Window()
+{
+  if (wnd != 0) {
+    SDL_DestroyWindow(wnd);
+  }
+}
+
+GLContext::GLContext(SDLContext const& sdl, Window const& wnd)
+  : sdl(sdl), glctx()
+{
+  glctx = :: SDL_GL_CreateContext(wnd.wnd);
+  if (glctx == 0) {
+    sdl_throw("SDL_GL_CreateContext");
+  }
+}
+
+GLContext::~GLContext()
+{
+  if (glctx != 0) {
+    ::SDL_GL_DeleteContext(glctx);
+  }
+}
+
+KeyboardState::KeyboardState(SDLContext const& sdl)
+  : sdl(sdl)
+{
+  keyboardstate = ::SDL_GetKeyboardState(&num);
+}
+
+bt_bool PollEvent(SDLContext const& sdl, SDL_Event& ev)
+{
+  return ::SDL_PollEvent(&ev);
+}
+
+void GL_SetAttribute(SDLContext const& sdl, SDL_GLattr attr,
+  bt_int value)
+{
+  ::SDL_GL_SetAttribute(attr, value);
+}
+
+void GL_SwapWindow(SDLContext const& sdl, Window const& wnd)
+{
+  ::SDL_GL_SwapWindow(wnd.wnd);
+}
+
+bt_uint GetTicks(SDLContext const& sdl)
+{
+  return ::SDL_GetTicks();
+}
+
+SDL_EventType Event_Type(SDL_Event const& e)
+{
+  return SDL_EventType(e.type);
+}
+
+SDL_WindowEventID Event_WindowEventID(SDL_Event const& e)
+{
+  return static_cast<SDL_WindowEventID>(
+    e.type == SDL_WINDOWEVENT ? e.window.event : SDL_WINDOWEVENT_NONE);
+}
+
+bt_int Event_WindowEventData1(SDL_Event const& e)
+{
+  return e.type == SDL_WINDOWEVENT ? e.window.data1 : 0;
+}
+
+bt_int Event_WindowEventData2(SDL_Event const& e)
+{
+  return e.type == SDL_WINDOWEVENT ? e.window.data2 : 0;
+}
+
+bt_uint KeyboardState_Key(KeyboardState const& ks, SDL_Scancode key)
+{
+  if (key < ks.num) {
+    return ks.keyboardstate[key];
+  } else {
+    return 0;
+  }
+}
+
+};
+
+;
+

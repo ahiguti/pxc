@@ -32,10 +32,10 @@
  *
  */
 
-namespace sdlgears;
+namespace sdl2gears;
 import common -;
 import numeric::fpmath -;
-import SDL -;
+import SDL2 -;
 import GL -;
 import io::time -;
 
@@ -44,22 +44,12 @@ float const M_PI = 3.14159265;
 function void gear(float inner_radius, float outer_radius, float width,
   int teeth_i, float tooth_depth)
 {
-  float teeth = static_cast{float}(teeth_i);
-  int i;
-  float r0;
-  float r1;
-  float r2;
-  float angle;
-  float da;
-  float u;
-  float v;
-  float len;
+  const teeth = static_cast{float}(teeth_i);
+  const r0 = inner_radius;
+  const r1 = outer_radius - tooth_depth / 2.0;
+  const r2 = outer_radius + tooth_depth / 2.0;
 
-  r0 = inner_radius;
-  r1 = outer_radius - tooth_depth / 2.0;
-  r2 = outer_radius + tooth_depth / 2.0;
-
-  da = float(2.0) * M_PI / teeth / 4.0;
+  mutable da = float(2.0) * M_PI / teeth / 4.0;
 
   glShadeModel(GL_FLAT);
 
@@ -67,8 +57,8 @@ function void gear(float inner_radius, float outer_radius, float width,
 
   /* draw front face */
   glBegin(GL_QUAD_STRIP);
-  for (i = 0; i <= teeth_i; ++i) {
-    angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
+  for (int i : 0 .. teeth_i + 1) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
     glVertex3f(r0 * cosf(angle), r0 * sinf(angle), width * 0.5);
     glVertex3f(r1 * cosf(angle), r1 * sinf(angle), width * 0.5);
     if (i < teeth_i) {
@@ -82,9 +72,8 @@ function void gear(float inner_radius, float outer_radius, float width,
   /* draw front sides of teeth */
   glBegin(GL_QUADS);
   da = M_PI * 2.0 / teeth / 4.0;
-  for (i = 0; i < teeth_i; ++i) {
-    angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
-
+  for (int i : 0 .. teeth_i) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
     glVertex3f(r1 * cosf(angle), r1 * sinf(angle), width * 0.5);
     glVertex3f(r2 * cosf(angle + da), r2 * sinf(angle + da), width * 0.5);
     glVertex3f(r2 * cosf(angle + da * 2.0), r2 * sinf(angle + da * 2.0),
@@ -98,8 +87,8 @@ function void gear(float inner_radius, float outer_radius, float width,
 
   /* draw back face */
   glBegin(GL_QUAD_STRIP);
-  for (i = 0; i <= teeth_i; ++i) {
-    angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
+  for (int i : 0 .. teeth_i + 1) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
     glVertex3f(r1 * cosf(angle), r1 * sinf(angle), -width * 0.5);
     glVertex3f(r0 * cosf(angle), r0 * sinf(angle), -width * 0.5);
     if (i < teeth_i) {
@@ -113,9 +102,8 @@ function void gear(float inner_radius, float outer_radius, float width,
   /* draw back sides of teeth */
   glBegin(GL_QUADS);
   da = M_PI * 2.0 / teeth / 4.0;
-  for (i = 0; i < teeth_i; ++i) {
-    angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
-
+  for (int i : 0 .. teeth_i) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
     glVertex3f(r1 * cosf(angle + da * 3.0), r1 * sinf(angle + da * 3.0),
       -width * 0.5);
     glVertex3f(r2 * cosf(angle + da * 2.0), r2 * sinf(angle + da * 2.0),
@@ -127,14 +115,13 @@ function void gear(float inner_radius, float outer_radius, float width,
 
   /* draw outward faces of teeth */
   glBegin(GL_QUAD_STRIP);
-  for (i = 0; i < teeth_i; ++i) {
-    angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
-
+  for (int i : 0 .. teeth_i) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
     glVertex3f(r1 * cosf(angle), r1 * sinf(angle), width * 0.5);
     glVertex3f(r1 * cosf(angle), r1 * sinf(angle), -width * 0.5);
-    u = r2 * cosf(angle + da) - r1 * cosf(angle);
-    v = r2 * sinf(angle + da) - r1 * sinf(angle);
-    len = sqrtf(u * u + v * v);
+    mutable u = r2 * cosf(angle + da) - r1 * cosf(angle);
+    mutable v = r2 * sinf(angle + da) - r1 * sinf(angle);
+    const len = sqrtf(u * u + v * v);
     u /= len;
     v /= len;
     glNormal3f(v, -u, 0.0);
@@ -166,8 +153,8 @@ function void gear(float inner_radius, float outer_radius, float width,
 
   /* draw inside radius cylinder */
   glBegin(GL_QUAD_STRIP);
-  for (i = 0; i <= teeth_i; ++i) {
-    angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
+  for (int i : 0 .. teeth_i + 1) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
     glNormal3f(-cosf(angle), -sinf(angle), 0.0);
     glVertex3f(r0 * cosf(angle), r0 * sinf(angle), -width * 0.5);
     glVertex3f(r0 * cosf(angle), r0 * sinf(angle), width * 0.5);
@@ -184,7 +171,7 @@ uint gear2;
 uint gear3;
 float gears_angle = 0.0;
 
-function void draw(ptr{SDL} const& sdl)
+function void draw(SDL const& sdl)
 {
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -214,7 +201,7 @@ function void draw(ptr{SDL} const& sdl)
   glPopMatrix();
 }
 
-function void reshape(uint width, uint height)
+function void reshape(int width, int height)
 { 
   double h = static_cast{double}(height) / static_cast{double}(width);
   glViewport(0, 0, static_cast{int}(width), static_cast{int}(height));
@@ -226,31 +213,14 @@ function void reshape(uint width, uint height)
   glTranslatef(0.0, 0.0, -40.0);
 }
 
-
 function void init()
 {
-  farray{float, 4} pos;
-  pos[0] = 5.0;
-  pos[1] = 5.0;
-  pos[2] = 10.0;
-  pos[3] = 0.0;
-  farray{float, 4} red;
-  red[0] = 0.8;
-  red[1] = 0.1;
-  red[2] = 0.0;
-  red[3] = 1.0;
-  farray{float, 4} green;
-  green[0] = 0.0;
-  green[1] = 0.8;
-  green[2] = 0.2;
-  green[3] = 1.0;
-  farray{float, 4} blue;
-  blue[0] = 0.2;
-  blue[1] = 0.2;
-  blue[2] = 1.0;
-  blue[3] = 1.0;
+  const pos = make_farray{float}(5.0, 5.0, 10.0, 0.0);
+  const red = make_farray{float}(0.8, 0.1, 0.0, 1.0);
+  const green = make_farray{float}(0.0, 0.8, 0.2, 1.0);
+  const blue = make_farray{float}(0.2, 0.2, 1.0, 1.0);
 
-  glLightfv4(GL_LIGHT0, GL_POSITION, pos);
+  glLightfv(GL_LIGHT0, GL_POSITION, pos);
   glEnable(GL_CULL_FACE);
   glEnable(GL_LIGHTING);
   glEnable(GL_LIGHT0);
@@ -279,12 +249,14 @@ function void init()
 }
 
 {
-  const sdl = SDL::Init(system, SDL_INIT_VIDEO);
-  const uint init_w = 300;
-  const uint init_h = 300;
-  const s = sdl.SetVideoMode(init_w, init_h, 16, SDL_OPENGL | SDL_RESIZABLE);
-  // sdl.GL_SetAttribute(SDL_GL_SWAP_CONTROL, 1);
-  sdl.WM_SetCaption("PXC-SDLGears", "pxc-sdlgears");
+  const sdl = SDL2::SDL(system, SDL_INIT_VIDEO);
+  const int init_w = 500;
+  const int init_h = 500;
+  sdl.GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+  const wnd = SDL2::Window(sdl, "PXC-SDL2Gears", 0, 0, init_w, init_h,
+    SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
+    // SDL_WINDOW_FULLSCREEN | SDL_WINDOW_OPENGL);
+  const glctx = SDL2::GLContext(sdl, wnd);
 
   init();
   reshape(init_w, init_h);
@@ -293,54 +265,50 @@ function void init()
   uint t1 = 0;
   uint frames = 0;
 
+  bool nowait = false;
+
   bool done = false;
   while (!done) {
     Event ev;
     while (sdl.PollEvent(ev)) {
-      EventType const etype = ev.Type();
-      if (etype == SDL_VIDEORESIZE) {
-	const uint w = static_cast{uint}(ev.ResizeW());
-	const uint h = static_cast{uint}(ev.ResizeH());
-	const nw = sdl.SetVideoMode(w, h, 16, SDL_OPENGL | SDL_RESIZABLE);
-	reshape(w, h);
+      const etype = ev.Type();
+      if (etype == SDL_WINDOWEVENT) {
+	if (ev.WindowEventID() == SDL_WINDOWEVENT_RESIZED) {
+	  const w = ev.WindowEventData1();
+	  const h = ev.WindowEventData2();
+	  println(join{""}("w=", w, " h=", h));
+	  reshape(w, h);
+	}
       } else if (etype == SDL_QUIT) {
 	done = true;
 	break;
       }
     }
     draw(sdl);
-    sdl.GL_SwapBuffers();
+    sdl.GL_SwapWindow(wnd);
     {
       ++frames;
       uint t = sdl.GetTicks();
-      if (t - t0 >= 5000) {
-	float seconds = static_cast{float}(t - t0) / 1000.0;
-	float fps = static_cast{float}(frames) / seconds;
-
-	println(join{" "}(frames, "frames in", seconds, "seconds =", fps,
-	  "fps"));
+      if (t - t0 >= 1000) {
+	const seconds = static_cast{float}(t - t0) / 1000.0;
+	const fps = static_cast{float}(frames) / seconds;
+	println(join{" "}(frames, "frames in", seconds, "seconds =",
+	  fps, "fps"));
 	t0 = t;
 	frames = 0;
       }
-      if (t - t1 >= 10) {
-	t1 += 10;
+      if (t - t1 >= 10 || nowait) {
+	if (t - t1 >= 10) {
+	  t1 += 10;
+	}
 	gears_angle += 1.0;
-	const ks = sdl.GetKeyState();
-	if (ks.Key(SDLK_ESCAPE) != 0) {
-	  done = 1;
-	}
-	if (ks.Key(SDLK_UP) != 0) {
-	  view_rotx += 1.0;
-	}
-	if (ks.Key(SDLK_DOWN) != 0) {
-	  view_rotx -= 1.0;
-	}
-	if (ks.Key(SDLK_LEFT) != 0) {
-	  view_roty += 1.0;
-	}
-	if (ks.Key(SDLK_RIGHT) != 0) {
-	  view_roty -= 1.0;
-	}
+	const ks = SDL2::KeyboardState(sdl);
+	if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) { done = 1; }
+	if (ks.Key(SDL_SCANCODE_UP) != 0) { view_rotx += 1.0; }
+	if (ks.Key(SDL_SCANCODE_DOWN) != 0) { view_rotx -= 1.0; }
+	if (ks.Key(SDL_SCANCODE_LEFT) != 0) { view_roty += 1.0; }
+	if (ks.Key(SDL_SCANCODE_RIGHT) != 0) { view_roty -= 1.0; }
+	nowait = (ks.Key(SDL_SCANCODE_SPACE) != 0);
       }
     }
   }

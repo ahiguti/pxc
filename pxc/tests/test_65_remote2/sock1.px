@@ -100,11 +100,11 @@ private threaded function {tinterf} ptr{tinterf} create_stub(file const& f)
 
 private function void client_test_main(file const& f)
 {
-  var st = create_stub{ifoo}(f);
-  var z = st->hoge(5, 33);
-  var s = st->fuga("abc", "xyz");
-  var bp = st->create_bar(55);
-  var w = bp->m1(100);
+  const st = create_stub{ifoo}(f);
+  const z = st->hoge(5, 33);
+  const s = st->fuga("abc", "xyz");
+  const bp = st->create_bar(55);
+  const w = bp->m1(100);
   println(z);
   println(s);
   println(w);
@@ -122,8 +122,8 @@ private function void main()
 {
   errno_t ern;
   signal(io::system, SIGPIPE, SIG_IGN);
-  var sp = socketpair(io::system, AF_UNIX, SOCK_STREAM, PROTO_UNSPEC);
-  var sthr = create_thread(server_thread(io::system, sp.value.first));
+  mutable sp = socketpair(io::system, AF_UNIX, SOCK_STREAM, PROTO_UNSPEC);
+  const sthr = create_thread(server_thread(io::system, sp.value.first));
   client_test_main(sp.value.second);
   sp.errno = errno_t(); /* closes fds */
 }

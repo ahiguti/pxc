@@ -423,7 +423,7 @@ bool is_possibly_pod(const term& t)
     break;
   }
   const expr_struct *est = dynamic_cast<const expr_struct *>(t.get_expr());
-  if (est != 0 && est->cname != 0) {
+  if (est != 0 && est->cnamei.cname != 0) {
     return true;
   }
   return false;
@@ -1187,7 +1187,7 @@ std::string term_tostr(const term& t, term_tostr_sort s)
       self_block = ptr_down_cast<const expr_struct>(tdef)->block;
       tparams = self_block->tinfo.tparams;
       uniqns = ptr_down_cast<const expr_struct>(tdef)->uniqns;
-      cname = ptr_down_cast<const expr_struct>(tdef)->cname;
+      cname = ptr_down_cast<const expr_struct>(tdef)->cnamei.cname;
       esort_char = 's';
       break;
     case expr_e_dunion:
@@ -1202,7 +1202,7 @@ std::string term_tostr(const term& t, term_tostr_sort s)
       self_block = ptr_down_cast<const expr_interface>(tdef)->block;
       tparams = self_block->tinfo.tparams;
       uniqns = ptr_down_cast<const expr_interface>(tdef)->uniqns;
-      cname = ptr_down_cast<const expr_interface>(tdef)->cname;
+      cname = ptr_down_cast<const expr_interface>(tdef)->cnamei.cname;
       esort_char = 'i';
       break;
     case expr_e_typedef:
@@ -1215,7 +1215,7 @@ std::string term_tostr(const term& t, term_tostr_sort s)
 	}
 	sym = etd->sym;
 	uniqns = etd->uniqns;
-	cname = etd->cname;
+	cname = etd->cnamei.cname;
 	esort_char = 't';
 	self_block = 0;
       }
@@ -1242,7 +1242,7 @@ std::string term_tostr(const term& t, term_tostr_sort s)
 	  append_block_id_if_local = false;
 	  uniqns = "";
 	}
-	cname = efd->cname;
+	cname = efd->cnamei.cname;
 	esort_char = 'f';
       }
       break;
@@ -1329,8 +1329,7 @@ std::string term_tostr(const term& t, term_tostr_sort s)
 	  rstr_post = " >"; // need additional '>'
 	}
       }
-    } else if (cname != 0 && strcmp(cname, "%") != 0 &&
-      s == term_tostr_sort_cname) {
+    } else if (cname != 0 && s == term_tostr_sort_cname) {
       rstr = cname;
       #if 0
       if (s != term_tostr_sort_cname) {
@@ -2685,8 +2684,8 @@ static void check_interface_impl_one(expr_i *esub, expr_block *esub_block,
       fprintf(stderr, "%p %p %d:%s %d:%s\n", efd_impl, efd,
 	efd_impl->line, efd_impl->cname, efd->line, efd->cname);
       #endif
-      if (efd->cname != 0 && efd_impl->cname == 0) {
-	efd_impl->cname = arena_strdup(efd->cname);
+      if (efd->cnamei.cname != 0 && efd_impl->cnamei.cname == 0) {
+	efd_impl->cnamei = efd->cnamei;
       }
     }
   }

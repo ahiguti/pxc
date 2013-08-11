@@ -867,7 +867,7 @@ expr_enumval::expr_enumval(const char *fn, int line, const char *sym,
   expr_i *type_uneval, const char *cname, expr_i *val, attribute_e attr,
   expr_i *rest)
   : expr_i(fn, line), sym(sym),
-    type_uneval(ptr_down_cast<expr_te>(type_uneval)), cname(cname),
+    type_uneval(ptr_down_cast<expr_te>(type_uneval)), cnamei(cname),
     value(val), attr(attr),
     rest(ptr_down_cast<expr_enumval>(rest))
 {
@@ -1379,7 +1379,7 @@ std::string expr_argdecls::dump(int indent) const
 expr_funcdef::expr_funcdef(const char *fn, int line, const char *sym,
   const char *cname, bool is_const, expr_i *block, bool ext_decl, bool no_def,
   attribute_e attr)
-  : expr_i(fn, line), sym(sym), cname(cname), is_const(is_const),
+  : expr_i(fn, line), sym(sym), cnamei(cname), is_const(is_const),
     rettype_eval(), block(ptr_down_cast<expr_block>(block)),
     ext_decl(ext_decl), no_def(no_def), value_texpr(), tpup_thisptr(0),
     tpup_thisptr_nonconst(false), attr(attr)
@@ -1480,7 +1480,7 @@ std::string expr_funcdef::dump(int indent) const
 expr_typedef::expr_typedef(const char *fn, int line, const char *sym,
   const char *cname, const char *family, bool is_enum, bool is_bitmask,
   expr_i *enumvals, unsigned int num_tparams, attribute_e attr)
-  : expr_i(fn, line), sym(sym), cname(cname), typefamily_str(family),
+  : expr_i(fn, line), sym(sym), cnamei(cname), typefamily_str(family),
     is_enum(is_enum), is_bitmask(is_bitmask),
     enumvals(ptr_down_cast<expr_enumval>(enumvals)),
     num_tparams(num_tparams), attr(attr), tattr(),
@@ -1497,7 +1497,8 @@ void expr_typedef::set_unique_namespace_one(const std::string& u)
 
 std::string expr_typedef::dump(int indent) const
 {
-  return std::string("tyepdef ") + sym + " " + (cname != 0 ? cname : sym)
+  return std::string("tyepdef ") + sym + " "
+    + (cnamei.cname != 0 ? cnamei.cname : sym)
     + " " + (typefamily_str != 0 ? typefamily_str : "");
 }
 
@@ -1525,7 +1526,7 @@ std::string expr_metafdef::dump(int indent) const
 expr_struct::expr_struct(const char *fn, int line, const char *sym,
   const char *cname, const char *family, expr_i *block, attribute_e attr,
   bool has_udcon, bool private_udcon)
-  : expr_i(fn, line), sym(sym), cname(cname), typefamily_str(family),
+  : expr_i(fn, line), sym(sym), cnamei(cname), typefamily_str(family),
     block(ptr_down_cast<expr_block>(block)),
     attr(attr), value_texpr(), typefamily(typefamily_e_none),
     has_udcon(has_udcon), private_udcon(private_udcon), builtin_typestub(0),
@@ -1660,7 +1661,7 @@ std::string expr_dunion::dump(int indent) const
 
 expr_interface::expr_interface(const char *fn, int line, const char *sym,
   const char *cname, expr_i *block, attribute_e attr)
-  : expr_i(fn, line), sym(sym), cname(cname),
+  : expr_i(fn, line), sym(sym), cnamei(cname),
     block(ptr_down_cast<expr_block>(block)), attr(attr), value_texpr()
 {
   assert(block);

@@ -9,7 +9,7 @@ if [ "$1" != "" ]; then
   shift
   OPTS=$*
 else
-  TESTS=`echo *.px | sort`
+  TESTS=''
 fi
 
 if [ "$TEST_PXC_PROF" == "" ]; then

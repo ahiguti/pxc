@@ -18,7 +18,7 @@ public threaded interface ifoo <remote> {
 
 public threaded struct foo <ifoo> {
   function int fold(cslice{int} const& x, int v0, ptr{ibinop} const& o) {
-    var r = v0;
+    mutable r = v0;
     for (size_t i, int v : x) {
       r = o->op(r, v);
     }
@@ -38,12 +38,12 @@ public threaded struct binop_add <ibinop> {
 
 private function void client_test_main(file const& f)
 {
-  var op = to_ptr{orb_handle{ifoo}}(to_ptr{transport_file}(f));
-  var st = op->create_stub();
+  const op = to_ptr{orb_handle{ifoo}}(to_ptr{transport_file}(f));
+  const st = op->create_stub();
   farray{int, 10} arr;
   for (int i : 0 .. 10) { arr[i] = i + 1; }
-  var o = to_ptr(binop_add());
-  var z = st->fold(arr, 0, o); /* o is called back from the server */
+  const o = to_ptr(binop_add());
+  const z = st->fold(arr, 0, o); /* o is called back from the server */
   println(z);
 }
 
@@ -51,8 +51,8 @@ private multithreaded struct server_thread(io const& s, file const& f) {
   io const sys = s;
   file const sock = f;
   function void main() {
-    var op = to_ptr{orb_handle{ifoo}}(to_ptr{transport_file}(sock));
-    var obj = to_ptr(foo());
+    const op = to_ptr{orb_handle{ifoo}}(to_ptr{transport_file}(sock));
+    const obj = to_ptr(foo());
     op->start_server(obj);
   }
 }
@@ -60,8 +60,8 @@ private multithreaded struct server_thread(io const& s, file const& f) {
 private function void main()
 {
   signal(io::system, SIGPIPE, SIG_IGN);
-  var sp = socketpair(io::system, AF_UNIX, SOCK_STREAM, PROTO_UNSPEC);
-  var sthr = create_thread(server_thread(io::system, sp.value.first));
+  mutable sp = socketpair(io::system, AF_UNIX, SOCK_STREAM, PROTO_UNSPEC);
+  const sthr = create_thread(server_thread(io::system, sp.value.first));
   client_test_main(sp.value.second);
   sp.errno = errno_t(); /* closes fds */
 }
