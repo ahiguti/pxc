@@ -128,16 +128,16 @@ private threaded function {tinterf} ptr{tinterf} create_stub(
 
 private function void client_test_main(file const& f)
 {
-  var op = to_ptr{orb}(to_ptr{transport_file}(f));
-  var opclean = orb_cleanup(op);
-  var st = create_stub{ifoo}(op);
-  var z = st->hoge(5, 33);
-  var s = st->fuga("abc", "xyz");
-  var bp = st->create_bar(55);
-  var w = bp->m1(100);
-  var bzp = to_ptr{baz}(baz());
+  const op = to_ptr{orb}(to_ptr{transport_file}(f));
+  const opclean = orb_cleanup(op);
+  const st = create_stub{ifoo}(op);
+  const z = st->hoge(5, 33);
+  const s = st->fuga("abc", "xyz");
+  const bp = st->create_bar(55);
+  const w = bp->m1(100);
+  const bzp = to_ptr{baz}(baz());
   bp->set_baz(bzp);
-  var v = bp->do_baz(99);
+  const v = bp->do_baz(99);
   println(z);
   println(s);
   println(w);
@@ -155,8 +155,8 @@ private multithreaded struct server_thread(io const& s, file const& f) {
 private function void main()
 {
   signal(io::system, SIGPIPE, SIG_IGN);
-  var sp = socketpair(io::system, AF_UNIX, SOCK_STREAM, PROTO_UNSPEC);
-  var sthr = create_thread(server_thread(io::system, sp.value.first));
+  mutable sp = socketpair(io::system, AF_UNIX, SOCK_STREAM, PROTO_UNSPEC);
+  const sthr = create_thread(server_thread(io::system, sp.value.first));
   client_test_main(sp.value.second);
   sp.errno = errno_t(); /* closes fds */
 }

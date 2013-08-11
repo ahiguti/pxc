@@ -155,7 +155,7 @@ std::string csymbol_var(const expr_var *ev, bool cdecl)
   expr_i *fr = get_current_frame_expr(ev->symtbl_lexical);
   if (fr != 0 && fr->get_esort() == expr_e_struct) {
     expr_struct *const esd = ptr_down_cast<expr_struct>(fr);
-    if (esd->cname != 0) {
+    if (esd->cnamei.cname != 0) {
       /* c struct field */
       return std::string(ev->sym);
     }
@@ -249,7 +249,7 @@ static void emit_interface_def_one(emit_context& em, expr_interface *ei,
   if (!is_compiled(ei->block)) {
     return;
   }
-  if (!proto_only && ei->cname != 0) {
+  if (!proto_only && ei->cnamei.cname != 0) {
     return;
   }
   em.set_ns(ei->uniqns);
@@ -1223,7 +1223,7 @@ static void emit_type_definitions(emit_context& em)
     i != c.sorted.end(); ++i) {
     const expr_struct *const est = dynamic_cast<const expr_struct *>(*i);
     if (est != 0) {
-      if (est->cname == 0) {
+      if (est->cnamei.cname == 0) {
 	const bool proto_only = true;
 	emit_struct_def_one(em, est, proto_only);
       }
@@ -1246,7 +1246,7 @@ static void emit_type_definitions(emit_context& em)
   for (std::list<expr_i *>::iterator i = c.sorted.begin();
     i != c.sorted.end(); ++i) {
     const expr_struct *const est = dynamic_cast<const expr_struct *>(*i);
-    if (est != 0 && est->cname == 0) {
+    if (est != 0 && est->cnamei.cname == 0) {
       const bool proto_only = false;
       emit_struct_def_one(em, est, proto_only);
     }
@@ -1304,8 +1304,8 @@ static void emit_function_decl_one(emit_context& em, expr_funcdef *efd,
   bool set_ns, bool memfunc_ext)
 {
   if (set_ns) {
-    if (efd->cname != 0) {
-      std::string cname = efd->cname;
+    if (efd->cnamei.cname != 0) {
+      std::string cname = efd->cnamei.cname;
       size_t pos = cname.find(':');
       if (pos != cname.npos) {
 	const bool ns_extc = true;
@@ -1421,7 +1421,7 @@ static void emit_function_def(emit_context& em)
       emit_function_def_one(em, efd);
     }
     expr_struct *const est = dynamic_cast<expr_struct *>(*i);
-    if (est != 0 && est->cname == 0) {
+    if (est != 0 && est->cnamei.cname == 0) {
       if (!est->has_userdefined_constr()) {
 	/* default constr for plain struct */
 	emit_struct_constr_one(em, est, true);
@@ -1615,16 +1615,16 @@ void expr_var::emit_value(emit_context& em)
 std::string expr_enumval::emit_symbol_str() const
 {
   abort();
-  return std::string(cname);
+  return std::string(cnamei.cname);
 }
 
 void expr_enumval::emit_symbol(emit_context& em) const
 {
-  if (cname == 0) {
+  if (cnamei.cname == 0) {
     assert(value != 0);
     fn_emit_value(em, value);
   } else {
-    em.puts(std::string(cname));
+    em.puts(std::string(cnamei.cname));
   }
 }
 
@@ -2672,7 +2672,7 @@ void expr_funcdef::emit_value(emit_context& em)
 std::string expr_typedef::emit_symbol_str() const
 {
   abort();
-  return cname;
+  return cnamei.cname;
 }
 
 void expr_typedef::emit_symbol(emit_context& em) const

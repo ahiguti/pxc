@@ -62,12 +62,10 @@ static compile_mode cur_mode;
 %token<void_val> TOK_WHILE
 %token<void_val> TOK_DO
 %token<void_val> TOK_FOR
-%token<void_val> TOK_FOREACH
 %token<void_val> TOK_BREAK
 %token<void_val> TOK_CONTINUE
 %token<void_val> TOK_RETURN
 %token<void_val> TOK_FUNCTION
-%token<void_val> TOK_VAR
 %token<void_val> TOK_TYPEDEF
 %token<void_val> TOK_METAFUNCTION
 %token<void_val> TOK_STRUCT
@@ -199,8 +197,6 @@ toplevel_stmt_list
 toplevel_stmt
 	: body_stmt
 	| ext_stmt
-	/* | c_funcdecl_stmt */
-	/* | c_struct_stmt */
 	| c_enumval_stmt
 	| defs_stmt
 	| enum_stmt
@@ -325,32 +321,6 @@ body_stmt
 	  { $$ = expr_feach_new(cur_fname, @1.first_line, $5,
 		expr_block_new(cur_fname, @1.first_line, 0, 0, $3, 0,
 			passby_e_mutable_value, $8)); }
-	/* TODO: remove? */
-	/*
-	| TOK_FOREACH '(' foreach_argdecl ':' expression ')'
-		'{' function_body_stmt_list '}'
-	  { $$ = expr_feach_new(cur_fname, @1.first_line, $5,
-		expr_block_new(cur_fname, @1.first_line, 0, 0, $3, 0,
-			passby_e_mutable_value, $8)); }
-	*/
-	/*
-	| TOK_FOREACH '(' TOK_SYMBOL ',' TOK_SYMBOL ',' TOK_SYMBOL
-		':' type_expr ')'  '{' function_body_stmt_list '}'
-	  { $$ = expr_fldfe_new(cur_fname, @1.first_line, $3, $7, $5, $9,
-		$12); }
-	| TOK_FOREACH '(' TOK_SYMBOL ',' TOK_SYMBOL ':' type_expr ')'  
-		'{' function_body_stmt_list '}'
-	  { $$ = expr_fldfe_new(cur_fname, @1.first_line, $3, $5, 0, $7,
-		$10); }
-	| TOK_FOREACH '(' TOK_SYMBOL ':' type_expr ')'  
-		'{' function_body_stmt_list '}'
-	  { $$ = expr_fldfe_new(cur_fname, @1.first_line, 0, $3, 0, $5, $8); }
-	| TOK_FOREACH '(' TOK_SYMBOL ':' type_expr ';' TOK_SYMBOL ':'
-		expression ';' TOK_STRLIT ')'
-		'{' function_body_stmt_list '}'
-	  { $$ = expr_foldfe_new(cur_fname, @1.first_line, $3, $5, $7, $9,
-		arena_dequote_strdup($11), $14); }
-	*/
 	| TOK_BREAK ';'
 	  { $$ = expr_special_new(cur_fname, @1.first_line, TOK_BREAK, 0); }
 	| TOK_CONTINUE ';'
@@ -713,33 +683,6 @@ vardef_stmt
 	  { $$ = $1; }
 	| vardef_expr '=' assign_expr ';'
 	  { $$ = expr_op_new(cur_fname, @1.first_line, '=', $1, $3); }
-	| TOK_VAR TOK_SYMBOL '=' assign_expr ';'
-	  { $$ = expr_op_new(cur_fname, @1.first_line, '=',
-		expr_var_new(cur_fname, @1.first_line, $2, 0,
-			passby_e_mutable_value, attribute_unknown, $4),
-		$4); }
-	| TOK_VAR TOK_CONST TOK_SYMBOL '=' assign_expr ';'
-	  { $$ = expr_op_new(cur_fname, @1.first_line, '=',
-		expr_var_new(cur_fname, @1.first_line, $3, 0,
-			passby_e_const_value, attribute_unknown, $5),
-		$5); }
-	| TOK_VAR '&' TOK_SYMBOL '=' assign_expr ';'
-	  { $$ = expr_op_new(cur_fname, @1.first_line, '=',
-		expr_var_new(cur_fname, @1.first_line, $3, 0,
-			passby_e_mutable_reference, attribute_unknown, $5),
-		$5); }
-	| TOK_VAR '&' TOK_CONST TOK_SYMBOL '=' assign_expr ';'
-	  { $$ = expr_op_new(cur_fname, @1.first_line, '=',
-		expr_var_new(cur_fname, @1.first_line, $4, 0,
-			passby_e_const_reference, attribute_unknown, $6),
-		$6); }
-	/*
-	| type_expr '&' TOK_SYMBOL '=' assign_expr ';'
-	  { $$ = expr_op_new(cur_fname, @1.first_line, '=',
-		expr_var_new(cur_fname, @1.first_line, $3, $1,
-			passby_e_mutable_reference, attribute_unknown, $5),
-		$5); }
-	*/
 	;
 vardef_expr
 	: type_expr TOK_SYMBOL

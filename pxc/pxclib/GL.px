@@ -2,58 +2,661 @@ namespace GL;
 import common -;
 import meta m;
 
+/*
+ * Mesa 3-D graphics library
+ *
+ * Copyright (C) 1999-2006  Brian Paul   All Rights Reserved.
+ * Copyright (C) 2009  VMware, Inc.  All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included
+ * in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+ * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
+
 public tsvaluetype struct extern "GLbitfield" "extbitmask" GLbitfield { }
-public extern "GL_COLOR_BUFFER_BIT" GLbitfield GL_COLOR_BUFFER_BIT;
-public extern "GL_DEPTH_BUFFER_BIT" GLbitfield GL_DEPTH_BUFFER_BIT;
-public extern "GL_STENCIL_BUFFER_BIT" GLbitfield GL_STENCIL_BUFFER_BIT;
+expand(sym : m::map{m::list{
+"CURRENT",
+"POINT",
+"LINE",
+"POLYGON",
+"POLYGON_STRIPPLE",
+"PIXEL_MODE",
+"LIGHTING",
+"FOG",
+"DEPTH_BUFFER",
+"ACCUM_BUFFER",
+"STENCIL_BUFFER",
+"VIEWPORT",
+"TRANSFORM",
+"ENABLE",
+"COLOR_BUFFER",
+"HINT",
+"EVAL",
+"LIST",
+"TEXTURE",
+"SCISSOR",
+/* 1.1 */
+"CLIENT_PIXEL_STORE",
+"CLIENT_VERTEX_ARRAY"
+}, metafunction{x} m::concat{"GL_", x, "_BIT"}}) {
+public extern "%" GLbitfield sym;
+}
+public extern "%" GLbitfield GL_ALL_ATTRIB_BITS;
+/* 1.1 */
+public extern "%" GLbitfield GL_ALL_CLIENT_ATTRIB_BITS;
+public extern "%" GLbitfield GL_CLIENT_ALL_ATTRIB_BITS;
+
 
 public tsvaluetype struct extern "GLenum" "extenum" GLenum { }
-public extern "GL_TRIANGLES" GLenum GL_TRIANGLES;
-public extern "GL_FLAT" GLenum GL_FLAT;
-public extern "GL_QUAD_STRIP" GLenum GL_QUAD_STRIP;
-public extern "GL_QUADS" GLenum GL_QUADS;
-public extern "GL_SMOOTH" GLenum GL_SMOOTH;
-public extern "GL_PROJECTION" GLenum GL_PROJECTION;
-public extern "GL_MODELVIEW" GLenum GL_MODELVIEW;
-public extern "GL_LIGHT0" GLenum GL_LIGHT0;
-public extern "GL_CULL_FACE" GLenum GL_CULL_FACE;
-public extern "GL_LIGHTING" GLenum GL_LIGHTING;
-public extern "GL_DEPTH_TEST" GLenum GL_DEPTH_TEST;
-public extern "GL_COMPILE" GLenum GL_COMPILE;
-public extern "GL_FRONT" GLenum GL_FRONT;
-public extern "GL_AMBIENT_AND_DIFFUSE" GLenum GL_AMBIENT_AND_DIFFUSE;
-public extern "GL_NORMALIZE" GLenum GL_NORMALIZE;
-public extern "GL_POSITION" GLenum GL_POSITION;
+expand(sym : m::map{m::list{
+"BYTE",
+"UNSIGNED_BYTE",
+"SHORT",
+"UNSIGNED_SHORT",
+"INT",
+"UNSIGNED_INT",
+"FLOAT",
+"2_BYTES",
+"3_BYTES",
+"4_BYTES",
+"DOUBLE",
+"POINTS",
+"LINES",
+"LINE_LOOP",
+"LINE_STRIP",
+"TRIANGLES",
+"TRIANGLE_STRIP",
+"TRIANGLE_FAN",
+"QUADS",
+"QUAD_STRIP",
+"POLYGON",
+"VERTEX_ARRAY",
+"NORMAL_ARRAY",
+"COLOR_ARRAY",
+"INDEX_ARRAY",
+"TEXTURE_COORD_ARRAY",
+"EDGE_FLAG_ARRAY",
+"VERTEX_ARRAY_SIZE",
+"VERTEX_ARRAY_TYPE",
+"VERTEX_ARRAY_STRIDE",
+"NORMAL_ARRAY_TYPE",
+"NORMAL_ARRAY_STRIDE",
+"COLOR_ARRAY_SIZE",
+"COLOR_ARRAY_TYPE",
+"COLOR_ARRAY_STRIDE",
+"INDEX_ARRAY_TYPE",
+"INDEX_ARRAY_STRIDE",
+"TEXTURE_COORD_ARRAY_SIZE",
+"TEXTURE_COORD_ARRAY_TYPE",
+"TEXTURE_COORD_ARRAY_STRIDE",
+"EDGE_FLAG_ARRAY_STRIDE",
+"VERTEX_ARRAY_POINTER",
+"NORMAL_ARRAY_POINTER",
+"COLOR_ARRAY_POINTER",
+"INDEX_ARRAY_POINTER",
+"TEXTURE_COORD_ARRAY_POINTER",
+"EDGE_FLAG_ARRAY_POINTER",
+"V2F",
+"V3F",
+"C4UB_V2F",
+"C4UB_V3F",
+"C3F_V3F",
+"N3F_V3F",
+"C4F_N3F_V3F",
+"T2F_V3F",
+"T4F_V4F",
+"T2F_C4UB_V3F",
+"T2F_C3F_V3F",
+"T2F_N3F_V3F",
+"T2F_C4F_N3F_V3F",
+"T4F_C4F_N3F_V4F",
+"MATRIX_MODE",
+"MODELVIEW",
+"PROJECTION",
+"TEXTURE",
+"POINT_SMOOTH",
+"POINT_SIZE",
+"POINT_SIZE_GRANULARITY",
+"POINT_SIZE_RANGE",
+"LINE_SMOOTH",
+"LINE_STIPPLE",
+"LINE_STIPPLE_PATTERN",
+"LINE_STIPPLE_REPEAT",
+"LINE_WIDTH",
+"LINE_WIDTH_GRANULARITY",
+"LINE_WIDTH_RANGE",
+"POINT",
+"LINE",
+"FILL",
+"CW",
+"CCW",
+"FRONT",
+"BACK",
+"POLYGON_MODE",
+"POLYGON_SMOOTH",
+"POLYGON_STIPPLE",
+"EDGE_FLAG",
+"CULL_FACE",
+"CULL_FACE_MODE",
+"FRONT_FACE",
+"POLYGON_OFFSET_FACTOR",
+"POLYGON_OFFSET_UNITS",
+"POLYGON_OFFSET_POINT",
+"POLYGON_OFFSET_LINE",
+"POLYGON_OFFSET_FILL",
+"COMPILE",
+"COMPILE_AND_EXECUTE",
+"LIST_BASE",
+"LIST_INDEX",
+"LIST_MODE",
+"NEVER",
+"LESS",
+"EQUAL",
+"LEQUAL",
+"GREATER",
+"NOTEQUAL",
+"GEQUAL",
+"ALWAYS",
+"DEPTH_TEST",
+"DEPTH_BITS",
+"DEPTH_CLEAR_VALUE",
+"DEPTH_FUNC",
+"DEPTH_RANGE",
+"DEPTH_WRITEMASK",
+"DEPTH_COMPONENT",
+"LIGHTING",
+"LIGHT0",
+"LIGHT1",
+"LIGHT2",
+"LIGHT3",
+"LIGHT4",
+"LIGHT5",
+"LIGHT6",
+"LIGHT7",
+"SPOT_EXPONENT",
+"SPOT_CUTOFF",
+"CONSTANT_ATTENUATION",
+"LINEAR_ATTENUATION",
+"QUADRATIC_ATTENUATION",
+"AMBIENT",
+"DIFFUSE",
+"SPECULAR",
+"SHININESS",
+"EMISSION",
+"POSITION",
+"SPOT_DIRECTION",
+"AMBIENT_AND_DIFFUSE",
+"COLOR_INDEXES",
+"LIGHT_MODEL_TWO_SIDE",
+"LIGHT_MODEL_LOCAL_VIEWER",
+"LIGHT_MODEL_AMBIENT",
+"FRONT_AND_BACK",
+"SHADE_MODEL",
+"FLAT",
+"SMOOTH",
+"COLOR_MATERIAL",
+"COLOR_MATERIAL_FACE",
+"COLOR_MATERIAL_PARAMETER",
+"NORMALIZE",
+"CLIP_PLANE0",
+"CLIP_PLANE1",
+"CLIP_PLANE2",
+"CLIP_PLANE3",
+"CLIP_PLANE4",
+"CLIP_PLANE5",
+"ACCUM_RED_BITS",
+"ACCUM_GREEN_BITS",
+"ACCUM_BLUE_BITS",
+"ACCUM_ALPHA_BITS",
+"ACCUM_CLEAR_VALUE",
+"ACCUM",
+"ADD",
+"LOAD",
+"MULT",
+"RETURN",
+"ALPHA_TEST",
+"ALPHA_TEST_REF",
+"ALPHA_TEST_FUNC",
+"BLEND",
+"BLEND_SRC",
+"BLEND_DST",
+"ZERO",
+"ONE",
+"SRC_COLOR",
+"ONE_MINUS_SRC_COLOR",
+"SRC_ALPHA",
+"ONE_MINUS_SRC_ALPHA",
+"DST_ALPHA",
+"ONE_MINUS_DST_ALPHA",
+"DST_COLOR",
+"ONE_MINUS_DST_COLOR",
+"SRC_ALPHA_SATURATE",
+"FEEDBACK",
+"RENDER",
+"SELECT",
+"2D",
+"3D",
+"3D_COLOR",
+"3D_COLOR_TEXTURE",
+"4D_COLOR_TEXTURE",
+"POINT_TOKEN",
+"LINE_TOKEN",
+"LINE_RESET_TOKEN",
+"POLYGON_TOKEN",
+"BITMAP_TOKEN",
+"DRAW_PIXEL_TOKEN",
+"COPY_PIXEL_TOKEN",
+"PASS_THROUGH_TOKEN",
+"FEEDBACK_BUFFER_POINTER",
+"FEEDBACK_BUFFER_SIZE",
+"FEEDBACK_BUFFER_TYPE",
+"SELECTION_BUFFER_POINTER",
+"SELECTION_BUFFER_SIZE",
+"FOG",
+"FOG_MODE",
+"FOG_DENSITY",
+"FOG_COLOR",
+"FOG_INDEX",
+"FOG_START",
+"FOG_END",
+"LINEAR",
+"EXP",
+"EXP2",
+"LOGIC_OP",
+"INDEX_LOGIC_OP",
+"COLOR_LOGIC_OP",
+"LOGIC_OP_MODE",
+"CLEAR",
+"SET",
+"COPY",
+"COPY_INVERTED",
+"NOOP",
+"INVERT",
+"AND",
+"NAND",
+"OR",
+"NOR",
+"XOR",
+"EQUIV",
+"AND_REVERSE",
+"AND_INVERTED",
+"OR_REVERSE",
+"OR_INVERTED",
+"STENCIL_BITS",
+"STENCIL_TEST",
+"STENCIL_CLEAR_VALUE",
+"STENCIL_FUNC",
+"STENCIL_VALUE_MASK",
+"STENCIL_FAIL",
+"STENCIL_PASS_DEPTH_FAIL",
+"STENCIL_PASS_DEPTH_PASS",
+"STENCIL_REF",
+"STENCIL_WRITEMASK",
+"STENCIL_INDEX",
+"KEEP",
+"REPLACE",
+"INCR",
+"DECR",
+"NONE",
+"LEFT",
+"RIGHT",
+"FRONT_LEFT",
+"FRONT_RIGHT",
+"BACK_LEFT",
+"BACK_RIGHT",
+"AUX0",
+"AUX1",
+"AUX2",
+"AUX3",
+"COLOR_INDEX",
+"RED",
+"GREEN",
+"BLUE",
+"ALPHA",
+"LUMINANCE",
+"LUMINANCE_ALPHA",
+"ALPHA_BITS",
+"RED_BITS",
+"GREEN_BITS",
+"BLUE_BITS",
+"INDEX_BITS",
+"SUBPIXEL_BITS",
+"AUX_BUFFERS",
+"READ_BUFFER",
+"DRAW_BUFFER",
+"DOUBLEBUFFER",
+"STEREO",
+"BITMAP",
+"COLOR",
+"DEPTH",
+"STENCIL",
+"DITHER",
+"RGB",
+"RGBA",
+"MAX_LIST_NESTING",
+"MAX_EVAL_ORDER",
+"MAX_LIGHTS",
+"MAX_CLIP_PLANES",
+"MAX_TEXTURE_SIZE",
+"MAX_PIXEL_MAP_TABLE",
+"MAX_ATTRIB_STACK_DEPTH",
+"MAX_MODELVIEW_STACK_DEPTH",
+"MAX_NAME_STACK_DEPTH",
+"MAX_PROJECTION_STACK_DEPTH",
+"MAX_TEXTURE_STACK_DEPTH",
+"MAX_VIEWPORT_DIMS",
+"MAX_CLIENT_ATTRIB_STACK_DEPTH",
+"ATTRIB_STACK_DEPTH",
+"CLIENT_ATTRIB_STACK_DEPTH",
+"COLOR_CLEAR_VALUE",
+"COLOR_WRITEMASK",
+"CURRENT_INDEX",
+"CURRENT_COLOR",
+"CURRENT_NORMAL",
+"CURRENT_RASTER_COLOR",
+"CURRENT_RASTER_DISTANCE",
+"CURRENT_RASTER_INDEX",
+"CURRENT_RASTER_POSITION",
+"CURRENT_RASTER_TEXTURE_COORDS",
+"CURRENT_RASTER_POSITION_VALID",
+"CURRENT_TEXTURE_COORDS",
+"INDEX_CLEAR_VALUE",
+"INDEX_MODE",
+"INDEX_WRITEMASK",
+"MODELVIEW_MATRIX",
+"MODELVIEW_STACK_DEPTH",
+"NAME_STACK_DEPTH",
+"PROJECTION_MATRIX",
+"PROJECTION_STACK_DEPTH",
+"RENDER_MODE",
+"RGBA_MODE",
+"TEXTURE_MATRIX",
+"TEXTURE_STACK_DEPTH",
+"VIEWPORT",
+"AUTO_NORMAL",
+"MAP1_COLOR_4",
+"MAP1_INDEX",
+"MAP1_NORMAL",
+"MAP1_TEXTURE_COORD_1",
+"MAP1_TEXTURE_COORD_2",
+"MAP1_TEXTURE_COORD_3",
+"MAP1_TEXTURE_COORD_4",
+"MAP1_VERTEX_3",
+"MAP1_VERTEX_4",
+"MAP2_COLOR_4",
+"MAP2_INDEX",
+"MAP2_NORMAL",
+"MAP2_TEXTURE_COORD_1",
+"MAP2_TEXTURE_COORD_2",
+"MAP2_TEXTURE_COORD_3",
+"MAP2_TEXTURE_COORD_4",
+"MAP2_VERTEX_3",
+"MAP2_VERTEX_4",
+"MAP1_GRID_DOMAIN",
+"MAP1_GRID_SEGMENTS",
+"MAP2_GRID_DOMAIN",
+"MAP2_GRID_SEGMENTS",
+"COEFF",
+"ORDER",
+"DOMAIN",
+"PERSPECTIVE_CORRECTION_HINT",
+"POINT_SMOOTH_HINT",
+"LINE_SMOOTH_HINT",
+"POLYGON_SMOOTH_HINT",
+"FOG_HINT",
+"DONT_CARE",
+"FASTEST",
+"NICEST",
+"SCISSOR_BOX",
+"SCISSOR_TEST",
+"MAP_COLOR",
+"MAP_STENCIL",
+"INDEX_SHIFT",
+"INDEX_OFFSET",
+"RED_SCALE",
+"RED_BIAS",
+"GREEN_SCALE",
+"GREEN_BIAS",
+"BLUE_SCALE",
+"BLUE_BIAS",
+"ALPHA_SCALE",
+"ALPHA_BIAS",
+"DEPTH_SCALE",
+"DEPTH_BIAS",
+"PIXEL_MAP_S_TO_S_SIZE",
+"PIXEL_MAP_I_TO_I_SIZE",
+"PIXEL_MAP_I_TO_R_SIZE",
+"PIXEL_MAP_I_TO_G_SIZE",
+"PIXEL_MAP_I_TO_B_SIZE",
+"PIXEL_MAP_I_TO_A_SIZE",
+"PIXEL_MAP_R_TO_R_SIZE",
+"PIXEL_MAP_G_TO_G_SIZE",
+"PIXEL_MAP_B_TO_B_SIZE",
+"PIXEL_MAP_A_TO_A_SIZE",
+"PIXEL_MAP_S_TO_S",
+"PIXEL_MAP_I_TO_I",
+"PIXEL_MAP_I_TO_R",
+"PIXEL_MAP_I_TO_G",
+"PIXEL_MAP_I_TO_B",
+"PIXEL_MAP_I_TO_A",
+"PIXEL_MAP_R_TO_R",
+"PIXEL_MAP_G_TO_G",
+"PIXEL_MAP_B_TO_B",
+"PIXEL_MAP_A_TO_A",
+"PACK_ALIGNMENT",
+"PACK_LSB_FIRST",
+"PACK_ROW_LENGTH",
+"PACK_SKIP_PIXELS",
+"PACK_SKIP_ROWS",
+"PACK_SWAP_BYTES",
+"UNPACK_ALIGNMENT",
+"UNPACK_LSB_FIRST",
+"UNPACK_ROW_LENGTH",
+"UNPACK_SKIP_PIXELS",
+"UNPACK_SKIP_ROWS",
+"UNPACK_SWAP_BYTES",
+"ZOOM_X",
+"ZOOM_Y",
+"TEXTURE_ENV",
+"TEXTURE_ENV_MODE",
+"TEXTURE_1D",
+"TEXTURE_2D",
+"TEXTURE_WRAP_S",
+"TEXTURE_WRAP_T",
+"TEXTURE_MAG_FILTER",
+"TEXTURE_MIN_FILTER",
+"TEXTURE_ENV_COLOR",
+"TEXTURE_GEN_S",
+"TEXTURE_GEN_T",
+"TEXTURE_GEN_R",
+"TEXTURE_GEN_Q",
+"TEXTURE_GEN_MODE",
+"TEXTURE_BORDER_COLOR",
+"TEXTURE_WIDTH",
+"TEXTURE_HEIGHT",
+"TEXTURE_BORDER",
+"TEXTURE_COMPONENTS",
+"TEXTURE_RED_SIZE",
+"TEXTURE_GREEN_SIZE",
+"TEXTURE_BLUE_SIZE",
+"TEXTURE_ALPHA_SIZE",
+"TEXTURE_LUMINANCE_SIZE",
+"TEXTURE_INTENSITY_SIZE",
+"NEAREST_MIPMAP_NEAREST",
+"NEAREST_MIPMAP_LINEAR",
+"LINEAR_MIPMAP_NEAREST",
+"LINEAR_MIPMAP_LINEAR",
+"OBJECT_LINEAR",
+"OBJECT_PLANE",
+"EYE_LINEAR",
+"EYE_PLANE",
+"SPHERE_MAP",
+"DECAL",
+"MODULATE",
+"NEAREST",
+"REPEAT",
+"CLAMP",
+"S",
+"T",
+"R",
+"Q",
+"VENDOR",
+"RENDERER",
+"VERSION",
+"EXTENSIONS",
+"NO_ERROR",
+"INVALID_ENUM",
+"INVALID_VALUE",
+"INVALID_OPERATION",
+"STACK_OVERFLOW",
+"STACK_UNDERFLOW",
+"OUT_OF_MEMORY",
+/* 1.1 */
+"PROXY_TEXTURE_1D",
+"PROXY_TEXTURE_2D",
+"TEXTURE_PRIORITY",
+"TEXTURE_RESIDENT",
+"TEXTURE_BINDING_1D",
+"TEXTURE_BINDING_2D",
+"TEXTURE_INTERNAL_FORMAT",
+"ALPHA4",
+"ALPHA8",
+"ALPHA12",
+"ALPHA16",
+"LUMINANCE4",
+"LUMINANCE8",
+"LUMINANCE12",
+"LUMINANCE16",
+"LUMINANCE4_ALPHA4",
+"LUMINANCE6_ALPHA2",
+"LUMINANCE8_ALPHA8",
+"LUMINANCE12_ALPHA4",
+"LUMINANCE12_ALPHA12",
+"LUMINANCE16_ALPHA16",
+"INTENSITY",
+"INTENSITY4",
+"INTENSITY8",
+"INTENSITY12",
+"INTENSITY16",
+"R3_G3_B2",
+"RGB4",
+"RGB5",
+"RGB8",
+"RGB10",
+"RGB12",
+"RGB16",
+"RGBA2",
+"RGBA4",
+"RGB5_A1",
+"RGBA8",
+"RGB10_A2",
+"RGBA12",
+"RGBA16",
+/* 1.2 */
+"RESCALE_NORMAL",
+"CLAMP_TO_EDGE",
+"MAX_ELEMENTS_VERTICES",
+"MAX_ELEMENTS_INDICES",
+"BGR",
+"BGRA",
+"UNSIGNED_BYTE_3_3_2",
+"UNSIGNED_BYTE_2_3_3_REV",
+"UNSIGNED_SHORT_5_6_5",
+"UNSIGNED_SHORT_5_6_5_REV",
+"UNSIGNED_SHORT_4_4_4_4",
+"UNSIGNED_SHORT_4_4_4_4_REV",
+"UNSIGNED_SHORT_5_5_5_1",
+"UNSIGNED_SHORT_1_5_5_5_REV",
+"UNSIGNED_INT_8_8_8_8",
+"UNSIGNED_INT_8_8_8_8_REV",
+"UNSIGNED_INT_10_10_10_2",
+"UNSIGNED_INT_2_10_10_10_REV",
+"LIGHT_MODEL_COLOR_CONTROL",
+"SINGLE_COLOR",
+"SEPARATE_SPECULAR_COLOR",
+"TEXTURE_MIN_LOD",
+"TEXTURE_MAX_LOD",
+"TEXTURE_BASE_LEVEL",
+"TEXTURE_MAX_LEVEL",
+"SMOOTH_POINT_SIZE_RANGE",
+"SMOOTH_POINT_SIZE_GRANULARITY",
+"SMOOTH_LINE_WIDTH_RANGE",
+"SMOOTH_LINE_WIDTH_GRANULARITY",
+"ALIASED_POINT_SIZE_RANGE",
+"ALIASED_LINE_WIDTH_RANGE",
+"PACK_SKIP_IMAGES",
+"PACK_IMAGE_HEIGHT",
+"UNPACK_SKIP_IMAGES",
+"UNPACK_IMAGE_HEIGHT",
+"TEXTURE_3D",
+"PROXY_TEXTURE_3D",
+"TEXTURE_DEPTH",
+"TEXTURE_WRAP_R",
+"MAX_3D_TEXTURE_SIZE",
+"TEXTURE_BINDING_3D"
+}, metafunction{x} m::concat{"GL_", x}}) {
+public extern "%" GLenum sym;
+}
 
-public function extern "glClear" void glClear(GLbitfield mask);
-public function extern "glPushMatrix" void glPushMatrix();
-public function extern "glPopMatrix" void glPopMatrix();
-public function extern "glLoadIdentity" void glLoadIdentity();
-public function extern "glBegin" void glBegin(GLenum mode);
-public function extern "glEnd" void glEnd();
-public function extern "glRotatef" void glRotatef(float angle, float x,
-  float y, float z);
-public function extern "glViewport" void glViewport(int x, int y, int width,
-  int height);
-public function extern "glMatrixMode" void glMatrixMode(GLenum mode);
-public function extern "glFrustum" void glFrustum(double left, double right,
-  double bottom, double top, double nearVal, double farVal);
-public function extern "gl::glLightfv4" void glLightfv4(GLenum light,
+/* no arg */
+expand(sym : m::list{
+"glPushMatrix", "glPopMatrix", "glLoadIdentity", "glEnd", "glEndList"
+}) {
+public function extern "%" void sym();
+}
+
+/* two floats */
+expand(sym : m::list{
+"glVertex2f"
+}) {
+public function extern "%" void sym(float f0, float f1);
+}
+
+/* three floats */
+expand(sym : m::list{
+"glTranslatef", "glNormal3f", "glVertex3f"
+}) {
+public function extern "%" void sym(float f0, float f1, float f2);
+}
+
+/* four floats */
+expand(sym : m::list{
+"glRotatef"
+}) {
+public function extern "%" void sym(float f0, float f1, float f2, float f3);
+}
+
+public function extern "%" void glClear(GLbitfield mask);
+public function extern "%" void glBegin(GLenum mode);
+public function extern "%" void glViewport(int x, int y, int w, int h);
+public function extern "%" void glMatrixMode(GLenum mode);
+public function extern "%" void glFrustum(double l, double r, double b,
+  double t, double nearVal, double farVal);
+public function extern "%" void glEnable(GLenum cap);
+public function extern "%" void glDisable(GLenum cap);
+public function extern "%" uint glGenLists(int range);
+public function extern "%" void glNewList(uint list, GLenum mode);
+public function extern "%" void glCallList(uint list);
+public function extern "%" void glShadeModel(GLenum mode);
+public function extern "%" void glDepthRange(double near, double far);
+
+public function extern "gl::%" void glLightfv(GLenum light,
   GLenum pname, farray{float, 4} const& params);
-public function extern "glTranslatef" void glTranslatef(float x, float y,
-  float z);
-public function extern "glVertex2f" void glVertex2f(float x, float y);
-public function extern "glEnable" void glEnable(GLenum cap);
-public function extern "glDisable" void glDisable(GLenum cap);
-public function extern "glGenLists" uint glGenLists(int range);
-public function extern "glNewList" void glNewList(uint list, GLenum mode);
-public function extern "glEndList" void glEndList();
-public function extern "glCallList" void glCallList(uint list);
-public function extern "glShadeModel" void glShadeModel(GLenum mode);
-public function extern "glNormal3f" void glNormal3f(float nx, float ny,
-  float nz);
-public function extern "glVertex3f" void glVertex3f(float x, float y, float z);
-public function extern "gl::glMaterialfv4" void glMaterialfv(GLenum face,
+public function extern "gl::%" void glMaterialfv(GLenum face,
   GLenum pname, farray{float, 4} const& params);
 
 extern "ldflags" "-lGL -lm";
@@ -64,17 +667,19 @@ extern "types" inline
 
 private metafunction f4_sym m::csymbol{farray{float, 4}};
 
-extern "implementation" inline
+extern "functions" inline
 namespace gl {
 
-void glLightfv4(GLenum light, GLenum pname, %{f4_sym}% const& params)
+static inline void glLightfv(GLenum light, GLenum pname,
+  %{f4_sym}% const& params)
 {
-  glLightfv(light, pname, params.rawarr());
+  ::glLightfv(light, pname, params.rawarr());
 }
 
-void glMaterialfv4(GLenum face, GLenum pname, %{f4_sym}% const& params)
+static inline void glMaterialfv(GLenum face, GLenum pname,
+  %{f4_sym}% const& params)
 {
-  glMaterialfv(face, pname, params.rawarr());
+  ::glMaterialfv(face, pname, params.rawarr());
 }
 
 }; // namespace gl

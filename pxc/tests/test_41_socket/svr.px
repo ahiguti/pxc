@@ -17,7 +17,7 @@ multithreaded struct server_thread(io const& i, tptr{bool} const& rp,
   tptr{string} str_r = s;
   function void notify()
   {
-    var lck = lock_guard{bool}(readyp);
+    mutable lck = lock_guard{bool}(readyp);
     *lck = true;
     lck.notify_one();
   }
@@ -25,12 +25,12 @@ multithreaded struct server_thread(io const& i, tptr{bool} const& rp,
   {
     try {
       file_println(get_stderr(iop), "svr");
-      var sf = create_acceptor(iop, "localhost", "9999", AF_INET, SOCK_STREAM,
-	1024, 0); // TODO: fix EADDRINUSE
+      const sf = create_acceptor(iop, "localhost", "9999", AF_INET,
+	SOCK_STREAM, 1024, 0); // TODO: fix EADDRINUSE
       file_println(get_stderr(iop), "accepted");
       notify();
-      var peer_addr = sockaddr_storage();
-      var sock = accept(sf.value, peer_addr);
+      mutable peer_addr = sockaddr_storage();
+      const sock = accept(sf.value, peer_addr);
       string s;
       size_t len = 10;
       sock.value.read(s, len);
@@ -52,16 +52,16 @@ multithreaded struct client_thread(io const& i, tptr{bool} const& rp)
   function void main()
   {
     {
-      var lck = lock_cguard{bool}(readyp);
+      mutable lck = lock_cguard{bool}(readyp);
       while (true) {
 	if (*lck) { break; }
 	lck.wait();
       }
     }
     file_println(get_stderr(iop), "got notification");
-    var sf = create_connector(iop, "localhost", "9999", AF_INET, SOCK_STREAM,
+    const sf = create_connector(iop, "localhost", "9999", AF_INET, SOCK_STREAM,
       10);
-    var sock = connect(sf.value);
+    const sock = connect(sf.value);
     size_t wlen = 0;
     sock.value.write("hoge", wlen);
   }
@@ -70,10 +70,10 @@ multithreaded struct client_thread(io const& i, tptr{bool} const& rp)
 function void t1()
 {
   signal(io::system, SIGPIPE, SIG_IGN);
-  var readyp = to_tptr(bool(false));
-  var strp = to_tptr(string());
-  var sthr = create_thread(server_thread(io::system, readyp, strp));
-  var cthr = create_thread(client_thread(io::system, readyp));
+  const readyp = to_tptr(bool(false));
+  const strp = to_tptr(string());
+  const sthr = create_thread(server_thread(io::system, readyp, strp));
+  const cthr = create_thread(client_thread(io::system, readyp));
   sthr.join();
   cthr.join();
   println(*strp);

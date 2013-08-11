@@ -1,0 +1,52 @@
+namespace s2;
+import common -;
+import SDL2 -;
+import GL -;
+
+function void draw_tri()
+{
+  glBegin(GL_TRIANGLES);
+  glVertex2f(0.0, static_cast{float}(-1.732 / 3.0 * 2.0));
+  glVertex2f(-1.0, static_cast{float}(1.732 / 3.0));
+  glVertex2f(1.0, static_cast{float}(1.732 / 3.0));
+  glEnd();
+}
+
+{
+  const sdl = SDL2::SDL(system, SDL_INIT_VIDEO);
+  const wnd = SDL2::Window(sdl, "s2", 0, 0, 640, 480,
+    SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+  const glctx = SDL2::GLContext(sdl, wnd);
+  bool done = false;
+  float theta;
+  float xinc;
+  {
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glFrustum(-1.0, 1.0, -1.0, 1.0, 5.0, 100.0);
+    glMatrixMode(GL_MODELVIEW);
+  }
+  while (!done) {
+    Event ev;
+    while (sdl.PollEvent(ev)) {
+      if (ev.Type() == SDL_QUIT) {
+	done = true;
+	break;
+      }
+    }
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glPushMatrix();
+    glTranslatef(0.0, 2.0, -10.0);
+    glRotatef(theta, 0.0, 0.0, 1.0);
+    for (int i : 0 .. 100) {
+      glTranslatef(0.0, 0.0, -1.0);
+      draw_tri();
+    }
+    glPopMatrix();
+    system.usleep(10000);
+    sdl.GL_SwapWindow(wnd);
+    theta += 1.0;
+    xinc += 1.00000;
+  }
+}
+

@@ -157,8 +157,7 @@ expr_i *expr_metalist_new(expr_i *tl)
 {
   return expr_te_new(tl->fname, tl->line,
     expr_nssym_new(tl->fname, tl->line,
-      expr_nssym_new(tl->fname, tl->line,
-	expr_nssym_new(tl->fname, tl->line, 0, "type"), "common"), "@list"),
+      expr_nssym_new(tl->fname, tl->line, 0, "meta"), "@list"),
 	// TODO: type::common does not exist
     tl);
 }

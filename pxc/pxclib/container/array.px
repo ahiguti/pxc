@@ -1,11 +1,13 @@
 namespace container::array;
 public import numeric::integral -;
+public import numeric::cast -;
 public import container::impl::farray;
 public import container::impl::darray;
 public import container::impl::string;
 public import container::impl::invguard;
 public import container::impl::util;
 public import meta m;
+public import meta::vararg va;
 
 public tsvaluetype struct extern "::pxcrt::bt_slice" "slice" {t} slice {
   public metafunction key_type size_t;
@@ -127,4 +129,46 @@ public threaded function extern "::pxcrt::memcmp_strref"
   int memcmp_strref(strref const& x, strref const& y);
 public threaded function extern "::pxcrt::memcmp_cstrref"
   int memcmp_cstrref(cstrref const& x, cstrref const& y);
+
+public threaded function {typ, tlist} farray{typ, m::size{tlist}}
+make_farray(expand(va::arg_decls_bycref{tlist}))
+{
+  farray{typ, m::size{tlist}} arr;
+  expand (a, i: va::arg_names{m::size{tlist}}) {
+    if (is_numeric{typ}) {
+      arr[i] = static_cast{typ}(a);
+    } else {
+      arr[i] = a;
+    }
+  }
+  return arr;
+}
+
+public threaded function {typ, tlist} darray{typ}
+make_darray(expand(va::arg_decls_bycref{tlist}))
+{
+  mutable arr = darray{typ}(m::size{tlist});
+  expand (a, i: va::arg_names{m::size{tlist}}) {
+    if (is_numeric{typ}) {
+      arr[i] = static_cast{typ}(a);
+    } else {
+      arr[i] = a;
+    }
+  }
+  return arr;
+}
+
+public threaded function {typ, tlist} vector{typ}
+make_vector(expand(va::arg_decls_bycref{tlist}))
+{
+  mutable arr = vector{typ}(m::size{tlist});
+  expand (a, i: va::arg_names{m::size{tlist}}) {
+    if (is_numeric{typ}) {
+      arr[i] = static_cast{typ}(a);
+    } else {
+      arr[i] = a;
+    }
+  }
+  return arr;
+}
 

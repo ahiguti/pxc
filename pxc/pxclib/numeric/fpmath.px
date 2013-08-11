@@ -51,21 +51,21 @@ private metafunction funcs_a1
 
 /* decls for "sin", "cos", ... */
 expand (fsym : funcs_a1) {
-  public threaded function extern "%" double fsym(double x);
+  public threaded function extern "numeric::%" double fsym(double x);
 }
 /* decls for "sinf", "cosf", ... */
 expand (fsym : m::map{funcs_a1, metafunction{x} m::concat{x, "f"}}) {
-  public threaded function extern "%" float fsym(float x);
+  public threaded function extern "numeric::%" float fsym(float x);
 }
 
 /* c++ defs for "sin", "sinf", ... */
 private metafunction emit_funcdefs
   m::concat{
     m::fold{
-      m::map{funcs_a1, metafunction{x} emit_funcdef_a1{x, "$f", double}},
+      m::map{funcs_a1, metafunction{x} emit_funcdef_a1{x, "", double}},
       m::concat, ""},
     m::fold{
-      m::map{funcs_a1, metafunction{x} emit_funcdef_a1{x, "f$f", float}},
+      m::map{funcs_a1, metafunction{x} emit_funcdef_a1{x, "f", float}},
       m::concat, ""}};
 private metafunction emit_funcdef_a1{f, fsuffix, typ}
   m::concat{
@@ -104,12 +104,7 @@ static inline bt_double modf_double(bt_double x, bt_double& ir)
 { return std::modf(x, &ir); }
 static inline bt_float modf_float(bt_float x, bt_float& ir)
 { return std::modf(x, &ir); }
-}; // namespace numeric
-namespace numeric$n {
-namespace fpmath$n {
-using namespace pxcrt;
 %{emit_funcdefs}%
-}; // namespace fpmath$n
-}; // namespace numeric$n
+}; // namespace numeric
 ;
 

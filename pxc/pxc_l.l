@@ -33,7 +33,6 @@ extern int count_newline(const char *str);
 "while"			{ return TOK_WHILE; }
 "do"			{ return TOK_DO; }
 "for"			{ return TOK_FOR; }
-"foreach"		{ return TOK_FOREACH; }
 "break"			{ return TOK_BREAK; }
 "continue"		{ return TOK_CONTINUE; }
 "return"		{ return TOK_RETURN; }
@@ -43,7 +42,6 @@ extern int count_newline(const char *str);
 "switch"		{ return TOK_SWITCH; }
 "case"			{ return TOK_CASE; }
 "function"		{ return TOK_FUNCTION; }
-"var"			{ return TOK_VAR; }
 "const"			{ return TOK_CONST; }
 "mutable"		{ return TOK_MUTABLE; }
 "typedef"		{ return TOK_TYPEDEF; }
