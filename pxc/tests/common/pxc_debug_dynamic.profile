@@ -1,4 +1,4 @@
-incdir=../pxclib:../pxclib_test:.
+incdir=../pxc_%{platform}:../pxc_generic:.
 generate_dynamic=1
 cflags=-rdynamic -g -O0 -Werror -Wall -Wno-unused -Wno-attribute
 # -fmudflapth

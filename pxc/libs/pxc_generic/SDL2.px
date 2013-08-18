@@ -1,0 +1,555 @@
+namespace SDL2;
+import common -;
+import exception -;
+import meta m;
+
+extern "cflags" "`sdl2-config --cflags`";
+extern "ldflags" "`sdl2-config --libs`";
+
+/* SDL_Init */
+
+public struct extern "SDL2::SDLContext" "nodefault"
+SDL(io::io const& sys, InitFlags flags) { }
+
+public tsvaluetype struct extern "Uint32" "extbitmask" InitFlags { }
+expand(sym : m::map{m::list{
+  "AUDIO", "VIDEO", "CDROM", "TIMER", "EVERYTHING"
+}, metafunction{x} m::concat{"SDL_INIT_", x}}) {
+  public extern "%" InitFlags sym;
+}
+
+/* SDL_Window */
+
+public function option{ptr{Window}}
+SDL_CreateWindow(SDL const& sdl, cstrref const& title, int x, int y,
+  int w, int h, WindowFlags f)
+{
+  ptr{Window} p = to_ptr{Window}(sdl);
+  option{ptr{Window}} r;
+  if (CreateWindow(*p, title, x, y, w, h, f) == 0) {
+    r.some = p;
+  }
+  return r;
+}
+
+public struct extern "SDL2::Window" "noncopyable"
+Window private(SDL const& sdl) { }
+
+public extern "%" int SDL_WINDOWPOS_UNDEFINED;
+
+public tsvaluetype struct extern "Uint32" "extbitmask" WindowFlags { }
+expand(sym : m::map{m::list{
+  "FULLSCREEN", "OPENGL", "SHOWN", "HIDDEN", "BORDERLESS", "RESIZABLE",
+  "MINIMIZED", "MAXIMIZED", "INPUT_GRABBED", "INPUT_FOCUS", "MOUSE_FOCUS",
+  "FULLSCREEN_DESKTOP"
+}, metafunction{x} m::concat{"SDL_WINDOW_", x}}) {
+  public extern "%" WindowFlags sym;
+}
+
+public function extern "SDL2::GetWindowSize" void
+SDL_GetWindowSize(SDL const& sdl, ptr{Window} const& wnd, int mutable& w,
+  int mutable& h);
+
+private function extern "SDL2::CreateWindow" int
+CreateWindow(Window mutable& wnd, cstrref const& title, int x, int y, int w,
+  int h, WindowFlags f);
+
+/* SDL_Renderer */
+
+public function option{ptr{Renderer}}
+SDL_CreateRenderer(SDL const& sdl, ptr{Window} const& wnd, int index,
+  RendererFlags f)
+{
+  ptr{Renderer} p = to_ptr{Renderer}(sdl);
+  option{ptr{Renderer}} r;
+  if (CreateRenderer(*p, *wnd, index, f) == 0) {
+    r.some = p;
+  }
+  return r;
+}
+
+public struct extern "SDL2::Renderer" "noncopyable"
+Renderer private (SDL const& sdl) { }
+
+public tsvaluetype struct extern "Uint32" "extbitmask" RendererFlags { }
+expand(sym : m::map{m::list{
+  "SOFTWARE", "ACCELERATED", "PRESENTVSYNC", "TARGETTEXTURE"
+}, metafunction{x} m::concat{"SDL_RENDERER_", x}}) {
+  public extern "%" RendererFlags sym;
+}
+
+public struct extern "SDL_Rect" Rect {
+  int x;
+  int y;
+  int w;
+  int h;
+}
+
+public function extern "SDL2::RenderClear" int
+SDL_RenderClear(SDL const& sdl, ptr{Renderer} const& rnd);
+public function extern "SDL2::RenderPresent" void
+SDL_RenderPresent(SDL const& sdl, ptr{Renderer} const& rnd);
+public function extern "SDL2::RenderCopy" int
+SDL_RenderCopy(SDL const& sdl, ptr{Renderer} const& rnd,
+  ptr{Texture} const& tx, Rect const& src, Rect const& dst);
+
+private function extern "SDL2::CreateRenderer" int
+CreateRenderer(Renderer mutable& rnd, Window const& wnd, int index,
+  RendererFlags f);
+
+/* SDL_Surface */
+
+public struct extern "SDL2::Surface" "noncopyable"
+Surface private (SDL const& sdl) { }
+
+public function option{ptr{Surface}} SDL_LoadBMP(SDL const& sdl,
+  cstrref const& filename)
+{
+  ptr{Surface} p = to_ptr{Surface}(sdl);
+  option{ptr{Surface}} r;
+  if (LoadBMP(*p, filename) == 0) {
+    r.some = p;
+  }
+  return r;
+}
+
+private function extern "SDL2::LoadBMP" int
+LoadBMP(Surface mutable& sur, cstrref const& filename);
+
+/* SDL_Texture */
+
+public function option{ptr{Texture}}
+SDL_CreateTextureFromSurface(SDL const& sdl, ptr{Renderer} const& rnd,
+  ptr{Surface} const& sur)
+{
+  ptr{Texture} p = to_ptr{Texture}(sdl);
+  option{ptr{Texture}} r;
+  if (CreateTextureFromSurface(*p, rnd, sur) == 0) {
+    r.some = p;
+  }
+  return r;
+}
+
+public struct extern "SDL2::Texture" "noncopyable"
+Texture private (SDL const& sdl) { }
+
+public function extern "SDL2::CreateTextureFromSurface" int
+CreateTextureFromSurface(Texture mutable& tx, ptr{Renderer} const& rnd,
+  ptr{Surface} const& sur);
+
+/* SDL_Event */
+
+public tsvaluetype struct extern "SDL_Event" Event { }
+
+public function extern "SDL2::PollEvent" bool
+SDL_PollEvent(SDL const& sdl, Event mutable& ev);
+
+public function extern "SDL2::Event_Type" EventType
+Event_Type(Event const& ev);
+public function extern "SDL2::Event_WindowEventID" WindowEventID
+Event_WindowEventID(Event const& ev);
+public function extern "SDL2::Event_WindowEventData1" int
+Event_WindowEventData1(Event const& ev);
+public function extern "SDL2::Event_WindowEventData2" int
+Event_WindowEventData2(Event const& ev);
+public function extern "SDL2::Event_KeyboardEventState" uchar
+Event_KeyboardEventState(Event const& ev);
+public function extern "SDL2::Event_KeyboardEventRepeat" uchar
+Event_KeyboardEventRepeat(Event const& ev);
+
+public tsvaluetype struct extern "SDL_EventType" "extenum" EventType { }
+expand(sym : m::map{m::list{
+  "WINDOWEVENT", "SYSWMEVENT", "KEYDOWN", "KEYUP", "QUIT"
+}, metafunction{x} m::concat{"SDL_", x}}) {
+  public extern "%" EventType sym;
+}
+
+public tsvaluetype struct extern "SDL_WindowEventID" "extenum"
+WindowEventID { }
+expand (sym : m::map{m::list{
+  "MOVED", "RESIZED"
+}, metafunction{x} m::concat{"SDL_WINDOWEVENT_", x}}) {
+  public extern "%" WindowEventID sym;
+}
+
+/* SDL_GLContext */
+
+public struct extern "SDL_GLattr" "extenum" GLattr { }
+public extern "SDL_GL_DOUBLEBUFFER" GLattr SDL_GL_DOUBLEBUFFER;
+
+public function option{ptr{GLContext}}
+SDL_GL_CreateContext(SDL const& sdl, ptr{Window} const& wnd)
+{
+  ptr{GLContext} p = to_ptr{GLContext}(sdl);
+  option{ptr{GLContext}} r;
+  if (GL_CreateContext(*p, *wnd) == 0) {
+    r.some = p;
+  }
+  return r;
+}
+
+public struct extern "SDL2::GLContext" "noncopyable"
+GLContext private (SDL const& sdl) { }
+
+public function extern "SDL2::GL_SetAttribute" void
+SDL_GL_SetAttribute(SDL const& sdl, GLattr attr, int value);
+public function extern "SDL2::GL_SwapWindow" void
+SDL_GL_SwapWindow(SDL const& sdl, ptr{Window} const& wnd);
+public function extern "SDL2::GL_SetSwapInterval" void
+SDL_GL_SetSwapInterval(SDL const& sdl, int v);
+
+private function extern "SDL2::GL_CreateContext" int
+GL_CreateContext(GLContext mutable& glctx, Window const& wnd);
+
+/* SDL_KeyboardState */
+
+public struct extern "SDL2::KeyboardState" "linear"
+KeyboardState(SDL const& sdl) { }
+
+public function extern "SDL2::KeyboardState_Key" uint
+KeyboardState_Key(KeyboardState const& ks, Scancode code);
+
+/* SDL_Scancode */
+
+public struct extern "SDL_Scancode" "extenum" Scancode { }
+expand (sym : m::map{m::list{
+  "UNKNOWN", "RIGHT", "LEFT", "DOWN", "UP", "ESCAPE", "SPACE"
+}, metafunction{x} m::concat{"SDL_SCANCODE_", x}}) {
+  public extern "%" Scancode sym;
+}
+
+/* SDL_log */
+
+public struct extern "int" "extenum" LogCategory { }
+expand (sym : m::map{m::list{
+  "APPLICATION", "ERROR", "ASSERT", "SYSTEM", "AUDIO", "VIDEO", "RENDER",
+  "INPUT", "TEST"
+}, metafunction{x} m::concat{"SDL_LOG_CATEGORY_", x}}) {
+  public extern "%" LogCategory sym;
+}
+
+public function extern "SDL2::Log" void SDL_Log(SDL const& sdl,
+  cstrref const& mess);
+public function extern "SDL2::LogInfo" void SDL_LogInfo(SDL const& sdl,
+  LogCategory cat, cstrref const& mess);
+public function extern "SDL2::LogWarn" void SDL_LogWarn(SDL const& sdl,
+  LogCategory cat, cstrref const& mess);
+public function extern "SDL2::LogError" void SDL_LogError(SDL const& sdl,
+  LogCategory cat, cstrref const& mess);
+
+/* timer */
+
+public function extern "SDL2::GetTicks" uint SDL_GetTicks(SDL const& sdl);
+public function extern "SDL2::Delay" void SDL_Delay(SDL const& sdl, uint ms);
+
+extern "types" inline
+#include <SDL.h>
+namespace SDL2 {
+using namespace pxcrt;
+
+struct SDLContext {
+  SDLContext(pxcio::io const& sys, Uint32 flags);
+  ~SDLContext();
+  SDLContext(SDLContext const& sdl);
+private:
+  SDLContext& operator =(SDLContext const& sdl);
+  static int init_count;
+};
+
+struct Window : private noncopyable {
+  Window(SDLContext const& sdl);
+  ~Window();
+  const SDLContext sdl;
+  SDL_Window *ptr;
+};
+
+struct Renderer : private noncopyable {
+  Renderer(SDLContext const& sdl);
+  ~Renderer();
+  const SDLContext sdl;
+  SDL_Renderer *ptr;
+};
+
+struct Surface : private noncopyable {
+  Surface(SDLContext const& sdl);
+  ~Surface();
+  const SDLContext sdl;
+  SDL_Surface *ptr;
+};
+
+struct Texture : private noncopyable {
+  Texture(SDLContext const& sdl);
+  ~Texture();
+  const SDLContext sdl;
+  SDL_Texture *ptr;
+};
+
+struct GLContext : private noncopyable {
+  GLContext(SDLContext const& sdl);
+  ~GLContext();
+  const SDLContext sdl;
+  SDL_GLContext ptr;
+};
+
+struct KeyboardState : private noncopyable {
+  KeyboardState(SDLContext const& sdl);
+  const Uint8 *keyboardstate;
+  int num;
+  const SDLContext sdl;
+private:
+};
+
+}; // namespace SDL2
+;
+
+extern "implementation" inline
+namespace SDL2 {
+using namespace pxcrt;
+
+int SDLContext::init_count = 0;
+
+SDLContext::SDLContext(pxcio::io const& sys, Uint32 flags)
+{
+  if (++init_count == 1) {
+    SDL_Init(flags);
+  }
+}
+
+SDLContext::~SDLContext()
+{
+  if (--init_count == 0) {
+    SDL_Quit();
+  }
+}
+
+SDLContext::SDLContext(SDLContext const& sdl)
+{
+  ++init_count;
+}
+
+Window::Window(SDLContext const& sdl)
+  : sdl(sdl), ptr(0)
+{
+}
+
+Window::~Window()
+{
+  if (ptr != 0) {
+    SDL_DestroyWindow(ptr);
+  }
+}
+
+bt_int CreateWindow(Window& wnd, cstrref const& title, bt_int x, bt_int y,
+  bt_int w, bt_int h, Uint32 f)
+{
+  PXCRT_ALLOCA_NTSTRING(title_nt, title);
+  wnd.ptr = SDL_CreateWindow(title_nt.get(), x, y, w, h, f);
+  return (wnd.ptr != 0) ? 0 : -1;
+}
+
+typedef rcptr< rcval<Window> > Window_ptr;
+
+void GetWindowSize(SDLContext const& sdl, Window_ptr const& wnd, int& w,
+  int& h)
+{
+  SDL_GetWindowSize(wnd->value$z.ptr, &w, &h);
+}
+
+Renderer::Renderer(SDLContext const& sdl)
+  : sdl(sdl), ptr(0)
+{
+}
+
+Renderer::~Renderer()
+{
+  if (ptr != 0) {
+    SDL_DestroyRenderer(ptr);
+  }
+}
+
+bt_int CreateRenderer(Renderer& rnd, Window const& wnd, int index, Uint32 f)
+{
+  rnd.ptr = SDL_CreateRenderer(wnd.ptr, index, f);
+  return (rnd.ptr != 0) ? 0 : -1;
+}
+
+Surface::Surface(SDLContext const& sdl)
+  : sdl(sdl), ptr(0)
+{
+}
+
+Surface::~Surface()
+{
+  if (ptr != 0) {
+    SDL_FreeSurface(ptr);
+  }
+}
+
+bt_int LoadBMP(Surface& sur, cstrref const& filename)
+{
+  PXCRT_ALLOCA_NTSTRING(filename_nt, filename);
+  sur.ptr = SDL_LoadBMP(filename_nt.get());
+  return (sur.ptr != 0) ? 0 : -1;
+}
+
+Texture::Texture(SDLContext const& sdl)
+  : sdl(sdl), ptr(0)
+{
+}
+
+Texture::~Texture()
+{
+  if (ptr != 0) {
+    SDL_DestroyTexture(ptr);
+  }
+}
+
+typedef rcptr< rcval<Renderer> > Renderer_ptr;
+typedef rcptr< rcval<Surface> > Surface_ptr;
+
+bt_int CreateTextureFromSurface(Texture& tx, Renderer_ptr const& rnd,
+  Surface_ptr const& sur)
+{
+  tx.ptr = SDL_CreateTextureFromSurface(rnd->value$z.ptr, sur->value$z.ptr);
+  return (tx.ptr != 0) ? 0 : -1;
+}
+
+typedef rcptr< rcval<Texture> > Texture_ptr;
+
+bt_int RenderClear(SDLContext const& sdl, Renderer_ptr const& rnd)
+{
+  return SDL_RenderClear(rnd->value$z.ptr);
+}
+
+void RenderPresent(SDLContext const& sdl, Renderer_ptr const& rnd)
+{
+  SDL_RenderPresent(rnd->value$z.ptr);
+}
+
+bt_int RenderCopy(SDLContext const& sdl, Renderer_ptr const& rnd,
+  Texture_ptr const& tx, SDL_Rect const& src, SDL_Rect const& dst)
+{
+  return SDL_RenderCopy(rnd->value$z.ptr, tx->value$z.ptr, &src, &dst);
+}
+
+GLContext::GLContext(SDLContext const& sdl)
+  : sdl(sdl), ptr(0)
+{
+}
+
+GLContext::~GLContext()
+{
+  if (ptr != 0) {
+    ::SDL_GL_DeleteContext(ptr);
+  }
+}
+
+bt_int GL_CreateContext(GLContext& glctx, Window const& wnd)
+{
+  glctx.ptr = SDL_GL_CreateContext(wnd.ptr);
+  return (glctx.ptr != 0) ? 0 : -1;
+}
+
+KeyboardState::KeyboardState(SDLContext const& sdl)
+  : sdl(sdl)
+{
+  keyboardstate = ::SDL_GetKeyboardState(&num);
+}
+
+bt_bool PollEvent(SDLContext const& sdl, SDL_Event& ev)
+{
+  return ::SDL_PollEvent(&ev);
+}
+
+void GL_SetAttribute(SDLContext const& sdl, SDL_GLattr attr,
+  bt_int value)
+{
+  ::SDL_GL_SetAttribute(attr, value);
+}
+
+void GL_SwapWindow(SDLContext const& sdl, Window_ptr const& wnd)
+{
+  ::SDL_GL_SwapWindow(wnd->value$z.ptr);
+}
+
+void GL_SetSwapInterval(SDLContext const& sdl, int v)
+{
+  ::SDL_GL_SetSwapInterval(v);
+}
+
+bt_uint GetTicks(SDLContext const& sdl)
+{
+  return ::SDL_GetTicks();
+}
+
+void Delay(SDLContext const& sdl, bt_uint ms)
+{
+  ::SDL_Delay(ms);
+}
+
+SDL_EventType Event_Type(SDL_Event const& e)
+{
+  return SDL_EventType(e.type);
+}
+
+SDL_WindowEventID Event_WindowEventID(SDL_Event const& e)
+{
+  return static_cast<SDL_WindowEventID>(e.window.event);
+}
+
+bt_int Event_WindowEventData1(SDL_Event const& e)
+{
+  return e.window.data1;
+}
+
+bt_int Event_WindowEventData2(SDL_Event const& e)
+{
+  return e.window.data2;
+}
+
+bt_uchar Event_KeyboardEventState(SDL_Event const& e)
+{
+  return e.key.state;
+}
+
+bt_uchar Event_KeyboardEventRepeat(SDL_Event const& e)
+{
+  return e.key.repeat;
+}
+
+bt_uint KeyboardState_Key(KeyboardState const& ks, SDL_Scancode key)
+{
+  if (key < ks.num) {
+    return ks.keyboardstate[key];
+  } else {
+    return 0;
+  }
+}
+
+void Log(SDLContext const& sdl, cstrref const& mess)
+{
+  PXCRT_ALLOCA_NTSTRING(mess_nt, mess);
+  SDL_Log("%s", mess_nt.get());
+}
+
+void LogInfo(SDLContext const& sdl, int cat, cstrref const& mess)
+{
+  PXCRT_ALLOCA_NTSTRING(mess_nt, mess);
+  SDL_LogInfo(cat, "%s", mess_nt.get());
+}
+
+void LogWarn(SDLContext const& sdl, int cat, cstrref const& mess)
+{
+  PXCRT_ALLOCA_NTSTRING(mess_nt, mess);
+  SDL_LogWarn(cat, "%s", mess_nt.get());
+}
+
+void LogError(SDLContext const& sdl, int cat, cstrref const& mess)
+{
+  PXCRT_ALLOCA_NTSTRING(mess_nt, mess);
+  SDL_LogError(cat, "%s", mess_nt.get());
+}
+
+}; // namespace SDL2
+;
+

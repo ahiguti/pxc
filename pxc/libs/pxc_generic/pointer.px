@@ -80,10 +80,12 @@ private metafunction check_pointer_downcast{tto, tfrom}
     m::error{"invalid pointer_downcast"}};
 
 extern "types" inline
+
 #include <string>
 #include <pthread.h>
 #include <errno.h>
 #include <unistd.h>
+
 #ifdef PXCRT_DBG_RC
 #define DBG_RC(x) x
 #else
@@ -105,13 +107,19 @@ extern "types" inline
 #define DBG_POOL(x)
 #endif
 
+#ifdef __APPLE__
+#define NO_LOCAL_POOL
+#endif
+
 #include <cstdlib>
 
 namespace pxcrt {
 
-extern __thread void *local_pool_blocks;
-
 void clear_local_pool();
+
+#ifndef NO_LOCAL_POOL
+
+extern __thread void *local_pool_blocks;
 
 template <size_t sz> struct local_pool {
   static void *allocate() {
@@ -151,6 +159,7 @@ private:
   enum { pool_size = 2000 };
   static __thread void *free_list;
 };
+
 template <size_t sz> __thread void *local_pool<sz>::free_list = 0;
 
 template <bool is_small> struct local_pool_allocator;
@@ -186,6 +195,18 @@ template <typename T> static inline void local_deallocate(const T *ptr) {
   local_pool_allocator<is_small>::template deallocate<sizeof(T)>(
     const_cast<T *>(ptr));
 }
+
+#else
+
+template <typename T> static inline T *local_allocate() {
+  return static_cast<T *>(malloc(sizeof(T)));
+}
+
+template <typename T> static inline void local_deallocate(const T *ptr) {
+  return free(const_cast<T *>(ptr));
+}
+
+#endif
 
 template <typename T> static inline T *allocate_single() {
   return reinterpret_cast<T *>(malloc(sizeof(T)));
@@ -580,6 +601,8 @@ namespace pxcrt {
 extern "implementation" inline
 namespace pxcrt {
 
+#ifndef NO_LOCAL_POOL
+
 __thread void *local_pool_blocks;
 
 void __attribute__((destructor(101))) clear_local_pool()
@@ -590,6 +613,14 @@ void __attribute__((destructor(101))) clear_local_pool()
     local_pool_blocks = next;
   }
 }
+
+#else
+
+void clear_local_pool()
+{
+}
+
+#endif
 
 }; // namespace pxcrt
 ;

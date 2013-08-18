@@ -771,12 +771,13 @@ static void compile_cxx_all(const parser_options& po,
   if (!po.profile.generate_dynamic) {
     genopt = "-lpthread";
   } else {
-    #ifdef __APPLE__
-    genopt = "-fPIC -undefined dynamic_lookup -bundle -bundle_loader "
-      + po.argv0 + " -lpthread";
-    #else
-    genopt = "-fPIC -shared -lpthread";
-    #endif
+    const strmap::const_iterator i = po.profile.mapval.find("platform");
+    if (i != po.profile.mapval.end() && i->second == "macos") {
+      genopt = "-fPIC -undefined dynamic_lookup -bundle -bundle_loader "
+	+ po.argv0 + " -lpthread";
+    } else {
+      genopt = "-fPIC -shared -lpthread";
+    }
   }
   /*
   #ifdef __APPLE__
@@ -892,7 +893,7 @@ static void compile_module_to_cc_srcs(const parser_options& po,
     const std::string tmp_fn = cc_filename + ".tmp";
     tmpfile_guard g(tmp_fn);
     mi_main.self_copts = coptions();
-    arena_compile(tmp_fn, mi_main.self_copts, gmain);
+    arena_compile(po.profile.mapval, tmp_fn, mi_main.self_copts, gmain);
     if (rename(tmp_fn.c_str(), cc_filename.c_str()) != 0) {
       arena_error_throw(0, "-:-: rename('%s', '%s') failed: errno=%d",
 	tmp_fn.c_str(), cc_filename.c_str(), errno);
@@ -901,14 +902,29 @@ static void compile_module_to_cc_srcs(const parser_options& po,
       /* copy cc file */
       std::string sfn = po.src_filename + ".gen/";
       mkdir_hier(sfn);
-      std::string::size_type delim = cc_filename.rfind('/');
-      assert(delim != cc_filename.npos);
-      sfn += cc_filename.substr(delim);
+      std::string f;
+      if (!mi_main.aux_filename.empty()) {
+	/* filename instead of namespace */
+	f = mi_main.aux_filename;
+	std::string::size_type delim = f.rfind('/');
+	if (delim != f.npos) {
+	  f = f.substr(delim);
+	}
+      } else {
+	f = mi_main.unique_namespace;
+      }
+      for (size_t i = 0; i < f.size(); ++i) {
+	if (f[i] == ':') {
+	  f[i] = '_';
+	}
+      }
+      /* note: filename uniqueness is not guaranteed */
+      sfn += f + ".cc";
       copy_file_atomic(cc_filename, sfn, false);
     }
   }
   /* compile to o */
-  {
+  if (!po.gen_cc) {
     const std::string cfn = get_cc_filename(po, mi_main);
     const std::string ofn = get_o_filename(po, mi_main);
     const std::string cflags_str = make_cxx_opts(
@@ -1106,12 +1122,38 @@ private:
   auto_fp afp;
 };
 
+static std::string subst_variables(const std::string& str,
+  const std::map<std::string, std::string>& m)
+{
+  /* find '%{foo}' from str */
+  std::string r;
+  for (size_t i = 0; i < str.size(); ++i) {
+    const char ch = str[i];
+    if (ch == '%' && i + 2 < str.size() && str[i + 1] == '{') {
+      size_t p = i + 2;
+      while (i + 1 < str.size() && str[i] != '}') {
+	++i;
+      }
+      if (str[i] == '}') {
+	std::string k = str.substr(p, i - p);
+	std::map<std::string, std::string>::const_iterator iter = m.find(k);
+	if (iter != m.end()) {
+	  r.insert(r.end(), iter->second.begin(), iter->second.end());
+	}
+	continue;
+      }
+    }
+    r.push_back(ch);
+  }
+  return r;
+}
+
 static void load_profile(parser_options& po)
 {
   if (po.verbose > 0) {
     fprintf(stderr, "loading profile %s\n", po.profile_name.c_str());
   }
-  const std::string pstr = read_file_content(po.profile_name, false);
+  const std::string pstr = read_file_content(po.profile_name, true);
   md5_context md5;
   md5.update(pstr);
   po.profile.md5sum = to_hexadecimal(md5.final());
@@ -1132,17 +1174,33 @@ static void load_profile(parser_options& po)
     }
   }
   strmap::const_iterator iter;
+  iter = po.profile.mapval.find("platform");
+  std::string platform;
+  if (iter == po.profile.mapval.end()) {
+    #if defined(__linux)
+    platform = "linux";
+    #elif defined(__APPLE__)
+    platform = "macos";
+    #else
+    platform = "posix";
+    #endif
+    po.profile.mapval["platform"] = platform;
+  }
   iter = po.profile.mapval.find("generate_dynamic");
   if (iter != po.profile.mapval.end() && atoi(iter->second.c_str()) != 0) {
     po.profile.generate_dynamic = true;
   }
   iter = po.profile.mapval.find("incdir");
-  const std::string incstr = iter != po.profile.mapval.end()
+  std::string incstr = iter != po.profile.mapval.end()
     ? iter->second : "";
+  incstr = subst_variables(incstr, po.profile.mapval);
   split_string(incstr, ':', po.profile.incdir);
   if (po.profile.incdir.empty()) {
-    po.profile.incdir.push_back("/usr/share/pxc/");
-    po.profile.incdir.push_back("/usr/local/share/pxc/");
+    po.profile.incdir.push_back("/usr/share/pxc_" + platform + "/");
+    po.profile.incdir.push_back("/usr/share/pxc_generic/");
+    po.profile.incdir.push_back("/usr/local/share/pxc_" + platform + "/");
+    po.profile.incdir.push_back("/usr/local/share/pxc_generic/");
+    po.profile.incdir.push_back("./" + platform + "/");
     po.profile.incdir.push_back(".");
   }
   iter = po.profile.mapval.find("cxx");
@@ -1212,6 +1270,9 @@ static int compile_and_execute(parser_options& po,
   if (!po.no_build && (!po.no_update || !file_exist(exe_fn))) {
     compile_modules_rec(po, ami, fn,
       po.profile.generate_dynamic ? generate_main_dl : generate_main_exe);
+  }
+  if (po.gen_cc && po.no_execute) {
+    return 0;
   }
   /* compile to exe or so */
   if (need_to_relink(po, ami, mi_main)) {
@@ -1402,8 +1463,12 @@ static int prepare_options(parser_options& po, int argc, char **argv)
   }
   if (po.profile_name.empty()) {
     po.profile_name = "/etc/pxc.profile";
-  } else if (po.profile_name.find('/') == po.profile_name.npos) {
-    po.profile_name = "/etc/" + po.profile_name + ".profile";
+  } else if (po.profile_name[0] != '/') {
+    #if 0
+    char pbuf[PATH_MAX] = { 0 };
+    getcwd(pbuf, sizeof(pbuf));
+    po.profile_name = std::string(pbuf) + "/" + po.profile_name;
+    #endif
   }
   if (!check_path_validity(po.work_dir)) {
     fprintf(stderr, "working directory contains an invalid character: '%s'\n",
@@ -1419,7 +1484,7 @@ static int prepare_options(parser_options& po, int argc, char **argv)
   return 0;
 }
 
-static int clean_workdir(const std::string& dn)
+static int clean_workdir(parser_options const& po, const std::string& dn)
 {
   if (dn.size() < 8 || dn.substr(dn.size() - 8) != ".pxcwork") {
     /* for safety */
@@ -1432,7 +1497,9 @@ static int clean_workdir(const std::string& dn)
     filelock_lockobj lock(dn + "_lock"); /* throws */
     unlink_recursive(dn); /* throws */
   } catch (const std::exception& e) {
-    fprintf(stderr, "%s", e.what());
+    if (po.verbose > 1) {
+      fprintf(stderr, "warning: %s", e.what());
+    }
   }
   return 0;
 }
@@ -1446,7 +1513,7 @@ static int cdriver_main(int argc, char **argv)
       return r;
     }
     if (po.clean_flag) {
-      r = clean_workdir(po.work_dir);
+      r = clean_workdir(po, po.work_dir);
       if (r != 0) {
 	return r;
       }

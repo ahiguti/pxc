@@ -1515,6 +1515,7 @@ expr_i *expr_metafdef::clone() const
 {
   expr_metafdef *cpy = new expr_metafdef(*this);
   cpy->metafdef_term = term(); /* clear cached term */
+  cpy->evaluated_term = term(); /* clear evaluated term */
   return cpy;
 }
 

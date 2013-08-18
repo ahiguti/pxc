@@ -1210,7 +1210,7 @@ struct expr_metafdef : public expr_i {
   attribute_e get_attribute() const { return attr; }
   void set_attribute(attribute_e a) { attr = a; }
   void define_const_symbols_one() {
-    if (sym[0] != '\0') {
+    if (has_name()) {
       symtbl_lexical->define_name(sym, uniqns, this, attr, 0);
     }
   }
@@ -1223,12 +1223,16 @@ struct expr_metafdef : public expr_i {
   std::string dump(int indent) const;
   expr_tparams *get_tparams() const { return block->tinfo.tparams; }
   expr_i *get_rhs() const { return block->stmts->head; }
+  bool has_name() const {
+    return sym[0] != '\0';
+  }
 public:
   const char *const sym;
   std::string uniqns;
   expr_block *block;
   attribute_e attr;
   term metafdef_term; /* caches metafdef_to_term() */
+  term evaluated_term; /* for named and noarg metafunctions only */
 };
 
 struct expr_struct : public expr_i {

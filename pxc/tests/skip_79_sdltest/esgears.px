@@ -1,0 +1,548 @@
+
+/* $Id: gears.c,v 1.2 1999/10/21 16:39:06 brianp Exp $ */
+
+/*
+ * 3-D gear wheels.  This program is in the public domain.
+ *
+ * Command line options:
+ *    -info      print GL implementation information
+ *
+ *
+ * Brian Paul
+ */
+
+/* Conversion to GLUT by Mark J. Kilgard */
+
+/*
+ * $Log: gears.c,v $
+ * Revision 1.2  1999/10/21 16:39:06  brianp
+ * added -info command line option
+ *
+ * Revision 1.1.1.1  1999/08/19 00:55:40  jtg
+ * Imported sources
+ *
+ * Revision 3.2  1999/06/03 17:07:36  brianp
+ * an extra quad was being drawn in front and back faces
+ *
+ * Revision 3.1  1998/11/03 02:49:10  brianp
+ * added fps output
+ *
+ * Revision 3.0  1998/02/14 18:42:29  brianp
+ * initial rev
+ *
+ */
+
+namespace esgears;
+import common -;
+import numeric::fpmath -;
+import SDL2 -;
+import GL::gl11 -;
+import io::time -;
+import meta m;
+
+private metafunction is_gles m::eq{m::profile{"platform"}, "android"};
+
+float const M_PI = 3.14159265;
+
+function void gear(float inner_radius, float outer_radius, float width,
+  int teeth_i, float tooth_depth)
+{
+  const teeth = static_cast{float}(teeth_i);
+  const r0 = inner_radius;
+  const r1 = outer_radius - tooth_depth / 2.0;
+  const r2 = outer_radius + tooth_depth / 2.0;
+
+  mutable da = float(2.0) * M_PI / teeth / 4.0;
+
+  glShadeModel(GL_FLAT);
+
+  glNormal3f(0.0, 0.0, 1.0);
+
+  vector{float} vec;
+  vector{float} nor;
+
+  /* draw front face */
+  for (int i : 0 .. teeth_i + 1) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
+    vec.push_back(r0 * cosf(angle));
+    vec.push_back(r0 * sinf(angle));
+    vec.push_back(width * 0.5);
+    vec.push_back(r1 * cosf(angle));
+    vec.push_back(r1 * sinf(angle));
+    vec.push_back(width * 0.5);
+    if (i < teeth_i) {
+      vec.push_back(r0 * cosf(angle));
+      vec.push_back(r0 * sinf(angle));
+      vec.push_back(width * 0.5);
+      vec.push_back(r1 * cosf(angle + da * 3.0));
+      vec.push_back(r1 * sinf(angle + da * 3.0));
+      vec.push_back(width * 0.5);
+    }
+  }
+  glEnableClientState(GL_VERTEX_ARRAY);
+  glVertexPointer(3, GL_FLOAT, 0, vec[0 .. vec.size()].to_untyped());
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, static_cast{GLsizei}(vec.size() / 3));
+  glDisableClientState(GL_VERTEX_ARRAY);
+  vec.clear();
+  /*
+  glBegin(GL_TRIANGLE_STRIP);
+  // glBegin(GL_QUAD_STRIP);
+  for (int i : 0 .. teeth_i + 1) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
+    glVertex3f(r0 * cosf(angle), r0 * sinf(angle), width * 0.5);
+    glVertex3f(r1 * cosf(angle), r1 * sinf(angle), width * 0.5);
+    if (i < teeth_i) {
+      glVertex3f(r0 * cosf(angle), r0 * sinf(angle), width * 0.5);
+      glVertex3f(r1 * cosf(angle + da * 3.0), r1 * sinf(angle + da * 3.0),
+	width * 0.5);
+    }
+  }
+  glEnd();
+  */
+
+  /* draw front sides of teeth */
+  da = M_PI * 2.0 / teeth / 4.0;
+  for (int i : 0 .. teeth_i) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
+    vec.push_back(r1 * cosf(angle));
+    vec.push_back(r1 * sinf(angle));
+    vec.push_back(width * 0.5);
+    vec.push_back(r2 * cosf(angle + da));
+    vec.push_back(r2 * sinf(angle + da));
+    vec.push_back(width * 0.5);
+    vec.push_back(r1 * cosf(angle + da * 3.0));
+    vec.push_back(r1 * sinf(angle + da * 3.0));
+    vec.push_back(width * 0.5);
+    vec.push_back(r2 * cosf(angle + da * 2.0));
+    vec.push_back(r2 * sinf(angle + da * 2.0));
+    vec.push_back(width * 0.5);
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glVertexPointer(3, GL_FLOAT, 0, vec[0 .. vec.size()].to_untyped());
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, static_cast{GLsizei}(vec.size() / 3));
+    glDisableClientState(GL_VERTEX_ARRAY);
+    vec.clear();
+  }
+  /*
+  glBegin(GL_QUADS);
+  da = M_PI * 2.0 / teeth / 4.0;
+  for (int i : 0 .. teeth_i) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
+    glVertex3f(r1 * cosf(angle), r1 * sinf(angle), width * 0.5);
+    glVertex3f(r2 * cosf(angle + da), r2 * sinf(angle + da), width * 0.5);
+    glVertex3f(r2 * cosf(angle + da * 2.0), r2 * sinf(angle + da * 2.0),
+      width * 0.5);
+    glVertex3f(r1 * cosf(angle + da * 3.0), r1 * sinf(angle + da * 3.0),
+      width * 0.5);
+  }
+  glEnd();
+  */
+
+  glNormal3f(0.0, 0.0, -1.0);
+
+  /* draw back face */
+  for (int i : 0 .. teeth_i + 1) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
+    vec.push_back(r1 * cosf(angle));
+    vec.push_back(r1 * sinf(angle));
+    vec.push_back(-width * 0.5);
+    vec.push_back(r0 * cosf(angle));
+    vec.push_back(r0 * sinf(angle));
+    vec.push_back(-width * 0.5);
+    if (i < teeth_i) {
+      vec.push_back(r1 * cosf(angle + da * 3.0));
+      vec.push_back(r1 * sinf(angle + da * 3.0));
+      vec.push_back(-width * 0.5);
+      vec.push_back(r0 * cosf(angle));
+      vec.push_back(r0 * sinf(angle));
+      vec.push_back(-width * 0.5);
+    }
+  }
+  glEnableClientState(GL_VERTEX_ARRAY);
+  glVertexPointer(3, GL_FLOAT, 0, vec[0 .. vec.size()].to_untyped());
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, static_cast{GLsizei}(vec.size() / 3));
+  glDisableClientState(GL_VERTEX_ARRAY);
+  vec.clear();
+  /*
+  glBegin(GL_QUAD_STRIP);
+  for (int i : 0 .. teeth_i + 1) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
+    glVertex3f(r1 * cosf(angle), r1 * sinf(angle), -width * 0.5);
+    glVertex3f(r0 * cosf(angle), r0 * sinf(angle), -width * 0.5);
+    if (i < teeth_i) {
+      glVertex3f(r1 * cosf(angle + da * 3.0), r1 * sinf(angle + da * 3.0),
+	-width * 0.5);
+      glVertex3f(r0 * cosf(angle), r0 * sinf(angle), -width * 0.5);
+    }
+  }
+  glEnd();
+  */
+
+  /* draw back sides of teeth */
+  da = M_PI * 2.0 / teeth / 4.0;
+  for (int i : 0 .. teeth_i) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
+    vec.push_back(r1 * cosf(angle + da * 3.0));
+    vec.push_back(r1 * sinf(angle + da * 3.0));
+    vec.push_back(-width * 0.5);
+    vec.push_back(r2 * cosf(angle + da * 2.0));
+    vec.push_back(r2 * sinf(angle + da * 2.0));
+    vec.push_back(-width * 0.5);
+    vec.push_back(r1 * cosf(angle));
+    vec.push_back(r1 * sinf(angle));
+    vec.push_back(-width * 0.5);
+    vec.push_back(r2 * cosf(angle + da));
+    vec.push_back(r2 * sinf(angle + da));
+    vec.push_back(-width * 0.5);
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glVertexPointer(3, GL_FLOAT, 0, vec[0 .. vec.size()].to_untyped());
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, static_cast{GLsizei}(vec.size() / 3));
+    glDisableClientState(GL_VERTEX_ARRAY);
+    vec.clear();
+  }
+  /*
+  glBegin(GL_QUADS);
+  da = M_PI * 2.0 / teeth / 4.0;
+  for (int i : 0 .. teeth_i) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
+    glVertex3f(r1 * cosf(angle + da * 3.0), r1 * sinf(angle + da * 3.0),
+      -width * 0.5);
+    glVertex3f(r2 * cosf(angle + da * 2.0), r2 * sinf(angle + da * 2.0),
+      -width * 0.5);
+    glVertex3f(r2 * cosf(angle + da), r2 * sinf(angle + da), -width * 0.5);
+    glVertex3f(r1 * cosf(angle), r1 * sinf(angle), -width * 0.5);
+  }
+  glEnd();
+  */
+
+  /* draw outward faces of teeth */
+  float cos0 = 1.0;
+  float sin0 = 0.0;
+  nor.push_back(cos0);
+  nor.push_back(sin0);
+  nor.push_back(0.0);
+  nor.push_back(cos0);
+  nor.push_back(sin0);
+  nor.push_back(0.0);
+  for (int i : 0 .. teeth_i) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
+    /* 0 */
+    vec.push_back(r1 * cosf(angle));
+    vec.push_back(r1 * sinf(angle));
+    vec.push_back(width * 0.5);
+    vec.push_back(r1 * cosf(angle));
+    vec.push_back(r1 * sinf(angle));
+    vec.push_back(-width * 0.5);
+    mutable u = r2 * cosf(angle + da) - r1 * cosf(angle);
+    mutable v = r2 * sinf(angle + da) - r1 * sinf(angle);
+    const len = sqrtf(u * u + v * v);
+    u /= len;
+    v /= len;
+    nor.push_back(v);
+    nor.push_back(-u);
+    nor.push_back(0.0);
+    nor.push_back(v);
+    nor.push_back(-u);
+    nor.push_back(0.0);
+    /* 1 */
+    vec.push_back(r2 * cosf(angle + da));
+    vec.push_back(r2 * sinf(angle + da));
+    vec.push_back(width * 0.5);
+    vec.push_back(r2 * cosf(angle + da));
+    vec.push_back(r2 * sinf(angle + da));
+    vec.push_back(-width * 0.5);
+    nor.push_back(cosf(angle));
+    nor.push_back(sinf(angle));
+    nor.push_back(0.0);
+    nor.push_back(cosf(angle));
+    nor.push_back(sinf(angle));
+    nor.push_back(0.0);
+    /* 2 */
+    vec.push_back(r2 * cosf(angle + da * 2.0));
+    vec.push_back(r2 * sinf(angle + da * 2.0));
+    vec.push_back(width * 0.5);
+    vec.push_back(r2 * cosf(angle + da * 2.0));
+    vec.push_back(r2 * sinf(angle + da * 2.0));
+    vec.push_back(-width * 0.5);
+    u = r1 * cosf(angle + da * 3.0) - r2 * cosf(angle + da * 2.0);
+    v = r1 * sinf(angle + da * 3.0) - r2 * sinf(angle + da * 2.0);
+    nor.push_back(v);
+    nor.push_back(-u);
+    nor.push_back(0.0);
+    nor.push_back(v);
+    nor.push_back(-u);
+    nor.push_back(0.0);
+    /* 3 */
+    vec.push_back(r1 * cosf(angle + da * 3.0));
+    vec.push_back(r1 * sinf(angle + da * 3.0));
+    vec.push_back(width * 0.5);
+    vec.push_back(r1 * cosf(angle + da * 3.0));
+    vec.push_back(r1 * sinf(angle + da * 3.0));
+    vec.push_back(-width * 0.5);
+    nor.push_back(cosf(angle));
+    nor.push_back(sinf(angle));
+    nor.push_back(0.0);
+    nor.push_back(cosf(angle));
+    nor.push_back(sinf(angle));
+    nor.push_back(0.0);
+  }
+  vec.push_back(r1 * cos0);
+  vec.push_back(r1 * sin0);
+  vec.push_back(width * 0.5);
+  vec.push_back(r1 * cos0);
+  vec.push_back(r1 * sin0);
+  vec.push_back(-width * 0.5);
+  glEnableClientState(GL_VERTEX_ARRAY);
+  glEnableClientState(GL_NORMAL_ARRAY);
+  glVertexPointer(3, GL_FLOAT, 0, vec[0 .. vec.size()].to_untyped());
+  glNormalPointer(GL_FLOAT, 0, nor[0 .. nor.size()].to_untyped());
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, static_cast{GLsizei}(vec.size() / 3));
+  glDisableClientState(GL_VERTEX_ARRAY);
+  glDisableClientState(GL_NORMAL_ARRAY);
+  vec.clear();
+  nor.clear();
+  /*
+  glBegin(GL_QUAD_STRIP);
+  for (int i : 0 .. teeth_i) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
+    glVertex3f(r1 * cosf(angle), r1 * sinf(angle), width * 0.5);
+    glVertex3f(r1 * cosf(angle), r1 * sinf(angle), -width * 0.5);
+    mutable u = r2 * cosf(angle + da) - r1 * cosf(angle);
+    mutable v = r2 * sinf(angle + da) - r1 * sinf(angle);
+    const len = sqrtf(u * u + v * v);
+    u /= len;
+    v /= len;
+    glNormal3f(v, -u, 0.0);
+    glVertex3f(r2 * cosf(angle + da), r2 * sinf(angle + da), width * 0.5);
+    glVertex3f(r2 * cosf(angle + da), r2 * sinf(angle + da), -width * 0.5);
+    glNormal3f(cosf(angle), sinf(angle), 0.0);
+    glVertex3f(r2 * cosf(angle + da * 2.0), r2 * sinf(angle + da * 2.0),
+      width * 0.5);
+    glVertex3f(r2 * cosf(angle + da * 2.0), r2 * sinf(angle + da * 2.0),
+      -width * 0.5);
+    u = r1 * cosf(angle + da * 3.0) - r2 * cosf(angle + da * 2.0);
+    v = r1 * sinf(angle + da * 3.0) - r2 * sinf(angle + da * 2.0);
+    glNormal3f(v, -u, 0.0);
+    glVertex3f(r1 * cosf(angle + da * 3.0), r1 * sinf(angle + da * 3.0),
+      width * 0.5);
+    glVertex3f(r1 * cosf(angle + da * 3.0), r1 * sinf(angle + da * 3.0),
+      -width * 0.5);
+    glNormal3f(cosf(angle), sinf(angle), 0.0);
+  }
+  float cos0 = 1.0;
+  float sin0 = 0.0;
+  glVertex3f(r1 * cos0, r1 * sin0, width * 0.5);
+  glVertex3f(r1 * cos0, r1 * sin0, -width * 0.5);
+  glEnd();
+  */
+
+  glShadeModel(GL_SMOOTH);
+
+  /* draw inside radius cylinder */
+  for (int i : 0 .. teeth_i + 1) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
+    nor.push_back(-cosf(angle));
+    nor.push_back(-sinf(angle));
+    nor.push_back(0.0);
+    nor.push_back(-cosf(angle));
+    nor.push_back(-sinf(angle));
+    nor.push_back(0.0);
+    vec.push_back(r0 * cosf(angle));
+    vec.push_back(r0 * sinf(angle));
+    vec.push_back(-width * 0.5);
+    vec.push_back(r0 * cosf(angle));
+    vec.push_back(r0 * sinf(angle));
+    vec.push_back(width * 0.5);
+  }
+  glEnableClientState(GL_VERTEX_ARRAY);
+  glEnableClientState(GL_NORMAL_ARRAY);
+  glVertexPointer(3, GL_FLOAT, 0, vec[0 .. vec.size()].to_untyped());
+  glNormalPointer(GL_FLOAT, 0, nor[0 .. nor.size()].to_untyped());
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, static_cast{GLsizei}(vec.size() / 3));
+  glDisableClientState(GL_VERTEX_ARRAY);
+  glDisableClientState(GL_NORMAL_ARRAY);
+  vec.clear();
+  nor.clear();
+  /*
+  glBegin(GL_QUAD_STRIP);
+  for (int i : 0 .. teeth_i + 1) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
+    glNormal3f(-cosf(angle), -sinf(angle), 0.0);
+    glVertex3f(r0 * cosf(angle), r0 * sinf(angle), -width * 0.5);
+    glVertex3f(r0 * cosf(angle), r0 * sinf(angle), width * 0.5);
+  }
+  glEnd();
+  */
+
+}
+
+float view_rotx = 20.0;
+float view_roty = 30.0;
+float view_rotz = 0.0;
+float gears_angle = 0.0;
+farray{uint, 3} gear_ids;
+
+bool enable_call_list = true;
+
+function void draw_gear(int i)
+{
+  const red = make_farray{float}(0.8, 0.1, 0.0, 1.0);
+  const green = make_farray{float}(0.0, 0.8, 0.2, 1.0);
+  const blue = make_farray{float}(0.2, 0.2, 1.0, 1.0);
+  if (i == 0) {
+    glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, red);
+    gear(1.0, 4.0, 1.0, 20, 0.7);
+  } else if (i == 1) {
+    glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, green);
+    gear(0.5, 2.0, 2.0, 10, 0.7);
+  } else if (i == 2) {
+    glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, blue);
+    gear(1.3, 2.0, 0.5, 10, 0.7);
+  }
+}
+
+function void draw_gear_save(int i)
+{
+  if (!enable_call_list) {
+    return;
+  }
+  gear_ids[i] = glGenLists(1);
+  glNewList(gear_ids[i], GL_COMPILE);
+  draw_gear(i);
+  glEndList();
+}
+
+function void draw_call_list(int i)
+{
+  if (!enable_call_list) {
+    draw_gear(i);
+  } else {
+    glCallList(gear_ids[i]);
+  }
+}
+
+function void draw_frame(SDL const& sdl)
+{
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+  glPushMatrix();
+  glRotatef(view_rotx, 1.0, 0.0, 0.0);
+  glRotatef(view_roty, 0.0, 1.0, 0.0);
+  glRotatef(view_rotz, 0.0, 0.0, 1.0);
+
+  glPushMatrix();
+  glTranslatef(-3.0, -2.0, 0.0);
+  glRotatef(gears_angle, 0.0, 0.0, 1.0);
+  draw_call_list(0);
+  glPopMatrix();
+
+  glPushMatrix();
+  glTranslatef(3.1, -2.0, 0.0);
+  glRotatef(gears_angle * static_cast{float}(-2.0) - 9.0, 0.0, 0.0, 1.0);
+  draw_call_list(1);
+  glPopMatrix();
+
+  glPushMatrix();
+  glTranslatef(-3.1, 4.2, 0.0);
+  glRotatef(gears_angle * static_cast{float}(-2.0) - 25.0, 0.0, 0.0, 1.0);
+  draw_call_list(2);
+  glPopMatrix();
+
+  glPopMatrix();
+}
+
+function void reshape(int width, int height)
+{ 
+  double h = static_cast{double}(height) / static_cast{double}(width);
+  glViewport(0, 0, static_cast{GLsizei}(width), static_cast{GLsizei}(height));
+  glMatrixMode(GL_PROJECTION);
+  glLoadIdentity();
+  glFrustum(-1.0, 1.0, -h, h, 5.0, 60.0);
+  glMatrixMode(GL_MODELVIEW);
+  glLoadIdentity();
+  glTranslatef(0.0, 0.0, -40.0);
+}
+
+function void init()
+{
+  const pos = make_farray{float}(5.0, 5.0, 10.0, 0.0);
+
+  glLightfv(GL_LIGHT0, GL_POSITION, pos);
+  glEnable(GL_CULL_FACE);
+  glEnable(GL_LIGHTING);
+  glEnable(GL_LIGHT0);
+  glEnable(GL_DEPTH_TEST);
+
+  /* make the gears */
+  for (int i : 0 .. 3) {
+    draw_gear_save(i);
+  }
+  glEnable(GL_NORMALIZE);
+}
+
+{
+  const sdl = SDL2::SDL(system, SDL_INIT_VIDEO);
+  const int init_w = 300;
+  const int init_h = 300;
+  sdl.GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+  const wnd = sdl.CreateWindow("PXC-SDL2Gears", 0, 0, init_w, init_h,
+    SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL).some;
+    // SDL_WINDOW_FULLSCREEN | SDL_WINDOW_OPENGL);
+  const glctx = sdl.GL_CreateContext(wnd);
+  sdl.GL_SetSwapInterval(0);
+
+  init();
+  reshape(init_w, init_h);
+
+  uint t0 = 0;
+  uint t1 = 0;
+  uint frames = 0;
+
+  bool nowait = false;
+
+  bool done = false;
+  while (!done) {
+    Event ev;
+    while (sdl.PollEvent(ev)) {
+      const etype = ev.Type();
+      if (etype == SDL_WINDOWEVENT) {
+	if (ev.WindowEventID() == SDL_WINDOWEVENT_RESIZED) {
+	  const w = ev.WindowEventData1();
+	  const h = ev.WindowEventData2();
+	  println(join{""}("w=", w, " h=", h));
+	  reshape(w, h);
+	}
+      } else if (etype == SDL_QUIT) {
+	done = true;
+	break;
+      }
+    }
+    draw_frame(sdl);
+    sdl.GL_SwapWindow(wnd);
+    {
+      ++frames;
+      uint t = sdl.GetTicks();
+      if (t - t0 >= 1000) {
+	const seconds = static_cast{float}(t - t0) / 1000.0;
+	const fps = static_cast{float}(frames) / seconds;
+	println(join{" "}(frames, "frames in", seconds, "seconds =",
+	  fps, "fps"));
+	t0 = t;
+	frames = 0;
+      }
+      if (t - t1 >= 10 || nowait) {
+	if (t - t1 >= 10) {
+	  t1 += 10;
+	}
+	gears_angle += 1.0;
+	const ks = SDL2::KeyboardState(sdl);
+	if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) { done = 1; }
+	if (ks.Key(SDL_SCANCODE_UP) != 0) { view_rotx += 1.0; }
+	if (ks.Key(SDL_SCANCODE_DOWN) != 0) { view_rotx -= 1.0; }
+	if (ks.Key(SDL_SCANCODE_LEFT) != 0) { view_roty += 1.0; }
+	if (ks.Key(SDL_SCANCODE_RIGHT) != 0) { view_roty -= 1.0; }
+	nowait = (ks.Key(SDL_SCANCODE_SPACE) != 0);
+      }
+    }
+  }
+}
+
