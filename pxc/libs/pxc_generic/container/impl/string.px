@@ -41,63 +41,6 @@ template <typename T> typename T::mapped_type get_elem_value_nochek(const T& c,
 }
 
 template <typename T>
-struct bt_slice {
-  typedef T mapped_type;
-  bt_slice() : v(0), len(0) { }
-  bt_slice(T *ptr, bt_size_t o) : v(ptr), len(o) { }
-  template <typename Tc> bt_slice(Tc& c) : v(c.rawarr()), len(c.size()) { }
-  template <typename Tc> bt_slice(Tc& c, bt_size_t o1, bt_size_t o2) {
-    if (o2 > c.size()) { o2 = c.size(); }
-    if (o1 > o2) { o1 = o2; }
-    v = c.rawarr() + o1;
-    len = o2 - o1;
-  }
-  bt_bool empty() const { return len == 0; }
-  bt_size_t size() const { return len; }
-  T get(bt_size_t i) const { return (i < len) ? v[i] : T(); } // TODO: defcon
-  void set(bt_size_t i, T value) const { if (i < len) v[i] = value; }
-  bt_size_t find(bt_size_t offset, T const& value) const {
-    return array_find(v, len, offset, value);
-  }
-  void next() {
-    if (len == 0) { pxcrt::throw_invalid_index(); }
-    ++v;
-    --len;
-  }
-  void pop_front(size_t i) {
-    if (len < i) { pxcrt::throw_invalid_index(); }
-    v += i;
-    len -= i;
-  }
-  void pop_back(size_t i) {
-    if (len < i) { pxcrt::throw_invalid_index(); }
-    len -= i;
-  }
-  T& operator [](bt_size_t idx) const {
-    if (idx >= len) { pxcrt::throw_invalid_index(); }
-    return v[idx];
-  }
-  T& operator *() const {
-    if (len == 0) { pxcrt::throw_invalid_index(); }
-    return *v;
-  }
-  T value_at(bt_size_t idx) const {
-    if (idx >= len) { pxcrt::throw_invalid_index(); }
-    return v[idx];
-  }
-  T deref_value() const {
-    if (len == 0) { pxcrt::throw_invalid_index(); }
-    return *v;
-  }
-  T *rawarr() const { return v; }
-private:
-  bt_slice& operator =(const bt_slice&); /* not allowed */
-private:
-  T *v;
-  bt_size_t len;
-};
-
-template <typename T>
 struct bt_cslice {
   typedef T mapped_type;
   bt_cslice() : v(0), len(0) { }
@@ -147,10 +90,75 @@ struct bt_cslice {
     return *v;
   }
   const T *rawarr() const { return v; }
+  bt_cslice<bt_uchar> to_untyped() const {
+    return bt_cslice<bt_uchar>(reinterpret_cast<const bt_uchar *>(v),
+      len * sizeof(T));
+  }
 private:
   bt_cslice& operator =(const bt_cslice&); /* not allowed */
 protected:
   const T *v;
+  bt_size_t len;
+};
+
+template <typename T>
+struct bt_slice {
+  typedef T mapped_type;
+  bt_slice() : v(0), len(0) { }
+  bt_slice(T *ptr, bt_size_t o) : v(ptr), len(o) { }
+  template <typename Tc> bt_slice(Tc& c) : v(c.rawarr()), len(c.size()) { }
+  template <typename Tc> bt_slice(Tc& c, bt_size_t o1, bt_size_t o2) {
+    if (o2 > c.size()) { o2 = c.size(); }
+    if (o1 > o2) { o1 = o2; }
+    v = c.rawarr() + o1;
+    len = o2 - o1;
+  }
+  bt_bool empty() const { return len == 0; }
+  bt_size_t size() const { return len; }
+  T get(bt_size_t i) const { return (i < len) ? v[i] : T(); } // TODO: defcon
+  void set(bt_size_t i, T value) const { if (i < len) v[i] = value; }
+  bt_size_t find(bt_size_t offset, T const& value) const {
+    return array_find(v, len, offset, value);
+  }
+  void next() {
+    if (len == 0) { pxcrt::throw_invalid_index(); }
+    ++v;
+    --len;
+  }
+  void pop_front(size_t i) {
+    if (len < i) { pxcrt::throw_invalid_index(); }
+    v += i;
+    len -= i;
+  }
+  void pop_back(size_t i) {
+    if (len < i) { pxcrt::throw_invalid_index(); }
+    len -= i;
+  }
+  T& operator [](bt_size_t idx) const {
+    if (idx >= len) { pxcrt::throw_invalid_index(); }
+    return v[idx];
+  }
+  T& operator *() const {
+    if (len == 0) { pxcrt::throw_invalid_index(); }
+    return *v;
+  }
+  T value_at(bt_size_t idx) const {
+    if (idx >= len) { pxcrt::throw_invalid_index(); }
+    return v[idx];
+  }
+  T deref_value() const {
+    if (len == 0) { pxcrt::throw_invalid_index(); }
+    return *v;
+  }
+  T *rawarr() const { return v; }
+  bt_cslice<bt_uchar> to_untyped() const {
+    return bt_cslice<bt_uchar>(reinterpret_cast<const bt_uchar *>(v),
+      len * sizeof(T));
+  }
+private:
+  bt_slice& operator =(const bt_slice&); /* not allowed */
+private:
+  T *v;
   bt_size_t len;
 };
 

@@ -1022,7 +1022,10 @@ static void emit_dunion_def_one(emit_context& em, const expr_dunion *ev,
       em.indent('b');
       em.puts("typedef ");
       emit_term(em, (*i)->get_texpr());
+#if 0
       em.puts(" __attribute__((may_alias)) ");
+#endif
+      em.puts(" ");
       (*i)->emit_symbol(em);
       em.puts("$ut;\n");
     }
@@ -1050,7 +1053,10 @@ static void emit_dunion_def_one(emit_context& em, const expr_dunion *ev,
       (*i)->emit_symbol(em);
       // emit_term(em, (*i)->get_texpr());
       em.puts("$ut)]");
+#if 0
       em.puts(" __attribute__((may_alias, __aligned__(__alignof__(");
+#endif
+      em.puts(" __attribute__((__aligned__(__alignof__(");
       (*i)->emit_symbol(em);
       em.puts("$ut))))");
       em.puts(";\n");
@@ -3247,7 +3253,7 @@ void emit_code(const std::string& dest_filename, expr_block *gl_block,
     if (gmain == generate_main_dl) {
       em.printf("int %s$cm()\n{\n", mainfn.c_str());
     } else if (gmain == generate_main_exe) {
-      em.puts("int main()\n{\n");
+      em.puts("int main(int argc, char **argv)\n{\n");
     }
     em.printf(" return pxcrt::main_nothrow(& %s$c);\n", mainfn.c_str());
     em.puts("}\n");

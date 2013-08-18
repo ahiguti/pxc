@@ -55,15 +55,17 @@ namespace pxcio {
 using namespace pxcrt;
 
 struct sockaddr_storage {
-  sockaddr_storage() : sto() { }
+  sockaddr_storage() : sto(), len() { }
   int get_family() const;
   bt_uint get_in_addr() const;
   bt_ushort get_in_port() const;
   ::sockaddr *get_sockaddr() { return reinterpret_cast< ::sockaddr *>(&sto); }
   const ::sockaddr *get_sockaddr() const
     { return reinterpret_cast<const ::sockaddr *>(&sto); }
-  socklen_t get_socklen() const { return sizeof(sto); }
+  socklen_t get_maxlen() const { return sizeof(sto); }
+  socklen_t get_len() const { return len; }
   ::sockaddr_storage sto;
+  socklen_t len;
 };
 
 struct addrinfo {
@@ -111,7 +113,8 @@ addrinfo::addrinfo(::pxcio::io const& iop, cstrref const& node,
   int err = 0;
   if (service.empty()) {
     hints.ai_flags |= AI_NUMERICSERV;
-    err = ::getaddrinfo(node_nt.get(), "0", &hints, &ai);
+    /* macosx segfaluts if "0" and AI_NUMERICSERV are supplied */
+    err = ::getaddrinfo(node_nt.get(), "4", &hints, &ai);
   } else {
     PXCRT_ALLOCA_NTSTRING(service_nt, service);
     err = ::getaddrinfo(node_nt.get(), service_nt.get(), &hints, &ai);
@@ -156,6 +159,7 @@ sockaddr_storage addrinfo::get_sockaddr() const
   sockaddr_storage r = sockaddr_storage();
   if (cur != 0) {
     memcpy(&r.sto, cur->ai_addr, cur->ai_addrlen);
+    r.len = cur->ai_addrlen;
   }
   return r;
 }

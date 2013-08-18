@@ -1,0 +1,173 @@
+namespace GL::base;
+import common -;
+import meta m;
+
+public tsvaluetype struct extern "GLenum" "extenum" GLenum { }
+public tsvaluetype struct extern "GLbitfield" "extbitmask" GLbitfield { }
+public tsvaluetype struct extern "GLsync" "noncopyable" GLsync { }
+public tsvaluetype struct extern "GLboolean" "extint" GLboolean { }
+public tsvaluetype struct extern "GLsizei" "extint" GLsizei { }
+public tsvaluetype struct extern "GLsizeiptr" "extint" GLsizeiptr { }
+public tsvaluetype struct extern "GLintptr" "extint" GLintptr { }
+public tsvaluetype struct extern "gl::debug_proc" debug_proc { }
+public tsvaluetype struct extern "gl::void_p" "noncopyable" void_p { }
+public tsvaluetype struct extern "gl::cvoid_p" "noncopyable" cvoid_p { }
+public tsvaluetype struct extern "gl::glvoid_pp" "noncopyable" glvoid_pp { }
+public tsvaluetype struct extern "gl::glcvoid_pp" "noncopyable" glcvoid_pp { }
+public tsvaluetype struct extern "gl::glcchar_pp" "noncopyable" glcchar_pp { }
+
+expand (s : m::list{m::list{"", m::eq{m::profile{"platform"}, "macos"}}}) {
+extern "ldflags" "-lGL -lm";
+extern "ldflags" "-framework OpenGL -lm";
+}
+
+extern "types" inline
+
+#ifdef __APPLE__
+#include <OpenGL/gl.h>
+#include <OpenGL/glext.h>
+#elif defined ANDROID
+#include <GLES/gl.h>
+#include <GLES/glext.h>
+#else
+#include <GL/gl.h>
+#include <GL/glext.h>
+#endif
+
+namespace gl {
+#ifdef GL_VERSION_4_3
+struct debug_proc { GLDEBUGPROC rawarr() const { return 0; } };
+#endif
+struct void_p { void *rawarr() const { return 0; } };
+struct cvoid_p { const void *rawarr() const { return 0; } };
+struct glvoid_pp { GLvoid **rawarr() const { return 0; } };
+struct glcvoid_pp { const GLvoid *const *rawarr() const { return 0; } };
+struct glcchar_pp { const GLchar *const *rawarr() const { return 0; } };
+
+};
+;
+
+private metafunction type_alist m::list{
+  /* m::list{str, type, wrapper} */
+  m::list{"v", void, 0},
+  m::list{"e", GLenum, 0},
+  m::list{"m", GLbitfield, 0},
+  m::list{"f", float, 0},
+  m::list{"d", double, 0},
+  m::list{"b", bool, 0},
+  m::list{"by", char, 0},
+  m::list{"uby", uchar, 0},
+  m::list{"s", short, 0},
+  m::list{"us", ushort, 0},
+  m::list{"i", int, 0},
+  m::list{"ui", uint, 0},
+  m::list{"l", ulong, 0},
+  m::list{"szi", GLsizei, 0},
+  m::list{"ip", GLintptr, 0},
+  m::list{"szip", GLsizeiptr, 0},
+  m::list{"fx", int, 0},
+  m::list{"cx", int, 0},
+  m::list{"DP", debug_proc, 0},
+  m::list{"sync", GLsync, 0},
+  m::list{"*", void_p, 2},
+  m::list{"v*", slice{uchar}, 1},
+  m::list{"e*", slice{GLenum}, 1},
+  m::list{"f*", slice{float}, 1},
+  m::list{"d*", slice{double}, 1},
+  m::list{"b*", slice{uchar}, 1},
+  m::list{"c*", slice{char}, 1},
+  m::list{"by*", slice{char}, 1},
+  m::list{"uby*", slice{uchar}, 1},
+  m::list{"s*", slice{short}, 1},
+  m::list{"us*", slice{ushort}, 1},
+  m::list{"i*", slice{int}, 1},
+  m::list{"ui*", slice{uint}, 1},
+  m::list{"l*", slice{long}, 1},
+  m::list{"ul*", slice{ulong}, 1},
+  m::list{"szi*", slice{GLsizei}, 1},
+  m::list{"fx*", slice{int}, 1},
+  m::list{"_*", cvoid_p, 2},
+  m::list{"_v*", cslice{uchar}, 1},
+  m::list{"_e*", cslice{GLenum}, 1},
+  m::list{"_f*", cslice{float}, 1},
+  m::list{"_d*", cslice{double}, 1},
+  m::list{"_b*", cslice{GLboolean}, 1},
+  m::list{"_c*", cslice{char}, 1},
+  m::list{"_by*", cslice{char}, 1},
+  m::list{"_uby*", cslice{uchar}, 1},
+  m::list{"_s*", cslice{short}, 1},
+  m::list{"_us*", cslice{ushort}, 1},
+  m::list{"_i*", cslice{int}, 1},
+  m::list{"_ui*", cslice{uint}, 1},
+  m::list{"_l*", cslice{long}, 1},
+  m::list{"_ul*", cslice{ulong}, 1},
+  m::list{"_szi*", cslice{GLsizei}, 1},
+  m::list{"_ip*", cslice{GLintptr}, 1},
+  m::list{"_szip*", cslice{GLsizeiptr}, 1},
+  m::list{"_fx*", cslice{int}, 1},
+  m::list{"v**", glvoid_pp, 2},
+  m::list{"_v*_*", glcvoid_pp, 2},
+  m::list{"_c*_*", glcchar_pp}, 2};
+
+public metafunction find_type{s} find_type_iter{s, 0, m::at{type_alist, 0}};
+private metafunction find_type_iter{s, i, ent}
+  m::cond{
+    m::eq{m::at{ent, 0}, s},
+    ent,
+    find_type_iter{s, m::add{i, 1}, m::at{type_alist, m::add{i, 1}}}};
+public metafunction ent_to_rettype{ent}
+  m::at1{find_type{m::at1{ent}}};
+public metafunction ent_to_argdefs{ent}
+  m::map{
+    m::slice{ent, 2},
+    metafunction{x} m::list{
+      m::at0{x}, /* name */
+      m::at1{find_type{m::at1{x}}}, /* type */
+      m::gt{m::at2{find_type{m::at1{x}}}, 0}, /* byref */
+      0}}; /* mutable */
+
+private metafunction cargdecl{cmd, j} m::concat{
+  m::cond{m::eq{j, 0}, "", ", "},
+  m::csymbol{m::at1{find_type{m::at1{m::at{cmd, m::add{j, 2}}}}}},
+  m::cond{
+    m::at2{find_type{m::at1{m::at{cmd, m::add{j, 2}}}}}, 
+    " const&", ""},
+  " ",
+  m::at0{m::at{cmd, m::add{j, 2}}}};
+private metafunction cargdecls{cmd}
+  m::fold{
+    m::map{
+      m::seq{0, m::sub{m::size{cmd}, 2}},
+      metafunction{j} cargdecl{cmd, j}},
+    m::concat,
+    ""};
+private metafunction cargexpr{cmd, j} m::concat{
+  m::cond{m::eq{j, 0}, "", ", "},
+  m::at0{m::at{cmd, m::add{j, 2}}},
+  m::cond{
+    m::at2{find_type{m::at1{m::at{cmd, m::add{j, 2}}}}}, 
+    ".rawarr()", ""}};
+private metafunction cargexprs{cmd}
+  m::fold{
+    m::map{
+      m::seq{0, m::sub{m::size{cmd}, 2}},
+      metafunction{j} cargexpr{cmd, j}},
+    m::concat,
+    ""};
+
+private metafunction emit_function_one{cmd}
+  m::concat{
+    "static inline ",
+    m::csymbol{ent_to_rettype{cmd}}, /* return type */
+    " ",
+    m::at0{cmd}, /* function symbol */
+    "(",
+    cargdecls{cmd}, /* arg decls */
+    ") { return ::",
+    m::at0{cmd}, /* function symbol */
+    "(",
+    cargexprs{cmd}, /* arguments */ 
+    "); }\n"};
+public metafunction emit_functions{cmds}
+  m::fold{m::map{cmds, emit_function_one}, m::concat, ""};
+

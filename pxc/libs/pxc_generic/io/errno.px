@@ -34,11 +34,18 @@ void io_set_errno(io const& sys, int e)
   errno = e;
 }
 
+#if defined(__linux) && !defined(ANDROID)
+#if (_POSIX_C_SOURCE >= 200112L || _XOPEN_SOURCE >= 600) && ! _GNU_SOURCE
+#define HAVE_XSI_STRERROR_R
+#endif
+#else
+#define HAVE_XSI_STRERROR_R
+#endif
+
 void errno_t_append_to_string(int err, bt_string& s)
 {
   char buf[257];
-  #if (_POSIX_C_SOURCE >= 200112L || _XOPEN_SOURCE >= 600 \
-    || defined(__APPLE__) || defined(__CYGWIN__)) && ! _GNU_SOURCE
+  #ifdef HAVE_XSI_STRERROR_R
   /* XSI version */
   int len = strerror_r(err, buf, 256);
   const char *p = buf;

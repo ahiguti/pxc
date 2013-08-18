@@ -922,7 +922,7 @@ static term eval_meta_seq(const term_list_range& tlev, eval_context& ectx,
 static term eval_meta_join(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
-  if (tlev.size() != 1) {
+  if (tlev.size() != 1 && tlev.size() != 2) {
     arena_error_throw(pos, "join: Invalid number of arguments");
     return term();
   }
@@ -934,6 +934,9 @@ static term eval_meta_join(const term_list_range& tlev, eval_context& ectx,
   const term_list& tl = *t.get_metalist();
   term_list rtl;
   for (term_list::const_iterator i = tl.begin(); i != tl.end(); ++i) {
+    if (tlev.size() == 2 && i != tl.begin()) {
+      rtl.push_back(tlev[1]);
+    }
     const term_list *const il = i->get_metalist();
     if (il == 0) {
       arena_error_throw(pos, "join: Invalid argument: %s",
@@ -1443,6 +1446,23 @@ static term eval_meta_csymbol(const term_list_range& tlev, eval_context& ectx,
   return term();
 }
 
+static term eval_meta_profile(const term_list_range& tlev, eval_context& ectx,
+  expr_i *pos)
+{
+  if (tlev.size() != 1) {
+    return term();
+  }
+  std::string k = meta_term_to_string(tlev[0], false);
+  if (cur_profile == 0) {
+    arena_error_throw(pos, "internal error: cur_profile");
+  }
+  std::map<std::string, std::string>::const_iterator i = cur_profile->find(k);
+  if (i != cur_profile->end()) {
+    return term(i->second);
+  }
+  return term("");
+}
+
 static term eval_meta_map(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
@@ -1720,6 +1740,7 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@gt", &eval_meta_gt },
   { "@lt", &eval_meta_lt },
   { "@csymbol", &eval_meta_csymbol },
+  { "@profile", &eval_meta_profile },
   { "@map", &eval_meta_map },
   { "@fold", &eval_meta_fold },
   { "@filter", &eval_meta_filter },

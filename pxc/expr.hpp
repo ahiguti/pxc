@@ -186,7 +186,8 @@ void arena_set_recursion_limit(size_t v);
 void arena_clear();
 void arena_append_topval(const std::list<expr_i *>& topval, bool is_main,
   imports_type& imports_r);
-void arena_compile(const std::string& dest_filename, coptions& copt_apnd,
+void arena_compile(const std::map<std::string, std::string>& prof_map,
+  const std::string& dest_filename, coptions& copt_apnd,
   generate_main_e gmain);
 char *arena_strdup(const char *str);
 char *arena_dequote_strdup(const char *str);

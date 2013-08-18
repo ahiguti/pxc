@@ -36,7 +36,7 @@ namespace sdl2gears;
 import common -;
 import numeric::fpmath -;
 import SDL2 -;
-import GL -;
+import GL::gl11 -;
 import io::time -;
 
 float const M_PI = 3.14159265;
@@ -204,7 +204,7 @@ function void draw(SDL const& sdl)
 function void reshape(int width, int height)
 { 
   double h = static_cast{double}(height) / static_cast{double}(width);
-  glViewport(0, 0, static_cast{int}(width), static_cast{int}(height));
+  glViewport(0, 0, static_cast{GLsizei}(width), static_cast{GLsizei}(height));
   glMatrixMode(GL_PROJECTION);
   glLoadIdentity();
   glFrustum(-1.0, 1.0, -h, h, 5.0, 60.0);
@@ -253,16 +253,18 @@ function void init()
   const int init_w = 500;
   const int init_h = 500;
   sdl.GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-  const wnd = SDL2::Window(sdl, "PXC-SDL2Gears", 0, 0, init_w, init_h,
-    SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
-    // SDL_WINDOW_FULLSCREEN | SDL_WINDOW_OPENGL);
-  const glctx = SDL2::GLContext(sdl, wnd);
+  const wnd = sdl.CreateWindow("PXC-SDL2Gears", 0, 0, init_w, init_h,
+    // SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL).some;
+    SDL_WINDOW_FULLSCREEN | SDL_WINDOW_OPENGL).some;
+  const glctx = sdl.GL_CreateContext(wnd);
+  sdl.GL_SetSwapInterval(0);
 
   init();
   reshape(init_w, init_h);
 
   uint t0 = 0;
   uint t1 = 0;
+  uint tprev = sdl.GetTicks();
   uint frames = 0;
 
   bool nowait = false;
@@ -297,11 +299,16 @@ function void init()
 	t0 = t;
 	frames = 0;
       }
+      gears_angle += static_cast{float}(t - tprev) / 10.0;
+      tprev = t;
+      if (gears_angle > 360.0) {
+	gears_angle -= 360.0;
+      }
       if (t - t1 >= 10 || nowait) {
 	if (t - t1 >= 10) {
 	  t1 += 10;
 	}
-	gears_angle += 1.0;
+	// gears_angle += 1.0;
 	const ks = SDL2::KeyboardState(sdl);
 	if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) { done = 1; }
 	if (ks.Key(SDL_SCANCODE_UP) != 0) { view_rotx += 1.0; }

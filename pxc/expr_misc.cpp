@@ -48,6 +48,7 @@ builtins_type builtins;
 errors_type cur_errors;
 std::string main_namespace;
 int compile_phase = 0;
+const std::map<std::string, std::string> *cur_profile = 0;
 size_t recursion_limit = 3000;
 nsaliases_type nsaliases;
 nsextends_type nsextends;
@@ -1283,7 +1284,7 @@ std::string term_tostr(const term& t, term_tostr_sort s)
       }
       break;
     default:
-      return "[" + ulong_to_string(tdef->get_esort()) + "]";
+      return "[unknown_esort " + ulong_to_string(tdef->get_esort()) + "]";
     }
   }
   symbol_table *const st_defined = tdef->symtbl_lexical;

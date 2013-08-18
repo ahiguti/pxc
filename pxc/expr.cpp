@@ -139,7 +139,7 @@ expr_i *expr_tparams_new(const char *fn, int line, const char *sym,
 
 expr_i *expr_te_local_chain_new(expr_i *te1, expr_i *te2)
 {
-  /* te1::te2expr{te2args, ...} => @local{te1, "te2expr", te2args, ...} */
+  /* te1::te2expr{te2args, ...} => meta::local{te1, "te2expr", te2args, ...} */
   expr_te *const tte2 = ptr_down_cast<expr_te>(te2);
   std::string s = escape_c_str_literal(tte2->nssym->sym);
   char *const te2expr = arena_strdup(s.c_str());
@@ -497,10 +497,12 @@ void arena_set_recursion_limit(size_t v)
   recursion_limit = v;
 }
 
-void arena_compile(const std::string& dest_filename, coptions& copt_apnd,
+void arena_compile(const std::map<std::string, std::string>& prof_map,
+  const std::string& dest_filename, coptions& copt_apnd,
   generate_main_e gmain)
 {
   compile_phase = 1;
+  cur_profile = &prof_map;
   arena_error_throw_pushed();
   /* chain topvals */
   expr_stmts *e = 0;
@@ -528,7 +530,6 @@ void arena_compile(const std::string& dest_filename, coptions& copt_apnd,
     #endif
   }
   /* compile */
-  fn_append_coptions(global, copt_apnd);
   compile_phase = 2;
   fn_compile(global, 0, false);
   arena_error_throw_pushed();
@@ -543,9 +544,11 @@ void arena_compile(const std::string& dest_filename, coptions& copt_apnd,
   fn_check_final(global);
   arena_error_throw_pushed();
   compile_phase = 7;
-  emit_code(dest_filename, gl_block, gmain);
+  fn_append_coptions(global, copt_apnd);
   arena_error_throw_pushed();
   compile_phase = 8;
+  emit_code(dest_filename, gl_block, gmain);
+  arena_error_throw_pushed();
 }
 
 void arena_clear()
@@ -569,6 +572,7 @@ void arena_clear()
   cur_errors.clear();
   main_namespace = "";
   compile_phase = 0;
+  cur_profile = 0;
   recursion_limit = 3000;
   nsaliases.clear();
   nsextends.clear();

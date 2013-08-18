@@ -1,0 +1,37 @@
+namespace sdltest;
+import common -;
+import SDL2 -;
+
+{
+  const sdl = SDL2::SDL(system, SDL_INIT_VIDEO);
+  const wnd = sdl.CreateWindow("sdltest", 0, 0, 640, 480,
+    SDL_WINDOW_RESIZABLE).some;
+  const rnd = sdl.CreateRenderer(wnd, -1, 0).some;
+  const sur = sdl.LoadBMP("test.bmp").some;
+  const tx = sdl.CreateTextureFromSurface(rnd, sur).some;
+  SDL2::Rect src;
+  src.x = 0;
+  src.y = 0;
+  src.w = 200;
+  src.h = 170;
+  mutable dst = src;
+  sdl.RenderCopy(rnd, tx, src, dst);
+  bool done = false;
+  int x = 0;
+  while (!done) {
+    Event ev;
+    while (sdl.PollEvent(ev)) {
+      if (ev.Type() == SDL_QUIT) {
+	done = true;
+	break;
+      }
+    }
+    sdl.RenderClear(rnd);
+    x = (x + 1) & 127;
+    dst.x = (x >= 64) ? 128 - x : x;
+    sdl.RenderCopy(rnd, tx, src, dst);
+    sdl.RenderPresent(rnd);
+    sdl.Delay(5);
+  }
+}
+

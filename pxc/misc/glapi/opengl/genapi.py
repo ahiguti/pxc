@@ -29,6 +29,8 @@ def convertType(s):
   elif s == 'GLsizei': return 'szi'
   elif s == 'GLintptr': return 'ip'
   elif s == 'GLsizeiptr': return 'szip'
+  elif s == 'GLfixed': return 'fx'
+  elif s == 'GLclampx': return 'cx'
   elif s == 'GLDEBUGPROC': return 'DP'
   elif s == 'GLsync': return 'sync'
   elif s == 'void *': return '*'
@@ -46,6 +48,7 @@ def convertType(s):
   elif s == 'GLint64 *': return 'l*'
   elif s == 'GLuint64 *': return 'ul*'
   elif s == 'GLsizei *': return 'szi*'
+  elif s == 'GLfixed *': return 'fx*'
   elif s == 'const void *': return '_*'
   elif s == 'const GLvoid *': return '_v*'
   elif s == 'const GLenum *': return '_e*'
@@ -62,6 +65,7 @@ def convertType(s):
   elif s == 'const GLsizei *': return '_szi*'
   elif s == 'const GLintptr *': return '_ip*'
   elif s == 'const GLsizeiptr *': return '_szip*'
+  elif s == 'const GLfixed *': return '_fx*'
   elif s == 'GLvoid **': return 'v**'
   elif s == 'const GLvoid *const*': return '_v*_*'
   elif s == 'const GLchar *const*': return '_c*_*'
@@ -71,9 +75,11 @@ def convertType(s):
 class PXOutputGenerator(reg.COutputGenerator):
   """ """
   def __init__(self,
+               apiname,
                errFile = sys.stderr,
                warnFile = sys.stderr,
                diagFile = sys.stdout):
+    self.apiname = apiname
     self.pxCmdBody = ''
     self.pxEnumBody = ''
     self.pxBitfieldBody = ''
@@ -126,7 +132,7 @@ class PXOutputGenerator(reg.COutputGenerator):
     return mstr;
   def beginFile(self, genOpts):
     reg.OutputGenerator.beginFile(self, genOpts)
-    s = "namespace GL::api;\npublic import meta;\n" \
+    s = "namespace GL::api_" + self.apiname + ";\npublic import meta;\n" \
       + "private metafunction L meta::list;\n"
     print(s, end='', file=self.outFile)
   def endFile(self):
@@ -171,15 +177,20 @@ class PXOutputGenerator(reg.COutputGenerator):
     self.curFeature = ''
     reg.OutputGenerator.endFeature(self)
 
-opt = reg.CGeneratorOptions(
-  filename="api.px", \
-  genFuncPointers=None, \
-  profile='*', \
-  apiname='gl', \
-  emitversions='.+') #, versions='.+')
-gen = PXOutputGenerator(diagFile=None)
-x = reg.Registry()
-x.setGenerator(gen)
-x.loadFile(file="./gl.xml")
-x.apiGen(opt)
+def genApi(apiname, profile):
+  opt = reg.CGeneratorOptions(
+    filename="api_" + apiname + ".px", \
+    genFuncPointers=None, \
+    profile=profile, \
+    apiname=apiname, \
+    emitversions='.+') #, versions='.+')
+  gen = PXOutputGenerator(diagFile=None, apiname=apiname)
+  x = reg.Registry()
+  x.setGenerator(gen)
+  x.loadFile(file="./gl.xml")
+  x.apiGen(opt)
+
+genApi('gl', '*');
+genApi('gles1', 'common');
+genApi('gles2', 'common');
 

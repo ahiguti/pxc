@@ -38,6 +38,7 @@
 #define DBG_METASYM(x)
 #define DBG_METACONCAT(x)
 #define DBG_METALOCAL(x)
+#define DBG_METACACHE(x)
 #define DBG_ATTR(x)
 #define DBG_TYPEOF(x)
 #define DBG_LAMBDA(x)
@@ -581,7 +582,7 @@ static term save_upvalue_bind(term tm,
   return tm;
 }
 
-term eval_apply(const term& tm, const term_list_range& args,
+static term eval_apply_internal(const term& tm, const term_list_range& args,
   bool targs_evaluated, eval_context& ectx, expr_i *pos)
 {
   /* tm is already evaluated */
@@ -663,6 +664,36 @@ term eval_apply(const term& tm, const term_list_range& args,
   return term();
 }
 
+term eval_apply(const term& tm, const term_list_range& args,
+  bool targs_evaluated, eval_context& ectx, expr_i *pos)
+{
+  #if 0
+  try {
+  #endif
+    return eval_apply_internal(tm, args, targs_evaluated, ectx, pos);
+  #if 0
+  } catch (const std::exception& e) {
+    std::string s = e.what();
+    if (s.size() > 0 && s[s.size() - 1] != '\n') {
+      s += "\n";
+    }
+    s += std::string(pos->fname) + ":" + ulong_to_string(pos->line)
+      + ": (while applying "
+      + term_tostr_human(tm)
+      + " . "
+      + term_tostr_human(term(args))
+      + ")\n";
+    if (ectx.tpbind != 0) {
+      s += std::string(pos->fname) + ":" + ulong_to_string(pos->line)
+	+ ": (where "
+	+ term_tostr_human(*ectx.tpbind)
+	+ ")\n";
+    }
+    throw std::runtime_error(s);
+  }
+  #endif
+}
+
 static term rebuild_term(const term *tptr, expr_i *texpr,
   const term_list_range& targs)
 {
@@ -729,7 +760,17 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
     {
       expr_metafdef *const ta = ptr_down_cast<expr_metafdef>(texpr);
       const term tmf = metafdef_to_term(ta, ectx, pos);
-      const term tmfev = eval_term_internal(tmf, false, ectx, pos);
+      term tmfev;
+      if (!ta->evaluated_term.is_null()) {
+	tmfev = ta->evaluated_term;
+      } else {
+	tmfev = eval_term_internal(tmf, false, ectx, pos);
+	DBG_METACACHE(fprintf(stderr, "ev %s\n", ta->sym));
+	if (ta->has_name() && ta->block->tinfo.tparams == 0) {
+	  /* named metafunction without params. cache the evaluated result. */
+	  ta->evaluated_term = tmfev;
+	}
+      }
       if (targs.size() != 0) {
 	return eval_apply(tmfev, targs, targs_evaluated, ectx, pos);
       } else {
@@ -886,7 +927,8 @@ term eval_term_internal(const term& tm, bool targs_evaluated,
     if (s == term_sort_lambda) {
       const term_lambda *lmd = tm.get_term_lambda();
       if (!lmd->upvalues.empty()) {
-	/* targs are evaluated again if targs_evaluated is true */
+	/* is it possible to fix that targs are evaluated again when
+	 * targs_evaluated is true? */
 	return save_upvalue_bind(tm, lmd->upvalues, ectx, pos);
       }
     }

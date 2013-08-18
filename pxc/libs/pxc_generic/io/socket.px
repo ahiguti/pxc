@@ -175,7 +175,7 @@ static int socket_acceptor_fd(int& err_r, sockaddr_storage const& addr,
       err_r = errno;
       break;
     }
-    e = ::bind(fd, addr.get_sockaddr(), addr.get_socklen());
+    e = ::bind(fd, addr.get_sockaddr(), addr.get_len());
     if (e != 0) {
       err_r = errno;
       break;
@@ -235,7 +235,7 @@ file accept_internal(int& err_r, socket_acceptor const& sfp,
   sockaddr_storage& addr_r)
 {
   socket_acceptor_rep& sf = sfp->value$z;
-  socklen_t len = addr_r.get_socklen();
+  socklen_t len = addr_r.get_maxlen();
   int fd = ::accept(sf.listener->value$z.get(), addr_r.get_sockaddr(), &len);
   if (fd < 0) {
     err_r = errno;
@@ -264,7 +264,7 @@ file connect_internal(int& err_r, socket_connector const& sfp)
 	break;
       }
     }
-    e = ::connect(fd, sf.addr.get_sockaddr(), sf.addr.get_socklen());
+    e = ::connect(fd, sf.addr.get_sockaddr(), sf.addr.get_len());
     if (e != 0) {
       err_r = errno;
       break;
