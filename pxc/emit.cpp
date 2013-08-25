@@ -3255,6 +3255,9 @@ void emit_code(const std::string& dest_filename, expr_block *gl_block,
     } else if (gmain == generate_main_exe) {
       em.puts("int main(int argc, char **argv)\n{\n");
     }
+    em.printf(" i$%s$init = 0;\n", mainfn.c_str());
+      /* namespace body will be executed more than once if main() is called
+       * more than once */
     em.printf(" return pxcrt::main_nothrow(& %s$c);\n", mainfn.c_str());
     em.puts("}\n");
     if (gmain == generate_main_dl) {

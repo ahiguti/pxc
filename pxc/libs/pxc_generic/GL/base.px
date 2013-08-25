@@ -10,11 +10,13 @@ public tsvaluetype struct extern "GLsizei" "extint" GLsizei { }
 public tsvaluetype struct extern "GLsizeiptr" "extint" GLsizeiptr { }
 public tsvaluetype struct extern "GLintptr" "extint" GLintptr { }
 public tsvaluetype struct extern "gl::debug_proc" debug_proc { }
-public tsvaluetype struct extern "gl::void_p" "noncopyable" void_p { }
-public tsvaluetype struct extern "gl::cvoid_p" "noncopyable" cvoid_p { }
-public tsvaluetype struct extern "gl::glvoid_pp" "noncopyable" glvoid_pp { }
-public tsvaluetype struct extern "gl::glcvoid_pp" "noncopyable" glcvoid_pp { }
-public tsvaluetype struct extern "gl::glcchar_pp" "noncopyable" glcchar_pp { }
+public tsvaluetype struct extern "gl::glvoid_p" glvoid_p { }
+public tsvaluetype struct extern "gl::glcvoid_p" glcvoid_p { }
+public tsvaluetype struct extern "gl::void_p" void_p { }
+public tsvaluetype struct extern "gl::cvoid_p" cvoid_p { }
+public tsvaluetype struct extern "gl::glvoid_pp" glvoid_pp { }
+public tsvaluetype struct extern "gl::glcvoid_pp" glcvoid_pp { }
+public tsvaluetype struct extern "gl::glcchar_pp" glcchar_pp { }
 
 expand (s : m::list{m::list{"", m::eq{m::profile{"platform"}, "macos"}}}) {
 extern "ldflags" "-lGL -lm";
@@ -22,6 +24,10 @@ extern "ldflags" "-framework OpenGL -lm";
 }
 
 extern "types" inline
+
+#ifndef GL_GLEXT_PROTOTYPES
+#define GL_GLEXT_PROTOTYPES
+#endif
 
 #ifdef __APPLE__
 #include <OpenGL/gl.h>
@@ -35,14 +41,45 @@ extern "types" inline
 #endif
 
 namespace gl {
+
 #ifdef GL_VERSION_4_3
 struct debug_proc { GLDEBUGPROC rawarr() const { return 0; } };
 #endif
+typedef GLvoid *glvoid_p;
+typedef const GLvoid *glcvoid_p;
+typedef void *void_p;
+typedef const void *cvoid_p;
+typedef GLvoid **glvoid_pp;
+typedef const GLvoid *const *glcvoid_pp;
+typedef const GLchar *const *glcchar_pp;
+/*
 struct void_p { void *rawarr() const { return 0; } };
 struct cvoid_p { const void *rawarr() const { return 0; } };
 struct glvoid_pp { GLvoid **rawarr() const { return 0; } };
 struct glcvoid_pp { const GLvoid *const *rawarr() const { return 0; } };
 struct glcchar_pp { const GLchar *const *rawarr() const { return 0; } };
+*/
+
+};
+;
+
+public function extern "gl::to_voidp" {t} void_p to_voidp(t const& x);
+public function extern "gl::to_cvoidp" {t} cvoid_p to_cvoidp(t const& x);
+public function extern "gl::to_glvoidp" {t} glvoid_p to_glvoidp(t const& x);
+public function extern "gl::to_glcvoidp" {t} glcvoid_p to_glcvoidp(t const& x);
+public function extern "gl::offset_to_glcvoidp" glcvoid_p
+  offset_to_glcvoidp(size_t x);
+
+extern "functions" inline
+namespace gl {
+using namespace pxcrt;
+
+template <typename T> void_p to_voidp(T const& x) { return x.rawarr(); }
+template <typename T> cvoid_p to_cvoidp(T const& x) { return x.rawarr(); }
+template <typename T> glvoid_p to_glvoidp(T const& x) { return x.rawarr(); }
+template <typename T> glcvoid_p to_glcvoidp(T const& x) { return x.rawarr(); }
+static inline glcvoid_p offset_to_glcvoidp(bt_size_t x)
+{ return reinterpret_cast<const void *>(x); }
 
 };
 ;
@@ -69,8 +106,8 @@ private metafunction type_alist m::list{
   m::list{"cx", int, 0},
   m::list{"DP", debug_proc, 0},
   m::list{"sync", GLsync, 0},
-  m::list{"*", void_p, 2},
-  m::list{"v*", slice{uchar}, 1},
+  m::list{"*", void_p, 0},
+  m::list{"v*", glvoid_p, 0},
   m::list{"e*", slice{GLenum}, 1},
   m::list{"f*", slice{float}, 1},
   m::list{"d*", slice{double}, 1},
@@ -86,8 +123,8 @@ private metafunction type_alist m::list{
   m::list{"ul*", slice{ulong}, 1},
   m::list{"szi*", slice{GLsizei}, 1},
   m::list{"fx*", slice{int}, 1},
-  m::list{"_*", cvoid_p, 2},
-  m::list{"_v*", cslice{uchar}, 1},
+  m::list{"_*", cvoid_p, 0},
+  m::list{"_v*", glcvoid_p, 0},
   m::list{"_e*", cslice{GLenum}, 1},
   m::list{"_f*", cslice{float}, 1},
   m::list{"_d*", cslice{double}, 1},
@@ -105,9 +142,9 @@ private metafunction type_alist m::list{
   m::list{"_ip*", cslice{GLintptr}, 1},
   m::list{"_szip*", cslice{GLsizeiptr}, 1},
   m::list{"_fx*", cslice{int}, 1},
-  m::list{"v**", glvoid_pp, 2},
-  m::list{"_v*_*", glcvoid_pp, 2},
-  m::list{"_c*_*", glcchar_pp}, 2};
+  m::list{"v**", glvoid_pp, 0},
+  m::list{"_v*_*", glcvoid_pp, 0},
+  m::list{"_c*_*", glcchar_pp}, 0};
 
 public metafunction find_type{s} find_type_iter{s, 0, m::at{type_alist, 0}};
 private metafunction find_type_iter{s, i, ent}

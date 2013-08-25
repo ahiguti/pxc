@@ -48,29 +48,38 @@ private metafunction funcs_a1
     "exp", "log", "log10", "sqrt",
     "ceil", "floor", "fabs"
   };
+private metafunction funcs_a2
+  m::list{
+    "pow", "fmod", "atan2"
+  };
+
+private metafunction check_fp{t}
+  m::cond{
+    m::or{m::eq{t, float}, m::eq{t, double}},
+    t,
+    m::error{"invalid type ", t}};
 
 /* decls for "sin", "cos", ... */
 expand (fsym : funcs_a1) {
-  public threaded function extern "numeric::%" double fsym(double x);
+public threaded function extern "numeric::%" {t} check_fp{t} fsym(t x);
 }
-/* decls for "sinf", "cosf", ... */
-expand (fsym : m::map{funcs_a1, metafunction{x} m::concat{x, "f"}}) {
-  public threaded function extern "numeric::%" float fsym(float x);
+expand (fsym : funcs_a2) {
+public threaded function extern "numeric::%" {t} check_fp{t} fsym(t x, t y);
 }
-
-/* c++ defs for "sin", "sinf", ... */
+/* c++ defs for "sin", ... */
 private metafunction emit_funcdefs
   m::concat{
-    m::fold{
-      m::map{funcs_a1, metafunction{x} emit_funcdef_a1{x, "", double}},
-      m::concat, ""},
-    m::fold{
-      m::map{funcs_a1, metafunction{x} emit_funcdef_a1{x, "f", float}},
-      m::concat, ""}};
-private metafunction emit_funcdef_a1{f, fsuffix, typ}
+    m::fold{m::map{funcs_a1, emit_funcdef_a1}, m::concat, ""},
+    m::fold{m::map{funcs_a2, emit_funcdef_a2}, m::concat, ""}
+  };
+private metafunction emit_funcdef_a1{f}
   m::concat{
-    "static inline ", m::csymbol{typ}, " ", f, fsuffix, "(", m::csymbol{typ},
-    " x) { return std::", f, "(x); }\n"};
+    "template <typename T> ", 
+    "static inline T ", f, "(T x) { return std::", f, "(x); }\n"};
+private metafunction emit_funcdef_a2{f}
+  m::concat{
+    "template <typename T> ",
+    "static inline T ", f, "(T x, T y) { return std::", f, "(x, y); }\n"};
 
 extern "types" inline
 #include <cmath>
