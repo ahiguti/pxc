@@ -1,0 +1,502 @@
+
+/* $Id: gears.c,v 1.2 1999/10/21 16:39:06 brianp Exp $ */
+
+/*
+ * 3-D gear wheels.  This program is in the public domain.
+ *
+ * Command line options:
+ *    -info      print GL implementation information
+ *
+ *
+ * Brian Paul
+ */
+
+/* Conversion to GLUT by Mark J. Kilgard */
+
+/*
+ * $Log: gears.c,v $
+ * Revision 1.2  1999/10/21 16:39:06  brianp
+ * added -info command line option
+ *
+ * Revision 1.1.1.1  1999/08/19 00:55:40  jtg
+ * Imported sources
+ *
+ * Revision 3.2  1999/06/03 17:07:36  brianp
+ * an extra quad was being drawn in front and back faces
+ *
+ * Revision 3.1  1998/11/03 02:49:10  brianp
+ * added fps output
+ *
+ * Revision 3.0  1998/02/14 18:42:29  brianp
+ * initial rev
+ *
+ */
+
+namespace sdl2gears_es;
+import common -;
+import numeric::fpmath -;
+import numeric::quaternion -;
+import SDL2 -;
+import GL::gl15 -;
+import io::time -;
+import meta m;
+private import container::array +; /* extends vector */
+
+private metafunction is_gles m::eq{m::profile{"platform"}, "android"};
+
+float const M_PI = 3.14159265;
+
+function void vector_push3(vector{float} mutable& vec, float a, float b,
+  float c)
+{
+  vec.push_back(a);
+  vec.push_back(b);
+  vec.push_back(c);
+}
+
+function uint make_gear_vbo(float inner_radius, float outer_radius,
+  float width, int teeth_i, float tooth_depth,
+  farray{size_t, 6} mutable& ofs_r)
+{
+  const teeth = static_cast{float}(teeth_i);
+  const r0 = inner_radius;
+  const r1 = outer_radius - tooth_depth / 2.0;
+  const r2 = outer_radius + tooth_depth / 2.0;
+
+  mutable da = float(2.0) * M_PI / teeth / 4.0;
+
+  vector{float} vec;
+
+  /* draw front face */
+  /* triangle strip */
+  for (int i : 0 .. teeth_i + 1) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
+    const z = width * 0.5;
+    vec.push3(r0 * cos(angle), r0 * sin(angle), z);
+    vec.push3(r1 * cos(angle), r1 * sin(angle), z);
+    if (i < teeth_i) {
+      vec.push3(r0 * cos(angle), r0 * sin(angle), z);
+      vec.push3(r1 * cos(angle + da * 3.0), r1 * sin(angle + da * 3.0), z);
+    }
+  }
+  ofs_r[0] = vec.size();
+
+  /* draw front sides of teeth */
+  /* triangles */
+  da = M_PI * 2.0 / teeth / 4.0;
+  for (int i : 0 .. teeth_i) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
+    const z = width * 0.5;
+    /* 0 */
+    vec.push3(r1 * cos(angle), r1 * sin(angle), z);
+    vec.push3(r2 * cos(angle + da), r2 * sin(angle + da), z);
+    vec.push3(r1 * cos(angle + da * 3.0), r1 * sin(angle + da * 3.0), z);
+    /* 1 */
+    vec.push3(r1 * cos(angle + da * 3.0), r1 * sin(angle + da * 3.0), z);
+    vec.push3(r2 * cos(angle + da), r2 * sin(angle + da), z);
+    vec.push3(r2 * cos(angle + da * 2.0), r2 * sin(angle + da * 2.0), z);
+  }
+  ofs_r[1] = vec.size();
+
+  /* draw back face */
+  /* triangle strip */
+  for (int i : 0 .. teeth_i + 1) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
+    const z = -width * 0.5;
+    vec.push3(r1 * cos(angle), r1 * sin(angle), z);
+    vec.push3(r0 * cos(angle), r0 * sin(angle), z);
+    if (i < teeth_i) {
+      vec.push3(r1 * cos(angle + da * 3.0), r1 * sin(angle + da * 3.0), z);
+      vec.push3(r0 * cos(angle), r0 * sin(angle), z);
+    }
+  }
+  ofs_r[2] = vec.size();
+
+  /* draw back sides of teeth */
+  /* triangles */
+  da = M_PI * 2.0 / teeth / 4.0;
+  for (int i : 0 .. teeth_i) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
+    const z = -width * 0.5;
+    /* 0 */
+    vec.push3(r1 * cos(angle + da * 3.0), r1 * sin(angle + da * 3.0), z);
+    vec.push3(r2 * cos(angle + da * 2.0), r2 * sin(angle + da * 2.0), z);
+    vec.push3(r1 * cos(angle), r1 * sin(angle), z);
+    /* 1 */
+    vec.push3(r1 * cos(angle), r1 * sin(angle), z);
+    vec.push3(r2 * cos(angle + da * 2.0), r2 * sin(angle + da * 2.0), z);
+    vec.push3(r2 * cos(angle + da), r2 * sin(angle + da), z);
+  }
+  ofs_r[3] = vec.size();
+
+  /* draw outward faces of teeth */
+  /* triangle strip */
+  float cos0 = 1.0;
+  float sin0 = 0.0;
+  for (int i : 0 .. teeth_i) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
+    const prev_angle = M_PI * 2.0 * static_cast{float}(i + teeth_i) / teeth;
+    const z = width * 0.5;
+    /* 0 */
+    vec.push3(cos(prev_angle), sin(prev_angle), 0.0); /* normal */
+    vec.push3(r1 * cos(prev_angle), r1 * sin(prev_angle), z); /* vertex */
+    vec.push3(cos(angle), sin(angle), 0.0);
+    vec.push3(r1 * cos(angle), r1 * sin(angle), -z);
+    mutable u = r2 * cos(angle + da) - r1 * cos(angle);
+    mutable v = r2 * sin(angle + da) - r1 * sin(angle);
+    const len = sqrt(u * u + v * v);
+    u /= len;
+    v /= len;
+    /* 1 */
+    vec.push3(v, -u, 0.0);
+    vec.push3(r2 * cos(angle + da), r2 * sin(angle + da), z);
+    vec.push3(v, -u, 0.0);
+    vec.push3(r2 * cos(angle + da), r2 * sin(angle + da), -z);
+    /* 2 */
+    vec.push3(cos(angle), sin(angle), 0.0);
+    vec.push3(r2 * cos(angle + da * 2.0), r2 * sin(angle + da * 2.0), z);
+    vec.push3(cos(angle), sin(angle), 0.0);
+    vec.push3(r2 * cos(angle + da * 2.0), r2 * sin(angle + da * 2.0), -z);
+    u = r1 * cos(angle + da * 3.0) - r2 * cos(angle + da * 2.0);
+    v = r1 * sin(angle + da * 3.0) - r2 * sin(angle + da * 2.0);
+    /* 3 */
+    vec.push3(v, -u, 0.0);
+    vec.push3(r1 * cos(angle + da * 3.0), r1 * sin(angle + da * 3.0), z);
+    vec.push3(v, -u, 0.0);
+    vec.push3(r1 * cos(angle + da * 3.0), r1 * sin(angle + da * 3.0), -z);
+  }
+  vec.push3(cos0, sin0, 0.0);
+  vec.push3(r1 * cos0, r1 * sin0, width * 0.5);
+  vec.push3(cos0, sin0, 0.0);
+  vec.push3(r1 * cos0, r1 * sin0, -width * 0.5);
+  ofs_r[4] = vec.size();
+
+  /* draw inside radius cylinder */
+  /* triangle strip */
+  for (int i : 0 .. teeth_i + 1) {
+    const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
+    vec.push3(-cos(angle), -sin(angle), 0.0); /* normal */
+    vec.push3(r0 * cos(angle), r0 * sin(angle), -width * 0.5); /* vertex */
+    vec.push3(-cos(angle), -sin(angle), 0.0);
+    vec.push3(r0 * cos(angle), r0 * sin(angle), width * 0.5);
+  }
+  ofs_r[5] = vec.size();
+
+  farray{uint, 1} bufs;
+  glGenBuffers(1, bufs[0 .. 1]);
+  glBindBuffer(GL_ARRAY_BUFFER, bufs[0]);
+  glBufferData(GL_ARRAY_BUFFER, static_cast{GLsizeiptr}(vec.size() * 4),
+    to_glcvoidp(vec), GL_STATIC_DRAW);
+  return bufs[0];
+}
+
+function void draw_gear_vbo(uint vbo_name, farray{size_t, 6} const& ofs)
+{
+  /* */
+  glEnableClientState(GL_VERTEX_ARRAY);
+  glBindBuffer(GL_ARRAY_BUFFER, vbo_name);
+  glShadeModel(GL_FLAT);
+  glNormal3f(0.0, 0.0, 1.0);
+  /* draw front face */
+  glVertexPointer(3, GL_FLOAT, 0, offset_to_glcvoidp(0));
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, static_cast{GLsizei}(ofs[0] / 3));
+  /* draw back face */
+  glVertexPointer(3, GL_FLOAT, 0, offset_to_glcvoidp(ofs[0] * 4));
+  glDrawArrays(GL_TRIANGLES, 0, static_cast{GLsizei}((ofs[1] - ofs[0]) / 3));
+  /* */
+  glNormal3f(0.0, 0.0, -1.0);
+  /* draw back face */
+  glVertexPointer(3, GL_FLOAT, 0, offset_to_glcvoidp(ofs[1] * 4));
+  glDrawArrays(GL_TRIANGLE_STRIP, 0,
+    static_cast{GLsizei}((ofs[2] - ofs[1]) / 3));
+  /* draw back sides of teeth */
+  glVertexPointer(3, GL_FLOAT, 0, offset_to_glcvoidp(ofs[2] * 4));
+  glDrawArrays(GL_TRIANGLES, 0, static_cast{GLsizei}((ofs[3] - ofs[2]) / 3));
+  /* */
+  glEnableClientState(GL_NORMAL_ARRAY);
+  /* draw outward faces of teeth */
+  glVertexPointer(3, GL_FLOAT, 24, offset_to_glcvoidp((ofs[3] + 3) * 4));
+  glNormalPointer(GL_FLOAT, 24, offset_to_glcvoidp(ofs[3] * 4));
+  glDrawArrays(GL_TRIANGLE_STRIP, 0,
+    static_cast{GLsizei}((ofs[4] - ofs[3]) / 6));
+  /* */
+  // glShadeModel(GL_SMOOTH);
+  /* draw inside radius cylinder */
+  glVertexPointer(3, GL_FLOAT, 24, offset_to_glcvoidp((ofs[4] + 3) * 4));
+  glNormalPointer(GL_FLOAT, 24, offset_to_glcvoidp(ofs[4] * 4));
+  glDrawArrays(GL_TRIANGLE_STRIP, 0,
+    static_cast{GLsizei}((ofs[5] - ofs[4]) / 6));
+  /* */
+  glDisableClientState(GL_NORMAL_ARRAY);
+  glDisableClientState(GL_VERTEX_ARRAY);
+}
+
+float gears_angle = 0.0;
+
+tsvaluetype struct gear_vbo {
+  uint name;
+  farray{size_t, 6} ofs;
+}
+
+farray{gear_vbo, 3} gear_vbos;
+
+function void init_gear_vbos()
+{
+  gear_vbos[0].name = make_gear_vbo(1.0, 4.0, 1.0, 20, 0.7, gear_vbos[0].ofs);
+  gear_vbos[1].name = make_gear_vbo(0.5, 2.0, 2.0, 10, 0.7, gear_vbos[1].ofs);
+  gear_vbos[2].name = make_gear_vbo(1.3, 2.0, 0.5, 10, 0.7, gear_vbos[2].ofs);
+}
+
+function void deinit_gear_vbos()
+{
+  for (int i : 0 .. 3) {
+    farray{uint, 1} a;
+    a[0] = gear_vbos[i].name;
+    glDeleteBuffers(1, a[0 .. 1]);
+  }
+}
+
+function void draw_gear_vbo_one(int i)
+{
+  const red = make_farray{float}(0.8, 0.1, 0.0, 1.0);
+  const green = make_farray{float}(0.0, 0.8, 0.2, 1.0);
+  const blue = make_farray{float}(0.2, 0.2, 1.0, 1.0);
+  if (i == 0) {
+    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, red);
+    draw_gear_vbo(gear_vbos[0].name, gear_vbos[0].ofs);
+  } else if (i == 1) {
+    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, green);
+    draw_gear_vbo(gear_vbos[1].name, gear_vbos[1].ofs);
+  } else if (i == 2) {
+    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, blue);
+    draw_gear_vbo(gear_vbos[2].name, gear_vbos[2].ofs);
+  }
+}
+
+function void draw_frame(SDL const& sdl, quaternion{float} const& view_angle)
+{
+  farray{float, 16} view_angle_arr = view_angle.to_matrix();
+
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+  glPushMatrix();
+  glMultMatrixf(view_angle_arr);
+
+  function void draw_n(int n, int i) {
+    glTranslatef(0.0, 0.0, -static_cast{float}(n - 1));
+    for (int j : 0 .. n) {
+      draw_gear_vbo_one(i);
+      if (j != n - 1) {
+	glTranslatef(0.0, 0.0, 2.0);
+      }
+    }
+  }
+
+  int n_dup = 10;
+  glPushMatrix();
+  glTranslatef(-3.0, -2.0, 0.0);
+  glRotatef(gears_angle, 0.0, 0.0, 1.0);
+  draw_n(n_dup, 0);
+  glPopMatrix();
+
+  glPushMatrix();
+  glTranslatef(3.1, -2.0, 0.0);
+  glRotatef(gears_angle * static_cast{float}(-2.0) - 9.0, 0.0, 0.0, 1.0);
+  draw_n(n_dup, 1);
+  glPopMatrix();
+
+  glPushMatrix();
+  glTranslatef(-3.1, 4.2, 0.0);
+  glRotatef(gears_angle * static_cast{float}(-2.0) - 25.0, 0.0, 0.0, 1.0);
+  draw_n(n_dup, 2);
+  glPopMatrix();
+
+  glPopMatrix();
+}
+
+function void compat_glFrustum(double left, double right, double bottom, 
+  double top, double near, double far)
+{
+  farray{float, 16} a;
+  a[0]  = static_cast{float}(near * 2.0 / (right - left));
+  a[5]  = static_cast{float}(near * 2.0 / (top - bottom));
+  a[8]  = static_cast{float}((right + left) / (right - left));
+  a[9]  = static_cast{float}((top + bottom) / (top - bottom));
+  a[10] = static_cast{float}(-(far + near) / (far - near));
+  a[11] = static_cast{float}(-1.0);
+  a[14] = static_cast{float}(-(far * near * 2.0) / (far - near));
+  glMultMatrixf(a);
+}
+
+function void reshape(int width, int height)
+{ 
+  double h = static_cast{double}(height) / static_cast{double}(width);
+  glViewport(0, 0, static_cast{GLsizei}(width), static_cast{GLsizei}(height));
+  glMatrixMode(GL_PROJECTION);
+  glLoadIdentity();
+  compat_glFrustum(-1.0, 1.0, -h, h, 5.0, 60.0);
+  glMatrixMode(GL_MODELVIEW);
+  glLoadIdentity();
+  glTranslatef(0.0, 0.0, -40.0);
+}
+
+function void init_gl()
+{
+  const pos = make_farray{float}(5.0, 5.0, 10.0, 0.0);
+
+  glLightfv(GL_LIGHT0, GL_POSITION, pos);
+  glEnable(GL_CULL_FACE);
+  glEnable(GL_LIGHTING);
+  glEnable(GL_LIGHT0);
+  glEnable(GL_DEPTH_TEST);
+
+  /* make the gears */
+  init_gear_vbos();
+  glEnable(GL_NORMALIZE);
+}
+
+{
+  size_t const mu0 = mallinfo_in_use();
+  const sdl = SDL2::SDL(system, SDL_INIT_VIDEO);
+  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu0=", mu0));
+  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu1=", mallinfo_in_use()));
+  int init_w = 300;
+  int init_h = 300;
+  sdl.GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+  const wnd = sdl.CreateWindow("PXC-SDL2Gears", 0, 0, init_w, init_h,
+    SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL).some;
+    // SDL_WINDOW_FULLSCREEN | SDL_WINDOW_OPENGL);
+  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu2=", mallinfo_in_use()));
+  sdl.GetWindowSize(wnd, init_w, init_h);
+  const glctx = sdl.GL_CreateContext(wnd);
+  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu3=", mallinfo_in_use()));
+  sdl.GL_SetSwapInterval(0);
+
+  init_gl();
+  reshape(init_w, init_h);
+  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu4=", mallinfo_in_use()));
+
+  uint t0 = 0;
+  uint t1 = 0;
+  uint tprev = sdl.GetTicks();
+  uint frames = 0;
+  quaternion{float} view_angle = quaternion{float}(1.0, 0.0, 0.0, 0.0);
+
+  metafunction ticks_t farray{uint, 5};
+  ticks_t ticks;
+  ticks_t ticks_sum;
+  for (size_t i, uint mutable e : ticks) {
+    e = tprev;
+  }
+  function void save_ticks(size_t idx) {
+    const prev_tick = ticks[idx == 0 ? ticks.size() - 1 : idx - 1];
+    mutable& cur_tick = ticks[idx];
+    cur_tick = sdl.GetTicks();
+    ticks_sum[idx] += cur_tick - prev_tick;
+  }
+
+  bool done = false;
+  bool paused = false;
+  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu5=", mallinfo_in_use()));
+  function void rotate(float x, float y, float z, float angle) {
+    const q = quaternion_from_axis_angle{float}(x, y, z,
+      angle * M_PI / 180.0);
+    view_angle = view_angle.multiply(q);
+    view_angle.normalize();
+  }
+  while (!done) {
+    save_ticks(0);
+    Event ev;
+    while (sdl.PollEvent(ev)) {
+      const etype = ev.type;
+      if (etype == SDL_WINDOWEVENT) {
+	if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
+	  const w = ev.window.data1;
+	  const h = ev.window.data2;
+	  sdl.LogWarn(SDL_LOG_CATEGORY_TEST,
+	    join{""}("resized w=", w, " h=", h));
+	  reshape(w, h);
+	}
+      } else if (etype == SDL_FINGERMOTION) {
+	const dx = ev.tfinger.dx * 500.0;
+	const dy = ev.tfinger.dy * 500.0;
+	rotate(1.0, 0.0, 0.0, -dy);
+	rotate(0.0, 1.0, 0.0, -dx);
+      } else if (etype == SDL_MULTIGESTURE) {
+	sdl.LogWarn(SDL_LOG_CATEGORY_TEST,
+	  join{""}("multigesture dTheta=", ev.mgesture.dTheta,
+	    " dDist=", ev.mgesture.dDist));
+      } else if (etype == SDL_APP_WILLENTERBACKGROUND) {
+	sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("paused"));
+	paused = true;
+      } else if (etype == SDL_APP_DIDENTERFOREGROUND) {
+	sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("resumed"));
+	paused = false;
+	int w;
+	int h;
+	sdl.GetWindowSize(wnd, w, h);
+	reshape(w, h);
+      } else if (etype == SDL_QUIT) {
+	done = true;
+	break;
+      }
+    }
+    if (paused) {
+      sdl.Delay(100);
+      continue;
+    }
+    save_ticks(1);
+    {
+      draw_frame(sdl, view_angle);
+      save_ticks(2);
+      ++frames;
+      uint t = sdl.GetTicks();
+      if (t - t0 >= 1000) {
+	const seconds = static_cast{float}(t - t0) / 1000.0;
+	const fps = static_cast{float}(frames) / seconds;
+	sdl.LogWarn(SDL_LOG_CATEGORY_TEST,
+	  join{" "}(frames, "frames in", seconds, "seconds =", fps, "fps"));
+	sdl.LogWarn(SDL_LOG_CATEGORY_TEST,
+	  join{" "}("ticks: ", ticks_sum));
+	ticks_sum = ticks_t();
+	t0 = t;
+	frames = 0;
+      }
+      gears_angle += static_cast{float}(t - tprev) / 20.0;
+      gears_angle = fmod(gears_angle, 360.0);
+      tprev = t;
+      if (t - t1 >= 10) {
+	if (t - t1 >= 10) {
+	  t1 += 10;
+	}
+	const ks = SDL2::KeyboardState(sdl);
+	if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) { done = 1; }
+	if (ks.Key(SDL_SCANCODE_UP) != 0) { rotate(1.0, 0.0, 0.0, 2.0); }
+	if (ks.Key(SDL_SCANCODE_DOWN) != 0) { rotate(1.0, 0.0, 0.0, -2.0); }
+	if (ks.Key(SDL_SCANCODE_LEFT) != 0) { rotate(0.0, 1.0, 0.0, 2.0); }
+	if (ks.Key(SDL_SCANCODE_RIGHT) != 0) { rotate(0.0, 1.0, 0.0, -2.0); }
+      }
+    }
+    save_ticks(3);
+    sdl.GL_SwapWindow(wnd);
+    save_ticks(4);
+  }
+  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu6=", mallinfo_in_use()));
+  deinit_gear_vbos();
+  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu7=", mallinfo_in_use()));
+  /*
+  io::process::io_exit(io::system, 0);
+  */
+}
+
+function extern "pxcrt::mallinfo_in_use" size_t mallinfo_in_use();
+extern "implementation" inline
+#include <malloc.h>
+namespace pxcrt {
+bt_size_t mallinfo_in_use()
+{
+  struct mallinfo mi = ::mallinfo();
+  return mi.uordblks;
+}
+};
+;

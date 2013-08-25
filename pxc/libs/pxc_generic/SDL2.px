@@ -139,32 +139,109 @@ CreateTextureFromSurface(Texture mutable& tx, ptr{Renderer} const& rnd,
 
 /* SDL_Event */
 
-public tsvaluetype struct extern "SDL_Event" Event { }
+public tsvaluetype struct extern "SDL_Event" Event {
+  /* union */
+  EventType const type;
+  CommonEvent const common;
+  WindowEvent const window;
+  KeyboardEvent const key;
+  TextEditingEvent const edit;
+  TextInputEvent const text;
+  MouseMotionEvent const motion;
+  MouseButtonEvent const button;
+  MouseWheelEvent const wheel;
+  JoyAxisEvent const jaxis;
+  JoyBallEvent const jball;
+  JoyHatEvent const jhat;
+  JoyButtonEvent const jbutton;
+  JoyDeviceEvent const jdevice;
+  ControllerAxisEvent const caxis;
+  ControllerButtonEvent const cbutton;
+  ControllerDeviceEvent const cdevice;
+  QuitEvent const quit;
+  UserEvent const user;
+  SysWMEvent const syswm;
+  TouchFingerEvent const tfinger;
+  MultiGestureEvent const mgesture;
+  DollarGestureEvent const dgesture;
+  DropEvent const drop;
+}
+public tsvaluetype struct extern "SDL_CommonEvent" CommonEvent {
+  EventType const type;
+  uint const timestamp;
+}
+public tsvaluetype struct extern "SDL_WindowEvent" WindowEvent {
+  EventType const type;
+  uint const timestamp;
+  uint const windowID;
+  WindowEventID const event;
+  int const data1;
+  int const data2;
+}
+public tsvaluetype struct extern "SDL_KeyboardEvent" KeyboardEvent { }
+public tsvaluetype struct extern "SDL_TextEditingEvent" TextEditingEvent { }
+public tsvaluetype struct extern "SDL_TextInputEvent" TextInputEvent { }
+public tsvaluetype struct extern "SDL_MouseMotionEvent" MouseMotionEvent { }
+public tsvaluetype struct extern "SDL_MouseButtonEvent" MouseButtonEvent { }
+public tsvaluetype struct extern "SDL_MouseWheelEvent" MouseWheelEvent { }
+public tsvaluetype struct extern "SDL_JoyAxisEvent" JoyAxisEvent { }
+public tsvaluetype struct extern "SDL_JoyBallEvent" JoyBallEvent { }
+public tsvaluetype struct extern "SDL_JoyHatEvent" JoyHatEvent { }
+public tsvaluetype struct extern "SDL_JoyButtonEvent" JoyButtonEvent { }
+public tsvaluetype struct extern "SDL_JoyDeviceEvent" JoyDeviceEvent { }
+public tsvaluetype struct extern "SDL_ControllerAxisEvent"
+ControllerAxisEvent { }
+public tsvaluetype struct extern "SDL_ControllerButtonEvent"
+ControllerButtonEvent { }
+public tsvaluetype struct extern "SDL_ControllerDeviceEvent"
+ControllerDeviceEvent { }
+public tsvaluetype struct extern "SDL_QuitEvent" QuitEvent { }
+public tsvaluetype struct extern "SDL_UserEvent" UserEvent { }
+public tsvaluetype struct extern "SDL_SysWMEvent" SysWMEvent { }
+public tsvaluetype struct extern "SDL_TouchFingerEvent" TouchFingerEvent {
+  EventType const type;
+  uint const timestamp;
+  float x;
+  float y;
+  float dx;
+  float dy;
+  float pressure;
+}
+public tsvaluetype struct extern "SDL_MultiGestureEvent" MultiGestureEvent {
+  EventType const type;
+  uint const timestamp;
+  float dTheta;
+  float dDist;
+  float x;
+  float y;
+  ushort numFingers;
+}
+public tsvaluetype struct extern "SDL_DollarGestureEvent"
+DollarGestureEvent { }
+public tsvaluetype struct extern "SDL_DropEvent" DropEvent { }
 
 public function extern "SDL2::PollEvent" bool
 SDL_PollEvent(SDL const& sdl, Event mutable& ev);
 
-public function extern "SDL2::Event_Type" EventType
-Event_Type(Event const& ev);
-public function extern "SDL2::Event_WindowEventID" WindowEventID
-Event_WindowEventID(Event const& ev);
-public function extern "SDL2::Event_WindowEventData1" int
-Event_WindowEventData1(Event const& ev);
-public function extern "SDL2::Event_WindowEventData2" int
-Event_WindowEventData2(Event const& ev);
-public function extern "SDL2::Event_KeyboardEventState" uchar
-Event_KeyboardEventState(Event const& ev);
-public function extern "SDL2::Event_KeyboardEventRepeat" uchar
-Event_KeyboardEventRepeat(Event const& ev);
-
-public tsvaluetype struct extern "SDL_EventType" "extenum" EventType { }
+public tsvaluetype struct extern "Uint32" /* SDL_EventType */ "extenum"
+EventType { }
 expand(sym : m::map{m::list{
-  "WINDOWEVENT", "SYSWMEVENT", "KEYDOWN", "KEYUP", "QUIT"
+  "QUIT", "APP_TERMINATING", "APP_LOWMEMORY", "APP_WILLENTERBACKGROUND",
+  "APP_DIDENTERBACKGROUND", "APP_WILLENTERFOREGROUND",
+  "APP_DIDENTERFOREGROUND", "WINDOWEVENT", "SYSWMEVENT", "KEYDOWN", "KEYUP",
+  "TEXTEDITING", "TEXTINPUT", "MOUSEMOTION", "MOUSEBUTTONDOWN",
+  "MOUSEBUTTONUP", "MOUSEWHEEL", "JOYAXISMOTION", "JOYBALLMOTION",
+  "JOYHATMOTION", "JOYBUTTONDOWN", "JOYBUTTONUP", "JOYDEVICEADDED",
+  "JOYDEVICEREMOTED", "CONTROLLERAXISMOTION", "CONTROLLERBUTTONDOWN",
+  "CONTROLLERBUTTONUP", "CONTROLLERDEVICEADDED", "CONTROLLERDEVICEREMOVED",
+  "CONTROLLERDEVICEREMAPPED", "FINGERDOWN", "FINGERUP", "FINGERMOTION",
+  "DOLLARGESTURE", "DOLLARRECORD", "MULTIGESTURE", "CLIPBOARDUPDATE",
+  "DROPFILE", "USEREVENT", "LASTEVENT"
 }, metafunction{x} m::concat{"SDL_", x}}) {
   public extern "%" EventType sym;
 }
 
-public tsvaluetype struct extern "SDL_WindowEventID" "extenum"
+public tsvaluetype struct extern "Uint8" /* SDL_WindowEventID */ "extenum"
 WindowEventID { }
 expand (sym : m::map{m::list{
   "MOVED", "RESIZED"

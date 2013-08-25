@@ -3,7 +3,16 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- unsafe/safe
+
+- SDL: mainを複数回呼ばれた場合はmainの名前空間の本体だけを複数回実行
+  (done)
+
+- SDL: undef SDL_ANDROID_BLOCK_ON_PAUSE でないと端末回転させると固まる
+  (done)
+
 - SDLActivity.javaのflipEGL() eglWaitNativeとeglWaitGL削除
+  (done)
 
 - to_untyped()どうするか決めよ
   cslice{uchar}だとstrict aliasing ruleに反する
@@ -1908,6 +1917,7 @@ thread-local pool allocator
 
 
 ---------------------------------------------------------------------
+Python
 
 pxc_python
   function {t} void register_class()
@@ -1927,4 +1937,21 @@ struct node {
 struct object_pool {
   vector{strong{ptr{weak{node}}}} pool;
 }
+
+---------------------------------------------------------------------
+SDL2 on Android
+
+- SDL: 端末回転させると固まるのは、pause状態だとSDLThreadは
+  Android_ResumeSem待ちで止まり、onDestroyが投げたQUITイベントを拾え
+  ないから。SDL_ANDROID_BLOCK_ON_PAUSEが0だとおきない。
+- SDL: SDL_ANDROID_BLOCK_ON_PAUSEを0にすると回転で固まらないが、
+  激しくリーク。
+- SDL: そもそも回転させるとonDestroyが呼ばれるのもおかしい。
+  http://developer.android.com/guide/topics/resources/runtime-changes.html
+  AndroidManifest.xmlの<activity>にandroid:configChangesを設定すると
+  configuraionの変化でonDestroyが呼ばれなくなる
+- SDL: 方針:
+  - onDestroyは回転などで呼ばれないようにする
+  - SDL_ANDROID_BLOCK_ON_PAUSEは0にする
+  - onDestroyが呼ばれてmainが終了するときには_exit()してしまう。
 

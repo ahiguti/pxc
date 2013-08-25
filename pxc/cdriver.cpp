@@ -64,6 +64,7 @@ struct parser_options {
   std::string src_filename;
   profile_settings profile;
   std::string work_dir;
+  std::string gen_cc_dir;
   int verbose;
   bool clean_flag;
   bool no_build;
@@ -71,13 +72,12 @@ struct parser_options {
   bool no_execute;
   bool no_realpath;
   bool show_out;
-  bool gen_cc;
   bool gen_out;
   std::string argv0;
   time_t argv0_ctime;
   parser_options() : verbose(0), clean_flag(false), no_build(false),
     no_update(false), no_execute(false), no_realpath(false),
-    show_out(false), gen_cc(false), gen_out(false),
+    show_out(false), gen_out(false),
     argv0_ctime(0) { }
 };
 
@@ -827,6 +827,13 @@ static std::string get_expected_namespace_for_file(std::string fn)
   return fn;
 }
 
+static int compare_file_contents(const std::string& f0, const std::string& f1)
+{
+  const std::string s0 = file_exist(f0) ? read_file_content(f0, true) : "";
+  const std::string s1 = file_exist(f1) ? read_file_content(f1, true) : "";
+  return s0 == s1 ? 0 : 1;
+}
+
 static void copy_file_atomic(const std::string& src, const std::string& dst,
   bool set_exec)
 {
@@ -898,9 +905,10 @@ static void compile_module_to_cc_srcs(const parser_options& po,
       arena_error_throw(0, "-:-: rename('%s', '%s') failed: errno=%d",
 	tmp_fn.c_str(), cc_filename.c_str(), errno);
     }
-    if (po.gen_cc) {
+    if (!po.gen_cc_dir.empty()) {
       /* copy cc file */
-      std::string sfn = po.src_filename + ".gen/";
+      std::string sfn = po.gen_cc_dir;
+      // po.src_filename + ".gen/";
       mkdir_hier(sfn);
       std::string f;
       if (!mi_main.aux_filename.empty()) {
@@ -920,11 +928,13 @@ static void compile_module_to_cc_srcs(const parser_options& po,
       }
       /* note: filename uniqueness is not guaranteed */
       sfn += f + ".cc";
-      copy_file_atomic(cc_filename, sfn, false);
+      if (compare_file_contents(cc_filename, sfn) != 0) {
+	copy_file_atomic(cc_filename, sfn, false);
+      }
     }
   }
   /* compile to o */
-  if (!po.gen_cc) {
+  if (po.gen_cc_dir.empty()) {
     const std::string cfn = get_cc_filename(po, mi_main);
     const std::string ofn = get_o_filename(po, mi_main);
     const std::string cflags_str = make_cxx_opts(
@@ -1271,7 +1281,7 @@ static int compile_and_execute(parser_options& po,
     compile_modules_rec(po, ami, fn,
       po.profile.generate_dynamic ? generate_main_dl : generate_main_exe);
   }
-  if (po.gen_cc && po.no_execute) {
+  if (!po.gen_cc_dir.empty() && po.no_execute) {
     return 0;
   }
   /* compile to exe or so */
@@ -1414,8 +1424,9 @@ static int prepare_options(parser_options& po, int argc, char **argv)
       } else if ((s == "--work-dir" || s == "-w") && i + 1 < argc) {
 	++i;
 	po.work_dir = argv[i];
-      } else if (s == "--generate-cc") {
-	po.gen_cc = true;
+      } else if (s == "--generate-cc" && i + 1 < argc) {
+	++i;
+	po.gen_cc_dir = argv[i];
       } else if (s == "--generate" || s == "-g") {
 	po.gen_out = true;
       } else if (s == "--no-build" || s == "-nb") {

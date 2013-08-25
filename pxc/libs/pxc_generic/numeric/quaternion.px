@@ -1,0 +1,74 @@
+namespace numeric::quaternion;
+public import numeric::integral *;
+public import numeric::fp *;
+public import numeric::cast *;
+public import numeric::fpmath *;
+public import container::array *;
+
+tsvaluetype struct {t}
+quaternion(t w0, t x0, t y0, t z0) {
+  t w = w0;
+  t x = x0;
+  t y = y0;
+  t z = z0;
+}
+
+threaded function {t} void
+quaternion_normalize(quaternion{t} mutable& a)
+{
+  const len2 = a.w*a.w + a.x*a.x + a.y*a.y + a.z*a.z;
+  if (fabs(len2) > 0.0001 && fabs(len2 - 1.0) > 0.0001) {
+    const len = sqrt(len2);
+    a.w /= len;
+    a.x /= len;
+    a.y /= len;
+    a.z /= len;
+  }
+}
+
+threaded function {t} quaternion{t}
+quaternion_multiply(quaternion{t} const& a, quaternion{t} const& b)
+{
+  return quaternion{t}(
+    a.w*b.w - a.x*b.x - a.y*b.y - a.z*b.z,
+    a.w*b.x + a.x*b.w + a.y*b.z - a.z*b.y,
+    a.w*b.y + a.y*b.w + a.z*b.x - a.x*b.z,
+    a.w*b.z + a.z*b.w + a.x*b.y - a.y*b.x);
+}
+
+threaded function {t} quaternion{t}
+quaternion_conjugate(quaternion{t} const& a)
+{
+  return quaternion{t}(a.w, -a.x, -a.y, -a.z);
+}
+
+threaded function {t} quaternion{t}
+quaternion_from_axis_angle(t x, t y, t z /* normalized */, t angle /* rad */)
+{
+  const s = sin(angle * 0.5);
+  const c = cos(angle * 0.5);
+  return quaternion{t}(c, x * s, y * s, z * s);
+}
+
+threaded function {t} farray{t, 16}
+quaternion_to_matrix(quaternion{t} const& a /* normalized */)
+{
+  const t0 = static_cast{t}(0);
+  const t1 = static_cast{t}(1);
+  const t2 = static_cast{t}(2);
+  const xx = a.x * a.x * t2;
+  const yy = a.y * a.y * t2;
+  const zz = a.z * a.z * t2;
+  const xy = a.x * a.y * t2;
+  const yz = a.y * a.z * t2;
+  const zx = a.z * a.x * t2;
+  const wx = a.w * a.x * t2;
+  const wy = a.w * a.y * t2;
+  const wz = a.w * a.z * t2;
+  return make_farray{t}(
+    t1 - yy - zz, xy - wz,      zx + wy,      t0,
+    xy + wz,      t1 - zz - xx, yz - wx,      t0,
+    zx - wy,      yz + wx,      t1 - xx - yy, t0,
+    t0,           t0,           t0,           t1);
+}
+
