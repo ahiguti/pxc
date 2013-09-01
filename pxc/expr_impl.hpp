@@ -125,6 +125,12 @@ enum funccall_e {
   funccall_e_struct_constructor,
 };
 
+enum nssafety_e {
+  nssafety_e_safe,
+  nssafety_e_export_unsafe,
+  nssafety_e_use_unsafe,
+};
+
 enum typefamily_e {
   typefamily_e_none,             /* unknown */
   typefamily_e_ptr,              /* shared pointer */
@@ -198,24 +204,22 @@ struct template_info {
   }
 };
 
-typedef std::list<std::string> nsalias_entries;
-typedef std::map<std::pair<std::string, std::string>, nsalias_entries>
+typedef std::list<symbol> nsalias_entries;
+typedef std::map<std::pair<symbol, symbol>, nsalias_entries>
   nsaliases_type;
-typedef std::list<std::string> nsextend_entries;
-typedef std::map<std::string, nsextend_entries> nsextends_type;
+typedef std::list<symbol> nsextend_entries;
+typedef std::map<symbol, nsextend_entries> nsextends_type;
 
 struct symbol_common {
   symbol_common(expr_i *parent_expr)
     : parent_expr(parent_expr), upvalue_flag(false),
       symtbl_defined(0), arg_hidden_this(0), symbol_def(0) { }
-  std::string uniqns;
+  symbol uniqns;
   expr_i *parent_expr;
   bool upvalue_flag : 1;
-  std::string fullsym;
-  std::string sym_prefix;
   symbol_table *symtbl_defined; // FIXME: remove
   expr_i *arg_hidden_this;
-  std::string arg_hidden_this_ns;
+  symbol arg_hidden_this_ns;
 public:
   expr_i *resolve_symdef(symbol_table *lookup = 0);
   void set_symdef(expr_i *e);
@@ -225,7 +229,13 @@ public:
   void set_evaluated(const term& t); /* used for type auto-matching */
   const term& get_evaluated() const;
   const term& get_evaluated_nochk() const;
+  void set_fullsym(const symbol& sym) { fullsym = sym_prefix_fullsym = sym; }
+  const symbol& get_fullsym() const { return fullsym; }
+  void set_sym_prefix_fullsym(const symbol& psym) { sym_prefix_fullsym = psym; }
+  const symbol& get_sym_prefix_fullsym() const { return sym_prefix_fullsym; }
 private:
+  symbol fullsym;
+  symbol sym_prefix_fullsym;
   expr_i *symbol_def;
   term evaluated;
 };
@@ -233,6 +243,7 @@ private:
 struct cname_info {
   cname_info(const char *s) : cname(s) { }
   const char *cname;  
+  bool is_extdef() const { return cname != 0; }
 };
 
 struct inline_c_element {
@@ -258,8 +269,10 @@ struct expr_i {
   virtual void set_texpr(const term& t);
   virtual const term& get_value_texpr() { abort(); }
   virtual void set_value_texpr(const term&) { abort(); }
-  virtual void set_unique_namespace_one(const std::string& uniqns) { }
+  virtual void set_unique_namespace_one(const std::string& uniqns,
+    bool allow_unsafe) { }
   virtual std::string get_unique_namespace() const { return std::string(); }
+    // TODO: don't use std::string
   virtual attribute_e get_attribute() const { return attribute_unknown; }
   virtual void set_attribute(attribute_e a) { abort(); }
   virtual void define_const_symbols_one() { }
@@ -304,8 +317,9 @@ public:
   int get_num_children() const { return 2; }
   expr_i *get_child(int i);
   void set_child(int i, expr_i *e);
-  void set_unique_namespace_one(const std::string& u) { sdef.uniqns = u; }
-  std::string get_unique_namespace() const { return sdef.uniqns; }
+  void set_unique_namespace_one(const std::string& u, bool allow_unsafe) {
+    sdef.uniqns = u; }
+  std::string get_unique_namespace() const { return sdef.uniqns.to_string(); }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
   bool is_expression() const { return true; }
@@ -362,6 +376,7 @@ struct expr_inline_c : public expr_i {
     if (i == 0) { value = e; }
     else if (i == 1) { te_list = ptr_down_cast<expr_telist>(e); }
   }
+  void set_unique_namespace_one(const std::string& u, bool allow_unsafe);
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return false; }
   bool is_expression() const { return false; }
@@ -381,7 +396,7 @@ public:
 struct expr_ns : public expr_i {
   /* 'namespace' or 'import' */
   expr_ns(const char *fn, int line, expr_i *uniq_nssym, bool import, bool pub,
-    const char *nsalias);
+    const char *nsalias, const char *safety);
   expr_i *clone() const { return new expr_ns(*this); }
   expr_e get_esort() const { return expr_e_ns; }
   int get_num_children() const { return 1; }
@@ -392,8 +407,8 @@ struct expr_ns : public expr_i {
   void set_child(int i, expr_i *e) {
     if (i == 0) { uniq_nssym = e; }
   }
-  void set_unique_namespace_one(const std::string& u);
-  void check_type(symbol_table *lookup) { }
+  void set_unique_namespace_one(const std::string& u, bool allow_unsafe);
+  void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return false; }
   bool is_expression() const { return false; }
   void emit_value(emit_context& em);
@@ -404,6 +419,7 @@ public:
   const bool import;
   const bool pub;
   const char *nsalias;
+  const char *safety;
   std::string src_uniq_nsstr; /* src_uniq_nsstr 'imports' uniq_nsstr */
 };
 
@@ -507,8 +523,9 @@ struct expr_symbol : public expr_i {
   void set_child(int i, expr_i *e) {
     if (i == 0) { nssym = ptr_down_cast<expr_nssym>(e); }
   }
-  void set_unique_namespace_one(const std::string& u) { sdef.uniqns = u; }
-  std::string get_unique_namespace() const { return sdef.uniqns; }
+  void set_unique_namespace_one(const std::string& u, bool allow_unsafe) {
+    sdef.uniqns = u; }
+  std::string get_unique_namespace() const { return sdef.uniqns.to_string(); }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
   bool is_expression() const { return true; }
@@ -534,7 +551,8 @@ struct expr_var : public expr_i {
   void set_child(int i, expr_i *e) {
     if (i == 0) { type_uneval = ptr_down_cast<expr_te>(e); }
   }
-  void set_unique_namespace_one(const std::string& u) { uniqns = u; }
+  void set_unique_namespace_one(const std::string& u, bool allow_unsafe) {
+    uniqns = u; }
   std::string get_unique_namespace() const { return uniqns; }
   attribute_e get_attribute() const { return attr; }
   void set_attribute(attribute_e a) { attr = a; }
@@ -575,7 +593,7 @@ struct expr_enumval : public expr_i {
     if (i == 1) { value = e; }
     if (i == 2) { rest = ptr_down_cast<expr_enumval>(e); }
   }
-  void set_unique_namespace_one(const std::string& u) { uniqns = u; }
+  void set_unique_namespace_one(const std::string& u, bool allow_unsafe);
   std::string get_unique_namespace() const { return uniqns; }
   attribute_e get_attribute() const { return attr; }
   void set_attribute(attribute_e a) { attr = a; }
@@ -686,7 +704,8 @@ struct expr_argdecls : public expr_i {
     if (i == 0) { type_uneval = ptr_down_cast<expr_te>(e); }
     else if (i == 1) { rest = e; }
   }
-  void set_unique_namespace_one(const std::string& u) { uniqns = u; }
+  void set_unique_namespace_one(const std::string& u, bool allow_unsafe) {
+    uniqns = u; }
   std::string get_unique_namespace() const { return uniqns; }
   void define_vars_one(expr_stmts *stmt);
   term& resolve_texpr();
@@ -768,6 +787,7 @@ struct expr_op : public expr_i {
     if (i == 0) { arg0 = e; }
     else if (i == 1) { arg1 = e; }
   }
+  void set_unique_namespace_one(const std::string& u, bool allow_unsafe);
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
   bool is_expression() const { return true; }
@@ -981,7 +1001,8 @@ struct expr_fldfe : public expr_i {
     if (i == 0) { te = ptr_down_cast<expr_te>(e); }
     if (i == 1) { stmts = ptr_down_cast<expr_stmts>(e); }
   }
-  void set_unique_namespace_one(const std::string& u) { uniqns = u; }
+  void set_unique_namespace_one(const std::string& u, bool allow_unsafe) {
+    uniqns = u; }
   std::string get_unique_namespace() const { return uniqns; }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
@@ -1014,7 +1035,8 @@ struct expr_foldfe : public expr_i {
     if (i == 0) { valueste = ptr_down_cast<expr_te>(e); }
     if (i == 1) { stmts = ptr_down_cast<expr_stmts>(e); }
   }
-  void set_unique_namespace_one(const std::string& u) { uniqns = u; }
+  void set_unique_namespace_one(const std::string& u, bool allow_unsafe) {
+    uniqns = u; }
   std::string get_unique_namespace() const { return uniqns; }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
@@ -1049,7 +1071,8 @@ struct expr_expand : public expr_i {
     if (i == 1) { baseexpr = e; }
     if (i == 2) { rest = e; }
   }
-  void set_unique_namespace_one(const std::string& u) { uniqns = u; }
+  void set_unique_namespace_one(const std::string& u, bool allow_unsafe) {
+    uniqns = u; }
   std::string get_unique_namespace() const { return uniqns; }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return false; }
@@ -1094,7 +1117,7 @@ struct expr_funcdef : public expr_i {
   #endif
   const term& get_value_texpr() { return value_texpr; }
   void set_value_texpr(const term& t) { value_texpr = t; }
-  void set_unique_namespace_one(const std::string& u) { uniqns = u; }
+  void set_unique_namespace_one(const std::string& u, bool allow_unsafe);
   std::string get_unique_namespace() const { return uniqns; }
   attribute_e get_attribute() const { return attr; }
   void set_attribute(attribute_e a) { attr = a; }
@@ -1162,7 +1185,7 @@ struct expr_typedef : public expr_i {
   }
   const term& get_value_texpr() { return value_texpr; }
   void set_value_texpr(const term& t) { value_texpr = t; }
-  void set_unique_namespace_one(const std::string& u);
+  void set_unique_namespace_one(const std::string& u, bool allow_unsafe);
   std::string get_unique_namespace() const { return uniqns; }
   attribute_e get_attribute() const { return attr; }
   void set_attribute(attribute_e a) { attr = a; }
@@ -1205,7 +1228,8 @@ struct expr_metafdef : public expr_i {
   void set_child(int i, expr_i *e) {
     if (i == 0) { block = ptr_down_cast<expr_block>(e); }
   }
-  void set_unique_namespace_one(const std::string& u) { uniqns = u; }
+  void set_unique_namespace_one(const std::string& u, bool allow_unsafe) {
+    uniqns = u; }
   std::string get_unique_namespace() const { return uniqns; }
   attribute_e get_attribute() const { return attr; }
   void set_attribute(attribute_e a) { attr = a; }
@@ -1253,7 +1277,7 @@ struct expr_struct : public expr_i {
   void get_fields(std::list<expr_var *>& flds_r) const;
   const term& get_value_texpr() { return value_texpr; }
   void set_value_texpr(const term& t) { value_texpr = t; }
-  void set_unique_namespace_one(const std::string& u);
+  void set_unique_namespace_one(const std::string& u, bool allow_unsafe);
   std::string get_unique_namespace() const { return uniqns; }
   attribute_e get_attribute() const { return attr; }
   void set_attribute(attribute_e a) { attr = a; }
@@ -1269,7 +1293,7 @@ struct expr_struct : public expr_i {
   std::string dump(int indent) const;
   bool has_userdefined_constr() const;
 public:
-  const char *const sym;
+  const char *sym;
   std::string uniqns;
   cname_info cnamei;
   // const char *const cname;
@@ -1300,7 +1324,7 @@ struct expr_dunion : public expr_i {
   expr_var *get_first_field() const;
   const term& get_value_texpr() { return value_texpr; }
   void set_value_texpr(const term& t) { value_texpr = t; }
-  void set_unique_namespace_one(const std::string& u) { uniqns = u; }
+  void set_unique_namespace_one(const std::string& u, bool allow_unsafe);
   std::string get_unique_namespace() const { return uniqns; }
   attribute_e get_attribute() const { return attr; }
   void set_attribute(attribute_e a) { attr = a; }
@@ -1315,7 +1339,7 @@ struct expr_dunion : public expr_i {
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
-  const char *const sym;
+  const char *sym;
   std::string uniqns;
   expr_block *block;
   attribute_e attr;
@@ -1335,7 +1359,7 @@ struct expr_interface : public expr_i {
   expr_block *get_template_block() { return block; }
   const term& get_value_texpr() { return value_texpr; }
   void set_value_texpr(const term& t) { value_texpr = t; }
-  void set_unique_namespace_one(const std::string& u) { uniqns = u; }
+  void set_unique_namespace_one(const std::string& u, bool allow_unsafe);
   std::string get_unique_namespace() const { return uniqns; }
   attribute_e get_attribute() const { return attr; }
   void set_attribute(attribute_e a) { attr = a; }

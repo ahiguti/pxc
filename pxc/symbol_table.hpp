@@ -15,7 +15,11 @@
 #define PXC_SYMBOL_TABLE_HPP
 
 #include "expr.hpp"
+#include "symbol.hpp"
 #include <map>
+#if 0
+#include <tr1/unordered_map>
+#endif
 #include <string>
 
 namespace pxc {
@@ -95,9 +99,15 @@ struct ext_pragma {
 struct symbol_table {
   symbol_table(expr_block *block_backref);
   expr_block *block_backref;
-  typedef std::map<std::string, localvar_info> locals_type;
+  #if 0
+  typedef std::tr1::unordered_map<
+    symbol, localvar_info, symbol_hash, symbol_eq> locals_type;
+  #endif
+  typedef std::map<symbol, localvar_info> locals_type;
+  typedef std::list<symbol> local_names_type;
+private:
   locals_type locals;
-  typedef std::list<std::string> local_names_type;
+public:
   local_names_type local_names;
   locals_type upvalues;
   bool require_thisup : 1; /* uses a member field as upvalue */
@@ -105,21 +115,24 @@ struct symbol_table {
   int tempvar_id_count;
   ext_pragma pragma;
 public:
+  locals_type::const_iterator find(const symbol& k) const {
+    return locals.find(k); }
+  locals_type::const_iterator end() const { return locals.end(); }
   symbol_table *get_lexical_parent() const;
-  void define_name(const std::string& shortname, const std::string& ns,
+  void define_name(const symbol& shortname, const symbol& ns,
     expr_i *e, attribute_e visi, expr_stmts *stmt);
-  expr_i *resolve_name_nothrow(const std::string& fullname,
-    bool no_private, const std::string& curns, bool& is_global_r,
+  expr_i *resolve_name_nothrow(const symbol& fullname,
+    bool no_private, const symbol& curns, bool& is_global_r,
     bool& is_upvalue_r, bool& is_memfld_r);
-  expr_i *resolve_name_nothrow_memfld(const std::string& fullname,
-    bool no_private, const std::string& curns);
-  expr_i *resolve_name(const std::string& fullname, const std::string& curns,
+  expr_i *resolve_name_nothrow_memfld(const symbol& fullname,
+    bool no_private, const symbol& curns);
+  expr_i *resolve_name(const symbol& fullname, const symbol& curns,
     expr_i *e, bool& is_global_r, bool& is_upvalue_r);
   void clear_symbols();
   int generate_tempvar();
 private:
-  localvar_info resolve_name_nothrow_internal(const std::string& fullname,
-    const std::string& curns, bool memfld_only, bool& is_global_r,
+  localvar_info resolve_name_nothrow_internal(const symbol& fullname,
+    const symbol& curns, bool memfld_only, bool& is_global_r,
     bool& is_upvalue_r, bool& is_memfld_r);
 };
 

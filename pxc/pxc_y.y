@@ -130,6 +130,7 @@ static compile_mode cur_mode;
 %type<expr_val> catch_stmt
 %type<expr_val> ext_stmt
 %type<str_val>  opt_nsalias
+%type<str_val>  opt_nssafety
 %type<expr_val> funcdef_stmt
 %type<expr_val> c_funcdecl_stmt
 %type<expr_val> funcdecl_stmt
@@ -459,18 +460,24 @@ catch_stmt
 		0, passby_e_mutable_value, $7), $9); }
 	;
 ext_stmt
-	: TOK_NAMESPACE nssym_expr ';'
-	  { $$ = expr_ns_new(cur_fname, @1.first_line, $2, false, false, 0); }
+	: TOK_NAMESPACE nssym_expr opt_nssafety ';'
+	  { $$ = expr_ns_new(cur_fname, @1.first_line, $2, false, false, 0,
+		$3); }
 	| TOK_PRIVATE TOK_NAMESPACE nssym_expr ';'
-	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, false, false, 0); }
+	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, false, false, 0,
+		0); }
 	| TOK_PUBLIC TOK_NAMESPACE nssym_expr ';'
-	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, false, true, 0); }
+	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, false, true, 0,
+		0); }
 	| TOK_IMPORT nssym_expr opt_nsalias ';'
-	  { $$ = expr_ns_new(cur_fname, @1.first_line, $2, true, false, $3); }
+	  { $$ = expr_ns_new(cur_fname, @1.first_line, $2, true, false, $3,
+		0); }
 	| TOK_PRIVATE TOK_IMPORT nssym_expr opt_nsalias ';'
-	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, true, false, $4); }
+	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, true, false, $4,
+		0); }
 	| TOK_PUBLIC TOK_IMPORT nssym_expr opt_nsalias ';'
-	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, true, true, $4); }
+	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, true, true, $4,
+		0); }
 	| opt_attribute /* dummy */ TOK_EXTERN TOK_STRLIT TOK_INLINE
 	  { $$ = expr_inline_c_new(cur_fname, @2.first_line,
 		arena_dequote_strdup($3), arena_decode_inline_strdup($4),
@@ -493,6 +500,13 @@ opt_nsalias
 	  { $$ = "+"; }
 	| '*'
 	  { $$ = "*"; }
+	;
+
+opt_nssafety
+	:
+	  { $$ = 0; }
+	| TOK_STRLIT
+	  { $$ = arena_dequote_strdup($1); }
 	;
 funcdef_stmt
 	: opt_attribute TOK_FUNCTION opt_tparams_expr type_expr TOK_SYMBOL

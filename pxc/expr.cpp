@@ -36,8 +36,9 @@ expr_i *expr_inline_c_new(const char *fn, int line, const char *posstr,
 { return arena_push(new expr_inline_c(fn, line, posstr, cstr, declonly,
   val)); }
 expr_i *expr_ns_new(const char *fn, int line, expr_i *nssym, bool import,
-  bool pub, const char *nsalias)
-{ return arena_push(new expr_ns(fn, line, nssym, import, pub, nsalias)); }
+  bool pub, const char *nsalias, const char *safety)
+{ return arena_push(new expr_ns(fn, line, nssym, import, pub, nsalias,
+  safety)); }
 expr_i *expr_int_literal_new(const char *fn, int line, const char *str,
   bool is_unsigned)
 { return arena_push(new expr_int_literal(fn, line, str, is_unsigned)); }
@@ -337,7 +338,7 @@ static void define_builtins()
   /* set namespace */
   {
     int block_id_ns = 0;
-    fn_set_namespace(stmts, "meta", block_id_ns);
+    fn_set_namespace(stmts, "meta", block_id_ns, true);
   }
   topvals.push_front(stmts);
   /* stubs for builtin metafunctions */
@@ -366,7 +367,7 @@ static void define_builtins()
   /* set namespace */
   {
     int block_id_ns = 0;
-    fn_set_namespace(stmts, "meta", block_id_ns);
+    fn_set_namespace(stmts, "meta", block_id_ns, true);
   }
   topvals.push_front(stmts);
 }
@@ -451,7 +452,8 @@ void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
   }
   if (!uniqns.empty()) {
     int block_id_ns = 0;
-    fn_set_namespace(topval, uniqns, block_id_ns);
+    fn_set_namespace(topval, uniqns, block_id_ns,
+      nssafetymap[uniqns] != nssafety_e_safe);
   }
   if (is_main) {
     main_namespace = uniqns;
@@ -541,7 +543,10 @@ void arena_compile(const std::map<std::string, std::string>& prof_map,
   fn_check_template_upvalues_direct(global);
   fn_check_template_upvalues_tparam(global);
   arena_error_throw_pushed();
+  // double t1 = gettimeofday_double();
   fn_check_final(global);
+  // double t2 = gettimeofday_double();
+  // fprintf(stderr, "%s %f\n", dest_filename.c_str(), t2 - t1);
   arena_error_throw_pushed();
   compile_phase = 7;
   fn_append_coptions(global, copt_apnd);
@@ -576,6 +581,7 @@ void arena_clear()
   recursion_limit = 3000;
   nsaliases.clear();
   nsextends.clear();
+  nssafetymap.clear();
 }
 
 };

@@ -60,13 +60,21 @@ expr_i *symbol_common::resolve_symdef(symbol_table *lookup)
   /* called when te is eval()ed */
   if (symbol_def == 0) {
     bool is_global = false, is_upvalue = false;
-    const std::string lookup_ns =
+    const symbol lookup_ns =
       arg_hidden_this ? arg_hidden_this_ns : uniqns;
     if (lookup == 0) {
       lookup = parent_expr->symtbl_lexical;
     }
-    symbol_def = lookup->resolve_name(sym_prefix + fullsym, lookup_ns,
+    double t0 = gettimeofday_double();
+    symbol_def = lookup->resolve_name(get_sym_prefix_fullsym(), lookup_ns,
       parent_expr, is_global, is_upvalue);
+    double t1 = gettimeofday_double();
+    #if 1
+    if (t1 - t0 > 0.00005) {
+    fprintf(stderr, "slow resolve_name [%s] [%s] [%s] %f\n",
+      get_sym_prefix_fullsym().c_str(), get_fullsym().c_str(), lookup_ns.c_str(), t1 - t0);
+    }
+    #endif
     DBG_TE2(fprintf(stderr,
       "expr_te::resolve_symdef: this=%p symtbl=%p [%s]\n", this,
       lookup, symbol_def->dump(0).c_str()));
@@ -90,7 +98,7 @@ const expr_i *symbol_common::get_symdef() const
 void symbol_common::set_symdef(expr_i *e)
 {
 #if 0
-fprintf(stderr, "set symdef %s %p\n", fullsym.c_str(), e); // FIXME
+fprintf(stderr, "set symdef %s %p\n", get_fullsym().c_str(), e); // FIXME
 #endif
   symbol_def = e;
 }
@@ -113,12 +121,6 @@ term& symbol_common::resolve_evaluated()
     const bool need_partial_eval = cur_frame_uninstantiated(
       parent_expr->symtbl_lexical);
     evaluated = eval_expr(parent_expr, need_partial_eval);
-#if 0
-fprintf(stderr, "resolve %s(%p) -> %s(%p)\n", parent_expr->dump(0).c_str(), parent_expr, term_tostr_human(evaluated).c_str(), evaluated.get_expr());
-if (fullsym == "ttt") {
-//raise(SIGTRAP);
-}
-#endif
   }
   return evaluated;
 }
@@ -144,7 +146,7 @@ expr_te::expr_te(const char *fn, int line, expr_i *nssym, expr_i *tlarg)
     tlarg(ptr_down_cast<expr_telist>(tlarg)), sdef(this)
 {
   type_of_this_expr.clear(); /* check_type() */
-  sdef.fullsym = get_full_name(nssym);
+  sdef.set_fullsym(get_full_name(nssym));
   DBG_TE1(fprintf(stderr, "te %p %s\n", this,
     term_tostr_human(type_of_this_expr).c_str()));
 }
@@ -153,7 +155,7 @@ expr_i *expr_te::clone() const
 {
   expr_te *const r = new expr_te(*this);
 #if 0
-fprintf(stderr, "clone %s\n", sdef.fullsym.c_str()); // FIXME
+fprintf(stderr, "clone %s\n", sdef.get_fullsym().c_str()); // FIXME
 #endif
   /* argdecls have incomplete symbol_def values before instantiated */
   r->sdef.parent_expr = r;
@@ -185,8 +187,8 @@ expr_i *expr_te::resolve_symdef(symbol_table *lookup)
   if (sdef.symbol_def == 0) {
     bool is_global = false, is_upvalue = false;
     assert(lookup == symtbl_lexical);
-    sdef.symbol_def = symtbl_lexical->resolve_name(sdef.fullsym, sdef.ns, this,
-      is_global, is_upvalue);
+    sdef.symbol_def = symtbl_lexical->resolve_name(sdef.get_fullsym(), sdef.ns,
+      this, is_global, is_upvalue);
     DBG_TE2(fprintf(stderr,
       "expr_te::resolve_symdef: this=%p symtbl=%p [%s]\n", this,
       symtbl_lexical, sdef.symbol_def->dump(0).c_str()));
@@ -223,7 +225,7 @@ static void symdef_check_threading_attr_type_or_func(expr_i *e,
   if ((tattr & attribute_threaded) == 0 && (cattr & attribute_threaded) != 0) {
     arena_error_push(e,
       "Type or function '%s' for symbol '%s' is not threaded",
-      term_tostr_human(t).c_str(), sc->fullsym.c_str());
+      term_tostr_human(t).c_str(), sc->get_fullsym().c_str());
   }
   #if 0
   // FIXME: remove
@@ -234,19 +236,19 @@ static void symdef_check_threading_attr_type_or_func(expr_i *e,
       (cattr & attribute_multithr) != 0) {
       arena_error_push(e,
 	"Type '%s' for symbol '%s' is not multithreaded",
-	term_tostr_human(t).c_str(), sc->fullsym.c_str());
+	term_tostr_human(t).c_str(), sc->get_fullsym().c_str());
     }
     if ((tattr & attribute_valuetype) == 0 &&
       (cattr & attribute_valuetype) != 0) {
       arena_error_push(e,
 	"Type '%s' for symbol '%s' is not valuetype",
-	term_tostr_human(t).c_str(), sc->fullsym.c_str());
+	term_tostr_human(t).c_str(), sc->get_fullsym().c_str());
     }
     if ((tattr & attribute_tsvaluetype) == 0 &&
       (cattr & attribute_tsvaluetype) != 0) {
       arena_error_push(e,
 	"Type '%s' for symbol '%s' is not tsvaluetype",
-	term_tostr_human(t).c_str(), sc->fullsym.c_str());
+	term_tostr_human(t).c_str(), sc->get_fullsym().c_str());
     }
   }
 #if 0
@@ -259,13 +261,13 @@ fprintf(stderr, "%s c=%x t=%x\n", term_tostr_human(t).c_str(), (int)cattr, (int)
   if (!term_is_threaded(t)) {
     arena_error_push(e,
       "Type or function '%s' for symbol '%s' is not threaded",
-      term_tostr_human(t).c_str(), sc->fullsym.c_str());
+      term_tostr_human(t).c_str(), sc->get_fullsym().c_str());
   }
   // FIXME: term_is_valuetype
   if (is_multithr_context(cur) && !term_is_multithr(t)) {
     arena_error_push(e,
       "Type or function '%s' for symbol '%s' is not multithreaded",
-      term_tostr_human(t).c_str(), sc->fullsym.c_str());
+      term_tostr_human(t).c_str(), sc->get_fullsym().c_str());
   }
   #endif
 }
@@ -389,7 +391,7 @@ static term& resolve_texpr_symbol_common(expr_i *e)
   #endif
   DBG_RES(fprintf(stderr,
     "expr_symbol %p '%s' symdef='%s' type_of_this_expr='%s' symtbl=%p\n",
-    e, sc->fullsym.c_str(), sc->get_symdef()->dump(0).c_str(),
+    e, sc->get_fullsym().c_str(), sc->get_symdef()->dump(0).c_str(),
     term_tostr_human(e->type_of_this_expr).c_str(), e->symtbl_lexical));
   assert(!e->type_of_this_expr.is_null());
   #if 0
@@ -408,9 +410,10 @@ term& expr_te::resolve_texpr()
 std::string expr_te::dump(int indent) const
 {
   if (tlarg == 0) {
-    return "[" + sdef.fullsym + "]";
+    return "[" + sdef.get_fullsym().to_string() + "]";
   }
-  return "[" + sdef.fullsym + "(" + dump_expr(indent, tlarg) + ")]";
+  return "[" + sdef.get_fullsym().to_string() +
+    "(" + dump_expr(indent, tlarg) + ")]";
 }
 
 expr_telist::expr_telist(const char *fn, int line, expr_i *head, expr_i *rest)
@@ -484,6 +487,15 @@ expr_inline_c::expr_inline_c(const char *fn, int line, const char *label,
   }
 }
 
+void expr_inline_c::set_unique_namespace_one(const std::string& u,
+  bool allow_unsafe)
+{
+  if (!allow_unsafe) {
+    arena_error_throw(this,
+      "Unsafe extern statement in a safe namespace");
+  }
+}
+
 std::string expr_inline_c::dump(int indent) const
 {
   std::string r = "inline_c\n";
@@ -493,14 +505,30 @@ std::string expr_inline_c::dump(int indent) const
 }
 
 expr_ns::expr_ns(const char *fn, int line, expr_i *uniq_nssym, bool import,
-  bool pub, const char *nsalias)
+  bool pub, const char *nsalias, const char *safety)
   : expr_i(fn, line), uniq_nssym(uniq_nssym),
     uniq_nsstr(get_full_name(uniq_nssym)),
-    import(import), pub(pub), nsalias(nsalias)
+    import(import), pub(pub), nsalias(nsalias), safety(safety)
 {
+  if (!import) {
+    nssafety_e v = nssafety_e_safe;
+    if (safety != 0) {
+      std::string s(safety);
+      if (s == "safe") {
+	v = nssafety_e_safe;
+      } else if (s == "export-unsafe") {
+	v = nssafety_e_export_unsafe;
+      } else if (s == "use-unsafe") {
+	v = nssafety_e_use_unsafe;
+      } else {
+	arena_error_throw(this, "Invalid attribute '%s'", safety);
+      }
+    }
+    nssafetymap[uniq_nsstr] = v;
+  }
 }
 
-void expr_ns::set_unique_namespace_one(const std::string& u)
+void expr_ns::set_unique_namespace_one(const std::string& u, bool allow_unsafe)
 {
   if (nsalias != 0) {
     assert(import); /* this must be a import statement */
@@ -784,7 +812,7 @@ expr_symbol::expr_symbol(const char *fn, int line, expr_i *nssym)
   : expr_i(fn, line), nssym(ptr_down_cast<expr_nssym>(nssym)), sdef(this)
 {
   type_of_this_expr.clear(); /* check_type() */
-  sdef.fullsym = get_full_name(nssym);
+  sdef.set_fullsym(get_full_name(nssym));
 }
 
 expr_i *expr_symbol::clone() const
@@ -798,7 +826,7 @@ expr_i *expr_symbol::clone() const
 
 std::string expr_symbol::dump(int indent) const
 {
-  return sdef.fullsym;
+  return sdef.get_fullsym().to_string();
 }
 
 expr_i *expr_symbol::resolve_symdef(symbol_table *lookup)
@@ -879,6 +907,16 @@ expr_i *expr_enumval::clone() const
   expr_enumval *r = new expr_enumval(*this);
   r->type_of_this_expr.clear();
   return r;
+}
+
+void expr_enumval::set_unique_namespace_one(const std::string& u,
+  bool allow_unsafe)
+{
+  if (!allow_unsafe && cnamei.is_extdef()) {
+    arena_error_throw(this,
+      "Unsafe enum value is defined in a safe namespace");
+  }
+  uniqns = u;
 }
 
 term&
@@ -1027,6 +1065,15 @@ expr_i *expr_op::clone() const
   expr_op *eop = new expr_op(*this);
   eop->type_of_this_expr.clear();
   return eop;
+}
+
+void expr_op::set_unique_namespace_one(const std::string& u,
+  bool allow_unsafe)
+{
+  if (!allow_unsafe && extop != "") {
+    arena_error_throw(this,
+      "Unsafe operator is used in a safe namespace");
+  }
 }
 
 std::string expr_op::dump(int indent) const
@@ -1396,6 +1443,16 @@ expr_i *expr_funcdef::clone() const
   return cpy;
 }
 
+void expr_funcdef::set_unique_namespace_one(const std::string& u,
+  bool allow_unsafe)
+{
+  if (!allow_unsafe && cnamei.is_extdef()) {
+    arena_error_throw(this,
+      "Unsafe function is defined in a safe namespace");
+  }
+  uniqns = u;
+}
+
 bool expr_funcdef::is_global_function() const
 {
   expr_block *const bl = block->symtbl.get_lexical_parent()->block_backref;
@@ -1489,8 +1546,13 @@ expr_typedef::expr_typedef(const char *fn, int line, const char *sym,
   value_texpr = term(this);
 }
 
-void expr_typedef::set_unique_namespace_one(const std::string& u)
+void expr_typedef::set_unique_namespace_one(const std::string& u,
+  bool allow_unsafe)
 {
+  if (!allow_unsafe && cnamei.is_extdef()) {
+    arena_error_throw(this,
+      "Unsafe type is defined in a safe namespace");
+  }
   uniqns = u;
   typefamily = get_family_from_string(typefamily_str ? typefamily_str : "");
 }
@@ -1545,8 +1607,13 @@ expr_struct *expr_struct::clone() const
   return cpy;
 }
 
-void expr_struct::set_unique_namespace_one(const std::string& u)
+void expr_struct::set_unique_namespace_one(const std::string& u,
+  bool allow_unsafe)
 {
+  if (!allow_unsafe && cnamei.is_extdef()) {
+    arena_error_throw(this,
+      "Unsafe type is defined in a safe namespace");
+  }
   uniqns = u;
   typefamily = get_family_from_string(typefamily_str ? typefamily_str : "");
   if (typefamily_str != 0) {
@@ -1567,9 +1634,8 @@ void expr_struct::get_fields(std::list<expr_var *>& flds_r) const
   symbol_table& symtbl = block->symtbl;
   symbol_table::local_names_type::const_iterator i;
   for (i = symtbl.local_names.begin(); i != symtbl.local_names.end(); ++i) {
-    const symbol_table::locals_type::const_iterator iter
-      = symtbl.locals.find(*i);
-    assert(iter != symtbl.locals.end());
+    const symbol_table::locals_type::const_iterator iter = symtbl.find(*i);
+    assert(iter != symtbl.end());
     expr_var *const e = dynamic_cast<expr_var *>(iter->second.edef);
     if (e == 0) { continue; }
 #if 0
@@ -1618,6 +1684,19 @@ expr_i *expr_dunion::clone() const
   return cpy;
 }
 
+void expr_dunion::set_unique_namespace_one(const std::string& u,
+  bool allow_unsafe)
+{
+  #if 0
+  // extern dunion is not implemented
+  if (!allow_unsafe && cnamei.is_extdef()) {
+    arena_error_throw(this,
+      "Unsafe type is defined in a safe namespace");
+  }
+  #endif
+  uniqns = u;
+}
+
 void expr_dunion::get_fields(std::list<expr_var *>& flds_r) const
 {
   /* copy of expr_struct::get_fields */
@@ -1630,9 +1709,8 @@ void expr_dunion::get_fields(std::list<expr_var *>& flds_r) const
   symbol_table& symtbl = block->symtbl;
   symbol_table::local_names_type::const_iterator i;
   for (i = symtbl.local_names.begin(); i != symtbl.local_names.end(); ++i) {
-    const symbol_table::locals_type::const_iterator iter
-      = symtbl.locals.find(*i);
-    assert(iter != symtbl.locals.end());
+    const symbol_table::locals_type::const_iterator iter = symtbl.find(*i);
+    assert(iter != symtbl.end());
     expr_var *const e = dynamic_cast<expr_var *>(iter->second.edef);
     if (e == 0) { continue; }
     flds_r.push_back(e);
@@ -1643,9 +1721,8 @@ expr_var *expr_dunion::get_first_field() const
   symbol_table& symtbl = block->symtbl;
   symbol_table::local_names_type::const_iterator i;
   for (i = symtbl.local_names.begin(); i != symtbl.local_names.end(); ++i) {
-    const symbol_table::locals_type::const_iterator iter
-      = symtbl.locals.find(*i);
-    assert(iter != symtbl.locals.end());
+    const symbol_table::locals_type::const_iterator iter = symtbl.find(*i);
+    assert(iter != symtbl.end());
     expr_var *const e = dynamic_cast<expr_var *>(iter->second.edef);
     if (e == 0) { continue; }
     return e;
@@ -1675,6 +1752,16 @@ expr_i *expr_interface::clone() const
   expr_interface *cpy = new expr_interface(*this);
   cpy->value_texpr = term(cpy);
   return cpy;
+}
+
+void expr_interface::set_unique_namespace_one(const std::string& u,
+  bool allow_unsafe)
+{
+  if (!allow_unsafe && cnamei.is_extdef()) {
+    arena_error_throw(this,
+      "Unsafe type is defined in a safe namespace");
+  }
+  uniqns = u;
 }
 
 std::string expr_interface::dump(int indent) const

@@ -464,8 +464,8 @@ static term eval_meta_functions(const term_list_range& tlev,
   symbol_table::local_names_type::const_iterator i;
   term_list tl;
   for (i = symtbl->local_names.begin(); i != symtbl->local_names.end(); ++i) {
-    symbol_table::locals_type::const_iterator j = symtbl->locals.find(*i);
-    assert(j != symtbl->locals.end());
+    symbol_table::locals_type::const_iterator j = symtbl->find(*i);
+    assert(j != symtbl->end());
     const localvar_info& lv = j->second;
     expr_i *const e = lv.edef;
     if (e->generated_flag) {
@@ -498,8 +498,8 @@ static term eval_meta_types(const term_list_range& tlev, eval_context& ectx,
   symbol_table::local_names_type::const_iterator i;
   term_list tl;
   for (i = symtbl->local_names.begin(); i != symtbl->local_names.end(); ++i) {
-    symbol_table::locals_type::const_iterator j = symtbl->locals.find(*i);
-    assert(j != symtbl->locals.end());
+    symbol_table::locals_type::const_iterator j = symtbl->find(*i);
+    assert(j != symtbl->end());
     const localvar_info& lv = j->second;
     expr_i *const e = lv.edef;
     if (e->generated_flag) {
@@ -553,8 +553,8 @@ static term eval_meta_global_variables(const term_list_range& tlev,
   term_list tl;
   long long idx = 0;
   for (i = symtbl->local_names.begin(); i != symtbl->local_names.end(); ++i) {
-    symbol_table::locals_type::const_iterator j = symtbl->locals.find(*i);
-    assert(j != symtbl->locals.end());
+    symbol_table::locals_type::const_iterator j = symtbl->find(*i);
+    assert(j != symtbl->end());
     const localvar_info& lv = j->second;
     expr_i *const e = lv.edef;
     if (e->generated_flag) {
@@ -622,8 +622,8 @@ static term eval_meta_member_functions(const term_list_range& tlev,
     symbol_table::local_names_type::const_iterator i;
     for (i = symtbl->local_names.begin(); i != symtbl->local_names.end();
       ++i) {
-      symbol_table::locals_type::const_iterator j = symtbl->locals.find(*i);
-      assert(j != symtbl->locals.end());
+      symbol_table::locals_type::const_iterator j = symtbl->find(*i);
+      assert(j != symtbl->end());
       const localvar_info lv = j->second;
       expr_i *const e = lv.edef;
       /* no need to skip generated symbols because this metafunctions is
@@ -1622,16 +1622,6 @@ static term eval_meta_and(expr_i *texpr, const term_list_range& targs,
     }
   }
   return term(1LL);
-}
-
-double gettimeofday_double()
-{
-  struct timeval tv;
-  gettimeofday(&tv, 0);
-  double rv = tv.tv_usec;
-  rv /= 1000000;
-  rv += tv.tv_sec;
-  return rv;
 }
 
 static term eval_meta_timing(expr_i *texpr, const term_list_range& targs,

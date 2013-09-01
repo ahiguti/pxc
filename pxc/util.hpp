@@ -95,6 +95,8 @@ std::string escape_hex_non_alnum(const std::string& str);
 std::string unescape_hex_non_alnum(const std::string& str);
 std::string escape_hex_filename(const std::string& str);
 
+double gettimeofday_double();
+
 };
 
 #endif

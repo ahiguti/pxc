@@ -31,6 +31,8 @@ extern const std::map<std::string, std::string> *cur_profile;
 extern size_t recursion_limit;
 extern nsaliases_type nsaliases;
 extern nsextends_type nsextends;
+typedef std::map<std::string, nssafety_e> nssafetymap_type;
+extern nssafetymap_type nssafetymap;
 /* end: global variables */
 
 expr_i *string_to_te(expr_i *epos, const std::string& str);
@@ -40,8 +42,11 @@ std::string space_string(int n, char c);
 std::string dump_expr(int indent, expr_i *e);
 std::string get_full_name(expr_i *nssym);
 std::string to_short_name(const std::string& fullname);
+symbol to_short_name(const symbol& fullname);
 std::string get_namespace_part(const std::string& fullname);
+symbol get_namespace_part(const symbol& fullname);
 bool has_namespace(const std::string& name);
+bool has_namespace(const symbol& name);
 std::string term_tostr(const term& t, term_tostr_sort s);
 std::string term_tostr_cname(const term& t);
 std::string term_tostr_human(const term& t);
@@ -151,7 +156,8 @@ bool is_noexec_expr(expr_i *e);
 bool is_compiled(const expr_block *bl);
 
 void fn_append_coptions(expr_i *e, coptions& copt_append);
-void fn_set_namespace(expr_i *e, const std::string& uniqns, int& block_id_ns);
+void fn_set_namespace(expr_i *e, const std::string& uniqns, int& block_id_ns,
+  bool allow_unsafe);
 void fn_set_generated_code(expr_i *e);
 void fn_set_tree_and_define_static(expr_i *e, expr_i *p, symbol_table *symtbl,
   expr_stmts *stmt, bool is_template_descent, bool is_expand_base = false);

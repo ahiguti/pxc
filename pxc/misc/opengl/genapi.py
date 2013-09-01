@@ -4,6 +4,66 @@ import sys
 import reg
 import re
 
+typeArr = [
+  'void',
+  'GLenum',
+  'GLbitfield',
+  'GLfloat',
+  'GLdouble',
+  'GLboolean',
+  'GLbyte',
+  'GLubyte',
+  'GLshort',
+  'GLushort',
+  'GLint', # 10
+  'GLuint',
+  'GLuint64',
+  'GLsizei',
+  'GLintptr',
+  'GLsizeiptr',
+  'GLfixed',
+  'GLclampx',
+  'GLDEBUGPROC',
+  'GLsync',
+  'void *', # 20
+  'GLvoid *',
+  'GLenum *',
+  'GLfloat *',
+  'GLdouble *',
+  'GLboolean *',
+  'GLchar *',
+  'GLubyte *',
+  'GLshort *',
+  'GLushort *',
+  'GLint *', # 30
+  'GLuint *',
+  'GLint64 *',
+  'GLuint64 *',
+  'GLsizei *',
+  'GLfixed *',
+  'const void *',
+  'const GLvoid *',
+  'const GLenum *',
+  'const GLfloat *',
+  'const GLdouble *', # 40
+  'const GLboolean *',
+  'const GLchar *',
+  'const GLbyte *',
+  'const GLubyte *',
+  'const GLshort *',
+  'const GLushort *',
+  'const GLint *',
+  'const GLuint *',
+  'const GLsizei *',
+  'const GLintptr *', # 50
+  'const GLsizeiptr *',
+  'const GLfixed *',
+  'GLvoid **',
+  'const GLvoid *const*',
+  'const GLchar *const*',
+]
+typeMap = dict([(e, i) for i, e in enumerate(typeArr)])
+
 def dropSpace(s):
   return re.sub('\s+$', "", s)
 def splitWord(s):
@@ -13,6 +73,8 @@ def splitWord(s):
     ms = m.group()
   return [ dropSpace(s[0 : len(s) - len(ms)]), ms ]
 def convertType(s):
+  return str(typeMap[s])
+def convertTypeX(s):
   if s == 'void': return 'v'
   elif s == 'GLenum': return 'e'
   elif s == 'GLbitfield': return 'm'
@@ -120,15 +182,15 @@ class PXOutputGenerator(reg.COutputGenerator):
           pt = convertType(pp[0])
           lenattr = params[i].get('len')
           if lenattr is None:
-            mparam += "L{\"" + pn + "\",\"" + pt + "\"}"
+            mparam += "L{\"" + pn + "\"," + pt + "}"
           else:
-            mparam += "L{\"" + pn + "\",\"" + pt + "\",\"" + lenattr + "\"}"
+            mparam += "L{\"" + pn + "\"," + pt + ",\"" + lenattr + "\"}"
           if (i < n - 1):
             mparam += ','
     ptxt = ''.join([t for t in proto.itertext()])
     pp = splitWord(reg.noneStr(ptxt))
-    mstr = "  L{\"" + pname + "\",\"" \
-      + convertType(pp[0]) + "\"" + mparam + "}"
+    mstr = "  L{\"" + pname + "\"," \
+      + convertType(pp[0]) + mparam + "}"
     return mstr;
   def beginFile(self, genOpts):
     reg.OutputGenerator.beginFile(self, genOpts)

@@ -1,7 +1,19 @@
-namespace GL::base;
+namespace GL::base "use-unsafe";
 import common -;
 import meta m;
 
+public metafunction GLvoid void;
+public metafunction GLchar char;
+public metafunction GLbyte char;
+public metafunction GLubyte uchar;
+public metafunction GLshort short;
+public metafunction GLushort ushort;
+public metafunction GLint int;
+public metafunction GLuint uint;
+public metafunction GLint64 long;
+public metafunction GLuint64 ulong;
+public metafunction GLfloat float;
+public metafunction GLdouble double;
 public tsvaluetype struct extern "GLenum" "extenum" GLenum { }
 public tsvaluetype struct extern "GLbitfield" "extbitmask" GLbitfield { }
 public tsvaluetype struct extern "GLsync" "noncopyable" GLsync { }
@@ -9,14 +21,33 @@ public tsvaluetype struct extern "GLboolean" "extint" GLboolean { }
 public tsvaluetype struct extern "GLsizei" "extint" GLsizei { }
 public tsvaluetype struct extern "GLsizeiptr" "extint" GLsizeiptr { }
 public tsvaluetype struct extern "GLintptr" "extint" GLintptr { }
-public tsvaluetype struct extern "gl::debug_proc" debug_proc { }
-public tsvaluetype struct extern "gl::glvoid_p" glvoid_p { }
-public tsvaluetype struct extern "gl::glcvoid_p" glcvoid_p { }
-public tsvaluetype struct extern "gl::void_p" void_p { }
-public tsvaluetype struct extern "gl::cvoid_p" cvoid_p { }
-public tsvaluetype struct extern "gl::glvoid_pp" glvoid_pp { }
-public tsvaluetype struct extern "gl::glcvoid_pp" glcvoid_pp { }
-public tsvaluetype struct extern "gl::glcchar_pp" glcchar_pp { }
+public tsvaluetype struct extern "GLfixed" "extint" GLfixed { }
+public tsvaluetype struct extern "GLclampx" "extint" GLclampx { }
+public tsvaluetype struct extern "GLDEBUGPROC" GLDEBUGPROC { }
+
+private metafunction ptrtypes m::list{
+  "GLenum", "GLboolean", "GLsizei", "GLintptr", "GLsizeiptr",
+  "GLfixed",
+  "GLvoid", "GLfloat", "GLdouble", "GLubyte", "GLbyte", "GLchar", "GLushort",
+  "GLshort", "GLuint", "GLint", "GLuint64", "GLint64"};
+expand (sym : m::map{ptrtypes, metafunction{x} m::concat{x, "_p"}}) {
+public tsvaluetype struct extern "gl::%" sym { }
+}
+expand (sym : m::map{ptrtypes, metafunction{x} m::concat{x, "_cp"}}) {
+public tsvaluetype struct extern "gl::%" sym { }
+}
+public tsvaluetype struct extern "gl::GLvoid_pp" GLvoid_pp { }
+public tsvaluetype struct extern "gl::GLvoid_cpcp" GLvoid_cpcp { }
+public tsvaluetype struct extern "gl::GLchar_cpcp" GLchar_cpcp { }
+
+private metafunction emit_ptrtype{x}
+  m::concat{"typedef ", x, " *", x, "_p;\n"};
+private metafunction emit_ptrtype_c{x}
+  m::concat{"typedef const ", x, " *", x, "_cp;\n"};
+private metafunction emit_ptrtypes
+  m::concat{
+    m::fold{m::map{ptrtypes, emit_ptrtype}, m::concat, ""},
+    m::fold{m::map{ptrtypes, emit_ptrtype_c}, m::concat, ""}};
 
 expand (s : m::list{m::list{"", m::eq{m::profile{"platform"}, "macos"}}}) {
 extern "ldflags" "-lGL -lm";
@@ -42,135 +73,126 @@ extern "types" inline
 
 namespace gl {
 
-#ifdef GL_VERSION_4_3
-struct debug_proc { GLDEBUGPROC rawarr() const { return 0; } };
-#endif
-typedef GLvoid *glvoid_p;
-typedef const GLvoid *glcvoid_p;
-typedef void *void_p;
-typedef const void *cvoid_p;
-typedef GLvoid **glvoid_pp;
-typedef const GLvoid *const *glcvoid_pp;
-typedef const GLchar *const *glcchar_pp;
-/*
-struct void_p { void *rawarr() const { return 0; } };
-struct cvoid_p { const void *rawarr() const { return 0; } };
-struct glvoid_pp { GLvoid **rawarr() const { return 0; } };
-struct glcvoid_pp { const GLvoid *const *rawarr() const { return 0; } };
-struct glcchar_pp { const GLchar *const *rawarr() const { return 0; } };
-*/
+%{emit_ptrtypes}%
+
+typedef GLvoid **GLvoid_pp;
+typedef const GLvoid *const *GLvoid_cpcp;
+typedef const GLchar *const *GLchar_cpcp;
 
 };
 ;
 
-public function extern "gl::to_voidp" {t} void_p to_voidp(t const& x);
-public function extern "gl::to_cvoidp" {t} cvoid_p to_cvoidp(t const& x);
-public function extern "gl::to_glvoidp" {t} glvoid_p to_glvoidp(t const& x);
-public function extern "gl::to_glcvoidp" {t} glcvoid_p to_glcvoidp(t const& x);
-public function extern "gl::offset_to_glcvoidp" glcvoid_p
-  offset_to_glcvoidp(size_t x);
+public function extern "gl::to_void_p" {t} GLvoid_p to_void_p(t const& x);
+public function extern "gl::to_void_cp" {t} GLvoid_cp to_void_cp(t const& x);
+public function extern "gl::offset_to_void_cp" GLvoid_cp
+  offset_to_void_cp(size_t x); /* used for glVertexPointer() with VBO */
 
 extern "functions" inline
 namespace gl {
 using namespace pxcrt;
 
-template <typename T> void_p to_voidp(T const& x) { return x.rawarr(); }
-template <typename T> cvoid_p to_cvoidp(T const& x) { return x.rawarr(); }
-template <typename T> glvoid_p to_glvoidp(T const& x) { return x.rawarr(); }
-template <typename T> glcvoid_p to_glcvoidp(T const& x) { return x.rawarr(); }
-static inline glcvoid_p offset_to_glcvoidp(bt_size_t x)
+template <typename T> GLvoid_p to_void_p(T const& x) { return x.rawarr(); }
+template <typename T> GLvoid_cp to_void_cp(T const& x) { return x.rawarr(); }
+static inline GLvoid_cp offset_to_void_cp(bt_size_t x)
 { return reinterpret_cast<const void *>(x); }
 
 };
 ;
 
 private metafunction type_alist m::list{
-  /* m::list{str, type, wrapper} */
-  m::list{"v", void, 0},
-  m::list{"e", GLenum, 0},
-  m::list{"m", GLbitfield, 0},
-  m::list{"f", float, 0},
-  m::list{"d", double, 0},
-  m::list{"b", bool, 0},
-  m::list{"by", char, 0},
-  m::list{"uby", uchar, 0},
-  m::list{"s", short, 0},
-  m::list{"us", ushort, 0},
-  m::list{"i", int, 0},
-  m::list{"ui", uint, 0},
-  m::list{"l", ulong, 0},
-  m::list{"szi", GLsizei, 0},
-  m::list{"ip", GLintptr, 0},
-  m::list{"szip", GLsizeiptr, 0},
-  m::list{"fx", int, 0},
-  m::list{"cx", int, 0},
-  m::list{"DP", debug_proc, 0},
-  m::list{"sync", GLsync, 0},
-  m::list{"*", void_p, 0},
-  m::list{"v*", glvoid_p, 0},
-  m::list{"e*", slice{GLenum}, 1},
-  m::list{"f*", slice{float}, 1},
-  m::list{"d*", slice{double}, 1},
-  m::list{"b*", slice{uchar}, 1},
-  m::list{"c*", slice{char}, 1},
-  m::list{"by*", slice{char}, 1},
-  m::list{"uby*", slice{uchar}, 1},
-  m::list{"s*", slice{short}, 1},
-  m::list{"us*", slice{ushort}, 1},
-  m::list{"i*", slice{int}, 1},
-  m::list{"ui*", slice{uint}, 1},
-  m::list{"l*", slice{long}, 1},
-  m::list{"ul*", slice{ulong}, 1},
-  m::list{"szi*", slice{GLsizei}, 1},
-  m::list{"fx*", slice{int}, 1},
-  m::list{"_*", cvoid_p, 0},
-  m::list{"_v*", glcvoid_p, 0},
-  m::list{"_e*", cslice{GLenum}, 1},
-  m::list{"_f*", cslice{float}, 1},
-  m::list{"_d*", cslice{double}, 1},
-  m::list{"_b*", cslice{GLboolean}, 1},
-  m::list{"_c*", cslice{char}, 1},
-  m::list{"_by*", cslice{char}, 1},
-  m::list{"_uby*", cslice{uchar}, 1},
-  m::list{"_s*", cslice{short}, 1},
-  m::list{"_us*", cslice{ushort}, 1},
-  m::list{"_i*", cslice{int}, 1},
-  m::list{"_ui*", cslice{uint}, 1},
-  m::list{"_l*", cslice{long}, 1},
-  m::list{"_ul*", cslice{ulong}, 1},
-  m::list{"_szi*", cslice{GLsizei}, 1},
-  m::list{"_ip*", cslice{GLintptr}, 1},
-  m::list{"_szip*", cslice{GLsizeiptr}, 1},
-  m::list{"_fx*", cslice{int}, 1},
-  m::list{"v**", glvoid_pp, 0},
-  m::list{"_v*_*", glcvoid_pp, 0},
-  m::list{"_c*_*", glcchar_pp}, 0};
+  /* m::list{str, rettype, argtype} */
+  m::list{"v", GLvoid, GLvoid}, /* 0 */
+  m::list{"e", GLenum, GLenum},
+  m::list{"m", GLbitfield, GLbitfield},
+  m::list{"f", GLfloat, GLfloat},
+  m::list{"d", GLdouble, GLdouble},
+  m::list{"b", GLboolean, GLboolean},
+  m::list{"by", GLbyte, GLbyte},
+  m::list{"uby", GLubyte, GLubyte},
+  m::list{"s", GLshort, GLshort},
+  m::list{"us", GLushort, GLushort},
+  m::list{"i", GLint, GLint}, /* 10 */
+  m::list{"ui", GLuint, GLuint},
+  m::list{"l", GLint64, GLint64},
+  m::list{"szi", GLsizei, GLsizei},
+  m::list{"ip", GLintptr, GLintptr},
+  m::list{"szip", GLsizeiptr, GLsizeiptr},
+  m::list{"fx", GLfixed, GLfixed},
+  m::list{"cx", GLclampx, GLclampx},
+  m::list{"DP", GLDEBUGPROC, GLDEBUGPROC},
+  m::list{"sync", GLsync, GLsync},
+  m::list{"*", GLvoid_p, GLvoid_p}, /* 20 */
+  m::list{"v*", GLvoid_p, GLvoid_p},
+  m::list{"e*", GLenum_p, slice{GLenum}},
+  m::list{"f*", GLfloat_p, slice{GLfloat}},
+  m::list{"d*", GLdouble_p, slice{GLdouble}},
+  m::list{"b*", GLboolean_p, slice{GLboolean}},
+  m::list{"c*", GLchar_p, slice{GLchar}},
+  m::list{"uby*", GLubyte_p, slice{GLubyte}},
+  m::list{"s*", GLshort_p, slice{GLshort}},
+  m::list{"us*", GLushort_p, slice{GLushort}},
+  m::list{"i*", GLint_p, slice{GLint}}, /* 30 */
+  m::list{"ui*", GLuint_p, slice{GLuint}},
+  m::list{"l*", GLint64_p, slice{GLint64}},
+  m::list{"ul*", GLuint64_p, slice{GLuint64}},
+  m::list{"szi*", GLsizei_p, slice{GLsizei}},
+  m::list{"fx*", GLfixed_p, slice{GLfixed}},
+  m::list{"_*", GLvoid_cp, GLvoid_cp},
+  m::list{"_v*", GLvoid_cp, GLvoid_cp},
+  m::list{"_e*", GLenum_cp, cslice{GLenum}},
+  m::list{"_f*", GLfloat_cp, cslice{GLfloat}},
+  m::list{"_d*", GLdouble_cp, cslice{GLdouble}}, /* 40 */
+  m::list{"_b*", GLboolean_cp, cslice{GLboolean}},
+  m::list{"_c*", GLchar_cp, cslice{GLchar}},
+  m::list{"_by*", GLbyte_cp, cslice{GLbyte}},
+  m::list{"_uby*", GLubyte_cp, cslice{GLubyte}},
+  m::list{"_s*", GLshort_cp, cslice{GLshort}},
+  m::list{"_us*", GLushort_cp, cslice{GLushort}},
+  m::list{"_i*", GLint_cp, cslice{GLint}},
+  m::list{"_ui*", GLuint_cp, cslice{GLuint}},
+  m::list{"_szi*", GLsizei_cp, cslice{GLsizei}},
+  m::list{"_ip*", GLintptr_cp, cslice{GLintptr}}, /* 50 */
+  m::list{"_szip*", GLsizeiptr_cp, cslice{GLsizeiptr}},
+  m::list{"_fx*", GLfixed_cp, cslice{GLfixed}},
+  m::list{"v**", GLvoid_pp, GLvoid_pp},
+  m::list{"_v*_*", GLvoid_cpcp, GLvoid_cpcp},
+  m::list{"_c*_*", GLchar_cpcp, GLchar_cpcp}};
 
+public metafunction find_type{s} m::at{type_alist, s};
+/*
 public metafunction find_type{s} find_type_iter{s, 0, m::at{type_alist, 0}};
 private metafunction find_type_iter{s, i, ent}
   m::cond{
     m::eq{m::at{ent, 0}, s},
     ent,
     find_type_iter{s, m::add{i, 1}, m::at{type_alist, m::add{i, 1}}}};
+*/
+private metafunction type_slice{tent}
+  m::ne{m::at1{tent}, m::at2{tent}};
 public metafunction ent_to_rettype{ent}
   m::at1{find_type{m::at1{ent}}};
 public metafunction ent_to_argdefs{ent}
   m::map{
     m::slice{ent, 2},
-    metafunction{x} m::list{
-      m::at0{x}, /* name */
-      m::at1{find_type{m::at1{x}}}, /* type */
-      m::gt{m::at2{find_type{m::at1{x}}}, 0}, /* byref */
-      0}}; /* mutable */
+    metafunction{x} m::apply{
+      metafunction{xt} m::list{
+	/* name */ m::at0{x},
+	/* type */ m::at2{xt},
+	/* byref - if it's a slice-wrapper */ type_slice{xt},
+	/* mutable */ 0},
+      /* xt := */ find_type{m::at1{x}}}};
 
-private metafunction cargdecl{cmd, j} m::concat{
-  m::cond{m::eq{j, 0}, "", ", "},
-  m::csymbol{m::at1{find_type{m::at1{m::at{cmd, m::add{j, 2}}}}}},
-  m::cond{
-    m::at2{find_type{m::at1{m::at{cmd, m::add{j, 2}}}}}, 
-    " const&", ""},
-  " ",
-  m::at0{m::at{cmd, m::add{j, 2}}}};
+private metafunction cargdecl{cmd, j}
+  m::apply{
+    metafunction{jt} m::concat{
+      m::cond{m::eq{j, 0}, "", ", "},
+      m::csymbol{m::at2{jt}},
+      m::cond{
+	type_slice{jt}, 
+	" const&", ""},
+      " ",
+      m::at0{m::at{cmd, m::add{j, 2}}}},
+    /* jt := */ find_type{m::at1{m::at{cmd, m::add{j, 2}}}}};
 private metafunction cargdecls{cmd}
   m::fold{
     m::map{
@@ -178,12 +200,19 @@ private metafunction cargdecls{cmd}
       metafunction{j} cargdecl{cmd, j}},
     m::concat,
     ""};
-private metafunction cargexpr{cmd, j} m::concat{
-  m::cond{m::eq{j, 0}, "", ", "},
-  m::at0{m::at{cmd, m::add{j, 2}}},
-  m::cond{
-    m::at2{find_type{m::at1{m::at{cmd, m::add{j, 2}}}}}, 
-    ".rawarr()", ""}};
+private metafunction cargexpr{cmd, j}
+  m::apply{
+    metafunction{jt} m::concat{
+      m::cond{m::eq{j, 0}, "", ", "},
+      m::cond{ /* GLchar requires a cast */
+	type_slice{jt}, 
+	m::concat{"(", m::at1{jt}, ")"},
+	""},
+      m::at0{m::at{cmd, m::add{j, 2}}},
+      m::cond{
+	type_slice{jt}, 
+	".rawarr()", ""}},
+    /* jt := */ find_type{m::at1{m::at{cmd, m::add{j, 2}}}}};
 private metafunction cargexprs{cmd}
   m::fold{
     m::map{
