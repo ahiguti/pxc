@@ -52,6 +52,7 @@ const std::map<std::string, std::string> *cur_profile = 0;
 size_t recursion_limit = 3000;
 nsaliases_type nsaliases;
 nsextends_type nsextends;
+nssafetymap_type nssafetymap;
 /* end: global variables */
 
 static expr_i *string_to_nssym(expr_i *e, const std::string& str)
@@ -282,6 +283,11 @@ std::string to_short_name(const std::string& fullname)
   return fullname.substr(pos + 1);
 }
 
+symbol to_short_name(const symbol& fullname)
+{
+  return to_short_name(fullname.to_string()); /* TODO */
+}
+
 std::string get_namespace_part(const std::string& fullname)
 {
   const std::string::size_type tp = fullname.find('<');
@@ -292,11 +298,21 @@ std::string get_namespace_part(const std::string& fullname)
   return fullname.substr(0, pos - 1);
 }
 
+symbol get_namespace_part(const symbol& fullname)
+{
+  return get_namespace_part(fullname.to_string()); /* TODO */
+}
+
 bool has_namespace(const std::string& name)
 {
   const std::string::size_type tp = name.find('<');
   const std::string::size_type pos = name.rfind(':', tp);
   return pos != name.npos;
+}
+
+bool has_namespace(const symbol& name)
+{
+  return has_namespace(name.to_string());
 }
 
 bool is_type(const term& t)
@@ -2270,12 +2286,13 @@ void fn_append_coptions(expr_i *e, coptions& copt_apnd)
   }
 }
 
-void fn_set_namespace(expr_i *e, const std::string& uniqns, int& block_id_ns)
+void fn_set_namespace(expr_i *e, const std::string& uniqns, int& block_id_ns,
+  bool allow_unsafe)
 {
   if (e == 0) {
     return;
   }
-  e->set_unique_namespace_one(uniqns);
+  e->set_unique_namespace_one(uniqns, allow_unsafe);
   expr_block *const bl = dynamic_cast<expr_block *>(e);
   if (bl != 0) {
     assert(compile_phase == 0);
@@ -2287,7 +2304,7 @@ void fn_set_namespace(expr_i *e, const std::string& uniqns, int& block_id_ns)
   const int num = e->get_num_children();
   for (int i = 0; i < num; ++i) {
     expr_i *c = e->get_child(i);
-    fn_set_namespace(c, uniqns, block_id_ns);
+    fn_set_namespace(c, uniqns, block_id_ns, allow_unsafe);
   }
 }
 
@@ -2429,7 +2446,8 @@ void fn_update_tree(expr_i *e, expr_i *p, symbol_table *symtbl,
   }
   e->parent_expr = p;
   e->symtbl_lexical = symtbl;
-  e->set_unique_namespace_one(curns_u);
+  e->set_unique_namespace_one(curns_u,
+    nssafetymap[curns_u] != nssafety_e_safe);
   DBG_SYMTBL(fprintf(stderr, "fn_update_tree: set %p-> symtbl_lexical  = %p\n",
     e, symtbl));
   if (e->get_esort() == expr_e_block) {
@@ -2555,7 +2573,7 @@ static void check_upvalue_funcobj(expr_i *e)
   /* func is defined in the current func? */
   symbol_table *st = 0;
   for (st = sc->symtbl_defined; st != 0; st = st->get_lexical_parent()) {
-    if (st->locals.find(sc->fullsym) != st->locals.end()) {
+    if (st->locals.find(sc->get_fullsym()) != st->locals.end()) {
       return;
     }
     if (st->block_esort != expr_e_block) {
@@ -2566,12 +2584,12 @@ static void check_upvalue_funcobj(expr_i *e)
     return;
   }
   /* defined in the upvalue of the current frame? */
-  if (st->upvalues.find(sc->fullsym) == st->upvalues.end()) {
+  if (st->upvalues.find(sc->get_fullsym()) == st->upvalues.end()) {
     /* not found in the upvalues of the current frame. this means that
-     * es->fullsym is defined after the current function is defined.
+     * es->get_fullsym() is defined after the current function is defined.
      * TODO: too tricky. */
     arena_error_push(e, "Function closure '%s' is not yet defined",
-      sc->fullsym.c_str());
+      sc->get_fullsym().c_str());
   }
 #endif
 }
@@ -2594,7 +2612,7 @@ static void check_upvalue_memfunc(expr_i *e)
   symbol_table *frame_def = get_current_frame_symtbl(ef->symtbl_lexical);
   if (frame_usestruct != 0 && frame_def != 0 && frame_usestruct != frame_def) {
     arena_error_push(e, "Cannot use a member function '%s' as an upvalue",
-      sc->fullsym.c_str());
+      sc->get_fullsym().c_str());
   }
   #endif
 }
@@ -2653,26 +2671,28 @@ static void check_interface_impl_one(expr_i *esub, expr_block *esub_block,
     return;
   }
   const symbol_table& symtbl = ei_super->block->symtbl;
+  symbol_table::local_names_type::const_iterator k;
   symbol_table::locals_type::const_iterator i, j;
-  for (i = symtbl.locals.begin(); i != symtbl.locals.end(); ++i) {
+  for (k = symtbl.local_names.begin(); k != symtbl.local_names.end(); ++k) {
+    i = symtbl.find(*k);
     expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(i->second.edef);
     if (efd == 0) {
       continue;
     }
-    j = esub_block->symtbl.locals.find(i->first);
+    j = esub_block->symtbl.find(i->first);
     if (esub->get_esort() == expr_e_struct) {
-      if (j == esub_block->symtbl.locals.end() ||
+      if (j == esub_block->symtbl.end() ||
 	j->second.edef->get_esort() != expr_e_funcdef) {
 	arena_error_push(esub, "Method '%s' is not implemented",
 	  i->first.c_str());
 	continue;
       }
     } else if (esub->get_esort() == expr_e_interface) {
-      if (j != esub_block->symtbl.locals.end()) {
+      if (j != esub_block->symtbl.end()) {
 	arena_error_push(esub, "Can not override '%s'", i->first.c_str());
       }
     }
-    if (j != esub_block->symtbl.locals.end()) {
+    if (j != esub_block->symtbl.end()) {
       expr_funcdef *const efd_impl =
 	ptr_down_cast<expr_funcdef>(j->second.edef);
       if (!check_function_argtypes(ei_super, efd, efd_impl)) {
@@ -3077,12 +3097,12 @@ bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
 	    }
 	    arena_error_push(epos,
 	      "Field '%s' can not be modified from a const member function",
-	      sc->fullsym.c_str());
+	      sc->get_fullsym().c_str());
 	  }
 	} else {
 	  #if 0
 	  arena_error_push(epos, "Upvalue '%s' can not be modified",
-	    sc->fullsym.c_str());
+	    sc->get_fullsym().c_str());
 	  #endif
 	}
       }
@@ -3097,7 +3117,7 @@ bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
 	  return false;
 	}
 	arena_error_push(epos, "Variable '%s' can not be modified",
-	  sc->fullsym.c_str());
+	  sc->get_fullsym().c_str());
       }
     } else if (astyp == expr_e_argdecls) {
       expr_argdecls *const ead = ptr_down_cast<expr_argdecls>(eev);
@@ -3108,7 +3128,7 @@ bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
 	  return false;
 	}
 	arena_error_push(epos, "Argument '%s' can not be modified",
-	  sc->fullsym.c_str());
+	  sc->get_fullsym().c_str());
       }
     } else {
       DBG_LV(fprintf(stderr, "expr_has_lvalue %s 3 false\n",
@@ -3117,7 +3137,7 @@ bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
 	return false;
       }
       arena_error_push(epos, "Symbol '%s' can not be modified",
-	sc->fullsym.c_str());
+	sc->get_fullsym().c_str());
     }
     DBG_LV(fprintf(stderr, "expr_has_lvalue %s 4 true\n",
       a0->dump(0).c_str()));

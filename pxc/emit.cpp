@@ -399,8 +399,8 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
   em.puts(" {\n");
   em.add_indent(1);
   if (est->block->inherit != 0) {
-    if (est->block->symtbl.locals.find("~")
-      == est->block->symtbl.locals.end()) { /* no userdefined destr */
+    if (est->block->symtbl.find("~")
+      == est->block->symtbl.end()) { /* no userdefined destr */
       /* nothrow destructor */
       em.set_file_line(est);
       em.indent('b');
@@ -1726,8 +1726,8 @@ static void emit_global_vars(emit_context& em, expr_block *gl_blk)
   symbol_table::local_names_type::const_iterator i;
   for (i = symtbl->local_names.begin(); i != symtbl->local_names.end(); ++i) {
     const symbol_table::locals_type::const_iterator iter
-      = symtbl->locals.find(*i);
-    assert(iter != symtbl->locals.end());
+      = symtbl->find(*i);
+    assert(iter != symtbl->end());
     const expr_var *const e = dynamic_cast<const expr_var *>(
       iter->second.edef);
     if (e == 0) { continue; }
@@ -1756,8 +1756,8 @@ void expr_stmts::emit_local_decl(emit_context& em)
   for (i = symtbl_lexical->local_names.begin();
     i != symtbl_lexical->local_names.end(); ++i) {
     const symbol_table::locals_type::const_iterator iter
-      = symtbl_lexical->locals.find(*i);
-    assert(iter != symtbl_lexical->locals.end());
+      = symtbl_lexical->find(*i);
+    assert(iter != symtbl_lexical->end());
     if (iter->second.stmt != this) {
       continue;
     }
@@ -1797,8 +1797,8 @@ void expr_block::emit_local_decl(emit_context& em, bool is_funcbody)
   symbol_table::local_names_type::const_iterator i;
   for (i = symtbl.local_names.begin(); i != symtbl.local_names.end(); ++i) {
     const symbol_table::locals_type::const_iterator iter
-      = symtbl.locals.find(*i);
-    assert(iter != symtbl.locals.end());
+      = symtbl.find(*i);
+    assert(iter != symtbl.end());
     if (is_funcbody && iter->second.stmt != 0) {
       continue; /* will be defined on each stmt */
     }
@@ -1843,8 +1843,8 @@ void expr_block::emit_memberfunc_decl(emit_context& em, bool pure_virtual)
   symbol_table::local_names_type::const_iterator i;
   for (i = symtbl.local_names.begin(); i != symtbl.local_names.end(); ++i) {
     const symbol_table::locals_type::const_iterator iter
-      = symtbl.locals.find(*i);
-    assert(iter != symtbl.locals.end());
+      = symtbl.find(*i);
+    assert(iter != symtbl.end());
     expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(iter->second.edef);
     emit_memberfunc_decl_one(em, efd, pure_virtual);
   }

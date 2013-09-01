@@ -12,10 +12,12 @@
 // vim:sw=2:ts=8:ai
 
 #include "expr_misc.hpp"
+#include "util.hpp"
 
 #define DBG_DEF(x)
 #define DBG(x)
 #define DBG_EXT(x)
+#define DBG_TIMING(x)
 
 namespace pxc {
 
@@ -27,24 +29,21 @@ symbol_table::symbol_table(expr_block *block_backref)
 
 symbol_table *symbol_table::get_lexical_parent() const
 {
-  expr_i *e = block_backref->parent_expr;
-  while (e != 0) {
-    expr_block *bl = dynamic_cast<expr_block *>(e);
-    if (bl != 0) {
-      return &bl->symtbl;
-    }
-    e = e->parent_expr;
-  }
-  return 0;
+  return block_backref->symtbl_lexical;
 }
 
-void symbol_table::define_name(const std::string& shortname,
-  const std::string& curns, expr_i *e, attribute_e attr, expr_stmts *stmt)
+symbol append_namespace(const symbol& ns, const symbol& name)
+{
+  return ns.to_string() + "::" + name.to_string(); /* TODO */
+}
+
+void symbol_table::define_name(const symbol& shortname,
+  const symbol& curns, expr_i *e, attribute_e attr, expr_stmts *stmt)
   /* stmt must be set if e is a local variable */
 {
-  std::string name = shortname;
+  symbol name = shortname;
   if (get_lexical_parent() == 0 && !curns.empty()) {
-    name = curns + "::" + shortname;
+    name = append_namespace(curns, shortname);
   }
   DBG_DEF(fprintf(stderr,
     "symtbl=%p define[%s] curns=[%s] (%s:%d) s=%d e=%p lparent=%p\n",
@@ -60,8 +59,8 @@ void symbol_table::define_name(const std::string& shortname,
     name.c_str(), i->second.edef->fname, i->second.edef->line);
 }
 
-expr_i *symbol_table::resolve_name_nothrow(const std::string& fullname,
-  bool no_private, const std::string& curns, bool& is_global_r,
+expr_i *symbol_table::resolve_name_nothrow(const symbol& fullname,
+  bool no_private, const symbol& curns, bool& is_global_r,
   bool& is_upvalue_r, bool& is_memfld_r)
 {
   localvar_info v = resolve_name_nothrow_internal(fullname, curns, false,
@@ -70,7 +69,7 @@ expr_i *symbol_table::resolve_name_nothrow(const std::string& fullname,
     if (no_private) {
       return 0;
     }
-    const std::string nspart = get_namespace_part(fullname);
+    const symbol nspart = get_namespace_part(fullname);
     if (!nspart.empty()) {
       return 0;
     }
@@ -78,8 +77,8 @@ expr_i *symbol_table::resolve_name_nothrow(const std::string& fullname,
   return v.edef;
 }
 
-expr_i *symbol_table::resolve_name_nothrow_memfld(const std::string& fullname,
-  bool no_private, const std::string& curns)
+expr_i *symbol_table::resolve_name_nothrow_memfld(const symbol& fullname,
+  bool no_private, const symbol& curns)
 {
   bool is_global_dmy = false;
   bool is_upvalue_dmy = false;
@@ -90,7 +89,7 @@ expr_i *symbol_table::resolve_name_nothrow_memfld(const std::string& fullname,
     if (no_private) {
       return 0;
     }
-    const std::string nspart = get_namespace_part(fullname);
+    const symbol nspart = get_namespace_part(fullname);
     if (!nspart.empty()) {
       return 0;
     }
@@ -99,16 +98,19 @@ expr_i *symbol_table::resolve_name_nothrow_memfld(const std::string& fullname,
 }
 
 localvar_info symbol_table::resolve_name_nothrow_internal(
-  const std::string& fullname, const std::string& curns,
+  const symbol& fullname, const symbol& curns,
   bool memfld_only, bool& is_global_r, bool& is_upvalue_r,
   bool& is_memfld_r)
 {
   localvar_info v;
+  DBG_TIMING(double t[16] = { 0 });
+  DBG_TIMING(t[0] = gettimeofday_double());
   do {
     is_upvalue_r = false;
     is_memfld_r = block_esort == expr_e_struct;
     is_global_r = (get_lexical_parent() == 0);
     locals_type::const_iterator i = locals.find(fullname);
+    DBG_TIMING(t[1] = gettimeofday_double());
     if (i != locals.end()) {
       v = i->second;
       break;
@@ -116,6 +118,7 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
     if (memfld_only) {
       break;
     }
+    DBG_TIMING(t[2] = gettimeofday_double());
     symbol_table *psymtbl = get_lexical_parent();
     if (psymtbl != 0) {
       /* non-global */
@@ -172,74 +175,95 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
 	  v = localvar_info();
 	}
       }
+      DBG_TIMING(t[3] = gettimeofday_double());
       if (v.edef != 0) {
 	break;
       }
     } else {
       /* global */
-      if (!has_namespace(fullname)) {
+      DBG_TIMING(t[4] = gettimeofday_double());
+      if (!fullname.has_ns()) {
 	/* try the current namespace */
-	std::string pname = curns + "::" + fullname;
-	locals_type::const_iterator j = locals.find(pname);
-	if (j != locals.end()) {
-	  v = j->second;
-	  DBG_EXT(fprintf(stderr, "found curns %s %s %s\n", fullname.c_str(),
-	    curns.c_str(), pname.c_str()));
-	  break;
+	symbol pname = fullname.add_ns_if_defined(curns);
+	if (!pname.empty()) {
+	  // double t0 = gettimeofday_double();
+	  locals_type::const_iterator j = locals.find(pname);
+	  // double t1 = gettimeofday_double();
+	  #if 0
+	  if (t1 - t0 > 0.00002) {
+	  fprintf(stderr, "slow resolve_name_1 %s %f\n", fullname.c_str(),
+	    t1 - t0);
+	  }
+	  #endif
+	  if (j != locals.end()) {
+	    v = j->second;
+	    DBG_EXT(fprintf(stderr, "found curns %s %s %s\n", fullname.c_str(),
+	      curns.c_str(), pname.c_str()));
+	    break;
+	  }
 	}
 	/* try nsextends of the curns */
+	DBG_TIMING(t[5] = gettimeofday_double());
 	{
 	  nsextends_type::const_iterator j = nsextends.find(curns);
 	  if (j != nsextends.end()) {
 	    for (nsextend_entries::const_iterator k = j->second.begin();
 	      k != j->second.end(); ++k) {
-	      pname = *k + "::" + fullname;
-#if 0
-fprintf(stderr, "try %s\n", pname.c_str());
-#endif
-	      locals_type::const_iterator jp = locals.find(pname);
-	      if (jp != locals.end()) {
-		v = jp->second;
-		DBG_EXT(fprintf(stderr, "found nsext curns %s %s %s\n",
-		  fullname.c_str(), curns.c_str(), pname.c_str()));
-		break;
+	      pname = fullname.add_ns_if_defined(*k);
+	      #if 0
+	      fprintf(stderr, "try %s\n", pname.c_str());
+	      #endif
+	      if (!pname.empty()) {
+		locals_type::const_iterator jp = locals.find(pname);
+		if (jp != locals.end()) {
+		  v = jp->second;
+		  DBG_EXT(fprintf(stderr, "found nsext curns %s %s %s\n",
+		    fullname.c_str(), curns.c_str(), pname.c_str()));
+		  break;
+		}
 	      }
 	    }
 	  }
+	  DBG_TIMING(t[6] = gettimeofday_double());
 	  if (v.edef != 0) {
 	    break;
 	  }
 	}
+	DBG_TIMING(t[7] = gettimeofday_double());
 	/* try noprefix imports of curns */
 	nsaliases_type::const_iterator iter = nsaliases.find(
 	  std::make_pair(curns, ""));
 	if (iter != nsaliases.end()) {
 	  for (nsalias_entries::const_iterator i = iter->second.begin();
 	    i != iter->second.end(); ++i) {
-	    pname = *i + "::" + fullname;
-#if 0
-fprintf(stderr, "try %s\n", pname.c_str());
-#endif
-	    locals_type::const_iterator ip = locals.find(pname);
-	    if (ip != locals.end()) {
-	      v = ip->second;
-	      DBG_EXT(fprintf(stderr, "found noprefix curns %s %s %s\n",
-		fullname.c_str(), curns.c_str(), pname.c_str()));
-	      break;
+	    pname = fullname.add_ns_if_defined(*i);
+	    #if 0
+	    fprintf(stderr, "try %s\n", pname.c_str());
+	    #endif
+	    if (!pname.empty()) {
+	      locals_type::const_iterator ip = locals.find(pname);
+	      if (ip != locals.end()) {
+		v = ip->second;
+		DBG_EXT(fprintf(stderr, "found noprefix curns %s %s %s\n",
+		  fullname.c_str(), curns.c_str(), pname.c_str()));
+		break;
+	      }
 	    }
 	    /* try nsextends of a noprefix import of curns */
 	    nsextends_type::const_iterator j = nsextends.find(*i);
 	    if (j != nsextends.end()) {
 	      for (nsextend_entries::const_iterator k = j->second.begin();
 		k != j->second.end(); ++k) {
-		pname = *k + "::" + fullname;
-		locals_type::const_iterator jp = locals.find(pname);
-		if (jp != locals.end()) {
-		  v = jp->second;
-		  DBG_EXT(fprintf(stderr,
-		    "found nsext noprefix curns %s %s %s\n",
-		    fullname.c_str(), curns.c_str(), pname.c_str()));
-		  break;
+		pname = fullname.add_ns_if_defined(*k);
+		if (!pname.empty()) {
+		  locals_type::const_iterator jp = locals.find(pname);
+		  if (jp != locals.end()) {
+		    v = jp->second;
+		    DBG_EXT(fprintf(stderr,
+		      "found nsext noprefix curns %s %s %s\n",
+		      fullname.c_str(), curns.c_str(), pname.c_str()));
+		    break;
+		  }
 		}
 	      }
 	    }
@@ -247,29 +271,33 @@ fprintf(stderr, "try %s\n", pname.c_str());
 	      break;
 	    }
 	  }
+	  DBG_TIMING(t[8] = gettimeofday_double());
 	  if (v.edef != 0) {
 	    break;
 	  }
 	}
       } else {
 	/* has_namespace(fullname) */
-	const std::string nspart = get_namespace_part(fullname);
-	const std::string shortname = to_short_name(fullname);
+	const symbol nspart = get_namespace_part(fullname);
+	const symbol shortname = to_short_name(fullname);
 	/* try namespace aliases */
 	nsaliases_type::const_iterator iter = nsaliases.find(
 	  std::make_pair(curns, nspart));
+	DBG_TIMING(t[9] = gettimeofday_double());
 	if (iter != nsaliases.end()) {
 	  DBG_EXT(fprintf(stderr, "nsalias found %s -> %s\n", curns.c_str(),
 	    nspart.c_str()));
 	  for (nsalias_entries::const_iterator i = iter->second.begin();
 	    i != iter->second.end(); ++i) {
-	    std::string pname = *i + "::" + shortname;
-	    DBG_EXT(fprintf(stderr, "nsalias found %s -> %s %s\n",
-	      curns.c_str(), nspart.c_str(), pname.c_str()));
-	    locals_type::const_iterator ip = locals.find(pname);
-	    if (ip != locals.end()) {
-	      v = ip->second;
-	      break;
+	    symbol pname = shortname.add_ns_if_defined(*i);
+	    if (!pname.empty()) {
+	      DBG_EXT(fprintf(stderr, "nsalias found %s -> %s %s\n",
+		curns.c_str(), nspart.c_str(), pname.c_str()));
+	      locals_type::const_iterator ip = locals.find(pname);
+	      if (ip != locals.end()) {
+		v = ip->second;
+		break;
+	      }
 	    }
 	    /* try nsextends of a nsalias of curns */
 	    DBG_EXT(fprintf(stderr, "nsalias try nsextends %s\n", i->c_str()));
@@ -279,20 +307,24 @@ fprintf(stderr, "try %s\n", pname.c_str());
 		i->c_str()));
 	      for (nsextend_entries::const_iterator k = j->second.begin();
 		k != j->second.end(); ++k) {
-		pname = *k + "::" + shortname;
-		DBG_EXT(fprintf(stderr, "nsalias nsextends lookup %s\n",
-		  pname.c_str()));
-		locals_type::const_iterator jp = locals.find(pname);
-		if (jp != locals.end()) {
-		  v = jp->second;
-		  break;
+		pname = shortname.add_ns_if_defined(*k);
+		if (!pname.empty()) {
+		  DBG_EXT(fprintf(stderr, "nsalias nsextends lookup %s\n",
+		    pname.c_str()));
+		  locals_type::const_iterator jp = locals.find(pname);
+		  if (jp != locals.end()) {
+		    v = jp->second;
+		    break;
+		  }
 		}
 	      }
 	    }
+	    DBG_TIMING(t[10] = gettimeofday_double());
 	    if (v.edef != 0) {
 	      break;
 	    }
 	  }
+	  DBG_TIMING(t[11] = gettimeofday_double());
 	  if (v.edef != 0) {
 	    break;
 	  }
@@ -306,11 +338,21 @@ fprintf(stderr, "try %s\n", pname.c_str());
     block_backref->fname,
     block_backref->line, fullname.c_str(), curns.c_str(),
     is_upvalue_r ? "up" : "-", v.edef));
+  DBG_TIMING(double tcur = gettimeofday_double());
+  #if 0
+  if (tcur - t[0] > 0.00002) {
+    fprintf(stderr, "slow reso [%s] [%s]", fullname.c_str(), curns.c_str());
+    for (int i = 1; i < 16; ++i) {
+      if (t[i] != 0) fprintf(stderr, " (%d) %f", i, t[i] - t[0]);
+    }
+    fprintf(stderr, "\n");
+  }
+  #endif
   return v;
 }
 
-expr_i *symbol_table::resolve_name(const std::string& fullname,
-  const std::string& curns, expr_i *e, bool& is_global_r, bool& is_upvalue_r)
+expr_i *symbol_table::resolve_name(const symbol& fullname,
+  const symbol& curns, expr_i *e, bool& is_global_r, bool& is_upvalue_r)
 {
   bool is_memfld_r = false;
   localvar_info v = resolve_name_nothrow_internal(fullname, curns, false,
@@ -326,7 +368,7 @@ expr_i *symbol_table::resolve_name(const std::string& fullname,
     }
   }
   if (v.has_attrib_private()) {
-    const std::string nspart = get_namespace_part(fullname);
+    const symbol nspart = get_namespace_part(fullname);
     if (!nspart.empty()) {
       arena_error_throw(v.edef, "Symbol '%s' is private", fullname.c_str());
     }

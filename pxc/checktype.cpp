@@ -40,6 +40,8 @@
 #define DBG_RECHAIN(x)
 #define DBG_SETCHILD(x)
 #define DBG_VARIADIC(x)
+#define DBG_TIMING(x)
+#define DBG_TIMING3(x)
 
 namespace pxc {
 
@@ -213,15 +215,57 @@ static void check_type_symbol_common(expr_i *e, symbol_table *lookup)
 
 void expr_telist::check_type(symbol_table *lookup)
 {
+  // double t0 = gettimeofday_double();
   fn_check_type(head, lookup);
+  // double t1 = gettimeofday_double();
+  // if (t1 - t0 > 0.0001) {
+  // fprintf(stderr, "slow expr_telist check_type %f %s\n", t1 - t0,
+  //   this->dump(0).c_str());
+  // }
   fn_check_type(rest, lookup);
 }
 
 void expr_te::check_type(symbol_table *lookup)
 {
+  // double t0 = gettimeofday_double();
   fn_check_type(tlarg, symtbl_lexical);
     /* tlarg always uses lexical context */
+  // double t1 = gettimeofday_double();
   check_type_symbol_common(this, lookup);
+  // double t2 = gettimeofday_double();
+  #if 0
+  if (t2 - t0 > 0.0001) {
+  fprintf(stderr, "slow expr_te check_type %f %f %s\n", t1 - t0, t2 - t1,
+    this->dump(0).c_str());
+  }
+  #endif
+}
+
+void expr_ns::check_type(symbol_table *lookup)
+{
+  if (import) {
+    nssafetymap_type::const_iterator i = nssafetymap.find(src_uniq_nsstr);
+    if (i == nssafetymap.end()) {
+      arena_error_throw(this, "Internal error: namespace '%s' not found",
+	src_uniq_nsstr.c_str());
+    }
+    nssafetymap_type::const_iterator j = nssafetymap.find(uniq_nsstr);
+    if (j == nssafetymap.end()) {
+      arena_error_throw(this, "Internal error: namespace '%s' not found",
+	uniq_nsstr.c_str());
+    }
+    if (i->second == nssafety_e_safe &&
+      j->second == nssafety_e_export_unsafe) {
+      arena_error_throw(this, "Can not import unsafe namespace '%s'",
+	uniq_nsstr.c_str());
+    }
+    if (i->second == nssafety_e_use_unsafe &&
+      j->second == nssafety_e_export_unsafe && pub) {
+      arena_error_throw(this,
+	"Importing unsafe namespace '%s' must be private",
+	uniq_nsstr.c_str());
+    }
+  }
 }
 
 void expr_symbol::check_type(symbol_table *lookup)
@@ -613,6 +657,9 @@ void expr_enumval::check_type(symbol_table *lookup)
 
 void expr_stmts::check_type(symbol_table *lookup)
 {
+  #if 0
+  double t1 = gettimeofday_double();
+  #endif
   fn_check_type(head, lookup);
   if (rest != 0 && rest->parent_expr != this) {
     /* this happenes when head is a expr_expand. in this case, rest has
@@ -620,6 +667,10 @@ void expr_stmts::check_type(symbol_table *lookup)
     DBG_RECHAIN(fprintf(stderr, "RE-CHAINED\n"));
     return;
   }
+  #if 0
+  double t2 = gettimeofday_double();
+  fprintf(stderr, "stmt %d %f\n", (int)head->get_esort(), t2 - t1); // FIXME
+  #endif
   fn_check_type(rest, lookup);
   switch (head->get_esort()) {
   case expr_e_int_literal:
@@ -758,10 +809,19 @@ static void calc_inherit_transitive_rec(expr_i *pos,
 void expr_block::check_type(symbol_table *lookup)
 {
   DBG_CT_BLOCK(fprintf(stderr, "%s: %p\n", __PRETTY_FUNCTION__, this));
+  #if 0
+  double t1 = gettimeofday_double();
+  #endif
   /* compiling argdecls and rettype is necessary for function type
    * automatching. */
   fn_check_type(argdecls, &symtbl);
+  #if 0
+  double t2 = gettimeofday_double();
+  #endif
   fn_check_type(rettype_uneval, &symtbl);
+  #if 0
+  double t3 = gettimeofday_double();
+  #endif
   /* stmts are compiled only if it's instantiated. */
   if (!tinfo.is_uninstantiated()) {
     DBG_CT_BLOCK(fprintf(stderr, "%s: %p: instantiated\n",
@@ -780,6 +840,10 @@ void expr_block::check_type(symbol_table *lookup)
     #endif
   }
   compiled_flag = true;
+  #if 0
+  double t4 = gettimeofday_double();
+  fprintf(stderr, "block %f %f %f %s %s\n", t2 - t1, t3 - t2, t4 - t3, argdecls ? argdecls->dump(0).c_str() : "", rettype_uneval ? rettype_uneval->dump(0).c_str() : ""); // FIXME
+  #endif
 }
 
 static void check_dunion_field(const expr_op *eop, expr_i *a0)
@@ -1403,10 +1467,10 @@ void expr_op::check_type(symbol_table *lookup)
     }
     /* lookup without arg1_sym_prefix */
     /* lookup member field */
-    if (symtbl != 0 && symtbl->resolve_name_nothrow_memfld(sc->fullsym,
+    if (symtbl != 0 && symtbl->resolve_name_nothrow_memfld(sc->get_fullsym(),
       no_private, sc->uniqns)) {
       /* symbol is defined as a field */
-      DBG(fprintf(stderr, "found fld '%s' ns=%s\n", sc->fullsym.c_str(),
+      DBG(fprintf(stderr, "found fld '%s' ns=%s\n", sc->get_fullsym().c_str(),
 	sc->uniqns.c_str()));
       fn_check_type(arg1, symtbl);
       type_of_this_expr = arg1->resolve_texpr();
@@ -1417,7 +1481,7 @@ void expr_op::check_type(symbol_table *lookup)
       if (fo_efd != 0 && !fo_efd->is_virtual_or_member_function()) {
 	arena_error_throw(this, "Can not apply '%s' "
 	  "('%s' is not a member function)",
-	  tok_string(this, op), sc->fullsym.c_str());
+	  tok_string(this, op), sc->get_fullsym().c_str());
 	return;
       }
       assert(!type_of_this_expr.is_null());
@@ -1425,12 +1489,13 @@ void expr_op::check_type(symbol_table *lookup)
     } else if (parent_symtbl != 0) {
       /* lookup with arg1_sym_prefix */
       /* find non-member function (vector_size, map_size etc.) */
-      const std::string funcname_w_prefix = arg1_sym_prefix + sc->fullsym;
+      const std::string funcname_w_prefix = arg1_sym_prefix
+	+ sc->get_fullsym().to_string(); /* TODO: don't use std::string */
       symtbl = parent_symtbl;
       const std::string uniqns = arg0_uniqns;
       DBG(fprintf(stderr,
 	"trying non-member arg0=%s fullsym=%s ns=%s symtbl=%p\n",
-	arg0->dump(0).c_str(), sc->fullsym.c_str(), uniqns.c_str(),
+	arg0->dump(0).c_str(), sc->get_fullsym().c_str(), uniqns.c_str(),
 	symtbl));
       no_private = false;
       #if 0
@@ -1453,10 +1518,12 @@ void expr_op::check_type(symbol_table *lookup)
       }
       #endif
       if (fo != 0) {
-	DBG(fprintf(stderr, "found %s\n", sc->fullsym.c_str()));
+	DBG(fprintf(stderr, "found %s\n", sc->get_fullsym().c_str()));
 	sc->arg_hidden_this = arg0;
 	sc->arg_hidden_this_ns = arg0_uniqns;
-	sc->sym_prefix = arg1_sym_prefix;
+	sc->set_sym_prefix_fullsym(
+	  arg1_sym_prefix + sc->get_fullsym().to_string());
+	  /* TODO: don't use std::string */
 	fn_check_type(arg1, symtbl); /* expr_symbol::check_type */
 	type_of_this_expr = arg1->resolve_texpr();
 	assert(!type_of_this_expr.is_null());
@@ -2665,7 +2732,8 @@ static expr_i *subst_symbol_name_rec(expr_i *e, expr_i *parent, int parent_pos,
   expr_funcdef *fd = dynamic_cast<expr_funcdef *>(e);
   expr_var *ev = dynamic_cast<expr_var *>(e);
   expr_enumval *en = dynamic_cast<expr_enumval *>(e);
-  // TODO: expr_struct, expr_dunion, etc.
+  expr_struct *es = dynamic_cast<expr_struct *>(e);
+  expr_dunion *eu = dynamic_cast<expr_dunion *>(e);
   if (sy != 0) {
     expr_nssym *nsy = sy->nssym;
     assert(nsy != 0);
@@ -2743,6 +2811,14 @@ static expr_i *subst_symbol_name_rec(expr_i *e, expr_i *parent, int parent_pos,
   } else if (en != 0) {
     if (std::string(en->sym) == src) {
       en->sym = arena_strdup(dst.get_string().c_str());
+    }
+  } else if (es != 0) {
+    if (std::string(es->sym) == src) {
+      es->sym = arena_strdup(dst.get_string().c_str());
+    }
+  } else if (eu != 0) {
+    if (std::string(eu->sym) == src) {
+      eu->sym = arena_strdup(dst.get_string().c_str());
     }
   }
   int num = e->get_num_children();
@@ -3013,7 +3089,7 @@ static void subst_foldfe_one(expr_foldfe *ffe, expr_i *e,
       expr_op *const curop = ptr_down_cast<expr_op>(cur);
       expr_i *const arg1 = curop->arg1;
       if (arg1->get_esort() == expr_e_symbol &&
-	ptr_down_cast<expr_symbol>(arg1)->sdef.fullsym == ffe->embedsym) {
+	ptr_down_cast<expr_symbol>(arg1)->sdef.get_fullsym() == ffe->embedsym) {
 	for (exprlist_type::const_reverse_iterator i = ees_emb.rbegin();
 	  i != ees_emb.rend(); ++i) {
 	  ees.push_front(deep_clone_expr(*i));
@@ -3024,7 +3100,7 @@ static void subst_foldfe_one(expr_foldfe *ffe, expr_i *e,
       cur = curop->arg0;
       continue;
     } else if (cur->get_esort() == expr_e_symbol &&
-      ptr_down_cast<expr_symbol>(cur)->sdef.fullsym == ffe->embedsym) {
+      ptr_down_cast<expr_symbol>(cur)->sdef.get_fullsym() == ffe->embedsym) {
       for (exprlist_type::const_reverse_iterator i = ees_emb.rbegin();
 	i != ees_emb.rend(); ++i) {
 	ees.push_front(deep_clone_expr(*i));
@@ -3070,7 +3146,7 @@ static void subst_foldfe(expr_foldfe *ffe, expr_i *e, const exprlist_type& ees,
     return;
   }
   if (e->get_esort() == expr_e_symbol &&
-    ptr_down_cast<expr_symbol>(e)->sdef.fullsym == ffe->embedsym) {
+    ptr_down_cast<expr_symbol>(e)->sdef.get_fullsym() == ffe->embedsym) {
     subst_foldfe_one(ffe, e, ees, fop);
     return;
   }
@@ -3185,13 +3261,23 @@ static void assert_is_child(expr_i *e, expr_i *p)
 
 void expr_expand::check_type(symbol_table *lookup)
 {
+  // double t0 = gettimeofday_double();
   assert_is_child(this, parent_expr);
   assert_is_child(parent_expr, parent_expr->parent_expr);
   #if 0
   fprintf(stderr, "expand: %s\n", baseexpr->dump(0).c_str());
   #endif
   fn_check_type(valueste, lookup);
+  // double t01 = gettimeofday_double();
+  #if 0
+  // FIXME
+  if (t01 - t0 > 0.0003) {
+    fprintf(stderr, "slow expand valueste = %s %d\n",
+      valueste->dump(0).c_str(), (int)valueste->get_esort());
+  }
+  #endif
   const term& vtyp = valueste->sdef.resolve_evaluated();
+  // double t02 = gettimeofday_double();
   eval_context ectx;
   if (has_unbound_tparam(vtyp, ectx)) {
     return; /* not instantiated */
@@ -3301,7 +3387,9 @@ void expr_expand::check_type(symbol_table *lookup)
     }
     ees.push_back(se);
   }
+  // double t1 = gettimeofday_double();
   generated_expr = chain_exprlist(ees, ex);
+  // double t2 = gettimeofday_double();
   expr_i *gparent = 0;
   int gparent_pos = 0;
   expr_i *rest_expr = 0;
@@ -3409,7 +3497,13 @@ void expr_expand::check_type(symbol_table *lookup)
 	DBG_RECHAIN(fprintf(stderr, "RE-CHAIN genrest rest_expr=%p\n",
 	  rest_expr));
 	assert_valid_tree(generated_expr);
+	DBG_TIMING(fprintf(stderr, "expand ch %s:%d begin\n", this->fname,
+	  this->line));
+	DBG_TIMING(double timing_x1 = gettimeofday_double());
 	fn_check_type(generated_expr, lookup);
+	DBG_TIMING(double timing_x2 = gettimeofday_double());
+	DBG_TIMING(fprintf(stderr, "expand ch %s:%d end %f\n", this->fname,
+	  this->line, timing_x2 - timing_x1));
       } else if (ex == expand_e_argdecls) {
 	expr_argdecls *ad = ptr_down_cast<expr_argdecls>(generated_expr);
 	assert(ad != 0);
@@ -3492,6 +3586,10 @@ void expr_expand::check_type(symbol_table *lookup)
       }
     }
   }
+  #if 0
+  double t3 = gettimeofday_double();
+  fprintf(stderr, "expand x %f %f %f %f %f\n", t01-t0, t02-t01, t1-t02, t2-t1, t3-t2);
+  #endif
 }
 
 void expr_argdecls::define_vars_one(expr_stmts *stmt)
@@ -3504,6 +3602,7 @@ void expr_argdecls::define_vars_one(expr_stmts *stmt)
 
 void expr_argdecls::check_type(symbol_table *lookup)
 {
+  DBG_TIMING3(double timing_x1 = gettimeofday_double());
   term& typ = resolve_texpr();
   expr_i *const fr = get_current_frame_expr(lookup);
   if (fr != 0) {
@@ -3514,6 +3613,9 @@ void expr_argdecls::check_type(symbol_table *lookup)
   }
   fn_check_type(rest, lookup);
   /* type_of_this_expr */
+  DBG_TIMING3(double timing_x2 = gettimeofday_double());
+  DBG_TIMING3(fprintf(stderr, "argdecls ch %s:%d end %f\n", this->fname,
+    this->line, timing_x2 - timing_x1));
 }
 
 void expr_funcdef::check_type(symbol_table *lookup)
@@ -3523,7 +3625,7 @@ void expr_funcdef::check_type(symbol_table *lookup)
     arena_error_throw(this, "Non-member/virtual function can not be const");
   }
   if ((this->get_attribute() & attribute_multithr) != 0) {
-    // FIXME: valuetype, tsvaluetype
+    // FIXME: valuetype and tsvaluetype are invalid also
     arena_error_throw(this, "Invalid attribute for a function");
   }
   if (this->is_virtual_or_member_function() &&
@@ -3549,10 +3651,6 @@ void expr_funcdef::check_type(symbol_table *lookup)
     block->stmts = 0;
   }
   fn_check_type(block, lookup);
-  #if 0
-  // moved to fn_compile. need to be executed after all functions are compiled.
-  add_tparam_upvalues_funcdef(this);
-  #endif
 }
 
 void expr_typedef::check_type(symbol_table *lookup)

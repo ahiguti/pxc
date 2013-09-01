@@ -900,7 +900,13 @@ static void compile_module_to_cc_srcs(const parser_options& po,
     const std::string tmp_fn = cc_filename + ".tmp";
     tmpfile_guard g(tmp_fn);
     mi_main.self_copts = coptions();
+    const double t1 = gettimeofday_double();
     arena_compile(po.profile.mapval, tmp_fn, mi_main.self_copts, gmain);
+    const double t2 = gettimeofday_double();
+    if (po.verbose > 0) {
+      fprintf(stderr, "compiled %s %f\n", mi_main.unique_namespace.c_str(),
+	t2 - t1);
+    }
     if (rename(tmp_fn.c_str(), cc_filename.c_str()) != 0) {
       arena_error_throw(0, "-:-: rename('%s', '%s') failed: errno=%d",
 	tmp_fn.c_str(), cc_filename.c_str(), errno);

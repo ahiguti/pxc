@@ -21,6 +21,7 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <unistd.h>
 #include <assert.h>
 #include <errno.h>
@@ -631,6 +632,16 @@ std::string unescape_hex_non_alnum(const std::string& str)
     }
   }
   return r;
+}
+
+double gettimeofday_double()
+{
+  struct timeval tv;
+  gettimeofday(&tv, 0);
+  double rv = tv.tv_usec;
+  rv /= 1000000;
+  rv += tv.tv_sec;
+  return rv;
 }
 
 };
