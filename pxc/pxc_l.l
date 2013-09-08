@@ -94,6 +94,8 @@ extern int count_newline(const char *str);
 "|="			{ return TOK_OR_ASSIGN; }
 "&="			{ return TOK_AND_ASSIGN; }
 "^="			{ return TOK_XOR_ASSIGN; }
+"<<="			{ return TOK_SHIFTL_ASSIGN; }
+">>="			{ return TOK_SHIFTR_ASSIGN; }
 "->"			{ return TOK_ARROW; }
 "::"			{ return TOK_NSDELIM; }
 ".."			{ return TOK_SLICE; }

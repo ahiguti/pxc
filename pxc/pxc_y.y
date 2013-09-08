@@ -94,6 +94,8 @@ static compile_mode cur_mode;
 %token<void_val> TOK_OR_ASSIGN
 %token<void_val> TOK_AND_ASSIGN
 %token<void_val> TOK_XOR_ASSIGN
+%token<void_val> TOK_SHIFTL_ASSIGN
+%token<void_val> TOK_SHIFTR_ASSIGN
 %token<void_val> TOK_SLICE
 %token<void_val> TOK_TRY
 %token<void_val> TOK_THROW
@@ -868,6 +870,12 @@ assign_expr
 	  	$1, $3); }
 	| unary_expr TOK_XOR_ASSIGN assign_expr
 	  { $$ = expr_op_new(cur_fname, @1.first_line, TOK_XOR_ASSIGN,
+	  	$1, $3); }
+	| unary_expr TOK_SHIFTL_ASSIGN assign_expr
+	  { $$ = expr_op_new(cur_fname, @1.first_line, TOK_SHIFTL_ASSIGN,
+	  	$1, $3); }
+	| unary_expr TOK_SHIFTR_ASSIGN assign_expr
+	  { $$ = expr_op_new(cur_fname, @1.first_line, TOK_SHIFTR_ASSIGN,
 	  	$1, $3); }
 	| unary_expr TOK_EXTERN TOK_STRLIT assign_expr
 	  { $$ = expr_op_new(cur_fname, @1.first_line, TOK_EXTERN, $1, $4,

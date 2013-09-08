@@ -65,14 +65,19 @@ expr_i *symbol_common::resolve_symdef(symbol_table *lookup)
     if (lookup == 0) {
       lookup = parent_expr->symtbl_lexical;
     }
+    #if 0
     double t0 = gettimeofday_double();
+    #endif
     symbol_def = lookup->resolve_name(get_sym_prefix_fullsym(), lookup_ns,
       parent_expr, is_global, is_upvalue);
+    #if 0
     double t1 = gettimeofday_double();
-    #if 1
+    #endif
+    #if 0
     if (t1 - t0 > 0.00005) {
     fprintf(stderr, "slow resolve_name [%s] [%s] [%s] %f\n",
-      get_sym_prefix_fullsym().c_str(), get_fullsym().c_str(), lookup_ns.c_str(), t1 - t0);
+      get_sym_prefix_fullsym().c_str(), get_fullsym().c_str(),
+      lookup_ns.c_str(), t1 - t0);
     }
     #endif
     DBG_TE2(fprintf(stderr,
@@ -1086,6 +1091,8 @@ std::string expr_op::dump(int indent) const
   case TOK_OR_ASSIGN:
   case TOK_AND_ASSIGN:
   case TOK_XOR_ASSIGN:
+  case TOK_SHIFTL_ASSIGN:
+  case TOK_SHIFTR_ASSIGN:
   case TOK_ADD_ASSIGN:
   case TOK_SUB_ASSIGN:
   case TOK_MUL_ASSIGN:
