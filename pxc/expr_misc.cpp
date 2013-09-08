@@ -236,6 +236,8 @@ const char *tok_string(const expr_i *e, int tok)
   case TOK_OR_ASSIGN: return "|=";
   case TOK_AND_ASSIGN: return "&=";
   case TOK_XOR_ASSIGN: return "^=";
+  case TOK_SHIFTL_ASSIGN: return "<<=";
+  case TOK_SHIFTR_ASSIGN: return ">>=";
   case TOK_CASE: return "case";
   case TOK_SLICE: return "::";
   case TOK_EXPAND: return "expand";
@@ -572,6 +574,7 @@ typefamily_e get_family_from_string(const std::string& s)
   if (s == "farray") return typefamily_e_farray;
   if (s == "slice") return typefamily_e_slice;
   if (s == "cslice") return typefamily_e_cslice;
+  if (s == "ephemeral") return typefamily_e_ephemeral;
   if (s == "tree_map") return typefamily_e_tree_map;
   if (s == "tree_map_range") return typefamily_e_tree_map_range;
   if (s == "tree_map_crange") return typefamily_e_tree_map_crange;
@@ -607,6 +610,7 @@ std::string get_family_string(typefamily_e cat)
   case typefamily_e_farray: return "farray";
   case typefamily_e_slice: return "slice";
   case typefamily_e_cslice: return "cslice";
+  case typefamily_e_ephemeral: return "ephemeral";
   case typefamily_e_tree_map: return "tree_map";
   case typefamily_e_tree_map_range: return "tree_map_range";
   case typefamily_e_tree_map_crange: return "tree_map_crange";
@@ -844,7 +848,8 @@ bool is_cm_range_family(const term& t)
 
 static bool is_ephemeral_value_type(expr_i *e)
 {
-  return is_cm_range_family(e);
+  const typefamily_e cat = get_family(e);
+  return is_cm_range_family(e) || cat == typefamily_e_ephemeral;
   // || is_cm_lock_guard_family(e);
 }
 
@@ -1969,7 +1974,8 @@ void fn_compile(expr_i *e, expr_i *p, bool is_template)
     is_template);
   arena_error_throw_pushed();
   fn_check_type(e, e->symtbl_lexical);
-    /* calls fn_compile recursively if a template is instantiated */
+    /* calls fn_compile recursively if a template is instantiated or an expr
+     * is generated dynamically. */
   #if 0
   // move to expr.cpp
   fn_check_template_upvalues_direct(e);

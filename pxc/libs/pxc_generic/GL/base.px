@@ -36,9 +36,9 @@ public tsvaluetype struct extern "gl::%" sym { }
 expand (sym : m::map{ptrtypes, metafunction{x} m::concat{x, "_cp"}}) {
 public tsvaluetype struct extern "gl::%" sym { }
 }
-public tsvaluetype struct extern "gl::GLvoid_pp" GLvoid_pp { }
-public tsvaluetype struct extern "gl::GLvoid_cpcp" GLvoid_cpcp { }
-public tsvaluetype struct extern "gl::GLchar_cpcp" GLchar_cpcp { }
+public tsvaluetype struct extern "gl::GLvoid_p_p" GLvoid_p_p { }
+public tsvaluetype struct extern "gl::GLvoid_cp_cp" GLvoid_cp_cp { }
+public tsvaluetype struct extern "gl::GLchar_cp_cp" GLchar_cp_cp { }
 
 private metafunction emit_ptrtype{x}
   m::concat{"typedef ", x, " *", x, "_p;\n"};
@@ -75,9 +75,9 @@ namespace gl {
 
 %{emit_ptrtypes}%
 
-typedef GLvoid **GLvoid_pp;
-typedef const GLvoid *const *GLvoid_cpcp;
-typedef const GLchar *const *GLchar_cpcp;
+typedef GLvoid **GLvoid_p_p;
+typedef const GLvoid *const *GLvoid_cp_cp;
+typedef const GLchar *const *GLchar_cp_cp;
 
 };
 ;
@@ -86,6 +86,7 @@ public function extern "gl::to_void_p" {t} GLvoid_p to_void_p(t const& x);
 public function extern "gl::to_void_cp" {t} GLvoid_cp to_void_cp(t const& x);
 public function extern "gl::offset_to_void_cp" GLvoid_cp
   offset_to_void_cp(size_t x); /* used for glVertexPointer() with VBO */
+public function extern "gl::to_char_cp" GLchar_cp to_char_cp(cstrref const& x);
 
 extern "functions" inline
 namespace gl {
@@ -93,8 +94,10 @@ using namespace pxcrt;
 
 template <typename T> GLvoid_p to_void_p(T const& x) { return x.rawarr(); }
 template <typename T> GLvoid_cp to_void_cp(T const& x) { return x.rawarr(); }
-static inline GLvoid_cp offset_to_void_cp(bt_size_t x)
+static inline const void *offset_to_void_cp(bt_size_t x)
 { return reinterpret_cast<const void *>(x); }
+static inline const char *to_char_cp(cstrref const& x)
+{ return reinterpret_cast<const char *>(x.rawarr()); }
 
 };
 ;
@@ -154,9 +157,9 @@ private metafunction type_alist m::list{
   m::list{"_ip*", GLintptr_cp, cslice{GLintptr}}, /* 50 */
   m::list{"_szip*", GLsizeiptr_cp, cslice{GLsizeiptr}},
   m::list{"_fx*", GLfixed_cp, cslice{GLfixed}},
-  m::list{"v**", GLvoid_pp, GLvoid_pp},
-  m::list{"_v*_*", GLvoid_cpcp, GLvoid_cpcp},
-  m::list{"_c*_*", GLchar_cpcp, GLchar_cpcp}};
+  m::list{"v**", GLvoid_p_p, slice{GLvoid_p}},
+  m::list{"_v*_*", GLvoid_cp_cp, cslice{GLvoid_cp}},
+  m::list{"_c*_*", GLchar_cp_cp, cslice{GLchar_cp}}};
 
 public metafunction find_type{s} m::at{type_alist, s};
 /*

@@ -832,17 +832,13 @@ void expr_block::check_type(symbol_table *lookup)
       expr_funcdef *efd = ptr_down_cast<expr_funcdef>(parent_expr);
       check_return_expr(efd);
     } // FIXME: check_return_expr for struct constructor?
-    #if 0
-    // FIXME: remove. moved to expr_impl
-    std::set<expr_i *> s;
-    std::set<expr_i *> p; /* parents */
-    calc_inherit_transitive_rec(this, inherit_transitive, s, p, inherit);
-    #endif
   }
   compiled_flag = true;
   #if 0
   double t4 = gettimeofday_double();
-  fprintf(stderr, "block %f %f %f %s %s\n", t2 - t1, t3 - t2, t4 - t3, argdecls ? argdecls->dump(0).c_str() : "", rettype_uneval ? rettype_uneval->dump(0).c_str() : ""); // FIXME
+  fprintf(stderr, "block %f %f %f %s %s\n", t2 - t1, t3 - t2, t4 - t3,
+    argdecls ? argdecls->dump(0).c_str() : "",
+    rettype_uneval ? rettype_uneval->dump(0).c_str() : ""); // FIXME
   #endif
 }
 
@@ -924,18 +920,9 @@ static void store_tempvar(expr_i *e, passby_e passby, bool blockscope_flag,
       /* in this case, it will be rooted by value. test_25_slice/val.pl . */
     }
   }
-  // if (guard_elements) { abort(); } // FIXME
   e->tempvar_varinfo.passby = merge_passby(e->tempvar_varinfo.passby, passby);
   e->tempvar_varinfo.guard_elements |= guard_elements;
   e->tempvar_varinfo.scope_block |= blockscope_flag;
-  #if 0
-  if (is_passby_cm_value(e->tempvar_varinfo.passby) &&
-    !is_copyable(e->resolve_texpr())) {
-    /* reaches here if expr is a lock_guard constructor */
-    arena_error_throw(e,
-      "Internal error: failed to root because it's not copyable");
-  }
-  #endif
 }
 
 static void add_root_requirement_container_elements(expr_i *econ,
@@ -957,20 +944,6 @@ static void add_root_requirement_container_elements(expr_i *econ,
       blockscope_flag, guard_elements, "arrelem");
   }
 }
-
-#if 0
-static void check_ephemeral_object(expr_i *e, passby_e passby,
-  bool blockscope_flag)
-{
-  if (passby != passby_e_const_reference) {
-    return;
-  }
-  if (!blockscope_flag) {
-    return;
-  }
-  store_tempvar(e, passby_e_const_value, blockscope_flag, false, "ephemeral");
-}
-#endif
 
 term get_func_te_for_funccall(expr_i *func,
   bool& memfunc_w_explicit_obj_r)
@@ -1034,16 +1007,6 @@ static void add_root_requirement(expr_i *e, passby_e passby,
       arena_error_throw(e,
 	"Can not root by mutable reference because of conversion");
     }
-    #if 0
-    /* this expr has a rooted rvalue because of conversion. */
-    if (blockscope_flag) {
-      store_tempvar(e,
-	is_passby_const(passby)
-	? passby_e_const_value : passby_e_mutable_value, blockscope_flag,
-	false, "conv"); /* ROOT */
-    }
-    return;
-    #endif
     /* thru */
   }
   if (e->get_esort() == expr_e_funccall) {
@@ -1144,6 +1107,8 @@ static void add_root_requirement(expr_i *e, passby_e passby,
   case TOK_OR_ASSIGN:
   case TOK_AND_ASSIGN:
   case TOK_XOR_ASSIGN:
+  case TOK_SHIFTL_ASSIGN:
+  case TOK_SHIFTR_ASSIGN:
   case TOK_INC:
   case TOK_DEC:
   case TOK_PTR_REF:
@@ -1151,17 +1116,6 @@ static void add_root_requirement(expr_i *e, passby_e passby,
       blockscope_flag);
     add_root_requirement(eop->arg1, passby_e_const_value, blockscope_flag);
     return;
-  #if 0
-  case '?':
-    if (blockscope_flag) {
-      arena_error_throw(e, "Can not root a conditional expression");
-    }
-    return add_root_requirement(eop->arg1, passby, blockscope_flag);
-  case ':':
-    add_root_requirement(eop->arg0, passby, blockscope_flag);
-    add_root_requirement(eop->arg1, passby, blockscope_flag);
-    return;
-  #endif
   case '.':
   case TOK_ARROW:
     if (is_dunion(eop->arg0->resolve_texpr())) {
@@ -1184,12 +1138,6 @@ static void add_root_requirement(expr_i *e, passby_e passby,
       add_root_requirement(eop->arg0, passby_e_const_value, blockscope_flag);
     } else {
       /* pointers */
-      #if 0
-      if (blockscope_flag &&
-	is_multithreaded_pointer_family(eop->arg0->resolve_texpr())) {
-	arena_error_throw(e, "Block-scope lock is not implemented");
-      }
-      #endif
       /* copy the pointer in order to own a refcount */
       const bool guard_elements = type_has_invalidate_guard(
 	eop->arg0->resolve_texpr());
@@ -1225,11 +1173,8 @@ static void add_root_requirement(expr_i *e, passby_e passby,
       /* v[k] is required byref, or v[..] is required. need to guard. */
       add_root_requirement_container_elements(eop->arg0, blockscope_flag);
     } else {
-      /* by value */
-//      if (blockscope_flag) {
-	/* named variable. need to guard. */
-	store_tempvar(eop, passby, blockscope_flag, false, "elemval");
-//      }
+      /* passing container element by value */
+      store_tempvar(eop, passby, blockscope_flag, false, "elemval");
     }
     return;
   case '(':
@@ -1262,13 +1207,6 @@ static void add_root_requirement(expr_i *e, passby_e passby,
   }
 }
 
-#if 0
-static void check_expr_root(expr_i *e, passby_e passby, bool blockscope_flag)
-{
-  add_root_requirement(e, passby, blockscope_flag);
-}
-#endif
-
 static bool is_assign_op(int op, const std::string& extop)
 {
   switch (op) {
@@ -1281,6 +1219,8 @@ static bool is_assign_op(int op, const std::string& extop)
   case TOK_OR_ASSIGN:
   case TOK_AND_ASSIGN:
   case TOK_XOR_ASSIGN:
+  case TOK_SHIFTL_ASSIGN:
+  case TOK_SHIFTR_ASSIGN:
     return true;
   }
   if (op == TOK_EXTERN) {
@@ -1390,8 +1330,103 @@ static bool is_ifdef_cond_expr(expr_op *eop)
   return false;
 }
 
+static void subst_user_defined_op(expr_op *eop)
+{
+  const char *func = 0;
+  bool (*tc0)(const term& t) = 0;
+  bool (*tc1)(const term& t) = 0;
+  switch (eop->op) {
+  /* binary op wo side effect */
+  case '+': func = "add"; tc0 = tc1 = is_numeric_type; break;
+  case '-': func = "sub"; tc0 = tc1 = is_numeric_type; break;
+  case '*': func = "mul"; tc0 = tc1 = is_numeric_type; break;
+  case '/': func = "div"; tc0 = tc1 = is_numeric_type; break;
+  case '%': func = "mod"; tc0 = tc1 = is_integral_type; break;
+  case '|': func = "or"; tc0 = tc1 = is_boolean_type; break;
+  case '&': func = "and"; tc0 = tc1 = is_boolean_type; break;
+  case '^': func = "xor"; tc0 = tc1 = is_boolean_type; break;
+  case TOK_EQ: func = "eq"; tc0 = tc1 = is_equality_type; break;
+  case TOK_NE: func = "ne"; tc0 = tc1 = is_equality_type; break;
+  case '<': func = "lt"; tc0 = tc1 = is_ordered_type; break;
+  case '>': func = "gt"; tc0 = tc1 = is_ordered_type; break;
+  case TOK_LE: func = "le"; tc0 = tc1 = is_ordered_type; break;
+  case TOK_GE: func = "ge"; tc0 = tc1 = is_ordered_type; break;
+  case TOK_SHIFTL: func = "shiftl"; tc0 = tc1 = is_integral_type; break;
+  case TOK_SHIFTR: func = "shiftr"; tc0 = tc1 = is_integral_type; break;
+  /* assignment op */
+  case TOK_ADD_ASSIGN: func = "adda"; tc0 = tc1 = is_numeric_type; break;
+  case TOK_SUB_ASSIGN: func = "suba"; tc0 = tc1 = is_numeric_type; break;
+  case TOK_MUL_ASSIGN: func = "mula"; tc0 = tc1 = is_numeric_type; break;
+  case TOK_DIV_ASSIGN: func = "diva"; tc0 = tc1 = is_numeric_type; break;
+  case TOK_MOD_ASSIGN: func = "moda"; tc0 = tc1 = is_integral_type; break;
+  case TOK_OR_ASSIGN: func = "ora"; tc0 = tc1 = is_boolean_type; break;
+  case TOK_AND_ASSIGN: func = "anda"; tc0 = tc1 = is_boolean_type; break;
+  case TOK_XOR_ASSIGN: func = "xora"; tc0 = tc1 = is_boolean_type; break;
+  case TOK_SHIFTL_ASSIGN: func = "shiftla"; tc0 = tc1 = is_boolean_type; break;
+  case TOK_SHIFTR_ASSIGN: func = "shiftra"; tc0 = tc1 = is_boolean_type; break;
+  /* unary op wo side effect */
+  case TOK_PLUS: func = "plus"; tc0 = is_numeric_type; break;
+  case TOK_MINUS: func = "minus"; tc0 = is_numeric_type; break;
+  case '~': func = "neg"; tc0 = is_boolean_type; break;
+  case '!': func = "not"; tc0 = is_boolean_type; break;
+  default: break;
+  }
+  if (func == 0) {
+    return;
+  }
+  bool tc0f = true;
+  bool tc1f = true;
+  if (tc0 != 0) {
+    fn_check_type(eop->arg0, eop->symtbl_lexical);
+    tc0f = tc0(eop->arg0->resolve_texpr());
+  }
+  if (tc1 != 0) {
+    fn_check_type(eop->arg1, eop->symtbl_lexical);
+    tc1f = tc1(eop->arg1->resolve_texpr());
+  }
+  if (tc0f && tc1f) {
+    return; /* builtin op */
+  }
+  expr_i *fc = expr_funccall_new(eop->fname, eop->line,
+    expr_symbol_new(eop->fname, eop->line,
+      expr_nssym_new(eop->fname, eop->line,
+	expr_nssym_new(eop->fname, eop->line, 0, "operator"), func)),
+    expr_op_new(eop->fname, eop->line, ',', eop->arg0, eop->arg1));
+  eop->arg0 = fc;
+  eop->arg1 = 0;
+  eop->op = '(';
+  fn_set_tree_and_define_static(fc, eop, eop->symtbl_lexical, 0, 
+    eop->symtbl_lexical->block_backref->tinfo.template_descent);
+#if 0
+  if (eop->op == '+') {
+    /* operator::plus(arg0, arg1) */
+    fn_check_type(eop->arg0, eop->symtbl_lexical);
+    fn_check_type(eop->arg1, eop->symtbl_lexical);
+    if (!is_numeric_type(eop->arg0->resolve_texpr())
+      || !is_numeric_type(eop->arg1->resolve_texpr())) {
+#if 0
+fprintf(stderr, "op plus %s %s\n",
+  term_tostr_human(eop->arg0->get_texpr()).c_str(),
+  term_tostr_human(eop->arg1->get_texpr()).c_str());
+#endif
+      expr_i *fc = expr_funccall_new(eop->fname, eop->line,
+	expr_symbol_new(eop->fname, eop->line,
+	  expr_nssym_new(eop->fname, eop->line,
+	    expr_nssym_new(eop->fname, eop->line, 0, "operator"), "plus")),
+	expr_op_new(eop->fname, eop->line, ',', eop->arg0, eop->arg1));
+      eop->arg0 = fc;
+      eop->arg1 = 0;
+      eop->op = '(';
+      fn_set_tree_and_define_static(fc, eop, eop->symtbl_lexical, 0, 
+	eop->symtbl_lexical->block_backref->tinfo.template_descent);
+    }
+  }
+#endif
+}
+
 void expr_op::check_type(symbol_table *lookup)
 {
+  subst_user_defined_op(this);
   if (op == '.' || op == TOK_ARROW) {
     fn_check_type(arg0, lookup);
     term t = arg0->resolve_texpr();
@@ -1505,18 +1540,6 @@ void expr_op::check_type(symbol_table *lookup)
       expr_i *fo = symtbl->resolve_name_nothrow(funcname_w_prefix,
 	no_private, uniqns, is_global_dummy, is_upvalue_dummy,
 	is_memfld_dummy);
-      #if 0
-      // FIXME: remove
-      if (fo == 0) {
-	/* try using the caller's context */
-	symtbl = this->symtbl_lexical;
-	arg0_uniqns = sc->uniqns;
-	const std::string uniqns = arg0_uniqns;
-	fo = symtbl->resolve_name_nothrow(funcname_w_prefix,
-	  no_private, uniqns, is_global_dummy, is_upvalue_dummy,
-	  is_memfld_dummy);
-      }
-      #endif
       if (fo != 0) {
 	DBG(fprintf(stderr, "found %s\n", sc->get_fullsym().c_str()));
 	sc->arg_hidden_this = arg0;
@@ -1553,13 +1576,19 @@ void expr_op::check_type(symbol_table *lookup)
   case TOK_OR_ASSIGN:
   case TOK_AND_ASSIGN:
   case TOK_XOR_ASSIGN:
+  case TOK_SHIFTL_ASSIGN:
+  case TOK_SHIFTR_ASSIGN:
     check_boolean_type(this, arg0);
+    check_boolean_type(this, arg1);
+    /* FALLTHRU */
+  case TOK_MOD_ASSIGN:
+    check_integral_expr(this, arg0);
+    check_integral_expr(this, arg1);
     /* FALLTHRU */
   case TOK_ADD_ASSIGN:
   case TOK_SUB_ASSIGN:
   case TOK_MUL_ASSIGN:
   case TOK_DIV_ASSIGN:
-  case TOK_MOD_ASSIGN:
     check_numeric_expr(this, arg0);
     check_numeric_expr(this, arg1);
     /* FALLTHRU */
@@ -1799,7 +1828,7 @@ void expr_op::check_type(symbol_table *lookup)
       passing_root_requirement_fast(this, arg1, false);
     }
   }
-  if (arg0 != 0 && is_void_type(arg0->resolve_texpr())) {
+  if (arg0 != 0 && op != '(' && is_void_type(arg0->resolve_texpr())) {
     arena_error_throw(arg0, "Invalid expression (lhs is void)");
   }
   if (arg1 != 0 && is_void_type(arg1->resolve_texpr())) {

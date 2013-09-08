@@ -46,6 +46,23 @@ private metafunction is_gles m::eq{m::profile{"platform"}, "android"};
 
 float const M_PI = 3.14159265;
 
+metafunction fmat4 farray{float, 16};
+
+function fmat4 fmat4_frustum(double left, double right, double bottom, 
+  double top, double near, double far)
+{
+  fmat4 a;
+  a[0]  = static_cast{float}(near * 2.0 / (right - left));
+  a[5]  = static_cast{float}(near * 2.0 / (top - bottom));
+  a[8]  = static_cast{float}((right + left) / (right - left));
+  a[9]  = static_cast{float}((top + bottom) / (top - bottom));
+  a[10] = static_cast{float}(-(far + near) / (far - near));
+  a[11] = static_cast{float}(-1.0);
+  a[14] = static_cast{float}(-(far * near * 2.0) / (far - near));
+  return a;
+}
+
+
 function void vector_push3(vector{float} mutable& vec, float a, float b,
   float c)
 {
@@ -314,30 +331,94 @@ function void draw_frame(SDL const& sdl, quaternion{float} const& view_angle)
   glPopMatrix();
 }
 
-function void compat_glFrustum(double left, double right, double bottom, 
-  double top, double near, double far)
-{
-  farray{float, 16} a;
-  a[0]  = static_cast{float}(near * 2.0 / (right - left));
-  a[5]  = static_cast{float}(near * 2.0 / (top - bottom));
-  a[8]  = static_cast{float}((right + left) / (right - left));
-  a[9]  = static_cast{float}((top + bottom) / (top - bottom));
-  a[10] = static_cast{float}(-(far + near) / (far - near));
-  a[11] = static_cast{float}(-1.0);
-  a[14] = static_cast{float}(-(far * near * 2.0) / (far - near));
-  glMultMatrixf(a);
-}
-
 function void reshape(int width, int height)
 { 
   double h = static_cast{double}(height) / static_cast{double}(width);
   glViewport(0, 0, static_cast{GLsizei}(width), static_cast{GLsizei}(height));
   glMatrixMode(GL_PROJECTION);
   glLoadIdentity();
-  compat_glFrustum(-1.0, 1.0, -h, h, 5.0, 60.0);
+  const fr = fmat4_frustum(-1.0, 1.0, -h, h, 5.0, 60.0);
+  glMultMatrixf(fr);
   glMatrixMode(GL_MODELVIEW);
   glLoadIdentity();
   glTranslatef(0.0, 0.0, -40.0);
+}
+
+function uint compile_shader(cstrref const& src, GLenum type)
+{
+  mutable res = glCreateShader(type);
+  const source = make_farray{GLchar_cp}(to_char_cp(src));
+  const length = make_farray{int}(static_cast{int}(src.size()));
+  glShaderSource(res, 1, source, length);
+  glCompileShader(res);
+  farray{int, 1} success;
+  glGetShaderiv(res, GL_COMPILE_STATUS, success);
+  if (success[0] == 0) {
+    debug_log("compile_shader failed:",
+      join{"\t"}(static_cast{int}(type), success[0], src));
+    glDeleteShader(res);
+    res = 0;
+  }
+  debug_log("compile_shader", res);
+  return res;
+}
+
+function uint create_program(cstrref const& vertex_shader,
+  cstrref const& fragment_shader)
+{
+  mutable prog = glCreateProgram();
+  uint shader;
+  if (!vertex_shader.empty()) {
+    shader = compile_shader(vertex_shader, GL_VERTEX_SHADER);
+    if (shader != 0) {
+      glAttachShader(prog, shader);
+    }
+  }
+  if (!fragment_shader.empty()) {
+    shader = compile_shader(fragment_shader, GL_FRAGMENT_SHADER);
+    if (shader != 0) {
+      glAttachShader(prog, shader);
+    }
+  }
+  glLinkProgram(prog);
+  farray{int, 1} success;
+  glGetProgramiv(prog, GL_LINK_STATUS, success);
+  if (success[0] == 0) {
+    debug_log("create_program failed:", success[0]);
+    glDeleteProgram(prog);
+    prog = 0;
+  }
+  debug_log("create_program", prog);
+  return prog;
+}
+
+function void set_program()
+{
+  const vert = m::concat{
+    // "varying vec3 normal;\n",
+    // "varying vec3 light_vec;\n",
+    "void main(void) {\n",
+    "gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;\n",
+    // "gl_Position.y += 50.5;\n",
+    "vec4 vpos = gl_ModelViewMatrix * gl_Vertex;\n",
+    "vec3 normal = normalize(gl_NormalMatrix * gl_Normal);\n",
+    "vec3 light = normalize((gl_LightSource[0].position * vpos.w",
+    "  - vpos * gl_LightSource[0].position.w).xyz);\n",
+    //"vec3 light = normalize((gl_LightSource[0].position - vpos).xyz);\n",
+    "float diffuse = max(dot(light, normal), 0.0);\n",
+    "gl_FrontColor = gl_LightSource[0].diffuse * gl_FrontMaterial.diffuse",
+    "  * diffuse;\n",
+    // "gl_FrontColor = vec4(1.0, 0.0, 0.0, 1.0);\n",
+    "}\n"};
+  const frag = m::concat{
+    "void main(void) {\n",
+    "gl_FragColor = gl_Color;\n",
+    // "gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);\n",
+    "}\n"};
+  const prog = create_program(vert, frag);
+  if (prog != 0) {
+    glUseProgram(prog);
+  }
 }
 
 function void init_gl()
@@ -350,9 +431,17 @@ function void init_gl()
   glEnable(GL_LIGHT0);
   glEnable(GL_DEPTH_TEST);
 
+  // FIXME: disable
+  /* transparency */
+  // glEnable(GL_BLEND);
+  // glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
   /* make the gears */
   init_gear_vbos();
   glEnable(GL_NORMALIZE);
+
+  set_program();
+  
 }
 
 {
@@ -373,6 +462,8 @@ function void init_gl()
   sdl.GL_SetSwapInterval(0);
 
   init_gl();
+  // exit(0); // FIXME
+
   reshape(init_w, init_h);
   sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu4=", mallinfo_in_use()));
 

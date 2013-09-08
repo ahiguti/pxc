@@ -139,8 +139,8 @@ enum typefamily_e {
   typefamily_e_tptr,             /* multithread-shared pointer */
   typefamily_e_tcptr,            /* multithread-shared pointer, const target */
   typefamily_e_tiptr,            /* multithread-shared pointer, immutable tgt */
-  typefamily_e_lock_guard,       /* lock object (local) */
-  typefamily_e_lock_cguard,      /* lock object, const reference (local) */
+  typefamily_e_lock_guard,       /* lock object (eph) */
+  typefamily_e_lock_cguard,      /* lock object, const reference (eph) */
   typefamily_e_extint,           /* c-defined int/long etc */
   typefamily_e_extuint,          /* c-defined unsigned int/long etc, */
   typefamily_e_extenum,          /* c-defined enum */
@@ -150,11 +150,12 @@ enum typefamily_e {
   typefamily_e_varray,           /* resizable array */
   typefamily_e_darray,           /* dynamically allocated array */
   typefamily_e_farray,           /* fixed size array, fixed at compile time */
-  typefamily_e_slice,            /* array slice (local) */
-  typefamily_e_cslice,           /* array slice, const elements (local) */
+  typefamily_e_slice,            /* array slice (eph) */
+  typefamily_e_cslice,           /* array slice, const elements (eph) */
   typefamily_e_tree_map,         /* rb-tree map */
-  typefamily_e_tree_map_range,   /* range on tree_map (local) */
-  typefamily_e_tree_map_crange,  /* range on tree_map, const elements (local) */
+  typefamily_e_tree_map_range,   /* range on tree_map (eph) */
+  typefamily_e_tree_map_crange,  /* range on tree_map, const elements (eph) */
+  typefamily_e_ephemeral,        /* other ephemeral type (eph) */
   typefamily_e_linear,           /* noncopyable, nodefaultcon */
   typefamily_e_noncopyable,      /* noncopyable */
   typefamily_e_nodefault,        /* nodefaultcon */
@@ -794,8 +795,8 @@ struct expr_op : public expr_i {
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
 public:
-  const int op;
-  const std::string extop; /* "placement-new" for example */
+  int op;
+  std::string extop; /* "placement-new" for example */
   expr_i *arg0, *arg1;
 };
 
