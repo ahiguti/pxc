@@ -2,47 +2,9 @@ namespace GL::gl30 "export-unsafe";
 public import common -;
 public import GL::base *;
 public import GL::api_gl -;
-public import GL::api_gles1 -;
 public import meta m;
 
-private metafunction plat m::profile{"platform"};
-private metafunction plat_gles m::eq{plat, "android"};
-
-private metafunction gl_enumval
-  m::cond{plat_gles,
-    m::joinv{
-      GL_VERSION_ES_CM_1_0_ENUMVAL},
-    m::joinv{
-      GL_VERSION_1_1_ENUMVAL,
-      GL_VERSION_1_2_ENUMVAL,
-      GL_VERSION_1_3_ENUMVAL,
-      GL_VERSION_1_4_ENUMVAL,
-      GL_VERSION_1_5_ENUMVAL,
-      GL_VERSION_2_0_ENUMVAL,
-      GL_VERSION_2_1_ENUMVAL,
-      GL_VERSION_3_0_ENUMVAL}};
-private metafunction gl_bfval
-  m::cond{plat_gles,
-    m::joinv{GL_VERSION_ES_CM_1_0_BFVAL},
-    m::joinv{
-      GL_VERSION_1_1_BFVAL,
-      GL_VERSION_1_3_BFVAL,
-      GL_VERSION_3_0_BFVAL}};
-private metafunction gl_cmds
-  m::cond{plat_gles,
-    m::joinv{GL_VERSION_ES_CM_1_0_CMD},
-    m::joinv{
-      GL_VERSION_1_0_CMD,
-      GL_VERSION_1_1_CMD,
-      GL_VERSION_1_2_CMD,
-      GL_VERSION_1_3_CMD,
-      GL_VERSION_1_4_CMD,
-      GL_VERSION_1_5_CMD,
-      GL_VERSION_2_0_CMD,
-      GL_VERSION_2_1_CMD,
-      GL_VERSION_3_0_CMD}};
-
-private metafunction emit_functions_gl emit_functions{gl_cmds};
+private metafunction dummy 0;
 
 expand(sym : gl_bfval) {
 public extern "%" GLbitfield sym;
@@ -53,13 +15,34 @@ public extern "%" GLenum sym;
 }
 
 expand(sym, i : m::map{gl_cmds, m::at0}) {
-public function extern "gl::%" ent_to_rettype{m::at{gl_cmds, i}}
+public function extern "%" ent_to_rettype{m::at{gl_cmds, i}}
   sym(expand(GL::base::ent_to_argdefs{m::at{gl_cmds, i}}));
 }
 
-extern "functions" inline
-namespace gl {
-%{emit_functions_gl}%
-};
-;
+private metafunction gl_enumval
+  m::joinv{
+    GL_VERSION_1_1_ENUMVAL,
+    GL_VERSION_1_2_ENUMVAL,
+    GL_VERSION_1_3_ENUMVAL,
+    GL_VERSION_1_4_ENUMVAL,
+    GL_VERSION_1_5_ENUMVAL,
+    GL_VERSION_2_0_ENUMVAL,
+    GL_VERSION_2_1_ENUMVAL,
+    GL_VERSION_3_0_ENUMVAL};
+private metafunction gl_bfval
+  m::joinv{
+    GL_VERSION_1_1_BFVAL,
+    GL_VERSION_1_3_BFVAL,
+    GL_VERSION_3_0_BFVAL};
+private metafunction gl_cmds
+  m::joinv{
+    GL_VERSION_1_0_CMD,
+    GL_VERSION_1_1_CMD,
+    GL_VERSION_1_2_CMD,
+    GL_VERSION_1_3_CMD,
+    GL_VERSION_1_4_CMD,
+    GL_VERSION_1_5_CMD,
+    GL_VERSION_2_0_CMD,
+    GL_VERSION_2_1_CMD,
+    GL_VERSION_3_0_CMD};
 

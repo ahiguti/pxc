@@ -1,0 +1,103 @@
+namespace pointer::raw "use-unsafe";
+public import numeric::integral -;
+public import pointer -;
+public import container::array +;
+
+/* raw pointer types are safe, while dereferencing raw pointers are unsafe. */
+public tsvaluetype struct extern "pxcrt::rawptr<>::type" {t} rawptr { }
+public tsvaluetype struct extern "pxcrt::crawptr<>::type" {t} crawptr { }
+public tsvaluetype struct extern "pxcrt::charptr" charptr { }
+public metafunction voidptr rawptr{void};
+public tsvaluetype struct extern "pxcrt::ccharptr" ccharptr { }
+public metafunction cvoidptr crawptr{void};
+
+public threaded function extern "pxcrt::address" {t} rawptr{t}
+address(t mutable& x);
+public threaded function extern "pxcrt::caddress" {t} crawptr{t}
+caddress(t const& x);
+
+public threaded function extern "pxcrt::slice_rawptr" {t} rawptr{t}
+slice_rawptr(slice{t} const& x);
+public threaded function extern "pxcrt::cslice_crawptr" {t} crawptr{t}
+cslice_crawptr(cslice{t} const& x);
+public threaded function extern "pxcrt::farray_rawptr" {t, n} rawptr{t}
+farray_rawptr(farray{t, n} mutable& x);
+public threaded function extern "pxcrt::farray_crawptr" {t, n} crawptr{t}
+farray_crawptr(farray{t, n} const& x);
+public threaded function extern "pxcrt::darray_rawptr" {t} rawptr{t}
+darray_rawptr(darray{t} mutable& x);
+public threaded function extern "pxcrt::darray_crawptr" {t} crawptr{t}
+darray_crawptr(darray{t} const& x);
+public threaded function extern "pxcrt::vector_rawptr" {t} rawptr{t}
+vector_rawptr(vector{t} mutable& x);
+public threaded function extern "pxcrt::vector_crawptr" {t} crawptr{t}
+vector_crawptr(vector{t} const& x);
+
+public threaded function extern "pxcrt::strlit_crawptr" crawptr{uchar}
+strlit_crawptr(strlit const& x);
+
+public threaded function extern "pxcrt::rawptr_void" {t} voidptr
+rawptr_void(rawptr{t} x);
+public threaded function extern "pxcrt::rawptr_char" {t} charptr
+rawptr_char(rawptr{t} x);
+public threaded function extern "pxcrt::crawptr_void" {t} cvoidptr
+crawptr_void(crawptr{t} x);
+public threaded function extern "pxcrt::crawptr_char" {t} ccharptr
+crawptr_char(crawptr{t} x);
+
+public threaded function extern "pxcrt::rawptr_to_size_t" {t} size_t
+rawptr_to_size_t(rawptr{t} x);
+public threaded function extern "pxcrt::crawptr_to_size_t" {t} size_t
+crawptr_to_size_t(crawptr{t} x);
+
+extern "types" inline
+namespace pxcrt {
+
+template <typename T> struct rawptr { typedef T *type; };
+template <typename T> struct crawptr { typedef const T *type; };
+
+typedef char *charptr;
+typedef char const *ccharptr;
+
+template <typename T> static inline T *
+address(T& x) { return &x; }
+template <typename T> static inline T const *
+caddress(T const& x) { return &x; }
+
+template <typename T> static inline T *
+slice_rawptr(bt_slice<T> const& x) { return x.rawarr(); }
+template <typename T> static inline T const *
+cslice_crawptr(bt_cslice<T> const& x) { return x.rawarr(); }
+template <typename T, size_t N> static inline T *
+farray_rawptr(farray<T, N>& x) { return x.rawarr(); }
+template <typename T, size_t N> static inline T const *
+farray_crawptr(farray<T, N> const& x) { return x.rawarr(); }
+template <typename T> static inline T *
+darray_rawptr(darray<T>& x) { return x.rawarr(); }
+template <typename T> static inline T const *
+darray_crawptr(darray<T> const& x) { return x.rawarr(); }
+template <typename T> static inline T *
+vector_rawptr(pxcvector<T>& x) { return x.rawarr(); }
+template <typename T> static inline T const *
+vector_crawptr(pxcvector<T> const& x) { return x.rawarr(); }
+
+static inline bt_uchar const *
+strlit_crawptr(bt_strlit const& x) { return x.rawarr(); }
+
+template <typename T> static inline void *
+rawptr_void(T *x) { return x; }
+template <typename T> static inline void const *
+crawptr_void(T const *x) { return x; }
+template <typename T> static inline char *
+rawptr_char(T *x) { return reinterpret_cast<char *>(x); }
+template <typename T> static inline char const *
+crawptr_char(T const *x) { return reinterpret_cast<const char *>(x); }
+
+template <typename T> static inline bt_size_t
+rawptr_to_size_t(T *x) { return reinterpret_cast<bt_size_t>(x); }
+template <typename T> static inline bt_size_t
+crawptr_to_size_t(T const *x) { return reinterpret_cast<bt_size_t>(x); }
+
+};
+;
+

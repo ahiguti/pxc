@@ -14,40 +14,17 @@ public metafunction GLint64 long;
 public metafunction GLuint64 ulong;
 public metafunction GLfloat float;
 public metafunction GLdouble double;
+public metafunction GLboolean uchar;
+public metafunction GLsizei int;
+
 public tsvaluetype struct extern "GLenum" "extenum" GLenum { }
 public tsvaluetype struct extern "GLbitfield" "extbitmask" GLbitfield { }
-public tsvaluetype struct extern "GLsync" "noncopyable" GLsync { }
-public tsvaluetype struct extern "GLboolean" "extint" GLboolean { }
-public tsvaluetype struct extern "GLsizei" "extint" GLsizei { }
 public tsvaluetype struct extern "GLsizeiptr" "extint" GLsizeiptr { }
 public tsvaluetype struct extern "GLintptr" "extint" GLintptr { }
 public tsvaluetype struct extern "GLfixed" "extint" GLfixed { }
 public tsvaluetype struct extern "GLclampx" "extint" GLclampx { }
 public tsvaluetype struct extern "GLDEBUGPROC" GLDEBUGPROC { }
-
-private metafunction ptrtypes m::list{
-  "GLenum", "GLboolean", "GLsizei", "GLintptr", "GLsizeiptr",
-  "GLfixed",
-  "GLvoid", "GLfloat", "GLdouble", "GLubyte", "GLbyte", "GLchar", "GLushort",
-  "GLshort", "GLuint", "GLint", "GLuint64", "GLint64"};
-expand (sym : m::map{ptrtypes, metafunction{x} m::concat{x, "_p"}}) {
-public tsvaluetype struct extern "gl::%" sym { }
-}
-expand (sym : m::map{ptrtypes, metafunction{x} m::concat{x, "_cp"}}) {
-public tsvaluetype struct extern "gl::%" sym { }
-}
-public tsvaluetype struct extern "gl::GLvoid_p_p" GLvoid_p_p { }
-public tsvaluetype struct extern "gl::GLvoid_cp_cp" GLvoid_cp_cp { }
-public tsvaluetype struct extern "gl::GLchar_cp_cp" GLchar_cp_cp { }
-
-private metafunction emit_ptrtype{x}
-  m::concat{"typedef ", x, " *", x, "_p;\n"};
-private metafunction emit_ptrtype_c{x}
-  m::concat{"typedef const ", x, " *", x, "_cp;\n"};
-private metafunction emit_ptrtypes
-  m::concat{
-    m::fold{m::map{ptrtypes, emit_ptrtype}, m::concat, ""},
-    m::fold{m::map{ptrtypes, emit_ptrtype_c}, m::concat, ""}};
+public tsvaluetype struct extern "GLsync" "noncopyable" GLsync { }
 
 expand (s : m::list{m::list{"", m::eq{m::profile{"platform"}, "macos"}}}) {
 extern "ldflags" "-lGL -lm";
@@ -73,31 +50,18 @@ extern "types" inline
 
 namespace gl {
 
-%{emit_ptrtypes}%
-
-typedef GLvoid **GLvoid_p_p;
-typedef const GLvoid *const *GLvoid_cp_cp;
-typedef const GLchar *const *GLchar_cp_cp;
-
 };
 ;
 
-public function extern "gl::to_void_p" {t} GLvoid_p to_void_p(t const& x);
-public function extern "gl::to_void_cp" {t} GLvoid_cp to_void_cp(t const& x);
-public function extern "gl::offset_to_void_cp" GLvoid_cp
-  offset_to_void_cp(size_t x); /* used for glVertexPointer() with VBO */
-public function extern "gl::to_char_cp" GLchar_cp to_char_cp(cstrref const& x);
+public function extern "gl::offset_to_void_cp" crawptr{void}
+offset_to_void_cp(size_t x); /* used for glVertexPointer() with VBO */
 
 extern "functions" inline
 namespace gl {
 using namespace pxcrt;
 
-template <typename T> GLvoid_p to_void_p(T const& x) { return x.rawarr(); }
-template <typename T> GLvoid_cp to_void_cp(T const& x) { return x.rawarr(); }
 static inline const void *offset_to_void_cp(bt_size_t x)
 { return reinterpret_cast<const void *>(x); }
-static inline const char *to_char_cp(cstrref const& x)
-{ return reinterpret_cast<const char *>(x.rawarr()); }
 
 };
 ;
@@ -114,64 +78,54 @@ private metafunction type_alist m::list{
   m::list{"uby", GLubyte, GLubyte},
   m::list{"s", GLshort, GLshort},
   m::list{"us", GLushort, GLushort},
-  m::list{"i", GLint, GLint}, /* 10 */
-  m::list{"ui", GLuint, GLuint},
-  m::list{"l", GLint64, GLint64},
-  m::list{"szi", GLsizei, GLsizei},
-  m::list{"ip", GLintptr, GLintptr},
-  m::list{"szip", GLsizeiptr, GLsizeiptr},
-  m::list{"fx", GLfixed, GLfixed},
-  m::list{"cx", GLclampx, GLclampx},
-  m::list{"DP", GLDEBUGPROC, GLDEBUGPROC},
-  m::list{"sync", GLsync, GLsync},
-  m::list{"*", GLvoid_p, GLvoid_p}, /* 20 */
-  m::list{"v*", GLvoid_p, GLvoid_p},
-  m::list{"e*", GLenum_p, slice{GLenum}},
-  m::list{"f*", GLfloat_p, slice{GLfloat}},
-  m::list{"d*", GLdouble_p, slice{GLdouble}},
-  m::list{"b*", GLboolean_p, slice{GLboolean}},
-  m::list{"c*", GLchar_p, slice{GLchar}},
-  m::list{"uby*", GLubyte_p, slice{GLubyte}},
-  m::list{"s*", GLshort_p, slice{GLshort}},
-  m::list{"us*", GLushort_p, slice{GLushort}},
-  m::list{"i*", GLint_p, slice{GLint}}, /* 30 */
-  m::list{"ui*", GLuint_p, slice{GLuint}},
-  m::list{"l*", GLint64_p, slice{GLint64}},
-  m::list{"ul*", GLuint64_p, slice{GLuint64}},
-  m::list{"szi*", GLsizei_p, slice{GLsizei}},
-  m::list{"fx*", GLfixed_p, slice{GLfixed}},
-  m::list{"_*", GLvoid_cp, GLvoid_cp},
-  m::list{"_v*", GLvoid_cp, GLvoid_cp},
-  m::list{"_e*", GLenum_cp, cslice{GLenum}},
-  m::list{"_f*", GLfloat_cp, cslice{GLfloat}},
-  m::list{"_d*", GLdouble_cp, cslice{GLdouble}}, /* 40 */
-  m::list{"_b*", GLboolean_cp, cslice{GLboolean}},
-  m::list{"_c*", GLchar_cp, cslice{GLchar}},
-  m::list{"_by*", GLbyte_cp, cslice{GLbyte}},
-  m::list{"_uby*", GLubyte_cp, cslice{GLubyte}},
-  m::list{"_s*", GLshort_cp, cslice{GLshort}},
-  m::list{"_us*", GLushort_cp, cslice{GLushort}},
-  m::list{"_i*", GLint_cp, cslice{GLint}},
-  m::list{"_ui*", GLuint_cp, cslice{GLuint}},
-  m::list{"_szi*", GLsizei_cp, cslice{GLsizei}},
-  m::list{"_ip*", GLintptr_cp, cslice{GLintptr}}, /* 50 */
-  m::list{"_szip*", GLsizeiptr_cp, cslice{GLsizeiptr}},
-  m::list{"_fx*", GLfixed_cp, cslice{GLfixed}},
-  m::list{"v**", GLvoid_p_p, slice{GLvoid_p}},
-  m::list{"_v*_*", GLvoid_cp_cp, cslice{GLvoid_cp}},
-  m::list{"_c*_*", GLchar_cp_cp, cslice{GLchar_cp}}};
+  m::list{"i", GLint}, /* 10 */
+  m::list{"ui", GLuint},
+  m::list{"l", GLint64},
+  m::list{"szi", GLsizei},
+  m::list{"ip", GLintptr},
+  m::list{"szip", GLsizeiptr},
+  m::list{"fx", GLfixed},
+  m::list{"cx", GLclampx},
+  m::list{"DP", GLDEBUGPROC},
+  m::list{"sync", GLsync},
+  m::list{"*", voidptr}, /* 20 */
+  m::list{"v*", voidptr},
+  m::list{"e*", rawptr{GLenum}},
+  m::list{"f*", rawptr{GLfloat}},
+  m::list{"d*", rawptr{GLdouble}},
+  m::list{"b*", rawptr{GLboolean}},
+  m::list{"c*", charptr},
+  m::list{"uby*", rawptr{GLubyte}},
+  m::list{"s*", rawptr{GLshort}},
+  m::list{"us*", rawptr{GLushort}},
+  m::list{"i*", rawptr{GLint}}, /* 30 */
+  m::list{"ui*", rawptr{GLuint}},
+  m::list{"l*", rawptr{GLint64}},
+  m::list{"ul*", rawptr{GLuint64}},
+  m::list{"szi*", rawptr{GLsizei}},
+  m::list{"fx*", rawptr{GLfixed}},
+  m::list{"_*", cvoidptr},
+  m::list{"_v*", cvoidptr},
+  m::list{"_e*", crawptr{GLenum}},
+  m::list{"_f*", crawptr{GLfloat}},
+  m::list{"_d*", crawptr{GLdouble}}, /* 40 */
+  m::list{"_b*", crawptr{GLboolean}},
+  m::list{"_c*", ccharptr},
+  m::list{"_by*", crawptr{GLbyte}},
+  m::list{"_uby*", crawptr{GLubyte}},
+  m::list{"_s*", crawptr{GLshort}},
+  m::list{"_us*", crawptr{GLushort}},
+  m::list{"_i*", crawptr{GLint}},
+  m::list{"_ui*", crawptr{GLuint}},
+  m::list{"_szi*", crawptr{GLsizei}},
+  m::list{"_ip*", crawptr{GLintptr}}, /* 50 */
+  m::list{"_szip*", crawptr{GLsizeiptr}},
+  m::list{"_fx*", crawptr{GLfixed}},
+  m::list{"v**", rawptr{voidptr}},
+  m::list{"_v*_*", crawptr{cvoidptr}},
+  m::list{"_c*_*", crawptr{ccharptr}}};
 
 public metafunction find_type{s} m::at{type_alist, s};
-/*
-public metafunction find_type{s} find_type_iter{s, 0, m::at{type_alist, 0}};
-private metafunction find_type_iter{s, i, ent}
-  m::cond{
-    m::eq{m::at{ent, 0}, s},
-    ent,
-    find_type_iter{s, m::add{i, 1}, m::at{type_alist, m::add{i, 1}}}};
-*/
-private metafunction type_slice{tent}
-  m::ne{m::at1{tent}, m::at2{tent}};
 public metafunction ent_to_rettype{ent}
   m::at1{find_type{m::at1{ent}}};
 public metafunction ent_to_argdefs{ent}
@@ -180,63 +134,8 @@ public metafunction ent_to_argdefs{ent}
     metafunction{x} m::apply{
       metafunction{xt} m::list{
 	/* name */ m::at0{x},
-	/* type */ m::at2{xt},
-	/* byref - if it's a slice-wrapper */ type_slice{xt},
+	/* type */ m::at1{xt},
+	/* byref - if it's a slice-wrapper */ 0,
 	/* mutable */ 0},
       /* xt := */ find_type{m::at1{x}}}};
-
-private metafunction cargdecl{cmd, j}
-  m::apply{
-    metafunction{jt} m::concat{
-      m::cond{m::eq{j, 0}, "", ", "},
-      m::csymbol{m::at2{jt}},
-      m::cond{
-	type_slice{jt}, 
-	" const&", ""},
-      " ",
-      m::at0{m::at{cmd, m::add{j, 2}}}},
-    /* jt := */ find_type{m::at1{m::at{cmd, m::add{j, 2}}}}};
-private metafunction cargdecls{cmd}
-  m::fold{
-    m::map{
-      m::seq{0, m::sub{m::size{cmd}, 2}},
-      metafunction{j} cargdecl{cmd, j}},
-    m::concat,
-    ""};
-private metafunction cargexpr{cmd, j}
-  m::apply{
-    metafunction{jt} m::concat{
-      m::cond{m::eq{j, 0}, "", ", "},
-      m::cond{ /* GLchar requires a cast */
-	type_slice{jt}, 
-	m::concat{"(", m::at1{jt}, ")"},
-	""},
-      m::at0{m::at{cmd, m::add{j, 2}}},
-      m::cond{
-	type_slice{jt}, 
-	".rawarr()", ""}},
-    /* jt := */ find_type{m::at1{m::at{cmd, m::add{j, 2}}}}};
-private metafunction cargexprs{cmd}
-  m::fold{
-    m::map{
-      m::seq{0, m::sub{m::size{cmd}, 2}},
-      metafunction{j} cargexpr{cmd, j}},
-    m::concat,
-    ""};
-
-private metafunction emit_function_one{cmd}
-  m::concat{
-    "static inline ",
-    m::csymbol{ent_to_rettype{cmd}}, /* return type */
-    " ",
-    m::at0{cmd}, /* function symbol */
-    "(",
-    cargdecls{cmd}, /* arg decls */
-    ") { return ::",
-    m::at0{cmd}, /* function symbol */
-    "(",
-    cargexprs{cmd}, /* arguments */ 
-    "); }\n"};
-public metafunction emit_functions{cmds}
-  m::fold{m::map{cmds, emit_function_one}, m::concat, ""};
 

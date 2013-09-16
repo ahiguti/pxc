@@ -1353,6 +1353,11 @@ std::string term_tostr(const term& t, term_tostr_sort s)
       }
     } else if (cname != 0 && s == term_tostr_sort_cname) {
       rstr = cname;
+      std::string::size_type pos = rstr.find('>');
+      if (pos != rstr.npos && pos > 0) {
+	rstr_post = rstr.substr(pos + 1);
+	rstr = rstr.substr(0, pos - 1);
+      }
       #if 0
       if (s != term_tostr_sort_cname) {
 	rstr = replace_char(rstr, ':', '$');
@@ -1636,7 +1641,7 @@ static int num_bits_max(const term& t)
   return etd->tattr.significant_bits_max;
 }
 
-static bool is_int_literal(expr_i *e)
+static bool is_int_literal_or_uop(expr_i *e)
 {
   if (e->get_esort() == expr_e_int_literal) {
     return true;
@@ -1645,13 +1650,13 @@ static bool is_int_literal(expr_i *e)
     expr_op *const eop = ptr_down_cast<expr_op>(e);
     if (eop->op == TOK_PLUS || eop->op == TOK_MINUS) {
       /* unary op */
-      return is_int_literal(eop->arg0);
+      return is_int_literal_or_uop(eop->arg0);
     }
   }
   return false;
 }
 
-static bool is_float_literal(expr_i *e)
+static bool is_float_literal_or_uop(expr_i *e)
 {
   if (e->get_esort() == expr_e_float_literal) {
     return true;
@@ -1660,7 +1665,7 @@ static bool is_float_literal(expr_i *e)
     expr_op *const eop = ptr_down_cast<expr_op>(e);
     if (eop->op == TOK_PLUS || eop->op == TOK_MINUS) {
       /* unary op */
-      return is_float_literal(eop->arg0);
+      return is_float_literal_or_uop(eop->arg0);
     }
   }
   return false;
@@ -1680,17 +1685,17 @@ static bool numeric_convertible(expr_i *efrom, const term& tfrom,
     }
   }
   // if (efrom->get_esort() == expr_e_int_literal) {
-  if (is_int_literal(efrom)) {
+  if (is_int_literal_or_uop(efrom)) {
     if (is_integral_type(tto)) {
       return true; /* int literal to integral type */
     }
-    expr_int_literal *eint = ptr_down_cast<expr_int_literal>(efrom);
-    if (eint->get_signed() == 0 && is_bitmask(tto)) {
+    expr_int_literal *eint = dynamic_cast<expr_int_literal *>(efrom);
+    if (eint != 0 && eint->get_signed() == 0 && is_bitmask(tto)) {
       return true; /* zero to bitmask */
     }
   }
   // if (efrom->get_esort() == expr_e_float_literal && is_float_type(tto)) {
-  if (is_float_literal(efrom)) {
+  if (is_float_literal_or_uop(efrom)) {
     return true; /* float literal to float type */
   }
   if (!is_numeric_type(tfrom) || !is_numeric_type(tto)) {

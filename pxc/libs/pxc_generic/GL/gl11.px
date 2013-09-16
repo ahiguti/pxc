@@ -8,6 +8,19 @@ public import meta m;
 private metafunction plat m::profile{"platform"};
 private metafunction plat_gles m::eq{plat, "android"};
 
+expand(sym : gl_bfval) {
+public extern "%" GLbitfield sym;
+}
+
+expand(sym : gl_enumval) {
+public extern "%" GLenum sym;
+}
+
+expand(sym, i : m::map{gl_cmds, m::at0}) {
+public function extern "%" ent_to_rettype{m::at{gl_cmds, i}}
+  sym(expand(ent_to_argdefs{m::at{gl_cmds, i}}));
+}
+
 private metafunction gl_enumval
   m::cond{plat_gles,
     m::joinv{GL_VERSION_ES_CM_1_0_ENUMVAL},
@@ -20,25 +33,4 @@ private metafunction gl_cmds
   m::cond{plat_gles,
     m::joinv{GL_VERSION_ES_CM_1_0_CMD},
     m::joinv{GL_VERSION_1_0_CMD, GL_VERSION_1_1_CMD}};
-
-private metafunction emit_functions_gl emit_functions{gl_cmds};
-
-expand(sym : gl_bfval) {
-public extern "%" GLbitfield sym;
-}
-
-expand(sym : gl_enumval) {
-public extern "%" GLenum sym;
-}
-
-expand(sym, i : m::map{gl_cmds, m::at0}) {
-public function extern "gl::%" ent_to_rettype{m::at{gl_cmds, i}}
-  sym(expand(ent_to_argdefs{m::at{gl_cmds, i}}));
-}
-
-extern "functions" inline
-namespace gl {
-%{emit_functions_gl}%
-};
-;
 

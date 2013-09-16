@@ -1,0 +1,41 @@
+namespace i3;
+import common -;
+import meta m;
+import meta::vararg va;
+
+struct {tx} foo {
+  tx f1;
+  string f2;
+  function {name, ts} string __invoke(expand(va::arg_decls_bycref{ts})) {
+    string s;
+    s = "__invoke o=( ";
+    serialize_to_string{tx}(f1, s);
+    s.append(" ) args=(");
+    expand(a, i: va::arg_names{m::size{ts}}) {
+      {
+	s.append(" ");
+	metafunction t m::at0{m::at{ts, i}};
+	serialize_to_string{t}(a, s);
+      }
+    }
+    s.append(" )");
+    println(s);
+    return s;
+  }
+}
+
+{
+  foo{long} x;
+  x.f1 = 999;
+  x.m1("hoge", 33);
+  x.m2("fuga", 44);
+  // x.__invoke{"m1"}("hoge", 33);
+  // x.__invoke{"m2"}("fuga", 44);
+  foo{float} y;
+  y.f1 = 10.3;
+  y.m1("hoge", 11);
+  y.m2("fuga", 22);
+  // y.__invoke{"m1"}("hoge", 11);
+  // y.__invoke{"m2"}("fuga", 22);
+}
+
