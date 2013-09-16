@@ -1,0 +1,25 @@
+namespace GL::gles2 "export-unsafe";
+public import common -;
+public import GL::base *;
+public import GL::api_gles2 -;
+public import meta m;
+
+private metafunction dummy 0;
+
+expand(sym : gl_bfval) {
+public extern "%" GLbitfield sym;
+}
+
+expand(sym : gl_enumval) {
+public extern "%" GLenum sym;
+}
+
+expand(sym, i : m::map{gl_cmds, m::at0}) {
+public function extern "%" ent_to_rettype{m::at{gl_cmds, i}}
+  sym(expand(GL::base::ent_to_argdefs{m::at{gl_cmds, i}}));
+}
+
+private metafunction gl_enumval GL_ES_VERSION_2_0_ENUMVAL;
+private metafunction gl_bfval GL_ES_VERSION_2_0_BFVAL;
+private metafunction gl_cmds GL_ES_VERSION_2_0_CMD;
+

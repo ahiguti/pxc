@@ -236,7 +236,7 @@ public:
   const symbol& get_sym_prefix_fullsym() const { return sym_prefix_fullsym; }
 private:
   symbol fullsym;
-  symbol sym_prefix_fullsym;
+  symbol sym_prefix_fullsym; /* rename to modified_fullsym? */
   expr_i *symbol_def;
   term evaluated;
 };

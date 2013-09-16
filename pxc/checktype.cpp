@@ -758,7 +758,7 @@ static void check_return_expr(expr_funcdef *fdef)
 {
   const term& typ = fdef->get_rettype();
   std::string err_mess;
-  const bool allow_ephemeral = fdef->no_def && fdef->is_member_function();
+  const bool allow_ephemeral = fdef->no_def;
     /* allows ephemeral type if fdef is a extern c function */
   if (!check_term_validity(typ, false, false, allow_ephemeral, fdef,
     err_mess)) {
@@ -945,9 +945,31 @@ static void add_root_requirement_container_elements(expr_i *econ,
   }
 }
 
+symbol_common *get_func_symbol_common_for_funccall(expr_i *func,
+  bool& memfunc_w_explicit_obj_r)
+{
+  memfunc_w_explicit_obj_r = false;
+  if (func->get_sdef() != 0) {
+    symbol_common *const sc = func->get_sdef();
+    return sc;
+  } else if (func->get_esort() == expr_e_op) {
+    expr_op *const eop = ptr_down_cast<expr_op>(func);
+    symbol_common *const sc = eop->arg1->get_sdef();
+    if (sc != 0 && (eop->op == '.' || eop->op == TOK_ARROW)) {
+      memfunc_w_explicit_obj_r = true;
+      return sc;
+    }
+  }
+  return 0;
+}
+
 term get_func_te_for_funccall(expr_i *func,
   bool& memfunc_w_explicit_obj_r)
 {
+  symbol_common *sc = get_func_symbol_common_for_funccall(func,
+    memfunc_w_explicit_obj_r);
+  return sc != 0 ? sc->resolve_evaluated() : term();
+#if 0
   memfunc_w_explicit_obj_r = false;
   if (func->get_sdef() != 0) {
     symbol_common *const sc = func->get_sdef();
@@ -961,6 +983,7 @@ term get_func_te_for_funccall(expr_i *func,
     }
   }
   return term();
+#endif
 }
 
 static bool is_vararg_function_or_struct(expr_i *e)
@@ -1013,14 +1036,16 @@ static void add_root_requirement(expr_i *e, passby_e passby,
     expr_funccall *const efc = ptr_down_cast<expr_funccall>(e);
     if (is_ephemeral_value_type(e->resolve_texpr())) {
       /* function returning ephemeral type, which is only allowed for extern c
-       * function. it must be a member function of a container type, and the
-       * returned reference must be valid while the container is valid and it
-       * is not resized. */
+       * function. it must be a member function (or a member-like function) of
+       * a (possibly) container type, and the returned reference must be valid 
+       * while the container is valid and it is not resized. */
       expr_op *const eop = dynamic_cast<expr_op *>(efc->func);
       if (eop == 0 || (eop->op != '.' && eop->op != TOK_ARROW)) {
 	arena_error_throw(efc, "Non-member function returning ephemeral type");
+	  /* TODO: remove this restriction */
       }
-      /* 'this' object is a container. root the object and it's elements */
+      /* 'this' object is possibly a container. root the object and it's
+       * elements */
       add_root_requirement_container_elements(eop->arg0, blockscope_flag);
       add_root_requirement(eop->arg0,
 	is_passby_const(passby)
@@ -1397,22 +1422,18 @@ static void subst_user_defined_op(expr_op *eop)
   eop->op = '(';
   fn_set_tree_and_define_static(fc, eop, eop->symtbl_lexical, 0, 
     eop->symtbl_lexical->block_backref->tinfo.template_descent);
-#if 0
-  if (eop->op == '+') {
-    /* operator::plus(arg0, arg1) */
+}
+
+static void subst_user_defined_elemop(expr_op *eop)
+{
+  if (eop->op == '[') {
     fn_check_type(eop->arg0, eop->symtbl_lexical);
-    fn_check_type(eop->arg1, eop->symtbl_lexical);
-    if (!is_numeric_type(eop->arg0->resolve_texpr())
-      || !is_numeric_type(eop->arg1->resolve_texpr())) {
-#if 0
-fprintf(stderr, "op plus %s %s\n",
-  term_tostr_human(eop->arg0->get_texpr()).c_str(),
-  term_tostr_human(eop->arg1->get_texpr()).c_str());
-#endif
+    const term& ta0 = eop->arg0->resolve_texpr();
+    if (!is_container_family(ta0) && !is_cm_range_family(ta0)) {
       expr_i *fc = expr_funccall_new(eop->fname, eop->line,
 	expr_symbol_new(eop->fname, eop->line,
 	  expr_nssym_new(eop->fname, eop->line,
-	    expr_nssym_new(eop->fname, eop->line, 0, "operator"), "plus")),
+	    expr_nssym_new(eop->fname, eop->line, 0, "operator"), "getelem")),
 	expr_op_new(eop->fname, eop->line, ',', eop->arg0, eop->arg1));
       eop->arg0 = fc;
       eop->arg1 = 0;
@@ -1421,16 +1442,39 @@ fprintf(stderr, "op plus %s %s\n",
 	eop->symtbl_lexical->block_backref->tinfo.template_descent);
     }
   }
-#endif
+  if (eop->op == '=') {
+    expr_op *lhsop = dynamic_cast<expr_op *>(eop->arg0);
+    if (lhsop != 0 && lhsop->op == '[') {
+      fn_check_type(lhsop->arg0, lhsop->symtbl_lexical);
+      const term& ta0 = lhsop->arg0->resolve_texpr();
+      if (!is_container_family(ta0) && !is_cm_range_family(ta0)) {
+	expr_i *fc = expr_funccall_new(eop->fname, eop->line,
+	  expr_symbol_new(eop->fname, eop->line,
+	    expr_nssym_new(eop->fname, eop->line,
+	      expr_nssym_new(eop->fname, eop->line, 0, "operator"),
+	      "setelem")),
+	  expr_op_new(eop->fname, eop->line, ',',
+	    expr_op_new(eop->fname, eop->line, ',',
+	      lhsop->arg0, lhsop->arg1), eop->arg1));
+	eop->arg0 = fc;
+	eop->arg1 = 0;
+	eop->op = '(';
+	fn_set_tree_and_define_static(fc, eop, eop->symtbl_lexical, 0, 
+	  eop->symtbl_lexical->block_backref->tinfo.template_descent);
+      }
+    }
+  }
 }
 
 void expr_op::check_type(symbol_table *lookup)
 {
   subst_user_defined_op(this);
+  subst_user_defined_elemop(this);
   if (op == '.' || op == TOK_ARROW) {
     fn_check_type(arg0, lookup);
     term t = arg0->resolve_texpr();
     symbol_table *symtbl = 0;
+      /* symbol table used for finding field/mfunc name */
     symbol_table *parent_symtbl = 0;
     std::string arg0_uniqns;
     symbol_common *const sc = arg1->get_sdef();
@@ -1447,8 +1491,8 @@ void expr_op::check_type(symbol_table *lookup)
       symtbl = &es->block->symtbl;
       parent_symtbl = symtbl->get_lexical_parent();
       arg0_uniqns = es->uniqns;
-      /* vector_size, map_size etc */
       arg1_sym_prefix = es->sym + std::string("_");
+	/* for finding vector_size, map_size etc */
       if (is_cm_pointer_family(t)) {
 	/* if t is a ptr{foo}, find 'foo_funcname' from foo's namespace */
 	term t1 = get_pointer_target(t);
@@ -1500,30 +1544,43 @@ void expr_op::check_type(symbol_table *lookup)
     if (is_ancestor_symtbl(symtbl, symtbl_lexical)) {
       no_private = false; /* allow private field */
     }
-    /* lookup without arg1_sym_prefix */
-    /* lookup member field */
-    if (symtbl != 0 && symtbl->resolve_name_nothrow_memfld(sc->get_fullsym(),
-      no_private, sc->uniqns)) {
-      /* symbol is defined as a field */
-      DBG(fprintf(stderr, "found fld '%s' ns=%s\n", sc->get_fullsym().c_str(),
-	sc->uniqns.c_str()));
-      fn_check_type(arg1, symtbl);
-      type_of_this_expr = arg1->resolve_texpr();
-      // expr_i *const fo = type_of_this_expr.get_expr();
-      const expr_i *const fo = sc->get_symdef();
-      const expr_funcdef *const fo_efd =
-	dynamic_cast<const expr_funcdef *>(fo);
-      if (fo_efd != 0 && !fo_efd->is_virtual_or_member_function()) {
-	arena_error_throw(this, "Can not apply '%s' "
-	  "('%s' is not a member function)",
-	  tok_string(this, op), sc->get_fullsym().c_str());
+    /* find member field or function */
+    if (symtbl != 0) {
+      symbol symstr = sc->get_fullsym();
+      expr_i *fmem = symtbl->resolve_name_nothrow_memfld(symstr, no_private,
+	sc->uniqns);
+      bool is_generic_invoke = false;
+      if (fmem == 0) {
+	symstr = "__invoke"; /* TODO: intern once */
+	fmem = symtbl->resolve_name_nothrow_memfld(symstr, no_private,
+	  sc->uniqns);
+	is_generic_invoke = true;
+      }
+      if (fmem != 0) {
+	/* symbol is defined as a field/mfunc */
+	DBG(fprintf(stderr, "found fld '%s' ns=%s\n",
+	  symstr.c_str(), sc->uniqns.c_str()));
+	if (is_generic_invoke) {
+	  sc->set_sym_prefix_fullsym(symstr);
+	}
+	fn_check_type(arg1, symtbl); /* expr_symbol::check_type */
+	type_of_this_expr = arg1->resolve_texpr();
+	const expr_i *const fo = sc->get_symdef();
+	const expr_funcdef *const fo_efd =
+	  dynamic_cast<const expr_funcdef *>(fo);
+	if (fo_efd != 0 && !fo_efd->is_virtual_or_member_function()) {
+	  arena_error_throw(this, "Can not apply '%s' "
+	    "('%s' is not a member function)",
+	    tok_string(this, op), sc->get_fullsym().c_str());
+	  return;
+	}
+	assert(!type_of_this_expr.is_null());
 	return;
       }
-      assert(!type_of_this_expr.is_null());
-      return;
-    } else if (parent_symtbl != 0) {
+    }
+    /* find member-like non-member function (vector_size, map_size etc.) */
+    if (parent_symtbl != 0) {
       /* lookup with arg1_sym_prefix */
-      /* find non-member function (vector_size, map_size etc.) */
       const std::string funcname_w_prefix = arg1_sym_prefix
 	+ sc->get_fullsym().to_string(); /* TODO: don't use std::string */
       symtbl = parent_symtbl;
@@ -1558,11 +1615,10 @@ void expr_op::check_type(symbol_table *lookup)
 	  tok_string(this, op), funcname_w_prefix.c_str());
 	return;
       }
-    } else {
-      arena_error_throw(this, "Can not apply '%s' (field not found)",
-	tok_string(this, op));
-      return;
     }
+    arena_error_throw(this, "Can not apply '%s' (field not found)",
+      tok_string(this, op));
+    return;
   } else {
     /* other ops */
     fn_check_type(arg1, lookup); /* arg1 first. must for type inference */
@@ -2024,7 +2080,9 @@ void expr_funccall::check_type(symbol_table *lookup)
       arg->dump(0).c_str());
   }
   bool memfunc_w_explicit_obj = false;
-  term func_te = get_func_te_for_funccall(func, memfunc_w_explicit_obj);
+  symbol_common *func_sc = get_func_symbol_common_for_funccall(func,
+    memfunc_w_explicit_obj);
+  term func_te = func_sc != 0 ? func_sc->resolve_evaluated() : term();
   if (func_te.is_null()) {
     arena_error_throw(func, "Expression '%s' is not a function",
       func->dump(0).c_str());
@@ -2056,12 +2114,19 @@ void expr_funccall::check_type(symbol_table *lookup)
     term tis_ml(tis); /* metalist */
     const size_t tplen = get_tparam_length(func_te.get_expr());
     term_list tas; /* resolved targs */
-    if (func_te.get_args()->size() + 1 == tplen) {
-      tas = *func_te.get_args(); /* leading targs are explicitly specified */
+    if (func_sc != 0 && func_sc->get_sym_prefix_fullsym() == "__invoke") {
+      const std::string method_name(func_sc->get_fullsym().to_string());
+      tas.push_back(term(method_name));
+      tas.push_back(tis_ml);
+    } else if (func_te.get_args()->size() + 1 == tplen) {
+      /* leading targs are explicitly specified */
+      tas = *func_te.get_args();
       tas.push_back(tis_ml);
     } else if (func_te.get_args()->size() == 0 && tplen == 2
       && tis.size() == 1) {
-      /* to_ptr(...) uses this case */
+      /* no explicit targ is specified */
+      /* to_ptr(...) uses this case when it boxes an already-constructed
+       * value */
       tas.push_back(arglist.front()->resolve_texpr());
       tas.push_back(tis_ml);
     } else {

@@ -11,7 +11,7 @@ function void draw_tri()
     1.0, static_cast{float}(1.732 / 3.0));
   const sv = v[0 .. v.size()];
   glEnableClientState(GL_VERTEX_ARRAY);
-  glVertexPointer(2, GL_FLOAT, 0, sv.to_untyped());
+  glVertexPointer(2, GL_FLOAT, 0, sv.crawptr().void());
   glDrawArrays(GL_TRIANGLES, 0, 3);
   glDisableClientState(GL_VERTEX_ARRAY);
   /*
@@ -34,7 +34,7 @@ function void compat_glFrustum(double left, double right, double bottom,
   a[10] = static_cast{float}(-(far + near) / (far - near));
   a[11] = static_cast{float}(-1.0);
   a[14] = static_cast{float}(-(far * near * 2.0) / (far - near));
-  glMultMatrixf(a);
+  glMultMatrixf(a.crawptr());
 }
 
 {
@@ -55,7 +55,7 @@ function void compat_glFrustum(double left, double right, double bottom,
   while (!done) {
     Event ev;
     while (sdl.PollEvent(ev)) {
-      if (ev.Type() == SDL_QUIT) {
+      if (ev.type == SDL_QUIT) {
 	done = true;
 	break;
       }

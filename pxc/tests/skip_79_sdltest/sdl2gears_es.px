@@ -182,12 +182,12 @@ function uint make_gear_vbo(float inner_radius, float outer_radius,
   }
   ofs_r[5] = vec.size();
 
-  farray{uint, 1} bufs;
-  glGenBuffers(1, bufs[0 .. 1]);
-  glBindBuffer(GL_ARRAY_BUFFER, bufs[0]);
+  uint bufid;
+  glGenBuffers(1, address(bufid));
+  glBindBuffer(GL_ARRAY_BUFFER, bufid);
   glBufferData(GL_ARRAY_BUFFER, static_cast{GLsizeiptr}(vec.size() * 4),
-    to_void_cp(vec), GL_STATIC_DRAW);
-  return bufs[0];
+    vec.crawptr().void(), GL_STATIC_DRAW);
+  return bufid;
 }
 
 function void draw_gear_vbo(uint vbo_name, farray{size_t, 6} const& ofs)
@@ -250,9 +250,8 @@ function void init_gear_vbos()
 function void deinit_gear_vbos()
 {
   for (int i : 0 .. 3) {
-    farray{uint, 1} a;
-    a[0] = gear_vbos[i].name;
-    glDeleteBuffers(1, a[0 .. 1]);
+    uint a = gear_vbos[i].name;
+    glDeleteBuffers(1, caddress(a));
   }
 }
 
@@ -262,13 +261,13 @@ function void draw_gear_vbo_one(int i)
   const green = make_farray{float}(0.0, 0.8, 0.2, 1.0);
   const blue = make_farray{float}(0.2, 0.2, 1.0, 1.0);
   if (i == 0) {
-    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, red);
+    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, red.crawptr());
     draw_gear_vbo(gear_vbos[0].name, gear_vbos[0].ofs);
   } else if (i == 1) {
-    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, green);
+    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, green.crawptr());
     draw_gear_vbo(gear_vbos[1].name, gear_vbos[1].ofs);
   } else if (i == 2) {
-    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, blue);
+    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, blue.crawptr());
     draw_gear_vbo(gear_vbos[2].name, gear_vbos[2].ofs);
   }
 }
@@ -280,7 +279,7 @@ function void draw_frame(SDL const& sdl, quaternion{float} const& view_angle)
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
   glPushMatrix();
-  glMultMatrixf(view_angle_arr);
+  glMultMatrixf(view_angle_arr.crawptr());
 
   function void draw_n(int n, int i) {
     glTranslatef(0.0, 0.0, -static_cast{float}(n - 1));
@@ -325,7 +324,7 @@ function void compat_glFrustum(double left, double right, double bottom,
   a[10] = static_cast{float}(-(far + near) / (far - near));
   a[11] = static_cast{float}(-1.0);
   a[14] = static_cast{float}(-(far * near * 2.0) / (far - near));
-  glMultMatrixf(a);
+  glMultMatrixf(a.crawptr());
 }
 
 function void reshape(int width, int height)
@@ -344,7 +343,7 @@ function void init_gl()
 {
   const pos = make_farray{float}(5.0, 5.0, 10.0, 0.0);
 
-  glLightfv(GL_LIGHT0, GL_POSITION, pos);
+  glLightfv(GL_LIGHT0, GL_POSITION, pos.crawptr());
   glEnable(GL_CULL_FACE);
   glEnable(GL_LIGHTING);
   glEnable(GL_LIGHT0);

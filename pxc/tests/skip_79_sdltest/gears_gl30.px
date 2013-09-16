@@ -32,12 +32,15 @@
  *
  */
 
+metafunction debug_matrix 0;
+
 namespace gears_gl30 "export-unsafe";
 import common -;
 import numeric::fpmath -;
 import numeric::quaternion -;
 import SDL2 -;
 import GL::gl30 -;
+import GL::glm glm;
 import io::time -;
 import meta m;
 private import container::array +; /* extends vector */
@@ -47,6 +50,15 @@ private metafunction is_gles m::eq{m::profile{"platform"}, "android"};
 float const M_PI = 3.14159265;
 
 metafunction fmat4 farray{float, 16};
+
+glm::mat4 projection;
+glm::mat4 modelview_base;
+int loc_mvp;
+int loc_normal_matrix;
+int loc_mate_color;
+int loc_vertex;
+int loc_normal;
+int loc_lightpos;
 
 function fmat4 fmat4_frustum(double left, double right, double bottom, 
   double top, double near, double far)
@@ -200,52 +212,75 @@ function uint make_gear_vbo(float inner_radius, float outer_radius,
   ofs_r[5] = vec.size();
 
   farray{uint, 1} bufs;
-  glGenBuffers(1, bufs[0 .. 1]);
+  glGenBuffers(1, bufs.rawptr());
   glBindBuffer(GL_ARRAY_BUFFER, bufs[0]);
   glBufferData(GL_ARRAY_BUFFER, static_cast{GLsizeiptr}(vec.size() * 4),
-    to_void_cp(vec), GL_STATIC_DRAW);
+    vec.crawptr().void(), GL_STATIC_DRAW);
   return bufs[0];
 }
 
 function void draw_gear_vbo(uint vbo_name, farray{size_t, 6} const& ofs)
 {
   /* */
-  glEnableClientState(GL_VERTEX_ARRAY);
+  const lvtx = static_cast{uint}(loc_vertex);
+  const lnor = static_cast{uint}(loc_normal);
+  // glEnableClientState(GL_VERTEX_ARRAY);
   glBindBuffer(GL_ARRAY_BUFFER, vbo_name);
+  glEnableVertexAttribArray(lvtx);
   glShadeModel(GL_FLAT);
-  glNormal3f(0.0, 0.0, 1.0);
+  // glNormal3f(0.0, 0.0, 1.0);
+  glVertexAttrib3f(lnor, 0.0, 0.0, 1.0);
   /* draw front face */
-  glVertexPointer(3, GL_FLOAT, 0, offset_to_void_cp(0));
+  // glVertexPointer(3, GL_FLOAT, 0, offset_to_void_cp(0));
+  glVertexAttribPointer(lvtx, 3, GL_FLOAT, 0, 0, offset_to_void_cp(0));
   glDrawArrays(GL_TRIANGLE_STRIP, 0, static_cast{GLsizei}(ofs[0] / 3));
-  /* draw back face */
-  glVertexPointer(3, GL_FLOAT, 0, offset_to_void_cp(ofs[0] * 4));
+  /* draw front sides of teeth */
+  // glVertexPointer(3, GL_FLOAT, 0, offset_to_void_cp(ofs[0] * 4));
+  glVertexAttribPointer(lvtx, 3, GL_FLOAT, 0, 0,
+    offset_to_void_cp(ofs[0] * 4));
   glDrawArrays(GL_TRIANGLES, 0, static_cast{GLsizei}((ofs[1] - ofs[0]) / 3));
   /* */
-  glNormal3f(0.0, 0.0, -1.0);
+  // glNormal3f(0.0, 0.0, -1.0);
+  glVertexAttrib3f(lnor, 0.0, 0.0, -1.0);
   /* draw back face */
-  glVertexPointer(3, GL_FLOAT, 0, offset_to_void_cp(ofs[1] * 4));
+  // glVertexPointer(3, GL_FLOAT, 0, offset_to_void_cp(ofs[1] * 4));
+  glVertexAttribPointer(lvtx, 3, GL_FLOAT, 0, 0,
+    offset_to_void_cp(ofs[1] * 4));
   glDrawArrays(GL_TRIANGLE_STRIP, 0,
     static_cast{GLsizei}((ofs[2] - ofs[1]) / 3));
   /* draw back sides of teeth */
-  glVertexPointer(3, GL_FLOAT, 0, offset_to_void_cp(ofs[2] * 4));
+  // glVertexPointer(3, GL_FLOAT, 0, offset_to_void_cp(ofs[2] * 4));
+  glVertexAttribPointer(lvtx, 3, GL_FLOAT, 0, 0,
+    offset_to_void_cp(ofs[2] * 4));
   glDrawArrays(GL_TRIANGLES, 0, static_cast{GLsizei}((ofs[3] - ofs[2]) / 3));
   /* */
-  glEnableClientState(GL_NORMAL_ARRAY);
+  //glEnableClientState(GL_NORMAL_ARRAY);
+  glEnableVertexAttribArray(lnor);
   /* draw outward faces of teeth */
-  glVertexPointer(3, GL_FLOAT, 24, offset_to_void_cp((ofs[3] + 3) * 4));
-  glNormalPointer(GL_FLOAT, 24, offset_to_void_cp(ofs[3] * 4));
+  // glVertexPointer(3, GL_FLOAT, 24, offset_to_void_cp((ofs[3] + 3) * 4));
+  glVertexAttribPointer(lvtx, 3, GL_FLOAT, 0, 24,
+    offset_to_void_cp((ofs[3] + 3) * 4));
+  //glNormalPointer(GL_FLOAT, 24, offset_to_void_cp(ofs[3] * 4));
+  glVertexAttribPointer(lnor, 3, GL_FLOAT, 0, 24,
+    offset_to_void_cp(ofs[3] * 4));
   glDrawArrays(GL_TRIANGLE_STRIP, 0,
     static_cast{GLsizei}((ofs[4] - ofs[3]) / 6));
   /* */
   // glShadeModel(GL_SMOOTH);
   /* draw inside radius cylinder */
-  glVertexPointer(3, GL_FLOAT, 24, offset_to_void_cp((ofs[4] + 3) * 4));
-  glNormalPointer(GL_FLOAT, 24, offset_to_void_cp(ofs[4] * 4));
+  // glVertexPointer(3, GL_FLOAT, 24, offset_to_void_cp((ofs[4] + 3) * 4));
+  glVertexAttribPointer(lvtx, 3, GL_FLOAT, 0, 24,
+    offset_to_void_cp((ofs[4] + 3) * 4));
+  // glNormalPointer(GL_FLOAT, 24, offset_to_void_cp(ofs[4] * 4));
+  glVertexAttribPointer(lnor, 3, GL_FLOAT, 0, 24,
+    offset_to_void_cp(ofs[4] * 4));
   glDrawArrays(GL_TRIANGLE_STRIP, 0,
     static_cast{GLsizei}((ofs[5] - ofs[4]) / 6));
   /* */
-  glDisableClientState(GL_NORMAL_ARRAY);
-  glDisableClientState(GL_VERTEX_ARRAY);
+  glDisableVertexAttribArray(lnor);
+  glDisableVertexAttribArray(lvtx);
+  // glDisableClientState(GL_NORMAL_ARRAY);
+  // glDisableClientState(GL_VERTEX_ARRAY);
 }
 
 float gears_angle = 0.0;
@@ -267,25 +302,31 @@ function void init_gear_vbos()
 function void deinit_gear_vbos()
 {
   for (int i : 0 .. 3) {
-    farray{uint, 1} a;
-    a[0] = gear_vbos[i].name;
-    glDeleteBuffers(1, a[0 .. 1]);
+    const a = gear_vbos[i].name;
+    glDeleteBuffers(1, caddress(a));
   }
 }
 
-function void draw_gear_vbo_one(int i)
+function void draw_gear_vbo_one(int i, glm::mat4 const& mv,
+  glm::mat3 const& nm)
 {
+  glUniformMatrix4fv(loc_mvp, 1, 0, projection.multiply(mv).to_crawptr());
+  glUniformMatrix3fv(loc_normal_matrix, 1, 0, nm.to_crawptr());
+  glUniform4f(loc_lightpos, 5.0, 5.0, 10.0, 0.0);
   const red = make_farray{float}(0.8, 0.1, 0.0, 1.0);
   const green = make_farray{float}(0.0, 0.8, 0.2, 1.0);
   const blue = make_farray{float}(0.2, 0.2, 1.0, 1.0);
   if (i == 0) {
-    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, red);
+    // glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, red.crawptr());
+    glUniform4fv(loc_mate_color, 1, red.crawptr());
     draw_gear_vbo(gear_vbos[0].name, gear_vbos[0].ofs);
   } else if (i == 1) {
-    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, green);
+    // glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, green.crawptr());
+    glUniform4fv(loc_mate_color, 1, green.crawptr());
     draw_gear_vbo(gear_vbos[1].name, gear_vbos[1].ofs);
   } else if (i == 2) {
-    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, blue);
+    // glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, blue.crawptr());
+    glUniform4fv(loc_mate_color, 1, blue.crawptr());
     draw_gear_vbo(gear_vbos[2].name, gear_vbos[2].ofs);
   }
 }
@@ -296,66 +337,119 @@ function void draw_frame(SDL const& sdl, quaternion{float} const& view_angle)
 
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  glPushMatrix();
-  glMultMatrixf(view_angle_arr);
+  // glPushMatrix();
+  // glMultMatrixf(view_angle_arr.crawptr());
+  mutable mat_angle = glm::mat4();
+  slice{float} mat_angle_slice = mat_angle.to_slice();
+  for (size_t i : 0 .. 16) {
+    mat_angle_slice[i] = view_angle_arr[i];
+  }
+  const modelview_cur = modelview_base.multiply(mat_angle);
 
-  function void draw_n(int n, int i) {
-    glTranslatef(0.0, 0.0, -static_cast{float}(n - 1));
+  function void draw_n(int n, int i, glm::mat4 mutable& mv) {
+    // glTranslatef(0.0, 0.0, -static_cast{float}(n - 1));
+    mv = mv.translate(glm::make_vec3(0.0, 0.0, -static_cast{float}(n - 1)));
+    const nm = mv.to_3().inverse().transpose();
     for (int j : 0 .. n) {
-      draw_gear_vbo_one(i);
+      draw_gear_vbo_one(i, mv, nm);
       if (j != n - 1) {
-	glTranslatef(0.0, 0.0, 2.0);
+	// glTranslatef(0.0, 0.0, 2.0);
+	mv = mv.translate(glm::make_vec3(0.0, 0.0, 2.0));
       }
+    }
+    if (m::ne{debug_matrix, 0}) {
+      fmat4 m;
+      glGetFloatv(GL_MODELVIEW_MATRIX, m);
+      debug_log("MODELVIEW", m);
+      debug_log("modelview", mv.to_cslice());
     }
   }
 
+  glm::mat4 mutable mv;
+  
+  mv = modelview_cur;
   int n_dup = 10;
-  glPushMatrix();
-  glTranslatef(-3.0, -2.0, 0.0);
-  glRotatef(gears_angle, 0.0, 0.0, 1.0);
-  draw_n(n_dup, 0);
-  glPopMatrix();
+  // glPushMatrix();
+  // glTranslatef(-3.0, -2.0, 0.0);
+  // glRotatef(gears_angle, 0.0, 0.0, 1.0);
+  mv = mv.translate(glm::make_vec3(-3.0, -2.0, 0.0));
+  mv = mv.rotate(gears_angle, glm::make_vec3(0.0, 0.0, 1.0));
+  draw_n(n_dup, 0, mv);
+  // glPopMatrix();
 
-  glPushMatrix();
-  glTranslatef(3.1, -2.0, 0.0);
-  glRotatef(gears_angle * static_cast{float}(-2.0) - 9.0, 0.0, 0.0, 1.0);
-  draw_n(n_dup, 1);
-  glPopMatrix();
+  mv = modelview_cur;
+  // glPushMatrix();
+  // glTranslatef(3.1, -2.0, 0.0);
+  // glRotatef(gears_angle * static_cast{float}(-2.0) - 9.0, 0.0, 0.0, 1.0);
+  mv = mv.translate(glm::make_vec3(3.1, -2.0, 0.0));
+  mv = mv.rotate(gears_angle * static_cast{float}(-2.0) - 9.0,
+    glm::make_vec3(0.0, 0.0, 1.0));
+  draw_n(n_dup, 1, mv);
+  // glPopMatrix();
 
-  glPushMatrix();
-  glTranslatef(-3.1, 4.2, 0.0);
-  glRotatef(gears_angle * static_cast{float}(-2.0) - 25.0, 0.0, 0.0, 1.0);
-  draw_n(n_dup, 2);
-  glPopMatrix();
+  mv = modelview_cur;
+  // glPushMatrix();
+  // glTranslatef(-3.1, 4.2, 0.0);
+  // glRotatef(gears_angle * static_cast{float}(-2.0) - 25.0, 0.0, 0.0, 1.0);
+  mv = mv.translate(glm::make_vec3(-3.1, 4.2, 0.0));
+  mv = mv.rotate(gears_angle * static_cast{float}(-2.0) - 25.0,
+    glm::make_vec3(0.0, 0.0, 1.0));
+  draw_n(n_dup, 2, mv);
+  // glPopMatrix();
 
-  glPopMatrix();
+  // glPopMatrix();
 }
 
 function void reshape(int width, int height)
 { 
   double h = static_cast{double}(height) / static_cast{double}(width);
   glViewport(0, 0, static_cast{GLsizei}(width), static_cast{GLsizei}(height));
-  glMatrixMode(GL_PROJECTION);
-  glLoadIdentity();
+
+  // glMatrixMode(GL_PROJECTION);
+  // glLoadIdentity();
   const fr = fmat4_frustum(-1.0, 1.0, -h, h, 5.0, 60.0);
-  glMultMatrixf(fr);
-  glMatrixMode(GL_MODELVIEW);
-  glLoadIdentity();
-  glTranslatef(0.0, 0.0, -40.0);
+  // glMultMatrixf(fr.crawptr());
+
+  projection = glm::frustum{float}(-1.0, 1.0,
+    static_cast{float}(-h), static_cast{float}(h), 5.0, 60.0);
+
+  // glMatrixMode(GL_MODELVIEW);
+  // glLoadIdentity();
+  // glTranslatef(0.0, 0.0, -40.0);
+  
+  modelview_base = glm::mat4().translate(glm::make_vec3(0.0, 0.0, -40.0));
+
+  if (m::ne{debug_matrix, 0}) {
+    fmat4 m;
+    glGetFloatv(GL_PROJECTION_MATRIX, m);
+    debug_log("PROJECTION", m);
+    debug_log("projection", projection.to_cslice());
+    glGetFloatv(GL_MODELVIEW_MATRIX, m);
+    debug_log("MODELVIEW", m);
+    debug_log("modelview_base", modelview_base.to_cslice());
+  }
+
 }
 
 function uint compile_shader(cstrref const& src, GLenum type)
 {
   mutable res = glCreateShader(type);
-  const source = make_farray{GLchar_cp}(to_char_cp(src));
+  const source = make_farray{ccharptr}(src.crawptr().char());
   const length = make_farray{int}(static_cast{int}(src.size()));
-  glShaderSource(res, 1, source, length);
+  glShaderSource(res, 1, source.crawptr(), length.crawptr());
   glCompileShader(res);
-  farray{int, 1} success;
-  glGetShaderiv(res, GL_COMPILE_STATUS, success);
-  if (success[0] == 0) {
+  int success;
+  glGetShaderiv(res, GL_COMPILE_STATUS, address(success));
+  if (success == 0) {
+    int sz;
+    glGetShaderiv(res, GL_INFO_LOG_LENGTH, address(sz));
+    string buf;
+    buf.resize(static_cast{size_t}(sz), 0);
+    GLsizei len;
+    glGetShaderInfoLog(res, static_cast{GLsizei}(sz), address(len),
+      buf.rawptr().char());
     debug_log("compile_shader failed:",
-      join{"\t"}(static_cast{int}(type), success[0], src));
+      join{"\t"}(static_cast{int}(type), success, buf));
     glDeleteShader(res);
     res = 0;
   }
@@ -381,10 +475,10 @@ function uint create_program(cstrref const& vertex_shader,
     }
   }
   glLinkProgram(prog);
-  farray{int, 1} success;
-  glGetProgramiv(prog, GL_LINK_STATUS, success);
-  if (success[0] == 0) {
-    debug_log("create_program failed:", success[0]);
+  int success;
+  glGetProgramiv(prog, GL_LINK_STATUS, address(success));
+  if (success == 0) {
+    debug_log("create_program failed:", success);
     glDeleteProgram(prog);
     prog = 0;
   }
@@ -395,40 +489,61 @@ function uint create_program(cstrref const& vertex_shader,
 function void set_program()
 {
   const vert = m::concat{
-    // "varying vec3 normal;\n",
-    // "varying vec3 light_vec;\n",
+    "uniform mat4 model_view_projection;\n",
+    "uniform mat3 normal_matrix;\n",
+    "uniform vec4 lightpos;\n",
+    "uniform vec4 mate_color;\n",
+    "attribute vec3 vertex;\n",
+    "attribute vec3 normal;\n",
     "void main(void) {\n",
-    "gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;\n",
-    // "gl_Position.y += 50.5;\n",
-    "vec4 vpos = gl_ModelViewMatrix * gl_Vertex;\n",
-    "vec3 normal = normalize(gl_NormalMatrix * gl_Normal);\n",
-    "vec3 light = normalize((gl_LightSource[0].position * vpos.w",
-    "  - vpos * gl_LightSource[0].position.w).xyz);\n",
-    //"vec3 light = normalize((gl_LightSource[0].position - vpos).xyz);\n",
-    "float diffuse = max(dot(light, normal), 0.0);\n",
-    "gl_FrontColor = gl_LightSource[0].diffuse * gl_FrontMaterial.diffuse",
-    "  * diffuse;\n",
-    // "gl_FrontColor = vec4(1.0, 0.0, 0.0, 1.0);\n",
+    "  gl_Position = model_view_projection * vec4(vertex, 1.0);\n",
+    "  vec3 nor = normalize(normal_matrix * normal);\n",
+    "  vec3 light = normalize(lightpos.xyz);\n",
+    "  float diffuse = max(dot(light, nor), 0.0);\n",
+    "  gl_FrontColor = 0.2 * mate_color + diffuse * mate_color;\n",
+    //"  gl_FrontColor = 0.2 * gl_FrontMaterial.ambient\n",
+    //"    + 1.0 * gl_FrontMaterial.diffuse * diffuse;\n",
     "}\n"};
   const frag = m::concat{
     "void main(void) {\n",
-    "gl_FragColor = gl_Color;\n",
-    // "gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);\n",
+    "  gl_FragColor = gl_Color;\n",
     "}\n"};
   const prog = create_program(vert, frag);
   if (prog != 0) {
     glUseProgram(prog);
+    /* mvp */
+    loc_mvp = glGetUniformLocation(prog,
+      "model_view_projection".crawptr().char());
+    loc_normal_matrix = glGetUniformLocation(prog,
+      "normal_matrix".crawptr().char());
+    loc_lightpos = glGetUniformLocation(prog, "lightpos".crawptr().char());
+    loc_mate_color = glGetUniformLocation(prog, "mate_color".crawptr().char());
+    loc_vertex = glGetAttribLocation(prog, "vertex".crawptr().char());
+    loc_normal = glGetAttribLocation(prog, "normal".crawptr().char());
+    /*
+    loc_position = 0;
+    glBindAttribLocation(prog, static_cast{uint}(loc_position),
+      buf.crawptr().char());
+    check_error();
+    */
+    println("loc_vertex: ", loc_vertex);
+    println("loc_normal: ", loc_normal);
+    println("loc_lightpos: ", loc_lightpos);
+    println("loc_mate_color: ", loc_mate_color);
   }
+}
+
+function void check_error()
+{
 }
 
 function void init_gl()
 {
-  const pos = make_farray{float}(5.0, 5.0, 10.0, 0.0);
-
-  glLightfv(GL_LIGHT0, GL_POSITION, pos);
+  // const pos = make_farray{float}(5.0, 5.0, 10.0, 0.0);
+  // glLightfv(GL_LIGHT0, GL_POSITION, pos.crawptr());
   glEnable(GL_CULL_FACE);
-  glEnable(GL_LIGHTING);
-  glEnable(GL_LIGHT0);
+  // glEnable(GL_LIGHTING);
+  // glEnable(GL_LIGHT0);
   glEnable(GL_DEPTH_TEST);
 
   // FIXME: disable
@@ -438,7 +553,7 @@ function void init_gl()
 
   /* make the gears */
   init_gear_vbos();
-  glEnable(GL_NORMALIZE);
+  // glEnable(GL_NORMALIZE);
 
   set_program();
   
