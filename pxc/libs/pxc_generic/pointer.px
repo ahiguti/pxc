@@ -510,6 +510,16 @@ struct rcptr { /* T must have an intrusive count */
     }
     return p;
   }
+  static inline T *create_rawptr() {
+    T *p = T::allocate();
+    try {
+      new (p) T();
+    } catch (...) {
+      T::deallocate(p);
+      throw;
+    }
+    return p;
+  }
 private:
   T *ptr; /* not nullable */
 private:

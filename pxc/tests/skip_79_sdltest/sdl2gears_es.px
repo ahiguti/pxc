@@ -32,17 +32,15 @@
  *
  */
 
-namespace sdl2gears_es "export-unsafe";
+namespace sdl2gears_es "use-unsafe";
 import common -;
 import numeric::fpmath -;
 import numeric::quaternion -;
 import SDL2 -;
-import GL::gl15 -;
+import GL::gles10 -;
 import io::time -;
 import meta m;
 private import container::array +; /* extends vector */
-
-private metafunction is_gles m::eq{m::profile{"platform"}, "android"};
 
 float const M_PI = 3.14159265;
 
@@ -272,7 +270,7 @@ function void draw_gear_vbo_one(int i)
   }
 }
 
-function void draw_frame(SDL const& sdl, quaternion{float} const& view_angle)
+function void draw_frame(quaternion{float} const& view_angle)
 {
   farray{float, 16} view_angle_arr = view_angle.to_matrix();
 
@@ -356,28 +354,29 @@ function void init_gl()
 
 {
   size_t const mu0 = mallinfo_in_use();
-  const sdl = SDL2::SDL(system, SDL_INIT_VIDEO);
-  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu0=", mu0));
-  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu1=", mallinfo_in_use()));
+  // const ini = SDL_Init(SDL_INIT_VIDEO);
+  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu0=", mu0));
+  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu1=", mallinfo_in_use()));
   int init_w = 300;
   int init_h = 300;
-  sdl.GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-  const wnd = sdl.CreateWindow("PXC-SDL2Gears", 0, 0, init_w, init_h,
+  const ini = SDL_Init(SDL_INIT_VIDEO);
+  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+  const wnd = SDL_CreateWindow("PXC-SDL2Gears", 0, 0, init_w, init_h,
     SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL).some;
     // SDL_WINDOW_FULLSCREEN | SDL_WINDOW_OPENGL);
-  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu2=", mallinfo_in_use()));
-  sdl.GetWindowSize(wnd, init_w, init_h);
-  const glctx = sdl.GL_CreateContext(wnd);
-  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu3=", mallinfo_in_use()));
-  sdl.GL_SetSwapInterval(0);
+  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu2=", mallinfo_in_use()));
+  SDL_GetWindowSize(wnd, init_w, init_h);
+  const glctx = SDL_GL_CreateContext(wnd);
+  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu3=", mallinfo_in_use()));
+  SDL_GL_SetSwapInterval(0);
 
   init_gl();
   reshape(init_w, init_h);
-  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu4=", mallinfo_in_use()));
+  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu4=", mallinfo_in_use()));
 
   uint t0 = 0;
   uint t1 = 0;
-  uint tprev = sdl.GetTicks();
+  uint tprev = SDL_GetTicks();
   uint frames = 0;
   quaternion{float} view_angle = quaternion{float}(1.0, 0.0, 0.0, 0.0);
 
@@ -390,13 +389,13 @@ function void init_gl()
   function void save_ticks(size_t idx) {
     const prev_tick = ticks[idx == 0 ? ticks.size() - 1 : idx - 1];
     mutable& cur_tick = ticks[idx];
-    cur_tick = sdl.GetTicks();
+    cur_tick = SDL_GetTicks();
     ticks_sum[idx] += cur_tick - prev_tick;
   }
 
   bool done = false;
   bool paused = false;
-  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu5=", mallinfo_in_use()));
+  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu5=", mallinfo_in_use()));
   function void rotate(float x, float y, float z, float angle) {
     const q = quaternion_from_axis_angle{float}(x, y, z,
       angle * M_PI / 180.0);
@@ -405,14 +404,14 @@ function void init_gl()
   }
   while (!done) {
     save_ticks(0);
-    Event ev;
-    while (sdl.PollEvent(ev)) {
+    SDL_Event ev;
+    while (SDL_PollEvent(ev)) {
       const etype = ev.type;
       if (etype == SDL_WINDOWEVENT) {
 	if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
 	  const w = ev.window.data1;
 	  const h = ev.window.data2;
-	  sdl.LogWarn(SDL_LOG_CATEGORY_TEST,
+	  SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
 	    join{""}("resized w=", w, " h=", h));
 	  reshape(w, h);
 	}
@@ -422,18 +421,18 @@ function void init_gl()
 	rotate(1.0, 0.0, 0.0, -dy);
 	rotate(0.0, 1.0, 0.0, -dx);
       } else if (etype == SDL_MULTIGESTURE) {
-	sdl.LogWarn(SDL_LOG_CATEGORY_TEST,
+	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
 	  join{""}("multigesture dTheta=", ev.mgesture.dTheta,
 	    " dDist=", ev.mgesture.dDist));
       } else if (etype == SDL_APP_WILLENTERBACKGROUND) {
-	sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("paused"));
+	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("paused"));
 	paused = true;
       } else if (etype == SDL_APP_DIDENTERFOREGROUND) {
-	sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("resumed"));
+	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("resumed"));
 	paused = false;
 	int w;
 	int h;
-	sdl.GetWindowSize(wnd, w, h);
+	SDL_GetWindowSize(wnd, w, h);
 	reshape(w, h);
       } else if (etype == SDL_QUIT) {
 	done = true;
@@ -441,21 +440,21 @@ function void init_gl()
       }
     }
     if (paused) {
-      sdl.Delay(100);
+      SDL_Delay(100);
       continue;
     }
     save_ticks(1);
     {
-      draw_frame(sdl, view_angle);
+      draw_frame(view_angle);
       save_ticks(2);
       ++frames;
-      uint t = sdl.GetTicks();
+      uint t = SDL_GetTicks();
       if (t - t0 >= 1000) {
 	const seconds = static_cast{float}(t - t0) / 1000.0;
 	const fps = static_cast{float}(frames) / seconds;
-	sdl.LogWarn(SDL_LOG_CATEGORY_TEST,
+	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
 	  join{" "}(frames, "frames in", seconds, "seconds =", fps, "fps"));
-	sdl.LogWarn(SDL_LOG_CATEGORY_TEST,
+	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
 	  join{" "}("ticks: ", ticks_sum));
 	ticks_sum = ticks_t();
 	t0 = t;
@@ -468,7 +467,7 @@ function void init_gl()
 	if (t - t1 >= 10) {
 	  t1 += 10;
 	}
-	const ks = SDL2::KeyboardState(sdl);
+	SDL_KeyboardState const ks;
 	if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) { done = 1; }
 	if (ks.Key(SDL_SCANCODE_UP) != 0) { rotate(1.0, 0.0, 0.0, 2.0); }
 	if (ks.Key(SDL_SCANCODE_DOWN) != 0) { rotate(1.0, 0.0, 0.0, -2.0); }
@@ -477,12 +476,12 @@ function void init_gl()
       }
     }
     save_ticks(3);
-    sdl.GL_SwapWindow(wnd);
+    SDL_GL_SwapWindow(wnd);
     save_ticks(4);
   }
-  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu6=", mallinfo_in_use()));
+  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu6=", mallinfo_in_use()));
   deinit_gear_vbos();
-  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu7=", mallinfo_in_use()));
+  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu7=", mallinfo_in_use()));
   /*
   io::process::io_exit(io::system, 0);
   */

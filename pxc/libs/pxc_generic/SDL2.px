@@ -1,31 +1,31 @@
 namespace SDL2 "use-unsafe";
-import common -;
-import exception -;
-import meta m;
+public import common -;
+public import exception -;
+public import meta m;
 
 extern "cflags" "`sdl2-config --cflags`";
 extern "ldflags" "`sdl2-config --libs`";
 
 /* SDL_Init */
 
-public struct extern "SDL2::SDLContext" "nodefault"
-SDL(io::io const& sys, InitFlags flags) { }
+public struct extern "SDL2::Init" "nodefault"
+SDL_Init(SDL_InitFlags flags) { }
 
-public tsvaluetype struct extern "Uint32" "extbitmask" InitFlags { }
+public tsvaluetype struct extern "Uint32" "extbitmask" SDL_InitFlags { }
 expand(sym : m::map{m::list{
   "AUDIO", "VIDEO", "CDROM", "TIMER", "EVERYTHING"
 }, metafunction{x} m::concat{"SDL_INIT_", x}}) {
-  public extern "%" InitFlags sym;
+  public extern "%" SDL_InitFlags sym;
 }
 
 /* SDL_Window */
 
-public function option{ptr{Window}}
-SDL_CreateWindow(SDL const& sdl, cstrref const& title, int x, int y,
-  int w, int h, WindowFlags f)
+public function option{ptr{SDL_Window}}
+SDL_CreateWindow(cstrref const& title, int x, int y, int w, int h,
+  SDL_WindowFlags f)
 {
-  ptr{Window} p = to_ptr{Window}(sdl);
-  option{ptr{Window}} r;
+  ptr{SDL_Window} p = to_ptr{SDL_Window}();
+  option{ptr{SDL_Window}} r;
   if (CreateWindow(*p, title, x, y, w, h, f) == 0) {
     r.some = p;
   }
@@ -33,35 +33,33 @@ SDL_CreateWindow(SDL const& sdl, cstrref const& title, int x, int y,
 }
 
 public struct extern "SDL2::Window" "noncopyable"
-Window private(SDL const& sdl) { }
+SDL_Window private() { }
 
 public extern "%" int SDL_WINDOWPOS_UNDEFINED;
 
-public tsvaluetype struct extern "Uint32" "extbitmask" WindowFlags { }
+public tsvaluetype struct extern "Uint32" "extbitmask" SDL_WindowFlags { }
 expand(sym : m::map{m::list{
   "FULLSCREEN", "OPENGL", "SHOWN", "HIDDEN", "BORDERLESS", "RESIZABLE",
   "MINIMIZED", "MAXIMIZED", "INPUT_GRABBED", "INPUT_FOCUS", "MOUSE_FOCUS",
   "FULLSCREEN_DESKTOP"
 }, metafunction{x} m::concat{"SDL_WINDOW_", x}}) {
-  public extern "%" WindowFlags sym;
+  public extern "%" SDL_WindowFlags sym;
 }
 
 public function extern "SDL2::GetWindowSize" void
-SDL_GetWindowSize(SDL const& sdl, ptr{Window} const& wnd, int mutable& w,
-  int mutable& h);
+SDL_GetWindowSize(ptr{SDL_Window} const& wnd, int mutable& w, int mutable& h);
 
 private function extern "SDL2::CreateWindow" int
-CreateWindow(Window mutable& wnd, cstrref const& title, int x, int y, int w,
-  int h, WindowFlags f);
+CreateWindow(SDL_Window mutable& wnd, cstrref const& title, int x, int y,
+  int w, int h, SDL_WindowFlags f);
 
 /* SDL_Renderer */
 
-public function option{ptr{Renderer}}
-SDL_CreateRenderer(SDL const& sdl, ptr{Window} const& wnd, int index,
-  RendererFlags f)
+public function option{ptr{SDL_Renderer}}
+SDL_CreateRenderer(ptr{SDL_Window} const& wnd, int index, SDL_RendererFlags f)
 {
-  ptr{Renderer} p = to_ptr{Renderer}(sdl);
-  option{ptr{Renderer}} r;
+  ptr{SDL_Renderer} p = to_ptr{SDL_Renderer}();
+  option{ptr{SDL_Renderer}} r;
   if (CreateRenderer(*p, *wnd, index, f) == 0) {
     r.some = p;
   }
@@ -69,16 +67,16 @@ SDL_CreateRenderer(SDL const& sdl, ptr{Window} const& wnd, int index,
 }
 
 public struct extern "SDL2::Renderer" "noncopyable"
-Renderer private (SDL const& sdl) { }
+SDL_Renderer private () { }
 
-public tsvaluetype struct extern "Uint32" "extbitmask" RendererFlags { }
+public tsvaluetype struct extern "Uint32" "extbitmask" SDL_RendererFlags { }
 expand(sym : m::map{m::list{
   "SOFTWARE", "ACCELERATED", "PRESENTVSYNC", "TARGETTEXTURE"
 }, metafunction{x} m::concat{"SDL_RENDERER_", x}}) {
-  public extern "%" RendererFlags sym;
+  public extern "%" SDL_RendererFlags sym;
 }
 
-public struct extern "SDL_Rect" Rect {
+public struct extern "SDL_Rect" SDL_Rect {
   int x;
   int y;
   int w;
@@ -86,27 +84,26 @@ public struct extern "SDL_Rect" Rect {
 }
 
 public function extern "SDL2::RenderClear" int
-SDL_RenderClear(SDL const& sdl, ptr{Renderer} const& rnd);
+SDL_RenderClear(ptr{SDL_Renderer} const& rnd);
 public function extern "SDL2::RenderPresent" void
-SDL_RenderPresent(SDL const& sdl, ptr{Renderer} const& rnd);
+SDL_RenderPresent(ptr{SDL_Renderer} const& rnd);
 public function extern "SDL2::RenderCopy" int
-SDL_RenderCopy(SDL const& sdl, ptr{Renderer} const& rnd,
-  ptr{Texture} const& tx, Rect const& src, Rect const& dst);
+SDL_RenderCopy(ptr{SDL_Renderer} const& rnd,
+  ptr{SDL_Texture} const& tx, SDL_Rect const& src, SDL_Rect const& dst);
 
 private function extern "SDL2::CreateRenderer" int
-CreateRenderer(Renderer mutable& rnd, Window const& wnd, int index,
-  RendererFlags f);
+CreateRenderer(SDL_Renderer mutable& rnd, SDL_Window const& wnd,
+  int index, SDL_RendererFlags f);
 
 /* SDL_Surface */
 
 public struct extern "SDL2::Surface" "noncopyable"
-Surface private (SDL const& sdl) { }
+SDL_Surface private () { }
 
-public function option{ptr{Surface}} SDL_LoadBMP(SDL const& sdl,
-  cstrref const& filename)
+public function option{ptr{SDL_Surface}} SDL_LoadBMP(cstrref const& filename)
 {
-  ptr{Surface} p = to_ptr{Surface}(sdl);
-  option{ptr{Surface}} r;
+  ptr{SDL_Surface} p = to_ptr{SDL_Surface}();
+  option{ptr{SDL_Surface}} r;
   if (LoadBMP(*p, filename) == 0) {
     r.some = p;
   }
@@ -114,16 +111,27 @@ public function option{ptr{Surface}} SDL_LoadBMP(SDL const& sdl,
 }
 
 private function extern "SDL2::LoadBMP" int
-LoadBMP(Surface mutable& sur, cstrref const& filename);
+LoadBMP(SDL_Surface mutable& sur, cstrref const& filename);
+
+public function extern "SDL2::Surface_W" uint
+SDL_Surface_W(ptr{SDL_Surface} const& sur);
+public function extern "SDL2::Surface_H" uint
+SDL_Surface_H(ptr{SDL_Surface} const& sur);
+public function extern "SDL2::Surface_Pitch" uint
+SDL_Surface_Pitch(ptr{SDL_Surface} const& sur);
+public function extern "SDL2::Surface_BytesPerPixel" uint
+SDL_Surface_BytesPerPixel(ptr{SDL_Surface} const& sur);
+public function extern "SDL2::Surface_Pixels" strref
+SDL_Surface_Pixels(ptr{SDL_Surface} const& sur);
 
 /* SDL_Texture */
 
-public function option{ptr{Texture}}
-SDL_CreateTextureFromSurface(SDL const& sdl, ptr{Renderer} const& rnd,
-  ptr{Surface} const& sur)
+public function option{ptr{SDL_Texture}}
+SDL_CreateTextureFromSurface(ptr{SDL_Renderer} const& rnd,
+  ptr{SDL_Surface} const& sur)
 {
-  ptr{Texture} p = to_ptr{Texture}(sdl);
-  option{ptr{Texture}} r;
+  ptr{SDL_Texture} p = to_ptr{SDL_Texture}();
+  option{ptr{SDL_Texture}} r;
   if (CreateTextureFromSurface(*p, rnd, sur) == 0) {
     r.some = p;
   }
@@ -131,75 +139,90 @@ SDL_CreateTextureFromSurface(SDL const& sdl, ptr{Renderer} const& rnd,
 }
 
 public struct extern "SDL2::Texture" "noncopyable"
-Texture private (SDL const& sdl) { }
+SDL_Texture private () { }
 
 public function extern "SDL2::CreateTextureFromSurface" int
-CreateTextureFromSurface(Texture mutable& tx, ptr{Renderer} const& rnd,
-  ptr{Surface} const& sur);
+CreateTextureFromSurface(SDL_Texture mutable& tx, ptr{SDL_Renderer} const& rnd,
+  ptr{SDL_Surface} const& sur);
 
 /* SDL_Event */
 
-public tsvaluetype struct extern "SDL_Event" Event {
+public tsvaluetype struct extern "SDL_Event" SDL_Event {
   /* union */
-  EventType const type;
-  CommonEvent const common;
-  WindowEvent const window;
-  KeyboardEvent const key;
-  TextEditingEvent const edit;
-  TextInputEvent const text;
-  MouseMotionEvent const motion;
-  MouseButtonEvent const button;
-  MouseWheelEvent const wheel;
-  JoyAxisEvent const jaxis;
-  JoyBallEvent const jball;
-  JoyHatEvent const jhat;
-  JoyButtonEvent const jbutton;
-  JoyDeviceEvent const jdevice;
-  ControllerAxisEvent const caxis;
-  ControllerButtonEvent const cbutton;
-  ControllerDeviceEvent const cdevice;
-  QuitEvent const quit;
-  UserEvent const user;
-  SysWMEvent const syswm;
-  TouchFingerEvent const tfinger;
-  MultiGestureEvent const mgesture;
-  DollarGestureEvent const dgesture;
-  DropEvent const drop;
+  SDL_EventType const type;
+  SDL_CommonEvent const common;
+  SDL_WindowEvent const window;
+  SDL_KeyboardEvent const key;
+  SDL_TextEditingEvent const edit;
+  SDL_TextInputEvent const text;
+  SDL_MouseMotionEvent const motion;
+  SDL_MouseButtonEvent const button;
+  SDL_MouseWheelEvent const wheel;
+  SDL_JoyAxisEvent const jaxis;
+  SDL_JoyBallEvent const jball;
+  SDL_JoyHatEvent const jhat;
+  SDL_JoyButtonEvent const jbutton;
+  SDL_JoyDeviceEvent const jdevice;
+  SDL_ControllerAxisEvent const caxis;
+  SDL_ControllerButtonEvent const cbutton;
+  SDL_ControllerDeviceEvent const cdevice;
+  SDL_QuitEvent const quit;
+  SDL_UserEvent const user;
+  SDL_SysWMEvent const syswm;
+  SDL_TouchFingerEvent const tfinger;
+  SDL_MultiGestureEvent const mgesture;
+  SDL_DollarGestureEvent const dgesture;
+  SDL_DropEvent const drop;
 }
-public tsvaluetype struct extern "SDL_CommonEvent" CommonEvent {
-  EventType const type;
+public tsvaluetype struct extern "SDL_CommonEvent" SDL_CommonEvent {
+  SDL_EventType const type;
   uint const timestamp;
 }
-public tsvaluetype struct extern "SDL_WindowEvent" WindowEvent {
-  EventType const type;
+public tsvaluetype struct extern "SDL_WindowEvent" SDL_WindowEvent {
+  SDL_EventType const type;
   uint const timestamp;
   uint const windowID;
-  WindowEventID const event;
+  SDL_WindowEventID const event;
   int const data1;
   int const data2;
 }
-public tsvaluetype struct extern "SDL_KeyboardEvent" KeyboardEvent { }
-public tsvaluetype struct extern "SDL_TextEditingEvent" TextEditingEvent { }
-public tsvaluetype struct extern "SDL_TextInputEvent" TextInputEvent { }
-public tsvaluetype struct extern "SDL_MouseMotionEvent" MouseMotionEvent { }
-public tsvaluetype struct extern "SDL_MouseButtonEvent" MouseButtonEvent { }
-public tsvaluetype struct extern "SDL_MouseWheelEvent" MouseWheelEvent { }
-public tsvaluetype struct extern "SDL_JoyAxisEvent" JoyAxisEvent { }
-public tsvaluetype struct extern "SDL_JoyBallEvent" JoyBallEvent { }
-public tsvaluetype struct extern "SDL_JoyHatEvent" JoyHatEvent { }
-public tsvaluetype struct extern "SDL_JoyButtonEvent" JoyButtonEvent { }
-public tsvaluetype struct extern "SDL_JoyDeviceEvent" JoyDeviceEvent { }
+public tsvaluetype struct extern "SDL_KeyboardEvent"
+SDL_KeyboardEvent { }
+public tsvaluetype struct extern "SDL_TextEditingEvent"
+SDL_TextEditingEvent { }
+public tsvaluetype struct extern "SDL_TextInputEvent"
+SDL_TextInputEvent { }
+public tsvaluetype struct extern "SDL_MouseMotionEvent"
+SDL_MouseMotionEvent { }
+public tsvaluetype struct extern "SDL_MouseButtonEvent"
+SDL_MouseButtonEvent { }
+public tsvaluetype struct extern "SDL_MouseWheelEvent"
+SDL_MouseWheelEvent { }
+public tsvaluetype struct extern "SDL_JoyAxisEvent"
+SDL_JoyAxisEvent { }
+public tsvaluetype struct extern "SDL_JoyBallEvent"
+SDL_JoyBallEvent { }
+public tsvaluetype struct extern "SDL_JoyHatEvent"
+SDL_JoyHatEvent { }
+public tsvaluetype struct extern "SDL_JoyButtonEvent"
+SDL_JoyButtonEvent { }
+public tsvaluetype struct extern "SDL_JoyDeviceEvent"
+SDL_JoyDeviceEvent { }
 public tsvaluetype struct extern "SDL_ControllerAxisEvent"
-ControllerAxisEvent { }
+SDL_ControllerAxisEvent { }
 public tsvaluetype struct extern "SDL_ControllerButtonEvent"
-ControllerButtonEvent { }
+SDL_ControllerButtonEvent { }
 public tsvaluetype struct extern "SDL_ControllerDeviceEvent"
-ControllerDeviceEvent { }
-public tsvaluetype struct extern "SDL_QuitEvent" QuitEvent { }
-public tsvaluetype struct extern "SDL_UserEvent" UserEvent { }
-public tsvaluetype struct extern "SDL_SysWMEvent" SysWMEvent { }
-public tsvaluetype struct extern "SDL_TouchFingerEvent" TouchFingerEvent {
-  EventType const type;
+SDL_ControllerDeviceEvent { }
+public tsvaluetype struct extern "SDL_QuitEvent"
+SDL_QuitEvent { }
+public tsvaluetype struct extern "SDL_UserEvent"
+SDL_UserEvent { }
+public tsvaluetype struct extern "SDL_SysWMEvent"
+SDL_SysWMEvent { }
+public tsvaluetype struct extern "SDL_TouchFingerEvent"
+SDL_TouchFingerEvent {
+  SDL_EventType const type;
   uint const timestamp;
   float x;
   float y;
@@ -207,8 +230,9 @@ public tsvaluetype struct extern "SDL_TouchFingerEvent" TouchFingerEvent {
   float dy;
   float pressure;
 }
-public tsvaluetype struct extern "SDL_MultiGestureEvent" MultiGestureEvent {
-  EventType const type;
+public tsvaluetype struct extern "SDL_MultiGestureEvent"
+SDL_MultiGestureEvent {
+  SDL_EventType const type;
   uint const timestamp;
   float dTheta;
   float dDist;
@@ -217,14 +241,14 @@ public tsvaluetype struct extern "SDL_MultiGestureEvent" MultiGestureEvent {
   ushort numFingers;
 }
 public tsvaluetype struct extern "SDL_DollarGestureEvent"
-DollarGestureEvent { }
-public tsvaluetype struct extern "SDL_DropEvent" DropEvent { }
+SDL_DollarGestureEvent { }
+public tsvaluetype struct extern "SDL_DropEvent" SDL_DropEvent { }
 
 public function extern "SDL2::PollEvent" bool
-SDL_PollEvent(SDL const& sdl, Event mutable& ev);
+SDL_PollEvent(SDL_Event mutable& ev);
 
 public tsvaluetype struct extern "Uint32" /* SDL_EventType */ "extenum"
-EventType { }
+SDL_EventType { }
 expand(sym : m::map{m::list{
   "QUIT", "APP_TERMINATING", "APP_LOWMEMORY", "APP_WILLENTERBACKGROUND",
   "APP_DIDENTERBACKGROUND", "APP_WILLENTERFOREGROUND",
@@ -238,27 +262,28 @@ expand(sym : m::map{m::list{
   "DOLLARGESTURE", "DOLLARRECORD", "MULTIGESTURE", "CLIPBOARDUPDATE",
   "DROPFILE", "USEREVENT", "LASTEVENT"
 }, metafunction{x} m::concat{"SDL_", x}}) {
-  public extern "%" EventType sym;
+  public extern "%" SDL_EventType sym;
 }
 
-public tsvaluetype struct extern "Uint8" /* SDL_WindowEventID */ "extenum"
-WindowEventID { }
+public tsvaluetype struct extern "Uint8" "extenum" SDL_WindowEventID { }
 expand (sym : m::map{m::list{
   "MOVED", "RESIZED"
 }, metafunction{x} m::concat{"SDL_WINDOWEVENT_", x}}) {
-  public extern "%" WindowEventID sym;
+  public extern "%" SDL_WindowEventID sym;
 }
 
-/* SDL_GLContext */
+public struct extern "SDL_GLattr" "extenum" SDL_GLattr { }
+expand (sym : m::map{m::list{
+  "DOUBLEBUFFER", "CONTEXT_MAJOR_VERSION", "CONTEXT_MINOR_VERSION"
+}, metafunction{x} m::concat{"SDL_GL_", x}}) {
+  public extern "%" SDL_GLattr sym;
+}
 
-public struct extern "SDL_GLattr" "extenum" GLattr { }
-public extern "SDL_GL_DOUBLEBUFFER" GLattr SDL_GL_DOUBLEBUFFER;
-
-public function option{ptr{GLContext}}
-SDL_GL_CreateContext(SDL const& sdl, ptr{Window} const& wnd)
+public function option{ptr{SDL_GLContext}}
+SDL_GL_CreateContext(ptr{SDL_Window} const& wnd)
 {
-  ptr{GLContext} p = to_ptr{GLContext}(sdl);
-  option{ptr{GLContext}} r;
+  ptr{SDL_GLContext} p = to_ptr{SDL_GLContext}();
+  option{ptr{SDL_GLContext}} r;
   if (GL_CreateContext(*p, *wnd) == 0) {
     r.some = p;
   }
@@ -266,113 +291,115 @@ SDL_GL_CreateContext(SDL const& sdl, ptr{Window} const& wnd)
 }
 
 public struct extern "SDL2::GLContext" "noncopyable"
-GLContext private (SDL const& sdl) { }
+SDL_GLContext private () { }
 
-public function extern "SDL2::GL_SetAttribute" void
-SDL_GL_SetAttribute(SDL const& sdl, GLattr attr, int value);
+public function extern "SDL_GL_SetAttribute" void
+SDL_GL_SetAttribute(SDL_GLattr attr, int value);
 public function extern "SDL2::GL_SwapWindow" void
-SDL_GL_SwapWindow(SDL const& sdl, ptr{Window} const& wnd);
-public function extern "SDL2::GL_SetSwapInterval" void
-SDL_GL_SetSwapInterval(SDL const& sdl, int v);
+SDL_GL_SwapWindow(ptr{SDL_Window} const& wnd);
+public function extern "SDL_GL_SetSwapInterval" void
+SDL_GL_SetSwapInterval(int v);
 
 private function extern "SDL2::GL_CreateContext" int
-GL_CreateContext(GLContext mutable& glctx, Window const& wnd);
+GL_CreateContext(SDL_GLContext mutable& glctx, SDL_Window const& wnd);
 
 /* SDL_KeyboardState */
 
-public struct extern "SDL2::KeyboardState" "linear"
-KeyboardState(SDL const& sdl) { }
+public struct extern "SDL2::KeyboardState" "noncopyable"
+SDL_KeyboardState() { }
 
 public function extern "SDL2::KeyboardState_Key" uint
-KeyboardState_Key(KeyboardState const& ks, Scancode code);
+SDL_KeyboardState_Key(SDL_KeyboardState const& ks, SDL_Scancode code);
 
 /* SDL_Scancode */
 
-public struct extern "SDL_Scancode" "extenum" Scancode { }
+public struct extern "SDL_Scancode" "extenum" SDL_Scancode { }
 expand (sym : m::map{m::list{
   "UNKNOWN", "RIGHT", "LEFT", "DOWN", "UP", "ESCAPE", "SPACE"
 }, metafunction{x} m::concat{"SDL_SCANCODE_", x}}) {
-  public extern "%" Scancode sym;
+  public extern "%" SDL_Scancode sym;
 }
 
 /* SDL_log */
 
-public struct extern "int" "extenum" LogCategory { }
+public struct extern "int" "extenum" SDL_LogCategory { }
 expand (sym : m::map{m::list{
   "APPLICATION", "ERROR", "ASSERT", "SYSTEM", "AUDIO", "VIDEO", "RENDER",
   "INPUT", "TEST"
 }, metafunction{x} m::concat{"SDL_LOG_CATEGORY_", x}}) {
-  public extern "%" LogCategory sym;
+  public extern "%" SDL_LogCategory sym;
 }
 
-public function extern "SDL2::Log" void SDL_Log(SDL const& sdl,
+public function extern "SDL2::Log" void SDL_Log(cstrref const& mess);
+public function extern "SDL2::LogInfo" void SDL_LogInfo(SDL_LogCategory cat,
   cstrref const& mess);
-public function extern "SDL2::LogInfo" void SDL_LogInfo(SDL const& sdl,
-  LogCategory cat, cstrref const& mess);
-public function extern "SDL2::LogWarn" void SDL_LogWarn(SDL const& sdl,
-  LogCategory cat, cstrref const& mess);
-public function extern "SDL2::LogError" void SDL_LogError(SDL const& sdl,
-  LogCategory cat, cstrref const& mess);
+public function extern "SDL2::LogWarn" void SDL_LogWarn(SDL_LogCategory cat,
+  cstrref const& mess);
+public function extern "SDL2::LogError" void SDL_LogError(SDL_LogCategory cat,
+  cstrref const& mess);
 
 /* timer */
 
-public function extern "SDL2::GetTicks" uint SDL_GetTicks(SDL const& sdl);
-public function extern "SDL2::Delay" void SDL_Delay(SDL const& sdl, uint ms);
+public function extern "SDL_GetTicks" uint SDL_GetTicks();
+public function extern "SDL_Delay" void SDL_Delay(uint ms);
 
 extern "types" inline
 #include <SDL.h>
 namespace SDL2 {
 using namespace pxcrt;
 
-struct SDLContext {
-  SDLContext(pxcio::io const& sys, Uint32 flags);
-  ~SDLContext();
-  SDLContext(SDLContext const& sdl);
+struct Init {
+  Init(Uint32 flags);
+  Init();
+  Init(Init const& x);
+  ~Init();
 private:
-  SDLContext& operator =(SDLContext const& sdl);
+  Init& operator =(Init const& x);
   static int init_count;
 };
 
 struct Window : private noncopyable {
-  Window(SDLContext const& sdl);
+  Window();
   ~Window();
-  const SDLContext sdl;
+  const Init ini;
   SDL_Window *ptr;
 };
 
 struct Renderer : private noncopyable {
-  Renderer(SDLContext const& sdl);
+  Renderer();
   ~Renderer();
-  const SDLContext sdl;
+  const Init ini;
   SDL_Renderer *ptr;
 };
 
 struct Surface : private noncopyable {
-  Surface(SDLContext const& sdl);
+  Surface();
   ~Surface();
-  const SDLContext sdl;
+  const Init ini;
+  /* ptr must not be invalidated so that Surface_Pixels() returns a valid
+   * slice */
   SDL_Surface *ptr;
 };
 
 struct Texture : private noncopyable {
-  Texture(SDLContext const& sdl);
+  Texture();
   ~Texture();
-  const SDLContext sdl;
+  const Init ini;
   SDL_Texture *ptr;
 };
 
 struct GLContext : private noncopyable {
-  GLContext(SDLContext const& sdl);
+  GLContext();
   ~GLContext();
-  const SDLContext sdl;
+  const Init ini;
   SDL_GLContext ptr;
 };
 
 struct KeyboardState : private noncopyable {
-  KeyboardState(SDLContext const& sdl);
+  KeyboardState();
   const Uint8 *keyboardstate;
   int num;
-  const SDLContext sdl;
+  const Init ini;
 private:
 };
 
@@ -383,29 +410,36 @@ extern "implementation" inline
 namespace SDL2 {
 using namespace pxcrt;
 
-int SDLContext::init_count = 0;
+int Init::init_count = 0;
 
-SDLContext::SDLContext(pxcio::io const& sys, Uint32 flags)
+Init::Init(Uint32 flags)
 {
   if (++init_count == 1) {
     SDL_Init(flags);
   }
 }
 
-SDLContext::~SDLContext()
+Init::Init()
+{
+  if (++init_count == 1) {
+    SDL_Init(0);
+  }
+}
+
+Init::~Init()
 {
   if (--init_count == 0) {
     SDL_Quit();
   }
 }
 
-SDLContext::SDLContext(SDLContext const& sdl)
+Init::Init(Init const& x)
 {
   ++init_count;
 }
 
-Window::Window(SDLContext const& sdl)
-  : sdl(sdl), ptr(0)
+Window::Window()
+  : ptr(0)
 {
 }
 
@@ -426,14 +460,13 @@ bt_int CreateWindow(Window& wnd, cstrref const& title, bt_int x, bt_int y,
 
 typedef rcptr< rcval<Window> > Window_ptr;
 
-void GetWindowSize(SDLContext const& sdl, Window_ptr const& wnd, int& w,
-  int& h)
+void GetWindowSize(Window_ptr const& wnd, int& w, int& h)
 {
   SDL_GetWindowSize(wnd->value$z.ptr, &w, &h);
 }
 
-Renderer::Renderer(SDLContext const& sdl)
-  : sdl(sdl), ptr(0)
+Renderer::Renderer()
+  : ptr(0)
 {
 }
 
@@ -450,8 +483,8 @@ bt_int CreateRenderer(Renderer& rnd, Window const& wnd, int index, Uint32 f)
   return (rnd.ptr != 0) ? 0 : -1;
 }
 
-Surface::Surface(SDLContext const& sdl)
-  : sdl(sdl), ptr(0)
+Surface::Surface()
+  : ptr(0)
 {
 }
 
@@ -469,8 +502,37 @@ bt_int LoadBMP(Surface& sur, cstrref const& filename)
   return (sur.ptr != 0) ? 0 : -1;
 }
 
-Texture::Texture(SDLContext const& sdl)
-  : sdl(sdl), ptr(0)
+typedef rcptr< rcval<Surface> > Surface_ptr;
+
+bt_uint Surface_W(Surface_ptr const& sur)
+{
+  return sur->value$z.ptr->w;
+}
+
+bt_uint Surface_H(Surface_ptr const& sur)
+{
+  return sur->value$z.ptr->h;
+}
+
+bt_uint Surface_Pitch(Surface_ptr const& sur)
+{
+  return sur->value$z.ptr->pitch;
+}
+
+bt_uint Surface_BytesPerPixel(Surface_ptr const& sur)
+{
+  return sur->value$z.ptr->format->BytesPerPixel;
+}
+
+strref Surface_Pixels(Surface_ptr const& sur)
+{
+  SDL_Surface *const p = sur->value$z.ptr;
+  size_t const len = p->pitch * p->h;
+  return strref(static_cast<unsigned char *>(sur->value$z.ptr->pixels), len);
+}
+
+Texture::Texture()
+  : ptr(0)
 {
 }
 
@@ -493,24 +555,24 @@ bt_int CreateTextureFromSurface(Texture& tx, Renderer_ptr const& rnd,
 
 typedef rcptr< rcval<Texture> > Texture_ptr;
 
-bt_int RenderClear(SDLContext const& sdl, Renderer_ptr const& rnd)
+bt_int RenderClear(Renderer_ptr const& rnd)
 {
   return SDL_RenderClear(rnd->value$z.ptr);
 }
 
-void RenderPresent(SDLContext const& sdl, Renderer_ptr const& rnd)
+void RenderPresent(Renderer_ptr const& rnd)
 {
   SDL_RenderPresent(rnd->value$z.ptr);
 }
 
-bt_int RenderCopy(SDLContext const& sdl, Renderer_ptr const& rnd,
-  Texture_ptr const& tx, SDL_Rect const& src, SDL_Rect const& dst)
+bt_int RenderCopy(Renderer_ptr const& rnd, Texture_ptr const& tx,
+  SDL_Rect const& src, SDL_Rect const& dst)
 {
   return SDL_RenderCopy(rnd->value$z.ptr, tx->value$z.ptr, &src, &dst);
 }
 
-GLContext::GLContext(SDLContext const& sdl)
-  : sdl(sdl), ptr(0)
+GLContext::GLContext()
+  : ptr(0)
 {
 }
 
@@ -527,41 +589,19 @@ bt_int GL_CreateContext(GLContext& glctx, Window const& wnd)
   return (glctx.ptr != 0) ? 0 : -1;
 }
 
-KeyboardState::KeyboardState(SDLContext const& sdl)
-  : sdl(sdl)
+KeyboardState::KeyboardState()
 {
   keyboardstate = ::SDL_GetKeyboardState(&num);
 }
 
-bt_bool PollEvent(SDLContext const& sdl, SDL_Event& ev)
+bt_bool PollEvent(SDL_Event& ev)
 {
   return ::SDL_PollEvent(&ev);
 }
 
-void GL_SetAttribute(SDLContext const& sdl, SDL_GLattr attr,
-  bt_int value)
-{
-  ::SDL_GL_SetAttribute(attr, value);
-}
-
-void GL_SwapWindow(SDLContext const& sdl, Window_ptr const& wnd)
+void GL_SwapWindow(Window_ptr const& wnd)
 {
   ::SDL_GL_SwapWindow(wnd->value$z.ptr);
-}
-
-void GL_SetSwapInterval(SDLContext const& sdl, int v)
-{
-  ::SDL_GL_SetSwapInterval(v);
-}
-
-bt_uint GetTicks(SDLContext const& sdl)
-{
-  return ::SDL_GetTicks();
-}
-
-void Delay(SDLContext const& sdl, bt_uint ms)
-{
-  ::SDL_Delay(ms);
 }
 
 SDL_EventType Event_Type(SDL_Event const& e)
@@ -603,25 +643,25 @@ bt_uint KeyboardState_Key(KeyboardState const& ks, SDL_Scancode key)
   }
 }
 
-void Log(SDLContext const& sdl, cstrref const& mess)
+void Log(cstrref const& mess)
 {
   PXCRT_ALLOCA_NTSTRING(mess_nt, mess);
   SDL_Log("%s", mess_nt.get());
 }
 
-void LogInfo(SDLContext const& sdl, int cat, cstrref const& mess)
+void LogInfo(int cat, cstrref const& mess)
 {
   PXCRT_ALLOCA_NTSTRING(mess_nt, mess);
   SDL_LogInfo(cat, "%s", mess_nt.get());
 }
 
-void LogWarn(SDLContext const& sdl, int cat, cstrref const& mess)
+void LogWarn(int cat, cstrref const& mess)
 {
   PXCRT_ALLOCA_NTSTRING(mess_nt, mess);
   SDL_LogWarn(cat, "%s", mess_nt.get());
 }
 
-void LogError(SDLContext const& sdl, int cat, cstrref const& mess)
+void LogError(int cat, cstrref const& mess)
 {
   PXCRT_ALLOCA_NTSTRING(mess_nt, mess);
   SDL_LogError(cat, "%s", mess_nt.get());

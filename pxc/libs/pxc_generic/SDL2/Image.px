@@ -1,0 +1,43 @@
+namespace SDL2::Image "use-unsafe";
+public import common -;
+public import SDL2 -;
+
+extern "cflags" "`pkg-config --cflags SDL2_image`";
+extern "ldflags" "`pkg-config --libs SDL2_image`";
+
+public function option{ptr{SDL_Surface}}
+IMG_Load(cstrref const& filename)
+{
+  bool suc = false;
+  option{ptr{SDL_Surface}} r;
+  const p = Load(filename, suc);
+  if (suc) {
+    r.some = p;
+  }
+  return r;
+}
+
+
+private function extern "SDL2::Image::Load" ptr{SDL_Surface}
+Load(cstrref const& filename, bool mutable& suc_r);
+
+extern "implementation" inline
+#include <SDL_image.h>
+namespace SDL2 {
+namespace Image {
+using namespace pxcrt;
+rcptr< rcval< ::SDL2::Surface > > Load(cstrref const& filename, bt_bool& suc_r)
+{
+  PXCRT_ALLOCA_NTSTRING(filename_nt, filename);
+  rcptr< rcval< ::SDL2::Surface > > r(new rcval< ::SDL2::Surface > ());
+  SDL_Surface *p = IMG_Load(filename_nt.get());
+  r->value$z.ptr = p;
+  if (p != 0) {
+    suc_r = true;
+  }
+  return r;
+}
+};
+};
+;
+
