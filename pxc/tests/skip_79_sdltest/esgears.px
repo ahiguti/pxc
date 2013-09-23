@@ -420,7 +420,7 @@ function void draw_call_list(int i)
   }
 }
 
-function void draw_frame(SDL const& sdl)
+function void draw_frame()
 {
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -480,15 +480,14 @@ function void init()
 }
 
 {
-  const sdl = SDL2::SDL(system, SDL_INIT_VIDEO);
   const int init_w = 300;
   const int init_h = 300;
-  sdl.GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-  const wnd = sdl.CreateWindow("PXC-SDL2Gears", 0, 0, init_w, init_h,
+  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+  const wnd = SDL_CreateWindow("PXC-SDL2Gears", 0, 0, init_w, init_h,
     SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL).some;
     // SDL_WINDOW_FULLSCREEN | SDL_WINDOW_OPENGL);
-  const glctx = sdl.GL_CreateContext(wnd);
-  sdl.GL_SetSwapInterval(0);
+  const glctx = SDL_GL_CreateContext(wnd);
+  SDL_GL_SetSwapInterval(0);
 
   init();
   reshape(init_w, init_h);
@@ -501,8 +500,8 @@ function void init()
 
   bool done = false;
   while (!done) {
-    Event ev;
-    while (sdl.PollEvent(ev)) {
+    SDL_Event ev;
+    while (SDL_PollEvent(ev)) {
       const etype = ev.type;
       if (etype == SDL_WINDOWEVENT) {
 	if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
@@ -516,11 +515,11 @@ function void init()
 	break;
       }
     }
-    draw_frame(sdl);
-    sdl.GL_SwapWindow(wnd);
+    draw_frame();
+    SDL_GL_SwapWindow(wnd);
     {
       ++frames;
-      uint t = sdl.GetTicks();
+      uint t = SDL_GetTicks();
       if (t - t0 >= 1000) {
 	const seconds = static_cast{float}(t - t0) / 1000.0;
 	const fps = static_cast{float}(frames) / seconds;
@@ -534,7 +533,7 @@ function void init()
 	  t1 += 10;
 	}
 	gears_angle += 1.0;
-	const ks = SDL2::KeyboardState(sdl);
+	SDL_KeyboardState const ks;
 	if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) { done = 1; }
 	if (ks.Key(SDL_SCANCODE_UP) != 0) { view_rotx += 1.0; }
 	if (ks.Key(SDL_SCANCODE_DOWN) != 0) { view_rotx -= 1.0; }

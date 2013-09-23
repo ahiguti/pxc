@@ -53,10 +53,10 @@ function void compat_glFrustum(double left, double right, double bottom,
 }
 
 {
-  const sdl = SDL2::SDL(system, SDL_INIT_VIDEO);
-  const wnd = sdl.CreateWindow("texture", 0, 0, 600, 600,
+  // const ini = SDL_Init(SDL_INIT_VIDEO);
+  const wnd = SDL_CreateWindow("texture", 0, 0, 600, 600,
     SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE).some;
-  const glctx = sdl.GL_CreateContext(wnd);
+  const glctx = SDL_GL_CreateContext(wnd);
   float theta;
   float xinc;
 
@@ -98,8 +98,8 @@ function void compat_glFrustum(double left, double right, double bottom,
   bool done = false;
   bool paused = false;
   while (!done) {
-    Event ev;
-    while (sdl.PollEvent(ev)) {
+    SDL_Event ev;
+    while (SDL_PollEvent(ev)) {
       if (ev.type == SDL_QUIT) {
 	done = true;
 	break;
@@ -119,10 +119,10 @@ function void compat_glFrustum(double left, double right, double bottom,
     }
     glPopMatrix();
     if (paused) {
-      sdl.Delay(100);
+      SDL_Delay(100);
       continue;
     }
-    sdl.GL_SwapWindow(wnd);
+    SDL_GL_SwapWindow(wnd);
     theta += 1.0;
     xinc += 1.00000;
   }

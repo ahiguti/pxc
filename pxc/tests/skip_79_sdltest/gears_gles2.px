@@ -83,7 +83,7 @@ function uint make_gear_vbo(float inner_radius, float outer_radius,
 
   /* draw front face */
   /* triangle strip */
-  for (int i : 0 .. teeth_i + 1) {
+  for (const i : 0 .. teeth_i + 1) {
     const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
     const z = width * 0.5;
     vec.push3(r0 * cos(angle), r0 * sin(angle), z);
@@ -98,7 +98,7 @@ function uint make_gear_vbo(float inner_radius, float outer_radius,
   /* draw front sides of teeth */
   /* triangles */
   da = M_PI * 2.0 / teeth / 4.0;
-  for (int i : 0 .. teeth_i) {
+  for (const i : 0 .. teeth_i) {
     const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
     const z = width * 0.5;
     /* 0 */
@@ -114,7 +114,7 @@ function uint make_gear_vbo(float inner_radius, float outer_radius,
 
   /* draw back face */
   /* triangle strip */
-  for (int i : 0 .. teeth_i + 1) {
+  for (const i : 0 .. teeth_i + 1) {
     const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
     const z = -width * 0.5;
     vec.push3(r1 * cos(angle), r1 * sin(angle), z);
@@ -129,7 +129,7 @@ function uint make_gear_vbo(float inner_radius, float outer_radius,
   /* draw back sides of teeth */
   /* triangles */
   da = M_PI * 2.0 / teeth / 4.0;
-  for (int i : 0 .. teeth_i) {
+  for (const i : 0 .. teeth_i) {
     const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
     const z = -width * 0.5;
     /* 0 */
@@ -145,9 +145,9 @@ function uint make_gear_vbo(float inner_radius, float outer_radius,
 
   /* draw outward faces of teeth */
   /* triangle strip */
-  float cos0 = 1.0;
-  float sin0 = 0.0;
-  for (int i : 0 .. teeth_i) {
+  const cos0 = float(1.0);
+  const sin0 = float(0.0);
+  for (const i : 0 .. teeth_i) {
     const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
     const z = width * 0.5;
     float mutable u;
@@ -245,7 +245,7 @@ function uint make_gear_vbo(float inner_radius, float outer_radius,
 
   /* draw inside radius cylinder */
   /* triangle strip */
-  for (int i : 0 .. teeth_i + 1) {
+  for (const i : 0 .. teeth_i + 1) {
     const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
     vec.push3(-cos(angle), -sin(angle), 0.0); /* normal */
     vec.push3(r0 * cos(angle), r0 * sin(angle), -width * 0.5); /* vertex */
@@ -323,7 +323,7 @@ function void init_gear_vbos()
 
 function void deinit_gear_vbos()
 {
-  for (int i : 0 .. 3) {
+  for (const i : 0 .. 3) {
     const a = gear_vbos[i].name;
     glDeleteBuffers(1, caddress(a));
   }
@@ -350,7 +350,7 @@ function void draw_gear_vbo_one(int i, glm::mat4 const& mv,
   }
 }
 
-function void draw_frame(SDL const& sdl, quaternion{float} const& view_angle)
+function void draw_frame(quaternion{float} const& view_angle)
 {
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   farray{float, 16} view_angle_arr = view_angle.to_matrix();
@@ -411,9 +411,9 @@ function void reshape(int width, int height)
 function uint compile_shader(cstrref const& src, GLenum type)
 {
   mutable res = glCreateShader(type);
-  const source = make_farray{ccharptr}(src.crawptr().char());
+  mutable source = make_farray{ccharptr}(src.crawptr().char());
   const length = make_farray{int}(static_cast{int}(src.size()));
-  glShaderSource(res, 1, source.crawptr(), length.crawptr());
+  glShaderSource(res, 1, source.rawptr(), length.crawptr());
   glCompileShader(res);
   int success;
   glGetShaderiv(res, GL_COMPILE_STATUS, address(success));
@@ -473,8 +473,10 @@ function void set_program()
     "attribute vec3 vertex;\n",
     "attribute vec3 normal;\n",
     "varying vec4 frag_color;\n",
+    "varying vec3 position;\n",
     "void main(void) {\n",
     "  gl_Position = model_view_projection * vec4(vertex, 1.0);\n",
+    "  position = vertex;\n",
     "  vec3 nor = normalize(normal_matrix * normal);\n",
     "  vec3 light = normalize(lightpos.xyz);\n",
     "  float diffuse = max(dot(light, nor), 0.0);\n",
@@ -482,8 +484,11 @@ function void set_program()
     "}\n"};
   const frag = m::concat{
     "varying vec4 frag_color;\n",
+    "varying vec3 position;\n",
     "void main(void) {\n",
-    "  gl_FragColor = frag_color;\n",
+    "  float kx = float(mod(position.x,0.2)<0.1);\n",
+    "  float ky = float(mod(position.y,0.2)<0.1);\n",
+    "  gl_FragColor = frag_color * (0.8 + kx * 0.1 + ky * 0.1);\n",
     "}\n"};
   const prog = create_program(vert, frag);
   if (prog != 0) {
@@ -501,6 +506,8 @@ function void set_program()
     println("loc_normal: ", loc_normal);
     println("loc_lightpos: ", loc_lightpos);
     println("loc_mate_color: ", loc_mate_color);
+    SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("Locations: ",
+      loc_vertex, loc_normal, loc_lightpos, loc_mate_color));
   }
 }
 
@@ -517,50 +524,43 @@ function void init_gl()
 }
 
 {
-  size_t const mu0 = mallinfo_in_use();
-  const sdl = SDL2::SDL(system, SDL_INIT_VIDEO);
-  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu0=", mu0));
-  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu1=", mallinfo_in_use()));
   int init_w = 300;
   int init_h = 300;
-  sdl.GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-  const wnd = sdl.CreateWindow("PXC-SDL2Gears", 0, 0, init_w, init_h,
+  const ini = SDL_Init(SDL_INIT_VIDEO);
+  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+  const wnd = SDL_CreateWindow("PXC-SDL2Gears", 0, 0, init_w, init_h,
     SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL).some;
-    // SDL_WINDOW_FULLSCREEN | SDL_WINDOW_OPENGL);
-  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu2=", mallinfo_in_use()));
-  sdl.GetWindowSize(wnd, init_w, init_h);
-  const glctx = sdl.GL_CreateContext(wnd);
-  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu3=", mallinfo_in_use()));
-  sdl.GL_SetSwapInterval(0);
+  SDL_GetWindowSize(wnd, init_w, init_h);
+  const glctx = SDL_GL_CreateContext(wnd);
+  SDL_GL_SetSwapInterval(0);
 
   init_gl();
-  // exit(0); // FIXME
 
   reshape(init_w, init_h);
-  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu4=", mallinfo_in_use()));
 
   uint t0 = 0;
   uint t1 = 0;
-  uint tprev = sdl.GetTicks();
+  uint tprev = SDL_GetTicks();
   uint frames = 0;
-  quaternion{float} view_angle = quaternion{float}(1.0, 0.0, 0.0, 0.0);
+  mutable view_angle = quaternion{float}(1.0, 0.0, 0.0, 0.0);
 
   metafunction ticks_t farray{uint, 5};
   ticks_t ticks;
   ticks_t ticks_sum;
-  for (size_t i, uint mutable e : ticks) {
+  for (const i, mutable e : ticks) {
     e = tprev;
   }
   function void save_ticks(size_t idx) {
     const prev_tick = ticks[idx == 0 ? ticks.size() - 1 : idx - 1];
     mutable& cur_tick = ticks[idx];
-    cur_tick = sdl.GetTicks();
+    cur_tick = SDL_GetTicks();
     ticks_sum[idx] += cur_tick - prev_tick;
   }
 
   bool done = false;
   bool paused = false;
-  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu5=", mallinfo_in_use()));
   function void rotate(float x, float y, float z, float angle) {
     const q = quaternion_from_axis_angle{float}(x, y, z,
       angle * M_PI / 180.0);
@@ -569,14 +569,14 @@ function void init_gl()
   }
   while (!done) {
     save_ticks(0);
-    Event ev;
-    while (sdl.PollEvent(ev)) {
+    SDL_Event ev;
+    while (SDL_PollEvent(ev)) {
       const etype = ev.type;
       if (etype == SDL_WINDOWEVENT) {
 	if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
 	  const w = ev.window.data1;
 	  const h = ev.window.data2;
-	  sdl.LogWarn(SDL_LOG_CATEGORY_TEST,
+	  SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
 	    join{""}("resized w=", w, " h=", h));
 	  reshape(w, h);
 	}
@@ -586,18 +586,18 @@ function void init_gl()
 	rotate(1.0, 0.0, 0.0, -dy);
 	rotate(0.0, 1.0, 0.0, -dx);
       } else if (etype == SDL_MULTIGESTURE) {
-	sdl.LogWarn(SDL_LOG_CATEGORY_TEST,
+	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
 	  join{""}("multigesture dTheta=", ev.mgesture.dTheta,
 	    " dDist=", ev.mgesture.dDist));
       } else if (etype == SDL_APP_WILLENTERBACKGROUND) {
-	sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("paused"));
+	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("paused"));
 	paused = true;
       } else if (etype == SDL_APP_DIDENTERFOREGROUND) {
-	sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("resumed"));
+	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("resumed"));
 	paused = false;
 	int w;
 	int h;
-	sdl.GetWindowSize(wnd, w, h);
+	SDL_GetWindowSize(wnd, w, h);
 	reshape(w, h);
       } else if (etype == SDL_QUIT) {
 	done = true;
@@ -605,21 +605,21 @@ function void init_gl()
       }
     }
     if (paused) {
-      sdl.Delay(100);
+      SDL_Delay(100);
       continue;
     }
     save_ticks(1);
     {
-      draw_frame(sdl, view_angle);
+      draw_frame(view_angle);
       save_ticks(2);
       ++frames;
-      uint t = sdl.GetTicks();
+      uint t = SDL_GetTicks();
       if (t - t0 >= 1000) {
 	const seconds = static_cast{float}(t - t0) / 1000.0;
 	const fps = static_cast{float}(frames) / seconds;
-	sdl.LogWarn(SDL_LOG_CATEGORY_TEST,
+	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
 	  join{" "}(frames, "frames in", seconds, "seconds =", fps, "fps"));
-	sdl.LogWarn(SDL_LOG_CATEGORY_TEST,
+	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
 	  join{" "}("ticks: ", ticks_sum));
 	ticks_sum = ticks_t();
 	t0 = t;
@@ -632,7 +632,7 @@ function void init_gl()
 	if (t - t1 >= 10) {
 	  t1 += 10;
 	}
-	const ks = SDL2::KeyboardState(sdl);
+	SDL_KeyboardState const ks;
 	if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) { done = 1; }
 	if (ks.Key(SDL_SCANCODE_UP) != 0) { rotate(1.0, 0.0, 0.0, 2.0); }
 	if (ks.Key(SDL_SCANCODE_DOWN) != 0) { rotate(1.0, 0.0, 0.0, -2.0); }
@@ -641,25 +641,10 @@ function void init_gl()
       }
     }
     save_ticks(3);
-    sdl.GL_SwapWindow(wnd);
+    SDL_GL_SwapWindow(wnd);
     save_ticks(4);
   }
-  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu6=", mallinfo_in_use()));
   deinit_gear_vbos();
-  sdl.LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu7=", mallinfo_in_use()));
-  /*
   io::process::io_exit(io::system, 0);
-  */
 }
 
-function extern "pxcrt::mallinfo_in_use" size_t mallinfo_in_use();
-extern "implementation" inline
-#include <malloc.h>
-namespace pxcrt {
-bt_size_t mallinfo_in_use()
-{
-  struct mallinfo mi = ::mallinfo();
-  return mi.uordblks;
-}
-};
-;

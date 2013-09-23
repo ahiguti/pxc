@@ -2820,63 +2820,66 @@ static void emit_vardef_constructor_fast_boxing(emit_context& em,
   const std::string otyp_cstr = term_tostr_cname(otyp); /* foo */
   DBG_FBC(fprintf(stderr, "type=%s atyp=%s\n", term_tostr_human(typ).c_str(),
     term_tostr_human(otyp).c_str()));
-  if (!is_interface_or_impl(otyp)) {
-    #if 0
-    const std::string varp0 = var_csymbol + "p0";
-    #endif
+  const bool is_interf_impl = is_interface_or_impl(otyp);
+  {
     const std::string varp1 = var_csymbol + "p1";
     const typefamily_e cat = get_family(typ);
+    std::string otypcnt_cstr;
     std::string rcval_cstr;
     std::string count_type_cstr;
-    if (cat == typefamily_e_tptr || cat == typefamily_e_tcptr) {
-      rcval_cstr = "pxcrt::trcval";
-      count_type_cstr = "pxcrt::mtcount";
-    } else if (cat == typefamily_e_tiptr) {
-      rcval_cstr = "pxcrt::tircval";
-      count_type_cstr = "pxcrt::mtcount";
-    } else { /* ptr cptr iptr */
-      rcval_cstr = "pxcrt::rcval";
-      count_type_cstr = "pxcrt::stcount";
+    if (is_interf_impl) {
+      otypcnt_cstr = otyp_cstr;
+    } else {
+      if (cat == typefamily_e_tptr || cat == typefamily_e_tcptr) {
+	rcval_cstr = "pxcrt::trcval";
+	count_type_cstr = "pxcrt::mtcount";
+      } else if (cat == typefamily_e_tiptr) {
+	rcval_cstr = "pxcrt::tircval";
+	count_type_cstr = "pxcrt::mtcount";
+      } else { /* ptr cptr iptr */
+	rcval_cstr = "pxcrt::rcval";
+	count_type_cstr = "pxcrt::stcount";
+      }
+      otypcnt_cstr = rcval_cstr + "< " + otyp_cstr + " >"; /* rcval<foo> */
     }
-    const std::string otypcnt_cstr = rcval_cstr + "< " + otyp_cstr + " >";
-      /* rcval<foo> */
-    #if 0
-    em.puts("pxcrt::uninit_mem< " + otypcnt_cstr + " > *const " + varp0
-      + " = new pxcrt::uninit_mem< " + otypcnt_cstr + " >;\n");
-    em.indent('x');
-    em.puts(otypcnt_cstr + "*const " + varp1 + " = reinterpret_cast< "
-      + otypcnt_cstr + " * >(" + varp0 + ");\n");
-    #endif
     em.puts(otypcnt_cstr + "*const " + varp1 + " = "
       + otypcnt_cstr + "::allocate();\n");
     em.indent('x');
     em.puts("try {\n");
     em.indent('x');
-    em.puts("new (&" + varp1 + "->value$z) " + otyp_cstr + "(");
+    if (is_interf_impl) {
+      em.puts("new (" + varp1 + ") " + otyp_cstr + "(");
+    } else {
+      em.puts("new (&" + varp1 + "->value$z) " + otyp_cstr + "(");
+    }
     fn_emit_value(em, fast_boxing_cfunc->arg);
     em.puts(");\n");
-    em.indent('x');
-    em.puts("new (&" + varp1 + "->count$z) " + count_type_cstr
-      + "(); /* nothrow */\n");
-    if (is_multithreaded_pointer_family(typ)) {
+    if (!is_interf_impl) {
+      /* initialize intrusive reference counter */
       em.indent('x');
-      em.puts("try {\n");
-      em.indent('x');
-      em.puts("new (&" + varp1 + "->monitor$z) pxcrt::monitor();\n");
-      em.indent('x');
-      em.puts("} catch (...) {\n");
-      em.indent('x');
-      em.puts("typedef ");
-      em.puts(term_tostr_cname(otyp));
-      em.puts(" ");
-      em.puts(dtor_typedef_name(otyp));
-      em.puts(";\n");
-      em.indent('x');
-      em.puts(varp1 + "->value$z." + destructor_cstr(otyp) + "();\n");
-      em.indent('x');
-      em.puts("throw;\n");
-      em.indent('x');
-      em.puts("}\n");
+      em.puts("new (&" + varp1 + "->count$z) " + count_type_cstr
+	+ "(); /* nothrow */\n");
+      if (is_multithreaded_pointer_family(typ)) {
+	/* initialize monitor */
+	em.indent('x');
+	em.puts("try {\n");
+	em.indent('x');
+	em.puts("new (&" + varp1 + "->monitor$z) pxcrt::monitor();\n");
+	em.indent('x');
+	em.puts("} catch (...) {\n");
+	em.indent('x');
+	em.puts("typedef ");
+	em.puts(term_tostr_cname(otyp));
+	em.puts(" ");
+	em.puts(dtor_typedef_name(otyp));
+	em.puts(";\n");
+	em.indent('x');
+	em.puts(varp1 + "->value$z." + destructor_cstr(otyp) + "();\n");
+	em.indent('x');
+	em.puts("throw;\n");
+	em.indent('x');
+	em.puts("}\n");
+      }
     }
     em.indent('x');
     em.puts("} catch (...) {\n");
@@ -2890,11 +2893,6 @@ static void emit_vardef_constructor_fast_boxing(emit_context& em,
     em.indent('x');
     em.puts(cs0 + " " + var_csymbol);
     em.puts("((" + varp1 + "))");
-  } else {
-    em.puts(cs0 + " " + var_csymbol);
-    em.puts("(" + cs0 + "::create_rawptr(");
-    fn_emit_value(em, fast_boxing_cfunc->arg);
-    em.puts("))");
   }
 }
 
@@ -2918,7 +2916,8 @@ static expr_funccall *can_emit_fast_boxing(expr_funccall *func)
     DBG_CEFB(fprintf(stderr, "cefb %s 4\n", func->dump(0).c_str()));
     return 0;
   }
-  if (cfunc->funccall_sort != funccall_e_struct_constructor) {
+  if (cfunc->funccall_sort != funccall_e_struct_constructor &&
+    cfunc->funccall_sort != funccall_e_default_constructor) {
     DBG_CEFB(fprintf(stderr, "cefb %s 5\n", func->dump(0).c_str()));
     return 0;
   }
