@@ -1981,13 +1981,13 @@ void expr_op::emit_value(emit_context& em)
     if (is_noninterface_pointer(arg0->get_texpr())) {
       /* non-interface pointer dereference */
       if (need_to_emit_expr_returning_value(this)) {
-	em.puts("(pxcrt::deref_value$z(");
+	em.puts("(pxcrt::deref_value(");
 	fn_emit_value(em, arg0);
 	em.puts("))");
       } else {
 	em.puts("((");
 	fn_emit_value(em, arg0);
-	em.puts(")->value$z)");
+	em.puts(")->value)");
       }
     } else if (is_cm_pointer_family(arg0->get_texpr())) {
       /* interface pointer dereference */
@@ -2850,7 +2850,7 @@ static void emit_vardef_constructor_fast_boxing(emit_context& em,
     if (is_interf_impl) {
       em.puts("new (" + varp1 + ") " + otyp_cstr + "(");
     } else {
-      em.puts("new (&" + varp1 + "->value$z) " + otyp_cstr + "(");
+      em.puts("new (&" + varp1 + "->value) " + otyp_cstr + "(");
     }
     fn_emit_value(em, fast_boxing_cfunc->arg);
     em.puts(");\n");
@@ -2874,7 +2874,7 @@ static void emit_vardef_constructor_fast_boxing(emit_context& em,
 	em.puts(dtor_typedef_name(otyp));
 	em.puts(";\n");
 	em.indent('x');
-	em.puts(varp1 + "->value$z." + destructor_cstr(otyp) + "();\n");
+	em.puts(varp1 + "->value." + destructor_cstr(otyp) + "();\n");
 	em.indent('x');
 	em.puts("throw;\n");
 	em.indent('x');

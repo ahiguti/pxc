@@ -3,13 +3,27 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- 引数を取るオプションは -p=hoge のように指定する形にするか
+
+- genericsとvariant
+
+- variant的型へのmarshal方法再考
+
+- bt_intなど -> pxcではintなど、C++ではbt_intのまま (done)
+
+- show_outなくす(done)
+
+- 演算子を非メンバ関数で (done)
+
+- value$z をやめて単に value に(done)
+
+- quaternionをglmのものに
+
 - emit_vardef_constructor_fast_boxingの継承使っているケース、
   create_rawptrは引数0か1個のときしか定義されていないからそれ以外の
   ケースでエラーになるのではないか test_85_fastbox/fb1.px (done)
 
 - private namespace. 親namespaceからのみシンボルが参照できる.
-
-- 演算子を非メンバ関数で
 
 - glm
 
@@ -1998,4 +2012,35 @@ foo[x]の式は、fooがelemguardをサポートするコンテナではない�
 operator::getelem(foo, x)へ置換する。ただし、foo[x] = 3 のように
 代入の左辺だった場合は operator::setelem(foo, x, 3)へ置換する。
 代入演算子としては'='のみ許す。
+
+---------------------------------------------------------------------
+variant的型へのmarshal方法再考
+
+- int等の基本型は値でmarshal
+- mutable byref引数は変更が反映されないが仕方なし
+- byrefを返す関数、ephemeralを返す関数はscriptから呼べない
+  それらはcopyableでないかもしれないから
+
+---------------------------------------------------------------------
+genericsとvariant
+
+型に要求する条件がわからないとインスタンス化してよいか判断できない。
+variantは常にインスタンス化できるべきでは？
+それを実現するには...
+- なんらかの型が受け入れられる箇所は全てvariantも受け入れる
+  - if (hoge)
+  - for でコンテナのイテレート
+  - 全ての演算子
+
+---------------------------------------------------------------------
+perl.px整理
+
+px関数呼び出しは、引数を一旦名前有り変数に置く
+  wrapされたオブジェクトのときはmutable byrefで
+perl::symbols廃止、meta::symbol使う
+meta::symbolは型フィルタと関数フィルタを引数で指定できるようにする?
+  型フィルタは is_concrete
+  関数フィルタは 返値がbyrefでなくephemeralでもない
+  最後に関数フィルタ適用するだけでよい？
+  最後に型フィルタとしてcopyableなものに制限が必要
 

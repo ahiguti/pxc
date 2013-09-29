@@ -17,18 +17,18 @@ public threaded function {t} t
 decimal_to_fp(cstrref mutable& buf)
 { return m::symbol{m::concat{"decimal_to_fp_", t}}(buf); }
 
-public threaded function extern "text::fp_to_decimal_bt_float"
-void fp_to_decimal_bt_float(float v, string mutable& buf);
-public threaded function extern "text::fp_to_decimal_bt_double"
-void fp_to_decimal_bt_double(double v, string mutable& buf);
-public threaded function extern "text::decimal_to_fp_nocheck_bt_float"
-float decimal_to_fp_nocheck_bt_float(cstrref const& buf);
-public threaded function extern "text::decimal_to_fp_nocheck_bt_double"
-double decimal_to_fp_nocheck_bt_double(cstrref const& buf);
-public threaded function extern "text::decimal_to_fp_bt_float"
-float decimal_to_fp_bt_float(cstrref mutable& buf);
-public threaded function extern "text::decimal_to_fp_bt_double"
-double decimal_to_fp_bt_double(cstrref mutable& buf);
+public threaded function extern "text::fp_to_decimal_float"
+void fp_to_decimal_float(float v, string mutable& buf);
+public threaded function extern "text::fp_to_decimal_double"
+void fp_to_decimal_double(double v, string mutable& buf);
+public threaded function extern "text::decimal_to_fp_nocheck_float"
+float decimal_to_fp_nocheck_float(cstrref const& buf);
+public threaded function extern "text::decimal_to_fp_nocheck_double"
+double decimal_to_fp_nocheck_double(cstrref const& buf);
+public threaded function extern "text::decimal_to_fp_float"
+float decimal_to_fp_float(cstrref mutable& buf);
+public threaded function extern "text::decimal_to_fp_double"
+double decimal_to_fp_double(cstrref mutable& buf);
 
 extern "implementation" inline
 namespace text {
@@ -72,11 +72,11 @@ static cstrref get_decimal_part(cstrref const& buf)
   }
   return cstrref(p, i);
 }
-void fp_to_decimal_bt_double(bt_double x, bt_string& buf)
+void fp_to_decimal_double(bt_double x, bt_string& buf)
 { fp_to_decimal_internal("%.16f", x, buf); }
-void fp_to_decimal_bt_float(bt_float x, bt_string& buf)
+void fp_to_decimal_float(bt_float x, bt_string& buf)
 { fp_to_decimal_internal("%.7f", x, buf); }
-bt_double decimal_to_fp_nocheck_bt_double(cstrref const& buf)
+bt_double decimal_to_fp_nocheck_double(cstrref const& buf)
 {
   cstrref pbuf = get_decimal_part(buf);
   PXCRT_ALLOCA_NTSTRING(buf_nt, pbuf);
@@ -84,7 +84,7 @@ bt_double decimal_to_fp_nocheck_bt_double(cstrref const& buf)
   sscanf(buf_nt.get(), "%lf", &r);
   return r;
 }
-bt_float decimal_to_fp_nocheck_bt_float(cstrref const& buf)
+bt_float decimal_to_fp_nocheck_float(cstrref const& buf)
 {
   cstrref pbuf = get_decimal_part(buf);
   PXCRT_ALLOCA_NTSTRING(buf_nt, pbuf);
@@ -92,7 +92,7 @@ bt_float decimal_to_fp_nocheck_bt_float(cstrref const& buf)
   sscanf(buf_nt.get(), "%f", &r);
   return r;
 }
-bt_double decimal_to_fp_bt_double(cstrref& buf)
+bt_double decimal_to_fp_double(cstrref& buf)
 {
   cstrref pbuf = get_decimal_part(buf);
   PXCRT_ALLOCA_NTSTRING(buf_nt, buf);
@@ -104,7 +104,7 @@ bt_double decimal_to_fp_bt_double(cstrref& buf)
   }
   return r;
 }
-bt_float decimal_to_fp_bt_float(cstrref& buf)
+bt_float decimal_to_fp_float(cstrref& buf)
 {
   cstrref pbuf = get_decimal_part(buf);
   PXCRT_ALLOCA_NTSTRING(buf_nt, buf);

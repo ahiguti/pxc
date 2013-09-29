@@ -234,9 +234,9 @@ socket_connector create_socket_connector(::pxcio::io const& iop,
 file accept_internal(int& err_r, socket_acceptor const& sfp,
   sockaddr_storage& addr_r)
 {
-  socket_acceptor_rep& sf = sfp->value$z;
+  socket_acceptor_rep& sf = sfp->value;
   socklen_t len = addr_r.get_maxlen();
-  int fd = ::accept(sf.listener->value$z.get(), addr_r.get_sockaddr(), &len);
+  int fd = ::accept(sf.listener->value.get(), addr_r.get_sockaddr(), &len);
   if (fd < 0) {
     err_r = errno;
     fd = -1;
@@ -246,7 +246,7 @@ file accept_internal(int& err_r, socket_acceptor const& sfp,
 
 file connect_internal(int& err_r, socket_connector const& sfp)
 {
-  socket_connector_rep& sf = sfp->value$z;
+  socket_connector_rep& sf = sfp->value;
   int e = 0;
   int fd = ::socket(sf.addr.get_family(), sf.socktype, sf.protocol);
   do {
@@ -290,7 +290,7 @@ int socket_set_recv_timeout(file const& f, bt_uint sec)
 {
   struct ::timeval tv = { 0 };
   tv.tv_sec = sec;
-  return setsockopt_common(f->value$z.get(), SOL_SOCKET, SO_RCVTIMEO, &tv,
+  return setsockopt_common(f->value.get(), SOL_SOCKET, SO_RCVTIMEO, &tv,
     sizeof(tv));
 }
 
@@ -298,7 +298,7 @@ int socket_set_send_timeout(file const& f, bt_uint sec)
 {
   struct ::timeval tv = { 0 };
   tv.tv_sec = sec;
-  return setsockopt_common(f->value$z.get(), SOL_SOCKET, SO_SNDTIMEO, &tv,
+  return setsockopt_common(f->value.get(), SOL_SOCKET, SO_SNDTIMEO, &tv,
     sizeof(tv));
 }
 

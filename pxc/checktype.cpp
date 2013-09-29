@@ -1551,6 +1551,7 @@ void expr_op::check_type(symbol_table *lookup)
 	sc->uniqns);
       bool is_generic_invoke = false;
       if (fmem == 0) {
+	/* "__invoke" member function */
 	symstr = "__invoke"; /* TODO: intern once */
 	fmem = symtbl->resolve_name_nothrow_memfld(symstr, no_private,
 	  sc->uniqns);
@@ -1561,7 +1562,7 @@ void expr_op::check_type(symbol_table *lookup)
 	DBG(fprintf(stderr, "found fld '%s' ns=%s\n",
 	  symstr.c_str(), sc->uniqns.c_str()));
 	if (is_generic_invoke) {
-	  sc->set_sym_prefix_fullsym(symstr);
+	  sc->set_sym_prefix_fullsym(symstr, is_generic_invoke);
 	}
 	fn_check_type(arg1, symtbl); /* expr_symbol::check_type */
 	type_of_this_expr = arg1->resolve_texpr();
@@ -1581,7 +1582,7 @@ void expr_op::check_type(symbol_table *lookup)
     /* find member-like non-member function (vector_size, map_size etc.) */
     if (parent_symtbl != 0) {
       /* lookup with arg1_sym_prefix */
-      const std::string funcname_w_prefix = arg1_sym_prefix
+      std::string funcname_w_prefix = arg1_sym_prefix
 	+ sc->get_fullsym().to_string(); /* TODO: don't use std::string */
       symtbl = parent_symtbl;
       const std::string uniqns = arg0_uniqns;
@@ -1597,13 +1598,20 @@ void expr_op::check_type(symbol_table *lookup)
       expr_i *fo = symtbl->resolve_name_nothrow(funcname_w_prefix,
 	no_private, uniqns, is_global_dummy, is_upvalue_dummy,
 	is_memfld_dummy);
+      bool is_generic_invoke = false;
+      if (fo == 0) {
+	/* "foo__invoke" function */
+	funcname_w_prefix = arg1_sym_prefix + "__invoke";
+	  /* TODO: don't use std::string */
+	fo = symtbl->resolve_name_nothrow(funcname_w_prefix, no_private,
+	  uniqns, is_global_dummy, is_upvalue_dummy, is_memfld_dummy);
+	is_generic_invoke = true;
+      }
       if (fo != 0) {
 	DBG(fprintf(stderr, "found %s\n", sc->get_fullsym().c_str()));
 	sc->arg_hidden_this = arg0;
 	sc->arg_hidden_this_ns = arg0_uniqns;
-	sc->set_sym_prefix_fullsym(
-	  arg1_sym_prefix + sc->get_fullsym().to_string());
-	  /* TODO: don't use std::string */
+	sc->set_sym_prefix_fullsym(funcname_w_prefix, is_generic_invoke);
 	fn_check_type(arg1, symtbl); /* expr_symbol::check_type */
 	type_of_this_expr = arg1->resolve_texpr();
 	assert(!type_of_this_expr.is_null());
@@ -1611,8 +1619,12 @@ void expr_op::check_type(symbol_table *lookup)
       } else {
 	DBG(fprintf(stderr, "func %s notfound [%s] [%s])",
 	  funcname_w_prefix.c_str(), uniqns.c_str(), arg0_uniqns.c_str()));
-	arena_error_throw(this, "Can not apply '%s' (function '%s' not found)",
-	  tok_string(this, op), funcname_w_prefix.c_str());
+	arena_error_throw(this,
+	  "Can not apply '%s' "
+	  "(member function '%s' nor non-member function '%s' not found)",
+	  tok_string(this, op),
+	  sc->get_fullsym().c_str(),
+	  (arg1_sym_prefix + sc->get_fullsym().to_string()).c_str());
 	return;
       }
     }
@@ -1634,21 +1646,39 @@ void expr_op::check_type(symbol_table *lookup)
   case TOK_XOR_ASSIGN:
   case TOK_SHIFTL_ASSIGN:
   case TOK_SHIFTR_ASSIGN:
-    check_boolean_type(this, arg0);
-    check_boolean_type(this, arg1);
-    /* FALLTHRU */
   case TOK_MOD_ASSIGN:
-    check_integral_expr(this, arg0);
-    check_integral_expr(this, arg1);
-    /* FALLTHRU */
   case TOK_ADD_ASSIGN:
   case TOK_SUB_ASSIGN:
   case TOK_MUL_ASSIGN:
   case TOK_DIV_ASSIGN:
-    check_numeric_expr(this, arg0);
-    check_numeric_expr(this, arg1);
-    /* FALLTHRU */
   case '=':
+    /* assignment ops */
+    switch (op) {
+    case TOK_OR_ASSIGN:
+    case TOK_AND_ASSIGN:
+    case TOK_XOR_ASSIGN:
+    case TOK_SHIFTL_ASSIGN:
+    case TOK_SHIFTR_ASSIGN:
+      check_boolean_type(this, arg0);
+      check_boolean_type(this, arg1);
+      break;
+    case TOK_MOD_ASSIGN:
+      check_integral_expr(this, arg0);
+      check_integral_expr(this, arg1);
+      break;
+    case TOK_ADD_ASSIGN:
+    case TOK_SUB_ASSIGN:
+    case TOK_MUL_ASSIGN:
+    case TOK_DIV_ASSIGN:
+      check_numeric_expr(this, arg0);
+      check_numeric_expr(this, arg1);
+      break;
+    case '=':
+      break;
+    default:
+      abort();
+    }
+    /* assignment ops */
     check_type_convert_to_lhs(this, arg1, arg0->resolve_texpr());
     check_lvalue(this, arg0);
     {
@@ -1657,8 +1687,7 @@ void expr_op::check_type(symbol_table *lookup)
 	check_copyable(this, arg1);
       }
     }
-    // type_of_this_expr = arg0->resolve_texpr();
-    /* does not have value */
+    /* assignment expressions don't have value */
     type_of_this_expr = builtins.type_void;
     break;
   case '?':
@@ -2114,7 +2143,8 @@ void expr_funccall::check_type(symbol_table *lookup)
     term tis_ml(tis); /* metalist */
     const size_t tplen = get_tparam_length(func_te.get_expr());
     term_list tas; /* resolved targs */
-    if (func_sc != 0 && func_sc->get_sym_prefix_fullsym() == "__invoke") {
+    if (func_sc != 0 && func_sc->is_generic_invoke()) {
+      /* "__invoke" or "foo__invoke" */
       const std::string method_name(func_sc->get_fullsym().to_string());
       tas.push_back(term(method_name));
       tas.push_back(tis_ml);

@@ -58,7 +58,7 @@ void thread_join(thread_ptr const& t);
 ;
 
 extern "implementation" inline
-#define DBG(x)
+#define PXC_THREAD_DBG(x)
 namespace pxcthread {
 
 void *pxc_thread_child_main(void *arg)
@@ -92,11 +92,11 @@ void *pxc_thread_child_main(void *arg)
 thread_ptr create_thread_impl(thrdata_ptr const& m)
 {
   thread_ptr thr(thread_ptr::create_rawptr(m));
-  thread_rep& impl = thr->value$z;
+  thread_rep& impl = thr->value;
   if (pthread_create(&impl.tid, 0, pxc_thread_child_main, m.get()) != 0) {
-    DBG(fprintf(stderr, "failed to create thread\n"));
+    PXC_THREAD_DBG(fprintf(stderr, "failed to create thread\n"));
   } else {
-    DBG(fprintf(stderr, "thread create\n"));
+    PXC_THREAD_DBG(fprintf(stderr, "thread create\n"));
     impl.need_join = true;
   }
   return thr;
@@ -108,21 +108,21 @@ void thread_join(thread_ptr const& t)
     return;
   }
   pxcrt::guard_val<thread_ptr> grd(t);
-  grd.get()->value$z.join();
+  grd.get()->value.join();
 }
 
 void thread_rep::join()
 {
   if (!need_join) {
-    DBG(fprintf(stderr, "no need to join\n"));
+    PXC_THREAD_DBG(fprintf(stderr, "no need to join\n"));
     return;
   }
   if (tid == pthread_self()) {
-    DBG(fprintf(stderr, "detach\n"));
+    PXC_THREAD_DBG(fprintf(stderr, "detach\n"));
     const int e = pthread_detach(tid);
     assert(e == 0);
   } else {
-    DBG(fprintf(stderr, "join\n"));
+    PXC_THREAD_DBG(fprintf(stderr, "join\n"));
     const int e = pthread_join(tid, 0);
     assert(e == 0);
   }
@@ -130,6 +130,6 @@ void thread_rep::join()
 }
 
 };
-#undef DBG
+#undef PXC_THREAD_DBG
 ;
 

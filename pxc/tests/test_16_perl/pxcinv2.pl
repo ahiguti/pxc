@@ -1,10 +1,15 @@
 #!/usr/bin/perl
 
-use PXC::Loader;
+use DynaLoader;
 
-my $pxccmd = "../../pxc --no-realpath -w .pxc -p ../common/pxc_dynamic.profile";
-
-PXC::Loader::load($pxccmd, "./test2.px");
+my $pxccmd =
+  "../../pxc --no-realpath -w=.pxc -p=../common/pxc_dynamic.profile -g -ne"
+  . " ./test2.px";
+system("$pxccmd") == 0 or die;
+my $libref = DynaLoader::dl_load_file("./test2.so") or die;
+my $symref = DynaLoader::dl_find_symbol($libref, "pxc_library_init") or die;
+my $initfn = DynaLoader::dl_install_xsub(undef, $symref) or die;
+&$initfn();
 
 my $v1 = test2::plus(10, 20);
 print "v1=$v1\n";
@@ -18,3 +23,4 @@ print "x=$x y=$y\n";
 
 my $z = test2::fib(30);
 print "z=$z\n";
+
