@@ -1,0 +1,32 @@
+namespace i4;
+import common -;
+import meta m;
+import meta::vararg va;
+
+struct foo {
+  int f1;
+  string f2;
+}
+
+function {name, ts} string foo___invoke(expand(va::arg_decls_bycref{ts})) {
+  string s;
+  s = "__invoke args=(";
+  expand(a, i: va::arg_names{m::size{ts}}) {
+    {
+      s.append(" ");
+      metafunction t m::at0{m::at{ts, i}};
+      serialize_to_string{t}(a, s);
+    }
+  }
+  s.append(" )");
+  println(s);
+  return s;
+}
+
+{
+  foo x;
+  x.f1 = 999;
+  x.m1("hoge", 33);
+  x.m2("fuga", 44);
+}
+

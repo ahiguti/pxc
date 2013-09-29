@@ -462,7 +462,7 @@ typedef rcptr< rcval<Window> > Window_ptr;
 
 void GetWindowSize(Window_ptr const& wnd, int& w, int& h)
 {
-  SDL_GetWindowSize(wnd->value$z.ptr, &w, &h);
+  SDL_GetWindowSize(wnd->value.ptr, &w, &h);
 }
 
 Renderer::Renderer()
@@ -506,29 +506,29 @@ typedef rcptr< rcval<Surface> > Surface_ptr;
 
 bt_uint Surface_W(Surface_ptr const& sur)
 {
-  return sur->value$z.ptr->w;
+  return sur->value.ptr->w;
 }
 
 bt_uint Surface_H(Surface_ptr const& sur)
 {
-  return sur->value$z.ptr->h;
+  return sur->value.ptr->h;
 }
 
 bt_uint Surface_Pitch(Surface_ptr const& sur)
 {
-  return sur->value$z.ptr->pitch;
+  return sur->value.ptr->pitch;
 }
 
 bt_uint Surface_BytesPerPixel(Surface_ptr const& sur)
 {
-  return sur->value$z.ptr->format->BytesPerPixel;
+  return sur->value.ptr->format->BytesPerPixel;
 }
 
 strref Surface_Pixels(Surface_ptr const& sur)
 {
-  SDL_Surface *const p = sur->value$z.ptr;
+  SDL_Surface *const p = sur->value.ptr;
   size_t const len = p->pitch * p->h;
-  return strref(static_cast<unsigned char *>(sur->value$z.ptr->pixels), len);
+  return strref(static_cast<unsigned char *>(sur->value.ptr->pixels), len);
 }
 
 Texture::Texture()
@@ -549,7 +549,7 @@ typedef rcptr< rcval<Surface> > Surface_ptr;
 bt_int CreateTextureFromSurface(Texture& tx, Renderer_ptr const& rnd,
   Surface_ptr const& sur)
 {
-  tx.ptr = SDL_CreateTextureFromSurface(rnd->value$z.ptr, sur->value$z.ptr);
+  tx.ptr = SDL_CreateTextureFromSurface(rnd->value.ptr, sur->value.ptr);
   return (tx.ptr != 0) ? 0 : -1;
 }
 
@@ -557,18 +557,18 @@ typedef rcptr< rcval<Texture> > Texture_ptr;
 
 bt_int RenderClear(Renderer_ptr const& rnd)
 {
-  return SDL_RenderClear(rnd->value$z.ptr);
+  return SDL_RenderClear(rnd->value.ptr);
 }
 
 void RenderPresent(Renderer_ptr const& rnd)
 {
-  SDL_RenderPresent(rnd->value$z.ptr);
+  SDL_RenderPresent(rnd->value.ptr);
 }
 
 bt_int RenderCopy(Renderer_ptr const& rnd, Texture_ptr const& tx,
   SDL_Rect const& src, SDL_Rect const& dst)
 {
-  return SDL_RenderCopy(rnd->value$z.ptr, tx->value$z.ptr, &src, &dst);
+  return SDL_RenderCopy(rnd->value.ptr, tx->value.ptr, &src, &dst);
 }
 
 GLContext::GLContext()
@@ -601,7 +601,7 @@ bt_bool PollEvent(SDL_Event& ev)
 
 void GL_SwapWindow(Window_ptr const& wnd)
 {
-  ::SDL_GL_SwapWindow(wnd->value$z.ptr);
+  ::SDL_GL_SwapWindow(wnd->value.ptr);
 }
 
 SDL_EventType Event_Type(SDL_Event const& e)

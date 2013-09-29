@@ -67,18 +67,17 @@ struct parser_options {
   std::string gen_cc_dir;
   int verbose;
   bool clean_flag;
+  bool clean_all_flag;
   bool no_build;
   bool no_update;
   bool no_execute;
   bool no_realpath;
-  bool show_out;
   bool gen_out;
   std::string argv0;
   time_t argv0_ctime;
-  parser_options() : verbose(0), clean_flag(false), no_build(false),
-    no_update(false), no_execute(false), no_realpath(false),
-    show_out(false), gen_out(false),
-    argv0_ctime(0) { }
+  parser_options() : verbose(0), clean_flag(false), clean_all_flag(false),
+    no_build(false), no_update(false), no_execute(false), no_realpath(false),
+    gen_out(false), argv0_ctime(0) { }
 };
 
 struct all_modules_info {
@@ -1344,16 +1343,7 @@ static int compile_and_execute(parser_options& po,
   }
   const std::string sn = arena_get_ns_main_funcname(mi_main.unique_namespace)
     + "$cm";
-  if (po.show_out) {
-    fprintf(stdout, "%s\t%s\n", exe_fn.c_str(), sn.c_str());
-    fprintf(stdout, "(close stdin to exit)\n");
-    fflush(stdout);
-    /* wait until stdin is closed */
-    char c = 0;
-    while ((c = fgetc(stdin)) != EOF) { }
-    /* lock is released here */
-    return 0;
-  } else if (!po.profile.generate_dynamic) {
+  if (!po.profile.generate_dynamic) {
     char *e_argv[2];
     e_argv[0] = strdup(exe_fn.c_str());
     e_argv[1] = 0;
@@ -1401,6 +1391,31 @@ static bool check_path_validity(const std::string& path)
   return true;
 }
 
+static int clean_workdir(parser_options const& po, const std::string& dn)
+{
+  if (dn.size() < 8 || dn.substr(dn.size() - 8) != ".pxcwork") {
+    /* for safety */
+    fprintf(stderr, "internal error: invalid working directory: '%s'\n", 
+      dn.c_str());
+    return 1;
+  }
+  fprintf(stderr, "cleaning: '%s'\n", dn.c_str());
+  try {
+    filelock_lockobj lock(dn + "_lock"); /* throws */
+    unlink_recursive(dn); /* throws */
+  } catch (const std::exception& e) {
+    if (po.verbose > 1) {
+      fprintf(stderr, "warning: %s", e.what());
+    }
+  }
+  return 0;
+}
+
+static int clean_workdir_all(const std::string& dn)
+{
+  return 0;
+}
+
 static int prepare_options(parser_options& po, int argc, char **argv)
 {
   if (argc >= 1) {
@@ -1414,43 +1429,69 @@ static int prepare_options(parser_options& po, int argc, char **argv)
   }
   int i = 1;
   for (; i < argc; ++i) {
-    const std::string s = argv[i];
-    if (s.empty()) {
+    const std::string arg = argv[i];
+    if (arg.empty()) {
       continue;
     }
+    std::string::size_type p = arg.find('=');
+    std::string s;
+    std::string param;
+    if (p != arg.npos) {
+      s = arg.substr(0, p);
+      param = arg.substr(p + 1);
+    } else {
+      s = arg;
+    }
     if (s[0] == '-') {
-      if (s == "--clean" || s == "-c") {
-	po.clean_flag = true;
-      } else if ((s == "--verbose" || s == "-v") && i + 1 < argc) {
-	++i;
-	po.verbose = atoi(argv[i]);
-      } else if ((s == "--profile" || s == "-p") && i + 1 < argc) {
-	++i;
-	po.profile_name = argv[i];
-      } else if ((s == "--work-dir" || s == "-w") && i + 1 < argc) {
-	++i;
-	po.work_dir = argv[i];
-      } else if (s == "--generate-cc" && i + 1 < argc) {
-	++i;
-	po.gen_cc_dir = argv[i];
-      } else if (s == "--generate" || s == "-g") {
-	po.gen_out = true;
-      } else if (s == "--no-build" || s == "-nb") {
-	po.no_build = true;
-      } else if (s == "--no-update" || s == "-nu") {
-	po.no_update = true;
-      } else if (s == "--no-execute" || s == "-ne") {
-	po.no_execute = true;
-      #if 0
-      } else if (s == "--show-warnings" || s == "-W") {
-	po.show_c_warnings = true;
-      #endif
-      } else if (s == "--show-out") {
-	po.show_out = true;
-      } else if (s == "--no-realpath") {
-	po.no_realpath = true;
-      } else {
-	fprintf(stderr, "unknown option '%s'\n", s.c_str());
+      bool err = false;
+      if (param.empty()) {
+	if (s == "--clean" || s == "-c") {
+	  po.clean_flag = true;
+	} else if (s == "--clean-all" || s == "-C") {
+	  po.clean_all_flag = true;
+	  /* TODO */
+	} else if (s == "--generate" || s == "-g") {
+	  po.gen_out = true;
+	} else if (s == "--no-build" || s == "-nb") {
+	  po.no_build = true;
+	} else if (s == "--no-update" || s == "-nu") {
+	  po.no_update = true;
+	} else if (s == "--no-execute" || s == "-ne") {
+	  po.no_execute = true;
+	} else if (s == "--no-realpath") {
+	  po.no_realpath = true;
+	} else {
+	  err = true;
+	}
+      } else { 
+	if (s == "--verbose" || s == "-v") {
+	  po.verbose = atoi(param.c_str());
+	} else if (s == "--profile" || s == "-p") {
+	  po.profile_name = param;
+	} else if (s == "--work-dir" || s == "-w") {
+	  po.work_dir = param;
+	} else if (s == "--generate-cc") {
+	  po.gen_cc_dir = param;
+	} else {
+	  err = true;
+	}
+      }
+      if (err) {
+	fprintf(stderr, "Unknown option '%s'\n", arg.c_str());
+	fprintf(stderr,
+	  "Usage: %s [OPTIONS ...] SOURCE_FILES ...\n"
+	  "  Options:\n"
+	  "  --clean | -c\n"
+	  "  --clean-all | -C\n"
+	  "  --generate | -g\n"
+	  "  --no-build | -nb\n"
+	  "  --no-update | -nu\n"
+	  "  --no-execute | -ne\n"
+	  "  --no-realpath | -nr\n"
+	  "  --profile=FILE | -p=FILE\n"
+	  "  --work-dir=DIRECTORY | -w=DIRECTORY\n"
+	  "  --verbose=VALUE | -v=VALUE\n"
+	  "  --generate-cc=DIRECTORY\n", argv[0]);
 	return 1;
       }
     } else {
@@ -1497,27 +1538,10 @@ static int prepare_options(parser_options& po, int argc, char **argv)
       po.src_filename.c_str());
     return 1;
   }
+  if (po.clean_all_flag) {
+    clean_workdir_all(po.work_dir);
+  }
   po.work_dir += "/" + escape_hex_filename(po.profile_name) + ".pxcwork";
-  return 0;
-}
-
-static int clean_workdir(parser_options const& po, const std::string& dn)
-{
-  if (dn.size() < 8 || dn.substr(dn.size() - 8) != ".pxcwork") {
-    /* for safety */
-    fprintf(stderr, "internal error: invalid working directory: '%s'\n", 
-      dn.c_str());
-    return 1;
-  }
-  fprintf(stderr, "cleaning: '%s'\n", dn.c_str());
-  try {
-    filelock_lockobj lock(dn + "_lock"); /* throws */
-    unlink_recursive(dn); /* throws */
-  } catch (const std::exception& e) {
-    if (po.verbose > 1) {
-      fprintf(stderr, "warning: %s", e.what());
-    }
-  }
   return 0;
 }
 

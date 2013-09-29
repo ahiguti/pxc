@@ -1,5 +1,8 @@
-incdir=../pxc_%{platform}:../pxc_generic:.
-cflags=-g -O3 -DNDEBUG -Werror -Wall -Wno-unused -Wno-attributes
+#incdir=../pxc_%{platform}:../pxc_generic:.
+incdir=../pxc_generic:.
+cflags=-g -O3 -DNDEBUG -DNO_LOCAL_POOL=1
+#cflags=-g -O3 -DNDEBUG
+# -Werror -Wall -Wno-unused -Wno-attributes
 #cflags=-g -O3 -DNDEBUG -Wall -Wno-unused -Wno-attributes
 #cflags=-g -O0 -DNDEBUG -Wall -Wno-unused -Wno-attributes
 # cflags=-DPXCRT_DBG_RC

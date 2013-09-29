@@ -214,7 +214,8 @@ typedef std::map<symbol, nsextend_entries> nsextends_type;
 struct symbol_common {
   symbol_common(expr_i *parent_expr)
     : parent_expr(parent_expr), upvalue_flag(false),
-      symtbl_defined(0), arg_hidden_this(0), symbol_def(0) { }
+      symtbl_defined(0), arg_hidden_this(0), generic_invoke_flag(false),
+      symbol_def(0) { }
   symbol uniqns;
   expr_i *parent_expr;
   bool upvalue_flag : 1;
@@ -232,11 +233,16 @@ public:
   const term& get_evaluated_nochk() const;
   void set_fullsym(const symbol& sym) { fullsym = sym_prefix_fullsym = sym; }
   const symbol& get_fullsym() const { return fullsym; }
-  void set_sym_prefix_fullsym(const symbol& psym) { sym_prefix_fullsym = psym; }
+  bool is_generic_invoke() const { return generic_invoke_flag; }
+  void set_sym_prefix_fullsym(const symbol& psym, bool is_gen_inv) {
+    sym_prefix_fullsym = psym;
+    generic_invoke_flag = is_gen_inv;
+  }
   const symbol& get_sym_prefix_fullsym() const { return sym_prefix_fullsym; }
 private:
   symbol fullsym;
   symbol sym_prefix_fullsym; /* rename to modified_fullsym? */
+  bool generic_invoke_flag; /* "__invoke" or "foo__invoke" */
   expr_i *symbol_def;
   term evaluated;
 };

@@ -8,12 +8,6 @@ else
   TESTS=`echo *.pl | sort`
 fi
 
-s=`perl -MPXC::Loader -e "print 1" 2>&1`
-if [ "$s" != "1" ]; then
-  echo "SKIPPED (PXC::Loader is not installed)."
-  exit 0
-fi
-
 total=0
 err=0
 errnames=''
