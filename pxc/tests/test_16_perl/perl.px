@@ -2,10 +2,10 @@
 // vim:sw=2
 
 namespace perl;
-public import common;
+public import common -;
 public import meta m;
+public import meta::symbol;
 public import perl::impl;
-public import perl::symbols;
 private import numeric::integral -;
 
 public metafunction sv perl::impl::sv;
@@ -15,30 +15,43 @@ public metafunction xs_create_function{f} perl::impl::xs_create_function{f};
 public metafunction xs_create_type{f} perl::impl::xs_create_type{f};
 public metafunction sv_to_int perl::impl::sv_to_int;
 public metafunction int_to_sv perl::impl::int_to_sv;
-public metafunction convert_from_perlsv{t} perl::impl::convert_from_perlsv{t};
+public metafunction perlsv_get_value{t} perl::impl::perlsv_get_value{t};
 public metafunction convert_to_perlsv{t} perl::impl::convert_to_perlsv{t};
+
+public metafunction functions_for_ns{ns}
+  m::filter{
+    meta::symbol::functions_for_ns{ns},
+    metafunction{f} m::not{meta::family::is_ephemeral_type{m::rettype{f}}}};
+public metafunction is_constructible_non_ephemeral{t}
+  m::and{
+    m::is_constructible_type{t},
+    m::not{meta::family::is_ephemeral_type{t}}};
 
 public function {ns} void export_all()
 {
-  metafunction allfuncs perl::symbols::all_functions{ns};
-  metafunction alltypes perl::symbols::all_types{ns};
-  expand (i : m::seq{m::size{allfuncs}}) {
-    perl::xs_create_function{m::at{allfuncs, i}}();
-  }
+  metafunction allfuncs functions_for_ns{ns};
+  metafunction alltypes meta::symbol::dependent_types_for_ns{ns};
+  metafunction contypes m::filter{alltypes, is_constructible_non_ephemeral};
   expand (i : m::seq{m::size{alltypes}}) {
     perl::xs_create_type{m::at{alltypes, i}}();
+  }
+  expand (i : m::seq{m::size{contypes}}) {
+    perl::xs_create_function{m::at{contypes, i}}();
+  }
+  expand (i : m::seq{m::size{allfuncs}}) {
+    perl::xs_create_function{m::at{allfuncs, i}}();
   }
 }
 
 public function {ns} void show_exports()
 {
-  metafunction allfuncs perl::symbols::all_functions{ns};
-  metafunction alltypes perl::symbols::all_types{ns};
-  expand (i : m::seq{m::size{allfuncs}}) {
-    println(m::full_string{m::at{allfuncs, i}});
-  }
+  metafunction allfuncs functions_for_ns{ns};
+  metafunction alltypes meta::symbol::dependent_types_for_ns{ns};
   expand (i : m::seq{m::size{alltypes}}) {
     println(m::full_string{m::at{alltypes, i}});
+  }
+  expand (i : m::seq{m::size{allfuncs}}) {
+    println(m::full_string{m::at{allfuncs, i}});
   }
 }
 

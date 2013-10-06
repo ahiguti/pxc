@@ -2083,7 +2083,17 @@ void expr_op::emit_value(emit_context& em)
       em.puts("(new (&");
       fn_emit_value(em, arg0);
       em.puts(") ");
-      fn_emit_value(em, arg1);
+      if (arg1->get_esort() == expr_e_funccall) {
+	/* explicit constructor call */
+	fn_emit_value(em, arg1);
+      } else {
+	/* copy constructor */
+	em.puts(term_tostr(arg0->get_texpr(),
+	  term_tostr_sort_cname));
+	em.puts("(");
+	fn_emit_value(em, arg1);
+	em.puts(")");
+      }
       em.puts(")");
       return;
     }

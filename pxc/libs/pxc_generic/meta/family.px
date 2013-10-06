@@ -43,8 +43,9 @@ public metafunction is_range_type{t}
     m::eq{m::family{t}, "tree_map_range"},
     m::eq{m::family{t}, "tree_map_crange"}};
 
+public metafunction is_ephemeral_type{t}
+  m::or{is_range_type{t}, m::eq{m::family{t}, "ephemeral"}};
+
 public metafunction to_non_ephemeral_type{t}
-  m::cond{is_string_family_type{t}, string,
-  m::cond{is_range_type{t}, m::local{t, "non_ephemeral_type"},
-  t}};
+  m::cond{is_ephemeral_type{t}, m::local{t, "non_ephemeral_type"}, t};
 

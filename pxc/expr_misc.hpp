@@ -102,6 +102,7 @@ bool type_allow_feach(const term& t);
 bool is_compatible_pointer(const term&t0, const term& t1);
 bool is_copyable(const term& t);
 bool is_assignable(const term& t);
+bool is_constructible(const term& t);
 bool is_polymorphic(const term& t);
 typefamily_e get_family(const term& t);
 typefamily_e get_family_from_string(const std::string& s);

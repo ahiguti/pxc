@@ -3,6 +3,15 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- return x が抜けていてもエラーにならない
+
+- perl再整理
+  - 型のコンストラクタを関数としてexport
+    - pxfunc_obj{f}().call()のfが型のとき、placement newで構築
+  - svarrのget(i)でperlsvを構築するのは遅いので生SV*を返す
+
+- noncopyableな値を返す関数は実現できないか？
+
 - 引数を取るオプションは -p=hoge のように指定する形にするか
 
 - genericsとvariant
@@ -2033,14 +2042,110 @@ variantは常にインスタンス化できるべきでは？
   - 全ての演算子
 
 ---------------------------------------------------------------------
+noncopyableな値を返す関数は実現できないか？
+
+RVO相当のことを常時おこなうような実装にすればよい。
+const bar x = foo(a, b);
+barがnoncopyableのとき、xのアロケートは呼び出し側が行い、fooへの隠し
+引数としてポインタを渡す。呼ばれた時点ではまだbarオブジェクトとして
+初期化はされていない。fooの中身についての制約がいくつか必要。
+function bar foo(int a, int b)
+{
+  bar r = bar(a, b);
+  ...
+  return r;
+}
+function bar foo(int a, int b)
+{
+  return hoge(a, b);
+}
+1. fooの中のreturn式はすべて同じ変数を返す
+2. fooの中のreturn式はすべて関数呼び出し
+のどちらか。
+
+例外が投げられたときはどうするか。
+fooで例外が投げられたときはbarは未初期化に戻す。
+
+void foo(int a, int b, bar& r__)
+{
+  new(r__) bar(a, b);
+  /* r__が初期化されたので、これ以降例外が投げられると未初期化に戻す */
+  try {
+    ...
+  } catch (...) {
+    r__.~bar();
+    throw;
+  }
+}
+void foo(int a, int b, bar& r__)
+{
+  /* r__の初期化はhogeの中なので、fooではなにもしない */
+  return hoge(a, b, r__);
+}
+呼び出し側
+rvo<bar> x;
+foo(a, b, x.get());
+bar& x = x.get();
+フィールドをrvoにした場合
+struct fubar {
+  rvo<bar> x;
+  fubar(int a, int b) : x(foo(a, b, x)) { }
+}
+
+template <typename T> rvo : public T {
+  rvo(const dummy& x) { }
+  T& get() { return reinterpret_cast<T>(&buf); }
+  T const& get() const { return reinterpret_cast<T>(&buf); }
+  char buf[sizeof(T)];
+};
+
+rvoはdummyを受けるコンストラクタを持ち、中身は空
+RVO可能な型は全てdummyコンストラクタを持つようにするか？
+->ダメ。その型がnodefaultなフィールドを持つとそれを初期化できない。
+  やはりwrapperをかぶせる?
+全ての型にnoinitコンストラクタ持たせられるか？
+
+rvo関数によってフィールドを初期化するようなコンストラクタを
+どのように書くかが問題。
+
+案1
+- rvo可能な型はnoinitコンストラクタを持つ。
+- noncopyableな型は必ずrvo可能。
+- noncopyableなフィールドを持つ型のnoinitコンストラクタをどう実装するか？
+  rvo可能でないフィールドも持っていることがあるが、それをnoinitする手段が無い
+- フィールドの初期化にはrvo関数を使えないようにするか？
+
+案2
+- rvo可能な型はコンストラクタを使わずに初期化する
+
+案3
+- 全ての型にnoinitコンストラクタを持たせる
+  ただしpodは不要
+- rvo関数はdummyを返し、それをnoinitコンストラクタへ渡す
+
+案4
+- rvo初期化するフィールドだけはwrapperにし、フィールドアクセスはget()する。
+  rvo初期化しないフィールドについてはwrapperを使わない
+- wrapperはコピーコンストラクタとデストラクタは中身型のものにする。
+- rvo初期化する変数はwrapperを定義してから参照変数を作る。
+
+---------------------------------------------------------------------
 perl.px整理
 
-px関数呼び出しは、引数を一旦名前有り変数に置く
+px関数呼び出しは、引数を一旦名前有り変数に置く(done)
   wrapされたオブジェクトのときはmutable byrefで
-perl::symbols廃止、meta::symbol使う
+perl::symbols廃止、meta::symbol使う(done)
 meta::symbolは型フィルタと関数フィルタを引数で指定できるようにする?
   型フィルタは is_concrete
   関数フィルタは 返値がbyrefでなくephemeralでもない
   最後に関数フィルタ適用するだけでよい？
   最後に型フィルタとしてcopyableなものに制限が必要
+
+px関数呼び出しの引数
+すべてのpx型はperlsvにwrapできる。
+intやstringなどの型はperlの値をそのまま値渡しすることもできる。
+値変換可能な型については、svの中身を見てwrap値か変換かを決める。
+
+値型のとき: t mutable sym = perlsv_get_value{noneph{t}}(sv);
+参照型のとき: 
 
