@@ -1025,6 +1025,26 @@ bool is_assignable(const term& t)
 #endif
 }
 
+bool is_constructible(const term& t)
+{
+  expr_i *const expr = t.get_expr();
+  if (expr == 0) {
+    // fprintf(stderr, "is_constructible: %s false\n", term_tostr_human(t).c_str());
+    return false;
+  }
+  const expr_e esort = expr->get_esort();
+  if (esort == expr_e_struct) {
+    expr_struct *const est = ptr_down_cast<expr_struct>(expr);
+    if (est->block->argdecls != 0) {
+      //fprintf(stderr, "is_constructible: %s true\n", term_tostr_human(t).c_str());
+      return true;
+    }
+  }
+  const bool r = is_default_constructible(t);
+  // fprintf(stderr, "is_constructible: %s %d\n", term_tostr_human(t).c_str(), (int)r);
+  return r;
+}
+
 bool is_polymorphic(const term& t)
 {
   const expr_i *const einst = term_get_instance_const(t);

@@ -476,7 +476,7 @@ static bool is_default_constructible(const term& typ, expr_i *pos,
   expr_i *const expr = typ.get_expr();
   const term_list *const args = typ.get_args();
   if (expr == 0) {
-    return true;
+    return true; /* TODO: false? */
   }
   if (depth > 1000) {
     arena_error_push(pos, "A type dependency cycle is found: '%s'",

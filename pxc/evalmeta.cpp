@@ -196,6 +196,17 @@ static term eval_meta_is_assignable_type(const term_list_range& tlev,
   return term(r);
 }
 
+static term eval_meta_is_constructible_type(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos)
+{
+  if (tlev.size() != 1) {
+    return term();
+  }
+  const term& ttyp = tlev[0];
+  const long long r = is_constructible(ttyp);
+  return term(r);
+}
+
 static term eval_meta_is_polymorphic_type(const term_list_range& tlev,
   eval_context& ectx, expr_i *pos)
 {
@@ -234,6 +245,9 @@ static term eval_meta_argnum(const term_list_range& tlev, eval_context& ectx,
   expr_i *const einst = term_get_instance(ttyp);
   DBG_METAARGTYPE(fprintf(stderr, "t.expr=%p inst=%p\n", t.expr, einst));
   expr_block *block = einst->get_template_block();
+  if (block == 0) {
+    return term(0LL);
+  }
   expr_argdecls *ad = block->get_argdecls();
   const long long len = argdecls_length(ad);
   return term(len);
@@ -279,6 +293,9 @@ static term eval_meta_argtype(const term_list_range& tlev, eval_context& ectx,
   expr_i *const einst = term_get_instance(ttyp);
   DBG_METAARGTYPE(fprintf(stderr, "t.expr=%p inst=%p\n", t.expr, einst));
   expr_block *block = einst->get_template_block();
+  if (block == 0) {
+    return term();
+  }
   DBG_METAARGTYPE(fprintf(stderr, "arg %d\n", n));
   expr_argdecls *ad = block->get_argdecls();
   for (int i = 0; i < n && ad != 0; ++i) {
@@ -308,6 +325,9 @@ static term eval_meta_argbyref(const term_list_range& tlev, eval_context& ectx,
   expr_i *const einst = term_get_instance(ttyp);
   DBG_METAARGTYPE(fprintf(stderr, "t.expr=%p inst=%p\n", t.expr, einst));
   expr_block *block = einst->get_template_block();
+  if (block == 0) {
+    return term();
+  }
   DBG_METAARGTYPE(fprintf(stderr, "arg %d\n", n));
   expr_argdecls *ad = block->get_argdecls();
   for (int i = 0; i < n && ad != 0; ++i) {
@@ -336,9 +356,11 @@ static term eval_meta_argtypes(const term_list_range& tlev,
   expr_block *block = einst->get_template_block();
   DBG_METAARGTYPE(fprintf(stderr, "arg %d\n", n));
   term_list tl;
-  for (expr_argdecls *ad = block->get_argdecls(); ad != 0;
-    ad = ad->get_rest()) {
-    tl.push_back(ad->resolve_texpr());
+  if (block != 0) {
+    for (expr_argdecls *ad = block->get_argdecls(); ad != 0;
+      ad = ad->get_rest()) {
+      tl.push_back(ad->resolve_texpr());
+    }
   }
   return term(tl);
 }
@@ -1692,7 +1714,8 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@global_variables", &eval_meta_global_variables },
   { "@member_functions", &eval_meta_member_functions },
   { "@is_copyable_type", &eval_meta_is_copyable_type },
-  { "@is_assignable_type", eval_meta_is_assignable_type },
+  { "@is_assignable_type", &eval_meta_is_assignable_type },
+  { "@is_constructible_type", &eval_meta_is_constructible_type },
   { "@is_polymorphic_type", &eval_meta_is_polymorphic_type },
   { "@inherits", &eval_meta_inherits },
   { "@field_types", &eval_meta_field_types },
