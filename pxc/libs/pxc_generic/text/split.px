@@ -1,28 +1,52 @@
 namespace text::split;
-import container::array +;
+import container::array -;
 import numeric::integral -;
+import numeric::cast -;
 import text::conversion -;
 import meta m;
 import meta::vararg va;
 import meta::family mf;
 
 public threaded function {delim, tlist} void
-vector_split(expand(split_arg_decls{tlist}))
+string_split(expand(split_arg_decls{tlist}))
 { 
   size_t pos = 0;
+  const sz = a0.size();
   expand(arg, idx : va::arg_names{m::size{tlist}}) {
     if (m::ne{idx, 0}) {
-      size_t const p = a0.find(pos, delim);
-      arg = from_string{m::at0{m::at{tlist, idx}}}(a0[pos .. p]);
+      size_t p;
+      if (m::is_function{delim}) {
+	for (p = pos; p < sz; ++p) {
+	  if (delim(a0[p])) {
+	    break;
+	  }
+	}
+      } else {
+	p = find_mapped(a0, pos,
+	  static_cast{m::local{m::at0{m::at0{tlist}}, "mapped_type"}}(delim));
+      }
+      if (mf::is_string_family_type{m::at0{m::at{tlist, idx}}}) {
+	arg = a0[pos .. p];
+      } else {
+	arg = from_string{m::at0{m::at{tlist, idx}}}(a0[pos .. p]);
+      }
       if (m::ne{idx, m::sub{m::size{tlist}, 1}}) {
-	pos = (p != a0.size()) ? (p + 1) : p;
+	if (m::is_function{delim}) {
+	  for (pos = p; pos < sz; ++pos) {
+	    if (!delim(a0[pos])) {
+	      break;
+	    }
+	  }
+	} else {
+	  pos = (p != sz) ? (p + 1) : p;
+	}
       }
     }
   }
 }
 
 public threaded function {tlist} void
-vector_concat(expand(concat_arg_decls{tlist}))
+string_concat(expand(concat_arg_decls{tlist}))
 {
   expand (a, i: va::arg_names{m::size{tlist}}) {
     if (m::ne{i, 0}) { 
@@ -37,7 +61,7 @@ vector_concat(expand(concat_arg_decls{tlist}))
 }
 
 public threaded function {delim, tlist} string
-join(expand(va::arg_decls_bycref{tlist}))
+string_join(expand(va::arg_decls_bycref{tlist}))
 {
   string s;
   expand (a, i: va::arg_names{m::size{tlist}}) {

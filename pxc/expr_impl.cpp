@@ -450,8 +450,8 @@ expr_inline_c::expr_inline_c(const char *fn, int line, const char *label,
     posstr != "link" &&
     posstr != "cflags" &&
     posstr != "ldflags" &&
-    posstr != "disable_bounds_checking" &&
-    posstr != "disable_guard" &&
+    posstr != "disable-bounds-checking" &&
+    posstr != "disable-guard" &&
     posstr != "emit"
     ) {
     arena_error_push(this,

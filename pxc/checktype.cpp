@@ -286,11 +286,11 @@ void expr_inline_c::check_type(symbol_table *lookup)
   if (value != 0) {
     value_evaluated = eval_expr(value);
     const long long v = meta_term_to_long(value_evaluated);
-    if (posstr == "disable_bounds_checking") {
+    if (posstr == "disable-bounds-checking") {
       symtbl_lexical->pragma.disable_bounds_checking = v;
-    } else if (posstr == "disable_guard") {
+    } else if (posstr == "disable-guard") {
       symtbl_lexical->pragma.disable_guard = v; // not implemented yet
-    } else if (posstr == "trace_meta") {
+    } else if (posstr == "trace-meta") {
       symtbl_lexical->pragma.trace_meta = v;
     } else if (posstr == "emit") {
       /* nothing to do */

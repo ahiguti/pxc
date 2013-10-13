@@ -1,0 +1,40 @@
+#!/usr/bin/pxc
+
+namespace tbl;
+import common -;
+import io::buffered -;
+import text::split -;
+import meta m;
+
+threaded function {enttype, delim} vector{enttype}
+parse_table(file const& ifile)
+{
+  mutable vec = vector{enttype}();
+  const err = stream_foreach{file, parse_line}(ifile, '\n', 16386);
+  threaded function bool parse_line(cstrref const& line) {
+    enttype ent;
+    string_split{delim}(line, expand(fld: m::field_names{enttype}; ent.fld));
+    vec.push_back(ent);
+    return true;
+  }
+  return vec;
+}
+
+mtvaluetype struct mapent {
+  string address;
+  string perms;
+  unit offset;
+  unit dev;
+  uint inode;
+  string path;
+}
+
+threaded function bool delim(uchar ch) {
+  return ch == ' ' || ch == '\t';
+}
+
+{
+  const p = parse_table{mapent, delim}(get_stdin(system));
+  println(p);
+}
+

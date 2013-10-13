@@ -1,0 +1,23 @@
+namespace generic;
+public import meta m;
+
+public function {t} t identity(t x) { return x; }
+
+public function {t, name} m::rettype{m::local{t, name}}
+method_as_function(expand(
+  m::joinv{
+    m::list{m::list{"o", t, 0,
+      m::not{m::is_const_member_function{m::local{t, name}}}}},
+    subst_argnames{m::args{m::local{t, name}}}}))
+{
+  expand(sym: m::list{name}) {
+    return o.sym(expand(a : m::map{m::seq{m::argnum{m::local{t, name}}},
+      metafunction{i} m::concat{"a", i}}; a));
+  }
+}
+
+private metafunction subst_argnames{xs}
+  m::map{m::seq{m::size{xs}}, metafunction{i}
+    m::list{m::concat{"a", i}, m::at1{m::at{xs, i}}, m::at2{m::at{xs, i}},
+      m::at3{m::at{xs, i}}}};
+

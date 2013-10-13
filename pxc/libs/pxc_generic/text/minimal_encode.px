@@ -31,10 +31,10 @@ void minimal_encode(bt_string& buf, cstrref const& src)
   bt_uchar *wptr = wstart;
   for (const bt_uchar *p = start; p != end; ++p) {
     const bt_uchar c = p[0];
-    if ((c >= 0x10 && c <= 0x7a) || c >= 0x80) {
+    if ((c >= 0x10 && c <= 0x7a && c != 0x2c) || c >= 0x80) {
       wptr[0] = c;
       ++wptr;
-    } else if (c < 0x10) {
+    } else if (c < 0x30) {
       wptr[0] = '~';
       wptr[1] = c + 0x20;
     } else {
@@ -57,7 +57,7 @@ void minimal_decode(bt_string& buf, cstrref const& src)
   for (const bt_uchar *p = start; p != end; ++p) {
     if (p[0] == '~' && p + 1 != end) {
       bt_uchar ch = p[1];
-      (*wptr++) = ch < 0x40 ? ch - 0x20 : ch + 0x20;
+      (*wptr++) = ch < 0x50 ? ch - 0x20 : ch + 0x20;
       p++;
     } else {
       (*wptr++) = p[0];

@@ -253,8 +253,8 @@ static term eval_meta_argnum(const term_list_range& tlev, eval_context& ectx,
   return term(len);
 }
 
-static term eval_meta_rettype(const term_list_range& tlev, eval_context& ectx,
-  expr_i *pos)
+static term eval_meta_ret_common(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos, int idx)
 {
   if (tlev.size() != 1) {
     return term();
@@ -267,17 +267,65 @@ static term eval_meta_rettype(const term_list_range& tlev, eval_context& ectx,
   }
   expr_i *const einst = term_get_instance(ttyp);
   expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(einst);
-  DBG_METAARGTYPE(fprintf(stderr, "rettype\n"));
   if (efd != 0) {
-    return efd->get_rettype();
+    switch (idx) {
+    case -1: break;
+    case 1: return efd->get_rettype();
+    case 2: return term(is_passby_cm_reference(efd->block->ret_passby)
+      ? 1 : 0);
+    case 3: return term(is_passby_mutable(efd->block->ret_passby) ? 1 : 0);
+    default: abort();
+    }
+    term r[4];
+    r[0] = term("");
+    r[1] = efd->get_rettype();
+    r[2] = term(is_passby_cm_reference(efd->block->ret_passby) ? 1 : 0);
+    r[3] = term(is_passby_mutable(efd->block->ret_passby) ? 1 : 0);
+    return term(term_list_range(r, 4));
   } else if (is_type(ttyp)) {
-    return ttyp;
+    switch (idx) {
+    case -1: break;
+    case 1: return ttyp;
+    case 2: return term(0LL);
+    case 3: return term(0LL);
+    default: abort();
+    }
+    term r[4];
+    r[0] = term("");
+    r[1] = ttyp;
+    r[2] = term(0LL);
+    r[3] = term(0LL);
+    return term(term_list_range(r, 4));
   }
   return term();
 }
 
-static term eval_meta_argtype(const term_list_range& tlev, eval_context& ectx,
+static term eval_meta_rettype(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
+{
+  return eval_meta_ret_common(tlev, ectx, pos, 1);
+}
+
+static term eval_meta_retbyref(const term_list_range& tlev, eval_context& ectx,
+  expr_i *pos)
+{
+  return eval_meta_ret_common(tlev, ectx, pos, 2);
+}
+
+static term eval_meta_retmutable(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos)
+{
+  return eval_meta_ret_common(tlev, ectx, pos, 3);
+}
+
+static term eval_meta_ret(const term_list_range& tlev, eval_context& ectx,
+  expr_i *pos)
+{
+  return eval_meta_ret_common(tlev, ectx, pos, -1);
+}
+
+static term eval_meta_arg_common(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos, int idx)
 {
   if (tlev.size() != 2) {
     return term();
@@ -301,42 +349,41 @@ static term eval_meta_argtype(const term_list_range& tlev, eval_context& ectx,
   for (int i = 0; i < n && ad != 0; ++i) {
     ad = ad->get_rest();
   }
-  if (ad != 0) {
-    return ad->resolve_texpr();
+  if (ad == 0) {
+    return term();
   }
-  return term();
+  switch (idx) {
+  case -1: break;
+  case 0: return term(std::string(ad->sym));
+  case 1: return ad->resolve_texpr();
+  case 2: return term(is_passby_cm_reference(ad->passby) ? 1 : 0);
+  case 3: return term(is_passby_mutable(ad->passby) ? 1 : 0);
+  default: abort();
+  }
+  term r[4];
+  r[0] = term(std::string(ad->sym));
+  r[1] = ad->resolve_texpr();
+  r[2] = term(is_passby_cm_reference(ad->passby) ? 1 : 0);
+  r[3] = term(is_passby_mutable(ad->passby) ? 1 : 0);
+  return term(term_list_range(r, 4));
+}
+
+static term eval_meta_argtype(const term_list_range& tlev, eval_context& ectx,
+  expr_i *pos)
+{
+  return eval_meta_arg_common(tlev, ectx, pos, 1);
 }
 
 static term eval_meta_argbyref(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
-  if (tlev.size() != 2) {
-    return term();
-  }
-  term ttyp = tlev[0];
-  const term& tnum = tlev[1];
-  expr_i *const ttypexpr = ttyp.get_expr();
-  if (ttypexpr == 0 ||
-    !is_type_or_func_esort(ttypexpr->get_esort()) ||
-    !tnum.is_long() || tnum.get_long() < 0) {
-    return term();
-  }
-  const long long n = tnum.get_long();
-  expr_i *const einst = term_get_instance(ttyp);
-  DBG_METAARGTYPE(fprintf(stderr, "t.expr=%p inst=%p\n", t.expr, einst));
-  expr_block *block = einst->get_template_block();
-  if (block == 0) {
-    return term();
-  }
-  DBG_METAARGTYPE(fprintf(stderr, "arg %d\n", n));
-  expr_argdecls *ad = block->get_argdecls();
-  for (int i = 0; i < n && ad != 0; ++i) {
-    ad = ad->get_rest();
-  }
-  if (ad != 0) {
-    return term(is_passby_cm_reference(ad->passby) ? 1 : 0);
-  }
-  return term();
+  return eval_meta_arg_common(tlev, ectx, pos, 2);
+}
+
+static term eval_meta_argmutable(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos)
+{
+  return eval_meta_arg_common(tlev, ectx, pos, 3);
 }
 
 static term eval_meta_argtypes(const term_list_range& tlev,
@@ -1702,9 +1749,13 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@unique", &eval_meta_unique },
   { "@base", &eval_meta_base },
   { "@rettype", &eval_meta_rettype },
+  { "@retbyref", &eval_meta_retbyref },
+  { "@retmutable", &eval_meta_retmutable },
+  { "@ret", &eval_meta_ret },
   { "@argnum", &eval_meta_argnum },
   { "@argtype", &eval_meta_argtype },
   { "@argbyref", &eval_meta_argbyref },
+  { "@argmutable", &eval_meta_argmutable },
   { "@argtypes", &eval_meta_argtypes },
   { "@argnames", &eval_meta_argnames },
   { "@args", &eval_meta_args },

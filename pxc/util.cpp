@@ -61,6 +61,26 @@ std::string read_file_content(const std::string& fn, bool err_thr)
   return s;
 }
 
+std::vector<std::string> read_directory(const std::string& dn)
+{
+  std::vector<std::string> r;
+  auto_dir dir(opendir(dn.c_str()));
+  if (dir.get()) {
+    while (true) {
+      struct dirent *const ent = readdir(dir.get()); /* TODO: THREAD? */
+      if (ent == 0) {
+	break;
+      }
+      const std::string c = ent->d_name;
+      if (c == "." || c == "..") {
+	continue;
+      }
+      r.push_back(c);
+    }
+  }
+  return r;
+}
+
 std::string ulong_to_string_hexadecimal(unsigned long long v)
 {
   char buf[32];

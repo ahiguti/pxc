@@ -64,7 +64,7 @@ private threaded function void string_append_brace_open(string mutable& v)
 private threaded function void string_append_brace_close(string mutable& v)
 { v.push_back('}'); }
 private threaded function void string_append_sep(string mutable& v)
-{ v.push_back('|'); }
+{ v.push_back(','); }
 private threaded function void string_append_none(string mutable& v)
 { } 
 private threaded function {t} void string_append_star(t const& x,
@@ -119,7 +119,7 @@ private threaded function size_t token_length(cstrref const& s)
 	return i;
       }
     }
-    if (ch == '}' || ch == '|') {
+    if (ch == '}' || ch == ',') {
       return i;
     }
   }
@@ -175,6 +175,10 @@ private threaded function bool string_parse_bool(cstrref mutable& s)
     }
   }
 }
+private threaded function unit string_parse_unit(cstrref mutable& s)
+{
+  return unit();
+}
 private threaded function void string_parse_symbol_peek(cstrref mutable& stok)
 {
   size_t const sz = stok.size();
@@ -228,7 +232,7 @@ private threaded function bool string_parse_brace_close_cond(
   cstrref mutable& s)
 { return string_parse_char_cond(s, '}'); }
 private threaded function bool string_parse_sep_cond(cstrref mutable& s)
-{ return string_parse_char_cond(s, '|'); }
+{ return string_parse_char_cond(s, ','); }
 private threaded struct deserialize_tpl {
   metafunction source_type cstrref;
   metafunction symstr{t} m::concat{t, "_parse_from_string"};
@@ -241,7 +245,7 @@ private threaded struct deserialize_tpl {
     m::cond{n::is_integral{t}, string_parse_integral{t},
     m::cond{n::is_fp{t}, string_parse_fp{t},
     m::cond{m::eq{t, bool}, string_parse_bool,
-    m::cond{m::eq{t, unit}, string_parse_token_skip,
+    m::cond{m::eq{t, unit}, string_parse_unit,
     0}}}}}};
   metafunction array_begin_cond string_parse_brace_open_cond;
   metafunction array_end_cond string_parse_brace_close_cond;

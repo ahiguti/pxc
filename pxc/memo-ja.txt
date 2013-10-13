@@ -3,43 +3,37 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- return x が抜けていてもエラーにならない
-
 - perl再整理
-  - 型のコンストラクタを関数としてexport
-    - pxfunc_obj{f}().call()のfが型のとき、placement newで構築
-  - svarrのget(i)でperlsvを構築するのは遅いので生SV*を返す
+  - 型のコンストラクタを関数としてexport(done)
+    - pxfunc_obj{f}().call()のfが型のとき、placement newで構築(done)
+  - svarrのget(i)でperlsvを構築するのは遅いので生SV*を返す(done)
+  - 返値をperlsvではなく生SV*(done)
+  - field(done)
+  - global variables
+    - グローバル変数の型がperlに登録されていない問題
+  - extval, enum val
+  - pseudo-member function
+  - 継承
+    - 各型について、全派生型のstashとstash名をmapで保存。mappedには
+      upcast関数を保存。void * -> foo * -> super * -> void * の変換。
+    - get_value_ivを、ポインタの参照を取るように変更
+
+- return x が抜けていてもエラーにならない？ expandを使うと起きる？
 
 - noncopyableな値を返す関数は実現できないか？
 
-- 引数を取るオプションは -p=hoge のように指定する形にするか
+- 引数を取るオプションは -p=hoge のように指定する形にするか(done)
 
 - genericsとvariant
 
-- variant的型へのmarshal方法再考
-
-- bt_intなど -> pxcではintなど、C++ではbt_intのまま (done)
-
-- show_outなくす(done)
-
-- 演算子を非メンバ関数で (done)
-
-- value$z をやめて単に value に(done)
-
 - quaternionをglmのものに
 
-- emit_vardef_constructor_fast_boxingの継承使っているケース、
-  create_rawptrは引数0か1個のときしか定義されていないからそれ以外の
-  ケースでエラーになるのではないか test_85_fastbox/fb1.px (done)
 
 - private namespace. 親namespaceからのみシンボルが参照できる.
 
 - glm
 
-- value$z などのpxc固有の名前をC++から利用するための関数を用意するか
-
-- vectorのsliceを簡潔に書けるように。 -> できる。なにが困っている？
-- rawptr{t}, crawptr{t}
+- rawptr{t}, crawptr{t} (done)
 
 - resolve_nameが遅いのでinternする
 
@@ -51,15 +45,7 @@ FIXME/TODO M1
 
 - sdl: オブジェクトはboxedにしないとコンストラクタ複数作りたいとき困る
 
-- プラットフォームごとのpath
-
-- プラットフォームをメタ関数で取得(done)
-
-- extern "ldflags"などをメタ関数で出し分けられるように(done)
-
-- minimal sdl app
-
-- 引数の無いmetafunctionの評価結果をキャッシュしていない
+- プラットフォームごとのpath(done)
 
 - metafunctionのデバグのためのエラーメッセージが不十分
 
@@ -88,15 +74,11 @@ FIXME/TODO M1
     のみ無効化されるようにできる。イベントループ境界でQObjectポインタ
     を保持できないようにすれば無効化はおきない。可能？
 
-- weak pointer (done)
-
 - py: defconではないときにno_initを付ける
 
 - ネストされたstructなどについてのterm_tostrは正しいのか？
 
-- リンクだけ実行されたときldflagsが無視されている(done)
 
-- inline_cに埋め込み式(done)
 
 - externを許可するパス、許可しないパス
 
@@ -494,6 +476,24 @@ interfaceまわり
 
 ---------------------------------------------------------------------
 DONE
+
+- arrayのfindは消す。genericなfindはpodならmemcmpになるような実装を
+  用意。(done)
+- operator.pxは全てthreadedつけなければならないか？(done)
+- vectorの要素を探すfindがoperatorを使うように(done)
+- full_string{}が文字列とシンボルを区別できるように(done)
+- bt_intなど -> pxcではintなど、C++ではbt_intのまま (done)
+- show_outなくす(done)
+- 演算子を非メンバ関数で (done)
+- value$z をやめて単に value に(done)
+- emit_vardef_constructor_fast_boxingの継承使っているケース、
+  create_rawptrは引数0か1個のときしか定義されていないからそれ以外の
+  ケースでエラーになるのではないか test_85_fastbox/fb1.px (done)
+- プラットフォームをメタ関数で取得(done)
+- extern "ldflags"などをメタ関数で出し分けられるように(done)
+- weak pointer (done)
+- リンクだけ実行されたときldflagsが無視されている(done)
+- inline_cに埋め込み式(done)
 
 - pointer/raw.px pxcrt::rawptr<>::type をemitできるように(done)
 - externな関数はephemeral typeを返すことができて、その呼び出しをroot
@@ -2146,6 +2146,8 @@ px関数呼び出しの引数
 intやstringなどの型はperlの値をそのまま値渡しすることもできる。
 値変換可能な型については、svの中身を見てwrap値か変換かを決める。
 
-値型のとき: t mutable sym = perlsv_get_value{noneph{t}}(sv);
-参照型のとき: 
+- pxメンバ関数をperlから呼べるようにする
+- svarr.get()は生のSV*を返すようにし、無駄にperlsvを作らない。
+- 型コンストラクタは型名のpackageのnewに定義
+- メンバ関数やメンバぽい関数は型名のpackageに定義
 

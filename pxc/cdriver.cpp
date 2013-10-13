@@ -1347,6 +1347,8 @@ static int compile_and_execute(parser_options& po,
     char *e_argv[2];
     e_argv[0] = strdup(exe_fn.c_str());
     e_argv[1] = 0;
+    lock.unlock();
+    /* NOTE: this execv may fail if another process is doing clean_workdir */
     execv(e_argv[0], e_argv);
     fprintf(stderr, "Failed to execute '%s': errno=%d\n", exe_fn.c_str(),
       errno);
@@ -1411,8 +1413,27 @@ static int clean_workdir(parser_options const& po, const std::string& dn)
   return 0;
 }
 
-static int clean_workdir_all(const std::string& dn)
+static int clean_workdir_all(const parser_options& po)
 {
+  std::vector<std::string> ents = read_directory(po.work_dir + "/");
+  for (size_t i = 0; i < ents.size(); ++i) {
+    const std::string e = ents[i];
+    if (e.size() < 8 || e.substr(e.size() - 8) != ".pxcwork") {
+      continue;
+    }
+    int r = clean_workdir(po, po.work_dir + "/" + e);
+    if (r != 0) {
+      return r;
+    }
+  }
+  for (size_t i = 0; i < ents.size(); ++i) {
+    const std::string e = ents[i];
+    if (e.size() < 13 || e.substr(e.size() - 13) != ".pxcwork_lock") {
+      continue;
+    }
+    unlink_if(po.work_dir + "/" + e);
+      /* NOTE: causes problem if another process is doing compilation */
+  }
   return 0;
 }
 
@@ -1539,7 +1560,10 @@ static int prepare_options(parser_options& po, int argc, char **argv)
     return 1;
   }
   if (po.clean_all_flag) {
-    clean_workdir_all(po.work_dir);
+    int r = clean_workdir_all(po);
+    if (r != 0) {
+      return r;
+    }
   }
   po.work_dir += "/" + escape_hex_filename(po.profile_name) + ".pxcwork";
   return 0;
