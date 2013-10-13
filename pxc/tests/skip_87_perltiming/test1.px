@@ -1,0 +1,65 @@
+
+namespace test1;
+import perl;
+import common -;
+import numeric::integral -;
+import pointer -;
+
+function perl::sv f1(perl::sv x)
+{
+  return x;
+}
+
+function perl::sv f2(perl::sv x, perl::sv y)
+{
+  return perl::int_to_sv(perl::sv_to_int(x) + perl::sv_to_int(y));
+}
+
+function int f3(int x, int y)
+{
+  return x + y;
+}
+
+struct hoge {
+  int x;
+  long y;
+  string z;
+  vector{long} w;
+}
+
+function int hoge_get_x(hoge const& o) { return o.x; }
+function void hoge_set_x(hoge mutable& o, int x) { o.x = x; }
+function string hoge_get_z(hoge const& o) { return o.z; }
+function void hoge_set_z(hoge mutable& o, cstrref const& z) { o.z = z; }
+function long hoge_get_w(hoge const& o, size_t i) { return o.w[i]; }
+function void hoge_set_w(hoge mutable& o, size_t i, long v) { o.w[i] = v; }
+function void hoge_resize_w(hoge mutable& o, size_t i) { o.w.resize(i, 0); }
+
+function long test_hoge(hoge mutable& o, long x) {
+  const len = static_cast{size_t}(x);
+  hoge_resize_w(o, len);
+  for (const i : 0 .. len) {
+    hoge_set_w(o, i, static_cast{long}(i * 2));
+  }
+  long v = 0;
+  for (const i : 0 .. len) {
+    for (const j : 0 .. i) {
+      v += static_cast{long}(hoge_get_w(o, j));
+    }
+  }
+  return v;
+}
+
+function ptr{hoge} f4()
+{
+  ptr{hoge} v = to_ptr(hoge());
+  return v;
+}
+
+function int f5(ptr{hoge} v)
+{
+  v->x += 1;
+  return v->x;
+}
+
+

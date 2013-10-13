@@ -1143,7 +1143,7 @@ static std::string tparam_str_string(const std::string& v, term_tostr_sort s)
   if (s == term_tostr_sort_cname) {
     return escape_c_str_literal(v);
   } else if (s == term_tostr_sort_humanreadable) {
-    return v;
+    return "\"" + v + "\"";
   }
   return escape_hex_non_alnum(v) + "$ls";
 }

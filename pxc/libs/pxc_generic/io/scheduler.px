@@ -1,0 +1,92 @@
+namespace io::scheduler "use-unsafe";
+public import numeric::integral -;
+public import container::array -;
+public import io -;
+public import io::file -;
+public import io::process -;
+public import io::errno -;
+
+public threaded function extern "pxcio::px_%" uint
+get_nprocs(io const& iop);
+
+public tsvaluetype struct extern "pxcio::px_cpu_set_t" cpu_set_t { }
+
+public threaded function extern "pxcio::%" void
+cpu_set_t_zero(cpu_set_t mutable& cs);
+public threaded function extern "pxcio::%" void
+cpu_set_t_set(cpu_set_t mutable& cs, uint c);
+public threaded function extern "pxcio::%" void
+cpu_set_t_clr(cpu_set_t mutable& cs, uint c);
+public threaded function extern "pxcio::%" bool
+cpu_set_t_isset(cpu_set_t const& cs, uint c);
+
+public threaded function extern "pxcio::%" void
+cpu_set_t_append_to_string(cpu_set_t const& cs, string mutable& buf);
+
+public threaded function extern "pxcio::px_%" errno_t
+sched_setaffinity(io const& iop, pid_t pid, cpu_set_t mutable& cs);
+public threaded function extern "pxcio::px_%" errno_t
+sched_getaffinity(io const& iop, pid_t pid, cpu_set_t mutable& cs);
+
+extern "types" inline
+#ifdef __linux
+#include <sched.h>
+#endif
+namespace pxcio {
+
+#ifdef __linux
+typedef cpu_set_t px_cpu_set_t;
+#else
+typedef pxcrt::unit cpu_set_t;
+#endif
+
+};
+;
+
+extern "implementation" inline
+namespace pxcio {
+
+#ifdef __linux
+
+#include <sys/sysinfo.h>
+uint px_get_nprocs(io const& io) { return get_nprocs(); }
+void cpu_set_t_append_to_string(px_cpu_set_t const& cs, pxcrt::bt_string& buf)
+{
+  const int n = get_nprocs();
+  for (int i = 0; i < n; ++i) {
+    buf.push_back(CPU_ISSET(i, &cs) ? '1' : '0');
+  }
+  if (n <= 0) {
+    buf.push_back('-');
+  }
+}
+void cpu_set_t_zero(px_cpu_set_t& cs) { CPU_ZERO(&cs); }
+void cpu_set_t_set(px_cpu_set_t& cs, pxcrt::bt_uint c) { CPU_SET(c, &cs); }
+void cpu_set_t_clr(px_cpu_set_t& cs, pxcrt::bt_uint c) { CPU_CLR(c, &cs); }
+pxcrt::bt_bool cpu_set_t_isset(px_cpu_set_t const& cs, pxcrt::bt_uint c)
+{ return CPU_ISSET(c, &cs) != 0; }
+int px_sched_setaffinity(io const& io, pid_t pid, px_cpu_set_t& cs)
+{ return sched_setaffinity(pid, sizeof(cs), &cs) == 0 ? 0 : errno; }
+int px_sched_getaffinity(io const& io, pid_t pid, px_cpu_set_t& cs)
+{ return sched_getaffinity(pid, sizeof(cs), &cs) == 0 ? 0 : errno; }
+
+#else
+
+uint px_get_nprocs(io const& io) { return 0; }
+void cpu_set_t_append_to_string(px_cpu_set_t const& cs, pxcrt::bt_string& buf)
+{ buf.push_back('-'); }
+void cpu_set_t_zero(px_cpu_set_t& cs) { }
+void cpu_set_t_set(px_cpu_set_t& cs, pxcrt::bt_uint c) { }
+void cpu_set_t_clr(px_cpu_set_t& cs, pxcrt::bt_uint c) { }
+pxcrt::bt_bool cpu_set_t_isset(px_cpu_set_t const& cs, pxcrt::bt_uint c)
+{ return false; }
+int px_sched_setaffinity(io const& io, pid_t pid, px_cpu_set_t& cs)
+{ return ENOTSUP; }
+int px_sched_getaffinity(io const& io, pid_t pid, px_cpu_set_t& cs)
+{ return ENOTSUP; }
+
+#endif
+
+};
+;
+

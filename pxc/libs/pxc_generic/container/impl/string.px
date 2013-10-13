@@ -11,8 +11,8 @@ void throw_bad_alloc();
 void throw_would_invalidate();
 void throw_invalid_index();
 
-template <typename T> bt_size_t array_find(const T *start, bt_size_t len,
-  bt_size_t offset, T const& value)
+template <typename T> static inline bt_size_t
+array_find(const T *start, bt_size_t len, bt_size_t offset, T const& value)
 {
   if (offset >= len) {
     return len;
@@ -28,14 +28,20 @@ template <typename T> bt_size_t array_find(const T *start, bt_size_t len,
   }
 }
 
-template <typename T> typename T::mapped_type get_elem_value(const T& c,
-  bt_size_t offset)
+template <typename T> static inline bt_size_t
+find_mapped_memchr(const T& c, bt_size_t offset, typename T::mapped_type v)
+{
+  return array_find(c.rawarr(), c.size(), offset, v);
+}
+
+template <typename T> static inline typename T::mapped_type
+get_elem_value(const T& c, bt_size_t offset)
 {
   return c[offset];
 }
 
-template <typename T> typename T::mapped_type get_elem_value_nochek(const T& c,
-  bt_size_t offset)
+template <typename T> static inline typename T::mapped_type
+get_elem_value_nochek(const T& c, bt_size_t offset)
 {
   return c.rawarr()[offset];
 }

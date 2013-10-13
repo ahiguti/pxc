@@ -19,7 +19,6 @@ public tsvaluetype struct extern "::pxcrt::bt_slice" "slice" {t} slice {
   public function extern "size" size_t size() const;
   public function extern "get" t get(size_t i) const;
   public function extern "set" void set(size_t i, t v) const;
-  public function extern "find" size_t find(size_t offset, t const& v) const;
   public function extern "next" void next();
   public function extern "pop_front" void pop_front(size_t i);
   public function extern "pop_back" void pop_back(size_t i);
@@ -34,7 +33,6 @@ public tsvaluetype struct extern "::pxcrt::bt_cslice" "cslice" {t} cslice {
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
   public function extern "get" t get(size_t i) const;
-  public function extern "find" size_t find(size_t o, t const& v) const;
   public function extern "next" void next();
   public function extern "pop_front" void pop_front(size_t i);
   public function extern "pop_back" void pop_back(size_t i);
@@ -49,7 +47,6 @@ public mtvaluetype struct extern "::pxcrt::pxcvector" "varray" {t} vector {
   public metafunction crange_type cslice{t};
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
-  public function extern "find" size_t find(size_t offset, t const& v) const;
   public function extern "resize" void resize(size_t i, t const& v);
   public function extern "clear" void clear();
   public function extern "push_back" void push_back(t const& v);
@@ -119,8 +116,8 @@ public tsvaluetype struct extern "::pxcrt::bt_strlit" "farray" strlit {
   public metafunction crange_type cslice{uchar};
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
-  public function extern "find" size_t find(size_t o, uchar const& v) const;
 }
+
 
 public threaded function extern "::pxcrt::memcmp_string"
   int memcmp_string(string const& x, string const& y);
@@ -172,4 +169,34 @@ make_vector(expand(va::arg_decls_bycref{tlist}))
   }
   return arr;
 }
+
+private metafunction is_array_family{fam}
+  m::or{
+    m::eq{fam, "varray"},
+    m::eq{fam, "farray"},
+    m::eq{fam, "darray"},
+    m::eq{fam, "slice"},
+    m::eq{fam, "cslice"}};
+
+public threaded function {t, tk, tm} tk
+find_mapped(t const& c, tk k, tm const& x)
+{
+  if (m::and{is_array_family{m::family{t}},
+    m::or{m::eq{tm, char}, m::eq{tm, uchar}}}) {
+    return find_mapped_memchr{t}(c, k, x);
+  } else {
+    tk i;
+    tk const sz = c.size();
+    for (i = k; i < sz; ++i) {
+      extern "disable-bounds-checking" 1;
+      if (c[i] == x) { break; }
+    }
+    return i;
+  }
+}
+
+private threaded function extern "::pxcrt::find_mapped_memchr" {t}
+m::local{t, "key_type"}
+find_mapped_memchr(t const& c, m::local{t, "key_type"} const& k,
+  m::local{t, "mapped_type"} const& x);
 

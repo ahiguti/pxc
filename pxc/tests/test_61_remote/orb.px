@@ -465,7 +465,7 @@ private threaded function {t} t unmarshal_reference(ptr{orb} const& op,
 private threaded function size_t skip_token(string const& buf,
   size_t mutable& pos, size_t epos)
 {
-  size_t delim_pos = buf.find(pos, '\t');
+  size_t delim_pos = find_mapped(buf, pos, '\t');
   if (delim_pos < epos) {
     pos = delim_pos + 1;
     return delim_pos;
@@ -612,7 +612,7 @@ private threaded function {t, tk, cmp} size_t binary_search(cslice{t} const& s,
   size_t first = 0;
   size_t last = s.size();
   while (last - first > 0) {
-    extern "disable_bounds_checking" 1; /* s[middle] is always safe */
+    extern "disable-bounds-checking" 1; /* s[middle] is always safe */
     size_t const middle = first + ((last - first) >> 1);
     int const c = cmp(s[middle], k);
     if (c < 0) {

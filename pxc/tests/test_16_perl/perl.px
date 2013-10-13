@@ -1,6 +1,3 @@
-
-// vim:sw=2
-
 namespace perl;
 public import common -;
 public import meta m;
@@ -12,16 +9,20 @@ public metafunction sv perl::impl::sv;
 public metafunction av perl::impl::av;
 public metafunction hv perl::impl::hv;
 public metafunction xs_create_function{f} perl::impl::xs_create_function{f};
-public metafunction xs_create_type{f} perl::impl::xs_create_type{f};
+public metafunction xs_create_field{t, i} perl::impl::xs_create_field{t, i};
+public metafunction xs_create_type{t} perl::impl::xs_create_type{t};
+public metafunction xs_create_variable{n, i}
+  perl::impl::xs_create_variable{n, i};
 public metafunction sv_to_int perl::impl::sv_to_int;
 public metafunction int_to_sv perl::impl::int_to_sv;
-public metafunction perlsv_get_value{t} perl::impl::perlsv_get_value{t};
 public metafunction convert_to_perlsv{t} perl::impl::convert_to_perlsv{t};
 
 public metafunction functions_for_ns{ns}
   m::filter{
     meta::symbol::functions_for_ns{ns},
-    metafunction{f} m::not{meta::family::is_ephemeral_type{m::rettype{f}}}};
+    metafunction{f}
+      m::and{m::not{meta::family::is_ephemeral_type{m::rettype{f}}},
+	m::not{m::retbyref{f}}}};
 public metafunction is_constructible_non_ephemeral{t}
   m::and{
     m::is_constructible_type{t},
@@ -32,14 +33,45 @@ public function {ns} void export_all()
   metafunction allfuncs functions_for_ns{ns};
   metafunction alltypes meta::symbol::dependent_types_for_ns{ns};
   metafunction contypes m::filter{alltypes, is_constructible_non_ephemeral};
+  metafunction nslist m::imports_transitive{ns};
   expand (i : m::seq{m::size{alltypes}}) {
-    perl::xs_create_type{m::at{alltypes, i}}();
+    perl::xs_create_type{m::at{alltypes, i}}(
+      m::full_string{m::at{alltypes, i}});
   }
   expand (i : m::seq{m::size{contypes}}) {
-    perl::xs_create_function{m::at{contypes, i}}();
+    {
+      metafunction typ m::at{contypes, i};
+      perl::xs_create_function{typ}(m::concat{m::full_string{typ}, "::new"});
+      expand (j : m::seq{m::size{m::member_functions{typ}}}) {
+	{
+	  metafunction mf m::to_string{m::at{m::member_functions{typ}, j}};
+	  perl::xs_create_function{method_as_function{typ, mf}}(
+	    m::concat{m::full_string{typ}, "::", mf});
+	}
+      }
+      expand (j : m::seq{m::size{m::fields{typ}}}) {
+	{
+	  metafunction fld m::at{m::fields{typ}, j};
+	  metafunction fn m::at0{fld};
+	  metafunction ft m::at1{fld};
+	  perl::xs_create_field{typ, j}(
+	    m::concat{m::full_string{typ}, "::", fn});
+	}
+      }
+    }
   }
   expand (i : m::seq{m::size{allfuncs}}) {
-    perl::xs_create_function{m::at{allfuncs, i}}();
+    perl::xs_create_function{m::at{allfuncs, i}}(
+      m::full_string{m::at{allfuncs, i}});
+  }
+  expand (n : nslist) {
+    {
+      metafunction gvars m::global_variables{n};
+      expand (i : m::seq{m::size{gvars}}) {
+	perl::xs_create_variable{n, i}(
+	  m::concat{n, "::", m::at0{m::at{gvars, i}}});
+      }
+    }
   }
 }
 

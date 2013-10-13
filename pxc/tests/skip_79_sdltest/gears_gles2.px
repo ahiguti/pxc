@@ -426,7 +426,7 @@ function uint compile_shader(cstrref const& src, GLenum type)
     glGetShaderInfoLog(res, static_cast{GLsizei}(sz), address(len),
       buf.rawptr().char());
     debug_log("compile_shader failed:",
-      join{"\t"}(static_cast{int}(type), success, buf));
+      string_join{"\t"}(static_cast{int}(type), success, buf));
     glDeleteShader(res);
     res = 0;
   }
@@ -506,7 +506,7 @@ function void set_program()
     println("loc_normal: ", loc_normal);
     println("loc_lightpos: ", loc_lightpos);
     println("loc_mate_color: ", loc_mate_color);
-    SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("Locations: ",
+    SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("Locations: ",
       loc_vertex, loc_normal, loc_lightpos, loc_mate_color));
   }
 }
@@ -577,7 +577,7 @@ function void init_gl()
 	  const w = ev.window.data1;
 	  const h = ev.window.data2;
 	  SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	    join{""}("resized w=", w, " h=", h));
+	    string_join{""}("resized w=", w, " h=", h));
 	  reshape(w, h);
 	}
       } else if (etype == SDL_FINGERMOTION) {
@@ -587,13 +587,13 @@ function void init_gl()
 	rotate(0.0, 1.0, 0.0, -dx);
       } else if (etype == SDL_MULTIGESTURE) {
 	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	  join{""}("multigesture dTheta=", ev.mgesture.dTheta,
+	  string_join{""}("multigesture dTheta=", ev.mgesture.dTheta,
 	    " dDist=", ev.mgesture.dDist));
       } else if (etype == SDL_APP_WILLENTERBACKGROUND) {
-	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("paused"));
+	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("paused"));
 	paused = true;
       } else if (etype == SDL_APP_DIDENTERFOREGROUND) {
-	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("resumed"));
+	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("resumed"));
 	paused = false;
 	int w;
 	int h;
@@ -618,9 +618,10 @@ function void init_gl()
 	const seconds = static_cast{float}(t - t0) / 1000.0;
 	const fps = static_cast{float}(frames) / seconds;
 	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	  join{" "}(frames, "frames in", seconds, "seconds =", fps, "fps"));
+	  string_join{" "}(frames, "frames in", seconds, "seconds =", fps,
+	    "fps"));
 	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	  join{" "}("ticks: ", ticks_sum));
+	  string_join{" "}("ticks: ", ticks_sum));
 	ticks_sum = ticks_t();
 	t0 = t;
 	frames = 0;
