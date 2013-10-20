@@ -1,0 +1,36 @@
+namespace bug2;
+import common -;
+
+/* 2013/10/14 testcase for a c++ compilation failure */
+
+function {func1_cb} void
+func1(int x)
+{
+  func1_cb(x);
+}
+
+function {func2_cb} void
+func2(int x)
+{
+  func1{cl_func2}(x);
+  function void cl_func2(int x) {
+    func2_cb(x);
+  }
+}
+
+struct foo {
+  int z;
+  function void met() {
+    z = 999;
+    func2{cl_main}(50);
+    function void cl_main(int x) {
+      z += x;
+    }
+    println(z);
+  }
+}
+
+{
+  foo x;
+  x.met();
+}

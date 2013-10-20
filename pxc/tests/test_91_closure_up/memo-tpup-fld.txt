@@ -1,0 +1,36 @@
+
+upvalueとして使ったfieldの名前の衝突を避けるには
+
+function {f} int twice(int x)
+{
+  return f(f(x));
+}
+
+struct foo {
+  int f0;
+  function int hoge() {
+    function int fuga(int x) {
+      return f0 + x;
+    }
+    int v = twice{fuga}(5);
+  }
+}
+
+twice{fuga}はfugaのupvalueであるf0を運ぶ。
+fugaでは名前f0は衝突しない。
+
+運ぶだけのupvalueはu0$u, u1$uのように名前をつければどうか。
+
+calc_dep_upvalues_one:
+  dep_upvaluesのうち自身が直接参照しているものが先頭のいくつまでであるか
+  を記録。
+emit_function_argdecls:
+  ここでupvalueの引数宣言をemitしている。
+  dep_upvaluesのうち自身が直接参照しているものかどうか調べ、そうでない
+  ものについてはu0$uのような名前をつける。
+  なおby-constrefフラグが立って入ればconstrefに。
+emit_func_upvalue_args:
+  関数呼び出しの引数のうちupvalueを積んでいる。
+  各upvalueについて、それが呼び出し元のフレームのdep_upvaluesの「直接
+  参照ではない」ものに含まれていればu0$uなど、そうでないなら従来どおり。
+

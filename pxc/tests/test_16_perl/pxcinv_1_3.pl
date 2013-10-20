@@ -17,8 +17,8 @@ $o->z("xyz");
 my $z = $o->z();
 print "$x $z\n";
 
-my $pkg_test1 = \%{test1::};
-my $f = $pkg_test1->{hoge_get_x};
+my $pkg_test1_hoge = \%{test1::hoge::};
+my $f = $pkg_test1_hoge->{x};
 my $c = *$f{CODE};
 # my $c = *{$pkg->{hoge_get_x}}{CODE};
 my $x1 = &$c($o);

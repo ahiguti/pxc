@@ -1,6 +1,7 @@
 namespace perl;
 public import common -;
 public import meta m;
+public import meta::family mf;
 public import meta::symbol;
 public import perl::impl;
 private import numeric::integral -;
@@ -60,9 +61,31 @@ public function {ns} void export_all()
       }
     }
   }
+  metafunction extract_pointer{t}
+    m::cond{mf::is_pointer_family{m::family{t}}, m::at0{t}, t};
+  metafunction base_type_candidate{fn}
+    m::cond{m::ge{m::size{m::argtypes{fn}}, 1},
+      m::concat{extract_pointer{m::argtype{fn, 0}}, "_"},
+      "0_"};
   expand (i : m::seq{m::size{allfuncs}}) {
-    perl::xs_create_function{m::at{allfuncs, i}}(
-      m::full_string{m::at{allfuncs, i}});
+    {
+      metafunction fn m::at{allfuncs, i};
+      metafunction fnstr m::full_string{fn};
+      metafunction btc m::concat{m::get_namespace{fn}, "::",
+	base_type_candidate{fn}};
+      /* debug_log(fnstr, btc); */
+      if (m::eq{m::substring{fnstr, 0, m::strlen{btc}}, btc}) {
+	/* pseudo member function */
+	debug_log("pmfnstr", pmfnstr);
+	metafunction pmfnstr m::concat{
+	  m::full_string{m::argtype{fn, 0}}, "::",
+	  m::substring{fnstr, m::strlen{btc}}};
+	perl::xs_create_function{fn}(pmfnstr);
+      } else {
+	/* normal function */
+	perl::xs_create_function{fn}(fnstr);
+      }
+    }
   }
   expand (n : nslist) {
     {
@@ -85,5 +108,10 @@ public function {ns} void show_exports()
   expand (i : m::seq{m::size{allfuncs}}) {
     println(m::full_string{m::at{allfuncs, i}});
   }
+}
+
+public function string string_value(cstrref const& x)
+{
+  return x;
 }
 

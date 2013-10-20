@@ -1,0 +1,26 @@
+namespace constmet8;
+import common -;
+
+import meta m;
+
+function {f} m::rettype{f} apply(m::argtype{f, 0} const& x)
+{
+  return f(x);
+}
+
+struct foo {
+  int x;
+  function int m(int y) const {
+    function int nf(int z) {
+      return x + z;
+    }
+    return apply{nf}(y);
+  }
+}
+
+function void t1() {
+  ptr{foo} v = to_ptr(foo(10));
+  println(v->m(20));
+}
+
+t1();

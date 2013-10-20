@@ -121,6 +121,27 @@ expr_i *deep_clone_template(expr_i *e, expr_block *instantiate_root)
   return deep_clone_rec(e, instantiate_root, true);
 }
 
+static void downgrade_threading_attribute_rec(expr_i *e, attribute_e mask)
+{
+  if (e == 0) {
+    return;
+  }
+  expr_e es = e->get_esort();
+  if (es == expr_e_funcdef || es == expr_e_struct || es == expr_e_typedef ||
+    es == expr_e_dunion || es == expr_e_interface) {
+    const attribute_e oattr = e->get_attribute();
+    const int dmask = attribute_threaded | attribute_multithr |
+      attribute_valuetype | attribute_tsvaluetype;
+    const int om = dmask & oattr & mask;
+    attribute_e nattr = attribute_e((oattr & ~dmask) | om);
+    e->set_attribute(nattr);
+  }
+  const int num = e->get_num_children();
+  for (int i = 0; i < num; ++i) {
+    downgrade_threading_attribute_rec(e->get_child(i), mask);
+  }
+}
+
 static expr_i *instantiate_template_internal(expr_i *tmpl_root,
   const term_list_range& targs)
 {
@@ -165,13 +186,9 @@ static expr_i *instantiate_template_internal(expr_i *tmpl_root,
   const term rt(tmpl_root, targs);
   rcpy->set_value_texpr(rt);
   /* downgrade threading attribute if necessary */
-  attribute_e nattr = attribute_e(rcpy->get_attribute()
-    & ~(attribute_threaded | attribute_multithr |
-      attribute_valuetype | attribute_tsvaluetype));
-  nattr = attribute_e(nattr | get_term_threading_attribute(rt));
-  rcpy->set_attribute(nattr);
-  DBG_ATTR(fprintf(stderr, "%s: attr %d\n", term_tostr_human(rt).c_str(),
-    nattr));
+  downgrade_threading_attribute_rec(rcpy, get_term_threading_attribute(rt));
+  DBG_ATTR(fprintf(stderr, "%s: attr %x\n", term_tostr_human(rt).c_str(),
+    get_term_threading_attribute(rt)));
   /* compile instantiated part */
   assert(rcpy->symtbl_lexical != 0);
   const int num = rcpy->get_num_children();

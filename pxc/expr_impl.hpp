@@ -46,6 +46,22 @@ template <typename T> size_t argdecls_length(T *p)
   return p == 0 ? 0 : argdecls_length(p->get_rest()) + 1;
 }
 
+template <typename T> struct unique_vector {
+  typedef typename std::vector<T>::const_iterator const_iterator;
+  typedef typename std::vector<T>::size_type size_type;
+  std::vector<T> v;
+  std::set<T> s;
+  void insert_if(T const& x) {
+    if (s.find(x) == s.end()) {
+      s.insert(x);
+      v.push_back(x);
+    }
+  }
+  const_iterator begin() const { return v.begin(); }
+  const_iterator end() const { return v.end(); }
+  size_type size() const { return v.size(); }
+};
+
 struct expr_te;
 
 typedef std::list<expr_i *> expr_arena_type;
@@ -1119,9 +1135,7 @@ struct expr_funcdef : public expr_i {
   expr_struct *is_member_function() const;
   expr_interface *is_virtual_function() const;
   expr_i *is_virtual_or_member_function() const;
-  #if 0
   expr_funcdef *is_member_function_descent();
-  #endif
   const term& get_value_texpr() { return value_texpr; }
   void set_value_texpr(const term& t) { value_texpr = t; }
   void set_unique_namespace_one(const std::string& u, bool allow_unsafe);
@@ -1176,6 +1190,18 @@ public:
   tpup_set_type tpup_set;
   expr_struct *tpup_thisptr;
   bool tpup_thisptr_nonconst : 1;
+  /* TODO */
+  typedef std::pair<
+    symbol_table * /* caller symtbl */,
+    expr_funcdef * /* callee funcdef */> call_entry;
+  typedef unique_vector<call_entry> calls_type;
+  calls_type calls;
+  typedef std::pair<
+    expr_i * /* var, arg, or fld*/,
+    bool /* is_const_member_function */> dep_upvalue_type;
+  typedef unique_vector<dep_upvalue_type> dep_upvalues_type;
+  dep_upvalues_type dep_upvalues;
+  dep_upvalues_type dep_upvalues_tr;
   attribute_e attr;
 };
 
