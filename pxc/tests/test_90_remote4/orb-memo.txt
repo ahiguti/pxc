@@ -1,0 +1,28 @@
+test_90_remote4
+
+downcastを一ヶ所除去。downcast(dynamic_cast)すべて無くせる？
+
+execute_request リクエスト一行を実行する
+  rbuf中の読み出し範囲はposとeposで示し、パースするたびにposを進める。
+  リクエストの種類を読む。メソッド呼び出しは「M」。
+    もしリクエストではなくレスポンスならfalseを返す。
+  thisオブジェクトを読む。valがスケルトンid。
+  スケルトンのreal_objectに対しcall_methodを呼ぶ。
+
+call_method -> call_method_ni{t} -> call_method_bs -> method_call
+
+method_call
+  メソッド呼び出しを実行し、wbufに結果をappendする
+
+orb_transportインタフェースのsend_receive()がデータやりとりする。
+
+send_receive
+  wbufが空でないなら全て送信
+  wbufとrbufをクリア
+  改行を読むまでrbufへ受信
+
+exchange_loop
+  send_receiveを実行
+  execute_requestを実行し、falseを返したらreturn
+  繰り返し(これは相手からのリクエストを処理を繰り返し実行している)
+

@@ -33,6 +33,7 @@
 #define DBG_LV(x)
 #define DBG_SLICE(x)
 #define DBG_CALLEE(x)
+#define DBG_DEPUP(x)
 
 namespace pxc {
 
@@ -1988,6 +1989,110 @@ void fn_check_template_upvalues_tparam(expr_i *e)
   execute_rec_incl_instances(e, check_template_upvalues_tparam_one);
 }
 
+static void calc_dep_upvalues_direct(expr_i *e)
+{
+  expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(e);
+  if (efd == 0) {
+    return;
+  }
+  /* append upvalues used by efd itself */
+  symbol_table *symt = &efd->block->symtbl;
+  symbol_table::locals_type::const_iterator i;
+  for (i = symt->upvalues.begin(); i != symt->upvalues.end(); ++i) {
+    expr_i *const eup = i->second.edef;
+    bool is_constmemfunc_context = false;
+    expr_i *const eframe = get_current_frame_expr(eup->symtbl_lexical);
+    if (is_global_var(eup)) {
+      continue; /* eup is a global variable */
+    }
+    if (eframe != 0 && eframe->get_esort() == expr_e_struct) {
+      /* e is a struct field */
+      expr_funcdef *mf = get_up_member_func(symt);
+      if (mf == efd && mf->is_member_function() == eframe) {
+	/* efd is a member function and eup is a field of the same struct */
+	continue;
+      }
+      if (mf != 0 && mf->is_member_function() == eframe) {
+	/* efd is a descent of a member function of eframe */
+	is_constmemfunc_context = mf->is_const;
+      }
+    }
+    expr_funcdef::dep_upvalue_type de(eup, is_constmemfunc_context);
+    efd->dep_upvalues.insert_if(de);
+    DBG_DEPUP(fprintf(stderr, "depup %s %s %d\n",
+      term_tostr_human(efd->get_value_texpr()).c_str(), eup->dump(0).c_str(),
+      (int)is_constmemfunc_context));
+  }
+}
+
+static void calc_dep_upvalues_tr_rec(expr_funcdef *tgt_efd,
+  std::set<expr_funcdef *>& es, expr_funcdef::dep_upvalues_type& deps)
+{
+  if (es.find(tgt_efd) != es.end()) {
+    return;
+  }
+  es.insert(tgt_efd);
+  /* append callee upvalues */
+  expr_funcdef::calls_type::const_iterator ci;
+  for (ci = tgt_efd->calls.begin(); ci != tgt_efd->calls.end(); ++ci) {
+    symbol_table *const call_symt = ci->first;
+    expr_funcdef *const callee = ci->second;
+    expr_funcdef::dep_upvalues_type cdeps = callee->dep_upvalues;
+    calc_dep_upvalues_tr_rec(callee, es, cdeps); /* recursive call */
+    expr_funcdef::dep_upvalues_type::const_iterator di;
+    for (di = cdeps.begin(); di != cdeps.end(); ++di) {
+      expr_i *const eupdef = di->first; /* expr defining the upvalue */
+      symbol_table *const eupdef_symt = eupdef->symtbl_lexical;
+      symbol_table *s = call_symt; 
+      for (; s != &tgt_efd->block->symtbl; s = s->get_lexical_parent()) {
+	if (s == eupdef_symt) {
+	  break; /* eup is defined in the tgt_efd frame */
+	}
+      }
+      if (s == eupdef_symt) {
+	/* this upvalue is defined in the frame of tgt_efd. */
+	DBG_DEPUP(fprintf(stderr, "depup_found_local %s %s\n",
+	  term_tostr_human(tgt_efd->get_value_texpr()).c_str(),
+	  eupdef->dump(0).c_str()));
+	continue;
+      }
+      expr_i *const eupdef_frame = get_current_frame_expr(eupdef_symt);
+      if (eupdef_frame != 0 && tgt_efd->is_member_function() == eupdef_frame) {
+	/* this upvalue is a field and tgt_efd is a member function of the
+	 * same struct */
+	DBG_DEPUP(fprintf(stderr, "depup_found_field %s %s\n",
+	  term_tostr_human(tgt_efd->get_value_texpr()).c_str(),
+	  eupdef->dump(0).c_str()));
+	continue;
+      }
+      /* this upvalue is an upvalue of the caller(tgt_efd) too. */
+      deps.insert_if(*di);
+      DBG_DEPUP(fprintf(stderr, "depup_callee %s %s %d\n",
+	term_tostr_human(tgt_efd->get_value_texpr()).c_str(),
+	di->first->dump(0).c_str(), (int)(di->second)));
+    }
+  }
+  es.erase(tgt_efd);
+}
+
+static void calc_dep_upvalues_tr(expr_i *e)
+{
+  expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(e);
+  if (efd == 0) {
+    return;
+  }
+  std::set<expr_funcdef *> es;
+  expr_funcdef::dep_upvalues_type deps = efd->dep_upvalues;
+  calc_dep_upvalues_tr_rec(efd, es, deps);
+  efd->dep_upvalues_tr = deps;
+}
+
+void fn_check_dep_upvalues(expr_i *e)
+{
+  execute_rec_incl_instances(e, calc_dep_upvalues_direct);
+  execute_rec_incl_instances(e, calc_dep_upvalues_tr);
+}
+
 void fn_compile(expr_i *e, expr_i *p, bool is_template)
 {
   if (e == 0) {
@@ -2926,9 +3031,11 @@ void fn_check_final(expr_i *e)
   check_upvalue_funcobj(e);
   check_upvalue_memfunc(e);
   check_use_before_def(e);
+#if 0
   if (e->get_esort() == expr_e_funccall) {
     check_tpup_thisptr_constness(ptr_down_cast<expr_funccall>(e));
   }
+#endif
   /* check instances */
   expr_block *const bl = dynamic_cast<expr_block *>(e);
   if (bl != 0) {
@@ -3115,7 +3222,23 @@ bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
 	if (bl->parent_expr != 0 &&
 	  bl->parent_expr->get_esort() == expr_e_struct) {
 	  /* as->symbol_def is an instance variable */
-	  expr_i *efd = a0;
+	  expr_i *const a0frame = get_current_frame_expr(a0->symtbl_lexical);
+	  if (a0frame->get_esort() == expr_e_funcdef) {
+	    expr_funcdef *efd = ptr_down_cast<expr_funcdef>(a0frame);
+	    efd = efd->is_member_function_descent();
+	    if (efd->is_const) {
+	      DBG_LV(fprintf(stderr, "expr_has_lvalue %s 1 false\n",
+		a0->dump(0).c_str()));
+	      if (!thro_flg) {
+		return false;
+	      }
+	      arena_error_push(epos,
+		"Field '%s' can not be modified from a const member function",
+		sc->get_fullsym().c_str());
+	    }
+	  }
+	  #if 0
+	  // TODO: remove
 	  while (efd->get_esort() != expr_e_funcdef) {
 	    efd = efd->parent_expr;
 	    assert(efd);
@@ -3130,6 +3253,7 @@ bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
 	      "Field '%s' can not be modified from a const member function",
 	      sc->get_fullsym().c_str());
 	  }
+	  #endif
 	} else {
 	  #if 0
 	  arena_error_push(epos, "Upvalue '%s' can not be modified",

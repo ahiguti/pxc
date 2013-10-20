@@ -405,11 +405,13 @@ static inline std::string generate_klass_name(const pxcrt::bt_string& s) {
   for (size_t i = 0; i < s.size(); ++i) {
     const char ch = s[i];
     if (ch == '{' || ch == '}' || ch == '\"') {
-      r.push_back('_');
+      r.push_back(ch);
+      // r.push_back('_');
     } else {
       r.push_back(ch);
     }
   }
+  DBG(fprintf(stderr, "%s\n", r.c_str()));
   return r;
 }
 
@@ -464,7 +466,7 @@ template <typename T> struct type_pl {
     klass_name = generate_klass_name(name);
     klass_stash = gv_stashpv(klass_name.c_str(), 1);
     const std::string sd = klass_name + "::DESTROY";
-    DBG(fprintf(stderr, "CREATE TYPE %s %s stash=%p\n", name.c_str(),
+    DBG(fprintf(stderr, "CREATE TYPE %s %s stash=%p\n", "",
       klass_name.c_str(), klass_stash));
     destr_cv = newXS((char *)sd.c_str(), &destr,
       "type_pl" /* must be a literal */);
@@ -569,10 +571,15 @@ value_or_ref_set_string(value_or_ref<T>& x, rawsv const& v)
 {
   IV value_iv = 0;
   if (type_pl<T>::get_value_iv(v, value_iv)) {
+    DBG(fprintf(stderr, "value_or_ref_set_string pxobj %p %ld %zu %s\n", v,
+      (long)value_iv, ((T *)(void *)value_iv)->size(),
+      ((T *)(void *)value_iv)->rawarr()));
     x.u.ptr = (T *)(void *)value_iv;
   } else {
     STRLEN len = 0;
     const unsigned char *const p = (unsigned char *)(SvPV_nomg(v, len));
+    DBG(fprintf(stderr, "value_or_ref_set_string svpv %p %ld %s\n", v,
+      (long)value_iv, (const char *)p));
     new ((T *)(x.u.buf)) T(p, (size_t)len);
     x.own = true;
   }

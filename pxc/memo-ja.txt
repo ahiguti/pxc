@@ -3,20 +3,33 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- 構造体fieldをupvalueとして使うと名前が衝突する可能性がある(done)
+
+- externなテンプレ関数にはテンプレ引数に型or整数しかわたせないように
+  しないといけない。C++のテンプレ関数の制限。
+
 - perl再整理
   - 型のコンストラクタを関数としてexport(done)
     - pxfunc_obj{f}().call()のfが型のとき、placement newで構築(done)
   - svarrのget(i)でperlsvを構築するのは遅いので生SV*を返す(done)
   - 返値をperlsvではなく生SV*(done)
   - field(done)
-  - global variables
-    - グローバル変数の型がperlに登録されていない問題
-  - extval, enum val
-  - pseudo-member function
+  - global variables(done)
+  - extval, enum val(done)
+  - pseudo-member function。関数の最初の引数の型名が関数名のprefix
+    となる(done)
+  - グローバル変数の型をperlに登録する
+  - unionのtagを取得する関数
   - 継承
     - 各型について、全派生型のstashとstash名をmapで保存。mappedには
       upcast関数を保存。void * -> foo * -> super * -> void * の変換。
     - get_value_ivを、ポインタの参照を取るように変更
+  - perlsvに演算子実装
+
+- orb再整理
+  - 一方向リクエスト・レスポンスのときはpipelining可能なように
+
+- 実装を自動で埋めるmethod。to_stringのように。
 
 - return x が抜けていてもエラーにならない？ expandを使うと起きる？
 
@@ -1185,6 +1198,8 @@ variant型だと実行できない処理:
 
 ---------------------------------------------------------------------
 関数が必要とする上位変数の計算
+
+(2013/10 この内容は古い)
 
 - 関数の中身をchecktypeするときに、フレーム(funcdef/struct)のcallee_list
   にfunccall先を書いてゆく。

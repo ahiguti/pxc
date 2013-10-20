@@ -166,6 +166,7 @@ void fn_update_tree(expr_i *e, expr_i *p, symbol_table *symtbl,
   const std::string& curns_u);
 void fn_check_template_upvalues_direct(expr_i *e);
 void fn_check_template_upvalues_tparam(expr_i *e);
+void fn_check_dep_upvalues(expr_i *e);
 void fn_check_final(expr_i *e);
 void fn_compile(expr_i *e, expr_i *p, bool is_template);
 expr_i *fn_drop_non_exports(expr_i *e);

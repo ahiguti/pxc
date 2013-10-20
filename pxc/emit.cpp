@@ -173,23 +173,26 @@ std::string csymbol_var(const expr_var *ev, bool cdecl)
 }
 
 static void emit_var_cdecl(emit_context& em, const expr_var *ev,
-  bool is_argdecl, bool force_byref)
+  bool is_argdecl, bool force_const, bool force_byref)
 {
   if (is_argdecl) {
     /* used for emitting struct constructors and function upvalue args */
     passby_e passby = ev->varinfo.passby;
+    if (force_const) {
+      if (passby == passby_e_mutable_value) {
+	passby = passby_e_const_value;
+      }
+      if (passby == passby_e_mutable_reference) {
+	passby = passby_e_const_reference;
+      }
+    }
     if (force_byref) {
       /* used for emitting function upvalue args */
-      switch (passby) {
-      case passby_e_const_value:
+      if (passby == passby_e_const_value) {
 	passby = passby_e_const_reference;
-	break;
-      case passby_e_mutable_value:
+      }
+      if (passby == passby_e_mutable_value) {
 	passby = passby_e_mutable_reference;
-	break;
-      case passby_e_const_reference:
-      case passby_e_mutable_reference:
-	break;
       }
     }
     emit_typestr_call_traits(em, ev->type_of_this_expr, passby);
@@ -214,6 +217,27 @@ static void emit_arg_cdecl(emit_context& em, const expr_argdecls *ad,
   }
   em.puts(" ");
   ad->emit_symbol(em);
+}
+
+static passby_e get_passby(const expr_i *e)
+{
+  if (e->get_esort() == expr_e_var) {
+    return ptr_down_cast<const expr_var>(e)->varinfo.passby;
+  } else if (e->get_esort() == expr_e_argdecls) {
+    return ptr_down_cast<const expr_argdecls>(e)->passby;
+  }
+  abort();
+}
+
+static void emit_indirect_upvalue(emit_context& em, const expr_i *e, size_t i,
+  bool force_const)
+{
+  passby_e p = get_passby(e);
+  emit_term(em, e->type_of_this_expr);
+  if (force_const || is_passby_const(p)) {
+    em.printf(" const");
+  }
+  em.printf("& _%zu$up", i);
 }
 
 template <typename T> static std::string get_type_cname_w_ns(T e)
@@ -525,7 +549,7 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
 	if (i != flds.begin()) {
 	  em.puts(", ");
 	}
-	emit_var_cdecl(em, *i, true, false);
+	emit_var_cdecl(em, *i, true, false, false);
       }
       em.puts(");\n");
     }
@@ -594,7 +618,7 @@ static void emit_struct_constr_one(emit_context& em, expr_struct *est,
 	if (i != flds.begin()) {
 	  em.puts(", ");
 	}
-	emit_var_cdecl(em, *i, true, false);
+	emit_var_cdecl(em, *i, true, false, false);
       }
       em.puts(")");
       emit_struct_constr_initializer(em, est, flds, false, false);
@@ -1264,6 +1288,7 @@ static void emit_type_definitions(emit_context& em)
   }
 }
 
+#if 0
 static void emit_thisptr_argdecl(emit_context& em, expr_struct *est,
   bool is_const)
 {
@@ -1273,11 +1298,33 @@ static void emit_thisptr_argdecl(emit_context& em, expr_struct *est,
   }
   em.puts("& this$up");
 }
+#endif
 
 static void emit_function_argdecls(emit_context& em, expr_funcdef *efd)
 {
   bool is_first = true;
   /* upvalues */
+  expr_funcdef::dep_upvalues_type::const_iterator i;
+  for (i = efd->dep_upvalues_tr.begin(); i != efd->dep_upvalues_tr.end();
+    ++i) {
+    if (!is_first) {
+      em.puts(", ");
+    } else {
+      is_first = false;
+    }
+    expr_i *const e = i->first;
+    size_t j = i - efd->dep_upvalues_tr.begin();
+    if (j >= efd->dep_upvalues.size()) {
+      /* indirect upvalue */
+      emit_indirect_upvalue(em, e, j - efd->dep_upvalues.size(), i->second);
+    } else if (e->get_esort() == expr_e_var) {
+      /* FIXME: force by-constref if i->second is true */
+      emit_var_cdecl(em, ptr_down_cast<expr_var>(e), true, i->second, true);
+    } else {
+      emit_arg_cdecl(em, ptr_down_cast<expr_argdecls>(e), true, true);
+    }
+  }
+  #if 0
   expr_funcdef::tpup_vec_type::const_iterator i;
   for (i = efd->tpup_vec.begin(); i != efd->tpup_vec.end(); ++i) {
     if (is_global_var(*i)) {
@@ -1303,6 +1350,7 @@ static void emit_function_argdecls(emit_context& em, expr_funcdef *efd)
     }
     emit_thisptr_argdecl(em, efd->tpup_thisptr, !efd->tpup_thisptr_nonconst);
   }
+  #endif
   emit_argdecls(em, efd->block->get_argdecls(), is_first);
 }
 
@@ -1578,6 +1626,7 @@ static void emit_value_symdef_common(emit_context& em, symbol_common& sdef,
     edef->emit_symbol(em);
     return;
   }
+  #if 0
   /* check if it's an imported member field */
   expr_i *const def_fr = get_current_frame_expr(edef->symtbl_lexical);
   expr_struct *const def_est = dynamic_cast<expr_struct *>(def_fr);
@@ -1590,6 +1639,7 @@ static void emit_value_symdef_common(emit_context& em, symbol_common& sdef,
     em.puts(")");
     return;
   }
+  #endif
   edef->emit_symbol(em);
 }
 
@@ -1738,7 +1788,7 @@ static void emit_global_vars(emit_context& em, expr_block *gl_blk)
     if (!is_main_ns) {
       em.puts("extern ");
     }
-    emit_var_cdecl(em, e, false, false);
+    emit_var_cdecl(em, e, false, false, false);
     if (is_main_ns) {
       emit_explicit_init_if(em, e->get_texpr());
     }
@@ -1766,7 +1816,7 @@ void expr_stmts::emit_local_decl(emit_context& em)
     if (e == 0) { continue; }
     em.set_file_line(e);
     em.indent('S');
-    emit_var_cdecl(em, e, false, false);
+    emit_var_cdecl(em, e, false, false, false);
     emit_explicit_init_if(em, e->get_texpr());
     em.puts(";\n");
   }
@@ -1808,7 +1858,7 @@ void expr_block::emit_local_decl(emit_context& em, bool is_funcbody)
     }
     em.set_file_line(e);
     em.indent('b');
-    emit_var_cdecl(em, e, false, false);
+    emit_var_cdecl(em, e, false, false, false);
     em.puts("; // localdecl\n");
   }
 }
@@ -2108,6 +2158,31 @@ void expr_op::emit_value(emit_context& em)
   fn_emit_value(em, arg1);
 }
 
+static bool is_caller_indirect_upvalue(expr_i *edef,
+  symbol_table *caller_symtbl, size_t& idx_r)
+{
+  idx_r = 0;
+  expr_i *frame_expr = get_current_frame_expr(caller_symtbl);
+  if (frame_expr == 0) {
+    return false;
+  }
+  if (frame_expr->get_esort() != expr_e_funcdef) {
+    return false;
+  }
+  expr_funcdef *const efd = ptr_down_cast<expr_funcdef>(frame_expr);
+  size_t n0 = efd->dep_upvalues.size();
+  size_t n1 = efd->dep_upvalues_tr.size();
+  for (size_t i = 0; i < n1 - n0; ++i) {
+    const expr_funcdef::dep_upvalue_type& u
+      = *(efd->dep_upvalues_tr.begin() + n0 + i);
+    if (u.first == edef) {
+      idx_r = i;
+      return true;
+    }
+  }
+  return false;
+}
+
 static bool emit_func_upvalue_args(emit_context& em, expr_i *func,
   symbol_table *caller_symtbl)
 {
@@ -2122,6 +2197,22 @@ static bool emit_func_upvalue_args(emit_context& em, expr_i *func,
   }
   bool is_first = true;
   /* upvalues */
+  expr_funcdef::dep_upvalues_type::const_iterator i;
+  for (i = efd->dep_upvalues_tr.begin(); i != efd->dep_upvalues_tr.end();
+    ++i) {
+    if (!is_first) {
+      em.puts(", ");
+    } else {
+      is_first = false;
+    }
+    size_t idx = 0;
+    if (is_caller_indirect_upvalue(i->first, caller_symtbl, idx)) {
+      em.printf("_%zu$up", idx);
+    } else {
+      i->first->emit_symbol(em);
+    }
+  }
+  #if 0
   expr_funcdef::tpup_vec_type::const_iterator i;
   for (i = efd->tpup_vec.begin(); i != efd->tpup_vec.end(); ++i) {
     if (is_global_var(*i)) {
@@ -2163,6 +2254,7 @@ static bool emit_func_upvalue_args(emit_context& em, expr_i *func,
       em.puts("this$up");
     }
   }
+  #endif
   return !is_first;
 }
 
@@ -2187,10 +2279,14 @@ static void emit_function_expr(emit_context& em, expr_i *func)
   if (caller_fr_expr != 0 && caller_fr_expr->get_esort() == expr_e_funcdef &&
     !ptr_down_cast<expr_funcdef>(caller_fr_expr)->is_member_function()) {
     /* calling member function from non-member function. */
+    throw "internal error: "
+      "calling member function from nested non-member function";
+    #if 0
     em.puts("(this$up.");
     fn_emit_value(em, func);
     em.puts(")");
     return;
+    #endif
   }
   fn_emit_value(em, func);
 }
@@ -2247,7 +2343,8 @@ void expr_funccall::emit_value(emit_context& em)
       break;
     }
     em.puts("(");
-    bool is_first = !emit_func_upvalue_args(em, func, symtbl_lexical);
+    bool is_first = !emit_func_upvalue_args(em, fld != 0 ? fld : func,
+      symtbl_lexical);
     if (arg != 0) {
       if (!is_first) {
 	em.puts(" , ");

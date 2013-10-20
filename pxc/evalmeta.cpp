@@ -1380,6 +1380,25 @@ static term eval_meta_nsname(const term_list_range& tlev, eval_context& ectx,
   return term(s);
 }
 
+static term eval_meta_get_namespace(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos)
+{
+  if (tlev.size() != 1) {
+    return term();
+  }
+  expr_i *const e = tlev[0].get_expr();
+  if (e == 0) {
+    return term();
+  }
+  const term t(e); /* drop params */
+  std::string s(term_tostr_human(t));
+  std::string::size_type p = s.rfind(':');
+  if (p != s.npos && p > 1) {
+    s = s.substr(0, p - 1);
+  }
+  return term(s);
+}
+
 static term eval_meta_not(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
@@ -1793,6 +1812,7 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@strlen", &eval_meta_strlen },
   { "@family", &eval_meta_family },
   { "@attribute", &eval_meta_attribute },
+  { "@get_namespace", &eval_meta_get_namespace },
   { "@nsname", &eval_meta_nsname },
   { "@not", &eval_meta_not },
   { "@eq", &eval_meta_eq },

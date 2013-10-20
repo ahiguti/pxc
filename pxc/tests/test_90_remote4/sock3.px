@@ -1,0 +1,137 @@
+namespace sock3;
+import common -;
+import meta -;
+import io -;
+import io::file -;
+import io::errno -;
+import io::standard -;
+import io::addrinfo -;
+import io::socket -;
+import io::signal -;
+import thread -;
+import orb -;
+
+public threaded interface ifoo <remote> {
+  function int hoge(int x, int y) const;
+  function string fuga(cstrref const& x, cstrref const& y) const;
+  function ptr{ibar} create_bar(int x) const;
+}
+
+public threaded interface ibaz <remote> {
+  function int baz_m1(int x);
+}
+
+public threaded struct baz <ibaz> {
+  function int baz_m1(int x) {
+    // debug_log("baz_m1", x);
+    return x * x;
+  }
+}
+
+public threaded interface ibar <remote> {
+  function int m1(int y);
+  function void set_baz(ptr{ibaz} const& p);
+  function int do_baz(int v);
+}
+
+public threaded struct bar(int x0) <ibar> {
+  int x = x0;
+  ptr{ibaz} bzp = to_ptr(baz());
+  function int m1(int y) {
+    return x * y;
+  }
+  function void set_baz(ptr{ibaz} const& p) {
+    bzp = p;
+  }
+  function int do_baz(int v) {
+    return bzp->baz_m1(v);
+  }
+}
+
+public threaded struct foo <ifoo> {
+  int intval;
+  string strval;
+  function int hoge(int x, int y) const {
+    return intval + x + y;
+  }
+  function string fuga(cstrref const& x, cstrref const& y) const {
+    string s = strval;
+    s.append(x);
+    s.append(y);
+    return s;
+  }
+  function ptr{ibar} create_bar(int x) const {
+    ptr{bar} p = to_ptr{bar}(bar(x));
+    return p;
+  }
+}
+
+private threaded struct transport_file(file const& f0) <orb_transport> {
+  file const f = f0;
+  bool ok = true;
+  function void send_receive(string mutable& rbuf, string mutable& wbuf) {
+    if (ok && !wbuf.empty()) {
+      size_t wsize;
+      f.write_all(wbuf, wsize);
+      if (wsize != wbuf.size()) {
+	ok = false;
+      }
+    }
+    wbuf.clear();
+    rbuf.clear();
+    while (ok) {
+      size_t rsize = 1024;
+      f.read(rbuf, rsize);
+      if (rbuf.size() > 0 && rbuf[rbuf.size() - 1] == '\n') {
+	break;
+      }
+      if (rsize == 0) {
+	ok = false;
+      }
+    }
+    if (!ok) {
+      rbuf.clear();
+      rbuf = "T\tio_error\n";
+    }
+  }
+}
+
+private function void client_test_main(file const& f)
+{
+  const op = to_ptr{orb_handle{ifoo}}(to_ptr{transport_file}(f));
+  const st = op->create_stub();
+  const z = st->hoge(5, 33);
+  const s = st->fuga("abc", "xyz");
+  const bp = st->create_bar(55);
+  const w = bp->m1(100);
+  const bzp = to_ptr{baz}(baz());
+  bp->set_baz(bzp);
+  const v = bp->do_baz(99);
+  println(z);
+  println(s);
+  println(w);
+  println(v);
+}
+
+private multithreaded struct server_thread(io const& s, file const& f) {
+  io const sys = s;
+  file const sock = f;
+  function void main() {
+    ptr{orb_transport} tf = to_ptr(transport_file(sock));
+    ptr{orb_handle{ifoo}} op = to_ptr(orb_handle{ifoo}(tf));
+    ptr{ifoo} obj = to_ptr(foo());
+    op->start_server(obj);
+  }
+}
+
+private function void main()
+{
+  signal(io::system, SIGPIPE, SIG_IGN);
+  mutable sp = socketpair(io::system, AF_UNIX, SOCK_STREAM, PROTO_UNSPEC);
+  const sthr = create_thread(server_thread(io::system, sp.value.first));
+  client_test_main(sp.value.second);
+  sp.errno = errno_t(); /* closes fds */
+}
+
+main();
+

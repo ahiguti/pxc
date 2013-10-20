@@ -540,8 +540,10 @@ void arena_compile(const std::map<std::string, std::string>& prof_map,
   compile_phase = 5;
   fn_check_root(global);
   compile_phase = 6;
+  // TODO: remove
   fn_check_template_upvalues_direct(global);
   fn_check_template_upvalues_tparam(global);
+  fn_check_dep_upvalues(global);
   arena_error_throw_pushed();
   // double t1 = gettimeofday_double();
   fn_check_final(global);

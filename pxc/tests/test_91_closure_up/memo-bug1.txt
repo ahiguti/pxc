@@ -1,0 +1,28 @@
+
+func1のテンプレパラメータにfunc2内のcl_func2が指定されている
+func2のテンプレパラメータにcl_mainが指定されている
+cl_mainはupvalueを持っている
+
+cl_func2は上位であるfunc1のテンプレパラメータのupvalueも引き継が
+なければならないのにされていないのが問題
+
+func1{cl_func2}のシグニチャがおかしい。
+cl_func2自体は正しくupvalueを持っている。
+
+void func2$f$p$bug1$n$$cl_main$f4$r$(pxcrt::bt_int& z$4$bug1$ns0, pxcrt::bt_int x$) {
+ ::bug1$n::func1$f$p$bug1$n$$cl_func2$f2$ic$p$bug1$n$$cl_main$f4$r$$$r$(x$);
+ ^^^ ここでupvalueであるzを渡していない
+}
+void cl_func2$f2$ic$p$bug1$n$$cl_main$f4$r$$(pxcrt::bt_int& z$4$bug1$ns0, pxcrt::bt_int x$) {
+ ::bug1$n::cl_main$f4(z$4$bug1$ns0 , x$);
+}
+void func1$f$p$bug1$n$$cl_func2$f2$ic$p$bug1$n$$cl_main$f4$r$$$r$(pxcrt::bt_int x$) {
+^^^ この関数のシグニチャがおかしい
+ ::bug1$n::cl_func2$f2$ic$p$bug1$n$$cl_main$f4$r$$(z$4$bug1$ns0 , x$);
+ ^^^ ここでzが渡ってきていないのに使っている
+}
+
+void func2{cl_main}(up_z, x) {
+  func1{cl_func2, cl_main}
+}
+

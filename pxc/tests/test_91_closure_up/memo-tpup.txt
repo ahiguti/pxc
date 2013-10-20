@@ -1,0 +1,230 @@
+
+expr_funccall::check_typeの段階で、その関数呼び出しを含む関数のefd->callee_vec
+に呼び出し先のefd_instを追加している。checktypeが終わった段階では、各efdの
+callee_vecには、その関数が直接呼び出す先の関数リストが入っている。
+
+コンパイル最終段で、全nodeに対してadd_tparam_upvalues_funcdef_direct
+が実行され、その後全nodeに対してadd_tparam_upvalues_funcdef_tparam
+が実行される。
+
+add_tparam_upvalues_funcdef_direct(efd)の処理
+  efdのsymtblの各upvaluesについて、それが構造体のメンバでなければ
+  それをefd->tpup_vecに追加する。
+  efdがrequire_thisup(これは構造体のメンバをupvalueとしてアクセス
+  しているとき真)であれば、efd->tpup_thisptrに構造体をセット、
+  efd->thisup_thisptr_nonconstに上位メンバ関数のconstnessをセット。
+
+FIXME: check_tpup_thisptr_constnessの内容も怪しい
+
+add_tparam_upvalues_funcdef_tparam(efd)の処理
+  efdのcallee_vecの各々について、add_func_upvalues_callee(efd, callee)
+  を実行。
+  efdのテンプレートパラメータの各々について、
+  add_tparam_upvalues_tp_internal(efd, param)を実行。
+    (FIXME: これはefdのテンプレパラメータだけでなく、efdがネストされた
+    関数の時は上位関数のテンプレパラメータも同じようにしなければならない)
+
+add_func_upvalues_callee(efd, callee)の処理
+  (これはadd_tparam_upvalues_funcdef_directとほとんど同じ)
+  (そもそもcalleeの推移閉包を取ってないのがおかしい)
+  calleeのsymtblの各upvaluesについて、それが構造体のメンバでなければ
+  それをefd->tpup_vecに追加する。
+  efdがrequire_thisupであれば、efd->tpup_thisptrと_nonconstをセット。
+
+add_tparam_upvalues_tp_internal(efd, t)の処理
+  再帰的。
+  tが関数なら
+    tの各upvalueのうちフィールドでないものについて、efd->tpup_vecに
+    追加。
+    tがrequire_thisupならefd->tpup_thisptrに構造体をセット
+  tの各パラメータtargについて(efd, targ)を引数にして再帰呼び出し
+
+--------------------------------------------------------------------
+一旦現状の実装を忘れる
+
+--------------------------------------------------------------------
+emitされるべきC++関数のシグニチャ
+
+通常の引数の前に、その関数の、関数テンプレ引数が引き連れているupvalue
+のリストをemitする。関数テンプレ引数が引き連れているupvalueは存在しな
+いこともあるし、複数持っていることもある。
+テンプレインスタンス毎に引き連れているupvalueが異なるから、C++シグニ
+チャも異なることもある。
+
+関数が引き連れているupvalueの情報は、upreq_varsとupreq_strsに入っている。
+struct upreq_var_type {
+  expr_i *var; /* 変数 (local, args, fldのいずれか) */
+  expr_funcdef *closure; /* この関数が引き連れている */
+};
+vector<upreq_var_type> upreq_vars;  
+struct upreq_str_type {
+  expr_struct *str; /* 構造体 */
+  expr_funcdef *closure; /* この関数が引き連れている */
+};
+あるいはmap<expr_funcdef *, expr_i *>にすればよいか？
+
+--------------------------------------------------------------------
+関数がup引数要求するupvalueをどのように決めるのが正しいのか
+
+各funcdefについて、そのup引数要求を決める。
+  要求されうるのは、変数(var, arg, fld)か、thisのいずれか。
+  変数は、closureから上位値を参照しているときに要求される(upreq_vars)
+  thisは、closureからメンバ関数を呼んでいるときに要求される(upreq_strs)
+各funccallについて、そのup引数要求の解決方法を決める。
+これを同時にやらねばならない。funccallの未解決のものがfuncdefの引数
+要求に含まれるから。
+
+各funcdef内で
+  直接参照している変数(upvalue)があればそれらをupreq_varsに入れる。
+    (自funcdefのblockと合わせてpush)
+  直接上位メンバ関数を呼ぶようなclosureならメンバ関数をupreq_strsに入れる。
+    (自funcdefのblockと合わせてpush)
+各funcdef内のfunccallについて、呼び出し先のupreq_varsとupreq_strsを見て、
+  そのblockが
+  そのfuncdefの直接又はブロックのローカル変数である(upreso_local)
+  そのfuncdefがmemberfuncでありup引数要求はfieldである(upreso_field)
+  そのfuncdefでは定義されておらずfuncdef自体のup引数要求とする(upreso_req)
+のいずれであるかを調べる。
+
+---------------------------------------
+データの持たせかた
+
+expr_funcdef::funccalls: 関数内のfunccallのリスト
+expr_funcdef::upreq_vars: 要求しているup引数リスト
+  各要素は
+    - expr_var又はexpr_argdecls(local, fld, argsのいずれか)
+    - コンテキストを表すblock
+  のpair。
+expr_funcdef::upreq_strs: 要求しているup構造体リスト
+  各要素は
+    - expr_struct
+    - コンテキストを表すblock
+  のpair。
+expr_funccall::upreso_vars: up引数の解決方法リスト??
+expr_funccall::upreso_strs: up構造体の解決方法リスト??
+expr_funcdef::upreq_calc: 初期0, upreqの計算中は1, 計算完了すると2。
+  自己再帰を防止するために使う
+(expr_funcdef::callee_vec等は廃止する)
+
+---------------------------------------
+emitされるupvalueの種類
+
+自func内で解決しないようなupvalueについては、
+「コンテキストのns+blockid+変数名」
+の名前を付ける。構造体thisのときは変数名としてthis$upを使う。
+
+
+
+
+funccallに渡すupvaluesのemit:
+  callbackされるclosureから参照している変数:
+  argdecls, var(local, field)であるかにかかわらず、呼び出し元の
+  blockid+変数名
+callbackされるのがメンバ関数のとき:
+  呼び出し元のblockid+this$up
+
+---------------------------------------
+emit
+
+funccallに渡すupvaluesのemit:
+  
+
+funcの下のclosureから上位の変数を参照する:
+  名前空間+ブロックid+変数名のエンコードされたシンボルをemit
+
+memfuncの下のclosureから上位memfuncを呼び出す:
+  
+
+---------------------------------------
+resolve_upvalue_one
+
+- 全nodeからfuncdef(efd)について実行。
+- upreq_calcが1か2ならそのままreturn
+- efd内で直接参照しているupvalueがsymtbl.upvaluesに入っているので、
+  それらをupreqに入れる
+- efdのfunccallsについて、
+  - 呼び出し先のfuncdefに対し再帰的にresolve_upvalue_one実行
+  - 呼び出し先のupreqの各々について、funccall::upresoをきめる
+    - efdの直接またはブロックのローカル変数: upreso_local
+    - efdがメンバ関数であり、upreqは同じメンバ関数のstructのfield
+
+
+---------------------------------------
+メモ
+
+各funccallについて、その引数要求の解決方法を決めなければならない。
+
+・関数の定義が直接参照しているupvalueは引数要求する。
+  function void foo() {
+    int x = 0;
+    function void bar() {
+      x += 3;
+    }
+  }
+  この場合barはfooのxを必要としている。xは関数やブロックのローカル
+  変数、又は構造体のfield。
+
+・bazがbarを直接呼び出しているとき、
+  barが必要とするupvalueがbar内(直接又はブロックの)変数の場合、
+    それはbarは引数要求しない
+  barが必要とするupvalueがbar内変数ではない場合、
+    それはbarは引数要求する
+関数が直接または間接的に呼び出している関数のupvalueも必要
+  function void foo() {
+    int x = 0;
+    function void bar() {
+      x += 3;
+    }
+    function void baz() {
+      bar();
+    }
+  }
+  この場合bazはfooのxを必要としている
+
+
+---------------------------------------
+メモメモ
+
+とりあえずclosureから上位メンバ関数はよべないようにする。
+
+上位値を必要とするケース
+- その関数が上位の変数を参照している 
+- その関数が上位の関数を呼んでいる
+- その関数がテンプレ引数の関数を呼んでいる
+
+必要な上位値の計算方法
+efd
+1. efdが呼んでいる関数の各々について、上位値を計算
+2. それらのうち、efdのフレームにあるかmemfunc fieldのものを消す
+3. efd自身が参照している上位変数のリストを作る
+4. 2と3を合わせたものがefdの上位値リスト
+
+calc_dep_upvalues(efd)
+{
+  if (efd->calc_dep_upvalues_status != 0) {
+    return;
+  }
+  efd->calc_dep_upvalues_status = 1;
+  efd->dep_upvalues.clear();
+  foreach (efd->symtbl.upvalues) {
+    efd->dep_upvaluesに加える。このときefdがconst member functionの下か
+    どうかも記録する。これはup引数をemitするときにconst refかどうかを決
+    めるのに使う。
+  }
+  foreach (efd->calls_vec) {
+    callc_dep_upvalues(callee);
+    foreach (callee->dep_upvalues) {
+      callしている式のsymtblからcallしている関数までparentをたどり、
+      いずれかのsymtblにその変数があるなら、その呼び出し箇所で見えている
+      変数だから、continue。
+      callしている式がメンバ関数フレームであり、変数が同じstructのfield
+      であるなら、その呼び出し箇所で見えているfieldだから、continue。
+      そうでないならその変数をefd->dep_upvaluesに加える。
+    }
+  }
+  efd->calc_dep_upvalues_status = 2;
+}
+
+だめ。status=1で未計算なdep_upvaluesを中間efdが漏らす。
+
+

@@ -2285,18 +2285,33 @@ fprintf(stderr, "tote %s\n", einst->dump(0).c_str());
 	= efd_p_inst->is_virtual_or_member_function();
       if (caller_memfunc_parent == 0 ||
 	caller_memfunc_parent->get_esort() != expr_e_struct) {
+	#if 0
 	/* if caller is not inside a struct context, it's a function which
 	 * takes callee as a template parameter. if so, callee should be
 	 * called without an object. */
 	/* noop */
+	#endif
+	if (callee_memfunc_parent != 0) {
+	  arena_error_throw(this,
+	    "Calling a member function from a non-member function");
+	}
       } else if (callee_memfunc_parent != 0 &&
 	caller_memfunc_parent != callee_memfunc_parent) {
 	arena_error_throw(this,
 	  "Calling a member function without an object");
       }
+      /* calling a member function from a nested function? */
+      if (caller_memfunc != 0 &&
+	caller_memfunc != get_current_frame_expr(symtbl_lexical) &&
+	callee_memfunc_parent != 0) {
+	arena_error_throw(this,
+	  "Calling a member function from a nested function");
+      }
     }
     /* add callee_funcs */
     expr_i *const fr = get_current_frame_expr(symtbl_lexical);
+    #if 1
+    // TODO: remove
     if (fr != 0 && fr->get_esort() == expr_e_funcdef &&
       func->get_esort() != expr_e_op) { /* add non-local lookup only. TBD. */
       expr_funcdef *const efd_inst = ptr_down_cast<expr_funcdef>(einst);
@@ -2305,6 +2320,13 @@ fprintf(stderr, "tote %s\n", einst->dump(0).c_str());
 	curfd->callee_set.insert(efd_inst);
 	curfd->callee_vec.push_back(efd_inst);
       }
+    }
+    #endif
+    if (fr != 0 && fr->get_esort() == expr_e_funcdef) {
+      expr_funcdef *const efd_inst = ptr_down_cast<expr_funcdef>(einst);
+      expr_funcdef *const curfd = ptr_down_cast<expr_funcdef>(fr);
+      expr_funcdef::call_entry ce(symtbl_lexical, efd_inst);
+      curfd->calls.insert_if(ce);
     }
     DBG(fprintf(stderr,
       "expr=[%s] type_of_this_expr=[%s] tvmap.size()=%d "
@@ -3928,10 +3950,7 @@ static void add_func_upvalues_callee(expr_funcdef *efd, expr_funcdef *tefd)
     }
   }
 }
-#if 0
-#endif
 
-#if 1
 static void add_tparam_upvalues_tp_internal(expr_funcdef *efd, const term& t)
 {
   expr_i *const texpr = t.get_expr();
@@ -3985,7 +4004,6 @@ static void add_tparam_upvalues_tp_internal(expr_funcdef *efd, const term& t)
     }
   }
 }
-#endif
 
 void add_tparam_upvalues_funcdef_tparam(expr_funcdef *efd)
 {
@@ -3993,9 +4011,6 @@ void add_tparam_upvalues_funcdef_tparam(expr_funcdef *efd)
     efd->callee_vec.begin(); i != efd->callee_vec.end(); ++i) {
     add_func_upvalues_callee(efd, *i);
   }
-#if 0
-#endif
-#if 1
   /* tparam upvalues */
   term& t = efd->value_texpr;
   const term_list *const targs = t.get_args();
@@ -4006,7 +4021,6 @@ void add_tparam_upvalues_funcdef_tparam(expr_funcdef *efd)
   for (j = targs->begin(); j != targs->end(); ++j) {
     add_tparam_upvalues_tp_internal(efd, *j);
   }
-#endif
 }
 
 void add_tparam_upvalues_funcdef_direct(expr_funcdef *efd)
@@ -4050,6 +4064,7 @@ void add_tparam_upvalues_funcdef_direct(expr_funcdef *efd)
   }
 }
 
+#if 0
 void check_tpup_thisptr_constness(expr_funccall *fc)
 {
   bool memfunc_w_explicit_obj = false;
@@ -4070,6 +4085,7 @@ void check_tpup_thisptr_constness(expr_funccall *fc)
     }
   }
 }
+#endif
 
 void fn_check_closure(expr_i *e)
 {

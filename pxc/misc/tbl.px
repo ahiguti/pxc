@@ -6,18 +6,17 @@ import io::buffered -;
 import text::split -;
 import meta m;
 
-threaded function {enttype, delim} vector{enttype}
+threaded function {cb, line_delim, col_delim} void
 parse_table(file const& ifile)
 {
-  mutable vec = vector{enttype}();
-  const err = stream_foreach{file, parse_line}(ifile, '\n', 16386);
+  metafunction enttype m::argtype{cb, 0};
+  const err = stream_foreach{file, parse_line}(ifile, line_delim, 16386);
   threaded function bool parse_line(cstrref const& line) {
-    enttype ent;
-    string_split{delim}(line, expand(fld: m::field_names{enttype}; ent.fld));
-    vec.push_back(ent);
-    return true;
+    enttype e;
+    string_split{col_delim}(line,
+      expand(fld: m::field_names{enttype}; e.fld));
+    return cb(e);
   }
-  return vec;
 }
 
 mtvaluetype struct mapent {
@@ -29,12 +28,16 @@ mtvaluetype struct mapent {
   string path;
 }
 
-threaded function bool delim(uchar ch) {
-  return ch == ' ' || ch == '\t';
-}
-
 {
-  const p = parse_table{mapent, delim}(get_stdin(system));
-  println(p);
+  vector{mapent} vec;
+  parse_table{rec_one, '\n', col_delim}(get_stdin(system));
+  threaded function bool col_delim(uchar ch) {
+    return ch == ' ' || ch == '\t';
+  }
+  threaded function bool rec_one(mapent const& e) {
+    vec.push_back(e);
+    return true;
+  }
+  println(vec);
 }
 

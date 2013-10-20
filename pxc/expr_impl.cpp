@@ -1495,7 +1495,6 @@ expr_i *expr_funcdef::is_virtual_or_member_function() const
   return is_virtual_function();
 }
 
-#if 0
 expr_funcdef *expr_funcdef::is_member_function_descent()
 {
   expr_funcdef *efd = this;
@@ -1514,7 +1513,6 @@ expr_funcdef *expr_funcdef::is_member_function_descent()
   }
   return 0;
 }
-#endif
 
 const term& expr_funcdef::get_rettype()
 {
