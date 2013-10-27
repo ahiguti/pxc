@@ -5,6 +5,7 @@ import numeric::cast n;
 import meta -;
 import text::positional -;
 import pointer -;
+import meta::family -;
 
 public union variant {
   unit unitval;
@@ -24,13 +25,13 @@ public function {t} variant to_variant(t const& x)
   variant r;
   if (m::eq{t, unit}) {
     r.unitval = unit();
-  } else if (n::is_signed_integral{t}) {
+  } else if (is_signed_integral_type{t}) {
     r.longval = n::static_cast{long, t}(x);
-  } else if (n::is_unsigned_integral{t}) {
+  } else if (is_unsigned_integral_type{t}) {
     r.ulongval = n::static_cast{ulong, t}(x);
-  } else if (n::is_fp{t}) {
+  } else if (is_fp_type{t}) {
     r.doubleval = x;
-  } else if (is_string_family_type{t}) {
+  } else if (is_string_or_slice_type{t}) {
     r.stringval = x;
   } else if (m::eq{t, variant}) {
     r = x;
@@ -47,7 +48,7 @@ public function {t} t from_variant(variant const& x)
 {
   if (m::eq{t, unit}) {
     return unit();
-  } else if (n::is_integral_enum_bitmask{t}) {
+  } else if (is_integral_enum_bitmask_type{t}) {
     if (case x.longval) {
       return n::static_cast{t, long}(x.longval);
     } else if (case x.ulongval) {
@@ -59,7 +60,7 @@ public function {t} t from_variant(variant const& x)
     } else if (case x.unitval) {
       return 0;
     }
-  } else if (n::is_fp{t}) {
+  } else if (is_fp_type{t}) {
     if (case x.doubleval) {
       return n::static_cast{t, double}(x.doubleval);
     } else if (case x.longval) {
@@ -288,7 +289,7 @@ private function {tobj, methodidx, fsym} variant variant_invoke_impl(
   }
 }
 
-private metafunction is_string_family_type{t}
+private metafunction is_string_or_slice_type{t}
   m::or{
     m::eq{t, string},
     m::eq{t, strlit},
@@ -298,10 +299,10 @@ private metafunction is_range_type{t}
   m::or{
     m::eq{m::family{t}, "slice"},
     m::eq{m::family{t}, "cslice"},
-    m::eq{m::family{t}, "tree_map_range"},
-    m::eq{m::family{t}, "tree_map_crange"}};
+    m::eq{m::family{t}, "map_range"},
+    m::eq{m::family{t}, "map_crange"}};
 private metafunction to_non_ephemeral{t}
-  m::cond{is_string_family_type{t}, string,
+  m::cond{is_string_or_slice_type{t}, string,
   m::cond{is_range_type{t}, m::local{t, "non_ephemeral_type"},
   t}};
 
@@ -320,10 +321,10 @@ private metafunction args_with_index{f}
 private metafunction is_variant_valuetype{t}
   m::or{
     m::eq{t, unit},
-    n::is_signed_integral{t},
-    n::is_unsigned_integral{t},
-    n::is_fp{t},
-    is_string_family_type{t},
+    is_signed_integral_type{t},
+    is_unsigned_integral_type{t},
+    is_fp_type{t},
+    is_string_or_slice_type{t},
     m::eq{t, variant}};
 private metafunction epnd_pattern_num{arg}
   m::add{

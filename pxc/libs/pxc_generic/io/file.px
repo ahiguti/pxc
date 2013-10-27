@@ -221,14 +221,14 @@ file io_create_file(io const& iop, bt_int fd)
 
 file create_file(bt_int fd)
 {
-  try {
-    file r(file::create_rawptr(fd)); /* throw */
+  PXC_TRY {
+    file r(file::create_rawptr(fd)); /* throws */
     return r;
-  } catch (...) {
+  } PXC_CATCH(...) {
     if (fd >= 2) {
       file_rep f(fd); /* closes fd */
     }
-    throw;
+    PXC_RETHROW;
   }
 }
 

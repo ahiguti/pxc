@@ -9,6 +9,7 @@ public import text::split -;
 public import algebraic -;
 public import meta::vararg v;
 public import meta m;
+public import meta::family -;
 
 public threaded function extern "pxcio::get_stdin"
   file get_stdin(io const& iop);
@@ -20,7 +21,7 @@ public threaded function extern "pxcio::get_stderr"
 public threaded function {t} void file_print(file const& f, t const& x)
 {
   size_t wlen;
-  if (is_string_family_type{t}) {
+  if (is_string_or_slice_type{t}) {
     file_write_all(f, x, wlen);
   } else {
     file_write_all(f, to_string(x), wlen);
@@ -30,7 +31,7 @@ public threaded function {t} void file_print(file const& f, t const& x)
 public threaded function {t} void file_println(file const& f, t const& x)
 {
   size_t wlen;
-  if (is_string_family_type{t}) {
+  if (is_string_or_slice_type{t}) {
     string s = x;
     s.append("\n");
     file_write_all(f, s, wlen);

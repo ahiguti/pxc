@@ -74,7 +74,7 @@ private metafunction check_pointer_downcast{tto, tfrom}
   m::cond{
     m::and{
       m::eq{m::family{tto}, m::family{tfrom}},
-      mf::is_pointer_family{m::family{tto}},
+      mf::is_pointer_type{tto},
       m::is_polymorphic_type{m::at0{tfrom}},
       m::is_polymorphic_type{m::at0{tto}}},
     tto,
@@ -252,7 +252,7 @@ private:
     const int e = pthread_mutex_init(&mtx, &mattr);
     pthread_mutexattr_destroy(&mattr);
     if (e != 0) {
-      throw std::runtime_error("pthread_mutex_init"); // TODO
+      PXC_THROW(std::runtime_error("pthread_mutex_init")); // TODO
     }
   }
 private:
@@ -299,7 +299,7 @@ private:
     const int e = pthread_cond_init(&cond, 0);
     DBG_COND(fprintf(stderr, "cond init %p %d\n", &cond, e));
     if (e != 0) {
-      throw std::runtime_error("pthread_cond_init"); // TODO
+      PXC_THROW(std::runtime_error("pthread_cond_init")); // TODO
     }
   }
 private:
@@ -499,21 +499,21 @@ struct rcptr { /* T must have an intrusive count */
   void dec_invalidate_guard() const { ptr->unlock$z(); }
   template <typename Tx> static inline T *create_rawptr(const Tx& x) {
     T *p = T::allocate();
-    try {
+    PXC_TRY {
       new (p) T(x);
-    } catch (...) {
+    } PXC_CATCH(...) {
       T::deallocate(p);
-      throw;
+      PXC_RETHROW;
     }
     return p;
   }
   static inline T *create_rawptr() {
     T *p = T::allocate();
-    try {
+    PXC_TRY {
       new (p) T();
-    } catch (...) {
+    } PXC_CATCH(...) {
       T::deallocate(p);
-      throw;
+      PXC_RETHROW;
     }
     return p;
   }

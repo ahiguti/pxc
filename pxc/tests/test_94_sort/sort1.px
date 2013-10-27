@@ -1,0 +1,20 @@
+namespace sort1 "use-unsafe";
+import common -;
+
+function extern "sort1::sort" {tc} void sort(tc mutable& x);
+
+{
+  mutable arr = make_farray{int}(5, 33, 1, 3, 99, 0, 2);
+  sort(arr);
+  print(arr);
+}
+
+extern "functions" inline
+#include <algorithm>
+namespace sort1 {
+template <typename Tc> inline void sort(Tc& x)
+{
+  std::sort(x.rawarr(), x.rawarr() + x.size());
+}
+};
+;

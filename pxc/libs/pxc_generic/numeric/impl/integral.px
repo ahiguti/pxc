@@ -2,6 +2,22 @@ namespace numeric::impl::integral "use-unsafe";
 
 extern "types" inline
 
+#if PXC_PROFILE_noexceptions
+#define PXC_NOEXCEPTIONS 1
+#define PXC_THROW(x) ::abort();
+#define PXC_TRY
+#define PXC_CATCH(x) if(0)
+#define PXC_NOTHROW throw()
+#define PXC_RETHROW
+#define BOOST_NO_EXCEPTIONS
+#else
+#define PXC_THROW(x) throw x;
+#define PXC_TRY try
+#define PXC_CATCH(x) catch(x)
+#define PXC_NOTHROW throw()
+#define PXC_RETHROW throw
+#endif
+
 #include <stdint.h>
 #include <cstdio>
 #include <cstdlib>
@@ -10,6 +26,13 @@ extern "types" inline
 #include <climits>
 #include <alloca.h>
 #include <stdexcept>
+
+#ifdef BOOST_NO_EXCEPTIONS
+namespace boost {
+template <typename T> void throw_exception(T const& x) { ::abort(); }
+};
+#endif
+
 #include <boost/type_traits/is_pod.hpp>
 #include <boost/static_assert.hpp>
 
@@ -27,6 +50,7 @@ typedef ::int32_t bt_int;
 typedef ::uint64_t bt_ulong;
 typedef ::int64_t bt_long;
 typedef ::size_t bt_size_t;
+typedef ::ssize_t bt_ssize_t;
 typedef float bt_float;
 typedef double bt_double;
 struct bt_tpdummy;
@@ -39,6 +63,10 @@ private:
 };
 
 }; // namespace pxcrt
+
+;
+
+extern "functions" inline
 
 ;
 

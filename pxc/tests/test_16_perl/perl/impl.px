@@ -100,9 +100,9 @@ private function {t} rawsv convert_to_rawsv_own(t const& x)
     return x.get().incref();
   } else if (eq{t, string}) {
     return string_to_rawsv_own(x);
-  } else if (is_fp{t}) {
+  } else if (is_fp_type{t}) {
     return fp_to_rawsv_own{t}(x);
-  } else if (is_integral_enum_bitmask{t}) {
+  } else if (is_integral_enum_bitmask_type{t}) {
     return integral_to_rawsv_own{t}(x);
   } else if (eq{t, unit}) {
     return rawsv_undef();
@@ -120,9 +120,9 @@ private function {t} void rawsv_get_value(rawsv const& x,
     sto.set_sv(x);
   } else if (eq{t, string}) {
     sto.set_string(x);
-  } else if (is_fp{t}) {
+  } else if (is_fp_type{t}) {
     sto.set_fp(x);
-  } else if (is_integral_enum_bitmask{t}) {
+  } else if (is_integral_enum_bitmask_type{t}) {
     sto.set_integral(x);
   } else if (eq{t, bool}) {
     sto.set_integral(x);
@@ -165,7 +165,7 @@ private metafunction is_valuetype{t}
   or{
     eq{t, unit},
     eq{t, bool},
-    is_numeric_enum_bitmask{t},
+    is_numeric_enum_bitmask_type{t},
     eq{t, string},
     eq{t, sv}};
 
@@ -423,10 +423,12 @@ template <typename F> struct func_pl {
       args[i] = ST(i);
     }
     SV *rvraw = 0;
-    try {
+    PXC_TRY {
       rvraw = F().call$f(perlsvarr(args, items));
-    } catch (const std::exception& e) {
+    } PXC_CATCH(const std::exception& e) {
+      #ifndef PXC_NOEXCEPTIONS
       croak(e.what());
+      #endif
     }
     ST(0) = sv_2mortal(rvraw);
     XSRETURN(1);
@@ -624,7 +626,7 @@ template <typename T> static inline T&
 rawsv_get_object(rawsv const& v) { // throws(c++)
   IV value_iv = 0;
   if (!type_pl<T>::get_value_iv(v, value_iv)) {
-    throw std::runtime_error("rawsv_get_object"); /* TODO */
+    PXC_THROW(std::runtime_error("rawsv_get_object")); /* TODO */
   }
   {
     DBG(fprintf(stderr, "rawsv_get_object klass=%s box\n",

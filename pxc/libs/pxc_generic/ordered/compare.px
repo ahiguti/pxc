@@ -1,10 +1,11 @@
-namespace ordered::compare;
+namespace ordered::compare "use-unsafe";
 public import numeric::integral -;
 public import numeric::fp -;
 public import numeric::union_tag -;
 public import container::array -;
 public import meta m;
 public import meta::family mf;
+public import text::conversion -;
 
 public threaded function {t} t min(t const& x, t const& y)
 {
@@ -23,21 +24,9 @@ public threaded function {t} int compare(t const& x, t const& y)
   metafunction fam m::family{t};
   if (m::eq{t, unit}) {
     return 0;
-  } else if (mf::is_string_family_type{t}) {
-    if (m::eq{t, string}) {
-      return memcmp_string(x, y);
-    } else if (m::eq{t, strlit}) {
-      return memcmp_strlit(x, y);
-    } else if (m::eq{t, strref}) {
-      return memcmp_strref(x, y);
-    } else if (m::eq{t, cstrref}) {
-      return memcmp_cstrref(x, y);
-    } else {
-      return m::error{"internal error"};
-    }
-  } else if (m::or{
-    m::eq{fam, "builtin"}, m::eq{fam, "int"}, m::eq{fam, "uint"},
-    m::eq{fam, "float"}, m::eq{fam, "numeric"}}) {
+  } else if (mf::is_string_or_slice_type{t}) {
+    return memcmp_string(x, y);
+  } else if (mf::is_numeric_type{t}) {
     return x < y ? -1 : x > y ? 1 : 0;
   } else if (m::eq{fam, "farray"}) {
     size_t const sz = m::at{t, 1};
@@ -66,8 +55,8 @@ public threaded function {t} int compare(t const& x, t const& y)
       return 1;
     }
     return 0;
-  } else if (m::eq{fam, "tree_map"}) {
-    return m::error{"not implemented for tree_map"};
+  } else if (m::eq{fam, "map"}) {
+    return m::error{"not implemented for _map"};
   } else if (m::eq{fam, "struct"}) {
     expand (fld, idx : m::field_names{t}) {
       {
@@ -98,4 +87,49 @@ public threaded function {t} int compare(t const& x, t const& y)
     return m::error{m::concat{"not implemented for type '", t, "'"}};
   }
 }
+
+public threaded function extern "pxcrt::sort_lt" {tarr}
+void sort_lt(tarr mutable& x);
+
+public threaded function extern "pxcrt::stable_sort_lt" {tarr}
+void stable_sort_lt(tarr mutable& x);
+
+public threaded function extern "pxcrt::sort" {tcmp, tarr}
+void sort(tarr mutable& x);
+
+public threaded function extern "pxcrt::stable_sort" {tcmp, tarr}
+void stable_sort(tarr mutable& x);
+
+extern "functions" inline
+
+#include <algorithm>
+
+namespace pxcrt {
+
+template <typename Tcmp, typename Tarr> inline
+void sort_lt(Tarr& x, Tcmp const& cmp)
+{
+  std::sort(x.rawarr(), x.rawarr() + x.size());
+}
+
+template <typename Tcmp, typename Tarr> inline
+void stable_sort_lt(Tarr& x, Tcmp const& cmp)
+{
+  std::stable_sort(x.rawarr(), x.rawarr() + x.size());
+}
+
+template <typename Tcmp, typename Tarr> inline
+void sort(Tarr& x, Tcmp const& cmp)
+{
+  std::sort(x.rawarr(), x.rawarr() + x.size(), cmp);
+}
+
+template <typename Tcmp, typename Tarr> inline
+void stable_sort(Tarr& x, Tcmp const& cmp)
+{
+  std::stable_sort(x.rawarr(), x.rawarr() + x.size(), cmp);
+}
+
+};
+;
 

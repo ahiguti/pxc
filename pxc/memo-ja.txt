@@ -3,7 +3,20 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- 構造体fieldをupvalueとして使うと名前が衝突する可能性がある(done)
+- list, set, multimap, multiset
+  - list{t}はkey_typeがunit, mapped_typeがt
+  - set{t}はkey_typeがt, mapped_typeがunit(done)
+
+- deque
+  - stl実装を使う。wrapper作る。
+  - familyはvarray。rangeはslice。ランダムアクセス可能なので。
+
+- 汎用tableパーザ
+
+- tbl_bug1.px.fixme
+
+- expandで生成された無名関数はシンボルのuniquenessを確保できないので
+  テンプレパラメータに使えないようにする
 
 - externなテンプレ関数にはテンプレ引数に型or整数しかわたせないように
   しないといけない。C++のテンプレ関数の制限。
@@ -490,6 +503,12 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- 例外無しモード(done)
+- sort関数 (done)
+- 構造体fieldをupvalueとして使うと名前が衝突する可能性がある(done)
+- operator.pxの総称関数は組み込み型に対しても使えるようにする(done)
+- expr_miscのis_ordered_typeの定義、operator.pxとmeta/family.pxの定義
+  と合わせる(done)
 - arrayのfindは消す。genericなfindはpodならmemcmpになるような実装を
   用意。(done)
 - operator.pxは全てthreadedつけなければならないか？(done)
@@ -932,7 +951,8 @@ foo$e   variantのenum要素
 foo$fg  foreachのguardオブジェクト
 foo$fe  foreachのkey, mapped値, guardオブジェクト
 $e      variantのenum
-this$up メンバ関数の下の関数からメンバ関数を呼ぶための上位this
+_0$up   間接的に利用する上位値引数
+this$up メンバ関数の下の関数からメンバ関数を呼ぶための上位this(廃止)
 ??      変数
 $ic     ネストされたテンプレートに使う
 str$ls  テンプレート引数の文字列リテラル
@@ -2165,4 +2185,24 @@ intやstringなどの型はperlの値をそのまま値渡しすることもで�
 - svarr.get()は生のSV*を返すようにし、無駄にperlsvを作らない。
 - 型コンストラクタは型名のpackageのnewに定義
 - メンバ関数やメンバぽい関数は型名のpackageに定義
+
+---------------------------------------------------------------------
+textとtable
+
+fld1をそのままkeyに、fld2をmapped、たたみこみは加算
+keyを関数にできるようにする。
+mappedを関数にできるようにする。たたみこみと合わせて一つの関数。
+
+各フィールド又は複数フィールドについて、
+- それらの値を取り何らかの値を返す関数
+- それらを集約する関数。しない場合はキーになる。
+出力
+- ソート関数
+
+record型の上のmonoid構造についてのfoldingを、fieldのmonoid構造と
+キーの指定によって定義する。
+- レコードからキーを返す関数
+- mappedの初期値を返す関数(キーを引数に取る?)
+- mappedをfoldする関数(キーを引数にとる?)
+select f1, sum(f2) from tbl group by f1
 

@@ -5,7 +5,7 @@ import numeric::cast -;
 import text::conversion -;
 import meta m;
 import meta::vararg va;
-import meta::family mf;
+import meta::family -;
 
 public threaded function {delim, tlist} void
 string_split(expand(split_arg_decls{tlist}))
@@ -25,7 +25,7 @@ string_split(expand(split_arg_decls{tlist}))
 	p = find_mapped(a0, pos,
 	  static_cast{m::local{m::at0{m::at0{tlist}}, "mapped_type"}}(delim));
       }
-      if (mf::is_string_family_type{m::at0{m::at{tlist, idx}}}) {
+      if (is_string_or_slice_type{m::at0{m::at{tlist, idx}}}) {
 	arg = a0[pos .. p];
       } else {
 	arg = from_string{m::at0{m::at{tlist, idx}}}(a0[pos .. p]);
@@ -55,7 +55,7 @@ string_concat(expand(concat_arg_decls{tlist}))
   expand (a, i: va::arg_names{m::size{tlist}}) {
     if (m::ne{i, 0}) { 
       metafunction t m::at0{m::at{tlist, i}};
-      if (mf::is_string_family_type{t}) {
+      if (is_string_or_slice_type{t}) {
         a0.append(a);
       } else {
         serialize_to_string{t}(a, a0);
@@ -74,7 +74,7 @@ string_join(expand(va::arg_decls_bycref{tlist}))
       if (m::and{m::ne{i, 0}, m::ne{delim, ""}}) {
         s.append(delim);
       }
-      if (mf::is_string_family_type{t}) {
+      if (is_string_or_slice_type{t}) {
         s.append(a);
       } else {
         serialize_to_string{t}(a, s);

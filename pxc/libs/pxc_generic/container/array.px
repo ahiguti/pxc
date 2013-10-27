@@ -3,10 +3,11 @@ public import numeric::integral -;
 public import numeric::cast -;
 public import container::impl::farray;
 public import container::impl::darray;
-public import container::impl::string;
+public import container::impl::vector;
 public import container::impl::invguard;
 public import container::impl::util;
 public import meta m;
+public import meta::family mf;
 public import meta::vararg va;
 
 public tsvaluetype struct extern "::pxcrt::bt_slice" "slice" {t} slice {
@@ -15,6 +16,7 @@ public tsvaluetype struct extern "::pxcrt::bt_slice" "slice" {t} slice {
   public metafunction range_type slice{t};
   public metafunction crange_type slice{t};
   public metafunction non_ephemeral_type vector{t};
+  public metafunction rebind{u} slice{u};
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
   public function extern "get" t get(size_t i) const;
@@ -30,6 +32,7 @@ public tsvaluetype struct extern "::pxcrt::bt_cslice" "cslice" {t} cslice {
   public metafunction range_type cslice{t};
   public metafunction crange_type cslice{t};
   public metafunction non_ephemeral_type vector{t};
+  public metafunction rebind{u} cslice{u};
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
   public function extern "get" t get(size_t i) const;
@@ -39,12 +42,15 @@ public tsvaluetype struct extern "::pxcrt::bt_cslice" "cslice" {t} cslice {
 }
 
 public metafunction string vector{uchar};
+public metafunction dstring darray{uchar};
+public metafunction fstring farray{uchar};
 
 public mtvaluetype struct extern "::pxcrt::pxcvector" "varray" {t} vector {
   public metafunction key_type size_t;
   public metafunction mapped_type t;
   public metafunction range_type slice{t};
   public metafunction crange_type cslice{t};
+  public metafunction rebind{u} vector{u};
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
   public function extern "resize" void resize(size_t i, t const& v);
@@ -86,28 +92,24 @@ public tsvaluetype struct extern "::pxcrt::farray" "farray" {t, n} farray {
   public metafunction mapped_type t;
   public metafunction range_type slice{t};
   public metafunction crange_type cslice{t};
+  public metafunction rebind{u} farray{u, n};
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
 }
 
-public tsvaluetype struct extern "::pxcrt::darray" "darray" {t} darray {
+public tsvaluetype struct extern "::pxcrt::darray" "darray" {t}
+darray(size_t len, t const& value) {
   public metafunction key_type size_t;
   public metafunction mapped_type t;
   public metafunction range_type slice{t};
   public metafunction crange_type cslice{t};
+  public metafunction rebind{u} darray{u};
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
 }
 
 public metafunction strref slice{uchar};
 public metafunction cstrref cslice{uchar};
-
-public metafunction is_string_family_type{t}
-    m::or{
-      m::eq{t, string},
-      m::eq{t, strlit},
-      m::eq{t, strref},
-      m::eq{t, cstrref}};
 
 public tsvaluetype struct extern "::pxcrt::bt_strlit" "farray" strlit {
   public metafunction key_type size_t;
@@ -118,22 +120,15 @@ public tsvaluetype struct extern "::pxcrt::bt_strlit" "farray" strlit {
   public function extern "size" size_t size() const;
 }
 
-
-public threaded function extern "::pxcrt::memcmp_string"
-  int memcmp_string(string const& x, string const& y);
-public threaded function extern "::pxcrt::memcmp_strlit"
-  int memcmp_strlit(strlit const& x, strlit const& y);
-public threaded function extern "::pxcrt::memcmp_strref"
-  int memcmp_strref(strref const& x, strref const& y);
-public threaded function extern "::pxcrt::memcmp_cstrref"
-  int memcmp_cstrref(cstrref const& x, cstrref const& y);
+public threaded function extern "::pxcrt::memcmp_string" {t}
+  int memcmp_string(t const& x, t const& y);
 
 public threaded function {typ, tlist} farray{typ, m::size{tlist}}
 make_farray(expand(va::arg_decls_bycref{tlist}))
 {
   farray{typ, m::size{tlist}} arr;
   expand (a, i: va::arg_names{m::size{tlist}}) {
-    if (is_numeric{typ}) {
+    if (mf::is_numeric_type{typ}) {
       arr[i] = static_cast{typ}(a);
     } else {
       arr[i] = a;
@@ -145,9 +140,9 @@ make_farray(expand(va::arg_decls_bycref{tlist}))
 public threaded function {typ, tlist} darray{typ}
 make_darray(expand(va::arg_decls_bycref{tlist}))
 {
-  mutable arr = darray{typ}(m::size{tlist});
+  mutable arr = darray{typ}(m::size{tlist}, typ());
   expand (a, i: va::arg_names{m::size{tlist}}) {
-    if (is_numeric{typ}) {
+    if (mf::is_numeric_type{typ}) {
       arr[i] = static_cast{typ}(a);
     } else {
       arr[i] = a;
@@ -159,9 +154,10 @@ make_darray(expand(va::arg_decls_bycref{tlist}))
 public threaded function {typ, tlist} vector{typ}
 make_vector(expand(va::arg_decls_bycref{tlist}))
 {
-  mutable arr = vector{typ}(m::size{tlist});
+  mutable arr = vector{typ}();
+  arr.resize(m::size{tlist});
   expand (a, i: va::arg_names{m::size{tlist}}) {
-    if (is_numeric{typ}) {
+    if (mf::is_numeric_type{typ}) {
       arr[i] = static_cast{typ}(a);
     } else {
       arr[i] = a;
@@ -170,18 +166,10 @@ make_vector(expand(va::arg_decls_bycref{tlist}))
   return arr;
 }
 
-private metafunction is_array_family{fam}
-  m::or{
-    m::eq{fam, "varray"},
-    m::eq{fam, "farray"},
-    m::eq{fam, "darray"},
-    m::eq{fam, "slice"},
-    m::eq{fam, "cslice"}};
-
 public threaded function {t, tk, tm} tk
 find_mapped(t const& c, tk k, tm const& x)
 {
-  if (m::and{is_array_family{m::family{t}},
+  if (m::and{mf::is_array_or_slice_type{t},
     m::or{m::eq{tm, char}, m::eq{tm, uchar}}}) {
     return find_mapped_memchr{t}(c, k, x);
   } else {
@@ -199,4 +187,20 @@ private threaded function extern "::pxcrt::find_mapped_memchr" {t}
 m::local{t, "key_type"}
 find_mapped_memchr(t const& c, m::local{t, "key_type"} const& k,
   m::local{t, "mapped_type"} const& x);
+
+public threaded function {t} void reverse(slice{t} const& x)
+{
+  metafunction size_type size_t;
+  metafunction mapped_type slice{t}:mapped_type;
+  size_type s = 0;
+  size_type f = x.size();
+  while (s < f) {
+    extern "disable-bounds-checking" 1;
+    --f;
+    mapped_type const v = x[s];
+    x[s] = x[f];
+    x[f] = v;
+    ++s;
+  }
+}
 

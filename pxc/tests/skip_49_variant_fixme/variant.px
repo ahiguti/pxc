@@ -19,7 +19,7 @@ public threaded interface idynamic {
   function variant invoke(cstrref const& name, cslice{variant} const& args);
 }
 
-private metafunction is_string_family_type{t}
+private metafunction is_string_or_slice_type{t}
   m::or{
     m::eq{t, string},
     m::eq{t, strlit},
@@ -30,11 +30,11 @@ private metafunction is_range_type{t}
   m::or{
     m::eq{m::family{t}, "slice"},
     m::eq{m::family{t}, "cslice"},
-    m::eq{m::family{t}, "tree_map_range"},
-    m::eq{m::family{t}, "tree_map_crange"}};
+    m::eq{m::family{t}, "map_range"},
+    m::eq{m::family{t}, "map_crange"}};
 
 private metafunction to_non_ephemeral{t}
-  m::cond{is_string_family_type{t}, string,
+  m::cond{is_string_or_slice_type{t}, string,
   m::cond{is_range_type{t}, m::local{t, "non_ephemeral_type"},
   t}};
 
@@ -49,7 +49,7 @@ public threaded function {t} variant to_variant(t const& x)
     r.ulongval = n::static_cast{ulong, t}(x);
   } else if (n::is_fp{t}) {
     r.doubleval = x;
-  } else if (is_string_family_type{t}) {
+  } else if (is_string_or_slice_type{t}) {
     r.stringval = x;
   } else if (m::eq{t, variant}) {
     r = x;

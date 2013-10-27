@@ -1,9 +1,10 @@
 namespace container::impl::darray "use-unsafe";
 public import container::impl::array_common;
-public import container::impl::string;
+public import container::impl::vector;
 
 extern "types" inline
 namespace pxcrt {
+
 template <typename T>
 struct darray {
   typedef T mapped_type;
@@ -24,11 +25,11 @@ struct darray {
     if (is_trivially_copyable<T>::value) {
       initialize_fill_n(start, valid_len, val);
     } else {
-      try {
+      PXC_TRY {
 	initialize_fill_n(start, valid_len, val);
-      } catch (...) {
+      } PXC_CATCH(...) {
 	deallocate_uninitialized(start, valid_len);
-	throw;
+	PXC_RETHROW;
       }
     }
   }
@@ -38,11 +39,11 @@ struct darray {
     if (is_trivially_copyable<T>::value) {
       initialize_copy_n(start, valid_len, x.start);
     } else {
-      try {
+      PXC_TRY {
 	initialize_copy_n(start, valid_len, x.start);
-      } catch (...) {
+      } PXC_CATCH(...) {
 	deallocate_uninitialized(start, valid_len);
-	throw;
+	PXC_RETHROW;
       }
     }
   }
@@ -72,5 +73,6 @@ private:
   darray(); /* not allowed */
   darray& operator =(const darray& x); /* not allowed */
 };
+
 }; // namespace pxcrt
 ;

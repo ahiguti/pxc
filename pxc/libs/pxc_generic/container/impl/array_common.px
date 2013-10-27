@@ -23,7 +23,7 @@ allocate_uninitialized(size_t len)
 {
   void *p = malloc(len * sizeof(T));
   if (p == 0) {
-    throw std::bad_alloc();
+    PXC_THROW(std::bad_alloc());
   }
   return static_cast<T *>(p);
 }
@@ -52,13 +52,13 @@ initialize_fill_n(T *ptr, size_t len, const T& x)
     }
   } else {
     size_t i = 0;
-    try {
+    PXC_TRY {
       for (; i < len; ++i) {
 	new (ptr + i) T(x);
       }
-    } catch (...) {
+    } PXC_CATCH(...) {
       deinitialize_n(ptr, i);
-      throw;
+      PXC_RETHROW;
     }
   }
 }
@@ -69,13 +69,13 @@ initialize_copy_n(T *ptr, size_t len, const T *src)
     memcpy(ptr, src, len * sizeof(T));
   } else {
     size_t i = 0;
-    try {
+    PXC_TRY {
       for (; i < len; ++i) {
 	new (ptr + i) T(src[i]);
       }
-    } catch (...) {
+    } PXC_CATCH(...) {
       deinitialize_n(ptr, i);
-      throw;
+      PXC_RETHROW;
     }
   }
 }
@@ -94,16 +94,16 @@ reserve_n(T *ptr, size_t vlen, size_t nlen)
   if (is_trivially_copyable<T>::value) {
     void *p = realloc(ptr, nlen * sizeof(T));
     if (p == 0) {
-      throw std::bad_alloc();
+      PXC_THROW(std::bad_alloc());
     }
     return static_cast<T *>(p);
   } else {
     T *p = allocate_uninitialized<T>(nlen);
-    try {
+    PXC_TRY {
       initialize_copy_n(p, vlen, ptr);
-    } catch (...) {
+    } PXC_CATCH(...) {
       deallocate_uninitialized<T>(p, nlen);
-      throw;
+      PXC_RETHROW;
     }
     deinitialize_n(ptr, vlen);
     deallocate_uninitialized<T>(ptr, vlen);

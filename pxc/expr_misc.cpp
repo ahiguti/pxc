@@ -243,7 +243,8 @@ const char *tok_string(const expr_i *e, int tok)
   case TOK_SLICE: return "::";
   case TOK_EXPAND: return "expand";
   default:
-    arena_error_throw(e, "Internal error: unknown token %d", tok);
+    /* arena_error_throw(e, "Internal error: unknown token %d", tok); */
+    return "unknown-token";
   }
   return "";
 }
@@ -405,19 +406,20 @@ bool is_equality_type(const term& t)
 bool is_ordered_type(const term& t)
 {
   if (is_numeric_type(t)) {
-  // if (is_builtin_pod(t)) {
     return true;
   }
+  #if 0
   if (t == builtins.type_strlit) {
     return true;
   }
   if (is_string_type(t)) {
     return true;
   }
+  #endif
   if (is_cm_slice_family(t) || is_array_family(t)) {
-    term et = get_array_elem_texpr(0, t);
-    if (is_builtin_pod(et) && is_integral_type(et)) {
-      /* op == is allowed only if it is memcmp-compatible */
+    const term& et = get_array_elem_texpr(0, t);
+    if (et == builtins.type_uchar) {
+      /* memcmp-compatible */
       return true;
     }
   }
@@ -576,9 +578,9 @@ typefamily_e get_family_from_string(const std::string& s)
   if (s == "slice") return typefamily_e_slice;
   if (s == "cslice") return typefamily_e_cslice;
   if (s == "ephemeral") return typefamily_e_ephemeral;
-  if (s == "tree_map") return typefamily_e_tree_map;
-  if (s == "tree_map_range") return typefamily_e_tree_map_range;
-  if (s == "tree_map_crange") return typefamily_e_tree_map_crange;
+  if (s == "map") return typefamily_e_map;
+  if (s == "map_range") return typefamily_e_map_range;
+  if (s == "map_crange") return typefamily_e_map_crange;
   if (s == "linear") return typefamily_e_linear;
   if (s == "noncopyable") return typefamily_e_noncopyable;
   if (s == "nodefault") return typefamily_e_nodefault;
@@ -612,9 +614,9 @@ std::string get_family_string(typefamily_e cat)
   case typefamily_e_slice: return "slice";
   case typefamily_e_cslice: return "cslice";
   case typefamily_e_ephemeral: return "ephemeral";
-  case typefamily_e_tree_map: return "tree_map";
-  case typefamily_e_tree_map_range: return "tree_map_range";
-  case typefamily_e_tree_map_crange: return "tree_map_crange";
+  case typefamily_e_map: return "map";
+  case typefamily_e_map_range: return "map_range";
+  case typefamily_e_map_crange: return "map_crange";
   case typefamily_e_linear: return "linear";
   case typefamily_e_noncopyable: return "noncopyable";
   case typefamily_e_nodefault: return "nodefault";
@@ -819,27 +821,27 @@ bool is_cm_slice_family(const term& t)
 bool is_map_family(const term& t)
 {
   const typefamily_e cat = get_family(t);
-  return cat == typefamily_e_tree_map;
+  return cat == typefamily_e_map;
 }
 
 bool is_cm_maprange_family(const term& t)
 {
   const typefamily_e cat = get_family(t);
-  return cat == typefamily_e_tree_map_range ||
-    cat == typefamily_e_tree_map_crange;
+  return cat == typefamily_e_map_range ||
+    cat == typefamily_e_map_crange;
 }
 
 bool is_const_range_family(const term& t)
 {
   const typefamily_e cat = get_family(t);
-  return cat == typefamily_e_cslice || cat == typefamily_e_tree_map_crange;
+  return cat == typefamily_e_cslice || cat == typefamily_e_map_crange;
 }
 
 static bool is_cm_range_family(expr_i *e)
 {
   const typefamily_e cat = get_family(e);
   return cat == typefamily_e_slice || cat == typefamily_e_cslice ||
-    cat == typefamily_e_tree_map_range || cat == typefamily_e_tree_map_crange;
+    cat == typefamily_e_map_range || cat == typefamily_e_map_crange;
 }
 
 bool is_cm_range_family(const term& t)
@@ -919,7 +921,7 @@ bool type_has_invalidate_guard(const term& t)
   const typefamily_e cat = get_family(t);
   if (
     cat == typefamily_e_varray ||
-    cat == typefamily_e_tree_map ||
+    cat == typefamily_e_map ||
     cat == typefamily_e_tptr ||
     cat == typefamily_e_tcptr) {
     return true;
@@ -934,11 +936,11 @@ bool type_allow_feach(const term& t)
   case typefamily_e_varray:
   case typefamily_e_darray:
   case typefamily_e_farray:
-  case typefamily_e_tree_map:
+  case typefamily_e_map:
   case typefamily_e_slice:
   case typefamily_e_cslice:
-  case typefamily_e_tree_map_range:
-  case typefamily_e_tree_map_crange:
+  case typefamily_e_map_range:
+  case typefamily_e_map_crange:
     return true;
   default:
     return false;
@@ -1076,7 +1078,20 @@ static std::string term_tostr_tparams(const expr_tparams *tp, bool show_values,
   }
   while (tp != 0) {
     if (show_values) {
-      r += term_tostr(tp->param_def, s);
+      const term& tpdef = tp->param_def;
+      r += term_tostr(tpdef, s);
+#if 0
+if (term_tostr(tpdef, s) == "::sort3$n::cmp$f2") {
+abort();
+}
+      if (s == term_tostr_sort_cname) {
+	const expr_i *const de = tpdef.get_expr();
+	if (de != 0 && de->get_esort() == expr_e_funcdef) {
+	  /* function as tparam. append funcobj prefix. */
+	  r += "$fo";
+	}
+      }
+#endif
     } else {
       r += std::string(tp->sym);
     }
@@ -1483,6 +1498,13 @@ std::string term_tostr_list(const term_list_range& tl, term_tostr_sort s)
       }
     }
     rstr += term_tostr(*i, s);
+    if (s == term_tostr_sort_cname) {
+      const expr_i *const de = i->get_expr();
+      if (de != 0 && de->get_esort() == expr_e_funcdef) {
+	/* function as tparam. append funcobj prefix. */
+	rstr += "$fo";
+      }
+    }
   }
   if (s == term_tostr_sort_cname) {
     rstr += " >";
@@ -1923,70 +1945,6 @@ static void execute_rec_incl_instances(expr_i *e, void (*f)(expr_i *))
     expr_i *c = e->get_child(i);
     execute_rec_incl_instances(c, f);
   }
-}
-
-#if 0
-static void calc_callee_rec(expr_funcdef *efd, std::set<expr_funcdef *>& s,
-  expr_funcdef::callee_vec_type& trv, expr_funcdef::callee_set_type& trs)
-{
-  if (s.find(efd) != s.end()) {
-    return;
-  }
-  s.insert(efd);
-  for (expr_funcdef::callee_vec_type::const_iterator i
-    = efd->callee_vec.begin(); i != efd->callee_vec.end(); ++i) {
-    calc_callee_rec(*i, s, trv, trs);
-    if (trs.find(*i) == trs.end()) {
-      trv.push_back(*i);
-      trs.insert(*i);
-      DBG_CALLEE(fprintf(stderr, "%s calls %s\n", efd->sym, (*i)->sym));
-    }
-  }
-  s.erase(efd);
-}
-
-static void calc_callee_tr(expr_funcdef *efd)
-{
-  if (efd->callee_vec.empty() || !efd->callee_vec_tr.empty()) {
-    /* already done */
-  }
-  /* TODO: too slow */
-  std::set<expr_funcdef *> s;
-  expr_funcdef::callee_vec_type trv;
-  expr_funcdef::callee_set_type trs;
-  calc_callee_rec(efd, s, trv, trs);
-  efd->callee_vec_tr.swap(trv);
-  efd->callee_set_tr.swap(trs);
-}
-#endif
-
-static void check_template_upvalues_direct_one(expr_i *e)
-{
-  expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(e);
-  if (efd != 0) {
-    add_tparam_upvalues_funcdef_direct(efd);
-    #if 0
-    calc_callee_tr(efd);
-    #endif
-  }
-}
-
-void fn_check_template_upvalues_direct(expr_i *e)
-{
-  execute_rec_incl_instances(e, check_template_upvalues_direct_one);
-}
-
-static void check_template_upvalues_tparam_one(expr_i *e)
-{
-  expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(e);
-  if (efd != 0) {
-    add_tparam_upvalues_funcdef_tparam(efd);
-  }
-}
-
-void fn_check_template_upvalues_tparam(expr_i *e)
-{
-  execute_rec_incl_instances(e, check_template_upvalues_tparam_one);
 }
 
 static void calc_dep_upvalues_direct(expr_i *e)
@@ -2927,9 +2885,10 @@ static void check_use_before_def_one(varmap_type& uvars,
       if (efd != 0) {
 	/* this funccall uses these variables as upvalues. they must be
 	 * defined before the func is called. */
-	expr_funcdef::tpup_vec_type::const_iterator i;
-	for (i = efd->tpup_vec.begin(); i != efd->tpup_vec.end(); ++i) {
-	  expr_var *const ev = dynamic_cast<expr_var *>(*i);
+	expr_funcdef::dep_upvalues_type::const_iterator i;
+	for (i = efd->dep_upvalues.begin(); i != efd->dep_upvalues.end();
+	  ++i) {
+	  expr_var *const ev = dynamic_cast<expr_var *>(i->first);
 	  if (ev != 0 && uvars.find(ev) == uvars.end()) {
 	    uvars[ev] = std::make_pair(e, efd);
 	  }
@@ -3031,11 +2990,6 @@ void fn_check_final(expr_i *e)
   check_upvalue_funcobj(e);
   check_upvalue_memfunc(e);
   check_use_before_def(e);
-#if 0
-  if (e->get_esort() == expr_e_funccall) {
-    check_tpup_thisptr_constness(ptr_down_cast<expr_funccall>(e));
-  }
-#endif
   /* check instances */
   expr_block *const bl = dynamic_cast<expr_block *>(e);
   if (bl != 0) {
@@ -3425,6 +3379,14 @@ term get_array_range_texpr(expr_op *eop, expr_i *ec /* nullable */,
 
 term get_array_elem_texpr(expr_op *eop, const term& t0)
 {
+  term t = eval_local_lookup(t0, "mapped_type", eop);
+  if (t.is_null()) {
+    arena_error_throw(eop, "Symbol 'mapped_type' is not found for type '%s'",
+      term_tostr_human(t0).c_str());
+    return builtins.type_void;
+  }
+  return t;
+  #if 0
   if (t0 == builtins.type_strlit) {
     return builtins.type_uchar;
   }
@@ -3441,9 +3403,9 @@ term get_array_elem_texpr(expr_op *eop, const term& t0)
       case typefamily_e_slice:
       case typefamily_e_cslice:
 	return tparams->param_def;
-      case typefamily_e_tree_map:
-      case typefamily_e_tree_map_range:
-      case typefamily_e_tree_map_crange:
+      case typefamily_e_map:
+      case typefamily_e_map_range:
+      case typefamily_e_map_crange:
 	if (tparams->rest != 0) {
 	  return tparams->rest->param_def;
 	}
@@ -3460,7 +3422,7 @@ term get_array_elem_texpr(expr_op *eop, const term& t0)
 	return tparams->param_def;
       } else if (std::string(est->family) == "cslice") {
 	return tparams->param_def;
-      } else if (std::string(est->family) == "tree_map") {
+      } else if (std::string(est->family) == "map") {
 	if (tparams->rest != 0) {
 	  return tparams->rest->param_def;
 	}
@@ -3470,10 +3432,19 @@ term get_array_elem_texpr(expr_op *eop, const term& t0)
   }
   arena_error_throw(eop, "Cannot apply '[]'");
   return builtins.type_void;
+  #endif
 }
 
 term get_array_index_texpr(expr_op *eop, const term& t0)
 {
+  term t = eval_local_lookup(t0, "key_type", eop);
+  if (t.is_null()) {
+    arena_error_throw(eop, "Symbol 'key_type' is not found for type '%s'",
+      term_tostr_human(t0).c_str());
+    return builtins.type_void;
+  }
+  return t;
+  #if 0
   if (t0 == builtins.type_strlit) {
     return builtins.type_size_t;
   }
@@ -3489,6 +3460,9 @@ term get_array_index_texpr(expr_op *eop, const term& t0)
       case typefamily_e_farray:
       case typefamily_e_slice:
       case typefamily_e_cslice:
+      case typefamily_e_map:
+      case typefamily_e_map_range:
+      case typefamily_e_map_crange:
 	{
 	  term t = eval_local_lookup(t0, "key_type", eop);
 	  if (t.is_null()) {
@@ -3496,11 +3470,6 @@ term get_array_index_texpr(expr_op *eop, const term& t0)
 	    return builtins.type_void;
 	  }
 	  return t;
-	}
-      case typefamily_e_tree_map:
-      case typefamily_e_tree_map_range:
-	if (tparams->rest != 0) {
-	  return tparams->param_def;
 	}
 	break;
       default:
@@ -3510,6 +3479,7 @@ term get_array_index_texpr(expr_op *eop, const term& t0)
   }
   arena_error_throw(eop, "Cannot apply '[]'");
   return builtins.type_void;
+  #endif
 }
 
 bool is_vardef_constructor_or_byref(expr_i *e, bool incl_byref)

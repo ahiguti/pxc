@@ -1175,7 +1175,11 @@ static void load_profile(parser_options& po)
   strlist lines;
   split_string(pstr, '\n', lines);
   for (strlist::const_iterator i = lines.begin(); i != lines.end(); ++i) {
-    const std::string& s = *i;
+    std::string s = *i;
+    const size_t ch = s.find('#');
+    if (ch != std::string::npos) {
+      s = s.substr(0, ch);
+    }
     const size_t eq = s.find('=');
     if (eq == std::string::npos) {
       po.profile.mapval[s] = "";

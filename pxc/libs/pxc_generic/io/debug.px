@@ -1,12 +1,13 @@
 namespace io::debug "use-unsafe";
-import numeric::integral -;
-import container::array -;
+public import numeric::integral -;
+public import container::array -;
+public import meta::family mf;
 
 public threaded function {t} void debug_log(cstrref const& msg, t const& x)
 {
   string s = msg;
   s.push_back('\t');
-  if (is_string_family_type{t}) {
+  if (mf::is_string_or_slice_type{t}) {
     s.append(x);
   } else {
     text::conversion::serialize_to_string(x, s);

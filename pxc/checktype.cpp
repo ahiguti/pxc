@@ -88,6 +88,7 @@ static void check_bool_expr(expr_op *eop, expr_i *a0)
     s0.c_str(), op_message(eop).c_str());
 }
 
+#if 0
 static void check_unsigned_integral_expr(expr_op *eop, expr_i *a0)
 {
   const term t = a0->resolve_texpr();
@@ -100,6 +101,7 @@ static void check_unsigned_integral_expr(expr_op *eop, expr_i *a0)
     "Unsigned integral type expected (got: %s) %s",
     s0.c_str(), op_message(eop).c_str());
 }
+#endif
 
 static void check_type_common(expr_op *eop, expr_i *a0,
   bool (*func)(const term& t), const char *mess)
@@ -508,7 +510,7 @@ static bool is_default_constructible(const term& typ, expr_i *pos,
     if (cat == typefamily_e_darray) {
       return false;
     }
-    if (cat == typefamily_e_varray || cat == typefamily_e_tree_map ||
+    if (cat == typefamily_e_varray || cat == typefamily_e_map ||
       cat == typefamily_e_nocascade) {
       return true;
     }
@@ -2120,7 +2122,7 @@ void expr_funccall::check_type(symbol_table *lookup)
     eval_context ectx;
     if (has_unbound_tparam(func_te, ectx)) {
       arena_error_throw(func,
-	"Termplate expression '%s' has an unbound type parameter",
+	"Template expression '%s' has an unbound type parameter",
 	term_tostr_human(func_te).c_str());
     }
   }
@@ -2310,18 +2312,6 @@ fprintf(stderr, "tote %s\n", einst->dump(0).c_str());
     }
     /* add callee_funcs */
     expr_i *const fr = get_current_frame_expr(symtbl_lexical);
-    #if 1
-    // TODO: remove
-    if (fr != 0 && fr->get_esort() == expr_e_funcdef &&
-      func->get_esort() != expr_e_op) { /* add non-local lookup only. TBD. */
-      expr_funcdef *const efd_inst = ptr_down_cast<expr_funcdef>(einst);
-      expr_funcdef *const curfd = ptr_down_cast<expr_funcdef>(fr);
-      if (curfd->callee_set.find(efd_inst) == curfd->callee_set.end()) {
-	curfd->callee_set.insert(efd_inst);
-	curfd->callee_vec.push_back(efd_inst);
-      }
-    }
-    #endif
     if (fr != 0 && fr->get_esort() == expr_e_funcdef) {
       expr_funcdef *const efd_inst = ptr_down_cast<expr_funcdef>(einst);
       expr_funcdef *const curfd = ptr_down_cast<expr_funcdef>(fr);
@@ -2455,24 +2445,7 @@ fprintf(stderr, "tote %s\n", einst->dump(0).c_str());
 	type_of_this_expr = func_te;
 	funccall_sort = funccall_e_struct_constructor;
 	return;
-      #if 0
-      } else if (
-	(get_family(func_te) == typefamily_e_darray ||
-	get_family(func_te) == typefamily_e_varray) &&
-	arglist.size() == 1 && is_cm_slice_family(arglist.front())) {
-	/* slice to array */
-	const term tfrom = arglist.front();
-	const term tra = get_array_range_texpr(0, 0, func_te);
-	const term_list *const tfa = tfrom.get_args();
-	const term_list *const tta = tra.get_args();
-	if (tta != 0 && tfa != 0 && tta->front() == tfa->front()) {
-	} else {
-	  arena_error_push(this, "Invalid conversion from %s to %s",
-	    term_tostr_human(func_te).c_str(),
-	    term_tostr_human(arglist.front()).c_str());
-	}
-	// FIXME
-      #endif
+#if 0
       } else if (get_family(func_te) == typefamily_e_darray) {
 	/* darray constructor */
 	if (arglist.size() < 2) {
@@ -2519,6 +2492,7 @@ fprintf(stderr, "tote %s\n", einst->dump(0).c_str());
 	type_of_this_expr = func_te;
 	funccall_sort = funccall_e_struct_constructor;
 	return;
+#endif
       } else if (is_numeric_type(func_te)) {
 	/* explicit conversion to external numeric type */
 	if (arglist.size() < 1) {
@@ -3901,191 +3875,6 @@ void expr_try::check_type(symbol_table *lookup)
   fn_check_type(rest, lookup);
   /* type_of_this_expr */
 }
-
-static bool is_struct_member(expr_i *edef)
-{
-  expr_i *const efr = get_current_frame_expr(edef->symtbl_lexical);
-  return efr != 0 && efr->get_esort() == expr_e_struct;
-}
-
-static void add_func_upvalues_callee(expr_funcdef *efd, expr_funcdef *tefd)
-{
-  symbol_table& symtbl = tefd->block->symtbl;
-  symbol_table::locals_type::const_iterator j;
-  /* upvalues required by tefd */
-  for (j = symtbl.upvalues.begin(); j != symtbl.upvalues.end(); ++j) {
-    expr_i *const e = j->second.edef;
-    if (is_struct_member(e)) {
-      continue;
-    }
-    if (e->symtbl_lexical == &efd->block->symtbl) {
-      /* this variable is defined in efd itself */
-      continue;
-    }
-    if (efd->tpup_set.find(e) == efd->tpup_set.end()) {
-      DBG_TPUP(fprintf(stderr, "TPUP fn=%s tp up=%s tparam=%s\n", efd->sym,
-	e->dump(0).c_str(), tefd->sym));
-      efd->tpup_set.insert(e);
-      efd->tpup_vec.push_back(e);
-    }
-  }
-  /* is tefd memberfunc descent? */
-  if (tefd->block->symtbl.require_thisup) {
-    expr_funcdef *const up_memfunc = get_up_member_func(
-      &tefd->block->symtbl);
-    if (up_memfunc) {
-      /* yes, it's a memberfunc descent */
-      expr_struct *const up_est = up_memfunc->is_member_function();
-	/* IMF ?? */
-      assert(up_est);
-      if (efd->is_member_function() != up_est) { /* IMF ?? */
-	if (efd->tpup_thisptr != 0 && efd->tpup_thisptr != up_est) {
-	  arena_error_throw(tefd, "Internal error: up_memfunc (indirect)");
-	}
-	DBG_TPUP(fprintf(stderr, "TPUP_THISPTR internal efd=%s callee=%s\n",
-	  efd->sym, tefd->sym));
-	efd->tpup_thisptr = up_est;
-	efd->tpup_thisptr_nonconst |= (!up_memfunc->is_const);
-      }
-    }
-  }
-}
-
-static void add_tparam_upvalues_tp_internal(expr_funcdef *efd, const term& t)
-{
-  expr_i *const texpr = t.get_expr();
-  if (texpr == 0) {
-    return;
-  }
-  if (texpr->get_esort() == expr_e_funcdef) {
-    const expr_i *const einst = term_get_instance_const(t);
-    const expr_funcdef *tefd = ptr_down_cast<const expr_funcdef>(einst);
-    symbol_table& symtbl = tefd->block->symtbl;
-    symbol_table::locals_type::const_iterator j;
-    /* upvalues required by this tparam function */
-    for (j = symtbl.upvalues.begin(); j != symtbl.upvalues.end(); ++j) {
-      expr_i *const e = j->second.edef;
-      if (is_struct_member(e)) {
-	continue;
-      }
-      if (efd->tpup_set.find(e) == efd->tpup_set.end()) {
-	DBG_TPUP(fprintf(stderr, "TPUP fn=%s tp up=%s tparam=%s\n", efd->sym,
-	  e->dump(0).c_str(), tefd->sym));
-	efd->tpup_set.insert(e);
-	efd->tpup_vec.push_back(e);
-      }
-    }
-    /* is this tparam function memberfunc descent? */
-    if (tefd->block->symtbl.require_thisup) {
-      expr_funcdef *const up_memfunc = get_up_member_func(
-	&tefd->block->symtbl);
-      if (up_memfunc) {
-	/* yes, it's a memberfunc descent */
-	expr_struct *const up_est = up_memfunc->is_member_function();
-	  /* IMF ?? */
-	assert(up_est);
-	if (efd->is_member_function() != up_est) { /* IMF ?? */
-	  if (efd->tpup_thisptr != 0 && efd->tpup_thisptr != up_est) {
-	    arena_error_throw(tefd, "Internal error: up_memfunc (indirect)");
-	  }
-	  DBG_TPUP(fprintf(stderr, "TPUP_THISPTR internal efd=%s\n",
-	    efd->sym));
-	  efd->tpup_thisptr = up_est;
-	  efd->tpup_thisptr_nonconst |= (!up_memfunc->is_const);
-	}
-      }
-    }
-  }
-  const term_list *const targs = t.get_args();
-  if (targs != 0) {
-    term_list::const_iterator j;
-    for (j = targs->begin(); j != targs->end(); ++j) {
-      add_tparam_upvalues_tp_internal(efd, *j);
-    }
-  }
-}
-
-void add_tparam_upvalues_funcdef_tparam(expr_funcdef *efd)
-{
-  for (expr_funcdef::callee_vec_type::const_iterator i =
-    efd->callee_vec.begin(); i != efd->callee_vec.end(); ++i) {
-    add_func_upvalues_callee(efd, *i);
-  }
-  /* tparam upvalues */
-  term& t = efd->value_texpr;
-  const term_list *const targs = t.get_args();
-  if (targs == 0 || targs->empty()) {
-    return;
-  }
-  term_list::const_iterator j;
-  for (j = targs->begin(); j != targs->end(); ++j) {
-    add_tparam_upvalues_tp_internal(efd, *j);
-  }
-}
-
-void add_tparam_upvalues_funcdef_direct(expr_funcdef *efd)
-{
-  /* direct upvalues */
-  #if 0
-  DBG_TPUP(fprintf(stderr, "TPUP enter %s\n", efd->sym));
-  #endif
-  efd->tpup_set.clear();
-  efd->tpup_vec.clear();
-  const symbol_table::locals_type& upvalues = efd->block->symtbl.upvalues;
-  symbol_table::locals_type::const_iterator i;
-  for (i = upvalues.begin(); i != upvalues.end(); ++i) {
-    expr_i *const e = i->second.edef;
-    if (is_struct_member(e)) {
-      continue;
-    }
-    if (efd->tpup_set.find(e) == efd->tpup_set.end()) {
-      DBG_TPUP(fprintf(stderr, "TPUP fn=%s direct up=%s\n", efd->sym,
-	e->dump(0).c_str()));
-      efd->tpup_set.insert(e);
-      efd->tpup_vec.push_back(e);
-    }
-  }
-  if (efd->block->symtbl.require_thisup) {
-    expr_funcdef *const up_memfunc = get_up_member_func(&efd->block->symtbl);
-    if (up_memfunc) {
-      expr_struct *const up_est = up_memfunc->is_member_function();
-	/* IMF ?? */
-      assert(up_est);
-      if (efd->is_member_function() != up_est) { /* IMF ?? */
-	if (efd->tpup_thisptr != 0 && efd->tpup_thisptr != up_est) {
-	  arena_error_throw(efd, "Internal error: up_memfunc (indirect)");
-	}
-	DBG_TPUP(fprintf(stderr, "TPUP_THISPTR direct efd=%s\n",
-	  efd->dump(0).c_str()));
-	efd->tpup_thisptr = up_est;
-	efd->tpup_thisptr_nonconst |= (!up_memfunc->is_const);
-      }
-    }
-  }
-}
-
-#if 0
-void check_tpup_thisptr_constness(expr_funccall *fc)
-{
-  bool memfunc_w_explicit_obj = false;
-  term func_te = get_func_te_for_funccall(fc->func, memfunc_w_explicit_obj);
-  expr_i *const func_inst = term_get_instance(func_te);
-  if (is_function(func_te)) {
-    expr_funcdef *efd = ptr_down_cast<expr_funcdef>(func_inst);
-    expr_funcdef *const caller_memfunc = get_up_member_func(fc->symtbl_lexical);
-    if (caller_memfunc != 0 && caller_memfunc->is_const) {
-      expr_struct *const caller_memfunc_struct =
-        caller_memfunc->is_member_function(); /* IMF OK */
-      if (efd->tpup_thisptr == caller_memfunc_struct &&
-        !efd->tpup_thisptr_nonconst) {
-        arena_error_throw(fc,
-          "Calling a non-const member function '%s' from a const "
-          "member function", term_tostr_human(efd->value_texpr).c_str());
-      }
-    }
-  }
-}
-#endif
 
 void fn_check_closure(expr_i *e)
 {

@@ -292,7 +292,7 @@ static void emit_interface_def_one(emit_context& em, expr_interface *ei,
   em.indent('b');
   em.puts("virtual ~");
   em.puts(name_c);
-  em.puts("() throw() { }\n");
+  em.puts("() PXC_NOTHROW { }\n");
   em.set_file_line(ei);
   em.indent('b');
   em.puts("virtual void incref$z() const = 0;\n");
@@ -430,7 +430,7 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
       em.indent('b');
       em.puts("~");
       em.puts(name_c);
-      em.puts("() throw() { }\n");
+      em.puts("() PXC_NOTHROW { }\n");
     }
     const bool multithr = (est->get_attribute() & attribute_multithr) != 0;
     if (multithr) {
@@ -1198,7 +1198,7 @@ static void emit_dunion_def_one(emit_context& em, const expr_dunion *ev,
   em.indent('b');
   em.puts("~");
   em.puts(name_c);
-  em.puts("() throw() { deinit$(); }\n");
+  em.puts("() PXC_NOTHROW { deinit$(); }\n");
   /* copy constructor */
   em.set_file_line(ev);
   em.indent('b');
@@ -1300,8 +1300,44 @@ static void emit_thisptr_argdecl(emit_context& em, expr_struct *est,
 }
 #endif
 
-static void emit_function_argdecls(emit_context& em, expr_funcdef *efd)
+static bool emit_function_argdecls_upvalues(emit_context& em,
+  expr_funcdef *efd, bool emit_as_fields)
 {
+  bool is_first = true;
+  expr_funcdef::dep_upvalues_type::const_iterator i;
+  for (i = efd->dep_upvalues_tr.begin(); i != efd->dep_upvalues_tr.end();
+    ++i) {
+    if (emit_as_fields) {
+      em.indent('U');
+    } else {
+      if (!is_first) {
+	em.puts(", ");
+      } else {
+	is_first = false;
+      }
+    }
+    expr_i *const e = i->first;
+    size_t j = i - efd->dep_upvalues_tr.begin();
+    if (j >= efd->dep_upvalues.size()) {
+      /* indirect upvalue */
+      emit_indirect_upvalue(em, e, j - efd->dep_upvalues.size(), i->second);
+    } else if (e->get_esort() == expr_e_var) {
+      /* force by-constref if i->second is true */
+      emit_var_cdecl(em, ptr_down_cast<expr_var>(e), true, i->second, true);
+    } else {
+      emit_arg_cdecl(em, ptr_down_cast<expr_argdecls>(e), true, true);
+    }
+    if (emit_as_fields) {
+      em.puts(";\n");
+    }
+  }
+  return is_first;
+}
+
+static void emit_function_argdecls(emit_context& em, expr_funcdef *efd,
+  bool omit_upvalues)
+{
+  #if 0
   bool is_first = true;
   /* upvalues */
   expr_funcdef::dep_upvalues_type::const_iterator i;
@@ -1318,39 +1354,17 @@ static void emit_function_argdecls(emit_context& em, expr_funcdef *efd)
       /* indirect upvalue */
       emit_indirect_upvalue(em, e, j - efd->dep_upvalues.size(), i->second);
     } else if (e->get_esort() == expr_e_var) {
-      /* FIXME: force by-constref if i->second is true */
+      /* force by-constref if i->second is true */
       emit_var_cdecl(em, ptr_down_cast<expr_var>(e), true, i->second, true);
     } else {
       emit_arg_cdecl(em, ptr_down_cast<expr_argdecls>(e), true, true);
     }
   }
-  #if 0
-  expr_funcdef::tpup_vec_type::const_iterator i;
-  for (i = efd->tpup_vec.begin(); i != efd->tpup_vec.end(); ++i) {
-    if (is_global_var(*i)) {
-      continue;
-    }
-    if (!is_first) {
-      em.puts(", ");
-    } else {
-      is_first = false;
-    }
-    if ((*i)->get_esort() == expr_e_var) {
-      emit_var_cdecl(em, ptr_down_cast<expr_var>(*i), true, true);
-    } else {
-      emit_arg_cdecl(em, ptr_down_cast<expr_argdecls>(*i), true, true);
-    }
-  }
-  /* upvalue thisptr */
-  if (efd->tpup_thisptr != 0) {
-    if (!is_first) {
-      em.puts(", ");
-    } else {
-      is_first = false;
-    }
-    emit_thisptr_argdecl(em, efd->tpup_thisptr, !efd->tpup_thisptr_nonconst);
-  }
   #endif
+  bool is_first = true;
+  if (!omit_upvalues) {
+    is_first = emit_function_argdecls_upvalues(em, efd, false);
+  }
   emit_argdecls(em, efd->block->get_argdecls(), is_first);
 }
 
@@ -1394,15 +1408,25 @@ static void emit_function_decl_one(emit_context& em, expr_funcdef *efd,
       em.puts(name_c);
     }
     em.puts("(");
-    emit_function_argdecls(em, efd);
+    emit_function_argdecls(em, efd, false);
     em.puts(")");
     if (efd->is_const) {
       em.puts(" const");
     }
     if (efd->is_destructor()) {
-      em.puts(" throw ()");
+      em.puts(" PXC_NOTHROW");
     }
   }
+}
+
+bool exceptions_disabled()
+{
+  typedef std::map<std::string, std::string> profile_type;
+  profile_type::const_iterator i = cur_profile->find("noexceptions");
+  if (i != cur_profile->end()) {
+    return atoi(i->second.c_str()) != 0;
+  }
+  return false;
 }
 
 static void emit_function_def_one(emit_context& em, expr_funcdef *efd)
@@ -1423,9 +1447,14 @@ static void emit_function_def_one(emit_context& em, expr_funcdef *efd)
       em.puts("{\n");
       em.add_indent(1);
       em.indent('D');
-      em.puts("try ");
+      const bool noe = exceptions_disabled();
+      if (!noe) {
+	em.puts("try ");
+      }
       fn_emit_value(em, efd->block);
-      em.puts(" catch (...) { ::abort(); }\n");
+      if (!noe) {
+	em.puts(" catch (...) { ::abort(); }\n");
+      }
       em.add_indent(-1);
       em.indent('D');
       em.puts("}\n");
@@ -1441,6 +1470,92 @@ static void emit_function_def_one(emit_context& em, expr_funcdef *efd)
   }
 }
 
+static void emit_function_decl_one_cfuncobj(emit_context& em,
+  expr_funcdef *efd)
+{
+  const std::string name_c = get_type_cname_wo_ns(efd);
+  em.puts("struct ");
+  em.puts(name_c);
+  em.puts("$fo {\n");
+  /* fields */
+  em.add_indent(1);
+  em.indent('O');
+  emit_function_argdecls_upvalues(em, efd, true);
+  /* constructor */
+  em.add_indent(1);
+  em.indent('O');
+  em.puts(name_c);
+  em.puts("$fo(");
+  emit_function_argdecls_upvalues(em, efd, false);
+  em.puts(")");
+  if (efd->dep_upvalues_tr.size() != 0) {
+    em.puts(" : ");
+    for (expr_funcdef::dep_upvalues_type::const_iterator i
+      = efd->dep_upvalues_tr.begin(); i != efd->dep_upvalues_tr.end(); ++i) {
+      if (i != efd->dep_upvalues_tr.begin()) {
+	em.puts(", ");
+      }
+      expr_i *const e = i->first;
+      size_t j = i - efd->dep_upvalues_tr.begin();
+      if (j >= efd->dep_upvalues.size()) {
+	/* indirect upvalue */
+	const size_t idx = j - efd->dep_upvalues.size();
+	em.printf("_%zu$up(_%zu$up)", idx, idx);
+      } else if (e->get_esort() == expr_e_var) {
+	const std::string s = csymbol_var(ptr_down_cast<expr_var>(e), true);
+	em.puts(s + "(" + s + ")");
+      } else {
+	const std::string s = ptr_down_cast<expr_argdecls>(e)
+	  ->emit_symbol_str();
+	em.puts(s + "(" + s + ")");
+      }
+    }
+    em.puts(" { }\n");
+  }
+  em.indent('O');
+  emit_term(em, efd->get_rettype());
+  em.puts(" operator ()(");
+  emit_function_argdecls(em, efd, true); /* omit upvalues */
+  em.puts(") { return ");
+  em.puts(name_c);
+  em.puts("(");
+  for (expr_funcdef::dep_upvalues_type::const_iterator i
+    = efd->dep_upvalues_tr.begin(); i != efd->dep_upvalues_tr.end(); ++i) {
+    if (i != efd->dep_upvalues_tr.begin()) {
+      em.puts(", ");
+    }
+    expr_i *const e = i->first;
+    size_t j = i - efd->dep_upvalues_tr.begin();
+    if (j >= efd->dep_upvalues.size()) {
+      /* indirect upvalue */
+      const size_t idx = j - efd->dep_upvalues.size();
+      em.printf("_%zu$up", idx);
+    } else if (e->get_esort() == expr_e_var) {
+      const std::string s = csymbol_var(ptr_down_cast<expr_var>(e), true);
+      em.puts(s);
+    } else {
+      const std::string s = ptr_down_cast<expr_argdecls>(e)
+	->emit_symbol_str();
+      em.puts(s);
+    }
+  }
+  bool is_first = efd->dep_upvalues_tr.size() == 0;
+  expr_argdecls *ad = efd->block->get_argdecls();
+  while (ad != 0) {
+    if (!is_first) {
+      em.puts(", ");
+    } else {
+      is_first = false;
+    }
+    ad->emit_symbol(em);
+    ad = ad->get_rest();
+  }
+  em.puts("); ");
+  em.puts("}\n");
+  em.add_indent(-1);
+  em.puts("};\n");
+}
+
 static void emit_function_decl(emit_context& em)
 {
   for (expr_arena_type::iterator i = expr_arena.begin();
@@ -1448,13 +1563,14 @@ static void emit_function_decl(emit_context& em)
     expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(*i);
     if (efd != 0 && !efd->is_member_function() &&
       !efd->is_virtual_function() && is_compiled(efd->block)) {
-	if (efd->no_def && efd->block->tinfo.has_tparams()) {
-	  continue;
-	}
-//      if (!efd->no_def || efd->is_virtual_function()) {
-	emit_function_decl_one(em, efd, true, false);
-	em.puts(";\n");
-//      }
+      if (efd->no_def && efd->block->tinfo.has_tparams()) {
+	continue;
+      }
+      emit_function_decl_one(em, efd, true, false);
+      em.puts(";\n");
+      if (efd->dep_upvalues.size() != 0 && efd->used_as_cfuncobj) {
+	emit_function_decl_one_cfuncobj(em, efd);
+      }
     }
     expr_ns *const ens = dynamic_cast<expr_ns *>(*i);
     if (ens != 0 && ens->import) {
@@ -1709,6 +1825,10 @@ static bool is_split_point(expr_i *e)
 
 static void split_expr_rec(expr_i *e, std::vector<expr_i *>& es)
 {
+  if (e->get_esort() == expr_e_block) {
+    /* anonymous functions, for example */
+    return;
+  }
   const int n = e->get_num_children();
   for (int i = 0; i < n; ++i) {
     expr_i *const c = e->get_child(i);
@@ -1755,16 +1875,28 @@ void expr_stmts::emit_value(emit_context& em)
     assert(rest == 0);
     return;
   }
+  #if 0
+  em.printf("\n#if 0\nemit stmt %s\n#endif\n", head->dump(0).c_str());
+  #endif
   if (is_noexec_expr(head)) {
     /* nothing to emit */
   } else if (!is_block_stmt(head)) {
+    #if 0
+    em.printf("\n#if 0\nemit stmt split begin\n#endif\n");
+    #endif
     emit_split_expr(em, head, false); /* line */
+    #if 0
+    em.printf("\n#if 0\nemit stmt split done\n#endif\n");
+    #endif
   } else {
     /* block statement */
     em.indent('S');
     fn_emit_value(em, head); /* noline  */
     em.puts("\n");
   }
+  #if 0
+  em.printf("\n#if 0\nemit stmt done\n#endif\n");
+  #endif
   if (rest != 0) {
     fn_emit_value(em, rest);
   }
@@ -2183,15 +2315,9 @@ static bool is_caller_indirect_upvalue(expr_i *edef,
   return false;
 }
 
-static bool emit_func_upvalue_args(emit_context& em, expr_i *func,
-  symbol_table *caller_symtbl)
+static bool emit_func_upvalue_args_fdef(emit_context& em,
+  const expr_funcdef *efd, symbol_table *caller_symtbl)
 {
-  symbol_common *const sdef = func->get_sdef();
-  if (sdef == 0) {
-    return false;
-  }
-  const expr_funcdef *const efd = dynamic_cast<const expr_funcdef *>(
-    term_get_instance_const(sdef->get_evaluated()));
   if (efd == 0) {
     return false;
   }
@@ -2212,50 +2338,42 @@ static bool emit_func_upvalue_args(emit_context& em, expr_i *func,
       i->first->emit_symbol(em);
     }
   }
-  #if 0
-  expr_funcdef::tpup_vec_type::const_iterator i;
-  for (i = efd->tpup_vec.begin(); i != efd->tpup_vec.end(); ++i) {
-    if (is_global_var(*i)) {
-      continue;
-    }
-    if (!is_first) {
-      em.puts(", ");
-    } else {
-      is_first = false;
-    }
-    (*i)->emit_symbol(em);
-  }
-  /* upvalue thisptr */
-  if (efd->tpup_thisptr != 0) {
-    if (!is_first) {
-      em.puts(", ");
-    } else {
-      is_first = false;
-    }
-    expr_i *const caller_fr_expr = get_current_frame_expr(caller_symtbl);
-    if (caller_fr_expr != 0 && caller_fr_expr->get_esort() == expr_e_funcdef &&
-      ptr_down_cast<expr_funcdef>(caller_fr_expr)->is_member_function()
-	== efd->tpup_thisptr) {
-      em.puts("*this");
-    } else {
-      #if 0
-      if (caller_fr_expr == 0) {
-	em.puts("/* F */");
-      } else if (caller_fr_expr->get_esort() != expr_e_funcdef) {
-	em.puts("/* S */");
-      } else if (ptr_down_cast<expr_funcdef>(caller_fr_expr)
-	->is_member_function() != efd->tpup_thisptr) {
-	em.puts("/* M */");
-	abort();
-      } else {
-	em.puts("/* ? */");
-      }
-      #endif
-      em.puts("this$up");
-    }
-  }
-  #endif
   return !is_first;
+}
+
+static bool emit_func_upvalue_args(emit_context& em, expr_i *func,
+  symbol_table *caller_symtbl)
+{
+  symbol_common *const sdef = func->get_sdef();
+  if (sdef == 0) {
+    return false;
+  }
+  const expr_funcdef *const efd = dynamic_cast<const expr_funcdef *>(
+    term_get_instance_const(sdef->get_evaluated()));
+  return emit_func_upvalue_args_fdef(em, efd, caller_symtbl);
+  #if 0
+  if (efd == 0) {
+    return false;
+  }
+  bool is_first = true;
+  /* upvalues */
+  expr_funcdef::dep_upvalues_type::const_iterator i;
+  for (i = efd->dep_upvalues_tr.begin(); i != efd->dep_upvalues_tr.end();
+    ++i) {
+    if (!is_first) {
+      em.puts(", ");
+    } else {
+      is_first = false;
+    }
+    size_t idx = 0;
+    if (is_caller_indirect_upvalue(i->first, caller_symtbl, idx)) {
+      em.printf("_%zu$up", idx);
+    } else {
+      i->first->emit_symbol(em);
+    }
+  }
+  return !is_first;
+  #endif
 }
 
 static void emit_function_expr(emit_context& em, expr_i *func)
@@ -2342,14 +2460,51 @@ void expr_funccall::emit_value(emit_context& em)
       emit_term(em, get_texpr());
       break;
     }
+    expr_i *func_expr = fld != 0 ? fld : func;
+    symbol_common *const sdef = func_expr->get_sdef();
+    const expr_funcdef *const efd = dynamic_cast<const expr_funcdef *>(
+      term_get_instance_const(sdef->get_evaluated()));
+    bool const is_extfunc = (efd != 0 && efd->cnamei.is_extdef());
     em.puts("(");
-    bool is_first = !emit_func_upvalue_args(em, fld != 0 ? fld : func,
-      symtbl_lexical);
+    bool is_first = true;
+    if (!is_extfunc) {
+      is_first = !emit_func_upvalue_args(em, fld != 0 ? fld : func,
+	symtbl_lexical);
+    }
     if (arg != 0) {
       if (!is_first) {
 	em.puts(" , ");
       }
+      is_first = false;
       fn_emit_value(em, arg);
+    }
+    if (is_extfunc) {
+      /* callee is a c function */
+      #if 0
+      fprintf(stderr, "is_extfunc %s\n", efd->dump(0).c_str());
+      #endif
+      const term& te = efd->value_texpr;
+      const term_list *const targs = te.get_args();
+      if (targs != 0) {
+	for (term_list::const_iterator i = targs->begin(); i != targs->end();
+	  ++i) {
+	  expr_i *e = i->get_expr();
+	  if (e != 0 && e->get_esort() == expr_e_funcdef) {
+	    expr_funcdef *const cefd = ptr_down_cast<expr_funcdef>(e);
+	    if (cefd->dep_upvalues_tr.size() != 0) {
+	      if (!is_first) {
+		em.puts(" , ");
+	      }
+	      const std::string name_c = get_type_cname_wo_ns(cefd);
+	      em.puts(name_c);
+	      em.puts("$fo(");
+	      emit_func_upvalue_args_fdef(em, cefd, symtbl_lexical);
+	      em.puts(")");
+	      is_first = false;
+	    }
+	  }
+	}
+      }
     }
     em.puts(")");
   }
@@ -2372,10 +2527,10 @@ void expr_special::emit_value(emit_context& em)
     }
     break;
   case TOK_THROW:
-    em.puts("throw");
+    em.puts("PXC_THROW(");
     assert(arg);
-    em.puts(" ");
     fn_emit_value(em, arg);
+    em.puts(")");
     break;
   }
 }
@@ -2881,20 +3036,25 @@ void expr_interface::emit_value(emit_context& em)
 
 void expr_try::emit_value(emit_context& em)
 {
+  const bool noe = exceptions_disabled();
   if (tblock != 0) {
-    em.puts("try ");
+    if (!noe) {
+      em.puts("try ");
+    }
     fn_emit_value(em, tblock);
   }
-  em.puts(" catch (const ");
-  assert(cblock->argdecls);
-  /* don't use call-traits. always catch by const reference. */
-  emit_term(em, cblock->argdecls->get_texpr());
-  em.puts("& ");
-  cblock->argdecls->emit_symbol(em);
-  em.puts(") ");
-  fn_emit_value(em, cblock);
-  if (rest != 0) {
-    fn_emit_value(em, rest);
+  if (!noe) {
+    em.puts(" catch (const ");
+    assert(cblock->argdecls);
+    /* don't use call-traits. always catch by const reference. */
+    emit_term(em, cblock->argdecls->get_texpr());
+    em.puts("& ");
+    cblock->argdecls->emit_symbol(em);
+    em.puts(") ");
+    fn_emit_value(em, cblock);
+    if (rest != 0) {
+      fn_emit_value(em, rest);
+    }
   }
 }
 
@@ -2952,8 +3112,11 @@ static void emit_vardef_constructor_fast_boxing(emit_context& em,
     em.puts(otypcnt_cstr + "*const " + varp1 + " = "
       + otypcnt_cstr + "::allocate();\n");
     em.indent('x');
-    em.puts("try {\n");
-    em.indent('x');
+    const bool noe = exceptions_disabled();
+    if (!noe) {
+      em.puts("try {\n");
+      em.indent('x');
+    }
     if (is_interf_impl) {
       em.puts("new (" + varp1 + ") " + otyp_cstr + "(");
     } else {
@@ -2969,34 +3132,40 @@ static void emit_vardef_constructor_fast_boxing(emit_context& em,
       if (is_multithreaded_pointer_family(typ)) {
 	/* initialize monitor */
 	em.indent('x');
-	em.puts("try {\n");
-	em.indent('x');
+	if (!noe) {
+	  em.puts("try {\n");
+	  em.indent('x');
+	}
 	em.puts("new (&" + varp1 + "->monitor$z) pxcrt::monitor();\n");
 	em.indent('x');
-	em.puts("} catch (...) {\n");
-	em.indent('x');
-	em.puts("typedef ");
-	em.puts(term_tostr_cname(otyp));
-	em.puts(" ");
-	em.puts(dtor_typedef_name(otyp));
-	em.puts(";\n");
-	em.indent('x');
-	em.puts(varp1 + "->value." + destructor_cstr(otyp) + "();\n");
-	em.indent('x');
-	em.puts("throw;\n");
-	em.indent('x');
-	em.puts("}\n");
+	if (!noe) {
+	  em.puts("} catch (...) {\n");
+	  em.indent('x');
+	  em.puts("typedef ");
+	  em.puts(term_tostr_cname(otyp));
+	  em.puts(" ");
+	  em.puts(dtor_typedef_name(otyp));
+	  em.puts(";\n");
+	  em.indent('x');
+	  em.puts(varp1 + "->value." + destructor_cstr(otyp) + "();\n");
+	  em.indent('x');
+	  em.puts("throw;\n");
+	  em.indent('x');
+	  em.puts("}\n");
+	}
       }
     }
-    em.indent('x');
-    em.puts("} catch (...) {\n");
-    em.indent('x');
-    em.puts("pxcrt::deallocate_single< " + otypcnt_cstr + " >(" + varp1
-      + ");\n");
-    em.indent('x');
-    em.puts("throw;\n");
-    em.indent('x');
-    em.puts("}\n");
+    if (!noe) {
+      em.indent('x');
+      em.puts("} catch (...) {\n");
+      em.indent('x');
+      em.puts("pxcrt::deallocate_single< " + otypcnt_cstr + " >(" + varp1
+	+ ");\n");
+      em.indent('x');
+      em.puts("throw;\n");
+      em.indent('x');
+      em.puts("}\n");
+    }
     em.indent('x');
     em.puts(cs0 + " " + var_csymbol);
     em.puts("((" + varp1 + "))");
@@ -3293,10 +3462,25 @@ static void emit_inline_c(emit_context& em, const std::string& posstr,
   }
 }
 
+static void emit_profile(emit_context& em)
+{
+  typedef std::map<std::string, std::string> profile_type;
+  profile_type::const_iterator i;
+  for (i = cur_profile->begin(); i != cur_profile->end(); ++i) {
+    em.puts("#define PXC_PROFILE_");
+    em.puts(i->first);
+    em.puts(" ");
+    em.puts(i->second);
+    em.puts("\n");
+  }
+
+}
+
 void emit_code(const std::string& dest_filename, expr_block *gl_block,
   generate_main_e gmain)
 {
   emit_context em(dest_filename);
+  emit_profile(em);
   em.set_file_line(gl_block);
   em.puts("/* type definitions */\n");
   emit_inline_c(em, "types", true);

@@ -2,6 +2,7 @@ NUM		[0-9]
 HDNUM		[0-9a-fA-F]
 AL		[a-zA-Z_]
 ALNUM		[0-9a-zA-Z_]
+SZ		[OSLZ]
 ESCCH		[abfnrtv\'\"\\\?\0]
 NOEI		(\n|[^\;\n].*\n)
 NOEC		([^\*]|\*[^\/])
@@ -62,17 +63,17 @@ extern int count_newline(const char *str);
 "expand"		{ return TOK_EXPAND; }
 \'(\\{ESCCH}|[^\\'])\'	{ yylval.str_val = pxc::arena_strdup(yytext);
 			  return TOK_UINTLIT; }
-{NUM}+UL?		{ yylval.str_val = pxc::arena_strdup(yytext);
+{NUM}+U{SZ}?		{ yylval.str_val = pxc::arena_strdup(yytext);
 			  return TOK_UINTLIT; }
-0x{HDNUM}+UL?		{ yylval.str_val = pxc::arena_strdup(yytext);
+0x{HDNUM}+U{SZ}?	{ yylval.str_val = pxc::arena_strdup(yytext);
 			  return TOK_UINTLIT; }
-{NUM}+L?		{ yylval.str_val = pxc::arena_strdup(yytext);
+{NUM}+{SZ}?		{ yylval.str_val = pxc::arena_strdup(yytext);
 			  return TOK_INTLIT; }
-0x{HDNUM}+L?		{ yylval.str_val = pxc::arena_strdup(yytext);
+0x{HDNUM}+{SZ}?		{ yylval.str_val = pxc::arena_strdup(yytext);
 			  return TOK_INTLIT; }
 {AL}{ALNUM}*		{ yylval.str_val = pxc::arena_strdup(yytext);
 			  return TOK_SYMBOL; }
-{NUM}+\.{NUM}+		{ yylval.str_val = pxc::arena_strdup(yytext);
+{NUM}+\.{NUM}+F?	{ yylval.str_val = pxc::arena_strdup(yytext);
 			  return TOK_FLOATLIT; }
 \"(\\.|[^\\"])*\"	{ yylval.str_val = pxc::arena_strdup(yytext);
 			  return TOK_STRLIT; }

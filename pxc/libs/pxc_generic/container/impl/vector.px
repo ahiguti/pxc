@@ -1,4 +1,4 @@
-namespace container::impl::string "use-unsafe";
+namespace container::impl::vector "use-unsafe";
 public import numeric::integral;
 public import container::impl::invguard;
 public import container::impl::array_common;
@@ -213,7 +213,7 @@ struct pxcvector {
     }
     return *this;
   }
-  bool empty() const { return valid_len == 0; }
+  bt_bool empty() const { return valid_len == 0; }
   size_type size() const { return valid_len; }
   bt_size_t find(bt_size_t offset, T const& value) const {
     return array_find(start, valid_len, offset, value);
@@ -329,11 +329,11 @@ private:
     if (is_trivially_copyable<T>::value) {
       initialize_copy_n(start, valid_len, ptr);
     } else {
-      try {
+      PXC_TRY {
 	initialize_copy_n(start, valid_len, ptr);
-      } catch (...) {
+      } PXC_CATCH(...) {
 	deallocate_uninitialized(start, alloc_len);
-	throw;
+	PXC_RETHROW;
       }
     }
   }
@@ -398,7 +398,7 @@ private:
       const size_type nl_n = (nl >= 1) ? (nl * 2) : 1;
       const size_type max_len = ((size_t)-1) / sizeof(T);
       if (nl_n <= nl || nl_n > max_len) {
-        throw std::bad_alloc(); /* overflow */
+        PXC_THROW(std::bad_alloc()); /* overflow */
       }
       nl = nl_n;
     } while (nl < len);
@@ -511,13 +511,8 @@ template <typename Tx, typename Ty> inline bool
 le_memcmp(const Tx& x, const Ty& y) { return !lt_memcmp(y, x); }
 template <typename Tx, typename Ty> inline bool
 ge_memcmp(const Tx& x, const Ty& y) { return !lt_memcmp(x, y); }
-inline int memcmp_string(const bt_string& x, const bt_string& y)
-{ return compare_memcmp(x, y); }
-inline int memcmp_strlit(const bt_strlit& x, const bt_strlit& y)
-{ return compare_memcmp(x, y); }
-inline int memcmp_strref(const strref& x, const strref& y)
-{ return compare_memcmp(x, y); }
-inline int memcmp_cstrref(const cstrref& x, const cstrref& y)
+
+template <typename T> inline int memcmp_string(T const& x, T const& y)
 { return compare_memcmp(x, y); }
 
 inline bt_string cstr_to_string(const char *cstr)

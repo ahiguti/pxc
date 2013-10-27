@@ -1,0 +1,21 @@
+namespace tbl_bug1;
+import common -;
+import io::text -;
+
+mtvaluetype struct ent {
+  string key;
+  int x;
+  int y;
+}
+
+{
+  const f = system.open("hoge.text", O_RDONLY, 0).value;
+  f.read_table{record_cb, 0}(); // error: es is not defined yet
+  vector{ent} es;
+  threaded function bool record_cb(ent const& e) {
+    es.push_back(e);
+    return true;
+  }
+  println(es);
+}
+

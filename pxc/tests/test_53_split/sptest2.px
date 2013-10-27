@@ -3,7 +3,7 @@ import split -;
 import common -;
 import io::file -;
 import io::errno -;
-import io::buffered -;
+import io::text -;
 import text::conversion -;
 import meta m;
 
@@ -12,7 +12,7 @@ function void t1()
   string buffer;
   const msg = "x";
   const f = system.open("hoge3.txt", io::file::O_RDONLY, 0);
-  stream_foreach{file, parse_line}(f.value, '\n', 4096);
+  f.value.read_lines{parse_line, 0}();
   function bool parse_line(cslice{uchar} line) {
     line.pop_back(1);
     string s = "cb ";
