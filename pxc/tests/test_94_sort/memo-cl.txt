@@ -1,0 +1,27 @@
+
+pxのclosureをc++の関数オブジェクトにする方法?
+
+externテンプレ関数のテンプレ引数に関数が指定された場合は、
+pxのclosureをwrapする関数オブジェクト型を作り、そのインスタンスを
+テンプレ関数の最後の引数として暗黙裡に追加する。
+
+1. externテンプレ関数のテンプレパラメータに関数が指定された場合、
+   その関数に「cの関数オブジェクトをemitする」フラグをつける
+2. テンプレ関数式をemitするところで、テンプレパラメータが関数だったら
+   関数オブジェクトの型のほうをemitするようにする。
+3. externテンプレ関数を呼ぶときには、うしろに暗黙の関数オブジェクト
+   の一時オブジェクトを作る式を追加する。
+
+closureの関数オブジェクト
+
+function bool cmp(size_t x, size_t y) { } これがfooを運ぶ場合
+
+struct cmp$fo {
+  cmp$fo(u0) : u0$up(_0) { }
+  bool operator ()(size_t x, size_t y) {
+    cmp$f(u0$up, x, y);
+  }
+};
+
+sort<...>(vec, cmp$fo(u0$up));
+

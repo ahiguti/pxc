@@ -85,11 +85,10 @@ struct builtins_type {
   term type_ulong;
   term type_long;
   term type_size_t;
+  term type_ssize_t;
   term type_float;
   term type_double;
   term type_strlit;
-  term type_slice;
-  term type_cslice;
   term type_tpdummy;
 };
 
@@ -168,9 +167,9 @@ enum typefamily_e {
   typefamily_e_farray,           /* fixed size array, fixed at compile time */
   typefamily_e_slice,            /* array slice (eph) */
   typefamily_e_cslice,           /* array slice, const elements (eph) */
-  typefamily_e_tree_map,         /* rb-tree map */
-  typefamily_e_tree_map_range,   /* range on tree_map (eph) */
-  typefamily_e_tree_map_crange,  /* range on tree_map, const elements (eph) */
+  typefamily_e_map,              /* map */
+  typefamily_e_map_range,        /* range on map (eph) */
+  typefamily_e_map_crange,       /* range on map, const elements (eph) */
   typefamily_e_ephemeral,        /* other ephemeral type (eph) */
   typefamily_e_linear,           /* noncopyable, nodefaultcon */
   typefamily_e_noncopyable,      /* noncopyable */
@@ -1129,9 +1128,11 @@ struct expr_funcdef : public expr_i {
   }
   expr_block *get_template_block() { return block; }
   bool is_global_function() const;
+  #if 0
   bool has_template_param_upvalues() const {
     return tpup_thisptr != 0 || !tpup_vec.empty(); }
     /* NOTE: can be used only after compiled */
+  #endif
   expr_struct *is_member_function() const;
   expr_interface *is_virtual_function() const;
   expr_i *is_virtual_or_member_function() const;
@@ -1174,23 +1175,6 @@ public:
   bool ext_decl : 1;  /* imported function and block may be null */
   bool no_def : 1;    /* extern c function or virtual function decl */
   term value_texpr;
-  typedef std::vector<expr_funcdef *> callee_vec_type;
-  typedef std::set<expr_funcdef *> callee_set_type;
-  callee_vec_type callee_vec;
-  callee_set_type callee_set;
-  #if 0
-  callee_vec_type callee_vec_tr;
-  callee_set_type callee_set_tr;
-  #endif
-  /* following tpup_* flds are used when this function instance has
-   * template parameter functions and they need upvalues. */
-  typedef std::vector<expr_i *> tpup_vec_type;
-  typedef std::set<expr_i *> tpup_set_type;
-  tpup_vec_type tpup_vec;
-  tpup_set_type tpup_set;
-  expr_struct *tpup_thisptr;
-  bool tpup_thisptr_nonconst : 1;
-  /* TODO */
   typedef std::pair<
     symbol_table * /* caller symtbl */,
     expr_funcdef * /* callee funcdef */> call_entry;
@@ -1203,6 +1187,7 @@ public:
   dep_upvalues_type dep_upvalues;
   dep_upvalues_type dep_upvalues_tr;
   attribute_e attr;
+  bool used_as_cfuncobj;
 };
 
 struct expr_typedef : public expr_i {

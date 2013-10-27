@@ -307,6 +307,8 @@ static const builtin_typedefs_type builtin_typedefs[] = {
     type_attribute(63, 63, true, true, true), &builtins.type_long },
   { "size_t", "pxcrt::bt_size_t", 0, true, 0,
     type_attribute(32, 64, true, true, false), &builtins.type_size_t},
+  { "ssize_t", "pxcrt::bt_ssize_t", 0, true, 0,
+    type_attribute(32, 63, true, true, true), &builtins.type_ssize_t},
   { "float", "pxcrt::bt_float", 0, true, 0,
     type_attribute(23, 23, true, false, true), &builtins.type_float },
   { "double", "pxcrt::bt_double", 0, true, 0,
@@ -375,8 +377,6 @@ static void define_builtins()
 static bool define_builtin_string(expr_stmts *stmts_runtime)
 {
   builtins.type_strlit = builtins.type_void;
-  builtins.type_slice = builtins.type_void;
-  builtins.type_cslice = builtins.type_void;
   for (expr_stmts *st = stmts_runtime; st != 0; st = st->rest) {
     expr_struct *def = dynamic_cast<expr_struct *>(st->head);
     if (def == 0) {
@@ -386,15 +386,9 @@ static bool define_builtin_string(expr_stmts *stmts_runtime)
     const std::string ns(def->get_unique_namespace());
     if (s == "strlit" && ns == "container::array") {
       builtins.type_strlit = def->get_value_texpr();
-    } else if (s == "slice" && ns == "container::array") {
-      builtins.type_slice = def->get_value_texpr();
-    } else if (s == "cslice" && ns == "container::array") {
-      builtins.type_cslice = def->get_value_texpr();
     }
   }
-  if (builtins.type_strlit == builtins.type_void ||
-    builtins.type_slice == builtins.type_void ||
-    builtins.type_cslice == builtins.type_void) {
+  if (builtins.type_strlit == builtins.type_void) {
     return false;
   }
   return true;
@@ -540,9 +534,6 @@ void arena_compile(const std::map<std::string, std::string>& prof_map,
   compile_phase = 5;
   fn_check_root(global);
   compile_phase = 6;
-  // TODO: remove
-  fn_check_template_upvalues_direct(global);
-  fn_check_template_upvalues_tparam(global);
   fn_check_dep_upvalues(global);
   arena_error_throw_pushed();
   // double t1 = gettimeofday_double();

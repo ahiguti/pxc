@@ -65,10 +65,10 @@ void *pxc_thread_child_main(void *arg)
 {
   thrdata_rawptr m = static_cast<thrdata_rawptr>(arg);
   /* no need to lock m */
-  try {
-    try {
+  PXC_TRY {
+    PXC_TRY {
       m->main$f();
-    } catch (const std::exception& e) {
+    } PXC_CATCH(const std::exception& e) {
       std::string mess;
       pxcrt::bt_string s0 = pxcrt::c_exception_message(e);
       mess.insert(mess.end(), s0.begin(), s0.end());
@@ -80,7 +80,7 @@ void *pxc_thread_child_main(void *arg)
       ::write(2, mess.data(), mess.size());
       //::abort();
     }
-  } catch (...) {
+  } PXC_CATCH(...) {
     const char *const mess = "thread: uncaught exception\n";
     ::write(2, mess, strlen(mess));
     // ::abort();

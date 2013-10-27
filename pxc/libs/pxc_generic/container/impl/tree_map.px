@@ -1,8 +1,9 @@
-namespace container::impl::stdmap "use-unsafe";
+namespace container::impl::tree_map "use-unsafe";
 public import container::impl::array_common;
 
 extern "types" inline
 #include <map>
+#include <set>
 namespace tree_map {
 
 template <typename Tf>
@@ -69,6 +70,15 @@ struct with_guard {
     return range_type(r.first, r.second);
   }
   size_type size() const { return v.size(); }
+  bool insert(const key_type& k, const mapped_type& v) {
+    /* insert() does not invalidate iterators */
+    return v.insert(std::pair<key_type, mapped_type>(k, v));
+  }
+  bool insert_key(const key_type& k, const mapped_type& v) {
+    /* tree_set uses this */
+    /* insert_key() does not invalidate iterators */
+    return v.insert(k);
+  }
   size_type erase(const key_type& k) {
     check_resize();
     return v.erase(k);
@@ -100,6 +110,16 @@ struct tree_map_compare
   tree_map_compare() { }
   tree_map_compare(const typename base_type::range_type& x) : base_type(x) { }
   tree_map_compare(const typename base_type::crange_type& x) : base_type(x) { }
+};
+
+template <typename Tk, typename Tf>
+struct tree_set_compare
+  : public with_guard< std::set< Tk, compare_less<Tf> > >
+{
+  typedef with_guard< std::set< Tk, compare_less<Tf> > > base_type;
+  tree_set_compare() { }
+  tree_set_compare(const typename base_type::range_type& x) : base_type(x) { }
+  tree_set_compare(const typename base_type::crange_type& x) : base_type(x) { }
 };
 
 template <typename Tmap>
@@ -193,69 +213,46 @@ struct tree_map_crange
   }
 };
 
-/*
-template <typename Tk, typename Tm, typename Tf>
-struct tree_map_range {
-  typedef with_guard< std::map<Tk, Tm, compare_less<Tf> > > tree_map_type;
-  typedef typename tree_map_type::iterator iterator;
-  typedef typename tree_map_type::const_iterator const_iterator;
-  tree_map_range() : start(), finish() { }
-  explicit tree_map_range(tree_map_type& c)
-    : start(c.begin()), finish(c.end()) { }
-  tree_map_range(const iterator& i0, const iterator& i1)
-    : start(i0), finish(i1) { }
-  template <typename Tc> tree_map_range(Tc& c, const Tk& k0,
-    const Tk& k1) : start(c.find(k0)), finish(c.find(k1)) {
+template <typename Tk, typename Tf>
+struct tree_set_range
+  : public map_range< with_guard< std::set< Tk, compare_less<Tf> > > >
+{
+  typedef with_guard< std::set<Tk, compare_less<Tf> > > map_type;
+  typedef map_range<map_type> base_type;
+  typedef typename base_type::iterator iterator;
+  tree_set_range() { }
+  tree_set_range(const iterator& i0, const iterator& i1)
+    : base_type(i0, i1) { }
+  explicit tree_set_range(map_type& c)
+    : base_type(c.begin(), c.end()) { }
+  template <typename Tc> tree_set_range(Tc& c, const Tk& k0, const Tk& k1)
+    : base_type(c.lower_bound(k0), c.upper_bound(k1)) {
+    compare_less<Tf> cmp;
+    if (!cmp(k0, k1)) { this->start = this->finish = iterator(); }
   }
-  bool empty() const { return start == finish; }
-  Tm& operator *() const {
-    if (start == finish) { pxcrt::throw_invalid_index(); }
-    return start->second;
-  }
-  void next() {
-    if (start == finish) { pxcrt::throw_invalid_index(); }
-    ++start;
-  }
-  iterator begin() const { return start; }
-  iterator end() const { return finish; }
-private:
-  iterator start;
-  iterator finish;
 };
-*/
 
-/*
-template <typename Tk, typename Tm, typename Tf>
-struct tree_map_crange {
-  typedef with_guard< std::map<Tk, Tm, compare_less<Tf> > > tree_map_type;
-  typedef typename tree_map_type::const_iterator iterator;
-  typedef typename tree_map_type::const_iterator const_iterator;
-  tree_map_crange() : start(), finish() { }
-  explicit tree_map_crange(const tree_map_type& c)
-    : start(c.begin()), finish(c.end()) { }
-  tree_map_crange(const iterator& i0, const iterator& i1)
-    : start(i0), finish(i1) { }
-  tree_map_crange(const tree_map_range<Tk, Tm, Tf>& r)
-    : start(r.begin()), finish(r.end()) { }
-  template <typename Tc> tree_map_crange(const Tc& c, const Tk& k0,
-    const Tk& k1) : start(c.find(k0)), finish(c.find(k1)) {
+template <typename Tk, typename Tf>
+struct tree_set_crange
+  : public map_crange< with_guard< std::set< Tk, compare_less<Tf> > > >
+{
+  typedef with_guard< std::set<Tk, compare_less<Tf> > > map_type;
+  typedef map_crange<map_type> base_type;
+  typedef typename base_type::iterator iterator;
+  tree_set_crange() { }
+  tree_set_crange(const iterator& i0, const iterator& i1)
+    : base_type(i0, i1) { }
+  explicit tree_set_crange(const map_type& c)
+    : base_type(c.begin(), c.end()) { }
+  tree_set_crange(const tree_set_range<Tk, Tf>& r)
+    : base_type(r.begin(), r.end()) { }
+  template <typename Tc>
+  tree_set_crange(const Tc& c, const Tk& k0, const Tk& k1)
+    : base_type(c.lower_bound(k0), c.upper_bound(k1)) {
+    compare_less<Tf> cmp;
+    if (!cmp(k0, k1)) { this->start = this->finish = iterator(); }
   }
-  bool empty() const { return start == finish; }
-  const Tm& operator *() const {
-    if (start == finish) { pxcrt::throw_invalid_index(); }
-    return start->second;
-  }
-  void next() {
-    if (start == finish) { pxcrt::throw_invalid_index(); }
-    ++start;
-  }
-  const_iterator begin() const { return start; }
-  const_iterator end() const { return finish; }
-private:
-  const_iterator start;
-  const_iterator finish;
 };
-*/
 
 }; // namespace tree_map
 ;

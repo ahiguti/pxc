@@ -1,0 +1,61 @@
+namespace io::text;
+public import numeric::integral -;
+public import container::array -;
+public import io::file +;
+public import io::errno -;
+public import text::split -;
+public import meta m;
+
+threaded function {cb, opt} errno_t file_read_lines(file const& ifile)
+{
+  metafunction line_delim get_opt{opt, "line_delim", '\n'};
+  metafunction read_block_size get_opt{opt, "read_block_size", 16384};
+  string buffer;
+  bool cont_flag = true;
+  while (cont_flag) {
+    size_t pos = buffer.size();
+    size_t rlen = read_block_size;
+    const e = ifile.read(buffer, rlen);
+    if (e != EOK) {
+      return e;
+    }
+    if (rlen == 0) {
+      break;
+    }
+    while (cont_flag) {
+      const uchar delim = line_delim;
+      size_t const p = find_mapped{string}(buffer, pos, delim);
+      if (p == buffer.size()) {
+	break;
+      }
+      cstrref sr = buffer[pos .. p + 1];
+      cont_flag = cb(sr);
+      pos = p + 1;
+    }
+    buffer.erase(0, pos);
+  }
+  return EOK;
+}
+
+threaded function {cb, opt} errno_t
+file_read_table(file const& ifile)
+{
+  metafunction enttype m::argtype{cb, 0};
+  metafunction column_delim get_opt{opt, "column_delim", column_delim_space};
+  const err = file_read_lines{parse_line, opt}(ifile);
+  threaded function bool parse_line(cstrref const& line) {
+    enttype e;
+    string_split{column_delim}(line,
+      expand(fld: m::field_names{enttype}; e.fld));
+    return cb(e);
+  }
+  return err;
+}
+
+private metafunction get_opt{opt, k, def}
+  m::cond{m::is_type{opt}, m::local{opt, k}, def};
+
+private threaded function bool column_delim_space(uchar ch) {
+  return ch == ' ' || ch == '\t';
+}
+

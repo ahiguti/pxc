@@ -1,0 +1,21 @@
+namespace tbl;
+import common -;
+import io::text -;
+
+mtvaluetype struct ent {
+  string key;
+  int x;
+  int y;
+}
+
+{
+  const f = system.open("hoge.txt", O_RDONLY, 0).value;
+  vector{ent} es;
+  f.read_table{record_cb, 0}();
+  threaded function bool record_cb(ent const& e) {
+    es.push_back(e);
+    return true;
+  }
+  println(es);
+}
+

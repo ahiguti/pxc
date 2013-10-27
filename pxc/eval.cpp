@@ -142,6 +142,38 @@ static void downgrade_threading_attribute_rec(expr_i *e, attribute_e mask)
   }
 }
 
+static void check_closure_cfuncobj(const term& t, const expr_i *einst)
+{
+  if (einst->get_esort() != expr_e_funcdef) {
+    return;
+  }
+#if 0
+//fprintf(stderr, "check_closure_cfuncobj %s\n", term_tostr_human(t).c_str());
+#endif
+  const expr_funcdef *const efd_inst =
+    ptr_down_cast<const expr_funcdef>(einst);
+  if (!efd_inst->cnamei.is_extdef()) {
+    return; /* efd_inst is not an external c function */
+  }
+  const term_list *targs = t.get_args();
+  if (targs == 0) {
+    return;
+  }
+  for (term_list::const_iterator i = targs->begin(); i != targs->end(); ++i) {
+    expr_i *const c = i->get_expr();
+    if (c == 0 || c->get_esort() != expr_e_funcdef) {
+      continue;
+    }
+    term cte = *i;
+    expr_funcdef *const efd = ptr_down_cast<expr_funcdef>(
+      term_get_instance(cte));
+      efd->used_as_cfuncobj = true;
+#if 0
+fprintf(stderr, "used_as_funcobj %s\n", term_tostr_human(*i).c_str());
+#endif
+  }
+}
+
 static expr_i *instantiate_template_internal(expr_i *tmpl_root,
   const term_list_range& targs)
 {
@@ -210,6 +242,8 @@ static expr_i *instantiate_template_internal(expr_i *tmpl_root,
   /* tree must be updated before check_inherit_threading because inherit
    * base may use tparam. */
   check_inherit_threading(rcpy, rcpy->get_template_block());
+  /* closure is used as a c++ function object? */
+  check_closure_cfuncobj(rt, rcpy);
   return rcpy;
 }
 

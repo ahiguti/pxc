@@ -5,14 +5,14 @@ import io -;
 import io::file -;
 import io::errno -;
 import io::standard -;
-import io::buffered -;
+import io::text -;
 import text::conversion -;
 
 function {t} void parse_table(file const& fp, t mutable& tbl)
 {
   t:key_type key;
   t:mapped_type mapped;
-  stream_foreach{file, parse_line}(fp, '\n', 16384);
+  fp.read_lines{parse_line, 0}();
   function bool parse_line(cstrref const& line) {
     size_t const sz = line.size();
     size_t cur = 0;

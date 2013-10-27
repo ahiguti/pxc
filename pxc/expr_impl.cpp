@@ -587,20 +587,32 @@ expr_int_literal::resolve_texpr()
 	type_of_this_expr = builtins.type_uchar;
       } else {
 	const char *p = str;
-	for (; *p != 0 && *p != 'L'; ++p) { }
-	if (*p == 'L') {
-	  type_of_this_expr = builtins.type_ulong;
-	} else {
-	  type_of_this_expr = builtins.type_uint;
+	type_of_this_expr = builtins.type_uint;
+	for (; *p != 0; ++p) {
+	  if (*p == 'L') {
+	    type_of_this_expr = builtins.type_ulong;
+	  } else if (*p == 'S') {
+	    type_of_this_expr = builtins.type_ushort;
+	  } else if (*p == 'O') {
+	    type_of_this_expr = builtins.type_uchar;
+	  } else if (*p == 'Z') {
+	    type_of_this_expr = builtins.type_size_t;
+	  }
 	}
       }
     } else {
       const char *p = str;
-      for (; *p != 0 && *p != 'L'; ++p) { }
-      if (*p == 'L') {
-	type_of_this_expr = builtins.type_long;
-      } else {
-	type_of_this_expr = builtins.type_int;
+      type_of_this_expr = builtins.type_int;
+      for (; *p != 0; ++p) {
+	if (*p == 'L') {
+	  type_of_this_expr = builtins.type_long;
+	} else if (*p == 'S') {
+	  type_of_this_expr = builtins.type_short;
+	} else if (*p == 'O') {
+	  type_of_this_expr = builtins.type_char;
+	} else if (*p == 'Z') {
+	  type_of_this_expr = builtins.type_ssize_t;
+	}
       }
     }
   }
@@ -651,7 +663,12 @@ expr_float_literal::expr_float_literal(const char *fn, int line,
   const char *str)
   : expr_i(fn, line), str(str)
 {
-  type_of_this_expr = builtins.type_double;
+  size_t s = strlen(str);
+  if (s != 0 && str[s - 1] == 'F') {
+    type_of_this_expr = builtins.type_float;
+  } else {
+    type_of_this_expr = builtins.type_double;
+  }
 }
 
 double expr_float_literal::get_value() const
@@ -1435,8 +1452,8 @@ expr_funcdef::expr_funcdef(const char *fn, int line, const char *sym,
   attribute_e attr)
   : expr_i(fn, line), sym(sym), cnamei(cname), is_const(is_const),
     rettype_eval(), block(ptr_down_cast<expr_block>(block)),
-    ext_decl(ext_decl), no_def(no_def), value_texpr(), tpup_thisptr(0),
-    tpup_thisptr_nonconst(false), attr(attr)
+    ext_decl(ext_decl), no_def(no_def), value_texpr(), attr(attr),
+    used_as_cfuncobj(false)
 {
   assert(block);
   this->block->symtbl.block_esort = expr_e_funcdef;

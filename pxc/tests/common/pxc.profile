@@ -8,3 +8,5 @@ cflags=-g -O3 -DNDEBUG -DNO_LOCAL_POOL=1
 # cflags=-DPXCRT_DBG_RC
 cxx=g++
 # cxx=clang++
+# cflags=-g -O3 -DNDEBUG -DNO_LOCAL_POOL=1 -fno-exceptions
+# noexceptions=1

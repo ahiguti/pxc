@@ -10,7 +10,7 @@ public import text::minimal_encode e;
 
 public threaded function {t} string to_string(t const& x)
 {
-  if (is_string_family_type{t}) {
+  if (mf::is_string_or_slice_type{t}) {
     return x;
   } else {
     string s;
@@ -27,7 +27,7 @@ public threaded function {t} void serialize_to_string(t const& x,
 
 public threaded function {t} t from_string(cstrref const& s)
 {
-  if (is_string_family_type{t}) {
+  if (mf::is_string_or_slice_type{t}) {
     return s;
   } else {
     cstrref s1 = s;
@@ -82,9 +82,9 @@ private threaded struct serialize_tpl {
     m::eq{m::to_string{sym{t}}, symstr{t}};
   metafunction specialized_func{t}
     m::cond{has_specialized_symbol{t}, sym{t},
-    m::cond{is_string_family_type{t}, string_append_escape{t},
-    m::cond{n::is_integral{t}, p::integral_to_decimal,
-    m::cond{n::is_fp{t}, p::fp_to_decimal,
+    m::cond{mf::is_string_or_slice_type{t}, string_append_escape{t},
+    m::cond{mf::is_integral_type{t}, p::integral_to_decimal,
+    m::cond{mf::is_fp_type{t}, p::fp_to_decimal,
     m::cond{m::eq{t, bool}, bool_to_string,
     m::cond{m::eq{t, unit}, string_append_star,
     0}}}}}};
@@ -241,9 +241,9 @@ private threaded struct deserialize_tpl {
     m::eq{m::to_string{sym{t}}, symstr{t}};
   metafunction specialized_func{t}
     m::cond{has_specialized_symbol{t}, string_parse_token{t, sym{t}},
-    m::cond{is_string_family_type{t}, string_parse_string_unescape,
-    m::cond{n::is_integral{t}, string_parse_integral{t},
-    m::cond{n::is_fp{t}, string_parse_fp{t},
+    m::cond{mf::is_string_or_slice_type{t}, string_parse_string_unescape,
+    m::cond{mf::is_integral_type{t}, string_parse_integral{t},
+    m::cond{mf::is_fp_type{t}, string_parse_fp{t},
     m::cond{m::eq{t, bool}, string_parse_bool,
     m::cond{m::eq{t, unit}, string_parse_unit,
     0}}}}}};

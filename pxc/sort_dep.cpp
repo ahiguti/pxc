@@ -32,9 +32,9 @@ static std::list<expr_i *> get_dep_tparams(expr_struct *est)
       term t = (*args)[0]; /* elemnt type */
       r.push_back(term_get_instance(t));
     }
-  } else if (cat == typefamily_e_tree_map) {
-    if (argslen > 2) {
-      term t = (*args)[2]; /* compare funcobject */
+  } else if (cat == typefamily_e_map) {
+    if (argslen > 1) {
+      term t = (*args)[argslen - 1]; /* compare funcobject */
       r.push_back(term_get_instance(t));
     }
   } else if (

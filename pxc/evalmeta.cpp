@@ -1376,7 +1376,11 @@ static term eval_meta_nsname(const term_list_range& tlev, eval_context& ectx,
     return term();
   }
   const term t(e); /* drop params */
-  const std::string s(term_tostr_human(t));
+  std::string s(term_tostr_human(t));
+  std::string::size_type p = s.find('{');
+  if (p != s.npos) {
+    s = s.substr(0, p); /* drop { ... } */
+  }
   return term(s);
 }
 
@@ -1745,6 +1749,7 @@ static const builtin_typestub_entry builtin_typestub_entries[] = {
   { "@0ulong", &builtins.type_ulong },
   { "@0long", &builtins.type_long },
   { "@0size_t", &builtins.type_size_t },
+  { "@0ssize_t", &builtins.type_ssize_t },
   { "@0float", &builtins.type_float },
   { "@0double", &builtins.type_double },
   { "@0strlit", &builtins.type_strlit },

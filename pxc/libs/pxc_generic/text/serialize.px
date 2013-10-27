@@ -14,10 +14,9 @@ private metafunction field_types_sorted{t}
 public threaded function {tpl, t} void serialize(t const& x,
   m::local{tpl, "target_type"} mutable& o)
 {
-  metafunction fam m::family{t};
   if (m::not{m::eq{m::local{tpl, "specialized_func", t}, 0}}) {
     m::local{tpl, "specialized_func", t}(x, o);
-  } else if (mf::is_array_family{fam}) {
+  } else if (mf::is_array_or_slice_type{t}) {
     m::local{tpl, "array_begin"}(o);
     for (size_t i, m::at{t, 0} v : x) {
       if (i != 0) {
@@ -26,7 +25,7 @@ public threaded function {tpl, t} void serialize(t const& x,
       serialize{tpl, m::at{t, 0}}(v, o);
     }
     m::local{tpl, "array_end"}(o);
-  } else if (mf::is_map_family{fam}) {
+  } else if (mf::is_map_or_range_type{t}) {
     m::local{tpl, "map_begin"}(o);
     bool is_first = true;
     for (m::at{t, 0} k, m::at{t, 1} v : x) {
@@ -40,11 +39,11 @@ public threaded function {tpl, t} void serialize(t const& x,
       serialize{tpl, m::at{t, 1}}(v, o);
     }
     m::local{tpl, "map_end"}(o);
-  } else if (mf::is_pointer_family{fam}) {
+  } else if (mf::is_pointer_type{t}) {
     m::local{tpl, "pointer_begin"}(o);
     serialize{tpl, m::at{t, 0}}(*x, o);
     m::local{tpl, "pointer_end"}(o);
-  } else if (mf::is_struct_family{fam}) {
+  } else if (mf::is_struct_type{t}) {
     m::local{tpl, "struct_begin"}(o);
     expand (fld, idx : field_names_sorted{t}) {
       {
@@ -57,7 +56,7 @@ public threaded function {tpl, t} void serialize(t const& x,
       }
     }
     m::local{tpl, "struct_end"}(o);
-  } else if (mf::is_union_family{fam}) {
+  } else if (mf::is_union_type{t}) {
     m::local{tpl, "union_begin"}(o);
     expand (fld, idx : m::field_names{t}) {
       if (case x.fld) {
@@ -75,10 +74,9 @@ public threaded function {tpl, t} void serialize(t const& x,
 public threaded function {tpl, t} t
 deserialize(m::local{tpl, "source_type"} mutable& s)
 {
-  metafunction fam m::family{t};
   if (m::not{m::eq{m::local{tpl, "specialized_func", t}, 0}}) {
     return m::local{tpl, "specialized_func", t}(s);
-  } else if (mf::is_array_family{fam}) {
+  } else if (mf::is_array_or_slice_type{t}) {
     /* TODO: farray, darray */
     t r;
     if (m::local{tpl, "array_begin_cond"}(s)) {
@@ -99,7 +97,7 @@ deserialize(m::local{tpl, "source_type"} mutable& s)
       m::local{tpl, "value_skip"}(s);
     }
     return r;
-  } else if (mf::is_map_family{fam}) {
+  } else if (mf::is_map_or_range_type{t}) {
     t r;
     if (s.empty() || m::local{tpl, "map_begin_cond"}(s)) {
       bool is_first = true;
@@ -124,7 +122,7 @@ deserialize(m::local{tpl, "source_type"} mutable& s)
       m::local{tpl, "value_skip"}(s);
     }
     return r;
-  } else if (mf::is_pointer_family{fam}) {
+  } else if (mf::is_pointer_type{t}) {
     if (m::local{tpl, "pointer_begin_cond"}(s)) {
       t r = pointer::box_pointer{t}(deserialize{tpl, m::at{t, 0}}(s));
       m::local{tpl, "pointer_end_skip"}(s);
@@ -135,7 +133,7 @@ deserialize(m::local{tpl, "source_type"} mutable& s)
       t r = pointer::box_pointer{t}(deserialize{tpl, m::at{t, 0}}(s0));
       return r;
     }
-  } else if (mf::is_struct_family{fam}) {
+  } else if (mf::is_struct_type{t}) {
     t r;
     if (m::local{tpl, "struct_begin_cond"}(s)) {
       expand (fld, idx : field_names_sorted{t}) {
@@ -176,7 +174,7 @@ deserialize(m::local{tpl, "source_type"} mutable& s)
       m::local{tpl, "value_skip"}(s);
     }
     return r;
-  } else if (mf::is_union_family{fam}) {
+  } else if (mf::is_union_type{t}) {
     t r;
     if (m::local{tpl, "union_begin_cond"}(s)) {
       bool is_first = true;

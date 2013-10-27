@@ -3,8 +3,10 @@ public import numeric::integral -;
 public import container::array -;
 
 extern "types" inline
+
 #include <stdexcept>
 #include <vector>
+
 namespace pxcrt {
 
 void throw_invalid_index() __attribute__((noreturn));
@@ -16,7 +18,7 @@ void set_stack_trace_limit(size_t sz);
 
 struct exception {
   exception();
-  virtual ~exception() throw() { }
+  virtual ~exception() PXC_NOTHROW { }
   virtual bt_string message() const = 0;
   std::vector<void *> trace;
 };
@@ -55,10 +57,8 @@ int main_nothrow(void (*main_f)(void));
 
 extern "functions" inline
 namespace pxcrt {
-
 bt_string c_exception_message(std::exception const& ex);
 bt_string c_exception_stack_trace(std::exception const& ex);
-
 }; // namespace pxcrt
 ;
 
@@ -93,13 +93,13 @@ bt_string would_invalidate::message() const
 { return cstr_to_string("would_invalidate"); }
 
 void throw_bad_alloc()
-{ throw bad_alloc(); }
+{ PXC_THROW(bad_alloc()); }
 void throw_invalid_index()
-{ throw invalid_index(); }
+{ PXC_THROW(invalid_index()); }
 void throw_invalid_field()
-{ throw invalid_field(); }
+{ PXC_THROW(invalid_field()); }
 void throw_would_invalidate()
-{ throw would_invalidate(); }
+{ PXC_THROW(would_invalidate()); }
 
 size_t stack_trace_limit = static_cast<size_t>(-1);
 
@@ -178,10 +178,11 @@ bt_string c_exception_stack_trace(std::exception const& exc)
 
 int main_nothrow(void (*main_f)(void))
 {
-  try {
-    try {
+  PXC_TRY {
+    PXC_TRY {
       (*main_f)();
-    } catch (const std::exception& e) {
+    } PXC_CATCH(const std::exception& e) {
+      #if !PXC_NOEXCEPTIONS
       std::string mess;
       bt_string s0 = c_exception_message(e);
       mess.insert(mess.end(), s0.begin(), s0.end());
@@ -192,8 +193,9 @@ int main_nothrow(void (*main_f)(void))
       mess.insert(mess.end(), st.begin(), st.end());
       ::write(2, mess.data(), mess.size());
       return 1;
+      #endif
     }
-  } catch (...) {
+  } PXC_CATCH(...) {
     const char *const mess = "main: uncaught exception\n";
     ::write(2, mess, strlen(mess));
     return 1;
@@ -202,5 +204,6 @@ int main_nothrow(void (*main_f)(void))
 }
 
 }; // namespace pxcrt
+
 ;
 
