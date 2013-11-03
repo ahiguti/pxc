@@ -1,6 +1,6 @@
 namespace container::impl::vector "use-unsafe";
 public import numeric::integral;
-public import container::impl::invguard;
+public import container::impl::refguard;
 public import container::impl::array_common;
 
 extern "types" inline
@@ -61,7 +61,7 @@ struct bt_cslice {
   }
   bt_bool empty() const { return len == 0; }
   bt_size_t size() const { return len; }
-  T get(bt_size_t i) const { return (i < len) ? v[i] : T(); } // TODO: defcon
+  // T get(bt_size_t i) const { return (i < len) ? v[i] : T(); } // TODO: defcon
   bt_size_t find(bt_size_t offset, T const& value) const {
     return array_find(v, len, offset, value);
   }
@@ -70,12 +70,12 @@ struct bt_cslice {
     ++v;
     --len;
   }
-  void pop_front(size_t i) {
+  void next_front(size_t i) {
     if (len < i) { pxcrt::throw_invalid_index(); }
     v += i;
     len -= i;
   }
-  void pop_back(size_t i) {
+  void prev_back(size_t i) {
     if (len < i) { pxcrt::throw_invalid_index(); }
     len -= i;
   }
@@ -117,7 +117,7 @@ struct bt_slice {
   }
   bt_bool empty() const { return len == 0; }
   bt_size_t size() const { return len; }
-  T get(bt_size_t i) const { return (i < len) ? v[i] : T(); } // TODO: defcon
+  // T get(bt_size_t i) const { return (i < len) ? v[i] : T(); } // TODO: defcon
   void set(bt_size_t i, T value) const { if (i < len) v[i] = value; }
   bt_size_t find(bt_size_t offset, T const& value) const {
     return array_find(v, len, offset, value);
@@ -127,12 +127,12 @@ struct bt_slice {
     ++v;
     --len;
   }
-  void pop_front(size_t i) {
+  void next_front(size_t i) {
     if (len < i) { pxcrt::throw_invalid_index(); }
     v += i;
     len -= i;
   }
-  void pop_back(size_t i) {
+  void prev_back(size_t i) {
     if (len < i) { pxcrt::throw_invalid_index(); }
     len -= i;
   }
@@ -191,7 +191,7 @@ struct pxcvector {
   typedef const T *const_iterator;
   typedef pxcrt::bt_slice<T> range_type;
   typedef pxcrt::bt_cslice<T> crange_type;
-  pxcvector() : start(0), valid_len(0), alloc_len(0), invalidate_guard_count(0)
+  pxcvector() : start(0), valid_len(0), alloc_len(0), refguard_count(0)
     { }
   ~pxcvector() {
     deinitialize_n(start, valid_len);
@@ -253,7 +253,7 @@ struct pxcvector {
     typename pxcvector<Tc>::size_type len);
   void push_back(T const& x) {
     /* re-ordered for speed */
-    if (invalidate_guard_count == 0) {
+    if (refguard_count == 0) {
       /* valid_len + 1 never overflows */
       if (valid_len + 1 < alloc_len) {
 	/* fast path */
@@ -323,7 +323,7 @@ struct pxcvector {
   }
 private:
   void construct_internal(const T *ptr, size_type len) {
-    invalidate_guard_count = 0;
+    refguard_count = 0;
     alloc_len = valid_len = len;
     start = allocate_uninitialized<T>(alloc_len);
     if (is_trivially_copyable<T>::value) {
@@ -406,26 +406,26 @@ private:
     alloc_len = nl;
   }
   void check_resize() {
-    if (invalidate_guard_count != 0) { pxcrt::throw_would_invalidate(); }
+    if (refguard_count != 0) { pxcrt::throw_would_invalidate(); }
   }
-  void inc_invalidate_guard() const {
-    ++invalidate_guard_count;
+  void inc_refguard() const {
+    ++refguard_count;
   }
-  void dec_invalidate_guard() const {
-    --invalidate_guard_count;
+  void dec_refguard() const {
+    --refguard_count;
   }
 private:
   T *start;
   size_type valid_len;
   size_type alloc_len;
-  mutable size_type invalidate_guard_count;
+  mutable size_type refguard_count;
 };
 
 template <typename T> inline T&
 pxcvector_push_back_uninitialized(pxcvector<T>& v)
 {
   /* re-ordered for speed */
-  if (v.invalidate_guard_count == 0) {
+  if (v.refguard_count == 0) {
     /* valid_len + 1 never overflows */
     if (v.valid_len + 1 < v.alloc_len) {
       /* fast path */

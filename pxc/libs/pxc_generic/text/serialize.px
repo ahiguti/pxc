@@ -18,25 +18,25 @@ public threaded function {tpl, t} void serialize(t const& x,
     m::local{tpl, "specialized_func", t}(x, o);
   } else if (mf::is_array_or_slice_type{t}) {
     m::local{tpl, "array_begin"}(o);
-    for (size_t i, m::at{t, 0} v : x) {
+    for (size_t i, m::local{t, "mapped_type"} v : x) {
       if (i != 0) {
 	m::local{tpl, "array_sep"}(o);
       }
-      serialize{tpl, m::at{t, 0}}(v, o);
+      serialize{tpl, m::local{t, "mapped_type"}}(v, o);
     }
     m::local{tpl, "array_end"}(o);
   } else if (mf::is_map_or_range_type{t}) {
     m::local{tpl, "map_begin"}(o);
     bool is_first = true;
-    for (m::at{t, 0} k, m::at{t, 1} v : x) {
+    for (m::local{t, "key_type"} k, m::local{t, "mapped_type"} v : x) {
       if (is_first) {
 	is_first = false;
       } else {
 	m::local{tpl, "map_sep"}(o);
       }
-      serialize{tpl, m::at{t, 0}}(k, o);
+      serialize{tpl, m::local{t, "key_type"}}(k, o);
       m::local{tpl, "map_entry_sep"}(o);
-      serialize{tpl, m::at{t, 1}}(v, o);
+      serialize{tpl, m::local{t, "mapped_type"}}(v, o);
     }
     m::local{tpl, "map_end"}(o);
   } else if (mf::is_pointer_type{t}) {
@@ -129,7 +129,7 @@ deserialize(m::local{tpl, "source_type"} mutable& s)
       return r;
     } else {
       cstrref s0 = s;
-      s0.pop_back(s0.size());
+      s0.prev_back(s0.size());
       t r = pointer::box_pointer{t}(deserialize{tpl, m::at{t, 0}}(s0));
       return r;
     }
@@ -152,7 +152,7 @@ deserialize(m::local{tpl, "source_type"} mutable& s)
 		found = false;
 		break;
 	      }
-	      s.pop_front(s0.size());
+	      s.next_front(s0.size());
 	      m::local{tpl, "struct_entry_sep_cond"}(s);
 	      m::local{tpl, "value_skip"}(s);
 	      // debug_log("skip result: ", s);
@@ -162,7 +162,7 @@ deserialize(m::local{tpl, "source_type"} mutable& s)
 	      }
 	    }
 	    if (found) {
-	      s.pop_front(m::strlen{m::to_string{fld}});
+	      s.next_front(m::strlen{m::to_string{fld}});
 	      m::local{tpl, "struct_entry_sep_cond"}(s);
 	      r.fld = deserialize{tpl, m::at{field_types_sorted{t}, idx}}(s);
 	    }

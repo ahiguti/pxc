@@ -935,7 +935,7 @@ static void add_root_requirement_container_elements(expr_i *econ,
     econ->dump(0).c_str(), (int)blockscope_flag));
   const bool con_lv = expr_has_lvalue(econ, econ, false);
   const bool guard_elements =
-    type_has_invalidate_guard(econ->resolve_texpr());
+    type_has_refguard(econ->resolve_texpr());
   DBG_CON(fprintf(stderr, "op[] container=%s lvalue=%d\n",
     econ->dump(0).c_str(), (int)con_lv));
   if (!guard_elements) {
@@ -1166,7 +1166,7 @@ static void add_root_requirement(expr_i *e, passby_e passby,
     } else {
       /* pointers */
       /* copy the pointer in order to own a refcount */
-      const bool guard_elements = type_has_invalidate_guard(
+      const bool guard_elements = type_has_refguard(
 	eop->arg0->resolve_texpr());
       #if 0
       fprintf(stderr, "%s: guard=%d\n",
@@ -1843,7 +1843,7 @@ void expr_op::check_type(symbol_table *lookup)
   }
   /* rooting */
   if (op == TOK_PTR_DEREF && is_cm_pointer_family(arg0->resolve_texpr()) &&
-    type_has_invalidate_guard(arg0->resolve_texpr())) {
+    type_has_refguard(arg0->resolve_texpr())) {
     /* threaded pointer dereference. copy the ptr and lock it */
     passing_root_requirement(passby_e_const_value, this, this, false);
   }
