@@ -4,7 +4,7 @@ public import numeric::cast -;
 public import container::impl::farray;
 public import container::impl::darray;
 public import container::impl::vector;
-public import container::impl::invguard;
+public import container::impl::refguard;
 public import container::impl::util;
 public import meta m;
 public import meta::family mf;
@@ -14,7 +14,7 @@ public tsvaluetype struct extern "::pxcrt::bt_slice" "slice" {t} slice {
   public metafunction key_type size_t;
   public metafunction mapped_type t;
   public metafunction range_type slice{t};
-  public metafunction crange_type slice{t};
+  public metafunction crange_type cslice{t};
   public metafunction non_ephemeral_type vector{t};
   public metafunction rebind{u} slice{u};
   public function extern "empty" bool empty() const;
@@ -22,8 +22,8 @@ public tsvaluetype struct extern "::pxcrt::bt_slice" "slice" {t} slice {
   public function extern "get" t get(size_t i) const;
   public function extern "set" void set(size_t i, t v) const;
   public function extern "next" void next();
-  public function extern "pop_front" void pop_front(size_t i);
-  public function extern "pop_back" void pop_back(size_t i);
+  public function extern "next_front" void next_front(size_t i);
+  public function extern "prev_back" void prev_back(size_t i);
 }
 
 public tsvaluetype struct extern "::pxcrt::bt_cslice" "cslice" {t} cslice {
@@ -37,8 +37,8 @@ public tsvaluetype struct extern "::pxcrt::bt_cslice" "cslice" {t} cslice {
   public function extern "size" size_t size() const;
   public function extern "get" t get(size_t i) const;
   public function extern "next" void next();
-  public function extern "pop_front" void pop_front(size_t i);
-  public function extern "pop_back" void pop_back(size_t i);
+  public function extern "next_front" void next_front(size_t i);
+  public function extern "prev_back" void prev_back(size_t i);
 }
 
 public metafunction string vector{uchar};
@@ -106,6 +106,57 @@ darray(size_t len, t const& value) {
   public metafunction rebind{u} darray{u};
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
+}
+
+public tsvaluetype struct extern "::pxcrt::deque_slice" "slice" {t}
+deque_slice {
+  public metafunction key_type size_t;
+  public metafunction mapped_type t;
+  public metafunction range_type deque_slice{t};
+  public metafunction crange_type deque_cslice{t};
+  public metafunction non_ephemeral_type deque{t};
+  public metafunction rebind{u} deque_slice{u};
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "get" t get(size_t i) const;
+  public function extern "set" void set(size_t i, t v) const;
+  public function extern "next" void next();
+  public function extern "next_front" void next_front(size_t i);
+  public function extern "prev_back" void prev_back(size_t i);
+}
+
+public tsvaluetype struct extern "::pxcrt::deque_cslice" "cslice" {t}
+deque_cslice {
+  public metafunction key_type size_t;
+  public metafunction mapped_type t;
+  public metafunction range_type deque_cslice{t};
+  public metafunction crange_type deque_cslice{t};
+  public metafunction non_ephemeral_type deque{t};
+  public metafunction rebind{u} deque_cslice{u};
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "get" t get(size_t i) const;
+  public function extern "next" void next();
+  public function extern "next_front" void next_front(size_t i);
+  public function extern "prev_back" void prev_back(size_t i);
+}
+
+public mtvaluetype struct extern "::pxcrt::pxcdeque" "varray" {t} deque {
+  public metafunction key_type size_t;
+  public metafunction mapped_type t;
+  public metafunction range_type deque_slice{t};
+  public metafunction crange_type deque_cslice{t};
+  public metafunction rebind{u} deque{u};
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "resize" void resize(size_t i, t const& v);
+  public function extern "clear" void clear();
+  public function extern "push_back" void push_back(t const& v);
+  public function extern "pop_back" t pop_back();
+  public function extern "reserve" void reserve(size_t i);
+  public function extern "append" void append(crange_type const& v);
+  public function extern "insert" void insert(size_t i, crange_type const& v);
+  public function extern "erase" void erase(size_t first, size_t last);
 }
 
 public metafunction strref slice{uchar};

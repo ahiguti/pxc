@@ -4,7 +4,7 @@ public import container::impl::array_common;
 extern "types" inline
 #include <map>
 #include <set>
-namespace tree_map {
+namespace pxcmap {
 
 template <typename Tf>
 struct compare_less {
@@ -16,29 +16,173 @@ struct compare_less {
   }
 };
 
-template <typename Tk, typename Tm, typename Tf> struct tree_map_range;
-template <typename Tk, typename Tm, typename Tf> struct tree_map_crange;
+template <typename Tk, typename Tm, typename Tcmp>
+struct map_conf {
+  typedef std::map<Tk, Tm, compare_less<Tcmp> > base_map;
+  typedef typename base_map::key_type key_type;
+  typedef typename base_map::mapped_type mapped_type;
+  typedef typename base_map::iterator iterator;
+  typedef typename base_map::const_iterator const_iterator;
+  static inline key_type const& get_key(iterator const& iter)
+    { return iter->first; }
+  static inline key_type const& get_ckey(const_iterator const& iter)
+    { return iter->first; }
+  static inline mapped_type& get_mapped(iterator const& iter)
+    { return iter->second; }
+  static inline mapped_type const& get_cmapped(const_iterator const& iter)
+    { return iter->second; }
+  static inline mapped_type& get_mapped(base_map& m, key_type const& k)
+    { return m[k]; }
+  static inline bool insert(base_map& m, key_type const& k,
+    mapped_type const& v)
+    { return m.insert(typename base_map::value_type(k, v)).second; }
+  static inline bool erase(base_map& m, key_type const& k)
+    { return m.erase(k); }
+};
 
-template <typename Tmap>
+template <typename Tk, typename Tcmp>
+struct set_conf {
+  typedef std::set<Tk, compare_less<Tcmp> > base_map;
+  typedef typename base_map::key_type key_type;
+  typedef pxcrt::bt_unit mapped_type;
+  typedef typename base_map::const_iterator iterator; /* always const */
+  typedef typename base_map::const_iterator const_iterator;
+  static inline key_type const& get_key(iterator const& iter)
+    { return *iter; }
+  static inline key_type const& get_ckey(const_iterator const& iter)
+    { return *iter; }
+  static inline mapped_type& get_mapped(iterator const& iter)
+    { return pxcrt::unit_value; }
+  static inline mapped_type const& get_cmapped(const_iterator const& iter)
+    { return pxcrt::unit_value; }
+  static inline mapped_type& get_mapped(base_map& m, key_type const& k)
+    { m.insert(k); return pxcrt::unit_value; }
+  static inline bool insert(base_map& m, key_type const& key,
+    mapped_type const& val)
+    { return m.insert(key).second; }
+  static inline bool erase(base_map& m, key_type const& k)
+    { return m.erase(k); }
+};
+
+template <typename Tk, typename Tm, typename Tcmp>
+struct multimap_conf {
+  typedef std::multimap<Tk, Tm, compare_less<Tcmp> > base_map;
+  typedef typename base_map::key_type key_type;
+  typedef typename base_map::mapped_type mapped_type;
+  typedef typename base_map::value_type value_type;
+  typedef typename base_map::iterator iterator;
+  typedef typename base_map::const_iterator const_iterator;
+  static inline key_type const& get_key(iterator const& iter)
+    { return iter->first; }
+  static inline key_type const& get_ckey(const_iterator const& iter)
+    { return iter->first; }
+  static inline mapped_type& get_mapped(iterator const& iter)
+    { return iter->second; }
+  static inline mapped_type const& get_cmapped(const_iterator const& iter)
+    { return iter->second; }
+  static inline mapped_type& get_mapped(base_map& m, key_type const& k) {
+    iterator i = m.find(k);
+    if (i == m.end()) {
+      i = m.insert(value_type(k, mapped_type()));
+    }
+    return i->second;
+  }
+  static inline bool insert(base_map& m, key_type const& key,
+    mapped_type const& val)
+    { m.insert(value_type(key, val)); return true; }
+  static inline bool erase(base_map& m, key_type const& k)
+    { return m.erase(k); }
+};
+
+template <typename Tcnf> struct with_guard;
+
+template <typename Tcnf, bool is_const> struct range_conf;
+
+template <typename Tcnf> struct range_conf<Tcnf, false> {
+  typedef typename Tcnf::iterator iterator;
+  typedef typename Tcnf::mapped_type mapped_type;
+  typedef with_guard<Tcnf> map_type;
+};
+
+template <typename Tcnf> struct range_conf<Tcnf, true> {
+  typedef typename Tcnf::const_iterator iterator;
+  typedef typename Tcnf::mapped_type const mapped_type;
+  typedef with_guard<Tcnf> const map_type;
+};
+
+template <typename Tcnf, bool is_const> struct range_base {
+  typedef typename Tcnf::base_map base_map;
+  typedef typename base_map::key_type key_type;
+  typedef typename range_conf<Tcnf, is_const>::mapped_type mapped_type;
+  typedef typename range_conf<Tcnf, is_const>::iterator iterator;
+  typedef typename base_map::const_iterator const_iterator;
+  typedef typename base_map::key_compare key_compare;
+  typedef typename range_conf<Tcnf, is_const>::map_type map_type;
+  range_base() : start(), finish() { }
+  range_base(const iterator& i0, const iterator& i1)
+    : start(i0), finish(i1) { }
+  range_base(map_type& c, const key_type& k0, const key_type& k1)
+    : start(), finish() {
+    key_compare cmp;
+    if (cmp(k0, k1)) {
+      start = c.lower_bound(k0);
+      finish = c.upper_bound(k1);
+    }
+  }
+  template <typename Tc> range_base(Tc& c)
+    : start(c.begin()), finish(c.end()) { }
+  bool empty() const { return start == finish; }
+  mapped_type& deref() const {
+    if (empty()) { pxcrt::throw_invalid_index(); }
+    return Tcnf::get_mapped(start);
+  }
+  mapped_type const& cderef() const {
+    if (empty()) { pxcrt::throw_invalid_index(); }
+    return Tcnf::get_cmapped(start);
+  }
+  static inline key_type const& get_key(const iterator& iter) {
+    return Tcnf::get_key(iter);
+  }
+  static inline key_type const& get_ckey(const const_iterator& iter) {
+    return Tcnf::get_ckey(iter);
+  }
+  static inline mapped_type& get_mapped(const iterator& iter) {
+    return Tcnf::get_mapped(iter);
+  }
+  static inline const mapped_type& get_cmapped(const const_iterator& iter) {
+    return Tcnf::get_cmapped(iter);
+  }
+  void next() {
+    if (empty()) { pxcrt::throw_invalid_index(); }
+    ++start;
+  }
+  iterator begin() const { return start; }
+  iterator end() const { return finish; }
+public:
+  iterator start;
+  iterator finish;
+};
+
+template <typename Tcnf>
 struct with_guard {
   template <typename Tc> friend struct pxcrt::guard_ref;
   template <typename Tc> friend struct pxcrt::guard_val;
-  typedef Tmap map_type;
-  typedef typename map_type::key_type key_type;
-  typedef typename map_type::mapped_type mapped_type;
-  typedef typename map_type::key_compare::funcobj_type funcobj_type;
-  typedef typename map_type::size_type size_type;
-  typedef typename map_type::iterator iterator;
-  typedef typename map_type::const_iterator const_iterator;
-  typedef tree_map_range<key_type, mapped_type, funcobj_type> range_type;
-  typedef tree_map_crange<key_type, mapped_type, funcobj_type> crange_type;
-  with_guard() : invalidate_guard_count(0) { }
+  typedef Tcnf conf_type;
+  typedef typename Tcnf::base_map base_map;
+  typedef range_base<Tcnf, false> range_type;
+  typedef range_base<Tcnf, true> crange_type;
+  typedef typename base_map::key_type key_type;
+  typedef typename Tcnf::mapped_type mapped_type;
+  typedef typename base_map::size_type size_type;
+  typedef typename base_map::iterator iterator;
+  typedef typename base_map::const_iterator const_iterator;
+  with_guard() : refguard_count(0) { }
   with_guard(const with_guard& x)
-    : v(x.v), invalidate_guard_count(0) { }
+    : v(x.v), refguard_count(0) { }
   with_guard(const range_type& x)
-    : v(x.begin(), x.end()), invalidate_guard_count(0) { }
+    : v(x.start, x.finish), refguard_count(0) { }
   with_guard(const crange_type& x)
-    : v(x.begin(), x.end()), invalidate_guard_count(0) { }
+    : v(x.start, x.finish), refguard_count(0) { }
   with_guard& operator =(const with_guard& x) {
     check_resize();
     v = x.v;
@@ -47,9 +191,21 @@ struct with_guard {
   mapped_type& operator [](const key_type& k) {
     /* no need to call check_resize() because v[k] never invalidate any
      * iterators */
-    return v[k];
+    return Tcnf::get_mapped(v, k);
   }
-  mapped_type value_at(const key_type& k) { return v[k]; }
+  mapped_type value_at(const key_type& k) { return Tcnf::get_mapped(v, k); }
+  static inline key_type const& get_key(const iterator& iter) {
+    return Tcnf::get_key(iter);
+  }
+  static inline key_type const& get_ckey(const const_iterator& iter) {
+    return Tcnf::get_ckey(iter);
+  }
+  static inline mapped_type& get_mapped(const iterator& iter) {
+    return Tcnf::get_mapped(iter);
+  }
+  static inline const mapped_type& get_cmapped(const const_iterator& iter) {
+    return Tcnf::get_cmapped(iter);
+  }
   bool exists(const key_type& k) const { return v.find(k) != v.end(); }
   iterator find(const key_type& k) { return v.find(k); }
   const_iterator find(const key_type& k) const { return v.find(k); }
@@ -61,23 +217,10 @@ struct with_guard {
   const_iterator upper_bound(const key_type& k) const {
     return v.upper_bound(k);
   }
-  crange_type equal_range(const key_type& k) const {
-    const std::pair<const_iterator, const_iterator> r = v.equal_range(k);
-    return crange_type(r.first, r.second);
-  }
-  range_type equal_range(const key_type& k) {
-    const std::pair<iterator, iterator> r = v.equal_range(k);
-    return range_type(r.first, r.second);
-  }
   size_type size() const { return v.size(); }
-  bool insert(const key_type& k, const mapped_type& v) {
+  bool insert(const key_type& k, const mapped_type& m) {
     /* insert() does not invalidate iterators */
-    return v.insert(std::pair<key_type, mapped_type>(k, v));
-  }
-  bool insert_key(const key_type& k, const mapped_type& v) {
-    /* tree_set uses this */
-    /* insert_key() does not invalidate iterators */
-    return v.insert(k);
+    return Tcnf::insert(v, k, m);
   }
   size_type erase(const key_type& k) {
     check_resize();
@@ -91,169 +234,25 @@ struct with_guard {
   const_iterator begin() const { return v.begin(); }
   iterator end() { return v.end(); }
   const_iterator end() const { return v.end(); }
+  crange_type equal_range(const key_type& k) const {
+    const std::pair<const_iterator, const_iterator> r = v.equal_range(k);
+    return crange_type(r.first, r.second);
+  }
+  range_type equal_range(const key_type& k) {
+    const std::pair<iterator, iterator> r = v.equal_range(k);
+    return range_type(r.first, r.second);
+  }
 private:
   void check_resize() {
-    if (invalidate_guard_count != 0) { pxcrt::throw_would_invalidate(); }
+    if (refguard_count != 0) { pxcrt::throw_would_invalidate(); }
   }
-  void inc_invalidate_guard() const { ++invalidate_guard_count; }
-  void dec_invalidate_guard() const { --invalidate_guard_count; }
+  void inc_refguard() const { ++refguard_count; }
+  void dec_refguard() const { --refguard_count; }
 private:
-  map_type v;
-  mutable size_t invalidate_guard_count;
+  base_map v;
+  mutable size_t refguard_count;
 };
 
-template <typename Tk, typename Tm, typename Tf>
-struct tree_map_compare
-  : public with_guard< std::map< Tk, Tm, compare_less<Tf> > >
-{
-  typedef with_guard< std::map< Tk, Tm, compare_less<Tf> > > base_type;
-  tree_map_compare() { }
-  tree_map_compare(const typename base_type::range_type& x) : base_type(x) { }
-  tree_map_compare(const typename base_type::crange_type& x) : base_type(x) { }
-};
-
-template <typename Tk, typename Tf>
-struct tree_set_compare
-  : public with_guard< std::set< Tk, compare_less<Tf> > >
-{
-  typedef with_guard< std::set< Tk, compare_less<Tf> > > base_type;
-  tree_set_compare() { }
-  tree_set_compare(const typename base_type::range_type& x) : base_type(x) { }
-  tree_set_compare(const typename base_type::crange_type& x) : base_type(x) { }
-};
-
-template <typename Tmap>
-struct map_range {
-  typedef typename Tmap::key_type key_type;
-  typedef typename Tmap::mapped_type mapped_type;
-  typedef typename Tmap::iterator iterator;
-  typedef typename Tmap::const_iterator const_iterator;
-  map_range() : start(), finish() { }
-  map_range(const iterator& i0, const iterator& i1)
-    : start(i0), finish(i1) { }
-  bool empty() const { return start == finish; }
-  mapped_type& operator *() const {
-    if (empty()) { pxcrt::throw_invalid_index(); }
-    return start->second;
-  }
-  void next() {
-    if (empty()) { pxcrt::throw_invalid_index(); }
-    ++start;
-  }
-  iterator begin() const { return start; }
-  iterator end() const { return finish; }
-protected:
-  iterator start;
-  iterator finish;
-};
-
-template <typename Tmap>
-struct map_crange {
-  typedef typename Tmap::key_type key_type;
-  typedef typename Tmap::mapped_type mapped_type;
-  typedef typename Tmap::const_iterator iterator;
-  typedef typename Tmap::const_iterator const_iterator;
-  map_crange() : start(), finish() { }
-  map_crange(const iterator& i0, const iterator& i1)
-    : start(i0), finish(i1) { }
-  bool empty() const { return start == finish; }
-  const mapped_type& operator *() const {
-    if (empty()) { pxcrt::throw_invalid_index(); }
-    return start->second;
-  }
-  void next() {
-    if (empty()) { pxcrt::throw_invalid_index(); }
-    ++start;
-  }
-  iterator begin() const { return start; }
-  iterator end() const { return finish; }
-protected:
-  iterator start;
-  iterator finish;
-};
-
-template <typename Tk, typename Tm, typename Tf>
-struct tree_map_range
-  : public map_range< with_guard< std::map< Tk, Tm, compare_less<Tf> > > >
-{
-  typedef with_guard< std::map<Tk, Tm, compare_less<Tf> > > map_type;
-  typedef map_range<map_type> base_type;
-  typedef typename base_type::iterator iterator;
-  tree_map_range() { }
-  tree_map_range(const iterator& i0, const iterator& i1)
-    : base_type(i0, i1) { }
-  explicit tree_map_range(map_type& c)
-    : base_type(c.begin(), c.end()) { }
-  template <typename Tc> tree_map_range(Tc& c, const Tk& k0, const Tk& k1)
-    : base_type(c.lower_bound(k0), c.upper_bound(k1)) {
-    compare_less<Tf> cmp;
-    if (!cmp(k0, k1)) { this->start = this->finish = iterator(); }
-  }
-};
-
-template <typename Tk, typename Tm, typename Tf>
-struct tree_map_crange
-  : public map_crange< with_guard< std::map< Tk, Tm, compare_less<Tf> > > >
-{
-  typedef with_guard< std::map<Tk, Tm, compare_less<Tf> > > map_type;
-  typedef map_crange<map_type> base_type;
-  typedef typename base_type::iterator iterator;
-  tree_map_crange() { }
-  tree_map_crange(const iterator& i0, const iterator& i1)
-    : base_type(i0, i1) { }
-  explicit tree_map_crange(const map_type& c)
-    : base_type(c.begin(), c.end()) { }
-  tree_map_crange(const tree_map_range<Tk, Tm, Tf>& r)
-    : base_type(r.begin(), r.end()) { }
-  template <typename Tc>
-  tree_map_crange(const Tc& c, const Tk& k0, const Tk& k1)
-    : base_type(c.lower_bound(k0), c.upper_bound(k1)) {
-    compare_less<Tf> cmp;
-    if (!cmp(k0, k1)) { this->start = this->finish = iterator(); }
-  }
-};
-
-template <typename Tk, typename Tf>
-struct tree_set_range
-  : public map_range< with_guard< std::set< Tk, compare_less<Tf> > > >
-{
-  typedef with_guard< std::set<Tk, compare_less<Tf> > > map_type;
-  typedef map_range<map_type> base_type;
-  typedef typename base_type::iterator iterator;
-  tree_set_range() { }
-  tree_set_range(const iterator& i0, const iterator& i1)
-    : base_type(i0, i1) { }
-  explicit tree_set_range(map_type& c)
-    : base_type(c.begin(), c.end()) { }
-  template <typename Tc> tree_set_range(Tc& c, const Tk& k0, const Tk& k1)
-    : base_type(c.lower_bound(k0), c.upper_bound(k1)) {
-    compare_less<Tf> cmp;
-    if (!cmp(k0, k1)) { this->start = this->finish = iterator(); }
-  }
-};
-
-template <typename Tk, typename Tf>
-struct tree_set_crange
-  : public map_crange< with_guard< std::set< Tk, compare_less<Tf> > > >
-{
-  typedef with_guard< std::set<Tk, compare_less<Tf> > > map_type;
-  typedef map_crange<map_type> base_type;
-  typedef typename base_type::iterator iterator;
-  tree_set_crange() { }
-  tree_set_crange(const iterator& i0, const iterator& i1)
-    : base_type(i0, i1) { }
-  explicit tree_set_crange(const map_type& c)
-    : base_type(c.begin(), c.end()) { }
-  tree_set_crange(const tree_set_range<Tk, Tf>& r)
-    : base_type(r.begin(), r.end()) { }
-  template <typename Tc>
-  tree_set_crange(const Tc& c, const Tk& k0, const Tk& k1)
-    : base_type(c.lower_bound(k0), c.upper_bound(k1)) {
-    compare_less<Tf> cmp;
-    if (!cmp(k0, k1)) { this->start = this->finish = iterator(); }
-  }
-};
-
-}; // namespace tree_map
+}; // namespace pxcmap
 ;
 

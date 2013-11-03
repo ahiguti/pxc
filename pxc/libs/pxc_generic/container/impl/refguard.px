@@ -1,4 +1,4 @@
-namespace container::impl::invguard "use-unsafe";
+namespace container::impl::refguard "use-unsafe";
 private import numeric::integral;
 
 extern "types" inline
@@ -6,10 +6,10 @@ namespace pxcrt {
 template <typename Tc>
 struct guard_ref {
   guard_ref(Tc& c) : c(c) {
-    c.inc_invalidate_guard();
+    c.inc_refguard();
   }
   ~guard_ref() {
-    c.dec_invalidate_guard();
+    c.dec_refguard();
   }
   Tc& get() {
     return c;
@@ -26,10 +26,10 @@ private:
 template <typename Tc>
 struct guard_val {
   guard_val(const Tc& x) : c(x) {
-    c.inc_invalidate_guard();
+    c.inc_refguard();
   }
   ~guard_val() {
-    c.dec_invalidate_guard();
+    c.dec_refguard();
   }
   Tc& get() {
     return c;

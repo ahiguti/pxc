@@ -176,22 +176,6 @@ std::string space_string(int n, char c)
   return s;
 }
 
-#if 0
-std::string ulong_to_string(unsigned long long v)
-{
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%llu", v);
-  return std::string(buf);
-}
-
-std::string long_to_string(long long v)
-{
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%lld", v);
-  return std::string(buf);
-}
-#endif
-
 const char *tok_string(const expr_i *e, int tok)
 {
   switch (tok) {
@@ -408,21 +392,26 @@ bool is_ordered_type(const term& t)
   if (is_numeric_type(t)) {
     return true;
   }
+  if (is_simple_string_type(t)) {
+    return true; /* memcmp-compatible */
+  }
   #if 0
   if (t == builtins.type_strlit) {
-    return true;
+    return true; /* memcmp-compatible */
   }
-  if (is_string_type(t)) {
-    return true;
-  }
-  #endif
-  if (is_cm_slice_family(t) || is_array_family(t)) {
-    const term& et = get_array_elem_texpr(0, t);
-    if (et == builtins.type_uchar) {
-      /* memcmp-compatible */
-      return true;
+  const expr_struct *const est = dynamic_cast<expr_struct *>(t.get_expr());
+  if (est != 0) {
+    const std::string s(est->sym);
+    const std::string ns(est->get_unique_namespace());
+    if (ns == "container::array" &&
+      (s == "vector" || s == "darray" || s == "farray")) {
+      const term& et = get_array_elem_texpr(0, t);
+      if (et == builtins.type_uchar) {
+	return true; /* memcmp-compatible */
+      }
     }
   }
+  #endif
   return false;
 }
 
@@ -472,10 +461,30 @@ bool is_possibly_nonpod(const term& t)
   return true;
 }
 
-bool is_string_type(const term& t)
+static bool is_simple_array_type(const term& t)
 {
-  const typefamily_e cat = get_family(t);
-  if (cat == typefamily_e_varray) {
+  if (t == builtins.type_strlit) {
+    return true;
+  }
+  const expr_struct *const est = dynamic_cast<expr_struct *>(t.get_expr());
+  if (est != 0) {
+    const std::string s(est->sym);
+    const std::string ns(est->get_unique_namespace());
+    if (ns == "container::array" &&
+      (s == "vector" || s == "farray" || s == "darray" ||
+	s == "slice" || s == "cslice")) {
+      return true;
+    }
+  }
+  #if 0
+  fprintf(stderr, "is_vector_type %s false\n", term_tostr_human(t).c_str());
+  #endif
+  return false;
+}
+
+bool is_simple_string_type(const term& t)
+{
+  if (is_simple_array_type(t)) {
     const term& et = get_array_elem_texpr(0, t);
     if (et == builtins.type_uchar) {
       return true;
@@ -585,8 +594,6 @@ typefamily_e get_family_from_string(const std::string& s)
   if (s == "noncopyable") return typefamily_e_noncopyable;
   if (s == "nodefault") return typefamily_e_nodefault;
   if (s == "nocascade") return typefamily_e_nocascade;
-  // if (s == "wptr") return typefamily_e_wptr;
-  // if (s == "wcptr") return typefamily_e_wcptr;
   return typefamily_e_none;
 }
 
@@ -690,17 +697,6 @@ term get_pointer_target(const term& t)
   }
   return term();
 }
-
-#if 0
-bool is_same_threading_pointer(const term& t0, const term& t1)
-{
-  const typefamily_e c0 = get_family(t0);
-  const typefamily_e c1 = get_family(t1);
-  bool thr0 = is_threaded_pointer_family(c0);
-  bool thr1 = is_threaded_pointer_family(c1);
-  return thr0 == thr1;
-}
-#endif
 
 bool is_function(const term& t)
 {
@@ -916,7 +912,7 @@ bool has_userdef_constr(const term& t)
   return has_userdef_constr_internal(t, checked);
 }
 
-bool type_has_invalidate_guard(const term& t)
+bool type_has_refguard(const term& t)
 {
   const typefamily_e cat = get_family(t);
   if (
@@ -973,17 +969,6 @@ bool is_copyable(const term& t)
     }
   }
   return true;
-#if 0
-  /* return true iff copy constructor is allowed */
-  if (is_interface(t)) {
-    return false;
-  }
-  const typefamily_e cat = get_family(t);
-  if (cat == typefamily_e_linear || cat == typefamily_e_noncopyable) {
-    return false;
-  }
-  return true;
-#endif
 }
 
 static bool is_assignable_type_one(expr_i *e)
@@ -1012,20 +997,6 @@ bool is_assignable(const term& t)
     }
   }
   return true;
-#if 0
-  /* returns true iff 'operator =' is allowed */
-  if (!is_copyable(t)) {
-    return false;
-  }
-  if (is_ephemeral_value_type(t)) {
-    return false;
-  }
-  const typefamily_e cat = get_family(t);
-  if (cat == typefamily_e_darray) {
-    return false;
-  }
-  return true;
-#endif
 }
 
 bool is_constructible(const term& t)
@@ -1080,18 +1051,6 @@ static std::string term_tostr_tparams(const expr_tparams *tp, bool show_values,
     if (show_values) {
       const term& tpdef = tp->param_def;
       r += term_tostr(tpdef, s);
-#if 0
-if (term_tostr(tpdef, s) == "::sort3$n::cmp$f2") {
-abort();
-}
-      if (s == term_tostr_sort_cname) {
-	const expr_i *const de = tpdef.get_expr();
-	if (de != 0 && de->get_esort() == expr_e_funcdef) {
-	  /* function as tparam. append funcobj prefix. */
-	  r += "$fo";
-	}
-      }
-#endif
     } else {
       r += std::string(tp->sym);
     }
@@ -1394,11 +1353,6 @@ std::string term_tostr(const term& t, term_tostr_sort s)
 	rstr_post = rstr.substr(pos + 1);
 	rstr = rstr.substr(0, pos - 1);
       }
-      #if 0
-      if (s != term_tostr_sort_cname) {
-	rstr = replace_char(rstr, ':', '$');
-      }
-      #endif
     } else {
       rstr = "";
       if (is_virtual_or_member_function_flag) {
@@ -1583,24 +1537,6 @@ bool is_sub_type(const term& t0, const term& t1)
     return false;
   }
   return implements_interface(t0blk, t1ei);
-  #if 0
-  expr_telist *ih = tdef->block->inherit;
-  while (ih != 0) {
-    if (ih->head->get_sdef()->resolve_evaluated() == t1) {
-      DBG_SUB(fprintf(stderr, "is_sub_type: inherit\n"));
-      return true;
-    }
-    #if 0
-    raise(SIGTRAP); // FIXME
-    #endif
-    DBG_SUB(fprintf(stderr, "is_sub_type: not inherit %s %s\n",
-      term_tostr_human(ih->head->get_sdef()->resolve_evaluated()).c_str(),
-      term_tostr_human(t1).c_str()));
-    ih = ih->rest;
-  }
-  DBG_SUB(fprintf(stderr, "is_sub_type: none matched\n"));
-  return false;
-  #endif
 }
 
 static bool check_tvmap(tvmap_type& tvmap, const std::string& sym,
@@ -1808,37 +1744,12 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
     DBG_CONV(fprintf(stderr, "convert: numeric cast\n"));
     return true;
   }
-  if (tfrom == builtins.type_strlit && is_string_type(tto)) {
+  if (tfrom == builtins.type_strlit && is_simple_string_type(tto)) {
     DBG_CONV(fprintf(stderr, "convert: strlit to string\n"));
     efrom->conv = conversion_e_cast;
     efrom->type_conv_to = tconvto;
     return true;
   }
-  #if 0
-  if (is_string_type(tfrom)) {
-    efrom->conv = conversion_e_from_string;
-    efrom->type_conv_to = tconvto;
-    DBG_CONV(fprintf(stderr, "convert: from string\n"));
-    return true;
-  }
-  if (is_string_type(tconvto)) {
-    efrom->conv = conversion_e_to_string;
-    efrom->type_conv_to = tconvto;
-    DBG_CONV(fprintf(stderr, "convert: to string\n"));
-    return true;
-  }
-  #endif
-  #if 0
-  // TODO: disable auto boxing
-  if (is_cm_pointer_family(tconvto) &&
-    is_sub_type(tfrom, get_pointer_target(tconvto))) {
-    /* auto boxing */
-    efrom->conv = conversion_e_boxing;
-    efrom->type_conv_to = tconvto;
-    DBG_CONV(fprintf(stderr, "convert: auto boxing\n"));
-    return true;
-  }
-  #endif
   if (is_cm_range_family(tconvto) && is_cm_range_family(tfrom) &&
     (is_const_range_family(tconvto) || !is_const_range_family(tfrom))) {
     /* range to crange */
@@ -2064,11 +1975,6 @@ void fn_compile(expr_i *e, expr_i *p, bool is_template)
   fn_check_type(e, e->symtbl_lexical);
     /* calls fn_compile recursively if a template is instantiated or an expr
      * is generated dynamically. */
-  #if 0
-  // move to expr.cpp
-  fn_check_template_upvalues_direct(e);
-  fn_check_template_upvalues_tparam(e);
-  #endif
   arena_error_throw_pushed();
   DBG_COMPILE(fprintf(stderr, "compile %p(%s:%d) end\n", e, e->fname,
     e->line));
@@ -2187,9 +2093,6 @@ attribute_e get_expr_threading_attribute(const expr_i *e)
 attribute_e get_context_threading_attribute(symbol_table *cur)
 {
   expr_i *const fe = get_current_frame_expr(cur);
-  #if 0
-  return get_expr_threading_attribute(fe);
-  #endif
   return get_term_threading_attribute(fe->get_value_texpr());
 }
 
@@ -2235,71 +2138,11 @@ attribute_e get_term_threading_attribute(const term& t)
     } else {
       mask = get_threading_attribute_mask(ce->get_esort());
     }
-#if 0
-fprintf(stderr, "%s >> %s pre %x\n", term_tostr_human(t).c_str(),
-  term_tostr_human(*i).c_str(), attr);
-#endif
-#if 0
-    // int mask = get_threading_attribute_mask(ce->get_esort());
-#endif
     attr &= (get_term_threading_attribute(*i) | ~mask);
-#if 0
-fprintf(stderr, "%s >> %s post %x\n", term_tostr_human(t).c_str(),
-  term_tostr_human(*i).c_str(), attr);
-#endif
   }
   attribute_e r = attribute_e(attr);
-#if 0
-if (term_tostr_human(t) == "algebraic::common::product_type{{meta::bt_int,container::string::string}}") {
-//abort();
-}
-fprintf(stderr, "%s %x\n", term_tostr_human(t).c_str(), attr);
-#endif
   return r;
 }
-
-#if 0
-static bool check_term_threading_attribute(const term& t, bool req_multithr)
-{
-  const expr_i *const e = t.get_expr();
-  if (e == 0) {
-    return true;
-  }
-  const attribute_e attr = get_expr_threading_attribute(e);
-  if ((attr & attribute_threaded) == 0) {
-    DBG_THR(fprintf(stderr, "thr %s %s attr=%d 1\n",
-      term_tostr_human(t).c_str(), e->dump(0).c_str(), (int)attr));
-    return false;
-  }
-  if (req_multithr && is_type_esort(e->get_esort())) {
-    if ((attr & attribute_multithr) == 0) {
-      DBG_THR(fprintf(stderr, "thr %s 2\n", term_tostr_human(t).c_str()));
-      return false;
-    }
-  }
-  const term_list *const args = t.get_args();
-  if (args == 0) {
-    return true;
-  }
-  for (term_list::const_iterator i = args->begin(); i != args->end(); ++i) {
-    if (!check_term_threading_attribute(*i, req_multithr)) {
-      DBG_THR(fprintf(stderr, "thr %s 3\n", term_tostr_human(t).c_str()));
-      return false;
-    }
-  }
-  return true;
-}
-
-bool term_is_threaded(const term& t)
-{
-  return check_term_threading_attribute(t, false);
-}
-
-bool term_is_multithr(const term& t)
-{
-  return check_term_threading_attribute(t, true);
-}
-#endif
 
 expr_funcdef *get_up_member_func(symbol_table *cur)
 {
@@ -2323,20 +2166,6 @@ expr_funcdef *get_up_member_func(symbol_table *cur)
   }
   return efd;
 }
-
-#if 0
-expr_i *get_up_frame(expr_funcdef *efd)
-{
-  symbol_table *cur = efd->block->symtbl.get_lexical_parent();
-  while (cur) {
-    if (cur->block_esort != expr_e_block) {
-      return cur;
-    }
-    cur = cur->get_lexical_parent();
-  }
-  return 0;
-}
-#endif
 
 std::string dump_expr(int indent, expr_i *e)
 {
@@ -2410,9 +2239,9 @@ void fn_set_generated_code(expr_i *e)
   if (e == 0) {
     return;
   }
-#if 0
-fprintf(stderr, "set generated %p %s\n", e, e->dump(0).c_str());
-#endif
+  #if 0
+  fprintf(stderr, "set generated %p %s\n", e, e->dump(0).c_str());
+  #endif
   e->generated_flag = true;
   expr_block *const bl = dynamic_cast<expr_block *>(e);
   if (bl != 0) {
@@ -2428,12 +2257,6 @@ fprintf(stderr, "set generated %p %s\n", e, e->dump(0).c_str());
 static void fn_check_syntax_one(expr_i *e)
 {
   expr_stmts *stmts = 0;
-  #if 0
-  expr_struct *const est = dynamic_cast<expr_struct *>(e);
-  if (est != 0) {
-    stmts = est->block->stmts;
-  }
-  #endif
   expr_dunion *const ev = dynamic_cast<expr_dunion *>(e);
   if (ev != 0) {
     stmts = ev->block->stmts;
@@ -2555,62 +2378,6 @@ void fn_update_tree(expr_i *e, expr_i *p, symbol_table *symtbl,
   }
 }
 
-#if 0
-static void check_type_validity_common(expr_i *e, const term& t)
-{
-  const term_list *tl = t.get_args();
-  if (tl == 0 || tl->empty())  {
-    return;
-  }
-  for (term_list::const_iterator i = tl->begin(); i != tl->end(); ++i) {
-    check_type_validity_common(e, *i);
-  }
-  if (!is_cm_pointer_family(t)) {
-    return;
-  }
-  const expr_i *const tgt = tl->front().get_expr();
-  if (tgt == 0) {
-    arena_error_throw(e, "Internal error (check_type_validity_common)");
-  }
-  const bool is_mtptr = is_multithreaded_pointer_family(t);
-  const bool is_imptr = is_immutable_pointer_family(t);
-  const attribute_e attr = tgt->get_attribute();
-  #if 0
-  fprintf(stderr, "ctvc %s mt=%d im=%d attr=%x\n", term_tostr_human(t).c_str(),
-    (int)is_mtptr, (int)is_imptr, (int)attr); // FIXME  
-  #endif
-  if (is_mtptr && is_imptr && (attr & attribute_tsvaluetype) == 0) {
-    arena_error_throw(e,
-      "Invalid type: '%s' (pointer target is not a tsvaluetype)",
-      term_tostr_human(t).c_str());
-  }
-  if (is_imptr && (attr & attribute_valuetype) == 0) {
-    arena_error_throw(e,
-      "Invalid type: '%s' (pointer target is not a valuetype)",
-      term_tostr_human(t).c_str());
-  }
-  if (is_mtptr && (attr & attribute_multithr) == 0) {
-    arena_error_throw(e,
-      "Invalid type: '%s' (pointer target is not a multithreaded type)",
-      term_tostr_human(t).c_str());
-  }
-}
-
-void fn_check_type(expr_i *e, symbol_table *symtbl)
-{
-  if (e == 0) {
-    return;
-  }
-  DBG_CT(fprintf(stderr, "fn_check_type begin %p expr=%s\n",
-    e, e->dump(0).c_str()));
-  e->check_type(symtbl);
-  check_type_validity_common(e, e->get_texpr());
-  DBG_CT(fprintf(stderr, "fn_check_type end %p expr=%s -> type=%s\n",
-    e, e->dump(0).c_str(),
-    term_tostr(e->get_texpr(), term_tostr_sort_strict).c_str()));
-}
-#endif
-
 template <typename T> T *find_parent_tmpl(T *e, expr_e t)
 {
   while (e != 0) {
@@ -2625,15 +2392,6 @@ template <typename T> T *find_parent_tmpl(T *e, expr_e t)
 expr_i *find_parent(expr_i *e, expr_e t)
 {
   return find_parent_tmpl(e, t);
-  #if 0
-  while (e != 0) {
-    if (e->get_esort() == t) {
-      return e;
-    }
-    e = e->parent_expr;
-  }
-  return 0;
-  #endif
 }
 
 const expr_i *find_parent_const(const expr_i *e, expr_e t)
@@ -2649,66 +2407,6 @@ symbol_table *find_current_symbol_table(expr_i *e)
   }
   expr_block *const eb = ptr_down_cast<expr_block>(ep);
   return &eb->symtbl;
-}
-
-static void check_upvalue_funcobj(expr_i *e)
-{
-#if 0
-  /* an upvalue function can be referred before defined only if the function
-     is not a function object. */
-  symbol_common *const sc = e->get_sdef();
-  if (sc == 0) {
-    return;
-  }
-  expr_funcdef *const ef = dynamic_cast<expr_funcdef *>(sc->symbol_def);
-  if (ef == 0 || !ef->is_funcobj()) {
-    return;
-  }
-  /* func is defined in the current func? */
-  symbol_table *st = 0;
-  for (st = sc->symtbl_defined; st != 0; st = st->get_lexical_parent()) {
-    if (st->locals.find(sc->get_fullsym()) != st->locals.end()) {
-      return;
-    }
-    if (st->block_esort != expr_e_block) {
-      break;
-    }
-  }
-  if (st == 0) {
-    return;
-  }
-  /* defined in the upvalue of the current frame? */
-  if (st->upvalues.find(sc->get_fullsym()) == st->upvalues.end()) {
-    /* not found in the upvalues of the current frame. this means that
-     * es->get_fullsym() is defined after the current function is defined.
-     * TODO: too tricky. */
-    arena_error_push(e, "Function closure '%s' is not yet defined",
-      sc->get_fullsym().c_str());
-  }
-#endif
-}
-
-static void check_upvalue_memfunc(expr_i *e)
-{
-  #if 0
-  /* TODO: not reached. 'calling a member function with an invalid context' */
-  symbol_common *const sc = e->get_sdef();
-  if (sc == 0) {
-    return;
-  }
-  expr_funcdef *const ef = dynamic_cast<expr_funcdef *>(sc->symbol_def);
-  if (ef == 0 || !ef->is_member_function()) {
-    return;
-  }
-  symbol_table *frame_usefunc = get_current_frame_symtbl(sc->symtbl_defined);
-  symbol_table *frame_usestruct = get_current_frame_symtbl(
-    frame_usefunc->get_lexical_parent());
-  symbol_table *frame_def = get_current_frame_symtbl(ef->symtbl_lexical);
-  if (frame_usestruct != 0 && frame_def != 0 && frame_usestruct != frame_def) {
-    arena_error_push(e, "Cannot use a member function '%s' as an upvalue",
-      sc->get_fullsym().c_str());
-  }
-  #endif
 }
 
 static bool check_function_argtypes(const expr_interface *ei,
@@ -2987,8 +2685,6 @@ void fn_check_final(expr_i *e)
   }
   check_type_threading(e);
   check_interface_impl(e);
-  check_upvalue_funcobj(e);
-  check_upvalue_memfunc(e);
   check_use_before_def(e);
   /* check instances */
   expr_block *const bl = dynamic_cast<expr_block *>(e);
@@ -3164,9 +2860,6 @@ bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
     term& tev = sc->resolve_evaluated();
     expr_i *const eev = term_get_instance(tev);
     expr_e astyp = eev != 0 ? eev->get_esort() : expr_e_metafdef /* dummy */;
-    #if 0
-    const expr_e astyp = sc->resolve_symdef()->get_esort();
-    #endif
     if (astyp == expr_e_var) {
       if (upvalue_flag) {
 	symbol_table *symtbl = find_current_symbol_table(eev);
@@ -3191,34 +2884,9 @@ bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
 		sc->get_fullsym().c_str());
 	    }
 	  }
-	  #if 0
-	  // TODO: remove
-	  while (efd->get_esort() != expr_e_funcdef) {
-	    efd = efd->parent_expr;
-	    assert(efd);
-	  }
-	  if (ptr_down_cast<expr_funcdef>(efd)->is_const) {
-	    DBG_LV(fprintf(stderr, "expr_has_lvalue %s 1 false\n",
-	      a0->dump(0).c_str()));
-	    if (!thro_flg) {
-	      return false;
-	    }
-	    arena_error_push(epos,
-	      "Field '%s' can not be modified from a const member function",
-	      sc->get_fullsym().c_str());
-	  }
-	  #endif
-	} else {
-	  #if 0
-	  arena_error_push(epos, "Upvalue '%s' can not be modified",
-	    sc->get_fullsym().c_str());
-	  #endif
 	}
       }
       expr_var *const ev = ptr_down_cast<expr_var>(eev);
-      #if 0
-      if (is_passby_const(ev->varinfo.passby)) {
-      #endif
       if (!is_passby_mutable(ev->varinfo.passby)) {
 	DBG_LV(fprintf(stderr, "expr_has_lvalue %s 1.1 false\n",
 	  a0->dump(0).c_str()));
@@ -3291,14 +2959,6 @@ bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
       /* expr '(foo)' has an lvalue iff foo has an lvalue */
       return expr_has_lvalue(aop, aop->arg0, thro_flg);
     case TOK_PTR_DEREF:
-      #if 0
-      /* expr '*foo' has an lvalue iff foo has an lvalue */
-      /* enable this? constness should be transitive? */
-      /* if so, we need to reject copying ptr{foo} if rhs has no lvalue */
-      if (!expr_has_lvalue(aop, aop->arg0, thro_flg)) {
-	return false;
-      }
-      #endif
       /* expr '*foo' has an lvalue iff foo is a non-const ptr */
       if (is_const_or_immutable_pointer_family(aop->arg0->resolve_texpr())) {
 	DBG_LV(fprintf(stderr, "expr_has_lvalue %s 8 false\n",
@@ -3386,53 +3046,6 @@ term get_array_elem_texpr(expr_op *eop, const term& t0)
     return builtins.type_void;
   }
   return t;
-  #if 0
-  if (t0 == builtins.type_strlit) {
-    return builtins.type_uchar;
-  }
-  /* extern struct? */
-  const expr_i *const einst = term_get_instance_const(t0);
-  const expr_struct *const est = dynamic_cast<const expr_struct *>(einst);
-  if (est != 0) {
-    const expr_tparams *tparams = est->block->tinfo.tparams;
-    if (tparams != 0) {
-      switch (est->typefamily) {
-      case typefamily_e_varray:
-      case typefamily_e_darray:
-      case typefamily_e_farray:
-      case typefamily_e_slice:
-      case typefamily_e_cslice:
-	return tparams->param_def;
-      case typefamily_e_map:
-      case typefamily_e_map_range:
-      case typefamily_e_map_crange:
-	if (tparams->rest != 0) {
-	  return tparams->rest->param_def;
-	}
-	break;
-      default:
-	break;
-      }
-      #if 0
-      if (std::string(est->family) == "varray") {
-	return tparams->param_def;
-      } else if (std::string(est->family) == "farray") {
-	return tparams->param_def;
-      } else if (std::string(est->family) == "slice") {
-	return tparams->param_def;
-      } else if (std::string(est->family) == "cslice") {
-	return tparams->param_def;
-      } else if (std::string(est->family) == "map") {
-	if (tparams->rest != 0) {
-	  return tparams->rest->param_def;
-	}
-      }
-      #endif
-    }
-  }
-  arena_error_throw(eop, "Cannot apply '[]'");
-  return builtins.type_void;
-  #endif
 }
 
 term get_array_index_texpr(expr_op *eop, const term& t0)
@@ -3444,42 +3057,6 @@ term get_array_index_texpr(expr_op *eop, const term& t0)
     return builtins.type_void;
   }
   return t;
-  #if 0
-  if (t0 == builtins.type_strlit) {
-    return builtins.type_size_t;
-  }
-  /* extern struct? */
-  const expr_i *const einst = term_get_instance_const(t0);
-  const expr_struct *const est = dynamic_cast<const expr_struct *>(einst);
-  if (est != 0) {
-    const expr_tparams *tparams = est->block->tinfo.tparams;
-    if (tparams != 0) {
-      switch (est->typefamily) {
-      case typefamily_e_varray:
-      case typefamily_e_darray:
-      case typefamily_e_farray:
-      case typefamily_e_slice:
-      case typefamily_e_cslice:
-      case typefamily_e_map:
-      case typefamily_e_map_range:
-      case typefamily_e_map_crange:
-	{
-	  term t = eval_local_lookup(t0, "key_type", eop);
-	  if (t.is_null()) {
-	    arena_error_throw(eop, "Symbol 'key_type' is not found");
-	    return builtins.type_void;
-	  }
-	  return t;
-	}
-	break;
-      default:
-	break;
-      }
-    }
-  }
-  arena_error_throw(eop, "Cannot apply '[]'");
-  return builtins.type_void;
-  #endif
 }
 
 bool is_vardef_constructor_or_byref(expr_i *e, bool incl_byref)
@@ -3552,18 +3129,6 @@ static bool is_vardefdefault(expr_i *e)
 bool is_vardef_or_vardefset(expr_i *e)
 {
   return is_vardefdefault(e) || is_vardefset(e);
-#if 0
-  const bool r = is_vardefdefault(e) || is_vardefset(e);
-  if (!r) {
-    return false;
-  }
-  if (has_blockscope_tempvar(e)) {
-    /* impossible for udcon because structs can not have ephemeral fields. */
-    abort();
-    return false;
-  }
-  return true;
-#endif
 }
 
 bool is_noexec_expr(expr_i *e)
@@ -3586,27 +3151,9 @@ bool is_noexec_expr(expr_i *e)
   }
 }
 
-#if 0
-static bool is_expand_dummy(const expr_block *bl)
-{
-  expr_i *p = bl->parent_expr;
-  while (true) {
-    if (p == 0) {
-      return false;
-    }
-    if (p->get_esort() == expr_e_expand) {
-      return true;
-    }
-    p = p->parent_expr;
-  }
-}
-#endif
-
 bool is_compiled(const expr_block *bl)
 {
-  // return !bl->tinfo.is_uninstantiated() && bl->symtbl_lexical != 0;
-  return !bl->tinfo.is_uninstantiated() /* && !is_expand_dummy(bl) */
-    && bl->compiled_flag;
+  return !bl->tinfo.is_uninstantiated() && bl->compiled_flag;
 }
 
 }; 

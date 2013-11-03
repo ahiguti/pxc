@@ -3,13 +3,33 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- list, set, multimap, multiset
-  - list{t}はkey_typeがunit, mapped_typeがt
-  - set{t}はkey_typeがt, mapped_typeがunit(done)
+- mapの[]はmappedがdefconでなければ実行できないので組み込みでは
+  定義されないようにする
+
+- 連結リストから削除する処理をどう実現するか
+  mapped const参照を引数にとりboolを返すclosureを引数に取る関数
+
+- expr_misc is_ordered_type()の判定はfamilyでなく型名で判定する。deque
+  を入れたときのため。is_string_type()も同様。(done)
 
 - deque
   - stl実装を使う。wrapper作る。
   - familyはvarray。rangeはslice。ランダムアクセス可能なので。
+
+- farrayとdarrayをdefconでない型で初期化するためのmake関数。
+
+- list, set, multimap, multiset
+  - list{t}はkey_typeがunit, mapped_typeがtであるようなmultimap
+  - set{t}はkey_typeがt, mapped_typeがunit(done)
+
+- mapのfind的なもの
+  - range_gt, range_ge, range_lt, range_le
+
+- sliceとrangeのpop_front/pop_backを改名。next_front(), prev_back()?
+  (done)
+
+- map_rangeのerase_front(): guard_countが1でないとthrow。そうで
+  ないならrangeの最初の要素をmapから削除する。
 
 - 汎用tableパーザ
 
@@ -2205,4 +2225,27 @@ record型の上のmonoid構造についてのfoldingを、fieldのmonoid構造�
 - mappedの初期値を返す関数(キーを引数に取る?)
 - mappedをfoldする関数(キーを引数にとる?)
 select f1, sum(f2) from tbl group by f1
+
+---------------------------------------------------------------------
+コンテナ要素の参照についての保証
+
+コンテナ要素の参照は、その参照が有効な間、参照を取得した位置の
+コンテナ要素の別名でありつづけることが保証される。つまり、その要素を
+書き換えると、コンテナのその位置の要素が書き換わる。
+参照をコンテナからデタッチするような方法で参照有効性を保証するような
+やりかただと、上の性質が保証されなくなってしまう。
+
+---------------------------------------------------------------------
+コンテナ分類
+
+                      key      mapped   multi    range
+farray{t, n}          size_t   t        no       slice
+darray{t}             size_t   t        no       slice
+vector{t}             size_t   t        no       slice
+deque{t}              size_t   t        no       slice
+list{t}               unit     t        yes      map_range
+tree_map{t, s}        t        s        no       map_range
+tree_multimap{t, s}   t        s        yes      map_range
+set{t}                t        unit     no       map_range
+multiset{t}           t        unit     yes      map_range
 

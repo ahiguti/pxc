@@ -2186,9 +2186,21 @@ void expr_op::emit_value(emit_context& em)
       /* range dereference */
       assert(is_cm_range_family(arg0->get_texpr()));
       /* safe to return ref because range object is always rooted. */
-      em.puts("(*(");
-      fn_emit_value(em, arg0);
-      em.puts("))");
+      if (is_cm_slice_family(arg0->get_texpr())) {
+	/* array slice */
+	em.puts("(*(");
+	fn_emit_value(em, arg0);
+	em.puts("))");
+      } else {
+	/* map range */
+	em.puts("((");
+	fn_emit_value(em, arg0);
+	if (is_const_range_family(arg0->get_texpr())) {
+	  em.puts(").cderef())");
+	} else {
+	  em.puts(").deref())");
+	}
+      }
     }
     return;
   case '.':
@@ -2662,7 +2674,11 @@ void expr_if::emit_value(emit_context& em)
 	em.add_indent(1);
 	em.indent('I');
 	emit_arg_cdecl(em, mapped, true, false);
-	em.puts(" = i$it->second;\n");
+	if (mapped_mutable_ref) {
+	  em.puts(" = ag$fe.get_mapped(i$it);\n");
+	} else {
+	  em.puts(" = ag$fe.get_cmapped(i$it);\n");
+	}
 	em.indent('I');
 	fn_emit_value(em, block1);
 	em.puts("\n");
@@ -2809,7 +2825,7 @@ void expr_feach::emit_value(emit_context& em)
   em.puts("& ag$fe = (");
   fn_emit_value(em, ce);
   em.puts(");\n");
-  if (type_has_invalidate_guard(ce->get_texpr())) {
+  if (type_has_refguard(ce->get_texpr())) {
     em.indent('f');
     if (mapped_mutable_flag) {
       em.puts("const pxcrt::guard_ref< ");
@@ -2866,11 +2882,19 @@ void expr_feach::emit_value(emit_context& em)
     em.indent('f');
     expr_argdecls *const adk = block->get_argdecls();
     emit_arg_cdecl(em, adk, true, false);
-    em.puts(" = i$fe->first;\n");
+    if (mapped_mutable_flag) {
+      em.puts(" = ag$fe.get_key(i$fe);\n");
+    } else {
+      em.puts(" = ag$fe.get_ckey(i$fe);\n");
+    }
     expr_argdecls *const adm = adk->get_rest();
     em.indent('f');
     emit_arg_cdecl(em, adm, true, false);
-    em.puts(" = i$fe->second;\n");
+    if (mapped_mutable_flag) {
+      em.puts(" = ag$fe.get_mapped(i$fe);\n");
+    } else {
+      em.puts(" = ag$fe.get_cmapped(i$fe);\n");
+    }
     em.indent('f');
     fn_emit_value(em, block);
     em.puts("\n");

@@ -1,0 +1,136 @@
+namespace container::impl::deque "use-unsafe";
+public import container::impl::vector;
+
+extern "types" inline
+#include <limits>
+#include <deque>
+namespace pxcrt {
+
+template <typename T>
+struct deque_cslice {
+  typedef T mapped_type;
+  typedef std::deque<T>::const_iterator iterator;
+  deque_cslice() : v() { }
+  template <typename Tc> deque_cslice(const Tc& c)
+    : v(c.begin(), c.end()) { }
+  template <typename Tc> deque_cslice(const Tc& c, bt_size_t o1,
+    bt_size_t o2) {
+    if (o2 > c.size()) { o2 = c.size(); }
+    if (o1 > o2) { o1 = o2; }
+    v.first = c.begin() + o1;
+    v.second = start + (o2 - o1);
+  }
+  bt_bool empty() const { return v.first == v.second; }
+  bt_size_t size() const { return v.second - v.first; }
+  // T get(bt_size_t i) const { return (i < size()) ? v.first[i] : T(); }
+    // TODO: defcon
+  bt_size_t find(bt_size_t offset, T const& value) const {
+    bt_size_t p = std::min(offset, size());
+    for (iterator i = v.first + n; i < v.second; ++i, ++offset) {
+      if (*i == value) {
+	break;
+      }
+    }
+    return offset;
+  }
+  void next() {
+    if (empty()) { pxcrt::throw_invalid_index(); }
+    ++v.first;
+  }
+  void next_front(size_t i) {
+    if (size() < i) { pxcrt::throw_invalid_index(); }
+    v.first += i;
+  }
+  void prev_back(size_t i) {
+    if (size() < i) { pxcrt::throw_invalid_index(); }
+    v.second -= i;
+  }
+  const T& operator [](bt_size_t idx) const {
+    if (idx >= size()) { pxcrt::throw_invalid_index(); }
+    return v.first[idx];
+  }
+  const T& operator *() const {
+    if (empty()) { pxcrt::throw_invalid_index(); }
+    return *v;
+  }
+  T value_at(bt_size_t idx) const {
+    if (idx >= size()) { pxcrt::throw_invalid_index(); }
+    return v.first[idx];
+  }
+  T deref_value() const {
+    if (empty()) { pxcrt::throw_invalid_index(); }
+    return v.first[0];
+  }
+  iterator rawarr() const { return v.first; }
+private:
+  deque_cslice& operator =(const deque_cslice&); /* not allowed */
+protected:
+  std::pair<iterator, iterator> v;
+};
+
+struct deque_slice {
+  typedef T mapped_type;
+  typedef std::deque<T>::iterator iterator;
+  deque_slice() : v() { }
+  template <typename Tc> deque_slice(Tc& c)
+    : v(c.begin(), c.end()) { }
+  template <typename Tc> deque_slice(Tc& c, bt_size_t o1, bt_size_t o2) {
+    if (o2 > c.size()) { o2 = c.size(); }
+    if (o1 > o2) { o1 = o2; }
+    v.first = c.begin() + o1;
+    v.second = start + (o2 - o1);
+  }
+  bt_bool empty() const { return v.first == v.second; }
+  bt_size_t size() const { return v.second - v.first; }
+  // T get(bt_size_t i) const { return (i < size()) ? v.first[i] : T(); }
+    // TODO: defcon
+  bt_size_t find(bt_size_t offset, T const& value) const {
+    bt_size_t p = std::min(offset, size());
+    for (iterator i = v.first + n; i < v.second; ++i, ++offset) {
+      if (*i == value) {
+	break;
+      }
+    }
+    return offset;
+  }
+  void next() {
+    if (empty()) { pxcrt::throw_invalid_index(); }
+    ++v.first;
+  }
+  void next_front(size_t i) {
+    if (size() < i) { pxcrt::throw_invalid_index(); }
+    v.first += i;
+  }
+  void prev_back(size_t i) {
+    if (size() < i) { pxcrt::throw_invalid_index(); }
+    v.second -= i;
+  }
+  T& operator [](bt_size_t idx) const {
+    if (idx >= size()) { pxcrt::throw_invalid_index(); }
+    return v.first[idx];
+  }
+  T& operator *() const {
+    if (empty()) { pxcrt::throw_invalid_index(); }
+    return *v;
+  }
+  T value_at(bt_size_t idx) const {
+    if (idx >= size()) { pxcrt::throw_invalid_index(); }
+    return v.first[idx];
+  }
+  T deref_value() const {
+    if (empty()) { pxcrt::throw_invalid_index(); }
+    return v.first[0];
+  }
+  iterator rawarr() const { return v.first; }
+private:
+  deque_slice& operator =(const deque_slice&); /* not allowed */
+protected:
+  std::pair<iterator, iterator> v;
+};
+
+// TODO: deque
+
+
+}; // namespace pxcrt
+;
+
