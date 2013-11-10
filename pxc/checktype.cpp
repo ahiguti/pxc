@@ -1798,7 +1798,7 @@ void expr_op::check_type(symbol_table *lookup)
 	  arena_error_throw(this, "Using an array without type parameter");
 	}
       } else {
-	/* array element */
+	/* array or map element */
 	if (is_map_family(arg0->resolve_texpr())) {
 	  if (!is_ifdef_cond_expr(this)) {
 	    /* getting map element can cause implicit inserting */
@@ -1806,6 +1806,12 @@ void expr_op::check_type(symbol_table *lookup)
 	  } else {
 	    /* if (x : m[i]) { ... } */
 	    /* m need not to have lvalue */
+	  }
+	  /* operator [] for map requires mapped type to be defcon */
+	  term telem = get_array_elem_texpr(this, arg0->resolve_texpr());
+	  if (!is_default_constructible(telem)) {
+	    arena_error_push(this, "Type '%s' is not default-constructible",
+	      term_tostr_human(telem).c_str());
 	  }
 	}
 	if (op == TOK_PTR_DEREF) {
