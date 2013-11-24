@@ -3037,6 +3037,17 @@ term get_array_range_texpr(expr_op *eop, expr_i *ec /* nullable */,
   return slt;
 }
 
+bool is_raw_array(expr_op *eop, const term& t0)
+{
+  term t = eval_local_lookup(t0, "is_raw_array", eop);
+  if (t.is_null()) {
+    arena_error_throw(eop, "Symbol 'is_raw_array' is not found for type '%s'",
+      term_tostr_human(t0).c_str());
+    return false;
+  }
+  return meta_term_to_long(t) != 0;
+}
+
 term get_array_elem_texpr(expr_op *eop, const term& t0)
 {
   term t = eval_local_lookup(t0, "mapped_type", eop);
