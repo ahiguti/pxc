@@ -9,8 +9,8 @@ namespace pxcrt {
 template <typename T>
 struct deque_cslice {
   typedef T mapped_type;
-  typedef std::deque<T>::const_iterator iterator;
-  typedef std::deque<T>::const_iterator const_iterator;
+  typedef typename std::deque<T>::const_iterator iterator;
+  typedef typename std::deque<T>::const_iterator const_iterator;
   deque_cslice() : v() { }
   template <typename Tc> deque_cslice(const Tc& c)
     : v(c.begin(), c.end()) { }
@@ -19,7 +19,7 @@ struct deque_cslice {
     if (o2 > c.size()) { o2 = c.size(); }
     if (o1 > o2) { o1 = o2; }
     v.first = c.begin() + o1;
-    v.second = start + (o2 - o1);
+    v.second = v.first + (o2 - o1);
   }
   iterator begin() const { return v.first; } 
   iterator end() const { return v.second; } 
@@ -29,7 +29,7 @@ struct deque_cslice {
     // TODO: defcon
   bt_size_t find(bt_size_t offset, T const& value) const {
     bt_size_t p = std::min(offset, size());
-    for (iterator i = v.first + n; i < v.second; ++i, ++offset) {
+    for (iterator i = v.first + p; i < v.second; ++i, ++offset) {
       if (*i == value) {
 	break;
       }
@@ -74,7 +74,8 @@ protected:
 template <typename T>
 struct deque_slice {
   typedef T mapped_type;
-  typedef std::deque<T>::iterator iterator;
+  typedef typename std::deque<T>::iterator iterator;
+  typedef typename std::deque<T>::const_iterator const_iterator;
   deque_slice() : v() { }
   template <typename Tc> deque_slice(Tc& c)
     : v(c.begin(), c.end()) { }
@@ -82,7 +83,7 @@ struct deque_slice {
     if (o2 > c.size()) { o2 = c.size(); }
     if (o1 > o2) { o1 = o2; }
     v.first = c.begin() + o1;
-    v.second = start + (o2 - o1);
+    v.second = v.first + (o2 - o1);
   }
   iterator begin() const { return v.first; } 
   iterator end() const { return v.second; } 
@@ -92,7 +93,7 @@ struct deque_slice {
     // TODO: defcon
   bt_size_t find(bt_size_t offset, T const& value) const {
     bt_size_t p = std::min(offset, size());
-    for (iterator i = v.first + n; i < v.second; ++i, ++offset) {
+    for (iterator i = v.first + p; i < v.second; ++i, ++offset) {
       if (*i == value) {
 	break;
       }
@@ -149,7 +150,7 @@ struct pxcdeque {
   pxcdeque(const crange_type& x) : value(x.begin(), x.end()) { }
   pxcdeque(const range_type& x) : value(x.begin(), x.end()) { }
   bt_bool empty() const { return value.empty(); }
-  size_type size() const { retrun value.size(); }
+  size_type size() const { return value.size(); }
   bt_size_t find(bt_size_t offset, T const& v) const {
     bt_size_t i = 0, n = size();
     for (; i < n; ++i) {
@@ -211,6 +212,10 @@ struct pxcdeque {
     iterator const ilast = ifirst + (last - first);
     value.erase(ifirst, ilast);
   }
+  iterator begin() { return value.begin(); }
+  iterator end() { return value.end(); }
+  const_iterator begin() const { return value.begin(); }
+  const_iterator end() const { return value.end(); }
 private:
   void check_resize() {
     if (refguard_count != 0) { pxcrt::throw_would_invalidate(); }

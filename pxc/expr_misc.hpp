@@ -148,6 +148,7 @@ bool is_range_op(const expr_i *e);
 bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg);
 term get_pointer_deref_texpr(expr_op *eop, const term& t);
 term get_array_range_texpr(expr_op *eop, expr_i *ec, const term& ect);
+bool is_raw_array(expr_op *eop, const term& t0);
 term get_array_elem_texpr(expr_op *eop, const term& t0);
 term get_array_index_texpr(expr_op *eop, const term& t0);
 bool is_vardef_constructor_or_byref(expr_i *e, bool incl_byref);

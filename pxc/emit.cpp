@@ -2080,7 +2080,7 @@ void emit_array_elem_or_range_expr(emit_context& em, expr_op *eop)
       eop->symtbl_lexical->pragma.disable_bounds_checking) {
       em.puts("(");
       fn_emit_value(em, eop->arg0);
-      em.puts(".rawarr()[");
+      em.puts(".begin()[");
       fn_emit_value(em, eop->arg1);
       em.puts("])");
     } else {
@@ -2837,31 +2837,57 @@ void expr_feach::emit_value(emit_context& em)
   }
   const term& cet = ce->get_texpr();
   if (is_array_family(cet) || is_cm_slice_family(cet)) {
-    em.indent('f');
-    em.puts("const size_t sz$fe = ag$fe.size();\n");
-    em.indent('f');
-    if (!mapped_mutable_flag) {
-      em.puts("const ");
+    if (is_raw_array(0, cet)) {
+      /* raw array */
+      em.indent('f');
+      em.puts("const size_t sz$fe = ag$fe.size();\n");
+      em.indent('f');
+      if (!mapped_mutable_flag) {
+	em.puts("const ");
+      }
+      expr_argdecls *const adk = block->get_argdecls();
+      expr_argdecls *const adm = adk->get_rest();
+      em.puts(get_term_cname(adm->get_texpr()));
+      em.puts(" *const ar$fe = ag$fe.rawarr();\n");
+      em.indent('f');
+      em.puts("for (");
+      emit_arg_cdecl(em, adk, false, false); /* always mutable */
+      em.puts(" = 0; ");
+      adk->emit_symbol(em);
+      em.puts(" != sz$fe; ++");
+      adk->emit_symbol(em);
+      em.puts(") {\n");
+      em.add_indent(1);
+      em.indent('f');
+      emit_arg_cdecl(em, adm, true, false);
+      em.puts(" = ar$fe"); /* raw ponter. no need to perform range check. */
+      em.puts("[");
+      adk->emit_symbol(em);
+      em.puts("];\n");
+    } else {
+      /* deque etc. */
+      em.indent('f');
+      em.puts("size_t idx$fe = 0;\n");
+      em.indent('f');
+      em.puts("for (");
+      em.puts(cetstr);
+      if (mapped_mutable_flag) {
+	em.puts("::iterator ");
+      } else {
+	em.puts("::const_iterator ");
+      }
+      em.puts(
+	"i$fe = ag$fe.begin(); i$fe != ag$fe.end(); ++i$fe, ++idx$fe) {\n");
+      em.add_indent(1);
+      em.indent('f');
+      expr_argdecls *const adk = block->get_argdecls();
+      emit_arg_cdecl(em, adk, true, false);
+      em.puts(" = idx$fe;\n");
+      expr_argdecls *const adm = adk->get_rest();
+      em.indent('f');
+      emit_arg_cdecl(em, adm, true, false);
+      em.puts(" = *i$fe;\n");
     }
-    expr_argdecls *const adk = block->get_argdecls();
-    expr_argdecls *const adm = adk->get_rest();
-    em.puts(get_term_cname(adm->get_texpr()));
-    em.puts(" *const ar$fe = ag$fe.rawarr();\n");
-    em.indent('f');
-    em.puts("for (");
-    emit_arg_cdecl(em, adk, false, false); /* always mutable */
-    em.puts(" = 0; ");
-    adk->emit_symbol(em);
-    em.puts(" != sz$fe; ++");
-    adk->emit_symbol(em);
-    em.puts(") {\n");
-    em.add_indent(1);
-    em.indent('f');
-    emit_arg_cdecl(em, adm, true, false);
-    em.puts(" = ar$fe"); /* raw ponter. no need to perform range check. */
-    em.puts("[");
-    adk->emit_symbol(em);
-    em.puts("];\n");
     em.indent('f');
     fn_emit_value(em, block);
     em.puts("\n");
