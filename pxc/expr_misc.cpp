@@ -34,6 +34,7 @@
 #define DBG_SLICE(x)
 #define DBG_CALLEE(x)
 #define DBG_DEPUP(x)
+#define DBG_UBD(x)
 
 namespace pxc {
 
@@ -2527,31 +2528,6 @@ static void check_interface_impl(expr_i *e)
   }
 }
 
-static bool check_use_before_def_checkpoint(expr_i *e)
-{
-  expr_i *p = e->parent_expr;
-  if (p == 0) {
-    return false;
-  }
-  if (p->get_esort() == expr_e_stmts &&
-    ptr_down_cast<expr_stmts>(p)->head == e) {
-    return true;
-  }
-  /* if (...), etc. */
-  switch (p->get_esort()) {
-  case expr_e_if:
-  case expr_e_while:
-  case expr_e_for:
-  case expr_e_forrange:
-  case expr_e_feach:
-  case expr_e_try:
-    return true;
-  default:
-    break;
-  }
-  return false;
-}
-
 typedef std::map< expr_var *, std::pair<expr_i *, const expr_funcdef *> >
   varmap_type;
 typedef std::set<expr_var *> vars_type;
@@ -2563,10 +2539,20 @@ static void check_use_before_def_one(varmap_type& uvars,
     return;
   }
   if (e->get_esort() == expr_e_var) {
-    dvars_cur.insert(ptr_down_cast<expr_var>(e));
-  } else if (e->get_esort() == expr_e_funcdef ||
-    e->get_esort() == expr_e_struct) {
-    return;
+    expr_var *const ev = ptr_down_cast<expr_var>(e);
+    dvars_cur.insert(ev);
+    DBG_UBD(fprintf(stderr, "UBD dvar=%s(%p) uvars=%zu\n", ev->sym, ev,
+      uvars.size()));
+    if (uvars.find(ev) != uvars.end()) {
+      DBG_UBD(fprintf(stderr, "UBD!\n"));
+      const std::pair<expr_i *, const expr_funcdef *>& vm = uvars[ev];
+      expr_i *const eu = vm.first;
+      arena_error_push(eu, "Variable '%s' used before defined",
+	ev->sym);
+      if (vm.second != 0) {
+	arena_error_push(eu, "(used as an upvalue for '%s')", vm.second->sym);
+      }
+    }
   } else if (e->get_esort() == expr_e_funccall) {
     expr_funccall *const ef = ptr_down_cast<expr_funccall>(e);
     expr_i *fld = get_op_rhs(ef->func, '.');
@@ -2584,10 +2570,12 @@ static void check_use_before_def_one(varmap_type& uvars,
 	/* this funccall uses these variables as upvalues. they must be
 	 * defined before the func is called. */
 	expr_funcdef::dep_upvalues_type::const_iterator i;
-	for (i = efd->dep_upvalues.begin(); i != efd->dep_upvalues.end();
+	for (i = efd->dep_upvalues_tr.begin(); i != efd->dep_upvalues_tr.end();
 	  ++i) {
 	  expr_var *const ev = dynamic_cast<expr_var *>(i->first);
 	  if (ev != 0 && uvars.find(ev) == uvars.end()) {
+	    DBG_UBD(fprintf(stderr, "UBD funccall %s var=%s(%p)\n", efd->sym,
+	      ev->sym, ev));
 	    uvars[ev] = std::make_pair(e, efd);
 	  }
 	}
@@ -2602,34 +2590,41 @@ static void check_use_before_def_one(varmap_type& uvars,
       }
     }
   }
-  const int num_children = e->get_num_children();
-  for (int i = 0; i < num_children; ++i) {
-    check_use_before_def_one(uvars, dvars_cur, e->get_child(i));
-  }
-  if (check_use_before_def_checkpoint(e)) {
-    for (vars_type::const_iterator i = dvars_cur.begin(); i != dvars_cur.end();
-      ++i) {
-      if (uvars.find(*i) != uvars.end()) {
-	expr_i *vu = uvars[*i].first;
-	arena_error_push(vu, "Variable '%s' used before defined", (*i)->sym);
-	const expr_funcdef *ef = uvars[*i].second;
-	if (ef != 0) {
-	  arena_error_push(vu, "(used as an upvalue for '%s')", ef->sym);
+  /* check recursively */
+  if (e->get_esort() == expr_e_op) {
+    /* special treatment for ops. variable x must not be appear in the rhs of
+     * 'var x = ...'. */
+    expr_op *const eop = ptr_down_cast<expr_op>(e);
+    /* check rhs first */
+    check_use_before_def_one(uvars, dvars_cur, eop->arg1);
+    check_use_before_def_one(uvars, dvars_cur, eop->arg0);
+  } else {
+    const int num_children = e->get_num_children();
+    for (int i = 0; i < num_children; ++i) {
+      expr_i *const c = e->get_child(i);
+      if (c != 0 && c->get_esort() == expr_e_block) {
+	expr_block *const cbl = ptr_down_cast<expr_block>(c);
+	if (cbl->symtbl.block_esort != expr_e_block) {
+	  /* child frame. skip. */
+	  continue;
 	}
       }
+      check_use_before_def_one(uvars, dvars_cur, e->get_child(i));
     }
-    dvars_cur.clear();
   }
 }
 
-// FIXME: correct?
 static void check_use_before_def(expr_i *e)
 {
   expr_block *const bl = dynamic_cast<expr_block *>(e);
   if (bl != 0) {
-    varmap_type uvars;
-    vars_type dvars_cur;
-    check_use_before_def_one(uvars, dvars_cur, bl);
+    expr_i *const fre = get_current_frame_expr(&bl->symtbl);
+    if (fre == 0 || bl->symtbl.block_esort != expr_e_block) {
+      /* a frame block or global */
+      varmap_type uvars;
+      vars_type dvars_cur;
+      check_use_before_def_one(uvars, dvars_cur, bl);
+    }
   }
 }
 
