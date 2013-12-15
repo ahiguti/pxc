@@ -3,7 +3,20 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- tbl_bug1.px.fixme
+- 汎用tableパーザ
+- プラグイン
+  - dlopenして初期化関数を呼ぶのをmulti-thread safeにできるように?
+  - 初期化を必要としないnamespace -> threaded namespace? (done)
+    - グローバルスコープがnoexec_exprしか存在しない
+  - 特定のinterfaceの実装を持つdllをコンパイル・ロードする手段
+- dense hash map実装
+- threaded namespaceは初期化関数を省略
+
+- get_stdin()の効率改善
+
+- local poolの後始末を__attribute__((destructor))使わずに実現できるか
+
+- tbl_bug1.px.fixme (done)
 
 - deque(done)
   - stl実装を使う。wrapper作る。
@@ -22,8 +35,6 @@ FIXME/TODO M1
 
 - mapのfind的なもの
   - range_gt, range_ge, range_lt, range_le
-
-- 汎用tableパーザ
 
 - sliceとrangeのpop_front/pop_backを改名。next_front(), prev_back()?
   (done)
@@ -2256,5 +2267,16 @@ check_use_before_def
 関数呼び出しがあればそのupvalueをuvarsに入れる
 変数定義があれば、それがuvarsに既に入っていたらuse before defエラー
 入れ子のblockもイテレートするが、入れ子のフレームは読み飛ばす。
+
+
+---------------------------------------------------------------------
+multi-thread safeなプラグイン
+
+threadedな関数をdlopen/dlsymから呼び出す仕組みが必要。
+threaded function {interf} load(string filename)
+{
+}
+初期化を必要とするモジュールのリストが実装側とインタフェース定義箇所
+で同一でないと困るのではないか。
 
 

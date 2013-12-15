@@ -1608,7 +1608,6 @@ static void emit_function_def(emit_context& em)
 
 static void emit_import_init(emit_context& em, const std::string& main_ns)
 {
-  /* TODO: this impl is not efficient at runtime */
   std::set<std::string> ss;
   for (expr_arena_type::iterator i = expr_arena.begin();
     i != expr_arena.end(); ++i) {
@@ -1620,6 +1619,10 @@ static void emit_import_init(emit_context& em, const std::string& main_ns)
       }
       if (ss.find(fn) != ss.end()) {
 	continue;
+      }
+      nsthrmap_type::const_iterator j = nsthrmap.find(ens->uniq_nsstr);
+      if (j != nsthrmap.end() && j->second) {
+	continue; /* fn is a threaded namespace */
       }
       ss.insert(fn);
       em.set_file_line(ens);
@@ -3551,6 +3554,10 @@ void emit_code(const std::string& dest_filename, expr_block *gl_block,
   em.puts("/* function definitions */\n");
   emit_function_def(em);
   em.finish_ns();
+  const bool is_thr_ns = nsthrmap[main_namespace];
+  if (gmain == generate_main_none && is_thr_ns) {
+    return; /* no need to generate namespace main */
+  }
   /* main */
   em.puts("/* package main */\n");
   em.start_ns();
@@ -3562,7 +3569,7 @@ void emit_code(const std::string& dest_filename, expr_block *gl_block,
   fn_emit_value(em, gl_block);
   em.puts("\n");
   em.finish_ns();
-  /* extern c no namespace */
+  /* extern c wo namespace */
   em.set_file_line(gl_block);
   em.puts("/* package main c */\n");
   em.set_file_line(gl_block);

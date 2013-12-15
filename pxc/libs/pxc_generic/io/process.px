@@ -1,4 +1,4 @@
-namespace io::process "use-unsafe";
+threaded namespace io::process "use-unsafe";
 public import numeric::integral -;
 public import numeric::cast -;
 public import container::array -;
@@ -7,9 +7,6 @@ public import io -;
 public import io::errno -;
 public import io::signal -;
 public import exception;
-
-public extern "pxcio::pxc_argv" vector{string} argv;
-public extern "pxcio::pxc_environ" vector{string} environ;
 
 public threaded function errno_t io_exit(io const& sys, int st)
 {
@@ -124,17 +121,6 @@ int shell_exec_internal(io const& sys, cstrref const& cmd);
 
 private function extern "pxcio::io_process_init" void io_process_init();
 
-io_process_init();
-
-extern "functions" inline
-namespace pxcio {
-
-extern pxcrt::pxcvector<pxcrt::bt_string> pxc_argv;
-extern pxcrt::pxcvector<pxcrt::bt_string> pxc_environ;
-
-};
-;
-
 extern "implementation" inline
 extern "C" {
 extern char **environ;
@@ -145,36 +131,7 @@ namespace pxcio {
 #include <sys/types.h>
 #include <sys/wait.h>
 
-pxcrt::pxcvector<pxcrt::bt_string> pxc_argv;
-pxcrt::pxcvector<pxcrt::bt_string> pxc_environ;
-
-
 using namespace pxcrt;
-
-void io_process_init()
-{
-  pxc_argv.clear();
-  char buf[32];
-  int c = 0;
-  while (true) {
-    snprintf(buf, sizeof(buf), "PXC_ARG%d", c++);
-    const char *ent = getenv(buf);
-    if (ent == 0) {
-      break;
-    }
-    const unsigned char *uent = reinterpret_cast<const unsigned char *>(ent);
-    const pxcrt::bt_string s(uent, strlen(ent));
-    pxc_argv.push_back(s);
-    unsetenv(buf);
-  }
-  char **p = ::environ;
-  while (*p != 0) {
-    const unsigned char *uent = reinterpret_cast<const unsigned char *>(*p);
-    const pxcrt::bt_string s(uent, strlen(*p));
-    pxc_environ.push_back(s);
-    ++p;
-  }
-}
 
 void _exit_internal(io const& sys, bt_int st)
 {
