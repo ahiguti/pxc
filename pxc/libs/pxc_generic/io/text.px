@@ -6,7 +6,7 @@ public import io::errno -;
 public import text::split -;
 public import meta m;
 
-threaded function {cb, opt} errno_t file_read_lines(file const& ifile)
+public threaded function {cb, opt} errno_t file_read_lines(file const& ifile)
 {
   metafunction line_delim get_opt{opt, "line_delim", '\n'};
   metafunction read_block_size get_opt{opt, "read_block_size", 16384};
@@ -37,11 +37,16 @@ threaded function {cb, opt} errno_t file_read_lines(file const& ifile)
   return EOK;
 }
 
-threaded function {cb, opt} errno_t
+public threaded function bool is_space_or_tab(uchar ch)
+{
+  return ch == ' ' || ch == '\t';
+}
+
+public threaded function {cb, opt} errno_t
 file_read_table(file const& ifile)
 {
   metafunction enttype m::argtype{cb, 0};
-  metafunction column_delim get_opt{opt, "column_delim", column_delim_space};
+  metafunction column_delim get_opt{opt, "column_delim", is_space_or_tab};
   const err = file_read_lines{parse_line, opt}(ifile);
   threaded function bool parse_line(cstrref const& line) {
     enttype e;
@@ -54,8 +59,4 @@ file_read_table(file const& ifile)
 
 private metafunction get_opt{opt, k, def}
   m::cond{m::is_type{opt}, m::local{opt, k}, def};
-
-private threaded function bool column_delim_space(uchar ch) {
-  return ch == ' ' || ch == '\t';
-}
 

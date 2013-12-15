@@ -510,10 +510,10 @@ std::string expr_inline_c::dump(int indent) const
 }
 
 expr_ns::expr_ns(const char *fn, int line, expr_i *uniq_nssym, bool import,
-  bool pub, const char *nsalias, const char *safety)
+  bool pub, bool thr, const char *nsalias, const char *safety)
   : expr_i(fn, line), uniq_nssym(uniq_nssym),
     uniq_nsstr(get_full_name(uniq_nssym)),
-    import(import), pub(pub), nsalias(nsalias), safety(safety)
+    import(import), pub(pub), thr(thr), nsalias(nsalias), safety(safety)
 {
   if (!import) {
     nssafety_e v = nssafety_e_safe;

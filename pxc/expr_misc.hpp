@@ -33,6 +33,8 @@ extern nsaliases_type nsaliases;
 extern nsextends_type nsextends;
 typedef std::map<std::string, nssafety_e> nssafetymap_type;
 extern nssafetymap_type nssafetymap;
+typedef std::map<std::string, bool> nsthrmap_type;
+extern nsthrmap_type nsthrmap;
 /* end: global variables */
 
 expr_i *string_to_te(expr_i *epos, const std::string& str);
@@ -117,6 +119,7 @@ std::string long_to_string(long long v);
 #endif
 const char *tok_string(const expr_i *e, int tok);
 int count_newline(const char *str);
+bool is_global_frame(symbol_table *lookup);
 symbol_table *get_current_frame_symtbl(symbol_table *lookup);
 expr_i *get_current_frame_expr(symbol_table *lookup);
   /* funcdef, struct, interface */

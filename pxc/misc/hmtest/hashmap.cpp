@@ -52,7 +52,7 @@ struct hashmap_buckets {
       }
       bn.deinit_entry();
       node_type *p = &bn;
-      node_type *const pend = sentinel();
+      node_type *const pend = buckets_end();
       while (p->next != pend) {
 	p->deinit_entry();
 	node_type *np = p->next;
@@ -62,28 +62,31 @@ struct hashmap_buckets {
     }
     free(buckets);
   }
-  void set(const Tk& k, const Tm& m, size_type bkt) {
+  bool insert(const Tk& k, const Tm& m, size_type bkt) {
     assert(bkt < num_buckets);
     node_type& bn = buckets[bkt];
     if (bn.next == 0) {
+      /* this bucket is empty */
       bn.init_entry(k, m); /* throw */
-      bn.next = sentinel();
+      bn.next = buckets_end();
       ++num_entries;
-      return;
+      return true; /* created */
     }
+    /* this bucket is not empty */
     node_type *p = &bn;
-    node_type *const pend = sentinel();
+    node_type *const pend = buckets_end();
     while (true) {
       entry_type& pe = *p->get_entry();
       if (pe.first == k) {
 	pe.second = m;
-	return;
+	return false; /* not created */
       }
       if (p->next == pend) {
 	break;
       }
       p = p->next;
     }
+    /* append to the end of the buket */
     node_type *const nn = static_cast<node_type *>(
       malloc(sizeof(node_type)));
     if (nn == 0) {
@@ -95,9 +98,10 @@ struct hashmap_buckets {
       free(nn);
       throw;
     }
-    nn->next = sentinel();
+    nn->next = buckets_end();
     p->next = nn;
     ++num_entries;
+    return true; /* created */
   }
   const Tm *find(const Tk& k, size_type bkt) const {
     return find_internal(k, bkt);
@@ -117,20 +121,20 @@ private:
       if (pe.first == k) {
 	return &pe.second;
       }
-      node_type *const pend = sentinel();
+      node_type *const pend = buckets_end();
       if (p->next == pend) {
 	return 0;
       }
       p = p->next;
     }
   }
-  node_type *sentinel() const {
+  node_type *buckets_end() const {
     return buckets + num_buckets;
   }
   hashmap_buckets(const hashmap_buckets& x);
   hashmap_buckets& operator =(const hashmap_buckets& x);
 private:
-  node_type *buckets; /* num_buckets + 1 */
+  node_type *buckets;
   size_type num_buckets;
   size_type num_entries;
 };
@@ -153,7 +157,7 @@ int main()
 {
   map_type m(211);
   for (int i = 0; i < 100; ++i) {
-    m.set(i, i, i);
+    m.insert(i, i, i);
   }
   long t1 = time(0);
   int v = 0;

@@ -36,8 +36,8 @@ expr_i *expr_inline_c_new(const char *fn, int line, const char *posstr,
 { return arena_push(new expr_inline_c(fn, line, posstr, cstr, declonly,
   val)); }
 expr_i *expr_ns_new(const char *fn, int line, expr_i *nssym, bool import,
-  bool pub, const char *nsalias, const char *safety)
-{ return arena_push(new expr_ns(fn, line, nssym, import, pub, nsalias,
+  bool pub, bool thr, const char *nsalias, const char *safety)
+{ return arena_push(new expr_ns(fn, line, nssym, import, pub, thr, nsalias,
   safety)); }
 expr_i *expr_int_literal_new(const char *fn, int line, const char *str,
   bool is_unsigned)
@@ -422,6 +422,7 @@ void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
   expr_i *e = topval;
   std::string uniqns;
   /* find namespace decl */
+  bool ns_is_thr = false;
   while (e != 0) {
     expr_i *stmt = ptr_down_cast<expr_stmts>(e)->head;
     if (stmt->get_esort() == expr_e_ns) {
@@ -431,6 +432,7 @@ void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
 	  arena_error_push(ns, "Duplicate namespace declaration");
 	}
 	uniqns = ns->uniq_nsstr;
+	ns_is_thr = ns->thr;
 	imports_r.main_unique_namespace = uniqns;
       } else {
 	import_info ii;
@@ -448,6 +450,7 @@ void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
     int block_id_ns = 0;
     fn_set_namespace(topval, uniqns, block_id_ns,
       nssafetymap[uniqns] != nssafety_e_safe);
+    nsthrmap[uniqns] = ns_is_thr;
   }
   if (is_main) {
     main_namespace = uniqns;
@@ -530,9 +533,7 @@ void arena_compile(const std::map<std::string, std::string>& prof_map,
   fn_compile(global, 0, false);
   arena_error_throw_pushed();
   compile_phase = 3;
-  fn_check_closure(global);
-  compile_phase = 5;
-  fn_check_root(global);
+  fn_check_misc(global);
   compile_phase = 6;
   fn_check_dep_upvalues(global);
   arena_error_throw_pushed();
@@ -575,6 +576,7 @@ void arena_clear()
   nsaliases.clear();
   nsextends.clear();
   nssafetymap.clear();
+  nsthrmap.clear();
 }
 
 };

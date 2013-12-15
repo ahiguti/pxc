@@ -55,6 +55,7 @@ size_t recursion_limit = 3000;
 nsaliases_type nsaliases;
 nsextends_type nsextends;
 nssafetymap_type nssafetymap;
+nsthrmap_type nsthrmap;
 /* end: global variables */
 
 static expr_i *string_to_nssym(expr_i *e, const std::string& str)
@@ -2017,6 +2018,11 @@ expr_i *fn_drop_non_exports(expr_i *e) {
   }
   sl[sl.size() - 1]->rest = 0;
   return sl[0];
+}
+
+bool is_global_frame(symbol_table *cur)
+{
+  return (get_current_frame_symtbl(cur) == 0);
 }
 
 symbol_table *get_current_frame_symtbl(symbol_table *cur)

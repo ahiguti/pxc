@@ -1,4 +1,4 @@
-namespace io::standard "use-unsafe";
+threaded namespace io::standard "use-unsafe";
 public import numeric::integral -;
 public import container::array -;
 public import io -;
@@ -59,33 +59,29 @@ public function {tlist} void println(expand(v::arg_decls_bycref{tlist}))
   file_write_all(get_stdout(io::system), s, len);
 }
 
-private extern "pxcio::stdin"  option{file} stdin;
-private extern "pxcio::stdout" option{file} stdout;
-private extern "pxcio::stderr" option{file} stderr;
-
-private function extern "pxcio::iostd_init" void iostd_init();
-
-iostd_init();
+private extern "pxcio::dummy" option{file} dummy;
+  /* instantiate option{file} */
 
 extern "implementation" inline
 namespace pxcio {
 
 typedef ::algebraic$n::option$v$p$io$$file$n$$file$s$r$ optfile;
 
-/* these values are immutable after initialized, and multi-thread safe. */
-optfile pxc_stdin;
-optfile pxc_stdout;
-optfile pxc_stderr;
-
-file get_stdin(io const& iop)  { return pxc_stdin.some$$r(); }
-file get_stdout(io const& iop) { return pxc_stdout.some$$r(); }
-file get_stderr(io const& iop) { return pxc_stderr.some$$r(); }
-
-void iostd_init()
-{
-  pxc_stdin .some$$l(create_file(0));
+/* TODO: slow */
+file get_stdin(io const& iop)  {
+  optfile pxc_stdin;
+  pxc_stdin.some$$l(create_file(0));
+  return pxc_stdin.some$$r();
+}
+file get_stdout(io const& iop) {
+  optfile pxc_stdout;
   pxc_stdout.some$$l(create_file(1));
+  return pxc_stdout.some$$r();
+}
+file get_stderr(io const& iop) {
+  optfile pxc_stderr;
   pxc_stderr.some$$l(create_file(2));
+  return pxc_stderr.some$$r();
 }
 
 };

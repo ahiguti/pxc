@@ -32,15 +32,10 @@ valgrind-run:
 	exit 0;
 
 valgrind-check:
-	fgrep 'ERROR SUMMARY' valgrind.log | \
-	fgrep -v 'ERROR SUMMARY: 0 errors'; \
-	fgrep 'definitely lost' valgrind.log | \
-	fgrep -v 'bytes in 0 blocks'; \
-	fgrep 'indirectly lost' valgrind.log | \
-	fgrep -v 'bytes in 0 blocks'; \
-	fgrep 'still reachable' valgrind.log | \
-	fgrep -v 'bytes in 0 blocks'; \
-	exit 0;
+	!( fgrep 'ERROR SUMMARY' valgrind.log | fgrep -v ': 0 errors' )
+	!( fgrep 'definitely lost' valgrind.log | fgrep -v ' in 0 blocks' )
+	!( fgrep 'indirectly lost' valgrind.log | fgrep -v ' in 0 blocks' )
+	!( fgrep 'still reachable' valgrind.log | fgrep -v ' in 0 blocks' )
 
 efence:
 	rm -f efence.log

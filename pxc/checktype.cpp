@@ -308,7 +308,8 @@ void expr_var::define_vars_one(expr_stmts *stmt)
 }
 
 static bool check_term_validity(const term& t, bool allow_nontype,
-  bool allow_local_func, bool allow_ephemeral, expr_i *pos, std::string& err_mess_r)
+  bool allow_local_func, bool allow_ephemeral, expr_i *pos,
+  std::string& err_mess_r)
 {
   DBG_CTV(fprintf(stderr, "CTV %s\n", term_tostr_human(t).c_str()));
   expr_i *const e = t.get_expr();
@@ -3882,18 +3883,45 @@ void expr_try::check_type(symbol_table *lookup)
   /* type_of_this_expr */
 }
 
-void fn_check_closure(expr_i *e)
+void fn_check_misc(expr_i *glo)
 {
-// TODO: remove this func
 #if 0
+  typedef std::map<std::string, bool> nsthr_map_type;
+  nsthr_map_type nsthr_map;
 #endif
-}
-
-void fn_check_root(expr_i *e)
-{
-// TODO: remove this func
+  expr_block *const gb = ptr_down_cast<expr_block>(glo);
+  bool cur_ns_thr = false;
+  for (expr_stmts *st = gb->stmts; st != 0; st = st->rest) {
+    expr_i *const head = st->head;
+    if (head->get_esort() == expr_e_ns) {
+      expr_ns *const ens = ptr_down_cast<expr_ns>(head);
+      if (!ens->import) {
+	cur_ns_thr = ens->thr;
 #if 0
+fprintf(stderr, "ns %s %d\n", ens->uniq_nsstr.c_str(), int(ens->thr));
 #endif
+      } else {
+	/* import */
+	const std::string n = ens->uniq_nsstr;
+	nsthrmap_type::iterator i = nsthrmap.find(n);
+	if (i == nsthrmap.end()) {
+	  #if 0
+	  arena_error_push(head, "Internal error: nsthr_map.find %s",
+	    n.c_str());
+	  #endif
+	} else {
+	  if (cur_ns_thr && !i->second) {
+	    arena_error_push(head, "Importing a non-threaded namespace '%s' "
+	      "from a threaded namespace", n.c_str());
+	  }
+	}
+      }
+    }
+    if (cur_ns_thr && !is_noexec_expr(head)) {
+      arena_error_push(head, "Global statement is not allowed in a "
+	"threaded namespace");
+    }
+  }
 }
 
 static void check_type_validity_common(expr_i *e, const term& t)

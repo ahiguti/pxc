@@ -418,7 +418,7 @@ public:
 struct expr_ns : public expr_i {
   /* 'namespace' or 'import' */
   expr_ns(const char *fn, int line, expr_i *uniq_nssym, bool import, bool pub,
-    const char *nsalias, const char *safety);
+    bool thr, const char *nsalias, const char *safety);
   expr_i *clone() const { return new expr_ns(*this); }
   expr_e get_esort() const { return expr_e_ns; }
   int get_num_children() const { return 1; }
@@ -440,6 +440,7 @@ public:
   const std::string uniq_nsstr;
   const bool import;
   const bool pub;
+  const bool thr;
   const char *nsalias;
   const char *safety;
   std::string src_uniq_nsstr; /* src_uniq_nsstr 'imports' uniq_nsstr */
