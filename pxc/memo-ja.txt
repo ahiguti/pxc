@@ -3,12 +3,20 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- 汎用tableパーザ
+- C++インタフェースを実装するpxcモジュールをロード実行する手段
+  - ヘッダファイルを出力する -> PXC_IMPORT_HEADER
+
+- hs2インタフェース
+
+- safe mode: pathの最後はunsafe不可にする
+
 - プラグイン
-  - dlopenして初期化関数を呼ぶのをmulti-thread safeにできるように?
+  - dlopenして初期化関数を呼ぶのをmulti-thread safeにできるように(done)
   - 初期化を必要としないnamespace -> threaded namespace? (done)
-    - グローバルスコープがnoexec_exprしか存在しない
-  - 特定のinterfaceの実装を持つdllをコンパイル・ロードする手段
+  - 特定のinterfaceの実装を持つdllをコンパイル・ロードする手段(done)
+
+- 汎用tableパーザ
+
 - dense hash map実装
 - threaded namespaceは初期化関数を省略
 
@@ -2270,13 +2278,58 @@ check_use_before_def
 
 
 ---------------------------------------------------------------------
-multi-thread safeなプラグイン
+threadedなdllをコンパイル・ロードする手段
 
-threadedな関数をdlopen/dlsymから呼び出す仕組みが必要。
-threaded function {interf} load(string filename)
-{
+- 対象namespaceに含まれる特定の名前の関数が、プロファイルで指定された
+  シグニチャを持つことを要請する。またthreadedでなければならない。
+- 対象がthreaded namespaceであることを要請。したがって地の文は持たな
+  い。main()は空。
+- その特定の関数へのポインタを返す関数をextern "C"でemitする。
+
+profileに emit_threaded_dll=foo::bar と指定する。
+foo::bar:args  引数の型など
+foo::bar:ret   返値の型など
+foo::bar:name  関数の名前(文字列)
+このprofileを指定してpxc hoge.pxすると、hoge::(名前) の関数の型を
+チェックしたうえで、その関数ポインタを返す関数をpxc_threaded_dll
+としてemitする。hogeはthreaded namespaceでなければならない。
+
+---------------------------------------------------------------------
+hs2インタフェース
+
+interface hs2_service {
+  ptr{hs2_worker} make_worker();
 }
-初期化を必要とするモジュールのリストが実装側とインタフェース定義箇所
-で同一でないと困るのではないか。
 
+interface hs2_worker {
+  void execute_command(strref const& req, hs2_command& cmd);
+}
+
+リクエスト: 0 3 4 foo [args ...]
+  テーブル0, 3, 4に対してfoo(args,...)を実行する
+
+execute_commandから呼べる関数
+indexの状態:
+  none, row_found, row_notfound
+find_first
+  (none -> row_found, row_notfound)
+  table_id, キー, find_flag(EXACT, AFTER, BEFORE, KEY_OR_NEXT,
+  KEY_OR_PREV)を指定してレコードを探す
+find_more
+  (row_found -> row_found, row_notfound)
+  さらなるレコードを探す
+find_done
+  (row_found, row_notfound -> none)
+  findを終了する
+update
+  (row_found)
+  現在選択中のレコードを、フィールドの値を指定してupdate
+insert
+  (none)
+  フィールドの値を指定してレコードをinsert
+
+---------------------------------------------------------------------
+C++インタフェースを実装するpxcモジュールをロード実行する手段
+
+- 特定名前空間のヘッダファイルを作る
 

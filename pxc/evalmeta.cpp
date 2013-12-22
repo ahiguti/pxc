@@ -1890,13 +1890,29 @@ builtin_nonstrict_metafunc_t find_builtin_nonstrict_metafunction(
   return 0;
 }
 
-term eval_local_lookup(const term& t, const std::string& name, expr_i *pos)
+term eval_mf_local(const term& t, const std::string& name, expr_i *pos)
 {
   eval_context ectx;
   term_list tl;
   tl.push_back(t);
   tl.push_back(term(name));
   term r = eval_meta_local(tl, ectx, pos);
+  return r;
+}
+
+term eval_mf_args(const term& t, expr_i *pos)
+{
+  eval_context ectx;
+  term_list_range tr(&t, 1);
+  term r = eval_meta_args(tr, ectx, pos);
+  return r;
+}
+
+term eval_mf_ret(const term& t, expr_i *pos)
+{
+  eval_context ectx;
+  term_list_range tr(&t, 1);
+  term r = eval_meta_ret(tr, ectx, pos);
   return r;
 }
 

@@ -140,12 +140,6 @@ enum funccall_e {
   funccall_e_struct_constructor,
 };
 
-enum nssafety_e {
-  nssafety_e_safe,
-  nssafety_e_export_unsafe,
-  nssafety_e_use_unsafe,
-};
-
 enum typefamily_e {
   typefamily_e_none,             /* unknown */
   typefamily_e_ptr,              /* shared pointer */

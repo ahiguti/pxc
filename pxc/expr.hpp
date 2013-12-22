@@ -181,6 +181,13 @@ enum generate_main_e {
   generate_main_exe,
 };
 
+enum nssafety_e {
+  nssafety_e_safe,
+  nssafety_e_export_unsafe,
+  nssafety_e_use_unsafe,
+};
+
+
 void arena_init();
 void arena_set_recursion_limit(size_t v);
 void arena_clear();

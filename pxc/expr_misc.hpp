@@ -35,6 +35,7 @@ typedef std::map<std::string, nssafety_e> nssafetymap_type;
 extern nssafetymap_type nssafetymap;
 typedef std::map<std::string, bool> nsthrmap_type;
 extern nsthrmap_type nsthrmap;
+extern std::string emit_threaded_dll_func;
 /* end: global variables */
 
 expr_i *string_to_te(expr_i *epos, const std::string& str);

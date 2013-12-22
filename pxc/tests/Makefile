@@ -27,7 +27,8 @@ valgrind: valgrind-run valgrind-check
 valgrind-run:
 	rm -f valgrind.log
 	for i in `find . -name "*.exe"`; do \
-	  valgrind $$i > /dev/null 2>> valgrind.log; \
+	  valgrind --suppressions=./common/dlopen.supp $$i \
+	    > /dev/null 2>> valgrind.log; \
 	done; \
 	exit 0;
 

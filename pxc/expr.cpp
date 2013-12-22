@@ -533,7 +533,7 @@ void arena_compile(const std::map<std::string, std::string>& prof_map,
   fn_compile(global, 0, false);
   arena_error_throw_pushed();
   compile_phase = 3;
-  fn_check_misc(global);
+  fn_check_misc(global, gmain);
   compile_phase = 6;
   fn_check_dep_upvalues(global);
   arena_error_throw_pushed();
@@ -577,6 +577,7 @@ void arena_clear()
   nsextends.clear();
   nssafetymap.clear();
   nsthrmap.clear();
+  emit_threaded_dll_func = "";
 }
 
 };

@@ -56,6 +56,7 @@ nsaliases_type nsaliases;
 nsextends_type nsextends;
 nssafetymap_type nssafetymap;
 nsthrmap_type nsthrmap;
+std::string emit_threaded_dll_func;
 /* end: global variables */
 
 static expr_i *string_to_nssym(expr_i *e, const std::string& str)
@@ -3026,7 +3027,7 @@ term get_array_range_texpr(expr_op *eop, expr_i *ec /* nullable */,
     expr_has_lvalue(ec, ec, true);
     nonconst = true;
   }
-  term slt = eval_local_lookup(ect,
+  term slt = eval_mf_local(ect,
     nonconst ? "range_type" : "crange_type", eop);
   if (slt.is_null()) {
     arena_error_throw(eop, "Cannot apply '[ .. ]'");
@@ -3040,7 +3041,7 @@ term get_array_range_texpr(expr_op *eop, expr_i *ec /* nullable */,
 
 bool is_raw_array(expr_op *eop, const term& t0)
 {
-  term t = eval_local_lookup(t0, "is_raw_array", eop);
+  term t = eval_mf_local(t0, "is_raw_array", eop);
   if (t.is_null()) {
     arena_error_throw(eop, "Symbol 'is_raw_array' is not found for type '%s'",
       term_tostr_human(t0).c_str());
@@ -3051,7 +3052,7 @@ bool is_raw_array(expr_op *eop, const term& t0)
 
 term get_array_elem_texpr(expr_op *eop, const term& t0)
 {
-  term t = eval_local_lookup(t0, "mapped_type", eop);
+  term t = eval_mf_local(t0, "mapped_type", eop);
   if (t.is_null()) {
     arena_error_throw(eop, "Symbol 'mapped_type' is not found for type '%s'",
       term_tostr_human(t0).c_str());
@@ -3062,7 +3063,7 @@ term get_array_elem_texpr(expr_op *eop, const term& t0)
 
 term get_array_index_texpr(expr_op *eop, const term& t0)
 {
-  term t = eval_local_lookup(t0, "key_type", eop);
+  term t = eval_mf_local(t0, "key_type", eop);
   if (t.is_null()) {
     arena_error_throw(eop, "Symbol 'key_type' is not found for type '%s'",
       term_tostr_human(t0).c_str());
