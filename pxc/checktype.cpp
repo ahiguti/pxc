@@ -3883,7 +3883,7 @@ void expr_try::check_type(symbol_table *lookup)
   /* type_of_this_expr */
 }
 
-void fn_check_misc(expr_i *glo)
+void fn_check_misc(expr_i *glo, generate_main_e gmain)
 {
 #if 0
   typedef std::map<std::string, bool> nsthr_map_type;
@@ -3920,6 +3920,63 @@ fprintf(stderr, "ns %s %d\n", ens->uniq_nsstr.c_str(), int(ens->thr));
     if (cur_ns_thr && !is_noexec_expr(head)) {
       arena_error_push(head, "Global statement is not allowed in a "
 	"threaded namespace");
+    }
+  }
+  /* emit_threaded_dll */
+  if (gmain == generate_main_dl) {
+    std::map<std::string, std::string>::const_iterator iter
+      = cur_profile->find("emit_threaded_dll");
+    if (iter != cur_profile->end()) {
+      expr_block *const glo_block = ptr_down_cast<expr_block>(glo);
+      const std::string etdstr = iter->second;
+      bool is_global_dummy = false;
+      bool is_upvalue_dummy = false;
+      expr_i *const etd = glo_block->symtbl.resolve_name(etdstr, "", glo,
+	is_global_dummy, is_upvalue_dummy);
+      if (etd->get_esort() != expr_e_struct) {
+	arena_error_throw(glo, "Invalid configuration for emit_threaded_dll: "
+	  "symbol '%s' is not a struct", etdstr.c_str());
+      }
+      const term& te = ptr_down_cast<expr_struct>(etd)->get_value_texpr();
+      term exp_args = eval_mf_local(te, "args", glo);
+      term exp_ret = eval_mf_local(te, "ret", glo);
+      term efname = eval_mf_local(te, "name", glo);
+      std::string efnstr = meta_term_to_string(efname, false);
+      if (efnstr.empty()) {
+	arena_error_throw(glo, "Invalid configuration for emit_threaded_dll: "
+	  "symbol '%s:name' is not a string",
+	  etdstr.c_str());
+      }
+      std::string emfname = main_namespace + "::" + efnstr;
+      is_global_dummy = false;
+      is_upvalue_dummy = false;
+      expr_i *emf = glo_block->symtbl.resolve_name(emfname, "", glo,
+	is_global_dummy, is_upvalue_dummy);
+      if (emf->get_esort() != expr_e_funcdef) {
+	arena_error_throw(glo, "Invalid configuration for emit_threaded_dll: "
+	  "symbol '%s' is not a function", emfname.c_str());
+      }
+      const term& fte = emf->get_value_texpr();
+      term fte_args = eval_mf_args(fte, glo);
+      term fte_ret = eval_mf_ret(fte, glo);
+      if (exp_args != fte_args) {
+	arena_error_throw(glo, "Precondition failed for emit_threaded_dll: "
+	  "invalid arguments '%s' ('%s' expected)",
+	  term_tostr_human(fte_args).c_str(),
+	  term_tostr_human(exp_args).c_str());
+      }
+      if (exp_ret != fte_ret) {
+	arena_error_throw(glo, "Precondition failed for emit_threaded_dll: "
+	  "invalid return type '%s' ('%s' expected)",
+	  term_tostr_human(fte_ret).c_str(),
+	  term_tostr_human(exp_ret).c_str());
+      }
+      const bool ns_thr = nsthrmap[main_namespace];
+      if (!ns_thr) {
+	arena_error_throw(glo, "Precondition failed for emit_threaded_dll: "
+	  "namespace '%s' is not threaded", main_namespace.c_str());
+      }
+      emit_threaded_dll_func = term_tostr_cname(fte);
     }
   }
 }

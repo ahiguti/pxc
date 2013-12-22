@@ -17,7 +17,7 @@
 namespace pxc {
 
 void fn_check_type(expr_i *e, symbol_table *symtbl);
-void fn_check_misc(expr_i *e);
+void fn_check_misc(expr_i *e, generate_main_e gmain);
 void add_tparam_upvalues_funcdef_direct(expr_funcdef *efd);
 void add_tparam_upvalues_funcdef_tparam(expr_funcdef *efd);
 #if 0

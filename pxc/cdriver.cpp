@@ -16,6 +16,7 @@
 #include <list>
 #include <deque>
 #include "expr.hpp"
+#include "expr_misc.hpp"
 #include "util.hpp"
 #include "parser.hpp"
 #include "pxc_md5.hpp"
@@ -50,11 +51,13 @@ struct profile_settings {
   std::string cxx;
   std::string cflags;
   std::string ldflags;
+  std::string emit_threaded_dll;
   bool generate_dynamic; /* TODO */
   bool show_warnings;
   size_t recursion_limit;
+  size_t safe_mode;
   profile_settings() : generate_dynamic(false), show_warnings(false),
-    recursion_limit(0) { }
+    recursion_limit(0), safe_mode(1) { }
 };
 
 typedef std::list<source_info> sources_type;
@@ -392,6 +395,7 @@ static void load_source_and_calc_checksum(const parser_options& po,
   md5_context md5;
   unsigned long long src_mask = 0;
   unsigned long long src_mask_bit = 1;
+    /* no need to oring? */
   module_info::source_files_type::iterator i;
   std::string notfound_fnlist;
   for (i = mi.source_files.begin(); i != mi.source_files.end();
@@ -444,7 +448,7 @@ static void load_source_and_calc_checksum(const parser_options& po,
     md5.update(i->content);
     if (loaded) {
       src_mask |= src_mask_bit;
-      // break;
+      break;
     }
   }
   if (src_mask == 0) {
@@ -901,6 +905,32 @@ static void compile_module_to_cc_srcs(const parser_options& po,
     mi_main.self_copts = coptions();
     const double t1 = gettimeofday_double();
     arena_compile(po.profile.mapval, tmp_fn, mi_main.self_copts, gmain);
+    if (po.profile.safe_mode != 0) {
+      for (all_modules_info::modules_type::const_iterator i
+	= ami.modules.begin(); i != ami.modules.end(); ++i) {
+	const module_info& mi = i->second;
+	const std::string uniqns = mi.unique_namespace;
+	nssafety_e const s = nssafetymap[uniqns];
+	if (!mi.aux_filename.empty()) {
+	  if (s != nssafety_e_safe) {
+	    arena_error_throw(0, "-:-: Unsafe namespace is not allowed: '%s'",
+	      mi.aux_filename.c_str());
+	  }
+	} else {
+	  size_t bmax = po.profile.incdir.size();
+	  if (bmax >= po.profile.safe_mode) {
+	    bmax -= po.profile.safe_mode;
+	  }
+	  /* first #bmax path elements are allowed to be unsafe */
+	  size_t const bmexp = 1ULL << bmax;
+	  if (bmexp < mi.src_mask) {
+	    arena_error_throw(0,
+	      "-:-: Unsafe namespace is not allowed: namespace '%s'",
+	      i->first.c_str());
+	  }
+	}
+      }
+    }
     const double t2 = gettimeofday_double();
     if (po.verbose > 0) {
       fprintf(stderr, "compiled %s %f\n", mi_main.unique_namespace.c_str(),
@@ -1238,6 +1268,12 @@ static void load_profile(parser_options& po)
   if (iter != po.profile.mapval.end()) {
     po.profile.show_warnings = true;
   }
+  iter = po.profile.mapval.find("emit_threaded_dll");
+  po.profile.emit_threaded_dll = iter != po.profile.mapval.end()
+    ? iter->second : "";
+  iter = po.profile.mapval.find("safe_mode");
+  po.profile.safe_mode = iter != po.profile.mapval.end()
+    ? atoi(iter->second.c_str()) : 1;
 }
 
 static void check_profile_md5sum(const parser_options& po)

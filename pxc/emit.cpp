@@ -3520,6 +3520,9 @@ static void emit_profile(emit_context& em)
   typedef std::map<std::string, std::string> profile_type;
   profile_type::const_iterator i;
   for (i = cur_profile->begin(); i != cur_profile->end(); ++i) {
+    if (i->first.empty()) {
+      continue;
+    }
     em.puts("#define PXC_PROFILE_");
     em.puts(i->first);
     em.puts(" ");
@@ -3546,6 +3549,7 @@ void emit_code(const std::string& dest_filename, expr_block *gl_block,
   em.start_ns();
   emit_function_decl(em);
   em.finish_ns();
+  em.puts("#ifndef PXC_IMPORT_HEADER\n");
   em.puts("/* inline c */\n");
   emit_inline_c(em, "implementation", false);
   em.start_ns();
@@ -3555,66 +3559,77 @@ void emit_code(const std::string& dest_filename, expr_block *gl_block,
   emit_function_def(em);
   em.finish_ns();
   const bool is_thr_ns = nsthrmap[main_namespace];
+  #if 0
   if (gmain == generate_main_none && is_thr_ns) {
     return; /* no need to generate namespace main */
   }
-  /* main */
-  em.puts("/* package main */\n");
-  em.start_ns();
-  em.set_file_line(gl_block);
-  const std::string mainfn = arena_get_ns_main_funcname(main_namespace);
-  em.set_ns(main_namespace);
-  em.set_file_line(gl_block);
-  em.printf("void %s()\n", mainfn.c_str());
-  fn_emit_value(em, gl_block);
-  em.puts("\n");
-  em.finish_ns();
-  /* extern c wo namespace */
-  em.set_file_line(gl_block);
-  em.puts("/* package main c */\n");
-  em.set_file_line(gl_block);
-  em.printf("static int i$%s$init = 0;\n", mainfn.c_str());
-  em.set_file_line(gl_block);
-  em.puts("extern \"C\" {\n");
-  em.set_file_line(gl_block);
-  em.printf("void %s$c()\n{\n", mainfn.c_str());
-  em.set_file_line(gl_block);
-  em.add_indent(1);
-  em.indent('m');
-  em.printf("if (i$%s$init == 0) {\n", mainfn.c_str());
-  em.add_indent(1);
-  emit_import_init(em, main_namespace);
-  em.set_file_line(gl_block);
-  em.indent('m');
-  em.printf("%s::%s();\n", to_c_ns(main_namespace).c_str(), mainfn.c_str());
-  em.set_file_line(gl_block);
-  em.indent('m');
-  em.printf("i$%s$init = 1;\n", mainfn.c_str());
-  em.add_indent(-1);
-  em.indent('m');
-  em.puts("}\n");
-  em.add_indent(-1);
-  em.puts("}\n");
-  /* TODO: don't emit $cm if not necessary */
-  if (gmain != generate_main_none) {
-    if (gmain == generate_main_dl) {
-      em.printf("int %s$cm()\n{\n", mainfn.c_str());
-    } else if (gmain == generate_main_exe) {
-      em.puts("int main(int argc, char **argv)\n{\n");
-    }
-    em.printf(" i$%s$init = 0;\n", mainfn.c_str());
-      /* namespace body will be executed more than once if main() is called
-       * more than once */
-    em.printf(" return pxcrt::main_nothrow(& %s$c);\n", mainfn.c_str());
+  #endif
+  if (!is_thr_ns || gmain != generate_main_none) {
+    /* main */
+    em.puts("/* package main */\n");
+    em.start_ns();
+    em.set_file_line(gl_block);
+    const std::string mainfn = arena_get_ns_main_funcname(main_namespace);
+    em.set_ns(main_namespace);
+    em.set_file_line(gl_block);
+    em.printf("void %s()\n", mainfn.c_str());
+    fn_emit_value(em, gl_block);
+    em.puts("\n");
+    em.finish_ns();
+    /* extern c wo namespace */
+    em.set_file_line(gl_block);
+    em.puts("/* package main c */\n");
+    em.set_file_line(gl_block);
+    em.printf("static int i$%s$init = 0;\n", mainfn.c_str());
+    em.set_file_line(gl_block);
+    em.puts("extern \"C\" {\n");
+    em.set_file_line(gl_block);
+    em.printf("void %s$c()\n{\n", mainfn.c_str());
+    em.set_file_line(gl_block);
+    em.add_indent(1);
+    em.indent('m');
+    em.printf("if (i$%s$init == 0) {\n", mainfn.c_str());
+    em.add_indent(1);
+    emit_import_init(em, main_namespace);
+    em.set_file_line(gl_block);
+    em.indent('m');
+    em.printf("%s::%s();\n", to_c_ns(main_namespace).c_str(), mainfn.c_str());
+    em.set_file_line(gl_block);
+    em.indent('m');
+    em.printf("i$%s$init = 1;\n", mainfn.c_str());
+    em.add_indent(-1);
+    em.indent('m');
     em.puts("}\n");
-    if (gmain == generate_main_dl) {
-      /* another entry function */
-      em.puts("int pxc_library_init()\n{\n");
+    em.add_indent(-1);
+    em.puts("}\n");
+    /* TODO: don't emit $cm if not necessary */
+    if (gmain != generate_main_none) {
+      if (gmain == generate_main_dl) {
+	em.printf("int %s$cm()\n{\n", mainfn.c_str());
+      } else if (gmain == generate_main_exe) {
+	em.puts("int main(int argc, char **argv)\n{\n");
+      }
+      em.printf(" i$%s$init = 0;\n", mainfn.c_str());
+	/* namespace body will be executed more than once if main() is called
+	 * more than once */
       em.printf(" return pxcrt::main_nothrow(& %s$c);\n", mainfn.c_str());
       em.puts("}\n");
+      if (gmain == generate_main_dl) {
+	if (!emit_threaded_dll_func.empty()) {
+	  em.puts("void *pxc_threaded_dll()\n{\n");
+	  em.printf(" return reinterpret_cast<void *>(& %s);\n",
+	    emit_threaded_dll_func.c_str());
+	  em.puts("}\n");
+	} else {
+	  em.puts("int pxc_library_init()\n{\n");
+	  em.printf(" return pxcrt::main_nothrow(& %s$c);\n", mainfn.c_str());
+	  em.puts("}\n");
+	}
+      }
     }
+    em.puts("}; /* extern \"C\" */\n");
   }
-  em.puts("}; /* extern \"C\" */\n");
+  em.puts("#endif /* PXC_IMPORT_HEADER */\n");
 }
 
 };

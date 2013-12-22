@@ -1,0 +1,42 @@
+namespace tdtest_invoke "use-unsafe";
+import common -;
+
+tdtest_invoke_main();
+
+private function extern "tdtest::tdtest_invoke_main" void tdtest_invoke_main();
+
+extern "ldflags" "-ldl";
+
+extern "implementation" inline
+
+#include <dlfcn.h>
+namespace tdtest {
+void tdtest_invoke_main()
+{
+  const char *fn = "./tdtest1.so";
+  void *p = dlopen(fn, RTLD_NOW);
+  do {
+    if (p == 0) {
+      fprintf(stderr, "failed to open %s\n", fn);
+      break;
+    }
+    void *ent = dlsym(p, "pxc_threaded_dll");
+    if (ent == 0) {
+      fprintf(stderr, "symbol pxc_threaded_dll not found\n");
+    }
+    typedef void *(*entfunc_type)();
+    entfunc_type entfunc = reinterpret_cast<entfunc_type>(ent);
+    void *func_ptr = entfunc();
+    typedef int (*func_type)(int, int);
+    func_type tfunc_ptr = reinterpret_cast<func_type>(func_ptr);
+    int r = tfunc_ptr(35, 11);
+    printf("r=%d\n", r);
+  } while (false);
+  if (p) {
+    dlclose(p);
+  }
+}
+}; // namespace tdtest
+
+;
+
