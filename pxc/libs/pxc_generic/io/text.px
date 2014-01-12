@@ -1,6 +1,7 @@
 namespace io::text;
 public import numeric::integral -;
 public import container::array -;
+public import io +;
 public import io::file +;
 public import io::errno -;
 public import text::split -;
@@ -43,7 +44,7 @@ public threaded function bool is_space_or_tab(uchar ch)
 }
 
 public threaded function {cb, opt} errno_t
-file_read_table(file const& ifile)
+file_read_records(file const& ifile)
 {
   metafunction enttype m::argtype{cb, 0};
   metafunction column_delim get_opt{opt, "column_delim", is_space_or_tab};
@@ -55,6 +56,35 @@ file_read_table(file const& ifile)
     return cb(e);
   }
   return err;
+}
+
+public threaded function {opt, t} errno_t
+file_read_append_records(file const& ifile, t mutable& v)
+{
+  return ifile.read_records{record_cb, opt}();
+  threaded function bool record_cb(t:mapped_type const& e) {
+    v.push_back(e);
+  }
+}
+
+public threaded function {cb, opt} errno_t
+io_read_records(io const& sys, cstrref const& fn)
+{
+  const ef = sys.open(fn, O_RDONLY, 0);
+  if (const e : ef.errno) {
+    return e;
+  }
+  return ef.value.read_records{cb, opt}();
+}
+
+public threaded function {opt, t} errno_t
+io_read_append_records(io const& sys, cstrref const& fn, t mutable& v)
+{
+  const ef = sys.open(fn, O_RDONLY, 0);
+  if (const e : ef.errno) {
+    return e;
+  }
+  return ef.value.read_append_records{opt, t}(v);
 }
 
 private metafunction get_opt{opt, k, def}

@@ -1,0 +1,27 @@
+namespace tx1;
+import common -;
+import meta m;
+import io -;
+import io::file -;
+import io::errno -;
+import io::standard -;
+import io::text -;
+import text::conversion -;
+
+{
+  const f = system.open("hoge3.txt", io::file::O_RDONLY, 0);
+  vector{string} vec;
+  f.value.read_lines{read_line, 0}();
+  function bool read_line(cstrref const& line) {
+    vec.push_back(line);
+    return true;
+  }
+  for (size_t i, string s : vec) {
+    string buf;
+    text::minimal_encode::minimal_encode(buf, s);
+    println(buf);
+    // println(s);
+  }
+  // println(vec);
+}
+

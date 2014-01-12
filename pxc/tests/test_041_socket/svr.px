@@ -9,6 +9,9 @@ import io::socket -;
 import io::signal -;
 import thread -;
 
+private metafunction svr_host "127.0.0.1";
+private metafunction svr_port "5001";
+
 multithreaded struct server_thread(io const& i, tptr{bool} const& rp,
   tptr{string} const& s)
 {
@@ -25,7 +28,7 @@ multithreaded struct server_thread(io const& i, tptr{bool} const& rp,
   {
     try {
       file_println(get_stderr(iop), "svr");
-      const sf = create_acceptor(iop, "localhost", "9999", AF_INET,
+      const sf = make_acceptor(iop, svr_host, svr_port, AF_INET,
 	SOCK_STREAM, 1024, 0); // TODO: fix EADDRINUSE
       file_println(get_stderr(iop), "accepted");
       notify();
@@ -59,8 +62,8 @@ multithreaded struct client_thread(io const& i, tptr{bool} const& rp)
       }
     }
     file_println(get_stderr(iop), "got notification");
-    const sf = create_connector(iop, "localhost", "9999", AF_INET, SOCK_STREAM,
-      10);
+    const sf = make_connector(iop, svr_host, svr_port, AF_INET,
+      SOCK_STREAM, 10);
     const sock = connect(sf.value);
     size_t wlen = 0;
     sock.value.write("hoge", wlen);
@@ -72,8 +75,8 @@ function void t1()
   signal(io::system, SIGPIPE, SIG_IGN);
   const readyp = to_tptr(bool(false));
   const strp = to_tptr(string());
-  const sthr = create_thread(server_thread(io::system, readyp, strp));
-  const cthr = create_thread(client_thread(io::system, readyp));
+  const sthr = make_thread(server_thread(io::system, readyp, strp));
+  const cthr = make_thread(client_thread(io::system, readyp));
   sthr.join();
   cthr.join();
   println(*strp);

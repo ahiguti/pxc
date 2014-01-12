@@ -152,8 +152,8 @@ static void check_closure_cfuncobj(const term& t, const expr_i *einst)
 #endif
   const expr_funcdef *const efd_inst =
     ptr_down_cast<const expr_funcdef>(einst);
-  if (!efd_inst->cnamei.is_extdef()) {
-    return; /* efd_inst is not an external c function */
+  if (!efd_inst->is_c_defined()) {
+    return;
   }
   const term_list *targs = t.get_args();
   if (targs == 0) {
@@ -452,7 +452,10 @@ bool has_unbound_tparam(const term& t, eval_context& ectx)
   expr_tparams *const tp = dynamic_cast<expr_tparams *>(t.get_expr());
   if (tp != 0 && tp->param_def.is_null()) {
     const term p = find_tparam_bind(tp, ectx);
-    return p.is_null();
+    if (p.is_null()) {
+      return true;
+    }
+    return has_unbound_tparam(p, ectx);
   }
   const term_list *const cargs = t.get_args_or_metalist();
   if (cargs != 0 && has_unbound_tparam(*cargs, ectx)) {
@@ -945,8 +948,8 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
       term tlev[targs.size()];
       eval_term_list_internal(targs, targs_evaluated, tlev, ectx, pos);
       DBG_INST(fprintf(stderr, "instantiate tm=%s evaluated_args=%s\n",
-	term_tostr_human(tm).c_str(),
-	term_tostr_list_human(tlev).c_str()));
+	term_tostr_human(rebuild_term(tptr, texpr, targs)).c_str(),
+	term_tostr_list_human(term_list_range(tlev, targs.size())).c_str()));
       if (!is_partial_eval_uneval(term_list_range(tlev, targs.size()), ectx)) {
 	DBG_INST(fprintf(stderr, "instantiate!\n"));
 	expr_i *const einst = instantiate_template(texpr,

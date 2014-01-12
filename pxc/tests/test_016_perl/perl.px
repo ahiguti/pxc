@@ -9,11 +9,11 @@ private import numeric::integral -;
 public metafunction sv perl::impl::sv;
 public metafunction av perl::impl::av;
 public metafunction hv perl::impl::hv;
-public metafunction xs_create_function{f} perl::impl::xs_create_function{f};
-public metafunction xs_create_field{t, i} perl::impl::xs_create_field{t, i};
-public metafunction xs_create_type{t} perl::impl::xs_create_type{t};
-public metafunction xs_create_variable{n, i}
-  perl::impl::xs_create_variable{n, i};
+public metafunction xs_make_function{f} perl::impl::xs_make_function{f};
+public metafunction xs_make_field{t, i} perl::impl::xs_make_field{t, i};
+public metafunction xs_make_type{t} perl::impl::xs_make_type{t};
+public metafunction xs_make_variable{n, i}
+  perl::impl::xs_make_variable{n, i};
 public metafunction sv_to_int perl::impl::sv_to_int;
 public metafunction int_to_sv perl::impl::int_to_sv;
 public metafunction convert_to_perlsv{t} perl::impl::convert_to_perlsv{t};
@@ -36,17 +36,17 @@ public function {ns} void export_all()
   metafunction contypes m::filter{alltypes, is_constructible_non_ephemeral};
   metafunction nslist m::imports_transitive{ns};
   expand (i : m::seq{m::size{alltypes}}) {
-    perl::xs_create_type{m::at{alltypes, i}}(
+    perl::xs_make_type{m::at{alltypes, i}}(
       m::full_string{m::at{alltypes, i}});
   }
   expand (i : m::seq{m::size{contypes}}) {
     {
       metafunction typ m::at{contypes, i};
-      perl::xs_create_function{typ}(m::concat{m::full_string{typ}, "::new"});
+      perl::xs_make_function{typ}(m::concat{m::full_string{typ}, "::new"});
       expand (j : m::seq{m::size{m::member_functions{typ}}}) {
 	{
 	  metafunction mf m::to_string{m::at{m::member_functions{typ}, j}};
-	  perl::xs_create_function{method_as_function{typ, mf}}(
+	  perl::xs_make_function{method_as_function{typ, mf}}(
 	    m::concat{m::full_string{typ}, "::", mf});
 	}
       }
@@ -55,7 +55,7 @@ public function {ns} void export_all()
 	  metafunction fld m::at{m::fields{typ}, j};
 	  metafunction fn m::at0{fld};
 	  metafunction ft m::at1{fld};
-	  perl::xs_create_field{typ, j}(
+	  perl::xs_make_field{typ, j}(
 	    m::concat{m::full_string{typ}, "::", fn});
 	}
       }
@@ -80,10 +80,10 @@ public function {ns} void export_all()
 	metafunction pmfnstr m::concat{
 	  m::full_string{m::argtype{fn, 0}}, "::",
 	  m::substring{fnstr, m::strlen{btc}}};
-	perl::xs_create_function{fn}(pmfnstr);
+	perl::xs_make_function{fn}(pmfnstr);
       } else {
 	/* normal function */
-	perl::xs_create_function{fn}(fnstr);
+	perl::xs_make_function{fn}(fnstr);
       }
     }
   }
@@ -91,7 +91,7 @@ public function {ns} void export_all()
     {
       metafunction gvars m::global_variables{n};
       expand (i : m::seq{m::size{gvars}}) {
-	perl::xs_create_variable{n, i}(
+	perl::xs_make_variable{n, i}(
 	  m::concat{n, "::", m::at0{m::at{gvars, i}}});
       }
     }

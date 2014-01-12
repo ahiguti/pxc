@@ -44,23 +44,33 @@ public threaded function {t} void file_println(file const& f, t const& x)
 
 public function {tlist} void print(expand(v::arg_decls_bycref{tlist}))
 {
-  string s = string_join{"\t"}(
-    expand(a: v::arg_names{m::size{tlist}}; a));
+  string s = string_join{"\t"}(expand(a: v::arg_names{m::size{tlist}}; a));
   size_t len;
   file_write_all(get_stdout(io::system), s, len);
 }
 
 public function {tlist} void println(expand(v::arg_decls_bycref{tlist}))
 {
-  string s = string_join{"\t"}(
-    expand(a: v::arg_names{m::size{tlist}}; a));
+  string s = string_join{"\t"}(expand(a: v::arg_names{m::size{tlist}}; a));
   s.append("\n");
   size_t len;
   file_write_all(get_stdout(io::system), s, len);
 }
 
+/* debug_log does not require an io handle */
+public threaded function {tlist} void
+debug_log(expand(v::arg_decls_bycref{tlist}))
+{
+  string s = string_join{"\t"}(expand(a: v::arg_names{m::size{tlist}}; a));
+  s.push_back('\n');
+  debug_log_internal(s);
+}
+
 private extern "pxcio::dummy" option{file} dummy;
   /* instantiate option{file} */
+
+private threaded function extern "pxcio::debug_log_internal"
+  void debug_log_internal(cstrref const& s);
 
 extern "implementation" inline
 namespace pxcio {
@@ -70,18 +80,22 @@ typedef ::algebraic$n::option$v$p$io$$file$n$$file$s$r$ optfile;
 /* TODO: slow */
 file get_stdin(io const& iop)  {
   optfile pxc_stdin;
-  pxc_stdin.some$$l(create_file(0));
+  pxc_stdin.some$$l(make_file(0));
   return pxc_stdin.some$$r();
 }
 file get_stdout(io const& iop) {
   optfile pxc_stdout;
-  pxc_stdout.some$$l(create_file(1));
+  pxc_stdout.some$$l(make_file(1));
   return pxc_stdout.some$$r();
 }
 file get_stderr(io const& iop) {
   optfile pxc_stderr;
-  pxc_stderr.some$$l(create_file(2));
+  pxc_stderr.some$$l(make_file(2));
   return pxc_stderr.some$$r();
+}
+void debug_log_internal(cstrref const& s)
+{
+  write(2, s.rawarr(), s.size());
 }
 
 };

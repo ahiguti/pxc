@@ -59,13 +59,15 @@ extern "functions" inline
 namespace pxcrt {
 bt_string c_exception_message(std::exception const& ex);
 bt_string c_exception_stack_trace(std::exception const& ex);
+std::string c_exception_to_stdstring(const std::exception& ex);
+void c_exception_log_stderr(const std::exception& ex);
 }; // namespace pxcrt
 ;
 
 extern "implementation" inline
 #include <string>
 #include <unistd.h>
-#ifdef __LINUX__
+#ifdef __linux
 #include <execinfo.h>
 #endif
 namespace pxcrt {
@@ -110,7 +112,7 @@ void set_stack_trace_limit(size_t sz)
 
 exception::exception()
 {
-#ifdef __LINUX__
+#ifdef __linux
   if (stack_trace_limit != 0) {
     size_t n = std::min(static_cast<size_t>(5), stack_trace_limit);
     while (true) {
@@ -160,7 +162,7 @@ bt_string c_exception_stack_trace(std::exception const& exc)
     return bt_string();
   }
   bt_string r;
-#ifdef __LINUX__
+#ifdef __linux
   std::vector<void *> const& tr = e->trace; 
   char **syms = backtrace_symbols(&tr[0], tr.size());
   if (syms == 0) {
@@ -176,27 +178,38 @@ bt_string c_exception_stack_trace(std::exception const& exc)
   return r;
 }
 
+std::string c_exception_to_stdstring(const std::exception& ex)
+{
+  std::string mess;
+  bt_string s0 = c_exception_message(ex);
+  mess.insert(mess.end(), s0.begin(), s0.end());
+  if (!mess.empty() && mess[mess.size() - 1] != '\n') {
+    mess += "\n";
+  }
+  bt_string st = c_exception_stack_trace(ex);
+  mess.insert(mess.end(), st.begin(), st.end());
+  return mess;
+}
+
+void c_exception_log_stderr(const std::exception& ex)
+{
+  const std::string mess = c_exception_to_stdstring(ex);
+  ::write(2, mess.data(), mess.size());
+}
+
 int main_nothrow(void (*main_f)(void))
 {
   PXC_TRY {
     PXC_TRY {
       (*main_f)();
-    } PXC_CATCH(const std::exception& e) {
+    } PXC_CATCH(const std::exception& ex) {
       #if !PXC_NOEXCEPTIONS
-      std::string mess;
-      bt_string s0 = c_exception_message(e);
-      mess.insert(mess.end(), s0.begin(), s0.end());
-      if (!mess.empty() && mess[mess.size() - 1] != '\n') {
-	mess += "\n";
-      }
-      bt_string st = c_exception_stack_trace(e);
-      mess.insert(mess.end(), st.begin(), st.end());
-      ::write(2, mess.data(), mess.size());
+      c_exception_log_stderr(ex);
       return 1;
       #endif
     }
   } PXC_CATCH(...) {
-    const char *const mess = "main: uncaught exception\n";
+    const char *const mess = "PXCMAIN: Uncaught exception\n";
     ::write(2, mess, strlen(mess));
     return 1;
   }

@@ -259,7 +259,7 @@ private:
 struct cname_info {
   cname_info(const char *s) : cname(s) { }
   const char *cname;  
-  bool is_extdef() const { return cname != 0; }
+  bool has_cname() const { return cname != 0; }
 };
 
 struct inline_c_element {
@@ -1109,7 +1109,7 @@ public:
 
 struct expr_funcdef : public expr_i {
   expr_funcdef(const char *fn, int line, const char *sym, const char *cname,
-    bool is_const, expr_i *block, bool ext_decl, bool no_def,
+    bool is_const, expr_i *block, bool ext_pxc, bool no_def,
     attribute_e attr);
   expr_i *clone() const;
   expr_e get_esort() const { return expr_e_funcdef; }
@@ -1156,6 +1156,7 @@ struct expr_funcdef : public expr_i {
   void emit_symbol(emit_context& em) const;
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool is_c_defined() const { return cnamei.has_cname() && no_def; }
 public:
   const char *sym;
   std::string uniqns;
@@ -1167,7 +1168,7 @@ private:
   term rettype_eval;
 public:
   expr_block *block;
-  bool ext_decl : 1;  /* imported function and block may be null */
+  bool ext_pxc : 1;  /* an imported function (block may be null) */
   bool no_def : 1;    /* extern c function or virtual function decl */
   term value_texpr;
   typedef std::pair<

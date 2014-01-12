@@ -38,9 +38,6 @@ public threaded function {t, tis} tcptr{t} to_tcptr(expand(argdecls{tis}))
 public threaded function {t, tis} tiptr{t} to_tiptr(expand(argdecls{tis}))
 { return box_pointer{tiptr{t}, tis}(expand(a: argnames{tis}; a)); }
 
-private metafunction argdecls{tis} v::arg_decls_bycref{tis};
-private metafunction argnames{tis} v::arg_names{m::size{tis}};
-
 public threaded function {tp, tis} tp box_pointer(expand(argdecls{tis}))
 {
   if (m::eq{m::list{m::at0{tp}}, m::map{tis, m::at0}}) {
@@ -63,6 +60,12 @@ bool instanceof(check_polymorphic{tobj, t} const& x);
 
 public threaded function extern "pxcrt::pointer_downcast" {tto, tfrom}
 check_pointer_downcast{tto, tfrom} pointer_downcast(tfrom const& x);
+
+
+/* private */
+
+private metafunction argdecls{tis} v::arg_decls_bycref{tis};
+private metafunction argnames{tis} v::arg_names{m::size{tis}};
 
 private metafunction check_polymorphic{t1, t2}
   m::cond{
@@ -108,7 +111,7 @@ extern "types" inline
 #define DBG_POOL(x)
 #endif
 
-#ifdef __APPLE__
+#if defined(__APPLE__) && !defined(NO_LOCAL_POOL)
 #define NO_LOCAL_POOL
 #endif
 
@@ -484,7 +487,7 @@ struct rcptr { /* T must have an intrusive count */
   }
   /* boxing foo to ptr{ifoo} */
   template <typename Tx> explicit rcptr(const Tx& x)
-    : ptr(create_rawptr(x)) { }
+    : ptr(make_rawptr(x)) { }
   ~rcptr() { ptr->decref$z(); }
   rcptr& operator =(T *x) { return set(x); }
   template <typename Tx> rcptr& operator =(Tx *x) { return set(x); }
@@ -497,7 +500,7 @@ struct rcptr { /* T must have an intrusive count */
   T *operator ->() const { return ptr; }
   void inc_refguard() const { ptr->lock$z(); }
   void dec_refguard() const { ptr->unlock$z(); }
-  template <typename Tx> static inline T *create_rawptr(const Tx& x) {
+  template <typename Tx> static inline T *make_rawptr(const Tx& x) {
     T *p = T::allocate();
     PXC_TRY {
       new (p) T(x);
@@ -507,7 +510,7 @@ struct rcptr { /* T must have an intrusive count */
     }
     return p;
   }
-  static inline T *create_rawptr() {
+  static inline T *make_rawptr() {
     T *p = T::allocate();
     PXC_TRY {
       new (p) T();

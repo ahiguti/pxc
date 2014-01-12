@@ -750,6 +750,7 @@ static void emit_dunion_aux_functions(emit_context& em,
   ev->get_fields(flds);
   flds_type::const_iterator i;
   const bool is_nullable = is_nullable_dunion(ev);
+    /* e.g., option{ptr{foo}}. optimized for space. */
   bool has_non_unit = false;
   bool has_non_smallpod = false;
   expr_var *const first_pod_field = dunion_find_pod_field(ev);
@@ -1389,10 +1390,14 @@ static void emit_function_decl_one(emit_context& em, expr_funcdef *efd,
     /* a simple function, a member function, or a virtual function */
     const std::string name_c = get_type_cname_wo_ns(efd);
     DBG_DECL(fprintf(stderr, "decl_one nam_c=%s\n", name_c.c_str()));
-    if (efd->block->tinfo.template_descent && !efd->is_virtual_function()) {
-      em.puts("inline ");
-    }
     expr_struct *const esd = efd->is_member_function();
+    if (efd->block->tinfo.template_descent && !efd->is_virtual_function()) {
+      if (esd != 0) {
+	em.puts("inline ");
+      } else {
+	em.puts("static inline ");
+      }
+    }
     if (!efd->is_destructor()) {
       emit_term(em, efd->get_rettype());
       em.puts(" ");
@@ -1431,7 +1436,7 @@ bool exceptions_disabled()
 
 static void emit_function_def_one(emit_context& em, expr_funcdef *efd)
 {
-  if ((efd->ext_decl && !efd->block->tinfo.template_descent) || efd->no_def) {
+  if ((efd->ext_pxc && !efd->block->tinfo.template_descent) || efd->no_def) {
     return;
   }
   if (efd->is_member_function()) {
@@ -2479,10 +2484,10 @@ void expr_funccall::emit_value(emit_context& em)
     symbol_common *const sdef = func_expr->get_sdef();
     const expr_funcdef *const efd = dynamic_cast<const expr_funcdef *>(
       term_get_instance_const(sdef->get_evaluated()));
-    bool const is_extfunc = (efd != 0 && efd->cnamei.is_extdef());
+    bool const is_cfunc = (efd != 0 && efd->no_def);
     em.puts("(");
     bool is_first = true;
-    if (!is_extfunc) {
+    if (!is_cfunc) {
       is_first = !emit_func_upvalue_args(em, fld != 0 ? fld : func,
 	symtbl_lexical);
     }
@@ -2493,10 +2498,10 @@ void expr_funccall::emit_value(emit_context& em)
       is_first = false;
       fn_emit_value(em, arg);
     }
-    if (is_extfunc) {
+    if (is_cfunc) {
       /* callee is a c function */
       #if 0
-      fprintf(stderr, "is_extfunc %s\n", efd->dump(0).c_str());
+      fprintf(stderr, "is_cfunc %s\n", efd->dump(0).c_str());
       #endif
       const term& te = efd->value_texpr;
       const term_list *const targs = te.get_args();

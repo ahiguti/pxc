@@ -3,17 +3,32 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- C++インタフェースを実装するpxcモジュールをロード実行する手段
-  - ヘッダファイルを出力する -> PXC_IMPORT_HEADER
+- lock_guard効いてることを確認するてすと
 
-- hs2インタフェース
+- threadのインタフェースを変更。make_thread{func}の形に。(done)
 
-- safe mode: pathの最後はunsafe不可にする
+- backtrace()を可能な限りすべてのプラットフォームで。
 
-- プラグイン
-  - dlopenして初期化関数を呼ぶのをmulti-thread safeにできるように(done)
-  - 初期化を必要としないnamespace -> threaded namespace? (done)
-  - 特定のinterfaceの実装を持つdllをコンパイル・ロードする手段(done)
+- body付きextern関数は、メンバ関数でなければextern名は無視される
+
+- 参照やephemeralを返す関数のrootルールを整理&テスト
+  - externなら、thisか最初の引数をroot
+  - そうでないならエラー
+  - checktype.cppのadd_root_requirement()
+
+- ephemeral型の制約緩和: vector{cstrref}などが使えるように
+  - テンプレパラメータやフィールドにephemeralなものを使うことを許可
+  - ただしそれらを使った型はそれ自体がephemeralになる
+    - テンプレパラメータにephemeralなものを含むならephemeral
+    - フィールドにephemeralなものを含むならephemeral
+      - フィールドは無理？ フィールドにephemeralなものを含めて、メンバ
+        関数から渡ってきたephemeralな値をそこへ代入してしまったら？
+	初期化以外の代入が許可されていないからよいのか？
+  - ephemeral: 初期化以外の代入不可、要素取得以外のreturn不可
+
+- Cシンボル名を指定するけどpxcで定義する関数
+
+- safe mode: pathの最後はunsafe不可にする(done)
 
 - 汎用tableパーザ
 
@@ -23,12 +38,6 @@ FIXME/TODO M1
 - get_stdin()の効率改善
 
 - local poolの後始末を__attribute__((destructor))使わずに実現できるか
-
-- tbl_bug1.px.fixme (done)
-
-- deque(done)
-  - stl実装を使う。wrapper作る。
-  - familyはvarray。rangeはslice。ランダムアクセス可能なので。
 
 - list
 
@@ -43,9 +52,6 @@ FIXME/TODO M1
 
 - mapのfind的なもの
   - range_gt, range_ge, range_lt, range_le
-
-- sliceとrangeのpop_front/pop_backを改名。next_front(), prev_back()?
-  (done)
 
 - map_rangeのerase_front(): guard_countが1でないとthrow。そうで
   ないならrangeの最初の要素をmapから削除する。
@@ -94,8 +100,6 @@ FIXME/TODO M1
 
 - glm
 
-- rawptr{t}, crawptr{t} (done)
-
 - resolve_nameが遅いのでinternする
 
 - to_untyped()どうするか決めよ
@@ -105,8 +109,6 @@ FIXME/TODO M1
 - --cleanはフォルダが存在しなければ.lockを作らない
 
 - sdl: オブジェクトはboxedにしないとコンストラクタ複数作りたいとき困る
-
-- プラットフォームごとのpath(done)
 
 - metafunctionのデバグのためのエラーメッセージが不十分
 
@@ -538,6 +540,19 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- C++インタフェースを実装するpxcモジュールをロード実行する手段(done)
+- ヘッダファイルを出力する -> PXC_IMPORT_HEADER(done)
+- プラグイン(done)
+  - dlopenして初期化関数を呼ぶのをmulti-thread safeにできるように(done)
+  - 初期化を必要としないnamespace -> threaded namespace? (done)
+  - 特定のinterfaceの実装を持つdllをコンパイル・ロードする手段(done)
+- hs2インタフェース(done)
+- tbl_bug1.px.fixme (done)
+- deque(done)
+- sliceとrangeのpop_front/pop_backを改名。next_front(), prev_back()?
+  (done)
+- rawptr{t}, crawptr{t} (done)
+- プラットフォームごとのpath(done)
 - 連想配列の[]はmappedがdefcondであることを要求(done)
 - expr_misc is_ordered_type()の判定はfamilyでなく型名で判定する。deque
   を入れたときのため。is_string_type()も同様。(done)
@@ -2225,26 +2240,6 @@ intやstringなどの型はperlの値をそのまま値渡しすることもで�
 - メンバ関数やメンバぽい関数は型名のpackageに定義
 
 ---------------------------------------------------------------------
-textとtable
-
-fld1をそのままkeyに、fld2をmapped、たたみこみは加算
-keyを関数にできるようにする。
-mappedを関数にできるようにする。たたみこみと合わせて一つの関数。
-
-各フィールド又は複数フィールドについて、
-- それらの値を取り何らかの値を返す関数
-- それらを集約する関数。しない場合はキーになる。
-出力
-- ソート関数
-
-record型の上のmonoid構造についてのfoldingを、fieldのmonoid構造と
-キーの指定によって定義する。
-- レコードからキーを返す関数
-- mappedの初期値を返す関数(キーを引数に取る?)
-- mappedをfoldする関数(キーを引数にとる?)
-select f1, sum(f2) from tbl group by f1
-
----------------------------------------------------------------------
 コンテナ要素の参照についての保証
 
 コンテナ要素の参照は、その参照が有効な間、参照を取得した位置の
@@ -2295,41 +2290,144 @@ foo::bar:name  関数の名前(文字列)
 としてemitする。hogeはthreaded namespaceでなければならない。
 
 ---------------------------------------------------------------------
-hs2インタフェース
+ephemeral型の制約緩和
 
-interface hs2_service {
-  ptr{hs2_worker} make_worker();
-}
+vector{cstrref}などが使えるように
+- テンプレパラメータやフィールドにephemeralなものを使うことを許可
+- ただしそれらを使った型はそれ自体がephemeralになる
+  - テンプレパラメータにephemeralなものを含むならephemeral
+  - フィールドにephemeralなものを含むならephemeral
+      - フィールドは無理？ フィールドにephemeralなものを含めて、メンバ
+        関数から渡ってきたephemeralな値をそこへ代入してしまったら？
+	初期化以外の代入が許可されていないからよいのか？
+  - ephemeral: 初期化以外の代入不可、要素取得以外のreturn不可
 
-interface hs2_worker {
-  void execute_command(strref const& req, hs2_command& cmd);
-}
+is_partially_ephemeral_type (is_peph)
+  1. typefamilyがrangeかephemeralなら真 (従来の定義はこれだけ)
+  2. structのfieldにis_partially_ephemeral_typeのものを含めば真
+  3. 既約型式がパラメタにis_partially_ephemeral_typeのものを含めば真
 
-リクエスト: 0 3 4 foo [args ...]
-  テーブル0, 3, 4に対してfoo(args,...)を実行する
-
-execute_commandから呼べる関数
-indexの状態:
-  none, row_found, row_notfound
-find_first
-  (none -> row_found, row_notfound)
-  table_id, キー, find_flag(EXACT, AFTER, BEFORE, KEY_OR_NEXT,
-  KEY_OR_PREV)を指定してレコードを探す
-find_more
-  (row_found -> row_found, row_notfound)
-  さらなるレコードを探す
-find_done
-  (row_found, row_notfound -> none)
-  findを終了する
-update
-  (row_found)
-  現在選択中のレコードを、フィールドの値を指定してupdate
-insert
-  (none)
-  フィールドの値を指定してレコードをinsert
+is_pephな型についての制約
+- グローバル変数にはis_peph型は不許可。
+- 初期化以外の代入の左辺には使えない。
+  代入の左右で寿命が違うことがあるから。
+- returnで返せない。ただしexternな関数は返すことができるが、その場合
+  thisが有効なうちは返した値が有効であるように実装せねばならい。
+- mutable参照渡しできない。
+- mutableメンバ関数を呼べるのは、そのオブジェクトを作ったブロックの中
+  だけ。
+    vector{cstrref} vs;
 
 ---------------------------------------------------------------------
-C++インタフェースを実装するpxcモジュールをロード実行する手段
+thread改修
 
-- 特定名前空間のヘッダファイルを作る
+make_threadは関数をパラメタに取る。make_thread呼び出しにその関数の
+パラメタを渡す。evalするとその関数の返値が返ってくる。
+  interface {t} uneval { function t eval(); }
+  function foo hoge(bar x) { ... }
+  uneval{foo} x = make_thread{hoge}(x);
+  foo y = x.eval();
+現在のthread実装でこれをwrapする方法
+
+interface {t} uneval { function t eval(); }
+multithreaded struct {f}
+uneval_thread_params(tptr{farg} const& a, tptr{fret} const& r)
+{
+  tptr{farg} argp = a;
+  tptr{fret} retp = r;
+  void main() {
+    *retp = f(*argp);
+  }
+}
+struct {f} uneval_thread(tptr{fargs} const& a) <uneval{t}> { 
+  tptr{fret} retp = to_tptr{fret}();
+  thread thr = make_thread(uneval_thread_params(a, retp));
+  function fret eval() {
+    thr.join();
+    return *retp;
+  }
+}
+
+---------------------------------------------------------------------
+textとtable
+
+fld1をそのままkeyに、fld2をmapped、たたみこみは加算
+keyを関数にできるようにする。
+mappedを関数にできるようにする。たたみこみと合わせて一つの関数。
+
+各フィールド又は複数フィールドについて、
+- それらの値を取り何らかの値を返す関数
+- それらを集約する関数。しない場合はキーになる。
+出力
+- ソート関数
+
+record型の上のmonoid構造についてのfoldingを、fieldのmonoid構造と
+キーの指定によって定義する。
+- レコードからキーを返す関数
+- mappedの初期値を返す関数(キーを引数に取る?)
+- mappedをfoldする関数(キーを引数にとる?)
+select f1, sum(f2) from tbl group by f1
+
+function void fold_records(trecs mutable& recs, trec const& rec)
+{
+}
+
+keyが型tuple{int, string, int} フィールド{0, 1, 4}
+mappedがadd{int} フィールド
+list{0, int, 1, string, 4, int, 3, add{int}, 2, last{int}};
+フィールド1, 4, 3をキーにしたmapを作り、
+フィールド3の値については加算
+フィールド2の値については上書き
+
+各レコードをfieldsにsplitしたあと、必要なfieldだけを取り出す関数
+を適用(その関数は関数アダプタで合成)する。それの結果の最初の引数
+がキー、残りがmappedになる。
+
+キーをmapから探し、レコード参照を取る。そのレコードのmappedの
+フィールドに対し各々mapped関数を適用する。
+
+ソート関数を適用。
+
+records->recordsの関数の合成として実現する。レコード単位の変換と、
+全レコード貯めるものとの二種類ある。foldやsortするのは後者。
+
+continuation的に次段階の関数を受けとるか。
+
+recordsからrecordsを返す関数を、保持するデータ型とrecordコールバックの
+組で定義する。
+struct table1(tcontinuation c) {
+  /* some data  */
+  bool push(tfield0 fld0, tfield1 fld1, ...) { }
+  void end() { }
+}
+最終段でファイルに出力することができる。エラーは例外で。
+struct {t} records_to_file(file ofile) {
+  bool push(expand(...)) { }
+  void end() { }
+}
+最終段はコンテナに値を格納することもできる。
+
+後段は複数もつこともできる。
+合成は、再終段のオブジェクトから順に作り前段のコンストラクタに渡す。
+
+最前段は各レコードをパースして型付けられたfieldのリストに渡す処理。
+またはコンテナから後段へ順に渡す処理。
+
+一つのsourceを複数のsinkへコピーしたり、複数のsourceをmergeも。
+
+- レコードをパースして各フィールドの開始オフセットを調べる。
+- フィールド変換関数を呼び出す。
+  { 0, string, { 1, 2 }, foo }
+
+function {param, tsink} bool
+convert_fields(tsink mutable& sink, cstrref const& str,
+  cslice{size_t} const& offsets)
+{
+  expand(p: param) {
+    t0 a0 = convert{?)(str[0]);
+    t1 a1 = foo(convert{?}(str[0]), convert{?}(str[1]));
+  }
+  return sink.push(expand(a0, a1, ...));
+}
+
 
