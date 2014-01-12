@@ -520,6 +520,15 @@ funcdef_stmt
 		expr_block_new(cur_fname, @2.first_line, $3, 0, $7, $4,
 			passby_e_mutable_value, $11),
 		cur_mode != compile_mode_main, false, $1); }
+	| opt_attribute TOK_FUNCTION TOK_EXTERN TOK_STRLIT opt_tparams_expr
+		type_expr TOK_SYMBOL
+		'(' argdecl_list ')' opt_cv '{' function_body_stmt_list '}'
+	  /* extern with body */
+	  { $$ = expr_funcdef_new(cur_fname, @2.first_line, $7,
+		arena_dequote_strdup($4), $11,
+		expr_block_new(cur_fname, @2.first_line, $5, 0, $9, $6,
+			passby_e_mutable_value, $13),
+		cur_mode != compile_mode_main, false, $1); }
 	| opt_attribute TOK_FUNCTION '~' '{' function_body_stmt_list '}'
 	  { $$ = expr_funcdef_new(cur_fname, @2.first_line, 0, 0, false,
 		expr_block_new(cur_fname, @2.first_line, 0, 0, 0, 0,

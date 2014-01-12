@@ -46,7 +46,7 @@ public tsvaluetype struct extern "::pxcrt::bt_cslice" "cslice" {t} cslice {
 
 public metafunction string vector{uchar};
 public metafunction dstring darray{uchar};
-public metafunction fstring farray{uchar};
+public metafunction fstring{n} farray{uchar, n};
 
 public mtvaluetype struct extern "::pxcrt::pxcvector" "varray" {t} vector {
   public metafunction key_type size_t;
@@ -162,6 +162,8 @@ public mtvaluetype struct extern "::pxcrt::pxcdeque" "varray" {t} deque {
   public function extern "clear" void clear();
   public function extern "push_back" void push_back(t const& v);
   public function extern "pop_back" t pop_back();
+  public function extern "push_front" void push_front(t const& v);
+  public function extern "pop_front" t pop_front();
   public function extern "reserve" void reserve(size_t i);
   public function extern "append" void append(crange_type const& v);
   public function extern "insert" void insert(size_t i, crange_type const& v);
@@ -216,7 +218,22 @@ public threaded function {typ, tlist} vector{typ}
 make_vector(expand(va::arg_decls_bycref{tlist}))
 {
   mutable arr = vector{typ}();
-  arr.resize(m::size{tlist});
+  arr.resize(m::size{tlist}, typ());
+  expand (a, i: va::arg_names{m::size{tlist}}) {
+    if (mf::is_numeric_type{typ}) {
+      arr[i] = static_cast{typ}(a);
+    } else {
+      arr[i] = a;
+    }
+  }
+  return arr;
+}
+
+public threaded function {typ, tlist} deque{typ}
+make_deque(expand(va::arg_decls_bycref{tlist}))
+{
+  mutable arr = deque{typ}();
+  arr.resize(m::size{tlist}, typ());
   expand (a, i: va::arg_names{m::size{tlist}}) {
     if (mf::is_numeric_type{typ}) {
       arr[i] = static_cast{typ}(a);

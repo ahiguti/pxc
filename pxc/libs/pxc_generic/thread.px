@@ -1,39 +1,52 @@
-namespace thread "use-unsafe";
+threaded namespace thread "use-unsafe";
 public import numeric::integral -;
 public import pointer -;
 public import container::array;
 public import exception;
 public import meta -;
 
-public multithreaded struct extern "pxcthread::thread_ptr" thread { }
-public threaded function {targs} thread create_thread(targs const& args)
+public multithreaded struct extern "pxcthread::thread_ptr" "nodefault"
+thread { }
+
+public threaded function {targs} thread make_thread(targs const& args)
 {
   tptr{thrdata} r = to_tptr{thrdata_impl{targs}}(thrdata_impl{targs}(args));
-  return create_thread_impl(r);
+  return make_thread_impl(r);
 }
+
 public threaded function extern "pxcthread::thread_join"
   void thread_join(thread const& thr);
+
+
+/* private */
 
 private multithreaded interface thrdata {
   function void main();
 }
-private multithreaded struct {targs} thrdata_impl(targs const& a) < thrdata > {
+private multithreaded struct {targs} thrdata_impl(targs const& a)
+  <thrdata>
+{
   targs args = a;
   function void main() {
     args.main();
   }
 }
-private threaded function extern "pxcthread::create_thread_impl"
-  thread create_thread_impl(tptr{thrdata} const& f);
+private threaded function extern "pxcthread::make_thread_impl"
+  thread make_thread_impl(tptr{thrdata} const& f);
 
 extern "types" inline
+
 namespace pxcthread {
+
 struct thread_rep;
+
 typedef pxcrt::rcptr< pxcrt::trcval<thread_rep> > thread_ptr;
 };
+
 ;
 
 extern "functions" inline
+
 namespace pxcthread {
 
 typedef pxcrt::rcptr< thread$n::thrdata$i > thrdata_ptr;
@@ -51,47 +64,42 @@ private:
   thread_rep& operator =(const thread_rep&);
 };
 
-thread_ptr create_thread_impl(thrdata_ptr const& m);
+thread_ptr make_thread_impl(thrdata_ptr const& m);
 void thread_join(thread_ptr const& t);
 
 };
+
 ;
 
 extern "implementation" inline
+
 #define PXC_THREAD_DBG(x)
+
 namespace pxcthread {
 
 void *pxc_thread_child_main(void *arg)
 {
   thrdata_rawptr m = static_cast<thrdata_rawptr>(arg);
-  /* no need to lock m */
+    /* no need to lock m */
   PXC_TRY {
     PXC_TRY {
       m->main$f();
-    } PXC_CATCH(const std::exception& e) {
-      std::string mess;
-      pxcrt::bt_string s0 = pxcrt::c_exception_message(e);
-      mess.insert(mess.end(), s0.begin(), s0.end());
-      if (!mess.empty() && mess[mess.size() - 1] != '\n') {
-        mess += "\n";
-      }
-      pxcrt::bt_string st = pxcrt::c_exception_stack_trace(e);
-      mess.insert(mess.end(), st.begin(), st.end());
-      ::write(2, mess.data(), mess.size());
-      //::abort();
+    } PXC_CATCH(const std::exception& ex) {
+      #if !PXC_NOEXCEPTIONS
+      pxcrt::c_exception_log_stderr(ex);
+      #endif
     }
   } PXC_CATCH(...) {
-    const char *const mess = "thread: uncaught exception\n";
+    const char *const mess = "PXCTHREAD: Uncaught exception\n";
     ::write(2, mess, strlen(mess));
-    // ::abort();
   }
   pxcrt::clear_local_pool();
   return 0;
 }
 
-thread_ptr create_thread_impl(thrdata_ptr const& m)
+thread_ptr make_thread_impl(thrdata_ptr const& m)
 {
-  thread_ptr thr(thread_ptr::create_rawptr(m));
+  thread_ptr thr(thread_ptr::make_rawptr(m));
   thread_rep& impl = thr->value;
   if (pthread_create(&impl.tid, 0, pxc_thread_child_main, m.get()) != 0) {
     PXC_THREAD_DBG(fprintf(stderr, "failed to create thread\n"));
@@ -130,6 +138,8 @@ void thread_rep::join()
 }
 
 };
+
 #undef PXC_THREAD_DBG
+
 ;
 

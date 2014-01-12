@@ -1582,12 +1582,8 @@ static int prepare_options(parser_options& po, int argc, char **argv)
   }
   if (po.profile_name.empty()) {
     po.profile_name = "/etc/pxc.profile";
-  } else if (po.profile_name[0] != '/') {
-    #if 0
-    char pbuf[PATH_MAX] = { 0 };
-    getcwd(pbuf, sizeof(pbuf));
-    po.profile_name = std::string(pbuf) + "/" + po.profile_name;
-    #endif
+  } else if (!po.no_realpath) {
+    po.profile_name = get_canonical_path(po.profile_name);
   }
   if (!check_path_validity(po.work_dir)) {
     fprintf(stderr, "working directory contains an invalid character: '%s'\n",

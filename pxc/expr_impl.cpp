@@ -934,7 +934,7 @@ expr_i *expr_enumval::clone() const
 void expr_enumval::set_unique_namespace_one(const std::string& u,
   bool allow_unsafe)
 {
-  if (!allow_unsafe && cnamei.is_extdef()) {
+  if (!allow_unsafe && cnamei.has_cname()) {
     arena_error_throw(this,
       "Unsafe enum value is defined in a safe namespace");
   }
@@ -1448,11 +1448,11 @@ std::string expr_argdecls::dump(int indent) const
 }
 
 expr_funcdef::expr_funcdef(const char *fn, int line, const char *sym,
-  const char *cname, bool is_const, expr_i *block, bool ext_decl, bool no_def,
+  const char *cname, bool is_const, expr_i *block, bool ext_pxc, bool no_def,
   attribute_e attr)
   : expr_i(fn, line), sym(sym), cnamei(cname), is_const(is_const),
     rettype_eval(), block(ptr_down_cast<expr_block>(block)),
-    ext_decl(ext_decl), no_def(no_def), value_texpr(), attr(attr),
+    ext_pxc(ext_pxc), no_def(no_def), value_texpr(), attr(attr),
     used_as_cfuncobj(false)
 {
   assert(block);
@@ -1470,7 +1470,7 @@ expr_i *expr_funcdef::clone() const
 void expr_funcdef::set_unique_namespace_one(const std::string& u,
   bool allow_unsafe)
 {
-  if (!allow_unsafe && cnamei.is_extdef()) {
+  if (!allow_unsafe && cnamei.has_cname()) {
     arena_error_throw(this,
       "Unsafe function is defined in a safe namespace");
   }
@@ -1571,7 +1571,7 @@ expr_typedef::expr_typedef(const char *fn, int line, const char *sym,
 void expr_typedef::set_unique_namespace_one(const std::string& u,
   bool allow_unsafe)
 {
-  if (!allow_unsafe && cnamei.is_extdef()) {
+  if (!allow_unsafe && cnamei.has_cname()) {
     arena_error_throw(this,
       "Unsafe type is defined in a safe namespace");
   }
@@ -1632,7 +1632,7 @@ expr_struct *expr_struct::clone() const
 void expr_struct::set_unique_namespace_one(const std::string& u,
   bool allow_unsafe)
 {
-  if (!allow_unsafe && cnamei.is_extdef()) {
+  if (!allow_unsafe && cnamei.has_cname()) {
     arena_error_throw(this,
       "Unsafe type is defined in a safe namespace");
   }
@@ -1711,7 +1711,7 @@ void expr_dunion::set_unique_namespace_one(const std::string& u,
 {
   #if 0
   // extern dunion is not implemented
-  if (!allow_unsafe && cnamei.is_extdef()) {
+  if (!allow_unsafe && cnamei.has_cname()) {
     arena_error_throw(this,
       "Unsafe type is defined in a safe namespace");
   }
@@ -1779,7 +1779,7 @@ expr_i *expr_interface::clone() const
 void expr_interface::set_unique_namespace_one(const std::string& u,
   bool allow_unsafe)
 {
-  if (!allow_unsafe && cnamei.is_extdef()) {
+  if (!allow_unsafe && cnamei.has_cname()) {
     arena_error_throw(this,
       "Unsafe type is defined in a safe namespace");
   }

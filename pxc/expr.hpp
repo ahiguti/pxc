@@ -97,8 +97,8 @@ expr_i *expr_expand_new(const char *fn, int line, const char *itersym,
   expr_i *rest);
 expr_i *expr_special_new(const char *fn, int line, int tok, expr_i *arg);
 expr_i *expr_funcdef_new(const char *fn, int line, const char *sym,
-  const char *cname, bool is_const, expr_i *block, bool ext_decl,
-  bool extc_decl, attribute_e visi);
+  const char *cname, bool is_const, expr_i *block, bool ext_pxc,
+  bool no_def, attribute_e visi);
 expr_i *expr_typedef_new(const char *fn, int line, const char *sym,
   const char *cname, const char *family, bool is_enum, bool is_bitmask,
   expr_i *enumvals, unsigned int num_tparams, attribute_e visi);

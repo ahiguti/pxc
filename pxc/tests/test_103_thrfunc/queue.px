@@ -1,0 +1,95 @@
+namespace queue;
+import common -;
+
+private metafunction entry_type uneval{void};
+private metafunction queue_type deque{tptr{entry_type}};
+
+private multithreaded struct task_queue_shared() {
+  public deque{tptr{entry_type}} queue;
+  public int stop_thread = 0;
+}
+
+public threaded struct task_queue()
+{
+  tptr{task_queue_shared} const shared = to_tptr{task_queue_shared}();
+  ptr{uneval{unit}} const thr = make_thread_func{queue_thread_main}(shared);
+  function ~ {
+    queue_thread_stop(shared, 1);
+  }
+  public function void push(tptr{entry_type} const& e) {
+    queue_push_notify(shared, e);
+  }
+}
+
+private threaded function option{tptr{entry_type}}
+queue_wait_pop(tptr{task_queue_shared} const& tq)
+{
+  option{tptr{entry_type}} ent;
+  mutable lck = lock_guard{task_queue_shared}(tq);
+  task_queue_shared mutable& q = *lck;
+  while (true) {
+    int const sf = q.stop_thread;
+    bool const em = q.queue.empty();
+    if (sf < 0 || (sf > 0 && em)) {
+      debug_log("wait_pop: stop");
+      break;
+    }
+    if (q.queue.empty()) {
+      lck.wait();
+      continue;
+    }
+    ent.some = q.queue.pop_front();
+    break;
+  }
+  return ent;
+}
+
+private threaded function unit
+queue_thread_main(tptr{task_queue_shared} const& tq)
+{
+  while (true) {
+    option{tptr{entry_type}} ent = queue_wait_pop(tq);
+    if (case ent.none) {
+      break;
+    }
+    ent.some->eval();
+  }
+  return unit();
+}
+
+private threaded function void
+queue_thread_stop(tptr{task_queue_shared} const& tq, int mode)
+{
+  mutable lck = lock_guard{task_queue_shared}(tq);
+  lck->stop_thread = mode;
+  lck.notify_all();
+}
+
+private threaded function void
+queue_push_notify(tptr{task_queue_shared} const& tq,
+  tptr{entry_type} const& ep)
+{
+  mutable lck = lock_guard{task_queue_shared}(tq);
+  task_queue_shared mutable& q = *lck;
+  bool const need_notify = q.queue.empty();
+  q.queue.push_back(ep);
+  if (need_notify) {
+    lck.notify_one();
+  }
+}
+
+multithreaded struct hoge(int x0) <uneval{void}> {
+  int const x = x0;
+  function void eval() {
+    debug_log("hoge", x);
+  }
+}
+
+{
+  task_queue tq;
+  tq.push(to_tptr{hoge}(10));
+  tq.push(to_tptr{hoge}(20));
+  tq.push(to_tptr{hoge}(30));
+  println("ok");
+}
+

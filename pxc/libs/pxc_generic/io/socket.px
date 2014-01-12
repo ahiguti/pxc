@@ -64,24 +64,24 @@ socketpair(io const& iop, ai::family_t family, ai::socktype_t socktype,
   return r;
 }
 
-public multithreaded union create_acceptor_t {
+public multithreaded union make_acceptor_t {
   ai::gai_error_t gai_error;
   errno_t errno;
   socket_acceptor value;
 }
 
-public threaded function create_acceptor_t create_acceptor(io const& iop,
+public threaded function make_acceptor_t make_acceptor(io const& iop,
   cstrref const& host, cstrref const& service, ai::family_t family,
   ai::socktype_t socktype, uint backlog, uint timeout_sec)
 {
-  create_acceptor_t r;
+  make_acceptor_t r;
   const ai = ai::addrinfo(iop, host, service, family, socktype,
     ai::PROTO_UNSPEC, ai::AI_PASSIVE);
   if (ai.get_error() != ai::EAI_OK) {
     r.gai_error = ai.get_error();
   } else {
     errno_t err = EOK;
-    const sa = create_socket_acceptor(iop, err, ai.get_sockaddr(), socktype,
+    const sa = make_socket_acceptor(iop, err, ai.get_sockaddr(), socktype,
       ai::PROTO_UNSPEC, backlog, timeout_sec);
     if (err != EOK) {
       r.errno = err;
@@ -92,33 +92,33 @@ public threaded function create_acceptor_t create_acceptor(io const& iop,
   return r;
 }
 
-public multithreaded union create_connector_t {
+public multithreaded union make_connector_t {
   ai::gai_error_t gai_error;
   socket_connector value;
 }
 
-public threaded function create_connector_t create_connector(io const& iop,
+public threaded function make_connector_t make_connector(io const& iop,
   cstrref const& host, cstrref const& service, ai::family_t family,
   ai::socktype_t socktype, uint timeout_sec)
 {
-  create_connector_t r;
+  make_connector_t r;
   const ai = ai::addrinfo(iop, host, service, family, socktype,
     ai::PROTO_UNSPEC, 0);
   if (ai.get_error() != ai::EAI_OK) {
   } else {
-    r.value = create_socket_connector(iop, ai.get_sockaddr(), socktype,
+    r.value = make_socket_connector(iop, ai.get_sockaddr(), socktype,
       ai::PROTO_UNSPEC, timeout_sec);
   }
   return r;
 }
 
-private threaded function extern "pxcio::create_socket_acceptor"
-  socket_acceptor create_socket_acceptor(io const& iop,
+private threaded function extern "pxcio::make_socket_acceptor"
+  socket_acceptor make_socket_acceptor(io const& iop,
     errno_t mutable& err_r, ai::sockaddr_storage const& addr,
     ai::socktype_t socktype, ai::protocol_t protocol, uint listen_backlog,
     uint accept_timeout_sec);
-private threaded function extern "pxcio::create_socket_connector"
-  socket_connector create_socket_connector(io const& iop,
+private threaded function extern "pxcio::make_socket_connector"
+  socket_connector make_socket_connector(io const& iop,
     ai::sockaddr_storage const& addr, ai::socktype_t socktype,
     ai::protocol_t protocol, uint connect_timeout_sec);
 private threaded function extern "pxcio::accept_internal"
@@ -200,16 +200,16 @@ socket_acceptor_rep::socket_acceptor_rep(int& err_r,
   bt_uint timeout_sec)
   : addr(addr), socktype(socktype), protocol(protocol),
     timeout_sec(timeout_sec),
-    listener(create_file(socket_acceptor_fd(err_r, addr, socktype, protocol,
+    listener(make_file(socket_acceptor_fd(err_r, addr, socktype, protocol,
       backlog, timeout_sec)))
 {
 }
 
-socket_acceptor create_socket_acceptor(::pxcio::io const& iop,
+socket_acceptor make_socket_acceptor(::pxcio::io const& iop,
   int& err_r, sockaddr_storage const& addr, int socktype, int protocol,
   bt_uint backlog, bt_uint timeout_sec)
 {
-  socket_acceptor sa(socket_acceptor::create_rawptr(
+  socket_acceptor sa(socket_acceptor::make_rawptr(
     socket_acceptor_rep(
       err_r, addr, socktype, protocol, backlog, timeout_sec)));
   return sa;
@@ -222,11 +222,11 @@ socket_connector_rep::socket_connector_rep(sockaddr_storage const& addr,
 {
 }
 
-socket_connector create_socket_connector(::pxcio::io const& iop,
+socket_connector make_socket_connector(::pxcio::io const& iop,
   sockaddr_storage const& addr, int socktype, int protocol,
   bt_uint timeout_sec)
 {
-  socket_connector sc(socket_connector::create_rawptr(
+  socket_connector sc(socket_connector::make_rawptr(
     socket_connector_rep(addr, socktype, protocol, timeout_sec)));
   return sc;
 }
@@ -241,7 +241,7 @@ file accept_internal(int& err_r, socket_acceptor const& sfp,
     err_r = errno;
     fd = -1;
   }
-  return create_file(fd);
+  return make_file(fd);
 }
 
 file connect_internal(int& err_r, socket_connector const& sfp)
@@ -276,7 +276,7 @@ file connect_internal(int& err_r, socket_connector const& sfp)
     }
     fd = -1;
   }
-  return create_file(fd);
+  return make_file(fd);
 }
 
 static int setsockopt_common(int fd, int level, int optname,
@@ -313,8 +313,8 @@ int socket_set_send_timeout(file const& f, bt_uint sec)
   }
   ::pxcrt::pxcvector<file> r;
   if (e == 0) {
-    r.push_back(create_file(fds[0]));
-    r.push_back(create_file(fds[1]));
+    r.push_back(make_file(fds[0]));
+    r.push_back(make_file(fds[1]));
   }
   return r;
 }

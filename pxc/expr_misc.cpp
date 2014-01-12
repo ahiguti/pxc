@@ -775,8 +775,7 @@ bool is_const_or_immutable_pointer_family(const term& t)
 {
   const typefamily_e cat = get_family(t);
   return cat == typefamily_e_tcptr || cat == typefamily_e_cptr ||
-    cat == typefamily_e_lock_cguard || cat == typefamily_e_tiptr ||
-    cat == typefamily_e_iptr;
+    cat == typefamily_e_tiptr || cat == typefamily_e_iptr;
 }
 
 bool is_immutable_pointer_family(const term& t)
@@ -851,8 +850,8 @@ bool is_cm_range_family(const term& t)
 static bool is_ephemeral_value_type(expr_i *e)
 {
   const typefamily_e cat = get_family(e);
-  return is_cm_range_family(e) || cat == typefamily_e_ephemeral;
-  // || is_cm_lock_guard_family(e);
+  return is_cm_range_family(e) || cat == typefamily_e_ephemeral
+    || is_cm_lock_guard_family(e);
 }
 
 bool is_ephemeral_value_type(const term& t)
@@ -1190,6 +1189,7 @@ std::string term_tostr(const term& t, term_tostr_sort s)
   if (tdef == 0) {
     return std::string();
   }
+  const term_list *const args = t.get_args();
   const char *sym = 0;
   const char *cname = 0;
   std::string uniqns;
@@ -1263,6 +1263,15 @@ std::string term_tostr(const term& t, term_tostr_sort s)
 	  uniqns = "";
 	}
 	cname = efd->cnamei.cname;
+	if (cname != 0 && !efd->no_def && !is_virtual_or_member_function_flag
+	  && args != 0 && !args->empty()) {
+	  /* extern non-member pxc-defined function with tparam. ignore cname
+	   * in order to generate unique c symbol. */
+#if 0
+fprintf(stderr, "pxc-defined %s\n", cname); // FIXME
+#endif
+	  cname = 0;
+	}
 	esort_char = 'f';
       }
       break;
@@ -1414,10 +1423,9 @@ std::string term_tostr(const term& t, term_tostr_sort s)
   term_tostr_sort schild = s;
   if (s == term_tostr_sort_cname) {
     /* use foo<bar> only if it's a c-type */
-    schild = cname != 0 ?
-      term_tostr_sort_cname : term_tostr_sort_cname_tparam;
+    schild = cname != 0
+      ? term_tostr_sort_cname : term_tostr_sort_cname_tparam;
   }
-  const term_list *const args = t.get_args();
   if (args != 0 && !args->empty()) {
     rstr += term_tostr_list(*args, schild);
   } else if (tparams != 0) {

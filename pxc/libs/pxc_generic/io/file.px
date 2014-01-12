@@ -78,7 +78,7 @@ io_open(io const& iop, cstrref const& fn, open_flags_t flags, mode_t md)
   open_t r;
   int fd = io_open_fd(iop, fn, flags, md);
   if (fd >= 0) {
-    r.value = iop.create_file(fd);
+    r.value = iop.make_file(fd);
   } else {
     r.errno = iop.get_errno();
   }
@@ -89,8 +89,8 @@ io_open(io const& iop, cstrref const& fn, open_flags_t flags, mode_t md)
 private threaded function extern "pxcio::io_open_fd"
 int io_open_fd(io const& iop, cstrref const& fn, open_flags_t flags,
   mode_t md);
-private threaded function extern "pxcio::io_create_file"
-file io_create_file(io const& iop, int fd);
+private threaded function extern "pxcio::io_make_file"
+file io_make_file(io const& iop, int fd);
 
 /*
 public threaded function extern "pxcio::io_open"
@@ -197,7 +197,7 @@ typedef ::pxcrt::rcptr< pxcrt::tircval<file_rep> > file;
 extern "functions" inline
 namespace pxcio {
 
-file create_file(int fd); /* can be called from other io::* namespaces */
+file make_file(int fd); /* can be called from other io::* namespaces */
 
 };
 ;
@@ -213,15 +213,15 @@ bt_int io_open_fd(io const& iop, cstrref const& fn, int flags, ::mode_t md)
   return ::open(fn_nt.get(), flags, md);
 }
 
-file io_create_file(io const& iop, bt_int fd)
+file io_make_file(io const& iop, bt_int fd)
 {
-  return create_file(fd);
+  return make_file(fd);
 }
 
-file create_file(bt_int fd)
+file make_file(bt_int fd)
 {
   PXC_TRY {
-    file r(file::create_rawptr(fd)); /* throws */
+    file r(file::make_rawptr(fd)); /* throws */
     return r;
   } PXC_CATCH(...) {
     if (fd >= 2) {

@@ -608,10 +608,13 @@ void expr_var::check_type(symbol_table *lookup)
       arena_error_push(this, "Reference variable '%s' is not initialized",
 	sym);
     }
+    #if 0
+    // TODO: remove. not necessary.
     if (is_ephemeral_value_type(typ)) {
       arena_error_push(this, "Ephemeral type variable '%s' is not initialized",
 	sym);
     }
+    #endif
   }
   /* type_of_this_expr */
 }
@@ -757,11 +760,18 @@ static void check_return_expr_block(expr_funcdef *fdef, expr_block *block)
   arena_error_push(error_pos, "Control reaches end of non-void function");
 }
 
+static bool is_ext_struct_memfunc(expr_funcdef *fdef)
+{
+  expr_struct *est = fdef->is_member_function();
+  return (est != 0 && est->cnamei.has_cname());
+}
+
 static void check_return_expr(expr_funcdef *fdef)
 {
   const term& typ = fdef->get_rettype();
   std::string err_mess;
-  const bool allow_ephemeral = fdef->no_def;
+  const bool allow_ephemeral = fdef->cnamei.has_cname()
+    || is_ext_struct_memfunc(fdef);
     /* allows ephemeral type if fdef is a extern c function */
   if (!check_term_validity(typ, false, false, allow_ephemeral, fdef,
     err_mess)) {
@@ -772,10 +782,10 @@ static void check_return_expr(expr_funcdef *fdef)
     return; /* returning void */
   }
   if (fdef->no_def) {
-    return; /* no definition (extern c) */
+    return;
   }
-  if (fdef->ext_decl && fdef->block->tinfo.tparams == 0) {
-    DBG_CT_BLOCK(fprintf(stderr, "extdecl %s\n", fdef->dump(0).c_str()));
+  if (fdef->ext_pxc && fdef->block->tinfo.tparams == 0) {
+    DBG_CT_BLOCK(fprintf(stderr, "ext_pxc %s\n", fdef->dump(0).c_str()));
     return; /* decl only */
   }
   check_return_expr_block(fdef, fdef->block);
@@ -926,6 +936,11 @@ static void store_tempvar(expr_i *e, passby_e passby, bool blockscope_flag,
   e->tempvar_varinfo.passby = merge_passby(e->tempvar_varinfo.passby, passby);
   e->tempvar_varinfo.guard_elements |= guard_elements;
   e->tempvar_varinfo.scope_block |= blockscope_flag;
+  if (is_passby_cm_value(passby) && !is_copyable(e->resolve_texpr())) {
+    arena_error_throw(e,
+      "Internal error: Can not create a temp copy of type '%s' expr '%s'",
+      term_tostr_human(e->resolve_texpr()).c_str(), e->dump(0).c_str());
+  }
 }
 
 static void add_root_requirement_container_elements(expr_i *econ,
@@ -1003,6 +1018,17 @@ static bool is_vararg_function_or_struct(expr_i *e)
   return bl != 0 && bl->is_expand_argdecls();
 }
 
+static expr_i *get_first_arg(expr_funccall *efc)
+{
+  expr_i *efcarg = efc->arg;
+  while (efcarg != 0 && efcarg->get_esort() == expr_e_op &&
+    ptr_down_cast<expr_op>(efcarg)->op == ',') {
+    /* lhs of comma */
+    efcarg = ptr_down_cast<expr_op>(efcarg)->arg0;
+  }
+  return efcarg;
+}
+
 static void add_root_requirement(expr_i *e, passby_e passby,
   bool blockscope_flag)
 {
@@ -1043,6 +1069,38 @@ static void add_root_requirement(expr_i *e, passby_e passby,
        * a (possibly) container type, and the returned reference must be valid 
        * while the container is valid and it is not resized. */
       expr_op *const eop = dynamic_cast<expr_op *>(efc->func);
+      if (eop != 0 && (eop->op == '.' || eop->op == TOK_ARROW)) {
+	/* 'this' object is possibly a container. root the object and it's
+	 * elements */
+	add_root_requirement_container_elements(eop->arg0, blockscope_flag);
+	add_root_requirement(eop->arg0,
+	  is_passby_const(passby)
+	  ? passby_e_const_reference : passby_e_mutable_reference,
+	  blockscope_flag);
+	return;
+      }
+      /* non-member function. it must be an 'extern' function */
+      {
+	bool memfunc_w_explicit_obj = false;
+	term te = get_func_te_for_funccall(efc->func, memfunc_w_explicit_obj);
+	expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(
+	  term_get_instance(te));
+	if (efd != 0) {
+	  if (!efd->cnamei.has_cname()) {
+	    arena_error_throw(efc,
+	      "Internal error: Non-member, non-extern function returning "
+	      "an ephemeral type");
+	  }
+	}
+      }
+      expr_i *const first_arg = get_first_arg(efc);
+      if (first_arg != 0) {
+	add_root_requirement(first_arg,
+	  is_passby_const(passby)
+	  ? passby_e_const_reference : passby_e_mutable_reference,
+	  blockscope_flag);
+      }
+      #if 0
       if (eop == 0 || (eop->op != '.' && eop->op != TOK_ARROW)) {
 	arena_error_throw(efc, "Non-member function returning ephemeral type");
 	  /* TODO: remove this restriction */
@@ -1055,6 +1113,7 @@ static void add_root_requirement(expr_i *e, passby_e passby,
 	? passby_e_const_reference : passby_e_mutable_reference,
 	blockscope_flag);
       return;
+      #endif
     }
     /* function returning reference? */
     bool memfunc_w_explicit_obj = false;
@@ -1081,6 +1140,7 @@ static void add_root_requirement(expr_i *e, passby_e passby,
 	  ptr_down_cast<expr_op>(efcarg)->op == ',') {
 	  arena_error_throw(efc,
 	    "Invalid function call (multiple arguments, returning reference)");
+	    /* TODO: remove this restriction (root the first arg) */
 	}
 	if (efd->is_virtual_or_member_function()) {
 	  arena_error_throw(efc,
@@ -1163,6 +1223,9 @@ static void add_root_requirement(expr_i *e, passby_e passby,
   case TOK_PTR_DEREF:
     if (is_cm_range_family(eop->arg0->resolve_texpr())) {
       /* range dereference. root the range object. */
+      add_root_requirement(eop->arg0, passby_e_const_value, blockscope_flag);
+    } else if (is_cm_lock_guard_family(eop->arg0->resolve_texpr())) {
+      /* lock guard object. root the object. */
       add_root_requirement(eop->arg0, passby_e_const_value, blockscope_flag);
     } else {
       /* pointers */
@@ -1868,10 +1931,12 @@ void expr_op::check_type(symbol_table *lookup)
 	check_lvalue(this, arg1);
       }
       if (is_passby_cm_reference(ev->varinfo.passby) ||
-	is_ephemeral_value_type(ev->resolve_texpr())) {
+	(is_ephemeral_value_type(ev->resolve_texpr()) &&
+	  !is_cm_lock_guard_family(ev->resolve_texpr()))) {
 	/* require block scope root on rhs because the variable is an ephemeral
 	 * variable and is required to be valid while the block is finished.
 	 * this is the only case a block scope tempvar is required. */
+	/* note: no need (and should not) to create a copy of a lock guard. */
 	DBG_CON(fprintf(stderr, "block scope root rhs %s\n",
 	  arg1->dump(0).c_str()));
 	add_root_requirement(arg1, ev->varinfo.passby, true);
@@ -3773,7 +3838,7 @@ void expr_funcdef::check_type(symbol_table *lookup)
 	"Internal error: threaded function in an invalid context");
     }
   }
-  if (ext_decl && !block->tinfo.template_descent) {
+  if (ext_pxc && !block->tinfo.template_descent) {
     /* external and not template. stmts are not necessary. */
     block->stmts = 0;
   }
@@ -4031,6 +4096,23 @@ static void check_type_validity_common(expr_i *e, const term& t)
   }
 }
 
+bool expr_is_instantiated(expr_i *e)
+{
+  if (e == 0) {
+    return false;
+  }
+  if (e->symtbl_lexical == 0) {
+    return false;
+  }
+  if (e->symtbl_lexical->block_backref == 0) {
+    return false;
+  }
+  if (e->symtbl_lexical->block_backref->tinfo.is_uninstantiated()) {
+    return false;
+  }
+  return true;
+}
+
 void fn_check_type(expr_i *e, symbol_table *symtbl)
 {
   /* note: symtbl is different from symtbl_lexical if e is a field symbol.
@@ -4041,7 +4123,9 @@ void fn_check_type(expr_i *e, symbol_table *symtbl)
   DBG_CT(fprintf(stderr, "fn_check_type begin %p expr=%s\n",
     e, e->dump(0).c_str()));
   e->check_type(symtbl);
-  check_type_validity_common(e, e->get_texpr());
+  if (expr_is_instantiated(e)) {
+    check_type_validity_common(e, e->get_texpr());
+  }
   DBG_CT(fprintf(stderr, "fn_check_type end %p expr=%s -> type=%s\n",
     e, e->dump(0).c_str(),
     term_tostr(e->get_texpr(), term_tostr_sort_strict).c_str()));

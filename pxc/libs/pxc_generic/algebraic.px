@@ -5,7 +5,7 @@ public import meta m;
 public import meta::vararg va;
 
 public tsvaluetype struct {types}
-type_product(expand(
+tuple(expand(
   m::map{
     m::seq{m::size{types}},
     metafunction{i} m::list{m::concat{"a", i}, m::at{types, i}, 1, 0}}))
@@ -20,7 +20,7 @@ type_product(expand(
 }
 
 public tsvaluetype union {types}
-type_sum
+sumtype
 {
   expand (s, i: va::field_names{m::size{types}}) {
     m::at{types, i} s;
@@ -46,5 +46,12 @@ option
 {
   unit none;
   t some;
+}
+
+public threaded function {tlist} tuple{m::map{tlist, m::at0}}
+make_tuple(expand(va::arg_decls_bycref{tlist}))
+{
+  metafunction typ tuple{m::map{tlist, m::at0}};
+  return typ(expand(a: va::arg_names{m::size{tlist}}; a));
 }
 

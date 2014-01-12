@@ -47,16 +47,16 @@ public function {t} sv convert_to_perlsv(t const& x)
   return rawsv_to_sv(convert_to_rawsv_own(x), false);
 }
 
-public function {f} void xs_create_function(string const& name) {
-  func_pl{pxfunc_obj{f}}().xs_create_function(name);
+public function {f} void xs_make_function(string const& name) {
+  func_pl{pxfunc_obj{f}}().xs_make_function(name);
 }
 
-public function {t, i} void xs_create_field(string const& name) {
-  func_pl{pxfield_obj{t, i}}().xs_create_function(name);
+public function {t, i} void xs_make_field(string const& name) {
+  func_pl{pxfield_obj{t, i}}().xs_make_function(name);
 }
 
-public function {t} void xs_create_type(string const& name) {
-  type_pl{t}().xs_create_type(name);
+public function {t} void xs_make_type(string const& name) {
+  type_pl{t}().xs_make_type(name);
 }
 
 // private
@@ -148,8 +148,8 @@ private struct extern "pxperl::perlsvarr" svarr {
 }
 
 private struct extern "pxperl::func_pl" {t} func_pl {
-  function extern "xs_create_function"
-    void xs_create_function(string const& s) const;
+  function extern "xs_make_function"
+    void xs_make_function(string const& s) const;
 }
 
 private struct extern "pxperl::value_or_ref" "noncopyable" {t} value_or_ref { }
@@ -269,7 +269,7 @@ private struct {t, i} pxfield_obj {
 }
 
 private struct extern "pxperl::type_pl" "nocascade" {t} type_pl {
-  function extern "xs_create_type" void xs_create_type(string const& s) const;
+  function extern "xs_make_type" void xs_make_type(string const& s) const;
 }
 
 private function extern "pxperl::rawsv_get_object" {t} t mutable&
@@ -408,7 +408,7 @@ template <typename F> struct func_pl {
     ST(0) = sv_2mortal(rvraw);
     XSRETURN(1);
   }
-  static void xs_create_function(const pxcrt::bt_string& name) {
+  static void xs_make_function(const pxcrt::bt_string& name) {
     if (func_cv != 0) { return; }
     std::string s = generate_klass_name(name);
     func_cv = newXS(const_cast<char *>(s.c_str()), &call,
@@ -438,7 +438,7 @@ template <typename T> struct type_pl {
     }
     XSRETURN_EMPTY;
   }
-  static void xs_create_type(const pxcrt::bt_string& name) { // throw(c++)
+  static void xs_make_type(const pxcrt::bt_string& name) { // throw(c++)
     if (destr_cv != 0) { return; }
     klass_name = generate_klass_name(name);
     klass_stash = gv_stashpv(klass_name.c_str(), 1);
