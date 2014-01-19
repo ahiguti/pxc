@@ -58,14 +58,15 @@ static std::string op_message(expr_op *eop)
 static void check_type_convert_to_lhs(expr_op *eop, expr_i *efrom, term& tto)
 {
   tvmap_type tvmap;
-  if (!convert_type(efrom, tto, tvmap)) {
+  check_convert_type(efrom, tto, &tvmap);
+  #if 0
     const std::string sfrom = term_tostr(efrom->resolve_texpr(),
       term_tostr_sort_humanreadable);
     const std::string sto = term_tostr(tto,
       term_tostr_sort_humanreadable);
     arena_error_push(efrom, "Can not convert from '%s' to '%s' %s",
       sfrom.c_str(), sto.c_str(), op_message(eop).c_str());
-  }
+  #endif
 }
 
 static void check_bool_expr(expr_op *eop, expr_i *a0)
@@ -2127,7 +2128,7 @@ static void check_ptr_constructor_syntax(expr_funccall *fc, const term& te)
   if (curfr_expr == 0 || curfr_expr->get_unique_namespace() != "pointer") {
     const std::string s0 = term_tostr_human(te);
     arena_error_push(fc,
-      "Can not call a pointer constructor. Use to_ptr family instead.");
+      "Can not call a pointer constructor. Use make_ptr family instead.");
   }
   #if 0
   if (fc->parent_expr != 0 && fc->parent_expr->get_esort() == expr_e_op) {
@@ -2229,7 +2230,7 @@ void expr_funccall::check_type(symbol_table *lookup)
     } else if (func_te.get_args()->size() == 0 && tplen == 2
       && tis.size() == 1) {
       /* no explicit targ is specified */
-      /* to_ptr(...) uses this case when it boxes an already-constructed
+      /* make_ptr(...) uses this case when it boxes an already-constructed
        * value */
       tas.push_back(arglist.front()->resolve_texpr());
       tas.push_back(tis_ml);
@@ -2276,14 +2277,15 @@ void expr_funccall::check_type(symbol_table *lookup)
 	term_tostr(ad->resolve_texpr(), term_tostr_sort_humanreadable)
 	  .c_str()));
       /* check argument types */
-      if (!convert_type(*j, ad->resolve_texpr(), tvmap)) {
+      check_convert_type(*j, ad->resolve_texpr(), &tvmap);
+      #if 0
 	const std::string s0 = term_tostr_human((*j)->resolve_texpr());
 	const std::string s1 = term_tostr_human(ad->resolve_texpr());
 	arena_error_push(this, "Invalid conversion from %s to %s",
 	  s0.c_str(), s1.c_str());
 	arena_error_push(this, "  initializing argument %u of '%s'",
 	  argcnt, efd_p_inst->sym);
-      }
+      #endif
       /* check lvalue and root argument expressions */
       passing_root_requirement(ad->passby, this, *j, false);
       ++j;
@@ -2432,14 +2434,15 @@ fprintf(stderr, "tote %s\n", einst->dump(0).c_str());
 	    .c_str(),
 	  term_tostr(ad->resolve_texpr(), term_tostr_sort_humanreadable)
 	    .c_str()));
-	if (!convert_type(*j, ad->resolve_texpr(), tvmap)) {
+	check_convert_type(*j, ad->resolve_texpr(), &tvmap);
+	#if 0
 	  const std::string s0 = term_tostr_human((*j)->resolve_texpr());
 	  const std::string s1 = term_tostr_human(ad->resolve_texpr());
 	  arena_error_push(this, "Invalid conversion from %s to %s",
 	    s0.c_str(), s1.c_str());
 	  arena_error_push(this, "  initializing argument %u of '%s'",
 	    argcnt, est_p_inst->sym);
-	}
+	#endif
 	passing_root_requirement(ad->passby, this, *j, false);
 	++j;
 	ad = ad->get_rest();
@@ -2484,12 +2487,13 @@ fprintf(stderr, "tote %s\n", einst->dump(0).c_str());
 	    arena_error_push(this, "Pointer target is an interface: %s",
 	      term_tostr_human(func_te).c_str());
 	  }
-	  if (!convert_type(j, tg, tvmap)) {
+	  check_convert_type(j, tg, &tvmap);
+	  #if 0
 	    const std::string s0 = term_tostr_human(j->resolve_texpr());
 	    const std::string s1 = term_tostr_human(tg);
 	    arena_error_push(this, "Invalid conversion from %s to %s",
 	      s0.c_str(), s1.c_str());
-	  }
+	  #endif
 	  passing_root_requirement(passby_e_const_reference, this, j, false);
 	    /* root the arg */
 	  type_of_this_expr = func_te;
@@ -2507,6 +2511,7 @@ fprintf(stderr, "tote %s\n", einst->dump(0).c_str());
 	  /* must be of the form var x = ptr(foo(...)) */
 	funccall_sort = funccall_e_struct_constructor;
 	return;
+#if 0
       } else if (arglist.size() == 1 && !is_ephemeral_value_type(func_te) &&
 	convert_type(arglist.front(), func_te)) {
 	/* exclude ephemeral types because rooting logic is not implemented */
@@ -2517,6 +2522,7 @@ fprintf(stderr, "tote %s\n", einst->dump(0).c_str());
 	type_of_this_expr = func_te;
 	funccall_sort = funccall_e_struct_constructor;
 	return;
+#endif
 #if 0
       } else if (get_family(func_te) == typefamily_e_darray) {
 	/* darray constructor */
@@ -2575,12 +2581,13 @@ fprintf(stderr, "tote %s\n", einst->dump(0).c_str());
 	    est_p_inst->sym);
 	}
 	expr_i *const j = arglist.front();
-	if (!convert_type(j, func_te, tvmap)) {
+	check_convert_type(j, func_te, &tvmap);
+	#if 0
 	  const std::string s0 = term_tostr_human(j->resolve_texpr());
 	  const std::string s1 = term_tostr_human(func_te);
 	  arena_error_push(this, "Invalid conversion from %s to %s",
 	    s0.c_str(), s1.c_str());
-	}
+	#endif
 	passing_root_requirement_fast(this, j, false);
 	  /* root the arg. */
 	type_of_this_expr = func_te;
@@ -2602,14 +2609,15 @@ fprintf(stderr, "tote %s\n", einst->dump(0).c_str());
       flds_type::iterator i = flds.begin();
       arglist_type::iterator j = arglist.begin();
       while (i != flds.end() && j != arglist.end()) {
-	if (!convert_type(*j, (*i)->resolve_texpr(), tvmap)) {
+	check_convert_type(*j, (*i)->resolve_texpr(), &tvmap);
+	#if 0
 	  const std::string s0 = term_tostr_human((*j)->resolve_texpr());
 	  const std::string s1 = term_tostr_human((*i)->resolve_texpr());
 	  arena_error_push(this, "Invalid conversion from %s to %s",
 	    s0.c_str(), s1.c_str());
 	  arena_error_push(this, "  initializing argument %u of '%s'",
 	    argcnt, est_p_inst->sym);
-	}
+	#endif
 	passing_root_requirement(passby_e_const_reference, this, *j, false);
 	++i;
 	++j;
@@ -2669,14 +2677,15 @@ fprintf(stderr, "tote %s\n", einst->dump(0).c_str());
     }
     tvmap_type tvmap;
     const arglist_type::iterator j = arglist.begin();
-    if (!convert_type(*j, convto, tvmap)) {
+    check_convert_type(*j, convto, &tvmap);
+    #if 0
       const std::string s0 = term_tostr_human((*j)->resolve_texpr());
       const std::string s1 = term_tostr_human(convto);
       arena_error_push(this, "Invalid conversion from %s to %s",
 	s0.c_str(), s1.c_str());
       arena_error_push(this, "  initializing argument %u of '%s'",
 	1, s1.c_str());
-    }
+    #endif
     /* need not to root (*j) */ /* <---- WHY? */
     passing_root_requirement_fast(this, *j, false);
       /* root the arg. */
@@ -2720,14 +2729,15 @@ void expr_special::check_type(symbol_table *lookup)
     }
     #endif
     tvmap_type tvmap;
-    if (!convert_type(arg, rettyp, tvmap)) {
+    check_convert_type(arg, rettyp, &tvmap);
+    #if 0
       const std::string s0 = term_tostr(rettyp,
 	term_tostr_sort_humanreadable);
       const std::string s1 = term_tostr(arg->resolve_texpr(),
 	term_tostr_sort_humanreadable);
       arena_error_push(this, "Can not convert from '%s' to '%s'",
 	s1.c_str(), s0.c_str());
-    }
+    #endif
   } else if (tok == TOK_THROW) {
     if (is_void_type(arg->resolve_texpr())) {
       arena_error_push(this, "Can not throw a void value");

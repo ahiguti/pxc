@@ -385,7 +385,7 @@ private threaded function {t} ptr{stub{t}} create_stub(ptr{orb} const& op,
   size_t remote_objid)
 {
   orb mutable& o = *op;
-  ptr{stub{t}} r = to_ptr{stub{t}}(stub{t}(op, remote_objid));
+  ptr{stub{t}} r = make_ptr{stub{t}}(stub{t}(op, remote_objid));
   size_t const local_objid = rawptr_to_size_t(ptr_to_rawptr(r));
   o.stubs_rtol[remote_objid] = local_objid; /* throw */
   o.stubs_ltor[local_objid] = remote_objid; /* throw */
@@ -422,7 +422,7 @@ private threaded function {t} void marshal_reference(orb mutable& o,
   } else {
     skeleton_mapped mutable& m = o.skeletons[ra];
     if (case m.nothing) {
-      m.real_object = to_ptr{call_method_instance{m::at0{t}}}(x);
+      m.real_object = make_ptr{call_method_instance{m::at0{t}}}(x);
     }
     o.wbuf.push_back('!');
     serialize_to_string{size_t}(ra, o.wbuf);
@@ -557,7 +557,7 @@ public threaded function {ns} ns_functions create_ns_functions()
     {
       strlit k = m::to_string{fsym};
       metafunction fc marshal_fcall{m::symbol{fsym, ns}};
-      ptr{i_marshal_fcall} p = to_ptr{fc}(fc());
+      ptr{i_marshal_fcall} p = make_ptr{fc}(fc());
       func_entry e = func_entry(k, p);
       fs.push_back(e);
     }
@@ -572,7 +572,7 @@ public threaded function {t} methods create_methods()
     {
       strlit k = m::to_string{fsym};
       metafunction mt marshal_method{t, idx};
-      ptr{i_marshal_method} p = to_ptr{mt}(mt());
+      ptr{i_marshal_method} p = make_ptr{mt}(mt());
       method_entry e = method_entry(k, p);
       ms.push_back(e);
     }

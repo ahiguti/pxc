@@ -36,7 +36,7 @@ public threaded interface ibar <remote> {
 
 public threaded struct bar(int x0) <ibar> {
   int x = x0;
-  ptr{ibaz} bzp = to_ptr(baz());
+  ptr{ibaz} bzp = make_ptr(baz());
   function int m1(int y) {
     return x * y;
   }
@@ -61,7 +61,7 @@ public threaded struct foo <ifoo> {
     return s;
   }
   function ptr{ibar} create_bar(int x) const {
-    ptr{bar} p = to_ptr{bar}(bar(x));
+    ptr{bar} p = make_ptr{bar}(bar(x));
     return p;
   }
 }
@@ -98,7 +98,7 @@ private threaded struct transport_file(file const& f0) <orb_transport> {
 
 private threaded function ptr{orb} create_orb_file(file const& f)
 {
-  return to_ptr{orb}(to_ptr{transport_file}(f));
+  return make_ptr{orb}(make_ptr{transport_file}(f));
 }
 
 threaded struct orb_cleanup(ptr{orb} const& op0) {
@@ -111,10 +111,10 @@ threaded struct orb_cleanup(ptr{orb} const& op0) {
 
 private threaded function {tinterf, tklass} void orb_server_loop(file const& f)
 {
-  ptr{orb_transport} tf = to_ptr(transport_file(f));
-  ptr{orb} op = to_ptr(orb(tf));
+  ptr{orb_transport} tf = make_ptr(transport_file(f));
+  ptr{orb} op = make_ptr(orb(tf));
   orb_cleanup opclean = orb_cleanup(op);
-  ptr{tinterf} obj = to_ptr(tklass());
+  ptr{tinterf} obj = make_ptr(tklass());
   push_return_value(op, obj);
   exchange_loop(op);
 }
@@ -128,14 +128,14 @@ private threaded function {tinterf} ptr{tinterf} create_stub(
 
 private function void client_test_main(file const& f)
 {
-  const op = to_ptr{orb}(to_ptr{transport_file}(f));
+  const op = make_ptr{orb}(make_ptr{transport_file}(f));
   const opclean = orb_cleanup(op);
   const st = create_stub{ifoo}(op);
   const z = st->hoge(5, 33);
   const s = st->fuga("abc", "xyz");
   const bp = st->create_bar(55);
   const w = bp->m1(100);
-  const bzp = to_ptr{baz}(baz());
+  const bzp = make_ptr{baz}(baz());
   bp->set_baz(bzp);
   const v = bp->do_baz(99);
   println(z);

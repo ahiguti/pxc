@@ -1716,13 +1716,31 @@ static bool numeric_convertible(expr_i *efrom, const term& tfrom,
   return to_min >= from_max;
 }
 
-bool convert_type(expr_i *efrom, term& tto)
+static term get_implicit_conversion_func(const term& tfrom, const term& tto)
 {
-  tvmap_type tvmap;
-  return convert_type(efrom, tto, tvmap);
+  const expr_i *const efrom = term_get_instance_const(tfrom);
+  const expr_i *const eto = term_get_instance_const(tto);
+  const std::string tto_ns = eto->get_unique_namespace();
+  const std::string tfrom_ns = efrom->get_unique_namespace();
+  if (global_block == 0) {
+    return term();
+  }
+  symbol_table *const symtbl = &global_block->symtbl;
+  bool is_global_dummy = false;
+  bool is_upvalue_dummy = false;
+  expr_i *eic = symtbl->resolve_name("operator::implicit_conversion", "",
+    global_block, is_global_dummy, is_upvalue_dummy);
+  const term tic_ta[2] = { tto, tfrom };
+  const term tic = term(eic, term_list_range(tic_ta, 2));
+  const term term_r = eval_term(tic);
+  #if 0
+  fprintf(stderr, "implicit_conversion_func: %s -> %s\n",
+    term_tostr_human(tic).c_str(), term_tostr_human(term_r).c_str());
+  #endif
+  return term_r;
 }
 
-bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
+static void convert_type_internal(expr_i *efrom, term& tto, tvmap_type& tvmap)
 {
   term& tfrom = efrom->resolve_texpr();
   DBG_CONV(fprintf(stderr, "convert efrom=%s from=%s to=%s\n",
@@ -1731,12 +1749,12 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
     term_tostr_human(tto).c_str()));
   if (is_same_type(tfrom, tto)) {
     DBG_CONV(fprintf(stderr, "convert: same type\n"));
-    return true;
+    return;
   }
   if (unify_type(tto, tfrom, tvmap)) {
     /* type parameterized function */
     DBG_CONV(fprintf(stderr, "convert: unify\n"));
-    return true;
+    return;
   }
   DBG_CONV(fprintf(stderr, "P1\n"));
   term tconvto;
@@ -1753,13 +1771,13 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
     efrom->conv = conversion_e_cast;
     efrom->type_conv_to = tconvto;
     DBG_CONV(fprintf(stderr, "convert: numeric cast\n"));
-    return true;
+    return;
   }
   if (tfrom == builtins.type_strlit && is_simple_string_type(tto)) {
     DBG_CONV(fprintf(stderr, "convert: strlit to string\n"));
     efrom->conv = conversion_e_cast;
     efrom->type_conv_to = tconvto;
-    return true;
+    return;
   }
   if (is_cm_range_family(tconvto) && is_cm_range_family(tfrom) &&
     (is_const_range_family(tconvto) || !is_const_range_family(tfrom))) {
@@ -1770,7 +1788,7 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
       DBG_CONV(fprintf(stderr, "convert: range\n"));
       efrom->conv = conversion_e_subtype_ptr;
       efrom->type_conv_to = tconvto;
-      return true;
+      return;
     }
   }
   DBG_CONV(fprintf(stderr, "P5\n"));
@@ -1781,15 +1799,16 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
     const term tra = get_array_range_texpr(0, efrom, tfrom);
     if (is_const_range_family(tra) && !is_const_range_family(tconvto)) {
       DBG_CONV(fprintf(stderr, "convert: auto range constness\n"));
-      return false;
-    }
-    const term_list *const tta = tconvto.get_args();
-    const term_list *const tfa = tra.get_args();
-    if (tta != 0 && tfa != 0 && tta->front() == tfa->front()) {
-      DBG_CONV(fprintf(stderr, "convert: auto container to range\n"));
-      efrom->conv = conversion_e_container_range;
-      efrom->type_conv_to = tconvto;
-      return true;
+      /* no */
+    } else {
+      const term_list *const tta = tconvto.get_args();
+      const term_list *const tfa = tra.get_args();
+      if (tta != 0 && tfa != 0 && tta->front() == tfa->front()) {
+	DBG_CONV(fprintf(stderr, "convert: auto container to range\n"));
+	efrom->conv = conversion_e_container_range;
+	efrom->type_conv_to = tconvto;
+	return;
+      }
     }
   }
   DBG_CONV(fprintf(stderr, "P6\n"));
@@ -1804,7 +1823,7 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
       // efrom->conv = conversion_e_subtype_obj; // FIXME: remove
       efrom->conv = conversion_e_cast;
       efrom->type_conv_to = tconvto;
-      return true;
+      return;
     }
   }
   DBG_CONV(fprintf(stderr, "P7\n"));
@@ -1830,7 +1849,7 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
       DBG_CONV(fprintf(stderr, "convert: (struct) ptr\n"));
       efrom->conv = conversion_e_subtype_ptr;
       efrom->type_conv_to = tconvto;
-      return true;
+      return;
     }
   }
   DBG_CONV(fprintf(stderr, "P8\n"));
@@ -1838,10 +1857,32 @@ bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap)
     DBG_CONV(fprintf(stderr, "convert: sub type\n"));
     efrom->conv = conversion_e_subtype_obj;
     efrom->type_conv_to = tconvto;
-    return true;
+    return;
+  }
+  const term cf = get_implicit_conversion_func(tfrom, tconvto);
+  if (cf.is_expr()) {
+    efrom->conv = conversion_e_implicit;
+    efrom->type_conv_to = tconvto;
+    efrom->implicit_conversion_func = cf;
+    return;
   }
   DBG_CONV(fprintf(stderr, "convert: failed\n"));
-  return false;
+  const std::string sfrom = term_tostr(efrom->resolve_texpr(),
+    term_tostr_sort_humanreadable);
+  const std::string sto = term_tostr(tto,
+    term_tostr_sort_humanreadable);
+  arena_error_throw(efrom, "Can not convert from '%s' to '%s'",
+    sfrom.c_str(), sto.c_str());
+}
+
+void check_convert_type(expr_i *efrom, term& tto, tvmap_type *p)
+{
+  if (p == 0) {
+    tvmap_type tvmap;
+    convert_type_internal(efrom, tto, tvmap);
+  } else {
+    convert_type_internal(efrom, tto, *p);
+  }
 }
 
 static void execute_rec_incl_instances(expr_i *e, void (*f)(expr_i *))

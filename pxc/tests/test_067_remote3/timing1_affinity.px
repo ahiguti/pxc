@@ -31,7 +31,7 @@ private function void client_test_main(file const& f)
     cs.set(3);
     io::scheduler::sched_setaffinity(io::system, 0, cs);
   }
-  const op = to_ptr(orb_handle{ibinop}(to_ptr{transport_file}(f)));
+  const op = make_ptr(orb_handle{ibinop}(make_ptr{transport_file}(f)));
   const st = op->create_stub();
   double const t0 = gettimeofday_double(io::system);
   int z = 0;
@@ -54,8 +54,8 @@ private multithreaded struct server_thread(io const& s, file const& f) {
       cs.set(0);
       io::scheduler::sched_setaffinity(sys, 0, cs);
     }
-    const op = to_ptr{orb_handle{ibinop}}(to_ptr{transport_file}(sock));
-    const obj = to_ptr(binop_add());
+    const op = make_ptr{orb_handle{ibinop}}(make_ptr{transport_file}(sock));
+    const obj = make_ptr(binop_add());
     op->start_server(obj);
   }
 }

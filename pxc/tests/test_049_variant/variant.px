@@ -39,7 +39,7 @@ public function {t} variant to_variant(t const& x)
     r.ptrval = x;
   } else {
     metafunction ts to_non_ephemeral{t};
-    r.ptrval = to_ptr{stub_object{ts}}(x);
+    r.ptrval = make_ptr{stub_object{ts}}(x);
   }
   return r;
 }
@@ -167,7 +167,7 @@ prepare_namespace_map(tree_map{string, variant} mutable& elems)
     {
       metafunction f m::at{funcs, idx};
       variant x;
-      x.ptrval = to_ptr{stub_function{f}}();
+      x.ptrval = make_ptr{stub_function{f}}();
       elems[m::to_string{f}] = x;
       // println(m::concat{"func (", ns, "): ", m::to_string{f}});
     }
@@ -177,7 +177,7 @@ prepare_namespace_map(tree_map{string, variant} mutable& elems)
     {
       metafunction t m::at{types, idx};
       variant x;
-      x.ptrval = to_ptr{stub_function{t}}();
+      x.ptrval = make_ptr{stub_function{t}}();
       elems[m::to_string{t}] = x;
       // println(m::to_string{t});
     }
@@ -186,7 +186,7 @@ prepare_namespace_map(tree_map{string, variant} mutable& elems)
   expand (name, idx : m::map{vars, m::at0}) {
     {
       variant x;
-      x.ptrval = to_ptr{stub_variable{name, ns, m::at1{m::at{vars, idx}}}}();
+      x.ptrval = make_ptr{stub_variable{name, ns, m::at1{m::at{vars, idx}}}}();
       elems[m::to_string{name}] = x;
       // println(m::to_string{name});
     }

@@ -40,7 +40,7 @@ public threaded struct foo <ifoo> {
     return s;
   }
   function ptr{ibar} create_bar(int x) const {
-    ptr{bar} p = to_ptr{bar}(bar(x));
+    ptr{bar} p = make_ptr{bar}(bar(x));
     return p;
   }
 }
@@ -78,22 +78,22 @@ private threaded struct transport_file(file const& f0) <orb_transport> {
 
 private threaded function ptr{orb} create_orb_file(file const& f)
 {
-  return to_ptr{orb}(to_ptr{transport_file}(f));
+  return make_ptr{orb}(make_ptr{transport_file}(f));
 }
 
 private threaded function {tinterf, tklass} void orb_server_loop(file const& f)
 {
-  ptr{orb_transport} tf = to_ptr(transport_file(f));
-  ptr{orb} op = to_ptr(orb(tf));
-  ptr{tinterf} obj = to_ptr(tklass());
+  ptr{orb_transport} tf = make_ptr(transport_file(f));
+  ptr{orb} op = make_ptr(orb(tf));
+  ptr{tinterf} obj = make_ptr(tklass());
   push_return_value(op, obj);
   exchange_loop(op);
 }
 
 private threaded function {tinterf} ptr{tinterf} create_stub(file const& f)
 {
-  ptr{orb_transport} tf = to_ptr(transport_file(f));
-  ptr{orb} op = to_ptr(orb(tf));
+  ptr{orb_transport} tf = make_ptr(transport_file(f));
+  ptr{orb} op = make_ptr(orb(tf));
   exchange_loop(op);
   return pop_return_value{ptr{tinterf}}(op);
 }

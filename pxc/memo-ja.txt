@@ -3,6 +3,22 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- 引数型のpartial evalを止めることができればevalが相当シンプルになる。
+
+- implicit_coversion{tto, tfrom}
+  conversion_e_implicit
+  implicit_conversion_func
+  x tfromの名前空間の foo___to が定義されていて0以外を返せばそれ
+  x ttoの名前空間の bar___from が定義されていて0以外を返せばそれ
+  - operator::implicit_conversion{tto, tfrom}
+  - convert_typeを例外吐く形に変更(done)
+  - implicit_conversion_funcが正しいシグニチャを持つかコンパイラ側が確認
+
+- metaの命名規則を整理
+  m::argnames, m::argtypes を arg_names, arg_types など
+
+- to_ptr -> make_ptr (done)
+
 - lock_guard効いてることを確認するてすと
 
 - threadのインタフェースを変更。make_thread{func}の形に。(done)
@@ -2430,4 +2446,53 @@ convert_fields(tsink mutable& sink, cstrref const& str,
   return sink.push(expand(a0, a1, ...));
 }
 
+一般に関数合成テンプレートをどう作るか。
+[fubar, 0, 1, 2, hoge, 1, fuga, 3, foobar]
+  0, 1, 2番めの引数をhogeに適用した結果をa0,
+  1番めの引数をfugaに適用した結果をa1,
+  3番めの引数をfoobarに適用した結果をa2
+  これを引数にして関数fubar(a0, a1, a2)
+
+メタ関数でつくるのではなく、単に関数
+  fubar(hoge(a[0], a[1], a[2]), fuga(a[1]), foobar(a[3]))
+を渡すようにするか。aはcsrefarr型。
+ -> いまいち。csrefarr一つを引数とする場合にしか使えない。
+
+composite{[fubar, [hoge, 0, 1, 2], [fuga, 1], [foobar, 3], 4]}
+fubar(hoge(a0, a1, a2), fuga(a1), foobar(a3), a4)
+  -> これは実装できそう。無名関数とちがって引数と返値型を指定不要。
+
+read_recordsはcstrref複数引数の関数をテンプレパラメータとして取り、
+レコード毎にそれを呼び出す。
+
+tableオブジェクトは
+フォーマットを表す型リストをtparamとして取る。
+putメソッドは複数引数を取る。
+foreachメソッドは複数引数の関数をtparamとして取る。
+
+ifileは
+foreachメソッドは複数引数の関数をtparamとして取る。
+
+ofileは
+putメソッドは複数引数を取る。
+デストラクタでflushするか。
+
+table, ifile, ofileのそれぞれの間に変換関数を挟み込む。
+
+まずは function {delim} cstrref read_token(cstrref mutable& buf) を実装
+
+datasource: foreach{cb}() でレコード毎にcbを呼び出すことができる。cbの
+  引数は任意個、各々は任意の値型。
+datasink: put(...)でレコードを追加できる。putの引数は任意個、各々は任意の
+  値型。
+datatrans: datasourceとdatasinkの間に入るテンプレート関数。datasinkの
+  putをテンプレパラメータとして取り、datasourceからのcbに丁度合う関数
+  を返す(実装する)。できることは、関数合成による変換、limit、フィルタ。
+
+map: datasinkでもありdatasourceでもある。putでレコードを追加し、foreach
+  で取り出す。最初のn個のfieldはキーであり残りはmapped。mappedは単なる
+  値型ではなくmonoid。
+  集約関数: sum, average, count, min, max
+multimap: mapとのちがいは最初のn個のfieldについてsortするだけでfoldし
+  ない点。
 

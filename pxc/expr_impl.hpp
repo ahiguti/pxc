@@ -121,6 +121,7 @@ enum conversion_e {
   conversion_e_to_string,
   conversion_e_from_string,
   #endif
+  conversion_e_implicit, /* calls convert_implicit{foo, bar} */
   conversion_e_subtype_obj, /* foo to ifoo etc. converted value has lvalue. */
   conversion_e_subtype_ptr, /* ptr{foo} to cptr{foo} etc. */
   conversion_e_container_range, /* vector{foo} to range{foo} etc. */
@@ -318,6 +319,7 @@ public:
   term type_of_this_expr; /* TODO: remove? */
   conversion_e conv;
   term type_conv_to;
+  term implicit_conversion_func;
   expr_i *parent_expr;
   symbol_table *symtbl_lexical;
   int tempvar_id;

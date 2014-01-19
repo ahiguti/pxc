@@ -36,7 +36,7 @@ public threaded interface ibar <remote> {
 
 public threaded struct bar(int x0) <ibar> {
   int x = x0;
-  ptr{ibaz} bzp = to_ptr(baz());
+  ptr{ibaz} bzp = make_ptr(baz());
   function int m1(int y) {
     return x * y;
   }
@@ -61,7 +61,7 @@ public threaded struct foo <ifoo> {
     return s;
   }
   function ptr{ibar} create_bar(int x) const {
-    ptr{bar} p = to_ptr{bar}(bar(x));
+    ptr{bar} p = make_ptr{bar}(bar(x));
     return p;
   }
 }
@@ -98,13 +98,13 @@ private threaded struct transport_file(file const& f0) <orb_transport> {
 
 private function void client_test_main(file const& f)
 {
-  const op = to_ptr{orb_handle{ifoo}}(to_ptr{transport_file}(f));
+  const op = make_ptr{orb_handle{ifoo}}(make_ptr{transport_file}(f));
   const st = op->create_stub();
   const z = st->hoge(5, 33);
   const s = st->fuga("abc", "xyz");
   const bp = st->create_bar(55);
   const w = bp->m1(100);
-  const bzp = to_ptr{baz}(baz());
+  const bzp = make_ptr{baz}(baz());
   bp->set_baz(bzp);
   const v = bp->do_baz(99);
   println(z);
@@ -117,9 +117,9 @@ private multithreaded struct server_thread(io const& s, file const& f) {
   io const sys = s;
   file const sock = f;
   function void main() {
-    ptr{orb_transport} tf = to_ptr(transport_file(sock));
-    ptr{orb_handle{ifoo}} op = to_ptr(orb_handle{ifoo}(tf));
-    ptr{ifoo} obj = to_ptr(foo());
+    ptr{orb_transport} tf = make_ptr(transport_file(sock));
+    ptr{orb_handle{ifoo}} op = make_ptr(orb_handle{ifoo}(tf));
+    ptr{ifoo} obj = make_ptr(foo());
     op->start_server(obj);
   }
 }
