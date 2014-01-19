@@ -79,6 +79,18 @@ struct bt_cslice {
     if (len < i) { pxcrt::throw_invalid_index(); }
     len -= i;
   }
+  bt_cslice<T> next_token(T delim) {
+    bt_size_t const offset = array_find(v, len, 0, delim);
+    bt_cslice<T> r(v, offset);
+    if (offset < len) {
+      v += offset + 1;
+      len -= offset + 1;
+    } else {
+      v += len;
+      len = 0;
+    }
+    return r;
+  }
   const T& operator [](bt_size_t idx) const {
     if (idx >= len) { pxcrt::throw_invalid_index(); }
     return v[idx];
@@ -137,6 +149,18 @@ struct bt_slice {
   void prev_back(size_t i) {
     if (len < i) { pxcrt::throw_invalid_index(); }
     len -= i;
+  }
+  bt_slice<T> next_token(T delim) {
+    bt_size_t const offset = array_find(v, len, 0, delim);
+    bt_slice<T> r(v, offset);
+    if (offset < len) {
+      v += offset + 1;
+      len -= offset + 1;
+    } else {
+      v += len;
+      len = 0;
+    }
+    return r;
   }
   T& operator [](bt_size_t idx) const {
     if (idx >= len) { pxcrt::throw_invalid_index(); }

@@ -107,7 +107,7 @@ static term eval_meta_symbol(const term_list_range& tlev, eval_context& ectx,
   std::string sym_ns;
   bool no_private = true;
   if (tlev.size() >= 2) {
-    /* find symbol from the specified symtbl */
+    /* find symbol from the specified namespace */
     term typ = tlev[1];
     if (typ.is_string()) {
       sym_ns = typ.get_string();
@@ -120,7 +120,7 @@ static term eval_meta_symbol(const term_list_range& tlev, eval_context& ectx,
       sym_ns = typexpr->get_unique_namespace();
     }
   } else {
-    /* find symbol from the current symtbl */
+    /* find symbol from the current namespace */
     sym_ns = pos->get_unique_namespace();
   }
   symbol_table *const symtbl = &global_block->symtbl;

@@ -802,9 +802,9 @@ type_expr
 	| nssym_expr '{' type_arg_list '}' ':' type_expr
 	  { $$ = expr_te_local_chain_new(
 		expr_te_new(cur_fname, @1.first_line, $1, $3), $6); }
-	/*
 	| '[' type_arg_list ']'
 	  { $$ = expr_metalist_new($2); }
+	/*
 	*/
 	;
 type_arg

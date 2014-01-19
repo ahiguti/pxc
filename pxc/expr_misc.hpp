@@ -112,8 +112,11 @@ typefamily_e get_family_from_string(const std::string& s);
 std::string get_family_string(typefamily_e cat);
 term get_pointer_target(const term& t);
 bool pointer_conversion_allowed(const typefamily_e f, const typefamily_e t);
+void check_convert_type(expr_i *efrom, term& tto, tvmap_type *tvmap = 0);
+#if 0
 bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap);
 bool convert_type(expr_i *efrom, term& tto);
+#endif
 #if 0
 std::string ulong_to_string(unsigned long long v);
 std::string long_to_string(long long v);

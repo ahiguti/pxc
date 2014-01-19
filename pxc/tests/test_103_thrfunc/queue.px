@@ -11,7 +11,7 @@ private multithreaded struct task_queue_shared() {
 
 public threaded struct task_queue()
 {
-  tptr{task_queue_shared} const shared = to_tptr{task_queue_shared}();
+  tptr{task_queue_shared} const shared = make_tptr{task_queue_shared}();
   ptr{uneval{unit}} const thr = make_thread_func{queue_thread_main}(shared);
   function ~ {
     queue_thread_stop(shared, 1);
@@ -87,9 +87,9 @@ multithreaded struct hoge(int x0) <uneval{void}> {
 
 {
   task_queue tq;
-  tq.push(to_tptr{hoge}(10));
-  tq.push(to_tptr{hoge}(20));
-  tq.push(to_tptr{hoge}(30));
+  tq.push(make_tptr{hoge}(10));
+  tq.push(make_tptr{hoge}(20));
+  tq.push(make_tptr{hoge}(30));
   println("ok");
 }
 

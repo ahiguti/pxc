@@ -16,7 +16,7 @@ public threaded interface orb_transport {
 
 public threaded struct {t} orb_handle(ptr{orb_transport} const& tr)
 {
-  private ptr{orb_rep} orep = to_ptr{orb_rep}(orb_rep(tr));
+  private ptr{orb_rep} orep = make_ptr{orb_rep}(orb_rep(tr));
   function ~ {
     /* need to clear skeletons in order to remove cyclic references */
     reset();
@@ -390,7 +390,7 @@ private threaded function {t} ptr{stub{t}} create_stub(ptr{orb_rep} const& op,
   size_t remote_objid)
 {
   mutable& o = *op;
-  ptr{stub{t}} r = to_ptr{stub{t}}(stub{t}(op, remote_objid));
+  ptr{stub{t}} r = make_ptr{stub{t}}(stub{t}(op, remote_objid));
   const local_objid = ptr_to_rawptr(r);
   o.stubs_rtol[remote_objid] = local_objid; /* throw */
   o.stubs_ltor[local_objid] = remote_objid; /* throw */
@@ -431,7 +431,7 @@ private threaded function {t} void marshal_reference(orb_rep mutable& o,
       /* TODO: use skeletons_free_ids */
       id = o.skeletons.size();
       skeleton_mapped m;
-      m.real_object = to_ptr{call_method_instance{m::at0{t}}}(x);
+      m.real_object = make_ptr{call_method_instance{m::at0{t}}}(x);
       o.skeletons.push_back(m);
       o.skeletons_ptr_to_id[ra] = id;
     }

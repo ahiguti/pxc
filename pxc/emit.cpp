@@ -3491,6 +3491,14 @@ void fn_emit_value(emit_context& em, expr_i *e, bool expand_composite,
       em.puts(")");
     }
     break;
+  case conversion_e_implicit:
+    {
+      emit_term(em, e->implicit_conversion_func);
+      em.puts("(");
+      emit_value_internal(em, e);
+      em.puts(")");
+    }
+    break;
   }
 }
 

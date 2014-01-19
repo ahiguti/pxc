@@ -38,11 +38,11 @@ public threaded struct binop_add <ibinop> {
 
 private function void client_test_main(file const& f)
 {
-  const op = to_ptr{orb_handle{ifoo}}(to_ptr{transport_file}(f));
+  const op = make_ptr{orb_handle{ifoo}}(make_ptr{transport_file}(f));
   const st = op->create_stub();
   farray{int, 10} arr;
   for (int i : 0 .. 10) { arr[i] = i + 1; }
-  const o = to_ptr(binop_add());
+  const o = make_ptr(binop_add());
   const z = st->fold(arr, 0, o); /* o is called back from the server */
   println(z);
 }
@@ -51,8 +51,8 @@ private multithreaded struct server_thread(io const& s, file const& f) {
   io const sys = s;
   file const sock = f;
   function void main() {
-    const op = to_ptr{orb_handle{ifoo}}(to_ptr{transport_file}(sock));
-    const obj = to_ptr(foo());
+    const op = make_ptr{orb_handle{ifoo}}(make_ptr{transport_file}(sock));
+    const obj = make_ptr(foo());
     op->start_server(obj);
   }
 }

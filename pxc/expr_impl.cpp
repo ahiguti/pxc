@@ -1411,12 +1411,8 @@ expr_argdecls::resolve_texpr()
       } else if (ep->get_esort() == expr_e_forrange) {
 	expr_forrange *const efr = ptr_down_cast<expr_forrange>(ep);
 	term& t0 = efr->r0->resolve_texpr();
-	term& t1 = efr->r1->resolve_texpr();
-	if (convert_type(efr->r1, t0)) {
-	  type_of_this_expr = t0;
-	} else if (convert_type(efr->r0, t1)) {
-	  type_of_this_expr = t1;
-	}
+	check_convert_type(efr->r1, t0);
+	type_of_this_expr = t0;
       } else if (ep->get_esort() == expr_e_if) {
 	expr_if *const ei = ptr_down_cast<expr_if>(ep);
 	type_of_this_expr = ei->cond->resolve_texpr();
