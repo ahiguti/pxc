@@ -58,8 +58,8 @@ static bool term_truth_value(const term& t)
   return true;
 }
 
-static term eval_meta_local(const term_list_range& tlev, eval_context& ectx,
-  expr_i *pos)
+static term eval_meta_local_internal(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos, bool thr_notfound)
 {
   if (tlev.size() < 2) {
     return term();
@@ -86,12 +86,29 @@ static term eval_meta_local(const term_list_range& tlev, eval_context& ectx,
   DBG_METASYM(fprintf(stderr, "meta_local name=[%s] ns=[%s] rsym=%p\n",
     name.c_str(), sym_ns.c_str(), rsym));
   if (rsym == 0) {
-    return term(); /* not found */
+    /* not found */
+    if (thr_notfound) {
+      return term();
+    } else {
+      return term(0LL);
+    }
   }
   term_list rtargs;
   rtargs.insert(rtargs.begin(), tlev.begin() + 2, tlev.end());
   term rt(rsym, rtargs);
   return eval_term_internal(rt, true, ectx, pos);
+}
+
+static term eval_meta_local(const term_list_range& tlev, eval_context& ectx,
+  expr_i *pos)
+{
+  return eval_meta_local_internal(tlev, ectx, pos, true);
+}
+
+static term eval_meta_lsymbol(const term_list_range& tlev, eval_context& ectx,
+  expr_i *pos)
+{
+  return eval_meta_local_internal(tlev, ectx, pos, false);
 }
 
 static term eval_meta_symbol(const term_list_range& tlev, eval_context& ectx,
@@ -112,12 +129,16 @@ static term eval_meta_symbol(const term_list_range& tlev, eval_context& ectx,
     if (typ.is_string()) {
       sym_ns = typ.get_string();
     } else {
+      arena_error_throw(pos, "meta_symbol: Invalid argument '%s'", 
+	term_tostr_human(typ).c_str());
+      #if 0
       expr_i *const typexpr = typ.get_expr();
       if (typexpr == 0 || !is_type_or_func_esort(typexpr->get_esort())) {
 	arena_error_throw(pos, "meta_symbol: Invalid type '%s'",
 	  term_tostr_human(typ).c_str());
       }
       sym_ns = typexpr->get_unique_namespace();
+      #endif
     }
   } else {
     /* find symbol from the current namespace */
@@ -1834,6 +1855,7 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@fold", &eval_meta_fold },
   { "@filter", &eval_meta_filter },
   { "@local", &eval_meta_local },
+  { "@lsymbol", &eval_meta_lsymbol },
   { "@symbol", &eval_meta_symbol },
   { "@apply", &eval_meta_apply },
   { "@error", &eval_meta_error },
