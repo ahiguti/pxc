@@ -1716,7 +1716,30 @@ static bool numeric_convertible(expr_i *efrom, const term& tfrom,
   return to_min >= from_max;
 }
 
-static term get_implicit_conversion_func(const term& tfrom, const term& tto)
+static void check_convfunc_validity(term& convfunc, const term& tfrom,
+  const term& tto, expr_i *pos)
+{
+  expr_i *const cfe = convfunc.get_expr();
+  if (cfe != 0 && cfe->get_esort() == expr_e_funcdef) {
+    expr_i *const einst = term_get_instance(convfunc);
+    expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(einst);
+    expr_block *block = einst->get_template_block();
+    if (block != 0) {
+      expr_argdecls *ad = block->get_argdecls();
+      if (ad != 0 && ad->get_rest() == 0 && ad->resolve_texpr() == tfrom &&
+	ad->passby != passby_e_mutable_reference &&
+	efd->get_rettype() == tto) {
+	/* ok */
+	return;
+      }
+    }
+  }
+  arena_error_push(pos, "Invalid conversion function: '%s'",
+    term_tostr_human(convfunc).c_str());
+}
+
+static term get_implicit_conversion_func(const term& tfrom, const term& tto,
+  expr_i *pos)
 {
   const expr_i *const efrom = term_get_instance_const(tfrom);
   const expr_i *const eto = term_get_instance_const(tto);
@@ -1732,12 +1755,9 @@ static term get_implicit_conversion_func(const term& tfrom, const term& tto)
     global_block, is_global_dummy, is_upvalue_dummy);
   const term tic_ta[2] = { tto, tfrom };
   const term tic = term(eic, term_list_range(tic_ta, 2));
-  const term term_r = eval_term(tic);
-  #if 0
-  fprintf(stderr, "implicit_conversion_func: %s -> %s\n",
-    term_tostr_human(tic).c_str(), term_tostr_human(term_r).c_str());
-  #endif
-  return term_r;
+  term term_convfunc = eval_term(tic);
+  check_convfunc_validity(term_convfunc, tfrom, tto, pos);
+  return term_convfunc;
 }
 
 static void convert_type_internal(expr_i *efrom, term& tto, tvmap_type& tvmap)
@@ -1859,7 +1879,7 @@ static void convert_type_internal(expr_i *efrom, term& tto, tvmap_type& tvmap)
     efrom->type_conv_to = tconvto;
     return;
   }
-  const term cf = get_implicit_conversion_func(tfrom, tconvto);
+  const term cf = get_implicit_conversion_func(tfrom, tconvto, efrom);
   if (cf.is_expr()) {
     efrom->conv = conversion_e_implicit;
     efrom->type_conv_to = tconvto;

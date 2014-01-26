@@ -3,68 +3,177 @@ public import numeric::integral -;
 public import meta::family -;
 public import meta m;
 
-threaded function {t} t add(t const& x, t const& y)
-// { if (is_numeric_type{t}) { return x + y; } else { return x.__add(y); } }
+threaded function {tx, ty} binop_rettype{tx, ty, "add", is_numeric_type}
+add(tx const& x, ty const& y)
 {
-  if (is_numeric_type{t}) { return x + y; }
-  else { return binop{t, "add"}(x, y); }
+  if (is_numeric_type{tx}) { return x + y; }
+  else { return binop{tx, ty, "add"}(x, y); }
 }
 
-threaded function {t} t sub(t const& x, t const& y)
-{ if (is_numeric_type{t}) { return x - y; } else { return x.__sub(y); } }
-threaded function {t} t mul(t const& x, t const& y)
-{ if (is_numeric_type{t}) { return x * y; } else { return x.__mul(y); } }
-threaded function {t} t div(t const& x, t const& y)
-{ if (is_numeric_type{t}) { return x / y; } else { return x.__div(y); } }
-threaded function {t} t mod(t const& x, t const& y)
-{ if (is_numeric_type{t}) { return x % y; } else { return x.__mod(y); } }
+threaded function {tx, ty} binop_rettype{tx, ty, "sub", is_numeric_type}
+sub(tx const& x, ty const& y)
+{
+  if (is_numeric_type{tx}) { return x - y; }
+  else { return binop{tx, ty, "sub"}(x, y); }
+}
 
-threaded function {t} t or(t const& x, t const& y)
-{ if (is_boolean_type{t}) { return x | y; } else { return x.__or(y); } }
-threaded function {t} t and(t const& x, t const& y)
-{ if (is_boolean_type{t}) { return x & y; } else { return x.__and(y); } }
-threaded function {t} t xor(t const& x, t const& y)
-{ if (is_boolean_type{t}) { return x ^ y; } else { return x.__xor(y); } }
+threaded function {tx, ty} binop_rettype{tx, ty, "mul", is_numeric_type}
+mul(tx const& x, ty const& y)
+{
+  if (is_numeric_type{tx}) { return x * y; }
+  else { return binop{tx, ty, "mul"}(x, y); }
+}
 
-threaded function {t} t eq(t const& x, t const& y)
-{ if (is_equality_type{t}) { return x == y; } else { return x.__eq(y); } }
-threaded function {t} t ne(t const& x, t const& y)
-{ if (is_equality_type{t}) { return x != y; } else { return x.__ne(y); } }
+threaded function {tx, ty} binop_rettype{tx, ty, "div", is_numeric_type}
+div(tx const& x, ty const& y)
+{
+  if (is_numeric_type{tx}) { return x / y; }
+  else { return binop{tx, ty, "div"}(x, y); }
+}
 
-threaded function {t} t shiftl(t const& x, t const& y)
-{ if (is_integral_type{t}) { return x << y; } else { return x.__shiftl(y); } }
-threaded function {t} t shiftr(t const& x, t const& y)
-{ if (is_integral_type{t}) { return x >> y; } else { return x.__shiftr(y); } }
+threaded function {tx, ty} binop_rettype{tx, ty, "mod", is_numeric_type}
+mod(tx const& x, ty const& y)
+{
+  if (is_numeric_type{tx}) { return x % y; }
+  else { return binop{tx, ty, "mod"}(x, y); }
+}
+
+threaded function {tx, ty} binop_rettype{tx, ty, "or", is_boolean_type}
+or(tx const& x, ty const& y)
+{
+  if (is_boolean_type{tx}) { return x | y; }
+  else { return binop{tx, ty, "or"}(x, y); }
+}
+
+threaded function {tx, ty} binop_rettype{tx, ty, "and", is_boolean_type}
+and(tx const& x, ty const& y)
+{
+  if (is_boolean_type{tx}) { return x & y; }
+  else { return binop{tx, ty, "and"}(x, y); }
+}
+
+threaded function {tx, ty} binop_rettype{tx, ty, "xor", is_boolean_type}
+xor(tx const& x, ty const& y)
+{
+  if (is_boolean_type{t}) { return x ^ y; }
+  else { return binop{tx, ty, "xor"}(x, y); }
+}
+
+threaded function {tx, ty} binop_rettype{tx, ty, "eq", is_equality_type}
+eq(tx const& x, ty const& y)
+{
+  if (is_equality_type{tx}) { return x == y; }
+  else { return binop{tx, ty, "eq"}(x, y); }
+}
+
+threaded function {tx, ty} binop_rettype{tx, ty, "ne", is_equality_type}
+ne(tx const& x, ty const& y)
+{
+  if (is_equality_type{t}) { return x != y; }
+  else { return binop{tx, ty, "ne"}(x, y); }
+}
+
+threaded function {tx, ty} binop_rettype{tx, ty, "shiftl", is_integral_type}
+shiftl(tx const& x, ty const& y)
+{
+  if (is_integral_type{tx}) { return x << y; }
+  else { return binop{tx, ty, "shiftl"}(x, y); }
+}
+
+threaded function {tx, ty} binop_rettype{tx, ty, "shiftl", is_integral_type}
+shiftr(tx const& x, ty const& y)
+{
+  if (is_integral_type{tx}) { return x >> y; }
+  else { return binop{tx, ty, "shiftr"}(x, y); }
+}
 
 threaded function {tx, ty} void adda(tx mutable& x, ty const& y)
-{ if (is_numeric_type{tx}) { x += y; } else { x.__adda(y); } }
-threaded function {tx, ty} void suba(tx mutable& x, ty const& y)
-{ if (is_numeric_type{tx}) { x -= y; } else { x.__suba(y); } }
-threaded function {tx, ty} void mula(tx mutable& x, ty const& y)
-{ if (is_numeric_type{tx}) { x *= y; } else { x.__mula(y); } }
-threaded function {tx, ty} void diva(tx mutable& x, ty const& y)
-{ if (is_numeric_type{tx}) { x /= y; } else { x.__diva(y); } }
-threaded function {tx, ty} void moda(tx mutable& x, ty const& y)
-{ if (is_numeric_type{tx}) { x %= y; } else { x.__moda(y); } }
-threaded function {tx, ty} void ora(tx mutable& x, ty const& y)
-{ if (is_boolean_type{tx}) { x |= y; } else { x.__ora(y); } }
-threaded function {tx, ty} void anda(tx mutable& x, ty const& y)
-{ if (is_boolean_type{tx}) { x &= y; } else { x.__anda(y); } }
-threaded function {tx, ty} void xora(tx mutable& x, ty const& y)
-{ if (is_boolean_type{tx}) { x ^= y; } else { x.__xora(y); } }
-threaded function {tx, ty} void shiftla(tx mutable& x, ty const& y)
-{ if (is_integral_type{tx}) { x <<= y; } else { x.__shiftla(y); } }
-threaded function {tx, ty} void shiftra(tx mutable& x, ty const& y)
-{ if (is_integral_tyep{tx}) { x >>= y; } else { x.__shiftra(y); } }
+{
+  if (is_numeric_type{tx}) { x += y; }
+  else { binopa{tx, ty, "add"}(x, y); }
+}
 
-threaded function {t} t plus(t const& x)
-{ if (is_numeric_type{t}) { return x; } else { return x.__plus(); } }
-threaded function {t} t minus(t const& x)
-{ if (is_numeric_type{t}) { return -x; } else { return x.__minus(); } }
-threaded function {t} t neg(t const& x)
-{ if (is_boolean_type{t}) { return ~x; } else { return x.__neg(); } }
-threaded function {t} t not(t const& x)
-{ if (is_boolean_type{t}) { return !x; } else { return x.__not(); } }
+threaded function {tx, ty} void suba(tx mutable& x, ty const& y)
+{
+  if (is_numeric_type{tx}) { x -= y; }
+  else { binopa{tx, ty, "sub"}(x, y); }
+}
+
+threaded function {tx, ty} void mula(tx mutable& x, ty const& y)
+{
+  if (is_numeric_type{tx}) { x *= y; }
+  else { binopa{tx, ty, "mul"}(x, y); }
+}
+
+threaded function {tx, ty} void diva(tx mutable& x, ty const& y)
+{
+  if (is_numeric_type{tx}) { x /= y; }
+  else { binopa{tx, ty, "div"}(x, y); }
+}
+
+threaded function {tx, ty} void moda(tx mutable& x, ty const& y)
+{
+  if (is_numeric_type{tx}) { x %= y; }
+  else { binopa{tx, ty, "mod"}(x, y); }
+}
+
+threaded function {tx, ty} void ora(tx mutable& x, ty const& y)
+{
+  if (is_boolean_type{tx}) { x |= y; }
+  else { binopa{tx, ty, "or"}(x, y); }
+}
+
+threaded function {tx, ty} void anda(tx mutable& x, ty const& y)
+{
+  if (is_boolean_type{tx}) { x &= y; }
+  else { binopa{tx, ty, "and"}(x, y); }
+}
+
+threaded function {tx, ty} void xora(tx mutable& x, ty const& y)
+{
+  if (is_boolean_type{tx}) { x ^= y; }
+  else { binopa{tx, ty, "xor"}(x, y); }
+}
+
+threaded function {tx, ty} void shiftla(tx mutable& x, ty const& y)
+{
+  if (is_integral_type{tx}) { x <<= y; }
+  else { binopa{tx, ty, "shiftl"}(x, y); }
+}
+
+threaded function {tx, ty} void shiftra(tx mutable& x, ty const& y)
+{
+  if (is_integral_type{tx}) { x >>= y; }
+  else { binopa{tx, ty, "shiftr"}(x, y); }
+}
+
+threaded function {tx} unaryop_rettype{tx, "plus", is_numeric_type}
+plus(tx const& x)
+{
+  if (is_numeric_type{tx}) { return x; }
+  else { unaryop{tx, "plus", is_numeric_type}(x); }
+}
+
+threaded function {tx} unaryop_rettype{tx, "minus", is_numeric_type}
+minus(tx const& x)
+{
+  if (is_numeric_type{tx}) { return -x; }
+  else { unaryop{tx, "minus", is_numeric_type}(x); }
+}
+
+threaded function {tx} unaryop_rettype{tx, "neg", is_boolean_type}
+neg(tx const& x)
+{
+  if (is_boolean_type{tx}) { return ~x; }
+  else { unaryop{tx, "neg", is_boolean_type}(x); }
+}
+
+threaded function {tx} unaryop_rettype{tx, "not", is_boolean_type}
+not(tx const& x)
+{
+  if (is_boolean_type{tx}) { return !x; }
+  else { unaryop{tx, "not", is_boolean_type}(x); }
+}
 
 threaded function {tx, ty} mapped_type{tx}
 getelem(tx const& x, ty const& y)
@@ -85,54 +194,154 @@ private metafunction mapped_type{t}
     m::local{t, "mapped_type"},
     m::rettype{m::local{t, "__getelem"}}};
 
-threaded function {t, opstr} t binop(t const& x, t const& y)
+private metafunction has_lsymbol{t, name}
+  m::eq{m::to_string{m::lsymbol{t, name}}, name};
+private metafunction has_gsymbol{t, name}
+  m::eq{m::to_string{m::symbol{name, m::get_namespace{t}}}, name};
+
+private metafunction binop_rettype{tx, ty, opstr, is_builtin}
+  m::cond{
+    m::and{m::ne{is_builtin, 0}, is_builtin{tx}, is_builtin{ty}},
+    tx,
+  m::cond{
+    has_lsymbol{tx, m::concat{"__", opstr}},
+    m::rettype{m::lsymbol{tx, m::concat{"__", opstr}}},
+  m::cond{
+    has_lsymbol{tx, m::concat{"__", opstr, "a"}},
+    tx,
+  m::cond{
+    has_gsymbol{tx, m::concat{tx, "___", opstr}},
+    m::rettype{m::apply{
+      m::symbol{m::concat{tx, "___", opstr}, m::get_namespace{tx}}, tx, ty}},
+  m::cond{
+    has_gsymbol{tx, m::concat{tx, "___", opstr, "a"}},
+    tx,
+  tx}}}}};
+
+threaded function {tx, ty, opstr} binop_rettype{tx, ty, opstr, 0}
+binop(tx const& x, ty const& y)
 {
   metafunction opstr_bin m::concat{"__", opstr};
-  metafunction op_bin m::symbol{opstr_bin, t};
+  metafunction op_bin m::lsymbol{tx, opstr_bin};
   metafunction opstr_assign m::concat{"__", opstr, "a"};
-  metafunction op_assign m::symbol{opstr_assign, t};
-  metafunction fstr_bin m::concat{t, "___", opstr};
-  metafunction f_bin m::symbol{fstr_bin};
-  metafunction fstr_assign m::concat{t, "___", opstr};
-  metafunction f_assign m::symbol{fstr_assign};
+  metafunction op_assign m::lsymbol{tx, opstr_assign};
+  metafunction fstr_bin m::concat{tx, "___", opstr};
+  metafunction f_bin m::symbol{fstr_bin, m::get_namespace{tx}};
+  metafunction fstr_assign m::concat{tx, "___", opstr, "a"};
+  metafunction f_assign m::symbol{fstr_assign, m::get_namespace{tx}};
   if (m::eq{m::to_string{op_bin}, opstr_bin}) {
+    /* return foo.__add(x, y); */
     expand(sym: m::list{opstr_bin}) { return x.sym(y); }
   } else if (m::eq{m::to_string{op_assign}, opstr_assign}) {
-    t r = x;
-    expand(sym: m::list{opstr_assign}) { r.sym(y); }
-    return r;
+    /* r = x; foo.__adda(r, y); return x; */
+    tx r = x; expand(sym: m::list{opstr_assign}) { r.sym(y); } return r;
   } else if (m::eq{m::to_string{f_bin}, fstr_bin}) {
-    expand(sym: m::list{f_bin}) { return sym(x, y); }
+    /* return foo___add(x, y); */
+    return f_bin{tx, ty}(x, y);
   } else if (m::eq{m::to_string{f_assign}, f_assign}) {
-    t r = x;
-    expand(sym: m::list{f_assign}) { f_assign(r, y); }
+    /* r = x; foo___adda(r, y); return r; */
+    tx r = x;
+    f_assign{tx, ty}(r, y);
     return r;
-  } else if (is_struct_type{t}) {
+  } else if (is_struct_type{tx}) {
+    /* apply binop for each field, and construct a value of type tx */
     metafunction op m::symbol{add, "operator"};
-    return t(expand(fld: m::field_names{t}; op(x.fld, y.fld)));
+    return tx(expand(fld: m::field_names{tx}; op(x.fld, y.fld)));
+  } else {
+    return m::error{m::concat{"operator ", opstr, " not defined"}};
+  }
+}
+
+threaded function {tx, ty, opstr} void binopa(tx mutable& x, ty const& y)
+{
+  metafunction opstr_bin m::concat{"__", opstr};
+  metafunction op_bin m::lsymbol{tx, opstr_bin};
+  metafunction opstr_assign m::concat{"__", opstr, "a"};
+  metafunction op_assign m::lsymbol{tx, opstr_assign};
+  metafunction fstr_bin m::concat{tx, "___", opstr};
+  metafunction f_bin m::symbol{fstr_bin, m::get_namespace{tx}};
+  metafunction fstr_assign m::concat{tx, "___", opstr, "a"};
+  metafunction f_assign m::symbol{fstr_assign, m::get_namespace{tx}};
+  if (m::eq{m::to_string{op_bin}, opstr_bin}) {
+    /* x = foo.__add(x, y); */
+    expand(sym: m::list{opstr_bin}) { x = x.sym(y); }
+  } else if (m::eq{m::to_string{op_assign}, opstr_assign}) {
+    /* foo.__adda(x, y); */
+    expand(sym: m::list{opstr_assign}) { x.sym(y); }
+  } else if (m::eq{m::to_string{f_bin}, fstr_bin}) {
+    /* x = foo___add(x, y); */
+    x = f_bin{tx, ty}(x, y);
+  } else if (m::eq{m::to_string{f_assign}, fstr_assign}) {
+    /* foo___adda(x, y); */
+    f_assign{tx, ty}(x, y);
+  } else if (m::and{is_struct_type{tx}, m::eq{tx, ty}}) {
+    /* apply binop for each field */
+    metafunction op m::symbol{m::concat{opstr, "a"}, "operator"};
+    expand(fld: m::field_names{tx}; op(x.fld, y.fld));
+  } else {
+    return m::error{m::concat{"operator ", opstr, " not defined"}};
+  }
+}
+
+private metafunction unaryop_rettype{tx, opstr, is_builtin}
+  m::cond{
+    m::and{m::ne{is_builtin, 0}, is_builtin{tx}},
+    tx,
+  m::cond{
+    has_lsymbol{tx, m::concat{"__", opstr}},
+    m::rettype{m::lsymbol{tx, m::concat{"__", opstr}}},
+  m::cond{
+    has_gsymbol{tx, m::concat{tx, "___", opstr}},
+    m::rettype{m::apply{
+      m::symbol{m::concat{tx, "___", opstr}, m::get_namespace{tx}}, tx}},
+  tx}}};
+
+threaded function {tx, opstr, is_builtin}
+unaryop_rettype{tx, opstr, is_builtin}
+unaryop(tx const& x)
+{
+  metafunction opstr_u m::concat{"__", opstr};
+  metafunction op_u m::lsymbol{tx, opstr_u};
+  metafunction fstr_u m::concat{tx, "___", opstr};
+  metafunction f_u m::symbol{fstr_u, m::get_namespace{tx}};
+  if (m::eq{m::to_string{op_u}, opstr_u}) {
+    /* return foo.__plus(x); */
+    expand(sym: m::list{opstr_u}) { return x.sym(); }
+  } else if (m::eq{m::to_string{f_u}, fstr_u}) {
+    /* return foo___plus(x); */
+    return f_u{tx}(x);
+  } else if (is_struct_type{tx}) {
+    /* apply unaryop for each field, and construct a value of type tx */
+    metafunction op m::symbol{add, "operator"};
+    return tx(expand(fld: m::field_names{tx}; op(x.fld)));
   } else {
     return m::error{m::concat{"operator ", opstr, " not defined"}};
   }
 }
 
 public metafunction implicit_conversion{tto, tfrom}
-  m::cond{
-    m::eq{
-      m::to_string{m::symbol{conv_funcname_nons{tto, tfrom}, tfrom}},
+  m::cond{ /* conversion function defined in the tfrom ns? */
+    m::eq{m::to_string{
+      m::symbol{
+	conv_funcname_nons{tto, tfrom}, m::get_namespace{tfrom}}},
       conv_funcname_nons{tto, tfrom}},
-    implicit_conversion_from{tto, tfrom},
-    //m::apply{m::symbol{conv_funcname_nons{tto, tfrom}, tfrom}, tto, tfrom},
-    0};
+      implicit_conversion_ns{tto, tfrom, 0},
+    m::cond{ /* conversion function defined in th tto ns? */
+      m::eq{m::to_string{
+	m::symbol{
+	  conv_funcname_nons{tto, tfrom}, m::get_namespace{tto}}},
+	conv_funcname_nons{tto, tfrom}},
+      implicit_conversion_ns{tto, tfrom, 1},
+      0}};
 
 private metafunction conv_funcname_nons{tto, tfrom}
   m::concat{m::to_string{tfrom}, "___to"};
 
-private threaded function {tto, tfrom} tto
-implicit_conversion_from(tfrom const& from)
-{
-  return m::apply{
-    m::symbol{conv_funcname_nons{tto, tfrom}, tfrom},
+private metafunction implicit_conversion_ns{tto, tfrom, tons}
+  m::apply{
+    m::symbol{
+      conv_funcname_nons{tto, tfrom},
+      m::get_namespace{m::cond{tons, tto, tfrom}}},
     tto,
-    tfrom}(from);
-}
+    tfrom};
 
