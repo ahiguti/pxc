@@ -452,6 +452,7 @@ expr_inline_c::expr_inline_c(const char *fn, int line, const char *label,
     posstr != "ldflags" &&
     posstr != "disable-bounds-checking" &&
     posstr != "disable-guard" &&
+    posstr != "disable-noheap-checking" &&
     posstr != "emit"
     ) {
     arena_error_push(this,

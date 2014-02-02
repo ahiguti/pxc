@@ -2,7 +2,7 @@ threaded namespace io::time "use-unsafe";
 public import numeric::integral -;
 public import numeric::fp -;
 public import numeric::cast -;
-public import io -;
+public import io +;
 
 public tsvaluetype struct extern "std::time_t" "extint" time_t { }   //SLONG
 public tsvaluetype struct extern "::suseconds_t" "extint" suseconds_t { }
@@ -13,12 +13,14 @@ public tsvaluetype struct extern "::timeval" timeval {
 }
 
 public threaded function extern "pxcio::gettimeofday" timeval
-  gettimeofday(io::io const& iop);
-public threaded function extern "pxcio::time" time_t time(io::io const& iop);
+io_gettimeofday(io::io const& iop);
+public threaded function extern "pxcio::time" time_t
+io_time(io::io const& iop);
 
-public threaded function double gettimeofday_double(io::io const& iop)
+public threaded function double
+io_gettimeofday_double(io::io const& iop)
 {
-  timeval tv = gettimeofday(iop);
+  timeval tv = iop.gettimeofday();
   double const rv = static_cast{double, time_t}(tv.tv_sec)
     + static_cast{double, suseconds_t}(tv.tv_usec) / 1000000.0;
   return rv;

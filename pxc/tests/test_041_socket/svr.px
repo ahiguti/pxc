@@ -27,22 +27,22 @@ multithreaded struct server_thread(io const& i, tptr{bool} const& rp,
   function void main()
   {
     try {
-      file_println(get_stderr(iop), "svr");
-      const sf = make_acceptor(iop, svr_host, svr_port, AF_INET,
+      iop.stderr().println("svr");
+      const sf = iop.make_acceptor(svr_host, svr_port, AF_INET,
 	SOCK_STREAM, 1024, 0); // TODO: fix EADDRINUSE
-      file_println(get_stderr(iop), "accepted");
+      iop.stderr().println("accepted");
       notify();
       mutable peer_addr = sockaddr_storage();
-      const sock = accept(sf.value, peer_addr);
+      const sock = sf.value.accept(peer_addr);
       string s;
       size_t len = 10;
       sock.value.read(s, len);
       *str_r = s;
     } catch (exception::c_exception e) {
-      file_println(get_stderr(iop), "thrown");
+      iop.stderr().println("thrown");
       notify();
     } catch (io::errno::errno_t e) {
-      file_println(get_stderr(iop), "thrown errno");
+      iop.stderr().println("thrown errno");
       notify();
     }
   }
@@ -61,18 +61,17 @@ multithreaded struct client_thread(io const& i, tptr{bool} const& rp)
 	lck.wait();
       }
     }
-    file_println(get_stderr(iop), "got notification");
-    const sf = make_connector(iop, svr_host, svr_port, AF_INET,
+    iop.stderr().println("got notification");
+    const sf = iop.make_connector(svr_host, svr_port, AF_INET,
       SOCK_STREAM, 10);
-    const sock = connect(sf.value);
-    size_t wlen = 0;
-    sock.value.write("hoge", wlen);
+    const sock = sf.value.connect();
+    sock.value.write("hoge");
   }
 }
 
 function void t1()
 {
-  signal(io::system, SIGPIPE, SIG_IGN);
+  io::system.signal(SIGPIPE, SIG_IGN);
   const readyp = make_tptr(bool(false));
   const strp = make_tptr(string());
   const sthr = make_thread(server_thread(io::system, readyp, strp));

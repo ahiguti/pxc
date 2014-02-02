@@ -1,7 +1,7 @@
 threaded namespace io::standard "use-unsafe";
 public import numeric::integral -;
 public import container::array -;
-public import io -;
+public import io +;
 public import io::file -;
 public import io::errno -;
 public import text::conversion -;
@@ -11,50 +11,46 @@ public import meta::vararg v;
 public import meta m;
 public import meta::family -;
 
-public threaded function extern "pxcio::get_stdin"
-  file get_stdin(io const& iop);
-public threaded function extern "pxcio::get_stdout"
-  file get_stdout(io const& iop);
-public threaded function extern "pxcio::get_stderr"
-  file get_stderr(io const& iop);
+public threaded function extern "pxcio::io_stdin"
+  file io_stdin(io const& iop);
+public threaded function extern "pxcio::io_stdout"
+  file io_stdout(io const& iop);
+public threaded function extern "pxcio::io_stderr"
+  file io_stderr(io const& iop);
 
 public threaded function {t} void file_print(file const& f, t const& x)
 {
-  size_t wlen;
   if (is_string_or_slice_type{t}) {
-    file_write_all(f, x, wlen);
+    f.write_all(x);
   } else {
-    file_write_all(f, to_string(x), wlen);
+    f.write_all(to_string(x));
   }
 }
 
 public threaded function {t} void file_println(file const& f, t const& x)
 {
-  size_t wlen;
   if (is_string_or_slice_type{t}) {
     string s = x;
     s.append("\n");
-    file_write_all(f, s, wlen);
+    f.write_all(s);
   } else {
     string s = to_string(x);
     s.append("\n");
-    file_write_all(f, s, wlen);
+    f.write_all(s);
   }
 }
 
 public function {tlist} void print(expand(v::arg_decls_bycref{tlist}))
 {
   string s = string_join{"\t"}(expand(a: v::arg_names{m::size{tlist}}; a));
-  size_t len;
-  file_write_all(get_stdout(io::system), s, len);
+  system.stdout().write_all(s);
 }
 
 public function {tlist} void println(expand(v::arg_decls_bycref{tlist}))
 {
   string s = string_join{"\t"}(expand(a: v::arg_names{m::size{tlist}}; a));
   s.append("\n");
-  size_t len;
-  file_write_all(get_stdout(io::system), s, len);
+  system.stdout().write_all(s);
 }
 
 /* debug_log does not require an io handle */
@@ -78,17 +74,17 @@ namespace pxcio {
 typedef ::algebraic$n::option$v$p$io$$file$n$$file$s$r$ optfile;
 
 /* TODO: slow */
-file get_stdin(io const& iop)  {
+file io_stdin(io const& iop)  {
   optfile pxc_stdin;
   pxc_stdin.some$$l(make_file(0));
   return pxc_stdin.some$$r();
 }
-file get_stdout(io const& iop) {
+file io_stdout(io const& iop) {
   optfile pxc_stdout;
   pxc_stdout.some$$l(make_file(1));
   return pxc_stdout.some$$r();
 }
-file get_stderr(io const& iop) {
+file io_stderr(io const& iop) {
   optfile pxc_stderr;
   pxc_stderr.some$$l(make_file(2));
   return pxc_stderr.some$$r();

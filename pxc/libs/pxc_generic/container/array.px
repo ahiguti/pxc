@@ -43,7 +43,7 @@ public tsvaluetype struct extern "::pxcrt::bt_cslice" "cslice" {t} cslice {
   public function extern "next" void next();
   public function extern "next_front" void next_front(size_t i);
   public function extern "prev_back" void prev_back(size_t i);
-  public function extern "next_token" cslice{t} next_token(t delim);
+  public function extern "next_token" cslice{t} next_token(t const& delim);
 }
 
 public metafunction string vector{uchar};
@@ -191,11 +191,13 @@ public threaded function extern "::pxcrt::memcmp_string" {t}
 public threaded function {typ, tlist} farray{typ, m::size{tlist}}
 make_farray(expand(va::arg_decls_bycref{tlist}))
 {
+  extern "disable-noheap-checking" 1;
   farray{typ, m::size{tlist}} arr;
   expand (a, i: va::arg_names{m::size{tlist}}) {
     if (mf::is_numeric_type{typ}) {
       arr[i] = static_cast{typ}(a);
     } else {
+      extern "disable-noheap-checking" 1;
       arr[i] = a;
     }
   }
@@ -205,11 +207,13 @@ make_farray(expand(va::arg_decls_bycref{tlist}))
 public threaded function {typ, tlist} darray{typ}
 make_darray(expand(va::arg_decls_bycref{tlist}))
 {
+  extern "disable-noheap-checking" 1;
   mutable arr = darray{typ}(m::size{tlist}, typ());
   expand (a, i: va::arg_names{m::size{tlist}}) {
     if (mf::is_numeric_type{typ}) {
       arr[i] = static_cast{typ}(a);
     } else {
+      extern "disable-noheap-checking" 1;
       arr[i] = a;
     }
   }
@@ -219,12 +223,14 @@ make_darray(expand(va::arg_decls_bycref{tlist}))
 public threaded function {typ, tlist} vector{typ}
 make_vector(expand(va::arg_decls_bycref{tlist}))
 {
+  extern "disable-noheap-checking" 1;
   mutable arr = vector{typ}();
   arr.resize(m::size{tlist}, typ());
   expand (a, i: va::arg_names{m::size{tlist}}) {
     if (mf::is_numeric_type{typ}) {
       arr[i] = static_cast{typ}(a);
     } else {
+      extern "disable-noheap-checking" 1;
       arr[i] = a;
     }
   }
@@ -234,12 +240,14 @@ make_vector(expand(va::arg_decls_bycref{tlist}))
 public threaded function {typ, tlist} deque{typ}
 make_deque(expand(va::arg_decls_bycref{tlist}))
 {
+  extern "disable-noheap-checking" 1;
   mutable arr = deque{typ}();
   arr.resize(m::size{tlist}, typ());
   expand (a, i: va::arg_names{m::size{tlist}}) {
     if (mf::is_numeric_type{typ}) {
       arr[i] = static_cast{typ}(a);
     } else {
+      extern "disable-noheap-checking" 1;
       arr[i] = a;
     }
   }
@@ -282,5 +290,52 @@ public threaded function {t} void reverse(slice{t} const& x)
     x[f] = v;
     ++s;
   }
+}
+
+public threaded function {n, tc, tv} farray{tc:crange_type, n}
+fsplit(tc const& c, tv const& v)
+{
+  metafunction key_type tc:key_type;
+  metafunction mapped_type tc:mapped_type;
+  metafunction crange_type tc:crange_type;
+  extern "disable-noheap-checking" 1;
+  farray{crange_type, n} arr;
+  key_type mutable p;
+  for (size_t i : 0 .. n) {
+    key_type const pend = find_mapped{tc, key_type, mapped_type}(c, p, v);
+    extern "disable-bounds-checking" 1;
+    extern "disable-noheap-checking" 1;
+    arr[i] = c[p .. pend];
+    if (pend == c.size()) {
+      break;
+    }
+    p = pend + 1;
+  }
+  return arr;
+}
+
+public threaded function {tc, tv} darray{tc:crange_type}
+dsplit(tc const& c, tv const& v)
+{
+  metafunction key_type tc:key_type;
+  metafunction mapped_type tc:mapped_type;
+  metafunction crange_type tc:crange_type;
+  size_t cnt = 1;
+  for (const i, const m : c) {
+    if (m == v) {
+      ++cnt;
+    }
+  }
+  extern "disable-noheap-checking" 1;
+  mutable arr = darray{crange_type}(cnt, crange_type());
+  key_type mutable p;
+  for (size_t i : 0 .. cnt) {
+    key_type const pend = find_mapped{tc, key_type, mapped_type}(c, p, v);
+    extern "disable-bounds-checking" 1;
+    extern "disable-noheap-checking" 1;
+    arr[i] = c[p .. pend];
+    p = pend + 1;
+  }
+  return arr;
 }
 

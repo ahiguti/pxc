@@ -68,7 +68,7 @@ static term eval_meta_local_internal(const term_list_range& tlev,
   const std::string name = meta_term_to_string(tlev[1], false);
   DBG_METALOCAL(fprintf(stderr, "eval_meta_local: '%s'\n", name.c_str()));
   expr_i *const einst = term_get_instance(typ);
-  expr_block *const bl = einst->get_template_block();
+  expr_block *const bl = einst != 0 ? einst->get_template_block() : 0;
   if (einst == 0 || bl == 0) {
     arena_error_throw(pos, "meta_local: Invalid type '%s'",
       term_tostr_human(typ).c_str());
@@ -1326,8 +1326,8 @@ static term eval_meta_attribute(const term_list_range& tlev,
     return term();
   }
   std::string s = meta_term_to_string(tlev[1], false);
-  if (s == "ephemeral") {
-    return term(is_ephemeral_value_type(tlev[0]));
+  if (s == "noheap") {
+    return term(is_noheap_type(tlev[0]));
   }
   return term();
 }

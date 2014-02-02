@@ -8,6 +8,7 @@ public import io::errno -;
 public import io::time -;
 public import meta m;
 public import exception;
+public import operator -;
 
 public multithreaded struct extern "pxcio::file" "nodefault" file { }
   /* while pxcio::file is implemented as an immutable pointer, it is
@@ -96,76 +97,135 @@ file io_make_file(io const& iop, int fd);
 public threaded function extern "pxcio::io_open"
 file io_open(io const& iop, cstrref const& fn, open_flags_t flags, mode_t md);
 */
-public threaded function extern "pxcio::file_read"
-errno_t file_read(file const& f, string mutable& buf, size_t mutable& len);
-public threaded function extern "pxcio::file_write"
-errno_t file_write(file const& f, cstrref const& buf, size_t mutable& len_r);
-public threaded function extern "pxcio::file_lseek"
-errno_t file_lseek(file const& f, off_t mutable& offset, whence_t whence);
-public threaded function extern "pxcio::io_stat"
-errno_t io_stat(io const& iop, cstrref const& fn, statbuf mutable& buf);
-public threaded function extern "pxcio::io_sleep"
-uint io_sleep(io const& iop, uint sec);
-public threaded function extern "pxcio::io_usleep"
-uint io_usleep(io const& iop, uint usec);
+private threaded function extern "pxcio::file_read_impl" errno_t
+file_read_impl(file const& f, string mutable& buf, size_t mutable& len);
 
-public threaded function
-errno_t file_read_all(file const& f, string mutable& buf)
+public threaded function errno_or_value{size_t}
+file_read(file const& f, string mutable& buf, size_t len)
 {
+  errno_or_value{size_t} r;
+  const e = file_read_impl(f, buf, len);
+  if (e != EOK) {
+    r.errno = e;
+  } else {
+    r.value = len;
+  }
+  return r;
+}
+
+public threaded function extern "pxcio::file_write_impl" errno_t
+file_write_impl(file const& f, cstrref const& buf, size_t mutable& len_r);
+
+public threaded function errno_or_value{size_t}
+file_write(file const& f, cstrref const& buf)
+{
+  errno_or_value{size_t} r;
+  size_t len = 0;
+  const e = file_write_impl(f, buf, len);
+  if (e != EOK) {
+    r.errno = e;
+  } else {
+    r.value = len;
+  }
+  return r;
+}
+
+public threaded function extern "pxcio::file_lseek_impl" errno_t
+file_lseek_impl(file const& f, off_t mutable& offset, whence_t whence);
+
+public threaded function errno_or_value{off_t}
+file_lseek(file const& f, off_t offset, whence_t whence)
+{
+  errno_or_value{off_t} r;
+  const e = file_lseek_impl(f, offset, whence);
+  if (e != EOK) {
+    r.errno = e;
+  } else {
+    r.value = offset;
+  }
+  return r;
+}
+
+public threaded function extern "pxcio::io_stat" errno_t
+io_stat(io const& iop, cstrref const& fn, statbuf mutable& buf);
+public threaded function extern "pxcio::io_sleep" uint
+io_sleep(io const& iop, uint sec);
+public threaded function extern "pxcio::io_usleep" uint
+io_usleep(io const& iop, uint usec);
+
+public threaded function errno_or_value{size_t}
+file_read_all(file const& f, string mutable& buf)
+{
+  size_t rlen = 0;
   while (true) {
-    size_t len = 16384;
-    const e = file_read(f, buf, len);
-    if (e != EOK) {
-      return e;
-    }
-    if (len == 0) {
-      break;
+    size_t const len = 16384; /* TODO */
+    const r = file_read(f, buf, len);
+    if (const rl : r.value) {
+      if (rl == 0) {
+	break;
+      }
+      rlen += rl;
+    } else {
+      return r;
     }
   }
-  return EOK;
+  errno_or_value{size_t} r;
+  r.value = rlen;
+  return r;
 }
-public threaded function
-errno_t file_write_all(file const& f, cstrref const& buf,
-  size_t mutable& len_r)
+public threaded function errno_or_value{size_t}
+file_write_all(file const& f, cstrref const& buf)
 {
-  len_r = 0;
+  size_t len_r = 0;
   size_t curpos = 0;
   size_t endpos = buf.size();
   while (curpos != endpos) {
-    size_t wlen = 0;
-    const e = file_write(f, buf[curpos .. endpos], wlen);
-    if (e != EOK) {
-      return e;
+    const r = file_write(f, buf[curpos .. endpos]);
+    if (case r.errno) {
+      return r;
     }
+    const size_t wlen = r.value;
     if (wlen == 0) {
       break;
     }
     curpos += wlen;
     len_r += wlen;
   }
-  return EOK;
+  errno_or_value{size_t} r;
+  r.value = len_r;
+  return r;
 }
 
-public threaded function
-errno_t io_read_file(io const& iop, cstrref const& fn, string mutable& buf)
+public threaded function errno_or_value{ptr{string}}
+io_read_file(io const& iop, cstrref const& fn)
 {
-  buf.clear();
+  errno_or_value{ptr{string}} r;
   const f = io_open(iop, fn, O_RDONLY, 0);
   if (const err: f.errno) {
-    return err;
+    r.errno = err;
+  } else {
+    const buf = make_ptr{string}();
+    const ra = file_read_all(f.value, *buf);
+    if (const err: ra.errno) {
+      r.errno = err;
+    } else {
+      r.value = buf;
+    }
   }
-  return file_read_all(f.value, buf);
+  return r;
 }
-public threaded function
-errno_t io_write_file(io const& iop, cstrref const& fn, cstrref const& buf,
-  size_t mutable& len_r)
+public threaded function errno_or_value{size_t}
+io_write_file(io const& iop, cstrref const& fn, cstrref const& buf)
 {
+  errno_or_value{size_t} r;
   const f = io_open(iop, fn, O_WRONLY | O_CREAT | O_TRUNC,
     S_IRWXU | S_IRWXG | S_IRWXO);
   if (const err: f.errno) {
-    return err;
+    r.errno = err;
+  } else {
+    r = file_write_all(f.value, buf);
   }
-  return file_write_all(f.value, buf, len_r);
+  return r;
 }
 
 extern "types" inline
@@ -231,7 +291,7 @@ file make_file(bt_int fd)
   }
 }
 
-errno_t file_read(file const& f, bt_string& buf, size_t& len)
+errno_t file_read_impl(file const& f, bt_string& buf, size_t& len)
 {
   int const fd = f->value.get();
   bt_size_t sz = len;
@@ -249,7 +309,7 @@ errno_t file_read(file const& f, bt_string& buf, size_t& len)
   return 0;
 }
 
-errno_t file_write(file const& f, cstrref const& buf, size_t& len_r)
+errno_t file_write_impl(file const& f, cstrref const& buf, size_t& len_r)
 {
   int const fd = f->value.get();
   bt_size_t sz = buf.size();
@@ -265,7 +325,7 @@ errno_t file_write(file const& f, cstrref const& buf, size_t& len_r)
   return 0;
 }
 
-errno_t file_lseek(file const& f, ::off_t& offset, int whence)
+errno_t file_lseek_impl(file const& f, ::off_t& offset, int whence)
 {
   int const fd = f->value.get();
   off_t r = ::lseek(fd, offset, whence);

@@ -2668,24 +2668,35 @@ void expr_if::emit_value(emit_context& em)
 	fn_emit_value(em, econ);
 	em.puts(");\n");
 	em.indent('I');
-	em.puts(cetstr);
-	if (mapped_mutable_ref) {
-	  em.puts("::iterator");
+	if (is_array_family(tcon) || is_cm_slice_family(tcon)) {
+	  emit_term(em, get_array_index_texpr(0, tcon));
+	  em.puts(" i$it = (");
+	  fn_emit_value(em, eop->arg1);
+	  em.puts(");\n");
+	  em.indent('I');
+	  em.puts("if (i$it < ag$fe.size()) {\n");
+	  emit_arg_cdecl(em, mapped, true, false);
+	  em.puts(" = ag$fe[i$it];\n"); /* TODO: can omit range chack */
 	} else {
-	  em.puts("::const_iterator");
-	}
-	em.puts(" i$it = ag$fe.find(");
-	fn_emit_value(em, eop->arg1);
-	em.puts(");\n");
-	em.indent('I');
-	em.puts("if (i$it != ag$fe.end()) {\n");
-	em.add_indent(1);
-	em.indent('I');
-	emit_arg_cdecl(em, mapped, true, false);
-	if (mapped_mutable_ref) {
-	  em.puts(" = ag$fe.get_mapped(i$it);\n");
-	} else {
-	  em.puts(" = ag$fe.get_cmapped(i$it);\n");
+	  em.puts(cetstr);
+	  if (mapped_mutable_ref) {
+	    em.puts("::iterator");
+	  } else {
+	    em.puts("::const_iterator");
+	  }
+	  em.puts(" i$it = ag$fe.find(");
+	  fn_emit_value(em, eop->arg1);
+	  em.puts(");\n");
+	  em.indent('I');
+	  em.puts("if (i$it != ag$fe.end()) {\n");
+	  em.add_indent(1);
+	  em.indent('I');
+	  emit_arg_cdecl(em, mapped, true, false);
+	  if (mapped_mutable_ref) {
+	    em.puts(" = ag$fe.get_mapped(i$it);\n");
+	  } else {
+	    em.puts(" = ag$fe.get_cmapped(i$it);\n");
+	  }
 	}
 	em.indent('I');
 	fn_emit_value(em, block1);

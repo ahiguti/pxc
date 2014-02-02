@@ -435,7 +435,7 @@ private threaded function {t} t unmarshal_reference(ptr{orb} const& op,
   orb mutable& o = *op;
   cstrref buf = o.rbuf[pos .. epos];
   if (buf.empty()) {
-    throw runtime_error_template{"parse_error"}();
+    throw runtime_error_template{"orb"}("parse_error");
   }
   uchar const ch = buf[0];
   buf.next_front(1);
@@ -447,7 +447,7 @@ private threaded function {t} t unmarshal_reference(ptr{orb} const& op,
 	ptr{cmi_type}, ptr{call_method_table}}(m.real_object);
       return cmip->objptr;
     }
-    throw runtime_error_template{"skeleton_notfound"}();
+    throw runtime_error_template{"orb"}("skeleton_notfound");
   } else if (ch == '~') {
     if (size_t lp : o.stubs_rtol[val]) {
       ptr{remote} r = rawptr_to_ptr(size_t_to_rawptr(lp));
@@ -458,7 +458,7 @@ private threaded function {t} t unmarshal_reference(ptr{orb} const& op,
       return r;
     }
   } else {
-    throw runtime_error_template{"parse_error"}();
+    throw runtime_error_template{"orb"}("parse_error");
   }
 }
 

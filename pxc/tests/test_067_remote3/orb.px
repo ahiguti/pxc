@@ -439,7 +439,7 @@ private threaded function {t, from_remote} t unmarshal_reference(
   mutable& o = *op;
   cstrref buf = o.rbuf[pos .. epos];
   if (buf.empty()) {
-    throw runtime_error_template{"parse_error"}();
+    throw runtime_error_template{"orb"}("parse_error");
   }
   const ch = buf[0];
   buf.next_front(1);
@@ -454,7 +454,7 @@ private threaded function {t, from_remote} t unmarshal_reference(
 	return cmip->objptr;
       }
     }
-    throw runtime_error_template{"skeleton_notfound"}();
+    throw runtime_error_template{"orb"}("skeleton_notfound");
   } else if (ch == ((from_remote != 0) ? '!' : '~')) {
     if (size_t lp : o.stubs_rtol[val]) {
       ptr{remote} r = rawptr_to_ptr(lp);
@@ -465,7 +465,7 @@ private threaded function {t, from_remote} t unmarshal_reference(
       return r;
     }
   } else {
-    throw runtime_error_template{"parse_error"}();
+    throw runtime_error_template{"orb"}("parse_error");
   }
 }
 

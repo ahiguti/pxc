@@ -14,21 +14,19 @@ public threaded struct transport_file(file const& f0) <orb_transport> {
   }
   function void send_receive(string mutable& rbuf, string mutable& wbuf) {
     if (ok && !wbuf.empty()) {
-      size_t wsize;
-      f.write_all(wbuf, wsize);
-      if (wsize != wbuf.size()) {
+      const wr = f.write_all(wbuf);
+      if (case wr.errno || wr.value != wbuf.size()) {
 	ok = false;
       }
     }
     wbuf.clear();
     rbuf.clear();
     while (ok) {
-      size_t rsize = 4096;
-      f.read(rbuf, rsize);
+      const rr = f.read(rbuf, 4096);
       if (rbuf.size() > 0 && rbuf[rbuf.size() - 1] == '\n') {
 	break;
       }
-      if (rsize == 0) {
+      if (case rr.errno || rr.value == 0) {
 	ok = false;
       }
     }

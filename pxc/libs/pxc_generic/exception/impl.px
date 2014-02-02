@@ -56,11 +56,14 @@ int main_nothrow(void (*main_f)(void));
 ;
 
 extern "functions" inline
+
 namespace pxcrt {
+
 bt_string c_exception_message(std::exception const& ex);
 bt_string c_exception_stack_trace(std::exception const& ex);
 std::string c_exception_to_stdstring(const std::exception& ex);
 void c_exception_log_stderr(const std::exception& ex);
+
 }; // namespace pxcrt
 ;
 
@@ -143,6 +146,30 @@ private:
   void *ptr;
 };
 
+bt_string exception_message(pxcrt::exception const& exc)
+{
+  return exc.message();
+}
+
+bt_string exception_stack_trace(pxcrt::exception const& exc)
+{
+  bt_string r;
+#ifdef __linux
+  std::vector<void *> const& tr = exc.trace; 
+  char **syms = backtrace_symbols(&tr[0], tr.size());
+  if (syms == 0) {
+    throw_bad_alloc();
+  }
+  auto_free af(syms);
+  for (size_t i = 0; i < tr.size(); ++i) {
+    r.append(cstrref(
+      reinterpret_cast<const bt_uchar *>(syms[i]), strlen(syms[i])));
+    r.push_back('\n');
+  }
+#endif
+  return r;
+}
+
 bt_string c_exception_message(std::exception const& exc)
 {
   const exception *const e = dynamic_cast<const exception *>(&exc);
@@ -158,24 +185,10 @@ bt_string c_exception_message(std::exception const& exc)
 bt_string c_exception_stack_trace(std::exception const& exc)
 {
   const exception *const e = dynamic_cast<const exception *>(&exc);
-  if (e== 0 || e->trace.empty()) {
+  if (e == 0) {
     return bt_string();
   }
-  bt_string r;
-#ifdef __linux
-  std::vector<void *> const& tr = e->trace; 
-  char **syms = backtrace_symbols(&tr[0], tr.size());
-  if (syms == 0) {
-    throw_bad_alloc();
-  }
-  auto_free af(syms);
-  for (size_t i = 0; i < tr.size(); ++i) {
-    r.append(cstrref(
-      reinterpret_cast<const bt_uchar *>(syms[i]), strlen(syms[i])));
-    r.push_back('\n');
-  }
-#endif
-  return r;
+  return exception_stack_trace(*e);
 }
 
 std::string c_exception_to_stdstring(const std::exception& ex)
@@ -217,6 +230,5 @@ int main_nothrow(void (*main_f)(void))
 }
 
 }; // namespace pxcrt
-
 ;
 
