@@ -847,16 +847,46 @@ bool is_cm_range_family(const term& t)
   return is_cm_range_family(t.get_expr());
 }
 
-static bool is_ephemeral_value_type(expr_i *e)
+static bool is_range_guard_ephemeral(expr_i *e)
 {
   const typefamily_e cat = get_family(e);
   return is_cm_range_family(e) || cat == typefamily_e_ephemeral
     || is_cm_lock_guard_family(e);
 }
 
-bool is_ephemeral_value_type(const term& t)
+bool is_noheap_type(const term& t)
 {
-  return is_ephemeral_value_type(t.get_expr());
+  expr_i *const e = t.get_expr();
+  if (e == 0) {
+    return false;
+  }
+  if (is_range_guard_ephemeral(e)) {
+    return true;
+  }
+  #if 0
+  if (is_cm_range_family(e)) {
+    return true;
+  }
+  if (is_cm_lock_guard_family(e)) {
+    return true;
+  }
+  const typefamily_e cat = get_family(e);
+  if (cat == typefamily_e_ephemeral) {
+    return true;
+  }
+  #endif
+  if (is_container_family(t)) {
+    const term_list *const targs = t.get_args();
+    if (targs != 0) {
+      for (term_list::const_iterator i = targs->begin(); i != targs->end();
+	++i) {
+	if (is_noheap_type(*i)) {
+	  return true;
+	}
+      }
+    }
+  }
+  return false;
 }
 
 bool is_container_family(const term& t)
@@ -973,13 +1003,15 @@ bool is_copyable(const term& t)
   return true;
 }
 
-static bool is_assignable_type_one(expr_i *e)
+static bool is_assignable_type_one(expr_i *e, bool allow_unsafe)
 {
   if (!is_copyable_type_one(e)) {
     return false;
   }
-  if (is_ephemeral_value_type(e)) {
-    return false;
+  if (is_range_guard_ephemeral(e)) {
+    if (!allow_unsafe || !is_cm_range_family(e)) {
+      return false;
+    }
   }
   const typefamily_e cat = get_family(e);
   if (cat == typefamily_e_darray) {
@@ -988,17 +1020,27 @@ static bool is_assignable_type_one(expr_i *e)
   return true;
 }
 
-bool is_assignable(const term& t)
+static bool is_assignable_internal(const term& t, bool allow_unsafe)
 {
   sorted_exprs c;
   sort_dep(c, t.get_expr());
   for (std::list<expr_i *>::iterator i = c.sorted.begin();
     i != c.sorted.end(); ++i) {
-    if (!is_assignable_type_one(*i)) {
+    if (!is_assignable_type_one(*i, allow_unsafe)) {
       return false;
     }
   }
   return true;
+}
+
+bool is_assignable(const term& t)
+{
+  return is_assignable_internal(t, false);
+}
+
+bool is_assignable_allowing_unsafe(const term& t)
+{
+  return is_assignable_internal(t, true);
 }
 
 bool is_constructible(const term& t)

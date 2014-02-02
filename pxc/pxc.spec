@@ -1,4 +1,4 @@
-%define debug_package %{nil}
+%global __os_install_post %{nil}
 
 Summary: P Extension Compiler
 Name: pxc
@@ -17,7 +17,7 @@ Requires: gcc-c++, boost-devel
 %prep
 %setup -n %{name}
 
-%define _use_internal_dependency_generator 0
+# %define _use_internal_dependency_generator 0
 
 %build
 make pxc
@@ -28,6 +28,7 @@ mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}
 mkdir -p $RPM_BUILD_ROOT/%{_bindir}
 mkdir -p $RPM_BUILD_ROOT/usr/share
 install -m 644 pxc.profile $RPM_BUILD_ROOT/%{_sysconfdir}/
+install -m 644 pxc_unsafe.profile $RPM_BUILD_ROOT/%{_sysconfdir}/
 install -m 644 pxc_dynamic.profile $RPM_BUILD_ROOT/%{_sysconfdir}/
 install -m 755 pxc $RPM_BUILD_ROOT/%{_bindir}/
 cp -a libs/pxc_* $RPM_BUILD_ROOT/usr/share/
@@ -35,6 +36,7 @@ cp -a libs/pxc_* $RPM_BUILD_ROOT/usr/share/
 %files
 %defattr(-, root, root)
 %config(noreplace,missingok) %{_sysconfdir}/pxc.profile
+%config(noreplace,missingok) %{_sysconfdir}/pxc_unsafe.profile
 %config(noreplace,missingok) %{_sysconfdir}/pxc_dynamic.profile
 %{_bindir}/pxc
 /usr/share/pxc_*

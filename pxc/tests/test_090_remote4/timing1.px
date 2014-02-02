@@ -27,14 +27,14 @@ private function void client_test_main(file const& f)
 {
   const op = make_ptr(orb_handle{ibinop}(make_ptr{transport_file}(f)));
   const st = op->create_stub();
-  double const t0 = gettimeofday_double(io::system);
+  double const t0 = io::system.gettimeofday_double();
   int z = 0;
   for (int i : 0 .. 1000) {
     for (int j : 0 .. 1000) {
       z += st->op(i, j);
     }
   }
-  double const t1 = gettimeofday_double(io::system);
+  double const t1 = io::system.gettimeofday_double();
   println(z);
   debug_log("time", t1 - t0);
 }
@@ -51,8 +51,8 @@ private multithreaded struct server_thread(io const& s, file const& f) {
 
 private function void main()
 {
-  signal(io::system, SIGPIPE, SIG_IGN);
-  mutable sp = socketpair(io::system, AF_UNIX, SOCK_STREAM, PROTO_UNSPEC);
+  io::system.signal(SIGPIPE, SIG_IGN);
+  mutable sp = io::system.socketpair(AF_UNIX, SOCK_STREAM, PROTO_UNSPEC);
   const sthr = make_thread(server_thread(io::system, sp.value.first));
   client_test_main(sp.value.second);
   sp.errno = errno_t(); /* closes fds */

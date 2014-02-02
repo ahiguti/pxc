@@ -51,21 +51,19 @@ private threaded struct transport_file(file const& f0) <orb_transport> {
   errno_t en;
   function void send_receive(string mutable& rbuf, string mutable& wbuf) {
     if (ok && !wbuf.empty()) {
-      size_t wsize;
-      f.write_all(wbuf, wsize);
-      if (wsize != wbuf.size()) {
+      const wr = f.write_all(wbuf);
+      if (case wr.errno || wr.value != wbuf.size()) {
 	ok = false;
       }
     }
     wbuf.clear();
     rbuf.clear();
     while (ok) {
-      size_t rsize = 1024;
-      f.read(rbuf, rsize);
+      const rr = f.read(rbuf, 1024);
       if (rbuf.size() > 0 && rbuf[rbuf.size() - 1] == '\n') {
 	break;
       }
-      if (rsize == 0) {
+      if (case rr.errno || rr.value == 0) {
 	ok = false;
       }
     }
@@ -121,8 +119,8 @@ private multithreaded struct server_thread(io const& s, file const& f) {
 private function void main()
 {
   errno_t ern;
-  signal(io::system, SIGPIPE, SIG_IGN);
-  mutable sp = socketpair(io::system, AF_UNIX, SOCK_STREAM, PROTO_UNSPEC);
+  io::system.signal(SIGPIPE, SIG_IGN);
+  mutable sp = io::system.socketpair(AF_UNIX, SOCK_STREAM, PROTO_UNSPEC);
   const sthr = make_thread(server_thread(io::system, sp.value.first));
   client_test_main(sp.value.second);
   sp.errno = errno_t(); /* closes fds */

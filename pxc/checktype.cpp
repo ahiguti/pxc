@@ -291,6 +291,8 @@ void expr_inline_c::check_type(symbol_table *lookup)
     const long long v = meta_term_to_long(value_evaluated);
     if (posstr == "disable-bounds-checking") {
       symtbl_lexical->pragma.disable_bounds_checking = v;
+    } else if (posstr == "disable-noheap-checking") {
+      symtbl_lexical->pragma.disable_noheap_checking = v;
     } else if (posstr == "disable-guard") {
       symtbl_lexical->pragma.disable_guard = v; // not implemented yet
     } else if (posstr == "trace-meta") {
@@ -309,8 +311,8 @@ void expr_var::define_vars_one(expr_stmts *stmt)
 }
 
 static bool check_term_validity(const term& t, bool allow_nontype,
-  bool allow_local_func, bool allow_ephemeral, expr_i *pos,
-  std::string& err_mess_r)
+  bool allow_local_func, bool allow_noheap, bool allow_noheap_container,
+  expr_i *pos, std::string& err_mess_r)
 {
   DBG_CTV(fprintf(stderr, "CTV %s\n", term_tostr_human(t).c_str()));
   expr_i *const e = t.get_expr();
@@ -336,14 +338,23 @@ static bool check_term_validity(const term& t, bool allow_nontype,
       return false;
     }
   }
-  if (!allow_ephemeral && is_ephemeral_value_type(t)) {
-    err_mess_r = "(template parameter '" + term_tostr_human(t) +
-      "' is an ephemeral type)";
-    return false;
+  const bool is_noheap_flag = is_noheap_type(t);
+  if (is_noheap_flag) {
+    if (!allow_noheap) {
+      err_mess_r = "(template parameter '" + term_tostr_human(t) +
+	"' is a noheap type)";
+      return false;
+    }
+    if (!allow_noheap_container && is_container_family(t)) {
+      err_mess_r = "(template parameter '" + term_tostr_human(t) +
+	"' is a noheap container type)";
+      return false;
+    }
   }
   const bool tp_allow_nontype = true;
   const bool tp_allow_local_func = !is_type(t);
-  const bool tp_allow_ephemeral = !is_type(t);
+  const bool tp_allow_noheap = !is_type(t) || is_noheap_flag;
+  const bool tp_allow_noheap_container = !is_type(t) || is_noheap_flag;
   const term_list *tl = t.get_args();
   const size_t tlarg_len = tl != 0 ? tl->size() : 0;
   expr_block *const ttbl = e ? e->get_template_block() : 0;
@@ -382,7 +393,8 @@ static bool check_term_validity(const term& t, bool allow_nontype,
 	#endif
 	if (tlarg_len >= 1) {
 	  if (!check_term_validity(tl->front(), tp_allow_nontype,
-	    tp_allow_local_func, tp_allow_ephemeral, pos, err_mess_r)) {
+	    tp_allow_local_func, tp_allow_noheap, tp_allow_noheap_container,
+	    pos, err_mess_r)) {
 	    return false;
 	  }
 	}
@@ -409,7 +421,7 @@ static bool check_term_validity(const term& t, bool allow_nontype,
   if (tl != 0) {
     for (term_list::const_iterator i = tl->begin(); i != tl->end(); ++i) {
       if (!check_term_validity(*i, tp_allow_nontype, tp_allow_local_func,
-	tp_allow_ephemeral, pos, err_mess_r)) {
+	tp_allow_noheap, tp_allow_noheap_container, pos, err_mess_r)) {
 	return false;
       }
     }
@@ -419,10 +431,11 @@ static bool check_term_validity(const term& t, bool allow_nontype,
 }
 
 static void check_var_type(term& typ, expr_i *e, const char *sym,
-  bool byref_flag, bool need_copyable)
+  bool byref_flag, bool need_copyable, bool allow_noheap_container)
 {
   std::string err_mess;
-  if (!check_term_validity(typ, false, false, true, e, err_mess)) {
+  if (!check_term_validity(typ, false, false, true, allow_noheap_container,
+    e, err_mess)) {
     arena_error_push(e, "Invalid type '%s' for variable or field '%s' %s",
       term_tostr_human(typ).c_str(), sym, err_mess.c_str());
   }
@@ -454,9 +467,9 @@ static void check_var_type(term& typ, expr_i *e, const char *sym,
   if (cur != 0 && e->get_esort() == expr_e_var &&
     (cur->block_esort == expr_e_struct || cur->block_esort == expr_e_dunion)) {
     expr_var *const ev = ptr_down_cast<expr_var>(e);
-    if (is_ephemeral_value_type(typ)) {
+    if (is_noheap_type(typ)) {
       arena_error_push(e,
-	"Type '%s' for field '%s' is an ephemeral type",
+	"Type '%s' for field '%s' is a noheap type",
 	term_tostr_human(typ).c_str(), sym);
     }
     if (is_passby_cm_reference(ev->varinfo.passby)) {
@@ -586,12 +599,16 @@ void expr_var::check_type(symbol_table *lookup)
       need_copyable = true;
     }
   }
+  bool allow_noheap_container = !is_passby_mutable(varinfo.passby);
+  if (symtbl_lexical->pragma.disable_noheap_checking) {
+    allow_noheap_container = true;
+  }
   check_var_type(typ, this, sym, is_passby_cm_reference(varinfo.passby),
-    need_copyable);
+    need_copyable, allow_noheap_container);
   if (is_global_var(this)) {
-    if (is_ephemeral_value_type(typ)) {
+    if (is_noheap_type(typ)) {
       arena_error_push(this,
-	"Type '%s' for global variable '%s' is an ephemeral type",
+	"Type '%s' for global variable '%s' is a noheap type",
 	term_tostr_human(typ).c_str(), sym);
     }
     const attribute_e tattr = get_term_threading_attribute(typ);
@@ -611,7 +628,7 @@ void expr_var::check_type(symbol_table *lookup)
     }
     #if 0
     // TODO: remove. not necessary.
-    if (is_ephemeral_value_type(typ)) {
+    if (is_noheap_type(typ)) {
       arena_error_push(this, "Ephemeral type variable '%s' is not initialized",
 	sym);
     }
@@ -771,11 +788,15 @@ static void check_return_expr(expr_funcdef *fdef)
 {
   const term& typ = fdef->get_rettype();
   std::string err_mess;
-  const bool allow_ephemeral = fdef->cnamei.has_cname()
+  bool allow_noheap = fdef->cnamei.has_cname()
     || is_ext_struct_memfunc(fdef);
-    /* allows ephemeral type if fdef is a extern c function */
-  if (!check_term_validity(typ, false, false, allow_ephemeral, fdef,
-    err_mess)) {
+    /* allows noheap type if fdef is an external c function or a member
+     * function of an external struct */
+  if (fdef->block != 0 && fdef->block->symtbl.pragma.disable_noheap_checking) {
+    allow_noheap = true;
+  }
+  if (!check_term_validity(typ, false, false, allow_noheap,
+    allow_noheap, fdef, err_mess)) {
     arena_error_push(fdef, "Invalid return type '%s' %s",
       term_tostr_human(typ).c_str(), err_mess.c_str());
   }
@@ -785,40 +806,13 @@ static void check_return_expr(expr_funcdef *fdef)
   if (fdef->no_def) {
     return;
   }
-  if (fdef->ext_pxc && fdef->block->tinfo.tparams == 0) {
+  if (fdef->ext_pxc && !fdef->block->tinfo.template_descent) {
+    /* non-template function defined in non-main module. body is dropped. */
     DBG_CT_BLOCK(fprintf(stderr, "ext_pxc %s\n", fdef->dump(0).c_str()));
     return; /* decl only */
   }
   check_return_expr_block(fdef, fdef->block);
 }
-
-#if 0
-// FIXME: remove. moved to expr_impl
-static void calc_inherit_transitive_rec(expr_i *pos,
-  expr_block::inherit_list_type& lst, std::set<expr_i *>& s,
-  std::set<expr_i *>& p, expr_telist *inh)
-{
-  for (expr_telist *i = inh; i != 0; i = i->rest) {
-    term t = i->head->get_sdef()->resolve_evaluated();
-    expr_i *const einst = term_get_instance(t);
-    if (p.find(einst) != p.end()) {
-      arena_error_throw(pos, "%s: Inheritance loop detected",
-	term_tostr_human(t).c_str());
-    } else if (s.find(einst) != s.end()) {
-      /* skip */
-    } else {
-      lst.push_back(einst);
-      s.insert(einst);
-      expr_interface *ei = ptr_down_cast<expr_interface>(einst);
-      if (ei->block->inherit != 0) {
-	p.insert(einst);
-	calc_inherit_transitive_rec(pos, lst, s, p, ei->block->inherit);
-	p.erase(einst);
-      }
-    }
-  }
-}
-#endif
 
 void expr_block::check_type(symbol_table *lookup)
 {
@@ -838,8 +832,8 @@ void expr_block::check_type(symbol_table *lookup)
   #endif
   /* stmts are compiled only if it's instantiated. */
   if (!tinfo.is_uninstantiated()) {
-    DBG_CT_BLOCK(fprintf(stderr, "%s: %p: instantiated\n",
-      __PRETTY_FUNCTION__, this));
+    DBG_CT_BLOCK(fprintf(stderr, "%s: %s: instantiated\n",
+      __PRETTY_FUNCTION__, this->dump(0).c_str()));
     fn_check_type(inherit, &symtbl);
     fn_check_type(stmts, &symtbl);
     if (parent_expr != 0 && parent_expr->get_esort() == expr_e_funcdef) {
@@ -1034,7 +1028,7 @@ static void add_root_requirement(expr_i *e, passby_e passby,
   bool blockscope_flag)
 {
   /* this function makes e valid while the current statement (or block if
-   * blockscope_flag is true) is terminated. if e is an ephemeral value (eg.,
+   * blockscope_flag is true) is terminated. if e is a noheap value (eg.,
    * range types), the object e refer to is also rooted. */
   if (e == 0) {
     return;
@@ -1064,7 +1058,7 @@ static void add_root_requirement(expr_i *e, passby_e passby,
   }
   if (e->get_esort() == expr_e_funccall) {
     expr_funccall *const efc = ptr_down_cast<expr_funccall>(e);
-    if (is_ephemeral_value_type(e->resolve_texpr())) {
+    if (is_noheap_type(e->resolve_texpr())) {
       /* function returning ephemeral type, which is only allowed for extern c
        * function. it must be a member function (or a member-like function) of
        * a (possibly) container type, and the returned reference must be valid 
@@ -1088,9 +1082,12 @@ static void add_root_requirement(expr_i *e, passby_e passby,
 	  term_get_instance(te));
 	if (efd != 0) {
 	  if (!efd->cnamei.has_cname()) {
-	    arena_error_throw(efc,
-	      "Internal error: Non-member, non-extern function returning "
-	      "an ephemeral type");
+	    if (efd->block == 0 ||
+	      !efd->block->symtbl.pragma.disable_noheap_checking) {
+	      arena_error_throw(efc,
+		"Internal error: Non-member, non-extern function returning "
+		"a noheap type");
+	    }
 	  }
 	}
       }
@@ -1868,15 +1865,15 @@ void expr_op::check_type(symbol_table *lookup)
 	  if (!is_ifdef_cond_expr(this)) {
 	    /* getting map element can cause implicit inserting */
 	    check_lvalue(this, arg0);
+	    /* operator [] for map requires mapped type to be defcon */
+	    term telem = get_array_elem_texpr(this, arg0->resolve_texpr());
+	    if (!is_default_constructible(telem)) {
+	      arena_error_push(this, "Type '%s' is not default-constructible",
+		term_tostr_human(telem).c_str());
+	    }
 	  } else {
 	    /* if (x : m[i]) { ... } */
 	    /* m need not to have lvalue */
-	  }
-	  /* operator [] for map requires mapped type to be defcon */
-	  term telem = get_array_elem_texpr(this, arg0->resolve_texpr());
-	  if (!is_default_constructible(telem)) {
-	    arena_error_push(this, "Type '%s' is not default-constructible",
-	      term_tostr_human(telem).c_str());
 	  }
 	}
 	if (op == TOK_PTR_DEREF) {
@@ -1932,9 +1929,9 @@ void expr_op::check_type(symbol_table *lookup)
 	check_lvalue(this, arg1);
       }
       if (is_passby_cm_reference(ev->varinfo.passby) ||
-	(is_ephemeral_value_type(ev->resolve_texpr()) &&
+	(is_noheap_type(ev->resolve_texpr()) &&
 	  !is_cm_lock_guard_family(ev->resolve_texpr()))) {
-	/* require block scope root on rhs because the variable is an ephemeral
+	/* require block scope root on rhs because the variable is a noheap
 	 * variable and is required to be valid while the block is finished.
 	 * this is the only case a block scope tempvar is required. */
 	/* note: no need (and should not) to create a copy of a lock guard. */
@@ -1946,14 +1943,16 @@ void expr_op::check_type(symbol_table *lookup)
       }
     } else {
       /* asign op, lhs is not a vardef */
-      if (is_ephemeral_value_type(arg0->resolve_texpr())) {
-	/* 'w1 = w2' is not allowed for ephemeral types, because these
+      term& a0t = arg0->resolve_texpr();
+      if (!symtbl_lexical->pragma.disable_noheap_checking &&
+	is_noheap_type(a0t)) {
+	/* 'w1 = w2' is not allowed for noheap types, because these
 	 * variables may depend different objects */
 	arena_error_throw(this,
-	  "Invalid assignment ('%s' is an ephemeral type)",
+	  "Invalid assignment ('%s' is a noheap type)",
 	  term_tostr_human(arg0->resolve_texpr()).c_str());
       }
-      if (!is_assignable(arg0->resolve_texpr())) {
+      if (!is_assignable_allowing_unsafe(a0t)) {
 	/* 'v1 = v2' is not allowed. darray for example. */
 	arena_error_throw(this,
 	  "Invalid assignment ('%s' is not an assignable type)",
@@ -2046,7 +2045,7 @@ static void set_type_inference_result_for_funccall(expr_funccall *efc,
   }
   if (real_func_expr != 0 && real_func_expr->get_sdef() != 0) {
     std::string err_mess;
-    if (!check_term_validity(einst->get_value_texpr(), true, true, true,
+    if (!check_term_validity(einst->get_value_texpr(), true, true, true, true,
       efc, err_mess)) {
       arena_error_push(efc, "Incomplete template expression: '%s' %s",
 	term_tostr_human(einst->get_value_texpr()).c_str(),
@@ -2328,7 +2327,7 @@ fprintf(stderr, "tote au %s\n", efd_inst->dump(0).c_str());
       einst = efd_p_inst;
       std::string err_mess;
       if (!check_term_validity(efd_p_inst->get_value_texpr(), true, true, true,
-	this, err_mess)) {
+	true, this, err_mess)) {
 	arena_error_push(this, "Incomplete template expression: '%s' %s",
 	  term_tostr_human(efd_p_inst->get_value_texpr()).c_str(),
 	  err_mess.c_str());
@@ -2512,7 +2511,7 @@ fprintf(stderr, "tote %s\n", einst->dump(0).c_str());
 	funccall_sort = funccall_e_struct_constructor;
 	return;
 #if 0
-      } else if (arglist.size() == 1 && !is_ephemeral_value_type(func_te) &&
+      } else if (arglist.size() == 1 && !is_noheap_type(func_te) &&
 	convert_type(arglist.front(), func_te)) {
 	/* exclude ephemeral types because rooting logic is not implemented */
 	/* explicit conversion */
@@ -3810,7 +3809,8 @@ void expr_argdecls::check_type(symbol_table *lookup)
   if (fr != 0) {
     expr_block *const tbl = fr->get_template_block();
     if (!tbl->tinfo.is_uninstantiated()) {
-      check_var_type(typ, this, sym, is_passby_cm_reference(passby), true);
+      check_var_type(typ, this, sym, is_passby_cm_reference(passby), true,
+	!is_passby_mutable(passby));
     }
   }
   fn_check_type(rest, lookup);

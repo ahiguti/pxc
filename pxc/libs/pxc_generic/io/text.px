@@ -17,10 +17,10 @@ public threaded function {cb, opt} errno_t file_read_lines(file const& ifile)
     size_t pos = buffer.size();
     size_t rlen = read_block_size;
     const e = ifile.read(buffer, rlen);
-    if (e != EOK) {
-      return e;
+    if (const err : e.errno) {
+      return err;
     }
-    if (rlen == 0) {
+    if (e.value == 0) {
       break;
     }
     while (cont_flag) {
@@ -64,6 +64,7 @@ file_read_append_records(file const& ifile, t mutable& v)
   return ifile.read_records{record_cb, opt}();
   threaded function bool record_cb(t:mapped_type const& e) {
     v.push_back(e);
+    return true;
   }
 }
 

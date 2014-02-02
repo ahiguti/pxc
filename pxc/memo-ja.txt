@@ -3,10 +3,34 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- -Wall -Werrorで通す
+
+- 108/ret.px -> 112/ret1.px (done)
+
+- expandの中でm::symbolの既定namespaceが拾えない？
+
+- make_ptr{foo, m::list}(); コンパイラがループ
+  108/lp1.px
+
+- 例外再整理
+- runtime_error_templateは実行時に文字列引数を取る(done)
+- 例外のto_string(done)
+
+- io::fileのerrno_tを返す関数は、errno_or_valueを使う。(done)
+
+- io::standardをメソッド式呼び出し対応(done)
+
+- m[x] = y は mのmappedがdefconでなくてもコンパイルできるように
+
+- 範囲式 v[a .. b] もユーザ定義可能に
+- フィールドのget/setもユーザ定義可能に
+
 - フィールドを持つかどうか調べるために、見つからなかっても例外投げな
   いmeta::localが必要 -> meta::lsymbol (done)
 
 - 引数型のpartial evalを止めることができればevalがシンプルになる。
+  - eval()とは別にpartial_eval()を用意するか。関数引数の型式を簡約
+    するだけのeval。
 
 - operatorをbinop使うように変更(done)
 - operator binopのreturn type(done)
@@ -1071,6 +1095,20 @@ decref$z 参照カウンタ用
 - コンテナにイテレータは無い -> かわりにrange
 
 ---------------------------------------------------------------------
+要件整理
+
+- memory safe
+- multithread safe
+- (exception safe) --- 意味が不明確。リークしないというだけか。
+- 形無しlambda計算に基づくmetaprogramming
+- compile-time reflection
+- late bindingもサポート
+- C++との互換
+  - inlined C++ code
+  - C++テンプレ型を使える
+  - const correctness
+
+---------------------------------------------------------------------
 injectns使うと分割コンパイルで不整合がおきうる。
 
 Bar inject Fooのとき、BarをimportするかどうかによってFooに対する
@@ -1978,14 +2016,6 @@ emitせよ、という意味。
 
 
 ---------------------------------------------------------------------
-例外クラスの継承
-
-logic_error_st/runtime_error_st/bad_alloc_st はそれぞれ
-std::logic_error等をnon-virtualな基底クラスにしている。
-これらの複数を継承するとexceptionへupcastできない。
- ... std::exception is an ambiguous base of foo
-
----------------------------------------------------------------------
 ioの下
 
 io::file
@@ -2310,35 +2340,6 @@ foo::bar:name  関数の名前(文字列)
 としてemitする。hogeはthreaded namespaceでなければならない。
 
 ---------------------------------------------------------------------
-ephemeral型の制約緩和
-
-vector{cstrref}などが使えるように
-- テンプレパラメータやフィールドにephemeralなものを使うことを許可
-- ただしそれらを使った型はそれ自体がephemeralになる
-  - テンプレパラメータにephemeralなものを含むならephemeral
-  - フィールドにephemeralなものを含むならephemeral
-      - フィールドは無理？ フィールドにephemeralなものを含めて、メンバ
-        関数から渡ってきたephemeralな値をそこへ代入してしまったら？
-	初期化以外の代入が許可されていないからよいのか？
-  - ephemeral: 初期化以外の代入不可、要素取得以外のreturn不可
-
-is_partially_ephemeral_type (is_peph)
-  1. typefamilyがrangeかephemeralなら真 (従来の定義はこれだけ)
-  2. structのfieldにis_partially_ephemeral_typeのものを含めば真
-  3. 既約型式がパラメタにis_partially_ephemeral_typeのものを含めば真
-
-is_pephな型についての制約
-- グローバル変数にはis_peph型は不許可。
-- 初期化以外の代入の左辺には使えない。
-  代入の左右で寿命が違うことがあるから。
-- returnで返せない。ただしexternな関数は返すことができるが、その場合
-  thisが有効なうちは返した値が有効であるように実装せねばならい。
-- mutable参照渡しできない。
-- mutableメンバ関数を呼べるのは、そのオブジェクトを作ったブロックの中
-  だけ。
-    vector{cstrref} vs;
-
----------------------------------------------------------------------
 thread改修
 
 make_threadは関数をパラメタに取る。make_thread呼び出しにその関数の
@@ -2499,4 +2500,103 @@ map: datasinkでもありdatasourceでもある。putでレコードを追加し
   集約関数: sum, average, count, min, max
 multimap: mapとのちがいは最初のn個のfieldについてsortするだけでfoldし
   ない点。
+
+---------------------------------------------------------------------
+ephemeral型の制約緩和
+
+vector{cstrref}などが使えるように
+- テンプレパラメータやフィールドにephemeralなものを使うことを許可
+- ただしそれらを使った型はそれ自体がephemeralになる
+  - テンプレパラメータにephemeralなものを含むならephemeral
+  - フィールドにephemeralなものを含むならephemeral
+      - フィールドは無理？ フィールドにephemeralなものを含めて、メンバ
+        関数から渡ってきたephemeralな値をそこへ代入してしまったら？
+	初期化以外の代入が許可されていないからよいのか？
+  - ephemeral: 初期化以外の代入不可、要素取得以外のreturn不可
+
+is_partially_ephemeral_type (is_peph)
+  1. typefamilyがrangeかephemeralなら真 (従来の定義はこれだけ)
+  2. structのfieldにis_partially_ephemeral_typeのものを含めば真
+  3. 既約型式がパラメタにis_partially_ephemeral_typeのものを含めば真
+
+制約についての考え方
+- 根本的には、ephemeralオブジェクトはstackが巻戻ると無効になる
+- コンテナ要素に入れられるのは、そのコンテナより上位のephemeralオブ
+  ジェクトだけである
+
+案1 is_pephな型についての制約
+- グローバル変数にはis_peph型は不許可。
+- 初期化以外の代入の左辺には使えない。
+  代入の左右で寿命が違うことがあるから。
+- returnで返せない。ただしexternな関数は返すことができるが、その場合
+  最初の引数が有効なうちは返した値が有効であるように実装せねばならい。
+- mutable参照渡しできない。
+- mutableメンバ関数を呼べるのは、そのオブジェクトを作ったブロックの中
+  だけ。
+    function foo(vector{cstrref} mutable& vs) {
+      cstrref s = "hoge";
+      vs.push_back(s); // fooを抜けると無効な値がvsに残る
+    }
+
+例: vector{cstrref}はどのような制約を加えれば安全か
+- vector{cstrref}はglobal変数やfieldにはできない
+- スタック上にconst変数を宣言するのはOK。
+- make_vector{cstrref, tlst}の中ではvector{cstrref} mutableはOK。
+
+is_noheap
+  - ephemeralファミリ、rangeファミリはis_noheapである
+  - コンテナであり、その要素がis_noheapならばis_noheapである
+
+コンテナとrange以外のテンプレ型が、テンプレ引数にis_noheapを持つと
+エラー。フィールドの型が、is_noheapであればエラー。
+
+noheapの変数は、
+  - スタック上の変数に限る。フィールドには使えない。
+  - constに限る
+ただしextern "disable-noheap-restriction" 1のときはチェックしない。
+  - このディレクティブはmake_vector等がmutable変数を作るために使う。
+
+改修手順:
+  is_noheap_type()を定義。
+  is_ephemeral_value_type()呼び出しをis_noheap_type()に置き換え
+  check_term_validity()の中、
+    const bool tp_allow_ephemeral =
+      !is_type(t) || is_container_family(t) || is_cm_range_family(t)
+  に変更
+  ついでにallow_ephemeral -> allow_noheap にsed
+  変数定義のcheck_term_validity()は、constならallow_noheap。
+  make_farray等の中にextern "disable-noheap-restriction" 1を入れる
+  disable-noheap-restrictionを実装
+  is_ephemeral_value_type削除
+
+---------------------------------------------------------------------
+例外クラスの継承
+
+logic_error_st/runtime_error_st/bad_alloc_st はそれぞれ
+std::logic_error等をnon-virtualな基底クラスにしている。
+これらの複数を継承するとexceptionへupcastできない。
+ ... std::exception is an ambiguous base of foo
+
+---------------------------------------------------------------------
+例外再整理
+
+インタフェース
+c_exception                        : c++のstd::exception
+c_logic_error <c_exception>        : c++のstd::logic_error
+c_runtime_error <c_exception>      : c++のstd::runtime_error
+c_bad_alloc <c_exception>          : c++のstd::bad_alloc
+exception { function string message() const; }
+logic_error <exception>
+runtime_error <exception>
+bad_alloc <exception>
+
+pxcの例外は c++のレベルで
+exception をvirtual、
+c++のstd::runtime_error等を非virtual継承。
+
+例外型は全てc_exceptionをc++のレベルでは継承しているが、pxcレベルでは
+  exceptionはc_exceptionを継承していない。
+
+
+具体型
 

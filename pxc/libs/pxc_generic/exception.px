@@ -2,6 +2,7 @@ threaded namespace exception "use-unsafe";
 public import exception::impl;
 public import numeric::integral -;
 public import container::array -;
+public import meta m;
 
 /* C++ exceptions */
 public mtvaluetype interface extern "std::exception"
@@ -48,9 +49,17 @@ public mtvaluetype struct {str} logic_error_template <logic_error>
 {
   function string message() const { return str; }
 }
-public mtvaluetype struct {str} runtime_error_template <runtime_error>
+public mtvaluetype struct {str}
+runtime_error_template(cstrref const& m)
+  <runtime_error>
 {
-  function string message() const { return str; }
+  string msg = m;
+  function string message() const {
+    string s = m::concat{"runtime_error{", str, "}("};
+    s.append(msg);
+    s.append(")");
+    return s;
+  }
 }
 public mtvaluetype struct {str} bad_alloc_template <bad_alloc>
 {
@@ -61,6 +70,30 @@ public threaded function extern "pxcrt::c_exception_message" string
 c_exception_message(c_exception const& ex);
 public threaded function extern "pxcrt::c_exception_stack_trace" string
 c_exception_stack_trace(c_exception const& ex);
+public threaded function extern "pxcrt::exception_message" string
+exception_message(exception const& ex);
+public threaded function extern "pxcrt::exception_stack_trace" string
+exception_stack_trace(exception const& ex);
+
+public threaded function void
+c_exception_append_to_string(c_exception const& ex, string mutable& str)
+{
+  str.append(c_exception_message(ex));
+  if (str.size() > 0 && str[str.size() - 1] != '\n') {
+    str.push_back('\n');
+  }
+  str.append(c_exception_stack_trace(ex));
+}
+
+public threaded function void
+exception_append_to_string(exception const& ex, string mutable& str)
+{
+  str.append(exception_message(ex));
+  if (str.size() > 0 && str[str.size() - 1] != '\n') {
+    str.push_back('\n');
+  }
+  str.append(exception_stack_trace(ex));
+}
 
 public function extern "pxcrt::set_stack_trace_limit" void
 set_stack_trace_limit(size_t sz);
