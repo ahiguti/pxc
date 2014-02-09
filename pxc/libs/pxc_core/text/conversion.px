@@ -143,7 +143,7 @@ private threaded function {t, f} t string_parse_token(cstrref mutable& s)
 {
   size_t const toklen = token_length(s);
   cstrref stok = s[0 .. toklen];
-  s.next_front(toklen);
+  s.increment_front(toklen);
   return f(stok);
 }
 private threaded function string string_parse_string_unescape(
@@ -183,21 +183,21 @@ private threaded function void string_parse_symbol_peek(cstrref mutable& stok)
 {
   size_t const sz = stok.size();
   size_t const toklen = token_length(stok);
-  stok.prev_back(sz - toklen);
+  stok.decrement_back(sz - toklen);
 }
 private threaded function void string_parse_symbol(cstrref mutable& stok,
   cstrref mutable& s)
 {
   size_t const sz = stok.size();
   size_t const toklen = token_length(stok);
-  stok.prev_back(sz - toklen);
-  s.next_front(toklen);
+  stok.decrement_back(sz - toklen);
+  s.increment_front(toklen);
 }
 private threaded function bool string_parse_char_cond(cstrref mutable& s,
   uchar ch)
 {
   if (s.size() > 0 && s[0] == ch) {
-    s.next_front(1);
+    s.increment_front(1);
     return true;
   } else {
     return false;
@@ -210,7 +210,7 @@ private threaded function void string_parse_brace_close_skip(
   for (size_t i, uchar ch : s) {
     if (ch == '}') {
       if (--level == 0) {
-	s.next_front(i + 1);
+	s.increment_front(i + 1);
 	return;
       }
     } else if (ch == '{') {
@@ -221,7 +221,7 @@ private threaded function void string_parse_brace_close_skip(
 private threaded function void string_parse_token_skip(cstrref mutable& s)
 {
   size_t const toklen = token_length(s);
-  s.next_front(toklen);
+  s.increment_front(toklen);
 }
 private threaded function bool string_parse_brace_open_cond(cstrref mutable& s)
 { return string_parse_char_cond(s, '{'); }

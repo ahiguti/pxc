@@ -1,0 +1,32 @@
+namespace exr6;
+import common -;
+import meta m;
+
+function {lst, x, r} expand foo
+{
+  if (m::gt{m::size{lst}, 0}) {
+    metafunction cidx m::div{m::size{lst}, 2};
+    if (x == m::at{lst, cidx}) {
+      r = x;
+    } else if (x < m::at{lst, cidx}) {
+      expand foo{m::slice{lst, 0, cidx}, x, r};
+    } else {
+      expand foo{m::slice{lst, m::add{cidx, 1}}, x, r};
+    }
+  }
+}
+
+function {t} t test1(t iv)
+{
+  metafunction lst m::sort{m::list{1, 5, 23, 11, 4, 9, 16}};
+  t rv;
+  expand foo{lst, "iv", "rv"};
+  return rv;
+}
+
+{
+  for (int i : 0 .. 30) {
+    println(test1(i));
+  }
+}
+

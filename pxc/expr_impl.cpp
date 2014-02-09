@@ -159,14 +159,15 @@ expr_te::expr_te(const char *fn, int line, expr_i *nssym, expr_i *tlarg)
 expr_i *expr_te::clone() const
 {
   expr_te *const r = new expr_te(*this);
-#if 0
-fprintf(stderr, "clone %s\n", sdef.get_fullsym().c_str()); // FIXME
-#endif
-  /* argdecls have incomplete symbol_def values before instantiated */
   r->sdef.parent_expr = r;
-  r->sdef.set_symdef(0);
-  r->sdef.set_evaluated(term()); // HERE HERE HERE
-  r->type_of_this_expr.clear();
+  if (is_term_literal()) {
+    /* term literal */
+  } else {
+    /* argdecls have incomplete symbol_def values before instantiated */
+    r->sdef.set_symdef(0);
+    r->sdef.set_evaluated(term()); // HERE HERE HERE
+    r->type_of_this_expr.clear();
+  }
   return r;
 }
 
@@ -181,6 +182,11 @@ void expr_te::set_child(int i, expr_i *e)
 {
   if (i == 0) { nssym = ptr_down_cast<expr_nssym>(e); }
   else if (i == 1) { tlarg = ptr_down_cast<expr_telist>(e); }
+}
+
+bool expr_te::is_term_literal() const
+{
+  return nssym->sym[0] == 0; /* symbol is empty */
 }
 
 expr_i *expr_te::resolve_symdef(symbol_table *lookup)
@@ -1339,12 +1345,12 @@ std::string expr_foldfe::dump(int indent) const
   return r;
 }
 
-expr_expand::expr_expand(const char *fn, int line, const char *itersym,
-  const char *idxsym, expr_i *valueste, expr_i *baseexpr, expand_e ex,
-  expr_i *rest)
+expr_expand::expr_expand(const char *fn, int line, expr_i *callee,
+  const char *itersym, const char *idxsym, expr_i *valueste,
+  expr_i *baseexpr, expand_e ex, expr_i *rest)
   : expr_i(fn, line), itersym(itersym), idxsym(idxsym),
     valueste(ptr_down_cast<expr_te>(valueste)), baseexpr(baseexpr), ex(ex),
-    rest(rest), generated_expr(0)
+    rest(rest), callee(callee), generated_expr(0)
 {
 }
 

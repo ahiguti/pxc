@@ -31,7 +31,26 @@ namespace pxc {
 std::string get_canonical_path(const std::string& x)
 {
   auto_free p(realpath(x.c_str(), 0));
-  return std::string(p.get());
+  const std::string s = std::string(p.get());
+  return s;
+}
+
+std::string trim_path(const std::string& s, int trim_path)
+{
+  if (trim_path != 0) {
+    int n = 0;
+    size_t p = s.size();
+    while (p > 0) {
+      if (s[p - 1] == '/') {
+	if (++n >= trim_path) {
+	  break;
+	}
+      }
+      --p;
+    }
+    return s.substr(p);
+  }
+  return s;
 }
 
 std::string read_file_content(const std::string& fn, bool err_thr)

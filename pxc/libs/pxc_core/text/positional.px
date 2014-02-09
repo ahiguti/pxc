@@ -77,10 +77,10 @@ decimal_to_integral(cstrref mutable& buf)
   }
   uchar const ch = buf[0];
   if (ch == '-') {
-    buf.next_front(1);
+    buf.increment_front(1);
     return decimal_to_integral_internal{t, 1}(buf);
   } else if (ch == '+') {
-    buf.next_front(1);
+    buf.increment_front(1);
     return decimal_to_integral_internal{t, 0}(buf);
   } else {
     return decimal_to_integral_internal{t, 0}(buf);
@@ -95,12 +95,12 @@ decimal_to_integral_internal(cstrref mutable& buf)
     if (v >= '0' && v <= '9') {
       if (negative) {
 	if (r < (lim::lowest{t}() / 10)) {
-	  buf.next_front(idx);
+	  buf.increment_front(idx);
 	  return r;
 	}
       } else {
 	if (r > (lim::highest{t}() / 10)) {
-	  buf.next_front(idx);
+	  buf.increment_front(idx);
 	  return r;
 	}
       }
@@ -109,24 +109,24 @@ decimal_to_integral_internal(cstrref mutable& buf)
       if (negative) {
 	t const nr = r - dig;
 	if (nr > r) {
-	  buf.next_front(idx);
+	  buf.increment_front(idx);
 	  return r;
 	}
 	r = nr;
       } else {
 	t const nr = r + dig;
 	if (nr < r) {
-	  buf.next_front(idx);
+	  buf.increment_front(idx);
 	  return r;
 	}
 	r = nr;
       }
     } else {
-      buf.next_front(idx);
+      buf.increment_front(idx);
       return r;
     }
   }
-  buf.next_front(buf.size());
+  buf.increment_front(buf.size());
   return r;
 }
 
@@ -228,7 +228,7 @@ bt_double decimal_to_fp_double(cstrref& buf)
   int n = 0;
   sscanf(buf_nt.get(), "%lf%n", &r, &n);
   if (n > 0) {
-    buf.next_front(n);
+    buf.increment_front(n);
   }
   return r;
 }
@@ -241,7 +241,7 @@ bt_float decimal_to_fp_float(cstrref& buf)
   int n = 0;
   sscanf(buf_nt.get(), "%f%n", &r, &n);
   if (n > 0) {
-    buf.next_front(n);
+    buf.increment_front(n);
   }
   return r;
 }

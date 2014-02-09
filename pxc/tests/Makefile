@@ -79,6 +79,7 @@ cleanlogs:
 	rm -f test_*/*.obj
 	rm -f test_*/*.manifest
 	rm -f test_*/*.so
+	rm -rf work/
 
 cleanprepare:
 	rm -f ../run/*.exe

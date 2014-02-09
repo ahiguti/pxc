@@ -42,6 +42,7 @@
 #define DBG_VARIADIC(x)
 #define DBG_TIMING(x)
 #define DBG_TIMING3(x)
+#define DBG_EXPAND_TIMING(x)
 
 namespace pxc {
 
@@ -2305,24 +2306,25 @@ void expr_funccall::check_type(symbol_table *lookup)
     } else if (ad != 0) {
       arena_error_push(this, "Too few argument for '%s'", efd_p_inst->sym);
     }
+    if (efd_p_inst->block->rettype_uneval == 0) {
+      arena_error_throw(this,
+	"Invalid function call: target function is for 'expand' statement");
+    }
     expr_i *einst = 0;
     size_t const efd_num_tparams = elist_length(
       efd_p_inst->block->tinfo.tparams);
     size_t const num_targs = (func_te_args == 0) ? 0 : func_te_args->size();
-    if (efd_num_tparams > num_targs) {
     /*
     if (efd_p_inst->block->tinfo.has_tparams() &&
       (func_te_args == 0 || func_te_args->empty())) {
     */
+    if (efd_num_tparams > num_targs) {
       /* instantiate template function automatically */
       DBG(fprintf(stderr, "func is uninstantiated\n"));
       einst = create_tpfunc_texpr(efd_p_inst, func_te_args, tvmap, this);
       set_type_inference_result_for_funccall(this, einst);
       expr_funcdef *efd_inst = ptr_down_cast<expr_funcdef>(einst);
       type_of_this_expr = efd_inst->get_rettype();
-#if 0
-fprintf(stderr, "tote au %s\n", efd_inst->dump(0).c_str());
-#endif
     } else {
       einst = efd_p_inst;
       std::string err_mess;
@@ -2333,9 +2335,6 @@ fprintf(stderr, "tote au %s\n", efd_inst->dump(0).c_str());
 	  err_mess.c_str());
       }
       type_of_this_expr = apply_tvmap(efd_p_inst->get_rettype(), tvmap);
-#if 0
-fprintf(stderr, "tote %s\n", einst->dump(0).c_str());
-#endif
     }
     funccall_sort = funccall_e_funccall;
     const bool call_wo_obj = func->get_esort() != expr_e_op;
@@ -2945,14 +2944,12 @@ static expr_i *subst_symbol_name_rec(expr_i *e, expr_i *parent, int parent_pos,
 	  arena_strdup(long_to_string(dst.get_long()).c_str()),
 	  dst.get_long() < 0);
 	if (parent != 0) {
-	  // set_child_parent(parent, parent_pos, lit);
 	  parent->set_child(parent_pos, lit);
 	}
 	return lit;
-      } else if (to_symbol) {
+      } else if (dst.is_string() && to_symbol) {
 	expr_i *sycpy = create_symbol_from_string(dst.get_string(), sy);
 	if (parent != 0) {
-	  // set_child_parent(parent, parent_pos, sycpy);
 	  parent->set_child(parent_pos, sycpy);
 	}
 	return sycpy;
@@ -2961,7 +2958,6 @@ static expr_i *subst_symbol_name_rec(expr_i *e, expr_i *parent, int parent_pos,
 	  arena_strdup(escape_c_str_literal(dst.get_string()).c_str()));
 	DBG_FLDFE(fprintf(stderr, "lit: %s\n", lit->dump(0).c_str()));
 	if (parent != 0) {
-	  // set_child_parent(parent, parent_pos, lit);
 	  parent->set_child(parent_pos, lit);
 	}
 	return lit;
@@ -2977,28 +2973,35 @@ static expr_i *subst_symbol_name_rec(expr_i *e, expr_i *parent, int parent_pos,
 	  arena_strdup(long_to_string(dst.get_long()).c_str()),
 	  dst.get_long() < 0);
 	if (parent != 0) {
-	  // set_child_parent(parent, parent_pos, lit);
 	  parent->set_child(parent_pos, lit);
 	}
 	return lit;
-      #if 0
+      #if 0 /* not reached */
       } else if (to_symbol) {
 	expr_i *tecpy = create_te_from_string(dst.get_string(), te);
 	if (parent != 0) {
-	  // set_child_parent(parent, parent_pos, tecpy);
 	  kparent->set_child(parent_pos, tecpy);
 	}
 	return tecpy;
       #endif
-      } else {
+      } else if (dst.is_string()) {
 	expr_i *lit = expr_str_literal_new(nsy->fname, nsy->line,
 	  arena_strdup(escape_c_str_literal(dst.get_string()).c_str()));
 	DBG_FLDFE(fprintf(stderr, "lit: %s\n", lit->dump(0).c_str()));
 	if (parent != 0) {
-	  // set_child_parent(parent, parent_pos, lit);
 	  parent->set_child(parent_pos, lit);
 	}
 	return lit;
+      } else if (dst.is_metalist()) {
+	expr_te *nte = ptr_down_cast<expr_te>(
+	  expr_te_new(te->fname, te->line,
+	    expr_nssym_new(te->fname, te->line, 0, arena_strdup("")), 0));
+	nte->set_symdef(nte); /* resolves to itself */
+	nte->sdef.set_evaluated(dst);
+	if (parent != 0) {
+	  parent->set_child(parent_pos, nte);
+	}
+	return nte;
       }
     }
   } else if (fd != 0) {
@@ -3029,7 +3032,7 @@ static expr_i *subst_symbol_name_rec(expr_i *e, expr_i *parent, int parent_pos,
   return e;
 }
 
-// FIXME: remove
+// FIXME: remove. unused.
 static void subst_symbol_name(expr_i *e, const std::string& src,
   const term& dst, bool to_symbol)
 {
@@ -3059,7 +3062,7 @@ static void subst_symbol_name(expr_i *e, const std::string& src,
 	    arena_strdup(long_to_string(dst.get_long()).c_str()),
 	    dst.get_long() < 0);
 	  e->set_child(i, lit);
-	} else if (to_symbol) {
+	} else if (dst.is_string() && to_symbol) {
 	  #if 0
 	  expr_i *nsycpy = expr_nssym_new(nsy->fname, nsy->line, 0,
 	    arena_strdup(dst.get_string().c_str()));
@@ -3067,11 +3070,13 @@ static void subst_symbol_name(expr_i *e, const std::string& src,
 	  #endif
 	  expr_i *sycpy = create_symbol_from_string(dst.get_string(), sy);
 	  e->set_child(i, sycpy);
+	#if 0
 	} else {
 	  expr_i *lit = expr_str_literal_new(nsy->fname, nsy->line,
-	    arena_strdup(escape_c_str_literal(dst.get_string()).c_str()));
+	    arena_strdup(escape_c_str_literal(dst.get_string())));
 	  DBG_FLDFE(fprintf(stderr, "lit: %s\n", lit->dump(0).c_str()));
 	  e->set_child(i, lit);
+	#endif
 	}
 	subst_node = true;
       }
@@ -3084,7 +3089,7 @@ static void subst_symbol_name(expr_i *e, const std::string& src,
 	    arena_strdup(long_to_string(dst.get_long()).c_str()),
 	    dst.get_long() < 0);
 	  e->set_child(i, lit);
-	} else if (to_symbol) {
+	} else if (dst.is_string() && to_symbol) {
 	  #if 0
 	  expr_i *nsycpy = expr_nssym_new(nsy->fname, nsy->line, 0,
 	    arena_strdup(dst.get_string().c_str()));
@@ -3092,11 +3097,13 @@ static void subst_symbol_name(expr_i *e, const std::string& src,
 	  #endif
 	  expr_i *tecpy = create_te_from_string(dst.get_string(), te);
 	  e->set_child(i, tecpy);
+	#if 0
 	} else {
 	  expr_i *lit = expr_str_literal_new(nsy->fname, nsy->line,
-	    arena_strdup(escape_c_str_literal(dst.get_string()).c_str()));
+	    arena_strdup(escape_c_str_literal(dst.get_string())));
 	  DBG_FLDFE(fprintf(stderr, "lit: %s\n", lit->dump(0).c_str()));
 	  e->set_child(i, lit);
+	#endif
 	}
 	subst_node = true;
       }
@@ -3173,6 +3180,7 @@ static bool valid_for_symbol(const std::string& s)
 }
 #endif
 
+// FIXME: remove. unsed.
 void expr_fldfe::check_type(symbol_table *lookup)
 {
   check_genericfe_syntax(stmts);
@@ -3460,25 +3468,75 @@ static void assert_is_child(expr_i *e, expr_i *p)
   #endif
 }
 
-void expr_expand::check_type(symbol_table *lookup)
+static void check_type_expr_expand(expr_expand *const epnd,
+  symbol_table *lookup)
 {
-  // double t0 = gettimeofday_double();
-  assert_is_child(this, parent_expr);
-  assert_is_child(parent_expr, parent_expr->parent_expr);
-  #if 0
-  fprintf(stderr, "expand: %s\n", baseexpr->dump(0).c_str());
-  #endif
-  fn_check_type(valueste, lookup);
-  // double t01 = gettimeofday_double();
-  #if 0
-  // FIXME
-  if (t01 - t0 > 0.0003) {
-    fprintf(stderr, "slow expand valueste = %s %d\n",
-      valueste->dump(0).c_str(), (int)valueste->get_esort());
+  DBG_EXPAND_TIMING(double t0 = gettimeofday_double());
+  assert_is_child(epnd, epnd->parent_expr);
+  assert_is_child(epnd->parent_expr, epnd->parent_expr->parent_expr);
+  term vtyp;
+  typedef std::map<std::string, term> expfunc_subst_type;
+  expfunc_subst_type expfunc_subst;
+  if (epnd->callee != 0) {
+    /* expand foo{...} */
+    expr_te *const te = ptr_down_cast<expr_te>(epnd->callee);
+    expr_i *const sd = te->resolve_symdef(lookup);
+    if (sd->get_esort() != expr_e_funcdef) {
+      arena_error_throw(te,
+	"Invalid parameter for 'expand' : '%s' (function expected)",
+	te->nssym->sym);
+    }
+    expr_funcdef *const efd = ptr_down_cast<expr_funcdef>(sd);
+    if (efd->block->rettype_uneval != 0) {
+      arena_error_throw(te,
+	"Invalid function for 'expand' : '%s' "
+	"(function is not for 'expand' statement)",
+	te->nssym->sym);
+    }
+    expr_stmts *const stmts = efd->block->stmts;
+    expr_tparams *callee_tps = efd->block->tinfo.tparams;
+    expr_telist *tlarg = te->tlarg;
+    if (elist_length(tlarg) != elist_length(callee_tps)) {
+      arena_error_throw(epnd,
+	"Wrong number of template parameters: '%s' (%d expected)",
+	te->dump(0).c_str(), static_cast<int>(elist_length(callee_tps)));
+    }
+    term_list tal;
+    while (tlarg != 0) {
+      const term t = eval_term(term(tlarg->head));
+      const std::string n(callee_tps->sym);
+      expfunc_subst[n] = term_litexpr_to_literal(t);
+      tlarg = tlarg->rest;
+      callee_tps = callee_tps->rest;
+    }
+    term_list vals;
+    {
+      long long i = 0;
+      for (expr_stmts *s = stmts; s != 0; s = s->rest, ++i) {
+	term ent[2];
+	ent[0] = term(std::string(""));
+	ent[1] = term(i);
+	const term val(term_list_range(ent, 2));
+	vals.push_back(val);
+      }
+    }
+    vtyp = term(vals);
+    epnd->valueste = ptr_down_cast<expr_te>(te); /* dummy */
+    epnd->baseexpr = stmts;
+    epnd->itersym = 0;
+  } else {
+    /* expand ( ) */
+    fn_check_type(epnd->valueste, lookup);
+    vtyp = epnd->valueste->sdef.resolve_evaluated();
   }
-  #endif
-  const term& vtyp = valueste->sdef.resolve_evaluated();
-  // double t02 = gettimeofday_double();
+  DBG_EXPAND_TIMING(double t01 = gettimeofday_double());
+  bool slow_flag = false;
+  DBG_EXPAND_TIMING(slow_flag = (t01 - t0 > 0.0003));
+  if (slow_flag) {
+    DBG_EXPAND_TIMING(fprintf(stderr, "slow expand valueste = %s %d\n",
+      valueste->dump(0).c_str(), (int)valueste->get_esort()));
+  }
+  DBG_EXPAND_TIMING(double t02 = gettimeofday_double());
   eval_context ectx;
   if (has_unbound_tparam(vtyp, ectx)) {
     return; /* not instantiated */
@@ -3487,12 +3545,12 @@ void expr_expand::check_type(symbol_table *lookup)
     : vtyp.get_args();
     // FIXME: should be metalist 
   if (targs == 0) {
-    arena_error_throw(valueste,
+    arena_error_throw(epnd->valueste,
       "Invalid parameter for 'expand' : '%s' (metalist expected)",
       term_tostr_human(vtyp).c_str());
   }
-  if (ex != expand_e_argdecls && baseexpr == 0) {
-    arena_error_throw(this, "Empty base expression for 'expand'");
+  if (epnd->ex != expand_e_argdecls && epnd->baseexpr == 0) {
+    arena_error_throw(epnd, "Empty base expression for 'expand'");
   }
   exprlist_type ees;
   long long idx = 0;
@@ -3500,10 +3558,10 @@ void expr_expand::check_type(symbol_table *lookup)
     ++i, ++idx) {
     const term& te = *i;
     expr_i *se = 0;
-    if (ex == expand_e_argdecls) {
+    if (epnd->ex == expand_e_argdecls) {
       const term_list *const ent = te.get_metalist();
       if (ent == 0 || ent->size() != 4) {
-	arena_error_throw(valueste,
+	arena_error_throw(epnd->valueste,
 	  "Invalid parameter for 'expand' : '%s' "
 	  "(must be a metalist of size 4)",
 	  term_tostr_human(te).c_str());
@@ -3513,9 +3571,9 @@ void expr_expand::check_type(symbol_table *lookup)
       const long long pass_byref = (*ent)[2].get_long();
       const long long arg_mutable = (*ent)[3].get_long();
       expr_argdecls *ad = ptr_down_cast<expr_argdecls>(
-	expr_argdecls_new(this->fname, this->line, "dummy",
-	expr_te_new(this->fname, this->line,
-	  expr_nssym_new(this->fname, this->line, 0, "dummy"), 0),
+	expr_argdecls_new(epnd->fname, epnd->line, "dummy",
+	expr_te_new(epnd->fname, epnd->line,
+	  expr_nssym_new(epnd->fname, epnd->line, 0, "dummy"), 0),
 	passby_e_const_value, 0));
       /* dirty hack ... */
       ad->sym = arena_strdup(name.c_str());
@@ -3525,7 +3583,7 @@ void expr_expand::check_type(symbol_table *lookup)
 	? (arg_mutable ? passby_e_mutable_reference : passby_e_const_reference)
 	: (arg_mutable ? passby_e_mutable_value : passby_e_const_value);
       se = ad;
-    } else if (ex == expand_e_statement) {
+    } else if (epnd->ex == expand_e_statement) {
       const term_list *const ent = te.get_metalist();
       term symte;
       expr_i *baseexpr_cur = 0;
@@ -3536,12 +3594,12 @@ void expr_expand::check_type(symbol_table *lookup)
 	  symte = (*ent)[0];
 	  if ((*ent)[1].is_long()) {
 	    const int stnum = (*ent)[1].get_long();
-	    if (stnum >= 0 && baseexpr->get_esort() == expr_e_stmts) {
+	    if (stnum >= 0 && epnd->baseexpr->get_esort() == expr_e_stmts) {
 	      DBG_EP(fprintf(stderr, "metalist 2 long stmts ent = %p\n", ent));
-	      expr_stmts *cur = ptr_down_cast<expr_stmts>(baseexpr);
+	      expr_stmts *cur = ptr_down_cast<expr_stmts>(epnd->baseexpr);
 	      for (int i = 0; i < stnum && cur != 0; ++i, cur = cur->rest) { }
 	      if (cur == 0) {
-		arena_error_throw(valueste,
+		arena_error_throw(epnd->valueste,
 		  "Expand: statement number %d not found", stnum);
 	      }
 	      baseexpr_cur = cur->head;
@@ -3552,55 +3610,56 @@ void expr_expand::check_type(symbol_table *lookup)
       } else {
 	/* te is of the form {"foo", "bar"} and baseexpr is a single stmt */
 	symte = te; /* TODO: convert to string */
-	if (baseexpr->get_esort() == expr_e_stmts) {
-	  baseexpr_cur = ptr_down_cast<expr_stmts>(baseexpr)->head;
+	if (epnd->baseexpr->get_esort() == expr_e_stmts) {
+	  baseexpr_cur = ptr_down_cast<expr_stmts>(epnd->baseexpr)->head;
 	} else {
-	  baseexpr_cur = baseexpr;
+	  baseexpr_cur = epnd->baseexpr;
 	}
       }
-      #if 0
-      if (!symte.is_string() || baseexpr_cur == 0) {
-	arena_error_throw(valueste, "invalid parameter for 'expand' : '%s'",
-	  term_tostr_human(vtyp).c_str());
-      }
-      #endif
       se = deep_clone_expr(baseexpr_cur);
-      se = subst_symbol_name_rec(se, 0, 0, itersym, symte, true);
-      if (idxsym != 0) {
+      if (epnd->itersym != 0) {
+	se = subst_symbol_name_rec(se, 0, 0, epnd->itersym, symte, true);
+      }
+      if (epnd->idxsym != 0) {
 	const term tidx = term(idx);
-	se = subst_symbol_name_rec(se, 0, 0, idxsym, tidx, true);
+	se = subst_symbol_name_rec(se, 0, 0, epnd->idxsym, tidx, true);
+      }
+      for (expfunc_subst_type::const_iterator i = expfunc_subst.begin();
+	i != expfunc_subst.end(); ++i) {
+	se = subst_symbol_name_rec(se, 0, 0, i->first, i->second, true);
       }
       DBG_EP(fprintf(stderr, "itersym = %s\n", itersym));
       DBG_EP(fprintf(stderr, "subst = %s\n", se->dump(0).c_str()));
     } else {
-      assert(ex == expand_e_comma);
-      se = deep_clone_expr(baseexpr);
-      #if 0
-      if (!te.is_string() || te.get_string().empty()) {
-	arena_error_throw(valueste, "invalid parameter for 'expand' : '%s'",
-	  term_tostr_human(vtyp).c_str());
+      assert(epnd->ex == expand_e_comma);
+      se = deep_clone_expr(epnd->baseexpr);
+      if (epnd->itersym != 0) {
+	se = subst_symbol_name_rec(se, 0, 0, epnd->itersym, te, true);
       }
-      #endif
-      se = subst_symbol_name_rec(se, 0, 0, itersym, te, true);
+      for (expfunc_subst_type::const_iterator i = expfunc_subst.begin();
+	i != expfunc_subst.end(); ++i) {
+	se = subst_symbol_name_rec(se, 0, 0, i->first, i->second, true);
+      }
     }
     if (se == 0) {
-      arena_error_throw(valueste, "Expanded to a null expression");
+      arena_error_throw(epnd->valueste, "Expanded to a null expression");
     }
     ees.push_back(se);
   }
-  // double t1 = gettimeofday_double();
-  generated_expr = chain_exprlist(ees, ex);
-  // double t2 = gettimeofday_double();
+  DBG_EXPAND_TIMING(double t1 = gettimeofday_double());
+  epnd->generated_expr = chain_exprlist(ees, epnd->ex);
+  DBG_EXPAND_TIMING(double t2 = gettimeofday_double());
   expr_i *gparent = 0;
   int gparent_pos = 0;
   expr_i *rest_expr = 0;
-  if (ex == expand_e_statement) {
+  if (epnd->ex == expand_e_statement) {
     /* expand expr is placed as if it is an element of the list. */
-    expr_stmts *pstmts = ptr_down_cast<expr_stmts>(parent_expr);
+    expr_stmts *pstmts = ptr_down_cast<expr_stmts>(epnd->parent_expr);
     /* rest expression is the parent stmt's rest instead of this->rest */
     rest_expr = pstmts->rest;
     /* generated_expr is created as stmts */
-    assert(generated_expr == 0 || generated_expr->get_esort() == expr_e_stmts);
+    assert(epnd->generated_expr == 0 ||
+      epnd->generated_expr->get_esort() == expr_e_stmts);
     expr_i *p = pstmts->parent_expr;
     int const n = p->get_num_children();
     int i = 0;
@@ -3610,52 +3669,52 @@ void expr_expand::check_type(symbol_table *lookup)
       }
     }
     if (i == n) {
-      arena_error_throw(this,
+      arena_error_throw(epnd,
 	"Expand stmts: internal error: not a child expr");
     }
-    set_child_parent(p, i, generated_expr);
+    set_child_parent(p, i, epnd->generated_expr);
     gparent_pos = i;
     gparent = p;
   } else {
-    if (ex == expand_e_argdecls) {
+    if (epnd->ex == expand_e_argdecls) {
       /* expand expr is placed on the 'rest' part of the list. */
-      rest_expr = this->rest;
+      rest_expr = epnd->rest;
     } else {
       assert(ex == expand_e_comma);
-      expr_op *p_op = dynamic_cast<expr_op *>(parent_expr);
-      if (p_op != 0 && p_op->op == ',' && p_op->arg1 == this) {
+      expr_op *p_op = dynamic_cast<expr_op *>(epnd->parent_expr);
+      if (p_op != 0 && p_op->op == ',' && p_op->arg1 == epnd) {
 	rest_expr = p_op->arg0;
       }
     }
-    expr_i *p = parent_expr;
+    expr_i *p = epnd->parent_expr;
     int const n = p->get_num_children();
     int i = 0;
     for (i = 0; i < n; ++i) {
-      if (p->get_child(i) == this) {
+      if (p->get_child(i) == epnd) {
 	break;
       }
     }
     if (i == n) {
-      arena_error_throw(this,
+      arena_error_throw(epnd,
 	"Expand argdecls: internal error: not a child expr");
     }
-    set_child_parent(p, i, generated_expr);
+    set_child_parent(p, i, epnd->generated_expr);
     gparent = p;
     gparent_pos = i;
   }
   /* re-chain */
-  if (generated_expr != 0) {
-    fn_set_generated_code(generated_expr); /* mark block_id_ns = 0 */
-    fn_update_tree(generated_expr, gparent, lookup, uniqns);
+  if (epnd->generated_expr != 0) {
+    fn_set_generated_code(epnd->generated_expr); /* mark block_id_ns = 0 */
+    fn_update_tree(epnd->generated_expr, gparent, lookup, epnd->uniqns);
     assert(lookup != 0);
     const bool is_template_descent
       = lookup->block_backref->tinfo.template_descent;
-    fn_set_tree_and_define_static(generated_expr, gparent, lookup, 0,
+    fn_set_tree_and_define_static(epnd->generated_expr, gparent, lookup, 0,
       is_template_descent);
     /* chain rest */
     if (rest_expr != 0) {
-      if (ex == expand_e_comma) {
-	expr_i *cur = generated_expr;
+      if (epnd->ex == expand_e_comma) {
+	expr_i *cur = epnd->generated_expr;
 	expr_i *cur_parent = gparent;
 	int cur_parent_pos = gparent_pos;
 	while (true) {
@@ -3682,13 +3741,13 @@ void expr_expand::check_type(symbol_table *lookup)
 	  }
 	}
 	if (i == n) {
-	  arena_error_throw(this, "Expand: internal error: not a child expr");
+	  arena_error_throw(epnd, "Expand: internal error: not a child expr");
 	}
 	set_child_parent(gpp, i, ntop);
 	assert_valid_tree(gpp);
 	fn_check_type(ntop, lookup);
-      } else if (ex == expand_e_statement) {
-	expr_stmts *st = ptr_down_cast<expr_stmts>(generated_expr);
+      } else if (epnd->ex == expand_e_statement) {
+	expr_stmts *st = ptr_down_cast<expr_stmts>(epnd->generated_expr);
 	assert(st != 0);
 	while (st->rest != 0) {
 	  st = st->rest;
@@ -3697,38 +3756,38 @@ void expr_expand::check_type(symbol_table *lookup)
 	rest_expr->parent_expr = st;
 	DBG_RECHAIN(fprintf(stderr, "RE-CHAIN genrest rest_expr=%p\n",
 	  rest_expr));
-	assert_valid_tree(generated_expr);
-	DBG_TIMING(fprintf(stderr, "expand ch %s:%d begin\n", this->fname,
-	  this->line));
+	assert_valid_tree(epnd->generated_expr);
+	DBG_TIMING(fprintf(stderr, "expand ch %s:%d begin\n", epnd->fname,
+	  epnd->line));
 	DBG_TIMING(double timing_x1 = gettimeofday_double());
-	fn_check_type(generated_expr, lookup);
+	fn_check_type(epnd->generated_expr, lookup);
 	DBG_TIMING(double timing_x2 = gettimeofday_double());
-	DBG_TIMING(fprintf(stderr, "expand ch %s:%d end %f\n", this->fname,
-	  this->line, timing_x2 - timing_x1));
-      } else if (ex == expand_e_argdecls) {
-	expr_argdecls *ad = ptr_down_cast<expr_argdecls>(generated_expr);
+	DBG_TIMING(fprintf(stderr, "expand ch %s:%d end %f\n", epnd->fname,
+	  epnd->line, timing_x2 - timing_x1));
+      } else if (epnd->ex == expand_e_argdecls) {
+	expr_argdecls *ad = ptr_down_cast<expr_argdecls>(epnd->generated_expr);
 	assert(ad != 0);
 	while (ad->rest != 0) {
 	  ad = ad->get_rest();
 	}
 	ad->rest = ptr_down_cast<expr_argdecls>(rest_expr);
 	rest_expr->parent_expr = ad;
-	assert_valid_tree(generated_expr);
-	fn_check_type(generated_expr, lookup);
+	assert_valid_tree(epnd->generated_expr);
+	fn_check_type(epnd->generated_expr, lookup);
       } else {
 	abort();
       }
     } else {
       /* generated_expr != 0 && rest_expr == 0 */
-      assert_is_child(generated_expr, generated_expr->parent_expr);
-      assert_is_child(generated_expr->parent_expr,
-	generated_expr->parent_expr->parent_expr);
-      assert_valid_tree(generated_expr);
-      fn_check_type(generated_expr, lookup);
+      assert_is_child(epnd->generated_expr, epnd->generated_expr->parent_expr);
+      assert_is_child(epnd->generated_expr->parent_expr,
+	epnd->generated_expr->parent_expr->parent_expr);
+      assert_valid_tree(epnd->generated_expr);
+      fn_check_type(epnd->generated_expr, lookup);
     }
   } else {
     /* generated_expr == 0 */
-    if (ex == expand_e_comma) {
+    if (epnd->ex == expand_e_comma) {
       if (rest_expr != 0) {
 	expr_i *gpp = gparent->parent_expr;
 	int n = gpp->get_num_children();
@@ -3739,7 +3798,7 @@ void expr_expand::check_type(symbol_table *lookup)
 	  }
 	}
 	if (i == n) {
-	  arena_error_throw(this, "Expand: internal error: not a child expr");
+	  arena_error_throw(epnd, "Expand: internal error: not a child expr");
 	}
 	set_child_parent(gpp, i, rest_expr);
 	assert_valid_tree(rest_expr);
@@ -3764,7 +3823,7 @@ void expr_expand::check_type(symbol_table *lookup)
 	    }
 	  }
 	  if (i == n) {
-	    arena_error_throw(this, "Internal error: replace_child");
+	    arena_error_throw(epnd, "Internal error: replace_child");
 	  }
 	  set_child_parent(gpp, i, gp_op->arg1);
 	} else {
@@ -3773,7 +3832,7 @@ void expr_expand::check_type(symbol_table *lookup)
       }
     } else {
       set_child_parent(gparent, gparent_pos, rest_expr);
-      if (ex == expand_e_argdecls) {
+      if (epnd->ex == expand_e_argdecls) {
 	/* need to check rest_expr here because it is a child of this expr */
 	assert_valid_tree(rest_expr);
 	fn_check_type(rest_expr, lookup);
@@ -3787,10 +3846,14 @@ void expr_expand::check_type(symbol_table *lookup)
       }
     }
   }
-  #if 0
-  double t3 = gettimeofday_double();
-  fprintf(stderr, "expand x %f %f %f %f %f\n", t01-t0, t02-t01, t1-t02, t2-t1, t3-t2);
-  #endif
+  DBG_EXPAND_TIMING(double t3 = gettimeofday_double());
+  DBG_EXPAND_TIMING(fprintf(stderr, "expand x %f %f %f %f %f\n", t01-t0,
+    t02-t01, t1-t02, t2-t1, t3-t2));
+}
+
+void expr_expand::check_type(symbol_table *lookup)
+{
+  check_type_expr_expand(this, lookup);
 }
 
 void expr_argdecls::define_vars_one(expr_stmts *stmt)

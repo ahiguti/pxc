@@ -102,11 +102,11 @@ expr_i *expr_foldfe_new(const char *fn, int line, const char *itersym,
   const char *foldop, expr_i *stmts)
 { return arena_push(new expr_foldfe(fn, line, itersym, valueste, embedsym,
   embedexpr, foldop, stmts)); }
-expr_i *expr_expand_new(const char *fn, int line, const char *itersym,
-  const char *idxsym, expr_i *valueste, expr_i *baseexpr, expand_e ex,
-  expr_i *rest)
-{ return arena_push(new expr_expand(fn, line, itersym, idxsym, valueste,
-  baseexpr, ex, rest)); }
+expr_i *expr_expand_new(const char *fn, int line, expr_i *callee,
+  const char *itersym, const char *idxsym, expr_i *valueste,
+  expr_i *baseexpr, expand_e ex, expr_i *rest)
+{ return arena_push(new expr_expand(fn, line, callee, itersym, idxsym,
+  valueste, baseexpr, ex, rest)); }
 expr_i *expr_funcdef_new(const char *fn, int line, const char *sym,
   const char *cname, bool is_const, expr_i *block, bool ext_pxc,
   bool no_def, attribute_e attr)

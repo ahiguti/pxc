@@ -1,0 +1,35 @@
+namespace exr5;
+import common -;
+import meta m;
+
+function {lst} expand foo
+{
+  metafunction lsz m::size{lst};
+  if (m::gt{lsz, 0}) {
+    metafunction cidx m::div{lsz, 2};
+    metafunction lst0 m::slice{lst, 0, cidx};
+    metafunction lst1 m::slice{lst, m::add{cidx, 1}};
+    if (x == m::at{lst, cidx}) {
+      return x;
+    } else if (x < m::at{lst, cidx}) {
+      expand foo{lst0};
+    } else {
+      expand foo{lst1};
+    }
+  } else {
+    return 0;
+  }
+}
+
+function int test1(int x)
+{
+  metafunction lst m::sort{m::list{1, 5, 23, 11, 4, 9, 16}};
+  expand foo{lst};
+}
+
+{
+  for (int x : 0 .. 30) {
+    println(test1(x));
+  }
+}
+

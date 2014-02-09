@@ -152,9 +152,12 @@ template <typename Tcnf, bool is_const> struct range_base {
   static inline const mapped_type& get_cmapped(const const_iterator& iter) {
     return Tcnf::get_cmapped(iter);
   }
-  void next() {
-    if (empty()) { pxcrt::throw_invalid_index(); }
-    ++start;
+  void increment_front(size_t i) {
+    while (i > 0) {
+      if (empty()) { pxcrt::throw_invalid_index(); }
+      ++start;
+      --i;
+    }
   }
   iterator begin() const { return start; }
   iterator end() const { return finish; }

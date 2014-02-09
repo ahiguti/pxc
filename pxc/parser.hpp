@@ -23,6 +23,7 @@ namespace pxc {
 
 struct source_file_info {
   std::string filename;
+  std::string filename_trim;
   std::string content;
 };
 

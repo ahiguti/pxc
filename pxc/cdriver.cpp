@@ -75,12 +75,13 @@ struct parser_options {
   bool no_update;
   bool no_execute;
   bool no_realpath;
+  int trim_path;
   bool gen_out;
   std::string argv0;
   time_t argv0_ctime;
   parser_options() : verbose(0), clean_flag(false), clean_all_flag(false),
     no_build(false), no_update(false), no_execute(false), no_realpath(false),
-    gen_out(false), argv0_ctime(0) { }
+    trim_path(0), gen_out(false), argv0_ctime(0) { }
 };
 
 struct all_modules_info {
@@ -113,7 +114,7 @@ static std::string get_work_filename(const parser_options& po,
 {
   std::string fn;
   if (!mi.aux_filename.empty()) {
-    fn = mi.aux_filename;
+    fn = trim_path(mi.aux_filename, po.trim_path);
     fn = escape_hex_filename(fn);
     fn = "fn/" + fn;
   } else {
@@ -551,6 +552,7 @@ static void get_module_info_rec(const parser_options& po,
       mi.source_files.push_back(source_file_info());
       source_file_info& si = mi.source_files.back();
       si.filename = aux_fn;
+      si.filename_trim = trim_path(si.filename, po.trim_path);
     } else {
       const std::string ns_filename = get_filename_for_ns(ns);
       for (strlist::const_iterator i = po.profile.incdir.begin();
@@ -566,6 +568,7 @@ static void get_module_info_rec(const parser_options& po,
 	mi.source_files.push_back(source_file_info());
 	source_file_info& si = mi.source_files.back();
 	si.filename = s;
+	si.filename_trim = trim_path(si.filename, po.trim_path);
       }
     }
   }
@@ -879,7 +882,7 @@ static void compile_module_to_cc_srcs(const parser_options& po,
 	arena_error_throw(0,
 	  "-:-: Invalid namespace declaration '%s' for '%s'",
 	  cursrc_imports.main_unique_namespace.c_str(),
-	  mi.aux_filename.c_str());
+	  trim_path(mi.aux_filename, po.trim_path).c_str());
       }
     }
     #if 0
@@ -1049,7 +1052,8 @@ static bool compile_modules_rec(const parser_options& po,
     }
   } catch (const std::exception& e) {
     std::string s = e.what();
-    s = "-:-: (while compiling '" + modname + "')\n" + s;
+    s = "-:-: (while compiling '" + trim_path(modname, po.trim_path) + "')\n"
+      + s;
     throw std::runtime_error(s);
   }
   return modified;
@@ -1246,9 +1250,9 @@ static void load_profile(parser_options& po)
   split_string(incstr, ':', po.profile.incdir);
   if (po.profile.incdir.empty()) {
     po.profile.incdir.push_back("/usr/share/pxc_" + platform + "/");
-    po.profile.incdir.push_back("/usr/share/pxc_generic/");
+    po.profile.incdir.push_back("/usr/share/pxc_core/");
     po.profile.incdir.push_back("/usr/local/share/pxc_" + platform + "/");
-    po.profile.incdir.push_back("/usr/local/share/pxc_generic/");
+    po.profile.incdir.push_back("/usr/local/share/pxc_core/");
     po.profile.incdir.push_back("./" + platform + "/");
     po.profile.incdir.push_back(".");
   }
@@ -1520,7 +1524,7 @@ static int prepare_options(parser_options& po, int argc, char **argv)
 	} else if (s == "--no-execute" || s == "-ne") {
 	  po.no_execute = true;
 	} else if (s == "--no-realpath") {
-	  po.no_realpath = true;
+	  po.no_realpath = true; /* for regression test */
 	} else {
 	  err = true;
 	}
@@ -1533,6 +1537,8 @@ static int prepare_options(parser_options& po, int argc, char **argv)
 	  po.work_dir = param;
 	} else if (s == "--generate-cc") {
 	  po.gen_cc_dir = param;
+	} else if (s == "--trim-path") {
+	  po.trim_path = atoi(param.c_str()); /* for regression test */
 	} else {
 	  err = true;
 	}
@@ -1601,7 +1607,8 @@ static int prepare_options(parser_options& po, int argc, char **argv)
       return r;
     }
   }
-  po.work_dir += "/" + escape_hex_filename(po.profile_name) + ".pxcwork";
+  po.work_dir += "/" +
+    escape_hex_filename(trim_path(po.profile_name, po.trim_path)) + ".pxcwork";
   return 0;
 }
 
