@@ -6,5 +6,5 @@ if [ "$TEST_PXC_PROF" == "" ]; then
 fi
 export MUDFLAP_OPTIONS=-viol-segv
 
-exec gdb --args ../../pxc --no-realpath -w=.pxc -p="$TEST_PXC_PROF" $*
+exec gdb --args ../../pxc --trim-path=2 -w=../work -p="$TEST_PXC_PROF" $*
 

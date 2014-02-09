@@ -202,6 +202,7 @@ struct term_expr : public term_i {
 
 std::string meta_term_to_string(const term& t, bool detail_flag);
 long long meta_term_to_long(const term& t);
+term term_litexpr_to_literal(const term& t);
 
 };
 

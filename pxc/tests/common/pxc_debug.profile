@@ -1,4 +1,4 @@
-incdir=../pxc_%{platform}:../pxc_generic:.
+incdir=../pxc_%{platform}:../pxc_core:.
 cflags=-rdynamic -g -O0 -Wall -Wno-unused
 # cflags=-std=c++11 -rdynamic -g -O0 -Wall -Wno-unused
 # -fmudflapth

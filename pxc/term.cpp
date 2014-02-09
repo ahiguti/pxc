@@ -392,5 +392,18 @@ long long meta_term_to_long(const term& t)
   }
 }
 
+term term_litexpr_to_literal(const term& t)
+{
+  expr_i *const e = t.get_expr();
+  if (e != 0) {
+    if (e->get_esort() == expr_e_int_literal) {
+      return term(ptr_down_cast<expr_int_literal>(e)->get_signed());
+    } else if (e->get_esort() == expr_e_str_literal) {
+      return term(ptr_down_cast<expr_str_literal>(e)->value);
+    }
+  }
+  return t;
+}
+
 };
 

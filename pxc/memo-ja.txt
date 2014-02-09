@@ -3,6 +3,23 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- expr_to_termでevaluatedが付いていれば二回evalしてしまう (done)
+
+- function expand(done)
+
+- function expand以外の関数はexpandできないように(done)
+
+- 制約緩和第二弾: noheapや参照をfieldにも置けるようにする。
+
+- slice::next -> increment_front decrement_back (done)
+
+- 数値リテラルからキャストしなくてすむように
+
+- 自動テスト速くするためにnsのコンパイルを共通化 (done)
+
+- cslice{int} const& y; darray{int} const x = y; がエラー
+  -> 109/darr.px (done)
+
 - -Wall -Werrorで通す
 
 - 108/ret.px -> 112/ret1.px (done)
@@ -2537,6 +2554,7 @@ is_partially_ephemeral_type (is_peph)
       cstrref s = "hoge";
       vs.push_back(s); // fooを抜けると無効な値がvsに残る
     }
+  mutableなpephは禁止しておく。
 
 例: vector{cstrref}はどのような制約を加えれば安全か
 - vector{cstrref}はglobal変数やfieldにはできない
@@ -2569,6 +2587,10 @@ noheapの変数は、
   disable-noheap-restrictionを実装
   is_ephemeral_value_type削除
 
+制約緩和第二弾でnoheapをfieldにも置けるようにする。その場合構造体自体
+もnoheapになる。fieldはconstでなければならない。fieldには参照も置ける
+ようにする。
+
 ---------------------------------------------------------------------
 例外クラスの継承
 
@@ -2599,4 +2621,16 @@ c++のstd::runtime_error等を非virtual継承。
 
 
 具体型
+
+
+---------------------------------------------------------------------
+function expand
+
+定義:
+  function {args} void hoge() { expand (sym, idx : args) { ... } }
+  展開の部品取り用関数。この関数は普通に呼ぶとエラーになるかもしれない。
+適用:
+  expand hoge{args};
+  関数hogeの中のexpand式の内容が展開される。
+
 

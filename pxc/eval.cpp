@@ -770,6 +770,9 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
 	  term_tostr_human(rebuild_term(tptr, texpr, targs)).c_str());
       }
       expr_te *const te = ptr_down_cast<expr_te>(texpr);
+      if (te->is_term_literal()) {
+	return te->sdef.get_evaluated();
+      }
       return eval_te(te, ectx, pos);
     }
     break;

@@ -20,32 +20,16 @@ struct darray {
     deallocate_uninitialized(start, valid_len);
   }
   darray(size_type len, const T& val) {
-    valid_len = len;
-    start = allocate_uninitialized<T>(valid_len);
-    if (is_trivially_copyable<T>::value) {
-      initialize_fill_n(start, valid_len, val);
-    } else {
-      PXC_TRY {
-	initialize_fill_n(start, valid_len, val);
-      } PXC_CATCH(...) {
-	deallocate_uninitialized(start, valid_len);
-	PXC_RETHROW;
-      }
-    }
+    construct_fill(len, val);
   }
   darray(const darray& x) {
-    valid_len = x.valid_len;
-    start = allocate_uninitialized<T>(valid_len);
-    if (is_trivially_copyable<T>::value) {
-      initialize_copy_n(start, valid_len, x.start);
-    } else {
-      PXC_TRY {
-	initialize_copy_n(start, valid_len, x.start);
-      } PXC_CATCH(...) {
-	deallocate_uninitialized(start, valid_len);
-	PXC_RETHROW;
-      }
-    }
+    construct_copy(x.start, x.valid_len);
+  }
+  darray(const range_type& x) {
+    construct_copy(x.rawarr(), x.size());
+  }
+  darray(const crange_type& x) {
+    construct_copy(x.rawarr(), x.size());
   }
   bool empty() const { return valid_len == 0; }
   size_type size() const { return valid_len; }
@@ -67,6 +51,35 @@ struct darray {
   const_iterator end() const { return start + valid_len; }
   T *rawarr() { return start; }
   const T *rawarr() const { return start; }
+private:
+  void construct_fill(size_type len, const T& val) {
+    valid_len = len;
+    start = allocate_uninitialized<T>(valid_len);
+    if (is_trivially_copyable<T>::value) {
+      initialize_fill_n(start, valid_len, val);
+    } else {
+      PXC_TRY {
+	initialize_fill_n(start, valid_len, val);
+      } PXC_CATCH(...) {
+	deallocate_uninitialized(start, valid_len);
+	PXC_RETHROW;
+      }
+    }
+  }
+  void construct_copy(const T *arr, size_type len) {
+    valid_len = len;
+    start = allocate_uninitialized<T>(valid_len);
+    if (is_trivially_copyable<T>::value) {
+      initialize_copy_n(start, valid_len, arr);
+    } else {
+      PXC_TRY {
+       initialize_copy_n(start, valid_len, arr);
+      } PXC_CATCH(...) {
+       deallocate_uninitialized(start, valid_len);
+       PXC_RETHROW;
+      }
+    }
+  }
 private:
   T *start;
   size_type valid_len;

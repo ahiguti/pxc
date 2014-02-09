@@ -1,4 +1,4 @@
-incdir=../pxc_%{platform}:../pxc_generic:.
+incdir=../pxc_%{platform}:../pxc_core:.
 generate_dynamic=1
 cflags=-rdynamic -g -O3 -DNDEBUG -Werror -Wall -Wno-unused
 # cflags=-rdynamic -g -O3 -DNDEBUG -Werror -Wall -Wno-unused

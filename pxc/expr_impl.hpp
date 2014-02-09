@@ -341,6 +341,7 @@ public:
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
   bool is_expression() const { return true; }
+  bool is_term_literal() const;
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
   virtual symbol_common *get_sdef() { return &sdef; }
@@ -1073,22 +1074,24 @@ public:
 };
 
 struct expr_expand : public expr_i {
-  expr_expand(const char *fn, int line, const char *itersym,
+  expr_expand(const char *fn, int line, expr_i *callee, const char *itersym,
     const char *idxsym, expr_i *valueste, expr_i *baseexpr, expand_e ex,
     expr_i *rest);
   expr_i *clone() const;
   expr_e get_esort() const { return expr_e_expand; }
-  int get_num_children() const { return 3; }
+  int get_num_children() const { return 4; }
   expr_i *get_child(int i) {
     if (i == 0) { return valueste; }
     if (i == 1) { return baseexpr; }
     if (i == 2) { return rest; }
+    if (i == 3) { return callee; }
     return 0;
   }
   void set_child(int i, expr_i *e) {
     if (i == 0) { valueste = ptr_down_cast<expr_te>(e); }
     if (i == 1) { baseexpr = e; }
     if (i == 2) { rest = e; }
+    if (i == 3) { callee = e; }
   }
   void set_unique_namespace_one(const std::string& u, bool allow_unsafe) {
     uniqns = u; }
@@ -1106,6 +1109,7 @@ public:
   expr_i *baseexpr;
   expand_e ex;
   expr_i *rest;
+  expr_i *callee; /* expr_te */
   expr_i *generated_expr;
 };
 

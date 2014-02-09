@@ -1,4 +1,4 @@
-incdir=/usr/share/pxc_%{platform}/:/usr/share/pxc_generic/:/usr/share/pxc_ext/:.
+incdir=/usr/share/pxc_%{platform}/:/usr/share/pxc_core/:/usr/share/pxc_ext/:.
 show_warnings
 safe_mode=1
 cxx=g++

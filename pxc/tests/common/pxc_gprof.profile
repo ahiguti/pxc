@@ -1,4 +1,4 @@
-incdir=../pxc_%{platform}:../pxc_generic:.
+incdir=../pxc_%{platform}:../pxc_core:.
 cflags=-g -O -p -Werror -Wall -Wno-unused -Wno-attribute
 # -fmudflapth
 # ldflags=-lmudflapth

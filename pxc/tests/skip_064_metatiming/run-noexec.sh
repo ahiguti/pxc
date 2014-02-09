@@ -1,4 +1,4 @@
 #!/bin/bash
 
-exec ../../pxc --no-realpath -w .pxc -p \
+exec ../../pxc --trim-path=2 -w=../work -p \
 	../common/pxc.profile -c --no-execute fib.px

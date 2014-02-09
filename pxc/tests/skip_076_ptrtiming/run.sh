@@ -27,7 +27,7 @@ for i in $TESTS; do
   # echo "$bn";
   echo -n ".";
   if [ "$i" != "pxcrt.px" ]; then
-    ../../pxc --no-realpath -w .pxc -p "$TEST_PXC_PROF" $OPTS "$i" \
+    ../../pxc --trim-path=2 -w=../work -p "$TEST_PXC_PROF" $OPTS "$i" \
     	> $bn.log 2> $bn.log2
     if [ ! "$?" ]; then
       echo "$bn failed"

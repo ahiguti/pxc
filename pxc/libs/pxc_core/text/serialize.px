@@ -127,8 +127,7 @@ deserialize(m::local{tpl, "source_type"} mutable& s)
       m::local{tpl, "pointer_end_skip"}(s);
       return r;
     } else {
-      cstrref s0 = s;
-      s0.prev_back(s0.size());
+      cstrref s0;
       t r = pointer::box_pointer{t}(deserialize{tpl, m::at{t, 0}}(s0));
       return r;
     }
@@ -149,7 +148,7 @@ deserialize(m::local{tpl, "source_type"} mutable& s)
 		found = false;
 		break;
 	      }
-	      s.next_front(s0.size());
+	      s.increment_front(s0.size());
 	      m::local{tpl, "struct_entry_sep_cond"}(s);
 	      m::local{tpl, "value_skip"}(s);
 	      if (s.empty() || m::local{tpl, "struct_end_peek_cond"}(s)) {
@@ -158,7 +157,7 @@ deserialize(m::local{tpl, "source_type"} mutable& s)
 	      }
 	    }
 	    if (found) {
-	      s.next_front(m::strlen{m::to_string{fld}});
+	      s.increment_front(m::strlen{m::to_string{fld}});
 	      m::local{tpl, "struct_entry_sep_cond"}(s);
 	      r.fld = deserialize{tpl, m::at{field_types_sorted{t}, idx}}(s);
 	    }
