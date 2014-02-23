@@ -5,46 +5,67 @@ public import pointer -;
 public import meta m;
 public import algebraic -;
 
-public multithreaded interface {t} uneval {
+public multithreaded interface {t} uneval
+{
   function t eval();
 }
 
 public threaded function {f} ptr{uneval{func_ret{f}}}
 make_thread_func(expand(m::args{f}))
 {
-  const p = make_ptr(uneval_thread{f}(
-    make_tptr(make_tuple(expand(a : m::map{m::args{f}, m::at0}; a)))));
-  return p;
+  if (m::eq{func_ret{f}, void}) {
+    return make_ptr(uneval_thread_void{f}(
+      make_tptr(make_tuple(expand(a : m::map{m::args{f}, m::at0}; a)))));
+  } else {
+    return make_ptr(uneval_thread_nonvoid{f}(
+      make_tptr(make_tuple(expand(a : m::map{m::args{f}, m::at0}; a)))));
+  }
 }
 
-private metafunction func_arg{f} tuple{m::argtypes{f}};
-private metafunction func_ret{f} type_map{m::rettype{f}};
-private metafunction type_map{t} m::cond{m::eq{t, void}, unit, t};
+private metafunction func_arg{f} tuple{m::arg_types{f}};
+private metafunction func_ret{f} m::ret_type{f};
 
 private multithreaded struct {f}
-uneval_thread_params(tptr{func_arg{f}} const& a, tptr{func_ret{f}} const& r)
+uneval_thread_params_nonvoid(tptr{func_arg{f}} const& a,
+  tptr{func_ret{f}} const& r)
 {
   tptr{func_arg{f}} argp = a;
   tptr{func_ret{f}} retp = r;
   function void main() {
     func_arg{f} const& arg = *argp;
-    if (m::eq{func_ret{f}, unit}) {
-      f(expand(a: m::field_names{func_arg{f}}; arg.a));
-    } else {
-      *retp = f(expand(a: m::field_names{func_arg{f}}; arg.a));
-    }
+    *retp = f(expand(a: m::field_names{func_arg{f}}; arg.a));
   }
 }
 
 private multithreaded struct {f}
-uneval_thread(tptr{func_arg{f}} const& a)
+uneval_thread_params_void(tptr{func_arg{f}} const& a)
+{
+  tptr{func_arg{f}} argp = a;
+  function void main() {
+    func_arg{f} const& arg = *argp;
+    f(expand(a: m::field_names{func_arg{f}}; arg.a));
+  }
+}
+
+private multithreaded struct {f}
+uneval_thread_nonvoid(tptr{func_arg{f}} const& a)
   <uneval{func_ret{f}}>
 {
   tptr{func_ret{f}} retp = make_tptr{func_ret{f}}();
-  thread thr = make_thread(uneval_thread_params{f}(a, retp));
+  thread thr = make_thread(uneval_thread_params_nonvoid{f}(a, retp));
   function func_ret{f} eval() {
     thr.join();
     return *retp;
+  }
+}
+
+private multithreaded struct {f}
+uneval_thread_void(tptr{func_arg{f}} const& a)
+  <uneval{void}>
+{
+  thread thr = make_thread(uneval_thread_params_void{f}(a));
+  function void eval() {
+    thr.join();
   }
 }
 

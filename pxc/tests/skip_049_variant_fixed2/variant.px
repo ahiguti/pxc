@@ -118,27 +118,27 @@ private metafunction stub_object_args{t}
     m::args{t}};
 private metafunction argexp{arg}
   m::list{
-    generate_argname{arg}, // a0, a1, a2, ...
+    generate_arg_name{arg}, // a0, a1, a2, ...
     m::add{m::mul{m::at{arg, 3}, 2}, m::at{arg, 4}}}; // byref * 2 + mutable
-private metafunction generate_argname{arg} m::concat{"a", m::at{arg, 0}};
-private metafunction mf_argnames{t, fsym}
-  m::map{m::args{m::local{t, m::to_string{fsym}}}, generate_argname};
+private metafunction generate_arg_name{arg} m::concat{"a", m::at{arg, 0}};
+private metafunction mf_arg_names{t, fsym}
+  m::map{m::args{m::local{t, m::to_string{fsym}}}, generate_arg_name};
 private metafunction seqstr{n} m::map{m::seq{n}, m::to_string};
 private metafunction mf_str{t} m::map{m::member_functions{t}, m::to_string};
 private metafunction mf_argexp_list{t, fsym}
   m::map{m::args{m::local{t, m::to_string{fsym}}}, argexp};
-private metafunction mf_argtype_noneph{t, fsym, idx}
+private metafunction mf_arg_type_noneph{t, fsym, idx}
   to_non_ephemeral{m::at{m::at{m::args{m::local{t, fsym}}, idx}, 2}};
-private metafunction func_argnames{f} m::map{m::args{f}, generate_argname};
+private metafunction func_arg_names{f} m::map{m::args{f}, generate_arg_name};
 private metafunction func_argexp_list{f} m::map{m::args{f}, argexp};
-private metafunction func_argtype_noneph{f, idx}
+private metafunction func_arg_type_noneph{f, idx}
   to_non_ephemeral{m::at{m::at{m::args{f}, idx}, 2}};
 
 public threaded struct {t}
 stub_object(expand(a : stub_object_args{t})) : idynamic :
 {
   expand(dummy : m::list{m::list{"dummy", m::is_copyable_type{t}}}) {
-    t value = t(expand(a : m::argnames{t}; a));
+    t value = t(expand(a : m::arg_names{t}; a));
     t value = x;
   }
   function variant invoke(cstrref const& name, cslice{variant} const& args) {
@@ -164,42 +164,42 @@ public threaded function {tobj, methodidx, fsym} variant variant_invoke(
     fsym};
   expand(ae, idx : func_argexp_list{f}) {
     /* const value */
-    func_argtype_noneph{f, idx} ae =
-      from_variant{func_argtype_noneph{f, idx}}(args[idx]);
+    func_arg_type_noneph{f, idx} ae =
+      from_variant{func_arg_type_noneph{f, idx}}(args[idx]);
     /* mutable value */
-    func_argtype_noneph{f, idx} ae =
-      from_variant{func_argtype_noneph{f, idx}}(args[idx]);
+    func_arg_type_noneph{f, idx} ae =
+      from_variant{func_arg_type_noneph{f, idx}}(args[idx]);
     /* const reference */
-    func_argtype_noneph{f, idx} const& ae =
+    func_arg_type_noneph{f, idx} const& ae =
       downcast_const{
-	stub_object{func_argtype_noneph{f, idx}}, idynamic
+	stub_object{func_arg_type_noneph{f, idx}}, idynamic
       }(*(args[idx].ptrval)).value;
     /* mutable reference */
-    func_argtype_noneph{f, idx} mutable& ae =
+    func_arg_type_noneph{f, idx} mutable& ae =
       downcast_mutable{
-	stub_object{func_argtype_noneph{f, idx}}, idynamic
+	stub_object{func_arg_type_noneph{f, idx}}, idynamic
       }(*(args[idx].ptrval)).value;
   }
   if (m::is_type{tobj}) {
     expand (sym : m::list{m::list{m::to_string{f}, 0}}) {
-      if (m::eq{m::rettype{f}, void}) {
-	obj.sym(expand(a : func_argnames{f}; a));
+      if (m::eq{m::ret_type{f}, void}) {
+	obj.sym(expand(a : func_arg_names{f}; a));
 	return variant();
       } else {
-	return to_variant{m::rettype{f}}(
-	  obj.sym(expand(a : func_argnames{f}; a)));
+	return to_variant{m::ret_type{f}}(
+	  obj.sym(expand(a : func_arg_names{f}; a)));
       }
     }
   } else {
-    if (m::eq{m::rettype{f}, void}) {
-      f(expand(a : func_argnames{f}; a));
+    if (m::eq{m::ret_type{f}, void}) {
+      f(expand(a : func_arg_names{f}; a));
       return variant();
     } else if (m::or{m::is_function{f}, m::is_copyable_type{f}}) {
-      return to_variant{m::rettype{f}}(f(expand(a : func_argnames{f}; a)));
+      return to_variant{m::ret_type{f}}(f(expand(a : func_arg_names{f}; a)));
     } else {
       variant r;
       r.ptrval = ptr{stub_object{f}}(
-	stub_object{f}(expand(a : func_argnames{f}; a)));
+	stub_object{f}(expand(a : func_arg_names{f}; a)));
       return r;
     }
   }

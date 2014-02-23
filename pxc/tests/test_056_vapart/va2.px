@@ -2,15 +2,15 @@ namespace va2;
 import common -;
 import meta m;
 
-metafunction argname{i} m::concat{"a", i};
-metafunction arginfo{lst, i} m::list{argname{i}, m::at0{m::at{lst, i}}, 1, 0};
+metafunction arg_name{i} m::concat{"a", i};
+metafunction arginfo{lst, i} m::list{arg_name{i}, m::at0{m::at{lst, i}}, 1, 0};
 
 function {f, ns, lst} string
-vafunc(expand(m::map{m::seq{m::size{lst}}, arginfo, lst}))
+vafunc(expand(m::map{m::seq{m::size{lst}}, metafunction{x} arginfo{lst, x}}))
 {
   string r;
-  expand(arg, idx : m::map{m::seq{m::size{lst}}, argname}) {
-    r.append(m::symbol{f, ns, m::at0{m::at{lst, idx}}}(arg));
+  expand(arg, idx : m::map{m::seq{m::size{lst}}, arg_name}) {
+    r.append(m::symbol{f, ns}(arg));
   }
   return r;
 }

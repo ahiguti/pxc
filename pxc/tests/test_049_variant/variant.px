@@ -102,7 +102,7 @@ stub_object(expand(stub_object_args{t})) < idynamic >
 {
   expand(dummy : m::list{m::list{"dummy", m::is_copyable_type{t}}}) {
     /* noncopyable */
-    t value = t(expand(a : m::argnames{t}; a));
+    t value = t(expand(a : m::arg_names{t}; a));
     /* copyable */
     t value = x;
   }
@@ -150,7 +150,7 @@ public struct {varname, ns, mutable_flag} stub_variable < idynamic >
 }
 
 private metafunction is_concrete{t}
-  m::and{m::eq{m::num_tparams{t}, m::num_targs{t}}, m::not{m::eq{t, void}},
+  m::and{m::eq{m::tparam_size{t}, m::targ_size{t}}, m::not{m::eq{t, void}},
       m::not{m::attribute{t, "noheap"}}};
 private metafunction filter_concrete{fs} m::filter{fs, is_concrete};
 private metafunction is_constructible{t}
@@ -207,10 +207,11 @@ public struct {ns} stub_namespace () < idynamic >
 }
 
 public function {tlist} variant
-variant_invoke(expand(m::map{m::seq{m::size{tlist}}, vi_arginfo, tlist}))
+variant_invoke(expand(m::map{m::seq{m::size{tlist}},
+  metafunction{x} vi_arginfo{tlist, x}}))
 {
   farray{variant, m::sub{m::size{tlist}, 2}} args;
-  expand(arg, idx : m::map{m::seq{2, m::size{tlist}}, idx_argname}) {
+  expand(arg, idx : m::map{m::seq{2, m::size{tlist}}, idx_arg_name}) {
     args[idx] = to_variant{m::at0{m::at{tlist, m::add{idx, 2}}}}(arg);
   }
   return a0.ptrval->invoke(a1, args);
@@ -223,7 +224,7 @@ private function {tobj, methodidx, fsym} variant variant_invoke_impl(
   expand(m::cond{
     m::is_type{tobj},
     m::list{m::list{"obj", tobj, 1, 1}},
-    m::list}))
+    m::nil}))
 {
   metafunction f m::cond{
     m::is_type{tobj},
@@ -231,57 +232,57 @@ private function {tobj, methodidx, fsym} variant variant_invoke_impl(
     fsym};
   expand(ae, idx : func_argexp_list{f}) {
     /* pattern #0: const value */
-    func_argtype_noneph{f, idx} const& ae =
+    func_arg_type_noneph{f, idx} const& ae =
       downcast_const{
-	stub_object{func_argtype_noneph{f, idx}}, idynamic
+	stub_object{func_arg_type_noneph{f, idx}}, idynamic
       }(*(args[idx].ptrval)).value;
     /* pattern #1: mutable value */
-    func_argtype_noneph{f, idx} const& ae = /* need not to be mutable ref */
+    func_arg_type_noneph{f, idx} const& ae = /* need not to be mutable ref */
       downcast_const{
-	stub_object{func_argtype_noneph{f, idx}}, idynamic
+	stub_object{func_arg_type_noneph{f, idx}}, idynamic
       }(*(args[idx].ptrval)).value;
     /* pattern #2: const reference */
-    func_argtype_noneph{f, idx} const& ae =
+    func_arg_type_noneph{f, idx} const& ae =
       downcast_const{
-	stub_object{func_argtype_noneph{f, idx}}, idynamic
+	stub_object{func_arg_type_noneph{f, idx}}, idynamic
       }(*(args[idx].ptrval)).value;
     /* pattern #3: mutable reference */
-    func_argtype_noneph{f, idx} mutable& ae =
+    func_arg_type_noneph{f, idx} mutable& ae =
       downcast_mutable{
-	stub_object{func_argtype_noneph{f, idx}}, idynamic
+	stub_object{func_arg_type_noneph{f, idx}}, idynamic
       }(*(args[idx].ptrval)).value;
     /* pattern #4: variant-valuetype, pass by const value */
-    func_argtype_noneph{f, idx} ae =
-      from_variant{func_argtype_noneph{f, idx}}(args[idx]);
+    func_arg_type_noneph{f, idx} ae =
+      from_variant{func_arg_type_noneph{f, idx}}(args[idx]);
     /* pattern #5: variant-valuetype, pass by mutable value */
-    func_argtype_noneph{f, idx} ae =
-      from_variant{func_argtype_noneph{f, idx}}(args[idx]);
+    func_arg_type_noneph{f, idx} ae =
+      from_variant{func_arg_type_noneph{f, idx}}(args[idx]);
     /* pattern #6: variant-valuetype, pass by const reference */
-    func_argtype_noneph{f, idx} ae =
-      from_variant{func_argtype_noneph{f, idx}}(args[idx]);
+    func_arg_type_noneph{f, idx} ae =
+      from_variant{func_arg_type_noneph{f, idx}}(args[idx]);
     /* pattern #7: variant-valuetype, pass by mutable reference */
-    func_argtype_noneph{f, idx} ae =
-      from_variant{func_argtype_noneph{f, idx}}(args[idx]);
+    func_arg_type_noneph{f, idx} ae =
+      from_variant{func_arg_type_noneph{f, idx}}(args[idx]);
   }
   if (m::is_type{tobj}) {
     expand (sym : m::list{m::list{m::to_string{f}, 0}}) {
-      if (m::eq{m::rettype{f}, void}) {
-	obj.sym(expand(a : func_argnames{f}; a));
+      if (m::eq{m::ret_type{f}, void}) {
+	obj.sym(expand(a : func_arg_names{f}; a));
 	return variant();
       } else {
-	return to_variant{m::rettype{f}}(
-	  obj.sym(expand(a : func_argnames{f}; a)));
+	return to_variant{m::ret_type{f}}(
+	  obj.sym(expand(a : func_arg_names{f}; a)));
       }
     }
   } else {
-    if (m::eq{m::rettype{f}, void}) {
-      f(expand(a : func_argnames{f}; a));
+    if (m::eq{m::ret_type{f}, void}) {
+      f(expand(a : func_arg_names{f}; a));
       return variant();
     } else if (m::or{m::is_function{f}, m::is_copyable_type{f}}) {
-      return to_variant{m::rettype{f}}(f(expand(a : func_argnames{f}; a)));
+      return to_variant{m::ret_type{f}}(f(expand(a : func_arg_names{f}; a)));
     } else {
       ptr{stub_object{f}} p = ptr{stub_object{f}}(
-	stub_object{f}(expand(a : func_argnames{f}; a)));
+	stub_object{f}(expand(a : func_arg_names{f}; a)));
       variant r;
       r.ptrval = p;
       return r;
@@ -315,9 +316,8 @@ private metafunction arg_with_index{idx, arginfo}
   m::joinv{m::list{idx}, arginfo};
 private metafunction args_with_index{f}
   m::map{
-    m::seq{m::size{m::args{f}}},
-    m::args{f},
-    arg_with_index};
+    m::transposev{m::seq{m::size{m::args{f}}}, m::args{f}},
+    metafunction{v} arg_with_index{m::at0{v}, m::at1{v}}};
 private metafunction is_variant_valuetype{t}
   m::or{
     m::eq{t, unit},
@@ -333,18 +333,18 @@ private metafunction epnd_pattern_num{arg}
     m::at4{arg}}; /* is_variant_valuetype * 4 + byref * 2 + mutable */
 private metafunction argexp{arg}
   m::list{
-    generate_argname{arg}, /* a0, a1, a2, ... */
+    generate_arg_name{arg}, /* a0, a1, a2, ... */
     epnd_pattern_num{arg}}; /* pattern #? */
-private metafunction idx_argname{i} m::concat{"a", i};
-private metafunction generate_argname{arg} idx_argname{m::at{arg, 0}};
+private metafunction idx_arg_name{i} m::concat{"a", i};
+private metafunction generate_arg_name{arg} idx_arg_name{m::at{arg, 0}};
 private metafunction member_functions_str{t}
   m::map{m::member_functions{t}, m::to_string};
-private metafunction func_argnames{f}
-  m::map{args_with_index{f}, generate_argname};
+private metafunction func_arg_names{f}
+  m::map{args_with_index{f}, generate_arg_name};
 private metafunction func_argexp_list{f}
   m::map{args_with_index{f}, argexp};
-private metafunction func_argtype_noneph{f, idx}
+private metafunction func_arg_type_noneph{f, idx}
   to_non_ephemeral{m::at{m::at{args_with_index{f}, idx}, 2}};
 private metafunction vi_arginfo{tilist, i}
-  m::list{idx_argname{i}, m::at0{m::at{tilist, i}}, 1, 0};
+  m::list{idx_arg_name{i}, m::at0{m::at{tilist, i}}, 1, 0};
 

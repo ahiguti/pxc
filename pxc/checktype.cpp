@@ -929,6 +929,10 @@ static void store_tempvar(expr_i *e, passby_e passby, bool blockscope_flag,
       /* in this case, it will be rooted by value. test_25_slice/val.pl . */
     }
   }
+#if 0
+// FIXME
+if (is_noheap_type(e->resolve_texpr())) abort();
+#endif
   e->tempvar_varinfo.passby = merge_passby(e->tempvar_varinfo.passby, passby);
   e->tempvar_varinfo.guard_elements |= guard_elements;
   e->tempvar_varinfo.scope_block |= blockscope_flag;
@@ -1014,21 +1018,10 @@ static bool is_vararg_function_or_struct(expr_i *e)
   return bl != 0 && bl->is_expand_argdecls();
 }
 
-static expr_i *get_first_arg(expr_funccall *efc)
-{
-  expr_i *efcarg = efc->arg;
-  while (efcarg != 0 && efcarg->get_esort() == expr_e_op &&
-    ptr_down_cast<expr_op>(efcarg)->op == ',') {
-    /* lhs of comma */
-    efcarg = ptr_down_cast<expr_op>(efcarg)->arg0;
-  }
-  return efcarg;
-}
-
 static void add_root_requirement(expr_i *e, passby_e passby,
   bool blockscope_flag)
 {
-  /* this function makes e valid while the current statement (or block if
+  /* this function makes e valid until the current statement (or block if
    * blockscope_flag is true) is terminated. if e is a noheap value (eg.,
    * range types), the object e refer to is also rooted. */
   if (e == 0) {
@@ -1092,27 +1085,25 @@ static void add_root_requirement(expr_i *e, passby_e passby,
 	  }
 	}
       }
-      expr_i *const first_arg = get_first_arg(efc);
-      if (first_arg != 0) {
-	add_root_requirement(first_arg,
+      /* when a non-member function returns a noheap type, its arguments must
+       * be rooted. */
+      typedef std::list<expr_i *> arglist_type;
+      arglist_type arglist;
+      append_hidden_this(efc->func, arglist); /* noop */
+      append_comma_sep_list(efc->arg, arglist);
+      for (arglist_type::const_iterator j = arglist.begin();
+	j != arglist.end(); ++j) {
+	if (is_container_family(e->resolve_texpr())) {
+	  /* this funccall returns a container of noheap type. root container
+	   * elements also, because it may be converted to .
+	   * ( 'const r = make_vector{cslice{int}}(iv0, iv1)' for example ) */
+	  add_root_requirement_container_elements(*j, blockscope_flag);
+	}
+	add_root_requirement(*j,
 	  is_passby_const(passby)
 	  ? passby_e_const_reference : passby_e_mutable_reference,
 	  blockscope_flag);
       }
-      #if 0
-      if (eop == 0 || (eop->op != '.' && eop->op != TOK_ARROW)) {
-	arena_error_throw(efc, "Non-member function returning ephemeral type");
-	  /* TODO: remove this restriction */
-      }
-      /* 'this' object is possibly a container. root the object and it's
-       * elements */
-      add_root_requirement_container_elements(eop->arg0, blockscope_flag);
-      add_root_requirement(eop->arg0,
-	is_passby_const(passby)
-	? passby_e_const_reference : passby_e_mutable_reference,
-	blockscope_flag);
-      return;
-      #endif
     }
     /* function returning reference? */
     bool memfunc_w_explicit_obj = false;
@@ -1149,36 +1140,13 @@ static void add_root_requirement(expr_i *e, passby_e passby,
       }
       return;
     }
+    /* thru */
   }
-  if (e->get_esort() == expr_e_op) {
-    expr_op *const eop = ptr_down_cast<expr_op>(e);
-    if (eop->op == '=' && eop->arg0->get_esort() == expr_e_var) {
-      /* foo x = ... */
-      return; /* always rooted */
-    }
-  }
-  switch (e->get_esort()) {
-  case expr_e_int_literal:
-  case expr_e_float_literal:
-  case expr_e_bool_literal:
-  case expr_e_str_literal:
-  case expr_e_symbol:
-    return; /* always rooted */
-  default:
-    break;
-  }
-  expr_op *const eop = dynamic_cast<expr_op *>(e);
-  if (eop == 0) {
-    /* not a operator. this expr returns a value instead of reference. */
-    if (blockscope_flag) {
-      store_tempvar(e,
-	is_passby_const(passby)
-	? passby_e_const_value : passby_e_mutable_value, blockscope_flag,
-	false, "nonop"); /* ROOT */
-    } else {
-    }
+  if (e->get_esort() != expr_e_op) {
+    /* function calls, symbols, literals etc. */
     return;
   }
+  expr_op *const eop = ptr_down_cast<expr_op>(e);
   /* operator */
   switch (eop->op) {
   case ',':
@@ -1199,9 +1167,14 @@ static void add_root_requirement(expr_i *e, passby_e passby,
   case TOK_INC:
   case TOK_DEC:
   case TOK_PTR_REF:
-    add_root_requirement(eop->arg0, passby_e_mutable_reference,
-      blockscope_flag);
-    add_root_requirement(eop->arg1, passby_e_const_value, blockscope_flag);
+    if (eop->op == '=' && eop->arg0->get_esort() == expr_e_var) {
+      /* foo x = ... */
+      return; /* always rooted */
+    } else {
+      add_root_requirement(eop->arg0, passby_e_mutable_reference,
+	blockscope_flag);
+      add_root_requirement(eop->arg1, passby_e_const_value, blockscope_flag);
+    }
     return;
   case '.':
   case TOK_ARROW:
@@ -3468,6 +3441,48 @@ static void assert_is_child(expr_i *e, expr_i *p)
   #endif
 }
 
+static term fill_stmt_selector(const term& te, expr_i *const baseexpr,
+  expr_expand *const epnd)
+{
+  expr_stmts *const stmts = ptr_down_cast<expr_stmts>(baseexpr);
+  size_t num_stmts = elist_length(stmts);
+  const term_list *const targs = te.get_metalist();
+  if (targs == 0) {
+    return te;
+  }
+  term_list tl;
+  size_t idx = 0;
+  for (term_list::const_iterator i = targs->begin(); i != targs->end();
+    ++i, ++idx) {
+    const term_list *const ent = i->get_metalist();
+    if (ent == 0 || ent->size() == 1) {
+      for (size_t j = 0; j < num_stmts; ++j) {
+	term nent[3];
+	nent[0] = (ent == 0 ? (*i) : (*ent)[0]);
+	nent[1] = term(static_cast<long long>(j));
+	nent[2] = term(static_cast<long long>(idx));
+	tl.push_back(term(term_list_range(nent, 3)));
+      }
+    } else if (ent->size() == 2) {
+      const term_list *const sels = (*ent)[1].get_metalist();
+      if (sels != 0) {
+	/* selector is a list of ints */
+	for (term_list::const_iterator j = sels->begin(); j != sels->end();
+	  ++j) {
+	  term nent[3];
+	  nent[0] = (*ent)[0];
+	  nent[1] = *j;
+	  nent[2] = term(static_cast<long long>(idx));
+	  tl.push_back(term(term_list_range(nent, 3)));
+	}
+      } else {
+	tl.push_back(*i);
+      }
+    }
+  }
+  return term(tl);
+}
+
 static void check_type_expr_expand(expr_expand *const epnd,
   symbol_table *lookup)
 {
@@ -3528,6 +3543,10 @@ static void check_type_expr_expand(expr_expand *const epnd,
     /* expand ( ) */
     fn_check_type(epnd->valueste, lookup);
     vtyp = epnd->valueste->sdef.resolve_evaluated();
+    if (epnd->ex == expand_e_statement) {
+      /* if statement selector is not specified, fill it. */
+      vtyp = fill_stmt_selector(vtyp, epnd->baseexpr, epnd);
+    }
   }
   DBG_EXPAND_TIMING(double t01 = gettimeofday_double());
   bool slow_flag = false;
@@ -3541,9 +3560,7 @@ static void check_type_expr_expand(expr_expand *const epnd,
   if (has_unbound_tparam(vtyp, ectx)) {
     return; /* not instantiated */
   }
-  const term_list *const targs = vtyp.is_metalist() ? vtyp.get_metalist()
-    : vtyp.get_args();
-    // FIXME: should be metalist 
+  const term_list *const targs = vtyp.get_metalist();
   if (targs == 0) {
     arena_error_throw(epnd->valueste,
       "Invalid parameter for 'expand' : '%s' (metalist expected)",
@@ -3621,7 +3638,11 @@ static void check_type_expr_expand(expr_expand *const epnd,
 	se = subst_symbol_name_rec(se, 0, 0, epnd->itersym, symte, true);
       }
       if (epnd->idxsym != 0) {
-	const term tidx = term(idx);
+	long long idxv = idx;
+	if (ent->size() >= 3) {
+	  idxv = (*ent)[2].get_long();
+	}
+	const term tidx = term(idxv);
 	se = subst_symbol_name_rec(se, 0, 0, epnd->idxsym, tidx, true);
       }
       for (expfunc_subst_type::const_iterator i = expfunc_subst.begin();

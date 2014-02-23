@@ -5,7 +5,9 @@ public import io +;
 public import io::file +;
 public import io::errno -;
 public import text::split -;
+public import text::conversion -;
 public import meta m;
+public import meta::family mf;
 
 public threaded function {cb, opt} errno_t file_read_lines(file const& ifile)
 {
@@ -38,6 +40,30 @@ public threaded function {cb, opt} errno_t file_read_lines(file const& ifile)
   return EOK;
 }
 
+public threaded function {cb, opt} errno_t
+file_read_table(file const& ifile)
+{
+  const err = file_read_lines{parse_line, opt}(ifile);
+  threaded function bool parse_line(cstrref mutable line)
+  {
+    expand(sym, idx: m::map{m::seq{m::arg_size{cb}},
+      metafunction{i} m::list{
+        m::concat{"a", i},
+        mf::is_string_or_slice_type{m::arg_type{cb, i}}}})
+    { 
+      /* not a string type */
+      m::arg_type{cb, idx} const sym = from_string{m::arg_type{cb, idx}}(
+        line.next_token('\t'));
+      /* string */
+      m::arg_type{cb, idx} const sym = line.next_token('\t');
+    }
+    /* cb(a0, a1, ...) */
+    return cb(expand(a: m::map{m::seq{m::arg_size{cb}},
+      metafunction{i} m::concat{"a", i}}; a));
+  }
+  return err;
+}
+
 public threaded function bool is_space_or_tab(uchar ch)
 {
   return ch == ' ' || ch == '\t';
@@ -46,7 +72,7 @@ public threaded function bool is_space_or_tab(uchar ch)
 public threaded function {cb, opt} errno_t
 file_read_records(file const& ifile)
 {
-  metafunction enttype m::argtype{cb, 0};
+  metafunction enttype m::arg_type{cb, 0};
   metafunction column_delim get_opt{opt, "column_delim", is_space_or_tab};
   const err = file_read_lines{parse_line, opt}(ifile);
   threaded function bool parse_line(cstrref const& line) {

@@ -189,14 +189,14 @@ private threaded function {f} void function_call(ptr{orb} const& op,
   size_t pos, size_t epos)
 {
   expand (asym, idx : func_argexp_list{f}) {
-    func_argtype_ne{f, idx} asym =
-      unmarshal_type{func_argtype_ne{f, idx}}(op, pos, epos);
+    func_arg_type_ne{f, idx} asym =
+      unmarshal_type{func_arg_type_ne{f, idx}}(op, pos, epos);
   }
-  if (m::ne{m::rettype{f}, void}) {
-    m::rettype{f} r = f(expand(a : func_argnames{f}; a));
+  if (m::ne{m::ret_type{f}, void}) {
+    m::ret_type{f} r = f(expand(a : func_arg_names{f}; a));
     push_return_value(op, r);
   } else {
-    f(expand(a : func_argnames{f}; a));
+    f(expand(a : func_arg_names{f}; a));
     orb mutable& o = *op;
     o.wbuf.append("R\n");
   }
@@ -209,17 +209,17 @@ private threaded function {t, mi} void method_call(ptr{orb} const& op,
   t mutable& objt = downcast_mutable{t, remote}(obj);
   metafunction f m::at{member_functions_sorted{t}, mi};
   expand (asym, idx : func_argexp_list{f}) {
-    func_argtype_ne{f, idx} asym =
-      unmarshal_type{func_argtype_ne{f, idx}}(op, pos, epos);
+    func_arg_type_ne{f, idx} asym =
+      unmarshal_type{func_arg_type_ne{f, idx}}(op, pos, epos);
   }
   expand (fsym : m::list{m::list{m::to_string{f}, 0}}) {
-    if (m::ne{m::rettype{f}, void}) {
-      m::rettype{f} r = objt.fsym(expand(a : func_argnames{f}; a));
+    if (m::ne{m::ret_type{f}, void}) {
+      m::ret_type{f} r = objt.fsym(expand(a : func_arg_names{f}; a));
       o.wbuf.append("R\t");
-      marshal_type{m::rettype{f}}(o, r);
+      marshal_type{m::ret_type{f}}(o, r);
       o.wbuf.append("\n");
     } else {
-      objt.fsym(expand(a : func_argnames{f}; a));
+      objt.fsym(expand(a : func_arg_names{f}; a));
       o.wbuf.append("R\t\n");
     }
   }
@@ -267,14 +267,14 @@ rcptr<remote_type> rawptr_to_ptr(bt_size_t rawptr)
 ;
 
 private threaded function {t, fidx}
-m::rettype{m::at{m::member_functions{t}, fidx}}
+m::ret_type{m::at{m::member_functions{t}, fidx}}
 stub_method_template(
   ptr{orb} const& op, size_t remote_objid,
-  expand (replace_argnames{m::args{m::at{m::member_functions{t}, fidx}}}))
+  expand (replace_arg_names{m::args{m::at{m::member_functions{t}, fidx}}}))
 {
   metafunction mfuncs m::member_functions{t};
-  metafunction rtype m::rettype{m::at{mfuncs, fidx}};
-  metafunction args replace_argnames{m::args{m::at{mfuncs, fidx}}};
+  metafunction rtype m::ret_type{m::at{mfuncs, fidx}};
+  metafunction args replace_arg_names{m::args{m::at{mfuncs, fidx}}};
   orb mutable& o = *op;
   o.wbuf.append("M\t~");
   serialize_to_string{size_t}(remote_objid, o.wbuf);
@@ -313,29 +313,29 @@ private threaded struct {t} stub (ptr{orb} const& op, size_t robjid) <t> {
       metafunction{x}
 	m::list{m::to_string{x}, m::is_const_member_function{x}}};
   metafunction args_replnames{fidx}
-    replace_argnames{m::args{m::at{mfuncs, fidx}}};
-  metafunction argnames{fidx} m::map{args_replnames{fidx}, m::at0};
+    replace_arg_names{m::args{m::at{mfuncs, fidx}}};
+  metafunction arg_names{fidx} m::map{args_replnames{fidx}, m::at0};
   expand (fsym, fidx: mfis) {
     /* non-const member function */
-    function m::rettype{m::at{mfuncs, fidx}}
+    function m::ret_type{m::at{mfuncs, fidx}}
       fsym(expand (args_replnames{fidx})) {
-      if (m::eq{m::rettype{m::at{mfuncs, fidx}}, void}) {
+      if (m::eq{m::ret_type{m::at{mfuncs, fidx}}, void}) {
 	stub_method_template{t, fidx}(
-	  shared_orb, remote_objid, expand (a : argnames{fidx}; a));
+	  shared_orb, remote_objid, expand (a : arg_names{fidx}; a));
       } else {
 	return stub_method_template{t, fidx}(
-	  shared_orb, remote_objid, expand (a : argnames{fidx}; a));
+	  shared_orb, remote_objid, expand (a : arg_names{fidx}; a));
       }
     }
     /* const member function */
-    function m::rettype{m::at{mfuncs, fidx}}
-      fsym(expand (replace_argnames{m::args{m::at{mfuncs, fidx}}})) const {
-      if (m::eq{m::rettype{m::at{mfuncs, fidx}}, void}) {
+    function m::ret_type{m::at{mfuncs, fidx}}
+      fsym(expand (replace_arg_names{m::args{m::at{mfuncs, fidx}}})) const {
+      if (m::eq{m::ret_type{m::at{mfuncs, fidx}}, void}) {
 	stub_method_template{t, fidx}(
-	  shared_orb, remote_objid, expand (a : argnames{fidx}; a));
+	  shared_orb, remote_objid, expand (a : arg_names{fidx}; a));
       } else {
 	return stub_method_template{t, fidx}(
-	  shared_orb, remote_objid, expand (a : argnames{fidx}; a));
+	  shared_orb, remote_objid, expand (a : arg_names{fidx}; a));
       }
     }
   }
@@ -377,7 +377,7 @@ private threaded function {t} t exchange_and_pop_return_value(
   }
 }
 
-private metafunction replace_argnames{args}
+private metafunction replace_arg_names{args}
   /* replace arg names to 'a0', 'a1', ... */
   m::map{m::seq{m::size{args}},
     metafunction{i}
@@ -490,15 +490,15 @@ private metafunction func_argexp_list{f}
     m::seq{m::size{m::args{f}}},
     metafunction{i} m::list{m::concat{"a", i},
       0}};
-      // m::cond{type_byref{func_argtype_ne{f, i}}, 1, 0}}};
+      // m::cond{type_byref{func_arg_type_ne{f, i}}, 1, 0}}};
 private metafunction type_byref{t}
   m::and{
     m::eq{m::family{t}, "ptr"},
     m::inherits{m::at0{t}, remote}};
-private metafunction func_argnames{f}
+private metafunction func_arg_names{f}
   m::map{
     m::seq{m::size{m::args{f}}},
     metafunction{idx} m::concat{"a", idx}};
-private metafunction func_argtype_ne{f, idx}
-  mf::to_non_ephemeral_type{m::at{m::argtypes{f}, idx}};
+private metafunction func_arg_type_ne{f, idx}
+  mf::to_non_ephemeral_type{m::at{m::arg_types{f}, idx}};
 

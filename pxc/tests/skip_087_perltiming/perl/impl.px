@@ -138,12 +138,12 @@ private metafunction is_valuetype{t}
     eq{t, string},
     eq{t, sv}};
 
-private metafunction argtype_noneph{f, i} to_non_ephemeral_type{argtype{f, i}};
+private metafunction arg_type_noneph{f, i} to_non_ephemeral_type{arg_type{f, i}};
 /*
-private metafunction argname_ne{f, i}
-  cond{is_ephemeral_type{argtype{f, i}}, concat{"ea", i}, concat{"a", i}};
+private metafunction arg_name_ne{f, i}
+  cond{is_ephemeral_type{arg_type{f, i}}, concat{"ea", i}, concat{"a", i}};
 */
-private metafunction argname_ne{f, i} concat{"ea", i};
+private metafunction arg_name_ne{f, i} concat{"ea", i};
 
 private function extern "pxperl::identity_ref" {t} t mutable&
 identity_ref(t mutable& x);
@@ -157,33 +157,33 @@ private struct {f} pxfunc_obj {
   function sv call(svarr const& a) {
     /* extract or convert to px object */
     /* TODO: a.get() is too slow */
-    expand (sym, idx: map{seq{argnum{f}}, metafunction{x}
-      list{concat{"a", x}, is_valuetype{argtype_noneph{f, x}}}}) {
+    expand (sym, idx: map{seq{arg_size{f}}, metafunction{x}
+      list{concat{"a", x}, is_valuetype{arg_type_noneph{f, x}}}}) {
       /* byref */
-      argtype_noneph{f, idx} mutable& sym =
-	perlsv_get_object{argtype_noneph{f, idx}}(a.get(idx));
+      arg_type_noneph{f, idx} mutable& sym =
+	perlsv_get_object{arg_type_noneph{f, idx}}(a.get(idx));
       /* byval */
-      value_or_ref{argtype_noneph{f, idx}} mutable sym;
+      value_or_ref{arg_type_noneph{f, idx}} mutable sym;
     }
-    expand (sym, idx: map{seq{argnum{f}}, metafunction{x}
-      list{concat{"a", x}, is_valuetype{argtype_noneph{f, x}}}}) {
+    expand (sym, idx: map{seq{arg_size{f}}, metafunction{x}
+      list{concat{"a", x}, is_valuetype{arg_type_noneph{f, x}}}}) {
       /* byref */
       noop();
       /* byval */
-      perlsv_get_value{argtype_noneph{f, idx}}(a.get(idx), sym);
+      perlsv_get_value{arg_type_noneph{f, idx}}(a.get(idx), sym);
     }
     /* convert to ephemeral type if necessary */
-    expand (sym, idx: map{seq{argnum{f}}, metafunction{x}
-      list{concat{"a", x}, is_ephemeral_type{argtype{f, x}}}}) {
+    expand (sym, idx: map{seq{arg_size{f}}, metafunction{x}
+      list{concat{"a", x}, is_ephemeral_type{arg_type{f, x}}}}) {
       /* not an ephemeral type */
       expand (esym: list{concat{"ea", idx}}) {
-	argtype{f, idx} mutable& esym
-	  = arg_extract{argtype_noneph{f, idx}}(sym);
+	arg_type{f, idx} mutable& esym
+	  = arg_extract{arg_type_noneph{f, idx}}(sym);
       }
       /* ephemeral type */
       expand (esym: list{concat{"ea", idx}}) {
-	argtype{f, idx} mutable esym
-	  = arg_extract{argtype_noneph{f, idx}}(sym);
+	arg_type{f, idx} mutable esym
+	  = arg_extract{arg_type_noneph{f, idx}}(sym);
       }
     }
     /* call the function or type constructor */
@@ -191,14 +191,14 @@ private struct {f} pxfunc_obj {
       mutable uptr = uninit_ptr{f}(0);
       f mutable& obj = uninit_ptr_getref(uptr);
       obj extern "placement-new"
-	f(expand(i: map{seq{argnum{f}}, metafunction{x} argname_ne{f, x}}; i));
+	f(expand(i: map{seq{arg_size{f}}, metafunction{x} arg_name_ne{f, x}}; i));
       return perlsv_from_object{f}(uptr);
-    } else if (eq{rettype{f}, void}) {
-      f(expand(i: map{seq{argnum{f}}, metafunction{x} argname_ne{f, x}}; i));
+    } else if (eq{ret_type{f}, void}) {
+      f(expand(i: map{seq{arg_size{f}}, metafunction{x} arg_name_ne{f, x}}; i));
       return sv();
     } else {
-      return convert_to_perlsv{rettype{f}}(
-	f(expand(i: map{seq{argnum{f}}, metafunction{x} argname_ne{f, x}}; i)));
+      return convert_to_perlsv{ret_type{f}}(
+	f(expand(i: map{seq{arg_size{f}}, metafunction{x} arg_name_ne{f, x}}; i)));
     }
   }
 }

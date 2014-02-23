@@ -114,7 +114,7 @@ static term eval_meta_lsymbol(const term_list_range& tlev, eval_context& ectx,
 static term eval_meta_symbol(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
-  if (tlev.size() < 1) {
+  if (tlev.size() != 1 && tlev.size() != 2) {
     return term();
   }
   const std::string name = meta_term_to_string(tlev[0], false);
@@ -186,7 +186,7 @@ static term eval_meta_apply(const term_list_range& tlev, eval_context& ectx,
 static term eval_meta_error(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
-  if (tlev.size() < 1) {
+  if (tlev.size() != 1) {
     return term();
   }
   const std::string m = meta_term_to_string(tlev[0], true);
@@ -251,7 +251,7 @@ static term eval_meta_inherits(const term_list_range& tlev, eval_context& ectx,
   return term(r);
 }
 
-static term eval_meta_argnum(const term_list_range& tlev, eval_context& ectx,
+static term eval_meta_arg_size(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
   if (tlev.size() != 1) {
@@ -321,19 +321,19 @@ static term eval_meta_ret_common(const term_list_range& tlev,
   return term();
 }
 
-static term eval_meta_rettype(const term_list_range& tlev, eval_context& ectx,
+static term eval_meta_ret_type(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
   return eval_meta_ret_common(tlev, ectx, pos, 1);
 }
 
-static term eval_meta_retbyref(const term_list_range& tlev, eval_context& ectx,
-  expr_i *pos)
+static term eval_meta_ret_byref(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos)
 {
   return eval_meta_ret_common(tlev, ectx, pos, 2);
 }
 
-static term eval_meta_retmutable(const term_list_range& tlev,
+static term eval_meta_ret_mutable(const term_list_range& tlev,
   eval_context& ectx, expr_i *pos)
 {
   return eval_meta_ret_common(tlev, ectx, pos, 3);
@@ -389,25 +389,25 @@ static term eval_meta_arg_common(const term_list_range& tlev,
   return term(term_list_range(r, 4));
 }
 
-static term eval_meta_argtype(const term_list_range& tlev, eval_context& ectx,
+static term eval_meta_arg_type(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
   return eval_meta_arg_common(tlev, ectx, pos, 1);
 }
 
-static term eval_meta_argbyref(const term_list_range& tlev, eval_context& ectx,
-  expr_i *pos)
+static term eval_meta_arg_byref(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos)
 {
   return eval_meta_arg_common(tlev, ectx, pos, 2);
 }
 
-static term eval_meta_argmutable(const term_list_range& tlev,
+static term eval_meta_arg_mutable(const term_list_range& tlev,
   eval_context& ectx, expr_i *pos)
 {
   return eval_meta_arg_common(tlev, ectx, pos, 3);
 }
 
-static term eval_meta_argtypes(const term_list_range& tlev,
+static term eval_meta_arg_types(const term_list_range& tlev,
   eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
@@ -433,8 +433,8 @@ static term eval_meta_argtypes(const term_list_range& tlev,
   return term(tl);
 }
 
-static term eval_meta_argnames(const term_list_range& tlev, eval_context& ectx,
-  expr_i *pos)
+static term eval_meta_arg_names(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
     return term();
@@ -820,7 +820,7 @@ static term eval_meta_fields(const term_list_range& tlev, eval_context& ectx,
   return term(tl);
 }
 
-static term eval_meta_num_tparams(const term_list_range& tlev,
+static term eval_meta_tparam_size(const term_list_range& tlev,
   eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
@@ -840,7 +840,7 @@ static term eval_meta_num_tparams(const term_list_range& tlev,
   return term(tparams_len);
 }
 
-static term eval_meta_num_targs(const term_list_range& tlev,
+static term eval_meta_targ_size(const term_list_range& tlev,
   eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
@@ -1053,37 +1053,48 @@ static term eval_meta_joinv(const term_list_range& tlev, eval_context& ectx,
   return term(rtl);
 }
 
-static term eval_meta_join_tail(const term_list_range& tlev,
+static term eval_meta_transposev(const term_list_range& tlev,
   eval_context& ectx, expr_i *pos)
 {
-  if (tlev.size() != 1) {
-    return term();
-  }
-  const term& t = tlev[0];
-  const term_list *tl = t.get_metalist();
-  term_list rtl;
-  while (tl != 0) {
-    const size_t sz = tl->size();
-    if (sz <= 1) {
-      break;
+  std::vector<term_list> mat;
+  for (size_t i = 0; i < tlev.size(); ++i) {
+    if (!tlev[i].is_metalist()) {
+      return term();
     }
-    rtl.insert(rtl.end(), tl->begin(), tl->end() - 1);
-    tl = (*tl)[sz - 1].get_metalist();
+    const term_list& tl1 = *tlev[i].get_metalist();
+    for (size_t j = 0; j < tl1.size(); ++j) {
+      if (mat.size() <= j) {
+	mat.push_back(term_list());
+      }
+      term_list& rtl1 = mat[j];
+      rtl1.push_back(tl1[j]);
+    }
+  }
+  term_list rtl;
+  for (size_t i = 0; i < mat.size(); ++i) {
+    const term e(mat[i]);
+    rtl.push_back(e);
   }
   return term(rtl);
+}
+
+static term eval_meta_transpose(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos)
+{
+  if (tlev.size() != 1 || !tlev[0].is_metalist()) {
+    return term();
+  }
+  const term_list& tl = *tlev[0].get_metalist();
+  return eval_meta_transposev(tl, ectx, pos);
 }
 
 static term eval_meta_sort(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
-  if (tlev.size() != 1) {
+  if (tlev.size() != 1 || !tlev[0].is_metalist()) {
     return term();
   }
-  const term& t = tlev[0];
-  if (!t.is_metalist()) {
-    return term();
-  }
-  const term_list& tl = *t.get_metalist();
+  const term_list& tl = *tlev[0].get_metalist();
   term_list rtl = tl;
   std::stable_sort(rtl.begin(), rtl.end());
   return term(rtl);
@@ -1157,6 +1168,21 @@ static term eval_meta_is_member_function(const term_list_range& tlev,
   long long v = 0;
   if (efd != 0) {
     v = (efd->is_virtual_or_member_function() != 0);
+  }
+  return term(v);
+}
+
+static term eval_meta_is_mutable_member_function(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos)
+{
+  if (tlev.size() != 1) {
+    return term();
+  }
+  const expr_funcdef *const efd = dynamic_cast<const expr_funcdef *>(
+    tlev[0].get_expr());
+  long long v = 0;
+  if (efd != 0) {
+    v = (efd->is_virtual_or_member_function() != 0) && !(efd->is_const);
   }
   return term(v);
 }
@@ -1405,7 +1431,7 @@ static term eval_meta_nsname(const term_list_range& tlev, eval_context& ectx,
   return term(s);
 }
 
-static term eval_meta_get_namespace(const term_list_range& tlev,
+static term eval_meta_nsof(const term_list_range& tlev,
   eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1) {
@@ -1579,49 +1605,16 @@ static term eval_meta_profile(const term_list_range& tlev, eval_context& ectx,
 static term eval_meta_map(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
-  /* map{list_0, ... , lst_n, func, arg_0, ... , arg_n} */
-  size_t fidx = 0;
-  for (size_t i = 0; i < tlev.size(); ++i) {
-    if (!tlev[i].is_metalist()) {
-      fidx = i;
-      break;
-    }
-  }
-  if (fidx == tlev.size()) {
+  if (tlev.size() != 2 || !tlev[0].is_metalist()) {
     return term();
   }
-  const term& tfunc = tlev[fidx]; /* function */
-  #if 0
-  if (!tfunc.is_expr() ||
-    (tfunc.get_args() != 0 && !tfunc.get_args()->empty())) {
-    arena_error_throw(0, "not a symbol: '%s'",
-      term_tostr_human(tfunc).c_str());
-  }
-  #endif
-  term_list rtl;
-  size_t cur = 0;
-  while (true) {
-    term_list itl;
-    itl.insert(itl.end(), tlev.begin() + fidx + 1, tlev.end());
-    bool done = false;
-    for (size_t i = 0; i < fidx; ++i) {
-      const term_list& tl = *tlev[i].get_metalist();
-      if (tl.size() <= cur) {
-	done = true;
-	break;
-      }
-      itl.push_back(tl[cur]);
-    }
-    if (done) {
-      break;
-    }
-    term tc = eval_apply(tfunc, itl, true, ectx, pos);
-    #if 0
-    term it(tfunc.get_expr(), itl);
-    term tc = eval_term_internal(it, true, ectx, pos);
-    #endif
-    rtl.push_back(tc);
-    ++cur;
+  const term_list& tl = *tlev[0].get_metalist();
+  const term& tfunc = tlev[1];
+  term_list rtl(tl.size());
+  for (size_t i = 0; i < tl.size(); ++i) {
+    const term& arg = tl[i];
+    term tc = eval_apply(tfunc, term_list_range(&arg, 1), true, ectx, pos);
+    rtl[i] = tc;
   }
   return term(rtl);
 }
@@ -1737,6 +1730,19 @@ static term eval_meta_and(expr_i *texpr, const term_list_range& targs,
   return term(1LL);
 }
 
+static term eval_meta_trace(expr_i *texpr, const term_list_range& targs,
+  bool targs_evaluated, eval_context& ectx, expr_i *pos)
+{
+  term tc;
+  for (term_list_range::const_iterator i = targs.begin(); i != targs.end();
+    ++i) {
+    tc = eval_if_unevaluated(*i, targs_evaluated, ectx, pos);
+    fprintf(stderr, "%s\t=>\t%s\n",
+      term_tostr_human(*i).c_str(), term_tostr_human(tc).c_str());
+  }
+  return tc;
+}
+
 static term eval_meta_timing(expr_i *texpr, const term_list_range& targs,
   bool targs_evaluated, eval_context& ectx, expr_i *pos)
 {
@@ -1789,20 +1795,21 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@seq", &eval_meta_seq },
   { "@join", &eval_meta_join },
   { "@joinv", &eval_meta_joinv },
-  { "@join_tail", &eval_meta_join_tail },
+  { "@transpose", &eval_meta_transpose },
+  { "@transposev", &eval_meta_transposev },
   { "@sort", &eval_meta_sort },
   { "@unique", &eval_meta_unique },
   { "@base", &eval_meta_base },
-  { "@rettype", &eval_meta_rettype },
-  { "@retbyref", &eval_meta_retbyref },
-  { "@retmutable", &eval_meta_retmutable },
+  { "@ret_type", &eval_meta_ret_type },
+  { "@ret_byref", &eval_meta_ret_byref },
+  { "@ret_mutable", &eval_meta_ret_mutable },
   { "@ret", &eval_meta_ret },
-  { "@argnum", &eval_meta_argnum },
-  { "@argtype", &eval_meta_argtype },
-  { "@argbyref", &eval_meta_argbyref },
-  { "@argmutable", &eval_meta_argmutable },
-  { "@argtypes", &eval_meta_argtypes },
-  { "@argnames", &eval_meta_argnames },
+  { "@arg_size", &eval_meta_arg_size },
+  { "@arg_type", &eval_meta_arg_type },
+  { "@arg_byref", &eval_meta_arg_byref },
+  { "@arg_mutable", &eval_meta_arg_mutable },
+  { "@arg_types", &eval_meta_arg_types },
+  { "@arg_names", &eval_meta_arg_names },
   { "@args", &eval_meta_args },
   { "@imports", &eval_meta_imports },
   { "@functions", &eval_meta_functions },
@@ -1817,14 +1824,15 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@field_types", &eval_meta_field_types },
   { "@field_names", &eval_meta_field_names },
   { "@fields", &eval_meta_fields },
-  { "@num_tparams", &eval_meta_num_tparams },
-  { "@num_targs", &eval_meta_num_targs },
+  { "@tparam_size", &eval_meta_tparam_size },
+  { "@targ_size", &eval_meta_targ_size },
   { "@targs", &eval_meta_targs },
   { "@values", &eval_meta_values },
   { "@typeof", &eval_meta_typeof },
   { "@is_type", &eval_meta_is_type },
   { "@is_function", &eval_meta_is_function },
   { "@is_member_function", &eval_meta_is_member_function },
+  { "@is_mutable_member_function", &eval_meta_is_mutable_member_function },
   { "@is_const_member_function", &eval_meta_is_const_member_function },
   { "@is_int", &eval_meta_is_int },
   { "@is_string", &eval_meta_is_string },
@@ -1838,7 +1846,7 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@strlen", &eval_meta_strlen },
   { "@family", &eval_meta_family },
   { "@attribute", &eval_meta_attribute },
-  { "@get_namespace", &eval_meta_get_namespace },
+  { "@nsof", &eval_meta_nsof },
   { "@nsname", &eval_meta_nsname },
   { "@not", &eval_meta_not },
   { "@eq", &eval_meta_eq },
@@ -1870,6 +1878,7 @@ static const nonstrict_metafunc_entry nonstrict_metafunc_entries[] = {
   { "@@cond", &eval_meta_cond },
   { "@@or", &eval_meta_or },
   { "@@and", &eval_meta_and },
+  { "@@trace", &eval_meta_trace },
   { "@@timing", &eval_meta_timing },
 };
 
