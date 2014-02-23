@@ -582,7 +582,8 @@ static void get_module_info_rec(const parser_options& po,
       get_module_info_rec(po, i->ns, "", ami, ancestors, checked);
     } catch (const std::exception& e) {
       std::string s = e.what();
-      s = "-:-: (imported from '" + modname + "')\n" + s;
+      const std::string mn = trim_path(modname, po.trim_path);
+      s = "-:-: (imported from '" + mn + "')\n" + s;
       throw std::runtime_error(s);
     }
   }

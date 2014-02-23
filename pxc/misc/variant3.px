@@ -127,44 +127,44 @@ multithreaded struct {t} stub_iinvoke : iinvoke : {
   t value;
   metafunction mfuncstr{t} m::map{m::member_functions{t}, m::to_string};
   metafunction seqstr{n} m::map{m::seq{n}, m::to_string};
-  metafunction argname{arg} m::concat{"a", m::at{arg, 0}};
-  metafunction argnames{fsym}
-    m::map{m::args{m::local{t, m::to_string{fsym}}}, argname};
+  metafunction arg_name{arg} m::concat{"a", m::at{arg, 0}};
+  metafunction arg_names{fsym}
+    m::map{m::args{m::local{t, m::to_string{fsym}}}, arg_name};
   metafunction argexp{arg}
     m::list{
-      argname{arg}, // a0, a1, a2, ...
+      arg_name{arg}, // a0, a1, a2, ...
       m::add{m::mul{m::at{arg, 3}, 2}, m::at{arg, 4}}}; // byref * 2 + mutable
   metafunction argexp_list{fsym}
     m::map{m::args{m::local{t, m::to_string{fsym}}}, argexp};
   metafunction args_ae{fsym, ae}
     m::at{m::args{m::local{t, fsym}}, m::to_int{m::substring{ae, 1}}};
-  metafunction argtype_ae{fsym, ae} m::at{args_ae{fsym, ae}, 2};
-  metafunction argtype_noneph{fsym, ae} to_non_ephemeral{argtype_ae{fsym, ae}};
+  metafunction arg_type_ae{fsym, ae} m::at{args_ae{fsym, ae}, 2};
+  metafunction arg_type_noneph{fsym, ae} to_non_ephemeral{arg_type_ae{fsym, ae}};
   function variant invoke(cstrref const& name, cslice{variant} const& args) {
     expand(fsym : mfuncstr{t}) {
       if (m::to_string{fsym} == name) {
 	expand(ae : argexp_list{fsym}) {
 	  /* const value */
-	  argtype_noneph{fsym, ae} ae = from_variant{argtype_noneph{fsym, ae}}(
+	  arg_type_noneph{fsym, ae} ae = from_variant{arg_type_noneph{fsym, ae}}(
 	    args[m::to_int{m::substring{ae, 1}}]);
 	  /* mutable value */
-	  argtype_noneph{fsym, ae} ae = from_variant{argtype_noneph{fsym, ae}}(
+	  arg_type_noneph{fsym, ae} ae = from_variant{arg_type_noneph{fsym, ae}}(
 	    args[m::to_int{m::substring{ae, 1}}]);
 	  /* const reference */
-	  argtype_noneph{fsym, ae} const& ae =
-	    downcast_const{stub_iinvoke{argtype_noneph{fsym, ae}}, iinvoke}(
+	  arg_type_noneph{fsym, ae} const& ae =
+	    downcast_const{stub_iinvoke{arg_type_noneph{fsym, ae}}, iinvoke}(
 	      *(args[m::to_int{m::substring{ae, 1}}].tptrval)).value;
 	  /* mutable reference */
-	  argtype_noneph{fsym, ae} mutable& ae =
-	    downcast_mutable{stub_iinvoke{argtype_noneph{fsym, ae}}, iinvoke}(
+	  arg_type_noneph{fsym, ae} mutable& ae =
+	    downcast_mutable{stub_iinvoke{arg_type_noneph{fsym, ae}}, iinvoke}(
 	      *(args[m::to_int{m::substring{ae, 1}}].tptrval)).value;
 	}
-	if (m::eq{m::rettype{m::local{t, m::to_string{fsym}}}, void}) {
-	  value.fsym(expand(a : argnames{fsym}; a));
+	if (m::eq{m::ret_type{m::local{t, m::to_string{fsym}}}, void}) {
+	  value.fsym(expand(a : arg_names{fsym}; a));
 	  return variant();
 	} else {
-	  return to_variant{m::rettype{m::local{t, m::to_string{fsym}}}}(
-	    value.fsym(expand(a : argnames{fsym}; a)));
+	  return to_variant{m::ret_type{m::local{t, m::to_string{fsym}}}}(
+	    value.fsym(expand(a : arg_names{fsym}; a)));
 	}
       }
     }

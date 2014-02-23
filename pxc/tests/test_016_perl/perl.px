@@ -22,8 +22,8 @@ public metafunction functions_for_ns{ns}
   m::filter{
     meta::symbol::functions_for_ns{ns},
     metafunction{f}
-      m::and{m::not{meta::family::is_ephemeral_type{m::rettype{f}}},
-	m::not{m::retbyref{f}}}};
+      m::and{m::not{meta::family::is_ephemeral_type{m::ret_type{f}}},
+	m::not{m::ret_byref{f}}}};
 public metafunction is_constructible_non_ephemeral{t}
   m::and{
     m::is_constructible_type{t},
@@ -64,21 +64,21 @@ public function {ns} void export_all()
   metafunction extract_pointer{t}
     m::cond{mf::is_pointer_type{t}, m::at0{t}, t};
   metafunction base_type_candidate{fn}
-    m::cond{m::ge{m::size{m::argtypes{fn}}, 1},
-      m::concat{extract_pointer{m::argtype{fn, 0}}, "_"},
+    m::cond{m::ge{m::size{m::arg_types{fn}}, 1},
+      m::concat{extract_pointer{m::arg_type{fn, 0}}, "_"},
       "0_"};
   expand (i : m::seq{m::size{allfuncs}}) {
     {
       metafunction fn m::at{allfuncs, i};
       metafunction fnstr m::full_string{fn};
-      metafunction btc m::concat{m::get_namespace{fn}, "::",
+      metafunction btc m::concat{m::nsof{fn}, "::",
 	base_type_candidate{fn}};
       /* debug_log(fnstr, btc); */
       if (m::eq{m::substring{fnstr, 0, m::strlen{btc}}, btc}) {
 	/* pseudo member function */
 	debug_log("pmfnstr", pmfnstr);
 	metafunction pmfnstr m::concat{
-	  m::full_string{m::argtype{fn, 0}}, "::",
+	  m::full_string{m::arg_type{fn, 0}}, "::",
 	  m::substring{fnstr, m::strlen{btc}}};
 	perl::xs_make_function{fn}(pmfnstr);
       } else {

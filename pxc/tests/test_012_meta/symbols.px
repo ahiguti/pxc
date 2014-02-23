@@ -5,16 +5,16 @@ public import common -;
 
 private metafunction nslist{ns} imports_transitive{ns};
 private metafunction is_concrete{t}
-  and{eq{num_tparams{t}, num_targs{t}}, not{eq{t, void}}};
+  and{eq{tparam_size{t}, targ_size{t}}, not{eq{t, void}}};
 private metafunction filter_concrete{fs} filter{fs, is_concrete};
 private metafunction has_byref_iter{f, n, i}
-  cond{eq{n, i}, 0, or{argbyref{f, i}, has_byref_iter{f, n, add{i, 1}}}};
-private metafunction norefarg{f} not{has_byref_iter{f, argnum{f}, 0}};
+  cond{eq{n, i}, 0, or{arg_byref{f, i}, has_byref_iter{f, n, add{i, 1}}}};
+private metafunction norefarg{f} not{has_byref_iter{f, arg_size{f}, 0}};
 private metafunction filter_norefarg{fs} filter{fs, norefarg};
 private metafunction nsfuncs{ns}
   filter_norefarg{filter_concrete{join{map{nslist{ns}, functions}}}};
 private metafunction nstypes{ns} filter_concrete{join{map{nslist{ns}, types}}};
-private metafunction atypes_one{f} joinv{list{rettype{f}}, argtypes{f}};
+private metafunction atypes_one{f} joinv{list{ret_type{f}}, arg_types{f}};
 private metafunction atypes{fs}
   filter_concrete{join{map{filter_concrete{fs}, atypes_one}}};
 private metafunction ftypes{ts}

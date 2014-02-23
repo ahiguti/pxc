@@ -139,6 +139,8 @@ static compile_mode cur_mode;
 %type<int_val> opt_cv
 %type<visi_val> opt_attribute
 %type<visi_val> opt_attribute_threading
+%type<visi_val> visibility
+%type<int_val> opt_mutable
 %type<int_val> opt_private
 %type<str_val>  opt_strlit
 %type<expr_val> struct_stmt
@@ -699,22 +701,30 @@ metafdef_stmt
 	  { $$ = expr_metafdef_new(cur_fname, @2.first_line, $3, $4, $5, $1); }
 	;
 visi_vardef_stmt
-	: TOK_PRIVATE type_expr TOK_SYMBOL ';'
-	  { $$ = expr_var_new(cur_fname, @1.first_line, $3, $2,
-		passby_e_mutable_value, attribute_private, 0); }
-	| TOK_PUBLIC type_expr TOK_SYMBOL ';'
-	  { $$ = expr_var_new(cur_fname, @1.first_line, $3, $2,
-		passby_e_mutable_value, attribute_public, 0); }
-	| TOK_PRIVATE type_expr TOK_SYMBOL '=' assign_expr ';'
+	: visibility type_expr opt_mutable TOK_SYMBOL ';'
+	  { $$ = expr_var_new(cur_fname, @1.first_line, $4, $2,
+		$3 ? passby_e_mutable_value : passby_e_const_value,
+		$1, 0); }
+	| visibility type_expr opt_mutable TOK_SYMBOL '=' assign_expr ';'
 	  { $$ = expr_op_new(cur_fname, @1.first_line, '=',
-		expr_var_new(cur_fname, @1.first_line, $3, $2,
-			passby_e_mutable_value, attribute_private, $5),
-		$5); }
-	| TOK_PUBLIC type_expr TOK_SYMBOL '=' assign_expr ';'
-	  { $$ = expr_op_new(cur_fname, @1.first_line, '=',
-		expr_var_new(cur_fname, @1.first_line, $3, $2,
-			passby_e_mutable_value, attribute_public, $5),
-		$5); }
+		expr_var_new(cur_fname, @1.first_line, $4, $2,
+			$3 ? passby_e_mutable_value : passby_e_const_value,
+			$1, $6),
+		$6); }
+	;
+visibility
+	: TOK_PUBLIC
+	  { $$ = attribute_public; }
+	| TOK_PRIVATE
+	  { $$ = attribute_private; }
+	;
+opt_mutable
+	:
+	  { $$ = 1; }
+	| TOK_MUTABLE
+	  { $$ = 1; }
+	| TOK_CONST
+	  { $$ = 0; }
 	;
 vardef_stmt
 	: vardef_expr ';'

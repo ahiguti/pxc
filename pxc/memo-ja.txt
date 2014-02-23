@@ -3,6 +3,36 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- 103/queueをcoreへ
+
+- v1 = make_vector{cslice}(sli1) で sli1がblockscopeでrootされていない
+  (done)
+
+- meta::transpose (done)
+
+- meta::mapの仕様簡略化 (done)
+
+- metaの命名ルール確定 (done)
+
+- is_const_member_function やめて is_mutable...にする。mutableなら1に
+  統一するため。 (done)
+
+- metaの可変長引数なものを明確化 (done)
+
+- make_ptrの引数がcrefに固定されている 114/mp1 (done)
+
+- expandのindexは式セレクタがリストであっても1つとカウント(done)
+
+- expandのパラメータに式を文字列として渡せば式を展開する。文法的に
+  問題無い箇所であるかもチェックする。
+
+- expand等のテンプレパラメータに変数を指定すると空文字列になるのは
+  わかりにくいので、変数名を文字列化するようにするか
+
+- expand: セレクタが指定されない場合は全stmtを選択 (done)
+
+- expand: セレクタとしてリストを許可 (done)
+
 - expr_to_termでevaluatedが付いていれば二回evalしてしまう (done)
 
 - function expand(done)
@@ -2519,6 +2549,49 @@ multimap: mapとのちがいは最初のn個のfieldについてsortするだけ
   ない点。
 
 ---------------------------------------------------------------------
+例外クラスの継承
+
+logic_error_st/runtime_error_st/bad_alloc_st はそれぞれ
+std::logic_error等をnon-virtualな基底クラスにしている。
+これらの複数を継承するとexceptionへupcastできない。
+ ... std::exception is an ambiguous base of foo
+
+---------------------------------------------------------------------
+例外再整理
+
+インタフェース
+c_exception                        : c++のstd::exception
+c_logic_error <c_exception>        : c++のstd::logic_error
+c_runtime_error <c_exception>      : c++のstd::runtime_error
+c_bad_alloc <c_exception>          : c++のstd::bad_alloc
+exception { function string message() const; }
+logic_error <exception>
+runtime_error <exception>
+bad_alloc <exception>
+
+pxcの例外は c++のレベルで
+exception をvirtual、
+c++のstd::runtime_error等を非virtual継承。
+
+例外型は全てc_exceptionをc++のレベルでは継承しているが、pxcレベルでは
+  exceptionはc_exceptionを継承していない。
+
+
+具体型
+
+
+---------------------------------------------------------------------
+function expand
+
+定義:
+  function {args} void hoge() { expand (sym, idx : args) { ... } }
+  展開の部品取り用関数。この関数は普通に呼ぶとエラーになるかもしれない。
+適用:
+  expand hoge{args};
+  関数hogeの中のexpand式の内容が展開される。
+
+
+---------------------------------------------------------------------
 ephemeral型の制約緩和
 
 vector{cstrref}などが使えるように
@@ -2588,49 +2661,11 @@ noheapの変数は、
   is_ephemeral_value_type削除
 
 制約緩和第二弾でnoheapをfieldにも置けるようにする。その場合構造体自体
-もnoheapになる。fieldはconstでなければならない。fieldには参照も置ける
-ようにする。
+もnoheapになる。fieldはconstでなければならない。
 
 ---------------------------------------------------------------------
-例外クラスの継承
+ephemeral型の制約緩和#2
 
-logic_error_st/runtime_error_st/bad_alloc_st はそれぞれ
-std::logic_error等をnon-virtualな基底クラスにしている。
-これらの複数を継承するとexceptionへupcastできない。
- ... std::exception is an ambiguous base of foo
-
----------------------------------------------------------------------
-例外再整理
-
-インタフェース
-c_exception                        : c++のstd::exception
-c_logic_error <c_exception>        : c++のstd::logic_error
-c_runtime_error <c_exception>      : c++のstd::runtime_error
-c_bad_alloc <c_exception>          : c++のstd::bad_alloc
-exception { function string message() const; }
-logic_error <exception>
-runtime_error <exception>
-bad_alloc <exception>
-
-pxcの例外は c++のレベルで
-exception をvirtual、
-c++のstd::runtime_error等を非virtual継承。
-
-例外型は全てc_exceptionをc++のレベルでは継承しているが、pxcレベルでは
-  exceptionはc_exceptionを継承していない。
-
-
-具体型
-
-
----------------------------------------------------------------------
-function expand
-
-定義:
-  function {args} void hoge() { expand (sym, idx : args) { ... } }
-  展開の部品取り用関数。この関数は普通に呼ぶとエラーになるかもしれない。
-適用:
-  expand hoge{args};
-  関数hogeの中のexpand式の内容が展開される。
+noheap型はヒープに置けない。ptr{t}はtがnoheapであったらエラー。
 
 

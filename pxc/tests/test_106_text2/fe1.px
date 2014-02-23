@@ -17,27 +17,6 @@ public import io::standard -;
 import common -;
 import operator -;
 
-public threaded function {cb, opt} errno_t
-file_read_records2(file const& ifile)
-{ 
-  const err = file_read_lines{parse_line, opt}(ifile);
-  threaded function bool parse_line(cstrref mutable line) {
-    expand(sym, idx: m::map{m::seq{m::argnum{cb}},
-      metafunction{i} m::list{
-	m::concat{"a", i},
-	mf::is_string_or_slice_type{m::argtype{cb, i}}}}) {
-      /* not a string type */
-      m::argtype{cb, idx} const sym = from_string{m::argtype{cb, idx}}(
-	line.next_token('\t'));
-      /* string */
-      m::argtype{cb, idx} const sym = line.next_token('\t');
-    }
-    return cb(expand(
-      a: m::map{m::seq{m::argnum{cb}}, metafunction{i} m::concat{"a", i}}; a));
-  }
-  return err;
-}
-
 struct {t} monoid_average {
   metafunction value_type t;
   t value;
@@ -59,7 +38,6 @@ function {tto, tfrom} tto monoid_average___to(tfrom const& from)
 function {t} void
 monoid_average_append_to_string(t const& x, string mutable& str)
 {
-  // t:value_type const xv = x.get();
   t:value_type const xv = x;
   return text::conversion::serialize_to_string(xv, str);
 }
@@ -72,10 +50,10 @@ struct foo {
 }
 
 {
-  const f = system.open("hoge3.txt", io::file::O_RDONLY, 0);
   vector{foo} v;
   monoid_average{double} avg;
-  file_read_records2{readrec, 0}(f.value);
+  system.open("hoge3.txt", io::file::O_RDONLY, 0)
+    .value.read_table{readrec, 0}();
   function bool readrec(cstrref const& s, int i, double d) {
     v.emplace_back(s, i, d, monoid_average{double}(d, 1));
     avg = avg + monoid_average{double}(d, 1);

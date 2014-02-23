@@ -1,24 +1,30 @@
 namespace queue;
 import common -;
 
-private metafunction entry_type uneval{void};
-private metafunction queue_type deque{tptr{entry_type}};
+public metafunction entry_type uneval{void};
 
-private multithreaded struct task_queue_shared() {
-  public deque{tptr{entry_type}} queue;
-  public int stop_thread = 0;
-}
-
-public threaded struct task_queue()
+public threaded struct task_queue(size_t num_thrs)
 {
-  tptr{task_queue_shared} const shared = make_tptr{task_queue_shared}();
-  ptr{uneval{unit}} const thr = make_thread_func{queue_thread_main}(shared);
-  function ~ {
-    queue_thread_stop(shared, 1);
-  }
   public function void push(tptr{entry_type} const& e) {
     queue_push_notify(shared, e);
   }
+  private function ~ {
+    queue_thread_stop(shared, 1);
+  }
+  private function void construct(size_t num_thrs) {
+    for (size_t i : 0 .. num_thrs) {
+      thrs.push_back(make_thread_func{queue_thread_main}(shared));
+    }
+  }
+  private tptr{task_queue_shared} const shared = make_tptr{task_queue_shared}();
+  private vector{ptr{uneval{void}}} thrs;
+  construct(num_thrs);
+}
+
+private multithreaded struct task_queue_shared()
+{
+  public deque{tptr{entry_type}} queue;
+  public int stop_thread = 0;
 }
 
 private threaded function option{tptr{entry_type}}
@@ -44,7 +50,7 @@ queue_wait_pop(tptr{task_queue_shared} const& tq)
   return ent;
 }
 
-private threaded function unit
+private threaded function void
 queue_thread_main(tptr{task_queue_shared} const& tq)
 {
   while (true) {
@@ -54,7 +60,6 @@ queue_thread_main(tptr{task_queue_shared} const& tq)
     }
     ent.some->eval();
   }
-  return unit();
 }
 
 private threaded function void
@@ -86,10 +91,12 @@ multithreaded struct hoge(int x0) <uneval{void}> {
 }
 
 {
-  task_queue tq;
-  tq.push(make_tptr{hoge}(10));
-  tq.push(make_tptr{hoge}(20));
-  tq.push(make_tptr{hoge}(30));
+  {
+    mutable tq = task_queue(1);
+    tq.push(make_tptr{hoge}(10));
+    tq.push(make_tptr{hoge}(20));
+    tq.push(make_tptr{hoge}(30));
+  }
   println("ok");
 }
 

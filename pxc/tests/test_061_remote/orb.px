@@ -193,17 +193,17 @@ private threaded function {f} void function_call(orb mutable& o, size_t pos,
   size_t epos)
 {
   expand (asym, idx : func_argexp_list{f}) {
-    func_argtype_ne{f, idx} asym =
-      unmarshal_value{func_argtype_ne{f, idx}}(o.rbuf, pos, epos);
+    func_arg_type_ne{f, idx} asym =
+      unmarshal_value{func_arg_type_ne{f, idx}}(o.rbuf, pos, epos);
   }
-  if (m::ne{m::rettype{f}, void}) {
-    m::rettype{f} r = f(expand(a : func_argnames{f}; a));
+  if (m::ne{m::ret_type{f}, void}) {
+    m::ret_type{f} r = f(expand(a : func_arg_names{f}; a));
     o.wbuf.append("R\t");
     marshal_value(o.wbuf, r);
     o.wbuf.append("\n");
   } else {
     o.wbuf.append("R\t");
-    f(expand(a : func_argnames{f}; a));
+    f(expand(a : func_arg_names{f}; a));
     o.wbuf.append("\n");
   }
 }
@@ -214,18 +214,18 @@ private threaded function {t, mi} void method_call(orb mutable& o, size_t pos,
   t mutable& objt = downcast_mutable{t, remote}(obj);
   metafunction f m::at{member_functions_sorted{t}, mi};
   expand (asym, idx : func_argexp_list{f}) {
-    func_argtype_ne{f, idx} asym =
-      unmarshal_value{func_argtype_ne{f, idx}}(o.rbuf, pos, epos);
+    func_arg_type_ne{f, idx} asym =
+      unmarshal_value{func_arg_type_ne{f, idx}}(o.rbuf, pos, epos);
   }
   expand (fsym : m::list{m::list{m::to_string{f}, 0}}) {
-    if (m::ne{m::rettype{f}, void}) {
-      m::rettype{f} r = objt.fsym(expand(a : func_argnames{f}; a));
+    if (m::ne{m::ret_type{f}, void}) {
+      m::ret_type{f} r = objt.fsym(expand(a : func_arg_names{f}; a));
       o.wbuf.append("R\t");
       marshal_value(o.wbuf, r);
       o.wbuf.append("\n");
     } else {
       o.wbuf.append("R\t");
-      obj.fsym(expand(a : func_argnames{f}; a));
+      obj.fsym(expand(a : func_arg_names{f}; a));
       o.wbuf.append("\n");
     }
   }
@@ -310,11 +310,11 @@ private threaded struct {t} stub (ptr{orb} const& op, size_t robjid) <t> {
 	m::list{m::to_string{x}, m::is_const_member_function{x}}};
   expand (fsym, fidx: mfis) {
     /* non-const member function */
-    function m::rettype{m::at{mfuncs, fidx}}
-      fsym(expand (replace_argnames{m::args{m::at{mfuncs, fidx}}}))
+    function m::ret_type{m::at{mfuncs, fidx}}
+      fsym(expand (replace_arg_names{m::args{m::at{mfuncs, fidx}}}))
     {
-      metafunction rtype m::rettype{m::at{mfuncs, fidx}};
-      metafunction args replace_argnames{m::args{m::at{mfuncs, fidx}}};
+      metafunction rtype m::ret_type{m::at{mfuncs, fidx}};
+      metafunction args replace_arg_names{m::args{m::at{mfuncs, fidx}}};
       orb mutable& o = *shared_orb;
       o.wbuf.append("M\t~");
       serialize_to_string{size_t}(remote_objid, o.wbuf);
@@ -329,11 +329,11 @@ private threaded struct {t} stub (ptr{orb} const& op, size_t robjid) <t> {
       return r;
     }
     /* const member function */
-    function m::rettype{m::at{mfuncs, fidx}}
-      fsym(expand (replace_argnames{m::args{m::at{mfuncs, fidx}}})) const
+    function m::ret_type{m::at{mfuncs, fidx}}
+      fsym(expand (replace_arg_names{m::args{m::at{mfuncs, fidx}}})) const
     {
-      metafunction rtype m::rettype{m::at{mfuncs, fidx}};
-      metafunction args replace_argnames{m::args{m::at{mfuncs, fidx}}};
+      metafunction rtype m::ret_type{m::at{mfuncs, fidx}};
+      metafunction args replace_arg_names{m::args{m::at{mfuncs, fidx}}};
       orb mutable& o = *shared_orb;
       o.wbuf.append("M\t~");
       serialize_to_string{size_t}(remote_objid, o.wbuf);
@@ -373,7 +373,7 @@ private threaded function {t} t execute_expect_response(ptr{orb} const& op)
   }
 }
 
-private metafunction replace_argnames{args}
+private metafunction replace_arg_names{args}
   /* replace arg names to 'a0', 'a1', ... */
   m::map{m::seq{m::size{args}},
     metafunction{i}
@@ -486,17 +486,17 @@ private metafunction func_argexp_list{f}
   m::map{
     m::seq{m::size{m::args{f}}},
     metafunction{i} m::list{m::concat{"a", i},
-      m::cond{type_byref{func_argtype_ne{f, i}}, 1, 0}}};
+      m::cond{type_byref{func_arg_type_ne{f, i}}, 1, 0}}};
 private metafunction type_byref{t}
   m::and{
     m::eq{m::family{t}, "ptr"},
     m::inherits{m::at0{t}, remote}};
-private metafunction func_argnames{f}
+private metafunction func_arg_names{f}
   m::map{
     m::seq{m::size{m::args{f}}},
     metafunction{idx} m::concat{"a", idx}};
-private metafunction func_argtype_ne{f, idx}
-  mf::to_non_ephemeral_type{m::at{m::argtypes{f}, idx}};
+private metafunction func_arg_type_ne{f, idx}
+  mf::to_non_ephemeral_type{m::at{m::arg_types{f}, idx}};
 
 /* using function/method table */ /* TODO: remove */
 
