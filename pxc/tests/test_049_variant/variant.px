@@ -135,12 +135,12 @@ public struct {varname, ns, mutable_flag} stub_variable < idynamic >
       return variant(); // TODO: throw
     }
     if (args.empty()) {
-      return to_variant{m::typeof{m::symbol{varname, ns}}}
-	(m::symbol{varname, ns});
+      return to_variant{m::typeof{m::symbol{ns, varname}}}
+	(m::symbol{ns, varname});
     } else {
       if (m::eq{mutable_flag, 1}) {
-	m::symbol{varname, ns} =
-	  from_variant{m::typeof{m::symbol{varname, ns}}}(args[0]);
+	m::symbol{ns, varname} =
+	  from_variant{m::typeof{m::symbol{ns, varname}}}(args[0]);
 	return variant();
       } else {
 	return variant(); // TODO: throw
@@ -304,7 +304,7 @@ private metafunction is_range_type{t}
     m::eq{m::family{t}, "map_crange"}};
 private metafunction to_non_ephemeral{t}
   m::cond{is_string_or_slice_type{t}, string,
-  m::cond{is_range_type{t}, m::local{t, "non_ephemeral_type"},
+  m::cond{is_range_type{t}, m::symbol{t, "non_ephemeral_type"},
   t}};
 
 private metafunction stub_object_args{t}

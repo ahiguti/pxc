@@ -1,6 +1,7 @@
 threaded namespace ordered::compare "use-unsafe";
 public import numeric::integral -;
 public import numeric::fp -;
+public import numeric::fpmath -;
 public import numeric::union_tag -;
 public import container::array -;
 public import meta m;
@@ -26,12 +27,24 @@ public threaded function {t} int compare(t const& x, t const& y)
     return 0;
   } else if (mf::is_string_or_slice_type{t}) {
     return memcmp_string(x, y);
-  } else if (mf::is_numeric_type{t}) {
+  } else if (mf::is_integral_type{t}) {
     return x < y ? -1 : x > y ? 1 : 0;
+  } else if (mf::is_fp_type{t}) {
+    if (isnan(x)) {
+      if (!isnan(y)) {
+	return 1;
+      } else {
+	return 0;
+      }
+    } else if (isnan(y)) {
+      return -1;
+    } else {
+      return x < y ? -1 : x > y ? 1 : 0;
+    }
   } else if (m::eq{fam, "farray"}) {
     size_t const sz = m::at{t, 1};
     size_t i = 0;
-    for (i = 0; i < n; ++i) {
+    for (i = 0; i < sz; ++i) {
       int const c = compare(x[i], y[i]);
       if (c != 0) {
 	return c;
@@ -43,7 +56,7 @@ public threaded function {t} int compare(t const& x, t const& y)
     size_t const ysz = y.size();
     size_t const sz = xsz < ysz ? xsz : ysz;
     size_t i = 0;
-    for (i = 0; i < n; ++i) {
+    for (i = 0; i < sz; ++i) {
       int const c = compare(x[i], y[i]);
       if (c != 0) {
 	return c;
@@ -55,8 +68,6 @@ public threaded function {t} int compare(t const& x, t const& y)
       return 1;
     }
     return 0;
-  } else if (m::eq{fam, "map"}) {
-    return m::error{"not implemented for _map"};
   } else if (m::eq{fam, "struct"}) {
     expand (fld, idx : m::field_names{t}) {
       {

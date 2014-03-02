@@ -25,7 +25,7 @@ expr_i *instantiate_template(expr_i *tmpl_root, const term_list_range& targs,
 term eval_expr(expr_i *e, bool need_partial_eval = false);
 term eval_term(const term& t, bool need_partial_eval = false);
 
-term eval_mf_local(const term& t, const std::string& name, expr_i *pos);
+term eval_mf_symbol(const term& t, const std::string& name, expr_i *pos);
 term eval_mf_args(const term& t, expr_i *pos);
 term eval_mf_ret(const term& t, expr_i *pos);
 

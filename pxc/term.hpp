@@ -62,7 +62,8 @@ struct term {
   term(const term& x) : ptr(x.ptr) { if (ptr) ptr->incref(); }
   explicit term(long long x);                            /* value */
   explicit term(const std::string& x);                   /* value */
-  explicit term(const term_list_range& a);               /* metalist */
+  explicit term(const term_list_range& a, bool make_index = false);
+                                                         /* metalist */
   term(const std::vector<expr_tparams *>& upvalues, expr_tparams *tpms,
     const term& t);                                      /* lambda */
   term(expr_tparams *tpm, const term& tpmv, const term& tpmv_lexctx,
@@ -93,6 +94,7 @@ struct term {
   bool is_bind() const { return get_term_bind() != 0; }
   bool is_long() const { return get_term_long() != 0; }
   bool is_string() const { return get_term_string() != 0; }
+  bool has_index() const;
   term_i *get() const { return ptr; }
   expr_i *get_expr() const;
   const term_list *get_args() const;
@@ -106,6 +108,7 @@ struct term {
   const term *get_bind_next() const;
   long get_long() const;
   std::string get_string() const;
+  ssize_t assoc_find(const term& key) const;
   void clear() {
     if (ptr) {
       ptr->decref();
@@ -154,17 +157,17 @@ struct term_string : public term_i {
 struct term_metalist : public term_i {
   explicit term_metalist(const term_list_range& a);
   term_sort get_sort() const { return term_sort_metalist; }
-  virtual ssize_t find(const term& t) const;
+  virtual bool has_index() const { return false; }
+  virtual ssize_t assoc_find(const term& t) const;
   const term_list v;
 };
 
 struct term_metalist_idx : public term_metalist {
   explicit term_metalist_idx(const term_list_range& a);
-  virtual ssize_t find(const term& t) const;
+  virtual bool has_index() const { return true; }
+  virtual ssize_t assoc_find(const term& t) const;
   typedef std::map<term, size_t> index_type;
   const index_type index; /* for fast lookup */
-private:
-  static index_type create_index(const term_list_range& a);
 };
 
 struct term_lambda : public term_i {

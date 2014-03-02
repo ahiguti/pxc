@@ -10,20 +10,22 @@ import text::conversion -;
 
 function {t} void parse_table(file const& fp, t mutable& tbl)
 {
-  t:key_type key;
-  t:mapped_type mapped;
+  m::symbol{t, "key_type"} key;
+  m::symbol{t, "mapped_type"} mapped;
   fp.read_lines{parse_line, 0}();
   function bool parse_line(cstrref const& line) {
     size_t const sz = line.size();
     size_t cur = 0;
-    expand (i : m::seq{m::add{1, m::max{t:key_pos, t:mapped_pos}}}) {
+    expand (i : m::seq{
+      m::add{1, m::max{m::symbol{t, "key_pos"}, m::symbol{t, "mapped_pos"}}}})
+    {
       {
 	size_t delim = find_mapped(line, cur, '\t');
 	cstrref col = line[cur .. delim];
-	if (m::eq{i, t:key_pos}) {
-	  key = from_string{t:key_type}(col);
-	} else if (m::eq{i, t:mapped_pos}) {
-	  mapped = from_string{t:mapped_type}(col);
+	if (m::eq{i, m::symbol{t, "key_pos"}}) {
+	  key = from_string{m::symbol{t, "key_type"}}(col);
+	} else if (m::eq{i, m::symbol{t, "mapped_pos"}}) {
+	  mapped = from_string{m::symbol{t, "mapped_type"}}(col);
 	}
 	cur = (delim < sz) ? (delim + 1) : sz;
       }

@@ -301,7 +301,7 @@ function void init_gear_vbos()
 
 function void deinit_gear_vbos()
 {
-  for (int i : 0 .. 3) {
+  for (size_t i : 0 .. 3) {
     const a = gear_vbos[i].name;
     glDeleteBuffers(1, caddress(a));
   }
@@ -449,7 +449,7 @@ function uint compile_shader(cstrref const& src, GLenum type)
     glGetShaderInfoLog(res, static_cast{GLsizei}(sz), address(len),
       buf.rawptr().char());
     debug_log("compile_shader failed:",
-      join{"\t"}(static_cast{int}(type), success, buf));
+      string_join{"\t"}(static_cast{int}(type), success, buf));
     glDeleteShader(res);
     res = 0;
   }
@@ -561,25 +561,29 @@ function void init_gl()
 
 {
   size_t const mu0 = mallinfo_in_use();
-  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu0=", mu0));
-  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu1=", mallinfo_in_use()));
+  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("mu0=", mu0));
+  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("mu1=",
+    mallinfo_in_use()));
   int init_w = 300;
   int init_h = 300;
   SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
   const wnd = SDL_CreateWindow("PXC-SDL2Gears", 0, 0, init_w, init_h,
     SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL).some;
     // SDL_WINDOW_FULLSCREEN | SDL_WINDOW_OPENGL);
-  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu2=", mallinfo_in_use()));
+  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("mu2=",
+    mallinfo_in_use()));
   SDL_GetWindowSize(wnd, init_w, init_h);
   const glctx = SDL_GL_CreateContext(wnd);
-  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu3=", mallinfo_in_use()));
+  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("mu3=",
+    mallinfo_in_use()));
   SDL_GL_SetSwapInterval(0);
 
   init_gl();
   // exit(0); // FIXME
 
   reshape(init_w, init_h);
-  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu4=", mallinfo_in_use()));
+  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("mu4=",
+    mallinfo_in_use()));
 
   uint t0 = 0;
   uint t1 = 0;
@@ -602,7 +606,8 @@ function void init_gl()
 
   bool done = false;
   bool paused = false;
-  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu5=", mallinfo_in_use()));
+  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("mu5=",
+    mallinfo_in_use()));
   function void rotate(float x, float y, float z, float angle) {
     const q = quaternion_from_axis_angle{float}(x, y, z,
       angle * M_PI / 180.0);
@@ -611,7 +616,7 @@ function void init_gl()
   }
   while (!done) {
     save_ticks(0);
-    Event ev;
+    SDL_Event ev;
     while (SDL_PollEvent(ev)) {
       const etype = ev.type;
       if (etype == SDL_WINDOWEVENT) {
@@ -619,7 +624,7 @@ function void init_gl()
 	  const w = ev.window.data1;
 	  const h = ev.window.data2;
 	  SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	    join{""}("resized w=", w, " h=", h));
+	    string_join{""}("resized w=", w, " h=", h));
 	  reshape(w, h);
 	}
       } else if (etype == SDL_FINGERMOTION) {
@@ -629,13 +634,13 @@ function void init_gl()
 	rotate(0.0, 1.0, 0.0, -dx);
       } else if (etype == SDL_MULTIGESTURE) {
 	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	  join{""}("multigesture dTheta=", ev.mgesture.dTheta,
+	  string_join{""}("multigesture dTheta=", ev.mgesture.dTheta,
 	    " dDist=", ev.mgesture.dDist));
       } else if (etype == SDL_APP_WILLENTERBACKGROUND) {
-	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("paused"));
+	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("paused"));
 	paused = true;
       } else if (etype == SDL_APP_DIDENTERFOREGROUND) {
-	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("resumed"));
+	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("resumed"));
 	paused = false;
 	int w;
 	int h;
@@ -652,7 +657,7 @@ function void init_gl()
     }
     save_ticks(1);
     {
-      draw_frame(sdl, view_angle);
+      draw_frame(view_angle);
       save_ticks(2);
       ++frames;
       uint t = SDL_GetTicks();
@@ -660,9 +665,10 @@ function void init_gl()
 	const seconds = static_cast{float}(t - t0) / 1000.0;
 	const fps = static_cast{float}(frames) / seconds;
 	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	  join{" "}(frames, "frames in", seconds, "seconds =", fps, "fps"));
+	  string_join{" "}(frames, "frames in", seconds, "seconds =", fps,
+	    "fps"));
 	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	  join{" "}("ticks: ", ticks_sum));
+	  string_join{" "}("ticks: ", ticks_sum));
 	ticks_sum = ticks_t();
 	t0 = t;
 	frames = 0;
@@ -674,8 +680,8 @@ function void init_gl()
 	if (t - t1 >= 10) {
 	  t1 += 10;
 	}
-	const ks = SDL2::KeyboardState(sdl);
-	if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) { done = 1; }
+	SDL_KeyboardState const ks;
+	if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) { done = true; }
 	if (ks.Key(SDL_SCANCODE_UP) != 0) { rotate(1.0, 0.0, 0.0, 2.0); }
 	if (ks.Key(SDL_SCANCODE_DOWN) != 0) { rotate(1.0, 0.0, 0.0, -2.0); }
 	if (ks.Key(SDL_SCANCODE_LEFT) != 0) { rotate(0.0, 1.0, 0.0, 2.0); }
@@ -686,9 +692,11 @@ function void init_gl()
     SDL_GL_SwapWindow(wnd);
     save_ticks(4);
   }
-  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu6=", mallinfo_in_use()));
+  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("mu6=",
+    mallinfo_in_use()));
   deinit_gear_vbos();
-  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("mu7=", mallinfo_in_use()));
+  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("mu7=",
+    mallinfo_in_use()));
   /*
   io::process::io_exit(io::system, 0);
   */

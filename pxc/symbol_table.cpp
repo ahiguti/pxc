@@ -41,22 +41,27 @@ void symbol_table::define_name(const symbol& shortname,
   const symbol& curns, expr_i *e, attribute_e attr, expr_stmts *stmt)
   /* stmt must be set if e is a local variable */
 {
+  bool is_global = false;
   symbol name = shortname;
   if (get_lexical_parent() == 0 && !curns.empty()) {
     name = append_namespace(curns, shortname);
+    is_global = true;
   }
   DBG_DEF(fprintf(stderr,
     "symtbl=%p define[%s] curns=[%s] (%s:%d) s=%d e=%p lparent=%p\n",
     this, name.c_str(), curns.c_str(), e->fname, e->line, (int)block_esort, e,
     get_lexical_parent()));
   locals_type::iterator i = locals.find(name);
-  if (i == locals.end()) {
-    locals[name] = localvar_info(e, attr, stmt);
-    local_names.push_back(name);
-    return;
+  if (i != locals.end()) {
+    arena_error_throw(e, "Duplicated name %s (defined at %s:%d)",
+      name.c_str(), i->second.edef->fname, i->second.edef->line);
   }
-  arena_error_throw(e, "Duplicated name %s (defined at %s:%d)",
-    name.c_str(), i->second.edef->fname, i->second.edef->line);
+  locals[name] = localvar_info(e, attr, stmt);
+  local_names.push_back(name);
+  if (is_global) {
+    nsmap_entry& nsent = nsmap[curns];
+    nsent[shortname] = name; /* short to long */
+  }
 }
 
 expr_i *symbol_table::resolve_name_nothrow(const symbol& fullname,
@@ -390,6 +395,7 @@ symbol_table::clear_symbols()
   locals.clear();
   local_names.clear();
   upvalues.clear();
+  nsmap.clear(); /* not necessary */
 }
 
 };

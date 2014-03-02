@@ -71,6 +71,10 @@ bool is_possibly_pod(const term& t);
 bool is_possibly_nonpod(const term& t);
 bool is_simple_string_type(const term& t);
 bool is_integral_type(const term& t);
+unsigned long long uint_max_value(const term& t);
+const type_attribute *get_type_attribute(const term& t);
+long long integral_max_value(const term& t);
+long long integral_min_value(const term& t);
 bool is_unsigned_integral_type(const term& t);
 bool is_float_type(const term& t);
 bool is_same_type(const term& t0, const term& t1);
@@ -114,6 +118,7 @@ std::string get_family_string(typefamily_e cat);
 term get_pointer_target(const term& t);
 bool pointer_conversion_allowed(const typefamily_e f, const typefamily_e t);
 void check_convert_type(expr_i *efrom, term& tto, tvmap_type *tvmap = 0);
+bool is_compiletime_intval(expr_i *e);
 #if 0
 bool convert_type(expr_i *efrom, term& tto, tvmap_type& tvmap);
 bool convert_type(expr_i *efrom, term& tto);

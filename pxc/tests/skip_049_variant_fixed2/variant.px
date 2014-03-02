@@ -35,7 +35,7 @@ private metafunction is_range_type{t}
 
 private metafunction to_non_ephemeral{t}
   m::cond{is_string_or_slice_type{t}, string,
-  m::cond{is_range_type{t}, m::local{t, "non_ephemeral_type"},
+  m::cond{is_range_type{t}, m::symbol{t, "non_ephemeral_type"},
   t}};
 
 public threaded function {t} variant to_variant(t const& x)
@@ -122,13 +122,13 @@ private metafunction argexp{arg}
     m::add{m::mul{m::at{arg, 3}, 2}, m::at{arg, 4}}}; // byref * 2 + mutable
 private metafunction generate_arg_name{arg} m::concat{"a", m::at{arg, 0}};
 private metafunction mf_arg_names{t, fsym}
-  m::map{m::args{m::local{t, m::to_string{fsym}}}, generate_arg_name};
+  m::map{m::args{m::symbol{t, m::to_string{fsym}}}, generate_arg_name};
 private metafunction seqstr{n} m::map{m::seq{n}, m::to_string};
 private metafunction mf_str{t} m::map{m::member_functions{t}, m::to_string};
 private metafunction mf_argexp_list{t, fsym}
-  m::map{m::args{m::local{t, m::to_string{fsym}}}, argexp};
+  m::map{m::args{m::symbol{t, m::to_string{fsym}}}, argexp};
 private metafunction mf_arg_type_noneph{t, fsym, idx}
-  to_non_ephemeral{m::at{m::at{m::args{m::local{t, fsym}}, idx}, 2}};
+  to_non_ephemeral{m::at{m::at{m::args{m::symbol{t, fsym}}, idx}, 2}};
 private metafunction func_arg_names{f} m::map{m::args{f}, generate_arg_name};
 private metafunction func_argexp_list{f} m::map{m::args{f}, argexp};
 private metafunction func_arg_type_noneph{f, idx}

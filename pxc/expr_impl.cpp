@@ -652,15 +652,6 @@ expr_int_literal::get_unsigned() const
   return strtoull(str, 0, 0); /* decimal, hexadecimal, or octal */
 }
 
-long long
-expr_int_literal::get_signed() const
-{
-  if (str[0] == '\'') {
-    return get_unsigned();
-  }
-  return strtoll(str, 0, 0); /* decimal, hexadecimal, or octal */
-}
-
 std::string expr_int_literal::dump(int indent) const
 {
   return str;
@@ -1004,6 +995,33 @@ std::string expr_stmts::dump(int indent) const
   return r;
 }
 
+static expr_tparams *convert_to_tparams(expr_i *tparams,
+  expr_i *& tparams_error_r)
+{
+  if (tparams == 0) {
+    return 0;
+  }
+  expr_e const es = tparams->get_esort();
+  if (es == expr_e_tparams) {
+    return ptr_down_cast<expr_tparams>(tparams);
+  }
+  if (es == expr_e_telist) {
+    expr_telist *const tel = ptr_down_cast<expr_telist>(tparams);
+    expr_i *const head = tel->head;
+    if (head->get_esort() == expr_e_te) {
+      expr_te *const te = ptr_down_cast<expr_te>(head);
+      if (te->tlarg == 0 && te->nssym->prefix == 0) {
+	/* ok, it's a symbol */
+	return ptr_down_cast<expr_tparams>(
+	  expr_tparams_new(tparams->fname, tparams->line, te->nssym->sym,
+	    convert_to_tparams(tel->rest, tparams_error_r)));
+      }
+    }
+  }
+  tparams_error_r = tparams;
+  return 0;
+}
+
 expr_block::expr_block(const char *fn, int line, expr_i *tparams,	
   expr_i *inherit, expr_i *argdecls, expr_i *rettype_uneval,
   passby_e ret_passby, expr_i *stmts)
@@ -1011,18 +1029,29 @@ expr_block::expr_block(const char *fn, int line, expr_i *tparams,
     inherit(ptr_down_cast<expr_telist>(inherit)),
     argdecls(argdecls),
     rettype_uneval(ptr_down_cast<expr_te>(rettype_uneval)),
-    ret_passby(ret_passby),
-    stmts(ptr_down_cast<expr_stmts>(stmts)),
+    ret_passby(ret_passby), /* NOTE: ret_passby is not implemented yet */
+    stmts(ptr_down_cast<expr_stmts>(stmts)), tparams_error(0),
     symtbl(this), compiled_flag(false)
 {
-  /* NOTE: ret_passby is not implemented yet */
+  /* sometimes tparams is parsed as expr_telist. we need to convert it to
+   * expr_tparams. */
+  tinfo.tparams = convert_to_tparams(tparams, tparams_error);
+  #if 0
   tinfo.tparams = ptr_down_cast<expr_tparams>(tparams);
+  #endif
 }
 
 expr_block *expr_block::clone() const
 {
   expr_block *bl = new expr_block(*this);
   bl->symtbl.block_backref = bl;
+  #if 0
+  if (compiled_flag) {
+    // template instantiation for example
+    arena_error_throw(this, "Internal error: clone() for compiled block");
+  }
+  #endif
+  bl->compiled_flag = false;
   return bl;
 }
 
@@ -1418,8 +1447,15 @@ expr_argdecls::resolve_texpr()
       } else if (ep->get_esort() == expr_e_forrange) {
 	expr_forrange *const efr = ptr_down_cast<expr_forrange>(ep);
 	term& t0 = efr->r0->resolve_texpr();
-	check_convert_type(efr->r1, t0);
-	type_of_this_expr = t0;
+	term& t1 = efr->r1->resolve_texpr();
+	const bool r0i = is_compiletime_intval(efr->r0);
+	if (r0i) {
+	  check_convert_type(efr->r0, t1);
+	  type_of_this_expr = t1;
+	} else {
+	  check_convert_type(efr->r1, t0);
+	  type_of_this_expr = t0;
+	}
       } else if (ep->get_esort() == expr_e_if) {
 	expr_if *const ei = ptr_down_cast<expr_if>(ep);
 	type_of_this_expr = ei->cond->resolve_texpr();
@@ -1743,6 +1779,11 @@ void expr_dunion::get_fields(std::list<expr_var *>& flds_r) const
 }
 expr_var *expr_dunion::get_first_field() const
 {
+  if (!block->compiled_flag) {
+    arena_error_throw(this,
+      "Failed to enumerate fields of union '%s' which is not compiled yet",
+      this->sym);
+  }
   symbol_table& symtbl = block->symtbl;
   symbol_table::local_names_type::const_iterator i;
   for (i = symtbl.local_names.begin(); i != symtbl.local_names.end(); ++i) {

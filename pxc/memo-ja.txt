@@ -3,25 +3,42 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- 103/queueをcoreへ
+- get_optionの取り決め決定。
+- serializeのオプション渡し方法決定
 
-- v1 = make_vector{cslice}(sli1) で sli1がblockscopeでrootされていない
-  (done)
+- defconとunionについて再整理
 
-- meta::transpose (done)
+- インスタンス化していないブロックにcompiled_flag=trueをセットして
+  問題ないのか？
 
-- meta::mapの仕様簡略化 (done)
+- meta整理: functions, types, symbolなどをnsと型の両方取れるように
 
-- metaの命名ルール確定 (done)
+- meta::metafunction_names ?
 
-- is_const_member_function やめて is_mutable...にする。mutableなら1に
-  統一するため。 (done)
+- regex/posix immutable ptrとして保持。const regex_tはマルチスレッド
+  セーフ。(glibcの実装はlockしている模様)
 
-- metaの可変長引数なものを明確化 (done)
+- fpclassifyなどは -lm が必要
 
-- make_ptrの引数がcrefに固定されている 114/mp1 (done)
+- floatの operator < は strict weak ordering ではないのでstd::mapの
+  キーにはできない。どうするか。-> wrap (done)
 
-- expandのindexは式セレクタがリストであっても1つとカウント(done)
+- io::fileのcloseを実装。参照カウントが1より大きければEBUSY。
+
+- meta::character : 文字コード又はリストを取り文字列を返す (done)
+- meta::code_at : 文字を取り文字コードを返す (done)
+
+- get_optionをmetaに
+
+- ファイルをcloseしたときのエラーを拾う方法を考えよ
+
+- 汎用tableパーザ
+
+- 配列インデックスの型チェック (done)
+
+- metaのオーバーフローとゼロ除算チェック (done)
+
+- 数値リテラルからキャストしなくてすむように (done)
 
 - expandのパラメータに式を文字列として渡せば式を展開する。文法的に
   問題無い箇所であるかもチェックする。
@@ -29,74 +46,30 @@ FIXME/TODO M1
 - expand等のテンプレパラメータに変数を指定すると空文字列になるのは
   わかりにくいので、変数名を文字列化するようにするか
 
-- expand: セレクタが指定されない場合は全stmtを選択 (done)
-
-- expand: セレクタとしてリストを許可 (done)
-
-- expr_to_termでevaluatedが付いていれば二回evalしてしまう (done)
-
-- function expand(done)
-
-- function expand以外の関数はexpandできないように(done)
-
 - 制約緩和第二弾: noheapや参照をfieldにも置けるようにする。
 
-- slice::next -> increment_front decrement_back (done)
-
-- 数値リテラルからキャストしなくてすむように
-
-- 自動テスト速くするためにnsのコンパイルを共通化 (done)
-
-- cslice{int} const& y; darray{int} const x = y; がエラー
-  -> 109/darr.px (done)
-
 - -Wall -Werrorで通す
-
-- 108/ret.px -> 112/ret1.px (done)
 
 - expandの中でm::symbolの既定namespaceが拾えない？
 
 - make_ptr{foo, m::list}(); コンパイラがループ
   108/lp1.px
 
-- 例外再整理
-- runtime_error_templateは実行時に文字列引数を取る(done)
-- 例外のto_string(done)
-
-- io::fileのerrno_tを返す関数は、errno_or_valueを使う。(done)
-
-- io::standardをメソッド式呼び出し対応(done)
-
 - m[x] = y は mのmappedがdefconでなくてもコンパイルできるように
 
 - 範囲式 v[a .. b] もユーザ定義可能に
 - フィールドのget/setもユーザ定義可能に
 
-- フィールドを持つかどうか調べるために、見つからなかっても例外投げな
-  いmeta::localが必要 -> meta::lsymbol (done)
-
 - 引数型のpartial evalを止めることができればevalがシンプルになる。
   - eval()とは別にpartial_eval()を用意するか。関数引数の型式を簡約
     するだけのeval。
 
-- operatorをbinop使うように変更(done)
-- operator binopのreturn type(done)
 
-- operator unaryop(done)
-
-- operator::implicit_conversion{tto, tfrom} (done)
-- convert_typeを例外吐く形に変更(done)
-- implicit_conversion_funcが正しいシグニチャを持つかコンパイラ側が
-  確認する(done)
 
 - metaの命名規則を整理
   m::argnames, m::argtypes を arg_names, arg_types など
 
-- to_ptr -> make_ptr (done)
-
 - lock_guard効いてることを確認するてすと
-
-- threadのインタフェースを変更。make_thread{func}の形に。(done)
 
 - backtrace()を可能な限りすべてのプラットフォームで。
 
@@ -120,8 +93,6 @@ FIXME/TODO M1
 - Cシンボル名を指定するけどpxcで定義する関数
 
 - safe mode: pathの最後はunsafe不可にする(done)
-
-- 汎用tableパーザ
 
 - dense hash map実装
 - threaded namespaceは初期化関数を省略
@@ -179,8 +150,6 @@ FIXME/TODO M1
 - return x が抜けていてもエラーにならない？ expandを使うと起きる？
 
 - noncopyableな値を返す関数は実現できないか？
-
-- 引数を取るオプションは -p=hoge のように指定する形にするか(done)
 
 - genericsとvariant
 
@@ -631,6 +600,43 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- 103/queueをcoreへ (done)
+- v1 = make_vector{cslice}(sli1) で sli1がblockscopeでrootされていない
+  (done)
+- meta::transpose (done)
+- meta::mapの仕様簡略化 (done)
+- metaの命名ルール確定 (done)
+- is_const_member_function やめて is_mutable...にする。mutableなら1に
+  統一するため。 (done)
+- metaの可変長引数なものを明確化 (done)
+- make_ptrの引数がcrefに固定されている 114/mp1 (done)
+- expandのindexは式セレクタがリストであっても1つとカウント(done)
+- expand: セレクタが指定されない場合は全stmtを選択 (done)
+- expand: セレクタとしてリストを許可 (done)
+- expr_to_termでevaluatedが付いていれば二回evalしてしまう (done)
+- function expand(done)
+- function expand以外の関数はexpandできないように(done)
+- slice::next -> increment_front decrement_back (done)
+- 自動テスト速くするためにnsのコンパイルを共通化 (done)
+- cslice{int} const& y; darray{int} const x = y; がエラー
+  -> 109/darr.px (done)
+- 108/ret.px -> 112/ret1.px (done)
+- runtime_error_templateは実行時に文字列引数を取る(done)
+- 例外のto_string(done)
+- io::fileのerrno_tを返す関数は、errno_or_valueを使う。(done)
+- io::standardをメソッド式呼び出し対応(done)
+- フィールドを持つかどうか調べるために、見つからなかっても例外投げな
+  いmeta::localが必要 -> meta::lsymbol (done)
+- operatorをbinop使うように変更(done)
+- operator binopのreturn type(done)
+- operator unaryop(done)
+- operator::implicit_conversion{tto, tfrom} (done)
+- convert_typeを例外吐く形に変更(done)
+- implicit_conversion_funcが正しいシグニチャを持つかコンパイラ側が
+  確認する(done)
+- to_ptr -> make_ptr (done)
+- threadのインタフェースを変更。make_thread{func}の形に。(done)
+- 引数を取るオプションは -p=hoge のように指定する形にするか(done)
 - C++インタフェースを実装するpxcモジュールをロード実行する手段(done)
 - ヘッダファイルを出力する -> PXC_IMPORT_HEADER(done)
 - プラグイン(done)
@@ -2417,6 +2423,134 @@ struct {f} uneval_thread(tptr{fargs} const& a) <uneval{t}> {
 }
 
 ---------------------------------------------------------------------
+例外クラスの継承
+
+logic_error_st/runtime_error_st/bad_alloc_st はそれぞれ
+std::logic_error等をnon-virtualな基底クラスにしている。
+これらの複数を継承するとexceptionへupcastできない。
+ ... std::exception is an ambiguous base of foo
+
+---------------------------------------------------------------------
+例外再整理
+
+インタフェース
+c_exception                        : c++のstd::exception
+c_logic_error <c_exception>        : c++のstd::logic_error
+c_runtime_error <c_exception>      : c++のstd::runtime_error
+c_bad_alloc <c_exception>          : c++のstd::bad_alloc
+exception { function string message() const; }
+logic_error <exception>
+runtime_error <exception>
+bad_alloc <exception>
+
+pxcの例外は c++のレベルで
+exception をvirtual、
+c++のstd::runtime_error等を非virtual継承。
+
+例外型は全てc_exceptionをc++のレベルでは継承しているが、pxcレベルでは
+  exceptionはc_exceptionを継承していない。
+
+
+具体型
+
+
+---------------------------------------------------------------------
+function expand
+
+定義:
+  function {args} void hoge() { expand (sym, idx : args) { ... } }
+  展開の部品取り用関数。この関数は普通に呼ぶとエラーになるかもしれない。
+適用:
+  expand hoge{args};
+  関数hogeの中のexpand式の内容が展開される。
+
+
+---------------------------------------------------------------------
+ephemeral型の制約緩和
+
+vector{cstrref}などが使えるように
+- テンプレパラメータやフィールドにephemeralなものを使うことを許可
+- ただしそれらを使った型はそれ自体がephemeralになる
+  - テンプレパラメータにephemeralなものを含むならephemeral
+  - フィールドにephemeralなものを含むならephemeral
+      - フィールドは無理？ フィールドにephemeralなものを含めて、メンバ
+        関数から渡ってきたephemeralな値をそこへ代入してしまったら？
+	初期化以外の代入が許可されていないからよいのか？
+  - ephemeral: 初期化以外の代入不可、要素取得以外のreturn不可
+
+is_partially_ephemeral_type (is_peph)
+  1. typefamilyがrangeかephemeralなら真 (従来の定義はこれだけ)
+  2. structのfieldにis_partially_ephemeral_typeのものを含めば真
+  3. 既約型式がパラメタにis_partially_ephemeral_typeのものを含めば真
+
+制約についての考え方
+- 根本的には、ephemeralオブジェクトはstackが巻戻ると無効になる
+- コンテナ要素に入れられるのは、そのコンテナより上位のephemeralオブ
+  ジェクトだけである
+
+案1 is_pephな型についての制約
+- グローバル変数にはis_peph型は不許可。
+- 初期化以外の代入の左辺には使えない。
+  代入の左右で寿命が違うことがあるから。
+- returnで返せない。ただしexternな関数は返すことができるが、その場合
+  最初の引数が有効なうちは返した値が有効であるように実装せねばならい。
+- mutable参照渡しできない。
+- mutableメンバ関数を呼べるのは、そのオブジェクトを作ったブロックの中
+  だけ。
+    function foo(vector{cstrref} mutable& vs) {
+      cstrref s = "hoge";
+      vs.push_back(s); // fooを抜けると無効な値がvsに残る
+    }
+  mutableなpephは禁止しておく。
+
+例: vector{cstrref}はどのような制約を加えれば安全か
+- vector{cstrref}はglobal変数やfieldにはできない
+- スタック上にconst変数を宣言するのはOK。
+- make_vector{cstrref, tlst}の中ではvector{cstrref} mutableはOK。
+
+is_noheap
+  - ephemeralファミリ、rangeファミリはis_noheapである
+  - コンテナであり、その要素がis_noheapならばis_noheapである
+
+コンテナとrange以外のテンプレ型が、テンプレ引数にis_noheapを持つと
+エラー。フィールドの型が、is_noheapであればエラー。
+
+noheapの変数は、
+  - スタック上の変数に限る。フィールドには使えない。
+  - constに限る
+ただしextern "disable-noheap-restriction" 1のときはチェックしない。
+  - このディレクティブはmake_vector等がmutable変数を作るために使う。
+
+改修手順:
+  is_noheap_type()を定義。
+  is_ephemeral_value_type()呼び出しをis_noheap_type()に置き換え
+  check_term_validity()の中、
+    const bool tp_allow_ephemeral =
+      !is_type(t) || is_container_family(t) || is_cm_range_family(t)
+  に変更
+  ついでにallow_ephemeral -> allow_noheap にsed
+  変数定義のcheck_term_validity()は、constならallow_noheap。
+  make_farray等の中にextern "disable-noheap-restriction" 1を入れる
+  disable-noheap-restrictionを実装
+  is_ephemeral_value_type削除
+
+制約緩和第二弾でnoheapをfieldにも置けるようにする。その場合構造体自体
+もnoheapになる。fieldはconstでなければならない。
+
+---------------------------------------------------------------------
+ephemeral型の制約緩和#2
+
+noheap型はヒープに置けない。ptr{t}はtがnoheapであったらエラー。
+
+
+---------------------------------------------------------------------
+数値リテラルからキャストしなくてすむように
+
+暗黙の変換の範囲チェック。
+
+数値リテラル: int_literal, unary op, teの評価結果がis_long()。
+
+---------------------------------------------------------------------
 textとtable
 
 fld1をそのままkeyに、fld2をmapped、たたみこみは加算
@@ -2547,125 +2681,27 @@ map: datasinkでもありdatasourceでもある。putでレコードを追加し
   集約関数: sum, average, count, min, max
 multimap: mapとのちがいは最初のn個のfieldについてsortするだけでfoldし
   ない点。
+逆順をどう実現するか？
+
+[
+  [ifile{"stdin", string, int, int, int}]
+  [table_map{[string, int], [sum{int}, min{int}]}, 0, 1, 2, 3],
+  [table_multimap{[int, int], [string, int]}, 2, 3, 0, 1],
+  [ofile{"stdout", string, int, int, int}, 0, 1, 2, 3]
+]
+
+if (mutable m : mapval[k]) {
+  m += v;
+} else {
+  mapval.insert(k, v);
+}
 
 ---------------------------------------------------------------------
-例外クラスの継承
+metalistを { ... } で
 
-logic_error_st/runtime_error_st/bad_alloc_st はそれぞれ
-std::logic_error等をnon-virtualな基底クラスにしている。
-これらの複数を継承するとexceptionへupcastできない。
- ... std::exception is an ambiguous base of foo
-
----------------------------------------------------------------------
-例外再整理
-
-インタフェース
-c_exception                        : c++のstd::exception
-c_logic_error <c_exception>        : c++のstd::logic_error
-c_runtime_error <c_exception>      : c++のstd::runtime_error
-c_bad_alloc <c_exception>          : c++のstd::bad_alloc
-exception { function string message() const; }
-logic_error <exception>
-runtime_error <exception>
-bad_alloc <exception>
-
-pxcの例外は c++のレベルで
-exception をvirtual、
-c++のstd::runtime_error等を非virtual継承。
-
-例外型は全てc_exceptionをc++のレベルでは継承しているが、pxcレベルでは
-  exceptionはc_exceptionを継承していない。
-
-
-具体型
-
-
----------------------------------------------------------------------
-function expand
-
-定義:
-  function {args} void hoge() { expand (sym, idx : args) { ... } }
-  展開の部品取り用関数。この関数は普通に呼ぶとエラーになるかもしれない。
-適用:
-  expand hoge{args};
-  関数hogeの中のexpand式の内容が展開される。
-
-
----------------------------------------------------------------------
-ephemeral型の制約緩和
-
-vector{cstrref}などが使えるように
-- テンプレパラメータやフィールドにephemeralなものを使うことを許可
-- ただしそれらを使った型はそれ自体がephemeralになる
-  - テンプレパラメータにephemeralなものを含むならephemeral
-  - フィールドにephemeralなものを含むならephemeral
-      - フィールドは無理？ フィールドにephemeralなものを含めて、メンバ
-        関数から渡ってきたephemeralな値をそこへ代入してしまったら？
-	初期化以外の代入が許可されていないからよいのか？
-  - ephemeral: 初期化以外の代入不可、要素取得以外のreturn不可
-
-is_partially_ephemeral_type (is_peph)
-  1. typefamilyがrangeかephemeralなら真 (従来の定義はこれだけ)
-  2. structのfieldにis_partially_ephemeral_typeのものを含めば真
-  3. 既約型式がパラメタにis_partially_ephemeral_typeのものを含めば真
-
-制約についての考え方
-- 根本的には、ephemeralオブジェクトはstackが巻戻ると無効になる
-- コンテナ要素に入れられるのは、そのコンテナより上位のephemeralオブ
-  ジェクトだけである
-
-案1 is_pephな型についての制約
-- グローバル変数にはis_peph型は不許可。
-- 初期化以外の代入の左辺には使えない。
-  代入の左右で寿命が違うことがあるから。
-- returnで返せない。ただしexternな関数は返すことができるが、その場合
-  最初の引数が有効なうちは返した値が有効であるように実装せねばならい。
-- mutable参照渡しできない。
-- mutableメンバ関数を呼べるのは、そのオブジェクトを作ったブロックの中
-  だけ。
-    function foo(vector{cstrref} mutable& vs) {
-      cstrref s = "hoge";
-      vs.push_back(s); // fooを抜けると無効な値がvsに残る
-    }
-  mutableなpephは禁止しておく。
-
-例: vector{cstrref}はどのような制約を加えれば安全か
-- vector{cstrref}はglobal変数やfieldにはできない
-- スタック上にconst変数を宣言するのはOK。
-- make_vector{cstrref, tlst}の中ではvector{cstrref} mutableはOK。
-
-is_noheap
-  - ephemeralファミリ、rangeファミリはis_noheapである
-  - コンテナであり、その要素がis_noheapならばis_noheapである
-
-コンテナとrange以外のテンプレ型が、テンプレ引数にis_noheapを持つと
-エラー。フィールドの型が、is_noheapであればエラー。
-
-noheapの変数は、
-  - スタック上の変数に限る。フィールドには使えない。
-  - constに限る
-ただしextern "disable-noheap-restriction" 1のときはチェックしない。
-  - このディレクティブはmake_vector等がmutable変数を作るために使う。
-
-改修手順:
-  is_noheap_type()を定義。
-  is_ephemeral_value_type()呼び出しをis_noheap_type()に置き換え
-  check_term_validity()の中、
-    const bool tp_allow_ephemeral =
-      !is_type(t) || is_container_family(t) || is_cm_range_family(t)
-  に変更
-  ついでにallow_ephemeral -> allow_noheap にsed
-  変数定義のcheck_term_validity()は、constならallow_noheap。
-  make_farray等の中にextern "disable-noheap-restriction" 1を入れる
-  disable-noheap-restrictionを実装
-  is_ephemeral_value_type削除
-
-制約緩和第二弾でnoheapをfieldにも置けるようにする。その場合構造体自体
-もnoheapになる。fieldはconstでなければならない。
-
----------------------------------------------------------------------
-ephemeral型の制約緩和#2
-
-noheap型はヒープに置けない。ptr{t}はtがnoheapであったらエラー。
-
+metafunction hoge { x, y, z }; // リスト
+metafunction hoge { x, y, z } fuga { x, y, z }; // hoge{x, y, z}の定義
+TOK_METAFUNCTION TOK_SYMBOL type_arg ';'
+TOK_METAFUNCTION TOK_SYMBOL type_arg type_arg ';'
+仮引数宣言もtype_arg(expr_te)としてパースし、あとでexpr_tparamsへ変換
 

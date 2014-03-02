@@ -4,6 +4,8 @@ public import meta m;
 public import meta::vararg v;
 public import meta::family mf;
 
+/* public */
+
 /* reference-counting shared pointer types */
 public threaded      struct extern "pxcrt::ptr"   "ptr"   {t} ptr   { } 
 public threaded      struct extern "pxcrt::cptr"  "cptr"  {t} cptr  { }
@@ -316,9 +318,11 @@ struct monitor {
 
 struct mtcount { /* reference counter for multi-threaded shared objects */ 
   mtcount() : count$z(1) { }
-  void incref$z() { __sync_fetch_and_add(&count$z, 1); } /* gcc >= 4 */
+  /* atomic counter. requires gcc >= 4. */
+  void incref$z() { __sync_fetch_and_add(&count$z, 1); }
   bool decref$z() { return (__sync_fetch_and_add(&count$z, -1) == 1); }
-public:
+  long get_count$z() { return __sync_fetch_and_add(&count$z, 0); }
+private:
   long count$z;
 };
 
@@ -326,7 +330,8 @@ struct stcount { /* reference counter for single-threaded shared objects */
   stcount() : count$z(1) { }
   void incref$z() { ++count$z; }
   bool decref$z() { return (--count$z == 0); }
-public:
+  long get_count$z() { return count$z; }
+private:
   long count$z;
 };
 
@@ -358,7 +363,7 @@ struct rcval {
       DBG_RC(fprintf(stdout, "d  %p\n", this));
     }
   }
-  size_t get_count$z() const { return count$z.count$z; }
+  size_t get_count$z() const { return count$z.get_count$z(); }
   /* void lock$z() const { } */
   /* void unlock$z() const { } */
   /* void wait$z() const { } */
@@ -406,7 +411,7 @@ struct trcval {
       DBG_RC(fprintf(stdout, "d  %p\n", this));
     }
   }
-  size_t get_count$z() const { return count$z.count$z; }
+  size_t get_count$z() const { return count$z.get_count$z(); }
   void lock$z() const { monitor$z.mtx.lock(); }
   void unlock$z() const { monitor$z.mtx.unlock(); }
   void wait$z() const { monitor$z.cond.wait(monitor$z.mtx); }
@@ -455,7 +460,7 @@ struct tircval {
       DBG_RC(fprintf(stdout, "d  %p\n", this));
     }
   }
-  size_t get_count$z() const { return count$z.count$z; }
+  size_t get_count$z() const { return count$z.get_count$z(); }
   /* void lock$z() const { } */
   /* void unlock$z() const { } */
   /* void wait$z() const { } */

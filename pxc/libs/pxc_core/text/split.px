@@ -23,7 +23,7 @@ string_split(expand(split_arg_decls{tlist}))
 	}
       } else {
 	p = find_mapped(a0, pos,
-	  static_cast{m::local{m::at0{m::at0{tlist}}, "mapped_type"}}(delim));
+	  static_cast{m::symbol{m::at0{m::at0{tlist}}, "mapped_type"}}(delim));
       }
       if (is_string_or_slice_type{m::at0{m::at{tlist, idx}}}) {
 	arg = a0[pos .. p];
@@ -49,11 +49,14 @@ string_split(expand(split_arg_decls{tlist}))
   }
 }
 
-public threaded function {tlist} void
-string_concat(expand(concat_arg_decls{tlist}))
+public threaded function {delim, tlist} void
+string_append_join(expand(concat_arg_decls{tlist}))
 {
   expand (a, i: va::arg_names{m::size{tlist}}) {
     if (m::ne{i, 0}) { 
+      if (m::and{m::ne{i, 1}, m::ne{delim, ""}}) {
+	a0.append(delim);
+      }
       metafunction t m::at0{m::at{tlist, i}};
       if (is_string_or_slice_type{t}) {
         a0.append(a);

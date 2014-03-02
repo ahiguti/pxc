@@ -18,11 +18,7 @@
 #include <stdlib.h>
 
 struct auto_free {
-  explicit auto_free(char *p) : ptr(p) {
-    if (ptr == 0) {
-      abort();
-    }
-  }
+  explicit auto_free(char *p) : ptr(p) { }
   ~auto_free() { free(ptr); }
   char *get() const { return ptr; }
 private:

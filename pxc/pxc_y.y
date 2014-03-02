@@ -162,6 +162,7 @@ static compile_mode cur_mode;
 %type<expr_val> opt_type_expr
 %type<expr_val> type_arg_list
 %type<expr_val> type_arg
+%type<expr_val> type_arg_excl_metalist
 %type<expr_val> nssym_expr
 %type<expr_val> symbol_expr
 %type<expr_val> expression
@@ -191,7 +192,7 @@ static compile_mode cur_mode;
 toplevel_stmt_list
 	:
 	  { topval = $$ = 0; }
-	| TOK_EXPAND '(' TOK_SYMBOL opt_symbol ':' type_expr ')' '{'
+	| TOK_EXPAND '(' TOK_SYMBOL opt_symbol ':' type_arg ')' '{'
 		toplevel_stmt_list '}' toplevel_stmt_list
 	  { topval = $$ = expr_stmts_new(cur_fname, @1.first_line,
 		expr_expand_new(cur_fname, @1.first_line, 0, $3, $4, $6, $9,
@@ -230,7 +231,7 @@ opt_tparams_expr
 struct_body_stmt_list
 	:
 	  { $$ = 0; }
-	| TOK_EXPAND '(' TOK_SYMBOL opt_symbol ':' type_expr ')' '{'
+	| TOK_EXPAND '(' TOK_SYMBOL opt_symbol ':' type_arg ')' '{'
 		struct_body_stmt_list '}' struct_body_stmt_list
 	  { $$ = expr_stmts_new(cur_fname, @1.first_line,
 		expr_expand_new(cur_fname, @1.first_line, 0, $3, $4, $6, $9,
@@ -246,7 +247,7 @@ struct_body_stmt
 dunion_body_stmt_list
 	:
 	  { $$ = 0; }
-	| TOK_EXPAND '(' TOK_SYMBOL opt_symbol ':' type_expr ')' '{'
+	| TOK_EXPAND '(' TOK_SYMBOL opt_symbol ':' type_arg ')' '{'
 		dunion_body_stmt_list '}' dunion_body_stmt_list
 	  { $$ = expr_stmts_new(cur_fname, @1.first_line,
 		expr_expand_new(cur_fname, @1.first_line, 0, $3, $4, $6, $9,
@@ -275,12 +276,12 @@ interface_body_stmt
 function_body_stmt_list
 	:
 	  { $$ = 0; }
-	| TOK_EXPAND '(' TOK_SYMBOL opt_symbol ':' type_expr ')' '{'
+	| TOK_EXPAND '(' TOK_SYMBOL opt_symbol ':' type_arg ')' '{'
 		function_body_stmt_list '}' function_body_stmt_list
 	  { $$ = expr_stmts_new(cur_fname, @1.first_line,
 		expr_expand_new(cur_fname, @1.first_line, 0, $3, $4, $6, $9,
 			expand_e_statement, 0), $11); }
-	| TOK_EXPAND type_expr ';' function_body_stmt_list
+	| TOK_EXPAND type_arg ';' function_body_stmt_list
 	  { $$ = expr_stmts_new(cur_fname, @1.first_line,
 		expr_expand_new(cur_fname, @1.first_line, $2, 0, 0, 0, 0,
 			expand_e_statement, 0), $4); }
@@ -696,9 +697,16 @@ c_enumval_stmt
 		arena_dequote_strdup($3), 0, $1, 0); }
 	;
 metafdef_stmt
-	: opt_attribute TOK_METAFUNCTION TOK_SYMBOL opt_tparams_expr
+	: opt_attribute TOK_METAFUNCTION TOK_SYMBOL type_arg_excl_metalist ';'
+	  { $$ = expr_metafdef_new(cur_fname, @2.first_line, $3, 0, $4, $1); }
+	| opt_attribute TOK_METAFUNCTION TOK_SYMBOL '{' type_arg_list '}' ';'
+	  { $$ = expr_metafdef_new(cur_fname, @2.first_line, $3, 0,
+		  expr_metalist_new($5), $1); }
+	| opt_attribute TOK_METAFUNCTION TOK_SYMBOL '{' type_arg_list '}'
 		type_arg ';'
-	  { $$ = expr_metafdef_new(cur_fname, @2.first_line, $3, $4, $5, $1); }
+	  { $$ = expr_metafdef_new(cur_fname, @2.first_line, $3, $5, $7, $1); }
+	  /* $5 expects tparam_list but parsed as type_arg_list to avoid
+	   conflicts. it will be converted to expr_tparams when compiled. */
 	;
 visi_vardef_stmt
 	: visibility type_expr opt_mutable TOK_SYMBOL ';'
@@ -776,7 +784,7 @@ vardef_expr
 argdecl_list
 	:
 	  { $$ = 0; }
-	| TOK_EXPAND '(' type_expr ')' argdecl_list_trail
+	| TOK_EXPAND '(' type_arg ')' argdecl_list_trail
 	  { $$ = expr_expand_new(cur_fname, @1.first_line, 0, 0, 0, $3, 0,
 		expand_e_argdecls, $5); }
 	| type_expr TOK_SYMBOL argdecl_list_trail
@@ -816,18 +824,16 @@ type_expr
 	  { $$ = expr_te_new(cur_fname, @1.first_line, $1, 0); }
 	| nssym_expr '{' type_arg_list '}'
 	  { $$ = expr_te_new(cur_fname, @1.first_line, $1, $3); }
+	/*
 	| nssym_expr ':' type_expr
 	  { $$ = expr_te_local_chain_new(
 		expr_te_new(cur_fname, @1.first_line, $1, 0), $3); }
 	| nssym_expr '{' type_arg_list '}' ':' type_expr
 	  { $$ = expr_te_local_chain_new(
 		expr_te_new(cur_fname, @1.first_line, $1, $3), $6); }
-	| '[' type_arg_list ']'
-	  { $$ = expr_metalist_new($2); }
-	/*
 	*/
 	;
-type_arg
+type_arg_excl_metalist
 	: type_expr
 	  { $$ = $1; }
 	| TOK_INTLIT
@@ -842,9 +848,15 @@ type_arg
 		expr_block_new(cur_fname, @1.first_line, $2, 0, $5, $3,
 			passby_e_mutable_value, $9),
 		cur_mode != compile_mode_main, false, attribute_private); }
-	| TOK_METAFUNCTION opt_tparams_expr type_arg
-	  { $$ = expr_metafdef_new(cur_fname, @1.first_line, 0, $2, $3,
+	| TOK_METAFUNCTION '{' tparam_list '}' type_arg
+	  { $$ = expr_metafdef_new(cur_fname, @1.first_line, 0, $3, $5,
 		attribute_private); }
+	;
+type_arg
+	: type_arg_excl_metalist
+	  { $$ = $1; }
+	| '{' type_arg_list '}'
+	  { $$ = expr_metalist_new($2); }
 	;
 type_arg_list
 	: type_arg
@@ -873,7 +885,7 @@ expression
 assign_expr
 	: cond_expr
 	  { $$ = $1; }
-	| TOK_EXPAND '(' TOK_SYMBOL opt_symbol ':' type_expr ';'
+	| TOK_EXPAND '(' TOK_SYMBOL opt_symbol ':' type_arg ';'
 		assign_expr ')'
 	  { $$ = expr_expand_new(cur_fname, @1.first_line, 0, $3, $4, $6, $8,
 		expand_e_comma, 0); }
@@ -1031,10 +1043,6 @@ postfix_expr
 			expr_op_new(cur_fname, @1.first_line, TOK_PTR_DEREF,
 				$1, 0), 0),
 		$3); }
-	/*
-	| vardef_expr
-	  { $$ = $1; }
-	*/
 	;
 array_index_expr
 	: expression
@@ -1055,10 +1063,8 @@ primary_expr
 	  { $$ = $1; }
 	| '(' expression ')'
 	  { $$ = expr_op_new(cur_fname, @1.first_line, '(', $2, 0); }
-	/*
 	| '{' expression '}'
-	  { $$ = 0; } //
-	*/
+	  { yyerror("syntax error"); } /* RESERVED */
 	;
 int_literal
 	: TOK_INTLIT

@@ -491,7 +491,8 @@ static void check_var_type(term& typ, expr_i *e, const char *sym,
 static bool is_default_constructible(const term& typ, expr_i *pos,
   size_t depth)
 {
-  expr_i *const expr = typ.get_expr();
+  // expr_i *const expr = typ.get_expr();
+  const expr_i *const expr = term_get_instance_const(typ);
   const term_list *const args = typ.get_args();
   if (expr == 0) {
     return true; /* TODO: false? */
@@ -507,7 +508,7 @@ static bool is_default_constructible(const term& typ, expr_i *pos,
     return false;
   }
   if (esort == expr_e_struct) {
-    expr_struct *const est = ptr_down_cast<expr_struct>(expr);
+    const expr_struct *const est = ptr_down_cast<const expr_struct>(expr);
     if (est->block->argdecls != 0) {
       /* note that it's defcon even when it has empty udcon */
       return false;
@@ -542,7 +543,12 @@ static bool is_default_constructible(const term& typ, expr_i *pos,
     return true;
   }
   if (esort == expr_e_dunion) {
-    expr_dunion *const ev = ptr_down_cast<expr_dunion>(expr);
+    const expr_dunion *const ev = ptr_down_cast<const expr_dunion>(expr);
+    #if 0
+    if (!ev->block->tinfo.is_uninstantiated()) {
+      return true;
+    }
+    #endif
     typedef std::list<expr_var *> fields_type;
     fields_type flds;
     ev->get_fields(flds);
@@ -588,6 +594,11 @@ static void check_default_construct(term& typ, expr_var *ev, const char *sym)
 }
 
 void expr_var::check_type(symbol_table *lookup)
+{
+  resolve_texpr();
+}
+
+void expr_var::check_defcon()
 {
   term& typ = resolve_texpr();
   bool need_defcon = true;
@@ -817,6 +828,10 @@ static void check_return_expr(expr_funcdef *fdef)
 
 void expr_block::check_type(symbol_table *lookup)
 {
+  if (tparams_error != 0) {
+    arena_error_throw(tparams_error, "Syntax error near '%s'",
+      tparams_error->dump(0).c_str());
+  }
   DBG_CT_BLOCK(fprintf(stderr, "%s: %p\n", __PRETTY_FUNCTION__, this));
   #if 0
   double t1 = gettimeofday_double();
@@ -841,8 +856,8 @@ void expr_block::check_type(symbol_table *lookup)
       expr_funcdef *efd = ptr_down_cast<expr_funcdef>(parent_expr);
       check_return_expr(efd);
     } // FIXME: check_return_expr for struct constructor?
+    compiled_flag = true;
   }
-  compiled_flag = true;
   #if 0
   double t4 = gettimeofday_double();
   fprintf(stderr, "block %f %f %f %s %s\n", t2 - t1, t3 - t2, t4 - t3,
@@ -1816,18 +1831,26 @@ void expr_op::check_type(symbol_table *lookup)
 	expr_op *const eoprange = ptr_down_cast<expr_op>(arg1);
 	expr_i *const range_begin = eoprange->arg0;
 	expr_i *const range_end = eoprange->arg1;
+	#if 0
 	if (is_integral_type(idxt) &&
 	  is_integral_type(range_begin->resolve_texpr())) {
 	  /* need not to convert */
 	} else {
+	#endif
 	  check_type_convert_to_lhs(this, range_begin, idxt);
+	#if 0
 	}
+	#endif
+	#if 0
 	if (is_integral_type(idxt) &&
 	  is_integral_type(range_end->resolve_texpr())) {
 	  /* need not to convert */
 	} else {
+	#endif
 	  check_type_convert_to_lhs(this, range_end, idxt);
+	#if 0
 	}
+	#endif
 	type_of_this_expr = get_array_range_texpr(this, arg0,
 	  arg0->resolve_texpr());
 	if (type_of_this_expr.is_null()) {
@@ -1855,9 +1878,11 @@ void expr_op::check_type(symbol_table *lookup)
 	    arena_error_throw(this, "Can not apply '%s'",
 	      tok_string(this, op));
 	  }
+	#if 0
 	} else if (is_integral_type(idxt) &&
 	  is_integral_type(arg1->resolve_texpr())) {
 	  /* need not to convert */
+	#endif
 	} else {
 	  check_type_convert_to_lhs(this, arg1, idxt);
 	}
@@ -2082,7 +2107,7 @@ static void check_passing_memfunc_rec(expr_funccall *fc,
 static void check_passing_memfunc(expr_funccall *fc, const term& te)
 {
   /* issue an error if a foreign member function is passed as a template
-   * parameter, which is caused by meta::local{...} . */
+   * parameter, which is caused by meta::symbol{t, name} . */
   expr_funcdef *const efd = get_up_member_func(fc->symtbl_lexical);
   expr_struct *est = 0;
   if (efd != 0) {
@@ -2570,6 +2595,11 @@ void expr_funccall::check_type(symbol_table *lookup)
       }
     } else {
       /* plain constructor */
+      if (est_p_inst->block->tinfo.is_uninstantiated()) {
+	arena_error_throw(this,
+	  "Can not call a plain constructor for an uninstantiated struct '%s'",
+	  est_p_inst->sym);
+      }
       typedef std::list<expr_var *> flds_type;
       flds_type flds;
       est_p_inst->get_fields(flds);
@@ -4097,9 +4127,9 @@ fprintf(stderr, "ns %s %d\n", ens->uniq_nsstr.c_str(), int(ens->thr));
 	  "symbol '%s' is not a struct", etdstr.c_str());
       }
       const term& te = ptr_down_cast<expr_struct>(etd)->get_value_texpr();
-      term exp_args = eval_mf_local(te, "args", glo);
-      term exp_ret = eval_mf_local(te, "ret", glo);
-      term efname = eval_mf_local(te, "name", glo);
+      term exp_args = eval_mf_symbol(te, "args", glo);
+      term exp_ret = eval_mf_symbol(te, "ret", glo);
+      term efname = eval_mf_symbol(te, "name", glo);
       std::string efnstr = meta_term_to_string(efname, false);
       if (efnstr.empty()) {
 	arena_error_throw(glo, "Invalid configuration for emit_threaded_dll: "
