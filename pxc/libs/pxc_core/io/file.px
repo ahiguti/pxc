@@ -146,6 +146,10 @@ file_lseek(file const& f, off_t offset, whence_t whence)
   return r;
 }
 
+public threaded function extern "pxcio::file_close" errno_t
+file_close(file mutable& f);
+  /* NOTE: returns EBUSY if f is not the unique reference to the file. */
+
 public threaded function extern "pxcio::io_stat" errno_t
 io_stat(io const& iop, cstrref const& fn, statbuf mutable& buf);
 public threaded function extern "pxcio::io_sleep" uint
@@ -238,18 +242,23 @@ using namespace pxcrt;
 
 typedef struct ::stat statbuf;
 
+struct file_rep;
+
+/* immutable value, multi-thread safe refcount */
+typedef ::pxcrt::rcptr< pxcrt::tircval<file_rep> > file;
+
+int file_close(file& f);
+
 struct file_rep {
   file_rep(int fd) : fd(fd) { }
   ~file_rep() { if (fd > 2) close(fd); } /* don't close stdin/out/err */
   int get() const { return fd; }
+  friend int file_close(file& f);
 private:
-  const int fd;
+  int fd; /* only file_close() can modify this */
   file_rep(const file_rep&);
   file_rep& operator =(const file_rep&);
 };
-
-/* immutable value, multi-thread safe refcount */
-typedef ::pxcrt::rcptr< pxcrt::tircval<file_rep> > file;
 
 };
 ;
@@ -335,6 +344,22 @@ errno_t file_lseek_impl(file const& f, ::off_t& offset, int whence)
   }
   offset = r;
   return 0;
+}
+
+int /* errno_t */ file_close(file& f)
+{
+  /* to avoid race conditions, closing file descriptor is only allowed when f
+   * is the unique reference to the file descriptor. */
+  size_t const refcnt = f->get_count$z();
+  /* note: if refcnt == 1 here, there is no possibility that f->refcount is
+   * modified asynchronously because no other thread owns a refcount on it. */
+  int const fd = f->value.fd;
+  if (refcnt != 1U || fd < 2) {
+    return EBUSY; /* this file is shared */
+  }
+  f->value.fd = -1;
+  int const rv = ::close(fd);
+  return rv == 0 ? 0 : errno;
 }
 
 errno_t io_stat(io const& iop, cstrref const& fn, pxcio::statbuf& buf)

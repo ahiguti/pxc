@@ -496,20 +496,20 @@ bool is_simple_string_type(const term& t)
   return false;
 }
 
+const type_attribute *get_type_attribute(const term& t)
+{
+  const expr_i *const e = t.get_expr();
+  if (e != 0 && e->get_esort() == expr_e_typedef) {
+    const expr_typedef *const etd = ptr_down_cast<const expr_typedef>(e);
+    return &etd->tattr;
+  }
+  return 0;
+}
+
 static bool is_pod_integral_type(const term& t)
 {
-  if (
-    t == builtins.type_bool ||
-    t == builtins.type_uchar ||
-    t == builtins.type_char ||
-    t == builtins.type_ushort ||
-    t == builtins.type_short ||
-    t == builtins.type_uint ||
-    t == builtins.type_int ||
-    t == builtins.type_ulong ||
-    t == builtins.type_long ||
-    t == builtins.type_size_t
-    ) {
+  const type_attribute *const tattr = get_type_attribute(t);
+  if (tattr != 0 && tattr->is_integral) {
     return true;
   }
   const typefamily_e cat = get_family(t);
@@ -525,16 +525,48 @@ bool is_integral_type(const term& t)
   return cat == typefamily_e_extint || cat == typefamily_e_extuint;
 }
 
+unsigned long long uintegral_max_value(const term& t)
+{
+  const type_attribute *const tattr = get_type_attribute(t);
+  if (tattr != 0 && tattr->is_integral && !tattr->is_signed) {
+    if (tattr->significant_bits_min == tattr->significant_bits_max) {
+      unsigned long long v = 1ULL;
+      v <<= static_cast<unsigned>(tattr->significant_bits_max);
+      --v;
+      return v;
+    }
+  }
+  return 0;
+}
+
+long long integral_max_value(const term& t)
+{
+  const type_attribute *const tattr = get_type_attribute(t);
+  if (tattr != 0 && tattr->is_integral && tattr->is_signed) {
+    if (tattr->significant_bits_min == tattr->significant_bits_max) {
+      unsigned long long v = 1ULL;
+      v <<= static_cast<unsigned>(tattr->significant_bits_max);
+      --v;
+      return v;
+    }
+  }
+  return 0;
+}
+
+long long integral_min_value(const term& t)
+{
+  long long v = integral_max_value(t);
+  if (v != 0LL) {
+    v = -v;
+    --v;
+  }
+  return v;
+}
+
 bool is_unsigned_integral_type(const term& t)
 {
-  if (
-    t == builtins.type_bool ||
-    t == builtins.type_uchar ||
-    t == builtins.type_ushort ||
-    t == builtins.type_uint ||
-    t == builtins.type_ulong ||
-    t == builtins.type_size_t
-    ) {
+  const type_attribute *const tattr = get_type_attribute(t);
+  if (tattr != 0 && tattr->is_integral && !tattr->is_signed) {
     return true;
   }
   const typefamily_e cat = get_family(t);
@@ -1321,7 +1353,7 @@ fprintf(stderr, "pxc-defined %s\n", cname); // FIXME
       {
 	const expr_int_literal *const ei =
 	  ptr_down_cast<const expr_int_literal>(tdef);
-	return tparam_str_long(ei->get_signed(), s);
+	return tparam_str_long(ei->get_unsigned(), s);
       }
       break;
     case expr_e_str_literal:
@@ -1673,16 +1705,65 @@ static int num_bits_max(const term& t)
   return etd->tattr.significant_bits_max;
 }
 
-static bool is_int_literal_or_uop(expr_i *e)
+bool is_compiletime_intval(expr_i *e)
 {
   if (e->get_esort() == expr_e_int_literal) {
     return true;
   }
+  symbol_common *sdef = e->get_sdef();
+  if (sdef != 0) {
+    term& ev = sdef->resolve_evaluated();
+    if (ev.is_long()) {
+      return true;
+    }
+  }
   if (e->get_esort() == expr_e_op) {
     expr_op *const eop = ptr_down_cast<expr_op>(e);
-    if (eop->op == TOK_PLUS || eop->op == TOK_MINUS) {
+    if (eop->op == TOK_PLUS || eop->op == TOK_MINUS || eop->op == '(') {
+      /* unary + or - */
+      return is_compiletime_intval(eop->arg0);
+    }
+  }
+  return false;
+}
+
+static bool is_int_literal_or_uop(expr_i *e, bool& is_negative,
+  unsigned long long& ulv)
+{
+  if (e->get_esort() == expr_e_int_literal) {
+    expr_int_literal *const ei = ptr_down_cast<expr_int_literal>(e);
+    /* int literal is always non-negative */
+    #if 0
+    if (ei->is_unsigned) {
+    #endif
+      is_negative = false;
+      ulv = ei->get_unsigned();
+    #if 0
+    } else {
+      long long sv = ei->get_signed();
+      if (sv >= 0) {
+	is_negative = false;
+	ulv = sv;
+      } else {
+	is_negative = true;
+	sv += 1; /* in order not to overflow */
+	sv = -sv;
+	ulv = sv;
+	ulv += 1;
+      }
+    }
+    #endif
+    return true;
+  }
+  if (e->get_esort() == expr_e_op) {
+    expr_op *const eop = ptr_down_cast<expr_op>(e);
+    if (eop->op == TOK_PLUS || eop->op == TOK_MINUS || eop->op == '(') {
       /* unary op */
-      return is_int_literal_or_uop(eop->arg0);
+      const bool r = is_int_literal_or_uop(eop->arg0, is_negative, ulv);
+      if (r && eop->op == TOK_MINUS) {
+	is_negative = !is_negative;
+      }
+      return r;
     }
   }
   return false;
@@ -1695,7 +1776,7 @@ static bool is_float_literal_or_uop(expr_i *e)
   }
   if (e->get_esort() == expr_e_op) {
     expr_op *const eop = ptr_down_cast<expr_op>(e);
-    if (eop->op == TOK_PLUS || eop->op == TOK_MINUS) {
+    if (eop->op == TOK_PLUS || eop->op == TOK_MINUS || eop->op == '(') {
       /* unary op */
       return is_float_literal_or_uop(eop->arg0);
     }
@@ -1703,44 +1784,88 @@ static bool is_float_literal_or_uop(expr_i *e)
   return false;
 }
 
+static bool integral_in_range(const term& tto, bool is_negative,
+  unsigned long long ulv)
+{
+  if (is_unsigned_integral_type(tto)) {
+    if (is_negative) {
+      return false;
+    }
+    unsigned long long uim = uintegral_max_value(tto);
+    return uim == 0 /* no check */ || ulv <= uim;
+  } else {
+    if (is_negative) {
+      long long lmin = integral_min_value(tto);
+      if (lmin == 0) {
+	return true; /* no check */
+      }
+      lmin += 1; /* in order not to overflow */
+      lmin = -lmin;
+      unsigned long long ulmin = lmin;
+      ulmin += 1;
+      return ulv <= ulmin;
+    } else {
+      long long lmax = integral_max_value(tto);
+      return lmax == 0 /* no check */ ||
+	ulv <= static_cast<unsigned long long>(lmax);
+    }
+  }
+}
+
+static bool integral_in_range_long(const term& tto, long long lv)
+{
+  bool is_negative = lv < 0;
+  unsigned long long ulv = 0;
+  if (is_negative) {
+    lv += 1; /* in order not to overflow */
+    lv = -lv;
+    ulv = lv;
+    ulv += 1;
+  } else {
+    ulv = lv;
+  }
+  return integral_in_range(tto, is_negative, ulv);
+}
+
 static bool numeric_convertible(expr_i *efrom, const term& tfrom,
   const term& tto)
 {
+  if (tto == tfrom) {
+    return true;
+  }
+  /* from compile-time constant */
   symbol_common *sdef = efrom->get_sdef();
   if (sdef != 0) {
     term& ev = sdef->resolve_evaluated();
     if (ev.is_long() && is_numeric_type(tto)) {
-      return true; /* compile-time long constant to numeric */
+      /* compile-time long constant to integral or float */
+      return integral_in_range_long(tto, ev.get_long());
     }
     if (ev.is_long() && ev.get_long() == 0 && is_bitmask(tto)) {
       return true; /* zero to bitmask */
     }
   }
-  // if (efrom->get_esort() == expr_e_int_literal) {
-  if (is_int_literal_or_uop(efrom)) {
+  /* from integral literal */
+  unsigned long long ulv = 0;
+  bool is_signed = false;
+  if (is_int_literal_or_uop(efrom, is_signed, ulv)) {
     if (is_integral_type(tto)) {
-      return true; /* int literal to integral type */
+      /* int literal to integral type */
+      return integral_in_range(tto, is_signed, ulv);
     }
     expr_int_literal *eint = dynamic_cast<expr_int_literal *>(efrom);
-    if (eint != 0 && eint->get_signed() == 0 && is_bitmask(tto)) {
+    if (eint != 0 && eint->get_unsigned() == 0 && is_bitmask(tto)) {
       return true; /* zero to bitmask */
     }
   }
-  // if (efrom->get_esort() == expr_e_float_literal && is_float_type(tto)) {
-  if (is_float_literal_or_uop(efrom)) {
+  if (is_float_literal_or_uop(efrom) && is_float_type(tto)) {
     return true; /* float literal to float type */
   }
   if (!is_numeric_type(tfrom) || !is_numeric_type(tto)) {
     return false;
   }
-  if (tto == tfrom) {
-    return true;
-  }
   if (get_family(tfrom) != get_family(tto)) {
     return false; /* none(builtin), int, uint, enum, bitmask */
-  }
-  if (is_unsigned_integral_type(tfrom) != is_unsigned_integral_type(tto)) {
-    return false; /* different signedness */
   }
   const typefamily_e cat = get_family(tfrom);
   if (cat != typefamily_e_none) {
@@ -1750,12 +1875,27 @@ static bool numeric_convertible(expr_i *efrom, const term& tfrom,
   if (is_enum(tfrom) || is_bitmask(tfrom) || is_enum(tto) || is_bitmask(tto)) {
     return false;
   }
-  if (is_integral_type(tfrom) != is_integral_type(tto)) {
-    return false; /* integral <=> floating */
+  /* builtin integral or float */
+  const type_attribute *const tafrom = get_type_attribute(tfrom);
+  const type_attribute *const tato = get_type_attribute(tto);
+  if (tafrom == 0 || tato == 0) {
+    return false;
   }
-  int to_min = num_bits_min(tto);
-  int from_max = num_bits_max(tfrom);
-  return to_min >= from_max;
+  if (!tafrom->is_integral && tato->is_integral) {
+    /* float to integral */
+    return false;
+  }
+  if (tafrom->is_signed && !tato->is_signed) {
+    /* signed to unsigned */
+    return false;
+  }
+  const int to_min = num_bits_min(tto);
+  const int from_max = num_bits_max(tfrom);
+  if (to_min < from_max) {
+    /* possibly smaller number of significant bits */
+    return false;
+  }
+  return true;
 }
 
 static void check_convfunc_validity(term& convfunc, const term& tfrom,
@@ -1827,9 +1967,7 @@ static void convert_type_internal(expr_i *efrom, term& tto, tvmap_type& tvmap)
   } else {
     tconvto = tto;
   }
-  // TODO: enable this
   if (numeric_convertible(efrom, tfrom, tconvto)) {
-  // if (is_numeric_type(tfrom) && is_numeric_type(tconvto)) {
     efrom->conv = conversion_e_cast;
     efrom->type_conv_to = tconvto;
     DBG_CONV(fprintf(stderr, "convert: numeric cast\n"));
@@ -1882,7 +2020,6 @@ static void convert_type_internal(expr_i *efrom, term& tto, tvmap_type& tvmap)
     const term_list *const tta = tra.get_args();
     if (tta != 0 && tfa != 0 && tta->front() == tfa->front()) {
       DBG_CONV(fprintf(stderr, "convert: auto range to container\n"));
-      // efrom->conv = conversion_e_subtype_obj; // FIXME: remove
       efrom->conv = conversion_e_cast;
       efrom->type_conv_to = tconvto;
       return;
@@ -2791,11 +2928,22 @@ static void check_type_threading(expr_i *e)
   check_type_threading_te(te, e);
 }
 
+static void check_var_defcon(expr_i *e)
+{
+  if (e == 0) {
+    return;
+  }
+  if (e->get_esort() == expr_e_var) {
+    ptr_down_cast<expr_var>(e)->check_defcon();
+  }
+}
+
 void fn_check_final(expr_i *e)
 {
   if (e == 0) {
     return;
   }
+  check_var_defcon(e);
   check_type_threading(e);
   check_interface_impl(e);
   check_use_before_def(e);
@@ -3138,7 +3286,7 @@ term get_array_range_texpr(expr_op *eop, expr_i *ec /* nullable */,
     expr_has_lvalue(ec, ec, true);
     nonconst = true;
   }
-  term slt = eval_mf_local(ect,
+  term slt = eval_mf_symbol(ect,
     nonconst ? "range_type" : "crange_type", eop);
   if (slt.is_null()) {
     arena_error_throw(eop, "Cannot apply '[ .. ]'");
@@ -3152,7 +3300,7 @@ term get_array_range_texpr(expr_op *eop, expr_i *ec /* nullable */,
 
 bool is_raw_array(expr_op *eop, const term& t0)
 {
-  term t = eval_mf_local(t0, "is_raw_array", eop);
+  term t = eval_mf_symbol(t0, "is_raw_array", eop);
   if (t.is_null()) {
     arena_error_throw(eop, "Symbol 'is_raw_array' is not found for type '%s'",
       term_tostr_human(t0).c_str());
@@ -3163,7 +3311,7 @@ bool is_raw_array(expr_op *eop, const term& t0)
 
 term get_array_elem_texpr(expr_op *eop, const term& t0)
 {
-  term t = eval_mf_local(t0, "mapped_type", eop);
+  term t = eval_mf_symbol(t0, "mapped_type", eop);
   if (t.is_null()) {
     arena_error_throw(eop, "Symbol 'mapped_type' is not found for type '%s'",
       term_tostr_human(t0).c_str());
@@ -3174,7 +3322,7 @@ term get_array_elem_texpr(expr_op *eop, const term& t0)
 
 term get_array_index_texpr(expr_op *eop, const term& t0)
 {
-  term t = eval_mf_local(t0, "key_type", eop);
+  term t = eval_mf_symbol(t0, "key_type", eop);
   if (t.is_null()) {
     arena_error_throw(eop, "Symbol 'key_type' is not found for type '%s'",
       term_tostr_human(t0).c_str());

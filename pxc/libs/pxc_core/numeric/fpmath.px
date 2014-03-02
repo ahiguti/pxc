@@ -11,15 +11,15 @@ public extern "FP_SUBNORMAL"	fpclass_t FP_SUBNORMAL;
 public extern "FP_NORMAL"	fpclass_t FP_NORMAL;
 
 public threaded function {t} fpclass_t fpclassify(t x)
-{ return m::symbol{m::concat{"fpclassify_", t}}(x); }
+{ return m::symbol{m::nsof{fpclassify}, m::concat{"fpclassify_", t}}(x); }
 public threaded function {t} t frexp(t x, int mutable& exp)
-{ return m::symbol{m::concat{"frexp_", t}}(x, exp); }
+{ return m::symbol{m::nsof{frexp}, m::concat{"frexp_", t}}(x, exp); }
 public threaded function {t} t ldexp(t x, int exp)
-{ return m::symbol{m::concat{"ldexp_", t}}(x, exp); }
+{ return m::symbol{m::nsof{ldexp}, m::concat{"ldexp_", t}}(x, exp); }
 public threaded function {t} bool signbit(t x)
-{ return m::symbol{m::concat{"signbit_", t}}(x); }
+{ return m::symbol{m::nsof{signbit}, m::concat{"signbit_", t}}(x); }
 public threaded function {t} t modf(t x, t mutable& ir)
-{ return m::symbol{m::concat{"modf_", t}}(x, ir); }
+{ return m::symbol{m::nsof{modf}, m::concat{"modf_", t}}(x, ir); }
 
 public threaded function extern "numeric::fpclassify_double"
   fpclass_t fpclassify_double(double x);
@@ -52,25 +52,33 @@ private metafunction funcs_a2
   m::list{
     "pow", "fmod", "atan2"
   };
+private metafunction funcs_a1b
+  m::list{
+    "isfinite", "isnormal", "isnan", "isinf"
+  };
 
-private metafunction check_fp{t}
+private metafunction check_fp{t, s}
   m::cond{
     m::or{m::eq{t, float}, m::eq{t, double}},
-    t,
+    s,
     m::error{"invalid type ", t}};
 
 /* decls for "sin", "cos", ... */
 expand (fsym : funcs_a1) {
-public threaded function extern "numeric::%" {t} check_fp{t} fsym(t x);
+public threaded function extern "numeric::%" {t} check_fp{t, t} fsym(t x);
 }
 expand (fsym : funcs_a2) {
-public threaded function extern "numeric::%" {t} check_fp{t} fsym(t x, t y);
+public threaded function extern "numeric::%" {t} check_fp{t, t} fsym(t x, t y);
+}
+expand (fsym : funcs_a1b) {
+public threaded function extern "numeric::%" {t} check_fp{t, bool} fsym(t x);
 }
 /* c++ defs for "sin", ... */
 private metafunction emit_funcdefs
   m::concat{
     m::fold{m::map{funcs_a1, emit_funcdef_a1}, m::concat, ""},
-    m::fold{m::map{funcs_a2, emit_funcdef_a2}, m::concat, ""}
+    m::fold{m::map{funcs_a2, emit_funcdef_a2}, m::concat, ""},
+    m::fold{m::map{funcs_a2, emit_funcdef_a1b}, m::concat, ""}
   };
 private metafunction emit_funcdef_a1{f}
   m::concat{
@@ -80,6 +88,10 @@ private metafunction emit_funcdef_a2{f}
   m::concat{
     "template <typename T> ",
     "static inline T ", f, "(T x, T y) { return std::", f, "(x, y); }\n"};
+private metafunction emit_funcdef_a1b{f}
+  m::concat{
+    "template <typename T> ", 
+    "static inline bool ", f, "(T x) { return std::", f, "(x); }\n"};
 
 extern "types" inline
 #include <cmath>

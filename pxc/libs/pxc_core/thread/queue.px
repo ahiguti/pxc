@@ -1,11 +1,15 @@
-namespace queue;
-import common -;
+threaded namespace thread::queue;
+public import numeric::integral -;
+public import container::array -;
+public import pointer -;
+public import thread::func -;
+public import algebraic -;
 
-public metafunction entry_type uneval{void};
+public metafunction task uneval{void};
 
 public threaded struct task_queue(size_t num_thrs)
 {
-  public function void push(tptr{entry_type} const& e) {
+  public function void push(tptr{task} const& e) {
     queue_push_notify(shared, e);
   }
   private function ~ {
@@ -16,28 +20,28 @@ public threaded struct task_queue(size_t num_thrs)
       thrs.push_back(make_thread_func{queue_thread_main}(shared));
     }
   }
-  private tptr{task_queue_shared} const shared = make_tptr{task_queue_shared}();
+  private tptr{task_queue_shared} const shared 
+    = make_tptr{task_queue_shared}();
   private vector{ptr{uneval{void}}} thrs;
   construct(num_thrs);
 }
 
 private multithreaded struct task_queue_shared()
 {
-  public deque{tptr{entry_type}} queue;
+  public deque{tptr{task}} queue;
   public int stop_thread = 0;
 }
 
-private threaded function option{tptr{entry_type}}
+private threaded function option{tptr{task}}
 queue_wait_pop(tptr{task_queue_shared} const& tq)
 {
-  option{tptr{entry_type}} ent;
+  option{tptr{task}} ent;
   mutable lck = lock_guard{task_queue_shared}(tq);
   task_queue_shared mutable& q = *lck;
   while (true) {
     int const sf = q.stop_thread;
     bool const em = q.queue.empty();
     if (sf < 0 || (sf > 0 && em)) {
-      debug_log("wait_pop: stop");
       break;
     }
     if (q.queue.empty()) {
@@ -54,7 +58,7 @@ private threaded function void
 queue_thread_main(tptr{task_queue_shared} const& tq)
 {
   while (true) {
-    option{tptr{entry_type}} ent = queue_wait_pop(tq);
+    option{tptr{task}} ent = queue_wait_pop(tq);
     if (case ent.none) {
       break;
     }
@@ -72,7 +76,7 @@ queue_thread_stop(tptr{task_queue_shared} const& tq, int mode)
 
 private threaded function void
 queue_push_notify(tptr{task_queue_shared} const& tq,
-  tptr{entry_type} const& ep)
+  tptr{task} const& ep)
 {
   mutable lck = lock_guard{task_queue_shared}(tq);
   task_queue_shared mutable& q = *lck;
@@ -81,22 +85,5 @@ queue_push_notify(tptr{task_queue_shared} const& tq,
   if (need_notify) {
     lck.notify_one();
   }
-}
-
-multithreaded struct hoge(int x0) <uneval{void}> {
-  int const x = x0;
-  function void eval() {
-    debug_log("hoge", x);
-  }
-}
-
-{
-  {
-    mutable tq = task_queue(1);
-    tq.push(make_tptr{hoge}(10));
-    tq.push(make_tptr{hoge}(20));
-    tq.push(make_tptr{hoge}(30));
-  }
-  println("ok");
 }
 

@@ -22,12 +22,18 @@ struct {t} monoid_average {
   t value;
   size_t count;
   function t get() const { return value / static_cast{t}(count); }
-  function monoid_average{t} __add(monoid_average{t} const& y) const {
-    return monoid_average(value + y.value, count + y.count);
-  }
   function string to_string() const {
     return text::conversion::to_string(get());
   } 
+}
+
+function {tx, ty} tx
+monoid_average___add(tx const& x, ty const& y)
+{
+  tx r = x;
+  r.value = x.value + y.value;
+  r.count = x.count + y.count;
+  return r;
 }
 
 function {tto, tfrom} tto monoid_average___to(tfrom const& from)
@@ -38,7 +44,7 @@ function {tto, tfrom} tto monoid_average___to(tfrom const& from)
 function {t} void
 monoid_average_append_to_string(t const& x, string mutable& str)
 {
-  t:value_type const xv = x;
+  m::symbol{t, "value_type"} const xv = x;
   return text::conversion::serialize_to_string(xv, str);
 }
 

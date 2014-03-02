@@ -1,0 +1,65 @@
+namespace fixme_fe1_err;
+public import numeric::integral -;
+public import container::array -;
+public import io::text -;
+public import io::errno -;
+public import text::split -;
+public import text::conversion -;
+public import meta m;
+public import io +;
+public import io::file +;
+public import meta::family mf;
+
+
+public import numeric::fp -;
+public import io::standard -;
+
+import common -;
+import operator -;
+
+struct {t} monoid_average {
+  metafunction value_type t;
+  t value;
+  size_t count;
+  function t get() const { return value / static_cast{t}(count); }
+  function monoid_average{t} __add(monoid_average{t} const& y) const {
+    return monoid_average{t}(value + y.value, count + y.count);
+  }
+  function string to_string() const {
+    return text::conversion::to_string(get());
+  } 
+}
+
+function {tto, tfrom} tto monoid_average___to(tfrom const& from)
+{
+  return from.get();
+}
+
+function {t} void
+monoid_average_append_to_string(t const& x, string mutable& str)
+{
+  m::symbol{t, "value_type"} const xv = x;
+  return text::conversion::serialize_to_string(xv, str);
+}
+
+struct foo {
+  string sval;
+  int ival;
+  double dval;
+  monoid_average{double} adval;
+}
+
+{
+  vector{foo} v;
+  monoid_average{double} avg;
+  system.open("hoge3.txt", io::file::O_RDONLY, 0)
+    .value.read_table{readrec, 0}();
+  function bool readrec(cstrref const& s, int i, double d) {
+    v.emplace_back(s, i, d, monoid_average{double}(d, 1));
+    avg = avg + monoid_average{double}(d, 1);
+    return true;
+  }
+  println(v);
+  println(avg);
+}
+

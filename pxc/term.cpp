@@ -24,8 +24,8 @@ term::term(const std::string& x)
 {
 }
 
-term::term(const term_list_range& x)
-  : ptr(new term_metalist(x))
+term::term(const term_list_range& x, bool make_index)
+  : ptr(make_index ? (new term_metalist_idx(x)) : (new term_metalist(x)))
 {
 }
 
@@ -44,6 +44,15 @@ term::term(expr_tparams *tpm, const term& tpmv, const term& tpmv_lexctx,
 term::term(expr_i *e)
   : ptr(new term_expr(e))
 {
+}
+
+bool term::has_index() const
+{
+  term_metalist *const tm = get_term_metalist();
+  if (tm == 0) {
+    return false;
+  }
+  return tm->has_index();
 }
 
 term::term(expr_i *e, const term_list_range& a)
@@ -126,6 +135,12 @@ std::string term::get_string() const
   return ts != 0 ? ts->v : std::string();
 }
 
+ssize_t term::assoc_find(const term& key) const
+{
+  term_metalist *const tm = get_term_metalist();
+  return tm != 0 ? tm->assoc_find(key) : -1;
+}
+
 term_metalist::term_metalist(const term_list_range& a)
   : v(a.begin(), a.end())
 {
@@ -160,46 +175,77 @@ term_string *term::get_term_string() const
   return dynamic_cast<term_string *>(ptr);
 }
 
-ssize_t term_metalist::find(const term& x) const
+ssize_t term_metalist::assoc_find(const term& x) const
 {
+  if (!x.is_long() && !x.is_string()) {
+    return -1;
+  }
   ssize_t c = 0;
   for (term_list::const_iterator i = v.begin(); i != v.end();
     ++i, ++c) {
-    if (*i == x) {
-      return c;
+    const term& v = *i;
+    /* element is a long or string */
+    if (v.is_long() || v.is_string()) {
+      if (v == x) {
+	return c;
+      }
+    } else if (v.is_metalist()) {
+      /* element is a metalist */
+      const term_list *const ml = v.get_metalist();
+      if (ml->size() > 0) {
+	const term& e = (*ml)[0];
+	if (x == e) {
+	  return c;
+	}
+      }
     }
   }
   return -1;
 }
 
-term_metalist_idx::index_type term_metalist_idx::create_index(
-  const term_list_range& a)
+static term_metalist_idx::index_type make_index(const term_list_range& a)
 {
   term_metalist_idx::index_type idx;
   for (size_t i = 0; i < a.size(); ++i) {
-    idx[a[i]] = i;
+    const term& k = a[i];
+    /* element is a long or string */
+    if (k.is_string() || k.is_long()) {
+      idx[k] = i;
+    } else if (k.is_metalist()) {
+      /* element is a metalist */
+      const term_list *const ml = k.get_metalist();
+      if (ml->size() > 0) {
+	const term& e = (*ml)[0];
+	if (e.is_long() || e.is_string()) {
+	  term_metalist_idx::index_type::iterator iter = idx.find(e);
+	  if (iter == idx.end()) {
+	    idx[e] = i;
+	  }
+	}
+      }
+    }
   }
-  #if 0
-  size_t c = 0;
-  for (term_list::const_iterator i = a.begin(); i != a.end(); ++i, ++c) {
-    idx[*i] = c;
-  }
-  #endif
   return idx; /* expects return value optimization */
 }
 
 term_metalist_idx::term_metalist_idx(const term_list_range& a)
-  : term_metalist(a), index(create_index(a))
+  : term_metalist(a), index(make_index(a))
 {
 }
 
-ssize_t term_metalist_idx::find(const term& x) const
+ssize_t term_metalist_idx::assoc_find(const term& x) const
 {
   index_type::const_iterator iter = index.find(x);
   if (iter != index.end()) {
+    #if 0
+    fprintf(stderr, "idx assoc_find: %s found\n", term_tostr_human(x).c_str());
+    #endif
     return iter->second;
   }
-  return -1;
+  #if 0
+  fprintf(stderr, "idx assoc_find: %s noidx\n", term_tostr_human(x).c_str());
+  #endif
+  return term_metalist::assoc_find(x);
 }
 
 term_lambda::term_lambda(const std::vector<expr_tparams *>& upvalues,
@@ -397,7 +443,7 @@ term term_litexpr_to_literal(const term& t)
   expr_i *const e = t.get_expr();
   if (e != 0) {
     if (e->get_esort() == expr_e_int_literal) {
-      return term(ptr_down_cast<expr_int_literal>(e)->get_signed());
+      return term(ptr_down_cast<expr_int_literal>(e)->get_unsigned());
     } else if (e->get_esort() == expr_e_str_literal) {
       return term(ptr_down_cast<expr_str_literal>(e)->value);
     }

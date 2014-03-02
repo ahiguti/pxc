@@ -38,7 +38,7 @@ metafunction is_range_type{t}
 
 metafunction to_non_ephemeral{t}
   m::cond{is_string_or_slice_type{t}, string,
-  m::cond{is_range_type{t}, m::local{t, "non_ephemeral_type"},
+  m::cond{is_range_type{t}, m::symbol{t, "non_ephemeral_type"},
   t}};
 
 threaded function {t} variant to_variant(t const& x)
@@ -129,15 +129,15 @@ multithreaded struct {t} stub_iinvoke : iinvoke : {
   metafunction seqstr{n} m::map{m::seq{n}, m::to_string};
   metafunction arg_name{arg} m::concat{"a", m::at{arg, 0}};
   metafunction arg_names{fsym}
-    m::map{m::args{m::local{t, m::to_string{fsym}}}, arg_name};
+    m::map{m::args{m::symbol{t, m::to_string{fsym}}}, arg_name};
   metafunction argexp{arg}
     m::list{
       arg_name{arg}, // a0, a1, a2, ...
       m::add{m::mul{m::at{arg, 3}, 2}, m::at{arg, 4}}}; // byref * 2 + mutable
   metafunction argexp_list{fsym}
-    m::map{m::args{m::local{t, m::to_string{fsym}}}, argexp};
+    m::map{m::args{m::symbol{t, m::to_string{fsym}}}, argexp};
   metafunction args_ae{fsym, ae}
-    m::at{m::args{m::local{t, fsym}}, m::to_int{m::substring{ae, 1}}};
+    m::at{m::args{m::symbol{t, fsym}}, m::to_int{m::substring{ae, 1}}};
   metafunction arg_type_ae{fsym, ae} m::at{args_ae{fsym, ae}, 2};
   metafunction arg_type_noneph{fsym, ae} to_non_ephemeral{arg_type_ae{fsym, ae}};
   function variant invoke(cstrref const& name, cslice{variant} const& args) {
@@ -159,11 +159,11 @@ multithreaded struct {t} stub_iinvoke : iinvoke : {
 	    downcast_mutable{stub_iinvoke{arg_type_noneph{fsym, ae}}, iinvoke}(
 	      *(args[m::to_int{m::substring{ae, 1}}].tptrval)).value;
 	}
-	if (m::eq{m::ret_type{m::local{t, m::to_string{fsym}}}, void}) {
+	if (m::eq{m::ret_type{m::symbol{t, m::to_string{fsym}}}, void}) {
 	  value.fsym(expand(a : arg_names{fsym}; a));
 	  return variant();
 	} else {
-	  return to_variant{m::ret_type{m::local{t, m::to_string{fsym}}}}(
+	  return to_variant{m::ret_type{m::symbol{t, m::to_string{fsym}}}}(
 	    value.fsym(expand(a : arg_names{fsym}; a)));
 	}
       }

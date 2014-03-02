@@ -23,22 +23,22 @@ public struct extern "@functions" "@functions" {ns} functions { }
 public struct extern "@types" "@types" {ns} types { }
 public struct extern "@global_variables" "@global_variables" {ns}
   global_variables { }
-  /* list{list{name, typ, byref(=0), mutable}} */
+  /* {{name, typ, byref(=0), mutable}, ...} */
 
-public struct extern "@local" "@local" {t, name, opt_arg} local { }
-  /* vararg */
-public struct extern "@lsymbol" "@lsymbol" {t, name, opt_arg} lsymbol { }
-  /* vararg */
-public struct extern "@symbol" "@symbol" {name, opt_t} symbol { }
+public struct extern "@local" "@local" {t, name} local { }
+public struct extern "@lsymbol" "@lsymbol" {t, name} lsymbol { }
+public struct extern "@symbol" "@symbol" {ns_or_name, opt_name} symbol { }
 public struct extern "@attribute" "@attribute" {t, name} attribute { }
 public struct extern "@family" "@family" {t} family { }
-public struct extern "@nsname" "@nsname" {x} nsname { }
+public struct extern "@nameof" "@nameof" {x} nameof { }
+  /* foo::bar{...} => "foo::bar" */
 public struct extern "@nsof" "@nsof" {x} nsof { }
+  /* foo::bar{...} => "foo" */
 public struct extern "@tparam_size" "@tparam_size" {x} tparam_size { }
 public struct extern "@targ_size" "@targ_size" {x} targ_size { }
 public struct extern "@targs" "@targs" {x} targs { }
 public struct extern "@base" "@base" {t} base { }
-public struct extern "@typeof" "@typeof" {x} typeof { }
+public struct extern "@typeof" "@typeof" {v} typeof { }
 
 public struct extern "@values" "@values" {x} values { }
 
@@ -46,7 +46,7 @@ public struct extern "@ret_type" "@ret_type" {f} ret_type { }
 public struct extern "@ret_byref" "@ret_byref" {f} ret_byref { }
 public struct extern "@ret_mutable" "@ret_mutable" {f} ret_mutable{ }
 public struct extern "@ret" "@ret" {f} ret { }
-  /* list{"", typ, 0, 0} */
+  /* {"", typ, byref, mutable} */
 public struct extern "@arg_size" "@arg_size" {f, i} arg_size { }
 public struct extern "@arg_type" "@arg_type" {f, i} arg_type { }
 public struct extern "@arg_byref" "@arg_byref" {f, i} arg_byref { }
@@ -54,12 +54,12 @@ public struct extern "@arg_mutable" "@arg_mutable" {f, i} arg_mutable { }
 public struct extern "@arg_types" "@arg_types" {f} arg_types { }
 public struct extern "@arg_names" "@arg_names" {f} arg_names { }
 public struct extern "@args" "@args" {f} args { }
-  /* list{list{name, typ, byref, mutable}} */
+  /* {{name, typ, byref, mutable}, ...} */
 
 public struct extern "@is_copyable_type" "@is_copyable_type" {t}
   is_copyable_type { }
-public struct extern "@is_asignable_type" "@is_asignable_type" {t}
-  is_asignable_type { }
+public struct extern "@is_assignable_type" "@is_assignable_type" {t}
+  is_assignable_type { }
 public struct extern "@is_constructible_type" "@is_constructible_type" {t}
   is_constructible_type { }
 public struct extern "@is_polymorphic_type" "@is_polymorphic_type" {t}
@@ -69,7 +69,7 @@ public struct extern "@inherits" "@inherits" {tderived, tbase} inherits { }
 public struct extern "@field_types" "@field_types" {t} field_types { }
 public struct extern "@field_names" "@field_names" {t} field_names { }
 public struct extern "@fields" "@fields" {t} fields { }
-  /* list{list{name, typ, byref(=0), mutable}} */
+  /* {{name, typ, byref(=0), mutable}} */
 public struct extern "@member_functions" "@member_functions" {t}
   member_functions { }
 
@@ -85,6 +85,8 @@ public struct extern "@rindex" "@rindex" {x, y} rindex { } /* TODO */
 public struct extern "@substring" "@substring" {x, i, j} substring { }
 public struct extern "@subst" "@subst" {x, from, to} subst { }
 public struct extern "@strlen" "@strlen" {x} strlen { }
+public struct extern "@character" "@character" {c} character { }
+public struct extern "@code_at" "@code_at" {s, idx} code_at { }
 
 public struct extern "@@cond" "@@cond" {c, x, y} cond { }
 public struct extern "@@or" "@@or" {x, y} or { }
@@ -97,8 +99,7 @@ public struct extern "@size" "@size" {x} size { }
 public struct extern "@slice" "@slice" {lst, i0, i1} slice { }
 public struct extern "@at" "@at" {lst, idx} at { }
 public struct extern "@seq" "@seq" {x, y} seq { }
-public struct extern "@map" "@map" {lists, mf, args} map { }
-  /* map{list_0, ... , lst_n, func, arg_0, ... , arg_n} */
+public struct extern "@map" "@map" {lst, mf} map { }
 public struct extern "@fold" "@fold" {lst, mf, v0} fold { }
 public struct extern "@filter" "@filter" {lst, f} filter { }
 public struct extern "@join" "@join" {lstlst, opt_sep} join { }
@@ -108,6 +109,8 @@ public struct extern "@transposev" "@transposev" {lst1, lst2} transposev { }
   /* vararg */
 public struct extern "@sort" "@sort" {lst} sort { }
 public struct extern "@unique" "@unique" {lst} unique { }
+public struct extern "@list_index" "@list_index" {lst} list_index { }
+public struct extern "@list_find" "@list_find" {lst, key} list_find { }
 
 public struct extern "@add" "@add" {x, y} add { } /* vararg */
 public struct extern "@sub" "@sub" {x, y} sub { }

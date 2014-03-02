@@ -1,0 +1,157 @@
+namespace table;
+public import common -;
+public import meta m; 
+public import meta::family mf;
+public import exception -;
+public import io::text -;
+public import io::errno -;
+
+public threaded struct {opt}
+table_ifile(file const& fp0)
+{
+  private file const fp = fp0;
+  private metafunction delim get_option{opt, "delim", '\t'};
+  public function bool insert() { return false; }
+  public function void flush() { }
+  public function {tout} void transform(tout mutable& out) const
+  {
+    threaded function bool parse_line(cstrref mutable line)
+    {
+      metafunction pf m::symbol{tout, "insert"};
+      expand(sym, idx: m::map{m::seq{m::arg_size{pf}},
+	metafunction{i} m::list{
+	  m::concat{"a", i},
+	  mf::is_string_or_slice_type{m::arg_type{pf, i}}}})
+      { 
+	/* not a string type */
+	m::arg_type{pf, idx} const sym = from_string{m::arg_type{pf, idx}}(
+	  line.next_token(delim));
+	/* string */
+	m::arg_type{pf, idx} const sym = line.next_token(delim);
+      }
+      return out.insert(expand(a: m::map{m::seq{m::arg_size{pf}},
+	metafunction{i} m::concat{"a", i}}; a));
+    }
+    errno_t errno = fp.read_lines{parse_line, opt}();
+    if (errno != EOK) {
+      throw runtime_error_template{"ifile"}(to_string(errno));
+    }
+    out.flush();
+  }
+}
+
+public threaded struct {tlist, opt}
+table_ofile(file const& fp0)
+{
+  private file const fp = fp0;
+  private string obuffer;
+  private metafunction delim m::character{get_option{opt, "delim", '\t'}};
+  private metafunction line_delim m::character{get_option{opt, "line_delim",
+    '\n'}};
+  private metafunction buffer_size get_option{opt, "buffer_size", 16384};
+  public function bool insert(expand(
+    m::map{m::seq{m::size{tlist}}, metafunction{i}
+      m::list{m::concat{"a", i}, m::at{tlist, i}, 1, 0}}))
+  {
+    string_append_join{delim}(
+      obuffer,
+      expand(a: m::map{m::seq{m::size{tlist}},
+	metafunction{i} m::concat{"a", i}}; a));
+    obuffer.append(line_delim);
+    if (obuffer.size() > buffer_size) {
+      flush();
+    }
+    return true;
+  }
+  public function void flush()
+  {
+    const r = fp.write(obuffer);
+    obuffer.clear();
+    if (case r.errno) {
+      throw runtime_error_template{"ofile"}(to_string(r.errno));
+    }
+  }
+  public function {tout} void transform(tout mutable& out) const
+  {
+    out.flush();
+  }
+}
+
+public struct {key_types, mapped_types}
+table_map()
+{
+  private metafunction key_type tuple{key_types};
+  private metafunction mapped_type tuple{mapped_types};
+  private metafunction tlist m::joinv{key_types, mapped_types};
+  private metafunction map_type tree_map{key_type, mapped_type};
+  private map_type mapval;
+  public function bool insert(expand(
+    m::map{m::seq{m::size{tlist}}, metafunction{i}
+      m::list{m::concat{"a", i}, m::at{tlist, i}, 1, 0}}))
+  {
+    metafunction klen m::size{key_types};
+    metafunction mlen m::size{mapped_types};
+    const k = key_type(expand(a: m::map{m::seq{klen}, metafunction{i}
+      m::concat{"a", i}}; a));
+    const m = mapped_type(expand(a: m::map{m::seq{mlen}, metafunction{i}
+      m::concat{"a", m::add{i, klen}}}; a));
+    if (mutable& m0 : mapval[k]) {
+      expand(sym, idx: m::map{m::seq{mlen}, metafunction{i}
+	m::concat{"_", i}})
+      {
+	m0.sym += m.sym;
+      }
+    } else {
+      mapval.insert(k, m);
+    }
+    return true;
+  }
+  public function void flush() { }
+  public function {tout} void transform(tout mutable& out) const
+  {
+    metafunction klen m::size{key_types};
+    metafunction pf m::symbol{tout, "insert"};
+    for (const k, const m : mapval) {
+      expand (sym, idx: m::map{m::seq{m::arg_size{pf}}, metafunction{i}
+	m::list{m::concat{"x", i}, m::ge{i, klen}}})
+      {
+	/* key */
+	expand (fldsym: m::list{m::concat{"_", idx}}) {
+	  const& sym = k.fldsym;
+	}
+	/* mapped */
+	expand (fldsym: m::list{m::concat{"_", m::sub{idx, klen}}}) {
+	  const& sym = m.fldsym;
+	}
+      }
+      out.insert(expand(a: m::map{m::seq{m::arg_size{pf}}, metafunction{i}
+	m::concat{"x", i}}; a));
+    }
+    out.flush();
+  }
+}
+
+private metafunction get_option{opt, k, def}
+  m::cond{
+    m::and{m::is_type{opt}, m::lsymbol{opt, k}},
+    m::lsymbol{opt, k},
+    def};
+
+{
+  println("TEST0");
+  mutable tin = table_ifile{0}(
+    system.open("hoge3.txt", io::file::O_RDONLY, 0).value);
+  mutable tout = table_ofile{{string, int, float}, 0}(system.stdout());
+  tin.transform(tout);
+}
+
+{
+  println("TEST1");
+  mutable tin = table_ifile{0}(
+    system.open("hoge3.txt", io::file::O_RDONLY, 0).value);
+  mutable ttbl = table_map{{string}, {int, float}}();
+  mutable tout = table_ofile{{string, int, float}, 0}(system.stdout());
+  tin.transform(ttbl);
+  ttbl.transform(tout);
+}
+

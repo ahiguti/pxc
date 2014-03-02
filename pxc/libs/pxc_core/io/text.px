@@ -11,8 +11,8 @@ public import meta::family mf;
 
 public threaded function {cb, opt} errno_t file_read_lines(file const& ifile)
 {
-  metafunction line_delim get_opt{opt, "line_delim", '\n'};
-  metafunction read_block_size get_opt{opt, "read_block_size", 16384};
+  metafunction line_delim get_option{opt, "line_delim", '\n'};
+  metafunction read_block_size get_option{opt, "buffer_size", 16384};
   string buffer;
   bool cont_flag = true;
   while (cont_flag) {
@@ -73,7 +73,7 @@ public threaded function {cb, opt} errno_t
 file_read_records(file const& ifile)
 {
   metafunction enttype m::arg_type{cb, 0};
-  metafunction column_delim get_opt{opt, "column_delim", is_space_or_tab};
+  metafunction column_delim get_option{opt, "column_delim", is_space_or_tab};
   const err = file_read_lines{parse_line, opt}(ifile);
   threaded function bool parse_line(cstrref const& line) {
     enttype e;
@@ -88,7 +88,7 @@ public threaded function {opt, t} errno_t
 file_read_append_records(file const& ifile, t mutable& v)
 {
   return ifile.read_records{record_cb, opt}();
-  threaded function bool record_cb(t:mapped_type const& e) {
+  threaded function bool record_cb(m::symbol{t, "mapped_type"} const& e) {
     v.push_back(e);
     return true;
   }
@@ -114,6 +114,7 @@ io_read_append_records(io const& sys, cstrref const& fn, t mutable& v)
   return ef.value.read_append_records{opt, t}(v);
 }
 
-private metafunction get_opt{opt, k, def}
-  m::cond{m::is_type{opt}, m::local{opt, k}, def};
+private metafunction get_option{opt, k, def}
+  m::cond{m::and{m::is_type{opt}, m::lsymbol{opt, k}},
+    m::lsymbol{opt, k}, def};
 

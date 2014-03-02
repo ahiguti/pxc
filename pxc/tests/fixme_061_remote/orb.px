@@ -69,7 +69,7 @@ private threaded function {ns, i0, i1} void call_ns_function_bs(orb& o,
     */
     int const c = compare{cstrref}(o.rbuf[tpos .. tepos], m::at{fns, cidx});
     if (c == 0) {
-      function_call{m::symbol{m::at{fns, cidx}, ns}}(o, apos, aepos);
+      function_call{m::symbol{ns, m::at{fns, cidx}}}(o, apos, aepos);
     } else if (c < 0) {
       call_ns_function_bs{ns, i0, cidx}(o, tpos, tepos, apos, aepos);
     } else {
@@ -364,7 +364,7 @@ public threaded function {ns} ns_functions create_ns_functions()
   expand (fsym, idx : m::sort{m::map{m::functions{ns}, m::to_string}}) {
     {
       strlit k = m::to_string{fsym};
-      metafunction fc marshal_fcall{m::symbol{fsym, ns}};
+      metafunction fc marshal_fcall{m::symbol{ns, fsym}};
       ptr{i_marshal_fcall} p = ptr{fc}(fc());
       func_entry e = func_entry(k, p);
       fs.push_back(e);

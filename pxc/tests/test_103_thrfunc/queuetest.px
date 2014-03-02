@@ -1,0 +1,21 @@
+namespace queuetest;
+import common -;
+import thread::queue -;
+
+multithreaded struct hoge(int x0) <uneval{void}> {
+  int const x = x0;
+  function void eval() {
+    debug_log("hoge", x);
+  }
+}
+
+{
+  {
+    mutable tq = task_queue(1);
+    tq.push(make_tptr{hoge}(10));
+    tq.push(make_tptr{hoge}(20));
+    tq.push(make_tptr{hoge}(30));
+  }
+  println("ok");
+}
+

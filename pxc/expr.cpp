@@ -138,8 +138,10 @@ expr_i *expr_tparams_new(const char *fn, int line, const char *sym,
   expr_i *rest)
 { return arena_push(new expr_tparams(fn, line, sym, rest)); }
 
+#if 0
 expr_i *expr_te_local_chain_new(expr_i *te1, expr_i *te2)
 {
+  // FIXME: remove. deprecated.
   /* te1::te2expr{te2args, ...} => meta::local{te1, "te2expr", te2args, ...} */
   expr_te *const tte2 = ptr_down_cast<expr_te>(te2);
   std::string s = escape_c_str_literal(tte2->nssym->sym);
@@ -152,7 +154,9 @@ expr_i *expr_te_local_chain_new(expr_i *te1, expr_i *te2)
 	expr_telist_new(te2->fname, te2->line,
 	  expr_str_literal_new(te2->fname, te2->line, te2expr),
 	  tte2->tlarg)));
+  abort();
 }
+#endif
 
 expr_i *expr_metalist_new(expr_i *tl)
 {
@@ -347,6 +351,8 @@ static void define_builtins()
   stmts = 0;
   {
     expr_i *est = 0;
+    #if 0
+    // remove. deprecated.
     est = expr_struct_new("BUILTIN", 0,
       arena_strdup("@local"),
       arena_strdup("@local"),
@@ -356,6 +362,7 @@ static void define_builtins()
 	attribute_threaded | attribute_multithr | attribute_valuetype |
 	attribute_tsvaluetype), false, false);
     stmts = expr_stmts_new("", 0, est, stmts);
+    #endif
     est = expr_struct_new("BUILTIN", 0,
       arena_strdup("@list"),
       arena_strdup("@list"),

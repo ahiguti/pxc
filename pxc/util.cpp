@@ -31,6 +31,9 @@ namespace pxc {
 std::string get_canonical_path(const std::string& x)
 {
   auto_free p(realpath(x.c_str(), 0));
+  if (p.get() == 0) {
+    return x;
+  }
   const std::string s = std::string(p.get());
   return s;
 }

@@ -98,6 +98,9 @@ struct ext_pragma {
     trace_meta(false) { }
 };
 
+typedef std::map<symbol, symbol> nsmap_entry;
+typedef std::map<symbol, nsmap_entry> nsmap_type;
+
 struct symbol_table {
   symbol_table(expr_block *block_backref);
   expr_block *block_backref;
@@ -116,6 +119,7 @@ public:
   expr_e block_esort; /* funcdef, struct, etc. */
   int tempvar_id_count;
   ext_pragma pragma;
+  nsmap_type nsmap;
 public:
   locals_type::const_iterator find(const symbol& k) const {
     return locals.find(k); }

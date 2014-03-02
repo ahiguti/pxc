@@ -452,7 +452,6 @@ struct expr_int_literal : public expr_i {
   expr_i *get_child(int i) { return 0; }
   void set_child(int i, expr_i *e) { }
   unsigned long long get_unsigned() const;
-  long long get_signed() const;
   term& resolve_texpr();
   void check_type(symbol_table *lookup) { }
   bool has_expr_to_emit() const { return true; }
@@ -462,6 +461,8 @@ struct expr_int_literal : public expr_i {
 public:
   const char *const str;
   bool is_unsigned;
+    /* true if this expr is of unsigned type. value itself is always
+     * non-negative. */
 };
 
 struct expr_float_literal : public expr_i {
@@ -579,6 +580,7 @@ struct expr_var : public expr_i {
   term& resolve_texpr();
   void define_vars_one(expr_stmts *stmt);
   void check_type(symbol_table *lookup);
+  void check_defcon();
   bool has_expr_to_emit() const { return true; }
   bool is_expression() const { return true; }
   std::string emit_symbol_str() const;
@@ -790,6 +792,7 @@ public:
   expr_te *rettype_uneval;
   passby_e ret_passby;
   expr_stmts *stmts;
+  expr_i *tparams_error; /* nonzero if tparams contains a syntax error */
   symbol_table symtbl;
   bool compiled_flag : 1;
 private:
