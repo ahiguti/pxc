@@ -15,13 +15,17 @@ public multithreaded struct extern "pxcrt::tcptr" "tcptr" {t} tcptr { }
 public tsvaluetype   struct extern "pxcrt::tiptr" "tiptr" {t} tiptr { }
 
 public mtvaluetype struct extern "pxcrt::lock_guard" "lock_guard" {t}
-lock_guard {
+lock_guard
+{
+  metafunction static_assert is_monitor{t};
   public function extern "wait" void wait();
   public function extern "notify_one" void notify_one();
   public function extern "notify_all" void notify_all();
 }
 public mtvaluetype struct extern "pxcrt::lock_cguard" "lock_cguard" {t}
-lock_cguard {
+lock_cguard
+{
+  metafunction static_assert is_monitor{t};
   public function extern "wait" void wait();
   public function extern "notify_one" void notify_one();
   public function extern "notify_all" void notify_all();
@@ -69,6 +73,16 @@ check_pointer_downcast{tto, tfrom} pointer_downcast(tfrom const& x);
 private metafunction argdecls{tis} v::arg_decls_byref{tis};
 private metafunction arg_names{tis} v::arg_names{m::size{tis}};
 
+private metafunction get_attribute{t, key, defval}
+  alist_find_mapped{to_alist{m::symbol{t, "__attribute__"}}, key, defval};
+  private metafunction to_alist{al} m::cond{m::ne{al, 0}, al, m::nil};
+  private metafunction alist_find_mapped{al, key, defval}
+    alist_mapped_at{al, m::list_find{al, key}, defval};
+  private metafunction alist_mapped_at{al, idx, defval}
+    m::cond{m::ge{idx, 0}, m::at1{m::at{al, idx}}, defval};
+ 
+private metafunction is_monitor{t} get_attribute{t, "monitor", 1};
+
 private metafunction check_polymorphic{t1, t2}
   m::cond{
     m::and{m::is_polymorphic_type{t1}, m::is_polymorphic_type{t2}},
@@ -113,8 +127,8 @@ extern "types" inline
 #define DBG_POOL(x)
 #endif
 
-#if defined(__APPLE__) && !defined(NO_LOCAL_POOL)
-#define NO_LOCAL_POOL
+#if defined(__APPLE__) && !defined(PXCRT_NO_LOCAL_POOL)
+#define PXCRT_NO_LOCAL_POOL
 #endif
 
 #include <cstdlib>
@@ -123,7 +137,7 @@ namespace pxcrt {
 
 void clear_local_pool();
 
-#ifndef NO_LOCAL_POOL
+#ifndef PXCRT_NO_LOCAL_POOL
 
 extern __thread void *local_pool_blocks;
 
@@ -321,7 +335,7 @@ struct mtcount { /* reference counter for multi-threaded shared objects */
   /* atomic counter. requires gcc >= 4. */
   void incref$z() { __sync_fetch_and_add(&count$z, 1); }
   bool decref$z() { return (__sync_fetch_and_add(&count$z, -1) == 1); }
-  long get_count$z() { return __sync_fetch_and_add(&count$z, 0); }
+  long refcnt$z() { return __sync_fetch_and_add(&count$z, 0); }
 private:
   long count$z;
 };
@@ -330,7 +344,7 @@ struct stcount { /* reference counter for single-threaded shared objects */
   stcount() : count$z(1) { }
   void incref$z() { ++count$z; }
   bool decref$z() { return (--count$z == 0); }
-  long get_count$z() { return count$z; }
+  long refcnt$z() { return count$z; }
 private:
   long count$z;
 };
@@ -352,18 +366,18 @@ struct rcval {
   template <typename T0, typename T1, typename T2>
   rcval(const T0& a0, const T1& a1, const T2& a2) : value(a0, a1, a2) { }
   void incref$z() const {
-    DBG_RC(fprintf(stdout, "%p %ld +1\n", this, get_count$z()));
+    DBG_RC(fprintf(stdout, "%p %ld +1\n", this, refcnt$z()));
     count$z.incref$z();
   }
   void decref$z() const {
-    DBG_RC(fprintf(stdout, "%p %ld -1\n", this, get_count$z()));
+    DBG_RC(fprintf(stdout, "%p %ld -1\n", this, refcnt$z()));
     if (count$z.decref$z()) {
       this->~rcval<T>();
       this->deallocate(this);
       DBG_RC(fprintf(stdout, "d  %p\n", this));
     }
   }
-  size_t get_count$z() const { return count$z.get_count$z(); }
+  size_t refcnt$z() const { return count$z.refcnt$z(); }
   /* void lock$z() const { } */
   /* void unlock$z() const { } */
   /* void wait$z() const { } */
@@ -400,18 +414,18 @@ struct trcval {
   template <typename T0, typename T1, typename T2>
   trcval(const T0& a0, const T1& a1, const T2& a2) : value(a0, a1, a2) { }
   void incref$z() const {
-    DBG_RC(fprintf(stdout, "%p %ld +1\n", this, get_count$z()));
+    DBG_RC(fprintf(stdout, "ir %p %ld +1\n", this, refcnt$z()));
     count$z.incref$z();
   }
   void decref$z() const {
-    DBG_RC(fprintf(stdout, "%p %ld -1\n", this, get_count$z()));
+    DBG_RC(fprintf(stdout, "dr %p %ld -1\n", this, refcnt$z()));
     if (count$z.decref$z()) {
       this->~trcval<T>();
       this->deallocate(this);
-      DBG_RC(fprintf(stdout, "d  %p\n", this));
+      DBG_RC(fprintf(stdout, "de %p\n", this));
     }
   }
-  size_t get_count$z() const { return count$z.get_count$z(); }
+  size_t refcnt$z() const { return count$z.refcnt$z(); }
   void lock$z() const { monitor$z.mtx.lock(); }
   void unlock$z() const { monitor$z.mtx.unlock(); }
   void wait$z() const { monitor$z.cond.wait(monitor$z.mtx); }
@@ -449,18 +463,18 @@ struct tircval {
   template <typename T0, typename T1, typename T2>
   tircval(const T0& a0, const T1& a1, const T2& a2) : value(a0, a1, a2) { }
   void incref$z() const {
-    DBG_RC(fprintf(stdout, "%p %ld +1\n", this, get_count$z()));
+    DBG_RC(fprintf(stdout, "ir %p %ld +1\n", this, refcnt$z()));
     count$z.incref$z();
   }
   void decref$z() const {
-    DBG_RC(fprintf(stdout, "%p %ld -1\n", this, get_count$z()));
+    DBG_RC(fprintf(stdout, "dr %p %ld -1\n", this, refcnt$z()));
     if (count$z.decref$z()) {
       this->~tircval<T>();
       this->deallocate(this);
-      DBG_RC(fprintf(stdout, "d  %p\n", this));
+      DBG_RC(fprintf(stdout, "de %p\n", this));
     }
   }
-  size_t get_count$z() const { return count$z.get_count$z(); }
+  size_t refcnt$z() const { return count$z.refcnt$z(); }
   /* void lock$z() const { } */
   /* void unlock$z() const { } */
   /* void wait$z() const { } */
@@ -629,7 +643,7 @@ namespace pxcrt {
 extern "implementation" inline
 namespace pxcrt {
 
-#ifndef NO_LOCAL_POOL
+#ifndef PXCRT_NO_LOCAL_POOL
 
 __thread void *local_pool_blocks;
 

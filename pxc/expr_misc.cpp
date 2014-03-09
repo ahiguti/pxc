@@ -2055,7 +2055,8 @@ static void convert_type_internal(expr_i *efrom, term& tto, tvmap_type& tvmap)
   if (is_sub_type(tfrom, tconvto)) {
     DBG_CONV(fprintf(stderr, "convert: sub type\n"));
     efrom->conv = conversion_e_subtype_obj;
-    efrom->type_conv_to = tconvto;
+    /* don't set type_conv_to here so that tempvar is not create as of type
+     * tto, which can be an interface. */
     return;
   }
   const term cf = get_implicit_conversion_func(tfrom, tconvto, efrom);

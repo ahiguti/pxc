@@ -12,11 +12,11 @@ public import meta m;
 public import meta::family -;
 
 public threaded function extern "pxcio::io_stdin"
-  file io_stdin(io const& iop);
+  file_st io_stdin(io const& iop);
 public threaded function extern "pxcio::io_stdout"
-  file io_stdout(io const& iop);
+  file_st io_stdout(io const& iop);
 public threaded function extern "pxcio::io_stderr"
-  file io_stderr(io const& iop);
+  file_st io_stderr(io const& iop);
 
 public threaded function {t} void file_print(file const& f, t const& x)
 {
@@ -62,8 +62,9 @@ debug_log(expand(v::arg_decls_bycref{tlist}))
   debug_log_internal(s);
 }
 
-private extern "pxcio::dummy" option{file} dummy;
+private extern "pxcio::dummy" option{file_st} dummy;
   /* instantiate option{file} */
+private metafunction dummy_type_csymbol m::csymbol{option{file_st}};
 
 private threaded function extern "pxcio::debug_log_internal"
   void debug_log_internal(cstrref const& s);
@@ -71,22 +72,22 @@ private threaded function extern "pxcio::debug_log_internal"
 extern "implementation" inline
 namespace pxcio {
 
-typedef ::algebraic$n::option$v$p$io$$file$n$$file$s$r$ optfile;
+typedef %{dummy_type_csymbol}% optfile;
 
 /* TODO: slow */
-file io_stdin(io const& iop)  {
+file_st io_stdin(io const& iop)  {
   optfile pxc_stdin;
-  pxc_stdin.some$$l(make_file(0));
+  pxc_stdin.some$$l(make_file_st(0));
   return pxc_stdin.some$$r();
 }
-file io_stdout(io const& iop) {
+file_st io_stdout(io const& iop) {
   optfile pxc_stdout;
-  pxc_stdout.some$$l(make_file(1));
+  pxc_stdout.some$$l(make_file_st(1));
   return pxc_stdout.some$$r();
 }
-file io_stderr(io const& iop) {
+file_st io_stderr(io const& iop) {
   optfile pxc_stderr;
-  pxc_stderr.some$$l(make_file(2));
+  pxc_stderr.some$$l(make_file_st(2));
   return pxc_stderr.some$$r();
 }
 void debug_log_internal(cstrref const& s)

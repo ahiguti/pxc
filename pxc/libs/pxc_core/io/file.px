@@ -10,10 +10,18 @@ public import meta m;
 public import exception;
 public import operator -;
 
-public multithreaded struct extern "pxcio::file" "nodefault" file { }
-  /* while pxcio::file is implemented as an immutable pointer, it is
+public threaded interface extern "pxcio::file"
+file { }
+public threaded struct extern "pxcio::file_st" "nodefault"
+file_st <file> { }
+public multithreaded struct extern "pxcio::file_mt" "nodefault"
+file_mt <file> {
+  /* while pxcio::file_mt is implemented as an immutable pointer, it is
    * defiend as 'multithreaded' instead of 'tsvaluetype', because it is
    * not transitively immutable. */
+  public metafunction __attribute__ {{"monitor", 0}};
+    /* does not implement wait/notify */
+}
 
 public tsvaluetype struct extern "::off_t" "extint" off_t { }         //SQUAD?
 public tsvaluetype struct extern "::dev_t" "extuint" dev_t { }        //UQUAD
@@ -71,15 +79,29 @@ public extern "S_IROTH"		mode_t S_IROTH;
 public extern "S_IWOTH"		mode_t S_IWOTH;
 public extern "S_IXOTH"		mode_t S_IXOTH;
 
-public metafunction open_t errno_or_value{file};
+public metafunction open_st errno_or_value{file_st};
+public metafunction open_mt errno_or_value{file_mt};
 
-public threaded function open_t
+public threaded function open_st
 io_open(io const& iop, cstrref const& fn, open_flags_t flags, mode_t md)
 {
-  open_t r;
+  open_st r;
   int fd = io_open_fd(iop, fn, flags, md);
   if (fd >= 0) {
-    r.value = iop.make_file(fd);
+    r.value = iop.make_file_st(fd);
+  } else {
+    r.errno = iop.get_errno();
+  }
+  return r;
+}
+
+public threaded function open_mt
+io_open_mt(io const& iop, cstrref const& fn, open_flags_t flags, mode_t md)
+{
+  open_mt r;
+  int fd = io_open_fd(iop, fn, flags, md);
+  if (fd >= 0) {
+    r.value = iop.make_file_mt(fd);
   } else {
     r.errno = iop.get_errno();
   }
@@ -90,13 +112,11 @@ io_open(io const& iop, cstrref const& fn, open_flags_t flags, mode_t md)
 private threaded function extern "pxcio::io_open_fd"
 int io_open_fd(io const& iop, cstrref const& fn, open_flags_t flags,
   mode_t md);
-private threaded function extern "pxcio::io_make_file"
-file io_make_file(io const& iop, int fd);
+private threaded function extern "pxcio::io_make_file_st"
+file_st io_make_file_st(io const& iop, int fd);
+private threaded function extern "pxcio::io_make_file_mt"
+file_mt io_make_file_mt(io const& iop, int fd);
 
-/*
-public threaded function extern "pxcio::io_open"
-file io_open(io const& iop, cstrref const& fn, open_flags_t flags, mode_t md);
-*/
 private threaded function extern "pxcio::file_read_impl" errno_t
 file_read_impl(file const& f, string mutable& buf, size_t mutable& len);
 
@@ -146,8 +166,8 @@ file_lseek(file const& f, off_t offset, whence_t whence)
   return r;
 }
 
-public threaded function extern "pxcio::file_close" errno_t
-file_close(file mutable& f);
+public threaded function extern "pxcio::file_st_close" errno_t
+file_st_close(file_st mutable& f);
   /* NOTE: returns EBUSY if f is not the unique reference to the file. */
 
 public threaded function extern "pxcio::io_stat" errno_t
@@ -242,22 +262,84 @@ using namespace pxcrt;
 
 typedef struct ::stat statbuf;
 
-struct file_rep;
+struct file_st;
 
-/* immutable value, multi-thread safe refcount */
-typedef ::pxcrt::rcptr< pxcrt::tircval<file_rep> > file;
+int file_st_close(file_st& f);
 
-int file_close(file& f);
-
-struct file_rep {
-  file_rep(int fd) : fd(fd) { }
-  ~file_rep() { if (fd > 2) close(fd); } /* don't close stdin/out/err */
+struct file_st_rep {
+  file_st_rep(int fd) : fd(fd) { }
+  ~file_st_rep() { if (fd > 2) close(fd); } /* don't close stdin/out/err */
   int get() const { return fd; }
-  friend int file_close(file& f);
+  friend int file_st_close(file_st& f);
 private:
-  int fd; /* only file_close() can modify this */
-  file_rep(const file_rep&);
-  file_rep& operator =(const file_rep&);
+  int fd;
+  file_st_rep(const file_st_rep&);
+  file_st_rep& operator =(const file_st_rep&);
+};
+
+struct file_mt_rep {
+  file_mt_rep(int fd) : fd(fd) { }
+  ~file_mt_rep() { if (fd > 2) close(fd); } /* don't close stdin/out/err */
+  int get() const { return fd; }
+private:
+  const int fd;
+  file_mt_rep(const file_mt_rep&);
+  file_mt_rep& operator =(const file_mt_rep&);
+};
+
+struct file {
+  virtual int get() const = 0;
+  virtual void incref$z() const = 0;
+  virtual void decref$z() const = 0;
+  virtual size_t refcnt$z() const = 0;
+};
+
+struct file_st : public file {
+  typedef ::pxcrt::rcptr< pxcrt::rcval<file_st_rep> > ptr_type;
+  ptr_type ptr;
+  file_st(int fd) : ptr(ptr_type::make_rawptr(fd)) { }
+  virtual int get() const { return ptr->value.get(); }
+  size_t refcnt$z() const { return count.refcnt$z(); }
+  void incref$z() const { count.incref$z(); }
+  void decref$z() const {
+    if (count.decref$z()) {
+      this->~file_st();
+      this->deallocate(this);
+    }
+  }
+  static file_st *allocate() {
+    return pxcrt::allocate_single<file_st>();
+  }
+  static void deallocate(file_st const *ptr) {
+    pxcrt::deallocate_single<file_st>(ptr);
+  }
+  mutable pxcrt::stcount count;
+};
+
+struct file_mt : public file {
+  typedef ::pxcrt::rcptr< pxcrt::tircval<file_mt_rep> > ptr_type;
+  ptr_type ptr;
+  file_mt(int fd) : ptr(ptr_type::make_rawptr(fd)) { }
+  virtual int get() const { return ptr->value.get(); }
+  size_t refcnt$z() const { return count.refcnt$z(); }
+  void incref$z() const { count.incref$z(); }
+  void decref$z() const {
+    if (count.decref$z()) {
+      this->~file_mt();
+      this->deallocate(this);
+    }
+  }
+  /* lock/unlock are no-op */
+  void lock$z() const { }
+  void unlock$z() const { }
+  /* does not implement wait/notify */
+  static file_mt *allocate() {
+    return pxcrt::allocate_single<file_mt>();
+  }
+  static void deallocate(file_mt const *ptr) {
+    pxcrt::deallocate_single<file_mt>(ptr);
+  }
+  mutable pxcrt::mtcount count;
 };
 
 };
@@ -266,7 +348,8 @@ private:
 extern "functions" inline
 namespace pxcio {
 
-file make_file(int fd); /* can be called from other io::* namespaces */
+file_st make_file_st(int fd); /* can be called from other io::* namespaces */
+file_mt make_file_mt(int fd); /* can be called from other io::* namespaces */
 
 };
 ;
@@ -282,19 +365,37 @@ bt_int io_open_fd(io const& iop, cstrref const& fn, int flags, ::mode_t md)
   return ::open(fn_nt.get(), flags, md);
 }
 
-file io_make_file(io const& iop, bt_int fd)
+file_st io_make_file_st(io const& iop, bt_int fd)
 {
-  return make_file(fd);
+  return make_file_st(fd);
 }
 
-file make_file(bt_int fd)
+file_mt io_make_file_mt(io const& iop, bt_int fd)
+{
+  return make_file_mt(fd);
+}
+
+file_st make_file_st(bt_int fd)
 {
   PXC_TRY {
-    file r(file::make_rawptr(fd)); /* throws */
+    file_st r(fd); /* throws */
     return r;
   } PXC_CATCH(...) {
     if (fd >= 2) {
-      file_rep f(fd); /* closes fd */
+      file_st_rep f(fd); /* closes fd */
+    }
+    PXC_RETHROW;
+  }
+}
+
+file_mt make_file_mt(bt_int fd)
+{
+  PXC_TRY {
+    file_mt r(fd); /* throws */
+    return r;
+  } PXC_CATCH(...) {
+    if (fd >= 2) {
+      file_mt_rep f(fd); /* closes fd */
     }
     PXC_RETHROW;
   }
@@ -302,7 +403,7 @@ file make_file(bt_int fd)
 
 errno_t file_read_impl(file const& f, bt_string& buf, size_t& len)
 {
-  int const fd = f->value.get();
+  int const fd = f.get();
   bt_size_t sz = len;
   if (sz > SSIZE_MAX) {
     sz = SSIZE_MAX;
@@ -320,7 +421,7 @@ errno_t file_read_impl(file const& f, bt_string& buf, size_t& len)
 
 errno_t file_write_impl(file const& f, cstrref const& buf, size_t& len_r)
 {
-  int const fd = f->value.get();
+  int const fd = f.get();
   bt_size_t sz = buf.size();
   if (sz > SSIZE_MAX) {
     sz = SSIZE_MAX;
@@ -336,7 +437,7 @@ errno_t file_write_impl(file const& f, cstrref const& buf, size_t& len_r)
 
 errno_t file_lseek_impl(file const& f, ::off_t& offset, int whence)
 {
-  int const fd = f->value.get();
+  int const fd = f.get();
   off_t r = ::lseek(fd, offset, whence);
   if (r == (off_t)-1) {
     offset = 0;
@@ -346,18 +447,10 @@ errno_t file_lseek_impl(file const& f, ::off_t& offset, int whence)
   return 0;
 }
 
-int /* errno_t */ file_close(file& f)
+int /* errno_t */ file_st_close(file_st& f)
 {
-  /* to avoid race conditions, closing file descriptor is only allowed when f
-   * is the unique reference to the file descriptor. */
-  size_t const refcnt = f->get_count$z();
-  /* note: if refcnt == 1 here, there is no possibility that f->refcount is
-   * modified asynchronously because no other thread owns a refcount on it. */
-  int const fd = f->value.fd;
-  if (refcnt != 1U || fd < 2) {
-    return EBUSY; /* this file is shared */
-  }
-  f->value.fd = -1;
+  int const fd = f.ptr->value.fd;
+  f.ptr->value.fd = -1;
   int const rv = ::close(fd);
   return rv == 0 ? 0 : errno;
 }

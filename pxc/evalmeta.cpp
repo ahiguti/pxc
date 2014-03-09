@@ -61,15 +61,20 @@ static bool term_truth_value(const term& t)
 static term eval_meta_local_internal(const term_list_range& tlev,
   eval_context& ectx, expr_i *pos, bool trw_notfound)
 {
-  if (tlev.size() != 2) {
+  if (tlev.size() != 2 && tlev.size() != 3) {
     return term();
   }
   term typ = tlev[0];
+  const term defval = tlev.size() > 2 ? tlev[2] : term(0LL);
   const std::string name = meta_term_to_string(tlev[1], false);
   DBG_METALOCAL(fprintf(stderr, "eval_meta_local: '%s'\n", name.c_str()));
   expr_i *const einst = term_get_instance(typ);
   expr_block *const bl = einst != 0 ? einst->get_template_block() : 0;
   if (einst == 0 || bl == 0) {
+    if (einst != 0 && is_type(typ)) {
+      /* builtin type */
+      return defval;
+    }
     arena_error_throw(pos, "meta_local: Invalid type '%s'",
       term_tostr_human(typ).c_str());
   }
@@ -96,12 +101,15 @@ static term eval_meta_local_internal(const term_list_range& tlev,
     if (trw_notfound) {
       return term();
     } else {
-      return term(0LL);
+      return defval;
     }
   }
+  #if 0
   term_list rtargs;
   rtargs.insert(rtargs.begin(), tlev.begin() + 2, tlev.end());
   term rt(rsym, rtargs);
+  #endif
+  term rt(rsym);
   return eval_term_internal(rt, true, ectx, pos);
 }
 
@@ -120,7 +128,7 @@ static term eval_meta_lsymbol(const term_list_range& tlev, eval_context& ectx,
 #endif
 
 static term eval_meta_symbol_global(const std::string& sym_ns,
-  const std::string& name, eval_context& ectx, expr_i *pos)
+  const std::string& name, const term& defval, eval_context& ectx, expr_i *pos)
 {
   if (name.find(':') != name.npos) {
     arena_error_throw(pos, "meta_symbol: Invalid name '%s'", name.c_str());
@@ -145,11 +153,11 @@ static term eval_meta_symbol_global(const std::string& sym_ns,
   DBG_METASYM(fprintf(stderr, "meta_symbol name=[%s] ns=[%s] rsym=%p[%s]\n",
     name.c_str(), sym_ns.c_str(), rsym, rsym ? rsym->dump(0).c_str() : ""));
   if (rsym == 0 || !is_global) {
-    return term(0LL);
+    return defval;
   }
   if (rsym->generated_flag) {
     /* hide generated symbols in order to avoid inconsistency */
-    return term(0LL);
+    return defval;
   }
   return term(rsym);
 }
@@ -159,15 +167,11 @@ static term eval_meta_symbol(const term_list_range& tlev, eval_context& ectx,
 {
   std::string sym_ns;
   std::string name;
-  if (tlev.size() != 1 && tlev.size() != 2) {
+  if (tlev.size() != 2 && tlev.size() != 3) {
     return term();
   }
-  if (tlev.size() == 1 || tlev[0].is_string()) {
+  if (tlev[0].is_string()) {
     /* global symbol */
-    if (!tlev[0].is_string()) {
-      arena_error_throw(pos, "meta_symbol: Invalid argument '%s'", 
-	term_tostr_human(tlev[0]).c_str());
-    }
     if (tlev.size() > 1 && !tlev[1].is_string()) {
       arena_error_throw(pos, "meta_symbol: Invalid argument '%s'", 
 	term_tostr_human(tlev[1]).c_str());
@@ -176,6 +180,7 @@ static term eval_meta_symbol(const term_list_range& tlev, eval_context& ectx,
       /* find symbol from the specified namespace */
       sym_ns = tlev[0].get_string();
       name = tlev[1].get_string();
+    #if 0
     } else if (tlev.size() == 1) {
       std::string name_w_ns = tlev[0].get_string();
       std::string::size_type sep = name_w_ns.rfind("::");
@@ -185,10 +190,12 @@ static term eval_meta_symbol(const term_list_range& tlev, eval_context& ectx,
       }
       sym_ns = name_w_ns.substr(0, sep);
       name = name_w_ns.substr(sep + 2);
+    #endif
     } else {
       return term();
     }
-    return eval_meta_symbol_global(sym_ns, name, ectx, pos);
+    const term defval = tlev.size() > 2 ? tlev[2] : term(0LL);
+    return eval_meta_symbol_global(sym_ns, name, defval, ectx, pos);
   } else {
     /* local symbol */
     return eval_meta_local_internal(tlev, ectx, pos, false);
@@ -269,9 +276,34 @@ static term eval_meta_inherits(const term_list_range& tlev, eval_context& ectx,
     return term();
   }
   const term& tderived = tlev[0];
-  const term& tbase = tlev[0];
+  const term& tbase = tlev[1];
   const long long r = is_sub_type(tderived, tbase);
   return term(r);
+}
+
+static term eval_meta_base_types(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos)
+{
+  if (tlev.size() != 1) {
+    return term();
+  }
+  term tbase = tlev[0];
+  expr_i *const einst = term_get_instance(tbase);
+  if (einst == 0) {
+    return term();
+  }
+  expr_block *block = einst->get_template_block();
+  if (block == 0) {
+    return term();
+  }
+  expr_block::inherit_list_type& il = block->resolve_inherit_transitive();
+  term_list tl;
+  for (expr_block::inherit_list_type::const_iterator i = il.begin();
+    i != il.end(); ++i) {
+    term te = (*i)->get_value_texpr();
+    tl.push_back(te);
+  }
+  return term(tl);
 }
 
 static term eval_meta_arg_size(const term_list_range& tlev, eval_context& ectx,
@@ -1298,6 +1330,17 @@ static term eval_meta_is_const_member_function(const term_list_range& tlev,
   return term(v);
 }
 
+static term eval_meta_is_metafunction(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos)
+{
+  if (tlev.size() != 1) {
+    return term();
+  }
+ const expr_metafdef *const em  = dynamic_cast<const expr_metafdef *>(
+    tlev[0].get_expr());
+  return em != 0 ? term(1LL) : term(0LL);
+}
+
 static term eval_meta_is_int(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
@@ -1970,6 +2013,7 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@is_constructible_type", &eval_meta_is_constructible_type },
   { "@is_polymorphic_type", &eval_meta_is_polymorphic_type },
   { "@inherits", &eval_meta_inherits },
+  { "@base_types", &eval_meta_base_types },
   { "@field_types", &eval_meta_field_types },
   { "@field_names", &eval_meta_field_names },
   { "@fields", &eval_meta_fields },
@@ -1983,6 +2027,7 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@is_member_function", &eval_meta_is_member_function },
   { "@is_mutable_member_function", &eval_meta_is_mutable_member_function },
   { "@is_const_member_function", &eval_meta_is_const_member_function },
+  { "@is_metafunction", &eval_meta_is_metafunction },
   { "@is_int", &eval_meta_is_int },
   { "@is_string", &eval_meta_is_string },
   { "@is_list", &eval_meta_is_list},

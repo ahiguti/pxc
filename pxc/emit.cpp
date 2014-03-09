@@ -295,13 +295,13 @@ static void emit_interface_def_one(emit_context& em, expr_interface *ei,
   em.puts("() PXC_NOTHROW { }\n");
   em.set_file_line(ei);
   em.indent('b');
+  em.puts("virtual size_t refcnt$z() const = 0;\n");
+  em.set_file_line(ei);
+  em.indent('b');
   em.puts("virtual void incref$z() const = 0;\n");
   em.set_file_line(ei);
   em.indent('b');
   em.puts("virtual void decref$z() const = 0;\n");
-  em.set_file_line(ei);
-  em.indent('b');
-  em.puts("virtual size_t get_count$z() const = 0;\n");
   const bool multithr = (ei->get_attribute() & attribute_multithr) != 0;
   if (multithr) {
     em.set_file_line(ei);
@@ -436,6 +436,10 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
     if (multithr) {
       em.set_file_line(est);
       em.indent('b');
+      em.puts("size_t refcnt$z() const "
+	"{ return __sync_fetch_and_add(&count$z, 0); }\n");
+      em.set_file_line(est);
+      em.indent('b');
       em.puts("void incref$z() const "
 	"{ __sync_fetch_and_add(&count$z, 1); }\n");
       em.set_file_line(est);
@@ -479,6 +483,9 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
     } else {
       em.set_file_line(est);
       em.indent('b');
+      em.puts("size_t refcnt$z() const { return count$z; }\n");
+      em.set_file_line(est);
+      em.indent('b');
       em.puts("void incref$z() const { ++count$z; }\n");
       em.set_file_line(est);
       em.indent('b');
@@ -501,9 +508,6 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
       em.puts(name_c);
       em.puts(" >(ptr); }\n");
     }
-    em.set_file_line(est);
-    em.indent('b');
-    em.puts("size_t get_count$z() const { return count$z; }\n");
     em.set_file_line(est);
     em.indent('b');
     em.puts("mutable long count$z;\n");
@@ -3558,9 +3562,9 @@ static void emit_profile(emit_context& em)
     }
     em.puts("#define PXC_PROFILE_");
     em.puts(i->first);
-    em.puts(" ");
+    em.puts(" \"");
     em.puts(i->second);
-    em.puts("\n");
+    em.puts("\"\n");
   }
 
 }

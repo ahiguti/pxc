@@ -26,19 +26,20 @@ import io::errno -;
   mutable f = system.open("hoge3.txt", io::file::O_RDONLY, 0).value;
   {
     const f_copy = f;
-    const cr = f.close(); /* should fail because refcnt > 1 */
+    const cr = f.close();
     if (cr == EOK) {
-      println("cr: unexpected: ", cr);
-    } else {
       println("cr: expected");
-      // println("cr: expected: ", cr);
+    } else {
+      println("cr: unexpected: ", cr);
+      // println("cr: unexpected: ", cr);
     }
   }
-  const cr = f.close();
+  const cr = f.close(); // should fail with EBADF
   if (cr == EOK) {
-    println("cr: ok");
+    println("cr: ok: unexpected");
   } else {
-    println("cr: ng: ", cr);
+    println("cr: ng: expected");
+    // println("cr: errno: ", cr.errno);
   }
 }
 

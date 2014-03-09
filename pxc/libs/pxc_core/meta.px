@@ -3,6 +3,7 @@ threaded namespace meta "use-unsafe";
 public struct extern "@error" "@error" {x} error { }
 
 public struct extern "@is_type" "@is_type" {x} is_type { }
+public struct extern "@is_interface" "@is_interface" {x} is_interface { }
 public struct extern "@is_function" "@is_function" {x} is_function{ }
 public struct extern "@is_member_function" "@is_member_function" {x}
   is_member_function{ }
@@ -25,9 +26,12 @@ public struct extern "@global_variables" "@global_variables" {ns}
   global_variables { }
   /* {{name, typ, byref(=0), mutable}, ...} */
 
+/*
 public struct extern "@local" "@local" {t, name} local { }
 public struct extern "@lsymbol" "@lsymbol" {t, name} lsymbol { }
-public struct extern "@symbol" "@symbol" {ns_or_name, opt_name} symbol { }
+*/
+public struct extern "@symbol" "@symbol" {ns_or_t, name, opt_notfound_value}
+  symbol { }
 public struct extern "@attribute" "@attribute" {t, name} attribute { }
 public struct extern "@family" "@family" {t} family { }
 public struct extern "@nameof" "@nameof" {x} nameof { }
@@ -80,8 +84,8 @@ public struct extern "@to_string" "@to_string" {x} to_string { }
 public struct extern "@full_string" "@full_string" {x} full_string { }
 
 public struct extern "@concat" "@concat" {x, y} concat { } /* vararg */
-public struct extern "@index" "@index" {x, y} index { } /* TODO */
-public struct extern "@rindex" "@rindex" {x, y} rindex { } /* TODO */
+// public struct extern "@index" "@index" {x, y} index { } /* TODO */
+// public struct extern "@rindex" "@rindex" {x, y} rindex { } /* TODO */
 public struct extern "@substring" "@substring" {x, i, j} substring { }
 public struct extern "@subst" "@subst" {x, from, to} subst { }
 public struct extern "@strlen" "@strlen" {x} strlen { }
@@ -164,4 +168,16 @@ public metafunction field_type{t, fname}
     cond{eq{at0{nlst}, n},
       at0{tlst},
       field_type_rec{slice{tlst, 1}, slice{nlst, 1}, n}};
+
+public metafunction find{x, key, notfound_val}
+  cond{
+    is_list{x},
+    apply{
+      metafunction{idx}
+	cond{ge{idx, 0}, at1{at{x, idx}}, notfound_val},
+      list_find{x, key}},
+  cond{
+    is_type{x},
+    symbol{x, key, notfound_val},
+  notfound_val}};
 

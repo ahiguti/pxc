@@ -1068,10 +1068,13 @@ static void calc_inherit_transitive_rec(expr_i *pos,
     term t = i->head->get_sdef()->resolve_evaluated();
     expr_i *const einst = term_get_instance(t);
     if (p.find(einst) != p.end()) {
-      arena_error_throw(pos, "%s: Inheritance loop detected",
+      arena_error_throw(pos, "Inheritance loop detected: '%s'",
         term_tostr_human(t).c_str());
     } else if (s.find(einst) != s.end()) {
       /* skip */
+    } else if (einst->get_esort() != expr_e_interface) {
+      arena_error_throw(pos, "Not an interface: '%s'",
+	term_tostr_human(t).c_str());
     } else {
       lst.push_back(einst);
       s.insert(einst);

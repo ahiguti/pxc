@@ -856,6 +856,21 @@ void expr_block::check_type(symbol_table *lookup)
       expr_funcdef *efd = ptr_down_cast<expr_funcdef>(parent_expr);
       check_return_expr(efd);
     } // FIXME: check_return_expr for struct constructor?
+    /* evaluate static_assert */
+    bool is_global = false;
+    bool is_upvalue = false;
+    bool is_memfld = false;
+    const bool no_private = false;
+    expr_i *sa = symtbl.resolve_name_nothrow("static_assert",
+      no_private, "", is_global, is_upvalue, is_memfld);
+    if (sa != 0 && !is_upvalue && !is_global &&
+      sa->get_esort() == expr_e_metafdef) {
+      const term t = eval_term(
+	term(ptr_down_cast<expr_metafdef>(sa)->get_rhs()));
+      if (t != term(1LL)) {
+	arena_error_throw(sa, "Static assertion failed");
+      }
+    }
     compiled_flag = true;
   }
   #if 0
@@ -1042,11 +1057,6 @@ static void add_root_requirement(expr_i *e, passby_e passby,
   if (e == 0) {
     return;
   }
-  #if 0
-  fprintf(stderr, "add_root_req %s passby=%d bl=%d\n", e->dump(0).c_str(),
-    (int)passby, (int)blockscope_flag); 
-  // if (e->dump(0) == "[lock_guard(([int]))](sobj)") { abort(); }
-  #endif
   if (e->conv == conversion_e_container_range) {
     /* convert from container to range */
     add_root_requirement_container_elements(e, blockscope_flag);
@@ -1519,6 +1529,57 @@ static void subst_user_defined_elemop(expr_op *eop)
   }
 }
 
+struct additional_lookup {
+  std::string ns;
+  std::string sym_prefix;
+};
+typedef std::vector<additional_lookup> additional_lookups;
+
+static void append_additional_lookups(expr_i *e, additional_lookups& als,
+  bool recursive_flag = true)
+{
+  expr_e const sort = e->get_esort();
+  additional_lookup al;
+  if (sort == expr_e_struct) {
+    expr_struct *est = ptr_down_cast<expr_struct>(e);
+    al.ns = est->uniqns;
+    al.sym_prefix = est->sym + std::string("_");
+    als.push_back(al);
+    term t = e->get_value_texpr();
+    if (is_cm_pointer_family(t)) {
+      /* if t is a ptr{foo}, find 'foo_funcname' from foo's namespace */
+      term t1 = get_pointer_target(t);
+      expr_i *const einst1 = term_get_instance(t1);
+      append_additional_lookups(einst1, als, true);
+    }
+  } else if (sort == expr_e_dunion) {
+    expr_dunion *eu = ptr_down_cast<expr_dunion>(e);
+    al.ns = eu->uniqns;
+    al.sym_prefix = eu->sym + std::string("_");
+    als.push_back(al);
+  } else if (sort == expr_e_interface) {
+    expr_interface *ei = ptr_down_cast<expr_interface>(e);
+    al.ns = ei->uniqns;
+    al.sym_prefix = ei->sym + std::string("_");
+    als.push_back(al);
+  } else if (sort == expr_e_typedef) {
+    expr_typedef *et = ptr_down_cast<expr_typedef>(e);
+    al.ns = et->uniqns;
+    al.sym_prefix = et->sym + std::string("_");
+    als.push_back(al);
+  }
+  if (recursive_flag) {
+    expr_block *const blk = e->get_template_block();
+    if (blk != 0) {
+      expr_block::inherit_list_type& ih = blk->resolve_inherit_transitive();
+      for (expr_block::inherit_list_type::const_iterator i = ih.begin();
+	i != ih.end(); ++i) {
+	append_additional_lookups(*i, als, false);
+      }
+    }
+  }
+}
+
 void expr_op::check_type(symbol_table *lookup)
 {
   subst_user_defined_op(this);
@@ -1526,67 +1587,15 @@ void expr_op::check_type(symbol_table *lookup)
   if (op == '.' || op == TOK_ARROW) {
     fn_check_type(arg0, lookup);
     term t = arg0->resolve_texpr();
-    symbol_table *symtbl = 0;
-      /* symbol table used for finding field/mfunc name */
-    symbol_table *parent_symtbl = 0;
-    std::string arg0_uniqns;
     symbol_common *const sc = arg1->get_sdef();
       /* always a symbol */
-    std::string arg1_sym_prefix;
     expr_i *const einst = term_get_instance(t);
     if (einst == 0) {
       arena_error_throw(arg0, "Invalid type: '%s'",
 	term_tostr_human(t).c_str());
     }
-    if (einst->get_esort() == expr_e_struct) {
-      expr_struct *const es = ptr_down_cast<expr_struct>(einst);
-      /* resolve using the context of the struct */
-      symtbl = &es->block->symtbl;
-      parent_symtbl = symtbl->get_lexical_parent();
-      arg0_uniqns = es->uniqns;
-      arg1_sym_prefix = es->sym + std::string("_");
-	/* for finding vector_size, map_size etc */
-      if (is_cm_pointer_family(t)) {
-	/* if t is a ptr{foo}, find 'foo_funcname' from foo's namespace */
-	term t1 = get_pointer_target(t);
-	expr_i *const einst1 = term_get_instance(t1);
-	expr_struct *const es1 = dynamic_cast<expr_struct *>(einst1);
-	if (es1 != 0) {
-	  arg0_uniqns = es1->uniqns;
-	  arg1_sym_prefix = es1->sym + std::string("_");
-	}
-	DBG(fprintf(stderr, "ptr target = %s", einst1->dump(0).c_str()));
-      }
-    } else if (einst->get_esort() == expr_e_dunion) {
-      expr_dunion *const ev = ptr_down_cast<expr_dunion>(einst);
-      /* resolve using the context of the dunion */
-      symtbl = &ev->block->symtbl;
-      parent_symtbl = symtbl->get_lexical_parent();
-      arg0_uniqns = ev->uniqns;
-      arg1_sym_prefix = ev->sym + std::string("_");
-    } else if (einst->get_esort() == expr_e_interface) {
-      expr_interface *const ei = ptr_down_cast<expr_interface>(einst);
-      /* resolve using the context of the interface */
-      symtbl = &ei->block->symtbl;
-      parent_symtbl = symtbl->get_lexical_parent();
-      arg0_uniqns = ei->uniqns;
-      arg1_sym_prefix = ei->sym + std::string("_");
-    } else if (einst->get_esort() == expr_e_typedef) {
-      expr_typedef *const etd = ptr_down_cast<expr_typedef>(einst);
-      if (is_cm_pointer_family(t)) {
-	t = get_pointer_target(t);
-	arg0_uniqns = einst->get_unique_namespace();
-	parent_symtbl = einst->symtbl_lexical;
-	DBG(fprintf(stderr, "ptr target = %s", einst->dump(0).c_str()));
-      } else {
-	symtbl = 0;
-	arg0_uniqns = etd->uniqns;
-	/* size_vector, size_map etc */
-	// TODO: UNUSED. remove.
-	arg1_sym_prefix = etd->sym + std::string("_");
-	parent_symtbl = einst->symtbl_lexical;
-      }
-    }
+    expr_block *const blk = einst->get_template_block();
+    symbol_table *const symtbl = blk != 0 ? &blk->symtbl : 0;
     bool is_global_dummy = false;
     bool is_upvalue_dummy = false;
     bool is_memfld_dummy = false;
@@ -1633,53 +1642,64 @@ void expr_op::check_type(symbol_table *lookup)
       }
     }
     /* find member-like non-member function (vector_size, map_size etc.) */
+    symbol_table *const parent_symtbl =
+      symtbl != 0 ? symtbl->get_lexical_parent() : 0;
     if (parent_symtbl != 0) {
-      /* lookup with arg1_sym_prefix */
-      std::string funcname_w_prefix = arg1_sym_prefix
-	+ sc->get_fullsym().to_string(); /* TODO: don't use std::string */
-      symtbl = parent_symtbl;
-      const std::string uniqns = arg0_uniqns;
-      DBG(fprintf(stderr,
-	"trying non-member arg0=%s fullsym=%s ns=%s symtbl=%p\n",
-	arg0->dump(0).c_str(), sc->get_fullsym().c_str(), uniqns.c_str(),
-	symtbl));
-      no_private = false;
-      #if 0
-      fprintf(stderr, "try %s uniqns=%s\n", funcname_w_prefix.c_str(),
-	uniqns.c_str());
-      #endif
-      expr_i *fo = symtbl->resolve_name_nothrow(funcname_w_prefix,
-	no_private, uniqns, is_global_dummy, is_upvalue_dummy,
-	is_memfld_dummy);
-      bool is_generic_invoke = false;
-      if (fo == 0) {
-	/* "foo__invoke" function */
-	funcname_w_prefix = arg1_sym_prefix + "__invoke";
-	  /* TODO: don't use std::string */
-	fo = symtbl->resolve_name_nothrow(funcname_w_prefix, no_private,
-	  uniqns, is_global_dummy, is_upvalue_dummy, is_memfld_dummy);
-	is_generic_invoke = true;
+      additional_lookups als;
+      append_additional_lookups(einst, als);
+      for (additional_lookups::const_iterator i = als.begin(); i != als.end();
+	++i) {
+	/* lookup with arg1_sym_prefix */
+	std::string funcname_w_prefix = i->sym_prefix
+	  + sc->get_fullsym().to_string(); /* TODO: don't use std::string */
+	const std::string uniqns = i->ns;
+	DBG(fprintf(stderr,
+	  "trying non-member arg0=%s fullsym=%s ns=%s parent_symtbl=%p\n",
+	  arg0->dump(0).c_str(), sc->get_fullsym().c_str(), uniqns.c_str(),
+	  parent_symtbl));
+	no_private = false;
+	expr_i *fo = parent_symtbl->resolve_name_nothrow(funcname_w_prefix,
+	  no_private, uniqns, is_global_dummy, is_upvalue_dummy,
+	  is_memfld_dummy);
+	bool is_generic_invoke = false;
+	if (fo == 0) {
+	  /* "foo__invoke" function */
+	  funcname_w_prefix = i->sym_prefix + "__invoke";
+	    /* TODO: don't use std::string */
+	  fo = parent_symtbl->resolve_name_nothrow(funcname_w_prefix,
+	    no_private, uniqns, is_global_dummy, is_upvalue_dummy,
+	    is_memfld_dummy);
+	  is_generic_invoke = true;
+	}
+	if (fo != 0) {
+	  DBG(fprintf(stderr, "found %s\n", sc->get_fullsym().c_str()));
+	  sc->arg_hidden_this = arg0;
+	  sc->arg_hidden_this_ns = i->ns;
+	  sc->set_sym_prefix_fullsym(funcname_w_prefix, is_generic_invoke);
+	  fn_check_type(arg1, parent_symtbl); /* expr_symbol::check_type */
+	  type_of_this_expr = arg1->resolve_texpr();
+	  assert(!type_of_this_expr.is_null());
+	  return;
+	}
       }
-      if (fo != 0) {
-	DBG(fprintf(stderr, "found %s\n", sc->get_fullsym().c_str()));
-	sc->arg_hidden_this = arg0;
-	sc->arg_hidden_this_ns = arg0_uniqns;
-	sc->set_sym_prefix_fullsym(funcname_w_prefix, is_generic_invoke);
-	fn_check_type(arg1, symtbl); /* expr_symbol::check_type */
-	type_of_this_expr = arg1->resolve_texpr();
-	assert(!type_of_this_expr.is_null());
-	return;
-      } else {
-	DBG(fprintf(stderr, "func %s notfound [%s] [%s])",
-	  funcname_w_prefix.c_str(), uniqns.c_str(), arg0_uniqns.c_str()));
-	arena_error_throw(this,
-	  "Can not apply '%s' "
-	  "(member function '%s' nor non-member function '%s' not found)",
-	  tok_string(this, op),
-	  sc->get_fullsym().c_str(),
-	  (arg1_sym_prefix + sc->get_fullsym().to_string()).c_str());
-	return;
+      /* not found */
+      std::string s;
+      for (additional_lookups::const_iterator i = als.begin(); i != als.end();
+	++i) {
+	if (!s.empty()) {
+	  s += ", ";
+	}
+	s += i->sym_prefix + sc->get_fullsym().to_string();
       }
+      DBG(fprintf(stderr, "func %s notfound [%s])",
+	funcname_w_prefix.c_str(), uniqns.c_str()));
+      arena_error_throw(this,
+	"Can not apply '%s' "
+	"(member function '%s' nor non-member function '%s' not found)",
+	tok_string(this, op),
+	sc->get_fullsym().c_str(),
+	s.c_str());
+      return;
     }
     arena_error_throw(this, "Can not apply '%s' (field not found)",
       tok_string(this, op));

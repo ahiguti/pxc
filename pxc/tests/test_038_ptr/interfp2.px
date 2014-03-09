@@ -1,0 +1,22 @@
+namespace interfp2;
+import common -;
+
+interface ifoo {
+  function int hoge();
+}
+
+struct foo(int i) <ifoo> {
+  public int id = i;
+  public function int hoge() { return 123; }
+  public function ~ { println("foo destr ", id); }
+}
+
+{
+  mutable o1 = foo(1); /* refcnt 1 */
+  mutable o2 = o1; /* refcnt 1 */
+  o2.id = 2;
+  const p3 = make_ptr{foo}(o2); /* refcnt 1 */
+  p3->id = 3;
+  const p4 = p3; /* refcnt 2 */
+}
+
