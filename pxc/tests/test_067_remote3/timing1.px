@@ -23,7 +23,7 @@ public threaded struct binop_add <ibinop> {
   }
 }
 
-private function void client_test_main(file const& f)
+private function void client_test_main(file_mt const& f)
 {
   const op = make_ptr(orb_handle{ibinop}(make_ptr{transport_file}(f)));
   const st = op->create_stub();
@@ -39,9 +39,9 @@ private function void client_test_main(file const& f)
   debug_log("time", t1 - t0);
 }
 
-private multithreaded struct server_thread(io const& s, file const& f) {
+private multithreaded struct server_thread(io const& s, file_mt const& f) {
   io const sys = s;
-  file const sock = f;
+  file_mt const sock = f;
   function void main() {
     const op = make_ptr{orb_handle{ibinop}}(make_ptr{transport_file}(sock));
     const obj = make_ptr(binop_add());

@@ -3,8 +3,19 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- m::symbolは見つからなかったら第3引数を返す(done)
+- meta::find(done)
+
+- 型式に負の数を許可
+
 - get_optionの取り決め決定。
 - serializeのオプション渡し方法決定
+
+- fileをthread作成時に渡せばスレッド終了するまでカウント握り続けないか
+
+- 地の文はブロックで囲むことを要求する
+
+- privateをデフォルトに
 
 - defconとunionについて再整理
 
@@ -20,25 +31,14 @@ FIXME/TODO M1
 
 - fpclassifyなどは -lm が必要
 
-- floatの operator < は strict weak ordering ではないのでstd::mapの
-  キーにはできない。どうするか。-> wrap (done)
 
 - io::fileのcloseを実装。参照カウントが1より大きければEBUSY。
-
-- meta::character : 文字コード又はリストを取り文字列を返す (done)
-- meta::code_at : 文字を取り文字コードを返す (done)
 
 - get_optionをmetaに
 
 - ファイルをcloseしたときのエラーを拾う方法を考えよ
 
 - 汎用tableパーザ
-
-- 配列インデックスの型チェック (done)
-
-- metaのオーバーフローとゼロ除算チェック (done)
-
-- 数値リテラルからキャストしなくてすむように (done)
 
 - expandのパラメータに式を文字列として渡せば式を展開する。文法的に
   問題無い箇所であるかもチェックする。
@@ -49,8 +49,6 @@ FIXME/TODO M1
 - 制約緩和第二弾: noheapや参照をfieldにも置けるようにする。
 
 - -Wall -Werrorで通す
-
-- expandの中でm::symbolの既定namespaceが拾えない？
 
 - make_ptr{foo, m::list}(); コンパイラがループ
   108/lp1.px
@@ -63,8 +61,6 @@ FIXME/TODO M1
 - 引数型のpartial evalを止めることができればevalがシンプルになる。
   - eval()とは別にpartial_eval()を用意するか。関数引数の型式を簡約
     するだけのeval。
-
-
 
 - metaの命名規則を整理
   m::argnames, m::argtypes を arg_names, arg_types など
@@ -91,8 +87,6 @@ FIXME/TODO M1
   - ephemeral: 初期化以外の代入不可、要素取得以外のreturn不可
 
 - Cシンボル名を指定するけどpxcで定義する関数
-
-- safe mode: pathの最後はunsafe不可にする(done)
 
 - dense hash map実装
 - threaded namespaceは初期化関数を省略
@@ -600,6 +594,25 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- meta::localとmeta::lsymbol廃止(done)
+- tptr{file_mt}がlock_guardを作れないことを確認。
+  -> 043_file/filptr3 (done)
+- interfaceを実装する型がboxing時にコピーコンストラクタ実行すると
+  参照カウントどうなるのか - stack上におかれる限りrefcnt==1で、
+  最初にbox化されたときにもrefcnt==1、ptrのコピーでincrefされる。
+  (done)
+- get_count$z => refnct$z (done)
+- io/file.px の FIXME : interfaceのconst refをrootしようとしてしまう
+  (done)
+- 型が実装するinterfaceについても名前引き候補とする(done)
+- floatの operator < は strict weak ordering ではないのでstd::mapの
+  キーにはできない。どうするか。-> wrap (done)
+- meta::character : 文字コード又はリストを取り文字列を返す (done)
+- meta::code_at : 文字を取り文字コードを返す (done)
+- 配列インデックスの型チェック (done)
+- metaのオーバーフローとゼロ除算チェック (done)
+- 数値リテラルからキャストしなくてすむように (done)
+- safe mode: pathの最後はunsafe不可にする(done)
 - 103/queueをcoreへ (done)
 - v1 = make_vector{cslice}(sli1) で sli1がblockscopeでrootされていない
   (done)
@@ -2704,4 +2717,58 @@ metafunction hoge { x, y, z } fuga { x, y, z }; // hoge{x, y, z}の定義
 TOK_METAFUNCTION TOK_SYMBOL type_arg ';'
 TOK_METAFUNCTION TOK_SYMBOL type_arg type_arg ';'
 仮引数宣言もtype_arg(expr_te)としてパースし、あとでexpr_tparamsへ変換
+
+---------------------------------------------------------------------
+fileの再整理
+
+目的:
+ - closeの実現とスレッド間共有を両立。
+ - file自体はbox化してcopyableにする。
+file_repがfile descriptorを保持し、デストラクタでclose。
+明示的closeも可能にすると、file_repをmutableにする必要がある。
+一方file_repをmutableにするとスレッド間共有で直列化してしまう。
+
+実装案:
+threaded file: ダミーのインタフェース
+threaded file_st <file>: シングルスレッド、close可能
+multithreaded file_mt <file>: マルチスレッド、close不可
+ファイルを開く関数は_stと_mt両方用意するか、必要無いなら_mtだけ用意。
+fileのC++実体はiptr{file_rep}。
+_stも_mtもC++実体はfileを継承。
+fileはインタフェースなのでincref$z, decref$z, get_count$z, lock$z,
+  unlock$z, wait$z等を実装。_stはlock関連の実装は空。_mtはlock関連を
+  実装する。
+
+案2:
+threaded file: ファイル共通のインタフェース。実装はfdを保持。
+threaded file_st <file>: close可能
+multithreaded file_mt <file>: close不可
+multithreaded socket <file_mt>: socket操作が可能
+multithreaded socket_listener <socket>: listenが可能
+
+openはptr{file_st}を返す。open_mtはtcptr{file_mt}を返す。
+socket関連はtcptr{socket}を返す。
+
+file_stとfile_mtは両方継承してはいけない。それを防止するためには
+これらをexternにして、pxcでは実装できない関数を純粋仮想関数にする。
+
+
+---------------------------------------------------------------------
+variantとinterface
+
+049_variant
+variant_invoke_impl(cslice{variant} const& args, obj?)
+{
+  /* 関数またはメソッドfの各引数について */
+  expand (ae, idx: func_argexp_list{f}) {
+    /* idynamicからstub_object{引数型}へdowncastし、それのvalueを
+       取得 */
+    func_arg_type_noneph{f, idx} const& ae =
+      downcast_const{
+	stub_object{func_arg_type_noneph{f, idx}}, idynamic
+      }(*(args[idx].ptrval)).value;
+    /* もし引数型がinterfaceならstub_object{インタフェース}をイン
+       スタンス化して、はまる。 */
+  }
+}
 

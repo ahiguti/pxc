@@ -154,9 +154,13 @@ private metafunction is_concrete{t}
       m::not{m::attribute{t, "noheap"}}};
 private metafunction filter_concrete{fs} m::filter{fs, is_concrete};
 private metafunction is_constructible{t}
-  m::not{m::and{
-    m::or{m::eq{m::family{t}, "linear"}, m::eq{m::family{t}, "nodefault"}},
-    m::eq{m::size{m::args{t}}, 0}}};
+  m::not{
+    m::and{
+      m::or{
+	m::eq{m::family{t}, "interface"},
+	m::eq{m::family{t}, "linear"},
+	m::eq{m::family{t}, "nodefault"}},
+      m::eq{m::size{m::args{t}}, 0}}};
 private metafunction filter_constructible{ts} m::filter{ts, is_constructible};
 
 private function {ns} void
@@ -230,6 +234,7 @@ private function {tobj, methodidx, fsym} variant variant_invoke_impl(
     m::is_type{tobj},
     m::at{m::member_functions{tobj}, methodidx},
     fsym};
+  /* declare typed arguments */
   expand(ae, idx : func_argexp_list{f}) {
     /* pattern #0: const value */
     func_arg_type_noneph{f, idx} const& ae =
@@ -265,6 +270,7 @@ private function {tobj, methodidx, fsym} variant variant_invoke_impl(
       from_variant{func_arg_type_noneph{f, idx}}(args[idx]);
   }
   if (m::is_type{tobj}) {
+    /* method call */
     expand (sym : m::list{m::list{m::to_string{f}, 0}}) {
       if (m::eq{m::ret_type{f}, void}) {
 	obj.sym(expand(a : func_arg_names{f}; a));
@@ -275,12 +281,16 @@ private function {tobj, methodidx, fsym} variant variant_invoke_impl(
       }
     }
   } else {
+    /* function or constructor call */
     if (m::eq{m::ret_type{f}, void}) {
+      /* function returning void */
       f(expand(a : func_arg_names{f}; a));
       return variant();
     } else if (m::or{m::is_function{f}, m::is_copyable_type{f}}) {
+      /* function returing a value, or a copyable object constructor */
       return to_variant{m::ret_type{f}}(f(expand(a : func_arg_names{f}; a)));
     } else {
+      /* noncopyable object constructor */
       ptr{stub_object{f}} p = ptr{stub_object{f}}(
 	stub_object{f}(expand(a : func_arg_names{f}; a)));
       variant r;

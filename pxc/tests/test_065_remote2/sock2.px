@@ -66,8 +66,8 @@ public threaded struct foo <ifoo> {
   }
 }
 
-private threaded struct transport_file(file const& f0) <orb_transport> {
-  file const f = f0;
+private threaded struct transport_file(file_mt const& f0) <orb_transport> {
+  file_mt const f = f0;
   bool ok = true;
   function void send_receive(string mutable& rbuf, string mutable& wbuf) {
     if (ok && !wbuf.empty()) {
@@ -95,7 +95,7 @@ private threaded struct transport_file(file const& f0) <orb_transport> {
   }
 }
 
-private threaded function ptr{orb} create_orb_file(file const& f)
+private threaded function ptr{orb} create_orb_file(file_mt const& f)
 {
   return make_ptr{orb}(make_ptr{transport_file}(f));
 }
@@ -108,7 +108,8 @@ threaded struct orb_cleanup(ptr{orb} const& op0) {
   }
 }
 
-private threaded function {tinterf, tklass} void orb_server_loop(file const& f)
+private threaded function {tinterf, tklass} void
+orb_server_loop(file_mt const& f)
 {
   ptr{orb_transport} tf = make_ptr(transport_file(f));
   ptr{orb} op = make_ptr(orb(tf));
@@ -125,7 +126,7 @@ private threaded function {tinterf} ptr{tinterf} create_stub(
   return pop_return_value{ptr{tinterf}}(op);
 }
 
-private function void client_test_main(file const& f)
+private function void client_test_main(file_mt const& f)
 {
   const op = make_ptr{orb}(make_ptr{transport_file}(f));
   const opclean = orb_cleanup(op);
@@ -143,9 +144,9 @@ private function void client_test_main(file const& f)
   println(v);
 }
 
-private multithreaded struct server_thread(io const& s, file const& f) {
+private multithreaded struct server_thread(io const& s, file_mt const& f) {
   io const sys = s;
-  file const sock = f;
+  file_mt const sock = f;
   function void main() {
     orb_server_loop{ifoo, foo}(sock);
   }

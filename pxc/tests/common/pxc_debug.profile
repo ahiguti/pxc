@@ -1,5 +1,8 @@
-incdir=../pxc_%{platform}:../pxc_core:.
-cflags=-rdynamic -g -O0 -Wall -Wno-unused
+incdir=../pxc_core:../pxc_ext:.
+safe_mode=0
+cxx=g++
+cflags=-rdynamic -g -O0 -Wall -Wno-unused -DNO_LOCAL_POLL
+# incdir=../pxc_%{platform}:../pxc_core:.
 # cflags=-std=c++11 -rdynamic -g -O0 -Wall -Wno-unused
 # -fmudflapth
 # ldflags=-lmudflapth
