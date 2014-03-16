@@ -97,7 +97,7 @@ private threaded function bool execute_request(ptr{orb_rep} const& op)
       mutable val = size_t();
       {
 	cstrref objbuf = o.rbuf[objpos + 1 .. delim_pos];
-	val = deserialize_from_string{size_t}(objbuf);
+	deserialize_from_string{size_t}(objbuf, val);
       }
       if (val < o.skeletons.size()) {
 	skeleton_mapped mutable m = o.skeletons[val];
@@ -271,7 +271,9 @@ private threaded function {t} t unmarshal_value(string const& buf,
   const delim_pos = skip_token(buf, npos, epos);
   cstrref tok = buf[pos .. delim_pos];
   pos = npos;
-  return deserialize_from_string{t}(tok);
+  mutable r = make_default{t}();
+  deserialize_from_string{t}(tok, r);
+  return r;
 }
 
 private threaded function {t} void marshal_value(string mutable& buf,
@@ -450,7 +452,8 @@ private threaded function {t, from_remote} t unmarshal_reference(
   }
   const ch = buf[0];
   buf.increment_front(1);
-  const val = deserialize_from_string{size_t}(buf);
+  size_t val;
+  deserialize_from_string{size_t}(buf, val);
   if (ch == ((from_remote != 0) ? '~' : '!')) {
     if (val < o.skeletons.size()) {
       mutable& m = o.skeletons[val];

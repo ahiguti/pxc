@@ -510,7 +510,7 @@ static term expr_to_term(expr_i *expr, eval_context& ectx, expr_i *pos)
     return metafdef_to_term(ptr_down_cast<expr_metafdef>(expr), ectx, pos);
     break;
   case expr_e_int_literal:
-    return term(ptr_down_cast<expr_int_literal>(expr)->get_unsigned());
+    return term(ptr_down_cast<expr_int_literal>(expr)->get_value_ll());
     break;
   case expr_e_str_literal:
     {

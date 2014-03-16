@@ -588,6 +588,7 @@ expr_int_literal::expr_int_literal(const char *fn, int line, const char *str,
 term&
 expr_int_literal::resolve_texpr()
 {
+  /* FIXME: range check */
   if (type_of_this_expr.is_null()) {
     if (is_unsigned) {
       if (str[0] == '\'') {
@@ -626,8 +627,14 @@ expr_int_literal::resolve_texpr()
   return type_of_this_expr;
 }
 
+bool
+expr_int_literal::is_negative() const
+{
+  return str[0] == '-';
+}
+
 unsigned long long
-expr_int_literal::get_unsigned() const
+expr_int_literal::get_value_nosig() const
 {
   if (str[0] == '\'') {
     if (str[1] == '\\') {
@@ -649,7 +656,27 @@ expr_int_literal::get_unsigned() const
     }
     return static_cast<unsigned char>(str[1]); /* character */
   }
-  return strtoull(str, 0, 0); /* decimal, hexadecimal, or octal */
+  /* decimal, hexadecimal, or octal */
+  if (is_negative()) {
+    return strtoull(str + 1, 0, 0);
+  } else {
+    return strtoull(str, 0, 0);
+  }
+}
+
+long long
+expr_int_literal::get_value_ll() const
+{
+  unsigned long long v = get_value_nosig();
+  if (is_negative()) {
+    v -= 1; /* in order not to overflow */
+    long long sv = v;
+    sv = -sv;
+    sv -= 1;
+    return sv;
+  } else {
+    return v;
+  }
 }
 
 std::string expr_int_literal::dump(int indent) const

@@ -632,7 +632,7 @@ struct_stmt
 	;
 opt_private
 	:
-	  { $$ = 0; }
+	  { $$ = 1; }
 	| TOK_PUBLIC
 	  { $$ = 0; }
 	| TOK_PRIVATE
@@ -838,6 +838,9 @@ type_arg_excl_metalist
 	  { $$ = $1; }
 	| TOK_INTLIT
 	  { $$ = expr_int_literal_new(cur_fname, @1.first_line, $1, false); }
+	| '-' TOK_INTLIT
+	  { $$ = expr_int_literal_new(cur_fname, @1.first_line,
+		arena_concat_strdup("-", $2), false); }
 	| TOK_UINTLIT
 	  { $$ = expr_int_literal_new(cur_fname, @1.first_line, $1, true); }
 	| TOK_STRLIT

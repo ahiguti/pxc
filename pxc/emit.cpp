@@ -1665,18 +1665,27 @@ void expr_ns::emit_value(emit_context& em)
 
 void expr_int_literal::emit_value(emit_context& em)
 {
-  unsigned long long const v = get_unsigned();
   if (is_unsigned) {
+    unsigned long long const v = get_value_nosig();
     if (v > 0xffffffffU) {
       em.printf("%lluULL", v);
     } else {
       em.printf("%lluU", v);
     }
   } else {
-    if (v > 0x7fffffff) {
-      em.printf("%lluLL", v);
+    long long const v = get_value_ll();
+    if (v > 0x7fffffff || v < 0x80000000) {
+      if (v > 0) {
+	em.printf("%lldLL", v);
+      } else {
+	em.printf("(%lldLL)", v);
+      }
     } else {
-      em.printf("%llu", v);
+      if (v > 0) {
+	em.printf("%lld", v);
+      } else {
+	em.printf("(%lld)", v);
+      }
     }
   }
 }

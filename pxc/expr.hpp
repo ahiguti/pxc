@@ -197,6 +197,7 @@ void arena_compile(const std::map<std::string, std::string>& prof_map,
   const std::string& dest_filename, coptions& copt_apnd,
   generate_main_e gmain);
 char *arena_strdup(const char *str);
+char *arena_concat_strdup(const char *s0, const char *s1);
 char *arena_dequote_strdup(const char *str);
 char *arena_decode_inline_strdup(const char *str);
 void arena_error_throw(const expr_i *e, const char *format, ...)

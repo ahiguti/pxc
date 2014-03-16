@@ -59,7 +59,7 @@ static bool term_truth_value(const term& t)
 }
 
 static term eval_meta_local_internal(const term_list_range& tlev,
-  eval_context& ectx, expr_i *pos, bool trw_notfound)
+  bool check_only, eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 2 && tlev.size() != 3) {
     return term();
@@ -98,37 +98,18 @@ static term eval_meta_local_internal(const term_list_range& tlev,
     name.c_str(), sym_ns.c_str(), rsym));
   if (rsym == 0) {
     /* not found */
-    if (trw_notfound) {
-      return term();
-    } else {
-      return defval;
-    }
+    return defval;
   }
-  #if 0
-  term_list rtargs;
-  rtargs.insert(rtargs.begin(), tlev.begin() + 2, tlev.end());
-  term rt(rsym, rtargs);
-  #endif
+  if (check_only) {
+    return term(1LL);
+  }
   term rt(rsym);
-  return eval_term_internal(rt, true, ectx, pos);
+  return eval_term_internal(rt, true, ectx, pos); /* is this necessary? */
 }
-
-#if 0
-static term eval_meta_local(const term_list_range& tlev, eval_context& ectx,
-  expr_i *pos)
-{
-  return eval_meta_local_internal(tlev, ectx, pos, true);
-}
-
-static term eval_meta_lsymbol(const term_list_range& tlev, eval_context& ectx,
-  expr_i *pos)
-{
-  return eval_meta_local_internal(tlev, ectx, pos, false);
-}
-#endif
 
 static term eval_meta_symbol_global(const std::string& sym_ns,
-  const std::string& name, const term& defval, eval_context& ectx, expr_i *pos)
+  const std::string& name, const term& defval, bool check_only,
+  eval_context& ectx, expr_i *pos)
 {
   if (name.find(':') != name.npos) {
     arena_error_throw(pos, "meta_symbol: Invalid name '%s'", name.c_str());
@@ -159,11 +140,15 @@ static term eval_meta_symbol_global(const std::string& sym_ns,
     /* hide generated symbols in order to avoid inconsistency */
     return defval;
   }
-  return term(rsym);
+  if (check_only) {
+    return term(1LL);
+  }
+  term rt = term(rsym);
+  return eval_term_internal(rt, true, ectx, pos); /* is this necessary? */
 }
 
-static term eval_meta_symbol(const term_list_range& tlev, eval_context& ectx,
-  expr_i *pos)
+static term eval_meta_symbol_internal(const term_list_range& tlev,
+  bool check_only, eval_context& ectx, expr_i *pos)
 {
   std::string sym_ns;
   std::string name;
@@ -180,26 +165,30 @@ static term eval_meta_symbol(const term_list_range& tlev, eval_context& ectx,
       /* find symbol from the specified namespace */
       sym_ns = tlev[0].get_string();
       name = tlev[1].get_string();
-    #if 0
-    } else if (tlev.size() == 1) {
-      std::string name_w_ns = tlev[0].get_string();
-      std::string::size_type sep = name_w_ns.rfind("::");
-      if (sep == name_w_ns.npos) {
-	arena_error_throw(pos, "meta_symbol: Invalid argument '%s'",
-	  name_w_ns.c_str());
-      }
-      sym_ns = name_w_ns.substr(0, sep);
-      name = name_w_ns.substr(sep + 2);
-    #endif
     } else {
       return term();
     }
     const term defval = tlev.size() > 2 ? tlev[2] : term(0LL);
-    return eval_meta_symbol_global(sym_ns, name, defval, ectx, pos);
+    return eval_meta_symbol_global(sym_ns, name, defval, check_only, ectx, pos);
   } else {
     /* local symbol */
-    return eval_meta_local_internal(tlev, ectx, pos, false);
+    return eval_meta_local_internal(tlev, check_only, ectx, pos);
   }
+}
+
+static term eval_meta_symbol(const term_list_range& tlev, eval_context& ectx,
+  expr_i *pos)
+{
+  return eval_meta_symbol_internal(tlev, false, ectx, pos);
+}
+
+static term eval_meta_symbol_exists(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos)
+{
+  if (tlev.size() != 2) {
+    return term();
+  }
+  return eval_meta_symbol_internal(tlev, true /* check_only */, ectx, pos);
 }
 
 static term eval_meta_apply(const term_list_range& tlev, eval_context& ectx,
@@ -1534,7 +1523,7 @@ static term eval_meta_code_at(const term_list_range& tlev, eval_context& ectx,
   return term(lch);
 }
 
-static term eval_meta_attribute(const term_list_range& tlev,
+static term eval_meta_characteristic(const term_list_range& tlev,
   eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 2) {
@@ -1543,6 +1532,8 @@ static term eval_meta_attribute(const term_list_range& tlev,
   std::string s = meta_term_to_string(tlev[1], false);
   if (s == "noheap") {
     return term(is_noheap_type(tlev[0]));
+  } else if (s == "defcon") {
+    return term(is_default_constructible(tlev[0]));
   }
   return term();
 }
@@ -2041,7 +2032,7 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@character", &eval_meta_character },
   { "@code_at", &eval_meta_code_at },
   { "@family", &eval_meta_family },
-  { "@attribute", &eval_meta_attribute },
+  { "@characteristic", &eval_meta_characteristic },
   { "@nsof", &eval_meta_nsof },
   { "@nameof", &eval_meta_nameof },
   { "@not", &eval_meta_not },
@@ -2063,6 +2054,7 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@lsymbol", &eval_meta_lsymbol },
   #endif
   { "@symbol", &eval_meta_symbol },
+  { "@symbol_exists", &eval_meta_symbol_exists },
   { "@apply", &eval_meta_apply },
   { "@error", &eval_meta_error },
 };

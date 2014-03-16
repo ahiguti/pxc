@@ -3,13 +3,40 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- m::symbolは見つからなかったら第3引数を返す(done)
-- meta::find(done)
+- 108/staticif_dupname
+
+- pointerのserializeは、指す先のserializeと等価にする
+
+- box_pointerはtargetがdefconであれば空引数でokにし、make_defaultも
+  可能ならそれを使う
+
+- deserializeのコピー除去
+  defconで作ってその位置に構築したほうが速い -> コンテナ
+  defconでない -> pointer
+  defcon使わないほうが速い -> intなど
+
+- deserialize_emplace_preferred{t}
+  defconでないならfalse
+  
+- deserialize_vardef{tpl, src, var}  変数宣言しdeserializeするマクロ
+
+- make_default
+
+- get_optionの取り決め決定。
+  - m::find
+  - __find というキーがあればそれも検索
+- serializeのオプション渡し方法決定
 
 - 型式に負の数を許可
 
-- get_optionの取り決め決定。
-- serializeのオプション渡し方法決定
+- m::symbolはシンボルをevalしないといけないのではないか(done)
+- m::symbolは見つからなかったら第3引数を返す(done)
+- meta::find(done)
+
+- 数値リテラルの範囲チェック
+
+- term_tostrで tparamsのシリアライズを必要とする理由を調べる。
+  termとして canonical ではないものが渡されているということか？
 
 - fileをthread作成時に渡せばスレッド終了するまでカウント握り続けないか
 
@@ -2771,4 +2798,28 @@ variant_invoke_impl(cslice{variant} const& args, obj?)
        スタンス化して、はまる。 */
   }
 }
+
+---------------------------------------------------------------------
+deserializeのコピー除去
+
+defconでない -> pointer
+defconで作ってその位置に構築したほうが速い -> コンテナ
+defcon使わないほうが速い -> intなど
+
+- deserialize_emplace_preferred{t}
+  defconでないならfalse
+  intのような単純型ならfalse
+  それ以外ならtrue
+- deserialize_emplaceはdefconのときのみ使える
+- deserialize_constructはdefconでなくても使える
+- deserialize_vardef{tpl, src, v}  変数宣言しdeserializeするマクロ
+
+案2:
+- make_defaultでpointerでもデフォルト値を作る
+- deserializeはemplaceのみ -> だめ
+- emplaceで不可能なケース
+  assignableでない - darray, constなfieldをもつstruct
+  - darrayとstructのみ
+- emplaceのほうが効率悪いケース
+  - cptrは指す先を作ってからboxしないといけないのでemplaceは効率悪い
 

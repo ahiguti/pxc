@@ -4,6 +4,7 @@ public import container::array -;
 public import meta m;
 public import meta::family mf;
 public import numeric::cast n;
+public import generic -;
 public import text::positional p;
 public import text::serialize -;
 public import text::minimal_encode e;
@@ -30,14 +31,17 @@ public threaded function {t} t from_string(cstrref const& s)
   if (mf::is_string_or_slice_type{t}) {
     return s;
   } else {
-    cstrref s1 = s;
-    return deserialize_from_string{t}(s1);
+    mutable s1 = s;
+    mutable r = make_default{t}();
+    deserialize_from_string{t}(s1, r);
+    return r;
   }
 }
 
-public threaded function {t} t deserialize_from_string(cstrref mutable& s)
+public threaded function {t} void
+deserialize_from_string(cstrref mutable& s, t mutable& r)
 {
-  return deserialize{deserialize_tpl, t}(s);
+  deserialize{deserialize_tpl, t}(s, r);
 }
 
 private threaded function void bool_to_string(bool v, string mutable& buf)
