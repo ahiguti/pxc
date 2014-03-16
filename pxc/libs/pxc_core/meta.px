@@ -32,7 +32,10 @@ public struct extern "@lsymbol" "@lsymbol" {t, name} lsymbol { }
 */
 public struct extern "@symbol" "@symbol" {ns_or_t, name, opt_notfound_value}
   symbol { }
-public struct extern "@attribute" "@attribute" {t, name} attribute { }
+public struct extern "@symbol_exists" "@symbol_exists" {ns_or_t, name}
+  symbol_exists { }
+public struct extern "@characteristic" "@characteristic" {t, name}
+  characteristic { }
 public struct extern "@family" "@family" {t} family { }
 public struct extern "@nameof" "@nameof" {x} nameof { }
   /* foo::bar{...} => "foo::bar" */
@@ -170,14 +173,14 @@ public metafunction field_type{t, fname}
       field_type_rec{slice{tlst, 1}, slice{nlst, 1}, n}};
 
 public metafunction find{x, key, notfound_val}
-  cond{
-    is_list{x},
+  cond{is_list{x},
     apply{
       metafunction{idx}
 	cond{ge{idx, 0}, at1{at{x, idx}}, notfound_val},
       list_find{x, key}},
-  cond{
-    is_type{x},
+  cond{is_type{x},
     symbol{x, key, notfound_val},
-  notfound_val}};
+  cond{is_metafunction{x},
+    apply{x, key},
+  notfound_val}}};
 

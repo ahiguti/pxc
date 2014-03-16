@@ -1353,7 +1353,7 @@ fprintf(stderr, "pxc-defined %s\n", cname); // FIXME
       {
 	const expr_int_literal *const ei =
 	  ptr_down_cast<const expr_int_literal>(tdef);
-	return tparam_str_long(ei->get_unsigned(), s);
+	return tparam_str_long(ei->get_value_ll(), s);
       }
       break;
     case expr_e_str_literal:
@@ -1736,8 +1736,8 @@ static bool is_int_literal_or_uop(expr_i *e, bool& is_negative,
     #if 0
     if (ei->is_unsigned) {
     #endif
-      is_negative = false;
-      ulv = ei->get_unsigned();
+      is_negative = ei->is_negative();
+      ulv = ei->get_value_nosig();
     #if 0
     } else {
       long long sv = ei->get_signed();
@@ -1854,7 +1854,7 @@ static bool numeric_convertible(expr_i *efrom, const term& tfrom,
       return integral_in_range(tto, is_signed, ulv);
     }
     expr_int_literal *eint = dynamic_cast<expr_int_literal *>(efrom);
-    if (eint != 0 && eint->get_unsigned() == 0 && is_bitmask(tto)) {
+    if (eint != 0 && eint->get_value_nosig() == 0 && is_bitmask(tto)) {
       return true; /* zero to bitmask */
     }
   }

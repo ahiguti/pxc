@@ -177,6 +177,25 @@ char *arena_strdup(const char *str)
   return p;
 }
 
+char *arena_concat_strdup(const char *s0, const char *s1)
+{
+  size_t l0 = strlen(s0);
+  size_t l1 = strlen(s1);
+  size_t len = l0 + l1;
+  if (len < l0) {
+    abort();
+  }
+  char *const ptr = static_cast<char *>(malloc(len + 1));
+  if (ptr == 0) {
+    abort();
+  }
+  str_arena.push_back(ptr);
+  memcpy(ptr, s0, l0);
+  memcpy(ptr + l0, s1, l1);
+  ptr[len] = '\0';
+  return ptr;
+}
+
 char *arena_dequote_strdup(const char *str)
 {
   const size_t len = strlen(str);

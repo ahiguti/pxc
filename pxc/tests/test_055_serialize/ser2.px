@@ -9,7 +9,8 @@ function {t} void test_one(t const& value)
   string const s = to_string(value);
   println(s);
   cstrref sr = s;
-  t x = deserialize_from_string{t}(sr);
+  mutable x = make_default{t}();
+  deserialize_from_string{t}(sr, x);
   string const s1 = to_string(x);
   println(s1);
   if (s != s1) {
@@ -41,16 +42,40 @@ union bar {
 
 function void t1()
 {
-  vector{ptr{foo}} a;
-  a.push_back(make_ptr{foo}(55, "abc"));
-  a.push_back(make_ptr{foo}(88, "xyz"));
-  test_one(a);
-  tree_map{string, bar} b;
-  const x1 = create_union{bar, "x"}(300);
-  const x2 = create_union{bar, "y"}("hoge");
-  b["a"] = x1;
-  b["b"] = x2;
-  test_one(b);
+  {
+    vector{ptr{foo}} a;
+    a.push_back(make_ptr{foo}(55, "abc"));
+    a.push_back(make_ptr{foo}(88, "xyz"));
+    test_one(a);
+  }
+  {
+    tree_map{string, bar} b;
+    const x1 = create_union{bar, "x"}(300);
+    const x2 = create_union{bar, "y"}("hoge");
+    b["a"] = x1;
+    b["b"] = x2;
+    test_one(b);
+  }
+  {
+    farray{foo, 3} c;
+    c[0].x = 0;
+    c[0].y = "a";
+    c[1].x = 3;
+    c[1].y = "b";
+    c[2].x = 33;
+    c[2].y = "c";
+    test_one(c);
+  }
+  {
+    mutable d = darray{foo}(3, foo());
+    d[0].x = 99;
+    d[0].y = "x";
+    d[1].x = 23;
+    d[1].y = "y";
+    d[2].x = 45;
+    d[2].y = "z";
+    test_one(d); /* not implemented yet */
+  }
 }
 
 t1();

@@ -1,9 +1,33 @@
 threaded namespace generic;
 public import meta m;
+public import meta::family mf;
 
-public function {t} t identity(t x) { return x; }
+public threaded function {t} t identity(t const& x) { return x; }
 
-public function {t, name} m::ret_type{m::symbol{t, name}}
+public threaded function {t} t make_default()
+{
+  if (m::characteristic{t, "defcon"}) {
+    return t();
+  } else if (mf::is_pointer_type{t}) {
+    metafunction tv m::at0{t};
+    if (m::characteristic{tv, "defcon"}) {
+      return pointer::box_pointer{t}();
+    } else {
+      const v = make_default{tv}();
+      return pointer::box_pointer{t}(v);
+    }
+  } else {
+    metafunction ats m::arg_types{t};
+    metafunction ans m::map{m::seq{m::size{ats}},
+      metafunction{i} m::concat{"a", i}};
+    expand(sym, idx: ans) {
+      const sym = make_default{m::at{ats, idx}}();
+    }
+    return t(expand(a: ans; a));
+  }
+}
+
+public threaded function {t, name} m::ret_type{m::symbol{t, name}}
 method_as_function(expand(
   m::joinv{
     m::list{m::list{"o", t, 1,
