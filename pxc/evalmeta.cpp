@@ -107,6 +107,17 @@ static term eval_meta_local_internal(const term_list_range& tlev,
   return eval_term_internal(rt, true, ectx, pos); /* is this necessary? */
 }
 
+static void check_public_namespace(const std::string& name)
+{
+  nspropmap_type::const_iterator i = nspropmap.find(name);
+  if (i == nspropmap.end()) {
+    arena_error_throw(0, "Namespace '%s' not imported", name.c_str());
+  }
+  if (!i->second.is_public) {
+    arena_error_throw(0, "Namespace '%s' is private", name.c_str());
+  }
+}
+
 static term eval_meta_symbol_global(const std::string& sym_ns,
   const std::string& name, const term& defval, bool check_only,
   eval_context& ectx, expr_i *pos)
@@ -116,17 +127,11 @@ static term eval_meta_symbol_global(const std::string& sym_ns,
   }
   symbol_table *const symtbl = &global_block->symtbl;
   assert(symtbl);
-  if (loaded_namespaces.find(sym_ns) == loaded_namespaces.end()) {
-    /* namespace sym_ns is not loaded. error. */
+  check_public_namespace(sym_ns);
     /* note that metafunctions must be always pure functional, or generated
        template functions can be inconsistent among compilation units. we
        must generate an error here instead of returning 'notfound', in order
        to avoid such inconsistency. */
-    DBG(fprintf(stderr, "not loaded: [%s] term=[%s]\n", sym_ns.c_str(),
-      term_tostr_human(typ).c_str()));
-    arena_error_throw(pos, "meta_symbol: Namespace '%s' not imported",
-      sym_ns.c_str());
-  }
   bool is_global = false, is_upvalue = false, is_memfld = false;
   bool no_private = true;
   expr_i *const rsym = symtbl->resolve_name_nothrow(name, no_private, sym_ns,
@@ -545,14 +550,25 @@ static term eval_meta_imports(const term_list_range& tlev, eval_context& ectx,
     return term();
   }
   const std::string name = meta_term_to_string(tlev[0], false);
+  check_public_namespace(name);
   loaded_namespaces_type::const_iterator iter = loaded_namespaces.find(name);
   if (iter == loaded_namespaces.end()) {
+    /* not reached */
     arena_error_throw(0, "Namespace '%s' not imported", name.c_str());
   }
   const imports_type::deps_type& deps = iter->second.deps;
   term_list tl;
   for (imports_type::deps_type::const_iterator i = deps.begin();
     i != deps.end(); ++i) {
+    const std::string tns = i->ns;
+    nspropmap_type::const_iterator j = nspropmap.find(tns);
+    if (j == nspropmap.end()) {
+      arena_error_throw(pos, "Internal error: namespace '%s' not imported",
+	tns.c_str());
+    }
+    if (!j->second.is_public) {
+      continue;
+    }
     term_list e;
     e.push_back(term(i->ns));
     e.push_back(term(i->import_public ? 0LL : 1LL));
@@ -591,9 +607,7 @@ static term eval_meta_functions(const term_list_range& tlev,
     return term();
   }
   const std::string name = meta_term_to_string(tlev[0], false);
-  if (loaded_namespaces.find(name) == loaded_namespaces.end()) {
-    arena_error_throw(0, "Namespace '%s' not imported", name.c_str());
-  }
+  check_public_namespace(name);
   symbol_table *const symtbl = &global_block->symtbl;
   symbol_table::local_names_type::const_iterator i;
   term_list tl;
@@ -625,9 +639,7 @@ static term eval_meta_types(const term_list_range& tlev, eval_context& ectx,
     return term();
   }
   const std::string name = meta_term_to_string(tlev[0], false);
-  if (loaded_namespaces.find(name) == loaded_namespaces.end()) {
-    arena_error_throw(0, "Namespace '%s' not imported", name.c_str());
-  }
+  check_public_namespace(name);
   symbol_table *const symtbl = &global_block->symtbl;
   symbol_table::local_names_type::const_iterator i;
   term_list tl;
@@ -679,9 +691,7 @@ static term eval_meta_global_variables(const term_list_range& tlev,
     return term();
   }
   const std::string name = meta_term_to_string(tlev[0], false);
-  if (loaded_namespaces.find(name) == loaded_namespaces.end()) {
-    arena_error_throw(0, "Namespace '%s' not imported", name.c_str());
-  }
+  check_public_namespace(name);
   symbol_table *const symtbl = &global_block->symtbl;
   symbol_table::local_names_type::const_iterator i;
   term_list tl;
@@ -773,65 +783,6 @@ static term eval_meta_member_functions(const term_list_range& tlev,
   }
   return term(tl);
 }
-
-#if 0
-static term eval_meta_field_types(const term_list_range& tlev,
-  eval_context& ectx, expr_i *pos)
-{
-  if (tlev.size() != 1) {
-    return term();
-  }
-  std::list<expr_var *> flds;
-  term ttyp = tlev[0];
-  expr_i *const einst = term_get_instance(ttyp);
-  expr_struct *const est = dynamic_cast<expr_struct *>(einst);
-  if (est != 0) {
-    est->get_fields(flds);
-  }
-  expr_dunion *const ev = dynamic_cast<expr_dunion *>(einst);
-  if (ev != 0) {
-    ev->get_fields(flds);
-  }
-  term_list tl;
-  for (std::list<expr_var *>::const_iterator i = flds.begin(); i != flds.end();
-    ++i) {
-    if (((*i)->get_attribute() & attribute_private) != 0) {
-      continue;
-    }
-    term& t = (*i)->resolve_texpr();
-    tl.push_back(t);
-  }
-  return term(tl);
-}
-
-static term eval_meta_field_names(const term_list_range& tlev,
-  eval_context& ectx, expr_i *pos)
-{
-  if (tlev.size() != 1) {
-    return term();
-  }
-  std::list<expr_var *> flds;
-  term ttyp = tlev[0];
-  expr_i *const einst = term_get_instance(ttyp);
-  expr_struct *const est = dynamic_cast<expr_struct *>(einst);
-  if (est != 0) {
-    est->get_fields(flds);
-  }
-  expr_dunion *const ev = dynamic_cast<expr_dunion *>(einst);
-  if (ev != 0) {
-    ev->get_fields(flds);
-  }
-  term_list tl;
-  for (std::list<expr_var *>::const_iterator i = flds.begin(); i != flds.end();
-    ++i) {
-    if (((*i)->get_attribute() & attribute_private) != 0) {
-      continue;
-    }
-    tl.push_back(term(std::string((*i)->sym)));
-  }
-  return term(tl);
-}
-#endif
 
 template <int mask> static term
 eval_meta_fields_internal(const term_list_range& tlev, eval_context& ectx,
@@ -1523,6 +1474,27 @@ static term eval_meta_code_at(const term_list_range& tlev, eval_context& ectx,
   return term(lch);
 }
 
+template <bool right> static term eval_meta_strchr(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos)
+{
+  if (tlev.size() != 2) {
+    return term();
+  }
+  const std::string s = meta_term_to_string(tlev[0], false);
+  const long long ch = meta_term_to_long(tlev[1]);
+  std::string::size_type p = 0;
+  if (right) {
+    p = s.rfind(ch);
+  } else {
+    p = s.find(ch);
+  }
+  if (p == s.npos) {
+    return term(-1LL);
+  } else {
+    return term(static_cast<long long>(p));
+  }
+}
+
 static term eval_meta_characteristic(const term_list_range& tlev,
   eval_context& ectx, expr_i *pos)
 {
@@ -1862,21 +1834,22 @@ static term eval_meta_cond(expr_i *texpr, const term_list_range& targs,
   bool targs_evaluated, eval_context& ectx, expr_i *pos)
 {
   const size_t num_args = targs.size();
-  if (num_args != 3) {
+  if (num_args % 2 != 1) {
     arena_error_throw(pos, "cond: Invalid number of arguments (got: %zu)",
       num_args);
     return term();
   }
-  term tc = eval_if_unevaluated((targs)[0], targs_evaluated, ectx, pos);
-  if (is_partial_eval_uneval(tc, ectx)) {
-    return term(texpr, targs); /* incomplete expr */
+  for (size_t i = 0; i + 1 < num_args; i += 2) {
+    term tc = eval_if_unevaluated((targs)[i], targs_evaluated, ectx, pos);
+    if (is_partial_eval_uneval(tc, ectx)) {
+      return term(texpr, targs); /* incomplete expr */
+    }
+    const bool c = term_truth_value(tc);
+    if (c) {
+      return eval_if_unevaluated(targs[i + 1], targs_evaluated, ectx, pos);
+    }
   }
-  const bool c = term_truth_value(tc);
-  if (c) {
-    return eval_if_unevaluated((targs)[1], targs_evaluated, ectx, pos);
-  } else {
-    return eval_if_unevaluated((targs)[2], targs_evaluated, ectx, pos);
-  }
+  return eval_if_unevaluated(targs[num_args - 1], targs_evaluated, ectx, pos);
 }
 
 static term eval_meta_or(expr_i *texpr, const term_list_range& targs,
@@ -2031,6 +2004,8 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@strlen", &eval_meta_strlen },
   { "@character", &eval_meta_character },
   { "@code_at", &eval_meta_code_at },
+  { "@strchr", &eval_meta_strchr<false> },
+  { "@strrchr", &eval_meta_strchr<true> },
   { "@family", &eval_meta_family },
   { "@characteristic", &eval_meta_characteristic },
   { "@nsof", &eval_meta_nsof },
@@ -2049,10 +2024,6 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@map", &eval_meta_map },
   { "@fold", &eval_meta_fold },
   { "@filter", &eval_meta_filter },
-  #if 0
-  { "@local", &eval_meta_local },
-  { "@lsymbol", &eval_meta_lsymbol },
-  #endif
   { "@symbol", &eval_meta_symbol },
   { "@symbol_exists", &eval_meta_symbol_exists },
   { "@apply", &eval_meta_apply },

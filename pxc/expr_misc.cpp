@@ -54,7 +54,7 @@ const std::map<std::string, std::string> *cur_profile = 0;
 size_t recursion_limit = 3000;
 nsaliases_type nsaliases;
 nsextends_type nsextends;
-nssafetymap_type nssafetymap;
+nspropmap_type nspropmap;
 nsthrmap_type nsthrmap;
 std::string emit_threaded_dll_func;
 /* end: global variables */
@@ -1925,6 +1925,9 @@ static term get_implicit_conversion_func(const term& tfrom, const term& tto,
 {
   const expr_i *const efrom = term_get_instance_const(tfrom);
   const expr_i *const eto = term_get_instance_const(tto);
+  if (efrom == 0 || eto == 0) {
+    return term(); /* tfrom or tto is not a type, for example */
+  }
   const std::string tto_ns = eto->get_unique_namespace();
   const std::string tfrom_ns = efrom->get_unique_namespace();
   if (global_block == 0) {
@@ -2621,7 +2624,7 @@ void fn_update_tree(expr_i *e, expr_i *p, symbol_table *symtbl,
   e->parent_expr = p;
   e->symtbl_lexical = symtbl;
   e->set_unique_namespace_one(curns_u,
-    nssafetymap[curns_u] != nssafety_e_safe);
+    nspropmap[curns_u].safety != nssafety_e_safe);
   DBG_SYMTBL(fprintf(stderr, "fn_update_tree: set %p-> symtbl_lexical  = %p\n",
     e, symtbl));
   if (e->get_esort() == expr_e_block) {

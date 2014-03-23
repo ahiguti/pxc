@@ -1,4 +1,4 @@
-namespace table;
+public namespace table;
 public import common -;
 public import meta m; 
 public import meta::family mf;
@@ -10,7 +10,7 @@ public threaded struct {opt}
 table_ifile(file_st const& fp0)
 {
   private file_st const fp = fp0;
-  private metafunction delim get_option{opt, "delim", '\t'};
+  private metafunction delim m::find{opt, "delim", '\t'};
   public function bool insert() { return false; }
   public function void flush() { }
   public function {tout} void transform(tout mutable& out) const
@@ -24,10 +24,9 @@ table_ifile(file_st const& fp0)
 	  mf::is_string_or_slice_type{m::arg_type{pf, i}}}})
       { 
 	/* not a string type */
-	m::arg_type{pf, idx} const sym = from_string{m::arg_type{pf, idx}}(
-	  line.next_token(delim));
+	const sym = from_string{m::arg_type{pf, idx}}(line.next_token(delim));
 	/* string */
-	m::arg_type{pf, idx} const sym = line.next_token(delim);
+	const sym = line.next_token(delim);
       }
       return out.insert(expand(a: m::map{m::seq{m::arg_size{pf}},
 	metafunction{i} m::concat{"a", i}}; a));
@@ -45,10 +44,10 @@ table_ofile(file_st const& fp0)
 {
   private file_st const fp = fp0;
   private string obuffer;
-  private metafunction delim m::character{get_option{opt, "delim", '\t'}};
-  private metafunction line_delim m::character{get_option{opt, "line_delim",
+  private metafunction delim m::character{m::find{opt, "delim", '\t'}};
+  private metafunction line_delim m::character{m::find{opt, "line_delim",
     '\n'}};
-  private metafunction buffer_size get_option{opt, "buffer_size", 16384};
+  private metafunction buffer_size m::find{opt, "buffer_size", 16384};
   public function bool insert(expand(
     m::map{m::seq{m::size{tlist}}, metafunction{i}
       m::list{m::concat{"a", i}, m::at{tlist, i}, 1, 0}}))
@@ -130,12 +129,6 @@ table_map()
     out.flush();
   }
 }
-
-private metafunction get_option{opt, k, def}
-  m::cond{
-    m::and{m::is_type{opt}, m::symbol{opt, k}},
-    m::symbol{opt, k},
-    def};
 
 {
   println("TEST0");

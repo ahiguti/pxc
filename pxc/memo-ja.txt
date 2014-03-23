@@ -3,37 +3,24 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- 108/staticif_dupname
+- bugfix: 025/val.px, blockscope_val?.px
+
+- 汎用tableパーザ
+  - regexで行パース
+
+- rcvector: copy-on-write vector?
+
+- 108/staticif_dupname -> 109/staticif_dupname (done)
 
 - pointerのserializeは、指す先のserializeと等価にする
 
-- box_pointerはtargetがdefconであれば空引数でokにし、make_defaultも
-  可能ならそれを使う
-
-- deserializeのコピー除去
-  defconで作ってその位置に構築したほうが速い -> コンテナ
-  defconでない -> pointer
-  defcon使わないほうが速い -> intなど
-
-- deserialize_emplace_preferred{t}
-  defconでないならfalse
-  
-- deserialize_vardef{tpl, src, var}  変数宣言しdeserializeするマクロ
-
-- make_default
-
-- get_optionの取り決め決定。
-  - m::find
-  - __find というキーがあればそれも検索
 - serializeのオプション渡し方法決定
 
 - 型式に負の数を許可
 
-- m::symbolはシンボルをevalしないといけないのではないか(done)
-- m::symbolは見つからなかったら第3引数を返す(done)
-- meta::find(done)
-
 - 数値リテラルの範囲チェック
+
+- vectorがreallocで伸ばせるケースを拡大。たとえばvector{vector{t}}。
 
 - term_tostrで tparamsのシリアライズを必要とする理由を調べる。
   termとして canonical ではないものが渡されているということか？
@@ -64,8 +51,6 @@ FIXME/TODO M1
 - get_optionをmetaに
 
 - ファイルをcloseしたときのエラーを拾う方法を考えよ
-
-- 汎用tableパーザ
 
 - expandのパラメータに式を文字列として渡せば式を展開する。文法的に
   問題無い箇所であるかもチェックする。
@@ -621,6 +606,14 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- private namespace(done)
+- evalmetaからprivate namespaceの中は引けないように(done)
+- meta::condを可変長(done)
+- deserializeの効率改善(done)
+- make_default(done)
+- m::symbolはシンボルをevalしないといけないのではないか(done)
+- m::symbolは見つからなかったら第3引数を返す(done)
+- meta::find(done)
 - meta::localとmeta::lsymbol廃止(done)
 - tptr{file_mt}がlock_guardを作れないことを確認。
   -> 043_file/filptr3 (done)
@@ -2822,4 +2815,16 @@ defcon使わないほうが速い -> intなど
   - darrayとstructのみ
 - emplaceのほうが効率悪いケース
   - cptrは指す先を作ってからboxしないといけないのでemplaceは効率悪い
+
+- コンストラクタを持つstructはretval、そうでないならemplace
+- コンテナは、darrayはretval、それ以外はemplace
+- pointerは指す先がconstならretval, それ以外なら指す先のemplace方針
+
+---------------------------------------------------------------------
+private namespace
+
+private namespaceのpublicシンボルは、親namespaceからのみ参照できる。
+symbol_commonの参照元と参照先の名前空間を比較する
+リフレクションではprivate namespaceの中身は見えない
+importsはprivate namespaceをスキップ
 

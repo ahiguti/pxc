@@ -51,10 +51,7 @@ efence:
 	exit 0;
 
 debug:
-	env \
-	  TEST_PXC_PROF=../common/pxc_debug.profile \
-	  TEST_PXC_DYNAMIC_PROF=../common/pxc_debug_dynamic.profile \
-	  $(MAKE) test
+	env TEST_PXC_DEBUG=1 $(MAKE) test
 
 retest: clean test
 

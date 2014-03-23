@@ -1,7 +1,7 @@
-threaded namespace regex::posix "use-unsafe";
+public threaded namespace regex::posix "use-unsafe";
 public import numeric::integral -;
 public import container::array -;
-public import container::impl::util;
+public import container::array::util;
 
 public tsvaluetype struct extern "int" "extbitmask" cflags_t { }
 public tsvaluetype struct extern "int" "extbitmask" eflags_t { }
@@ -22,10 +22,10 @@ public extern "REG_NOTEOL"        eflags_t REG_NOTEOL;
 public extern "0"                 regerror_t REG_OK;
 public extern "REG_NOMATCH"       regerror_t REG_NOMATCH;
 
-public valuetype struct extern "pregex::posix_re" "linear"
+public tsvaluetype struct extern "pregex::posix_re" "linear"
   regex(cstrref const& s, cflags_t cflags, regerror_t mutable& err_r) { }
 public threaded function extern "pregex::regex_exec"
-  regerror_t regex_exec(regex mutable& re, cstrref const& s,
+  regerror_t regex_exec(regex const& re, cstrref const& s,
     slice{regmatch_t} const& ma, eflags_t eflags);
 public threaded function extern "pregex::regex_error_string"
   string regex_error_string(regex const& re, regerror_t err);
@@ -65,7 +65,7 @@ posix_re::~posix_re()
   ::regfree(&value);
 }
 
-int regex_exec(posix_re& re, cstrref const& s,
+int regex_exec(posix_re const& re, cstrref const& s,
   bt_slice<regmatch_t> const& ma, int eflags)
 {
   PXCRT_ALLOCA_NTSTRING(s_nt, s);

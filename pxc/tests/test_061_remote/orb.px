@@ -1,4 +1,4 @@
-namespace orb "use-unsafe";
+public namespace orb "use-unsafe";
 public import ordered::compare -;
 public import common -;
 public import text::conversion -;
@@ -59,8 +59,7 @@ public threaded function bool execute_request(ptr{orb} const& op)
       size_t pos = objpos;
       size_t const delim_pos = skip_token(o.rbuf, pos, epos);
       cstrref objbuf = o.rbuf[objpos + 1 .. delim_pos];
-      size_t val;
-      deserialize_from_string{size_t}(objbuf, val);
+      size_t val = deserialize_from_string{size_t}(objbuf);
       if (skeleton_mapped mutable& m : o.skeletons[val]) {
 	m.real_object->call_method(o, pos, epos);
       } else {
@@ -239,9 +238,7 @@ private threaded function {t} t unmarshal_value(string const& buf,
   size_t const delim_pos = skip_token(buf, npos, epos);
   cstrref tok = buf[pos .. delim_pos];
   pos = npos;
-  mutable v = make_default{t}();
-  deserialize_from_string{t}(tok, v);
-  return v;
+  return deserialize_from_string{t}(tok);
 }
 
 private threaded function {t} void marshal_value(string mutable& buf,
@@ -442,8 +439,7 @@ private threaded function {t} t unmarshal_reference(ptr{orb} const& op,
   }
   uchar const ch = buf[0];
   buf.increment_front(1);
-  size_t val;
-  deserialize_from_string{size_t}(buf, val);
+  size_t val = deserialize_from_string{size_t}(buf);
   if (ch == '!') {
     if (skeleton_mapped mutable& m : o.skeletons[val]) {
       metafunction cmi_type call_method_instance{m::at0{t}};

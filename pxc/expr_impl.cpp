@@ -86,6 +86,25 @@ expr_i *symbol_common::resolve_symdef(symbol_table *lookup)
     symtbl_defined = lookup;
     upvalue_flag = is_upvalue;
     assert(symbol_def);
+    /* check private ns */
+    const std::string sdns = symbol_def->get_unique_namespace();
+    const std::string smns = parent_expr->get_unique_namespace();
+    if (sdns != "" && sdns != smns) {
+      nspropmap_type::const_iterator i = nspropmap.find(sdns);
+      if (i == nspropmap.end()) {
+	arena_error_push(parent_expr,
+	  "Internal error: namespace '%s' not found", sdns.c_str());
+      }
+      assert(i != nspropmap.end());
+      if (!i->second.is_public) {
+	const std::string p = smns + "::";
+	if (sdns.substr(0, p.size()) != p) {
+	  arena_error_push(parent_expr,
+	    "Symbol '%s' is defined in private namespace '%s'",
+	    this->get_fullsym().c_str(), sdns.c_str());
+	}
+      }
+    }
   } else {
     DBG_TE2(fprintf(stderr,
       "expr_te::resolve_symdef already resolved: %p [%s]\n", this,
@@ -536,7 +555,8 @@ expr_ns::expr_ns(const char *fn, int line, expr_i *uniq_nssym, bool import,
 	arena_error_throw(this, "Invalid attribute '%s'", safety);
       }
     }
-    nssafetymap[uniq_nsstr] = v;
+    nspropmap[uniq_nsstr].safety = v;
+    nspropmap[uniq_nsstr].is_public = pub;
   }
 }
 

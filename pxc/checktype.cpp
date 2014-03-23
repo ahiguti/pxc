@@ -248,26 +248,33 @@ void expr_te::check_type(symbol_table *lookup)
 void expr_ns::check_type(symbol_table *lookup)
 {
   if (import) {
-    nssafetymap_type::const_iterator i = nssafetymap.find(src_uniq_nsstr);
-    if (i == nssafetymap.end()) {
+    nspropmap_type::const_iterator i = nspropmap.find(src_uniq_nsstr);
+    if (i == nspropmap.end()) {
       arena_error_throw(this, "Internal error: namespace '%s' not found",
 	src_uniq_nsstr.c_str());
     }
-    nssafetymap_type::const_iterator j = nssafetymap.find(uniq_nsstr);
-    if (j == nssafetymap.end()) {
+    nspropmap_type::const_iterator j = nspropmap.find(uniq_nsstr);
+    if (j == nspropmap.end()) {
       arena_error_throw(this, "Internal error: namespace '%s' not found",
 	uniq_nsstr.c_str());
     }
-    if (i->second == nssafety_e_safe &&
-      j->second == nssafety_e_export_unsafe) {
+    if (i->second.safety == nssafety_e_safe &&
+      j->second.safety == nssafety_e_export_unsafe) {
       arena_error_throw(this, "Can not import unsafe namespace '%s'",
 	uniq_nsstr.c_str());
     }
-    if (i->second == nssafety_e_use_unsafe &&
-      j->second == nssafety_e_export_unsafe && pub) {
+    if (i->second.safety == nssafety_e_use_unsafe &&
+      j->second.safety == nssafety_e_export_unsafe && pub) {
       arena_error_throw(this,
 	"Importing unsafe namespace '%s' must be private",
 	uniq_nsstr.c_str());
+    }
+    if (!j->second.is_public) {
+      std::string p = src_uniq_nsstr + "::";
+      if (uniq_nsstr.substr(0, p.size()) != p) {
+	arena_error_throw(this, "Can not import private namespace '%s'",
+	  uniq_nsstr.c_str());
+      }
     }
   }
 }
@@ -1078,7 +1085,7 @@ static void add_root_requirement(expr_i *e, passby_e passby,
   if (e->get_esort() == expr_e_funccall) {
     expr_funccall *const efc = ptr_down_cast<expr_funccall>(e);
     if (is_noheap_type(e->resolve_texpr())) {
-      /* function returning ephemeral type, which is only allowed for extern c
+      /* function returning noheap type, which is only allowed for extern c
        * function. it must be a member function (or a member-like function) of
        * a (possibly) container type, and the returned reference must be valid 
        * while the container is valid and it is not resized. */
@@ -1165,7 +1172,15 @@ static void add_root_requirement(expr_i *e, passby_e passby,
       }
       return;
     }
-    /* thru */
+    if (is_passby_cm_reference(passby) && blockscope_flag) {
+      /* expr returns a value, and require blockscope passby-reference.
+       * create a tempvar to root the value. 025/blockscope_val?.px */
+      store_tempvar(e,
+	passby == passby_e_const_reference
+	  ? passby_e_const_value : passby_e_mutable_value,
+	blockscope_flag, false, "blpr"); /* ROOT */
+    }
+    return; /* function returning value */
   }
   if (e->get_esort() != expr_e_op) {
     /* function calls, symbols, literals etc. */

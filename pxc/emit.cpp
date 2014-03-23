@@ -2577,6 +2577,29 @@ void expr_special::emit_value(emit_context& em)
   }
 }
 
+static bool localvars_can_collide(const expr_if *ei)
+{
+  assert(ei->cond_static != -1);
+  expr_block *bl = ei->cond_static == 1 ? ei->block1 : ei->block2;
+  if (bl == 0) {
+    return false;
+  }
+  symbol_table *symtbl = &bl->symtbl;
+  symbol_table *p = symtbl->get_lexical_parent();
+  while (p != 0) {
+    symbol_table::local_names_type::const_iterator i;
+    for (i = symtbl->local_names.begin(); i != symtbl->local_names.end();
+      ++i) {
+      symbol_table::locals_type::const_iterator j = p->find(*i);
+      if (j != p->end()) {
+	return true; /* can collide */
+      }
+    }
+    p = p->get_lexical_parent();
+  }
+  return false;
+}
+
 static bool can_omit_brace(const expr_if *ei)
 {
   /* returns true if ei is the only statement in the block */
@@ -2618,7 +2641,10 @@ static bool can_omit_brace(const expr_if *ei)
       }
       st = st->rest;
     }
-    DBG_IF(fprintf(stderr, "5: false\n"));
+    DBG_IF(fprintf(stderr, "5: true\n"));
+    if (localvars_can_collide(ei)) {
+      return false;
+    }
     return true;
   }
   DBG_IF(fprintf(stderr, "can_omit_brace 7: false\n"));
