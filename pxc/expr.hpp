@@ -187,6 +187,12 @@ enum nssafety_e {
   nssafety_e_use_unsafe,
 };
 
+struct nsprop {
+  nsprop() : safety(nssafety_e_safe), is_public(false) { }
+  nssafety_e safety;
+  bool is_public;
+};
+
 
 void arena_init();
 void arena_set_recursion_limit(size_t v);

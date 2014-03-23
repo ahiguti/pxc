@@ -1,4 +1,4 @@
-threaded namespace meta "use-unsafe";
+public threaded namespace meta "use-unsafe";
 
 public struct extern "@error" "@error" {x} error { }
 
@@ -26,10 +26,6 @@ public struct extern "@global_variables" "@global_variables" {ns}
   global_variables { }
   /* {{name, typ, byref(=0), mutable}, ...} */
 
-/*
-public struct extern "@local" "@local" {t, name} local { }
-public struct extern "@lsymbol" "@lsymbol" {t, name} lsymbol { }
-*/
 public struct extern "@symbol" "@symbol" {ns_or_t, name, opt_notfound_value}
   symbol { }
 public struct extern "@symbol_exists" "@symbol_exists" {ns_or_t, name}
@@ -87,17 +83,18 @@ public struct extern "@to_string" "@to_string" {x} to_string { }
 public struct extern "@full_string" "@full_string" {x} full_string { }
 
 public struct extern "@concat" "@concat" {x, y} concat { } /* vararg */
-// public struct extern "@index" "@index" {x, y} index { } /* TODO */
-// public struct extern "@rindex" "@rindex" {x, y} rindex { } /* TODO */
 public struct extern "@substring" "@substring" {x, i, j} substring { }
 public struct extern "@subst" "@subst" {x, from, to} subst { }
 public struct extern "@strlen" "@strlen" {x} strlen { }
 public struct extern "@character" "@character" {c} character { }
 public struct extern "@code_at" "@code_at" {s, idx} code_at { }
+public struct extern "@strchr" "@strchr" {x, c} strchr { }
+public struct extern "@strrchr" "@strrchr" {x, c} strrchr { }
 
-public struct extern "@@cond" "@@cond" {c, x, y} cond { }
-public struct extern "@@or" "@@or" {x, y} or { }
-public struct extern "@@and" "@@and" {x, y} and { }
+public struct extern "@@cond" "@@cond" {c, x, y} cond { } /* vararg */
+public struct extern "@@or" "@@or" {x, y} or { } /* vararg */
+public struct extern "@@and" "@@and" {x, y} and { } /* vararg */
+
 public struct extern "@@trace" "@@trace" {x} trace { }
 public struct extern "@@timing" "@@timing" {x} timing { }
 
@@ -172,15 +169,21 @@ public metafunction field_type{t, fname}
       at0{tlst},
       field_type_rec{slice{tlst, 1}, slice{nlst, 1}, n}};
 
-public metafunction find{x, key, notfound_val}
-  cond{is_list{x},
-    apply{
-      metafunction{idx}
-	cond{ge{idx, 0}, at1{at{x, idx}}, notfound_val},
-      list_find{x, key}},
-  cond{is_type{x},
-    symbol{x, key, notfound_val},
-  cond{is_metafunction{x},
-    apply{x, key},
-  notfound_val}}};
+public metafunction find{x, key, defval}
+  cond{
+    is_list{x},
+      apply{
+	metafunction{i}
+	  cond{
+	    ge{i, 0}, at1{at{x, i}}, 
+	    apply{
+	      metafunction{j}
+		cond{ge{j, 0}, find{at1{at{x, j}}, key, defval}, defval},
+	      list_find{x, "__find"}}},
+	list_find{x, key}},
+    is_type{x},
+      cond{
+	symbol_exists{x, key}, symbol{x, key, defval},
+	find{symbol{x, "__find", nil}, key, defval}},
+    defval};
 

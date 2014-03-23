@@ -13,7 +13,19 @@ else
 fi
 
 if [ "$TEST_PXC_PROF" == "" ]; then
-  TEST_PXC_PROF=../common/pxc.profile
+  if [ "$TEST_PXC_DEBUG" == "1" ]; then
+    TEST_PXC_PROF=../common/pxc_debug.profile
+  else
+    TEST_PXC_PROF=../common/pxc.profile
+  fi
+fi
+
+if [ "$TEST_PXC_DYNAMIC_PROF" == "" ]; then
+  if [ "$TEST_PXC_DEBUG" == "1" ]; then
+    TEST_PXC_DYNAMIC_PROF=../common/pxc_debug_dynamic.profile
+  else
+    TEST_PXC_DYNAMIC_PROF=../common/pxc_dynamic.profile
+  fi
 fi
 
 total=0

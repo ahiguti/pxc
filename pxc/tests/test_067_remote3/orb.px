@@ -1,4 +1,4 @@
-namespace orb "use-unsafe";
+public namespace orb "use-unsafe";
 public import ordered::compare -;
 public import common -;
 public import text::conversion -;
@@ -91,7 +91,7 @@ private threaded function bool execute_request(ptr{orb_rep} const& op)
       mutable val = size_t();
       {
 	cstrref objbuf = o.rbuf[objpos + 1 .. delim_pos];
-	deserialize_from_string{size_t}(objbuf, val);
+	val = deserialize_from_string{size_t}(objbuf);
       }
       if (val < o.skeletons.size()) {
 	skeleton_mapped mutable m = o.skeletons[val];
@@ -265,9 +265,7 @@ private threaded function {t} t unmarshal_value(string const& buf,
   const delim_pos = skip_token(buf, npos, epos);
   cstrref tok = buf[pos .. delim_pos];
   pos = npos;
-  mutable r = make_default{t}();
-  deserialize_from_string{t}(tok, r);
-  return r;
+  return deserialize_from_string{t}(tok);
 }
 
 private threaded function {t} void marshal_value(string mutable& buf,
@@ -445,8 +443,7 @@ private threaded function {t, from_remote} t unmarshal_reference(
   }
   const ch = buf[0];
   buf.increment_front(1);
-  size_t val;
-  deserialize_from_string{size_t}(buf, val);
+  size_t val = deserialize_from_string{size_t}(buf);
   if (ch == ((from_remote != 0) ? '~' : '!')) {
     if (val < o.skeletons.size()) {
       mutable& m = o.skeletons[val];

@@ -13,7 +13,11 @@ else
 fi
 
 if [ "$TEST_PXC_PROF" == "" ]; then
-  TEST_PXC_PROF=./pxc_thrdll.profile
+  if [ "$TEST_PXC_DEBUG" == "1" ]; then
+    TEST_PXC_PROF=./pxc_thrdll_debug.profile
+  else
+    TEST_PXC_PROF=./pxc_thrdll.profile
+  fi
 fi
 
 total=0

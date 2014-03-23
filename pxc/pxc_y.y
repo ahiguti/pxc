@@ -472,15 +472,21 @@ ext_stmt
 	: TOK_NAMESPACE nssym_expr opt_nssafety ';'
 	  { $$ = expr_ns_new(cur_fname, @1.first_line, $2, false, false,
 		false, 0, $3); }
-	| TOK_PRIVATE TOK_NAMESPACE nssym_expr ';'
+	| TOK_PRIVATE TOK_NAMESPACE nssym_expr opt_nssafety ';'
 	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, false, false,
-		false, 0, 0); }
-	| TOK_PUBLIC TOK_NAMESPACE nssym_expr ';'
+		false, 0, $4); }
+	| TOK_PUBLIC TOK_NAMESPACE nssym_expr opt_nssafety ';'
 	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, false, true,
-		false, 0, 0); }
+		false, 0, $4); }
 	| TOK_THREADED TOK_NAMESPACE nssym_expr opt_nssafety ';'
 	  { $$ = expr_ns_new(cur_fname, @1.first_line, $3, false, false,
 		true, 0, $4); }
+	| TOK_PRIVATE TOK_THREADED TOK_NAMESPACE nssym_expr opt_nssafety ';'
+	  { $$ = expr_ns_new(cur_fname, @1.first_line, $4, false, false,
+		true, 0, $5); }
+	| TOK_PUBLIC TOK_THREADED TOK_NAMESPACE nssym_expr opt_nssafety ';'
+	  { $$ = expr_ns_new(cur_fname, @1.first_line, $4, false, true,
+		true, 0, $5); }
 	| TOK_IMPORT nssym_expr opt_nsalias ';'
 	  { $$ = expr_ns_new(cur_fname, @1.first_line, $2, true, false,
 		false, $3, 0); }

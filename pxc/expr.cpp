@@ -475,7 +475,7 @@ void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
   if (!uniqns.empty()) {
     int block_id_ns = 0;
     fn_set_namespace(topval, uniqns, block_id_ns,
-      nssafetymap[uniqns] != nssafety_e_safe);
+      nspropmap[uniqns].safety != nssafety_e_safe);
     nsthrmap[uniqns] = ns_is_thr;
   }
   if (is_main) {
@@ -601,7 +601,7 @@ void arena_clear()
   recursion_limit = 3000;
   nsaliases.clear();
   nsextends.clear();
-  nssafetymap.clear();
+  nspropmap.clear();
   nsthrmap.clear();
   emit_threaded_dll_func = "";
 }

@@ -1,4 +1,4 @@
-threaded namespace text::serialize;
+public threaded namespace text::serialize;
 public import numeric::integral -;
 public import container::array -;
 public import meta m;
@@ -69,171 +69,264 @@ serialize(t const& x, tplf{"target_type"} mutable& o)
   }
 }
 
-public threaded function {tpl, t} void
-deserialize(tplf{"source_type"} mutable& s, t mutable& r)
+public threaded function {tpl, t} t
+deserialize(m::find{tpl, "source_type", 0} mutable& src)
 {
-  metafunction tplf{x} m::find{tpl, x, 0};
-  metafunction tsym{x} m::symbol{t, x};
-  if (m::not{m::eq{m::apply{tplf{"specialized_func"}, t}, 0}}) {
-    r = m::apply{tplf{"specialized_func"}, t}(s);
-  } else if (mf::is_array_or_slice_type{t}) {
-    if (m::eq{m::family{t}, "varray"}) {
-      if (tplf{"array_begin_cond"}(s)) {
-	bool is_first = true;
-	while (true) {
-	  if (s.empty() || tplf{"array_end_cond"}(s)) {
-	    break;
-	  }
-	  if (is_first) {
-	    is_first = false;
-	  } else {
-	    tplf{"array_sep_cond"}(s);
-	  }
-	  const sz = r.size();
-	  mutable ent = make_default{m::at0{t}}();
-	  r.push_back(ent);
-	  deserialize{tpl, m::at0{t}}(s, r[sz]);
-	}
-      } else {
-	tplf{"value_skip"}(s);
-      }
-    } else if (m::eq{m::family{t}, "farray"}) {
-      if (tplf{"array_begin_cond"}(s)) {
-	bool is_first = true;
-	size_t idx = 0;
-	while (true) {
-	  if (s.empty() || tplf{"array_end_cond"}(s)) {
-	    break;
-	  }
-	  if (is_first) {
-	    is_first = false;
-	  } else {
-	    tplf{"array_sep_cond"}(s);
-	  }
-	  if (idx < m::at1{t}) {
-	    deserialize{tpl, m::at0{t}}(s, r[idx]);
-	    ++idx;
-	  } else {
-	    m::at0{t} ent = make_default{m::at0{t}}();
-	    deserialize{tpl, m::at0{t}}(s, ent);
-	  }
-	}
-      } else {
-	tplf{"value_skip"}(s);
-      }
-    } else {
-      m::apply{tplf{"unknown"}, t}(s);
-    }
-  } else if (mf::is_map_or_range_type{t}) {
-    if (s.empty() || tplf{"map_begin_cond"}(s)) {
-      bool is_first = true;
-      while (true) {
-	if (tplf{"map_end_cond"}(s)) {
-	  break;
-	}
-	if (is_first) {
-	  is_first = false;
-	} else {
-	  tplf{"map_sep_cond"}(s);
-	}
-	mutable k = make_default{m::at0{t}}();
-	deserialize{tpl, m::at{t, 0}}(s, k);
-	if (!tplf{"map_entry_sep_cond"}(s)) {
-	  tplf{"map_end_skip"}(s);
-	  break;
-	}
-	deserialize{tpl, m::at{t, 1}}(s, r[k]);
-      }
-    } else {
-      tplf{"value_skip"}(s);
-    }
-  } else if (mf::is_pointer_type{t}) {
-    if (tplf{"pointer_begin_cond"}(s)) {
-      if (mf::is_mutable_pointer_type{t}) {
-	deserialize{tpl, m::at0{t}}(s, *r);
-      } else {
-	mutable v = make_default{m::at0{t}}();
-	deserialize{tpl, m::at0{t}}(s, v);
-	r = box_pointer{t}(v);
-      }
-      tplf{"pointer_end_skip"}(s);
-    }
-  } else if (mf::is_struct_type{t}) {
-    if (tplf{"struct_begin_cond"}(s)) {
-      expand (fld, idx : field_names_sorted{t}) {
-	if (!tplf{"struct_end_peek_cond"}(s)) {
-	  bool found = true;
-	  while (true) {
-	    tplf{"struct_sep_cond"}(s);
-	    tplf{"source_type"} s0 = s;
-	    tplf{"struct_field_name_peek"}(s0);
-	    if (s0 == m::to_string{fld}) {
-	      break;
-	    } else if (s0 > m::to_string{fld}) {
-	      found = false;
-	      break;
-	    }
-	    s.increment_front(s0.size());
-	    tplf{"struct_entry_sep_cond"}(s);
-	    tplf{"value_skip"}(s);
-	    if (s.empty() || tplf{"struct_end_peek_cond"}(s)) {
-	      found = false;
-	      break;
-	    }
-	  }
-	  if (found) {
-	    s.increment_front(m::strlen{m::to_string{fld}});
-	    tplf{"struct_entry_sep_cond"}(s);
-	    deserialize{tpl, m::at{field_types_sorted{t}, idx}}(s, r.fld);
-	  }
-	}
-      }
-      tplf{"struct_end_skip"}(s);
-    } else {
-      tplf{"value_skip"}(s);
-    }
-  } else if (mf::is_union_type{t}) {
-    if (tplf{"union_begin_cond"}(s)) {
-      bool is_first = true;
-      while (true) {
-	if (s.empty() || tplf{"union_end_cond"}(s)) {
-	  break;
-	}
-	if (is_first) {
-	  is_first = false;
-	} else {
-	  if (!tplf{"union_sep_cond"}(s)) {
-	    tplf{"union_end_skip"}(s);
-	    break;
-	  }
-	}
-	tplf{"source_type"} s0 = s;
-	tplf{"union_field_name"}(s0, s);
-	if (!tplf{"union_entry_sep_cond"}(s)) {
-	  tplf{"union_end_skip"}(s);
-	  break;
-	}
-	expand (fld, idx : m::field_names{t}) {
-	  if (s0 == m::to_string{fld}) {
-	    metafunction tv m::at{m::field_types{t}, idx};
-	    mutable v = make_default{tv}();
-	    deserialize{tpl, tv}(s, v);
-	    r.fld = v;
-	  }
-	}
-      }
-    } else {
-      tplf{"value_skip"}(s);
-    }
+  if (deserialize_prefer_emplace{tpl, t}) {
+    t mutable ret = make_default{t}();
+    expand deserialize_macro{tpl, t, "src", "ret"};
+    return ret;
   } else {
-    m::apply{tplf{"unknown"}, t}(s);
+    expand deserialize_macro{tpl, t, "src", ""};
+  }
+}
+
+public threaded function {tpl, t} void
+deserialize_emplace(m::find{tpl, "source_type", 0} mutable& src,
+  t mutable& ret)
+{
+  if (deserialize_prefer_emplace{tpl, t}) {
+    expand deserialize_macro{tpl, t, "src", "ret"};
+  } else {
+    ret = deserialize{tpl, t}(src);
   }
 }
 
 /* private */
 
+private metafunction deserialize_prefer_emplace{tpl, t}
+  m::cond{
+    /* if special deserialization function is defined for t, prefer retval */
+    m::ne{m::apply{m::find{tpl, "specialized_func", 0}, t}, 0},
+    0,
+    /* darray prefer retval */
+    m::eq{m::family{t}, "darray"},
+    0,
+    /* pointer type */
+    mf::is_pointer_type{t},
+    m::cond{
+      /* mutable pointer prefer emplace iff target prefer emplace */
+      mf::is_mutable_pointer_type{t},
+      deserialize_prefer_emplace{tpl, m::at0{t}},
+      /* const pointer prefer retval */
+      0},
+    /* struct with constructor prefer retval */
+    m::and{mf::is_struct_type{t}, m::not{m::empty{m::args{t}}}},
+    0,
+    /* otherwise */
+    1};
+
+private function {tpl, t, src, ret} expand
+deserialize_macro
+{
+  metafunction tplf{x} m::find{tpl, x, 0};
+  metafunction tsym{x} m::symbol{t, x};
+  if (m::ne{m::apply{tplf{"specialized_func"}, t}, 0}) {
+    if (m::eq{ret, ""}) {
+      return m::apply{tplf{"specialized_func"}, t}(src);
+    } else {
+      ret = m::apply{tplf{"specialized_func"}, t}(src);
+    }
+  } else if (mf::is_array_or_slice_type{t}) {
+    if (m::eq{m::family{t}, "varray"}) {
+      if (m::eq{ret, ""}) {
+	deserialize_error();
+      }
+      if (tplf{"array_begin_cond"}(src)) {
+	bool is_first = true;
+	while (true) {
+	  if (src.empty() || tplf{"array_end_cond"}(src)) {
+	    break;
+	  }
+	  if (is_first) {
+	    is_first = false;
+	  } else {
+	    tplf{"array_sep_cond"}(src);
+	  }
+	  metafunction tval m::at0{t};
+	  if (deserialize_prefer_emplace{tpl, tval}) {
+	    const sz = ret.size();
+	    mutable ent = make_default{tval}();
+	    ret.push_back(ent);
+	    deserialize_emplace{tpl, tval}(src, ret[sz]);
+	  } else {
+	    ret.push_back(deserialize{tpl, tval}(src));
+	  }
+	}
+      } else {
+	tplf{"value_skip"}(src);
+      }
+    } else if (m::eq{m::family{t}, "farray"}) {
+      if (m::eq{ret, ""}) {
+	deserialize_error();
+      }
+      if (tplf{"array_begin_cond"}(src)) {
+	bool is_first = true;
+	size_t idx = 0;
+	while (true) {
+	  if (src.empty() || tplf{"array_end_cond"}(src)) {
+	    break;
+	  }
+	  if (is_first) {
+	    is_first = false;
+	  } else {
+	    tplf{"array_sep_cond"}(src);
+	  }
+	  if (idx < m::at1{t}) {
+	    deserialize_emplace{tpl, m::at0{t}}(src, ret[idx]);
+	    ++idx;
+	  } else {
+	    deserialize{tpl, m::at0{t}}(src); /* ignore */
+	  }
+	}
+      } else {
+	tplf{"value_skip"}(src);
+      }
+    } else if (m::eq{m::family{t}, "darray"}) {
+      if (m::ne{ret, ""}) {
+	deserialize_error();
+      } else {
+	metafunction tvec vector{m::at0{t}};
+	tvec mutable vec;
+	deserialize_emplace{tpl, tvec}(src, vec);
+	t const ret = vec[0 .. vec.size()];
+	return ret;
+      }
+    } else {
+      m::apply{tplf{"unknown"}, t}(src);
+    }
+  } else if (mf::is_map_or_range_type{t}) {
+    if (src.empty() || tplf{"map_begin_cond"}(src)) {
+      if (m::eq{ret, ""}) {
+	deserialize_error();
+      }
+      bool is_first = true;
+      while (true) {
+	if (tplf{"map_end_cond"}(src)) {
+	  break;
+	}
+	if (is_first) {
+	  is_first = false;
+	} else {
+	  tplf{"map_sep_cond"}(src);
+	}
+	const k = deserialize{tpl, m::at{t, 0}}(src);
+	if (!tplf{"map_entry_sep_cond"}(src)) {
+	  tplf{"map_end_skip"}(src);
+	  break;
+	}
+	deserialize_emplace{tpl, m::at{t, 1}}(src, ret[k]);
+      }
+    } else {
+      tplf{"value_skip"}(src);
+    }
+  } else if (mf::is_pointer_type{t}) {
+    if (tplf{"pointer_begin_cond"}(src)) {
+      if (m::eq{ret, ""}) {
+	const r = box_pointer{t}(deserialize{tpl, m::at0{t}}(src, v));
+	tplf{"pointer_end_skip"}(src);
+	return r;
+      } else {
+	deserialize_emplace{tpl, m::at0{t}}(src, *ret);
+	tplf{"pointer_end_skip"}(src);
+      }
+    } else {
+      tplf{"value_skip"}(src);
+    }
+  } else if (mf::is_struct_type{t}) {
+    if (tplf{"struct_begin_cond"}(src)) {
+      metafunction names
+	m::cond{m::eq{ret, ""}, arg_names_sorted{t}, field_names_sorted{t}};
+      expand (sym, idx : m::cond{m::eq{ret, ""}, names, m::nil}) {
+	mutable sym = make_default{m::at{arg_types_sorted{t}, idx}}();
+      }
+      expand (sym, idx : field_names_sorted{t}) {
+	if (!tplf{"struct_end_peek_cond"}(src)) {
+	  bool found = true;
+	  while (true) {
+	    tplf{"struct_sep_cond"}(src);
+	    tplf{"source_type"} s0 = src;
+	    tplf{"struct_field_name_peek"}(s0);
+	    if (s0 == m::to_string{sym}) {
+	      break;
+	    } else if (s0 > m::to_string{sym}) {
+	      found = false;
+	      break;
+	    }
+	    src.increment_front(s0.size());
+	    tplf{"struct_entry_sep_cond"}(src);
+	    tplf{"value_skip"}(src);
+	    if (src.empty() || tplf{"struct_end_peek_cond"}(src)) {
+	      found = false;
+	      break;
+	    }
+	  }
+	  if (found) {
+	    src.increment_front(m::strlen{m::to_string{sym}});
+	    tplf{"struct_entry_sep_cond"}(src);
+	    if (m::eq{ret, ""}) {
+	      deserialize_emplace{tpl, m::at{field_types_sorted{t}, idx}}(src,
+		sym);
+	    } else {
+	      deserialize_emplace{tpl, m::at{field_types_sorted{t}, idx}}(src,
+		ret.sym);
+	    }
+	  }
+	}
+      }
+      tplf{"struct_end_skip"}(src);
+      if (m::eq{ret, ""}) {
+	return t(expand(a: arg_names_sorted{t}; a));
+      }
+    } else {
+      tplf{"value_skip"}(src);
+    }
+  } else if (mf::is_union_type{t}) {
+    if (tplf{"union_begin_cond"}(src)) {
+      if (m::eq{ret, ""}) {
+	deserialize_error();
+      }
+      bool is_first = true;
+      while (true) {
+	if (src.empty() || tplf{"union_end_cond"}(src)) {
+	  break;
+	}
+	if (is_first) {
+	  is_first = false;
+	} else {
+	  if (!tplf{"union_sep_cond"}(src)) {
+	    tplf{"union_end_skip"}(src);
+	    break;
+	  }
+	}
+	tplf{"source_type"} s0 = src;
+	tplf{"union_field_name"}(s0, src);
+	if (!tplf{"union_entry_sep_cond"}(src)) {
+	  tplf{"union_end_skip"}(src);
+	  break;
+	}
+	/* TODO: binary search */
+	expand (sym, idx : m::field_names{t}) {
+	  if (s0 == m::to_string{sym}) {
+	    metafunction tv m::at{m::field_types{t}, idx};
+	    ret.sym = deserialize{tpl, tv}(src);
+	  }
+	}
+      }
+    } else {
+      tplf{"value_skip"}(src);
+    }
+  } else {
+    m::apply{tplf{"unknown"}, t}(src);
+  }
+}
+
 private metafunction field_names_sorted{t}
   m::map{m::sort{m::fields{t}}, m::at0};
 private metafunction field_types_sorted{t}
   m::map{m::sort{m::fields{t}}, m::at1};
+private metafunction arg_names_sorted{t}
+  m::map{m::sort{m::args{t}}, m::at0};
+private metafunction arg_types_sorted{t}
+  m::map{m::sort{m::args{t}}, m::at1};
 

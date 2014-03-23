@@ -914,7 +914,7 @@ static void compile_module_to_cc_srcs(const parser_options& po,
 	= ami.modules.begin(); i != ami.modules.end(); ++i) {
 	const module_info& mi = i->second;
 	const std::string uniqns = mi.unique_namespace;
-	nssafety_e const s = nssafetymap[uniqns];
+	nssafety_e const s = nspropmap[uniqns].safety;
 	if (!mi.aux_filename.empty()) {
 	  if (s != nssafety_e_safe) {
 	    arena_error_throw(0, "-:-: Unsafe namespace is not allowed: '%s'",
