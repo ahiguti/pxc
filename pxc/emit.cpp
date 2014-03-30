@@ -2894,10 +2894,11 @@ void expr_feach::emit_value(emit_context& em)
   em.puts(");\n");
   if (type_has_refguard(ce->get_texpr())) {
     em.indent('f');
+    em.puts(cetstr);
     if (mapped_mutable_flag) {
-      em.puts("const pxcrt::guard_ref< ");
+      em.puts("::guard_ref< ");
     } else {
-      em.puts("const pxcrt::guard_ref< const ");
+      em.puts("::guard_ref< const ");
     }
     em.puts(cetstr);
     em.puts(" > ag$fg(ag$fe);\n");
@@ -3365,8 +3366,8 @@ static void emit_var_or_tempvar(emit_context& em, expr_i *e, const term& tbase,
 	: (is_passby_const(vi.passby) ? "const " : ""))
       + base_s0;
     const std::string wr = is_passby_cm_reference(vi.passby)
-      ? "pxcrt::guard_ref" : "pxcrt::guard_val";
-    const std::string tstr = wr + "< " + base_cs0 + " > ";
+      ? "guard_ref" : "guard_val";
+    const std::string tstr = base_s0 + "::" + wr + "< " + base_cs0 + " > ";
     if (emv == emit_var_get || emv == emit_var_tempobj) {
       em.puts("(");
       if (emv == emit_var_tempobj) {

@@ -1,0 +1,15 @@
+namespace rootalias;
+import common -;
+
+function size_t foo(cslice{int} sli, vector{int} mutable& vec)
+{
+  vec.push_back(3); // throws: try to modify vec, which is aliased to sli
+  return sli.size();
+}
+
+{
+  exception::set_stack_trace_limit(0);
+  mutable x = make_vector{int}(0, 1, 2, 3, 4, 5);
+  const v = foo(x, x);
+  println(v);
+}

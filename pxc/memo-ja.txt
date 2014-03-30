@@ -3,14 +3,39 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- bugfix: 025/val.px, blockscope_val?.px
+- 直接malloc呼ぶのをやめる
+
+- openglのsafe interfaceをどう作るか
+
+- svectorのカバレッジ
+
+- コンストラクタが例外投げたときのコンテナの動作などをテスト
+
+- guard_ref/guard_val
+
+- 代入演算子はvoidを返す
+
+- vectorとguard改革案整理
+
+- local_allocate_nつかう
+
+- allocatorを別ファイルに
+
+- sliceの代入演算子を潰していないのはなぜ？
+
+- TODO棚卸し
+
+- rcvector: copy-on-write vector?
+  とりあえずmtsafe版は必要無い
+  書き込むときに分離と、リサイズしたときに分離で性能差でるか検討
 
 - 汎用tableパーザ
   - regexで行パース
+  - 先にrcvector欲しい
 
-- rcvector: copy-on-write vector?
-
-- 108/staticif_dupname -> 109/staticif_dupname (done)
+- コンテナからその要素参照を取り出すような関数は、返値のrootにコンテナ
+  の要素ガードが必要であるが、そのことをコンパイラに知らせる手段が
+  必要か
 
 - pointerのserializeは、指す先のserializeと等価にする
 
@@ -24,8 +49,6 @@ FIXME/TODO M1
 
 - term_tostrで tparamsのシリアライズを必要とする理由を調べる。
   termとして canonical ではないものが渡されているということか？
-
-- fileをthread作成時に渡せばスレッド終了するまでカウント握り続けないか
 
 - 地の文はブロックで囲むことを要求する
 
@@ -44,13 +67,6 @@ FIXME/TODO M1
   セーフ。(glibcの実装はlockしている模様)
 
 - fpclassifyなどは -lm が必要
-
-
-- io::fileのcloseを実装。参照カウントが1より大きければEBUSY。
-
-- get_optionをmetaに
-
-- ファイルをcloseしたときのエラーを拾う方法を考えよ
 
 - expandのパラメータに式を文字列として渡せば式を展開する。文法的に
   問題無い箇所であるかもチェックする。
@@ -454,10 +470,9 @@ FIXME/TODO M6
 TODO
 
 - expandを再帰的に展開できるようにすればbinary searchのインライン化
-  が可能になるか？
-- meta lambda
-- 可変長引数の代わりとなる演算子を決めよ。 cout << ... のようなもの。
-- 配列範囲チェックを非デバッグ時等に無効化するプラグマ?
+  が可能になるか？(done)
+- meta lambda(done)
+- 配列範囲チェックを非デバッグ時等に無効化するプラグマ?(done)
 - intの範囲を超えるenum/bitmask
 - 構造体の中でenumを定義できるようにする？
 - enumのint値を省略できるように
@@ -465,9 +480,7 @@ TODO
 - enumがエラーメッセージではintとして見えてしまう
 - mutexのlock保持スレッドを記録する実装
 - 演算子を総称関数に自動で置き換え、ユーザが演算子定義できるように
-- multithreaded structのコンストラクタ引数はmultithreaded型でなくても
-  よい?
-- import元を制限する構文(実装を隠すのに便利)
+  (done)
 - check_overflow pragma? 実行時にオーバーフローを検出
 - if (int v : foo.fld) { ... } // unionのフィールドは左辺値取れない
 - C++が定義する関数については宣言だけはemitする(誤った宣言で問題を起
@@ -515,39 +528,18 @@ TODO
 - const変数宣言
 - union fieldのrootをvectorと同様にするか？
 - ifdef?
-- namespace宣言が正しいかチェック?
-- 実行形式を生成してexecするようにする？
-- 複数ファイルコンパイル
-- coptionsのオプション取得にpkg-config的なものをサポート
-- pure(static?), synchronized
-- volatile?
-- constnessがptr先にも影響するように?
-- boxing時の無駄なコピーを無くす
 - struct定義時に実装するinterfaceを明示しなくてよいようにできるか？
   (implements宣言を分離。)
 - いつterm_tostr_instance_chain()を必要とするのか確認
 - interface型の一時変数を禁止(そもそもできない？)
-- namespace義務付け？
-- コンパイル全段階でatomicな更新を
 - 無名関数はテンプレート引数を持てない？
-- null値を持てないなptrとcptr
-- macroの右辺をte以外の式も許可
-- aliasを展開後の式をコンパイル(って何？)
-- expr以外のterm、intなどをtermへ
-- 配列とmapのイテレート方法を考えよ
-- operator []をユーザ定義できるようにするには？
-- リテラルnull、複合型リテラル
 - const変数(varは変更可能だがconstは不可)
 - extern関数へのpointer渡し、const pointer渡し
 - extern enum
 - switch
 - 定数
 - 参照カウントデバッグ
-- リフレクションと文字列変換
-- stringbuffer(文字列を引数として渡すときはstring_refとcstrに)
-- string実装を複数(参照カウントしない版など)
 - unstableな値を返す関数(substringのように)
-- コンパイル整合性チェック(全モジュールmd5)
 - posixモジュール
 - 文字列との暗黙変換やめる
 - interface間の継承
@@ -559,8 +551,6 @@ TODO
 - テンプレート型の間のinherit(is_sub_type)
 - 関数型の変数を定義できないように？
 - import pxcrtするとエラー
-- マクロ 
-- namespaceの継承？
 - 上位シンボルとの衝突チェック?おきない？
 - variantテスト
 - variantのstabilizeテスト
@@ -605,6 +595,31 @@ interfaceまわり
 
 ---------------------------------------------------------------------
 DONE
+
+- 暗黙変換がbyref又はnoheap型を返すとエラー(done)
+- add_root_requirement: function returning value && passby reference
+  && blockscope のときstore_tempvarするが、functionだけでなく値を返す
+  opでも同様のことをやる必要は無いのか。またconversionがあったときは？
+  - store_tempvarが必要なのは型にguardがある場合だけ。guardが無い場合
+    は const foo& x = func_ret_foo() の式はブロック末まで有効になる
+    ことがc++的に保証されているのと、mutable refで受けるのはpxc的に
+    許容していない。(done)
+  - 組み込みopについてはblockscopeなら常にstore_tempvarしている(bscpval)
+    (25/blockscope_val3) (done)
+  - conversion結果値を返す式については？ conversion結果、値を返し、
+    それをblockscope passby referenceでrootされるケース？-> implicit
+    conversionでstringに変換し、その[3]をblockscope byref ->
+    どうやって？ -> わからないがstore_tempvarにチェックを入れる(done)
+  - implicit_conversion適用された場合、store_tempvarで変換元をroot
+    したところで、変換先のblockscope rootは保証されないのでは？
+    -> エラーになるようにした(done)
+- 108/staticif_dupname -> 109/staticif_dupname (done)
+- store_tempvar(bscpval)は operator || などの非strict関数の右辺も評価
+  してしまわないか？ (done)
+- 三項演算子の : をstore_tempvarしてはいけない (done)
+- 三項演算子をblockscopeでrootするには？ -> noheap型を返すときはエラー
+  とする(125/condvar) (done)
+- bugfix: 025/val.px, blockscope_val?.px(done)
 
 - private namespace(done)
 - evalmetaからprivate namespaceの中は引けないように(done)
@@ -2827,4 +2842,74 @@ private namespaceのpublicシンボルは、親namespaceからのみ参照でき
 symbol_commonの参照元と参照先の名前空間を比較する
 リフレクションではprivate namespaceの中身は見えない
 importsはprivate namespaceをスキップ
+
+---------------------------------------------------------------------
+参照のblockscope root
+
+- 暗黙変換がbyref又はnoheap型を返すとエラー(done)
+- add_root_requirement: function returning value && passby reference
+  && blockscope のときstore_tempvarするが、functionだけでなく値を返す
+  opでも同様のことをやる必要は無いのか。またconversionがあったときは？
+  - store_tempvarが必要なのは型にguardがある場合だけ。guardが無い場合
+    は const foo& x = func_ret_foo() の式はブロック末まで有効になる
+    ことがc++的に保証されているのと、mutable refで受けるのはpxc的に
+    許容していない。(done)
+  - 組み込みopについてはblockscopeなら常にstore_tempvarしている(bscpval)
+    (25/blockscope_val3) (done)
+  - conversion結果値を返す式については？ conversion結果、値を返し、
+    それをblockscope passby referenceでrootされるケース？-> implicit
+    conversionでstringに変換し、その[3]をblockscope byref ->
+    どうやって？ -> わからないがstore_tempvarにチェックを入れる(done)
+  - implicit_conversion適用された場合、store_tempvarで変換元をroot
+    したところで、変換先のblockscope rootは保証されないのでは？
+    -> エラーになるようにした(done)
+- store_tempvar(bscpval)は operator || などの非strict関数の右辺も評価
+  してしまわないか？ (done)
+- 三項演算子の : をstore_tempvarしてはいけない (done)
+- 三項演算子をblockscopeでrootするには？ -> noheap型を返すときはエラー
+  とする(125/condvar) (done)
+- bugfix: 025/val.px, blockscope_val?.px(done)
+
+---------------------------------------------------------------------
+svector
+
+共有vector。参照カウントでrepを共有。svectorをthread間では共有できない。
+書き換えてもrepを分離しない(copy-on-writeではない)。
+リサイズしたら(realloc不要であっても)常にrepを分離する。
+svectorのsliceは、ポインタ二つ + svector
+
+---------------------------------------------------------------------
+vectorとguard改革案整理
+
+- vectorの実装は、svector
+- sliceの実装は、svectorのslice
+- vectorのコピーコンストラクタや代入演算子は中身のコピーを生じる
+- sliceも参照保持するのは、sliceが無効化するまでにvector自体がリサイズ
+  されてrepが分離しても、sliceの指す先は無効化されないようにするため。
+- tree_mapなど他のコンテナについても同様に参照カウント実装に変える。
+- guard_refとguard_valは廃止。tptrはlock_guard必須にする
+
+---------------------------------------------------------------------
+guard_ref/guard_val
+
+guardを持つ型はそのメンバとしてguard_refとguard_valを定義する。
+そのオブジェクトが消えるまでガードする。
+コンテナがスライスされる場合のためにget_range()などを定義する。
+Tc& get()
+Tc::range_type get_range()
+Tc::crange_type get_crange()
+
+
+---------------------------------------------------------------------
+svector
+
+文字列リテラルやsliceから const svcetor をスタック上に作るとrefcnt==0
+のrepを使う。構造体メンバとしてsvectorを作るときはだめ。
+template <typename T, size_t sz> struct svector_ephemeral : svector {
+  svector_rep eph_rep;
+  T buf[sz];
+  svector(T *p, size_t sz) { eph_rep.valid_len = sz; ptr = p; rep = &eph_rep; }
+}
+コピーさけられない。やめるか？
+
 

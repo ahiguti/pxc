@@ -4,6 +4,7 @@ public import numeric::cast -;
 public import container::array::array_common;
 public import container::array::refguard;
 public import container::array::vector;
+public import container::array::svector;
 public import container::array::farray;
 public import container::array::darray;
 public import container::array::deque;
@@ -11,6 +12,8 @@ public import container::array::util;
 public import meta m;
 public import meta::family mf;
 public import meta::vararg va;
+
+/* public */
 
 public tsvaluetype struct extern "::pxcrt::bt_slice" "slice" {t} slice {
   public metafunction key_type size_t;
@@ -45,10 +48,6 @@ public tsvaluetype struct extern "::pxcrt::bt_cslice" "cslice" {t} cslice {
   public function extern "next_token" cslice{t} next_token(t const& delim);
 }
 
-public metafunction string vector{uchar};
-public metafunction dstring darray{uchar};
-public metafunction fstring{n} farray{uchar, n};
-
 public mtvaluetype struct extern "::pxcrt::pxcvector" "varray" {t} vector {
   public metafunction key_type size_t;
   public metafunction mapped_type t;
@@ -67,30 +66,24 @@ public mtvaluetype struct extern "::pxcrt::pxcvector" "varray" {t} vector {
   public function extern "insert" void insert(size_t i, crange_type const& v);
   public function extern "erase" void erase(size_t first, size_t last);
 }
-
-/* in-place construction */
-public function {ts} void
-vector_emplace_back(expand(emplace_back_arg_decls{ts}))
-{
-  metafunction t m::at0{m::at0{m::at0{ts}}};
-  t mutable& x = vector_push_back_uninitialized(a0);
-  /* no need to handle exceptions here */
-  x extern "placement-new" t(expand(a: emplace_back_arg_names{ts}; a));
-  vector_rawarr_set_valid_len(a0, a0.size() + 1);
+public valuetype struct extern "::pxcrt::svector" "varray" {t} svector {
+  public metafunction key_type size_t;
+  public metafunction mapped_type t;
+  public metafunction range_type slice{t};
+  public metafunction crange_type cslice{t};
+  public metafunction rebind{u} svector{u};
+  public metafunction is_raw_array 1;
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "resize" void resize(size_t i, t const& v);
+  public function extern "clear" void clear();
+  public function extern "push_back" void push_back(t const& v);
+  public function extern "pop_back" t pop_back();
+  public function extern "reserve" void reserve(size_t i);
+  public function extern "append" void append(crange_type const& v);
+  public function extern "insert" void insert(size_t i, crange_type const& v);
+  public function extern "erase" void erase(size_t first, size_t last);
 }
-
-private function extern "::pxcrt::pxcvector_push_back_uninitialized" {t}
-t mutable& vector_push_back_uninitialized(vector{t} mutable& v);
-private function extern "::pxcrt::pxcvector_rawarr_set_valid_len" {t}
-void vector_rawarr_set_valid_len(vector{t} mutable& v, size_t len);
-private metafunction emplace_back_arg_decls{ts}
-  m::map{
-    m::seq{m::size{ts}},
-    metafunction{i}
-      m::list{m::concat{"a", i}, m::at0{m::at{ts, i}},
-	m::cond{m::eq{i, 0}, 1, 0}, 1}}; /* 1st arg is by mutable ref */
-private metafunction emplace_back_arg_names{ts}
-  m::map{m::seq{1, m::size{ts}}, metafunction{i} m::concat{"a", i}};
 
 public tsvaluetype struct extern "::pxcrt::farray" "farray" {t, n} farray {
   public metafunction key_type size_t;
@@ -169,9 +162,6 @@ public mtvaluetype struct extern "::pxcrt::pxcdeque" "varray" {t} deque {
   public function extern "erase" void erase(size_t first, size_t last);
 }
 
-public metafunction strref slice{uchar};
-public metafunction cstrref cslice{uchar};
-
 public tsvaluetype struct extern "::pxcrt::bt_strlit" "farray" strlit {
   public metafunction key_type size_t;
   public metafunction mapped_type uchar;
@@ -181,9 +171,6 @@ public tsvaluetype struct extern "::pxcrt::bt_strlit" "farray" strlit {
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
 }
-
-public threaded function extern "::pxcrt::memcmp_string" {t}
-  int memcmp_string(t const& x, t const& y);
 
 public threaded function {typ, tlist} farray{typ, m::size{tlist}}
 make_farray(expand(va::arg_decls_bycref{tlist}))
@@ -251,28 +238,6 @@ make_deque(expand(va::arg_decls_bycref{tlist}))
   return arr;
 }
 
-public threaded function {t, tk, tm} tk
-find_mapped(t const& c, tk k, tm const& x)
-{
-  if (m::and{mf::is_array_or_slice_type{t},
-    m::or{m::eq{tm, char}, m::eq{tm, uchar}}}) {
-    return find_mapped_memchr{t}(c, k, x);
-  } else {
-    tk i;
-    tk const sz = c.size();
-    for (i = k; i < sz; ++i) {
-      extern "disable-bounds-checking" 1;
-      if (c[i] == x) { break; }
-    }
-    return i;
-  }
-}
-
-private threaded function extern "::pxcrt::find_mapped_memchr" {t}
-m::symbol{t, "key_type"}
-find_mapped_memchr(t const& c, m::symbol{t, "key_type"} const& k,
-  m::symbol{t, "mapped_type"} const& x);
-
 public threaded function {t} void reverse(slice{t} const& x)
 {
   metafunction size_type size_t;
@@ -335,4 +300,63 @@ make_darray_split(tc const& c, tv const& v)
   }
   return arr;
 }
+
+public metafunction strref slice{uchar};
+public metafunction cstrref cslice{uchar};
+public metafunction string vector{uchar};
+public metafunction dstring darray{uchar};
+public metafunction fstring{n} farray{uchar, n};
+
+public function {ts} void
+vector_emplace_back(expand(emplace_back_arg_decls{ts}))
+{
+  metafunction t m::at0{m::at0{m::at0{ts}}};
+  t mutable& x = vector_push_back_uninitialized(a0);
+  x extern "placement-new" t(expand(a: emplace_back_arg_names{ts}; a));
+    /* no need to handle exceptions here */
+  vector_rawarr_set_valid_len(a0, a0.size() + 1);
+}
+
+public threaded function extern "::pxcrt::memcmp_string" {t} int
+memcmp_string(t const& x, t const& y);
+
+public threaded function {t, tk, tm} tk
+find_mapped(t const& c, tk k, tm const& x)
+{
+  if (m::and{mf::is_array_or_slice_type{t},
+    m::or{m::eq{tm, char}, m::eq{tm, uchar}}}) {
+    return find_mapped_memchr{t}(c, k, x);
+  } else {
+    tk i;
+    tk const sz = c.size();
+    for (i = k; i < sz; ++i) {
+      extern "disable-bounds-checking" 1;
+      if (c[i] == x) { break; }
+    }
+    return i;
+  }
+}
+
+/* private */
+
+private function extern "::pxcrt::pxcvector_push_back_uninitialized" {t}
+t mutable& vector_push_back_uninitialized(vector{t} mutable& v);
+
+private function extern "::pxcrt::pxcvector_rawarr_set_valid_len" {t}
+void vector_rawarr_set_valid_len(vector{t} mutable& v, size_t len);
+
+private metafunction emplace_back_arg_decls{ts}
+  m::map{
+    m::seq{m::size{ts}},
+    metafunction{i}
+      m::list{m::concat{"a", i}, m::at0{m::at{ts, i}},
+	m::cond{m::eq{i, 0}, 1, 0}, 1}}; /* 1st arg is by mutable ref */
+
+private metafunction emplace_back_arg_names{ts}
+  m::map{m::seq{1, m::size{ts}}, metafunction{i} m::concat{"a", i}};
+
+private threaded function extern "::pxcrt::find_mapped_memchr" {t}
+m::symbol{t, "key_type"}
+find_mapped_memchr(t const& c, m::symbol{t, "key_type"} const& k,
+  m::symbol{t, "mapped_type"} const& x);
 

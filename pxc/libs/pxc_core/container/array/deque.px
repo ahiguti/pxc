@@ -25,8 +25,6 @@ struct deque_cslice {
   iterator end() const { return v.second; } 
   bt_bool empty() const { return v.first == v.second; }
   bt_size_t size() const { return v.second - v.first; }
-  // T get(bt_size_t i) const { return (i < size()) ? v.first[i] : T(); }
-    // TODO: defcon
   bt_size_t find(bt_size_t offset, T const& value) const {
     bt_size_t p = std::min(offset, size());
     for (iterator i = v.first + p; i < v.second; ++i, ++offset) {
@@ -85,8 +83,6 @@ struct deque_slice {
   iterator end() const { return v.second; } 
   bt_bool empty() const { return v.first == v.second; }
   bt_size_t size() const { return v.second - v.first; }
-  // T get(bt_size_t i) const { return (i < size()) ? v.first[i] : T(); }
-    // TODO: defcon
   bt_size_t find(bt_size_t offset, T const& value) const {
     bt_size_t p = std::min(offset, size());
     for (iterator i = v.first + p; i < v.second; ++i, ++offset) {
@@ -130,8 +126,6 @@ protected:
 template <typename T>
 struct pxcdeque {
   typedef T mapped_type;
-  template <typename Tc> friend struct pxcrt::guard_ref;
-  template <typename Tc> friend struct pxcrt::guard_val;
   typedef pxcrt::bt_size_t size_type;
   typedef std::deque<T> base_deque;
   typedef typename base_deque::iterator iterator;
@@ -208,6 +202,32 @@ struct pxcdeque {
   iterator end() { return value.end(); }
   const_iterator begin() const { return value.begin(); }
   const_iterator end() const { return value.end(); }
+  template <typename Tc> struct guard_ref {
+    guard_ref(Tc& x) : v(x) { v.inc_refguard(); }
+    ~guard_ref() { v.dec_refguard(); }
+    Tc& get() { return v; }
+    typename Tc::range_type get_range() 
+      { return typename Tc::range_type(v); }
+    typename Tc::crange_type get_crange() 
+      { return typename Tc::crange_type(v); }
+  private:
+    Tc& v;
+    guard_ref(const guard_ref&);
+    guard_ref& operator =(const guard_ref&);
+  };
+  template <typename Tc> struct guard_val {
+    guard_val(const Tc& x) : v(x) { v.inc_refguard(); }
+    ~guard_val() { v.dec_refguard(); }
+    Tc& get() { return v; }
+    typename Tc::range_type get_range() 
+      { return typename Tc::range_type(v); }
+    typename Tc::crange_type get_crange() 
+      { return typename Tc::crange_type(v); }
+  private:
+    Tc v;
+    guard_val(const guard_val&);
+    guard_val& operator =(const guard_val&);
+  };
 private:
   void check_resize() {
     if (refguard_count != 0) { pxcrt::throw_would_invalidate(); }

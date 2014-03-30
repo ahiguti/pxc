@@ -168,8 +168,6 @@ public:
 
 template <typename Tcnf>
 struct with_guard {
-  template <typename Tc> friend struct pxcrt::guard_ref;
-  template <typename Tc> friend struct pxcrt::guard_val;
   typedef Tcnf conf_type;
   typedef typename Tcnf::base_map base_map;
   typedef range_base<Tcnf, false> range_type;
@@ -245,6 +243,32 @@ struct with_guard {
     const std::pair<iterator, iterator> r = v.equal_range(k);
     return range_type(r.first, r.second);
   }
+  template <typename Tc> struct guard_ref {
+    guard_ref(Tc& x) : v(x) { v.inc_refguard(); }
+    ~guard_ref() { v.dec_refguard(); }
+    Tc& get() { return v; }
+    typename Tc::range_type get_range() 
+      { return typename Tc::range_type(v); }
+    typename Tc::crange_type get_crange() 
+      { return typename Tc::crange_type(v); }
+  private:
+    Tc& v;
+    guard_ref(const guard_ref&);
+    guard_ref& operator =(const guard_ref&);
+  };
+  template <typename Tc> struct guard_val {
+    guard_val(const Tc& x) : v(x) { v.inc_refguard(); }
+    ~guard_val() { v.dec_refguard(); }
+    Tc& get() { return v; }
+    typename Tc::range_type get_range() 
+      { return typename Tc::range_type(v); }
+    typename Tc::crange_type get_crange() 
+      { return typename Tc::crange_type(v); }
+  private:
+    Tc v;
+    guard_val(const guard_val&);
+    guard_val& operator =(const guard_val&);
+  };
 private:
   void check_resize() {
     if (refguard_count != 0) { pxcrt::throw_would_invalidate(); }

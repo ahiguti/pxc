@@ -1910,7 +1910,12 @@ static void check_convfunc_validity(term& convfunc, const term& tfrom,
       expr_argdecls *ad = block->get_argdecls();
       if (ad != 0 && ad->get_rest() == 0 && ad->resolve_texpr() == tfrom &&
 	ad->passby != passby_e_mutable_reference &&
-	efd->get_rettype() == tto) {
+	efd->get_rettype() == tto &&
+	/* implicit conversion function must not return noheap or reference
+	 * because rooting is not implemented for these cases */
+	is_passby_cm_value(block->ret_passby) &&
+	!is_noheap_type(tto))
+      {
 	/* ok */
 	return;
       }
@@ -2064,6 +2069,12 @@ static void convert_type_internal(expr_i *efrom, term& tto, tvmap_type& tvmap)
   }
   const term cf = get_implicit_conversion_func(tfrom, tconvto, efrom);
   if (cf.is_expr()) {
+    #if 0
+    if (is_noheap_type(tconvto)) {
+      arena_error_throw(efrom,
+	"Implicit conversion to noheap type is prohibited");
+    }
+    #endif
     efrom->conv = conversion_e_implicit;
     efrom->type_conv_to = tconvto;
     efrom->implicit_conversion_func = cf;
