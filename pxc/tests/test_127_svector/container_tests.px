@@ -1,0 +1,51 @@
+public namespace container_tests;
+public import common -;
+public import meta m;
+public import meta::family mf;
+
+function {t} t make_seq(size_t len)
+{
+  metafunction tm m::at0{t};
+  t v;
+  for (const i : 0 .. len) {
+    if (mf::is_pointer_type{tm}) {
+      const e = box_pointer{tm}(static_cast{int}(i));
+      v.push_back(e);
+    } else {
+      v.push_back(static_cast{int}(i));
+    }
+  }
+  return v;
+}
+
+function {t, cpy} void test_push_int()
+{
+  const v = make_seq{t}(20);
+  println(v);
+}
+
+function {t, cpy} void test_insert(size_t len, size_t inslen)
+{
+  const w = make_seq{t}(inslen);
+  for (const pos : 0 .. len + 1) {
+    mutable v = make_seq{t}(len);
+    expand (sym: m::seq{cpy}) { const vcpy = v; } /* copy if cpy is set */
+    v.insert(pos, w);
+    println("insert", len, inslen, v);
+  }
+}
+
+function {t, cpy} void test_erase(size_t len, size_t erlen)
+{
+  for (const pos : 0 .. len - erlen + 1) {
+    mutable v = make_seq{t}(len);
+    expand (sym: m::seq{cpy}) { const vcpy = v; } /* copy if cpy is set */
+    v.erase(pos, pos + erlen);
+    println("erase", len, erlen, v);
+  }
+}
+
+// test_push_int{vector{int}}();
+// test_insert{vector{int}}(10, 3);
+// test_erase{vector{int}}(10, 3);
+

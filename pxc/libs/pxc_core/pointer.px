@@ -3,6 +3,7 @@ public import numeric::integral -;
 public import meta m;
 public import meta::vararg v;
 public import meta::family mf;
+public import allocator;
 
 /* public */
 
@@ -121,120 +122,10 @@ extern "types" inline
 #else
 #define DBG_COND(x)
 #endif
-#ifdef PXCRT_DBG_POOL
-#define DBG_POOL(x) x
-#else
-#define DBG_POOL(x)
-#endif
-
-#if defined(__APPLE__) && !defined(PXCRT_NO_LOCAL_POOL)
-#define PXCRT_NO_LOCAL_POOL
-#endif
 
 #include <cstdlib>
 
 namespace pxcrt {
-
-void clear_local_pool();
-
-#ifndef PXCRT_NO_LOCAL_POOL
-
-extern __thread void *local_pool_blocks;
-
-template <size_t sz> struct local_pool {
-  static void *allocate() {
-    if (free_list != 0) {
-      void *r = free_list;
-      free_list = *(void **)free_list;
-      DBG_POOL(fprintf(stderr, "a %zu %p\n", sz, r));
-      return r;
-    }
-    extend();
-    void *r = free_list;
-    free_list = *(void **)free_list;
-    DBG_POOL(fprintf(stderr, "A %zu %p\n", sz, r));
-    return r;
-  }
-  static void deallocate(void *p) {
-    DBG_POOL(fprintf(stderr, "d %zu %p\n", sz, p));
-    append_free_list(p);
-  }
-  static void append_free_list(void *p) {
-    *(void **)p = free_list;
-    free_list = p;
-  }
-private:
-  static void extend() {
-    DBG_POOL(fprintf(stderr, "X %zu\n", sz));
-    char *b = (char *)malloc(sizeof(void *) + pool_size);
-    *(void **)(b) = local_pool_blocks; /* segv if null */
-    local_pool_blocks = b;
-    b += sizeof(void *);
-    size_t const bsz = pool_size / sz;
-    for (size_t i = 0; i < bsz; ++i) {
-      append_free_list(b + i * sz);
-    }
-  }
-private:
-  enum { pool_size = 2000 };
-  static __thread void *free_list;
-};
-
-template <size_t sz> __thread void *local_pool<sz>::free_list = 0;
-
-template <bool is_small> struct local_pool_allocator;
-
-template <> struct local_pool_allocator<true> {
-  template <size_t sz> static void *allocate() {
-    enum { pool_block_sz = ((sz + 7) / 8) * 8 };
-    return local_pool<pool_block_sz>::allocate();
-  }
-  template <size_t sz> static void deallocate(void *ptr) {
-    enum { pool_block_sz = ((sz + 7) / 8) * 8 };
-    return local_pool<pool_block_sz>::deallocate(ptr);
-  }
-};
-
-template <> struct local_pool_allocator<false> {
-  template <size_t sz> static void *allocate() {
-    return malloc(sz);
-  }
-  template <size_t sz> static void deallocate(void *ptr) {
-    free(ptr);
-  }
-};
-
-template <typename T> static inline T *local_allocate() {
-  enum { is_small = sizeof(T) <= 64 ? true : false };
-  return static_cast<T *>(
-    local_pool_allocator<is_small>::template allocate<sizeof(T)>());
-}
-
-template <typename T> static inline void local_deallocate(const T *ptr) {
-  enum { is_small = sizeof(T) <= 64 ? true : false };
-  local_pool_allocator<is_small>::template deallocate<sizeof(T)>(
-    const_cast<T *>(ptr));
-}
-
-#else
-
-template <typename T> static inline T *local_allocate() {
-  return static_cast<T *>(malloc(sizeof(T)));
-}
-
-template <typename T> static inline void local_deallocate(const T *ptr) {
-  return free(const_cast<T *>(ptr));
-}
-
-#endif
-
-template <typename T> static inline T *allocate_single() {
-  return reinterpret_cast<T *>(malloc(sizeof(T)));
-}
-
-template <typename T> static inline void deallocate_single(const T *ptr) {
-  free(const_cast<T *>(ptr));
-}
 
 struct condition_variable;
 
@@ -333,6 +224,7 @@ struct monitor {
 struct mtcount { /* reference counter for multi-threaded shared objects */ 
   mtcount() : count$z(1) { }
   /* atomic counter. requires gcc >= 4. */
+  /* TODO: use std::atomic or boost::atomic */
   void incref$z() { __sync_fetch_and_add(&count$z, 1); }
   bool decref$z() { return (__sync_fetch_and_add(&count$z, -1) == 1); }
   long refcnt$z() { return __sync_fetch_and_add(&count$z, 0); }
@@ -539,6 +431,32 @@ struct rcptr { /* T must have an intrusive count */
     }
     return p;
   }
+  template <typename Tc> struct guard_ref {
+    guard_ref(Tc& x) : v(x) { v.inc_refguard(); }
+    ~guard_ref() { v.dec_refguard(); }
+    Tc& get() { return v; }
+    typename Tc::range_type get_range() 
+      { return typename Tc::range_type(v); }
+    typename Tc::crange_type get_crange() 
+      { return typename Tc::crange_type(v); }
+  private:
+    Tc& v;
+    guard_ref(const guard_ref&);
+    guard_ref& operator =(const guard_ref&);
+  };
+  template <typename Tc> struct guard_val {
+    guard_val(const Tc& x) : v(x) { v.inc_refguard(); }
+    ~guard_val() { v.dec_refguard(); }
+    Tc& get() { return v; }
+    typename Tc::range_type get_range() 
+      { return typename Tc::range_type(v); }
+    typename Tc::crange_type get_crange() 
+      { return typename Tc::crange_type(v); }
+  private:
+    Tc v;
+    guard_val(const guard_val&);
+    guard_val& operator =(const guard_val&);
+  };
 private:
   T *ptr; /* not nullable */
 private:
@@ -619,50 +537,6 @@ pointer_downcast(Tfrom const& from) {
   ref.incref$z();
   return Tto(&ref);
 }
-
-#if 0
-template <typename T> struct rawptr {
-  T *ptr;
-  operator T *() const { return ptr; }
-};
-
-template <typename T> struct crawptr {
-  const T *ptr;
-  operator const T *() const { return ptr; }
-};
-#endif
-
-}; // namespace pxcrt
-;
-
-extern "functions" inline
-namespace pxcrt {
-}; // namespace pxcrt
-;
-
-extern "implementation" inline
-namespace pxcrt {
-
-#ifndef PXCRT_NO_LOCAL_POOL
-
-__thread void *local_pool_blocks;
-
-void __attribute__((destructor(101))) clear_local_pool()
-{
-  while (local_pool_blocks != 0) {
-    void *next = *(void **)local_pool_blocks;
-    free(local_pool_blocks);
-    local_pool_blocks = next;
-  }
-}
-
-#else
-
-void clear_local_pool()
-{
-}
-
-#endif
 
 }; // namespace pxcrt
 ;

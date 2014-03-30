@@ -966,17 +966,21 @@ static void store_tempvar(expr_i *e, passby_e passby, bool blockscope_flag,
       /* in this case, it will be rooted by value. test_25_slice/val.pl . */
     }
   }
-#if 0
-// FIXME
-if (is_noheap_type(e->resolve_texpr())) abort();
-#endif
   e->tempvar_varinfo.passby = merge_passby(e->tempvar_varinfo.passby, passby);
   e->tempvar_varinfo.guard_elements |= guard_elements;
   e->tempvar_varinfo.scope_block |= blockscope_flag;
+  /* note: temp variable is created as of type e->resolve_texpr() even when
+   * it is implicitly converted to another type. */
   if (is_passby_cm_value(passby) && !is_copyable(e->resolve_texpr())) {
     arena_error_throw(e,
-      "Internal error: Can not create a temp copy of type '%s' expr '%s'",
+      "Can not create a temp copy of type '%s' expr '%s'",
       term_tostr_human(e->resolve_texpr()).c_str(), e->dump(0).c_str());
+  }
+  if (e->conv == conversion_e_implicit) {
+    /* no idea how to reach here, but check for safety */
+    arena_error_throw(e,
+      "Can not create a temp variable for expr '%s' because of conversion",
+      e->dump(0).c_str());
   }
 }
 
@@ -1186,8 +1190,8 @@ static void add_root_requirement(expr_i *e, passby_e passby,
     /* function calls, symbols, literals etc. */
     return;
   }
-  expr_op *const eop = ptr_down_cast<expr_op>(e);
   /* operator */
+  expr_op *const eop = ptr_down_cast<expr_op>(e);
   switch (eop->op) {
   case ',':
     add_root_requirement(eop->arg0, passby, blockscope_flag);
@@ -1264,12 +1268,6 @@ static void add_root_requirement(expr_i *e, passby_e passby,
 	  ? passby_e_const_reference : passby_e_mutable_reference;
       }
       add_root_requirement(eop->arg0, container_passby, blockscope_flag);
-      #if 0
-	(is_passby_const(passby) ||
-	  is_cm_range_family(eop->arg0->resolve_texpr()))
-	? passby_e_const_reference : passby_e_mutable_reference,
-	blockscope_flag);
-      #endif
     }
     if (is_passby_cm_reference(passby) ||
       (eop->arg1 != 0 && is_range_op(eop->arg1))) {
@@ -1286,27 +1284,50 @@ static void add_root_requirement(expr_i *e, passby_e passby,
   default:
     break;
   }
-  /* other operations return value */
+  /* reaches here if eop is an operation returning byval */
   if (passby == passby_e_mutable_reference) {
     arena_error_throw(e, "Can not root by mutable reference");
   }
+  bool child_blockscope_flag = blockscope_flag;
   if (blockscope_flag) {
     store_tempvar(eop,
       is_passby_const(passby)
       ? passby_e_const_value : passby_e_mutable_value,
-      blockscope_flag, false, "ptrderef"); /* ROOT */
+      blockscope_flag, false, "bscpval"); /* ROOT */
+    if (eop->op == '?' && is_noheap_type(e->resolve_texpr())) {
+      /* can not store values of 2nd and 3rd exprs to a named temp variable
+       * because they must be lazily evaluated. */
+      arena_error_throw(e,
+	"Can not blockscope-root operator '?:' returning a noheap type");
+      /* no need to worry about '||' and '&&' because they always return
+       * bool. */
+    }
+    /* need not to blockscope-root child expressions */
+    child_blockscope_flag = false;
   }
   if (eop->arg0 != 0) {
     add_root_requirement(eop->arg0,
       is_passby_const(passby)
       ? passby_e_const_value : passby_e_mutable_value,
-      blockscope_flag);
+      child_blockscope_flag);
   }
-  if (eop->arg1 != 0) {
-    add_root_requirement(eop->arg0,
+  if (eop->op == '?') {
+    expr_op *const arg1_eop = ptr_down_cast<expr_op>(eop->arg1);
+    add_root_requirement(arg1_eop->arg0,
       is_passby_const(passby)
       ? passby_e_const_value : passby_e_mutable_value,
-      blockscope_flag);
+      child_blockscope_flag);
+    add_root_requirement(arg1_eop->arg1,
+      is_passby_const(passby)
+      ? passby_e_const_value : passby_e_mutable_value,
+      child_blockscope_flag);
+  } else {
+    if (eop->arg1 != 0) {
+      add_root_requirement(eop->arg1,
+	is_passby_const(passby)
+	? passby_e_const_value : passby_e_mutable_value,
+	child_blockscope_flag);
+    }
   }
 }
 

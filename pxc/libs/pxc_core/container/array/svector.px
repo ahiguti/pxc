@@ -1,0 +1,298 @@
+public threaded namespace container::array::svector "use-unsafe";
+public import container::array::vector;
+
+extern "types" inline
+
+#include <algorithm>
+#include <limits>
+
+namespace pxcrt {
+
+struct svector_rep {
+  /* must be a pod so that empty_rep is initialized wo constructor call */
+  size_t refcnt;
+  size_t valid_len;
+  size_t alloc_len;
+};
+
+extern svector_rep empty_rep; /* for empty value */
+
+template <typename T>
+struct svector {
+  typedef T mapped_type;
+  typedef pxcrt::bt_size_t size_type;
+  typedef T *iterator;
+  typedef const T *const_iterator;
+  typedef pxcrt::bt_slice<T> range_type;
+  typedef pxcrt::bt_cslice<T> crange_type;
+  svector() : rep(&empty_rep) { }
+  svector(const svector& x) : rep(x.rep) { rep_incref(rep); }
+  svector(const crange_type& x) { rep_init(x.begin(), x.size(), x.size()); }
+  svector(const range_type& x) { rep_init(x.begin(), x.size(), x.size()); }
+  svector(const T *start, size_type sz, size_type asz) {
+    rep_init(start, sz, asz);
+  }
+  void operator =(const svector& x) {
+    if (&x != this) {
+      rep_incref(x.rep);
+      rep_decref(rep);
+      rep = x.repf;
+    }
+  }
+  ~svector() { rep_decref(rep); }
+  bt_bool empty() const { return size() == 0; }
+  size_type size() const { return rep->valid_len; }
+  size_type find(bt_size_t offset, T const& value) const {
+    return array_find(begin(), size(), offset, value);
+  }
+  T& operator [](size_type idx) {
+    if (idx >= size()) { pxcrt::throw_invalid_index(); }
+    return begin()[idx];
+  }
+  const T& operator [](size_type idx) const {
+    if (idx >= size()) { pxcrt::throw_invalid_index(); }
+    return begin()[idx];
+  }
+  void resize(size_type sz, T const& x) {
+    if (sz == 0) {
+      clear();
+      return;
+    }
+    size_type const olen = size();
+    rep_make_unique(sz);
+    if (sz > olen) {
+      initialize_fill_n(end(), sz - olen, x);
+      rep->valid_len = sz;
+    }
+  }
+  void clear() {
+    rep_decref(rep);
+    rep = &empty_rep;
+  }
+  void swap(svector& x) {
+    svector_rep *orep = rep;
+    rep = x.rep;
+    x.rep = orep;
+  }
+  void push_back(T const& x) {
+    /* calls rep_make_unique only if it's necessary */
+    if (rep->refcnt != 1 || rep->valid_len >= rep->alloc_len) {
+      rep_make_unique(size() + 1);
+    }
+    initialize_1(end(), x);
+    rep->valid_len += 1;
+  }
+  T pop_back() {
+    if (empty()) { pxcrt::throw_invalid_index(); }
+    size_type nlen = size() - 1;
+    if (nlen == 0) {
+      clear();
+      return;
+    }
+    const T r = end()[-1];
+    rep_make_unique(nlen);
+    return r;
+  }
+  void reserve(size_type sz) {
+    rep_make_unique(std::max(size(), sz));
+  }
+  void append(const crange_type& x) {
+    append(x.begin(), x.size());
+  }
+  void append(const T *ptr, size_type len) {
+    size_type const olen = size();
+    size_type const nlen = olen + len;
+    if (nlen < olen) { pxcrt::throw_bad_alloc(); } /* overflow */
+    rep_make_unique(nlen);
+    initialize_copy_n(begin() + olen, len, ptr);
+    rep->valid_len = nlen;
+  }
+  void insert(size_type pos, const crange_type& x) {
+    size_type const olen = size();
+    size_type const plen = x.size();
+    size_type const nlen = olen + plen;
+    if (pos > olen) { pxcrt::throw_invalid_index(); }
+    if (nlen < olen) { pxcrt::throw_bad_alloc(); } /* overflow */
+    rep_make_unique(nlen);
+    if (plen == 0) { return; }
+    insert_n(begin(), rep->valid_len /* modified */, x.begin(), plen, pos);
+  }
+  void erase(size_type first, size_type last) {
+    size_type const olen = size();
+    if (last > olen || first > last) { pxcrt::throw_invalid_index(); }
+    if (first >= last) { return; }
+    size_type const elen = last - first;
+    if (rep->refcnt == 1) {
+      /* already unique. erase in-place */
+      T *const start = begin();
+      copy_n(start + first, olen - last, start + last);
+      deinitialize_n(start + olen - elen, elen);
+      rep->valid_len -= elen;
+    } else {
+      /* create a copy */
+      svector x(begin(), first, olen - elen);
+      x.append(begin() + last, olen - last);
+      this->swap(x);
+    }
+  }
+  const_iterator begin() const {
+    return reinterpret_cast<const T *>(
+      reinterpret_cast<const char *>(rep) + sizeof(svector_rep));
+  }
+  const_iterator end() const {
+    return begin() + size();
+  }
+  iterator begin() {
+    return reinterpret_cast<T *>(
+      reinterpret_cast<char *>(rep) + sizeof(svector_rep));
+  }
+  iterator end() {
+    return begin() + size();
+  }
+  T *rawarr() { return begin(); }
+  const T *rawarr() const { return begin(); }
+  template <size_t mul> T *reserve_back(size_type len) {
+    if (len >= ((size_t)-1) / mul) {
+      pxcrt::throw_bad_alloc(); /* overflow */
+    }
+    const size_type osz = size();
+    const size_type nsz = osz + len * mul;
+    if (nsz < osz) {
+      pxcrt::throw_bad_alloc(); /* overflow */
+    }
+    rep_make_unique(nsz);
+    return begin() + osz;
+  }
+  void rawarr_set_valid_len(size_type len) {
+    assert(rep->refcnt == 1);
+    rep->valid_len = len;
+  }
+  template <typename Tc> struct guard_ref {
+    guard_ref(Tc& x) : v(x) { }
+    Tc& get() { return v; }
+    typename Tc::range_type get_range()
+      { return typename Tc::range_type(v); }
+    typename Tc::crange_type get_crange()
+      { return typename Tc::crange_type(v); }
+  private:
+    Tc v; /* shares rep */
+    guard_ref(const guard_ref&);
+    guard_ref& operator =(const guard_ref&);
+  };
+  template <typename Tc> struct guard_val {
+    guard_val(const Tc& x) : v(x) { }
+    Tc& get() { return v; }
+    typename Tc::range_type get_range()
+      { return typename Tc::range_type(v); }
+    typename Tc::crange_type get_crange()
+      { return typename Tc::crange_type(v); }
+  private:
+    Tc v;
+    guard_val(const guard_val&);
+    guard_val& operator =(const guard_val&);
+  };
+private:
+  svector_rep *rep;
+private:
+  static inline void rep_incref(svector_rep *rep) {
+    if (rep->refcnt != 0) {
+      ++rep->refcnt;
+    }
+  }
+  static inline void rep_decref(svector_rep *rep) {
+    if (rep->refcnt != 0) {
+      if (--rep->refcnt == 0) {
+	T *const p = reinterpret_cast<T *>(
+	  reinterpret_cast<char *>(rep) + sizeof(svector_rep));
+	deinitialize_n(p, rep->valid_len);
+	free(rep);
+      }
+    }
+  }
+  void rep_init(const T *ptr, size_t sz, size_t asz) {
+    rep = &empty_rep;
+    assert(rep->refcnt == 0 && rep->valid_len == 0 && rep->alloc_len == 0);
+    if (asz != 0) {
+      void *const vrep = malloc(sizeof(svector_rep) + sizeof(T) * asz);
+      svector_rep *const nrep = reinterpret_cast<svector_rep *>(vrep);
+      nrep->refcnt = 1;
+      nrep->valid_len = 0;
+      nrep->alloc_len = asz;
+      T *const start = reinterpret_cast<T *>(
+	reinterpret_cast<char *>(nrep) + sizeof(svector_rep));
+      if (is_trivially_copyable<T>::value) {
+	initialize_copy_n(start, sz, ptr);
+      } else {
+	PXC_TRY {
+	  initialize_copy_n(start, sz, ptr);
+	} PXC_CATCH(...) {
+	  free(nrep);
+	  PXC_RETHROW;
+	}
+      }
+      nrep->valid_len = sz;
+      rep = nrep;
+    }
+  }
+  void rep_make_unique(size_type asz) {
+    if (rep->refcnt != 1) {
+      /* need to create a unique rep */
+      rep_make_unique_resize(asz);
+    } else {
+      /* already unique */
+      if (asz > rep->alloc_len) {
+	/* extend alloc_len */
+	size_type nl = rep->alloc_len;
+	do {
+	  const size_type nl_n = (nl >= 1) ? (nl * 2) : 1;
+	  const size_type max_len = ((size_t)-1) / sizeof(T);
+	  if (nl_n <= nl || nl_n > max_len) { pxcrt::throw_bad_alloc(); }
+	  nl = nl_n;
+	} while (nl < asz);
+	rep_make_unique_resize(nl);
+      } else if (asz < rep->valid_len) {
+	/* shrink valid_len */
+	deinitialize_n(begin() + asz, rep->valid_len - asz);
+	rep->valid_len = asz;
+      } else {
+	/* nothing to do */
+      }
+    }
+    assert(rep->refcnt == 1);
+  }
+  void rep_make_unique_resize(size_type asz) {
+    if (is_trivially_copyable<T>::value) {
+      if (rep->refcnt != 1) {
+	asz = std::max(asz, size_type(1));
+	  /* set asz nonzero so that rep_init allocate a unique buffer */
+	rep_init(begin(), std::min(size(), asz), asz);
+      } else {
+	rep = (svector_rep *)realloc(rep,
+	  sizeof(svector_rep) + sizeof(T) * asz);
+      }
+    } else {
+      svector_rep *const orep = rep;
+      PXC_TRY {
+	asz = std::max(asz, size_type(1));
+	  /* set asz nonzero so that rep_init allocate a unique buffer */
+	rep_init(begin(), std::min(size(), asz), asz);
+      } PXC_CATCH(...) {
+	rep_decref(orep);
+	PXC_RETHROW;
+      } 
+      rep_decref(orep);
+    }
+  }
+};
+
+}; // namespace pxcrt
+;
+
+extern "implementation" inline
+namespace pxcrt {
+
+svector_rep empty_rep; /* pod */
+
+}; // namespace pxcrt
+;
+
