@@ -37,19 +37,19 @@ class foo {
     return r;
   }
   public static void main(String args[]) {
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 10; ++i) {
       long t1 = System.currentTimeMillis();
       int r = t1();
       long t2 = System.currentTimeMillis();
-      System.out.println(r);
-      System.out.println((double)(t2 - t1) / 1000.0);
+      String s = r + "\t" + ((double)(t2 - t1) / 1000.0);
+      System.out.println(s);
     }
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 10; ++i) {
       long t1 = System.currentTimeMillis();
       int r = t2();
       long t2 = System.currentTimeMillis();
-      System.out.println(r);
-      System.out.println((double)(t2 - t1) / 1000.0);
+      String s = r + "\t" + ((double)(t2 - t1) / 1000.0);
+      System.out.println(s);
     }
   }
 }

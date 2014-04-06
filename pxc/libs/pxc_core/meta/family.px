@@ -151,25 +151,33 @@ private metafunction is_numeric_enum_bitmask_family{t, fam}
 private metafunction is_array_or_slice_family{fam}
   m::or{
     m::eq{fam, "varray"},
+    m::eq{fam, "cvarray"},
     m::eq{fam, "darray"},
+    m::eq{fam, "cdarray"},
     m::eq{fam, "farray"},
+    m::eq{fam, "cfarray"},
     m::eq{fam, "slice"},
     m::eq{fam, "cslice"}};
 
 private metafunction is_string_or_slice_typestr{t, s}
   m::or{
     m::eq{s, "container::array::vector{meta::uchar}"},
+    m::eq{s, "container::array::cvector{meta::uchar}"},
     m::eq{s, "container::array::darray{meta::uchar}"},
+    m::eq{s, "container::array::cdarray{meta::uchar}"},
     m::eq{s, "container::array::slice{meta::uchar}"},
     m::eq{s, "container::array::cslice{meta::uchar}"},
     m::eq{s, "container::array::strlit"},
     m::and{
-      m::eq{m::nameof{t}, "container::array::farray"},
+      m::or{
+	m::eq{m::nameof{t}, "container::array::farray"},
+	m::eq{m::nameof{t}, "container::array::cfarray"}},
       m::eq{m::at0{t}, uchar}}};
 
 private metafunction is_map_or_range_family{fam}
   m::or{
     m::eq{fam, "map"},
+    m::eq{fam, "cmap"},
     m::eq{fam, "map_range"},
     m::eq{fam, "map_crange"}};
 

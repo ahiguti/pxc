@@ -1,8 +1,9 @@
-public namespace t2;
+public namespace t2 "use-unsafe";
 import common -;
 import algebraic -;
 import io::time -;
 import meta m;
+import test -;
 
 metafunction nptr{t} option{ptr{t}};
 
@@ -29,22 +30,22 @@ function nptr{heaptm} create_tree(int depth)
   return r;
 }
 
-function int f1()
+function int p1(int loop)
 {
   int r = 0;
-  farray{nptr{heaptm}, 200} v;
-  for (int i : 0 .. 200) {
+  mutable v = darray{nptr{heaptm}}(static_cast{size_t}(loop), nptr{heaptm}());
+  for (size_t i : 0 .. static_cast{size_t}(loop)) {
     const t = create_tree(16);
     v[i] = t;
   }
-  for (int i : 0 .. 200) {
+  for (size_t i : 0 .. static_cast{size_t}(loop)) {
     r += v[i].some->sum();
   }
   return r;
 }
 
-function extern "::f2" int f2();
-function extern "::f3" int f3();
+function extern "::c2" int c2(int loop);
+function extern "::c3" int c3(int loop);
 
 extern "implementation" inline
 #include <memory>
@@ -76,14 +77,14 @@ static std::shared_ptr<heaptm> create_tree(int depth)
   }
 }
 
-int f2()
+int c2(int loop)
 {
   int r = 0;
-  std::shared_ptr<heaptm> v[200];
-  for (int i = 0; i < 200; ++i) {
+  std::vector< std::shared_ptr<heaptm> > v(loop);
+  for (int i = 0; i < loop; ++i) {
     v[i] = create_tree(16);
   }
-  for (int i = 0; i < 200; ++i) {
+  for (int i = 0; i < loop; ++i) {
     r += v[i]->sum();
   }
   return r;
@@ -116,14 +117,14 @@ static std::unique_ptr<heaptm3> create_tree3(int depth)
   }
 }
 
-int f3()
+int c3(int loop)
 {
   int r = 0;
-  std::unique_ptr<heaptm3> v[200];
-  for (int i = 0; i < 200; ++i) {
+  std::vector< std::unique_ptr<heaptm3> > v(loop);
+  for (int i = 0; i < loop; ++i) {
     v[i] = create_tree3(16);
   }
-  for (int i = 0; i < 200; ++i) {
+  for (int i = 0; i < loop; ++i) {
     r += v[i]->sum();
   }
   return r;
@@ -131,20 +132,7 @@ int f3()
 
 ;
 
-function {func} void do_test() {
-  double tsum = 0.0;
-  for (size_t i : 0 .. 20) {
-    const t0 = gettimeofday_double(system);
-    const r = func();
-    const t1 = gettimeofday_double(system);
-    println(m::full_string{func}, r, t1 - t0);
-    tsum += t1 - t0;
-  }
-  println(m::full_string{func}, "TOTAL", tsum);
+{
+  test_timing_default{{p1, c2, c3}}();
 }
-
-do_test{f1}();
-do_test{f2}();
-do_test{f3}();
-
 

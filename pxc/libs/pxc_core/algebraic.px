@@ -4,12 +4,16 @@ public import meta -;
 public import meta m;
 public import meta::vararg va;
 
-public tsvaluetype struct {types}
+public tsvaluetype struct {types, ord}
 tuple(expand(
   m::map{
     m::seq{m::size{types}},
     metafunction{i} m::list{m::concat{"a", i}, m::at{types, i}, 1, 0}}))
 {
+  metafunction __static_assert__
+    m::fold{ord, metafunction{r, x} m::and{r, m::is_int{x}}, 1};
+    /* ord must be a list of int */
+  metafunction __attribute__ {{"__order__", ord}};
   expand (s, idx:
     m::map{m::seq{m::size{types}}, metafunction{i} m::concat{"_", i}})
   {
@@ -48,10 +52,10 @@ option
   t some;
 }
 
-public threaded function {tlist} tuple{m::map{tlist, m::at0}}
+public threaded function {tlist} tuple{m::map{tlist, m::at0}, m::nil}
 make_tuple(expand(va::arg_decls_bycref{tlist}))
 {
-  metafunction typ tuple{m::map{tlist, m::at0}};
+  metafunction typ tuple{m::map{tlist, m::at0}, m::nil};
   return typ(expand(a: va::arg_names{m::size{tlist}}; a));
 }
 

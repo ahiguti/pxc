@@ -617,12 +617,16 @@ typefamily_e get_family_from_string(const std::string& s)
   if (s == "extfloat") return typefamily_e_extfloat;
   if (s == "extnumeric") return typefamily_e_extnumeric;
   if (s == "varray") return typefamily_e_varray;
+  if (s == "cvarray") return typefamily_e_cvarray;
   if (s == "darray") return typefamily_e_darray;
+  if (s == "cdarray") return typefamily_e_cdarray;
   if (s == "farray") return typefamily_e_farray;
+  if (s == "cfarray") return typefamily_e_cfarray;
   if (s == "slice") return typefamily_e_slice;
   if (s == "cslice") return typefamily_e_cslice;
   if (s == "ephemeral") return typefamily_e_ephemeral;
   if (s == "map") return typefamily_e_map;
+  if (s == "cmap") return typefamily_e_cmap;
   if (s == "map_range") return typefamily_e_map_range;
   if (s == "map_crange") return typefamily_e_map_crange;
   if (s == "linear") return typefamily_e_linear;
@@ -651,12 +655,16 @@ std::string get_family_string(typefamily_e cat)
   case typefamily_e_extfloat: return "extfloat";
   case typefamily_e_extnumeric: return "extnumeric";
   case typefamily_e_varray: return "varray";
+  case typefamily_e_cvarray: return "cvarray";
   case typefamily_e_darray: return "darray";
+  case typefamily_e_cdarray: return "cdarray";
   case typefamily_e_farray: return "farray";
+  case typefamily_e_cfarray: return "cfarray";
   case typefamily_e_slice: return "slice";
   case typefamily_e_cslice: return "cslice";
   case typefamily_e_ephemeral: return "ephemeral";
   case typefamily_e_map: return "map";
+  case typefamily_e_cmap: return "cmap";
   case typefamily_e_map_range: return "map_range";
   case typefamily_e_map_crange: return "map_crange";
   case typefamily_e_linear: return "linear";
@@ -838,8 +846,19 @@ static bool is_cm_lock_guard_family(expr_i *e)
 bool is_array_family(const term& t)
 {
   const typefamily_e cat = get_family(t);
-  return cat == typefamily_e_varray || cat == typefamily_e_darray ||
-    cat == typefamily_e_farray;
+  return
+    cat == typefamily_e_varray || cat == typefamily_e_cvarray ||
+    cat == typefamily_e_darray || cat == typefamily_e_cdarray ||
+    cat == typefamily_e_farray || cat == typefamily_e_cfarray;
+}
+
+bool is_const_array_family(const term& t)
+{
+  const typefamily_e cat = get_family(t);
+  return
+    cat == typefamily_e_cvarray ||
+    cat == typefamily_e_cdarray ||
+    cat == typefamily_e_cfarray;
 }
 
 bool is_cm_slice_family(const term& t)
@@ -851,7 +870,13 @@ bool is_cm_slice_family(const term& t)
 bool is_map_family(const term& t)
 {
   const typefamily_e cat = get_family(t);
-  return cat == typefamily_e_map;
+  return cat == typefamily_e_map || cat == typefamily_e_cmap;
+}
+
+bool is_const_map_family(const term& t)
+{
+  const typefamily_e cat = get_family(t);
+  return cat == typefamily_e_cmap;
 }
 
 bool is_cm_maprange_family(const term& t)
@@ -923,7 +948,12 @@ bool is_noheap_type(const term& t)
 
 bool is_container_family(const term& t)
 {
-  return is_array_family(t) || is_map_family(t); // TODO
+  return is_array_family(t) || is_map_family(t);
+}
+
+bool is_const_container_family(const term& t)
+{
+  return is_const_array_family(t) || is_const_map_family(t);
 }
 
 const bool has_userdef_constr_internal(const term& t,
@@ -940,7 +970,8 @@ const bool has_userdef_constr_internal(const term& t,
       return true;
     }
     if (est->typefamily != typefamily_e_none) {
-      if (est->typefamily == typefamily_e_farray) {
+      if (est->typefamily == typefamily_e_farray ||
+	est->typefamily == typefamily_e_cfarray) {
 	const term_list *const tl = t.get_args();
 	if (tl != 0 && !tl->empty()) {
 	  return has_userdef_constr_internal(tl->front(), checked);
@@ -981,7 +1012,9 @@ bool type_has_refguard(const term& t)
   const typefamily_e cat = get_family(t);
   if (
     cat == typefamily_e_varray ||
+    cat == typefamily_e_cvarray ||
     cat == typefamily_e_map ||
+    cat == typefamily_e_cmap ||
     cat == typefamily_e_tptr ||
     cat == typefamily_e_tcptr) {
     return true;
@@ -994,9 +1027,13 @@ bool type_allow_feach(const term& t)
   const typefamily_e cat = get_family(t);
   switch (cat) {
   case typefamily_e_varray:
+  case typefamily_e_cvarray:
   case typefamily_e_darray:
+  case typefamily_e_cdarray:
   case typefamily_e_farray:
+  case typefamily_e_cfarray:
   case typefamily_e_map:
+  case typefamily_e_cmap:
   case typefamily_e_slice:
   case typefamily_e_cslice:
   case typefamily_e_map_range:
@@ -1046,12 +1083,13 @@ static bool is_assignable_type_one(expr_i *e, bool allow_unsafe)
     }
   }
   const typefamily_e cat = get_family(e);
-  if (cat == typefamily_e_darray) {
+  if (cat == typefamily_e_darray || cat == typefamily_e_cdarray) {
     return false;
   }
   return true;
 }
 
+// FIXME: used?
 static bool is_assignable_internal(const term& t, bool allow_unsafe)
 {
   sorted_exprs c;
@@ -2026,7 +2064,8 @@ static void convert_type_internal(expr_i *efrom, term& tto, tvmap_type& tvmap)
     const term tra = get_array_range_texpr(0, 0, tconvto);
     const term_list *const tfa = tfrom.get_args();
     const term_list *const tta = tra.get_args();
-    if (tta != 0 && tfa != 0 && tta->front() == tfa->front()) {
+    if (tta != 0 && tfa != 0 && !tta->empty() && !tfa->empty() &&
+      tta->front() == tfa->front()) {
       DBG_CONV(fprintf(stderr, "convert: auto range to container\n"));
       efrom->conv = conversion_e_cast;
       efrom->type_conv_to = tconvto;
@@ -2617,6 +2656,11 @@ void fn_set_tree_and_define_static(expr_i *e, expr_i *p, symbol_table *symtbl,
   expr_i *expand_base = 0;
   if (e->get_esort() == expr_e_expand) {
     expand_base = ptr_down_cast<expr_expand>(e)->baseexpr;
+  } else if (e->get_esort() == expr_e_funcdef) {
+    expr_funcdef *const efd = ptr_down_cast<expr_funcdef>(e);
+    if (efd->is_macro()) {
+      expand_base = efd->block;
+    }
   }
   const int num = e->get_num_children();
   for (int i = 0; i < num; ++i) {
@@ -3137,7 +3181,9 @@ bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
     expr_i *const eev = term_get_instance(tev);
     expr_e astyp = eev != 0 ? eev->get_esort() : expr_e_metafdef /* dummy */;
     if (astyp == expr_e_var) {
+//fprintf(stderr, "expr_has_lvalue %s var %d\n", a0->dump(0).c_str(), (int)upvalue_flag);
       if (upvalue_flag) {
+//fprintf(stderr, "expr_has_lvalue %s upvar\n", a0->dump(0).c_str());
 	symbol_table *symtbl = find_current_symbol_table(eev);
 	assert(symtbl);
 	expr_block *bl = symtbl->block_backref;
@@ -3145,6 +3191,7 @@ bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
 	if (bl->parent_expr != 0 &&
 	  bl->parent_expr->get_esort() == expr_e_struct) {
 	  /* as->symbol_def is an instance variable */
+//fprintf(stderr, "expr_has_lvalue %s field\n", a0->dump(0).c_str());
 	  expr_i *const a0frame = get_current_frame_expr(a0->symtbl_lexical);
 	  if (a0frame->get_esort() == expr_e_funcdef) {
 	    expr_funcdef *efd = ptr_down_cast<expr_funcdef>(a0frame);
@@ -3217,6 +3264,7 @@ bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
 	DBG_LV(fprintf(stderr, "expr_has_lvalue: op[] 0-1\n"));
 	const term tc = aop->arg0->resolve_texpr();
 	if (is_const_range_family(tc)) {
+	  /* const range */
 	  DBG_LV(fprintf(stderr, "expr_has_lvalue %s 6 false\n",
 	    a0->dump(0).c_str()));
 	  if (!thro_flg) {
@@ -3224,9 +3272,20 @@ bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
 	  }
 	  arena_error_push(epos, "Const range element can not be modified");
 	} else if (is_cm_range_family(tc)) {
+	  /* mutable range */
 	  DBG_LV(fprintf(stderr, "expr_has_lvalue %s 7 true\n",
 	    a0->dump(0).c_str()));
+	  /* a[] is mutable even when a is not mutable */
 	  return true;
+	} else if (is_const_container_family(tc)) {
+	  /* const container */
+	  DBG_LV(fprintf(stderr, "expr_has_lvalue %s 7-1 false\n",
+	    a0->dump(0).c_str()));
+	  if (!thro_flg) {
+	    return false;
+	  }
+	  arena_error_push(epos,
+	    "Const container element can not be modified");
 	} else {
 	  return expr_has_lvalue(aop, aop->arg0, thro_flg);
 	}
@@ -3236,17 +3295,22 @@ bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
       return expr_has_lvalue(aop, aop->arg0, thro_flg);
     case TOK_PTR_DEREF:
       /* expr '*foo' has an lvalue iff foo is a non-const ptr */
-      if (is_const_or_immutable_pointer_family(aop->arg0->resolve_texpr())) {
-	DBG_LV(fprintf(stderr, "expr_has_lvalue %s 8 false\n",
-	  a0->dump(0).c_str()));
-	if (!thro_flg) {
-	  return false;
+      {
+	const term& tc = aop->arg0->resolve_texpr();
+	if (is_const_or_immutable_pointer_family(tc) ||
+	  is_const_range_family(tc) ||
+	  is_const_container_family(tc)) {
+	  DBG_LV(fprintf(stderr, "expr_has_lvalue %s 8 false\n",
+	    a0->dump(0).c_str()));
+	  if (!thro_flg) {
+	    return false;
+	  }
+	  arena_error_push(epos, "Can not modify data via a const reference");
 	}
-	arena_error_push(epos, "Can not modify data via a const reference");
+	DBG_LV(fprintf(stderr, "expr_has_lvalue %s 9 true\n",
+	  a0->dump(0).c_str()));
+	return true; /* ok */
       }
-      DBG_LV(fprintf(stderr, "expr_has_lvalue %s 9 true\n",
-	a0->dump(0).c_str()));
-      return true; /* ok */
     default:
       break;
     }

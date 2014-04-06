@@ -1,6 +1,7 @@
 public threaded namespace container::array::array_common "use-unsafe";
 public import numeric::integral;
 public import container::array::refguard;
+public import allocator;
 
 extern "types" inline
 
@@ -19,16 +20,13 @@ template <typename T> struct is_trivially_copyable {
 template <typename T> inline void
 deallocate_uninitialized(T *ptr, size_t len)
 {
-  free(ptr);
+  global_deallocate_n(ptr, len * sizeof(T));
 }
 
 template <typename T> inline T *
 allocate_uninitialized(size_t len)
 {
-  void *p = malloc(len * sizeof(T));
-  if (p == 0) {
-    PXC_THROW(std::bad_alloc());
-  }
+  void *p = global_allocate_n(len * sizeof(T));
   return static_cast<T *>(p);
 }
 
@@ -99,20 +97,18 @@ initialize_1(T *ptr, const T& x)
 }
 
 template <typename T> inline T *
-reserve_n(T *ptr, size_t vlen, size_t nlen)
+reserve_n(T *ptr, size_t vlen, size_t alloc_olen, size_t alloc_nlen)
 {
   if (is_trivially_copyable<T>::value) {
-    void *p = realloc(ptr, nlen * sizeof(T));
-    if (p == 0) {
-      PXC_THROW(std::bad_alloc());
-    }
+    void *p = global_reallocate_n(ptr, alloc_olen * sizeof(T),
+      alloc_nlen * sizeof(T));
     return static_cast<T *>(p);
   } else {
-    T *p = allocate_uninitialized<T>(nlen);
+    T *p = allocate_uninitialized<T>(alloc_nlen);
     PXC_TRY {
       initialize_copy_n(p, vlen, ptr);
     } PXC_CATCH(...) {
-      deallocate_uninitialized<T>(p, nlen);
+      deallocate_uninitialized<T>(p, alloc_nlen);
       PXC_RETHROW;
     }
     deinitialize_n(ptr, vlen);
