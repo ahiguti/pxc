@@ -830,7 +830,17 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
 	}
       }
       if (targs.size() != 0) {
-	return eval_apply(tmfev, targs, targs_evaluated, ectx, pos);
+	if (ta->is_variadic) {
+	  term_list vargs(targs.size());
+	  for (size_t i = 0; i < targs.size(); ++i) {
+	    vargs[i] = eval_if_unevaluated(targs[i], targs_evaluated, ectx,
+	      pos);
+	  }
+	  const term larg(vargs); /* metalist */
+	  return eval_apply(tmfev, term_list_range(&larg, 1), true, ectx, pos);
+	} else {
+	  return eval_apply(tmfev, targs, targs_evaluated, ectx, pos);
+	}
       } else {
 	return tmfev;
       }

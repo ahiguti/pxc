@@ -112,6 +112,7 @@ static compile_mode cur_mode;
 %type<expr_val> toplevel_stmt_list
 %type<expr_val> toplevel_stmt
 %type<expr_val> defs_stmt
+%type<expr_val> tparam
 %type<expr_val> tparam_list
 %type<expr_val> opt_tparams_expr
 %type<expr_val> struct_body_stmt_list
@@ -215,6 +216,10 @@ defs_stmt
 	| dunion_stmt
 	| interface_stmt
 	| metafdef_stmt
+	;
+tparam
+	: TOK_SYMBOL
+	  { $$ = expr_tparams_new(cur_fname, @1.first_line, $1, 0); }
 	;
 tparam_list
 	: TOK_SYMBOL
@@ -704,15 +709,22 @@ c_enumval_stmt
 	;
 metafdef_stmt
 	: opt_attribute TOK_METAFUNCTION TOK_SYMBOL type_arg_excl_metalist ';'
-	  { $$ = expr_metafdef_new(cur_fname, @2.first_line, $3, 0, $4, $1); }
+	  { $$ = expr_metafdef_new(cur_fname, @2.first_line, $3, 0, $4, 0,
+		$1); }
 	| opt_attribute TOK_METAFUNCTION TOK_SYMBOL '{' type_arg_list '}' ';'
 	  { $$ = expr_metafdef_new(cur_fname, @2.first_line, $3, 0,
-		  expr_metalist_new($5), $1); }
+		  expr_metalist_new($5), 0, $1); }
 	| opt_attribute TOK_METAFUNCTION TOK_SYMBOL '{' type_arg_list '}'
 		type_arg ';'
-	  { $$ = expr_metafdef_new(cur_fname, @2.first_line, $3, $5, $7, $1); }
+	  { $$ = expr_metafdef_new(cur_fname, @2.first_line, $3, $5, $7, 0,
+		$1); }
 	  /* $5 expects tparam_list but parsed as type_arg_list to avoid
 	   conflicts. it will be converted to expr_tparams when compiled. */
+	| opt_attribute TOK_METAFUNCTION TOK_SYMBOL '{' tparam '*' '}'
+		type_arg ';'
+	  /* variadic metafunction */
+	  { $$ = expr_metafdef_new(cur_fname, @2.first_line, $3, $5, $8, 1,
+		$1); }
 	;
 visi_vardef_stmt
 	: visibility type_expr opt_mutable TOK_SYMBOL ';'
@@ -859,7 +871,11 @@ type_arg_excl_metalist
 		cur_mode != compile_mode_main, false, attribute_private); }
 	| TOK_METAFUNCTION '{' tparam_list '}' type_arg
 	  { $$ = expr_metafdef_new(cur_fname, @1.first_line, 0, $3, $5,
-		attribute_private); }
+		0, attribute_private); }
+	| TOK_METAFUNCTION '{' tparam '*' '}' type_arg
+	  /* variadic metafunction */
+	  { $$ = expr_metafdef_new(cur_fname, @1.first_line, 0, $3, $6,
+		1, attribute_private); }
 	;
 type_arg
 	: type_arg_excl_metalist
@@ -1122,6 +1138,7 @@ void pxc_parse_file(const source_info& si, imports_type& imports_r)
 		pi.set(s.data(), s.size());
 		cur_fname = arena_strdup(i->filename_trim.c_str());
 		assert(s.size());
+		yylloc.first_line = 1;
 		yyparse();
 		topvals.push_back(topval);
 		topval = 0;

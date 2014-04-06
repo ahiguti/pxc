@@ -118,8 +118,9 @@ expr_i *expr_typedef_new(const char *fn, int line, const char *sym,
 { return arena_push(new expr_typedef(fn, line, sym, cname, family, is_enum,
   is_bitmask, enumvals, num_tpara, attr)); }
 expr_i *expr_metafdef_new(const char *fn, int line, const char *sym,
-  expr_i *tparams, expr_i *rhs, attribute_e attr)
-{ return arena_push(new expr_metafdef(fn, line, sym, tparams, rhs, attr)); }
+  expr_i *tparams, expr_i *rhs, bool is_variadic, attribute_e attr)
+{ return arena_push(new expr_metafdef(fn, line, sym, tparams, rhs,
+  is_variadic, attr)); }
 expr_i *expr_struct_new(const char *fn, int line, const char *sym,
   const char *cname, const char *family, expr_i *block, attribute_e attr,
   bool has_udcon, bool private_udcon)

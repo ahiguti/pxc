@@ -1247,7 +1247,7 @@ public:
 
 struct expr_metafdef : public expr_i {
   expr_metafdef(const char *fn, int line, const char *sym, expr_i *tparams,
-    expr_i *rhs, attribute_e attr);
+    expr_i *rhs, bool is_variadic, attribute_e attr);
   expr_i *clone() const;
   expr_e get_esort() const { return expr_e_metafdef; }
   int get_num_children() const { return 1; }
@@ -1284,6 +1284,7 @@ public:
   const char *const sym;
   std::string uniqns;
   expr_block *block;
+  bool is_variadic;
   attribute_e attr;
   term metafdef_term; /* caches metafdef_to_term() */
   term evaluated_term; /* for named and noarg metafunctions only */

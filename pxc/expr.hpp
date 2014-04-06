@@ -103,7 +103,7 @@ expr_i *expr_typedef_new(const char *fn, int line, const char *sym,
   const char *cname, const char *family, bool is_enum, bool is_bitmask,
   expr_i *enumvals, unsigned int num_tparams, attribute_e visi);
 expr_i *expr_metafdef_new(const char *fn, int line, const char *sym,
-  expr_i *tparams, expr_i *rhs, attribute_e visi);
+  expr_i *tparams, expr_i *rhs, bool is_variadic, attribute_e visi);
 expr_i *expr_struct_new(const char *fn, int line, const char *sym,
   const char *cname, const char *family, expr_i *block, attribute_e visi,
   bool has_udcon, bool private_udcon);
