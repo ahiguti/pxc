@@ -81,8 +81,8 @@ expr_i *symbol_common::resolve_symdef(symbol_table *lookup)
     }
     #endif
     DBG_TE2(fprintf(stderr,
-      "expr_te::resolve_symdef: this=%p symtbl=%p [%s]\n", this,
-      lookup, symbol_def->dump(0).c_str()));
+      "expr_te::resolve_symdef: this=%p symtbl=%p [%s] up=%d\n", this,
+      lookup, symbol_def->dump(0).c_str(), (int)is_upvalue));
     symtbl_defined = lookup;
     upvalue_flag = is_upvalue;
     assert(symbol_def);

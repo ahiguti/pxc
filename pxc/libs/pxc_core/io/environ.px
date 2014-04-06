@@ -11,6 +11,19 @@ public import exception;
 public extern "pxcio::pxc_argv" vector{string} argv;
 public extern "pxcio::pxc_environ" vector{string} environ;
 
+public function string getenv(cstrref const& name)
+{
+  string x = name;
+  x.push_back('=');
+  const len = x.size();
+  for (const i, const s : environ) {
+    if (s[0 .. len] == x) {
+      return s[len .. s.size()];
+    }
+  }
+  return string();
+}
+
 private function extern "pxcio::io_environ_init" void io_environ_init();
 
 io_environ_init();

@@ -14,7 +14,7 @@ my $sys = io::system();
 # print "$sys\n";
 my $f = io::file::O_RDONLY();
 # print "$f\n";
-my $o = $sys->open("hoge.txt", $f, 0);
+my $o = $sys->open_st("hoge.txt", $f, 0);
 # print "$o\n";
 my $pkg_string = \%{"container::array::vector{meta::uchar}::"};
 # print "pkg_string=$pkg_string\n";

@@ -69,11 +69,17 @@ public threaded function {t} int compare(t const& x, t const& y)
     }
     return 0;
   } else if (m::eq{fam, "struct"}) {
+    metafunction ordlst m::type_attribute{t, "__order__", m::nil};
+    metafunction ord{i} m::cond{m::empty{ordlst}, 0, m::at{ordlst, i}};
     expand (fld, idx : m::field_names{t}) {
       {
 	int const c = compare(x.fld, y.fld);
 	if (c != 0) {
-	  return c;
+	  if (m::ne{ord{idx}, 0}) {
+	    return -c;
+	  } else {
+	    return c;
+	  }
 	}
       }
     }
@@ -84,12 +90,10 @@ public threaded function {t} int compare(t const& x, t const& y)
       return tc;
     }
     expand (fld, idex : m::field_names{t}) {
-      {
-	if (case x.fld) {
-	  int const c = compare(x.fld, y.fld);
-	  if (c != 0) {
-	    return c;
-	  }
+      if (case x.fld) {
+	int const c = compare(x.fld, y.fld);
+	if (c != 0) {
+	  return c;
 	}
       }
     }

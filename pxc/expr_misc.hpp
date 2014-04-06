@@ -98,6 +98,7 @@ bool is_multithreaded_pointer_family(const term& t);
 bool is_array_family(const term& t);
 bool is_cm_slice_family(const term& t);
 bool is_container_family(const term& t);
+bool is_const_container_family(const term& t);
 bool is_map_family(const term& t);
 bool is_cm_maprange_family(const term& t);
 bool is_const_range_family(const term& t);

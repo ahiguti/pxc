@@ -1,7 +1,9 @@
 public threaded namespace io::file "use-unsafe";
 public import numeric::integral -;
+public import numeric::cast -;
 public import container::array -;
 public import meta -;
+public import meta::vararg v;
 public import pointer -;
 public import io +;
 public import io::errno -;
@@ -84,8 +86,46 @@ public extern "S_IXOTH"		mode_t S_IXOTH;
 public metafunction open_st errno_or_value{file_st};
 public metafunction open_mt errno_or_value{file_mt};
 
+public threaded function {tlist} open_st
+io_open(expand(v::arg_decls_bycref{tlist}))
+{
+  open_flags_t flags = O_RDONLY;
+  mode_t md = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+  if (m::gt{m::size{tlist}, 2}) {
+    metafunction ti m::at2{tlist};
+    if (m::eq{m::at0{ti}, open_flags_t}) {
+      flags = a2;
+    } else {
+      if (a2 == "r") {
+	flags = O_RDONLY;
+      } else if (a2 == "r+") {
+	flags = O_RDWR;
+      } else if (a2 == "w") {
+	flags = O_WRONLY | O_CREAT | O_TRUNC;
+      } else if (a2 == "w+") {
+	flags = O_RDWR | O_CREAT | O_TRUNC;
+      } else if (a2 == "a") {
+	flags = O_WRONLY | O_CREAT | O_APPEND;
+      } else if (a2 == "a+") {
+	flags = O_RDWR | O_CREAT | O_APPEND;
+      } else {
+	open_st r;
+	r.errno = EINVAL;
+	return r;
+      }
+    }
+  }
+  if (m::gt{m::size{tlist}, 3}) {
+    md = a3;
+  }
+  if (m::gt{m::size{tlist}, 4}) {
+    open_invalid_arg(); /* compile-time error */
+  }
+  return io_open_st(a0, a1, flags, md);
+}
+
 public threaded function open_st
-io_open(io const& iop, cstrref const& fn, open_flags_t flags, mode_t md)
+io_open_st(io const& iop, cstrref const& fn, open_flags_t flags, mode_t md)
 {
   open_st r;
   int fd = io_open_fd(iop, fn, flags, md);
@@ -108,6 +148,10 @@ io_open_mt(io const& iop, cstrref const& fn, open_flags_t flags, mode_t md)
     r.errno = iop.get_errno();
   }
   return r;
+}
+
+private function {mtflag} expand macro_open
+{
 }
 
 /* file descriptors are hidden */
@@ -226,7 +270,7 @@ public threaded function errno_or_value{ptr{string}}
 io_read_file(io const& iop, cstrref const& fn)
 {
   errno_or_value{ptr{string}} r;
-  const f = io_open(iop, fn, O_RDONLY, 0);
+  const f = io_open(iop, fn, O_RDONLY);
   if (const err: f.errno) {
     r.errno = err;
   } else {

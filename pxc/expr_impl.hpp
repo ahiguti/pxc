@@ -158,13 +158,17 @@ enum typefamily_e {
   typefamily_e_extfloat,         /* c-defined float/double etc, */
   typefamily_e_extnumeric,       /* c-defined other numeric types */
   typefamily_e_varray,           /* resizable array */
+  typefamily_e_cvarray,          /* resizable array, const elem */
   typefamily_e_darray,           /* dynamically allocated array */
-  typefamily_e_farray,           /* fixed size array, fixed at compile time */
+  typefamily_e_cdarray,          /* dynamically allocated array, const elem */
+  typefamily_e_farray,           /* fixed size array */
+  typefamily_e_cfarray,          /* fixed size array, const elem */
   typefamily_e_slice,            /* array slice (eph) */
-  typefamily_e_cslice,           /* array slice, const elements (eph) */
+  typefamily_e_cslice,           /* array slice, const elem (eph) */
   typefamily_e_map,              /* map */
+  typefamily_e_cmap,             /* map, const elem */
   typefamily_e_map_range,        /* range on map (eph) */
-  typefamily_e_map_crange,       /* range on map, const elements (eph) */
+  typefamily_e_map_crange,       /* range on map, const elem (eph) */
   typefamily_e_ephemeral,        /* other ephemeral type (eph) */
   typefamily_e_linear,           /* noncopyable, nodefaultcon */
   typefamily_e_noncopyable,      /* noncopyable */
@@ -1155,7 +1159,10 @@ struct expr_funcdef : public expr_i {
     }
   }
   bool is_destructor() const {
-    return block->rettype_uneval == 0;
+    return sym == 0 && block->rettype_uneval == 0;
+  }
+  bool is_macro() const {
+    return sym != 0 && block->rettype_uneval == 0;
   }
   const term& get_rettype();
   void check_type(symbol_table *lookup);

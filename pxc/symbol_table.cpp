@@ -127,9 +127,8 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
     symbol_table *psymtbl = get_lexical_parent();
     if (psymtbl != 0) {
       /* non-global */
-      bool is_upvalue_dummy = false;
       v = psymtbl->resolve_name_nothrow_internal(fullname, curns, false,
-	is_global_r, is_upvalue_dummy, is_memfld_r);
+	is_global_r, is_upvalue_r, is_memfld_r);
       if (v.edef != 0 && block_esort != expr_e_block) {
 	bool is_const = false;
 	switch (v.edef->get_esort()) {

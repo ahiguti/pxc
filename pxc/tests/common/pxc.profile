@@ -1,4 +1,4 @@
-incdir=../pxc_core:../pxc_ext:.
+incdir=../pxc_core:../pxc_ext:../pxc_test:.
 safe_mode=0
 cxx=g++
 cflags=-g -O3 -DNDEBUG -Wall -Wno-unused -Wno-strict-aliasing

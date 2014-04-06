@@ -30,14 +30,13 @@ mkdir -p $RPM_BUILD_ROOT/usr/share
 install -m 644 pxc.profile $RPM_BUILD_ROOT/%{_sysconfdir}/
 install -m 644 pxc_unsafe.profile $RPM_BUILD_ROOT/%{_sysconfdir}/
 install -m 644 pxc_dynamic.profile $RPM_BUILD_ROOT/%{_sysconfdir}/
+install -m 644 pxc_dynamic_unsafe.profile $RPM_BUILD_ROOT/%{_sysconfdir}/
 install -m 755 pxc $RPM_BUILD_ROOT/%{_bindir}/
 cp -a libs/pxc_* $RPM_BUILD_ROOT/usr/share/
 
 %files
 %defattr(-, root, root)
-%config(noreplace,missingok) %{_sysconfdir}/pxc.profile
-%config(noreplace,missingok) %{_sysconfdir}/pxc_unsafe.profile
-%config(noreplace,missingok) %{_sysconfdir}/pxc_dynamic.profile
+%config(noreplace,missingok) %{_sysconfdir}/*.profile
 %{_bindir}/pxc
 /usr/share/pxc_*
 

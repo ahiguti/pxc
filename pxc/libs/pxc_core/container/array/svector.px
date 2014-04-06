@@ -6,6 +6,8 @@ extern "types" inline
 #include <algorithm>
 #include <limits>
 
+#define PXCRT_DBG_SVECTOR(x)
+
 namespace pxcrt {
 
 struct svector_rep {
@@ -75,12 +77,20 @@ struct svector {
     x.rep = orep;
   }
   void push_back(T const& x) {
-    /* calls rep_make_unique only if it's necessary */
-    if (rep->refcnt != 1 || rep->valid_len >= rep->alloc_len) {
+    if (rep->refcnt == 1 && rep->valid_len < rep->alloc_len) {
+      /* fast path */
+      PXCRT_DBG_SVECTOR(fprintf(stderr, "fastpath\n"));
+      initialize_1(end(), x);
+      rep->valid_len += 1;
+      return;
+    } else {
+      /* slow path */
+      PXCRT_DBG_SVECTOR(fprintf(stderr, "slowpath %zu %zu %zu\n", rep->refcnt,
+	rep->valid_len, rep->alloc_len));
       rep_make_unique(size() + 1);
+      initialize_1(end(), x);
+      rep->valid_len += 1;
     }
-    initialize_1(end(), x);
-    rep->valid_len += 1;
   }
   T pop_back() {
     if (empty()) { pxcrt::throw_invalid_index(); }
@@ -205,7 +215,8 @@ private:
 	T *const p = reinterpret_cast<T *>(
 	  reinterpret_cast<char *>(rep) + sizeof(svector_rep));
 	deinitialize_n(p, rep->valid_len);
-	free(rep);
+	global_deallocate_n(rep,
+	  sizeof(svector_rep) + sizeof(T) * rep->alloc_len);
       }
     }
   }
@@ -213,7 +224,8 @@ private:
     rep = &empty_rep;
     assert(rep->refcnt == 0 && rep->valid_len == 0 && rep->alloc_len == 0);
     if (asz != 0) {
-      void *const vrep = malloc(sizeof(svector_rep) + sizeof(T) * asz);
+      void *const vrep = global_allocate_n(
+	sizeof(svector_rep) + sizeof(T) * asz);
       svector_rep *const nrep = reinterpret_cast<svector_rep *>(vrep);
       nrep->refcnt = 1;
       nrep->valid_len = 0;
@@ -226,7 +238,8 @@ private:
 	PXC_TRY {
 	  initialize_copy_n(start, sz, ptr);
 	} PXC_CATCH(...) {
-	  free(nrep);
+	  global_deallocate_n(rep,
+	    sizeof(svector_rep) + sizeof(T) * rep->alloc_len);
 	  PXC_RETHROW;
 	}
       }
@@ -267,8 +280,10 @@ private:
 	  /* set asz nonzero so that rep_init allocate a unique buffer */
 	rep_init(begin(), std::min(size(), asz), asz);
       } else {
-	rep = (svector_rep *)realloc(rep,
-	  sizeof(svector_rep) + sizeof(T) * asz);
+	rep = (svector_rep *)global_reallocate_n(rep,
+	    sizeof(svector_rep) + sizeof(T) * rep->alloc_len,
+	    sizeof(svector_rep) + sizeof(T) * asz);
+	rep->alloc_len = asz;
       }
     } else {
       svector_rep *const orep = rep;
@@ -285,7 +300,34 @@ private:
   }
 };
 
+template <typename T> struct msvector : public svector<T> {
+  typedef pxcrt::bt_size_t size_type;
+  typedef pxcrt::bt_slice<T> range_type;
+  typedef pxcrt::bt_cslice<T> crange_type;
+  msvector() { }
+  msvector(const msvector& x) : svector<T>(x) { }
+  msvector(const crange_type& x) : svector<T>(x) { }
+  msvector(const range_type& x) : svector<T>(x) { }
+  msvector(const T *start, size_type sz, size_type asz)
+    : svector<T>(start, sz, asz) { }
+};
+
+template <typename T> struct csvector : public svector<T> {
+  typedef pxcrt::bt_size_t size_type;
+  typedef pxcrt::bt_slice<T> range_type;
+  typedef pxcrt::bt_cslice<T> crange_type;
+  csvector() { }
+  csvector(const csvector& x) : svector<T>(x) { }
+  csvector(const crange_type& x) : svector<T>(x) { }
+  csvector(const range_type& x) : svector<T>(x) { }
+  csvector(const T *start, size_type sz, size_type asz)
+    : svector<T>(start, sz, asz) { }
+};
+
 }; // namespace pxcrt
+
+#undef PXCRT_DBG_SVECTOR
+
 ;
 
 extern "implementation" inline

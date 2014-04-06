@@ -27,12 +27,12 @@ static std::list<expr_i *> get_dep_tparams(expr_struct *est)
   const term_list *const args = te.get_args();
   size_t argslen = args != 0 ? args->size() : 0;
   const typefamily_e cat = est->typefamily;
-  if (cat == typefamily_e_farray) {
+  if (cat == typefamily_e_farray || cat == typefamily_e_cfarray) {
     if (argslen != 0) {
       term t = (*args)[0]; /* elemnt type */
       r.push_back(term_get_instance(t));
     }
-  } else if (cat == typefamily_e_map) {
+  } else if (cat == typefamily_e_map || cat == typefamily_e_cmap) {
     if (argslen > 1) {
       term t = (*args)[argslen - 1]; /* compare funcobject */
       r.push_back(term_get_instance(t));
@@ -45,7 +45,9 @@ static std::list<expr_i *> get_dep_tparams(expr_struct *est)
     cat == typefamily_e_tcptr ||
     cat == typefamily_e_tiptr ||
     cat == typefamily_e_darray ||
-    cat == typefamily_e_varray) {
+    cat == typefamily_e_cdarray ||
+    cat == typefamily_e_varray ||
+    cat == typefamily_e_cvarray) {
     /* no dep */
   } else {
     if (args != 0) {

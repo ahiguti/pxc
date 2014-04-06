@@ -378,7 +378,9 @@ static bool check_term_validity(const term& t, bool allow_nontype,
     const size_t tparams_len = ttbl->tinfo.is_uninstantiated()
       ? elist_length(ttbl->tinfo.tparams) : 0;
     #endif
-    if (tparams_len != tlarg_len) {
+    if (tparams_len != tlarg_len && (tlarg_len != 0 || !allow_nontype)) {
+      /* allows template type or function wo tlarg if allow_nontype is true,
+       * so that template type/frunction can be used as a metafunction. */
       // abort(); // FIXME
       DBG_CTV(fprintf(stderr, "CTV %s false 4\n",
 	term_tostr_human(t).c_str()));
@@ -389,16 +391,7 @@ static bool check_term_validity(const term& t, bool allow_nontype,
     expr_struct *const est = dynamic_cast<expr_struct *>(e);
     if (est != 0 && est->typefamily != typefamily_e_none) {
       const typefamily_e cat = est->typefamily;
-      if (cat == typefamily_e_farray) {
-	#if 0
-	if (tlarg_len != 2) {
-	  DBG_CTV(fprintf(stderr, "CTV %s false 5\n",
-	    term_tostr_human(t).c_str()));
-	  err_mess_r = "(template parameter '" + term_tostr_human(t) +
-	    "' is not an integer)";
-	  return false;
-	}
-	#endif
+      if (cat == typefamily_e_farray || cat == typefamily_e_cfarray) {
 	if (tlarg_len >= 1) {
 	  if (!check_term_validity(tl->front(), tp_allow_nontype,
 	    tp_allow_local_func, tp_allow_noheap, tp_allow_noheap_container,
@@ -412,13 +405,6 @@ static bool check_term_validity(const term& t, bool allow_nontype,
 	    err_mess_r = "(2nd template parameter must be an integer literal)";
 	    return false;
 	  }
-	  #if 0
-	  const expr_i *const e2nd = t2nd.get_expr();
-	  if (e2nd == 0 || e2nd->get_esort() != expr_e_int_literal) {
-	    err_mess_r = "(2nd template parameter must be an integer literal)";
-	    return false;
-	  }
-	  #endif
 	}
 	DBG_CTV(fprintf(stderr, "CTV %s true 6\n",
 	  term_tostr_human(t).c_str()));
@@ -527,14 +513,15 @@ static bool is_default_constructible(const term& typ, expr_i *pos,
     if (cat == typefamily_e_linear || cat == typefamily_e_nodefault) {
       return false;
     }
-    if (cat == typefamily_e_farray) {
+    if (cat == typefamily_e_farray || cat == typefamily_e_cfarray) {
       return (args == 0 || args->empty()) ? false
 	: is_default_constructible(args->front(), pos, depth);
     }
-    if (cat == typefamily_e_darray) {
+    if (cat == typefamily_e_darray || cat == typefamily_e_cdarray) {
       return false;
     }
-    if (cat == typefamily_e_varray || cat == typefamily_e_map ||
+    if (cat == typefamily_e_varray || cat == typefamily_e_cvarray ||
+      cat == typefamily_e_map || cat == typefamily_e_cmap ||
       cat == typefamily_e_nocascade) {
       return true;
     }
@@ -863,12 +850,12 @@ void expr_block::check_type(symbol_table *lookup)
       expr_funcdef *efd = ptr_down_cast<expr_funcdef>(parent_expr);
       check_return_expr(efd);
     } // FIXME: check_return_expr for struct constructor?
-    /* evaluate static_assert */
+    /* evaluate __static_assert__ */
     bool is_global = false;
     bool is_upvalue = false;
     bool is_memfld = false;
     const bool no_private = false;
-    expr_i *sa = symtbl.resolve_name_nothrow("static_assert",
+    expr_i *sa = symtbl.resolve_name_nothrow("__static_assert__",
       no_private, "", is_global, is_upvalue, is_memfld);
     if (sa != 0 && !is_upvalue && !is_global &&
       sa->get_esort() == expr_e_metafdef) {
@@ -2360,7 +2347,7 @@ void expr_funccall::check_type(symbol_table *lookup)
     } else if (ad != 0) {
       arena_error_push(this, "Too few argument for '%s'", efd_p_inst->sym);
     }
-    if (efd_p_inst->block->rettype_uneval == 0) {
+    if (efd_p_inst->is_macro()) {
       arena_error_throw(this,
 	"Invalid function call: target function is for 'expand' statement");
     }
@@ -2563,66 +2550,6 @@ void expr_funccall::check_type(symbol_table *lookup)
 	  /* must be of the form var x = ptr(foo(...)) */
 	funccall_sort = funccall_e_struct_constructor;
 	return;
-#if 0
-      } else if (arglist.size() == 1 && !is_noheap_type(func_te) &&
-	convert_type(arglist.front(), func_te)) {
-	/* exclude ephemeral types because rooting logic is not implemented */
-	/* explicit conversion */
-	passing_root_requirement(passby_e_const_reference, this,
-	  arglist.front(), false);
-	  /* root the arg */
-	type_of_this_expr = func_te;
-	funccall_sort = funccall_e_struct_constructor;
-	return;
-#endif
-#if 0
-      } else if (get_family(func_te) == typefamily_e_darray) {
-	/* darray constructor */
-	if (arglist.size() < 2) {
-	  arena_error_throw(this, "Too few argument for '%s'",
-	    est_p_inst->sym);
-	} else if (arglist.size() > 2) {
-	  arena_error_throw(this, "Too many argument for '%s'",
-	    est_p_inst->sym);
-	}
-	check_unsigned_integral_expr(0, arglist.front());
-	expr_i *const j = *(++arglist.begin());
-	const term_list *const arr_te_targs = func_te.get_args();
-	if (arr_te_targs == 0 || arr_te_targs->size() != 1) {
-	  arena_error_throw(this, "Using an array without type parameter");
-	}
-	term tto = (*arr_te_targs)[0];
-	if (!convert_type(j, tto, tvmap)) {
-	  const std::string s0 = term_tostr_human(j->resolve_texpr());
-	  const std::string s1 = term_tostr_human(tto);
-	  arena_error_push(this, "Invalid conversion from %s to %s",
-	    s0.c_str(), s1.c_str());
-	  arena_error_push(this, "  initializing argument %u of '%s'",
-	    0, est_p_inst->sym);
-	}
-	passing_root_requirement_fast(this, j, false);
-	  /* root the arg. */
-	type_of_this_expr = func_te;
-	funccall_sort = funccall_e_struct_constructor;
-	return;
-      } else if (get_family(func_te) == typefamily_e_varray) {
-	/* varray constructor */
-	const term_list *const arr_te_targs = func_te.get_args();
-	if (arr_te_targs == 0 || arr_te_targs->size() != 1) {
-	  arena_error_throw(this, "Using an array without type parameter");
-	}
-	if (arglist.size() != 1) {
-	  arena_error_throw(this, "Too many argument for '%s'",
-	    est_p_inst->sym);
-	}
-	expr_i *const j = arglist.front();
-	check_unsigned_integral_expr(0, j);
-	passing_root_requirement_fast(this, j, false);
-	  /* root the arg. */
-	type_of_this_expr = func_te;
-	funccall_sort = funccall_e_struct_constructor;
-	return;
-#endif
       } else if (is_numeric_type(func_te)) {
 	/* explicit conversion to external numeric type */
 	if (arglist.size() < 1) {
@@ -2923,11 +2850,63 @@ static expr_i *deep_clone_expr(expr_i *e)
   return deep_clone_template(e, 0);
 }
 
+static bool is_pxc_alpha(int ch)
+{
+  return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_';
+}
+
+static bool is_pxc_alnum(int ch)
+{
+  return (ch >= '0' && ch <= '9') || is_pxc_alpha(ch);
+}
+
+static bool is_valid_for_symbol(const std::string& s)
+{
+  if (s.empty()) {
+    return false;
+  }
+  if (!is_pxc_alpha(s[0])) {
+    return false;
+  }
+  for (size_t i = 0; i < s.size(); ++i) {
+    if (!is_pxc_alnum(s[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static void check_validity_for_symbol(const std::string& s, expr_i *pos)
+{
+  if (!is_valid_for_symbol(s)) {
+    arena_error_throw(pos,
+      "Expand: name '%s' is invalid for a symbol", s.c_str());
+  }
+}
+
+static expr_i *create_nssym_from_string(const std::string& s, expr_i *pos)
+{
+  std::string name = s;
+  expr_i *prefix = 0;
+  std::string::size_type p = name.rfind("::");
+  if (p != name.npos) {
+    std::string pre = name.substr(0, p);
+    name = name.substr(p + 2);
+    prefix = create_nssym_from_string(pre, pos);
+  }
+  check_validity_for_symbol(name, pos);
+  expr_i *nsy = expr_nssym_new(pos->fname, pos->line, prefix,
+    arena_strdup(name.c_str()));
+  return nsy;
+}
+
 static expr_i *create_symbol_from_string(const std::string& s, expr_i *pos)
 {
-  /* FIXME: check if s is valid for a symbol */
+  #if 0
   expr_i *nsy = expr_nssym_new(pos->fname, pos->line, 0,
     arena_strdup(s.c_str()));
+  #endif
+  expr_i *nsy = create_nssym_from_string(s, pos);
   expr_i *sy = expr_symbol_new(pos->fname, pos->line, nsy);
   return sy;
 }
@@ -3065,22 +3044,27 @@ static expr_i *subst_symbol_name_rec(expr_i *e, expr_i *parent, int parent_pos,
     }
   } else if (fd != 0) {
     if (std::string(fd->sym) == src) {
+      check_validity_for_symbol(dst.get_string(), e);
       fd->sym = arena_strdup(dst.get_string().c_str());
     }
   } else if (ev != 0) {
     if (std::string(ev->sym) == src) {
+      check_validity_for_symbol(dst.get_string(), e);
       ev->sym = arena_strdup(dst.get_string().c_str());
     }
   } else if (en != 0) {
     if (std::string(en->sym) == src) {
+      check_validity_for_symbol(dst.get_string(), e);
       en->sym = arena_strdup(dst.get_string().c_str());
     }
   } else if (es != 0) {
     if (std::string(es->sym) == src) {
+      check_validity_for_symbol(dst.get_string(), e);
       es->sym = arena_strdup(dst.get_string().c_str());
     }
   } else if (eu != 0) {
     if (std::string(eu->sym) == src) {
+      check_validity_for_symbol(dst.get_string(), e);
       eu->sym = arena_strdup(dst.get_string().c_str());
     }
   }
@@ -3588,7 +3572,7 @@ static void check_type_expr_expand(expr_expand *const epnd,
 	te->nssym->sym);
     }
     expr_funcdef *const efd = ptr_down_cast<expr_funcdef>(sd);
-    if (efd->block->rettype_uneval != 0) {
+    if (!efd->is_macro()) {
       arena_error_throw(te,
 	"Invalid function for 'expand' : '%s' "
 	"(function is not for 'expand' statement)",
@@ -3639,7 +3623,7 @@ static void check_type_expr_expand(expr_expand *const epnd,
   DBG_EXPAND_TIMING(slow_flag = (t01 - t0 > 0.0003));
   if (slow_flag) {
     DBG_EXPAND_TIMING(fprintf(stderr, "slow expand valueste = %s %d\n",
-      valueste->dump(0).c_str(), (int)valueste->get_esort()));
+      epnd->valueste->dump(0).c_str(), (int)epnd->valueste->get_esort()));
   }
   DBG_EXPAND_TIMING(double t02 = gettimeofday_double());
   eval_context ectx;
@@ -3735,7 +3719,6 @@ static void check_type_expr_expand(expr_expand *const epnd,
 	i != expfunc_subst.end(); ++i) {
 	se = subst_symbol_name_rec(se, 0, 0, i->first, i->second, true);
       }
-      DBG_EP(fprintf(stderr, "itersym = %s\n", itersym));
       DBG_EP(fprintf(stderr, "subst = %s\n", se->dump(0).c_str()));
     } else {
       assert(epnd->ex == expand_e_comma);

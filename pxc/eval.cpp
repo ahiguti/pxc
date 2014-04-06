@@ -355,6 +355,7 @@ static term get_term_bind_evaluated(const term& t, eval_context& ectx)
 {
   term_bind *tb = t.get_term_bind();
   #if EVAL_LAZY
+  /* not used anymore */
   const term& tpv = tb->tpv;
   term lexctx = tb->tpv_lexctx;
   term& et = tb->tpv_evaluated;
