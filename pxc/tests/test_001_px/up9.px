@@ -1,0 +1,37 @@
+
+public namespace up9;
+import common -;
+
+function {t, f} void values_vector(vector{t} mutable& v)
+{
+  size_t sz = v.size();
+  size_t i;
+  for (i = 0; i < sz; ++i) {
+    f(v[i]);
+  }
+}
+
+function {t, f} void keys_vector(vector{t} mutable& v)
+{
+  uint sz = v.size();
+  uint i;
+  for (i = 0; i < sz; ++i) {
+    f(i);
+  }
+}
+
+function void foo(vector{int} mutable& v) {
+  int x;
+  metafunction m2{t} function {t} void(t y) { x += y; };
+  values_vector{int, m2{int}}(v);
+  println(x);
+}
+
+vector{int} a;
+a.resize(101, 0);
+size_t i;
+for (i = 0; i < a.size(); ++i) {
+  a[i] = static_cast{int}(i);
+}
+foo(a);
+

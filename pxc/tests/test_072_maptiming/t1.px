@@ -1,0 +1,76 @@
+public namespace t1 "use-unsafe";
+import common -;
+import numeric::cast -;
+import meta m;
+import io -;
+import io::time -;
+import test -;
+
+function {tvec, tchar, len} size_t r1(int loop)
+{
+  size_t r = 0;
+  for (size_t i : 0 .. static_cast{size_t}(loop)) {
+    tvec v;
+    for (size_t j : 0 .. static_cast{size_t}(len)) {
+      v.push_back(static_cast{tchar, size_t}(j));
+    }
+    r += v.size();
+  }
+  return r;
+}
+
+function extern "::r2" size_t r2(int loop, int len);
+function extern "::r3" size_t r3(int loop, int len);
+
+function {f, len} size_t wrap(int loop)
+{
+  return f(loop, len);
+}
+
+extern "implementation" inline
+#include <vector>
+
+size_t r2(int loop, int len)
+{
+  size_t r = 0;
+  for (size_t i = 0; i < loop; ++i) {
+    std::vector<unsigned char> v;
+    for (size_t j = 0; j < len; ++j) {
+      v.push_back(static_cast<unsigned char>(j));
+    }
+    r += v.size();
+  }
+  return r;
+}
+
+size_t r3(int loop, int len)
+{
+  size_t r = 0;
+  for (size_t i = 0; i < loop; ++i) {
+    std::string v;
+    for (size_t j = 0; j < len; ++j) {
+      v.push_back(static_cast<char>(j));
+    }
+    r += v.size();
+  }
+  return r;
+}
+
+;
+
+{
+  test_timing_default{{
+    r1{vector{uchar}, uchar, 5},
+    r1{vector{uchar}, uchar, 10},
+    r1{vector{uchar}, uchar, 30},
+    r1{svector{uchar}, uchar, 5},
+    r1{svector{uchar}, uchar, 10},
+    r1{svector{uchar}, uchar, 30},
+    wrap{r2, 5},
+    wrap{r2, 10},
+    wrap{r2, 30},
+    wrap{r3, 5},
+    wrap{r3, 10},
+    wrap{r3, 30}}}();
+}
+

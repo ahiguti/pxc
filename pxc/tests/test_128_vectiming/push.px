@@ -1,0 +1,55 @@
+public namespace push;
+public import common -;
+public import meta m;
+public import test -;
+
+function {t, pushnum, rsv} size_t test_push(int num)
+{
+  size_t sum = 0;
+  for (size_t i : 0 .. static_cast{size_t}(num)) {
+    t obj;
+    m::at0{t} e;
+    if (m::gt{pushnum, 0}) {
+      if (m::gt{rsv, 0}) {
+	obj.reserve(pushnum);
+      }
+      for (size_t j : 0 .. pushnum) {
+	obj.push_back(e);
+      }
+    }
+    sum += obj.size();
+  }
+  return sum;
+}
+
+function {f} void timing(size_t num)
+{
+  for (size_t i : 0 .. 3) {
+    const t0 = system.gettimeofday_double();
+    const r = f(num);
+    const t1 = system.gettimeofday_double();
+    println(r, num, t1 - t0, m::full_string{f});
+  }
+}
+
+{
+  test_timing_default{{
+    test_push{vector{int}, 0, 0},
+    test_push{vector{int}, 1, 0},
+    test_push{vector{int}, 10, 0},
+    test_push{vector{int}, 100, 0},
+    test_push{svector{int}, 0, 0},
+    test_push{svector{int}, 1, 0},
+    test_push{svector{int}, 10, 0},
+    test_push{svector{int}, 100, 0}}}();
+  test_timing_default{{
+    test_push{vector{int}, 0, 1},
+    test_push{vector{int}, 1, 1},
+    test_push{vector{int}, 10, 1},
+    test_push{vector{int}, 100, 1},
+    test_push{svector{int}, 0, 1},
+    test_push{svector{int}, 1, 1},
+    test_push{svector{int}, 10, 1},
+    test_push{svector{int}, 100, 1}}}();
+}
+
