@@ -1061,7 +1061,7 @@ static expr_tparams *convert_to_tparams(expr_i *tparams,
 	/* ok, it's a symbol */
 	return ptr_down_cast<expr_tparams>(
 	  expr_tparams_new(tparams->fname, tparams->line, te->nssym->sym,
-	    convert_to_tparams(tel->rest, tparams_error_r)));
+	    false, convert_to_tparams(tel->rest, tparams_error_r)));
       }
     }
   }
@@ -1243,6 +1243,9 @@ expr_funccall::expr_funccall(const char *fn, int line, expr_i *func,
   expr_i *arg)
   : expr_i(fn, line), func(func), arg(arg), funccall_sort(funccall_e_funccall)
 {
+  #if 0
+  fprintf(stderr, "this=%p func=%p %d\n", this, this->func, tempvar_id);
+  #endif
   type_of_this_expr.clear();
 }
 
@@ -1909,9 +1912,9 @@ std::string expr_try::dump(int indent) const
 }
 
 expr_tparams::expr_tparams(const char *fn, int line, const char *sym,
-  expr_i *rest)
-  : expr_i(fn, line), sym(sym), rest(ptr_down_cast<expr_tparams>(rest)),
-    param_def()
+  bool is_variadic_metaf, expr_i *rest)
+  : expr_i(fn, line), sym(sym), is_variadic_metaf(is_variadic_metaf),
+    rest(ptr_down_cast<expr_tparams>(rest)), param_def()
 {
 }
 

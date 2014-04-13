@@ -1,25 +1,93 @@
-public namespace table;
-public import common -;
-public import meta m; 
-public import meta::family mf;
+public namespace container::table;
+public import numeric::integral -;
+public import numeric::cast -;
+public import container::array -;
+public import container::tree_map -;
+public import pointer -;
 public import exception -;
+public import io::file -;
 public import io::text -;
 public import io::errno -;
+public import text::string::split -;
+public import text::string::serialize -;
+public import algebraic -;
 public import regex::posix -;
+public import meta m; 
+public import meta::family mf;
 
-private threaded function ptr{regex}
-make_regex(cstrref const& rex, cflags_t cflags)
+public metafunction table_ifile{va*}
+  m::apply{
+    metafunction{n}
+      m::cond{
+	m::eq{n, 2}, table_ifile_type{m::at0{va}, m::at1{va}},
+	m::eq{n, 1}, table_ifile_type{m::at0{va}, 0},
+	m::error{"invalid parameter"}},
+    m::size{va}};
+
+public metafunction table_ofile{va*}
+  m::apply{
+    metafunction{n}
+      m::cond{
+	m::eq{n, 2}, table_ofile_type{m::at0{va}, m::at1{va}},
+	m::eq{n, 1}, table_ofile_type{m::at0{va}, 0},
+	m::error{"invalid parameter"}},
+    m::size{va}};
+
+public metafunction table_map{va*}
+  m::apply{
+    metafunction{n}
+      m::cond{
+	m::eq{n, 3}, table_map_type{m::at0{va}, m::at1{va}, m::at2{va}},
+	m::eq{n, 2}, table_map_type{m::at0{va}, m::nil, m::at1{va}},
+	m::eq{n, 1}, table_map_type{m::at0{va}, m::nil, m::nil},
+	m::error{"invalid parameter"}},
+    m::size{va}};
+
+public threaded function {trans, tfrom, tto} void
+transform(tfrom const& from, tto mutable& to)
 {
-  regerror_t err;
-  const r = make_ptr{regex}(rex, REG_EXTENDED | cflags, err);
-  if (err != REG_OK) {
-    throw runtime_error_template{"ifile_re"}(r->error_string(err));
+  metafunction to_insert m::symbol{tto, "insert"};
+  metafunction to_args m::args{to_insert};
+  metafunction to_arg_names m::arg_names{to_insert};
+  if (m::and{m::is_list{trans}, m::not{m::empty{trans}}}) {
+    metafunction from_ftlist m::symbol{tfrom, "field_types"};
+    metafunction in_args m::map{m::seq{m::size{from_ftlist}},
+      metafunction{i} {m::concat{"a", i}, m::at{from_ftlist, i}, 1, 0}};
+    metafunction out_argnames m::trace{m::map{m::seq{m::size{trans}},
+      metafunction{i} m::concat{"o", i}}};
+    threaded function bool record_cb(expand(in_args)) {
+      expand (sym, i: m::trace{m::map{m::seq{m::size{trans}},
+	metafunction{i} {m::concat{"o", i}, m::is_int{m::at{trans, i}}}}})
+      {
+	/* function */
+	const& sym = m::at0{m::at{trans, i}}(expand(a:
+	  m::map{m::slice{m::at{trans, i}, 1}, metafunction{j}
+	    m::concat{"a", j}}; a));
+	/* int */
+	expand (asym: {m::concat{"a", m::at{trans, i}}}) {
+	  const& sym = asym;
+	}
+      }
+      return to.insert(expand(a: out_argnames; a));
+    }
+    from.foreach{record_cb}();
+  } else {
+    threaded function bool record_cb(expand(to_args)) {
+      return to.insert(expand(a: to_arg_names; a));
+    }
+    if (m::eq{trans, 0}) {
+      from.foreach{record_cb}();
+    } else {
+      from.foreach{trans{record_cb}}();
+    }
   }
-  return r;
+  to.flush();
 }
 
-public threaded struct {tlist, opt}
-table_ifile(file_st const& fp0)
+/* private */
+
+private threaded struct {tlist, opt}
+table_ifile_type(file_st const& fp0)
 {
   private file_st const fp = fp0;
   private metafunction delim m::find{opt, "delim", '\t'};
@@ -84,8 +152,19 @@ table_ifile(file_st const& fp0)
   }
 }
 
-public threaded struct {tlist, opt}
-table_ofile(file_st const& fp0)
+private threaded function ptr{regex}
+make_regex(cstrref const& rex, cflags_t cflags)
+{
+  regerror_t err;
+  const r = make_ptr{regex}(rex, REG_EXTENDED | cflags, err);
+  if (err != REG_OK) {
+    throw runtime_error_template{"ifile_re"}(r->error_string(err));
+  }
+  return r;
+}
+
+private threaded struct {tlist, opt}
+table_ofile_type(file_st const& fp0)
 {
   private file_st const fp = fp0;
   private string mutable obuffer;
@@ -120,12 +199,12 @@ table_ofile(file_st const& fp0)
   }
 }
 
-public valuetype struct {key_types, mapped_types}
-table_map()
+private valuetype struct {key_types, key_ord, mapped_types}
+table_map_type()
 {
-  public metafunction key_type tuple{key_types, m::nil};
+  public metafunction key_type tuple{key_types, key_ord};
   public metafunction mapped_type tuple{mapped_types, m::nil};
-  public metafunction field_types m::joinv{key_types, mapped_types};
+  public metafunction field_types m::join{key_types, mapped_types};
   public metafunction map_type m::cond{
     m::empty{mapped_types},
     tree_set{key_type},
@@ -184,46 +263,5 @@ table_map()
       }
     }
   }
-}
-
-public threaded function {trans, tfrom, tto} void
-transform(tfrom const& from, tto mutable& to)
-{
-  metafunction to_insert m::symbol{tto, "insert"};
-  metafunction to_args m::args{to_insert};
-  metafunction to_arg_names m::arg_names{to_insert};
-  if (m::is_list{trans}) {
-    metafunction from_ftlist m::symbol{tfrom, "field_types"};
-    metafunction in_args m::map{m::seq{m::size{from_ftlist}},
-      metafunction{i} {m::concat{"a", i}, m::at{from_ftlist, i}, 1, 0}};
-    metafunction out_argnames m::trace{m::map{m::seq{m::size{trans}},
-      metafunction{i} m::concat{"o", i}}};
-    threaded function bool record_cb(expand(in_args)) {
-      expand (sym, i: m::trace{m::map{m::seq{m::size{trans}},
-	metafunction{i} {m::concat{"o", i}, m::is_int{m::at{trans, i}}}}})
-      {
-	/* function */
-	const& sym = m::at0{m::at{trans, i}}(expand(a:
-	  m::map{m::slice{m::at{trans, i}, 1}, metafunction{j}
-	    m::concat{"a", j}}; a));
-	/* int */
-	expand (asym: {m::concat{"a", m::at{trans, i}}}) {
-	  const& sym = asym;
-	}
-      }
-      return to.insert(expand(a: out_argnames; a));
-    }
-    from.foreach{record_cb}();
-  } else {
-    threaded function bool record_cb(expand(to_args)) {
-      return to.insert(expand(a: to_arg_names; a));
-    }
-    if (m::eq{trans, 0}) {
-      from.foreach{record_cb}();
-    } else {
-      from.foreach{trans{record_cb}}();
-    }
-  }
-  to.flush();
 }
 

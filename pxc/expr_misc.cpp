@@ -2030,7 +2030,8 @@ static void convert_type_internal(expr_i *efrom, term& tto, tvmap_type& tvmap)
     /* range to crange */
     const term_list *const tta = tconvto.get_args();
     const term_list *const tfa = tfrom.get_args();
-    if (tta != 0 && tfa != 0 && tta->front() == tfa->front()) {
+    if (tta != 0 && tfa != 0 && !tta->empty() && !tfa->empty() &&
+      tta->front() == tfa->front()) {
       DBG_CONV(fprintf(stderr, "convert: range\n"));
       efrom->conv = conversion_e_subtype_ptr;
       efrom->type_conv_to = tconvto;
@@ -2049,7 +2050,8 @@ static void convert_type_internal(expr_i *efrom, term& tto, tvmap_type& tvmap)
     } else {
       const term_list *const tta = tconvto.get_args();
       const term_list *const tfa = tra.get_args();
-      if (tta != 0 && tfa != 0 && tta->front() == tfa->front()) {
+      if (tta != 0 && tfa != 0 && !tta->empty() && !tfa->empty() &&
+	tta->front() == tfa->front()) {
 	DBG_CONV(fprintf(stderr, "convert: auto container to range\n"));
 	efrom->conv = conversion_e_container_range;
 	efrom->type_conv_to = tconvto;

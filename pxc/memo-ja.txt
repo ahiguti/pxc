@@ -3,29 +3,25 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- 可変長引数メタ関数: metafunction {x*} ... (done)
-  - 133/varm.px sumv2 
+- json スペースを読み飛ばす処理、値をまるごと読み飛ばす処理
 
-- 132_constmem_bugfix (done)
+- memcpyなどはintなどの配列にたいしては速くない
 
-- vectorのようにパラメータを取るテンプレはmeta lambdaとして使える
-  ように、引数が与えられなかったら評価しないで値としてメタ関数に
-  渡せるようにする。metafunction{x} ...との扱いを共通化するため。
-  (done)
+- 関数呼び出しの式について、対象がvariadic functionであったときと同じ
+  ように variadic metafunctionであっても引数型を渡すようにする?
 
-- io::file::openをvarargsに (done)
+- serializeをvariadic metafunction使ってoptを無指定にできるように
+
+- expt_metafdef::is_variadic消去
+
+- 無名variadic metafunction (done)
 
 - 汎用tableパーザ
   - 先にrcvector欲しい(done)
   - 次: transform: fieldに関数適用(done)
-  - 次: multiset
-  - 次: regex split
-  - container::tableに移動
-  - 比較関数を指定できるように
-
-- range等に対する operator * のexpr_has_lvalueが正しくない (done)
-- コンテナには中身がconstであるものも用意必要 (done)
-- マクロ置換でシンボルが空白だったらエラーになるか確認(done)
+  - 次: regex split (done)
+  - 比較関数を指定できるように (done)
+  - container::tableに移動 (done)
 
 - popen, fcntl, poll, epoll
 
@@ -33,12 +29,6 @@ FIXME/TODO M1
 
 - bulkではなくグローバルへ返せるようなスレッドローカルアロケータ
 
-- timingもtest_*に含め、実行時引数で長時間timingを実行するようにする
-  (done)
-
-- vectorとsvectorの性能比較 (done)
-
-- 直接malloc呼ぶのをやめる (done)
 
 - openglのsafe interfaceをどう作るか
 
@@ -51,9 +41,6 @@ FIXME/TODO M1
 - 代入演算子はvoidを返す
 
 - vectorとguard改革案整理
-
-- local_allocate_nつかう (done)
-- allocatorを別ファイルに (done)
 
 - sliceの代入演算子を潰していないのはなぜ？
 
@@ -626,6 +613,25 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- 可変長引数メタ関数: metafunction {x*} ... (done)
+  - transposevは要らない (done)
+  - joinはjoin_listに、joinvはjoinに (done)
+  - apply_listを用意 (done)
+- 132_constmem_bugfix (done)
+- vectorのようにパラメータを取るテンプレはmeta lambdaとして使える
+  ように、引数が与えられなかったら評価しないで値としてメタ関数に
+  渡せるようにする。metafunction{x} ...との扱いを共通化するため。
+  (done)
+- io::file::openをvarargsに (done)
+- range等に対する operator * のexpr_has_lvalueが正しくない (done)
+- コンテナには中身がconstであるものも用意必要 (done)
+- マクロ置換でシンボルが空白だったらエラーになるか確認(done)
+- timingもtest_*に含め、実行時引数で長時間timingを実行するようにする
+  (done)
+- vectorとsvectorの性能比較 (done)
+- 直接malloc呼ぶのをやめる (done)
+- local_allocate_nつかう (done)
+- allocatorを別ファイルに (done)
 - 暗黙変換がbyref又はnoheap型を返すとエラー(done)
 - add_root_requirement: function returning value && passby reference
   && blockscope のときstore_tempvarするが、functionだけでなく値を返す
@@ -2983,3 +2989,46 @@ struct {f} tr_function_object {
 
 118_table
 
+---------------------------------------------------------------------
+eval_apply_internal
+
+term_lambda:
+  std::vector<expr_tparams *> upvalues;
+  expr_tparams *const tparams;
+  const term v;
+term_bind:
+  expr_tparams *const tp;
+  const term tpv;
+  const term tpv_lexctx;
+  const bool is_upvalue;
+  const term_next; /* term_bind or term_lambda */
+
+
+if (s == term_sort_lambda || s == term_sort_bind) {
+  size_t nbind = 0;
+  const term *cur = &tm; /* bindかlambdaを指す */
+  while (tp != 0) { /* 既に適用済みのbindの数を計算 */
+    ...
+    cur = cur->get_bind_next(); /* curは次のbind又はlambdaへ移動 */
+    ...
+  }
+  この時点でcurはlambdaを指している
+  term ntm = tm; /* tmにさらにbindを追加した式をここに作る */
+  expr_tparams *ltpms = cur->get_lambda_tparams();
+  while (ltpms != 0) { /* lambdaが尽きるまで */
+    while (ltpms != 0 && nbind > 0) {
+      /* this param is already bound */
+      ltpms = tlpms->rest;
+      --nbind;
+    }
+    while (ltpms != 0 && args_bindcnt < args.size()) {
+      /* bind this param */
+      term arg = eval_if_unevaluated(args[args_bindcnt], targs_evaluated,
+	ectx, pos); /* eager evaluation */
+      ntm = term(ltpms, arg, term(), false, ntm); /* term_bind */
+      ltpms = ltpms->rest;
+      ++args_bindcnt;
+    }
+  }
+
+}

@@ -136,8 +136,9 @@ expr_i *expr_try_new(const char *fn, int line, expr_i *tblock, expr_i *cblock,
   expr_i *rest)
 { return arena_push(new expr_try(fn, line, tblock, cblock, rest)); }
 expr_i *expr_tparams_new(const char *fn, int line, const char *sym,
-  expr_i *rest)
-{ return arena_push(new expr_tparams(fn, line, sym, rest)); }
+  bool is_variadic_metaf, expr_i *rest)
+{ return arena_push(new expr_tparams(fn, line, sym, is_variadic_metaf,
+  rest)); }
 
 #if 0
 expr_i *expr_te_local_chain_new(expr_i *te1, expr_i *te2)

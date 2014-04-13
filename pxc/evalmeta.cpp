@@ -196,6 +196,16 @@ static term eval_meta_symbol_exists(const term_list_range& tlev,
   return eval_meta_symbol_internal(tlev, true /* check_only */, ectx, pos);
 }
 
+static term eval_meta_apply_list(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos)
+{
+  if (tlev.size() != 2 || !tlev[1].is_metalist()) {
+    return term();
+  }
+  const term_list *const targs = tlev[1].get_metalist();
+  return eval_apply(tlev[0], *targs, true, ectx, pos);
+}
+
 static term eval_meta_apply(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
@@ -1043,16 +1053,16 @@ static term eval_meta_seq(const term_list_range& tlev, eval_context& ectx,
   return term(tl);
 }
 
-static term eval_meta_join(const term_list_range& tlev, eval_context& ectx,
-  expr_i *pos)
+static term eval_meta_join_list(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 1 && tlev.size() != 2) {
-    arena_error_throw(pos, "join: Invalid number of arguments");
+    arena_error_throw(pos, "join_list: Invalid number of arguments");
     return term();
   }
   const term& t = tlev[0];
   if (!t.is_metalist()) {
-    arena_error_throw(pos, "join: Invalid argument");
+    arena_error_throw(pos, "join_list: Invalid argument");
     return term();
   }
   const term_list& tl = *t.get_metalist();
@@ -1072,7 +1082,7 @@ static term eval_meta_join(const term_list_range& tlev, eval_context& ectx,
   return term(rtl);
 }
 
-static term eval_meta_joinv(const term_list_range& tlev, eval_context& ectx,
+static term eval_meta_join(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
   term_list rtl;
@@ -1947,10 +1957,9 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@size", &eval_meta_size },
   { "@slice", &eval_meta_slice },
   { "@seq", &eval_meta_seq },
+  { "@join_list", &eval_meta_join_list },
   { "@join", &eval_meta_join },
-  { "@joinv", &eval_meta_joinv },
   { "@transpose", &eval_meta_transpose },
-  { "@transposev", &eval_meta_transposev },
   { "@sort", &eval_meta_sort },
   { "@unique", &eval_meta_unique },
   { "@list_index", &eval_meta_list_index },
@@ -2026,6 +2035,7 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@filter", &eval_meta_filter },
   { "@symbol", &eval_meta_symbol },
   { "@symbol_exists", &eval_meta_symbol_exists },
+  { "@apply_list", &eval_meta_apply_list },
   { "@apply", &eval_meta_apply },
   { "@error", &eval_meta_error },
 };

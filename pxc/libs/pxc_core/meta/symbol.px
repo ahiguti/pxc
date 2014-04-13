@@ -3,9 +3,9 @@ import meta -;
 import numeric::integral -;
 
 public metafunction functions_for_ns{ns}
-  filter_concrete{join{map{imports_transitive{ns}, functions}}};
+  filter_concrete{join_list{map{imports_transitive{ns}, functions}}};
 public metafunction types_for_ns{ns}
-  filter_concrete{join{map{imports_transitive{ns}, types}}};
+  filter_concrete{join_list{map{imports_transitive{ns}, types}}};
 public metafunction dependent_types_for_ns{ns}
   iteration_limit{direct_dependent_types_for_types, types_used_in_ns{ns}};
 
@@ -14,22 +14,22 @@ private metafunction is_concrete{t}
 private metafunction filter_concrete{fs} filter{fs, is_concrete};
 
 private metafunction argret_types_for_function{f}
-  joinv{list{ret_type{f}}, arg_types{f}};
+  join{list{ret_type{f}}, arg_types{f}};
 private metafunction argret_types_for_functions{fs}
-  filter_concrete{join{map{fs, argret_types_for_function}}};
+  filter_concrete{join_list{map{fs, argret_types_for_function}}};
 private metafunction field_types_for_types{ts}
-  filter_concrete{join{map{ts, field_types}}};
+  filter_concrete{join_list{map{ts, field_types}}};
 private metafunction memberfunc_argret_types_for_types{ts}
-  argret_types_for_functions{join{map{ts, member_functions}}};
+  argret_types_for_functions{join_list{map{ts, member_functions}}};
 private metafunction param_types_for_types{ts}
-  filter_concrete{join{map{ts, targs}}};
+  filter_concrete{join_list{map{ts, targs}}};
 
 private metafunction types_used_in_ns{ns}
-  unique{joinv{
+  unique{join{
     types_for_ns{ns},
     argret_types_for_functions{functions_for_ns{ns}}}};
 private metafunction direct_dependent_types_for_types{ts}
-  unique{joinv{
+  unique{join{
     ts,
     field_types_for_types{ts},
     memberfunc_argret_types_for_types{ts},
