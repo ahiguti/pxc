@@ -114,7 +114,7 @@ expr_i *expr_interface_new(const char *fn, int line, const char *sym,
 expr_i *expr_try_new(const char *fn, int line, expr_i *tblock, expr_i *cblock,
   expr_i *rest);
 expr_i *expr_tparams_new(const char *fn, int line, const char *sym,
-  expr_i *rest);
+  bool is_variadic_metaf, expr_i *rest);
 expr_i *expr_te_local_chain_new(expr_i *te1, expr_i *te2);
 expr_i *expr_metalist_new(expr_i *tl);
 

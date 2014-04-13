@@ -1,13 +1,13 @@
-public threaded namespace text::conversion;
+public threaded namespace text::string::serialize;
 public import numeric::integral -;
 public import container::array -;
+public import text::serialize -;
+public import generic -;
 public import meta m;
 public import meta::family mf;
 public import numeric::cast n;
-public import generic -;
-public import text::positional p;
-public import text::serialize -;
-public import text::minimal_encode e;
+public import text::string::positional p;
+public import text::string::minimal_encode e;
 
 public threaded function {t} string
 to_string(t const& x)
@@ -24,7 +24,7 @@ to_string(t const& x)
 public threaded function {t} void
 serialize_to_string(t const& x, string mutable& out)
 {
-  serialize{serialize_tpl, t}(x, out);
+  serialize{ser_default, t}(x, out);
 }
 
 public threaded function {t} t
@@ -51,51 +51,50 @@ from_string_emplace(cstrref const& s, t mutable& r)
 public threaded function {t} t
 deserialize_from_string(cstrref mutable& s)
 {
-  return deserialize{deserialize_tpl, t}(s);
+  return deserialize{ser_default, t}(s);
 }
 
 public threaded function {t} void
 deserialize_from_string_emplace(cstrref mutable& s, t mutable& r)
 {
-  deserialize_emplace{deserialize_tpl, t}(s, r);
+  deserialize_emplace{ser_default, t}(s, r);
 }
 
-public threaded struct serialize_tpl {
-  metafunction target_type string;
-  metafunction specialized_func{t}
+public threaded struct ser_default {
+  /* serialize */
+  metafunction ser_target_type string;
+  metafunction ser_specialized{t}
     m::cond{
       m::symbol_exists{m::nsof{t}, m::concat{t, "_append_to_string"}},
 	m::symbol{m::nsof{t}, m::concat{t, "_append_to_string"}},
       mf::is_string_or_slice_type{t}, string_append_escape{t},
-      mf::is_integral_type{t}, p::integral_to_decimal,
+      mf::is_integral_type{t}, p::integral_to_decimal{t},
       mf::is_fp_type{t}, p::fp_to_decimal,
       m::eq{t, bool}, bool_to_string,
       m::eq{t, unit}, unit_to_string,
       0};
-  metafunction array_begin string_append_char{'{'};
-  metafunction array_end string_append_char{'}'};
-  metafunction array_sep string_append_char{','};
-  metafunction map_begin string_append_char{'{'};
-  metafunction map_end string_append_char{'}'};
-  metafunction map_sep string_append_char{','};
-  metafunction map_entry_sep string_append_char{','};
-  metafunction pointer_begin string_append_char{'{'};
-  metafunction pointer_end string_append_char{'}'};
-  metafunction struct_begin string_append_char{'{'};
-  metafunction struct_end string_append_char{'}'};
-  metafunction struct_sep string_append_char{','};
-  metafunction struct_entry_sep string_append_char{','};
-  metafunction struct_field_name string_append_noesc;
-  metafunction union_begin string_append_char{'{'};
-  metafunction union_end string_append_char{'}'};
-  metafunction union_entry_sep string_append_char{','};
-  metafunction union_field_name string_append_noesc;
-  metafunction unknown{fam} unknown_to_string;
-}
-
-public threaded struct deserialize_tpl {
-  metafunction source_type cstrref;
-  metafunction specialized_func{t}
+  metafunction ser_array_begin string_append_char{'{'};
+  metafunction ser_array_end string_append_char{'}'};
+  metafunction ser_array_sep string_append_char{','};
+  metafunction ser_map_begin string_append_char{'{'};
+  metafunction ser_map_end string_append_char{'}'};
+  metafunction ser_map_sep string_append_char{','};
+  metafunction ser_map_entry_sep string_append_char{','};
+  metafunction ser_pointer_begin string_append_char{'{'};
+  metafunction ser_pointer_end string_append_char{'}'};
+  metafunction ser_struct_begin string_append_char{'{'};
+  metafunction ser_struct_end string_append_char{'}'};
+  metafunction ser_struct_sep string_append_char{','};
+  metafunction ser_struct_entry_sep string_append_char{','};
+  metafunction ser_struct_field_name string_append_noesc;
+  metafunction ser_union_begin string_append_char{'{'};
+  metafunction ser_union_end string_append_char{'}'};
+  metafunction ser_union_entry_sep string_append_char{','};
+  metafunction ser_union_field_name string_append_noesc;
+  metafunction ser_unknown{fam} unknown_to_string;
+  /* deserialize */
+  metafunction des_source_type cstrref;
+  metafunction des_specialized{t}
     m::cond{
       m::symbol_exists{m::nsof{t}, m::concat{t, "_parse_from_string"}},
 	m::symbol{m::nsof{t}, m::concat{t, "_parse_from_string"}},
@@ -105,31 +104,31 @@ public threaded struct deserialize_tpl {
       m::eq{t, bool}, string_parse_bool,
       m::eq{t, unit}, string_parse_unit,
       0};
-  metafunction array_begin_cond string_parse_char_cond{'{'};
-  metafunction array_end_cond string_parse_char_cond{'}'};
-  metafunction array_end_skip string_parse_char_skip{'{', '}'};
-  metafunction array_sep_cond string_parse_char_cond{','};
-  metafunction map_begin_cond string_parse_char_cond{'{'};
-  metafunction map_end_cond string_parse_char_cond{'}'};
-  metafunction map_end_skip string_parse_char_skip{'{', '}'};
-  metafunction map_sep_cond string_parse_char_cond{','};
-  metafunction map_entry_sep_cond string_parse_char_cond{','};
-  metafunction pointer_begin_cond string_parse_char_cond{'{'};
-  metafunction pointer_end_skip string_parse_char_skip{'{', '}'};
-  metafunction struct_begin_cond string_parse_char_cond{'{'};
-  metafunction struct_end_peek_cond string_parse_char_peek_cond{'}'};
-  metafunction struct_end_skip string_parse_char_skip{'{', '}'};
-  metafunction struct_sep_cond string_parse_char_cond{','};
-  metafunction struct_entry_sep_cond string_parse_char_cond{','};
-  metafunction struct_field_name_peek string_parse_symbol_peek;
-  metafunction union_begin_cond string_parse_char_cond{'{'};
-  metafunction union_end_cond string_parse_char_cond{'}'};
-  metafunction union_end_skip string_parse_char_skip{'{', '}'};
-  metafunction union_sep_cond string_parse_char_cond{','};
-  metafunction union_entry_sep_cond string_parse_char_cond{','};
-  metafunction union_field_name string_parse_symbol;
-  metafunction unknown{fam} string_parse_token_skip;
-  metafunction value_skip string_parse_token_skip;
+  metafunction des_array_begin_cond string_parse_char_cond{'{'};
+  metafunction des_array_end_cond string_parse_char_cond{'}'};
+  metafunction des_array_end_skip string_parse_char_skip{'{', '}'};
+  metafunction des_array_sep_cond string_parse_char_cond{','};
+  metafunction des_map_begin_cond string_parse_char_cond{'{'};
+  metafunction des_map_end_cond string_parse_char_cond{'}'};
+  metafunction des_map_end_skip string_parse_char_skip{'{', '}'};
+  metafunction des_map_sep_cond string_parse_char_cond{','};
+  metafunction des_map_entry_sep_cond string_parse_char_cond{','};
+  metafunction des_pointer_begin_cond string_parse_char_cond{'{'};
+  metafunction des_pointer_end_skip string_parse_char_skip{'{', '}'};
+  metafunction des_struct_begin_cond string_parse_char_cond{'{'};
+  metafunction des_struct_end_peek_cond string_parse_char_peek_cond{'}'};
+  metafunction des_struct_end_skip string_parse_char_skip{'{', '}'};
+  metafunction des_struct_sep_cond string_parse_char_cond{','};
+  metafunction des_struct_entry_sep_cond string_parse_char_cond{','};
+  metafunction des_struct_field_name_peek string_parse_symbol_peek;
+  metafunction des_union_begin_cond string_parse_char_cond{'{'};
+  metafunction des_union_end_cond string_parse_char_cond{'}'};
+  metafunction des_union_end_skip string_parse_char_skip{'{', '}'};
+  metafunction des_union_sep_cond string_parse_char_cond{','};
+  metafunction des_union_entry_sep_cond string_parse_char_cond{','};
+  metafunction des_union_field_name string_parse_symbol;
+  metafunction des_unknown{fam} string_parse_token_skip;
+  metafunction des_value_skip string_parse_token_skip;
 }
 
 private threaded function {t} void unknown_to_string(t const& v,
@@ -155,7 +154,7 @@ private threaded function void bool_to_string(bool v, string mutable& buf)
 private threaded function {t} void string_append_escape(t const& x,
   string mutable& v)
 {
-  e::minimal_encode(v, x);
+  e::minimal_encode(x, v);
 }
 
 private threaded function {t} void string_append_noesc(t const& x,
@@ -219,20 +218,16 @@ private threaded function string string_parse_string_unescape(
   return string_parse_token{string, str_decode}(s);
   threaded function string str_decode(cstrref const& stok) {
     string r;
-    e::minimal_decode(r, stok);
+    e::minimal_decode(stok, r);
     return r;
   }
 }
 
-private threaded function {t} t string_parse_integral(cstrref mutable& s)
-{
-  return string_parse_token{t, p::decimal_to_integral{t}}(s);
-}
+private metafunction string_parse_integral{t}
+  string_parse_token{t, p::decimal_to_integral{t}};
 
-private threaded function {t} t string_parse_fp(cstrref mutable& s)
-{
-  return string_parse_token{t, p::decimal_to_fp{t}}(s);
-}
+private metafunction string_parse_fp{t}
+  string_parse_token{t, p::decimal_to_fp{t}};
 
 private threaded function bool string_parse_bool(cstrref mutable& s)
 {

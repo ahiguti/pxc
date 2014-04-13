@@ -1,4 +1,4 @@
-public threaded namespace text::positional "use-unsafe";
+public threaded namespace text::string::positional "use-unsafe";
 public import numeric::integral -;
 public import container::array -;
 public import numeric::cast -;
@@ -8,8 +8,15 @@ public import meta m;
 
 /* positional notation */
 
-public threaded function {t} void integral_to_decimal(t v, string mutable& buf)
+public metafunction integral_to_decimal{t} integral_to_positional{t, 10};
+public metafunction integral_to_hexadecimal{t} integral_to_positional{t, 16};
+
+public threaded function {t, base} void
+integral_to_positional(t v, string mutable& buf)
 {
+  if (m::or{m::lt{base, 2}, m::gt{base, 36}}) {
+    m::error{"invalid parameter"};
+  }
   if (v == 0) {
     buf.push_back('0');
     return;
@@ -19,43 +26,80 @@ public threaded function {t} void integral_to_decimal(t v, string mutable& buf)
     buf.push_back('-');
     pos0 += 1;
     while (v != 0) {
-      t rem = v % 10;
-      v /= 10;
-      buf.push_back(- static_cast{uchar, t}(rem) + '0');
+      t rem = v % base;
+      v /= base;
+      if (m::le{base, 10}) {
+	buf.push_back(static_cast{uchar, t}(-rem) + '0');
+      } else {
+	const dv = - static_cast{uchar, t}(-rem);
+	buf.push_back(dv <= 10 ? dv + '0' : dv + 'a' - 10);
+      }
     }
   } else {
     while (v != 0) {
-      t rem = v % 10;
-      v /= 10;
-      buf.push_back(static_cast{uchar, t}(rem) + '0');
+      t rem = v % base;
+      v /= base;
+      if (m::le{base, 10}) {
+	buf.push_back(static_cast{uchar, t}(rem) + '0');
+      } else {
+	const dv = static_cast{uchar, t}(rem);
+	buf.push_back(dv <= 10 ? dv + '0' : dv + 'a' - 10);
+      }
     }
   }
   reverse(buf[pos0 .. buf.size()]);
 }
 
-public threaded function {t} t decimal_to_integral_nocheck(cstrref const& buf)
+public metafunction decimal_to_integral_nocheck{t}
+  positional_to_integral_nocheck{t, 10};
+public metafunction hexadecimal_to_integral_nocheck{t}
+  positional_to_integral_nocheck{t, 16};
+
+public threaded function {t, base} t
+positional_to_integral_nocheck(cstrref const& buf)
 {
+  if (m::or{m::lt{base, 2}, m::gt{base, 36}}) {
+    m::error{"invalid parameter"};
+  }
   if (buf.size() == 0) {
     return t();
   }
   uchar const ch = buf[0];
   if (ch == '-') {
-    return decimal_to_integral_nocheck_internal{t, 1}(buf[1 .. buf.size()]);
+    return positional_to_integral_nocheck_internal{t, base, 1}(
+      buf[1 .. buf.size()]);
   } else if (ch == '+') {
-    return decimal_to_integral_nocheck_internal{t, 0}(buf[1 .. buf.size()]);
+    return positional_to_integral_nocheck_internal{t, base, 0}(
+      buf[1 .. buf.size()]);
   } else {
-    return decimal_to_integral_nocheck_internal{t, 0}(buf);
+    return positional_to_integral_nocheck_internal{t, base, 0}(buf);
   }
 }
 
-private threaded function {t, negative} t
-decimal_to_integral_nocheck_internal(cstrref const& buf)
+private threaded function {t, base} bool
+uchar_to_integral(uchar v, t mutable& dig_r)
+{
+  if (v >= '0' && v <= m::add{m::max{base, 10}, '9'}) {
+    dig_r = static_cast{t, uchar}(v - '0');
+    return true;
+  }
+  if (m::gt{base, 10}) {
+    if (v >= 'a' && v <= m::add{'a', base}) {
+      dig_r = static_cast{t, uchar}(v - 'a' + 10);
+      return true;
+    }
+  }
+  return false;
+}
+
+private threaded function {t, base, negative} t
+positional_to_integral_nocheck_internal(cstrref const& buf)
 {
   t r;
   for (size_t idx, uchar v : buf) {
-    if (v >= '0' && v <= '9') {
-      r *= 10;
-      t const dig = static_cast{t, uchar}(v - '0');
+    t dig;
+    if (uchar_to_integral{t, base}(v, dig)) {
+      r *= base;
       if (negative) {
 	r -= dig;
       } else {
@@ -68,43 +112,49 @@ decimal_to_integral_nocheck_internal(cstrref const& buf)
   return r;
 }
 
-public threaded function {t} t
-decimal_to_integral(cstrref mutable& buf)
+public metafunction decimal_to_integral{t} positional_to_integral{t, 10};
+public metafunction hexadecimal_to_integral{t} positional_to_integral{t, 16};
+
+public threaded function {t, base} t
+positional_to_integral(cstrref mutable& buf)
 {
+  if (m::or{m::lt{base, 2}, m::gt{base, 36}}) {
+    m::error{"invalid parameter"};
+  }
   if (buf.size() == 0) {
     return t();
   }
   uchar const ch = buf[0];
   if (ch == '-') {
     buf.increment_front(1);
-    return decimal_to_integral_internal{t, 1}(buf);
+    return positional_to_integral_internal{t, base, 1}(buf);
   } else if (ch == '+') {
     buf.increment_front(1);
-    return decimal_to_integral_internal{t, 0}(buf);
+    return positional_to_integral_internal{t, base, 0}(buf);
   } else {
-    return decimal_to_integral_internal{t, 0}(buf);
+    return positional_to_integral_internal{t, base, 0}(buf);
   }
 }
 
-private threaded function {t, negative} t
-decimal_to_integral_internal(cstrref mutable& buf)
+private threaded function {t, base, negative} t
+positional_to_integral_internal(cstrref mutable& buf)
 {
   t r;
   for (size_t idx, uchar v : buf) {
-    if (v >= '0' && v <= '9') {
+    t dig;
+    if (uchar_to_integral{t, base}(v, dig)) {
       if (negative) {
-	if (r < (lim::lowest{t}() / 10)) {
+	if (r < (lim::lowest{t}() / base)) {
 	  buf.increment_front(idx);
 	  return r;
 	}
       } else {
-	if (r > (lim::highest{t}() / 10)) {
+	if (r > (lim::highest{t}() / base)) {
 	  buf.increment_front(idx);
 	  return r;
 	}
       }
-      r *= 10;
-      t const dig = static_cast{t, uchar}(v - '0');
+      r *= base;
       if (negative) {
 	t const nr = r - dig;
 	if (nr > r) {

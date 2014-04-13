@@ -620,7 +620,9 @@ static void get_indirect_imports(const all_modules_info& ami,
   if (cc_srcs_r.find(modname) != cc_srcs_r.end()) {
     return;
   }
-  assert(ami.modules.find(modname) != ami.modules.end());
+  if (ami.modules.find(modname) == ami.modules.end()) {
+    arena_error_throw(0, "-:-: Namespace '%s' not found\n", modname.c_str());
+  }
   const module_info& md = ami.modules.find(modname)->second;
   for (imports_type::deps_type::const_iterator i = md.imports.deps.begin();
     i != md.imports.deps.end(); ++i) {
@@ -1588,7 +1590,7 @@ static int prepare_options(parser_options& po, int argc, char **argv)
     po.work_dir = get_home_directory() + "/.pxc";
   }
   if (po.profile_name.empty()) {
-    po.profile_name = "/etc/pxc.profile";
+    po.profile_name = "/etc/pxc/pxc.profile";
   } else if (!po.no_realpath) {
     po.profile_name = get_canonical_path(po.profile_name);
   }

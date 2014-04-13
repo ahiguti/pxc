@@ -44,8 +44,6 @@
 #define DBG_LAMBDA(x)
 #define DBG_EVAL_TRACE(x)
 
-#define EVAL_LAZY 0
-
 namespace pxc {
 
 static void apply_tvmap_list(const term_list& src, term_list& dst,
@@ -354,24 +352,11 @@ static term eval_term_with_bind(const term& t, bool targs_evaluated,
 static term get_term_bind_evaluated(const term& t, eval_context& ectx)
 {
   term_bind *tb = t.get_term_bind();
-  #if EVAL_LAZY
-  /* not used anymore */
-  const term& tpv = tb->tpv;
-  term lexctx = tb->tpv_lexctx;
-  term& et = tb->tpv_evaluated;
-  if (et.is_null()) {
-    et = eval_term_with_bind(tpv, false, lexctx, ectx, 0);
-      /* FIXME modifying tb->tpv_lexctx can cause cycle? */
-  }
-  return et;
-  #else
   return tb->tpv;
-  #endif
 }
 
 static term find_tparam_bind(expr_tparams *tp, eval_context& ectx)
 {
-  #if 1
   const term *tpbind = ectx.tpbind;
   while (tpbind != 0) {
     if (!tpbind->is_bind()) {
@@ -389,60 +374,16 @@ static term find_tparam_bind(expr_tparams *tp, eval_context& ectx)
   }
   /* not found */
   return term();
-  #endif
-  #if 0
-  evaluated_entry *const ee = ectx.evvals;
-  size_t const ee_num = ectx.evvals_num;
-  size_t i = 0;
-  for (; i < ee_num; ++i) {
-    if (ee[i].uneval_tpb->tp == tp) {
-      break;
-    }
-  }
-  if (i >= ee_num) {
-    return term();
-  }
-  evaluated_entry& ent = ee[i];
-  term_bind *const tb = ent.uneval_tpb;
-  #if EVAL_LAZY
-  if (ent.evaluated.is_null()) {
-    const term& tpv = tb->tpv;
-    const term& lexctx = tb->tpv_lexctx;
-    ent.evaluated = eval_term_with_bind(tpv, false, lexctx, ectx, 0);
-  }
-  return ent.evaluated;
-  #else
-  return tb->tpv;
-  #endif
-  #endif
 }
 
 bool is_partial_eval_uneval(const term& t, eval_context& ectx)
 {
-  #if 0
-  bool r = has_unbound_tparam(t, ectx);
-  if (r) {
-    assert(ectx.need_partial_eval);
-  }
-  return r;
-  #endif
-  #if 1
   return ectx.need_partial_eval && has_unbound_tparam(t, ectx);
-  #endif
 }
 
 bool is_partial_eval_uneval(const term_list_range& tl, eval_context& ectx)
 {
-  #if 0
-  bool r = has_unbound_tparam(tl, ectx);
-  if (r) {
-    assert(ectx.need_partial_eval);
-  }
-  return r;
-  #endif
-  #if 1
   return ectx.need_partial_eval && has_unbound_tparam(tl, ectx);
-  #endif
 }
 
 bool has_unbound_tparam(const term& t, eval_context& ectx)
@@ -667,17 +608,26 @@ static term eval_apply_internal(const term& tm, const term_list_range& args,
       }
       while (ltpms != 0 && args_bindcnt < args.size()) {
 	/* bind this param */
-	#if EVAL_LAZY
-	const term& arg = args[args_bindcnt];
-	const term lexctx = ectx.tpbind != 0 ? *ectx.tpbind : term();
-	ntm = term(ltpms, arg, lexctx, false, ntm); /* term_bind */
-	#else
-	term arg = eval_if_unevaluated(args[args_bindcnt], targs_evaluated,
-	  ectx, pos); /* eager evaluation */
-	ntm = term(ltpms, arg, term(), false, ntm); /* term_bind */
-	#endif
-	ltpms = ltpms->rest;
-	++args_bindcnt;
+	if (ltpms->is_variadic_metaf) {
+	  /* ltpms is a parameter for a variadic metafunction */
+	  term_list al;
+	  while (args_bindcnt < args.size()) {
+	    term arg = eval_if_unevaluated(args[args_bindcnt], targs_evaluated,
+	      ectx, pos); /* eager evaluation */
+	    al.push_back(arg);
+	    ++args_bindcnt;
+	  }
+	  term vas(al); /* term_metalist */
+	  ntm = term(ltpms, vas, term(), false, ntm); /* term_bind */
+	  ltpms = 0;
+	} else {
+	  /* not a variadic metafunction */
+	  term arg = eval_if_unevaluated(args[args_bindcnt], targs_evaluated,
+	    ectx, pos); /* eager evaluation */
+	  ntm = term(ltpms, arg, term(), false, ntm); /* term_bind */
+	  ltpms = ltpms->rest;
+	  ++args_bindcnt;
+	}
       }
       if (ltpms != 0) {
 	/* not enough args supplied yet */
@@ -830,6 +780,7 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
 	}
       }
       if (targs.size() != 0) {
+	#if 0
 	if (ta->is_variadic) {
 	  term_list vargs(targs.size());
 	  for (size_t i = 0; i < targs.size(); ++i) {
@@ -839,8 +790,11 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
 	  const term larg(vargs); /* metalist */
 	  return eval_apply(tmfev, term_list_range(&larg, 1), true, ectx, pos);
 	} else {
+	#endif
 	  return eval_apply(tmfev, targs, targs_evaluated, ectx, pos);
+	#if 0
 	}
+	#endif
       } else {
 	return tmfev;
       }

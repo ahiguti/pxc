@@ -1,27 +1,17 @@
-public threaded namespace text::minimal_encode "use-unsafe";
+public threaded namespace text::string::minimal_encode "use-unsafe";
 import numeric::integral -;
 import container::array -;
 
 public threaded function extern "pxclib::minimal_encode"
-  void minimal_encode(string mutable& buf, cstrref const& src);
+  void minimal_encode(cstrref const& src, string mutable& buf);
 public threaded function extern "pxclib::minimal_decode"
-  void minimal_decode(string mutable& buf, cstrref const& src);
-
-extern "functions" inline
-namespace pxclib {
-
-using namespace pxcrt;
-
-void minimal_encode(bt_string& buf, cstrref const& src);
-void minimal_decode(bt_string& buf, cstrref const& src);
-
-}; // namespace pxclib
-;
+  void minimal_decode(cstrref const& src, string mutable& buf);
 
 extern "implementation" inline
 namespace pxclib {
+using namespace pxcrt;
 
-void minimal_encode(bt_string& buf, cstrref const& src)
+void minimal_encode(cstrref const& src, bt_string& buf)
 {
   /* escapes 0x00 - 0x0f, 0x2c, 0x7a - 0x7f */
   const size_t srclen = src.size();
@@ -49,7 +39,7 @@ void minimal_encode(bt_string& buf, cstrref const& src)
   buf.rawarr_set_valid_len(osize + wptr - wstart);
 }
 
-void minimal_decode(bt_string& buf, cstrref const& src)
+void minimal_decode(cstrref const& src, bt_string& buf)
 {
   const size_t srclen = src.size();
   const bt_uchar *const start = src.rawarr();

@@ -12,19 +12,20 @@ private metafunction has_byref_iter{f, n, i}
 private metafunction norefarg{f} not{has_byref_iter{f, arg_size{f}, 0}};
 private metafunction filter_norefarg{fs} filter{fs, norefarg};
 private metafunction nsfuncs{ns}
-  filter_norefarg{filter_concrete{join{map{nslist{ns}, functions}}}};
-private metafunction nstypes{ns} filter_concrete{join{map{nslist{ns}, types}}};
-private metafunction atypes_one{f} joinv{list{ret_type{f}}, arg_types{f}};
+  filter_norefarg{filter_concrete{join_list{map{nslist{ns}, functions}}}};
+private metafunction nstypes{ns}
+  filter_concrete{join_list{map{nslist{ns}, types}}};
+private metafunction atypes_one{f} join{list{ret_type{f}}, arg_types{f}};
 private metafunction atypes{fs}
-  filter_concrete{join{map{filter_concrete{fs}, atypes_one}}};
+  filter_concrete{join_list{map{filter_concrete{fs}, atypes_one}}};
 private metafunction ftypes{ts}
-  filter_concrete{join{map{ts, field_types}}};
-private metafunction mfatypes{ts} atypes{join{map{ts, member_functions}}};
-private metafunction tatypes{ts} join{map{ts, targs}};
+  filter_concrete{join_list{map{ts, field_types}}};
+private metafunction mfatypes{ts} atypes{join_list{map{ts, member_functions}}};
+private metafunction tatypes{ts} join_list{map{ts, targs}};
 private metafunction init_types{ns}
-  unique{joinv{nstypes{ns}, atypes{nsfuncs{ns}}}};
+  unique{join{nstypes{ns}, atypes{nsfuncs{ns}}}};
 private metafunction step_types{ts}
-  unique{joinv{ts, ftypes{ts}, mfatypes{ts}, tatypes{ts}}};
+  unique{join{ts, ftypes{ts}, mfatypes{ts}, tatypes{ts}}};
 private metafunction rep_types{ts, tsn}
   cond{eq{ts, tsn}, ts, rep_types{tsn, step_types{tsn}}};
 

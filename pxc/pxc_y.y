@@ -112,7 +112,7 @@ static compile_mode cur_mode;
 %type<expr_val> toplevel_stmt_list
 %type<expr_val> toplevel_stmt
 %type<expr_val> defs_stmt
-%type<expr_val> tparam
+%type<expr_val> tparam_variadic
 %type<expr_val> tparam_list
 %type<expr_val> opt_tparams_expr
 %type<expr_val> struct_body_stmt_list
@@ -217,15 +217,15 @@ defs_stmt
 	| interface_stmt
 	| metafdef_stmt
 	;
-tparam
-	: TOK_SYMBOL
-	  { $$ = expr_tparams_new(cur_fname, @1.first_line, $1, 0); }
+tparam_variadic
+	: TOK_SYMBOL '*'
+	  { $$ = expr_tparams_new(cur_fname, @1.first_line, $1, 1, 0); }
 	;
 tparam_list
 	: TOK_SYMBOL
-	  { $$ = expr_tparams_new(cur_fname, @1.first_line, $1, 0); }
+	  { $$ = expr_tparams_new(cur_fname, @1.first_line, $1, 0, 0); }
 	| TOK_SYMBOL ',' tparam_list
-	  { $$ = expr_tparams_new(cur_fname, @1.first_line, $1, $3); }
+	  { $$ = expr_tparams_new(cur_fname, @1.first_line, $1, 0, $3); }
 	;
 opt_tparams_expr
 	:
@@ -720,10 +720,10 @@ metafdef_stmt
 		$1); }
 	  /* $5 expects tparam_list but parsed as type_arg_list to avoid
 	   conflicts. it will be converted to expr_tparams when compiled. */
-	| opt_attribute TOK_METAFUNCTION TOK_SYMBOL '{' tparam '*' '}'
+	| opt_attribute TOK_METAFUNCTION TOK_SYMBOL '{' tparam_variadic '}'
 		type_arg ';'
 	  /* variadic metafunction */
-	  { $$ = expr_metafdef_new(cur_fname, @2.first_line, $3, $5, $8, 1,
+	  { $$ = expr_metafdef_new(cur_fname, @2.first_line, $3, $5, $7, 1,
 		$1); }
 	;
 visi_vardef_stmt
@@ -872,9 +872,9 @@ type_arg_excl_metalist
 	| TOK_METAFUNCTION '{' tparam_list '}' type_arg
 	  { $$ = expr_metafdef_new(cur_fname, @1.first_line, 0, $3, $5,
 		0, attribute_private); }
-	| TOK_METAFUNCTION '{' tparam '*' '}' type_arg
+	| TOK_METAFUNCTION '{' tparam_variadic '}' type_arg
 	  /* variadic metafunction */
-	  { $$ = expr_metafdef_new(cur_fname, @1.first_line, 0, $3, $6,
+	  { $$ = expr_metafdef_new(cur_fname, @1.first_line, 0, $3, $5,
 		1, attribute_private); }
 	;
 type_arg
@@ -1140,6 +1140,7 @@ void pxc_parse_file(const source_info& si, imports_type& imports_r)
 		assert(s.size());
 		yylloc.first_line = 1;
 		yyparse();
+		arena_error_throw_pushed();
 		topvals.push_back(topval);
 		topval = 0;
 	}

@@ -5,22 +5,22 @@ public import meta::family mf;
 public import exception -;
 public import io::text -;
 public import io::errno -;
-public import table -;
+public import container::table -;
 
 {
   println("TEST0");
   const fp = system.open("hoge3.txt").value;
-  mutable tin = table_ifile{{string, int, float}, 0}(fp);
-  mutable tout = table_ofile{{string, int, float}, 0}(system.stdout());
+  mutable tin = table_ifile{{string, int, float}}(fp);
+  mutable tout = table_ofile{{string, int, float}}(system.stdout());
   transform{0}(tin, tout);
 }
 
 {
   println("TEST1");
   const fp = system.open("hoge3.txt").value;
-  mutable tin = table_ifile{{string, int, float}, 0}(fp);
+  mutable tin = table_ifile{{string, int, float}}(fp);
   mutable ttbl = table_map{{string}, {int, float}}();
-  mutable tout = table_ofile{{string, int, float}, 0}(system.stdout());
+  mutable tout = table_ofile{{string, int, float}}(system.stdout());
   transform{0}(tin, ttbl);
   transform{0}(ttbl, tout);
 }
@@ -28,9 +28,9 @@ public import table -;
 {
   println("TEST2");
   const fp = system.open("hoge3.txt").value;
-  mutable tin = table_ifile{{string, int, float}, 0}(fp);
+  mutable tin = table_ifile{{string, int, float}}(fp);
   mutable ttbl = table_map{{string}, {int, float}}();
-  mutable tout = table_ofile{{float, string}, 0}(system.stdout());
+  mutable tout = table_ofile{{float, string}}(system.stdout());
   transform{0}(tin, ttbl);
   transform{{2, 0}}(ttbl, tout);
 }
@@ -38,9 +38,9 @@ public import table -;
 {
   println("TEST3");
   const fp = system.open("hoge3.txt").value;
-  mutable tin = table_ifile{{string, int, float}, 0}(fp);
+  mutable tin = table_ifile{{string, int, float}}(fp);
   mutable ttbl = table_map{{string}, {int, float}}();
-  mutable tout = table_ofile{{float, string}, 0}(system.stdout());
+  mutable tout = table_ofile{{float, string}}(system.stdout());
   float sum = 0.0;
   transform{0}(tin, ttbl);
   transform{{{my_add, 1, 2}, 0}}(ttbl, tout);
@@ -55,9 +55,9 @@ public import table -;
 {
   println("TEST4");
   const fp = system.open("hoge3.txt").value;
-  mutable tin = table_ifile{{string, int, float}, 0}(fp);
+  mutable tin = table_ifile{{string, int, float}}(fp);
   mutable ttbl = table_map{{string}, {int, float}}();
-  mutable tout = table_ofile{{float, string}, 0}(system.stdout());
+  mutable tout = table_ofile{{float, string}}(system.stdout());
   float sum = 0.0;
   transform{0}(tin, ttbl);
   transform{tr_func}(ttbl, tout);
@@ -74,20 +74,29 @@ public import table -;
   const fp = system.open("hoge3c.txt").value;
   metafunction opt {{"regex" ,"([a-z]+):([0-9]+)"}};
   mutable tin = table_ifile{{string, int}, opt}(fp);
-  mutable tout = table_ofile{{string, int}, 0}(system.stdout());
+  mutable tout = table_ofile{{string, int}}(system.stdout());
   transform{0}(tin, tout);
 }
 
 {
   println("TEST6");
   const fp = system.open("hoge3.txt").value;
-  mutable tin = table_ifile{{string, int, float}, 0}(fp);
+  mutable tin = table_ifile{{string, int, float}}(fp);
   mutable t0 = table_map{{string}, {int, float}}();
-  mutable t1 = table_map{{float, int, string}, m::nil}();
-  mutable tout = table_ofile{{string, float, int}, 0}(system.stdout());
+  mutable t1 = table_map{{float, int, string}}();
+  mutable tout = table_ofile{{string, float, int}}(system.stdout());
   transform{0}(tin, t0);
   transform{{2, 1, 0}}(t0, t1);
   transform{{2, 0, 1}}(t1, tout);
 }
 
+{
+  println("TEST7");
+  const fp = system.open("hoge3.txt").value;
+  mutable tin = table_ifile{{string, int, float}}(fp);
+  mutable ttbl = table_map{{string}, {1}, {int, float}}();
+  mutable tout = table_ofile{{string, int, float}}(system.stdout());
+  transform{0}(tin, ttbl);
+  transform{0}(ttbl, tout);
+}
 

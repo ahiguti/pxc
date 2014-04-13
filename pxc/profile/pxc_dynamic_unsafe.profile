@@ -1,5 +1,5 @@
 generate_dynamic=1
-incdir=/usr/share/pxc_%{platform}/:/usr/share/pxc_core/:./%{platform}:.
+incdir=/usr/share/pxc/pxc_%{platform}/:/usr/share/pxc/pxc_core/:.
 show_warnings
 safe_mode=0
 cxx=g++

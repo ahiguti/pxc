@@ -106,11 +106,9 @@ public struct extern "@seq" "@seq" {x, y} seq { }
 public struct extern "@map" "@map" {lst, mf} map { }
 public struct extern "@fold" "@fold" {lst, mf, v0} fold { }
 public struct extern "@filter" "@filter" {lst, f} filter { }
-public struct extern "@join" "@join" {lstlst, opt_sep} join { }
-public struct extern "@joinv" "@joinv" {lst1, lst2} joinv { } /* vararg */
+public struct extern "@join_list" "@join_list" {lstlst, opt_sep} join_list { }
+public struct extern "@join" "@join" {lst1, lst2} join { } /* vararg */
 public struct extern "@transpose" "@transpose" {lstlst} transpose { }
-public struct extern "@transposev" "@transposev" {lst1, lst2} transposev { }
-  /* vararg */
 public struct extern "@sort" "@sort" {lst} sort { }
 public struct extern "@unique" "@unique" {lst} unique { }
 public struct extern "@list_index" "@list_index" {lst} list_index { }
@@ -158,9 +156,9 @@ public metafunction imports_transitive{ns}
     map{filter{imports{ns}, is_import_pub}, at0};
   private metafunction imports_name{ns} map{imports{ns}, at0};
   private metafunction imports_init{ns}
-    sort{unique{joinv{list{ns}, imports_name{ns}}}};
+    sort{unique{join{list{ns}, imports_name{ns}}}};
   private metafunction imports_rec{lst}
-    sort{unique{joinv{lst, join{map{lst, imports_name_pub}}}}};
+    sort{unique{join{lst, join_list{map{lst, imports_name_pub}}}}};
 
 public metafunction field_type{t, fname}
   field_type_rec{field_types{t}, field_names{t}, fname};

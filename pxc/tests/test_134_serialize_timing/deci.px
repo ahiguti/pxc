@@ -1,0 +1,53 @@
+namespace deci;
+public import common -;
+public import meta m;
+public import test -;
+public import text::string::positional -;
+
+function size_t test_serialize(int num)
+{
+  long sum = 0;
+  string buf;
+  for (int i : 0 .. num) {
+    buf.clear();
+    serialize_to_string(i, buf);
+    int v = from_string{int}(buf);
+    sum += v;
+  }
+  return static_cast{size_t}(sum);
+}
+
+function {base, use_seri, use_deseri} size_t test_positional(int num)
+{
+  long sum = 0;
+  string buf;
+  for (int i : 0 .. num) {
+    buf.clear();
+    if (m::ne{use_seri, 0}) {
+      serialize_to_string(i, buf);
+    } else {
+      integral_to_positional{int, base}(i, buf);
+    }
+    cstrref sli = buf;
+    if (m::ne{use_deseri, 0}) {
+      int v = from_string{int}(buf);
+      sum += v;
+    } else {
+      int v = positional_to_integral{int, base}(sli);
+      sum += v;
+    }
+  }
+  return static_cast{size_t}(sum);
+}
+
+{
+  test_timing_default{{
+    test_serialize,
+    test_positional{10, 0, 0},
+    test_positional{10, 1, 0},
+    test_positional{10, 0, 1},
+    test_positional{10, 1, 1},
+    test_positional{16, 0, 0}
+  }}();
+}
+

@@ -690,7 +690,8 @@ public:
 };
 
 struct expr_tparams : public expr_i {
-  expr_tparams(const char *fn, int line, const char *sym, expr_i *rest);
+  expr_tparams(const char *fn, int line, const char *sym,
+    bool is_variadic_metaf, expr_i *rest);
   expr_tparams *clone() const { return new expr_tparams(*this); }
   expr_e get_esort() const { return expr_e_tparams; }
   int get_num_children() const { return 1; }
@@ -711,6 +712,7 @@ struct expr_tparams : public expr_i {
   void emit_value(emit_context& em) { }
 public:
   const char *sym;
+  const bool is_variadic_metaf;
   expr_tparams *rest;
   term param_def;
 };
@@ -1284,7 +1286,7 @@ public:
   const char *const sym;
   std::string uniqns;
   expr_block *block;
-  bool is_variadic;
+  bool is_variadic; /* TODO: remove */
   attribute_e attr;
   term metafdef_term; /* caches metafdef_to_term() */
   term evaluated_term; /* for named and noarg metafunctions only */
