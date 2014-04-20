@@ -6,7 +6,8 @@ extern "types" inline
 #include <algorithm>
 #include <limits>
 
-#define PXCRT_DBG_SVECTOR(x)
+#define PXCRT_DBG_SVECTOR1(x)
+#define PXCRT_DBG_SVECTOR2(x)
 
 namespace pxcrt {
 
@@ -79,13 +80,13 @@ struct svector {
   void push_back(T const& x) {
     if (rep->refcnt == 1 && rep->valid_len < rep->alloc_len) {
       /* fast path */
-      PXCRT_DBG_SVECTOR(fprintf(stderr, "fastpath\n"));
+      PXCRT_DBG_SVECTOR2(fprintf(stderr, "fastpath\n"));
       initialize_1(end(), x);
       rep->valid_len += 1;
       return;
     } else {
       /* slow path */
-      PXCRT_DBG_SVECTOR(fprintf(stderr, "slowpath %zu %zu %zu\n", rep->refcnt,
+      PXCRT_DBG_SVECTOR2(fprintf(stderr, "slowpath %zu %zu %zu\n", rep->refcnt,
 	rep->valid_len, rep->alloc_len));
       rep_make_unique(size() + 1);
       initialize_1(end(), x);
@@ -206,15 +207,20 @@ private:
 private:
   static inline void rep_incref(svector_rep *rep) {
     if (rep->refcnt != 0) {
+      PXCRT_DBG_SVECTOR1(fprintf(stderr, "rep_decref incref %p %zu\n", rep,
+	rep->refcnt + 1));
       ++rep->refcnt;
     }
   }
   static inline void rep_decref(svector_rep *rep) {
     if (rep->refcnt != 0) {
+      PXCRT_DBG_SVECTOR1(fprintf(stderr, "rep_decref decref %p %zu\n", rep,
+	rep->refcnt - 1));
       if (--rep->refcnt == 0) {
 	T *const p = reinterpret_cast<T *>(
 	  reinterpret_cast<char *>(rep) + sizeof(svector_rep));
 	deinitialize_n(p, rep->valid_len);
+	PXCRT_DBG_SVECTOR1(fprintf(stderr, "rep_decref dealloc %p\n", rep));
 	global_deallocate_n(rep,
 	  sizeof(svector_rep) + sizeof(T) * rep->alloc_len);
       }
@@ -227,6 +233,7 @@ private:
       void *const vrep = global_allocate_n(
 	sizeof(svector_rep) + sizeof(T) * asz);
       svector_rep *const nrep = reinterpret_cast<svector_rep *>(vrep);
+      PXCRT_DBG_SVECTOR1(fprintf(stderr, "rep_init alloc %p\n", nrep));
       nrep->refcnt = 1;
       nrep->valid_len = 0;
       nrep->alloc_len = asz;
@@ -238,6 +245,7 @@ private:
 	PXC_TRY {
 	  initialize_copy_n(start, sz, ptr);
 	} PXC_CATCH(...) {
+	  PXCRT_DBG_SVECTOR1(fprintf(stderr, "rep_init dealloc %p\n", rep));
 	  global_deallocate_n(rep,
 	    sizeof(svector_rep) + sizeof(T) * rep->alloc_len);
 	  PXC_RETHROW;
@@ -276,13 +284,21 @@ private:
   void rep_make_unique_resize(size_type asz) {
     if (is_trivially_copyable<T>::value) {
       if (rep->refcnt != 1) {
+	svector_rep *const orep = rep;
 	asz = std::max(asz, size_type(1));
 	  /* set asz nonzero so that rep_init allocate a unique buffer */
+	PXCRT_DBG_SVECTOR1(fprintf(stderr, "rep_make_unique_resize init1 %p\n",
+	  rep));
 	rep_init(begin(), std::min(size(), asz), asz);
+	rep_decref(orep);
       } else {
+	PXCRT_DBG_SVECTOR1(fprintf(stderr, "rep_make_unique_resize pre %p\n",
+	  rep));
 	rep = (svector_rep *)global_reallocate_n(rep,
 	    sizeof(svector_rep) + sizeof(T) * rep->alloc_len,
 	    sizeof(svector_rep) + sizeof(T) * asz);
+	PXCRT_DBG_SVECTOR1(fprintf(stderr, "rep_make_unique_resize post %p\n",
+	  rep));
 	rep->alloc_len = asz;
       }
     } else {
@@ -326,7 +342,8 @@ template <typename T> struct csvector : public svector<T> {
 
 }; // namespace pxcrt
 
-#undef PXCRT_DBG_SVECTOR
+#undef PXCRT_DBG_SVECTOR1
+#undef PXCRT_DBG_SVECTOR2
 
 ;
 

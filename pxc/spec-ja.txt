@@ -1,41 +1,14 @@
 
-thread関連制約の強さ: valuetype > threaded, multithreaded > threaded
-(valuetypeかmultithreadedならばthreadedでもある)
-- 型がthreaded/multithreaded/valuetypeであるのは
-  - struct/union/interfaceがt/m/v以上装飾がついている
-  - かつ、テンプレパラメータがt/m/v型やt関数であること
-- 関数がthreadedであるのは
-  - 非メンバ関数についてはthreaded装飾、メンバ関数については
-    struct/interfaceがthreaded以上装飾がついている
-  - かつ、テンプレパラメータがt/m/v型やt関数であること
-- threaded装飾されたstruct/unionについての制約
-  - threaded装飾struct等のfieldの型はthreaded以上must
-  - multithreaded装飾struct等のfieldの型はmultithreaded以上must  
-  - valuetype装飾struct等のfieldの型はvaluetype以上must
-- threaded装飾された関数とt/m/v装飾された型のメンバ関数についての制約
-  - 呼べる関数はthreadedな関数だけ
-  - 変数・引数・返値の型はthreadedな型だけ
-  - グローバル変数をアクセスできない
-- ポインタ
-  - ptr/cptr/iptrはthreaded装飾されている
-  - tptr/tcptr/tiptrはmultithreaded装飾されている
-  - iptr/tiptrはvaluetype装飾されている
-  - ptr->cptr は代入可能
-  - tptr->tcptr は代入可能
-  - iptr -> cptr は代入可能ではない(実装上の理由)
-  - tptr->ptr, tcptr->cptr, tiptr->iptr は代入可能ではない(実装上の理由)
-  - tiptr -> tcptr は代入可能ではない(実装上の理由)
-- ポインタの型パラメータについての制約
-  - tptr/tcptrの型パラメータはmultithreaded以上must
-  - iptr/tiptrの型パラメータはvaluetype(以上)must
-
-thread関連(やりなおし)
-- thread関連装飾
+thread装飾の意味
+- 関数に対するthread装飾
+  - 装飾無し関数: メインスレッドでしか利用できない関数
   - threaded関数: 子スレッドでも利用できる関数
       グローバル変数にアクセスしない
       threadedではない関数を呼ばない
       引数や変数はthreaded型でなければならない
       closureはthreadedでないものも定義できるが呼べない
+- 型に対するthread装飾
+  - 装飾無し型: メインスレッドでしか利用できない型
   - threaded型: 子スレッドでも利用できる型
       thread間で渡すことはできないが中では利用できる型
       メンバ関数は暗黙裡にthreaded関数になる
@@ -189,5 +162,4 @@ thread関連(やりなおし)
     で参照できる。
   - namespace bar が import foo + とすると、擬似メンバ関数のlookup時に
     fooに加えてbarを検索するようになる。
-
 

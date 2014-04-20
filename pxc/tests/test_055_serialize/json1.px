@@ -1,0 +1,44 @@
+public namespace json1;
+public import common -;
+public import text::string::json -;
+public import text::serialize -;
+
+function {t} void test_one(t const& value)
+{
+  string s;
+  serialize{ser_json, t}(value, s);
+  println(s);
+  cstrref sr = s;
+  const x = deserialize{ser_json, t}(sr);
+  string s1;
+  serialize{ser_json, t}(x, s1);
+  println(s1);
+  if (s != s1) {
+    println("not equal");
+  } else {
+    println("ok");
+  }
+}
+
+struct foo {
+  int x;
+  string y;
+}
+
+{
+  string sv = "abcdef";
+  test_one(sv);
+
+  int iv = 1234;
+  test_one(iv);
+
+  const f = foo(3, "abc");
+  test_one(f);
+
+  vector{foo} x;
+  x.push_back(foo(5, "abc"));
+  x.push_back(foo(10, "xyz"));
+  x.push_back(foo(1, "hoge"));
+  test_one(x);
+}
+

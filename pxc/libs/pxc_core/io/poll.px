@@ -1,0 +1,120 @@
+public threaded namespace io::poll "use-unsafe";
+public import numeric::integral -;
+public import container::array -;
+public import io::file +;
+public import io::errno -;
+public import meta m;
+public import pointer -;
+
+public multithreaded struct extern "pxcio::poll" "nodefault"
+poll(io::io const& iop) { }
+
+public tsvaluetype struct extern "unsigned" "extbitmask"
+poll_eventmask_t { }
+
+public extern "pxcio::poll_eventmask_in" poll_eventmask_t POLLIN;
+public extern "pxcio::poll_eventmask_out" poll_eventmask_t POLLOUT;
+public extern "pxcio::poll_eventmask_et" poll_eventmask_t EPOLLET;
+
+public threaded function extern "pxcio::poll_add" errno_t
+poll_add(poll const& p, file_mt const& f, poll_eventmask_t ev);
+
+public threaded function extern "pxcio::poll_modify" errno_t
+poll_modify(poll const& p, file_mt const& f, poll_eventmask_t ev);
+
+public threaded function extern "pxcio::poll_remove" errno_t
+poll_remove(poll const& p, file_mt const& f);
+
+public tsvaluetype struct extern "pxcio::poll_event"
+poll_event { }
+
+public threaded function extern "pxcio::poll_event_fileno" int
+poll_event_fileno(poll_event const& ev);
+
+public threaded function extern "pxcio::poll_event_events" poll_eventmask_t
+poll_event_events(poll_event const& ev);
+
+public threaded function extern "pxcio::poll_wait" errno_t
+poll_wait(poll const& p, size_t maxevents, uint timeo_ms,
+  vector{poll_event} mutable& events_r);
+
+extern "types" inline
+#include <sys/epoll.h>
+
+namespace pxcio {
+
+struct poll {
+  poll(io const& iop);
+  file_mt handle;
+};
+
+typedef ::epoll_event poll_event;
+
+enum { poll_eventmask_in = EPOLLIN };
+enum { poll_eventmask_out = EPOLLOUT };
+enum { poll_eventmask_et = EPOLLET };
+
+};
+;
+
+extern "implementation" inline
+namespace pxcio {
+
+poll::poll(io const& iop)
+  : handle(io_make_file_mt(iop, ::epoll_create(1024)))
+{
+}
+
+int poll_add(poll const& p, file_mt const& f, unsigned ev)
+{
+  epoll_event e;
+  e.events = ev;
+  e.data.fd = f.get();
+  const int r = epoll_ctl(p.handle.get(), EPOLL_CTL_ADD, f.get(), &e);
+  return r < 0 ? errno : 0;
+}
+
+int poll_modify(poll const& p, file_mt const& f, unsigned ev)
+{
+  epoll_event e;
+  e.events = ev;
+  e.data.fd = f.get();
+  const int r = epoll_ctl(p.handle.get(), EPOLL_CTL_MOD, f.get(), &e);
+  return r < 0 ? errno : 0;
+}
+
+int poll_remove(poll const& p, file_mt const& f)
+{
+  epoll_event e = { };
+  const int r = epoll_ctl(p.handle.get(), EPOLL_CTL_DEL, f.get(), &e);
+  return r < 0 ? errno : 0;
+}
+
+pxcrt::bt_int poll_event_fileno(poll_event const& e)
+{
+  return e.data.fd;
+}
+
+unsigned poll_event_events(poll_event const& e)
+{
+  return e.events;
+}
+
+int
+poll_wait(poll const& ep, pxcrt::bt_size_t maxevents, pxcrt::bt_uint timeo_ms,
+  pxcrt::pxcvector<poll_event>& events_r)
+{
+  maxevents = std::min(maxevents, size_t(65535));
+  size_t const osz = events_r.size();
+  poll_event *evp = events_r.reserve_back<1>(maxevents);
+  int n = epoll_wait(ep.handle.get(), evp, maxevents, timeo_ms);
+  if (n < 0) {
+    return errno;
+  }
+  events_r.rawarr_set_valid_len(osz + maxevents);
+  return 0;
+}
+
+};
+;
+

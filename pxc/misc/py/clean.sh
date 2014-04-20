@@ -1,2 +1,2 @@
 #!/bin/bash
-pxc -p /etc/pxc_dynamic.profile -c
+pxc -p=/etc/pxc_dynamic.profile -c

@@ -2,22 +2,23 @@ public threaded namespace io::process "use-unsafe";
 public import numeric::integral -;
 public import numeric::cast -;
 public import container::array -;
+public import algebraic -;
 public import meta -;
-public import io -;
+public import io +;
+public import io::standard -;
 public import io::errno -;
 public import io::signal -;
+public import io::file -;
 public import exception;
 
-public threaded function errno_t io_exit(io const& sys, int st)
+public threaded function void io__exit(io const& sys, int st)
 {
   _exit_internal(sys, st);
-  return sys.get_errno();
 }
 
-public function errno_t exit(int st)
+public function void exit(int st)
 {
   exit_internal(io::system, st);
-  return io::system.get_errno();
 }
 
 public threaded function void io_abort(io const& sys)
@@ -37,6 +38,58 @@ public threaded function errno_or_value{pid_t} io_fork(io const& sys)
     r.errno = sys.get_errno();
   } else {
     r.value = pid;
+  }
+  return r;
+}
+
+public multithreaded struct pipe_process(pid_t pid0, file_mt const& file0)
+{
+  public pid_t const pid = pid0;
+  public file_mt file = file0;
+}
+
+public threaded function errno_or_value{pipe_process}
+io_popen(io const& sys, cstrref const& command, cslice{string} const& argv,
+  bool for_write, bool search_path)
+{
+  errno_or_value{pipe_process} r;
+  mutable p = sys.pipe();
+  if (const e : p.errno) {
+    r.errno = e;
+    return r;
+  }
+  const rfork = sys.fork();
+  if (const e : rfork.errno) {
+    r.errno = e;
+    return r;
+  }
+  const pid = rfork.value;
+  if (pid == 0) {
+    /* child process */
+    try {
+      errno_t err;
+      if (for_write) {
+	err = dup2_internal(sys, p.value.first, sys.stdin());
+      } else {
+	err = dup2_internal(sys, p.value.second, sys.stdout());
+      }
+      p.errno = EOK; /* close pipe fds */
+      if (err == EOK) {
+	if (search_path) {
+	  sys.execvp(command, argv);
+	} else {
+	  sys.execv(command, argv);
+	}
+      }
+    } catch (exception::c_exception ex) {
+      /* bad_alloc for example */
+    }
+    sys._exit(127);
+  }
+  if (for_write) {
+    r.value = pipe_process(pid, p.value.second);
+  } else {
+    r.value = pipe_process(pid, p.value.first);
   }
   return r;
 }
@@ -99,9 +152,11 @@ public threaded function extern "pxcio::wtermsig"
 signal_t WTERMSIG(status_t st);
 
 public threaded function extern "pxcio::execv"
-errno_t execv(io const& sys, cstrref const& path, vector{string} const& argv);
+errno_t io_execv(io const& sys, cstrref const& path,
+  cslice{string} const& argv);
 public threaded function extern "pxcio::execvp"
-errno_t execvp(io const& sys, cstrref const& path, vector{string} const& argv);
+errno_t io_execvp(io const& sys, cstrref const& path,
+  cslice{string} const& argv);
 
 private threaded function extern "pxcio::_exit_internal"
 void _exit_internal(io const& sys, int status);
@@ -118,6 +173,8 @@ pid_t waitpid_internal(io const& sys, pid_t pid, status_t mutable& st_r,
   wait_options_t opt);
 private threaded function extern "pxcio::shell_exec_internal"
 int shell_exec_internal(io const& sys, cstrref const& cmd);
+private threaded function extern "pxcio::dup2_internal"
+errno_t dup2_internal(io const& sys, file const& ofp, file const& nfp);
 
 private function extern "pxcio::io_process_init" void io_process_init();
 
@@ -184,7 +241,7 @@ int wtermsig(int st)
 }
 
 static int execv_internal(bool execvp_flag, cstrref const& path,
-  pxcvector<bt_string> const& argv)
+  bt_cslice<bt_string> const& argv)
 {
   PXCRT_ALLOCA_NTSTRING(path_nt, path);
   pxcvector<bt_string> argv_nt;
@@ -205,13 +262,13 @@ static int execv_internal(bool execvp_flag, cstrref const& path,
 }
 
 int execv(io const& sys, cstrref const& path,
-  pxcvector<bt_string> const& argv)
+  bt_cslice<bt_string> const& argv)
 {
   return execv_internal(false, path, argv);
 }
 
 int execvp(io const& sys, cstrref const& file,
-  pxcvector<bt_string> const& argv)
+  bt_cslice<bt_string> const& argv)
 {
   return execv_internal(true, file, argv);
 }
@@ -220,6 +277,14 @@ int shell_exec_internal(io const& sys, cstrref const& cmd)
 {
   PXCRT_ALLOCA_NTSTRING(cmd_nt, cmd);
   return std::system(cmd_nt.get());
+}
+
+int dup2_internal(io const& sys, file const& ofp, file const& nfp)
+{
+  if (dup2(ofp.get(), nfp.get()) < 0) {
+    return errno;
+  }
+  return 0;
 }
 
 };

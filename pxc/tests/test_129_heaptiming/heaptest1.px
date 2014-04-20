@@ -1,0 +1,70 @@
+namespace heaptest1 "use-unsafe";
+public import common -;
+public import test -;
+
+private struct entry(int v) {
+  public int const intval = v;
+}
+
+private function {loop} int test_main(int len)
+{
+  mutable arr = darray{ptr{entry}}(static_cast{size_t}(len),
+    make_ptr{entry}(0));
+  mutable int v = 0;
+  mutable int x = 0;
+  for (const i : 0 .. loop) {
+    for (size_t j : 0 .. static_cast{size_t}(len)) {
+      v += arr[j]->intval;
+      arr[j] = make_ptr{entry}(x);
+      ++x;
+    }
+  }
+  return v;
+}
+
+private function extern "heaptest1::test_main_c" {loop} int
+test_main_c(int len);
+
+extern "functions" inline
+namespace heaptest1 {
+
+struct entry {
+  const int intval;
+  entry(int v) : intval(v) { }
+};
+
+template <size_t loop> static inline int test_main_c(int len)
+{
+  typedef entry *entry_ptr;
+  entry_ptr *arr = new entry_ptr[len]();
+  int v = 0;
+  int x = 0;
+  for (int i = 0; i < loop; ++i) {
+    for (int j = 0; j < len; ++j) {
+      entry *e = arr[j];
+      if (e != 0) {
+        v += e->intval;
+      }
+      e = new entry(x);
+      delete arr[j];
+      arr[j] = e;
+      ++x;
+    }
+  }
+  for (int j = 0; j < len; ++j) {
+    delete arr[j];
+  }
+  delete [] arr;
+  return v;
+}
+
+};
+;
+
+{
+  test_timing_default{{
+    test_main{100},
+    test_main_c{100}
+  }}();
+}
+

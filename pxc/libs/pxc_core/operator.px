@@ -69,20 +69,46 @@ xor(tx const& x, ty const& y)
   else { return binop{tx, ty, "xor"}(x, y); }
 }
 
-public threaded function {tx, ty}
-binop_ret_type{tx, ty, "eq", is_equality_type}
+public threaded function {tx, ty} bool
 eq(tx const& x, ty const& y)
 {
   if (is_equality_type{tx}) { return x == y; }
   else { return binop{tx, ty, "eq"}(x, y); }
 }
 
-public threaded function {tx, ty}
-binop_ret_type{tx, ty, "ne", is_equality_type}
+public threaded function {tx, ty} bool
 ne(tx const& x, ty const& y)
 {
   if (is_equality_type{t}) { return x != y; }
   else { return binop{tx, ty, "ne"}(x, y); }
+}
+
+public threaded function {tx, ty} bool
+gt(tx const& x, ty const& y)
+{
+  if (is_ordered_type{tx}) { return x > y; }
+  else { return binop{tx, ty, "gt"}(x, y); }
+}
+
+public threaded function {tx, ty} bool
+lt(tx const& x, ty const& y)
+{
+  if (is_ordered_type{tx}) { return x < y; }
+  else { return binop{tx, ty, "lt"}(x, y); }
+}
+
+public threaded function {tx, ty} bool
+ge(tx const& x, ty const& y)
+{
+  if (is_ordered_type{tx}) { return x >= y; }
+  else { return binop{tx, ty, "ge"}(x, y); }
+}
+
+public threaded function {tx, ty} bool
+le(tx const& x, ty const& y)
+{
+  if (is_ordered_type{tx}) { return x <= y; }
+  else { return binop{tx, ty, "le"}(x, y); }
 }
 
 public threaded function {tx, ty}
@@ -203,6 +229,19 @@ setelem(tx mutable& x, ty const& y, tz const& z)
   else { x.__setelem(y, z); }
 }
 
+public threaded function {tx, ty}
+m::ret_type{m::symbol{m::nsof{tx}, m::concat{tx, "___getfld"}}}
+getfld(tx const& x, ty const& y)
+{
+  return m::symbol{m::nsof{tx}, m::concat{tx, "___getfld"}}(x, y);
+}
+
+public threaded function {tx, ty, tz} void
+setfld(tx mutable& x, ty const& y, tz const& z)
+{
+  m::symbol{m::nsof{tx}, m::concat{tx, "___setfld"}}(x, y, z);
+}
+
 public metafunction implicit_conversion{tto, tfrom}
   m::cond{ /* conversion function defined in the tfrom ns? */
     m::eq{
@@ -224,12 +263,13 @@ private metafunction mapped_type{t}
   m::cond{
     is_container_or_range_type{t},
     m::symbol{t, "mapped_type"},
-    m::ret_type{m::symbol{t, "__getelem"}}};
+    has_symbol{t, "__getelem"},
+    m::ret_type{m::symbol{t, "__getelem"}},
+    m::ret_type{m::symbol{m::nsof{t},
+      m::concat{m::to_string{t}, "___getelem"}}}};
 
-private metafunction has_symbol{t, name}
-  m::eq{m::to_string{m::symbol{t, name}}, name};
-private metafunction has_gsymbol{t, name}
-  m::eq{m::to_string{m::symbol{m::nsof{t}, name}}, name};
+private metafunction has_symbol{t, name} m::symbol_exists{t, name};
+private metafunction has_gsymbol{t, name} m::symbol_exists{m::nsof{t}, name};
 
 private metafunction binop_ret_type{tx, ty, opstr, is_builtin}
   m::cond{
@@ -261,21 +301,22 @@ binop(tx const& x, ty const& y)
   metafunction f_bin m::symbol{m::nsof{tx}, fstr_bin};
   metafunction fstr_assign m::concat{tx, "___", opstr, "a"};
   metafunction f_assign m::symbol{m::nsof{tx}, fstr_assign};
-  if (m::eq{m::to_string{op_bin}, opstr_bin}) {
+  if (m::ne{op_bin, 0}) {
     /* return foo.__add(x, y); */
     expand(sym: m::list{opstr_bin}) { return x.sym(y); }
-  } else if (m::eq{m::to_string{op_assign}, opstr_assign}) {
+  } else if (m::ne{op_assign, 0}) {
     /* r = x; foo.__adda(r, y); return x; */
     tx r = x; expand(sym: m::list{opstr_assign}) { r.sym(y); } return r;
-  } else if (m::eq{m::to_string{f_bin}, fstr_bin}) {
+  } else if (m::ne{f_bin, 0}) {
     /* return foo___add(x, y); */
     return f_bin{tx, ty}(x, y);
-  } else if (m::eq{m::to_string{f_assign}, f_assign}) {
+  } else if (m::ne{f_assign, 0}) {
     /* r = x; foo___adda(r, y); return r; */
     tx r = x;
     f_assign{tx, ty}(r, y);
     return r;
-  } else if (is_struct_type{tx}) {
+  } else if (m::and{is_struct_type{tx},
+    m::not{m::empty{m::field_names{tx}}}}) {
     /* apply binop for each field, and construct a value of type tx */
     metafunction op m::symbol{"operator", opstr};
     return tx(expand(fld: m::field_names{tx}; op(x.fld, y.fld)));
@@ -295,19 +336,20 @@ binopa(tx mutable& x, ty const& y)
   metafunction f_bin m::symbol{m::nsof{tx}, fstr_bin};
   metafunction fstr_assign m::concat{tx, "___", opstr, "a"};
   metafunction f_assign m::symbol{m::nsof{tx}, fstr_assign};
-  if (m::eq{m::to_string{op_bin}, opstr_bin}) {
+  if (m::ne{op_bin, 0}) {
     /* x = foo.__add(x, y); */
-    expand(sym: m::list{opstr_bin}) { x = x.sym(y); }
-  } else if (m::eq{m::to_string{op_assign}, opstr_assign}) {
+    expand(sym: m::list{op_bin}) { x = x.sym(y); }
+  } else if (m::ne{op_assign, 0}) {
     /* foo.__adda(x, y); */
     expand(sym: m::list{opstr_assign}) { x.sym(y); }
-  } else if (m::eq{m::to_string{f_bin}, fstr_bin}) {
+  } else if (m::ne{f_bin, 0}) {
     /* x = foo___add(x, y); */
     x = f_bin{tx, ty}(x, y);
-  } else if (m::eq{m::to_string{f_assign}, fstr_assign}) {
+  } else if (m::ne{f_assign, 0}) {
     /* foo___adda(x, y); */
     f_assign{tx, ty}(x, y);
-  } else if (m::and{is_struct_type{tx}, m::eq{tx, ty}}) {
+  } else if (m::and{is_struct_type{tx}, m::eq{tx, ty},
+    m::not{m::empty{m::field_names{tx}}}}) {
     /* apply binop for each field */
     metafunction op m::symbol{"operator", m::concat{opstr, "a"}};
     expand(fld: m::field_names{tx}; op(x.fld, y.fld));

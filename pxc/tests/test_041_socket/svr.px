@@ -8,9 +8,71 @@ import io::addrinfo -;
 import io::socket -;
 import io::signal -;
 import thread -;
+import exception -;
 
 private metafunction svr_host "127.0.0.1";
 private metafunction svr_port "5001";
+
+/*
+threaded function file_mt
+make_listener(io const& sys, cstrref const& node, cstrref const& service,
+  family_t family, socktype_t socktype, protocol_t protocol, int backlog,
+  bool reuseaddr)
+{
+  metafunction error runtime_error_template{"make_listener"};
+  addrinfo addr;
+  const eai = sys.getaddrinfo(node, service, family, socktype, protocol, 0,
+    addr);
+  if (eai != EAI_OK) {
+    throw error(string_join{" "}(node, service, eai));
+  }
+  const osock = sys.socket(family, socktype, protocol);
+  if (case osock.errno) {
+    throw error(string_join{" "}("socket", osock.errno));
+  }
+  const sock = osock.value;
+  errno_t mutable err;
+  if (reuseaddr) {
+    err = sock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1);
+    if (err != EOK) {
+      throw error(string_join{" "}("REUSEADDR", err));
+    }
+  }
+  err = sock.bind(addr.sockaddr());
+  if (err != EOK) {
+    throw error(string_join{" "}("bind", err));
+  }
+  err = sock.listen(backlog);
+  if (err != EOK) {
+    throw error(string_join{" "}("listen", err));
+  }
+  return sock;
+}
+
+threaded function file_mt
+connect(io const& sys, cstrref const& node, cstrref const& service,
+  family_t family, socktype_t socktype, protocol_t protocol)
+{
+  metafunction error runtime_error_template{"connect"};
+  addrinfo addr;
+  const eai = sys.getaddrinfo(node, service, family, socktype, protocol, 0,
+    addr);
+  if (eai != EAI_OK) {
+    throw error(string_join{" "}(node, service, eai));
+  }
+  const osock = sys.socket(family, socktype, protocol);
+  if (case osock.errno) {
+    throw error(string_join{" "}("socket", osock.errno));
+  }
+  const sock = osock.value;
+  errno_t err;
+  err = sock.connect(addr.sockaddr());
+  if (err != EOK) {
+    throw error(string_join{" "}("connect", err));
+  }
+  return sock;
+}
+*/
 
 multithreaded struct server_thread(io const& i, tptr{bool} const& rp,
   tptr{string} const& s)
@@ -28,12 +90,12 @@ multithreaded struct server_thread(io const& i, tptr{bool} const& rp,
   {
     try {
       iop.stderr().println("svr");
-      const sf = iop.make_acceptor(svr_host, svr_port, AF_INET,
-	SOCK_STREAM, 1024, 0); // TODO: fix EADDRINUSE
+      const lsn = iop.listen(svr_host, svr_port, AF_INET, SOCK_STREAM,
+	IPPROTO_TCP, 1024, true);
       iop.stderr().println("accepted");
       notify();
       mutable peer_addr = sockaddr_storage();
-      const sock = sf.value.accept(peer_addr);
+      const sock = lsn.accept(peer_addr);
       string s;
       size_t len = 10;
       sock.value.read(s, len);
@@ -62,10 +124,9 @@ multithreaded struct client_thread(io const& i, tptr{bool} const& rp)
       }
     }
     iop.stderr().println("got notification");
-    const sf = iop.make_connector(svr_host, svr_port, AF_INET,
-      SOCK_STREAM, 10);
-    const sock = sf.value.connect();
-    sock.value.write("hoge");
+    const sock = iop.connect(svr_host, svr_port, AF_INET, SOCK_STREAM,
+      IPPROTO_TCP);
+    sock.write("hoge");
   }
 }
 
