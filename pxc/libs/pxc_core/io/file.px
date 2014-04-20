@@ -2,15 +2,15 @@ public threaded namespace io::file "use-unsafe";
 public import numeric::integral -;
 public import numeric::cast -;
 public import container::array -;
-public import meta -;
-public import meta::vararg v;
 public import pointer -;
 public import io +;
 public import io::errno -;
 public import io::time -;
-public import meta m;
 public import exception;
 public import operator -;
+public import algebraic -;
+public import meta m;
+public import meta::vararg v;
 
 public threaded interface extern "pxcio::file"
 file { }
@@ -150,10 +150,6 @@ io_open_mt(io const& iop, cstrref const& fn, open_flags_t flags, mode_t md)
   return r;
 }
 
-private function {mtflag} expand macro_open
-{
-}
-
 /* file descriptors are hidden */
 private threaded function extern "pxcio::io_open_fd"
 int io_open_fd(io const& iop, cstrref const& fn, open_flags_t flags,
@@ -162,6 +158,9 @@ private threaded function extern "pxcio::io_make_file_st"
 file_st io_make_file_st(io const& iop, int fd);
 private threaded function extern "pxcio::io_make_file_mt"
 file_mt io_make_file_mt(io const& iop, int fd);
+
+public threaded function extern "pxcio::file_fileno" int
+file_fileno(file const& f);
 
 private threaded function extern "pxcio::file_read_impl" errno_t
 file_read_impl(file const& f, string mutable& buf, size_t mutable& len);
@@ -214,21 +213,17 @@ file_lseek(file const& f, off_t offset, whence_t whence)
 
 public threaded function extern "pxcio::file_st_close" errno_t
 file_st_close(file_st mutable& f);
-  /* NOTE: returns EBUSY if f is not the unique reference to the file. */
+  /* NOTE: file_mt can not be closed explicitly. */
 
 public threaded function extern "pxcio::io_stat" errno_t
 io_stat(io const& iop, cstrref const& fn, statbuf mutable& buf);
-public threaded function extern "pxcio::io_sleep" uint
-io_sleep(io const& iop, uint sec);
-public threaded function extern "pxcio::io_usleep" uint
-io_usleep(io const& iop, uint usec);
 
 public threaded function errno_or_value{size_t}
 file_read_all(file const& f, string mutable& buf)
 {
   size_t rlen = 0;
   while (true) {
-    size_t const len = 16384; /* TODO */
+    size_t const len = 16384; /* TODO: configurable? */
     const r = file_read(f, buf, len);
     if (const rl : r.value) {
       if (rl == 0) {
@@ -243,6 +238,7 @@ file_read_all(file const& f, string mutable& buf)
   r.value = rlen;
   return r;
 }
+
 public threaded function errno_or_value{size_t}
 file_write_all(file const& f, cstrref const& buf)
 {
@@ -284,6 +280,7 @@ io_read_file(io const& iop, cstrref const& fn)
   }
   return r;
 }
+
 public threaded function errno_or_value{size_t}
 io_write_file(io const& iop, cstrref const& fn, cstrref const& buf)
 {
@@ -297,6 +294,26 @@ io_write_file(io const& iop, cstrref const& fn, cstrref const& buf)
   }
   return r;
 }
+
+public metafunction pipe_t errno_or_value{pair{file_mt, file_mt}};
+
+public threaded function pipe_t
+io_pipe(io const& sys)
+{
+  pipe_t r;
+  errno_t err = EOK;
+  vector{file_mt} v = io_pipe_internal(sys, err);
+  if (err != EOK) {
+    r.errno = err;
+  } else {
+    r.value = pair{file_mt, file_mt}(v[0], v[1]);
+  }
+  return r;
+}
+
+private threaded function extern "pxcio::io_pipe_internal"
+vector{file_mt}
+io_pipe_internal(io const& sys, errno_t mutable& err_r);
 
 extern "types" inline
 #include <sys/types.h>
@@ -393,6 +410,11 @@ struct file_mt : public file {
 
 extern "functions" inline
 namespace pxcio {
+
+static inline bt_int file_fileno(file const& f)
+{
+  return f.get();
+}
 
 file_st make_file_st(int fd); /* can be called from other io::* namespaces */
 file_mt make_file_mt(int fd); /* can be called from other io::* namespaces */
@@ -511,14 +533,21 @@ errno_t io_stat(io const& iop, cstrref const& fn, pxcio::statbuf& buf)
   return 0;
 }
 
-bt_uint io_sleep(io const& iop, bt_uint sec)
+::pxcrt::pxcvector<file_mt> io_pipe_internal(::pxcio::io const& sys,
+  int& err_r)
 {
-  return ::sleep(sec);
-}
-
-bt_uint io_usleep(io const& iop, bt_uint usec)
-{
-  return ::usleep(usec);
+  int fds[2];
+  const int e = ::pipe(fds);
+  if (e != 0) {
+    err_r = errno;
+    fds[0] = fds[1] = -1;
+  }
+  ::pxcrt::pxcvector<file_mt> r;
+  if (e == 0) {
+    r.push_back(make_file_mt(fds[0]));
+    r.push_back(make_file_mt(fds[1]));
+  }
+  return r;
 }
 
 };

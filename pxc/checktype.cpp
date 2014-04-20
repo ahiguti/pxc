@@ -43,6 +43,7 @@
 #define DBG_TIMING(x)
 #define DBG_TIMING3(x)
 #define DBG_EXPAND_TIMING(x)
+#define DBG_DYNFLD(x)
 
 namespace pxc {
 
@@ -1000,7 +1001,7 @@ symbol_common *get_func_symbol_common_for_funccall(expr_i *func,
     return sc;
   } else if (func->get_esort() == expr_e_op) {
     expr_op *const eop = ptr_down_cast<expr_op>(func);
-    symbol_common *const sc = eop->arg1->get_sdef();
+    symbol_common *const sc = eop->arg1 ? eop->arg1->get_sdef() : 0;
     if (sc != 0 && (eop->op == '.' || eop->op == TOK_ARROW)) {
       memfunc_w_explicit_obj_r = true;
       return sc;
@@ -1510,6 +1511,89 @@ static void subst_user_defined_op(expr_op *eop)
     eop->symtbl_lexical->block_backref->tinfo.template_descent);
 }
 
+static void subst_user_defined_fldop(expr_op *eop)
+{
+  if (eop->op == '.' && eop->arg1->get_esort() == expr_e_symbol &&
+    eop->parent_expr != 0 &&
+    eop->parent_expr->get_esort() != expr_e_funccall &&
+    (eop->parent_expr->get_esort() != expr_e_op ||
+      ptr_down_cast<expr_op>(eop->parent_expr)->op != '=' ||
+      ptr_down_cast<expr_op>(eop->parent_expr)->arg0 != eop))
+  {
+    fn_check_type(eop->arg0, eop->symtbl_lexical);
+    term ta0 = eop->arg0->resolve_texpr();
+    expr_i *const einst0 = term_get_instance(ta0);
+    expr_block *const tblk = einst0->get_template_block();
+    if (tblk != 0) {
+      bool is_global = false;
+      bool is_upvalue = false;
+      bool is_memfld = false;
+      expr_i *hf = tblk->symtbl.resolve_name_nothrow("__has_fldop__", true,
+	"", is_global, is_upvalue, is_memfld);
+      if (hf != 0 && !hf->generated_flag) {
+	DBG_DYNFLD(fprintf(stderr, "hasfldop!!! %s\n", eop->dump(0).c_str()));
+	expr_symbol *sym = ptr_down_cast<expr_symbol>(eop->arg1);
+	expr_i *fc = expr_funccall_new(eop->fname, eop->line,
+	  expr_symbol_new(eop->fname, eop->line,
+	    expr_nssym_new(eop->fname, eop->line,
+	      expr_nssym_new(eop->fname, eop->line, 0, "operator"), "getfld")),
+	  expr_op_new(eop->fname, eop->line, ',', eop->arg0,
+	    expr_str_literal_new(eop->fname, eop->line,
+	      arena_strdup(escape_c_str_literal(sym->nssym->sym).c_str()))));
+	eop->arg0 = fc;
+	eop->arg1 = 0;
+	eop->op = '(';
+	fn_set_tree_and_define_static(fc, eop, eop->symtbl_lexical, 0, 
+	  eop->symtbl_lexical->block_backref->tinfo.template_descent);
+	DBG_DYNFLD(fprintf(stderr, "hasfldop!!! => %s\n",
+	  eop->dump(0).c_str()));
+      }
+    }
+  }
+  if (eop->op == '=') {
+    expr_op *lhsop = dynamic_cast<expr_op *>(eop->arg0);
+    if (lhsop != 0 && lhsop->op == '.' &&
+      lhsop->arg1->get_esort() == expr_e_symbol)
+    {
+      fn_check_type(eop->arg0, eop->symtbl_lexical);
+      term ta0 = lhsop->arg0->resolve_texpr();
+      expr_i *const einst0 = term_get_instance(ta0);
+      expr_block *const tblk = einst0->get_template_block();
+      if (tblk != 0) {
+	bool is_global = false;
+	bool is_upvalue = false;
+	bool is_memfld = false;
+	expr_i *hf = tblk->symtbl.resolve_name_nothrow("__has_fldop__", true,
+	  "", is_global, is_upvalue, is_memfld);
+	if (hf != 0 && !hf->generated_flag) {
+	  DBG_DYNFLD(fprintf(stderr, "hasfldop!!! set %s\n",
+	    eop->dump(0).c_str()));
+	  expr_symbol *sym = ptr_down_cast<expr_symbol>(lhsop->arg1);
+	  expr_i *fc = expr_funccall_new(eop->fname, eop->line,
+	    expr_symbol_new(eop->fname, eop->line,
+	      expr_nssym_new(eop->fname, eop->line,
+		expr_nssym_new(eop->fname, eop->line, 0, "operator"),
+		  "setfld")),
+	    expr_op_new(eop->fname, eop->line, ',',
+	      expr_op_new(eop->fname, eop->line, ',',
+		lhsop->arg0,
+		expr_str_literal_new(eop->fname, eop->line,
+		  arena_strdup(
+		    escape_c_str_literal(sym->nssym->sym).c_str()))),
+	      eop->arg1));
+	  eop->arg0 = fc;
+	  eop->arg1 = 0;
+	  eop->op = '(';
+	  fn_set_tree_and_define_static(fc, eop, eop->symtbl_lexical, 0, 
+	    eop->symtbl_lexical->block_backref->tinfo.template_descent);
+	  DBG_DYNFLD(fprintf(stderr, "hasfldop!!! set => %s\n",
+	    eop->dump(0).c_str()));
+	}
+      }
+    }
+  }
+}
+
 static void subst_user_defined_elemop(expr_op *eop)
 {
   if (eop->op == '[') {
@@ -1607,6 +1691,7 @@ void expr_op::check_type(symbol_table *lookup)
 {
   subst_user_defined_op(this);
   subst_user_defined_elemop(this);
+  subst_user_defined_fldop(this);
   if (op == '.' || op == TOK_ARROW) {
     fn_check_type(arg0, lookup);
     term t = arg0->resolve_texpr();

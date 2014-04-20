@@ -709,22 +709,19 @@ c_enumval_stmt
 	;
 metafdef_stmt
 	: opt_attribute TOK_METAFUNCTION TOK_SYMBOL type_arg_excl_metalist ';'
-	  { $$ = expr_metafdef_new(cur_fname, @2.first_line, $3, 0, $4, 0,
-		$1); }
+	  { $$ = expr_metafdef_new(cur_fname, @2.first_line, $3, 0, $4, $1); }
 	| opt_attribute TOK_METAFUNCTION TOK_SYMBOL '{' type_arg_list '}' ';'
 	  { $$ = expr_metafdef_new(cur_fname, @2.first_line, $3, 0,
-		  expr_metalist_new($5), 0, $1); }
+		  expr_metalist_new($5), $1); }
 	| opt_attribute TOK_METAFUNCTION TOK_SYMBOL '{' type_arg_list '}'
 		type_arg ';'
-	  { $$ = expr_metafdef_new(cur_fname, @2.first_line, $3, $5, $7, 0,
-		$1); }
+	  { $$ = expr_metafdef_new(cur_fname, @2.first_line, $3, $5, $7, $1); }
 	  /* $5 expects tparam_list but parsed as type_arg_list to avoid
 	   conflicts. it will be converted to expr_tparams when compiled. */
 	| opt_attribute TOK_METAFUNCTION TOK_SYMBOL '{' tparam_variadic '}'
 		type_arg ';'
 	  /* variadic metafunction */
-	  { $$ = expr_metafdef_new(cur_fname, @2.first_line, $3, $5, $7, 1,
-		$1); }
+	  { $$ = expr_metafdef_new(cur_fname, @2.first_line, $3, $5, $7, $1); }
 	;
 visi_vardef_stmt
 	: visibility type_expr opt_mutable TOK_SYMBOL ';'
@@ -871,11 +868,11 @@ type_arg_excl_metalist
 		cur_mode != compile_mode_main, false, attribute_private); }
 	| TOK_METAFUNCTION '{' tparam_list '}' type_arg
 	  { $$ = expr_metafdef_new(cur_fname, @1.first_line, 0, $3, $5,
-		0, attribute_private); }
+		attribute_private); }
 	| TOK_METAFUNCTION '{' tparam_variadic '}' type_arg
 	  /* variadic metafunction */
 	  { $$ = expr_metafdef_new(cur_fname, @1.first_line, 0, $3, $5,
-		1, attribute_private); }
+		attribute_private); }
 	;
 type_arg
 	: type_arg_excl_metalist

@@ -1,0 +1,42 @@
+namespace t2;
+import common -;
+import python py;
+
+struct foo {
+  int x;
+  int y;
+  string z;
+  function int bar(int v) const {
+    println("bar is called", "v=", v);
+    // return to_string{int}(v * 3);
+    return v * 3;
+  }
+}
+
+{
+  try {
+    py::register_class{foo}();
+    py::pxc_module_init();
+    const main = py::module("__main__");
+    mutable global = main.attr("__dict__");
+    const r = py::eval("str(2 + 3)", global, global);
+    println(r);
+    global["hoge"] = py::make_string("xyz");
+    println(global["hoge"]);
+    println("pxcmod x1");
+    const pxcmod = py::module("pxc");
+    println("pxcmod imported");
+    const pxcdic = pxcmod.attr("__dict__");
+    py::exec("import pxc", global, global);
+    const f = py::eval("pxc.t2_foo()", global, global);
+    println("exec done");
+    // println("f=", f);
+    const z = f.bar(33);
+    println("invoke done");
+    println(z);
+    println("attr done");
+  } catch (py::error_already_set e) {
+    py::error_print();
+  }
+}
+

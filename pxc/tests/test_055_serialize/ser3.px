@@ -1,0 +1,38 @@
+public namespace ser3;
+import common -;
+import text::string::serialize -;
+import meta m;
+
+function {t} void test_one(t const& value)
+{
+  string const s = to_string(value);
+  println(s);
+  cstrref sr = s;
+  const x = deserialize_from_string{t}(sr);
+  string const s1 = to_string(x);
+  println(s1);
+  if (s != s1) {
+    println("not equal");
+  } else {
+    println("ok");
+  }
+}
+
+struct foo {
+  unit x;
+  int y;
+  string z;
+}
+
+function void t1()
+{
+  {
+    vector{ptr{foo}} a;
+    a.push_back(make_ptr{foo}(unit(), 55, "abc"));
+    a.push_back(make_ptr{foo}(unit(), 88, "xyz"));
+    test_one(a);
+  }
+}
+
+t1();
+

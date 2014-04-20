@@ -1,0 +1,175 @@
+public namespace t1 "use-unsafe";
+import common -;
+import test -;
+import numeric::cast -;
+import meta m;
+import io -;
+import io::time -;
+import algebraic -;
+import io::environ -;
+
+struct foo {
+  int x;
+  int y;
+  int z;
+}
+
+function int p1(int loop)
+{
+  int r = 0;
+  for (int i : 0 .. loop) {
+    for (int j : 0 .. loop) {
+      const p = foo(i, j, i + j);
+      r += p.x;
+      r += p.y;
+      r += p.z;
+    }
+  }
+  return r;
+}
+
+function int p2(int loop)
+{
+  int r = 0;
+  for (int i : 0 .. loop) {
+    for (int j : 0 .. loop) {
+      const p = make_ptr{foo}(i, j, i + j);
+      r += p->x;
+      r += p->y;
+      r += p->z;
+    }
+  }
+  return r;
+}
+
+function int p3(int loop)
+{
+  int r = 0;
+  for (int i : 0 .. loop) {
+    for (int j : 0 .. loop) {
+      either{unit, foo} p;
+      p.second = foo(i, j, i + j);
+      r += p.second.x;
+      r += p.second.y;
+      r += p.second.z;
+    }
+  }
+  return r;
+}
+
+function int p4(int loop)
+{
+  int r = 0;
+  mutable a = darray{foo}(static_cast{size_t}(loop), foo());
+  for (int i : 0 .. loop) {
+    for (int j : 0 .. loop) {
+      a[static_cast{size_t}(j)] = foo(i, j, i + j);
+    }
+    for (size_t j : 0 .. static_cast{size_t}(loop)) {
+      r += a[j].x;
+      r += a[j].y;
+      r += a[j].z;
+    }
+  }
+  return r;
+}
+
+function int p5(int loop)
+{
+  int r = 0;
+  mutable a = darray{ptr{foo}}(static_cast{size_t}(loop), make_ptr{foo}());
+  for (int i : 0 .. loop) {
+    for (int j : 0 .. loop) {
+      a[static_cast{size_t}(j)] = make_ptr{foo}(i, j, i + j);
+    }
+    for (size_t j : 0 .. static_cast{size_t}(loop)) {
+      r += a[j]->x;
+      r += a[j]->y;
+      r += a[j]->z;
+    }
+  }
+  return r;
+}
+
+function extern "::c1" int c1(int loop);
+function extern "::c2" int c2(int loop);
+function extern "::c3" int c3(int loop);
+function extern "::c4" int c4(int loop);
+
+extern "implementation" inline
+#include <memory>
+
+struct foo {
+  int x;
+  int y;
+  int z;
+  foo() : x(), y(), z() { }
+  foo(int x0, int y0, int z0) : x(x0), y(y0), z(z0) { }
+};
+
+int c1(int loop)
+{
+  int r = 0;
+  for (size_t i = 0; i < loop; ++i) {
+    for (size_t j = 0; j < loop; ++j) {
+      foo p(i, j, i + j);
+      r += p.x;
+      r += p.y;
+      r += p.z;
+    }
+  }
+  return r;
+}
+
+int c2(int loop)
+{
+  int r = 0;
+  for (size_t i = 0; i < loop; ++i) {
+    for (size_t j = 0; j < loop; ++j) {
+      std::shared_ptr<foo> p = std::make_shared<foo>(i, j, i + j);
+      r += p->x;
+      r += p->y;
+      r += p->z;
+    }
+  }
+  return r;
+}
+
+int c3(int loop)
+{
+  int r = 0;
+  for (size_t i = 0; i < loop; ++i) {
+    for (size_t j = 0; j < loop; ++j) {
+      std::shared_ptr<foo> p(new foo(i, j, i + j));
+      r += p->x;
+      r += p->y;
+      r += p->z;
+    }
+  }
+  return r;
+}
+
+int c4(int loop)
+{
+  int r = 0;
+  std::vector< std::shared_ptr<foo> > v(loop);
+  for (size_t i = 0; i < loop; ++i) {
+    for (size_t j = 0; j < loop; ++j) {
+      std::shared_ptr<foo> p = std::make_shared<foo>(i, j, i + j);
+      v[j] = p;
+    }
+    for (size_t j = 0; j < loop; ++j) {
+      r += v[j]->x;
+      r += v[j]->y;
+      r += v[j]->z;
+    }
+  }
+  return r;
+}
+
+;
+
+{
+  test_timing_default{{p1, p2, p3, p4, p5, c1, c2, c3, c4}}();
+}
+

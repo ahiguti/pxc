@@ -4,17 +4,18 @@ import io::addrinfo -;
 
 function void t1()
 {
-  const ai = addrinfo(io::system, "localhost", "", AF_INET, SOCK_STREAM,
-    PROTO_UNSPEC, 0);
+  addrinfo ai;
+  gai_error_t e = io::system.getaddrinfo("localhost", "", AF_INET, SOCK_STREAM,
+    PROTO_UNSPEC, 0, ai);
   print("empty=");
   println(ai.empty());
-  if (ai.get_error() != gai_error_t()) {
+  if (e != EAI_OK) {
     print("error=");
-    println(ai.get_error());
+    println(e);
   }
-  sockaddr_storage sa = ai.get_sockaddr();
+  sockaddr_storage sa = ai.sockaddr();
   println("addr=");
-  ulong a = sa.get_in_addr();
+  ulong a = sa.in_addr();
   println((a >> 24) & 255);
   println((a >> 16) & 255);
   println((a >> 8) & 255);

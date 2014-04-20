@@ -103,7 +103,7 @@ expr_i *expr_typedef_new(const char *fn, int line, const char *sym,
   const char *cname, const char *family, bool is_enum, bool is_bitmask,
   expr_i *enumvals, unsigned int num_tparams, attribute_e visi);
 expr_i *expr_metafdef_new(const char *fn, int line, const char *sym,
-  expr_i *tparams, expr_i *rhs, bool is_variadic, attribute_e visi);
+  expr_i *tparams, expr_i *rhs, attribute_e visi);
 expr_i *expr_struct_new(const char *fn, int line, const char *sym,
   const char *cname, const char *family, expr_i *block, attribute_e visi,
   bool has_udcon, bool private_udcon);
@@ -118,7 +118,7 @@ expr_i *expr_tparams_new(const char *fn, int line, const char *sym,
 expr_i *expr_te_local_chain_new(expr_i *te1, expr_i *te2);
 expr_i *expr_metalist_new(expr_i *tl);
 
-// TODO: move to parser.hpp
+/* TODO: move to parser.hpp */
 struct checksum_type {
   time_t timestamp;
   std::string md5sum;

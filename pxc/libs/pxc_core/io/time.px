@@ -16,6 +16,10 @@ public threaded function extern "pxcio::gettimeofday" timeval
 io_gettimeofday(io::io const& iop);
 public threaded function extern "pxcio::time" time_t
 io_time(io::io const& iop);
+public threaded function extern "pxcio::io_sleep" uint
+io_sleep(io const& iop, uint sec);
+public threaded function extern "pxcio::io_usleep" uint
+io_usleep(io const& iop, uint usec);
 
 public threaded function double
 io_gettimeofday_double(io::io const& iop)
@@ -35,6 +39,7 @@ extern "functions" inline
 
 extern "implementation" inline
 namespace pxcio {
+using namespace pxcrt;
 
 ::timeval gettimeofday(io const& iop)
 {
@@ -48,8 +53,19 @@ std::time_t time(io const& iop)
   return std::time(0);
 }
 
+bt_uint io_sleep(io const& iop, bt_uint sec)
+{
+  return ::sleep(sec);
+}
+
+bt_uint io_usleep(io const& iop, bt_uint usec)
+{
+  return ::usleep(usec);
+}
+
 void time_init()
 {
+  /* not multi-thread safe */
   tzset();
 }
 

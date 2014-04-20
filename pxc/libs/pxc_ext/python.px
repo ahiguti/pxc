@@ -1,0 +1,598 @@
+public namespace python "use-unsafe";
+public import common -;
+public import meta m;
+
+pxc_python_init();
+
+public struct extern "pxc_python::object" object {
+  public metafunction __has_fldop__ 1; /* uses object__getfld|setfld */
+}
+
+public function {t} object make_object(t const& v)
+{
+  if (m::characteristic{t, "noheap"}) {
+    m::error{"can not create a python object from a noheap type"};
+  }
+  extern "emit" m::concat{"return boost::python::object(v$)"};
+  return object(); /* dummy */
+}
+
+public function extern "pxc_python::make_long" object
+make_long(numeric::integral::long v);
+
+public function extern "pxc_python::make_string" object
+make_string(cstrref const& s);
+
+public function {func} object
+make_function()
+{
+  if (m::not{m::and{
+    m::is_function{func},
+    m::not{m::is_member_function{func}}}})
+  {
+    m::error{"invarid template parameter"};
+  }
+  extern "emit" m::concat{
+    "return boost::python::make_function(",
+    m::csymbol{func},
+    ")"};
+  return object(); /* dummy */
+}
+
+public function object
+make_list()
+{
+  extern "emit" m::concat{"return boost::python::list()"};
+  return object(); /* dummy */
+}
+
+public function object
+make_dict()
+{
+  extern "emit" m::concat{"return boost::python::dict()"};
+  return object(); /* dummy */
+}
+
+public function {tlist} m::cond{m::gt{m::size{tlist}, 2}, void, object}
+object_attr(expand(
+  m::cond{
+    m::gt{m::size{tlist}, 2},
+    {{"obj", object, 1, 1}, {"name", cstrref, 1, 0}, {"val", object, 1, 0}},
+    {{"obj", object, 1, 0}, {"name", cstrref, 1, 0}}}))
+{
+  if (m::eq{m::size{tlist}, 3}) {
+    object_setattr(obj, name, val);
+  } else if (m::eq{m::size{tlist}, 2}) {
+    return object_getattr(obj, name);
+  } else {
+    m::error{"invalid args"};
+  }
+}
+
+public function extern "pxc_python::object_append_to_string" void
+object_append_to_string(object const& obj,
+  container::array::string mutable& str);
+
+public function extern "pxc_python::object_get" object
+object___getelem(object const& obj, object const& key);
+
+public function extern "pxc_python::object_set" void
+object___setelem(object mutable& obj, object const& key,
+  object const& val);
+
+public function extern "pxc_python::object_getfld" object
+object___getfld(object const& obj, strlit const& name);
+
+public function extern "pxc_python::object_setfld" void
+object___setfld(object mutable& obj, strlit const& name, object const& val);
+
+public function {name, tlist} object
+object___invoke(expand(
+  m::map{m::seq{m::size{tlist}},
+    metafunction{i} {m::concat{"a", i}, object, 1, 0}}))
+{
+  if (m::empty{tlist}) {
+    m::error{"invalid args"};
+  }
+  extern "emit" m::concat{
+    "return boost::python::call_method<boost::python::object>(a0$.ptr(), ",
+    "\"", name, "\"",
+    m::fold{
+      m::seq{1, m::size{tlist}},
+      metafunction{x, y} m::concat{", a", y, "$"},
+      ""},
+    ");\n"};
+  return object(); /* dummy */
+}
+
+public function {tlist} object
+object_call(expand(
+  m::map{m::seq{m::size{tlist}},
+    metafunction{i} {m::concat{"a", i}, object, 1, 0}}))
+{
+  if (m::empty{tlist}) {
+    m::error{"invalid args"};
+  }
+  extern "emit" m::concat{
+    "return a0$(",
+    m::fold{
+      m::seq{1, m::size{tlist}},
+      metafunction{x, y}
+	m::concat{x, m::cond{m::eq{x, ""}, "", ", "}, "a", y, "$"},
+      ""},
+    ");\n"};
+  return object(); /* dummy */
+}
+
+public struct extern "pxc_python::error_already_set"
+error_already_set { }
+
+public function extern "pxc_python::module" object
+module(cstrref const& name);
+
+public function extern "pxc_python::eval" object
+eval(cstrref const& expr, object const& globals, object const& locals);
+
+public function extern "pxc_python::exec" object
+exec(cstrref const& code, object const& globals, object const& locals);
+
+public function {tto, tfrom} object strlit___to(strlit const& s)
+{ return make_string(s); }
+
+public function {tto, tfrom} object slice___to(cstrref const& s)
+{ return make_string(s); }
+
+public function {tto, tfrom} object
+vector___to(container::array::string const& s)
+{ return make_string(s); }
+
+public function {tto, tfrom} object int___to(int v)
+{ return make_long(v); }
+
+public function {tto, tfrom} object long___to(numeric::integral::long v)
+{ return make_long(v); }
+
+public function {tto, tfrom} tto object___to(object const& v)
+{
+  if (m::characteristic{tto, "noheap"}) {
+    m::error{"can not convert a python object to a noheap type"};
+  }
+  extern "emit"
+    m::concat{"return boost::python::extract< ", m::csymbol{tto}, " >(v$)"};
+  return tto(); /* dummy */
+}
+
+public function {tx, ty} void object___adda(object mutable& x, object const& y)
+{ extern "emit" m::concat{"x$ += y$"}; }
+
+public function {tx, ty} void object___suba(object mutable& x, object const& y)
+{ extern "emit" m::concat{"x$ -= y$"}; }
+
+public function {tx, ty} void object___mula(object mutable& x, object const& y)
+{ extern "emit" m::concat{"x$ *= y$"}; }
+
+public function {tx, ty} void object___diva(object mutable& x, object const& y)
+{ extern "emit" m::concat{"x$ /= y$"}; }
+
+public function {tx, ty} void object___moda(object mutable& x, object const& y)
+{ extern "emit" m::concat{"x$ %= y$"}; }
+
+public function {tx, ty} bool object___or(object const& x, object const& y)
+{ extern "emit" m::concat{"return x$ | y$"}; return false; }
+
+public function {tx, ty} bool object___and(object const& x, object const& y)
+{ extern "emit" m::concat{"return x$ & y$"}; return false; }
+
+public function {tx, ty} bool object___eq(object const& x, object const& y)
+{ extern "emit" m::concat{"return x$ == y$"}; return false; }
+
+public function {tx, ty} bool object___ne(object const& x, object const& y)
+{ extern "emit" m::concat{"return x$ != y$"}; return false; }
+
+public function {tx, ty} bool object___gt(object const& x, object const& y)
+{ extern "emit" m::concat{"return x$ > y$"}; return false; }
+
+public function {tx, ty} bool object___lt(object const& x, object const& y)
+{ extern "emit" m::concat{"return x$ < y$"}; return false; }
+
+public function {tx, ty} bool object___ge(object const& x, object const& y)
+{ extern "emit" m::concat{"return x$ >= y$"}; return false; }
+
+public function {tx, ty} bool object___le(object const& x, object const& y)
+{ extern "emit" m::concat{"return x$ <= y$"}; return false; }
+
+public function extern "pxc_python::error_print" void
+error_print();
+
+public function extern "pxc_python::error_fetch" void
+error_fetch(object mutable& typ, object mutable& value, object mutable& trace);
+
+public function extern "pxc_python::clear_error" void
+error_clear();
+
+public function {t} void
+register_class()
+{
+  if (m::characteristic{t, "noheap"}) {
+    m::error{"can not register a noheap type"};
+  }
+  register_class_caller_c{register_class_caller{t}} c;
+  c.do_register();
+}
+
+public function extern "pxc_python::pxc_python_module_init" void
+pxc_module_init();
+
+/* private */
+
+private function extern "pxc_python::object_getattr" object
+object_getattr(object const& obj, cstrref const& name);
+
+private function extern "pxc_python::object_setattr" void
+object_setattr(object mutable& obj, cstrref const& name, object const& val);
+
+private struct extern "pxc_python::register_class_caller_c" {caller}
+register_class_caller_c {
+  function extern "do_register" void do_register();
+}
+
+private struct {klass} register_class_caller {
+  function void call() {
+    register_class_internal{klass}();
+  }
+}
+
+private function {klass} void register_class_internal()
+{
+  extern "emit" m::concat{cdef{klass}, mfdefs{klass}, flddefs{klass}};
+}
+
+private metafunction pyname{t}
+  m::subst{
+    m::subst{
+      m::subst{m::full_string{t}, "::", "_"},
+    "{", ""},
+  "}", ""};
+private metafunction cdef{t}
+  m::concat{
+    "boost::python::class_< ", m::csymbol{t}, " >(\"", pyname{t},
+    "\"", inidef{t}, ")"};
+private metafunction concat_sep{lst, sep}
+  m::fold{
+    lst,
+    metafunction{x, y} m::cond{m::eq{x, ""}, y, m::concat{x, ", ", y}},
+    ""};
+private metafunction arg_cdecl{arg}
+  m::concat{
+    m::csymbol{m::at{arg, 1}},
+    m::cond{m::at{arg, 3}, "", " const"},
+    m::cond{m::at{arg, 2}, " &", ""}};
+private metafunction inidef{t}
+  m::cond{
+    m::eq{m::arg_size{t}, 0},
+    "",
+    m::concat{
+      ", boost::python::init< ",
+      concat_sep{m::map{m::args{t}, arg_cdecl}, ", "},
+      " >()"}};
+private metafunction mfdef{t, f}
+  m::concat{".def(\"", f, "\", &", m::csymbol{t}, "::", m::csymbol{f}, ")"};
+private metafunction mfdefs{t}
+  m::fold{
+    m::map{m::member_functions{t}, metafunction{f} mfdef{t, f}},
+    m::concat, ""};
+private metafunction flddef{t, i}
+  m::concat{
+    m::cond{m::at3{m::at{m::fields{t}, i}},
+      ".def_readwrite(\"",
+      ".def_readonly(\""},
+    m::at{m::field_names{t}, i}, "\", &",
+    m::csymbol{t}, "::", m::csymbol{t, i}, ")"};
+private metafunction flddefs{t}
+  m::fold{
+    m::map{m::seq{m::size{m::fields{t}}}, metafunction{i} flddef{t, i}},
+    m::concat, ""};
+
+private function extern "pxc_python::pxc_python_init" void pxc_python_init();
+
+extern "types" inline
+
+#include <string>
+#include <boost/python.hpp>
+
+namespace pxc_python {
+
+typedef ::boost::python::object object;
+typedef ::boost::python::error_already_set error_already_set;
+
+struct init_chain {
+  void (*func)();
+  init_chain *next;
+};
+
+void pxc_python_init();
+void add_init_chain(init_chain *p);
+
+template <typename Tcaller> struct register_class_caller_c {
+  void do_register() {
+    init_chain_value.func = &call;
+    init_chain_value.next = 0;
+    add_init_chain(&init_chain_value);
+  }
+  static void call() {
+    Tcaller caller;
+    caller.call$f();
+  }
+  static init_chain init_chain_value;
+};
+
+template <typename Tcaller> init_chain
+register_class_caller_c<Tcaller>::init_chain_value;
+
+}; // namespace pxc_python
+
+;
+
+extern "functions" inline
+
+namespace pxc_python {
+
+}; // namespace pxc_python
+
+;
+
+
+extern "implementation" inline
+
+namespace pxc_python {
+
+typedef pxcrt::pxcvector<unsigned char> pxcstring;
+typedef pxcrt::bt_strlit strlit;
+typedef pxcrt::cstrref cstrref;
+
+static init_chain *init_chain_top = 0;
+static bool initialized = false;
+static std::vector<boost::python::object> small_long_values;
+
+void pxc_python_init()
+{
+  if (!Py_IsInitialized()) {
+    Py_InitializeEx(0);
+  }
+  if (small_long_values.empty()) {
+    small_long_values.resize(101);
+    for (size_t i = 0; i < 101; ++i) {
+      small_long_values[i] = boost::python::long_(i);
+    }
+  }
+}
+
+object
+object_getfld(object const& obj, strlit const& name)
+{
+  return obj.attr(reinterpret_cast<const char *>(name.begin()));
+}
+
+void
+object_setfld(object& obj, strlit const& name, object const& val)
+{
+  obj.attr(reinterpret_cast<const char *>(name.begin())) = val;
+}
+
+object
+object_getattr(object const& obj, cstrref const& name)
+{
+  PXCRT_ALLOCA_NTSTRING(name_nt, name);
+  return obj.attr(name_nt.get());
+}
+
+void
+object_setattr(object& obj, cstrref const& name, object const& val)
+{
+  PXCRT_ALLOCA_NTSTRING(name_nt, name);
+  obj.attr(name_nt.get()) = val;
+}
+
+void
+object_append_to_string(object const& obj, pxcstring& str)
+{
+  boost::python::str s(obj);
+  char *sval = 0;
+  Py_ssize_t len = 0;
+  PyString_AsStringAndSize(s.ptr(), &sval, &len);
+  if (sval == 0) {
+    str.append(reinterpret_cast<const unsigned char *>("?"), 1);
+  } else {
+    str.append(reinterpret_cast<const unsigned char *>(sval), len);
+  }
+}
+
+object
+object_get(object const& obj, object const& key)
+{
+  return obj[key];
+}
+
+void
+object_set(object& obj, object const& key, object const& val)
+{
+  obj[key] = val;
+}
+
+
+struct pystr_from_pxcstr {
+  static PyObject *convert(pxcstring const& s) {
+    return boost::python::incref(boost::python::str(
+      reinterpret_cast<const char *>(s.rawarr()), s.size()).ptr());
+  }
+};
+
+struct pystr_to_pxcstr {
+  pystr_to_pxcstr() {
+    boost::python::converter::registry::push_back(
+      &convertible, &construct, boost::python::type_id<pxcstring>());
+  }
+  static void *convertible(PyObject *obj) {
+    if (!PyString_Check(obj)) { return 0; }
+    return obj;
+  }
+  static void construct(PyObject *obj,
+    boost::python::converter::rvalue_from_python_stage1_data *data) {
+    char *sval = 0;
+    Py_ssize_t len = 0;
+    PyString_AsStringAndSize(obj, &sval, &len);
+    if (sval == 0) { boost::python::throw_error_already_set(); }
+    void *storage =
+      ((boost::python::converter::rvalue_from_python_storage<pxcstring>*)data)
+	->storage.bytes;
+    const unsigned char *p = reinterpret_cast<const unsigned char *>(sval);
+    new (storage) pxcstring(p, len);
+    data->convertible = storage;
+  }
+};
+
+struct pystr_from_cstrref {
+  static PyObject *convert(cstrref const& s) {
+    return boost::python::incref(boost::python::str(
+      reinterpret_cast<const char *>(s.rawarr()), s.size()).ptr());
+  }
+};
+
+struct pystr_to_cstrref {
+  pystr_to_cstrref() {
+    boost::python::converter::registry::push_back(
+      &convertible, &construct, boost::python::type_id<cstrref>());
+  }
+  static void *convertible(PyObject *obj) {
+    if (!PyString_Check(obj)) { return 0; }
+    return obj;
+  }
+  static void construct(PyObject *obj,
+    boost::python::converter::rvalue_from_python_stage1_data *data) {
+    char *sval = 0;
+    Py_ssize_t len = 0;
+    PyString_AsStringAndSize(obj, &sval, &len);
+    if (sval == 0) { boost::python::throw_error_already_set(); }
+    void *storage =
+      ((boost::python::converter::rvalue_from_python_storage<cstrref>*)data)
+	->storage.bytes;
+    const unsigned char *p = reinterpret_cast<const unsigned char *>(sval);
+    new (storage) cstrref(p, len);
+    data->convertible = storage;
+  }
+};
+
+void add_init_chain(init_chain *p)
+{
+  p->next = init_chain_top;
+  init_chain_top = p;
+}
+
+BOOST_PYTHON_MODULE(pxc)
+{
+  if (initialized) {
+    return;
+  }
+  initialized = true;
+  {
+    /* which is better? */
+    #if 1
+    /* pxcstring is converted to python string by value */
+    boost::python::to_python_converter<pxcstring, pystr_from_pxcstr>();
+    /* cstrref is converted to python string by value */
+    boost::python::to_python_converter<cstrref, pystr_from_cstrref>();
+    #endif
+    #if 0
+    /* pxcstring is not converted to python string */
+    boost::python::class_<pxcstring>("string", boost::python::init<cstrref>());
+    boost::python::implicitly_convertible<pxcstring, cstrref>();
+    #endif
+  }
+  pystr_to_pxcstr();
+  pystr_to_cstrref();
+  init_chain *p = init_chain_top;
+  while (p != 0) {
+    (*(p->func))();
+    p = p->next;
+  }
+}
+
+void pxc_python_module_init()
+{
+  initpxc();
+}
+
+object module(cstrref const& name)
+{
+  PXCRT_ALLOCA_NTSTRING(name_nt, name);
+  return boost::python::import(name_nt.get());
+}
+
+object make_long(pxcrt::bt_long v)
+{
+  if (v >= 0 && v < small_long_values.size()) {
+    return small_long_values[v];
+  }
+  return boost::python::long_(v);
+}
+
+object make_string(cstrref const& s)
+{
+  return boost::python::str(
+    reinterpret_cast<const char *>(s.rawarr()), s.size());
+}
+
+object eval(cstrref const& expr, object const& globals,
+  object const& locals)
+{
+  PXCRT_ALLOCA_NTSTRING(expr_nt, expr);
+  return boost::python::eval(expr_nt.get(), globals, locals);
+}
+
+object exec(cstrref const& code, object const& globals,
+  object const& locals)
+{
+  PXCRT_ALLOCA_NTSTRING(code_nt, code);
+  return boost::python::exec(code_nt.get(), globals, locals);
+}
+
+void error_print()
+{
+  PyErr_Print();
+}
+
+void error_fetch(object& typ, object& value, object& trace)
+{
+  PyObject *etyp = 0;
+  PyObject *evalue = 0;
+  PyObject *etrace = 0;
+  PyErr_Fetch(&etyp, &evalue, &etrace);
+  // PyErr_Clear();
+  typ = object();
+  if (etyp != 0) {
+    typ = boost::python::object(boost::python::handle<>(etyp));
+  }
+  value = object();
+  if (evalue != 0) {
+    value = boost::python::object(boost::python::handle<>(evalue));
+  }
+  trace = object();
+  if (etrace != 0) {
+    trace = boost::python::object(boost::python::handle<>(etrace));
+  }
+}
+
+void error_clear()
+{
+  PyErr_Clear();
+}
+
+}; // namespace pxc_python
+
+;
+
+extern "incdir"
+  "`python -c 'from distutils.sysconfig import *; print get_python_inc()'`";
+extern "ldflags"
+  "-lboost_python `python-config --libs`";
+

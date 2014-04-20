@@ -3,6 +3,8 @@ public import common -;
 public import meta m;
 public import test -;
 public import text::string::positional -;
+public import text::serialize -;
+public import text::string::json -;
 
 function size_t test_serialize(int num)
 {
@@ -12,6 +14,20 @@ function size_t test_serialize(int num)
     buf.clear();
     serialize_to_string(i, buf);
     int v = from_string{int}(buf);
+    sum += v;
+  }
+  return static_cast{size_t}(sum);
+}
+
+function size_t test_json(int num)
+{
+  long sum = 0;
+  string buf;
+  for (int i : 0 .. num) {
+    buf.clear();
+    serialize{ser_json, int}(i, buf);
+    cstrref rbuf = buf;
+    int v = deserialize{ser_json, int}(rbuf);
     sum += v;
   }
   return static_cast{size_t}(sum);
@@ -43,6 +59,7 @@ function {base, use_seri, use_deseri} size_t test_positional(int num)
 {
   test_timing_default{{
     test_serialize,
+    test_json,
     test_positional{10, 0, 0},
     test_positional{10, 1, 0},
     test_positional{10, 0, 1},

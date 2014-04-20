@@ -133,15 +133,9 @@ deserialize_macro
 	deserialize_error();
       }
       if (tplf{"des_array_begin_cond"}(src)) {
-	bool is_first = true;
 	while (true) {
 	  if (src.empty() || tplf{"des_array_end_cond"}(src)) {
 	    break;
-	  }
-	  if (is_first) {
-	    is_first = false;
-	  } else {
-	    tplf{"des_array_sep_cond"}(src);
 	  }
 	  metafunction tval m::at0{t};
 	  if (deserialize_prefer_emplace{tpl, tval}) {
@@ -152,6 +146,7 @@ deserialize_macro
 	  } else {
 	    ret.push_back(deserialize{tpl, tval}(src));
 	  }
+	  tplf{"des_array_sep_cond"}(src);
 	}
       } else {
 	tplf{"des_value_skip"}(src);
@@ -161,16 +156,10 @@ deserialize_macro
 	deserialize_error();
       }
       if (tplf{"des_array_begin_cond"}(src)) {
-	bool is_first = true;
 	size_t idx = 0;
 	while (true) {
 	  if (src.empty() || tplf{"des_array_end_cond"}(src)) {
 	    break;
-	  }
-	  if (is_first) {
-	    is_first = false;
-	  } else {
-	    tplf{"des_array_sep_cond"}(src);
 	  }
 	  if (idx < m::at1{t}) {
 	    deserialize_emplace{tpl, m::at0{t}}(src, ret[idx]);
@@ -178,6 +167,7 @@ deserialize_macro
 	  } else {
 	    deserialize{tpl, m::at0{t}}(src); /* ignore */
 	  }
+	  tplf{"des_array_sep_cond"}(src);
 	}
       } else {
 	tplf{"des_value_skip"}(src);
@@ -200,15 +190,9 @@ deserialize_macro
       if (m::ne{noret, 0}) {
 	deserialize_error();
       }
-      bool is_first = true;
       while (true) {
 	if (tplf{"des_map_end_cond"}(src)) {
 	  break;
-	}
-	if (is_first) {
-	  is_first = false;
-	} else {
-	  tplf{"des_map_sep_cond"}(src);
 	}
 	const k = deserialize{tpl, m::at{t, 0}}(src);
 	if (!tplf{"des_map_entry_sep_cond"}(src)) {
@@ -216,6 +200,7 @@ deserialize_macro
 	  break;
 	}
 	deserialize_emplace{tpl, m::at{t, 1}}(src, ret[k]);
+	tplf{"des_map_sep_cond"}(src);
       }
     } else {
       tplf{"des_value_skip"}(src);
@@ -242,27 +227,28 @@ deserialize_macro
       }
       expand (sym, idx : field_names_sorted{t}) {
 	if (!tplf{"des_struct_end_peek_cond"}(src)) {
-	  bool found = true;
+	  size_t fn_size = 0;
 	  while (true) {
-	    tplf{"des_struct_sep_cond"}(src);
 	    tplf{"des_source_type"} s0 = src;
-	    tplf{"des_struct_field_name_peek"}(s0);
+	    fn_size = tplf{"des_struct_field_name_peek"}(s0);
 	    if (s0 == m::to_string{sym}) {
-	      break;
+	      break; /* found */
 	    } else if (s0 > m::to_string{sym}) {
-	      found = false;
+	      fn_size = 0; /* s0 > sym */
 	      break;
 	    }
-	    src.increment_front(s0.size());
+	    /* s0 < sym */
+	    src.increment_front(fn_size);
 	    tplf{"des_struct_entry_sep_cond"}(src);
 	    tplf{"des_value_skip"}(src);
+	    tplf{"des_struct_sep_cond"}(src);
 	    if (src.empty() || tplf{"des_struct_end_peek_cond"}(src)) {
-	      found = false;
+	      fn_size = 0;
 	      break;
 	    }
 	  }
-	  if (found) {
-	    src.increment_front(m::strlen{m::to_string{sym}});
+	  if (fn_size > 0) {
+	    src.increment_front(fn_size);
 	    tplf{"des_struct_entry_sep_cond"}(src);
 	    if (m::ne{noret, 0}) {
 	      deserialize_emplace{tpl, m::at{field_types_sorted{t}, idx}}(src,
@@ -271,6 +257,7 @@ deserialize_macro
 	      deserialize_emplace{tpl, m::at{field_types_sorted{t}, idx}}(src,
 		ret.sym);
 	    }
+	    tplf{"des_struct_sep_cond"}(src);
 	  }
 	}
       }
@@ -291,14 +278,6 @@ deserialize_macro
 	if (src.empty() || tplf{"des_union_end_cond"}(src)) {
 	  break;
 	}
-	if (is_first) {
-	  is_first = false;
-	} else {
-	  if (!tplf{"des_union_sep_cond"}(src)) {
-	    tplf{"des_union_end_skip"}(src);
-	    break;
-	  }
-	}
 	tplf{"des_source_type"} s0 = src;
 	tplf{"des_union_field_name"}(s0, src);
 	if (!tplf{"des_union_entry_sep_cond"}(src)) {
@@ -311,6 +290,10 @@ deserialize_macro
 	    metafunction tv m::at{m::field_types{t}, idx};
 	    ret.sym = deserialize{tpl, tv}(src);
 	  }
+	}
+	if (!tplf{"des_union_sep_cond"}(src)) {
+	  tplf{"des_union_end_skip"}(src);
+	  break;
 	}
       }
     } else {

@@ -1,0 +1,50 @@
+public namespace t3;
+import common -;
+import python py;
+
+public struct foo {
+  int x;
+  string z;
+  function string bar(int v) {
+    println("bar is called", v);
+    x = v;
+    z = string_join{""}("bar: ", v * 3);
+    return z;
+  }
+  function int get_x() {
+    return x;
+  }
+}
+
+{
+  try {
+    py::register_class{foo}();
+    py::pxc_module_init();
+    mutable global = py::module("__main__").attr("__dict__");
+    py::exec("import pxc", global, global);
+    const f = py::eval("pxc.t3_foo()", global, global);
+    const s = f.bar(33);
+    string z = s;
+    println(z);
+    foo fc = f;
+    println(fc);
+    mutable f2 = py::make_object(fc);
+    int z2 = f2.get_x();
+    println(z2);
+    f2.attr("x", 222);
+    int z3 = f2.get_x();
+    println(z3);
+    string z4 = py::make_string(z).swapcase(); /* str.swapcase */
+    println(z4);
+    const math = py::module("math");
+    int x = math.factorial(10);
+    println(x);
+    const date = py::module("datetime").attr("date");
+    const tm = date.fromordinal(1);
+    println(tm);
+    println(py::module("base64").b64encode("0123456789abcdef"));
+  } catch (py::error_already_set e) {
+    py::error_print();
+  }
+}
+

@@ -3,7 +3,20 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- json スペースを読み飛ばす処理、値をまるごと読み飛ばす処理
+- 136/t12-fixme
+
+- Expression 'py::module("sys").exc_type' is of type void
+
+- pxcstringをpython::objectにwrapしないようにする？ (done)
+
+- 136/python (done)
+
+- C++に渡せる関数であるかどうか(closureではないか)判定するメタ関数
+
+- __attribute__ monitor 効いてるのか？
+
+- __invokeみたいなのはgeneratedであったら無視しないと分割コンパイル
+  不整合がおきる可能性がある
 
 - memcpyなどはintなどの配列にたいしては速くない
 
@@ -12,18 +25,12 @@ FIXME/TODO M1
 
 - serializeをvariadic metafunction使ってoptを無指定にできるように
 
-- expt_metafdef::is_variadic消去
-
-- 無名variadic metafunction (done)
-
 - 汎用tableパーザ
   - 先にrcvector欲しい(done)
   - 次: transform: fieldに関数適用(done)
   - 次: regex split (done)
   - 比較関数を指定できるように (done)
   - container::tableに移動 (done)
-
-- popen, fcntl, poll, epoll
 
 - forコンテナのmappedをmutable& にできるように
 
@@ -45,10 +52,6 @@ FIXME/TODO M1
 - sliceの代入演算子を潰していないのはなぜ？
 
 - TODO棚卸し
-
-- rcvector: copy-on-write vector?
-  とりあえずmtsafe版は必要無い
-  書き込むときに分離と、リサイズしたときに分離で性能差でるか検討
 
 - コンテナからその要素参照を取り出すような関数は、返値のrootにコンテナ
   の要素ガードが必要であるが、そのことをコンパイラに知らせる手段が
@@ -613,6 +616,11 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- python: 動的フィールドget/set foo.bar (done)
+- bind EADDRINUSE (done)
+- expt_metafdef::is_variadic消去(done)
+- 無名variadic metafunction (done)
+- popen, fcntl, poll, epoll (done)
 - 可変長引数メタ関数: metafunction {x*} ... (done)
   - transposevは要らない (done)
   - joinはjoin_listに、joinvはjoinに (done)
@@ -3032,3 +3040,56 @@ if (s == term_sort_lambda || s == term_sort_bind) {
   }
 
 }
+
+---------------------------------------------------------------------
+json
+
+deserialize_macroの動作
+cstrref mutable& srcの前から削り、ターゲット型へ変換する。
+srcには無駄な空白があるかもしれないから削る必要がある。
+des_struct_begin_condのようなcond関数は、期待するトークンであればtrue
+を返す。trueを返したときはトークンは削られる。
+
+- string_parse_tokenの最初にskip_space入れる
+- string_parse_token_skipも同様。token_length使っている場所は同様。
+
+055_serialize/json1.px
+
+des_struct_sep_condを入れるのをループの末尾にするべし
+
+---------------------------------------------------------------------
+epoll
+
+epoll_dataを構築するときに fd に関連付けられる。fdはcloseできてはなら
+ないので、file_mt でなくてはならない。 epoll_dataのデストラクタが
+関連付けを外す。epoll()が返すイベントリストの各エントリは、epoll_data
+の参照カウントを1つ保持しなければならない。なぜならそのイベントが解放
+されるまではepoll_dataは有効なポインタでなければならないから。
+
+-> 複数スレッドで動かすとポインタの有効性が保証できなくなる
+
+やりなおし
+epoll_eventに生ポインタを付けるのはやめて、ファイルデスクリプタ番号
+を付ける。fd再利用によってイベントが誤爆したところで何ら問題は起きない。
+fdからハンドラオブジェクトへの対応はarrayなりmapで。
+
+edge-triggeredのときにしかマルチスレッドで
+
+---------------------------------------------------------------------
+python
+
+- 演算子
+- double
+- python例外オブジェクト
+- pxc noncopyable
+- pxc関数をpy関数に変換
+- pxcstringをpyobjectにwrapするのはやめるか
+
+---------------------------------------------------------------------
+動的フィールド
+
+x.foo の式は、次の条件を満たすと動的フィールド参照に置き換わる
+- 右辺がシンボル(funccallではない)
+- xの型がtxとすると、txの名前空間に tx___getfldが定義されている
+
+

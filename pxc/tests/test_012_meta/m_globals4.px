@@ -1,0 +1,51 @@
+import common -;
+
+public namespace m_globals4;
+import meta -;
+import container -;
+
+function {t} int foo() {
+  return 3;
+}
+
+struct {t} bar {
+  function int mbar(vector{t} f) {
+    return 2;
+  }
+}
+
+function int baz(bar{ref{vector{int}}} v) {
+  return 3;
+}
+
+private metafunction nslist{ns} imports_tr{ns};
+private metafunction is_concrete{t} eq{tparam_size{t}, targ_size{t}};
+private metafunction filter_concrete{fs} filter{fs, is_concrete};
+private metafunction nsfuncs{ns}
+  filter_concrete{join{map{nslist{ns}, functions}}};
+private metafunction nstypes{ns} filter_concrete{join{map{nslist{ns}, types}}};
+private metafunction atypes_one{f} joinv{list{ret_type{f}}, arg_types{f}};
+private metafunction atypes{fs} filter_concrete{join{map{fs, atypes_one}}};
+private metafunction ftypes{ts} filter_concrete{join{map{ts, field_types}}};
+private metafunction mfatypes{ts} atypes{join{map{ts, member_functions}}};
+private metafunction tatypes{ts} filter_concrete{join{map{ts, targs}}};
+private metafunction init_types{ns}
+  unique{joinv{nstypes{ns}, atypes{nsfuncs{ns}}}};
+private metafunction step_types{ts}
+  unique{joinv{ts, ftypes{ts}, mfatypes{ts}, tatypes{ts}}};
+private metafunction rep_types{ts, tsn}
+  cond{eq{ts, tsn}, ts, rep_types{tsn, step_types{tsn}}};
+public metafunction all_types{ns} rep_types{init_types, step_types{init_types{ns}}};
+
+// println(concat{"NSFUNCS: ", nsfuncs});
+// println(concat{"NSTYPES: ", nstypes});
+// println(concat{"ATYPES: ", unique{atypes{nsfuncs}}});
+// println(concat{"FTYPES: ", unique{ftypes{nstypes}}});
+// println(concat{"MFATYPES: ", mfatypes{nstypes}});
+// println(concat{"TATYPES: ", tatypes{nstypes}});
+
+println(concat{"0: ", map{init_types{"m_globals"}, full_string}});
+// println(concat{"1: ", step_types{init_types}});
+// println(concat{"2: ", step_types{step_types{init_types}}});
+println(concat{"n: ", map{all_types{"m_globals"}, full_string}});
+

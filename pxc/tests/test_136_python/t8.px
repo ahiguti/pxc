@@ -1,0 +1,38 @@
+public namespace t8;
+import common -;
+import python py;
+
+struct foo {
+  int x;
+  string y;
+}
+
+function ptr{foo} make_foo()
+{
+  return make_ptr{foo}();
+}
+
+function void foo_set_x(ptr{foo} const& obj, int x)
+{
+  obj->x = x;
+}
+
+function int foo_get_x(ptr{foo} const& obj)
+{
+  return obj->x;
+}
+
+{
+  try {
+    const f0 = py::make_function{make_foo}();
+    const f1 = py::make_function{foo_set_x}();
+    const f2 = py::make_function{foo_get_x}();
+    const obj = f0.call(); /* error: no type converter */
+    f1.call(obj, 123);
+    const v = f2.call(obj);
+    println(v);
+  } catch (py::error_already_set e) {
+    py::error_print();
+  }
+}
+
