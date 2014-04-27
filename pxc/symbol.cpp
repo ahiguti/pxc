@@ -56,6 +56,10 @@ static size_t intern(const std::string& s)
     symbol_strings[cur].ns_part = ns_part;
     symbol_strings[cur].base_part = base_part;
     symbol_strings[base_part].nsname_map[ns_part] = cur;
+#if 0
+fprintf(stderr, "intern %s id=%zu baseid=%zu nsid=%zu\n",
+  s.c_str(), cur, base_part, ns_part);
+#endif
   }
   return cur;
 }

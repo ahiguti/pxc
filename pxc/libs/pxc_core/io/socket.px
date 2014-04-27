@@ -16,7 +16,7 @@ io_socket(io const& sys, family_t family, socktype_t socktype,
   protocol_t protocol)
 {
   open_mt r;
-  int fd = sys.socket_fd(family, socktype, protocol);
+  int fd = io_socket_fd(sys, family, socktype, protocol);
   if (fd >= 0) {
     r.value = sys.make_file_mt(fd);
   } else {
@@ -109,7 +109,7 @@ io_listen(io const& sys, cstrref const& node, cstrref const& service,
   const sock = osock.value;
   errno_t mutable err;
   if (reuseaddr) {
-    err = sock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1);
+    err = sock.setsockopt(SOL_SOCKET, io::socket::SO_REUSEADDR, 1);
     if (err != EOK) {
       throw error(string_join{" "}("REUSEADDR", err));
     }

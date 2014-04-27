@@ -15,20 +15,15 @@ struct foo {
 
 {
   try {
-    py::register_class{foo}();
-    py::pxc_module_init();
+    const klass = py::make_class{foo}();
     const main = py::module("__main__");
     mutable global = main.attr("__dict__");
     const r = py::eval("str(2 + 3)", global, global);
     println(r);
     global["hoge"] = py::make_string("xyz");
     println(global["hoge"]);
-    println("pxcmod x1");
-    const pxcmod = py::module("pxc");
-    println("pxcmod imported");
-    const pxcdic = pxcmod.attr("__dict__");
-    py::exec("import pxc", global, global);
-    const f = py::eval("pxc.t2_foo()", global, global);
+    global["t2_foo"] = klass;
+    const f = py::eval("t2_foo()", global, global);
     println("exec done");
     // println("f=", f);
     const z = f.bar(33);

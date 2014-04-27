@@ -17,9 +17,6 @@
 #include "expr.hpp"
 #include "symbol.hpp"
 #include <map>
-#if 0
-#include <tr1/unordered_map>
-#endif
 #include <string>
 
 namespace pxc {
@@ -29,6 +26,7 @@ enum expr_e {
   expr_e_telist,
   expr_e_inline_c,
   expr_e_ns,
+  expr_e_nsmark,
   expr_e_int_literal,
   expr_e_float_literal,
   expr_e_bool_literal,
@@ -104,10 +102,6 @@ typedef std::map<symbol, nsmap_entry> nsmap_type;
 struct symbol_table {
   symbol_table(expr_block *block_backref);
   expr_block *block_backref;
-  #if 0
-  typedef std::tr1::unordered_map<
-    symbol, localvar_info, symbol_hash, symbol_eq> locals_type;
-  #endif
   typedef std::map<symbol, localvar_info> locals_type;
   typedef std::list<symbol> local_names_type;
 private:
@@ -127,19 +121,20 @@ public:
   symbol_table *get_lexical_parent() const;
   void define_name(const symbol& shortname, const symbol& ns,
     expr_i *e, attribute_e visi, expr_stmts *stmt);
-  expr_i *resolve_name_nothrow(const symbol& fullname,
-    bool no_private, const symbol& curns, bool& is_global_r,
-    bool& is_upvalue_r, bool& is_memfld_r);
+  expr_i *resolve_name_nothrow_ns(const symbol& fullname,
+    bool no_private_curns, const symbol& curns, expr_i *pos);
   expr_i *resolve_name_nothrow_memfld(const symbol& fullname,
-    bool no_private, const symbol& curns);
+    bool no_private, bool no_generated, const symbol& curns, expr_i *pos);
   expr_i *resolve_name(const symbol& fullname, const symbol& curns,
     expr_i *e, bool& is_global_r, bool& is_upvalue_r);
   void clear_symbols();
   int generate_tempvar();
 private:
   localvar_info resolve_name_nothrow_internal(const symbol& fullname,
-    const symbol& curns, bool memfld_only, bool& is_global_r,
-    bool& is_upvalue_r, bool& is_memfld_r);
+    const symbol& curns, expr_i *e, bool memfld_only, bool memfld_nogen,
+    bool& is_global_r, bool& is_upvalue_r, bool& is_memfld_r);
+  localvar_info resolve_global_internal(const symbol& shortname,
+    const symbol& ns, const symbol& curns, bool no_generated, expr_i *pos);
 };
 
 };

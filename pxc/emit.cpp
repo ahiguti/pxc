@@ -1601,12 +1601,15 @@ static void emit_function_def(emit_context& em)
     }
     expr_struct *const est = dynamic_cast<expr_struct *>(*i);
     if (est != 0 && est->cnamei.cname == 0) {
-      if (!est->has_userdefined_constr()) {
+      const bool has_udcon = est->has_userdefined_constr();
+      if (!has_udcon) {
 	/* default constr for plain struct */
 	emit_struct_constr_one(em, est, true);
       }
-      /* udcon or struct field constr */
-      emit_struct_constr_one(em, est, false);
+      if (has_udcon || is_copyable(est->get_value_texpr())) {
+	/* udcon or struct field constr */
+	emit_struct_constr_one(em, est, false);
+      }
     }
     expr_dunion *const ev = dynamic_cast<expr_dunion *>(*i);
     if (ev != 0) {
@@ -1661,6 +1664,11 @@ void expr_ns::emit_value(emit_context& em)
   } else {
     em.printf("/* namespace %s */", uniq_nsstr.c_str());
   }
+}
+
+void expr_nsmark::emit_value(emit_context& em)
+{
+  em.printf("/* nsmark %s */", uniqns.c_str());
 }
 
 void expr_int_literal::emit_value(emit_context& em)

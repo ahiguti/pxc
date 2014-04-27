@@ -568,19 +568,22 @@ void expr_ns::set_unique_namespace_one(const std::string& u, bool allow_unsafe)
     std::string astr(nsalias);
     /* astr can be a word, "-", "+", or "*" */
     if (astr == "+") {
-      nsextend_entries& e = nsextends[uniq_nsstr];
+      symbol_list& e = nsextends[uniq_nsstr];
       e.push_back(u);
       astr = "";
     } else if (astr == "*") {
-      nsextend_entries& e = nsextends[u];
+      symbol_list& e = nschains[u];
       e.push_back(uniq_nsstr);
       astr = "";
     } else if (astr == "-") {
       astr = "";
     }
     /* 'u' imports 'uniq_nsstr' as prefix 'nsalias' */
-    nsalias_entries& e = nsaliases[std::make_pair(u, astr)];
+    symbol_list& e = nsaliases[std::make_pair(u, astr)];
     e.push_back(uniq_nsstr);
+  }
+  if (import) {
+    nsimports[u].push_back(std::make_pair(uniq_nsstr, pub));
   }
   src_uniq_nsstr = u;
 }
@@ -596,6 +599,22 @@ std::string expr_ns::dump(int indent) const
   } else {
     return "namespace " + uniq_nsstr;
   }
+}
+
+expr_nsmark::expr_nsmark(const char *fn, int line, bool end_mark)
+  : expr_i(fn, line), end_mark(end_mark)
+{
+}
+
+void expr_nsmark::set_unique_namespace_one(const std::string& u,
+  bool allow_unsafe)
+{
+  uniqns = u;
+}
+
+std::string expr_nsmark::dump(int indent) const
+{
+  return "nsmark " + uniqns;
 }
 
 expr_int_literal::expr_int_literal(const char *fn, int line, const char *str,

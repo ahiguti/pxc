@@ -57,6 +57,7 @@ expr_i *expr_inline_c_new(const char *fn, int lin, const char *posstr,
   const char *cstr, bool declonly, expr_i *val);
 expr_i *expr_ns_new(const char *fn, int line, expr_i *nssym, bool import,
   bool pub, bool thr, const char *nsalias, const char *safety);
+expr_i *expr_nsmark_new(const char *fn, int line, bool end_mark);
 expr_i *expr_int_literal_new(const char *fn, int line, const char *str,
   bool is_unsigned);
 expr_i *expr_float_literal_new(const char *fn, int line, const char *str);
@@ -197,7 +198,7 @@ struct nsprop {
 void arena_init();
 void arena_set_recursion_limit(size_t v);
 void arena_clear();
-void arena_append_topval(const std::list<expr_i *>& topval, bool is_main,
+void arena_append_topval(std::list<expr_i *>& topval, bool is_main,
   imports_type& imports_r);
 void arena_compile(const std::map<std::string, std::string>& prof_map,
   const std::string& dest_filename, coptions& copt_apnd,

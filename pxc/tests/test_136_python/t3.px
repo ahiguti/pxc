@@ -18,11 +18,9 @@ public struct foo {
 
 {
   try {
-    py::register_class{foo}();
-    py::pxc_module_init();
+    const klass = py::make_class{foo}();
     mutable global = py::module("__main__").attr("__dict__");
-    py::exec("import pxc", global, global);
-    const f = py::eval("pxc.t3_foo()", global, global);
+    const f = klass();
     const s = f.bar(33);
     string z = s;
     println(z);

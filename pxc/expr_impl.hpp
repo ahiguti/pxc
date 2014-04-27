@@ -219,11 +219,12 @@ struct template_info {
   }
 };
 
-typedef std::list<symbol> nsalias_entries;
-typedef std::map<std::pair<symbol, symbol>, nsalias_entries>
-  nsaliases_type;
-typedef std::list<symbol> nsextend_entries;
-typedef std::map<symbol, nsextend_entries> nsextends_type;
+typedef std::list<symbol> symbol_list;
+typedef std::map<symbol, std::list<std::pair<symbol, bool> > > nsimports_type;
+typedef std::set<std::pair<symbol, symbol> > nsimports_rec_type;
+typedef std::map<std::pair<symbol, symbol>, symbol_list> nsaliases_type;
+typedef std::map<symbol, symbol_list> nschains_type;
+typedef std::map<symbol, symbol_list> nsextends_type;
 
 struct symbol_common {
   symbol_common(expr_i *parent_expr)
@@ -284,7 +285,7 @@ struct expr_i {
   virtual expr_i *get_child(int i) = 0;
   virtual void set_child(int i, expr_i *e) = 0;
   virtual expr_block *get_template_block() { return 0; }
-  virtual std::string dump(int indent) const = 0;
+  virtual std::string dump(int indent = 0) const = 0;
   virtual symbol_common *get_sdef() { return 0; }
   virtual term& resolve_texpr() { return type_of_this_expr; }
   virtual void set_texpr(const term& t);
@@ -445,6 +446,24 @@ public:
   const char *nsalias;
   const char *safety;
   std::string src_uniq_nsstr; /* src_uniq_nsstr 'imports' uniq_nsstr */
+};
+
+struct expr_nsmark : public expr_i {
+  expr_nsmark(const char *fn, int line, bool end_mark);
+  expr_i *clone() const { return new expr_nsmark(*this); }
+  expr_e get_esort() const { return expr_e_nsmark; }
+  int get_num_children() const { return 0; }
+  expr_i *get_child(int i) { return 0; }
+  void set_child(int i, expr_i *e) { }
+  void set_unique_namespace_one(const std::string& u, bool allow_unsafe);
+  void check_type(symbol_table *lookup);
+  bool has_expr_to_emit() const { return false; }
+  bool is_expression() const { return false; }
+  void emit_value(emit_context& em);
+  std::string dump(int indent) const;
+public:
+  std::string uniqns;
+  const bool end_mark;
 };
 
 struct expr_int_literal : public expr_i {
@@ -776,6 +795,9 @@ struct expr_block : public expr_i {
     else if (i == 3) { rettype_uneval = ptr_down_cast<expr_te>(e); }
     else if (i == 4) { stmts = ptr_down_cast<expr_stmts>(e); }
   }
+  void set_unique_namespace_one(const std::string& u, bool allow_unsafe) {
+    uniqns = u; }
+  std::string get_unique_namespace() const { return uniqns; }
   void check_type(symbol_table *lookup);
   expr_argdecls *get_argdecls() const;
   bool is_expand_argdecls() const {
@@ -799,6 +821,7 @@ public:
   passby_e ret_passby;
   expr_stmts *stmts;
   expr_i *tparams_error; /* nonzero if tparams contains a syntax error */
+  std::string uniqns;
   symbol_table symtbl;
   bool compiled_flag : 1;
 private:

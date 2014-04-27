@@ -1,0 +1,93 @@
+public namespace pytiming5;
+public import common -;
+public import python py;
+public import test -;
+public import meta m;
+
+struct cfoo {
+  public int ival;
+  public long lval;
+  public string sval;
+  public function int faddint(int x, int y) {
+    return x + y;
+  }
+  public function string faddstr(string const& x, string const& y) {
+    string s = x;
+    s.append(y);
+    return s;
+  }
+  public function string faddcsref(cstrref const& x, cstrref const& y) {
+    string s = x;
+    s.append(y);
+    return s;
+  }
+  public function int faddlenstr(string const& x, string const& y) {
+    return static_cast{int}(x.size() + y.size());
+  }
+  public function int faddlensref(cstrref const& x, cstrref const& y) {
+    return static_cast{int}(x.size() + y.size());
+  }
+}
+
+function {fname, rep} size_t do_test(int num)
+{
+  const main = py::module("__main__");
+  const func = py::module("__main__").__dict__[fname];
+  int sum = 0;
+  for (int i : 0 .. rep) {
+    int s = func(num);
+    sum += s;
+  }
+  return static_cast{size_t}(sum);
+}
+
+function void def_pyfunc(py::object const& glo, cstrref const& funcname,
+  cstrref const& iniexpr, cstrref const& foldexpr)
+{
+  const s = string_join{""}(
+    "def ", funcname, "(num):\n",
+    "  ", iniexpr, "\n",
+    "  for i in range(num):\n",
+    "    ", foldexpr, "\n",
+    "  return sum\n");
+  println(s);
+  py::exec(s, glo, glo);
+}
+
+{
+  try {
+    py::module("sys").path.append(".");
+    const main = py::module("__main__");
+    mutable global = main.__dict__;
+    global["cfoo"] = py::make_class{cfoo}();
+    py::exec(string_join{"\n"}(
+      "class pfoo:",
+      "  ival = 0",
+      "  sval = ''", 
+      "  def fadd(self, x, y):",
+      "    return x + y",
+      "  def faddlen(self, x, y):",
+      "    return len(x) + len(y)"),
+      global, global);
+    def_pyfunc(global, "test_c1",
+      "obj, sum = cfoo(), 0", "sum = obj.faddint(sum, i)");
+    def_pyfunc(global, "test_c2",
+      "obj, sum = cfoo(), 0", "sum += obj.faddlenstr(str(i), str(i))");
+    def_pyfunc(global, "test_c3",
+      "obj, sum = cfoo(), 0", "sum += obj.faddlensref(str(i), str(i))");
+    def_pyfunc(global, "test_p1",
+      "obj, sum = pfoo(), 0", "sum = obj.fadd(sum, i)");
+    def_pyfunc(global, "test_p2",
+      "obj, sum = pfoo(), 0", "sum += obj.faddlen(str(i), str(i))");
+    test_timing_default{{
+      do_test{"test_c1", 100},
+      do_test{"test_c2", 100},
+      do_test{"test_c3", 100},
+      do_test{"test_p1", 100},
+      do_test{"test_p2", 100}
+    }}();
+  } catch (py::error_already_set e) {
+    py::error_print();
+  }
+}
+

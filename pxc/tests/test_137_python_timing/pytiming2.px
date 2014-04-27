@@ -1,0 +1,85 @@
+public namespace pytiming2;
+public import common -;
+public import python py;
+public import test -;
+
+function {t} t fib(t x) { return x < 2 ? x : fib(x - 1) + fib(x - 2); }
+
+function {v} size_t test1(int num)
+{
+  long sum = 0;
+  for (const i : 0 .. num) {
+    long const x = fib{py::object}(v);
+    sum += x;
+  }
+  return static_cast{size_t}(sum);
+}
+
+function {v} size_t test1c(int num)
+{
+  long sum = 0;
+  for (const i : 0 .. num) {
+    long const x = fib{int}(v);
+    sum += x;
+  }
+  return static_cast{size_t}(sum);
+}
+
+function {v} size_t test1py(int num)
+{
+  const main = py::module("__main__");
+  const global = main.__dict__;
+  py::exec(string_join{"\n"}(
+    "def fib(x):",
+    "  return x if x < 2 else fib(x - 1) + fib(x - 2)"),
+    global, global);
+  long sum = 0;
+  for (const i : 0 .. num) {
+    long const x = main.fib(v);
+    sum += x;
+  }
+  return static_cast{size_t}(sum);
+}
+
+function {v} size_t test1py2(int num)
+{
+  const main = py::module("__main__");
+  const global = main.__dict__;
+  py::exec(string_join{"\n"}(
+    "def fib(x):",
+    "  return x if x < 2 else fib(x - 1) + fib(x - 2)",
+    "def test1(v, num):",
+    "  sum = 0",
+    "  for i in range(num):",
+    "    sum += fib(v)",
+    "  return sum"),
+    global, global);
+  long sum = main.test1(v, num);
+  return static_cast{size_t}(sum);
+}
+
+function {v} size_t test1py3(int num)
+{
+  const global = py::module("__main__").__dict__;
+  py::exec("import fibmod", global, global);
+  const fibmod = py::module("fibmod");
+  long sum = fibmod.test1(v, num);
+  return static_cast{size_t}(sum);
+}
+
+{
+  try {
+    py::module("sys").path.append(".");
+    // println("path=", py::module("sys").path);
+    test_timing_default{{
+      test1{20},
+      test1c{20},
+      test1py{20},
+      test1py2{20},
+      test1py3{20}
+    }}();
+  } catch (py::error_already_set e) {
+    py::error_print();
+  }
+}
+

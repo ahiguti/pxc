@@ -280,6 +280,17 @@ void expr_ns::check_type(symbol_table *lookup)
   }
 }
 
+void expr_nsmark::check_type(symbol_table *lookup)
+{
+  if (end_mark) {
+    compiled_ns[uniqns] = true;
+  }
+  #if 0
+  fprintf(stderr, "nsmark %s %d check_type()\n", uniqns.c_str(),
+    (int)end_mark);
+  #endif
+}
+
 void expr_symbol::check_type(symbol_table *lookup)
 {
   check_type_symbol_common(this, lookup);
@@ -851,22 +862,20 @@ void expr_block::check_type(symbol_table *lookup)
       expr_funcdef *efd = ptr_down_cast<expr_funcdef>(parent_expr);
       check_return_expr(efd);
     } // FIXME: check_return_expr for struct constructor?
+    /* set compiled_flag */
+    compiled_flag = true; 
     /* evaluate __static_assert__ */
-    bool is_global = false;
-    bool is_upvalue = false;
-    bool is_memfld = false;
     const bool no_private = false;
-    expr_i *sa = symtbl.resolve_name_nothrow("__static_assert__",
-      no_private, "", is_global, is_upvalue, is_memfld);
-    if (sa != 0 && !is_upvalue && !is_global &&
-      sa->get_esort() == expr_e_metafdef) {
+    const bool no_generated = false;
+    expr_i *sa = symtbl.resolve_name_nothrow_memfld("__static_assert__",
+      no_private, no_generated, "", this);
+    if (sa != 0 && sa->get_esort() == expr_e_metafdef) {
       const term t = eval_term(
 	term(ptr_down_cast<expr_metafdef>(sa)->get_rhs()));
       if (t != term(1LL)) {
 	arena_error_throw(sa, "Static assertion failed");
       }
     }
-    compiled_flag = true;
   }
   #if 0
   double t4 = gettimeofday_double();
@@ -1515,7 +1524,8 @@ static void subst_user_defined_fldop(expr_op *eop)
 {
   if (eop->op == '.' && eop->arg1->get_esort() == expr_e_symbol &&
     eop->parent_expr != 0 &&
-    eop->parent_expr->get_esort() != expr_e_funccall &&
+    (eop->parent_expr->get_esort() != expr_e_funccall ||
+      ptr_down_cast<expr_funccall>(eop->parent_expr)->func != eop) &&
     (eop->parent_expr->get_esort() != expr_e_op ||
       ptr_down_cast<expr_op>(eop->parent_expr)->op != '=' ||
       ptr_down_cast<expr_op>(eop->parent_expr)->arg0 != eop))
@@ -1523,13 +1533,18 @@ static void subst_user_defined_fldop(expr_op *eop)
     fn_check_type(eop->arg0, eop->symtbl_lexical);
     term ta0 = eop->arg0->resolve_texpr();
     expr_i *const einst0 = term_get_instance(ta0);
+    expr_struct *const est0 = dynamic_cast<expr_struct *>(einst0);
     expr_block *const tblk = einst0->get_template_block();
-    if (tblk != 0) {
-      bool is_global = false;
-      bool is_upvalue = false;
-      bool is_memfld = false;
-      expr_i *hf = tblk->symtbl.resolve_name_nothrow("__has_fldop__", true,
-	"", is_global, is_upvalue, is_memfld);
+    /* supports structs only. no additional ns lookup. */
+    if (est0 != 0 && tblk != 0) {
+      const bool no_generated = true;
+      expr_i *const hf = tblk->symtbl.resolve_name_nothrow_memfld(
+	"__has_fldop__", true, no_generated, "", est0);
+      #if 0
+      const std::string sstr = einst0->get_unique_namespace() +
+	+ "::" + std::string(est0->sym) + "___getfld";
+      expr_i *hf = tblk->symtbl.resolve_name_nothrow_ns(sstr, true, "");
+      #endif
       if (hf != 0 && !hf->generated_flag) {
 	DBG_DYNFLD(fprintf(stderr, "hasfldop!!! %s\n", eop->dump(0).c_str()));
 	expr_symbol *sym = ptr_down_cast<expr_symbol>(eop->arg1);
@@ -1558,13 +1573,18 @@ static void subst_user_defined_fldop(expr_op *eop)
       fn_check_type(eop->arg0, eop->symtbl_lexical);
       term ta0 = lhsop->arg0->resolve_texpr();
       expr_i *const einst0 = term_get_instance(ta0);
+      expr_struct *const est0 = dynamic_cast<expr_struct *>(einst0);
       expr_block *const tblk = einst0->get_template_block();
-      if (tblk != 0) {
-	bool is_global = false;
-	bool is_upvalue = false;
-	bool is_memfld = false;
-	expr_i *hf = tblk->symtbl.resolve_name_nothrow("__has_fldop__", true,
-	  "", is_global, is_upvalue, is_memfld);
+      /* supports structs only. no additional ns lookup. */
+      if (est0 != 0 && tblk != 0) {
+	const bool no_generated = true;
+	expr_i *const hf = tblk->symtbl.resolve_name_nothrow_memfld(
+	  "__has_fldop__", true, no_generated, "", est0);
+	#if 0
+	const std::string sstr = einst0->get_unique_namespace() +
+	  + "::" + std::string(est0->sym) + "___setfld";
+	expr_i *hf = tblk->symtbl.resolve_name_nothrow_ns(sstr, true, "");
+	#endif
 	if (hf != 0 && !hf->generated_flag) {
 	  DBG_DYNFLD(fprintf(stderr, "hasfldop!!! set %s\n",
 	    eop->dump(0).c_str()));
@@ -1704,9 +1724,6 @@ void expr_op::check_type(symbol_table *lookup)
     }
     expr_block *const blk = einst->get_template_block();
     symbol_table *const symtbl = blk != 0 ? &blk->symtbl : 0;
-    bool is_global_dummy = false;
-    bool is_upvalue_dummy = false;
-    bool is_memfld_dummy = false;
     DBG(fprintf(stderr,
       "sym=%s rhs_sym_ns=%s symtbl=%p parent_symtbl=%p\n",
       sc->fullsym.c_str(), sc->uniqns.c_str(), symtbl, parent_symtbl));
@@ -1718,13 +1735,13 @@ void expr_op::check_type(symbol_table *lookup)
     if (symtbl != 0) {
       symbol symstr = sc->get_fullsym();
       expr_i *fmem = symtbl->resolve_name_nothrow_memfld(symstr, no_private,
-	sc->uniqns);
+	false, sc->uniqns, this);
       bool is_generic_invoke = false;
       if (fmem == 0) {
 	/* "__invoke" member function */
 	symstr = "__invoke"; /* TODO: intern once */
 	fmem = symtbl->resolve_name_nothrow_memfld(symstr, no_private,
-	  sc->uniqns);
+	  false, sc->uniqns, this);
 	is_generic_invoke = true;
       }
       if (fmem != 0) {
@@ -1766,17 +1783,15 @@ void expr_op::check_type(symbol_table *lookup)
 	  arg0->dump(0).c_str(), sc->get_fullsym().c_str(), uniqns.c_str(),
 	  parent_symtbl));
 	no_private = false;
-	expr_i *fo = parent_symtbl->resolve_name_nothrow(funcname_w_prefix,
-	  no_private, uniqns, is_global_dummy, is_upvalue_dummy,
-	  is_memfld_dummy);
+	expr_i *fo = parent_symtbl->resolve_name_nothrow_ns(
+	  uniqns + "::" + funcname_w_prefix, no_private, uniqns, this);
 	bool is_generic_invoke = false;
 	if (fo == 0) {
 	  /* "foo__invoke" function */
 	  funcname_w_prefix = i->sym_prefix + "__invoke";
 	    /* TODO: don't use std::string */
-	  fo = parent_symtbl->resolve_name_nothrow(funcname_w_prefix,
-	    no_private, uniqns, is_global_dummy, is_upvalue_dummy,
-	    is_memfld_dummy);
+	  fo = parent_symtbl->resolve_name_nothrow_ns(
+	    uniqns + "::" + funcname_w_prefix, no_private, uniqns, this);
 	  is_generic_invoke = true;
 	}
 	if (fo != 0) {
@@ -2288,9 +2303,37 @@ static void check_ptr_constructor_syntax(expr_funccall *fc, const term& te)
   #endif
 }
 
+static void subst_user_defined_call(expr_funccall *fc, symbol_table *lookup)
+{
+  if (fc->func->get_esort() != expr_e_symbol) {
+    return;
+  }
+  expr_symbol *const sym = ptr_down_cast<expr_symbol>(fc->func);
+  symbol_common *const sc = sym->get_sdef();
+  const expr_i *const sd = sc->get_symdef();
+  if (sd->get_esort() != expr_e_var && sd->get_esort() != expr_e_argdecls) {
+    return;
+  }
+  /* func is a variable or argument */
+  expr_i *nfunc = expr_op_new(fc->fname, fc->line, '.',
+    expr_symbol_new(fc->fname, fc->line,
+      expr_nssym_new(fc->fname, fc->line, 0, sym->nssym->sym)),
+    expr_symbol_new(fc->fname, fc->line,
+      expr_nssym_new(fc->fname, fc->line, 0, "__call")));
+  fc->func = nfunc;
+  const std::string uniqns = sc->uniqns.to_string();
+  int block_id_ns = 0;
+  const bool allow_unsafe = false;
+  fn_set_namespace(nfunc, uniqns, block_id_ns, allow_unsafe);
+  fn_set_tree_and_define_static(nfunc, fc, fc->symtbl_lexical, 0,
+    fc->symtbl_lexical->block_backref->tinfo.template_descent);
+  fn_check_type(fc->func, lookup);
+}
+
 void expr_funccall::check_type(symbol_table *lookup)
 {
   fn_check_type(func, lookup);
+  subst_user_defined_call(this, lookup);
   /* check args */
   {
     /* can't use fn_check_type(arg, lookup) because it assumes arg as
@@ -3250,6 +3293,7 @@ void check_genericfe_syntax(expr_i *e)
   switch (e->get_esort()) {
   case expr_e_inline_c:
   case expr_e_ns:
+  case expr_e_nsmark:
   case expr_e_var:
     /* var is not allowed because it requires block_id_ns which is not
      * generated inside a generic foreach block */
