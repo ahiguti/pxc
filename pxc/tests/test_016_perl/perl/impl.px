@@ -97,7 +97,7 @@ uninit_ptr_getref(uninit_ptr{t} mutable& x);
 private function {t} rawsv convert_to_rawsv_own(t const& x)
 {
   if (eq{t, sv}) {
-    return x.get().incref();
+    return rawsv_incref(x.get());
   } else if (eq{t, string}) {
     return string_to_rawsv_own(x);
   } else if (is_fp_type{t}) {
@@ -117,15 +117,15 @@ private function {t} void rawsv_get_value(rawsv const& x,
   value_or_ref{t} mutable& sto)
 {
   if (eq{t, sv}) {
-    sto.set_sv(x);
+    value_or_ref_set_sv(sto, x);
   } else if (eq{t, string}) {
-    sto.set_string(x);
+    value_or_ref_set_string(sto, x);
   } else if (is_fp_type{t}) {
-    sto.set_fp(x);
+    value_or_ref_set_fp(sto, x);
   } else if (is_integral_enum_bitmask_type{t}) {
-    sto.set_integral(x);
+    value_or_ref_set_integral(sto, x);
   } else if (eq{t, bool}) {
-    sto.set_integral(x);
+    value_or_ref_set_integral(sto, x);
   } else if (eq{t, unit}) {
     /* nothing to do */
   } else {
@@ -254,7 +254,7 @@ private struct {t, i} pxfield_obj {
 	/*byref */
 	obj.sym = v;
 	/* byval */
-	obj.sym = v.get();
+	obj.sym = value_or_ref_get(v);
       }
       return rawsv_undef();
     } else {

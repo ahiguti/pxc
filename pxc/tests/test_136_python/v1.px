@@ -1,0 +1,31 @@
+public namespace v1;
+import common -;
+import python py;
+
+public struct foo {
+  int x;
+  string z;
+  function string bar(int v) {
+    println("bar is called", v);
+    x = v;
+    z = string_join{""}("bar: ", v * 3);
+    return z;
+  }
+  function int get_x() {
+    return x;
+  }
+}
+
+{
+  try {
+    const foo_class = py::make_class{foo}();
+    foo x;
+    const f = py::make_object(x);
+    const s = f.bar(33);
+    string z = s;
+    println(z);
+  } catch (py::error_already_set e) {
+    py::error_print();
+  }
+}
+

@@ -91,9 +91,9 @@ static term eval_meta_local_internal(const term_list_range& tlev,
   assert(symtbl);
   const std::string sym_ns;
   const bool no_private = true;
-  bool is_global = false, is_upvalue = false, is_memfld = false;
-  expr_i *const rsym = symtbl->resolve_name_nothrow(name, no_private, sym_ns,
-    is_global, is_upvalue, is_memfld);
+  const bool no_memfld_generated = false;
+  expr_i *const rsym = symtbl->resolve_name_nothrow_memfld(name, no_private,
+    no_memfld_generated, sym_ns, pos);
   DBG_METASYM(fprintf(stderr, "meta_local name=[%s] ns=[%s] rsym=%p\n",
     name.c_str(), sym_ns.c_str(), rsym));
   if (rsym == 0) {
@@ -132,13 +132,12 @@ static term eval_meta_symbol_global(const std::string& sym_ns,
        template functions can be inconsistent among compilation units. we
        must generate an error here instead of returning 'notfound', in order
        to avoid such inconsistency. */
-  bool is_global = false, is_upvalue = false, is_memfld = false;
   bool no_private = true;
-  expr_i *const rsym = symtbl->resolve_name_nothrow(name, no_private, sym_ns,
-    is_global, is_upvalue, is_memfld);
+  expr_i *const rsym = symtbl->resolve_name_nothrow_ns(name, no_private,
+    sym_ns, pos);
   DBG_METASYM(fprintf(stderr, "meta_symbol name=[%s] ns=[%s] rsym=%p[%s]\n",
     name.c_str(), sym_ns.c_str(), rsym, rsym ? rsym->dump(0).c_str() : ""));
-  if (rsym == 0 || !is_global) {
+  if (rsym == 0) {
     return defval;
   }
   if (rsym->generated_flag) {
@@ -1516,6 +1515,8 @@ static term eval_meta_characteristic(const term_list_range& tlev,
     return term(is_noheap_type(tlev[0]));
   } else if (s == "defcon") {
     return term(is_default_constructible(tlev[0]));
+  } else if (s == "copyable") {
+    return term(is_copyable(tlev[0]));
   }
   return term();
 }

@@ -9,21 +9,20 @@ public import pointer -;
 public multithreaded struct extern "pxcio::poll" "nodefault"
 poll(io::io const& iop) { }
 
-public tsvaluetype struct extern "unsigned" "extbitmask"
+public tsvaluetype struct extern "short" "extbitmask"
 poll_eventmask_t { }
 
 public extern "pxcio::poll_eventmask_in" poll_eventmask_t POLLIN;
 public extern "pxcio::poll_eventmask_out" poll_eventmask_t POLLOUT;
-public extern "pxcio::poll_eventmask_et" poll_eventmask_t EPOLLET;
 
 public threaded function extern "pxcio::poll_add" errno_t
-poll_add(poll const& p, file_mt const& f, poll_eventmask_t ev);
+poll_add(poll mutable& p, file_mt const& f, poll_eventmask_t ev);
 
 public threaded function extern "pxcio::poll_modify" errno_t
-poll_modify(poll const& p, file_mt const& f, poll_eventmask_t ev);
+poll_modify(poll mutable& p, file_mt const& f, poll_eventmask_t ev);
 
 public threaded function extern "pxcio::poll_remove" errno_t
-poll_remove(poll const& p, file_mt const& f);
+poll_remove(poll mutable& p, file_mt const& f);
 
 public tsvaluetype struct extern "pxcio::poll_event"
 poll_event { }
@@ -35,86 +34,103 @@ public threaded function extern "pxcio::poll_event_events" poll_eventmask_t
 poll_event_events(poll_event const& ev);
 
 public threaded function extern "pxcio::poll_wait" errno_t
-poll_wait(poll const& p, size_t maxevents, uint timeo_ms,
+poll_wait(poll mutable& p, size_t maxevents, uint timeo_ms,
   vector{poll_event} mutable& events_r);
 
 extern "types" inline
-#include <sys/epoll.h>
+
+#include <sys/poll.h>
+#include <vector>
 
 namespace pxcio {
 
 struct poll {
   poll(io const& iop);
-  file_mt handle;
+  std::vector< ::pollfd > fds;
+  std::vector<short> fd_events;
 };
 
-typedef ::epoll_event poll_event;
+typedef ::pollfd poll_event;
 
-enum { poll_eventmask_in = EPOLLIN };
-enum { poll_eventmask_out = EPOLLOUT };
-enum { poll_eventmask_et = EPOLLET };
+enum { poll_eventmask_in = POLLIN };
+enum { poll_eventmask_out = POLLOUT };
 
 };
+
 ;
 
 extern "implementation" inline
+
 namespace pxcio {
 
 poll::poll(io const& iop)
-  : handle(io_make_file_mt(iop, ::epoll_create(1024)))
 {
+  fds.resize(1);
 }
 
-int poll_add(poll const& p, file_mt const& f, unsigned ev)
+int poll_add(poll& p, file_mt const& f, short ev)
 {
-  epoll_event e;
-  e.events = ev;
-  e.data.fd = f.get();
-  const int r = epoll_ctl(p.handle.get(), EPOLL_CTL_ADD, f.get(), &e);
-  return r < 0 ? errno : 0;
+  const int fd = f.get();
+  if (fd < 0) {
+    return EINVAL;
+  }
+  if (p.fd_events.size() <= static_cast<size_t>(fd)) {
+    p.fd_events.resize(fd + 1);
+  }
+  p.fd_events[fd] = ev;
+  return 0;
 }
 
-int poll_modify(poll const& p, file_mt const& f, unsigned ev)
+int poll_modify(poll& p, file_mt const& f, short ev)
 {
-  epoll_event e;
-  e.events = ev;
-  e.data.fd = f.get();
-  const int r = epoll_ctl(p.handle.get(), EPOLL_CTL_MOD, f.get(), &e);
-  return r < 0 ? errno : 0;
+  return poll_add(p, f, ev);
 }
 
-int poll_remove(poll const& p, file_mt const& f)
+int poll_remove(poll& p, file_mt const& f)
 {
-  epoll_event e = { };
-  const int r = epoll_ctl(p.handle.get(), EPOLL_CTL_DEL, f.get(), &e);
-  return r < 0 ? errno : 0;
+  return poll_add(p, f, 0);
 }
 
-pxcrt::bt_int poll_event_fileno(poll_event const& e)
+pxcrt::bt_int poll_event_fileno(::pollfd const& e)
 {
-  return e.data.fd;
+  return e.fd;
 }
 
-unsigned poll_event_events(poll_event const& e)
+short poll_event_events(::pollfd const& e)
 {
-  return e.events;
+  return e.revents;
 }
 
 int
-poll_wait(poll const& ep, pxcrt::bt_size_t maxevents, pxcrt::bt_uint timeo_ms,
+poll_wait(poll& p, pxcrt::bt_size_t maxevents, pxcrt::bt_uint timeo_ms,
   pxcrt::pxcvector<poll_event>& events_r)
 {
-  maxevents = std::min(maxevents, size_t(65535));
-  size_t const osz = events_r.size();
-  poll_event *evp = events_r.reserve_back<1>(maxevents);
-  int n = epoll_wait(ep.handle.get(), evp, maxevents, timeo_ms);
-  if (n < 0) {
-    return errno;
+  size_t nfds = 0;
+  for (size_t i = 0; i < p.fd_events.size(); ++i) {
+    const short ev = p.fd_events[i];
+    if (ev == 0) {
+      continue;
+    }
+    if (nfds <= p.fds.size()) {
+      p.fds.resize(nfds + 1);
+    }
+    ::pollfd& pfd = p.fds[nfds];
+    pfd.fd = i;
+    pfd.events = ev;
+    ++nfds;
   }
-  events_r.rawarr_set_valid_len(osz + maxevents);
+  int n = ::poll(&p.fds[0], nfds, timeo_ms);
+  for (size_t i = 0; i < nfds; ++i) {
+    const ::pollfd& pfd = p.fds[i];
+    if (pfd.revents == 0) {
+      continue;
+    }
+    events_r.push_back(pfd);
+  }
   return 0;
 }
 
 };
+
 ;
 

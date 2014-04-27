@@ -18,11 +18,10 @@ public struct foo {
 
 {
   try {
-    py::register_class{foo}();
-    py::pxc_module_init();
     mutable global = py::module("__main__").__dict__;
-    py::exec("import pxc", global, global);
-    const f = py::eval("pxc.t10_foo()", global, global);
+    const klass = py::make_class{foo}();
+    global["t10_foo"] = klass;
+    const f = py::eval("t10_foo()", global, global);
     const s = f.bar(33); /* s is a python string */
     println(s);
   } catch (py::error_already_set e) {

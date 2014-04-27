@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export TEST_PXC_PROF=../common/pxc_cxx11_unsafe.profile
+export TEST_PXC_PROF=../common/pxc.profile
 
 exec ./run0.sh $*
 

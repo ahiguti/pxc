@@ -52,11 +52,15 @@ std::string main_namespace;
 int compile_phase = 0;
 const std::map<std::string, std::string> *cur_profile = 0;
 size_t recursion_limit = 3000;
+nsimports_type nsimports;
+nsimports_rec_type nsimports_rec;
 nsaliases_type nsaliases;
+nschains_type nschains;
 nsextends_type nsextends;
 nspropmap_type nspropmap;
 nsthrmap_type nsthrmap;
 std::string emit_threaded_dll_func;
+compiled_ns_type compiled_ns;
 /* end: global variables */
 
 static expr_i *string_to_nssym(expr_i *e, const std::string& str)
@@ -2294,6 +2298,7 @@ expr_i *fn_drop_non_exports(expr_i *e) {
     expr_i *const h = st->head;
     bool is_export = false;
     switch (h->get_esort()) {
+    case expr_e_nsmark:
     case expr_e_struct:
     case expr_e_dunion:
     case expr_e_interface:
@@ -3490,6 +3495,7 @@ bool is_noexec_expr(expr_i *e)
   case expr_e_typedef:
   case expr_e_metafdef:
   case expr_e_ns:
+  case expr_e_nsmark:
   case expr_e_enumval:
   case expr_e_struct:
   case expr_e_dunion:
@@ -3507,6 +3513,44 @@ bool is_noexec_expr(expr_i *e)
 bool is_compiled(const expr_block *bl)
 {
   return !bl->tinfo.is_uninstantiated() && bl->compiled_flag;
+}
+
+static void add_imports_rec(const symbol& k, const symbol& v)
+{
+  std::pair<symbol, symbol> e(k, v);
+  if (nsimports_rec.find(e) != nsimports_rec.end()) {
+    return;
+  }
+  nsimports_rec.insert(e);
+  #if 0
+  fprintf(stderr, "imports_rec %s %s\n", k.c_str(), v.c_str());
+  #endif
+  nsimports_type::const_iterator iter = nsimports.find(v);
+  if (iter == nsimports.end()) {
+    return;
+  }
+  const std::list<std::pair<symbol, bool> >& lst = iter->second;
+  for (std::list<std::pair<symbol, bool> >::const_iterator j = lst.begin();
+    j != lst.end(); ++j) {
+    if (j->second) {
+      add_imports_rec(k, j->first);
+    }
+  }
+}
+
+void fn_prepare_imports()
+{
+  for (nsimports_type::const_iterator i = nsimports.begin();
+    i != nsimports.end(); ++i) {
+    #if 0
+    fprintf(stderr, "imports %s\n", i->first.c_str());
+    #endif
+    const std::list<std::pair<symbol, bool> >& lst = i->second;
+    for (std::list<std::pair<symbol, bool> >::const_iterator j = lst.begin();
+      j != lst.end(); ++j) {
+      add_imports_rec(i->first, j->first);
+    }
+  }
 }
 
 }; 

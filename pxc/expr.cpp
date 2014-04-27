@@ -39,6 +39,8 @@ expr_i *expr_ns_new(const char *fn, int line, expr_i *nssym, bool import,
   bool pub, bool thr, const char *nsalias, const char *safety)
 { return arena_push(new expr_ns(fn, line, nssym, import, pub, thr, nsalias,
   safety)); }
+expr_i *expr_nsmark_new(const char *fn, int line, bool end_mark)
+{ return arena_push(new expr_nsmark(fn, line, end_mark)); }
 expr_i *expr_int_literal_new(const char *fn, int line, const char *str,
   bool is_unsigned)
 { return arena_push(new expr_int_literal(fn, line, str, is_unsigned)); }
@@ -421,9 +423,22 @@ static bool define_builtin_string(expr_stmts *stmts_runtime)
   return true;
 }
 
-void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
+void arena_append_topval(std::list<expr_i *>& tvs, bool is_main,
   imports_type& imports_r)
 {
+  /* append namespace-begin/end marks */
+  {
+    const char *fname = "-";
+    int line = 0;
+    if (!tvs.empty()) {
+      fname = (*tvs.begin())->fname;
+      line = (*tvs.begin())->line;
+    }
+    tvs.push_front(expr_stmts_new(fname, line,
+      expr_nsmark_new(fname, line, false), 0));
+    tvs.push_back(expr_stmts_new(fname, line,
+      expr_nsmark_new(fname, line, true), 0));
+  }
   expr_i *topval = 0;
   {
     /* concat topvals */
@@ -478,6 +493,8 @@ void arena_append_topval(const std::list<expr_i *>& tvs, bool is_main,
     fn_set_namespace(topval, uniqns, block_id_ns,
       nspropmap[uniqns].safety != nssafety_e_safe);
     nsthrmap[uniqns] = ns_is_thr;
+//fprintf(stderr, "compiled_ns init %s\n", uniqns.c_str());
+    compiled_ns[uniqns] = false; /* defined, but not compiled yet */
   }
   if (is_main) {
     main_namespace = uniqns;
@@ -557,6 +574,7 @@ void arena_compile(const std::map<std::string, std::string>& prof_map,
   }
   /* compile */
   compile_phase = 2;
+  fn_prepare_imports();
   fn_compile(global, 0, false);
   arena_error_throw_pushed();
   compile_phase = 3;
@@ -600,11 +618,16 @@ void arena_clear()
   compile_phase = 0;
   cur_profile = 0;
   recursion_limit = 3000;
+  nsimports.clear();
+  nsimports_rec.clear();
   nsaliases.clear();
+  nschains.clear();
   nsextends.clear();
   nspropmap.clear();
   nsthrmap.clear();
   emit_threaded_dll_func = "";
+  compiled_ns.clear();
+  symbol::clear();
 }
 
 };

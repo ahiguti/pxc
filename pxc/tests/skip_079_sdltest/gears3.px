@@ -44,6 +44,7 @@ import SDL2::Image -;
 import GL::gles2 -;
 import GL::glm glm;
 import io::time -;
+import io::environ -;
 import meta m;
 private import container::array +; /* extends vector */
 
@@ -325,7 +326,7 @@ function void init_gear_vbos()
 
 function void deinit_gear_vbos()
 {
-  for (const i : 0 .. 3) {
+  for (size_t i : 0 .. 3) {
     const a = gear_vbos[i].name;
     glDeleteBuffers(1, caddress(a));
   }
@@ -429,7 +430,7 @@ function uint compile_shader(cstrref const& src, GLenum type)
     glGetShaderInfoLog(res, static_cast{GLsizei}(sz), address(len),
       buf.rawptr().char());
     debug_log("compile_shader failed:",
-      join{"\t"}(static_cast{int}(type), success, buf));
+      string_join{"\t"}(static_cast{int}(type), success, buf));
     glDeleteShader(res);
     res = 0;
   }
@@ -516,7 +517,7 @@ function void set_program()
     println("loc_normal: ", loc_normal);
     println("loc_lightpos: ", loc_lightpos);
     println("loc_mate_color: ", loc_mate_color);
-    SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("Locations: ",
+    SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("Locations: ",
       loc_vertex, loc_normal, loc_lightpos, loc_mate_color));
   }
 }
@@ -527,7 +528,7 @@ function void check_error()
   if (v == GL_NO_ERROR) {
     return;
   }
-  sdllog(join{""}("error: ", v));
+  sdllog(string_join{""}("error: ", v));
 }
 
 function void prepare_texture()
@@ -541,7 +542,7 @@ function void prepare_texture()
   glGenTextures(1, address(texture_id));
   sdllog("prepare_texture 3");
   glBindTexture(GL_TEXTURE_2D, texture_id);
-  sdllog(join{""}("texture_id", texture_id));
+  sdllog(string_join{""}("texture_id", texture_id));
   glTexImage2D(GL_TEXTURE_2D, 0, static_cast{int}(mode),
     static_cast{int}(sur.W()), static_cast{int}(sur.H()),
     0, mode, GL_UNSIGNED_BYTE, sur.Pixels().crawptr().void());
@@ -552,10 +553,10 @@ function void prepare_texture()
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
     static_cast{int}(GL_NEAREST));
 
-  sdllog(join{""}("wh", sur.W(), sur.H()));
-  sdllog(join{""}("loc_sampler", loc_sampler));
+  sdllog(string_join{""}("wh", sur.W(), sur.H()));
+  sdllog(string_join{""}("loc_sampler", loc_sampler));
   glUniform1i(loc_sampler, 0);
-  sdllog(join{""}("prepare_texture done"));
+  sdllog(string_join{""}("prepare_texture done"));
 }
 
 function void sdllog(cstrref const& mess)
@@ -634,7 +635,7 @@ function void init_gl()
 	  const w = ev.window.data1;
 	  const h = ev.window.data2;
 	  SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	    join{""}("resized w=", w, " h=", h));
+	    string_join{""}("resized w=", w, " h=", h));
 	  reshape(w, h);
 	}
       } else if (etype == SDL_FINGERMOTION) {
@@ -644,13 +645,13 @@ function void init_gl()
 	rotate(0.0, 1.0, 0.0, -dx);
       } else if (etype == SDL_MULTIGESTURE) {
 	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	  join{""}("multigesture dTheta=", ev.mgesture.dTheta,
+	  string_join{""}("multigesture dTheta=", ev.mgesture.dTheta,
 	    " dDist=", ev.mgesture.dDist));
       } else if (etype == SDL_APP_WILLENTERBACKGROUND) {
-	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("paused"));
+	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("paused"));
 	paused = true;
       } else if (etype == SDL_APP_DIDENTERFOREGROUND) {
-	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, join{""}("resumed"));
+	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("resumed"));
 	paused = false;
 	int w;
 	int h;
@@ -675,9 +676,10 @@ function void init_gl()
 	const seconds = static_cast{float}(t - t0) / 1000.0;
 	const fps = static_cast{float}(frames) / seconds;
 	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	  join{" "}(frames, "frames in", seconds, "seconds =", fps, "fps"));
+	  string_join{" "}(frames, "frames in", seconds, "seconds =", fps,
+	    "fps"));
 	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	  join{" "}("ticks: ", ticks_sum));
+	  string_join{" "}("ticks: ", ticks_sum));
 	ticks_sum = ticks_t();
 	t0 = t;
 	frames = 0;
@@ -690,7 +692,7 @@ function void init_gl()
 	  t1 += 10;
 	}
 	SDL_KeyboardState const ks;
-	if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) { done = 1; }
+	if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) { done = true; }
 	if (ks.Key(SDL_SCANCODE_UP) != 0) { rotate(1.0, 0.0, 0.0, 2.0); }
 	if (ks.Key(SDL_SCANCODE_DOWN) != 0) { rotate(1.0, 0.0, 0.0, -2.0); }
 	if (ks.Key(SDL_SCANCODE_LEFT) != 0) { rotate(0.0, 1.0, 0.0, 2.0); }
@@ -702,6 +704,6 @@ function void init_gl()
     save_ticks(4);
   }
   deinit_gear_vbos();
-  io::process::io_exit(io::system, 0);
+  io::system._exit(0);
 }
 

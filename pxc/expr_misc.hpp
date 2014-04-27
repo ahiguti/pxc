@@ -29,13 +29,18 @@ extern std::string main_namespace;
 extern int compile_phase;
 extern const std::map<std::string, std::string> *cur_profile;
 extern size_t recursion_limit;
+extern nsimports_type nsimports;
+extern nsimports_rec_type nsimports_rec;
 extern nsaliases_type nsaliases;
+extern nschains_type nschains;
 extern nsextends_type nsextends;
 typedef std::map<std::string, nsprop> nspropmap_type;
 extern nspropmap_type nspropmap;
 typedef std::map<std::string, bool> nsthrmap_type;
 extern nsthrmap_type nsthrmap;
 extern std::string emit_threaded_dll_func;
+typedef std::map<symbol, bool> compiled_ns_type;
+extern compiled_ns_type compiled_ns;
 /* end: global variables */
 
 expr_i *string_to_te(expr_i *epos, const std::string& str);
@@ -183,6 +188,7 @@ void fn_check_template_upvalues_direct(expr_i *e);
 void fn_check_template_upvalues_tparam(expr_i *e);
 void fn_check_dep_upvalues(expr_i *e);
 void fn_check_final(expr_i *e);
+void fn_prepare_imports();
 void fn_compile(expr_i *e, expr_i *p, bool is_template);
 expr_i *fn_drop_non_exports(expr_i *e);
 
