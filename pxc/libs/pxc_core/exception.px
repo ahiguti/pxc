@@ -49,6 +49,10 @@ public mtvaluetype struct {str} logic_error_template <logic_error>
 {
   function string message() const { return str; }
 }
+public mtvaluetype struct {str} bad_alloc_template <bad_alloc>
+{
+  function string message() const { return str; }
+}
 public mtvaluetype struct {str}
 runtime_error_template(cstrref const& m)
   <runtime_error>
@@ -61,9 +65,17 @@ runtime_error_template(cstrref const& m)
     return s;
   }
 }
-public mtvaluetype struct {str} bad_alloc_template <bad_alloc>
+public mtvaluetype struct {str}
+unexpected_value_template(cstrref const& m)
+  <runtime_error>
 {
-  function string message() const { return str; }
+  string msg = m;
+  function string message() const {
+    string s = m::concat{"unexpected_value{", str, "}("};
+    s.append(msg);
+    s.append(")");
+    return s;
+  }
 }
 
 public threaded function extern "pxcrt::c_exception_message" string

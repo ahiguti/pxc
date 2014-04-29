@@ -18,37 +18,32 @@ public threaded function extern "pxcio::io_stdout"
 public threaded function extern "pxcio::io_stderr"
   file_st io_stderr(io const& iop);
 
-public threaded function {t} void file_print(file const& f, t const& x)
+public threaded function {tlist} void
+file_print(expand(v::arg_decls_bycref{tlist}))
 {
-  if (is_string_or_slice_type{t}) {
-    f.write_all(x);
-  } else {
-    f.write_all(to_string(x));
-  }
+  string s = string_join{" "}(
+    expand(a: m::slice{v::arg_names{m::size{tlist}}, 1}; a));
+  a0.write_all(s);
 }
 
-public threaded function {t} void file_println(file const& f, t const& x)
+public threaded function {tlist} void
+file_println(expand(v::arg_decls_bycref{tlist}))
 {
-  if (is_string_or_slice_type{t}) {
-    string s = x;
-    s.append("\n");
-    f.write_all(s);
-  } else {
-    string s = to_string(x);
-    s.append("\n");
-    f.write_all(s);
-  }
+  string s = string_join{" "}(
+    expand(a: m::slice{v::arg_names{m::size{tlist}}, 1}; a));
+  s.append("\n");
+  a0.write_all(s);
 }
 
 public function {tlist} void print(expand(v::arg_decls_bycref{tlist}))
 {
-  string s = string_join{"\t"}(expand(a: v::arg_names{m::size{tlist}}; a));
+  string s = string_join{" "}(expand(a: v::arg_names{m::size{tlist}}; a));
   system.stdout().write_all(s);
 }
 
 public function {tlist} void println(expand(v::arg_decls_bycref{tlist}))
 {
-  string s = string_join{"\t"}(expand(a: v::arg_names{m::size{tlist}}; a));
+  string s = string_join{" "}(expand(a: v::arg_names{m::size{tlist}}; a));
   s.append("\n");
   system.stdout().write_all(s);
 }

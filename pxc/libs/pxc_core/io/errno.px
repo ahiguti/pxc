@@ -1,7 +1,11 @@
 public threaded namespace io::errno "use-unsafe";
 public import numeric::integral -;
 public import container::array -;
+public import text::string::serialize -;
+public import meta m;
 public import io +;
+public import exception;
+public import pointer;
 
 /* public */
 
@@ -30,56 +34,56 @@ public extern "%" errno_t sym;
 }
 
 public tsvaluetype union {t} errno_or_value {
-  errno_t errno;
-  t value;
+  public errno_t errno;
+  public t value;
 }
 
-public threaded function extern "pxcio::io_get_errno"
-errno_t io_get_errno(io const& sys);
-public threaded function extern "pxcio::io_set_errno"
-void io_set_errno(io const& sys, errno_t e);
-public threaded function extern "pxcio::errno_t_append_to_string"
-void errno_t_append_to_string(errno_t e, string mutable& s);
+public threaded function
+errno_t io_get_errno(io const& sys)
+{
+  extern "emit" "return errno";
+  return EOK; /* dummy */
+}
+
+public threaded function
+void io_set_errno(io const& sys, errno_t e)
+{
+  extern "emit" "errno = e$";
+}
+
+public threaded function
+void errno_t_append_to_string(errno_t e, string mutable& s)
+{
+  metafunction code m::concat{
+    "const char *s = 0;\n",
+    m::fold{
+      errno_values,
+      metafunction{x, y} m::concat{x,
+	m::cond{m::eq{x, ""}, "if (e$ == ", "else if (e$ == "}, y,
+	") { s = \"", y, "\"; }\n"},
+      ""},
+    "if (s != 0) {\n",
+    "s$.append(reinterpret_cast<const unsigned char *>(s), std::strlen(s));\n",
+    "} else {\n",
+    "char buf[32];\n",
+    "int len = snprintf(buf, sizeof(buf), \"errno(%d)\", ",
+    "  static_cast<int>(e$));\n",
+    "s$.append(reinterpret_cast<unsigned char *>(buf), len);\n",
+    "}"};
+  extern "emit" code;
+}
+
+public threaded function
+void errno_t_check(errno_t e)
+{
+  if (e != EOK) {
+    throw exception::unexpected_value_template{errno_t}(to_string(e));
+  }
+}
 
 /* private */
 
 extern "implementation" inline
 #include <errno.h>
-namespace pxcio {
-using namespace pxcrt;
-
-int io_get_errno(io const& sys)
-{
-  return errno;
-}
-
-void io_set_errno(io const& sys, int e)
-{
-  errno = e;
-}
-
-#if defined(__linux) && !defined(ANDROID)
-#if (_POSIX_C_SOURCE >= 200112L || _XOPEN_SOURCE >= 600) && ! _GNU_SOURCE
-#define HAVE_XSI_STRERROR_R
-#endif
-#else
-#define HAVE_XSI_STRERROR_R
-#endif
-
-void errno_t_append_to_string(int err, bt_string& s)
-{
-  char buf[257];
-  #ifdef HAVE_XSI_STRERROR_R
-  /* XSI version */
-  int len = strerror_r(err, buf, 256);
-  const char *p = buf;
-  #else
-  /* GNU version */
-  const char *p = strerror_r(err, buf, 256);
-  #endif
-  s.append(reinterpret_cast<const bt_uchar *>(p), strlen(p));
-}
-
-}; // namespace pxcio
 ;
 

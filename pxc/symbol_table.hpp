@@ -73,7 +73,8 @@ struct localvar_info {
   attribute_e attr;
   expr_stmts *stmt;
   bool has_attrib_private() const {
-    return (attr & attribute_private) != 0;
+    // return (attr & attribute_private) != 0;
+    return (attr & attribute_public) == 0;
   }
   bool has_attrib_threaded() const {
     return (attr & attribute_threaded) != 0;
@@ -136,6 +137,8 @@ private:
   localvar_info resolve_global_internal(const symbol& shortname,
     const symbol& ns, const symbol& curns, bool no_generated, expr_i *pos);
 };
+
+symbol get_lexical_context_ns(expr_i *pos);
 
 };
 

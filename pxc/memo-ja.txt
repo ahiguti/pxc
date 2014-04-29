@@ -3,6 +3,24 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- privateなフィールドがメタ関数でとれてしまっている
+
+- privateをデフォルトに
+
+- TypeError: No to_python (by-value) converter found for C++ type
+  が出るとboost::pythonがリークしている。 136/t8, 136/v2
+
+- chm2
+
+- sstringとstrlit: 8byte境界まで0fill、比較を速く
+
+- errnoのto_stringは"EINTR"など
+
+- error処理整理
+- echosvr整理
+- mysql
+- opengl モデル読み込み
+
 - NOTE: meta::symbolはコンテキストによって結果が変わることがあること
   に注意。importしている名前空間のリストによってヒットするシンボルが
   変わることがあるから。
@@ -119,8 +137,6 @@ FIXME/TODO M1
   termとして canonical ではないものが渡されているということか？
 
 - 地の文はブロックで囲むことを要求する
-
-- privateをデフォルトに
 
 - defconとunionについて再整理
 
@@ -3168,4 +3184,31 @@ nsextends[u]
    nspartをiで置き換えたものを引く。
    さらに各iについて、nsextends[nspart]の各jについて、nspartをjで置き換えた
    ものを引く
+
+---------------------------------------------------------------------
+error処理整理
+
+- errno_or_value{t}の期待しないfieldが読まれると errno$$r() が呼ばれて
+  invalid_field()が投げられる　
+- pxcのコードがunion fieldでアクセスするときは、もっと親切な例外を投げる
+  ようにしたい。
+
+案:
+- foo.fld の fooがunionだったら、operator::union_field{foo, "fld"}に
+  置き換える
+
+  if (const x : foo.fld) { ... }
+  expr_ifのblock1->argdeclsが!=0で、condがeopで、op=='.'かTOK_ARROW
+
+  case foo.fld
+  parentがop==TOK_CASE
+
+---------------------------------------------------------------------
+chm2
+
+hashmap_bucketsがそのままhash_map。
+hashmap_buckets_hdrにrefcnt。
+refcntが1より大きければrehashしない。
+for文は専用の二重ループを用意する。
+rangeは無い。
 

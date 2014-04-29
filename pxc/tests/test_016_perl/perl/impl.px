@@ -7,18 +7,18 @@ public import meta -;
 public import meta::family -;
 
 public struct extern "pxperl::perlsv" sv {
-  function extern "get" rawsv get() const;
+  public function extern "get" rawsv get() const;
 }
 public struct extern "pxperl::perlav" av {
-  function extern "fetch" sv fetch(size_t idx) const;
-  function extern "store" bool store(size_t idx, sv val);
-  function extern "size" size_t size() const;
-  function extern "resize" void resize(size_t idx);
+  public function extern "fetch" sv fetch(size_t idx) const;
+  public function extern "store" bool store(size_t idx, sv val);
+  public function extern "size" size_t size() const;
+  public function extern "resize" void resize(size_t idx);
   // TODO: shift, unshift, push, pop
 }
 public struct extern "pxperl::perlhv" hv {
-  function extern "fetch" sv fetch(string const& key) const;
-  function extern "store" bool store(string const& key, sv const& val);
+  public function extern "fetch" sv fetch(string const& key) const;
+  public function extern "store" bool store(string const& key, sv const& val);
 }
 
 public function sv int_to_sv(int x)
@@ -140,12 +140,12 @@ private function extern "pxperl::fp_to_rawsv_own" {t} rawsv
   fp_to_rawsv_own(t x);
 
 private struct extern "pxperl::perlsvarr" svarr {
-  function extern "size" size_t size() const;
-  function extern "get" rawsv get(size_t i) const;
+  public function extern "size" size_t size() const;
+  public function extern "get" rawsv get(size_t i) const;
 }
 
 private struct extern "pxperl::func_pl" {t} func_pl {
-  function extern "xs_make_function"
+  public function extern "xs_make_function"
     void xs_make_function(string const& s) const;
 }
 
@@ -181,7 +181,7 @@ private metafunction arg_extract{t}
 private function void noop() { }
 
 private struct {f} pxfunc_obj {
-  function rawsv call(svarr const& a) {
+  public function rawsv call(svarr const& a) {
     /* returns rawsv with an ownership */
     /* extract or convert to px object */
     expand (sym, idx: map{seq{arg_size{f}}, metafunction{x}
@@ -235,7 +235,7 @@ private struct {t, i} pxfield_obj {
   metafunction fld at{fields{t}, i};
   metafunction fld_type at1{fld};
   metafunction fld_name at0{fld};
-  function rawsv call(svarr const& a) {
+  public function rawsv call(svarr const& a) {
     t mutable& obj = rawsv_get_object{t}(a.get(0));
     if (a.size() > 1) {
       expand (sym, idx: list{list{"v", is_valuetype{fld_type}}}) {
@@ -270,7 +270,7 @@ private struct {ns, i} pxvar_obj {
   metafunction gvar_type at1{gvar};
   metafunction gvar_name at0{gvar};
   metafunction gvar_mutable at3{gvar};
-  function rawsv call(svarr const& a) {
+  public function rawsv call(svarr const& a) {
     if (a.size() > 0) {
       if (ne{gvar_mutable, 0}) {
 	value_or_ref{gvar_type} mutable v;
@@ -290,7 +290,8 @@ private struct {ns, i} pxvar_obj {
 }
 
 private struct extern "pxperl::type_pl" "nocascade" {t} type_pl {
-  function extern "xs_make_type" void xs_make_type(string const& s) const;
+  public function extern "xs_make_type" void
+    xs_make_type(string const& s) const;
 }
 
 private function extern "pxperl::rawsv_get_object" {t} t mutable&

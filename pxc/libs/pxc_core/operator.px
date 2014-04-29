@@ -1,6 +1,8 @@
 public threaded namespace operator;
 public import numeric::integral -;
 public import meta::family -;
+public import exception -;
+public import text::string::serialize -;
 public import meta m;
 
 /* public */
@@ -240,6 +242,25 @@ public threaded function {tx, ty, tz} void
 setfld(tx mutable& x, ty const& y, tz const& z)
 {
   m::symbol{m::nsof{tx}, m::concat{tx, "___setfld"}}(x, y, z);
+}
+
+public threaded function {fld, t}
+m::field_type{t, fld}
+union_field(t const& x)
+{
+  expand (sym: {fld}) {
+    if (!case x.sym) {
+      expand (fsym, idx: m::field_names{t}) {
+	if (m::ne{m::to_string{sym}, m::to_string{fsym}}) {
+	  if (case x.fsym) {
+	    throw exception::unexpected_value_template{
+	      m::to_string{m::field_type{t, fsym}}}(to_string(x.fsym));
+	  }
+	}
+      }
+    }
+    return x.sym;
+  }
 }
 
 public metafunction implicit_conversion{tto, tfrom}

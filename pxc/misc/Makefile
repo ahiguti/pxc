@@ -5,6 +5,7 @@ clean:
 	cd misctest && $(MAKE) clean
 	cd py && $(MAKE) clean
 	cd hmtest && $(MAKE) clean
+	cd tmtiming && $(MAKE) clean
 	rm -f decimal
 
 decimal:
