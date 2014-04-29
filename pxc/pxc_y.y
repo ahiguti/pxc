@@ -154,6 +154,7 @@ static compile_mode cur_mode;
 %type<expr_val> metafdef_stmt
 %type<expr_val> c_enumval_stmt
 %type<expr_val> visi_vardef_stmt
+%type<expr_val> visi_union_flddef_stmt
 %type<expr_val> argdecl_list
 %type<expr_val> argdecl_list_trail
 %type<expr_val> forrange_argdecl
@@ -263,6 +264,7 @@ dunion_body_stmt_list
 dunion_body_stmt
 	: expression_stmt /* only vardef is allowed */
 	| defs_stmt
+	| visi_union_flddef_stmt
 	;
 interface_body_stmt_list
 	:
@@ -734,6 +736,11 @@ visi_vardef_stmt
 			$3 ? passby_e_mutable_value : passby_e_const_value,
 			$1, $6),
 		$6); }
+	;
+visi_union_flddef_stmt
+	: visibility type_expr TOK_SYMBOL ';'
+	  { $$ = expr_var_new(cur_fname, @1.first_line, $3, $2,
+		passby_e_mutable_value, $1, 0); }
 	;
 visibility
 	: TOK_PUBLIC

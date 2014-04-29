@@ -1522,7 +1522,8 @@ static void subst_user_defined_op(expr_op *eop)
 
 static void subst_user_defined_fldop(expr_op *eop)
 {
-  if (eop->op == '.' && eop->arg1->get_esort() == expr_e_symbol &&
+  if ((eop->op == '.' || eop->op == TOK_ARROW) &&
+    eop->arg1->get_esort() == expr_e_symbol &&
     eop->parent_expr != 0 &&
     (eop->parent_expr->get_esort() != expr_e_funccall ||
       ptr_down_cast<expr_funccall>(eop->parent_expr)->func != eop) &&
@@ -1530,13 +1531,14 @@ static void subst_user_defined_fldop(expr_op *eop)
       ptr_down_cast<expr_op>(eop->parent_expr)->op != '=' ||
       ptr_down_cast<expr_op>(eop->parent_expr)->arg0 != eop))
   {
+    /* arg0.arg1 as rvalue */
     fn_check_type(eop->arg0, eop->symtbl_lexical);
     term ta0 = eop->arg0->resolve_texpr();
     expr_i *const einst0 = term_get_instance(ta0);
-    expr_struct *const est0 = dynamic_cast<expr_struct *>(einst0);
     expr_block *const tblk = einst0->get_template_block();
-    /* supports structs only. no additional ns lookup. */
-    if (est0 != 0 && tblk != 0) {
+    if (einst0->get_esort() == expr_e_struct && tblk != 0) {
+      /* user-defined field op? */
+      expr_struct *const est0 = ptr_down_cast<expr_struct>(einst0);
       const bool no_generated = true;
       expr_i *const hf = tblk->symtbl.resolve_name_nothrow_memfld(
 	"__has_fldop__", true, no_generated, "", est0);
@@ -1564,10 +1566,45 @@ static void subst_user_defined_fldop(expr_op *eop)
 	  eop->dump(0).c_str()));
       }
     }
+    if (einst0->get_esort() == expr_e_dunion && tblk != 0) {
+      /* union field op */
+      bool skip = false;
+      if (eop->parent_expr->get_esort() == expr_e_if) {
+	expr_if *const eif = ptr_down_cast<expr_if>(eop->parent_expr);
+	if (eif->block1->argdecls != 0 && eif->cond == eop) {
+	  skip = true;
+	}
+      } else if (eop->parent_expr->get_esort() == expr_e_op) {
+	expr_op *const peop = ptr_down_cast<expr_op>(eop->parent_expr);
+	if (peop->op == TOK_CASE) {
+	  skip = true;
+	}
+      }
+      const symbol sym = get_lexical_context_ns(eop);
+      if (!skip && sym != "operator") {
+	/* operator::union_field{fld}(arg0) */
+	expr_symbol *sym = ptr_down_cast<expr_symbol>(eop->arg1);
+	expr_i *fc = expr_funccall_new(eop->fname, eop->line,
+	  expr_te_new(eop->fname, eop->line,
+	    expr_nssym_new(eop->fname, eop->line,
+	      expr_nssym_new(eop->fname, eop->line, 0, "operator"),
+	      "union_field"),
+	    expr_telist_new(eop->fname, eop->line,
+	      expr_str_literal_new(eop->fname, eop->line,
+		arena_strdup(escape_c_str_literal(sym->nssym->sym).c_str())),
+	      0)),
+	  eop->arg0);
+	eop->arg0 = fc;
+	eop->arg1 = 0;
+	eop->op = '(';
+	fn_set_tree_and_define_static(fc, eop, eop->symtbl_lexical, 0, 
+	  eop->symtbl_lexical->block_backref->tinfo.template_descent);
+      }
+    }
   }
   if (eop->op == '=') {
     expr_op *lhsop = dynamic_cast<expr_op *>(eop->arg0);
-    if (lhsop != 0 && lhsop->op == '.' &&
+    if (lhsop != 0 && (lhsop->op == '.' || lhsop->op == TOK_ARROW) &&
       lhsop->arg1->get_esort() == expr_e_symbol)
     {
       fn_check_type(eop->arg0, eop->symtbl_lexical);

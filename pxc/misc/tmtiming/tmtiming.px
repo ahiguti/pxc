@@ -1,0 +1,45 @@
+#!/usr/bin/env pxc
+public namespace tmtiming;
+public import common -;
+
+{
+  metafunction sstring svector{uchar};
+  // metafunction sstring vector{uchar};
+  size_t test_size = 100;
+  size_t loop = 1000000;
+  tree_map{sstring, sstring} mval;
+  vector{sstring} aval;
+  aval.resize(test_size, sstring());
+  for (const i : 0 .. test_size) {
+    mutable s0 = to_string(i);
+    mutable s1 = s0;
+    s1.append(s0);
+    sstring s = s1[0 .. s1.size()];
+    aval[i] = s;
+    mutable ms = s;
+    ms.append("val");
+    mval[s] = ms;
+  }
+  const t1 = io::system.gettimeofday_double();
+  long v = 0;
+  for (const i : 0 .. loop) {
+    v = test1(v);
+  }
+  const t2 = io::system.gettimeofday_double();
+  function long test1(long v) {
+    const sz = aval.size();
+    long x = 1;
+    for (const i : 0 .. sz) {
+      x = (x * 1664525 + 1013904223) & 0xffffffffL;
+      const k = aval[static_cast{size_t}(x) % test_size];
+      // const k = aval[i];
+      const m = mval[k];
+      // println(m);
+      v += static_cast{long}(m.size());
+    }
+    return v;
+  }
+  println("value:", v);
+  println("time:", t2 - t1);
+}
+

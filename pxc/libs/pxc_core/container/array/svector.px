@@ -30,16 +30,23 @@ struct svector {
   typedef pxcrt::bt_cslice<T> crange_type;
   svector() : rep(&empty_rep) { }
   svector(const svector& x) : rep(x.rep) { rep_incref(rep); }
-  svector(const crange_type& x) { rep_init(x.begin(), x.size(), x.size()); }
-  svector(const range_type& x) { rep_init(x.begin(), x.size(), x.size()); }
+  svector(const crange_type& x) {
+    rep_init(x.begin(), x.size(), x.size());
+    rep_zerofill();
+  }
+  svector(const range_type& x) {
+    rep_init(x.begin(), x.size(), x.size());
+    rep_zerofill();
+  }
   svector(const T *start, size_type sz, size_type asz) {
     rep_init(start, sz, asz);
+    rep_zerofill();
   }
   void operator =(const svector& x) {
     if (&x != this) {
       rep_incref(x.rep);
       rep_decref(rep);
-      rep = x.repf;
+      rep = x.rep;
     }
   }
   ~svector() { rep_decref(rep); }
@@ -66,6 +73,7 @@ struct svector {
     if (sz > olen) {
       initialize_fill_n(end(), sz - olen, x);
       rep->valid_len = sz;
+      rep_zerofill();
     }
   }
   void clear() {
@@ -83,6 +91,7 @@ struct svector {
       PXCRT_DBG_SVECTOR2(fprintf(stderr, "fastpath\n"));
       initialize_1(end(), x);
       rep->valid_len += 1;
+      rep_zerofill();
       return;
     } else {
       /* slow path */
@@ -91,6 +100,7 @@ struct svector {
       rep_make_unique(size() + 1);
       initialize_1(end(), x);
       rep->valid_len += 1;
+      rep_zerofill();
     }
   }
   T pop_back() {
@@ -101,11 +111,22 @@ struct svector {
       return;
     }
     const T r = end()[-1];
+    const bool is_uniq = rep->refcnt == 1;
     rep_make_unique(nlen);
+    if (is_trivially_copyable<T>::value && sizeof(T) == 1) {
+      if (is_uniq) {
+	assert(rep->valid_len < rep->alloc_len);
+	end() = 0;
+      } else {
+	/* new copy */
+	rep_zerofill();
+      }
+    }
     return r;
   }
   void reserve(size_type sz) {
     rep_make_unique(std::max(size(), sz));
+    rep_zerofill();
   }
   void append(const crange_type& x) {
     append(x.begin(), x.size());
@@ -117,6 +138,7 @@ struct svector {
     rep_make_unique(nlen);
     initialize_copy_n(begin() + olen, len, ptr);
     rep->valid_len = nlen;
+    rep_zerofill();
   }
   void insert(size_type pos, const crange_type& x) {
     size_type const olen = size();
@@ -127,6 +149,7 @@ struct svector {
     rep_make_unique(nlen);
     if (plen == 0) { return; }
     insert_n(begin(), rep->valid_len /* modified */, x.begin(), plen, pos);
+    rep_zerofill();
   }
   void erase(size_type first, size_type last) {
     size_type const olen = size();
@@ -145,6 +168,7 @@ struct svector {
       x.append(begin() + last, olen - last);
       this->swap(x);
     }
+    rep_zerofill();
   }
   const_iterator begin() const {
     return reinterpret_cast<const T *>(
@@ -172,11 +196,13 @@ struct svector {
       pxcrt::throw_bad_alloc(); /* overflow */
     }
     rep_make_unique(nsz);
+    rep_zerofill();
     return begin() + osz;
   }
   void rawarr_set_valid_len(size_type len) {
     assert(rep->refcnt == 1);
     rep->valid_len = len;
+    rep_zerofill();
   }
   template <typename Tc> struct guard_ref {
     guard_ref(Tc& x) : v(x) { }
@@ -226,12 +252,31 @@ private:
       }
     }
   }
+  void rep_zerofill() {
+    if (is_trivially_copyable<T>::value && sizeof(T) == 1) {
+      char *p = reinterpret_cast<char *>(begin());
+      size_t pos = rep->valid_len;
+      const size_t epos = (pos + 7) & ~7ULL;
+      assert(epos <= rep->alloc_len);
+      if (epos != pos) {
+	memset(p + pos, 0, epos - pos);
+      }
+    }
+  }
   void rep_init(const T *ptr, size_t sz, size_t asz) {
     rep = &empty_rep;
     assert(rep->refcnt == 0 && rep->valid_len == 0 && rep->alloc_len == 0);
     if (asz != 0) {
-      void *const vrep = global_allocate_n(
-	sizeof(svector_rep) + sizeof(T) * asz);
+      const size_type max_len =
+	(-(sizeof(svector_rep) + sizeof(T))) / sizeof(T) - 8;
+      if (asz > max_len) { pxcrt::throw_bad_alloc(); }
+      if (is_trivially_copyable<T>::value && sizeof(T) == 1) {
+//fprintf(stderr, "asz pre=%zu\n", asz);
+	asz = (asz + 7) & ~7ULL; /* align for 0-filling */
+//fprintf(stderr, "asz post=%zu\n", asz);
+      }
+      const size_type aszt = asz * sizeof(T) + sizeof(svector_rep);
+      void *const vrep = global_allocate_n(aszt);
       svector_rep *const nrep = reinterpret_cast<svector_rep *>(vrep);
       PXCRT_DBG_SVECTOR1(fprintf(stderr, "rep_init alloc %p\n", nrep));
       nrep->refcnt = 1;
@@ -241,6 +286,12 @@ private:
 	reinterpret_cast<char *>(nrep) + sizeof(svector_rep));
       if (is_trivially_copyable<T>::value) {
 	initialize_copy_n(start, sz, ptr);
+	#if 0
+	if (sizeof(T) == 1) {
+	  /* 0-filling */
+	  memset(start + sz, 0, asz - sz);
+	}
+	#endif
       } else {
 	PXC_TRY {
 	  initialize_copy_n(start, sz, ptr);
@@ -266,7 +317,8 @@ private:
 	size_type nl = rep->alloc_len;
 	do {
 	  const size_type nl_n = (nl >= 1) ? (nl * 2) : 1;
-	  const size_type max_len = ((size_t)-1) / sizeof(T);
+	  const size_type max_len =
+	    (-(sizeof(svector_rep) + sizeof(T))) / sizeof(T) - 8;
 	  if (nl_n <= nl || nl_n > max_len) { pxcrt::throw_bad_alloc(); }
 	  nl = nl_n;
 	} while (nl < asz);
@@ -294,12 +346,23 @@ private:
       } else {
 	PXCRT_DBG_SVECTOR1(fprintf(stderr, "rep_make_unique_resize pre %p\n",
 	  rep));
+	if (sizeof(T) == 1) {
+//fprintf(stderr, "asztr pre=%zu\n", asz);
+	  asz = (asz + 7) & ~7ULL; /* align for 0-filling */
+//fprintf(stderr, "asztr post=%zu\n", asz);
+	}
 	rep = (svector_rep *)global_reallocate_n(rep,
 	    sizeof(svector_rep) + sizeof(T) * rep->alloc_len,
 	    sizeof(svector_rep) + sizeof(T) * asz);
 	PXCRT_DBG_SVECTOR1(fprintf(stderr, "rep_make_unique_resize post %p\n",
 	  rep));
 	rep->alloc_len = asz;
+	#if 0
+	if (sizeof(T) == 1) {
+	  /* 0-filling */
+	  memset(end(), 0, asz - rep->valid_len);
+	}
+	#endif
       }
     } else {
       svector_rep *const orep = rep;

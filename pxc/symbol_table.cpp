@@ -157,7 +157,7 @@ localvar_info symbol_table::resolve_global_internal(const symbol& shortname,
   return v;
 }
 
-static symbol get_pos_ns(expr_i *pos)
+symbol get_lexical_context_ns(expr_i *pos)
 {
   symbol_table *stbl = pos->symtbl_lexical;
   while (stbl != 0) {
@@ -173,7 +173,7 @@ static symbol get_pos_ns(expr_i *pos)
 
 static bool is_visible_from_pos(const symbol& ns, expr_i *pos)
 {
-  const symbol posns = get_pos_ns(pos);
+  const symbol posns = get_lexical_context_ns(pos);
   if (ns == posns) {
     return true;
   }
