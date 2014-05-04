@@ -403,6 +403,8 @@ bool is_ordered_type(const term& t)
     return true; /* memcmp-compatible */
   }
   #if 0
+  #endif
+  #if 0
   if (t == builtins.type_strlit) {
     return true; /* memcmp-compatible */
   }

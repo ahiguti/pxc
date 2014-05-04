@@ -2,24 +2,43 @@
 public namespace tmtiming;
 public import common -;
 
+private tsvaluetype struct {t} fo_eq {
+  function bool call(t const& x, t const& y) const {
+    return ordered::compare_swo(x, y) == 0;
+  }
+}
+
+private tsvaluetype struct {t} fo_hash {
+  function size_t call(t x) const {
+    return static_cast{size_t}(x);
+  }
+}
+
+metafunction sstring svector{uchar};
+// metafunction sstring vector{uchar};
+// metafunction map_type tree_map{sstring, sstring};
+metafunction map_type hash_map{sstring, sstring, hash_sstring, eq_sstring};
+
 {
-  metafunction sstring svector{uchar};
-  // metafunction sstring vector{uchar};
-  size_t test_size = 100;
-  size_t loop = 1000000;
-  tree_map{sstring, sstring} mval;
+  size_t test_size = 10000000;
+  size_t loop = 1;
+  mutable mval = map_type(test_size * 2);
+  // map_type mval;
   vector{sstring} aval;
   aval.resize(test_size, sstring());
   for (const i : 0 .. test_size) {
     mutable s0 = to_string(i);
     mutable s1 = s0;
-    s1.append(s0);
-    sstring s = s1[0 .. s1.size()];
-    aval[i] = s;
-    mutable ms = s;
+    // s1.append(s0);
+    sstring ss1 = s1[0 .. s1.size()];
+    sstring ss2 = s1[0 .. s1.size()];
+    aval[i] = ss1;
+    mutable ms = ss1;
     ms.append("val");
-    mval[s] = ms;
+    mval[ss2] = ms;
+    // println(mval.size());
   }
+  println("start");
   const t1 = io::system.gettimeofday_double();
   long v = 0;
   for (const i : 0 .. loop) {
@@ -29,11 +48,13 @@ public import common -;
   function long test1(long v) {
     const sz = aval.size();
     long x = 1;
+    // const avals = aval[0 .. aval.size()];
     for (const i : 0 .. sz) {
       x = (x * 1664525 + 1013904223) & 0xffffffffL;
-      const k = aval[static_cast{size_t}(x) % test_size];
+      const& k = aval[static_cast{size_t}(x) % test_size];
+      // const& k = avals[static_cast{size_t}(x) % test_size];
       // const k = aval[i];
-      const m = mval[k];
+      const& m = mval[k];
       // println(m);
       v += static_cast{long}(m.size());
     }

@@ -11,15 +11,17 @@
 // typedef std::map<std::string, std::string> map_type;
 typedef boost::unordered_map<std::string, std::string> map_type;
 
-size_t test_size = 100;
-size_t loop = 1000000;
+size_t test_size = 10000000;
+size_t loop = 1;
 
 std::vector<std::string> aval;
 map_type mval;
 
 static long test1(long v) {
+  long x = 1;
   for (size_t i = 0; i < test_size; ++i) {
-    const std::string k = aval[i];
+    x = (x * 1664525 + 1013904223) & 0xffffffffL;
+    const std::string k = aval[(int)(x % test_size)];
     const std::string m = mval[k];
     v += m.size();
   }

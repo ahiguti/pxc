@@ -1,0 +1,130 @@
+public namespace texture "use-unsafe";
+import common -;
+import SDL2 -;
+import GL::gl11 -;
+
+farray{uint, 1} tex;
+
+function void draw_tri()
+{
+  glEnable(GL_TEXTURE_2D);
+  glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE,
+    static_cast{float}(GL_REPLACE));
+  glBindTexture(GL_TEXTURE_2D, tex[0]);
+  const v = make_farray{float}(
+    0.0, static_cast{float}(-1.732 / 3.0 * 2.0),
+    -1.0, static_cast{float}(1.732 / 3.0),
+    1.0, static_cast{float}(1.732 / 3.0));
+  const sv = v[0 .. v.size()];
+  const c = make_farray{float}(0.5, 0.0, 0.0, 1.5, 1.0, 1.5);
+  const sc = c[0 .. c.size()];
+  glEnableClientState(GL_VERTEX_ARRAY);
+  glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+  glVertexPointer(2, GL_FLOAT, 0, sv.crawptr().void());
+  glTexCoordPointer(2, GL_FLOAT, 0, sc.crawptr().void());
+  glDrawArrays(GL_TRIANGLES, 0, 3);
+  glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+  glDisableClientState(GL_VERTEX_ARRAY);
+/*
+  glBegin(GL_TRIANGLES);
+  glTexCoord2f(0.5, 0.0);
+  glVertex2f(0.0, static_cast{float}(-1.732 / 3.0 * 2.0));
+  glTexCoord2f(0.0, 1.5);
+  glVertex2f(-1.0, static_cast{float}(1.732 / 3.0));
+  glTexCoord2f(1.0, 1.5);
+  glVertex2f(1.0, static_cast{float}(1.732 / 3.0));
+  glEnd();
+  glDisable(GL_TEXTURE_2D);
+*/
+}
+
+function void compat_glFrustum(double left, double right, double bottom,
+  double top, double near, double far)
+{
+  farray{float, 16} a;
+  a[0]  = static_cast{float}(near * 2.0 / (right - left));
+  a[5]  = static_cast{float}(near * 2.0 / (top - bottom));
+  a[8]  = static_cast{float}((right + left) / (right - left));
+  a[9]  = static_cast{float}((top + bottom) / (top - bottom));
+  a[10] = static_cast{float}(-(far + near) / (far - near));
+  a[11] = static_cast{float}(-1.0);
+  a[14] = static_cast{float}(-(far * near * 2.0) / (far - near));
+  glMultMatrixf(a.crawptr());
+}
+
+{
+  // const ini = SDL_Init(SDL_INIT_VIDEO);
+  const wnd = SDL_CreateWindow("texture", 0, 0, 600, 600,
+    SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE).some;
+  const glctx = SDL_GL_CreateContext(wnd);
+  float theta;
+  float xinc;
+
+  const tex_data = make_farray{uchar}(
+    0, 0, 0, 63,
+    255, 0, 0, 63,
+    0, 255, 0, 63,
+    255, 255, 0, 63,
+    0, 0, 255, 63,
+    255, 0, 255, 63,
+    0, 255, 255, 63,
+    255, 255, 255, 63,
+    0, 0, 0, 63,
+    127, 0, 0, 63,
+    0, 127, 0, 63,
+    127, 127, 0, 63,
+    0, 0, 127, 63,
+    127, 0, 127, 63,
+    0, 127, 127, 63,
+    127, 127, 127, 63);
+  glGenTextures(1, tex.rawptr()); 
+  println("tex=", tex);
+  glBindTexture(GL_TEXTURE_2D, tex[0]);
+  glTexImage2D(GL_TEXTURE_2D, 0, static_cast{int}(GL_RGBA), 4, 4, 0, GL_RGBA,
+    GL_UNSIGNED_BYTE, tex_data.crawptr().void());
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+    static_cast{int}(GL_NEAREST));
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+    static_cast{int}(GL_NEAREST));
+  glEnable(GL_DEPTH_TEST);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glEnable(GL_BLEND);
+  {
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    compat_glFrustum(-1.0, 1.0, -1.0, 1.0, 5.0, 100.0);
+    glMatrixMode(GL_MODELVIEW);
+  }
+  bool done = false;
+  bool paused = false;
+  while (!done) {
+    SDL_Event ev;
+    while (SDL_PollEvent(ev)) {
+      if (ev.type == SDL_QUIT) {
+	done = true;
+	break;
+      } else if (ev.type == SDL_APP_WILLENTERBACKGROUND) {
+	paused = true;
+      } else if (ev.type == SDL_APP_DIDENTERFOREGROUND) {
+	paused = false;
+      }
+    }
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glPushMatrix();
+    glTranslatef(0.0, 2.0, -20.0);
+    glRotatef(theta, 0.0, 0.0, 1.0);
+    for (int i : 0 .. 100) {
+      glTranslatef(0.0, 0.2, 1.0);
+      draw_tri();
+    }
+    glPopMatrix();
+    if (paused) {
+      SDL_Delay(100);
+      continue;
+    }
+    SDL_GL_SwapWindow(wnd);
+    theta += 1.0;
+    xinc += 1.00000;
+  }
+}
+

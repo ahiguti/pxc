@@ -1156,6 +1156,16 @@ struct filelock_lockobj {
 	arena_error_throw(0, "-:-: Failed to open '%s': errno=%d\n",
 	  fn.c_str(), errno);
       }
+      int flg = fcntl(fileno(fp.get()), F_GETFD, 0);
+      if (flg == -1) {
+	arena_error_throw(0, "-:-: Failed to fcntl(F_GETFD) '%s': errno=%d\n",
+	  fn.c_str(), errno);
+      }
+      flg |= FD_CLOEXEC; /* close on exec */
+      if (fcntl(fileno(fp.get()), F_SETFD, flg) == -1) {
+	arena_error_throw(0, "-:-: Failed to fcntl(F_SETFD) '%s': errno=%d\n",
+	  fn.c_str(), errno);
+      }
       if (flock(fileno(fp.get()), LOCK_EX) != 0) {
 	arena_error_throw(0, "-:-: Failed to lock '%s': errno=%d\n",
 	  fn.c_str(), errno);
@@ -1394,8 +1404,7 @@ static int compile_and_execute(parser_options& po,
     char *e_argv[2];
     e_argv[0] = strdup(exe_fn.c_str());
     e_argv[1] = 0;
-    lock.unlock();
-    /* NOTE: this execv may fail if another process is doing clean_workdir */
+    /* note: lock will be released when execv is succeeded */
     execv(e_argv[0], e_argv);
     fprintf(stderr, "Failed to execute '%s': errno=%d\n", exe_fn.c_str(),
       errno);

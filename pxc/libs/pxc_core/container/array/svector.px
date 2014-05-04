@@ -105,18 +105,18 @@ struct svector {
   }
   T pop_back() {
     if (empty()) { pxcrt::throw_invalid_index(); }
+    const T r = end()[-1];
     size_type nlen = size() - 1;
     if (nlen == 0) {
       clear();
-      return;
+      return r;
     }
-    const T r = end()[-1];
     const bool is_uniq = rep->refcnt == 1;
     rep_make_unique(nlen);
     if (is_trivially_copyable<T>::value && sizeof(T) == 1) {
       if (is_uniq) {
 	assert(rep->valid_len < rep->alloc_len);
-	end() = 0;
+	*end() = T(); /* FIXME: requires defcon */
       } else {
 	/* new copy */
 	rep_zerofill();
@@ -256,7 +256,8 @@ private:
     if (is_trivially_copyable<T>::value && sizeof(T) == 1) {
       char *p = reinterpret_cast<char *>(begin());
       size_t pos = rep->valid_len;
-      const size_t epos = (pos + 7) & ~7ULL;
+      const size_t mask = sizeof(size_t) - 1;
+      const size_t epos = (pos + mask) & ~mask;
       assert(epos <= rep->alloc_len);
       if (epos != pos) {
 	memset(p + pos, 0, epos - pos);
@@ -268,11 +269,12 @@ private:
     assert(rep->refcnt == 0 && rep->valid_len == 0 && rep->alloc_len == 0);
     if (asz != 0) {
       const size_type max_len =
-	(-(sizeof(svector_rep) + sizeof(T))) / sizeof(T) - 8;
-      if (asz > max_len) { pxcrt::throw_bad_alloc(); }
+	(- sizeof(svector_rep) - sizeof(size_t)) / sizeof(T);
+      if (asz >= max_len) { pxcrt::throw_bad_alloc(); }
       if (is_trivially_copyable<T>::value && sizeof(T) == 1) {
+	const size_t mask = sizeof(size_t) - 1;
 //fprintf(stderr, "asz pre=%zu\n", asz);
-	asz = (asz + 7) & ~7ULL; /* align for 0-filling */
+	asz = (asz + mask) & ~mask; /* align for 0-filling */
 //fprintf(stderr, "asz post=%zu\n", asz);
       }
       const size_type aszt = asz * sizeof(T) + sizeof(svector_rep);
@@ -347,8 +349,9 @@ private:
 	PXCRT_DBG_SVECTOR1(fprintf(stderr, "rep_make_unique_resize pre %p\n",
 	  rep));
 	if (sizeof(T) == 1) {
+	  const size_t mask = sizeof(size_t) - 1;
 //fprintf(stderr, "asztr pre=%zu\n", asz);
-	  asz = (asz + 7) & ~7ULL; /* align for 0-filling */
+	  asz = (asz + mask) & ~mask; /* align for 0-filling */
 //fprintf(stderr, "asztr post=%zu\n", asz);
 	}
 	rep = (svector_rep *)global_reallocate_n(rep,
@@ -402,6 +405,65 @@ template <typename T> struct csvector : public svector<T> {
   csvector(const T *start, size_type sz, size_type asz)
     : svector<T>(start, sz, asz) { }
 };
+
+static inline size_t
+hash_sstring(const svector<bt_uchar>& x)
+{
+  const bt_ulong *const xp = reinterpret_cast<const bt_ulong *>(x.begin());
+  const size_t xs0 = x.size();
+  const size_t xsz = (xs0 + (sizeof(size_t)-1)) / sizeof(size_t);
+  size_t r = 0;
+  for (size_t i = 0; i < xsz; ++i) {
+    r ^= size_t(xp[i]) + 0x9e3779b9 + (r << 6) + (r >> 2);
+  }
+  return r;
+}
+
+static inline bool
+sstring_eq(const svector<bt_uchar>& x, const svector<bt_uchar>& y)
+{
+  const size_t xs0 = x.size();
+  const size_t ys0 = y.size();
+  if (xs0 != ys0) {
+    return false;
+  }
+  const size_t sz = (xs0 + (sizeof(size_t)-1)) / sizeof(size_t);
+  const bt_ulong *const xp = reinterpret_cast<const bt_ulong *>(x.begin());
+  const bt_ulong *const yp = reinterpret_cast<const bt_ulong *>(y.begin());
+  for (size_t i = 0; i < sz; ++i) {
+    if (xp[i] != yp[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static inline int
+sstring_cmp(const svector<bt_uchar>& x, const svector<bt_uchar>& y)
+{
+  const bt_ulong *const xp = reinterpret_cast<const bt_ulong *>(x.begin());
+  const bt_ulong *const yp = reinterpret_cast<const bt_ulong *>(y.begin());
+  const size_t xs0 = x.size();
+  const size_t ys0 = y.size();
+  const size_t xsz = (xs0 + (sizeof(size_t)-1)) / sizeof(size_t);
+  const size_t ysz = (ys0 + (sizeof(size_t)-1)) / sizeof(size_t);
+  const size_t sz = xsz < ysz ? xsz : ysz; 
+  for (size_t i = 0; i < sz; ++i) {
+    if (xp[i] < yp[i]) {
+      return -1;
+    }
+    if (xp[i] > yp[i]) {
+      return 1;
+    }
+  }
+  if (xs0 > ys0) {
+    return 1;
+  }
+  if (xs0 < ys0) {
+    return -1;
+  }
+  return 0;
+}
 
 }; // namespace pxcrt
 

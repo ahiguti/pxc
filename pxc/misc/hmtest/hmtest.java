@@ -3,8 +3,11 @@ import java.util.*;
 
 class hmtest {
   static int test1(HashMap<Integer, Integer> m, int cnt, int v) {
+    int k = 0;
     for (int i = 0; i < cnt; ++i) {
-      v += m.get(i % 100);
+      v += m.get(k);
+      ++k;
+      if (k >= 100) { k = 0; }
     }
     return v;
   }

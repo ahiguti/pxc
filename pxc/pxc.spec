@@ -27,11 +27,7 @@ rm -rf $RPM_BUILD_ROOT
 mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/pxc
 mkdir -p $RPM_BUILD_ROOT/%{_bindir}
 mkdir -p $RPM_BUILD_ROOT/usr/share/pxc
-install -m 644 profile/pxc.profile $RPM_BUILD_ROOT/%{_sysconfdir}/pxc/
-install -m 644 profile/pxc_unsafe.profile $RPM_BUILD_ROOT/%{_sysconfdir}/pxc/
-install -m 644 profile/pxc_dynamic.profile $RPM_BUILD_ROOT/%{_sysconfdir}/pxc/
-install -m 644 profile/pxc_dynamic_unsafe.profile \
-	$RPM_BUILD_ROOT/%{_sysconfdir}/pxc/
+install -m 644 profile/*.profile $RPM_BUILD_ROOT/%{_sysconfdir}/pxc/
 install -m 755 pxc $RPM_BUILD_ROOT/%{_bindir}/
 cp -a libs/pxc_* $RPM_BUILD_ROOT/usr/share/pxc/
 

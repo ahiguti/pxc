@@ -1,0 +1,32 @@
+#!/usr/bin/env pxc
+namespace hmtest;
+public import common -;
+
+metafunction map_type hash_map{int, int};
+
+function int test1(map_type const& m, int cnt, int v) {
+  int k = 0;
+  for (int i : 0 .. cnt) {
+    if (const x : m[k]) {
+      v += x;
+    }
+    ++k;
+    if (k >= 100) { k = 0; }
+  }
+  return v;
+}
+
+{
+  mutable m = map_type(100);
+  for (int i : 0 .. 100) {
+    m.insert(i, i);
+  }
+  const t1 = io::system.gettimeofday_double();
+  int v = 0;
+  for (int i : 0 .. 300) {
+    v = test1(m, 1000000, v);
+  }
+  const t2 = io::system.gettimeofday_double();
+  println(v, (t2 - t1));
+}
+

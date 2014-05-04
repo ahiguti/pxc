@@ -2736,15 +2736,15 @@ void expr_if::emit_value(emit_context& em)
 	} else {
 	  em.puts(cetstr);
 	  if (mapped_mutable_ref) {
-	    em.puts("::iterator");
+	    em.puts("::find_type");
 	  } else {
-	    em.puts("::const_iterator");
+	    em.puts("::cfind_type");
 	  }
 	  em.puts(" i$it = ag$fe.find(");
 	  fn_emit_value(em, eop->arg1);
 	  em.puts(");\n");
 	  em.indent('I');
-	  em.puts("if (i$it != ag$fe.end()) {\n");
+	  em.puts("if (i$it != ag$fe.notfound()) {\n");
 	  em.add_indent(1);
 	  em.indent('I');
 	  emit_arg_cdecl(em, mapped, true, false);
