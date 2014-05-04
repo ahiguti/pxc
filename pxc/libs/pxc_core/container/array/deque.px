@@ -124,7 +124,7 @@ protected:
 };
 
 template <typename T>
-struct pxcdeque {
+struct pxcdeque : public refguard_base {
   typedef T mapped_type;
   typedef pxcrt::bt_size_t size_type;
   typedef std::deque<T> base_deque;
@@ -132,7 +132,7 @@ struct pxcdeque {
   typedef typename base_deque::const_iterator const_iterator;
   typedef deque_slice<T> range_type;
   typedef deque_cslice<T> crange_type;
-  pxcdeque() : refguard_count(0) { }
+  pxcdeque() { }
   pxcdeque(const crange_type& x) : value(x.begin(), x.end()) { }
   pxcdeque(const range_type& x) : value(x.begin(), x.end()) { }
   bt_bool empty() const { return value.empty(); }
@@ -202,45 +202,8 @@ struct pxcdeque {
   iterator end() { return value.end(); }
   const_iterator begin() const { return value.begin(); }
   const_iterator end() const { return value.end(); }
-  template <typename Tc> struct guard_ref {
-    guard_ref(Tc& x) : v(x) { v.inc_refguard(); }
-    ~guard_ref() { v.dec_refguard(); }
-    Tc& get() { return v; }
-    typename Tc::range_type get_range() 
-      { return typename Tc::range_type(v); }
-    typename Tc::crange_type get_crange() 
-      { return typename Tc::crange_type(v); }
-  private:
-    Tc& v;
-    guard_ref(const guard_ref&);
-    guard_ref& operator =(const guard_ref&);
-  };
-  template <typename Tc> struct guard_val {
-    guard_val(const Tc& x) : v(x) { v.inc_refguard(); }
-    ~guard_val() { v.dec_refguard(); }
-    Tc& get() { return v; }
-    typename Tc::range_type get_range() 
-      { return typename Tc::range_type(v); }
-    typename Tc::crange_type get_crange() 
-      { return typename Tc::crange_type(v); }
-  private:
-    Tc v;
-    guard_val(const guard_val&);
-    guard_val& operator =(const guard_val&);
-  };
-private:
-  void check_resize() {
-    if (refguard_count != 0) { pxcrt::throw_would_invalidate(); }
-  }
-  void inc_refguard() const {
-    ++refguard_count;
-  }
-  void dec_refguard() const {
-    --refguard_count;
-  }
 private:
   base_deque value;
-  mutable size_type refguard_count;
 };
 
 }; // namespace pxcrt

@@ -4,7 +4,7 @@ public import container::array::vector;
 extern "types" inline
 #include <map>
 #include <set>
-namespace pxcmap {
+namespace pxcrt {
 
 template <typename Tf>
 struct compare_less {
@@ -167,7 +167,7 @@ public:
 };
 
 template <typename Tcnf>
-struct with_guard {
+struct with_guard : public refguard_base {
   typedef Tcnf conf_type;
   typedef typename Tcnf::base_map base_map;
   typedef range_base<Tcnf, false> range_type;
@@ -177,13 +177,15 @@ struct with_guard {
   typedef typename base_map::size_type size_type;
   typedef typename base_map::iterator iterator;
   typedef typename base_map::const_iterator const_iterator;
-  with_guard() : refguard_count(0) { }
+  typedef typename base_map::iterator find_type;
+  typedef typename base_map::const_iterator cfind_type;
+  with_guard() { }
   with_guard(const with_guard& x)
-    : v(x.v), refguard_count(0) { }
+    : v(x.v) { }
   with_guard(const range_type& x)
-    : v(x.start, x.finish), refguard_count(0) { }
+    : v(x.start, x.finish) { }
   with_guard(const crange_type& x)
-    : v(x.start, x.finish), refguard_count(0) { }
+    : v(x.start, x.finish) { }
   with_guard& operator =(const with_guard& x) {
     check_resize();
     v = x.v;
@@ -210,6 +212,8 @@ struct with_guard {
   bool exists(const key_type& k) const { return v.find(k) != v.end(); }
   iterator find(const key_type& k) { return v.find(k); }
   const_iterator find(const key_type& k) const { return v.find(k); }
+  iterator notfound() { return end(); }
+  const_iterator notfound() const { return end(); }
   iterator lower_bound(const key_type& k) { return v.lower_bound(k); }
   const_iterator lower_bound(const key_type& k) const {
     return v.lower_bound(k);
@@ -243,43 +247,10 @@ struct with_guard {
     const std::pair<iterator, iterator> r = v.equal_range(k);
     return range_type(r.first, r.second);
   }
-  template <typename Tc> struct guard_ref {
-    guard_ref(Tc& x) : v(x) { v.inc_refguard(); }
-    ~guard_ref() { v.dec_refguard(); }
-    Tc& get() { return v; }
-    typename Tc::range_type get_range() 
-      { return typename Tc::range_type(v); }
-    typename Tc::crange_type get_crange() 
-      { return typename Tc::crange_type(v); }
-  private:
-    Tc& v;
-    guard_ref(const guard_ref&);
-    guard_ref& operator =(const guard_ref&);
-  };
-  template <typename Tc> struct guard_val {
-    guard_val(const Tc& x) : v(x) { v.inc_refguard(); }
-    ~guard_val() { v.dec_refguard(); }
-    Tc& get() { return v; }
-    typename Tc::range_type get_range() 
-      { return typename Tc::range_type(v); }
-    typename Tc::crange_type get_crange() 
-      { return typename Tc::crange_type(v); }
-  private:
-    Tc v;
-    guard_val(const guard_val&);
-    guard_val& operator =(const guard_val&);
-  };
-private:
-  void check_resize() {
-    if (refguard_count != 0) { pxcrt::throw_would_invalidate(); }
-  }
-  void inc_refguard() const { ++refguard_count; }
-  void dec_refguard() const { --refguard_count; }
 private:
   base_map v;
-  mutable size_t refguard_count;
 };
 
-}; // namespace pxcmap
+}; // namespace pxcrt
 ;
 

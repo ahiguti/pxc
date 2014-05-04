@@ -70,7 +70,7 @@ void c_exception_log_stderr(const std::exception& ex);
 extern "implementation" inline
 #include <string>
 #include <unistd.h>
-#ifdef __linux
+#ifdef __GLIBC__
 #include <execinfo.h>
 #endif
 namespace pxcrt {
@@ -115,7 +115,7 @@ void set_stack_trace_limit(size_t sz)
 
 exception::exception()
 {
-#ifdef __linux
+#ifdef __GLIBC__
   if (stack_trace_limit != 0) {
     size_t n = std::min(static_cast<size_t>(5), stack_trace_limit);
     while (true) {
@@ -154,7 +154,7 @@ bt_string exception_message(pxcrt::exception const& exc)
 bt_string exception_stack_trace(pxcrt::exception const& exc)
 {
   bt_string r;
-#ifdef __linux
+#ifdef __GLIBC__
   std::vector<void *> const& tr = exc.trace; 
   char **syms = backtrace_symbols(&tr[0], tr.size());
   if (syms == 0) {

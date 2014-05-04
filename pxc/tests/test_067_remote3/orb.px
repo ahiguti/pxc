@@ -1,5 +1,5 @@
 public namespace orb "use-unsafe";
-public import ordered::compare -;
+public import ordered -;
 public import common -;
 public import text::string::serialize -;
 public import meta -;
@@ -137,7 +137,7 @@ private threaded function {ns, i0, i1} void call_ns_function_bs(
     metafunction fns m::sort{m::map{m::functions{ns}, m::to_string}};
     metafunction cidx m::add{i0, m::div{m::sub{i1, i0}, 2}};
     const& o = *op;
-    const c = compare{cstrref}(o.rbuf[tpos .. tepos], m::at{fns, cidx});
+    const c = compare_swo{cstrref}(o.rbuf[tpos .. tepos], m::at{fns, cidx});
     if (c == 0) {
       function_call{m::symbol{ns, m::at{fns, cidx}}}(op, apos, aepos);
     } else if (c < 0) {
@@ -174,7 +174,7 @@ private threaded function {t, i0, i1} void call_method_bs(
     metafunction mf member_functions_sorted{t};
     metafunction cidx m::add{i0, m::div{m::sub{i1, i0}, 2}};
     const& o = *op;
-    const c = compare{cstrref}(
+    const c = compare_swo{cstrref}(
       o.rbuf[tpos .. tepos], m::to_string{m::at{mf, cidx}});
     if (c == 0) {
       method_call{t, cidx}(op, apos, aepos, obj);

@@ -73,8 +73,8 @@ struct localvar_info {
   attribute_e attr;
   expr_stmts *stmt;
   bool has_attrib_private() const {
-    // return (attr & attribute_private) != 0;
-    return (attr & attribute_public) == 0;
+    return (attr & attribute_private) != 0;
+    // return (attr & attribute_public) == 0;
   }
   bool has_attrib_threaded() const {
     return (attr & attribute_threaded) != 0;

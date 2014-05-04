@@ -1,56 +1,46 @@
 public threaded namespace container::array::refguard "use-unsafe";
 public import numeric::integral;
+public import container::array::array_common;
 
 extern "types" inline
 namespace pxcrt {
 
-#if 0
-template <typename Tc>
-struct guard_ref {
-  guard_ref(Tc& c) : c(c) {
-    c.inc_refguard();
+struct refguard_base {
+  refguard_base() : refguard_count(0) { }
+  template <typename Tc> struct guard_ref {
+    guard_ref(Tc& x) : v(x) { v.inc_refguard(); }
+    ~guard_ref() { v.dec_refguard(); }
+    Tc& get() { return v; }
+    typename Tc::range_type get_range()
+      { return typename Tc::range_type(v); }
+    typename Tc::crange_type get_crange()
+      { return typename Tc::crange_type(v); }
+  private:
+    Tc& v;
+    guard_ref(const guard_ref&);
+    guard_ref& operator =(const guard_ref&);
+  };
+  template <typename Tc> struct guard_val {
+    guard_val(const Tc& x) : v(x) { v.inc_refguard(); }
+    ~guard_val() { v.dec_refguard(); }
+    Tc& get() { return v; }
+    typename Tc::range_type get_range()
+      { return typename Tc::range_type(v); }
+    typename Tc::crange_type get_crange()
+      { return typename Tc::crange_type(v); }
+  private:
+    Tc v;
+    guard_val(const guard_val&);
+    guard_val& operator =(const guard_val&);
+  };
+  void inc_refguard() const { ++refguard_count; }
+  void dec_refguard() const { --refguard_count; }
+  void check_resize() {
+    if (refguard_count != 0) { pxcrt::throw_would_invalidate(); }
   }
-  ~guard_ref() {
-    c.dec_refguard();
-  }
-  Tc& get() {
-    return c;
-  }
-  typename Tc::range_type get_range()
-    { return typename Tc::range_type(c); }
-  typename Tc::crange_type get_crange()
-    { return typename Tc::crange_type(c); }
-private:
-  Tc& c;
-  guard_ref(const guard_ref&);
-  guard_ref& operator =(const guard_ref&);
+  mutable size_t refguard_count;
 };
-template <typename Tc>
-struct guard_val {
-  guard_val(const Tc& x) : c(x) {
-    c.inc_refguard();
-  }
-  ~guard_val() {
-    c.dec_refguard();
-  }
-  Tc& get() {
-    return c;
-  }
-  typename Tc::range_type get_range()
-    { return typename Tc::range_type(c); }
-  typename Tc::crange_type get_crange()
-    { return typename Tc::crange_type(c); }
-private:
-  Tc c;
-  guard_val(const guard_val&);
-  guard_val& operator =(const guard_val&);
-};
-#endif
 
 }; // namespace pxcrt
 ;
 
-extern "implementation" inline
-namespace pxcrt {
-}; // namespace pxcrt
-;

@@ -20,9 +20,12 @@ struct hashmap_node {
     : next(n), entry(k, m) { }
 };
 
+typedef size_t (*modulo_func)(size_t);
+
 struct hashmap_buckets_hdr {
   size_t num_buckets;
   size_t num_entries;
+  modulo_func buckets_modf;
 };
 
 template <typename Tk, typename Tm, typename Teq, typename Thash>
@@ -30,7 +33,7 @@ struct hashmap_buckets {
   typedef hashmap_node<Tk, Tm> node_type;
   typedef hashmap_entry<Tk, Tm> entry_type;
   typedef size_t size_type;
-  hashmap_buckets(size_type ini_num_buckets) {
+  hashmap_buckets(size_type ini_num_buckets, modulo_func mf) {
     hdr = static_cast<hashmap_buckets_hdr *>(malloc(
       sizeof(hashmap_buckets_hdr) +
       ini_num_buckets * sizeof(node_type *)));
@@ -42,6 +45,7 @@ struct hashmap_buckets {
     node_type **const buckets = get_buckets();
     h.num_entries = 0;
     h.num_buckets = ini_num_buckets;
+    h.buckets_modf = mf;
     for (size_type i = 0; i < ini_num_buckets; ++i) {
       buckets[i] = 0;
     }
@@ -85,16 +89,38 @@ struct hashmap_buckets {
   }
   const Tm *find(const Tk& k) const {
     size_t bkt = hash(k);
-    if (bkt > hdr->num_buckets) {
+    #if 0
+    if (bkt >= hdr->num_buckets) {
       bkt %= hdr->num_buckets;
     }
+    #endif
+    #if 0
+    if (bkt >= 211) {
+      bkt %= 211;
+    }
+    #endif
+    #if 1
+    bkt = hdr->buckets_modf(bkt);
+    #endif
+    // bkt %= hdr->num_buckets;
     return find_internal(k, bkt);
   }
   Tm *find(const Tk& k) {
     size_t bkt = hash(k);
-    if (bkt > hdr->num_buckets) {
+    #if 0
+    if (bkt >= hdr->num_buckets) {
       bkt %= hdr->num_buckets;
     }
+    #endif
+    #if 0
+    if (bkt >= 211) {
+      bkt %= 211;
+    }
+    #endif
+    #if 1
+    bkt = hdr->buckets_modf(bkt);
+    #endif
+    // bkt %= hdr->num_buckets;
     return find_internal(k, bkt);
   }
 private:
@@ -129,7 +155,7 @@ struct hash_fo {
 
 typedef hashmap_buckets<int, int, std::equal_to<int>, hash_fo> map_type;
 
-static int test1(const map_type& m, int cnt, int v) {
+int test1(const map_type& m, int cnt, int v) {
   int k = 0;
   for (int i = 0; i < cnt; ++i) {
     // int k = i % 100;
@@ -142,10 +168,16 @@ static int test1(const map_type& m, int cnt, int v) {
   }
   return v;
 }
+
+static size_t mod211(size_t x)
+{
+  return x % 211;
+}
+
 int main()
 {
   // map_type m(211);
-  map_type m(256);
+  map_type m(211, mod211);
   for (int i = 0; i < 100; ++i) {
     m.insert(i, i, i);
   }

@@ -33,3 +33,4 @@ run: all
 	/usr/bin/time ./chm2
 	/usr/bin/time java tmtest
 	/usr/bin/time java hmtest
+	/usr/bin/time ./hmtest.px

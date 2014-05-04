@@ -1,6 +1,6 @@
 
 #include <time.h>
-// #include <unordered_map>
+#include <tr1/unordered_map>
 #include <map>
 #include <vector>
 #include <string>
@@ -34,12 +34,12 @@ struct compare {
   }
 };
 
-// typedef std::unordered_map<int, int> map_type;
+// typedef std::tr1::unordered_map<std::string, std::string> map_type;
 // typedef std::map<std::string, std::string, compare> map_type;
 typedef std::map<std::string, std::string> map_type;
 
-size_t test_size = 10000;
-size_t loop = 10000;
+size_t test_size = 10000000;
+size_t loop = 1;
 
 std::vector<std::string> aval;
 map_type mval;

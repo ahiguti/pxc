@@ -1,5 +1,6 @@
 public threaded namespace container::array::vector "use-unsafe";
 public import container::array::array_common;
+public import container::array::refguard;
 
 extern "types" inline
 #include <limits>
@@ -162,15 +163,14 @@ struct bt_strlit : public bt_cslice<bt_uchar> {
 };
 
 template <typename T>
-struct pxcvector {
+struct pxcvector : public refguard_base {
   typedef T mapped_type;
   typedef pxcrt::bt_size_t size_type;
   typedef T *iterator;
   typedef const T *const_iterator;
   typedef pxcrt::bt_slice<T> range_type;
   typedef pxcrt::bt_cslice<T> crange_type;
-  pxcvector() : start(0), valid_len(0), alloc_len(0), refguard_count(0)
-    { }
+  pxcvector() : start(0), valid_len(0), alloc_len(0) { }
   ~pxcvector() {
     deinitialize_n(start, valid_len);
     deallocate_uninitialized(start, alloc_len);
@@ -293,32 +293,6 @@ struct pxcvector {
   void rawarr_set_valid_len(size_type len) {
     valid_len = len;
   }
-  template <typename Tc> struct guard_ref {
-    guard_ref(Tc& x) : v(x) { v.inc_refguard(); }
-    ~guard_ref() { v.dec_refguard(); }
-    Tc& get() { return v; }
-    typename Tc::range_type get_range()
-      { return typename Tc::range_type(v); }
-    typename Tc::crange_type get_crange()
-      { return typename Tc::crange_type(v); }
-  private:
-    Tc& v;
-    guard_ref(const guard_ref&);
-    guard_ref& operator =(const guard_ref&);
-  };
-  template <typename Tc> struct guard_val {
-    guard_val(const Tc& x) : v(x) { v.inc_refguard(); }
-    ~guard_val() { v.dec_refguard(); }
-    Tc& get() { return v; }
-    typename Tc::range_type get_range()
-      { return typename Tc::range_type(v); }
-    typename Tc::crange_type get_crange()
-      { return typename Tc::crange_type(v); }
-  private:
-    Tc v;
-    guard_val(const guard_val&);
-    guard_val& operator =(const guard_val&);
-  };
 private:
   void construct_internal(const T *ptr, size_type len) {
     refguard_count = 0;
@@ -391,20 +365,10 @@ private:
     start = reserve_n(start, valid_len, alloc_len, nl);
     alloc_len = nl;
   }
-  void check_resize() {
-    if (refguard_count != 0) { pxcrt::throw_would_invalidate(); }
-  }
-  void inc_refguard() const {
-    ++refguard_count;
-  }
-  void dec_refguard() const {
-    --refguard_count;
-  }
 private:
   T *start;
   size_type valid_len;
   size_type alloc_len;
-  mutable size_type refguard_count;
 };
 
 template <typename T> inline T&
@@ -437,7 +401,7 @@ typedef pxcvector<bt_uchar> bt_string;
 typedef bt_slice<bt_uchar> strref;
 typedef bt_cslice<bt_uchar> cstrref;
 
-template <typename T> inline int memcmp_string(T const& x, T const& y)
+template <typename T> inline int string_cmp(T const& x, T const& y)
 { return compare_memcmp(x, y); }
 
 inline bt_string cstr_to_string(const char *cstr)
