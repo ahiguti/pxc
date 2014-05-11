@@ -7,15 +7,16 @@ import numeric::cast n;
 metafunction strlit container::array::strlit;
 
 multithreaded union variant {
-  unit unitval;
-  long longval;
-  double doubleval;
-  string stringval;
-  tptr{iinvoke} tptrval;
+  public unit unitval;
+  public long longval;
+  public double doubleval;
+  public string stringval;
+  public tptr{iinvoke} tptrval;
 }
 
 multithreaded interface iinvoke {
-  function variant invoke(cstrref const& name, cslice{variant} const& args);
+  public function variant invoke(cstrref const& name,
+    cslice{variant} const& args);
 }
 
 threaded function {t} variant to_variant(t const& x)
@@ -51,10 +52,10 @@ threaded function {t} t from_variant(variant const& x)
 }
 
 multithreaded struct foo {
-  int val;
-  function void add(int x) { val += x; }
-  function int get(int y) const { return val; }
-  function int func1(int mutable& x, long const& y) {
+  public int val;
+  public function void add(int x) { val += x; }
+  public function int get(int y) const { return val; }
+  public function int func1(int mutable& x, long const& y) {
     x = val;
     val += n::static_cast{int, long}(y);
     return val;
@@ -64,7 +65,9 @@ multithreaded struct foo {
 // TODO: generic
 multithreaded struct foo_iinvoke < iinvoke > {
   foo value;
-  function variant invoke(cstrref const& name, cslice{variant} const& args) {
+  public function variant invoke(cstrref const& name,
+    cslice{variant} const& args)
+  {
     variant r;
     if (name == "add") {
       value.add(numeric::cast::static_cast{int, long}(args[0].longval));

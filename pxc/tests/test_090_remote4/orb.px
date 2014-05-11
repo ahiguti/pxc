@@ -11,7 +11,8 @@ public import exception -;
 public threaded interface remote { }
 
 public threaded interface orb_transport {
-  function void send_receive(string mutable& rbuf, string mutable& wbuf);
+  public function void send_receive(string mutable& rbuf,
+    string mutable& wbuf);
 }
 
 public threaded struct {t} orb_handle(ptr{orb_transport} const& tr)
@@ -35,19 +36,19 @@ public threaded struct {t} orb_handle(ptr{orb_transport} const& tr)
 }
 
 private threaded struct orb_rep(ptr{orb_transport} const& tr) {
-  ptr{orb_transport} transport = tr;
-  string rbuf;
-  size_t rbuf_pos;
-  string wbuf;
-  vector{skeleton_mapped} skeletons;
+  public ptr{orb_transport} transport = tr;
+  public string rbuf;
+  public size_t rbuf_pos;
+  public string wbuf;
+  public vector{skeleton_mapped} skeletons;
     /* local realobject id to realobject strong pointer */
-  tree_map{size_t, size_t} skeletons_ptr_to_id;
-  vector{size_t} skeletons_free_ids;
-  tree_map{size_t, size_t} stubs_rtol;
+  public tree_map{size_t, size_t} skeletons_ptr_to_id;
+  public vector{size_t} skeletons_free_ids;
+  public tree_map{size_t, size_t} stubs_rtol;
     /* remote realobject id to local stub rawptr */
-  tree_map{size_t, size_t} stubs_ltor;
+  public tree_map{size_t, size_t} stubs_ltor;
     /* local stub rawptr to remote realobject id */
-  function void reset() {
+  public function void reset() {
     rbuf.clear();
     rbuf_pos = 0;
     wbuf.clear();
@@ -60,8 +61,8 @@ private threaded struct orb_rep(ptr{orb_transport} const& tr) {
 }
 
 private threaded union skeleton_mapped {
-  unit nothing;
-  ptr{call_method_table} real_object;
+  public unit nothing;
+  public ptr{call_method_table} real_object;
 }
 
 private threaded function void exchange_loop(ptr{orb_rep} const& op)
@@ -194,14 +195,14 @@ private threaded function {t, i0, i1} void call_method_bs(
 }
 
 private threaded interface call_method_table {
-  function void call_method(ptr{orb_rep} const& op, size_t pos,
+  public function void call_method(ptr{orb_rep} const& op, size_t pos,
     size_t const epos);
 }
 
 private threaded struct {t} call_method_instance (ptr{t} const& p)
   <call_method_table> {
-  const objptr = p;
-  function void call_method(ptr{orb_rep} const& op, size_t pos,
+  public ptr{t} const objptr = p;
+  public function void call_method(ptr{orb_rep} const& op, size_t pos,
     size_t const epos) {
     call_method_ni{t}(op, pos, epos, *objptr);
   }

@@ -3,6 +3,11 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- static_cast無しでfloatだけで計算できるように
+
+- シバンに pxc -p=unsafe のように書けるように
+- cdriver: pxファイル名にスペース等が入っていないかチェック
+
 - x86_64用adt-bundle-linuxのaaptコマンドが32bitのlibz.so.1を要求...
 
 - boost/cstdint.hpp __GLIBC_PREREQが定義されていない場合のworkaround
@@ -3237,4 +3242,63 @@ hashmap_buckets_hdrにrefcnt。
 refcntが1より大きければrehashしない。
 for文は専用の二重ループを用意する。
 rangeは無い。
+
+---------------------------------------------------------------------
+openglのsafe wrapper
+
+頂点配列は使わず、常に頂点バッファオブジェクトを使うことを前提。
+プログラマブルシェーダ前提。
+
+VBOハンドルが大きさ(bytes)を保持している。
+glGenBuffers(1, &buf); でハンドルを作る
+glBindBuffer(GL_ARRAY_BUFFER, &buf);
+glBufferData(GL_ARRAY_BUFRER, src_bytes, src, GL_STATIC_DRAW); で転送
+
+glGetActiveUniformとglGetActiveAttribでuniformとattributeの名前と型の
+一覧が取れる。これを使えばmemory safeにできる。
+
+VBOにはint配列やfloat配列などの型のデータを置ける。さらに「要素配列型」
+のデータも置ける。これはglDrawElementsで使う要素配列。
+
+VBOデータ作成
+
+- glGenBuffers(1, &vbo_name) でVBO作成
+- glBindBuffer(GL_ARRAY_BUFFER, &vbo_name)
+  glBufferData(GL_ARRAY_BUFFER, src_bytes, src, GL_STATIC_DRAW)
+- (要素配列を使うなら)
+  glGenBuffers(1, &evbo_name) でVBO作成
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, &evbo_name)
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, src_bytes, src, GL_STATIC_DRAW)
+
+描画の流れ
+
+- 頂点のattrib変数をloc_vertex, 法線のattrib変数をloc_normalとする。
+- glBindBuffer(GL_ARRAY_BUFFER, vbo_name) でVBOを指定
+- attrib変数が要素ごとに可変であれば
+    glEnableVertexAttribArray(loc_vertex)
+  そうでないなら
+    glVertexAttrib3f(loc_normal, 0.0, 0.0, 1.0)
+  のように即値を指定する。
+- glVertexAttribPointer(loc_vertex, 3, GL_FLOAT, 0, 0, offset)
+  として、loc_vertexにつっこむ配列始点のVBO中オフセット位置を指定。
+- (glDrawArraysのとき)
+  - glDrawArrays(GL_TRIANGLES, 0, num) のようにして描画
+- (glDrawElementsのとき)
+  - glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo_name) で要素配列
+    のVBO指定
+  - glDrawElements(GL_TRIANGLES, num, GL_UNSIGNED_INT, offset)
+    のようにして描画
+
+memory safeにするために
+
+要素配列のVBOは、どのVBOを指す要素配列なのかを指定したうえで、
+glBufferDataでデータを流し込む際に、各値が、指す先の配列の範囲外
+にならないかをチェックしなければならない。範囲チェックのためには
+指す先の型(floatなど)を決めねばならない。また、データを流し込んだ
+あとは、指す先のVBOが削除されてはならず、サイズを縮小してもなら
+ない。
+  element_array_uchar_float
+
+シェーダをコンパイルしてglLinkProgramするとuniformなどのlocation
+が取得可能になる。
 

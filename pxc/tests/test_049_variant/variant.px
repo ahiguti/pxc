@@ -8,16 +8,17 @@ import pointer -;
 import meta::family -;
 
 public union variant {
-  unit unitval;
-  long longval;
-  ulong ulongval;
-  double doubleval;
-  string stringval;
-  ptr{idynamic} ptrval;
+  public unit unitval;
+  public long longval;
+  public ulong ulongval;
+  public double doubleval;
+  public string stringval;
+  public ptr{idynamic} ptrval;
 }
 
 public interface idynamic {
-  function variant invoke(cstrref const& name, cslice{variant} const& args);
+  public function variant invoke(cstrref const& name,
+    cslice{variant} const& args);
 }
 
 public function {t} variant to_variant(t const& x)
@@ -202,7 +203,9 @@ public struct {ns} stub_namespace () < idynamic >
 {
   tree_map{string, variant} elems;
   prepare_namespace_map{ns}(elems);
-  function variant invoke(cstrref const& name, cslice{variant} const& args) {
+  public function variant invoke(cstrref const& name,
+    cslice{variant} const& args)
+  {
     if (variant e : elems[name]) {
       return e.ptrval->invoke("", args);
     }

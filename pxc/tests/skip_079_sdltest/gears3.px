@@ -1,3 +1,4 @@
+public namespace gears3 "export-unsafe";
 
 /* $Id: gears.c,v 1.2 1999/10/21 16:39:06 brianp Exp $ */
 
@@ -34,7 +35,6 @@
 
 metafunction debug_matrix 0;
 
-public namespace gears3 "export-unsafe";
 import common -;
 import pointer::raw -;
 import numeric::fpmath -;
@@ -62,6 +62,10 @@ int loc_normal;
 int loc_lightpos;
 int loc_sampler;
 uint texture_id;
+int screen_width = 0;
+int screen_height = 0;
+float perspective_distance = 1.1;
+float min_distance = 1.0;
 
 function void vector_push3(vector{float} mutable& vec, float a, float b,
   float c)
@@ -311,8 +315,8 @@ function void draw_gear_vbo(uint vbo_name, farray{size_t, 6} const& ofs)
 float gears_angle = 0.0;
 
 tsvaluetype struct gear_vbo {
-  uint name;
-  farray{size_t, 6} ofs;
+  public uint name;
+  public farray{size_t, 6} ofs;
 }
 
 farray{gear_vbo, 3} gear_vbos;
@@ -353,7 +357,7 @@ function void draw_gear_vbo_one(int i, glm::mat4 const& mv,
   }
 }
 
-function void draw_frame(quaternion{float} const& view_angle)
+function void draw_frame(quaternion{float} const& view_angle, float object_size)
 {
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   farray{float, 16} view_angle_arr = view_angle.to_matrix();
@@ -362,7 +366,8 @@ function void draw_frame(quaternion{float} const& view_angle)
   for (size_t i : 0 .. 16) {
     mat_angle_slice[i] = view_angle_arr[i];
   }
-  const modelview_cur = modelview_base.multiply(mat_angle);
+  const modelview_cur = modelview_base.multiply(mat_angle)
+    .scale(glm::make_vec3(object_size, object_size, object_size));
 
   function void draw_n(int n, int i, glm::mat4 mutable& mv) {
     const nm = mv.to_3().inverse().transpose();
@@ -405,11 +410,36 @@ function void draw_frame(quaternion{float} const& view_angle)
 
 function void reshape(int width, int height)
 { 
-  double h = static_cast{double}(height) / static_cast{double}(width);
-  glViewport(0, 0, static_cast{GLsizei}(width), static_cast{GLsizei}(height));
-  projection = glm::frustum{float}(-1.0, 1.0,
-    static_cast{float}(-h), static_cast{float}(h), 5.0, 60.0);
-  modelview_base = glm::mat4().translate(glm::make_vec3(0.0, 0.0, -40.0));
+  screen_width = width;
+  screen_height = height;
+  update_mvp();
+}
+
+function void set_distance(float x)
+{
+  perspective_distance = x;
+  if (perspective_distance < min_distance + 0.1) {
+    perspective_distance = min_distance + 0.1; }
+  if (perspective_distance > 500.0) { perspective_distance = 500.0; }
+  update_mvp();
+}
+
+function void update_mvp()
+{
+  const h = static_cast{float}(screen_height)
+    / static_cast{float}(screen_width);
+  glViewport(0, 0, static_cast{GLsizei}(screen_width),
+    static_cast{GLsizei}(screen_height));
+  const d = static_cast{float}(perspective_distance);
+  const near = static_cast{float}(d - min_distance);
+  const far = static_cast{float}(d + min_distance);
+  const left = static_cast{float}(-1.0 * ((d - min_distance) / d));
+  const right = static_cast{float}(1.0 * ((d - min_distance) / d));
+  const bottom = static_cast{float}(-h * ((d - min_distance) / d));
+  const top = static_cast{float}(h * ((d - min_distance) / d));
+  projection = glm::frustum{float}(left, right, bottom, top, near, far);
+  modelview_base = glm::mat4().translate(glm::make_vec3(0.0, 0.0,
+    static_cast{float}(-perspective_distance)));
 }
 
 function uint compile_shader(cstrref const& src, GLenum type)
@@ -535,6 +565,7 @@ function void prepare_texture()
 {
   sdllog("prepare_texture");
   const sur = IMG_Load("img-c256.jpg").some;
+  // const sur = IMG_Load("img-c1024.jpg").some;
   const mode = sur.BytesPerPixel() == 4 ? GL_RGBA : GL_RGB;
   sdllog("prepare_texture 1");
   glActiveTexture(GL_TEXTURE0);
@@ -566,7 +597,7 @@ function void sdllog(cstrref const& mess)
 
 function void init_gl()
 {
-  // glEnable(GL_CULL_FACE);
+  glEnable(GL_CULL_FACE);
   glEnable(GL_DEPTH_TEST);
   init_gear_vbos();
   set_program();
@@ -590,7 +621,8 @@ function void init_gl()
   const wnd = SDL_CreateWindow("PXC-SDL2Gears", 0, 0, init_w, init_h, fl).some;
   SDL_GetWindowSize(wnd, init_w, init_h);
   const glctx = SDL_GL_CreateContext(wnd);
-  SDL_GL_SetSwapInterval(0);
+  // SDL_GL_SetSwapInterval(0);
+  SDL_GL_SetSwapInterval(1);
 
   sdllog("PXC-SDL2Gears init_gl");
   init_gl();
@@ -603,6 +635,7 @@ function void init_gl()
   uint tprev = SDL_GetTicks();
   uint frames = 0;
   mutable view_angle = quaternion{float}(1.0, 0.0, 0.0, 0.0);
+  mutable float view_object_size = 0.08;
 
   metafunction ticks_t farray{uint, 5};
   ticks_t ticks;
@@ -619,12 +652,47 @@ function void init_gl()
 
   bool done = false;
   bool paused = false;
-  function void rotate(float x, float y, float z, float angle) {
-    const q = quaternion_from_axis_angle{float}(x, y, z,
-      angle * M_PI / 180.0);
+  function void view_angle_rotate_rad(float x, float y, float z,
+    float angle_rad)
+  {
+    const q = quaternion_from_axis_angle{float}(x, y, z, angle_rad);
     view_angle = view_angle.multiply(q);
     view_angle.normalize();
   }
+  function void view_angle_rotate(float x, float y, float z, float angle) {
+    view_angle_rotate_rad(x, y, z, angle * M_PI / 180.0);
+  }
+  function void view_object_size_multiply(float v) {
+    view_object_size *= v;
+    sdllog(string_join{" "}("object_size", view_object_size));
+  }
+  struct touch_status {
+    public float x0; /* finger 0 */
+    public float y0; /* finger 0 */
+    public float x1; /* finger 1 */
+    public float y1; /* finger 1 */
+    public bool f1down;
+    public function void update(SDL_FingerID fng, float x, float y) {
+      if (fng == 0) {
+	x0 = x;
+	y0 = y;
+      } else if (fng == 1) {
+	x1 = x;
+	y1 = y;
+      }
+    }
+    public function float distance() const {
+      const dx = x1 - x0;
+      const dy = y1 - y0;
+      return sqrt(dx * dx + dy * dy);
+    }
+    public function float angle() const {
+      const dx = x1 - x0;
+      const dy = y1 - y0;
+      return atan2(dy, dx);
+    }
+  }
+  touch_status touch;
   while (!done) {
     save_ticks(0);
     SDL_Event ev;
@@ -639,14 +707,44 @@ function void init_gl()
 	  reshape(w, h);
 	}
       } else if (etype == SDL_FINGERMOTION) {
-	const dx = ev.tfinger.dx * 500.0;
-	const dy = ev.tfinger.dy * 500.0;
-	rotate(1.0, 0.0, 0.0, -dy);
-	rotate(0.0, 1.0, 0.0, -dx);
-      } else if (etype == SDL_MULTIGESTURE) {
+	const fng = ev.tfinger.fingerId;
+	if (!touch.f1down) {
+	  const dx = ev.tfinger.dx * 500.0;
+	  const dy = ev.tfinger.dy * 500.0;
+	  SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
+	    string_join{" "}("motion", dx, dy, fng));
+	  view_angle_rotate(1.0, 0.0, 0.0, -dy);
+	  view_angle_rotate(0.0, 1.0, 0.0, -dx);
+	} else {
+	  const x = ev.tfinger.x;
+	  const y = ev.tfinger.y;
+	  const d0 = touch.distance();
+	  const ang0 = touch.angle();
+	  touch.update(fng, x, y);
+	  const d1 = touch.distance();
+	  const ang1 = touch.angle();
+	  SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
+	    string_join{" "}("object_size", d0, d1, x, y, view_object_size));
+	  view_object_size_multiply(d1 / d0);
+	  view_angle_rotate_rad(0.0, 0.0, 1.0, ang1 - ang0);
+	  SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
+	    string_join{" "}("touchangle", ang1));
+	}
+      } else if (etype == SDL_FINGERDOWN) {
+	const x = ev.tfinger.x;
+	const y = ev.tfinger.y;
+	const fng = ev.tfinger.fingerId;
+	if (fng == 1) {
+	  touch.f1down = true;
+	}
+	touch.update(fng, x, y);
 	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	  string_join{""}("multigesture dTheta=", ev.mgesture.dTheta,
-	    " dDist=", ev.mgesture.dDist));
+	  string_join{" "}("down", x, y, fng));
+      } else if (etype == SDL_FINGERUP) {
+	const fng = ev.tfinger.fingerId;
+	if (fng == 1) {
+	  touch.f1down = false;
+	}
       } else if (etype == SDL_APP_WILLENTERBACKGROUND) {
 	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("paused"));
 	paused = true;
@@ -668,8 +766,12 @@ function void init_gl()
     }
     save_ticks(1);
     {
-      draw_frame(view_angle);
-      save_ticks(2);
+      draw_frame(view_angle, view_object_size);
+    }
+    save_ticks(2);
+    SDL_GL_SwapWindow(wnd);
+    save_ticks(3);
+    {
       ++frames;
       uint t = SDL_GetTicks();
       if (t - t0 >= 1000) {
@@ -685,6 +787,7 @@ function void init_gl()
 	frames = 0;
       }
       gears_angle += static_cast{float}(t - tprev) / 20.0;
+      // gears_angle += static_cast{float}(1);
       gears_angle = fmod(gears_angle, 360.0);
       tprev = t;
       if (t - t1 >= 10) {
@@ -693,14 +796,34 @@ function void init_gl()
 	}
 	SDL_KeyboardState const ks;
 	if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) { done = true; }
-	if (ks.Key(SDL_SCANCODE_UP) != 0) { rotate(1.0, 0.0, 0.0, 2.0); }
-	if (ks.Key(SDL_SCANCODE_DOWN) != 0) { rotate(1.0, 0.0, 0.0, -2.0); }
-	if (ks.Key(SDL_SCANCODE_LEFT) != 0) { rotate(0.0, 1.0, 0.0, 2.0); }
-	if (ks.Key(SDL_SCANCODE_RIGHT) != 0) { rotate(0.0, 1.0, 0.0, -2.0); }
+	if (ks.Key(SDL_SCANCODE_UP) != 0) {
+	  if (ks.Key(SDL_SCANCODE_LCTRL) != 0) {
+	    set_distance(perspective_distance + 0.01);
+	    SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("distance",
+	      perspective_distance));
+	  } else {
+	    view_angle_rotate(1.0, 0.0, 0.0, 2.0);
+	  }
+	}
+	if (ks.Key(SDL_SCANCODE_DOWN) != 0) {
+	  if (ks.Key(SDL_SCANCODE_LCTRL) != 0) {
+	    set_distance(perspective_distance - 0.01);
+	    SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("distance",
+	      perspective_distance));
+	  } else {
+	    view_angle_rotate(1.0, 0.0, 0.0, -2.0);
+	  }
+	}
+	if (ks.Key(SDL_SCANCODE_LEFT) != 0) {
+	  view_angle_rotate(0.0, 1.0, 0.0, 2.0); }
+	if (ks.Key(SDL_SCANCODE_RIGHT) != 0) {
+	  view_angle_rotate(0.0, 1.0, 0.0, -2.0); }
+	if (ks.Key(SDL_SCANCODE_SPACE) != 0) {
+	  view_object_size_multiply(1.01); }
+	if (ks.Key(SDL_SCANCODE_LSHIFT) != 0) {
+	  view_object_size_multiply(0.99); }
       }
     }
-    save_ticks(3);
-    SDL_GL_SwapWindow(wnd);
     save_ticks(4);
   }
   deinit_gear_vbos();

@@ -8,26 +8,27 @@ public import meta::family mf;
 public import exception -;
 
 public threaded interface orb_transport {
-  function void send_receive(string mutable& rbuf, string mutable& wbuf);
+  public function void send_receive(string mutable& rbuf,
+    string mutable& wbuf);
 }
 
 public threaded struct orb(ptr{orb_transport} const& tr) {
-  ptr{orb_transport} transport = tr;
-  ns_functions funcs; // TODO: remove
-  vector{methods} mets; // TODO: remove
-  string rbuf;
-  string wbuf;
-  tree_map{size_t, skeleton_mapped} skeletons;
+  public ptr{orb_transport} transport = tr;
+  public ns_functions funcs; // TODO: remove
+  public vector{methods} mets; // TODO: remove
+  public string rbuf;
+  public string wbuf;
+  public tree_map{size_t, skeleton_mapped} skeletons;
     /* local realobject rawptr to realobject strong pointer */
-  tree_map{size_t, size_t} stubs_rtol;
+  public tree_map{size_t, size_t} stubs_rtol;
     /* remote realobject id to local stub rawptr */
-  tree_map{size_t, size_t} stubs_ltor;
+  public tree_map{size_t, size_t} stubs_ltor;
     /* local stub rawptr to remote realobject id */
 }
 
 public threaded union skeleton_mapped {
-  unit nothing;
-  ptr{call_method_table} real_object;
+  public unit nothing;
+  public ptr{call_method_table} real_object;
 }
 
 public threaded interface remote { }
@@ -169,13 +170,15 @@ private threaded function {t, i0, i1} void call_method_bs(
 }
 
 private threaded interface call_method_table {
-  function void call_method(orb mutable& o, size_t pos, size_t const epos);
+  public function void call_method(orb mutable& o, size_t pos,
+    size_t const epos);
 }
 
 private threaded struct {t} call_method_instance (ptr{t} const& p)
   <call_method_table> {
-  ptr{t} objptr = p;
-  function void call_method(orb mutable& o, size_t pos, size_t const epos) {
+  public ptr{t} objptr = p;
+  public function void call_method(orb mutable& o, size_t pos,
+    size_t const epos) {
     call_method_ni{t}(o, pos, epos, *objptr);
   }
 }
@@ -291,8 +294,8 @@ bt_size_t rawptr_to_size_t(rawptr_type rawptr)
 ;
 
 private threaded struct {t} stub (ptr{orb} const& op, size_t robjid) <t> {
-  ptr{orb} shared_orb = op;
-  size_t remote_objid = robjid;
+  public ptr{orb} shared_orb = op;
+  public size_t remote_objid = robjid;
   function ~ {
     orb mutable& o = *shared_orb;
     /* TODO: send remove request */
@@ -301,16 +304,16 @@ private threaded struct {t} stub (ptr{orb} const& op, size_t robjid) <t> {
       o.stubs_rtol.erase(remote_objid);
     }
   }
-  metafunction mfuncs m::member_functions{t};
+  public metafunction mfuncs m::member_functions{t};
     /* TODO: const member functions */
-  metafunction mfis
+  public metafunction mfis
     m::map{
       mfuncs,
       metafunction{x}
 	m::list{m::to_string{x}, m::is_const_member_function{x}}};
   expand (fsym, fidx: mfis) {
     /* non-const member function */
-    function m::ret_type{m::at{mfuncs, fidx}}
+    public function m::ret_type{m::at{mfuncs, fidx}}
       fsym(expand (replace_arg_names{m::args{m::at{mfuncs, fidx}}}))
     {
       metafunction rtype m::ret_type{m::at{mfuncs, fidx}};
@@ -329,7 +332,7 @@ private threaded struct {t} stub (ptr{orb} const& op, size_t robjid) <t> {
       return r;
     }
     /* const member function */
-    function m::ret_type{m::at{mfuncs, fidx}}
+    public function m::ret_type{m::at{mfuncs, fidx}}
       fsym(expand (replace_arg_names{m::args{m::at{mfuncs, fidx}}})) const
     {
       metafunction rtype m::ret_type{m::at{mfuncs, fidx}};
@@ -352,8 +355,8 @@ private threaded struct {t} stub (ptr{orb} const& op, size_t robjid) <t> {
 
 public mtvaluetype struct orb_error(cstrref const& m) <runtime_error>
 {
-  string const mess = m;
-  function string message() const { return mess; }
+  public string const mess = m;
+  public function string message() const { return mess; }
 }
 
 private threaded function {t} t execute_expect_response(ptr{orb} const& op)
@@ -533,15 +536,15 @@ public threaded function void call_method(orb mutable& o, size_t const pos,
 public threaded struct func_entry (strlit const& k,
   ptr{i_marshal_fcall} const& f)
 {
-  strlit name = k;
-  ptr{i_marshal_fcall} func = f;
+  public strlit name = k;
+  public ptr{i_marshal_fcall} func = f;
 }
 
 public threaded struct method_entry (strlit const& k,
   ptr{i_marshal_method} const& f)
 {
-  strlit name = k;
-  ptr{i_marshal_method} method = f;
+  public strlit name = k;
+  public ptr{i_marshal_method} method = f;
 }
 
 public metafunction ns_functions vector{func_entry};
@@ -582,25 +585,25 @@ public threaded function {t} methods create_methods()
 
 private threaded interface i_marshal_fcall
 {
-  function void call(orb mutable& o, size_t pos, size_t epos) const;
+  public function void call(orb mutable& o, size_t pos, size_t epos) const;
 }
 
 private threaded struct {f} marshal_fcall <i_marshal_fcall>
 {
-  function void call(orb mutable& o, size_t pos, size_t epos) const {
+  public function void call(orb mutable& o, size_t pos, size_t epos) const {
     function_call{f}(o, pos, epos);
   }
 }
 
 private threaded interface i_marshal_method
 {
-  function void call(orb mutable& o, size_t pos, size_t epos,
+  public function void call(orb mutable& o, size_t pos, size_t epos,
     remote mutable& obj) const;
 }
 
 private threaded struct {t, mi} marshal_method <i_marshal_method>
 {
-  function void call(orb mutable& o, size_t pos, size_t epos,
+  public function void call(orb mutable& o, size_t pos, size_t epos,
     remote mutable& obj) const {
     method_call{t, mi}(o, pos, epos, obj);
   }

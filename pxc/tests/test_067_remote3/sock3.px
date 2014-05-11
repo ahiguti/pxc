@@ -12,55 +12,55 @@ import thread -;
 import orb -;
 
 public threaded interface ifoo <remote> {
-  function int hoge(int x, int y) const;
-  function string fuga(cstrref const& x, cstrref const& y) const;
-  function ptr{ibar} create_bar(int x) const;
+  public function int hoge(int x, int y) const;
+  public function string fuga(cstrref const& x, cstrref const& y) const;
+  public function ptr{ibar} create_bar(int x) const;
 }
 
 public threaded interface ibaz <remote> {
-  function int baz_m1(int x);
+  public function int baz_m1(int x);
 }
 
 public threaded struct baz <ibaz> {
-  function int baz_m1(int x) {
+  public function int baz_m1(int x) {
     // debug_log("baz_m1", x);
     return x * x;
   }
 }
 
 public threaded interface ibar <remote> {
-  function int m1(int y);
-  function void set_baz(ptr{ibaz} const& p);
-  function int do_baz(int v);
+  public function int m1(int y);
+  public function void set_baz(ptr{ibaz} const& p);
+  public function int do_baz(int v);
 }
 
 public threaded struct bar(int x0) <ibar> {
-  int x = x0;
-  ptr{ibaz} bzp = make_ptr(baz());
-  function int m1(int y) {
+  public int x = x0;
+  public ptr{ibaz} bzp = make_ptr(baz());
+  public function int m1(int y) {
     return x * y;
   }
-  function void set_baz(ptr{ibaz} const& p) {
+  public function void set_baz(ptr{ibaz} const& p) {
     bzp = p;
   }
-  function int do_baz(int v) {
+  public function int do_baz(int v) {
     return bzp->baz_m1(v);
   }
 }
 
 public threaded struct foo <ifoo> {
-  int intval;
-  string strval;
-  function int hoge(int x, int y) const {
+  public int intval;
+  public string strval;
+  public function int hoge(int x, int y) const {
     return intval + x + y;
   }
-  function string fuga(cstrref const& x, cstrref const& y) const {
+  public function string fuga(cstrref const& x, cstrref const& y) const {
     string s = strval;
     s.append(x);
     s.append(y);
     return s;
   }
-  function ptr{ibar} create_bar(int x) const {
+  public function ptr{ibar} create_bar(int x) const {
     ptr{bar} p = make_ptr{bar}(bar(x));
     return p;
   }
@@ -69,7 +69,8 @@ public threaded struct foo <ifoo> {
 private threaded struct transport_file(file_mt const& f0) <orb_transport> {
   file_mt const f = f0;
   bool ok = true;
-  function void send_receive(string mutable& rbuf, string mutable& wbuf) {
+  public function void send_receive(string mutable& rbuf,
+    string mutable& wbuf) {
     if (ok && !wbuf.empty()) {
       const wr = f.write_all(wbuf);
       if (case wr.errno || wr.value != wbuf.size()) {
@@ -114,7 +115,7 @@ private function void client_test_main(file_mt const& f)
 private multithreaded struct server_thread(io const& s, file_mt const& f) {
   io const sys = s;
   file_mt const sock = f;
-  function void main() {
+  public function void main() {
     ptr{orb_transport} tf = make_ptr(transport_file(sock));
     ptr{orb_handle{ifoo}} op = make_ptr(orb_handle{ifoo}(tf));
     ptr{ifoo} obj = make_ptr(foo());
