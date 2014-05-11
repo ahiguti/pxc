@@ -13,11 +13,11 @@ import orb -;
 import transport_file -;
 
 public threaded interface ifoo <remote> {
-  function int fold(cslice{int} const& x, int v0, ptr{ibinop} const& o);
+  public function int fold(cslice{int} const& x, int v0, ptr{ibinop} const& o);
 }
 
 public threaded struct foo <ifoo> {
-  function int fold(cslice{int} const& x, int v0, ptr{ibinop} const& o) {
+  public function int fold(cslice{int} const& x, int v0, ptr{ibinop} const& o) {
     mutable r = v0;
     for (size_t i, int v : x) {
       r = o->op(r, v);
@@ -27,11 +27,11 @@ public threaded struct foo <ifoo> {
 }
 
 public threaded interface ibinop <remote> {
-  function int op(int x, int y);
+  public function int op(int x, int y);
 }
 
 public threaded struct binop_add <ibinop> {
-  function int op(int x, int y) {
+  public function int op(int x, int y) {
     return x + y;
   }
 }
@@ -50,7 +50,7 @@ private function void client_test_main(file_mt const& f)
 private multithreaded struct server_thread(io const& s, file_mt const& f) {
   io const sys = s;
   file_mt const sock = f;
-  function void main() {
+  public function void main() {
     const op = make_ptr{orb_handle{ifoo}}(make_ptr{transport_file}(sock));
     const obj = make_ptr(foo());
     op->start_server(obj);

@@ -1,5 +1,6 @@
 #!/bin/bash
 
+cd `dirname $0`
 pushd ./jni/pxsrc/ && ./pxc_clean.sh && popd
 ndk-build NDK_DEBUG=0 clean
 ndk-build NDK_DEBUG=1 clean

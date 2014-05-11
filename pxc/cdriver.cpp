@@ -1601,6 +1601,9 @@ static int prepare_options(parser_options& po, int argc, char **argv)
   if (po.profile_name.empty()) {
     po.profile_name = "/etc/pxc/pxc.profile";
   } else if (!po.no_realpath) {
+    if (po.profile_name.find('/') == std::string::npos) {
+      po.profile_name = "/etc/pxc/pxc_" + po.profile_name + ".profile";
+    }
     po.profile_name = get_canonical_path(po.profile_name);
   }
   if (!check_path_validity(po.work_dir)) {

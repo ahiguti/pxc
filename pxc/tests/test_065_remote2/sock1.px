@@ -11,45 +11,46 @@ import thread -;
 import orb -;
 
 public threaded interface ifoo <remote> {
-  function int hoge(int x, int y) const;
-  function string fuga(cstrref const& x, cstrref const& y) const;
-  function ptr{ibar} create_bar(int x) const;
+  public function int hoge(int x, int y) const;
+  public function string fuga(cstrref const& x, cstrref const& y) const;
+  public function ptr{ibar} create_bar(int x) const;
 }
 
 public threaded interface ibar <remote> {
-  function int m1(int y);
+  public function int m1(int y);
 }
 
 public threaded struct bar(int x0) <ibar> {
-  int x = x0;
-  function int m1(int y) {
+  public int x = x0;
+  public function int m1(int y) {
     return x * y;
   }
 }
 
 public threaded struct foo <ifoo> {
-  int intval;
-  string strval;
-  function int hoge(int x, int y) const {
+  public int intval;
+  public string strval;
+  public function int hoge(int x, int y) const {
     return intval + x + y;
   }
-  function string fuga(cstrref const& x, cstrref const& y) const {
+  public function string fuga(cstrref const& x, cstrref const& y) const {
     string s = strval;
     s.append(x);
     s.append(y);
     return s;
   }
-  function ptr{ibar} create_bar(int x) const {
+  public function ptr{ibar} create_bar(int x) const {
     ptr{bar} p = make_ptr{bar}(bar(x));
     return p;
   }
 }
 
 private threaded struct transport_file(file_mt const& f0) <orb_transport> {
-  file_mt const f = f0;
-  bool ok = true;
-  errno_t en;
-  function void send_receive(string mutable& rbuf, string mutable& wbuf) {
+  public file_mt const f = f0;
+  public bool ok = true;
+  public errno_t en;
+  public function void send_receive(string mutable& rbuf,
+    string mutable& wbuf) {
     if (ok && !wbuf.empty()) {
       const wr = f.write_all(wbuf);
       if (case wr.errno || wr.value != wbuf.size()) {
@@ -110,9 +111,9 @@ private function void client_test_main(file_mt const& f)
 }
 
 private multithreaded struct server_thread(io const& s, file_mt const& f) {
-  io const sys = s;
-  file_mt const sock = f;
-  function void main() {
+  public io const sys = s;
+  public file_mt const sock = f;
+  public function void main() {
     orb_server_loop{ifoo, foo}(sock);
   }
 }

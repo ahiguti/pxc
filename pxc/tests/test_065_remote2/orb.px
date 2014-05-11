@@ -9,18 +9,19 @@ public import meta::family mf;
 public import exception -;
 
 public threaded interface orb_transport {
-  function void send_receive(string mutable& rbuf, string mutable& wbuf);
+  public function void send_receive(string mutable& rbuf,
+    string mutable& wbuf);
 }
 
 public threaded struct orb(ptr{orb_transport} const& tr) {
-  ptr{orb_transport} transport = tr;
-  string rbuf;
-  string wbuf;
-  tree_map{size_t, skeleton_mapped} skeletons;
+  public ptr{orb_transport} transport = tr;
+  public string rbuf;
+  public string wbuf;
+  public tree_map{size_t, skeleton_mapped} skeletons;
     /* local realobject rawptr to realobject strong pointer */
-  tree_map{size_t, size_t} stubs_rtol;
+  public tree_map{size_t, size_t} stubs_rtol;
     /* remote realobject id to local stub rawptr */
-  tree_map{size_t, size_t} stubs_ltor;
+  public tree_map{size_t, size_t} stubs_ltor;
     /* local stub rawptr to remote realobject id */
 }
 
@@ -30,8 +31,8 @@ public threaded function void orb_clear_skeletons(orb mutable& o)
 }
 
 public threaded union skeleton_mapped {
-  unit nothing;
-  ptr{call_method_table} real_object;
+  public unit nothing;
+  public ptr{call_method_table} real_object;
 }
 
 public threaded interface remote { }
@@ -156,13 +157,15 @@ private threaded function {t, i0, i1} void call_method_bs(
 }
 
 private threaded interface call_method_table {
-  function void call_method(ptr{orb} const& op, size_t pos, size_t const epos);
+  public function void call_method(ptr{orb} const& op, size_t pos,
+    size_t const epos);
 }
 
 private threaded struct {t} call_method_instance (ptr{t} const& p)
   <call_method_table> {
-  ptr{t} objptr = p;
-  function void call_method(ptr{orb} const& op, size_t pos, size_t const epos)
+  public ptr{t} objptr = p;
+  public function void call_method(ptr{orb} const& op, size_t pos,
+    size_t const epos)
   {
     call_method_ni{t}(op, pos, epos, *objptr);
   }
@@ -297,8 +300,8 @@ stub_method_template(
 }
 
 private threaded struct {t} stub (ptr{orb} const& op, size_t robjid) <t> {
-  ptr{orb} shared_orb = op;
-  size_t remote_objid = robjid;
+  public ptr{orb} shared_orb = op;
+  public size_t remote_objid = robjid;
   function ~ {
     orb mutable& o = *shared_orb;
     /* TODO: send remove request */
@@ -343,8 +346,8 @@ private threaded struct {t} stub (ptr{orb} const& op, size_t robjid) <t> {
 }
 
 public mtvaluetype struct orb_error(cstrref const& m) <runtime_error> {
-  string const mess = m;
-  function string message() const { return mess; }
+  public string const mess = m;
+  public function string message() const { return mess; }
 }
 
 private threaded function {t} t pop_return_value(ptr{orb} const& op)

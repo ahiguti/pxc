@@ -14,11 +14,11 @@ import orb -;
 import transport_file -;
 
 public threaded interface ibinop <remote> {
-  function int op(int x, int y);
+  public function int op(int x, int y);
 }
 
 public threaded struct binop_add <ibinop> {
-  function int op(int x, int y) {
+  public function int op(int x, int y) {
     return x + y;
   }
 }
@@ -42,7 +42,7 @@ private function void client_test_main(file_mt const& f)
 private multithreaded struct server_thread(io const& s, file_mt const& f) {
   io const sys = s;
   file_mt const sock = f;
-  function void main() {
+  public function void main() {
     const op = make_ptr{orb_handle{ibinop}}(make_ptr{transport_file}(sock));
     const obj = make_ptr(binop_add());
     op->start_server(obj);

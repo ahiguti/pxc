@@ -824,9 +824,14 @@ eval_meta_fields_internal(const term_list_range& tlev, eval_context& ectx,
   term_list tl;
   for (std::list<expr_var *>::const_iterator i = flds.begin(); i != flds.end();
     ++i) {
+    if (((*i)->get_attribute() & attribute_public) == 0) {
+      continue;
+    }
+    #if 0
     if (((*i)->get_attribute() & attribute_private) != 0) {
       continue;
     }
+    #endif
     if (mask == 0x3) {
       term_list tl1;
       tl1.push_back(term(std::string((*i)->sym))); /* name */
