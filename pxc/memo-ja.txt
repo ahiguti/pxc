@@ -3,6 +3,24 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- 辞書式順序で
+
+- catchの引数もconst byrefなどを指定できるようにするか
+
+- for (size_t i, int v: arr) { ... } をguardせずに実行するように
+  配列やスライスはmappedがbyvalのときguardせずに実行できる
+  連想配列はイテレータ無効化の可能性があるからguard外せない
+
+- for文のconst byrefなどがよくわからない
+
+- tree_map_compareという名前になるのが面倒
+
+- algebraic整理 -> tupleとeitherに分離
+
+- コンテナの rebind{u} は m::baseなどを使って実現できるので要らない。
+
+- operator::eqなどのboolを返す演算のstructに対する定義
+
 - static_cast無しでfloatだけで計算できるように
 
 - シバンに pxc -p=unsafe のように書けるように
@@ -3301,4 +3319,61 @@ glBufferDataでデータを流し込む際に、各値が、指す先の配列�
 
 シェーダをコンパイルしてglLinkProgramするとuniformなどのlocation
 が取得可能になる。
+
+---------------------------------------------------------------------
+operator::eq
+
+operator::eqなどのboolを返す演算のstructに対する定義
+各fieldについてeqを取ったもののandだが、短絡評価できる。
+{
+  if (x.fld0 != y.fld0) { return false; }
+  if (x.fld1 != y.fld1) { return false; }
+  return true;
+}
+
+eq, ne, gt, lt, ge, le
+
+
+---------------------------------------------------------------------
+functor
+
+型fooについて foo_fmap が定義されていればファンクタ。
+
+fmapは、テンプレ引数として関数fを取り、引数としてリスト的な値を取る
+f: t0 -> t1
+fmap{foo, f}: foo{t0} -> foo{t1}
+
+m::base{tx} で txの一番外側のテンプレを返す。例えば
+m::base{vector{int}} => vector 。
+
+function {f, tx} pair{m::ret_type{f}} pair_fmap(tx const& x)
+{
+  return make_pair(f(x.first), f(x.second));
+}
+
+function {f, tx} vector{m::ret_type{f}} vector_fmap(tx const& x)
+{
+  vector{m::ret_type{f}} r;
+  r.resize(x.size());
+  for (const& k, const& v: x) { r[k] = x; }
+  return r;
+}
+
+連想配列の場合はmapped型に適用する
+function {f, tx} tree_map{m::at0{tx}, m::ret_type{f}}
+tree_map_fmap(tx const& x)
+{
+  tree_map{m::at0{tx}, m::ret_type{f}} r;
+  for (const& k, const& v: x) { r[k] = f(x); }
+  return r;
+}
+
+metafunction fmap_ret_type{f, tx} m::apply_list{m::base{tx}
+
+function {f, tx}
+m::ret_type{m::symbol{m::nsof{tx}, m::concat{tx, "_fmap"}}}
+fmap(tx x)
+{
+  return m::symbol{m::nsof{tx}, m::concat{tx, "_fmap"}}(x);
+}
 

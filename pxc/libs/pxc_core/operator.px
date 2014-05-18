@@ -324,32 +324,91 @@ binop(tx const& x, ty const& y)
   metafunction f_assign m::symbol{m::nsof{tx}, fstr_assign};
   if (m::ne{op_bin, 0}) {
     /* return foo.__add(x, y); */
-    // m::error{m::concat{"opbin", tx, ty, opstr}};
     expand(sym: m::list{opstr_bin}) { return x.sym(y); }
   } else if (m::ne{op_assign, 0}) {
     /* r = x; foo.__adda(r, y); return x; */
-    // m::error{m::concat{"opassign", tx, ty, opstr}};
     tx r = x; expand(sym: m::list{opstr_assign}) { r.sym(y); } return r;
   } else if (m::ne{f_bin, 0}) {
     /* return foo___add(x, y); */
-    // m::error{m::concat{"fbin", tx, ty, opstr}};
     return f_bin{tx, ty}(x, y);
   } else if (m::ne{f_assign, 0}) {
     /* r = x; foo___adda(r, y); return r; */
-    // m::error{m::concat{"fassign", tx, ty, opstr}};
     tx r = x;
     f_assign{tx, ty}(r, y);
     return r;
-  } else if (m::and{is_struct_type{tx},
-    m::not{m::empty{m::field_names{tx}}}}) {
-    /* apply binop for each field, and construct a value of type tx */
-    // m::error{m::concat{"struct", tx, ty, opstr}};
-    metafunction op m::symbol{"operator", opstr};
-    return tx(expand(fld: m::field_names{tx}; op(x.fld, y.fld)));
+  } else if (m::eq{opstr, "eq"}) {
+    return eq_folding{tx, ty}(x, y);
+  } else if (m::eq{opstr, "ne"}) {
+    return !eq_folding{tx, ty}(x, y);
+  } else if (m::eq{opstr, "gt"}) {
+    return op_lexi{0, tx, ty}(x, y);
+  } else if (m::eq{opstr, "lt"}) {
+    return op_lexi{1, tx, ty}(x, y);
+  } else if (m::eq{opstr, "ge"}) {
+    return !op_lexi{1, tx, ty}(x, y);
+  } else if (m::eq{opstr, "le"}) {
+    return !op_lexi{0, tx, ty}(x, y);
+  } else if (extend_op_fields{tx, ty}) {
+     /* apply binop for each field */
+     metafunction op m::symbol{"operator", opstr};
+     return tx(expand(fld: m::field_names{tx}; op(x.fld, y.fld)));
   } else {
     return m::error{m::concat{"operator ", opstr, " not defined"}};
   }
 }
+
+private threaded function {tx, ty} bool
+eq_folding(tx const& x, ty const& y)
+{
+  if (m::and{mf::is_array_or_slice_type{tx}, mf::is_array_or_slice_type{ty}}) {
+    if (x.size() != y.size()) { return false; }
+    for (const& k, const& m: x) {
+      if (y[k] != m) { return false; }
+    }
+    return true;
+  } else if (m::and{mf::is_map_or_range_type{tx},
+    mf::is_map_or_range_type{ty}}) {
+    if (x.size() != y.size()) { return false; }
+    for (const& k, const& m: x) {
+      if (const& ym : y[k]) {
+	if (ym != m) { return false; }
+      } else {
+	return false;
+      }
+    }
+    return true;
+  } else {
+    return m::error{m::concat{"equality is not defined"}};
+  }
+}
+
+private threaded function {lt, tx, ty} bool
+op_lexi(tx const& x, ty const& y)
+{
+  if (m::and{mf::is_array_or_slice_type{tx}, mf::is_array_or_slice_type{ty}}) {
+    const xsz = x.size();
+    const ysz = x.size();
+    const sz = xsz > ysz ? xsz : ysz;
+    for (const& k, const& m: x) {
+      if (m::ne{lt, 0}) {
+	if (m < y[k]) { return true; }
+      } else {
+	if (m > y[k]) { return true; }
+      }
+    }
+    if (m::ne{lt, 0}) {
+      if (xsz < ysz) { return true; }
+    } else {
+      if (xsz > ysz) { return true; }
+    }
+    return false;
+  } else {
+    return m::error{m::concat{"lexicographical order is not defined"}};
+  }
+}
+
+private metafunction extend_op_fields{tx, ty}
+  m::and{m::eq{tx, ty}, is_struct_type{tx}, m::not{m::empty{m::fields{tx}}}};
 
 private threaded function {tx, ty, opstr} void
 binopa(tx mutable& x, ty const& y)
@@ -374,11 +433,10 @@ binopa(tx mutable& x, ty const& y)
   } else if (m::ne{f_assign, 0}) {
     /* foo___adda(x, y); */
     f_assign{tx, ty}(x, y);
-  } else if (m::and{is_struct_type{tx}, m::eq{tx, ty},
-    m::not{m::empty{m::field_names{tx}}}}) {
-    /* apply binop for each field */
-    metafunction op m::symbol{"operator", m::concat{opstr, "a"}};
-    expand(fld: m::field_names{tx}; op(x.fld, y.fld));
+  } else if (extend_op_fields{tx, ty}) {
+     /* apply binop for each field */
+     metafunction op m::symbol{"operator", m::concat{opstr, "a"}};
+     expand(fld: m::field_names{tx}; op(x.fld, y.fld));
   } else {
     return m::error{m::concat{"operator ", opstr, " not defined"}};
   }
@@ -411,10 +469,10 @@ unaryop(tx const& x)
   } else if (m::eq{m::to_string{f_u}, fstr_u}) {
     /* return foo___plus(x); */
     return f_u{tx}(x);
-  } else if (is_struct_type{tx}) {
-    /* apply unaryop for each field, and construct a value of type tx */
-    metafunction op m::symbol{"operator", opstr};
-    return tx(expand(fld: m::field_names{tx}; op(x.fld)));
+  } else if (extend_op_fields{tx, tx}) {
+     /* apply unaryop for each field */
+     metafunction op m::symbol{"operator", opstr};
+     return tx(expand(fld: m::field_names{tx}; op(x.fld)));
   } else {
     return m::error{m::concat{"operator ", opstr, " not defined"}};
   }

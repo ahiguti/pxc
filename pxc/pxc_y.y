@@ -155,13 +155,21 @@ static compile_mode cur_mode;
 %type<expr_val> c_enumval_stmt
 %type<expr_val> visi_vardef_stmt
 %type<expr_val> visi_union_flddef_stmt
+%type<expr_val> argdecl_key
+%type<expr_val> argdecl_mapped
 %type<expr_val> argdecl_list
 %type<expr_val> argdecl_list_trail
 %type<expr_val> forrange_argdecl
+/*
 %type<expr_val> foreach_argdecl
+*/
 %type<expr_val> type_expr
+/*
 %type<expr_val> type_expr_or_const
+*/
+/*
 %type<expr_val> opt_type_expr
+*/
 %type<expr_val> type_arg_list
 %type<expr_val> type_arg
 %type<expr_val> type_arg_excl_metalist
@@ -333,7 +341,7 @@ body_stmt
 	  { $$ = expr_forrange_new(cur_fname, @1.first_line, $5, $7,
 		expr_block_new(cur_fname, @1.first_line, 0, 0, $3, 0,
 			passby_e_mutable_value, $10)); }
-	| TOK_FOR '(' foreach_argdecl ':' expression ')'
+	| TOK_FOR '(' argdecl_key ':' expression ')'
 		'{' function_body_stmt_list '}'
 	  { $$ = expr_feach_new(cur_fname, @1.first_line, $5,
 		expr_block_new(cur_fname, @1.first_line, 0, 0, $3, 0,
@@ -350,35 +358,12 @@ body_stmt
 	  { $$ = expr_special_new(cur_fname, @1.first_line, TOK_THROW, $2); }
 	;
 forrange_argdecl
-	: type_expr_or_const TOK_SYMBOL
+	: type_expr TOK_SYMBOL
 	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $2, $1,
 			passby_e_const_value, 0); }
-foreach_argdecl
-	: type_expr_or_const TOK_SYMBOL ',' type_expr_or_const TOK_SYMBOL
-	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $2, $1,
-			passby_e_const_reference,
-		expr_argdecls_new(cur_fname, @1.first_line, $5, $4,
-			passby_e_const_reference, 0));
-		}
-	| type_expr_or_const TOK_SYMBOL ',' opt_type_expr TOK_MUTABLE
-		TOK_SYMBOL
-	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $2, $1,
-			passby_e_const_reference,
-		expr_argdecls_new(cur_fname, @1.first_line, $6, $4,
-			passby_e_mutable_reference, 0));
-		}
-	;
-type_expr_or_const
-	: type_expr
-	  { $$ = $1; }
-	| TOK_CONST
-	  { $$ = 0; }
-	;
-opt_type_expr
-	:
-	  { $$ = 0; }
-	| type_expr
-	  { $$ = $1; }
+	| TOK_CONST TOK_SYMBOL
+	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $2, 0,
+			passby_e_const_value, 0); }
 	;
 expression_stmt
 	: expression ';'
@@ -802,6 +787,54 @@ vardef_expr
 	| TOK_MUTABLE '&' TOK_SYMBOL
 	  { $$ = expr_var_new(cur_fname, @1.first_line, $3, 0,
 		passby_e_mutable_reference, attribute_unknown, 0); }
+	;
+argdecl_key
+	: type_expr TOK_SYMBOL ',' argdecl_mapped
+	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $2, $1,
+		passby_e_mutable_value, $4); }
+	| TOK_CONST TOK_SYMBOL ',' argdecl_mapped
+	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $2, 0,
+		passby_e_const_value, $4); }
+	| type_expr TOK_CONST TOK_SYMBOL ',' argdecl_mapped
+	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $3, $1,
+		passby_e_const_value, $5); }
+	| TOK_CONST '&' TOK_SYMBOL ',' argdecl_mapped
+	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $3, 0,
+		passby_e_const_reference, $5); }
+	| type_expr TOK_CONST '&' TOK_SYMBOL ',' argdecl_mapped
+	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $4, $1,
+		passby_e_const_reference, $6); }
+	;
+argdecl_mapped
+	: type_expr TOK_SYMBOL
+	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $2, $1,
+		passby_e_mutable_value, 0); }
+	| TOK_CONST TOK_SYMBOL
+	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $2, 0,
+		passby_e_const_value, 0); }
+	| type_expr TOK_CONST TOK_SYMBOL
+	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $3, $1,
+		passby_e_const_value, 0); }
+	| TOK_CONST '&' TOK_SYMBOL
+	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $3, 0,
+		passby_e_const_reference, 0); }
+	| type_expr TOK_CONST '&' TOK_SYMBOL
+	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $4, $1,
+		passby_e_const_reference, 0); }
+	/*
+	| TOK_MUTABLE TOK_SYMBOL
+	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $2, 0,
+		passby_e_mutable_value, 0); }
+	| type_expr TOK_MUTABLE TOK_SYMBOL
+	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $3, $1,
+		passby_e_mutable_value, 0); }
+	*/
+	| TOK_MUTABLE '&' TOK_SYMBOL
+	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $3, 0,
+		passby_e_mutable_reference, 0); }
+	| type_expr TOK_MUTABLE '&' TOK_SYMBOL
+	  { $$ = expr_argdecls_new(cur_fname, @1.first_line, $4, $1,
+		passby_e_mutable_reference, 0); }
 	;
 argdecl_list
 	:
