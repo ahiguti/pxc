@@ -2989,6 +2989,20 @@ void expr_feach::check_type(symbol_table *lookup)
     arena_error_push(this, "Container type expected (got: %s)", s0.c_str());
     return;
   }
+  if (block->get_argdecls()->get_rest()->passby
+    == passby_e_mutable_reference) {
+    if (is_container_family(tce)) {
+      check_lvalue(ce, ce);
+    } else if (is_cm_range_family(tce)) {
+      if (is_const_range_family(tce)) {
+	arena_error_push(ce, "Const range element can not be modified");
+	return;
+      }
+    } else {
+      arena_error_push(this,
+	"Internal error: expr_feach::check_type: not a container");
+    }
+  }
   term tidx = get_array_index_texpr(0, tce);
   term telm = get_array_elem_texpr(0, tce);
   assert(argdecls_length(block->get_argdecls()) == 2);

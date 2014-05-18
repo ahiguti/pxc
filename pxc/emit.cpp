@@ -2659,6 +2659,7 @@ static bool can_omit_brace(const expr_if *ei)
   return false;
 }
 
+#if 0
 // FIXME: remove and use is_passby_mutable() instead
 static bool arg_passby_mutable(expr_argdecls *ad)
 {
@@ -2674,6 +2675,7 @@ static bool arg_passby_mutable(expr_argdecls *ad)
   abort();
   return false;
 }
+#endif
 
 void expr_if::emit_value(emit_context& em)
 {
@@ -2890,8 +2892,12 @@ void expr_feach::emit_value(emit_context& em)
   expr_argdecls *const mapped = block->get_argdecls()->get_rest();
   const std::string cetstr = get_term_cname(ce->get_texpr());
   emit_split_expr(em, ce, true);
+  #if 0
   const bool mapped_mutable_flag = arg_passby_mutable(mapped);
-  if (mapped_mutable_flag) {
+  #endif
+  const bool mapped_mutable_byref =
+    mapped->passby == passby_e_mutable_reference;
+  if (mapped_mutable_byref) {
     em.puts("");
   } else {
     em.puts("const ");
@@ -2903,7 +2909,7 @@ void expr_feach::emit_value(emit_context& em)
   if (type_has_refguard(ce->get_texpr())) {
     em.indent('f');
     em.puts(cetstr);
-    if (mapped_mutable_flag) {
+    if (mapped_mutable_byref) {
       em.puts("::guard_ref< ");
     } else {
       em.puts("::guard_ref< const ");
@@ -2918,7 +2924,7 @@ void expr_feach::emit_value(emit_context& em)
       em.indent('f');
       em.puts("const size_t sz$fe = ag$fe.size();\n");
       em.indent('f');
-      if (!mapped_mutable_flag) {
+      if (!mapped_mutable_byref) {
 	em.puts("const ");
       }
       expr_argdecls *const adk = block->get_argdecls();
@@ -2947,7 +2953,7 @@ void expr_feach::emit_value(emit_context& em)
       em.indent('f');
       em.puts("for (");
       em.puts(cetstr);
-      if (mapped_mutable_flag) {
+      if (mapped_mutable_byref) {
 	em.puts("::iterator ");
       } else {
 	em.puts("::const_iterator ");
@@ -2974,7 +2980,7 @@ void expr_feach::emit_value(emit_context& em)
     em.indent('f');
     em.puts("for (");
     em.puts(cetstr);
-    if (mapped_mutable_flag) {
+    if (mapped_mutable_byref) {
       em.puts("::iterator ");
     } else {
       em.puts("::const_iterator ");
@@ -2984,7 +2990,7 @@ void expr_feach::emit_value(emit_context& em)
     em.indent('f');
     expr_argdecls *const adk = block->get_argdecls();
     emit_arg_cdecl(em, adk, true, false);
-    if (mapped_mutable_flag) {
+    if (mapped_mutable_byref) {
       em.puts(" = ag$fe.get_key(i$fe);\n");
     } else {
       em.puts(" = ag$fe.get_ckey(i$fe);\n");
@@ -2992,7 +2998,7 @@ void expr_feach::emit_value(emit_context& em)
     expr_argdecls *const adm = adk->get_rest();
     em.indent('f');
     emit_arg_cdecl(em, adm, true, false);
-    if (mapped_mutable_flag) {
+    if (mapped_mutable_byref) {
       em.puts(" = ag$fe.get_mapped(i$fe);\n");
     } else {
       em.puts(" = ag$fe.get_cmapped(i$fe);\n");

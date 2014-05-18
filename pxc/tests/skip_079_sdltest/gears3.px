@@ -508,27 +508,27 @@ function void set_program()
     "attribute vec3 normal;\n",
     "varying vec2 texcoord;\n",
     "varying vec2 vertex_xy;\n",
-    "varying float light_diffuse;\n",
+    "varying float brightness;\n",
     "void main(void) {\n",
     "  gl_Position = model_view_projection * vec4(vertex, 1.0);\n",
     "  texcoord = vertex.xy * 0.14 + vec2(0.5, 0.5);\n",
     "  vertex_xy = vertex.xy;\n",
     "  vec3 nor = normalize(normal_matrix * normal);\n",
     "  vec3 light = normalize(lightpos.xyz);\n",
-    "  light_diffuse = max(dot(light, nor), 0.0) + 0.4;\n",
+    "  brightness = max(dot(light, nor), 0.0) + 0.4;\n",
     "}\n"};
   const frag = m::concat{
     "uniform sampler2D sampler;\n",
     "uniform vec4 mate_color;\n",
     "varying vec2 texcoord;\n",
     "varying vec2 vertex_xy;\n",
-    "varying float light_diffuse;\n",
+    "varying float brightness;\n",
     "void main(void) {\n",
     "  vec4 color = texture2D(sampler, texcoord.xy);\n",
     "  float x0 = mod(vertex_xy.x, 0.4) - 0.2;\n",
     "  float y0 = mod(vertex_xy.y, 0.4) - 0.2;\n",
     "  if (x0 * x0 + y0 * y0 < 0.01) discard;\n",
-    "  gl_FragColor = color * light_diffuse * 0.9 + mate_color * 0.1;\n",
+    "  gl_FragColor = color * brightness * 0.9 + mate_color * 0.1;\n",
     "}\n"};
   const prog = create_program(vert, frag);
   if (prog != 0) {
@@ -640,7 +640,7 @@ function void init_gl()
   metafunction ticks_t farray{uint, 5};
   ticks_t ticks;
   ticks_t ticks_sum;
-  for (const i, mutable e : ticks) {
+  for (const i, mutable& e : ticks) {
     e = tprev;
   }
   function void save_ticks(size_t idx) {
