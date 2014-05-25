@@ -193,28 +193,28 @@ public threaded function {tx} unaryop_ret_type{tx, "plus", is_numeric_type}
 plus(tx const& x)
 {
   if (is_numeric_type{tx}) { return x; }
-  else { unaryop{tx, "plus", is_numeric_type}(x); }
+  else { return unaryop{tx, "plus", is_numeric_type}(x); }
 }
 
 public threaded function {tx} unaryop_ret_type{tx, "minus", is_numeric_type}
 minus(tx const& x)
 {
   if (is_numeric_type{tx}) { return -x; }
-  else { unaryop{tx, "minus", is_numeric_type}(x); }
+  else { return unaryop{tx, "minus", is_numeric_type}(x); }
 }
 
 public threaded function {tx} unaryop_ret_type{tx, "neg", is_boolean_type}
 neg(tx const& x)
 {
   if (is_boolean_type{tx}) { return ~x; }
-  else { unaryop{tx, "neg", is_boolean_type}(x); }
+  else { return unaryop{tx, "neg", is_boolean_type}(x); }
 }
 
 public threaded function {tx} unaryop_ret_type{tx, "not", is_boolean_type}
 not(tx const& x)
 {
   if (is_boolean_type{tx}) { return !x; }
-  else { unaryop{tx, "not", is_boolean_type}(x); }
+  else { return unaryop{tx, "not", is_boolean_type}(x); }
 }
 
 public threaded function {tx, ty} mapped_type{tx}
@@ -264,19 +264,14 @@ union_field(t const& x)
 }
 
 public metafunction implicit_conversion{tto, tfrom}
-  m::cond{ /* conversion function defined in the tfrom ns? */
-    m::eq{
-      m::to_string{
-	m::symbol{m::nsof{tfrom}, conv_funcname_nons{tto, tfrom}}},
-      conv_funcname_nons{tto, tfrom}},
+  m::cond{
+    /* conversion function defined in the tfrom ns? */
+    has_nssymbol{tfrom, conv_funcname_nons{tto, tfrom}},
     implicit_conversion_ns{tto, tfrom, 0},
-    m::cond{ /* conversion function defined in th tto ns? */
-      m::eq{
-	m::to_string{
-	  m::symbol{m::nsof{tto}, conv_funcname_nons{tto, tfrom}}},
-	conv_funcname_nons{tto, tfrom}},
-      implicit_conversion_ns{tto, tfrom, 1},
-      0}};
+    /* conversion function defined in th tto ns? */
+    has_nssymbol{tto, conv_funcname_nons{tto, tfrom}},
+    implicit_conversion_ns{tto, tfrom, 1},
+    0};
 
 /* private */
 
@@ -284,30 +279,30 @@ private metafunction mapped_type{t}
   m::cond{
     is_container_or_range_type{t},
     m::symbol{t, "mapped_type"},
-    has_symbol{t, "__getelem"},
+    has_tsymbol{t, "__getelem"},
     m::ret_type{m::symbol{t, "__getelem"}},
     m::ret_type{m::symbol{m::nsof{t},
       m::concat{m::to_string{t}, "___getelem"}}}};
 
-private metafunction has_symbol{t, name} m::symbol_exists{t, name};
-private metafunction has_gsymbol{t, name} m::symbol_exists{m::nsof{t}, name};
+private metafunction has_tsymbol{t, name} m::symbol_exists{t, name};
+private metafunction has_nssymbol{t, name} m::symbol_exists{m::nsof{t}, name};
 
 private metafunction binop_ret_type{tx, ty, opstr, is_builtin}
   m::cond{
     m::and{m::ne{is_builtin, 0}, is_builtin{tx}, is_builtin{ty}},
     tx,
   m::cond{
-    has_symbol{tx, m::concat{"__", opstr}},
+    has_tsymbol{tx, m::concat{"__", opstr}},
     m::ret_type{m::symbol{tx, m::concat{"__", opstr}}},
   m::cond{
-    has_symbol{tx, m::concat{"__", opstr, "a"}},
+    has_tsymbol{tx, m::concat{"__", opstr, "a"}},
     tx,
   m::cond{
-    has_gsymbol{tx, m::concat{tx, "___", opstr}},
+    has_nssymbol{tx, m::concat{tx, "___", opstr}},
     m::ret_type{m::apply{
       m::symbol{m::nsof{tx}, m::concat{tx, "___", opstr}}, tx, ty}},
   m::cond{
-    has_gsymbol{tx, m::concat{tx, "___", opstr, "a"}},
+    has_nssymbol{tx, m::concat{tx, "___", opstr, "a"}},
     tx,
   tx}}}}};
 
@@ -353,7 +348,7 @@ binop(tx const& x, ty const& y)
      metafunction op m::symbol{"operator", opstr};
      return tx(expand(fld: m::field_names{tx}; op(x.fld, y.fld)));
   } else {
-    return m::error{m::concat{"operator ", opstr, " not defined"}};
+    return m::error{m::concat{tx, ": operator ", opstr, " is not defined"}};
   }
 }
 
@@ -378,7 +373,7 @@ eq_folding(tx const& x, ty const& y)
     }
     return true;
   } else {
-    return m::error{m::concat{"equality is not defined"}};
+    return m::error{m::concat{tx, ": equality is not defined"}};
   }
 }
 
@@ -403,7 +398,7 @@ op_lexi(tx const& x, ty const& y)
     }
     return false;
   } else {
-    return m::error{m::concat{"lexicographical order is not defined"}};
+    return m::error{m::concat{tx, ": lexicographical order is not defined"}};
   }
 }
 
@@ -438,7 +433,7 @@ binopa(tx mutable& x, ty const& y)
      metafunction op m::symbol{"operator", m::concat{opstr, "a"}};
      expand(fld: m::field_names{tx}; op(x.fld, y.fld));
   } else {
-    return m::error{m::concat{"operator ", opstr, " not defined"}};
+    return m::error{m::concat{tx, ": operator ", opstr, " is not defined"}};
   }
 }
 
@@ -447,10 +442,10 @@ private metafunction unaryop_ret_type{tx, opstr, is_builtin}
     m::and{m::ne{is_builtin, 0}, is_builtin{tx}},
     tx,
   m::cond{
-    has_symbol{tx, m::concat{"__", opstr}},
+    has_tsymbol{tx, m::concat{"__", opstr}},
     m::ret_type{m::symbol{tx, m::concat{"__", opstr}}},
   m::cond{
-    has_gsymbol{tx, m::concat{tx, "___", opstr}},
+    has_nssymbol{tx, m::concat{tx, "___", opstr}},
     m::ret_type{m::apply{
       m::symbol{m::nsof{tx}, m::concat{tx, "___", opstr}}, tx}},
   tx}}};
@@ -460,13 +455,12 @@ unaryop_ret_type{tx, opstr, is_builtin}
 unaryop(tx const& x)
 {
   metafunction opstr_u m::concat{"__", opstr};
-  metafunction op_u m::symbol{tx, opstr_u};
   metafunction fstr_u m::concat{tx, "___", opstr};
   metafunction f_u m::symbol{m::nsof{tx}, fstr_u};
-  if (m::eq{m::to_string{op_u}, opstr_u}) {
+  if (has_tsymbol{tx, opstr_u}) {
     /* return foo.__plus(x); */
     expand(sym: m::list{opstr_u}) { return x.sym(); }
-  } else if (m::eq{m::to_string{f_u}, fstr_u}) {
+  } else if (has_nssymbol{tx, fstr_u}) {
     /* return foo___plus(x); */
     return f_u{tx}(x);
   } else if (extend_op_fields{tx, tx}) {
@@ -474,7 +468,7 @@ unaryop(tx const& x)
      metafunction op m::symbol{"operator", opstr};
      return tx(expand(fld: m::field_names{tx}; op(x.fld)));
   } else {
-    return m::error{m::concat{"operator ", opstr, " not defined"}};
+    return m::error{m::concat{tx, ": operator ", opstr, " is not defined"}};
   }
 }
 

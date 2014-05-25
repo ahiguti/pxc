@@ -636,13 +636,13 @@ expr_int_literal::resolve_texpr()
 	const char *p = str;
 	type_of_this_expr = builtins.type_uint;
 	for (; *p != 0; ++p) {
-	  if (*p == 'L') {
+	  if (*p == 'L' || *p == 'l') {
 	    type_of_this_expr = builtins.type_ulong;
-	  } else if (*p == 'S') {
+	  } else if (*p == 'S' || *p == 's') {
 	    type_of_this_expr = builtins.type_ushort;
-	  } else if (*p == 'O') {
+	  } else if (*p == 'O' || *p == 's') {
 	    type_of_this_expr = builtins.type_uchar;
-	  } else if (*p == 'Z') {
+	  } else if (*p == 'Z' || *p == 'z') {
 	    type_of_this_expr = builtins.type_size_t;
 	  }
 	}
@@ -651,13 +651,13 @@ expr_int_literal::resolve_texpr()
       const char *p = str;
       type_of_this_expr = builtins.type_int;
       for (; *p != 0; ++p) {
-	if (*p == 'L') {
+	if (*p == 'L' || *p == 'l') {
 	  type_of_this_expr = builtins.type_long;
-	} else if (*p == 'S') {
+	} else if (*p == 'S' || *p == 's') {
 	  type_of_this_expr = builtins.type_short;
-	} else if (*p == 'O') {
+	} else if (*p == 'O' || *p == 'o') {
 	  type_of_this_expr = builtins.type_char;
-	} else if (*p == 'Z') {
+	} else if (*p == 'Z' || *p == 'o') {
 	  type_of_this_expr = builtins.type_ssize_t;
 	}
       }
@@ -728,7 +728,7 @@ expr_float_literal::expr_float_literal(const char *fn, int line,
   : expr_i(fn, line), str(str)
 {
   size_t s = strlen(str);
-  if (s != 0 && str[s - 1] == 'F') {
+  if (s != 0 && (str[s - 1] == 'F' || str[s - 1] == 'f')) {
     type_of_this_expr = builtins.type_float;
   } else {
     type_of_this_expr = builtins.type_double;

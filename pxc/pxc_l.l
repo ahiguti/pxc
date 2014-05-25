@@ -73,7 +73,7 @@ extern int count_newline(const char *str);
 			  return TOK_INTLIT; }
 {AL}{ALNUM}*		{ yylval.str_val = pxc::arena_strdup(yytext);
 			  return TOK_SYMBOL; }
-{NUM}+\.{NUM}+F?	{ yylval.str_val = pxc::arena_strdup(yytext);
+{NUM}+\.{NUM}+[Ff]?	{ yylval.str_val = pxc::arena_strdup(yytext);
 			  return TOK_FLOATLIT; }
 \"(\\.|[^\\"])*\"	{ yylval.str_val = pxc::arena_strdup(yytext);
 			  return TOK_STRLIT; }
