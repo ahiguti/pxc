@@ -18,7 +18,8 @@ public tsvaluetype   struct extern "pxcrt::tiptr" "tiptr" {t} tiptr { }
 public mtvaluetype struct extern "pxcrt::lock_guard" "lock_guard" {t}
 lock_guard
 {
-  metafunction __static_assert__ is_monitor{t};
+  metafunction __static_assert__ check_monitor{t};
+    /* note: some types does not implement monitor */
   public function extern "wait" void wait();
   public function extern "notify_one" void notify_one();
   public function extern "notify_all" void notify_all();
@@ -26,7 +27,7 @@ lock_guard
 public mtvaluetype struct extern "pxcrt::lock_cguard" "lock_cguard" {t}
 lock_cguard
 {
-  metafunction __static_assert__ is_monitor{t};
+  metafunction __static_assert__ check_monitor{t};
   public function extern "wait" void wait();
   public function extern "notify_one" void notify_one();
   public function extern "notify_all" void notify_all();
@@ -74,7 +75,11 @@ check_pointer_downcast{tto, tfrom} pointer_downcast(tfrom const& x);
 private metafunction argdecls{tis} v::arg_decls_byref{tis};
 private metafunction arg_names{tis} v::arg_names{m::size{tis}};
 
-private metafunction is_monitor{t} m::type_attribute{t, "monitor", 1};
+private metafunction check_monitor{t}
+  /* error if t has "monitor" attribute with zero */
+  m::cond{
+    m::type_attribute{t, "monitor", 1}, t,
+    m::error{"not a monitor type"}};
 
 private metafunction check_polymorphic{t1, t2}
   m::cond{

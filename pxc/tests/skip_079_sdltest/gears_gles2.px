@@ -332,8 +332,8 @@ function void deinit_gear_vbos()
 function void draw_gear_vbo_one(int i, glm::mat4 const& mv,
   glm::mat3 const& nm)
 {
-  glUniformMatrix4fv(loc_mvp, 1, 0, projection.multiply(mv).to_crawptr());
-  glUniformMatrix3fv(loc_normal_matrix, 1, 0, nm.to_crawptr());
+  glUniformMatrix4fv(loc_mvp, 1, 0, (projection * mv).crawptr());
+  glUniformMatrix3fv(loc_normal_matrix, 1, 0, nm.crawptr());
   glUniform4f(loc_lightpos, 5.0, 5.0, 10.0, 0.0);
   const red = make_farray{float}(0.8, 0.1, 0.0, 1.0);
   const green = make_farray{float}(0.0, 0.8, 0.2, 1.0);
@@ -355,11 +355,11 @@ function void draw_frame(quaternion{float} const& view_angle)
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   farray{float, 16} view_angle_arr = view_angle.to_matrix();
   mutable mat_angle = glm::mat4();
-  slice{float} mat_angle_slice = mat_angle.to_slice();
+  slice{float} mat_angle_slice = mat_angle.slice();
   for (size_t i : 0 .. 16) {
     mat_angle_slice[i] = view_angle_arr[i];
   }
-  const modelview_cur = modelview_base.multiply(mat_angle);
+  const modelview_cur = modelview_base * mat_angle;
 
   function void draw_n(int n, int i, glm::mat4 mutable& mv) {
     mv = mv.translate(glm::make_vec3(0.0, 0.0, -static_cast{float}(n - 1)));
@@ -549,7 +549,7 @@ function void init_gl()
   metafunction ticks_t farray{uint, 5};
   ticks_t ticks;
   ticks_t ticks_sum;
-  for (const i, mutable e : ticks) {
+  for (const i, mutable& e : ticks) {
     e = tprev;
   }
   function void save_ticks(size_t idx) {

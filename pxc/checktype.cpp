@@ -872,9 +872,11 @@ void expr_block::check_type(symbol_table *lookup)
     if (sa != 0 && sa->get_esort() == expr_e_metafdef) {
       const term t = eval_term(
 	term(ptr_down_cast<expr_metafdef>(sa)->get_rhs()));
+      #if 0
       if (t != term(1LL)) {
 	arena_error_throw(sa, "Static assertion failed");
       }
+      #endif
     }
   }
   #if 0
@@ -1512,7 +1514,9 @@ static void subst_user_defined_op(expr_op *eop)
     expr_symbol_new(eop->fname, eop->line,
       expr_nssym_new(eop->fname, eop->line,
 	expr_nssym_new(eop->fname, eop->line, 0, "operator"), func)),
-    expr_op_new(eop->fname, eop->line, ',', eop->arg0, eop->arg1));
+    (tc1 != 0)
+      ? expr_op_new(eop->fname, eop->line, ',', eop->arg0, eop->arg1)
+      : eop->arg0);
   eop->arg0 = fc;
   eop->arg1 = 0;
   eop->op = '(';

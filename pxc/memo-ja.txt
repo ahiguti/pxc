@@ -3,7 +3,22 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- glm ベクタや行列？のスカラ倍、スカラ除算
+
+- 四元数をglm使う
+
+- 一般化されたfold
+
+- __fooが定義されていたら..のような処理について、定義されているか
+  どうかはm::symbolが0を返すかどうかで判定する。m::symbolが返すもの
+  はメタ関数の可能性があるから、文字列として比較するのはよくない。
+
 - 辞書式順序で
+
+- 複数のpxから使われている型や関数について、すべてのコンパイル単位で
+  同じC++コードを生成していることを保証するにはどうすればよいか
+  - メタ関数が純関数的であること
+  - マクロ展開が純関数的であること
 
 - catchの引数もconst byrefなどを指定できるようにするか
 
@@ -11,13 +26,12 @@ FIXME/TODO M1
   配列やスライスはmappedがbyvalのときguardせずに実行できる
   連想配列はイテレータ無効化の可能性があるからguard外せない
 
-- for文のconst byrefなどがよくわからない
-
 - tree_map_compareという名前になるのが面倒
 
 - algebraic整理 -> tupleとeitherに分離
 
 - コンテナの rebind{u} は m::baseなどを使って実現できるので要らない。
+  (done)
 
 - operator::eqなどのboolを返す演算のstructに対する定義
 
@@ -3376,4 +3390,16 @@ fmap(tx x)
 {
   return m::symbol{m::nsof{tx}, m::concat{tx, "_fmap"}}(x);
 }
+
+---------------------------------------------------------------------
+一般化されたfold
+
+- 型tの構成子foo, barに対し、それぞれ関数hoge, fugaで置き換えた式
+- 列コンテナだけが特殊で、nil/consが構成子と見做す
+- function {funcs, t} ret_type{m::at0{funcs}} fold(t const& x)
+  {
+    if (const v: x.foo) { return m::at0{funcs}(v); }
+    if (const v: x.bar) { return m::at1{funcs}(v); }
+  }
+- unionの構成子を関数として返すメタ関数が欲しいところ
 
