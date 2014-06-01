@@ -1,5 +1,5 @@
 public threaded namespace container::tree_map::tree_map "use-unsafe";
-public import container::array::vector;
+public import container::array::varray;
 
 extern "types" inline
 #include <map>
@@ -159,6 +159,12 @@ template <typename Tcnf, bool is_const> struct range_base {
       --i;
     }
   }
+  range_base<Tcnf, is_const> range() const {
+    return range_base<Tcnf, is_const>(start, finish);
+  }
+  range_base<Tcnf, true> crange() const {
+    return range_base<Tcnf, true>(start, finish);
+  }
   iterator begin() const { return start; }
   iterator end() const { return finish; }
 public:
@@ -235,18 +241,24 @@ struct with_guard : public refguard_base {
     check_resize();
     v.clear();
   }
-  iterator begin() { return v.begin(); }
-  const_iterator begin() const { return v.begin(); }
-  iterator end() { return v.end(); }
-  const_iterator end() const { return v.end(); }
-  crange_type equal_range(const key_type& k) const {
-    const std::pair<const_iterator, const_iterator> r = v.equal_range(k);
-    return crange_type(r.first, r.second);
+  range_type range() {
+    return range_type(v.begin(), v.end());
+  }
+  crange_type crange() const {
+    return crange_type(v.begin(), v.end());
   }
   range_type equal_range(const key_type& k) {
     const std::pair<iterator, iterator> r = v.equal_range(k);
     return range_type(r.first, r.second);
   }
+  crange_type equal_crange(const key_type& k) const {
+    const std::pair<const_iterator, const_iterator> r = v.equal_range(k);
+    return crange_type(r.first, r.second);
+  }
+  iterator begin() { return v.begin(); }
+  const_iterator begin() const { return v.begin(); }
+  iterator end() { return v.end(); }
+  const_iterator end() const { return v.end(); }
 private:
   base_map v;
 };

@@ -3,15 +3,14 @@ public import numeric::integral -;
 public import numeric::cast -;
 public import container::array::array_common;
 public import container::array::refguard;
-public import container::array::vector;
-public import container::array::svector;
+public import container::array::varray;
+public import container::array::svarray;
 public import container::array::farray;
 public import container::array::darray;
 public import container::array::deque;
 public import container::array::util;
 public import meta m;
 public import meta::family mf;
-public import meta::vararg va;
 
 /* public */
 
@@ -21,15 +20,17 @@ slice {
   public metafunction mapped_type t;
   public metafunction range_type slice{t};
   public metafunction crange_type cslice{t};
-  public metafunction non_ephemeral_type vector{t};
+  public metafunction non_ephemeral_type varray{t};
   public metafunction is_raw_array 1;
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
   public function extern "get" t get(size_t i) const;
-  public function extern "set" void set(size_t i, t v) const;
+  public function extern "set" void set(size_t i, t const& v) const;
   public function extern "increment_front" void increment_front(size_t i);
   public function extern "decrement_back" void decrement_back(size_t i);
-  public function extern "next_token" slice{t} next_token(t delim);
+  public function extern "next_token" slice{t} next_token(t const& delim);
+  public function extern "range" range_type range() const;
+  public function extern "crange" crange_type crange() const;
 }
 
 public tsvaluetype struct extern "::pxcrt::bt_cslice" "cslice" {t}
@@ -38,7 +39,7 @@ cslice {
   public metafunction mapped_type t;
   public metafunction range_type cslice{t};
   public metafunction crange_type cslice{t};
-  public metafunction non_ephemeral_type vector{t};
+  public metafunction non_ephemeral_type varray{t};
   public metafunction is_raw_array 1;
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
@@ -46,10 +47,12 @@ cslice {
   public function extern "increment_front" void increment_front(size_t i);
   public function extern "decrement_back" void decrement_back(size_t i);
   public function extern "next_token" cslice{t} next_token(t const& delim);
+  public function extern "range" range_type range() const;
+  public function extern "crange" crange_type crange() const;
 }
 
-public mtvaluetype struct extern "::pxcrt::pxcvector" "varray" {t}
-vector {
+public mtvaluetype struct extern "::pxcrt::pxcvarray" "varray" {t}
+varray {
   public metafunction key_type size_t;
   public metafunction mapped_type t;
   public metafunction range_type slice{t};
@@ -65,10 +68,12 @@ vector {
   public function extern "append" void append(crange_type const& v);
   public function extern "insert" void insert(size_t i, crange_type const& v);
   public function extern "erase" void erase(size_t first, size_t last);
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
 }
 
-public mtvaluetype struct extern "::pxcrt::pxcvector" "cvarray" {t}
-cvector {
+public mtvaluetype struct extern "::pxcrt::pxcvarray" "cvarray" {t}
+cvarray {
   public metafunction key_type size_t;
   public metafunction mapped_type t;
   public metafunction range_type cslice{t};
@@ -84,10 +89,12 @@ cvector {
   public function extern "append" void append(crange_type const& v);
   public function extern "insert" void insert(size_t i, crange_type const& v);
   public function extern "erase" void erase(size_t first, size_t last);
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
 }
 
-public valuetype struct extern "::pxcrt::msvector" "varray" {t}
-svector {
+public valuetype struct extern "::pxcrt::msvarray" "varray" {t}
+svarray {
   public metafunction key_type size_t;
   public metafunction mapped_type t;
   public metafunction range_type slice{t};
@@ -103,10 +110,12 @@ svector {
   public function extern "append" void append(crange_type const& v);
   public function extern "insert" void insert(size_t i, crange_type const& v);
   public function extern "erase" void erase(size_t first, size_t last);
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
 }
 
-public valuetype struct extern "::pxcrt::csvector" "varray" {t}
-csvector {
+public valuetype struct extern "::pxcrt::csvarray" "varray" {t}
+csvarray {
   public metafunction key_type size_t;
   public metafunction mapped_type t;
   public metafunction range_type cslice{t};
@@ -122,6 +131,8 @@ csvector {
   public function extern "append" void append(crange_type const& v);
   public function extern "insert" void insert(size_t i, crange_type const& v);
   public function extern "erase" void erase(size_t first, size_t last);
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
 }
 
 public tsvaluetype struct extern "::pxcrt::farray" "farray" {t, n}
@@ -133,6 +144,8 @@ farray {
   public metafunction is_raw_array 1;
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
 }
 
 public tsvaluetype struct extern "::pxcrt::farray" "cfarray" {t, n}
@@ -144,6 +157,8 @@ cfarray {
   public metafunction is_raw_array 1;
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
 }
 
 public tsvaluetype struct extern "::pxcrt::darray" "darray" {t}
@@ -155,6 +170,8 @@ darray(size_t len, t const& value) {
   public metafunction is_raw_array 1;
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
 }
 
 public tsvaluetype struct extern "::pxcrt::darray" "cdarray" {t}
@@ -166,6 +183,8 @@ cdarray(size_t len, t const& value) {
   public metafunction is_raw_array 1;
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
 }
 
 public tsvaluetype struct extern "::pxcrt::deque_slice" "slice" {t}
@@ -182,6 +201,8 @@ deque_slice {
   public function extern "set" void set(size_t i, t v) const;
   public function extern "increment_front" void increment_front(size_t i);
   public function extern "decrement_back" void decrement_back(size_t i);
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
 }
 
 public tsvaluetype struct extern "::pxcrt::deque_cslice" "cslice" {t}
@@ -197,6 +218,8 @@ deque_cslice {
   public function extern "get" t get(size_t i) const;
   public function extern "increment_front" void increment_front(size_t i);
   public function extern "decrement_back" void decrement_back(size_t i);
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
 }
 
 public mtvaluetype struct extern "::pxcrt::pxcdeque" "varray" {t}
@@ -218,6 +241,8 @@ deque {
   public function extern "append" void append(crange_type const& v);
   public function extern "insert" void insert(size_t i, crange_type const& v);
   public function extern "erase" void erase(size_t first, size_t last);
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
 }
 
 public mtvaluetype struct extern "::pxcrt::pxcdeque" "cvarray" {t}
@@ -239,6 +264,8 @@ cdeque {
   public function extern "append" void append(crange_type const& v);
   public function extern "insert" void insert(size_t i, crange_type const& v);
   public function extern "erase" void erase(size_t first, size_t last);
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
 }
 
 public tsvaluetype struct extern "::pxcrt::bt_strlit" "cfarray" strlit {
@@ -249,100 +276,26 @@ public tsvaluetype struct extern "::pxcrt::bt_strlit" "cfarray" strlit {
   public metafunction is_raw_array 1;
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
 }
 
-public threaded function {typ, tlist} farray{typ, m::size{tlist}}
-make_farray(expand(va::arg_decls_bycref{tlist}))
-{
-  extern "disable-noheap-checking" 1;
-  farray{typ, m::size{tlist}} arr;
-  expand macro_construct_list{typ, tlist, "arr"};
-  return arr;
-}
-
-public threaded function {typ, tlist} cfarray{typ, m::size{tlist}}
-make_cfarray(expand(va::arg_decls_bycref{tlist}))
-{
-  extern "disable-noheap-checking" 1;
-  farray{typ, m::size{tlist}} arr;
-  expand macro_construct_list{typ, tlist, "arr"};
-  return arr;
-}
-
-public threaded function {typ, tlist} darray{typ}
-make_darray(expand(va::arg_decls_bycref{tlist}))
-{
-  extern "disable-noheap-checking" 1;
-  mutable arr = darray{typ}(m::size{tlist}, typ());
-  expand macro_construct_list{typ, tlist, "arr"};
-  return arr;
-}
-
-public threaded function {typ, tlist} cdarray{typ}
-make_cdarray(expand(va::arg_decls_bycref{tlist}))
-{
-  extern "disable-noheap-checking" 1;
-  mutable arr = darray{typ}(m::size{tlist}, typ());
-  expand macro_construct_list{typ, tlist, "arr"};
-  return arr;
-}
-
-public threaded function {typ, tlist} vector{typ}
-make_vector(expand(va::arg_decls_bycref{tlist}))
-{
-  extern "disable-noheap-checking" 1;
-  mutable arr = vector{typ}();
-  arr.resize(m::size{tlist}, typ());
-  expand macro_construct_list{typ, tlist, "arr"};
-  return arr;
-}
-
-public threaded function {typ, tlist} cvector{typ}
-make_cvector(expand(va::arg_decls_bycref{tlist}))
-{
-  extern "disable-noheap-checking" 1;
-  mutable arr = vector{typ}();
-  arr.resize(m::size{tlist}, typ());
-  expand macro_construct_list{typ, tlist, "arr"};
-  return arr;
-}
-
-public threaded function {typ, tlist} deque{typ}
-make_deque(expand(va::arg_decls_bycref{tlist}))
-{
-  extern "disable-noheap-checking" 1;
-  mutable arr = deque{typ}();
-  arr.resize(m::size{tlist}, typ());
-  expand macro_construct_list{typ, tlist, "arr"};
-  return arr;
-}
-
-public threaded function {typ, tlist} cdeque{typ}
-make_cdeque(expand(va::arg_decls_bycref{tlist}))
-{
-  extern "disable-noheap-checking" 1;
-  mutable arr = deque{typ}();
-  arr.resize(m::size{tlist}, typ());
-  expand macro_construct_list{typ, tlist, "arr"};
-  return arr;
-}
-
-public threaded function {t} void
-reverse(t const& x)
-{
-  metafunction size_type size_t;
-  metafunction mapped_type m::symbol{t, "mapped_type"};
-  size_type s = 0;
-  size_type f = x.size();
-  while (s < f) {
-    extern "disable-bounds-checking" 1;
-    --f;
-    mapped_type const v = x[s];
-    x[s] = x[f];
-    x[f] = v;
-    ++s;
-  }
-}
+public metafunction make_farray{typ, tlist}
+  make_farray_func{typ, m::size{tlist}};
+public metafunction make_cfarray{typ, tlist}
+  make_cfarray_func{typ, m::size{tlist}};
+public metafunction make_darray{typ, tlist}
+  make_darray_func{typ, m::size{tlist}};
+public metafunction make_cdarray{typ, tlist}
+  make_cdarray_func{typ, m::size{tlist}};
+public metafunction make_varray{typ, tlist}
+  make_varray_func{typ, m::size{tlist}};
+public metafunction make_cvarray{typ, tlist}
+  make_cvarray_func{typ, m::size{tlist}};
+public metafunction make_deque{typ, tlist}
+  make_deque_func{typ, m::size{tlist}};
+public metafunction make_cdeque{typ, tlist}
+  make_cdeque_func{typ, m::size{tlist}};
 
 public threaded function {n, tc, tv} farray{m::symbol{tc, "crange_type"}, n}
 make_farray_split(tc const& c, tv const& v)
@@ -391,33 +344,50 @@ make_darray_split(tc const& c, tv const& v)
   return arr;
 }
 
+public threaded function {t} void
+reverse(t const& x)
+{
+  metafunction size_type size_t;
+  metafunction mapped_type m::symbol{t, "mapped_type"};
+  size_type s = 0;
+  size_type f = x.size();
+  while (s < f) {
+    extern "disable-bounds-checking" 1;
+    --f;
+    mapped_type const v = x[s];
+    x[s] = x[f];
+    x[f] = v;
+    ++s;
+  }
+}
+
 public metafunction strref slice{uchar};
 public metafunction cstrref cslice{uchar};
-public metafunction string vector{uchar};
+public metafunction string varray{uchar};
 public metafunction dstring darray{uchar};
 public metafunction fstring{n} farray{uchar, n};
 
 public function {ts} void
-vector_emplace_back(expand(emplace_back_arg_decls{ts}))
+varray_emplace_back(expand(emplace_back_arg_decls{ts}))
 {
   metafunction t m::at0{m::at0{m::at0{ts}}};
-  t mutable& x = vector_push_back_uninitialized(a0);
+  t mutable& x = varray_push_back_uninitialized(a0);
   x extern "placement-new" t(expand(a: emplace_back_arg_names{ts}; a));
     /* no need to handle exceptions here */
-  vector_rawarr_set_valid_len(a0, a0.size() + 1);
+  varray_rawarr_set_valid_len(a0, a0.size() + 1);
 }
 
 public threaded function extern "::pxcrt::string_cmp" {t} int
 string_cmp(t const& x, t const& y);
 
 public threaded function extern "::pxcrt::sstring_cmp" int
-sstring_cmp(svector{uchar} const& x, svector{uchar} const& y);
+sstring_cmp(svarray{uchar} const& x, svarray{uchar} const& y);
 
 public threaded function extern "::pxcrt::sstring_eq" bool
-sstring_eq(svector{uchar} const& x, svector{uchar} const& y);
+sstring_eq(svarray{uchar} const& x, svarray{uchar} const& y);
 
 public threaded function extern "::pxcrt::hash_sstring" size_t
-hash_sstring(svector{uchar} const& x);
+hash_sstring(svarray{uchar} const& x);
 
 public threaded function {t, tk, tm} tk
 find_mapped(t const& c, tk k, tm const& x)
@@ -438,11 +408,11 @@ find_mapped(t const& c, tk k, tm const& x)
 
 /* private */
 
-private function extern "::pxcrt::pxcvector_push_back_uninitialized" {t}
-t mutable& vector_push_back_uninitialized(vector{t} mutable& v);
+private function extern "::pxcrt::pxcvarray_push_back_uninitialized" {t}
+t mutable& varray_push_back_uninitialized(varray{t} mutable& v);
 
-private function extern "::pxcrt::pxcvector_rawarr_set_valid_len" {t}
-void vector_rawarr_set_valid_len(vector{t} mutable& v, size_t len);
+private function extern "::pxcrt::pxcvarray_rawarr_set_valid_len" {t}
+void varray_rawarr_set_valid_len(varray{t} mutable& v, size_t len);
 
 private metafunction emplace_back_arg_decls{ts}
   m::map{
@@ -459,15 +429,90 @@ m::symbol{t, "key_type"}
 find_mapped_memchr(t const& c, m::symbol{t, "key_type"} const& k,
   m::symbol{t, "mapped_type"} const& x);
 
-private function {typ, tlist, arr} expand macro_construct_list
+private function {typ, n, arr} expand macro_construct
 {
-  expand (a, i: va::arg_names{m::size{tlist}}) {
-    if (mf::is_numeric_type{typ}) {
-      arr[i] = static_cast{typ}(a);
-    } else {
-      extern "disable-noheap-checking" 1;
-      arr[i] = a;
-    }
+  expand (a, idx: m::map{m::seq{n}, metafunction{i} m::concat{"a", i}}) {
+    extern "disable-noheap-checking" 1;
+    arr[idx] = a;
   }
+}
+
+private metafunction arr_argdecls{typ, n}
+  m::map{m::seq{n}, metafunction{i} {m::concat{"a", i}, typ, 1, 0}};
+
+private threaded function {typ, n} farray{typ, n}
+make_farray_func(expand(arr_argdecls{typ, n}))
+{
+  extern "disable-noheap-checking" 1;
+  farray{typ, n} arr;
+  expand macro_construct{typ, n, "arr"};
+  return arr;
+}
+
+private threaded function {typ, n} cfarray{typ, n}
+make_cfarray_func(expand(arr_argdecls{typ, n}))
+{
+  extern "disable-noheap-checking" 1;
+  cfarray{typ, n} arr;
+  expand macro_construct{typ, n, "arr"};
+  return arr;
+}
+
+private threaded function {typ, n} darray{typ}
+make_darray_func(expand(arr_argdecls{typ, n}))
+{
+  extern "disable-noheap-checking" 1;
+  mutable arr = darray{typ}(n, typ());
+  expand macro_construct{typ, n, "arr"};
+  return arr;
+}
+
+private threaded function {typ, n} cdarray{typ}
+make_cdarray_func(expand(arr_argdecls{typ, n}))
+{
+  extern "disable-noheap-checking" 1;
+  mutable arr = darray{typ}(n, typ());
+  expand macro_construct{typ, tlist, "arr"};
+  return arr;
+}
+
+private threaded function {typ, n} varray{typ}
+make_varray_func(expand(arr_argdecls{typ, n}))
+{
+  extern "disable-noheap-checking" 1;
+  mutable arr = varray{typ}();
+  arr.resize(n, typ());
+  expand macro_construct{typ, n, "arr"};
+  return arr;
+}
+
+private threaded function {typ, n} cvarray{typ}
+make_cvarray_func(expand(arr_argdecls{typ, n}))
+{
+  extern "disable-noheap-checking" 1;
+  mutable arr = varray{typ}();
+  arr.resize(n, typ());
+  expand macro_construct{typ, n, "arr"};
+  return arr;
+}
+
+private threaded function {typ, n} deque{typ}
+make_deque_func(expand(arr_argdecls{typ, n}))
+{
+  extern "disable-noheap-checking" 1;
+  mutable arr = deque{typ}();
+  arr.resize(n, typ());
+  expand macro_construct{typ, n, "arr"};
+  return arr;
+}
+
+private threaded function {typ, n} cdeque{typ}
+make_cdeque_func(expand(arr_argdecls{typ, n}))
+{
+  extern "disable-noheap-checking" 1;
+  mutable arr = deque{typ}();
+  arr.resize(m::size{tlist}, typ());
+  expand macro_construct{typ, tlist, "arr"};
+  return arr;
 }
 

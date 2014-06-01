@@ -1492,6 +1492,7 @@ static void subst_user_defined_op(expr_op *eop)
   case TOK_MINUS: func = "minus"; tc0 = is_numeric_type; break;
   case '~': func = "neg"; tc0 = is_boolean_type; break;
   case '!': func = "not"; tc0 = is_boolean_type; break;
+  case '{': func = "make_tuple"; break;
   default: break;
   }
   if (func == 0) {
@@ -1507,7 +1508,7 @@ static void subst_user_defined_op(expr_op *eop)
     fn_check_type(eop->arg1, eop->symtbl_lexical);
     tc1f = tc1(eop->arg1->resolve_texpr());
   }
-  if (tc0f && tc1f) {
+  if (tc0f && tc1f && eop->op != '{') {
     return; /* builtin op */
   }
   expr_i *fc = expr_funccall_new(eop->fname, eop->line,
@@ -1571,7 +1572,8 @@ static void subst_user_defined_fldop(expr_op *eop)
       }
     }
     if (einst0->get_esort() == expr_e_dunion && tblk != 0) {
-      /* union field op */
+      /* union field op is substituted to operator::union_field, in order
+       * to throw detailed exception when it is invalid. */
       bool skip = false;
       if (eop->parent_expr->get_esort() == expr_e_if) {
 	expr_if *const eif = ptr_down_cast<expr_if>(eop->parent_expr);
@@ -2453,6 +2455,29 @@ void expr_funccall::check_type(symbol_table *lookup)
     func_te = eval_term(t_un);
     DBG_VARIADIC(fprintf(stderr, "variadic %s -> %s\n",
       term_tostr_human(t_un).c_str(), term_tostr_human(func_te).c_str()));
+    set_type_inference_result_for_funccall(this, term_get_instance(func_te));
+  } else if (func_te.is_bind()) {
+    /* metafunction reduces to a generic vararg function */
+    typedef std::list<expr_i *> arglist_type;
+    arglist_type arglist;
+    append_hidden_this(func, arglist);
+    append_comma_sep_list(arg, arglist);
+    term_list tis;
+    for (arglist_type::const_iterator i = arglist.begin(); i != arglist.end();
+      ++i) {
+      const bool has_lv = expr_has_lvalue(*i, *i, false);
+      term_list ent;
+      ent.push_back((*i)->resolve_texpr());
+      ent.push_back(term(has_lv));
+      tis.push_back(term(ent));
+    }
+    term tis_ml(tis); /* metalist */
+    eval_context ectx;
+    term func_te2 = eval_apply(func_te, term_list_range(&tis_ml, 1), true,
+      ectx, this);
+    DBG_VARIADIC(fprintf(stderr, "metaf variadic %s -> %s\n",
+      term_tostr_human(func_te).c_str(), term_tostr_human(func_te2).c_str()));
+    func_te = func_te2;
     set_type_inference_result_for_funccall(this, term_get_instance(func_te));
   }
   if (!memfunc_w_explicit_obj) {

@@ -1,4 +1,4 @@
-public threaded namespace container::array::vector "use-unsafe";
+public threaded namespace container::array::varray "use-unsafe";
 public import container::array::array_common;
 public import container::array::refguard;
 
@@ -45,6 +45,12 @@ struct bt_cslice {
     }
     return r;
   }
+  bt_cslice<T> range() const {
+    return bt_cslice<T>(*this);
+  }
+  bt_cslice<T> crange() const {
+    return bt_cslice<T>(*this);
+  }
   const T& operator [](bt_size_t idx) const {
     if (idx >= len) { pxcrt::throw_invalid_index(); }
     return v[idx];
@@ -85,7 +91,7 @@ struct bt_slice {
   }
   bt_bool empty() const { return len == 0; }
   bt_size_t size() const { return len; }
-  void set(bt_size_t i, T value) const { if (i < len) v[i] = value; }
+  void set(bt_size_t i, T const& value) const { if (i < len) v[i] = value; }
   bt_size_t find(bt_size_t offset, T const& value) const {
     return array_find(v, len, offset, value);
   }
@@ -103,7 +109,7 @@ struct bt_slice {
     if (len < i) { pxcrt::throw_invalid_index(); }
     len -= i;
   }
-  bt_slice<T> next_token(T delim) {
+  bt_slice<T> next_token(T const& delim) {
     bt_size_t const offset = array_find(v, len, 0, delim);
     bt_slice<T> r(v, offset);
     if (offset < len) {
@@ -114,6 +120,12 @@ struct bt_slice {
       len = 0;
     }
     return r;
+  }
+  bt_slice<T> range() const {
+    return bt_slice<T>(*this);
+  }
+  bt_cslice<T> crange() const {
+    return bt_cslice<T>(*this);
   }
   T& operator [](bt_size_t idx) const {
     if (idx >= len) { pxcrt::throw_invalid_index(); }
@@ -160,30 +172,36 @@ struct bt_strlit : public bt_cslice<bt_uchar> {
     len = x.len;
     return *this;
   }
+  range_type range() {
+    return range_type(*this);
+  }
+  crange_type crange() const {
+    return crange_type(*this);
+  }
 };
 
 template <typename T>
-struct pxcvector : public refguard_base {
+struct pxcvarray : public refguard_base {
   typedef T mapped_type;
   typedef pxcrt::bt_size_t size_type;
   typedef T *iterator;
   typedef const T *const_iterator;
   typedef pxcrt::bt_slice<T> range_type;
   typedef pxcrt::bt_cslice<T> crange_type;
-  pxcvector() : start(0), valid_len(0), alloc_len(0) { }
-  ~pxcvector() {
+  pxcvarray() : start(0), valid_len(0), alloc_len(0) { }
+  ~pxcvarray() {
     deinitialize_n(start, valid_len);
     deallocate_uninitialized(start, alloc_len);
   }
-  pxcvector(const pxcvector& x)
+  pxcvarray(const pxcvarray& x)
     { construct_internal(x.start, x.valid_len); }
-  pxcvector(const crange_type& x)
+  pxcvarray(const crange_type& x)
     { construct_internal(x.rawarr(), x.size()); }
-  pxcvector(const range_type& x)
+  pxcvarray(const range_type& x)
     { construct_internal(x.rawarr(), x.size()); }
-  pxcvector(const T *ptr, size_type len)
+  pxcvarray(const T *ptr, size_type len)
     { construct_internal(ptr, len); }
-  pxcvector& operator =(const pxcvector& x) {
+  pxcvarray& operator =(const pxcvarray& x) {
     check_resize();
     if (&x != this) {
       clear_internal();
@@ -219,10 +237,10 @@ struct pxcvector : public refguard_base {
     clear_internal();
   }
   template <typename Tc> friend Tc&
-  pxcvector_push_back_uninitialized(pxcvector<Tc>& v);
+  pxcvarray_push_back_uninitialized(pxcvarray<Tc>& v);
   template <typename Tc> friend void
-  pxcvector_rawarr_set_valid_len(pxcvector<Tc>& v,
-    typename pxcvector<Tc>::size_type len);
+  pxcvarray_rawarr_set_valid_len(pxcvarray<Tc>& v,
+    typename pxcvarray<Tc>::size_type len);
   void push_back(T const& x) {
     /* re-ordered for speed */
     if (refguard_count == 0) {
@@ -270,6 +288,12 @@ struct pxcvector : public refguard_base {
   void erase(size_type first, size_type last) {
     check_resize();
     erase_internal(first, last);
+  }
+  bt_slice<T> range() {
+    return bt_slice<T>(start, valid_len);
+  }
+  bt_cslice<T> crange() const {
+    return bt_cslice<T>(start, valid_len);
   }
   iterator begin() { return start; }
   const_iterator begin() const { return start; }
@@ -372,7 +396,7 @@ private:
 };
 
 template <typename T> inline T&
-pxcvector_push_back_uninitialized(pxcvector<T>& v)
+pxcvarray_push_back_uninitialized(pxcvarray<T>& v)
 {
   /* re-ordered for speed */
   if (v.refguard_count == 0) {
@@ -391,13 +415,13 @@ pxcvector_push_back_uninitialized(pxcvector<T>& v)
 }
 
 template <typename T> inline void
-pxcvector_rawarr_set_valid_len(pxcvector<T>& v,
-  typename pxcvector<T>::size_type len)
+pxcvarray_rawarr_set_valid_len(pxcvarray<T>& v,
+  typename pxcvarray<T>::size_type len)
 {
   v.valid_len = len;
 }
 
-typedef pxcvector<bt_uchar> bt_string;
+typedef pxcvarray<bt_uchar> bt_string;
 typedef bt_slice<bt_uchar> strref;
 typedef bt_cslice<bt_uchar> cstrref;
 

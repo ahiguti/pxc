@@ -39,10 +39,10 @@ private threaded struct orb_rep(ptr{orb_transport} const& tr) {
   public ptr{orb_transport} transport = tr;
   public string rbuf;
   public string wbuf;
-  public vector{skeleton_mapped} skeletons;
+  public varray{skeleton_mapped} skeletons;
     /* local realobject id to realobject strong pointer */
   public tree_map{size_t, size_t} skeletons_ptr_to_id;
-  public vector{size_t} skeletons_free_ids;
+  public varray{size_t} skeletons_free_ids;
   public tree_map{size_t, size_t} stubs_rtol;
     /* remote realobject id to local stub rawptr */
   public tree_map{size_t, size_t} stubs_ltor;
@@ -138,7 +138,7 @@ private threaded function {ns, i0, i1} void call_ns_function_bs(
     metafunction fns m::sort{m::map{m::functions{ns}, m::to_string}};
     metafunction cidx m::add{i0, m::div{m::sub{i1, i0}, 2}};
     const& o = *op;
-    const c = compare_swo{cstrref}(o.rbuf[tpos .. tepos], m::at{fns, cidx});
+    const c = compare_strict_weak{cstrref}(o.rbuf[tpos .. tepos], m::at{fns, cidx});
     if (c == 0) {
       function_call{m::symbol{ns, m::at{fns, cidx}}}(op, apos, aepos);
     } else if (c < 0) {
@@ -175,7 +175,7 @@ private threaded function {t, i0, i1} void call_method_bs(
     metafunction mf member_functions_sorted{t};
     metafunction cidx m::add{i0, m::div{m::sub{i1, i0}, 2}};
     const& o = *op;
-    const c = compare_swo{cstrref}(
+    const c = compare_strict_weak{cstrref}(
       o.rbuf[tpos .. tepos], m::to_string{m::at{mf, cidx}});
     if (c == 0) {
       method_call{t, cidx}(op, apos, aepos, obj);

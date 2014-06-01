@@ -1,5 +1,5 @@
 public threaded namespace container::array::darray "use-unsafe";
-public import container::array::vector;
+public import container::array::varray;
 
 extern "types" inline
 namespace pxcrt {
@@ -41,6 +41,12 @@ struct darray {
   T value_at(size_type idx) const {
     if (idx >= valid_len) { pxcrt::throw_invalid_index(); }
     return start[idx];
+  }
+  bt_slice<T> range() {
+    return bt_slice<T>(start, valid_len);
+  }
+  bt_cslice<T> crange() const {
+    return bt_cslice<T>(start, valid_len);
   }
   iterator begin() { return start; }
   const_iterator begin() const { return start; }

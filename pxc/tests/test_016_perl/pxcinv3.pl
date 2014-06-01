@@ -16,7 +16,7 @@ my $f = io::file::O_RDONLY();
 # print "$f\n";
 my $o = $sys->open_st("hoge.txt", $f, 0);
 # print "$o\n";
-my $pkg_string = \%{"container::array::vector{meta::uchar}::"};
+my $pkg_string = \%{"container::array::varray{meta::uchar}::"};
 # print "pkg_string=$pkg_string\n";
 my $nstr = *{$pkg_string->{new}}{CODE};
 my $s = &$nstr();

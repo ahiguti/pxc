@@ -413,7 +413,7 @@ bool is_ordered_type(const term& t)
     const std::string s(est->sym);
     const std::string ns(est->get_unique_namespace());
     if (ns == "container::array" &&
-      (s == "vector" || s == "darray" || s == "farray")) {
+      (s == "varray" || s == "darray" || s == "farray")) {
       const term& et = get_array_elem_texpr(0, t);
       if (et == builtins.type_uchar) {
 	return true; /* memcmp-compatible */
@@ -480,7 +480,7 @@ static bool is_simple_array_type(const term& t)
     const std::string s(est->sym);
     const std::string ns(est->get_unique_namespace());
     if (ns == "container::array" &&
-      (s == "vector" || s == "farray" || s == "darray" ||
+      (s == "varray" || s == "farray" || s == "darray" ||
 	s == "slice" || s == "cslice")) {
       return true;
     }

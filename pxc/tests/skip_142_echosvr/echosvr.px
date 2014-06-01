@@ -52,7 +52,7 @@ worker_main(tptr{worker_shared} const& shared, int thr_id)
   const sys = shared->sys;
   const err = sys.stderr();
   metafunction entry_type option{ptr{conn_data}};
-  vector{entry_type} conns;
+  varray{entry_type} conns;
   threaded function entry_type get_conn(int fd) {
     if (fd < 0 || static_cast{size_t}(fd) >= conns.size()) {
       return entry_type();
@@ -74,7 +74,7 @@ worker_main(tptr{worker_shared} const& shared, int thr_id)
     mutable pl = epoll(io::system);
     pl.add(lsn, EPOLLIN);
     mutable peer_addr = sockaddr_storage();
-    vector{epoll_event} events;
+    varray{epoll_event} events;
     string buffer;
     err.println(string_join{" "}("ready", thr_id));
     while (true) {
@@ -134,7 +134,7 @@ worker_main(tptr{worker_shared} const& shared, int thr_id)
   const lsn = io::system.listen(svr_host, svr_port, AF_INET,
     SOCK_STREAM, IPPROTO_TCP, 1024, true);
   lsn.setfl(O_RDONLY | O_NONBLOCK);
-  vector{ptr{uneval{void}}} workers;
+  varray{ptr{uneval{void}}} workers;
   for (const i: 0 .. 2) {
     const pshared = make_tptr{worker_shared}(io::system, lsn);
     const sthr = make_thread_func{worker_main}(pshared, i);

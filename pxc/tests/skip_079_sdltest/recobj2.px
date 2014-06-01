@@ -9,7 +9,7 @@ import GL::gles2 -;
 import GL::glm glm;
 import io::time -;
 import meta m;
-private import container::array +; /* extends vector */
+// private import container::array +; /* extends varray */
 
 metafunction debug_matrix 0;
 
@@ -29,13 +29,15 @@ int loc_sampler;
 uint texture_id;
 float gears_angle;
 
-function void vector_push3(vector{float} mutable& vec, float a, float b,
+/*
+function void varray_push3(varray{float} mutable& vec, float a, float b,
   float c)
 {
   vec.push_back(a);
   vec.push_back(b);
   vec.push_back(c);
 }
+*/
 
 function void draw_poly(cslice{glm::vec3} const& varr)
 {
@@ -84,9 +86,12 @@ function void draw_poly_split(cslice{glm::vec3} const& varr, uint rec)
   for (const i: 0 .. sz) {
     c += varr[i];
   }
+  c /= static_cast{float}(sz);
+  /*
   c.x /= static_cast{float}(sz);
   c.y /= static_cast{float}(sz);
   c.z /= static_cast{float}(sz);
+  */
   for (const i: 0 .. sz) {
     len += glm::distance(c, varr[i]);
   }
@@ -108,11 +113,37 @@ function void draw_poly_split(cslice{glm::vec3} const& varr, uint rec)
   }
 }
 
+function void draw_bump(cslice{glm::vec3} const& varr)
+{
+  if (varr.size() != 4) {
+    return;
+  }
+  // draw_poly(varr);
+  varray{glm::vec3} vx = varr;
+  const nor = -glm::cross(varr[1] - varr[0], varr[2] - varr[0]).normalize();
+  for (const i, mutable& e: vx) {
+    e -= nor * 0.1f;
+  }
+  draw_poly(vx);
+  /* side */
+  const sz = varr.size();
+  for (const i: 0 .. sz) {
+    size_t i1 = i + 1 != sz ? i + 1 : 0;
+    const side = make_farray{glm::vec3}(vx[i], varr[i], varr[i1], vx[i1]);
+    draw_poly(side);
+  }
+}
+
 function void draw_tube(cslice{glm::vec3} const& varr)
 {
-  vector{glm::vec3} vx = varr;
+  if (varr.size() < 3) {
+    return;
+  }
+  varray{glm::vec3} vx = varr;
+  const nor = -glm::cross(varr[1] - varr[0], varr[2] - varr[0]).normalize();
   for (const i, mutable& e: vx) {
-    e.z += 0.3;
+    e -= nor * 0.3f;
+    // e.z += 0.3;
   }
   /* front */
   // draw_poly_split(varr, 3);
@@ -122,7 +153,8 @@ function void draw_tube(cslice{glm::vec3} const& varr)
   for (const i: 0 .. sz) {
     size_t i1 = i + 1 != sz ? i + 1 : 0;
     const side = make_farray{glm::vec3}(vx[i], varr[i], varr[i1], vx[i1]);
-    draw_poly(side);
+    draw_bump(side);
+    // draw_poly(side);
   }
   /* back */
   // slice{glm::vec3} vsli = vback;
@@ -145,6 +177,57 @@ function void draw_regular_polygon(size_t n)
   draw_poly(arr);
 }
 
+/* TODO */
+tsvaluetype struct vertex {
+  public glm::vec3 position;
+  public glm::vec3 normal;
+  public glm::vec2 uv;
+}
+multithreaded struct vertices {
+  public varray{uint} vertex_ids;
+  public varray{float} vertex_values;
+  public tree_map{vertex, uint} value_to_id;
+  public function void push(vertex const& value) {
+    if (const e: value_to_id[value]) {
+      vertex_ids.push_back(e);
+    } else {
+      const id = static_cast{uint}(vertex_values.size());
+      vertex_values.push_back(value.position.x);
+      vertex_values.push_back(value.position.y);
+      vertex_values.push_back(value.position.z);
+      vertex_values.push_back(value.normal.x);
+      vertex_values.push_back(value.normal.y);
+      vertex_values.push_back(value.normal.z);
+      value_to_id[value] = id;
+    }
+  }
+}
+
+struct vboname(uint vval, uint velem) {
+  public uint const vbo_values = vval;
+  public uint const vbo_elems = velem;
+}
+
+function vboname vertices_create_vbo(vertices const& vs)
+{
+  farray{uint, 2} vbos;
+  glGenBuffers(2, vbos.rawptr());
+  if (vbos[0] == 0) {
+    return vboname(0, 0);
+  }
+  glBindBuffer(GL_ARRAY_BUFFER, vbos[0]);
+  glBufferData(GL_ARRAY_BUFFER,
+    static_cast{GLsizeiptr}(vs.vertex_values.size()) * 4,
+    vs.vertex_values.crawptr().void(), GL_STATIC_DRAW);
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbos[1]);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+    static_cast{GLsizeiptr}(vs.vertex_ids.size()) * 4,
+    vs.vertex_ids.crawptr().void(), GL_STATIC_DRAW);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+  return vboname(vbos[0], vbos[1]);
+}
+
 function void draw_square(glm::mat4 const& mv, glm::mat3 const& nm)
 {
   const mvp = projection * mv;
@@ -160,7 +243,7 @@ function void draw_square(glm::mat4 const& mv, glm::mat3 const& nm)
     glm::make_vec3( 0.0,  1.0, 0.0),
     glm::make_vec3(-1.7320508F/2.0F, -0.5, 0.0),
     glm::make_vec3( 1.7320508F/2.0F, -0.5, 0.0));
-  draw_regular_polygon(11);
+  draw_regular_polygon(7);
   /*
   const pvals = make_farray{glm::vec3}(
     glm::make_vec3(-1.0, -1.0, 0.0),

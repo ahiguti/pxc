@@ -1,5 +1,5 @@
-public threaded namespace container::array::svector "use-unsafe";
-public import container::array::vector;
+public threaded namespace container::array::svarray "use-unsafe";
+public import container::array::varray;
 
 extern "types" inline
 
@@ -11,45 +11,45 @@ extern "types" inline
 
 namespace pxcrt {
 
-struct svector_rep {
+struct svarray_rep {
   /* must be a pod so that empty_rep is initialized wo constructor call */
   size_t refcnt;
   size_t valid_len;
   size_t alloc_len;
 };
 
-extern svector_rep empty_rep; /* for empty value */
+extern svarray_rep empty_rep; /* for empty value */
 
 template <typename T>
-struct svector {
+struct svarray {
   typedef T mapped_type;
   typedef pxcrt::bt_size_t size_type;
   typedef T *iterator;
   typedef const T *const_iterator;
   typedef pxcrt::bt_slice<T> range_type;
   typedef pxcrt::bt_cslice<T> crange_type;
-  svector() : rep(&empty_rep) { }
-  svector(const svector& x) : rep(x.rep) { rep_incref(rep); }
-  svector(const crange_type& x) {
+  svarray() : rep(&empty_rep) { }
+  svarray(const svarray& x) : rep(x.rep) { rep_incref(rep); }
+  svarray(const crange_type& x) {
     rep_init(x.begin(), x.size(), x.size());
     rep_zerofill();
   }
-  svector(const range_type& x) {
+  svarray(const range_type& x) {
     rep_init(x.begin(), x.size(), x.size());
     rep_zerofill();
   }
-  svector(const T *start, size_type sz, size_type asz) {
+  svarray(const T *start, size_type sz, size_type asz) {
     rep_init(start, sz, asz);
     rep_zerofill();
   }
-  void operator =(const svector& x) {
+  void operator =(const svarray& x) {
     if (&x != this) {
       rep_incref(x.rep);
       rep_decref(rep);
       rep = x.rep;
     }
   }
-  ~svector() { rep_decref(rep); }
+  ~svarray() { rep_decref(rep); }
   bt_bool empty() const { return size() == 0; }
   size_type size() const { return rep->valid_len; }
   size_type find(bt_size_t offset, T const& value) const {
@@ -80,8 +80,8 @@ struct svector {
     rep_decref(rep);
     rep = &empty_rep;
   }
-  void swap(svector& x) {
-    svector_rep *orep = rep;
+  void swap(svarray& x) {
+    svarray_rep *orep = rep;
     rep = x.rep;
     x.rep = orep;
   }
@@ -164,22 +164,28 @@ struct svector {
       rep->valid_len -= elen;
     } else {
       /* create a copy */
-      svector x(begin(), first, olen - elen);
+      svarray x(begin(), first, olen - elen);
       x.append(begin() + last, olen - last);
       this->swap(x);
     }
     rep_zerofill();
   }
+  bt_slice<T> range() {
+    return bt_slice<T>(begin(), size());
+  }
+  bt_cslice<T> crange() const {
+    return bt_cslice<T>(begin(), size());
+  }
   const_iterator begin() const {
     return reinterpret_cast<const T *>(
-      reinterpret_cast<const char *>(rep) + sizeof(svector_rep));
+      reinterpret_cast<const char *>(rep) + sizeof(svarray_rep));
   }
   const_iterator end() const {
     return begin() + size();
   }
   iterator begin() {
     return reinterpret_cast<T *>(
-      reinterpret_cast<char *>(rep) + sizeof(svector_rep));
+      reinterpret_cast<char *>(rep) + sizeof(svarray_rep));
   }
   iterator end() {
     return begin() + size();
@@ -229,26 +235,26 @@ struct svector {
     guard_val& operator =(const guard_val&);
   };
 private:
-  svector_rep *rep;
+  svarray_rep *rep;
 private:
-  static inline void rep_incref(svector_rep *rep) {
+  static inline void rep_incref(svarray_rep *rep) {
     if (rep->refcnt != 0) {
       PXCRT_DBG_SVECTOR1(fprintf(stderr, "rep_decref incref %p %zu\n", rep,
 	rep->refcnt + 1));
       ++rep->refcnt;
     }
   }
-  static inline void rep_decref(svector_rep *rep) {
+  static inline void rep_decref(svarray_rep *rep) {
     if (rep->refcnt != 0) {
       PXCRT_DBG_SVECTOR1(fprintf(stderr, "rep_decref decref %p %zu\n", rep,
 	rep->refcnt - 1));
       if (--rep->refcnt == 0) {
 	T *const p = reinterpret_cast<T *>(
-	  reinterpret_cast<char *>(rep) + sizeof(svector_rep));
+	  reinterpret_cast<char *>(rep) + sizeof(svarray_rep));
 	deinitialize_n(p, rep->valid_len);
 	PXCRT_DBG_SVECTOR1(fprintf(stderr, "rep_decref dealloc %p\n", rep));
 	global_deallocate_n(rep,
-	  sizeof(svector_rep) + sizeof(T) * rep->alloc_len);
+	  sizeof(svarray_rep) + sizeof(T) * rep->alloc_len);
       }
     }
   }
@@ -269,7 +275,7 @@ private:
     assert(rep->refcnt == 0 && rep->valid_len == 0 && rep->alloc_len == 0);
     if (asz != 0) {
       const size_type max_len =
-	(- sizeof(svector_rep) - sizeof(size_t)) / sizeof(T);
+	(- sizeof(svarray_rep) - sizeof(size_t)) / sizeof(T);
       if (asz >= max_len) { pxcrt::throw_bad_alloc(); }
       if (is_trivially_copyable<T>::value && sizeof(T) == 1) {
 	const size_t mask = sizeof(size_t) - 1;
@@ -277,15 +283,15 @@ private:
 	asz = (asz + mask) & ~mask; /* align for 0-filling */
 //fprintf(stderr, "asz post=%zu\n", asz);
       }
-      const size_type aszt = asz * sizeof(T) + sizeof(svector_rep);
+      const size_type aszt = asz * sizeof(T) + sizeof(svarray_rep);
       void *const vrep = global_allocate_n(aszt);
-      svector_rep *const nrep = reinterpret_cast<svector_rep *>(vrep);
+      svarray_rep *const nrep = reinterpret_cast<svarray_rep *>(vrep);
       PXCRT_DBG_SVECTOR1(fprintf(stderr, "rep_init alloc %p\n", nrep));
       nrep->refcnt = 1;
       nrep->valid_len = 0;
       nrep->alloc_len = asz;
       T *const start = reinterpret_cast<T *>(
-	reinterpret_cast<char *>(nrep) + sizeof(svector_rep));
+	reinterpret_cast<char *>(nrep) + sizeof(svarray_rep));
       if (is_trivially_copyable<T>::value) {
 	initialize_copy_n(start, sz, ptr);
 	#if 0
@@ -300,7 +306,7 @@ private:
 	} PXC_CATCH(...) {
 	  PXCRT_DBG_SVECTOR1(fprintf(stderr, "rep_init dealloc %p\n", rep));
 	  global_deallocate_n(rep,
-	    sizeof(svector_rep) + sizeof(T) * rep->alloc_len);
+	    sizeof(svarray_rep) + sizeof(T) * rep->alloc_len);
 	  PXC_RETHROW;
 	}
       }
@@ -320,7 +326,7 @@ private:
 	do {
 	  const size_type nl_n = (nl >= 1) ? (nl * 2) : 1;
 	  const size_type max_len =
-	    (-(sizeof(svector_rep) + sizeof(T))) / sizeof(T) - 8;
+	    (-(sizeof(svarray_rep) + sizeof(T))) / sizeof(T) - 8;
 	  if (nl_n <= nl || nl_n > max_len) { pxcrt::throw_bad_alloc(); }
 	  nl = nl_n;
 	} while (nl < asz);
@@ -338,7 +344,7 @@ private:
   void rep_make_unique_resize(size_type asz) {
     if (is_trivially_copyable<T>::value) {
       if (rep->refcnt != 1) {
-	svector_rep *const orep = rep;
+	svarray_rep *const orep = rep;
 	asz = std::max(asz, size_type(1));
 	  /* set asz nonzero so that rep_init allocate a unique buffer */
 	PXCRT_DBG_SVECTOR1(fprintf(stderr, "rep_make_unique_resize init1 %p\n",
@@ -354,9 +360,9 @@ private:
 	  asz = (asz + mask) & ~mask; /* align for 0-filling */
 //fprintf(stderr, "asztr post=%zu\n", asz);
 	}
-	rep = (svector_rep *)global_reallocate_n(rep,
-	    sizeof(svector_rep) + sizeof(T) * rep->alloc_len,
-	    sizeof(svector_rep) + sizeof(T) * asz);
+	rep = (svarray_rep *)global_reallocate_n(rep,
+	    sizeof(svarray_rep) + sizeof(T) * rep->alloc_len,
+	    sizeof(svarray_rep) + sizeof(T) * asz);
 	PXCRT_DBG_SVECTOR1(fprintf(stderr, "rep_make_unique_resize post %p\n",
 	  rep));
 	rep->alloc_len = asz;
@@ -368,7 +374,7 @@ private:
 	#endif
       }
     } else {
-      svector_rep *const orep = rep;
+      svarray_rep *const orep = rep;
       PXC_TRY {
 	asz = std::max(asz, size_type(1));
 	  /* set asz nonzero so that rep_init allocate a unique buffer */
@@ -382,32 +388,32 @@ private:
   }
 };
 
-template <typename T> struct msvector : public svector<T> {
+template <typename T> struct msvarray : public svarray<T> {
   typedef pxcrt::bt_size_t size_type;
   typedef pxcrt::bt_slice<T> range_type;
   typedef pxcrt::bt_cslice<T> crange_type;
-  msvector() { }
-  msvector(const msvector& x) : svector<T>(x) { }
-  msvector(const crange_type& x) : svector<T>(x) { }
-  msvector(const range_type& x) : svector<T>(x) { }
-  msvector(const T *start, size_type sz, size_type asz)
-    : svector<T>(start, sz, asz) { }
+  msvarray() { }
+  msvarray(const msvarray& x) : svarray<T>(x) { }
+  msvarray(const crange_type& x) : svarray<T>(x) { }
+  msvarray(const range_type& x) : svarray<T>(x) { }
+  msvarray(const T *start, size_type sz, size_type asz)
+    : svarray<T>(start, sz, asz) { }
 };
 
-template <typename T> struct csvector : public svector<T> {
+template <typename T> struct csvarray : public svarray<T> {
   typedef pxcrt::bt_size_t size_type;
   typedef pxcrt::bt_slice<T> range_type;
   typedef pxcrt::bt_cslice<T> crange_type;
-  csvector() { }
-  csvector(const csvector& x) : svector<T>(x) { }
-  csvector(const crange_type& x) : svector<T>(x) { }
-  csvector(const range_type& x) : svector<T>(x) { }
-  csvector(const T *start, size_type sz, size_type asz)
-    : svector<T>(start, sz, asz) { }
+  csvarray() { }
+  csvarray(const csvarray& x) : svarray<T>(x) { }
+  csvarray(const crange_type& x) : svarray<T>(x) { }
+  csvarray(const range_type& x) : svarray<T>(x) { }
+  csvarray(const T *start, size_type sz, size_type asz)
+    : svarray<T>(start, sz, asz) { }
 };
 
 static inline size_t
-hash_sstring(const svector<bt_uchar>& x)
+hash_sstring(const svarray<bt_uchar>& x)
 {
   const bt_ulong *const xp = reinterpret_cast<const bt_ulong *>(x.begin());
   const size_t xs0 = x.size();
@@ -420,7 +426,7 @@ hash_sstring(const svector<bt_uchar>& x)
 }
 
 static inline bool
-sstring_eq(const svector<bt_uchar>& x, const svector<bt_uchar>& y)
+sstring_eq(const svarray<bt_uchar>& x, const svarray<bt_uchar>& y)
 {
   const size_t xs0 = x.size();
   const size_t ys0 = y.size();
@@ -439,7 +445,7 @@ sstring_eq(const svector<bt_uchar>& x, const svector<bt_uchar>& y)
 }
 
 static inline int
-sstring_cmp(const svector<bt_uchar>& x, const svector<bt_uchar>& y)
+sstring_cmp(const svarray<bt_uchar>& x, const svarray<bt_uchar>& y)
 {
   const bt_ulong *const xp = reinterpret_cast<const bt_ulong *>(x.begin());
   const bt_ulong *const yp = reinterpret_cast<const bt_ulong *>(y.begin());
@@ -475,7 +481,7 @@ sstring_cmp(const svector<bt_uchar>& x, const svector<bt_uchar>& y)
 extern "implementation" inline
 namespace pxcrt {
 
-svector_rep empty_rep; /* pod */
+svarray_rep empty_rep; /* pod */
 
 }; // namespace pxcrt
 ;
