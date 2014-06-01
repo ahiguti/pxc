@@ -15,7 +15,7 @@ public threaded interface orb_transport {
 public threaded struct orb(ptr{orb_transport} const& tr) {
   public ptr{orb_transport} transport = tr;
   public ns_functions funcs; // TODO: remove
-  public vector{methods} mets; // TODO: remove
+  public varray{methods} mets; // TODO: remove
   public string rbuf;
   public string wbuf;
   public tree_map{size_t, skeleton_mapped} skeletons;
@@ -120,7 +120,7 @@ private threaded function {ns, i0, i1} void call_ns_function_bs(orb mutable& o,
   } else {
     metafunction fns m::sort{m::map{m::functions{ns}, m::to_string}};
     metafunction cidx m::add{i0, m::div{m::sub{i1, i0}, 2}};
-    int const c = compare_swo{cstrref}(
+    int const c = compare_strict_weak{cstrref}(
       o.rbuf[tpos .. tepos], m::at{fns, cidx});
     if (c == 0) {
       function_call{m::symbol{ns, m::at{fns, cidx}}}(o, apos, aepos);
@@ -157,7 +157,7 @@ private threaded function {t, i0, i1} void call_method_bs(
   } else {
     metafunction mf member_functions_sorted{t};
     metafunction cidx m::add{i0, m::div{m::sub{i1, i0}, 2}};
-    int const c = compare_swo{cstrref}(
+    int const c = compare_strict_weak{cstrref}(
       o.rbuf[tpos .. tepos], m::to_string{m::at{mf, cidx}});
     if (c == 0) {
       method_call{t, cidx}(o, apos, aepos, obj);
@@ -547,10 +547,10 @@ public threaded struct method_entry (strlit const& k,
   public ptr{i_marshal_method} method = f;
 }
 
-public metafunction ns_functions vector{func_entry};
+public metafunction ns_functions varray{func_entry};
 public metafunction ns_functions_slice cslice{func_entry};
 
-public metafunction methods vector{method_entry};
+public metafunction methods varray{method_entry};
 public metafunction methods_slice cslice{method_entry};
 
 public threaded function {ns} ns_functions create_ns_functions()
@@ -632,12 +632,12 @@ private threaded function {t, tk, cmp} size_t binary_search(cslice{t} const& s,
 private threaded function int compare_func_entry(func_entry const& ent,
   cstrref const& k)
 {
-  return compare_swo{cstrref}(ent.name, k);
+  return compare_strict_weak{cstrref}(ent.name, k);
 }
 
 private threaded function int compare_method_entry(method_entry const& ent,
   cstrref const& k)
 {
-  return compare_swo{cstrref}(ent.name, k);
+  return compare_strict_weak{cstrref}(ent.name, k);
 }
 

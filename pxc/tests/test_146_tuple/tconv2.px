@@ -1,0 +1,44 @@
+public namespace tconv2;
+public import common -;
+public import meta m;
+
+struct foo {
+  public varray{int} s;
+}
+
+public function {tto, tfrom} tto tuple___to(tfrom const& v)
+{
+  if (m::eq{tto, foo}) {
+    foo x;
+    expand (sym: m::field_names{tfrom}) {
+      x.s.push_back(static_cast{int}(v.sym));
+    }
+    return x;
+  } else {
+    m::error{"not defined"};
+    return tto();
+  }
+}
+
+/* expects that t2 is as efficient as t1 */
+
+public function foo t2()
+{
+  foo z = {9999, 8888, 55};
+  return z;
+}
+
+public function foo t1()
+{
+  foo z;
+  z.s.push_back(9999);
+  z.s.push_back(8888);
+  z.s.push_back(55);
+  return z;
+}
+
+{
+  println(t1());
+  println(t2());
+}
+

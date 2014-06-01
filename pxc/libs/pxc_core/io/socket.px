@@ -80,7 +80,7 @@ io_socketpair(io const& sys, family_t family, socktype_t socktype,
 {
   socketpair_t r;
   errno_t err = EOK;
-  vector{file_mt} v = io_socketpair_internal(sys, err, family, socktype,
+  varray{file_mt} v = io_socketpair_internal(sys, err, family, socktype,
     protocol);
   if (err != EOK) {
     r.errno = err;
@@ -163,7 +163,7 @@ file_accept_internal(file_mt const& lsn, errno_t mutable& err_r,
   sockaddr_storage mutable& addr_r);
 
 private threaded function extern "pxcio::io_socketpair_internal"
-vector{file_mt}
+varray{file_mt}
 io_socketpair_internal(io const& sys, errno_t mutable& err_r,
   family_t family, socktype_t socktype, protocol_t protocol);
 
@@ -232,7 +232,7 @@ int file_connect(file_mt const& f, sockaddr_storage const& addr)
   return r != 0 ? errno : 0;
 }
 
-::pxcrt::pxcvector<file_mt> io_socketpair_internal(::pxcio::io const& sys,
+::pxcrt::pxcvarray<file_mt> io_socketpair_internal(::pxcio::io const& sys,
   int& err_r, int family, int typ, int protocol)
 {
   int fds[2];
@@ -241,7 +241,7 @@ int file_connect(file_mt const& f, sockaddr_storage const& addr)
     err_r = errno;
     fds[0] = fds[1] = -1;
   }
-  ::pxcrt::pxcvector<file_mt> r;
+  ::pxcrt::pxcvarray<file_mt> r;
   if (e == 0) {
     r.push_back(make_file_mt(fds[0]));
     r.push_back(make_file_mt(fds[1]));

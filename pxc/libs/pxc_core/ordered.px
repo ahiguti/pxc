@@ -8,24 +8,24 @@ public import meta m;
 public import meta::family mf;
 public import text::string::serialize -;
 
-public threaded function {t} t min_swo(t const& x, t const& y)
+public threaded function {t} t min_strict_weak(t const& x, t const& y)
 {
-  return compare_swo(x, y) < 0 ? x : y;
+  return compare_strict_weak(x, y) < 0 ? x : y;
 }
 
-public threaded function {t} t max_swo(t const& x, t const& y)
+public threaded function {t} t max_strict_weak(t const& x, t const& y)
 {
-  return compare_swo(x, y) > 0 ? x : y;
+  return compare_strict_weak(x, y) > 0 ? x : y;
 }
 
-public threaded function {t} int compare_swo(t const& x, t const& y)
+public threaded function {t} int compare_strict_weak(t const& x, t const& y)
 {
   /* this function must be a 'Strict Weak Ordering' because tree_map
    * uses this as Compare for std::map */
   metafunction fam m::family{t};
   if (m::eq{t, unit}) {
     return 0;
-  } else if (m::eq{t, svector{uchar}}) {
+  } else if (m::eq{t, svarray{uchar}}) {
     return sstring_cmp(x, y);
   } else if (mf::is_string_or_slice_type{t}) {
     return string_cmp(x, y);
@@ -47,7 +47,7 @@ public threaded function {t} int compare_swo(t const& x, t const& y)
     size_t const sz = m::at{t, 1};
     size_t i = 0;
     for (i = 0; i < sz; ++i) {
-      int const c = compare_swo(x[i], y[i]);
+      int const c = compare_strict_weak(x[i], y[i]);
       if (c != 0) {
 	return c;
       }
@@ -59,7 +59,7 @@ public threaded function {t} int compare_swo(t const& x, t const& y)
     size_t const sz = xsz < ysz ? xsz : ysz;
     size_t i = 0;
     for (i = 0; i < sz; ++i) {
-      int const c = compare_swo(x[i], y[i]);
+      int const c = compare_strict_weak(x[i], y[i]);
       if (c != 0) {
 	return c;
       }
@@ -75,7 +75,7 @@ public threaded function {t} int compare_swo(t const& x, t const& y)
     metafunction ord{i} m::cond{m::empty{ordlst}, 0, m::at{ordlst, i}};
     expand (fld, idx : m::field_names{t}) {
       {
-	int const c = compare_swo(x.fld, y.fld);
+	int const c = compare_strict_weak(x.fld, y.fld);
 	if (c != 0) {
 	  if (m::ne{ord{idx}, 0}) {
 	    return -c;
@@ -87,13 +87,13 @@ public threaded function {t} int compare_swo(t const& x, t const& y)
     }
     return 0;
   } else if (m::eq{fam, "union"}) {
-    int const tc = compare_swo(union_tag(x), union_tag(y));
+    int const tc = compare_strict_weak(union_tag(x), union_tag(y));
     if (tc != 0) {
       return tc;
     }
     expand (fld, idex : m::field_names{t}) {
       if (case x.fld) {
-	int const c = compare_swo(x.fld, y.fld);
+	int const c = compare_strict_weak(x.fld, y.fld);
 	if (c != 0) {
 	  return c;
 	}

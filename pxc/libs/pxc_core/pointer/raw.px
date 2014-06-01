@@ -1,11 +1,15 @@
-public threaded namespace pointer::raw "use-unsafe";
+public threaded namespace pointer::raw "export-unsafe";
 public import numeric::integral -;
 public import pointer -;
 public import container::array +;
+public import meta m;
 
-/* raw pointer types are safe, while dereferencing raw pointers are unsafe. */
-public tsvaluetype struct extern "pxcrt::rawptr<>::type" {t} rawptr { }
-public tsvaluetype struct extern "pxcrt::crawptr<>::type" {t} crawptr { }
+public tsvaluetype struct extern "pxcrt::rawptr<>::type" {t} rawptr {
+  public metafunction value_type t;
+}
+public tsvaluetype struct extern "pxcrt::crawptr<>::type" {t} crawptr {
+  public metafunction value_type t;
+}
 public tsvaluetype struct extern "pxcrt::charptr" charptr { }
 public metafunction voidptr rawptr{void};
 public tsvaluetype struct extern "pxcrt::ccharptr" ccharptr { }
@@ -30,10 +34,10 @@ public threaded function extern "pxcrt::darray_rawptr" {t} rawptr{t}
 darray_rawptr(darray{t} mutable& x);
 public threaded function extern "pxcrt::darray_crawptr" {t} crawptr{t}
 darray_crawptr(darray{t} const& x);
-public threaded function extern "pxcrt::vector_rawptr" {t} rawptr{t}
-vector_rawptr(vector{t} mutable& x);
-public threaded function extern "pxcrt::vector_crawptr" {t} crawptr{t}
-vector_crawptr(vector{t} const& x);
+public threaded function extern "pxcrt::varray_rawptr" {t} rawptr{t}
+varray_rawptr(varray{t} mutable& x);
+public threaded function extern "pxcrt::varray_crawptr" {t} crawptr{t}
+varray_crawptr(varray{t} const& x);
 
 public threaded function extern "pxcrt::strlit_crawptr" crawptr{uchar}
 strlit_crawptr(strlit const& x);
@@ -46,6 +50,27 @@ public threaded function extern "pxcrt::crawptr_void" {t} cvoidptr
 crawptr_void(crawptr{t} x);
 public threaded function extern "pxcrt::crawptr_char" {t} ccharptr
 crawptr_char(crawptr{t} x);
+
+public threaded function extern "pxcrt::op_add" {tx, ty}
+check_rawptr{tx} rawptr___add(tx x, size_t n);
+public threaded function extern "pxcrt::op_add" {tx, ty}
+check_crawptr{tx} crawptr___add(tx x, size_t n);
+public threaded function extern "pxcrt::op_sub" {tx, ty}
+check_rawptr{tx} rawptr___sub(tx x, size_t n);
+public threaded function extern "pxcrt::op_sub" {tx, ty}
+check_crawptr{tx} crawptr___sub(tx x, size_t n);
+
+private metafunction check_rawptr{t}
+  check_internal{t, "pointer::raw::rawptr"};
+private metafunction check_crawptr{t}
+  check_internal{t, "pointer::raw::crawptr"};
+private metafunction check_internal{t, name}
+  m::cond{
+    m::and{
+      m::eq{m::nameof{t}, name},
+      m::ne{m::symbol{t, "value_type"}, void}},
+    t,
+    m::error{t, ": unexpected type"}};
 
 public threaded function extern "pxcrt::rawptr_to_size_t" {t} size_t
 rawptr_to_size_t(rawptr{t} x);
@@ -81,9 +106,9 @@ darray_rawptr(darray<T>& x) { return x.rawarr(); }
 template <typename T> static inline T const *
 darray_crawptr(darray<T> const& x) { return x.rawarr(); }
 template <typename T> static inline T *
-vector_rawptr(pxcvector<T>& x) { return x.rawarr(); }
+varray_rawptr(pxcvarray<T>& x) { return x.rawarr(); }
 template <typename T> static inline T const *
-vector_crawptr(pxcvector<T> const& x) { return x.rawarr(); }
+varray_crawptr(pxcvarray<T> const& x) { return x.rawarr(); }
 
 static inline bt_uchar const *
 strlit_crawptr(bt_strlit const& x) { return x.rawarr(); }
@@ -101,6 +126,11 @@ template <typename T> static inline bt_size_t
 rawptr_to_size_t(T *x) { return reinterpret_cast<bt_size_t>(x); }
 template <typename T> static inline bt_size_t
 crawptr_to_size_t(T const *x) { return reinterpret_cast<bt_size_t>(x); }
+
+template <typename Tx, typename Ty> static inline Tx
+op_add(Tx x, size_t y) { return x + y; }
+template <typename Tx, typename Ty> static inline Tx
+op_sub(Tx x, size_t y) { return x - y; }
 
 };
 ;

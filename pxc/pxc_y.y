@@ -1126,7 +1126,7 @@ primary_expr
 	| '(' expression ')'
 	  { $$ = expr_op_new(cur_fname, @1.first_line, '(', $2, 0); }
 	| '{' expression '}'
-	  { yyerror("syntax error"); } /* RESERVED */
+	  { $$ = expr_op_new(cur_fname, @1.first_line, '{', $2, 0); }
 	;
 int_literal
 	: TOK_INTLIT

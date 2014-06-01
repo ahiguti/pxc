@@ -1,0 +1,39 @@
+public namespace tconv1;
+public import common -;
+public import meta m;
+
+struct foo {
+  public varray{string} s;
+}
+
+public function {tto, tfrom} tto tuple___to(tfrom const& v)
+{
+  if (m::eq{tto, foo}) {
+    foo x;
+    expand (sym: m::field_names{tfrom}) {
+      x.s.push_back(to_string(v.sym));
+    }
+    return x;
+  } else {
+    m::error{"not defined"};
+    return tto();
+  }
+}
+
+public function void t2()
+{
+  foo z = {9999, 8888, "xyz"};
+  println(z.s);
+}
+
+public function void t1()
+{
+  const s = {9999, 8888, "xyz"};
+  println(to_string(s));
+}
+
+{
+  t1();
+  t2();
+}
+

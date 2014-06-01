@@ -1,0 +1,515 @@
+public namespace recobj3 "export-unsafe";
+import common -;
+import pointer::raw -;
+import numeric::fpmath -;
+import numeric::quaternion -;
+import SDL2 -;
+import SDL2::Image -;
+import GL::gles2 -;
+import GL::glm glm;
+import io::time -;
+import meta m;
+
+import glutil -;
+
+metafunction debug_matrix 0;
+
+float const M_PI = 3.14159265;
+
+metafunction fmat4 farray{float, 16};
+
+glm::mat4 projection;
+glm::mat4 modelview_base;
+int loc_mvp;
+int loc_normal_matrix;
+int loc_mate_color;
+int loc_vertex;
+int loc_normal;
+int loc_light_dir;
+int loc_sampler;
+uint texture_id;
+float gears_angle;
+
+function void draw_poly(vertices mutable& vs, cslice{glm::vec3} const& varr)
+{
+  const sz = varr.size();
+  if (sz < 3) {
+    return;
+  }
+  const nor = -glm::cross(varr[1] - varr[0], varr[2] - varr[0]).normalize();
+  varray{vertex} vtxs;
+  vtxs.resize(sz, vertex());
+  for (const i : 0 .. sz) {
+    mutable& v = vtxs[i];
+    v.position = varr[i];
+    v.normal = nor;
+    v.uv = glm::vec2();
+  }
+  for (const i : 0 .. sz - 2) {
+    vs.push(vtxs[0]);
+    vs.push(vtxs[i + 1]);
+    vs.push(vtxs[i + 2]);
+  }
+  return;
+}
+
+/*
+function void draw_poly_split(vertices mutable& vs,
+  cslice{glm::vec3} const& varr, uint rec)
+{
+  const sz = varr.size();
+  if (sz < 3) {
+    return;
+  }
+  const nor = -glm::cross(varr[1] - varr[0], varr[2] - varr[0]).normalize();
+  if (rec < 1) {
+    draw_poly(vs, varr);
+    return;
+  }
+  glm::vec3 mutable c;
+  float mutable len;
+  for (const i: 0 .. sz) {
+    c += varr[i];
+  }
+  c /= static_cast{float}(sz);
+  for (const i: 0 .. sz) {
+    len += glm::distance(c, varr[i]);
+  }
+  // println(len);
+  len *= 20.0;
+  // if (len < 10.0) { len = 10.0; }
+  // len /= static_cast{float}(sz);
+  mutable nv = nor;
+  nv.x /= len;
+  nv.y /= len;
+  nv.z /= len;
+  mutable nvarr = farray{glm::vec3, 3}();
+  for (const i : 0 .. sz) {
+    const i1 = i + 1 < sz ? i + 1 : 0;
+    nvarr[0] = varr[i];
+    nvarr[1] = varr[i1];
+    nvarr[2] = c - nv;
+    draw_poly_split(vs, nvarr, rec - 1);
+  }
+}
+*/
+
+function void polygon_scale(varray{glm::vec3} mutable& ps, float scale)
+{
+  glm::vec3 mutable avg;
+  for (const i, const& p: ps) {
+    avg += p;
+  }
+  avg /= static_cast{float}(ps.size());
+  for (const i, mutable& p: ps) {
+    p = avg + ((p - avg) * scale);
+  }
+}
+
+function void draw_bump(vertices mutable& vs, cslice{glm::vec3} const& varr,
+  float scale)
+{
+  if (varr.size() != 4) {
+    return;
+  }
+  // draw_poly(vs, varr);
+  /* front */
+  varray{glm::vec3} vx = varr;
+  const nor = -glm::cross(varr[1] - varr[0], varr[2] - varr[0]).normalize();
+  for (const i, mutable& e: vx) {
+    e -= nor * 0.02f;
+  }
+  polygon_scale(vx, scale);
+  draw_poly(vs, vx);
+  /* side */
+  const sz = varr.size();
+  for (const i: 0 .. sz) {
+    size_t i1 = i + 1 != sz ? i + 1 : 0;
+    const side = make_farray{glm::vec3}(vx[i], varr[i], varr[i1], vx[i1]);
+    draw_poly(vs, side);
+  }
+}
+
+function void draw_tube(vertices mutable& vs, cslice{glm::vec3} const& varr,
+  int rec)
+{
+  if (varr.size() < 3) {
+    return;
+  }
+  if (rec <= 0) {
+    draw_poly(vs, varr);
+    return;
+  }
+  varray{glm::vec3} vx = varr;
+  polygon_scale(vx, 0.9);
+  const nor = -glm::cross(varr[1] - varr[0], varr[2] - varr[0]).normalize();
+  for (const i, mutable& e: vx) {
+    e -= nor * 0.1f;
+    // e.z += 0.3;
+  }
+  /* front */
+  // draw_poly_split(vs, varr, 3);
+  draw_tube(vs, vx, rec - 1);
+  // draw_bump(vs, vx, 0.9);
+  /* side */
+  const sz = varr.size();
+  for (const i: 0 .. sz) {
+    size_t i1 = i + 1 != sz ? i + 1 : 0;
+    const side = make_farray{glm::vec3}(vx[i], varr[i], varr[i1], vx[i1]);
+    draw_bump(vs, side, 0.5);
+    // draw_poly(vs, side);
+  }
+}
+
+function void draw_regular_polygon(vertices mutable& vs, size_t n)
+{
+  mutable arr = darray{glm::vec3}(n, glm::vec3());
+  for (const i: 0 .. n) {
+    const a = (static_cast{float}(i) * 2.0f * M_PI) / static_cast{float}(n);
+    arr[i].x = sin(a);
+    arr[i].y = -cos(a);
+    arr[i].z = 0.0f;
+  }
+  draw_tube(vs, arr, 25);
+  reverse(arr[0 .. arr.size()]);
+  draw_tube(vs, arr, 12);
+  // draw_poly(vs, arr);
+}
+
+function void draw_frame_vbo(vertices const& vs, glm::mat4 const& mv,
+  glm::mat3 const& nm)
+{
+  const mvp = projection * mv;
+  glUniformMatrix4fv(loc_mvp, 1, 0, mvp.crawptr());
+  glUniformMatrix3fv(loc_normal_matrix, 1, 0, nm.crawptr());
+  const light = glm::make_vec3(5.0, 5.0, -10.0).normalize();
+  //println(light);
+  glUniform3fv(loc_light_dir, 1, light.crawptr());
+  check_error();
+  const red = make_farray{float}(0.8, 0.1, 0.0, 1.0);
+  glUniform4fv(loc_mate_color, 1, red.crawptr());
+  vs.draw(GL_TRIANGLES, 0, vs.elements.size(), loc_vertex, loc_normal, -1);
+}
+
+function void init_vbo()
+{
+}
+
+function void deinit_vbo()
+{
+}
+
+function void draw_frame(vertices const& vs,
+  quaternion{float} const& view_angle)
+{
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  farray{float, 16} view_angle_arr = view_angle.to_matrix();
+  mutable mat_angle = glm::mat4();
+  slice{float} mat_angle_slice = mat_angle.slice();
+  for (size_t i : 0 .. 16) {
+    mat_angle_slice[i] = view_angle_arr[i];
+  }
+  // const modelview_cur = modelview_base * mat_angle;
+  const modelview_cur = (modelview_base * mat_angle)
+    .scale(glm::make_vec3(1.5, 1.5, 1.5));
+  const mv = modelview_cur.rotate(gears_angle, glm::make_vec3(0.0, 0.0, 1.0));
+  const nm = mv.to_3().inverse().transpose();
+  // println(nm.determinant());
+  draw_frame_vbo(vs, mv, nm);
+}
+
+function void reshape(int width, int height)
+{ 
+  double h = static_cast{double}(height) / static_cast{double}(width);
+  glViewport(0, 0, static_cast{GLsizei}(width), static_cast{GLsizei}(height));
+  projection = glm::frustum{float}(-1.0, 1.0,
+    static_cast{float}(-h), static_cast{float}(h), 1.0, 60.0);
+  modelview_base = glm::mat4().translate(glm::make_vec3(0.0, 0.0, -5.0));
+}
+
+function uint compile_shader(cstrref const& src, GLenum type)
+{
+  mutable res = glCreateShader(type);
+  mutable source = make_farray{ccharptr}(src.crawptr().char());
+  const length = make_farray{int}(static_cast{int}(src.size()));
+  glShaderSource(res, 1, source.rawptr(), length.crawptr());
+  glCompileShader(res);
+  int success;
+  glGetShaderiv(res, GL_COMPILE_STATUS, address(success));
+  if (success == 0) {
+    int sz;
+    glGetShaderiv(res, GL_INFO_LOG_LENGTH, address(sz));
+    string buf;
+    buf.resize(static_cast{size_t}(sz), 0);
+    GLsizei len;
+    glGetShaderInfoLog(res, static_cast{GLsizei}(sz), address(len),
+      buf.rawptr().char());
+    debug_log("compile_shader failed:",
+      string_join{"\t"}(static_cast{int}(type), success, buf));
+    glDeleteShader(res);
+    res = 0;
+  }
+  debug_log("compile_shader", res);
+  return res;
+}
+
+function uint create_program(cstrref const& vertex_shader,
+  cstrref const& fragment_shader)
+{
+  mutable prog = glCreateProgram();
+  uint shader;
+  if (!vertex_shader.empty()) {
+    shader = compile_shader(vertex_shader, GL_VERTEX_SHADER);
+    if (shader != 0) {
+      glAttachShader(prog, shader);
+    }
+  }
+  if (!fragment_shader.empty()) {
+    shader = compile_shader(fragment_shader, GL_FRAGMENT_SHADER);
+    if (shader != 0) {
+      glAttachShader(prog, shader);
+    }
+  }
+  glLinkProgram(prog);
+  int success;
+  glGetProgramiv(prog, GL_LINK_STATUS, address(success));
+  if (success == 0) {
+    debug_log("create_program failed:", success);
+    glDeleteProgram(prog);
+    prog = 0;
+  }
+  debug_log("create_program", prog);
+  return prog;
+}
+
+function void set_program()
+{
+  const vert = m::concat{
+    "uniform mat4 model_view_projection;\n",
+    "uniform mat3 normal_matrix;\n",
+    "uniform vec3 light_dir;\n",
+    "uniform vec4 mate_color;\n",
+    "attribute vec3 vertex;\n",
+    "attribute vec3 normal;\n",
+    "varying float brightness;\n",
+    "void main(void) {\n",
+    "  gl_Position = model_view_projection * vec4(vertex, 1.0);\n",
+    "  vec3 nor = normalize(normal_matrix * normal);\n",
+    "  brightness = max(dot(light_dir, nor), 0.0) * 0.9 + 0.05;\n",
+    "}\n"};
+  const frag = m::concat{
+    "uniform sampler2D sampler;\n",
+    "uniform vec4 mate_color;\n",
+    "varying float brightness;\n",
+    "void main(void) {\n",
+    "  vec4 color = vec4(1.0, 1.0, 1.0, 1.0);\n",
+    "  gl_FragColor = color * brightness;\n",
+    "}\n"};
+  const prog = create_program(vert, frag);
+  if (prog != 0) {
+    glUseProgram(prog);
+    /* mvp */
+    loc_mvp = glGetUniformLocation(prog,
+      "model_view_projection".crawptr().char());
+    loc_normal_matrix = glGetUniformLocation(prog,
+      "normal_matrix".crawptr().char());
+    loc_light_dir = glGetUniformLocation(prog, "light_dir".crawptr().char());
+    loc_mate_color = glGetUniformLocation(prog, "mate_color".crawptr().char());
+    loc_sampler = glGetUniformLocation(prog, "sampler".crawptr().char());
+    loc_vertex = glGetAttribLocation(prog, "vertex".crawptr().char());
+    loc_normal = glGetAttribLocation(prog, "normal".crawptr().char());
+    println("loc_vertex: ", loc_vertex);
+    println("loc_normal: ", loc_normal);
+    println("loc_light_dir: ", loc_light_dir);
+    println("loc_mate_color: ", loc_mate_color);
+    SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("Locations: ",
+      loc_vertex, loc_normal, loc_light_dir, loc_mate_color));
+  }
+}
+
+function void check_error()
+{
+  const v = glGetError();
+  if (v == GL_NO_ERROR) {
+    return;
+  }
+  sdllog(string_join{""}("error: ", static_cast{int}(v)));
+}
+
+function void prepare_texture()
+{
+  sdllog("prepare_texture");
+  const sur = IMG_Load("img-c1024.jpg").some;
+  const mode = sur.BytesPerPixel() == 4 ? GL_RGBA : GL_RGB;
+  sdllog("prepare_texture 1");
+  glActiveTexture(GL_TEXTURE0);
+  sdllog("prepare_texture 2");
+  glGenTextures(1, address(texture_id));
+  sdllog("prepare_texture 3");
+  glBindTexture(GL_TEXTURE_2D, texture_id);
+  sdllog(string_join{""}("texture_id", texture_id));
+  glTexImage2D(GL_TEXTURE_2D, 0, static_cast{int}(mode),
+    static_cast{int}(sur.W()), static_cast{int}(sur.H()),
+    0, mode, GL_UNSIGNED_BYTE, sur.Pixels().crawptr().void());
+  check_error();
+
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+    static_cast{int}(GL_NEAREST));
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+    static_cast{int}(GL_NEAREST));
+
+  sdllog(string_join{""}("wh", sur.W(), sur.H()));
+  sdllog(string_join{""}("loc_sampler", loc_sampler));
+  glUniform1i(loc_sampler, 0);
+  sdllog(string_join{""}("prepare_texture done"));
+}
+
+function void sdllog(cstrref const& mess)
+{
+  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, mess);
+}
+
+function void init_gl()
+{
+  glEnable(GL_CULL_FACE);
+  glEnable(GL_DEPTH_TEST);
+  init_vbo();
+  set_program();
+  prepare_texture();
+}
+
+{
+  sdllog("PXC-SDL2 main");
+  const ini = SDL_Init(SDL_INIT_VIDEO);
+  int init_w = 300;
+  int init_h = 300;
+  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+  const wnd = SDL_CreateWindow("PXC-SDL2", 0, 0, init_w, init_h,
+    SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL).some;
+  SDL_GetWindowSize(wnd, init_w, init_h);
+  const glctx = SDL_GL_CreateContext(wnd);
+  SDL_GL_SetSwapInterval(0);
+
+  sdllog("PXC-SDL2 init_gl");
+  init_gl();
+
+  sdllog("PXC-SDL2 reshape");
+  reshape(init_w, init_h);
+
+  uint t0 = 0;
+  uint t1 = 0;
+  uint tprev = SDL_GetTicks();
+  uint frames = 0;
+  mutable view_angle = quaternion{float}(1.0, 0.0, 0.0, 0.0);
+
+  metafunction ticks_t farray{uint, 5};
+  ticks_t ticks;
+  ticks_t ticks_sum;
+  for (const i, mutable& e : ticks) {
+    e = tprev;
+  }
+  function void save_ticks(size_t idx) {
+    const prev_tick = ticks[idx == 0 ? ticks.size() - 1 : idx - 1];
+    mutable& cur_tick = ticks[idx];
+    cur_tick = SDL_GetTicks();
+    ticks_sum[idx] += cur_tick - prev_tick;
+  }
+
+  vertices vs;
+  draw_regular_polygon(vs, 33);
+  vs.create_vbo();
+
+  bool done = false;
+  bool paused = false;
+  function void rotate(float x, float y, float z, float angle) {
+    const q = quaternion_from_axis_angle{float}(x, y, z,
+      angle * M_PI / 180.0);
+    view_angle = view_angle.multiply(q);
+    view_angle.normalize();
+  }
+  while (!done) {
+    save_ticks(0);
+    SDL_Event ev;
+    while (SDL_PollEvent(ev)) {
+      const etype = ev.type;
+      if (etype == SDL_WINDOWEVENT) {
+	if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
+	  const w = ev.window.data1;
+	  const h = ev.window.data2;
+	  SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
+	    string_join{""}("resized w=", w, " h=", h));
+	  reshape(w, h);
+	}
+      } else if (etype == SDL_FINGERMOTION) {
+	const dx = ev.tfinger.dx * 500.0;
+	const dy = ev.tfinger.dy * 500.0;
+	rotate(1.0, 0.0, 0.0, -dy);
+	rotate(0.0, 1.0, 0.0, -dx);
+      } else if (etype == SDL_MULTIGESTURE) {
+	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
+	  string_join{""}("multigesture dTheta=", ev.mgesture.dTheta,
+	    " dDist=", ev.mgesture.dDist));
+      } else if (etype == SDL_APP_WILLENTERBACKGROUND) {
+	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("paused"));
+	paused = true;
+      } else if (etype == SDL_APP_DIDENTERFOREGROUND) {
+	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("resumed"));
+	paused = false;
+	int w;
+	int h;
+	SDL_GetWindowSize(wnd, w, h);
+	reshape(w, h);
+      } else if (etype == SDL_QUIT) {
+	done = true;
+	break;
+      }
+    }
+    if (paused) {
+      SDL_Delay(100);
+      continue;
+    }
+    save_ticks(1);
+    {
+      draw_frame(vs, view_angle);
+      save_ticks(2);
+      ++frames;
+      uint t = SDL_GetTicks();
+      if (t - t0 >= 1000) {
+	const seconds = static_cast{float}(t - t0) / 1000.0;
+	const fps = static_cast{float}(frames) / seconds;
+	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
+	  string_join{" "}(frames, "frames in", seconds, "seconds =",
+	    fps, "fps"));
+	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
+	  string_join{" "}("ticks: ", ticks_sum));
+	ticks_sum = ticks_t();
+	t0 = t;
+	frames = 0;
+      }
+      /*
+      gears_angle += static_cast{float}(t - tprev) / 20.0;
+      gears_angle = fmod(gears_angle, 360.0);
+      */
+      tprev = t;
+      if (t - t1 >= 10) {
+	if (t - t1 >= 10) {
+	  t1 += 10;
+	}
+	SDL_KeyboardState const ks;
+	if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) { done = true; }
+	if (ks.Key(SDL_SCANCODE_UP) != 0) { rotate(1.0, 0.0, 0.0, 2.0); }
+	if (ks.Key(SDL_SCANCODE_DOWN) != 0) { rotate(1.0, 0.0, 0.0, -2.0); }
+	if (ks.Key(SDL_SCANCODE_LEFT) != 0) { rotate(0.0, 1.0, 0.0, 2.0); }
+	if (ks.Key(SDL_SCANCODE_RIGHT) != 0) { rotate(0.0, 1.0, 0.0, -2.0); }
+      }
+    }
+    save_ticks(3);
+    SDL_GL_SwapWindow(wnd);
+    save_ticks(4);
+  }
+  deinit_vbo();
+  io::system._exit(0);
+}
+

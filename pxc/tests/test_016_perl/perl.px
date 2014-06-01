@@ -42,10 +42,15 @@ public function {ns} void export_all()
   expand (i : m::seq{m::size{contypes}}) {
     {
       metafunction typ m::at{contypes, i};
+      metafunction memfuncs m::filter{
+	m::member_functions{typ},
+	metafunction{f}
+	  m::and{m::not{meta::family::is_ephemeral_type{m::ret_type{f}}},
+	    m::not{m::ret_byref{f}}}};
       perl::xs_make_function{typ}(m::concat{m::full_string{typ}, "::new"});
-      expand (j : m::seq{m::size{m::member_functions{typ}}}) {
+      expand (j : m::seq{m::size{memfuncs}}) {
 	{
-	  metafunction mf m::to_string{m::at{m::member_functions{typ}, j}};
+	  metafunction mf m::to_string{m::at{memfuncs, j}};
 	  perl::xs_make_function{method_as_function{typ, mf}}(
 	    m::concat{m::full_string{typ}, "::", mf});
 	}

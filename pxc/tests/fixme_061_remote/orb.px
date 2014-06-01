@@ -9,7 +9,7 @@ public import meta::family mf;
 
 public threaded struct orb {
   ns_functions funcs;
-  vector{methods} mets;
+  varray{methods} mets;
   string rbuf;
   string wbuf;
   tree_map{rawptr_type, skeleton_mapped} skeletons;
@@ -67,7 +67,7 @@ private threaded function {ns, i0, i1} void call_ns_function_bs(orb& o,
     debug_log("tepos", tepos);
     debug_log("name", o.rbuf[tpos .. tepos]);
     */
-    int const c = compare_swo{cstrref}(
+    int const c = compare_strict_weak{cstrref}(
       o.rbuf[tpos .. tepos], m::at{fns, cidx});
     if (c == 0) {
       function_call{m::symbol{ns, m::at{fns, cidx}}}(o, apos, aepos);
@@ -108,7 +108,7 @@ private threaded function {t, i0, i1} void call_method_bs(
     debug_log("tepos", tepos);
     debug_log("name", o.rbuf[tpos .. tepos]);
     */
-    int const c = compare_swo{cstrref}(
+    int const c = compare_strict_weak{cstrref}(
       o.rbuf[tpos .. tepos], m::to_string{m::at{mf, cidx}});
     if (c == 0) {
       method_call{t, cidx}(o, apos, aepos, obj);
@@ -353,10 +353,10 @@ public threaded struct method_entry (strlit const& k,
   ptr{i_marshal_method} method = f;
 }
 
-public metafunction ns_functions vector{func_entry};
+public metafunction ns_functions varray{func_entry};
 public metafunction ns_functions_slice cslice{func_entry};
 
-public metafunction methods vector{method_entry};
+public metafunction methods varray{method_entry};
 public metafunction methods_slice cslice{method_entry};
 
 public threaded function {ns} ns_functions create_ns_functions()
@@ -436,12 +436,12 @@ private threaded function {t, tk, cmp} size_t binary_search(cslice{t} const& s,
 private threaded function int compare_func_entry(func_entry const& ent,
   cstrref const& k)
 {
-  return compare_swo{cstrref}(ent.name, k);
+  return compare_strict_weak{cstrref}(ent.name, k);
 }
 
 private threaded function int compare_method_entry(method_entry const& ent,
   cstrref const& k)
 {
-  return compare_swo{cstrref}(ent.name, k);
+  return compare_strict_weak{cstrref}(ent.name, k);
 }
 
