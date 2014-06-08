@@ -1,0 +1,151 @@
+public namespace glgeometry "export-unsafe";
+public import common -;
+public import exception -;
+public import meta m;
+public import glutil -;
+public import dvalue -;
+public import GL::glm -;
+public import numeric::fpmath -;
+
+public struct geometry_functions()
+{
+  public tree_map{string, ptr{geometry_function_i}} func_map; 
+  init();
+  private function void init() {
+    func_map.insert("fill", make_ptr{gfunc{gfunc_fill}}());
+    func_map.insert("hole", make_ptr{gfunc{gfunc_hole}}());
+    func_map.insert("bump", make_ptr{gfunc{gfunc_bump}}());
+    func_map.insert("regular_polygon",
+      make_ptr{gfunc{gfunc_regular_polygon}}());
+  }
+}
+
+public function void geometry_functions_build(geometry_functions const& gf,
+  vertices mutable& vs, cslice{vec3} const& poly, dvalue const& args)
+{
+  const& name = (*args.a)[0].s;
+  if (const f: gf.func_map[name]) {
+    f->build(gf, vs, poly, args);
+  } else {
+    throw runtime_error_template{"glgeometry"}(
+      string_join{" "}("unknown", name));
+  }
+}
+
+/* private */
+
+private threaded function float pi()
+{
+  return 3.14159265;
+}
+
+private interface geometry_function_i
+{
+  public function void build(geometry_functions const& gf,
+    vertices mutable& vs, cslice{vec3} const& poly, dvalue const& args);
+}
+
+private struct {f} gfunc <geometry_function_i>
+{
+  public function void build(geometry_functions const& gf,
+    vertices mutable& vs, cslice{vec3} const& poly, dvalue const& args)
+  {
+    f(gf, vs, poly, args);
+  }
+}
+
+private function void gfunc_fill(geometry_functions const& gf,
+  vertices mutable& vs, cslice{vec3} const& poly, dvalue const& args)
+{
+  const sz = poly.size();
+  if (sz < 3) { return; }
+  const nor = -cross(poly[1] - poly[0], poly[2] - poly[0]).normalize();
+  varray{vertex} vtxs;
+  vtxs.resize(sz, vertex());
+  for (const i: 0 .. sz) {
+    mutable& v = vtxs[i];
+    v.position = poly[i];
+    v.normal = nor;
+    v.uv = vec2();
+  }
+  for (const i: 0 .. sz - 2) {
+    vs.push_vertex(vtxs[0]);
+    vs.push_vertex(vtxs[i + 1]);
+    vs.push_vertex(vtxs[i + 2]);
+  }
+}
+
+private function void gfunc_hole(geometry_functions const& gf,
+  vertices mutable& vs, cslice{vec3} const& poly, dvalue const& args)
+{
+}
+
+private function void polygon_scale(darray{vec3} mutable& poly, float scale)
+{
+  vec3 mutable avg;
+  for (const i, const& p: poly) {
+    avg += p;
+  }
+  avg /= static_cast{float}(poly.size());
+  for (const i, mutable& p: poly) {
+    p = avg + ((p - avg) * scale);
+  }
+}
+
+private function void gfunc_bump(geometry_functions const& gf,
+  vertices mutable& vs, cslice{vec3} const& poly, dvalue const& args)
+{
+  float const z = static_cast{float}((*args.a)[1].f);
+  float const scale = static_cast{float}((*args.a)[2].f);
+  int const recurse = static_cast{int}((*args.a)[3].i);
+  dvalue const& child0 = (*args.a)[4];
+  dvalue const& child1 = (*args.a)[5];
+  gfunc_bump_internal(gf, vs, poly, z, scale, recurse, child0, child1);
+}
+
+private function void gfunc_bump_internal(geometry_functions const& gf,
+  vertices mutable& vs, cslice{vec3} const& poly, float z, float scale,
+  int recurse, dvalue const& child0, dvalue const& child1)
+{
+  if (poly.size() < 3) { return; }
+  darray{vec3} front = poly;
+  const nor = -cross(poly[1] - poly[0], poly[2] - poly[0]).normalize();
+  for (const i, mutable& e: front) {
+    e -= nor * z;
+  }
+  polygon_scale(front, scale);
+  /* front */
+  if (recurse > 1) {
+    gfunc_bump_internal(gf, vs, front, z, scale, recurse - 1, child0, child1);
+  } else {
+    gf.build(vs, front, child1);
+  }
+  /* side */
+  const sz = front.size();
+  for (const i: 0 .. sz) {
+    const i1 = i + 1 != sz ? i + 1 : 0;
+    const side = make_farray{vec3}(front[i], poly[i], poly[i1], front[i1]);
+    gf.build(vs, side, child0);
+  }
+}
+
+private function void gfunc_regular_polygon(geometry_functions const& gf,
+  vertices mutable& vs, cslice{vec3} const& poly /* ignored */,
+  dvalue const& args)
+{
+  float const radius = static_cast{float}((*args.a)[1].f);
+  size_t const n = static_cast{size_t}((*args.a)[2].i);
+  dvalue const& child0 = (*args.a)[3];
+  dvalue const& child1 = (*args.a)[4];
+  mutable arr = darray{vec3}(n, vec3());
+  for (const i: 0 .. n) {
+    const a = (static_cast{float}(i) * 2.0f * pi()) / static_cast{float}(n);
+    arr[i].x = sin(a) * radius;
+    arr[i].y = -cos(a) * radius;
+    arr[i].z = 0.0f;
+  }
+  gf.build(vs, arr, child0);
+  reverse(arr.range());
+  gf.build(vs, arr, child1);
+}
+
