@@ -18,6 +18,7 @@
 #include "symbol.hpp"
 #include <map>
 #include <string>
+#include <list>
 
 namespace pxc {
 
@@ -66,6 +67,7 @@ struct expr_funcdef;
 struct expr_struct;
 struct expr_dunion;
 struct expr_interface;
+struct expr_var;
 
 struct localvar_info {
   expr_i *edef; /* expr_var, expr_typedef, expr_metafdef, expr_struct,
@@ -107,18 +109,24 @@ struct symbol_table {
   typedef std::list<symbol> local_names_type;
 private:
   locals_type locals;
-public:
   local_names_type local_names;
   locals_type upvalues;
   bool require_thisup : 1; /* uses a member field as upvalue */
   expr_e block_esort; /* funcdef, struct, etc. */
   int tempvar_id_count;
-  ext_pragma pragma;
   nsmap_type nsmap;
 public:
-  locals_type::const_iterator find(const symbol& k) const {
-    return locals.find(k); }
-  locals_type::const_iterator end() const { return locals.end(); }
+  ext_pragma pragma;
+public:
+  expr_e get_block_esort() const { return block_esort; }
+  void set_block_esort(expr_e v) { block_esort = v; }
+  local_names_type const& get_local_names() const;
+  locals_type const& get_upvalues() const;
+  void get_ns_symbols(const symbol& ns,
+    std::list< std::pair<symbol, localvar_info> >& locals_r) const;
+  locals_type::const_iterator find(const symbol& k, bool no_generated) const;
+  locals_type::const_iterator end() const;
+  void get_fields(std::list<expr_var *>& flds_r) const;
   symbol_table *get_lexical_parent() const;
   void define_name(const symbol& shortname, const symbol& ns,
     expr_i *e, attribute_e visi, expr_stmts *stmt);

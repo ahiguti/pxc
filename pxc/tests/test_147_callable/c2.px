@@ -1,0 +1,33 @@
+namespace c2;
+public import common -;
+public import callable -;
+
+threaded function string foo(int x, int y, string z, string const& w)
+{
+  return string_join{" "}(x, y, z, w);
+}
+
+threaded function void bar(int x, int y, tptr{string} const& r)
+{
+  *r = string_join{" "}(x, y);
+}
+
+{
+  const c = make_tcallable_ptr{foo, 2}(11, 222);
+  const r = c("abc", "xyz");
+  println(r);
+}
+
+{
+  const c = make_tcallable_ptr{foo, 0}();
+  const r = c(99, 33, "foo", "bar");
+  println(r);
+}
+
+{
+  const c = make_tcallable_ptr{bar, 0}();
+  const r = make_tptr(string());
+  c(123, 456, r);
+  println(r);
+}
+

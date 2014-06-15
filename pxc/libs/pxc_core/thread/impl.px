@@ -1,0 +1,98 @@
+public threaded namespace thread::impl "use-unsafe";
+public import numeric::integral -;
+public import operator -;
+public import pointer -;
+public import io::errno -;
+public import algebraic -;
+public import meta m;
+public import exception -;
+public import text::string::serialize -;
+
+public threaded struct {f}
+thread(expand(m::args{f}))
+{
+  private metafunction tfuncobj thread_main_funcobj{f};
+  private tfuncobj mutable fobj = tfuncobj(expand(a: m::arg_names{f}; a));
+  private bool need_join = false;
+  private thread_id thd;
+  init();
+  private function void init() {
+    const err = thread_create{tfuncobj}(thd, fobj);
+    if (err != EOK) {
+      throw runtime_error_template{"thread_create"}(to_string(err));
+    }
+    need_join = true;
+  }
+  public function ~ {
+    __call();
+  }
+  public function m::ret_type{f} __call() {
+    if (need_join) {
+      need_join = false;
+      const err = thread_join{tfuncobj}(thd);
+      if (err != EOK) {
+	throw runtime_error_template{"thread_join"}(to_string(err));
+      }
+    }
+    return fobj.ret.some;
+  }
+}
+
+private multithreaded struct {f}
+thread_main_funcobj(expand(m::args{f}))
+{
+  private metafunction tfld tuple{m::arg_types{f}, m::nil};
+  public tfld const fld = tfld(expand(a: m::arg_names{f}; a));
+  public option{m::ret_type{f}} ret;
+  public function void __call() {
+    ret.some = f(expand(f: m::field_names{tfld}; fld.f));
+  }
+}
+
+private threaded struct extern "pxcrt::thread_id" "noncopyable" thread_id { }
+
+private threaded function extern "pxcrt::thread_create" {tfuncobj} errno_t
+thread_create(thread_id mutable& thd, tfuncobj mutable& funcobj);
+private threaded function extern "pxcrt::thread_join" {tfuncobj} errno_t
+thread_join(thread_id mutable& thd);
+
+extern "types" inline
+
+#include <pthread.h>
+
+namespace pxcrt {
+
+typedef pthread_t thread_id;
+
+};
+
+;
+
+extern "functions" inline
+
+namespace pxcrt {
+
+template <typename Tfuncobj> static inline void *
+funcobj_wrap(void *arg)
+{
+  Tfuncobj *const a = static_cast<Tfuncobj *>(arg);
+  a->__call$f();
+  return 0;
+}
+
+template <typename Tfuncobj> int
+thread_create(thread_id& thd, Tfuncobj& funcobj)
+{
+  return pthread_create(&thd, 0, &funcobj_wrap<Tfuncobj>, &funcobj);
+}
+
+template <typename Tfuncobj> int
+thread_join(thread_id& thd)
+{
+  return pthread_join(thd, 0);
+}
+
+};
+
+;
+

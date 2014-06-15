@@ -471,7 +471,8 @@ static void check_var_type(term& typ, expr_i *e, const char *sym,
 //  }
 #endif
   if (cur != 0 && e->get_esort() == expr_e_var &&
-    (cur->block_esort == expr_e_struct || cur->block_esort == expr_e_dunion)) {
+    (cur->get_block_esort() == expr_e_struct ||
+      cur->get_block_esort() == expr_e_dunion)) {
     expr_var *const ev = ptr_down_cast<expr_var>(e);
     if (is_noheap_type(typ)) {
       arena_error_push(e,
@@ -1552,7 +1553,7 @@ static void subst_user_defined_fldop(expr_op *eop)
 	+ "::" + std::string(est0->sym) + "___getfld";
       expr_i *hf = tblk->symtbl.resolve_name_nothrow_ns(sstr, true, "");
       #endif
-      if (hf != 0 && !hf->generated_flag) {
+      if (hf != 0) {
 	DBG_DYNFLD(fprintf(stderr, "hasfldop!!! %s\n", eop->dump(0).c_str()));
 	expr_symbol *sym = ptr_down_cast<expr_symbol>(eop->arg1);
 	expr_i *fc = expr_funccall_new(eop->fname, eop->line,
@@ -3049,8 +3050,16 @@ void expr_feach::check_type(symbol_table *lookup)
       term_tostr_human(ta1).c_str(),
       term_tostr_human(telm).c_str());
   }
-  passing_root_requirement(block->get_argdecls()->get_rest()->passby, this,
-    ce, true);
+  passby_e cnt_passby = block->get_argdecls()->get_rest()->passby;
+  if (is_cm_range_family(tce)) {
+    /* range object itself need not to be mutable */
+    if (cnt_passby == passby_e_mutable_reference) {
+      cnt_passby = passby_e_const_reference;
+    } else if (cnt_passby == passby_e_mutable_value) {
+      cnt_passby = passby_e_const_value;
+    }
+  }
+  passing_root_requirement(cnt_passby, this, ce, true);
 }
 
 static expr_i *deep_clone_expr(expr_i *e)
@@ -3979,7 +3988,7 @@ static void check_type_expr_expand(expr_expand *const epnd,
       /* expand expr is placed on the 'rest' part of the list. */
       rest_expr = epnd->rest;
     } else {
-      assert(ex == expand_e_comma);
+      assert(epnd->ex == expand_e_comma);
       expr_op *p_op = dynamic_cast<expr_op *>(epnd->parent_expr);
       if (p_op != 0 && p_op->op == ',' && p_op->arg1 == epnd) {
 	rest_expr = p_op->arg0;

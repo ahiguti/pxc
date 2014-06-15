@@ -25,13 +25,13 @@ io_socket(io const& sys, family_t family, socktype_t socktype,
   return r;
 }
 
-public threaded function extern "pxcio::file_bind" errno_t
+public threaded function extern "pxcrt::file_bind" errno_t
 file_bind(file_mt const& f, sockaddr_storage const& addr);
 
-public threaded function extern "pxcio::file_listen" errno_t
+public threaded function extern "pxcrt::file_listen" errno_t
 file_listen(file_mt const& f, int backlog);
 
-public threaded function extern "pxcio::file_connect" errno_t
+public threaded function extern "pxcrt::file_connect" errno_t
 file_connect(file_mt const& f, sockaddr_storage const& addr);
 
 public threaded function open_mt
@@ -64,11 +64,11 @@ expand (sym: {
 public extern "%" sockopt_t sym;
 }
 
-public threaded function extern "pxcio::file_setsockopt" {t}
+public threaded function extern "pxcrt::file_setsockopt" {t}
 check_sockopt_argtype{t}
 file_setsockopt(file const& f, socklevel_t level, sockopt_t opt, t const& v);
 
-public threaded function extern "pxcio::file_getsockopt" {t}
+public threaded function extern "pxcrt::file_getsockopt" {t}
 check_sockopt_argtype{t}
 file_getsockopt(file const& f, socklevel_t level, sockopt_t opt, t mutable& v);
 
@@ -151,18 +151,18 @@ io_connect(io const& sys, cstrref const& node, cstrref const& service,
 
 /* private */
 
-private threaded function extern "pxcio::io_socket_fd" int
+private threaded function extern "pxcrt::io_socket_fd" int
 io_socket_fd(io const& sys, family_t family, socktype_t socktype,
   protocol_t protocol);
 
-private threaded function extern "pxcio::io_make_file_mt"
+private threaded function extern "pxcrt::io_make_file_mt"
 file_mt io_make_file_mt(io const& sys, int fd); /* defined in io::file */
 
-private threaded function extern "pxcio::file_accept_internal" file_mt
+private threaded function extern "pxcrt::file_accept_internal" file_mt
 file_accept_internal(file_mt const& lsn, errno_t mutable& err_r,
   sockaddr_storage mutable& addr_r);
 
-private threaded function extern "pxcio::io_socketpair_internal"
+private threaded function extern "pxcrt::io_socketpair_internal"
 varray{file_mt}
 io_socketpair_internal(io const& sys, errno_t mutable& err_r,
   family_t family, socktype_t socktype, protocol_t protocol);
@@ -173,7 +173,7 @@ private metafunction check_sockopt_argtype{t}
     m::error{"invalid type"}};
 
 extern "functions" inline
-namespace pxcio {
+namespace pxcrt {
 
 template <typename T> static inline int
 file_setsockopt(file_mt const& f, int level, int opt, T const& v)
@@ -195,7 +195,7 @@ file_getsockopt(file_mt const& f, int level, int opt, T& v)
 ;
 
 extern "implementation" inline
-namespace pxcio {
+namespace pxcrt {
 
 bt_int io_socket_fd(io const& sys, int family, int socktype, int protocol)
 {
@@ -232,7 +232,7 @@ int file_connect(file_mt const& f, sockaddr_storage const& addr)
   return r != 0 ? errno : 0;
 }
 
-::pxcrt::pxcvarray<file_mt> io_socketpair_internal(::pxcio::io const& sys,
+::pxcrt::pxcvarray<file_mt> io_socketpair_internal(::pxcrt::io const& sys,
   int& err_r, int family, int typ, int protocol)
 {
   int fds[2];

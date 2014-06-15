@@ -1,6 +1,6 @@
 public namespace ot2;
-import common -;
-import orb -;
+public import common -;
+public import orb -;
 
 public threaded function int foo(int x, int y)
 {
@@ -13,27 +13,4 @@ public threaded function string bar(cstrref const& x, cstrref const& y)
   s.append(y);
   return s;
 }
-
-private threaded struct transport_dummy <orb_transport> {
-  function void send_receive(string mutable& rbuf, string mutable& wbuf) { }
-}
-
-threaded function string do_call(cstrref ibuf)
-{
-  orb o = orb(make_ptr{transport_dummy}());
-  o.funcs = create_ns_functions{"ot2"}();
-  o.rbuf = ibuf;
-  call_ns_function(o, 0, o.rbuf.size());
-  return o.wbuf;
-}
-
-private function void t1()
-{
-  string s1 = do_call("foo\t15\t20");
-  string s2 = do_call("bar\t15\t20");
-  print(s1);
-  print(s2);
-}
-
-t1();
 

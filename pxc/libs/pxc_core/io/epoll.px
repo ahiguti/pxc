@@ -8,35 +8,35 @@ public import pointer -;
 
 public metafunction has_epoll m::eq{m::profile{"platform"}, "linux"};
 
-public multithreaded struct extern "pxcio::epoll_t" "nodefault"
+public multithreaded struct extern "pxcrt::epoll_t" "nodefault"
 epoll(io::io const& iop) { }
 
 public tsvaluetype struct extern "unsigned" "extbitmask"
 epoll_eventmask_t { }
 
-public extern "pxcio::epoll_eventmask_in" epoll_eventmask_t EPOLLIN;
-public extern "pxcio::epoll_eventmask_out" epoll_eventmask_t EPOLLOUT;
-public extern "pxcio::epoll_eventmask_et" epoll_eventmask_t EPOLLET;
+public extern "pxcrt::epoll_eventmask_in" epoll_eventmask_t EPOLLIN;
+public extern "pxcrt::epoll_eventmask_out" epoll_eventmask_t EPOLLOUT;
+public extern "pxcrt::epoll_eventmask_et" epoll_eventmask_t EPOLLET;
 
-public threaded function extern "pxcio::epoll_add" errno_t
+public threaded function extern "pxcrt::epoll_add" errno_t
 epoll_add(epoll mutable& p, file_mt const& f, epoll_eventmask_t ev);
 
-public threaded function extern "pxcio::epoll_modify" errno_t
+public threaded function extern "pxcrt::epoll_modify" errno_t
 epoll_modify(epoll mutable& p, file_mt const& f, epoll_eventmask_t ev);
 
-public threaded function extern "pxcio::epoll_remove" errno_t
+public threaded function extern "pxcrt::epoll_remove" errno_t
 epoll_remove(epoll mutable& p, file_mt const& f);
 
 public tsvaluetype struct extern "epoll_event"
 epoll_event { }
 
-public threaded function extern "pxcio::epoll_event_fileno" int
+public threaded function extern "pxcrt::epoll_event_fileno" int
 epoll_event_fileno(epoll_event const& ev);
 
-public threaded function extern "pxcio::epoll_event_events" epoll_eventmask_t
+public threaded function extern "pxcrt::epoll_event_events" epoll_eventmask_t
 epoll_event_events(epoll_event const& ev);
 
-public threaded function extern "pxcio::epoll_wait" errno_t
+public threaded function extern "pxcrt::epoll_wait" errno_t
 epoll_wait(epoll mutable& p, size_t maxevents, uint timeo_ms,
   varray{epoll_event} mutable& events_r);
 
@@ -46,7 +46,7 @@ extern "types" inline
 
 #include <sys/epoll.h>
 
-namespace pxcio {
+namespace pxcrt {
 
 struct epoll_t {
   epoll_t(io const& iop);
@@ -67,7 +67,7 @@ extern "implementation" inline
 
 #if %{has_epoll}%
 
-namespace pxcio {
+namespace pxcrt {
 
 epoll_t::epoll_t(io const& iop)
   : handle(io_make_file_mt(iop, ::epoll_create(1024)))

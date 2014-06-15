@@ -1,0 +1,26 @@
+public namespace timing2_t;
+public import common -;
+public import orb -;
+public import timing2 -;
+
+private threaded struct transport_dummy <orb_transport> {
+  function void send_receive(string mutable& rbuf, string mutable& wbuf) { }
+}
+
+private function void t2()
+{
+  ptr{orb} op = make_ptr{orb}(make_ptr{transport_dummy}());
+  orb mutable& o = *op;
+  for (size_t i : 0 .. 1000000) {
+    o.rbuf = "foo\t1\t2";
+    call_ns_function_ni{"timing2"}(op, 0, o.rbuf.size());
+    // print(o.wbuf);
+    o.wbuf.clear();
+    o.rbuf = "bar\tabc\txyz";
+    call_ns_function_ni{"timing2"}(op, 0, o.rbuf.size());
+    // print(o.wbuf);
+  }
+  println("done");
+}
+
+t2();

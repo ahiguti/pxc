@@ -423,7 +423,7 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
   em.puts(" {\n");
   em.add_indent(1);
   if (est->block->inherit != 0) {
-    if (est->block->symtbl.find("~")
+    if (est->block->symtbl.find("~", false)
       == est->block->symtbl.end()) { /* no userdefined destr */
       /* nothrow destructor */
       em.set_file_line(est);
@@ -1731,7 +1731,7 @@ static bool is_field_w_explicit_obj(const expr_i *e)
 static bool cur_block_is_struct(expr_i *e)
 {
   symbol_table *stbl = e->symtbl_lexical;
-  return stbl->block_esort == expr_e_struct;
+  return stbl->get_block_esort() == expr_e_struct;
 }
 
 static bool cur_block_is_global(expr_i *e)
@@ -1943,10 +1943,12 @@ void expr_stmts::emit_value(emit_context& em)
 static void emit_global_vars(emit_context& em, expr_block *gl_blk)
 {
   symbol_table *const symtbl = &gl_blk->symtbl;
+  symbol_table::local_names_type const& local_names
+    = symtbl->get_local_names();
   symbol_table::local_names_type::const_iterator i;
-  for (i = symtbl->local_names.begin(); i != symtbl->local_names.end(); ++i) {
+  for (i = local_names.begin(); i != local_names.end(); ++i) {
     const symbol_table::locals_type::const_iterator iter
-      = symtbl->find(*i);
+      = symtbl->find(*i, false);
     assert(iter != symtbl->end());
     const expr_var *const e = dynamic_cast<const expr_var *>(
       iter->second.edef);
@@ -1972,11 +1974,12 @@ void expr_stmts::emit_local_decl(emit_context& em)
     /* global context */
     return;
   }
+  symbol_table::local_names_type const& local_names
+    = symtbl_lexical->get_local_names();
   symbol_table::local_names_type::const_iterator i;
-  for (i = symtbl_lexical->local_names.begin();
-    i != symtbl_lexical->local_names.end(); ++i) {
+  for (i = local_names.begin(); i != local_names.end(); ++i) {
     const symbol_table::locals_type::const_iterator iter
-      = symtbl_lexical->find(*i);
+      = symtbl_lexical->find(*i, false);
     assert(iter != symtbl_lexical->end());
     if (iter->second.stmt != this) {
       continue;
@@ -2014,10 +2017,12 @@ void expr_block::emit_value_nobrace(emit_context& em)
 
 void expr_block::emit_local_decl(emit_context& em, bool is_funcbody)
 {
+  symbol_table::local_names_type const& local_names
+    = symtbl.get_local_names();
   symbol_table::local_names_type::const_iterator i;
-  for (i = symtbl.local_names.begin(); i != symtbl.local_names.end(); ++i) {
+  for (i = local_names.begin(); i != local_names.end(); ++i) {
     const symbol_table::locals_type::const_iterator iter
-      = symtbl.find(*i);
+      = symtbl.find(*i, false);
     assert(iter != symtbl.end());
     if (is_funcbody && iter->second.stmt != 0) {
       continue; /* will be defined on each stmt */
@@ -2060,10 +2065,12 @@ static void emit_memberfunc_decl_one(emit_context&em, expr_funcdef *efd,
 
 void expr_block::emit_memberfunc_decl(emit_context& em, bool pure_virtual)
 {
+  symbol_table::local_names_type const& local_names
+    = symtbl.get_local_names();
   symbol_table::local_names_type::const_iterator i;
-  for (i = symtbl.local_names.begin(); i != symtbl.local_names.end(); ++i) {
+  for (i = local_names.begin(); i != local_names.end(); ++i) {
     const symbol_table::locals_type::const_iterator iter
-      = symtbl.find(*i);
+      = symtbl.find(*i, false);
     assert(iter != symtbl.end());
     expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(iter->second.edef);
     emit_memberfunc_decl_one(em, efd, pure_virtual);
@@ -2595,10 +2602,11 @@ static bool localvars_can_collide(const expr_if *ei)
   symbol_table *symtbl = &bl->symtbl;
   symbol_table *p = symtbl->get_lexical_parent();
   while (p != 0) {
+    symbol_table::local_names_type const& local_names
+      = symtbl->get_local_names();
     symbol_table::local_names_type::const_iterator i;
-    for (i = symtbl->local_names.begin(); i != symtbl->local_names.end();
-      ++i) {
-      symbol_table::locals_type::const_iterator j = p->find(*i);
+    for (i = local_names.begin(); i != local_names.end(); ++i) {
+      symbol_table::locals_type::const_iterator j = p->find(*i, false);
       if (j != p->end()) {
 	return true; /* can collide */
       }
@@ -2897,7 +2905,9 @@ void expr_feach::emit_value(emit_context& em)
   #endif
   const bool mapped_mutable_byref =
     mapped->passby == passby_e_mutable_reference;
-  if (mapped_mutable_byref) {
+  const bool container_mutable =
+    is_cm_range_family(ce->get_texpr()) ? false : mapped_mutable_byref;
+  if (container_mutable) {
     em.puts("");
   } else {
     em.puts("const ");

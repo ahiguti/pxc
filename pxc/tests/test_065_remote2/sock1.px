@@ -110,12 +110,10 @@ private function void client_test_main(file_mt const& f)
   println(w);
 }
 
-private multithreaded struct server_thread(io const& s, file_mt const& f) {
-  public io const sys = s;
-  public file_mt const sock = f;
-  public function void main() {
-    orb_server_loop{ifoo, foo}(sock);
-  }
+private threaded function void
+server_thread(io const& sys, file_mt const& sock)
+{
+  orb_server_loop{ifoo, foo}(sock);
 }
 
 private function void main()
@@ -123,7 +121,7 @@ private function void main()
   errno_t ern;
   io::system.signal(SIGPIPE, SIG_IGN);
   mutable sp = io::system.socketpair(AF_UNIX, SOCK_STREAM, PROTO_UNSPEC);
-  const sthr = make_thread(server_thread(io::system, sp.value.first));
+  const sthr = make_thread_func{server_thread}(io::system, sp.value.first);
   client_test_main(sp.value.second);
   sp.errno = errno_t(); /* closes fds */
 }

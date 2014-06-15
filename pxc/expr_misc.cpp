@@ -2177,10 +2177,14 @@ static void calc_dep_upvalues_direct(expr_i *e)
   if (efd == 0) {
     return;
   }
+  if (!efd->block->compiled_flag) {
+    return; /* uninstantiated template */
+  }
   /* append upvalues used by efd itself */
   symbol_table *symt = &efd->block->symtbl;
   symbol_table::locals_type::const_iterator i;
-  for (i = symt->upvalues.begin(); i != symt->upvalues.end(); ++i) {
+  symbol_table::locals_type const& upvalues = symt->get_upvalues();
+  for (i = upvalues.begin(); i != upvalues.end(); ++i) {
     expr_i *const eup = i->second.edef;
     bool is_constmemfunc_context = false;
     expr_i *const eframe = get_current_frame_expr(eup->symtbl_lexical);
@@ -2340,7 +2344,7 @@ bool is_global_frame(symbol_table *cur)
 symbol_table *get_current_frame_symtbl(symbol_table *cur)
 {
   while (cur) {
-    if (cur->block_esort != expr_e_block) {
+    if (cur->get_block_esort() != expr_e_block) {
       return cur; /* funcdef, struct, dunion, or interface */
     }
     cur = cur->get_lexical_parent();
@@ -2356,7 +2360,7 @@ expr_i *get_current_frame_expr(symbol_table *cur)
   }
   expr_i *e = fr->block_backref;
   while (e) {
-    if (e->get_esort() == fr->block_esort) {
+    if (e->get_esort() == fr->get_block_esort()) {
       break;
     }
     e = e->parent_expr;
@@ -2368,7 +2372,7 @@ expr_i *get_current_block_expr(symbol_table *cur)
 {
   expr_i *e = cur->block_backref;
   while (e) {
-    if (e->get_esort() == cur->block_esort) {
+    if (e->get_esort() == cur->get_block_esort()) {
       break;
     }
     e = e->parent_expr;
@@ -2467,7 +2471,7 @@ expr_funcdef *get_up_member_func(symbol_table *cur)
 {
   expr_funcdef *efd = 0;
   while (cur) {
-    if (cur->block_esort == expr_e_funcdef) {
+    if (cur->get_block_esort() == expr_e_funcdef) {
       expr_i *e = cur->block_backref;
       while (e) {
 	if (e->get_esort() == expr_e_funcdef) {
@@ -2787,15 +2791,16 @@ static void check_interface_impl_one(expr_i *esub, expr_block *esub_block,
     return;
   }
   const symbol_table& symtbl = ei_super->block->symtbl;
+  symbol_table::local_names_type const& local_names = symtbl.get_local_names();
   symbol_table::local_names_type::const_iterator k;
   symbol_table::locals_type::const_iterator i, j;
-  for (k = symtbl.local_names.begin(); k != symtbl.local_names.end(); ++k) {
-    i = symtbl.find(*k);
+  for (k = local_names.begin(); k != local_names.end(); ++k) {
+    i = symtbl.find(*k, false);
     expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(i->second.edef);
     if (efd == 0) {
       continue;
     }
-    j = esub_block->symtbl.find(i->first);
+    j = esub_block->symtbl.find(i->first, false);
     if (esub->get_esort() == expr_e_struct) {
       if (j == esub_block->symtbl.end() ||
 	j->second.edef->get_esort() != expr_e_funcdef) {
@@ -2927,7 +2932,7 @@ static void check_use_before_def_one(varmap_type& uvars,
       expr_i *const c = e->get_child(i);
       if (c != 0 && c->get_esort() == expr_e_block) {
 	expr_block *const cbl = ptr_down_cast<expr_block>(c);
-	if (cbl->symtbl.block_esort != expr_e_block) {
+	if (cbl->symtbl.get_block_esort() != expr_e_block) {
 	  /* child frame. skip. */
 	  continue;
 	}
@@ -2942,7 +2947,7 @@ static void check_use_before_def(expr_i *e)
   expr_block *const bl = dynamic_cast<expr_block *>(e);
   if (bl != 0) {
     expr_i *const fre = get_current_frame_expr(&bl->symtbl);
-    if (fre == 0 || bl->symtbl.block_esort != expr_e_block) {
+    if (fre == 0 || bl->symtbl.get_block_esort() != expr_e_block) {
       /* a frame block or global */
       varmap_type uvars;
       vars_type dvars_cur;

@@ -4,22 +4,88 @@ public import pointer -;
 public import container::array;
 public import exception;
 public import meta -;
+public import meta m;
+public import operator -;
+public import callable -;
 
 /* public */
 
-public multithreaded struct extern "pxcthread::thread_ptr" "nodefault"
+public threaded function {f} tcallable_ptr{func_ret{f}, m::nil}
+make_thread_func(expand(m::args{f}))
+{
+  if (m::eq{func_ret{f}, void}) {
+    return tcallable_ptr{func_ret{f}, m::nil}(
+      make_tcptr(uneval_thread_void{f}(
+	make_tptr(make_tuple(expand(a : m::map{m::args{f}, m::at0}; a))))));
+  } else {
+    return tcallable_ptr{func_ret{f}, m::nil}(
+      make_tcptr(uneval_thread_nonvoid{f}(
+	make_tptr(make_tuple(expand(a : m::map{m::args{f}, m::at0}; a))))));
+  }
+}
+
+/* private */
+
+private metafunction func_arg{f} tuple{m::arg_types{f}, m::nil};
+private metafunction func_ret{f} m::ret_type{f};
+
+private multithreaded struct {f}
+uneval_thread_params_nonvoid(tptr{func_arg{f}} const& a,
+  tptr{func_ret{f}} const& r)
+{
+  private tptr{func_arg{f}} argp = a;
+  private tptr{func_ret{f}} retp = r;
+  public function void main() {
+    func_arg{f} const& arg = *argp;
+    *retp = f(expand(a: m::field_names{func_arg{f}}; arg.a));
+  }
+}
+
+private multithreaded struct {f}
+uneval_thread_params_void(tptr{func_arg{f}} const& a)
+{
+  private tptr{func_arg{f}} argp = a;
+  public function void main() {
+    func_arg{f} const& arg = *argp;
+    f(expand(a: m::field_names{func_arg{f}}; arg.a));
+  }
+}
+
+private multithreaded struct {f}
+uneval_thread_nonvoid(tptr{func_arg{f}} const& a)
+  <tcallable{func_ret{f}, m::nil}>
+{
+  private tptr{func_ret{f}} retp = make_tptr{func_ret{f}}();
+  private thread thr =
+    make_thread_internal(uneval_thread_params_nonvoid{f}(a, retp));
+  public function func_ret{f} __call() const {
+    thr.join();
+    return *retp;
+  }
+}
+
+private multithreaded struct {f}
+uneval_thread_void(tptr{func_arg{f}} const& a)
+  <tcallable{void, m::nil}>
+{
+  private thread thr = make_thread_internal(uneval_thread_params_void{f}(a));
+  public function void __call() const {
+    thr.join();
+  }
+}
+
+private multithreaded struct extern "pxcrt::thread_ptr" "nodefault"
 thread { }
 
-public threaded function {targs} thread make_thread(targs const& args)
+private threaded function {targs}
+thread make_thread_internal(targs const& args)
 {
   tptr{thrdata} r = make_tptr{thrdata_impl{targs}}(thrdata_impl{targs}(args));
   return make_thread_impl(r);
 }
 
-public threaded function extern "pxcthread::thread_join"
+private threaded function extern "pxcrt::thread_join"
   void thread_join(thread const& thr);
-
-/* private */
 
 private multithreaded interface thrdata {
   function void main();
@@ -32,12 +98,12 @@ private multithreaded struct {targs} thrdata_impl(targs const& a)
     args.main();
   }
 }
-private threaded function extern "pxcthread::make_thread_impl"
+private threaded function extern "pxcrt::make_thread_impl"
   thread make_thread_impl(tptr{thrdata} const& f);
 
 extern "types" inline
 
-namespace pxcthread {
+namespace pxcrt {
 
 struct thread_rep;
 
@@ -48,7 +114,7 @@ typedef pxcrt::rcptr< pxcrt::trcval<thread_rep> > thread_ptr;
 
 extern "functions" inline
 
-namespace pxcthread {
+namespace pxcrt {
 
 typedef pxcrt::rcptr< thread$n::thrdata$i > thrdata_ptr;
 typedef thread$n::thrdata$i *thrdata_rawptr;
@@ -76,7 +142,7 @@ extern "implementation" inline
 
 #define PXC_THREAD_DBG(x)
 
-namespace pxcthread {
+namespace pxcrt {
 
 void *pxc_thread_child_main(void *arg)
 {

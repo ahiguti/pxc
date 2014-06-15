@@ -51,6 +51,11 @@ void symbol_table::define_name(const symbol& shortname,
     "symtbl=%p define[%s] curns=[%s] (%s:%d) s=%d e=%p lparent=%p\n",
     this, name.c_str(), curns.c_str(), e->fname, e->line, (int)block_esort, e,
     get_lexical_parent()));
+  if (block_backref->compiled_flag) {
+    arena_error_throw(block_backref,
+      "Internal error: symbol_table::define_name('%s'): "
+      "block is compiled already", shortname.c_str());
+  }
   locals_type::iterator i = locals.find(name);
   if (i != locals.end()) {
     arena_error_throw(e, "Duplicated name %s (defined at %s:%d)",
@@ -118,10 +123,16 @@ static void check_compiled_ns(const symbol& fullname, const symbol& nspart,
   compiled_ns_type::const_iterator iter = compiled_ns.find(nspart);
   if (iter != compiled_ns.end() && !iter->second) {
     /* ns defined, but not compiled yet */
-    arena_error_throw(pos,
-      "Undefined symbol '%s' (default namespace: '%s')"
-      "(namespace '%s' is not compiled yet)",
-      fullname.c_str(), curns.c_str(), nspart.to_string().c_str());
+    if (fullname.empty()) {
+      arena_error_throw(pos,
+	"Can not get symbols: namespace '%s' is not compiled yet",
+	nspart.c_str());
+    } else {
+      arena_error_throw(pos,
+	"Undefined symbol '%s' (default namespace: '%s')"
+	"(namespace '%s' is not compiled yet)",
+	fullname.c_str(), curns.c_str(), nspart.to_string().c_str());
+    }
   }
 }
 
@@ -189,6 +200,84 @@ static bool is_visible_from_pos(const symbol& ns, expr_i *pos)
     pos->dump(0).c_str());
   #endif
   return false;
+}
+
+symbol_table::locals_type::const_iterator symbol_table::find(const symbol& k,
+  bool no_generated) const
+{
+  if (!no_generated && !block_backref->compiled_flag) {
+    arena_error_throw(0,
+      "Internal error: symbol_table::find('%s'): "
+      "block '%s' is not compiled yet", k.c_str(),
+      block_backref->dump(0).c_str());
+  }
+  locals_type::const_iterator i = locals.find(k);
+  if (no_generated && i->second.edef->generated_flag) {
+    return end();
+  }
+  return i;
+}
+
+symbol_table::locals_type::const_iterator symbol_table::end() const
+{
+  return locals.end();
+}
+
+void symbol_table::get_fields(std::list<expr_var *>& flds_r) const
+{
+  flds_r.clear();
+  if (!block_backref->compiled_flag) {
+    arena_error_throw(block_backref,
+      "Internal error: symbol_table::get_fields(): "
+      "block is not compiled yet");
+  }
+  local_names_type::const_iterator i;
+  for (i = local_names.begin(); i != local_names.end(); ++i) {
+    const locals_type::const_iterator iter = find(*i, false);
+      /* incl generated */
+    assert(iter != end());
+    if (iter->second.edef && iter->second.edef->get_esort() == expr_e_var) {
+      flds_r.push_back(ptr_down_cast<expr_var>(iter->second.edef));
+    }
+  }
+}
+
+symbol_table::local_names_type const& symbol_table::get_local_names() const
+{
+  if (!block_backref->compiled_flag) {
+    arena_error_throw(block_backref,
+      "Internal error: symbol_table::get_local_names(): "
+      "block is not compiled yet");
+  }
+  return local_names;
+}
+
+symbol_table::locals_type const& symbol_table::get_upvalues() const
+{
+  if (!block_backref->compiled_flag) {
+    arena_error_throw(block_backref,
+      "Internal error: symbol_table::get_upvalues(): "
+      "block is not compiled yet");
+  }
+  return upvalues;
+}
+
+void symbol_table::get_ns_symbols(const symbol& ns,
+  std::list< std::pair<symbol, localvar_info> >& locals_r) const
+{
+  check_compiled_ns(symbol(), ns, ns, block_backref);
+  local_names_type::const_iterator i;
+  for (i = local_names.begin(); i != local_names.end(); ++i) {
+    locals_type::const_iterator j = locals.find(*i);
+    assert(j != locals.end());
+    const localvar_info& lv = j->second;
+    expr_i *const e = lv.edef;
+    if (lv.has_attrib_private() ||
+      e->get_unique_namespace() != ns.to_string()) {
+      continue;
+    }
+    locals_r.push_back(std::make_pair(*i, lv));
+  }
 }
 
 localvar_info symbol_table::resolve_name_nothrow_internal(
