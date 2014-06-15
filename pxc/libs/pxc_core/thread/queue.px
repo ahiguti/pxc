@@ -3,14 +3,16 @@ public import numeric::integral -;
 public import container::array -;
 public import pointer -;
 public import operator -;
-public import thread::func -;
+public import thread -;
+public import callable -;
 public import algebraic -;
+public import meta m;
 
-public metafunction task uneval{void};
+public metafunction task tcallable_ptr{void, m::nil};
 
 public threaded struct task_queue(size_t num_thrs)
 {
-  public function void push(tptr{task} const& e) {
+  public function void push(task const& e) {
     queue_push_notify(shared, e);
   }
   private function ~ {
@@ -23,20 +25,20 @@ public threaded struct task_queue(size_t num_thrs)
   }
   private tptr{task_queue_shared} const shared 
     = make_tptr{task_queue_shared}();
-  private varray{ptr{uneval{void}}} thrs;
+  private varray{tcallable_ptr{void, m::nil}} thrs;
   construct(num_thrs);
 }
 
 private multithreaded struct task_queue_shared()
 {
-  public deque{tptr{task}} queue;
+  public deque{task} queue;
   public int stop_thread = 0;
 }
 
-private threaded function option{tptr{task}}
+private threaded function option{task}
 queue_wait_pop(tptr{task_queue_shared} const& tq)
 {
-  option{tptr{task}} ent;
+  option{task} ent;
   mutable lck = lock_guard{task_queue_shared}(tq);
   task_queue_shared mutable& q = *lck;
   while (true) {
@@ -59,11 +61,11 @@ private threaded function void
 queue_thread_main(tptr{task_queue_shared} const& tq)
 {
   while (true) {
-    option{tptr{task}} ent = queue_wait_pop(tq);
+    option{task} ent = queue_wait_pop(tq);
     if (case ent.none) {
       break;
     }
-    ent.some->eval();
+    ent.some.__call();
   }
 }
 
@@ -77,7 +79,7 @@ queue_thread_stop(tptr{task_queue_shared} const& tq, int mode)
 
 private threaded function void
 queue_push_notify(tptr{task_queue_shared} const& tq,
-  tptr{task} const& ep)
+  task const& ep)
 {
   mutable lck = lock_guard{task_queue_shared}(tq);
   task_queue_shared mutable& q = *lck;

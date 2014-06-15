@@ -4,9 +4,9 @@ use DynaLoader;
 
 my $pxccmd =
   "../../pxc --no-realpath -w=.pxc -p=../common/pxc_dynamic.profile -g -ne"
-  . " ./test2.px";
+  . " ./test2_main.px";
 system("$pxccmd") == 0 or die;
-my $libref = DynaLoader::dl_load_file("./test2.so") or die;
+my $libref = DynaLoader::dl_load_file("./test2_main.so") or die;
 my $symref = DynaLoader::dl_find_symbol($libref, "pxc_library_init") or die;
 my $initfn = DynaLoader::dl_install_xsub(undef, $symref) or die;
 &$initfn();

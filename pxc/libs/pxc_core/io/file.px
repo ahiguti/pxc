@@ -12,13 +12,13 @@ public import algebraic -;
 public import meta m;
 public import meta::vararg v;
 
-public threaded interface extern "pxcio::file"
+public threaded interface extern "pxcrt::file"
 file { }
-public threaded struct extern "pxcio::file_st" "nodefault"
+public threaded struct extern "pxcrt::file_st" "nodefault"
 file_st <file> { }
-public multithreaded struct extern "pxcio::file_mt" "nodefault"
+public multithreaded struct extern "pxcrt::file_mt" "nodefault"
 file_mt <file> {
-  /* while pxcio::file_mt is implemented as an immutable pointer, it is
+  /* while pxcrt::file_mt is implemented as an immutable pointer, it is
    * defiend as 'multithreaded' instead of 'tsvaluetype', because it is
    * not transitively immutable. */
   public metafunction __attribute__ {{"monitor", 0}};
@@ -38,7 +38,7 @@ public tsvaluetype struct extern "::ssize_t" "extint" ssize_t { }     //SWORD?
 public tsvaluetype struct extern "int" "extbitmask" open_flags_t { }
 public tsvaluetype struct extern "int" "extenum" whence_t { }
 
-public tsvaluetype struct extern "pxcio::statbuf" statbuf {
+public tsvaluetype struct extern "pxcrt::statbuf" statbuf {
   public dev_t st_dev;
   public ino_t st_ino;
   public mode_t st_mode;
@@ -151,18 +151,18 @@ io_open_mt(io const& iop, cstrref const& fn, open_flags_t flags, mode_t md)
 }
 
 /* file descriptors are hidden */
-private threaded function extern "pxcio::io_open_fd"
+private threaded function extern "pxcrt::io_open_fd"
 int io_open_fd(io const& iop, cstrref const& fn, open_flags_t flags,
   mode_t md);
-private threaded function extern "pxcio::io_make_file_st"
+private threaded function extern "pxcrt::io_make_file_st"
 file_st io_make_file_st(io const& iop, int fd);
-private threaded function extern "pxcio::io_make_file_mt"
+private threaded function extern "pxcrt::io_make_file_mt"
 file_mt io_make_file_mt(io const& iop, int fd);
 
-public threaded function extern "pxcio::file_fileno" int
+public threaded function extern "pxcrt::file_fileno" int
 file_fileno(file const& f);
 
-private threaded function extern "pxcio::file_read_impl" errno_t
+private threaded function extern "pxcrt::file_read_impl" errno_t
 file_read_impl(file const& f, string mutable& buf, size_t mutable& len);
 
 public threaded function errno_or_value{size_t}
@@ -178,7 +178,7 @@ file_read(file const& f, string mutable& buf, size_t len)
   return r;
 }
 
-public threaded function extern "pxcio::file_write_impl" errno_t
+public threaded function extern "pxcrt::file_write_impl" errno_t
 file_write_impl(file const& f, cstrref const& buf, size_t mutable& len_r);
 
 public threaded function errno_or_value{size_t}
@@ -195,7 +195,7 @@ file_write(file const& f, cstrref const& buf)
   return r;
 }
 
-public threaded function extern "pxcio::file_lseek_impl" errno_t
+public threaded function extern "pxcrt::file_lseek_impl" errno_t
 file_lseek_impl(file const& f, off_t mutable& offset, whence_t whence);
 
 public threaded function errno_or_value{off_t}
@@ -211,11 +211,11 @@ file_lseek(file const& f, off_t offset, whence_t whence)
   return r;
 }
 
-public threaded function extern "pxcio::file_st_close" errno_t
+public threaded function extern "pxcrt::file_st_close" errno_t
 file_st_close(file_st mutable& f);
   /* NOTE: file_mt can not be closed explicitly. */
 
-public threaded function extern "pxcio::io_stat" errno_t
+public threaded function extern "pxcrt::io_stat" errno_t
 io_stat(io const& iop, cstrref const& fn, statbuf mutable& buf);
 
 public threaded function errno_or_value{size_t}
@@ -311,7 +311,7 @@ io_pipe(io const& sys)
   return r;
 }
 
-private threaded function extern "pxcio::io_pipe_internal"
+private threaded function extern "pxcrt::io_pipe_internal"
 varray{file_mt}
 io_pipe_internal(io const& sys, errno_t mutable& err_r);
 
@@ -320,7 +320,7 @@ extern "types" inline
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
-namespace pxcio {
+namespace pxcrt {
 using namespace pxcrt;
 
 typedef struct ::stat statbuf;
@@ -409,7 +409,7 @@ struct file_mt : public file {
 ;
 
 extern "functions" inline
-namespace pxcio {
+namespace pxcrt {
 
 static inline bt_int file_fileno(file const& f)
 {
@@ -423,7 +423,7 @@ file_mt make_file_mt(int fd); /* can be called from other io::* namespaces */
 ;
 
 extern "implementation" inline
-namespace pxcio {
+namespace pxcrt {
 
 typedef int errno_t;
 
@@ -523,7 +523,7 @@ int /* errno_t */ file_st_close(file_st& f)
   return rv == 0 ? 0 : errno;
 }
 
-errno_t io_stat(io const& iop, cstrref const& fn, pxcio::statbuf& buf)
+errno_t io_stat(io const& iop, cstrref const& fn, pxcrt::statbuf& buf)
 {
   PXCRT_ALLOCA_NTSTRING(fn_nt, fn);
   const int e = ::stat(fn_nt.get(), &buf);
@@ -533,7 +533,7 @@ errno_t io_stat(io const& iop, cstrref const& fn, pxcio::statbuf& buf)
   return 0;
 }
 
-::pxcrt::pxcvarray<file_mt> io_pipe_internal(::pxcio::io const& sys,
+::pxcrt::pxcvarray<file_mt> io_pipe_internal(::pxcrt::io const& sys,
   int& err_r)
 {
   int fds[2];

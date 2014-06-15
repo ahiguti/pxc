@@ -112,22 +112,20 @@ private function void client_test_main(file_mt const& f)
   println(v);
 }
 
-private multithreaded struct server_thread(io const& s, file_mt const& f) {
-  io const sys = s;
-  file_mt const sock = f;
-  public function void main() {
-    ptr{orb_transport} tf = make_ptr(transport_file(sock));
-    ptr{orb_handle{ifoo}} op = make_ptr(orb_handle{ifoo}(tf));
-    ptr{ifoo} obj = make_ptr(foo());
-    op->start_server(obj);
-  }
+private threaded function void
+server_thread(io const& sys, file_mt const& sock)
+{
+  ptr{orb_transport} tf = make_ptr(transport_file(sock));
+  ptr{orb_handle{ifoo}} op = make_ptr(orb_handle{ifoo}(tf));
+  ptr{ifoo} obj = make_ptr(foo());
+  op->start_server(obj);
 }
 
 private function void main()
 {
   io::system.signal(SIGPIPE, SIG_IGN);
   mutable sp = io::system.socketpair(AF_UNIX, SOCK_STREAM, PROTO_UNSPEC);
-  const sthr = make_thread(server_thread(io::system, sp.value.first));
+  const sthr = make_thread_func{server_thread}(io::system, sp.value.first);
   client_test_main(sp.value.second);
   sp.errno = errno_t(); /* closes fds */
 }

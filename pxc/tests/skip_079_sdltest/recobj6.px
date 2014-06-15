@@ -30,18 +30,22 @@ int loc_normal;
 int loc_light_dir;
 int loc_sampler;
 uint texture_id;
+
+int screen_width = 0;
+int screen_height = 0;
+float perspective_distance = 1.1;
+float min_distance = 1.0;
+
 float gears_angle;
 
-function void build_vertices(vertices mutable& vs)
+function void build_vertices(ptr{vertices} const& vptr)
 {
-  geometry_functions gf;
-  dvalue const geo =
-    {"regular_polygon", 2.0, 10,
-      {"bump", 0.3, 0.7, 3,
-	{"bump", 0.01, 0.9, 1, {"fill"}, {"fill"}},
-	{"fill"}},
-      {"fill"}};
-  gf.build(vs, cslice{glm::vec3}(), geo);
+  const t = fill(vptr);
+  const builder = regular_polygon(2.0, 7,
+    bump(0.3, 0.7, 3,
+      bump(0.01, 0.9, 1, t, t), t),
+    bump(0.03, 0.9, 5, t, t));
+  builder(cslice{glm::vec3}());
 }
 
 function void draw_frame_vbo(buffer_object const& bo, glm::mat4 const& mv,
@@ -50,7 +54,7 @@ function void draw_frame_vbo(buffer_object const& bo, glm::mat4 const& mv,
   const mvp = projection * mv;
   glUniformMatrix4fv(loc_mvp, 1, 0, mvp.crawptr());
   glUniformMatrix3fv(loc_normal_matrix, 1, 0, nm.crawptr());
-  const light = glm::make_vec3(5.0, 5.0, -10.0).normalize();
+  const light = glm::make_vec3(5.0, 5.0, -5.0).normalize();
   //println(light);
   glUniform3fv(loc_light_dir, 1, light.crawptr());
   check_error();
@@ -71,31 +75,50 @@ function void draw_frame(buffer_object const& bo,
   quaternion{float} const& view_angle, glm::quat const& view_angle_q)
 {
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  /*
-  farray{float, 16} view_angle_arr = view_angle.to_matrix();
-  mutable mat_angle = glm::mat4();
-  slice{float} mat_angle_slice = mat_angle.slice();
-  for (size_t i : 0 .. 16) {
-    mat_angle_slice[i] = view_angle_arr[i];
-  }
-  // const modelview_cur = modelview_base * mat_angle;
-  */
   const modelview_cur = (modelview_base * view_angle_q.conjugate().to_mat4())
-    .scale(glm::make_vec3(1.5, 1.5, 1.5));
-  const mv = modelview_cur.rotate(gears_angle, glm::make_vec3(0.0, 0.0, 1.0));
-  // const nm = mv.to_3().inverse().transpose();
-  const nm = mv.to_3();
-  // println(nm.determinant());
-  draw_frame_vbo(bo, mv, nm);
+    .scale(glm::make_vec3(0.2, 0.2, 0.2));
+  const mv0 = modelview_cur.rotate(gears_angle, glm::make_vec3(0.0, 0.0, 1.0));
+  mutable mv = mv0;
+  for (size_t i : 0 .. 10) {
+    const nm = mv.to_3();
+    draw_frame_vbo(bo, mv, nm);
+    break;
+    mv = mv.translate(glm::make_vec3(0.0, 0.0, -1.0));
+  }
 }
 
 function void reshape(int width, int height)
 { 
-  double h = static_cast{double}(height) / static_cast{double}(width);
-  glViewport(0, 0, static_cast{GLsizei}(width), static_cast{GLsizei}(height));
-  projection = glm::frustum{float}(-1.0, 1.0,
-    static_cast{float}(-h), static_cast{float}(h), 1.0, 60.0);
-  modelview_base = glm::mat4().translate(glm::make_vec3(0.0, 0.0, -5.0));
+  screen_width = width;
+  screen_height = height;
+  update_mvp();
+}
+
+function void set_distance(float x)
+{
+  perspective_distance = x;
+  if (perspective_distance < min_distance + 0.1) {
+    perspective_distance = min_distance + 0.1; }
+  if (perspective_distance > 500.0) { perspective_distance = 500.0; }
+  update_mvp();
+}
+
+function void update_mvp()
+{
+  const h = static_cast{float}(screen_height)
+    / static_cast{float}(screen_width);
+  glViewport(0, 0, static_cast{GLsizei}(screen_width),
+    static_cast{GLsizei}(screen_height));
+  const d = static_cast{float}(perspective_distance);
+  const near = static_cast{float}(d - min_distance);
+  const far = static_cast{float}(d + min_distance);
+  const left = static_cast{float}(-1.0 * ((d - min_distance) / d));
+  const right = static_cast{float}(1.0 * ((d - min_distance) / d));
+  const bottom = static_cast{float}(-h * ((d - min_distance) / d));
+  const top = static_cast{float}(h * ((d - min_distance) / d));
+  projection = glm::frustum{float}(left, right, bottom, top, near, far);
+  modelview_base = glm::mat4().translate(glm::make_vec3(0.0, 0.0,
+    static_cast{float}(-perspective_distance)));
 }
 
 function uint compile_shader(cstrref const& src, GLenum type)
@@ -167,7 +190,7 @@ function void set_program()
     "void main(void) {\n",
     "  gl_Position = model_view_projection * vec4(vertex, 1.0);\n",
     "  vec3 nor = normalize(normal_matrix * normal);\n",
-    "  brightness = max(dot(light_dir, nor), 0.0) * 0.5 + 0.05;\n",
+    "  brightness = max(dot(light_dir, nor), 0.0) * 0.8 + 0.05;\n",
     "  vec3 reflection_vec = reflect(light_dir, nor);\n",
     "  vec3 surface_to_camera = vec3(0.0, 0.0, 1.0);\n",
     "  float cos_angle = max(0.0, dot(surface_to_camera, reflection_vec));\n",
@@ -180,8 +203,8 @@ function void set_program()
     "varying float brightness;\n",
     "varying float specular;\n",
     "void main(void) {\n",
-    "  vec4 color1 = vec4(0.3, 0.5, 0.5, 1.0);\n",
-    "  vec4 color2 = vec4(1.0, 1.0, 1.0, 1.0);\n",
+    "  vec4 color1 = vec4(0.3, 0.6, 0.5, 1.0);\n",
+    "  vec4 color2 = vec4(0.8, 0.8, 0.8, 1.0);\n",
     "  gl_FragColor = color1 * brightness + color2 * specular;\n",
     "}\n"};
   const prog = create_program(vert, frag);
@@ -257,6 +280,8 @@ function void init_gl()
   prepare_texture();
 }
 
+
+
 {
   sdllog("PXC-SDL2 main");
   const ini = SDL_Init(SDL_INIT_VIDEO);
@@ -283,6 +308,7 @@ function void init_gl()
   uint frames = 0;
   mutable view_angle = quaternion{float}(1.0, 0.0, 0.0, 0.0);
   mutable view_angle_q = glm::make_quat_wxyz(1.0, 0.0, 0.0, 0.0);
+  mutable float view_object_size = 1.00;
 
   metafunction ticks_t farray{uint, 5};
   ticks_t ticks;
@@ -299,12 +325,12 @@ function void init_gl()
 
   buffer_object bo;
   bo.vs_arr.push_back(vertex_set());
-  build_vertices(*bo.vs_arr[0].vtxs);
+  build_vertices(bo.vs_arr[0].vtxs);
   bo.create_vbo();
 
   bool done = false;
   bool paused = false;
-  function void rotate(float x, float y, float z, float angle) {
+  function void view_angle_rotate(float x, float y, float z, float angle) {
     const q = quaternion_from_axis_angle{float}(x, y, z,
       angle * M_PI / 180.0);
     view_angle = view_angle.multiply(q);
@@ -314,6 +340,24 @@ function void init_gl()
     view_angle_q.normalize();
     // println(view_angle, q);
     // println(view_angle_q, qq);
+  }
+  /*
+  */
+  /*
+  function void view_angle_rotate_rad(float x, float y, float z,
+    float angle_rad)
+  {
+    const q = quaternion_from_axis_angle{float}(x, y, z, angle_rad);
+    view_angle = view_angle.multiply(q);
+    view_angle.normalize();
+  }
+  function void view_angle_rotate(float x, float y, float z, float angle) {
+    view_angle_rotate_rad(x, y, z, angle * M_PI / 180.0);
+  }
+  */
+  function void view_object_size_multiply(float v) {
+    view_object_size *= v;
+    sdllog(string_join{" "}("object_size", view_object_size));
   }
   while (!done) {
     save_ticks(0);
@@ -331,8 +375,8 @@ function void init_gl()
       } else if (etype == SDL_FINGERMOTION) {
 	const dx = ev.tfinger.dx * 500.0;
 	const dy = ev.tfinger.dy * 500.0;
-	rotate(1.0, 0.0, 0.0, -dy);
-	rotate(0.0, 1.0, 0.0, -dx);
+	view_angle_rotate(1.0, 0.0, 0.0, -dy);
+	view_angle_rotate(0.0, 1.0, 0.0, -dx);
       } else if (etype == SDL_MULTIGESTURE) {
 	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
 	  string_join{""}("multigesture dTheta=", ev.mgesture.dTheta,
@@ -383,12 +427,34 @@ function void init_gl()
 	if (t - t1 >= 10) {
 	  t1 += 10;
 	}
-	SDL_KeyboardState const ks;
-	if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) { done = true; }
-	if (ks.Key(SDL_SCANCODE_UP) != 0) { rotate(1.0, 0.0, 0.0, 2.0); }
-	if (ks.Key(SDL_SCANCODE_DOWN) != 0) { rotate(1.0, 0.0, 0.0, -2.0); }
-	if (ks.Key(SDL_SCANCODE_LEFT) != 0) { rotate(0.0, 1.0, 0.0, 2.0); }
-	if (ks.Key(SDL_SCANCODE_RIGHT) != 0) { rotate(0.0, 1.0, 0.0, -2.0); }
+        SDL_KeyboardState const ks;
+        if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) { done = true; }
+        if (ks.Key(SDL_SCANCODE_UP) != 0) {
+          if (ks.Key(SDL_SCANCODE_LCTRL) != 0) {
+            set_distance(perspective_distance + 0.01);
+            SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("distance",
+              perspective_distance));
+          } else {
+            view_angle_rotate(1.0, 0.0, 0.0, 2.0);
+          }
+        }
+        if (ks.Key(SDL_SCANCODE_DOWN) != 0) {
+          if (ks.Key(SDL_SCANCODE_LCTRL) != 0) {
+            set_distance(perspective_distance - 0.01);
+            SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("distance",
+              perspective_distance));
+          } else {
+            view_angle_rotate(1.0, 0.0, 0.0, -2.0);
+          }
+        }
+        if (ks.Key(SDL_SCANCODE_LEFT) != 0) {
+          view_angle_rotate(0.0, 1.0, 0.0, 2.0); }
+        if (ks.Key(SDL_SCANCODE_RIGHT) != 0) {
+          view_angle_rotate(0.0, 1.0, 0.0, -2.0); }
+        if (ks.Key(SDL_SCANCODE_SPACE) != 0) {
+          view_object_size_multiply(1.01); }
+        if (ks.Key(SDL_SCANCODE_LSHIFT) != 0) {
+          view_object_size_multiply(0.99); }
       }
     }
     save_ticks(3);

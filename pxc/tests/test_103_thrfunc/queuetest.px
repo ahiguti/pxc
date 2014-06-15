@@ -1,20 +1,19 @@
 public namespace queuetest;
 import common -;
 import thread::queue -;
+import meta m;
 
-multithreaded struct hoge(int x0) <uneval{void}> {
-  int const x = x0;
-  function void eval() {
-    debug_log("hoge", x);
-  }
+threaded function void fhoge(int x)
+{
+  debug_log("hoge", x);
 }
 
 {
   {
     mutable tq = task_queue(1);
-    tq.push(make_tptr{hoge}(10));
-    tq.push(make_tptr{hoge}(20));
-    tq.push(make_tptr{hoge}(30));
+    tq.push(make_tcallable_ptr{fhoge, 1}(10));
+    tq.push(make_tcallable_ptr{fhoge, 1}(20));
+    tq.push(make_tcallable_ptr{fhoge, 1}(30));
   }
   println("ok");
 }

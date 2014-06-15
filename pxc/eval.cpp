@@ -708,6 +708,34 @@ static term rebuild_term(const term *tptr, expr_i *texpr,
   return term(texpr, targs);
 }
 
+static std::string get_ectx_bind_str(eval_context const& ectx)
+{
+  if (ectx.tpbind == 0) {
+    return "";
+  }
+  std::string r;
+  term_bind *tb = ectx.tpbind->get_term_bind();
+  while (tb != 0) {
+    if (r.empty()) { r += " where"; }
+    r += " ";
+    r += std::string(tb->tp->sym) + "=" + term_tostr_human(tb->tpv);
+    tb = tb->next.get_term_bind();
+  }
+  return r;
+}
+
+static std::string incomplete_term_to_str(expr_i *texpr,
+  const term_list_range& targs1, const term_list_range& targs2)
+{
+  size_t sz = targs1.size();
+  term targs[sz];
+  for (size_t i = 0; i < sz; ++i) {
+    targs[i] = targs2[i].is_null() ? targs1[i] : targs2[i];
+  }
+  return term_tostr_human(
+    term(texpr, term_list_range(sz != 0 ? &targs[0] : 0, sz)));
+}
+
 static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
   bool targs_evaluated, const term *tptr, eval_context& ectx, expr_i *pos)
 {
@@ -860,8 +888,10 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
 	}
 	s += std::string(pos->fname) + ":" + ulong_to_string(pos->line)
 	  + ": (while evaluating expression: "
-	  + term_tostr_human(term(texpr, tlev_range))
-	  + ")\n";
+	  + incomplete_term_to_str(texpr, targs, tlev_range)
+	  + "";
+	s += get_ectx_bind_str(ectx);
+	s += ")\n";
 	throw std::runtime_error(s);
       }
       if (r.is_null()) {
@@ -880,7 +910,9 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
 	s += std::string(pos->fname) + ":" + ulong_to_string(pos->line)
 	  + ": (while evaluating expression: "
 	  + term_tostr_human(term(texpr, targs))
-	  + ")\n";
+	  + "";
+	s += get_ectx_bind_str(ectx);
+	s += ")\n";
 	throw std::runtime_error(s);
       }
       if (r.is_null()) {

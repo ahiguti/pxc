@@ -1567,7 +1567,7 @@ expr_funcdef::expr_funcdef(const char *fn, int line, const char *sym,
     used_as_cfuncobj(false)
 {
   assert(block);
-  this->block->symtbl.block_esort = expr_e_funcdef;
+  this->block->symtbl.set_block_esort(expr_e_funcdef);
   value_texpr = term(this);
 }
 
@@ -1729,7 +1729,7 @@ expr_struct::expr_struct(const char *fn, int line, const char *sym,
     metafunc_strict(0), metafunc_nonstrict(0)
 {
   assert(block);
-  this->block->symtbl.block_esort = expr_e_struct;
+  this->block->symtbl.set_block_esort(expr_e_struct);
   value_texpr = term(this);
 }
 
@@ -1758,6 +1758,8 @@ void expr_struct::set_unique_namespace_one(const std::string& u,
 
 void expr_struct::get_fields(std::list<expr_var *>& flds_r) const
 {
+  block->symtbl.get_fields(flds_r);
+#if 0
   flds_r.clear();
   if (!block->compiled_flag) {
     arena_error_throw(this,
@@ -1767,7 +1769,8 @@ void expr_struct::get_fields(std::list<expr_var *>& flds_r) const
   symbol_table& symtbl = block->symtbl;
   symbol_table::local_names_type::const_iterator i;
   for (i = symtbl.local_names.begin(); i != symtbl.local_names.end(); ++i) {
-    const symbol_table::locals_type::const_iterator iter = symtbl.find(*i);
+    const symbol_table::locals_type::const_iterator iter = symtbl.find(*i,
+      false);
     assert(iter != symtbl.end());
     expr_var *const e = dynamic_cast<expr_var *>(iter->second.edef);
     if (e == 0) { continue; }
@@ -1780,7 +1783,7 @@ continue;
 #endif
     flds_r.push_back(e);
   }
-
+#endif
 }
 
 bool expr_struct::has_userdefined_constr() const
@@ -1806,7 +1809,7 @@ expr_dunion::expr_dunion(const char *fn, int line, const char *sym,
     block(ptr_down_cast<expr_block>(block)), attr(attr), value_texpr()
 {
   assert(block);
-  this->block->symtbl.block_esort = expr_e_dunion;
+  this->block->symtbl.set_block_esort(expr_e_dunion);
   value_texpr = term(this);
 }
 
@@ -1832,6 +1835,8 @@ void expr_dunion::set_unique_namespace_one(const std::string& u,
 
 void expr_dunion::get_fields(std::list<expr_var *>& flds_r) const
 {
+  block->symtbl.get_fields(flds_r);
+  #if 0
   /* copy of expr_struct::get_fields */
   flds_r.clear();
   if (!block->compiled_flag) {
@@ -1842,15 +1847,24 @@ void expr_dunion::get_fields(std::list<expr_var *>& flds_r) const
   symbol_table& symtbl = block->symtbl;
   symbol_table::local_names_type::const_iterator i;
   for (i = symtbl.local_names.begin(); i != symtbl.local_names.end(); ++i) {
-    const symbol_table::locals_type::const_iterator iter = symtbl.find(*i);
+    const symbol_table::locals_type::const_iterator iter = symtbl.find(*i,
+      false);
     assert(iter != symtbl.end());
     expr_var *const e = dynamic_cast<expr_var *>(iter->second.edef);
     if (e == 0) { continue; }
     flds_r.push_back(e);
   }
+  #endif
 }
 expr_var *expr_dunion::get_first_field() const
 {
+  std::list<expr_var *> flds;
+  block->symtbl.get_fields(flds);
+  if (flds.empty()) {
+    return 0;
+  }
+  return flds.front();
+#if 0
   if (!block->compiled_flag) {
     arena_error_throw(this,
       "Failed to enumerate fields of union '%s' which is not compiled yet",
@@ -1859,13 +1873,15 @@ expr_var *expr_dunion::get_first_field() const
   symbol_table& symtbl = block->symtbl;
   symbol_table::local_names_type::const_iterator i;
   for (i = symtbl.local_names.begin(); i != symtbl.local_names.end(); ++i) {
-    const symbol_table::locals_type::const_iterator iter = symtbl.find(*i);
+    const symbol_table::locals_type::const_iterator iter = symtbl.find(*i,
+      false);
     assert(iter != symtbl.end());
     expr_var *const e = dynamic_cast<expr_var *>(iter->second.edef);
     if (e == 0) { continue; }
     return e;
   }
   return 0;
+#endif
 }
 
 std::string expr_dunion::dump(int indent) const
@@ -1881,7 +1897,7 @@ expr_interface::expr_interface(const char *fn, int line, const char *sym,
     block(ptr_down_cast<expr_block>(block)), attr(attr), value_texpr()
 {
   assert(block);
-  this->block->symtbl.block_esort = expr_e_interface;
+  this->block->symtbl.set_block_esort(expr_e_interface);
   value_texpr = term(this);
 }
 

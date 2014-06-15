@@ -1,0 +1,36 @@
+public namespace ot1_t;
+public import common -;
+public import orb -;
+public import ot1;
+
+private threaded struct transport_dummy <orb_transport> {
+  function void send_receive(string mutable& rbuf, string mutable& wbuf) { }
+}
+
+private function void t1()
+{
+  orb o = orb(make_ptr{transport_dummy}());
+  o.funcs = create_ns_functions{"ot1"}();
+  o.rbuf = "foo\t1\t2";
+  call_ns_function(o, 0, o.rbuf.size());
+  print(o.wbuf);
+  o.wbuf.clear();
+  o.rbuf = "bar\tabc\txyz";
+  call_ns_function(o, 0, o.rbuf.size());
+  print(o.wbuf);
+}
+
+private function void t2()
+{
+  orb o = orb(make_ptr{transport_dummy}());
+  o.rbuf = "foo\t1\t2";
+  call_ns_function_ni{"ot1"}(o, 0, o.rbuf.size());
+  print(o.wbuf);
+  o.wbuf.clear();
+  o.rbuf = "bar\tabc\txyz";
+  call_ns_function_ni{"ot1"}(o, 0, o.rbuf.size());
+  print(o.wbuf);
+}
+
+t1();
+t2();

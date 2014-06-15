@@ -84,10 +84,11 @@ void sort_dep(sorted_exprs& c, expr_i *e)
   }
   if (block != 0 && is_compiled(block)) {
     const symbol_table& st = block->symtbl;
+    symbol_table::local_names_type const& local_names = st.get_local_names();
     symbol_table::local_names_type::const_iterator k;
     symbol_table::locals_type::const_iterator i;
-    for (k = st.local_names.begin(); k != st.local_names.end(); ++k) {
-      i = st.find(*k);
+    for (k = local_names.begin(); k != local_names.end(); ++k) {
+      i = st.find(*k, false);
       expr_var *const ev = dynamic_cast<expr_var *>(i->second.edef);
       if (ev == 0) {
 	continue;

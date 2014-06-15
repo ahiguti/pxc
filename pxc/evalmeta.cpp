@@ -618,20 +618,15 @@ static term eval_meta_functions(const term_list_range& tlev,
   const std::string name = meta_term_to_string(tlev[0], false);
   check_public_namespace(name);
   symbol_table *const symtbl = &global_block->symtbl;
-  symbol_table::local_names_type::const_iterator i;
+  std::list< std::pair<symbol, localvar_info> > syms;
+  symtbl->get_ns_symbols(name, syms);
   term_list tl;
-  for (i = symtbl->local_names.begin(); i != symtbl->local_names.end(); ++i) {
-    symbol_table::locals_type::const_iterator j = symtbl->find(*i);
-    assert(j != symtbl->end());
-    const localvar_info& lv = j->second;
+  for (std::list< std::pair<symbol, localvar_info> >::const_iterator i
+    = syms.begin(); i != syms.end(); ++i)
+  {
+    const localvar_info& lv = i->second;
     expr_i *const e = lv.edef;
-    if (e->generated_flag) {
-      /* generated items must not be visible so that the result of this
-       * metafunction after expand is equvalent to the result before expand.
-       * this is important for consistency among compilation units. */
-      continue;
-    }
-    if (lv.has_attrib_private() || e->get_unique_namespace() != name) {
+    if (lv.has_attrib_private()) {
       continue;
     }
     if (e->get_esort() == expr_e_funcdef) {
@@ -650,18 +645,15 @@ static term eval_meta_types(const term_list_range& tlev, eval_context& ectx,
   const std::string name = meta_term_to_string(tlev[0], false);
   check_public_namespace(name);
   symbol_table *const symtbl = &global_block->symtbl;
-  symbol_table::local_names_type::const_iterator i;
+  std::list< std::pair<symbol, localvar_info> > syms;
+  symtbl->get_ns_symbols(name, syms);
   term_list tl;
-  for (i = symtbl->local_names.begin(); i != symtbl->local_names.end(); ++i) {
-    symbol_table::locals_type::const_iterator j = symtbl->find(*i);
-    assert(j != symtbl->end());
-    const localvar_info& lv = j->second;
+  for (std::list< std::pair<symbol, localvar_info> >::const_iterator i
+    = syms.begin(); i != syms.end(); ++i)
+  {
+    const localvar_info& lv = i->second;
     expr_i *const e = lv.edef;
-    if (e->generated_flag) {
-      /* hide generated symbols in order to avoid inconsistency */
-      continue;
-    }
-    if (lv.has_attrib_private() || e->get_unique_namespace() != name) {
+    if (lv.has_attrib_private()) {
       continue;
     }
     if (e == builtins.type_tpdummy.get_expr()) {
@@ -702,21 +694,15 @@ static term eval_meta_global_variables(const term_list_range& tlev,
   const std::string name = meta_term_to_string(tlev[0], false);
   check_public_namespace(name);
   symbol_table *const symtbl = &global_block->symtbl;
-  symbol_table::local_names_type::const_iterator i;
   term_list tl;
   long long idx = 0;
-  for (i = symtbl->local_names.begin(); i != symtbl->local_names.end(); ++i) {
-    symbol_table::locals_type::const_iterator j = symtbl->find(*i);
-    assert(j != symtbl->end());
-    const localvar_info& lv = j->second;
+  std::list< std::pair<symbol, localvar_info> > syms;
+  symtbl->get_ns_symbols(name, syms);
+  for (std::list< std::pair<symbol, localvar_info> >::const_iterator i
+    = syms.begin(); i != syms.end(); ++i)
+  {
+    const localvar_info& lv = i->second;
     expr_i *const e = lv.edef;
-    if (e->generated_flag) {
-      /* hide generated symbols in order to avoid inconsistency */
-      continue;
-    }
-    if (lv.has_attrib_private() || e->get_unique_namespace() != name) {
-      continue;
-    }
     term_list rec;
     std::string name;
     bool is_mutable = false;
@@ -765,18 +751,13 @@ static term eval_meta_member_functions(const term_list_range& tlev,
     blk = ei->block;
   }
   if (blk != 0) {
-    if (!blk->compiled_flag) {
-      /* necessary for referential transparency */
-      const char *sym = est != 0 ? est->sym : ei->sym;
-      arena_error_throw(blk,
-	"Failed to enumerate member functions of '%s' "
-	"which is not compiled yet", sym);
-    }
     symbol_table *symtbl = &blk->symtbl;
     symbol_table::local_names_type::const_iterator i;
-    for (i = symtbl->local_names.begin(); i != symtbl->local_names.end();
-      ++i) {
-      symbol_table::locals_type::const_iterator j = symtbl->find(*i);
+    symbol_table::local_names_type const& local_names
+      = symtbl->get_local_names();
+    for (i = local_names.begin(); i != local_names.end(); ++i) {
+      symbol_table::locals_type::const_iterator j = symtbl->find(*i, false);
+	/* incl generated symbols */
       assert(j != symtbl->end());
       const localvar_info lv = j->second;
       expr_i *const e = lv.edef;
@@ -827,11 +808,6 @@ eval_meta_fields_internal(const term_list_range& tlev, eval_context& ectx,
     if (((*i)->get_attribute() & attribute_public) == 0) {
       continue;
     }
-    #if 0
-    if (((*i)->get_attribute() & attribute_private) != 0) {
-      continue;
-    }
-    #endif
     if (mask == 0x3) {
       term_list tl1;
       tl1.push_back(term(std::string((*i)->sym))); /* name */

@@ -72,3 +72,28 @@ UV 左上が(0,0), 右下が(1,1)
 
 - 複数の子フラグメントのn番めにだけ適用したい、とかどうするか
 
+tupleから引くのではなく、関数の合成としてデータを式で書けるようにしたい。
+const geo =
+  regular_polygon(2.0, 10,
+    bump(0.3, 0.7, 3,
+      bump(0.01, 0.9, 1, draw(), ()),
+      fill()),
+    bump(0.01, 0.9, 1, fill(), fill()));
+regular_polygon等は関数ではなく関数オブジェクト。
+
+/* 引数poly、返値voidの関数オブジェクト */
+interface gfunc {
+  function void __call(cslice{vec3} const& poly);
+}
+
+struct regular_polygon(float radius, size_t n, gfunc const& c0,
+  gfunc const& c1) <gfunc>
+{
+  function void __call(cslice{vec3} const& poly) {
+    ...
+    c0(poly0);
+    ...
+    c1(poly1);
+  }
+}
+
