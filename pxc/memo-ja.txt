@@ -3,34 +3,34 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- thread/implをthreadへ
+- pod_array_compare等はxとyの型が異なっていても使えるように(done)
 
-- for (const i, mutable& e: arr) はarrがsliceならarr自体はconstでも
-  許可(done)
+- sstringはhash_sstring/eq_sstringがhashとeqのデフォルトになるように
+  array_or_sliceでis_raw_array、要素が基本型ならばeq, hash, compareを
+    pod_array_eq
+    pod_array_hash
+    pod_array_compare
+  eq: array_or_sliceで要素が基本型ならvarray_eq等
+  hash: array_or_sliceで要素が基本型なら
 
-- シンボル引きの結果の違いによってコンパイル単位間不整合が起きるような
-  ことがないことを、struct symbol_table が保証(done)
-  - resolve_name()の引数no_generatedが
-    - trueのとき、生成されたシンボルは返さない
-    - falseのとき、生成されたシンボルも返すが、その名前空間が未コンパ
-      イルならエラー
-    (done)
-  - evalmetaの、nsのシンボル一覧を取得するようなメタ関数については、
-    シンボル一覧を取る関数を用意してsymbol_table::findは無くす
-    (done)
+- sort関数をcompare_strict_weak限定に(done)
+
+- darrayを、小さいときはスタック、ただしmake_darrayは常にヒープ
+
+- extern "linear" は noncopyableに統合できるのではないか
+
+- get/setrlimit
 
 - operator () が __call() に置き換わらないケースがある(文法的に特定の
   式でしか置き換わらない)
-
-- threadをfuncのみにする
+  funccallのfuncは expr_teかexpr_symbolかexpr_opの「.」のみ
+  x()
+  x.f()
+  foo()()
 
 - compare_strict_weakのパラメタに順序入れ替えを
 
-- sort関数をcompare_strict_weak限定に
-
 - ephemeral と noheap 統一
-
-- make_farrayなどの中の型キャストはやめる(done)
 
 - コンテナからrange/sliceを作る簡単な式を用意
   中身のrootされることを確認
@@ -38,14 +38,6 @@ FIXME/TODO M1
 - algebraicはなくす？
 
 - stdin等を関数ではなくfieldに
-
-- sstringはhash_sstring/eq_sstringがhashとeqのデフォルトになるように
-
-- operator { } は tuple を構築する (done)
-- tuple___toを定義すれば { ... } から任意の型へ変換 (done)
-  一時tupleを除去しなくてもgccが最適化してくれる模様
-
-- container::array::vectorは varray に改名する。(done)
 
 - 名前空間の命名規則として、なるべく構造で分類する。
     ordered -> 順序構造
@@ -58,12 +50,9 @@ FIXME/TODO M1
     container::array
   構造の間に包含関係があっても下に入れないこともある？
 
-- numeric/quaternion削除
+- numeric/quaternion削除(done)
+- quaternionをglmのものに(done)
   
-- glm ベクタや行列？のスカラ倍、スカラ除算 (done)
-
-- 四元数をglm使う (done)
-
 - 一般化されたfold
 
 - __fooが定義されていたら..のような処理について、定義されているか
@@ -378,8 +367,6 @@ FIXME/TODO M1
 - noncopyableな値を返す関数は実現できないか？
 
 - genericsとvariant
-
-- quaternionをglmのものに
 
 
 - private namespace. 親namespaceからのみシンボルが参照できる.
@@ -800,6 +787,27 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- thread/implをthreadへ(done)
+- for (const i, mutable& e: arr) はarrがsliceならarr自体はconstでも
+  許可(done)
+- シンボル引きの結果の違いによってコンパイル単位間不整合が起きるような
+  ことがないことを、struct symbol_table が保証(done)
+  - resolve_name()の引数no_generatedが
+    - trueのとき、生成されたシンボルは返さない
+    - falseのとき、生成されたシンボルも返すが、その名前空間が未コンパ
+      イルならエラー
+    (done)
+  - evalmetaの、nsのシンボル一覧を取得するようなメタ関数については、
+    シンボル一覧を取る関数を用意してsymbol_table::findは無くす
+    (done)
+- threadをfuncのみにする(done)
+- make_farrayなどの中の型キャストはやめる(done)
+- operator { } は tuple を構築する (done)
+  (一時tupleを除去しなくてもgccが最適化してくれる模様)
+- tuple___toを定義すれば { ... } から任意の型へ変換 (done)
+- container::array::vectorは varray に改名する。(done)
+- glm ベクタや行列？のスカラ倍、スカラ除算 (done)
+- 四元数をglm使う (done)
 - python: 動的フィールドget/set foo.bar (done)
 - bind EADDRINUSE (done)
 - expt_metafdef::is_variadic消去(done)

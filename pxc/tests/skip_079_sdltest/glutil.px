@@ -18,10 +18,10 @@ public tsvaluetype struct vertex
   public glm::vec2 uv;
 }
 
-public tsvaluetype struct edge
+public tsvaluetype struct node_edge
 {
   public size_t edge_sort;
-  public glm::mat4 trans; /* or glm::quat? */
+  public glm::mat4 trans; /* or quat and vec3 ? */
 }
 
 public multithreaded struct vertices
@@ -29,7 +29,7 @@ public multithreaded struct vertices
   public varray{float} vertex_values;
   public varray{uint} elements;
   public tree_map{vertex, uint} value_to_id;
-  public varray{edge} edges;
+  public varray{node_edge} edges;
   public function void push_vertex(vertex const& value)
   {
     if (const id: value_to_id[value]) {
@@ -50,7 +50,7 @@ public multithreaded struct vertices
       /* debug_log("push", value, "id", id); */
     }
   }
-  public function void push_edge(edge const& e)
+  public function void push_edge(node_edge const& e)
   {
     edges.push_back(e);
   }
@@ -146,14 +146,15 @@ public function bool buffer_object_create_vbo(buffer_object mutable& bo)
 }
 
 public function void buffer_object_draw(buffer_object const& bo, GLenum mode,
-  size_t elem_offset, size_t elem_num, int attr_position, int attr_normal,
-  int attr_uv)
+  size_t vs_id, int attr_position, int attr_normal, int attr_uv)
 {
-  if (elem_offset + elem_num < elem_offset ||
-    elem_offset + elem_num > bo.num_elements) {
-    throw runtime_error_template{"glutil::vertices_draw"}("range");
+  size_t elem_offset;
+  size_t elem_num;
+  {
+    const& be = bo.vs_arr[vs_id];
+    elem_offset = be.elements_offset;
+    elem_num = be.vtxs->elements.size();
   }
-  /* println(attr_position, attr_normal); */
   glBindBuffer(GL_ARRAY_BUFFER, bo.vbo_values);
   check_error();
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bo.vbo_elems);
@@ -179,6 +180,7 @@ public function void buffer_object_draw(buffer_object const& bo, GLenum mode,
       offset_to_void_cp(24));
     check_error();
   }
+  /* TODO: (gles >= 3.0) glDrawRangeElements */
   glDrawElements(mode, static_cast{GLsizei}(elem_num), GL_UNSIGNED_INT,
     offset_to_void_cp(elem_offset * 4));
   check_error();
@@ -200,11 +202,26 @@ public function void buffer_object_draw(buffer_object const& bo, GLenum mode,
   check_error();
 }
 
-public threaded struct scene_node
+public threaded struct scene_node()
 {
-  string vs_name;
-  size_t vs_id;
-  glm::mat4 trans;
-  varray{ptr{scene_node}} children;
+  public int vs_id = -1;
+  public glm::mat4 trans;
+  public varray{ptr{scene_node}} children;
+}
+
+public function{set_normal_func} void
+scene_node_draw(scene_node const& sn, buffer_object const& bo,
+  glm::mat4 const& model_mat, int attr_position, int attr_normal, int attr_uv)
+{
+  const mm = model_mat * sn.trans;
+  set_normal_func(mm);
+  if (sn.vs_id >= 0) {
+    bo.draw(GL_TRIANGLES, static_cast{size_t}(sn.vs_id), attr_position,
+      attr_normal, attr_uv);
+  }
+  for (const i, const& snp: sn.children) {
+    scene_node_draw{set_normal_func}(*snp, bo, mm, attr_position, attr_normal,
+      attr_uv);
+  }
 }
 

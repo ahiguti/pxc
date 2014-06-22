@@ -4,6 +4,8 @@ public import allocator;
 
 extern "types" inline
 
+#include <algorithm>
+
 namespace pxcrt {
 
 void throw_bad_alloc();
@@ -267,6 +269,19 @@ template <typename Tx, typename Ty> inline bool
 le_memcmp(const Tx& x, const Ty& y) { return !lt_memcmp(y, x); }
 template <typename Tx, typename Ty> inline bool
 ge_memcmp(const Tx& x, const Ty& y) { return !lt_memcmp(x, y); }
+
+template <typename T> inline size_t
+hash_podarr(const T& x)
+{
+  typedef typename T::mapped_type mt;
+  mt const* const p = x.rawarr();
+  size_t n = x.size();
+  size_t r = 0;
+  for (size_t i = 0; i < n; ++i) {
+    r ^= p[i] + 0x9e3779b9 + (r << 6) + (r >> 2);
+  }
+  return r;
+}
 
 }; // namespace pxcrt
 

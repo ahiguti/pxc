@@ -93,10 +93,14 @@ function uint make_gear_vbo(float inner_radius, float outer_radius,
   for (const i : 0 .. teeth_i + 1) {
     const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
     const z = width * 0.5;
+    vec.push3(0.0, 0.0, 1.0);
     vec.push3(r0 * cos(angle), r0 * sin(angle), z);
+    vec.push3(0.0, 0.0, 1.0);
     vec.push3(r1 * cos(angle), r1 * sin(angle), z);
     if (i < teeth_i) {
+      vec.push3(0.0, 0.0, 1.0);
       vec.push3(r0 * cos(angle), r0 * sin(angle), z);
+      vec.push3(0.0, 0.0, 1.0);
       vec.push3(r1 * cos(angle + da * 3.0), r1 * sin(angle + da * 3.0), z);
     }
   }
@@ -109,12 +113,18 @@ function uint make_gear_vbo(float inner_radius, float outer_radius,
     const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
     const z = width * 0.5;
     /* 0 */
+    vec.push3(0.0, 0.0, 1.0);
     vec.push3(r1 * cos(angle), r1 * sin(angle), z);
+    vec.push3(0.0, 0.0, 1.0);
     vec.push3(r2 * cos(angle + da), r2 * sin(angle + da), z);
+    vec.push3(0.0, 0.0, 1.0);
     vec.push3(r1 * cos(angle + da * 3.0), r1 * sin(angle + da * 3.0), z);
     /* 1 */
+    vec.push3(0.0, 0.0, 1.0);
     vec.push3(r1 * cos(angle + da * 3.0), r1 * sin(angle + da * 3.0), z);
+    vec.push3(0.0, 0.0, 1.0);
     vec.push3(r2 * cos(angle + da), r2 * sin(angle + da), z);
+    vec.push3(0.0, 0.0, 1.0);
     vec.push3(r2 * cos(angle + da * 2.0), r2 * sin(angle + da * 2.0), z);
   }
   ofs_r[1] = vec.size();
@@ -124,10 +134,14 @@ function uint make_gear_vbo(float inner_radius, float outer_radius,
   for (const i : 0 .. teeth_i + 1) {
     const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
     const z = -width * 0.5;
+    vec.push3(0.0, 0.0, -1.0);
     vec.push3(r1 * cos(angle), r1 * sin(angle), z);
+    vec.push3(0.0, 0.0, -1.0);
     vec.push3(r0 * cos(angle), r0 * sin(angle), z);
     if (i < teeth_i) {
+      vec.push3(0.0, 0.0, -1.0);
       vec.push3(r1 * cos(angle + da * 3.0), r1 * sin(angle + da * 3.0), z);
+      vec.push3(0.0, 0.0, -1.0);
       vec.push3(r0 * cos(angle), r0 * sin(angle), z);
     }
   }
@@ -140,12 +154,18 @@ function uint make_gear_vbo(float inner_radius, float outer_radius,
     const angle = M_PI * 2.0 * static_cast{float}(i) / teeth;
     const z = -width * 0.5;
     /* 0 */
+    vec.push3(0.0, 0.0, -1.0);
     vec.push3(r1 * cos(angle + da * 3.0), r1 * sin(angle + da * 3.0), z);
+    vec.push3(0.0, 0.0, -1.0);
     vec.push3(r2 * cos(angle + da * 2.0), r2 * sin(angle + da * 2.0), z);
+    vec.push3(0.0, 0.0, -1.0);
     vec.push3(r1 * cos(angle), r1 * sin(angle), z);
     /* 1 */
+    vec.push3(0.0, 0.0, -1.0);
     vec.push3(r1 * cos(angle), r1 * sin(angle), z);
+    vec.push3(0.0, 0.0, -1.0);
     vec.push3(r2 * cos(angle + da * 2.0), r2 * sin(angle + da * 2.0), z);
+    vec.push3(0.0, 0.0, -1.0);
     vec.push3(r2 * cos(angle + da), r2 * sin(angle + da), z);
   }
   ofs_r[3] = vec.size();
@@ -275,32 +295,38 @@ function void draw_gear_vbo(uint vbo_name, farray{size_t, 6} const& ofs)
   const lnor = static_cast{uint}(loc_normal);
   glBindBuffer(GL_ARRAY_BUFFER, vbo_name);
   glEnableVertexAttribArray(lvtx);
-  glVertexAttrib3f(lnor, 0.0, 0.0, 1.0);
+  glEnableVertexAttribArray(lnor);
   /* draw front face */
-  glVertexAttribPointer(lvtx, 3, GL_FLOAT, 0, 0, offset_to_void_cp(0));
-  glDrawArrays(GL_TRIANGLE_STRIP, 0, static_cast{GLsizei}(ofs[0] / 3));
+  glVertexAttribPointer(lvtx, 3, GL_FLOAT, 0, 24,
+    offset_to_void_cp((size_t() + 3) * 4));
+  glVertexAttribPointer(lnor, 3, GL_FLOAT, 0, 24,
+    offset_to_void_cp(size_t() * 4));
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, static_cast{GLsizei}(ofs[0] / 6));
   /* draw front sides of teeth */
-  glVertexAttribPointer(lvtx, 3, GL_FLOAT, 0, 0,
+  glVertexAttribPointer(lvtx, 3, GL_FLOAT, 0, 24,
+    offset_to_void_cp((ofs[0] + 3) * 4));
+  glVertexAttribPointer(lnor, 3, GL_FLOAT, 0, 24,
     offset_to_void_cp(ofs[0] * 4));
-  glDrawArrays(GL_TRIANGLES, 0, static_cast{GLsizei}((ofs[1] - ofs[0]) / 3));
-  glVertexAttrib3f(lnor, 0.0, 0.0, -1.0);
+  glDrawArrays(GL_TRIANGLES, 0, static_cast{GLsizei}((ofs[1] - ofs[0]) / 6));
   /* draw back face */
-  glVertexAttribPointer(lvtx, 3, GL_FLOAT, 0, 0,
+  glVertexAttribPointer(lvtx, 3, GL_FLOAT, 0, 24,
+    offset_to_void_cp((ofs[1] + 3) * 4));
+  glVertexAttribPointer(lnor, 3, GL_FLOAT, 0, 24,
     offset_to_void_cp(ofs[1] * 4));
   glDrawArrays(GL_TRIANGLE_STRIP, 0,
-    static_cast{GLsizei}((ofs[2] - ofs[1]) / 3));
+    static_cast{GLsizei}((ofs[2] - ofs[1]) / 6));
   /* draw back sides of teeth */
-  glVertexAttribPointer(lvtx, 3, GL_FLOAT, 0, 0,
+  glVertexAttribPointer(lvtx, 3, GL_FLOAT, 0, 24,
+    offset_to_void_cp((ofs[2] + 3) * 4));
+  glVertexAttribPointer(lnor, 3, GL_FLOAT, 0, 24,
     offset_to_void_cp(ofs[2] * 4));
-  glDrawArrays(GL_TRIANGLES, 0, static_cast{GLsizei}((ofs[3] - ofs[2]) / 3));
-  /* use vbo for normals */
-  glEnableVertexAttribArray(lnor);
+  glDrawArrays(GL_TRIANGLES, 0, static_cast{GLsizei}((ofs[3] - ofs[2]) / 6));
   /* draw outward faces of teeth */
   glVertexAttribPointer(lvtx, 3, GL_FLOAT, 0, 24,
     offset_to_void_cp((ofs[3] + 3) * 4));
   glVertexAttribPointer(lnor, 3, GL_FLOAT, 0, 24,
     offset_to_void_cp(ofs[3] * 4));
-  glDrawArrays(GL_TRIANGLES, 0, static_cast{GLsizei}((ofs[4] - ofs[3]) / 3));
+  glDrawArrays(GL_TRIANGLES, 0, static_cast{GLsizei}((ofs[4] - ofs[3]) / 6));
   /* draw inside radius cylinder */
   glVertexAttribPointer(lvtx, 3, GL_FLOAT, 0, 24,
     offset_to_void_cp((ofs[4] + 3) * 4));
@@ -339,8 +365,8 @@ function void deinit_gear_vbos()
 function void draw_gear_vbo_one(int i, glm::mat4 const& mv,
   glm::mat3 const& nm)
 {
-  glUniformMatrix4fv(loc_mvp, 1, 0, projection.multiply(mv).to_crawptr());
-  glUniformMatrix3fv(loc_normal_matrix, 1, 0, nm.to_crawptr());
+  glUniformMatrix4fv(loc_mvp, 1, 0, (projection * mv).crawptr());
+  glUniformMatrix3fv(loc_normal_matrix, 1, 0, nm.crawptr());
   glUniform4f(loc_lightpos, 5.0, 5.0, 10.0, 0.0);
   const red = make_farray{float}(0.8, 0.1, 0.0, 1.0);
   const green = make_farray{float}(0.0, 0.8, 0.2, 1.0);
@@ -362,11 +388,11 @@ function void draw_frame(quaternion{float} const& view_angle, float object_size)
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   farray{float, 16} view_angle_arr = view_angle.to_matrix();
   mutable mat_angle = glm::mat4();
-  slice{float} mat_angle_slice = mat_angle.to_slice();
+  slice{float} mat_angle_slice = mat_angle.slice();
   for (size_t i : 0 .. 16) {
     mat_angle_slice[i] = view_angle_arr[i];
   }
-  const modelview_cur = modelview_base.multiply(mat_angle)
+  const modelview_cur = (modelview_base * mat_angle)
     .scale(glm::make_vec3(object_size, object_size, object_size));
 
   function void draw_n(int n, int i, glm::mat4 mutable& mv) {
@@ -508,27 +534,27 @@ function void set_program()
     "attribute vec3 normal;\n",
     "varying vec2 texcoord;\n",
     "varying vec2 vertex_xy;\n",
-    "varying float light_diffuse;\n",
+    "varying float brightness;\n",
     "void main(void) {\n",
     "  gl_Position = model_view_projection * vec4(vertex, 1.0);\n",
     "  texcoord = vertex.xy * 0.14 + vec2(0.5, 0.5);\n",
     "  vertex_xy = vertex.xy;\n",
     "  vec3 nor = normalize(normal_matrix * normal);\n",
     "  vec3 light = normalize(lightpos.xyz);\n",
-    "  light_diffuse = max(dot(light, nor), 0.0) + 0.4;\n",
+    "  brightness = max(dot(light, nor), 0.0) + 0.4;\n",
     "}\n"};
   const frag = m::concat{
     "uniform sampler2D sampler;\n",
     "uniform vec4 mate_color;\n",
     "varying vec2 texcoord;\n",
     "varying vec2 vertex_xy;\n",
-    "varying float light_diffuse;\n",
+    "varying float brightness;\n",
     "void main(void) {\n",
     "  vec4 color = texture2D(sampler, texcoord.xy);\n",
     "  float x0 = mod(vertex_xy.x, 0.4) - 0.2;\n",
     "  float y0 = mod(vertex_xy.y, 0.4) - 0.2;\n",
     "  if (x0 * x0 + y0 * y0 < 0.01) discard;\n",
-    "  gl_FragColor = color * light_diffuse * 0.9 + mate_color * 0.1;\n",
+    "  gl_FragColor = color * brightness * 0.9 + mate_color * 0.1;\n",
     "}\n"};
   const prog = create_program(vert, frag);
   if (prog != 0) {
@@ -621,8 +647,8 @@ function void init_gl()
   const wnd = SDL_CreateWindow("PXC-SDL2Gears", 0, 0, init_w, init_h, fl).some;
   SDL_GetWindowSize(wnd, init_w, init_h);
   const glctx = SDL_GL_CreateContext(wnd);
-  // SDL_GL_SetSwapInterval(0);
-  SDL_GL_SetSwapInterval(1);
+  SDL_GL_SetSwapInterval(0);
+  // SDL_GL_SetSwapInterval(1);
 
   sdllog("PXC-SDL2Gears init_gl");
   init_gl();
@@ -640,7 +666,7 @@ function void init_gl()
   metafunction ticks_t farray{uint, 5};
   ticks_t ticks;
   ticks_t ticks_sum;
-  for (const i, mutable e : ticks) {
+  for (const i, mutable& e : ticks) {
     e = tprev;
   }
   function void save_ticks(size_t idx) {

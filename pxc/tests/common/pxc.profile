@@ -1,6 +1,7 @@
 incdir=../pxc_core:../pxc_ext:../pxc_test:.
 safe_mode=0
 cxx=g++
+# cxx=clang++
 cflags=-g -O3 -DNDEBUG -Wall -Wno-unused -Wno-strict-aliasing
 # -Werror
  # -Wno-error=unused-local-typedefs # -Wno-unused -Wno-attributes

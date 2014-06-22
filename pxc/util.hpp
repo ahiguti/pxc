@@ -61,6 +61,7 @@ private:
 std::string get_canonical_path(const std::string& x);
 std::string trim_path(const std::string& x, int trim_path);
 std::string read_file_content(const std::string& fn, bool err_thr);
+bool file_access(const std::string& fn);
 std::vector<std::string> read_directory(const std::string& dn);
 std::string ulong_to_string_hexadecimal(unsigned long long v);
 unsigned long long ulong_from_string_hexadecimal(const std::string& s);

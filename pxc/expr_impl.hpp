@@ -161,6 +161,8 @@ enum typefamily_e {
   typefamily_e_cvarray,          /* resizable array, const elem */
   typefamily_e_darray,           /* dynamically allocated array */
   typefamily_e_cdarray,          /* dynamically allocated array, const elem */
+  typefamily_e_darrayst,         /* darray, may be on stack */
+  typefamily_e_cdarrayst,        /* cdarray, may be on stack */
   typefamily_e_farray,           /* fixed size array */
   typefamily_e_cfarray,          /* fixed size array, const elem */
   typefamily_e_slice,            /* array slice (eph) */
@@ -861,6 +863,9 @@ struct expr_funccall : public expr_i {
     if (i == 0) { func = e; }
     else if (i == 1) { arg = e; }
   }
+  void set_unique_namespace_one(const std::string& u, bool allow_unsafe) {
+    uniqns = u; }
+  std::string get_unique_namespace() const { return uniqns; }
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
   bool is_expression() const { return true; }
@@ -870,6 +875,7 @@ public:
   expr_i *func;
   expr_i *arg;
   funccall_e funccall_sort;
+  std::string uniqns;
   #if 0
   term auto_replace_term;
     /* if nonnull, this term is emitted instead of the original one for some

@@ -264,7 +264,7 @@ expr_i *instantiate_template(expr_i *tmpl_root, const term_list_range& targs,
 }
 
 static void eval_term_list_internal(const term_list_range& tl,
-  bool targs_evaluated, term *tlev, eval_context& ectx, expr_i *pos)
+  bool targs_evaluated, term_list& tlev, eval_context& ectx, expr_i *pos)
 {
   for (size_t i = 0; i < tl.size(); ++i) {
     if (targs_evaluated) {
@@ -728,7 +728,7 @@ static std::string incomplete_term_to_str(expr_i *texpr,
   const term_list_range& targs1, const term_list_range& targs2)
 {
   size_t sz = targs1.size();
-  term targs[sz];
+  term_list targs(sz);
   for (size_t i = 0; i < sz; ++i) {
     targs[i] = targs2[i].is_null() ? targs1[i] : targs2[i];
   }
@@ -872,8 +872,8 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
     }
     term r;
     if (es->metafunc_strict != 0) {
-      term tlev[targs.size()];
-      term_list_range tlev_range(tlev, targs.size());
+      term_list tlev(targs.size());
+      term_list_range tlev_range(tlev);
       try {
 	eval_term_list_internal(targs, targs_evaluated, tlev, ectx, pos);
 	if (is_partial_eval_uneval(tlev_range, ectx)) {
@@ -945,15 +945,15 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
       #endif
     }
     if (tparams_len != 0) {
-      term tlev[targs.size()];
+      term_list tlev(targs.size());
       eval_term_list_internal(targs, targs_evaluated, tlev, ectx, pos);
       DBG_INST(fprintf(stderr, "instantiate tm=%s evaluated_args=%s\n",
 	term_tostr_human(rebuild_term(tptr, texpr, targs)).c_str(),
 	term_tostr_list_human(term_list_range(tlev, targs.size())).c_str()));
-      if (!is_partial_eval_uneval(term_list_range(tlev, targs.size()), ectx)) {
+      if (!is_partial_eval_uneval(term_list_range(tlev), ectx)) {
 	DBG_INST(fprintf(stderr, "instantiate!\n"));
 	expr_i *const einst = instantiate_template(texpr,
-	  term_list_range(tlev, targs.size()), pos);
+	  term_list_range(tlev), pos);
 	DBG_EVAL(fprintf(stderr, "EVALI2 sort tmpl instantiated %s\n",
 	  term_tostr(einst->get_value_texpr(), term_tostr_sort_strict)
 	    .c_str()
