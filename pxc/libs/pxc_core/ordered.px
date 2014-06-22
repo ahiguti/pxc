@@ -25,10 +25,14 @@ public threaded function {t} int compare_strict_weak(t const& x, t const& y)
   metafunction fam m::family{t};
   if (m::eq{t, unit}) {
     return 0;
+  } else if (is_pod_raw_array{t}) {
+    return pod_array_compare{t, t}(x, y);
+  /*
   } else if (m::eq{t, svarray{uchar}}) {
     return sstring_cmp(x, y);
   } else if (mf::is_string_or_slice_type{t}) {
     return string_cmp(x, y);
+  */
   } else if (mf::is_integral_type{t}) {
     return x < y ? -1 : x > y ? 1 : 0;
   } else if (mf::is_fp_type{t}) {
@@ -105,19 +109,41 @@ public threaded function {t} int compare_strict_weak(t const& x, t const& y)
   }
 }
 
-// FIXME: std::sort requires Compare to be SWO
+private tsvaluetype struct {t} cmp {
+  public function int call(t const& x, t const& y) const
+    { return compare_strict_weak(x, y); }
+}
 
-public threaded function extern "pxcrt::sort_lt" {tarr}
-void sort_lt(tarr mutable& x);
+public metafunction sort{t}
+  sort_compare{m::symbol{t, "mapped_type"},
+    cmp{slice{m::symbol{t, "mapped_type"}}}};
 
-public threaded function extern "pxcrt::stable_sort_lt" {tarr}
-void stable_sort_lt(tarr mutable& x);
+public metafunction stable_sort{t}
+  stable_sort_compare{m::symbol{t, "mapped_type"},
+    cmp{slice{m::symbol{t, "mapped_type"}}}};
 
-public threaded function extern "pxcrt::sort" {tcmp, tarr}
-void sort(tarr mutable& x);
+private threaded function extern "pxcrt::sort" {t, tcmp}
+void sort_compare(slice{t} const& x);
 
-public threaded function extern "pxcrt::stable_sort" {tcmp, tarr}
-void stable_sort(tarr mutable& x);
+private threaded function extern "pxcrt::stable_sort" {t, tcmp}
+void stable_sort_compare(slice{t} const& x);
+
+extern "types" inline
+
+namespace pxcrt {
+
+template <typename Tf>
+struct compare_less {
+  Tf f;
+  template <typename Tk>
+  inline bool operator () (const Tk& x, const Tk& y) const {
+    return f.call$f(x, y) < 0;
+  }
+};
+
+};
+
+;
 
 extern "functions" inline
 
@@ -125,28 +151,16 @@ extern "functions" inline
 
 namespace pxcrt {
 
-template <typename Tcmp, typename Tarr> inline
-void sort_lt(Tarr& x, Tcmp const& cmp)
+template <typename T, typename Tcmp> inline
+void sort_compare(bt_slice<T> const& x)
 {
-  std::sort(x.rawarr(), x.rawarr() + x.size());
+  std::sort(x.rawarr(), x.rawarr() + x.size(), compare_less<Tcmp>());
 }
 
-template <typename Tcmp, typename Tarr> inline
-void stable_sort_lt(Tarr& x, Tcmp const& cmp)
+template <typename T, typename Tcmp> inline
+void stable_sort_lt(bt_slice<T> const& x)
 {
-  std::stable_sort(x.rawarr(), x.rawarr() + x.size());
-}
-
-template <typename Tcmp, typename Tarr> inline
-void sort(Tarr& x, Tcmp const& cmp)
-{
-  std::sort(x.rawarr(), x.rawarr() + x.size(), cmp);
-}
-
-template <typename Tcmp, typename Tarr> inline
-void stable_sort(Tarr& x, Tcmp const& cmp)
-{
-  std::stable_sort(x.rawarr(), x.rawarr() + x.size(), cmp);
+  std::stable_sort(x.rawarr(), x.rawarr() + x.size(), compare_less<Tcmp>());
 }
 
 };

@@ -15,6 +15,7 @@ public metafunction to_gfptr{f}
 
 public metafunction regular_polygon to_gfptr{gf_regular_polygon};
 public metafunction bump to_gfptr{gf_bump};
+public metafunction edge to_gfptr{gf_edge};
 public metafunction fill to_gfptr{gf_fill};
 public metafunction hole to_gfptr{gf_hole};
 
@@ -28,14 +29,20 @@ private threaded function float pi()
 private threaded function void polygon_scale(darray{vec3} mutable& poly,
   float scale)
 {
-  vec3 mutable avg;
-  for (const i, const& p: poly) {
-    avg += p;
-  }
-  avg /= static_cast{float}(poly.size());
+  const c = polygon_center(poly);
   for (const i, mutable& p: poly) {
-    p = avg + ((p - avg) * scale);
+    p = c + ((p - c) * scale);
   }
+}
+
+private threaded function vec3 polygon_center(cslice{vec3} const& poly)
+{
+  vec3 mutable c;
+  for (const i, const& p: poly) {
+    c += p;
+  }
+  c /= static_cast{float}(poly.size());
+  return c;
 }
 
 private threaded function void gf_regular_polygon(float radius, size_t n,
@@ -76,6 +83,28 @@ private threaded function void gf_bump(float z, float scale, int recurse,
     const side = make_farray{vec3}(front[i], poly[i], poly[i1], front[i1]);
     c1(side);
   }
+}
+
+private threaded function void gf_edge(ptr{vertices} const& vptr,
+  size_t edge_sort, gfptr const& c0, poly_t const& poly)
+{
+  if (poly.size() < 3) { return; }
+  const ex = (poly[1] - poly[0]).normalize();
+  const ez = -cross(poly[1] - poly[0], poly[2] - poly[0]).normalize();
+  const ey = cross(ex, ez);
+  node_edge e;
+  const c = polygon_center(poly);
+  mat4 tr;
+  tr = tr.translate(c);
+  tr = tr * make_mat4(
+    ex.x, ex.y, ex.z,  0.0, 
+    ey.x, ey.y, ey.z,  0.0,
+    ez.x, ez.y, ez.z,  0.0,
+     0.0,  0.0,  0.0,  1.0);  
+  e.trans = tr;
+  e.edge_sort = edge_sort;
+  vptr->push_edge(e);
+  c0(poly);
 }
 
 private threaded function void gf_fill(ptr{vertices} const& vptr,

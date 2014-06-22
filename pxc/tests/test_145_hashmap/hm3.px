@@ -3,13 +3,13 @@ public import common -;
 
 {
   metafunction sstring svarray{uchar};
-  metafunction map_type hash_map{sstring, sstring, hash_sstring,
-    equal_compare{sstring}};
+  metafunction map_type hash_map{sstring, sstring, pod_array_hash{sstring},
+    pod_array_eq{sstring, sstring}};
   mutable hm = map_type(1000);
   for (int i : 0 .. 1000) {
     mutable s = to_string(i);
     sstring ss = s[0 .. s.size()];
-    size_t h = hash_sstring(ss) % 1031;
+    size_t h = pod_array_hash{sstring}(ss) % 1031;
     println(h);
     hm.insert(ss, ss);
   }

@@ -402,25 +402,6 @@ bool is_ordered_type(const term& t)
   if (is_simple_string_type(t)) {
     return true; /* memcmp-compatible */
   }
-  #if 0
-  #endif
-  #if 0
-  if (t == builtins.type_strlit) {
-    return true; /* memcmp-compatible */
-  }
-  const expr_struct *const est = dynamic_cast<expr_struct *>(t.get_expr());
-  if (est != 0) {
-    const std::string s(est->sym);
-    const std::string ns(est->get_unique_namespace());
-    if (ns == "container::array" &&
-      (s == "varray" || s == "darray" || s == "farray")) {
-      const term& et = get_array_elem_texpr(0, t);
-      if (et == builtins.type_uchar) {
-	return true; /* memcmp-compatible */
-      }
-    }
-  }
-  #endif
   return false;
 }
 
@@ -479,9 +460,12 @@ static bool is_simple_array_type(const term& t)
   if (est != 0) {
     const std::string s(est->sym);
     const std::string ns(est->get_unique_namespace());
-    if (ns == "container::array" &&
-      (s == "varray" || s == "farray" || s == "darray" ||
-	s == "slice" || s == "cslice")) {
+    if (ns == "container::array" && (
+      s == "varray" || s == "cvarray" ||
+      s == "darray" || s == "cdarray" ||
+      s == "darrayst" || s == "cdarrayst" ||
+      s == "farray" || s == "cfarray" ||
+      s == "slice" || s == "cslice")) {
       return true;
     }
   }
@@ -626,6 +610,8 @@ typefamily_e get_family_from_string(const std::string& s)
   if (s == "cvarray") return typefamily_e_cvarray;
   if (s == "darray") return typefamily_e_darray;
   if (s == "cdarray") return typefamily_e_cdarray;
+  if (s == "darrayst") return typefamily_e_darrayst;
+  if (s == "cdarrayst") return typefamily_e_cdarrayst;
   if (s == "farray") return typefamily_e_farray;
   if (s == "cfarray") return typefamily_e_cfarray;
   if (s == "slice") return typefamily_e_slice;
@@ -664,6 +650,8 @@ std::string get_family_string(typefamily_e cat)
   case typefamily_e_cvarray: return "cvarray";
   case typefamily_e_darray: return "darray";
   case typefamily_e_cdarray: return "cdarray";
+  case typefamily_e_darrayst: return "darrayst";
+  case typefamily_e_cdarrayst: return "cdarrayst";
   case typefamily_e_farray: return "farray";
   case typefamily_e_cfarray: return "cfarray";
   case typefamily_e_slice: return "slice";
@@ -855,6 +843,7 @@ bool is_array_family(const term& t)
   return
     cat == typefamily_e_varray || cat == typefamily_e_cvarray ||
     cat == typefamily_e_darray || cat == typefamily_e_cdarray ||
+    cat == typefamily_e_darrayst || cat == typefamily_e_cdarrayst ||
     cat == typefamily_e_farray || cat == typefamily_e_cfarray;
 }
 
@@ -864,6 +853,7 @@ bool is_const_array_family(const term& t)
   return
     cat == typefamily_e_cvarray ||
     cat == typefamily_e_cdarray ||
+    cat == typefamily_e_cdarrayst ||
     cat == typefamily_e_cfarray;
 }
 
@@ -1036,6 +1026,8 @@ bool type_allow_feach(const term& t)
   case typefamily_e_cvarray:
   case typefamily_e_darray:
   case typefamily_e_cdarray:
+  case typefamily_e_darrayst:
+  case typefamily_e_cdarrayst:
   case typefamily_e_farray:
   case typefamily_e_cfarray:
   case typefamily_e_map:
@@ -1060,6 +1052,9 @@ static bool is_copyable_type_one(expr_i *e)
     return false;
   }
   if (cat == typefamily_e_linear || cat == typefamily_e_noncopyable) {
+    return false;
+  }
+  if (cat == typefamily_e_darrayst || cat == typefamily_e_cdarrayst) {
     return false;
   }
   return true;
@@ -1090,6 +1085,9 @@ static bool is_assignable_type_one(expr_i *e, bool allow_unsafe)
   }
   const typefamily_e cat = get_family(e);
   if (cat == typefamily_e_darray || cat == typefamily_e_cdarray) {
+    return false;
+  }
+  if (cat == typefamily_e_darrayst || cat == typefamily_e_cdarrayst) {
     return false;
   }
   return true;

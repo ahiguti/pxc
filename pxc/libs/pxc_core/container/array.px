@@ -187,6 +187,32 @@ cdarray(size_t len, t const& value) {
   public function extern "crange" crange_type crange() const;
 }
 
+public tsvaluetype struct extern "::pxcrt::darrayst" "darrayst" {t}
+darrayst(size_t len, t const& value) {
+  public metafunction key_type size_t;
+  public metafunction mapped_type t;
+  public metafunction range_type slice{t};
+  public metafunction crange_type cslice{t};
+  public metafunction is_raw_array 1;
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
+}
+
+public tsvaluetype struct extern "::pxcrt::darrayst" "cdarrayst" {t}
+cdarrayst(size_t len, t const& value) {
+  public metafunction key_type size_t;
+  public metafunction mapped_type t;
+  public metafunction range_type cslice{t};
+  public metafunction crange_type cslice{t};
+  public metafunction is_raw_array 1;
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
+}
+
 public tsvaluetype struct extern "::pxcrt::deque_slice" "slice" {t}
 deque_slice {
   public metafunction key_type size_t;
@@ -377,17 +403,48 @@ varray_emplace_back(expand(emplace_back_arg_decls{ts}))
   varray_rawarr_set_valid_len(a0, a0.size() + 1);
 }
 
-public threaded function extern "::pxcrt::string_cmp" {t} int
-string_cmp(t const& x, t const& y);
+public metafunction is_pod_raw_array_pair{tx, ty}
+  m::and{
+    is_pod_raw_array{tx},
+    is_pod_raw_array{ty},
+    m::eq{m::symbol{tx, "mapped_type", 0}, m::symbol{ty, "mapped_type", 0}}};
 
-public threaded function extern "::pxcrt::sstring_cmp" int
-sstring_cmp(svarray{uchar} const& x, svarray{uchar} const& y);
+public metafunction is_pod_raw_array{t}
+  m::and{
+    mf::is_array_or_slice_type{t},
+    m::symbol{t, "is_raw_array", 0},
+    mf::is_integral_enum_bitmask_type{m::symbol{t, "mapped_type", 0}}};
 
-public threaded function extern "::pxcrt::sstring_eq" bool
-sstring_eq(svarray{uchar} const& x, svarray{uchar} const& y);
+public metafunction is_pod_raw_sarray_pair{tx, ty}
+  m::and{
+    is_pod_raw_sarray{tx},
+    is_pod_raw_sarray{ty},
+    m::eq{m::symbol{tx, "mapped_type", 0}, m::symbol{ty, "mapped_type", 0}}};
 
-public threaded function extern "::pxcrt::hash_sstring" size_t
-hash_sstring(svarray{uchar} const& x);
+public metafunction is_pod_raw_sarray{t}
+  m::and{
+    is_pod_raw_array{t},
+    m::or{
+      m::eq{m::full_string{m::base{t}}, "container::array::svarray{}"},
+      m::eq{m::full_string{m::base{t}}, "container::array::csvarray{}"}}};
+
+public metafunction pod_array_eq{tx, ty}
+  m::cond{
+    is_pod_raw_sarray_pair{tx, ty}, pod_sarray_eq_impl{tx, ty},
+    is_pod_raw_array_pair{tx, ty}, pod_array_eq_impl{tx, ty},
+    m::error{m::concat{tx, ", ", ty, ": invalid type"}}};
+
+public metafunction pod_array_compare{tx, ty}
+  m::cond{
+    is_pod_raw_sarray_pair{tx, ty}, pod_sarray_compare_impl{tx, ty},
+    is_pod_raw_array_pair{tx, ty}, pod_array_compare_impl{tx, ty},
+    m::error{m::concat{tx, ", ", ty, ": invalid type"}}};
+
+public metafunction pod_array_hash{t}
+  m::cond{
+    is_pod_raw_sarray{t}, pod_sarray_hash_impl{t},
+    is_pod_raw_array{t}, pod_array_hash_impl{t},
+    m::error{m::concat{t, ": invalid type"}}};
 
 public threaded function {t, tk, tm} tk
 find_mapped(t const& c, tk k, tm const& x)
@@ -515,4 +572,17 @@ make_cdeque_func(expand(arr_argdecls{typ, n}))
   expand macro_construct{typ, tlist, "arr"};
   return arr;
 }
+
+private threaded function extern "::pxcrt::pod_array_eq" {tx, ty} bool
+pod_array_eq_impl(tx const& x, ty const& y);
+private threaded function extern "::pxcrt::pod_array_compare" {tx, ty} int
+pod_array_compare_impl(tx const& x, ty const& y);
+private threaded function extern "::pxcrt::pod_array_hash" {t} size_t
+pod_array_hash_impl(t const& x);
+private threaded function extern "::pxcrt::pod_sarray_eq" {tx, ty} bool
+pod_sarray_eq_impl(tx const& x, ty const& y);
+private threaded function extern "::pxcrt::pod_sarray_compare" {tx, ty} int
+pod_sarray_compare_impl(tx const& x, ty const& y);
+private threaded function extern "::pxcrt::pod_sarray_hash" {t} size_t
+pod_sarray_hash_impl(t const& x);
 

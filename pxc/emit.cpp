@@ -3364,6 +3364,19 @@ static void emit_vardef_constructor(emit_context& em, expr_i *e,
     /* to avoid ambiguity with function declaration, we need to append
      * parens for each argument. */
     emit_comma_sep_list_with_paren(em, fc->arg);
+    if (get_family(typ) == typefamily_e_darrayst ||
+      get_family(typ) == typefamily_e_cdarrayst) {
+      expr_op *const eop = dynamic_cast<expr_op *>(fc->arg);
+      assert(eop != 0);
+      assert(eop->op == ',');
+      expr_i *const arg1st = eop->arg0; /* num elements */
+      const term et = get_array_elem_texpr(0, typ);
+      em.puts(", alloca(sizeof(");
+      em.puts(term_tostr(et, term_tostr_sort_cname));
+      em.puts(") * (");
+      fn_emit_value(em, arg1st);
+      em.puts("))");
+    }
     em.puts(")");
   }
 }

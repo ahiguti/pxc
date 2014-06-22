@@ -412,63 +412,138 @@ template <typename T> struct csvarray : public svarray<T> {
     : svarray<T>(start, sz, asz) { }
 };
 
-static inline size_t
-hash_sstring(const svarray<bt_uchar>& x)
-{
-  const bt_ulong *const xp = reinterpret_cast<const bt_ulong *>(x.begin());
-  const size_t xs0 = x.size();
-  const size_t xsz = (xs0 + (sizeof(size_t)-1)) / sizeof(size_t);
-  size_t r = 0;
-  for (size_t i = 0; i < xsz; ++i) {
-    r ^= size_t(xp[i]) + 0x9e3779b9 + (r << 6) + (r >> 2);
-  }
-  return r;
-}
+template <typename Tx, typename Ty, bool is_sstr> struct
+pod_sarray_eq_impl;
 
-static inline bool
-sstring_eq(const svarray<bt_uchar>& x, const svarray<bt_uchar>& y)
+template <typename Tx, typename Ty> struct
+pod_sarray_eq_impl<Tx, Ty, true>
 {
-  const size_t xs0 = x.size();
-  const size_t ys0 = y.size();
-  if (xs0 != ys0) {
-    return false;
-  }
-  const size_t sz = (xs0 + (sizeof(size_t)-1)) / sizeof(size_t);
-  const bt_ulong *const xp = reinterpret_cast<const bt_ulong *>(x.begin());
-  const bt_ulong *const yp = reinterpret_cast<const bt_ulong *>(y.begin());
-  for (size_t i = 0; i < sz; ++i) {
-    if (xp[i] != yp[i]) {
+  bt_bool operator ()(Tx const& x, Ty const& y) const
+  {
+    const size_t xs0 = x.size();
+    const size_t ys0 = y.size();
+    if (xs0 != ys0) {
       return false;
     }
-  }
-  return true;
-}
-
-static inline int
-sstring_cmp(const svarray<bt_uchar>& x, const svarray<bt_uchar>& y)
-{
-  const bt_ulong *const xp = reinterpret_cast<const bt_ulong *>(x.begin());
-  const bt_ulong *const yp = reinterpret_cast<const bt_ulong *>(y.begin());
-  const size_t xs0 = x.size();
-  const size_t ys0 = y.size();
-  const size_t xsz = (xs0 + (sizeof(size_t)-1)) / sizeof(size_t);
-  const size_t ysz = (ys0 + (sizeof(size_t)-1)) / sizeof(size_t);
-  const size_t sz = xsz < ysz ? xsz : ysz; 
-  for (size_t i = 0; i < sz; ++i) {
-    if (xp[i] < yp[i]) {
-      return -1;
+    const size_t sz = (xs0 + (sizeof(size_t)-1)) / sizeof(size_t);
+    const bt_ulong *const xp = reinterpret_cast<const bt_ulong *>(x.begin());
+    const bt_ulong *const yp = reinterpret_cast<const bt_ulong *>(y.begin());
+    for (size_t i = 0; i < sz; ++i) {
+      if (xp[i] != yp[i]) {
+	return false;
+      }
     }
-    if (xp[i] > yp[i]) {
+    return true;
+  }
+};
+
+template <typename Tx, typename Ty> struct
+pod_sarray_eq_impl<Tx, Ty, false>
+{
+  bt_bool operator ()(Tx const& x, Ty const& y) const
+  {
+    return eq_memcmp(x, y);
+  }
+};
+
+template <typename Tx, typename Ty, bool is_sstr> struct
+pod_sarray_compare_impl;
+
+template <typename Tx, typename Ty> struct
+pod_sarray_compare_impl<Tx, Ty, true>
+{
+  bt_int operator ()(Tx const& x, Ty const& y) const
+  {
+    const bt_ulong *const xp = reinterpret_cast<const bt_ulong *>(x.begin());
+    const bt_ulong *const yp = reinterpret_cast<const bt_ulong *>(y.begin());
+    const size_t xs0 = x.size();
+    const size_t ys0 = y.size();
+    const size_t xsz = (xs0 + (sizeof(size_t)-1)) / sizeof(size_t);
+    const size_t ysz = (ys0 + (sizeof(size_t)-1)) / sizeof(size_t);
+    const size_t sz = xsz < ysz ? xsz : ysz; 
+    for (size_t i = 0; i < sz; ++i) {
+      if (xp[i] < yp[i]) {
+	return -1;
+      }
+      if (xp[i] > yp[i]) {
+	return 1;
+      }
+    }
+    if (xs0 > ys0) {
       return 1;
     }
+    if (xs0 < ys0) {
+      return -1;
+    }
+    return 0;
   }
-  if (xs0 > ys0) {
-    return 1;
+};
+
+template <typename Tx, typename Ty> struct
+pod_sarray_compare_impl<Tx, Ty, false>
+{
+  bt_int operator ()(Tx const& x, Ty const& y) const
+  {
+    return compare_memcmp(x, y);
   }
-  if (xs0 < ys0) {
-    return -1;
+};
+
+template <typename T, bool is_sstr> struct
+pod_sarray_hash_impl;
+
+template <typename T> struct
+pod_sarray_hash_impl<T, true>
+{
+  bt_size_t operator ()(T const& x)
+  {
+    const bt_ulong *const xp = reinterpret_cast<const bt_ulong *>(x.begin());
+    const size_t xs0 = x.size();
+    const size_t xsz = (xs0 + (sizeof(size_t)-1)) / sizeof(size_t);
+    size_t r = 0;
+    for (size_t i = 0; i < xsz; ++i) {
+      r ^= size_t(xp[i]) + 0x9e3779b9 + (r << 6) + (r >> 2);
+    }
+    return r;
   }
-  return 0;
+};
+
+template <typename T> struct
+pod_sarray_hash_impl<T, false>
+{
+  bt_size_t operator ()(T const& x)
+  {
+    return hash_podarr(x);
+  }
+};
+
+template <typename Tx, typename Ty> struct is_sstring_pair {
+  typedef typename Tx::mapped_type mtx;
+  typedef typename Ty::mapped_type mty;
+  enum {
+    value = (
+      is_trivially_copyable<mtx>::value &&
+      is_trivially_copyable<mty>::value &&
+      sizeof(mtx) == 1 &&
+      sizeof(mty) == 1) };
+};
+
+template <typename Tx, typename Ty> static inline bt_bool
+pod_sarray_eq(Tx const& x, Ty const& y)
+{
+  return pod_sarray_eq_impl<Tx, Ty, is_sstring_pair<Tx, Ty>::value>()(x, y);
+}
+
+template <typename Tx, typename Ty> static inline bt_int
+pod_sarray_compare(Tx const& x, Ty const& y)
+{
+  return pod_sarray_compare_impl<Tx, Ty, is_sstring_pair<Tx, Ty>::value>()
+    (x, y);
+}
+
+template <typename T> static inline bt_size_t
+pod_sarray_hash(T const& x)
+{
+  return pod_sarray_hash_impl<T, is_sstring_pair<T, T>::value>()(x);
 }
 
 }; // namespace pxcrt

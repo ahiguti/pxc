@@ -1,113 +1,88 @@
 public threaded namespace thread "use-unsafe";
 public import numeric::integral -;
-public import pointer -;
-public import container::array;
-public import exception;
-public import meta -;
-public import meta m;
 public import operator -;
+public import pointer -;
+public import io::errno -;
+public import algebraic -;
+public import meta m;
+public import exception -;
 public import callable -;
+public import text::string::serialize -;
 
-/* public */
-
-public threaded function {f} tcallable_ptr{func_ret{f}, m::nil}
-make_thread_func(expand(m::args{f}))
+public threaded function {f} callable_ptr{m::ret_type{f}, m::nil}
+make_thread_ptr(expand(m::args{f}))
 {
-  if (m::eq{func_ret{f}, void}) {
-    return tcallable_ptr{func_ret{f}, m::nil}(
-      make_tcptr(uneval_thread_void{f}(
-	make_tptr(make_tuple(expand(a : m::map{m::args{f}, m::at0}; a))))));
-  } else {
-    return tcallable_ptr{func_ret{f}, m::nil}(
-      make_tcptr(uneval_thread_nonvoid{f}(
-	make_tptr(make_tuple(expand(a : m::map{m::args{f}, m::at0}; a))))));
-  }
+  return callable_ptr{m::ret_type{f}, m::nil}(
+    make_ptr{thread{f}}(expand(a: m::arg_names{f}; a)));
+    /* arg types of f must be multithreaded, or an error is raised here. */
 }
 
-/* private */
-
-private metafunction func_arg{f} tuple{m::arg_types{f}, m::nil};
-private metafunction func_ret{f} m::ret_type{f};
-
-private multithreaded struct {f}
-uneval_thread_params_nonvoid(tptr{func_arg{f}} const& a,
-  tptr{func_ret{f}} const& r)
+public threaded struct {f}
+thread(expand(m::args{f}))
+  <callable{m::ret_type{f}, m::nil}>
 {
-  private tptr{func_arg{f}} argp = a;
-  private tptr{func_ret{f}} retp = r;
-  public function void main() {
-    func_arg{f} const& arg = *argp;
-    *retp = f(expand(a: m::field_names{func_arg{f}}; arg.a));
+  private metafunction tfuncobj thread_main_funcobj{f};
+  private tfuncobj mutable fobj = tfuncobj(expand(a: m::arg_names{f}; a));
+  private bool need_join = false;
+  private thread_id thd;
+  init();
+  private function void init() {
+    const err = thread_create{tfuncobj}(thd, fobj);
+    if (err != EOK) {
+      throw runtime_error_template{"thread_create"}(to_string(err));
+    }
+    need_join = true;
   }
-}
-
-private multithreaded struct {f}
-uneval_thread_params_void(tptr{func_arg{f}} const& a)
-{
-  private tptr{func_arg{f}} argp = a;
-  public function void main() {
-    func_arg{f} const& arg = *argp;
-    f(expand(a: m::field_names{func_arg{f}}; arg.a));
+  public function ~ {
+    __call();
   }
-}
-
-private multithreaded struct {f}
-uneval_thread_nonvoid(tptr{func_arg{f}} const& a)
-  <tcallable{func_ret{f}, m::nil}>
-{
-  private tptr{func_ret{f}} retp = make_tptr{func_ret{f}}();
-  private thread thr =
-    make_thread_internal(uneval_thread_params_nonvoid{f}(a, retp));
-  public function func_ret{f} __call() const {
-    thr.join();
-    return *retp;
+  public function m::ret_type{f} __call() {
+    if (need_join) {
+      need_join = false;
+      const err = thread_join{tfuncobj}(thd);
+      if (err != EOK) {
+	throw runtime_error_template{"thread_join"}(to_string(err));
+      }
+    }
+    if (m::ne{m::ret_type{f}, void}) {
+      return fobj.ret.some;
+    }
   }
 }
 
 private multithreaded struct {f}
-uneval_thread_void(tptr{func_arg{f}} const& a)
-  <tcallable{void, m::nil}>
+thread_main_funcobj(expand(m::args{f}))
 {
-  private thread thr = make_thread_internal(uneval_thread_params_void{f}(a));
-  public function void __call() const {
-    thr.join();
+  private metafunction tfld tuple{m::arg_types{f}, m::nil};
+  private metafunction tret
+    m::cond{m::eq{m::ret_type{f}, void}, unit, option{m::ret_type{f}}};
+  public tfld const fld = tfld(expand(a: m::arg_names{f}; a));
+    /* arg types of f must be multithreaded, or an error is raised here. */
+  public tret mutable ret;
+  public function void __call() {
+    if (m::eq{m::ret_type{f}, void}) {
+      f(expand(f: m::field_names{tfld}; fld.f));
+    } else {
+      ret.some = f(expand(f: m::field_names{tfld}; fld.f));
+    }
   }
 }
 
-private multithreaded struct extern "pxcrt::thread_ptr" "nodefault"
-thread { }
+private threaded struct extern "pxcrt::thread_id" "noncopyable" thread_id { }
 
-private threaded function {targs}
-thread make_thread_internal(targs const& args)
-{
-  tptr{thrdata} r = make_tptr{thrdata_impl{targs}}(thrdata_impl{targs}(args));
-  return make_thread_impl(r);
-}
-
-private threaded function extern "pxcrt::thread_join"
-  void thread_join(thread const& thr);
-
-private multithreaded interface thrdata {
-  function void main();
-}
-private multithreaded struct {targs} thrdata_impl(targs const& a)
-  <thrdata>
-{
-  targs args = a;
-  function void main() {
-    args.main();
-  }
-}
-private threaded function extern "pxcrt::make_thread_impl"
-  thread make_thread_impl(tptr{thrdata} const& f);
+private threaded function extern "pxcrt::thread_create" {tfuncobj} errno_t
+thread_create(thread_id mutable& thd, tfuncobj mutable& funcobj);
+private threaded function extern "pxcrt::thread_join" {tfuncobj} errno_t
+thread_join(thread_id mutable& thd);
 
 extern "types" inline
 
+#include <pthread.h>
+
 namespace pxcrt {
 
-struct thread_rep;
+typedef pthread_t thread_id;
 
-typedef pxcrt::rcptr< pxcrt::trcval<thread_rep> > thread_ptr;
 };
 
 ;
@@ -116,97 +91,27 @@ extern "functions" inline
 
 namespace pxcrt {
 
-typedef pxcrt::rcptr< thread$n::thrdata$i > thrdata_ptr;
-typedef thread$n::thrdata$i *thrdata_rawptr;
-
-struct thread_rep {
-  thread_rep(thrdata_ptr const& m) : tid(), need_join(false), mptr(m) { }
-  ~thread_rep() { join(); }
-  void join();
-  pthread_t tid;
-  bool need_join;
-  thrdata_ptr mptr;
-private:
-  thread_rep(const thread_rep&);
-  thread_rep& operator =(const thread_rep&);
-};
-
-thread_ptr make_thread_impl(thrdata_ptr const& m);
-void thread_join(thread_ptr const& t);
-
-};
-
-;
-
-extern "implementation" inline
-
-#define PXC_THREAD_DBG(x)
-
-namespace pxcrt {
-
-void *pxc_thread_child_main(void *arg)
+template <typename Tfuncobj> static inline void *
+funcobj_wrap(void *arg)
 {
-  thrdata_rawptr m = static_cast<thrdata_rawptr>(arg);
-    /* no need to lock m */
-  PXC_TRY {
-    PXC_TRY {
-      m->main$f();
-    } PXC_CATCH(const std::exception& ex) {
-      #if !PXC_NOEXCEPTIONS
-      pxcrt::c_exception_log_stderr(ex);
-      #endif
-    }
-  } PXC_CATCH(...) {
-    const char *const mess = "PXCTHREAD: Uncaught exception\n";
-    ::write(2, mess, strlen(mess));
-  }
-  pxcrt::clear_local_pool();
+  Tfuncobj *const a = static_cast<Tfuncobj *>(arg);
+  a->__call$f();
   return 0;
 }
 
-thread_ptr make_thread_impl(thrdata_ptr const& m)
+template <typename Tfuncobj> int
+thread_create(thread_id& thd, Tfuncobj& funcobj)
 {
-  thread_ptr thr(thread_ptr::make_rawptr(m));
-  thread_rep& impl = thr->value;
-  if (pthread_create(&impl.tid, 0, pxc_thread_child_main, m.get()) != 0) {
-    PXC_THREAD_DBG(fprintf(stderr, "failed to create thread\n"));
-  } else {
-    PXC_THREAD_DBG(fprintf(stderr, "thread create\n"));
-    impl.need_join = true;
-  }
-  return thr;
+  return pthread_create(&thd, 0, &funcobj_wrap<Tfuncobj>, &funcobj);
 }
 
-void thread_join(thread_ptr const& t)
+template <typename Tfuncobj> int
+thread_join(thread_id& thd)
 {
-  if (t.get() == 0) {
-    return;
-  }
-  thread_ptr::guard_val<thread_ptr> grd(t);
-  grd.get()->value.join();
-}
-
-void thread_rep::join()
-{
-  if (!need_join) {
-    PXC_THREAD_DBG(fprintf(stderr, "no need to join\n"));
-    return;
-  }
-  if (tid == pthread_self()) {
-    PXC_THREAD_DBG(fprintf(stderr, "detach\n"));
-    __attribute__((unused)) const int e = pthread_detach(tid);
-    assert(e == 0);
-  } else {
-    PXC_THREAD_DBG(fprintf(stderr, "join\n"));
-    __attribute__((unused)) const int e = pthread_join(tid, 0);
-    assert(e == 0);
-  }
-  need_join = false;
+  return pthread_join(thd, 0);
 }
 
 };
-
-#undef PXC_THREAD_DBG
 
 ;
 

@@ -1598,14 +1598,25 @@ static int prepare_options(parser_options& po, int argc, char **argv)
   if (po.work_dir.empty()) {
     po.work_dir = get_home_directory() + "/.pxc";
   }
-  if (po.profile_name.empty()) {
-    po.profile_name = "/etc/pxc/pxc.profile";
-  } else if (!po.no_realpath) {
-    if (po.profile_name.find('/') == std::string::npos) {
-      po.profile_name = "/etc/pxc/pxc_" + po.profile_name + ".profile";
+
+  {
+    static const char *etc_path[] = { "/usr/local/etc", "/etc", 0 };
+    for (const char **p = etc_path; *p != 0; ++p) {
+      std::string dstr(*p);
+      if (po.profile_name.empty()) {
+	po.profile_name = dstr + "/pxc/pxc.profile";
+      } else if (!po.no_realpath) {
+	if (po.profile_name.find('/') == std::string::npos) {
+	  po.profile_name = dstr + "/pxc/pxc_" + po.profile_name + ".profile";
+	}
+	po.profile_name = get_canonical_path(po.profile_name);
+      }
+      if (file_access(po.profile_name)) {
+	break;
+      }
     }
-    po.profile_name = get_canonical_path(po.profile_name);
   }
+
   if (!check_path_validity(po.work_dir)) {
     fprintf(stderr, "working directory contains an invalid character: '%s'\n",
       po.work_dir.c_str());

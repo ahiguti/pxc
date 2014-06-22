@@ -533,6 +533,9 @@ static bool is_default_constructible(const term& typ, expr_i *pos,
     if (cat == typefamily_e_darray || cat == typefamily_e_cdarray) {
       return false;
     }
+    if (cat == typefamily_e_darrayst || cat == typefamily_e_cdarrayst) {
+      return false;
+    }
     if (cat == typefamily_e_varray || cat == typefamily_e_cvarray ||
       cat == typefamily_e_map || cat == typefamily_e_cmap ||
       cat == typefamily_e_nocascade) {
@@ -2207,10 +2210,22 @@ static term_list tparams_apply_tvmap(expr_i *e, expr_tparams *tp,
 static expr_i *create_tpfunc_texpr(expr_i *e, const term_list *partial_targs,
   const tvmap_type& tvm, expr_i *inst_pos)
 {
-  expr_block *const bl = e->get_template_block();
-  assert(bl);
-  term_list telist = tparams_apply_tvmap(e, bl->tinfo.tparams, partial_targs,
-    tvm);
+  arena_error_throw_pushed();
+  term_list telist;
+  try {
+    expr_block *const bl = e->get_template_block();
+    assert(bl);
+    telist = tparams_apply_tvmap(e, bl->tinfo.tparams, partial_targs, tvm);
+    arena_error_throw_pushed();
+  } catch (const std::exception& ex) {
+    const term t(e);
+    const std::string k = term_tostr_human(t);
+    std::string m = ex.what();
+    std::string s = std::string(inst_pos->fname) + ":"
+      + ulong_to_string(inst_pos->line)
+      + ": (instantiated from here) instantiating " + k + "\n" + m;
+    throw std::runtime_error(s);
+  }
   return instantiate_template(e, telist, inst_pos);
 }
 
@@ -2349,6 +2364,24 @@ static void check_ptr_constructor_syntax(expr_funccall *fc, const term& te)
 
 static void subst_user_defined_call(expr_funccall *fc, symbol_table *lookup)
 {
+  bool memfunc_w_explicit_obj = false;
+  symbol_common *func_sc = get_func_symbol_common_for_funccall(fc->func,
+    memfunc_w_explicit_obj);
+  term func_te = func_sc != 0 ? func_sc->resolve_evaluated() : term();
+  expr_i *func_e = func_te.get_expr();
+  if (func_sc != 0 && func_e == 0) {
+    /* term_bind */
+    return;
+  }
+  if (func_e != 0) {
+    if (func_e->get_esort() != expr_e_var &&
+      func_e->get_esort() != expr_e_argdecls &&
+      func_e->get_esort() != expr_e_funccall &&
+      func_e->get_esort() != expr_e_op) {
+      return;
+    }
+  }
+  #if 0
   if (fc->func->get_esort() != expr_e_symbol) {
     return;
   }
@@ -2359,13 +2392,17 @@ static void subst_user_defined_call(expr_funccall *fc, symbol_table *lookup)
     return;
   }
   /* func is a variable or argument */
+  #endif
   expr_i *nfunc = expr_op_new(fc->fname, fc->line, '.',
+    fc->func,
+    #if 0
     expr_symbol_new(fc->fname, fc->line,
       expr_nssym_new(fc->fname, fc->line, 0, sym->nssym->sym)),
+    #endif
     expr_symbol_new(fc->fname, fc->line,
       expr_nssym_new(fc->fname, fc->line, 0, "__call")));
   fc->func = nfunc;
-  const std::string uniqns = sc->uniqns.to_string();
+  const std::string uniqns = fc->uniqns;
   int block_id_ns = 0;
   const bool allow_unsafe = false;
   fn_set_namespace(nfunc, uniqns, block_id_ns, allow_unsafe);

@@ -83,6 +83,14 @@ std::string read_file_content(const std::string& fn, bool err_thr)
   return s;
 }
 
+bool file_access(const std::string& fn)
+{
+  if (::access(fn.c_str(), R_OK)) {
+    return true;
+  }
+  return false;
+}
+
 std::vector<std::string> read_directory(const std::string& dn)
 {
   std::vector<std::string> r;

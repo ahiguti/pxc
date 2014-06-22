@@ -1,5 +1,6 @@
 public threaded namespace operator;
 public import numeric::integral -;
+public import container::array -;
 public import meta::family -;
 public import exception -;
 public import text::string::serialize -;
@@ -422,7 +423,10 @@ binop(tx const& x, ty const& y)
 private threaded function {tx, ty} bool
 eq_folding(tx const& x, ty const& y)
 {
-  if (m::and{mf::is_array_or_slice_type{tx}, mf::is_array_or_slice_type{ty}}) {
+  if (m::and{m::eq{tx, ty}, is_pod_raw_array_or_sarray{tx}}) {
+    return pod_array_eq{tx}(x, y);
+  } else if (m::and{mf::is_array_or_slice_type{tx},
+    mf::is_array_or_slice_type{ty}}) {
     if (x.size() != y.size()) { return false; }
     for (const& k, const& m: x) {
       if (y[k] != m) { return false; }
