@@ -18,6 +18,7 @@
 #define DBG(x)
 #define DBG_TIMING(x)
 #define DBG_EXT(x)
+#define DBG_FIND(x)
 
 namespace pxc {
 
@@ -57,6 +58,8 @@ void symbol_table::define_name(const symbol& shortname,
       "block is compiled already", shortname.c_str());
   }
   locals_type::iterator i = locals.find(name);
+  DBG_FIND(fprintf(stderr, "symbol_table::find0 %s %d\n", name.c_str(),
+    int(i != locals.end())));
   if (i != locals.end()) {
     arena_error_throw(e, "Duplicated name %s (defined at %s:%d)",
       name.c_str(), i->second.edef->fname, i->second.edef->line);
@@ -154,6 +157,8 @@ localvar_info symbol_table::resolve_global_internal(const symbol& shortname,
   }
   DBG_EXT(fprintf(stderr, "lookup global %s\n", pname.c_str()));
   locals_type::const_iterator i = locals.find(pname);
+  DBG_FIND(fprintf(stderr, "symbol_table::find2 %s %d\n", pname.c_str(),
+    int(i != locals.end())));
   if (i != locals.end() &&
     (!no_generated || !i->second.edef->generated_flag)) {
     v = i->second;
@@ -212,6 +217,8 @@ symbol_table::locals_type::const_iterator symbol_table::find(const symbol& k,
       block_backref->dump(0).c_str());
   }
   locals_type::const_iterator i = locals.find(k);
+  DBG_FIND(fprintf(stderr, "symbol_table::find3 %s %d\n", k.c_str(),
+    int(i != locals.end())));
   if (no_generated && i->second.edef->generated_flag) {
     return end();
   }
@@ -299,6 +306,8 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
        * namespace of the same name as the prefix.*/
     } else {
       locals_type::const_iterator i = locals.find(fullname);
+      DBG_FIND(fprintf(stderr, "symbol_table::find1 %s %d\n", fullname.c_str(),
+	int(i != locals.end())));
       if (i != locals.end() &&
 	(!memfld_nogen || !i->second.edef->generated_flag)) {
 	v = i->second;
@@ -385,7 +394,6 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
       DBG_EXT(fprintf(stderr, "global %s\n", fullname.c_str()));
       DBG_TIMING(t[4] = gettimeofday_double());
       if (!fullname.has_ns()) {
-	symbol pname;
 	/* try the current namespace */
 	v = resolve_global_internal(fullname, curns, curns, true, pos);
 	  /* no-generated symbol only */
@@ -435,6 +443,11 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
 	    }
 	  }
 	  DBG_TIMING(t[8] = gettimeofday_double());
+	}
+	/* try the current namespace again, incl generated syms */
+	v = resolve_global_internal(fullname, curns, curns, false, pos);
+	if (v.edef != 0) {
+	  return v;
 	}
       } else {
 	/* has_namespace(fullname) */

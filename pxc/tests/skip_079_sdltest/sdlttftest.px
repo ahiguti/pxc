@@ -1,0 +1,95 @@
+public namespace sdlttftest;
+import common -;
+import SDL2 -;
+import SDL2::TTF -;
+
+function {t} t power_of_2(t v)
+{
+  mutable t r = static_cast{t}(1);
+  while (r != 0 && r < v) { r <<= 1; }
+  return r;
+}
+
+{
+  const ini = SDL_Init(SDL_INIT_VIDEO);
+  const wnd = SDL_CreateWindow("sdltest", 0, 0, 800, 800,
+    SDL_WINDOW_RESIZABLE).some;
+  const rnd = SDL_CreateRenderer(wnd, -1, 0).some;
+  const fnames = make_farray{string}(
+    "/Library/Fonts/OsakaMono.ttf",
+    "/usr/share/fonts/vlgothic/VL-PGothic-Regular.ttf");
+  option{ptr{TTF_Font}} font;
+  for (size_t i, const& fn: fnames) {
+    font = TTF_OpenFont(fn, 24);
+    if (case font.some) {
+      break;
+    }
+  }
+  SDL_Color mutable fg;
+  fg.r = 255;
+  fg.g = 255;
+  fg.b = 255;
+  fg.a = 255;
+  uint hmax = 0;
+  uint wtotal = 0;
+  varray{ptr{SDL_Surface}} sur_arr;
+  for (const i: 0 .. 0x60) {
+    farray{uchar, 1} z;
+    z[0] = static_cast{uchar}(i + 0x20);
+    const sur = TTF_RenderUTF8_Blended(font.some, z, fg).some;
+    println(z, sur.W(), sur.H());
+    sur_arr.push_back(sur);
+    hmax = max(hmax, sur.H());
+    wtotal += sur.W();
+  }
+  const sur_chars = SDL_CreateRGBSurface(static_cast{int}(power_of_2(wtotal)),
+    static_cast{int}(power_of_2(hmax)), 32, 0, 0, 0, 0).some;
+  println("wtotal, hmax", wtotal, hmax);
+  uint xcur = 0;
+  for (const i, const e: sur_arr) {
+    SDL_Rect r0;
+    SDL_Rect r1;
+    r0.x = 0;
+    r0.y = 0;
+    r0.w = static_cast{int}(e.W());
+    r0.h = static_cast{int}(e.H());
+    r1.x = static_cast{int}(xcur);
+    r1.y = 0;
+    r1.w = r0.w;
+    r1.h = r1.h;
+    const v = SDL_BlitSurface(e, r0, sur_chars, r1);
+    println("blit", v);
+    xcur += static_cast{uint}(r1.w);
+  }
+  /*
+  const sur = TTF_RenderUTF8_Blended(font.some, "大阪 Osaka", fg).some;
+  */
+  const sur = sur_chars;
+  const tx = SDL_CreateTextureFromSurface(rnd, sur).some;
+  SDL_Rect src;
+  src.x = 0;
+  src.y = 0;
+  src.w = static_cast{int}(sur.W());
+  src.h = static_cast{int}(sur.H());
+  println(src.w, src.h);
+  mutable dst = src;
+  SDL_RenderCopy(rnd, tx, src, dst);
+  bool done = false;
+  int x = 0;
+  while (!done) {
+    SDL_Event ev;
+    while (SDL_PollEvent(ev)) {
+      if (ev.type == SDL_QUIT) {
+	done = true;
+	break;
+      }
+    }
+    SDL_RenderClear(rnd);
+    x = (x + 1) & 127;
+    dst.x = (x >= 64) ? 128 - x : x;
+    SDL_RenderCopy(rnd, tx, src, dst);
+    SDL_RenderPresent(rnd);
+    SDL_Delay(5);
+  }
+}
+

@@ -15,7 +15,6 @@ public tsvaluetype struct vertex
 {
   public glm::vec3 position;
   public glm::vec3 normal;
-  public glm::vec4 tangent;
   public glm::vec2 uv;
 }
 
@@ -24,10 +23,6 @@ public tsvaluetype struct node_edge
   public size_t edge_sort;
   public glm::mat4 trans; /* or quat and vec3 ? */
 }
-
-private metafunction enable_normal_map 1;
-private metafunction num_float_per_vertex
-  meta::cond{meta::ne{enable_normal_map, 0}, 12, 6};
 
 public multithreaded struct vertices
 {
@@ -41,22 +36,15 @@ public multithreaded struct vertices
       elements.push_back(id);
       /* debug_log("push", value, "id", id); */
     } else {
-      const id = static_cast{uint}(
-	vertex_values.size() / num_float_per_vertex);
+      const id = static_cast{uint}(vertex_values.size() / 8);
       vertex_values.push_back(value.position.x);
       vertex_values.push_back(value.position.y);
       vertex_values.push_back(value.position.z);
       vertex_values.push_back(value.normal.x);
       vertex_values.push_back(value.normal.y);
       vertex_values.push_back(value.normal.z);
-      expand (i: m::seq{enable_normal_map}) {
-      vertex_values.push_back(value.tangent.x);
-      vertex_values.push_back(value.tangent.y);
-      vertex_values.push_back(value.tangent.z);
-      vertex_values.push_back(value.tangent.w);
       vertex_values.push_back(value.uv.x);
       vertex_values.push_back(value.uv.y);
-      }
       value_to_id[value] = id;
       elements.push_back(id);
       /* debug_log("push", value, "id", id); */
@@ -70,7 +58,7 @@ public multithreaded struct vertices
 
 public threaded struct vertex_set()
 {
-  public string name; /* unused */
+  public string name;
   public ptr{vertices} vtxs = make_ptr{vertices}();
   public size_t vertex_values_offset;
   public size_t elements_offset;
@@ -92,7 +80,7 @@ function void check_error()
   if (v == GL_NO_ERROR) {
     return;
   }
-  /* debug_log(string_join{""}("glutil::check_error", static_cast{int}(v))); */
+  // debug_log(string_join{""}("glutil::check_error", static_cast{int}(v)));
   throw runtime_error_template{"glutil::check_error"}(
     to_string(static_cast{int}(v)));
 }
@@ -118,8 +106,7 @@ public function bool buffer_object_create_vbo(buffer_object mutable& bo)
       vertex_values[num_v + j] = v;
     }
     for (const j, const& e: be.vtxs->elements) {
-      elements[num_e + j] =
-	e + (static_cast{uint}(num_v) / num_float_per_vertex);
+      elements[num_e + j] = e + static_cast{uint}(num_v);
     }
     be.vertex_values_offset = num_v;
     be.elements_offset = num_e;
@@ -152,15 +139,14 @@ public function bool buffer_object_create_vbo(buffer_object mutable& bo)
   bo.vbo_values = vbos[0];
   bo.vbo_elems = vbos[1];
   /*
-  println("values=", bo.num_vertex_values / num_float_per_vertex,
+  println("values=", bo.num_vertex_values / 8,
     "elems=", bo.num_elements);
   */
   return true;
 }
 
 public function void buffer_object_draw(buffer_object const& bo, GLenum mode,
-  size_t vs_id, int attr_position, int attr_normal, int attr_tangent,
-  int attr_uv)
+  size_t vs_id, int attr_position, int attr_normal, int attr_uv)
 {
   size_t elem_offset;
   size_t elem_num;
@@ -168,45 +154,31 @@ public function void buffer_object_draw(buffer_object const& bo, GLenum mode,
     const& be = bo.vs_arr[vs_id];
     elem_offset = be.elements_offset;
     elem_num = be.vtxs->elements.size();
-    /*
-    println("vs_id=", vs_id, "elem_offset=", elem_offset, "elem_num=",
-      elem_num);
-    */
   }
   glBindBuffer(GL_ARRAY_BUFFER, bo.vbo_values);
   check_error();
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bo.vbo_elems);
   check_error();
-  metafunction stride_byte m::mul{4, num_float_per_vertex};
   if (attr_position >= 0) {
     glEnableVertexAttribArray(static_cast{uint}(attr_position));
     check_error();
-    glVertexAttribPointer(static_cast{uint}(attr_position), 3, GL_FLOAT, 0,
-      stride_byte, offset_to_void_cp(0));
+    glVertexAttribPointer(static_cast{uint}(attr_position), 3, GL_FLOAT, 0, 32,
+      offset_to_void_cp(0));
     check_error();
   }
   if (attr_normal >= 0) {
     glEnableVertexAttribArray(static_cast{uint}(attr_normal));
     check_error();
-    glVertexAttribPointer(static_cast{uint}(attr_normal), 3, GL_FLOAT, 0,
-      stride_byte, offset_to_void_cp(12));
-    check_error();
-  }
-  expand (i: m::seq{enable_normal_map}) {
-  if (attr_tangent >= 0) {
-    glEnableVertexAttribArray(static_cast{uint}(attr_tangent));
-    check_error();
-    glVertexAttribPointer(static_cast{uint}(attr_tangent), 4, GL_FLOAT, 0,
-      stride_byte, offset_to_void_cp(24));
+    glVertexAttribPointer(static_cast{uint}(attr_normal), 3, GL_FLOAT, 0, 32,
+      offset_to_void_cp(12));
     check_error();
   }
   if (attr_uv >= 0) {
     glEnableVertexAttribArray(static_cast{uint}(attr_uv));
     check_error();
-    glVertexAttribPointer(static_cast{uint}(attr_uv), 2, GL_FLOAT, 0,
-      stride_byte, offset_to_void_cp(40));
+    glVertexAttribPointer(static_cast{uint}(attr_uv), 2, GL_FLOAT, 0, 32,
+      offset_to_void_cp(24));
     check_error();
-  }
   }
   /* TODO: (gles >= 3.0) glDrawRangeElements */
   glDrawElements(mode, static_cast{GLsizei}(elem_num), GL_UNSIGNED_INT,
@@ -215,16 +187,6 @@ public function void buffer_object_draw(buffer_object const& bo, GLenum mode,
   if (attr_uv >= 0) {
     glDisableVertexAttribArray(static_cast{uint}(attr_uv));
     check_error();
-  }
-  expand (i: m::seq{enable_normal_map}) {
-  if (attr_tangent >= 0) {
-    glDisableVertexAttribArray(static_cast{uint}(attr_tangent));
-    check_error();
-  }
-  if (attr_uv >= 0) {
-    glDisableVertexAttribArray(static_cast{uint}(attr_uv));
-    check_error();
-  }
   }
   if (attr_normal >= 0) {
     glDisableVertexAttribArray(static_cast{uint}(attr_normal));
@@ -247,36 +209,19 @@ public threaded struct scene_node()
   public varray{ptr{scene_node}} children;
 }
 
-public function ptr{scene_node}
-buffer_object_instantiate_scene(buffer_object const& bo, int vs_id)
-{
-  const r = make_ptr{scene_node}();
-  r->vs_id = vs_id;
-  if (vs_id >= 0) {
-    const& vs = bo.vs_arr[static_cast{size_t}(vs_id)];
-    for (size_t i, const& e: vs.vtxs->edges) {
-      const p = bo.instantiate_scene(static_cast{int}(e.edge_sort));
-      p->trans = e.trans;
-      r->children.push_back(p);
-    }
-  }
-  return r;
-}
-
-public function {set_normal_func} void
+public function{set_normal_func} void
 scene_node_draw(scene_node const& sn, buffer_object const& bo,
-  glm::mat4 const& model_mat, int attr_position, int attr_normal,
-  int attr_tangent, int attr_uv)
+  glm::mat4 const& model_mat, int attr_position, int attr_normal, int attr_uv)
 {
   const mm = model_mat * sn.trans;
   set_normal_func(mm);
   if (sn.vs_id >= 0) {
     bo.draw(GL_TRIANGLES, static_cast{size_t}(sn.vs_id), attr_position,
-      attr_normal, attr_tangent, attr_uv);
+      attr_normal, attr_uv);
   }
   for (const i, const& snp: sn.children) {
     scene_node_draw{set_normal_func}(*snp, bo, mm, attr_position, attr_normal,
-      attr_tangent, attr_uv);
+      attr_uv);
   }
 }
 

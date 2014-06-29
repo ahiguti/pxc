@@ -3,42 +3,65 @@ public import numeric::integral -;
 public import container::array -;
 public import io::file +;
 public import io::errno -;
-public import meta m;
+public import io::poll -;
 public import pointer -;
+public import meta m;
 
 public metafunction has_epoll m::eq{m::profile{"platform"}, "linux"};
 
-public multithreaded struct extern "pxcrt::epoll_t" "nodefault"
-epoll(io::io const& iop) { }
+expand (i: m::seq{has_epoll}) {
 
-public tsvaluetype struct extern "unsigned" "extbitmask"
-epoll_eventmask_t { }
+  public multithreaded struct extern "pxcrt::epoll_t" "nodefault"
+  epoll(io::io const& iop) { }
 
-public extern "pxcrt::epoll_eventmask_in" epoll_eventmask_t EPOLLIN;
-public extern "pxcrt::epoll_eventmask_out" epoll_eventmask_t EPOLLOUT;
-public extern "pxcrt::epoll_eventmask_et" epoll_eventmask_t EPOLLET;
+  public tsvaluetype struct extern "unsigned" "extbitmask"
+  epoll_eventmask_t { }
 
-public threaded function extern "pxcrt::epoll_add" errno_t
-epoll_add(epoll mutable& p, file_mt const& f, epoll_eventmask_t ev);
+  public extern "pxcrt::epoll_eventmask_in" epoll_eventmask_t EPOLLIN;
+  public extern "pxcrt::epoll_eventmask_out" epoll_eventmask_t EPOLLOUT;
+  public extern "pxcrt::epoll_eventmask_et" epoll_eventmask_t EPOLLET;
 
-public threaded function extern "pxcrt::epoll_modify" errno_t
-epoll_modify(epoll mutable& p, file_mt const& f, epoll_eventmask_t ev);
+  public threaded function extern "pxcrt::epoll_add" errno_t
+  epoll_add(epoll mutable& p, file_mt const& f, epoll_eventmask_t ev);
 
-public threaded function extern "pxcrt::epoll_remove" errno_t
-epoll_remove(epoll mutable& p, file_mt const& f);
+  public threaded function extern "pxcrt::epoll_modify" errno_t
+  epoll_modify(epoll mutable& p, file_mt const& f, epoll_eventmask_t ev);
 
-public tsvaluetype struct extern "epoll_event"
-epoll_event { }
+  public threaded function extern "pxcrt::epoll_remove" errno_t
+  epoll_remove(epoll mutable& p, file_mt const& f);
 
-public threaded function extern "pxcrt::epoll_event_fileno" int
-epoll_event_fileno(epoll_event const& ev);
+  public tsvaluetype struct extern "epoll_event"
+  epoll_event { }
 
-public threaded function extern "pxcrt::epoll_event_events" epoll_eventmask_t
-epoll_event_events(epoll_event const& ev);
+  public threaded function extern "pxcrt::epoll_event_fileno" int
+  epoll_event_fileno(epoll_event const& ev);
 
-public threaded function extern "pxcrt::epoll_wait" errno_t
-epoll_wait(epoll mutable& p, size_t maxevents, uint timeo_ms,
-  varray{epoll_event} mutable& events_r);
+  public threaded function extern "pxcrt::epoll_event_events"
+  epoll_eventmask_t epoll_event_events(epoll_event const& ev);
+
+  public threaded function extern "pxcrt::epoll_wait" errno_t
+  epoll_wait(epoll mutable& p, size_t maxevents, uint timeo_ms,
+    varray{epoll_event} mutable& events_r);
+}
+
+expand (i: m::seq{m::not{has_epoll}}) {
+
+  public metafunction epoll poll;
+  public metafunction epoll_eventmask_t poll_eventmask_t;
+  public metafunction EPOLLIN POLLIN;
+  public metafunction EPOLLOUT POLLOUT;
+  public extern "0" poll_eventmask_t EPOLLET;
+  public metafunction epoll_add poll_add;
+  public metafunction epoll_modify poll_modify;
+  public metafunction epoll_remove poll_remove;
+  public metafunction epoll_event poll_event;
+  public metafunction epoll_event_fileno poll_event_fileno;
+  public metafunction epoll_event_events poll_event_events;
+  public metafunction epoll_wait poll_wait;
+
+}
+
+/* private */
 
 extern "types" inline
 

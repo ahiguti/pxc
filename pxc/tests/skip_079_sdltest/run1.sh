@@ -22,7 +22,7 @@ errnames=''
 export MUDFLAP_OPTIONS=-viol-segv
 for i in $TESTS; do
   bn=`basename $i .px`
-  ../../pxc -v=0 --trim-path=2 -w=../work -p="$TEST_PXC_PROF" $OPTS "$i"
+  ../../pxc -v=0 --trim-path=2 -w=../work -p="$TEST_PXC_PROF" "$i" $OPTS
   bn=`basename $i .px`
   total=$((total + 1))
 done

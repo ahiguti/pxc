@@ -11,12 +11,27 @@ public import exception;
 public extern "pxcrt::pxc_argv" varray{string} argv;
 public extern "pxcrt::pxc_environ" varray{string} environ;
 
+public function string get_option(cstrref const& name)
+{
+  const sz = name.size();
+  for (const i, const s: argv) {
+    if (s.size() >= sz && s[0 .. sz] == name) {
+      if (s.size() > sz && s[sz] == '=') {
+	return s[sz + 1 .. s.size()];
+      } else {
+	return "1";
+      }
+    }
+  }
+  return string();
+}
+
 public function string getenv(cstrref const& name)
 {
   string x = name;
   x.push_back('=');
   const len = x.size();
-  for (const i, const s : environ) {
+  for (const i, const s: environ) {
     if (s[0 .. len] == x) {
       return s[len .. s.size()];
     }
@@ -55,25 +70,39 @@ using namespace pxcrt;
 void io_environ_init()
 {
   pxc_argv.clear();
-  char buf[32];
-  int c = 0;
-  while (true) {
-    snprintf(buf, sizeof(buf), "PXC_ARG%d", c++);
-    const char *ent = getenv(buf);
-    if (ent == 0) {
-      break;
+  {
+    char **p = ::pxcrt::process_argv;
+    if (p != 0 && *p != 0) { ++p; }
+    while (p != 0 && *p != 0) {
+      const unsigned char *uent = reinterpret_cast<const unsigned char *>(*p);
+      const pxcrt::bt_string s(uent, strlen(*p));
+      pxc_argv.push_back(s);
+      ++p;
     }
-    const unsigned char *uent = reinterpret_cast<const unsigned char *>(ent);
-    const pxcrt::bt_string s(uent, strlen(ent));
-    pxc_argv.push_back(s);
-    unsetenv(buf);
   }
-  char **p = ::environ;
-  while (*p != 0) {
-    const unsigned char *uent = reinterpret_cast<const unsigned char *>(*p);
-    const pxcrt::bt_string s(uent, strlen(*p));
-    pxc_environ.push_back(s);
-    ++p;
+  {
+    char buf[32];
+    int c = 0;
+    while (true) {
+      snprintf(buf, sizeof(buf), "PXC_ARG%d", c++);
+      const char *ent = getenv(buf);
+      if (ent == 0) {
+	break;
+      }
+      const unsigned char *uent = reinterpret_cast<const unsigned char *>(ent);
+      const pxcrt::bt_string s(uent, strlen(ent));
+      pxc_argv.push_back(s);
+      unsetenv(buf);
+    }
+  }
+  {
+    char **p = ::environ;
+    while (*p != 0) {
+      const unsigned char *uent = reinterpret_cast<const unsigned char *>(*p);
+      const pxcrt::bt_string s(uent, strlen(*p));
+      pxc_environ.push_back(s);
+      ++p;
+    }
   }
 }
 

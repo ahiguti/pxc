@@ -3718,6 +3718,7 @@ void emit_code(const std::string& dest_filename, expr_block *gl_block,
 	em.printf("int %s$cm()\n{\n", mainfn.c_str());
       } else if (gmain == generate_main_exe) {
 	em.puts("int main(int argc, char **argv)\n{\n");
+	em.puts(" pxcrt::process_argv = argv;\n");
       }
       em.printf(" i$%s$init = 0;\n", mainfn.c_str());
 	/* namespace body will be executed more than once if main() is called
