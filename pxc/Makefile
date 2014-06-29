@@ -11,9 +11,12 @@ OBJS =	pxc_y.o pxc_l.o expr.o expr_impl.o expr_misc.o eval.o evalmeta.o \
 	checktype.o term.o emit.o emit_context.o symbol.o symbol_table.o \
 	cdriver.o pxc_md5.o util.o sort_dep.o
 INSTALL_PREFIX=/usr/local
+ifeq ($(shell uname), Darwin)
+  CXXFLAGS += -Wno-unneeded-internal-declaration -Wno-null-conversion
+endif
 
 all: pxc
-	cd tests; $(MAKE)
+	# cd tests; $(MAKE)
 
 %.cpp: %.y
 	bison --report=all -d -o $@ $<
@@ -29,6 +32,9 @@ pxc_l.o: pxc_l.cpp
 pxc: $(OBJS)
 	cd tests; $(MAKE) clean
 	$(CXX) -rdynamic $(CXXFLAGS) -o $@ $^ -ldl -lpthread
+
+test:
+	cd tests; $(MAKE)
 
 retest:
 	cd tests; $(MAKE) retest

@@ -41,7 +41,7 @@ public tsvaluetype struct extern "Uint32" "extbitmask" SDL_WindowFlags { }
 expand(sym : m::map{m::list{
   "FULLSCREEN", "OPENGL", "SHOWN", "HIDDEN", "BORDERLESS", "RESIZABLE",
   "MINIMIZED", "MAXIMIZED", "INPUT_GRABBED", "INPUT_FOCUS", "MOUSE_FOCUS",
-  "FULLSCREEN_DESKTOP"
+  "FULLSCREEN_DESKTOP", "ALLOW_HIGHDPI"
 }, metafunction{x} m::concat{"SDL_WINDOW_", x}}) {
   public extern "%" SDL_WindowFlags sym;
 }
@@ -100,7 +100,8 @@ CreateRenderer(SDL_Renderer mutable& rnd, SDL_Window const& wnd,
 public struct extern "SDL2::Surface" "noncopyable"
 SDL_Surface private () { }
 
-public function option{ptr{SDL_Surface}} SDL_LoadBMP(cstrref const& filename)
+public function option{ptr{SDL_Surface}}
+SDL_LoadBMP(cstrref const& filename)
 {
   ptr{SDL_Surface} p = make_ptr{SDL_Surface}();
   option{ptr{SDL_Surface}} r;
@@ -113,6 +114,23 @@ public function option{ptr{SDL_Surface}} SDL_LoadBMP(cstrref const& filename)
 private function extern "SDL2::LoadBMP" int
 LoadBMP(SDL_Surface mutable& sur, cstrref const& filename);
 
+public function option{ptr{SDL_Surface}}
+SDL_CreateRGBSurface(int width, int height, int depth, uint rmask, uint gmask,
+  uint bmask, uint amask)
+{
+  ptr{SDL_Surface} p = make_ptr{SDL_Surface}();
+  option{ptr{SDL_Surface}} r;
+  if (CreateRGBSurface(*p, width, height, depth, rmask, gmask, bmask, amask)
+    == 0) {
+    r.some = p;
+  }
+  return r;
+}
+
+private function extern "SDL2::CreateRGBSurface" int
+CreateRGBSurface(SDL_Surface mutable& sur, int width, int height, int depth,
+  uint rmask, uint gmask, uint bmask, uint amask);
+
 public function extern "SDL2::Surface_W" uint
 SDL_Surface_W(ptr{SDL_Surface} const& sur);
 public function extern "SDL2::Surface_H" uint
@@ -123,6 +141,18 @@ public function extern "SDL2::Surface_BytesPerPixel" uint
 SDL_Surface_BytesPerPixel(ptr{SDL_Surface} const& sur);
 public function extern "SDL2::Surface_Pixels" strref
 SDL_Surface_Pixels(ptr{SDL_Surface} const& sur);
+
+public function extern "SDL2::BlitSurface" int
+SDL_BlitSurface(ptr{SDL_Surface} const& src, SDL_Rect const& srcrect,
+  ptr{SDL_Surface} const& dst, SDL_Rect mutable& dstrect);
+
+public tsvaluetype struct extern "SDL_Color"
+SDL_Color {
+  public uchar r;
+  public uchar g;
+  public uchar b;
+  public uchar a;
+}
 
 /* SDL_Texture */
 
@@ -273,7 +303,9 @@ expand(sym : m::map{m::list{
 
 public tsvaluetype struct extern "Uint8" "extenum" SDL_WindowEventID { }
 expand (sym : m::map{m::list{
-  "MOVED", "RESIZED"
+  "SHOWN", "HIDDEN", "EXPOSED", "MOVED", "RESIZED", "SIZE_CHANGED",
+  "MINIMIZED", "MAXIMIZED", "RESTORED", "ENTER", "LEAVE", "FOCUS_GAINED",
+  "FOCUS_LOST", "CLOSE"
 }, metafunction{x} m::concat{"SDL_WINDOWEVENT_", x}}) {
   public extern "%" SDL_WindowEventID sym;
 }
@@ -305,6 +337,9 @@ public function extern "SDL2::GL_SwapWindow" void
 SDL_GL_SwapWindow(ptr{SDL_Window} const& wnd);
 public function extern "SDL_GL_SetSwapInterval" void
 SDL_GL_SetSwapInterval(int v);
+public function extern "SDL2::GL_GetDrawableSize" void
+SDL_GL_GetDrawableSize(ptr{SDL_Window} const& wnd, int mutable& w,
+  int mutable& h);
 
 private function extern "SDL2::GL_CreateContext" int
 GL_CreateContext(SDL_GLContext mutable& glctx, SDL_Window const& wnd);
@@ -356,8 +391,11 @@ public function extern "SDL_GetTicks" uint SDL_GetTicks();
 public function extern "SDL_Delay" void SDL_Delay(uint ms);
 
 extern "types" inline
+
 #include <SDL.h>
+
 namespace SDL2 {
+
 using namespace pxcrt;
 
 struct Init {
@@ -416,10 +454,13 @@ private:
 };
 
 }; // namespace SDL2
+
 ;
 
 extern "implementation" inline
+
 namespace SDL2 {
+
 using namespace pxcrt;
 
 int Init::init_count = 0;
@@ -514,6 +555,14 @@ bt_int LoadBMP(Surface& sur, cstrref const& filename)
   return (sur.ptr != 0) ? 0 : -1;
 }
 
+bt_int CreateRGBSurface(Surface& sur, bt_int width, bt_int height,
+  bt_int depth, bt_uint rmask, bt_uint gmask, bt_uint bmask, bt_uint amask)
+{
+  sur.ptr = SDL_CreateRGBSurface(SDL_SWSURFACE, width, height, depth, rmask,
+    gmask, bmask, amask);
+  return (sur.ptr != 0) ? 0 : -1;
+}
+
 typedef rcptr< rcval<Surface> > Surface_ptr;
 
 bt_uint Surface_W(Surface_ptr const& sur)
@@ -541,6 +590,12 @@ strref Surface_Pixels(Surface_ptr const& sur)
   SDL_Surface *const p = sur->value.ptr;
   size_t const len = p->pitch * p->h;
   return strref(static_cast<unsigned char *>(sur->value.ptr->pixels), len);
+}
+
+bt_int BlitSurface(Surface_ptr const& src, SDL_Rect const& srcrect,
+  Surface_ptr const& dst, SDL_Rect& dstrect)
+{
+  return ::SDL_BlitSurface(src->value.ptr, &srcrect, dst->value.ptr, &dstrect);
 }
 
 Texture::Texture()
@@ -616,6 +671,11 @@ void GL_SwapWindow(Window_ptr const& wnd)
   ::SDL_GL_SwapWindow(wnd->value.ptr);
 }
 
+void GL_GetDrawableSize(Window_ptr const& wnd, bt_int& w, bt_int& h)
+{
+  ::SDL_GL_GetDrawableSize(wnd->value.ptr, &w, &h);
+}
+
 SDL_EventType Event_Type(SDL_Event const& e)
 {
   return SDL_EventType(e.type);
@@ -680,5 +740,6 @@ void LogError(int cat, cstrref const& mess)
 }
 
 }; // namespace SDL2
+
 ;
 

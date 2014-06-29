@@ -100,8 +100,8 @@ private threaded function void gf_edge(ptr{vertices} const& vptr,
 {
   if (poly.size() < 3) { return; }
   const ex = (poly[1] - poly[0]).normalize();
-  const ez = cross(poly[1] - poly[0], poly[2] - poly[0]).normalize();
-  const ey = -cross(ex, ez);
+  const ez = -cross(poly[1] - poly[0], poly[2] - poly[0]).normalize();
+  const ey = cross(ex, ez);
   node_edge e;
   const c = polygon_center(poly);
   mat4 tr;
@@ -123,20 +123,12 @@ private threaded function void gf_fill(ptr{vertices} const& vptr,
   const sz = poly.size();
   if (sz < 3) { return; }
   const nor = -cross(poly[1] - poly[0], poly[2] - poly[0]).normalize();
-  const tang = -(poly[1] - poly[0]).normalize();
   mutable vtxs = darray{vertex}(sz, vertex());
   for (const i: 0 .. sz) {
     mutable& v = vtxs[i];
     v.position = poly[i];
     v.normal = nor;
-    v.tangent = make_vec4(tang.x, tang.y, tang.z, -1.0f);
     v.uv = vec2();
-  }
-  if (sz == 4) {
-    vtxs[0].uv = make_vec2(-0.5f, -0.5f);
-    vtxs[1].uv = make_vec2(0.5f, -0.5f);
-    vtxs[2].uv = make_vec2(0.5f, 0.5f);
-    vtxs[3].uv = make_vec2(-0.5f, 0.5f);
   }
   for (const i: 0 .. sz - 2) {
     vptr->push_vertex(vtxs[0]);
@@ -145,7 +137,7 @@ private threaded function void gf_fill(ptr{vertices} const& vptr,
   }
 }
 
-private threaded function void gf_hole(poly_t const& poly)
+private function void gf_hole(poly_t const& poly)
 {
 }
 
