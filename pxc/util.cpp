@@ -85,7 +85,7 @@ std::string read_file_content(const std::string& fn, bool err_thr)
 
 bool file_access(const std::string& fn)
 {
-  if (::access(fn.c_str(), R_OK)) {
+  if (::access(fn.c_str(), R_OK) == 0) {
     return true;
   }
   return false;

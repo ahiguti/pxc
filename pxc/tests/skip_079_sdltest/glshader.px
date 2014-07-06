@@ -1,0 +1,116 @@
+public namespace glshader "export-unsafe";
+public import common -;
+public import pointer::raw -;
+public import numeric::fpmath -;
+public import GL::gles2 -;
+public import GL::glm glm;
+public import meta m;
+public import exception -;
+
+public function {tuni, tattr} cptr{shader{tuni, tattr}}
+make_shader_ptr(cstrref const& prog_v, cstrref const& prog_f)
+{
+  return make_cptr{shader{tuni, tattr}}(prog_v, prog_f);
+}
+
+public struct {tuni, tattr}
+shader private(cstrref const& prog_v, cstrref const& prog_f)
+{
+  public metafunction uniforms_type tuni;
+  public metafunction vertex_attributes_type tattr;
+  expand (sym: m::map{m::field_names{tuni},
+    metafunction{s} m::concat{"u_", s}})
+  {
+  public int sym = -1;
+  }
+  expand (sym: m::map{m::field_names{tattr},
+    metafunction{s} m::concat{"a_", s}})
+  {
+  public int sym = -1;
+  }
+  public uint program = 0;
+  public string error;
+  /* private */
+  init(prog_v, prog_f);
+  private function void init(cstrref const& prog_v, cstrref const& prog_f)
+  {
+    program = create_program(prog_v, prog_f, error);
+    if (program == 0) {
+      throw runtime_error_template{"create_program"}("1");
+    }
+    expand (sym: m::field_names{tuni}) {
+    expand (vsym: {m::concat{"u_", sym}}) {
+    vsym = glGetUniformLocation(program, m::to_string{sym}.crawptr().char());
+    }
+    }
+    expand (sym: m::field_names{tattr}) {
+    expand (vsym: {m::concat{"a_", sym}}) {
+    vsym = glGetAttribLocation(program, m::to_string{sym}.crawptr().char());
+    }
+    }
+  }
+}
+
+private function uint compile_shader(cstrref const& src, GLenum type,
+  string mutable& err_r)
+{
+  mutable res = glCreateShader(type);
+  mutable source = make_farray{ccharptr}(src.crawptr().char());
+  const length = make_farray{int}(static_cast{int}(src.size()));
+  glShaderSource(res, 1, source.rawptr(), length.crawptr());
+  glCompileShader(res);
+  int success;
+  glGetShaderiv(res, GL_COMPILE_STATUS, address(success));
+  if (success == 0) {
+    int sz;
+    /* glGetShaderiv(res, GL_INFO_LOG_LENGTH, address(sz)); */
+    sz = 4096; /* android bug workaround */
+    string buf;
+    buf.resize(static_cast{size_t}(sz), 0);
+    GLsizei len;
+    glGetShaderInfoLog(res, static_cast{GLsizei}(sz), address(len),
+      buf.rawptr().char());
+    debug_log("compile_shader failed:",
+      string_join{"\t"}(static_cast{int}(type), success, buf));
+    err_r = string_join{"\t"}(static_cast{int}(type), success, buf);
+    glDeleteShader(res);
+    res = 0;
+  }
+  return res;
+}
+
+private function uint
+create_program(cstrref const& vertex_shader, cstrref const& fragment_shader,
+  string mutable& err_r)
+{
+  mutable prog = glCreateProgram();
+  uint shader;
+  int success = 1;
+  if (!vertex_shader.empty()) {
+    shader = compile_shader(vertex_shader, GL_VERTEX_SHADER, err_r);
+    if (shader != 0) {
+      glAttachShader(prog, shader);
+    } else {
+      success = 0;
+    }
+  }
+  if (!fragment_shader.empty()) {
+    shader = compile_shader(fragment_shader, GL_FRAGMENT_SHADER, err_r);
+    if (shader != 0) {
+      glAttachShader(prog, shader);
+    } else {
+      success = 0;
+    }
+  }
+  if (success == 0) {
+    debug_log("create_program failed:", success);
+    glDeleteProgram(prog);
+    prog = 0;
+  } else {
+    glLinkProgram(prog);
+    glGetProgramiv(prog, GL_LINK_STATUS, address(success));
+    debug_log("create_program", prog);
+  }
+  return prog;
+}
+

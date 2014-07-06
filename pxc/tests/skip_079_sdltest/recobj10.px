@@ -11,13 +11,12 @@ import io::time -;
 import io::environ -;
 import exception -;
 import meta m;
-import text::string::positional -;
 
 import glshader -;
 import gldraw -;
 import glgeometry -;
 
-valuetype struct main_uniforms
+tsvaluetype struct main_uniforms
 {
   public glm::mat4 view_projection_matrix;
   public glm::mat4 model_matrix;
@@ -28,7 +27,7 @@ valuetype struct main_uniforms
   public glm::vec3 view_dir;
 }
 
-valuetype struct main_vertex_attributes
+tsvaluetype struct main_vertex_attributes
 {
   public glm::vec3 position;
   public glm::vec3 normal;
@@ -36,12 +35,12 @@ valuetype struct main_vertex_attributes
   public glm::vec2 uv;
 }
 
-valuetype struct font_uniforms
+tsvaluetype struct font_uniforms
 {
   public int sampler;
 }
 
-valuetype struct font_vertex_attributes
+tsvaluetype struct font_vertex_attributes
 {
   public glm::vec2 pos;
   public glm::vec2 uvpos;
@@ -92,7 +91,7 @@ function void build_vertices(buffer_object{main_shader} mutable& bo)
       bump(0.01, 0.9, 5,
 	sphere(10, t0),
 	t0))
-      (poly_t(), mesh_pos());
+      (cslice{glm::vec3}());
   }
   /* vtx1 */
   {
@@ -102,7 +101,7 @@ function void build_vertices(buffer_object{main_shader} mutable& bo)
     regular_polygon(0.1, 4,
       bump(8.0, 1.0, 1, t1, t1),
       t1)
-      (poly_t(), mesh_pos());
+      (cslice{glm::vec3}());
   }
   /* vtx2 */
   {
@@ -112,52 +111,17 @@ function void build_vertices(buffer_object{main_shader} mutable& bo)
     regular_polygon(10.0, 100,
       bump(1.0, 1.0, 1, hole(), edge_v(vtx2, 0, hole())),
       hole())
-      (poly_t(), mesh_pos());
+      (cslice{glm::vec3}());
   }
   /* vtx3 */
   {
     bo.vs_arr.push_back(vertex_set{tattr}());
     const vtx3 = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
     const t3 = fill_v(vtx3);
-    regular_polygon(0.2, 4,
-      bump(0.2828, 1.0, 1, t3, t3),
+    regular_polygon(2.0, 4,
+      bump(2.828, 1.0, 1, t3, t3),
       t3)
-      (poly_t(), mesh_pos());
-  }
-  /* vtx4 */
-  {
-    bo.vs_arr.push_back(vertex_set{tattr}());
-    const vtx4 = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
-    const t4 = fill_v(vtx4);
-    regular_polygon(30.0, 4, 
-      rectangle_split(60, 60, edge_v(vtx4, 3, hole())),
-      hole())
-      (poly_t(), mesh_pos());
-  }
-  /* vtx5 */
-  {
-    bo.vs_arr.push_back(vertex_set{tattr}());
-    const vtx5 = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
-    const t5 = fill_v(vtx5);
-    const cube = bump(0.0, 0.5, 1, lid(bump(1.0, 1.0, 1, t5, t5), t5), hole());
-    regular_polygon(500.0, 4, 
-      rectangle_split(100, 100, cube),
-      hole())
-      (poly_t(), mesh_pos());
-  }
-  /* vtx6 */
-  {
-    bo.vs_arr.push_back(vertex_set{tattr}());
-    const vtx6 = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
-    const t6 = fill_v(vtx6);
-    const rnd = make_rand_generator(1U);
-    regular_polygon(10.0, 4,
-      bump(1.0, 1.0, 1,
-	rand_bump(3000, 0.8, 0.005, 0.015, 0.005, 0.015, 0.200, 1.000, rnd,
-	  t6, t6, t6),
-	t6),
-      t6)
-      (poly_t(), mesh_pos());
+      (cslice{glm::vec3}());
   }
   for (const i, const& a: bo.vs_arr) {
     println(i, "vtxs", a.vtxs->vertex_values.size(), "elems",
@@ -174,8 +138,6 @@ function void draw_frame(camera_info mutable& cam, main_shader_ptr const& sdr,
   check_error();
   glEnable(GL_CULL_FACE);
   glEnable(GL_DEPTH_TEST);
-  // glDepthFunc(GL_LEQUAL);
-  glDepthFunc(GL_LESS);
   glDisable(GL_BLEND);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   const light = glm::make_vec3(5.0, 5.0, -5.0).normalize();
@@ -192,7 +154,7 @@ function void draw_frame(camera_info mutable& cam, main_shader_ptr const& sdr,
   glUniformMatrix4fv(sdr->u_view_projection_matrix, 1, 0, vp.crawptr());
   const red = make_farray{float}(0.8, 0.1, 0.0, 1.0);
   glUniform1i(sdr->u_sampler, 1);
-  const sn = bo.instantiate_scene(6);
+  const sn = bo.instantiate_scene(2);
   const modelview_cur = glm::mat4();
   function void set_uniform_cb(glm::mat4 const& model_mat)
   {
@@ -215,8 +177,8 @@ function void draw_frame(camera_info mutable& cam, main_shader_ptr const& sdr,
   check_error();
   glUniform1i(psdr->u_sampler, 0);
   check_error();
-  const lpp = cast_uint(psdr->a_pos);
-  const lpu = cast_uint(psdr->a_uvpos);
+  const lpp = static_cast{uint}(psdr->a_pos);
+  const lpu = static_cast{uint}(psdr->a_uvpos);
   glEnableVertexAttribArray(lpp);
   check_error();
   glEnableVertexAttribArray(lpu);
@@ -235,17 +197,17 @@ function void draw_frame(camera_info mutable& cam, main_shader_ptr const& sdr,
     const ty1 = 0;
     const tw = tx1 - tx0;
     const th = fti.char_h;
-    const x0 = cast_float(cur_x) * 2.0f
-      / cast_float(cam.screen_width) - 1.0f;
-    const y0 = cast_float(cur_y) * 2.0f
-      / cast_float(cam.screen_height) - 1.0f;
-    const x1 = cast_float(cur_x + tw) * 2.0f
-      / cast_float(cam.screen_width) - 1.0f;
-    const y1 = cast_float(cur_y + th) * 2.0f
-      / cast_float(cam.screen_height) - 1.0f;
-    const u0 = cast_float(tx0) / cast_float(fti.surface_w);
-    const v0 = cast_float(ty0) / cast_float(fti.surface_h);
-    const u1 = cast_float(tx1) / cast_float(fti.surface_w);
+    const x0 = static_cast{float}(cur_x) * 2.0f
+      / static_cast{float}(cam.screen_width) - 1.0f;
+    const y0 = static_cast{float}(cur_y) * 2.0f
+      / static_cast{float}(cam.screen_height) - 1.0f;
+    const x1 = static_cast{float}(cur_x + tw) * 2.0f
+      / static_cast{float}(cam.screen_width) - 1.0f;
+    const y1 = static_cast{float}(cur_y + th) * 2.0f
+      / static_cast{float}(cam.screen_height) - 1.0f;
+    const u0 = static_cast{float}(tx0) / static_cast{float}(fti.surface_w);
+    const v0 = static_cast{float}(ty0) / static_cast{float}(fti.surface_h);
+    const u1 = static_cast{float}(tx1) / static_cast{float}(fti.surface_w);
     const v1 = 0.0f;
     /* println(x0, y0, x1, y1, u0, v0, u1, v1); */
     pvals.push_back(x0);
@@ -279,7 +241,7 @@ function void draw_frame(camera_info mutable& cam, main_shader_ptr const& sdr,
     check_error();
     glVertexAttribPointer(lpu, 2, GL_FLOAT, 0, 0, uvals.crawptr().void());
     check_error();
-    glDrawArrays(GL_TRIANGLES, 0, cast_int(pvals.size() / 2));
+    glDrawArrays(GL_TRIANGLES, 0, static_cast{int}(pvals.size() / 2));
     check_error();
     glDisableVertexAttribArray(lpp);
     check_error();
@@ -298,19 +260,84 @@ function void reshape(camera_info mutable& cam, int width, int height)
 function void update_mvp(camera_info mutable& cam)
 {
   float const perspective_distance = 1.1;
-  float const min_distance = 0.5;
-  const h = cast_float(cam.screen_height)
-    / cast_float(cam.screen_width);
+  float const min_distance = 1.0;
+  const h = static_cast{float}(cam.screen_height)
+    / static_cast{float}(cam.screen_width);
   glViewport(0, 0, static_cast{GLsizei}(cam.screen_width),
     static_cast{GLsizei}(cam.screen_height));
-  const d = cast_float(perspective_distance);
-  const near = cast_float(d - min_distance);
-  const far = cast_float(d + min_distance + 1000.0);
-  const left = cast_float(-1.0 * ((d - min_distance) / d));
-  const right = cast_float(1.0 * ((d - min_distance) / d));
-  const bottom = cast_float(-h * ((d - min_distance) / d));
-  const top = cast_float(h * ((d - min_distance) / d));
+  const d = static_cast{float}(perspective_distance);
+  const near = static_cast{float}(d - min_distance);
+  const far = static_cast{float}(d + min_distance + 100.0);
+  const left = static_cast{float}(-1.0 * ((d - min_distance) / d));
+  const right = static_cast{float}(1.0 * ((d - min_distance) / d));
+  const bottom = static_cast{float}(-h * ((d - min_distance) / d));
+  const top = static_cast{float}(h * ((d - min_distance) / d));
   cam.projection = glm::frustum{float}(left, right, bottom, top, near, far);
+}
+
+function uint compile_shader(cstrref const& src, GLenum type)
+{
+  mutable res = glCreateShader(type);
+  mutable source = make_farray{ccharptr}(src.crawptr().char());
+  const length = make_farray{int}(static_cast{int}(src.size()));
+  glShaderSource(res, 1, source.rawptr(), length.crawptr());
+  sdllog("compile_shader pre");
+  glCompileShader(res);
+  sdllog("compile_shader post");
+  int success;
+  glGetShaderiv(res, GL_COMPILE_STATUS, address(success));
+  if (success == 0) {
+    int sz;
+    sz = 4096; /* glGetShaderiv(res, GL_INFO_LOG_LENGTH, address(sz)); */
+      /* android bug workaround */
+    string buf;
+    buf.resize(static_cast{size_t}(sz), 0);
+    GLsizei len;
+    glGetShaderInfoLog(res, static_cast{GLsizei}(sz), address(len),
+      buf.rawptr().char());
+    debug_log("compile_shader failed:",
+      string_join{"\t"}(static_cast{int}(type), success, buf));
+    sdllog(string_join{" "}("compile_shader: ", static_cast{int}(type),
+      success, buf));
+    glDeleteShader(res);
+    res = 0;
+  }
+  sdllog(string_join{""}("compile_shader res=", res));
+  return res;
+}
+
+function uint create_program(cstrref const& vertex_shader,
+  cstrref const& fragment_shader)
+{
+  mutable prog = glCreateProgram();
+  uint shader;
+  int success = 1;
+  if (!vertex_shader.empty()) {
+    shader = compile_shader(vertex_shader, GL_VERTEX_SHADER);
+    if (shader != 0) {
+      glAttachShader(prog, shader);
+    } else {
+      success = 0;
+    }
+  }
+  if (!fragment_shader.empty()) {
+    shader = compile_shader(fragment_shader, GL_FRAGMENT_SHADER);
+    if (shader != 0) {
+      glAttachShader(prog, shader);
+    } else {
+      success = 0;
+    }
+  }
+  if (success == 0) {
+    debug_log("create_program failed:", success);
+    glDeleteProgram(prog);
+    prog = 0;
+  } else {
+    glLinkProgram(prog);
+    glGetProgramiv(prog, GL_LINK_STATUS, address(success));
+    debug_log("create_program", prog);
+  }
+  return prog;
 }
 
 threaded function {t} t power_of_2(t v)
@@ -464,8 +491,8 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
       wtotal += sur.W();
     }
     const sur_chars = SDL_CreateRGBSurface(
-      cast_int(power_of_2(wtotal)),
-      cast_int(power_of_2(hmax)), 32, 0, 0, 0, 0).some;
+      static_cast{int}(power_of_2(wtotal)),
+      static_cast{int}(power_of_2(hmax)), 32, 0, 0, 0, 0).some;
     println("wtotal, hmax", wtotal, hmax);
     fti.char_x.clear();
     uint xcur = 0;
@@ -474,14 +501,14 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
       SDL_Rect r1;
       r0.x = 0;
       r0.y = 0;
-      r0.w = cast_int(e.W());
-      r0.h = cast_int(e.H());
-      r1.x = cast_int(xcur);
+      r0.w = static_cast{int}(e.W());
+      r0.h = static_cast{int}(e.H());
+      r1.x = static_cast{int}(xcur);
       r1.y = 0;
       r1.w = r0.w;
       r1.h = r1.h;
       const v = SDL_BlitSurface(e, r0, sur_chars, r1);
-      xcur += cast_uint(r1.w);
+      xcur += static_cast{uint}(r1.w);
       fti.char_x.push_back(xcur);
     }
     fti.char_h = hmax;
@@ -504,15 +531,15 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
     check_error();
     glBindTexture(GL_TEXTURE_2D, fti.font_texture_id);
     check_error();
-    glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_RGBA),
-      cast_int(sur.W()), cast_int(sur.H()),
+    glTexImage2D(GL_TEXTURE_2D, 0, static_cast{int}(GL_RGBA),
+      static_cast{int}(sur.W()), static_cast{int}(sur.H()),
       0, GL_RGBA, GL_UNSIGNED_BYTE, sur.Pixels().crawptr().void());
     check_error();
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
-      cast_int(GL_NEAREST));
+      static_cast{int}(GL_NEAREST));
     check_error();
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-      cast_int(GL_NEAREST));
+      static_cast{int}(GL_NEAREST));
     check_error();
   }
   {
@@ -525,8 +552,8 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
     const sur0_w = sur0.W();
     const sur0_h = sur0.H();
     const sur1 = SDL_CreateRGBSurface(
-      cast_int(power_of_2(sur0_w)),
-      cast_int(power_of_2(sur0_h)), 32, 0, 0, 0, 0).some;
+      static_cast{int}(power_of_2(sur0_w)),
+      static_cast{int}(power_of_2(sur0_h)), 32, 0, 0, 0, 0).some;
     const sur1_w = sur1.W();	
     const sur1_h = sur1.H();	
     const sur0buf = sur0.Pixels();
@@ -536,7 +563,7 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
 	const mx = sur0_w - x - 1;
 	const my = sur0_h - y - 1;
 	uchar alpha_value = 0;
-	const uint brd = 2;
+	const uint brd = 6;
 	if (x == y && x < brd) {
 	  alpha_value = 1;
 	} else if (y < brd && y < x && y < mx) {
@@ -569,15 +596,15 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
     check_error();
     glBindTexture(GL_TEXTURE_2D, mti.main_texture_id);
     check_error();
-    glTexImage2D(GL_TEXTURE_2D, 0, cast_int(mode),
-      cast_int(sur1.W()), cast_int(sur1.H()),
+    glTexImage2D(GL_TEXTURE_2D, 0, static_cast{int}(mode),
+      static_cast{int}(sur1.W()), static_cast{int}(sur1.H()),
       0, mode, GL_UNSIGNED_BYTE, sur1.Pixels().crawptr().void());
     check_error();
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
-      cast_int(GL_NEAREST));
+      static_cast{int}(GL_NEAREST));
     check_error();
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-      cast_int(GL_NEAREST));
+      static_cast{int}(GL_NEAREST));
     check_error();
     mti.surface_w = sur1.W();
     mti.surface_h = sur1.H();
@@ -590,7 +617,7 @@ function void check_error()
   if (v == GL_NO_ERROR) {
     return;
   }
-  sdllog(string_join{""}("error: ", cast_int(v)));
+  sdllog(string_join{""}("error: ", static_cast{int}(v)));
   throw runtime_error_template{"gl_error"}("1");
 }
 
@@ -653,7 +680,7 @@ function void sdllog(cstrref const& mess)
 
   farray{uint, 2} mutable frame_tdiffs;
   for (const i, mutable& e: frame_tdiffs) {
-    e = 1000U / cast_uint(frame_tdiffs.size());
+    e = 1000U / static_cast{uint}(frame_tdiffs.size());
   }
   float mutable frame_speed_mul = 1.0f;
 
@@ -698,14 +725,14 @@ function void sdllog(cstrref const& mess)
   farray{glm::vec2, 2} start_pos;
   farray{glm::vec2, 2} cur_pos;
   glm::vec2 finger_xyrotate_delta;
-  // glm::vec2 finger_xymove_delta;
-  // float finger_zrotate_delta;
+  glm::vec2 finger_xymove_delta;
+  float finger_zrotate_delta;
   float finger_zmove_delta;
   int finger_zmove_mode = 0;
   function void finger_motion(float x, float y, float dx, float dy,
     SDL_FingerID fng) {
     size_t fid = 2;
-    if (fingerids.size() > 0 && fingerids[0] == fng) {
+    if (fingerids.size() > 0 && (fingerids[0] == fng || fingerids[0] == 0)) {
       fid = 0;
     } else if (fingerids.size() > 1 && fingerids[1] == fng) {
       fid = 1;
@@ -713,18 +740,14 @@ function void sdllog(cstrref const& mess)
     if (fid < 2) {
       cur_pos[fid] = glm::make_vec2(x, y);
       /*
-      sdllog(string_join{" "}("finger_motion", x, y, fid, fng));
-      */
-    } else {
-      /*
-      sdllog(string_join{" "}("finger_motion(ignored)", x, y, fng,
-	"fingerids:", fingerids));
+      SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
+	  string_join{" "}("finger_motion", x, y, fng));
       */
     }
   }
   function void finger_down(float x, float y, SDL_FingerID fng) {
     size_t fid = 2;
-    if (fingerids.size() > 0 && fingerids[0] == fng) {
+    if (fingerids.size() > 0 && (fingerids[0] == fng || fingerids[0] == 0)) {
       fid = 0;
     } else if (fingerids.size() > 1 && fingerids[1] == fng) {
       fid = 1;
@@ -737,7 +760,8 @@ function void sdllog(cstrref const& mess)
       start_pos[fid] = glm::make_vec2(x, y);
       cur_pos[fid] = start_pos[fid];
       /*
-      sdllog(string_join{" "}("finger_down", x, y, fid));
+      SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
+	  string_join{" "}("finger_down", x, y, fid));
       */
       fingerdown_time[0] = 0;
       fingerdown_time[1] = 0;
@@ -750,31 +774,20 @@ function void sdllog(cstrref const& mess)
   }
   function void finger_up(SDL_FingerID fng) {
     size_t fid = 2;
-    if (fingerids.size() > 0 && fingerids[0] == fng) {
+    if (fingerids.size() > 0 && (fingerids[0] == fng || fingerids[0] == 0)) {
       fid = 0;
+      fingerids.erase(0, 1);
     } else if (fingerids.size() > 1 && fingerids[1] == fng) {
       fid = 1;
+      fingerids.resize(1, 0);
     }
     if (fid < 2) {
       fingdown[fid] = false;
       /*
-      sdllog(string_join{" "}("finger_up", fid));
+      SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
+	  string_join{" "}("finger_up", fid));
       */
-      if (fid == 1) {
-	start_pos[0] = cur_pos[0];
-	fingerids.resize(1, 0);
-	fingdown[1] = false;
-      } else {
-	fingerids.erase(0, 1);
-	if (fingerids.empty()) {
-	  fingdown[0] = false;
-	} else {
-	  cur_pos[0] = cur_pos[1];
-	  start_pos[0] = cur_pos[1];
-	  fingdown[0] = fingdown[1];
-	  fingdown[1] = false;
-	}
-      }
+      start_pos = cur_pos;
       fingerdown_time[0] = 0;
       fingerdown_time[1] = 0;
       finger_zmove_mode = 0;
@@ -797,8 +810,6 @@ function void sdllog(cstrref const& mess)
     */
     camera_rotate(1.0, 0.0, 0.0, -dy * 2.0);
     camera_rotate(0.0, 1.0, 0.0, -dx * 2.0);
-    finger_xyrotate_delta.x = dx;
-    finger_xyrotate_delta.y = dy;
   }
   function void finger_action_two_fingers() {
     const d0 = cur_pos[0] - start_pos[0];
@@ -814,15 +825,15 @@ function void sdllog(cstrref const& mess)
 	const rat = distance_start / distance_cur;
 	const prev = finger_zmove_delta;
 	if (rat > 1.2) {
-	  finger_zmove_delta += 0.0003;
-	  if (finger_zmove_delta >= 1.0) {
-	    finger_zmove_delta = 1.0;
+	  finger_zmove_delta += 0.0001;
+	  if (finger_zmove_delta >= 0.01) {
+	    finger_zmove_delta = 0.01;
 	  }
 	  finger_zmove_mode = 1;
 	} else if (rat < 0.8) {
-	  finger_zmove_delta -= 0.0003;
-	  if (finger_zmove_delta <= -1.0) {
-	    finger_zmove_delta = -1.0;
+	  finger_zmove_delta -= 0.0001;
+	  if (finger_zmove_delta <= -0.01) {
+	    finger_zmove_delta = -0.01;
 	  }
 	  finger_zmove_mode = 1;
 	}
@@ -860,12 +871,10 @@ function void sdllog(cstrref const& mess)
       }
       if (fingerids[0] == 0) {
 	/* mouse button */
-	/*
 	finger_zmove_delta -= 0.0001;
 	if (finger_zmove_delta <= -0.01) {
 	  finger_zmove_delta = -0.01;
 	}
-	*/
       }
     } else if (!fingdown[0] && fingdown[1]) {
       if (fingerdown_time[1] >= 2) {
@@ -883,30 +892,16 @@ function void sdllog(cstrref const& mess)
 	start_pos[1] = (start_pos[1] + cur_pos[1]) / 2.0f;
 	fingerdown_time[1] += 1;
       }
-    } else {
-      const len = glm::length(finger_xyrotate_delta);
-      camera_rotate(1.0, 0.0, 0.0, -finger_xyrotate_delta.y * 2.0);
-      camera_rotate(0.0, 1.0, 0.0, -finger_xyrotate_delta.x * 2.0);
-      /*
-      sdllog(string_join{" "}("len", len));
-      */
-      const decay = 0.03f * frame_speed_mul;
-      if (len < decay) {
-	finger_xyrotate_delta = glm::make_vec2(0.0f, 0.0f);
-      } else {
-	finger_xyrotate_delta -= finger_xyrotate_delta * decay / len;
-      }
     }
     camera_move(0.0, 0.0, finger_zmove_delta);
   }
-  double time_after_swapwindow = io::system.gettimeofday_double();
   while (!done) {
     save_ticks(0);
     SDL_Event ev;
     while (SDL_PollEvent(ev)) {
       const etype = ev.type;
       /*
-       sdllog(string_join{" "}("event", cast_int(ev.type)));
+       sdllog(string_join{" "}("event", static_cast{int}(ev.type)));
        */
       if (etype == SDL_WINDOWEVENT) {
 	if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
@@ -929,41 +924,9 @@ function void sdllog(cstrref const& mess)
 	} else {
 	  /*
 	  sdllog(string_join{" "}("window event ",
-		cast_int(ev.window.event)));
+		static_cast{int}(ev.window.event)));
 	  */
 	}
-      } else if (etype == SDL_MOUSEBUTTONDOWN) {
-	/*
-	sdllog(string_join{" "}("mousedown", ev.button.x, ev.button.y,
-	  ev.button.button));
-	finger_down(
-	  cast_float(ev.button.x)
-	    / cast_float(cam.screen_width),
-	  cast_float(ev.button.y)
-	    / cast_float(cam.screen_height),
-	  0);
-	*/
-      } else if (etype == SDL_MOUSEBUTTONUP) {
-	/*
-	sdllog(string_join{" "}("mouseup", ev.button.button));
-	finger_up(0);
-	 */
-      } else if (etype == SDL_MOUSEMOTION) {
-	/*
-	sdllog(string_join{" "}("mousemotion", ev.button.x, ev.button.y,
-	  ev.button.button));
-	 */
-      } else if (etype == SDL_FINGERDOWN) {
-	/*
-	sdllog(string_join{" "}("fingerdown", ev.tfinger.x, ev.tfinger.y,
-	  ev.tfinger.fingerId));
-	*/
-	finger_down(ev.tfinger.x, ev.tfinger.y, ev.tfinger.fingerId);
-      } else if (etype == SDL_FINGERUP) {
-	/*
-	sdllog(string_join{" "}("fingerup", ev.tfinger.fingerId));
-	*/
-	finger_up(ev.tfinger.fingerId);
       } else if (etype == SDL_FINGERMOTION) {
 	finger_motion(ev.tfinger.x, ev.tfinger.y, ev.tfinger.dx, ev.tfinger.dy,
 	  ev.tfinger.fingerId);
@@ -971,6 +934,23 @@ function void sdllog(cstrref const& mess)
 	sdllog(string_join{" "}("fingermotion", ev.tfinger.x, ev.tfinger.y,
 	  ev.tfinger.dx, ev.tfinger.dy, ev.tfinger.fingerId));
 	*/
+      } else if (etype == SDL_MOUSEBUTTONDOWN) {
+	/*
+	sdllog(string_join{" "}("mousedown", ev.button.x, ev.button.y,
+	  ev.button.button));
+	*/
+	finger_down(
+	  static_cast{float}(ev.button.x)
+	    / static_cast{float}(cam.screen_width),
+	  static_cast{float}(ev.button.y)
+	    / static_cast{float}(cam.screen_height),
+	  0);
+      } else if (etype == SDL_MOUSEBUTTONUP) {
+	finger_up(0);
+      } else if (etype == SDL_FINGERDOWN) {
+	finger_down(ev.tfinger.x, ev.tfinger.y, ev.tfinger.fingerId);
+      } else if (etype == SDL_FINGERUP) {
+	finger_up(ev.tfinger.fingerId);
       } else if (etype == SDL_APP_WILLENTERBACKGROUND) {
 	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("paused"));
 	paused = true;
@@ -984,12 +964,9 @@ function void sdllog(cstrref const& mess)
       } else if (etype == SDL_QUIT) {
 	done = true;
 	break;
-      } else if (etype == SDL_MULTIGESTURE) {
       } else {
-	string s;
-	integral_to_hexadecimal{int}(cast_int(ev.type), s);
-	sdllog(string_join{" "}("unknown event", s));
 	/*
+	sdllog(string_join{" "}("unknown event", static_cast{int}(ev.type)));
 	*/
       }
     }
@@ -1001,18 +978,15 @@ function void sdllog(cstrref const& mess)
     }
     save_ticks(1);
     {
-      const mess = string_join{" "}(fps,
-	frame_speed_mul,
-	ticks_sum_prev,
-	finger_zmove_delta,
-	cam.camera_angle);
+      const mess = string_join{" "}(fps, cam.camera_angle, ticks_sum_prev,
+	frame_speed_mul);
       draw_frame(cam, sdr, bo, psdr, fti, mess);
       save_ticks(2);
       ++frames;
       uint t = SDL_GetTicks();
       if (t - tprevsec >= 1000) {
-	const seconds = cast_float(t - tprevsec) / 1000.0;
-	fps = cast_float(frames) / seconds;
+	const seconds = static_cast{float}(t - tprevsec) / 1000.0;
+	fps = static_cast{float}(frames) / seconds;
 	/*
 	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
 	  string_join{" "}(frames, "frames in", seconds, "seconds =",
@@ -1025,28 +999,23 @@ function void sdllog(cstrref const& mess)
 	tprevsec = t;
 	frames = 0;
       }
-      mutable tdiff = cast_int(t - tprev);
+      mutable tdiff = static_cast{int}(t - tprev);
       tprev = t;
 
-      uint tdiff_frame_sum = cast_uint(tdiff);
+      uint tdiff_frame_sum = static_cast{uint}(tdiff);
       for (const i: 1 .. frame_tdiffs.size()) {
 	tdiff_frame_sum += frame_tdiffs[i];
 	frame_tdiffs[i - 1] = frame_tdiffs[i];
       }
-      frame_tdiffs[frame_tdiffs.size() - 1] = cast_uint(tdiff);
+      frame_tdiffs[frame_tdiffs.size() - 1] = static_cast{uint}(tdiff);
 
       if (tdiff_frame_sum < 98 || tdiff_frame_sum > 102) {
-	frame_speed_mul = cast_float(tdiff_frame_sum)
-	  * 60.0f / 1000.0f / cast_float(frame_tdiffs.size());
+	frame_speed_mul = static_cast{float}(tdiff_frame_sum)
+	  * 60.0f / 1000.0f / static_cast{float}(frame_tdiffs.size());
       }
       if (frame_speed_mul > 0.90f && frame_speed_mul < 1.10f) {
 	frame_speed_mul = 1.0f;
       }
-      if (frame_speed_mul < 0.01f) {
-	frame_speed_mul = 0.01f;
-      }
-      /*
-      */
       /* println("frame_speed_mul", frame_speed_mul, tdiff_frame_sum,
        frame_tdiffs); */
 
@@ -1068,18 +1037,10 @@ function void sdllog(cstrref const& mess)
 	  camera_rotate(0.0, 1.0, 0.0, -1.0);
 	}
 	if (ks.Key(SDL_SCANCODE_SPACE) != 0) {
-	  finger_zmove_delta -= 0.0003;
-	  if (finger_zmove_delta <= -1.0) {
-	    finger_zmove_delta = -1.0;
-	  }
-	  finger_zmove_mode = 1;
+	  camera_move(0.0, 0.0, -0.02);
 	}
 	if (ks.Key(SDL_SCANCODE_LSHIFT) != 0) {
-	  finger_zmove_delta += 0.0003;
-	  if (finger_zmove_delta >= 1.0) {
-	    finger_zmove_delta = 1.0;
-	  }
-	  finger_zmove_mode = 1;
+	  camera_move(0.0, 0.0, 0.02);
 	}
 	if (ks.Key(SDL_SCANCODE_A) != 0) {
 	  camera_move(-0.02, 0.0, 0.0);
@@ -1103,23 +1064,8 @@ function void sdllog(cstrref const& mess)
       }
     }
     save_ticks(3);
-    double latency_target = 0.0;
-    // uint latency_target = 16; /* 60 fps */
-    // double latency_target = 0.0310;
-    if (latency_target > 0.0) {
-      const now = io::system.gettimeofday_double();
-      const td = time_after_swapwindow - now;
-      if (latency_target > td) {
-	io::system.usleep(static_cast{uint}((latency_target - td) * 1000000.0));
-	// println(latency_target - td);
-      }
-      /*
-      io::system.usleep(static_cast{uint}(0.032 * 1000000.0));
-      */
-    }
     SDL_GL_SwapWindow(wnd);
     save_ticks(4);
-    time_after_swapwindow = io::system.gettimeofday_double();
   }
   io::system._exit(0);
 }

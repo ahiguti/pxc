@@ -12,7 +12,7 @@ OBJS =	pxc_y.o pxc_l.o expr.o expr_impl.o expr_misc.o eval.o evalmeta.o \
 	cdriver.o pxc_md5.o util.o sort_dep.o
 INSTALL_PREFIX=/usr/local
 ifeq ($(shell uname), Darwin)
-  CXXFLAGS += -Wno-unneeded-internal-declaration -Wno-null-conversion
+#  CXXFLAGS += -Wno-unneeded-internal-declaration -Wno-null-conversion
 endif
 
 all: pxc
