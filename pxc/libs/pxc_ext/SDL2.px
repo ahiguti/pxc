@@ -177,6 +177,13 @@ CreateTextureFromSurface(SDL_Texture mutable& tx, ptr{SDL_Renderer} const& rnd,
 
 /* SDL_Event */
 
+public tsvaluetype struct extern "uchar" "extenum" SDL_ButtonState { }
+public extern "::SDL_PRESSED" SDL_ButtonState SDL_PRESSED;
+public extern "::SDL_RELEASED" SDL_ButtonState SDL_RELEASED;
+
+public tsvaluetype struct extern "SDL_TouchID" "extint" SDL_TouchID { }
+public tsvaluetype struct extern "SDL_FingerID" "extint" SDL_FingerID { }
+
 public tsvaluetype struct extern "SDL_Event" SDL_Event {
   /* union */
   public SDL_EventType const type;
@@ -216,20 +223,26 @@ public tsvaluetype struct extern "SDL_WindowEvent" SDL_WindowEvent {
   public int const data1;
   public int const data2;
 }
-public tsvaluetype struct extern "SDL_TouchID" "extint"
-SDL_TouchID { }
-public tsvaluetype struct extern "SDL_FingerID" "extint"
-SDL_FingerID { }
 public tsvaluetype struct extern "SDL_KeyboardEvent"
 SDL_KeyboardEvent { }
 public tsvaluetype struct extern "SDL_TextEditingEvent"
 SDL_TextEditingEvent { }
 public tsvaluetype struct extern "SDL_TextInputEvent"
 SDL_TextInputEvent { }
+public tsvaluetype struct extern "SDL_MouseButtonEvent"
+SDL_MouseButtonEvent {
+  public SDL_EventType const type;
+  public uint const timestamp;
+  public uint const windowID;
+  public uint const which;
+  public uchar const button;
+  public SDL_ButtonState const state;
+  public uchar const clicks;
+  public int const x;
+  public int const y;
+}
 public tsvaluetype struct extern "SDL_MouseMotionEvent"
 SDL_MouseMotionEvent { }
-public tsvaluetype struct extern "SDL_MouseButtonEvent"
-SDL_MouseButtonEvent { }
 public tsvaluetype struct extern "SDL_MouseWheelEvent"
 SDL_MouseWheelEvent { }
 public tsvaluetype struct extern "SDL_JoyAxisEvent"
@@ -389,6 +402,21 @@ public function extern "SDL2::LogError" void SDL_LogError(SDL_LogCategory cat,
 
 public function extern "SDL_GetTicks" uint SDL_GetTicks();
 public function extern "SDL_Delay" void SDL_Delay(uint ms);
+
+/* display mode */
+
+public struct extern "SDL_DisplayMode" SDL_DisplayMode {
+  public uint format;
+  public int w;
+  public int h;
+  public int refresh_rate;
+}
+
+public function extern "SDL_GetNumDisplayModes"
+int SDL_GetNumDisplayModes(int display_index);
+public function extern "SDL2::GetDisplayMode"
+int SDL_GetDisplayMode(int display_index, int mode_index,
+  SDL_DisplayMode mutable& mode);
 
 extern "types" inline
 
@@ -737,6 +765,12 @@ void LogError(int cat, cstrref const& mess)
 {
   PXCRT_ALLOCA_NTSTRING(mess_nt, mess);
   SDL_LogError(cat, "%s", mess_nt.get());
+}
+
+bt_int GetDisplayMode(bt_int display, bt_int mode_index,
+  SDL_DisplayMode& mode_r)
+{
+  return SDL_GetDisplayMode(display, mode_index, &mode_r);
 }
 
 }; // namespace SDL2

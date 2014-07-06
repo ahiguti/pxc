@@ -1,0 +1,289 @@
+public namespace gldraw "export-unsafe";
+public import common -;
+public import pointer::raw -;
+public import numeric::fpmath -;
+public import SDL2 -;
+public import SDL2::Image -;
+public import GL::gles2 -;
+public import GL::glm glm;
+public import io::time -;
+public import meta m;
+public import exception -;
+public import glshader -;
+
+public valuetype struct node_edge
+{
+  public size_t edge_sort;
+  public glm::mat4 trans; /* or quat and vec3 ? */
+}
+
+private metafunction num_float_struct{t}
+  m::fold{m::map{m::field_types{t}, num_float_fld}, m::add, 0};
+private metafunction num_float_fld{t}
+  m::cond{
+    m::eq{t, float}, 1,
+    m::eq{t, glm::vec2}, 2,
+    m::eq{t, glm::vec3}, 3,
+    m::eq{t, glm::vec4}, 4,
+    m::error{"invalid type"}};
+
+private threaded function {t} void
+push_float(varray{float} mutable& arr, t const& v)
+{
+  if (m::eq{t, float}) {
+    arr.push_back(v);
+  } else {
+    expand (fld: m::field_names{t}) {
+    push_float(arr, v.fld);
+    }
+  }
+}
+
+public multithreaded struct {tattr} vertices
+{
+  private metafunction num_float_per_vertex num_float_struct{tattr};
+  public varray{float} vertex_values;
+  public varray{uint} elements;
+  public tree_map{tattr, uint} value_to_id;
+  public varray{node_edge} edges;
+  public function void push_vertex_dedup(tattr const& value)
+  {
+    if (const id: value_to_id[value]) {
+      elements.push_back(id);
+      /* debug_log("push", value, "id", id); */
+    } else {
+      const id = static_cast{uint}(
+	vertex_values.size() / num_float_per_vertex);
+      push_float{tattr}(vertex_values, value);
+      value_to_id[value] = id;
+      elements.push_back(id);
+      /* debug_log("push", value, "id", id); */
+    }
+  }
+  public function void push_polygon_distinct(cslice{tattr} const& vals)
+  {
+    /* no dedup */
+    const first_id = vertex_values.size() / num_float_per_vertex;
+    for (const i, const& val: vals) {
+      push_float{tattr}(vertex_values, val);
+    }
+    /* polygon to triangles */
+    for (const i: 0 .. vals.size() - 2) {
+      elements.push_back(static_cast{uint}(first_id));
+      elements.push_back(static_cast{uint}(first_id + i + 1));
+      elements.push_back(static_cast{uint}(first_id + i + 2));
+    }
+  }
+  public function void push_edge(node_edge const& e)
+  {
+    edges.push_back(e);
+  }
+}
+
+public threaded struct {tattr} vertex_set()
+{
+  public string name; /* unused */
+  public ptr{vertices{tattr}} vtxs = make_ptr{vertices{tattr}}();
+  public size_t vertex_values_offset;
+  public size_t elements_offset;
+}
+
+public threaded struct {tshader} buffer_object
+{
+  public metafunction vertex_attributes_type
+    m::symbol{tshader, "vertex_attributes_type"};
+  public varray{vertex_set{vertex_attributes_type}} vs_arr;
+  public tree_map{string, size_t} vs_names;
+  public uint vbo_values;
+  public uint vbo_elems;
+  public size_t num_vertex_values;
+  public size_t num_elements;
+}
+
+function void check_error()
+{
+  const v = glGetError();
+  if (v == GL_NO_ERROR) {
+    return;
+  }
+  throw runtime_error_template{"glutil::check_error"}(
+    to_string(static_cast{int}(v)));
+}
+
+public function {tshader} bool
+buffer_object_create_vbo(buffer_object{tshader} mutable& bo)
+{
+  metafunction tattr m::symbol{tshader, "vertex_attributes_type"};
+  varray{float} vertex_values;
+  varray{uint} elements;
+  size_t num_v = 0;
+  size_t num_e = 0;
+  for (const i, const& be: bo.vs_arr) {
+    num_v += be.vtxs->vertex_values.size();
+    num_e += be.vtxs->elements.size();
+  }
+  vertex_values.resize(num_v, 0.0);
+  elements.resize(num_e, 0);
+  bo.num_vertex_values = num_v;
+  bo.num_elements = num_e;
+  num_v = 0;
+  num_e = 0;
+  for (const i, mutable& be: bo.vs_arr) {
+    for (const j, const& v: be.vtxs->vertex_values) {
+      vertex_values[num_v + j] = v;
+    }
+    for (const j, const& e: be.vtxs->elements) {
+      elements[num_e + j] = e +
+	(static_cast{uint}(num_v) / num_float_struct{tattr});
+    }
+    be.vertex_values_offset = num_v;
+    be.elements_offset = num_e;
+    num_v += be.vtxs->vertex_values.size();
+    num_e += be.vtxs->elements.size();
+  }
+
+  farray{uint, 2} vbos;
+  glGenBuffers(2, vbos.rawptr());
+  check_error();
+  if (vbos[0] == 0 || vbos[1] == 0) {
+    return false;
+  }
+  glBindBuffer(GL_ARRAY_BUFFER, vbos[0]);
+  check_error();
+  glBufferData(GL_ARRAY_BUFFER,
+    static_cast{GLsizeiptr}(vertex_values.size()) * 4,
+    vertex_values.crawptr().void(), GL_STATIC_DRAW);
+  check_error();
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+  check_error();
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbos[1]);
+  check_error();
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+    static_cast{GLsizeiptr}(elements.size()) * 4,
+    elements.crawptr().void(), GL_STATIC_DRAW);
+  check_error();
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+  check_error();
+  bo.vbo_values = vbos[0];
+  bo.vbo_elems = vbos[1];
+  return true;
+}
+
+private function {tshader} void
+buffer_object_draw_pre(buffer_object{tshader} const& bo, tshader const& sdr)
+{
+  glBindBuffer(GL_ARRAY_BUFFER, bo.vbo_values);
+  check_error();
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bo.vbo_elems);
+  check_error();
+  /* */
+  metafunction tattr m::symbol{tshader, "vertex_attributes_type"};
+  metafunction stride_byte m::mul{4, num_float_struct{tattr}};
+  size_t offset = 0;
+  expand (sym, idx: m::map{m::field_names{tattr},
+    metafunction{s} m::concat{"a_", s}})
+  {
+  if (sdr.sym >= 0) {
+    glEnableVertexAttribArray(static_cast{uint}(sdr.sym));
+    check_error();
+    int const nfloat = num_float_fld{m::at{m::field_types{tattr}, idx}};
+    glVertexAttribPointer(static_cast{uint}(sdr.sym), nfloat, GL_FLOAT, 0,
+      stride_byte, offset_to_void_cp(offset));
+    check_error();
+    offset += static_cast{size_t}(nfloat) * 4;
+  }
+  }
+}
+
+private function {tshader} void
+buffer_object_draw_post(buffer_object{tshader} const& bo, tshader const& sdr)
+{
+  metafunction tattr m::symbol{tshader, "vertex_attributes_type"};
+  expand (sym, idx: m::map{m::field_names{tattr},
+    metafunction{s} m::concat{"a_", s}})
+  {
+  if (sdr.sym >= 0) {
+    glDisableVertexAttribArray(static_cast{uint}(sdr.sym));
+    check_error();
+  }
+  }
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+  check_error();
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+  check_error();
+}
+
+private function {tshader} void
+buffer_object_draw_elems(buffer_object{tshader} const& bo, GLenum mode,
+  size_t vs_id)
+{
+  size_t elem_offset;
+  size_t elem_num;
+  {
+    const& be = bo.vs_arr[vs_id];
+    elem_offset = be.elements_offset;
+    elem_num = be.vtxs->elements.size();
+  }
+  /* TODO: (gles >= 3.0) glDrawRangeElements */
+  glDrawElements(mode, static_cast{GLsizei}(elem_num), GL_UNSIGNED_INT,
+    offset_to_void_cp(elem_offset * 4));
+  check_error();
+}
+
+public function {tshader} void
+buffer_object_draw(buffer_object{tshader} const& bo, GLenum mode, size_t vs_id,
+  tshader const& sdr)
+{
+  buffer_object_draw_pre(bo, sdr);
+  buffer_object_draw_elems(bo, mode, vs_id);
+  buffer_object_draw_post(bo, sdr);
+}
+
+public threaded struct scene_node()
+{
+  public int vs_id = -1;
+  public glm::mat4 trans;
+  public varray{ptr{scene_node}} children;
+}
+
+public function {tshader} ptr{scene_node}
+buffer_object_instantiate_scene(buffer_object{tshader} const& bo, int vs_id)
+{
+  const r = make_ptr{scene_node}();
+  r->vs_id = vs_id;
+  if (vs_id >= 0) {
+    const& vs = bo.vs_arr[static_cast{size_t}(vs_id)];
+    for (size_t i, const& e: vs.vtxs->edges) {
+      const p = bo.instantiate_scene(static_cast{int}(e.edge_sort));
+      p->trans = e.trans;
+      r->children.push_back(p);
+    }
+  }
+  return r;
+}
+
+private function {set_normal_func, tshader} void
+scene_node_draw_rec(scene_node const& sn, buffer_object{tshader} const& bo,
+  glm::mat4 const& model_mat)
+{
+  const mm = model_mat * sn.trans;
+  {
+    set_normal_func(mm);
+    if (sn.vs_id >= 0) {
+      bo.draw_elems(GL_TRIANGLES, static_cast{size_t}(sn.vs_id));
+    }
+  }
+  for (const i, const& snp: sn.children) {
+    scene_node_draw_rec{set_normal_func}(*snp, bo, mm);
+  }
+}
+
+public function {set_normal_func, tshader} void
+scene_node_draw(scene_node const& sn, buffer_object{tshader} const& bo,
+  glm::mat4 const& model_mat, tshader const& sdr)
+{
+  bo.draw_pre(sdr);
+  scene_node_draw_rec{set_normal_func}(sn, bo, model_mat);
+  bo.draw_post(sdr);
+}
+

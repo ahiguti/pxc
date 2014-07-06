@@ -25,6 +25,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/file.h>
+#include <sys/utsname.h>
 #include <unistd.h>
 #include <assert.h>
 #include <stdexcept>
@@ -781,23 +782,13 @@ static void compile_cxx_all(const parser_options& po,
     genopt = "-lpthread";
   } else {
     const strmap::const_iterator i = po.profile.mapval.find("platform");
-    if (i != po.profile.mapval.end() && i->second == "macos") {
+    if (i != po.profile.mapval.end() && i->second == "Darwin") {
       genopt = "-fPIC -undefined dynamic_lookup -bundle -bundle_loader "
 	+ po.argv0 + " -lpthread";
     } else {
       genopt = "-fPIC -shared -lpthread";
     }
   }
-  /*
-  #ifdef __APPLE__
-  std::string cmd = po.profile.cxx + " " + po.profile.cflags
-    + " -g -fPIC -undefined dynamic_lookup -bundle -bundle_loader "
-    + po.argv0 + " -o '" + ofn + "' -lpthread";
-  #else
-  std::string cmd = po.profile.cxx + " " + po.profile.cflags
-    + " -g -fPIC -shared -o '" + ofn + "' -lpthread";
-  #endif
-  */
   const std::string ofn_tmp = ofn + ".tmp";
   std::string cmd = po.profile.cxx + " " + po.profile.cflags + " " + genopt
     + " -o '" + ofn_tmp + "'";
@@ -1243,13 +1234,12 @@ static void load_profile(parser_options& po)
   iter = po.profile.mapval.find("platform");
   std::string platform;
   if (iter == po.profile.mapval.end()) {
-    #if defined(__linux)
-    platform = "linux";
-    #elif defined(__APPLE__)
-    platform = "macos";
-    #else
-    platform = "posix";
-    #endif
+    struct utsname utsn;
+    if (::uname(&utsn) < 0) {
+      arena_error_throw(0, "-:-: uname() failed: errno=%d", errno);
+    }
+    platform = std::string(utsn.sysname);
+    /* fprintf(stderr, "uname: %s", platform.c_str()); */
     po.profile.mapval["platform"] = platform;
   }
   iter = po.profile.mapval.find("generate_dynamic");
@@ -1603,15 +1593,19 @@ static int prepare_options(parser_options& po, int argc, char **argv)
     static const char *etc_path[] = { "/usr/local/etc", "/etc", 0 };
     for (const char **p = etc_path; *p != 0; ++p) {
       std::string dstr(*p);
+      std::string prof_path;
       if (po.profile_name.empty()) {
-	po.profile_name = dstr + "/pxc/pxc.profile";
+	prof_path = dstr + "/pxc/pxc.profile";
       } else if (!po.no_realpath) {
 	if (po.profile_name.find('/') == std::string::npos) {
-	  po.profile_name = dstr + "/pxc/pxc_" + po.profile_name + ".profile";
+	  prof_path = dstr + "/pxc/pxc_" + po.profile_name + ".profile";
+	} else {
+	  prof_path = po.profile_name;
 	}
-	po.profile_name = get_canonical_path(po.profile_name);
+	prof_path = get_canonical_path(prof_path);
       }
-      if (file_access(po.profile_name)) {
+      if (file_access(prof_path)) {
+	po.profile_name = prof_path;
 	break;
       }
     }

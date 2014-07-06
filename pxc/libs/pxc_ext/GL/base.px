@@ -29,7 +29,7 @@ public tsvaluetype struct extern "GLfixed" "extint" GLfixed { }
 public tsvaluetype struct extern "GLDEBUGPROC" GLDEBUGPROC { }
 public tsvaluetype struct extern "GLsync" "noncopyable" GLsync { }
 
-expand (s : m::list{m::list{"", m::eq{m::profile{"platform"}, "macos"}}}) {
+expand (s : m::list{m::list{"", m::eq{m::profile{"platform"}, "Darwin"}}}) {
 extern "ldflags" "-lGL -lm";
 extern "ldflags" "-framework OpenGL -lm";
 }
@@ -41,8 +41,14 @@ extern "types" inline
 #endif
 
 #ifdef __APPLE__
+#include <TargetConditionals.h>
+#if TARGET_OS_IPHONE
+#include <OpenGLES/ES2/gl.h>
+#include <OpenGLES/ES2/glext.h>
+#else
 #include <OpenGL/gl.h>
 #include <OpenGL/glext.h>
+#endif
 #elif defined ANDROID
 #include <GLES/gl.h>
 #include <GLES/glext.h>
