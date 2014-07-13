@@ -6,6 +6,7 @@ import SDL2 -;
 import SDL2::Image -;
 import SDL2::TTF -;
 import GL::gles2 -;
+import GL::gl30 -;
 import GL::glm glm;
 import io::time -;
 import io::environ -;
@@ -17,15 +18,20 @@ import glshader -;
 import gldraw -;
 import glgeometry -;
 
+private float distance_max = 1000.0;
+
+metafunction enable_shadowmapping 1;
+
 valuetype struct main_uniforms
 {
   public glm::mat4 view_projection_matrix;
   public glm::mat4 model_matrix;
-  public glm::mat4 normal_matrix;
+  public glm::mat3 normal_matrix;
   public int sampler;
+  public int sampler_sm;
   public glm::vec3 camera_pos;
-  public glm::vec3 light_dir;
-  public glm::vec3 view_dir;
+  public glm::vec3 light_pos;
+  public glm::mat4 shadowmap_mvp;
 }
 
 valuetype struct main_vertex_attributes
@@ -35,6 +41,13 @@ valuetype struct main_vertex_attributes
   public glm::vec4 tangent;
   public glm::vec2 uv;
 }
+
+valuetype struct shadowmap_uniforms
+{
+  public glm::mat4 shadowmap_mvp;
+}
+
+metafunction shadowmap_vertex_attributes main_vertex_attributes;
 
 valuetype struct font_uniforms
 {
@@ -49,6 +62,9 @@ valuetype struct font_vertex_attributes
 
 metafunction main_shader shader{main_uniforms, main_vertex_attributes};
 metafunction main_shader_ptr cptr{main_shader};
+metafunction shadowmap_shader
+  shader{shadowmap_uniforms, shadowmap_vertex_attributes};
+metafunction shadowmap_shader_ptr cptr{shadowmap_shader};
 metafunction font_shader shader{font_uniforms, font_vertex_attributes};
 metafunction font_shader_ptr cptr{font_shader};
 
@@ -75,23 +91,29 @@ valuetype struct camera_info
   public glm::vec3 camera_pos;
   public int screen_width;
   public int screen_height;
+  public bool proj_light;
+  public shadowmap_fbo sm;
+  public glm::mat4 sm_projection;
+  public glm::quat light_angle;
+  public glm::vec3 light_pos;
 }
 
-function void build_vertices(buffer_object{main_shader} mutable& bo)
+function void build_vertices(buffer_object{main_vertex_attributes} mutable& bo)
 {
   metafunction tattr m::symbol{main_shader, "vertex_attributes_type"};
   metafunction fill_v fill{tattr};
   metafunction edge_v edge{tattr};
+  if (false) {
   /* vtx0 */
   {
     bo.vs_arr.push_back(vertex_set{tattr}());
     const vtx0 = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
     const t0 = fill_v(vtx0);
     regular_polygon(0.3, 100,
-      bump(0.04, 0.5, 1, t0, t0),
-      bump(0.01, 0.9, 5,
-	sphere(10, t0),
-	t0))
+      bump_rec(0.04, 0.5, 1, t0, t0),
+      bump_rec(0.01, 0.9, 5,
+	t0,
+	sphere(10, t0)))
       (poly_t(), mesh_pos());
   }
   /* vtx1 */
@@ -100,7 +122,7 @@ function void build_vertices(buffer_object{main_shader} mutable& bo)
     const vtx1 = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
     const t1 = fill_v(vtx1);
     regular_polygon(0.1, 4,
-      bump(8.0, 1.0, 1, t1, t1),
+      bump_rec(8.0, 1.0, 1, t1, t1),
       t1)
       (poly_t(), mesh_pos());
   }
@@ -110,7 +132,7 @@ function void build_vertices(buffer_object{main_shader} mutable& bo)
     const vtx2 = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
     const t2 = fill_v(vtx2);
     regular_polygon(10.0, 100,
-      bump(1.0, 1.0, 1, hole(), edge_v(vtx2, 0, hole())),
+      bump_rec(1.0, 1.0, 1, edge_v(vtx2, 0, hole()), hole()),
       hole())
       (poly_t(), mesh_pos());
   }
@@ -120,7 +142,7 @@ function void build_vertices(buffer_object{main_shader} mutable& bo)
     const vtx3 = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
     const t3 = fill_v(vtx3);
     regular_polygon(0.2, 4,
-      bump(0.2828, 1.0, 1, t3, t3),
+      bump_rec(0.2828, 1.0, 1, t3, t3),
       t3)
       (poly_t(), mesh_pos());
   }
@@ -139,9 +161,22 @@ function void build_vertices(buffer_object{main_shader} mutable& bo)
     bo.vs_arr.push_back(vertex_set{tattr}());
     const vtx5 = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
     const t5 = fill_v(vtx5);
-    const cube = bump(0.0, 0.5, 1, lid(bump(1.0, 1.0, 1, t5, t5), t5), hole());
+    const cube = bump_rec(0.0, 0.5, 1, hole(),
+      lid(bump_rec(1.0, 1.0, 1, t5, t5), t5));
     regular_polygon(500.0, 4, 
       rectangle_split(100, 100, cube),
+      hole())
+      (poly_t(), mesh_pos());
+  }
+  }
+  if (true) {
+  /* vtx7 */
+  {
+    bo.vs_arr.push_back(vertex_set{tattr}());
+    const vtx = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
+    const t = fill_v(vtx);
+    regular_polygon(170.0, 50, 
+      bump_rec(-1.0, 1.0, 1, edge_v(vtx, 1, hole()), hole()),
       hole())
       (poly_t(), mesh_pos());
   }
@@ -151,12 +186,25 @@ function void build_vertices(buffer_object{main_shader} mutable& bo)
     const vtx6 = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
     const t6 = fill_v(vtx6);
     const rnd = make_rand_generator(1U);
-    regular_polygon(10.0, 4,
-      bump(1.0, 1.0, 1,
-	rand_bump(3000, 0.8, 0.005, 0.015, 0.005, 0.015, 0.200, 1.000, rnd,
-	  t6, t6, t6),
-	t6),
+    regular_polygon(5.0, 4,
+      bump_rec(1.0, 1.0, 1,
+	t6,
+	rand_bump(10, 0.08, 0.02, 0.08, 0.02, 0.08, 0.05, 0.100, rnd,
+	  t6, t6, t6)),
       t6)
+      (poly_t(), mesh_pos());
+  }
+  }
+  /* vtx8 */
+  {
+    bo.vs_arr.push_back(vertex_set{tattr}());
+    const vtx = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
+    const t = fill_v(vtx);
+    const rnd = make_rand_generator(1U);
+    regular_polygon(20.0, 4,
+      rectangle_split(300, 300,
+	rand_bump(1, 0.8, 0.2, 0.8, 0.2, 0.8, 0.2, 0.8, rnd,
+	  t, t, t)), hole())
       (poly_t(), mesh_pos());
   }
   for (const i, const& a: bo.vs_arr) {
@@ -165,43 +213,207 @@ function void build_vertices(buffer_object{main_shader} mutable& bo)
   }
 }
 
-function void draw_frame(camera_info mutable& cam, main_shader_ptr const& sdr,
-  buffer_object{main_shader} const& bo, font_shader_ptr const& psdr,
+function uint draw_frame(camera_info mutable& cam, main_shader_ptr const& sdr,
+  shadowmap_fbo const& sfbo, shadowmap_shader_ptr const& smsdr,
+  buffer_object{main_vertex_attributes} const& bo, font_shader_ptr const& psdr,
   font_texture_info const& fti, cstrref const& mess)
 {
-  /* main */
-  glUseProgram(sdr->program);
-  check_error();
-  glEnable(GL_CULL_FACE);
-  glEnable(GL_DEPTH_TEST);
-  // glDepthFunc(GL_LEQUAL);
-  glDepthFunc(GL_LESS);
-  glDisable(GL_BLEND);
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  const light = glm::make_vec3(5.0, 5.0, -5.0).normalize();
-  glUniform3fv(sdr->u_light_dir, 1, light.crawptr());
-  check_error();
-  glUniform3fv(sdr->u_view_dir, 1,
-    (cam.camera_angle.to_mat3() * glm::make_vec3(0.0, 0.0, -1.0)).crawptr());
-  check_error();
-  glUniform3fv(sdr->u_camera_pos, 1, cam.camera_pos.crawptr());
-  const view = (glm::mat4().translate(cam.camera_pos)
-    * cam.camera_angle.to_mat4())
-    .inverse();
-  const vp = cam.projection * view;
-  glUniformMatrix4fv(sdr->u_view_projection_matrix, 1, 0, vp.crawptr());
-  const red = make_farray{float}(0.8, 0.1, 0.0, 1.0);
-  glUniform1i(sdr->u_sampler, 1);
-  const sn = bo.instantiate_scene(6);
-  const modelview_cur = glm::mat4();
-  function void set_uniform_cb(glm::mat4 const& model_mat)
+  // println("draw_frame enter");
+  const sn = bo.instantiate_scene(2);
+  /* shadowmap view and view-projection matrix */
   {
-    glUniformMatrix4fv(sdr->u_model_matrix, 1, 0, model_mat.crawptr());
-    const nm = model_mat.to_3();
-    glUniformMatrix3fv(sdr->u_normal_matrix, 1, 0, nm.crawptr());
+    // cam.light_pos = cam.camera_pos + glm::make_vec3(15.0, -15.0, 0.0);
+    cam.light_pos = cam.camera_pos +
+      cam.camera_angle.to_mat3() * glm::make_vec3(3.0, 3.0, 8.0);
+    cam.light_angle = cam.camera_angle;
   }
-  sn->draw{set_uniform_cb, main_shader}(bo, modelview_cur, *sdr);
-  check_error();
+  const sm_view = (
+    glm::mat4().translate(cam.light_pos) * cam.light_angle.to_mat4())
+    .inverse();
+  const sm_vp = cam.sm_projection * sm_view;
+  if (m::ne{enable_shadowmapping, 0}) {
+    check_error();
+    int saved_fb;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
+    check_error();
+    // sdllog(string_join{" "}("saved_fb", saved_fb));
+    /* shadowmap */
+    // sdllog(string_join{" "}("draw_frame smsdr", smsdr->program));
+    glUseProgram(smsdr->program);
+    check_error();
+    if (true) {
+      glBindFramebuffer(GL_FRAMEBUFFER, sfbo.fbo);
+      check_error();
+      glViewport(0, 0, static_cast{GLsizei}(sfbo.sm_width),
+	static_cast{GLsizei}(sfbo.sm_height));
+      glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+      check_error();
+    }
+    else {
+      glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    }
+    glEnable(GL_CULL_FACE);
+    // glFrontFace(GL_CW);
+    // glCullFace(GL_FRONT);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glDisable(GL_BLEND);
+    {
+      if (false) {
+	const y = sm_view * glm::make_vec4(0.0, 0.0, 0.0, 1.0);
+	println("sm_mv(0) =>", y);
+	mutable x = sm_vp * glm::make_vec4(0.0, 0.0, 0.0, 1.0);
+	println("sm_mvp(0) =>", x);
+	glm::mat4 mutable view;
+	view = (view.translate(cam.camera_pos) * cam.camera_angle.to_mat4())
+	  .inverse();
+	mutable aa = cam.projection * view * glm::make_vec4(0.0, 0.0, 0.0, 1.0);
+	println("cam_mvp(0) =>", aa);
+      }
+      function void set_uniform_cb(glm::mat4 const& model_mat)
+      {
+	const sm_mvp = sm_vp * model_mat;
+	glUniformMatrix4fv(smsdr->u_shadowmap_mvp, 1, 0, sm_mvp.crawptr());
+	// println("shadowmap_mvp(L)", sm_mvp.cslice());
+	// glUniformMatrix4fv(smsdr->u_shadowmap_mvp, 1, 0, m.crawptr());
+	check_error();
+      }
+      sn->draw{set_uniform_cb, shadowmap_vertex_attributes, shadowmap_shader}(
+	bo, glm::mat4(), *smsdr);
+      check_error();
+      if (false) {
+	farray{int, 4} view;
+	/*
+	if (cam.proj_light) {
+	  glGetIntegerv(GL_VIEWPORT, view.rawptr());
+	  // println(view);
+	} else {
+	*/
+	  view[2] = sfbo.sm_width;
+	  view[3] = sfbo.sm_height;
+	/*
+	}
+	*/
+	mutable dbuf = darray{uchar}(
+	  static_cast{size_t}(view[2] * view[3] * 4), 0);
+	glReadPixels(0, 0, view[2], view[3], GL_RGBA,
+	  GL_UNSIGNED_BYTE, dbuf.rawptr().void());
+	const sli = dbuf[0 .. 10];
+	println("readpixels", sli);
+	/*
+	float avg = 0.0f;
+	float minval = 2.0f;
+	float maxval = -2.0f;
+	for (const i, const v: dbuf) {
+	  avg += v;
+	  if (v < minval) { minval = v; }
+	  if (v > maxval) { maxval = v; }
+	}
+	avg /= static_cast{float}(dbuf.size());
+	// println("avg", avg, "min", minval, "max", maxval);
+	{
+	  float const perspective_distance = 1.0;
+	  float const min_distance = 0.2;
+	  const d = cast_float(perspective_distance);
+	  const near = cast_float(d - min_distance);
+	  const far = cast_float(d + min_distance + distance_max);
+	  const distance = far * near / (avg * (far - near) - far);
+	  // println("dbuf avg", avg, "distance", distance);
+	}
+	*/
+      }
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
+  }
+  uint const tick_shadowmapping_shader = SDL_GetTicks();
+  /* main */
+  glViewport(0, 0, static_cast{GLsizei}(cam.screen_width),
+    static_cast{GLsizei}(cam.screen_height));
+  if (true) {
+    glUseProgram(sdr->program);
+    check_error();
+    glEnable(GL_CULL_FACE);
+    // glFrontFace(GL_CCW);
+    glCullFace(GL_BACK);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    // glDepthFunc(GL_LESS);
+    // glDepthRange(0.1, 1000.0); // FIXME
+    /*
+    {
+    farray{float, 2} params;
+    glGetFloatv(GL_DEPTH_RANGE, params.rawptr());
+    check_error();
+    println(params);
+    }
+    */
+    glDisable(GL_BLEND);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    /*
+    const light = glm::make_vec3(2500.0, 2500.0, -2500.0);
+    */
+    const camera_target = cam.camera_angle.to_mat3() *
+      glm::make_vec3(0.0, 0.0, -20.0);
+    glUniform3fv(sdr->u_light_pos, 1, cam.light_pos.crawptr());
+    check_error();
+    glUniform3fv(sdr->u_camera_pos, 1, cam.camera_pos.crawptr());
+    mutable view = glm::mat4();
+    if (cam.proj_light) {
+      view = (view.translate(cam.light_pos) * cam.light_angle.to_mat4())
+	.inverse();
+    } else {
+      view = (view.translate(cam.camera_pos) * cam.camera_angle.to_mat4())
+	.inverse();
+      // println("camerapos", cam.camera_pos);
+    }
+    const vp = cam.projection * view;
+    glUniformMatrix4fv(sdr->u_view_projection_matrix, 1, 0, vp.crawptr());
+    const red = make_farray{float}(0.8, 0.1, 0.0, 1.0);
+    glUniform1i(sdr->u_sampler, 1);
+    check_error();
+    glUniform1i(sdr->u_sampler_sm, 2);
+    check_error();
+    const model_cur = glm::mat4();
+    function void set_uniform_cb(glm::mat4 const& model_mat)
+    {
+      glUniformMatrix4fv(sdr->u_model_matrix, 1, 0, model_mat.crawptr());
+      /* const nm = model_mat.inverse().transpose().to_3(); */
+      const nm = model_mat.to_3();
+      glUniformMatrix3fv(sdr->u_normal_matrix, 1, 0, nm.crawptr());
+      // println("m", model_mat * glm::make_vec4(0.0, 0.0, 0.0, 1.0));
+      // println("mv", view * model_mat * glm::make_vec4(0.0, 0.0, 0.0, 1.0));
+      const sm_mvp = sm_vp * model_mat;	
+      glUniformMatrix4fv(sdr->u_shadowmap_mvp, 1, 0, sm_mvp.crawptr());
+      // println("shadowmap_mvp(M)", sm_mvp.cslice());
+      check_error();
+    }
+    sn->draw{set_uniform_cb, main_vertex_attributes, main_shader}(bo,
+      model_cur, *sdr);
+    check_error();
+    if (false) {
+      farray{int, 4} view;
+      glGetIntegerv(GL_VIEWPORT, view.rawptr());
+      println(view);
+      mutable dbuf = darray{float}(static_cast{size_t}(view[2] * view[3]),
+	0.0f);
+      glReadPixels(view[0], view[1], view[2], view[3], GL_DEPTH_COMPONENT,
+	GL_FLOAT, dbuf.rawptr().void());
+      float avg = 0.0f;
+      for (const i, const v: dbuf) {
+	avg += v;
+      }
+      avg /= static_cast{float}(dbuf.size());
+      {
+	float const perspective_distance = 1.0;
+	float const min_distance = 0.2;
+	const d = cast_float(perspective_distance);
+	const near = cast_float(d - min_distance);
+	const far = cast_float(d + min_distance + distance_max);
+	const distance = far * near / (avg * (far - near) - far);
+	println("dbuf avg", avg, distance, near, far);
+      }
+    }
+  }
   /* panel */
   glUseProgram(psdr->program);
   check_error();
@@ -286,6 +498,7 @@ function void draw_frame(camera_info mutable& cam, main_shader_ptr const& sdr,
     glDisableVertexAttribArray(lpu);
     check_error();
   }
+  return tick_shadowmapping_shader;
 }
 
 function void reshape(camera_info mutable& cam, int width, int height)
@@ -297,20 +510,37 @@ function void reshape(camera_info mutable& cam, int width, int height)
 
 function void update_mvp(camera_info mutable& cam)
 {
-  float const perspective_distance = 1.1;
-  float const min_distance = 0.5;
+  float const perspective_distance = 1.0;
+  float const min_distance = 0.2;
   const h = cast_float(cam.screen_height)
     / cast_float(cam.screen_width);
   glViewport(0, 0, static_cast{GLsizei}(cam.screen_width),
     static_cast{GLsizei}(cam.screen_height));
   const d = cast_float(perspective_distance);
-  const near = cast_float(d - min_distance);
-  const far = cast_float(d + min_distance + 1000.0);
-  const left = cast_float(-1.0 * ((d - min_distance) / d));
-  const right = cast_float(1.0 * ((d - min_distance) / d));
-  const bottom = cast_float(-h * ((d - min_distance) / d));
-  const top = cast_float(h * ((d - min_distance) / d));
-  cam.projection = glm::frustum{float}(left, right, bottom, top, near, far);
+  {
+    const near = cast_float(d - min_distance);
+    const far = cast_float(d + min_distance + distance_max);
+    const left = cast_float(-1.0 * ((d - min_distance) / d));
+    const right = cast_float(1.0 * ((d - min_distance) / d));
+    const bottom = cast_float(-h * ((d - min_distance) / d));
+    const top = cast_float(h * ((d - min_distance) / d));
+    /*
+      const rat = 50.0f;
+      cam.projection = glm::ortho{float}(-rat, rat, -rat * h, rat * h, near,
+	far);
+    */
+    cam.projection = glm::frustum{float}(left, right, bottom, top, near, far);
+  }
+  {
+    const near = cast_float(d - min_distance);
+    const far = cast_float(d + min_distance + 1000.0);
+    const left = cast_float(-1.0 * ((d - min_distance) / d));
+    const right = cast_float(1.0 * ((d - min_distance) / d));
+    const bottom = cast_float(-1.0 * ((d - min_distance) / d));
+    const top = cast_float(1.0 * ((d - min_distance) / d));
+    cam.sm_projection = glm::frustum{float}(left, right, bottom, top, near,
+      far);
+  }
 }
 
 threaded function {t} t power_of_2(t v)
@@ -323,6 +553,145 @@ threaded function {t} t power_of_2(t v)
 metafunction gl_precision m::cond{m::eq{m::profile{"platform"}, "ios"},
   "precision highp float;\n", ""};
 
+valuetype struct shadowmap_fbo {
+  public uint fbo;
+  public uint sm_texture;
+  public int sm_width;
+  public int sm_height;
+}
+
+function void init_shadowmap_fbo(shadowmap_fbo mutable& sfbo)
+{
+  int saved_fb;
+  glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
+  sfbo.sm_width = 2048;
+  sfbo.sm_height = 2048;
+  /* texture */
+  glActiveTexture(GL_TEXTURE2);
+  check_error();
+  glGenTextures(1, address(sfbo.sm_texture));
+  check_error();
+  glBindTexture(GL_TEXTURE_2D, sfbo.sm_texture);
+  check_error();
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, cast_int(GL_NEAREST));
+  check_error();
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+    cast_int(GL_NEAREST));
+  check_error();
+  /*
+  glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_DEPTH_COMPONENT), sfbo.sm_width,
+    sfbo.sm_height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE,
+    offset_to_void_cp(0));
+  */
+  glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_RGBA), sfbo.sm_width,
+    sfbo.sm_height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+    offset_to_void_cp(0));
+  check_error();
+  glGenFramebuffers(1, address(sfbo.fbo));
+  check_error();
+  glBindFramebuffer(GL_FRAMEBUFFER, sfbo.fbo);
+  check_error();
+  /*
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
+    sfbo.sm_texture, 0);
+  */
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+    sfbo.sm_texture, 0);
+  check_error();
+  /*
+  glDrawBuffer(GL_NONE); // MacOSX requires this
+  */
+  /*
+  GLenum x;
+  glDrawBuffers(0, caddress(x));
+  */
+  /*
+  glReadBuffer(GL_NONE);
+  */
+  int orig_rb;
+  glGetIntegerv(GL_RENDERBUFFER_BINDING, address(orig_rb));
+  println("orig_rb", orig_rb);
+  check_error();
+  uint depthbuf;
+  glGenRenderbuffers(1, address(depthbuf));
+  check_error();
+  glBindRenderbuffer(GL_RENDERBUFFER, depthbuf);
+  check_error();
+  /*
+  glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, sfbo.sm_width,
+    sfbo.sm_height);
+  */
+  glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, sfbo.sm_width,
+    sfbo.sm_height);
+  check_error();
+  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+    GL_RENDERBUFFER, depthbuf);
+  check_error();
+  glBindRenderbuffer(GL_RENDERBUFFER, static_cast{uint}(orig_rb));
+  /*
+  */
+  /*
+  GLenum drawbuffer = GL_COLOR_ATTACHMENT0;
+  glDrawBuffers(1, caddress(drawbuffer));
+  check_error();
+  */
+  const e = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+  if (e != GL_FRAMEBUFFER_COMPLETE) {
+    println("incompete framebuffer", cast_int(e));
+  } else {
+    println("compete framebuffer");
+  }
+  check_error();
+  // glBindTexture(GL_TEXTURE_2D, 0);
+  check_error();
+  glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
+  check_error();
+}
+
+function shadowmap_shader_ptr
+init_shadowmap_shader()
+{
+  const vert = m::concat{
+    gl_precision,
+    "uniform mat4 shadowmap_mvp;\n",
+    "attribute vec3 position;\n",
+    /*
+    "varying float vary_z;\n",
+    */
+    "varying vec4 vary_smpos;\n",
+    "void main(void) {\n",
+    /*
+    */
+    "  vec4 p = shadowmap_mvp * vec4(position, 1.0);\n",
+    /*
+    "  vary_z = (p.z/p.w + 1.0) / 2.0;\n",
+    */
+    "  gl_Position = p;\n",
+    "  vary_smpos = p;\n",
+    "}\n"};
+  const frag = m::concat{
+    gl_precision,
+    /*
+    "varying float vary_z;\n",
+    */
+    "uniform mat4 shadowmap_mvp;\n",
+    "varying vec4 vary_smpos;\n",
+    "void main(void) {\n",
+    "  vec4 p = vary_smpos;\n",
+    "  float pz = (p.z/p.w + 1.0) / 2.0;\n",
+    // "  float z = vary_z * 256.0;\n", /* [0.0, 256.0] */
+    "  float z = pz * 256.0;\n", /* [0.0, 256.0] */
+    "  float z0 = floor(z);\n", /* [0, 256] */
+    "  z = (z - z0) * 256.0;\n", /* [0.0, 256.0) */
+    "  float z1 = floor(z);\n", /* [0, 256) */
+    "  z = (z - z1) * 256.0;\n", /* [0.0, 256.0) */
+    "  float z2 = floor(z);\n",  /* [0, 256) */
+    "  gl_FragColor = vec4(z0 / 255.0, z1 / 255.0, z2 / 255.0, 1.0);\n",
+    "}\n"};
+  return make_shader_ptr{shadowmap_uniforms, shadowmap_vertex_attributes}(
+    vert, frag);
+}
+
 function main_shader_ptr
 init_main_shader()
 {
@@ -331,6 +700,7 @@ init_main_shader()
     "uniform mat4 view_projection_matrix;\n",
     "uniform mat4 model_matrix;\n",
     "uniform mat3 normal_matrix;\n",
+    "uniform mat4 shadowmap_mvp;\n",
     "attribute vec3 position;\n",
     "attribute vec3 normal;\n",
     "attribute vec4 tangent;\n",
@@ -340,43 +710,53 @@ init_main_shader()
     "varying vec3 vary_tangent;\n",
     "varying vec3 vary_binormal;\n",
     "varying vec2 vary_uv;\n",
+    m::cond{enable_shadowmapping,
+    "varying vec4 vary_smpos;\n",
+    ""
+    },
     "void main(void) {\n",
     "  vec4 pos4 = vec4(position, 1.0);\n",
-    "  gl_Position = view_projection_matrix * model_matrix * pos4;\n",
-    "  vary_position = (model_matrix * pos4).xyz;\n",
+    "  vec4 gpos4 = model_matrix * pos4;\n",
+    "  gl_Position = view_projection_matrix * gpos4;\n",
+    "  vary_position = gpos4.xyz;\n",
     "  vary_normal = normal_matrix * normal;\n",
     "  vary_tangent = normal_matrix * tangent.xyz;\n",
     "  vary_binormal = cross(vary_normal, vary_tangent) * tangent.w;\n",
     "  vary_uv = uv;\n",
+    m::cond{enable_shadowmapping,
+    "  vary_smpos = shadowmap_mvp * pos4;\n",
+    ""
+    },
     "}\n"};
   const frag = m::concat{
     gl_precision,
     "uniform sampler2D sampler;\n",
+    "uniform sampler2D sampler_sm;\n",
     "uniform vec3 camera_pos;\n",
-    "uniform vec3 light_dir;\n",
-    "uniform vec3 view_dir;\n",
+    "uniform vec3 light_pos;\n",
+    "uniform mat4 shadowmap_mvp;\n",
     "varying vec3 vary_position;\n",
     "varying vec3 vary_normal;\n",
     "varying vec3 vary_tangent;\n",
     "varying vec3 vary_binormal;\n",
     "varying vec2 vary_uv;\n",
+    "varying vec4 vary_pposition;\n",
+    "varying vec4 vary_smpos;\n",
+    /* */
     "void main(void) {\n",
     "  vec3 nor = vary_normal;\n",
-    "  float u = vary_uv.x;\n",
-    "  float v = vary_uv.y;\n",
-    "  float u1 = (u + 0.5) * 128.0;\n",
-    "  float v1 = (v + 0.5) * 128.0;\n",
-    "  float ui = floor(u1);\n",
-    "  float uj = u1 - ui;\n",
-    "  float vi = floor(v1);\n",
-    "  float vj = v1 - vi;\n",
-    "  vec4 c0 = texture2D(sampler, vec2(ui / 128.0, vi / 128.0));\n",
+    "  vec2 uv1 = (vary_uv + 0.5) * 256.0;\n",
+    "  vec2 uvi = floor(uv1);\n",
+    "  vec2 uvj = uv1 - uvi;\n",
+    "  vec2 uvi_fr = fract(uvi / 32.0) * 32.0;\n",
+    "  vec4 c0 = texture2D(sampler, uvi_fr / 128.0);\n",
     "  int alv = int(c0.a * 255.0 + 0.5);\n",
     "  c0 *= 0.1;\n",
-    "  int left_top = int(vj - uj >= 0.0);\n",
-    "  int left_bottom  = int(vj + uj <= 1.0);\n",
     "  int ut1 = 0;\n",
     "  int vt1 = 0;\n",
+    /* */
+    "  int left_top = int(uvj.y - uvj.x >= 0.0);\n",
+    "  int left_bottom  = int(uvj.y + uvj.x <= 1.0);\n",
     "  ut1 += int(alv == 4) - int(alv == 8);\n",
     "  ut1 += int(alv == 3) * (1 - left_bottom);\n",
     "  ut1 += int(alv == 5) * (1 - left_top);\n",
@@ -387,20 +767,42 @@ init_main_shader()
     "  vt1 += int(alv == 7) * (1 - left_bottom);\n",
     "  vt1 += -int(alv == 1) * (1 - left_top);\n",
     "  vt1 += -int(alv == 3) * left_bottom;\n",
-    "  nor += float(ut1) * vary_tangent * 0.3;\n",
-    "  nor += float(vt1) * vary_binormal * 0.3;\n",
+    /* */
+    "  nor += float(ut1) * vary_tangent * 0.2;\n",
+    "  nor += float(vt1) * vary_binormal * 0.2;\n",
+    /* */
     "  nor = normalize(nor);\n",
+    "  vec3 light_dir = normalize(light_pos - vary_position);\n",
     /* */
-    "  float brightness = max(dot(light_dir, nor), 0.0) * 0.5 + 0.1;\n",
     "  vec3 reflection_vec = reflect(-light_dir, nor);\n",
-    "  vec3 vtx_from_camera = normalize(vary_position - camera_pos);\n",
-    "  float cos_angle = max(0.0, dot(vtx_from_camera, reflection_vec));\n",
-    "  float specular = pow(cos_angle, 32.0);\n",
-    "  vec4 color1 = vec4(0.25, 0.26, 0.27, 1.0);\n",
-    "  vec4 color2 = vec4(1.0, 1.0, 1.0, 1.0);\n",
-    "  vec4 color = color1 * brightness + color2 * specular;\n",
-    "  color = c0 + color;\n",
+    "  vec3 camera_dir = normalize(camera_pos - vary_position);\n",
+    "  float cos_angle = max(0.0, dot(camera_dir, reflection_vec));\n",
+    "  float light_distance = length(light_pos - vary_position);\n",
+    "  float dist = min(20.0 / light_distance, 1.0);\n",
+    "  float specular = pow(cos_angle, 16.0);\n",
+    "  float diffuse = max(dot(light_dir, nor), 0.0);\n",
     /* */
+    "  vec4 color1 = vec4(0.15, 0.16, 0.13, 1.0);\n",
+    "  vec4 color2 = vec4(0.2, 0.2, 0.2, 1.0);\n",
+    "  vec4 color3 = vec4(1.0, 1.0, 1.0, 1.0);\n",
+    /* */
+    m::cond{enable_shadowmapping,
+    m::concat{
+    "  vec4 smp = vary_smpos;\n",
+    "  vec3 smpos = ((smp.xyz / smp.w) + 1.0) * 0.5;\n",
+    "  float lflag = float(int(smpos.x <= 0.0) + int(smpos.x >= 1.0)",
+    "    + int(smpos.y <= 0.0) + int(smpos.y >= 1.0) == 0);\n",
+    "  vec4 smz = texture2D(sampler_sm, smpos.xy * lflag);\n",
+    "  float z0 = floor(smz.r * 255.0 + 0.5);\n",
+    "  float z1 = floor(smz.g * 255.0 + 0.5);\n",
+    "  float z2 = floor(smz.b * 255.0 + 0.5);\n",
+    "  float zval = z0 * 65536.0 + z1 * 256.0 + z2;\n",
+    "  float lstr = float(smpos.z * 16770000.0 < zval) * lflag;\n",
+    "  vec4 color = color1 + (color2 * diffuse + color3 * specular) ",
+    "    * dist * lstr;\n"
+    },
+    "  vec4 color = color1 + (color2 * diffuse + color3 * specular);\n"
+    },
     "  gl_FragColor = color;\n",
     "}\n"};
   return make_shader_ptr{main_uniforms, main_vertex_attributes}(vert, frag);
@@ -517,7 +919,7 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
   }
   {
     // const sur = IMG_Load("img-c1024.jpg").some;
-    const sur0 = IMG_Load("test.bmp").some;
+    const sur0 = IMG_Load("test.png").some;
     const bpp = sur0.BytesPerPixel();
     if (bpp != 4 && bpp != 3) {
       throw runtime_error_template{"img_load"}("1");
@@ -533,25 +935,27 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
     const sur1buf = sur1.Pixels();
     for (const x: 0 .. sur0_w) {
       for (const y: 0 .. sur0_h) {
-	const mx = sur0_w - x - 1;
-	const my = sur0_h - y - 1;
+	const tx = x % 32;
+	const ty = y % 32;
+	const mx = 32U - tx - 1;
+	const my = 32U - ty - 1;
 	uchar alpha_value = 0;
-	const uint brd = 2;
-	if (x == y && x < brd) {
+	const uint brd = 1;
+	if (tx == ty && tx < brd) {
 	  alpha_value = 1;
-	} else if (y < brd && y < x && y < mx) {
+	} else if (ty < brd && ty < tx && ty < mx) {
 	  alpha_value = 2;
-	} else if (mx == y && mx < brd) {
+	} else if (mx == ty && mx < brd) {
 	  alpha_value = 3;
-	} else if (mx < brd && mx < y && mx < my) {
+	} else if (mx < brd && mx < ty && mx < my) {
 	  alpha_value = 4;
 	} else if (mx < brd && mx == my) {
 	  alpha_value = 5;
 	} else if (my < brd && my < x && my < mx) {
 	  alpha_value = 6;
-	} else if (my == x && my < brd) {
+	} else if (my == tx && my < brd) {
 	  alpha_value = 7;
-	} else if (x < brd && x < y && x < my) {
+	} else if (tx < brd && tx < ty && tx < my) {
 	  alpha_value = 8;
 	}
 	const offset0 = (y * sur0_w + x) * bpp;
@@ -591,35 +995,43 @@ function void check_error()
     return;
   }
   sdllog(string_join{""}("error: ", cast_int(v)));
-  throw runtime_error_template{"gl_error"}("1");
+  // io::system.abort();
+  // throw runtime_error_template{"gl_error"}("1");
 }
 
 function void sdllog(cstrref const& mess)
 {
-  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, mess);
+  SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, mess);
 }
 
 {
   camera_info cam;
   sdllog("PXC-SDL2 main");
   const ini = SDL_Init(SDL_INIT_VIDEO);
-  int init_w = 800;
-  int init_h = 800;
+  int init_w = 512;
+  int init_h = 512;
   const num_modes = SDL_GetNumDisplayModes(0);
   for (int i: 0 .. num_modes) {
     SDL_DisplayMode mode;
     SDL_GetDisplayMode(0, i, mode);
     if (mode.w * mode.h > init_w * init_h) {
-      init_w = mode.w;
-      init_h = mode.h;
+      // init_w = mode.w;
+      // init_h = mode.h;
+    }
+    if (mode.w * mode.h < init_w * init_h) {
+      // init_w = mode.w;
+      // init_h = mode.h;
     }
     sdllog(string_join{" "}("displaymode", mode.w, mode.h));
   }
   SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-  mutable wflags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE
-    | SDL_WINDOW_ALLOW_HIGHDPI;
+  mutable wflags = SDL_WINDOW_OPENGL;
+  wflags |= SDL_WINDOW_RESIZABLE;
+  wflags |= SDL_WINDOW_ALLOW_HIGHDPI;
+  /*
+  */
   /*
   wflags |= SDL_WINDOW_FULLSCREEN;
    */
@@ -630,12 +1042,19 @@ function void sdllog(cstrref const& mess)
   sdllog(string_join{" "}("create_window", init_w, init_h));
   const wnd = SDL_CreateWindow("PXC-SDL2", 0, 0, init_w, init_h, wflags).some;
   SDL_GL_GetDrawableSize(wnd, init_w, init_h);
+  sdllog(string_join{" "}("drawable size", init_w, init_h));
   const glctx = SDL_GL_CreateContext(wnd);
   SDL_GL_SetSwapInterval(vsync);
 
   sdllog("PXC-SDL2 init0");
+  shadowmap_fbo sfbo;
+  if (m::ne{enable_shadowmapping, 0}) {
+    init_shadowmap_fbo(sfbo);
+  }
   const sdr = init_main_shader();
+  const smsdr = init_shadowmap_shader();
   const psdr = init_font_shader();
+  check_error();
   main_texture_info mti;
   font_texture_info fti;
   init_texture(mti, fti);
@@ -643,13 +1062,18 @@ function void sdllog(cstrref const& mess)
 
   sdllog("PXC-SDL2 reshape");
   reshape(cam, init_w, init_h);
+  check_error();
 
   uint tprevsec = 0;
   uint tprev = SDL_GetTicks();
   uint frames = 0;
   float mutable fps = 0.0;
   cam.camera_angle = glm::make_quat_wxyz(1.0, 0.0, 0.0, 0.0);
+  println("cang", cam.camera_angle.to_mat3() * glm::make_vec3(1.0, 2.0, 3.0));
   cam.camera_pos = glm::make_vec3(0.0, 0.0, 10.0);
+
+  cam.light_angle = glm::make_quat_angle_axis(30.0, 1.0, 1.0, 0.0);
+  cam.light_pos = cam.light_angle.to_mat3() * glm::make_vec3(0.0, 0.0, 20.0);
 
   farray{uint, 2} mutable frame_tdiffs;
   for (const i, mutable& e: frame_tdiffs) {
@@ -657,7 +1081,7 @@ function void sdllog(cstrref const& mess)
   }
   float mutable frame_speed_mul = 1.0f;
 
-  metafunction ticks_t farray{uint, 5};
+  metafunction ticks_t farray{uint, 6};
   ticks_t ticks;
   ticks_t ticks_sum;
   ticks_t ticks_sum_prev;
@@ -671,15 +1095,14 @@ function void sdllog(cstrref const& mess)
     ticks_sum[idx] += cur_tick - prev_tick;
   }
 
-  buffer_object{main_shader} bo;
+  buffer_object{main_vertex_attributes} bo;
   {
     const t0 = system.gettimeofday_double();
     build_vertices(bo);
     const t1 = system.gettimeofday_double();
     bo.create_vbo();
     const t2 = system.gettimeofday_double();
-    SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-      string_join{" "}("build vertex", t1 - t0, t2 - t1));
+    sdllog(string_join{" "}("build vertex", t1 - t0, t2 - t1));
   }
 
   bool done = false;
@@ -744,8 +1167,7 @@ function void sdllog(cstrref const& mess)
       finger_zmove_mode = 0;
     }
     /*
-    SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	string_join{" "}("finger_down_post", fingerids));
+    sdllog(string_join{" "}("finger_down_post", fingerids));
     */
   }
   function void finger_up(SDL_FingerID fng) {
@@ -780,8 +1202,7 @@ function void sdllog(cstrref const& mess)
       finger_zmove_mode = 0;
     }
     /*
-    SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	string_join{" "}("finger_up_post", fingerids));
+    sdllog(string_join{" "}("finger_up_post", fingerids));
     */
   }
   function void finger_action_one_finger(size_t fid) {
@@ -914,18 +1335,19 @@ function void sdllog(cstrref const& mess)
 	  int h;
 	  SDL_GL_GetDrawableSize(wnd, w, h);
 	  reshape(cam, w, h);
-	  SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	    string_join{""}("resized w=", w, " h=", h));
+	  sdllog(string_join{""}("resized w=", w, " h=", h));
 	} else if (ev.window.event == SDL_WINDOWEVENT_HIDDEN) {
 	  /* sdllog("hidden"); */
+/*
 	} else if (ev.window.event == SDL_WINDOWEVENT_MINIMIZED ||
 	    ev.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
 	  paused = true;
-	  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, "paused");
+	  sdllog("paused");
+*/
 	} else if (ev.window.event == SDL_WINDOWEVENT_RESTORED ||
 	    ev.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) {
 	  paused = false;
-	  SDL_LogWarn(SDL_LOG_CATEGORY_TEST, "restored");
+	  sdllog("restored");
 	} else {
 	  /*
 	  sdllog(string_join{" "}("window event ",
@@ -933,6 +1355,8 @@ function void sdllog(cstrref const& mess)
 	  */
 	}
       } else if (etype == SDL_MOUSEBUTTONDOWN) {
+//	cam.proj_light = !cam.proj_light;
+	update_mvp(cam);
 	/*
 	sdllog(string_join{" "}("mousedown", ev.button.x, ev.button.y,
 	  ev.button.button));
@@ -967,15 +1391,17 @@ function void sdllog(cstrref const& mess)
       } else if (etype == SDL_FINGERMOTION) {
 	finger_motion(ev.tfinger.x, ev.tfinger.y, ev.tfinger.dx, ev.tfinger.dy,
 	  ev.tfinger.fingerId);
+/*
+*/
 	/*
 	sdllog(string_join{" "}("fingermotion", ev.tfinger.x, ev.tfinger.y,
 	  ev.tfinger.dx, ev.tfinger.dy, ev.tfinger.fingerId));
 	*/
       } else if (etype == SDL_APP_WILLENTERBACKGROUND) {
-	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("paused"));
+	sdllog(string_join{""}("paused"));
 	paused = true;
       } else if (etype == SDL_APP_DIDENTERFOREGROUND) {
-	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("resumed"));
+	sdllog(string_join{""}("resumed"));
 	paused = false;
 	int w;
 	int h;
@@ -988,11 +1414,12 @@ function void sdllog(cstrref const& mess)
       } else {
 	string s;
 	integral_to_hexadecimal{int}(cast_int(ev.type), s);
-	sdllog(string_join{" "}("unknown event", s));
 	/*
+	sdllog(string_join{" "}("unknown event", s));
 	*/
       }
     }
+    check_error();
     if (paused) {
       SDL_Delay(100);
       tprev = SDL_GetTicks();
@@ -1006,19 +1433,18 @@ function void sdllog(cstrref const& mess)
 	ticks_sum_prev,
 	finger_zmove_delta,
 	cam.camera_angle);
-      draw_frame(cam, sdr, bo, psdr, fti, mess);
+      const tick_sm = draw_frame(cam, sdr, sfbo, smsdr, bo, psdr, fti, mess);
       save_ticks(2);
+      save_ticks(3);
       ++frames;
       uint t = SDL_GetTicks();
       if (t - tprevsec >= 1000) {
 	const seconds = cast_float(t - tprevsec) / 1000.0;
 	fps = cast_float(frames) / seconds;
 	/*
-	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	  string_join{" "}(frames, "frames in", seconds, "seconds =",
+	sdllog(string_join{" "}(frames, "frames in", seconds, "seconds =",
 	    fps, "fps"));
-	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	  string_join{" "}("ticks: ", ticks_sum));
+	sdllog(string_join{" "}("ticks: ", ticks_sum));
 	*/
 	ticks_sum_prev = ticks_sum;
 	ticks_sum = ticks_t();
@@ -1099,10 +1525,14 @@ function void sdllog(cstrref const& mess)
 	if (ks.Key(SDL_SCANCODE_X) != 0) {
 	  camera_rotate(0.0, 0.0, 1.0, 1.0);
 	}
+	if (ks.Key(SDL_SCANCODE_RETURN) != 0) {
+	  finger_zmove_delta = 0.0;
+	  finger_zmove_mode = 1;
+	}
 	finger_action_step();
       }
     }
-    save_ticks(3);
+    save_ticks(4);
     double latency_target = 0.0;
     // uint latency_target = 16; /* 60 fps */
     // double latency_target = 0.0310;
@@ -1117,8 +1547,10 @@ function void sdllog(cstrref const& mess)
       io::system.usleep(static_cast{uint}(0.032 * 1000000.0));
       */
     }
+    check_error();
     SDL_GL_SwapWindow(wnd);
-    save_ticks(4);
+    check_error();
+    save_ticks(5);
     time_after_swapwindow = io::system.gettimeofday_double();
   }
   io::system._exit(0);

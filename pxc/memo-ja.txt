@@ -3,6 +3,23 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- bool allow_noheap_container = !is_passby_mutable(varinfo.passby);
+  これは推移的に定数オブジェクトであるときに限らなくいいのか？
+  -> 限らなくてよい。排除せねばならないのはvarrayのpush_backにより
+    コンテナ自体より短い寿命のものが要素に作られてしまうケース。
+    function foo(varray{cstrref} mutable& vs) {
+      cstrref s = "hoge";
+      vs.push_back(s); // fooを抜けると無効な値がvsに残る
+    }
+
+- darraystはcopyableだけどもreturn式には使えないようにする?
+  コピーコンストラクタを許可してしまうとコピコン除去により呼び出し先
+  でallocaしたポインタが呼び出し元のオブジェクトに渡ってしまう
+  - darray型の変数を定義し
+
+- struct constructorでreturn式は使えないことを確認
+  checktype.cpp expr_block::check_typeのFIXME
+
 - platformを'uname -o'の文字列に変える。macosなどとハードコードしてい
   る箇所を除去。リンクに使うコマンドはプロファイルで指定。
 

@@ -7,6 +7,8 @@ public import GL::glm -;
 public import numeric::fpmath -;
 public import operator op;
 
+public metafunction modifier_t callable_ptr{darray{vec3}, {poly_t}};
+
 public metafunction poly_t cslice{vec3};
 public metafunction gf_poly callable_ptr{void, {poly_t, mesh_pos}};
 public metafunction to_gf_poly{f}
@@ -27,7 +29,7 @@ rand_generator(uint seed0)
 }
 
 public metafunction regular_polygon to_gf_poly{gf_regular_polygon};
-public metafunction bump to_gf_poly{gf_bump};
+public metafunction bump_rec to_gf_poly{gf_bump_rec};
 public metafunction rand_bump to_gf_poly{gf_rand_bump};
 public metafunction edge{tattr} to_gf_poly{gf_edge{tattr}};
 public metafunction fill{tattr} to_gf_poly{gf_fill{tattr}};
@@ -50,15 +52,12 @@ public tsvaluetype struct mesh_pos {
   public size_t w;
 }
 
-/* private */
-
-private threaded function float pi()
+public threaded function float pi_float()
 {
   return 3.1415926535897932384626433832795;
 }
 
-private threaded function {t} void polygon_scale(t mutable& poly,
-  float scale)
+public threaded function {t} void polygon_scale(t mutable& poly, float scale)
 {
   const c = polygon_center(poly);
   for (const i, mutable& p: poly) {
@@ -66,7 +65,7 @@ private threaded function {t} void polygon_scale(t mutable& poly,
   }
 }
 
-private threaded function vec3 polygon_center(cslice{vec3} const& poly)
+public threaded function vec3 polygon_center(cslice{vec3} const& poly)
 {
   vec3 mutable c;
   for (const i, const& p: poly) {
@@ -76,7 +75,7 @@ private threaded function vec3 polygon_center(cslice{vec3} const& poly)
   return c;
 }
 
-private threaded function float polygon_radius(cslice{vec3} const& poly)
+public threaded function float polygon_radius(cslice{vec3} const& poly)
 {
   const c = polygon_center(poly);
   float mutable r = 0.0;
@@ -86,12 +85,15 @@ private threaded function float polygon_radius(cslice{vec3} const& poly)
   return r;
 }
 
+/* private */
+
 private threaded function void gf_regular_polygon(float radius, size_t n,
   gf_poly const& c0, gf_poly const& c1, poly_t const& poly, mesh_pos const& mp)
 {
+  /* poly is ignored */
   mutable arr = darray{vec3}(n, vec3());
   for (const i: 0 .. n) {
-    const a = (cast_float(i) * 2.0f * pi()) / cast_float(n);
+    const a = (cast_float(i) * 2.0f * pi_float()) / cast_float(n);
     arr[i].x = sin(a) * radius;
     arr[i].y = -cos(a) * radius;
     arr[i].z = 0.0f;
@@ -101,28 +103,52 @@ private threaded function void gf_regular_polygon(float radius, size_t n,
   c1(arr, mesh_pos());
 }
 
-private threaded function void gf_bump(float z, float scale, int recurse,
+private threaded function void gf_polygon_points(poly_t const& pts, 
+  gf_poly const& c0, gf_poly const& c1, poly_t const& poly, mesh_pos const& mp)
+{
+  /* poly is ignored */
+  darrayst{vec3} arr = pts;
+  c0(arr, mesh_pos());
+  reverse(arr.range());
+  c1(arr, mesh_pos());
+}
+
+private threaded function void gf_bump_modifier(modifier_t const& mo,
+  gf_poly const& c0, gf_poly const& c1, poly_t const& poly, mesh_pos const& mp)
+{
+  darray{vec3} front = mo(poly);
+  if (front.size() < 3) { return; }
+  c1(front, mesh_pos());
+  const sz = front.size();
+  for (const i: 0 .. sz) {
+    const i1 = i + 1 != sz ? i + 1 : 0;
+    const side = make_farray{vec3}(front[i], poly[i], poly[i1], front[i1]);
+    c0(side, mesh_pos());
+  }
+}
+
+private threaded function void gf_bump_rec(float z, float scale, int recurse,
   gf_poly const& c0, gf_poly const& c1, poly_t const& poly, mesh_pos const& mp)
 {
   if (poly.size() < 3) { return; }
-  darray{vec3} front = poly;
-  const nor = -cross(poly[1] - poly[0], poly[2] - poly[0]).normalize();
+  darrayst{vec3} front = poly;
+  const nor = cross(poly[1] - poly[0], poly[2] - poly[0]).normalize();
   for (const i, mutable& e: front) {
-    e -= nor * z;
+    e += nor * z;
   }
   polygon_scale(front, scale);
   /* front */
   if (recurse > 1) {
-    gf_bump(z, scale, recurse - 1, c0, c1, front, mesh_pos());
+    gf_bump_rec(z, scale, recurse - 1, c0, c1, front, mesh_pos());
   } else {
-    c0(front, mesh_pos());
+    c1(front, mesh_pos());
   }
   /* side */
   const sz = front.size();
   for (const i: 0 .. sz) {
     const i1 = i + 1 != sz ? i + 1 : 0;
     const side = make_farray{vec3}(front[i], poly[i], poly[i1], front[i1]);
-    c1(side, mesh_pos());
+    c0(side, mesh_pos());
   }
 }
 
@@ -132,9 +158,9 @@ private threaded function void gf_rand_bump(size_t num, float scale,
   gf_poly const& c2, poly_t const& poly, mesh_pos const& mp)
 {
   if (poly.size() != 4) { return; }
-  darray{vec3} front = poly;
+  darrayst{vec3} front = poly;
   /* front */
-  c0(front, mesh_pos());
+  c2(front, mesh_pos());
   /* bumps */
   polygon_scale(front, scale);
   /*
@@ -165,7 +191,7 @@ private threaded function void gf_rand_bump(size_t num, float scale,
     const t2 = s1 + (s2 - s1) * (yp + ysz);
     const t3 = s0 + (s3 - s0) * (yp + ysz);
     const poly1 = make_farray{vec3}(t0, t1, t2, t3);
-    gf_bump(zsz, 1.0, 1, c1, c2, poly1, mp);
+    gf_bump_rec(zsz, 1.0, 1, c0, c1, poly1, mp);
   }
 }
 
@@ -198,15 +224,16 @@ gf_fill(ptr{vertices{tattr}} const& vptr, poly_t const& poly,
 {
   const sz = poly.size();
   if (sz < 3) { return; }
-  const nor = -cross(poly[1] - poly[0], poly[2] - poly[0]).normalize();
-  const tang = -(poly[1] - poly[0]).normalize();
-  mutable vtxs = darray{tattr}(sz, tattr());
+  const nor = cross(poly[1] - poly[0], poly[2] - poly[0]).normalize();
+  const tang = (poly[1] - poly[0]).normalize();
+  mutable vtxs = darrayst{tattr}(sz, tattr());
   for (const i: 0 .. sz) {
     mutable& v = vtxs[i];
     v.position = poly[i];
     v.normal = nor;
-    v.tangent = make_vec4(tang.x, tang.y, tang.z, -1.0f);
+    v.tangent = make_vec4(tang.x, tang.y, tang.z, 1.0f);
     v.uv = vec2();
+    /* debug_log("fill", v); */
   }
   if (sz == 4) {
     vtxs[0].uv = make_vec2(-0.5f, -0.5f);
@@ -227,7 +254,7 @@ gf_fill(ptr{vertices{tattr}} const& vptr, poly_t const& poly,
 private threaded function void gf_lid(gf_poly const& c0, gf_poly const& c1,
   poly_t const& poly, mesh_pos const& mp)
 {
-  varray{vec3} arr = poly;
+  darrayst{vec3} arr = poly;
   c0(arr, mesh_pos());
   reverse(arr.range());
   c1(arr, mesh_pos());
@@ -245,12 +272,12 @@ private threaded function void gf_sphere(size_t split, gf_poly const& c0,
   if (split == 0) { c0(poly, mesh_pos()); }
   const nor = cross(poly[1] - poly[0], poly[2] - poly[0]).normalize();
   const radius = polygon_radius(poly);
-  varray{vec3} sp = poly;
+  darrayst{vec3} sp = poly;
   mesh_pos mp1;
   for (size_t i: 1 .. split) {
     mp1.x = i;
-    const a1 = pi() * cast_float(i) / cast_float(split * 2);
-    varray{vec3} p = poly;
+    const a1 = pi_float() * cast_float(i) / cast_float(split * 2);
+    darrayst{vec3} p = poly;
     for (size_t j, mutable& x: p) {
       x += nor * radius * sin(a1);
     }
@@ -261,7 +288,9 @@ private threaded function void gf_sphere(size_t split, gf_poly const& c0,
       mp1.y = j;
       c0(side, mp1);
     }
-    sp = p;
+    for (const j: 0 .. poly_sz) {
+      sp[j] = p[j];
+    }
   }
   const top_pos = polygon_center(poly) + nor * radius;
   for (const j: 0 .. poly_sz) {

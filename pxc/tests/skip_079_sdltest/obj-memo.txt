@@ -1,5 +1,17 @@
 
 TODO:
+- depth_texture使えるときに使う 
+- androidでhighpためす
+- モディファイヤ(頂点リストを変換する関数)を渡せるようにする
+- 法線を軸に回転し押し出し(側面は四角形にならない)
+  - 押し出さないで双方蓋をする
+  - 押し出さないで描画もしない
+- 押し出し、縦横それぞれ異なる比率で拡大縮小
+- 単純な押し出しはモディファイヤをパラメータに取る。
+- フラグメントシェーダが単純なときのiOSでの性能見る
+- 物体が遠いときは細かい部分は描かない仕組み
+  - ディテールは頂点配列の後ろのほうに寄せる。
+  - 距離に応じて頂点配列の途中までをglDrawElementsする。
 - シェーダ構造体を作る。uniformとattributeをフィールドとして持つ
   - あとはglutilにshaderを渡してattributeの設定をgenericに
 - instancedを試す
@@ -139,4 +151,60 @@ edgeの変換行列を作る方法
 (Ex, Ey, Ez)
 transform(px, py, pz)
 mat3(Ex, Ey, Ez)
+
+タイル
+16x16のタイルが16x16個。(0,0)のタイルはフラット塗りつぶし。
+各頂点のuvの下位4bitはタイル座標(xyそれぞれ0-16)を表す。
+頂点シェーダがそれをテクスチャの座標へ変換
+各頂点uvの8bitでタイル繰り返し回数を指定する
+頂点シェーダからフラグメントシェーダへ渡すデータ:
+  varying vec2 tile;
+  varying vec2 tile_rep;
+tileは四角形の頂点で1ずつ異なる値を持つ。
+フラグメントシェーダでtile.xとtile.yをfloor()を取って
+整数部分がタイル番号、小数部分をtile_rep倍してfract()
+  vec2 tile0 = floor(tile);
+  vec2 tile_fract = fract((tile - tile0) * tile_rep);
+  vec2 uv = (tile0 + tile_fract) * 16.0;
+
+512x512解像度、32x32のタイルを16回リピート
+uv1: 0..512
+uvi: 0..512 整数
+
+ドット絵作成方法
+32x32のタイル、偶数行タイルには法線マップ、奇数行タイルは色。
+イメージをロードするときに合成しテクスチャにする。
+
+メモ: FBOでシャドウマップ
+(0) depth buffer用テクスチャ
+マップの大きさ(sm_width, sm_height)とする。
+glGenTextures(1, &dbuf);
+glBindTexture(GL_TEXTURE_2D, dbuf);
+glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, sm_width, sm_height, 0,
+  GL_DEPTH_COMPONENT /* ??? */, GL_UNSIGNED_BYTE /* ??? */, 0);
+glBindTexture(GL_TEXTURE_2D, 0);
+(1) テクスチャへ描画するための準備
+glGenFramebuffers(1, &fb);
+glBindFramebuffer(GL_FRAMEBUFFER, fb);
+glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
+  dbuf, 0); /* FBOにテクスチャをアタッチする */
+glDrawBuffer(GL_NONE); /* カラーは描かなくてよいのでNONE */
+glReadBuffer(GL_NONE); /* glReadPixelsで読まないのでNONE? */
+glBinfFramebuffer(GL_FRAMEBUFFER, 0);
+(2) 描画
+glBindFramebuffer(GL_FRAMEBUFFER, fb);
+glClear(GL_DEPTH_BUFFER_BIT);
+
+https://www.opengl.org/registry/specs/ARB/depth_texture.txt
+
+depth_textureが無い場合はRGBA値に書き込めばいい
+
+シャドウマップ参照
+シャドウマップの時のmvp行列で頂点を変換する。
+xyzそれぞれ(-1,1)から(0,1)へ変換
+テクスチャを引く
+引いた値とz値を比較、不一致なら影
+
+
+vtx8 300x300 48fps
 

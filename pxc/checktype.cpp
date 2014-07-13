@@ -365,7 +365,9 @@ static bool check_term_validity(const term& t, bool allow_nontype,
 	"' is a noheap type)";
       return false;
     }
-    if (!allow_noheap_container && is_container_family(t)) {
+    if (!allow_noheap_container && is_container_family(t) &&
+      get_family(t) != typefamily_e_darrayst &&
+      get_family(t) != typefamily_e_cdarrayst) {
       err_mess_r = "(template parameter '" + term_tostr_human(t) +
 	"' is a noheap container type)";
       return false;
@@ -625,6 +627,9 @@ void expr_var::check_defcon()
   if (symtbl_lexical->pragma.disable_noheap_checking) {
     allow_noheap_container = true;
   }
+/*
+fprintf(stderr, "check_defcon %s nc=%d anc=%d\n", term_tostr_human(typ).c_str(), (int)need_copyable, (int)allow_noheap_container);
+*/
   check_var_type(typ, this, sym, is_passby_cm_reference(varinfo.passby),
     need_copyable, allow_noheap_container);
   if (is_global_var(this)) {
