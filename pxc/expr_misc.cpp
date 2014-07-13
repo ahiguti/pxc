@@ -916,6 +916,10 @@ bool is_noheap_type(const term& t)
   if (is_range_guard_ephemeral(e)) {
     return true;
   }
+  const typefamily_e cat = get_family(e);
+  if (cat == typefamily_e_darrayst || cat == typefamily_e_cdarrayst) {
+    return true;
+  }
   #if 0
   if (is_cm_range_family(e)) {
     return true;
@@ -1054,9 +1058,11 @@ static bool is_copyable_type_one(expr_i *e)
   if (cat == typefamily_e_linear || cat == typefamily_e_noncopyable) {
     return false;
   }
+  /*
   if (cat == typefamily_e_darrayst || cat == typefamily_e_cdarrayst) {
     return false;
   }
+  */
   return true;
 }
 
