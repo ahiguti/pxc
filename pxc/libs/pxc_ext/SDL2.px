@@ -185,7 +185,7 @@ public tsvaluetype struct extern "SDL_TouchID" "extint" SDL_TouchID { }
 public tsvaluetype struct extern "SDL_FingerID" "extint" SDL_FingerID { }
 
 public tsvaluetype struct extern "SDL_Event" SDL_Event {
-  /* union */
+  /* SDL_Event is actually a union */
   public SDL_EventType const type;
   public SDL_CommonEvent const common;
   public SDL_WindowEvent const window;
@@ -224,7 +224,14 @@ public tsvaluetype struct extern "SDL_WindowEvent" SDL_WindowEvent {
   public int const data2;
 }
 public tsvaluetype struct extern "SDL_KeyboardEvent"
-SDL_KeyboardEvent { }
+SDL_KeyboardEvent {
+  public SDL_EventType const type;
+  public uint const timestamp;
+  public uint const windowID;
+  public uchar const state;
+  public uchar const repeat;
+  public SDL_Keysym keysym;
+}
 public tsvaluetype struct extern "SDL_TextEditingEvent"
 SDL_TextEditingEvent { }
 public tsvaluetype struct extern "SDL_TextInputEvent"
@@ -323,11 +330,17 @@ expand (sym : m::map{m::list{
   public extern "%" SDL_WindowEventID sym;
 }
 
-public struct extern "SDL_GLattr" "extenum" SDL_GLattr { }
+public tsvaluetype struct extern "SDL_GLattr" "extenum" SDL_GLattr { }
 expand (sym : m::map{m::list{
-  "DOUBLEBUFFER", "CONTEXT_MAJOR_VERSION", "CONTEXT_MINOR_VERSION"
+  "DOUBLEBUFFER", "CONTEXT_MAJOR_VERSION", "CONTEXT_MINOR_VERSION",
+  "CONTEXT_PROFILE_MASK", "ACCELERATED_VISUAL"
 }, metafunction{x} m::concat{"SDL_GL_", x}}) {
   public extern "%" SDL_GLattr sym;
+}
+expand (sym : m::map{m::list{
+  "CONTEXT_PROFILE_CORE", "CONTEXT_PROFILE_COMPATIBILITY"
+}, metafunction{x} m::concat{"SDL_GL_", x}}) {
+  public extern "%" int sym;
 }
 
 public function option{ptr{SDL_GLContext}}
@@ -359,7 +372,12 @@ GL_CreateContext(SDL_GLContext mutable& glctx, SDL_Window const& wnd);
 
 /* SDL_KeyboardState */
 
-public struct extern "SDL2::KeyboardState" "noncopyable"
+public tsvaluetype struct extern "SDL_Keysym" 
+SDL_Keysym {
+  public SDL_Scancode scancode;
+}
+
+public tsvaluetype struct extern "SDL2::KeyboardState" "noncopyable"
 SDL_KeyboardState() { }
 
 public function extern "SDL2::KeyboardState_Key" uint
@@ -367,11 +385,11 @@ SDL_KeyboardState_Key(SDL_KeyboardState const& ks, SDL_Scancode code);
 
 /* SDL_Scancode */
 
-public struct extern "SDL_Scancode" "extenum" SDL_Scancode { }
+public tsvaluetype struct extern "SDL_Scancode" "extenum" SDL_Scancode { }
 expand (sym : m::map{m::join{
   m::list{
     "UNKNOWN", "RIGHT", "LEFT", "DOWN", "UP", "ESCAPE", "SPACE", "LSHIFT",
-    "LCTRL", "RETURN"},
+    "LCTRL", "RETURN", "TAB"},
   m::map{
     m::seq{26}, metafunction{i} m::character{m::add{i, m::code_at{"A", 0}}}},
   m::map{
@@ -497,6 +515,7 @@ Init::Init(Uint32 flags)
 {
   if (++init_count == 1) {
     SDL_Init(flags);
+    SDL_LogSetAllPriority(SDL_LOG_PRIORITY_VERBOSE); // FIXME
   }
 }
 

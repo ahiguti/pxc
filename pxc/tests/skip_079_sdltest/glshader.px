@@ -2,7 +2,8 @@ public namespace glshader "export-unsafe";
 public import common -;
 public import pointer::raw -;
 public import numeric::fpmath -;
-public import GL::gles2 -;
+public import GL::gles20 -;
+public import GL::gl30 -;
 public import GL::glm glm;
 public import meta m;
 public import exception -;
@@ -11,6 +12,12 @@ public function {tuni, tattr} cptr{shader{tuni, tattr}}
 make_shader_ptr(cstrref const& prog_v, cstrref const& prog_f)
 {
   return make_cptr{shader{tuni, tattr}}(prog_v, prog_f);
+}
+
+public function void check_error(cstrref const& s)
+{
+  // glGetError(); /* ignore */
+  // throw runtime_error_template{"shader"}(s);
 }
 
 public struct {tuni, tattr}
@@ -29,6 +36,9 @@ shader private(cstrref const& prog_v, cstrref const& prog_f)
   public int sym = -1;
   }
   public uint program = 0;
+  /*
+  public uint vao = 0;
+  */
   public string error;
   /* private */
   init(prog_v, prog_f);
@@ -41,13 +51,20 @@ shader private(cstrref const& prog_v, cstrref const& prog_f)
     expand (sym: m::field_names{tuni}) {
     expand (vsym: {m::concat{"u_", sym}}) {
     vsym = glGetUniformLocation(program, m::to_string{sym}.crawptr().char());
+    glGetError(); /* ignore */
     }
     }
     expand (sym: m::field_names{tattr}) {
     expand (vsym: {m::concat{"a_", sym}}) {
     vsym = glGetAttribLocation(program, m::to_string{sym}.crawptr().char());
+    glGetError(); /* ignore */
     }
     }
+    /*
+    // FIXME
+    glGenVertexArrays(1, address(vao));
+    glBindVertexArray(vao);
+    */
   }
 }
 
@@ -63,8 +80,11 @@ private function uint compile_shader(cstrref const& src, GLenum type,
   glGetShaderiv(res, GL_COMPILE_STATUS, address(success));
   if (success == 0) {
     int sz;
-    /* glGetShaderiv(res, GL_INFO_LOG_LENGTH, address(sz)); */
-    sz = 4096; /* android bug workaround */
+    if (m::eq{m::profile{"platform"}, "android"}) {
+      sz = 4096; /* android bug workaround */
+    } else {
+      glGetShaderiv(res, GL_INFO_LOG_LENGTH, address(sz));
+    }
     string buf;
     buf.resize(static_cast{size_t}(sz), 0);
     GLsizei len;
@@ -108,8 +128,23 @@ create_program(cstrref const& vertex_shader, cstrref const& fragment_shader,
     prog = 0;
   } else {
     glLinkProgram(prog);
-    glGetProgramiv(prog, GL_LINK_STATUS, address(success));
-    debug_log("create_program succeeded:", prog);
+    int linkst;
+    glGetProgramiv(prog, GL_LINK_STATUS, address(linkst));
+    if (linkst == 0) {
+      string buf;
+      buf.resize(4096, 0);
+      GLsizei len;
+      glGetProgramInfoLog(prog, static_cast{GLsizei}(buf.size()), address(len),
+	buf.rawptr().char());
+      buf.resize(static_cast{size_t}(len), 0);
+      debug_log("linkprogram failed:", string_join{"\t"}(prog, buf));
+      debug_log("vert:", vertex_shader);
+      debug_log("frag:", fragment_shader);
+      glDeleteProgram(prog);
+      prog = 0;
+    } else {
+      debug_log("linkprogram succeeded:", prog);
+    }
   }
   return prog;
 }

@@ -708,10 +708,21 @@ void expr_enumval::check_type(symbol_table *lookup)
 
 void expr_stmts::check_type(symbol_table *lookup)
 {
-  #if 0
-  double t1 = gettimeofday_double();
-  #endif
-  fn_check_type(head, lookup);
+  /*
+  try {
+  */
+    fn_check_type(head, lookup);
+  /*
+  } catch (const std::exception& ex) {
+    std::string s = ex.what();
+    if (s.size() > 0 && s[s.size() - 1] != '\n') {
+      s += "\n";
+    }
+    s += std::string(this->fname) + ":" + ulong_to_string(this->line)
+      + ": (while compiling statement)\n";
+    throw std::runtime_error(s);
+  }
+  */
   if (rest != 0 && rest->parent_expr != this) {
     /* this happenes when head is a expr_expand. in this case, rest has
      * moved to the rest of the generated expr. */

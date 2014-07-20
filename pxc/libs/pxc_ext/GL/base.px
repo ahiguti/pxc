@@ -46,6 +46,8 @@ extern "types" inline
 #include <OpenGLES/ES2/gl.h>
 #include <OpenGLES/ES2/glext.h>
 #else
+#include <OpenGL/gl3.h>
+#include <OpenGL/gl3ext.h>
 #include <OpenGL/gl.h>
 #include <OpenGL/glext.h>
 #endif
@@ -65,12 +67,40 @@ namespace pxcrt { namespace gl {
 public function extern "pxcrt::gl::offset_to_void_cp" crawptr{void}
 offset_to_void_cp(size_t x); /* used for glVertexPointer() with VBO */
 
+public function extern "pxcrt::gl::ccharptr_to_string" string
+ccharptr_to_string(ccharptr x);
+
+public function extern "pxcrt::gl::charptr_to_string" string
+charptr_to_string(charptr x);
+
+public function extern "pxcrt::gl::cubptr_to_string" string
+cubptr_to_string(crawptr{GLubyte} x);
+
+public function extern "pxcrt::gl::ubptr_to_string" string
+ubptr_to_string(rawptr{GLubyte} x);
+
 extern "functions" inline
 namespace pxcrt { namespace gl {
 using namespace pxcrt;
 
 static inline const void *offset_to_void_cp(bt_size_t x)
 { return reinterpret_cast<const void *>(x); }
+
+static inline bt_string ccharptr_to_string(const char *x)
+{
+  if (x == 0) { return bt_string(); }
+  return bt_string(reinterpret_cast<const unsigned char *>(x),
+    std::strlen(x));
+}
+
+static inline bt_string charptr_to_string(char *x)
+{ return ccharptr_to_string(reinterpret_cast<const char *>(x)); }
+
+static inline bt_string cubptr_to_string(const GLubyte *x)
+{ return ccharptr_to_string(reinterpret_cast<const char *>(x)); }
+
+static inline bt_string ubptr_to_string(GLubyte *x)
+{ return ccharptr_to_string(reinterpret_cast<const char *>(x)); }
 
 }; };
 ;
