@@ -4,7 +4,7 @@ public import pointer::raw -;
 public import numeric::fpmath -;
 public import SDL2 -;
 public import SDL2::Image -;
-public import GL::gles2 -;
+public import GL::gles20 -;
 public import GL::glm glm;
 public import io::time -;
 public import meta m;
@@ -105,7 +105,7 @@ function void check_error()
   if (v == GL_NO_ERROR) {
     return;
   }
-  throw runtime_error_template{"glutil::check_error"}(
+  throw runtime_error_template{"gldraw::check_error"}(
     to_string(static_cast{int}(v)));
 }
 
@@ -170,23 +170,26 @@ buffer_object_create_vbo(buffer_object{tattr} mutable& bo)
 private metafunction get_vattr{tshader}
   m::symbol{tshader, "vertex_attributes_type"};
 
-private function {tattr, tshader} void
-buffer_object_draw_pre(buffer_object{tattr} const& bo, tshader const& sdr)
+private function {tbo, tshader} void
+buffer_object_draw_pre(tbo const& bo, tshader const& sdr)
 {
   glBindBuffer(GL_ARRAY_BUFFER, bo.vbo_values);
   check_error();
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bo.vbo_elems);
   check_error();
   /* */
-  metafunction stride_byte m::mul{4, num_float_struct{tattr}};
+  metafunction tattr_bo m::symbol{tbo, "vertex_attributes_type"};
+  metafunction tattr_sh m::symbol{tshader, "vertex_attributes_type"};
+  /* FIXME: make sure that tattr_sh is a sub-struct of tattr_bo */
+  metafunction stride_byte m::mul{4, num_float_struct{tattr_bo}};
   size_t offset = 0;
-  expand (sym, idx: m::map{m::field_names{tattr},
+  expand (sym, idx: m::map{m::field_names{tattr_sh},
     metafunction{s} m::concat{"a_", s}})
   {
   if (sdr.sym >= 0) {
     glEnableVertexAttribArray(static_cast{uint}(sdr.sym));
     check_error();
-    int const nfloat = num_float_fld{m::at{m::field_types{tattr}, idx}};
+    int const nfloat = num_float_fld{m::at{m::field_types{tattr_sh}, idx}};
     glVertexAttribPointer(static_cast{uint}(sdr.sym), nfloat, GL_FLOAT, 0,
       stride_byte, offset_to_void_cp(offset));
     check_error();
@@ -195,10 +198,11 @@ buffer_object_draw_pre(buffer_object{tattr} const& bo, tshader const& sdr)
   }
 }
 
-private function {tattr, tshader} void
-buffer_object_draw_post(buffer_object{tattr} const& bo, tshader const& sdr)
+private function {tbo, tshader} void
+buffer_object_draw_post(tbo const& bo, tshader const& sdr)
 {
-  expand (sym, idx: m::map{m::field_names{tattr},
+  metafunction tattr_sh m::symbol{tshader, "vertex_attributes_type"};
+  expand (sym, idx: m::map{m::field_names{tattr_sh},
     metafunction{s} m::concat{"a_", s}})
   {
   if (sdr.sym >= 0) {
@@ -229,13 +233,15 @@ buffer_object_draw_elems(buffer_object{tattr} const& bo, GLenum mode,
   check_error();
 }
 
-public function {tattr, tshader} void
-buffer_object_draw(buffer_object{tattr} const& bo, GLenum mode,
+public function {tbo, tshader} void
+buffer_object_draw(tbo const& bo, GLenum mode,
   size_t vs_id, tshader const& sdr)
 {
+  /*
   if (m::ne{m::symbol{tshader, "vertex_attributes_type"}, tattr}) {
     m::errror{"invalid type"};
   }
+  */
   buffer_object_draw_pre(bo, sdr);
   buffer_object_draw_elems(bo, mode, vs_id);
   buffer_object_draw_post(bo, sdr);
@@ -264,8 +270,8 @@ buffer_object_instantiate_scene(buffer_object{tattr} const& bo, int vs_id)
   return r;
 }
 
-private function {set_normal_func, tattr} void
-scene_node_draw_rec(scene_node const& sn, buffer_object{tattr} const& bo,
+private function {set_normal_func, tbo} void
+scene_node_draw_rec(scene_node const& sn, tbo const& bo,
   glm::mat4 const& model_mat)
 {
   const mm = model_mat * sn.trans;
@@ -276,20 +282,22 @@ scene_node_draw_rec(scene_node const& sn, buffer_object{tattr} const& bo,
     }
   }
   for (const i, const& snp: sn.children) {
-    scene_node_draw_rec{set_normal_func}(*snp, bo, mm);
+    scene_node_draw_rec{set_normal_func, tbo}(*snp, bo, mm);
   }
 }
 
-public function {set_normal_func, tattr, tshader} void
+public function {set_normal_func, tbo, tshader} void
 scene_node_draw(scene_node const& sn,
-  buffer_object{tattr} const& bo, glm::mat4 const& model_mat,
+  tbo const& bo, glm::mat4 const& model_mat,
   tshader const& sdr)
 {
+  /*
   if (m::ne{m::symbol{tshader, "vertex_attributes_type"}, tattr}) {
     m::errror{"invalid type"};
   }
+  */
   bo.draw_pre(sdr);
-  scene_node_draw_rec{set_normal_func}(sn, bo, model_mat);
+  scene_node_draw_rec{set_normal_func, tbo}(sn, bo, model_mat);
   bo.draw_post(sdr);
 }
 

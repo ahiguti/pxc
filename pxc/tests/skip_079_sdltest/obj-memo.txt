@@ -1,5 +1,14 @@
 
 TODO:
+- 画面上にボタン
+- instancedを試す
+- geometry shader試してみる
+- ポイントスプライト
+- geometry shaderを使ったポイントスプライト
+- shadowmapをウインドウと同じサイズに
+- shadowmapには頂点属性のpositionだけわたせばよい
+- ufoの頭の法線がおかしい
+- 台形を法線マップしたときに歪まないように補正
 - depth_texture使えるときに使う 
 - androidでhighpためす
 - モディファイヤ(頂点リストを変換する関数)を渡せるようにする
@@ -14,8 +23,8 @@ TODO:
   - 距離に応じて頂点配列の途中までをglDrawElementsする。
 - シェーダ構造体を作る。uniformとattributeをフィールドとして持つ
   - あとはglutilにshaderを渡してattributeの設定をgenericに
-- instancedを試す
 - 文字列表示はタイルベースのテクスチャマップを使えば高速化できる
+  ポイントスプライトのほうがよい？
 - normalを頂点ごとに
 - vertexの比較を止めて、polygonの三角形分割をそのままつっこむ?
   - normalを頂点ごとにもたせれば頂点共通化しやすいので現状のほうがよい？
@@ -207,4 +216,56 @@ xyzそれぞれ(-1,1)から(0,1)へ変換
 
 
 vtx8 300x300 48fps
+
+遅延シェーディングする価値があるかどうか
+ - 後段で複雑なことをするかどうか
+ - フラグメントシェーダが空のときの描画速さ
+ - GL_RBG32Fテクスチャに書き込む速さ
+z-prepassする価値があるか
+ - 後段で複雑なことをするかどうか
+ - フラグメントシェーダ無駄打ちをなくすかわりに頂点シェーダをもう一回回す
+   ほうがよいなら
+ - GL_RGB32Fテクスチャ読み書きより頂点シェーダもう一度回すほうが速いなら
+   遅延シェーディングよりz-prepassのほうがよい(複雑なことしないなら)
+ - 深さによってフラグメントシェーダを切り替えるのに使えるか
+   -> subroutineが使えればそっちのほうがよい？
+ 
+z-prepass
+  glEnable(GL_DEPTH_TEST);
+  /* 1st */
+  glDepthMask(GL_TRUE);
+  glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+  glDepthFunc(GL_LESS);
+  /* 2nd */
+  glDepthMask(GL_FALSE); /* デプスバッファに書き込まない */
+  glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+  glDepthFunc(GL_EQUAL);
+z-prepass適用前: mbp vtx8 200x200 カメラのアングルによっては30fps
+z-prepass適用後: カメラのアングルによらず60fps安定する
+
+遅延シェーディング
+  /* 1st */
+  シェーダは以下の属性を2ndへそのままま渡す
+    "attribute vec3 position;\n",
+    "attribute vec3 normal;\n",
+    "attribute vec4 tangent;\n",
+    "attribute vec3 uvw;\n",
+  1st用のフレームバッファを作る
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, ...)
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, ...)
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, ...)
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, ...)
+  glDrawBuffers(3, {GL_COLOR_ATTACHMENT0, ...});
+  フラグメントシェーダではgl_FragColorではなくgl_FragData[0]...を書く
+  /* 2nd */
+  全面を覆う四角形を書く。
+  フラグメントシェーダではtexture2D()を繰り返して属性を取り出す
+
+z-prepass適用: mbp vtx8 200x200 60fps安定する
+遅延シェーディング適用: 20fps程度、あまり安定せず。1st passでの
+  テクスチャへの書き込みコストがあるために変動するということか？
+
+ポイントスプライト
+
+GL_POINT_SIZE_MAXの大きさが限界
 

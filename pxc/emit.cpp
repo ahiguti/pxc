@@ -3301,8 +3301,7 @@ static void emit_vardef_constructor_fast_boxing(emit_context& em,
       em.indent('x');
       em.puts("} catch (...) {\n");
       em.indent('x');
-      em.puts("pxcrt::deallocate_single< " + otypcnt_cstr + " >(" + varp1
-	+ ");\n");
+      em.puts(otypcnt_cstr + "::deallocate(" + varp1 + ");\n");
       em.indent('x');
       em.puts("throw;\n");
       em.indent('x');

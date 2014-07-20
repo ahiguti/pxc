@@ -61,6 +61,23 @@ typeArr = [
   'GLvoid **',
   'const GLvoid *const*',
   'const GLchar *const*',
+
+  'const GLuint64 *',
+  'GLuint64EXT',
+  'const GLuint64EXT *',
+  'GLuint64EXT *',
+  'struct _cl_context *',
+  'struct _cl_event *',
+  'GLDEBUGPROCARB',
+  'GLhandleARB',
+  'const GLcharARB **',
+  'GLcharARB *',
+  'GLhandleARB *',
+  'const GLcharARB *',
+  'GLsizeiptrARB',
+  'GLintptrARB',
+  'GLeglImageOES',
+  'GLclampf',
 ]
 typeMap = dict([(e, i) for i, e in enumerate(typeArr)])
 
@@ -73,7 +90,7 @@ def splitWord(s):
     ms = m.group()
   return [ dropSpace(s[0 : len(s) - len(ms)]), ms ]
 def convertType(s):
-  return str(typeMap[s])
+  return str(typeMap[s]) if (s in typeMap) else "\""+s+"\""
 def convertTypeX(s):
   if s == 'void': return 'v'
   elif s == 'GLenum': return 'e'
@@ -194,7 +211,8 @@ class PXOutputGenerator(reg.COutputGenerator):
     return mstr;
   def beginFile(self, genOpts):
     reg.OutputGenerator.beginFile(self, genOpts)
-    s = "namespace GL::api_" + self.apiname + ";\npublic import meta;\n" \
+    s = "public threaded namespace GL::api_" + self.apiname + ";\n" \
+      + "public import meta;\n" \
       + "private metafunction L meta::list;\n"
     print(s, end='', file=self.outFile)
   def endFile(self):
@@ -244,9 +262,13 @@ def genApi(apiname, profile):
     filename="api_" + apiname + ".px", \
     genFuncPointers=None, \
     profile=profile, \
+    # addExtensions='GL_EXT|GL_ARB', \
+    # addExtensions='.+', \
+    addExtensions='', \
     apiname=apiname, \
     emitversions='.+') #, versions='.+')
-  gen = PXOutputGenerator(diagFile=None, apiname=apiname)
+  # gen = PXOutputGenerator(diagFile=None, apiname=apiname)
+  gen = PXOutputGenerator(diagFile=sys.stdout, apiname=apiname)
   x = reg.Registry()
   x.setGenerator(gen)
   x.loadFile(file="./gl.xml")
