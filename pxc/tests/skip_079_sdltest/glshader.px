@@ -2,26 +2,22 @@ public namespace glshader "export-unsafe";
 public import common -;
 public import pointer::raw -;
 public import numeric::fpmath -;
-public import GL::gles20 -;
+public import GL::gles2 -;
 public import GL::gl30 -;
 public import GL::glm glm;
 public import meta m;
 public import exception -;
 
 public function {tuni, tattr} cptr{shader{tuni, tattr}}
-make_shader_ptr(cstrref const& prog_v, cstrref const& prog_f)
+make_shader_ptr(cstrref const& prog_v, cstrref const& prog_f,
+  strlit const& attrib_to_avoid_0)
 {
-  return make_cptr{shader{tuni, tattr}}(prog_v, prog_f);
-}
-
-public function void check_error(cstrref const& s)
-{
-  // glGetError(); /* ignore */
-  // throw runtime_error_template{"shader"}(s);
+  return make_cptr{shader{tuni, tattr}}(prog_v, prog_f, attrib_to_avoid_0);
 }
 
 public struct {tuni, tattr}
-shader private(cstrref const& prog_v, cstrref const& prog_f)
+shader private(cstrref const& prog_v, cstrref const& prog_f,
+  strlit const& attrib_to_avoid_0)
 {
   public metafunction uniforms_type tuni;
   public metafunction vertex_attributes_type tattr;
@@ -36,35 +32,38 @@ shader private(cstrref const& prog_v, cstrref const& prog_f)
   public int sym = -1;
   }
   public uint program = 0;
-  /*
-  public uint vao = 0;
-  */
   public string error;
   /* private */
-  init(prog_v, prog_f);
-  private function void init(cstrref const& prog_v, cstrref const& prog_f)
+  init(prog_v, prog_f, attrib_to_avoid_0);
+  private function void init(cstrref const& prog_v, cstrref const& prog_f,
+    strlit const& attrib_to_avoid_0)
   {
-    program = create_program(prog_v, prog_f, error);
+    program = create_program(prog_v, prog_f, attrib_to_avoid_0, error);
     if (program == 0) {
       throw runtime_error_template{"create_program"}("1");
     }
     expand (sym: m::field_names{tuni}) {
     expand (vsym: {m::concat{"u_", sym}}) {
-    vsym = glGetUniformLocation(program, m::to_string{sym}.crawptr().char());
+    vsym = glGetUniformLocation_nocheck(program,
+      m::to_string{sym}.crawptr().char());
     glGetError(); /* ignore */
+    println(m::to_string{sym}, vsym);
+    if (vsym < 0) {
+      vsym = glGetAttribLocation_nocheck(program,
+	m::to_string{sym}.crawptr().char());
+      glGetError(); /* ignore */
+      println(m::to_string{sym}, vsym);
+    }
     }
     }
     expand (sym: m::field_names{tattr}) {
     expand (vsym: {m::concat{"a_", sym}}) {
-    vsym = glGetAttribLocation(program, m::to_string{sym}.crawptr().char());
+    vsym = glGetAttribLocation_nocheck(program,
+      m::to_string{sym}.crawptr().char());
     glGetError(); /* ignore */
+    println(m::to_string{sym}, vsym);
     }
     }
-    /*
-    // FIXME
-    glGenVertexArrays(1, address(vao));
-    glBindVertexArray(vao);
-    */
   }
 }
 
@@ -101,7 +100,7 @@ private function uint compile_shader(cstrref const& src, GLenum type,
 
 private function uint
 create_program(cstrref const& vertex_shader, cstrref const& fragment_shader,
-  string mutable& err_r)
+  strlit const& attrib_to_avoid_0, string mutable& err_r)
 {
   mutable prog = glCreateProgram();
   uint shader;
@@ -118,6 +117,9 @@ create_program(cstrref const& vertex_shader, cstrref const& fragment_shader,
     shader = compile_shader(fragment_shader, GL_FRAGMENT_SHADER, err_r);
     if (shader != 0) {
       glAttachShader(prog, shader);
+      if (!attrib_to_avoid_0.empty()) {
+	glBindAttribLocation(prog, 1, attrib_to_avoid_0.crawptr().char());
+      }
     } else {
       success = 0;
     }

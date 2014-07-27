@@ -4,8 +4,6 @@ public import GL::base *;
 public import GL::api_gl -;
 public import meta m;
 
-private metafunction dummy 0;
-
 expand(sym : gl_bfval) {
 public extern "%" GLbitfield sym;
 }
@@ -14,35 +12,74 @@ expand(sym : gl_enumval) {
 public extern "%" GLenum sym;
 }
 
-expand(sym, i : m::map{gl_cmds, m::at0}) {
-public function extern "%" ent_to_ret_type{m::at{gl_cmds, i}}
-  sym(expand(GL::base::ent_to_argdefs{m::at{gl_cmds, i}}));
+expand(sym0, i : m::map{gl_cmds, m::at0}) {
+expand(sym1 : {m::concat{sym0, "_nocheck"}}) {
+expand(sym_c : {m::concat{"::", sym0}}) {
+public function extern "sym_c" ent_to_ret_type{m::at{gl_cmds, i}}
+  sym1(expand(ent_to_argdefs{m::at{gl_cmds, i}}));
+public function ent_to_ret_type{m::at{gl_cmds, i}}
+  sym0(expand(ent_to_argdefs{m::at{gl_cmds, i}}))
+{
+  metafunction cmd m::at{gl_cmds, i};
+  metafunction rt ent_to_ret_type{cmd};
+  if (m::ne{rt, void}) {
+    const r = sym1(expand(a: ent_to_argnames{cmd}; a));
+    if (m::ne{sym0, "glGetError"}) {
+      gl_check_error_if(m::to_string{sym0});
+    }
+    return r;
+  } else {
+    sym1(expand(a: ent_to_argnames{cmd}; a));
+    gl_check_error_if(m::to_string{sym0});
+  }
+}
+}
+}
 }
 
+private metafunction gl_available
+  m::apply{
+    metafunction{x} m::or{m::eq{x, "Linux"}, m::eq{x, "Darwin"}},
+    m::profile{"platform"}};
+
 private metafunction gl_enumval
-  m::join{
-    GL_VERSION_1_1_ENUMVAL,
-    GL_VERSION_1_2_ENUMVAL,
-    GL_VERSION_1_3_ENUMVAL,
-    GL_VERSION_1_4_ENUMVAL,
-    GL_VERSION_1_5_ENUMVAL,
-    GL_VERSION_2_0_ENUMVAL,
-    GL_VERSION_2_1_ENUMVAL,
-    GL_VERSION_3_0_ENUMVAL};
+  m::cond{gl_available,
+    m::join{
+      GL_VERSION_1_1_ENUMVAL,
+      GL_VERSION_1_2_ENUMVAL,
+      GL_VERSION_1_3_ENUMVAL,
+      GL_VERSION_1_4_ENUMVAL,
+      GL_VERSION_1_5_ENUMVAL,
+      GL_VERSION_2_0_ENUMVAL,
+      GL_VERSION_2_1_ENUMVAL,
+      GL_VERSION_3_0_ENUMVAL,
+      GL_VERSION_3_1_ENUMVAL,
+      GL_VERSION_3_2_ENUMVAL,
+      GL_VERSION_3_3_ENUMVAL},
+    m::nil};
 private metafunction gl_bfval
-  m::join{
-    GL_VERSION_1_1_BFVAL,
-    GL_VERSION_1_3_BFVAL,
-    GL_VERSION_3_0_BFVAL};
+  m::cond{gl_available,
+    m::join{
+      GL_VERSION_1_1_BFVAL,
+      GL_VERSION_1_3_BFVAL,
+      GL_VERSION_3_0_BFVAL,
+      GL_VERSION_3_1_BFVAL,
+      GL_VERSION_3_2_BFVAL},
+    m::nil};
 private metafunction gl_cmds
-  m::join{
-    GL_VERSION_1_0_CMD,
-    GL_VERSION_1_1_CMD,
-    GL_VERSION_1_2_CMD,
-    GL_VERSION_1_3_CMD,
-    GL_VERSION_1_4_CMD,
-    GL_VERSION_1_5_CMD,
-    GL_VERSION_2_0_CMD,
-    GL_VERSION_2_1_CMD,
-    GL_VERSION_3_0_CMD};
+  m::cond{gl_available,
+    m::join{
+      GL_VERSION_1_0_CMD,
+      GL_VERSION_1_1_CMD,
+      GL_VERSION_1_2_CMD,
+      GL_VERSION_1_3_CMD,
+      GL_VERSION_1_4_CMD,
+      GL_VERSION_1_5_CMD,
+      GL_VERSION_2_0_CMD,
+      GL_VERSION_2_1_CMD,
+      GL_VERSION_3_0_CMD,
+      GL_VERSION_3_1_CMD,
+      GL_VERSION_3_2_CMD,
+      GL_VERSION_3_3_CMD},
+    m::nil};
 
