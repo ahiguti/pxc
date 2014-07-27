@@ -3227,6 +3227,25 @@ static void set_child_parent(expr_i *parent, int pos, expr_i *child)
   }
 }
 
+template <typename T>
+static void subst_symbol_sym_expr(T *e, const std::string& src,
+  const term& dst)
+{
+  if (std::string(e->sym) == src) {
+    check_validity_for_symbol(dst.get_string(), e);
+    e->sym = arena_strdup(dst.get_string().c_str());
+  }
+}
+
+template <typename T>
+static void subst_symbol_cname_sym_expr(T *e, const std::string& src,
+  const term& dst)
+{
+  if (e->cnamei.has_cname() && std::string(e->cnamei.cname) == src) {
+    e->cnamei.cname = arena_strdup(dst.get_string().c_str());
+  }
+}
+
 static expr_i *subst_symbol_name_rec(expr_i *e, expr_i *parent, int parent_pos,
   const std::string& src, const term& dst, bool to_symbol /* true */)
 {
@@ -3313,30 +3332,18 @@ static expr_i *subst_symbol_name_rec(expr_i *e, expr_i *parent, int parent_pos,
       }
     }
   } else if (fd != 0) {
-    if (std::string(fd->sym) == src) {
-      check_validity_for_symbol(dst.get_string(), e);
-      fd->sym = arena_strdup(dst.get_string().c_str());
-    }
+    subst_symbol_sym_expr(fd, src, dst);
+    subst_symbol_cname_sym_expr(fd, src, dst);
   } else if (ev != 0) {
-    if (std::string(ev->sym) == src) {
-      check_validity_for_symbol(dst.get_string(), e);
-      ev->sym = arena_strdup(dst.get_string().c_str());
-    }
+    subst_symbol_sym_expr(ev, src, dst);
   } else if (en != 0) {
-    if (std::string(en->sym) == src) {
-      check_validity_for_symbol(dst.get_string(), e);
-      en->sym = arena_strdup(dst.get_string().c_str());
-    }
+    subst_symbol_sym_expr(en, src, dst);
+    subst_symbol_cname_sym_expr(en, src, dst);
   } else if (es != 0) {
-    if (std::string(es->sym) == src) {
-      check_validity_for_symbol(dst.get_string(), e);
-      es->sym = arena_strdup(dst.get_string().c_str());
-    }
+    subst_symbol_sym_expr(es, src, dst);
+    subst_symbol_cname_sym_expr(es, src, dst);
   } else if (eu != 0) {
-    if (std::string(eu->sym) == src) {
-      check_validity_for_symbol(dst.get_string(), e);
-      eu->sym = arena_strdup(dst.get_string().c_str());
-    }
+    subst_symbol_sym_expr(eu, src, dst);
   }
   int num = e->get_num_children();
   for (int i = 0; i < num; ++i) {

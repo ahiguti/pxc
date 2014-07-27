@@ -1,5 +1,27 @@
 
+性能目安
+1478-t3
+mbpはzprepassあり、ios/androidはzprepassなし
+mbp 2880x1800 60fps vtx8 72*32430 頂点 (778320 tri) (4670万tri/sec)
+mbp 2880x1800 60fps vtx10 2250030 頂点 (750010 tri) (4500万tri/sec)
+    (zprepass, shadowmapping)
+ipad air 24fps
+iphone4s 7fps
+xperia z ultra 30-45fps zprepassしたらさらに遅くなる
+xperia gx 8-12fps
+
+instancedレンダリング
+96頂点のオブジェクトを25600個
+mbp 2880x1800 60fps vtx? 96*25600 頂点 (819200 tri) (4915万tri/sec)
+instancedしなかったらちょうど30fpsだった。
+改良の余地:
+(1) shadowmapping, zprepass, mainで3回glBufferDataするのは無駄 (done)
+(2) インスタンス毎にmat4を渡すより、vec3とquatを渡すほうが軽い
+(3) glMapBuffer使ってコピーを避けたほうが速いかもしれない
+
+
 TODO:
+- use_instancedでないときはshadowmap_mvp
 - 画面上にボタン
 - instancedを試す
 - geometry shader試してみる
@@ -268,4 +290,28 @@ z-prepass適用: mbp vtx8 200x200 60fps安定する
 ポイントスプライト
 
 GL_POINT_SIZE_MAXの大きさが限界
+
+instanced試す
+  位置と向きをインスタンス属性にする。
+  インスタンス属性につてglVertexAttribDivisorを1にする。
+  glDrawElementsInstancedで書く前に、インスタンス属性にglBufferData
+  で突っ込む
+  頂点シェーダに、model行列の前に位置と向きを適用する処理を追加
+  (あるいはmodel行列をインスタンス属性にする?)
+- mvpをuniformで渡すのではなく、vpを渡す。シェーダがmとvpをposに適用する
+- modelをuniformではなくattributeにする
+- nodeをsortごとにinstancedレンダリングする関数
+  1. nodeを再帰的に舐めてインスタンス属性(model行列)の配列を作る
+  (instancedを使う場合)
+  glBindBuffer(GL_ARRAY_BUFFER, &model_mat_vbo);
+  glBufferData(GL_ARRAY_BUFFER, ...);
+  glEnableVertexAttribArray(loc_model_mat);
+  glVertexAttribPointer(loc_model_mat, ...);
+  glVertexAttribDivisor(loc_model_mat, 1); // 頂点属性と違うのはここだけ
+  glDrawElementsInstanced(...);
+  (instancedを使わない場合)
+  for (i) {
+    glVertexAttrib4fv(loc_model_mat, 配列[i]);
+    glDrawElements(...);
+  }
 

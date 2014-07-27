@@ -1313,6 +1313,10 @@ static int compile_and_execute(parser_options& po,
       module_info& mi = i->second;
       mi.cc_srcs.clear();
       mi.cc_srcs_ord.clear();
+      if (mi.aux_filename.empty() && mi.unique_namespace.empty()) {
+	/* this ns is removed from the dependency list */
+	continue;
+      }
       get_indirect_imports(ami,
 	!mi.aux_filename.empty() ? mi.aux_filename : mi.unique_namespace,
 	false, true, mi.cc_srcs, mi.cc_srcs_ord);

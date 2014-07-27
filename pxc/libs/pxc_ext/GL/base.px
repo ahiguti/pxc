@@ -2,6 +2,7 @@ public threaded namespace GL::base "export-unsafe";
 public import common -;
 public import pointer::raw -;
 public import meta m;
+public import exception -;
 
 public metafunction GLvoid void;
 public metafunction GLchar char;
@@ -27,7 +28,7 @@ public tsvaluetype struct extern "GLsizeiptr" "extint" GLsizeiptr { }
 public tsvaluetype struct extern "GLintptr" "extint" GLintptr { }
 public tsvaluetype struct extern "GLfixed" "extint" GLfixed { }
 public tsvaluetype struct extern "GLDEBUGPROC" GLDEBUGPROC { }
-public tsvaluetype struct extern "GLsync" "noncopyable" GLsync { }
+public tsvaluetype struct extern "GLsync" GLsync { }
 
 expand (s : m::list{m::list{"", m::eq{m::profile{"platform"}, "Darwin"}}}) {
 extern "ldflags" "-lGL -lm";
@@ -43,8 +44,12 @@ extern "types" inline
 #ifdef __APPLE__
 #include <TargetConditionals.h>
 #if TARGET_OS_IPHONE
+#include <OpenGLES/ES3/gl.h>
+#include <OpenGLES/ES3/glext.h>
 #include <OpenGLES/ES2/gl.h>
 #include <OpenGLES/ES2/glext.h>
+#include <OpenGLES/ES1/gl.h>
+#include <OpenGLES/ES1/glext.h>
 #else
 #include <OpenGL/gl3.h>
 #include <OpenGL/gl3ext.h>
@@ -79,6 +84,31 @@ cubptr_to_string(crawptr{GLubyte} x);
 public function extern "pxcrt::gl::ubptr_to_string" string
 ubptr_to_string(rawptr{GLubyte} x);
 
+public function extern "pxcrt::gl::get_check_error_enabled" int
+get_check_error_enabled();
+
+public function extern "pxcrt::gl::set_check_error_enabled" void
+set_check_error_enabled(int v);
+
+private function extern "::glGetError" GLenum
+gl_get_error();
+
+public function void gl_check_error(cstrref const& name)
+{
+  const e = gl_get_error();
+  if (static_cast{int}(e) != 0) {
+    throw runtime_error_template{"opengl_error"}(
+      string_join{" "}(name, static_cast{int}(e)));
+  }
+}
+
+public function void gl_check_error_if(cstrref const& name)
+{
+  if (get_check_error_enabled() != 0) {
+    gl_check_error(name);
+  }
+}
+
 extern "functions" inline
 namespace pxcrt { namespace gl {
 using namespace pxcrt;
@@ -101,6 +131,22 @@ static inline bt_string cubptr_to_string(const GLubyte *x)
 
 static inline bt_string ubptr_to_string(GLubyte *x)
 { return ccharptr_to_string(reinterpret_cast<const char *>(x)); }
+
+extern int check_error_enabled;
+
+static inline bt_int get_check_error_enabled()
+{ return check_error_enabled; }
+
+static inline void set_check_error_enabled(bt_int v)
+{ check_error_enabled = v; }
+
+}; };
+;
+
+extern "implementation" inline
+namespace pxcrt { namespace gl {
+
+int check_error_enabled = 0;
 
 }; };
 ;
@@ -178,5 +224,11 @@ public metafunction ent_to_argdefs{ent}
 	/* type */ m::at1{xt},
 	/* byref - if it's a slice-wrapper */ 0,
 	/* mutable */ 0},
+      /* xt := */ find_type{m::at1{x}}}};
+public metafunction ent_to_argnames{ent}
+  m::map{
+    m::slice{ent, 2},
+    metafunction{x} m::apply{
+      metafunction{xt} m::at0{x},
       /* xt := */ find_type{m::at1{x}}}};
 
