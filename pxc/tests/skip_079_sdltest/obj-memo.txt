@@ -1,14 +1,17 @@
 
 性能目安
-1478-t3
+(1478-t3)
 mbpはzprepassあり、ios/androidはzprepassなし
-mbp 2880x1800 60fps vtx8 72*32430 頂点 (778320 tri) (4670万tri/sec)
-mbp 2880x1800 60fps vtx10 2250030 頂点 (750010 tri) (4500万tri/sec)
-    (zprepass, shadowmapping)
+mbp 2880x1800 macosx 60fps vtx8 72*32430 頂点 (778320 tri) (4670万tri/sec)
+mbp 2880x1800 macosx 60fps vtx10 2250030 頂点 (750010 tri) (4500万tri/sec)
 ipad air 24fps
 iphone4s 7fps
 xperia z ultra 30-45fps zprepassしたらさらに遅くなる
 xperia gx 8-12fps
+(1497-t2 20140802)
+mbp 2880x1800 linux 60fps vtx8 81*32430 頂点 (875610 tri)
+mbp 2880x1800 linux 60fps vtx10 2250030 頂点 (750010 tri)
+  (use_instanced=0) use_instanced=0 is faster, but higher cpu usage
 
 instancedレンダリング
 96頂点のオブジェクトを25600個
@@ -19,21 +22,28 @@ instancedしなかったらちょうど30fpsだった。
 (2) インスタンス毎にmat4を渡すより、vec3とquatを渡すほうが軽い
 (3) glMapBuffer使ってコピーを避けたほうが速いかもしれない
 
+deferred
+1479-t2 ok
+1485-t5 ok
+1489-t2 ng
+1490-t5 ng
+1495-t1 復活
 
 TODO:
-- use_instancedでないときはshadowmap_mvp
+- primitive restartを使えるときには使う。頂点データ減らせる。
+- 慣性飛行
+- 衝突判定
 - 画面上にボタン
+- ポイントスプライト
+- 配列uniformでインスタンスデータを渡す方法でinstanced
+- use_instancedでないときはshadowmap_mvp
 - instancedを試す
 - geometry shader試してみる
-- ポイントスプライト
 - geometry shaderを使ったポイントスプライト
 - shadowmapをウインドウと同じサイズに
 - shadowmapには頂点属性のpositionだけわたせばよい
-- ufoの頭の法線がおかしい
-- 台形を法線マップしたときに歪まないように補正
 - depth_texture使えるときに使う 
 - androidでhighpためす
-- モディファイヤ(頂点リストを変換する関数)を渡せるようにする
 - 法線を軸に回転し押し出し(側面は四角形にならない)
   - 押し出さないで双方蓋をする
   - 押し出さないで描画もしない
@@ -314,4 +324,115 @@ instanced試す
     glVertexAttrib4fv(loc_model_mat, 配列[i]);
     glDrawElements(...);
   }
+
+タイル化
+  vec2 uv1 = (vary_uvw.xy / vary_uvw.z + 0.5) * 256.0;
+  vec2 uvi = floor(uv1);   uv座標の整数部分 (0, 0)-(256, 256)
+  vec2 uvj = uv1 - uvi;    uv座標のサブピクセル (0.0, 0.0)-(1.0, 1.0)
+  vec2 uvi_fr = fract(uvi / 32.0) * 32.0; uv非タイル部分
+  vec4 c0 = texture2d(sampler, uvi_fr / 128.0);
+  以下のように変更
+  タイルの大きさ32x32、タイルマップ128x128とする
+  vec2 uv0 = vary_uvw.xy / vary_uvw.z; (0-4)などの範囲
+  vec2 uv_tm = floor(uv0); (0-4)範囲整数。タイルのxy番号
+  vec2 uv_tmfr = uv0 - uv_tm; (0-1)範囲。タイルの中の座標
+  vec2 uv_ti = uv_tmfr * tile_size; (0-32)範囲。
+  vec2 uvi = floor(uv_ti); (0-32)範囲整数。タイルの中の座標
+  vec2 uvj = uv_ti - uvi; (0-1)範囲。サブピクセル座標
+  vec4 ti = texture2d(sampler_tilemap, uv_tm / tilemap_size);
+    (0-1)範囲。タイルテクスチャ位置を返す
+  vec4 uv_tileconv = floor(ti.xy * 255.0 + 0.5) + uv_tmfr;
+    使うのは(0-128)範囲。タイルテクスチャ位置と中の座標
+  vec4 c0 = texture2d(sampler, uv_tileconv / tiletex_size);\n"
+
+  vec2 uv1 = (vary_uvw.xy / vary_uvw.z + 0.5) * 4096.0;
+  vec2 uvi = floor(uv1);   uv座標の整数部分 (0, 0)-(4096, 4096)
+  vec2 uvj = uv1 - uvi;    uv座標のサブピクセル (0.0, 0.0)-(1.0, 1.0)
+  uvi /= 32.0;
+  vec2 uvi_tile = floor(uvi);    uvタイル部分 (0, 0)-(128, 128)
+  vec2 uvi_fr = uvi - uvi_tile;  uv非タイル部分
+  vec4 ti = texture2d(sampler_tilemap, uvi_tile / 128.0);
+  vec2 uvi_tileconv = floor(ti * 255.0 + 0.5) + uvi_fr;  非タイル部分も加算
+                   値としては(0, 0)-(256.0, 256.0)取れるが全部は使わない
+                   これを32倍するとテクスチャのピクセル座標になる
+  vec c0 = texture2d(sampler, uvi_tileconv / (1024.0 / 32.0));
+                   テクスチャのサイズが1024x1024のとき
+
+dpat.xcf
+  32x32テクスチャ 一行めに法線情報、二行目にdiffuse色、三行目にemit色
+  法線情報は0から8までの値しか使っていない
+  16以上の値はエミッションにする。
+  16: 常時点灯
+  17-20: uniform float emit_brightness[4]; の値を掛ける
+法線情報
+  0: (標準) 000000
+  1: (左上) ff0000
+  2: (上)   00ff00
+  3: (右上) ffff00
+  4: (右)   0000ff
+  5: (右下) ff00ff
+  6: (下)   00ffff
+  7: (左下) ffffff
+  8: (左)   808080
+
+ 16: 点灯   8080c0
+
+必要なタイル
+  面の一部分に凸がある
+  横または縦に非光沢黒色の帯、一部にエミッション
+
+alv再整理
+xyは正が右上
+u, vはそれぞれtangent, binormalの正方向への傾き
+lefttop: y>x
+leftbottom: y+x<1
+1: 凸左下 lefttopなら-u、そうでないなら-v
+2: 凸下 -v
+3: 凸右下 leftbottomなら-v、そうでないなら+u
+4: 凸右 +u
+5: 凸右上 lefttopなら+v、そうでないなら+u
+6: 凸上 +v
+7: 凸左上 leftbottomなら-u、そうでないなら+v
+8: 凸左 -u
+凹をどう実現するか
+x1: 凹左下 lefttopなら+u、そうでないなら+v
+法線の傾ける方向をuv共に凸のときと反対向きにすればよい
+alvの上位ビットに傾きの大きさと正負を持たせる。
+下位ビットはできるだけ集約
+2と6、4と8は互いに反対向きなので片方でよい
+無条件傾きuv、leftbottom傾きuv、lefttop傾きuvの3つの値を提供すればよいか
+各6bit、16が中央
+
+バッテン型テクスチャマップのほうがよいか？iosで性能を試せ。
+
+
+ivec4 avlv = ivec4(avl1, avl3, avl5, alv7)
+ut1 += avlv * ivec4(-lt, 1-lb, 1-lt, -lb);
+vt1 += avlv * ivec4(lt-1, -lb, lt, 1-lb);
+
+色は黄緑だからテクスチャの端のピクセルを引いている
+法線パタンは引いたピクセルのAを見るから、端のパターン(斜め面取り)を見ている
+ピクセルの端で法線の向きがおかしいのはlb/luの判定が内側と異なるからのはず
+
+狙ったピクセルを引く方法、例えば128x128のテクスチャ
+coordを[0,128)の値とする
+coord = clamp(floor(coord) + 0.5, 0.5, 127.5);
+
+http://gamedev.stackexchange.com/questions/46963/how-to-avoid-texture-bleeding-in-a-texture-atlas
+
+c04040 凹左上
+c0c040 凹右上
+c0f0c0 凹右下
+C0C0C0 凹左下
+
+ポイントスプライト
+glEnable(GL_VERTEX_PROGRAM_POINT_SIZE); // gl_PointSizeによる指定が有効になる
+glEnable(GL_POINT_SPRITE); // gl_PointCoordが使えるようになる
+頂点シェーダ
+gl_Position = ...
+gl_PointSize = ...
+フラグメントシェーダ
+vec2 xy = gl.PointCoord * 2.0 - 1.0; // (-1.0, 1.0)範囲にする
+gl_FragColor = ...
+
 

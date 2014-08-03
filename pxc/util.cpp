@@ -22,6 +22,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <sys/resource.h>
 #include <unistd.h>
 #include <assert.h>
 #include <errno.h>
@@ -692,6 +693,20 @@ double gettimeofday_double()
   rv /= 1000000;
   rv += tv.tv_sec;
   return rv;
+}
+
+void extend_rlimit_stack()
+{
+  struct rlimit rlim;
+  int r = getrlimit(RLIMIT_STACK, &rlim);
+  if (r != 0) {
+    arena_error_throw(0, "-:0: Failed to get RLIMIT_STACK: errno=%d\n", errno);
+  }
+  rlim.rlim_cur = rlim.rlim_max;
+  r = setrlimit(RLIMIT_STACK, &rlim);
+  if (r != 0) {
+    arena_error_throw(0, "-:0: Failed to set RLIMIT_STACK: errno=%d\n", errno);
+  }
 }
 
 };

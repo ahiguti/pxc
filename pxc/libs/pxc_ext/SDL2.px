@@ -141,6 +141,9 @@ public function extern "SDL2::Surface_BytesPerPixel" uint
 SDL_Surface_BytesPerPixel(ptr{SDL_Surface} const& sur);
 public function extern "SDL2::Surface_Pixels" strref
 SDL_Surface_Pixels(ptr{SDL_Surface} const& sur);
+public function extern "SDL2::Surface_Masks" void
+SDL_Surface_Masks(ptr{SDL_Surface} const& sur, uint mutable& r,
+  uint mutable& g, uint mutable& b, uint mutable& a);
 
 public function extern "SDL2::BlitSurface" int
 SDL_BlitSurface(ptr{SDL_Surface} const& src, SDL_Rect const& srcrect,
@@ -300,6 +303,9 @@ public tsvaluetype struct extern "SDL_DollarGestureEvent"
 SDL_DollarGestureEvent { }
 public tsvaluetype struct extern "SDL_DropEvent" SDL_DropEvent { }
 
+public function extern "SDL_EventState" uchar
+SDL_EventState(SDL_EventType typ, int enable);
+
 public function extern "SDL2::PollEvent" bool
 SDL_PollEvent(SDL_Event mutable& ev);
 
@@ -333,7 +339,8 @@ expand (sym : m::map{m::list{
 public tsvaluetype struct extern "SDL_GLattr" "extenum" SDL_GLattr { }
 expand (sym : m::map{m::list{
   "DOUBLEBUFFER", "CONTEXT_MAJOR_VERSION", "CONTEXT_MINOR_VERSION",
-  "CONTEXT_PROFILE_MASK", "ACCELERATED_VISUAL"
+  "CONTEXT_PROFILE_MASK", "ACCELERATED_VISUAL", "MULTISAMPLEBUFFERS",
+   "MULTISAMPLESAMPLES"
 }, metafunction{x} m::concat{"SDL_GL_", x}}) {
   public extern "%" SDL_GLattr sym;
 }
@@ -637,6 +644,16 @@ strref Surface_Pixels(Surface_ptr const& sur)
   SDL_Surface *const p = sur->value.ptr;
   size_t const len = p->pitch * p->h;
   return strref(static_cast<unsigned char *>(sur->value.ptr->pixels), len);
+}
+
+void Surface_Masks(Surface_ptr const& sur, bt_uint& r, bt_uint& g, bt_uint& b,
+  bt_uint& a)
+{
+  SDL_Surface *const p = sur->value.ptr;
+  r = p->format->Rmask;
+  g = p->format->Gmask;
+  b = p->format->Bmask;
+  a = p->format->Amask;
 }
 
 bt_int BlitSurface(Surface_ptr const& src, SDL_Rect const& srcrect,

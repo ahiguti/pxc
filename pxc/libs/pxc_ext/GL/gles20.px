@@ -21,9 +21,29 @@ expand(sym : gl_enumval) {
 public extern "%" GLenum sym;
 }
 
-expand(sym, i : m::map{gl_cmds, m::at0}) {
-public function extern "%" ent_to_ret_type{m::at{gl_cmds, i}}
-  sym(expand(GL::base::ent_to_argdefs{m::at{gl_cmds, i}}));
+expand(sym0, i : m::map{gl_cmds, m::at0}) {
+expand(sym1 : {m::concat{sym0, "_nocheck"}}) {
+expand(sym_c : {m::concat{"::", sym0}}) {
+private function extern "sym_c" ent_to_ret_type{m::at{gl_cmds, i}}
+  sym1(expand(ent_to_argdefs{m::at{gl_cmds, i}}));
+public function ent_to_ret_type{m::at{gl_cmds, i}}
+  sym0(expand(ent_to_argdefs{m::at{gl_cmds, i}}))
+{
+  metafunction cmd m::at{gl_cmds, i};
+  metafunction rt ent_to_ret_type{cmd};
+  if (m::ne{rt, void}) {
+    const r = sym1(expand(a: ent_to_argnames{cmd}; a));
+    if (m::ne{sym0, "glGetError"}) {
+      gl_check_error_if(m::to_string{sym0});
+    }
+    return r;
+  } else {
+    sym1(expand(a: ent_to_argnames{cmd}; a));
+    gl_check_error_if(m::to_string{sym0});
+  }
+}
+}
+}
 }
 
 private metafunction gl_enumval GL_ES_VERSION_2_0_ENUMVAL;

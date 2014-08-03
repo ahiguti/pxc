@@ -2,7 +2,7 @@ public namespace glshader "export-unsafe";
 public import common -;
 public import pointer::raw -;
 public import numeric::fpmath -;
-public import GL::gles2 -;
+public import GL::gles20 -;
 public import GL::gl30 -;
 public import GL::glm glm;
 public import meta m;
@@ -47,12 +47,13 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
     vsym = glGetUniformLocation_nocheck(program,
       m::to_string{sym}.crawptr().char());
     glGetError(); /* ignore */
-    println(m::to_string{sym}, vsym);
     if (vsym < 0) {
       vsym = glGetAttribLocation_nocheck(program,
 	m::to_string{sym}.crawptr().char());
       glGetError(); /* ignore */
-      println(m::to_string{sym}, vsym);
+      println("uniform(attr)", m::to_string{sym}, vsym);
+    } else {
+      println("uniform", m::to_string{sym}, vsym);
     }
     }
     }
@@ -61,7 +62,7 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
     vsym = glGetAttribLocation_nocheck(program,
       m::to_string{sym}.crawptr().char());
     glGetError(); /* ignore */
-    println(m::to_string{sym}, vsym);
+    println("attribute", m::to_string{sym}, vsym);
     }
     }
   }

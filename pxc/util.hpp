@@ -100,6 +100,8 @@ std::string escape_hex_filename(const std::string& str);
 
 double gettimeofday_double();
 
+void extend_rlimit_stack();
+
 };
 
 #endif
