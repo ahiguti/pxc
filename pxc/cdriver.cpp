@@ -1639,6 +1639,7 @@ static int prepare_options(parser_options& po, int argc, char **argv)
 static int cdriver_main(int argc, char **argv)
 {
   try {
+    extend_rlimit_stack(); /* pxc consumes stack */
     parser_options po;
     int r = prepare_options(po, argc, argv);
     if (r != 0) {

@@ -706,8 +706,40 @@ void expr_enumval::check_type(symbol_table *lookup)
   /* type_of_this_expr */
 }
 
+static void stmts_check_type(expr_stmts *stmts, symbol_table *lookup)
+{
+  while (stmts != 0) {
+    fn_check_type(stmts->head, lookup);
+    if (stmts->rest != 0 && stmts->rest->parent_expr != stmts) {
+      /* this happenes when head is a expr_expand. in this case, rest has
+       * moved to the rest of the generated expr. */
+      DBG_RECHAIN(fprintf(stderr, "RE-CHAINED\n"));
+      return;
+    }
+    switch (stmts->head->get_esort()) {
+    case expr_e_int_literal:
+    case expr_e_float_literal:
+    case expr_e_bool_literal:
+    case expr_e_str_literal:
+    case expr_e_symbol:
+      if (stmts->parent_expr != 0 && stmts->parent_expr->parent_expr != 0 &&
+	stmts->parent_expr->parent_expr->get_esort() == expr_e_metafdef) {
+	/* ok for macro rhs */
+      } else {
+	arena_error_push(stmts, "Invalid statement");
+      }
+      break;
+    default:
+      break;
+    }
+    stmts = stmts->rest;
+  }
+}
+
 void expr_stmts::check_type(symbol_table *lookup)
 {
+  stmts_check_type(this, lookup);
+#if 0
   /*
   try {
   */
@@ -750,6 +782,7 @@ void expr_stmts::check_type(symbol_table *lookup)
   default:
     break;
   }
+#endif
 }
 
 static void check_return_expr_block(expr_funcdef *fdef, expr_block *block)
