@@ -1,0 +1,172 @@
+public namespace glnode "export-unsafe";
+public import common -;
+public import pointer::raw -;
+public import numeric::fpmath -;
+public import GL::glm glm;
+public import GL::compat -;
+public import meta m;
+public import exception -;
+public import glshader -;
+public import glbuffer -;
+
+public threaded struct scene_node()
+{
+  public int vs_id = -1;
+  public glm::mat4 trans;
+  public glm::mat4 trans_initial;
+  public varray{ptr{scene_node}} children;
+  public tree_set{int} joint_sorts;
+}
+
+public function ptr{scene_node}
+instantiate_scene(buffer_object const& bo, int vs_id)
+{
+  const r = make_ptr{scene_node}();
+  r->vs_id = vs_id;
+  if (vs_id >= 0) {
+    r->joint_sorts[vs_id] = unit();
+    const& vs = *bo.get_by_id(static_cast{size_t}(vs_id));
+    for (size_t i, const& e: vs.vtxs->joints) {
+      const p = instantiate_scene(bo, static_cast{int}(
+	bo.get_id_by_name(e.joint_sort)));
+      p->trans = e.trans;
+      p->trans_initial = e.trans;
+      r->children.push_back(p);
+      for (const i, const x: p->joint_sorts) {
+	r->joint_sorts[i] = unit();
+      }
+    }
+  }
+  return r;
+}
+
+private function {set_normal_func, tbo} void
+scene_node_draw_rec(scene_node const& sn, tbo const& bo,
+  glm::mat4 const& model_mat)
+{
+  const mm = model_mat * sn.trans;
+  {
+    set_normal_func(mm);
+    if (sn.vs_id >= 0) {
+      bo.draw_elems(static_cast{size_t}(sn.vs_id));
+    }
+  }
+  for (const i, const& snp: sn.children) {
+    scene_node_draw_rec{set_normal_func, tbo}(*snp, bo, mm);
+  }
+}
+
+public function {set_normal_func, tbo, tshader} void
+scene_node_draw(scene_node const& sn, tbo const& bo,
+  glm::mat4 const& model_mat, tshader const& sdr)
+{
+  bo.draw_pre(sdr);
+  scene_node_draw_rec{set_normal_func, tbo}(sn, bo, model_mat);
+  bo.draw_post(sdr);
+}
+
+private function {tbo} void
+scene_node_push_instance_rec(scene_node const& sn, glm::mat4 const& model_mat,
+  tbo const& bo)
+{
+  const mm = model_mat * sn.trans;
+  mutable& instance = *bo.instances[static_cast{size_t}(sn.vs_id)];
+  mutable& arr = instance.client_buffer;
+  arr.append(mm.cslice());
+  for (const i, const& snp: sn.children) {
+    scene_node_push_instance_rec{tbo}(*snp, mm, bo);
+  }
+}
+
+public function {tbo} void
+scene_node_prepare_instances(scene_node const& sn, tbo const& bo,
+  glm::mat4 const& model_mat)
+{
+  for (const i, const x: sn.joint_sorts) {
+    mutable& instance = *bo.instances[static_cast{size_t}(i)];
+    mutable& arr = instance.client_buffer;
+    arr.clear();
+  }
+  scene_node_push_instance_rec{tbo}(sn, model_mat, bo);
+  for (const i, const x: sn.joint_sorts) {
+    if (m::ne{is_gl3, 0}) {
+      mutable& instance = *bo.instances[static_cast{size_t}(i)];
+      mutable& arr = instance.client_buffer;
+      glBindBuffer(GL_ARRAY_BUFFER, instance.vbo_inst);
+      glBufferData(GL_ARRAY_BUFFER, static_cast{GLsizeiptr}(arr.size()) * 4,
+	arr.crawptr().void(), GL_STATIC_DRAW);
+      glBindBuffer(GL_ARRAY_BUFFER, 0);
+    }
+    // println("instances", i, arr.size());
+  }
+}
+
+public function {tbo, tshader} void
+scene_node_draw_instanced(scene_node const& sn, tbo const& bo,
+  glm::mat4 const& model_mat, tshader const& sdr)
+{
+  if (sdr.u_model_matrix < 0) {
+    return;
+  }
+  const loc = static_cast{uint}(sdr.u_model_matrix);
+  bo.draw_pre(sdr);
+  if (m::ne{is_gl3, 0}) {
+    glEnableVertexAttribArray(loc + 0);
+    glEnableVertexAttribArray(loc + 1);
+    glEnableVertexAttribArray(loc + 2);
+    glEnableVertexAttribArray(loc + 3);
+    glVertexAttribDivisor(loc + 0, 1);
+    glVertexAttribDivisor(loc + 1, 1);
+    glVertexAttribDivisor(loc + 2, 1);
+    glVertexAttribDivisor(loc + 3, 1);
+  }
+  for (const i, const x: sn.joint_sorts) {
+    mutable& instance = *bo.instances[static_cast{size_t}(i)];
+    mutable& arr = instance.client_buffer;
+    /*
+    arr.clear();
+    scene_node_push_instance_rec{tbo}(sn, i, model_mat, arr);
+    */
+    if (m::ne{is_gl3, 0}) {
+      glBindBuffer(GL_ARRAY_BUFFER, instance.vbo_inst);
+      /*
+      glBufferData(GL_ARRAY_BUFFER, static_cast{GLsizeiptr}(arr.size()) * 4,
+	arr.crawptr().void(), GL_STATIC_DRAW);
+      */
+      int const nfloat = 4;
+      int const stride_byte = nfloat * 4 * 4;
+      glVertexAttribPointer(loc + 0, nfloat, GL_FLOAT, 0,
+	stride_byte, offset_to_void_cp(0));
+      glVertexAttribPointer(loc + 1, nfloat, GL_FLOAT, 0,
+	stride_byte, offset_to_void_cp(16));
+      glVertexAttribPointer(loc + 2, nfloat, GL_FLOAT, 0,
+	stride_byte, offset_to_void_cp(32));
+      glVertexAttribPointer(loc + 3, nfloat, GL_FLOAT, 0,
+	stride_byte, offset_to_void_cp(48));
+      glBindBuffer(GL_ARRAY_BUFFER, 0);
+      bo.draw_elems_instanced(static_cast{size_t}(i), 
+	arr.size() / 16);
+      // println("draw", i, arr.size());
+    } else {
+      for (const j : 0U .. arr.size() / 16U) {
+	glVertexAttrib4fv(loc + 0, arr.crawptr() + j * 16U +  0U);
+	glVertexAttrib4fv(loc + 1, arr.crawptr() + j * 16U +  4U);
+	glVertexAttrib4fv(loc + 2, arr.crawptr() + j * 16U +  8U);
+	glVertexAttrib4fv(loc + 3, arr.crawptr() + j * 16U + 12U);
+	bo.draw_elems(static_cast{size_t}(i));
+      }
+    }
+  }
+  if (m::ne{is_gl3, 0}) {
+    glVertexAttribDivisor(loc + 0, 0);
+    glVertexAttribDivisor(loc + 1, 0);
+    glVertexAttribDivisor(loc + 2, 0);
+    glVertexAttribDivisor(loc + 3, 0);
+    glDisableVertexAttribArray(loc + 0);
+    glDisableVertexAttribArray(loc + 1);
+    glDisableVertexAttribArray(loc + 2);
+    glDisableVertexAttribArray(loc + 3);
+  }
+  bo.draw_post(sdr);
+}
+

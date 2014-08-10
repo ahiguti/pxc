@@ -532,6 +532,7 @@ void arena_init()
 {
   arena_clear();
   compile_phase = 0;
+  compiling_stmt = 0;
   define_builtins();
 }
 
@@ -616,6 +617,7 @@ void arena_clear()
   cur_errors.clear();
   main_namespace = "";
   compile_phase = 0;
+  compiling_stmt = 0;
   cur_profile = 0;
   recursion_limit = 3000;
   nsimports.clear();

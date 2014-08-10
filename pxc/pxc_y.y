@@ -207,6 +207,10 @@ toplevel_stmt_list
 	  { topval = $$ = expr_stmts_new(cur_fname, @1.first_line,
 		expr_expand_new(cur_fname, @1.first_line, 0, $3, $4, $6, $9,
 			expand_e_statement, 0), $11); }
+	| TOK_EXPAND type_arg ';' toplevel_stmt_list
+	  { topval = $$ = expr_stmts_new(cur_fname, @1.first_line,
+		expr_expand_new(cur_fname, @1.first_line, $2, 0, 0, 0, 0,
+			expand_e_statement, 0), $4); }
 	| toplevel_stmt toplevel_stmt_list
 	  { topval = $$ = expr_stmts_new(cur_fname, @1.first_line, $1, $2); }
 	;
@@ -312,9 +316,10 @@ opt_symbol
 function_body_stmt
 	: body_stmt
 	| defs_stmt
-	| TOK_EXTERN TOK_STRLIT type_arg ';'
+	| c_enumval_stmt
+	| opt_attribute /* dummy */ TOK_EXTERN TOK_STRLIT type_arg ';'
 	  { $$ = expr_inline_c_new(cur_fname, @1.first_line,
-		arena_dequote_strdup($2), "", false, $3); }
+		arena_dequote_strdup($3), "", false, $4); }
 	  /* for pragma */
 	;
 body_stmt

@@ -30,9 +30,109 @@ public tsvaluetype struct extern "GLfixed" "extint" GLfixed { }
 public tsvaluetype struct extern "GLDEBUGPROC" GLDEBUGPROC { }
 public tsvaluetype struct extern "GLsync" GLsync { }
 
-expand (s : m::list{m::list{"", m::eq{m::profile{"platform"}, "Darwin"}}}) {
-extern "ldflags" "-lGL -lm";
-extern "ldflags" "-framework OpenGL -lm";
+public function {gl_bfvals, gl_enumvals, gl_cmds} expand
+macro_define_api
+{
+  expand(sym: gl_bfvals) {
+    public extern "%" GLbitfield sym;
+  }
+  expand(sym: gl_enumvals) {
+    public extern "%" GLenum sym;
+  }
+  expand(sym0, i : m::map{gl_cmds, m::at0}) {
+    expand(sym1 : {m::concat{sym0, "_nocheck"}}) {
+      expand(sym_c : {m::concat{"::", sym0}}) {
+	public threaded function extern "sym_c"
+	GL::base::ent_to_ret_type{m::at{gl_cmds, i}}
+	  sym1(expand(GL::base::ent_to_argdefs{m::at{gl_cmds, i}}));
+	public threaded function GL::base::ent_to_ret_type{m::at{gl_cmds, i}}
+	  sym0(expand(GL::base::ent_to_argdefs{m::at{gl_cmds, i}}))
+	{
+	  metafunction cmd m::at{gl_cmds, i};
+	  metafunction rt GL::base::ent_to_ret_type{cmd};
+	  if (m::ne{rt, void}) {
+	    const r = sym1(expand(a: GL::base::ent_to_argnames{cmd}; a));
+	    if (m::ne{sym0, "glGetError"}) {
+	      gl_check_error_if(m::to_string{sym0});
+	    }
+	    return r;
+	  } else {
+	    sym1(expand(a: GL::base::ent_to_argnames{cmd}; a));
+	    gl_check_error_if(m::to_string{sym0});
+	  }
+	}
+      }
+    }
+  }
+}
+
+public metafunction ent_to_ret_type{ent}
+  m::at1{find_type{m::at1{ent}}};
+
+public metafunction ent_to_argdefs{ent}
+  m::map{
+    m::slice{ent, 2},
+    metafunction{x} m::apply{
+      metafunction{xt} m::list{
+	/* name */ m::at0{x},
+	/* type */ m::at1{xt},
+	/* byref - if it's a slice-wrapper */ 0,
+	/* mutable */ 0},
+      /* xt := */ find_type{m::at1{x}}}};
+
+public metafunction ent_to_argnames{ent}
+  m::map{
+    m::slice{ent, 2},
+    metafunction{x} m::apply{
+      metafunction{xt} m::at0{x},
+      /* xt := */ find_type{m::at1{x}}}};
+
+public threaded function extern "pxcrt::gl::offset_to_void_cp" crawptr{void}
+offset_to_void_cp(size_t x); /* for glVertexPointer() */
+
+public threaded function extern "pxcrt::gl::ccharptr_to_string" string
+ccharptr_to_string(ccharptr x);
+
+public threaded function extern "pxcrt::gl::charptr_to_string" string
+charptr_to_string(charptr x);
+
+public threaded function extern "pxcrt::gl::cubptr_to_string" string
+cubptr_to_string(crawptr{GLubyte} x);
+
+public threaded function extern "pxcrt::gl::ubptr_to_string" string
+ubptr_to_string(rawptr{GLubyte} x);
+
+public threaded function extern "pxcrt::gl::get_check_error_enabled" int
+get_check_error_enabled();
+
+public threaded function extern "pxcrt::gl::set_check_error_enabled" void
+set_check_error_enabled(int v);
+
+public threaded function void gl_check_error(cstrref const& name)
+{
+  const e = gl_get_error();
+  if (static_cast{int}(e) != 0) {
+    throw runtime_error_template{"opengl_error"}(
+      string_join{" "}(name, static_cast{int}(e)));
+  }
+}
+
+public threaded function void gl_check_error_if(cstrref const& name)
+{
+  if (get_check_error_enabled() != 0) {
+    gl_check_error(name);
+  }
+}
+
+/* private */
+
+private threaded function extern "::glGetError" GLenum
+gl_get_error();
+
+expand (s : m::list{m::list{"", m::eq{m::profile{"platform"}, "Darwin"}}})
+{
+  extern "ldflags" "-lGL -lm";
+  extern "ldflags" "-framework OpenGL -lm";
 }
 
 extern "types" inline
@@ -44,6 +144,7 @@ extern "types" inline
 #ifdef __APPLE__
 #include <TargetConditionals.h>
 #if TARGET_OS_IPHONE
+/* ios */
 #include <OpenGLES/ES3/gl.h>
 #include <OpenGLES/ES3/glext.h>
 #include <OpenGLES/ES2/gl.h>
@@ -51,63 +152,25 @@ extern "types" inline
 #include <OpenGLES/ES1/gl.h>
 #include <OpenGLES/ES1/glext.h>
 #else
+/* macos */
 #include <OpenGL/gl3.h>
 #include <OpenGL/gl3ext.h>
 #include <OpenGL/gl.h>
 #include <OpenGL/glext.h>
 #endif
 #elif defined ANDROID
+/* android */
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
 #include <GLES/gl.h>
 #include <GLES/glext.h>
 #else
+/* linux */
 #include <GL/gl.h>
 #include <GL/glext.h>
 #endif
 
-namespace pxcrt { namespace gl {
-
-}; };
 ;
-
-public function extern "pxcrt::gl::offset_to_void_cp" crawptr{void}
-offset_to_void_cp(size_t x); /* used for glVertexPointer() with VBO */
-
-public function extern "pxcrt::gl::ccharptr_to_string" string
-ccharptr_to_string(ccharptr x);
-
-public function extern "pxcrt::gl::charptr_to_string" string
-charptr_to_string(charptr x);
-
-public function extern "pxcrt::gl::cubptr_to_string" string
-cubptr_to_string(crawptr{GLubyte} x);
-
-public function extern "pxcrt::gl::ubptr_to_string" string
-ubptr_to_string(rawptr{GLubyte} x);
-
-public function extern "pxcrt::gl::get_check_error_enabled" int
-get_check_error_enabled();
-
-public function extern "pxcrt::gl::set_check_error_enabled" void
-set_check_error_enabled(int v);
-
-private function extern "::glGetError" GLenum
-gl_get_error();
-
-public function void gl_check_error(cstrref const& name)
-{
-  const e = gl_get_error();
-  if (static_cast{int}(e) != 0) {
-    throw runtime_error_template{"opengl_error"}(
-      string_join{" "}(name, static_cast{int}(e)));
-  }
-}
-
-public function void gl_check_error_if(cstrref const& name)
-{
-  if (get_check_error_enabled() != 0) {
-    gl_check_error(name);
-  }
-}
 
 extern "functions" inline
 namespace pxcrt { namespace gl {
@@ -209,26 +272,8 @@ private metafunction type_alist m::list{
   m::list{"v**", rawptr{voidptr}},
   m::list{"_v*_*", crawptr{cvoidptr}},
   m::list{"_c*_*", rawptr{ccharptr}}}
-  /* workaround for android */ // m::list{"_c*_*", crawptr{ccharptr}}}
+  /* workaround for android */ /* m::list{"_c*_*", crawptr{ccharptr}}} */
   ;
 
-public metafunction find_type{s} m::at{type_alist, s};
-public metafunction ent_to_ret_type{ent}
-  m::at1{find_type{m::at1{ent}}};
-public metafunction ent_to_argdefs{ent}
-  m::map{
-    m::slice{ent, 2},
-    metafunction{x} m::apply{
-      metafunction{xt} m::list{
-	/* name */ m::at0{x},
-	/* type */ m::at1{xt},
-	/* byref - if it's a slice-wrapper */ 0,
-	/* mutable */ 0},
-      /* xt := */ find_type{m::at1{x}}}};
-public metafunction ent_to_argnames{ent}
-  m::map{
-    m::slice{ent, 2},
-    metafunction{x} m::apply{
-      metafunction{xt} m::at0{x},
-      /* xt := */ find_type{m::at1{x}}}};
+private metafunction find_type{s} m::at{type_alist, s};
 

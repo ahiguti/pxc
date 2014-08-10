@@ -1,54 +1,62 @@
 public namespace recobj "export-unsafe";
-import common -;
-import pointer::raw -;
-import numeric::fpmath -;
-import SDL2 -;
-import SDL2::Image -;
-import SDL2::TTF -;
-import GL::gles30 -; /* ios, android */
-import GL::gl30 -;  /* linux, macosx */
-import GL::glm glm;
-import io::time -;
-import io::environ -;
-import exception -;
-import meta m;
-import text::string::positional -;
+public import common -;
+public import pointer::raw -;
+public import numeric::fpmath -;
+public import SDL2 -;
+public import SDL2::Image -;
+public import SDL2::TTF -;
+public import GL::glm glm;
+public import GL::compat -;
+public import io::time -;
+public import io::environ -;
+public import exception -;
+public import meta m;
+public import text::string::positional -;
 
-import glshader -;
-import gldraw -;
-import glgeometry -;
+public import glshader -;
+public import glgeometry -;
+public import glbuffer -;
+public import glnode -;
 
-metafunction enable_shadowmapping 1;
-metafunction enable_normalmapping 1;
-metafunction enable_deferred 0;
-metafunction enable_zprepass m::and{m::not{is_gles}, m::not{enable_deferred}};
-metafunction enable_msaa 0;
-metafunction use_depth_texture m::not{is_android};
-metafunction use_sampler2dshadow m::not{is_gles};
-metafunction use_instanced is_gl3;
-
-metafunction is_ios m::eq{m::profile{"platform"}, "ios"};
-metafunction is_android m::eq{m::profile{"platform"}, "android"};
-metafunction is_macos m::eq{m::profile{"platform"}, "Darwin"};
-metafunction is_linux m::eq{m::profile{"platform"}, "Linux"};
-metafunction is_gles m::or{is_ios, is_android};
-metafunction is_gl3 m::not{is_gles};
-
-metafunction glsl_prepend
-  m::cond{
-    is_gles, "precision highp float;\n",
-    is_gl3,  "#version 150\n",
-    ""};
-
-metafunction glsl_vert_in m::cond{is_gl3, "in ", "attribute "};
-metafunction glsl_vert_out m::cond{is_gl3, "out ", "varying "};
-metafunction glsl_frag_in m::cond{is_gl3, "in ", "varying "};
-metafunction glsl_texture2d m::cond{is_gl3, "texture", "texture2D"};
-metafunction glsl_shadow2d m::cond{is_gl3, "texture", "shadow2D"};
-metafunction glsl_decl_fragcolor m::cond{is_gl3, "out vec4 fragcolor;\n", "\n"};
-metafunction glsl_fragcolor m::cond{is_gl3, "fragcolor", "gl_FragColor"};
-
-private float distance_max = 1000.0;
+valuetype struct
+glconfig(bool is_gles0, int major0, int minor0, bool msaa0)
+{
+  public bool const is_gles = is_gles0;
+  public int const major = major0;
+  public int const minor = minor0;
+  public bool enable_shadowmapping = true;
+  public bool enable_normalmapping = true;
+  public bool enable_deferred = false;
+  public bool enable_zprepass = !is_gles && !enable_deferred;
+  public bool enable_msaa = msaa0;
+  public bool enable_instanced = major >= 3 && !is_gles;
+  public bool enable_sampler2dshadow = !is_gles;
+  public bool enable_depth_texture = !is_android;
+  public function bool is_gl3() const { return major >= 3 && !is_gles; }
+  public function strlit prepend() const {
+    return is_gles ? "precision highp float;\n" :
+	   is_gl3() ? "#version 150\n" :
+	   ""; }
+  public function strlit vert_in() const {
+    return is_gl3() ? "in " : "attribute "; }
+  public function strlit vert_out() const {
+    return is_gl3() ? "out " : "varying "; }
+  public function strlit frag_in() const {
+    return is_gl3() ? "in " : "varying "; }
+  public function strlit texture2d() const {
+    return is_gl3() ? "texture" : "texture2D"; }
+  public function strlit shadow2d() const {
+    return is_gl3() ? "texture" : "shadow2D"; }
+  public function strlit fragcolor() const {
+    return is_gl3() ? "fragcolor" : "gl_FragColor"; }
+  public function strlit decl_fragcolor() const {
+    return is_gl3() ? "out vec4 fragcolor;\n" : "\n"; }
+  public function string empty_shader_vert() const {
+    return prepend() +
+      "void main(void) { gl_Position = vec4(0.0, 0.0, 0.0, 1.0); }\n"; }
+  public function string empty_shader_frag() const {
+    return prepend() + "void main(void) { }\n"; }
+}
 
 valuetype struct main_uniforms
 {
@@ -186,160 +194,87 @@ valuetype struct font_texture_info
   public uint text_vbo;
 }
 
-valuetype struct camera_info
+valuetype struct position_angle
+{
+  public glm::vec3 position;
+  public glm::quat angle;
+  public function glm::mat4 to_mat4() const
+  {
+    return glm::mat4().translate(position) * angle.to_mat4();
+  }
+  public function void translate_relative(glm::vec3 const& v)
+  {
+    position += angle.to_mat3() * v;
+  }
+  public function void rotate_angle_axis(float a, float x, float y, float z)
+  {
+    angle *= glm::make_quat_angle_axis(a, x, y, z);
+  }
+  public function void normalize()
+  {
+    angle.normalize();
+  }
+}
+
+valuetype struct
+projection_info()
 {
   public glm::mat4 projection;
-  public glm::quat camera_angle;
-  public glm::vec3 camera_pos;
+  public position_angle camera;
   public int screen_width;
   public int screen_height;
   public bool proj_light;
   public shadowmap_fbo sm;
   public glm::mat4 sm_projection;
-  public glm::quat light_angle;
-  public glm::vec3 light_pos;
-  public float light_on;
-  public size_t scene;
+  public position_angle light;
+  public float light_on = 1.0;
+  public float const distance_max = 1000.0;
 }
 
-function void build_vertices(buffer_object{main_vertex_attributes} mutable& bo)
+valuetype struct
+player_info()
+{
+  public position_angle posang;
+}
+
+function void build_vertices(buffer_object mutable& bo)
 {
   metafunction tattr m::symbol{main_shader, "vertex_attributes_type"};
   metafunction fill_v fill{tattr};
   metafunction joint_v joint{tattr};
   /* vtx0 */
   {
-    bo.vs_arr.push_back(vertex_set{tattr}());
-    const vtx0 = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
-    const fsmooth = fill_smooth{tattr}(vtx0);
-    const t0 = fill_v(vtx0);
+    const vtxs = bo.get("saucer")->vtxs;
+    const fsmooth = fill_smooth{tattr}(vtxs);
+    const t = fill_v(vtxs);
     regular_polygon(3.0, 40,
-      bump_rec(0.2, 0.5, 1, t0, t0),
+      bump_rec(0.2, 0.5, 1, t, t),
       bump_rec(0.01, 0.9, 5,
-	t0,
+	t,
 	sphere(10, fsmooth)))
       (poly_t(), mesh_pos());
   }
-  /* vtx1 */
-  /*
-  {
-    bo.vs_arr.push_back(vertex_set{tattr}());
-    const vtx1 = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
-    const t1 = fill_v(vtx1);
-    regular_polygon(0.1, 4,
-      bump_rec(8.0, 1.0, 1, t1, t1),
-      t1)
-      (poly_t(), mesh_pos());
-  }
-  */
   /* vtx2 */
   {
-    bo.vs_arr.push_back(vertex_set{tattr}());
-    const vtx2 = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
+    const vtx2 = bo.get("saucer-multi")->vtxs;
     const t2 = fill_v(vtx2);
     regular_polygon(50.0, 50,
-      bump_rec(1.0, 1.0, 1, joint_v(vtx2, 0, hole()), hole()),
+      bump_rec(1.0, 1.0, 1, joint_v(vtx2, "saucer", hole()), hole()),
       hole())
       (poly_t(), mesh_pos());
   }
-  /* vtx4 */
-  /*
-  {
-    bo.vs_arr.push_back(vertex_set{tattr}());
-    const vtx4 = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
-    const t4 = fill_v(vtx4);
-    regular_polygon(30.0, 4, 
-      rectangle_split(10, 10, joint_v(vtx4, 3, hole())),
-      hole())
-      (poly_t(), mesh_pos());
-  }
-  */
-  /* vtx5 */
-  /*
-  {
-    bo.vs_arr.push_back(vertex_set{tattr}());
-    const vtx5 = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
-    const t5 = fill_v(vtx5);
-    const cube = bump_rec(0.0, 0.5, 1, hole(),
-      lid(bump_rec(1.0, 1.0, 1, t5, t5), t5));
-    regular_polygon(500.0, 4, 
-      rectangle_split(10, 10, cube),
-      hole())
-      (poly_t(), mesh_pos());
-  }
-  */
-  /* vtx7 */
-  /*
-  {
-    bo.vs_arr.push_back(vertex_set{tattr}());
-    const vtx = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
-    const t = fill_v(vtx);
-    regular_polygon(170.0, 50, 
-      bump_rec(-1.0, 1.0, 1, joint_v(vtx, 1, hole()), hole()),
-      hole())
-      (poly_t(), mesh_pos());
-  }
-  */
-  /* vtx6 */
-  /*
-  {
-    bo.vs_arr.push_back(vertex_set{tattr}());
-    const vtx6 = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
-    const t6 = fill_v(vtx6);
-    const rnd = make_rand_generator(1U);
-    regular_polygon(5.0, 4,
-      bump_rec(1.0, 1.0, 1,
-	t6,
-	rand_bump(10, 0.08, 0.02, 0.08, 0.02, 0.08, 0.05, 0.100, rnd,
-	  t6, t6, t6)),
-      t6)
-      (poly_t(), mesh_pos());
-  }
-  */
-  /* vtx8 */
-  /*
-  {
-    bo.vs_arr.push_back(vertex_set{tattr}());
-    const vtx = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
-    const t = fill_v(vtx);
-    const rnd = make_rand_generator(1U);
-    regular_polygon(100.0, 4,
-      rectangle_split(250, 250,
-	rand_bump(1, 0.8, 0.2, 0.8, 0.2, 0.8, 0.2, 0.8, rnd,
-	  t, t, t)),
-      t)
-      (poly_t(), mesh_pos());
-  }
-  */
   /* vtx8 */
   {
-    bo.vs_arr.push_back(vertex_set{tattr}());
-    const n = bo.vs_arr.size();
-    const vtx = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
+    const vtx = bo.get("block-multi")->vtxs;
     const t = fill_v(vtx);
     regular_polygon(600.0, 4,
-      rectangle_split(9, 8, joint_v(vtx, n, hole())),
+      rectangle_split(9, 8, joint_v(vtx, "block", hole())),
       hole())
       (poly_t(), mesh_pos());
   }
   /* vtx9 */
-  /*
   {
-    bo.vs_arr.push_back(vertex_set{tattr}());
-    const vtx = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
-    const t = fill_v(vtx);
-    const rnd = make_rand_generator(1U);
-    regular_polygon(50.0, 4,
-      rectangle_split(30, 30,
-	rand_bump(1, 0.8, 0.2, 0.8, 0.2, 0.8, 1.0, 4.0, rnd,
-	t, t, t)),
-      bump_rec(0.2, 1.0, 1, t, t))
-      (poly_t(), mesh_pos());
-  }
-  */
-  {
-    bo.vs_arr.push_back(vertex_set{tattr}());
-    const vtx = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
+    const vtx = bo.get("block")->vtxs;
     const t = fill_v(vtx);
     const rnd = make_rand_generator(1U);
     regular_polygon(50.0, 4,
@@ -351,24 +286,9 @@ function void build_vertices(buffer_object{main_vertex_attributes} mutable& bo)
 	bump_rec(0.2, 1.0, 1, t, t)))
       (poly_t(), mesh_pos());
   }
-  /*
-  {
-    bo.vs_arr.push_back(vertex_set{tattr}());
-    const vtx = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
-    const t = fill_v(vtx);
-    const rnd = make_rand_generator(1U);
-    regular_polygon(50.0, 4,
-      rectangle_split(250, 250,
-	rand_bump(1, 0.8, 0.2, 0.8, 0.2, 0.8, 0.2, 0.8, rnd,
-	  t, t, t)),
-      bump_rec(10.0, 1.0, 1, t, t))
-      (poly_t(), mesh_pos());
-  }
-  */
   /* vtx10 */
   {
-    bo.vs_arr.push_back(vertex_set{tattr}());
-    const vtx = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
+    const vtx = bo.get("bullet")->vtxs;
     const t = fill_v(vtx);
     mutable m = glm::mat4()
       .translate(glm::make_vec3(0.0, 0.0, 1.0))
@@ -378,93 +298,66 @@ function void build_vertices(buffer_object{main_vertex_attributes} mutable& bo)
       t)
       (poly_t(), mesh_pos());
   }
-  /*
-  */
   {
     /* 60fps, macosx/linux mbp gt750m */
-    bo.vs_arr.push_back(vertex_set{tattr}());
-    const vtx = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
+    const vtx = bo.get("bullet-multi")->vtxs;
     const t = fill_v(vtx);
-    const child_id = bo.vs_arr.size() - 2;
     regular_polygon(600.0, 4,
-      rectangle_split(160, 160, joint_v(vtx, child_id, hole())),
+      rectangle_split(160, 160, joint_v(vtx, "bullet", hole())),
       hole())
       (poly_t(), mesh_pos());
-    /*
-    */
   }
   {
-    bo.vs_arr.push_back(vertex_set{tattr}());
-    const vtx = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
+    const vtx = bo.get("bullet-multi-2")->vtxs;
     const t = fill_v(vtx);
-    const child_id = bo.vs_arr.size() - 3;
     regular_polygon(600.0, 4,
-      rectangle_split(80, 80, joint_v(vtx, child_id, hole())),
+      rectangle_split(80, 80, joint_v(vtx, "bullet", hole())),
       hole())
       (poly_t(), mesh_pos());
-    /*
-    */
   }
   /*
-  {
-    bo.vs_arr.push_back(vertex_set{tattr}());
-    const vtx = bo.vs_arr[bo.vs_arr.size() - 1].vtxs;
-    const t = fill_v(vtx);
-    regular_polygon(300.0, 4, bump_rec(0.01, 1.0, 1, t, t), t)
-      (poly_t(), mesh_pos());
-  }
-  */
-  /* */
   for (const i, const& a: bo.vs_arr) {
     println(i, "vtxs", a.vtxs->vertex_values.size(), "elems",
       a.vtxs->elements.size());
   }
+  */ 
 }
 
-function uint draw_frame(camera_info mutable& cam, ptr{scene_node} const& sn,
-  buffer_object{main_vertex_attributes} const& bo, main_shader_ptr const& sdr,
-  shadowmap_fbo const& sfbo, shadowmap_shader_ptr const& smsdr,
-  zprepass_shader_ptr const& zpsdr, deferred_shading_fbo const& dsfbo,
-  ds1st_shader_ptr const& ds1sdr, ds2nd_shader_ptr const& ds2sdr,
-  font_shader_ptr const& psdr, font_texture_info const& fti,
-  cstrref const& mess)
+function uint draw_frame(pglcontext mutable& pgc, buffer_object const& bo,
+  ptr{scene_node} const& sn, cstrref const& mess)
 {
-  // println("draw_frame enter");
-  // const sn = bo.instantiate_scene(static_cast{int}(cam.scene));
-  /* shadowmap view and view-projection matrix */
+  /*
   {
-    cam.light_pos = cam.camera_pos +
-      cam.camera_angle.to_mat3() * glm::make_vec3(3.0, 3.0, 5.0);
-    cam.light_angle = cam.camera_angle;
+    pgc.cam.light.position = pgc.cam.camera.position +
+      pgc.cam.camera.angle.to_mat3() * glm::make_vec3(3.0, 3.0, 5.0);
+    pgc.cam.light.angle = pgc.cam.camera.angle;
   }
-  const sm_view = (
-    glm::mat4().translate(cam.light_pos) * cam.light_angle.to_mat4())
-    .inverse();
-  const sm_vp = cam.sm_projection * sm_view;
-  if (m::ne{use_instanced, 0}) {
+  */
+  /* shadowmap view and view-projection matrix */
+  const sm_view = pgc.cam.light.to_mat4().inverse();
+  const sm_vp = pgc.cam.sm_projection * sm_view;
+  if (pgc.glc.enable_instanced) {
     /* prepare instances */
-    sn->prepare_instances{buffer_object{main_vertex_attributes}}
-      (bo, glm::mat4());
+    sn->prepare_instances{buffer_object}(bo, glm::mat4());
   }
   /* shadowmap */
-  if (m::ne{enable_shadowmapping, 0}) {
+  if (pgc.glc.enable_shadowmapping) {
     int saved_fb;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
     // sdllog(string_join{" "}("saved_fb", saved_fb));
     /* shadowmap */
     // sdllog(string_join{" "}("draw_frame smsdr", smsdr->program));
     // println("smsdr program: ", smsdr->program);
-    glUseProgram(smsdr->program);
-    glBindFramebuffer(GL_FRAMEBUFFER, sfbo.fbo);
-    glViewport(0, 0, static_cast{GLsizei}(sfbo.sm_width),
-      static_cast{GLsizei}(sfbo.sm_height));
+    glUseProgram(pgc.smsdr->program);
+    glBindFramebuffer(GL_FRAMEBUFFER, pgc.sfbo.fbo);
+    glViewport(0, 0, static_cast{GLsizei}(pgc.sfbo.sm_width),
+      static_cast{GLsizei}(pgc.sfbo.sm_height));
     glEnable(GL_CULL_FACE);
     // glFrontFace(GL_CW);
     // glCullFace(GL_FRONT);
     glEnable(GL_DEPTH_TEST);
-    if (m::ne{use_depth_texture, 0}) {
+    if (pgc.glc.enable_depth_texture) {
       glColorMask(0, 0, 0, 0);
-      // glColorMask(1, 1, 1, 1);
     } else {
       glColorMask(1, 1, 1, 1);
     }
@@ -478,79 +371,34 @@ function uint draw_frame(camera_info mutable& cam, ptr{scene_node} const& sn,
 	mutable x = sm_vp * glm::make_vec4(0.0, 0.0, 0.0, 1.0);
 	println("sm_mvp(0) =>", x);
 	glm::mat4 mutable view;
-	view = (view.translate(cam.camera_pos) * cam.camera_angle.to_mat4())
-	  .inverse();
-	mutable aa = cam.projection * view * glm::make_vec4(0.0, 0.0, 0.0, 1.0);
+	view = pgc.cam.camera.to_mat4().inverse();
+	mutable aa = pgc.cam.projection * view
+	  * glm::make_vec4(0.0, 0.0, 0.0, 1.0);
 	println("cam_mvp(0) =>", aa);
       }
-      if (m::ne{use_instanced, 0}) {
-	glUniformMatrix4fv(smsdr->u_shadowmap_vp, 1, 0, sm_vp.crawptr());
-	sn->draw_instanced
-	  {buffer_object{main_vertex_attributes}, shadowmap_shader}
-	  (bo, glm::mat4(), *smsdr);
+      if (pgc.glc.enable_instanced) {
+	glUniformMatrix4fv(pgc.smsdr->u_shadowmap_vp, 1, 0, sm_vp.crawptr());
+	sn->draw_instanced{buffer_object, shadowmap_shader}
+	  (bo, glm::mat4(), *pgc.smsdr);
       } else {
 	function void set_uniform_cb(glm::mat4 const& model_mat)
 	{
 	  /* note: sm_vp is already applied to model_mat. model_mat is
 	   * actually the mvp matrix. */
-	  glUniformMatrix4fv(smsdr->u_model_matrix, 1, 0, model_mat.crawptr());
-	  //const sm_mvp = sm_vp * model_mat;
-	  //glUniformMatrix4fv(smsdr->u_shadowmap_mvp, 1, 0, sm_mvp.crawptr());
-	  // println("shadowmap_mvp(L)", sm_mvp.cslice());
-	  // glUniformMatrix4fv(smsdr->u_shadowmap_mvp, 1, 0, m.crawptr());
+	  glUniformMatrix4fv(pgc.smsdr->u_model_matrix, 1, 0,
+	    model_mat.crawptr());
 	}
-	sn->draw{set_uniform_cb, buffer_object{main_vertex_attributes},
-	  shadowmap_shader}(bo, sm_vp, *smsdr);
-      }
-      if (false) {
-	farray{int, 4} view;
-	/*
-	if (cam.proj_light) {
-	  glGetIntegerv(GL_VIEWPORT, view.rawptr());
-	  // println(view);
-	} else {
-	*/
-	  view[2] = sfbo.sm_width;
-	  view[3] = sfbo.sm_height;
-	/*
-	}
-	*/
-	mutable dbuf = darray{uchar}(
-	  static_cast{size_t}(view[2] * view[3] * 4), 0);
-	glReadPixels(0, 0, view[2], view[3], GL_RGBA,
-	  GL_UNSIGNED_BYTE, dbuf.rawptr().void());
-	const sli = dbuf[0 .. 10];
-	println("readpixels", sli);
-	/*
-	float avg = 0.0f;
-	float minval = 2.0f;
-	float maxval = -2.0f;
-	for (const i, const v: dbuf) {
-	  avg += v;
-	  if (v < minval) { minval = v; }
-	  if (v > maxval) { maxval = v; }
-	}
-	avg /= static_cast{float}(dbuf.size());
-	// println("avg", avg, "min", minval, "max", maxval);
-	{
-	  float const perspective_distance = 1.0;
-	  float const min_distance = 0.2;
-	  const d = cast_float(perspective_distance);
-	  const near = cast_float(d - min_distance);
-	  const far = cast_float(d + min_distance + distance_max);
-	  const distance = far * near / (avg * (far - near) - far);
-	  // println("dbuf avg", avg, "distance", distance);
-	}
-	*/
+	sn->draw{set_uniform_cb, buffer_object, shadowmap_shader}
+	  (bo, sm_vp, *pgc.smsdr);
       }
     }
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
   }
-  glViewport(0, 0, static_cast{GLsizei}(cam.screen_width),
-    static_cast{GLsizei}(cam.screen_height));
+  glViewport(0, 0, static_cast{GLsizei}(pgc.cam.screen_width),
+    static_cast{GLsizei}(pgc.cam.screen_height));
   /* z-prepass */
-  if (m::ne{enable_zprepass, 0}) {
-    glUseProgram(zpsdr->program);
+  if (pgc.glc.enable_zprepass) {
+    glUseProgram(pgc.zpsdr->program);
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glEnable(GL_DEPTH_TEST);
@@ -560,48 +408,47 @@ function uint draw_frame(camera_info mutable& cam, ptr{scene_node} const& sn,
     glClear(GL_DEPTH_BUFFER_BIT);
     glColorMask(0, 0, 0, 0);
     mutable view = glm::mat4();
-    if (cam.proj_light) {
-      view = (view.translate(cam.light_pos) * cam.light_angle.to_mat4())
-	.inverse();
+    if (pgc.cam.proj_light) {
+      view = pgc.cam.light.to_mat4().inverse();
     } else {
-      view = (view.translate(cam.camera_pos) * cam.camera_angle.to_mat4())
-	.inverse();
+      view = pgc.cam.camera.to_mat4().inverse();
     }
-    const vp = cam.projection * view;
-    glUniformMatrix4fv(zpsdr->u_view_projection_matrix, 1, 0, vp.crawptr());
+    const vp = pgc.cam.projection * view;
+    glUniformMatrix4fv(pgc.zpsdr->u_view_projection_matrix, 1, 0,
+      vp.crawptr());
     const model_cur = glm::mat4();
-    if (m::ne{use_instanced, 0}) {
-      sn->draw_instanced{buffer_object{main_vertex_attributes}, zprepass_shader}
-	(bo, model_cur, *zpsdr);
+    if (pgc.glc.enable_instanced) {
+      sn->draw_instanced{buffer_object, zprepass_shader}
+	(bo, model_cur, *pgc.zpsdr);
     } else {
       function void set_uniform_cb(glm::mat4 const& model_mat)
       {
-	glUniformMatrix4fv(zpsdr->u_model_matrix, 1, 0, model_mat.crawptr());
+	glUniformMatrix4fv(pgc.zpsdr->u_model_matrix, 1, 0,
+	  model_mat.crawptr());
       }
-      sn->draw
-	{set_uniform_cb, buffer_object{main_vertex_attributes}, zprepass_shader}
-	(bo, model_cur, *zpsdr);
+      sn->draw{set_uniform_cb, buffer_object, zprepass_shader}
+	(bo, model_cur, *pgc.zpsdr);
     }
   }
   uint const tick_shadowmapping_shader = SDL_GetTicks();
   /* main or ds1 */
   if (true) {
     int saved_fb;
-    if (m::ne{enable_deferred, 0}) {
+    if (pgc.glc.enable_deferred) {
       glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
-      glBindFramebuffer(GL_FRAMEBUFFER, dsfbo.fbo);
-      glViewport(0, 0, static_cast{GLsizei}(dsfbo.ds_width),
-	static_cast{GLsizei}(dsfbo.ds_height));
-      glUseProgram(ds1sdr->program);
+      glBindFramebuffer(GL_FRAMEBUFFER, pgc.dsfbo.fbo);
+      glViewport(0, 0, static_cast{GLsizei}(pgc.dsfbo.ds_width),
+	static_cast{GLsizei}(pgc.dsfbo.ds_height));
+      glUseProgram(pgc.ds1sdr->program);
     } else {
-      glUseProgram(sdr->program);
+      glUseProgram(pgc.sdr->program);
     }
     glDisable(GL_BLEND);
     glEnable(GL_CULL_FACE);
     // glFrontFace(GL_CCW);
     glCullFace(GL_BACK);
     glEnable(GL_DEPTH_TEST);
-    if (m::ne{enable_zprepass, 0}) {
+    if (pgc.glc.enable_zprepass) {
       // glDepthMask(0);
       glColorMask(1, 1, 1, 1);
       glDepthFunc(GL_EQUAL);
@@ -612,71 +459,60 @@ function uint draw_frame(camera_info mutable& cam, ptr{scene_node} const& sn,
       glColorMask(1, 1, 1, 1);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
-    // glDepthFunc(GL_LESS);
-    // glDepthRange(0.1, 1000.0); // FIXME
     /*
-    {
-    farray{float, 2} params;
-    glGetFloatv(GL_DEPTH_RANGE, params.rawptr());
-    println(params);
-    }
-    */
-    /*
-    const light = glm::make_vec3(2500.0, 2500.0, -2500.0);
-    */
-    const camera_target = cam.camera_angle.to_mat3() *
+    const camera_target = pgc.cam.camera_angle.to_mat3() *
       glm::make_vec3(0.0, 0.0, -20.0);
-    if (m::ne{enable_deferred, 0}) {
+    */
+    if (pgc.glc.enable_deferred) {
       /* noop */
     } else {
-      glUniform3fv(sdr->u_light_pos, 1, cam.light_pos.crawptr());
-      glUniform3fv(sdr->u_camera_pos, 1, cam.camera_pos.crawptr());
+      glUniform3fv(pgc.sdr->u_light_pos, 1, pgc.cam.light.position.crawptr());
+      glUniform3fv(pgc.sdr->u_camera_pos, 1, pgc.cam.camera.position.crawptr());
     }
     mutable view = glm::mat4();
-    if (cam.proj_light) {
-      view = (view.translate(cam.light_pos) * cam.light_angle.to_mat4())
-	.inverse();
+    if (pgc.cam.proj_light) {
+      view = pgc.cam.light.to_mat4().inverse();
     } else {
-      view = (view.translate(cam.camera_pos) * cam.camera_angle.to_mat4())
-	.inverse();
-      // println("camerapos", cam.camera_pos);
+      view = pgc.cam.camera.to_mat4().inverse();
     }
-    const vp = cam.projection * view;
+    const vp = pgc.cam.projection * view;
     const red = make_farray{float}(0.8, 0.1, 0.0, 1.0);
-    if (m::ne{enable_deferred, 0}) {
-      glUniformMatrix4fv(ds1sdr->u_view_projection_matrix, 1, 0, vp.crawptr());
+    if (pgc.glc.enable_deferred) {
+      glUniformMatrix4fv(pgc.ds1sdr->u_view_projection_matrix, 1, 0,
+	vp.crawptr());
     } else {
-      glUniform1i(sdr->u_sampler, 1);
-      glUniform1i(sdr->u_sampler_tilemap, 2);
-      glUniform1i(sdr->u_sampler_sm, 3);
-      glUniform1f(sdr->u_light_on, cam.light_on);
-      glUniformMatrix4fv(sdr->u_shadowmap_vp, 1, 0, sm_vp.crawptr());
-      glUniformMatrix4fv(sdr->u_view_projection_matrix, 1, 0, vp.crawptr());
+      glUniform1i(pgc.sdr->u_sampler, 1);
+      glUniform1i(pgc.sdr->u_sampler_tilemap, 2);
+      glUniform1i(pgc.sdr->u_sampler_sm, 3);
+      glUniform1f(pgc.sdr->u_light_on, pgc.cam.light_on);
+      glUniformMatrix4fv(pgc.sdr->u_shadowmap_vp, 1, 0, sm_vp.crawptr());
+      glUniformMatrix4fv(pgc.sdr->u_view_projection_matrix, 1, 0, vp.crawptr());
     }
-    if (m::ne{enable_deferred, 0}) {
-      if (m::ne{use_instanced, 0}) {
-	sn->draw_instanced{buffer_object{main_vertex_attributes}, ds1st_shader}
-	  (bo, glm::mat4(), *ds1sdr);
+    if (pgc.glc.enable_deferred) {
+      if (pgc.glc.enable_instanced) {
+	sn->draw_instanced{buffer_object, ds1st_shader}
+	  (bo, glm::mat4(), *pgc.ds1sdr);
       } else {
 	function void set_uniform_cb(glm::mat4 const& model_mat)
 	{
-	  glUniformMatrix4fv(ds1sdr->u_model_matrix, 1, 0,
+	  glUniformMatrix4fv(pgc.ds1sdr->u_model_matrix, 1, 0,
 	    model_mat.crawptr());
 	}
-	sn->draw{set_uniform_cb, buffer_object{main_vertex_attributes},
-	  ds1st_shader}(bo, glm::mat4(), *ds1sdr);
+	sn->draw{set_uniform_cb, buffer_object,
+	  ds1st_shader}(bo, glm::mat4(), *pgc.ds1sdr);
       }
     } else {
-      if (m::ne{use_instanced, 0}) {
-	sn->draw_instanced{buffer_object{main_vertex_attributes}, main_shader}
-	  (bo, glm::mat4(), *sdr);
+      if (pgc.glc.enable_instanced) {
+	sn->draw_instanced{buffer_object, main_shader}
+	  (bo, glm::mat4(), *pgc.sdr);
       } else {
 	function void set_uniform_cb(glm::mat4 const& model_mat)
 	{
-	  glUniformMatrix4fv(sdr->u_model_matrix, 1, 0, model_mat.crawptr());
+	  glUniformMatrix4fv(pgc.sdr->u_model_matrix, 1, 0,
+	    model_mat.crawptr());
 	}
-	sn->draw{set_uniform_cb, buffer_object{main_vertex_attributes},
-	  main_shader}(bo, glm::mat4(), *sdr);
+	sn->draw{set_uniform_cb, buffer_object, main_shader}
+	  (bo, glm::mat4(), *pgc.sdr);
       }
     }
     if (false) {
@@ -697,35 +533,36 @@ function uint draw_frame(camera_info mutable& cam, ptr{scene_node} const& sn,
 	float const min_distance = 0.2;
 	const d = cast_float(perspective_distance);
 	const near = cast_float(d - min_distance);
-	const far = cast_float(d + min_distance + distance_max);
+	const far = cast_float(d + min_distance + pgc.cam.distance_max);
 	const distance = far * near / (avg * (far - near) - far);
 	println("dbuf avg", avg, distance, near, far);
       }
     }
-    if (m::ne{enable_deferred, 0}) {
+    if (pgc.glc.enable_deferred) {
       glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
     }
   }
   /* ds2 */
-  if (m::ne{enable_deferred, 0}) {
+  if (pgc.glc.enable_deferred) {
     // println("ds2");
-    glUseProgram(ds2sdr->program);
+    glUseProgram(pgc.ds2sdr->program);
     glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
-    glUniform3fv(ds2sdr->u_light_pos, 1, cam.light_pos.crawptr());
-    glUniform3fv(ds2sdr->u_camera_pos, 1, cam.camera_pos.crawptr());
-    glUniformMatrix4fv(ds2sdr->u_shadowmap_vp, 1, 0, sm_vp.crawptr());
-    glUniform1i(ds2sdr->u_sampler, 1);
-    glUniform1i(ds2sdr->u_sampler_tilemap, 2);
-    glUniform1i(ds2sdr->u_sampler_sm, 3);
-    glUniform1i(ds2sdr->u_sampler_ds0, 4);
-    glUniform1i(ds2sdr->u_sampler_ds1, 5);
-    glUniform1i(ds2sdr->u_sampler_ds2, 6);
-    glUniform1i(ds2sdr->u_sampler_ds3, 7);
-    glUniform1f(ds2sdr->u_light_on, cam.light_on);
-    glBindBuffer(GL_ARRAY_BUFFER, dsfbo.ds_vbo);
-    const vattr_position = cast_uint(ds2sdr->a_position);
+    glUniform3fv(pgc.ds2sdr->u_light_pos, 1, pgc.cam.light.position.crawptr());
+    glUniform3fv(pgc.ds2sdr->u_camera_pos, 1,
+	pgc.cam.camera.position.crawptr());
+    glUniformMatrix4fv(pgc.ds2sdr->u_shadowmap_vp, 1, 0, sm_vp.crawptr());
+    glUniform1i(pgc.ds2sdr->u_sampler, 1);
+    glUniform1i(pgc.ds2sdr->u_sampler_tilemap, 2);
+    glUniform1i(pgc.ds2sdr->u_sampler_sm, 3);
+    glUniform1i(pgc.ds2sdr->u_sampler_ds0, 4);
+    glUniform1i(pgc.ds2sdr->u_sampler_ds1, 5);
+    glUniform1i(pgc.ds2sdr->u_sampler_ds2, 6);
+    glUniform1i(pgc.ds2sdr->u_sampler_ds3, 7);
+    glUniform1f(pgc.ds2sdr->u_light_on, pgc.cam.light_on);
+    glBindBuffer(GL_ARRAY_BUFFER, pgc.dsfbo.ds_vbo);
+    const vattr_position = cast_uint(pgc.ds2sdr->a_position);
     glEnableVertexAttribArray(vattr_position);
     glVertexAttribPointer(vattr_position, 2, GL_FLOAT, 0, 0,
       offset_to_void_cp(0));
@@ -735,12 +572,12 @@ function uint draw_frame(camera_info mutable& cam, ptr{scene_node} const& sn,
   }
   /* sprites */
   /* panel */
-  glUseProgram(psdr->program);
+  glUseProgram(pgc.psdr->program);
   glDisable(GL_CULL_FACE);
   glDisable(GL_DEPTH_TEST);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   glEnable(GL_BLEND);
-  glUniform1i(psdr->u_sampler, 0);
+  glUniform1i(pgc.psdr->u_sampler, 0);
   varray{float} xyuv;
   uint cur_x = 0;
   uint cur_y = 0;
@@ -748,23 +585,23 @@ function uint draw_frame(camera_info mutable& cam, ptr{scene_node} const& sn,
     if (ch < 0x20) {
       continue;
     }
-    const tx0 = (ch > 0x20) ? fti.char_x[ch - 0x20 - 1] : 0;
-    const tx1 = fti.char_x[ch - 0x20];
-    const ty0 = fti.char_h;
+    const tx0 = (ch > 0x20) ? pgc.fti.char_x[ch - 0x20 - 1] : 0;
+    const tx1 = pgc.fti.char_x[ch - 0x20];
+    const ty0 = pgc.fti.char_h;
     const ty1 = 0;
     const tw = tx1 - tx0;
-    const th = fti.char_h;
+    const th = pgc.fti.char_h;
     const x0 = cast_float(cur_x) * 2.0f
-      / cast_float(cam.screen_width) - 1.0f;
+      / cast_float(pgc.cam.screen_width) - 1.0f;
     const y0 = cast_float(cur_y) * 2.0f
-      / cast_float(cam.screen_height) - 1.0f;
+      / cast_float(pgc.cam.screen_height) - 1.0f;
     const x1 = cast_float(cur_x + tw) * 2.0f
-      / cast_float(cam.screen_width) - 1.0f;
+      / cast_float(pgc.cam.screen_width) - 1.0f;
     const y1 = cast_float(cur_y + th) * 2.0f
-      / cast_float(cam.screen_height) - 1.0f;
-    const u0 = cast_float(tx0) / cast_float(fti.surface_w);
-    const v0 = cast_float(ty0) / cast_float(fti.surface_h);
-    const u1 = cast_float(tx1) / cast_float(fti.surface_w);
+      / cast_float(pgc.cam.screen_height) - 1.0f;
+    const u0 = cast_float(tx0) / cast_float(pgc.fti.surface_w);
+    const v0 = cast_float(ty0) / cast_float(pgc.fti.surface_h);
+    const u1 = cast_float(tx1) / cast_float(pgc.fti.surface_w);
     const v1 = 0.0f;
     /* println(x0, y0, x1, y1, u0, v0, u1, v1); */
     xyuv.push_back(x0);
@@ -794,9 +631,9 @@ function uint draw_frame(camera_info mutable& cam, ptr{scene_node} const& sn,
     cur_x += tw;
   }
   if (xyuv.size() > 0) {
-    const lpp = cast_uint(psdr->a_pos);
-    const lpu = cast_uint(psdr->a_uvpos);
-    glBindBuffer(GL_ARRAY_BUFFER, fti.text_vbo);
+    const lpp = cast_uint(pgc.psdr->a_pos);
+    const lpu = cast_uint(pgc.psdr->a_uvpos);
+    glBindBuffer(GL_ARRAY_BUFFER, pgc.fti.text_vbo);
     glBufferData(GL_ARRAY_BUFFER,
       static_cast{GLsizeiptr}(xyuv.size()) * 4,
       xyuv.crawptr().void(), GL_STATIC_DRAW);
@@ -812,26 +649,25 @@ function uint draw_frame(camera_info mutable& cam, ptr{scene_node} const& sn,
   return tick_shadowmapping_shader;
 }
 
-function void reshape(camera_info mutable& cam, shadowmap_fbo mutable& sfbo,
-  deferred_shading_fbo mutable& dsfbo, int width, int height)
+function void reshape(pglcontext mutable& pgc, int width, int height)
 { 
-  cam.screen_width = width;
-  cam.screen_height = height;
+  pgc.cam.screen_width = width;
+  pgc.cam.screen_height = height;
   if (m::ne{is_gles, 0}) {
-    sfbo.sm_width = 1024;
-    sfbo.sm_height = 1024;
+    pgc.sfbo.sm_width = 1024;
+    pgc.sfbo.sm_height = 1024;
   } else {
-    sfbo.sm_width = width;
-    sfbo.sm_height = height;
+    pgc.sfbo.sm_width = width;
+    pgc.sfbo.sm_height = height;
   }
-  init_shadowmap_fbo(sfbo);
-  dsfbo.ds_width = width;
-  dsfbo.ds_height = height;
-  init_deferred_shading_fbo(dsfbo);
-  update_mvp(cam);
+  init_shadowmap_fbo(pgc.glc, pgc.sfbo);
+  pgc.dsfbo.ds_width = width;
+  pgc.dsfbo.ds_height = height;
+  init_deferred_shading_fbo(pgc.glc, pgc.dsfbo);
+  update_mvp(pgc.cam);
 }
 
-function void update_mvp(camera_info mutable& cam)
+function void update_mvp(projection_info mutable& cam)
 {
   float const perspective_distance = 1.0;
   float const min_distance = 0.2;
@@ -842,7 +678,7 @@ function void update_mvp(camera_info mutable& cam)
   const d = cast_float(perspective_distance);
   {
     const near = cast_float(d - min_distance);
-    const far = cast_float(d + min_distance + distance_max);
+    const far = cast_float(d + min_distance + cam.distance_max);
     const left = cast_float(-1.0 * ((d - min_distance) / d));
     const right = cast_float(1.0 * ((d - min_distance) / d));
     const bottom = cast_float(-h * ((d - min_distance) / d));
@@ -852,7 +688,7 @@ function void update_mvp(camera_info mutable& cam)
   {
     const sm_h = max(1.0, h);
     const near = cast_float(d - min_distance);
-    const far = cast_float(d + min_distance + distance_max);
+    const far = cast_float(d + min_distance + cam.distance_max);
     const left = cast_float(-1.0 * ((d - min_distance) / d));
     const right = cast_float(1.0 * ((d - min_distance) / d));
     const bottom = cast_float(-sm_h * ((d - min_distance) / d));
@@ -861,7 +697,7 @@ function void update_mvp(camera_info mutable& cam)
     */
     /*
     const near = cast_float(d - min_distance);
-    const far = cast_float(d + min_distance + distance_max);
+    const far = cast_float(d + min_distance + cam.distance_max);
     const left = cast_float(-1.0 * ((d - min_distance) / d));
     const right = cast_float(1.0 * ((d - min_distance) / d));
     const bottom = cast_float(-1.0 * ((d - min_distance) / d));
@@ -887,9 +723,10 @@ valuetype struct shadowmap_fbo {
   public uint depthbuf;
 }
 
-function void init_shadowmap_fbo(shadowmap_fbo mutable& sfbo)
+function void init_shadowmap_fbo(glconfig const& glc,
+  shadowmap_fbo mutable& sfbo)
 {
-  if (m::ne{enable_shadowmapping, 0}) {
+  if (glc.enable_shadowmapping) {
     sdllog(string_join{" "}("shadowmap", sfbo.sm_width, sfbo.sm_height));
     int saved_fb;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
@@ -902,15 +739,20 @@ function void init_shadowmap_fbo(shadowmap_fbo mutable& sfbo)
     }
     glGenTextures(1, address(sfbo.sm_texture));
     glBindTexture(GL_TEXTURE_2D, sfbo.sm_texture);
-    if (m::ne{use_depth_texture, 0}) {
-      const f = use_sampler2dshadow != 0 ? GL_LINEAR : GL_NEAREST;
+    if (glc.enable_depth_texture) {
+      const f = glc.enable_sampler2dshadow ? GL_LINEAR : GL_NEAREST;
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, cast_int(f));
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, cast_int(f));
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE,
-	cast_int(GL_COMPARE_REF_TO_TEXTURE));
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC,
-	cast_int(GL_LEQUAL));
-      if (m::eq{is_gles, 0}) {
+      if (m::ne{is_gl3, 0}) {
+	if (glc.is_gl3()) {
+	  // FIXME ???
+	  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE,
+	    cast_int(GL_COMPARE_REF_TO_TEXTURE));
+	  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC,
+	    cast_int(GL_LEQUAL));
+	}
+      }
+      if (!glc.is_gles) {
 	glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_DEPTH_COMPONENT),
 	  sfbo.sm_width, sfbo.sm_height, 0, GL_DEPTH_COMPONENT,
 	  GL_UNSIGNED_BYTE, offset_to_void_cp(0));
@@ -941,7 +783,7 @@ function void init_shadowmap_fbo(shadowmap_fbo mutable& sfbo)
     }
     glGenFramebuffers(1, address(sfbo.fbo));
     glBindFramebuffer(GL_FRAMEBUFFER, sfbo.fbo);
-    if (m::ne{use_depth_texture, 0}) {
+    if (glc.enable_depth_texture) {
       glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
 	GL_TEXTURE_2D, sfbo.sm_texture, 0);
     } else {
@@ -949,7 +791,7 @@ function void init_shadowmap_fbo(shadowmap_fbo mutable& sfbo)
 	GL_TEXTURE_2D, sfbo.sm_texture, 0);
     }
     /* renderbuffer */
-    if (m::ne{use_depth_texture, 0}) {
+    if (glc.enable_depth_texture) {
       if (m::eq{is_gles, 0}) {
 	glDrawBuffer(GL_NONE);
 	glReadBuffer(GL_NONE);
@@ -969,10 +811,6 @@ function void init_shadowmap_fbo(shadowmap_fbo mutable& sfbo)
       glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
 	GL_RENDERBUFFER, sfbo.depthbuf);
       glBindRenderbuffer(GL_RENDERBUFFER, static_cast{uint}(orig_rb));
-      /*
-      GLenum drawbuffer = GL_COLOR_ATTACHMENT0;
-      glDrawBuffers(1, caddress(drawbuffer));
-      */
     }
     const e = glCheckFramebufferStatus(GL_FRAMEBUFFER);
     if (e != GL_FRAMEBUFFER_COMPLETE) {
@@ -994,547 +832,504 @@ valuetype struct deferred_shading_fbo {
 }
 
 function void
-init_deferred_shading_fbo(deferred_shading_fbo mutable& dsfbo)
+init_deferred_shading_fbo(glconfig const& glc,
+  deferred_shading_fbo mutable& dsfbo)
 {
-  if (m::ne{enable_deferred, 0}) {
-    sdllog(string_join{" "}("deferred_fbo"));
-    int saved_fb;
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
-    /* texture */
-    for (const i, const tx: dsfbo.ds_texture) {
-      if (tx != 0) {
+  if (m::ne{is_gl3, 0}) {
+    if (glc.enable_deferred) {
+      sdllog(string_join{" "}("deferred_fbo"));
+      int saved_fb;
+      glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
+      /* texture */
+      for (const i, const tx: dsfbo.ds_texture) {
+	if (tx != 0) {
+	  glActiveTexture(static_cast{GLenum}(static_cast{size_t}(
+	    GL_TEXTURE4) + i));
+	  glBindTexture(GL_TEXTURE_2D, 0);
+	  glDeleteTextures(1, caddress(tx));
+	}
+      }
+      dsfbo.ds_texture.clear();
+      for (size_t i: 0 .. 4) {
+	uint tx;
 	glActiveTexture(static_cast{GLenum}(static_cast{size_t}(
 	  GL_TEXTURE4) + i));
-	glBindTexture(GL_TEXTURE_2D, 0);
-	glDeleteTextures(1, caddress(tx));
+	glGenTextures(1, address(tx));
+	glBindTexture(GL_TEXTURE_2D, tx);
+	glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_RGB32F), dsfbo.ds_width,
+	  dsfbo.ds_height, 0, GL_RGB, GL_FLOAT, offset_to_void_cp(0));
+	/*
+	glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_RGBA), dsfbo.ds_width,
+	  dsfbo.ds_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, offset_to_void_cp(0));
+	*/
+	println("tex2d", i, tx, dsfbo.ds_width, dsfbo.ds_height);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+	  cast_int(GL_NEAREST));
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+	  cast_int(GL_NEAREST));
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
+	  cast_int(GL_CLAMP_TO_EDGE));
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
+	  cast_int(GL_CLAMP_TO_EDGE));
+	dsfbo.ds_texture.push_back(tx);
       }
-    }
-    dsfbo.ds_texture.clear();
-    for (size_t i: 0 .. 4) {
-      uint tx;
-      glActiveTexture(static_cast{GLenum}(static_cast{size_t}(
-	GL_TEXTURE4) + i));
-      glGenTextures(1, address(tx));
-      glBindTexture(GL_TEXTURE_2D, tx);
-      glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_RGB32F), dsfbo.ds_width,
-	dsfbo.ds_height, 0, GL_RGB, GL_FLOAT, offset_to_void_cp(0));
+      /* framebuffer */
+      if (dsfbo.fbo != 0) {
+	glDeleteFramebuffers(1, caddress(dsfbo.fbo));
+	dsfbo.fbo = 0;
+      }
+      glGenFramebuffers(1, address(dsfbo.fbo));
+      glBindFramebuffer(GL_FRAMEBUFFER, dsfbo.fbo);
+      for (const i, const tx: dsfbo.ds_texture) {
+	glFramebufferTexture2D(GL_FRAMEBUFFER,
+	  static_cast{GLenum}(static_cast{size_t}(GL_COLOR_ATTACHMENT0) + i),
+	  GL_TEXTURE_2D, tx, 0);
+	println("frametex2d", i, tx);
+      }
+      /* renderbuffer */
+      {
+	int orig_rb;
+	glGetIntegerv(GL_RENDERBUFFER_BINDING, address(orig_rb));
+	println("orig_rb", orig_rb);
+	if (dsfbo.depthbuf != 0) {
+	  glDeleteRenderbuffers(1, caddress(dsfbo.depthbuf));
+	  dsfbo.depthbuf = 0;
+	}
+	glGenRenderbuffers(1, address(dsfbo.depthbuf));
+	glBindRenderbuffer(GL_RENDERBUFFER, dsfbo.depthbuf);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT,
+	  dsfbo.ds_width, dsfbo.ds_height);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+	  GL_RENDERBUFFER, dsfbo.depthbuf);
+	glBindRenderbuffer(GL_RENDERBUFFER, static_cast{uint}(orig_rb));
+      }
+      const bufs = make_farray{GLenum}(
+	GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1,
+	GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3);
+      glDrawBuffers(4, bufs.crawptr());
       /*
-      glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_RGBA), dsfbo.ds_width,
-	dsfbo.ds_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, offset_to_void_cp(0));
       */
-      println("tex2d", i, tx, dsfbo.ds_width, dsfbo.ds_height);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
-	cast_int(GL_NEAREST));
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-	cast_int(GL_NEAREST));
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
-	cast_int(GL_CLAMP_TO_EDGE));
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
-	cast_int(GL_CLAMP_TO_EDGE));
-      dsfbo.ds_texture.push_back(tx);
-    }
-    /* framebuffer */
-    if (dsfbo.fbo != 0) {
-      glDeleteFramebuffers(1, caddress(dsfbo.fbo));
-      dsfbo.fbo = 0;
-    }
-    glGenFramebuffers(1, address(dsfbo.fbo));
-    glBindFramebuffer(GL_FRAMEBUFFER, dsfbo.fbo);
-    for (const i, const tx: dsfbo.ds_texture) {
-      glFramebufferTexture2D(GL_FRAMEBUFFER,
-	static_cast{GLenum}(static_cast{size_t}(GL_COLOR_ATTACHMENT0) + i),
-	GL_TEXTURE_2D, tx, 0);
-      println("frametex2d", i, tx);
-    }
-    /* renderbuffer */
-    {
-      int orig_rb;
-      glGetIntegerv(GL_RENDERBUFFER_BINDING, address(orig_rb));
-      println("orig_rb", orig_rb);
-      if (dsfbo.depthbuf != 0) {
-	glDeleteRenderbuffers(1, caddress(dsfbo.depthbuf));
-	dsfbo.depthbuf = 0;
+      const e = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+      if (e != GL_FRAMEBUFFER_COMPLETE) {
+	println("dsfbo: incomplete framebuffer", cast_int(e));
+      } else {
+	println("dsfbo: complete framebuffer");
       }
-      glGenRenderbuffers(1, address(dsfbo.depthbuf));
-      glBindRenderbuffer(GL_RENDERBUFFER, dsfbo.depthbuf);
-      glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT,
-	dsfbo.ds_width, dsfbo.ds_height);
-      glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-	GL_RENDERBUFFER, dsfbo.depthbuf);
-      glBindRenderbuffer(GL_RENDERBUFFER, static_cast{uint}(orig_rb));
-    }
-    const bufs = make_farray{GLenum}(
-      GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1,
-      GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3);
-    glDrawBuffers(4, bufs.crawptr());
-    /*
-    */
-    const e = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-    if (e != GL_FRAMEBUFFER_COMPLETE) {
-      println("dsfbo: incomplete framebuffer", cast_int(e));
-    } else {
-      println("dsfbo: complete framebuffer");
-    }
-    glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
-    /* vbo */
-    if (dsfbo.ds_vbo == 0) {
-      glGenBuffers(1, address(dsfbo.ds_vbo));
+      glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
+      /* vbo */
       if (dsfbo.ds_vbo == 0) {
-	throw runtime_error_template{"ds_vbo"}("1");
+	glGenBuffers(1, address(dsfbo.ds_vbo));
+	if (dsfbo.ds_vbo == 0) {
+	  throw runtime_error_template{"ds_vbo"}("1");
+	}
+	glBindBuffer(GL_ARRAY_BUFFER, dsfbo.ds_vbo);
+	const pvals = make_farray{float}(
+	  -1.0, -1.0,
+	   1.0, -1.0,
+	   1.0,  1.0,
+	  -1.0,  1.0);
+	glBufferData(GL_ARRAY_BUFFER, static_cast{GLsizeiptr}(pvals.size()) * 4,
+	  pvals.crawptr().void(), GL_STATIC_DRAW);
       }
-      glBindBuffer(GL_ARRAY_BUFFER, dsfbo.ds_vbo);
-      const pvals = make_farray{float}(
-	-1.0, -1.0,
-	 1.0, -1.0,
-	 1.0,  1.0,
-	-1.0,  1.0);
-      glBufferData(GL_ARRAY_BUFFER, static_cast{GLsizeiptr}(pvals.size()) * 4,
-	pvals.crawptr().void(), GL_STATIC_DRAW);
     }
   }
 }
 
 function shadowmap_shader_ptr
-init_shadowmap_shader()
+init_shadowmap_shader(glconfig const& g)
 {
-  const vert = m::concat{
-    glsl_prepend,
-    m::cond{m::ne{use_instanced, 0},
-      m::concat{
-	"uniform mat4 shadowmap_vp;\n",
-	glsl_vert_in, "mat4 model_matrix;\n"},
-      "uniform mat4 model_matrix;\n"},
-    glsl_vert_in, "vec3 position;\n",
-    m::cond{m::ne{use_depth_texture, 0},
-      "", m::concat{glsl_vert_out, "vec4 vary_smpos;\n"}},
-    "void main(void) {\n",
-    m::cond{m::ne{use_instanced, 0},
-      "  vec4 p = shadowmap_vp * (model_matrix * vec4(position, 1.0));\n",
-      "  vec4 p = model_matrix * vec4(position, 1.0);\n"},
-    "  gl_Position = p;\n",
-    m::cond{m::ne{use_depth_texture, 0},
-      "", "  vary_smpos = p;\n"},
-    "}\n"};
-  const frag = m::cond{m::ne{use_depth_texture, 0},
-    empty_shader_frag,
-    m::concat{
-      glsl_prepend,
-      glsl_frag_in, "vec4 vary_smpos;\n",
-      glsl_decl_fragcolor,
-      "void main(void) {\n",
-      "  vec4 p = vary_smpos;\n",
-      "  float pz = (p.z/p.w + 1.0) / 2.0;\n",
-      "  float z = pz * 256.0;\n", /* [0.0, 256.0] */
-      "  float z0 = floor(z);\n", /* [0, 256] */
-      "  z = (z - z0) * 256.0;\n", /* [0.0, 256.0) */
-      "  float z1 = floor(z);\n", /* [0, 256) */
-      "  z = (z - z1) * 256.0;\n", /* [0.0, 256.0) */
-      "  float z2 = floor(z);\n",  /* [0, 256) */
-      "  ", glsl_fragcolor, "= vec4(z0/255.0, z1/255.0, z2/255.0, 1.0);\n",
-      "}\n"}};
+  string v;
+  v += g.prepend();
+  if (g.enable_instanced) {
+    v += "uniform mat4 shadowmap_vp;\n";
+    v += g.vert_in() + "mat4 model_matrix;\n";
+  } else {
+    v += "uniform mat4 model_matrix;\n";
+  }
+  v += g.vert_in() + "vec3 position;\n";
+  if (!g.enable_depth_texture) {
+    v += g.vert_out() + "vec4 vary_smpos;\n";
+  }
+  v += "void main(void) {\n";
+  if (g.enable_instanced) {
+    v += "vec4 p = shadowmap_vp * (model_matrix * vec4(position, 1.0));\n";
+  } else {
+    v += "vec4 p = model_matrix * vec4(position, 1.0);\n";
+  }
+  v += "gl_Position = p;\n";
+  if (!g.enable_depth_texture) {
+    v += "vary_smpos = p;\n";
+  }
+  v += "}\n";
+  string f;
+  if (g.enable_depth_texture) {
+    f += g.empty_shader_frag();
+  } else {
+    f += g.prepend();
+    f += g.frag_in() + "vec4 vary_smpos;\n";
+    f += g.decl_fragcolor();
+    f += "void main(void) {\n";
+    f += "vec4 p = vary_smpos;\n";
+    f += "  float pz = (p.z/p.w + 1.0) / 2.0;\n";
+    f += "  float z = pz * 256.0;\n";/* [0.0, 256.0] */
+    f += "  float z0 = floor(z);\n"; /* [0, 256] */
+    f += "  z = (z - z0) * 256.0;\n"; /* [0.0, 256.0) */
+    f += "  float z1 = floor(z);\n"; /* [0, 256) */
+    f += "  z = (z - z1) * 256.0;\n"; /* [0.0, 256.0) */
+    f += "  float z2 = floor(z);\n";  /* [0, 256) */
+    f += g.fragcolor() + "= vec4(z0/255.0, z1/255.0, z2/255.0, 1.0);\n";
+    f += "}\n";
+  }
+  println("VERT:", v);
+  println("FRAG:", f);
   return make_shader_ptr{shadowmap_uniforms, shadowmap_vertex_attributes}(
-    vert, frag, "model_matrix");
+    v, f, "model_matrix");
 }
 
 function zprepass_shader_ptr
-init_zprepass_shader()
+init_zprepass_shader(glconfig const& g)
 {
-  const vert = m::concat{
-    glsl_prepend,
-    "uniform mat4 view_projection_matrix;\n",
-    m::cond{m::ne{use_instanced, 0},
-      m::concat{glsl_vert_in, "mat4 model_matrix;\n"},
-      "uniform mat4 model_matrix;\n"},
-    glsl_vert_in, "vec3 position;\n",
-    "void main(void) {\n",
-    "  vec4 pos4 = vec4(position, 1.0);\n",
-    "  vec4 gpos4 = model_matrix * pos4;\n",
-    "  gl_Position = view_projection_matrix * gpos4;\n",
-    "}\n"};
-  const frag = empty_shader_frag;
-  return make_shader_ptr{zprepass_uniforms, zprepass_vertex_attributes}(vert,
-    frag, "model_matrix");
+  string v;
+  v += g.prepend();
+  v += "uniform mat4 view_projection_matrix;\n";
+  if (g.enable_instanced) {
+    v += g.vert_in() + "mat4 model_matrix;\n";
+  } else {
+    v += "uniform mat4 model_matrix;\n";
+  }
+  v += g.vert_in() + "vec3 position;\n";
+  v += "void main(void) {\n";
+  v += "vec4 pos4 = vec4(position, 1.0);\n";
+  v += "vec4 gpos4 = model_matrix * pos4;\n";
+  v += "gl_Position = view_projection_matrix * gpos4;\n";
+  v += "}\n";
+  string f = g.empty_shader_frag();
+  return make_shader_ptr{zprepass_uniforms, zprepass_vertex_attributes}(v, f,
+    "model_matrix");
 }
 
-metafunction
-main_shader_vert{is_ds1st}
-  m::concat{
-    glsl_prepend,
-    "uniform mat4 view_projection_matrix;\n",
-    "uniform mat4 shadowmap_vp;\n",
-    m::cond{m::ne{use_instanced, 0},
-      m::concat{glsl_vert_in, "mat4 model_matrix;\n"},
-      "uniform mat4 model_matrix;\n"},
-    glsl_vert_in, "vec3 position;\n",
-    glsl_vert_in, "vec3 normal;\n",
-    glsl_vert_in, "vec3 tangent;\n",
-    glsl_vert_in, "vec3 uvw;\n",
-    glsl_vert_out, "vec3 vary_position;\n",
-    glsl_vert_out, "vec3 vary_normal;\n",
-    glsl_vert_out, "vec3 vary_tangent;\n",
-    glsl_vert_out, "vec3 vary_uvw;\n",
-    m::cond{is_ds1st,
-      "",
-      m::concat{
-	glsl_vert_out, "vec3 vary_binormal;\n",
-	m::cond{enable_shadowmapping,
-	  m::concat{glsl_vert_out, "vec4 vary_smpos;\n"},
-	  ""
-	}
-      }
-    },
-    "void main(void) {\n",
-    "  vec4 pos4 = vec4(position, 1.0);\n",
-    "  vec4 gpos4 = model_matrix * pos4;\n",
-    "  gl_Position = view_projection_matrix * gpos4;\n",
-    m::cond{is_gl3,
-    "  mat3 normal_matrix = mat3(model_matrix);\n",
-    m::concat{
-    "  mat3 normal_matrix = mat3(model_matrix[0].xyz, model_matrix[1].xyz,",
-    "    model_matrix[2].xyz);\n"}
-    },
-    "  vary_position = gpos4.xyz / gpos4.w;\n",
-    "  vary_normal = normal_matrix * normal;\n",
-    "  vary_tangent = normal_matrix * tangent;\n",
-    "  vary_uvw = uvw;\n",
-    m::cond{is_ds1st,
-      "",
-      m::concat{
-	"  vary_binormal = cross(vary_normal, vary_tangent);\n",
-	m::cond{enable_shadowmapping,
-	  "  vary_smpos = shadowmap_vp * gpos4;\n",
-	  ""
-	}
-      }
-    },
-    "}\n"};
-
-metafunction
-ds1st_shader_frag
-  m::concat{
-    glsl_prepend,
-    glsl_frag_in, "vec3 vary_position;\n",
-    glsl_frag_in, "vec3 vary_normal;\n",
-    glsl_frag_in, "vec3 vary_tangent;\n",
-    glsl_frag_in, "vec3 vary_uvw;\n",
-    m::cond{is_gl3,
-      m::concat{
-	"out vec3 ds_data[4];\n",
-	"void main(void) {\n",
-	"  ds_data[0] = vary_position;\n",
-	"  ds_data[1] = vary_normal;\n",
-	"  ds_data[2] = vary_tangent;\n",
-	"  ds_data[3] = vary_uvw;\n",
-	"}\n"
-      },
-      m::concat{
-	"void main(void) {\n",
-	"  gl_FragData[0].xyz = vary_position;\n",
-	"  gl_FragData[1].xyz = vary_normal;\n",
-	"  gl_FragData[2].xyz = vary_tangent;\n",
-	"  gl_FragData[3].xyz = vary_uvw;\n",
-	"}\n"
-      }
-    }
-  };
-
-metafunction
-ds2nd_shader_vert
-  m::concat{
-    glsl_prepend,
-    glsl_vert_in, "vec2 position;\n",
-    glsl_vert_out, "vec2 vary_ds_coord;\n",
-    "void main(void) {\n",
-    "  gl_Position = vec4(position, 0.5, 1.0);\n",
-    "  vary_ds_coord = (position + 1.0) * 0.5;\n",
-    "}\n"};
-
-metafunction
-main_shader_frag{is_ds2nd}
-  m::concat{
-    glsl_prepend,
-    "uniform sampler2D sampler;\n",
-    "uniform sampler2D sampler_tilemap;\n",
-    m::cond{use_sampler2dshadow,
-    "uniform sampler2DShadow sampler_sm;\n",
-    "uniform sampler2D sampler_sm;\n"
-    },
-    "uniform vec3 camera_pos;\n",
-    "uniform vec3 light_pos;\n",
-    "uniform float light_on;\n",
-    "uniform mat4 shadowmap_vp;\n",
-    m::cond{is_ds2nd,
-      m::concat{
-	"uniform sampler2D sampler_ds0;\n",
-	"uniform sampler2D sampler_ds1;\n",
-	"uniform sampler2D sampler_ds2;\n",
-	"uniform sampler2D sampler_ds3;\n",
-	glsl_frag_in, "vec2 vary_ds_coord;\n"
-      },
-      m::concat{
-	glsl_frag_in, "vec3 vary_position;\n",
-	glsl_frag_in, "vec3 vary_normal;\n",
-	glsl_frag_in, "vec3 vary_tangent;\n",
-	glsl_frag_in, "vec3 vary_uvw;\n",
-	glsl_frag_in, "vec3 vary_binormal;\n",
-	m::cond{enable_shadowmapping,
-	  m::concat{
-	    glsl_frag_in, "vec4 vary_smpos;\n",
-/*
-	    "float gen_rand(const vec2 v) {\n",
-	    "  return fract(sin(dot(v.xy, vec2(12.9898, 78.233))) ",
-	    "    * 43758.5453);\n",
-	    "}\n",
-*/
-	    ""
-	  },
-	  ""
-	} /* enable_shadowmapping */
-      }
-    }, /* is_ds2nd */
-    glsl_decl_fragcolor,
-    "void main(void) {\n",
-    m::cond{is_ds2nd,
-      m::concat{
-	"vec3 vary_position = ",
-	  glsl_texture2d, "(sampler_ds0, vary_ds_coord).xyz;\n",
-	"vec3 vary_normal = ",
-	  glsl_texture2d, "(sampler_ds1, vary_ds_coord).xyz;\n",
-	"vec3 vary_tangent = ",
-	  glsl_texture2d, "(sampler_ds2, vary_ds_coord).xyz;\n",
-	"vec3 vary_uvw = ",
-	  glsl_texture2d, "(sampler_ds3, vary_ds_coord).xyz;\n",
-	"vec3 vary_binormal = cross(vary_normal, vary_tangent);\n",
-	  /* TODO: * tangent.w */
-	m::cond{enable_shadowmapping,
-	  "vec4 vary_smpos = shadowmap_vp * vec4(vary_position, 1.0);\n",
-	  ""
-	}
-      },
-      ""
-    },
-    "  vec3 light_dir = normalize(light_pos - vary_position);\n",
-    "  float light_distance = length(light_pos - vary_position);\n",
-    "  vec4 color = vec4(0.0, 0.0, 0.0, 1.0);\n",
-    "  vec4 color_dif = vec4(0.3, 0.3, 0.3, 1.0);\n",
-    "  float mate_ambient = 0.2;\n",
-    "  float mate_specular = 1.0;\n",
-    m::cond{m::ne{enable_shadowmapping, 0},
-      m::concat{
-      "  vec4 smp = vary_smpos;\n",
-      "  vec3 smpos = ((smp.xyz / smp.w) + 1.0) * 0.5;\n",
-      "  float lflag = float(int(smpos.x <= 0.0) + int(smpos.x >= 1.0)",
-      "    + int(smpos.y <= 0.0) + int(smpos.y >= 1.0) == 0);\n"
-      },
-      m::concat{
-      "  float lflag = 1.0;\n"
-      }
-    }, /* enable_shadowmapping */
-    "  float lstr = lflag;\n",
-    "  float distbr = min(3000.0 / (light_distance * light_distance), ",
-    "    light_on);\n",
-    "  vec3 nor = vary_normal;\n",
-    m::cond{m::ne{enable_normalmapping, 0},
-      m::concat{
-      "  const float tile_size = 32.0;\n",
-      "  const float tilemap_size = 128.0;\n",
-      "  const float tiletex_size = 256.0;\n",
-      "  vec2 uv0 = vary_uvw.xy / vary_uvw.z;\n",
-      "  vec2 uv_tm = floor(uv0);\n",
-	// タイルマップの座標
-      "  vec2 uv_tmfr = uv0 - uv_tm;\n",
-        // タイル内座標(0,1)
-      "  vec2 uv_ti = uv_tmfr * tile_size;\n",
-      "  vec2 uvi = floor(uv_ti);\n",
-        // タイル内のピクセル座標整数部分
-      "  vec2 uvj = uv_ti - uvi;\n",
-        // ピクセル内座標(0,1)
-      "  vec4 ti = ", glsl_texture2d,
-      "    (sampler_tilemap, uv_tm / tilemap_size);\n",
-        // タイルマップを引く
-      "  vec2 uv_pixel = floor(ti.xy * 255.0 + 0.5) * tile_size + uvi;\n",
-        // タイル変換後のuv座標
-      /*
-      "  mate_ambient = 0.8;\n",
-      "  mate_specular = 1.0;\n",
-      */
-      "  mate_ambient = ti.z;\n",
-      "  mate_specular = ti.w;\n",
-      /*
-      "  vec4 c0 = ", glsl_texture2d, "(sampler, clamp(floor(uv_pixel) + vec2(0.5, 0.5), vec2(0.5, 0.5), vec2(tiletex_size - 0.5, tiletex_size - 0.5)) / tiletex_size);\n",
-      */
-      "  vec4 c0 = ", glsl_texture2d, "(sampler, uv_pixel / tiletex_size);\n",
-      /*
-      */
-        // テクスチャを引く
-      "  float alv0 = floor(c0.a * 255.0 + 0.5);\n",
-      "  float avol = floor(alv0 / 16.0);\n",
-      "  int alv = int(alv0 - avol * 16.0);\n",
-      "  float lt = float(uvj.y - uvj.x >= 0.0);\n",
-      "  float lb = float(uvj.y + uvj.x <= 1.0);\n",
-      "  vec4 avlv = vec4(float(alv == 1), float(alv == 3), float(alv == 5),",
-      "    float(alv == 7));\n",
-      "  float ut1 = dot(avlv, vec4(-lt, 1.0-lb, 1.0-lt, -lb));\n",
-      "  float vt1 = dot(avlv, vec4(lt-1.0, -lb, lt, 1.0-lb));\n",
-      "  ut1 += float(alv == 4);\n",
-      "  vt1 -= float(alv == 2);\n",
-      /*
-      "  ut1 += float(alv == 4) - float(alv == 8);\n",
-      "  vt1 += float(alv == 6) - float(alv == 2);\n",
-      */
-      "  avol = (avol - 8.0) * distbr * 0.2;\n",
-      "  color += vec4(c0.xyz, 0.0) * float(alv == 10);\n",
-      "  color_dif = vec4(c0.xyz, 0.0) * float(alv != 10);\n",
-      "  distbr *= float(alv != 10);\n",
-      "  nor += vary_tangent * ut1 * avol;\n",
-      "  nor += vary_binormal * vt1 * avol;\n",
-      "  nor = normalize(nor);\n"
-      },
-      ""
-    }, /* enable_normalmapping */
-    "  vec3 reflection_vec = reflect(-light_dir, nor);\n",
-    "  vec3 camera_dir = normalize(camera_pos - vary_position);\n",
-    "  float cos_angle = max(0.0, dot(camera_dir, reflection_vec));\n",
-    "  float specular = pow(cos_angle, 16.0);\n",
-    "  float diffuse = clamp(dot(light_dir, nor), 0.0, 1.0);\n",
-    m::cond{enable_shadowmapping,
-      m::cond{use_depth_texture,
-	m::cond{use_sampler2dshadow,
-	  m::concat{
-	  "  smpos.z *= 0.9995;\n",
-//	  "  smpos.xy += (gen_rand(smpos.xy) - vec2(0.5, 0.5)) / 1024.0;\n",
-//	  m::concat{"  lstr = ", glsl_shadow2d, "(sampler_sm, smpos);\n"},
-	  m::concat{
-	    "  lstr = (",
-	    glsl_shadow2d, "(sampler_sm, smpos+vec3(-0.0003,-0.0003,0.0))+",
-	    glsl_shadow2d, "(sampler_sm, smpos+vec3(-0.0003,0.0003,0.0))+",
-	    glsl_shadow2d, "(sampler_sm, smpos+vec3(0.0003,-0.0003,0.0))+",
-	    glsl_shadow2d, "(sampler_sm, smpos+vec3(0.0003,0.0003,0.0)))",
-	    m::cond{is_gl3, "", ".r"},
-	    "    / 4.0;\n"},
-/*
-	  m::concat{
-	    "  lstr = (",
-	    "    texture(sampler_sm, smpos + vec3(-0.0002, -0.0002, 0.0))+",
-	    "    texture(sampler_sm, smpos + vec3(0.0002, 0.0002, 0.0)))",
-	    "    / 2.0;\n"},
-*/
-	  "  color += (vec4(1.0, 1.0, 1.0, 1.0) * mate_specular ",
-	  "    * specular) * distbr * lstr;\n"
-	  },
-	  m::concat{
-	  "  float zval = ", glsl_texture2d,
-	  "     (sampler_sm, smpos.xy * lflag).x;\n",
-	  "  lstr = float(smpos.z < zval * 1.0005) * lflag;\n",
-	  "  color += (vec4(1.0, 1.0, 1.0, 1.0) * mate_specular ",
-	  "    * specular) * distbr * lstr;\n"
-	  }
-	}, /* use_sampler2dshadow */
-	m::concat{
-	"  vec4 smz = ", glsl_texture2d, "(sampler_sm, smpos.xy * lflag);\n",
-	"  float z0 = floor(smz.r * 255.0 + 0.5);\n",
-	"  float z1 = floor(smz.g * 255.0 + 0.5);\n",
-	"  float z2 = floor(smz.b * 255.0 + 0.5);\n",
-	"  float zval = z0 * 65536.0 + z1 * 256.0 + z2;\n",
-	"  lstr = float(smpos.z * 16770000.0 < zval) * lflag;\n",
-	"  color += (vec4(1.0, 1.0, 1.0, 1.0) * mate_specular ",
-	"    * specular) * distbr * lstr;\n"
-	}
-      }, /* use_depth_texture */
-      m::concat{
-      "  color += (vec4(1.0, 1.0, 1.0, 1.0) * mate_specular ",
-      "    * specular) * distbr * lstr;\n"
-      }
-    }, /* enable_shadowmapping */
-//    "  if (vary_position.x != 0.0f) { color = vec4(1.0, 0.0, 1.0, 1.0); }\n", // FIXME
-    "  ", glsl_fragcolor, " = color + ",
-    "     (color_dif * (diffuse * distbr * lstr + mate_ambient));\n",
-    "}\n"};
-
-metafunction empty_shader_frag
-  m::concat{glsl_prepend, "void main(void) { }\n"};
-
-metafunction empty_shader_vert
-  m::concat{
-    glsl_prepend,
-    "void main(void) { gl_Position = vec4(0.0, 0.0, 0.0, 1.0); }\n"};
-
 function ds1st_shader_ptr
-init_ds1st_shader()
+init_ds1st_shader(glconfig const g)
 {
+  const v = g.enable_deferred
+    ? main_or_ds1st_shader_vert(g) : g.empty_shader_vert();
+  string f;
+  if (g.enable_deferred) {
+    f += g.prepend();
+    f += g.frag_in() + "vec3 vary_position;\n";
+    f += g.frag_in() + "vec3 vary_normal;\n";
+    f += g.frag_in() + "vec3 vary_tangent;\n";
+    f += g.frag_in() + "vec3 vary_uvw;\n";
+    if (g.is_gl3()) {
+      f += "out vec3 ds_data[4];\n";
+      f += "void main(void) {\n";
+      f += "ds_data[0] = vary_position;\n";
+      f += "ds_data[1] = vary_normal;\n";
+      f += "ds_data[2] = vary_tangent;\n";
+      f += "ds_data[3] = vary_uvw;\n";
+      f += "}\n";
+    } else {
+      f += "void main(void) {\n";
+      f += "gl_FragData[0].xyz = vary_position;\n";
+      f += "gl_FragData[1].xyz = vary_normal;\n";
+      f += "gl_FragData[2].xyz = vary_tangent;\n";
+      f += "gl_FragData[3].xyz = vary_uvw;\n";
+      f += "}\n";
+    }
+  } else {
+    f += g.empty_shader_frag();
+  }
+  return make_shader_ptr{ds1st_uniforms, ds1st_vertex_attributes}(v, f,
+    "model_matrix");
+  /*
   const vert = m::cond{enable_deferred,
     main_shader_vert{1}, empty_shader_vert};
   const frag = m::cond{enable_deferred, ds1st_shader_frag, empty_shader_frag};
   return make_shader_ptr{ds1st_uniforms, ds1st_vertex_attributes}(vert, frag,
     "model_matrix");
+  */
 }
 
 function ds2nd_shader_ptr
-init_ds2nd_shader()
+init_ds2nd_shader(glconfig const& g)
 {
+  string v;
+  if (g.enable_deferred) {
+    v += g.prepend();
+    v += g.vert_in() +  "vec2 position;\n";
+    v += g.vert_out() + "vec2 vary_ds_coord;\n";
+    v += "void main(void) {\n";
+    v += "gl_Position = vec4(position, 0.5, 1.0);\n";
+    v += "vary_ds_coord = (position + 1.0) * 0.5;\n";
+    v += "}\n";
+  } else {
+    v += g.empty_shader_vert();
+  }
+  const f = g.enable_deferred
+    ? main_or_ds2nd_shader_frag(g) : g.empty_shader_frag();
+  return make_shader_ptr{ds2nd_uniforms, ds2nd_vertex_attributes}(v, f, "");
+  /*
   const vert = m::cond{enable_deferred,
     ds2nd_shader_vert, empty_shader_vert};
   const frag = m::cond{enable_deferred, main_shader_frag{1}, empty_shader_frag};
   return make_shader_ptr{ds2nd_uniforms, ds2nd_vertex_attributes}(vert, frag,
     "");
+  */
+}
+
+function string
+main_or_ds1st_shader_vert(glconfig const& g)
+{
+  string v;
+  v += g.prepend();
+  v += "uniform mat4 view_projection_matrix;\n";
+  v += "uniform mat4 shadowmap_vp;\n";
+  if (g.enable_instanced) {
+    v += g.vert_in() + "mat4 model_matrix;\n";
+  } else {
+    v += "uniform mat4 model_matrix;\n";
+  }
+  v += g.vert_in() + "vec3 position;\n";
+  v += g.vert_in() + "vec3 normal;\n";
+  v += g.vert_in() + "vec3 tangent;\n";
+  v += g.vert_in() + "vec3 uvw;\n";
+  v += g.vert_out() + "vec3 vary_position;\n";
+  v += g.vert_out() + "vec3 vary_normal;\n";
+  v += g.vert_out() + "vec3 vary_tangent;\n";
+  v += g.vert_out() + "vec3 vary_uvw;\n";
+  if (!g.enable_deferred) {
+    v += g.vert_out() + "vec3 vary_binormal;\n";
+    if (g.enable_shadowmapping) {
+      v += g.vert_out() + "vec4 vary_smpos;\n";
+    }
+  }
+  v += "void main(void) {\n";
+  v += "  vec4 pos4 = vec4(position, 1.0);\n";
+  v += "  vec4 gpos4 = model_matrix * pos4;\n";
+  v += "  gl_Position = view_projection_matrix * gpos4;\n";
+  if (g.is_gl3()) {
+    v += "  mat3 normal_matrix = mat3(model_matrix);\n";
+  } else {
+    v += "  mat3 normal_matrix = mat3(model_matrix[0].xyz, ";
+    v += "    model_matrix[1].xyz, model_matrix[2].xyz);\n";
+  }
+  v += "  vary_position = gpos4.xyz / gpos4.w;\n";
+  v += "  vary_normal = normal_matrix * normal;\n";
+  v += "  vary_tangent = normal_matrix * tangent;\n";
+  v += "  vary_uvw = uvw;\n";
+  if (!g.enable_deferred) {
+    v += "  vary_binormal = cross(vary_normal, vary_tangent);\n";
+    if (g.enable_shadowmapping) {
+      v += "  vary_smpos = shadowmap_vp * gpos4;\n";
+    }
+  }
+  v += "}\n";
+  return v;
+}
+
+function string main_or_ds2nd_shader_frag(glconfig const& g)
+{
+  string f;
+  f += g.prepend();
+  f += "uniform sampler2D sampler;\n";
+  f += "uniform sampler2D sampler_tilemap;\n";
+  if (g.enable_sampler2dshadow) {
+    f += "uniform sampler2DShadow sampler_sm;\n";
+  } else {
+    f += "uniform sampler2D sampler_sm;\n";
+  }
+  f += "uniform vec3 camera_pos;\n";
+  f += "uniform vec3 light_pos;\n";
+  f += "uniform float light_on;\n";
+  f += "uniform mat4 shadowmap_vp;\n";
+  if (g.enable_deferred) {
+    f += "uniform sampler2D sampler_ds0;\n";
+    f += "uniform sampler2D sampler_ds1;\n";
+    f += "uniform sampler2D sampler_ds2;\n";
+    f += "uniform sampler2D sampler_ds3;\n";
+    f += g.frag_in() + "vec2 vary_ds_coord;\n";
+  } else {
+    f += g.frag_in() + "vec3 vary_position;\n";
+    f += g.frag_in() + "vec3 vary_normal;\n";
+    f += g.frag_in() + "vec3 vary_tangent;\n";
+    f += g.frag_in() + "vec3 vary_uvw;\n";
+    f += g.frag_in() + "vec3 vary_binormal;\n";
+    if (g.enable_shadowmapping) {
+      f += g.frag_in() + "vec4 vary_smpos;\n";
+    }
+  }
+  f += g.decl_fragcolor();
+  f += "void main(void) {\n";
+  if (g.enable_deferred) {
+    f += "vec3 vary_position = ";
+    f += g.texture2d() + "(sampler_ds0, vary_ds_coord).xyz;\n";
+    f += "vec3 vary_normal = ";
+    f += g.texture2d() + "(sampler_ds1, vary_ds_coord).xyz;\n";
+    f += "vec3 vary_tangent = ";
+    f += g.texture2d() + "(sampler_ds2, vary_ds_coord).xyz;\n";
+    f += "vec3 vary_uvw = ";
+    f += g.texture2d() + "(sampler_ds3, vary_ds_coord).xyz;\n";
+    f += "vec3 vary_binormal = cross(vary_normal, vary_tangent);\n";
+    if (g.enable_shadowmapping) {
+      f += "vec4 vary_smpos = shadowmap_vp * vec4(vary_position, 1.0);\n";
+    }
+  }
+  f += "vec3 light_dir = normalize(light_pos - vary_position);\n";
+  f += "float light_distance = length(light_pos - vary_position);\n";
+  f += "vec4 color = vec4(0.0, 0.0, 0.0, 1.0);\n";
+  f += "vec4 color_dif = vec4(0.3, 0.3, 0.3, 1.0);\n";
+  f += "float mate_ambient = 0.2;\n";
+  f += "float mate_specular = 1.0;\n";
+  if (g.enable_shadowmapping) {
+    f += "vec4 smp = vary_smpos;\n";
+    f += "vec3 smpos = ((smp.xyz / smp.w) + 1.0) * 0.5;\n";
+    f += "float lflag = float(int(smpos.x <= 0.0) + int(smpos.x >= 1.0)";
+    f += "  + int(smpos.y <= 0.0) + int(smpos.y >= 1.0) == 0);\n";
+  } else {
+    f += "float lflag = 1.0;\n";
+  }
+  f += "float lstr = lflag;\n";
+  f += "float distbr = min(3000.0 / (light_distance * light_distance), ";
+  f += "  light_on);\n";
+  f += "vec3 nor = vary_normal;\n";
+  if (g.enable_normalmapping) {
+    f += "const float tile_size = 32.0;\n";
+    f += "const float tilemap_size = 128.0;\n";
+    f += "const float tiletex_size = 256.0;\n";
+    f += "vec2 uv0 = vary_uvw.xy / vary_uvw.z;\n";
+    f += "vec2 uv_tm = floor(uv0);\n";
+	  /* tilemap coordinate */
+    f += "vec2 uv_tmfr = uv0 - uv_tm;\n";
+	  /* coordinate inside a tile (0, 1) */
+    f += "vec2 uv_ti = uv_tmfr * tile_size;\n";
+    f += "vec2 uvi = floor(uv_ti);\n";
+	  /* coordinate inside a tile, integral */
+    f += "vec2 uvj = uv_ti - uvi;\n";
+	  /* subpixel coordinate */
+    f += "vec4 ti = " +  g.texture2d();
+    f += "  (sampler_tilemap, uv_tm / tilemap_size);\n";
+	  /* lookup the tilemap */
+    f += "vec2 uv_pixel = floor(ti.xy * 255.0 + 0.5) * tile_size + uvi;\n";
+	  /* tile pattern coordinate */
+    f += "mate_ambient = ti.z;\n";
+    f += "mate_specular = ti.w;\n";
+    f += "vec4 c0 = " + g.texture2d();
+    f += "  (sampler, uv_pixel / tiletex_size);\n";
+	  /* lookup the tilepattern */
+    f += "float alv0 = floor(c0.a * 255.0 + 0.5);\n";
+    f += "float avol = floor(alv0 / 16.0);\n";
+    f += "int alv = int(alv0 - avol * 16.0);\n";
+    f += "float lt = float(uvj.y - uvj.x >= 0.0);\n";
+    f += "float lb = float(uvj.y + uvj.x <= 1.0);\n";
+    f += "vec4 avlv = vec4(float(alv == 1), float(alv == 3), ";
+    f += "  float(alv == 5), float(alv == 7));\n";
+    f += "float ut1 = dot(avlv, vec4(-lt, 1.0-lb, 1.0-lt, -lb));\n";
+    f += "float vt1 = dot(avlv, vec4(lt-1.0, -lb, lt, 1.0-lb));\n";
+    f += "ut1 += float(alv == 4);\n";
+    f += "vt1 -= float(alv == 2);\n";
+    f += "avol = (avol - 8.0) * distbr * 0.2;\n";
+    f += "color += vec4(c0.xyz, 0.0) * float(alv == 10);\n";
+    f += "color_dif = vec4(c0.xyz, 0.0) * float(alv != 10);\n";
+    f += "distbr *= float(alv != 10);\n";
+    f += "nor += vary_tangent * ut1 * avol;\n";
+    f += "nor += vary_binormal * vt1 * avol;\n";
+    f += "nor = normalize(nor);\n";
+  }
+  f += "vec3 reflection_vec = reflect(-light_dir, nor);\n";
+  f += "vec3 camera_dir = normalize(camera_pos - vary_position);\n";
+  f += "float cos_angle = max(0.0, dot(camera_dir, reflection_vec));\n";
+  f += "float specular = pow(cos_angle, 16.0);\n";
+  f += "float diffuse = clamp(dot(light_dir, nor), 0.0, 1.0);\n";
+  if (g.enable_shadowmapping) {
+    if (g.enable_depth_texture) {
+      if (g.enable_sampler2dshadow) {
+	f += "smpos.z *= 0.9995;\n";
+	f += "lstr = (";
+	f += g.shadow2d() + "(sampler_sm, smpos+vec3(-0.0003,-0.0003,0.0)) +";
+	f += g.shadow2d() + "(sampler_sm, smpos+vec3(-0.0003,0.0003,0.0)) +";
+	f += g.shadow2d() + "(sampler_sm, smpos+vec3(0.0003,-0.0003,0.0)) +";
+	f += g.shadow2d() + "(sampler_sm, smpos+vec3(0.0003,0.0003,0.0)))";
+	if (!g.is_gl3()) {
+	  f += ".r";
+	}
+	f += "  / 4.0;\n";
+      } else {
+	f += "float zval = " + g.texture2d();
+	f += "   (sampler_sm, smpos.xy * lflag).x;\n";
+	f += "lstr = float(smpos.z < zval * 1.0005) * lflag;\n";
+      }
+    } else {
+      f += "vec4 smz = " + g.texture2d();
+      f += "  (sampler_sm, smpos.xy * lflag);\n";
+      f += "float z0 = floor(smz.r * 255.0 + 0.5);\n";
+      f += "float z1 = floor(smz.g * 255.0 + 0.5);\n";
+      f += "float z2 = floor(smz.b * 255.0 + 0.5);\n";
+      f += "float zval = z0 * 65536.0 + z1 * 256.0 + z2;\n";
+      f += "lstr = float(smpos.z * 16770000.0 < zval) * lflag;\n";
+    }
+    f += "color += (vec4(1.0, 1.0, 1.0, 1.0) * mate_specular ";
+    f += "  * specular) * distbr * lstr;\n";
+  }
+  f += g.fragcolor() +  " = color + ";
+  f += "  (color_dif * (diffuse * distbr * lstr + mate_ambient));\n";
+  f += "}\n";
+  return f;
 }
 
 function main_shader_ptr
-init_main_shader()
+init_main_shader(glconfig const& g)
 {
-  const vert = m::cond{enable_deferred,
-    empty_shader_vert, main_shader_vert{0}};
-  const frag = m::cond{enable_deferred,
-    empty_shader_frag, main_shader_frag{0}};
-  return make_shader_ptr{main_uniforms, main_vertex_attributes}(vert, frag,
+  const v = g.enable_deferred
+    ? g.empty_shader_vert() : main_or_ds1st_shader_vert(g);
+  const f = g.enable_deferred
+    ? g.empty_shader_frag() : main_or_ds2nd_shader_frag(g);
+  return make_shader_ptr{main_uniforms, main_vertex_attributes}(v, f,
     "model_matrix");
 }
 
 function font_shader_ptr
-init_font_shader()
+init_font_shader(glconfig const& g)
 {
-  const vert = m::concat{
-    glsl_prepend,
-    glsl_vert_in, "vec2 pos;\n",
-    glsl_vert_in, "vec2 uvpos;\n",
-    glsl_vert_out, "vec2 texcoord;\n",
-    "void main(void) {\n",
-    "  gl_Position = vec4(pos, 0.0, 1.0);\n",
-    "  texcoord = uvpos;\n",
-    "}\n"};
-  const frag = m::concat{
-    glsl_prepend,
-    "uniform sampler2D sampler;\n",
-    glsl_frag_in, "vec2 texcoord;\n",
-    glsl_decl_fragcolor,
-    "void main(void) {\n",
-    "  vec4 col = ", glsl_texture2d, "(sampler, texcoord);\n",
-    "  col.a *= 0.5;\n",
-    "  ", glsl_fragcolor, " = col;\n",
-    "}\n"};
-  return make_shader_ptr{font_uniforms, font_vertex_attributes}(vert, frag,
-    "");
+  string v;
+  v += g.prepend();
+  v += g.vert_in() + "vec2 pos;\n";
+  v += g.vert_in() + "vec2 uvpos;\n";
+  v += g.vert_out() + "vec2 texcoord;\n";
+  v += "void main(void) {\n";
+  v += "gl_Position = vec4(pos, 0.0, 1.0);\n";
+  v += "texcoord = uvpos;\n";
+  v += "}\n";
+  string f;
+  f += g.prepend();
+  f += "uniform sampler2D sampler;\n";
+  f += g.frag_in() + "vec2 texcoord;\n";
+  f += g.decl_fragcolor();
+  f += "void main(void) {\n";
+  f += "vec4 col = " +  g.texture2d() + "(sampler, texcoord);\n";
+  f += "col.a *= 0.5;\n";
+  f += g.fragcolor() + " = col;\n";
+  f += "}\n";
+  return make_shader_ptr{font_uniforms, font_vertex_attributes}(v, f, "");
 }
 
 function sprite_shader_ptr
-init_sprite_shader()
+init_sprite_shader(glconfig const& g)
 {
-  const vert = m::concat{
-    glsl_prepend,
-    "uniform mat4 view_projection_matrix;\n",
-    glsl_vert_in, "vec3 position;\n",
-    glsl_vert_in, "vec2 uv;\n",
-    glsl_vert_in, "vec2 wh;\n",
-    "void main(void) {\n",
-    "  vec4 pos4 = vec4(position, 1.0);\n",
-    "  gl_Position = view_projection_matrix * pos4;\n",
-    "}\n"};
-  const frag = m::concat{
-    glsl_prepend,
-    "void main(void) {\n",
-    "}\n"};
-  return make_shader_ptr{sprite_uniforms, sprite_vertex_attributes}(vert, frag,
-    "");
+  string v;
+  v += g.prepend();
+  v += "uniform mat4 view_projection_matrix;\n";
+  v += g.vert_in() + "vec3 position;\n";
+  v += g.vert_in() + "vec2 uv;\n";
+  v += g.vert_in() + "vec2 wh;\n";
+  v += "void main(void) {\n";
+  v += "vec4 pos4 = vec4(position, 1.0);\n";
+  v += "gl_Position = view_projection_matrix * pos4;\n";
+  v += "}\n";
+  string f;
+  f += g.prepend();
+  f += "void main(void) {\n";
+  f += "}\n";
+  return make_shader_ptr{sprite_uniforms, sprite_vertex_attributes}(v, f, "");
 }
 
 function uint read_3_uint(cslice{uchar} const& buf, size_t o)
@@ -1782,9 +1577,11 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
       cast_int(mipmap_level > 0 ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST));
     mti.surface_w = tex_w;
     mti.surface_h = tex_h;
-    if (mipmap_level != 0) {
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mipmap_level);
+    if (m::ne{is_gl3, 0}) {
+      if (mipmap_level != 0) {
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mipmap_level);
+      }
     }
   }
   {
@@ -1828,197 +1625,114 @@ function void sdllog(cstrref const& mess)
   SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, mess);
 }
 
-function void main_loop()
+struct
+pglcontext(bool gles_flag0, int glmajor0, int glminor0, bool enable_msaa0)
 {
-  int fixed_fps = 1;
-  camera_info cam;
-  sdllog("PXC-SDL2 main");
-  const ini = SDL_Init(SDL_INIT_VIDEO);
-  int init_w = 128;
-  int init_h = 128;
-  const num_modes = SDL_GetNumDisplayModes(0);
-  for (int i: 0 .. num_modes) {
-    SDL_DisplayMode mode;
-    SDL_GetDisplayMode(0, i, mode);
-    if (mode.w * mode.h > init_w * init_h) {
-      // init_w = mode.w;
-      // init_h = mode.h;
+  public glconfig glc = glconfig(gles_flag0, glmajor0, glminor0,
+    enable_msaa0);
+  public main_shader_ptr const sdr = init_main_shader(glc);
+  public shadowmap_shader_ptr const smsdr = init_shadowmap_shader(glc);
+  public zprepass_shader_ptr const zpsdr = init_zprepass_shader(glc);
+  public ds1st_shader_ptr const ds1sdr = init_ds1st_shader(glc);
+  public ds2nd_shader_ptr const ds2sdr = init_ds2nd_shader(glc);
+  public sprite_shader_ptr const spsdr = init_sprite_shader(glc);
+  public font_shader_ptr const psdr = init_font_shader(glc);
+  public shadowmap_fbo sfbo;
+  public deferred_shading_fbo dsfbo;
+  public main_texture_info mti;
+  public font_texture_info fti;
+  public projection_info cam;
+  private uint vtxarr; // FIXME
+  init();
+  function void init()
+  {
+    if (m::ne{is_gl3, 0}) {
+      glGenVertexArrays(1, address(vtxarr));
+      glBindVertexArray(vtxarr);
+      println("glBindVertexArray", vtxarr);
     }
-    if (mode.w * mode.h < init_w * init_h) {
-      // init_w = mode.w;
-      // init_h = mode.h;
+    if (m::eq{is_gles, 0}) {
+      farray{float, 2} arr;
+      float step;
+      glGetFloatv(GL_POINT_SIZE_RANGE, arr.rawptr());
+      glGetFloatv(GL_POINT_SIZE_GRANULARITY, address(step));
+      println("GL_POINT_SIZE_RANGE", arr, step);
     }
-    sdllog(string_join{" "}("displaymode", mode.w, mode.h));
+    init_texture(mti, fti);
   }
-  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+}
 
-  if (m::ne{is_gl3, 0}) {
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
-    SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,
-     SDL_GL_CONTEXT_PROFILE_CORE); // SDL_GL_CONTEXT_PROFILE_COMPATIBILITY
-  } else {
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+struct
+frame_control()
+{
+  public metafunction ticks_t farray{uint, 6};
+  public uint tprevsec = 0;
+  public uint tprev = SDL_GetTicks();
+  public uint frames = 0;
+  public float mutable fps = 0.0;
+  public farray{uint, 2} mutable frame_tdiffs;
+  public float frame_speed_mul = 1.0f;
+  public ticks_t ticks;
+  public ticks_t ticks_sum;
+  public ticks_t ticks_sum_prev;
+  init();
+  function void init() {
+    for (const i, mutable& e: frame_tdiffs) {
+      e = 1000U / cast_uint(frame_tdiffs.size());
+    }
+    for (const i, mutable& e : ticks) {
+      e = tprev;
+    }
   }
-  if (m::ne{enable_msaa, 0}) {
-    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
-    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
-  }
-  mutable wflags = SDL_WINDOW_OPENGL;
-  wflags |= SDL_WINDOW_RESIZABLE;
-  wflags |= SDL_WINDOW_ALLOW_HIGHDPI;
-  /*
-  */
-  /*
-  wflags |= SDL_WINDOW_FULLSCREEN;
-   */
-  mutable vsync = 1;
-  if (get_option("-f") == "1") { wflags |= SDL_WINDOW_FULLSCREEN; }
-  if (get_option("-v") == "1") { vsync = 0; }
-  if (get_option("-h") == "1") { wflags &= ~SDL_WINDOW_ALLOW_HIGHDPI; }
-
-  sdllog(string_join{" "}("create_window", init_w, init_h));
-  const wnd = SDL_CreateWindow("PXC-SDL2", 0, 0, init_w, init_h, wflags).some;
-  SDL_GL_GetDrawableSize(wnd, init_w, init_h);
-  sdllog(string_join{" "}("drawable size", init_w, init_h));
-  const glctx = SDL_GL_CreateContext(wnd);
-  const swap_interval = SDL_GL_SetSwapInterval(vsync);
-  println("GL_VERSION", cubptr_to_string(glGetString(GL_VERSION)));
-  println("swap_interval", swap_interval);
-  /*
-  println("GL_EXTENSIONS", cubptr_to_string(glGetString(GL_EXTENSIONS)));
-  */
-  /*
-  int num_ext;
-  glGetIntegerv(GL_NUM_EXTENSIONS, address(num_ext));
-  for (int i: 0 .. num_ext) {
-    println("GL_EXTENSION", cubptr_to_string(glGetStringi(GL_EXTENSIONS,
-      static_cast{uint}(i))));
-  }
-  */
-
-  SDL_EventState(SDL_KEYDOWN, 0);
-  SDL_EventState(SDL_KEYUP, 0);
-  SDL_EventState(SDL_TEXTEDITING, 0);
-  SDL_EventState(SDL_TEXTINPUT, 0);
-
-  if (m::ne{enable_msaa, 0}) {
-    glEnable(GL_MULTISAMPLE);
-  }
-
-  sdllog("PXC-SDL2 init0");
-
-  uint vtxarr;
-  if (m::ne{is_gl3, 0}) {
-    glGenVertexArrays(1, address(vtxarr));
-    glBindVertexArray(vtxarr);
-    println("glBindVertexArray", vtxarr);
-  }
-
-  if (m::eq{is_gles, 0}) {
-    farray{float, 2} arr;
-    float step;
-    glGetFloatv(GL_POINT_SIZE_RANGE, arr.rawptr());
-    glGetFloatv(GL_POINT_SIZE_GRANULARITY, address(step));
-    println("GL_POINT_SIZE_RANGE", arr, step);
-  }
-
-  shadowmap_fbo sfbo;
-  deferred_shading_fbo dsfbo;
-  const sdr = init_main_shader();
-  sdllog("PXC-SDL2 init1");
-  const smsdr = init_shadowmap_shader();
-  sdllog("PXC-SDL2 init2");
-  const zpsdr = init_zprepass_shader();
-  sdllog("PXC-SDL2 init3");
-  const ds1sdr = init_ds1st_shader();
-  sdllog("PXC-SDL2 init4");
-  const ds2sdr = init_ds2nd_shader();
-  sdllog("PXC-SDL2 init5");
-  const spsdr = init_sprite_shader();
-  sdllog("PXC-SDL2 init6");
-  const psdr = init_font_shader();
-  sdllog("PXC-SDL2 init7");
-  main_texture_info mti;
-  font_texture_info fti;
-  init_texture(mti, fti);
-  sdllog("PXC-SDL2 initialized");
-
-  sdllog("PXC-SDL2 reshape");
-  reshape(cam, sfbo, dsfbo, init_w, init_h);
-
-  uint tprevsec = 0;
-  uint tprev = SDL_GetTicks();
-  uint frames = 0;
-  float mutable fps = 0.0;
-  cam.camera_angle = glm::make_quat_wxyz(1.0, 0.0, 0.0, 0.0);
-  println("cang", cam.camera_angle.to_mat3() * glm::make_vec3(1.0, 2.0, 3.0));
-  cam.camera_pos = glm::make_vec3(0.0, 0.0, 10.0);
-
-  cam.light_angle = glm::make_quat_angle_axis(30.0, 1.0, 1.0, 0.0);
-  cam.light_pos = cam.light_angle.to_mat3() * glm::make_vec3(0.0, 0.0, 20.0);
-  cam.light_on = 1.0f;
-
-  farray{uint, 2} mutable frame_tdiffs;
-  for (const i, mutable& e: frame_tdiffs) {
-    e = 1000U / cast_uint(frame_tdiffs.size());
-  }
-  float mutable frame_speed_mul = 1.0f;
-
-  metafunction ticks_t farray{uint, 6};
-  ticks_t ticks;
-  ticks_t ticks_sum;
-  ticks_t ticks_sum_prev;
-  for (const i, mutable& e : ticks) {
-    e = tprev;
-  }
-  function void save_ticks(size_t idx) {
+  public function void save_ticks(size_t idx) {
     const prev_tick = ticks[idx == 0 ? ticks.size() - 1 : idx - 1];
     mutable& cur_tick = ticks[idx];
     cur_tick = SDL_GetTicks();
     ticks_sum[idx] += cur_tick - prev_tick;
   }
-
-  buffer_object{main_vertex_attributes} bo;
+  public function void measure()
   {
-    const t0 = system.gettimeofday_double();
-    build_vertices(bo);
-    const t1 = system.gettimeofday_double();
-    bo.create_vbo();
-    const t2 = system.gettimeofday_double();
-    sdllog(string_join{" "}("build vertex", t1 - t0, t2 - t1));
-  }
+    ++frames;
+    uint t = SDL_GetTicks();
+    if (t - tprevsec >= 1000) {
+      const seconds = cast_float(t - tprevsec) / 1000.0;
+      fps = cast_float(frames) / seconds;
+      /*
+      sdllog(string_join{" "}(frames, "frames in", seconds, "seconds =",
+	  fps, "fps"));
+      sdllog(string_join{" "}("ticks: ", ticks_sum));
+      */
+      ticks_sum_prev = ticks_sum;
+      ticks_sum = ticks_t();
+      tprevsec = t;
+      frames = 0;
+    }
+    mutable tdiff = cast_int(t - tprev);
+    tprev = t;
 
-  cam.scene = bo.vs_arr.size() - 1;
-  // cam.scene = 0;
-  ptr{scene_node} snode = bo.instantiate_scene(static_cast{int}(cam.scene));
-  println("snode", snode->joint_sorts);
+    uint tdiff_frame_sum = cast_uint(tdiff);
+    for (const i: 1 .. frame_tdiffs.size()) {
+      tdiff_frame_sum += frame_tdiffs[i];
+      frame_tdiffs[i - 1] = frame_tdiffs[i];
+    }
+    frame_tdiffs[frame_tdiffs.size() - 1] = cast_uint(tdiff);
+  }
+}
 
-  bool done = false;
-  bool paused = false;
-  function void camera_rotate_mul(float x, float y, float z, float angle) {
-    const qq = glm::make_quat_angle_axis(angle * frame_speed_mul, x, y, z);
-    cam.camera_angle = (cam.camera_angle * qq).normalize();
-  }
-  function void camera_move_mul(float x, float y, float z) {
-    cam.camera_pos += cam.camera_angle.to_mat3() * glm::make_vec3(x, y, z)
-      * frame_speed_mul;
-  }
-  varray{SDL_FingerID} fingerids;
-  farray{bool, 2} fingdown;
-  farray{size_t, 2} fingerdown_time;
-  farray{glm::vec2, 2} start_pos;
-  farray{glm::vec2, 2} cur_pos;
-  glm::vec2 finger_xyrotate_delta;
-  // glm::vec2 finger_xymove_delta;
-  // float finger_zrotate_delta;
-  float finger_zmove_delta;
-  int finger_zmove_mode = 0;
-  int motion_count = 0;
-  function void finger_motion(float x, float y, float dx, float dy,
-    SDL_FingerID fng) {
+struct
+input_control()
+{
+  public varray{SDL_FingerID} fingerids;
+  public farray{bool, 2} fingdown;
+  public farray{size_t, 2} fingerdown_time;
+  public farray{glm::vec2, 2} start_pos;
+  public farray{glm::vec2, 2} cur_pos;
+  public glm::vec2 finger_xyrotate_delta;
+  public float finger_zmove_delta;
+  public int finger_zmove_mode = 0;
+  public function void finger_motion(float x, float y, float dx, float dy,
+    SDL_FingerID fng)
+  {
     size_t fid = 2;
     if (fingerids.size() > 0 && fingerids[0] == fng) {
       fid = 0;
@@ -2037,7 +1751,7 @@ function void main_loop()
       */
     }
   }
-  function void finger_down(float x, float y, SDL_FingerID fng) {
+  public function void finger_down(float x, float y, SDL_FingerID fng) {
     size_t fid = 2;
     if (fingerids.size() > 0 && fingerids[0] == fng) {
       fid = 0;
@@ -2062,7 +1776,7 @@ function void main_loop()
     sdllog(string_join{" "}("finger_down_post", fingerids));
     */
   }
-  function void finger_up(SDL_FingerID fng) {
+  public function void finger_up(SDL_FingerID fng) {
     size_t fid = 2;
     if (fingerids.size() > 0 && fingerids[0] == fng) {
       fid = 0;
@@ -2097,7 +1811,9 @@ function void main_loop()
     sdllog(string_join{" "}("finger_up_post", fingerids));
     */
   }
-  function void finger_action_one_finger(size_t fid) {
+  public function void finger_action_one_finger(position_angle mutable& target,
+      frame_control const& frctl, size_t fid)
+  {
     mutable dx = (cur_pos[fid].x - start_pos[fid].x);
     mutable dy = (cur_pos[fid].y - start_pos[fid].y);
     const d = glm::distance(start_pos[fid], cur_pos[fid]);
@@ -2108,12 +1824,14 @@ function void main_loop()
     /*
     sdllog(string_join{" "}("onefinger", dx, dy));
     */
-    camera_rotate_mul(1.0, 0.0, 0.0, -dy * 2.0);
-    camera_rotate_mul(0.0, 1.0, 0.0, -dx * 2.0);
+    target.rotate_angle_axis(-dy * 2.0 * frctl.frame_speed_mul, 1.0, 0.0, 0.0);
+    target.rotate_angle_axis(-dx * 2.0 * frctl.frame_speed_mul, 0.0, 1.0, 0.0);
     finger_xyrotate_delta.x = dx;
     finger_xyrotate_delta.y = dy;
   }
-  function void finger_action_two_fingers() {
+  public function void finger_action_two_fingers(position_angle mutable& target,
+      frame_control const& frctl)
+  {
     const d0 = cur_pos[0] - start_pos[0];
     const d1 = cur_pos[1] - start_pos[1];
     if (glm::dot(d0, d1) < 0.0f) {
@@ -2127,13 +1845,13 @@ function void main_loop()
 	const rat = distance_start / distance_cur;
 	const prev = finger_zmove_delta;
 	if (rat > 1.2) {
-	  finger_zmove_delta += 0.0003f * frame_speed_mul;
+	  finger_zmove_delta += 0.001f * frctl.frame_speed_mul;
 	  if (finger_zmove_delta >= 1.0) {
 	    finger_zmove_delta = 1.0;
 	  }
 	  finger_zmove_mode = 1;
 	} else if (rat < 0.8) {
-	  finger_zmove_delta -= 0.0003f * frame_speed_mul;
+	  finger_zmove_delta -= 0.001f * frctl.frame_speed_mul;
 	  if (finger_zmove_delta <= -1.0) {
 	    finger_zmove_delta = -1.0;
 	  }
@@ -2157,16 +1875,19 @@ function void main_loop()
 	avg /= d / 3.0;
       }
       avg /= 32.0f;
-      camera_move_mul(avg.x, -avg.y, 0.0);
+      target.translate_relative(
+	  glm::make_vec3(avg.x, -avg.y, 0.0) * frctl.frame_speed_mul);
     }
   }
-  function void finger_action_step() {
+  public function void finger_action_step(position_angle mutable& target,
+      frame_control const& frctl)
+  {
     /*
     sdllog(string_join{" "}("finger_action_step", fingdown[0], fingdown[1]));
     */
     if (fingdown[0] && !fingdown[1]) {
       if (fingerdown_time[0] >= 2) {
-	finger_action_one_finger(0);
+	finger_action_one_finger(target, frctl, 0);
       } else {
 	start_pos[0] = (start_pos[0] + cur_pos[0]) / 2.0f;
 	fingerdown_time[0] += 1;
@@ -2182,14 +1903,14 @@ function void main_loop()
       }
     } else if (!fingdown[0] && fingdown[1]) {
       if (fingerdown_time[1] >= 2) {
-	finger_action_one_finger(0);
+	finger_action_one_finger(target, frctl, 0);
       } else {
 	start_pos[1] = (start_pos[1] + cur_pos[1]) / 2.0f;
 	fingerdown_time[1] += 1;
       }
     } else if (fingdown[0] && fingdown[1]) {
       if (fingerdown_time[0] >= 2 && fingerdown_time[1] >= 2) {
-	finger_action_two_fingers();
+	finger_action_two_fingers(target, frctl);
       } else {
 	start_pos[0] = (start_pos[0] + cur_pos[0]) / 2.0f;
 	fingerdown_time[0] += 1;
@@ -2198,34 +1919,259 @@ function void main_loop()
       }
     } else {
       const len = glm::length(finger_xyrotate_delta);
-      camera_rotate_mul(1.0, 0.0, 0.0, -finger_xyrotate_delta.y * 2.0);
-      camera_rotate_mul(0.0, 1.0, 0.0, -finger_xyrotate_delta.x * 2.0);
-      /*
-      sdllog(string_join{" "}("len", len));
-      */
-      const decay = 0.03f * frame_speed_mul;
+      target.rotate_angle_axis(
+	  -finger_xyrotate_delta.y * 2.0 * frctl.frame_speed_mul,
+	  1.0, 0.0, 0.0);
+      target.rotate_angle_axis(
+	  -finger_xyrotate_delta.x * 2.0 * frctl.frame_speed_mul,
+	  0.0, 1.0, 0.0);
+      const decay = 0.03f * frctl.frame_speed_mul;
       if (len < decay) {
 	finger_xyrotate_delta = glm::make_vec2(0.0f, 0.0f);
       } else {
 	finger_xyrotate_delta -= finger_xyrotate_delta * decay / len;
       }
     }
-    camera_move_mul(0.0, 0.0, finger_zmove_delta);
+    target.translate_relative(glm::make_vec3(0.0, 0.0, finger_zmove_delta)
+	* frctl.frame_speed_mul);
   }
+  public function void add_zdelta(float zaccel, frame_control const& frctl)
+  {
+    finger_zmove_delta += zaccel * frctl.frame_speed_mul;
+    if (finger_zmove_delta <= -1.0) {
+      finger_zmove_delta = -1.0;
+    }
+    if (finger_zmove_delta >= 1.0) {
+      finger_zmove_delta = 1.0;
+    }
+    finger_zmove_mode = 1;
+  }
+}
+
+struct
+framerate_control(int vsync0)
+{
+  public int const vsync = vsync0;
+  public int const swap_interval = SDL_GL_SetSwapInterval(vsync0);
+  public double time_before_swapwindow = io::system.gettimeofday_double();
+  public farray{int, 64} delay_usec;
+  public int fixed_fps = 1;
+  public function void delay()
+  {
+    // glFlush();
+    double latency_target = 1.0 / static_cast{float}(60 / fixed_fps);
+    if (true) {
+      const now = io::system.gettimeofday_double();
+      const td = max(now - time_before_swapwindow, 0.0);
+      const sleep_sec = latency_target - td;
+      if (sleep_sec > 0.0) {
+	if (fixed_fps > 1 || swap_interval != 1) {
+	  io::system.usleep(static_cast{uint}(sleep_sec * 1000000.0));
+	}
+	time_before_swapwindow += latency_target;
+	if (now - time_before_swapwindow < -1.0) {
+	  time_before_swapwindow = now + 1.0;
+	}
+      } else {
+	time_before_swapwindow = io::system.gettimeofday_double();
+      }
+      const sleep_usec = static_cast{int}(sleep_sec * 1000000.0);
+      int s_sum = sleep_usec;
+      int neg_cnt = 0;
+      for (const i: 0 .. delay_usec.size() - 1) {
+	const v = delay_usec[i];
+	s_sum += v;
+	delay_usec[i] = delay_usec[i + 1];
+	// println("delay_usec[i]", i, v);
+	if (v < 0) {
+	  // println("neg", v);
+	  ++neg_cnt;
+	}
+      }
+      delay_usec[delay_usec.size() - 1] = sleep_usec;
+      const s_avg = static_cast{double}(s_sum)
+	/ static_cast{double}(delay_usec.size());
+      /*
+      println(fixed_fps, now - time_before_swapwindow, sleep_sec, s_avg,
+	neg_cnt);
+      */
+      if (fixed_fps < 6) {
+	if (neg_cnt > static_cast{int}(delay_usec.size() / 4)) {
+	  println("increment delay");
+	  ++fixed_fps;
+	  for (const i, mutable& v: delay_usec) {
+	    v = 0;
+	  }
+	}
+      }
+      /*
+      */
+      /*
+      if (neg_cnt > delay_usec.size() - 1 && fixed_fps < 6) {
+	++fixed_fps;
+	for (const i, mutable& v: delay_usec) {
+	  v = 0;
+	}
+	time_before_swapwindow = io::system.gettimeofday_double();
+      } else if (pos_cnt == delay_usec.size() - 1 && fixed_fps > 1) {
+	--fixed_fps;
+	for (const i, mutable& v: delay_usec) {
+	  v = 0;
+	}
+	time_before_swapwindow = io::system.gettimeofday_double();
+      }
+      */
+    }
+  }
+}
+
+function void main_loop()
+{
+  sdllog("PGC main");
+  const ini = SDL_Init(SDL_INIT_VIDEO);
+  int init_w = 128;
+  int init_h = 128;
+  bool enable_msaa = false;
+  const num_modes = SDL_GetNumDisplayModes(0);
+  for (int i: 0 .. num_modes) {
+    SDL_DisplayMode mode;
+    SDL_GetDisplayMode(0, i, mode);
+    if (mode.w * mode.h > init_w * init_h) {
+      // init_w = mode.w;
+      // init_h = mode.h;
+    }
+    if (mode.w * mode.h < init_w * init_h) {
+      // init_w = mode.w;
+      // init_h = mode.h;
+    }
+    sdllog(string_join{" "}("displaymode", mode.w, mode.h));
+  }
+  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+
+  if (enable_msaa) {
+    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
+  }
+  mutable wflags = SDL_WINDOW_OPENGL;
+  wflags |= SDL_WINDOW_RESIZABLE;
+  wflags |= SDL_WINDOW_ALLOW_HIGHDPI;
+  /*
+  wflags |= SDL_WINDOW_FULLSCREEN;
+   */
+  mutable vsync = 1;
+  if (get_option("-f") == "1") { wflags |= SDL_WINDOW_FULLSCREEN; }
+  if (get_option("-v") == "1") { vsync = 0; }
+  if (get_option("-h") == "1") { wflags &= ~SDL_WINDOW_ALLOW_HIGHDPI; }
+
+  sdllog(string_join{" "}("create_window", init_w, init_h));
+  const wnd = SDL_CreateWindow("PXC-SDL2", 0, 0, init_w, init_h, wflags).some;
+  bool gles_flag;
+  int glmajor;
+  int glminor;
+  if (m::eq{is_gles, 0}) {
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+    SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,
+     SDL_GL_CONTEXT_PROFILE_CORE);
+    glmajor = 3;
+    glminor = 1;
+    gles_flag = false;
+  } else {
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+    glmajor = 2;
+    glminor = 0;
+    gles_flag = true;
+  }
+  mutable glctx = SDL_GL_CreateContext(wnd);
+  if (m::eq{is_gles, 0}) {
+    const verstr = cubptr_to_string(glGetString_nocheck(GL_VERSION));
+    if (verstr.empty()) {
+      /* fallback to 2.1 */
+      SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+      SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+      glctx = SDL_GL_CreateContext(wnd);
+      glmajor = 2;
+      glminor = 1;
+    }
+  }
+  SDL_GL_GetDrawableSize(wnd, init_w, init_h);
+  sdllog(string_join{" "}("drawable size", init_w, init_h));
+  sdllog(string_join{" "}("GL_VERSION",
+    cubptr_to_string(glGetString(GL_VERSION))));
+  /*
+  println("GL_EXTENSIONS", cubptr_to_string(glGetString(GL_EXTENSIONS)));
+  */
+  /*
+  int num_ext;
+  glGetIntegerv(GL_NUM_EXTENSIONS, address(num_ext));
+  for (int i: 0 .. num_ext) {
+    println("GL_EXTENSION", cubptr_to_string(glGetStringi(GL_EXTENSIONS,
+      static_cast{uint}(i))));
+  }
+  */
+
+  SDL_EventState(SDL_KEYDOWN, 0);
+  SDL_EventState(SDL_KEYUP, 0);
+  SDL_EventState(SDL_TEXTEDITING, 0);
+  SDL_EventState(SDL_TEXTINPUT, 0);
+  if (m::or{is_android, is_ios}) {
+    SDL_EventState(SDL_MOUSEBUTTONDOWN, 0);
+    SDL_EventState(SDL_MOUSEBUTTONUP, 0);
+    SDL_EventState(SDL_MOUSEMOTION, 0);
+  }
+
+  if (m::ne{is_gl3, 0}) {
+    if (enable_msaa) {
+      glEnable(GL_MULTISAMPLE);
+    }
+  }
+
+  sdllog("PXC-SDL2 init0");
+
+  pglcontext pgc = pglcontext(gles_flag, glmajor, glminor, enable_msaa);
+
+  sdllog("PXC-SDL2 reshape");
+  reshape(pgc, init_w, init_h);
+
+  frame_control mutable frctl;
+
+  mutable bo = buffer_object(num_float_struct{main_vertex_attributes});
+  {
+    const t0 = system.gettimeofday_double();
+    build_vertices(bo);
+    const t1 = system.gettimeofday_double();
+    bo.create_vbo();
+    const t2 = system.gettimeofday_double();
+    sdllog(string_join{" "}("build vertex", t1 - t0, t2 - t1));
+  }
+
+  size_t scene_num = bo.num_vs_ids() - 1;
+  ptr{scene_node} snode = instantiate_scene(bo, static_cast{int}(scene_num));
+  println("snode", snode->joint_sorts);
+  input_control ictl;
+  int motion_count = 0;
   function void scene_next()
   {
-    ++cam.scene;
-    if (cam.scene >= bo.vs_arr.size()) {
-      cam.scene = 0;
+    ++scene_num;
+    if (scene_num >= bo.num_vs_ids()) {
+      scene_num = 0;
     }
-    snode = bo.instantiate_scene(static_cast{int}(cam.scene));
+    snode = instantiate_scene(bo, static_cast{int}(scene_num));
     println("snode", snode->joint_sorts);
   }
-  double time_before_swapwindow = io::system.gettimeofday_double();
-  double time_after_swapwindow = io::system.gettimeofday_double();
-  farray{int, 64} delay_usec;
+
+  mutable rctl = framerate_control(vsync);
+
+  player_info player;
+  player.posang.angle = glm::make_quat_wxyz(1.0, 0.0, 0.0, 0.0);
+  player.posang.position = glm::make_vec3(0.0, 0.0, 10.0);
+
+  bool done = false;
+  bool paused = false;
   while (!done) {
-    save_ticks(0);
+    frctl.save_ticks(0);
     SDL_Event ev;
     while (SDL_PollEvent(ev)) {
       const etype = ev.type;
@@ -2237,7 +2183,7 @@ function void main_loop()
 	  int w;
 	  int h;
 	  SDL_GL_GetDrawableSize(wnd, w, h);
-	  reshape(cam, sfbo, dsfbo, w, h);
+	  reshape(pgc, w, h);
 	  sdllog(string_join{""}("resized w=", w, " h=", h));
 	} else if (ev.window.event == SDL_WINDOWEVENT_HIDDEN) {
 	  /* sdllog("hidden"); */
@@ -2245,8 +2191,6 @@ function void main_loop()
 	    ev.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
 	  paused = true;
 	  sdllog("paused");
-/*
-*/
 	} else if (ev.window.event == SDL_WINDOWEVENT_RESTORED ||
 	    ev.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) {
 	  paused = false;
@@ -2258,33 +2202,29 @@ function void main_loop()
 	  */
 	}
       } else if (etype == SDL_MOUSEBUTTONDOWN) {
-	if (m::ne{is_linux, 0}) {
-	  const bx = cast_float(ev.button.x) / cast_float(cam.screen_width);
-	  const by = cast_float(ev.button.y) / cast_float(cam.screen_height);
-	  if (bx < 0.1 && by < 0.1) {
-	    scene_next();
-	  }
-	  if (bx > 0.9 && by < 0.1) {
-	    fixed_fps = fixed_fps != 6 ? fixed_fps + 1 : 1;
-	  }
-	  if (bx > 0.9 && by > 0.9) {
-	    cam.light_on = cam.light_on > 0.5f ? 0.0f : 1.0f;
-	  }
+	const bx = cast_float(ev.button.x) / cast_float(pgc.cam.screen_width);
+	const by = cast_float(ev.button.y) / cast_float(pgc.cam.screen_height);
+	if (bx < 0.1 && by < 0.1) {
+	  scene_next();
+	}
+	if (bx > 0.9 && by < 0.1) {
+	  rctl.fixed_fps = rctl.fixed_fps != 6 ? rctl.fixed_fps + 1 : 1;
+	}
+	if (bx > 0.9 && by > 0.9) {
+	  pgc.cam.light_on = pgc.cam.light_on > 0.5f ? 0.0f : 1.0f;
 	}
 	sdllog(string_join{" "}("mousedown", ev.button.x, ev.button.y,
 	  ev.button.button));
-	finger_down(
-	  cast_float(ev.button.x)
-	    / cast_float(cam.screen_width),
-	  cast_float(ev.button.y)
-	    / cast_float(cam.screen_height),
+	ictl.finger_down(
+	  cast_float(ev.button.x) / cast_float(pgc.cam.screen_width),
+	  cast_float(ev.button.y) / cast_float(pgc.cam.screen_height),
 	  0);
 	/*
 	*/
       } else if (etype == SDL_MOUSEBUTTONUP) {
 	/*
 	sdllog(string_join{" "}("mouseup", ev.button.button));
-	finger_up(0);
+	ictl.finger_up(0);
 	 */
       } else if (etype == SDL_MOUSEMOTION) {
 	/*
@@ -2292,34 +2232,34 @@ function void main_loop()
 	  ev.button.button));
 	 */
       } else if (etype == SDL_FINGERDOWN) {
+	/*
 	sdllog(string_join{" "}("fingerdown", ev.tfinger.x, ev.tfinger.y,
 	  ev.tfinger.fingerId));
-	/*
 	*/
-	finger_down(ev.tfinger.x, ev.tfinger.y, ev.tfinger.fingerId);
+	ictl.finger_down(ev.tfinger.x, ev.tfinger.y, ev.tfinger.fingerId);
 	if (ev.tfinger.x < 0.1 && ev.tfinger.y < 0.1) {
 	  scene_next();
 	}
 	if (ev.tfinger.x > 0.9 && ev.tfinger.y < 0.1) {
-	  fixed_fps = fixed_fps != 6 ? fixed_fps + 1 : 1;
+	  rctl.fixed_fps = rctl.fixed_fps != 6 ? rctl.fixed_fps + 1 : 1;
 	}
 	if (ev.tfinger.x > 0.9 && ev.tfinger.y > 0.9) {
-	  cam.light_on = cam.light_on > 0.5f ? 0.0f : 1.0f;
+	  pgc.cam.light_on = pgc.cam.light_on > 0.5f ? 0.0f : 1.0f;
 	}
       } else if (etype == SDL_FINGERUP) {
 	/*
 	sdllog(string_join{" "}("fingerup", ev.tfinger.fingerId));
 	*/
-	finger_up(ev.tfinger.fingerId);
+	ictl.finger_up(ev.tfinger.fingerId);
       } else if (etype == SDL_FINGERMOTION) {
 	if (m::or{is_android, is_ios}) {
-	  finger_motion(ev.tfinger.x, ev.tfinger.y, ev.tfinger.dx,
-	    ev.tfinger.dy, ev.tfinger.fingerId);
+	  ictl.finger_motion(ev.tfinger.x, ev.tfinger.y,
+	      ev.tfinger.dx, ev.tfinger.dy, ev.tfinger.fingerId);
+	  /*
+	  sdllog(string_join{" "}("fingermotion", ev.tfinger.x, ev.tfinger.y,
+	    ev.tfinger.dx, ev.tfinger.dy, ev.tfinger.fingerId));
+	  */
 	}
-/*
-	sdllog(string_join{" "}("fingermotion", ev.tfinger.x, ev.tfinger.y,
-	  ev.tfinger.dx, ev.tfinger.dy, ev.tfinger.fingerId));
-*/
       } else if (etype == SDL_APP_WILLENTERBACKGROUND) {
 	sdllog(string_join{""}("paused"));
 	paused = true;
@@ -2329,7 +2269,7 @@ function void main_loop()
 	int w;
 	int h;
 	SDL_GL_GetDrawableSize(wnd, w, h);
-	reshape(cam, sfbo, dsfbo, w, h);
+	reshape(pgc, w, h);
       } else if (etype == SDL_QUIT) {
 	done = true;
 	break;
@@ -2340,20 +2280,19 @@ function void main_loop()
 	  scene_next();
 	}
 	if (ev.key.keysym.scancode == SDL_SCANCODE_F) {
-	  fixed_fps = fixed_fps != 6 ? fixed_fps + 1 : 1;
+	  rctl.fixed_fps = rctl.fixed_fps != 6 ? rctl.fixed_fps + 1 : 1;
 	}
       } else {
 	string s;
 	integral_to_hexadecimal{int}(cast_int(ev.type), s);
 	sdllog(string_join{" "}("unknown event", s));
-	/*
-	*/
+	/* */
       }
     }
     if (paused) {
       SDL_Delay(300);
-      tprev = SDL_GetTicks();
-      tprevsec = tprev;
+      frctl.tprev = SDL_GetTicks();
+      frctl.tprevsec = frctl.tprev;
       continue;
     } else {
       function void motion_rec(scene_node mutable& sn, size_t i, size_t n)
@@ -2376,234 +2315,92 @@ function void main_loop()
 	}
       }
       motion_rec(*snode, 0, 1);
-      motion_count += 1;
+      motion_count += 1 * static_cast{int}(frctl.frame_speed_mul);
       if (motion_count >= 360) {
-	motion_count = 0;
+	motion_count -= 360;
       }
-      /*
-      */
     }
-    save_ticks(1);
+    frctl.save_ticks(1);
     {
-      const mess = string_join{" "}(fps,
-	frame_speed_mul,
-	ticks_sum_prev,
-	finger_zmove_delta,
-	cam.camera_angle);
-      const tick_sm = draw_frame(cam, snode, bo, sdr, sfbo, smsdr, zpsdr,
-	dsfbo, ds1sdr, ds2sdr, psdr, fti, mess);
-      save_ticks(2);
-      ++frames;
-      uint t = SDL_GetTicks();
-      if (t - tprevsec >= 1000) {
-	const seconds = cast_float(t - tprevsec) / 1000.0;
-	fps = cast_float(frames) / seconds;
-	/*
-	sdllog(string_join{" "}(frames, "frames in", seconds, "seconds =",
-	    fps, "fps"));
-	sdllog(string_join{" "}("ticks: ", ticks_sum));
-	*/
-	ticks_sum_prev = ticks_sum;
-	ticks_sum = ticks_t();
-	tprevsec = t;
-	frames = 0;
-      }
-      mutable tdiff = cast_int(t - tprev);
-      tprev = t;
-
-      uint tdiff_frame_sum = cast_uint(tdiff);
-      for (const i: 1 .. frame_tdiffs.size()) {
-	tdiff_frame_sum += frame_tdiffs[i];
-	frame_tdiffs[i - 1] = frame_tdiffs[i];
-      }
-      frame_tdiffs[frame_tdiffs.size() - 1] = cast_uint(tdiff);
-
-      frame_speed_mul = static_cast{float}(fixed_fps);
-      /*
-      const frame_speed_tgt = cast_float(tdiff_frame_sum)
-	  * 60.0f / 1000.0f / cast_float(frame_tdiffs.size());
-      if (frame_speed_mul < frame_speed_tgt) {
-	if (frame_speed_mul < 1.0f && frame_speed_tgt > 1.0f) {
-	  frame_speed_mul = 1.0f;
-	} else {
-	  frame_speed_mul += 0.001f;
-	}
-      }
-      if (frame_speed_mul > frame_speed_tgt) {
-	if (frame_speed_mul > 1.0f && frame_speed_tgt < 1.0f) {
-	  frame_speed_mul = 1.0f;
-	} else {
-	  frame_speed_mul -= 0.001f;
-	}
-	if (frame_speed_mul < 0.01f) {
-	  frame_speed_mul = 0.01f;
-	}
-      }
-      {
-	frame_speed_mul = frame_speed_tgt;
-	if (frame_speed_mul < 0.01f) {
-	  frame_speed_mul = 0.01f;
-	}
-      }
-      if (frame_speed_mul > 0.90f && frame_speed_mul < 1.10f) {
-	frame_speed_mul = 1.0f;
-      }
-      // println("frame_speed_mul", frame_speed_mul, frame_speed_tgt);
-      */
-      /*
-      if (frame_speed_mul < 0.01f) {
-	frame_speed_mul = 0.01f;
-      }
-      frame_speed_mul = 1.0f; /////// FIXME
-      */
-      /*
-      */
-      /* println("frame_speed_mul", frame_speed_mul, tdiff_frame_sum,
-       frame_tdiffs); */
-
-      {
-	SDL_KeyboardState const ks;
-	if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) {
-	  done = true;
-	}
-	if (ks.Key(SDL_SCANCODE_UP) != 0) {
-	  camera_rotate_mul(1.0, 0.0, 0.0, 1.0);
-	}
-	if (ks.Key(SDL_SCANCODE_DOWN) != 0) {
-	  camera_rotate_mul(1.0, 0.0, 0.0, -1.0);
-	}
-	if (ks.Key(SDL_SCANCODE_LEFT) != 0) {
-	  camera_rotate_mul(0.0, 1.0, 0.0, 1.0);
-	}
-	if (ks.Key(SDL_SCANCODE_RIGHT) != 0) {
-	  camera_rotate_mul(0.0, 1.0, 0.0, -1.0);
-	}
-	if (ks.Key(SDL_SCANCODE_SPACE) != 0) {
-	  finger_zmove_delta -= 0.0003f * frame_speed_mul;
-	  if (finger_zmove_delta <= -1.0) {
-	    finger_zmove_delta = -1.0;
-	  }
-	  finger_zmove_mode = 1;
-	}
-	if (ks.Key(SDL_SCANCODE_LSHIFT) != 0) {
-	  finger_zmove_delta += 0.0003f * frame_speed_mul;
-	  if (finger_zmove_delta >= 1.0) {
-	    finger_zmove_delta = 1.0;
-	  }
-	  finger_zmove_mode = 1;
-	}
-	if (ks.Key(SDL_SCANCODE_A) != 0) {
-	  camera_move_mul(-0.02, 0.0, 0.0);
-	}
-	if (ks.Key(SDL_SCANCODE_D) != 0) {
-	  camera_move_mul(0.02, 0.0, 0.0);
-	}
-	if (ks.Key(SDL_SCANCODE_S) != 0) {
-	  camera_move_mul(0.0, -0.02, 0.0);
-	}
-	if (ks.Key(SDL_SCANCODE_W) != 0) {
-	  camera_move_mul(0.0, 0.02, 0.0);
-	}
-	if (ks.Key(SDL_SCANCODE_Z) != 0) {
-	  camera_rotate_mul(0.0, 0.0, 1.0, 1.0);
-	}
-	if (ks.Key(SDL_SCANCODE_X) != 0) {
-	  camera_rotate_mul(0.0, 0.0, 1.0, -1.0);
-	}
-	if (ks.Key(SDL_SCANCODE_RETURN) != 0) {
-	  finger_zmove_delta = 0.0;
-	  finger_zmove_mode = 1;
-	}
-	finger_action_step();
-      }
+      /* draw frame */
+      pgc.cam.camera = player.posang;
+      pgc.cam.light.position = pgc.cam.camera.position +
+	pgc.cam.camera.angle.to_mat3() * glm::make_vec3(3.0, 3.0, 5.0);
+      pgc.cam.light.angle = pgc.cam.camera.angle;
+      const mess = string_join{" "}(frctl.fps, frctl.frame_speed_mul,
+	frctl.ticks_sum_prev, ictl.finger_zmove_delta, pgc.cam.camera.angle);
+      draw_frame(pgc, bo, snode, mess);
+      frctl.save_ticks(2);
+      frctl.measure();
+      frctl.frame_speed_mul = static_cast{float}(rctl.fixed_fps);
     }
-    save_ticks(3);
     {
-      // glFlush();
-      double latency_target = 1.0 / static_cast{float}(60 / fixed_fps);
-      if (true) {
-	const now = io::system.gettimeofday_double();
-	const td = max(now - time_before_swapwindow, 0.0);
-	const sleep_sec = latency_target - td;
-	if (sleep_sec > 0.0) {
-	  if (fixed_fps > 1 || swap_interval != 1) {
-	    io::system.usleep(static_cast{uint}(sleep_sec * 1000000.0));
-	  }
-	  time_before_swapwindow += latency_target;
-	  if (now - time_before_swapwindow < -1.0) {
-	    time_before_swapwindow = now + 1.0;
-	  }
-	} else {
-	  time_before_swapwindow = io::system.gettimeofday_double();
-	}
-	const sleep_usec = static_cast{int}(sleep_sec * 1000000.0);
-	int s_sum = sleep_usec;
-	int neg_cnt = 0;
-	for (const i: 0 .. delay_usec.size() - 1) {
-	  const v = delay_usec[i];
-	  s_sum += v;
-	  delay_usec[i] = delay_usec[i + 1];
-	  // println("delay_usec[i]", i, v);
-	  if (v < 0) {
-	    // println("neg", v);
-	    ++neg_cnt;
-	  }
-	}
-	delay_usec[delay_usec.size() - 1] = sleep_usec;
-	const s_avg = static_cast{double}(s_sum)
-	  / static_cast{double}(delay_usec.size());
-	/*
-	println(fixed_fps, now - time_before_swapwindow, sleep_sec, s_avg,
-	  neg_cnt);
-	*/
-	/*
-	if (fixed_fps < 6) {
-	  if (neg_cnt > static_cast{int}(delay_usec.size() / 4)) {
-	    println("increment delay");
-	    ++fixed_fps;
-	    for (const i, mutable& v: delay_usec) {
-	      v = 0;
-	    }
-	  }
-	}
-	*/
-	/*
-	if (fixed_fps > 1) {
-	  if (1.0 / 60.0 * 1050000.0 < s_avg) {
-	    println("decrement delay");
-	    --fixed_fps;
-	    for (const i, mutable& v: delay_usec) {
-	      v = 0;
-	    }
-	  }
-	}
-	*/
-	/*
-	if (neg_cnt > delay_usec.size() - 1 && fixed_fps < 6) {
-	  ++fixed_fps;
-	  for (const i, mutable& v: delay_usec) {
-	    v = 0;
-	  }
-	  time_before_swapwindow = io::system.gettimeofday_double();
-	} else if (pos_cnt == delay_usec.size() - 1 && fixed_fps > 1) {
-	  --fixed_fps;
-	  for (const i, mutable& v: delay_usec) {
-	    v = 0;
-	  }
-	  time_before_swapwindow = io::system.gettimeofday_double();
-	}
-	*/
+      SDL_KeyboardState const ks;
+      if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) {
+	done = true;
       }
+      if (ks.Key(SDL_SCANCODE_UP) != 0) {
+	player.posang.rotate_angle_axis(1.0f * frctl.frame_speed_mul,
+	    1.0, 0.0, 0.0);
+      }
+      if (ks.Key(SDL_SCANCODE_DOWN) != 0) {
+	player.posang.rotate_angle_axis(-1.0f * frctl.frame_speed_mul,
+	    1.0, 0.0, 0.0);
+      }
+      if (ks.Key(SDL_SCANCODE_LEFT) != 0) {
+	player.posang.rotate_angle_axis(1.0f * frctl.frame_speed_mul,
+	    0.0, 1.0, 0.0);
+      }
+      if (ks.Key(SDL_SCANCODE_RIGHT) != 0) {
+	player.posang.rotate_angle_axis(-1.0f * frctl.frame_speed_mul,
+	    0.0, 1.0, 0.0);
+      }
+      if (ks.Key(SDL_SCANCODE_SPACE) != 0) {
+	ictl.add_zdelta(-0.001f, frctl);
+      }
+      if (ks.Key(SDL_SCANCODE_LSHIFT) != 0) {
+	ictl.add_zdelta(0.001f, frctl);
+      }
+      if (ks.Key(SDL_SCANCODE_A) != 0) {
+	player.posang.translate_relative(
+	    glm::make_vec3(-0.05, 0.0, 0.0) * frctl.frame_speed_mul);
+      }
+      if (ks.Key(SDL_SCANCODE_D) != 0) {
+	player.posang.translate_relative(
+	    glm::make_vec3(0.05, 0.0, 0.0) * frctl.frame_speed_mul);
+      }
+      if (ks.Key(SDL_SCANCODE_S) != 0) {
+	player.posang.translate_relative(
+	    glm::make_vec3(0.0, -0.05, 0.0) * frctl.frame_speed_mul);
+      }
+      if (ks.Key(SDL_SCANCODE_W) != 0) {
+	player.posang.translate_relative(
+	    glm::make_vec3(0.0, 0.05, 0.0) * frctl.frame_speed_mul);
+      }
+      if (ks.Key(SDL_SCANCODE_Z) != 0) {
+	player.posang.rotate_angle_axis(
+	    1.0f * frctl.frame_speed_mul, 0.0, 0.0, 1.0);
+      }
+      if (ks.Key(SDL_SCANCODE_X) != 0) {
+	player.posang.rotate_angle_axis(
+	    -1.0f * frctl.frame_speed_mul, 0.0, 0.0, 1.0);
+      }
+      if (ks.Key(SDL_SCANCODE_RETURN) != 0) {
+	ictl.finger_zmove_delta = 0.0;
+	ictl.finger_zmove_mode = 1;
+      }
+      ictl.finger_action_step(player.posang, frctl);
     }
-    save_ticks(4);
+    frctl.save_ticks(3);
+    rctl.delay();
+    frctl.save_ticks(4);
     SDL_GL_SwapWindow(wnd);
-    save_ticks(5);
-    time_after_swapwindow = io::system.gettimeofday_double();
+    frctl.save_ticks(5);
   }
 }
 
 {
-  // GL::base::set_check_error_enabled(1);
+  GL::base::set_check_error_enabled(1);
   try {
     main_loop();
   } catch (exception::c_exception ex) {

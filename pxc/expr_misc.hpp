@@ -27,6 +27,7 @@ extern builtins_type builtins;
 extern errors_type cur_errors;
 extern std::string main_namespace;
 extern int compile_phase;
+extern expr_i *compiling_stmt;
 extern const std::map<std::string, std::string> *cur_profile;
 extern size_t recursion_limit;
 extern nsimports_type nsimports;

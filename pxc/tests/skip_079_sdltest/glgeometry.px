@@ -2,7 +2,7 @@ public namespace glgeometry "export-unsafe";
 public import common -;
 public import exception -;
 public import meta m;
-public import gldraw -;
+public import glbuffer -;
 public import GL::glm -;
 public import numeric::fpmath -;
 public import operator op;
@@ -239,8 +239,8 @@ poly_trans(poly_t const& poly)
 }
 
 private threaded function {tattr} void
-gf_joint(ptr{vertices{tattr}} const& vptr, size_t joint_sort, gf_poly const& c0,
-  poly_t const& poly, mesh_pos const& mp)
+gf_joint(ptr{vertices} const& vptr, string const& joint_sort,
+  gf_poly const& c0, poly_t const& poly, mesh_pos const& mp)
 {
   if (poly.size() < 3) { return; }
   node_joint e;
@@ -251,7 +251,7 @@ gf_joint(ptr{vertices{tattr}} const& vptr, size_t joint_sort, gf_poly const& c0,
 }
 
 private threaded function {tattr} void
-gf_fill_internal(ptr{vertices{tattr}} const& vptr, bool flat_flag,
+gf_fill_internal(ptr{vertices} const& vptr, bool flat_flag,
   poly_t const& poly, mesh_pos const& mp)
 {
   const sz = poly.size();
@@ -296,21 +296,21 @@ gf_fill_internal(ptr{vertices{tattr}} const& vptr, bool flat_flag,
     vptr->push_vertex_dedup(vtxs[i + 2]);
   }
   */
-  vptr->push_polygon_distinct(vtxs);
+  vptr->push_polygon_distinct{tattr}(vtxs);
 }
 
 private threaded function {tattr} void
-gf_fill(ptr{vertices{tattr}} const& vptr, poly_t const& poly,
+gf_fill(ptr{vertices} const& vptr, poly_t const& poly,
   mesh_pos const& mp)
 {
-  gf_fill_internal(vptr, true, poly, mp);
+  gf_fill_internal{tattr}(vptr, true, poly, mp);
 }
 
 private threaded function {tattr} void
-gf_fill_smooth(ptr{vertices{tattr}} const& vptr, poly_t const& poly,
+gf_fill_smooth(ptr{vertices} const& vptr, poly_t const& poly,
   mesh_pos const& mp)
 {
-  gf_fill_internal(vptr, false, poly, mp);
+  gf_fill_internal{tattr}(vptr, false, poly, mp);
 }
 
 private threaded function void gf_lid(gf_poly const& c0, gf_poly const& c1,

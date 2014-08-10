@@ -3,6 +3,8 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- function_body_stmtにc_enumval_stmtを追加したことで問題起きないか確認
+
 - expandをネストしなくてよいように、置換シンボルに複数渡せるように
   する。
 
@@ -3508,4 +3510,24 @@ fmap(tx x)
     if (const v: x.bar) { return m::at1{funcs}(v); }
   }
 - unionの構成子を関数として返すメタ関数が欲しいところ
+
+---------------------------------------------------------------------
+マクロ展開を許可するステートメント種類
+
+toplevel_stmt
+        : body_stmt
+        | ext_stmt ダメ。namespaceやimportなど。
+        | c_enumval_stmt 外部enum値。許可。
+        | defs_stmt
+        | enum_stmt
+        | visi_vardef_stmt
+        ;
+function_body_stmt
+        : body_stmt
+        | defs_stmt
+        | TOK_EXTERN TOK_STRLIT type_arg ';'
+          { $$ = expr_inline_c_new(cur_fname, @1.first_line,
+                arena_dequote_strdup($2), "", false, $3); }
+          /* for pragma */
+        ;
 

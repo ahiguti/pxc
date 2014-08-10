@@ -393,7 +393,7 @@ public metafunction string varray{uchar};
 public metafunction dstring darray{uchar};
 public metafunction fstring{n} farray{uchar, n};
 
-public function {ts} void
+public threaded function {ts} void
 varray_emplace_back(expand(emplace_back_arg_decls{ts}))
 {
   metafunction t m::at0{m::at0{m::at0{ts}}};
@@ -401,6 +401,32 @@ varray_emplace_back(expand(emplace_back_arg_decls{ts}))
   x extern "placement-new" t(expand(a: emplace_back_arg_names{ts}; a));
     /* no need to handle exceptions here */
   varray_rawarr_set_valid_len(a0, a0.size() + 1);
+}
+
+public metafunction varray___adda{tx, ty} array___adda{tx, ty};
+public metafunction cvarray___adda{tx, ty} array___adda{tx, ty};
+public metafunction strlit___add{tx, ty} array___add{tx, ty};
+public metafunction slice___add{tx, ty} array___add{tx, ty};
+public metafunction cslice___add{tx, ty} array___add{tx, ty};
+public metafunction darray___add{tx, ty} array___add{tx, ty};
+public metafunction cdarray___add{tx, ty} array___add{tx, ty};
+public metafunction darrayst___add{tx, ty} array___add{tx, ty};
+public metafunction cdarrayst___add{tx, ty} array___add{tx, ty};
+public metafunction farray___add{tx, ty} array___add{tx, ty};
+public metafunction cfarray___add{tx, ty} array___add{tx, ty};
+
+private threaded function {tx, ty} void
+array___adda(tx mutable& x, ty const& y)
+{
+  x.append(y);
+}
+
+private threaded function {tx, ty} varray{m::symbol{tx, "mapped_type", 0}}
+array___add(tx const& x, ty const& y)
+{
+  varray{m::symbol{tx, "mapped_type", 0}} r = x;
+  r.append(y);
+  return r;
 }
 
 public metafunction is_pod_raw_array_pair{tx, ty}
