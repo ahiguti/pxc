@@ -166,8 +166,9 @@ localvar_info symbol_table::resolve_global_internal(const symbol& shortname,
   }
   /* not found */
   if (!no_generated) {
-    /* if no_generated is not set, target ns must be compiled to avoid
-     * returning inconsistent result */
+    /* if no_generated is not set, it is necessary to assert target ns
+     * is already compiled, in order to avoid inconsistency between
+     * compilation units. */
     check_compiled_ns(pname, ns, curns, pos);
   }
   return v;
@@ -396,7 +397,7 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
       if (!fullname.has_ns()) {
 	/* try the current namespace */
 	v = resolve_global_internal(fullname, curns, curns, true, pos);
-	  /* no-generated symbol only */
+	  /* non-generated symbols only */
 	if (v.edef != 0) {
 	  return v;
 	}
@@ -412,7 +413,7 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
 		continue;
 	      }
 	      v = resolve_global_internal(fullname, *k, curns, false, pos);
-	      if (v.edef != 0) {
+	      if (v.edef != 0 && !v.has_attrib_private()) {
 		return v;
 	      }
 	    }
@@ -427,7 +428,7 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
 	  for (symbol_list::const_iterator i = iter->second.begin();
 	    i != iter->second.end(); ++i) {
 	    v = resolve_global_internal(fullname, *i, curns, false, pos);
-	    if (v.edef != 0) {
+	    if (v.edef != 0 && !v.has_attrib_private()) {
 	      return v;
 	    }
 	    /* try nschains of a noprefix import of curns */
@@ -436,7 +437,7 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
 	      for (symbol_list::const_iterator k = j->second.begin();
 		k != j->second.end(); ++k) {
 		v = resolve_global_internal(fullname, *k, curns, false, pos);
-		if (v.edef != 0) {
+		if (v.edef != 0 && !v.has_attrib_private()) {
 		  return v;
 		}
 	      }

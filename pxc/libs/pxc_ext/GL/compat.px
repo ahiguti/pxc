@@ -1,0 +1,79 @@
+public threaded namespace GL::compat "export-unsafe";
+public import common -;
+public import GL::base *;
+public import GL::api_gl -;
+public import GL::api_gles2 -;
+public import meta m;
+
+expand macro_define_api{
+  m::at0{api_compat},
+  m::at1{api_compat},
+  m::at2{api_compat}};
+
+private metafunction api_compat
+  m::apply{
+    metafunction {x}
+      m::cond{
+	m::eq{x, "android"}, api_gles2,
+	m::eq{x, "ios"}, api_gles3,
+	m::eq{x, "Linux"}, api_gl33,
+	m::eq{x, "Darwin"}, api_gl33,
+	m::error{"unknown platform"}},
+    m::profile{"platform"}};
+
+private metafunction api_gles2
+  {
+    GL_ES_VERSION_2_0_BFVAL,
+    GL_ES_VERSION_2_0_ENUMVAL,
+    GL_ES_VERSION_2_0_CMD
+  };
+
+private metafunction api_gles3
+  {
+    m::join{
+      GL_ES_VERSION_2_0_BFVAL,
+      GL_ES_VERSION_3_0_BFVAL},
+    m::join{
+      GL_ES_VERSION_2_0_ENUMVAL,
+      GL_ES_VERSION_3_0_ENUMVAL},
+    m::join{
+      GL_ES_VERSION_2_0_CMD,
+      GL_ES_VERSION_3_0_CMD}
+  };
+
+private metafunction api_gl33
+  {
+    m::join{
+      GL_VERSION_1_1_BFVAL,
+      GL_VERSION_1_3_BFVAL,
+      GL_VERSION_3_0_BFVAL,
+      GL_VERSION_3_1_BFVAL,
+      GL_VERSION_3_2_BFVAL},
+    m::join{
+      GL_VERSION_1_1_ENUMVAL,
+      GL_VERSION_1_2_ENUMVAL,
+      GL_VERSION_1_3_ENUMVAL,
+      GL_VERSION_1_4_ENUMVAL,
+      GL_VERSION_1_5_ENUMVAL,
+      GL_VERSION_2_0_ENUMVAL,
+      GL_VERSION_2_1_ENUMVAL,
+      GL_VERSION_3_0_ENUMVAL,
+      GL_VERSION_3_1_ENUMVAL,
+      GL_VERSION_3_2_ENUMVAL,
+      GL_VERSION_3_3_ENUMVAL},
+    m::join{
+      GL_VERSION_1_0_CMD,
+      GL_VERSION_1_1_CMD,
+      GL_VERSION_1_2_CMD,
+      GL_VERSION_1_3_CMD,
+      GL_VERSION_1_4_CMD,
+      GL_VERSION_1_5_CMD,
+      GL_VERSION_2_0_CMD,
+      GL_VERSION_2_1_CMD,
+      GL_VERSION_3_0_CMD,
+      GL_VERSION_3_1_CMD,
+      GL_VERSION_3_2_CMD,
+      GL_VERSION_3_3_CMD}
+  };
+
+

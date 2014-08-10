@@ -50,6 +50,7 @@ builtins_type builtins;
 errors_type cur_errors;
 std::string main_namespace;
 int compile_phase = 0;
+expr_i *compiling_stmt = 0;
 const std::map<std::string, std::string> *cur_profile = 0;
 size_t recursion_limit = 3000;
 nsimports_type nsimports;

@@ -116,6 +116,7 @@ static expr_i *deep_clone_rec(expr_i *e, expr_block *instantiate_root,
 
 expr_i *deep_clone_template(expr_i *e, expr_block *instantiate_root)
 {
+  /* fprintf(stderr, "deep_clone: [%s]\n", e->dump(0).c_str()); */
   return deep_clone_rec(e, instantiate_root, true);
 }
 

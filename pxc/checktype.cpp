@@ -706,31 +706,68 @@ void expr_enumval::check_type(symbol_table *lookup)
   /* type_of_this_expr */
 }
 
+struct stmt_compilation_error : public std::runtime_error {
+  stmt_compilation_error(const std::string& mess)
+    : std::runtime_error(mess) { }
+};
+
 static void stmts_check_type(expr_stmts *stmts, symbol_table *lookup)
 {
   while (stmts != 0) {
-    fn_check_type(stmts->head, lookup);
-    if (stmts->rest != 0 && stmts->rest->parent_expr != stmts) {
-      /* this happenes when head is a expr_expand. in this case, rest has
-       * moved to the rest of the generated expr. */
-      DBG_RECHAIN(fprintf(stderr, "RE-CHAINED\n"));
-      return;
-    }
-    switch (stmts->head->get_esort()) {
-    case expr_e_int_literal:
-    case expr_e_float_literal:
-    case expr_e_bool_literal:
-    case expr_e_str_literal:
-    case expr_e_symbol:
-      if (stmts->parent_expr != 0 && stmts->parent_expr->parent_expr != 0 &&
-	stmts->parent_expr->parent_expr->get_esort() == expr_e_metafdef) {
-	/* ok for macro rhs */
-      } else {
-	arena_error_push(stmts, "Invalid statement");
+    try {
+      fn_check_type(stmts->head, lookup);
+      if (stmts->rest != 0 && stmts->rest->parent_expr != stmts) {
+	/* this happenes when head is a expr_expand. in this case, rest has
+	 * moved to the rest of the generated expr. */
+	DBG_RECHAIN(fprintf(stderr, "RE-CHAINED\n"));
+	return;
       }
-      break;
-    default:
-      break;
+      switch (stmts->head->get_esort()) {
+      case expr_e_int_literal:
+      case expr_e_float_literal:
+      case expr_e_bool_literal:
+      case expr_e_str_literal:
+      case expr_e_symbol:
+	if (stmts->parent_expr != 0 && stmts->parent_expr->parent_expr != 0 &&
+	  stmts->parent_expr->parent_expr->get_esort() == expr_e_metafdef) {
+	  /* ok for macro rhs */
+	} else {
+	  arena_error_push(stmts, "Invalid statement");
+	}
+	break;
+      default:
+	break;
+      }
+    } catch (const stmt_compilation_error& ex) {
+      throw;
+    } catch (const std::exception& ex) {
+      if (stmts->rest != 0 && stmts->rest->parent_expr != stmts) {
+	/* re-chained */
+	throw;
+      }
+      std::string s = ex.what();
+      if (s.size() > 0 && s[s.size() - 1] != '\n') {
+	s += "\n";
+      }
+      std::string hstr = std::string(stmts->head->fname) + ":"
+	+ ulong_to_string(stmts->head->line) + ":";
+      const std::string s1 = s.substr(0, s.size() - 1);
+      std::string::size_type lastline = s1.rfind('\n');
+      if (lastline == s1.npos) {
+	lastline = 0;
+      } else {
+	++lastline;
+      }
+      /*
+      fprintf(stderr, "lastline=[%s]\n",
+	s.substr(lastline, hstr.size()).c_str());
+      */
+      if (s.substr(lastline, hstr.size()) == hstr) {
+	/* no need to add */
+	throw;
+      }
+      s = hstr + " (while compiling this statement)\n" + s;
+      throw stmt_compilation_error(s);
     }
     stmts = stmts->rest;
   }
@@ -3864,6 +3901,22 @@ static term fill_stmt_selector(const term& te, expr_i *const baseexpr,
   return term(tl);
 }
 
+static void subst_ext_pxc_rec(expr_i *e)
+{
+  if (e == 0) {
+    return;
+  }
+  if (e->get_esort() == expr_e_funcdef) {
+    expr_funcdef *const efd = ptr_down_cast<expr_funcdef>(e);
+    efd->ext_pxc = false;
+  }
+  int n = e->get_num_children();
+  for (int i = 0; i < n; ++i) {
+    expr_i *c = e->get_child(i);
+    subst_ext_pxc_rec(c);
+  }
+}
+
 static void check_type_expr_expand(expr_expand *const epnd,
   symbol_table *lookup)
 {
@@ -4015,6 +4068,18 @@ static void check_type_expr_expand(expr_expand *const epnd,
 	}
       }
       se = deep_clone_expr(baseexpr_cur);
+      if (epnd->callee != 0) {
+	/*
+	fprintf(stderr, "expand macro deep_clone uniqns=%s mainns=%s [%s]\n",
+	  epnd->uniqns.c_str(), main_namespace.c_str(),
+	  baseexpr_cur->dump(0).c_str());
+	*/
+	if (epnd->uniqns == main_namespace) {
+	  /* destination is the main namespace. drop the ext_pxc frag on
+	   * expr_funcdef. */
+	  subst_ext_pxc_rec(se);
+	}
+      }
       if (epnd->itersym != 0) {
 	se = subst_symbol_name_rec(se, 0, 0, epnd->itersym, symte, true);
       }

@@ -2,11 +2,19 @@ public namespace glshader "export-unsafe";
 public import common -;
 public import pointer::raw -;
 public import numeric::fpmath -;
-public import GL::gles20 -;
-public import GL::gl30 -;
 public import GL::glm glm;
+public import GL::compat -;
 public import meta m;
 public import exception -;
+
+public metafunction is_ios m::eq{m::profile{"platform"}, "ios"};
+public metafunction is_android m::eq{m::profile{"platform"}, "android"};
+public metafunction is_macos m::eq{m::profile{"platform"}, "Darwin"};
+public metafunction is_linux m::eq{m::profile{"platform"}, "Linux"};
+public metafunction is_gles m::or{is_ios, is_android};
+public metafunction is_gl3 m::not{is_gles};
+public metafunction is_gl3_or_gles3 m::not{is_android};
+
 
 public function {tuni, tattr} cptr{shader{tuni, tattr}}
 make_shader_ptr(cstrref const& prog_v, cstrref const& prog_f,
