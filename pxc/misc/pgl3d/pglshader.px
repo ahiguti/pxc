@@ -1,4 +1,4 @@
-public namespace recobj "export-unsafe";
+public namespace pglshader "export-unsafe";
 public import common -;
 public import pointer::raw -;
 public import numeric::fpmath -;
@@ -18,9 +18,7 @@ public import glgeometry -;
 public import glbuffer -;
 public import glnode -;
 
-/* sdlcontext */
-
-struct sdlcontext()
+public struct sdlcontext()
 {
   private SDL_Init init_object = SDL_Init(SDL_INIT_VIDEO);
   public int init_w = 128;
@@ -67,18 +65,20 @@ struct sdlcontext()
     if (get_option("-h") == "1") { wflags &= ~SDL_WINDOW_ALLOW_HIGHDPI; }
 
     sdllog(string_join{" "}("create_window", init_w, init_h));
-    sdl_window = SDL_CreateWindow("PXC-SDL2", 0, 0, init_w, init_h, wflags);
+    sdl_window = SDL_CreateWindow("PGL3D", 0, 0, init_w, init_h, wflags);
     const wnd = sdl_window.some;
     if (m::eq{is_gles, 0}) {
+      /* try opengl 3.3 */
       SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-      SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+      SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
       SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
       SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,
        SDL_GL_CONTEXT_PROFILE_CORE);
       glmajor = 3;
-      glminor = 1;
+      glminor = 3;
       gles_flag = false;
     } else {
+      /* opengles 2.0 */
       SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
       SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
       glmajor = 2;
@@ -89,7 +89,7 @@ struct sdlcontext()
     if (m::eq{is_gles, 0}) {
       const verstr = cubptr_to_string(glGetString_nocheck(GL_VERSION));
       if (verstr.empty()) {
-	/* fallback to 2.1 */
+	/* fallback to opengl 2.1 */
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
 	glctx = SDL_GL_CreateContext(wnd);
@@ -116,8 +116,6 @@ struct sdlcontext()
   }
 }
 
-/* pglshader */
-
 valuetype struct
 glconfig(bool is_gles0, int major0, int minor0, bool msaa0)
 {
@@ -130,13 +128,13 @@ glconfig(bool is_gles0, int major0, int minor0, bool msaa0)
   public bool enable_zprepass = !is_gles && !enable_deferred;
   public bool enable_msaa = msaa0;
   public bool enable_instanced = major >= 3 && !is_gles;
-  public bool enable_sampler2dshadow = !is_gles;
   public bool enable_depth_texture = !is_android;
+  public bool enable_sampler2dshadow = enable_depth_texture && !is_gles;
   public function bool is_gl3() const { return major >= 3 && !is_gles; }
   public function strlit prepend() const {
     return is_gles ? "precision highp float;\n" :
 	   is_gl3() ? "#version 150\n" :
-	   ""; }
+	   "#version 120\n"; }
   public function strlit vert_in() const {
     return is_gl3() ? "in " : "attribute "; }
   public function strlit vert_out() const {
@@ -171,7 +169,7 @@ valuetype struct main_uniforms
   public glm::mat4 shadowmap_vp;
 }
 
-valuetype struct main_vertex_attributes
+public valuetype struct main_vertex_attributes
 {
   public glm::vec3 position;
   public glm::vec3 normal;
@@ -228,6 +226,7 @@ valuetype struct shadowmap_uniforms
 {
   public glm::mat4 shadowmap_vp;
   public glm::mat4 model_matrix;
+    /* use as mvp when instanced rendering is disabled */
 }
 
 valuetype struct shadowmap_vertex_attributes
@@ -248,14 +247,12 @@ valuetype struct font_vertex_attributes
 
 valuetype struct sprite_uniforms
 {
-  public int sampler;
+  public glm::mat4 model_matrix; /* use as mvp */
 }
 
 valuetype struct sprite_vertex_attributes
 {
-  public glm::vec3 pos;
-  public glm::vec2 uv;
-  public glm::vec2 wh;
+  public glm::vec3 position;
 }
 
 metafunction main_shader shader{main_uniforms, main_vertex_attributes};
@@ -293,7 +290,7 @@ valuetype struct font_texture_info
   public uint text_vbo;
 }
 
-valuetype struct position_angle
+public valuetype struct position_angle
 {
   public glm::vec3 position;
   public glm::quat angle;
@@ -330,38 +327,22 @@ projection_info()
   public float const distance_max = 1000.0;
 }
 
-function uint draw_frame(pglshader mutable& pgs, buffer_object const& bo,
-  ptr{scene_node} const& sn, cstrref const& mess)
+public function uint draw_frame(pglshader mutable& pgs,
+  cslice{ptr{buffer_object}} const& bos, ptr{scene_node} const& sn,
+  cstrref const& mess)
 {
-  /*
-  {
-    pgs.cam.light.position = pgs.cam.camera.position +
-      pgs.cam.camera.angle.to_mat3() * glm::make_vec3(3.0, 3.0, 5.0);
-    pgs.cam.light.angle = pgs.cam.camera.angle;
-  }
-  */
   /* shadowmap view and view-projection matrix */
   const sm_view = pgs.cam.light.to_mat4().inverse();
   const sm_vp = pgs.cam.sm_projection * sm_view;
-  if (pgs.glc.enable_instanced) {
-    /* prepare instances */
-    sn->prepare_instances{buffer_object}(bo, glm::mat4());
-  }
-  /* shadowmap */
+  /* shadowmapping shader */
   if (pgs.glc.enable_shadowmapping) {
     int saved_fb;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
-    // sdllog(string_join{" "}("saved_fb", saved_fb));
-    /* shadowmap */
-    // sdllog(string_join{" "}("draw_frame smsdr", smsdr->program));
-    // println("smsdr program: ", smsdr->program);
     glUseProgram(pgs.smsdr->program);
     glBindFramebuffer(GL_FRAMEBUFFER, pgs.sfbo.fbo);
     glViewport(0, 0, static_cast{GLsizei}(pgs.sfbo.sm_width),
       static_cast{GLsizei}(pgs.sfbo.sm_height));
     glEnable(GL_CULL_FACE);
-    // glFrontFace(GL_CW);
-    // glCullFace(GL_FRONT);
     glEnable(GL_DEPTH_TEST);
     if (pgs.glc.enable_depth_texture) {
       glColorMask(0, 0, 0, 0);
@@ -372,38 +353,26 @@ function uint draw_frame(pglshader mutable& pgs, buffer_object const& bo,
     glDisable(GL_BLEND);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     {
-      if (false) {
-	const y = sm_view * glm::make_vec4(0.0, 0.0, 0.0, 1.0);
-	println("sm_mv(0) =>", y);
-	mutable x = sm_vp * glm::make_vec4(0.0, 0.0, 0.0, 1.0);
-	println("sm_mvp(0) =>", x);
-	glm::mat4 mutable view;
-	view = pgs.cam.camera.to_mat4().inverse();
-	mutable aa = pgs.cam.projection * view
-	  * glm::make_vec4(0.0, 0.0, 0.0, 1.0);
-	println("cam_mvp(0) =>", aa);
-      }
       if (pgs.glc.enable_instanced) {
+	sn->instances_set_data(bos, 0, glm::mat4(), pgs.glc.enable_instanced);
 	glUniformMatrix4fv(pgs.smsdr->u_shadowmap_vp, 1, 0, sm_vp.crawptr());
-	sn->draw_instanced{buffer_object, shadowmap_shader}
-	  (bo, glm::mat4(), *pgs.smsdr);
+	sn->draw_instanced({pgs.smsdr, unit()}, bos, pgs.glc.enable_instanced);
       } else {
-	function void set_uniform_cb(glm::mat4 const& model_mat)
-	{
-	  /* note: sm_vp is already applied to model_mat. model_mat is
-	   * actually the mvp matrix. */
-	  glUniformMatrix4fv(pgs.smsdr->u_model_matrix, 1, 0,
-	    model_mat.crawptr());
-	}
-	sn->draw{set_uniform_cb, buffer_object, shadowmap_shader}
-	  (bo, sm_vp, *pgs.smsdr);
+	/* note: view_projection is pre-applied to model_matrix */
+	sn->instances_set_data(bos, 0, sm_vp, pgs.glc.enable_instanced);
+	sn->draw_instanced({pgs.smsdr, unit()}, bos, pgs.glc.enable_instanced);
+	/* prepare model_matrix for the main shader */
+	sn->instances_set_data(bos, 0, glm::mat4(), pgs.glc.enable_instanced);
       }
     }
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
+  } else {
+    /* no shadow-mapping. prepare model_matrix for the main shader. */
+    sn->instances_set_data(bos, 0, glm::mat4(), pgs.glc.enable_instanced);
   }
   glViewport(0, 0, static_cast{GLsizei}(pgs.cam.screen_width),
     static_cast{GLsizei}(pgs.cam.screen_height));
-  /* z-prepass */
+  /* z-prepass shader */
   if (pgs.glc.enable_zprepass) {
     glUseProgram(pgs.zpsdr->program);
     glEnable(GL_CULL_FACE);
@@ -423,22 +392,10 @@ function uint draw_frame(pglshader mutable& pgs, buffer_object const& bo,
     const vp = pgs.cam.projection * view;
     glUniformMatrix4fv(pgs.zpsdr->u_view_projection_matrix, 1, 0,
       vp.crawptr());
-    const model_cur = glm::mat4();
-    if (pgs.glc.enable_instanced) {
-      sn->draw_instanced{buffer_object, zprepass_shader}
-	(bo, model_cur, *pgs.zpsdr);
-    } else {
-      function void set_uniform_cb(glm::mat4 const& model_mat)
-      {
-	glUniformMatrix4fv(pgs.zpsdr->u_model_matrix, 1, 0,
-	  model_mat.crawptr());
-      }
-      sn->draw{set_uniform_cb, buffer_object, zprepass_shader}
-	(bo, model_cur, *pgs.zpsdr);
-    }
+    sn->draw_instanced({pgs.zpsdr, unit()}, bos, pgs.glc.enable_instanced);
   }
   uint const tick_shadowmapping_shader = SDL_GetTicks();
-  /* main or ds1 */
+  /* main or ds1 shader */
   if (true) {
     int saved_fb;
     if (pgs.glc.enable_deferred) {
@@ -452,11 +409,9 @@ function uint draw_frame(pglshader mutable& pgs, buffer_object const& bo,
     }
     glDisable(GL_BLEND);
     glEnable(GL_CULL_FACE);
-    // glFrontFace(GL_CCW);
     glCullFace(GL_BACK);
     glEnable(GL_DEPTH_TEST);
     if (pgs.glc.enable_zprepass) {
-      // glDepthMask(0);
       glColorMask(1, 1, 1, 1);
       glDepthFunc(GL_EQUAL);
       glClear(GL_COLOR_BUFFER_BIT);
@@ -466,10 +421,6 @@ function uint draw_frame(pglshader mutable& pgs, buffer_object const& bo,
       glColorMask(1, 1, 1, 1);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
-    /*
-    const camera_target = pgs.cam.camera_angle.to_mat3() *
-      glm::make_vec3(0.0, 0.0, -20.0);
-    */
     if (pgs.glc.enable_deferred) {
       /* noop */
     } else {
@@ -497,54 +448,9 @@ function uint draw_frame(pglshader mutable& pgs, buffer_object const& bo,
 	vp.crawptr());
     }
     if (pgs.glc.enable_deferred) {
-      if (pgs.glc.enable_instanced) {
-	sn->draw_instanced{buffer_object, ds1st_shader}
-	  (bo, glm::mat4(), *pgs.ds1sdr);
-      } else {
-	function void set_uniform_cb(glm::mat4 const& model_mat)
-	{
-	  glUniformMatrix4fv(pgs.ds1sdr->u_model_matrix, 1, 0,
-	    model_mat.crawptr());
-	}
-	sn->draw{set_uniform_cb, buffer_object,
-	  ds1st_shader}(bo, glm::mat4(), *pgs.ds1sdr);
-      }
+      sn->draw_instanced({pgs.ds1sdr, unit()}, bos, pgs.glc.enable_instanced);
     } else {
-      if (pgs.glc.enable_instanced) {
-	sn->draw_instanced{buffer_object, main_shader}
-	  (bo, glm::mat4(), *pgs.sdr);
-      } else {
-	function void set_uniform_cb(glm::mat4 const& model_mat)
-	{
-	  glUniformMatrix4fv(pgs.sdr->u_model_matrix, 1, 0,
-	    model_mat.crawptr());
-	}
-	sn->draw{set_uniform_cb, buffer_object, main_shader}
-	  (bo, glm::mat4(), *pgs.sdr);
-      }
-    }
-    if (false) {
-      farray{int, 4} view;
-      glGetIntegerv(GL_VIEWPORT, view.rawptr());
-      println(view);
-      mutable dbuf = darray{float}(static_cast{size_t}(view[2] * view[3]),
-	0.0f);
-      glReadPixels(view[0], view[1], view[2], view[3], GL_DEPTH_COMPONENT,
-	GL_FLOAT, dbuf.rawptr().void());
-      float avg = 0.0f;
-      for (const i, const v: dbuf) {
-	avg += v;
-      }
-      avg /= static_cast{float}(dbuf.size());
-      {
-	float const perspective_distance = 1.0;
-	float const min_distance = 0.2;
-	const d = cast_float(perspective_distance);
-	const near = cast_float(d - min_distance);
-	const far = cast_float(d + min_distance + pgs.cam.distance_max);
-	const distance = far * near / (avg * (far - near) - far);
-	println("dbuf avg", avg, distance, near, far);
-      }
+      sn->draw_instanced({pgs.sdr, unit()}, bos, pgs.glc.enable_instanced);
     }
     if (pgs.glc.enable_deferred) {
       glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
@@ -552,7 +458,6 @@ function uint draw_frame(pglshader mutable& pgs, buffer_object const& bo,
   }
   /* ds2 */
   if (pgs.glc.enable_deferred) {
-    // println("ds2");
     glUseProgram(pgs.ds2sdr->program);
     glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
@@ -579,12 +484,28 @@ function uint draw_frame(pglshader mutable& pgs, buffer_object const& bo,
     glBindBuffer(GL_ARRAY_BUFFER, 0);
   }
   /* sprites */
+  {
+    mutable view = glm::mat4();
+    if (pgs.cam.proj_light) {
+      view = pgs.cam.light.to_mat4().inverse();
+    } else {
+      view = pgs.cam.camera.to_mat4().inverse();
+    }
+    const vp = pgs.cam.projection * view;
+    sn->instances_set_data(bos, 1, vp, pgs.glc.enable_instanced);
+    glUseProgram(pgs.spsdr->program);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE);
+    sn->draw_instanced({unit(), pgs.spsdr}, bos, pgs.glc.enable_instanced);
+  }
   /* panel */
   glUseProgram(pgs.psdr->program);
   glDisable(GL_CULL_FACE);
   glDisable(GL_DEPTH_TEST);
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   glUniform1i(pgs.psdr->u_sampler, 0);
   varray{float} xyuv;
   uint cur_x = 0;
@@ -611,7 +532,6 @@ function uint draw_frame(pglshader mutable& pgs, buffer_object const& bo,
     const v0 = cast_float(ty0) / cast_float(pgs.fti.surface_h);
     const u1 = cast_float(tx1) / cast_float(pgs.fti.surface_w);
     const v1 = 0.0f;
-    /* println(x0, y0, x1, y1, u0, v0, u1, v1); */
     xyuv.push_back(x0);
     xyuv.push_back(y0);
     xyuv.push_back(u0);
@@ -657,26 +577,6 @@ function uint draw_frame(pglshader mutable& pgs, buffer_object const& bo,
   return tick_shadowmapping_shader;
 }
 
-/*
-function void reshape(pglshader mutable& pgs, int width, int height)
-{ 
-  pgs.cam.screen_width = width;
-  pgs.cam.screen_height = height;
-  if (m::ne{is_gles, 0}) {
-    pgs.sfbo.sm_width = 1024;
-    pgs.sfbo.sm_height = 1024;
-  } else {
-    pgs.sfbo.sm_width = width;
-    pgs.sfbo.sm_height = height;
-  }
-  init_shadowmap_fbo(pgs.glc, pgs.sfbo);
-  pgs.dsfbo.ds_width = width;
-  pgs.dsfbo.ds_height = height;
-  init_deferred_shading_fbo(pgs.glc, pgs.dsfbo);
-  update_mvp(pgs.cam);
-}
-*/
-
 function void update_mvp(projection_info mutable& cam)
 {
   float const perspective_distance = 1.0;
@@ -703,16 +603,6 @@ function void update_mvp(projection_info mutable& cam)
     const right = cast_float(1.0 * ((d - min_distance) / d));
     const bottom = cast_float(-sm_h * ((d - min_distance) / d));
     const top = cast_float(sm_h * ((d - min_distance) / d));
-    /*
-    */
-    /*
-    const near = cast_float(d - min_distance);
-    const far = cast_float(d + min_distance + cam.distance_max);
-    const left = cast_float(-1.0 * ((d - min_distance) / d));
-    const right = cast_float(1.0 * ((d - min_distance) / d));
-    const bottom = cast_float(-1.0 * ((d - min_distance) / d));
-    const top = cast_float(1.0 * ((d - min_distance) / d));
-    */
     cam.sm_projection = glm::frustum{float}(left, right, bottom, top, near,
       far);
   }
@@ -754,13 +644,10 @@ function void init_shadowmap_fbo(glconfig const& glc,
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, cast_int(f));
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, cast_int(f));
       if (m::ne{is_gl3, 0}) {
-	if (glc.is_gl3()) {
-	  // FIXME ???
-	  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE,
-	    cast_int(GL_COMPARE_REF_TO_TEXTURE));
-	  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC,
-	    cast_int(GL_LEQUAL));
-	}
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE,
+	  cast_int(GL_COMPARE_REF_TO_TEXTURE));
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC,
+	  cast_int(GL_LEQUAL));
       }
       if (!glc.is_gles) {
 	glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_DEPTH_COMPONENT),
@@ -809,7 +696,9 @@ function void init_shadowmap_fbo(glconfig const& glc,
     } else {
       int orig_rb;
       glGetIntegerv(GL_RENDERBUFFER_BINDING, address(orig_rb));
+      /*
       println("orig_rb", orig_rb);
+      */
       if (sfbo.depthbuf != 0) {
 	glDeleteRenderbuffers(1, caddress(sfbo.depthbuf));
 	sfbo.depthbuf = 0;
@@ -954,6 +843,7 @@ init_shadowmap_shader(glconfig const& g)
     v += "uniform mat4 shadowmap_vp;\n";
     v += g.vert_in() + "mat4 model_matrix;\n";
   } else {
+    /* note: passes mvp as model_matrix */
     v += "uniform mat4 model_matrix;\n";
   }
   v += g.vert_in() + "vec3 position;\n";
@@ -990,8 +880,10 @@ init_shadowmap_shader(glconfig const& g)
     f += g.fragcolor() + "= vec4(z0/255.0, z1/255.0, z2/255.0, 1.0);\n";
     f += "}\n";
   }
+  /*
   println("VERT:", v);
   println("FRAG:", f);
+  */
   return make_shader_ptr{shadowmap_uniforms, shadowmap_vertex_attributes}(
     v, f, "model_matrix");
 }
@@ -1051,13 +943,6 @@ init_ds1st_shader(glconfig const g)
   }
   return make_shader_ptr{ds1st_uniforms, ds1st_vertex_attributes}(v, f,
     "model_matrix");
-  /*
-  const vert = m::cond{enable_deferred,
-    main_shader_vert{1}, empty_shader_vert};
-  const frag = m::cond{enable_deferred, ds1st_shader_frag, empty_shader_frag};
-  return make_shader_ptr{ds1st_uniforms, ds1st_vertex_attributes}(vert, frag,
-    "model_matrix");
-  */
 }
 
 function ds2nd_shader_ptr
@@ -1078,13 +963,6 @@ init_ds2nd_shader(glconfig const& g)
   const f = g.enable_deferred
     ? main_or_ds2nd_shader_frag(g) : g.empty_shader_frag();
   return make_shader_ptr{ds2nd_uniforms, ds2nd_vertex_attributes}(v, f, "");
-  /*
-  const vert = m::cond{enable_deferred,
-    ds2nd_shader_vert, empty_shader_vert};
-  const frag = m::cond{enable_deferred, main_shader_frag{1}, empty_shader_frag};
-  return make_shader_ptr{ds2nd_uniforms, ds2nd_vertex_attributes}(vert, frag,
-    "");
-  */
 }
 
 function string
@@ -1297,6 +1175,35 @@ init_main_shader(glconfig const& g)
     "model_matrix");
 }
 
+function sprite_shader_ptr
+init_sprite_shader(glconfig const& g)
+{
+  string v;
+  v += g.prepend();
+  if (g.enable_instanced) {
+    v += g.vert_in() + "mat4 model_matrix;\n";
+  } else {
+    v += "uniform mat4 model_matrix;\n";
+  }
+  v += g.vert_in() + "vec3 position;\n";
+  v += "void main(void) {\n";
+  v += "vec4 pos4 = vec4(position, 1.0);\n";
+  v += "gl_Position = model_matrix * pos4;\n";
+  v += "gl_PointSize = 60.0 / gl_Position.w;\n";
+  v += "}\n";
+  string f;
+  f += g.prepend();
+  f += g.decl_fragcolor();
+  f += "void main(void) {\n";
+  f += "vec2 xy = gl_PointCoord * 2.0 - 1.0;\n";
+  f += "float d = dot(xy, xy);\n";
+  f += "float b = d * float(d < 1.0);\n";
+  f += g.fragcolor() + " = vec4(b, b, b, 1.0);\n";
+  f += "}\n";
+  return make_shader_ptr{sprite_uniforms, sprite_vertex_attributes}(v, f,
+    "model_matrix");
+}
+
 function font_shader_ptr
 init_font_shader(glconfig const& g)
 {
@@ -1320,26 +1227,6 @@ init_font_shader(glconfig const& g)
   f += g.fragcolor() + " = col;\n";
   f += "}\n";
   return make_shader_ptr{font_uniforms, font_vertex_attributes}(v, f, "");
-}
-
-function sprite_shader_ptr
-init_sprite_shader(glconfig const& g)
-{
-  string v;
-  v += g.prepend();
-  v += "uniform mat4 view_projection_matrix;\n";
-  v += g.vert_in() + "vec3 position;\n";
-  v += g.vert_in() + "vec2 uv;\n";
-  v += g.vert_in() + "vec2 wh;\n";
-  v += "void main(void) {\n";
-  v += "vec4 pos4 = vec4(position, 1.0);\n";
-  v += "gl_Position = view_projection_matrix * pos4;\n";
-  v += "}\n";
-  string f;
-  f += g.prepend();
-  f += "void main(void) {\n";
-  f += "}\n";
-  return make_shader_ptr{sprite_uniforms, sprite_vertex_attributes}(v, f, "");
 }
 
 function uint read_3_uint(cslice{uchar} const& buf, size_t o)
@@ -1442,10 +1329,6 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
     if (fti.text_vbo == 0) {
       throw runtime_error_template{"text_vbo"}("1");
     }
-    /*
-    glBindBuffer(GL_ARRAY_BUFFER, fti.font_vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    */
   }
   {
     // const sur = IMG_Load("img-c1024.jpg").some;
@@ -1480,8 +1363,10 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
     uint gshift = get_shift(gmask);
     uint bshift = get_shift(bmask);
     uint ashift = get_shift(amask);
+    /*
     println("Masks", rmask, gmask, bmask, amask, rshift, gshift, bshift,
       ashift);
+    */
     const sur0buf = sur0.Pixels();
     for (const by: 0 .. sur0_h / 64) {
       for (const iy: 0 .. 32U) {
@@ -1630,12 +1515,12 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
   }
 }
 
-function void sdllog(cstrref const& mess)
+public function void sdllog(cstrref const& mess)
 {
   SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, mess);
 }
 
-struct
+public struct
 pglshader(bool gles_flag0, int glmajor0, int glminor0, bool enable_msaa0,
   int width0, int height0)
 {
@@ -1676,6 +1561,13 @@ pglshader(bool gles_flag0, int glmajor0, int glminor0, bool enable_msaa0,
 	glEnable(GL_MULTISAMPLE);
       }
     }
+    if (m::eq{is_gles, 0}) {
+      if (!glc.is_gl3()) {
+	glEnable(GL_POINT_SPRITE);
+	println("GL_POINT_SPRITE enabled");
+      }
+      glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
+    }
   }
   public function void reshape(int width, int height)
   {
@@ -1693,759 +1585,6 @@ pglshader(bool gles_flag0, int glmajor0, int glminor0, bool enable_msaa0,
     dsfbo.ds_height = height;
     init_deferred_shading_fbo(glc, dsfbo);
     update_mvp(cam);
-  }
-}
-
-struct
-frame_control()
-{
-  public metafunction ticks_t farray{uint, 6};
-  public uint tprevsec = 0;
-  public uint tprev = SDL_GetTicks();
-  public uint frames = 0;
-  public float mutable fps = 0.0;
-  public farray{uint, 2} mutable frame_tdiffs;
-  public float frame_speed_mul = 1.0f;
-  public ticks_t ticks;
-  public ticks_t ticks_sum;
-  public ticks_t ticks_sum_prev;
-  init();
-  function void init() {
-    for (const i, mutable& e: frame_tdiffs) {
-      e = 1000U / cast_uint(frame_tdiffs.size());
-    }
-    for (const i, mutable& e : ticks) {
-      e = tprev;
-    }
-  }
-  public function void save_ticks(size_t idx) {
-    const prev_tick = ticks[idx == 0 ? ticks.size() - 1 : idx - 1];
-    mutable& cur_tick = ticks[idx];
-    cur_tick = SDL_GetTicks();
-    ticks_sum[idx] += cur_tick - prev_tick;
-  }
-  public function void measure()
-  {
-    ++frames;
-    uint t = SDL_GetTicks();
-    if (t - tprevsec >= 1000) {
-      const seconds = cast_float(t - tprevsec) / 1000.0;
-      fps = cast_float(frames) / seconds;
-      /*
-      sdllog(string_join{" "}(frames, "frames in", seconds, "seconds =",
-	  fps, "fps"));
-      sdllog(string_join{" "}("ticks: ", ticks_sum));
-      */
-      ticks_sum_prev = ticks_sum;
-      ticks_sum = ticks_t();
-      tprevsec = t;
-      frames = 0;
-    }
-    mutable tdiff = cast_int(t - tprev);
-    tprev = t;
-
-    uint tdiff_frame_sum = cast_uint(tdiff);
-    for (const i: 1 .. frame_tdiffs.size()) {
-      tdiff_frame_sum += frame_tdiffs[i];
-      frame_tdiffs[i - 1] = frame_tdiffs[i];
-    }
-    frame_tdiffs[frame_tdiffs.size() - 1] = cast_uint(tdiff);
-  }
-}
-
-struct
-input_control()
-{
-  public varray{SDL_FingerID} fingerids;
-  public farray{bool, 2} fingdown;
-  public farray{size_t, 2} fingerdown_time;
-  public farray{glm::vec2, 2} start_pos;
-  public farray{glm::vec2, 2} cur_pos;
-  public glm::vec2 finger_xyrotate_delta;
-  public float finger_zmove_delta;
-  public int finger_zmove_mode = 0;
-  public function void finger_motion(float x, float y, float dx, float dy,
-    SDL_FingerID fng)
-  {
-    size_t fid = 2;
-    if (fingerids.size() > 0 && fingerids[0] == fng) {
-      fid = 0;
-    } else if (fingerids.size() > 1 && fingerids[1] == fng) {
-      fid = 1;
-    }
-    if (fid < 2) {
-      cur_pos[fid] = glm::make_vec2(x, y);
-      /*
-      sdllog(string_join{" "}("finger_motion", x, y, fid, fng));
-      */
-    } else {
-      /*
-      sdllog(string_join{" "}("finger_motion(ignored)", x, y, fng,
-	"fingerids:", fingerids));
-      */
-    }
-  }
-  public function void finger_down(float x, float y, SDL_FingerID fng) {
-    size_t fid = 2;
-    if (fingerids.size() > 0 && fingerids[0] == fng) {
-      fid = 0;
-    } else if (fingerids.size() > 1 && fingerids[1] == fng) {
-      fid = 1;
-    } else if (fingerids.size() < 2) {
-      fid = fingerids.size();
-      fingerids.push_back(fng);
-    }
-    if (fid < 2) {
-      fingdown[fid] = true;
-      start_pos[fid] = glm::make_vec2(x, y);
-      cur_pos[fid] = start_pos[fid];
-      /*
-      sdllog(string_join{" "}("finger_down", x, y, fid));
-      */
-      fingerdown_time[0] = 0;
-      fingerdown_time[1] = 0;
-      finger_zmove_mode = 0;
-    }
-    /*
-    sdllog(string_join{" "}("finger_down_post", fingerids));
-    */
-  }
-  public function void finger_up(SDL_FingerID fng) {
-    size_t fid = 2;
-    if (fingerids.size() > 0 && fingerids[0] == fng) {
-      fid = 0;
-    } else if (fingerids.size() > 1 && fingerids[1] == fng) {
-      fid = 1;
-    }
-    if (fid < 2) {
-      fingdown[fid] = false;
-      /*
-      sdllog(string_join{" "}("finger_up", fid));
-      */
-      if (fid == 1) {
-	start_pos[0] = cur_pos[0];
-	fingerids.resize(1, 0);
-	fingdown[1] = false;
-      } else {
-	fingerids.erase(0, 1);
-	if (fingerids.empty()) {
-	  fingdown[0] = false;
-	} else {
-	  cur_pos[0] = cur_pos[1];
-	  start_pos[0] = cur_pos[1];
-	  fingdown[0] = fingdown[1];
-	  fingdown[1] = false;
-	}
-      }
-      fingerdown_time[0] = 0;
-      fingerdown_time[1] = 0;
-      finger_zmove_mode = 0;
-    }
-    /*
-    sdllog(string_join{" "}("finger_up_post", fingerids));
-    */
-  }
-  public function void finger_action_one_finger(position_angle mutable& target,
-      frame_control const& frctl, size_t fid)
-  {
-    mutable dx = (cur_pos[fid].x - start_pos[fid].x);
-    mutable dy = (cur_pos[fid].y - start_pos[fid].y);
-    const d = glm::distance(start_pos[fid], cur_pos[fid]);
-    if (d > 3.0) {
-      dx /= d / 3.0;
-      dy /= d / 3.0;
-    }
-    /*
-    sdllog(string_join{" "}("onefinger", dx, dy));
-    */
-    target.rotate_angle_axis(-dy * 2.0 * frctl.frame_speed_mul, 1.0, 0.0, 0.0);
-    target.rotate_angle_axis(-dx * 2.0 * frctl.frame_speed_mul, 0.0, 1.0, 0.0);
-    finger_xyrotate_delta.x = dx;
-    finger_xyrotate_delta.y = dy;
-  }
-  public function void finger_action_two_fingers(position_angle mutable& target,
-      frame_control const& frctl)
-  {
-    const d0 = cur_pos[0] - start_pos[0];
-    const d1 = cur_pos[1] - start_pos[1];
-    if (glm::dot(d0, d1) < 0.0f) {
-      /* z move */
-      if (finger_zmove_mode != 2) {
-	const distance_start = glm::distance(start_pos[0], start_pos[1]);
-	mutable distance_cur = glm::distance(cur_pos[0], cur_pos[1]);
-	if (distance_cur <= 0.0001f) {
-	  distance_cur = 0.0001f;
-	}
-	const rat = distance_start / distance_cur;
-	const prev = finger_zmove_delta;
-	if (rat > 1.2) {
-	  finger_zmove_delta += 0.001f * frctl.frame_speed_mul;
-	  if (finger_zmove_delta >= 1.0) {
-	    finger_zmove_delta = 1.0;
-	  }
-	  finger_zmove_mode = 1;
-	} else if (rat < 0.8) {
-	  finger_zmove_delta -= 0.001f * frctl.frame_speed_mul;
-	  if (finger_zmove_delta <= -1.0) {
-	    finger_zmove_delta = -1.0;
-	  }
-	  finger_zmove_mode = 1;
-	}
-	if ((prev < 0.0f && finger_zmove_delta > 0.0f) ||
-	  (prev > 0.0f && finger_zmove_delta < 0.0f)) {
-	  /* stop */
-	  finger_zmove_delta = 0.0f;
-	  finger_zmove_mode = 2;
-	}
-      }
-    } else {
-      /* xy move */
-      const d0 = cur_pos[0] - start_pos[0];
-      const d1 = cur_pos[1] - start_pos[1];
-      mutable avg = (d0 + d1) / 2.0f;
-      const d = (glm::distance(start_pos[0], cur_pos[0]),
-	glm::distance(start_pos[1], cur_pos[0])) / 2.0f;
-      if (d > 3.0) {
-	avg /= d / 3.0;
-      }
-      avg /= 32.0f;
-      target.translate_relative(
-	  glm::make_vec3(avg.x, -avg.y, 0.0) * frctl.frame_speed_mul);
-    }
-  }
-  public function void finger_action_step(position_angle mutable& target,
-      frame_control const& frctl)
-  {
-    /*
-    sdllog(string_join{" "}("finger_action_step", fingdown[0], fingdown[1]));
-    */
-    if (fingdown[0] && !fingdown[1]) {
-      if (fingerdown_time[0] >= 2) {
-	finger_action_one_finger(target, frctl, 0);
-      } else {
-	start_pos[0] = (start_pos[0] + cur_pos[0]) / 2.0f;
-	fingerdown_time[0] += 1;
-      }
-      if (fingerids[0] == 0) {
-	/* mouse button */
-	/*
-	finger_zmove_delta -= 0.0001;
-	if (finger_zmove_delta <= -0.01) {
-	  finger_zmove_delta = -0.01;
-	}
-	*/
-      }
-    } else if (!fingdown[0] && fingdown[1]) {
-      if (fingerdown_time[1] >= 2) {
-	finger_action_one_finger(target, frctl, 0);
-      } else {
-	start_pos[1] = (start_pos[1] + cur_pos[1]) / 2.0f;
-	fingerdown_time[1] += 1;
-      }
-    } else if (fingdown[0] && fingdown[1]) {
-      if (fingerdown_time[0] >= 2 && fingerdown_time[1] >= 2) {
-	finger_action_two_fingers(target, frctl);
-      } else {
-	start_pos[0] = (start_pos[0] + cur_pos[0]) / 2.0f;
-	fingerdown_time[0] += 1;
-	start_pos[1] = (start_pos[1] + cur_pos[1]) / 2.0f;
-	fingerdown_time[1] += 1;
-      }
-    } else {
-      const len = glm::length(finger_xyrotate_delta);
-      target.rotate_angle_axis(
-	  -finger_xyrotate_delta.y * 2.0 * frctl.frame_speed_mul,
-	  1.0, 0.0, 0.0);
-      target.rotate_angle_axis(
-	  -finger_xyrotate_delta.x * 2.0 * frctl.frame_speed_mul,
-	  0.0, 1.0, 0.0);
-      const decay = 0.03f * frctl.frame_speed_mul;
-      if (len < decay) {
-	finger_xyrotate_delta = glm::make_vec2(0.0f, 0.0f);
-      } else {
-	finger_xyrotate_delta -= finger_xyrotate_delta * decay / len;
-      }
-    }
-    target.translate_relative(glm::make_vec3(0.0, 0.0, finger_zmove_delta)
-	* frctl.frame_speed_mul);
-  }
-  public function void add_zdelta(float zaccel, frame_control const& frctl)
-  {
-    finger_zmove_delta += zaccel * frctl.frame_speed_mul;
-    if (finger_zmove_delta <= -1.0) {
-      finger_zmove_delta = -1.0;
-    }
-    if (finger_zmove_delta >= 1.0) {
-      finger_zmove_delta = 1.0;
-    }
-    finger_zmove_mode = 1;
-  }
-}
-
-struct
-framerate_control(int vsync0)
-{
-  public int const vsync = vsync0;
-  public int const swap_interval = SDL_GL_SetSwapInterval(vsync0);
-  public double time_before_swapwindow = io::system.gettimeofday_double();
-  public farray{int, 64} delay_usec;
-  public int fixed_fps = 1;
-  public function void delay()
-  {
-    // glFlush();
-    double latency_target = 1.0 / static_cast{float}(60 / fixed_fps);
-    if (true) {
-      const now = io::system.gettimeofday_double();
-      const td = max(now - time_before_swapwindow, 0.0);
-      const sleep_sec = latency_target - td;
-      if (sleep_sec > 0.0) {
-	if (fixed_fps > 1 || swap_interval != 1) {
-	  io::system.usleep(static_cast{uint}(sleep_sec * 1000000.0));
-	}
-	time_before_swapwindow += latency_target;
-	if (now - time_before_swapwindow < -1.0) {
-	  time_before_swapwindow = now + 1.0;
-	}
-      } else {
-	time_before_swapwindow = io::system.gettimeofday_double();
-      }
-      const sleep_usec = static_cast{int}(sleep_sec * 1000000.0);
-      int s_sum = sleep_usec;
-      int neg_cnt = 0;
-      for (const i: 0 .. delay_usec.size() - 1) {
-	const v = delay_usec[i];
-	s_sum += v;
-	delay_usec[i] = delay_usec[i + 1];
-	// println("delay_usec[i]", i, v);
-	if (v < 0) {
-	  // println("neg", v);
-	  ++neg_cnt;
-	}
-      }
-      delay_usec[delay_usec.size() - 1] = sleep_usec;
-      const s_avg = static_cast{double}(s_sum)
-	/ static_cast{double}(delay_usec.size());
-      /*
-      println(fixed_fps, now - time_before_swapwindow, sleep_sec, s_avg,
-	neg_cnt);
-      */
-      if (fixed_fps < 6) {
-	if (neg_cnt > static_cast{int}(delay_usec.size() / 4)) {
-	  println("increment delay");
-	  ++fixed_fps;
-	  for (const i, mutable& v: delay_usec) {
-	    v = 0;
-	  }
-	}
-      }
-      /*
-      */
-      /*
-      if (neg_cnt > delay_usec.size() - 1 && fixed_fps < 6) {
-	++fixed_fps;
-	for (const i, mutable& v: delay_usec) {
-	  v = 0;
-	}
-	time_before_swapwindow = io::system.gettimeofday_double();
-      } else if (pos_cnt == delay_usec.size() - 1 && fixed_fps > 1) {
-	--fixed_fps;
-	for (const i, mutable& v: delay_usec) {
-	  v = 0;
-	}
-	time_before_swapwindow = io::system.gettimeofday_double();
-      }
-      */
-    }
-  }
-}
-
-valuetype struct
-player_info()
-{
-  public position_angle posang;
-}
-
-function void build_vertices(buffer_object mutable& bo)
-{
-  metafunction tattr m::symbol{main_shader, "vertex_attributes_type"};
-  metafunction fill_v fill{tattr};
-  metafunction joint_v joint{tattr};
-  /* vtx0 */
-  {
-    const vtxs = bo.get("saucer")->vtxs;
-    const fsmooth = fill_smooth{tattr}(vtxs);
-    const t = fill_v(vtxs);
-    regular_polygon(3.0, 40,
-      bump_rec(0.2, 0.5, 1, t, t),
-      bump_rec(0.01, 0.9, 5,
-	t,
-	sphere(10, fsmooth)))
-      (poly_t(), mesh_pos());
-  }
-  /* vtx2 */
-  {
-    const vtx2 = bo.get("saucer-multi")->vtxs;
-    const t2 = fill_v(vtx2);
-    regular_polygon(50.0, 50,
-      bump_rec(1.0, 1.0, 1, joint_v(vtx2, "saucer", hole()), hole()),
-      hole())
-      (poly_t(), mesh_pos());
-  }
-  /* vtx8 */
-  {
-    const vtx = bo.get("block-multi")->vtxs;
-    const t = fill_v(vtx);
-    regular_polygon(600.0, 4,
-      rectangle_split(9, 8, joint_v(vtx, "block", hole())),
-      hole())
-      (poly_t(), mesh_pos());
-  }
-  /* vtx9 */
-  {
-    const vtx = bo.get("block")->vtxs;
-    const t = fill_v(vtx);
-    const rnd = make_rand_generator(1U);
-    regular_polygon(50.0, 4,
-      rotate_local(glm::make_quat_angle_axis(45.0, 0.0, 0.0, 1.0),
-	rectangle_split(30, 30,
-	  rand_bump(1, 0.8, 0.2, 0.8, 0.2, 0.8, 1.0, 4.0, rnd,
-	    t, t, t))),
-      rotate_local(glm::make_quat_angle_axis(-45.0, 0.0, 0.0, 1.0),
-	bump_rec(0.2, 1.0, 1, t, t)))
-      (poly_t(), mesh_pos());
-  }
-  /* vtx10 */
-  {
-    const vtx = bo.get("bullet")->vtxs;
-    const t = fill_v(vtx);
-    mutable m = glm::mat4()
-      .translate(glm::make_vec3(0.0, 0.0, 1.0))
-      .rotate(10.0, glm::make_vec3(0.0, 0.0, 1.0));
-    regular_polygon(1.0, 6,
-      bump_apply(m, false, t, bump_apply(m, false, t, t)),
-      t)
-      (poly_t(), mesh_pos());
-  }
-  {
-    /* 60fps, macosx/linux mbp gt750m */
-    const vtx = bo.get("bullet-multi")->vtxs;
-    const t = fill_v(vtx);
-    regular_polygon(600.0, 4,
-      rectangle_split(160, 160, joint_v(vtx, "bullet", hole())),
-      hole())
-      (poly_t(), mesh_pos());
-  }
-  {
-    const vtx = bo.get("bullet-multi-2")->vtxs;
-    const t = fill_v(vtx);
-    regular_polygon(600.0, 4,
-      rectangle_split(80, 80, joint_v(vtx, "bullet", hole())),
-      hole())
-      (poly_t(), mesh_pos());
-  }
-  /*
-  for (const i, const& a: bo.vs_arr) {
-    println(i, "vtxs", a.vtxs->vertex_values.size(), "elems",
-      a.vtxs->elements.size());
-  }
-  */ 
-}
-
-function void main_loop()
-{
-  sdllog("PGC main");
-
-  sdlcontext sdlc  = sdlcontext();
-
-  SDL_EventState(SDL_KEYDOWN, 0);
-  SDL_EventState(SDL_KEYUP, 0);
-  SDL_EventState(SDL_TEXTEDITING, 0);
-  SDL_EventState(SDL_TEXTINPUT, 0);
-  if (m::or{is_android, is_ios}) {
-    SDL_EventState(SDL_MOUSEBUTTONDOWN, 0);
-    SDL_EventState(SDL_MOUSEBUTTONUP, 0);
-    SDL_EventState(SDL_MOUSEMOTION, 0);
-  }
-
-  sdllog("PXC-SDL2 init0");
-
-  pglshader pgs = pglshader(sdlc.gles_flag, sdlc.glmajor, sdlc.glminor,
-    sdlc.enable_msaa, sdlc.init_w, sdlc.init_h);
-
-/*
-  sdllog("PXC-SDL2 reshape");
-  pgs.reshape(sdlc.init_w, sdlc.init_h);
-*/
-
-  mutable bo = buffer_object(num_float_struct{main_vertex_attributes});
-  {
-    const t0 = system.gettimeofday_double();
-    build_vertices(bo);
-    const t1 = system.gettimeofday_double();
-    bo.create_vbo();
-    const t2 = system.gettimeofday_double();
-    sdllog(string_join{" "}("build vertex", t1 - t0, t2 - t1));
-  }
-
-  size_t scene_num = bo.num_vs_ids() - 1;
-  ptr{scene_node} snode = instantiate_scene(bo, static_cast{int}(scene_num));
-  println("snode", snode->joint_sorts);
-  input_control ictl;
-  int motion_count = 0;
-  function void scene_next()
-  {
-    ++scene_num;
-    if (scene_num >= bo.num_vs_ids()) {
-      scene_num = 0;
-    }
-    snode = instantiate_scene(bo, static_cast{int}(scene_num));
-    println("snode", snode->joint_sorts);
-  }
-
-  frame_control mutable frctl;
-  framerate_control mutable rctl = framerate_control(sdlc.vsync);
-
-  player_info player;
-  player.posang.angle = glm::make_quat_wxyz(1.0, 0.0, 0.0, 0.0);
-  player.posang.position = glm::make_vec3(0.0, 0.0, 10.0);
-
-  bool done = false;
-  bool paused = false;
-  while (!done) {
-    frctl.save_ticks(0);
-    SDL_Event ev;
-    while (SDL_PollEvent(ev)) {
-      const etype = ev.type;
-      /*
-       sdllog(string_join{" "}("event", cast_int(ev.type)));
-       */
-      if (etype == SDL_WINDOWEVENT) {
-	if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
-	  int w;
-	  int h;
-	  SDL_GL_GetDrawableSize(sdlc.sdl_window.some, w, h);
-	  pgs.reshape(w, h);
-	  sdllog(string_join{""}("resized w=", w, " h=", h));
-	} else if (ev.window.event == SDL_WINDOWEVENT_HIDDEN) {
-	  /* sdllog("hidden"); */
-	} else if (ev.window.event == SDL_WINDOWEVENT_MINIMIZED ||
-	    ev.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
-	  paused = true;
-	  sdllog("paused");
-	} else if (ev.window.event == SDL_WINDOWEVENT_RESTORED ||
-	    ev.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) {
-	  paused = false;
-	  sdllog("restored");
-	} else {
-	  /*
-	  sdllog(string_join{" "}("window event ",
-		cast_int(ev.window.event)));
-	  */
-	}
-      } else if (etype == SDL_MOUSEBUTTONDOWN) {
-	const bx = cast_float(ev.button.x) / cast_float(pgs.cam.screen_width);
-	const by = cast_float(ev.button.y) / cast_float(pgs.cam.screen_height);
-	if (bx < 0.1 && by < 0.1) {
-	  scene_next();
-	}
-	if (bx > 0.9 && by < 0.1) {
-	  rctl.fixed_fps = rctl.fixed_fps != 6 ? rctl.fixed_fps + 1 : 1;
-	}
-	if (bx > 0.9 && by > 0.9) {
-	  pgs.cam.light_on = pgs.cam.light_on > 0.5f ? 0.0f : 1.0f;
-	}
-	sdllog(string_join{" "}("mousedown", ev.button.x, ev.button.y,
-	  ev.button.button));
-	ictl.finger_down(
-	  cast_float(ev.button.x) / cast_float(pgs.cam.screen_width),
-	  cast_float(ev.button.y) / cast_float(pgs.cam.screen_height),
-	  0);
-	/*
-	*/
-      } else if (etype == SDL_MOUSEBUTTONUP) {
-	/*
-	sdllog(string_join{" "}("mouseup", ev.button.button));
-	ictl.finger_up(0);
-	 */
-      } else if (etype == SDL_MOUSEMOTION) {
-	/*
-	sdllog(string_join{" "}("mousemotion", ev.button.x, ev.button.y,
-	  ev.button.button));
-	 */
-      } else if (etype == SDL_FINGERDOWN) {
-	/*
-	sdllog(string_join{" "}("fingerdown", ev.tfinger.x, ev.tfinger.y,
-	  ev.tfinger.fingerId));
-	*/
-	ictl.finger_down(ev.tfinger.x, ev.tfinger.y, ev.tfinger.fingerId);
-	if (ev.tfinger.x < 0.1 && ev.tfinger.y < 0.1) {
-	  scene_next();
-	}
-	if (ev.tfinger.x > 0.9 && ev.tfinger.y < 0.1) {
-	  rctl.fixed_fps = rctl.fixed_fps != 6 ? rctl.fixed_fps + 1 : 1;
-	}
-	if (ev.tfinger.x > 0.9 && ev.tfinger.y > 0.9) {
-	  pgs.cam.light_on = pgs.cam.light_on > 0.5f ? 0.0f : 1.0f;
-	}
-      } else if (etype == SDL_FINGERUP) {
-	/*
-	sdllog(string_join{" "}("fingerup", ev.tfinger.fingerId));
-	*/
-	ictl.finger_up(ev.tfinger.fingerId);
-      } else if (etype == SDL_FINGERMOTION) {
-	if (m::or{is_android, is_ios}) {
-	  ictl.finger_motion(ev.tfinger.x, ev.tfinger.y,
-	      ev.tfinger.dx, ev.tfinger.dy, ev.tfinger.fingerId);
-	  /*
-	  sdllog(string_join{" "}("fingermotion", ev.tfinger.x, ev.tfinger.y,
-	    ev.tfinger.dx, ev.tfinger.dy, ev.tfinger.fingerId));
-	  */
-	}
-      } else if (etype == SDL_APP_WILLENTERBACKGROUND) {
-	sdllog(string_join{""}("paused"));
-	paused = true;
-      } else if (etype == SDL_APP_DIDENTERFOREGROUND) {
-	sdllog(string_join{""}("resumed"));
-	paused = false;
-	int w;
-	int h;
-	SDL_GL_GetDrawableSize(sdlc.sdl_window.some, w, h);
-	pgs.reshape(w, h);
-      } else if (etype == SDL_QUIT) {
-	done = true;
-	break;
-      } else if (etype == SDL_MULTIGESTURE) {
-      } else if (etype == SDL_KEYDOWN) {
-	// println("KEYDOWN event");
-	if (ev.key.keysym.scancode == SDL_SCANCODE_TAB) {
-	  scene_next();
-	}
-	if (ev.key.keysym.scancode == SDL_SCANCODE_F) {
-	  rctl.fixed_fps = rctl.fixed_fps != 6 ? rctl.fixed_fps + 1 : 1;
-	}
-      } else {
-	string s;
-	integral_to_hexadecimal{int}(cast_int(ev.type), s);
-	sdllog(string_join{" "}("unknown event", s));
-	/* */
-      }
-    }
-    if (paused) {
-      SDL_Delay(300);
-      frctl.tprev = SDL_GetTicks();
-      frctl.tprevsec = frctl.tprev;
-      continue;
-    } else {
-      function void motion_rec(scene_node mutable& sn, size_t i, size_t n)
-      {
-	const num = sn.children.size();
-	if (num > 0) {
-	  const rnd = make_rand_generator(1U);
-	  for (const ci, const& c: sn.children) {
-	    const ui = rnd->generate() / 65536;
-	    motion_rec(*c, ui, 65536);
-	  }
-	} else {
-	  const t = static_cast{float}(i) / static_cast{float}(n) * pi_float()
-	    * 2.0;
-	  const x = sin(t);
-	  const y = cos(t);
-	  const ang = glm::make_quat_angle_axis(
-	    static_cast{float}(motion_count), x, y, 0.0);
-	  sn.trans = sn.trans_initial * ang.to_mat4();
-	}
-      }
-      motion_rec(*snode, 0, 1);
-      motion_count += 1 * static_cast{int}(frctl.frame_speed_mul);
-      if (motion_count >= 360) {
-	motion_count -= 360;
-      }
-    }
-    frctl.save_ticks(1);
-    {
-      /* draw frame */
-      pgs.cam.camera = player.posang;
-      pgs.cam.light.position = pgs.cam.camera.position +
-	pgs.cam.camera.angle.to_mat3() * glm::make_vec3(3.0, 3.0, 5.0);
-      pgs.cam.light.angle = pgs.cam.camera.angle;
-      const mess = string_join{" "}(frctl.fps, frctl.frame_speed_mul,
-	frctl.ticks_sum_prev, ictl.finger_zmove_delta, pgs.cam.camera.angle);
-      draw_frame(pgs, bo, snode, mess);
-      frctl.save_ticks(2);
-      frctl.measure();
-      frctl.frame_speed_mul = static_cast{float}(rctl.fixed_fps);
-    }
-    {
-      SDL_KeyboardState const ks;
-      if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) {
-	done = true;
-      }
-      if (ks.Key(SDL_SCANCODE_UP) != 0) {
-	player.posang.rotate_angle_axis(1.0f * frctl.frame_speed_mul,
-	    1.0, 0.0, 0.0);
-      }
-      if (ks.Key(SDL_SCANCODE_DOWN) != 0) {
-	player.posang.rotate_angle_axis(-1.0f * frctl.frame_speed_mul,
-	    1.0, 0.0, 0.0);
-      }
-      if (ks.Key(SDL_SCANCODE_LEFT) != 0) {
-	player.posang.rotate_angle_axis(1.0f * frctl.frame_speed_mul,
-	    0.0, 1.0, 0.0);
-      }
-      if (ks.Key(SDL_SCANCODE_RIGHT) != 0) {
-	player.posang.rotate_angle_axis(-1.0f * frctl.frame_speed_mul,
-	    0.0, 1.0, 0.0);
-      }
-      if (ks.Key(SDL_SCANCODE_SPACE) != 0) {
-	ictl.add_zdelta(-0.001f, frctl);
-      }
-      if (ks.Key(SDL_SCANCODE_LSHIFT) != 0) {
-	ictl.add_zdelta(0.001f, frctl);
-      }
-      if (ks.Key(SDL_SCANCODE_A) != 0) {
-	player.posang.translate_relative(
-	    glm::make_vec3(-0.05, 0.0, 0.0) * frctl.frame_speed_mul);
-      }
-      if (ks.Key(SDL_SCANCODE_D) != 0) {
-	player.posang.translate_relative(
-	    glm::make_vec3(0.05, 0.0, 0.0) * frctl.frame_speed_mul);
-      }
-      if (ks.Key(SDL_SCANCODE_S) != 0) {
-	player.posang.translate_relative(
-	    glm::make_vec3(0.0, -0.05, 0.0) * frctl.frame_speed_mul);
-      }
-      if (ks.Key(SDL_SCANCODE_W) != 0) {
-	player.posang.translate_relative(
-	    glm::make_vec3(0.0, 0.05, 0.0) * frctl.frame_speed_mul);
-      }
-      if (ks.Key(SDL_SCANCODE_Z) != 0) {
-	player.posang.rotate_angle_axis(
-	    1.0f * frctl.frame_speed_mul, 0.0, 0.0, 1.0);
-      }
-      if (ks.Key(SDL_SCANCODE_X) != 0) {
-	player.posang.rotate_angle_axis(
-	    -1.0f * frctl.frame_speed_mul, 0.0, 0.0, 1.0);
-      }
-      if (ks.Key(SDL_SCANCODE_RETURN) != 0) {
-	ictl.finger_zmove_delta = 0.0;
-	ictl.finger_zmove_mode = 1;
-      }
-      ictl.finger_action_step(player.posang, frctl);
-    }
-    frctl.save_ticks(3);
-    rctl.delay();
-    frctl.save_ticks(4);
-    SDL_GL_SwapWindow(sdlc.sdl_window.some);
-    frctl.save_ticks(5);
-  }
-}
-
-{
-  GL::base::set_check_error_enabled(1);
-  try {
-    main_loop();
-  } catch (exception::c_exception ex) {
-    sdllog(string_join{" "}("uncaught exception", ex));
   }
 }
 

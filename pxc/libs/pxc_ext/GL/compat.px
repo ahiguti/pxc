@@ -73,7 +73,15 @@ private metafunction api_gl33
       GL_VERSION_3_0_CMD,
       GL_VERSION_3_1_CMD,
       GL_VERSION_3_2_CMD,
-      GL_VERSION_3_3_CMD}
+      m::filter{GL_VERSION_3_3_CMD, mesa_workaround}}
   };
 
+private metafunction mesa_workaround{e}
+  m::apply{
+    metafunction{n}
+      m::and{
+	m::ne{n, "glQueryCounter"},
+	m::ne{n, "glGetQueryObjecti64v"},
+	m::ne{n, "glGetQueryObjectui64v"}},
+    m::at0{e}};
 

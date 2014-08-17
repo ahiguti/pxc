@@ -1,0 +1,170 @@
+public namespace glshader "export-unsafe";
+public import common -;
+public import pointer::raw -;
+public import numeric::fpmath -;
+public import GL::glm glm;
+public import GL::compat -;
+public import meta m;
+public import exception -;
+
+public metafunction is_ios m::eq{m::profile{"platform"}, "ios"};
+public metafunction is_android m::eq{m::profile{"platform"}, "android"};
+public metafunction is_macos m::eq{m::profile{"platform"}, "Darwin"};
+public metafunction is_linux m::eq{m::profile{"platform"}, "Linux"};
+public metafunction is_gles m::or{is_ios, is_android};
+public metafunction is_gl3 m::not{is_gles};
+public metafunction is_gl3_or_gles3 m::not{is_android};
+
+
+public function {tuni, tattr} cptr{shader{tuni, tattr}}
+make_shader_ptr(cstrref const& prog_v, cstrref const& prog_f,
+  strlit const& attrib_to_avoid_0)
+{
+  return make_cptr{shader{tuni, tattr}}(prog_v, prog_f, attrib_to_avoid_0);
+}
+
+public struct {tuni, tattr}
+shader private(cstrref const& prog_v, cstrref const& prog_f,
+  strlit const& attrib_to_avoid_0)
+{
+  public metafunction uniforms_type tuni;
+  public metafunction vertex_attributes_type tattr;
+  expand (sym: m::map{m::field_names{tuni},
+    metafunction{s} m::concat{"u_", s}})
+  {
+  public int sym = -1;
+  }
+  expand (sym: m::map{m::field_names{tattr},
+    metafunction{s} m::concat{"a_", s}})
+  {
+  public int sym = -1;
+  }
+  public uint program = 0;
+  public string error;
+  /* private */
+  init(prog_v, prog_f, attrib_to_avoid_0);
+  private function void init(cstrref const& prog_v, cstrref const& prog_f,
+    strlit const& attrib_to_avoid_0)
+  {
+    program = create_program(prog_v, prog_f, attrib_to_avoid_0, error);
+    if (program == 0) {
+      throw runtime_error_template{"create_program"}("1");
+    }
+    expand (sym: m::field_names{tuni}) {
+      expand (vsym: {m::concat{"u_", sym}}) {
+	vsym = glGetUniformLocation_nocheck(program,
+	  m::to_string{sym}.crawptr().char());
+	glGetError(); /* ignore */
+	if (vsym < 0) {
+	  /* e.g., model_matrix is defined as a vertex attribute if instanced
+	   * rendering is enabled, and an uniform if not. */
+	  vsym = glGetAttribLocation_nocheck(program,
+	    m::to_string{sym}.crawptr().char());
+	  glGetError(); /* ignore */
+	  /*
+	  println("uniform(attr)", m::to_string{sym}, vsym);
+	  */
+	} else {
+	  /*
+	  println("uniform", m::to_string{sym}, vsym);
+	  */
+	}
+      }
+    }
+    expand (sym: m::field_names{tattr}) {
+      expand (vsym: {m::concat{"a_", sym}}) {
+	vsym = glGetAttribLocation_nocheck(program,
+	  m::to_string{sym}.crawptr().char());
+	glGetError(); /* ignore */
+	/*
+	println("attribute", m::to_string{sym}, vsym);
+	*/
+      }
+    }
+  }
+}
+
+private function uint compile_shader(cstrref const& src, GLenum type,
+  string mutable& err_r)
+{
+  mutable res = glCreateShader(type);
+  mutable source = make_farray{ccharptr}(src.crawptr().char());
+  const length = make_farray{int}(static_cast{int}(src.size()));
+  glShaderSource(res, 1, source.rawptr(), length.crawptr());
+  glCompileShader(res);
+  int success;
+  glGetShaderiv(res, GL_COMPILE_STATUS, address(success));
+  if (success == 0) {
+    int sz;
+    if (m::eq{m::profile{"platform"}, "android"}) {
+      sz = 4096; /* android bug workaround */
+    } else {
+      glGetShaderiv(res, GL_INFO_LOG_LENGTH, address(sz));
+    }
+    string buf;
+    buf.resize(static_cast{size_t}(sz), 0);
+    GLsizei len;
+    glGetShaderInfoLog(res, static_cast{GLsizei}(sz), address(len),
+      buf.rawptr().char());
+    debug_log("compile_shader failed:",
+      string_join{"\t"}(static_cast{int}(type), success, buf));
+    err_r = string_join{"\t"}(static_cast{int}(type), success, buf);
+    glDeleteShader(res);
+    res = 0;
+  }
+  return res;
+}
+
+private function uint
+create_program(cstrref const& vertex_shader, cstrref const& fragment_shader,
+  strlit const& attrib_to_avoid_0, string mutable& err_r)
+{
+  mutable prog = glCreateProgram();
+  uint shader;
+  int success = 1;
+  if (!vertex_shader.empty()) {
+    shader = compile_shader(vertex_shader, GL_VERTEX_SHADER, err_r);
+    if (shader != 0) {
+      glAttachShader(prog, shader);
+    } else {
+      success = 0;
+    }
+  }
+  if (!fragment_shader.empty()) {
+    shader = compile_shader(fragment_shader, GL_FRAGMENT_SHADER, err_r);
+    if (shader != 0) {
+      glAttachShader(prog, shader);
+      if (!attrib_to_avoid_0.empty()) {
+	glBindAttribLocation(prog, 1, attrib_to_avoid_0.crawptr().char());
+      }
+    } else {
+      success = 0;
+    }
+  }
+  if (success == 0) {
+    debug_log("create_program failed:", success);
+    glDeleteProgram(prog);
+    prog = 0;
+  } else {
+    glLinkProgram(prog);
+    int linkst;
+    glGetProgramiv(prog, GL_LINK_STATUS, address(linkst));
+    if (linkst == 0) {
+      string buf;
+      buf.resize(4096, 0);
+      GLsizei len;
+      glGetProgramInfoLog(prog, static_cast{GLsizei}(buf.size()), address(len),
+	buf.rawptr().char());
+      buf.resize(static_cast{size_t}(len), 0);
+      debug_log("linkprogram failed:", string_join{"\t"}(prog, buf));
+      debug_log("vert:", vertex_shader);
+      debug_log("frag:", fragment_shader);
+      glDeleteProgram(prog);
+      prog = 0;
+    } else {
+      debug_log("linkprogram succeeded:", prog);
+    }
+  }
+  return prog;
+}
+
