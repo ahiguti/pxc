@@ -1,0 +1,498 @@
+public namespace glgeometry "export-unsafe";
+public import common -;
+public import exception -;
+public import meta m;
+public import glbuffer -;
+public import GL::glm -;
+public import numeric::fpmath -;
+public import operator op;
+
+public metafunction modifier_t callable_ptr{darray{vertex_attr}, {poly_t}};
+
+public tsvaluetype struct vertex_attr {
+  public vec3 pos;
+  public vec3 nor;
+  public vec3 tan;
+  public vec3 uvw;
+}
+
+public tsvaluetype struct particle_vertex_attr {
+  public vec3 pos;
+  /*
+  public vec3 pos_delta;
+  public vec3 timing;
+  */
+}
+
+/* implicit conversion from vec3 to vertex_attr */
+public function {tto, tfrom} vertex_attr
+tvec3___to(vec3 const& x)
+{
+  vertex_attr r;
+  r.pos = x;
+  return r;
+}
+
+public metafunction poly_t cslice{vertex_attr};
+public metafunction gf_poly callable_ptr{void, {poly_t, mesh_pos}};
+public metafunction to_gf_poly{f}
+  make_callable_ptr{f, m::sub{m::size{m::args{f}}, 2}};
+
+public metafunction rand_generator_ptr ptr{rand_generator};
+public metafunction make_rand_generator make_ptr{rand_generator};
+
+public tsvaluetype struct
+rand_generator(uint seed0)
+{
+  private uint seed = seed0;
+  public function uint generate() {
+    uint rv = seed;
+    seed = seed * 1664525U + 1013904223U;
+    return rv;
+  }
+  public function float generate_float() {
+    return cast_float(generate()) / 4294967296.0;
+  }
+}
+
+public metafunction regular_polygon to_gf_poly{gf_regular_polygon};
+public metafunction bump_rec to_gf_poly{gf_bump_rec};
+public metafunction rand_bump to_gf_poly{gf_rand_bump};
+public metafunction joint{tattr} to_gf_poly{gf_joint{tattr}};
+public metafunction fill{tattr} to_gf_poly{gf_fill{tattr}};
+public metafunction fill_smooth{tattr} to_gf_poly{gf_fill_smooth{tattr}};
+public metafunction lid to_gf_poly{gf_lid};
+public metafunction hole to_gf_poly{gf_hole};
+public metafunction sphere to_gf_poly{gf_sphere};
+public metafunction rectangle_split to_gf_poly{gf_rectangle_split};
+public metafunction rotate_local to_gf_poly{gf_rotate_local};
+public metafunction bump_apply to_gf_poly{gf_bump_apply};
+public metafunction particle to_gf_poly{gf_particle};
+public metafunction rand_sphere to_gf_poly{gf_rand_sphere};
+
+public threaded function {t} float cast_float(t x)
+{ return static_cast{float, t}(x); }
+public threaded function {t} uint cast_uint(t x)
+{ return static_cast{uint, t}(x); }
+public threaded function {t} int cast_int(t x)
+{ return static_cast{int, t}(x); }
+
+public tsvaluetype struct mesh_pos {
+  public size_t x;
+  public size_t y;
+  public size_t z;
+  public size_t w;
+}
+
+public threaded function float pi_float()
+{
+  return 3.1415926535897932384626433832795;
+}
+
+public threaded function {t} void polygon_scale(t mutable& poly, float scale)
+{
+  const c = polygon_center(poly);
+  for (const i, mutable& p: poly) {
+    p.pos = c + ((p.pos - c) * scale);
+  }
+}
+
+public threaded function vec3 polygon_center(poly_t const& poly)
+{
+  vec3 mutable c;
+  for (const i, const& p: poly) {
+    c += p.pos;
+  }
+  c /= cast_float(poly.size());
+  return c;
+}
+
+public threaded function float polygon_radius(poly_t const& poly)
+{
+  const c = polygon_center(poly);
+  float mutable r = 0.0;
+  for (const i, const& p: poly) {
+    r = max(r, length(p.pos- c));
+  }
+  return r;
+}
+
+/* private */
+
+private threaded function vec3 normal_from_poly(poly_t const& poly)
+{
+  if (poly.size() < 3) { return vec3(); }
+  return cross(poly[1].pos - poly[0].pos, poly[2].pos - poly[0].pos)
+    .normalize();
+}
+
+private threaded function vec3 normal_scale_from_poly(poly_t const& poly)
+{
+  if (poly.size() < 3) { return vec3(); }
+  return normal_from_poly(poly) * length(poly[1].pos - poly[0].pos);
+}
+
+private threaded function void gf_regular_polygon(float radius, size_t n,
+  gf_poly const& c0, gf_poly const& c1, poly_t const& poly, mesh_pos const& mp)
+{
+  /* poly is ignored */
+  mutable arr = darray{vertex_attr}(n, vertex_attr());
+  for (const i: 0 .. n) {
+    const a = (cast_float(i) * 2.0f * pi_float()) / cast_float(n);
+    arr[i].pos.x = sin(a) * radius;
+    arr[i].pos.y = -cos(a) * radius;
+    arr[i].pos.z = 0.0f;
+  }
+  c0(arr, mesh_pos());
+  reverse(arr.range());
+  c1(arr, mesh_pos());
+}
+
+private threaded function void gf_polygon_points(poly_t const& pts, 
+  gf_poly const& c0, gf_poly const& c1, poly_t const& poly, mesh_pos const& mp)
+{
+  /* poly is ignored */
+  darrayst{vertex_attr} arr = pts;
+  c0(arr, mesh_pos());
+  reverse(arr.range());
+  c1(arr, mesh_pos());
+}
+
+private threaded function void gf_bump_modifier(modifier_t const& mo,
+  gf_poly const& c0, gf_poly const& c1, poly_t const& poly, mesh_pos const& mp)
+{
+  darray{vertex_attr} front = mo(poly);
+  if (front.size() < 3) { return; }
+  /* front */
+  c1(front, mesh_pos());
+  /* side */
+  const sz = front.size();
+  for (const i: 0 .. sz) {
+    const i1 = i + 1 != sz ? i + 1 : 0;
+    const side = make_farray{vertex_attr}(poly[i], poly[i1], front[i1],
+      front[i]);
+    c0(side, mesh_pos());
+  }
+}
+
+private threaded function void gf_bump_rec(float z, float scale, int recurse,
+  gf_poly const& c0, gf_poly const& c1, poly_t const& poly, mesh_pos const& mp)
+{
+  if (poly.size() < 3) { return; }
+  darrayst{vertex_attr} front = poly;
+  const nor = normal_scale_from_poly(poly);
+  for (const i, mutable& e: front) {
+    e.pos += nor * z;
+  }
+  polygon_scale(front, scale);
+  /* front */
+  if (recurse > 1) {
+    gf_bump_rec(z, scale, recurse - 1, c0, c1, front, mesh_pos());
+  } else {
+    c1(front, mesh_pos());
+  }
+  /* side */
+  const sz = front.size();
+  for (const i: 0 .. sz) {
+    const i1 = i + 1 != sz ? i + 1 : 0;
+    const side = make_farray{vertex_attr}(poly[i], poly[i1], front[i1],
+      front[i]);
+    c0(side, mesh_pos());
+  }
+}
+
+private threaded function void gf_rand_bump(size_t num, float scale,
+  float xmin, float xmax, float ymin, float ymax, float zmin, float zmax,
+  rand_generator_ptr const& rnd, gf_poly const& c0, gf_poly const& c1,
+  gf_poly const& c2, poly_t const& poly, mesh_pos const& mp)
+{
+  if (poly.size() != 4) { return; }
+  darrayst{vertex_attr} front = poly;
+  /* bumps */
+  polygon_scale(front, scale);
+  for (const i: 0 .. num) {
+    const xsz = xmin + (xmax - xmin) * rnd->generate_float();
+    const ysz = ymin + (ymax - ymin) * rnd->generate_float();
+    const zsz = zmin + (zmax - zmin) * rnd->generate_float();
+    const xp = (1.0f - xsz) * rnd->generate_float();
+    const yp = (1.0f - ysz) * rnd->generate_float();
+    threaded function vec3 pos(vec3 const& vec, float x, float xmax)
+    {
+      return vec * x / xmax;
+    }
+    const s0 = poly[0].pos + (poly[1].pos - poly[0].pos) * xp;
+    const s1 = poly[0].pos + (poly[1].pos - poly[0].pos) * (xp + xsz);
+    const s2 = poly[3].pos + (poly[2].pos - poly[3].pos) * (xp + xsz);
+    const s3 = poly[3].pos + (poly[2].pos - poly[3].pos) * xp;
+    const t0 = s0 + (s3 - s0) * yp;
+    const t1 = s1 + (s2 - s1) * yp;
+    const t2 = s1 + (s2 - s1) * (yp + ysz);
+    const t3 = s0 + (s3 - s0) * (yp + ysz);
+    const poly1 = make_farray{vertex_attr}(t0, t1, t2, t3);
+    gf_bump_rec(zsz, 1.0, 1, c0, c1, poly1, mp);
+  }
+  /* front */
+  c2(poly, mesh_pos());
+}
+
+public threaded function mat4
+poly_trans(poly_t const& poly)
+{
+  const ex = (poly[1].pos - poly[0].pos).normalize();
+  const ez = normal_from_poly(poly);
+  const ey = cross(ez, ex);
+  const c = polygon_center(poly);
+  return make_mat4(
+    ex.x, ex.y, ex.z,  0.0, 
+    ey.x, ey.y, ey.z,  0.0,
+    ez.x, ez.y, ez.z,  0.0,
+     c.x,  c.y,  c.z,  1.0);  
+}
+
+private threaded function {tattr} void
+gf_joint(ptr{vertices} const& vptr, string const& joint_name,
+  gf_poly const& c0, poly_t const& poly, mesh_pos const& mp)
+{
+  if (poly.size() < 3) { return; }
+  node_joint e;
+  e.trans = poly_trans(poly);
+  e.joint_name = joint_name;
+  vptr->push_joint(e);
+  c0(poly, mesh_pos());
+}
+
+private threaded function void
+gf_particle(ptr{vertices} const& vptr, poly_t const& poly, mesh_pos const& mp)
+{
+  for (const i, const& p: poly) {
+    particle_vertex_attr x;
+    x.pos = p.pos;
+    vptr->push_point{particle_vertex_attr}(x);
+  }
+}
+
+private threaded function void gf_rand_sphere(float radius, size_t n,
+  bool surface_flag, rand_generator_ptr const& rnd, gf_poly const& c0,
+  poly_t const& poly, mesh_pos const& mp)
+{
+  /* poly is ignored */
+  farray{vertex_attr, 1} arr;
+  vertex_attr v;
+  size_t i;
+  while (i < n) {
+    const x = rnd->generate_float() * 2.0f - 1.0f;
+    const y = rnd->generate_float() * 2.0f - 1.0f;
+    const z = rnd->generate_float() * 2.0f - 1.0f;
+    const d = x * x + y * y + z * z;
+    if (d > 1.0f) {
+      continue;
+    }
+    if (surface_flag) {
+      if (d < 0.001f) {
+	continue;
+      }
+      const m = radius / sqrt(d);
+      arr[0].pos.x = x * m;
+      arr[0].pos.y = y * m;
+      arr[0].pos.z = z * m;
+    } else {
+      arr[0].pos.x = x * radius;
+      arr[0].pos.y = y * radius;
+      arr[0].pos.z = z * radius;
+    }
+    c0(arr, mesh_pos());
+    ++i;
+  }
+}
+
+private threaded function {tattr} void
+gf_fill_internal(ptr{vertices} const& vptr, bool flat_flag,
+  poly_t const& poly, mesh_pos const& mp)
+{
+  const sz = poly.size();
+  if (sz < 3) { return; }
+  vec3 mutable nor;
+  vec3 mutable tang;
+  if (flat_flag) {
+    nor = normal_from_poly(poly);
+    tang = (poly[1].pos - poly[0].pos).normalize();
+  }
+  mutable vtxs = darrayst{tattr}(sz, tattr());
+  for (const i: 0 .. sz) {
+    mutable& v = vtxs[i];
+    v.position = poly[i].pos;
+    if (flat_flag) {
+      v.normal = nor;
+      v.tangent = make_vec3(tang.x, tang.y, tang.z);
+    } else {
+      v.normal = poly[i].nor;
+      v.tangent = poly[i].tan;
+    }
+    v.uvw = vec3();
+    /* debug_log("fill", v); */
+  }
+  if (sz == 4) {
+    vtxs[0].uvw = make_vec3(0.0f, 0.0f, 1.0f);
+    vtxs[1].uvw = make_vec3(4.0f, 0.0f, 1.0f);
+    vtxs[2].uvw = make_vec3(4.0f, 4.0f, 1.0f);
+    vtxs[3].uvw = make_vec3(0.0f, 4.0f, 1.0f);
+    const len01 = length(poly[1].pos - poly[0].pos);
+    const len23 = length(poly[3].pos - poly[2].pos);
+    const rat = len23 / len01;
+    if (rat < 0.95 || rat > 1.05) {
+      vtxs[0].uvw /= rat;
+      vtxs[1].uvw /= rat;
+    }
+  }
+  /*
+  for (const i: 0 .. sz - 2) {
+    vptr->push_vertex_dedup(vtxs[0]);
+    vptr->push_vertex_dedup(vtxs[i + 1]);
+    vptr->push_vertex_dedup(vtxs[i + 2]);
+  }
+  */
+  vptr->push_polygon_distinct{tattr}(vtxs);
+}
+
+private threaded function {tattr} void
+gf_fill(ptr{vertices} const& vptr, poly_t const& poly,
+  mesh_pos const& mp)
+{
+  gf_fill_internal{tattr}(vptr, true, poly, mp);
+}
+
+private threaded function {tattr} void
+gf_fill_smooth(ptr{vertices} const& vptr, poly_t const& poly,
+  mesh_pos const& mp)
+{
+  gf_fill_internal{tattr}(vptr, false, poly, mp);
+}
+
+private threaded function void gf_lid(gf_poly const& c0, gf_poly const& c1,
+  poly_t const& poly, mesh_pos const& mp)
+{
+  darrayst{vertex_attr} arr = poly;
+  c0(arr, mesh_pos());
+  reverse(arr.range());
+  c1(arr, mesh_pos());
+}
+
+private threaded function void gf_hole(poly_t const& poly, mesh_pos const& mp)
+{
+}
+
+private threaded function void gf_sphere(size_t split, gf_poly const& c0,
+  poly_t const& poly, mesh_pos const& mp)
+{
+  const poly_sz = poly.size();
+  if (poly_sz < 3) { return; }
+  if (split == 0) { c0(poly, mesh_pos()); }
+  const pcenter = polygon_center(poly);
+  const nor = normal_from_poly(poly);
+  const radius = polygon_radius(poly);
+  darrayst{vertex_attr} sp = poly;
+  mesh_pos mp1;
+  for (size_t i: 1 .. split) {
+    mp1.x = i;
+    const a1 = pi_float() * cast_float(i) / cast_float(split * 2);
+    darrayst{vertex_attr} p = poly;
+    for (size_t j, mutable& x: p) {
+      x.pos += nor * radius * sin(a1);
+    }
+    polygon_scale(p, cos(a1));
+    for (const j: 0 .. poly_sz) {
+      const j1 = j + 1 != poly_sz ? j + 1 : 0;
+      mutable side = make_farray{vertex_attr}(sp[j], sp[j1], p[j1], p[j]);
+      for (size_t i, mutable& p: side) {
+	p.nor = (p.pos - pcenter).normalize();
+      }
+      mp1.y = j;
+      c0(side, mp1);
+    }
+    for (const j: 0 .. poly_sz) {
+      sp[j] = p[j];
+    }
+  }
+  const top_pos = pcenter + nor * radius;
+  for (const j: 0 .. poly_sz) {
+    const j1 = j + 1 != poly_sz ? j + 1 : 0;
+    mutable side = make_farray{vertex_attr}(top_pos, sp[j], sp[j1]);
+    for (size_t i, mutable& p: side) {
+      p.nor = (p.pos - pcenter).normalize();
+    }
+    c0(side, mesh_pos());
+  }
+}
+
+private threaded function void gf_rectangle_split(size_t split_x,
+  size_t split_y, gf_poly const& c0, poly_t const& poly, mesh_pos const& mp)
+{
+  if (poly.size() != 4) { return; }
+  threaded function vec3 pos(vec3 const& vec, size_t i, size_t imax)
+  {
+    return vec * (cast_float(i) / cast_float(imax));
+  }
+  mesh_pos mp1;
+  for (const i: 0 .. split_x) {
+    mp1.x = i;
+    const s0 = poly[0].pos + pos(poly[1].pos - poly[0].pos, i, split_x);
+    const s1 = poly[0].pos + pos(poly[1].pos - poly[0].pos, i + 1, split_x);
+    const s2 = poly[3].pos + pos(poly[2].pos - poly[3].pos, i + 1, split_x);
+    const s3 = poly[3].pos + pos(poly[2].pos - poly[3].pos, i , split_x);
+    for (const j: 0 .. split_y) {
+      mp1.y = j;
+      const t0 = s0 + pos(s3 - s0, j, split_y);
+      const t1 = s1 + pos(s2 - s1, j, split_y);
+      const t2 = s1 + pos(s2 - s1, j + 1, split_y);
+      const t3 = s0 + pos(s3 - s0, j + 1, split_y);
+      c0(make_farray{vertex_attr}(t0, t1, t2, t3), mp1);
+    }
+  }
+}
+
+private threaded function void gf_rotate_local(quat const& q,
+  gf_poly const& c0, poly_t const& poly, mesh_pos const& mp)
+{
+  const trans = poly_trans(poly);
+  const trans_inv = trans.inverse();
+  const m = trans_inv * q.to_mat4() * trans;
+  darrayst{vertex_attr} p = poly;
+  for (const i, mutable& v: p) {
+    const v1 = m * make_vec4(v.pos.x, v.pos.y, v.pos.z, 1.0);
+    v.pos = make_vec3(v1.x, v1.y, v1.z);
+  }
+  c0(p, mp);
+}
+
+private threaded function void gf_bump_apply(mat4 const& m,
+  bool split_reverse, gf_poly const& c0, gf_poly const& c1, poly_t const& poly,
+  mesh_pos const& mp)
+{
+  const trans = poly_trans(poly);
+  const trans_inv = trans.inverse();
+  const m1 = trans_inv * m * trans;
+  darrayst{vertex_attr} front = poly;
+  for (const i, mutable& v: front) {
+    const v1 = m1 * make_vec4(v.pos.x, v.pos.y, v.pos.z, 1.0);
+    v.pos = make_vec3(v1.x / v1.w, v1.y / v1.w, v1.z / v1.w);
+  }
+  /* front */
+  c1(front, mp);
+  /* side */
+  const sz = poly.size();
+  for (const i: 0 .. sz) {
+    const i1 = i + 1 != sz ? i + 1 : 0;
+    if (split_reverse) {
+      const s0 = make_farray{vertex_attr}(poly[i], poly[i1], front[i1]);
+      const s1 = make_farray{vertex_attr}(front[i1], front[i], poly[i]);
+      c0(s0, mesh_pos());
+      c0(s1, mesh_pos());
+    } else {
+      const s0 = make_farray{vertex_attr}(poly[i], poly[i1], front[i]);
+      const s1 = make_farray{vertex_attr}(front[i], poly[i1], front[i1]);
+      c0(s0, mesh_pos());
+      c0(s1, mesh_pos());
+    }
+  }
+}
+

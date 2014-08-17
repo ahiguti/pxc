@@ -22,6 +22,10 @@ instancedしなかったらちょうど30fpsだった。
 (2) インスタンス毎にmat4を渡すより、vec3とquatを渡すほうが軽い
 (3) glMapBuffer使ってコピーを避けたほうが速いかもしれない
 
+ポイントスプライト
+(pgl19)
+mbp 2880x1800 macosx 60fps 1000万頂点 (6億頂点/秒)
+
 deferred
 1479-t2 ok
 1485-t5 ok
@@ -30,6 +34,12 @@ deferred
 1495-t1 復活
 
 TODO:
+- draw_frame: view_projectionを何度も計算しているのをやめる
+  - draw_instancedに一本化。instanced無効のときにはシェーダは
+    model_matrixをuniformで渡すもの。
+  - パーティクルのシェーダがどうなるか
+- iosでinstanced
+  attributeではなく uniform model_matrix[] で渡す方法で実装
 - buffer_objectを複数つくる。nodeをinstance化するときにどのboで描画
   するのかを記録。
 - primitive restartを使えるときには使う。頂点データ減らせる。
@@ -437,7 +447,18 @@ gl_PointSize = ...
 vec2 xy = gl.PointCoord * 2.0 - 1.0; // (-1.0, 1.0)範囲にする
 gl_FragColor = ...
 
-複数bufferobject対応
-instantiate_sceneはbuffer_objectのtupleを引数に取る。
-bo.get_by_idを
+uniform:
+  mat4 mvp; /* 花火のローカル座標からの変換 */
+  float t_now; /* 現在時刻(インスタンス作成からの経過秒数 */
+頂点属性:
+  vec3 position; /* 花火ローカル座標での開始位置 */
+  vec3 position_delta; /* サイクル内時刻に比例して座標に加算 */
+  vec3 timing; /* サイクル開始時刻, 終了時刻, 周期  */
+
+花火一発を一度のglDrawArraysで描く。
+
+t_now 現在時刻 (uniform)
+t_start サイクル開始時刻
+t_duration 1サイクルの周期 (除算を避けるために逆数にしておく？)
+t_cycle = floor((t_now - t_start) / t_duration) 現サイクル内時刻
 
