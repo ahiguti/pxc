@@ -309,7 +309,7 @@ struct hash_map : public refguard_base {
   static inline Tm& get_mapped(Tm *ptr) { return *ptr; }
   static inline const Tm& get_cmapped(const Tm *ptr) { return *ptr; }
   void rehash_if() {
-    if (refguard_count != 0) {
+    if (!refguard_is_zero()) {
       return;
     }
     size_t const n = hdr->denom_ent;
@@ -319,7 +319,7 @@ struct hash_map : public refguard_base {
     }
   }
   void rehash(size_type nsz) {
-    if (refguard_count != 0) {
+    if (!refguard_is_zero()) {
       return;
     }
     rehash_internal(nsz);

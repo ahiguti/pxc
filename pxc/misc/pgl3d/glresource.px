@@ -1,0 +1,78 @@
+public namespace glresource "export-unsafe";
+public import common -;
+public import GL::glm glm;
+public import GL::compat -;
+public import meta m;
+public import exception -;
+public import pointer::raw -;
+
+public metafunction is_ios m::eq{m::profile{"platform"}, "ios"};
+public metafunction is_android m::eq{m::profile{"platform"}, "android"};
+public metafunction is_macos m::eq{m::profile{"platform"}, "Darwin"};
+public metafunction is_linux m::eq{m::profile{"platform"}, "Linux"};
+public metafunction is_gles m::or{is_ios, is_android};
+public metafunction is_gl3 m::not{is_gles};
+public metafunction is_gl3_or_gles3 m::not{is_android};
+
+private threaded struct extern "glresource$n::handle" "noncopyable" {t}
+handle(t const& v)
+{
+  public t value;
+}
+
+extern "types" inline
+namespace glresource$n {
+template <typename T> struct handle
+{
+  handle(T const& v) : value(v) { }
+  T value;
+private:
+  handle(handle const&);
+  handle& operator =(handle const&);
+};
+};
+;
+
+public metafunction auto_buffer
+  auto_handle{uint, 0, glGenBuffers, glDeleteBuffers};
+public metafunction auto_texture
+  auto_handle{uint, 0, glGenTextures, glDeleteTextures};
+public metafunction auto_framebuffer
+  auto_handle{uint, 0, glGenFramebuffers, glDeleteFramebuffers};
+public metafunction auto_renderbuffer
+  auto_handle{uint, 0, glGenRenderbuffers, glDeleteRenderbuffers};
+public metafunction auto_vertexarray
+  m::cond{
+    is_gl3,
+    auto_handle{uint, 0, glGenVertexArrays, glDeleteVertexArrays},
+    auto_handle{uint, 0, 0, 0}};
+
+private threaded struct {t, init, generate_func, release_func}
+auto_handle()
+{
+  private handle{t} hnd = handle{t}(init);
+  public function t get() const
+  {
+    return hnd.value;
+  }
+  public function void generate()
+  {
+    reset();
+    if (m::ne{generate_func, 0}) {
+      generate_func(1, address(hnd.value));
+    }
+  }
+  public function void reset()
+  {
+    if (hnd.value > 0) {
+      if (m::ne{release_func, 0}) {
+	release_func(1, caddress(hnd.value));
+      }
+      hnd.value = 0;
+    }
+  }
+  private function ~ {
+    reset();
+  }
+}
+

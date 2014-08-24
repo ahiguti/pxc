@@ -6,38 +6,96 @@ public import GL::glm glm;
 public import GL::compat -;
 public import meta m;
 public import exception -;
+public import glresource -;
 
-public metafunction is_ios m::eq{m::profile{"platform"}, "ios"};
-public metafunction is_android m::eq{m::profile{"platform"}, "android"};
-public metafunction is_macos m::eq{m::profile{"platform"}, "Darwin"};
-public metafunction is_linux m::eq{m::profile{"platform"}, "Linux"};
-public metafunction is_gles m::or{is_ios, is_android};
-public metafunction is_gl3 m::not{is_gles};
-public metafunction is_gl3_or_gles3 m::not{is_android};
+public metafunction num_float_struct{t}
+  m::fold{m::map{m::field_types{t}, num_float_fld}, m::add, 0};
+
+public metafunction num_float_fld{t}
+  m::cond{
+    m::eq{t, float}, 1,
+    m::eq{t, glm::vec2}, 2,
+    m::eq{t, glm::vec3}, 3,
+    m::eq{t, glm::vec4}, 4,
+    m::eq{t, glm::mat2}, 4,
+    m::eq{t, glm::mat3}, 9,
+    m::eq{t, glm::mat4}, 16,
+    m::error{"invalid type"}};
+
+public metafunction num_attrib_fld{t}
+  m::cond{
+    m::eq{t, float}, 1,
+    m::eq{t, glm::vec2}, 1,
+    m::eq{t, glm::vec3}, 1,
+    m::eq{t, glm::vec4}, 1,
+    m::eq{t, glm::mat2}, 2,
+    m::eq{t, glm::mat3}, 3,
+    m::eq{t, glm::mat4}, 4,
+    m::error{"invalid type"}};
+
+public interface shader_i {
+  public function void enable_vertex_attrib_array(size_t num_float_per_vertex);
+  public function void disable_vertex_attrib_array();
+  public function void enable_instance_attrib_array(bool enable_flag);
+  public function void instance_attrib_pointer();
+  public function size_t instance_attrib_num_float() const;
+  public function void instance_attrib_set_uniform(cslice{float} const& value,
+    size_t offset);
+}
 
 
-public function {tuni, tattr} cptr{shader{tuni, tattr}}
+public function {tuni, tinst, tvert} ptr{shader{tuni, tinst, tvert}}
 make_shader_ptr(cstrref const& prog_v, cstrref const& prog_f,
   strlit const& attrib_to_avoid_0)
 {
-  return make_cptr{shader{tuni, tattr}}(prog_v, prog_f, attrib_to_avoid_0);
+  return make_ptr{shader{tuni, tinst, tvert}}(
+    prog_v, prog_f, attrib_to_avoid_0);
 }
 
-public struct {tuni, tattr}
+private function {t} void
+set_uniform(GLint loc, cslice{float} const& value, size_t offset)
+{
+  if (m::eq{t, glm::mat4}) {
+    glUniformMatrix4fv(loc, 1, 0, value.crawptr() + offset);
+  } else if (m::eq{t, glm::mat3}) {
+    glUniformMatrix3fv(loc, 1, 0, value.crawptr() + offset);
+  } else if (m::eq{t, glm::mat2}) {
+    glUniformMatrix2fv(loc, 1, 0, value.crawptr() + offset);
+  } else if (m::eq{t, glm::vec4}) {
+    glUniform4fv(loc, 1, value.crawptr() + offset);
+  } else if (m::eq{t, glm::vec3}) {
+    glUniform3fv(loc, 1, value.crawptr() + offset);
+  } else if (m::eq{t, glm::vec2}) {
+    glUniform2fv(loc, 1, value.crawptr() + offset);
+  } else if (m::eq{t, float}) {
+    glUniform1f(loc, value[offset]);
+  } else {
+    m::error{"set_uniform"};
+  }
+}
+
+public struct {tuni, tinst, tvert}
 shader private(cstrref const& prog_v, cstrref const& prog_f,
   strlit const& attrib_to_avoid_0)
+<shader_i>
 {
   public metafunction uniforms_type tuni;
-  public metafunction vertex_attributes_type tattr;
+  public metafunction instance_attributes_type tinst;
+  public metafunction vertex_attributes_type tvert;
   expand (sym: m::map{m::field_names{tuni},
     metafunction{s} m::concat{"u_", s}})
   {
-  public int sym = -1;
+    public int sym = -1;
   }
-  expand (sym: m::map{m::field_names{tattr},
-    metafunction{s} m::concat{"a_", s}})
+  expand (sym: m::map{m::field_names{tinst},
+    metafunction{s} m::concat{"i_", s}})
   {
-  public int sym = -1;
+    public int sym = -1;
+  }
+  expand (sym: m::map{m::field_names{tvert},
+    metafunction{s} m::concat{"v_", s}})
+  {
+    public int sym = -1;
   }
   public uint program = 0;
   public string error;
@@ -56,8 +114,8 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
 	  m::to_string{sym}.crawptr().char());
 	glGetError(); /* ignore */
 	if (vsym < 0) {
-	  /* e.g., model_matrix is defined as a vertex attribute if instanced
-	   * rendering is enabled, and an uniform if not. */
+	  /* model_matrix is defined as a vertex attribute if instanced
+	   * rendering is enabled. */
 	  vsym = glGetAttribLocation_nocheck(program,
 	    m::to_string{sym}.crawptr().char());
 	  glGetError(); /* ignore */
@@ -71,14 +129,157 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
 	}
       }
     }
-    expand (sym: m::field_names{tattr}) {
-      expand (vsym: {m::concat{"a_", sym}}) {
+    expand (sym: m::field_names{tinst}) {
+      expand (vsym: {m::concat{"i_", sym}}) {
+	vsym = glGetUniformLocation_nocheck(program,
+	  m::to_string{sym}.crawptr().char());
+	glGetError(); /* ignore */
+	if (vsym < 0) {
+	  /* model_matrix is defined as a vertex attribute if instanced
+	   * rendering is enabled. */
+	  vsym = glGetAttribLocation_nocheck(program,
+	    m::to_string{sym}.crawptr().char());
+	  glGetError(); /* ignore */
+	  /*
+	  println("instance(attr)", m::to_string{sym}, vsym);
+	  */
+	} else {
+	  /*
+	  println("instance", m::to_string{sym}, vsym);
+	  */
+	}
+      }
+    }
+    expand (sym: m::field_names{tvert}) {
+      expand (vsym: {m::concat{"v_", sym}}) {
 	vsym = glGetAttribLocation_nocheck(program,
 	  m::to_string{sym}.crawptr().char());
 	glGetError(); /* ignore */
 	/*
 	println("attribute", m::to_string{sym}, vsym);
 	*/
+      }
+    }
+  }
+  public function void instance_attrib_prepare(slice{float} const& arr,
+    instance_attributes_type const& v)
+  {
+    size_t offset = 0;
+    metafunction tinst_sh instance_attributes_type;
+    expand (sym, idx: m::field_names{tinst_sh})
+    {
+      size_t const nfl = num_float_fld{m::at{m::field_types{tinst_sh}, idx}};
+      const src = v.sym.cslice();
+      for (const i: 0 .. nfl) {
+	arr[offset + i] = src[i];
+      }
+      offset += nfl;
+    }
+  }
+  public function void enable_instance_attrib_array(bool enable_flag)
+  {
+    size_t offset = 0;
+    metafunction tinst_sh instance_attributes_type;
+    expand (sym, idx: m::map{m::field_names{tinst_sh},
+      metafunction{s} m::concat{"i_", s}})
+    {
+      metafunction tfield m::at{m::field_types{tinst_sh}, idx};
+      size_t const nfl = num_float_fld{tfield};
+      if (sym >= 0) {
+	if (m::ne{is_gl3, 0}) {
+	  int const n = num_attrib_fld{tfield};
+	  for (const i: 0 .. n) {
+	    const loc = static_cast{uint}(sym + i);
+	    if (enable_flag) {
+	      // println("enable", loc);
+	      glEnableVertexAttribArray(loc);
+	      glVertexAttribDivisor(loc, 1);
+	    } else {
+	      // println("disable", loc);
+	      glVertexAttribDivisor(loc, 0);
+	      glDisableVertexAttribArray(loc);
+	    }
+	  }
+	} else {
+	  throw runtime_error_template{"enable_instance_attrib_array"}("");
+	}
+      }
+      offset += nfl;
+    }
+  }
+  public function void instance_attrib_pointer()
+  {
+    size_t offset = 0;
+    metafunction tinst_sh instance_attributes_type;
+    metafunction stride_byte m::mul{num_float_struct{tinst_sh}, 4};
+    expand (sym, idx: m::map{m::field_names{tinst_sh},
+      metafunction{s} m::concat{"i_", s}})
+    {
+      metafunction tfield m::at{m::field_types{tinst_sh}, idx};
+      size_t const nfl = num_float_fld{tfield};
+      if (sym >= 0) {
+	if (m::ne{is_gl3, 0}) {
+	  int const dv = m::div{num_float_fld{tfield}, num_attrib_fld{tfield}};
+	  int const n = num_attrib_fld{tfield};
+	  for (const i: 0 .. n) {
+	    const loc = static_cast{uint}(sym + i);
+	    size_t const o = (offset + static_cast{size_t}(i * dv)) * 4U;
+	    // println("ptr", loc, stride_byte, offset, i, dv, o);
+	    glVertexAttribPointer(loc, dv, GL_FLOAT, 0, stride_byte,
+	      offset_to_void_cp(o));
+	  }
+	} else {
+	  throw runtime_error_template{"instance_attrib_pointer"}("");
+	}
+      }
+      offset += nfl;
+    }
+  }
+  public function size_t instance_attrib_num_float() const
+  {
+    return num_float_struct{instance_attributes_type};
+  }
+  public function void instance_attrib_set_uniform(cslice{float} const& arr,
+    size_t offset)
+  {
+    metafunction tinst_sh instance_attributes_type;
+    metafunction stride_byte m::mul{num_float_struct{tinst_sh}, 4};
+    expand (sym, idx: m::map{m::field_names{tinst_sh},
+      metafunction{s} m::concat{"i_", s}})
+    {
+      metafunction tfield m::at{m::field_types{tinst_sh}, idx};
+      size_t const nfl = num_float_fld{tfield};
+      if (sym >= 0) {
+	set_uniform{tfield}(sym, arr, offset);
+      }
+      offset += nfl;
+    }
+  }
+  public function void enable_vertex_attrib_array(size_t num_float_per_vertex)
+  {
+    int const stride_byte = static_cast{int}(num_float_per_vertex * 4);
+    size_t offset = 0;
+    metafunction tvert_sh vertex_attributes_type;
+    expand (sym, idx: m::map{m::field_names{tvert_sh},
+      metafunction{s} m::concat{"v_", s}})
+    {
+      if (sym >= 0) {
+	glEnableVertexAttribArray(static_cast{uint}(sym));
+	int const nfloat = num_float_fld{m::at{m::field_types{tvert_sh}, idx}};
+	glVertexAttribPointer(static_cast{uint}(sym), nfloat, GL_FLOAT, 0,
+	  stride_byte, offset_to_void_cp(offset));
+	offset += static_cast{size_t}(nfloat) * 4;
+      }
+    }
+  }
+  public function void disable_vertex_attrib_array()
+  {
+    metafunction tvert_sh vertex_attributes_type;
+    expand (sym, idx: m::map{m::field_names{tvert_sh},
+      metafunction{s} m::concat{"v_", s}})
+    {
+      if (sym >= 0) {
+	glDisableVertexAttribArray(static_cast{uint}(sym));
       }
     }
   }

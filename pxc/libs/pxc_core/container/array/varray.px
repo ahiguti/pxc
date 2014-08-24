@@ -25,12 +25,16 @@ struct bt_cslice {
     return array_find(v, len, offset, value);
   }
   void increment_front(size_t i) {
+    #ifndef PXC_NO_BOUNDS_CHECKING
     if (len < i) { pxcrt::throw_invalid_index(); }
+    #endif
     v += i;
     len -= i;
   }
   void decrement_back(size_t i) {
+    #ifndef PXC_NO_BOUNDS_CHECKING
     if (len < i) { pxcrt::throw_invalid_index(); }
+    #endif
     len -= i;
   }
   bt_cslice<T> next_token(T const& delim) {
@@ -52,19 +56,27 @@ struct bt_cslice {
     return bt_cslice<T>(*this);
   }
   const T& operator [](bt_size_t idx) const {
+    #ifndef PXC_NO_BOUNDS_CHECKING
     if (idx >= len) { pxcrt::throw_invalid_index(); }
+    #endif
     return v[idx];
   }
   const T& operator *() const {
+    #ifndef PXC_NO_BOUNDS_CHECKING
     if (len == 0) { pxcrt::throw_invalid_index(); }
+    #endif
     return *v;
   }
   T value_at(bt_size_t idx) const {
+    #ifndef PXC_NO_BOUNDS_CHECKING
     if (idx >= len) { pxcrt::throw_invalid_index(); }
+    #endif
     return v[idx];
   }
   T deref_value() const {
+    #ifndef PXC_NO_BOUNDS_CHECKING
     if (len == 0) { pxcrt::throw_invalid_index(); }
+    #endif
     return *v;
   }
   const T *begin() const { return v; }
@@ -96,17 +108,23 @@ struct bt_slice {
     return array_find(v, len, offset, value);
   }
   void next() {
+    #ifndef PXC_NO_BOUNDS_CHECKING
     if (len == 0) { pxcrt::throw_invalid_index(); }
+    #endif
     ++v;
     --len;
   }
   void increment_front(size_t i) {
+    #ifndef PXC_NO_BOUNDS_CHECKING
     if (len < i) { pxcrt::throw_invalid_index(); }
+    #endif
     v += i;
     len -= i;
   }
   void decrement_back(size_t i) {
+    #ifndef PXC_NO_BOUNDS_CHECKING
     if (len < i) { pxcrt::throw_invalid_index(); }
+    #endif
     len -= i;
   }
   bt_slice<T> next_token(T const& delim) {
@@ -128,19 +146,27 @@ struct bt_slice {
     return bt_cslice<T>(*this);
   }
   T& operator [](bt_size_t idx) const {
+    #ifndef PXC_NO_BOUNDS_CHECKING
     if (idx >= len) { pxcrt::throw_invalid_index(); }
+    #endif
     return v[idx];
   }
   T& operator *() const {
+    #ifndef PXC_NO_BOUNDS_CHECKING
     if (len == 0) { pxcrt::throw_invalid_index(); }
+    #endif
     return *v;
   }
   T value_at(bt_size_t idx) const {
+    #ifndef PXC_NO_BOUNDS_CHECKING
     if (idx >= len) { pxcrt::throw_invalid_index(); }
+    #endif
     return v[idx];
   }
   T deref_value() const {
+    #ifndef PXC_NO_BOUNDS_CHECKING
     if (len == 0) { pxcrt::throw_invalid_index(); }
+    #endif
     return *v;
   }
   T *begin() const { return v; }
@@ -215,11 +241,15 @@ struct pxcvarray : public refguard_base {
     return array_find(start, valid_len, offset, value);
   }
   T& operator [](size_type idx) {
+    #ifndef PXC_NO_BOUNDS_CHECKING
     if (idx >= valid_len) { pxcrt::throw_invalid_index(); }
+    #endif
     return start[idx];
   }
   const T& operator [](size_type idx) const {
+    #ifndef PXC_NO_BOUNDS_CHECKING
     if (idx >= valid_len) { pxcrt::throw_invalid_index(); }
+    #endif
     return start[idx];
   }
   void resize(size_type sz, T const& x) {
@@ -243,7 +273,7 @@ struct pxcvarray : public refguard_base {
     typename pxcvarray<Tc>::size_type len);
   void push_back(T const& x) {
     /* re-ordered for speed */
-    if (refguard_count == 0) {
+    if (refguard_is_zero()) {
       /* valid_len + 1 never overflows */
       if (valid_len + 1 < alloc_len) {
 	/* fast path */
@@ -319,7 +349,6 @@ struct pxcvarray : public refguard_base {
   }
 private:
   void construct_internal(const T *ptr, size_type len) {
-    refguard_count = 0;
     alloc_len = valid_len = len;
     start = allocate_uninitialized<T>(alloc_len);
     if (is_trivially_copyable<T>::value) {

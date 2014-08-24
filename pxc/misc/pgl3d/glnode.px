@@ -6,6 +6,7 @@ public import GL::glm glm;
 public import GL::compat -;
 public import meta m;
 public import exception -;
+public import glresource -;
 public import glshader -;
 public import glbuffer -;
 
@@ -69,61 +70,50 @@ instantiate_scene(cslice{ptr{buffer_object}} const& bos,
   return r;
 }
 
-private function {tshader} void
-scene_node_draw_rec(scene_node const& sn,
-  cslice{ptr{buffer_object}} const& bos, size_t bo_id, tshader const& sdr,
-  glm::mat4 const& model_mat)
+private function {t} void
+buffer_append(varray{float} mutable& arr, t const& v)
 {
-  const mm = model_mat * sn.trans;
-  // println("joint_id", sn.joint_id, sn.children.size());
-  if (sn.joint_id.bo_id == bo_id) {
-    glUniformMatrix4fv(sdr.u_model_matrix, 1, 0, mm.crawptr());
-    if (sn.joint_id.vs_id >= 0) {
-      bos[sn.joint_id.bo_id]->draw_elems(
-	static_cast{size_t}(sn.joint_id.vs_id));
-    }
-  }
-  for (const i, const& snp: sn.children) {
-    scene_node_draw_rec(*snp, bos, bo_id, sdr, mm);
-  }
-}
-
-public function {tshaders} void
-scene_node_draw(scene_node const& sn, glm::mat4 const& model_mat,
-  tshaders const& sdrs, cslice{ptr{buffer_object}} const& bos)
-{
-  expand (sym, i: m::field_names{tshaders}) {
-    if (m::ne{m::at{m::field_types{tshaders}, i}, unit}) {
-      bos[i]->draw_pre(*sdrs.sym);
-      scene_node_draw_rec(sn, bos, i, *sdrs.sym, model_mat);
-      bos[i]->draw_post(*sdrs.sym);
+  if (m::eq{t, float}) {
+    arr.push_back(v);
+  } else if (m::or{
+    m::eq{t, glm::vec2},
+    m::eq{t, glm::vec3},
+    m::eq{t, glm::vec4},
+    m::eq{t, glm::mat2},
+    m::eq{t, glm::mat3},
+    m::eq{t, glm::mat4}}) {
+    arr.append(v.cslice());
+  } else {
+    expand (sym: m::field_names{t})
+    {
+      buffer_append(arr, v.sym);
     }
   }
 }
 
-private function void
-scene_node_push_instance_rec(scene_node const& sn, glm::mat4 const& model_mat,
+private function {tinst} void
+scene_node_push_instance_rec(scene_node const& sn, tinst const& iattr,
   cslice{ptr{buffer_object}} const& bos, size_t bo_id)
 {
   if (!sn.bo_ids.exists(bo_id)) {
     return;
   }
-  const mm = model_mat * sn.trans;
+  const ia = iattr.apply(sn);
   const& bo = bos[sn.joint_id.bo_id];
   mutable& instance = *bo->instances[static_cast{size_t}(sn.joint_id.vs_id)];
   mutable& arr = instance.client_buffer;
   if (sn.joint_id.bo_id == bo_id) {
-    arr.append(mm.cslice());
+    buffer_append(arr, ia);
   }
   for (const i, const& snp: sn.children) {
-    scene_node_push_instance_rec(*snp, mm, bos, bo_id);
+    scene_node_push_instance_rec(*snp, ia, bos, bo_id);
   }
 }
 
-public function  void
+public function {tinst} void
 scene_node_instances_set_data(scene_node const& sn,
   cslice{ptr{buffer_object}} const& bos, size_t bo_id,
-  glm::mat4 const& model_mat, bool enable_instanced)
+  tinst const& iattr, bool enable_instanced)
 {
   for (const ji, const x: sn.joint_ids) {
     if (ji.bo_id != bo_id) {
@@ -135,7 +125,7 @@ scene_node_instances_set_data(scene_node const& sn,
     arr.clear();
   }
   /* prepare client_buffer */
-  scene_node_push_instance_rec(sn, model_mat, bos, bo_id);
+  scene_node_push_instance_rec(sn, iattr, bos, bo_id);
   if (enable_instanced) {
     /* copy client_buffer to vbo_inst */
     for (const ji, const x: sn.joint_ids) {
@@ -145,9 +135,9 @@ scene_node_instances_set_data(scene_node const& sn,
       const& bo = bos[ji.bo_id];
       mutable& instance = *bo->instances[static_cast{size_t}(ji.vs_id)];
       mutable& arr = instance.client_buffer;
-      glBindBuffer(GL_ARRAY_BUFFER, instance.vbo_inst);
+      glBindBuffer(GL_ARRAY_BUFFER, instance.vbo_inst.get());
       glBufferData(GL_ARRAY_BUFFER, static_cast{GLsizeiptr}(arr.size()) * 4,
-	arr.crawptr().void(), GL_STATIC_DRAW);
+	arr.crawptr().void(), GL_STREAM_DRAW);
       glBindBuffer(GL_ARRAY_BUFFER, 0);
     }
   }
@@ -166,29 +156,14 @@ scene_node_draw_instanced(scene_node const& sn,
   }
 }
 
-private function {tshader} void
+private function void
 scene_node_draw_instanced_internal(scene_node const& sn,
-  tshader const& sdr, buffer_object const& bo, size_t bo_id,
+  shader_i mutable& sdr, buffer_object const& bo, size_t bo_id,
   bool enable_instanced)
 {
-  if (sdr.u_model_matrix < 0) {
-    return;
-  }
-  const loc = static_cast{uint}(sdr.u_model_matrix);
   bo.draw_pre(sdr);
   if (enable_instanced) {
-    if (m::ne{is_gl3, 0}) {
-      glEnableVertexAttribArray(loc + 0);
-      glEnableVertexAttribArray(loc + 1);
-      glEnableVertexAttribArray(loc + 2);
-      glEnableVertexAttribArray(loc + 3);
-      glVertexAttribDivisor(loc + 0, 1);
-      glVertexAttribDivisor(loc + 1, 1);
-      glVertexAttribDivisor(loc + 2, 1);
-      glVertexAttribDivisor(loc + 3, 1);
-    } else {
-      throw runtime_error_template{"scene_node_draw_instanced"}("");
-    }
+    sdr.enable_instance_attrib_array(true);
   }
   for (const ji, const x: sn.joint_ids) {
     if (ji.bo_id != bo_id) {
@@ -196,49 +171,28 @@ scene_node_draw_instanced_internal(scene_node const& sn,
     }
     mutable& instance = *bo.instances[static_cast{size_t}(ji.vs_id)];
     mutable& arr = instance.client_buffer;
+    // println("draw_elems", ji.bo_id, ji.vs_id, "model=", arr.size());
     if (enable_instanced) {
       if (m::ne{is_gl3, 0}) {
-	glBindBuffer(GL_ARRAY_BUFFER, instance.vbo_inst);
-	int const nfloat = 4;
-	int const stride_byte = nfloat * 4 * 4;
-	glVertexAttribPointer(loc + 0, nfloat, GL_FLOAT, 0,
-	  stride_byte, offset_to_void_cp(0));
-	glVertexAttribPointer(loc + 1, nfloat, GL_FLOAT, 0,
-	  stride_byte, offset_to_void_cp(16));
-	glVertexAttribPointer(loc + 2, nfloat, GL_FLOAT, 0,
-	  stride_byte, offset_to_void_cp(32));
-	glVertexAttribPointer(loc + 3, nfloat, GL_FLOAT, 0,
-	  stride_byte, offset_to_void_cp(48));
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindBuffer(GL_ARRAY_BUFFER, instance.vbo_inst.get());
+	sdr.instance_attrib_pointer();
 	bo.draw_elems_instanced(static_cast{size_t}(ji.vs_id),
 	  arr.size() / 16);
-	// println("draw", i, arr.size());
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
       }
     } else {
-      for (const j : 0U .. arr.size() / 16U) {
-	glUniformMatrix4fv(sdr.u_model_matrix, 1, 0,
-	  arr.crawptr() + j * 16U);
-	/*
-	glVertexAttrib4fv(loc + 0, arr.crawptr() + j * 16U +  0U);
-	glVertexAttrib4fv(loc + 1, arr.crawptr() + j * 16U +  4U);
-	glVertexAttrib4fv(loc + 2, arr.crawptr() + j * 16U +  8U);
-	glVertexAttrib4fv(loc + 3, arr.crawptr() + j * 16U + 12U);
-	*/
+      size_t const iattr_num_float = sdr.instance_attrib_num_float();
+      size_t j;
+      size_t const jmax = arr.size();
+      // println("iattr_num_float", iattr_num_float, jmax);
+      for (j = 0; j < jmax; j += iattr_num_float) {
+	sdr.instance_attrib_set_uniform(arr, j);
 	bo.draw_elems(static_cast{size_t}(ji.vs_id));
       }
     }
   }
   if (enable_instanced) {
-    if (m::ne{is_gl3, 0}) {
-      glVertexAttribDivisor(loc + 0, 0);
-      glVertexAttribDivisor(loc + 1, 0);
-      glVertexAttribDivisor(loc + 2, 0);
-      glVertexAttribDivisor(loc + 3, 0);
-      glDisableVertexAttribArray(loc + 0);
-      glDisableVertexAttribArray(loc + 1);
-      glDisableVertexAttribArray(loc + 2);
-      glDisableVertexAttribArray(loc + 3);
-    }
+    sdr.enable_instance_attrib_array(false);
   }
   bo.draw_post(sdr);
 }

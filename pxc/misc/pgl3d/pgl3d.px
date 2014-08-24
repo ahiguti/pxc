@@ -11,6 +11,7 @@ public import exception -;
 public import meta m;
 public import text::string::positional -;
 
+public import glresource -;
 public import glshader -;
 public import glgeometry -;
 public import glbuffer -;
@@ -96,18 +97,36 @@ function void build_vertices(cslice{ptr{buffer_object}} const& bos)
       (poly_t(), mesh_pos());
   }
   {
-    /* particles */
+    /* particle */
     const vtx = bos[1]->get("particle")->vtxs;
     const p = particle(vtx);
     const rnd = make_rand_generator(1U);
-    rand_sphere(1.0, 250, true, rnd, p)
+    rand_sphere(1.0, 100, true, rnd, p)
+    //rand_sphere(1.0, 250, true, rnd, p)
       (poly_t(), mesh_pos());
   }
   {
-    /* */
+    /* particle multi */
     const vtx = bos[1]->get("particle-multi")->vtxs;
     regular_polygon(600.0, 4,
-      rectangle_split(200, 200, joint_v(vtx, "particle", hole())),
+      // rectangle_split(200, 200, joint_v(vtx, "particle", hole())),
+      rectangle_split(100, 100, joint_v(vtx, "particle", hole())),
+      hole())
+      (poly_t(), mesh_pos());
+  }
+  {
+    /* particle-bb */
+    const vtx = bos[2]->get("particle-bb")->vtxs;
+    const p = particle_bb(vtx);
+    const rnd = make_rand_generator(1U);
+    rand_sphere(1.0, 100, true, rnd, p)
+      (poly_t(), mesh_pos());
+  }
+  {
+    /* particle-bb multi */
+    const vtx = bos[2]->get("particle-bb-multi")->vtxs;
+    regular_polygon(600.0, 4,
+      rectangle_split(100, 100, joint_v(vtx, "particle-bb", hole())),
       hole())
       (poly_t(), mesh_pos());
   }
@@ -507,25 +526,24 @@ function void main_loop()
   varray{ptr{buffer_object}} bos;
   bos.push_back(make_ptr{buffer_object}
     (static_cast{size_t}(num_float_struct{main_vertex_attributes}), false));
-  /*
-  bos.push_back(make_ptr{buffer_object}
-    (static_cast{size_t}(num_float_struct{main_vertex_attributes}), true));
-  */
   bos.push_back(make_ptr{buffer_object}
     (static_cast{size_t}(num_float_struct{particle_vertex_attr}), true));
+  bos.push_back(make_ptr{buffer_object}
+    (static_cast{size_t}(num_float_struct{particle_bb_vertex_attr}), false));
   {
     const t0 = system.gettimeofday_double();
     build_vertices(bos);
     const t1 = system.gettimeofday_double();
     bos[0]->create_vbo();
     bos[1]->create_vbo();
+    bos[2]->create_vbo();
     const t2 = system.gettimeofday_double();
     sdllog(string_join{" "}("build vertex", t1 - t0, t2 - t1));
   }
 
   joint_id_type scene_id;
-  scene_id.bo_id = 1;
-  scene_id.vs_id = static_cast{int}(bos[1]->num_vs_ids() - 1);
+  scene_id.bo_id = 2;
+  scene_id.vs_id = static_cast{int}(bos[2]->num_vs_ids() - 1);
   ptr{scene_node} snode = instantiate_scene(bos, scene_id);
   input_control ictl;
   int motion_count = 0;
@@ -672,7 +690,7 @@ function void main_loop()
       }
     }
     if (paused) {
-      SDL_Delay(300);
+      SDL_Delay(100);
       frctl.tprev = SDL_GetTicks();
       frctl.tprevsec = frctl.tprev;
       continue;
@@ -711,7 +729,9 @@ function void main_loop()
       pgs.cam.light.angle = pgs.cam.camera.angle;
       const mess = string_join{" "}(frctl.fps, frctl.frame_speed_mul,
 	frctl.ticks_sum_prev, ictl.finger_zmove_delta, pgs.cam.camera.angle);
-      draw_frame(pgs, bos, snode, mess);
+      if (!paused) {
+	draw_frame(pgs, bos, snode, mess);
+      }
       frctl.save_ticks(2);
       frctl.measure();
       frctl.frame_speed_mul = static_cast{float}(rctl.fixed_fps);

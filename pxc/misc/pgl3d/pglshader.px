@@ -13,6 +13,7 @@ public import exception -;
 public import meta m;
 public import text::string::positional -;
 
+public import glresource -;
 public import glshader -;
 public import glgeometry -;
 public import glbuffer -;
@@ -63,6 +64,9 @@ public struct sdlcontext()
     if (get_option("-f") == "1") { wflags |= SDL_WINDOW_FULLSCREEN; }
     if (get_option("-v") == "1") { vsync = 0; }
     if (get_option("-h") == "1") { wflags &= ~SDL_WINDOW_ALLOW_HIGHDPI; }
+    if (m::ne{is_gles, 0}) {
+      wflags |= SDL_WINDOW_FULLSCREEN | SDL_WINDOW_BORDERLESS;
+    }
 
     sdllog(string_join{" "}("create_window", init_w, init_h));
     sdl_window = SDL_CreateWindow("PGL3D", 0, 0, init_w, init_h, wflags);
@@ -127,7 +131,7 @@ glconfig(bool is_gles0, int major0, int minor0, bool msaa0)
   public bool enable_deferred = false;
   public bool enable_zprepass = !is_gles && !enable_deferred;
   public bool enable_msaa = msaa0;
-  public bool enable_instanced = major >= 3 && !is_gles;
+  public bool enable_instanced = major >= 3; //  && !is_gles;
   public bool enable_depth_texture = !is_android;
   public bool enable_sampler2dshadow = enable_depth_texture && !is_gles;
   public function bool is_gl3() const { return major >= 3 && !is_gles; }
@@ -156,7 +160,7 @@ glconfig(bool is_gles0, int major0, int minor0, bool msaa0)
     return prepend() + "void main(void) { }\n"; }
 }
 
-valuetype struct main_uniforms
+tsvaluetype struct main_uniforms
 {
   public glm::mat4 view_projection_matrix;
   public glm::mat4 model_matrix;
@@ -169,7 +173,7 @@ valuetype struct main_uniforms
   public glm::mat4 shadowmap_vp;
 }
 
-public valuetype struct main_vertex_attributes
+public tsvaluetype struct main_vertex_attributes
 {
   public glm::vec3 position;
   public glm::vec3 normal;
@@ -177,13 +181,24 @@ public valuetype struct main_vertex_attributes
   public glm::vec3 uvw;
 }
 
-valuetype struct ds1st_uniforms
+tsvaluetype struct main_instance_attributes
+{
+  public glm::mat4 model_matrix;
+  public function main_instance_attributes apply(scene_node const& sn) const
+  {
+    main_instance_attributes r;
+    r.model_matrix = model_matrix * sn.trans;
+    return r;
+  }
+}
+
+tsvaluetype struct ds1st_uniforms
 {
   public glm::mat4 view_projection_matrix;
   public glm::mat4 model_matrix;
 }
 
-valuetype struct ds1st_vertex_attributes
+tsvaluetype struct ds1st_vertex_attributes
 {
   public glm::vec3 position;
   public glm::vec3 normal;
@@ -191,7 +206,7 @@ valuetype struct ds1st_vertex_attributes
   public glm::vec3 uvw;
 }
 
-valuetype struct ds2nd_uniforms
+tsvaluetype struct ds2nd_uniforms
 {
   public int sampler;
   public int sampler_tilemap;
@@ -206,88 +221,132 @@ valuetype struct ds2nd_uniforms
   public glm::mat4 shadowmap_vp;
 }
 
-valuetype struct ds2nd_vertex_attributes
+tsvaluetype struct ds2nd_vertex_attributes
 {
   public glm::vec2 position;
 }
 
-valuetype struct zprepass_uniforms
+tsvaluetype struct zprepass_uniforms
 {
   public glm::mat4 view_projection_matrix;
   public glm::mat4 model_matrix;
 }
 
-valuetype struct zprepass_vertex_attributes
+tsvaluetype struct zprepass_vertex_attributes
 {
   public glm::vec3 position;
 }
 
-valuetype struct shadowmap_uniforms
+tsvaluetype struct shadowmap_uniforms
 {
   public glm::mat4 shadowmap_vp;
   public glm::mat4 model_matrix;
     /* use as mvp when instanced rendering is disabled */
 }
 
-valuetype struct shadowmap_vertex_attributes
+tsvaluetype struct shadowmap_vertex_attributes
 {
   public glm::vec3 position;
 }
 
-valuetype struct font_uniforms
+tsvaluetype struct font_uniforms
 {
   public int sampler;
 }
 
-valuetype struct font_vertex_attributes
+tsvaluetype struct font_instance_attributes
+{
+  public function font_instance_attributes apply(scene_node const& sn) const
+  {
+    font_instance_attributes r;
+    return r;
+  }
+}
+
+tsvaluetype struct font_vertex_attributes
 {
   public glm::vec2 pos;
   public glm::vec2 uvpos;
 }
 
-valuetype struct sprite_uniforms
+tsvaluetype struct particle_uniforms
 {
   public glm::mat4 model_matrix; /* use as mvp */
+  public float point_size_base;
 }
 
-valuetype struct sprite_vertex_attributes
+tsvaluetype struct particle_instance_attributes
+{
+  public glm::mat4 model_matrix;
+  public function main_instance_attributes apply(scene_node const& sn) const
+  {
+    main_instance_attributes r;
+    r.model_matrix = model_matrix * sn.trans;
+    return r;
+  }
+}
+
+tsvaluetype struct particle_vertex_attributes
 {
   public glm::vec3 position;
 }
 
-metafunction main_shader shader{main_uniforms, main_vertex_attributes};
-metafunction main_shader_ptr cptr{main_shader};
-metafunction shadowmap_shader
-  shader{shadowmap_uniforms, shadowmap_vertex_attributes};
-metafunction shadowmap_shader_ptr cptr{shadowmap_shader};
-metafunction zprepass_shader
-  shader{zprepass_uniforms, zprepass_vertex_attributes};
-metafunction zprepass_shader_ptr cptr{zprepass_shader};
-metafunction ds1st_shader shader{ds1st_uniforms, ds1st_vertex_attributes};
-metafunction ds1st_shader_ptr cptr{ds1st_shader};
-metafunction ds2nd_shader shader{ds2nd_uniforms, ds2nd_vertex_attributes};
-metafunction ds2nd_shader_ptr cptr{ds2nd_shader};
-metafunction font_shader shader{font_uniforms, font_vertex_attributes};
-metafunction font_shader_ptr cptr{font_shader};
-metafunction sprite_shader shader{sprite_uniforms, sprite_vertex_attributes};
-metafunction sprite_shader_ptr cptr{sprite_shader};
+tsvaluetype struct particle_bb_uniforms
+{
+  public glm::mat4 view_projection_matrix;
+  public glm::mat4 model_matrix;
+  public glm::mat4 camera_matrix;
+  public float point_size_base;
+}
 
-valuetype struct main_texture_info
+tsvaluetype struct particle_bb_vertex_attributes
+{
+  public glm::vec3 position;
+  public glm::vec2 local_position;
+}
+
+metafunction main_shader_ptr
+  ptr{shader{
+    main_uniforms, main_instance_attributes, main_vertex_attributes}};
+metafunction shadowmap_shader_ptr
+  ptr{shader{
+    shadowmap_uniforms, main_instance_attributes,
+    shadowmap_vertex_attributes}};
+metafunction zprepass_shader_ptr
+  ptr{shader{
+    zprepass_uniforms, main_instance_attributes, zprepass_vertex_attributes}};
+metafunction ds1st_shader_ptr
+  ptr{shader{
+    ds1st_uniforms, main_instance_attributes, ds1st_vertex_attributes}};
+metafunction ds2nd_shader_ptr
+  ptr{shader{ds2nd_uniforms, main_instance_attributes,
+    ds2nd_vertex_attributes}};
+metafunction font_shader_ptr
+  ptr{shader{
+    font_uniforms, font_instance_attributes, font_vertex_attributes}};
+metafunction particle_shader_ptr
+  ptr{shader{particle_uniforms, particle_instance_attributes,
+    particle_vertex_attributes}};
+metafunction particle_bb_shader_ptr
+  ptr{shader{particle_bb_uniforms, particle_instance_attributes,
+    particle_bb_vertex_attributes}};
+
+threaded struct main_texture_info
 {
   public uint surface_w;
   public uint surface_h;
-  public uint main_texture_id;
-  public uint tilemap_texture_id;
+  public auto_texture main_texture_id;
+  public auto_texture tilemap_texture_id;
 }
 
-valuetype struct font_texture_info
+threaded struct font_texture_info
 {
   public varray{uint} char_x;
   public uint char_h;
   public uint surface_w;
   public uint surface_h;
-  public uint font_texture_id;
-  public uint text_vbo;
+  public auto_texture font_texture_id;
+  public auto_buffer text_vbo;
 }
 
 public valuetype struct position_angle
@@ -312,7 +371,7 @@ public valuetype struct position_angle
   }
 }
 
-valuetype struct
+struct
 projection_info()
 {
   public glm::mat4 projection;
@@ -339,7 +398,7 @@ public function uint draw_frame(pglshader mutable& pgs,
     int saved_fb;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
     glUseProgram(pgs.smsdr->program);
-    glBindFramebuffer(GL_FRAMEBUFFER, pgs.sfbo.fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, pgs.sfbo.fbo.get());
     glViewport(0, 0, static_cast{GLsizei}(pgs.sfbo.sm_width),
       static_cast{GLsizei}(pgs.sfbo.sm_height));
     glEnable(GL_CULL_FACE);
@@ -354,21 +413,28 @@ public function uint draw_frame(pglshader mutable& pgs,
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     {
       if (pgs.glc.enable_instanced) {
-	sn->instances_set_data(bos, 0, glm::mat4(), pgs.glc.enable_instanced);
+	sn->instances_set_data(bos, 0, main_instance_attributes(),
+	  pgs.glc.enable_instanced);
 	glUniformMatrix4fv(pgs.smsdr->u_shadowmap_vp, 1, 0, sm_vp.crawptr());
-	sn->draw_instanced({pgs.smsdr, unit()}, bos, pgs.glc.enable_instanced);
+	sn->draw_instanced({pgs.smsdr, unit(), unit()}, bos,
+	  pgs.glc.enable_instanced);
       } else {
 	/* note: view_projection is pre-applied to model_matrix */
-	sn->instances_set_data(bos, 0, sm_vp, pgs.glc.enable_instanced);
-	sn->draw_instanced({pgs.smsdr, unit()}, bos, pgs.glc.enable_instanced);
+	main_instance_attributes miattr;
+	miattr.model_matrix = sm_vp;
+	sn->instances_set_data(bos, 0, miattr, pgs.glc.enable_instanced);
+	sn->draw_instanced({pgs.smsdr, unit(), unit()}, bos,
+	  pgs.glc.enable_instanced);
 	/* prepare model_matrix for the main shader */
-	sn->instances_set_data(bos, 0, glm::mat4(), pgs.glc.enable_instanced);
+	sn->instances_set_data(bos, 0, main_instance_attributes(),
+	  pgs.glc.enable_instanced);
       }
     }
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
   } else {
     /* no shadow-mapping. prepare model_matrix for the main shader. */
-    sn->instances_set_data(bos, 0, glm::mat4(), pgs.glc.enable_instanced);
+    sn->instances_set_data(bos, 0, main_instance_attributes(),
+      pgs.glc.enable_instanced);
   }
   glViewport(0, 0, static_cast{GLsizei}(pgs.cam.screen_width),
     static_cast{GLsizei}(pgs.cam.screen_height));
@@ -392,15 +458,16 @@ public function uint draw_frame(pglshader mutable& pgs,
     const vp = pgs.cam.projection * view;
     glUniformMatrix4fv(pgs.zpsdr->u_view_projection_matrix, 1, 0,
       vp.crawptr());
-    sn->draw_instanced({pgs.zpsdr, unit()}, bos, pgs.glc.enable_instanced);
+    sn->draw_instanced({pgs.zpsdr, unit(), unit()}, bos,
+      pgs.glc.enable_instanced);
   }
-  uint const tick_shadowmapping_shader = SDL_GetTicks();
+  // uint const tick_shadowmapping_shader = SDL_GetTicks();
   /* main or ds1 shader */
   if (true) {
     int saved_fb;
     if (pgs.glc.enable_deferred) {
       glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
-      glBindFramebuffer(GL_FRAMEBUFFER, pgs.dsfbo.fbo);
+      glBindFramebuffer(GL_FRAMEBUFFER, pgs.dsfbo.fbo.get());
       glViewport(0, 0, static_cast{GLsizei}(pgs.dsfbo.ds_width),
 	static_cast{GLsizei}(pgs.dsfbo.ds_height));
       glUseProgram(pgs.ds1sdr->program);
@@ -448,15 +515,18 @@ public function uint draw_frame(pglshader mutable& pgs,
 	vp.crawptr());
     }
     if (pgs.glc.enable_deferred) {
-      sn->draw_instanced({pgs.ds1sdr, unit()}, bos, pgs.glc.enable_instanced);
+      sn->draw_instanced({pgs.ds1sdr, unit(), unit()}, bos,
+	pgs.glc.enable_instanced);
     } else {
-      sn->draw_instanced({pgs.sdr, unit()}, bos, pgs.glc.enable_instanced);
+      sn->draw_instanced({pgs.sdr, unit(), unit()}, bos,
+	pgs.glc.enable_instanced);
     }
     if (pgs.glc.enable_deferred) {
       glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
     }
   }
   /* ds2 */
+  if (false) {
   if (pgs.glc.enable_deferred) {
     glUseProgram(pgs.ds2sdr->program);
     glDisable(GL_CULL_FACE);
@@ -474,8 +544,8 @@ public function uint draw_frame(pglshader mutable& pgs,
     glUniform1i(pgs.ds2sdr->u_sampler_ds2, 6);
     glUniform1i(pgs.ds2sdr->u_sampler_ds3, 7);
     glUniform1f(pgs.ds2sdr->u_light_on, pgs.cam.light_on);
-    glBindBuffer(GL_ARRAY_BUFFER, pgs.dsfbo.ds_vbo);
-    const vattr_position = cast_uint(pgs.ds2sdr->a_position);
+    glBindBuffer(GL_ARRAY_BUFFER, pgs.dsfbo.ds_vbo.get());
+    const vattr_position = cast_uint(pgs.ds2sdr->v_position);
     glEnableVertexAttribArray(vattr_position);
     glVertexAttribPointer(vattr_position, 2, GL_FLOAT, 0, 0,
       offset_to_void_cp(0));
@@ -483,7 +553,32 @@ public function uint draw_frame(pglshader mutable& pgs,
     glDisableVertexAttribArray(vattr_position);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
   }
-  /* sprites */
+  }
+  /* particles-bb */
+  {
+    mutable cam_mat = glm::mat4();
+    if (pgs.cam.proj_light) {
+      cam_mat = pgs.cam.light.to_mat4();
+    } else {
+      cam_mat = pgs.cam.camera.to_mat4();
+    }
+    const vp = pgs.cam.projection * (cam_mat.inverse());
+    sn->instances_set_data(bos, 2, particle_instance_attributes(),
+      pgs.glc.enable_instanced);
+    glUseProgram(pgs.prtbsdr->program);
+    glUniformMatrix4fv(pgs.prtbsdr->u_view_projection_matrix, 1, 0,
+      vp.crawptr());
+    glUniformMatrix3fv(pgs.prtbsdr->u_camera_matrix, 1, 0,
+      cam_mat.to_3().crawptr());
+    glUniform1f(pgs.prtbsdr->u_point_size_base, 0.1f);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE);
+    sn->draw_instanced({unit(), unit(), pgs.prtbsdr}, bos,
+      pgs.glc.enable_instanced);
+  }
+  /* particles */
   {
     mutable view = glm::mat4();
     if (pgs.cam.proj_light) {
@@ -492,13 +587,19 @@ public function uint draw_frame(pglshader mutable& pgs,
       view = pgs.cam.camera.to_mat4().inverse();
     }
     const vp = pgs.cam.projection * view;
-    sn->instances_set_data(bos, 1, vp, pgs.glc.enable_instanced);
+    /* vp pre-applied */
+    particle_instance_attributes piattr;
+    piattr.model_matrix = vp;
+    sn->instances_set_data(bos, 1, piattr, pgs.glc.enable_instanced);
     glUseProgram(pgs.spsdr->program);
+    glUniform1f(pgs.spsdr->u_point_size_base,
+      0.1f * static_cast{float}(pgs.cam.screen_width));
     glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE);
-    sn->draw_instanced({unit(), pgs.spsdr}, bos, pgs.glc.enable_instanced);
+    sn->draw_instanced({unit(), pgs.spsdr, unit()}, bos,
+      pgs.glc.enable_instanced);
   }
   /* panel */
   glUseProgram(pgs.psdr->program);
@@ -507,6 +608,7 @@ public function uint draw_frame(pglshader mutable& pgs,
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   glUniform1i(pgs.psdr->u_sampler, 0);
+  //println("panel sampler", pgs.psdr->u_sampler);
   varray{float} xyuv;
   uint cur_x = 0;
   uint cur_y = 0;
@@ -559,12 +661,13 @@ public function uint draw_frame(pglshader mutable& pgs,
     cur_x += tw;
   }
   if (xyuv.size() > 0) {
-    const lpp = cast_uint(pgs.psdr->a_pos);
-    const lpu = cast_uint(pgs.psdr->a_uvpos);
-    glBindBuffer(GL_ARRAY_BUFFER, pgs.fti.text_vbo);
+    const lpp = cast_uint(pgs.psdr->v_pos);
+    const lpu = cast_uint(pgs.psdr->v_uvpos);
+    // println("text_vbo", pgs.fti.text_vbo.get(), lpp, lpu);
+    glBindBuffer(GL_ARRAY_BUFFER, pgs.fti.text_vbo.get());
     glBufferData(GL_ARRAY_BUFFER,
       static_cast{GLsizeiptr}(xyuv.size()) * 4,
-      xyuv.crawptr().void(), GL_STATIC_DRAW);
+      xyuv.crawptr().void(), GL_STREAM_DRAW);
     glEnableVertexAttribArray(lpp);
     glEnableVertexAttribArray(lpu);
     glVertexAttribPointer(lpp, 2, GL_FLOAT, 0, 16, offset_to_void_cp(0));
@@ -574,35 +677,34 @@ public function uint draw_frame(pglshader mutable& pgs,
     glDisableVertexAttribArray(lpu);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
   }
-  return tick_shadowmapping_shader;
+  return 0; // tick_shadowmapping_shader;
 }
 
 function void update_mvp(projection_info mutable& cam)
 {
   float const perspective_distance = 1.0;
-  float const min_distance = 0.2;
   const h = cast_float(cam.screen_height)
     / cast_float(cam.screen_width);
   glViewport(0, 0, static_cast{GLsizei}(cam.screen_width),
     static_cast{GLsizei}(cam.screen_height));
   const d = cast_float(perspective_distance);
   {
-    const near = cast_float(d - min_distance);
-    const far = cast_float(d + min_distance + cam.distance_max);
-    const left = cast_float(-1.0 * ((d - min_distance) / d));
-    const right = cast_float(1.0 * ((d - min_distance) / d));
-    const bottom = cast_float(-h * ((d - min_distance) / d));
-    const top = cast_float(h * ((d - min_distance) / d));
+    const near = cast_float(d);
+    const far = cast_float(d + cam.distance_max);
+    const left = cast_float(-1.0);
+    const right = cast_float(1.0);
+    const bottom = cast_float(-h);
+    const top = cast_float(h);
     cam.projection = glm::frustum{float}(left, right, bottom, top, near, far);
   }
   {
     const sm_h = max(1.0, h);
-    const near = cast_float(d - min_distance);
-    const far = cast_float(d + min_distance + cam.distance_max);
-    const left = cast_float(-1.0 * ((d - min_distance) / d));
-    const right = cast_float(1.0 * ((d - min_distance) / d));
-    const bottom = cast_float(-sm_h * ((d - min_distance) / d));
-    const top = cast_float(sm_h * ((d - min_distance) / d));
+    const near = cast_float(d);
+    const far = cast_float(d + cam.distance_max);
+    const left = cast_float(-1.0);
+    const right = cast_float(1.0);
+    const bottom = cast_float(-sm_h);
+    const top = cast_float(sm_h);
     cam.sm_projection = glm::frustum{float}(left, right, bottom, top, near,
       far);
   }
@@ -615,12 +717,13 @@ threaded function {t} t power_of_2(t v)
   return r;
 }
 
-valuetype struct shadowmap_fbo {
-  public uint fbo;
-  public uint sm_texture;
+struct shadowmap_fbo
+{
+  public auto_framebuffer fbo;
+  public auto_texture sm_texture;
   public int sm_width;
   public int sm_height;
-  public uint depthbuf;
+  public auto_renderbuffer depthbuf;
 }
 
 function void init_shadowmap_fbo(glconfig const& glc,
@@ -632,13 +735,8 @@ function void init_shadowmap_fbo(glconfig const& glc,
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
     /* texture */
     glActiveTexture(GL_TEXTURE3);
-    if (sfbo.sm_texture != 0) {
-      glBindTexture(GL_TEXTURE_2D, 0);
-      glDeleteTextures(1, caddress(sfbo.sm_texture));
-      sfbo.sm_texture = 0;
-    }
-    glGenTextures(1, address(sfbo.sm_texture));
-    glBindTexture(GL_TEXTURE_2D, sfbo.sm_texture);
+    sfbo.sm_texture.generate();
+    glBindTexture(GL_TEXTURE_2D, sfbo.sm_texture.get());
     if (glc.enable_depth_texture) {
       const f = glc.enable_sampler2dshadow ? GL_LINEAR : GL_NEAREST;
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, cast_int(f));
@@ -674,18 +772,14 @@ function void init_shadowmap_fbo(glconfig const& glc,
 	cast_int(GL_CLAMP_TO_EDGE));
     }
     /* framebuffer */
-    if (sfbo.fbo != 0) {
-      glDeleteFramebuffers(1, caddress(sfbo.fbo));
-      sfbo.fbo = 0;
-    }
-    glGenFramebuffers(1, address(sfbo.fbo));
-    glBindFramebuffer(GL_FRAMEBUFFER, sfbo.fbo);
+    sfbo.fbo.generate();
+    glBindFramebuffer(GL_FRAMEBUFFER, sfbo.fbo.get());
     if (glc.enable_depth_texture) {
       glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-	GL_TEXTURE_2D, sfbo.sm_texture, 0);
+	GL_TEXTURE_2D, sfbo.sm_texture.get(), 0);
     } else {
       glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-	GL_TEXTURE_2D, sfbo.sm_texture, 0);
+	GL_TEXTURE_2D, sfbo.sm_texture.get(), 0);
     }
     /* renderbuffer */
     if (glc.enable_depth_texture) {
@@ -699,16 +793,12 @@ function void init_shadowmap_fbo(glconfig const& glc,
       /*
       println("orig_rb", orig_rb);
       */
-      if (sfbo.depthbuf != 0) {
-	glDeleteRenderbuffers(1, caddress(sfbo.depthbuf));
-	sfbo.depthbuf = 0;
-      }
-      glGenRenderbuffers(1, address(sfbo.depthbuf));
-      glBindRenderbuffer(GL_RENDERBUFFER, sfbo.depthbuf);
+      sfbo.depthbuf.generate();
+      glBindRenderbuffer(GL_RENDERBUFFER, sfbo.depthbuf.get());
       glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16,
 	sfbo.sm_width, sfbo.sm_height);
       glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-	GL_RENDERBUFFER, sfbo.depthbuf);
+	GL_RENDERBUFFER, sfbo.depthbuf.get());
       glBindRenderbuffer(GL_RENDERBUFFER, static_cast{uint}(orig_rb));
     }
     const e = glCheckFramebufferStatus(GL_FRAMEBUFFER);
@@ -721,13 +811,14 @@ function void init_shadowmap_fbo(glconfig const& glc,
   }
 }
 
-valuetype struct deferred_shading_fbo {
-  public uint fbo;
-  public varray{uint} ds_texture; /* 4 */
+struct deferred_shading_fbo
+{
+  public auto_framebuffer fbo;
+  public varray{ptr{auto_texture}} ds_texture; /* 4 */
   public int ds_width;
   public int ds_height;
-  public uint depthbuf;
-  public uint ds_vbo;
+  public auto_renderbuffer depthbuf;
+  public auto_buffer ds_vbo;
 }
 
 function void
@@ -740,28 +831,20 @@ init_deferred_shading_fbo(glconfig const& glc,
       int saved_fb;
       glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
       /* texture */
-      for (const i, const tx: dsfbo.ds_texture) {
-	if (tx != 0) {
-	  glActiveTexture(static_cast{GLenum}(static_cast{size_t}(
-	    GL_TEXTURE4) + i));
-	  glBindTexture(GL_TEXTURE_2D, 0);
-	  glDeleteTextures(1, caddress(tx));
-	}
-      }
       dsfbo.ds_texture.clear();
       for (size_t i: 0 .. 4) {
-	uint tx;
+	const tx = make_ptr{auto_texture}();
+	tx->generate();
 	glActiveTexture(static_cast{GLenum}(static_cast{size_t}(
 	  GL_TEXTURE4) + i));
-	glGenTextures(1, address(tx));
-	glBindTexture(GL_TEXTURE_2D, tx);
+	glBindTexture(GL_TEXTURE_2D, tx->get());
 	glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_RGB32F), dsfbo.ds_width,
 	  dsfbo.ds_height, 0, GL_RGB, GL_FLOAT, offset_to_void_cp(0));
 	/*
 	glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_RGBA), dsfbo.ds_width,
 	  dsfbo.ds_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, offset_to_void_cp(0));
 	*/
-	println("tex2d", i, tx, dsfbo.ds_width, dsfbo.ds_height);
+	println("tex2d", i, tx->get(), dsfbo.ds_width, dsfbo.ds_height);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
 	  cast_int(GL_NEAREST));
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
@@ -773,16 +856,12 @@ init_deferred_shading_fbo(glconfig const& glc,
 	dsfbo.ds_texture.push_back(tx);
       }
       /* framebuffer */
-      if (dsfbo.fbo != 0) {
-	glDeleteFramebuffers(1, caddress(dsfbo.fbo));
-	dsfbo.fbo = 0;
-      }
-      glGenFramebuffers(1, address(dsfbo.fbo));
-      glBindFramebuffer(GL_FRAMEBUFFER, dsfbo.fbo);
+      dsfbo.fbo.generate();
+      glBindFramebuffer(GL_FRAMEBUFFER, dsfbo.fbo.get());
       for (const i, const tx: dsfbo.ds_texture) {
 	glFramebufferTexture2D(GL_FRAMEBUFFER,
 	  static_cast{GLenum}(static_cast{size_t}(GL_COLOR_ATTACHMENT0) + i),
-	  GL_TEXTURE_2D, tx, 0);
+	  GL_TEXTURE_2D, tx->get(), 0);
 	println("frametex2d", i, tx);
       }
       /* renderbuffer */
@@ -790,24 +869,18 @@ init_deferred_shading_fbo(glconfig const& glc,
 	int orig_rb;
 	glGetIntegerv(GL_RENDERBUFFER_BINDING, address(orig_rb));
 	println("orig_rb", orig_rb);
-	if (dsfbo.depthbuf != 0) {
-	  glDeleteRenderbuffers(1, caddress(dsfbo.depthbuf));
-	  dsfbo.depthbuf = 0;
-	}
-	glGenRenderbuffers(1, address(dsfbo.depthbuf));
-	glBindRenderbuffer(GL_RENDERBUFFER, dsfbo.depthbuf);
+	dsfbo.depthbuf.generate();
+	glBindRenderbuffer(GL_RENDERBUFFER, dsfbo.depthbuf.get());
 	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT,
 	  dsfbo.ds_width, dsfbo.ds_height);
 	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-	  GL_RENDERBUFFER, dsfbo.depthbuf);
+	  GL_RENDERBUFFER, dsfbo.depthbuf.get());
 	glBindRenderbuffer(GL_RENDERBUFFER, static_cast{uint}(orig_rb));
       }
       const bufs = make_farray{GLenum}(
 	GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1,
 	GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3);
       glDrawBuffers(4, bufs.crawptr());
-      /*
-      */
       const e = glCheckFramebufferStatus(GL_FRAMEBUFFER);
       if (e != GL_FRAMEBUFFER_COMPLETE) {
 	println("dsfbo: incomplete framebuffer", cast_int(e));
@@ -816,18 +889,19 @@ init_deferred_shading_fbo(glconfig const& glc,
       }
       glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
       /* vbo */
-      if (dsfbo.ds_vbo == 0) {
-	glGenBuffers(1, address(dsfbo.ds_vbo));
-	if (dsfbo.ds_vbo == 0) {
+      if (dsfbo.ds_vbo.get() == 0) {
+	dsfbo.ds_vbo.generate();
+	if (dsfbo.ds_vbo.get() == 0) {
 	  throw runtime_error_template{"ds_vbo"}("1");
 	}
-	glBindBuffer(GL_ARRAY_BUFFER, dsfbo.ds_vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, dsfbo.ds_vbo.get());
 	const pvals = make_farray{float}(
 	  -1.0, -1.0,
 	   1.0, -1.0,
 	   1.0,  1.0,
 	  -1.0,  1.0);
-	glBufferData(GL_ARRAY_BUFFER, static_cast{GLsizeiptr}(pvals.size()) * 4,
+	glBufferData(GL_ARRAY_BUFFER,
+	  static_cast{GLsizeiptr}(pvals.size()) * 4,
 	  pvals.crawptr().void(), GL_STATIC_DRAW);
       }
     }
@@ -884,8 +958,8 @@ init_shadowmap_shader(glconfig const& g)
   println("VERT:", v);
   println("FRAG:", f);
   */
-  return make_shader_ptr{shadowmap_uniforms, shadowmap_vertex_attributes}(
-    v, f, "model_matrix");
+  return make_shader_ptr{shadowmap_uniforms, main_instance_attributes,
+    shadowmap_vertex_attributes}(v, f, "model_matrix");
 }
 
 function zprepass_shader_ptr
@@ -901,13 +975,12 @@ init_zprepass_shader(glconfig const& g)
   }
   v += g.vert_in() + "vec3 position;\n";
   v += "void main(void) {\n";
-  v += "vec4 pos4 = vec4(position, 1.0);\n";
-  v += "vec4 gpos4 = model_matrix * pos4;\n";
+  v += "vec4 gpos4 = model_matrix * vec4(position, 1.0);\n";
   v += "gl_Position = view_projection_matrix * gpos4;\n";
   v += "}\n";
   string f = g.empty_shader_frag();
-  return make_shader_ptr{zprepass_uniforms, zprepass_vertex_attributes}(v, f,
-    "model_matrix");
+  return make_shader_ptr{zprepass_uniforms, main_instance_attributes,
+    zprepass_vertex_attributes}(v, f, "model_matrix");
 }
 
 function ds1st_shader_ptr
@@ -941,8 +1014,8 @@ init_ds1st_shader(glconfig const g)
   } else {
     f += g.empty_shader_frag();
   }
-  return make_shader_ptr{ds1st_uniforms, ds1st_vertex_attributes}(v, f,
-    "model_matrix");
+  return make_shader_ptr{ds1st_uniforms, main_instance_attributes,
+    ds1st_vertex_attributes}(v, f, "model_matrix");
 }
 
 function ds2nd_shader_ptr
@@ -962,7 +1035,8 @@ init_ds2nd_shader(glconfig const& g)
   }
   const f = g.enable_deferred
     ? main_or_ds2nd_shader_frag(g) : g.empty_shader_frag();
-  return make_shader_ptr{ds2nd_uniforms, ds2nd_vertex_attributes}(v, f, "");
+  return make_shader_ptr{ds2nd_uniforms, main_instance_attributes,
+    ds2nd_vertex_attributes}(v, f, "");
 }
 
 function string
@@ -992,8 +1066,7 @@ main_or_ds1st_shader_vert(glconfig const& g)
     }
   }
   v += "void main(void) {\n";
-  v += "  vec4 pos4 = vec4(position, 1.0);\n";
-  v += "  vec4 gpos4 = model_matrix * pos4;\n";
+  v += "  vec4 gpos4 = model_matrix * vec4(position, 1.0);\n";
   v += "  gl_Position = view_projection_matrix * gpos4;\n";
   if (g.is_gl3()) {
     v += "  mat3 normal_matrix = mat3(model_matrix);\n";
@@ -1171,12 +1244,13 @@ init_main_shader(glconfig const& g)
     ? g.empty_shader_vert() : main_or_ds1st_shader_vert(g);
   const f = g.enable_deferred
     ? g.empty_shader_frag() : main_or_ds2nd_shader_frag(g);
-  return make_shader_ptr{main_uniforms, main_vertex_attributes}(v, f,
-    "model_matrix");
+  return
+    make_shader_ptr{main_uniforms, main_instance_attributes,
+      main_vertex_attributes}(v, f, "model_matrix");
 }
 
-function sprite_shader_ptr
-init_sprite_shader(glconfig const& g)
+function particle_shader_ptr
+init_particle_shader(glconfig const& g)
 {
   string v;
   v += g.prepend();
@@ -1185,23 +1259,64 @@ init_sprite_shader(glconfig const& g)
   } else {
     v += "uniform mat4 model_matrix;\n";
   }
+  v += "uniform float point_size_base;\n";
   v += g.vert_in() + "vec3 position;\n";
+  // v += g.vert_out() + "float debug_w;\n";
   v += "void main(void) {\n";
-  v += "vec4 pos4 = vec4(position, 1.0);\n";
-  v += "gl_Position = model_matrix * pos4;\n";
-  v += "gl_PointSize = 60.0 / gl_Position.w;\n";
+  v += "gl_Position = model_matrix * vec4(position, 1.0);\n";
+  v += "gl_PointSize = point_size_base / gl_Position.w;\n";
+  // v += "debug_w = gl_Position.w;\n";
   v += "}\n";
   string f;
   f += g.prepend();
   f += g.decl_fragcolor();
+  // f += g.frag_in() + "float debug_w;\n";
   f += "void main(void) {\n";
   f += "vec2 xy = gl_PointCoord * 2.0 - 1.0;\n";
   f += "float d = dot(xy, xy);\n";
-  f += "float b = d * float(d < 1.0);\n";
+  f += "float b = max(0.0, 1.0 - d);\n";
+  // f += "if (debug_w < 1.0) { b = 1.0; }\n";
   f += g.fragcolor() + " = vec4(b, b, b, 1.0);\n";
   f += "}\n";
-  return make_shader_ptr{sprite_uniforms, sprite_vertex_attributes}(v, f,
-    "model_matrix");
+  return make_shader_ptr{particle_uniforms, particle_instance_attributes,
+    particle_vertex_attributes}(v, f, "model_matrix");
+}
+
+function particle_bb_shader_ptr
+init_particle_bb_shader(glconfig const& g)
+{
+  string v;
+  v += g.prepend();
+  if (g.enable_instanced) {
+    v += g.vert_in() + "mat4 model_matrix;\n";
+  } else {
+    v += "uniform mat4 model_matrix;\n";
+  }
+  v += "uniform mat4 view_projection_matrix;\n";
+  v += "uniform mat3 camera_matrix;\n";
+  v += "uniform float point_size_base;\n";
+  v += g.vert_in() + "vec3 position;\n";
+  v += g.vert_in() + "vec2 local_position;\n";
+  v += g.vert_out() + "vec2 point_coord;\n";
+  v += "void main(void) {\n";
+  v += "vec4 pos = model_matrix * vec4(position, 1.0);\n";
+  v += "vec3 posb = camera_matrix";
+  v += "  * vec3(local_position * point_size_base, 0.0);\n";
+  v += "gl_Position = view_projection_matrix * vec4(pos.xyz + posb, 1.0);\n";
+  v += "point_coord = local_position;\n";
+  v += "}\n";
+  string f;
+  f += g.prepend();
+  f += g.decl_fragcolor();
+  f += g.frag_in() + "vec2 point_coord;\n";
+  f += "void main(void) {\n";
+  f += "vec2 xy = point_coord;\n";
+  f += "float d = dot(xy, xy);\n";
+  f += "float b = max(0.0, 1.0 - d);\n";
+  f += g.fragcolor() + " = vec4(b, b, b, 1.0);\n";
+  f += "}\n";
+  return make_shader_ptr{particle_bb_uniforms, particle_instance_attributes,
+    particle_bb_vertex_attributes}(v, f, "model_matrix");
 }
 
 function font_shader_ptr
@@ -1226,7 +1341,8 @@ init_font_shader(glconfig const& g)
   f += "col.a *= 0.5;\n";
   f += g.fragcolor() + " = col;\n";
   f += "}\n";
-  return make_shader_ptr{font_uniforms, font_vertex_attributes}(v, f, "");
+  return make_shader_ptr{font_uniforms, font_instance_attributes,
+    font_vertex_attributes}(v, f, "");
 }
 
 function uint read_3_uint(cslice{uchar} const& buf, size_t o)
@@ -1316,8 +1432,9 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
     }
     /* font texture */
     glActiveTexture(GL_TEXTURE0);
-    glGenTextures(1, address(fti.font_texture_id));
-    glBindTexture(GL_TEXTURE_2D, fti.font_texture_id);
+    fti.font_texture_id.generate();
+    println("font_texture_id", fti.font_texture_id.get());
+    glBindTexture(GL_TEXTURE_2D, fti.font_texture_id.get());
     glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_RGBA),
       cast_int(sur.W()), cast_int(sur.H()),
       0, GL_RGBA, GL_UNSIGNED_BYTE, sur.Pixels().crawptr().void());
@@ -1325,8 +1442,8 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
       cast_int(GL_NEAREST));
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
       cast_int(GL_NEAREST));
-    glGenBuffers(1, address(fti.text_vbo));
-    if (fti.text_vbo == 0) {
+    fti.text_vbo.generate();
+    if (fti.text_vbo.get() == 0) {
       throw runtime_error_template{"text_vbo"}("1");
     }
   }
@@ -1418,8 +1535,8 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
     }
     const mode = GL_RGBA;
     glActiveTexture(GL_TEXTURE1);
-    glGenTextures(1, address(mti.main_texture_id));
-    glBindTexture(GL_TEXTURE_2D, mti.main_texture_id);
+    mti.main_texture_id.generate();
+    glBindTexture(GL_TEXTURE_2D, mti.main_texture_id.get());
     /*
     glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, cast_int(GL_TRUE));
     */
@@ -1503,8 +1620,8 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
     println("sur1buf", sur1_w, sur1_h);
     const mode = GL_RGBA;
     glActiveTexture(GL_TEXTURE2);
-    glGenTextures(1, address(mti.tilemap_texture_id));
-    glBindTexture(GL_TEXTURE_2D, mti.tilemap_texture_id);
+    mti.tilemap_texture_id.generate();
+    glBindTexture(GL_TEXTURE_2D, mti.tilemap_texture_id.get());
     glTexImage2D(GL_TEXTURE_2D, 0, cast_int(mode),
       cast_int(sur1.W()), cast_int(sur1.H()),
       0, mode, GL_UNSIGNED_BYTE, sur1.Pixels().crawptr().void());
@@ -1531,22 +1648,23 @@ pglshader(bool gles_flag0, int glmajor0, int glminor0, bool enable_msaa0,
   public zprepass_shader_ptr const zpsdr = init_zprepass_shader(glc);
   public ds1st_shader_ptr const ds1sdr = init_ds1st_shader(glc);
   public ds2nd_shader_ptr const ds2sdr = init_ds2nd_shader(glc);
-  public sprite_shader_ptr const spsdr = init_sprite_shader(glc);
+  public particle_shader_ptr const spsdr = init_particle_shader(glc);
+  public particle_bb_shader_ptr const prtbsdr = init_particle_bb_shader(glc);
   public font_shader_ptr const psdr = init_font_shader(glc);
   public shadowmap_fbo sfbo;
   public deferred_shading_fbo dsfbo;
   public main_texture_info mti;
   public font_texture_info fti;
   public projection_info cam;
-  private uint vtxarr;
+  private auto_vertexarray vtxarr;
   init();
   reshape(width0, height0);
   private function void init()
   {
     if (m::ne{is_gl3, 0}) {
-      glGenVertexArrays(1, address(vtxarr));
-      glBindVertexArray(vtxarr);
-      println("glBindVertexArray", vtxarr);
+      vtxarr.generate();
+      glBindVertexArray(vtxarr.get());
+      println("glBindVertexArray", vtxarr.get());
     }
     if (m::eq{is_gles, 0}) {
       farray{float, 2} arr;
