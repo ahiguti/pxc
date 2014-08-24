@@ -314,7 +314,7 @@ void expr_inline_c::check_type(symbol_table *lookup)
     } else if (posstr == "disable-noheap-checking") {
       symtbl_lexical->pragma.disable_noheap_checking = v;
     } else if (posstr == "disable-guard") {
-      symtbl_lexical->pragma.disable_guard = v; // not implemented yet
+      symtbl_lexical->pragma.disable_container_guard = v; // not implemented
     } else if (posstr == "trace-meta") {
       symtbl_lexical->pragma.trace_meta = v;
     } else if (posstr == "emit") {

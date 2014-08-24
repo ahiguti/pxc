@@ -92,10 +92,10 @@ struct localvar_info {
 struct ext_pragma {
   bool disable_bounds_checking : 1;
   bool disable_noheap_checking : 1;
-  bool disable_guard : 1;
+  bool disable_container_guard : 1;
   bool trace_meta : 1;
   ext_pragma() : disable_bounds_checking(false),
-    disable_noheap_checking(false), disable_guard(false),
+    disable_noheap_checking(false), disable_container_guard(false),
     trace_meta(false) { }
 };
 

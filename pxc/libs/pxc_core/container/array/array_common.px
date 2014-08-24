@@ -1,8 +1,20 @@
 public threaded namespace container::array::array_common "use-unsafe";
 public import numeric::integral;
 public import allocator;
+public import meta m;
+
+public metafunction pxc_no_bounds_checking
+  m::and{
+    m::eq{m::profile{"safe_mode"}, "0"},
+    m::eq{m::profile{"bounds_checking"}, "0"}};
 
 extern "types" inline
+
+#if %{pxc_no_bounds_checking}%
+#define PXC_NO_BOUNDS_CHECKING 1
+#else
+#undef PXC_NO_BOUNDS_CHECKING
+#endif
 
 #include <algorithm>
 

@@ -1,39 +1,8 @@
 
-性能目安
-(1478-t3)
-mbpはzprepassあり、ios/androidはzprepassなし
-mbp 2880x1800 macosx 60fps vtx8 72*32430 頂点 (778320 tri) (4670万tri/sec)
-mbp 2880x1800 macosx 60fps vtx10 2250030 頂点 (750010 tri) (4500万tri/sec)
-ipad air 24fps
-iphone4s 7fps
-xperia z ultra 30-45fps zprepassしたらさらに遅くなる
-xperia gx 8-12fps
-(1497-t2 20140802)
-mbp 2880x1800 linux 60fps vtx8 81*32430 頂点 (875610 tri)
-mbp 2880x1800 linux 60fps vtx10 2250030 頂点 (750010 tri)
-  (use_instanced=0) use_instanced=0 is faster, but higher cpu usage
-
-instancedレンダリング
-96頂点のオブジェクトを25600個
-mbp 2880x1800 60fps vtx? 96*25600 頂点 (819200 tri) (4915万tri/sec)
-instancedしなかったらちょうど30fpsだった。
-改良の余地:
-(1) shadowmapping, zprepass, mainで3回glBufferDataするのは無駄 (done)
-(2) インスタンス毎にmat4を渡すより、vec3とquatを渡すほうが軽い
-(3) glMapBuffer使ってコピーを避けたほうが速いかもしれない
-
-ポイントスプライト
-(pgl19)
-mbp 2880x1800 macosx 60fps 1000万頂点 (6億頂点/秒)
-
-deferred
-1479-t2 ok
-1485-t5 ok
-1489-t2 ng
-1490-t5 ng
-1495-t1 復活
-
 TODO:
+- scene_node_instances_set_data: model_mat決め打ちを直す(done)
+- scene_node_instances_set_data: GL_STREAM_DRAWが適切？(done)
+- z-prepass用にinstances_set_dataを余分に実行しているのをやめる？
 - draw_frame: view_projectionを何度も計算しているのをやめる
   - draw_instancedに一本化。instanced無効のときにはシェーダは
     model_matrixをuniformで渡すもの。
@@ -461,4 +430,53 @@ t_now 現在時刻 (uniform)
 t_start サイクル開始時刻
 t_duration 1サイクルの周期 (除算を避けるために逆数にしておく？)
 t_cycle = floor((t_now - t_start) / t_duration) 現サイクル内時刻
+
+ポイントスプライトを使わないパーティクル
+光点一発につき正方形ビルボード一枚使う
+attribute vec3 ビルボードの中心座標(ポイントスプライトの座標と同じもの)
+attribute vec2 ビルボードローカルの座標(4箇所)
+uniform model_matrix
+uniform view_projection (mvpはmodelとvpに分ける必要がある)
+uniform view_inv
+gl_Position = view_projection *
+  (model_matrix * position + view_inv * local_position);
+
+float toffset 個々のパーティクルのサイクル中オフセット
+vec3 color
+vec3 color_delta
+
+--------------------------------------------------------------------
+性能目安
+(1478-t3)
+mbpはzprepassあり、ios/androidはzprepassなし
+mbp 2880x1800 macosx 60fps vtx8 72*32430 頂点 (778320 tri) (4670万tri/sec)
+mbp 2880x1800 macosx 60fps vtx10 2250030 頂点 (750010 tri) (4500万tri/sec)
+ipad air 24fps
+iphone4s 7fps
+xperia z ultra 30-45fps zprepassしたらさらに遅くなる
+xperia gx 8-12fps
+(1497-t2 20140802)
+mbp 2880x1800 linux 60fps vtx8 81*32430 頂点 (875610 tri)
+mbp 2880x1800 linux 60fps vtx10 2250030 頂点 (750010 tri)
+  (use_instanced=0) use_instanced=0 is faster, but higher cpu usage
+
+instancedレンダリング
+96頂点のオブジェクトを25600個
+mbp 2880x1800 60fps vtx? 96*25600 頂点 (819200 tri) (4915万tri/sec)
+instancedしなかったらちょうど30fpsだった。
+改良の余地:
+(1) shadowmapping, zprepass, mainで3回glBufferDataするのは無駄 (done)
+(2) インスタンス毎にmat4を渡すより、vec3とquatを渡すほうが軽い
+(3) glMapBuffer使ってコピーを避けたほうが速いかもしれない
+
+ポイントスプライト
+(pgl19)
+mbp 2880x1800 macosx 60fps 1000万頂点 (6億頂点/秒)
+
+deferred
+1479-t2 ok
+1485-t5 ok
+1489-t2 ng
+1490-t5 ng
+1495-t1 復活
 

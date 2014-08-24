@@ -1,12 +1,22 @@
 public threaded namespace container::array::refguard "use-unsafe";
 public import numeric::integral;
 public import container::array::array_common;
+public import meta m;
+
+public metafunction pxc_no_container_guard
+  m::and{
+    m::eq{m::profile{"safe_mode"}, "0"},
+    m::eq{m::profile{"container_guard"}, "0"}};
 
 extern "types" inline
 namespace pxcrt {
 
 struct refguard_base {
-  refguard_base() : refguard_count(0) { }
+  refguard_base()
+  #if ! %{pxc_no_container_guard}%
+    : refguard_count(0)
+  #endif
+  { }
   template <typename Tc> struct guard_ref {
     guard_ref(Tc& x) : v(x) { v.inc_refguard(); }
     ~guard_ref() { v.dec_refguard(); }
@@ -33,12 +43,20 @@ struct refguard_base {
     guard_val(const guard_val&);
     guard_val& operator =(const guard_val&);
   };
+  #if %{pxc_no_container_guard}%
+  bool refguard_is_zero() const { return true; }
+  void inc_refguard() const { }
+  void dec_refguard() const { }
+  void check_resize() { }
+  #else
+  bool refguard_is_zero() const { return refguard_count == 0; }
   void inc_refguard() const { ++refguard_count; }
   void dec_refguard() const { --refguard_count; }
   void check_resize() {
     if (refguard_count != 0) { pxcrt::throw_would_invalidate(); }
   }
   mutable size_t refguard_count;
+  #endif
 };
 
 }; // namespace pxcrt
