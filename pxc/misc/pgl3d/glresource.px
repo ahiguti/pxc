@@ -11,7 +11,7 @@ public metafunction is_android m::eq{m::profile{"platform"}, "android"};
 public metafunction is_macos m::eq{m::profile{"platform"}, "Darwin"};
 public metafunction is_linux m::eq{m::profile{"platform"}, "Linux"};
 public metafunction is_gles m::or{is_ios, is_android};
-public metafunction is_gl3 m::not{is_gles};
+//public metafunction is_gl3 m::not{is_gles};
 public metafunction is_gl3_or_gles3 m::not{is_android};
 
 private threaded struct extern "glresource$n::handle" "noncopyable" {t}
@@ -41,11 +41,14 @@ public metafunction auto_framebuffer
   auto_handle{uint, 0, glGenFramebuffers, glDeleteFramebuffers};
 public metafunction auto_renderbuffer
   auto_handle{uint, 0, glGenRenderbuffers, glDeleteRenderbuffers};
-public metafunction auto_vertexarray
-  m::cond{
-    is_gl3,
-    auto_handle{uint, 0, glGenVertexArrays, glDeleteVertexArrays},
-    auto_handle{uint, 0, 0, 0}};
+expand (sym: m::seq{is_gl3_or_gles3}) {
+  public metafunction auto_vertexarray
+    auto_handle{uint, 0, glGenVertexArrays, glDeleteVertexArrays};
+}
+expand (sym: m::seq{m::not{is_gl3_or_gles3}}) {
+  public metafunction auto_vertexarray
+    auto_handle{uint, 0, 0, 0};
+}
 
 private threaded struct {t, init, generate_func, release_func}
 auto_handle()

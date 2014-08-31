@@ -1,8 +1,26 @@
 public threaded namespace generic;
+public import numeric::integral -;
 public import meta m;
 public import meta::family mf;
 
 public threaded function {t} t identity(t const& x) { return x; }
+
+public threaded function {t} void swap(t mutable& x, t mutable& y)
+{
+  if (m::symbol_exists{m::nsof{t}, m::concat{t, "_swap"}}) {
+    m::symbol{m::nsof{t}, m::concat{t, "_swap"}}(x, y);
+  } else if (m::ne{m::size{m::field_names{t}}, 0}) {
+    /* has public field */
+    /* note: not atomic */
+    expand (sym: m::field_names{t}) {
+      swap(x.sym, y.sym);
+    }
+  } else {
+    t const x0 = x;
+    x = y;
+    y = x0;
+  }
+}
 
 public threaded function {t} t make_default()
 {

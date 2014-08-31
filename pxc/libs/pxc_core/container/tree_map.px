@@ -25,6 +25,30 @@ public metafunction tree_multimap_range{t, s}
 public metafunction tree_multimap_crange{t, s}
   tree_multimap_compare_crange{t, s, cmp{t}};
 
+public threaded function {t, s, f} void
+tree_map_compare_swap(tree_map_compare{t, s, f} mutable& x,
+  tree_map_compare{t, s, f} mutable& y)
+{
+  memfunc_swap(x, y);
+}
+
+public threaded function {t, f} void
+tree_set_compare_swap(tree_set_compare{t, f} mutable& x,
+  tree_set_compare{t, f} mutable& y)
+{
+  memfunc_swap(x, y);
+}
+
+public threaded function {t, s, f} void
+tree_multimap_compare_swap(tree_multimap_compare{t, s, f} mutable& x,
+  tree_multimap_compare{t, s, f} mutable& y)
+{
+  memfunc_swap(x, y);
+}
+
+private threaded function extern "::pxcrt::memfunc_swap" {t} void
+memfunc_swap(t mutable& x, t mutable& y);
+
 private tsvaluetype struct {t} cmp {
   public function int call(t const& x, t const& y) const
     { return ordered::compare_strict_weak(x, y); }

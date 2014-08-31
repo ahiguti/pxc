@@ -319,6 +319,13 @@ struct pxcvarray : public refguard_base {
     check_resize();
     erase_internal(first, last);
   }
+  void swap(pxcvarray& x) {
+    check_resize();
+    x.check_resize();
+    std::swap(start, x.start);
+    std::swap(valid_len, x.valid_len);
+    std::swap(alloc_len, x.alloc_len);
+  }
   bt_slice<T> range() {
     return bt_slice<T>(start, valid_len);
   }
@@ -424,7 +431,13 @@ private:
   size_type alloc_len;
 };
 
-template <typename T> inline T&
+template <typename T> static inline void
+pxcvarray_swap(pxcvarray<T>& x, pxcvarray<T>& y)
+{
+  x.swap(y);
+}
+
+template <typename T> static inline T&
 pxcvarray_push_back_uninitialized(pxcvarray<T>& v)
 {
   /* re-ordered for speed */
@@ -443,7 +456,7 @@ pxcvarray_push_back_uninitialized(pxcvarray<T>& v)
   }
 }
 
-template <typename T> inline void
+template <typename T> static inline void
 pxcvarray_rawarr_set_valid_len(pxcvarray<T>& v,
   typename pxcvarray<T>::size_type len)
 {
@@ -464,7 +477,7 @@ template <typename T> static inline bt_size_t
 pod_array_hash(T const& x)
 { return hash_podarr(x); }
 
-inline bt_string cstr_to_string(const char *cstr)
+static inline bt_string cstr_to_string(const char *cstr)
 {
   return bt_string(
     reinterpret_cast<const unsigned char *>(cstr),

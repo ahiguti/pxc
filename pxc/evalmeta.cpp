@@ -261,6 +261,17 @@ static term eval_meta_is_constructible_type(const term_list_range& tlev,
   return term(r);
 }
 
+static term eval_meta_is_default_constructible_type(
+  const term_list_range& tlev, eval_context& ectx, expr_i *pos)
+{
+  if (tlev.size() != 1) {
+    return term();
+  }
+  const term& ttyp = tlev[0];
+  const long long r = is_default_constructible(ttyp);
+  return term(r);
+}
+
 static term eval_meta_is_polymorphic_type(const term_list_range& tlev,
   eval_context& ectx, expr_i *pos)
 {
@@ -1966,6 +1977,8 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@is_copyable_type", &eval_meta_is_copyable_type },
   { "@is_assignable_type", &eval_meta_is_assignable_type },
   { "@is_constructible_type", &eval_meta_is_constructible_type },
+  { "@is_default_constructible_type",
+    &eval_meta_is_default_constructible_type },
   { "@is_polymorphic_type", &eval_meta_is_polymorphic_type },
   { "@inherits", &eval_meta_inherits },
   { "@base_types", &eval_meta_base_types },

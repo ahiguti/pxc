@@ -40,7 +40,7 @@ public interface shader_i {
   public function void instance_attrib_pointer();
   public function size_t instance_attrib_num_float() const;
   public function void instance_attrib_set_uniform(cslice{float} const& value,
-    size_t offset);
+    size_t offset, size_t cnt);
 }
 
 
@@ -53,22 +53,22 @@ make_shader_ptr(cstrref const& prog_v, cstrref const& prog_f,
 }
 
 private function {t} void
-set_uniform(GLint loc, cslice{float} const& value, size_t offset)
+set_uniform(GLint loc, cslice{float} const& value, size_t offset, int cnt)
 {
   if (m::eq{t, glm::mat4}) {
-    glUniformMatrix4fv(loc, 1, 0, value.crawptr() + offset);
+    glUniformMatrix4fv(loc, cnt, 0, value.crawptr() + offset);
   } else if (m::eq{t, glm::mat3}) {
-    glUniformMatrix3fv(loc, 1, 0, value.crawptr() + offset);
+    glUniformMatrix3fv(loc, cnt, 0, value.crawptr() + offset);
   } else if (m::eq{t, glm::mat2}) {
-    glUniformMatrix2fv(loc, 1, 0, value.crawptr() + offset);
+    glUniformMatrix2fv(loc, cnt, 0, value.crawptr() + offset);
   } else if (m::eq{t, glm::vec4}) {
-    glUniform4fv(loc, 1, value.crawptr() + offset);
+    glUniform4fv(loc, cnt, value.crawptr() + offset);
   } else if (m::eq{t, glm::vec3}) {
-    glUniform3fv(loc, 1, value.crawptr() + offset);
+    glUniform3fv(loc, cnt, value.crawptr() + offset);
   } else if (m::eq{t, glm::vec2}) {
-    glUniform2fv(loc, 1, value.crawptr() + offset);
+    glUniform2fv(loc, cnt, value.crawptr() + offset);
   } else if (m::eq{t, float}) {
-    glUniform1f(loc, value[offset]);
+    glUniform1fv(loc, cnt, value.crawptr() + offset);
   } else {
     m::error{"set_uniform"};
   }
@@ -186,7 +186,7 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
       metafunction tfield m::at{m::field_types{tinst_sh}, idx};
       size_t const nfl = num_float_fld{tfield};
       if (sym >= 0) {
-	if (m::ne{is_gl3, 0}) {
+	if (m::ne{is_gl3_or_gles3, 0}) {
 	  int const n = num_attrib_fld{tfield};
 	  for (const i: 0 .. n) {
 	    const loc = static_cast{uint}(sym + i);
@@ -218,7 +218,7 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
       metafunction tfield m::at{m::field_types{tinst_sh}, idx};
       size_t const nfl = num_float_fld{tfield};
       if (sym >= 0) {
-	if (m::ne{is_gl3, 0}) {
+	if (m::ne{is_gl3_or_gles3, 0}) {
 	  int const dv = m::div{num_float_fld{tfield}, num_attrib_fld{tfield}};
 	  int const n = num_attrib_fld{tfield};
 	  for (const i: 0 .. n) {
@@ -240,7 +240,7 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
     return num_float_struct{instance_attributes_type};
   }
   public function void instance_attrib_set_uniform(cslice{float} const& arr,
-    size_t offset)
+    size_t offset, size_t cnt)
   {
     metafunction tinst_sh instance_attributes_type;
     metafunction stride_byte m::mul{num_float_struct{tinst_sh}, 4};
@@ -250,7 +250,7 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
       metafunction tfield m::at{m::field_types{tinst_sh}, idx};
       size_t const nfl = num_float_fld{tfield};
       if (sym >= 0) {
-	set_uniform{tfield}(sym, arr, offset);
+	set_uniform{tfield}(sym, arr, offset, static_cast{int}(cnt));
       }
       offset += nfl;
     }
