@@ -90,19 +90,22 @@ public threaded struct vertex_set(size_t num_float_per_vertex0)
 
 private threaded struct instance_data {
   public auto_buffer vbo_inst;
-  public varray{float} client_buffer;
+  public varray{float} instance_buffer;
 }
 
+public metafunction instances_type varray{varray{ptr{instance_data}}};
+
 public threaded struct
-buffer_object(size_t num_float_per_vertex0, bool draw_mode_points0)
+vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0)
 {
   public bool const draw_mode_points = draw_mode_points0;
   public size_t const num_float_per_vertex = num_float_per_vertex0;
   public auto_buffer vbo_values;
   public auto_buffer vbo_elems;
-  public varray{ptr{instance_data}} instances;
+  public instances_type instances;
   public size_t num_vertex_values;
   public size_t num_elements;
+  public metafunction num_instance_data 2;
   private varray{ptr{vertex_set}} vs_arr;
   private tree_map{string, size_t} vs_names;
   public function ptr{vertex_set} get(string const& name)
@@ -136,7 +139,7 @@ buffer_object(size_t num_float_per_vertex0, bool draw_mode_points0)
     if (const id: vs_names[name]) {
       return id;
     } else {
-      throw runtime_error_template{"buffer_object.get_id_by_name"}("");
+      throw runtime_error_template{"vertex_buffer.get_id_by_name"}("");
     }
   }
   public function size_t num_vs_ids() const
@@ -197,22 +200,36 @@ buffer_object(size_t num_float_per_vertex0, bool draw_mode_points0)
       glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     }
     for (const i: 0 .. vs_arr.size()) {
-      instances.push_back(make_ptr{instance_data}());
+      instances.push_back(varray{ptr{instance_data}}());
+      mutable& e = instances[i];
+      for (const j: 0 .. num_instance_data) {
+	e.push_back(make_ptr{instance_data}());
+      }
     }
-    if (m::ne{is_gl3, 0}) {
+    if (m::ne{is_gl3_or_gles3, 0}) {
       for (const i, const& vs: vs_arr) {
-	instances[i]->vbo_inst.generate();
-	if (instances[i]->vbo_inst.get() == 0) {
-	  return false;
+	for (const j: 0 .. static_cast{size_t}(num_instance_data)) {
+	  instances[i][j]->vbo_inst.generate();
+	  if (instances[i][j]->vbo_inst.get() == 0) {
+	    return false;
+	  }
 	}
       }
     }
     return true;
   }
+  public function void clear_instances()
+  {
+    for (const i, const& ai: instances) {
+      for (const j, const& aj: ai) {
+	aj->instance_buffer.clear();
+      }
+    }
+  }
 }
 
 private function void
-buffer_object_draw_pre(buffer_object const& bo, shader_i mutable& sdr)
+vertex_buffer_draw_pre(vertex_buffer const& bo, shader_i mutable& sdr)
 {
   glBindBuffer(GL_ARRAY_BUFFER, bo.vbo_values.get());
   sdr.enable_vertex_attrib_array(bo.num_float_per_vertex);
@@ -225,7 +242,7 @@ buffer_object_draw_pre(buffer_object const& bo, shader_i mutable& sdr)
 }
 
 private function void
-buffer_object_draw_post(buffer_object const& bo, shader_i mutable& sdr)
+vertex_buffer_draw_post(vertex_buffer const& bo, shader_i mutable& sdr)
 {
   sdr.disable_vertex_attrib_array();
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
@@ -235,7 +252,7 @@ buffer_object_draw_post(buffer_object const& bo, shader_i mutable& sdr)
 }
 
 private function void
-buffer_object_draw_elems(buffer_object const& bo, size_t vs_id)
+vertex_buffer_draw_elems(vertex_buffer const& bo, size_t vs_id)
 {
   const& be = *bo.get_by_id(vs_id);
   const elem_offset = be.elements_offset;
@@ -263,10 +280,10 @@ buffer_object_draw_elems(buffer_object const& bo, size_t vs_id)
 }
 
 private function void
-buffer_object_draw_elems_instanced(buffer_object const& bo, size_t vs_id,
+vertex_buffer_draw_elems_instanced(vertex_buffer const& bo, size_t vs_id,
   size_t num_instance)
 {
-  if (m::ne{is_gl3, 0}) {
+  if (m::ne{is_gl3_or_gles3, 0}) {
     size_t elem_offset;
     size_t elem_num;
     {
@@ -276,20 +293,21 @@ buffer_object_draw_elems_instanced(buffer_object const& bo, size_t vs_id,
     }
     GLenum mode = bo.draw_mode_points ? GL_POINTS :
       use_primitive_restart ? GL_TRIANGLE_FAN : GL_TRIANGLES;
+    // println("drawelementsinstanced", num_instance);
     glDrawElementsInstanced(mode, static_cast{GLsizei}(elem_num),
       GL_UNSIGNED_INT, offset_to_void_cp(elem_offset * 4),
       static_cast{GLsizei}(num_instance));
   } else {
-    throw runtime_error_template{"buffer_object_draw_elems_instanced"}("");
+    throw runtime_error_template{"vertex_buffer_draw_elems_instanced"}("");
   }
 }
 
 public function void
-buffer_object_draw(buffer_object const& bo, size_t vs_id,
+vertex_buffer_draw(vertex_buffer const& bo, size_t vs_id,
   shader_i mutable& sdr)
 {
-  buffer_object_draw_pre(bo, sdr);
-  buffer_object_draw_elems(bo, vs_id);
-  buffer_object_draw_post(bo, sdr);
+  vertex_buffer_draw_pre(bo, sdr);
+  vertex_buffer_draw_elems(bo, vs_id);
+  vertex_buffer_draw_post(bo, sdr);
 }
 

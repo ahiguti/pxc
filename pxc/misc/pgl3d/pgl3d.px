@@ -18,7 +18,7 @@ public import glbuffer -;
 public import glnode -;
 public import pglshader -;
 
-function void build_vertices(cslice{ptr{buffer_object}} const& bos)
+function void build_vertices(cslice{ptr{vertex_buffer}} const& bos)
 {
   metafunction tattr main_vertex_attributes;
   metafunction fill_v fill{tattr};
@@ -75,8 +75,8 @@ function void build_vertices(cslice{ptr{buffer_object}} const& bos)
       .translate(glm::make_vec3(0.0, 0.0, 1.0))
       .rotate(10.0, glm::make_vec3(0.0, 0.0, 1.0));
     regular_polygon(1.0, 6,
-      bump_apply(m, false, t, bump_apply(m, false, t, t)),
-      t)
+      bump_apply(m, false, t, t),
+      bump_apply(m, false, t, t))
       (poly_t(), mesh_pos());
   }
   {
@@ -84,8 +84,27 @@ function void build_vertices(cslice{ptr{buffer_object}} const& bos)
     const vtx = bos[0]->get("bullet-multi")->vtxs;
     const t = fill_v(vtx);
     regular_polygon(600.0, 4,
-      rectangle_split(160, 160, joint_v(vtx, "bullet", hole())),
+      rectangle_split(170, 170, joint_v(vtx, "bullet", hole())),
       hole())
+      (poly_t(), mesh_pos());
+  }
+  {
+    const vtx = bos[0]->get("bullet2")->vtxs;
+    const t = fill_v(vtx);
+    mutable m = glm::mat4()
+      .translate(glm::make_vec3(0.0, 0.0, 1.0))
+      .rotate(10.0, glm::make_vec3(0.0, 0.0, 1.0));
+    regular_polygon(1.0, 5,
+      bump_rec(0.8, 0.8, 1, t, t),
+      bump_rec(0.8, 0.8, 1, t, t))
+      (poly_t(), mesh_pos());
+  }
+  {
+    const vtx = bos[0]->get("bullet2-multi")->vtxs;
+    const t = fill_v(vtx);
+    const rnd = make_rand_generator(991U);
+    rand_sphere(200.0, 30000, false, rnd,
+      joint_v(vtx, "bullet2", hole()))
       (poly_t(), mesh_pos());
   }
   {
@@ -108,10 +127,17 @@ function void build_vertices(cslice{ptr{buffer_object}} const& bos)
   {
     /* particle multi */
     const vtx = bos[1]->get("particle-multi")->vtxs;
+    /*
     regular_polygon(600.0, 4,
       // rectangle_split(200, 200, joint_v(vtx, "particle", hole())),
       rectangle_split(100, 100, joint_v(vtx, "particle", hole())),
       hole())
+      (poly_t(), mesh_pos());
+    const vtx = bos[2]->get("particle-bb-multi")->vtxs;
+    */
+    const rnd = make_rand_generator(991U);
+    rand_sphere(60.0, 10000, true, rnd,
+      joint_v(vtx, "particle", hole()))
       (poly_t(), mesh_pos());
   }
   {
@@ -125,11 +151,24 @@ function void build_vertices(cslice{ptr{buffer_object}} const& bos)
   {
     /* particle-bb multi */
     const vtx = bos[2]->get("particle-bb-multi")->vtxs;
-    regular_polygon(600.0, 4,
-      rectangle_split(100, 100, joint_v(vtx, "particle-bb", hole())),
-      hole())
+    const rnd = make_rand_generator(991U);
+    rand_sphere(60.0, 10000, true, rnd,
+      joint_v(vtx, "particle-bb", hole()))
       (poly_t(), mesh_pos());
   }
+}
+
+public threaded struct node_data
+{
+  public glm::mat4 trans_ini;
+  public glm::mat4 trans_cur;
+}
+
+public threaded function void
+make_node(scene_node{node_data} mutable& sn)
+{
+  sn.data.trans_ini = sn.trans;
+  sn.data.trans_cur = sn.trans;
 }
 
 struct
@@ -523,12 +562,12 @@ function void main_loop()
   pglshader pgs = pglshader(sdlc.gles_flag, sdlc.glmajor, sdlc.glminor,
     sdlc.enable_msaa, sdlc.init_w, sdlc.init_h);
 
-  varray{ptr{buffer_object}} bos;
-  bos.push_back(make_ptr{buffer_object}
+  varray{ptr{vertex_buffer}} bos;
+  bos.push_back(make_ptr{vertex_buffer}
     (static_cast{size_t}(num_float_struct{main_vertex_attributes}), false));
-  bos.push_back(make_ptr{buffer_object}
+  bos.push_back(make_ptr{vertex_buffer}
     (static_cast{size_t}(num_float_struct{particle_vertex_attr}), true));
-  bos.push_back(make_ptr{buffer_object}
+  bos.push_back(make_ptr{vertex_buffer}
     (static_cast{size_t}(num_float_struct{particle_bb_vertex_attr}), false));
   {
     const t0 = system.gettimeofday_double();
@@ -544,7 +583,8 @@ function void main_loop()
   joint_id_type scene_id;
   scene_id.bo_id = 2;
   scene_id.vs_id = static_cast{int}(bos[2]->num_vs_ids() - 1);
-  ptr{scene_node} snode = instantiate_scene(bos, scene_id);
+  mutable snode = instantiate_scene{node_data, make_node}(
+    bos, scene_id, glm::mat4());
   input_control ictl;
   int motion_count = 0;
   function void scene_next()
@@ -557,7 +597,8 @@ function void main_loop()
 	scene_id.bo_id = 0;
       }
     }
-    snode = instantiate_scene(bos, scene_id);
+    snode = instantiate_scene{node_data, make_node}(
+      bos, scene_id, glm::mat4());
     rctl.fixed_fps = 1;
   }
 
@@ -695,7 +736,8 @@ function void main_loop()
       frctl.tprevsec = frctl.tprev;
       continue;
     } else {
-      function void motion_rec(scene_node mutable& sn, size_t i, size_t n)
+      function void motion_rec(scene_node{node_data} mutable& sn, size_t i,
+	size_t n)
       {
 	const num = sn.children.size();
 	if (num > 0) {
@@ -711,7 +753,7 @@ function void main_loop()
 	  const y = cos(t);
 	  const ang = glm::make_quat_angle_axis(
 	    static_cast{float}(motion_count), x, y, 0.0);
-	  sn.trans = sn.trans_initial * ang.to_mat4();
+	  sn.trans = sn.data.trans_ini * ang.to_mat4();
 	}
       }
       motion_rec(*snode, 0, 1);
@@ -730,7 +772,7 @@ function void main_loop()
       const mess = string_join{" "}(frctl.fps, frctl.frame_speed_mul,
 	frctl.ticks_sum_prev, ictl.finger_zmove_delta, pgs.cam.camera.angle);
       if (!paused) {
-	draw_frame(pgs, bos, snode, mess);
+	draw_frame(pgs, bos, *snode, mess);
       }
       frctl.save_ticks(2);
       frctl.measure();

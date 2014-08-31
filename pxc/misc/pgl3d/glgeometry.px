@@ -9,7 +9,9 @@ public import operator op;
 
 public metafunction modifier_t callable_ptr{darray{vertex_attr}, {poly_t}};
 
-public tsvaluetype struct vertex_attr {
+public tsvaluetype struct
+vertex_attr()
+{
   public vec3 pos;
   public vec3 nor;
   public vec3 tan;
@@ -244,9 +246,17 @@ private threaded function void gf_rand_bump(size_t num, float scale,
 public threaded function mat4
 poly_trans(poly_t const& poly)
 {
-  const ex = (poly[1].pos - poly[0].pos).normalize();
-  const ez = normal_from_poly(poly);
-  const ey = cross(ez, ex);
+  vec3 ex;
+  vec3 ey;
+  vec3 ez;
+  if (poly.size() >= 3) {
+    ex = (poly[1].pos - poly[0].pos).normalize();
+    ez = normal_from_poly(poly);
+  } else {
+    ex = make_vec3(1.0, 0.0, 0.0);
+    ez = make_vec3(0.0, 1.0, 0.0);
+  }
+  ey = cross(ez, ex);
   const c = polygon_center(poly);
   return make_mat4(
     ex.x, ex.y, ex.z,  0.0, 
@@ -259,7 +269,7 @@ private threaded function {tattr} void
 gf_joint(ptr{vertices} const& vptr, string const& joint_name,
   gf_poly const& c0, poly_t const& poly, mesh_pos const& mp)
 {
-  if (poly.size() < 3) { return; }
+  if (poly.size() < 1) { return; }
   node_joint e;
   e.trans = poly_trans(poly);
   e.joint_name = joint_name;

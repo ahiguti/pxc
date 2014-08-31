@@ -232,6 +232,11 @@ struct with_guard : public refguard_base {
     check_resize();
     v.clear();
   }
+  void swap(with_guard& x) {
+    check_resize();
+    x.check_resize();
+    v.swap(x.v);
+  }
   range_type range() {
     return range_type(v.begin(), v.end());
   }
@@ -253,6 +258,11 @@ struct with_guard : public refguard_base {
 private:
   base_map v;
 };
+
+template <typename T> static inline void memfunc_swap(T& x, T& y)
+{
+  x.swap(y);
+}
 
 }; // namespace pxcrt
 ;

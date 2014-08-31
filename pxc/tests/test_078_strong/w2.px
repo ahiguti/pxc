@@ -1,24 +1,24 @@
 public namespace w2;
 import common -;
-import weak -;
+import pointer::strong -;
 
 threaded struct node private () {
-  public option{ptr{weak{node}}} next;
-  public option{ptr{weak{node}}} prev;
+  public option{ptr{strong_count{node}}} next;
+  public option{ptr{strong_count{node}}} prev;
   public string str;
 }
 
 threaded struct arena {
-  public varray{strong{ptr{weak{node}}}} nodes;
-  public function ptr{weak{node}} create() {
-    const p = make_ptr(weak(node()));
+  public varray{strong{ptr{strong_count{node}}}} nodes;
+  public function ptr{strong_count{node}} create() {
+    const p = make_ptr(strong_count(node()));
     nodes.push_back(strong(p));
     return p;
   }
 }
 
 {
-  mutable option{ptr{weak{node}}} op;
+  mutable option{ptr{strong_count{node}}} op;
   {
     arena ar;
     const p0 = ar.create();
