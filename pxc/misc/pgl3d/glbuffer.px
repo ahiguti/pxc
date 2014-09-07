@@ -69,8 +69,11 @@ vertices(size_t num_float_per_vertex0)
     if (num_float_per_vertex != num_float_struct{tattr}) {
       throw runtime_error_template{"vertices::push_point"}("");
     }
+debug_log("push_point0", vertex_values.size());
     const first_id = vertex_values.size() / num_float_struct{tattr};
     push_float{tattr}(vertex_values, val);
+debug_log("push_point1", vertex_values.size());
+debug_log("push_point val", val);
     elements.push_back(static_cast{uint}(first_id));
   }
   public function void push_joint(node_joint const& e)
@@ -88,12 +91,24 @@ public threaded struct vertex_set(size_t num_float_per_vertex0)
   public size_t elements_offset;
 }
 
-private threaded struct instance_data {
+public threaded struct instance_buffer_type {
   public auto_buffer vbo_inst;
   public varray{float} instance_buffer;
 }
 
+private threaded struct instance_data {
+  public auto_buffer vbo_inst; // FIXME: not used
+  public varray{float} instance_buffer;
+  public size_t glbuffer_offset_float;
+}
+
 public metafunction instances_type varray{varray{ptr{instance_data}}};
+
+public threaded struct instances_info {
+  public size_t ibuf_offset_byte;
+  public size_t ibuf_bytes;
+}
+
 
 public threaded struct
 vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0)
@@ -121,6 +136,10 @@ vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0)
       vs_names[name] = id;
       return p;
     }
+  }
+  public function size_t num_vs() const
+  {
+    return vs_arr.size();
   }
   public function ptr{vertex_set} get_by_id(size_t vs_id) const
   {

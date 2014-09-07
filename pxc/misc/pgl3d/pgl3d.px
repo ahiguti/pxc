@@ -18,7 +18,8 @@ public import glbuffer -;
 public import glnode -;
 public import pglshader -;
 
-function void build_vertices(cslice{ptr{vertex_buffer}} const& bos)
+function void build_vertices(pglshader mutable& pgs,
+  cslice{ptr{vertex_buffer}} const& bos)
 {
   metafunction tattr main_vertex_attributes;
   metafunction fill_v fill{tattr};
@@ -100,10 +101,27 @@ function void build_vertices(cslice{ptr{vertex_buffer}} const& bos)
       (poly_t(), mesh_pos());
   }
   {
+    /* 60fbp mbp intel gpu */
     const vtx = bos[0]->get("bullet2-multi")->vtxs;
     const t = fill_v(vtx);
     const rnd = make_rand_generator(991U);
-    rand_sphere(200.0, 30000, false, rnd,
+    rand_sphere(200.0, 40000, false, rnd,
+      joint_v(vtx, "bullet2", hole()))
+      (poly_t(), mesh_pos());
+  }
+  {
+    const vtx = bos[0]->get("bullet2-multi2")->vtxs;
+    const t = fill_v(vtx);
+    const rnd = make_rand_generator(991U);
+    rand_sphere(200.0, 20000, false, rnd,
+      joint_v(vtx, "bullet2", hole()))
+      (poly_t(), mesh_pos());
+  }
+  {
+    const vtx = bos[0]->get("bullet2-multi3")->vtxs;
+    const t = fill_v(vtx);
+    const rnd = make_rand_generator(991U);
+    rand_sphere(200.0, 2000, false, rnd,
       joint_v(vtx, "bullet2", hole()))
       (poly_t(), mesh_pos());
   }
@@ -156,6 +174,49 @@ function void build_vertices(cslice{ptr{vertex_buffer}} const& bos)
       joint_v(vtx, "particle-bb", hole()))
       (poly_t(), mesh_pos());
   }
+  {
+    const vtx = bos[2]->get("mixed")->vtxs;
+    regular_polygon(1.0, 5,
+      bump_rec(1.0, 10.0, 1, hole(), joint_v(vtx, "saucer", hole())),
+      // joint_v(vtx, "bullet2", hole()),
+      // joint_v(vtx, "particle", hole()),
+      joint_v(vtx, "particle-bb", hole()))
+      (poly_t(), mesh_pos());
+  }
+  /*
+  */
+  {
+    /* for font2 shader */
+    const vtx = bos[3]->get("default_font")->vtxs;
+    const char_w = static_cast{float}(pgs.fti.char_w);
+    const char_h = static_cast{float}(pgs.fti.char_h);
+    const point_size = static_cast{float}(max(pgs.fti.char_w, pgs.fti.char_h));
+    const char_size_px = glm::make_vec2(char_w, char_h);
+    const texture_size_px = glm::make_vec2(
+      static_cast{float}(pgs.fti.surface_w),
+      static_cast{float}(pgs.fti.surface_h));
+    const char_h_tex = char_h / static_cast{float}(pgs.fti.surface_h);
+    const char_w_tex = char_w / static_cast{float}(pgs.fti.surface_w);
+    const clamp_x = char_w / point_size;
+    const clamp_y = char_h / point_size;
+    font2_vertex_attributes v;
+    v.char_size_px = char_size_px;
+    v.texture_size_px = texture_size_px;
+    v.texture_origin_px = glm::make_vec2(0.0, 0.0);
+    v.char_uv = glm::make_vec2(0.0, 0.0);
+    v.char_uv_delta = glm::make_vec2(char_w_tex, char_h_tex);
+    v.coord_clamp = glm::make_vec2(clamp_x, clamp_y);
+    v.char_px = static_cast{float}(pgs.fti.char_w);
+    v.char_point_size = point_size;
+    for (const i: 0 .. 14U) {
+      v.text_index = static_cast{float}(i);
+//debug_log("point size", v.char_point_size);
+//debug_log("text_index", v.text_index);
+println("font2_vertex_attributes", v);
+      vtx->push_point{font2_vertex_attributes}(v);
+    }
+//println("vertex_values", vtx->vertex_values);
+  }
 }
 
 public threaded struct node_data
@@ -174,7 +235,7 @@ make_node(scene_node{node_data} mutable& sn)
 struct
 frame_control()
 {
-  public metafunction ticks_t farray{uint, 6};
+  public metafunction ticks_t farray{uint, 7};
   public uint tprevsec = 0;
   public uint tprev = SDL_GetTicks();
   public uint frames = 0;
@@ -193,10 +254,10 @@ frame_control()
       e = tprev;
     }
   }
-  public function void save_ticks(size_t idx) {
+  public function void save_ticks(size_t idx, uint v) {
     const prev_tick = ticks[idx == 0 ? ticks.size() - 1 : idx - 1];
     mutable& cur_tick = ticks[idx];
-    cur_tick = SDL_GetTicks();
+    cur_tick = v;
     ticks_sum[idx] += cur_tick - prev_tick;
   }
   public function void measure()
@@ -473,7 +534,7 @@ framerate_control(int vsync0)
       const td = max(now - time_before_swapwindow, 0.0);
       const sleep_sec = latency_target - td;
       if (sleep_sec > 0.0) {
-	if (fixed_fps > 1 || swap_interval != 1) {
+	if (fixed_fps > 1 || swap_interval > 1) {
 	  io::system.usleep(static_cast{uint}(sleep_sec * 1000000.0));
 	}
 	time_before_swapwindow += latency_target;
@@ -569,20 +630,29 @@ function void main_loop()
     (static_cast{size_t}(num_float_struct{particle_vertex_attr}), true));
   bos.push_back(make_ptr{vertex_buffer}
     (static_cast{size_t}(num_float_struct{particle_bb_vertex_attr}), false));
+  bos.push_back(make_ptr{vertex_buffer}
+    (static_cast{size_t}(num_float_struct{font2_vertex_attributes}), true));
   {
     const t0 = system.gettimeofday_double();
-    build_vertices(bos);
+    build_vertices(pgs, bos);
     const t1 = system.gettimeofday_double();
     bos[0]->create_vbo();
     bos[1]->create_vbo();
     bos[2]->create_vbo();
+    bos[3]->create_vbo();
+println("bos[3] vbo_values", bos[3]->vbo_values.get());
     const t2 = system.gettimeofday_double();
     sdllog(string_join{" "}("build vertex", t1 - t0, t2 - t1));
   }
 
   joint_id_type scene_id;
-  scene_id.bo_id = 2;
-  scene_id.vs_id = static_cast{int}(bos[2]->num_vs_ids() - 1);
+  scene_id.bo_id = 3;
+  scene_id.vs_id = 0; // static_cast{int}(bos[2]->num_vs_ids() - 1);
+  const test_scroll_mode = false;
+  if (test_scroll_mode) {
+    scene_id.bo_id = 0;
+    scene_id.vs_id = 8;
+  }
   mutable snode = instantiate_scene{node_data, make_node}(
     bos, scene_id, glm::mat4());
   input_control ictl;
@@ -593,7 +663,7 @@ function void main_loop()
     if (scene_id.vs_id >= static_cast{int}(bos[scene_id.bo_id]->num_vs_ids())) {
       scene_id.vs_id = 0;
       ++scene_id.bo_id;
-      if (scene_id.bo_id >= bos.size()) {
+      if (scene_id.bo_id > 2) {
 	scene_id.bo_id = 0;
       }
     }
@@ -612,7 +682,7 @@ function void main_loop()
   bool done = false;
   bool paused = false;
   while (!done) {
-    frctl.save_ticks(0);
+    frctl.save_ticks(0, SDL_GetTicks());
     SDL_Event ev;
     while (SDL_PollEvent(ev)) {
       const etype = ev.type;
@@ -630,7 +700,7 @@ function void main_loop()
 	  /* sdllog("hidden"); */
 	} else if (ev.window.event == SDL_WINDOWEVENT_MINIMIZED ||
 	    ev.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
-	  paused = true;
+	  // paused = true; // FIXME
 	  sdllog("paused");
 	} else if (ev.window.event == SDL_WINDOWEVENT_RESTORED ||
 	    ev.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) {
@@ -746,7 +816,7 @@ function void main_loop()
 	    const ui = rnd->generate() / 65536;
 	    motion_rec(*c, ui, 65536);
 	  }
-	} else {
+	} else if (sn.joint_id.bo_id != 3) {
 	  const t = static_cast{float}(i) / static_cast{float}(n) * pi_float()
 	    * 2.0;
 	  const x = sin(t);
@@ -754,6 +824,19 @@ function void main_loop()
 	  const ang = glm::make_quat_angle_axis(
 	    static_cast{float}(motion_count), x, y, 0.0);
 	  sn.trans = sn.data.trans_ini * ang.to_mat4();
+	} else {
+	  /* bo_id == 3 */
+	  /* text object */
+	  const s = "ABC012345abcde";
+	  glm::mat4 str;
+	  slice{float} strs = str.slice();
+	  for (const i: 0 .. 14U) {
+	    strs[i] = static_cast{float}(s[i] - 0x20);
+	  }
+	  strs[14] = 0.0f;
+	  strs[15] = 0.0f;
+	  sn.trans = str;
+//println("text object", str.slice());
 	}
       }
       motion_rec(*snode, 0, 1);
@@ -762,7 +845,7 @@ function void main_loop()
 	motion_count -= 360;
       }
     }
-    frctl.save_ticks(1);
+    frctl.save_ticks(1, SDL_GetTicks());
     {
       /* draw frame */
       pgs.cam.camera = player.posang;
@@ -771,10 +854,14 @@ function void main_loop()
       pgs.cam.light.angle = pgs.cam.camera.angle;
       const mess = string_join{" "}(frctl.fps, frctl.frame_speed_mul,
 	frctl.ticks_sum_prev, ictl.finger_zmove_delta, pgs.cam.camera.angle);
+      uint tick1;
       if (!paused) {
-	draw_frame(pgs, bos, *snode, mess);
+	tick1 = draw_frame(pgs, bos, *snode, mess);
+      } else {
+	tick1 = SDL_GetTicks();
       }
-      frctl.save_ticks(2);
+      frctl.save_ticks(2, tick1);
+      frctl.save_ticks(3, SDL_GetTicks());
       frctl.measure();
       frctl.frame_speed_mul = static_cast{float}(rctl.fixed_fps);
     }
@@ -782,6 +869,10 @@ function void main_loop()
       SDL_KeyboardState const ks;
       if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) {
 	done = true;
+      }
+      if (test_scroll_mode) {
+	player.posang.rotate_angle_axis(1.0f * frctl.frame_speed_mul,
+	    1.0, 0.0, 0.0);
       }
       if (ks.Key(SDL_SCANCODE_UP) != 0) {
 	player.posang.rotate_angle_axis(1.0f * frctl.frame_speed_mul,
@@ -835,11 +926,11 @@ function void main_loop()
       }
       ictl.finger_action_step(player.posang, frctl);
     }
-    frctl.save_ticks(3);
+    frctl.save_ticks(4, SDL_GetTicks());
     rctl.delay();
-    frctl.save_ticks(4);
+    frctl.save_ticks(5, SDL_GetTicks());
     SDL_GL_SwapWindow(sdlc.sdl_window.some);
-    frctl.save_ticks(5);
+    frctl.save_ticks(6, SDL_GetTicks());
   }
 }
 

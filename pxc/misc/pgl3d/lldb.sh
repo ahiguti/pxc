@@ -1,4 +1,4 @@
 #!/bin/bash
 
-exec lldb -- pxc -p=unsafe pgl3d.px 
+exec lldb -- pxc -p=unsafe_debug pgl3d.px 
 
