@@ -37,7 +37,7 @@ public interface shader_i {
   public function void enable_vertex_attrib_array(size_t num_float_per_vertex);
   public function void disable_vertex_attrib_array();
   public function void enable_instance_attrib_array(bool enable_flag);
-  public function void instance_attrib_pointer();
+  public function void instance_attrib_pointer(size_t offset_float);
   public function size_t instance_attrib_num_float() const;
   public function void instance_attrib_set_uniform(cslice{float} const& value,
     size_t offset, size_t cnt);
@@ -186,7 +186,7 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
       metafunction tfield m::at{m::field_types{tinst_sh}, idx};
       size_t const nfl = num_float_fld{tfield};
       if (sym >= 0) {
-	if (m::ne{is_gl3_or_gles3, 0}) {
+	if (m::ne{is_gl33_or_gles3, 0}) {
 	  int const n = num_attrib_fld{tfield};
 	  for (const i: 0 .. n) {
 	    const loc = static_cast{uint}(sym + i);
@@ -207,7 +207,7 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
       offset += nfl;
     }
   }
-  public function void instance_attrib_pointer()
+  public function void instance_attrib_pointer(size_t offset_float)
   {
     size_t offset = 0;
     metafunction tinst_sh instance_attributes_type;
@@ -218,12 +218,13 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
       metafunction tfield m::at{m::field_types{tinst_sh}, idx};
       size_t const nfl = num_float_fld{tfield};
       if (sym >= 0) {
-	if (m::ne{is_gl3_or_gles3, 0}) {
+	if (m::ne{is_gl33_or_gles3, 0}) {
 	  int const dv = m::div{num_float_fld{tfield}, num_attrib_fld{tfield}};
 	  int const n = num_attrib_fld{tfield};
 	  for (const i: 0 .. n) {
 	    const loc = static_cast{uint}(sym + i);
-	    size_t const o = (offset + static_cast{size_t}(i * dv)) * 4U;
+	    size_t const o =
+	      (offset_float + offset + static_cast{size_t}(i * dv)) * 4U;
 	    // println("ptr", loc, stride_byte, offset, i, dv, o);
 	    glVertexAttribPointer(loc, dv, GL_FLOAT, 0, stride_byte,
 	      offset_to_void_cp(o));
@@ -264,10 +265,15 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
       metafunction{s} m::concat{"v_", s}})
     {
       if (sym >= 0) {
-	glEnableVertexAttribArray(static_cast{uint}(sym));
 	int const nfloat = num_float_fld{m::at{m::field_types{tvert_sh}, idx}};
+	glEnableVertexAttribArray(static_cast{uint}(sym));
 	glVertexAttribPointer(static_cast{uint}(sym), nfloat, GL_FLOAT, 0,
 	  stride_byte, offset_to_void_cp(offset));
+//println("vap", m::to_string{sym}, sym, "offset", offset, "float", nfloat, "stride_byte", stride_byte);
+	offset += static_cast{size_t}(nfloat) * 4;
+      } else {
+//println("vap notfound", m::to_string{sym}, sym);
+	int const nfloat = num_float_fld{m::at{m::field_types{tvert_sh}, idx}};
 	offset += static_cast{size_t}(nfloat) * 4;
       }
     }

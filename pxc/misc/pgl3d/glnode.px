@@ -32,7 +32,6 @@ scene_node(joint_id_type const& joint_id0, glm::mat4 const& trans0)
   public joint_id_type const joint_id = joint_id0;
   public glm::mat4 const trans = trans0;
   public varray{ptr{scene_node{t}}} children;
-  public node_info ninfo;
 }
 
 public function {t, finst} ptr{scene_node{t}}
@@ -56,23 +55,13 @@ instantiate_scene(cslice{ptr{vertex_buffer}} const& bos,
   joint_id_type const& joint_id, glm::mat4 const& tr)
 {
   const sn = make_ptr{scene_node{t}}(joint_id, tr);
-  mutable& ni = sn->ninfo;
   if (joint_id.vs_id >= 0) {
-    ni.joint_ids[joint_id] = unit();
-    ni.bo_ids[joint_id.bo_id] = unit();
     const& vs = *bos[joint_id.bo_id]->get_by_id(static_cast{size_t}(
       joint_id.vs_id));
     for (size_t i, const& e: vs.vtxs->joints) {
       const csn = instantiate_scene_by_name{t, finst}(
 	bos, e.joint_name, e.trans);
-      mutable& cni = csn->ninfo;
       sn->children.push_back(csn);
-      for (const i, const x: cni.joint_ids) {
-	ni.joint_ids[i] = unit();
-      }
-      for (const i, const x: cni.bo_ids) {
-	ni.bo_ids[i] = unit();
-      }
     }
   }
   finst(*sn);
@@ -102,8 +91,8 @@ buffer_append(varray{float} mutable& arr, t const& v)
 
 public function {t} void
 scene_node_send_instance_data(scene_node{t} const& sn,
-  cslice{ptr{vertex_buffer}} const& bos, bool enable_instanced,
-  bool enable_uniform_instancing)
+  cslice{ptr{vertex_buffer}} const& bos, instance_buffer_type mutable& gibuf,
+  bool enable_instanced, bool enable_uniform_instancing)
 {
   if (enable_instanced && !enable_uniform_instancing) {
     for (const bo_id, const& bo: bos) {
@@ -111,65 +100,84 @@ scene_node_send_instance_data(scene_node{t} const& sn,
 	for (const i, const& instp: vs) {
 	  mutable& inst = *instp;
 	  mutable& arr = inst.instance_buffer;
+	  /*
 	  glBindBuffer(GL_ARRAY_BUFFER, inst.vbo_inst.get());
 	  glBufferData(GL_ARRAY_BUFFER,
 	    static_cast{GLsizeiptr}(arr.size()) * 4,
-	    arr.crawptr().void(), GL_STREAM_DRAW);
+	    size_t_to_crawptr{void}(0), GL_STREAM_DRAW);
+	  */
+	  /*
+	  glBufferData(GL_ARRAY_BUFFER,
+	    static_cast{GLsizeiptr}(arr.size()) * 4,
+	    arr.crawptr().void(), GL_STREAM_DRAW); // FIXME: SINGLEBUFFER
 	  glBindBuffer(GL_ARRAY_BUFFER, 0);
+	  */
+	  inst.glbuffer_offset_float = gibuf.instance_buffer.size();
+	  gibuf.instance_buffer.append(arr);
 	}
       }
     }
+    glBindBuffer(GL_ARRAY_BUFFER, gibuf.vbo_inst.get());
+    glBufferData(GL_ARRAY_BUFFER,
+      static_cast{GLsizeiptr}(gibuf.instance_buffer.size()) * 4,
+      gibuf.instance_buffer.crawptr().void(), GL_STREAM_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    gibuf.instance_buffer.clear();
   }
 }
 
 public function {t} void
 scene_node_draw_instanced(scene_node{t} const& sn,
-  shader_i mutable& sdr, vertex_buffer const& bo, size_t bo_id,
+  shader_i mutable& sdr, vertex_buffer const& bo,
+  instance_buffer_type mutable& gibuf, size_t bo_id,
   size_t ibuf_id, bool enable_instanced, bool enable_uniform_instancing)
 {
-  const& ni = sn.ninfo;
+//println("draw_instanced", bo_id);
   bo.draw_pre(sdr);
   if (enable_instanced && !enable_uniform_instancing) {
     sdr.enable_instance_attrib_array(true);
+    glBindBuffer(GL_ARRAY_BUFFER, gibuf.vbo_inst.get());
   }
-  for (const ji, const x: ni.joint_ids) {
-    if (ji.bo_id != bo_id) {
-      continue;
-    }
-    mutable& instance = *bo.instances[static_cast{size_t}(ji.vs_id)][ibuf_id];
+  for (const vs_id: 0 .. bo.num_vs()) {
+    mutable& instance = *bo.instances[static_cast{size_t}(vs_id)][ibuf_id];
     mutable& arr = instance.instance_buffer;
     // println("draw_elems", ji.bo_id, ji.vs_id, "model=", arr.size());
     if (enable_instanced && !enable_uniform_instancing) {
       if (m::ne{is_gl3_or_gles3, 0}) {
 	// println("vattr instancing");
+	/*
 	glBindBuffer(GL_ARRAY_BUFFER, instance.vbo_inst.get());
-	sdr.instance_attrib_pointer();
-	bo.draw_elems_instanced(static_cast{size_t}(ji.vs_id),
+	*/
+	sdr.instance_attrib_pointer(instance.glbuffer_offset_float);
+	bo.draw_elems_instanced(static_cast{size_t}(vs_id),
 	  arr.size() / sdr.instance_attrib_num_float());
+	/*
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	*/
       }
     } else if (enable_uniform_instancing) {
       size_t const iattr_num_float = sdr.instance_attrib_num_float();
       size_t j;
       size_t const jmax = arr.size();
-      // println("iattr_num_float", iattr_num_float, jmax);
+//println("bo", bo_id, "iattr_num_float", iattr_num_float, jmax);
       for (j = 0; j < jmax; j += iattr_num_float * uniform_instancing_mul) {
 	size_t k = min((jmax - j) / iattr_num_float, uniform_instancing_mul);
 	sdr.instance_attrib_set_uniform(arr, j, k);
-	bo.draw_elems_instanced(static_cast{size_t}(ji.vs_id), k);
+	bo.draw_elems_instanced(static_cast{size_t}(vs_id), k);
       }
     } else {
       size_t const iattr_num_float = sdr.instance_attrib_num_float();
       size_t j;
       size_t const jmax = arr.size();
-      // println("iattr_num_float", iattr_num_float, jmax);
+//println("bo", bo_id, "iattr_num_float", iattr_num_float, jmax);
       for (j = 0; j < jmax; j += iattr_num_float) {
 	sdr.instance_attrib_set_uniform(arr, j, 1);
-	bo.draw_elems(static_cast{size_t}(ji.vs_id));
+	bo.draw_elems(static_cast{size_t}(vs_id));
       }
     }
   }
   if (enable_instanced && !enable_uniform_instancing) {
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
     sdr.enable_instance_attrib_array(false);
   }
   bo.draw_post(sdr);

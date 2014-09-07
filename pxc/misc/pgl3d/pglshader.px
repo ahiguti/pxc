@@ -71,15 +71,18 @@ public struct sdlcontext()
     sdllog(string_join{" "}("create_window", init_w, init_h));
     sdl_window = SDL_CreateWindow("PGL3D", 0, 0, init_w, init_h, wflags);
     const wnd = sdl_window.some;
+// FIXME: 3.3 -> 3.2 -> 2.1
     if (m::eq{is_gles, 0}) {
       /* try opengl 3.3 */
       SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
       SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+      // SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
       SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
       SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,
        SDL_GL_CONTEXT_PROFILE_CORE);
       glmajor = 3;
       glminor = 3;
+      // glminor = 2;
       gles_flag = false;
     } else {
       if (m::ne{is_android, 0}) {
@@ -147,12 +150,15 @@ glconfig(bool is_gles0, int major0, int minor0, bool msaa0)
   public bool enable_zprepass = !is_gles && !enable_deferred;
   public bool enable_msaa = msaa0;
   public bool enable_instanced = major >= 3;
-  public bool enable_uniform_instancing = (is_gles && enable_instanced);
+  public bool enable_uniform_instancing = enable_instanced &&
+    (is_gles || minor < 3 || true);
   // public bool enable_uniform_instancing = enable_instanced;
   public bool enable_depth_texture = !is_android;
   public bool enable_sampler2dshadow = enable_depth_texture && !is_gles;
   //public function bool is_gl3() const { return major >= 3 && !is_gles; }
   public function bool is_gl3_or_gles3() const { return major >= 3; }
+  public function bool is_gl33_or_gles3() const {
+    return major >= 3 && (is_gles || minor >= 3); }
   public function strlit prepend() const {
     if (is_gles) {
       if (is_gl3_or_gles3()) {
@@ -303,6 +309,37 @@ tsvaluetype struct font_vertex_attributes
   public glm::vec2 uvpos;
 }
 
+tsvaluetype struct font2_uniforms
+{
+  public glm::vec2 screen_size_px;
+  public float pixel_to_screen;
+  public int sampler;
+}
+
+tsvaluetype struct font2_instance_attributes
+{
+  public glm::mat4 idata;
+  public function {tsn} font2_instance_attributes apply(tsn const& sn) const
+  {
+    font2_instance_attributes r;
+    r.idata = idata;
+    return r;
+  }
+}
+
+public tsvaluetype struct font2_vertex_attributes
+{
+  public glm::vec2 texture_size_px;
+  public glm::vec2 texture_origin_px;
+  public glm::vec2 char_size_px;
+  public glm::vec2 char_uv;
+  public glm::vec2 char_uv_delta;
+  public glm::vec2 coord_clamp;
+  public float char_px;
+  public float char_point_size;
+  public float text_index;
+}
+
 tsvaluetype struct particle_uniforms
 {
   public glm::mat4 model_matrix; /* use as mvp */
@@ -358,6 +395,9 @@ metafunction ds2nd_shader_ptr
 metafunction font_shader_ptr
   ptr{shader{
     font_uniforms, font_instance_attributes, font_vertex_attributes}};
+metafunction font2_shader_ptr
+  ptr{shader{
+    font2_uniforms, font2_instance_attributes, font2_vertex_attributes}};
 metafunction particle_shader_ptr
   ptr{shader{particle_uniforms, particle_instance_attributes,
     particle_vertex_attributes}};
@@ -376,6 +416,7 @@ threaded struct main_texture_info
 threaded struct font_texture_info
 {
   public varray{uint} char_x;
+  public uint char_w;
   public uint char_h;
   public uint surface_w;
   public uint surface_h;
@@ -464,6 +505,9 @@ prepare_instance_data(tsn const& sn, node_common_data const& ncd,
     } else if (bo_id == 2) {
       /* particle-bb */
       buffer_append(ibarr[0]->instance_buffer, nad_self.model_matrix);
+    } else if (bo_id == 3) {
+//println("bo_id=3", vs_id, nad_self.model_matrix.cslice());
+      buffer_append(ibarr[0]->instance_buffer, nad_self.model_matrix);
     }
   }
   for (const i, const& snp: sn.children) {
@@ -489,9 +533,10 @@ public function {tsn} uint draw_frame(pglshader mutable& pgs,
     ncd.shadowmapping_vp = sm_vp;
     ncd.vp = vp;
     prepare_instance_data(sn, ncd, nad, bos);
-    sn.send_instance_data(bos, pgs.glc.enable_instanced,
-      pgs.glc.enable_uniform_instancing);
+    sn.send_instance_data(bos, pgs.global_ibuffer,
+	pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
   }
+  const tick1 = SDL_GetTicks();
   /* shadowmapping shader */
   if (pgs.glc.enable_shadowmapping) {
     int saved_fb;
@@ -502,6 +547,7 @@ public function {tsn} uint draw_frame(pglshader mutable& pgs,
       static_cast{GLsizei}(pgs.sfbo.sm_height));
     glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
+    glDepthMask(1);
     if (pgs.glc.enable_depth_texture) {
       glColorMask(0, 0, 0, 0);
     } else {
@@ -511,8 +557,8 @@ public function {tsn} uint draw_frame(pglshader mutable& pgs,
     glDisable(GL_BLEND);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     /* note: view_projection is pre-applied to model_matrix */
-    sn.draw_instanced(*pgs.smsdr, *bos[0], 0, 1,
-      pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
+    sn.draw_instanced(*pgs.smsdr, *bos[0], pgs.global_ibuffer,
+	0, 1, pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
   }
   glViewport(0, 0, static_cast{GLsizei}(pgs.cam.screen_width),
@@ -537,10 +583,9 @@ public function {tsn} uint draw_frame(pglshader mutable& pgs,
     const vp = pgs.cam.projection * view;
     glUniformMatrix4fv(pgs.zpsdr->u_view_projection_matrix, 1, 0,
       vp.crawptr());
-    sn.draw_instanced(*pgs.zpsdr, *bos[0], 0, 0,
-      pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
+    sn.draw_instanced(*pgs.zpsdr, *bos[0], pgs.global_ibuffer,
+	0, 0, pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
   }
-  // uint const tick_shadowmapping_shader = SDL_GetTicks();
   /* main or ds1 shader */
   if (true) {
     int saved_fb;
@@ -594,11 +639,12 @@ public function {tsn} uint draw_frame(pglshader mutable& pgs,
 	vp.crawptr());
     }
     if (pgs.glc.enable_deferred) {
-      sn.draw_instanced(*pgs.ds1sdr, *bos[0], 0, 0,
-	pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
+      sn.draw_instanced(*pgs.ds1sdr, *bos[0],
+	  pgs.global_ibuffer, 0, 0,
+	  pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
     } else {
-      sn.draw_instanced(*pgs.sdr, *bos[0], 0, 0,
-	pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
+      sn.draw_instanced(*pgs.sdr, *bos[0], pgs.global_ibuffer,
+	  0, 0, pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
     }
     if (pgs.glc.enable_deferred) {
       glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
@@ -647,11 +693,14 @@ public function {tsn} uint draw_frame(pglshader mutable& pgs,
       cam_mat.to_3().crawptr());
     glUniform1f(pgs.prtbsdr->u_point_size_base, 0.1f);
     glDisable(GL_CULL_FACE);
-    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glDepthMask(0);
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE);
-    sn.draw_instanced(*pgs.prtbsdr, *bos[2], 2, 0,
-      pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
+    sn.draw_instanced(*pgs.prtbsdr, *bos[2],
+	pgs.global_ibuffer, 2, 0,
+	pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
   }
   /* particles */
   {
@@ -659,16 +708,38 @@ public function {tsn} uint draw_frame(pglshader mutable& pgs,
     glUniform1f(pgs.spsdr->u_point_size_base,
       0.1f * static_cast{float}(pgs.cam.screen_width));
     glDisable(GL_CULL_FACE);
-    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glDepthMask(0);
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE);
-    sn.draw_instanced(*pgs.spsdr, *bos[1], 1, 0,
-      pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
+    sn.draw_instanced(*pgs.spsdr, *bos[1], pgs.global_ibuffer,
+	1, 0, pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
+  }
+  /* font */
+  {
+    glUseProgram(pgs.f2sdr->program);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(0);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glUniform1f(pgs.f2sdr->u_pixel_to_screen,
+      2.0f / static_cast{float}(pgs.cam.screen_width));
+    glUniform1i(pgs.f2sdr->u_sampler, 0);
+    const screen_size_px = glm::make_vec2(
+      static_cast{float}(pgs.cam.screen_width),
+      static_cast{float}(pgs.cam.screen_height));
+    glUniform2fv(pgs.f2sdr->u_screen_size_px, 1, screen_size_px.crawptr());
+//println("bos3");
+    sn.draw_instanced(*pgs.f2sdr, *bos[3], pgs.global_ibuffer,
+	3, 0, pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
   }
   /* panel */
   glUseProgram(pgs.psdr->program);
   glDisable(GL_CULL_FACE);
   glDisable(GL_DEPTH_TEST);
+  glDepthMask(0);
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   glUniform1i(pgs.psdr->u_sampler, 0);
@@ -741,7 +812,7 @@ public function {tsn} uint draw_frame(pglshader mutable& pgs,
     glDisableVertexAttribArray(lpu);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
   }
-  return 0; // tick_shadowmapping_shader;
+  return tick1;
 }
 
 function void update_mvp(projection_info mutable& cam)
@@ -1481,6 +1552,97 @@ init_font_shader(glconfig const& g)
     font_vertex_attributes}(v, f, "");
 }
 
+function font2_shader_ptr
+init_font2_shader(glconfig const& g)
+{
+  string v;
+  v += g.prepend();
+  v += "uniform float pixel_to_screen;\n";
+  v += "uniform vec2 screen_size_px;\n";
+  v += g.vert_in() + "vec2 texture_size_px;\n";
+  v += g.vert_in() + "vec2 texture_origin_px;\n";
+  v += g.vert_in() + "vec2 char_size_px;\n";
+  v += g.vert_in() + "vec2 char_uv;\n";
+  v += g.vert_in() + "vec2 char_uv_delta;\n";
+  v += g.vert_in() + "vec2 coord_clamp;\n";
+  v += g.vert_in() + "float char_px;\n";
+  v += g.vert_in() + "float char_point_size;\n";
+  v += g.vert_in() + "float text_index;\n";
+  if (g.enable_instanced) {
+    if (g.enable_uniform_instancing) {
+      v += "uniform mat4 idata["
+	+ m::to_string{uniform_instancing_mul} + "];\n";
+    } else {
+      v += g.vert_in() + "mat4 idata;\n";
+    }
+  } else {
+    v += "uniform mat4 idata;\n";
+  }
+  v += g.vert_out() + "vec2 vary_texture_size_px;\n";
+  v += g.vert_out() + "vec2 vary_texture_origin_px;\n";
+  v += g.vert_out() + "vec2 vary_char_size_px;\n";
+  v += g.vert_out() + "vec2 vary_char_uv;\n";
+  v += g.vert_out() + "vec2 vary_char_uv_delta;\n";
+  v += g.vert_out() + "vec2 vary_coord_clamp;\n";
+  v += g.vert_out() + "float vary_point_size;\n";
+  v += "void main(void) {\n";
+  v += "int idx_i = int(floor(text_index / 4.0));\n";
+  v += "int idx_j = int(fract(text_index / 4.0) * 4.0);\n";
+//  v += "int idx_i = 0;\n";
+//  v += "int idx_j = 0;\n";
+  if (g.enable_uniform_instancing) {
+    v += "float ch = idata[gl_InstanceID][idx_i][idx_j];\n";
+    v += "vec2 screen_pos = idata[gl_InstanceID][3].zw;\n";
+  } else {
+    v += "float ch = idata[idx_i][idx_j];\n";
+    v += "vec2 screen_pos = idata[3].zw;\n";
+  }
+//  v += "ch = text_index;\n"; // FIXME
+  // v += "screen_pos.x += char_px * pixel_to_screen * text_index;\n";
+  v += "screen_pos.y = 0.0;\n";
+  v += "screen_pos.x = (char_size_px.x * text_index * 2.0) ";
+  v += "  / screen_size_px.x;\n";
+  v += "gl_Position = vec4(screen_pos, 0.0, 1.0);\n";
+  v += "gl_PointSize = char_point_size;\n";
+  v += "vary_texture_size_px = texture_size_px;\n";
+  v += "vary_texture_origin_px = texture_origin_px + vec2(char_size_px.x * ch, 0.0);\n";
+  // v += "vary_texture_origin_px = vec2(11.0 * 33.0, 0.0);\n";
+  v += "vary_char_size_px = char_size_px;\n";
+  v += "vary_char_uv = char_uv + vec2(char_uv_delta.x * ch, 0.0);\n";
+  v += "vary_char_uv_delta = char_uv_delta;\n";
+//  v += "vary_char_uv = vec2(1.0/96.0, 0.0);\n";
+//  v += "vary_char_uv_delta = vec2(1.0/96.0, 19.0/32.0);\n";
+  v += "vary_coord_clamp = coord_clamp;\n";
+  v += "vary_point_size = char_point_size;\n";
+  v += "}\n";
+  string f;
+  f += g.prepend();
+  f += "uniform sampler2D sampler;\n";
+  f += g.frag_in() + "vec2 vary_texture_size_px;\n";
+  f += g.frag_in() + "vec2 vary_texture_origin_px;\n";
+  f += g.frag_in() + "vec2 vary_char_size_px;\n";
+  f += g.frag_in() + "vec2 vary_char_uv;\n";
+  f += g.frag_in() + "vec2 vary_char_uv_delta;\n";
+  f += g.frag_in() + "vec2 vary_coord_clamp;\n";
+  f += g.frag_in() + "float vary_point_size;\n";
+  f += g.decl_fragcolor();
+  f += "void main(void) {\n";
+  f += "vec2 xy = gl_PointCoord;\n";
+  f += "if (xy.x > vary_coord_clamp.x) { discard; }\n";
+//  f += "vec2 pcoord = min(gl_PointCoord, vary_coord_clamp);\n";
+//  f += "vec2 pcoord = gl_PointCoord / vary_coord_clamp;\n";
+//  f += "vec2 texcoord = vary_char_uv + vary_char_uv_delta * pcoord;\n";
+  f += "vec2 pcoord = vary_point_size * xy;\n";
+  f += "vec2 texcoord = (vary_texture_origin_px + pcoord) / vary_texture_size_px;\n";
+//  f += "vec2 texcoord = (vec2(11.0 * 33, 0.0) + pcoord) / vary_texture_size_px;\n";
+  f += "vec4 col = " +  g.texture2d() + "(sampler, texcoord);\n";
+  f += g.fragcolor() + " = vec4(1.0, 1.0, 1.0, col.a);\n";
+//  f += g.fragcolor() + " = vec4(1.0, 0.0, 0.0, 0.3);\n";
+  f += "}\n";
+  return make_shader_ptr{font2_uniforms, font2_instance_attributes,
+    font2_vertex_attributes}(v, f, "idata");
+}
+
 function uint read_3_uint(cslice{uchar} const& buf, size_t o)
 {
   /* FIXME: endianness */
@@ -1510,7 +1672,7 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
       "/usr/share/fonts/liberation/LiberationMono-Bold.ttf");
     option{ptr{TTF_Font}} font;
     for (size_t i, const& fn: fnames) {
-      font = TTF_OpenFont(fn, 16);
+      font = TTF_OpenFont(fn, 24);
       if (case font.some) {
 	break;
       }
@@ -1521,7 +1683,8 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
     fg.b = 255;
     fg.a = 255;
     uint hmax = 0;
-    uint wtotal = 0;
+    uint wmax = 0;
+    // uint wtotal = 0;
     varray{ptr{SDL_Surface}} sur_arr;
     for (const i: 0 .. 0x60) {
       farray{uchar, 1} z;
@@ -1530,12 +1693,12 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
       /* println(z, sur.W(), sur.H()); */
       sur_arr.push_back(sur);
       hmax = max(hmax, sur.H());
-      wtotal += sur.W();
+      wmax = max(wmax, sur.W());
     }
     const sur_chars = SDL_CreateRGBSurface(
-      cast_int(power_of_2(wtotal)),
+      cast_int(power_of_2(wmax * 0x60)),
       cast_int(power_of_2(hmax)), 32, 0, 0, 0, 0).some;
-    println("wtotal, hmax", wtotal, hmax);
+    println("wmax, hmax", wmax, hmax);
     fti.char_x.clear();
     uint xcur = 0;
     for (const i, const e: sur_arr) {
@@ -1550,9 +1713,10 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
       r1.w = r0.w;
       r1.h = r1.h;
       const v = SDL_BlitSurface(e, r0, sur_chars, r1);
-      xcur += cast_uint(r1.w);
+      xcur += cast_uint(wmax);
       fti.char_x.push_back(xcur);
     }
+    fti.char_w = wmax;
     fti.char_h = hmax;
     fti.surface_w = sur_chars.W();
     fti.surface_h = sur_chars.H();
@@ -1574,10 +1738,18 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
     glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_RGBA),
       cast_int(sur.W()), cast_int(sur.H()),
       0, GL_RGBA, GL_UNSIGNED_BYTE, sur.Pixels().crawptr().void());
+    /*
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+      cast_int(GL_LINEAR));
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+      cast_int(GL_LINEAR));
+    */
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
       cast_int(GL_NEAREST));
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
       cast_int(GL_NEAREST));
+    /*
+    */
     fti.text_vbo.generate();
     if (fti.text_vbo.get() == 0) {
       throw runtime_error_template{"text_vbo"}("1");
@@ -1787,12 +1959,14 @@ pglshader(bool gles_flag0, int glmajor0, int glminor0, bool enable_msaa0,
   public particle_shader_ptr const spsdr = init_particle_shader(glc);
   public particle_bb_shader_ptr const prtbsdr = init_particle_bb_shader(glc);
   public font_shader_ptr const psdr = init_font_shader(glc);
+  public font2_shader_ptr const f2sdr = init_font2_shader(glc);
   public shadowmap_fbo sfbo;
   public deferred_shading_fbo dsfbo;
   public main_texture_info mti;
   public font_texture_info fti;
   public projection_info cam;
   private auto_vertexarray vtxarr;
+  public instance_buffer_type global_ibuffer;
   init();
   reshape(width0, height0);
   private function void init()
@@ -1801,6 +1975,9 @@ pglshader(bool gles_flag0, int glmajor0, int glminor0, bool enable_msaa0,
       vtxarr.generate();
       glBindVertexArray(vtxarr.get());
       println("glBindVertexArray", vtxarr.get());
+    }
+    if (m::ne{is_gl3_or_gles3, 0}) {
+      global_ibuffer.vbo_inst.generate();
     }
     if (m::eq{is_gles, 0}) {
       farray{float, 2} arr;
