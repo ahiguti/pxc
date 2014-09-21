@@ -21,11 +21,24 @@ public multithreaded struct node_joint
   public glm::mat4 trans; /* or quat and vec3 ? */
 }
 
+private threaded function void
+float_slice_set_int(slice{float} const& s, int v)
+{
+  if (s.size() < 1) {
+    return;
+  }
+  const si = size_t_to_rawptr{int}(slice_rawptr(s).to_size_t()).to_slice(1);
+  si[0] = v;
+}
+
 private threaded function {t} void
 push_float(varray{float} mutable& arr, t const& v)
 {
   if (m::eq{t, float}) {
     arr.push_back(v);
+  } else if (m::eq{t, int}) {
+    arr.push_back(0.0f);
+    float_slice_set_int(arr[arr.size() - 1 .. arr.size()], v);
   } else {
     expand (fld: m::field_names{t}) {
       push_float(arr, v.fld);
@@ -40,10 +53,59 @@ vertices(size_t num_float_per_vertex0)
   public varray{float} vertex_values;
   public varray{uint} elements;
   public varray{node_joint} joints;
+  public size_t num_copies_hint = 1;
+  public bool has_instance_id;
+  public size_t num_copies = 1;
+  public size_t vertex_values_size_per_copy;
+  public size_t elements_size_per_copy;
+  public function void prepare_multiple_copies(bool enable_copying_instancing)
+  {
+    vertex_values_size_per_copy = vertex_values.size();
+    elements_size_per_copy = elements.size();
+    num_copies = 1;
+    if (!has_instance_id || !use_copying_instancing ||
+	!enable_copying_instancing) {
+      return;
+    }
+    num_copies = min(num_copies_hint, uniform_instancing_mul);
+debug_log("vertices::prepare_multiple_copies", num_copies);
+    const num_vertices = vertex_values.size() / num_float_per_vertex;
+    vertex_values.resize(vertex_values_size_per_copy * num_copies, float());
+    elements.resize(elements_size_per_copy * num_copies, uint());
+    for (const i: 1 .. num_copies) {
+      const vi = vertex_values_size_per_copy * i;
+      const ei = elements_size_per_copy * i;
+      for (const j: 0 .. vertex_values_size_per_copy) {
+	vertex_values[vi + j] = vertex_values[j];
+      }
+      for (const j: 0 .. num_vertices) {
+	/* set instance_id */
+	/* instance_id must be the first field of tattr */
+	vertex_values[vi + j * num_float_per_vertex] = static_cast{float}(i);
+	/*
+	const k = vi + j * num_float_per_vertex;
+	float_slice_set_int(vertex_values[k .. k + 1], static_cast{int}(i));
+	*/
+      }
+      for (const j: 0 .. elements_size_per_copy) {
+	mutable e = elements[j];
+	if (e != 0xffffffffU) {
+	  e += static_cast{uint}(num_vertices * i);
+	}
+	elements[ei + j] = e;
+      }
+    }
+  }
   public function {tattr} void push_polygon_distinct(cslice{tattr} const& vals)
   {
     if (num_float_per_vertex != num_float_struct{tattr}) {
       throw runtime_error_template{"vertices::push_polygon_distinct"}("");
+    }
+    if (m::eq{m::at0{m::field_names{tattr}}, "instance_id"}) {
+debug_log("has_instance_id true", m::to_string{tattr});
+      has_instance_id = true;
+    } else {
+debug_log("has_instance_id false", m::to_string{tattr}, m::to_string{m::at0{m::field_names{tattr}}});
     }
     /* no dedup */
     const first_id = vertex_values.size() / num_float_struct{tattr};
@@ -69,11 +131,11 @@ vertices(size_t num_float_per_vertex0)
     if (num_float_per_vertex != num_float_struct{tattr}) {
       throw runtime_error_template{"vertices::push_point"}("");
     }
-debug_log("push_point0", vertex_values.size());
+//debug_log("push_point0", vertex_values.size());
     const first_id = vertex_values.size() / num_float_struct{tattr};
     push_float{tattr}(vertex_values, val);
-debug_log("push_point1", vertex_values.size());
-debug_log("push_point val", val);
+//debug_log("push_point1", vertex_values.size());
+//debug_log("push_point val", val);
     elements.push_back(static_cast{uint}(first_id));
   }
   public function void push_joint(node_joint const& e)
@@ -91,13 +153,121 @@ public threaded struct vertex_set(size_t num_float_per_vertex0)
   public size_t elements_offset;
 }
 
-public threaded struct instance_buffer_type {
-  public auto_buffer vbo_inst;
-  public varray{float} instance_buffer;
+public metafunction glsync_compat m::cond{is_gl3_or_gles3, GLsync, unit};
+
+public threaded struct async_buffer() {
+  public auto_buffer vbo; /* noncopyable */
+  public rawptr{float} mapped_ptr;
+  public glsync_compat fence;
+  public size_t size_bytes;
+  init();
+  /*
+  public function void extend_buffer(size_t sz) {
+    if (sz >= size_bytes) {
+      return;
+    }
+    glBindBuffer(GL_ARRAY_BUFFER, vbo.get());
+    glBufferData(GL_ARRAY_BUFFER, sz, size_t_to_crawptr{void}(0),
+      GL_STREAM_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    size_bytes = sz;
+  }
+  */
+  public function void map_buffer(size_t sz_bytes) {
+    if (m::ne{is_gl3_or_gles3, 0}) {
+      glBindBuffer(GL_ARRAY_BUFFER, vbo.get());
+      //debug_log("glbindbuffer", vbo.get());
+      if (rawptr_to_size_t(mapped_ptr) != 0U) {
+	//debug_log("glunmapbuffer");
+	glUnmapBuffer(GL_ARRAY_BUFFER);
+	mapped_ptr = size_t_to_rawptr{float}(0U);
+      }
+      if (sz_bytes > size_bytes) {
+	//debug_log("glbufferdata size:", size_bytes);
+	glBufferData(GL_ARRAY_BUFFER, static_cast{GLsizeiptr}(sz_bytes),
+	  size_t_to_crawptr{void}(0), GL_STREAM_DRAW);
+	size_bytes = sz_bytes;
+      }
+      mutable mask = static_cast{GLbitfield}(GL_MAP_WRITE_BIT);
+      if (m::ne{is_gl3_or_gles3, 0}) {
+	mask |= static_cast{GLbitfield}(GL_MAP_UNSYNCHRONIZED_BIT);
+      }
+      //debug_log("mapbufferrange", size_bytes, mask);
+      rawptr{void} p = glMapBufferRange(GL_ARRAY_BUFFER,
+	static_cast{GLintptr}(0), static_cast{GLsizeiptr}(size_bytes),
+	mask);
+      //debug_log("mapbufferrange", "ptr", rawptr_to_size_t(p));
+      mapped_ptr = size_t_to_rawptr{float}(rawptr_to_size_t(p));
+      glBindBuffer(GL_ARRAY_BUFFER, 0);
+    }
+  }
+  public function void unmap_buffer() {
+    if (m::ne{is_gl3_or_gles3, 0}) {
+      if (rawptr_to_size_t(mapped_ptr) != 0U) {
+	//debug_log("glunmapbuffer", vbo.get());
+	glBindBuffer(GL_ARRAY_BUFFER, vbo.get());
+	glUnmapBuffer(GL_ARRAY_BUFFER);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	mapped_ptr = size_t_to_rawptr{float}(0U);
+      }
+    }
+  }
+  public function GLenum client_wait_sync(long timeout) {
+    if (m::ne{is_gl3_or_gles3, 0}) {
+      return glClientWaitSync(fence, 0, timeout);
+    } else {
+      return GLenum();
+    }
+  }
+  private function void init() {
+    vbo.generate();
+    fence_sync();
+  }
+  public function void fence_sync() {
+    //debug_log("fence_sync", vbo.get());
+    delete_sync();
+    if (m::ne{is_gl3_or_gles3, 0}) {
+      fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    }
+  }
+  private function void delete_sync() {
+    if (m::ne{is_gl3_or_gles3, 0}) {
+      if (glIsSync(fence) != 0) {
+	glDeleteSync(fence);
+	fence = GLsync();
+      }
+    }
+  }
+  private function ~ {
+    unmap_buffer();
+    delete_sync();
+  }
+}
+
+public threaded struct instance_buffer_type() {
+  // public auto_buffer vbo_inst;
+  // public varray{float} instance_buffer; // FIXME: don't use this
+  private varray{ptr{async_buffer}} async_buffers;
+  public size_t async_buffer_current; // FIXME: private
+  public function ptr{async_buffer} get_current() const {
+    return async_buffers[async_buffer_current];
+  }
+  public function void switch_buffer() {
+    ++async_buffer_current;
+    if (async_buffer_current >= async_buffers.size()) {
+      async_buffer_current = 0;
+    }
+  }
+  init();
+  private function void init() {
+    for (const i: 0 .. 3) {
+      async_buffers.push_back(make_ptr{async_buffer}());
+    }
+  }
 }
 
 private threaded struct instance_data {
-  public auto_buffer vbo_inst; // FIXME: not used
+  // public auto_buffer vbo_inst; // FIXME: not used
   public varray{float} instance_buffer;
   public size_t glbuffer_offset_float;
 }
@@ -165,10 +335,13 @@ vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0)
   {
     return vs_arr.size();
   }
-  public function bool create_vbo()
+  public function bool create_vbo(bool enable_copying_instancing)
   {
     if (vbo_values.get() != 0 || vbo_elems.get() != 0) {
       return false;
+    }
+    for (const i, const& be: vs_arr) {
+      be->vtxs->prepare_multiple_copies(enable_copying_instancing);
     }
     varray{float} vertex_values;
     varray{uint} elements;
@@ -225,6 +398,7 @@ vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0)
 	e.push_back(make_ptr{instance_data}());
       }
     }
+/*
     if (m::ne{is_gl3_or_gles3, 0}) {
       for (const i, const& vs: vs_arr) {
 	for (const j: 0 .. static_cast{size_t}(num_instance_data)) {
@@ -235,6 +409,7 @@ vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0)
 	}
       }
     }
+*/
     return true;
   }
   public function void clear_instances()
@@ -271,16 +446,22 @@ vertex_buffer_draw_post(vertex_buffer const& bo, shader_i mutable& sdr)
 }
 
 private function void
-vertex_buffer_draw_elems(vertex_buffer const& bo, size_t vs_id)
+vertex_buffer_draw_elems(vertex_buffer const& bo, size_t vs_id,
+  size_t num_instance)
 {
   const& be = *bo.get_by_id(vs_id);
+  if (num_instance > be.vtxs->num_copies) {
+    throw runtime_error_template{"vertex_buffer_draw_elems"}("");
+  }
   const elem_offset = be.elements_offset;
-  const elem_num = be.vtxs->elements.size();
+  const elem_num = be.vtxs->elements_size_per_copy * num_instance;
   GLenum mode = bo.draw_mode_points ? GL_POINTS :
     use_primitive_restart ? GL_TRIANGLE_FAN : GL_TRIANGLES;
+//debug_log("draw_elems", be.vtxs->elements_size_per_copy, be.vtxs->elements.size());
   if (m::ne{use_draw_range, 0}) {
     const arr_offset = be.vertex_values_offset / bo.num_float_per_vertex;
-    const arr_num = be.vtxs->vertex_values.size() / bo.num_float_per_vertex;
+    const arr_num = be.vtxs->vertex_values_size_per_copy * num_instance
+      / bo.num_float_per_vertex;
     /*
     if (elem_num > 0) {
       println("DrawRangeElements", arr_offset, arr_num,
@@ -308,7 +489,7 @@ vertex_buffer_draw_elems_instanced(vertex_buffer const& bo, size_t vs_id,
     {
       const& be = *bo.get_by_id(vs_id);
       elem_offset = be.elements_offset;
-      elem_num = be.vtxs->elements.size();
+      elem_num = be.vtxs->elements_size_per_copy;
     }
     GLenum mode = bo.draw_mode_points ? GL_POINTS :
       use_primitive_restart ? GL_TRIANGLE_FAN : GL_TRIANGLES;
@@ -326,7 +507,7 @@ vertex_buffer_draw(vertex_buffer const& bo, size_t vs_id,
   shader_i mutable& sdr)
 {
   vertex_buffer_draw_pre(bo, sdr);
-  vertex_buffer_draw_elems(bo, vs_id);
+  vertex_buffer_draw_elems(bo, vs_id, 1);
   vertex_buffer_draw_post(bo, sdr);
 }
 

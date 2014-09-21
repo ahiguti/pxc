@@ -82,6 +82,11 @@ rawptr_to_size_t(rawptr{t} x);
 public threaded function extern "pxcrt::crawptr_to_size_t" {t} size_t
 crawptr_to_size_t(crawptr{t} x);
 
+public threaded function extern "pxcrt::rawptr_to_slice" {t} slice{t}
+rawptr_to_slice(rawptr{t} x, size_t xlen);
+public threaded function extern "pxcrt::crawptr_to_cslice" {t} cslice{t}
+crawptr_to_cslice(crawptr{t} x, size_t xlen);
+
 extern "types" inline
 namespace pxcrt {
 
@@ -136,6 +141,11 @@ template <typename T> static inline bt_size_t
 rawptr_to_size_t(T *x) { return reinterpret_cast<bt_size_t>(x); }
 template <typename T> static inline bt_size_t
 crawptr_to_size_t(T const *x) { return reinterpret_cast<bt_size_t>(x); }
+
+template <typename T> static inline bt_slice<T>
+rawptr_to_slice(T *x, bt_size_t xlen) { return bt_slice<T>(x, xlen); }
+template <typename T> static inline bt_cslice<T>
+crawptr_to_cslice(T const *x, bt_size_t xlen) { return bt_cslice<T>(x, xlen); }
 
 template <typename Tx, typename Ty> static inline Tx
 op_add(Tx x, size_t y) { return x + y; }
