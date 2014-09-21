@@ -18,15 +18,14 @@ public import glbuffer -;
 public import glnode -;
 public import pglshader -;
 
-function void build_vertices(pglshader mutable& pgs,
-  cslice{ptr{vertex_buffer}} const& bos)
+function void build_vertices(pglshader mutable& pgs)
 {
   metafunction tattr main_vertex_attributes;
   metafunction fill_v fill{tattr};
   metafunction joint_v joint{tattr};
   /* vtx0 */
   {
-    const vtxs = bos[0]->get("saucer")->vtxs;
+    const vtxs = pgs.make_vertices(0, "saucer");
     const fsmooth = fill_smooth{tattr}(vtxs);
     const t = fill_v(vtxs);
     regular_polygon(3.0, 40,
@@ -35,10 +34,11 @@ function void build_vertices(pglshader mutable& pgs,
 	t,
 	sphere(10, fsmooth)))
       (poly_t(), mesh_pos());
+    vtxs->num_copies_hint = 32;
   }
   /* vtx2 */
   {
-    const vtx2 = bos[0]->get("saucer-multi")->vtxs;
+    const vtx2 = pgs.make_vertices(0, "saucer-multi");
     const t2 = fill_v(vtx2);
     regular_polygon(50.0, 50,
       bump_rec(1.0, 1.0, 1, joint_v(vtx2, "saucer", hole()), hole()),
@@ -47,7 +47,7 @@ function void build_vertices(pglshader mutable& pgs,
   }
   /* vtx8 */
   {
-    const vtx = bos[0]->get("block-multi")->vtxs;
+    const vtx = pgs.make_vertices(0, "block-multi");
     const t = fill_v(vtx);
     regular_polygon(600.0, 4,
       rectangle_split(9, 8, joint_v(vtx, "block", hole())),
@@ -56,7 +56,7 @@ function void build_vertices(pglshader mutable& pgs,
   }
   /* vtx9 */
   {
-    const vtx = bos[0]->get("block")->vtxs;
+    const vtx = pgs.make_vertices(0, "block");
     const t = fill_v(vtx);
     const rnd = make_rand_generator(1U);
     regular_polygon(50.0, 4,
@@ -70,7 +70,7 @@ function void build_vertices(pglshader mutable& pgs,
   }
   /* vtx10 */
   {
-    const vtx = bos[0]->get("bullet")->vtxs;
+    const vtx = pgs.make_vertices(0, "bullet");
     const t = fill_v(vtx);
     mutable m = glm::mat4()
       .translate(glm::make_vec3(0.0, 0.0, 1.0))
@@ -79,10 +79,11 @@ function void build_vertices(pglshader mutable& pgs,
       bump_apply(m, false, t, t),
       bump_apply(m, false, t, t))
       (poly_t(), mesh_pos());
+    vtx->num_copies_hint = 32;
   }
   {
     /* 60fps, macosx/linux mbp gt750m */
-    const vtx = bos[0]->get("bullet-multi")->vtxs;
+    const vtx = pgs.make_vertices(0, "bullet-multi");
     const t = fill_v(vtx);
     regular_polygon(600.0, 4,
       rectangle_split(170, 170, joint_v(vtx, "bullet", hole())),
@@ -90,7 +91,7 @@ function void build_vertices(pglshader mutable& pgs,
       (poly_t(), mesh_pos());
   }
   {
-    const vtx = bos[0]->get("bullet2")->vtxs;
+    const vtx = pgs.make_vertices(0, "bullet2");
     const t = fill_v(vtx);
     mutable m = glm::mat4()
       .translate(glm::make_vec3(0.0, 0.0, 1.0))
@@ -99,18 +100,29 @@ function void build_vertices(pglshader mutable& pgs,
       bump_rec(0.8, 0.8, 1, t, t),
       bump_rec(0.8, 0.8, 1, t, t))
       (poly_t(), mesh_pos());
+    vtx->num_copies_hint = 32;
   }
+  /*
   {
-    /* 60fbp mbp intel gpu */
-    const vtx = bos[0]->get("bullet2-multi")->vtxs;
+    // 60fbp mbp intel gpu
+    const vtx = pgs.make_vertices(0, "bullet2-multi");
     const t = fill_v(vtx);
     const rnd = make_rand_generator(991U);
     rand_sphere(200.0, 40000, false, rnd,
       joint_v(vtx, "bullet2", hole()))
       (poly_t(), mesh_pos());
   }
+  */
   {
-    const vtx = bos[0]->get("bullet2-multi2")->vtxs;
+    const vtx = pgs.make_vertices(0, "bullet2-multi");
+    const t = fill_v(vtx);
+    const rnd = make_rand_generator(991U);
+    rand_sphere(200.0, 37000, false, rnd,
+      joint_v(vtx, "bullet2", hole()))
+      (poly_t(), mesh_pos());
+  }
+  {
+    const vtx = pgs.make_vertices(0, "bullet2-multi2");
     const t = fill_v(vtx);
     const rnd = make_rand_generator(991U);
     rand_sphere(200.0, 20000, false, rnd,
@@ -118,7 +130,7 @@ function void build_vertices(pglshader mutable& pgs,
       (poly_t(), mesh_pos());
   }
   {
-    const vtx = bos[0]->get("bullet2-multi3")->vtxs;
+    const vtx = pgs.make_vertices(0, "bullet2-multi3");
     const t = fill_v(vtx);
     const rnd = make_rand_generator(991U);
     rand_sphere(200.0, 2000, false, rnd,
@@ -126,7 +138,7 @@ function void build_vertices(pglshader mutable& pgs,
       (poly_t(), mesh_pos());
   }
   {
-    const vtx = bos[0]->get("bullet-multi-2")->vtxs;
+    const vtx = pgs.make_vertices(0, "bullet-multi-2");
     const t = fill_v(vtx);
     regular_polygon(600.0, 4,
       rectangle_split(80, 80, joint_v(vtx, "bullet", hole())),
@@ -135,7 +147,7 @@ function void build_vertices(pglshader mutable& pgs,
   }
   {
     /* particle */
-    const vtx = bos[1]->get("particle")->vtxs;
+    const vtx = pgs.make_vertices(1, "particle");
     const p = particle(vtx);
     const rnd = make_rand_generator(1U);
     rand_sphere(1.0, 100, true, rnd, p)
@@ -144,7 +156,7 @@ function void build_vertices(pglshader mutable& pgs,
   }
   {
     /* particle multi */
-    const vtx = bos[1]->get("particle-multi")->vtxs;
+    const vtx = pgs.make_vertices(1, "particle-multi");
     /*
     regular_polygon(600.0, 4,
       // rectangle_split(200, 200, joint_v(vtx, "particle", hole())),
@@ -154,13 +166,13 @@ function void build_vertices(pglshader mutable& pgs,
     const vtx = bos[2]->get("particle-bb-multi")->vtxs;
     */
     const rnd = make_rand_generator(991U);
-    rand_sphere(60.0, 10000, true, rnd,
+    rand_sphere(60.0, 30000, true, rnd,
       joint_v(vtx, "particle", hole()))
       (poly_t(), mesh_pos());
   }
   {
     /* particle-bb */
-    const vtx = bos[2]->get("particle-bb")->vtxs;
+    const vtx = pgs.make_vertices(2, "particle-bb");
     const p = particle_bb(vtx);
     const rnd = make_rand_generator(1U);
     rand_sphere(1.0, 100, true, rnd, p)
@@ -168,14 +180,14 @@ function void build_vertices(pglshader mutable& pgs,
   }
   {
     /* particle-bb multi */
-    const vtx = bos[2]->get("particle-bb-multi")->vtxs;
+    const vtx = pgs.make_vertices(2, "particle-bb-multi");
     const rnd = make_rand_generator(991U);
     rand_sphere(60.0, 10000, true, rnd,
       joint_v(vtx, "particle-bb", hole()))
       (poly_t(), mesh_pos());
   }
   {
-    const vtx = bos[2]->get("mixed")->vtxs;
+    const vtx = pgs.make_vertices(2, "mixed");
     regular_polygon(1.0, 5,
       bump_rec(1.0, 10.0, 1, hole(), joint_v(vtx, "saucer", hole())),
       // joint_v(vtx, "bullet2", hole()),
@@ -186,8 +198,18 @@ function void build_vertices(pglshader mutable& pgs,
   /*
   */
   {
+    /* for lineparticle shader */
+    const vtx = pgs.make_vertices(4, "lineparticle");
+    farray{lineparticle_vertex_attributes, 4} vs;
+    vs[0].vert = glm::make_vec2(0.0, -0.5);
+    vs[1].vert = glm::make_vec2(1.0, -0.5);
+    vs[2].vert = glm::make_vec2(1.0, 0.5);
+    vs[3].vert = glm::make_vec2(0.0, 0.5);
+    vtx->push_polygon_distinct{lineparticle_vertex_attributes}(vs);
+  }
+  {
     /* for font2 shader */
-    const vtx = bos[3]->get("default_font")->vtxs;
+    const vtx = pgs.make_vertices(3, "default_font");
     const char_w = static_cast{float}(pgs.fti.char_w);
     const char_h = static_cast{float}(pgs.fti.char_h);
     const point_size = static_cast{float}(max(pgs.fti.char_w, pgs.fti.char_h));
@@ -195,24 +217,20 @@ function void build_vertices(pglshader mutable& pgs,
     const texture_size_px = glm::make_vec2(
       static_cast{float}(pgs.fti.surface_w),
       static_cast{float}(pgs.fti.surface_h));
-    const char_h_tex = char_h / static_cast{float}(pgs.fti.surface_h);
-    const char_w_tex = char_w / static_cast{float}(pgs.fti.surface_w);
     const clamp_x = char_w / point_size;
     const clamp_y = char_h / point_size;
     font2_vertex_attributes v;
     v.char_size_px = char_size_px;
     v.texture_size_px = texture_size_px;
     v.texture_origin_px = glm::make_vec2(0.0, 0.0);
-    v.char_uv = glm::make_vec2(0.0, 0.0);
-    v.char_uv_delta = glm::make_vec2(char_w_tex, char_h_tex);
     v.coord_clamp = glm::make_vec2(clamp_x, clamp_y);
     v.char_px = static_cast{float}(pgs.fti.char_w);
+//println("char_point_size", point_size);
     v.char_point_size = point_size;
     for (const i: 0 .. 14U) {
       v.text_index = static_cast{float}(i);
-//debug_log("point size", v.char_point_size);
-//debug_log("text_index", v.text_index);
-println("font2_vertex_attributes", v);
+//sdllog(string_join{""}("text_index", i, v.text_index));
+//println("font2_vertex_attributes", v);
       vtx->push_point{font2_vertex_attributes}(v);
     }
 //println("vertex_values", vtx->vertex_values);
@@ -221,21 +239,21 @@ println("font2_vertex_attributes", v);
 
 public threaded struct node_data
 {
-  public glm::mat4 trans_ini;
+  public glm::mat4 trans_initial;
   public glm::mat4 trans_cur;
 }
 
 public threaded function void
-make_node(scene_node{node_data} mutable& sn)
+node_init(scene_node{node_data} mutable& sn)
 {
-  sn.data.trans_ini = sn.trans;
+  sn.data.trans_initial = sn.trans;
   sn.data.trans_cur = sn.trans;
 }
 
 struct
 frame_control()
 {
-  public metafunction ticks_t farray{uint, 7};
+  public metafunction ticks_t farray{uint, 8};
   public uint tprevsec = 0;
   public uint tprev = SDL_GetTicks();
   public uint frames = 0;
@@ -394,8 +412,8 @@ input_control()
     /*
     sdllog(string_join{" "}("onefinger", dx, dy));
     */
-    target.rotate_angle_axis(-dy * 2.0 * frctl.frame_speed_mul, 1.0, 0.0, 0.0);
-    target.rotate_angle_axis(-dx * 2.0 * frctl.frame_speed_mul, 0.0, 1.0, 0.0);
+    target.rotate_angle_axis(-dy * 5.0 * frctl.frame_speed_mul, 1.0, 0.0, 0.0);
+    target.rotate_angle_axis(-dx * 5.0 * frctl.frame_speed_mul, 0.0, 1.0, 0.0);
     finger_xyrotate_delta.x = dx;
     finger_xyrotate_delta.y = dy;
   }
@@ -449,15 +467,16 @@ input_control()
 	  glm::make_vec3(avg.x, -avg.y, 0.0) * frctl.frame_speed_mul);
     }
   }
-  public function void finger_action_step(position_angle mutable& target,
-      frame_control const& frctl)
+  public function void finger_action_step(player_info mutable& pl,
+      glm::vec3 mutable& pos_delta, frame_control const& frctl)
   {
+    position_angle mutable& posang = pl.posang;
     /*
     sdllog(string_join{" "}("finger_action_step", fingdown[0], fingdown[1]));
     */
     if (fingdown[0] && !fingdown[1]) {
       if (fingerdown_time[0] >= 2) {
-	finger_action_one_finger(target, frctl, 0);
+	finger_action_one_finger(posang, frctl, 0);
       } else {
 	start_pos[0] = (start_pos[0] + cur_pos[0]) / 2.0f;
 	fingerdown_time[0] += 1;
@@ -473,14 +492,14 @@ input_control()
       }
     } else if (!fingdown[0] && fingdown[1]) {
       if (fingerdown_time[1] >= 2) {
-	finger_action_one_finger(target, frctl, 0);
+	finger_action_one_finger(posang, frctl, 0);
       } else {
 	start_pos[1] = (start_pos[1] + cur_pos[1]) / 2.0f;
 	fingerdown_time[1] += 1;
       }
     } else if (fingdown[0] && fingdown[1]) {
       if (fingerdown_time[0] >= 2 && fingerdown_time[1] >= 2) {
-	finger_action_two_fingers(target, frctl);
+	finger_action_two_fingers(posang, frctl);
       } else {
 	start_pos[0] = (start_pos[0] + cur_pos[0]) / 2.0f;
 	fingerdown_time[0] += 1;
@@ -489,10 +508,10 @@ input_control()
       }
     } else {
       const len = glm::length(finger_xyrotate_delta);
-      target.rotate_angle_axis(
+      posang.rotate_angle_axis(
 	  -finger_xyrotate_delta.y * 2.0 * frctl.frame_speed_mul,
 	  1.0, 0.0, 0.0);
-      target.rotate_angle_axis(
+      posang.rotate_angle_axis(
 	  -finger_xyrotate_delta.x * 2.0 * frctl.frame_speed_mul,
 	  0.0, 1.0, 0.0);
       const decay = 0.03f * frctl.frame_speed_mul;
@@ -502,8 +521,23 @@ input_control()
 	finger_xyrotate_delta -= finger_xyrotate_delta * decay / len;
       }
     }
+    posang.position += pl.pos_delta * frctl.frame_speed_mul;
+    if (pl.accel) {
+      pl.accel_ratio = min(
+	  pl.accel_ratio + 0.003f * frctl.frame_speed_mul, 1.0f);
+    } else {
+      pl.accel_ratio = max(
+	  pl.accel_ratio - 0.003f * frctl.frame_speed_mul, 0.01f);
+    }
+    pl.accel_ratio = 1.0f;
+    pl.pos_delta =
+      pl.pos_delta * (1.0f - pl.accel_ratio)
+      + posang.angle.to_mat3()
+	* glm::make_vec3(0.0, 0.0, finger_zmove_delta * pl.accel_ratio);
+    /*
     target.translate_relative(glm::make_vec3(0.0, 0.0, finger_zmove_delta)
 	* frctl.frame_speed_mul);
+    */
   }
   public function void add_zdelta(float zaccel, frame_control const& frctl)
   {
@@ -600,6 +634,9 @@ valuetype struct
 player_info()
 {
   public position_angle posang;
+  public glm::vec3 pos_delta;
+  public bool accel;
+  public float accel_ratio = 0.1f;
 }
 
 function void main_loop()
@@ -622,55 +659,79 @@ function void main_loop()
 
   pglshader pgs = pglshader(sdlc.gles_flag, sdlc.glmajor, sdlc.glminor,
     sdlc.enable_msaa, sdlc.init_w, sdlc.init_h);
+  build_vertices(pgs);
+  pgs.prepare_vertex_buffers();
 
-  varray{ptr{vertex_buffer}} bos;
-  bos.push_back(make_ptr{vertex_buffer}
-    (static_cast{size_t}(num_float_struct{main_vertex_attributes}), false));
-  bos.push_back(make_ptr{vertex_buffer}
-    (static_cast{size_t}(num_float_struct{particle_vertex_attr}), true));
-  bos.push_back(make_ptr{vertex_buffer}
-    (static_cast{size_t}(num_float_struct{particle_bb_vertex_attr}), false));
-  bos.push_back(make_ptr{vertex_buffer}
-    (static_cast{size_t}(num_float_struct{font2_vertex_attributes}), true));
-  {
-    const t0 = system.gettimeofday_double();
-    build_vertices(pgs, bos);
-    const t1 = system.gettimeofday_double();
-    bos[0]->create_vbo();
-    bos[1]->create_vbo();
-    bos[2]->create_vbo();
-    bos[3]->create_vbo();
-println("bos[3] vbo_values", bos[3]->vbo_values.get());
-    const t2 = system.gettimeofday_double();
-    sdllog(string_join{" "}("build vertex", t1 - t0, t2 - t1));
-  }
-
-  joint_id_type scene_id;
-  scene_id.bo_id = 3;
-  scene_id.vs_id = 0; // static_cast{int}(bos[2]->num_vs_ids() - 1);
+  const scene_names = make_farray{string}(
+    "saucer", "saucer-multi", "block-multi", "block",
+    "bullet-multi", "bullet2-multi3", "bullet2-multi2", "bullet2-multi",
+    // "bullet2-multi", "bullet2-multi2", "bullet2-multi3",
+    "particle", "particle-multi",
+    "particle-bb", "particle-bb-multi");
+  mutable size_t cur_scene = 0;
   const test_scroll_mode = false;
-  if (test_scroll_mode) {
-    scene_id.bo_id = 0;
-    scene_id.vs_id = 8;
-  }
-  mutable snode = instantiate_scene{node_data, make_node}(
-    bos, scene_id, glm::mat4());
-  input_control ictl;
-  int motion_count = 0;
-  function void scene_next()
+  mutable snode = instantiate_cur_scene();
+  function ptr{scene_node{node_data}} instantiate_cur_scene()
   {
-    ++scene_id.vs_id;
-    if (scene_id.vs_id >= static_cast{int}(bos[scene_id.bo_id]->num_vs_ids())) {
-      scene_id.vs_id = 0;
-      ++scene_id.bo_id;
-      if (scene_id.bo_id > 2) {
-	scene_id.bo_id = 0;
+    const name = scene_names[cur_scene];
+    joint_id_type scene_id = pgs.find_joint_id_by_name(name);
+    const p0 = make_ptr{scene_node{node_data}}(joint_id_type(), glm::mat4());
+    const p1 = pgs.make_node{node_data, node_init}(scene_id,
+      glm::mat4());
+    /*
+    const p2 = make_ptr{scene_node{node_data}}(
+      find_joint_id_by_name("default_font"), glm::mat4());
+    */
+    const p2 = make_ptr{scene_node{node_data}}(joint_id_type(), glm::mat4());
+    const p3 = make_ptr{scene_node{node_data}}(
+      pgs.find_joint_id_by_name("lineparticle"), glm::mat4());
+    p0->children.push_back(p1);
+    p0->children.push_back(p2);
+    p0->children.push_back(p3);
+    return p0;
+  }
+  function void set_text(ptr{scene_node{node_data}} const& nd,
+    cstrref const& text, uint x, uint y)
+  {
+    const size_t nchar_per_node = 14U;
+    const n = (text.size() + (nchar_per_node - 1U)) / nchar_per_node;
+    while (nd->children.size() < n) {
+      const p = make_ptr{scene_node{node_data}}(
+	pgs.find_joint_id_by_name("default_font"), glm::mat4());
+      nd->children.push_back(p);
+    }
+    if (nd->children.size() > n) {
+      nd->children.erase(n, nd->children.size());
+    }
+    const char_w = pgs.fti.char_w;
+    const screen_w = cast_float(pgs.cam.screen_width);
+    const screen_h = cast_float(pgs.cam.screen_height);
+    for (const i, const p: nd->children) {
+      const& sli = p->trans.slice();
+      sli[14] = (cast_float(x) / screen_w) * 2.0f - 1.0f;
+      sli[15] = (cast_float(y) / screen_h) * 2.0f - 1.0f;
+      x += char_w * 14;
+      for (const j: 0 .. nchar_per_node) {
+	if (i * 14 + j < text.size()) {
+	  sli[j] = static_cast{float}(text[i * 14 + j] - 0x20);
+	} else {
+	  sli[j] = 0.0f;
+	}
       }
     }
-    snode = instantiate_scene{node_data, make_node}(
-      bos, scene_id, glm::mat4());
+  }
+  function void scene_next()
+  {
+    ++cur_scene;
+    if (cur_scene >= scene_names.size()) {
+      cur_scene = 0;
+    }
+    snode = instantiate_cur_scene();
     rctl.fixed_fps = 1;
   }
+
+  input_control ictl;
+  int motion_count = 0;
 
   frame_control mutable frctl;
   framerate_control mutable rctl = framerate_control(sdlc.vsync);
@@ -682,7 +743,6 @@ println("bos[3] vbo_values", bos[3]->vbo_values.get());
   bool done = false;
   bool paused = false;
   while (!done) {
-    frctl.save_ticks(0, SDL_GetTicks());
     SDL_Event ev;
     while (SDL_PollEvent(ev)) {
       const etype = ev.type;
@@ -694,7 +754,7 @@ println("bos[3] vbo_values", bos[3]->vbo_values.get());
 	  int w;
 	  int h;
 	  SDL_GL_GetDrawableSize(sdlc.sdl_window.some, w, h);
-	  pgs.reshape(w, h);
+	  pgs.resize_screen(w, h);
 	  sdllog(string_join{""}("resized w=", w, " h=", h));
 	} else if (ev.window.event == SDL_WINDOWEVENT_HIDDEN) {
 	  /* sdllog("hidden"); */
@@ -755,7 +815,8 @@ println("bos[3] vbo_values", bos[3]->vbo_values.get());
 	  rctl.fixed_fps = rctl.fixed_fps != 6 ? rctl.fixed_fps + 1 : 1;
 	}
 	if (ev.tfinger.x > 0.9 && ev.tfinger.y > 0.9) {
-	  pgs.cam.light_on = pgs.cam.light_on > 0.5f ? 0.0f : 1.0f;
+	  player.accel = !player.accel;
+	  //pgs.cam.light_on = pgs.cam.light_on > 0.5f ? 0.0f : 1.0f;
 	}
       } else if (etype == SDL_FINGERUP) {
 	/*
@@ -780,7 +841,7 @@ println("bos[3] vbo_values", bos[3]->vbo_values.get());
 	int w;
 	int h;
 	SDL_GL_GetDrawableSize(sdlc.sdl_window.some, w, h);
-	pgs.reshape(w, h);
+	pgs.resize_screen(w, h);
       } else if (etype == SDL_QUIT) {
 	done = true;
 	break;
@@ -800,6 +861,7 @@ println("bos[3] vbo_values", bos[3]->vbo_values.get());
 	/* */
       }
     }
+    frctl.save_ticks(0, SDL_GetTicks());
     if (paused) {
       SDL_Delay(100);
       frctl.tprev = SDL_GetTicks();
@@ -816,27 +878,25 @@ println("bos[3] vbo_values", bos[3]->vbo_values.get());
 	    const ui = rnd->generate() / 65536;
 	    motion_rec(*c, ui, 65536);
 	  }
-	} else if (sn.joint_id.bo_id != 3) {
+	} else if (sn.joint_id.bo_id < 3) {
 	  const t = static_cast{float}(i) / static_cast{float}(n) * pi_float()
 	    * 2.0;
 	  const x = sin(t);
 	  const y = cos(t);
 	  const ang = glm::make_quat_angle_axis(
 	    static_cast{float}(motion_count), x, y, 0.0);
-	  sn.trans = sn.data.trans_ini * ang.to_mat4();
-	} else {
-	  /* bo_id == 3 */
-	  /* text object */
-	  const s = "ABC012345abcde";
-	  glm::mat4 str;
-	  slice{float} strs = str.slice();
-	  for (const i: 0 .. 14U) {
-	    strs[i] = static_cast{float}(s[i] - 0x20);
-	  }
-	  strs[14] = 0.0f;
-	  strs[15] = 0.0f;
-	  sn.trans = str;
-//println("text object", str.slice());
+	  sn.trans = sn.data.trans_initial * ang.to_mat4();
+	} else if (sn.joint_id.bo_id == 4) {
+// FIXME
+	  const& sli = sn.trans.slice();
+	  sli[0] = 5.0f;
+	  sli[1] = 0.0f;
+	  sli[2] = 0.0f;
+	  sli[3] = 10.0f;
+	  sli[4] = 0.0f;
+	  sli[5] = 0.0f;
+	  sli[6] = 1.0f; /* point_size_base */
+//println("boid4", sli);
 	}
       }
       motion_rec(*snode, 0, 1);
@@ -845,6 +905,10 @@ println("bos[3] vbo_values", bos[3]->vbo_values.get());
 	motion_count -= 360;
       }
     }
+    const mess = string_join{" "}(frctl.fps, frctl.frame_speed_mul,
+      frctl.ticks_sum_prev, ictl.finger_zmove_delta, pgs.cam.camera.angle,
+      player.pos_delta);
+    set_text(snode->children[1], mess, 0, 0);
     frctl.save_ticks(1, SDL_GetTicks());
     {
       /* draw frame */
@@ -852,16 +916,18 @@ println("bos[3] vbo_values", bos[3]->vbo_values.get());
       pgs.cam.light.position = pgs.cam.camera.position +
 	pgs.cam.camera.angle.to_mat3() * glm::make_vec3(3.0, 3.0, 5.0);
       pgs.cam.light.angle = pgs.cam.camera.angle;
-      const mess = string_join{" "}(frctl.fps, frctl.frame_speed_mul,
-	frctl.ticks_sum_prev, ictl.finger_zmove_delta, pgs.cam.camera.angle);
-      uint tick1;
+      varray{uint} tick_draw;
       if (!paused) {
-	tick1 = draw_frame(pgs, bos, *snode, mess);
-      } else {
-	tick1 = SDL_GetTicks();
+	tick_draw = draw_frame(pgs, *snode, mess);
       }
-      frctl.save_ticks(2, tick1);
-      frctl.save_ticks(3, SDL_GetTicks());
+      if (tick_draw.size() > 2) {
+	frctl.save_ticks(2, tick_draw[0]);
+	frctl.save_ticks(3, tick_draw[1]);
+      } else {
+	frctl.save_ticks(2, SDL_GetTicks());
+	frctl.save_ticks(3, SDL_GetTicks());
+      }
+      frctl.save_ticks(4, SDL_GetTicks());
       frctl.measure();
       frctl.frame_speed_mul = static_cast{float}(rctl.fixed_fps);
     }
@@ -924,17 +990,19 @@ println("bos[3] vbo_values", bos[3]->vbo_values.get());
 	ictl.finger_zmove_delta = 0.0;
 	ictl.finger_zmove_mode = 1;
       }
-      ictl.finger_action_step(player.posang, frctl);
+      ictl.finger_action_step(player, player.pos_delta, frctl);
     }
-    frctl.save_ticks(4, SDL_GetTicks());
-    rctl.delay();
     frctl.save_ticks(5, SDL_GetTicks());
-    SDL_GL_SwapWindow(sdlc.sdl_window.some);
+    rctl.delay();
     frctl.save_ticks(6, SDL_GetTicks());
+    SDL_GL_SwapWindow(sdlc.sdl_window.some);
+    frctl.save_ticks(7, SDL_GetTicks());
   }
 }
 
 {
+debug_log(m::to_string{m::at0{m::field_names{main_vertex_attributes}}});
+debug_log(main_vertex_attributes());
   GL::base::set_check_error_enabled(1);
   try {
     main_loop();
