@@ -3,8 +3,10 @@ public import common -;
 public import GL::glm glm;
 public import GL::compat -;
 public import meta m;
+public import meta::vararg v;
 public import exception -;
 public import pointer::raw -;
+public import SDL2 -;
 
 public metafunction is_ios m::eq{m::profile{"platform"}, "ios"};
 public metafunction is_android m::eq{m::profile{"platform"}, "android"};
@@ -13,10 +15,9 @@ public metafunction is_linux m::eq{m::profile{"platform"}, "Linux"};
 public metafunction is_gles m::or{is_ios, is_android};
 public metafunction is_gl3_or_gles3 m::not{is_android};
 public metafunction is_gl33_or_gles3 is_gl3_or_gles3; // FIXME
-public metafunction use_copying_instancing 1; // FIXME
-// public metafunction use_copying_instancing 0; // FIXME
+public metafunction use_copying_instancing m::not{is_gl3_or_gles3}; // FIXME
+// public metafunction use_copying_instancing 1; // FIXME
 public metafunction uniform_instancing_mul m::cond{is_gles, 8, 32};
-
 
 private threaded struct extern "glresource$n::handle" "noncopyable" {t}
 handle(t const& v)
@@ -81,5 +82,12 @@ auto_handle()
   private function ~ {
     reset();
   }
+}
+
+public threaded function {tlist} void
+sdllog(expand(v::arg_decls_bycref{tlist}))
+{
+  const s = string_join{"\t"}(expand(a: v::arg_names{m::size{tlist}}; a));
+  SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, s);
 }
 
