@@ -17,6 +17,7 @@ public import glgeometry -;
 public import glbuffer -;
 public import glnode -;
 public import pglshader -;
+public import pglcommon -;
 
 function void build_vertices(pglshader mutable& pgs)
 {
@@ -40,7 +41,7 @@ function void build_vertices(pglshader mutable& pgs)
   {
     const vtx2 = pgs.make_vertices(0, "saucer-multi");
     const t2 = fill_v(vtx2);
-    regular_polygon(50.0, 50,
+    regular_polygon(50.0, 3,
       bump_rec(1.0, 1.0, 1, joint_v(vtx2, "saucer", hole()), hole()),
       hole())
       (poly_t(), mesh_pos());
@@ -225,15 +226,15 @@ function void build_vertices(pglshader mutable& pgs)
     v.texture_origin_px = glm::make_vec2(0.0, 0.0);
     v.coord_clamp = glm::make_vec2(clamp_x, clamp_y);
     v.char_px = static_cast{float}(pgs.fti.char_w);
-//println("char_point_size", point_size);
+//sdllog("char_point_size", point_size);
     v.char_point_size = point_size;
-    for (const i: 0 .. 14U) {
-      v.text_index = static_cast{float}(i);
-//sdllog(string_join{""}("text_index", i, v.text_index));
-//println("font2_vertex_attributes", v);
+    //for (const i: 0 .. 14U) {
+    //  v.text_index = static_cast{float}(i);
+//sdllog("text_index", i, v.text_index);
+//sdllog("font2_vertex_attributes", v);
       vtx->push_point{font2_vertex_attributes}(v);
-    }
-//println("vertex_values", vtx->vertex_values);
+    //}
+//sdllog("vertex_values", vtx->vertex_values);
   }
 }
 
@@ -248,6 +249,12 @@ node_init(scene_node{node_data} mutable& sn)
 {
   sn.data.trans_initial = sn.trans;
   sn.data.trans_cur = sn.trans;
+}
+
+struct
+scene_control()
+{
+  public float prev_spawn = 0.0;
 }
 
 struct
@@ -286,9 +293,9 @@ frame_control()
       const seconds = cast_float(t - tprevsec) / 1000.0;
       fps = cast_float(frames) / seconds;
       /*
-      sdllog(string_join{" "}(frames, "frames in", seconds, "seconds =",
-	  fps, "fps"));
-      sdllog(string_join{" "}("ticks: ", ticks_sum));
+      sdllog(frames, "frames in", seconds, "seconds =",
+	  fps, "fps");
+      sdllog("ticks: ", ticks_sum);
       */
       ticks_sum_prev = ticks_sum;
       ticks_sum = ticks_t();
@@ -330,12 +337,12 @@ input_control()
     if (fid < 2) {
       cur_pos[fid] = glm::make_vec2(x, y);
       /*
-      sdllog(string_join{" "}("finger_motion", x, y, fid, fng));
+      sdllog("finger_motion", x, y, fid, fng);
       */
     } else {
       /*
-      sdllog(string_join{" "}("finger_motion(ignored)", x, y, fng,
-	"fingerids:", fingerids));
+      sdllog("finger_motion(ignored)", x, y, fng,
+	"fingerids:", fingerids);
       */
     }
   }
@@ -354,14 +361,14 @@ input_control()
       start_pos[fid] = glm::make_vec2(x, y);
       cur_pos[fid] = start_pos[fid];
       /*
-      sdllog(string_join{" "}("finger_down", x, y, fid));
+      sdllog("finger_down", x, y, fid);
       */
       fingerdown_time[0] = 0;
       fingerdown_time[1] = 0;
       finger_zmove_mode = 0;
     }
     /*
-    sdllog(string_join{" "}("finger_down_post", fingerids));
+    sdllog("finger_down_post", fingerids);
     */
   }
   public function void finger_up(SDL_FingerID fng) {
@@ -374,7 +381,7 @@ input_control()
     if (fid < 2) {
       fingdown[fid] = false;
       /*
-      sdllog(string_join{" "}("finger_up", fid));
+      sdllog("finger_up", fid);
       */
       if (fid == 1) {
 	start_pos[0] = cur_pos[0];
@@ -396,7 +403,7 @@ input_control()
       finger_zmove_mode = 0;
     }
     /*
-    sdllog(string_join{" "}("finger_up_post", fingerids));
+    sdllog("finger_up_post", fingerids);
     */
   }
   public function void finger_action_one_finger(position_angle mutable& target,
@@ -410,7 +417,7 @@ input_control()
       dy /= d / 3.0;
     }
     /*
-    sdllog(string_join{" "}("onefinger", dx, dy));
+    sdllog("onefinger", dx, dy);
     */
     target.rotate_angle_axis(-dy * 5.0 * frctl.frame_speed_mul, 1.0, 0.0, 0.0);
     target.rotate_angle_axis(-dx * 5.0 * frctl.frame_speed_mul, 0.0, 1.0, 0.0);
@@ -472,7 +479,7 @@ input_control()
   {
     position_angle mutable& posang = pl.posang;
     /*
-    sdllog(string_join{" "}("finger_action_step", fingdown[0], fingdown[1]));
+    sdllog("finger_action_step", fingdown[0], fingdown[1]);
     */
     if (fingdown[0] && !fingdown[1]) {
       if (fingerdown_time[0] >= 2) {
@@ -585,9 +592,9 @@ framerate_control(int vsync0)
 	const v = delay_usec[i];
 	s_sum += v;
 	delay_usec[i] = delay_usec[i + 1];
-	// println("delay_usec[i]", i, v);
+	// sdllog("delay_usec[i]", i, v);
 	if (v < 0) {
-	  // println("neg", v);
+	  // sdllog("neg", v);
 	  ++neg_cnt;
 	}
       }
@@ -595,13 +602,13 @@ framerate_control(int vsync0)
       const s_avg = static_cast{double}(s_sum)
 	/ static_cast{double}(delay_usec.size());
       /*
-      println(fixed_fps, now - time_before_swapwindow, sleep_sec, s_avg,
+      sdllog(fixed_fps, now - time_before_swapwindow, sleep_sec, s_avg,
 	neg_cnt);
       */
       /*
       if (fixed_fps < 6) {
 	if (neg_cnt > static_cast{int}(delay_usec.size() / 4)) {
-	  println("increment delay");
+	  sdllog("increment delay");
 	  ++fixed_fps;
 	  for (const i, mutable& v: delay_usec) {
 	    v = 0;
@@ -664,37 +671,35 @@ function void main_loop()
 
   const scene_names = make_farray{string}(
     "saucer", "saucer-multi", "block-multi", "block",
-    "bullet-multi", "bullet2-multi3", "bullet2-multi2", "bullet2-multi",
+    "bullet2-multi3", "bullet2-multi2", "bullet2-multi",
     // "bullet2-multi", "bullet2-multi2", "bullet2-multi3",
+    "bullet-multi",
     "particle", "particle-multi",
     "particle-bb", "particle-bb-multi");
   mutable size_t cur_scene = 0;
   const test_scroll_mode = false;
-  mutable snode = instantiate_cur_scene();
+  mutable snode = make_ptr{scene_node{node_data}}(joint_id_type(),
+    glm::mat4());
+  {
+    const p1 = instantiate_cur_scene();
+    const p2 = make_ptr{scene_node{node_data}}(joint_id_type(), glm::mat4());
+      /* for font2 */
+    const p3 = make_ptr{scene_node{node_data}}(joint_id_type(), glm::mat4());
+      /* for lineparticle */
+    snode->children.push_back(p1);
+    snode->children.push_back(p2);
+    snode->children.push_back(p3);
+  }
   function ptr{scene_node{node_data}} instantiate_cur_scene()
   {
     const name = scene_names[cur_scene];
     joint_id_type scene_id = pgs.find_joint_id_by_name(name);
-    const p0 = make_ptr{scene_node{node_data}}(joint_id_type(), glm::mat4());
-    const p1 = pgs.make_node{node_data, node_init}(scene_id,
-      glm::mat4());
-    /*
-    const p2 = make_ptr{scene_node{node_data}}(
-      find_joint_id_by_name("default_font"), glm::mat4());
-    */
-    const p2 = make_ptr{scene_node{node_data}}(joint_id_type(), glm::mat4());
-    const p3 = make_ptr{scene_node{node_data}}(
-      pgs.find_joint_id_by_name("lineparticle"), glm::mat4());
-    p0->children.push_back(p1);
-    p0->children.push_back(p2);
-    p0->children.push_back(p3);
-    return p0;
+    return pgs.make_node{node_data, node_init}(scene_id, glm::mat4());
   }
   function void set_text(ptr{scene_node{node_data}} const& nd,
     cstrref const& text, uint x, uint y)
   {
-    const size_t nchar_per_node = 14U;
-    const n = (text.size() + (nchar_per_node - 1U)) / nchar_per_node;
+    const n = text.size();
     while (nd->children.size() < n) {
       const p = make_ptr{scene_node{node_data}}(
 	pgs.find_joint_id_by_name("default_font"), glm::mat4());
@@ -708,15 +713,13 @@ function void main_loop()
     const screen_h = cast_float(pgs.cam.screen_height);
     for (const i, const p: nd->children) {
       const& sli = p->trans.slice();
-      sli[14] = (cast_float(x) / screen_w) * 2.0f - 1.0f;
-      sli[15] = (cast_float(y) / screen_h) * 2.0f - 1.0f;
-      x += char_w * 14;
-      for (const j: 0 .. nchar_per_node) {
-	if (i * 14 + j < text.size()) {
-	  sli[j] = static_cast{float}(text[i * 14 + j] - 0x20);
-	} else {
-	  sli[j] = 0.0f;
-	}
+      sli[2] = (cast_float(x) / screen_w) * 2.0f - 1.0f;
+      sli[3] = (cast_float(y) / screen_h) * 2.0f - 1.0f;
+      x += char_w;
+      if (i < text.size()) {
+	sli[0] = static_cast{float}(text[i] - 0x20);
+      } else {
+	sli[0] = 0.0f;
       }
     }
   }
@@ -726,9 +729,11 @@ function void main_loop()
     if (cur_scene >= scene_names.size()) {
       cur_scene = 0;
     }
-    snode = instantiate_cur_scene();
+    snode->children[0] = instantiate_cur_scene();
     rctl.fixed_fps = 1;
   }
+
+  scene_control sctl;
 
   input_control ictl;
   int motion_count = 0;
@@ -747,7 +752,7 @@ function void main_loop()
     while (SDL_PollEvent(ev)) {
       const etype = ev.type;
       /*
-       sdllog(string_join{" "}("event", cast_int(ev.type)));
+       sdllog("event", cast_int(ev.type));
        */
       if (etype == SDL_WINDOWEVENT) {
 	if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
@@ -755,7 +760,7 @@ function void main_loop()
 	  int h;
 	  SDL_GL_GetDrawableSize(sdlc.sdl_window.some, w, h);
 	  pgs.resize_screen(w, h);
-	  sdllog(string_join{""}("resized w=", w, " h=", h));
+	  sdllog("resized w=", w, " h=", h);
 	} else if (ev.window.event == SDL_WINDOWEVENT_HIDDEN) {
 	  /* sdllog("hidden"); */
 	} else if (ev.window.event == SDL_WINDOWEVENT_MINIMIZED ||
@@ -768,8 +773,7 @@ function void main_loop()
 	  sdllog("restored");
 	} else {
 	  /*
-	  sdllog(string_join{" "}("window event ",
-		cast_int(ev.window.event)));
+	  sdllog("window event ", cast_int(ev.window.event));
 	  */
 	}
       } else if (etype == SDL_MOUSEBUTTONDOWN) {
@@ -784,8 +788,7 @@ function void main_loop()
 	if (bx > 0.9 && by > 0.9) {
 	  pgs.cam.light_on = pgs.cam.light_on > 0.5f ? 0.0f : 1.0f;
 	}
-	sdllog(string_join{" "}("mousedown", ev.button.x, ev.button.y,
-	  ev.button.button));
+	sdllog("mousedown", ev.button.x, ev.button.y, ev.button.button);
 	ictl.finger_down(
 	  cast_float(ev.button.x) / cast_float(pgs.cam.screen_width),
 	  cast_float(ev.button.y) / cast_float(pgs.cam.screen_height),
@@ -794,18 +797,16 @@ function void main_loop()
 	*/
       } else if (etype == SDL_MOUSEBUTTONUP) {
 	/*
-	sdllog(string_join{" "}("mouseup", ev.button.button));
+	sdllog("mouseup", ev.button.button);
 	ictl.finger_up(0);
 	 */
       } else if (etype == SDL_MOUSEMOTION) {
 	/*
-	sdllog(string_join{" "}("mousemotion", ev.button.x, ev.button.y,
-	  ev.button.button));
+	sdllog("mousemotion", ev.button.x, ev.button.y, ev.button.button);
 	 */
       } else if (etype == SDL_FINGERDOWN) {
 	/*
-	sdllog(string_join{" "}("fingerdown", ev.tfinger.x, ev.tfinger.y,
-	  ev.tfinger.fingerId));
+	sdllog("fingerdown", ev.tfinger.x, ev.tfinger.y, ev.tfinger.fingerId);
 	*/
 	ictl.finger_down(ev.tfinger.x, ev.tfinger.y, ev.tfinger.fingerId);
 	if (ev.tfinger.x < 0.1 && ev.tfinger.y < 0.1) {
@@ -816,11 +817,11 @@ function void main_loop()
 	}
 	if (ev.tfinger.x > 0.9 && ev.tfinger.y > 0.9) {
 	  player.accel = !player.accel;
-	  //pgs.cam.light_on = pgs.cam.light_on > 0.5f ? 0.0f : 1.0f;
+	  pgs.cam.light_on = pgs.cam.light_on > 0.5f ? 0.0f : 1.0f;
 	}
       } else if (etype == SDL_FINGERUP) {
 	/*
-	sdllog(string_join{" "}("fingerup", ev.tfinger.fingerId));
+	sdllog("fingerup", ev.tfinger.fingerId);
 	*/
 	ictl.finger_up(ev.tfinger.fingerId);
       } else if (etype == SDL_FINGERMOTION) {
@@ -828,15 +829,15 @@ function void main_loop()
 	  ictl.finger_motion(ev.tfinger.x, ev.tfinger.y,
 	      ev.tfinger.dx, ev.tfinger.dy, ev.tfinger.fingerId);
 	  /*
-	  sdllog(string_join{" "}("fingermotion", ev.tfinger.x, ev.tfinger.y,
-	    ev.tfinger.dx, ev.tfinger.dy, ev.tfinger.fingerId));
+	  sdllog("fingermotion", ev.tfinger.x, ev.tfinger.y,
+	    ev.tfinger.dx, ev.tfinger.dy, ev.tfinger.fingerId);
 	  */
 	}
       } else if (etype == SDL_APP_WILLENTERBACKGROUND) {
-	sdllog(string_join{""}("paused"));
+	sdllog("paused");
 	paused = true;
       } else if (etype == SDL_APP_DIDENTERFOREGROUND) {
-	sdllog(string_join{""}("resumed"));
+	sdllog("resumed");
 	paused = false;
 	int w;
 	int h;
@@ -847,7 +848,7 @@ function void main_loop()
 	break;
       } else if (etype == SDL_MULTIGESTURE) {
       } else if (etype == SDL_KEYDOWN) {
-	// println("KEYDOWN event");
+	// sdllog("KEYDOWN event");
 	if (ev.key.keysym.scancode == SDL_SCANCODE_TAB) {
 	  scene_next();
 	}
@@ -857,7 +858,7 @@ function void main_loop()
       } else {
 	string s;
 	integral_to_hexadecimal{int}(cast_int(ev.type), s);
-	sdllog(string_join{" "}("unknown event", s));
+	sdllog("unknown event", s);
 	/* */
       }
     }
@@ -868,46 +869,96 @@ function void main_loop()
       frctl.tprevsec = frctl.tprev;
       continue;
     } else {
-      function void motion_rec(scene_node{node_data} mutable& sn, size_t i,
-	size_t n)
+      function void step_lp(scene_control mutable& sctl,
+	scene_node{node_data} mutable& sn_lp, float speed)
       {
-	const num = sn.children.size();
-	if (num > 0) {
-	  const rnd = make_rand_generator(1U);
-	  for (const ci, const& c: sn.children) {
-	    const ui = rnd->generate() / 65536;
-	    motion_rec(*c, ui, 65536);
-	  }
-	} else if (sn.joint_id.bo_id < 3) {
-	  const t = static_cast{float}(i) / static_cast{float}(n) * pi_float()
-	    * 2.0;
+	for (const i, const& snp: sn_lp.children) {
+	  const& sli = snp->trans.slice();
+	  mutable vec0 = glm::make_vec3(sli[0], sli[1], sli[2]);
+	  mutable vec1 = glm::make_vec3(sli[3], sli[4], sli[5]);
+	  const vd = vec1 - vec0;
+	  vec0 += vd / 4.0f;
+	  vec1 += vd / 4.0f;
+	  sli[0] = vec0.x;
+	  sli[1] = vec0.y;
+	  sli[2] = vec0.z;
+	  sli[3] = vec1.x;
+	  sli[4] = vec1.y;
+	  sli[5] = vec1.z;
+	  const step = sli[7] + speed;
+	  sli[7] = step;
+	}
+	function bool is_finished(ptr{scene_node{node_data}} const& snp) {
+	  const& sli = snp->trans.slice();
+	  return sli[7] > 200.0f;
+	}
+	// sdllog("erase?", sn_lp.children.size());
+	erase_cond{is_finished}(sn_lp.children);
+      }
+      function void spawn_lp(scene_control mutable& sctl,
+	scene_node{node_data} mutable& sn_lp, glm::mat4 const& tr, float speed)
+      {
+	size_t const lim = is_gles != 0 ? 20000U : 200000U;
+	if (sn_lp.children.size() > lim /* || pgs.cam.light_on > 0.0 */) {
+	  return;
+	}
+	// sdllog("post erase?", sn_lp.children.size());
+	const p3 = make_ptr{scene_node{node_data}}(
+	  pgs.find_joint_id_by_name("lineparticle"), glm::mat4());
+	const& sli = p3->trans.slice();
+	const p0 = tr * glm::make_vec4(0.0f, 0.0f, -5.0f, 1.0f);
+	const p1 = tr * glm::make_vec4(0.0f, 0.0f, -10.0f, 1.0f);
+	sli[0] = p0.x; /* position0 */
+	sli[1] = p0.y;
+	sli[2] = p0.z;
+	sli[3] = p1.x; /* position1 */
+	sli[4] = p1.y;
+	sli[5] = p1.z;
+	sli[6] = 0.25f; /* point_size_base */
+	sli[7] = 0.0f; /* step */
+	sn_lp.children.push_back(p3);
+      }
+      step_lp(sctl, *snode->children[2], frctl.frame_speed_mul);
+      // spawn_lp(sctl, *snode->children[2], frctl.frame_speed_mul);
+      bool spawn_now = false;
+      {
+	sctl.prev_spawn += frctl.frame_speed_mul;
+	if (sctl.prev_spawn > 3.0) {
+	  spawn_now = true;
+	  sctl.prev_spawn -= 3.0;
+	}
+      }
+      function void step_snobj(scene_control mutable& sctl,
+	scene_node{node_data} mutable& snobj,
+	scene_node{node_data} mutable& sn_lp, float speed)
+      {
+	const rnd = make_rand_generator(1U);
+	for (const ci, const& csnp: snobj.children) {
+	  mutable& csn = *csnp;
+	  const ui = rnd->generate() / 65536;
+	  const t = static_cast{float}(ui)
+	    / static_cast{float}(65536) * pi_float() * 2.0;
 	  const x = sin(t);
 	  const y = cos(t);
 	  const ang = glm::make_quat_angle_axis(
 	    static_cast{float}(motion_count), x, y, 0.0);
-	  sn.trans = sn.data.trans_initial * ang.to_mat4();
-	} else if (sn.joint_id.bo_id == 4) {
-// FIXME
-	  const& sli = sn.trans.slice();
-	  sli[0] = 5.0f;
-	  sli[1] = 0.0f;
-	  sli[2] = 0.0f;
-	  sli[3] = 10.0f;
-	  sli[4] = 0.0f;
-	  sli[5] = 0.0f;
-	  sli[6] = 1.0f; /* point_size_base */
-//println("boid4", sli);
+	  csn.trans = csn.data.trans_initial * ang.to_mat4();
+	  if (spawn_now) {
+	    spawn_lp(sctl, sn_lp, csn.trans, speed);
+	  }
 	}
       }
-      motion_rec(*snode, 0, 1);
+      step_snobj(sctl, *snode->children[0], *snode->children[2],
+	frctl.frame_speed_mul);
       motion_count += 1 * static_cast{int}(frctl.frame_speed_mul);
       if (motion_count >= 360) {
 	motion_count -= 360;
       }
     }
     const mess = string_join{" "}(frctl.fps, frctl.frame_speed_mul,
-      frctl.ticks_sum_prev, ictl.finger_zmove_delta, pgs.cam.camera.angle,
-      player.pos_delta);
+      frctl.ticks_sum_prev, ictl.finger_zmove_delta,
+      snode->children[2]->children.size(),
+      pgs.cam.camera.angle, player.pos_delta);
     set_text(snode->children[1], mess, 0, 0);
     frctl.save_ticks(1, SDL_GetTicks());
     {
@@ -1001,13 +1052,13 @@ function void main_loop()
 }
 
 {
-debug_log(m::to_string{m::at0{m::field_names{main_vertex_attributes}}});
-debug_log(main_vertex_attributes());
+sdllog(m::to_string{m::at0{m::field_names{main_vertex_attributes}}});
+sdllog(main_vertex_attributes());
   GL::base::set_check_error_enabled(1);
   try {
     main_loop();
   } catch (exception::c_exception ex) {
-    sdllog(string_join{" "}("uncaught exception", ex));
+    sdllog("uncaught exception", ex);
   }
 }
 

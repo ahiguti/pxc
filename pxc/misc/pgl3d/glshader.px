@@ -16,6 +16,7 @@ public metafunction num_float_fld{t}
   m::cond{
     m::eq{t, float}, 1,
     m::eq{t, int}, 1,
+    m::eq{t, unit}, 0,
     m::eq{t, glm::vec2}, 2,
     m::eq{t, glm::vec3}, 3,
     m::eq{t, glm::vec4}, 4,
@@ -28,6 +29,7 @@ public metafunction num_attrib_fld{t}
   m::cond{
     m::eq{t, float}, 1,
     m::eq{t, int}, 1,
+    m::eq{t, unit}, 0,
     m::eq{t, glm::vec2}, 1,
     m::eq{t, glm::vec3}, 1,
     m::eq{t, glm::vec4}, 1,
@@ -123,11 +125,11 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
 	    m::to_string{sym}.crawptr().char());
 	  glGetError(); /* ignore */
 	  /*
-	  println("uniform(attr)", m::to_string{sym}, vsym);
+	  sdllog("uniform(attr)", m::to_string{sym}, vsym);
 	  */
 	} else {
 	  /*
-	  println("uniform", m::to_string{sym}, vsym);
+	  sdllog("uniform", m::to_string{sym}, vsym);
 	  */
 	}
       }
@@ -144,11 +146,11 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
 	    m::to_string{sym}.crawptr().char());
 	  glGetError(); /* ignore */
 	  /*
-	  println("instance(attr)", m::to_string{sym}, vsym);
+	  sdllog("instance(attr)", m::to_string{sym}, vsym);
 	  */
 	} else {
 	  /*
-	  println("instance", m::to_string{sym}, vsym);
+	  sdllog("instance", m::to_string{sym}, vsym);
 	  */
 	}
       }
@@ -159,7 +161,7 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
 	  m::to_string{sym}.crawptr().char());
 	glGetError(); /* ignore */
 	/*
-	println("attribute", m::to_string{sym}, vsym);
+	sdllog("attribute", m::to_string{sym}, vsym);
 	*/
       }
     }
@@ -203,11 +205,11 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
 	    for (const i: 0 .. n) {
 	      const loc = static_cast{uint}(sym + i);
 	      if (enable_flag) {
-		// println("enable", loc);
+		// sdllog("enable", loc);
 		glEnableVertexAttribArray(loc);
 		glVertexAttribDivisor(loc, 1);
 	      } else {
-		// println("disable", loc);
+		// sdllog("disable", loc);
 		glVertexAttribDivisor(loc, 0);
 		glDisableVertexAttribArray(loc);
 	      }
@@ -240,7 +242,7 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
 	      const loc = static_cast{uint}(sym + i);
 	      size_t const o =
 		(offset_float + offset + static_cast{size_t}(i * dv)) * 4U;
-	      // println("ptr", loc, stride_byte, offset, i, dv, o);
+	      // sdllog("ptr", loc, stride_byte, offset, i, dv, o);
 	      glVertexAttribPointer(loc, dv, GL_FLOAT, 0, stride_byte,
 		offset_to_void_cp(o));
 	    }
@@ -269,6 +271,7 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
 	size_t const nfl = num_float_fld{tfield};
 	if (sym >= 0) {
 	  set_uniform{tfield}(sym, arr, offset, static_cast{int}(cnt));
+//sdllog("set_uniform", m::to_string{sym}, arr[offset .. offset + nfl]);
 	}
 	offset += nfl;
       }
@@ -287,10 +290,10 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
 	glEnableVertexAttribArray(static_cast{uint}(sym));
 	glVertexAttribPointer(static_cast{uint}(sym), nfloat, GL_FLOAT, 0,
 	  stride_byte, offset_to_void_cp(offset));
-//println("vap", m::to_string{sym}, sym, "offset", offset, "float", nfloat, "stride_byte", stride_byte);
+//sdllog("vap", m::to_string{sym}, sym, "offset", offset, "float", nfloat, "stride_byte", stride_byte);
 	offset += static_cast{size_t}(nfloat) * 4;
       } else {
-//println("vap notfound", m::to_string{sym}, sym);
+//sdllog("vap notfound", m::to_string{sym}, sym);
 	int const nfloat = num_float_fld{m::at{m::field_types{tvert_sh}, idx}};
 	offset += static_cast{size_t}(nfloat) * 4;
       }
@@ -331,18 +334,12 @@ private function uint compile_shader(cstrref const& src, GLenum type,
     GLsizei len;
     glGetShaderInfoLog(res, static_cast{GLsizei}(sz), address(len),
       buf.rawptr().char());
-    sdllog(string_join{""}("compile_shader failed:",
-      string_join{"\t"}(static_cast{int}(type), success, buf)));
+    sdllog("compile_shader failed:", static_cast{int}(type), success, buf);
     err_r = string_join{"\t"}(static_cast{int}(type), success, buf);
     glDeleteShader(res);
     res = 0;
   }
   return res;
-}
-
-private function void sdllog(cstrref const& mess)
-{
-  SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, mess);
 }
 
 private function uint
@@ -372,7 +369,7 @@ create_program(cstrref const& vertex_shader, cstrref const& fragment_shader,
     }
   }
   if (success == 0) {
-    sdllog(string_join{""}("create_program failed:", success));
+    sdllog("create_program failed:", success);
     glDeleteProgram(prog);
     prog = 0;
   } else {
@@ -386,14 +383,13 @@ create_program(cstrref const& vertex_shader, cstrref const& fragment_shader,
       glGetProgramInfoLog(prog, static_cast{GLsizei}(buf.size()), address(len),
 	buf.rawptr().char());
       buf.resize(static_cast{size_t}(len), 0);
-      sdllog(string_join{""}("linkprogram failed:",
-	      string_join{"\t"}(prog, buf)));
-      sdllog(string_join{""}("vert:", vertex_shader));
-      sdllog(string_join{""}("frag:", fragment_shader));
+      sdllog("linkprogram failed:", prog, buf);
+      sdllog("vert:", vertex_shader);
+      sdllog("frag:", fragment_shader);
       glDeleteProgram(prog);
       prog = 0;
     } else {
-      sdllog(string_join{""}("linkprogram succeeded:", prog));
+      sdllog("linkprogram succeeded:", prog);
     }
   }
   return prog;
