@@ -17,13 +17,15 @@ public import glgeometry -;
 public import glbuffer -;
 public import glnode -;
 public import pglshader -;
+public import pglscene -;
 public import pglcommon -;
 
 function void build_vertices(pglshader mutable& pgs)
 {
   metafunction tattr main_vertex_attributes;
   metafunction fill_v fill{tattr};
-  metafunction joint_v joint{tattr};
+  metafunction joint_v poly_joint{tattr};
+  metafunction point_joint_v point_joint{tattr};
   /* vtx0 */
   {
     const vtxs = pgs.make_vertices(0, "saucer");
@@ -34,7 +36,7 @@ function void build_vertices(pglshader mutable& pgs)
       bump_rec(0.01, 0.9, 5,
 	t,
 	sphere(10, fsmooth)))
-      (poly_t(), mesh_pos());
+      (poly_t(), mesh_index());
     vtxs->num_copies_hint = 32;
   }
   /* vtx2 */
@@ -44,7 +46,7 @@ function void build_vertices(pglshader mutable& pgs)
     regular_polygon(50.0, 3,
       bump_rec(1.0, 1.0, 1, joint_v(vtx2, "saucer", hole()), hole()),
       hole())
-      (poly_t(), mesh_pos());
+      (poly_t(), mesh_index());
   }
   /* vtx8 */
   {
@@ -53,7 +55,7 @@ function void build_vertices(pglshader mutable& pgs)
     regular_polygon(600.0, 4,
       rectangle_split(9, 8, joint_v(vtx, "block", hole())),
       hole())
-      (poly_t(), mesh_pos());
+      (poly_t(), mesh_index());
   }
   /* vtx9 */
   {
@@ -67,7 +69,7 @@ function void build_vertices(pglshader mutable& pgs)
 	    t, t, t))),
       rotate_local(glm::make_quat_angle_axis(-45.0, 0.0, 0.0, 1.0),
 	bump_rec(0.2, 1.0, 1, t, t)))
-      (poly_t(), mesh_pos());
+      (poly_t(), mesh_index());
   }
   /* vtx10 */
   {
@@ -79,7 +81,7 @@ function void build_vertices(pglshader mutable& pgs)
     regular_polygon(1.0, 6,
       bump_apply(m, false, t, t),
       bump_apply(m, false, t, t))
-      (poly_t(), mesh_pos());
+      (poly_t(), mesh_index());
     vtx->num_copies_hint = 32;
   }
   {
@@ -89,7 +91,7 @@ function void build_vertices(pglshader mutable& pgs)
     regular_polygon(600.0, 4,
       rectangle_split(170, 170, joint_v(vtx, "bullet", hole())),
       hole())
-      (poly_t(), mesh_pos());
+      (poly_t(), mesh_index());
   }
   {
     const vtx = pgs.make_vertices(0, "bullet2");
@@ -100,7 +102,7 @@ function void build_vertices(pglshader mutable& pgs)
     regular_polygon(1.0, 5,
       bump_rec(0.8, 0.8, 1, t, t),
       bump_rec(0.8, 0.8, 1, t, t))
-      (poly_t(), mesh_pos());
+      (poly_t(), mesh_index());
     vtx->num_copies_hint = 32;
   }
   /*
@@ -109,34 +111,34 @@ function void build_vertices(pglshader mutable& pgs)
     const vtx = pgs.make_vertices(0, "bullet2-multi");
     const t = fill_v(vtx);
     const rnd = make_rand_generator(991U);
-    rand_sphere(200.0, 40000, false, rnd,
+    rand_sphere(200.0, 40000, false, false, rnd,
       joint_v(vtx, "bullet2", hole()))
-      (poly_t(), mesh_pos());
+      (poly_t(), mesh_index());
   }
   */
   {
     const vtx = pgs.make_vertices(0, "bullet2-multi");
     const t = fill_v(vtx);
     const rnd = make_rand_generator(991U);
-    rand_sphere(200.0, 37000, false, rnd,
-      joint_v(vtx, "bullet2", hole()))
-      (poly_t(), mesh_pos());
+    rand_sphere(200.0, 37000, false, true, rnd,
+      point_joint_v(vtx, "bullet2", hole()))
+      (poly_t(), mesh_index());
   }
   {
     const vtx = pgs.make_vertices(0, "bullet2-multi2");
     const t = fill_v(vtx);
     const rnd = make_rand_generator(991U);
-    rand_sphere(200.0, 20000, false, rnd,
-      joint_v(vtx, "bullet2", hole()))
-      (poly_t(), mesh_pos());
+    rand_sphere(200.0, 20000, false, true, rnd,
+      point_joint_v(vtx, "bullet2", hole()))
+      (poly_t(), mesh_index());
   }
   {
     const vtx = pgs.make_vertices(0, "bullet2-multi3");
     const t = fill_v(vtx);
     const rnd = make_rand_generator(991U);
-    rand_sphere(200.0, 2000, false, rnd,
-      joint_v(vtx, "bullet2", hole()))
-      (poly_t(), mesh_pos());
+    rand_sphere(200.0, 2000, false, true, rnd,
+      point_joint_v(vtx, "bullet2", hole()))
+      (poly_t(), mesh_index());
   }
   {
     const vtx = pgs.make_vertices(0, "bullet-multi-2");
@@ -144,16 +146,24 @@ function void build_vertices(pglshader mutable& pgs)
     regular_polygon(600.0, 4,
       rectangle_split(80, 80, joint_v(vtx, "bullet", hole())),
       hole())
-      (poly_t(), mesh_pos());
+      (poly_t(), mesh_index());
+  }
+  {
+    const vtx = pgs.make_vertices(0, "saucer-multi3");
+    const t = fill_v(vtx);
+    const rnd = make_rand_generator(991U);
+    rand_sphere(200.0, 200, false, true, rnd,
+      point_joint_v(vtx, "saucer", hole()))
+      (poly_t(), mesh_index());
   }
   {
     /* particle */
     const vtx = pgs.make_vertices(1, "particle");
     const p = particle(vtx);
     const rnd = make_rand_generator(1U);
-    rand_sphere(1.0, 100, true, rnd, p)
+    rand_sphere(1.0, 100, true, true, rnd, p)
     //rand_sphere(1.0, 250, true, rnd, p)
-      (poly_t(), mesh_pos());
+      (poly_t(), mesh_index());
   }
   {
     /* particle multi */
@@ -163,29 +173,29 @@ function void build_vertices(pglshader mutable& pgs)
       // rectangle_split(200, 200, joint_v(vtx, "particle", hole())),
       rectangle_split(100, 100, joint_v(vtx, "particle", hole())),
       hole())
-      (poly_t(), mesh_pos());
+      (poly_t(), mesh_index());
     const vtx = bos[2]->get("particle-bb-multi")->vtxs;
     */
     const rnd = make_rand_generator(991U);
-    rand_sphere(60.0, 30000, true, rnd,
-      joint_v(vtx, "particle", hole()))
-      (poly_t(), mesh_pos());
+    rand_sphere(60.0, 30000, true, true, rnd,
+      point_joint_v(vtx, "particle", hole()))
+      (poly_t(), mesh_index());
   }
   {
     /* particle-bb */
     const vtx = pgs.make_vertices(2, "particle-bb");
     const p = particle_bb(vtx);
     const rnd = make_rand_generator(1U);
-    rand_sphere(1.0, 100, true, rnd, p)
-      (poly_t(), mesh_pos());
+    rand_sphere(1.0, 100, true, true, rnd, p)
+      (poly_t(), mesh_index());
   }
   {
     /* particle-bb multi */
     const vtx = pgs.make_vertices(2, "particle-bb-multi");
     const rnd = make_rand_generator(991U);
-    rand_sphere(60.0, 10000, true, rnd,
-      joint_v(vtx, "particle-bb", hole()))
-      (poly_t(), mesh_pos());
+    rand_sphere(60.0, 10000, true, true, rnd,
+      point_joint_v(vtx, "particle-bb", hole()))
+      (poly_t(), mesh_index());
   }
   {
     const vtx = pgs.make_vertices(2, "mixed");
@@ -194,7 +204,7 @@ function void build_vertices(pglshader mutable& pgs)
       // joint_v(vtx, "bullet2", hole()),
       // joint_v(vtx, "particle", hole()),
       joint_v(vtx, "particle-bb", hole()))
-      (poly_t(), mesh_pos());
+      (poly_t(), mesh_index());
   }
   /*
   */
@@ -238,45 +248,21 @@ function void build_vertices(pglshader mutable& pgs)
   }
 }
 
-public threaded struct node_data
-{
-  public glm::mat4 trans_initial;
-  public glm::mat4 trans_cur;
-}
-
-public threaded function void
-node_init(scene_node{node_data} mutable& sn)
-{
-  sn.data.trans_initial = sn.trans;
-  sn.data.trans_cur = sn.trans;
-}
-
 struct
-scene_control()
-{
-  public float prev_spawn = 0.0;
-}
-
-struct
-frame_control()
+frame_statistics()
 {
   public metafunction ticks_t farray{uint, 8};
   public uint tprevsec = 0;
-  public uint tprev = SDL_GetTicks();
   public uint frames = 0;
   public float mutable fps = 0.0;
-  public farray{uint, 2} mutable frame_tdiffs;
-  public float frame_speed_mul = 1.0f;
   public ticks_t ticks;
   public ticks_t ticks_sum;
-  public ticks_t ticks_sum_prev;
+  public ticks_t ticks_sum_saved;
   init();
   function void init() {
-    for (const i, mutable& e: frame_tdiffs) {
-      e = 1000U / cast_uint(frame_tdiffs.size());
-    }
+    const t = SDL_GetTicks();
     for (const i, mutable& e : ticks) {
-      e = tprev;
+      e = t;
     }
   }
   public function void save_ticks(size_t idx, uint v) {
@@ -292,25 +278,11 @@ frame_control()
     if (t - tprevsec >= 1000) {
       const seconds = cast_float(t - tprevsec) / 1000.0;
       fps = cast_float(frames) / seconds;
-      /*
-      sdllog(frames, "frames in", seconds, "seconds =",
-	  fps, "fps");
-      sdllog("ticks: ", ticks_sum);
-      */
-      ticks_sum_prev = ticks_sum;
+      ticks_sum_saved = ticks_sum;
       ticks_sum = ticks_t();
       tprevsec = t;
       frames = 0;
     }
-    mutable tdiff = cast_int(t - tprev);
-    tprev = t;
-
-    uint tdiff_frame_sum = cast_uint(tdiff);
-    for (const i: 1 .. frame_tdiffs.size()) {
-      tdiff_frame_sum += frame_tdiffs[i];
-      frame_tdiffs[i - 1] = frame_tdiffs[i];
-    }
-    frame_tdiffs[frame_tdiffs.size() - 1] = cast_uint(tdiff);
   }
 }
 
@@ -407,7 +379,7 @@ input_control()
     */
   }
   public function void finger_action_one_finger(position_angle mutable& target,
-      frame_control const& frctl, size_t fid)
+      framerate_control const& frctl, size_t fid)
   {
     mutable dx = (cur_pos[fid].x - start_pos[fid].x);
     mutable dy = (cur_pos[fid].y - start_pos[fid].y);
@@ -425,7 +397,7 @@ input_control()
     finger_xyrotate_delta.y = dy;
   }
   public function void finger_action_two_fingers(position_angle mutable& target,
-      frame_control const& frctl)
+      framerate_control const& frctl)
   {
     const d0 = cur_pos[0] - start_pos[0];
     const d1 = cur_pos[1] - start_pos[1];
@@ -475,7 +447,7 @@ input_control()
     }
   }
   public function void finger_action_step(player_info mutable& pl,
-      glm::vec3 mutable& pos_delta, frame_control const& frctl)
+      glm::vec3 mutable& pos_delta, framerate_control const& frctl)
   {
     position_angle mutable& posang = pl.posang;
     /*
@@ -546,7 +518,7 @@ input_control()
 	* frctl.frame_speed_mul);
     */
   }
-  public function void add_zdelta(float zaccel, frame_control const& frctl)
+  public function void add_zdelta(float zaccel, framerate_control const& frctl)
   {
     finger_zmove_delta += zaccel * frctl.frame_speed_mul;
     if (finger_zmove_delta <= -1.0) {
@@ -565,75 +537,59 @@ framerate_control(int vsync0)
   public int const vsync = vsync0;
   public int const swap_interval = SDL_GL_SetSwapInterval(vsync0);
   public double time_before_swapwindow = io::system.gettimeofday_double();
-  public farray{int, 64} delay_usec;
-  public int fixed_fps = 1;
-  public function void delay()
+  public farray{double, 2} frame_intervals;
+  public double sleep_carry = 0.0;
+  public double max_fps = 60.0;
+  public double target_interval = 1.0 / max_fps;
+  public float frame_speed_mul = 1.0;
+  public function void start()
   {
-    double latency_target = 1.0 / static_cast{float}(60 / fixed_fps);
-    if (true) {
-      const now = io::system.gettimeofday_double();
-      const td = max(now - time_before_swapwindow, 0.0);
-      const sleep_sec = latency_target - td;
-      if (sleep_sec > 0.0) {
-	if (fixed_fps > 1 || swap_interval > 1) {
-	  io::system.usleep(static_cast{uint}(sleep_sec * 1000000.0));
-	}
-	time_before_swapwindow += latency_target;
-	if (now - time_before_swapwindow < -1.0) {
-	  time_before_swapwindow = now + 1.0;
-	}
-      } else {
-	time_before_swapwindow = io::system.gettimeofday_double();
-      }
-      const sleep_usec = static_cast{int}(sleep_sec * 1000000.0);
-      int s_sum = sleep_usec;
-      int neg_cnt = 0;
-      for (const i: 0 .. delay_usec.size() - 1) {
-	const v = delay_usec[i];
-	s_sum += v;
-	delay_usec[i] = delay_usec[i + 1];
-	// sdllog("delay_usec[i]", i, v);
-	if (v < 0) {
-	  // sdllog("neg", v);
-	  ++neg_cnt;
-	}
-      }
-      delay_usec[delay_usec.size() - 1] = sleep_usec;
-      const s_avg = static_cast{double}(s_sum)
-	/ static_cast{double}(delay_usec.size());
-      /*
-      sdllog(fixed_fps, now - time_before_swapwindow, sleep_sec, s_avg,
-	neg_cnt);
-      */
-      /*
-      if (fixed_fps < 6) {
-	if (neg_cnt > static_cast{int}(delay_usec.size() / 4)) {
-	  sdllog("increment delay");
-	  ++fixed_fps;
-	  for (const i, mutable& v: delay_usec) {
-	    v = 0;
-	  }
-	}
-      }
-      */
-      /*
-      */
-      /*
-      if (neg_cnt > delay_usec.size() - 1 && fixed_fps < 6) {
-	++fixed_fps;
-	for (const i, mutable& v: delay_usec) {
-	  v = 0;
-	}
-	time_before_swapwindow = io::system.gettimeofday_double();
-      } else if (pos_cnt == delay_usec.size() - 1 && fixed_fps > 1) {
-	--fixed_fps;
-	for (const i, mutable& v: delay_usec) {
-	  v = 0;
-	}
-	time_before_swapwindow = io::system.gettimeofday_double();
-      }
-      */
+    target_interval = 1.0 / max_fps;
+    for (const i, mutable& v: frame_intervals) {
+      v = target_interval;
     }
+    time_before_swapwindow = io::system.gettimeofday_double();
+  }
+  public function void control()
+  {
+    const now = io::system.gettimeofday_double();
+    const cur_interval = max(now - time_before_swapwindow, 0.0);
+    double sum_interval = cur_interval;
+    for (const i: 0 .. frame_intervals.size() - 1) {
+      const v = frame_intervals[i + 1];
+      frame_intervals[i] = v;
+      sum_interval += v;
+    }
+    if (frame_intervals.size() > 1) {
+      frame_intervals[frame_intervals.size() - 1] = cur_interval;
+    }
+    const avg_interval = sum_interval
+      / static_cast{double}(frame_intervals.size());
+    if (target_interval > avg_interval) {
+      mutable tfr = 1.0 / target_interval;
+      //if (target_interval > 0.1) {
+//	tfr = 1.0 / cur_interval;
+//      } else
+      {
+	// tfr += max(0.1, target_interval * 3.0f);
+	// tfr += target_interval * 10.0f;
+	tfr += 0.1f;
+      }
+      tfr = max(min(tfr, max_fps), 1.0);
+      target_interval = 1.0 / tfr;
+    } else {
+      target_interval = avg_interval;
+    }
+    const sleep_sec = target_interval - cur_interval + sleep_carry;
+//sdllog("target", target_interval, "cur", cur_interval, "sleep", sleep_sec);
+    if (sleep_sec > 0.001) {
+      const ss = min(sleep_sec, 0.1);
+      io::system.usleep(static_cast{uint}((ss - 0.001) * 1000000.0));
+    }
+    time_before_swapwindow = io::system.gettimeofday_double();
+    const slept = time_before_swapwindow - now;
+    sleep_carry = max(min(sleep_sec - slept, 0.1), -0.1);
+    frame_speed_mul = static_cast{float}(target_interval * 60.0);
   }
 }
 
@@ -645,6 +601,7 @@ player_info()
   public bool accel;
   public float accel_ratio = 0.1f;
 }
+
 
 function void main_loop()
 {
@@ -667,87 +624,31 @@ function void main_loop()
   pglshader pgs = pglshader(sdlc.gles_flag, sdlc.glmajor, sdlc.glminor,
     sdlc.enable_msaa, sdlc.init_w, sdlc.init_h);
   build_vertices(pgs);
+  varray{instances_type} local_bo_instances;
   pgs.prepare_vertex_buffers();
+  pgs.prepare_bo_instances(local_bo_instances);
+  node_factory nfac;
+  nfac.prepare(pgs.vertex_buffers); 
+  motion_thread_object mto = motion_thread_object(nfac, local_bo_instances);
 
-  const scene_names = make_farray{string}(
-    "saucer", "saucer-multi", "block-multi", "block",
-    "bullet2-multi3", "bullet2-multi2", "bullet2-multi",
-    // "bullet2-multi", "bullet2-multi2", "bullet2-multi3",
-    "bullet-multi",
-    "particle", "particle-multi",
-    "particle-bb", "particle-bb-multi");
-  mutable size_t cur_scene = 0;
+  size_t saved_stat_num_objects;
+
   const test_scroll_mode = false;
-  mutable snode = make_ptr{scene_node{node_data}}(joint_id_type(),
-    glm::mat4());
-  {
-    const p1 = instantiate_cur_scene();
-    const p2 = make_ptr{scene_node{node_data}}(joint_id_type(), glm::mat4());
-      /* for font2 */
-    const p3 = make_ptr{scene_node{node_data}}(joint_id_type(), glm::mat4());
-      /* for lineparticle */
-    snode->children.push_back(p1);
-    snode->children.push_back(p2);
-    snode->children.push_back(p3);
-  }
-  function ptr{scene_node{node_data}} instantiate_cur_scene()
-  {
-    const name = scene_names[cur_scene];
-    joint_id_type scene_id = pgs.find_joint_id_by_name(name);
-    return pgs.make_node{node_data, node_init}(scene_id, glm::mat4());
-  }
-  function void set_text(ptr{scene_node{node_data}} const& nd,
-    cstrref const& text, uint x, uint y)
-  {
-    const n = text.size();
-    while (nd->children.size() < n) {
-      const p = make_ptr{scene_node{node_data}}(
-	pgs.find_joint_id_by_name("default_font"), glm::mat4());
-      nd->children.push_back(p);
-    }
-    if (nd->children.size() > n) {
-      nd->children.erase(n, nd->children.size());
-    }
-    const char_w = pgs.fti.char_w;
-    const screen_w = cast_float(pgs.cam.screen_width);
-    const screen_h = cast_float(pgs.cam.screen_height);
-    for (const i, const p: nd->children) {
-      const& sli = p->trans.slice();
-      sli[2] = (cast_float(x) / screen_w) * 2.0f - 1.0f;
-      sli[3] = (cast_float(y) / screen_h) * 2.0f - 1.0f;
-      x += char_w;
-      if (i < text.size()) {
-	sli[0] = static_cast{float}(text[i] - 0x20);
-      } else {
-	sli[0] = 0.0f;
-      }
-    }
-  }
-  function void scene_next()
-  {
-    ++cur_scene;
-    if (cur_scene >= scene_names.size()) {
-      cur_scene = 0;
-    }
-    snode->children[0] = instantiate_cur_scene();
-    rctl.fixed_fps = 1;
-  }
-
-  scene_control sctl;
-
   input_control ictl;
-  int motion_count = 0;
-
-  frame_control mutable frctl;
-  framerate_control mutable rctl = framerate_control(sdlc.vsync);
 
   player_info player;
   player.posang.angle = glm::make_quat_wxyz(1.0, 0.0, 0.0, 0.0);
-  player.posang.position = glm::make_vec3(0.0, 0.0, 10.0);
+  player.posang.position = glm::make_vec3(0.0, 0.0, 200.0);
+
+  projection_info cam_drawing_frame;
+
+  frame_statistics mutable fr;
+  framerate_control mutable frctl = framerate_control(sdlc.vsync);
 
   bool done = false;
   bool paused = false;
   while (!done) {
+    bool scene_next_flag = false;
     SDL_Event ev;
     while (SDL_PollEvent(ev)) {
       const etype = ev.type;
@@ -770,6 +671,7 @@ function void main_loop()
 	} else if (ev.window.event == SDL_WINDOWEVENT_RESTORED ||
 	    ev.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) {
 	  paused = false;
+	  frctl.start();
 	  sdllog("restored");
 	} else {
 	  /*
@@ -780,10 +682,9 @@ function void main_loop()
 	const bx = cast_float(ev.button.x) / cast_float(pgs.cam.screen_width);
 	const by = cast_float(ev.button.y) / cast_float(pgs.cam.screen_height);
 	if (bx < 0.1 && by < 0.1) {
-	  scene_next();
+	  scene_next_flag = true;
 	}
 	if (bx > 0.9 && by < 0.1) {
-	  rctl.fixed_fps = rctl.fixed_fps != 6 ? rctl.fixed_fps + 1 : 1;
 	}
 	if (bx > 0.9 && by > 0.9) {
 	  pgs.cam.light_on = pgs.cam.light_on > 0.5f ? 0.0f : 1.0f;
@@ -810,10 +711,9 @@ function void main_loop()
 	*/
 	ictl.finger_down(ev.tfinger.x, ev.tfinger.y, ev.tfinger.fingerId);
 	if (ev.tfinger.x < 0.1 && ev.tfinger.y < 0.1) {
-	  scene_next();
+	  scene_next_flag = true;
 	}
 	if (ev.tfinger.x > 0.9 && ev.tfinger.y < 0.1) {
-	  rctl.fixed_fps = rctl.fixed_fps != 6 ? rctl.fixed_fps + 1 : 1;
 	}
 	if (ev.tfinger.x > 0.9 && ev.tfinger.y > 0.9) {
 	  player.accel = !player.accel;
@@ -843,6 +743,7 @@ function void main_loop()
 	int h;
 	SDL_GL_GetDrawableSize(sdlc.sdl_window.some, w, h);
 	pgs.resize_screen(w, h);
+	frctl.start();
       } else if (etype == SDL_QUIT) {
 	done = true;
 	break;
@@ -850,10 +751,9 @@ function void main_loop()
       } else if (etype == SDL_KEYDOWN) {
 	// sdllog("KEYDOWN event");
 	if (ev.key.keysym.scancode == SDL_SCANCODE_TAB) {
-	  scene_next();
+	  scene_next_flag = true;
 	}
 	if (ev.key.keysym.scancode == SDL_SCANCODE_F) {
-	  rctl.fixed_fps = rctl.fixed_fps != 6 ? rctl.fixed_fps + 1 : 1;
 	}
       } else {
 	string s;
@@ -861,126 +761,6 @@ function void main_loop()
 	sdllog("unknown event", s);
 	/* */
       }
-    }
-    frctl.save_ticks(0, SDL_GetTicks());
-    if (paused) {
-      SDL_Delay(100);
-      frctl.tprev = SDL_GetTicks();
-      frctl.tprevsec = frctl.tprev;
-      continue;
-    } else {
-      function void step_lp(scene_control mutable& sctl,
-	scene_node{node_data} mutable& sn_lp, float speed)
-      {
-	for (const i, const& snp: sn_lp.children) {
-	  const& sli = snp->trans.slice();
-	  mutable vec0 = glm::make_vec3(sli[0], sli[1], sli[2]);
-	  mutable vec1 = glm::make_vec3(sli[3], sli[4], sli[5]);
-	  const vd = vec1 - vec0;
-	  vec0 += vd / 4.0f;
-	  vec1 += vd / 4.0f;
-	  sli[0] = vec0.x;
-	  sli[1] = vec0.y;
-	  sli[2] = vec0.z;
-	  sli[3] = vec1.x;
-	  sli[4] = vec1.y;
-	  sli[5] = vec1.z;
-	  const step = sli[7] + speed;
-	  sli[7] = step;
-	}
-	function bool is_finished(ptr{scene_node{node_data}} const& snp) {
-	  const& sli = snp->trans.slice();
-	  return sli[7] > 200.0f;
-	}
-	// sdllog("erase?", sn_lp.children.size());
-	erase_cond{is_finished}(sn_lp.children);
-      }
-      function void spawn_lp(scene_control mutable& sctl,
-	scene_node{node_data} mutable& sn_lp, glm::mat4 const& tr, float speed)
-      {
-	size_t const lim = is_gles != 0 ? 20000U : 200000U;
-	if (sn_lp.children.size() > lim /* || pgs.cam.light_on > 0.0 */) {
-	  return;
-	}
-	// sdllog("post erase?", sn_lp.children.size());
-	const p3 = make_ptr{scene_node{node_data}}(
-	  pgs.find_joint_id_by_name("lineparticle"), glm::mat4());
-	const& sli = p3->trans.slice();
-	const p0 = tr * glm::make_vec4(0.0f, 0.0f, -5.0f, 1.0f);
-	const p1 = tr * glm::make_vec4(0.0f, 0.0f, -10.0f, 1.0f);
-	sli[0] = p0.x; /* position0 */
-	sli[1] = p0.y;
-	sli[2] = p0.z;
-	sli[3] = p1.x; /* position1 */
-	sli[4] = p1.y;
-	sli[5] = p1.z;
-	sli[6] = 0.25f; /* point_size_base */
-	sli[7] = 0.0f; /* step */
-	sn_lp.children.push_back(p3);
-      }
-      step_lp(sctl, *snode->children[2], frctl.frame_speed_mul);
-      // spawn_lp(sctl, *snode->children[2], frctl.frame_speed_mul);
-      bool spawn_now = false;
-      {
-	sctl.prev_spawn += frctl.frame_speed_mul;
-	if (sctl.prev_spawn > 3.0) {
-	  spawn_now = true;
-	  sctl.prev_spawn -= 3.0;
-	}
-      }
-      function void step_snobj(scene_control mutable& sctl,
-	scene_node{node_data} mutable& snobj,
-	scene_node{node_data} mutable& sn_lp, float speed)
-      {
-	const rnd = make_rand_generator(1U);
-	for (const ci, const& csnp: snobj.children) {
-	  mutable& csn = *csnp;
-	  const ui = rnd->generate() / 65536;
-	  const t = static_cast{float}(ui)
-	    / static_cast{float}(65536) * pi_float() * 2.0;
-	  const x = sin(t);
-	  const y = cos(t);
-	  const ang = glm::make_quat_angle_axis(
-	    static_cast{float}(motion_count), x, y, 0.0);
-	  csn.trans = csn.data.trans_initial * ang.to_mat4();
-	  if (spawn_now) {
-	    spawn_lp(sctl, sn_lp, csn.trans, speed);
-	  }
-	}
-      }
-      step_snobj(sctl, *snode->children[0], *snode->children[2],
-	frctl.frame_speed_mul);
-      motion_count += 1 * static_cast{int}(frctl.frame_speed_mul);
-      if (motion_count >= 360) {
-	motion_count -= 360;
-      }
-    }
-    const mess = string_join{" "}(frctl.fps, frctl.frame_speed_mul,
-      frctl.ticks_sum_prev, ictl.finger_zmove_delta,
-      snode->children[2]->children.size(),
-      pgs.cam.camera.angle, player.pos_delta);
-    set_text(snode->children[1], mess, 0, 0);
-    frctl.save_ticks(1, SDL_GetTicks());
-    {
-      /* draw frame */
-      pgs.cam.camera = player.posang;
-      pgs.cam.light.position = pgs.cam.camera.position +
-	pgs.cam.camera.angle.to_mat3() * glm::make_vec3(3.0, 3.0, 5.0);
-      pgs.cam.light.angle = pgs.cam.camera.angle;
-      varray{uint} tick_draw;
-      if (!paused) {
-	tick_draw = draw_frame(pgs, *snode, mess);
-      }
-      if (tick_draw.size() > 2) {
-	frctl.save_ticks(2, tick_draw[0]);
-	frctl.save_ticks(3, tick_draw[1]);
-      } else {
-	frctl.save_ticks(2, SDL_GetTicks());
-	frctl.save_ticks(3, SDL_GetTicks());
-      }
-      frctl.save_ticks(4, SDL_GetTicks());
-      frctl.measure();
-      frctl.frame_speed_mul = static_cast{float}(rctl.fixed_fps);
     }
     {
       SDL_KeyboardState const ks;
@@ -1043,11 +823,59 @@ function void main_loop()
       }
       ictl.finger_action_step(player, player.pos_delta, frctl);
     }
-    frctl.save_ticks(5, SDL_GetTicks());
-    rctl.delay();
-    frctl.save_ticks(6, SDL_GetTicks());
+    fr.save_ticks(0, SDL_GetTicks());
+    if (paused) {
+      SDL_Delay(100);
+      fr.tprevsec = SDL_GetTicks();
+      continue;
+    }
+    /* set camera and light */
+    {
+      pgs.cam.camera = player.posang;
+      pgs.cam.light.position = pgs.cam.camera.position +
+	pgs.cam.camera.angle.to_mat3() * glm::make_vec3(3.0, 3.0, 5.0);
+      pgs.cam.light.angle = pgs.cam.camera.angle;
+    }
+    /* motion and prepare instance data */
+    {
+      const mess = string_join{" "}(fr.fps, frctl.frame_speed_mul,
+	fr.ticks_sum_saved,
+	saved_stat_num_objects,
+	ictl.finger_zmove_delta,
+	pgs.cam.camera.angle, player.pos_delta);
+      mto.wait_and_exec{swap_data_cl}();
+      function void swap_data_cl(motion_thread_shared mutable& mts) {
+	// fr.save_ticks(1, SDL_GetTicks());
+	cam_drawing_frame = mts.cam;
+	mts.cam = pgs.cam;
+	mts.frame_speed_mul = frctl.frame_speed_mul;
+	mts.scene_reset = scene_next_flag ? 0 : -1;
+	mts.message = mess;
+	mts.message_char_w = pgs.fti.char_w;
+	local_bo_instances.swap(mts.bo_instances);
+	saved_stat_num_objects = mts.stat_num_objects;
+      }
+    }
+    fr.save_ticks(1, SDL_GetTicks());
+    {
+      /* draw frame */
+      varray{uint} tick_draw;
+      tick_draw = draw_frame(pgs, local_bo_instances, cam_drawing_frame);
+      if (tick_draw.size() > 2) {
+	fr.save_ticks(2, tick_draw[0]);
+	fr.save_ticks(3, tick_draw[1]);
+      } else {
+	fr.save_ticks(2, SDL_GetTicks());
+	fr.save_ticks(3, SDL_GetTicks());
+      }
+      fr.save_ticks(4, SDL_GetTicks());
+      fr.measure();
+    }
+    fr.save_ticks(5, SDL_GetTicks());
+    frctl.control();
+    fr.save_ticks(6, SDL_GetTicks());
     SDL_GL_SwapWindow(sdlc.sdl_window.some);
-    frctl.save_ticks(7, SDL_GetTicks());
+    fr.save_ticks(7, SDL_GetTicks());
   }
 }
 

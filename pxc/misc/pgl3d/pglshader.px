@@ -19,6 +19,105 @@ public import glgeometry -;
 public import glbuffer -;
 public import glnode -;
 
+valuetype struct
+glconfig(bool is_gles0, int major0, int minor0, bool msaa0)
+{
+  public bool const is_gles = is_gles0;
+  public int const major = major0;
+  public int const minor = minor0;
+  public bool enable_shadowmapping = true;
+  public bool enable_shadowmapping_multisample = false;
+  public bool enable_normalmapping = true;
+  public bool enable_deferred = false;
+  public bool enable_zprepass = !is_gles && !enable_deferred;
+  public bool enable_msaa = msaa0;
+  public bool enable_instanced = major >= 3 && use_copying_instancing == 0;
+  public bool enable_uniform_instancing = enable_instanced &&
+    // (is_gles || minor < 3 || true);
+    (major < 3 || (!is_gles && minor < 3));
+  public bool enable_depth_texture = !is_android;
+  public bool enable_sampler2dshadow = enable_depth_texture && !is_gles;
+  public function bool is_gl3_or_gles3() const { return major >= 3; }
+  public function bool is_gl33_or_gles3() const {
+    return major >= 3 && (is_gles || minor >= 3); }
+  public function strlit prepend() const {
+    if (is_gles) {
+      if (is_gl3_or_gles3()) {
+	return "#version 300 es\nprecision highp float;\n";
+      } else {
+	return "precision highp float;\n";
+      }
+    } else {
+      if (is_gl3_or_gles3()) {
+	return "#version 150\n";
+      } else {
+	return "#version 120\n";
+      }
+    }
+    /*
+    return is_gles ? "precision highp float;\n" :
+	   is_gl3() ? "#version 150\n" :
+	   "#version 120\n"; }
+    */
+  }
+  public function strlit vert_in() const {
+    return is_gl3_or_gles3() ? "in " : "attribute "; }
+  public function strlit vert_out() const {
+    return is_gl3_or_gles3() ? "out " : "varying "; }
+  public function strlit frag_in() const {
+    return is_gl3_or_gles3() ? "in " : "varying "; }
+  public function strlit texture2d() const {
+    return is_gl3_or_gles3() ? "texture" : "texture2D"; }
+  public function strlit shadow2d() const {
+    return is_gl3_or_gles3() ? "texture" : "shadow2D"; }
+  public function strlit fragcolor() const {
+    return is_gl3_or_gles3() ? "fragcolor" : "gl_FragColor"; }
+  public function strlit decl_fragcolor() const {
+    return is_gl3_or_gles3() ? "out vec4 fragcolor;\n" : "\n"; }
+  public function string decl_instance_id(bool has_iid) const {
+    if (use_copying_instancing != 0 && has_iid) {
+      return vert_in() + "float instance_id;\n";
+    } else {
+      return "";
+    }
+  }
+  public function string decl_instance_attr(cstrref const& t, cstrref const& n,
+      bool has_iid)
+    const {
+    if (use_copying_instancing != 0 && has_iid) {
+      return "uniform " + t + " " + n + "["
+	+ m::to_string{uniform_instancing_mul} + "];\n";
+    } else {
+      if (enable_instanced) {
+	if (enable_uniform_instancing) {
+	  return "uniform " + t + " " + n + "["
+	    + m::to_string{uniform_instancing_mul} + "];\n";
+	} else {
+	  return vert_in() + t + " " + n + ";\n";
+	}
+      } else {
+	return "uniform " + t + " " + n + ";\n";
+      }
+    }
+  }
+  public function string instance_attr(cstrref const& n, bool has_iid) const {
+    if (use_copying_instancing != 0 && has_iid) {
+      return n + "[int(instance_id)]";
+    } else {
+      if (enable_instanced && enable_uniform_instancing) {
+	return n + "[gl_InstanceID]";
+      } else {
+	return n;
+      }
+    }
+  }
+  public function string empty_shader_vert() const {
+    return prepend() +
+      "void main(void) { gl_Position = vec4(0.0, 0.0, 0.0, 1.0); }\n"; }
+  public function string empty_shader_frag() const {
+    return prepend() + "void main(void) { }\n"; }
+}
+
 public struct sdlcontext()
 {
   private SDL_Init init_object = SDL_Init(SDL_INIT_VIDEO);
@@ -138,106 +237,6 @@ public struct sdlcontext()
   }
 }
 
-valuetype struct
-glconfig(bool is_gles0, int major0, int minor0, bool msaa0)
-{
-  public bool const is_gles = is_gles0;
-  public int const major = major0;
-  public int const minor = minor0;
-  public bool enable_shadowmapping = true;
-  public bool enable_shadowmapping_multisample = false;
-  public bool enable_normalmapping = true;
-  public bool enable_deferred = false;
-  public bool enable_zprepass = !is_gles && !enable_deferred;
-  public bool enable_msaa = msaa0;
-  public bool enable_instanced = major >= 3 && use_copying_instancing == 0;
-  public bool enable_uniform_instancing = enable_instanced &&
-    // (is_gles || minor < 3 || true);
-    // (is_gles || minor < 3);
-    (major < 3 || (!is_gles && minor < 3));
-  public bool enable_depth_texture = !is_android;
-  public bool enable_sampler2dshadow = enable_depth_texture && !is_gles;
-  public function bool is_gl3_or_gles3() const { return major >= 3; }
-  public function bool is_gl33_or_gles3() const {
-    return major >= 3 && (is_gles || minor >= 3); }
-  public function strlit prepend() const {
-    if (is_gles) {
-      if (is_gl3_or_gles3()) {
-	return "#version 300 es\nprecision highp float;\n";
-      } else {
-	return "precision highp float;\n";
-      }
-    } else {
-      if (is_gl3_or_gles3()) {
-	return "#version 150\n";
-      } else {
-	return "#version 120\n";
-      }
-    }
-    /*
-    return is_gles ? "precision highp float;\n" :
-	   is_gl3() ? "#version 150\n" :
-	   "#version 120\n"; }
-    */
-  }
-  public function strlit vert_in() const {
-    return is_gl3_or_gles3() ? "in " : "attribute "; }
-  public function strlit vert_out() const {
-    return is_gl3_or_gles3() ? "out " : "varying "; }
-  public function strlit frag_in() const {
-    return is_gl3_or_gles3() ? "in " : "varying "; }
-  public function strlit texture2d() const {
-    return is_gl3_or_gles3() ? "texture" : "texture2D"; }
-  public function strlit shadow2d() const {
-    return is_gl3_or_gles3() ? "texture" : "shadow2D"; }
-  public function strlit fragcolor() const {
-    return is_gl3_or_gles3() ? "fragcolor" : "gl_FragColor"; }
-  public function strlit decl_fragcolor() const {
-    return is_gl3_or_gles3() ? "out vec4 fragcolor;\n" : "\n"; }
-  public function string decl_instance_id(bool has_iid) const {
-    if (use_copying_instancing != 0 && has_iid) {
-      return vert_in() + "float instance_id;\n";
-    } else {
-      return "";
-    }
-  }
-  public function string decl_instance_attr(cstrref const& t, cstrref const& n,
-      bool has_iid)
-    const {
-    if (use_copying_instancing != 0 && has_iid) {
-      return "uniform " + t + " " + n + "["
-	+ m::to_string{uniform_instancing_mul} + "];\n";
-    } else {
-      if (enable_instanced) {
-	if (enable_uniform_instancing) {
-	  return "uniform " + t + " " + n + "["
-	    + m::to_string{uniform_instancing_mul} + "];\n";
-	} else {
-	  return vert_in() + t + " " + n + ";\n";
-	}
-      } else {
-	return "uniform " + t + " " + n + ";\n";
-      }
-    }
-  }
-  public function string instance_attr(cstrref const& n, bool has_iid) const {
-    if (use_copying_instancing != 0 && has_iid) {
-      return n + "[int(instance_id)]";
-    } else {
-      if (enable_instanced && enable_uniform_instancing) {
-	return n + "[gl_InstanceID]";
-      } else {
-	return n;
-      }
-    }
-  }
-  public function string empty_shader_vert() const {
-    return prepend() +
-      "void main(void) { gl_Position = vec4(0.0, 0.0, 0.0, 1.0); }\n"; }
-  public function string empty_shader_frag() const {
-    return prepend() + "void main(void) { }\n"; }
-}
-
 tsvaluetype struct main_uniforms
 {
   public glm::mat4 view_projection_matrix;
@@ -341,7 +340,7 @@ tsvaluetype struct font2_uniforms
   public int sampler;
 }
 
-tsvaluetype struct font2_instance_attributes
+public tsvaluetype struct font2_instance_attributes
 {
   public glm::vec4 idata;
 }
@@ -455,7 +454,7 @@ threaded struct font_texture_info
   public auto_buffer text_vbo;
 }
 
-public valuetype struct position_angle
+public tsvaluetype struct position_angle
 {
   public glm::vec3 position;
   public glm::quat angle;
@@ -477,94 +476,152 @@ public valuetype struct position_angle
   }
 }
 
-struct
+public tsvaluetype struct
 projection_info()
 {
   public glm::mat4 projection;
+  public glm::mat4 sm_projection;
   public position_angle camera;
+  public position_angle light;
   public int screen_width;
   public int screen_height;
   public bool proj_light;
-  public shadowmap_fbo sm;
-  public glm::mat4 sm_projection;
-  public position_angle light;
   public float light_on = 1.0;
   public float const distance_max = 1000.0;
 }
 
-private struct node_common_data
+private function void
+send_instance_data(varray{instances_type} mutable& ibs,
+  instance_buffer_type mutable& gibuf, bool enable_instanced,
+  bool enable_uniform_instancing)
 {
-  public glm::mat4 shadowmapping_vp;
-  public glm::mat4 vp;
-}
-
-private function {tsn} void
-prepare_instance_data(tsn const& sn, node_common_data const& ncd,
-  cslice{ptr{vertex_buffer}} const& bos)
-{
-  const bo_id = sn.joint_id.bo_id;
-  const vs_id = sn.joint_id.vs_id;
-  if (bo_id >= 0 && vs_id >= 0) {
-    const& bo = bos[bo_id];
-    const& ibarr = bo->instances[static_cast{size_t}(vs_id)];
-    if (bo_id == 1) {
-      /* particle */
-      const mvp = ncd.vp * sn.trans;
-      buffer_append(ibarr[0]->instance_buffer, mvp);
-    } else if (bo_id == 4) {
-      /* lineparticle */
-      const sli = sn.trans.cslice();
-      lineparticle_instance_attributes v;
-      const sli_idata = v.idata.slice();
-      for (const i: 0 .. 9U) {
-	sli_idata[i] = sli[i];
-      }
-      /*
-      v.position0 = glm::make_vec3(sli[0], sli[1], sli[2]);
-      v.position1 = glm::make_vec3(sli[3], sli[4], sli[5]);
-      v.point_size_base = sli[6];
-      */
-      buffer_append(ibarr[0]->instance_buffer, v);
-    } else if (bo_id == 3) {
-      const sli = sn.trans.cslice();
-      font2_instance_attributes v;
-      v.idata = glm::make_vec4(sli[0], sli[1], sli[2], sli[3]);
-      buffer_append(ibarr[0]->instance_buffer, v);
-    } else {
-      /* ibuf_id == 0 for model matrix */
-      buffer_append(ibarr[0]->instance_buffer, sn.trans);
-      if (bo_id == 0) {
-	/* ibuf_id == 1 for shadowmapping mvp */
-	const smvp = ncd.shadowmapping_vp * sn.trans;
-	buffer_append(ibarr[1]->instance_buffer, smvp);
+  if (enable_instanced && !enable_uniform_instancing) {
+    size_t offset_float = 0;
+    for (const bo_id, mutable& ib: ibs) {
+      for (const vs_id, mutable& vs: ib) {
+	for (const i, mutable& inst: vs) {
+	  mutable& arr = inst.instance_buffer;
+	  inst.glbuffer_offset_float = offset_float;
+	  offset_float += arr.size();
+	}
       }
     }
-  }
-  for (const i, const& snp: sn.children) {
-    prepare_instance_data(*snp, ncd, bos);
+    if (offset_float != 0) {
+      mutable& cur_buf = *gibuf.get_current();
+      const size_t total_size_float = offset_float;
+      offset_float = 0;
+      cur_buf.client_wait_sync(1000000000U * 10U);
+      cur_buf.map_buffer(total_size_float * 4U);
+      const rawptr{float} mapped_ptr = cur_buf.mapped_ptr;
+  //sdllog("mapped_ptr", mapped_ptr, total_size_float * 4U);
+      for (const bo_id, mutable& ib: ibs) {
+	for (const vs_id, mutable& vs: ib) {
+	  for (const i, mutable& inst: vs) {
+	    mutable& arr = inst.instance_buffer;
+	    // if (bo_id == 3) { sdllog("font2 instance", arr); }
+	    const size_t sz = arr.size();
+	    const sli = rawptr_to_slice{float}(mapped_ptr + offset_float, sz);
+	    for (const j: 0 .. sz) {
+	      sli[j] = arr[j];
+	    }
+	    offset_float += sz;
+	  }
+	}
+      }
+      cur_buf.unmap_buffer();
+    }
   }
 }
 
-public function {tsn} varray{uint}
-draw_frame(pglshader mutable& pgs, tsn const& sn, cstrref const& mess)
+
+private function void
+finished_using_instance_data(instance_buffer_type mutable& gibuf,
+  bool enable_instanced, bool enable_uniform_instancing)
+{
+  if (enable_instanced && !enable_uniform_instancing) {
+    gibuf.get_current()->fence_sync();
+    gibuf.switch_buffer();
+  }
+}
+
+private function void
+draw_instanced(shader_i mutable& sdr, vertex_buffer const& bo,
+  instances_type mutable& ibs,
+  instance_buffer_type mutable& gibuf, size_t bo_id,
+  size_t ibuf_id, bool enable_instanced, bool enable_uniform_instancing)
+{
+//sdllog("draw_instanced", bo_id);
+  bo.draw_pre(sdr);
+  if (enable_instanced && !enable_uniform_instancing) {
+    sdr.enable_instance_attrib_array(true);
+    // glBindBuffer(GL_ARRAY_BUFFER, gibuf.vbo_inst.get());
+    glBindBuffer(GL_ARRAY_BUFFER, gibuf.get_current()->vbo.get());
+  }
+  for (const vs_id: 0 .. bo.num_vs()) {
+    mutable& instance = ibs[static_cast{size_t}(vs_id)][ibuf_id];
+    mutable& arr = instance.instance_buffer;
+    // sdllog("draw_elems", ji.bo_id, ji.vs_id, "model=", arr.size());
+    if (enable_instanced && !enable_uniform_instancing) {
+      if (m::ne{is_gl3_or_gles3, 0}) {
+	// sdllog("vattr instancing");
+	/*
+	glBindBuffer(GL_ARRAY_BUFFER, instance.vbo_inst.get());
+	*/
+	sdr.instance_attrib_pointer(instance.glbuffer_offset_float);
+//sdllog("draw_elems_instanced", vs_id, gibuf.async_buffer_current, gibuf.get_current()->vbo.get());
+	bo.draw_elems_instanced(static_cast{size_t}(vs_id),
+	  arr.size() / sdr.instance_attrib_num_float());
+	/*
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	*/
+      }
+    } else if (enable_uniform_instancing) {
+      size_t const iattr_num_float = sdr.instance_attrib_num_float();
+      size_t j;
+      size_t const jmax = arr.size();
+//sdllog("bo", bo_id, "iattr_num_float", iattr_num_float, jmax);
+      for (j = 0; j < jmax; j += iattr_num_float * uniform_instancing_mul) {
+	size_t k = min((jmax - j) / iattr_num_float, uniform_instancing_mul);
+	sdr.instance_attrib_set_uniform(arr, j, k);
+	bo.draw_elems_instanced(static_cast{size_t}(vs_id), k);
+      }
+    } else {
+      size_t const iattr_num_float = sdr.instance_attrib_num_float();
+      size_t j;
+      size_t const jmax = arr.size();
+      const& be = *bo.get_by_id(static_cast{size_t}(vs_id));
+      const inst_mul = be.vtxs->num_copies;
+//sdllog("bo", bo_id, "iattr_num_float", iattr_num_float, jmax);
+      for (j = 0; j < jmax; j += iattr_num_float * inst_mul) {
+	size_t k = min((jmax - j) / iattr_num_float, inst_mul);
+	sdr.instance_attrib_set_uniform(arr, j, k);
+	bo.draw_elems(static_cast{size_t}(vs_id), k);
+      }
+      /*
+      for (j = 0; j < jmax; j += iattr_num_float) {
+	sdr.instance_attrib_set_uniform(arr, j, 1);
+	bo.draw_elems(static_cast{size_t}(vs_id), 1);
+      }
+      */
+    }
+  }
+  if (enable_instanced && !enable_uniform_instancing) {
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    sdr.enable_instance_attrib_array(false);
+  }
+  bo.draw_post(sdr);
+}
+
+public function varray{uint}
+draw_frame(pglshader mutable& pgs, varray{instances_type} mutable& bo_instances,
+    projection_info const& cam_df)
 {
   const& bos = pgs.vertex_buffers;
   /* prepare instance data */
-  const sm_view = pgs.cam.light.to_mat4().inverse();
-  const sm_vp = pgs.cam.sm_projection * sm_view;
-  {
-    for (const i, const& bo: bos) {
-      bo->clear_instances();
-    }
-    const vp = pgs.cam.projection * pgs.cam.camera.to_mat4().inverse();
-    /* shadowmap view and view-projection matrix */
-    node_common_data ncd;
-    ncd.shadowmapping_vp = sm_vp;
-    ncd.vp = vp;
-    prepare_instance_data(sn, ncd, bos);
-  }
+  const sm_view = cam_df.light.to_mat4().inverse();
+  const sm_vp = cam_df.sm_projection * sm_view;
   const tick1 = SDL_GetTicks();
-  sn.send_instance_data(bos, pgs.global_ibuffer,
+  send_instance_data(bo_instances, pgs.global_ibuffer,
       pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
   const tick2 = SDL_GetTicks();
   /* shadowmapping shader */
@@ -587,12 +644,12 @@ draw_frame(pglshader mutable& pgs, tsn const& sn, cstrref const& mess)
     glDisable(GL_BLEND);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     /* note: view_projection is pre-applied to model_matrix */
-    sn.draw_instanced(*pgs.smsdr, *bos[0], pgs.global_ibuffer,
+    draw_instanced(*pgs.smsdr, *bos[0], bo_instances[0], pgs.global_ibuffer,
 	0, 1, pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
   }
-  glViewport(0, 0, static_cast{GLsizei}(pgs.cam.screen_width),
-    static_cast{GLsizei}(pgs.cam.screen_height));
+  glViewport(0, 0, static_cast{GLsizei}(cam_df.screen_width),
+    static_cast{GLsizei}(cam_df.screen_height));
   /* z-prepass shader */
   if (pgs.glc.enable_zprepass) {
     glUseProgram(pgs.zpsdr->program);
@@ -605,15 +662,15 @@ draw_frame(pglshader mutable& pgs, tsn const& sn, cstrref const& mess)
     glClear(GL_DEPTH_BUFFER_BIT);
     glColorMask(0, 0, 0, 0);
     mutable view = glm::mat4();
-    if (pgs.cam.proj_light) {
-      view = pgs.cam.light.to_mat4().inverse();
+    if (cam_df.proj_light) {
+      view = cam_df.light.to_mat4().inverse();
     } else {
-      view = pgs.cam.camera.to_mat4().inverse();
+      view = cam_df.camera.to_mat4().inverse();
     }
-    const vp = pgs.cam.projection * view;
+    const vp = cam_df.projection * view;
     glUniformMatrix4fv(pgs.zpsdr->u_view_projection_matrix, 1, 0,
       vp.crawptr());
-    sn.draw_instanced(*pgs.zpsdr, *bos[0], pgs.global_ibuffer,
+    draw_instanced(*pgs.zpsdr, *bos[0], bo_instances[0], pgs.global_ibuffer,
 	0, 0, pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
   }
   /* main or ds1 shader */
@@ -645,16 +702,16 @@ draw_frame(pglshader mutable& pgs, tsn const& sn, cstrref const& mess)
     if (pgs.glc.enable_deferred) {
       /* noop */
     } else {
-      glUniform3fv(pgs.sdr->u_light_pos, 1, pgs.cam.light.position.crawptr());
-      glUniform3fv(pgs.sdr->u_camera_pos, 1, pgs.cam.camera.position.crawptr());
+      glUniform3fv(pgs.sdr->u_light_pos, 1, cam_df.light.position.crawptr());
+      glUniform3fv(pgs.sdr->u_camera_pos, 1, cam_df.camera.position.crawptr());
     }
     mutable view = glm::mat4();
-    if (pgs.cam.proj_light) {
-      view = pgs.cam.light.to_mat4().inverse();
+    if (cam_df.proj_light) {
+      view = cam_df.light.to_mat4().inverse();
     } else {
-      view = pgs.cam.camera.to_mat4().inverse();
+      view = cam_df.camera.to_mat4().inverse();
     }
-    const vp = pgs.cam.projection * view;
+    const vp = cam_df.projection * view;
     const red = make_farray{float}(0.8, 0.1, 0.0, 1.0);
     if (pgs.glc.enable_deferred) {
       glUniformMatrix4fv(pgs.ds1sdr->u_view_projection_matrix, 1, 0,
@@ -663,17 +720,18 @@ draw_frame(pglshader mutable& pgs, tsn const& sn, cstrref const& mess)
       glUniform1i(pgs.sdr->u_sampler, 1);
       glUniform1i(pgs.sdr->u_sampler_tilemap, 2);
       glUniform1i(pgs.sdr->u_sampler_sm, 3);
-      glUniform1f(pgs.sdr->u_light_on, pgs.cam.light_on);
+      // glUniform1f(pgs.sdr->u_light_on, cam_df.light_on);
+      glUniform1f(pgs.sdr->u_light_on, 1.0f);
       glUniformMatrix4fv(pgs.sdr->u_shadowmap_vp, 1, 0, sm_vp.crawptr());
       glUniformMatrix4fv(pgs.sdr->u_view_projection_matrix, 1, 0,
 	vp.crawptr());
     }
     if (pgs.glc.enable_deferred) {
-      sn.draw_instanced(*pgs.ds1sdr, *bos[0],
+      draw_instanced(*pgs.ds1sdr, *bos[0], bo_instances[0],
 	  pgs.global_ibuffer, 0, 0,
 	  pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
     } else {
-      sn.draw_instanced(*pgs.sdr, *bos[0], pgs.global_ibuffer,
+      draw_instanced(*pgs.sdr, *bos[0], bo_instances[0], pgs.global_ibuffer,
 	  0, 0, pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
     }
     if (pgs.glc.enable_deferred) {
@@ -686,9 +744,9 @@ draw_frame(pglshader mutable& pgs, tsn const& sn, cstrref const& mess)
     glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
-    glUniform3fv(pgs.ds2sdr->u_light_pos, 1, pgs.cam.light.position.crawptr());
+    glUniform3fv(pgs.ds2sdr->u_light_pos, 1, cam_df.light.position.crawptr());
     glUniform3fv(pgs.ds2sdr->u_camera_pos, 1,
-	pgs.cam.camera.position.crawptr());
+	cam_df.camera.position.crawptr());
     glUniformMatrix4fv(pgs.ds2sdr->u_shadowmap_vp, 1, 0, sm_vp.crawptr());
     glUniform1i(pgs.ds2sdr->u_sampler, 1);
     glUniform1i(pgs.ds2sdr->u_sampler_tilemap, 2);
@@ -697,7 +755,7 @@ draw_frame(pglshader mutable& pgs, tsn const& sn, cstrref const& mess)
     glUniform1i(pgs.ds2sdr->u_sampler_ds1, 5);
     glUniform1i(pgs.ds2sdr->u_sampler_ds2, 6);
     glUniform1i(pgs.ds2sdr->u_sampler_ds3, 7);
-    glUniform1f(pgs.ds2sdr->u_light_on, pgs.cam.light_on);
+    glUniform1f(pgs.ds2sdr->u_light_on, cam_df.light_on);
     glBindBuffer(GL_ARRAY_BUFFER, pgs.dsfbo.ds_vbo.get());
     const vattr_position = cast_uint(pgs.ds2sdr->v_position);
     glEnableVertexAttribArray(vattr_position);
@@ -711,17 +769,17 @@ draw_frame(pglshader mutable& pgs, tsn const& sn, cstrref const& mess)
   {
 // FIXME
     mutable cam_mat = glm::mat4();
-    if (pgs.cam.proj_light) {
-      cam_mat = pgs.cam.light.to_mat4();
+    if (cam_df.proj_light) {
+      cam_mat = cam_df.light.to_mat4();
     } else {
-      cam_mat = pgs.cam.camera.to_mat4();
+      cam_mat = cam_df.camera.to_mat4();
     }
-    const vp = pgs.cam.projection * (cam_mat.inverse());
+    const vp = cam_df.projection * (cam_mat.inverse());
     glUseProgram(pgs.lpsdr->program);
     glUniformMatrix4fv(pgs.lpsdr->u_view_projection_matrix, 1, 0,
       vp.crawptr());
     const screen_size_px = make_farray{float}(
-      cast_float(pgs.cam.screen_width), cast_float(pgs.cam.screen_height));
+      cast_float(cam_df.screen_width), cast_float(cam_df.screen_height));
     glUniform2fv(pgs.lpsdr->u_screen_size_px, 1, screen_size_px.crawptr());
     glDisable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
@@ -733,18 +791,18 @@ draw_frame(pglshader mutable& pgs, tsn const& sn, cstrref const& mess)
     // glEnable(GL_BLEND);
     glDisable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE);
-    sn.draw_instanced(*pgs.lpsdr, *bos[4], pgs.global_ibuffer,
+    draw_instanced(*pgs.lpsdr, *bos[4], bo_instances[4], pgs.global_ibuffer,
 	4, 0, pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
   }
   /* particles-bb */
   {
     mutable cam_mat = glm::mat4();
-    if (pgs.cam.proj_light) {
-      cam_mat = pgs.cam.light.to_mat4();
+    if (cam_df.proj_light) {
+      cam_mat = cam_df.light.to_mat4();
     } else {
-      cam_mat = pgs.cam.camera.to_mat4();
+      cam_mat = cam_df.camera.to_mat4();
     }
-    const vp = pgs.cam.projection * (cam_mat.inverse());
+    const vp = cam_df.projection * (cam_mat.inverse());
     glUseProgram(pgs.prtbsdr->program);
     glUniformMatrix4fv(pgs.prtbsdr->u_view_projection_matrix, 1, 0,
       vp.crawptr());
@@ -757,7 +815,7 @@ draw_frame(pglshader mutable& pgs, tsn const& sn, cstrref const& mess)
     glDepthMask(0);
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE);
-    sn.draw_instanced(*pgs.prtbsdr, *bos[2],
+    draw_instanced(*pgs.prtbsdr, *bos[2], bo_instances[2],
 	pgs.global_ibuffer, 2, 0,
 	pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
   }
@@ -765,14 +823,14 @@ draw_frame(pglshader mutable& pgs, tsn const& sn, cstrref const& mess)
   {
     glUseProgram(pgs.spsdr->program);
     glUniform1f(pgs.spsdr->u_point_size_base,
-      0.1f * static_cast{float}(pgs.cam.screen_width));
+      0.1f * static_cast{float}(cam_df.screen_width));
     glDisable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
     glDepthMask(0);
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE);
-    sn.draw_instanced(*pgs.spsdr, *bos[1], pgs.global_ibuffer,
+    draw_instanced(*pgs.spsdr, *bos[1], bo_instances[1], pgs.global_ibuffer,
 	1, 0, pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
   }
   /* font */
@@ -784,17 +842,17 @@ draw_frame(pglshader mutable& pgs, tsn const& sn, cstrref const& mess)
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glUniform1f(pgs.f2sdr->u_pixel_to_screen,
-      2.0f / static_cast{float}(pgs.cam.screen_width));
+      2.0f / static_cast{float}(cam_df.screen_width));
     glUniform1i(pgs.f2sdr->u_sampler, 0);
     const screen_size_px = glm::make_vec2(
-      static_cast{float}(pgs.cam.screen_width),
-      static_cast{float}(pgs.cam.screen_height));
+      static_cast{float}(cam_df.screen_width),
+      static_cast{float}(cam_df.screen_height));
     glUniform2fv(pgs.f2sdr->u_screen_size_px, 1, screen_size_px.crawptr());
 //sdllog("bos3");
-    sn.draw_instanced(*pgs.f2sdr, *bos[3], pgs.global_ibuffer,
+    draw_instanced(*pgs.f2sdr, *bos[3], bo_instances[3], pgs.global_ibuffer,
 	3, 0, pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
   }
-  sn.finished_using_instance_data(bos, pgs.global_ibuffer,
+  finished_using_instance_data(pgs.global_ibuffer,
       pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
   return make_varray{uint}(tick1, tick2);
 }
@@ -1258,9 +1316,9 @@ function string main_or_ds2nd_shader_frag(glconfig const& g)
   f += "vec3 light_dir = normalize(light_pos - vary_position);\n";
   f += "float light_distance = length(light_pos - vary_position);\n";
   f += "vec4 color = vec4(0.0, 0.0, 0.0, 1.0);\n";
-  f += "vec4 color_dif = vec4(0.3, 0.3, 0.3, 1.0);\n";
+  f += "vec4 color_dif = vec4(0.42, 0.42, 0.42, 1.0);\n";
   f += "float mate_ambient = 0.2;\n";
-  f += "float mate_specular = 1.0;\n";
+  f += "float mate_specular = 0.5;\n";
   if (g.enable_shadowmapping) {
     f += "vec4 smp = vary_smpos;\n";
     f += "vec3 smpos = ((smp.xyz / smp.w) + 1.0) * 0.5;\n";
@@ -1270,8 +1328,11 @@ function string main_or_ds2nd_shader_frag(glconfig const& g)
     f += "float lflag = 1.0;\n";
   }
   f += "float lstr = lflag;\n";
+  /*
   f += "float distbr = min(3000.0 / (light_distance * light_distance), ";
   f += "  light_on);\n";
+  */
+  f += "float distbr = min(100.0 / light_distance , light_on);\n";
   f += "vec3 nor = vary_normal;\n";
   if (g.enable_normalmapping) {
     f += "const float tile_size = 32.0;\n";
@@ -1310,7 +1371,7 @@ function string main_or_ds2nd_shader_frag(glconfig const& g)
     f += "vt1 -= float(alv == 2);\n";
     f += "avol = (avol - 8.0) * distbr * 0.2;\n";
     f += "color += vec4(c0.xyz, 0.0) * float(alv == 10);\n";
-    f += "color_dif = vec4(c0.xyz, 0.0) * float(alv != 10);\n";
+    // f += "color_dif = vec4(c0.xyz, 0.0) * float(alv != 10);\n";
     f += "distbr *= float(alv != 10);\n";
     f += "nor += vary_tangent * ut1 * avol;\n";
     f += "nor += vary_binormal * vt1 * avol;\n";
@@ -1356,8 +1417,8 @@ function string main_or_ds2nd_shader_frag(glconfig const& g)
       f += "float zval = z0 * 65536.0 + z1 * 256.0 + z2;\n";
       f += "lstr = float(smpos.z * 16770000.0 < zval) * lflag;\n";
     }
-    f += "color += (vec4(1.0, 1.0, 1.0, 1.0) * mate_specular ";
-    f += "  * specular) * distbr * lstr;\n";
+    f += "color += vec4(1.0, 1.0, 1.0, 1.0)";
+    f += "  * (mate_specular * specular * distbr * distbr * lstr);\n";
   }
   f += g.fragcolor() +  " = color + ";
   f += "  (color_dif * (diffuse * distbr * lstr + mate_ambient));\n";
@@ -1560,7 +1621,7 @@ init_font2_shader(glconfig const& g)
   f += "vec2 texcoord = (vary_texture_origin_px + pcoord)";
   f += "  / vary_texture_size_px;\n";
   f += "vec4 col = " +  g.texture2d() + "(sampler, texcoord);\n";
-  f += g.fragcolor() + " = vec4(1.0, 1.0, 1.0, col.a);\n";
+  f += g.fragcolor() + " = vec4(1.0, 1.0, 0.0, col.a);\n";
   f += "}\n";
   return make_shader_ptr{font2_uniforms, font2_instance_attributes,
     font2_vertex_attributes}(v, f, "idata");
@@ -1596,7 +1657,7 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
       "/usr/share/fonts/liberation/LiberationMono-Regular.ttf");
     option{ptr{TTF_Font}} font;
     for (size_t i, const& fn: fnames) {
-      font = TTF_OpenFont(fn, 30);
+      font = TTF_OpenFont(fn, 18);
       if (case font.some) {
 	break;
       }
@@ -1885,8 +1946,8 @@ pglshader(bool gles_flag0, int glmajor0, int glminor0, bool enable_msaa0,
   public font_texture_info fti;
   public projection_info cam;
   public varray{ptr{vertex_buffer}} vertex_buffers;
-  private auto_vertexarray vtxarr;
   public instance_buffer_type global_ibuffer;
+  private auto_vertexarray vtxarr;
   init();
   resize_screen(width0, height0);
   private function void init()
@@ -1937,9 +1998,27 @@ pglshader(bool gles_flag0, int glmajor0, int glminor0, bool enable_msaa0,
   }
   public function void prepare_vertex_buffers()
   {
+    metafunction max_instance_data 2;
     const enable_copying_instancing = !glc.enable_instanced;
     for (const i, const& bo: vertex_buffers) {
       bo->create_vbo(enable_copying_instancing);
+    }
+  }
+  public function void prepare_bo_instances(
+      varray{instances_type} mutable& bo_instances) const
+  {
+    metafunction max_instance_data 2;
+    const enable_copying_instancing = !glc.enable_instanced;
+    bo_instances.resize(vertex_buffers.size(), instances_type());
+    for (const i, const& bo: vertex_buffers) {
+      mutable& instances = bo_instances[i];
+      for (const j: 0 .. bo->vs_arr.size()) {
+	instances.push_back(varray{instance_data}());
+	mutable& e = instances[j];
+	for (const k: 0 .. max_instance_data) {
+	  e.push_back(instance_data());
+	}
+      }
     }
   }
   public function joint_id_type find_joint_id_by_name(cstrref const& name)
@@ -1958,12 +2037,6 @@ pglshader(bool gles_flag0, int glmajor0, int glminor0, bool enable_msaa0,
     cstrref const& name)
   {
     return vertex_buffers[bo_id]->get(name)->vtxs;
-  }
-  public function {tnodedata, tinit} ptr{scene_node{tnodedata}}
-  make_node(joint_id_type const& scene_id, glm::mat4 const& trans)
-  {
-    return instantiate_scene{tnodedata, tinit}(vertex_buffers, scene_id,
-      trans);
   }
   public function void resize_screen(int width, int height)
   {

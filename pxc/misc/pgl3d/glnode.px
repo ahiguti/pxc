@@ -1,11 +1,12 @@
 public namespace glnode "export-unsafe";
 public import common -;
-public import pointer::raw -;
 public import numeric::fpmath -;
 public import GL::glm glm;
-public import GL::compat -;
 public import meta m;
 public import exception -;
+
+public import pointer::raw -;
+public import GL::compat -;
 public import glresource -;
 public import glshader -;
 public import glbuffer -;
@@ -32,210 +33,105 @@ scene_node(joint_id_type const& joint_id0, glm::mat4 const& trans0)
   public varray{ptr{scene_node{t}}} children;
 }
 
-public function {t, finst} ptr{scene_node{t}}
-instantiate_scene_by_name(cslice{ptr{vertex_buffer}} const& bos,
-  cstrref const& name, glm::mat4 const& tr)
+public mtvaluetype struct
+node_factory
 {
-  for (size_t bo_id, const& bop: bos) {
-    const& bo = *bop;
-    if (bo.has_name(name)) {
-      joint_id_type joint_id;
-      joint_id.bo_id = bo_id;
-      joint_id.vs_id = static_cast{int}(bo.get_id_by_name(name));
-      return instantiate_scene{t, finst}(bos, joint_id, tr);
-    }
-  }
-  throw runtime_error_template{"instantiate_scene_by_name"}(name);
-}
-
-public function {t, finst} ptr{scene_node{t}}
-instantiate_scene(cslice{ptr{vertex_buffer}} const& bos,
-  joint_id_type const& joint_id, glm::mat4 const& tr)
-{
-  const sn = make_ptr{scene_node{t}}(joint_id, tr);
-  if (joint_id.vs_id >= 0) {
-    const& vs = *bos[joint_id.bo_id]->get_by_id(static_cast{size_t}(
-      joint_id.vs_id));
-    for (size_t i, const& e: vs.vtxs->joints) {
-      const csn = instantiate_scene_by_name{t, finst}(
-	bos, e.joint_name, e.trans);
-      sn->children.push_back(csn);
-    }
-  }
-  finst(*sn);
-  return sn;
-}
-
-public function {t} void
-buffer_append(varray{float} mutable& arr, t const& v)
-{
-  if (m::eq{t, float}) {
-    arr.push_back(v);
-  } else if (m::or{
-    m::eq{t, glm::vec2},
-    m::eq{t, glm::vec3},
-    m::eq{t, glm::vec4},
-    m::eq{t, glm::mat2},
-    m::eq{t, glm::mat3},
-    m::eq{t, glm::mat4}}) {
-    arr.append(v.cslice());
-  } else {
-    expand (sym: m::field_names{t})
-    {
-      buffer_append(arr, v.sym);
-    }
-  }
-}
-
-public function {t} void
-scene_node_send_instance_data(scene_node{t} const& sn,
-  cslice{ptr{vertex_buffer}} const& bos, instance_buffer_type mutable& gibuf,
-  bool enable_instanced, bool enable_uniform_instancing)
-{
-  if (enable_instanced && !enable_uniform_instancing) {
-    size_t offset_float = 0;
-    for (const bo_id, const& bo: bos) {
-      for (const vs_id, const& vs: bo->instances) {
-	for (const i, const& instp: vs) {
-	  mutable& inst = *instp;
-	  mutable& arr = inst.instance_buffer;
-	  /*
-	  glBindBuffer(GL_ARRAY_BUFFER, inst.vbo_inst.get());
-	  glBufferData(GL_ARRAY_BUFFER,
-	    static_cast{GLsizeiptr}(arr.size()) * 4,
-	    size_t_to_crawptr{void}(0), GL_STREAM_DRAW);
-	  */
-	  /*
-	  glBufferData(GL_ARRAY_BUFFER,
-	    static_cast{GLsizeiptr}(arr.size()) * 4,
-	    arr.crawptr().void(), GL_STREAM_DRAW); // FIXME: SINGLEBUFFER
-	  glBindBuffer(GL_ARRAY_BUFFER, 0);
-	  */
-	  /*
-	  // FIXME: don't use gibuf.instance_buffer
-	  inst.glbuffer_offset_float = gibuf.instance_buffer.size();
-	  gibuf.instance_buffer.append(arr);
-	  */
-	  // FIXME: TEST
-	  inst.glbuffer_offset_float = offset_float;
-//sdllog("offset_float", offset_float, "sz", arr.size(), "bo", bo_id, "vs", vs_id, "i", i);
-	  offset_float += arr.size();
-	  /*
-	  */
+  public varray{node_buffer_info} binfo;
+  public tree_map{string, joint_id_type} name_to_id;
+  public function void prepare(cslice{ptr{vertex_buffer}} const& bos)
+  {
+    for (size_t bo_id, const& bop: bos) {
+      for (const& n, const id: bop->vs_names) {
+	joint_id_type jid;
+	jid.bo_id = bo_id;
+	jid.vs_id = static_cast{int}(id);
+	name_to_id[n] = jid;
+      }
+      binfo.push_back(node_buffer_info());
+      node_buffer_info mutable& nbi = binfo[binfo.size() - 1];
+      for (const i, const& vsp: bop->vs_arr) {
+	nbi.vs_arr.push_back(node_vs_info());
+	node_vs_info mutable& nvi = nbi.vs_arr[nbi.vs_arr.size() - 1];
+	for (const j, const& nj: vsp->vtxs->joints) {
+	  node_joint_info nji;
+	  nji.joint_id = bos_name_to_id(bos, nj.joint_name);
+	  nji.trans = nj.trans;
+	  nvi.joints.push_back(nji);
 	}
       }
     }
-    mutable& cur_buf = *gibuf.get_current();
-    const size_t total_size_float = offset_float;
-    offset_float = 0;
-    cur_buf.client_wait_sync(1000000000U * 10U);
-    cur_buf.map_buffer(total_size_float * 4U);
-    const rawptr{float} mapped_ptr = cur_buf.mapped_ptr;
-//sdllog("mapped_ptr", mapped_ptr, total_size_float * 4U);
-    for (const bo_id, const& bo: bos) {
-      for (const vs_id, const& vs: bo->instances) {
-	for (const i, const& instp: vs) {
-	  mutable& inst = *instp;
-	  mutable& arr = inst.instance_buffer;
-	  // if (bo_id == 3) { sdllog("font2 instance", arr); }
-	  const size_t sz = arr.size();
-	  const sli = rawptr_to_slice{float}(mapped_ptr + offset_float, sz);
-	  for (const j: 0 .. sz) {
-	    sli[j] = arr[j];
-	  }
-	  offset_float += sz;
-	}
+  }
+  public function {tnodedata, tinit} ptr{scene_node{tnodedata}}
+  make_node_by_id(joint_id_type const& joint_id, glm::mat4 const& trans) const
+  {
+    const sn = make_ptr{scene_node{tnodedata}}(joint_id, trans);
+    if (joint_id.vs_id >= 0) {
+      const& nbi = binfo[joint_id.bo_id];
+      const& nvi = nbi.vs_arr[static_cast{size_t}(joint_id.vs_id)];
+      for (const i, const& nji: nvi.joints) {
+	const csn = make_node_by_id{tnodedata, tinit}(nji.joint_id, nji.trans);
+	sn->children.push_back(csn);
       }
     }
-    cur_buf.unmap_buffer();
-    /*
-    glBindBuffer(GL_ARRAY_BUFFER, cur_buf.vbo.get());
-sdllog("bufferdata", gibuf.instance_buffer.size(), gibuf.async_buffer_current, cur_buf.vbo.get());
-    glBufferData(GL_ARRAY_BUFFER,
-      static_cast{GLsizeiptr}(gibuf.instance_buffer.size()) * 4,
-      gibuf.instance_buffer.crawptr().void(), GL_STREAM_DRAW);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    gibuf.instance_buffer.clear();
-    */
+    tinit(*sn);
+    return sn;
+  }
+  public function {tnodedata, tinit} ptr{scene_node{tnodedata}}
+  make_node_by_name(cstrref const& name, glm::mat4 const& trans) const
+  {
+    const rng = name_to_id.equal_crange(name);
+    return make_node_by_id{tnodedata, tinit}(*rng, trans);
+  }
+  public function joint_id_type get_joint_id_by_name(cstrref const& name) const
+  {
+    const rng = name_to_id.equal_crange(name);
+    return *rng;
   }
 }
 
-public function {t} void
-scene_node_finished_using_instance_data(scene_node{t} const& sn,
-  cslice{ptr{vertex_buffer}} const& bos, instance_buffer_type mutable& gibuf,
-  bool enable_instanced, bool enable_uniform_instancing)
+private threaded function joint_id_type
+bos_name_to_id(cslice{ptr{vertex_buffer}} const& bos, cstrref const& name)
 {
-  if (enable_instanced && !enable_uniform_instancing) {
-    gibuf.get_current()->fence_sync();
-    gibuf.switch_buffer();
-  }
-}
-
-public function {t} void
-scene_node_draw_instanced(scene_node{t} const& sn,
-  shader_i mutable& sdr, vertex_buffer const& bo,
-  instance_buffer_type mutable& gibuf, size_t bo_id,
-  size_t ibuf_id, bool enable_instanced, bool enable_uniform_instancing)
-{
-//sdllog("draw_instanced", bo_id);
-  bo.draw_pre(sdr);
-  if (enable_instanced && !enable_uniform_instancing) {
-    sdr.enable_instance_attrib_array(true);
-    // glBindBuffer(GL_ARRAY_BUFFER, gibuf.vbo_inst.get());
-    glBindBuffer(GL_ARRAY_BUFFER, gibuf.get_current()->vbo.get());
-  }
-  for (const vs_id: 0 .. bo.num_vs()) {
-    mutable& instance = *bo.instances[static_cast{size_t}(vs_id)][ibuf_id];
-    mutable& arr = instance.instance_buffer;
-    // sdllog("draw_elems", ji.bo_id, ji.vs_id, "model=", arr.size());
-    if (enable_instanced && !enable_uniform_instancing) {
-      if (m::ne{is_gl3_or_gles3, 0}) {
-	// sdllog("vattr instancing");
-	/*
-	glBindBuffer(GL_ARRAY_BUFFER, instance.vbo_inst.get());
-	*/
-	sdr.instance_attrib_pointer(instance.glbuffer_offset_float);
-//sdllog("draw_elems_instanced", vs_id, gibuf.async_buffer_current, gibuf.get_current()->vbo.get());
-	bo.draw_elems_instanced(static_cast{size_t}(vs_id),
-	  arr.size() / sdr.instance_attrib_num_float());
-	/*
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	*/
-      }
-    } else if (enable_uniform_instancing) {
-      size_t const iattr_num_float = sdr.instance_attrib_num_float();
-      size_t j;
-      size_t const jmax = arr.size();
-//sdllog("bo", bo_id, "iattr_num_float", iattr_num_float, jmax);
-      for (j = 0; j < jmax; j += iattr_num_float * uniform_instancing_mul) {
-	size_t k = min((jmax - j) / iattr_num_float, uniform_instancing_mul);
-	sdr.instance_attrib_set_uniform(arr, j, k);
-	bo.draw_elems_instanced(static_cast{size_t}(vs_id), k);
-      }
-    } else {
-      size_t const iattr_num_float = sdr.instance_attrib_num_float();
-      size_t j;
-      size_t const jmax = arr.size();
-      const& be = *bo.get_by_id(static_cast{size_t}(vs_id));
-      const inst_mul = be.vtxs->num_copies;
-//sdllog("bo", bo_id, "iattr_num_float", iattr_num_float, jmax);
-      for (j = 0; j < jmax; j += iattr_num_float * inst_mul) {
-	size_t k = min((jmax - j) / iattr_num_float, inst_mul);
-	sdr.instance_attrib_set_uniform(arr, j, k);
-	bo.draw_elems(static_cast{size_t}(vs_id), k);
-      }
-      /*
-      for (j = 0; j < jmax; j += iattr_num_float) {
-	sdr.instance_attrib_set_uniform(arr, j, 1);
-	bo.draw_elems(static_cast{size_t}(vs_id), 1);
-      }
-      */
+  joint_id_type jid;
+  for (const i, const& bo: bos) {
+    if (bo->has_name(name)) {
+      jid.bo_id = i;
+      jid.vs_id = static_cast{int}(bo->get_id_by_name(name));
+      break;
     }
   }
-  if (enable_instanced && !enable_uniform_instancing) {
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    sdr.enable_instance_attrib_array(false);
-  }
-  bo.draw_post(sdr);
+  return jid;
+}
+
+public mtvaluetype struct
+node_buffer_info
+{
+  public varray{node_vs_info} vs_arr;
+}
+
+public mtvaluetype struct
+node_vs_info
+{
+  public varray{node_joint_info} joints;
+}
+
+public tsvaluetype struct
+node_joint_info
+{
+  public joint_id_type joint_id;
+  public glm::mat4 trans;
+}
+
+public threaded struct node_data
+{
+  public glm::mat4 trans_initial;
+  public glm::mat4 trans_cur;
+}
+
+public threaded function void
+node_init(scene_node{node_data} mutable& sn)
+{
+  sn.data.trans_initial = sn.trans;
+  sn.data.trans_cur = sn.trans;
 }
 

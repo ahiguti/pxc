@@ -1,0 +1,390 @@
+public namespace pglscene "export-unsafe";
+public import common -;
+public import pointer::raw -;
+public import numeric::fpmath -;
+public import SDL2 -;
+public import SDL2::Image -;
+public import SDL2::TTF -;
+public import GL::glm glm;
+public import GL::compat -;
+public import io::time -;
+public import io::environ -;
+public import exception -;
+public import meta m;
+public import text::string::positional -;
+
+public import glresource -;
+public import glshader -;
+public import glgeometry -;
+public import glbuffer -;
+public import glnode -;
+public import pglshader -;
+public import pglcommon -;
+
+public threaded struct node_data
+{
+  public glm::mat4 trans_initial;
+  public glm::mat4 trans_cur;
+}
+
+public threaded function void
+node_init(scene_node{node_data} mutable& sn)
+{
+  sn.data.trans_initial = sn.trans;
+  sn.data.trans_cur = sn.trans;
+}
+
+public multithreaded struct
+motion_thread_shared(varray{instances_type} const& bo_instances0)
+{
+  public bool modifying = false;
+  public bool terminate_motion_thread = false;
+  public float frame_speed_mul = 1.0f;
+  public int scene_reset = -1;
+  public projection_info cam;
+  public string message;
+  public uint message_char_w;
+  public varray{instances_type} bo_instances = bo_instances0;
+  public size_t stat_num_objects;
+}
+
+public struct
+motion_thread_object(node_factory const& nfac,
+  varray{instances_type} const& bo_instances)
+{
+  public tptr{motion_thread_shared} const sharedp =
+    make_tptr{motion_thread_shared}(bo_instances);
+  private callable_ptr{void, m::nil} const thr =
+    make_thread_ptr{motion_thread_main}(sharedp, nfac);
+  function ~ {
+    mutable lck = lock_guard{motion_thread_shared}(sharedp);
+    lck->terminate_motion_thread = true;
+    lck.notify_one();
+  }
+  public function {f} void wait_and_exec()
+  {
+    mutable lck = lock_guard{motion_thread_shared}(sharedp);
+    mutable& shared = *lck;
+    while (true) {
+      if (!shared.modifying) {
+	break;
+      }
+      lck.wait();
+    }
+    f(shared);
+    shared.modifying = true;
+    lck.notify_one();
+  }
+}
+
+/* private */
+
+threaded function void
+motion_thread_main(tptr{motion_thread_shared} const& sptr,
+  node_factory const& nfac0)
+{
+  mutable sctl = scene_control(nfac0);
+  mutable lck = lock_guard{motion_thread_shared}(sptr);
+  while (true) {
+    mutable& shared = *lck;
+    if (shared.terminate_motion_thread) {
+      break;
+    }
+    if (!shared.modifying) {
+      lck.wait();
+      continue;
+    }
+    /* motion step */
+    {
+      if (shared.scene_reset >= 0) {
+	sctl.scene_next();
+      }
+    }
+    {
+      const sm_view = shared.cam.light.to_mat4().inverse();
+      const sm_vp = shared.cam.sm_projection * sm_view;
+      const vp = shared.cam.projection * shared.cam.camera.to_mat4().inverse();
+      node_common_data ncd;
+      ncd.shadowmapping_vp = sm_vp;
+      ncd.vp = vp;
+      scene_control_step(sctl, shared);
+      scene_control_set_message(sctl, shared.message, 0, 0,
+	shared.message_char_w,
+	cast_float(shared.cam.screen_width),
+	cast_float(shared.cam.screen_height));
+      scene_control_prepare_instance_data(sctl, ncd, shared.bo_instances);
+      shared.stat_num_objects = ncd.stat_num_objects;
+    }
+    shared.modifying = false;
+    lck.notify_one();
+  }
+}
+
+threaded struct
+scene_control(node_factory const& nfac)
+{
+  public node_factory nodefac = nfac;
+  public float prev_spawn = 0.0;
+  public int motion_count = 0;
+  public joint_id_type joint_id_lp =
+    nodefac.get_joint_id_by_name("lineparticle");
+  public joint_id_type joint_id_font =
+    nodefac.get_joint_id_by_name("default_font");
+  public size_t cur_scene = 0;
+  public ptr{scene_node{node_data}} snode =
+    make_ptr{scene_node{node_data}}(joint_id_type(), glm::mat4());
+  public darray{string} const scene_names = make_darray{string}(
+    "saucer", "saucer-multi", "block-multi", "block",
+    "bullet2-multi3", "bullet2-multi2", "bullet2-multi",
+    "bullet-multi", "saucer-multi3",
+    "particle", "particle-multi",
+    "particle-bb", "particle-bb-multi");
+  init();
+  private function void init()
+  {
+    const p1 = instantiate_cur_scene();
+    const p2 = make_ptr{scene_node{node_data}}(joint_id_type(), glm::mat4());
+      /* for font2 */
+    const p3 = make_ptr{scene_node{node_data}}(joint_id_type(), glm::mat4());
+      /* for lineparticle */
+    snode->children.push_back(p1);
+    snode->children.push_back(p2);
+    snode->children.push_back(p3);
+  }
+  private function ptr{scene_node{node_data}} instantiate_cur_scene()
+  {
+    const name = scene_names[cur_scene];
+    return nodefac.make_node_by_name{node_data, node_init}(name, glm::mat4());
+  }
+  public function void scene_next()
+  {
+    ++cur_scene;
+    if (cur_scene >= scene_names.size()) {
+      cur_scene = 0;
+    }
+    snode->children[0] = instantiate_cur_scene();
+  }
+}
+
+threaded function void
+scene_control_set_message(scene_control mutable& sctl,
+  cstrref const& text, uint x, uint y, uint char_w, float screen_w,
+  float screen_h)
+{
+  mutable& snode = *sctl.snode;
+  const nd = snode.children[1];
+  const n = text.size();
+  while (nd->children.size() < n) {
+    const p = make_ptr{scene_node{node_data}}(sctl.joint_id_font, glm::mat4());
+    nd->children.push_back(p);
+  }
+  if (nd->children.size() > n) {
+    nd->children.erase(n, nd->children.size());
+  }
+  /*
+  const char_w = pgs.fti.char_w;
+  const screen_w = cast_float(pgs.cam.screen_width);
+  const screen_h = cast_float(pgs.cam.screen_height);
+  */
+  for (const i, const p: nd->children) {
+    const& sli = p->trans.slice();
+    sli[2] = (cast_float(x) / screen_w) * 2.0f - 1.0f;
+    sli[3] = (cast_float(y) / screen_h) * 2.0f - 1.0f;
+    x += char_w;
+   if (i < text.size()) {
+      sli[0] = static_cast{float}(text[i] - 0x20);
+    } else {
+      sli[0] = 0.0f;
+    }
+  }
+}
+
+
+threaded function void
+scene_control_step(scene_control mutable& sctl, motion_thread_shared const& mts)
+{
+  const speed = mts.frame_speed_mul;
+  mutable& snode = *sctl.snode;
+  threaded function void step_lp(scene_node{node_data} mutable& sn_lp)
+  {
+    for (const i, const& snp: sn_lp.children) {
+      const& sli = snp->trans.slice();
+      mutable vec0 = glm::make_vec3(sli[0], sli[1], sli[2]);
+      mutable vec1 = glm::make_vec3(sli[3], sli[4], sli[5]);
+      const vd = vec1 - vec0;
+      vec0 += vd * speed / 4.0f;
+      vec1 += vd * speed / 4.0f;
+      sli[0] = vec0.x;
+      sli[1] = vec0.y;
+      sli[2] = vec0.z;
+      sli[3] = vec1.x;
+      sli[4] = vec1.y;
+      sli[5] = vec1.z;
+      const step = sli[7] + speed;
+      const sz = min(1.0f, (200.0f - step) / 20.0f);
+      sli[6] = 0.25f * sz;
+      sli[7] = step;
+    }
+    threaded function bool is_finished(ptr{scene_node{node_data}} const& snp) {
+      const& sli = snp->trans.slice();
+      return sli[7] > 200.0f;
+    }
+    // sdllog("erase?", sn_lp.children.size());
+    erase_cond{is_finished}(sn_lp.children);
+  }
+  threaded function void spawn_lp(scene_control mutable& sctl,
+    scene_node{node_data} mutable& sn_lp, glm::mat4 const& tr, float speed)
+  {
+    size_t const lim = is_gles != 0 ? 20000U : 200000U;
+    if (sn_lp.children.size() > lim /* || pgs.cam.light_on > 0.0 */) {
+      return;
+    }
+    // sdllog("post erase?", sn_lp.children.size());
+    const p3 = make_ptr{scene_node{node_data}}(sctl.joint_id_lp, glm::mat4());
+    const& sli = p3->trans.slice();
+    const p0 = tr * glm::make_vec4(0.0f, 0.0f, -5.0f, 1.0f);
+    const p1 = tr * glm::make_vec4(0.0f, 0.0f, -10.0f, 1.0f);
+    sli[0] = p0.x; /* position0 */
+    sli[1] = p0.y;
+    sli[2] = p0.z;
+    sli[3] = p1.x; /* position1 */
+    sli[4] = p1.y;
+    sli[5] = p1.z;
+    sli[6] = 0.25f; /* point_size_base */
+    sli[7] = 0.0f; /* step */
+    sn_lp.children.push_back(p3);
+  }
+  threaded function void step_snobj(scene_node{node_data} mutable& snobj,
+    scene_node{node_data} mutable& sn_lp)
+  {
+    // const rnd = make_rand_generator(1U);
+    for (const ci, const& csnp: snobj.children) {
+      mutable& csn = *csnp;
+      /*
+      const ui = rnd->generate() / 65536;
+      const t = static_cast{float}(ui)
+	/ static_cast{float}(65536) * pi_float() * 2.0;
+      const x = sin(t);
+      const y = cos(t);
+      const ang = glm::make_quat_angle_axis(
+	static_cast{float}(sctl.motion_count), x, y, 0.0);
+      */
+      const ang = glm::make_quat_angle_axis(
+	static_cast{float}(sctl.motion_count), 1.0, 0.0, 0.0);
+      csn.trans = csn.data.trans_initial * ang.to_mat4();
+      if (spawn_now) {
+	spawn_lp(sctl, sn_lp, csn.trans, speed);
+      }
+    }
+  }
+  step_lp(*snode.children[2]);
+  bool spawn_now = false;
+  {
+    sctl.prev_spawn += speed;
+    if (sctl.prev_spawn > 3.0) {
+      spawn_now = mts.cam.light_on != 0.0f;
+      sctl.prev_spawn -= 3.0;
+    }
+  }
+  step_snobj(*snode.children[0], *snode.children[2]);
+  sctl.motion_count += 1 * static_cast{int}(speed);
+  if (sctl.motion_count >= 360) {
+    sctl.motion_count -= 360;
+  }
+}
+
+threaded struct node_common_data
+{
+  public glm::mat4 shadowmapping_vp;
+  public glm::mat4 vp;
+  public size_t stat_num_objects;
+}
+
+threaded function {t} void
+buffer_append(varray{float} mutable& arr, t const& v)
+{
+  if (m::eq{t, float}) {
+    arr.push_back(v);
+  } else if (m::or{
+    m::eq{t, glm::vec2},
+    m::eq{t, glm::vec3},
+    m::eq{t, glm::vec4},
+    m::eq{t, glm::mat2},
+    m::eq{t, glm::mat3},
+    m::eq{t, glm::mat4}}) {
+    arr.append(v.cslice());
+  } else {
+    expand (sym: m::field_names{t})
+    {
+      buffer_append(arr, v.sym);
+    }
+  }
+}
+
+threaded function void
+clear_instances(varray{instances_type} mutable& ibs)
+{
+  for (const bo_id, mutable& instances: ibs) {
+    for (const i, mutable& ai: instances) {
+      for (const j, mutable& aj: ai) {
+	aj.instance_buffer.clear();
+      }
+    }
+  }
+}
+
+threaded function {tsn} void
+prepare_instance_data(tsn const& sn, node_common_data mutable& ncd,
+  varray{instances_type} mutable& ibs)
+{
+  const bo_id = sn.joint_id.bo_id;
+  const vs_id = sn.joint_id.vs_id;
+  if (bo_id >= 0 && vs_id >= 0) {
+    ++ncd.stat_num_objects;
+    mutable& ibarr = ibs[bo_id][static_cast{size_t}(vs_id)];
+    if (bo_id == 1) {
+      /* particle */
+      const mvp = ncd.vp * sn.trans;
+      buffer_append(ibarr[0].instance_buffer, mvp);
+    } else if (bo_id == 4) {
+      /* lineparticle */
+      const sli = sn.trans.cslice();
+      lineparticle_instance_attributes v;
+      const sli_idata = v.idata.slice();
+      for (const i: 0 .. 9U) {
+	sli_idata[i] = sli[i];
+      }
+      /*
+      v.position0 = glm::make_vec3(sli[0], sli[1], sli[2]);
+      v.position1 = glm::make_vec3(sli[3], sli[4], sli[5]);
+      v.point_size_base = sli[6];
+      */
+      buffer_append(ibarr[0].instance_buffer, v);
+    } else if (bo_id == 3) {
+      const sli = sn.trans.cslice();
+      font2_instance_attributes v;
+      v.idata = glm::make_vec4(sli[0], sli[1], sli[2], sli[3]);
+      buffer_append(ibarr[0].instance_buffer, v);
+    } else {
+      /* ibuf_id == 0 for model matrix */
+      buffer_append(ibarr[0].instance_buffer, sn.trans);
+      if (bo_id == 0) {
+	/* ibuf_id == 1 for shadowmapping mvp */
+	const smvp = ncd.shadowmapping_vp * sn.trans;
+	buffer_append(ibarr[1].instance_buffer, smvp);
+      }
+    }
+  }
+  for (const i, const& snp: sn.children) {
+    prepare_instance_data(*snp, ncd, ibs);
+  }
+}
+
+threaded function void
+scene_control_prepare_instance_data(scene_control mutable& sctl,
+  node_common_data mutable& ncd, varray{instances_type} mutable& ibs)
+{
+  clear_instances(ibs);
+  prepare_instance_data(*sctl.snode, ncd, ibs);
+}
+
