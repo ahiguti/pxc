@@ -245,8 +245,6 @@ public threaded struct async_buffer() {
 }
 
 public threaded struct instance_buffer_type() {
-  // public auto_buffer vbo_inst;
-  // public varray{float} instance_buffer; // FIXME: don't use this
   private varray{ptr{async_buffer}} async_buffers;
   public size_t async_buffer_current; // FIXME: private
   public function ptr{async_buffer} get_current() const {
@@ -266,13 +264,12 @@ public threaded struct instance_buffer_type() {
   }
 }
 
-private threaded struct instance_data {
-  // public auto_buffer vbo_inst; // FIXME: not used
+public multithreaded struct instance_data {
   public varray{float} instance_buffer;
   public size_t glbuffer_offset_float;
 }
 
-public metafunction instances_type varray{varray{ptr{instance_data}}};
+public metafunction instances_type varray{varray{instance_data}};
 
 public threaded struct instances_info {
   public size_t ibuf_offset_byte;
@@ -287,12 +284,12 @@ vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0)
   public size_t const num_float_per_vertex = num_float_per_vertex0;
   public auto_buffer vbo_values;
   public auto_buffer vbo_elems;
-  public instances_type instances;
+  // public instances_type instances;
   public size_t num_vertex_values;
   public size_t num_elements;
-  public metafunction num_instance_data 2;
-  private varray{ptr{vertex_set}} vs_arr;
-  private tree_map{string, size_t} vs_names;
+  // public metafunction num_instance_data 2;
+  public tree_map{string, size_t} vs_names;
+  public varray{ptr{vertex_set}} vs_arr;
   public function ptr{vertex_set} get(string const& name)
   {
     if (const id: vs_names[name]) {
@@ -391,6 +388,7 @@ vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0)
 	elements.crawptr().void(), GL_STATIC_DRAW);
       glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     }
+    /*
     for (const i: 0 .. vs_arr.size()) {
       instances.push_back(varray{ptr{instance_data}}());
       mutable& e = instances[i];
@@ -398,6 +396,7 @@ vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0)
 	e.push_back(make_ptr{instance_data}());
       }
     }
+    */
 /*
     if (m::ne{is_gl3_or_gles3, 0}) {
       for (const i, const& vs: vs_arr) {
@@ -412,6 +411,7 @@ vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0)
 */
     return true;
   }
+  /*
   public function void clear_instances()
   {
     for (const i, const& ai: instances) {
@@ -420,6 +420,7 @@ vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0)
       }
     }
   }
+  */
 }
 
 private function void
