@@ -52,6 +52,7 @@ std::string main_namespace;
 int compile_phase = 0;
 expr_i *compiling_stmt = 0;
 const std::map<std::string, std::string> *cur_profile = 0;
+bool compile_mode_generate_single_cc = true;
 size_t recursion_limit = 3000;
 nsimports_type nsimports;
 nsimports_rec_type nsimports_rec;

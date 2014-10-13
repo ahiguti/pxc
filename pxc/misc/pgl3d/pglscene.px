@@ -1,24 +1,15 @@
-public namespace pglscene "export-unsafe";
+public namespace pglscene;
 public import common -;
-public import pointer::raw -;
 public import numeric::fpmath -;
-public import SDL2 -;
-public import SDL2::Image -;
-public import SDL2::TTF -;
-public import GL::glm glm;
-public import GL::compat -;
+public import glm;
 public import io::time -;
 public import io::environ -;
 public import exception -;
 public import meta m;
 public import text::string::positional -;
 
-public import glresource -;
-public import glshader -;
-public import glgeometry -;
-public import glbuffer -;
 public import glnode -;
-public import pglshader -;
+public import pglbase -;
 public import pglcommon -;
 
 public threaded struct node_data
@@ -43,7 +34,8 @@ motion_thread_shared(varray{instances_type} const& bo_instances0)
   public int scene_reset = -1;
   public projection_info cam;
   public string message;
-  public uint message_char_w;
+  public uint font_width = 1;
+  public uint font_height = 1;
   public varray{instances_type} bo_instances = bo_instances0;
   public size_t stat_num_objects;
 }
@@ -108,16 +100,25 @@ motion_thread_main(tptr{motion_thread_shared} const& sptr,
       ncd.shadowmapping_vp = sm_vp;
       ncd.vp = vp;
       scene_control_step(sctl, shared);
-      scene_control_set_message(sctl, shared.message, 0, 0,
-	shared.message_char_w,
-	cast_float(shared.cam.screen_width),
-	cast_float(shared.cam.screen_height));
+      scene_control_set_message(sctl, *sctl.snode->children[1],
+	shared.message,
+	0, 0, shared.font_width, shared.font_height,
+	static_cast{float}(shared.cam.screen_width),
+	static_cast{float}(shared.cam.screen_height));
+      scene_control_update_buttons(sctl, *sctl.snode->children[2]);
       scene_control_prepare_instance_data(sctl, ncd, shared.bo_instances);
       shared.stat_num_objects = ncd.stat_num_objects;
     }
     shared.modifying = false;
     lck.notify_one();
   }
+}
+
+metafunction nodeptr ptr{scene_node{node_data}};
+
+threaded function nodeptr make_nodeptr()
+{
+  return make_ptr{scene_node{node_data}}(joint_id_type(), glm::mat4());
 }
 
 threaded struct
@@ -130,9 +131,14 @@ scene_control(node_factory const& nfac)
     nodefac.get_joint_id_by_name("lineparticle");
   public joint_id_type joint_id_font =
     nodefac.get_joint_id_by_name("default_font");
+  public joint_id_type joint_id_rect2d =
+    nodefac.get_joint_id_by_name("rect2d");
   public size_t cur_scene = 0;
-  public ptr{scene_node{node_data}} snode =
-    make_ptr{scene_node{node_data}}(joint_id_type(), glm::mat4());
+  public nodeptr const snode = make_nodeptr();
+  public nodeptr const node_scene = make_nodeptr();
+  public nodeptr const node_status_message = make_nodeptr();
+  public nodeptr const node_buttons = make_nodeptr();
+  public nodeptr const node_lineparticles = make_nodeptr();
   public darray{string} const scene_names = make_darray{string}(
     "saucer", "saucer-multi", "block-multi", "block",
     "bullet2-multi3", "bullet2-multi2", "bullet2-multi",
@@ -142,16 +148,13 @@ scene_control(node_factory const& nfac)
   init();
   private function void init()
   {
-    const p1 = instantiate_cur_scene();
-    const p2 = make_ptr{scene_node{node_data}}(joint_id_type(), glm::mat4());
-      /* for font2 */
-    const p3 = make_ptr{scene_node{node_data}}(joint_id_type(), glm::mat4());
-      /* for lineparticle */
-    snode->children.push_back(p1);
-    snode->children.push_back(p2);
-    snode->children.push_back(p3);
+    snode->children.push_back(node_scene);
+    snode->children.push_back(node_status_message);
+    snode->children.push_back(node_buttons);
+    snode->children.push_back(node_lineparticles);
+    node_scene->children.push_back(instantiate_cur_scene());
   }
-  private function ptr{scene_node{node_data}} instantiate_cur_scene()
+  private function nodeptr instantiate_cur_scene()
   {
     const name = scene_names[cur_scene];
     return nodefac.make_node_by_name{node_data, node_init}(name, glm::mat4());
@@ -162,46 +165,63 @@ scene_control(node_factory const& nfac)
     if (cur_scene >= scene_names.size()) {
       cur_scene = 0;
     }
-    snode->children[0] = instantiate_cur_scene();
+    node_scene->children[0] = instantiate_cur_scene();
   }
 }
 
 threaded function void
 scene_control_set_message(scene_control mutable& sctl,
-  cstrref const& text, uint x, uint y, uint char_w, float screen_w,
-  float screen_h)
+  scene_node{node_data} mutable& sn_text,
+  cstrref const& text, uint x, uint y, uint font_width, uint font_height,
+  float screen_w, float screen_h)
 {
-  mutable& snode = *sctl.snode;
-  const nd = snode.children[1];
-  const n = text.size();
-  while (nd->children.size() < n) {
-    const p = make_ptr{scene_node{node_data}}(sctl.joint_id_font, glm::mat4());
-    nd->children.push_back(p);
-  }
-  if (nd->children.size() > n) {
-    nd->children.erase(n, nd->children.size());
-  }
-  /*
-  const char_w = pgs.fti.char_w;
-  const screen_w = cast_float(pgs.cam.screen_width);
-  const screen_h = cast_float(pgs.cam.screen_height);
-  */
-  for (const i, const p: nd->children) {
-    const& sli = p->trans.slice();
-    sli[2] = (cast_float(x) / screen_w) * 2.0f - 1.0f;
-    sli[3] = (cast_float(y) / screen_h) * 2.0f - 1.0f;
-    x += char_w;
-   if (i < text.size()) {
-      sli[0] = static_cast{float}(text[i] - 0x20);
-    } else {
-      sli[0] = 0.0f;
+  {
+    mutable& nd = sn_text;
+    const n = text.size();
+    while (nd.children.size() < n) {
+      const p = make_ptr{scene_node{node_data}}(sctl.joint_id_font,
+	glm::mat4());
+      nd.children.push_back(p);
+    }
+    if (nd.children.size() > n) {
+      nd.children.erase(n, nd.children.size());
+    }
+    for (const i, const p: nd.children) {
+      const& sli = p->trans.slice();
+      sli[2] = (static_cast{float}(x) / screen_w) * 2.0f - 1.0f;
+      sli[3] = (static_cast{float}(y) / screen_h) * 2.0f - 1.0f;
+      x += font_width;
+     if (i < text.size()) {
+	sli[0] = static_cast{float}(text[i] - 0x20);
+      } else {
+	sli[0] = 0.0f;
+      }
     }
   }
 }
 
+threaded function void
+scene_control_update_buttons(scene_control mutable& sctl,
+  scene_node{node_data} mutable& sn_buttons)
+{
+  /* box */
+  mutable& nd = sn_buttons;
+  if (nd.children.size() < 1) {
+    const p = make_ptr{scene_node{node_data}}(sctl.joint_id_rect2d,
+      glm::mat4());
+    nd.children.push_back(p);
+  }
+  const cn = nd.children[0];
+  const& sli = cn->trans.slice();
+  sli[0] = -0.99f;
+  sli[1] = 0.81f;
+  sli[2] = 0.18f;
+  sli[3] = 0.18f;
+}
 
 threaded function void
-scene_control_step(scene_control mutable& sctl, motion_thread_shared const& mts)
+scene_control_step(scene_control mutable& sctl,
+  motion_thread_shared const& mts)
 {
   const speed = mts.frame_speed_mul;
   mutable& snode = *sctl.snode;
@@ -235,11 +255,11 @@ scene_control_step(scene_control mutable& sctl, motion_thread_shared const& mts)
   threaded function void spawn_lp(scene_control mutable& sctl,
     scene_node{node_data} mutable& sn_lp, glm::mat4 const& tr, float speed)
   {
-    size_t const lim = is_gles != 0 ? 20000U : 200000U;
-    if (sn_lp.children.size() > lim /* || pgs.cam.light_on > 0.0 */) {
+    // size_t const lim = is_gles != 0 ? 20000U : 200000U;
+    size_t const lim = 200000U;
+    if (sn_lp.children.size() > lim) {
       return;
     }
-    // sdllog("post erase?", sn_lp.children.size());
     const p3 = make_ptr{scene_node{node_data}}(sctl.joint_id_lp, glm::mat4());
     const& sli = p3->trans.slice();
     const p0 = tr * glm::make_vec4(0.0f, 0.0f, -5.0f, 1.0f);
@@ -254,21 +274,12 @@ scene_control_step(scene_control mutable& sctl, motion_thread_shared const& mts)
     sli[7] = 0.0f; /* step */
     sn_lp.children.push_back(p3);
   }
-  threaded function void step_snobj(scene_node{node_data} mutable& snobj,
+  threaded function void step_snobj(scene_node{node_data} mutable& sn_scene,
     scene_node{node_data} mutable& sn_lp)
   {
-    // const rnd = make_rand_generator(1U);
+    const& snobj = *sn_scene.children[0];
     for (const ci, const& csnp: snobj.children) {
       mutable& csn = *csnp;
-      /*
-      const ui = rnd->generate() / 65536;
-      const t = static_cast{float}(ui)
-	/ static_cast{float}(65536) * pi_float() * 2.0;
-      const x = sin(t);
-      const y = cos(t);
-      const ang = glm::make_quat_angle_axis(
-	static_cast{float}(sctl.motion_count), x, y, 0.0);
-      */
       const ang = glm::make_quat_angle_axis(
 	static_cast{float}(sctl.motion_count), 1.0, 0.0, 0.0);
       csn.trans = csn.data.trans_initial * ang.to_mat4();
@@ -277,7 +288,7 @@ scene_control_step(scene_control mutable& sctl, motion_thread_shared const& mts)
       }
     }
   }
-  step_lp(*snode.children[2]);
+  step_lp(*sctl.node_lineparticles);
   bool spawn_now = false;
   {
     sctl.prev_spawn += speed;
@@ -286,7 +297,7 @@ scene_control_step(scene_control mutable& sctl, motion_thread_shared const& mts)
       sctl.prev_spawn -= 3.0;
     }
   }
-  step_snobj(*snode.children[0], *snode.children[2]);
+  step_snobj(*sctl.node_scene, *sctl.node_lineparticles);
   sctl.motion_count += 1 * static_cast{int}(speed);
   if (sctl.motion_count >= 360) {
     sctl.motion_count -= 360;
@@ -349,22 +360,35 @@ prepare_instance_data(tsn const& sn, node_common_data mutable& ncd,
     } else if (bo_id == 4) {
       /* lineparticle */
       const sli = sn.trans.cslice();
+      ibarr[0].instance_buffer.append(sli[0 .. 9]);
+      /*
       lineparticle_instance_attributes v;
       const sli_idata = v.idata.slice();
       for (const i: 0 .. 9U) {
 	sli_idata[i] = sli[i];
       }
-      /*
-      v.position0 = glm::make_vec3(sli[0], sli[1], sli[2]);
-      v.position1 = glm::make_vec3(sli[3], sli[4], sli[5]);
-      v.point_size_base = sli[6];
-      */
       buffer_append(ibarr[0].instance_buffer, v);
+      */
+    } else if (bo_id == 5) {
+      /* rect2d */
+      const sli = sn.trans.cslice();
+      /*
+      rect2d_instance_attributes v;
+      const sli_idata = v.idata.slice();
+      for (const i: 0 .. 4U) {
+	sli_idata[i] = sli[i];
+      }
+      buffer_append(ibarr[0].instance_buffer, v);
+      */
+      ibarr[0].instance_buffer.append(sli[0 .. 4]);
     } else if (bo_id == 3) {
       const sli = sn.trans.cslice();
+      /*
       font2_instance_attributes v;
       v.idata = glm::make_vec4(sli[0], sli[1], sli[2], sli[3]);
       buffer_append(ibarr[0].instance_buffer, v);
+      */
+      ibarr[0].instance_buffer.append(sli[0 .. 4]);
     } else {
       /* ibuf_id == 0 for model matrix */
       buffer_append(ibarr[0].instance_buffer, sn.trans);

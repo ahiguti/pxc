@@ -542,11 +542,12 @@ void arena_set_recursion_limit(size_t v)
 }
 
 void arena_compile(const std::map<std::string, std::string>& prof_map,
-  const std::string& dest_filename, coptions& copt_apnd,
+  bool single_cc, const std::string& dest_filename, coptions& copt_apnd,
   generate_main_e gmain)
 {
   compile_phase = 1;
   cur_profile = &prof_map;
+  compile_mode_generate_single_cc = single_cc;
   arena_error_throw_pushed();
   /* chain topvals */
   expr_stmts *e = 0;
@@ -619,6 +620,7 @@ void arena_clear()
   compile_phase = 0;
   compiling_stmt = 0;
   cur_profile = 0;
+  compile_mode_generate_single_cc = false;
   recursion_limit = 3000;
   nsimports.clear();
   nsimports_rec.clear();

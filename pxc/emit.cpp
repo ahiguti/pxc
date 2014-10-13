@@ -3699,7 +3699,11 @@ void emit_code(const std::string& dest_filename, expr_block *gl_block,
     em.indent('m');
     em.printf("if (i$%s$init == 0) {\n", mainfn.c_str());
     em.add_indent(1);
-    emit_import_init(em, main_namespace);
+    if (!compile_mode_generate_single_cc) {
+      emit_import_init(em, main_namespace);
+    } else {
+      /* gen_single_cc: the single nsmain() contain all init statements */
+    }
     em.set_file_line(gl_block);
     em.indent('m');
     em.printf("%s::%s();\n", to_c_ns(main_namespace).c_str(), mainfn.c_str());
@@ -3711,7 +3715,6 @@ void emit_code(const std::string& dest_filename, expr_block *gl_block,
     em.puts("}\n");
     em.add_indent(-1);
     em.puts("}\n");
-    /* TODO: don't emit $cm if not necessary */
     if (gmain != generate_main_none) {
       if (gmain == generate_main_dl) {
 	em.printf("int %s$cm()\n{\n", mainfn.c_str());

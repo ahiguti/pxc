@@ -1,0 +1,49 @@
+public threaded namespace pglbase;
+public import common -;
+public import meta m;
+public import glm;
+
+public multithreaded struct instance_data {
+  public varray{float} instance_buffer;
+  public size_t glbuffer_offset_float;
+}
+
+public metafunction instances_type varray{varray{instance_data}};
+
+public tsvaluetype struct position_angle
+{
+  public glm::vec3 position;
+  public glm::quat angle;
+  public function glm::mat4 to_mat4() const
+  {
+    return glm::mat4().translate(position) * angle.to_mat4();
+  }
+  public function void translate_relative(glm::vec3 const& v)
+  {
+    position += angle.to_mat3() * v;
+  }
+  public function void rotate_angle_axis(float a, float x, float y, float z)
+  {
+    angle *= glm::make_quat_angle_axis(a, x, y, z);
+  }
+  public function void normalize()
+  {
+    angle.normalize();
+  }
+}
+
+public tsvaluetype struct
+projection_info()
+{
+  public glm::mat4 projection;
+  public glm::mat4 sm_projection;
+  public position_angle camera;
+  public position_angle light;
+  public int screen_width;
+  public int screen_height;
+  public int screen_size_base;
+  public bool proj_light;
+  public float light_on = 1.0;
+  public float const distance_max = 1000.0;
+}
+

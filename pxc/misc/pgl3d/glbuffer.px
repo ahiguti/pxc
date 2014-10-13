@@ -4,7 +4,7 @@ public import pointer::raw -;
 public import numeric::fpmath -;
 public import SDL2 -;
 public import SDL2::Image -;
-public import GL::glm glm;
+public import glm;
 public import GL::compat -;
 public import io::time -;
 public import meta m;
@@ -68,7 +68,7 @@ vertices(size_t num_float_per_vertex0)
       return;
     }
     num_copies = min(num_copies_hint, uniform_instancing_mul);
-sdllog("vertices::prepare_multiple_copies", num_copies);
+    sdllog("vertices::prepare_multiple_copies", num_copies);
     const num_vertices = vertex_values.size() / num_float_per_vertex;
     vertex_values.resize(vertex_values_size_per_copy * num_copies, float());
     elements.resize(elements_size_per_copy * num_copies, uint());
@@ -258,24 +258,11 @@ public threaded struct instance_buffer_type() {
   }
   init();
   private function void init() {
-    for (const i: 0 .. 3) {
+    for (const i: 0 .. 2) {
       async_buffers.push_back(make_ptr{async_buffer}());
     }
   }
 }
-
-public multithreaded struct instance_data {
-  public varray{float} instance_buffer;
-  public size_t glbuffer_offset_float;
-}
-
-public metafunction instances_type varray{varray{instance_data}};
-
-public threaded struct instances_info {
-  public size_t ibuf_offset_byte;
-  public size_t ibuf_bytes;
-}
-
 
 public threaded struct
 vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0)
@@ -284,10 +271,8 @@ vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0)
   public size_t const num_float_per_vertex = num_float_per_vertex0;
   public auto_buffer vbo_values;
   public auto_buffer vbo_elems;
-  // public instances_type instances;
   public size_t num_vertex_values;
   public size_t num_elements;
-  // public metafunction num_instance_data 2;
   public tree_map{string, size_t} vs_names;
   public varray{ptr{vertex_set}} vs_arr;
   public function ptr{vertex_set} get(string const& name)
@@ -388,39 +373,8 @@ vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0)
 	elements.crawptr().void(), GL_STATIC_DRAW);
       glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     }
-    /*
-    for (const i: 0 .. vs_arr.size()) {
-      instances.push_back(varray{ptr{instance_data}}());
-      mutable& e = instances[i];
-      for (const j: 0 .. num_instance_data) {
-	e.push_back(make_ptr{instance_data}());
-      }
-    }
-    */
-/*
-    if (m::ne{is_gl3_or_gles3, 0}) {
-      for (const i, const& vs: vs_arr) {
-	for (const j: 0 .. static_cast{size_t}(num_instance_data)) {
-	  instances[i][j]->vbo_inst.generate();
-	  if (instances[i][j]->vbo_inst.get() == 0) {
-	    return false;
-	  }
-	}
-      }
-    }
-*/
     return true;
   }
-  /*
-  public function void clear_instances()
-  {
-    for (const i, const& ai: instances) {
-      for (const j, const& aj: ai) {
-	aj->instance_buffer.clear();
-      }
-    }
-  }
-  */
 }
 
 private function void
