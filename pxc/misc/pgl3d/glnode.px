@@ -1,15 +1,9 @@
-public namespace glnode "export-unsafe";
+public namespace glnode;
 public import common -;
 public import numeric::fpmath -;
-public import GL::glm glm;
+public import glm;
 public import meta m;
 public import exception -;
-
-public import pointer::raw -;
-public import GL::compat -;
-public import glresource -;
-public import glshader -;
-public import glbuffer -;
 
 public tsvaluetype struct
 joint_id_type()
@@ -38,29 +32,6 @@ node_factory
 {
   public varray{node_buffer_info} binfo;
   public tree_map{string, joint_id_type} name_to_id;
-  public function void prepare(cslice{ptr{vertex_buffer}} const& bos)
-  {
-    for (size_t bo_id, const& bop: bos) {
-      for (const& n, const id: bop->vs_names) {
-	joint_id_type jid;
-	jid.bo_id = bo_id;
-	jid.vs_id = static_cast{int}(id);
-	name_to_id[n] = jid;
-      }
-      binfo.push_back(node_buffer_info());
-      node_buffer_info mutable& nbi = binfo[binfo.size() - 1];
-      for (const i, const& vsp: bop->vs_arr) {
-	nbi.vs_arr.push_back(node_vs_info());
-	node_vs_info mutable& nvi = nbi.vs_arr[nbi.vs_arr.size() - 1];
-	for (const j, const& nj: vsp->vtxs->joints) {
-	  node_joint_info nji;
-	  nji.joint_id = bos_name_to_id(bos, nj.joint_name);
-	  nji.trans = nj.trans;
-	  nvi.joints.push_back(nji);
-	}
-      }
-    }
-  }
   public function {tnodedata, tinit} ptr{scene_node{tnodedata}}
   make_node_by_id(joint_id_type const& joint_id, glm::mat4 const& trans) const
   {
@@ -87,20 +58,6 @@ node_factory
     const rng = name_to_id.equal_crange(name);
     return *rng;
   }
-}
-
-private threaded function joint_id_type
-bos_name_to_id(cslice{ptr{vertex_buffer}} const& bos, cstrref const& name)
-{
-  joint_id_type jid;
-  for (const i, const& bo: bos) {
-    if (bo->has_name(name)) {
-      jid.bo_id = i;
-      jid.vs_id = static_cast{int}(bo->get_id_by_name(name));
-      break;
-    }
-  }
-  return jid;
 }
 
 public mtvaluetype struct

@@ -2,7 +2,7 @@ public namespace glshader "export-unsafe";
 public import common -;
 public import pointer::raw -;
 public import numeric::fpmath -;
-public import GL::glm glm;
+public import glm;
 public import GL::compat -;
 public import meta m;
 public import exception -;
@@ -263,6 +263,9 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
   {
     metafunction tinst_sh instance_attributes_type;
     metafunction stride_byte m::mul{num_float_struct{tinst_sh}, 4};
+    if (m::gt{m::size{m::field_names{tinst_sh}}, 1}) {
+      m::error{"not supported"};
+    }
     expand (sym, idx: m::map{m::field_names{tinst_sh},
       metafunction{s} m::concat{"i_", s}})
     {

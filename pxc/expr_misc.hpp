@@ -29,6 +29,7 @@ extern std::string main_namespace;
 extern int compile_phase;
 extern expr_i *compiling_stmt;
 extern const std::map<std::string, std::string> *cur_profile;
+extern bool compile_mode_generate_single_cc;
 extern size_t recursion_limit;
 extern nsimports_type nsimports;
 extern nsimports_rec_type nsimports_rec;

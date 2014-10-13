@@ -78,11 +78,12 @@ struct parser_options {
   bool no_realpath;
   int trim_path;
   bool gen_out;
+  bool gen_single_cc;
   std::string argv0;
   time_t argv0_ctime;
   parser_options() : verbose(0), clean_flag(false), clean_all_flag(false),
     no_build(false), no_update(false), no_execute(false), no_realpath(false),
-    trim_path(0), gen_out(false), argv0_ctime(0) { }
+    trim_path(0), gen_out(false), gen_single_cc(false), argv0_ctime(0) { }
 };
 
 struct all_modules_info {
@@ -234,6 +235,9 @@ static std::string checksum_string(const checksum_type& c)
 
 static bool load_infofile(const parser_options& po, module_info& mi)
 {
+  if (!po.gen_cc_dir.empty()) {
+    return false;
+  }
   const std::string cc_filename = get_cc_filename(po, mi);
   struct stat sbuf;
   if (stat(cc_filename.c_str(), &sbuf) != 0) {
@@ -614,10 +618,15 @@ static void prepare_workdir(const parser_options& po, all_modules_info& ami,
   }
 }
 
-static void get_indirect_imports(const all_modules_info& ami,
+static void get_indirect_imports(const parser_options& po,
+  const all_modules_info& ami,
   const std::string& modname, bool follow_private, bool is_main,
   strset& cc_srcs_r, strlist& cc_srcs_ord_r)
 {
+  if (po.gen_single_cc) {
+    follow_private = true;
+    is_main = true;
+  }
   if (cc_srcs_r.find(modname) != cc_srcs_r.end()) {
     return;
   }
@@ -628,7 +637,7 @@ static void get_indirect_imports(const all_modules_info& ami,
   for (imports_type::deps_type::const_iterator i = md.imports.deps.begin();
     i != md.imports.deps.end(); ++i) {
     if (is_main || i->import_public || follow_private) {
-      get_indirect_imports(ami, i->ns, follow_private, false, cc_srcs_r,
+      get_indirect_imports(po, ami, i->ns, follow_private, false, cc_srcs_r,
 	cc_srcs_ord_r);
     }
     DBG(fprintf(stderr, "%s imports %s pub=%d\n", modname.c_str(),
@@ -861,7 +870,8 @@ static void compile_module_to_cc_srcs(const parser_options& po,
     module_info& mi = get_modinfo_by_name(ami, *i);
     source_info si;
     si.minfo = &mi;
-    si.mode = &mi == &mi_main ? compile_mode_main : compile_mode_import;
+    si.mode = (&mi == &mi_main || po.gen_single_cc)
+      ? compile_mode_main : compile_mode_import;
     pxc_parse_file(si, cursrc_imports);
     if (mi.unique_namespace != cursrc_imports.main_unique_namespace) {
       arena_error_throw(0,
@@ -901,7 +911,8 @@ static void compile_module_to_cc_srcs(const parser_options& po,
     tmpfile_guard g(tmp_fn);
     mi_main.self_copts = coptions();
     const double t1 = gettimeofday_double();
-    arena_compile(po.profile.mapval, tmp_fn, mi_main.self_copts, gmain);
+    arena_compile(po.profile.mapval, po.gen_single_cc, tmp_fn,
+      mi_main.self_copts, gmain);
     if (po.profile.safe_mode != 0) {
       for (all_modules_info::modules_type::const_iterator i
 	= ami.modules.begin(); i != ami.modules.end(); ++i) {
@@ -933,12 +944,8 @@ static void compile_module_to_cc_srcs(const parser_options& po,
       fprintf(stderr, "compiled %s %f\n", mi_main.unique_namespace.c_str(),
 	t2 - t1);
     }
-    if (rename(tmp_fn.c_str(), cc_filename.c_str()) != 0) {
-      arena_error_throw(0, "-:-: rename('%s', '%s') failed: errno=%d",
-	tmp_fn.c_str(), cc_filename.c_str(), errno);
-    }
     if (!po.gen_cc_dir.empty()) {
-      /* copy cc file */
+      /* generate cc file to gen_cc_dir */
       std::string sfn = po.gen_cc_dir;
       // po.src_filename + ".gen/";
       mkdir_hier(sfn);
@@ -960,8 +967,13 @@ static void compile_module_to_cc_srcs(const parser_options& po,
       }
       /* note: filename uniqueness is not guaranteed */
       sfn += f + ".cc";
-      if (compare_file_contents(cc_filename, sfn) != 0) {
-	copy_file_atomic(cc_filename, sfn, false);
+      if (compare_file_contents(tmp_fn, sfn) != 0) {
+	copy_file_atomic(tmp_fn, sfn, false);
+      }
+    } else {
+      if (rename(tmp_fn.c_str(), cc_filename.c_str()) != 0) {
+	arena_error_throw(0, "-:-: rename('%s', '%s') failed: errno=%d",
+	  tmp_fn.c_str(), cc_filename.c_str(), errno);
       }
     }
   }
@@ -986,7 +998,7 @@ static void compile_module_to_cc_srcs(const parser_options& po,
     }
   }
   /* generate info */
-  {
+  if (po.gen_cc_dir.empty()) {
     const std::string info_filename = get_info_filename(po, mi_main);
     const std::string tmp_fn = info_filename + ".tmp";
     tmpfile_guard g(tmp_fn);
@@ -1005,8 +1017,8 @@ static void get_mi_srcs(const parser_options& po, all_modules_info& ami,
   strlist cc_srcs_ord;
   strset link_srcs;
   strlist link_srcs_ord;
-  get_indirect_imports(ami, modname, false, true, cc_srcs, cc_srcs_ord);
-  get_indirect_imports(ami, modname, true, true, link_srcs, link_srcs_ord);
+  get_indirect_imports(po, ami, modname, false, true, cc_srcs, cc_srcs_ord);
+  get_indirect_imports(po, ami, modname, true, true, link_srcs, link_srcs_ord);
   module_info& mi_main = get_modinfo_by_name(ami, modname);
   mi_main.cc_srcs = cc_srcs;
   mi_main.cc_srcs_ord = cc_srcs_ord;
@@ -1034,15 +1046,21 @@ static bool compile_modules_rec(const parser_options& po,
   bool modified = false;
   try {
     /* build imports first */
-    for (imports_type::deps_type::const_iterator i = md.imports.deps.begin();
-      i != md.imports.deps.end(); ++i) {
-      const import_info& ii = *i;
-      modified |= compile_modules_rec(po, ami, ii.ns, generate_main_none);
-    }
-    if (md.need_rebuild) {
+    if (!po.gen_single_cc) {
+      for (imports_type::deps_type::const_iterator i = md.imports.deps.begin();
+	i != md.imports.deps.end(); ++i) {
+	const import_info& ii = *i;
+	modified |= compile_modules_rec(po, ami, ii.ns, generate_main_none);
+      }
+      if (md.need_rebuild) {
+	compile_module_to_cc(po, ami, modname, gmain);
+	modified = true;
+	md.need_rebuild = false;
+      }
+    } else {
+      /* gen_single_cc mode */
       compile_module_to_cc(po, ami, modname, gmain);
-      modified = true;	    
-      md.need_rebuild = false;
+      modified = true;
     }
   } catch (const std::exception& e) {
     std::string s = e.what();
@@ -1317,7 +1335,7 @@ static int compile_and_execute(parser_options& po,
 	/* this ns is removed from the dependency list */
 	continue;
       }
-      get_indirect_imports(ami,
+      get_indirect_imports(po, ami,
 	!mi.aux_filename.empty() ? mi.aux_filename : mi.unique_namespace,
 	false, true, mi.cc_srcs, mi.cc_srcs_ord);
       loaded |= check_need_rebuild(po, ami, mi);
@@ -1498,6 +1516,7 @@ static int prepare_options(parser_options& po, int argc, char **argv)
   } else {
     po.argv0 = "pxc";
   }
+  bool err = false;
   int i = 1;
   for (; i < argc; ++i) {
     const std::string arg = argv[i];
@@ -1514,15 +1533,15 @@ static int prepare_options(parser_options& po, int argc, char **argv)
       s = arg;
     }
     if (s[0] == '-') {
-      bool err = false;
       if (param.empty()) {
 	if (s == "--clean" || s == "-c") {
 	  po.clean_flag = true;
 	} else if (s == "--clean-all" || s == "-C") {
 	  po.clean_all_flag = true;
-	  /* TODO */
 	} else if (s == "--generate" || s == "-g") {
 	  po.gen_out = true;
+	} else if (s == "--generate-single-cc" || s == "-gs") {
+	  po.gen_single_cc = true;
 	} else if (s == "--no-build" || s == "-nb") {
 	  po.no_build = true;
 	} else if (s == "--no-update" || s == "-nu") {
@@ -1551,25 +1570,41 @@ static int prepare_options(parser_options& po, int argc, char **argv)
       }
       if (err) {
 	fprintf(stderr, "Unknown option '%s'\n", arg.c_str());
-	fprintf(stderr,
-	  "Usage: %s [OPTIONS ...] SOURCE_FILES ...\n"
-	  "  Options:\n"
-	  "  --clean | -c\n"
-	  "  --clean-all | -C\n"
-	  "  --generate | -g\n"
-	  "  --no-build | -nb\n"
-	  "  --no-update | -nu\n"
-	  "  --no-execute | -ne\n"
-	  "  --no-realpath | -nr\n"
-	  "  --profile=FILE | -p=FILE\n"
-	  "  --work-dir=DIRECTORY | -w=DIRECTORY\n"
-	  "  --verbose=VALUE | -v=VALUE\n"
-	  "  --generate-cc=DIRECTORY\n", argv[0]);
-	return 1;
+	break;
       }
     } else {
       po.src_filename = s;
-      break;
+      break; /* remaining arguments are passed to the executable */
+    }
+  }
+  if (err || argc == 1) {
+    fprintf(stderr,
+      "Usage: %s [OPTIONS ...] SOURCE_FILE\n"
+      "  Options:\n"
+      "  --clean | -c\n"
+      "  --clean-all | -C\n"
+      "  --generate | -g\n"
+      "  --no-build | -nb\n"
+      "  --no-update | -nu\n"
+      "  --no-execute | -ne\n"
+      "  --no-realpath | -nr\n"
+      "  --profile=FILE | -p=FILE\n"
+      "  --work-dir=DIRECTORY | -w=DIRECTORY\n"
+      "  --verbose=VALUE | -v=VALUE\n"
+      "  --generate-cc=DIRECTORY\n"
+      "  --generate-single-cc\n"
+      , argv[0]);
+    return 1;
+  }
+  {
+    if (po.gen_single_cc && po.gen_cc_dir.empty()) {
+      po.gen_cc_dir = ".";
+    }
+    if (!po.gen_cc_dir.empty()) {
+      po.no_execute = true;
+    }
+    if (po.gen_out) {
+      po.no_execute = true;
     }
   }
   {

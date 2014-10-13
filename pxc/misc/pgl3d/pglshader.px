@@ -5,7 +5,8 @@ public import numeric::fpmath -;
 public import SDL2 -;
 public import SDL2::Image -;
 public import SDL2::TTF -;
-public import GL::glm glm;
+public import glm;
+public import glm::raw;
 public import GL::compat -;
 public import io::time -;
 public import io::environ -;
@@ -18,6 +19,7 @@ public import glshader -;
 public import glgeometry -;
 public import glbuffer -;
 public import glnode -;
+public import pglbase -;
 
 valuetype struct
 glconfig(bool is_gles0, int major0, int minor0, bool msaa0)
@@ -34,7 +36,7 @@ glconfig(bool is_gles0, int major0, int minor0, bool msaa0)
   public bool enable_instanced = major >= 3 && use_copying_instancing == 0;
   public bool enable_uniform_instancing = enable_instanced &&
     // (is_gles || minor < 3 || true);
-    (major < 3 || (!is_gles && minor < 3));
+    (major < 3 || is_gles || (!is_gles && minor < 3));
   public bool enable_depth_texture = !is_android;
   public bool enable_sampler2dshadow = enable_depth_texture && !is_gles;
   public function bool is_gl3_or_gles3() const { return major >= 3; }
@@ -160,9 +162,12 @@ public struct sdlcontext()
     wflags |= SDL_WINDOW_FULLSCREEN;
      */
     mutable vsync = 1;
-    if (get_option("-f") == "1") { wflags |= SDL_WINDOW_FULLSCREEN; }
+    if (get_option("-f") == "1") { wflags |= SDL_WINDOW_FULLSCREEN_DESKTOP; }
+    if (get_option("-d") == "1") { wflags |= SDL_WINDOW_FULLSCREEN_DESKTOP; }
     if (get_option("-v") == "1") { vsync = 0; }
     if (get_option("-h") == "1") { wflags &= ~SDL_WINDOW_ALLOW_HIGHDPI; }
+    if (get_option("-w") != "") { init_w = from_string{int}(get_option("-w")); }
+    if (get_option("-h") != "") { init_h = from_string{int}(get_option("-h")); }
     if (m::ne{is_gles, 0}) {
       wflags |= SDL_WINDOW_FULLSCREEN | SDL_WINDOW_BORDERLESS;
     }
@@ -170,6 +175,7 @@ public struct sdlcontext()
     sdllog("create_window", init_w, init_h);
     sdl_window = SDL_CreateWindow("PGL3D", 0, 0, init_w, init_h, wflags);
     const wnd = sdl_window.some;
+    // SDL_SetWindowFullscreen(wnd, SDL_WINDOW_FULLSCREEN_DESKTOP); // FIXME????
 // FIXME: 3.3 -> 3.2 -> 2.1
     if (m::eq{is_gles, 0}) {
       /* try opengl 3.3 */
@@ -336,7 +342,6 @@ tsvaluetype struct font_vertex_attributes
 tsvaluetype struct font2_uniforms
 {
   public glm::vec2 screen_size_px;
-  public float pixel_to_screen;
   public int sampler;
 }
 
@@ -354,6 +359,21 @@ public tsvaluetype struct font2_vertex_attributes
   public glm::vec2 coord_clamp;
   public float char_px;
   public float char_point_size;
+}
+
+public tsvaluetype struct rect2d_vertex_attributes
+{
+  public instance_id_type instance_id;
+  public glm::vec2 vert;
+}
+
+public tsvaluetype struct rect2d_instance_attributes
+{
+  public glm::vec4 idata; /* x0, y0, dx, dy */
+}
+
+public tsvaluetype struct rect2d_uniforms
+{
 }
 
 tsvaluetype struct particle_uniforms
@@ -388,6 +408,7 @@ public tsvaluetype struct lineparticle_uniforms
 {
   public glm::mat4 view_projection_matrix;
   public glm::vec2 screen_size_px;
+  public float screen_size_base;
 }
 
 public tsvaluetype struct lineparticle_vertex_attributes
@@ -425,6 +446,9 @@ metafunction ds2nd_shader_ptr
 metafunction font2_shader_ptr
   ptr{shader{
     font2_uniforms, font2_instance_attributes, font2_vertex_attributes}};
+metafunction rect2d_shader_ptr
+  ptr{shader{
+    rect2d_uniforms, rect2d_instance_attributes, rect2d_vertex_attributes}};
 metafunction particle_shader_ptr
   ptr{shader{particle_uniforms, particle_instance_attributes,
     particle_vertex_attributes}};
@@ -452,42 +476,6 @@ threaded struct font_texture_info
   public uint surface_h;
   public auto_texture font_texture_id;
   public auto_buffer text_vbo;
-}
-
-public tsvaluetype struct position_angle
-{
-  public glm::vec3 position;
-  public glm::quat angle;
-  public function glm::mat4 to_mat4() const
-  {
-    return glm::mat4().translate(position) * angle.to_mat4();
-  }
-  public function void translate_relative(glm::vec3 const& v)
-  {
-    position += angle.to_mat3() * v;
-  }
-  public function void rotate_angle_axis(float a, float x, float y, float z)
-  {
-    angle *= glm::make_quat_angle_axis(a, x, y, z);
-  }
-  public function void normalize()
-  {
-    angle.normalize();
-  }
-}
-
-public tsvaluetype struct
-projection_info()
-{
-  public glm::mat4 projection;
-  public glm::mat4 sm_projection;
-  public position_angle camera;
-  public position_angle light;
-  public int screen_width;
-  public int screen_height;
-  public bool proj_light;
-  public float light_on = 1.0;
-  public float const distance_max = 1000.0;
 }
 
 private function void
@@ -648,8 +636,8 @@ draw_frame(pglshader mutable& pgs, varray{instances_type} mutable& bo_instances,
 	0, 1, pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
   }
-  glViewport(0, 0, static_cast{GLsizei}(cam_df.screen_width),
-    static_cast{GLsizei}(cam_df.screen_height));
+  glViewport(0, 0, static_cast{GLsizei}(pgs.cam.screen_width),
+    static_cast{GLsizei}(pgs.cam.screen_height));
   /* z-prepass shader */
   if (pgs.glc.enable_zprepass) {
     glUseProgram(pgs.zpsdr->program);
@@ -781,6 +769,8 @@ draw_frame(pglshader mutable& pgs, varray{instances_type} mutable& bo_instances,
     const screen_size_px = make_farray{float}(
       cast_float(cam_df.screen_width), cast_float(cam_df.screen_height));
     glUniform2fv(pgs.lpsdr->u_screen_size_px, 1, screen_size_px.crawptr());
+    const screen_size_base = cast_float(cam_df.screen_size_base);
+    glUniform1fv(pgs.lpsdr->u_screen_size_base, 1, caddress(screen_size_base));
     glDisable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
@@ -823,7 +813,7 @@ draw_frame(pglshader mutable& pgs, varray{instances_type} mutable& bo_instances,
   {
     glUseProgram(pgs.spsdr->program);
     glUniform1f(pgs.spsdr->u_point_size_base,
-      0.1f * static_cast{float}(cam_df.screen_width));
+      0.1f * static_cast{float}(cam_df.screen_size_base));
     glDisable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
@@ -833,6 +823,17 @@ draw_frame(pglshader mutable& pgs, varray{instances_type} mutable& bo_instances,
     draw_instanced(*pgs.spsdr, *bos[1], bo_instances[1], pgs.global_ibuffer,
 	1, 0, pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
   }
+  /* rect2d */
+  {
+    glUseProgram(pgs.rsdr->program);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(0);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    draw_instanced(*pgs.rsdr, *bos[5], bo_instances[5], pgs.global_ibuffer,
+	5, 0, pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
+  }
   /* font */
   {
     glUseProgram(pgs.f2sdr->program);
@@ -841,8 +842,6 @@ draw_frame(pglshader mutable& pgs, varray{instances_type} mutable& bo_instances,
     glDepthMask(0);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glUniform1f(pgs.f2sdr->u_pixel_to_screen,
-      2.0f / static_cast{float}(cam_df.screen_width));
     glUniform1i(pgs.f2sdr->u_sampler, 0);
     const screen_size_px = glm::make_vec2(
       static_cast{float}(cam_df.screen_width),
@@ -860,26 +859,32 @@ draw_frame(pglshader mutable& pgs, varray{instances_type} mutable& bo_instances,
 function void update_mvp(projection_info mutable& cam)
 {
   float const perspective_distance = 1.0;
-  const h = cast_float(cam.screen_height)
-    / cast_float(cam.screen_width);
+  const ssbase = max(cam.screen_height, cam.screen_width);
+  cam.screen_size_base = ssbase;
+  const h = cast_float(cam.screen_height) / cast_float(ssbase);
+  const w = cast_float(cam.screen_width) / cast_float(ssbase);
   glViewport(0, 0, static_cast{GLsizei}(cam.screen_width),
     static_cast{GLsizei}(cam.screen_height));
+  glDepthMask(1);
+  glColorMask(1, 1, 1, 1);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   const d = cast_float(perspective_distance);
   {
     const near = cast_float(d);
     const far = cast_float(d + cam.distance_max);
-    const left = cast_float(-1.0);
-    const right = cast_float(1.0);
+    const left = cast_float(-w);
+    const right = cast_float(w);
     const bottom = cast_float(-h);
     const top = cast_float(h);
     cam.projection = glm::frustum{float}(left, right, bottom, top, near, far);
   }
   {
+    const sm_w = max(1.0, w);
     const sm_h = max(1.0, h);
     const near = cast_float(d);
     const far = cast_float(d + cam.distance_max);
-    const left = cast_float(-1.0);
-    const right = cast_float(1.0);
+    const left = cast_float(-sm_w);
+    const right = cast_float(sm_w);
     const bottom = cast_float(-sm_h);
     const top = cast_float(sm_h);
     cam.sm_projection = glm::frustum{float}(left, right, bottom, top, near,
@@ -1516,6 +1521,7 @@ init_lineparticle_shader(glconfig const& g)
   */
   v += "uniform mat4 view_projection_matrix;\n";
   v += "uniform vec2 screen_size_px;\n";
+  v += "uniform float screen_size_base;\n";
   v += g.vert_in() + "vec2 vert;\n";
   v += g.vert_out() + "vec3 vary_coord;\n";
   v += g.vert_out() + "vec2 edge;\n";
@@ -1530,9 +1536,9 @@ init_lineparticle_shader(glconfig const& g)
   v += "vec2 p0 = p0p.xy * screen_size_px / p0p.w;\n";
   v += "vec2 p1 = p1p.xy * screen_size_px / p1p.w;\n";
   v += "float is_posi = min(float(p0p.w > 0.0), float(p1p.w > 0.0));\n"; 
-  v += "vec2 pvec = p1 - p0;\n";
+  v += "vec2 pvec = p1 - p0;\n"; // FIXME: must be non-zero
   v += "float plen = length(pvec);\n";
-  v += "vec2 r = screen_size_px.x * "
+  v += "vec2 r = screen_size_base * "
     + g.instance_attr("idata", has_inst) + "[2].x"
     + " / vec2(p0p.w, p1p.w);\n";
   v += "float rmx = max(r[0], r[1]);\n";
@@ -1625,6 +1631,29 @@ init_font2_shader(glconfig const& g)
   f += "}\n";
   return make_shader_ptr{font2_uniforms, font2_instance_attributes,
     font2_vertex_attributes}(v, f, "idata");
+}
+
+function rect2d_shader_ptr
+init_rect2d_shader(glconfig const& g)
+{
+  string v;
+  string f;
+  v += g.prepend();
+  v += g.vert_in() + "vec2 vert;\n";
+  v += g.decl_instance_id(true);
+  v += g.decl_instance_attr("vec4", "idata", true);
+  v += "void main(void) {\n";
+  v += "vec4 idata_i = " + g.instance_attr("idata", true) + ";\n";
+  v += "vec2 screen_pos = idata_i.xy + idata_i.zw * vert;\n";
+  v += "gl_Position = vec4(screen_pos, 0.0, 1.0);\n";
+  v += "}\n";
+  f += g.prepend();
+  f += g.decl_fragcolor();
+  f += "void main(void) {\n";
+  f += g.fragcolor() + " = vec4(1.0, 1.0, 1.0, 0.3);\n";
+  f += "}\n";
+  return make_shader_ptr{rect2d_uniforms, rect2d_instance_attributes,
+    rect2d_vertex_attributes}(v, f, "idata");
 }
 
 function uint read_3_uint(cslice{uchar} const& buf, size_t o)
@@ -1939,6 +1968,7 @@ pglshader(bool gles_flag0, int glmajor0, int glminor0, bool enable_msaa0,
   public particle_shader_ptr const spsdr = init_particle_shader(glc);
   public particle_bb_shader_ptr const prtbsdr = init_particle_bb_shader(glc);
   public lineparticle_shader_ptr const lpsdr = init_lineparticle_shader(glc);
+  public rect2d_shader_ptr const rsdr = init_rect2d_shader(glc);
   public font2_shader_ptr const f2sdr = init_font2_shader(glc);
   public shadowmap_fbo sfbo;
   public deferred_shading_fbo dsfbo;
@@ -1994,6 +2024,9 @@ pglshader(bool gles_flag0, int glmajor0, int glminor0, bool enable_msaa0,
       (static_cast{size_t}(num_float_struct{font2_vertex_attributes}), true));
     vertex_buffers.push_back(make_ptr{vertex_buffer}
       (static_cast{size_t}(num_float_struct{lineparticle_vertex_attributes}),
+	false));
+    vertex_buffers.push_back(make_ptr{vertex_buffer}
+      (static_cast{size_t}(num_float_struct{rect2d_vertex_attributes}),
 	false));
   }
   public function void prepare_vertex_buffers()

@@ -201,7 +201,7 @@ void arena_clear();
 void arena_append_topval(std::list<expr_i *>& topval, bool is_main,
   imports_type& imports_r);
 void arena_compile(const std::map<std::string, std::string>& prof_map,
-  const std::string& dest_filename, coptions& copt_apnd,
+  bool single_cc, const std::string& dest_filename, coptions& copt_apnd,
   generate_main_e gmain);
 char *arena_strdup(const char *str);
 char *arena_concat_strdup(const char *s0, const char *s1);

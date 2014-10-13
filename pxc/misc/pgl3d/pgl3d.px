@@ -3,7 +3,7 @@ public import common -;
 public import pointer::raw -;
 public import numeric::fpmath -;
 public import SDL2 -;
-public import GL::glm glm;
+public import glm;
 public import GL::compat -;
 public import io::time -;
 public import io::environ -;
@@ -18,6 +18,7 @@ public import glbuffer -;
 public import glnode -;
 public import pglshader -;
 public import pglscene -;
+public import pglbase -;
 public import pglcommon -;
 
 function void build_vertices(pglshader mutable& pgs)
@@ -217,6 +218,16 @@ function void build_vertices(pglshader mutable& pgs)
     vs[2].vert = glm::make_vec2(1.0, 0.5);
     vs[3].vert = glm::make_vec2(0.0, 0.5);
     vtx->push_polygon_distinct{lineparticle_vertex_attributes}(vs);
+  }
+  {
+    /* for rect2d shader */
+    const vtx = pgs.make_vertices(5, "rect2d");
+    farray{rect2d_vertex_attributes, 4} vs;
+    vs[0].vert = glm::make_vec2(0.0, 0.0);
+    vs[1].vert = glm::make_vec2(1.0, 0.0);
+    vs[2].vert = glm::make_vec2(1.0, 1.0);
+    vs[3].vert = glm::make_vec2(0.0, 1.0);
+    vtx->push_polygon_distinct{rect2d_vertex_attributes}(vs);
   }
   {
     /* for font2 shader */
@@ -602,6 +613,43 @@ player_info()
   public float accel_ratio = 0.1f;
 }
 
+function void node_factory_prepare(node_factory mutable& nf,
+  cslice{ptr{vertex_buffer}} const& bos)
+{
+  for (size_t bo_id, const& bop: bos) {
+    for (const& n, const id: bop->vs_names) {
+      joint_id_type jid;
+      jid.bo_id = bo_id;
+      jid.vs_id = static_cast{int}(id);
+      nf.name_to_id[n] = jid;
+    }
+    nf.binfo.push_back(node_buffer_info());
+    node_buffer_info mutable& nbi = nf.binfo[nf.binfo.size() - 1];
+    for (const i, const& vsp: bop->vs_arr) {
+      nbi.vs_arr.push_back(node_vs_info());
+      node_vs_info mutable& nvi = nbi.vs_arr[nbi.vs_arr.size() - 1];
+      for (const j, const& nj: vsp->vtxs->joints) {
+	node_joint_info nji;
+	nji.joint_id = bos_name_to_id(bos, nj.joint_name);
+	nji.trans = nj.trans;
+	nvi.joints.push_back(nji);
+      }
+    }
+  }
+  private function joint_id_type
+  bos_name_to_id(cslice{ptr{vertex_buffer}} const& bos, cstrref const& name)
+  {
+    joint_id_type jid;
+    for (const i, const& bo: bos) {
+      if (bo->has_name(name)) {
+	jid.bo_id = i;
+	jid.vs_id = static_cast{int}(bo->get_id_by_name(name));
+	break;
+      }
+    }
+    return jid;
+  }
+}
 
 function void main_loop()
 {
@@ -628,7 +676,7 @@ function void main_loop()
   pgs.prepare_vertex_buffers();
   pgs.prepare_bo_instances(local_bo_instances);
   node_factory nfac;
-  nfac.prepare(pgs.vertex_buffers); 
+  node_factory_prepare(nfac, pgs.vertex_buffers); 
   motion_thread_object mto = motion_thread_object(nfac, local_bo_instances);
 
   size_t saved_stat_num_objects;
@@ -661,6 +709,7 @@ function void main_loop()
 	  int h;
 	  SDL_GL_GetDrawableSize(sdlc.sdl_window.some, w, h);
 	  pgs.resize_screen(w, h);
+	  frctl.start();
 	  sdllog("resized w=", w, " h=", h);
 	} else if (ev.window.event == SDL_WINDOWEVENT_HIDDEN) {
 	  /* sdllog("hidden"); */
@@ -851,7 +900,8 @@ function void main_loop()
 	mts.frame_speed_mul = frctl.frame_speed_mul;
 	mts.scene_reset = scene_next_flag ? 0 : -1;
 	mts.message = mess;
-	mts.message_char_w = pgs.fti.char_w;
+	mts.font_width = pgs.fti.char_w;
+	mts.font_height = pgs.fti.char_h;
 	local_bo_instances.swap(mts.bo_instances);
 	saved_stat_num_objects = mts.stat_num_objects;
       }
@@ -876,6 +926,9 @@ function void main_loop()
     fr.save_ticks(6, SDL_GetTicks());
     SDL_GL_SwapWindow(sdlc.sdl_window.some);
     fr.save_ticks(7, SDL_GetTicks());
+    if (scene_next_flag) {
+      frctl.start();
+    }
   }
 }
 
