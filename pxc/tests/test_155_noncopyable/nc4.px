@@ -1,0 +1,36 @@
+public namespace nc4 "use-unsafe";
+public import common -;
+
+public struct extern "nocopy_test" "noncopyable" nocopy_test(int x0, int y0) {
+  public int x = x0;
+  public int y = y0;
+}
+
+extern "types" inline
+
+using namespace pxcrt;
+
+struct nocopy_test {
+  nocopy_test(bt_int x0, bt_int y0) : x(x0), y(y0) { }
+  bt_int x;
+  bt_int y;
+private:
+  nocopy_test(const nocopy_test&);
+  nocopy_test& operator =(const nocopy_test&);
+};
+
+;
+
+public struct foo() {
+  public nocopy_test v = nocopy_test(10, 22);
+}
+
+{
+  foo o = foo(); // error: foo is not copyable
+  println(o.v.x, o.v.y);
+  // mutable obj = nocopy_test(10, 20);
+  // obj.x = 10;
+  // obj.y = 20;
+  // println(obj.x, obj.y);
+}
+

@@ -2,7 +2,6 @@ public namespace pgl3d "export-unsafe";
 public import common -;
 public import pointer::raw -;
 public import numeric::fpmath -;
-public import SDL2 -;
 public import glm;
 public import GL::compat -;
 public import io::time -;
@@ -655,7 +654,8 @@ function void main_loop()
 {
   sdllog("PGC main");
 
-  sdlcontext sdlc  = sdlcontext();
+  sdlcontext sdlc;
+  // sdlcontext sdlc  = sdlcontext();
 
   SDL_EventState(SDL_KEYDOWN, 0);
   SDL_EventState(SDL_KEYUP, 0);
@@ -698,7 +698,7 @@ function void main_loop()
   while (!done) {
     bool scene_next_flag = false;
     SDL_Event ev;
-    while (SDL_PollEvent(ev)) {
+    while (SDL_PollEvent(address(ev)) != 0) {
       const etype = ev.type;
       /*
        sdllog("event", cast_int(ev.type));
@@ -707,7 +707,7 @@ function void main_loop()
 	if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
 	  int w;
 	  int h;
-	  SDL_GL_GetDrawableSize(sdlc.sdl_window.some, w, h);
+	  SDL_GL_GetDrawableSize(sdlc.sdl_window, address(w), address(h));
 	  pgs.resize_screen(w, h);
 	  frctl.start();
 	  sdllog("resized w=", w, " h=", h);
@@ -790,7 +790,7 @@ function void main_loop()
 	paused = false;
 	int w;
 	int h;
-	SDL_GL_GetDrawableSize(sdlc.sdl_window.some, w, h);
+	SDL_GL_GetDrawableSize(sdlc.sdl_window, address(w), address(h));
 	pgs.resize_screen(w, h);
 	frctl.start();
       } else if (etype == SDL_QUIT) {
@@ -812,61 +812,67 @@ function void main_loop()
       }
     }
     {
-      SDL_KeyboardState const ks;
-      if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) {
+      int numkeys;
+      const ksp = SDL_GetKeyboardState(address(numkeys));
+      const ks = ksp.to_cslice(static_cast{size_t}(numkeys));
+      function uint get_key(SDL_Scancode k) {
+	return ks[static_cast{uint}(k)];
+      }
+      // SDL_KeyboardState const ks;
+      if (get_key(SDL_SCANCODE_ESCAPE) != 0) {
 	done = true;
       }
       if (test_scroll_mode) {
 	player.posang.rotate_angle_axis(1.0f * frctl.frame_speed_mul,
 	    1.0, 0.0, 0.0);
       }
-      if (ks.Key(SDL_SCANCODE_UP) != 0) {
+      if (get_key(SDL_SCANCODE_UP) != 0) {
 	player.posang.rotate_angle_axis(1.0f * frctl.frame_speed_mul,
 	    1.0, 0.0, 0.0);
       }
-      if (ks.Key(SDL_SCANCODE_DOWN) != 0) {
+      if (get_key(SDL_SCANCODE_DOWN) != 0) {
 	player.posang.rotate_angle_axis(-1.0f * frctl.frame_speed_mul,
 	    1.0, 0.0, 0.0);
       }
-      if (ks.Key(SDL_SCANCODE_LEFT) != 0) {
+      if (get_key(SDL_SCANCODE_LEFT) != 0) {
 	player.posang.rotate_angle_axis(1.0f * frctl.frame_speed_mul,
 	    0.0, 1.0, 0.0);
       }
-      if (ks.Key(SDL_SCANCODE_RIGHT) != 0) {
+      if (get_key(SDL_SCANCODE_RIGHT) != 0) {
 	player.posang.rotate_angle_axis(-1.0f * frctl.frame_speed_mul,
 	    0.0, 1.0, 0.0);
       }
-      if (ks.Key(SDL_SCANCODE_SPACE) != 0) {
+      if (get_key(SDL_SCANCODE_SPACE) != 0) {
 	ictl.add_zdelta(-0.001f, frctl);
       }
-      if (ks.Key(SDL_SCANCODE_LSHIFT) != 0) {
+      if (get_key(SDL_SCANCODE_LSHIFT) != 0) {
 	ictl.add_zdelta(0.001f, frctl);
       }
-      if (ks.Key(SDL_SCANCODE_A) != 0) {
+      if (get_key(SDL_SCANCODE_A) != 0) {
 	player.posang.translate_relative(
 	    glm::make_vec3(-0.05, 0.0, 0.0) * frctl.frame_speed_mul);
       }
-      if (ks.Key(SDL_SCANCODE_D) != 0) {
+      if (get_key(SDL_SCANCODE_D) != 0) {
 	player.posang.translate_relative(
 	    glm::make_vec3(0.05, 0.0, 0.0) * frctl.frame_speed_mul);
       }
-      if (ks.Key(SDL_SCANCODE_S) != 0) {
+      if (get_key(SDL_SCANCODE_S) != 0) {
 	player.posang.translate_relative(
 	    glm::make_vec3(0.0, -0.05, 0.0) * frctl.frame_speed_mul);
       }
-      if (ks.Key(SDL_SCANCODE_W) != 0) {
+      if (get_key(SDL_SCANCODE_W) != 0) {
 	player.posang.translate_relative(
 	    glm::make_vec3(0.0, 0.05, 0.0) * frctl.frame_speed_mul);
       }
-      if (ks.Key(SDL_SCANCODE_Z) != 0) {
+      if (get_key(SDL_SCANCODE_Z) != 0) {
 	player.posang.rotate_angle_axis(
 	    1.0f * frctl.frame_speed_mul, 0.0, 0.0, 1.0);
       }
-      if (ks.Key(SDL_SCANCODE_X) != 0) {
+      if (get_key(SDL_SCANCODE_X) != 0) {
 	player.posang.rotate_angle_axis(
 	    -1.0f * frctl.frame_speed_mul, 0.0, 0.0, 1.0);
       }
-      if (ks.Key(SDL_SCANCODE_RETURN) != 0) {
+      if (get_key(SDL_SCANCODE_RETURN) != 0) {
 	ictl.finger_zmove_delta = 0.0;
 	ictl.finger_zmove_mode = 1;
       }
@@ -924,7 +930,7 @@ function void main_loop()
     fr.save_ticks(5, SDL_GetTicks());
     frctl.control();
     fr.save_ticks(6, SDL_GetTicks());
-    SDL_GL_SwapWindow(sdlc.sdl_window.some);
+    SDL_GL_SwapWindow(sdlc.sdl_window);
     fr.save_ticks(7, SDL_GetTicks());
     if (scene_next_flag) {
       frctl.start();

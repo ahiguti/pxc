@@ -2,7 +2,7 @@ NUM		[0-9]
 HDNUM		[0-9a-fA-F]
 AL		[a-zA-Z_]
 ALNUM		[0-9a-zA-Z_]
-SZ		[OSLZ]
+SZ		[OSLZoslz]
 ESCCH		[abfnrtv\'\"\\\?\0]
 NOEI		(\n|[^\;\n].*\n)
 NOEC		([^\*]|\*[^\/])
@@ -63,9 +63,9 @@ extern int count_newline(const char *str);
 "expand"		{ return TOK_EXPAND; }
 \'(\\{ESCCH}|[^\\'])\'	{ yylval.str_val = pxc::arena_strdup(yytext);
 			  return TOK_UINTLIT; }
-{NUM}+U{SZ}?		{ yylval.str_val = pxc::arena_strdup(yytext);
+{NUM}+[Uu]{SZ}?		{ yylval.str_val = pxc::arena_strdup(yytext);
 			  return TOK_UINTLIT; }
-0x{HDNUM}+U{SZ}?	{ yylval.str_val = pxc::arena_strdup(yytext);
+0x{HDNUM}+[Uu]{SZ}?	{ yylval.str_val = pxc::arena_strdup(yytext);
 			  return TOK_UINTLIT; }
 {NUM}+{SZ}?		{ yylval.str_val = pxc::arena_strdup(yytext);
 			  return TOK_INTLIT; }

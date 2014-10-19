@@ -1,0 +1,70 @@
+public threaded namespace container::raw "use-unsafe";
+public import numeric::integral -;
+public import container::array -;
+public import meta m;
+
+/* raw arrays, e.g., int x[32] */
+
+public tsvaluetype struct
+extern "::pxcrt::rawarray<>::type" "noncopyable" {t, n}
+rawarray {
+  public metafunction __static_assert__ m::characteristic{t, "defcon"};
+  public metafunction key_type size_t;
+  public metafunction mapped_type t;
+}
+
+public threaded function extern "::pxcrt::rawarray___getelem" {t, n} t
+rawarray___getelem(rawarray{t, n} const& x, size_t i);
+public threaded function extern "::pxcrt::rawarray___setelem" {t, n} void
+rawarray___setelem(rawarray{t, n} mutable& x, size_t i, t const& v);
+public threaded function extern "::pxcrt::rawarray_to_slice" {t, n} slice{t}
+rawarray_to_slice(rawarray{t, n} mutable& x);
+public threaded function extern "::pxcrt::rawarray_to_cslice" {t, n} cslice{t}
+rawarray_to_cslice(rawarray{t, n} const& x);
+
+extern "types" inline
+
+namespace pxcrt {
+
+template <typename T, size_t len>
+struct rawarray {
+  typedef T type[len];
+};
+
+template <typename T, size_t len>
+static inline T
+rawarray___getelem(typename rawarray<T, len>::type const& x, size_t idx)
+{
+  #ifdef PXC_NO_BOUNDS_CHECKING
+  if (idx >= len) { pxcrt::throw_invalid_index(); }
+  #endif
+  return x[idx];
+}
+
+template <typename T, size_t len>
+static inline void
+rawarray___setelem(typename rawarray<T, len>::type & x, size_t idx, T const& v)
+{
+  #ifdef PXC_NO_BOUNDS_CHECKING
+  if (idx >= len) { pxcrt::throw_invalid_index(); }
+  #endif
+  x[idx] = v;
+}
+
+template <typename T, size_t len>
+static inline bt_slice<T>
+rawarray_to_slice(typename rawarray<T, len>::type & x)
+{
+  return bt_slice<T>(x, len);
+}
+
+template <typename T, size_t len>
+static inline bt_cslice<T>
+rawarray_to_cslice(typename rawarray<T, len>::type const& x)
+{
+  return bt_cslice<T>(x, len);
+}
+
+};
+
+;

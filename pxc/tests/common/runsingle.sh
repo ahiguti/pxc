@@ -39,7 +39,7 @@ for i in $TESTS; do
   if [ "$i" != "pxcrt.px" ]; then
     ../../pxc -ne -gs --trim-path=2 -w=../work -p="$TEST_PXC_PROF" $OPTS "$i" \
     	> $bn.log 2> $bn.log2
-    g++ -O $i.cc -lpthread -o $i.cc.exe
+    g++ -O -I/usr/local/include $i.cc -lpthread -o $i.cc.exe
     ./$i.cc.exe >> $bn.log 2>> $bn.log2
     if [ ! "$?" ]; then
       echo "$bn failed"

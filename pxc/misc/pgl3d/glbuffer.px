@@ -1,9 +1,7 @@
 public namespace glbuffer "export-unsafe";
 public import common -;
-public import pointer::raw -;
+public import pointer::raw_unsafe -;
 public import numeric::fpmath -;
-public import SDL2 -;
-public import SDL2::Image -;
 public import glm;
 public import GL::compat -;
 public import io::time -;
@@ -27,7 +25,7 @@ float_slice_set_int(slice{float} const& s, int v)
   if (s.size() < 1) {
     return;
   }
-  const si = size_t_to_rawptr{int}(slice_rawptr(s).to_size_t()).to_slice(1);
+  const si = size_t_to_rawptr{int}(slice_to_rawptr(s).to_size_t()).to_slice(1);
   si[0] = v;
 }
 
@@ -167,7 +165,7 @@ public threaded struct async_buffer() {
       return;
     }
     glBindBuffer(GL_ARRAY_BUFFER, vbo.get());
-    glBufferData(GL_ARRAY_BUFFER, sz, size_t_to_crawptr{void}(0),
+    glBufferData(GL_ARRAY_BUFFER, sz, size_t_crawptr{void}(0),
       GL_STREAM_DRAW);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     size_bytes = sz;
@@ -365,12 +363,12 @@ vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0)
       glBindBuffer(GL_ARRAY_BUFFER, vbo_values.get());
       glBufferData(GL_ARRAY_BUFFER,
 	static_cast{GLsizeiptr}(vertex_values.size()) * 4,
-	vertex_values.crawptr().void(), GL_STATIC_DRAW);
+	vertex_values.to_crawptr().to_cvoidptr(), GL_STATIC_DRAW);
       glBindBuffer(GL_ARRAY_BUFFER, 0);
       glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo_elems.get());
       glBufferData(GL_ELEMENT_ARRAY_BUFFER,
 	static_cast{GLsizeiptr}(elements.size()) * 4,
-	elements.crawptr().void(), GL_STATIC_DRAW);
+	elements.to_crawptr().to_cvoidptr(), GL_STATIC_DRAW);
       glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     }
     return true;

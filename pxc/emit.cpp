@@ -2929,7 +2929,7 @@ void expr_feach::emit_value(emit_context& em)
   }
   const term& cet = ce->get_texpr();
   if (is_array_family(cet) || is_cm_slice_family(cet)) {
-    if (is_raw_array(0, cet)) {
+    if (is_dense_array(0, cet)) {
       /* raw array */
       em.indent('f');
       em.puts("const size_t sz$fe = ag$fe.size();\n");
@@ -3459,9 +3459,18 @@ static void emit_var_or_tempvar(emit_context& em, expr_i *e, const term& tbase,
 	/* defset */
 	const bool incl_byref = false;
 	if (!is_unnamed && is_vardef_constructor_or_byref(e, incl_byref)) {
+/*
+fprintf(stderr, "emit_vardef_constructor t=[%s]\n", e->dump(0).c_str());
+*/
 	  /* foo x((a0), (a1), ...) */
 	  emit_vardef_constructor(em, e, tbase, cs0, var_csymbol);
 	} else {
+/*
+fprintf(stderr, "emit explicit init [%s] t=[%s] %d\n", rhs->dump(0).c_str(), term_tostr_human(tbase).c_str(), (int)is_copyable(tbase));
+if (!is_copyable(tbase)) {
+abort();
+}
+*/
 	  em.puts(cs0 + " " + var_csymbol + " = ");
 	  fn_emit_value(em, rhs, false, is_unnamed);
 	}

@@ -1071,7 +1071,10 @@ static bool is_copyable_type_one(expr_i *e)
 bool is_copyable(const term& t)
 {
   sorted_exprs c;
-  sort_dep(c, t.get_expr());
+  // sort_dep(c, t.get_expr());
+  term t0 = t; /* TODO: avoid copying */
+  expr_i *const einst = term_get_instance(t0);
+  sort_dep(c, einst);
   for (std::list<expr_i *>::iterator i = c.sorted.begin();
     i != c.sorted.end(); ++i) {
     if (!is_copyable_type_one(*i)) {
@@ -1105,7 +1108,7 @@ static bool is_assignable_type_one(expr_i *e, bool allow_unsafe)
 static bool is_assignable_internal(const term& t, bool allow_unsafe)
 {
   sorted_exprs c;
-  sort_dep(c, t.get_expr());
+  sort_dep(c, t.get_expr()); // FIXME: term_get_instance()
   for (std::list<expr_i *>::iterator i = c.sorted.begin();
     i != c.sorted.end(); ++i) {
     if (!is_assignable_type_one(*i, allow_unsafe)) {
@@ -3397,11 +3400,11 @@ term get_array_range_texpr(expr_op *eop, expr_i *ec /* nullable */,
   return slt;
 }
 
-bool is_raw_array(expr_op *eop, const term& t0)
+bool is_dense_array(expr_op *eop, const term& t0)
 {
-  term t = eval_mf_symbol(t0, "is_raw_array", eop);
+  term t = eval_mf_symbol(t0, "is_dense_array", eop);
   if (t.is_null()) {
-    arena_error_throw(eop, "Symbol 'is_raw_array' is not found for type '%s'",
+    arena_error_throw(eop, "Symbol 'is_dense_array' is not found for type '%s'",
       term_tostr_human(t0).c_str());
     return false;
   }

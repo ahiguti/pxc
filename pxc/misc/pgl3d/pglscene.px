@@ -187,7 +187,7 @@ scene_control_set_message(scene_control mutable& sctl,
       nd.children.erase(n, nd.children.size());
     }
     for (const i, const p: nd.children) {
-      const& sli = p->trans.slice();
+      const& sli = p->trans.to_slice();
       sli[2] = (static_cast{float}(x) / screen_w) * 2.0f - 1.0f;
       sli[3] = (static_cast{float}(y) / screen_h) * 2.0f - 1.0f;
       x += font_width;
@@ -212,7 +212,7 @@ scene_control_update_buttons(scene_control mutable& sctl,
     nd.children.push_back(p);
   }
   const cn = nd.children[0];
-  const& sli = cn->trans.slice();
+  const& sli = cn->trans.to_slice();
   sli[0] = -0.99f;
   sli[1] = 0.81f;
   sli[2] = 0.18f;
@@ -228,7 +228,7 @@ scene_control_step(scene_control mutable& sctl,
   threaded function void step_lp(scene_node{node_data} mutable& sn_lp)
   {
     for (const i, const& snp: sn_lp.children) {
-      const& sli = snp->trans.slice();
+      const& sli = snp->trans.to_slice();
       mutable vec0 = glm::make_vec3(sli[0], sli[1], sli[2]);
       mutable vec1 = glm::make_vec3(sli[3], sli[4], sli[5]);
       const vd = vec1 - vec0;
@@ -246,7 +246,7 @@ scene_control_step(scene_control mutable& sctl,
       sli[7] = step;
     }
     threaded function bool is_finished(ptr{scene_node{node_data}} const& snp) {
-      const& sli = snp->trans.slice();
+      const& sli = snp->trans.to_slice();
       return sli[7] > 200.0f;
     }
     // sdllog("erase?", sn_lp.children.size());
@@ -261,7 +261,7 @@ scene_control_step(scene_control mutable& sctl,
       return;
     }
     const p3 = make_ptr{scene_node{node_data}}(sctl.joint_id_lp, glm::mat4());
-    const& sli = p3->trans.slice();
+    const& sli = p3->trans.to_slice();
     const p0 = tr * glm::make_vec4(0.0f, 0.0f, -5.0f, 1.0f);
     const p1 = tr * glm::make_vec4(0.0f, 0.0f, -10.0f, 1.0f);
     sli[0] = p0.x; /* position0 */
@@ -323,7 +323,7 @@ buffer_append(varray{float} mutable& arr, t const& v)
     m::eq{t, glm::mat2},
     m::eq{t, glm::mat3},
     m::eq{t, glm::mat4}}) {
-    arr.append(v.cslice());
+    arr.append(v.to_cslice());
   } else {
     expand (sym: m::field_names{t})
     {
@@ -359,7 +359,7 @@ prepare_instance_data(tsn const& sn, node_common_data mutable& ncd,
       buffer_append(ibarr[0].instance_buffer, mvp);
     } else if (bo_id == 4) {
       /* lineparticle */
-      const sli = sn.trans.cslice();
+      const sli = sn.trans.to_cslice();
       ibarr[0].instance_buffer.append(sli[0 .. 9]);
       /*
       lineparticle_instance_attributes v;
@@ -371,7 +371,7 @@ prepare_instance_data(tsn const& sn, node_common_data mutable& ncd,
       */
     } else if (bo_id == 5) {
       /* rect2d */
-      const sli = sn.trans.cslice();
+      const sli = sn.trans.to_cslice();
       /*
       rect2d_instance_attributes v;
       const sli_idata = v.idata.slice();
@@ -382,7 +382,7 @@ prepare_instance_data(tsn const& sn, node_common_data mutable& ncd,
       */
       ibarr[0].instance_buffer.append(sli[0 .. 4]);
     } else if (bo_id == 3) {
-      const sli = sn.trans.cslice();
+      const sli = sn.trans.to_cslice();
       /*
       font2_instance_attributes v;
       v.idata = glm::make_vec4(sli[0], sli[1], sli[2], sli[3]);

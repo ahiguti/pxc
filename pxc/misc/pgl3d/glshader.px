@@ -1,13 +1,12 @@
 public namespace glshader "export-unsafe";
 public import common -;
-public import pointer::raw -;
+public import pointer::raw_unsafe -;
 public import numeric::fpmath -;
 public import glm;
 public import GL::compat -;
 public import meta m;
 public import exception -;
 public import glresource -;
-public import SDL2 -;
 
 public metafunction num_float_struct{t}
   m::fold{m::map{m::field_types{t}, num_float_fld}, m::add, 0};
@@ -61,19 +60,19 @@ private function {t} void
 set_uniform(GLint loc, cslice{float} const& value, size_t offset, int cnt)
 {
   if (m::eq{t, glm::mat4}) {
-    glUniformMatrix4fv(loc, cnt, 0, value.crawptr() + offset);
+    glUniformMatrix4fv(loc, cnt, 0, value.to_crawptr() + offset);
   } else if (m::eq{t, glm::mat3}) {
-    glUniformMatrix3fv(loc, cnt, 0, value.crawptr() + offset);
+    glUniformMatrix3fv(loc, cnt, 0, value.to_crawptr() + offset);
   } else if (m::eq{t, glm::mat2}) {
-    glUniformMatrix2fv(loc, cnt, 0, value.crawptr() + offset);
+    glUniformMatrix2fv(loc, cnt, 0, value.to_crawptr() + offset);
   } else if (m::eq{t, glm::vec4}) {
-    glUniform4fv(loc, cnt, value.crawptr() + offset);
+    glUniform4fv(loc, cnt, value.to_crawptr() + offset);
   } else if (m::eq{t, glm::vec3}) {
-    glUniform3fv(loc, cnt, value.crawptr() + offset);
+    glUniform3fv(loc, cnt, value.to_crawptr() + offset);
   } else if (m::eq{t, glm::vec2}) {
-    glUniform2fv(loc, cnt, value.crawptr() + offset);
+    glUniform2fv(loc, cnt, value.to_crawptr() + offset);
   } else if (m::eq{t, float}) {
-    glUniform1fv(loc, cnt, value.crawptr() + offset);
+    glUniform1fv(loc, cnt, value.to_crawptr() + offset);
   } else {
     m::error{"set_uniform"};
   }
@@ -115,14 +114,12 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
     }
     expand (sym: m::field_names{tuni}) {
       expand (vsym: {m::concat{"u_", sym}}) {
-	vsym = glGetUniformLocation_nocheck(program,
-	  m::to_string{sym}.crawptr().char());
+	vsym = glGetUniformLocation_nocheck(program, m::to_string{sym});
 	glGetError(); /* ignore */
 	if (vsym < 0) {
 	  /* model_matrix is defined as a vertex attribute if instanced
 	   * rendering is enabled. */
-	  vsym = glGetAttribLocation_nocheck(program,
-	    m::to_string{sym}.crawptr().char());
+	  vsym = glGetAttribLocation_nocheck(program, m::to_string{sym});
 	  glGetError(); /* ignore */
 	  /*
 	  sdllog("uniform(attr)", m::to_string{sym}, vsym);
@@ -136,14 +133,12 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
     }
     expand (sym: m::field_names{tinst}) {
       expand (vsym: {m::concat{"i_", sym}}) {
-	vsym = glGetUniformLocation_nocheck(program,
-	  m::to_string{sym}.crawptr().char());
+	vsym = glGetUniformLocation_nocheck(program, m::to_string{sym});
 	glGetError(); /* ignore */
 	if (vsym < 0) {
 	  /* model_matrix is defined as a vertex attribute if instanced
 	   * rendering is enabled. */
-	  vsym = glGetAttribLocation_nocheck(program,
-	    m::to_string{sym}.crawptr().char());
+	  vsym = glGetAttribLocation_nocheck(program, m::to_string{sym});
 	  glGetError(); /* ignore */
 	  /*
 	  sdllog("instance(attr)", m::to_string{sym}, vsym);
@@ -157,8 +152,7 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
     }
     expand (sym: m::field_names{tvert}) {
       expand (vsym: {m::concat{"v_", sym}}) {
-	vsym = glGetAttribLocation_nocheck(program,
-	  m::to_string{sym}.crawptr().char());
+	vsym = glGetAttribLocation_nocheck(program, m::to_string{sym});
 	glGetError(); /* ignore */
 	/*
 	sdllog("attribute", m::to_string{sym}, vsym);
@@ -180,7 +174,7 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
 	if (m::eq{ft, float}) {
 	  arr[offset] = v.sym;
 	} else {
-	  const src = v.sym.cslice();
+	  const src = v.sym.to_cslice();
 	  for (const i: 0 .. nfl) {
 	    arr[offset + i] = src[i];
 	  }
@@ -319,9 +313,9 @@ private function uint compile_shader(cstrref const& src, GLenum type,
   string mutable& err_r)
 {
   mutable res = glCreateShader(type);
-  mutable source = make_farray{ccharptr}(src.crawptr().char());
+  mutable source = make_farray{ccharptr}(src.to_crawptr().to_ccharptr());
   const length = make_farray{int}(static_cast{int}(src.size()));
-  glShaderSource(res, 1, source.rawptr(), length.crawptr());
+  glShaderSource(res, 1, source.to_rawptr(), length.to_crawptr());
   glCompileShader(res);
   int success;
   glGetShaderiv(res, GL_COMPILE_STATUS, address(success));
@@ -336,7 +330,7 @@ private function uint compile_shader(cstrref const& src, GLenum type,
     buf.resize(static_cast{size_t}(sz), 0);
     GLsizei len;
     glGetShaderInfoLog(res, static_cast{GLsizei}(sz), address(len),
-      buf.rawptr().char());
+      buf.to_rawptr().to_charptr());
     sdllog("compile_shader failed:", static_cast{int}(type), success, buf);
     err_r = string_join{"\t"}(static_cast{int}(type), success, buf);
     glDeleteShader(res);
@@ -365,7 +359,8 @@ create_program(cstrref const& vertex_shader, cstrref const& fragment_shader,
     if (shader != 0) {
       glAttachShader(prog, shader);
       if (!attrib_to_avoid_0.empty()) {
-	glBindAttribLocation(prog, 1, attrib_to_avoid_0.crawptr().char());
+	glBindAttribLocation(prog, 1,
+	  attrib_to_avoid_0.to_crawptr().to_ccharptr());
       }
     } else {
       success = 0;
@@ -384,7 +379,7 @@ create_program(cstrref const& vertex_shader, cstrref const& fragment_shader,
       buf.resize(4096, 0);
       GLsizei len;
       glGetProgramInfoLog(prog, static_cast{GLsizei}(buf.size()), address(len),
-	buf.rawptr().char());
+	buf.to_rawptr().to_charptr());
       buf.resize(static_cast{size_t}(len), 0);
       sdllog("linkprogram failed:", prog, buf);
       sdllog("vert:", vertex_shader);

@@ -306,6 +306,9 @@ union_field(t const& x)
  * is possible from 'tfrom' to 'tto'. */
 public metafunction implicit_conversion{tto, tfrom}
   m::cond{
+    /* conversion member function */
+    has_tsymbol{tfrom, "__to"},
+    implicit_conversion_mf{tto, tfrom},
     /* conversion function defined in the tfrom ns? */
     has_nssymbol{tfrom, conv_funcname_nons{tto, tfrom}},
     implicit_conversion_ns{tto, tfrom, 0},
@@ -346,6 +349,8 @@ make_tuple(expand(va::arg_decls_bycref{tlist}))
 private metafunction mapped_type{t}
   m::cond{
     is_container_or_range_type{t},
+    m::symbol{t, "mapped_type"},
+    has_tsymbol{t, "mapped_type"},
     m::symbol{t, "mapped_type"},
     has_tsymbol{t, "__getelem"},
     m::ret_type{m::symbol{t, "__getelem"}},
@@ -423,17 +428,15 @@ binop(tx const& x, ty const& y)
 private threaded function {tx, ty} bool
 eq_folding(tx const& x, ty const& y)
 {
-  if (m::and{m::eq{tx, ty}, is_pod_raw_array_or_sarray{tx}}) {
+  if (m::and{m::eq{tx, ty}, is_pod_dense_array{tx}}) {
     return pod_array_eq{tx}(x, y);
-  } else if (m::and{mf::is_array_or_slice_type{tx},
-    mf::is_array_or_slice_type{ty}}) {
+  } else if (m::and{is_array_or_slice_type{tx}, is_array_or_slice_type{ty}}) {
     if (x.size() != y.size()) { return false; }
     for (const& k, const& m: x) {
       if (y[k] != m) { return false; }
     }
     return true;
-  } else if (m::and{mf::is_map_or_range_type{tx},
-    mf::is_map_or_range_type{ty}}) {
+  } else if (m::and{is_map_or_range_type{tx}, is_map_or_range_type{ty}}) {
     if (x.size() != y.size()) { return false; }
     for (const& k, const& m: x) {
       if (const& ym : y[k]) {
@@ -451,7 +454,7 @@ eq_folding(tx const& x, ty const& y)
 private threaded function {lt, tx, ty} bool
 op_lexi(tx const& x, ty const& y)
 {
-  if (m::and{mf::is_array_or_slice_type{tx}, mf::is_array_or_slice_type{ty}}) {
+  if (m::and{is_array_or_slice_type{tx}, is_array_or_slice_type{ty}}) {
     const xsz = x.size();
     const ysz = x.size();
     const sz = xsz > ysz ? xsz : ysz;
@@ -553,4 +556,10 @@ private metafunction implicit_conversion_ns{tto, tfrom, tons}
       conv_funcname_nons{tto, tfrom}},
     tto,
     tfrom};
+
+private threaded function {tto, tfrom} tto
+implicit_conversion_mf(tfrom const& x)
+{
+  return x.__to{tto}();
+}
 
