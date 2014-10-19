@@ -1,10 +1,7 @@
 public namespace pglshader "export-unsafe";
 public import common -;
-public import pointer::raw -;
+public import pointer::raw_unsafe -;
 public import numeric::fpmath -;
-public import SDL2 -;
-public import SDL2::Image -;
-public import SDL2::TTF -;
 public import glm;
 public import glm::raw;
 public import GL::compat -;
@@ -122,7 +119,6 @@ glconfig(bool is_gles0, int major0, int minor0, bool msaa0)
 
 public struct sdlcontext()
 {
-  private SDL_Init init_object = SDL_Init(SDL_INIT_VIDEO);
   public int init_w = 128;
   public int init_h = 128;
   public bool enable_msaa = false;
@@ -130,15 +126,17 @@ public struct sdlcontext()
   public int glmajor;
   public int glminor;
   public int vsync = 1;
-  public option{ptr{SDL_Window}} sdl_window;
-  private option{ptr{SDL_GLContext}} sdl_glcontext;
+  public scoped_nullable{SDL_DestroyWindow} sdl_window;
+  private scoped_nullable{SDL_GL_DeleteContext} sdl_glcontext;
   init();
   function void init()
   {
+    SDL_Init(SDL_INIT_VIDEO);
+    TTF_Init();
     const num_modes = SDL_GetNumDisplayModes(0);
     for (int i: 0 .. num_modes) {
       SDL_DisplayMode mode;
-      SDL_GetDisplayMode(0, i, mode);
+      SDL_GetDisplayMode(0, i, address(mode));
       if (mode.w * mode.h > init_w * init_h) {
 	// init_w = mode.w;
 	// init_h = mode.h;
@@ -173,8 +171,8 @@ public struct sdlcontext()
     }
 
     sdllog("create_window", init_w, init_h);
-    sdl_window = SDL_CreateWindow("PGL3D", 0, 0, init_w, init_h, wflags);
-    const wnd = sdl_window.some;
+    sdl_window.reset(SDL_CreateWindow("PGL3D", 0, 0, init_w, init_h, wflags));
+    const wnd = sdl_window.get();
     // SDL_SetWindowFullscreen(wnd, SDL_WINDOW_FULLSCREEN_DESKTOP); // FIXME????
 // FIXME: 3.3 -> 3.2 -> 2.1
     if (m::eq{is_gles, 0}) {
@@ -184,7 +182,7 @@ public struct sdlcontext()
       // SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
       SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
       SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,
-       SDL_GL_CONTEXT_PROFILE_CORE);
+	SDL_GL_CONTEXT_PROFILE_CORE);
       glmajor = 3;
       glminor = 3;
       // glminor = 2;
@@ -224,8 +222,8 @@ public struct sdlcontext()
 	glminor = 0;
       }
     }
-    sdl_glcontext = glctx;
-    SDL_GL_GetDrawableSize(wnd, init_w, init_h);
+    sdl_glcontext.reset(glctx);
+    SDL_GL_GetDrawableSize(wnd, address(init_w), address(init_h));
     sdllog("drawable size", init_w, init_h);
     sdllog("GL_VERSION",
       cubptr_to_string(glGetString(GL_VERSION)));
@@ -657,7 +655,7 @@ draw_frame(pglshader mutable& pgs, varray{instances_type} mutable& bo_instances,
     }
     const vp = cam_df.projection * view;
     glUniformMatrix4fv(pgs.zpsdr->u_view_projection_matrix, 1, 0,
-      vp.crawptr());
+      vp.to_crawptr());
     draw_instanced(*pgs.zpsdr, *bos[0], bo_instances[0], pgs.global_ibuffer,
 	0, 0, pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
   }
@@ -690,8 +688,10 @@ draw_frame(pglshader mutable& pgs, varray{instances_type} mutable& bo_instances,
     if (pgs.glc.enable_deferred) {
       /* noop */
     } else {
-      glUniform3fv(pgs.sdr->u_light_pos, 1, cam_df.light.position.crawptr());
-      glUniform3fv(pgs.sdr->u_camera_pos, 1, cam_df.camera.position.crawptr());
+      glUniform3fv(pgs.sdr->u_light_pos, 1,
+	cam_df.light.position.to_crawptr());
+      glUniform3fv(pgs.sdr->u_camera_pos, 1,
+	cam_df.camera.position.to_crawptr());
     }
     mutable view = glm::mat4();
     if (cam_df.proj_light) {
@@ -703,16 +703,16 @@ draw_frame(pglshader mutable& pgs, varray{instances_type} mutable& bo_instances,
     const red = make_farray{float}(0.8, 0.1, 0.0, 1.0);
     if (pgs.glc.enable_deferred) {
       glUniformMatrix4fv(pgs.ds1sdr->u_view_projection_matrix, 1, 0,
-	vp.crawptr());
+	vp.to_crawptr());
     } else {
       glUniform1i(pgs.sdr->u_sampler, 1);
       glUniform1i(pgs.sdr->u_sampler_tilemap, 2);
       glUniform1i(pgs.sdr->u_sampler_sm, 3);
       // glUniform1f(pgs.sdr->u_light_on, cam_df.light_on);
       glUniform1f(pgs.sdr->u_light_on, 1.0f);
-      glUniformMatrix4fv(pgs.sdr->u_shadowmap_vp, 1, 0, sm_vp.crawptr());
+      glUniformMatrix4fv(pgs.sdr->u_shadowmap_vp, 1, 0, sm_vp.to_crawptr());
       glUniformMatrix4fv(pgs.sdr->u_view_projection_matrix, 1, 0,
-	vp.crawptr());
+	vp.to_crawptr());
     }
     if (pgs.glc.enable_deferred) {
       draw_instanced(*pgs.ds1sdr, *bos[0], bo_instances[0],
@@ -732,10 +732,11 @@ draw_frame(pglshader mutable& pgs, varray{instances_type} mutable& bo_instances,
     glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
-    glUniform3fv(pgs.ds2sdr->u_light_pos, 1, cam_df.light.position.crawptr());
+    glUniform3fv(pgs.ds2sdr->u_light_pos, 1,
+      cam_df.light.position.to_crawptr());
     glUniform3fv(pgs.ds2sdr->u_camera_pos, 1,
-	cam_df.camera.position.crawptr());
-    glUniformMatrix4fv(pgs.ds2sdr->u_shadowmap_vp, 1, 0, sm_vp.crawptr());
+	cam_df.camera.position.to_crawptr());
+    glUniformMatrix4fv(pgs.ds2sdr->u_shadowmap_vp, 1, 0, sm_vp.to_crawptr());
     glUniform1i(pgs.ds2sdr->u_sampler, 1);
     glUniform1i(pgs.ds2sdr->u_sampler_tilemap, 2);
     glUniform1i(pgs.ds2sdr->u_sampler_sm, 3);
@@ -765,10 +766,10 @@ draw_frame(pglshader mutable& pgs, varray{instances_type} mutable& bo_instances,
     const vp = cam_df.projection * (cam_mat.inverse());
     glUseProgram(pgs.lpsdr->program);
     glUniformMatrix4fv(pgs.lpsdr->u_view_projection_matrix, 1, 0,
-      vp.crawptr());
+      vp.to_crawptr());
     const screen_size_px = make_farray{float}(
       cast_float(cam_df.screen_width), cast_float(cam_df.screen_height));
-    glUniform2fv(pgs.lpsdr->u_screen_size_px, 1, screen_size_px.crawptr());
+    glUniform2fv(pgs.lpsdr->u_screen_size_px, 1, screen_size_px.to_crawptr());
     const screen_size_base = cast_float(cam_df.screen_size_base);
     glUniform1fv(pgs.lpsdr->u_screen_size_base, 1, caddress(screen_size_base));
     glDisable(GL_CULL_FACE);
@@ -795,9 +796,9 @@ draw_frame(pglshader mutable& pgs, varray{instances_type} mutable& bo_instances,
     const vp = cam_df.projection * (cam_mat.inverse());
     glUseProgram(pgs.prtbsdr->program);
     glUniformMatrix4fv(pgs.prtbsdr->u_view_projection_matrix, 1, 0,
-      vp.crawptr());
+      vp.to_crawptr());
     glUniformMatrix3fv(pgs.prtbsdr->u_camera_matrix, 1, 0,
-      cam_mat.to_3().crawptr());
+      cam_mat.to_3().to_crawptr());
     glUniform1f(pgs.prtbsdr->u_point_size_base, 0.1f);
     glDisable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
@@ -846,7 +847,7 @@ draw_frame(pglshader mutable& pgs, varray{instances_type} mutable& bo_instances,
     const screen_size_px = glm::make_vec2(
       static_cast{float}(cam_df.screen_width),
       static_cast{float}(cam_df.screen_height));
-    glUniform2fv(pgs.f2sdr->u_screen_size_px, 1, screen_size_px.crawptr());
+    glUniform2fv(pgs.f2sdr->u_screen_size_px, 1, screen_size_px.to_crawptr());
 //sdllog("bos3");
     draw_instanced(*pgs.f2sdr, *bos[3], bo_instances[3], pgs.global_ibuffer,
 	3, 0, pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
@@ -1077,7 +1078,7 @@ init_deferred_shading_fbo(glconfig const& glc,
       const bufs = make_farray{GLenum}(
 	GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1,
 	GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3);
-      glDrawBuffers(4, bufs.crawptr());
+      glDrawBuffers(4, bufs.to_crawptr());
       const e = glCheckFramebufferStatus(GL_FRAMEBUFFER);
       if (e != GL_FRAMEBUFFER_COMPLETE) {
 	sdllog("dsfbo: incomplete framebuffer", cast_int(e));
@@ -1099,7 +1100,7 @@ init_deferred_shading_fbo(glconfig const& glc,
 	  -1.0,  1.0);
 	glBufferData(GL_ARRAY_BUFFER,
 	  static_cast{GLsizeiptr}(pvals.size()) * 4,
-	  pvals.crawptr().void(), GL_STATIC_DRAW);
+	  pvals.to_crawptr().to_cvoidptr(), GL_STATIC_DRAW);
       }
     }
   }
@@ -1677,19 +1678,27 @@ function void write_4_uint(slice{uchar} const& buf, size_t o, uint val)
 function void
 init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
 {
+  metafunction SDL_Surface_Scoped scoped_nullable{SDL_FreeSurface};
   {
     /* font */
-    const fnames = make_farray{string}(
+    mutable fnames = make_farray{string}(
       "mplus-1m-bold.ttf",
       "/Library/Fonts/Osaka.ttf",
       "/usr/share/fonts/mplus/mplus-1m-bold.ttf",
       "/usr/share/fonts/liberation/LiberationMono-Regular.ttf");
-    option{ptr{TTF_Font}} font;
-    for (size_t i, const& fn: fnames) {
-      font = TTF_OpenFont(fn, 18);
-      if (case font.some) {
+    // mutable font = scoped_nullable{TTF_CloseFont}();
+    scoped_nullable{TTF_CloseFont} font;
+    for (size_t i, mutable& fn: fnames) {
+      const p = TTF_OpenFont(fn.c_str(), 18);
+      sdllog("openfont", fn, p.to_size_t());
+      font.reset(p);
+      if (font.get() != rawptr{TTF_Font}()) {
 	break;
       }
+    }
+    if (font.get() == rawptr{TTF_Font}()) {
+      sdllog("failed to load font");
+      throw runtime_error_template{"load font"}("1");
     }
     SDL_Color mutable fg;
     fg.r = 255;
@@ -1699,46 +1708,55 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
     uint hmax = 0;
     uint wmax = 0;
     // uint wtotal = 0;
-    varray{ptr{SDL_Surface}} sur_arr;
+    varray{ptr{SDL_Surface_Scoped}} sur_arr;
     for (const i: 0 .. 0x60) {
-      farray{uchar, 1} z;
+      farray{uchar, 2} z;
       z[0] = static_cast{uchar}(i + 0x20);
-      const sur = TTF_RenderUTF8_Blended(font.some, z, fg).some;
+      z[1] = 0u;
+      const sur = make_ptr{SDL_Surface_Scoped}();
+      sur->reset(TTF_RenderUTF8_Blended(font,
+	z.range().to_crawptr().to_ccharptr(), fg));
       /* sdllog(z, sur.W(), sur.H()); */
       sur_arr.push_back(sur);
-      hmax = max(hmax, sur.H());
-      wmax = max(wmax, sur.W());
+      const sur_ref = sur->get().to_slice(1);
+      hmax = max(hmax, static_cast{uint}(sur_ref->h));
+      wmax = max(wmax, static_cast{uint}(sur_ref->w));
     }
-    const sur_chars = SDL_CreateRGBSurface(
-      cast_int(power_of_2(wmax * 0x60)),
-      cast_int(power_of_2(hmax)), 32, 0, 0, 0, 0).some;
+    SDL_Surface_Scoped sur_chars;
+    sur_chars.reset(SDL_CreateRGBSurface(0,
+      cast_int(power_of_2(wmax * 0x60u)),
+      cast_int(power_of_2(hmax)), 32, 0, 0, 0, 0));
     sdllog("wmax, hmax", wmax, hmax);
     fti.char_x.clear();
     uint xcur = 0;
-    for (const i, const e: sur_arr) {
+    for (const i, const ep: sur_arr) {
+      const& e = *ep->get().to_slice(1);
       SDL_Rect r0;
       SDL_Rect r1;
       r0.x = 0;
       r0.y = 0;
-      r0.w = cast_int(e.W());
-      r0.h = cast_int(e.H());
+      r0.w = e.w;
+      r0.h = e.h;
       r1.x = cast_int(xcur);
       r1.y = 0;
       r1.w = r0.w;
       r1.h = r1.h;
-      const v = SDL_BlitSurface(e, r0, sur_chars, r1);
+      const v = SDL_UpperBlit(*ep, caddress(r0), sur_chars, address(r1));
       xcur += cast_uint(wmax);
       fti.char_x.push_back(xcur);
     }
     fti.char_w = wmax;
     fti.char_h = hmax;
-    fti.surface_w = sur_chars.W();
-    fti.surface_h = sur_chars.H();
-    const sur = sur_chars;
-    const sur_chars_buf = sur_chars.Pixels();
-    for (const x: 0 .. sur_chars.W()) {
-      for (const y: 0 .. sur_chars.H()) {
-	const i = (y * sur_chars.W() + x) * 4;
+    const& sur_chars_ref = *sur_chars.get().to_slice(1);
+    fti.surface_w = static_cast{uint}(sur_chars_ref.w);
+    fti.surface_h = static_cast{uint}(sur_chars_ref.h);
+    /* const sur = sur_chars; */
+    const sur_chars_buf = sur_chars_ref.pixels.reinterpret_cast{uchar}()
+      .to_slice(static_cast{size_t}(sur_chars_ref.pitch * sur_chars_ref.h));
+    // const sur_chars_buf = sur_chars.Pixels();
+    for (const x: 0 .. sur_chars_ref.w) {
+      for (const y: 0 .. sur_chars_ref.h) {
+	const i = static_cast{size_t}((y * sur_chars_ref.w + x) * 4);
 	sur_chars_buf[i+0] = 255;
 	sur_chars_buf[i+1] = 255;
 	sur_chars_buf[i+2] = 255;
@@ -1750,8 +1768,8 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
     sdllog("font_texture_id", fti.font_texture_id.get());
     glBindTexture(GL_TEXTURE_2D, fti.font_texture_id.get());
     glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_RGBA),
-      cast_int(sur.W()), cast_int(sur.H()),
-      0, GL_RGBA, GL_UNSIGNED_BYTE, sur.Pixels().crawptr().void());
+      sur_chars_ref.w, sur_chars_ref.h,
+      0, GL_RGBA, GL_UNSIGNED_BYTE, sur_chars_ref.pixels);
     /*
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
       cast_int(GL_LINEAR));
@@ -1771,22 +1789,25 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
   }
   {
     // const sur = IMG_Load("img-c1024.jpg").some;
-    const sur0 = IMG_Load("dpat.png").some;
-    const bpp = sur0.BytesPerPixel();
+    SDL_Surface_Scoped sur0;
+    sur0.reset(IMG_Load("dpat.png"));
+    const& sur0ref = *sur0.get().to_slice(1);
+    const fmtp = sur0ref.format;
+    const& fmt = *sur0ref.format.to_slice(1);
+    const bpp = fmt.BytesPerPixel;
     if (bpp != 4 && bpp != 3) {
       throw runtime_error_template{"img_load"}("1");
     }
-    const sur0_w = sur0.W();
-    const sur0_h = sur0.H();
+    const sur0_w = static_cast{uint}(sur0ref.w);
+    const sur0_h = static_cast{uint}(sur0ref.h);
     mutable tex_w = power_of_2(sur0_w);
     mutable tex_h = power_of_2(sur0_h);
     varray{uint} uibuf;
     uibuf.resize(tex_w * tex_h, 0);
-    uint rmask;
-    uint gmask;
-    uint bmask;
-    uint amask;
-    sur0.Masks(rmask, gmask, bmask, amask);
+    uint rmask = fmt.Rmask;
+    uint gmask = fmt.Gmask;
+    uint bmask = fmt.Bmask;
+    uint amask = fmt.Amask;
     function uint get_shift(uint m) {
       uint r = 0;
       for (uint i: 0 .. 32) {
@@ -1806,7 +1827,10 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
     sdllog("Masks", rmask, gmask, bmask, amask, rshift, gshift, bshift,
       ashift);
     */
-    const sur0buf = sur0.Pixels();
+    const& sur0_ref = *sur0.get().to_slice(1);
+    const sur0buf = sur0_ref.pixels.reinterpret_cast{uchar}()
+      .to_slice(static_cast{size_t}(sur0_ref.pitch * sur0_ref.h));
+    // const sur0buf = sur0_ref.Pixels();
     for (const by: 0 .. sur0_h / 64) {
       for (const iy: 0 .. 32U) {
 	for (const x: 0 .. sur0_w) {
@@ -1866,7 +1890,7 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
     while (true) {
       glTexImage2D(GL_TEXTURE_2D, mipmap_level, cast_int(mode),
 	cast_int(tex_w), cast_int(tex_h),
-	0, mode, GL_UNSIGNED_BYTE, uibuf.crawptr().void());
+	0, mode, GL_UNSIGNED_BYTE, uibuf.to_crawptr().to_cvoidptr());
       const tex_w_prev = tex_w;
       const tex_h_prev = tex_h;
       tex_w /= 2;
@@ -1920,10 +1944,14 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
   }
   {
     /* tile map */
-    const sur1 = SDL_CreateRGBSurface(128, 128, 32, 0, 0, 0, 0).some;
-    const sur1_w = sur1.W();	
-    const sur1_h = sur1.H();	
-    const sur1buf = sur1.Pixels();
+    SDL_Surface_Scoped sur1;
+    sur1.reset(SDL_CreateRGBSurface(0, 128, 128, 32, 0, 0, 0, 0));
+    const& sur1_ref = *sur1.get().to_slice(1);
+    const sur1buf = sur1_ref.pixels.reinterpret_cast{uchar}()
+      .to_slice(static_cast{size_t}(sur1_ref.pitch * sur1_ref.h));
+    const sur1_w = static_cast{uint}(sur1_ref.w);
+    const sur1_h = static_cast{uint}(sur1_ref.h);
+    // const sur1buf = sur1.Pixels();
     const rnd = make_rand_generator(333U);
     for (const y: 0 .. sur1_h) {
       for (const x: 0 .. sur1_w) {
@@ -1945,8 +1973,8 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
     mti.tilemap_texture_id.generate();
     glBindTexture(GL_TEXTURE_2D, mti.tilemap_texture_id.get());
     glTexImage2D(GL_TEXTURE_2D, 0, cast_int(mode),
-      cast_int(sur1.W()), cast_int(sur1.H()),
-      0, mode, GL_UNSIGNED_BYTE, sur1.Pixels().crawptr().void());
+      cast_int(sur1_ref.w), cast_int(sur1_ref.h),
+      0, mode, GL_UNSIGNED_BYTE, sur1buf.to_crawptr().to_cvoidptr());
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
       cast_int(GL_NEAREST));
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
@@ -1995,7 +2023,7 @@ pglshader(bool gles_flag0, int glmajor0, int glminor0, bool enable_msaa0,
     if (m::eq{is_gles, 0}) {
       farray{float, 2} arr;
       float step;
-      glGetFloatv(GL_POINT_SIZE_RANGE, arr.rawptr());
+      glGetFloatv(GL_POINT_SIZE_RANGE, arr.to_rawptr());
       glGetFloatv(GL_POINT_SIZE_GRANULARITY, address(step));
       sdllog("GL_POINT_SIZE_RANGE", arr, step);
     }

@@ -46,6 +46,7 @@ static std::list<expr_i *> get_dep_tparams(expr_struct *est)
       r.push_back(term_get_instance(t));
     }
   } else if (
+    cat == typefamily_e_nocascade ||
     cat == typefamily_e_ptr ||
     cat == typefamily_e_cptr ||
     cat == typefamily_e_iptr ||

@@ -1,4 +1,4 @@
 #!/bin/bash
 
-exec gdb --args pxc -p=unsafe pgl3d.px 
+exec gdb --args pxc -p=unsafe_debug pgl3d.px 
 

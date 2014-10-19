@@ -1,0 +1,48 @@
+public threaded namespace pointer::raw_unsafe "export-unsafe";
+public import numeric::integral -;
+public import pointer -;
+public import operator;
+public import pointer::raw +;
+public import container::array +;
+public import meta m;
+
+/* unsafe */
+
+public threaded function extern "pxcrt::rawptr_to_slice" {t} slice{t}
+rawptr_to_slice(rawptr{t} x, size_t xlen);
+public threaded function extern "pxcrt::crawptr_to_cslice" {t} cslice{t}
+crawptr_to_cslice(crawptr{t} x, size_t xlen);
+
+public threaded function extern "pxcrt::rawptr_set" {t} void
+rawptr_set(rawptr{t} x, t v);
+public threaded function extern "pxcrt::rawptr_get" {t} t
+rawptr_get(rawptr{t} x);
+public threaded function extern "pxcrt::crawptr_get" {t} t
+crawptr_get(crawptr{t} x);
+
+public threaded function ccharptr varray_c_str(string mutable& x)
+{
+  const sz = x.size();
+  x.reserve(sz + 1);
+  const p = x.to_rawptr();
+  (p + sz).set(0);
+  return x.to_crawptr().to_ccharptr();
+}
+
+extern "types" inline
+namespace pxcrt {
+
+template <typename T> static inline bt_slice<T>
+rawptr_to_slice(T *x, bt_size_t xlen) { return bt_slice<T>(x, xlen); }
+template <typename T> static inline bt_cslice<T>
+crawptr_to_cslice(T const *x, bt_size_t xlen) { return bt_cslice<T>(x, xlen); }
+
+template <typename T> static inline void
+rawptr_set(T *x, T v) { *x = v; }
+template <typename T> static inline T
+rawptr_get(T *x) { return *x; }
+template <typename T> static inline T
+crawptr_get(T const *x) { return *x; }
+
+}
+;

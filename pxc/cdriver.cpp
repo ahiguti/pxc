@@ -806,7 +806,7 @@ static void compile_cxx_all(const parser_options& po,
     const std::string fn = get_o_filename(po, i->second);
     cmd += " '" + fn + "'";
   }
-  cmd += ldflags_str + libdir_str + link_str + " " + po.profile.ldflags;
+  cmd += " " + po.profile.ldflags + ldflags_str + libdir_str + link_str;
   int r = 0;
   std::string obuf;
   tmpfile_guard g(ofn_tmp);
