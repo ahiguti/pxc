@@ -140,6 +140,12 @@ scene_control(node_factory const& nfac)
   public nodeptr const node_buttons = make_nodeptr();
   public nodeptr const node_lineparticles = make_nodeptr();
   public darray{string} const scene_names = make_darray{string}(
+    // "untitled", "saucer", "saucer-multi", "block-multi", "block",
+    // "ab-multi", "ab-multi3", "skyscraper",
+    "al",
+    "cessna",
+    "skyscraper",
+    "airboat",
     "saucer", "saucer-multi", "block-multi", "block",
     "bullet2-multi3", "bullet2-multi2", "bullet2-multi",
     "bullet-multi", "saucer-multi3",
@@ -353,46 +359,25 @@ prepare_instance_data(tsn const& sn, node_common_data mutable& ncd,
   if (bo_id >= 0 && vs_id >= 0) {
     ++ncd.stat_num_objects;
     mutable& ibarr = ibs[bo_id][static_cast{size_t}(vs_id)];
-    if (bo_id == 1) {
+    if (bo_id == vbid_particle) {
       /* particle */
       const mvp = ncd.vp * sn.trans;
       buffer_append(ibarr[0].instance_buffer, mvp);
-    } else if (bo_id == 4) {
+    } else if (bo_id == vbid_lineparticle) {
       /* lineparticle */
       const sli = sn.trans.to_cslice();
       ibarr[0].instance_buffer.append(sli[0 .. 9]);
-      /*
-      lineparticle_instance_attributes v;
-      const sli_idata = v.idata.slice();
-      for (const i: 0 .. 9U) {
-	sli_idata[i] = sli[i];
-      }
-      buffer_append(ibarr[0].instance_buffer, v);
-      */
-    } else if (bo_id == 5) {
+    } else if (bo_id == vbid_rect2d) {
       /* rect2d */
       const sli = sn.trans.to_cslice();
-      /*
-      rect2d_instance_attributes v;
-      const sli_idata = v.idata.slice();
-      for (const i: 0 .. 4U) {
-	sli_idata[i] = sli[i];
-      }
-      buffer_append(ibarr[0].instance_buffer, v);
-      */
       ibarr[0].instance_buffer.append(sli[0 .. 4]);
-    } else if (bo_id == 3) {
+    } else if (bo_id == vbid_font2) {
       const sli = sn.trans.to_cslice();
-      /*
-      font2_instance_attributes v;
-      v.idata = glm::make_vec4(sli[0], sli[1], sli[2], sli[3]);
-      buffer_append(ibarr[0].instance_buffer, v);
-      */
       ibarr[0].instance_buffer.append(sli[0 .. 4]);
     } else {
       /* ibuf_id == 0 for model matrix */
       buffer_append(ibarr[0].instance_buffer, sn.trans);
-      if (bo_id == 0) {
+      if (bo_id == vbid_main || bo_id == vbid_main2) {
 	/* ibuf_id == 1 for shadowmapping mvp */
 	const smvp = ncd.shadowmapping_vp * sn.trans;
 	buffer_append(ibarr[1].instance_buffer, smvp);

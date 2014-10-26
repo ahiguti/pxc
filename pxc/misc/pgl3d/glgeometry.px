@@ -6,6 +6,7 @@ public import glm -;
 public import numeric::fpmath -;
 public import operator op;
 public import glbuffer -;
+public import wfobj -;
 
 public metafunction modifier_t callable_ptr{darray{vertex_attr}, {poly_t}};
 
@@ -78,6 +79,7 @@ public metafunction bump_apply to_gf_poly{gf_bump_apply};
 public metafunction particle to_gf_poly{gf_particle};
 public metafunction particle_bb to_gf_poly{gf_particle_bb};
 public metafunction rand_sphere to_gf_poly{gf_rand_sphere};
+public metafunction import_wfobj to_gf_poly{gf_import_wfobj};
 
 public threaded function {t} float cast_float(t x)
 { return static_cast{float, t}(x); }
@@ -130,9 +132,27 @@ public threaded function float polygon_radius(poly_t const& poly)
 
 private threaded function vec3 normal_from_poly(poly_t const& poly)
 {
-  if (poly.size() < 3) { return vec3(); }
-  return cross(poly[1].pos - poly[0].pos, poly[2].pos - poly[0].pos)
-    .normalize();
+  const sz = poly.size();
+  if (sz < 3) { return vec3(); }
+  if (sz == 3) {
+    return cross(poly[1].pos - poly[0].pos, poly[2].pos - poly[0].pos)
+      .normalize();
+  } else {
+    float maxlen = 0.0;
+    vec3 maxval;
+    for (const i: 0 .. sz - 1) {
+      const j = i + 1;
+      const v = cross(
+	poly[i + 1].pos - poly[i].pos,
+	poly[j == sz - 1u ? 0uz : j + 1u].pos - poly[j].pos);
+      const len2 = dot(v, v);
+      if (len2 > maxlen) {
+	maxval = v;
+	maxlen = len2;
+      }
+    }
+    return maxval.normalize();
+  }
 }
 
 private threaded function vec3 normal_scale_from_poly(poly_t const& poly)
@@ -418,16 +438,72 @@ gf_fill_internal(ptr{vertices} const& vptr, bool flat_flag,
     /* sdllog("fill", v); */
   }
   if (sz == 4) {
-    vtxs[0].uvw = make_vec3(0.0f, 0.0f, 1.0f);
-    vtxs[1].uvw = make_vec3(4.0f, 0.0f, 1.0f);
-    vtxs[2].uvw = make_vec3(4.0f, 4.0f, 1.0f);
-    vtxs[3].uvw = make_vec3(0.0f, 4.0f, 1.0f);
-    const len01 = length(poly[1].pos - poly[0].pos);
-    const len23 = length(poly[3].pos - poly[2].pos);
-    const rat = len23 / len01;
-    if (rat < 0.95 || rat > 1.05) {
-      vtxs[0].uvw /= rat;
-      vtxs[1].uvw /= rat;
+    const c0 = (poly[0].pos + poly[1].pos);
+    const c1 = (poly[1].pos + poly[2].pos);
+    const c2 = (poly[2].pos + poly[3].pos);
+    const c3 = (poly[3].pos + poly[0].pos);
+    const c02 = c2 - c0;
+    const c13 = c3 - c1;
+    if (fabs(dot(c02, c13)) < length(c02) * length(c13) * 0.05)
+    {
+      /* 01, 23 */
+      const v01 = poly[1].pos - poly[0].pos;
+      const v23 = poly[3].pos - poly[2].pos;
+      const dotv0123 = dot(v01, -v23);
+      const lenv01 = length(v01);
+      const lenv23 = length(v23);
+      const cosv0123 = dotv0123 / (lenv01 * lenv23);
+      const ratv2301 = lenv23 / lenv01;
+      /* 12, 30 */
+      const v12 = poly[2].pos - poly[1].pos;
+      const v30 = poly[0].pos - poly[3].pos;
+      const dotv1230 = dot(v12, -v30);
+      const lenv12 = length(v12);
+      const lenv30 = length(v30);
+      const cosv1230 = dotv1230 / (lenv12 * lenv30);
+      const ratv3012 = lenv30 / lenv12;
+      /* */
+      const lenv0123 = lenv01 + lenv23;
+      const lenv1230 = lenv12 + lenv30;
+      mutable co = make_vec2(32.0f, 32.0f);
+      co.x = max(4.0f, min(128.0f, floor(lenv0123)));
+      co.y = max(4.0f, min(128.0f, floor(lenv1230)));
+      /*
+      if (lenv0123 > lenv1230) {
+	co.y = min(floor(lenv0123 * 4.0f / lenv1230), 128.0f);
+      } else {
+	co.x = min(floor(lenv1230 * 4.0f / lenv0123), 128.0f);
+      }
+      */
+      if (cosv0123 > cosv1230) {
+	if (ratv2301 > 0.25 && ratv2301 < 4.0 && cosv0123 > 0.95f) {
+	  vtxs[0].uvw = make_vec3(0.0f, 0.0f, 1.0f);
+	  vtxs[1].uvw = make_vec3(co.x, 0.0f, 1.0f);
+	  vtxs[2].uvw = make_vec3(co.x, co.y, 1.0f);
+	  vtxs[3].uvw = make_vec3(0.0f, co.y, 1.0f);
+	  if (ratv2301 > 1.0f) {
+	    vtxs[2].uvw *= ratv2301;
+	    vtxs[3].uvw *= ratv2301;
+	  } else if (ratv2301 < 1.0f) {
+	    vtxs[0].uvw /= ratv2301;
+	    vtxs[1].uvw /= ratv2301;
+	  }
+	}
+      } else {
+	if (ratv3012 > 0.25 && ratv3012 < 4.0 && cosv1230 > 0.95f) {
+	  vtxs[0].uvw = make_vec3(0.0f, 0.0f, 1.0f);
+	  vtxs[1].uvw = make_vec3(co.x, 0.0f, 1.0f);
+	  vtxs[2].uvw = make_vec3(co.x, co.y, 1.0f);
+	  vtxs[3].uvw = make_vec3(0.0f, co.y, 1.0f);
+	  if (ratv3012 > 1.0f) {
+	    vtxs[3].uvw *= ratv3012;
+	    vtxs[0].uvw *= ratv3012;
+	  } else if (ratv3012 < 1.0f) {
+	    vtxs[1].uvw /= ratv3012;
+	    vtxs[2].uvw /= ratv3012;
+	  }
+	}
+      }
     }
   }
   vptr->push_polygon_distinct{tattr}(vtxs);
@@ -501,6 +577,44 @@ private threaded function void gf_sphere(size_t split, gf_poly const& c0,
       p.nor = (p.pos - pcenter).normalize();
     }
     c0(side, mesh_index());
+  }
+}
+
+private threaded function void gf_import_wfobj(wfobject const& wfo,
+  wfgroup const& wfgrp, gf_poly const& c0, poly_t const& poly,
+  mesh_index const& mp)
+{
+  mesh_index midx;
+  varray{vertex_attr} arr;
+//debug_log("import f", wfgrp.f);
+  for (const i, const& p: wfgrp.f) {
+//debug_log("import p", p);
+    if (arr.size() != p.size()) {
+      arr.resize(p.size(), vertex_attr());
+    }
+    mutable& sli = arr;
+    for (const j, const& v: p) {
+      // mutable& ae = sli[arr.size() - j - 1];
+      mutable& ae = sli[j];
+      const vid = v.vertex;
+//debug_log("vid", vid);
+      if (vid > 0 && wfo.v.size() >= vid) {
+	ae.pos = wfo.v[vid - 1];
+//debug_log("vertex", ae.pos);
+      }
+      const nid = v.normal;
+      if (nid > 0 && wfo.vn.size() >= nid) {
+	ae.nor = wfo.vn[nid - 1];
+      }
+      const cid = v.texcoord;
+      if (cid > 0 && wfo.vt.size() >= cid) {
+	const coord = wfo.vt[cid - 1];
+	ae.uvw = make_vec3(coord.x, coord.y, 0.0f);
+      }
+    }
+    midx.x = i;
+//debug_log("mesh", arr);
+    c0(arr, midx);
   }
 }
 
