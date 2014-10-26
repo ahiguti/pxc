@@ -370,6 +370,32 @@ make_darray_split(tc const& c, tv const& v)
   return arr;
 }
 
+public threaded function {tc, tv} varray{m::symbol{tc, "crange_type"}}
+make_varray_split(tc const& c, tv const& v)
+{
+  metafunction key_type m::symbol{tc, "key_type"};
+  metafunction mapped_type m::symbol{tc, "mapped_type"};
+  metafunction crange_type m::symbol{tc, "crange_type"};
+  size_t cnt = 1;
+  for (const i, const m : c) {
+    if (m == v) {
+      ++cnt;
+    }
+  }
+  extern "disable-noheap-checking" 1;
+  varray{crange_type} mutable arr;
+  arr.resize(cnt, crange_type());
+  key_type mutable p;
+  for (size_t i : 0 .. cnt) {
+    key_type const pend = find_mapped{tc, key_type, mapped_type}(c, p, v);
+    extern "disable-bounds-checking" 1;
+    extern "disable-noheap-checking" 1;
+    arr[i] = c[p .. pend];
+    p = pend + 1;
+  }
+  return arr;
+}
+
 public threaded function {t} void
 reverse(t const& x)
 {
@@ -492,6 +518,23 @@ find_mapped(t const& c, tk k, tm const& x)
       if (c[i] == x) { break; }
     }
     return i;
+  }
+}
+
+public threaded function {f, tc, tv} void
+split_foreach(tc const& c, tv const& v)
+{
+  metafunction key_type m::symbol{tc, "key_type"};
+  metafunction mapped_type m::symbol{tc, "mapped_type"};
+  key_type mutable p;
+  while (true) {
+    const pend = find_mapped{tc, key_type, mapped_type}(c, p, v);
+    extern "disable-bounds-checking" 1;
+    f(c[p .. pend]);
+    if (pend == c.size()) {
+      break;
+    }
+    p = pend + 1;
   }
 }
 

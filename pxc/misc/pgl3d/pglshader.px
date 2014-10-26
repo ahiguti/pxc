@@ -73,25 +73,29 @@ glconfig(bool is_gles0, int major0, int minor0, bool msaa0)
     return is_gl3_or_gles3() ? "fragcolor" : "gl_FragColor"; }
   public function strlit decl_fragcolor() const {
     return is_gl3_or_gles3() ? "out vec4 fragcolor;\n" : "\n"; }
-  public function string decl_instance_id(bool has_iid) const {
-    if (use_copying_instancing != 0 && has_iid) {
+  public function string decl_instance_id(bool shader_has_iid) const
+  {
+    if (use_copying_instancing != 0 && shader_has_iid) {
       return vert_in() + "float instance_id;\n";
     } else {
       return "";
     }
   }
   public function string decl_instance_attr(cstrref const& t, cstrref const& n,
-      bool has_iid)
-    const {
-    if (use_copying_instancing != 0 && has_iid) {
+      bool shader_support_instancing, bool shader_has_iid) const
+  {
+    if (use_copying_instancing != 0 && shader_has_iid) {
+      /* shader has 'instance_id' variable */
       return "uniform " + t + " " + n + "["
 	+ m::to_string{uniform_instancing_mul} + "];\n";
     } else {
-      if (enable_instanced) {
+      if (shader_support_instancing && enable_instanced) {
 	if (enable_uniform_instancing) {
+	  /* use gl_InstanceID and uniform arrays */
 	  return "uniform " + t + " " + n + "["
 	    + m::to_string{uniform_instancing_mul} + "];\n";
 	} else {
+	  /* use gl_InstanceID and glVertexAttribDivisor */
 	  return vert_in() + t + " " + n + ";\n";
 	}
       } else {
@@ -99,13 +103,20 @@ glconfig(bool is_gles0, int major0, int minor0, bool msaa0)
       }
     }
   }
-  public function string instance_attr(cstrref const& n, bool has_iid) const {
-    if (use_copying_instancing != 0 && has_iid) {
+  public function string instance_attr(cstrref const& n,
+    bool shader_support_instancing, bool shader_has_iid) const
+  {
+    if (use_copying_instancing != 0 && shader_has_iid) {
+      /* shader has 'instance_id' variable */
       return n + "[int(instance_id)]";
     } else {
-      if (enable_instanced && enable_uniform_instancing) {
+      if (shader_support_instancing && enable_instanced &&
+	enable_uniform_instancing) {
+	/* use gl_InstanceID and uniform arrays */
 	return n + "[gl_InstanceID]";
       } else {
+	/* use gl_InstanceID and glVertexAttribDivisor */
+	/* or no instancing */
 	return n;
       }
     }
@@ -263,9 +274,8 @@ public tsvaluetype struct main_vertex_attributes
   public glm::vec3 tangent;
   public glm::vec3 uvw;
 }
-tsvaluetype struct ds1st_vertex_attributes
+public tsvaluetype struct main2_vertex_attributes
 {
-  public instance_id_type instance_id;
   public glm::vec3 position;
   public glm::vec3 normal;
   public glm::vec3 tangent;
@@ -276,9 +286,17 @@ tsvaluetype struct zprepass_vertex_attributes
   public instance_id_type instance_id;
   public glm::vec3 position;
 }
+tsvaluetype struct zprepass2_vertex_attributes
+{
+  public glm::vec3 position;
+}
 tsvaluetype struct shadowmap_vertex_attributes
 {
   public instance_id_type instance_id;
+  public glm::vec3 position;
+}
+tsvaluetype struct shadowmap2_vertex_attributes
+{
   public glm::vec3 position;
 }
 
@@ -425,19 +443,39 @@ public tsvaluetype struct lineparticle_instance_attributes
   */
 }
 
-metafunction main_shader_ptr
+metafunction main_shader_ptr{instancing}
   ptr{shader{
-    main_uniforms, main_instance_attributes, main_vertex_attributes}};
-metafunction shadowmap_shader_ptr
+    main_uniforms, main_instance_attributes,
+    m::cond{instancing, main_vertex_attributes, main2_vertex_attributes}}};
+/*
+metafunction main2_shader_ptr
+  ptr{shader{
+    main_uniforms, main_instance_attributes, main2_vertex_attributes}};
+*/
+metafunction shadowmap_shader_ptr{instancing}
   ptr{shader{
     shadowmap_uniforms, main_instance_attributes,
-    shadowmap_vertex_attributes}};
-metafunction zprepass_shader_ptr
+    m::cond{instancing,
+      shadowmap_vertex_attributes, shadowmap2_vertex_attributes}}};
+/*
+metafunction shadowmap2_shader_ptr
   ptr{shader{
-    zprepass_uniforms, main_instance_attributes, zprepass_vertex_attributes}};
+    shadowmap_uniforms, main_instance_attributes,
+    shadowmap2_vertex_attributes}};
+*/
+metafunction zprepass_shader_ptr{instancing}
+  ptr{shader{
+    zprepass_uniforms, main_instance_attributes,
+    m::cond{instancing,
+      zprepass_vertex_attributes, zprepass2_vertex_attributes}}};
+/*
+metafunction zprepass2_shader_ptr
+  ptr{shader{
+    zprepass_uniforms, main_instance_attributes, zprepass2_vertex_attributes}};
+*/
 metafunction ds1st_shader_ptr
   ptr{shader{
-    ds1st_uniforms, main_instance_attributes, ds1st_vertex_attributes}};
+    ds1st_uniforms, main_instance_attributes, main_vertex_attributes}};
 metafunction ds2nd_shader_ptr
   ptr{shader{ds2nd_uniforms, main_instance_attributes,
     ds2nd_vertex_attributes}};
@@ -533,7 +571,7 @@ finished_using_instance_data(instance_buffer_type mutable& gibuf,
 private function void
 draw_instanced(shader_i mutable& sdr, vertex_buffer const& bo,
   instances_type mutable& ibs,
-  instance_buffer_type mutable& gibuf, size_t bo_id,
+  instance_buffer_type mutable& gibuf, vertex_buffer_id bo_id,
   size_t ibuf_id, bool enable_instanced, bool enable_uniform_instancing)
 {
 //sdllog("draw_instanced", bo_id);
@@ -614,7 +652,7 @@ draw_frame(pglshader mutable& pgs, varray{instances_type} mutable& bo_instances,
   if (pgs.glc.enable_shadowmapping) {
     int saved_fb;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
-    glUseProgram(pgs.smsdr->program);
+    /* set fb */
     glBindFramebuffer(GL_FRAMEBUFFER, pgs.sfbo.fbo.get());
     glViewport(0, 0, static_cast{GLsizei}(pgs.sfbo.sm_width),
       static_cast{GLsizei}(pgs.sfbo.sm_height));
@@ -630,15 +668,22 @@ draw_frame(pglshader mutable& pgs, varray{instances_type} mutable& bo_instances,
     glDisable(GL_BLEND);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     /* note: view_projection is pre-applied to model_matrix */
-    draw_instanced(*pgs.smsdr, *bos[0], bo_instances[0], pgs.global_ibuffer,
-	0, 1, pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
+    /* sm */
+    glUseProgram(pgs.smsdr->program);
+    draw_instanced(*pgs.smsdr, *bos[vbid_main], bo_instances[vbid_main],
+      pgs.global_ibuffer, vbid_main, 1, pgs.glc.enable_instanced,
+      pgs.glc.enable_uniform_instancing);
+    /* sm2 */
+    glUseProgram(pgs.sm2sdr->program);
+    draw_instanced(*pgs.sm2sdr, *bos[vbid_main2], bo_instances[vbid_main2],
+      pgs.global_ibuffer, vbid_main2, 1, false, false);
+    /* restore fb */
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
   }
   glViewport(0, 0, static_cast{GLsizei}(pgs.cam.screen_width),
     static_cast{GLsizei}(pgs.cam.screen_height));
   /* z-prepass shader */
   if (pgs.glc.enable_zprepass) {
-    glUseProgram(pgs.zpsdr->program);
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glEnable(GL_DEPTH_TEST);
@@ -654,23 +699,22 @@ draw_frame(pglshader mutable& pgs, varray{instances_type} mutable& bo_instances,
       view = cam_df.camera.to_mat4().inverse();
     }
     const vp = cam_df.projection * view;
+    /* zp */
+    glUseProgram(pgs.zpsdr->program);
     glUniformMatrix4fv(pgs.zpsdr->u_view_projection_matrix, 1, 0,
       vp.to_crawptr());
-    draw_instanced(*pgs.zpsdr, *bos[0], bo_instances[0], pgs.global_ibuffer,
-	0, 0, pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
+    draw_instanced(*pgs.zpsdr, *bos[vbid_main], bo_instances[vbid_main],
+      pgs.global_ibuffer, vbid_main, 0, pgs.glc.enable_instanced,
+      pgs.glc.enable_uniform_instancing);
+    /* zp2 */
+    glUseProgram(pgs.zp2sdr->program);
+    glUniformMatrix4fv(pgs.zp2sdr->u_view_projection_matrix, 1, 0,
+      vp.to_crawptr());
+    draw_instanced(*pgs.zp2sdr, *bos[vbid_main2], bo_instances[vbid_main2],
+      pgs.global_ibuffer, vbid_main2, 0, false, false);
   }
   /* main or ds1 shader */
   if (true) {
-    int saved_fb;
-    if (pgs.glc.enable_deferred) {
-      glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
-      glBindFramebuffer(GL_FRAMEBUFFER, pgs.dsfbo.fbo.get());
-      glViewport(0, 0, static_cast{GLsizei}(pgs.dsfbo.ds_width),
-	static_cast{GLsizei}(pgs.dsfbo.ds_height));
-      glUseProgram(pgs.ds1sdr->program);
-    } else {
-      glUseProgram(pgs.sdr->program);
-    }
     glDisable(GL_BLEND);
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
@@ -685,14 +729,6 @@ draw_frame(pglshader mutable& pgs, varray{instances_type} mutable& bo_instances,
       glColorMask(1, 1, 1, 1);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
-    if (pgs.glc.enable_deferred) {
-      /* noop */
-    } else {
-      glUniform3fv(pgs.sdr->u_light_pos, 1,
-	cam_df.light.position.to_crawptr());
-      glUniform3fv(pgs.sdr->u_camera_pos, 1,
-	cam_df.camera.position.to_crawptr());
-    }
     mutable view = glm::mat4();
     if (cam_df.proj_light) {
       view = cam_df.light.to_mat4().inverse();
@@ -702,9 +738,26 @@ draw_frame(pglshader mutable& pgs, varray{instances_type} mutable& bo_instances,
     const vp = cam_df.projection * view;
     const red = make_farray{float}(0.8, 0.1, 0.0, 1.0);
     if (pgs.glc.enable_deferred) {
+      /* ds1 */
+      int saved_fb;
+      glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
+      glBindFramebuffer(GL_FRAMEBUFFER, pgs.dsfbo.fbo.get());
+      glViewport(0, 0, static_cast{GLsizei}(pgs.dsfbo.ds_width),
+	static_cast{GLsizei}(pgs.dsfbo.ds_height));
+      glUseProgram(pgs.ds1sdr->program);
       glUniformMatrix4fv(pgs.ds1sdr->u_view_projection_matrix, 1, 0,
 	vp.to_crawptr());
+      draw_instanced(*pgs.ds1sdr, *bos[vbid_main], bo_instances[vbid_main],
+	pgs.global_ibuffer, vbid_main, 0,
+	pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
+      glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
     } else {
+      /* main */
+      glUseProgram(pgs.sdr->program);
+      glUniform3fv(pgs.sdr->u_light_pos, 1,
+	cam_df.light.position.to_crawptr());
+      glUniform3fv(pgs.sdr->u_camera_pos, 1,
+	cam_df.camera.position.to_crawptr());
       glUniform1i(pgs.sdr->u_sampler, 1);
       glUniform1i(pgs.sdr->u_sampler_tilemap, 2);
       glUniform1i(pgs.sdr->u_sampler_sm, 3);
@@ -713,25 +766,33 @@ draw_frame(pglshader mutable& pgs, varray{instances_type} mutable& bo_instances,
       glUniformMatrix4fv(pgs.sdr->u_shadowmap_vp, 1, 0, sm_vp.to_crawptr());
       glUniformMatrix4fv(pgs.sdr->u_view_projection_matrix, 1, 0,
 	vp.to_crawptr());
-    }
-    if (pgs.glc.enable_deferred) {
-      draw_instanced(*pgs.ds1sdr, *bos[0], bo_instances[0],
-	  pgs.global_ibuffer, 0, 0,
-	  pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
-    } else {
-      draw_instanced(*pgs.sdr, *bos[0], bo_instances[0], pgs.global_ibuffer,
-	  0, 0, pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
-    }
-    if (pgs.glc.enable_deferred) {
-      glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
+      draw_instanced(*pgs.sdr, *bos[vbid_main], bo_instances[vbid_main],
+	pgs.global_ibuffer, vbid_main, 0, pgs.glc.enable_instanced,
+	pgs.glc.enable_uniform_instancing);
+      /* main2 */
+      glUseProgram(pgs.m2sdr->program);
+      glUniform3fv(pgs.m2sdr->u_light_pos, 1,
+	cam_df.light.position.to_crawptr());
+      glUniform3fv(pgs.m2sdr->u_camera_pos, 1,
+	cam_df.camera.position.to_crawptr());
+      glUniform1i(pgs.m2sdr->u_sampler, 1);
+      glUniform1i(pgs.m2sdr->u_sampler_tilemap, 2);
+      glUniform1i(pgs.m2sdr->u_sampler_sm, 3);
+      // glUniform1f(pgs.m2sdr->u_light_on, cam_df.light_on);
+      glUniform1f(pgs.m2sdr->u_light_on, 1.0f);
+      glUniformMatrix4fv(pgs.m2sdr->u_shadowmap_vp, 1, 0, sm_vp.to_crawptr());
+      glUniformMatrix4fv(pgs.m2sdr->u_view_projection_matrix, 1, 0,
+	vp.to_crawptr());
+      draw_instanced(*pgs.m2sdr, *bos[vbid_main2], bo_instances[vbid_main2],
+	pgs.global_ibuffer, vbid_main2, 0, false, false);
     }
   }
   /* ds2 */
   if (pgs.glc.enable_deferred) {
-    glUseProgram(pgs.ds2sdr->program);
     glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
+    glUseProgram(pgs.ds2sdr->program);
     glUniform3fv(pgs.ds2sdr->u_light_pos, 1,
       cam_df.light.position.to_crawptr());
     glUniform3fv(pgs.ds2sdr->u_camera_pos, 1,
@@ -757,21 +818,6 @@ draw_frame(pglshader mutable& pgs, varray{instances_type} mutable& bo_instances,
   /* lineparticle */
   {
 // FIXME
-    mutable cam_mat = glm::mat4();
-    if (cam_df.proj_light) {
-      cam_mat = cam_df.light.to_mat4();
-    } else {
-      cam_mat = cam_df.camera.to_mat4();
-    }
-    const vp = cam_df.projection * (cam_mat.inverse());
-    glUseProgram(pgs.lpsdr->program);
-    glUniformMatrix4fv(pgs.lpsdr->u_view_projection_matrix, 1, 0,
-      vp.to_crawptr());
-    const screen_size_px = make_farray{float}(
-      cast_float(cam_df.screen_width), cast_float(cam_df.screen_height));
-    glUniform2fv(pgs.lpsdr->u_screen_size_px, 1, screen_size_px.to_crawptr());
-    const screen_size_base = cast_float(cam_df.screen_size_base);
-    glUniform1fv(pgs.lpsdr->u_screen_size_base, 1, caddress(screen_size_base));
     glDisable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
@@ -782,11 +828,6 @@ draw_frame(pglshader mutable& pgs, varray{instances_type} mutable& bo_instances,
     // glEnable(GL_BLEND);
     glDisable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE);
-    draw_instanced(*pgs.lpsdr, *bos[4], bo_instances[4], pgs.global_ibuffer,
-	4, 0, pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
-  }
-  /* particles-bb */
-  {
     mutable cam_mat = glm::mat4();
     if (cam_df.proj_light) {
       cam_mat = cam_df.light.to_mat4();
@@ -794,63 +835,87 @@ draw_frame(pglshader mutable& pgs, varray{instances_type} mutable& bo_instances,
       cam_mat = cam_df.camera.to_mat4();
     }
     const vp = cam_df.projection * (cam_mat.inverse());
+    const screen_size_px = make_farray{float}(
+      cast_float(cam_df.screen_width), cast_float(cam_df.screen_height));
+    const screen_size_base = cast_float(cam_df.screen_size_base);
+    glUseProgram(pgs.lpsdr->program);
+    glUniformMatrix4fv(pgs.lpsdr->u_view_projection_matrix, 1, 0,
+      vp.to_crawptr());
+    glUniform2fv(pgs.lpsdr->u_screen_size_px, 1, screen_size_px.to_crawptr());
+    glUniform1fv(pgs.lpsdr->u_screen_size_base, 1, caddress(screen_size_base));
+    draw_instanced(*pgs.lpsdr, *bos[vbid_lineparticle],
+      bo_instances[vbid_lineparticle], pgs.global_ibuffer,
+      vbid_lineparticle, 0, pgs.glc.enable_instanced,
+      pgs.glc.enable_uniform_instancing);
+  }
+  /* particles-bb */
+  {
     glUseProgram(pgs.prtbsdr->program);
+    glDisable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glDepthMask(0);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE);
+    mutable cam_mat = glm::mat4();
+    if (cam_df.proj_light) {
+      cam_mat = cam_df.light.to_mat4();
+    } else {
+      cam_mat = cam_df.camera.to_mat4();
+    }
+    const vp = cam_df.projection * (cam_mat.inverse());
     glUniformMatrix4fv(pgs.prtbsdr->u_view_projection_matrix, 1, 0,
       vp.to_crawptr());
     glUniformMatrix3fv(pgs.prtbsdr->u_camera_matrix, 1, 0,
       cam_mat.to_3().to_crawptr());
     glUniform1f(pgs.prtbsdr->u_point_size_base, 0.1f);
-    glDisable(GL_CULL_FACE);
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL);
-    glDepthMask(0);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_ONE, GL_ONE);
-    draw_instanced(*pgs.prtbsdr, *bos[2], bo_instances[2],
-	pgs.global_ibuffer, 2, 0,
-	pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
+    draw_instanced(*pgs.prtbsdr, *bos[vbid_particle_bb],
+      bo_instances[vbid_particle_bb], pgs.global_ibuffer, vbid_particle_bb, 0,
+      pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
   }
   /* particles */
   {
-    glUseProgram(pgs.spsdr->program);
-    glUniform1f(pgs.spsdr->u_point_size_base,
-      0.1f * static_cast{float}(cam_df.screen_size_base));
     glDisable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
     glDepthMask(0);
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE);
-    draw_instanced(*pgs.spsdr, *bos[1], bo_instances[1], pgs.global_ibuffer,
-	1, 0, pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
+    glUseProgram(pgs.spsdr->program);
+    glUniform1f(pgs.spsdr->u_point_size_base,
+      0.1f * static_cast{float}(cam_df.screen_size_base));
+    draw_instanced(*pgs.spsdr, *bos[vbid_particle],
+      bo_instances[vbid_particle], pgs.global_ibuffer, vbid_particle, 0,
+      pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
   }
   /* rect2d */
   {
-    glUseProgram(pgs.rsdr->program);
     glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
     glDepthMask(0);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    draw_instanced(*pgs.rsdr, *bos[5], bo_instances[5], pgs.global_ibuffer,
-	5, 0, pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
+    glUseProgram(pgs.rsdr->program);
+    draw_instanced(*pgs.rsdr, *bos[vbid_rect2d], bo_instances[vbid_rect2d],
+      pgs.global_ibuffer, vbid_rect2d, 0, pgs.glc.enable_instanced,
+      pgs.glc.enable_uniform_instancing);
   }
   /* font */
   {
-    glUseProgram(pgs.f2sdr->program);
     glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
     glDepthMask(0);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glUniform1i(pgs.f2sdr->u_sampler, 0);
     const screen_size_px = glm::make_vec2(
       static_cast{float}(cam_df.screen_width),
       static_cast{float}(cam_df.screen_height));
+    glUseProgram(pgs.f2sdr->program);
+    glUniform1i(pgs.f2sdr->u_sampler, 0);
     glUniform2fv(pgs.f2sdr->u_screen_size_px, 1, screen_size_px.to_crawptr());
-//sdllog("bos3");
-    draw_instanced(*pgs.f2sdr, *bos[3], bo_instances[3], pgs.global_ibuffer,
-	3, 0, pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
+    draw_instanced(*pgs.f2sdr, *bos[vbid_font2], bo_instances[vbid_font2],
+      pgs.global_ibuffer, vbid_font2, 0, pgs.glc.enable_instanced,
+      pgs.glc.enable_uniform_instancing);
   }
   finished_using_instance_data(pgs.global_ibuffer,
       pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
@@ -1106,20 +1171,20 @@ init_deferred_shading_fbo(glconfig const& glc,
   }
 }
 
-function shadowmap_shader_ptr
+function {instancing} shadowmap_shader_ptr{instancing}
 init_shadowmap_shader(glconfig const& g)
 {
   string v;
   v += g.prepend();
   /* note: passes mvp as model_matrix */
   v += g.decl_instance_id(true);
-  v += g.decl_instance_attr("mat4", "model_matrix", true);
+  v += g.decl_instance_attr("mat4", "model_matrix", instancing != 0, true);
   v += g.vert_in() + "vec3 position;\n";
   if (!g.enable_depth_texture) {
     v += g.vert_out() + "vec4 vary_smpos;\n";
   }
   v += "void main(void) {\n";
-  v += "vec4 p = " + g.instance_attr("model_matrix", true);
+  v += "vec4 p = " + g.instance_attr("model_matrix", instancing != 0, true);
   v += "  * vec4(position, 1.0);\n";
   v += "gl_Position = p;\n";
   if (!g.enable_depth_texture) {
@@ -1145,34 +1210,45 @@ init_shadowmap_shader(glconfig const& g)
     f += g.fragcolor() + "= vec4(z0/255.0, z1/255.0, z2/255.0, 1.0);\n";
     f += "}\n";
   }
-  return make_shader_ptr{shadowmap_uniforms, main_instance_attributes,
-    shadowmap_vertex_attributes}(v, f, "model_matrix");
+  return make_shader_ptr{
+    shadowmap_uniforms,
+    main_instance_attributes,
+    m::cond{instancing,
+      shadowmap_vertex_attributes,
+      shadowmap2_vertex_attributes}
+  }(v, f, "model_matrix");
 }
 
-function zprepass_shader_ptr
+function {instancing} zprepass_shader_ptr{instancing}
 init_zprepass_shader(glconfig const& g)
 {
   string v;
   v += g.prepend();
   v += "uniform mat4 view_projection_matrix;\n";
   v += g.decl_instance_id(true);
-  v += g.decl_instance_attr("mat4", "model_matrix", true);
+  v += g.decl_instance_attr("mat4", "model_matrix", instancing != 0, true);
   v += g.vert_in() + "vec3 position;\n";
   v += "void main(void) {\n";
-  v += "vec4 gpos4 = " + g.instance_attr("model_matrix", true);
+  v += "vec4 gpos4 = " + g.instance_attr("model_matrix", instancing != 0, true);
   v += "  * vec4(position, 1.0);\n";
   v += "gl_Position = view_projection_matrix * gpos4;\n";
   v += "}\n";
   string f = g.empty_shader_frag();
-  return make_shader_ptr{zprepass_uniforms, main_instance_attributes,
-    zprepass_vertex_attributes}(v, f, "model_matrix");
+  return make_shader_ptr{
+    zprepass_uniforms,
+    main_instance_attributes,
+    m::cond{instancing,
+      zprepass_vertex_attributes,
+      zprepass2_vertex_attributes}
+  }(v, f, "model_matrix");
 }
 
 function ds1st_shader_ptr
 init_ds1st_shader(glconfig const g)
 {
+  bool instancing = true;
   const v = g.enable_deferred
-    ? main_or_ds1st_shader_vert(g) : g.empty_shader_vert();
+    ? main_or_ds1st_shader_vert(g, instancing) : g.empty_shader_vert();
   string f;
   if (g.enable_deferred) {
     f += g.prepend();
@@ -1200,7 +1276,7 @@ init_ds1st_shader(glconfig const g)
     f += g.empty_shader_frag();
   }
   return make_shader_ptr{ds1st_uniforms, main_instance_attributes,
-    ds1st_vertex_attributes}(v, f, "model_matrix");
+    main_vertex_attributes}(v, f, "model_matrix");
 }
 
 function ds2nd_shader_ptr
@@ -1219,20 +1295,20 @@ init_ds2nd_shader(glconfig const& g)
     v += g.empty_shader_vert();
   }
   const f = g.enable_deferred
-    ? main_or_ds2nd_shader_frag(g) : g.empty_shader_frag();
+    ? main_or_ds2nd_shader_frag(g, true) : g.empty_shader_frag();
   return make_shader_ptr{ds2nd_uniforms, main_instance_attributes,
     ds2nd_vertex_attributes}(v, f, "");
 }
 
 function string
-main_or_ds1st_shader_vert(glconfig const& g)
+main_or_ds1st_shader_vert(glconfig const& g, bool instancing)
 {
   string v;
   v += g.prepend();
   v += "uniform mat4 view_projection_matrix;\n";
   v += "uniform mat4 shadowmap_vp;\n";
   v += g.decl_instance_id(true);
-  v += g.decl_instance_attr("mat4", "model_matrix", true);
+  v += g.decl_instance_attr("mat4", "model_matrix", instancing, true);
   v += g.vert_in() + "vec3 position;\n";
   v += g.vert_in() + "vec3 normal;\n";
   v += g.vert_in() + "vec3 tangent;\n";
@@ -1248,14 +1324,17 @@ main_or_ds1st_shader_vert(glconfig const& g)
     }
   }
   v += "void main(void) {\n";
-  v += "  vec4 gpos4 = " + g.instance_attr("model_matrix", true);
+  v += "  vec4 gpos4 = " + g.instance_attr("model_matrix", instancing, true);
   v += "    * vec4(position, 1.0);\n";
   v += "  gl_Position = view_projection_matrix * gpos4;\n";
   if (g.is_gl3_or_gles3()) {
-    v += "  mat3 normal_matrix = mat3(" + g.instance_attr("model_matrix", true)
+    v += "  mat3 normal_matrix = mat3("
+      + g.instance_attr("model_matrix", instancing, true)
       + ");\n";
   } else {
-    v += "  mat4 mm = " + g.instance_attr("model_matrix", true) + ";\n";
+    v += "  mat4 mm = "
+      + g.instance_attr("model_matrix", instancing, true)
+      + ";\n";
     v += "  mat3 normal_matrix = mat3(mm[0].xyz, mm[1].xyz, mm[2].xyz);\n";
   }
   v += "  vary_position = gpos4.xyz / gpos4.w;\n";
@@ -1272,7 +1351,7 @@ main_or_ds1st_shader_vert(glconfig const& g)
   return v;
 }
 
-function string main_or_ds2nd_shader_frag(glconfig const& g)
+function string main_or_ds2nd_shader_frag(glconfig const& g, bool instancing)
 {
   string f;
   f += g.prepend();
@@ -1322,7 +1401,11 @@ function string main_or_ds2nd_shader_frag(glconfig const& g)
   f += "vec3 light_dir = normalize(light_pos - vary_position);\n";
   f += "float light_distance = length(light_pos - vary_position);\n";
   f += "vec4 color = vec4(0.0, 0.0, 0.0, 1.0);\n";
-  f += "vec4 color_dif = vec4(0.42, 0.42, 0.42, 1.0);\n";
+  if (instancing) {
+    f += "vec4 color_dif = vec4(0.42, 0.42, 0.42, 1.0);\n";
+  } else {
+    f += "vec4 color_dif = vec4(0.46, 0.42, 0.42, 1.0);\n";
+  }
   f += "float mate_ambient = 0.2;\n";
   f += "float mate_specular = 0.5;\n";
   if (g.enable_shadowmapping) {
@@ -1432,17 +1515,20 @@ function string main_or_ds2nd_shader_frag(glconfig const& g)
   return f;
 }
 
-function main_shader_ptr
+function {instancing} main_shader_ptr{instancing}
 init_main_shader(glconfig const& g)
 {
   const v = g.enable_deferred
-    ? g.empty_shader_vert() : main_or_ds1st_shader_vert(g);
+    ? g.empty_shader_vert() : main_or_ds1st_shader_vert(g, instancing != 0);
   const f = g.enable_deferred
-    ? g.empty_shader_frag() : main_or_ds2nd_shader_frag(g);
+    ? g.empty_shader_frag() : main_or_ds2nd_shader_frag(g, instancing != 0);
 //sdllog("main_shader", v);
   return
-    make_shader_ptr{main_uniforms, main_instance_attributes,
-      main_vertex_attributes}(v, f, "model_matrix");
+    make_shader_ptr{
+      main_uniforms,
+      main_instance_attributes,
+      m::cond{instancing, main_vertex_attributes, main2_vertex_attributes}
+    }(v, f, "model_matrix");
 }
 
 function particle_shader_ptr
@@ -1451,11 +1537,11 @@ init_particle_shader(glconfig const& g)
   string v;
   v += g.prepend();
   v += g.decl_instance_id(false);
-  v += g.decl_instance_attr("mat4", "model_matrix", false);
+  v += g.decl_instance_attr("mat4", "model_matrix", true, false);
   v += "uniform float point_size_base;\n";
   v += g.vert_in() + "vec3 position;\n";
   v += "void main(void) {\n";
-  v += "gl_Position = " + g.instance_attr("model_matrix", false);
+  v += "gl_Position = " + g.instance_attr("model_matrix", true, false);
   v += "  * vec4(position, 1.0);\n";
   v += "gl_PointSize = point_size_base / gl_Position.w;\n";
   v += "}\n";
@@ -1478,7 +1564,7 @@ init_particle_bb_shader(glconfig const& g)
   string v;
   v += g.prepend();
   v += g.decl_instance_id(false);
-  v += g.decl_instance_attr("mat4", "model_matrix", false);
+  v += g.decl_instance_attr("mat4", "model_matrix", true, false);
   v += "uniform mat4 view_projection_matrix;\n";
   v += "uniform mat3 camera_matrix;\n";
   v += "uniform float point_size_base;\n";
@@ -1486,7 +1572,7 @@ init_particle_bb_shader(glconfig const& g)
   v += g.vert_in() + "vec2 local_position;\n";
   v += g.vert_out() + "vec2 point_coord;\n";
   v += "void main(void) {\n";
-  v += "vec4 pos = " + g.instance_attr("model_matrix", false);
+  v += "vec4 pos = " + g.instance_attr("model_matrix", true, false);
   v += "  * vec4(position, 1.0);\n";
   v += "vec3 posb = camera_matrix";
   v += "  * vec3(local_position * point_size_base, 0.0);\n";
@@ -1514,11 +1600,11 @@ init_lineparticle_shader(glconfig const& g)
   string v;
   v += g.prepend();
   v += g.decl_instance_id(true);
-  v += g.decl_instance_attr("mat3", "idata", has_inst);
+  v += g.decl_instance_attr("mat3", "idata", true, has_inst);
   /*
-  v += g.decl_instance_attr("vec3", "position0", has_inst);
-  v += g.decl_instance_attr("vec3", "position1", has_inst);
-  v += g.decl_instance_attr("float", "point_size_base", has_inst);
+  v += g.decl_instance_attr("vec3", "position0", true, has_inst);
+  v += g.decl_instance_attr("vec3", "position1", true, has_inst);
+  v += g.decl_instance_attr("float", "point_size_base", true, has_inst);
   */
   v += "uniform mat4 view_projection_matrix;\n";
   v += "uniform vec2 screen_size_px;\n";
@@ -1528,9 +1614,9 @@ init_lineparticle_shader(glconfig const& g)
   v += g.vert_out() + "vec2 edge;\n";
   v += "void main(void) {\n";
   v += "vec4 p0p = view_projection_matrix * vec4("
-    + g.instance_attr("idata", has_inst) + "[0], 1.0);\n";
+    + g.instance_attr("idata", true, has_inst) + "[0], 1.0);\n";
   v += "vec4 p1p = view_projection_matrix * vec4("
-    + g.instance_attr("idata", has_inst) + "[1], 1.0);\n";
+    + g.instance_attr("idata", true, has_inst) + "[1], 1.0);\n";
   v += "float pz0 = p0p.z / p0p.w;\n";
   v += "float pz1 = p1p.z / p1p.w;\n";
   v += "float pz = (pz0 + pz1) * 0.5;\n";
@@ -1540,7 +1626,7 @@ init_lineparticle_shader(glconfig const& g)
   v += "vec2 pvec = p1 - p0;\n"; // FIXME: must be non-zero
   v += "float plen = length(pvec);\n";
   v += "vec2 r = screen_size_base * "
-    + g.instance_attr("idata", has_inst) + "[2].x"
+    + g.instance_attr("idata", true, has_inst) + "[2].x"
     + " / vec2(p0p.w, p1p.w);\n";
   v += "float rmx = max(r[0], r[1]);\n";
   // v += "r = max(r, rmx - plen * 0.0625);\n";
@@ -1589,14 +1675,14 @@ init_font2_shader(glconfig const& g)
   v += g.vert_in() + "vec2 coord_clamp;\n";
   v += g.vert_in() + "float char_point_size;\n";
   v += g.decl_instance_id(true);
-  v += g.decl_instance_attr("vec4", "idata", true);
+  v += g.decl_instance_attr("vec4", "idata", true, true);
   v += g.vert_out() + "vec2 vary_texture_size_px;\n";
   v += g.vert_out() + "vec2 vary_texture_origin_px;\n";
   v += g.vert_out() + "vec2 vary_char_size_px;\n";
   v += g.vert_out() + "vec2 vary_coord_clamp;\n";
   v += g.vert_out() + "float vary_point_size;\n";
   v += "void main(void) {\n";
-  v += "vec4 idata_i = " + g.instance_attr("idata", true) + ";\n";
+  v += "vec4 idata_i = " + g.instance_attr("idata", true, true) + ";\n";
   v += "float ch = idata_i.x;\n";
   v += "vec2 screen_pos = idata_i.zw;\n";
   v += "vec2 screen_px = ";
@@ -1642,9 +1728,9 @@ init_rect2d_shader(glconfig const& g)
   v += g.prepend();
   v += g.vert_in() + "vec2 vert;\n";
   v += g.decl_instance_id(true);
-  v += g.decl_instance_attr("vec4", "idata", true);
+  v += g.decl_instance_attr("vec4", "idata", true, true);
   v += "void main(void) {\n";
-  v += "vec4 idata_i = " + g.instance_attr("idata", true) + ";\n";
+  v += "vec4 idata_i = " + g.instance_attr("idata", true, true) + ";\n";
   v += "vec2 screen_pos = idata_i.xy + idata_i.zw * vert;\n";
   v += "gl_Position = vec4(screen_pos, 0.0, 1.0);\n";
   v += "}\n";
@@ -1686,7 +1772,6 @@ init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
       "/Library/Fonts/Osaka.ttf",
       "/usr/share/fonts/mplus/mplus-1m-bold.ttf",
       "/usr/share/fonts/liberation/LiberationMono-Regular.ttf");
-    // mutable font = scoped_nullable{TTF_CloseFont}();
     scoped_nullable{TTF_CloseFont} font;
     for (size_t i, mutable& fn: fnames) {
       const p = TTF_OpenFont(fn.c_str(), 18);
@@ -1988,9 +2073,12 @@ pglshader(bool gles_flag0, int glmajor0, int glminor0, bool enable_msaa0,
 {
   public glconfig glc = glconfig(gles_flag0, glmajor0, glminor0,
     enable_msaa0);
-  public main_shader_ptr const sdr = init_main_shader(glc);
-  public shadowmap_shader_ptr const smsdr = init_shadowmap_shader(glc);
-  public zprepass_shader_ptr const zpsdr = init_zprepass_shader(glc);
+  public main_shader_ptr{1} const sdr = init_main_shader{1}(glc);
+  public main_shader_ptr{0} const m2sdr = init_main_shader{0}(glc);
+  public shadowmap_shader_ptr{1} const smsdr = init_shadowmap_shader{1}(glc);
+  public shadowmap_shader_ptr{0} const sm2sdr = init_shadowmap_shader{0}(glc);
+  public zprepass_shader_ptr{1} const zpsdr = init_zprepass_shader{1}(glc);
+  public zprepass_shader_ptr{0} const zp2sdr = init_zprepass_shader{0}(glc);
   public ds1st_shader_ptr const ds1sdr = init_ds1st_shader(glc);
   public ds2nd_shader_ptr const ds2sdr = init_ds2nd_shader(glc);
   public particle_shader_ptr const spsdr = init_particle_shader(glc);
@@ -2042,20 +2130,23 @@ pglshader(bool gles_flag0, int glmajor0, int glminor0, bool enable_msaa0,
       }
       glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
     }
-    vertex_buffers.push_back(make_ptr{vertex_buffer}
-      (static_cast{size_t}(num_float_struct{main_vertex_attributes}), false));
-    vertex_buffers.push_back(make_ptr{vertex_buffer}
-      (static_cast{size_t}(num_float_struct{particle_vertex_attr}), true));
-    vertex_buffers.push_back(make_ptr{vertex_buffer}
-      (static_cast{size_t}(num_float_struct{particle_bb_vertex_attr}), false));
-    vertex_buffers.push_back(make_ptr{vertex_buffer}
-      (static_cast{size_t}(num_float_struct{font2_vertex_attributes}), true));
-    vertex_buffers.push_back(make_ptr{vertex_buffer}
+    vertex_buffers.resize(vbid_count, make_ptr{vertex_buffer}(0u, false));
+    vertex_buffers[vbid_main] = make_ptr{vertex_buffer}
+      (static_cast{size_t}(num_float_struct{main_vertex_attributes}), false);
+    vertex_buffers[vbid_main2] = make_ptr{vertex_buffer}
+      (static_cast{size_t}(num_float_struct{main2_vertex_attributes}), false);
+    vertex_buffers[vbid_particle] = make_ptr{vertex_buffer}
+      (static_cast{size_t}(num_float_struct{particle_vertex_attr}), true);
+    vertex_buffers[vbid_particle_bb] = make_ptr{vertex_buffer}
+      (static_cast{size_t}(num_float_struct{particle_bb_vertex_attr}), false);
+    vertex_buffers[vbid_font2] = make_ptr{vertex_buffer}
+      (static_cast{size_t}(num_float_struct{font2_vertex_attributes}), true);
+    vertex_buffers[vbid_lineparticle] = make_ptr{vertex_buffer}
       (static_cast{size_t}(num_float_struct{lineparticle_vertex_attributes}),
-	false));
-    vertex_buffers.push_back(make_ptr{vertex_buffer}
+	false);
+    vertex_buffers[vbid_rect2d] = make_ptr{vertex_buffer}
       (static_cast{size_t}(num_float_struct{rect2d_vertex_attributes}),
-	false));
+	false);
   }
   public function void prepare_vertex_buffers()
   {
@@ -2094,7 +2185,7 @@ pglshader(bool gles_flag0, int glmajor0, int glminor0, bool enable_msaa0,
     }
     return scene_id;
   }
-  public function ptr{vertices} make_vertices(size_t bo_id,
+  public function ptr{vertices} make_vertices(vertex_buffer_id bo_id,
     cstrref const& name)
   {
     return vertex_buffers[bo_id]->get(name)->vtxs;

@@ -19,6 +19,26 @@ public import pglshader -;
 public import pglscene -;
 public import pglbase -;
 public import pglcommon -;
+public import wfobj -;
+
+function string sdl_read_file(string mutable& fn)
+{
+  string r;
+  scoped_nullable{SDL_RWclose} rwop;
+  rwop.reset(SDL_RWFromFile(fn.c_str(), "rb"));
+  if (rwop.get() == rawptr{SDL_RWops}()) {
+    throw runtime_error_template{"sdl_read_file"}(fn);
+  }
+  farray{uchar, 16384} buf;
+  while (true) {
+    const n = SDL_RWread(rwop, buf.range().to_rawptr().to_voidptr(), 1, 16384);
+    if (n == 0) {
+      break;
+    }
+    r.append(buf[0 .. n]);
+  }
+  return r;
+}
 
 function void build_vertices(pglshader mutable& pgs)
 {
@@ -26,9 +46,43 @@ function void build_vertices(pglshader mutable& pgs)
   metafunction fill_v fill{tattr};
   metafunction joint_v poly_joint{tattr};
   metafunction point_joint_v point_joint{tattr};
+  metafunction tattr2 main2_vertex_attributes;
+  metafunction fill2_v fill{tattr2};
+  metafunction joint2_v poly_joint{tattr2};
+  metafunction point2_joint_v point_joint{tattr2};
+  /* import */
+  const objs = make_farray{string}(
+      "al",
+      "cessna",
+      "skyscraper",
+      "airboat"
+      );
+  for (const i, const name: objs) {
+    string fn = name + ".obj";
+    const wfobjp = wfobject_read(sdl_read_file(fn));
+    const vtxs = pgs.make_vertices(vbid_main2, name);
+    const t = fill2_v(vtxs);
+    for (const j, mutable& v: wfobjp->v) {
+      v *= 20.0f;
+    }
+    for (const k, const g: wfobjp->groups) {
+      // debug_log("group", k, *g);
+      import_wfobj(*wfobjp, *g, t)(poly_t(), mesh_index());
+      // break;
+    }
+    vtxs->num_copies_hint = 32;
+  }
+  {
+    const vtx = pgs.make_vertices(vbid_main, "ab-multi");
+    const t = fill_v(vtx);
+    regular_polygon(50.0, 30,
+      bump_rec(1.0, 1.0, 1, joint_v(vtx, "airboat", hole()), hole()),
+      hole())
+      (poly_t(), mesh_index());
+  }
   /* vtx0 */
   {
-    const vtxs = pgs.make_vertices(0, "saucer");
+    const vtxs = pgs.make_vertices(vbid_main, "saucer");
     const fsmooth = fill_smooth{tattr}(vtxs);
     const t = fill_v(vtxs);
     regular_polygon(3.0, 40,
@@ -41,7 +95,7 @@ function void build_vertices(pglshader mutable& pgs)
   }
   /* vtx2 */
   {
-    const vtx2 = pgs.make_vertices(0, "saucer-multi");
+    const vtx2 = pgs.make_vertices(vbid_main, "saucer-multi");
     const t2 = fill_v(vtx2);
     regular_polygon(50.0, 3,
       bump_rec(1.0, 1.0, 1, joint_v(vtx2, "saucer", hole()), hole()),
@@ -50,7 +104,7 @@ function void build_vertices(pglshader mutable& pgs)
   }
   /* vtx8 */
   {
-    const vtx = pgs.make_vertices(0, "block-multi");
+    const vtx = pgs.make_vertices(vbid_main, "block-multi");
     const t = fill_v(vtx);
     regular_polygon(600.0, 4,
       rectangle_split(9, 8, joint_v(vtx, "block", hole())),
@@ -59,8 +113,8 @@ function void build_vertices(pglshader mutable& pgs)
   }
   /* vtx9 */
   {
-    const vtx = pgs.make_vertices(0, "block");
-    const t = fill_v(vtx);
+    const vtx = pgs.make_vertices(vbid_main2, "block");
+    const t = fill2_v(vtx);
     const rnd = make_rand_generator(1U);
     regular_polygon(50.0, 4,
       rotate_local(glm::make_quat_angle_axis(45.0, 0.0, 0.0, 1.0),
@@ -73,7 +127,7 @@ function void build_vertices(pglshader mutable& pgs)
   }
   /* vtx10 */
   {
-    const vtx = pgs.make_vertices(0, "bullet");
+    const vtx = pgs.make_vertices(vbid_main, "bullet");
     const t = fill_v(vtx);
     mutable m = glm::mat4()
       .translate(glm::make_vec3(0.0, 0.0, 1.0))
@@ -86,7 +140,7 @@ function void build_vertices(pglshader mutable& pgs)
   }
   {
     /* 60fps, macosx/linux mbp gt750m */
-    const vtx = pgs.make_vertices(0, "bullet-multi");
+    const vtx = pgs.make_vertices(vbid_main, "bullet-multi");
     const t = fill_v(vtx);
     regular_polygon(600.0, 4,
       rectangle_split(170, 170, joint_v(vtx, "bullet", hole())),
@@ -94,7 +148,7 @@ function void build_vertices(pglshader mutable& pgs)
       (poly_t(), mesh_index());
   }
   {
-    const vtx = pgs.make_vertices(0, "bullet2");
+    const vtx = pgs.make_vertices(vbid_main, "bullet2");
     const t = fill_v(vtx);
     mutable m = glm::mat4()
       .translate(glm::make_vec3(0.0, 0.0, 1.0))
@@ -108,7 +162,7 @@ function void build_vertices(pglshader mutable& pgs)
   /*
   {
     // 60fbp mbp intel gpu
-    const vtx = pgs.make_vertices(0, "bullet2-multi");
+    const vtx = pgs.make_vertices(vbid_main, "bullet2-multi");
     const t = fill_v(vtx);
     const rnd = make_rand_generator(991U);
     rand_sphere(200.0, 40000, false, false, rnd,
@@ -117,7 +171,7 @@ function void build_vertices(pglshader mutable& pgs)
   }
   */
   {
-    const vtx = pgs.make_vertices(0, "bullet2-multi");
+    const vtx = pgs.make_vertices(vbid_main, "bullet2-multi");
     const t = fill_v(vtx);
     const rnd = make_rand_generator(991U);
     rand_sphere(200.0, 37000, false, true, rnd,
@@ -125,7 +179,7 @@ function void build_vertices(pglshader mutable& pgs)
       (poly_t(), mesh_index());
   }
   {
-    const vtx = pgs.make_vertices(0, "bullet2-multi2");
+    const vtx = pgs.make_vertices(vbid_main, "bullet2-multi2");
     const t = fill_v(vtx);
     const rnd = make_rand_generator(991U);
     rand_sphere(200.0, 20000, false, true, rnd,
@@ -133,7 +187,7 @@ function void build_vertices(pglshader mutable& pgs)
       (poly_t(), mesh_index());
   }
   {
-    const vtx = pgs.make_vertices(0, "bullet2-multi3");
+    const vtx = pgs.make_vertices(vbid_main, "bullet2-multi3");
     const t = fill_v(vtx);
     const rnd = make_rand_generator(991U);
     rand_sphere(200.0, 2000, false, true, rnd,
@@ -141,7 +195,7 @@ function void build_vertices(pglshader mutable& pgs)
       (poly_t(), mesh_index());
   }
   {
-    const vtx = pgs.make_vertices(0, "bullet-multi-2");
+    const vtx = pgs.make_vertices(vbid_main, "bullet-multi-2");
     const t = fill_v(vtx);
     regular_polygon(600.0, 4,
       rectangle_split(80, 80, joint_v(vtx, "bullet", hole())),
@@ -149,7 +203,7 @@ function void build_vertices(pglshader mutable& pgs)
       (poly_t(), mesh_index());
   }
   {
-    const vtx = pgs.make_vertices(0, "saucer-multi3");
+    const vtx = pgs.make_vertices(vbid_main, "saucer-multi3");
     const t = fill_v(vtx);
     const rnd = make_rand_generator(991U);
     rand_sphere(200.0, 200, false, true, rnd,
@@ -157,8 +211,16 @@ function void build_vertices(pglshader mutable& pgs)
       (poly_t(), mesh_index());
   }
   {
+    const vtx = pgs.make_vertices(vbid_main, "ab-multi3");
+    const t = fill_v(vtx);
+    const rnd = make_rand_generator(991U);
+    rand_sphere(100.0, 100, false, true, rnd,
+      point_joint_v(vtx, "airboat", hole()))
+      (poly_t(), mesh_index());
+  }
+  {
     /* particle */
-    const vtx = pgs.make_vertices(1, "particle");
+    const vtx = pgs.make_vertices(vbid_particle, "particle");
     const p = particle(vtx);
     const rnd = make_rand_generator(1U);
     rand_sphere(1.0, 100, true, true, rnd, p)
@@ -167,7 +229,7 @@ function void build_vertices(pglshader mutable& pgs)
   }
   {
     /* particle multi */
-    const vtx = pgs.make_vertices(1, "particle-multi");
+    const vtx = pgs.make_vertices(vbid_particle, "particle-multi");
     /*
     regular_polygon(600.0, 4,
       // rectangle_split(200, 200, joint_v(vtx, "particle", hole())),
@@ -183,7 +245,7 @@ function void build_vertices(pglshader mutable& pgs)
   }
   {
     /* particle-bb */
-    const vtx = pgs.make_vertices(2, "particle-bb");
+    const vtx = pgs.make_vertices(vbid_particle_bb, "particle-bb");
     const p = particle_bb(vtx);
     const rnd = make_rand_generator(1U);
     rand_sphere(1.0, 100, true, true, rnd, p)
@@ -191,14 +253,14 @@ function void build_vertices(pglshader mutable& pgs)
   }
   {
     /* particle-bb multi */
-    const vtx = pgs.make_vertices(2, "particle-bb-multi");
+    const vtx = pgs.make_vertices(vbid_particle_bb, "particle-bb-multi");
     const rnd = make_rand_generator(991U);
     rand_sphere(60.0, 10000, true, true, rnd,
       point_joint_v(vtx, "particle-bb", hole()))
       (poly_t(), mesh_index());
   }
   {
-    const vtx = pgs.make_vertices(2, "mixed");
+    const vtx = pgs.make_vertices(vbid_particle_bb, "mixed");
     regular_polygon(1.0, 5,
       bump_rec(1.0, 10.0, 1, hole(), joint_v(vtx, "saucer", hole())),
       // joint_v(vtx, "bullet2", hole()),
@@ -210,7 +272,7 @@ function void build_vertices(pglshader mutable& pgs)
   */
   {
     /* for lineparticle shader */
-    const vtx = pgs.make_vertices(4, "lineparticle");
+    const vtx = pgs.make_vertices(vbid_lineparticle, "lineparticle");
     farray{lineparticle_vertex_attributes, 4} vs;
     vs[0].vert = glm::make_vec2(0.0, -0.5);
     vs[1].vert = glm::make_vec2(1.0, -0.5);
@@ -220,7 +282,7 @@ function void build_vertices(pglshader mutable& pgs)
   }
   {
     /* for rect2d shader */
-    const vtx = pgs.make_vertices(5, "rect2d");
+    const vtx = pgs.make_vertices(vbid_rect2d, "rect2d");
     farray{rect2d_vertex_attributes, 4} vs;
     vs[0].vert = glm::make_vec2(0.0, 0.0);
     vs[1].vert = glm::make_vec2(1.0, 0.0);
@@ -230,7 +292,7 @@ function void build_vertices(pglshader mutable& pgs)
   }
   {
     /* for font2 shader */
-    const vtx = pgs.make_vertices(3, "default_font");
+    const vtx = pgs.make_vertices(vbid_font2, "default_font");
     const char_w = static_cast{float}(pgs.fti.char_w);
     const char_h = static_cast{float}(pgs.fti.char_h);
     const point_size = static_cast{float}(max(pgs.fti.char_w, pgs.fti.char_h));
