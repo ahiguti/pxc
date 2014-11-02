@@ -1,0 +1,51 @@
+public namespace fp1 "use-unsafe";
+public import common -;
+public import meta m;
+
+public tsvaluetype struct extern "fptest::funcptr<>::type" "nocascade" {tr, ta}
+funcptr { }
+
+public threaded function extern "fptest::funcptr___call" {tr, ta} tr
+funcptr___call(funcptr{tr, ta} f, ta a);
+
+public threaded function extern "fptest::get_fp" funcptr{int, int} get_fp();
+public threaded function extern "fptest::get_fp2" funcptr{void, int} get_fp2();
+
+extern "types" inline
+namespace fptest {
+
+template <typename Tr, typename Ta> struct funcptr { typedef Tr (*type)(Ta); };
+
+template <typename Tr, typename Ta> static inline Tr
+funcptr___call(typename funcptr<Tr, Ta>::type f, Ta a)
+{
+  return f(a);
+}
+
+int test_fp(int x);
+void test_fp2(int x);
+
+static inline typename funcptr<int, int>::type get_fp() { return &test_fp; }
+static inline typename funcptr<void, int>::type get_fp2() { return &test_fp2; }
+
+};
+;
+
+extern "implementation" inline
+#include <stdio.h>
+namespace fptest {
+
+int test_fp(int x) { return x * 2; }
+void test_fp2(int x) { printf("value=%d\n", x); }
+
+};
+;
+
+{
+  funcptr{int, int} f = get_fp();
+  const y = f(123);
+  println(y);
+  funcptr{void, int} g = get_fp2();
+  g(500);
+}
+

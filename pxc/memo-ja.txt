@@ -3,6 +3,26 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- rawptrのupcastが__base__を見るのは、その型がexternなときだけ。
+
+- 以下のエラーメッセージがわかりにくすぎる
+  - Template expression '%s' is invalid
+    テンプレートインスタンスが存在しない
+  - Invalid template expression: ...
+    これはメタ関数の実行がnullを返したときに出る
+
+- C++のchar, long, unsigned longなどを使えるようにするか
+
+- rawref/crawrefが多重に適用されないようにする
+  - familyを"qualifier"にするか
+
+- pointer/raw_unsafe get/setは消す
+
+- int{int} が通ってしまう。
+
+- __deref() (done)
+  これはoperator内関数でwrapしない。unaryは全てwrapしなくてよいか。
+
 - noncopyableのチェックがおかしい
   mutable font = scoped_nullable{TTF_CloseFont}(); // C++エラー
   scoped_nullable{TTF_CloseFont} font; // エラーにならない
@@ -3558,4 +3578,17 @@ function_body_stmt
                 arena_dequote_strdup($2), "", false, $3); }
           /* for pragma */
         ;
+
+---------------------------------------------------------------------
+関数ポインタ
+
+tsvauletype struct {ti, tilist} function_pointer {
+}
+
+px関数をwrapする型を作る
+interface {rettype, tilist} function_object {
+  function rettype __call(expand(tilist)) const;
+}
+rettypeが型ではなく{t, passby}でもコンパイルできるようにする。
+interfaceが objectless となれるようにする。
 

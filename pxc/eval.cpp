@@ -1076,8 +1076,10 @@ static expr_i *term_get_instance_internal(const term& t, bool throw_if_noinst)
     bl->tinfo.instances.find(k);
   if (i == bl->tinfo.instances.end()) {
     if (throw_if_noinst) {
-      arena_error_throw(texpr, "Template expression '%s' is invalid",
-	term_tostr_human(t).c_str());
+      arena_error_throw(texpr, "Template expression '%s' is invalid "
+	  "(no instance is found for '%s')",
+	term_tostr_human(t).c_str(),
+	term_tostr_list(*targs, term_tostr_sort_humanreadable).c_str());
     } else {
       return texpr;
     }

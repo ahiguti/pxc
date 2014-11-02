@@ -1153,7 +1153,7 @@ public:
 
 struct expr_funcdef : public expr_i {
   expr_funcdef(const char *fn, int line, const char *sym, const char *cname,
-    bool is_const, expr_i *block, bool ext_pxc, bool no_def,
+    const char *copt, bool is_const, expr_i *block, bool ext_pxc, bool no_def,
     attribute_e attr);
   expr_i *clone() const;
   expr_e get_esort() const { return expr_e_funcdef; }
@@ -1217,6 +1217,7 @@ public:
   expr_block *block;
   bool ext_pxc : 1;  /* an imported function (block may be null) */
   bool no_def : 1;    /* extern c function or virtual function decl */
+  bool c_proto_flag : 1; /* emit prototype decl for this function */
   term value_texpr;
   typedef std::pair<
     symbol_table * /* caller symtbl */,

@@ -1559,16 +1559,24 @@ std::string expr_argdecls::dump(int indent) const
 }
 
 expr_funcdef::expr_funcdef(const char *fn, int line, const char *sym,
-  const char *cname, bool is_const, expr_i *block, bool ext_pxc, bool no_def,
-  attribute_e attr)
+  const char *cname, const char *copt, bool is_const, expr_i *block,
+  bool ext_pxc, bool no_def, attribute_e attr)
   : expr_i(fn, line), sym(sym), cnamei(cname), is_const(is_const),
     rettype_eval(), block(ptr_down_cast<expr_block>(block)),
-    ext_pxc(ext_pxc), no_def(no_def), value_texpr(), attr(attr),
-    used_as_cfuncobj(false)
+    ext_pxc(ext_pxc), no_def(no_def), c_proto_flag(true), value_texpr(),
+    attr(attr), used_as_cfuncobj(false)
 {
   assert(block);
   this->block->symtbl.set_block_esort(expr_e_funcdef);
   value_texpr = term(this);
+  if (copt != 0) {
+    const std::string s(copt);
+    if (s == "nocdecl") {
+      c_proto_flag = false;
+    } else {
+      arena_error_throw(this, "Invalid c option '%s'", copt);
+    }
+  }
 }
 
 expr_i *expr_funcdef::clone() const

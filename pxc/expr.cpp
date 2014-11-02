@@ -110,10 +110,10 @@ expr_i *expr_expand_new(const char *fn, int line, expr_i *callee,
 { return arena_push(new expr_expand(fn, line, callee, itersym, idxsym,
   valueste, baseexpr, ex, rest)); }
 expr_i *expr_funcdef_new(const char *fn, int line, const char *sym,
-  const char *cname, bool is_const, expr_i *block, bool ext_pxc,
-  bool no_def, attribute_e attr)
-{ return arena_push(new expr_funcdef(fn, line, sym, cname, is_const, block,
-  ext_pxc, no_def, attr)); }
+  const char *cname, const char *copt, bool is_const, expr_i *block,
+  bool ext_pxc, bool no_def, attribute_e attr)
+{ return arena_push(new expr_funcdef(fn, line, sym, cname, copt, is_const,
+  block, ext_pxc, no_def, attr)); }
 expr_i *expr_typedef_new(const char *fn, int line, const char *sym,
   const char *cname, const char *family, bool is_enum, bool is_bitmask,
   expr_i *enumvals, unsigned int num_tpara, attribute_e attr)

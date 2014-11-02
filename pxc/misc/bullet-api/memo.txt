@@ -1,0 +1,94 @@
+
+upcast
+- ptrなどのスマートポインタはto_rawptr()を用意する
+- rawptrは、指す先の型がref_upcastできればupcastできる
+
+staticメンバ関数のsignatureをプロトタイプ宣言してしまっている
+
+- typedef (done)
+- ネストされたクラス (done)
+- 関数 (done)
+- staticメンバ関数 (done)
+- 継承
+- コンバーター
+
+--------------------------
+
+  'sort' => 'ArrayType'
+    配列型。要素の型は'type'。
+  'sort' => 'PointerType'
+    ポインタ型。指す先の型は'type'。
+  'sort' => 'ReferenceType'
+    参照型。指す先の型は'type'。
+  'sort' => 'CvQualifiedType'
+    CV装飾。もとの型は'type'。
+  'sort' => 'Typedef'
+    typedef宣言。'name'で定義される型の名前、'type'でもとの型。
+  'sort' => 'FunctionType'
+    関数型。'returns'が返す型。'Argument'に引数型のリスト。
+  'sort' => 'FundamentalType'
+    基本型。'name'に'unsigned char'など。
+  'sort' => 'Struct'
+    構造体。struct foo定義されている以外はClassと同じ。
+  'sort' => 'Class'
+    クラス。'name'に'<'が含まれればインスタンス。'members'に中身の空白区切り
+    リスト。
+  'sort' => 'Enumeration'
+    列挙型。'name'に名前。'EnumValue'に要素('name'と'init')のリスト。
+  'sort' => 'Union'
+    union型。'members'に中身の空白区切りリスト。中身は'Field'のid。
+  'sort' => 'Constructor'
+    コンストラクタ。'name'は型名と同じ。'Argument'に引数のリスト。
+  'sort' => 'Converter'
+    operator fooのような型コンバータ。'const'があればconstメンバ関数。
+  'sort' => 'Destructor'
+    デストラクタ。
+  'sort' => 'Field'
+    構造体などのフィールド。'name'に名前、'type'に型。
+  'sort' => 'File'
+    c/hファイル。'name'にパス。
+  'sort' => 'Function'
+    関数。'name'に名前。'returns'に返す型。'Argument'に引数('name','type')
+    のリスト('name'は無いことがあるかも)。
+  'sort' => 'Method'
+    メンバ関数。'const'があればconstメンバ関数。'static'があればstaticメンバ
+    関数。
+  'sort' => 'Namespace'
+    名前空間。'name'にC++の名前空間名。'members'に中身の空白区切りリスト。
+  'sort' => 'OperatorFunction'
+    演算子。'name'は'*'など。'Argument'と'returns'。
+  'sort' => 'OperatorMethod'
+    メンバ演算子。'Argument'と'returns'。
+  'sort' => 'Variable'
+    グローバル変数？ なぜか'name'はmangleされている。
+
+型出力の方針
+  - コピーと代入が無いなら "noncopyable"
+  - コピー可能でデフォルトコンストラクタが無いなら "nodefault"
+  - operator == と operator != があればそれぞれ __eq, __ne を定義
+
+型式からpassinfoへの変換
+  - 型から'ReferenceType'と'CvQualifiedType'を外す。passbyを設定。
+  - 型式をpxへ変換。途中にReferenceがあればエラー。
+  - 型が'PointerType', 'ArrayType', 'ReferenceType' なら次が
+    'CvQualifiedType'かどうか見る。
+
+_2160 =>
+  sort => OperatorMethod
+  __sigset_t::operator=(__sigset_t const&)
+
+Argument => { 'type' => '_8853' };
+
+_8853 =>
+  sort => ReferenceType
+  type => '_109c'
+
+_109c =>
+  sort => CvQualifiedType
+  const => '1'
+  type => '_109'
+
+_109 =>
+  sort => 'Struct'
+  name => '__sigset_t'
+

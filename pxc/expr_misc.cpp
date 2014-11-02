@@ -802,6 +802,12 @@ bool is_interface_pointer(const term& t)
   return is_interface_or_impl(tt);
 }
 
+bool is_dereferencable(const term& t)
+{
+  return is_cm_pointer_family(t) || is_cm_lock_guard_family(t)
+    || is_cm_range_family(t) || is_container_family(t);
+}
+
 bool is_cm_pointer_family(const term& t)
 {
   return is_pointer_family(get_family(t));
@@ -1488,7 +1494,7 @@ fprintf(stderr, "pxc-defined %s\n", cname); // FIXME
     } else if (cname != 0 && s == term_tostr_sort_cname) {
       rstr = cname;
       std::string::size_type pos = rstr.find('>');
-      if (pos != rstr.npos && pos > 0) {
+      if (pos != rstr.npos && pos > 0 && rstr[pos - 1] == '<') {
 	rstr_post = rstr.substr(pos + 1);
 	rstr = rstr.substr(0, pos - 1);
       }
@@ -3524,6 +3530,15 @@ bool is_noexec_expr(expr_i *e)
     /* expr_e_if, expr_e_var, expr_e_op for example */
     return false;
   }
+}
+
+bool is_safe_namespace(const std::string& ns)
+{
+  nspropmap_type::const_iterator i = nspropmap.find(ns);
+  if (i == nspropmap.end()) {
+    arena_error_throw(0, "Namespace '%s' not found", ns.c_str());
+  }
+  return i->second.safety == nssafety_e_safe;
 }
 
 bool is_compiled(const expr_block *bl)

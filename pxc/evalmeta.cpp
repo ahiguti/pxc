@@ -1605,6 +1605,17 @@ static term eval_meta_nsof(const term_list_range& tlev,
   return term(s);
 }
 
+static term eval_meta_is_safe_ns(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos)
+{
+  if (tlev.size() != 1) {
+    return term();
+  }
+  const std::string s = meta_term_to_string(tlev[0], false);
+  bool v = is_safe_namespace(s);
+  return term(v);
+}
+
 static term eval_meta_not(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
@@ -2013,6 +2024,7 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@family", &eval_meta_family },
   { "@characteristic", &eval_meta_characteristic },
   { "@nsof", &eval_meta_nsof },
+  { "@is_safe_ns", &eval_meta_is_safe_ns },
   { "@nameof", &eval_meta_nameof },
   { "@not", &eval_meta_not },
   { "@eq", &eval_meta_eq },
