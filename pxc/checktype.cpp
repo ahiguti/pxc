@@ -164,8 +164,23 @@ static void check_copyable(const expr_op *eop, expr_i *a0)
     s0.c_str());
 }
 
+static expr_i *func_get_hidden_this(expr_i *e)
+{
+  expr_i *rhs = get_op_rhs(e, '.');
+  if (rhs == 0) {
+    rhs = get_op_rhs(e, TOK_ARROW);
+    if (rhs == 0) {
+      return 0;
+    }
+  }
+  symbol_common *const sc = rhs->get_sdef();
+  assert(sc);
+  return sc->arg_hidden_this;
+}
+
 static void append_hidden_this(expr_i *e, std::list<expr_i *>& lst)
 {
+  #if 0
   expr_i *rhs = get_op_rhs(e, '.');
   if (rhs == 0) {
     rhs = get_op_rhs(e, TOK_ARROW);
@@ -177,6 +192,11 @@ static void append_hidden_this(expr_i *e, std::list<expr_i *>& lst)
   assert(sc);
   if (sc->arg_hidden_this) {
     lst.push_back(sc->arg_hidden_this);
+  }
+  #endif
+  expr_i *p = func_get_hidden_this(e);
+  if (p != 0) {
+    lst.push_back(p);
   }
 }
 
@@ -1248,8 +1268,11 @@ static void add_root_requirement(expr_i *e, passby_e passby,
 	/* non-member function */
 	expr_i *efcarg = efc->arg;
 	if (efcarg == 0) {
-	  arena_error_throw(efc,
-	    "Invalid function call (no argument, returning reference)");
+	  efcarg = func_get_hidden_this(efc->func);
+	  if (efcarg == 0) {
+	    arena_error_throw(efc,
+	      "Invalid function call (no argument, returning reference)");
+	  }
 	}
 	if (efcarg->get_esort() == expr_e_op &&
 	  ptr_down_cast<expr_op>(efcarg)->op == ',') {
@@ -1582,7 +1605,10 @@ static void subst_user_defined_op(expr_op *eop)
   case TOK_MINUS: func = "minus"; tc0 = is_numeric_type; break;
   case '~': func = "neg"; tc0 = is_boolean_type; break;
   case '!': func = "not"; tc0 = is_boolean_type; break;
+  /* tuple */
   case '{': func = "make_tuple"; break;
+  /* pointer dereference */
+  case TOK_PTR_DEREF: func = "deref"; tc0 = is_dereferencable; break;
   default: break;
   }
   if (func == 0) {
@@ -1601,13 +1627,22 @@ static void subst_user_defined_op(expr_op *eop)
   if (tc0f && tc1f && eop->op != '{') {
     return; /* builtin op */
   }
-  expr_i *fc = expr_funccall_new(eop->fname, eop->line,
-    expr_symbol_new(eop->fname, eop->line,
-      expr_nssym_new(eop->fname, eop->line,
-	expr_nssym_new(eop->fname, eop->line, 0, "operator"), func)),
-    (tc1 != 0)
-      ? expr_op_new(eop->fname, eop->line, ',', eop->arg0, eop->arg1)
-      : eop->arg0);
+  expr_i *fc = 0;
+  if (eop->op == TOK_PTR_DEREF) {
+    fc = expr_funccall_new(eop->fname, eop->line,
+      expr_op_new(eop->fname, eop->line, '.',
+	eop->arg0,
+	expr_symbol_new(eop->fname, eop->line, 
+	  expr_nssym_new(eop->fname, eop->line, 0, "__deref"))), 0);
+  } else {
+    fc = expr_funccall_new(eop->fname, eop->line,
+      expr_symbol_new(eop->fname, eop->line,
+	expr_nssym_new(eop->fname, eop->line,
+	  expr_nssym_new(eop->fname, eop->line, 0, "operator"), func)),
+      (tc1 != 0)
+	? expr_op_new(eop->fname, eop->line, ',', eop->arg0, eop->arg1)
+	: eop->arg0);
+  }
   eop->arg0 = fc;
   eop->arg1 = 0;
   eop->op = '(';

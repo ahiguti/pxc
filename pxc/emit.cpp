@@ -1575,6 +1575,9 @@ static void emit_function_decl(emit_context& em)
       if (efd->no_def && efd->block->tinfo.has_tparams()) {
 	continue;
       }
+      if (!efd->c_proto_flag) {
+	continue; /* "nocdecl" is set */
+      }
       emit_function_decl_one(em, efd, true, false);
       em.puts(";\n");
       if (efd->dep_upvalues.size() != 0 && efd->used_as_cfuncobj) {

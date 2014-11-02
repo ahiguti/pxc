@@ -94,6 +94,7 @@ bool is_struct(const term& t);
 bool is_dunion(const term& t);
 bool is_interface(const term& t);
 bool is_interface_or_impl(const term& t);
+bool is_dereferencable(const term& t);
 bool is_noninterface_pointer(const term& t);
 bool is_interface_pointer(const term& t);
 bool is_const_or_immutable_pointer_family(const term& t);
@@ -175,6 +176,8 @@ term get_array_index_texpr(expr_op *eop, const term& t0);
 bool is_vardef_constructor_or_byref(expr_i *e, bool incl_byref);
 bool is_vardef_or_vardefset(expr_i *e);
 bool is_noexec_expr(expr_i *e);
+
+bool is_safe_namespace(const std::string& ns);
 
 bool is_compiled(const expr_block *bl);
 

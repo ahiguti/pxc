@@ -57,6 +57,9 @@ public metafunction is_pointer_type{t}
 public metafunction is_mutable_pointer_type{t}
   is_mutable_pointer_family{m::family{t}};
 
+public metafunction is_guard_type{t}
+  is_guard_family{m::family{t}};
+
 public metafunction is_struct_type{t}
   is_struct_family{m::family{t}};
 
@@ -71,6 +74,12 @@ public metafunction is_equality_type{t}
     is_ordered_type{t},
     is_integral_enum_bitmask_type{t},
     is_pointer_type{t}};
+
+public metafunction is_dereferencable_type{t}
+  m::or{
+    is_pointer_type{t},
+    is_range_type{t},
+    is_guard_type{t}};
 
 public metafunction is_ephemeral_type{t}
   m::or{is_range_type{t}, m::eq{m::family{t}, "ephemeral"}};
@@ -216,4 +225,9 @@ private metafunction is_union_family{fam}
 
 private metafunction is_interface_family{fam}
   m::eq{fam, "interface"};
+
+private metafunction is_guard_family{fam}
+  m::or{
+    m::eq{fam, "lock_guard"},
+    m::eq{fam, "lock_cguard"}};
 

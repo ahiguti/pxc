@@ -1,6 +1,6 @@
 public threaded namespace pointer::raw "use-unsafe";
 public import numeric::integral -;
-public import pointer -;
+public import pointer +;
 public import algebraic -;
 public import container::array +;
 public import meta m;
@@ -15,6 +15,69 @@ crawptr
 {
   public metafunction value_type t;
 }
+
+public tsvaluetype struct extern "pxcrt::rawref<>::type" {t}
+rawref(t mutable& x)
+{
+  metafunction __static_assert__ m::not{is_rawref_or_crawref{t}};
+  public metafunction value_type t;
+}
+
+public tsvaluetype struct extern "pxcrt::crawref<>::type" {t}
+crawref(t const& x)
+{
+  metafunction __static_assert__ m::not{is_rawref_or_crawref{t}};
+  public metafunction value_type t;
+}
+
+public metafunction ptr_raw to_rawptr;
+public metafunction ptr_craw to_crawptr;
+public metafunction cptr_raw to_crawptr;
+public metafunction cptr_craw to_crawptr;
+public metafunction iptr_raw to_crawptr;
+public metafunction iptr_craw to_crawptr;
+public metafunction tptr_raw to_rawptr;
+public metafunction tptr_craw to_crawptr;
+public metafunction tcptr_raw to_crawptr;
+public metafunction tcptr_craw to_crawptr;
+public metafunction tiptr_raw to_crawptr;
+public metafunction tiptr_craw to_crawptr;
+
+public threaded function {t} rawptr{m::at0{t}}
+to_rawptr(t const& x)
+{
+  return address(*x);
+}
+
+public threaded function {t} crawptr{m::at0{t}}
+to_crawptr(t const& x)
+{
+  return caddress(*x);
+}
+
+public threaded function {tto, tfrom} tto rawptr___to(tfrom x)
+{
+  metafunction tf m::nameof{tfrom};
+  metafunction tt m::nameof{tto};
+  metafunction cr "pointer::raw::crawptr";
+  metafunction r "pointer::raw::rawptr";
+  metafunction fa m::symbol{tfrom, "value_type"};
+  metafunction ta m::symbol{tto, "value_type"};
+  if (m::and{
+    m::or{m::eq{tf, cr}, m::eq{tf, r}},
+    m::or{m::eq{tt, cr}, m::eq{tt, r}},
+    m::not{m::and{m::eq{tt, r}, m::eq{tf, cr}}},
+    is_base_class{fa, ta}})
+  {
+    return rawptr_upcast{tto, tfrom}(x);
+  } else {
+    return m::error{m::concat{"invalid type: ", m::full_string{tto}, ", ",
+      m::full_string{tfrom}}};
+  }
+}
+
+private threaded function extern "::pxcrt::rawptr_upcast" {tto, tfrom} tto
+rawptr_upcast(tfrom x);
 
 public threaded struct {fconstr, fdestr}
 scoped(expand(m::args{fconstr}))
@@ -60,33 +123,6 @@ scoped_nullable()
   }
 }
 
-public threaded struct {fdestr}
-scoped_option()
-{
-  private metafunction value_type m::arg_type{fdestr, 0};
-  public nocopy{option{value_type}} hnd = nocopy(option{value_type}());
-  public function void reset(m::arg_type{fdestr, 0} const& v) {
-    if (value_type oldv: hnd.value.some) {
-      fdestr(oldv);
-    }
-    hnd.value.some = v;
-  }
-  public function value_type get() const
-  {
-    return hnd.value.some;
-  }
-  public function {tto} value_type __to() const
-  {
-    return hnd.value.some;
-  }
-  private function ~ {
-    if (value_type oldv: hnd.value.some) {
-      fdestr(oldv);
-    }
-    hnd.value.none = unit();
-  }
-}
-
 /* pointer to char. neither 'signed char' nor 'unsigned char'. */
 public tsvaluetype struct extern "pxcrt::charptr" charptr { }
 public tsvaluetype struct extern "pxcrt::ccharptr" ccharptr { }
@@ -98,13 +134,6 @@ public threaded function extern "pxcrt::address" {t} rawptr{t}
 address(t mutable& x);
 public threaded function extern "pxcrt::caddress" {t} crawptr{t}
 caddress(t const& x);
-
-public threaded function extern "pxcrt::rawptr_to_crawptr" {t} crawptr{t}
-rawptr_to_crawptr(rawptr{t} x);
-
-/* implicit conversion from rawptr{t} to crawptr{t} */
-public metafunction rawptr___to{tto, tfrom}
-  rawptr_to_crawptr{m::symbol{tfrom, "value_type"}};
 
 private threaded function extern "pxcrt::array_to_rawptr" {t}
 rawptr{m::symbol{t, "mapped_type"}}
@@ -199,11 +228,38 @@ private metafunction check_internal{t, name}
     t,
     m::error{t, ": unexpected type"}};
 
+private metafunction is_rawref_or_crawref{t}
+  m::or{
+    m::eq{m::nameof{t}, "pointer::raw::rawref"},
+    m::eq{m::nameof{t}, "pointer::raw::crawref"}};
+
+private metafunction is_base_class{tderiv, tbase}
+  m::apply{
+    metafunction{x}
+      m::cond{
+	/* tbase is the same type as tderiv? */
+	m::eq{tbase, tderiv},
+	1,
+	/* tbase is in the __base__ list of tderiv? */
+        m::is_list{x},
+	m::ge{m::list_find{x, m::to_string{tbase}}, 0},
+	/* otherwise */
+        0},
+    m::map{
+      m::cond{
+	m::is_safe_ns{m::nsof{tderiv}},
+	m::nil,
+	m::symbol{tderiv, "__base__", m::nil}},
+      m::to_string}};
+
 extern "types" inline
 namespace pxcrt {
 
 template <typename T> struct rawptr { typedef T *type; };
 template <typename T> struct crawptr { typedef const T *type; };
+
+template <typename T> struct rawref { typedef T& type; };
+template <typename T> struct crawref { typedef const T& type; };
 
 typedef char *charptr;
 typedef char const *ccharptr;
@@ -221,9 +277,6 @@ template <typename T> static inline T *
 address(T& x) { return &x; }
 template <typename T> static inline T const *
 caddress(T const& x) { return &x; }
-
-template <typename T> static inline T const *
-rawptr_to_crawptr(T *x) { return x; }
 
 template <typename T> static inline typename T::mapped_type *
 array_to_rawptr(T& x) { return x.rawarr(); }
@@ -272,6 +325,12 @@ template <typename Tx, typename Ty> static inline Tx
 rawptr_add(Tx x, size_t y) { return x + y; }
 template <typename Tx, typename Ty> static inline Tx
 rawptr_sub(Tx x, size_t y) { return x - y; }
+
+template <typename Tto, typename Tfrom> static inline Tto
+rawptr_upcast(Tfrom x)
+{
+  return x;
+}
 
 };
 ;
