@@ -5,18 +5,9 @@ public import operator;
 public import pointer::raw +;
 public import container::array +;
 public import meta m;
+public import meta::vararg va;
 
 /* unsafe */
-
-/*
-public tsvaluetype struct extern "::pxcrt::deref" "slice" {t} deref { }
-public tsvaluetype struct extern "::pxcrt::cderef" "cslice" {t} cderef { }
-
-public threaded function extern "pxcrt::rawptr_to_deref" {t} deref{t}
-rawptr_to_deref(rawptr{t} x);
-public threaded function extern "pxcrt::crawptr_tocderef" {t} cderef{t}
-crawptr_to_cderef(crawptr{t} x);
-*/
 
 public threaded function extern "pxcrt::rawptr___deref" {t} t mutable&
 rawptr___deref(rawptr{t} x);
@@ -28,64 +19,43 @@ rawptr_to_slice(rawptr{t} x, size_t xlen);
 public threaded function extern "pxcrt::crawptr_to_cslice" {t} cslice{t}
 crawptr_to_cslice(crawptr{t} x, size_t xlen);
 
-// FIXME: remove
-public threaded function extern "pxcrt::rawptr_set" {t} void
-rawptr_set(rawptr{t} x, t v);
-public threaded function extern "pxcrt::rawptr_get" {t} t
-rawptr_get(rawptr{t} x);
-public threaded function extern "pxcrt::crawptr_get" {t} t
-crawptr_get(crawptr{t} x);
+public threaded function {t, tilist} rawptr{t}
+new(expand(va::arg_decls_byref{tilist}))
+{
+  rawptr{t} r;
+  r extern "new" t(expand(a: va::arg_names{m::size{tilist}}; a));
+  return r;
+}
+
+public threaded function {t} void
+delete(t x)
+{
+  if (is_cm_rawptr{t}) {
+    delete_impl{t}(x);
+  } else {
+    m::error{m::concat{"invalid type: ", t}};
+  }
+}
+
+private metafunction is_cm_rawptr{t}
+  m::or{
+    m::eq{m::nameof{t}, "pointer::raw::rawptr"},
+    m::eq{m::nameof{t}, "pointer::raw::crawptr"}};
+
+private threaded function extern "pxcrt::delete_impl" {t} void
+delete_impl(t x);
 
 public threaded function ccharptr varray_c_str(string mutable& x)
 {
   const sz = x.size();
   x.reserve(sz + 1);
   const p = x.to_rawptr();
-  (p + sz).set(0);
+  *(p + sz) = 0;
   return x.to_crawptr().to_ccharptr();
 }
 
 extern "types" inline
 namespace pxcrt {
-
-/*
-template <typename T> struct cderef {
-  cderef() : ptr(0) { }
-  cderef(T const *p0) : ptr(p0) { }
-  bool empty() const { return false; }
-  bt_size_t size() const { return 1; }
-  const T& operator [](bt_size_t idx) const { return *ptr; }
-  const T& operator *() const { return *ptr; }
-  T value_at(bt_size_t idx) const { return *ptr; }
-  T deref_value() const { return *ptr; }
-  const T *begin() const { return ptr; }
-  const T *end() const { return ptr + 1; }
-  const T *rawarr() const { return ptr; }
-private:
-  const T *const ptr;
-};
-
-template <typename T> struct deref {
-  deref() : ptr(0) { }
-  deref(T *p0) : ptr(p0) { }
-  bool empty() const { return false; }
-  bt_size_t size() const { return 1; }
-  T& operator [](bt_size_t idx) const { return *ptr; }
-  T& operator *() const { return *ptr; }
-  T value_at(bt_size_t idx) const { return *ptr; }
-  T deref_value() const { return *ptr; }
-  T *begin() const { return ptr; }
-  T *end() const { return ptr + 1; }
-  T *rawarr() const { return ptr; }
-private:
-  T *const ptr;
-};
-
-template <typename T> static inline deref<T>
-rawptr_to_deref(T *x) { return deref<T>(x); }
-template <typename T> static inline cderef<T>
-crawptr_to_cderef(T const *x) { return cderef<T>(x); }
-*/
 
 template <typename T> static inline T&
 rawptr___deref(T *x) { return *x; }
@@ -97,13 +67,9 @@ rawptr_to_slice(T *x, bt_size_t xlen) { return bt_slice<T>(x, xlen); }
 template <typename T> static inline bt_cslice<T>
 crawptr_to_cslice(T const *x, bt_size_t xlen) { return bt_cslice<T>(x, xlen); }
 
-// FIXME: remove
 template <typename T> static inline void
-rawptr_set(T *x, T v) { *x = v; }
-template <typename T> static inline T
-rawptr_get(T *x) { return *x; }
-template <typename T> static inline T
-crawptr_get(T const *x) { return *x; }
+delete_impl(T x) { delete x; }
 
 }
 ;
+

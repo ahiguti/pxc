@@ -88,6 +88,10 @@ static void emit_term(emit_context& em, const term& t)
 
 static void emit_explicit_init_if(emit_context& em, const term& t)
 {
+  if (get_family(t) == typefamily_e_rawarray) {
+    em.puts(" = { }");
+    return;
+  }
   if (is_possibly_pod(t)) {
     /* it's possible that t is a POD type. need to generate an explicit
      * initializer. */
@@ -2321,10 +2325,16 @@ void expr_op::emit_value(emit_context& em)
     }
     break;
   case TOK_EXTERN:
-    if (extop == "placement-new") {
-      em.puts("(new (&");
-      fn_emit_value(em, arg0);
-      em.puts(") ");
+    if (extop == "placement-new" || extop == "new") {
+      if (extop == "placement-new") {
+	em.puts("(new (&");
+	fn_emit_value(em, arg0);
+	em.puts(") ");
+      } else {
+	em.puts("(");
+	fn_emit_value(em, arg0);
+	em.puts(" = new ");
+      }
       if (arg1->get_esort() == expr_e_funccall) {
 	/* explicit constructor call */
 	fn_emit_value(em, arg1);

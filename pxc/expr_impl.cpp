@@ -1181,7 +1181,9 @@ expr_op::expr_op(const char *fn, int line, int op, const char *extop,
     arg1(arg1)
 {
   type_of_this_expr.clear(); /* check_type() */
-  if (this->extop != "" && this->extop != "placement-new") {
+  if (this->extop != "" && this->extop != "placement-new" &&
+    this->extop != "new")
+  {
     arena_error_throw(this, "Invalid external operator '%s'",
       this->extop.c_str());
   }
