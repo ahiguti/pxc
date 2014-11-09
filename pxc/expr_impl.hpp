@@ -78,12 +78,15 @@ struct builtins_type {
   term type_bool;
   term type_uchar;
   term type_char;
+  term type_schar;
   term type_ushort;
   term type_short;
   term type_uint;
   term type_int;
   term type_ulong;
   term type_long;
+  term type_ulonglong;
+  term type_longlong;
   term type_size_t;
   term type_ssize_t;
   term type_float;
@@ -93,18 +96,21 @@ struct builtins_type {
 };
 
 struct type_attribute {
-  int significant_bits_min; /* 8 for uchar, 7 for char */
+  int significant_bits_min; /* 8 for uchar, 7 for schar */
   int significant_bits_max; /* ditto */
+  unsigned int signed_min : 1;
+  unsigned int signed_max : 1;
   bool is_numeric : 1;
   bool is_integral : 1;
-  bool is_signed : 1;
   type_attribute() : significant_bits_min(0), significant_bits_max(0),
-    is_numeric(false), is_integral(false), is_signed(false) { }
-  type_attribute(int sbmin, int sbmax, bool is_numeric, bool is_integral,
-    bool is_signed)
+      signed_min(0), signed_max(0), is_numeric(false), is_integral(false)
+    { }
+  type_attribute(int sbmin, int sbmax, unsigned int signed_min,
+      unsigned int signed_max, bool is_numeric, bool is_integral)
     : significant_bits_min(sbmin), significant_bits_max(sbmax),
-      is_numeric(is_numeric), is_integral(is_integral), is_signed(is_signed)
-      { }
+      signed_min(signed_min), signed_max(signed_max),
+      is_numeric(is_numeric), is_integral(is_integral)
+    { }
 };
 
 enum term_tostr_sort {
@@ -146,13 +152,14 @@ enum typefamily_e {
   typefamily_e_ptr,              /* shared pointer */
   typefamily_e_cptr,             /* shared pointer, const target */
   typefamily_e_iptr,             /* shared pointer, immutable target */
-  typefamily_e_tptr,             /* multithread-shared pointer */
-  typefamily_e_tcptr,            /* multithread-shared pointer, const target */
-  typefamily_e_tiptr,            /* multithread-shared pointer, immutable tgt */
+  typefamily_e_tptr,             /* target can be shared between threads  */
+  typefamily_e_tcptr,            /* ditto */
+  typefamily_e_tiptr,            /* ditto */
   typefamily_e_lock_guard,       /* lock object (eph) */
   typefamily_e_lock_cguard,      /* lock object, const reference (eph) */
-  typefamily_e_extint,           /* c-defined int/long etc */
-  typefamily_e_extuint,          /* c-defined unsigned int/long etc, */
+  typefamily_e_extint,           /* c-defined integral, unknown singedness */
+  typefamily_e_extuint,          /* c-defined unsigned integral */
+  typefamily_e_extsint,          /* c-defined signed integral */
   typefamily_e_extenum,          /* c-defined enum */
   typefamily_e_extbitmask,       /* c-defined bitmask */
   typefamily_e_extfloat,         /* c-defined float/double etc, */
@@ -165,6 +172,7 @@ enum typefamily_e {
   typefamily_e_cdarrayst,        /* cdarray, may be on stack */
   typefamily_e_farray,           /* fixed size array */
   typefamily_e_cfarray,          /* fixed size array, const elem */
+  typefamily_e_rawarray,         /* c++ raw array */
   typefamily_e_slice,            /* array slice (eph) */
   typefamily_e_cslice,           /* array slice, const elem (eph) */
   typefamily_e_map,              /* map */

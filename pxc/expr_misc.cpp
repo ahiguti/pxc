@@ -372,7 +372,7 @@ bool is_boolean_type(const term& t)
   }
   const typefamily_e cat = get_family(t);
   return cat == typefamily_e_extint || cat == typefamily_e_extuint
-    || cat == typefamily_e_extbitmask;
+    || cat == typefamily_e_extsint || cat == typefamily_e_extbitmask;
 }
 
 static bool is_builtin_pod(const term& t)
@@ -416,6 +416,7 @@ bool is_possibly_pod(const term& t)
   switch (cat) {
   case typefamily_e_extint:
   case typefamily_e_extuint:
+  case typefamily_e_extsint:
   case typefamily_e_extenum:
   case typefamily_e_extbitmask:
   case typefamily_e_extfloat:
@@ -441,6 +442,7 @@ bool is_possibly_nonpod(const term& t)
   switch (cat) {
   case typefamily_e_extint:
   case typefamily_e_extuint:
+  case typefamily_e_extsint:
   case typefamily_e_extenum:
   case typefamily_e_extbitmask:
   case typefamily_e_extfloat:
@@ -498,29 +500,21 @@ const type_attribute *get_type_attribute(const term& t)
   return 0;
 }
 
-static bool is_pod_integral_type(const term& t)
+bool is_integral_type(const term& t)
 {
   const type_attribute *const tattr = get_type_attribute(t);
   if (tattr != 0 && tattr->is_integral) {
     return true;
   }
   const typefamily_e cat = get_family(t);
-  return cat == typefamily_e_extint || cat == typefamily_e_extuint;
-}
-
-bool is_integral_type(const term& t)
-{
-  if (is_pod_integral_type(t)) {
-    return true;
-  }
-  const typefamily_e cat = get_family(t);
-  return cat == typefamily_e_extint || cat == typefamily_e_extuint;
+  return cat == typefamily_e_extint || cat == typefamily_e_extuint ||
+    cat == typefamily_e_extsint;
 }
 
 unsigned long long uintegral_max_value(const term& t)
 {
   const type_attribute *const tattr = get_type_attribute(t);
-  if (tattr != 0 && tattr->is_integral && !tattr->is_signed) {
+  if (tattr != 0 && tattr->is_integral && tattr->signed_max == 0) {
     if (tattr->significant_bits_min == tattr->significant_bits_max) {
       unsigned long long v = 1ULL;
       v <<= static_cast<unsigned>(tattr->significant_bits_max);
@@ -534,7 +528,7 @@ unsigned long long uintegral_max_value(const term& t)
 long long integral_max_value(const term& t)
 {
   const type_attribute *const tattr = get_type_attribute(t);
-  if (tattr != 0 && tattr->is_integral && tattr->is_signed) {
+  if (tattr != 0 && tattr->is_integral && tattr->signed_min > 0) {
     if (tattr->significant_bits_min == tattr->significant_bits_max) {
       unsigned long long v = 1ULL;
       v <<= static_cast<unsigned>(tattr->significant_bits_max);
@@ -558,7 +552,7 @@ long long integral_min_value(const term& t)
 bool is_unsigned_integral_type(const term& t)
 {
   const type_attribute *const tattr = get_type_attribute(t);
-  if (tattr != 0 && tattr->is_integral && !tattr->is_signed) {
+  if (tattr != 0 && tattr->is_integral && tattr->signed_max == 0) {
     return true;
   }
   const typefamily_e cat = get_family(t);
@@ -604,6 +598,7 @@ typefamily_e get_family_from_string(const std::string& s)
   if (s == "lock_cguard") return typefamily_e_lock_cguard;
   if (s == "extint") return typefamily_e_extint;
   if (s == "extuint") return typefamily_e_extuint;
+  if (s == "extsint") return typefamily_e_extsint;
   if (s == "extenum") return typefamily_e_extenum;
   if (s == "extbitmask") return typefamily_e_extbitmask;
   if (s == "extfloat") return typefamily_e_extfloat;
@@ -616,6 +611,7 @@ typefamily_e get_family_from_string(const std::string& s)
   if (s == "cdarrayst") return typefamily_e_cdarrayst;
   if (s == "farray") return typefamily_e_farray;
   if (s == "cfarray") return typefamily_e_cfarray;
+  if (s == "rawarray") return typefamily_e_rawarray;
   if (s == "slice") return typefamily_e_slice;
   if (s == "cslice") return typefamily_e_cslice;
   if (s == "ephemeral") return typefamily_e_ephemeral;
@@ -644,6 +640,7 @@ std::string get_family_string(typefamily_e cat)
   case typefamily_e_lock_cguard: return "lock_cguard";
   case typefamily_e_extint: return "extint";
   case typefamily_e_extuint: return "extuint";
+  case typefamily_e_extsint: return "extsint";
   case typefamily_e_extenum: return "extenum";
   case typefamily_e_extbitmask: return "extbitmask";
   case typefamily_e_extfloat: return "extfloat";
@@ -656,6 +653,7 @@ std::string get_family_string(typefamily_e cat)
   case typefamily_e_cdarrayst: return "cdarrayst";
   case typefamily_e_farray: return "farray";
   case typefamily_e_cfarray: return "cfarray";
+  case typefamily_e_rawarray: return "rawarray";
   case typefamily_e_slice: return "slice";
   case typefamily_e_cslice: return "cslice";
   case typefamily_e_ephemeral: return "ephemeral";
@@ -1087,6 +1085,11 @@ bool is_copyable(const term& t)
       return false;
     }
   }
+  const typefamily_e cat = get_family(einst);
+  if (cat == typefamily_e_rawarray) {
+    /* rawarray is copyable only if it is used as a template parameter */
+    return false;
+  }
   return true;
 }
 
@@ -1105,6 +1108,9 @@ static bool is_assignable_type_one(expr_i *e, bool allow_unsafe)
     return false;
   }
   if (cat == typefamily_e_darrayst || cat == typefamily_e_cdarrayst) {
+    return false;
+  }
+  if (cat == typefamily_e_rawarray) {
     return false;
   }
   return true;
@@ -1746,24 +1752,6 @@ static bool unify_type(
   return false;
 }
 
-static int num_bits_min(const term& t)
-{
-  expr_typedef *const etd = dynamic_cast<expr_typedef *>(t.get_expr());
-  if (etd == 0) {
-    return 0;
-  }
-  return etd->tattr.significant_bits_min;
-}
-
-static int num_bits_max(const term& t)
-{
-  expr_typedef *const etd = dynamic_cast<expr_typedef *>(t.get_expr());
-  if (etd == 0) {
-    return 0;
-  }
-  return etd->tattr.significant_bits_max;
-}
-
 bool is_compiletime_intval(expr_i *e)
 {
   if (e->get_esort() == expr_e_int_literal) {
@@ -1944,14 +1932,12 @@ static bool numeric_convertible(expr_i *efrom, const term& tfrom,
     /* float to integral */
     return false;
   }
-  if (tafrom->is_signed && !tato->is_signed) {
-    /* signed to unsigned */
+  if (tato->signed_min < tafrom->signed_max) {
+    /* possibly losing signedness */
     return false;
   }
-  const int to_min = num_bits_min(tto);
-  const int from_max = num_bits_max(tfrom);
-  if (to_min < from_max) {
-    /* possibly smaller number of significant bits */
+  if (tato->significant_bits_min < tafrom->significant_bits_max) {
+    /* possibly losing significant bits */
     return false;
   }
   return true;
@@ -3359,7 +3345,7 @@ bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
   }
   if (a0->get_esort() == expr_e_funccall) {
     expr_funccall *const fc = ptr_down_cast<expr_funccall>(a0);
-    bool dmy = false;
+    expr_i *dmy = 0;
     term te = get_func_te_for_funccall(fc->func, dmy);
     expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(
       term_get_instance(te));

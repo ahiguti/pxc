@@ -1100,6 +1100,9 @@ unary_expr
 	  { $$ = expr_op_new(cur_fname, @1.first_line, TOK_MINUS, $2, 0); }
 	| TOK_CASE unary_expr
 	  { $$ = expr_op_new(cur_fname, @1.first_line, TOK_CASE, $2, 0); }
+	| '+' TOK_EXTERN TOK_STRLIT unary_expr
+	  { $$ = expr_op_new(cur_fname, @1.first_line, TOK_EXTERN, $4, 0,
+		arena_dequote_strdup($3)); }
 	;
 postfix_expr
 	: primary_expr

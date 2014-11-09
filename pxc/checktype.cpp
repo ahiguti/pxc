@@ -1114,9 +1114,9 @@ static void add_root_requirement_container_elements(expr_i *econ,
 }
 
 symbol_common *get_func_symbol_common_for_funccall(expr_i *func,
-  bool& memfunc_w_explicit_obj_r)
+  expr_i *& memfunc_w_explicit_obj_r)
 {
-  memfunc_w_explicit_obj_r = false;
+  memfunc_w_explicit_obj_r = 0;
   if (func->get_sdef() != 0) {
     symbol_common *const sc = func->get_sdef();
     return sc;
@@ -1124,7 +1124,7 @@ symbol_common *get_func_symbol_common_for_funccall(expr_i *func,
     expr_op *const eop = ptr_down_cast<expr_op>(func);
     symbol_common *const sc = eop->arg1 ? eop->arg1->get_sdef() : 0;
     if (sc != 0 && (eop->op == '.' || eop->op == TOK_ARROW)) {
-      memfunc_w_explicit_obj_r = true;
+      memfunc_w_explicit_obj_r = eop->arg0;
       return sc;
     }
   }
@@ -1132,26 +1132,11 @@ symbol_common *get_func_symbol_common_for_funccall(expr_i *func,
 }
 
 term get_func_te_for_funccall(expr_i *func,
-  bool& memfunc_w_explicit_obj_r)
+  expr_i *& memfunc_w_explicit_obj_r)
 {
   symbol_common *sc = get_func_symbol_common_for_funccall(func,
     memfunc_w_explicit_obj_r);
   return sc != 0 ? sc->resolve_evaluated() : term();
-#if 0
-  memfunc_w_explicit_obj_r = false;
-  if (func->get_sdef() != 0) {
-    symbol_common *const sc = func->get_sdef();
-    return sc->resolve_evaluated();
-  } else if (func->get_esort() == expr_e_op) {
-    expr_op *const eop = ptr_down_cast<expr_op>(func);
-    symbol_common *const sc = eop->arg1->get_sdef();
-    if (sc != 0 && (eop->op == '.' || eop->op == TOK_ARROW)) {
-      memfunc_w_explicit_obj_r = true;
-      return sc->resolve_evaluated();
-    }
-  }
-  return term();
-#endif
 }
 
 static bool is_vararg_function_or_struct(expr_i *e)
@@ -1215,7 +1200,7 @@ static void add_root_requirement(expr_i *e, passby_e passby,
       }
       /* non-member function. it must be an 'extern' function */
       {
-	bool memfunc_w_explicit_obj = false;
+	expr_i *memfunc_w_explicit_obj = 0;
 	term te = get_func_te_for_funccall(efc->func, memfunc_w_explicit_obj);
 	expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(
 	  term_get_instance(te));
@@ -1251,30 +1236,37 @@ static void add_root_requirement(expr_i *e, passby_e passby,
       }
     }
     /* function returning reference? */
-    bool memfunc_w_explicit_obj = false;
+    expr_i *memfunc_w_explicit_obj;
     term te = get_func_te_for_funccall(efc->func, memfunc_w_explicit_obj);
     expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(
       term_get_instance(te));
     if (efd != 0 && is_passby_cm_reference(efd->block->ret_passby)) {
+      expr_i *efcarg = 0;
       if (efd->is_virtual_or_member_function()) {
 	/* member function */
-	if (memfunc_w_explicit_obj) {
+	if (memfunc_w_explicit_obj != 0) {
+	  efcarg = memfunc_w_explicit_obj;
+	  /*
 	  arena_error_throw(efc,
 	    "Invalid function call (explicit object, returning reference)");
+	  */
 	}
 	/* member function call with implicit object. no need to root the
 	 * object. */
       } else {
 	/* non-member function */
-	expr_i *efcarg = efc->arg;
+	efcarg = efc->arg;
 	if (efcarg == 0) {
 	  efcarg = func_get_hidden_this(efc->func);
+	  /* allow returning reference wo argument */
+	  /*
 	  if (efcarg == 0) {
 	    arena_error_throw(efc,
 	      "Invalid function call (no argument, returning reference)");
 	  }
+	  */
 	}
-	if (efcarg->get_esort() == expr_e_op &&
+	if (efcarg != 0 && efcarg->get_esort() == expr_e_op &&
 	  ptr_down_cast<expr_op>(efcarg)->op == ',') {
 	  arena_error_throw(efc,
 	    "Invalid function call (multiple arguments, returning reference)");
@@ -1284,7 +1276,10 @@ static void add_root_requirement(expr_i *e, passby_e passby,
 	  arena_error_throw(efc,
 	    "Invalid function call (member function, returning reference)");
 	}
-	add_root_requirement(efcarg, efd->block->ret_passby, blockscope_flag);
+      }
+      if (efcarg != 0) {
+	add_root_requirement(efcarg, efd->block->ret_passby,
+	  blockscope_flag);
       }
       return;
     }
@@ -2485,7 +2480,7 @@ static void check_ptr_constructor_syntax(expr_funccall *fc, const term& te)
 
 static void subst_user_defined_call(expr_funccall *fc, symbol_table *lookup)
 {
-  bool memfunc_w_explicit_obj = false;
+  expr_i *memfunc_w_explicit_obj = 0;
   symbol_common *func_sc = get_func_symbol_common_for_funccall(fc->func,
     memfunc_w_explicit_obj);
   term func_te = func_sc != 0 ? func_sc->resolve_evaluated() : term();
@@ -2554,7 +2549,7 @@ void expr_funccall::check_type(symbol_table *lookup)
     arena_error_throw(arg, "Expression '%s' is of type void",
       arg->dump(0).c_str());
   }
-  bool memfunc_w_explicit_obj = false;
+  expr_i *memfunc_w_explicit_obj = 0;
   symbol_common *func_sc = get_func_symbol_common_for_funccall(func,
     memfunc_w_explicit_obj);
   term func_te = func_sc != 0 ? func_sc->resolve_evaluated() : term();
@@ -2639,7 +2634,7 @@ void expr_funccall::check_type(symbol_table *lookup)
     func_te = func_te2;
     set_type_inference_result_for_funccall(this, term_get_instance(func_te));
   }
-  if (!memfunc_w_explicit_obj) {
+  if (memfunc_w_explicit_obj == 0) {
     symbol_common *esym = func->get_sdef();
     if (esym != 0 && esym->get_symdef()->get_esort() == expr_e_tparams) {
       /* func is passed as a template parameter. ok even when func is a
@@ -4441,7 +4436,7 @@ static void check_udcon_vardef_calling_memfunc(expr_struct *est, expr_i *e)
   int n = e->get_num_children();
   if (e->get_esort() == expr_e_funccall) {
     expr_funccall *fc = ptr_down_cast<expr_funccall>(e);
-    bool w_explicit_obj = false;
+    expr_i *w_explicit_obj = 0;
     term func_te = get_func_te_for_funccall(fc->func, w_explicit_obj);
     expr_i *const func_inst = term_get_instance(func_te);
     expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(func_inst);
