@@ -17,6 +17,7 @@ extern "types" inline
 #endif
 
 #include <algorithm>
+#include <type_traits>
 
 namespace pxcrt {
 
@@ -28,7 +29,28 @@ void throw_invalid_index();
 
 template <typename T> struct is_trivially_copyable {
   enum { value = boost::is_pod<T>::value };
+  // enum { value = std::is_trivially_copyable<T>::value };
 };
+
+template <typename T, bool copy_flag> struct placement_new;
+template <typename T> struct placement_new<T, true>
+{ void operator ()(T *dest, const T& src) { new (dest) T(src); }; };
+template <typename T> struct placement_new<T, false>
+{ void operator ()(T *dest, T& src) { new (dest) T(std::move(src)); }; };
+
+template <typename T, bool copy_flag> struct copy_or_move;
+template <typename T> struct copy_or_move<T, true>
+{ void operator ()(T& dest, const T& src) { dest = src; }; };
+template <typename T> struct copy_or_move<T, false>
+{ void operator ()(T& dest, T& src) { dest = src; }; };
+
+/*
+template <typename T, bool copyable> struct add_const_if_not;
+template <typename T> struct add_const_if_not<T, false>
+{ typedef const T type; };
+template <typename T> struct add_const_if_not<T, true>
+{ typedef T type; };
+*/
 
 template <typename T> inline void
 deallocate_uninitialized(T *ptr, size_t len)
@@ -61,8 +83,8 @@ deinitialize_1(T *ptr)
   }
 }
 
-template <typename T> inline void
-initialize_fill_n(T *ptr, size_t len, const T& x)
+template <typename T, typename Tsrc> inline void
+initialize_fill_n(T *ptr, size_t len, Tsrc& x)
 {
   if (is_trivially_copyable<T>::value) {
     for (size_t i = 0; i < len; ++i) {
@@ -72,7 +94,8 @@ initialize_fill_n(T *ptr, size_t len, const T& x)
     size_t i = 0;
     PXC_TRY {
       for (; i < len; ++i) {
-	new (ptr + i) T(x);
+	/* new (ptr + i) T(x); */
+	placement_new<T, std::is_const<Tsrc>::value>()(ptr + i, x);
       }
     } PXC_CATCH(...) {
       deinitialize_n(ptr, i);
@@ -81,8 +104,8 @@ initialize_fill_n(T *ptr, size_t len, const T& x)
   }
 }
 
-template <typename T> inline void
-initialize_copy_n(T *ptr, size_t len, const T *src)
+template <typename T, typename Tsrc> inline void
+initialize_copymove_n(T *ptr, size_t len, Tsrc *src)
 {
   if (is_trivially_copyable<T>::value) {
     memcpy(ptr, src, len * sizeof(T));
@@ -90,7 +113,8 @@ initialize_copy_n(T *ptr, size_t len, const T *src)
     size_t i = 0;
     PXC_TRY {
       for (; i < len; ++i) {
-	new (ptr + i) T(src[i]);
+	/* new (ptr + i) T(src[i]); */
+	placement_new<T, std::is_const<Tsrc>::value>()(ptr + i, src[i]);
       }
     } PXC_CATCH(...) {
       deinitialize_n(ptr, i);
@@ -99,13 +123,14 @@ initialize_copy_n(T *ptr, size_t len, const T *src)
   }
 }
 
-template <typename T> inline void
-initialize_1(T *ptr, const T& x)
+template <typename T, typename Tsrc> inline void
+initialize_1(T *ptr, Tsrc& x)
 {
   if (is_trivially_copyable<T>::value) {
     *ptr = x;
   } else {
-    new (ptr) T(x);
+    /* new (ptr) T(x); */
+    placement_new<T, std::is_const<Tsrc>::value>()(ptr, x);
   }
 }
 
@@ -119,7 +144,13 @@ reserve_n(T *ptr, size_t vlen, size_t alloc_olen, size_t alloc_nlen)
   } else {
     T *p = allocate_uninitialized<T>(alloc_nlen);
     PXC_TRY {
-      initialize_copy_n(p, vlen, ptr);
+      /* Tsrc is const if T is not move-constructible */
+      /*
+      typedef typename
+	add_const_if_not<T, std::is_move_constructible<T>::value>::type Tsrc;
+      initialize_copymove_n<T, Tsrc>(p, vlen, ptr);
+      */
+      initialize_copymove_n<T, T>(p, vlen, ptr);
     } PXC_CATCH(...) {
       deallocate_uninitialized<T>(p, alloc_nlen);
       PXC_RETHROW;
@@ -130,32 +161,33 @@ reserve_n(T *ptr, size_t vlen, size_t alloc_olen, size_t alloc_nlen)
   }
 }
 
-template <typename T> inline void
-copy_n(T *ptr, size_t len, const T *src)
+template <typename T, typename Tsrc> inline void
+copymove_n(T *ptr, size_t len, Tsrc *src)
 {
   if (is_trivially_copyable<T>::value) {
     memmove(ptr, src, len * sizeof(T));
   } else {
     for (size_t i = 0; i < len; ++i) {
-      ptr[i] = src[i];
+      /* ptr[i] = src[i]; */
+      copy_or_move<T, std::is_const<Tsrc>::value>()(ptr[i], src[i]);
     }
   }
 }
 
-template <typename T> inline void
-copy_backward_n(T *ptr, size_t len, const T *src)
+template <typename T, typename Tsrc> inline void
+copymove_backward_n(T *ptr, size_t len, Tsrc *src)
 {
   if (is_trivially_copyable<T>::value) {
     memmove(ptr, src, len * sizeof(T));
   } else {
     for (size_t i = len; i > 0; --i) {
-      ptr[i - 1] = src[i - 1];
+      copy_or_move<T, std::is_const<Tsrc>::value>()(ptr[i - 1], src[i - 1]);
     }
   }
 }
 
-template <typename T> inline void
-insert_n(T *x, size_t& xlen, const T *y, size_t ylen, size_t xpos)
+template <typename T, typename Tsrc> inline void
+insert_n(T *x, size_t& xlen, Tsrc *y, size_t ylen, size_t xpos)
   /* xlen is modified so that it is always the size of initialized range */
 {
   /* x[0 .. xlen] must be initialized, and x[xlen .. xlen + ylen]
@@ -165,22 +197,22 @@ insert_n(T *x, size_t& xlen, const T *y, size_t ylen, size_t xpos)
   if (olen - xpos >= ylen) {
     /* moving size >= ylen */
     /* append from x */
-    initialize_copy_n(x + xlen, ylen, x + olen - ylen);
+    initialize_copymove_n<T, Tsrc>(x + xlen, ylen, x + olen - ylen);
     xlen = nlen;
     /* move */
-    copy_backward_n(x + xpos + ylen, olen - ylen - xpos, x + xpos);
+    copymove_backward_n<T, Tsrc>(x + xpos + ylen, olen - ylen - xpos, x + xpos);
     /* copy from y */
-    copy_n(x + xpos, ylen, y);
+    copymove_n(x + xpos, ylen, y);
   } else {
     /* moving size < ylen */
     /* append from y */
-    initialize_copy_n(x + xlen, ylen - (olen - xpos), y + (olen - xpos));
+    initialize_copymove_n(x + xlen, ylen - (olen - xpos), y + (olen - xpos));
     xlen = xpos + ylen;
     /* append from x */
-    initialize_copy_n(x + xlen, olen - xpos, x + xpos);
+    initialize_copymove_n<T, Tsrc>(x + xlen, olen - xpos, x + xpos);
     xlen = nlen;
     /* copy from y */
-    copy_n(x + xpos, olen - xpos, y);
+    copymove_n(x + xpos, olen - xpos, y);
   }
 }
 

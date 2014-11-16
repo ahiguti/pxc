@@ -1,0 +1,38 @@
+namespace cl2;
+import common -;
+import meta m;
+import meta::vararg va;
+
+threaded function {f, tc} void foreach(tc mutable& c)
+{
+  for (const k, mutable& m: c) {
+    f(k, m);
+  }
+}
+
+threaded function {f, tz, tc} tz fold(tz const& v0, tc const& c)
+{
+  mutable v = v0;
+  for (const k, const& m: c) {
+    f(v, m);
+  }
+  return v;
+}
+
+function void foo()
+{
+  varray{int} arr;
+  arr.resize(10, 0);
+  int d = 123;
+  foreach{function {ts} void(expand(va::arg_decls_byref{ts})) {
+    a1 = static_cast{int}(a0) + d;
+  }}(arr);
+  println(arr);
+  const s = fold{function {ts} void(expand(va::arg_decls_byref{ts})) {
+    a0 += a1;
+  }}(0, arr);
+  println(s);
+}
+
+foo();
+
