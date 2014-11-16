@@ -3,6 +3,10 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- 名前無し関数をもっと短く定義できないか
+
+- C++11的右辺値参照を取る関数を作れるように
+
 - rawarrayをarray_familyに入れるか？
 
 - Invalid function callだったものを通すようにしたケースをrootされるか
@@ -3609,4 +3613,68 @@ interface {rettype, tilist} function_object {
 }
 rettypeが型ではなく{t, passby}でもコンパイルできるようにする。
 interfaceが objectless となれるようにする。
+
+---------------------------------------------------------------------
+名前無し関数をもっと短く定義できないか
+
+const s = fold{function {ts} void (expand(va::arg_decls_byref{ts})) {
+  a0 + a1;
+}}(0, arr);
+
+const s = fold{function{ a0 += a1; }}(0, arr);
+型式の中では型推論を使った定義だけを許す
+関数の返値型を推論できるようにする
+
+---------------------------------------------------------------------
+C++11的右辺値参照
+
+- コンテナにnoncopyableなものを入れられるようにする
+- noncoyableなオブジェクトをreturnで返せるようにする
+- 一時オブジェクトをmutable reference引数に渡せるようにする
+
+byval, byref, byrefmoveの区別を用意する。
+movableかどうかの区別を用意する。moveコンストラクタがあるかどうか。
+movableならreturnで返せる
+
+コンテナがcopyableであるのは中身がcopyableであるときと同値。
+movableも同じか？
+copyableかどうかはsort_depでパラメータを再帰的に全て取得して判定している。
+resize()はcopyableでなくても動くのか？
+(check_type_validity_commonでコンテナ要素はcopyableであることを要求している)
+
+interfaceはmovableでない。
+
+変数はlvalueだがrvalueではない
+関数の返した値はrvalueだがlvalueではない
+
+- passbyにpassby_reference_lとpassby_reference_rの区別
+
+expr_has_lvalue(a0) -- mutable referenceを持つかどうかを返す
+if (a0がsymbol) {
+  if (a0がvar) {
+    if (a0がupvalue) {
+      constメンバ関数の子ならfalse
+    }
+    varのpassbyがmutableでないならfalse
+  }
+}
+
+---------------------------------------------------------------------
+movable
+
+右辺値参照を導入せずに以下だけ実現
+- コンテナにnoncopyableな型を入れる
+- returnでnoncopyableな型を返す
+
+ほぼ全ての型をmovableにするが、以下はmovableでない
+- interface
+- scopedなもの。lock guardなど。
+- たとえばregex_tはmoveできる保証はなさそう。
+
+やるべき変更
+- C++型のwrapperでcopyconを殺しているものにmovecon追加
+- movableファミリ追加
+- is_movableな判定を実装
+  - return式が返せる型かどうかをこれできめる
+  - 代入の右辺はmovableであればok?
 

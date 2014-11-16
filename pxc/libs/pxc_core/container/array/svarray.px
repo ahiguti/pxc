@@ -136,7 +136,7 @@ struct svarray {
     size_type const nlen = olen + len;
     if (nlen < olen) { pxcrt::throw_bad_alloc(); } /* overflow */
     rep_make_unique(nlen);
-    initialize_copy_n(begin() + olen, len, ptr);
+    initialize_copymove_n(begin() + olen, len, ptr);
     rep->valid_len = nlen;
     rep_zerofill();
   }
@@ -159,7 +159,7 @@ struct svarray {
     if (rep->refcnt == 1) {
       /* already unique. erase in-place */
       T *const start = begin();
-      copy_n(start + first, olen - last, start + last);
+      copymove_n(start + first, olen - last, start + last);
       deinitialize_n(start + olen - elen, elen);
       rep->valid_len -= elen;
     } else {
@@ -293,7 +293,7 @@ private:
       T *const start = reinterpret_cast<T *>(
 	reinterpret_cast<char *>(nrep) + sizeof(svarray_rep));
       if (is_trivially_copyable<T>::value) {
-	initialize_copy_n(start, sz, ptr);
+	initialize_copymove_n(start, sz, ptr);
 	#if 0
 	if (sizeof(T) == 1) {
 	  /* 0-filling */
@@ -302,7 +302,7 @@ private:
 	#endif
       } else {
 	PXC_TRY {
-	  initialize_copy_n(start, sz, ptr);
+	  initialize_copymove_n(start, sz, ptr);
 	} PXC_CATCH(...) {
 	  PXCRT_DBG_SVECTOR1(fprintf(stderr, "rep_init dealloc %p\n", rep));
 	  global_deallocate_n(rep,

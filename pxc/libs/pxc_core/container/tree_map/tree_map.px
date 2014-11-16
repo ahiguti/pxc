@@ -179,11 +179,18 @@ struct with_guard : public refguard_base {
   with_guard() { }
   with_guard(const with_guard& x)
     : v(x.v) { }
+  with_guard(with_guard&& x)
+    : v(x.v) { }
   with_guard(const range_type& x)
     : v(x.start, x.finish) { }
   with_guard(const crange_type& x)
     : v(x.start, x.finish) { }
   with_guard& operator =(const with_guard& x) {
+    check_resize();
+    v = x.v;
+    return *this;
+  }
+  with_guard& operator =(with_guard&& x) {
     check_resize();
     v = x.v;
     return *this;

@@ -60,7 +60,6 @@ varray {
   public metafunction is_dense_array 1;
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
-  public function extern "resize" void resize(size_t i, t const& v);
   public function extern "clear" void clear();
   public function extern "push_back" void push_back(t const& v);
   public function extern "pop_back" t pop_back();
@@ -81,7 +80,6 @@ cvarray {
   public metafunction is_dense_array 1;
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
-  public function extern "resize" void resize(size_t i, t const& v);
   public function extern "clear" void clear();
   public function extern "push_back" void push_back(t const& v);
   public function extern "pop_back" t pop_back();
@@ -102,7 +100,6 @@ svarray {
   public metafunction is_dense_array 1;
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
-  public function extern "resize" void resize(size_t i, t const& v);
   public function extern "clear" void clear();
   public function extern "push_back" void push_back(t const& v);
   public function extern "pop_back" t pop_back();
@@ -123,7 +120,6 @@ csvarray {
   public metafunction is_dense_array 1;
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
-  public function extern "resize" void resize(size_t i, t const& v);
   public function extern "clear" void clear();
   public function extern "push_back" void push_back(t const& v);
   public function extern "pop_back" t pop_back();
@@ -257,7 +253,6 @@ deque {
   public metafunction is_dense_array 0;
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
-  public function extern "resize" void resize(size_t i, t const& v);
   public function extern "clear" void clear();
   public function extern "push_back" void push_back(t const& v);
   public function extern "pop_back" t pop_back();
@@ -280,7 +275,6 @@ cdeque {
   public metafunction is_dense_array 0;
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
-  public function extern "resize" void resize(size_t i, t const& v);
   public function extern "clear" void clear();
   public function extern "push_back" void push_back(t const& v);
   public function extern "pop_back" t pop_back();
@@ -434,6 +428,13 @@ varray_swap(varray{t} mutable& x, varray{t} mutable& y);
 
 public threaded function extern "::pxcrt::pxcvarray_swap" {t} void
 cvarray_swap(cvarray{t} mutable& x, cvarray{t} mutable& y);
+
+public metafunction varray_resize array_resize;
+public metafunction cvarray_resize array_resize;
+public metafunction svarray_resize array_resize;
+public metafunction csvarray_resize array_resize;
+public metafunction deque_resize array_resize;
+public metafunction cdeque_resize array_resize;
 
 public metafunction varray___adda{tx, ty} array___adda{tx, ty};
 public metafunction cvarray___adda{tx, ty} array___adda{tx, ty};
@@ -613,7 +614,7 @@ make_varray_func(expand(arr_argdecls{typ, n}))
 {
   extern "disable-noheap-checking" 1;
   mutable arr = varray{typ}();
-  arr.resize(n, typ());
+  array_resize_initial(arr, n, typ());
   expand macro_construct{typ, n, "arr"};
   return arr;
 }
@@ -623,7 +624,7 @@ make_cvarray_func(expand(arr_argdecls{typ, n}))
 {
   extern "disable-noheap-checking" 1;
   mutable arr = varray{typ}();
-  arr.resize(n, typ());
+  array_resize_initial(arr, n, typ());
   expand macro_construct{typ, n, "arr"};
   return arr;
 }
@@ -633,7 +634,7 @@ make_deque_func(expand(arr_argdecls{typ, n}))
 {
   extern "disable-noheap-checking" 1;
   mutable arr = deque{typ}();
-  arr.resize(n, typ());
+  array_resize_initial(arr, n, typ());
   expand macro_construct{typ, n, "arr"};
   return arr;
 }
@@ -643,7 +644,7 @@ make_cdeque_func(expand(arr_argdecls{typ, n}))
 {
   extern "disable-noheap-checking" 1;
   mutable arr = deque{typ}();
-  arr.resize(m::size{tlist}, typ());
+  array_resize_initial(arr, n, typ());
   expand macro_construct{typ, tlist, "arr"};
   return arr;
 }
@@ -660,4 +661,24 @@ private threaded function extern "::pxcrt::pod_sarray_compare" {tx, ty} int
 pod_sarray_compare_impl(tx const& x, ty const& y);
 private threaded function extern "::pxcrt::pod_sarray_hash" {t} size_t
 pod_sarray_hash_impl(t const& x);
+
+private threaded function extern "::pxcrt::array_resize" {tarr, tv}
+check_copyable{tarr, tv, void}
+array_resize(tarr mutable& arr, size_t i, tv const& v);
+
+private threaded function extern "::pxcrt::array_resize" {tarr, tv}
+check_copyable{tarr, tv, void}
+array_resize_initial(tarr const& arr, size_t i, tv const& v);
+  /* used by make_varray family. arr is declared as const in order to avoid
+   * noheap checking. */
+
+private metafunction check_copyable{tarr, tv, tret}
+  m::cond{
+    m::and{
+      m::is_copyable_type{tv},
+      m::or{
+	m::eq{m::family{tarr}, "varray"},
+	m::eq{m::family{tarr}, "cvarray"}}},
+    tret,
+    m::error{m::concat{"invalid type: ", tarr, " ", tv}}};
 

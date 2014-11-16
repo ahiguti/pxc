@@ -221,6 +221,15 @@ struct pxcvarray : public refguard_base {
   }
   pxcvarray(const pxcvarray& x)
     { construct_internal(x.start, x.valid_len); }
+  pxcvarray(pxcvarray&& x) {
+    x.check_resize();
+    start = x.start;
+    valid_len = x.valid_len;
+    alloc_len = x.alloc_len;
+    x.start = 0;
+    x.valid_len = 0;
+    x.alloc_len = 0;
+  }
   pxcvarray(const crange_type& x)
     { construct_internal(x.rawarr(), x.size()); }
   pxcvarray(const range_type& x)
@@ -233,6 +242,10 @@ struct pxcvarray : public refguard_base {
       clear_internal();
       append_internal(x.start, x.valid_len);
     }
+    return *this;
+  }
+  pxcvarray& operator =(pxcvarray&& x) {
+    this->swap(x);
     return *this;
   }
   bt_bool empty() const { return valid_len == 0; }
@@ -359,10 +372,10 @@ private:
     alloc_len = valid_len = len;
     start = allocate_uninitialized<T>(alloc_len);
     if (is_trivially_copyable<T>::value) {
-      initialize_copy_n(start, valid_len, ptr);
+      initialize_copymove_n(start, valid_len, ptr);
     } else {
       PXC_TRY {
-	initialize_copy_n(start, valid_len, ptr);
+	initialize_copymove_n(start, valid_len, ptr);
       } PXC_CATCH(...) {
 	deallocate_uninitialized(start, alloc_len);
 	PXC_RETHROW;
@@ -379,7 +392,7 @@ private:
       pxcrt::throw_bad_alloc(); /* overflow */
     }
     reserve_internal(nlen);
-    initialize_copy_n(start + valid_len, len, p);
+    initialize_copymove_n(start + valid_len, len, p);
     valid_len = nlen;
   }
   void insert_internal(size_type pos, const T *p, size_type plen) {
@@ -405,7 +418,7 @@ private:
       return;
     }
     const size_type elen = last - first;
-    copy_n(start + first, valid_len - last, start + last);
+    copymove_n(start + first, valid_len - last, start + last);
     deinitialize_n(start + valid_len - elen, elen);
     valid_len -= elen;
   }
@@ -482,6 +495,12 @@ static inline bt_string cstr_to_string(const char *cstr)
   return bt_string(
     reinterpret_cast<const unsigned char *>(cstr),
     strlen(cstr));
+}
+
+template <typename Tarr, typename Tv> static inline void
+array_resize(Tarr& arr, bt_size_t i, Tv const& v)
+{
+  arr.resize(i, v);
 }
 
 }; // namespace pxcrt
