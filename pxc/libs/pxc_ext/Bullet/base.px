@@ -1,0 +1,47 @@
+public namespace Bullet::base "use-unsafe";
+public import common -;
+public import pointer::func -;
+public import meta m;
+
+public metafunction crptr{x}
+  m::cond{m::is_list{x}, funcptr{m::at0{x}, m::slice{x, 1}}, crawptr{x}};
+public metafunction rptr{x}
+  m::cond{m::is_list{x}, funcptr{m::at0{x}, m::slice{x, 1}}, rawptr{x}};
+
+public metafunction match_args{tis, pat}
+  m::cond{
+    m::eq{m::size{tis}, 0}, m::eq{m::size{pat}, 0},
+    m::eq{m::size{pat}, 0}, 0,
+    m::and{
+      match_arg{m::at0{tis}, m::at0{pat}},
+      match_args{m::slice{tis, 1}, m::slice{pat, 1}}}};
+public metafunction match_arg{ti, pat}
+  m::cond{
+    m::is_int{pat}, m::le{pat, m::at1{ti}},
+    m::eq{m::nameof{m::at0{pat}}, "pointer::raw::crawptr"},
+      m::and{
+	m::le{m::at1{pat}, m::at1{ti}},
+	m::or{
+	  m::eq{m::nameof{m::at0{ti}}, "pointer::raw::crawptr"},
+	  m::eq{m::nameof{m::at0{ti}}, "pointer::raw::rawptr"}},
+	is_cxx_descent{
+	  m::at0{m::targs{m::at0{ti}}},
+	  m::at0{m::targs{m::at0{pat}}}}},
+    m::and{
+      m::le{m::at1{pat}, m::at1{ti}},
+      is_cxx_descent{m::at0{ti}, m::at0{pat}}}};
+public metafunction is_cxx_descent{t, tbase}
+  m::cond{
+    m::eq{t, tbase}, 1,
+    m::ge{m::list_find{m::symbol{t, "__base__", m::nil}, tbase}, 0}, 1,
+    0};
+
+extern "incdir" "/usr/include/bullet";
+extern "incdir" "/usr/local/include/bullet";
+extern "ldflags" "-L/usr/local/lib -lBulletCollision -lBulletDynamics";
+extern "ldflags" "-lBulletSoftBody -lLinearMath";
+
+extern "types" inline
+#include "btBulletDynamicsCommon.h"
+;
+
