@@ -130,35 +130,32 @@ public threaded function float polygon_radius(poly_t const& poly)
 
 /* private */
 
-private threaded function vec3 normal_from_poly(poly_t const& poly)
+private threaded function vec3 poly_cross_at(poly_t const& poly, size_t i)
 {
   const sz = poly.size();
-  if (sz < 3) { return vec3(); }
-  if (sz == 3) {
-    return cross(poly[1].pos - poly[0].pos, poly[2].pos - poly[0].pos)
-      .normalize();
-  } else {
-    float maxlen = 0.0;
-    vec3 maxval;
-    for (const i: 0 .. sz - 1) {
-      const j = i + 1;
-      const v = cross(
-	poly[i + 1].pos - poly[i].pos,
-	poly[j == sz - 1u ? 0uz : j + 1u].pos - poly[j].pos);
-      const len2 = dot(v, v);
-      if (len2 > maxlen) {
-	maxval = v;
-	maxlen = len2;
-      }
-    }
-    return maxval.normalize();
-  }
+  const i1 = (i + 1) >= sz ? (i + 1 - sz) : (i + 1);
+  const i2 = (i + 2) >= sz ? (i + 2 - sz) : (i + 2);
+  return cross(poly[i1].pos - poly[i].pos, poly[i2].pos - poly[i1].pos);
 }
 
 private threaded function vec3 normal_scale_from_poly(poly_t const& poly)
 {
-  if (poly.size() < 3) { return vec3(); }
-  return normal_from_poly(poly) * length(poly[1].pos - poly[0].pos);
+  const sz = poly.size();
+  if (sz < 3) { return vec3(); }
+  if (sz == 3) {
+    return cross(poly[1].pos - poly[0].pos, poly[2].pos - poly[1].pos) * 3.0f;
+  } else {
+    vec3 v;
+    for (const i: 0 .. sz) {
+      v += poly_cross_at(poly, i);
+    }
+    return v;
+  }
+}
+
+private threaded function vec3 normal_from_poly(poly_t const& poly)
+{
+  return normal_scale_from_poly(poly).normalize();
 }
 
 private threaded function void gf_regular_polygon(float radius, size_t n,
@@ -213,7 +210,7 @@ private threaded function void gf_bump_rec(float z, float scale, int recurse,
 {
   if (poly.size() < 3) { return; }
   darrayst{vertex_attr} front = poly;
-  const nor = normal_scale_from_poly(poly);
+  const nor = normal_scale_from_poly(poly) / static_cast{float}(poly.size());
   for (const i, mutable& e: front) {
     e.pos += nor * z;
   }
@@ -347,7 +344,7 @@ gf_particle_bb(ptr{vertices} const& vptr, poly_t const& poly,
     vtxs[1].lpos = make_vec2( 1.0, -1.0);
     vtxs[2].lpos = make_vec2( 1.0,  1.0);
     vtxs[3].lpos = make_vec2(-1.0,  1.0);
-    vptr->push_polygon_distinct{particle_bb_vertex_attr}(vtxs);
+    vptr->push_polygon_distinct{particle_bb_vertex_attr, 0}(vtxs);
   }
 }
 
@@ -506,7 +503,7 @@ gf_fill_internal(ptr{vertices} const& vptr, bool flat_flag,
       }
     }
   }
-  vptr->push_polygon_distinct{tattr}(vtxs);
+  vptr->push_polygon_distinct{tattr, 1}(vtxs);
 }
 
 private threaded function {tattr} void
@@ -586,9 +583,9 @@ private threaded function void gf_import_wfobj(wfobject const& wfo,
 {
   mesh_index midx;
   varray{vertex_attr} arr;
-//debug_log("import f", wfgrp.f);
+  //debug_log("import f", wfgrp.f);
   for (const i, const& p: wfgrp.f) {
-//debug_log("import p", p);
+    //debug_log("import p", p);
     if (arr.size() != p.size()) {
       arr.resize(p.size(), vertex_attr());
     }
@@ -597,10 +594,10 @@ private threaded function void gf_import_wfobj(wfobject const& wfo,
       // mutable& ae = sli[arr.size() - j - 1];
       mutable& ae = sli[j];
       const vid = v.vertex;
-//debug_log("vid", vid);
+      //debug_log("vid", vid);
       if (vid > 0 && wfo.v.size() >= vid) {
 	ae.pos = wfo.v[vid - 1];
-//debug_log("vertex", ae.pos);
+	//debug_log("vertex", ae.pos);
       }
       const nid = v.normal;
       if (nid > 0 && wfo.vn.size() >= nid) {
@@ -613,7 +610,7 @@ private threaded function void gf_import_wfobj(wfobject const& wfo,
       }
     }
     midx.x = i;
-//debug_log("mesh", arr);
+    // if (arr.size() >= 5) { debug_log("polygon", p, arr); }
     c0(arr, midx);
   }
 }

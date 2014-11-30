@@ -8,6 +8,8 @@ APP_STL := gnustl_static
 #APP_ABI := all
 APP_ABI := armeabi-v7a
 
+APP_CPPFLAGS += --std=c++11
+
 ifeq ($(strip $(NDK_DEBUG)),1)
   APP_CFLAGS +=
 else
