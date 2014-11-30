@@ -52,6 +52,7 @@ function void build_vertices(pglshader mutable& pgs)
   metafunction point2_joint_v point_joint{tattr2};
   /* import */
   const objs = make_farray{string}(
+      "parts",
       "al",
       "cessna",
       "skyscraper",
@@ -59,11 +60,12 @@ function void build_vertices(pglshader mutable& pgs)
       );
   for (const i, const name: objs) {
     string fn = name + ".obj";
+    sdllog("load", fn);
     const wfobjp = wfobject_read(sdl_read_file(fn));
     const vtxs = pgs.make_vertices(vbid_main2, name);
     const t = fill2_v(vtxs);
     for (const j, mutable& v: wfobjp->v) {
-      v *= 20.0f;
+      // v *= 10.0f;
     }
     for (const k, const g: wfobjp->groups) {
       // debug_log("group", k, *g);
@@ -72,6 +74,7 @@ function void build_vertices(pglshader mutable& pgs)
     }
     vtxs->num_copies_hint = 32;
   }
+  sdllog("load prebuild");
   {
     const vtx = pgs.make_vertices(vbid_main, "ab-multi");
     const t = fill_v(vtx);
@@ -122,7 +125,7 @@ function void build_vertices(pglshader mutable& pgs)
 	  rand_bump(1, 0.8, 0.2, 0.8, 0.2, 0.8, 1.0, 4.0, rnd,
 	    t, t, t))),
       rotate_local(glm::make_quat_angle_axis(-45.0, 0.0, 0.0, 1.0),
-	bump_rec(0.2, 1.0, 1, t, t)))
+	bump_rec(0.02, 1.0, 1, t, t)))
       (poly_t(), mesh_index());
   }
   /* vtx10 */
@@ -278,7 +281,7 @@ function void build_vertices(pglshader mutable& pgs)
     vs[1].vert = glm::make_vec2(1.0, -0.5);
     vs[2].vert = glm::make_vec2(1.0, 0.5);
     vs[3].vert = glm::make_vec2(0.0, 0.5);
-    vtx->push_polygon_distinct{lineparticle_vertex_attributes}(vs);
+    vtx->push_polygon_distinct{lineparticle_vertex_attributes, 0}(vs);
   }
   {
     /* for rect2d shader */
@@ -288,7 +291,7 @@ function void build_vertices(pglshader mutable& pgs)
     vs[1].vert = glm::make_vec2(1.0, 0.0);
     vs[2].vert = glm::make_vec2(1.0, 1.0);
     vs[3].vert = glm::make_vec2(0.0, 1.0);
-    vtx->push_polygon_distinct{rect2d_vertex_attributes}(vs);
+    vtx->push_polygon_distinct{rect2d_vertex_attributes, 0}(vs);
   }
   {
     /* for font2 shader */
