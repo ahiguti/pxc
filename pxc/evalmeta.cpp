@@ -239,6 +239,17 @@ static term eval_meta_is_copyable_type(const term_list_range& tlev,
   return term(r);
 }
 
+static term eval_meta_is_movable_type(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos)
+{
+  if (tlev.size() != 1) {
+    return term();
+  }
+  const term& ttyp = tlev[0];
+  const long long r = is_movable(ttyp);
+  return term(r);
+}
+
 static term eval_meta_is_assignable_type(const term_list_range& tlev,
   eval_context& ectx, expr_i *pos)
 {
@@ -1989,6 +2000,7 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@global_variables", &eval_meta_global_variables },
   { "@member_functions", &eval_meta_member_functions },
   { "@is_copyable_type", &eval_meta_is_copyable_type },
+  { "@is_movable_type", &eval_meta_is_movable_type },
   { "@is_assignable_type", &eval_meta_is_assignable_type },
   { "@is_constructible_type", &eval_meta_is_constructible_type },
   { "@is_default_constructible_type",

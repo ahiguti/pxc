@@ -61,12 +61,14 @@ varray {
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
   public function extern "clear" void clear();
+  public function extern "reserve" void reserve(size_t i);
+  /*
   public function extern "push_back" void push_back(t const& v);
   public function extern "pop_back" t pop_back();
-  public function extern "reserve" void reserve(size_t i);
   public function extern "append" void append(crange_type const& v);
   public function extern "insert" void insert(size_t i, crange_type const& v);
   public function extern "erase" void erase(size_t first, size_t last);
+  */
   public function extern "range" range_type range();
   public function extern "crange" crange_type crange() const;
 }
@@ -81,12 +83,14 @@ cvarray {
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
   public function extern "clear" void clear();
+  /*
   public function extern "push_back" void push_back(t const& v);
   public function extern "pop_back" t pop_back();
   public function extern "reserve" void reserve(size_t i);
   public function extern "append" void append(crange_type const& v);
   public function extern "insert" void insert(size_t i, crange_type const& v);
   public function extern "erase" void erase(size_t first, size_t last);
+  */
   public function extern "range" range_type range();
   public function extern "crange" crange_type crange() const;
 }
@@ -101,12 +105,14 @@ svarray {
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
   public function extern "clear" void clear();
+  public function extern "reserve" void reserve(size_t i);
+  /*
   public function extern "push_back" void push_back(t const& v);
   public function extern "pop_back" t pop_back();
-  public function extern "reserve" void reserve(size_t i);
   public function extern "append" void append(crange_type const& v);
   public function extern "insert" void insert(size_t i, crange_type const& v);
   public function extern "erase" void erase(size_t first, size_t last);
+  */
   public function extern "range" range_type range();
   public function extern "crange" crange_type crange() const;
 }
@@ -121,12 +127,14 @@ csvarray {
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
   public function extern "clear" void clear();
+  public function extern "reserve" void reserve(size_t i);
+  /*
   public function extern "push_back" void push_back(t const& v);
   public function extern "pop_back" t pop_back();
-  public function extern "reserve" void reserve(size_t i);
   public function extern "append" void append(crange_type const& v);
   public function extern "insert" void insert(size_t i, crange_type const& v);
   public function extern "erase" void erase(size_t first, size_t last);
+  */
   public function extern "range" range_type range();
   public function extern "crange" crange_type crange() const;
 }
@@ -254,14 +262,16 @@ deque {
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
   public function extern "clear" void clear();
+  public function extern "reserve" void reserve(size_t i);
+  /*
   public function extern "push_back" void push_back(t const& v);
   public function extern "pop_back" t pop_back();
   public function extern "push_front" void push_front(t const& v);
   public function extern "pop_front" t pop_front();
-  public function extern "reserve" void reserve(size_t i);
   public function extern "append" void append(crange_type const& v);
   public function extern "insert" void insert(size_t i, crange_type const& v);
   public function extern "erase" void erase(size_t first, size_t last);
+  */
   public function extern "range" range_type range();
   public function extern "crange" crange_type crange() const;
 }
@@ -276,14 +286,16 @@ cdeque {
   public function extern "empty" bool empty() const;
   public function extern "size" size_t size() const;
   public function extern "clear" void clear();
+  public function extern "reserve" void reserve(size_t i);
+  /*
   public function extern "push_back" void push_back(t const& v);
   public function extern "pop_back" t pop_back();
   public function extern "push_front" void push_front(t const& v);
   public function extern "pop_front" t pop_front();
-  public function extern "reserve" void reserve(size_t i);
   public function extern "append" void append(crange_type const& v);
   public function extern "insert" void insert(size_t i, crange_type const& v);
   public function extern "erase" void erase(size_t first, size_t last);
+  */
   public function extern "range" range_type range();
   public function extern "crange" crange_type crange() const;
 }
@@ -299,6 +311,12 @@ public tsvaluetype struct extern "::pxcrt::bt_strlit" "cfarray" strlit {
   public function extern "range" range_type range();
   public function extern "crange" crange_type crange() const;
 }
+
+public metafunction strref slice{uchar};
+public metafunction cstrref cslice{uchar};
+public metafunction string varray{uchar};
+public metafunction dstring darray{uchar};
+public metafunction fstring{n} farray{uchar, n};
 
 public metafunction make_farray{typ, tlist}
   make_farray_func{typ, m::size{tlist}};
@@ -400,18 +418,77 @@ reverse(t const& x)
   while (s < f) {
     extern "disable-bounds-checking" 1;
     --f;
-    mapped_type const v = x[s];
+    mapped_type mutable v = x[s];
     x[s] = x[f];
     x[f] = v;
     ++s;
   }
 }
 
-public metafunction strref slice{uchar};
-public metafunction cstrref cslice{uchar};
-public metafunction string varray{uchar};
-public metafunction dstring darray{uchar};
-public metafunction fstring{n} farray{uchar, n};
+/*
+public threaded function extern "::pxcrt::array_elemref" {t}
+m::symbol{t, "mapped_type"} mutable& array_elemref(t mutable& x);
+public threaded function extern "::pxcrt::array_elemcref" {t}
+m::symbol{t, "mapped_type"} mutable& array_elemcref(t mutable& x);
+*/
+
+/* FIXME: type check */
+public threaded function extern "::pxcrt::array_push_back" {tx, tv} void
+array_push_back(tx mutable& x, tv const& v);
+public threaded function extern "::pxcrt::array_push_back_move" {tx, tv} void
+array_push_back_move(tx mutable& x, tv mutable& v);
+public threaded function extern "::pxcrt::array_pop_back" {tx}
+m::symbol{tx, "mapped_type"} array_pop_back(tx mutable& x);
+public threaded function extern "::pxcrt::array_push_front" {tx, tv} void
+array_push_front(tx mutable& x, tv const& v);
+public threaded function extern "::pxcrt::array_push_front_move" {tx, tv} void
+array_push_front_move(tx mutable& x, tv mutable& v);
+public threaded function extern "::pxcrt::array_pop_front" {tx}
+m::symbol{tx, "mapped_type"} array_pop_front(tx mutable& x);
+public threaded function extern "::pxcrt::array_append" {tx, tv} void
+array_append(tx mutable& x, tv const& v);
+public threaded function extern "::pxcrt::array_insert" {tx, tv} void
+array_insert(tx mutable& x, size_t i, tv const& v);
+public threaded function extern "::pxcrt::array_erase" {tx} void
+array_erase(tx mutable& x, size_t first, size_t last);
+
+public metafunction varray_push_back array_push_back;
+public metafunction varray_push_back_move array_push_back_move;
+public metafunction varray_pop_back array_pop_back;
+public metafunction varray_append array_append;
+public metafunction varray_insert array_insert;
+public metafunction varray_erase array_erase;
+
+public metafunction cvarray_push_back array_push_back;
+public metafunction cvarray_push_back_move array_push_back_move;
+public metafunction cvarray_pop_back array_pop_back;
+public metafunction cvarray_append array_append;
+public metafunction cvarray_insert array_insert;
+public metafunction cvarray_erase array_erase;
+
+public metafunction svarray_push_back array_push_back;
+public metafunction svarray_push_back_move array_push_back_move;
+public metafunction svarray_pop_back array_pop_back;
+public metafunction svarray_append array_append;
+public metafunction svarray_insert array_insert;
+public metafunction svarray_erase array_erase;
+
+public metafunction csvarray_push_back array_push_back;
+public metafunction csvarray_push_back_move array_push_back_move;
+public metafunction csvarray_pop_back array_pop_back;
+public metafunction csvarray_append array_append;
+public metafunction csvarray_insert array_insert;
+public metafunction csvarray_erase array_erase;
+
+public metafunction deque_push_back array_push_back;
+public metafunction deque_push_back_move array_push_back_move;
+public metafunction deque_push_front array_push_front;
+public metafunction deque_push_front_move array_push_front_move;
+public metafunction deque_pop_back array_pop_back;
+public metafunction deque_pop_front array_pop_front;
+public metafunction deque_append array_append;
+public metafunction deque_insert array_insert;
+public metafunction deque_erase array_erase;
 
 public threaded function {ts} void
 varray_emplace_back(expand(emplace_back_arg_decls{ts}))

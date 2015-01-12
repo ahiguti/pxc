@@ -422,7 +422,8 @@ bool is_possibly_pod(const term& t)
   case typefamily_e_extfloat:
     return true;
   case typefamily_e_noncopyable:
-    return false; /* default constructible but noncopyable */
+  case typefamily_e_nonmovable:
+    return false; /* default constructible but nonmovable */
   default:
     break;
   }
@@ -448,7 +449,8 @@ bool is_possibly_nonpod(const term& t)
   case typefamily_e_extfloat:
     return false;
   case typefamily_e_noncopyable:
-    return true; /* default constructible but noncopyable */
+  case typefamily_e_nonmovable:
+    return true; /* default constructible but nonmovable */
   default:
     break;
   }
@@ -619,7 +621,7 @@ typefamily_e get_family_from_string(const std::string& s)
   if (s == "cmap") return typefamily_e_cmap;
   if (s == "map_range") return typefamily_e_map_range;
   if (s == "map_crange") return typefamily_e_map_crange;
-  if (s == "linear") return typefamily_e_linear;
+  if (s == "nonmovable") return typefamily_e_nonmovable;
   if (s == "noncopyable") return typefamily_e_noncopyable;
   if (s == "nodefault") return typefamily_e_nodefault;
   if (s == "nocascade") return typefamily_e_nocascade;
@@ -661,7 +663,7 @@ std::string get_family_string(typefamily_e cat)
   case typefamily_e_cmap: return "cmap";
   case typefamily_e_map_range: return "map_range";
   case typefamily_e_map_crange: return "map_crange";
-  case typefamily_e_linear: return "linear";
+  case typefamily_e_nonmovable: return "nonmovable";
   case typefamily_e_noncopyable: return "noncopyable";
   case typefamily_e_nodefault: return "nodefault";
   case typefamily_e_nocascade: return "nocascade";
@@ -1052,7 +1054,7 @@ bool type_allow_feach(const term& t)
   }
 }
 
-static bool is_copyable_type_one(expr_i *e)
+static bool is_movable_type_one(expr_i *e)
 {
   if (e->get_esort() == expr_e_interface) {
     return false;
@@ -1061,7 +1063,7 @@ static bool is_copyable_type_one(expr_i *e)
   if (is_cm_lock_guard_family(e)) {
     return false;
   }
-  if (cat == typefamily_e_linear || cat == typefamily_e_noncopyable) {
+  if (cat == typefamily_e_nonmovable) {
     return false;
   }
   /*
@@ -1072,16 +1074,34 @@ static bool is_copyable_type_one(expr_i *e)
   return true;
 }
 
-bool is_copyable(const term& t)
+static bool is_copyable_type_one(expr_i *e)
+{
+  if (e->get_esort() == expr_e_interface) {
+    return false;
+  }
+  const typefamily_e cat = get_family(e);
+  if (is_cm_lock_guard_family(e)) {
+    return false;
+  }
+  if (cat == typefamily_e_nonmovable || cat == typefamily_e_noncopyable) {
+    return false;
+  }
+  /*
+  if (cat == typefamily_e_darrayst || cat == typefamily_e_cdarrayst) {
+    return false;
+  }
+  */
+  return true;
+}
+
+template <bool cpy> bool is_copyable_or_movable(expr_i *einst)
 {
   sorted_exprs c;
-  // sort_dep(c, t.get_expr());
-  term t0 = t; /* TODO: avoid copying */
-  expr_i *const einst = term_get_instance(t0);
   sort_dep(c, einst);
   for (std::list<expr_i *>::iterator i = c.sorted.begin();
     i != c.sorted.end(); ++i) {
-    if (!is_copyable_type_one(*i)) {
+    const bool cnd = cpy ? is_copyable_type_one(*i) : is_movable_type_one(*i);
+    if (!cnd) {
       return false;
     }
   }
@@ -1093,9 +1113,23 @@ bool is_copyable(const term& t)
   return true;
 }
 
+bool is_copyable(const term& t)
+{
+  term t0 = t; /* TODO: avoid copying */
+  expr_i *const einst = term_get_instance(t0);
+  return is_copyable_or_movable<true>(einst);
+}
+
+bool is_movable(const term& t)
+{
+  term t0 = t; /* TODO: avoid copying */
+  expr_i *const einst = term_get_instance(t0);
+  return is_copyable_or_movable<false>(einst);
+}
+
 static bool is_assignable_type_one(expr_i *e, bool allow_unsafe)
 {
-  if (!is_copyable_type_one(e)) {
+  if (!is_movable_type_one(e)) {
     return false;
   }
   if (is_range_guard_ephemeral(e)) {

@@ -221,14 +221,14 @@ struct pxcvarray : public refguard_base {
   }
   pxcvarray(const pxcvarray& x)
     { construct_internal(x.start, x.valid_len); }
-  pxcvarray(pxcvarray&& x) {
-    x.check_resize();
-    start = x.start;
-    valid_len = x.valid_len;
-    alloc_len = x.alloc_len;
-    x.start = 0;
-    x.valid_len = 0;
-    x.alloc_len = 0;
+  pxcvarray(pxcvarray&& x)
+    { move_construct_internal(x); }
+  pxcvarray(pxcvarray& x) {
+    if (std::is_copy_constructible<T>::value) {
+      construct_internal(x.start, x.valid_len);
+    } else {
+      move_construct_internal(x);
+    }
   }
   pxcvarray(const crange_type& x)
     { construct_internal(x.rawarr(), x.size()); }
@@ -247,6 +247,13 @@ struct pxcvarray : public refguard_base {
   pxcvarray& operator =(pxcvarray&& x) {
     this->swap(x);
     return *this;
+  }
+  pxcvarray& operator =(pxcvarray& x) {
+    if (std::is_copy_assignable<T>::value) {
+      return *this = const_cast<const pxcvarray&>(x);
+    } else {
+      return *this = const_cast<pxcvarray&&>(x);
+    }
   }
   bt_bool empty() const { return valid_len == 0; }
   size_type size() const { return valid_len; }
@@ -285,24 +292,10 @@ struct pxcvarray : public refguard_base {
   pxcvarray_rawarr_set_valid_len(pxcvarray<Tc>& v,
     typename pxcvarray<Tc>::size_type len);
   void push_back(T const& x) {
-    /* re-ordered for speed */
-    if (refguard_is_zero()) {
-      /* valid_len + 1 never overflows */
-      if (valid_len + 1 < alloc_len) {
-	/* fast path */
-	initialize_1(start + valid_len, x);
-	valid_len++;
-	return;
-      } else {
-	/* slow path */
-	reserve_internal(valid_len + 1);
-	initialize_1(start + valid_len, x);
-	valid_len++;
-	return;
-      }
-    } else {
-      pxcrt::throw_would_invalidate();
-    }
+    push_back_internal(x);
+  }
+  void push_back(T&& x) {
+    push_back_internal(x);
   }
   T pop_back() {
     check_resize();
@@ -382,9 +375,38 @@ private:
       }
     }
   }
+  void move_construct_internal(pxcvarray& x) {
+    x.check_resize();
+    start = x.start;
+    valid_len = x.valid_len;
+    alloc_len = x.alloc_len;
+    x.start = 0;
+    x.valid_len = 0;
+    x.alloc_len = 0;
+  }
   void clear_internal() {
     deinitialize_n(start, valid_len);
     valid_len = 0;
+  }
+  template <typename Tx> void push_back_internal(Tx& x) {
+    /* re-ordered for speed */
+    if (refguard_is_zero()) {
+      /* valid_len + 1 never overflows */
+      if (valid_len + 1 < alloc_len) {
+	/* fast path */
+	initialize_1(start + valid_len, x);
+	valid_len++;
+	return;
+      } else {
+	/* slow path */
+	reserve_internal(valid_len + 1);
+	initialize_1(start + valid_len, x);
+	valid_len++;
+	return;
+      }
+    } else {
+      pxcrt::throw_would_invalidate();
+    }
   }
   void append_internal(const T *p, size_type len) {
     size_type nlen = valid_len + len;

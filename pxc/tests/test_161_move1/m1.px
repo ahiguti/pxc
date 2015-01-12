@@ -1,0 +1,30 @@
+public namespace m1 "use-unsafe";
+public import common -;
+public import move_common -;
+
+public struct extern "mtest::foo" foo {
+  public int v;
+}
+
+extern "types" inline
+namespace mtest {
+struct foo {
+  foo() : v(-1) { }
+  foo(const foo& x) = delete;
+  foo& operator =(const foo& x) = delete;
+  foo(foo&& x) { v = x.v; x.v = -1; }
+  foo(foo& x) : foo(std::move(x)) { }
+  foo& operator =(foo&& x) {
+    if (&x != this) { v = x.v; x.v = -1; } return *this; }
+  foo& operator =(foo& x) { return (*this) = std::move(x); }
+  int v;
+};
+};
+;
+
+{
+  foo y;
+  y.v = 100;
+  foo z = y;
+  println(y, z);
+}
