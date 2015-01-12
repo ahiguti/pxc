@@ -3664,12 +3664,14 @@ movable
 
 右辺値参照を導入せずに以下だけ実現
 - コンテナにnoncopyableな型を入れる
-- returnでnoncopyableな型を返す
+- returnでnoncopyableな型を返す(関数がnoncopyableな型を返せる)
 
 ほぼ全ての型をmovableにするが、以下はmovableでない
 - interface
 - scopedなもの。lock guardなど。
 - たとえばregex_tはmoveできる保証はなさそう。
+
+movable型を左辺とする代入は右辺を常にstd::moveする
 
 やるべき変更
 - C++型のwrapperでcopyconを殺しているものにmovecon追加
@@ -3677,4 +3679,31 @@ movable
 - is_movableな判定を実装
   - return式が返せる型かどうかをこれできめる
   - 代入の右辺はmovableであればok?
+
+手順
+- linearはもういらないから、これのかわりにnonmovable用意。
+- コンテナに右辺値参照コンストラクタと左辺値参照コンストラクタ
+  - 左辺値参照コンストラクタはis_copy_constructible<T>ならcopy、そうでない
+    ならmove
+- structのemitに、copyableでなくてmovableであればmoveコンストラクタ定義
+- コンテナのpush_backなどを非メンバ関数にし、move版を作る 
+
+
+---------------------------------------------------------------------
+コンテナのpush_backなどを非メンバ関数に
+
+public function extern "get" t get(size_t i) const;
+  - slice,cslice,deque_slice,deque_cslice
+public function extern "set" void set(size_t i, t const& v) const;
+  - slice,deque_slice
+public function extern "push_back" void push_back(t const& v);
+public function extern "pop_back" t pop_back();
+public function extern "append" void append(crange_type const& v);
+public function extern "insert" void insert(size_t i, crange_type const& v);
+public function extern "erase" void erase(size_t first, size_t last);
+  - varray,cvarray,svarray
+public function extern "push_front" void push_front(t const& v);
+public function extern "pop_front" t pop_front();
+  - deque
+
 

@@ -539,7 +539,7 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
     est->get_fields(flds);
     flds_type::const_iterator i;
     /* default constructor */
-    if (is_default_constructible(est->get_texpr())) {
+    if (is_default_constructible(est->get_value_texpr())) {
       em.set_file_line(est);
       em.indent('b');
       em.puts("inline ");
@@ -562,8 +562,111 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
       em.puts(");\n");
     }
   }
+  if (!is_copyable(est->get_value_texpr()) &&
+      is_movable(est->get_value_texpr())) {
+    /* move constructor */
+    em.set_file_line(est);
+    em.indent('b');
+    em.puts("inline ");
+    em.puts(name_c);
+    em.puts("(");
+    em.puts(name_c);
+    em.puts("&&);\n");
+    em.set_file_line(est);
+    em.indent('b');
+    em.puts("inline ");
+    em.puts(name_c);
+    em.puts("(");
+    em.puts(name_c);
+    em.puts("& x) : ");
+    em.puts(name_c);
+    em.puts("(std::move(x)) { }\n");
+    /* move assignment operator */
+    em.set_file_line(est);
+    em.indent('b');
+    em.puts("inline ");
+    em.puts(name_c);
+    em.puts("& operator =(");
+    em.puts(name_c);
+    em.puts("&& x);\n");
+    em.set_file_line(est);
+    em.indent('b');
+    em.puts("inline ");
+    em.puts(name_c);
+    em.puts("& operator =(");
+    em.puts(name_c);
+    em.puts("& x);\n");
+  }
   em.add_indent(-1);
   em.puts("};\n");
+}
+
+static void emit_struct_move_constr_one(emit_context& em, expr_struct *est)
+{
+  if (!is_compiled(est->block)) {
+    return;
+  }
+  const std::string name_c = get_type_cname_wo_ns(est);
+  typedef std::list<expr_var *> flds_type;
+  flds_type flds;
+  est->get_fields(flds);
+  flds_type::const_iterator i;
+  em.set_ns(est->uniqns);
+  em.set_file_line(est);
+  em.indent('b');
+  em.puts(name_c);
+  em.puts("::");
+  em.puts(name_c);
+  em.puts("(");
+  em.puts(name_c);
+  em.puts("&& x) : ");
+  for (i = flds.begin(); i != flds.end(); ++i) {
+    if (i != flds.begin()) {
+      em.puts(", ");
+    }
+    em.puts(csymbol_var(*i, true));
+    em.puts("(x.");
+    em.puts(csymbol_var(*i, true));
+    em.puts(")");
+  }
+  em.puts(" { }\n");
+  /* operator =(foo&&) */
+  em.set_file_line(est);
+  em.indent('b');
+  em.puts(name_c);
+  em.puts("& ");
+  em.puts(name_c);
+  em.puts("::operator =(");
+  em.puts(name_c);
+  em.puts("&& x) {\n");
+  em.add_indent(1);
+  em.indent('b');
+  em.puts("if (this != &x) {\n");
+  em.add_indent(1);
+  for (i = flds.begin(); i != flds.end(); ++i) {
+    em.indent('b');
+    em.puts(csymbol_var(*i, true));
+    em.puts(" = x.");
+    em.puts(csymbol_var(*i, true));
+    em.puts(";\n");
+  }
+  em.add_indent(-1);
+  em.indent('b');
+  em.puts("}\n");
+  em.indent('b');
+  em.puts("return *this;\n");
+  em.add_indent(-1);
+  em.indent('b');
+  em.puts("}\n");
+  /* operator =(foo&) */
+  em.set_file_line(est);
+  em.indent('b');
+  em.puts(name_c);
+  em.puts("& ");
+  em.puts(name_c);
+  em.puts("::operator =(");
+  em.puts(name_c);
+  em.puts("& x) { return (*this) = std::move(x); }\n");
 }
 
 static void emit_struct_constr_one(emit_context& em, expr_struct *est,
@@ -1616,6 +1719,10 @@ static void emit_function_def(emit_context& em)
       if (has_udcon || is_copyable(est->get_value_texpr())) {
 	/* udcon or struct field constr */
 	emit_struct_constr_one(em, est, false);
+      }
+      if (!is_copyable(est->get_value_texpr()) &&
+	  is_movable(est->get_value_texpr())) {
+	emit_struct_move_constr_one(em, est);
       }
     }
     expr_dunion *const ev = dynamic_cast<expr_dunion *>(*i);

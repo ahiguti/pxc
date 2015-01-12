@@ -117,6 +117,7 @@ bool type_has_refguard(const term& t);
 bool type_allow_feach(const term& t);
 bool is_compatible_pointer(const term&t0, const term& t1);
 bool is_copyable(const term& t);
+bool is_movable(const term& t);
 bool is_assignable(const term& t);
 bool is_assignable_allowing_unsafe(const term& t);
 bool is_constructible(const term& t);

@@ -180,7 +180,7 @@ enum typefamily_e {
   typefamily_e_map_range,        /* range on map (eph) */
   typefamily_e_map_crange,       /* range on map, const elem (eph) */
   typefamily_e_ephemeral,        /* other ephemeral type (eph) */
-  typefamily_e_linear,           /* noncopyable, nodefaultcon */
+  typefamily_e_nonmovable,       /* nonmovable */
   typefamily_e_noncopyable,      /* noncopyable */
   typefamily_e_nodefault,        /* nodefaultcon */
   typefamily_e_nocascade,        /* defcon even when tparam's not */
@@ -299,7 +299,7 @@ struct expr_i {
   virtual symbol_common *get_sdef() { return 0; }
   virtual term& resolve_texpr() { return type_of_this_expr; }
   virtual void set_texpr(const term& t);
-  virtual const term& get_value_texpr() { abort(); }
+  virtual const term& get_value_texpr() const { abort(); }
   virtual void set_value_texpr(const term&) { abort(); }
   virtual void set_unique_namespace_one(const std::string& uniqns,
     bool allow_unsafe) { }
@@ -1184,7 +1184,7 @@ struct expr_funcdef : public expr_i {
   expr_interface *is_virtual_function() const;
   expr_i *is_virtual_or_member_function() const;
   expr_funcdef *is_member_function_descent();
-  const term& get_value_texpr() { return value_texpr; }
+  const term& get_value_texpr() const { return value_texpr; }
   void set_value_texpr(const term& t) { value_texpr = t; }
   void set_unique_namespace_one(const std::string& u, bool allow_unsafe);
   std::string get_unique_namespace() const { return uniqns; }
@@ -1253,7 +1253,7 @@ struct expr_typedef : public expr_i {
   void set_child(int i, expr_i *e) {
     if (i == 0) { enumvals = ptr_down_cast<expr_enumval>(e); }
   }
-  const term& get_value_texpr() { return value_texpr; }
+  const term& get_value_texpr() const { return value_texpr; }
   void set_value_texpr(const term& t) { value_texpr = t; }
   void set_unique_namespace_one(const std::string& u, bool allow_unsafe);
   std::string get_unique_namespace() const { return uniqns; }
@@ -1345,7 +1345,7 @@ struct expr_struct : public expr_i {
   }
   expr_block *get_template_block() { return block; }
   void get_fields(std::list<expr_var *>& flds_r) const;
-  const term& get_value_texpr() { return value_texpr; }
+  const term& get_value_texpr() const { return value_texpr; }
   void set_value_texpr(const term& t) { value_texpr = t; }
   void set_unique_namespace_one(const std::string& u, bool allow_unsafe);
   std::string get_unique_namespace() const { return uniqns; }
@@ -1392,7 +1392,7 @@ struct expr_dunion : public expr_i {
   expr_block *get_template_block() { return block; }
   void get_fields(std::list<expr_var *>& flds_r) const;
   expr_var *get_first_field() const;
-  const term& get_value_texpr() { return value_texpr; }
+  const term& get_value_texpr() const { return value_texpr; }
   void set_value_texpr(const term& t) { value_texpr = t; }
   void set_unique_namespace_one(const std::string& u, bool allow_unsafe);
   std::string get_unique_namespace() const { return uniqns; }
@@ -1427,7 +1427,7 @@ struct expr_interface : public expr_i {
     if (i == 0) { block = ptr_down_cast<expr_block>(e); }
   }
   expr_block *get_template_block() { return block; }
-  const term& get_value_texpr() { return value_texpr; }
+  const term& get_value_texpr() const { return value_texpr; }
   void set_value_texpr(const term& t) { value_texpr = t; }
   void set_unique_namespace_one(const std::string& u, bool allow_unsafe);
   std::string get_unique_namespace() const { return uniqns; }

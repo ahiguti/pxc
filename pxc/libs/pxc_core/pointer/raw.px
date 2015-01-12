@@ -93,7 +93,7 @@ public threaded struct {fconstr, fdestr}
 scoped(expand(m::args{fconstr}))
 {
   private metafunction value_type m::ret_type{fconstr};
-  private nocopy{value_type} hnd = nocopy{value_type}(
+  private nomove{value_type} hnd = nomove{value_type}(
     fconstr(expand(a: m::arg_names{fconstr}; a)));
   public function value_type get() const
   {
@@ -113,7 +113,7 @@ scoped_nullable()
 {
   /* value_type must support defcon, operator !=, and copying */
   private metafunction value_type m::arg_type{fdestr, 0};
-  public nocopy{value_type} hnd = nocopy{value_type}(value_type());
+  public nomove{value_type} hnd = nomove{value_type}(value_type());
   public function void reset(m::arg_type{fdestr, 0} const& v) {
     if (hnd.value != value_type()) {
       fdestr(hnd.value);
@@ -218,8 +218,8 @@ crawptr_to_size_t(crawptr{t} x);
 
 /* private */
 
-private tsvaluetype struct extern "pxcrt::nocopy" "noncopyable" {t}
-nocopy(t const& v)
+private tsvaluetype struct extern "pxcrt::nomove" "nonmovable" {t}
+nomove(t const& v)
 {
   public t value;
 }
@@ -272,13 +272,13 @@ template <typename T> struct crawref { typedef const T& type; };
 typedef char *charptr;
 typedef char const *ccharptr;
 
-template <typename T> struct nocopy
+template <typename T> struct nomove
 {
-  nocopy(T const& v) : value(v) { }
+  nomove(T const& v) : value(v) { }
   T value;
 private:
-  nocopy(nocopy const&);
-  nocopy& operator =(nocopy const&);
+  nomove(nomove const&);
+  nomove& operator =(nomove const&);
 };
 
 template <typename T> static inline T *

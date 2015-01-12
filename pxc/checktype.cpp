@@ -152,15 +152,15 @@ static void check_lvalue(const expr_i *epos, expr_i *a0)
   expr_has_lvalue(epos, a0, true);
 }
 
-static void check_copyable(const expr_op *eop, expr_i *a0)
+static void check_movable(const expr_op *eop, expr_i *a0)
 {
   const term t = a0->resolve_texpr();
-  if (is_copyable(t)) {
+  if (is_movable(t)) {
     return;
   }
   const std::string s0 = term_tostr(a0->resolve_texpr(),
     term_tostr_sort_humanreadable);
-  arena_error_push(eop != 0 ? eop : a0, "Type '%s' is not copyable",
+  arena_error_push(eop != 0 ? eop : a0, "Type '%s' is not movable",
     s0.c_str());
 }
 
@@ -470,8 +470,8 @@ static void check_var_type(term& typ, expr_i *e, const char *sym,
   if (is_void_type(typ)) {
     arena_error_push(e, "Variable or field '%s' declared void", sym);
   }
-  if (!byref_flag && need_copyable && !is_copyable(typ)) {
-    arena_error_push(e, "Noncopyable type '%s' for variable or field '%s'",
+  if (!byref_flag && need_copyable && !is_movable(typ)) {
+    arena_error_push(e, "Nonmovable type '%s' for variable or field '%s'",
       term_tostr_human(typ).c_str(), sym);
   }
   if (term_has_unevaluated_expr(typ)) {
@@ -545,7 +545,7 @@ static bool is_default_constructible(const term& typ, expr_i *pos,
     if (is_cm_pointer_family(typ)) {
       return false;
     }
-    if (cat == typefamily_e_linear || cat == typefamily_e_nodefault) {
+    if (cat == typefamily_e_nodefault) {
       return false;
     }
     if (cat == typefamily_e_farray || cat == typefamily_e_cfarray) {
@@ -1080,7 +1080,7 @@ static void store_tempvar(expr_i *e, passby_e passby, bool blockscope_flag,
   e->tempvar_varinfo.scope_block |= blockscope_flag;
   /* note: temp variable is created as of type e->resolve_texpr() even when
    * it is implicitly converted to another type. */
-  if (is_passby_cm_value(passby) && !is_copyable(e->resolve_texpr())) {
+  if (is_passby_cm_value(passby) && !is_movable(e->resolve_texpr())) {
     arena_error_throw(e,
       "Can not create a temp copy of type '%s' expr '%s'",
       term_tostr_human(e->resolve_texpr()).c_str(), e->dump(0).c_str());
@@ -2043,7 +2043,7 @@ void expr_op::check_type(symbol_table *lookup)
     {
       const bool incl_byref = true;
       if (!is_vardef_constructor_or_byref(this, incl_byref)) {
-	check_copyable(this, arg1);
+	check_movable(this, arg1);
       }
     }
     /* assignment expressions don't have value */
@@ -2465,9 +2465,9 @@ static void check_ptr_constructor_syntax(expr_funccall *fc, const term& te)
   // FIXME: here
   #endif
   const term& tgt_type = te.get_args()->front();
-  if (!is_copyable(tgt_type)) {
+  if (!is_movable(tgt_type)) {
     const std::string s0 = term_tostr_human(tgt_type);
-    arena_error_push(fc, "Pointer taget '%s' must be copyable "
+    arena_error_push(fc, "Pointer taget '%s' must be movable "
       "because of an implementation restriction. Use box{%s}(...) instead.",
       s0.c_str(), s0.c_str());
   }
@@ -4658,8 +4658,8 @@ static void check_type_validity_common(expr_i *e, const term& t)
       return;
     }
     const term& te = tl->front();
-    if (!is_copyable(te)) {
-      arena_error_push(e, "Type '%s' is not copyable",
+    if (!is_movable(te)) {
+      arena_error_push(e, "Type '%s' is not movable",
 	term_tostr_human(te).c_str());
     }
   }
