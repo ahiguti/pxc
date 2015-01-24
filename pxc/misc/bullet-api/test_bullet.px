@@ -22,7 +22,7 @@ struct myDynamicsWorld()
       address(collisionConfiguration));
   public rawptr{btDynamicsWorld} const dynamicsWorld
     = address(dynamicsWorldObject);
-  public btAlignedObjectArray_btCollisionShape_p mutable collisionShapes;
+  public varray{rawptr{btCollisionShape}} mutable collisionShapes;
   function ~
   {
     int j;
@@ -36,8 +36,8 @@ struct myDynamicsWorld()
       delete(obj);
     }
     for (const j : 0 .. collisionShapes.size()) {
-      const shape = collisionShapes.at(j);
-      collisionShapes.at(j) = rawptr{btCollisionShape}();
+      const shape = collisionShapes[j];
+      collisionShapes[j] = rawptr{btCollisionShape}();
       delete(shape);
     }
   }

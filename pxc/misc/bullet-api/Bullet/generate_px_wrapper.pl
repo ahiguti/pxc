@@ -488,7 +488,7 @@ sub dump_struct
     if ($obj->{copycon} && !$obj->{has_virtual}) {
       # copyable and defcon
     } else {
-      $extfamily = ' "noncopyable"';
+      $extfamily = ' "nonmovable"';
     }
   } else {
     $extfamily = ' "nodefault"';
