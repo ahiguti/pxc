@@ -1,0 +1,31 @@
+public namespace m5 "use-unsafe";
+public import common -;
+
+public struct extern "mtest::nocopy" "noncopyable" {t} nocopy {
+  public t value;
+}
+
+extern "types" inline
+namespace mtest {
+template <typename T> struct nocopy {
+  nocopy() : value() { }
+  nocopy(nocopy const& x) = delete;
+  nocopy& operator =(nocopy const& x) = delete;
+  nocopy(nocopy&& x) { value = x.value; x.value = T(); }
+  nocopy(nocopy& x) : nocopy(std::move(x)) { }
+  nocopy& operator =(nocopy&& x) {
+    if (&x != this) { value = x.value; x.value = T(); } return *this; }
+  nocopy& operator =(nocopy& x) { return (*this) = std::move(x); }
+  T value;
+};
+};
+;
+
+{
+  varray{nocopy{string}} arr;
+  nocopy{string} y;
+  y.value = "abc";
+  arr.push_back_move(y);
+  println(arr.size(), arr[0].value);
+  println("y:", y.value);
+}
