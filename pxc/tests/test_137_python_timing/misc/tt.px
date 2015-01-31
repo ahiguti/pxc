@@ -1,0 +1,30 @@
+#!/usr/bin/env pxc
+public namespace tt;
+public import common -;
+public import python py;
+
+function {v} size_t test1py2(int num)
+{
+  const main = py::module("__main__");
+  const global = main.__dict__;
+  py::exec(string_join{""}(
+    "def fib(x):\n",
+    "  return x if x < 2 else fib(x - 1) + fib(x - 2)\n",
+    "def test1(v, num):\n",
+    "  sum = 0\n",
+    "  for i in range(num):\n",
+    "    sum += fib(v)\n",
+    "  return sum\n"),
+    global, global);
+  long sum = main.test1(v, num);
+  return static_cast{size_t}(sum);
+}
+
+{
+  try {
+    test1py2{30}(100);
+  } catch (py::error_already_set e) {
+    py::error_print();
+  }
+}
+
