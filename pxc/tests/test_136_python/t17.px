@@ -1,0 +1,39 @@
+public namespace t17;
+public import common -;
+public import python py;
+
+{
+  try {
+    const main = py::module("__main__");
+    const global = main.__dict__;
+    py::exec(string_join{"\n"}(
+      "def foo(arg, *args, **kwargs):",
+      "  print arg",
+      "  print '-' * 10",
+      "  for a in args:",
+      "    print a",
+      "  print '-' * 10",
+      "  keys = sorted(kwargs.keys())", 
+      "  for a in keys:",
+      "    print a, ':', kwargs[a]"),
+      global, global);
+    const foo = main.foo;
+    const args = py::make_tuple("aaa", "bbb", "ccc");
+    const kwargs = py::make_dict("abc", "ABC", "xyz", "XYZ");
+    const args_err = py::make_list();
+    const kwargs_err = py::make_list();
+    try {
+      py::call(foo, args_err, kwargs); // error: args must be a tuple
+    } catch (py::error_already_set e) {
+      py::error_print();
+    }
+    try {
+      py::call(foo, args, kwargs_err); // error: kwargs must be a dict
+    } catch (py::error_already_set e) {
+      py::error_print();
+    }
+  } catch (py::error_already_set e) {
+    py::error_print();
+  }
+}
+

@@ -1,0 +1,45 @@
+public namespace ud1;
+public import common -;
+public import meta m;
+
+public struct complex (double re0, double im0) {
+  public metafunction __has_fldop__ 1;
+  private double re = re0;
+  private double im = im0;
+  public function double get_re() const { return re; }
+  public function void set_re(double x) { re = x; }
+  public function double get_im() const { return im; }
+  public function void set_im(double x) { im = x; }
+}
+
+public function {fld, tx} double complex___getfld(complex const& x)
+{
+  if (m::eq{fld, "real"}) {
+    println("returning re");
+    return x.get_re();
+  } else if (m::eq{fld, "imag"}) {
+    return x.get_im();
+  } else {
+    println("returning default");
+    return 0.0;
+  }
+}
+
+public function {fld, tx, ty} void complex___setfld(
+  complex mutable& x, double y)
+{
+  if (m::eq{fld, "real"}) {
+    x.set_re(y);
+  } else if (m::eq{fld, "imag"}) {
+    x.set_im(y);
+  } else {
+    println("field " + m::to_string{fld} + " not found");
+  }
+}
+
+{
+  complex c = complex(2.0, 3.0);
+  println(c.real);
+  c.imag = 1234.0;
+  println(c.imag);
+}

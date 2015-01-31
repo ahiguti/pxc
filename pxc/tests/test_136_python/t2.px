@@ -1,0 +1,37 @@
+namespace t2;
+import common -;
+import python py;
+
+struct foo {
+  public int x;
+  public int y;
+  public string z;
+  public function int bar(int v) const {
+    println("bar is called", "v=", v);
+    // return to_string{int}(v * 3);
+    return v * 3;
+  }
+}
+
+{
+  try {
+    const klass = py::make_class{foo}();
+    const main = py::module("__main__");
+    mutable global = main.attr("__dict__");
+    const r = py::eval("str(2 + 3)", global, global);
+    println(r);
+    global["hoge"] = py::make_string("xyz");
+    println(global["hoge"]);
+    global["t2_foo"] = klass;
+    const f = py::eval("t2_foo()", global, global);
+    println("exec done");
+    // println("f=", f);
+    const z = f.bar(33);
+    println("invoke done");
+    println(z);
+    println("attr done");
+  } catch (py::error_already_set e) {
+    py::error_print();
+  }
+}
+
