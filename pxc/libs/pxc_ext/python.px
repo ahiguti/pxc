@@ -118,11 +118,23 @@ public function extern "pxc_python::object_set" void
 object___setelem(object const& obj, object const& key,
   object const& val);
 
-public function extern "pxc_python::object_getfld" object
-object___getfld(object const& obj, strlit const& name);
+public function {fld, tx} object
+object___getfld(object const& obj)
+{
+  return object_getfld(obj, m::to_string{fld});
+}
 
-public function extern "pxc_python::object_setfld" void
-object___setfld(object const& obj, strlit const& name, object const& val);
+public function {fld, tx, ty} void
+object___setfld(object const& obj, object const& val)
+{
+  object_setfld(obj, m::to_string{fld}, val);
+}
+
+private function extern "pxc_python::object_getfld" object
+object_getfld(object const& obj, strlit const& name);
+
+private function extern "pxc_python::object_setfld" void
+object_setfld(object const& obj, strlit const& name, object const& val);
 
 public function {name, tlist} object
 object___invoke(expand(

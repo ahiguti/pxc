@@ -1665,23 +1665,23 @@ static void subst_user_defined_fldop(expr_op *eop)
       /* user-defined field op? */
       expr_struct *const est0 = ptr_down_cast<expr_struct>(einst0);
       const bool no_generated = true;
+      /* to avoid compilation ordering problem, enable user-defined field
+       * operator only when __has_fldop__ is defined in the struct */
       expr_i *const hf = tblk->symtbl.resolve_name_nothrow_memfld(
 	"__has_fldop__", true, no_generated, "", est0);
-      #if 0
-      const std::string sstr = einst0->get_unique_namespace() +
-	+ "::" + std::string(est0->sym) + "___getfld";
-      expr_i *hf = tblk->symtbl.resolve_name_nothrow_ns(sstr, true, "");
-      #endif
       if (hf != 0) {
 	DBG_DYNFLD(fprintf(stderr, "hasfldop!!! %s\n", eop->dump(0).c_str()));
 	expr_symbol *sym = ptr_down_cast<expr_symbol>(eop->arg1);
 	expr_i *fc = expr_funccall_new(eop->fname, eop->line,
-	  expr_symbol_new(eop->fname, eop->line,
+	  expr_te_new(eop->fname, eop->line,
 	    expr_nssym_new(eop->fname, eop->line,
-	      expr_nssym_new(eop->fname, eop->line, 0, "operator"), "getfld")),
-	  expr_op_new(eop->fname, eop->line, ',', eop->arg0,
-	    expr_str_literal_new(eop->fname, eop->line,
-	      arena_strdup(escape_c_str_literal(sym->nssym->sym).c_str()))));
+	      expr_nssym_new(eop->fname, eop->line, 0, "operator"),
+	      "getfld"),
+	    expr_telist_new(eop->fname, eop->line,
+	      expr_str_literal_new(eop->fname, eop->line,
+		arena_strdup(escape_c_str_literal(sym->nssym->sym).c_str())),
+	      0)),
+	  eop->arg0);
 	eop->arg0 = fc;
 	eop->arg1 = 0;
 	eop->op = '(';
@@ -1733,37 +1733,32 @@ static void subst_user_defined_fldop(expr_op *eop)
     if (lhsop != 0 && (lhsop->op == '.' || lhsop->op == TOK_ARROW) &&
       lhsop->arg1->get_esort() == expr_e_symbol)
     {
-      fn_check_type(eop->arg0, eop->symtbl_lexical);
+      DBG_DYNFLD(fprintf(stderr, "hasfldop set? %s\n", eop->dump(0).c_str()));
+      fn_check_type(lhsop->arg0, eop->symtbl_lexical);
       term ta0 = lhsop->arg0->resolve_texpr();
       expr_i *const einst0 = term_get_instance(ta0);
       expr_struct *const est0 = dynamic_cast<expr_struct *>(einst0);
-      expr_block *const tblk = einst0->get_template_block();
+      expr_block *const tblk = einst0 != 0 ? einst0->get_template_block() : 0;
       /* supports structs only. no additional ns lookup. */
       if (est0 != 0 && tblk != 0) {
 	const bool no_generated = true;
 	expr_i *const hf = tblk->symtbl.resolve_name_nothrow_memfld(
 	  "__has_fldop__", true, no_generated, "", est0);
-	#if 0
-	const std::string sstr = einst0->get_unique_namespace() +
-	  + "::" + std::string(est0->sym) + "___setfld";
-	expr_i *hf = tblk->symtbl.resolve_name_nothrow_ns(sstr, true, "");
-	#endif
 	if (hf != 0 && !hf->generated_flag) {
 	  DBG_DYNFLD(fprintf(stderr, "hasfldop!!! set %s\n",
 	    eop->dump(0).c_str()));
 	  expr_symbol *sym = ptr_down_cast<expr_symbol>(lhsop->arg1);
 	  expr_i *fc = expr_funccall_new(eop->fname, eop->line,
-	    expr_symbol_new(eop->fname, eop->line,
+	    expr_te_new(eop->fname, eop->line,
 	      expr_nssym_new(eop->fname, eop->line,
 		expr_nssym_new(eop->fname, eop->line, 0, "operator"),
-		  "setfld")),
-	    expr_op_new(eop->fname, eop->line, ',',
-	      expr_op_new(eop->fname, eop->line, ',',
-		lhsop->arg0,
+		"setfld"),
+	      expr_telist_new(eop->fname, eop->line,
 		expr_str_literal_new(eop->fname, eop->line,
-		  arena_strdup(
-		    escape_c_str_literal(sym->nssym->sym).c_str()))),
-	      eop->arg1));
+		  arena_strdup(escape_c_str_literal(sym->nssym->sym).c_str())),
+		0)),
+	    expr_op_new(eop->fname, eop->line, ',',
+	      lhsop->arg0, eop->arg1));
 	  eop->arg0 = fc;
 	  eop->arg1 = 0;
 	  eop->op = '(';

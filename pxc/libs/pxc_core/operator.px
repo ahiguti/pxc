@@ -266,18 +266,21 @@ setelem(tx mutable& x, ty const& y, tz const& z)
 }
 
 /* user-defined operator '.', rvalue */
-public threaded function {tx, ty}
-m::ret_type{m::symbol{m::nsof{tx}, m::concat{tx, "___getfld"}}}
-getfld(tx const& x, ty const& y)
+public threaded function {fld, tx}
+m::ret_type{m::apply{
+  m::symbol{m::nsof{tx}, m::concat{tx, "___getfld"}}, fld, tx}}
+getfld(tx const& x)
 {
-  return m::symbol{m::nsof{tx}, m::concat{tx, "___getfld"}}(x, y);
+  return m::apply{m::symbol{m::nsof{tx}, m::concat{tx, "___getfld"}},
+    fld, tx}(x);
 }
 
 /* user-defined operator '.', lvalue */
-public threaded function {tx, ty, tz} void
-setfld(tx mutable& x, ty const& y, tz const& z)
+public threaded function {fld, tx, ty} void
+setfld(tx mutable& x, ty const& y)
 {
-  m::symbol{m::nsof{tx}, m::concat{tx, "___setfld"}}(x, y, z);
+  m::apply{m::symbol{m::nsof{tx}, m::concat{tx, "___setfld"}},
+    fld, tx, ty}(x, y);
 }
 
 /* operator '.' for union is substituted to operator::union_field, in

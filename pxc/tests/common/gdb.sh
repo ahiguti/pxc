@@ -6,5 +6,9 @@ if [ "$TEST_PXC_PROF" == "" ]; then
 fi
 export MUDFLAP_OPTIONS=-viol-segv
 
-exec gdb --args ../../pxc --trim-path=2 -w=../work -p="$TEST_PXC_PROF" $*
+if [ "`uname`" == "Darwin" ]; then
+  exec lldb -- ../../pxc --trim-path=2 -w=../work -p="$TEST_PXC_PROF" $*
+else
+  exec gdb --args ../../pxc --trim-path=2 -w=../work -p="$TEST_PXC_PROF" $*
+fi
 
