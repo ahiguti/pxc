@@ -52,11 +52,11 @@ function void build_vertices(pglshader mutable& pgs)
   metafunction point2_joint_v point_joint{tattr2};
   /* import */
   const objs = make_farray{string}(
-      "parts",
-      "al",
-      "cessna",
-      "skyscraper",
-      "airboat"
+      "parts"
+      // "al",
+      // "cessna",
+      // "skyscraper",
+      // "airboat"
       );
   for (const i, const name: objs) {
     string fn = name + ".obj";
@@ -120,12 +120,12 @@ function void build_vertices(pglshader mutable& pgs)
     const t = fill2_v(vtx);
     const rnd = make_rand_generator(1U);
     regular_polygon(50.0, 4,
-      rotate_local(glm::make_quat_angle_axis(45.0, 0.0, 0.0, 1.0),
+      rotate_local(glm::make_quat_angle_axis(to_radians(45.0), 0.0, 0.0, 1.0),
 	rectangle_split(30, 30,
 	  rand_bump(1, 0.8, 0.2, 0.8, 0.2, 0.8, 1.0, 4.0, rnd,
 	    t, t, t))),
-      rotate_local(glm::make_quat_angle_axis(-45.0, 0.0, 0.0, 1.0),
-	bump_rec(0.02, 1.0, 1, t, t)))
+      rotate_local(glm::make_quat_angle_axis(to_radians(-45.0), 0.0, 0.0, 1.0),
+	bump_rec(0.01, 1.0, 1, t, t)))
       (poly_t(), mesh_index());
   }
   /* vtx10 */
@@ -134,7 +134,7 @@ function void build_vertices(pglshader mutable& pgs)
     const t = fill_v(vtx);
     mutable m = glm::mat4()
       .translate(glm::make_vec3(0.0, 0.0, 1.0))
-      .rotate(10.0, glm::make_vec3(0.0, 0.0, 1.0));
+      .rotate(to_radians(10.0), glm::make_vec3(0.0, 0.0, 1.0));
     regular_polygon(1.0, 6,
       bump_apply(m, false, t, t),
       bump_apply(m, false, t, t))
@@ -466,8 +466,10 @@ input_control()
     /*
     sdllog("onefinger", dx, dy);
     */
-    target.rotate_angle_axis(-dy * 5.0 * frctl.frame_speed_mul, 1.0, 0.0, 0.0);
-    target.rotate_angle_axis(-dx * 5.0 * frctl.frame_speed_mul, 0.0, 1.0, 0.0);
+    target.rotate_angle_axis(to_radians(-dy * 5.0 * frctl.frame_speed_mul),
+	1.0, 0.0, 0.0);
+    target.rotate_angle_axis(to_radians(-dx * 5.0 * frctl.frame_speed_mul),
+	0.0, 1.0, 0.0);
     finger_xyrotate_delta.x = dx;
     finger_xyrotate_delta.y = dy;
   }
@@ -563,10 +565,10 @@ input_control()
     } else {
       const len = glm::length(finger_xyrotate_delta);
       posang.rotate_angle_axis(
-	  -finger_xyrotate_delta.y * 2.0 * frctl.frame_speed_mul,
+	  to_radians(-finger_xyrotate_delta.y * 2.0 * frctl.frame_speed_mul),
 	  1.0, 0.0, 0.0);
       posang.rotate_angle_axis(
-	  -finger_xyrotate_delta.x * 2.0 * frctl.frame_speed_mul,
+	  to_radians(-finger_xyrotate_delta.x * 2.0 * frctl.frame_speed_mul),
 	  0.0, 1.0, 0.0);
       const decay = 0.03f * frctl.frame_speed_mul;
       if (len < decay) {
@@ -750,8 +752,12 @@ function void main_loop()
   input_control ictl;
 
   player_info player;
+  /*
   player.posang.angle = glm::make_quat_wxyz(1.0, 0.0, 0.0, 0.0);
   player.posang.position = glm::make_vec3(0.0, 0.0, 200.0);
+  */
+  player.posang.angle = glm::make_quat_wxyz(0.70711, 0.70711, 0.0, 0.0);
+  player.posang.position = glm::make_vec3(0.0, -10.0, 0.0);
 
   projection_info cam_drawing_frame;
 
@@ -888,23 +894,28 @@ function void main_loop()
 	done = true;
       }
       if (test_scroll_mode) {
-	player.posang.rotate_angle_axis(1.0f * frctl.frame_speed_mul,
+	player.posang.rotate_angle_axis(
+	    to_radians(1.0f * frctl.frame_speed_mul),
 	    1.0, 0.0, 0.0);
       }
       if (get_key(SDL_SCANCODE_UP) != 0) {
-	player.posang.rotate_angle_axis(1.0f * frctl.frame_speed_mul,
+	player.posang.rotate_angle_axis(
+	    to_radians(1.0f * frctl.frame_speed_mul),
 	    1.0, 0.0, 0.0);
       }
       if (get_key(SDL_SCANCODE_DOWN) != 0) {
-	player.posang.rotate_angle_axis(-1.0f * frctl.frame_speed_mul,
+	player.posang.rotate_angle_axis(
+	    to_radians(-1.0f * frctl.frame_speed_mul),
 	    1.0, 0.0, 0.0);
       }
       if (get_key(SDL_SCANCODE_LEFT) != 0) {
-	player.posang.rotate_angle_axis(1.0f * frctl.frame_speed_mul,
+	player.posang.rotate_angle_axis(
+	    to_radians(1.0f * frctl.frame_speed_mul),
 	    0.0, 1.0, 0.0);
       }
       if (get_key(SDL_SCANCODE_RIGHT) != 0) {
-	player.posang.rotate_angle_axis(-1.0f * frctl.frame_speed_mul,
+	player.posang.rotate_angle_axis(
+	    to_radians(-1.0f * frctl.frame_speed_mul),
 	    0.0, 1.0, 0.0);
       }
       if (get_key(SDL_SCANCODE_SPACE) != 0) {
@@ -931,11 +942,11 @@ function void main_loop()
       }
       if (get_key(SDL_SCANCODE_Z) != 0) {
 	player.posang.rotate_angle_axis(
-	    1.0f * frctl.frame_speed_mul, 0.0, 0.0, 1.0);
+	    to_radians(1.0f * frctl.frame_speed_mul), 0.0, 0.0, 1.0);
       }
       if (get_key(SDL_SCANCODE_X) != 0) {
 	player.posang.rotate_angle_axis(
-	    -1.0f * frctl.frame_speed_mul, 0.0, 0.0, 1.0);
+	    to_radians(-1.0f * frctl.frame_speed_mul), 0.0, 0.0, 1.0);
       }
       if (get_key(SDL_SCANCODE_RETURN) != 0) {
 	ictl.finger_zmove_delta = 0.0;
@@ -962,7 +973,7 @@ function void main_loop()
 	fr.ticks_sum_saved,
 	saved_stat_num_objects,
 	ictl.finger_zmove_delta,
-	pgs.cam.camera.angle, player.pos_delta);
+	pgs.cam.camera.angle, pgs.cam.camera.position);
       mto.wait_and_exec{swap_data_cl}();
       function void swap_data_cl(motion_thread_shared mutable& mts) {
 	// fr.save_ticks(1, SDL_GetTicks());
