@@ -407,20 +407,20 @@ while (my ($tdn, $v) = each %type_defs) {
     if ($integral_types{$tds}) {
       # tdn is typedef'ed to an integral type
       my $ext = $integral_types{$tds};
-      print $fpt qq[public struct extern "%" "$ext" $tdn { }\n];
+      print $fpt qq[public multithreaded struct extern "%" "$ext" $tdn { }\n];
     } else {
       # tdn is a struct
-      print $fpt qq[public struct extern "%" $tdn { }\n];
+      print $fpt qq[public multithreaded struct extern "%" $tdn { }\n];
     }
   } else {
     # tdn is a pointer type. define it as extenum so that operator ==
     # is defined.
-    print $fpt qq[public struct extern "%" "extenum" $tdn { }\n];
+    print $fpt qq[public multithreaded struct extern "%" "extenum" $tdn { }\n];
   }
 }
 
 while (my ($tdn, $v) = each %struct_defs) {
-  print $fpt qq[public struct extern "%"\n$tdn {\n];
+  print $fpt qq[public multithreaded struct extern "%"\n$tdn {\n];
   for my $e (@{$v->[1]}) {
     my $t = '';
     eval {
@@ -439,7 +439,7 @@ while (my ($tdn, $v) = each %enum_defs) {
   my $is_typed_enum = defined($type_ucount{$tdn});
   my $et = $is_typed_enum ? $tdn : "SDL_Enum";
   if ($is_typed_enum) {
-    print $fpt qq[public struct extern "int" "extenum" $tdn { }\n];
+    print $fpt qq[public multithreaded struct extern "int" "extenum" $tdn { }\n];
   } else {
     print $fpt qq{/* enum $tdn */\n};
   }
