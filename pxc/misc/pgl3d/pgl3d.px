@@ -1,27 +1,39 @@
-public namespace pgl3d "export-unsafe";
+public namespace pgl3d "use-unsafe";
 public import common -;
 public import pointer::raw -;
 public import numeric::fpmath -;
 public import glm;
-public import GL::compat -;
 public import io::time -;
 public import io::environ -;
 public import exception -;
 public import meta m;
 public import text::string::positional -;
-
-public import glresource -;
-public import glshader -;
 public import glgeometry -;
-public import glbuffer -;
 public import glnode -;
-public import pglshader -;
 public import pglscene -;
 public import pglbase -;
 public import pglcommon -;
+public import pglapi -;
 public import wfobj -;
 
-function string sdl_read_file(string mutable& fn)
+private import GL::compat -;
+private import glresource -;
+private import glshader -;
+private import glbuffer -;
+private import pglshader -;
+
+
+public function void main(pgl3d_application mutable& app)
+{
+  GL::base::set_check_error_enabled(1);
+  try {
+    main_loop(app);
+  } catch (exception::c_exception ex) {
+    sdllog("uncaught exception", ex);
+  }
+}
+
+public function string sdl_read_file(string mutable& fn)
 {
   string r;
   scoped_nullable{SDL_RWclose} rwop;
@@ -38,289 +50,6 @@ function string sdl_read_file(string mutable& fn)
     r.append(buf[0 .. n]);
   }
   return r;
-}
-
-function void build_vertices(pglshader mutable& pgs)
-{
-  metafunction tattr main_vertex_attributes;
-  metafunction fill_v fill{tattr};
-  metafunction joint_v poly_joint{tattr};
-  metafunction point_joint_v point_joint{tattr};
-  metafunction tattr2 main2_vertex_attributes;
-  metafunction fill2_v fill{tattr2};
-  metafunction joint2_v poly_joint{tattr2};
-  metafunction point2_joint_v point_joint{tattr2};
-  /* import */
-  const objs = make_farray{string}(
-      "parts"
-      // "al",
-      // "cessna",
-      // "skyscraper",
-      // "airboat"
-      );
-  for (const i, const name: objs) {
-    string fn = name + ".obj";
-    sdllog("load", fn);
-    const wfobjp = wfobject_read(sdl_read_file(fn));
-    const vtxs = pgs.make_vertices(vbid_main2, name);
-    const t = fill2_v(vtxs);
-    for (const j, mutable& v: wfobjp->v) {
-      // v *= 10.0f;
-    }
-    for (const k, const g: wfobjp->groups) {
-      // debug_log("group", k, *g);
-      import_wfobj(*wfobjp, *g, t)(poly_t(), mesh_index());
-      // break;
-    }
-    vtxs->num_copies_hint = 32;
-  }
-  sdllog("load prebuild");
-  {
-    const vtx = pgs.make_vertices(vbid_main, "ab-multi");
-    const t = fill_v(vtx);
-    regular_polygon(50.0, 30,
-      bump_rec(1.0, 1.0, 1, joint_v(vtx, "airboat", hole()), hole()),
-      hole())
-      (poly_t(), mesh_index());
-  }
-  /* vtx0 */
-  {
-    const vtxs = pgs.make_vertices(vbid_main, "saucer");
-    const fsmooth = fill_smooth{tattr}(vtxs);
-    const t = fill_v(vtxs);
-    regular_polygon(3.0, 40,
-      bump_rec(0.2, 0.5, 1, t, t),
-      bump_rec(0.01, 0.9, 5,
-	t,
-	sphere(10, fsmooth)))
-      (poly_t(), mesh_index());
-    vtxs->num_copies_hint = 32;
-  }
-  /* vtx2 */
-  {
-    const vtx2 = pgs.make_vertices(vbid_main, "saucer-multi");
-    const t2 = fill_v(vtx2);
-    regular_polygon(50.0, 3,
-      bump_rec(1.0, 1.0, 1, joint_v(vtx2, "saucer", hole()), hole()),
-      hole())
-      (poly_t(), mesh_index());
-  }
-  /* vtx8 */
-  {
-    const vtx = pgs.make_vertices(vbid_main, "block-multi");
-    const t = fill_v(vtx);
-    regular_polygon(600.0, 4,
-      rectangle_split(9, 8, joint_v(vtx, "block", hole())),
-      hole())
-      (poly_t(), mesh_index());
-  }
-  /* vtx9 */
-  {
-    const vtx = pgs.make_vertices(vbid_main2, "block");
-    const t = fill2_v(vtx);
-    const rnd = make_rand_generator(1U);
-    regular_polygon(50.0, 4,
-      rotate_local(glm::make_quat_angle_axis(to_radians(45.0), 0.0, 0.0, 1.0),
-	rectangle_split(30, 30,
-	  rand_bump(1, 0.8, 0.2, 0.8, 0.2, 0.8, 1.0, 4.0, rnd,
-	    t, t, t))),
-      rotate_local(glm::make_quat_angle_axis(to_radians(-45.0), 0.0, 0.0, 1.0),
-	bump_rec(0.01, 1.0, 1, t, t)))
-      (poly_t(), mesh_index());
-  }
-  /* vtx10 */
-  {
-    const vtx = pgs.make_vertices(vbid_main, "bullet");
-    const t = fill_v(vtx);
-    mutable m = glm::mat4()
-      .translate(glm::make_vec3(0.0, 0.0, 1.0))
-      .rotate(to_radians(10.0), glm::make_vec3(0.0, 0.0, 1.0));
-    regular_polygon(1.0, 6,
-      bump_apply(m, false, t, t),
-      bump_apply(m, false, t, t))
-      (poly_t(), mesh_index());
-    vtx->num_copies_hint = 32;
-  }
-  {
-    /* 60fps, macosx/linux mbp gt750m */
-    const vtx = pgs.make_vertices(vbid_main, "bullet-multi");
-    const t = fill_v(vtx);
-    regular_polygon(600.0, 4,
-      rectangle_split(170, 170, joint_v(vtx, "bullet", hole())),
-      hole())
-      (poly_t(), mesh_index());
-  }
-  {
-    const vtx = pgs.make_vertices(vbid_main, "bullet2");
-    const t = fill_v(vtx);
-    mutable m = glm::mat4()
-      .translate(glm::make_vec3(0.0, 0.0, 1.0))
-      .rotate(10.0, glm::make_vec3(0.0, 0.0, 1.0));
-    regular_polygon(1.0, 5,
-      bump_rec(0.8, 0.8, 1, t, t),
-      bump_rec(0.8, 0.8, 1, t, t))
-      (poly_t(), mesh_index());
-    vtx->num_copies_hint = 32;
-  }
-  /*
-  {
-    // 60fbp mbp intel gpu
-    const vtx = pgs.make_vertices(vbid_main, "bullet2-multi");
-    const t = fill_v(vtx);
-    const rnd = make_rand_generator(991U);
-    rand_sphere(200.0, 40000, false, false, rnd,
-      joint_v(vtx, "bullet2", hole()))
-      (poly_t(), mesh_index());
-  }
-  */
-  {
-    const vtx = pgs.make_vertices(vbid_main, "bullet2-multi");
-    const t = fill_v(vtx);
-    const rnd = make_rand_generator(991U);
-    rand_sphere(200.0, 37000, false, true, rnd,
-      point_joint_v(vtx, "bullet2", hole()))
-      (poly_t(), mesh_index());
-  }
-  {
-    const vtx = pgs.make_vertices(vbid_main, "bullet2-multi2");
-    const t = fill_v(vtx);
-    const rnd = make_rand_generator(991U);
-    rand_sphere(200.0, 20000, false, true, rnd,
-      point_joint_v(vtx, "bullet2", hole()))
-      (poly_t(), mesh_index());
-  }
-  {
-    const vtx = pgs.make_vertices(vbid_main, "bullet2-multi3");
-    const t = fill_v(vtx);
-    const rnd = make_rand_generator(991U);
-    rand_sphere(200.0, 2000, false, true, rnd,
-      point_joint_v(vtx, "bullet2", hole()))
-      (poly_t(), mesh_index());
-  }
-  {
-    const vtx = pgs.make_vertices(vbid_main, "bullet-multi-2");
-    const t = fill_v(vtx);
-    regular_polygon(600.0, 4,
-      rectangle_split(80, 80, joint_v(vtx, "bullet", hole())),
-      hole())
-      (poly_t(), mesh_index());
-  }
-  {
-    const vtx = pgs.make_vertices(vbid_main, "saucer-multi3");
-    const t = fill_v(vtx);
-    const rnd = make_rand_generator(991U);
-    rand_sphere(200.0, 200, false, true, rnd,
-      point_joint_v(vtx, "saucer", hole()))
-      (poly_t(), mesh_index());
-  }
-  {
-    const vtx = pgs.make_vertices(vbid_main, "ab-multi3");
-    const t = fill_v(vtx);
-    const rnd = make_rand_generator(991U);
-    rand_sphere(100.0, 100, false, true, rnd,
-      point_joint_v(vtx, "airboat", hole()))
-      (poly_t(), mesh_index());
-  }
-  {
-    /* particle */
-    const vtx = pgs.make_vertices(vbid_particle, "particle");
-    const p = particle(vtx);
-    const rnd = make_rand_generator(1U);
-    rand_sphere(1.0, 100, true, true, rnd, p)
-    //rand_sphere(1.0, 250, true, rnd, p)
-      (poly_t(), mesh_index());
-  }
-  {
-    /* particle multi */
-    const vtx = pgs.make_vertices(vbid_particle, "particle-multi");
-    /*
-    regular_polygon(600.0, 4,
-      // rectangle_split(200, 200, joint_v(vtx, "particle", hole())),
-      rectangle_split(100, 100, joint_v(vtx, "particle", hole())),
-      hole())
-      (poly_t(), mesh_index());
-    const vtx = bos[2]->get("particle-bb-multi")->vtxs;
-    */
-    const rnd = make_rand_generator(991U);
-    rand_sphere(60.0, 30000, true, true, rnd,
-      point_joint_v(vtx, "particle", hole()))
-      (poly_t(), mesh_index());
-  }
-  {
-    /* particle-bb */
-    const vtx = pgs.make_vertices(vbid_particle_bb, "particle-bb");
-    const p = particle_bb(vtx);
-    const rnd = make_rand_generator(1U);
-    rand_sphere(1.0, 100, true, true, rnd, p)
-      (poly_t(), mesh_index());
-  }
-  {
-    /* particle-bb multi */
-    const vtx = pgs.make_vertices(vbid_particle_bb, "particle-bb-multi");
-    const rnd = make_rand_generator(991U);
-    rand_sphere(60.0, 10000, true, true, rnd,
-      point_joint_v(vtx, "particle-bb", hole()))
-      (poly_t(), mesh_index());
-  }
-  {
-    const vtx = pgs.make_vertices(vbid_particle_bb, "mixed");
-    regular_polygon(1.0, 5,
-      bump_rec(1.0, 10.0, 1, hole(), joint_v(vtx, "saucer", hole())),
-      // joint_v(vtx, "bullet2", hole()),
-      // joint_v(vtx, "particle", hole()),
-      joint_v(vtx, "particle-bb", hole()))
-      (poly_t(), mesh_index());
-  }
-  /*
-  */
-  {
-    /* for lineparticle shader */
-    const vtx = pgs.make_vertices(vbid_lineparticle, "lineparticle");
-    farray{lineparticle_vertex_attributes, 4} vs;
-    vs[0].vert = glm::make_vec2(0.0, -0.5);
-    vs[1].vert = glm::make_vec2(1.0, -0.5);
-    vs[2].vert = glm::make_vec2(1.0, 0.5);
-    vs[3].vert = glm::make_vec2(0.0, 0.5);
-    vtx->push_polygon_distinct{lineparticle_vertex_attributes, 0}(vs);
-  }
-  {
-    /* for rect2d shader */
-    const vtx = pgs.make_vertices(vbid_rect2d, "rect2d");
-    farray{rect2d_vertex_attributes, 4} vs;
-    vs[0].vert = glm::make_vec2(0.0, 0.0);
-    vs[1].vert = glm::make_vec2(1.0, 0.0);
-    vs[2].vert = glm::make_vec2(1.0, 1.0);
-    vs[3].vert = glm::make_vec2(0.0, 1.0);
-    vtx->push_polygon_distinct{rect2d_vertex_attributes, 0}(vs);
-  }
-  {
-    /* for font2 shader */
-    const vtx = pgs.make_vertices(vbid_font2, "default_font");
-    const char_w = static_cast{float}(pgs.fti.char_w);
-    const char_h = static_cast{float}(pgs.fti.char_h);
-    const point_size = static_cast{float}(max(pgs.fti.char_w, pgs.fti.char_h));
-    const char_size_px = glm::make_vec2(char_w, char_h);
-    const texture_size_px = glm::make_vec2(
-      static_cast{float}(pgs.fti.surface_w),
-      static_cast{float}(pgs.fti.surface_h));
-    const clamp_x = char_w / point_size;
-    const clamp_y = char_h / point_size;
-    font2_vertex_attributes v;
-    v.char_size_px = char_size_px;
-    v.texture_size_px = texture_size_px;
-    v.texture_origin_px = glm::make_vec2(0.0, 0.0);
-    v.coord_clamp = glm::make_vec2(clamp_x, clamp_y);
-    v.char_px = static_cast{float}(pgs.fti.char_w);
-//sdllog("char_point_size", point_size);
-    v.char_point_size = point_size;
-    //for (const i: 0 .. 14U) {
-    //  v.text_index = static_cast{float}(i);
-//sdllog("text_index", i, v.text_index);
-//sdllog("font2_vertex_attributes", v);
-      vtx->push_point{font2_vertex_attributes}(v);
-    //}
-//sdllog("vertex_values", vtx->vertex_values);
-  }
 }
 
 struct
@@ -361,258 +90,16 @@ frame_statistics()
   }
 }
 
-struct
-input_control()
+private function int set_swap_interval(int vsync)
 {
-  public varray{SDL_FingerID} fingerids;
-  public farray{bool, 2} fingdown;
-  public farray{size_t, 2} fingerdown_time;
-  public farray{glm::vec2, 2} start_pos;
-  public farray{glm::vec2, 2} cur_pos;
-  public glm::vec2 finger_xyrotate_delta;
-  public float finger_zmove_delta;
-  public int finger_zmove_mode = 0;
-  public function void finger_motion(float x, float y, float dx, float dy,
-    SDL_FingerID fng)
-  {
-    size_t fid = 2;
-    if (fingerids.size() > 0 && fingerids[0] == fng) {
-      fid = 0;
-    } else if (fingerids.size() > 1 && fingerids[1] == fng) {
-      fid = 1;
-    }
-    if (fid < 2) {
-      cur_pos[fid] = glm::make_vec2(x, y);
-      /*
-      sdllog("finger_motion", x, y, fid, fng);
-      */
-    } else {
-      /*
-      sdllog("finger_motion(ignored)", x, y, fng,
-	"fingerids:", fingerids);
-      */
-    }
-  }
-  public function void finger_down(float x, float y, SDL_FingerID fng) {
-    size_t fid = 2;
-    if (fingerids.size() > 0 && fingerids[0] == fng) {
-      fid = 0;
-    } else if (fingerids.size() > 1 && fingerids[1] == fng) {
-      fid = 1;
-    } else if (fingerids.size() < 2) {
-      fid = fingerids.size();
-      fingerids.push_back(fng);
-    }
-    if (fid < 2) {
-      fingdown[fid] = true;
-      start_pos[fid] = glm::make_vec2(x, y);
-      cur_pos[fid] = start_pos[fid];
-      /*
-      sdllog("finger_down", x, y, fid);
-      */
-      fingerdown_time[0] = 0;
-      fingerdown_time[1] = 0;
-      finger_zmove_mode = 0;
-    }
-    /*
-    sdllog("finger_down_post", fingerids);
-    */
-  }
-  public function void finger_up(SDL_FingerID fng) {
-    size_t fid = 2;
-    if (fingerids.size() > 0 && fingerids[0] == fng) {
-      fid = 0;
-    } else if (fingerids.size() > 1 && fingerids[1] == fng) {
-      fid = 1;
-    }
-    if (fid < 2) {
-      fingdown[fid] = false;
-      /*
-      sdllog("finger_up", fid);
-      */
-      if (fid == 1) {
-	start_pos[0] = cur_pos[0];
-	fingerids.resize(1, 0);
-	fingdown[1] = false;
-      } else {
-	fingerids.erase(0, 1);
-	if (fingerids.empty()) {
-	  fingdown[0] = false;
-	} else {
-	  cur_pos[0] = cur_pos[1];
-	  start_pos[0] = cur_pos[1];
-	  fingdown[0] = fingdown[1];
-	  fingdown[1] = false;
-	}
-      }
-      fingerdown_time[0] = 0;
-      fingerdown_time[1] = 0;
-      finger_zmove_mode = 0;
-    }
-    /*
-    sdllog("finger_up_post", fingerids);
-    */
-  }
-  public function void finger_action_one_finger(position_angle mutable& target,
-      framerate_control const& frctl, size_t fid)
-  {
-    mutable dx = (cur_pos[fid].x - start_pos[fid].x);
-    mutable dy = (cur_pos[fid].y - start_pos[fid].y);
-    const d = glm::distance(start_pos[fid], cur_pos[fid]);
-    if (d > 3.0) {
-      dx /= d / 3.0;
-      dy /= d / 3.0;
-    }
-    /*
-    sdllog("onefinger", dx, dy);
-    */
-    target.rotate_angle_axis(to_radians(-dy * 5.0 * frctl.frame_speed_mul),
-	1.0, 0.0, 0.0);
-    target.rotate_angle_axis(to_radians(-dx * 5.0 * frctl.frame_speed_mul),
-	0.0, 1.0, 0.0);
-    finger_xyrotate_delta.x = dx;
-    finger_xyrotate_delta.y = dy;
-  }
-  public function void finger_action_two_fingers(position_angle mutable& target,
-      framerate_control const& frctl)
-  {
-    const d0 = cur_pos[0] - start_pos[0];
-    const d1 = cur_pos[1] - start_pos[1];
-    if (glm::dot(d0, d1) < 0.0f) {
-      /* z move */
-      if (finger_zmove_mode != 2) {
-	const distance_start = glm::distance(start_pos[0], start_pos[1]);
-	mutable distance_cur = glm::distance(cur_pos[0], cur_pos[1]);
-	if (distance_cur <= 0.0001f) {
-	  distance_cur = 0.0001f;
-	}
-	const rat = distance_start / distance_cur;
-	const prev = finger_zmove_delta;
-	if (rat > 1.2) {
-	  finger_zmove_delta += 0.001f * frctl.frame_speed_mul;
-	  if (finger_zmove_delta >= 1.0) {
-	    finger_zmove_delta = 1.0;
-	  }
-	  finger_zmove_mode = 1;
-	} else if (rat < 0.8) {
-	  finger_zmove_delta -= 0.001f * frctl.frame_speed_mul;
-	  if (finger_zmove_delta <= -1.0) {
-	    finger_zmove_delta = -1.0;
-	  }
-	  finger_zmove_mode = 1;
-	}
-	if ((prev < 0.0f && finger_zmove_delta > 0.0f) ||
-	  (prev > 0.0f && finger_zmove_delta < 0.0f)) {
-	  /* stop */
-	  finger_zmove_delta = 0.0f;
-	  finger_zmove_mode = 2;
-	}
-      }
-    } else {
-      /* xy move */
-      const d0 = cur_pos[0] - start_pos[0];
-      const d1 = cur_pos[1] - start_pos[1];
-      mutable avg = (d0 + d1) / 2.0f;
-      const d = (glm::distance(start_pos[0], cur_pos[0]),
-	glm::distance(start_pos[1], cur_pos[0])) / 2.0f;
-      if (d > 3.0) {
-	avg /= d / 3.0;
-      }
-      avg /= 32.0f;
-      target.translate_relative(
-	  glm::make_vec3(avg.x, -avg.y, 0.0) * frctl.frame_speed_mul);
-    }
-  }
-  public function void finger_action_step(player_info mutable& pl,
-      glm::vec3 mutable& pos_delta, framerate_control const& frctl)
-  {
-    position_angle mutable& posang = pl.posang;
-    /*
-    sdllog("finger_action_step", fingdown[0], fingdown[1]);
-    */
-    if (fingdown[0] && !fingdown[1]) {
-      if (fingerdown_time[0] >= 2) {
-	finger_action_one_finger(posang, frctl, 0);
-      } else {
-	start_pos[0] = (start_pos[0] + cur_pos[0]) / 2.0f;
-	fingerdown_time[0] += 1;
-      }
-      if (fingerids[0] == 0) {
-	/* mouse button */
-	/*
-	finger_zmove_delta -= 0.0001;
-	if (finger_zmove_delta <= -0.01) {
-	  finger_zmove_delta = -0.01;
-	}
-	*/
-      }
-    } else if (!fingdown[0] && fingdown[1]) {
-      if (fingerdown_time[1] >= 2) {
-	finger_action_one_finger(posang, frctl, 0);
-      } else {
-	start_pos[1] = (start_pos[1] + cur_pos[1]) / 2.0f;
-	fingerdown_time[1] += 1;
-      }
-    } else if (fingdown[0] && fingdown[1]) {
-      if (fingerdown_time[0] >= 2 && fingerdown_time[1] >= 2) {
-	finger_action_two_fingers(posang, frctl);
-      } else {
-	start_pos[0] = (start_pos[0] + cur_pos[0]) / 2.0f;
-	fingerdown_time[0] += 1;
-	start_pos[1] = (start_pos[1] + cur_pos[1]) / 2.0f;
-	fingerdown_time[1] += 1;
-      }
-    } else {
-      const len = glm::length(finger_xyrotate_delta);
-      posang.rotate_angle_axis(
-	  to_radians(-finger_xyrotate_delta.y * 2.0 * frctl.frame_speed_mul),
-	  1.0, 0.0, 0.0);
-      posang.rotate_angle_axis(
-	  to_radians(-finger_xyrotate_delta.x * 2.0 * frctl.frame_speed_mul),
-	  0.0, 1.0, 0.0);
-      const decay = 0.03f * frctl.frame_speed_mul;
-      if (len < decay) {
-	finger_xyrotate_delta = glm::make_vec2(0.0f, 0.0f);
-      } else {
-	finger_xyrotate_delta -= finger_xyrotate_delta * decay / len;
-      }
-    }
-    posang.position += pl.pos_delta * frctl.frame_speed_mul;
-    if (pl.accel) {
-      pl.accel_ratio = min(
-	  pl.accel_ratio + 0.003f * frctl.frame_speed_mul, 1.0f);
-    } else {
-      pl.accel_ratio = max(
-	  pl.accel_ratio - 0.003f * frctl.frame_speed_mul, 0.01f);
-    }
-    pl.accel_ratio = 1.0f;
-    pl.pos_delta =
-      pl.pos_delta * (1.0f - pl.accel_ratio)
-      + posang.angle.to_mat3()
-	* glm::make_vec3(0.0, 0.0, finger_zmove_delta * pl.accel_ratio);
-    /*
-    target.translate_relative(glm::make_vec3(0.0, 0.0, finger_zmove_delta)
-	* frctl.frame_speed_mul);
-    */
-  }
-  public function void add_zdelta(float zaccel, framerate_control const& frctl)
-  {
-    finger_zmove_delta += zaccel * frctl.frame_speed_mul;
-    if (finger_zmove_delta <= -1.0) {
-      finger_zmove_delta = -1.0;
-    }
-    if (finger_zmove_delta >= 1.0) {
-      finger_zmove_delta = 1.0;
-    }
-    finger_zmove_mode = 1;
-  }
+  return SDL_GL_SetSwapInterval(vsync);
 }
 
 struct
 framerate_control(int vsync0)
 {
   public int const vsync = vsync0;
-  public int const swap_interval = SDL_GL_SetSwapInterval(vsync0);
+  public int const swap_interval = set_swap_interval(vsync0);
   public double time_before_swapwindow = io::system.gettimeofday_double();
   public farray{double, 2} frame_intervals;
   public double sleep_carry = 0.0;
@@ -670,59 +157,11 @@ framerate_control(int vsync0)
   }
 }
 
-valuetype struct
-player_info()
+private function void main_loop(pgl3d_application mutable& app)
 {
-  public position_angle posang;
-  public glm::vec3 pos_delta;
-  public bool accel;
-  public float accel_ratio = 0.1f;
-}
-
-function void node_factory_prepare(node_factory mutable& nf,
-  cslice{ptr{vertex_buffer}} const& bos)
-{
-  for (size_t bo_id, const& bop: bos) {
-    for (const& n, const id: bop->vs_names) {
-      joint_id_type jid;
-      jid.bo_id = bo_id;
-      jid.vs_id = static_cast{int}(id);
-      nf.name_to_id[n] = jid;
-    }
-    nf.binfo.push_back(node_buffer_info());
-    node_buffer_info mutable& nbi = nf.binfo[nf.binfo.size() - 1];
-    for (const i, const& vsp: bop->vs_arr) {
-      nbi.vs_arr.push_back(node_vs_info());
-      node_vs_info mutable& nvi = nbi.vs_arr[nbi.vs_arr.size() - 1];
-      for (const j, const& nj: vsp->vtxs->joints) {
-	node_joint_info nji;
-	nji.joint_id = bos_name_to_id(bos, nj.joint_name);
-	nji.trans = nj.trans;
-	nvi.joints.push_back(nji);
-      }
-    }
-  }
-  private function joint_id_type
-  bos_name_to_id(cslice{ptr{vertex_buffer}} const& bos, cstrref const& name)
-  {
-    joint_id_type jid;
-    for (const i, const& bo: bos) {
-      if (bo->has_name(name)) {
-	jid.bo_id = i;
-	jid.vs_id = static_cast{int}(bo->get_id_by_name(name));
-	break;
-      }
-    }
-    return jid;
-  }
-}
-
-function void main_loop()
-{
-  sdllog("PGC main");
+  sdllog("PGL3D main");
 
   sdlcontext sdlc;
-  // sdlcontext sdlc  = sdlcontext();
 
   SDL_EventState(SDL_KEYDOWN, 0);
   SDL_EventState(SDL_KEYUP, 0);
@@ -734,30 +173,24 @@ function void main_loop()
     SDL_EventState(SDL_MOUSEMOTION, 0);
   }
 
-  sdllog("PXC-SDL2 init0");
+  sdllog("PGL3D init0");
 
   pglshader pgs = pglshader(sdlc.gles_flag, sdlc.glmajor, sdlc.glminor,
     sdlc.enable_msaa, sdlc.init_w, sdlc.init_h);
-  build_vertices(pgs);
+  app.on_build_vertices(pgs);
   varray{instances_type} local_bo_instances;
   pgs.prepare_vertex_buffers();
   pgs.prepare_bo_instances(local_bo_instances);
   node_factory nfac;
-  node_factory_prepare(nfac, pgs.vertex_buffers); 
-  motion_thread_object mto = motion_thread_object(nfac, local_bo_instances);
+  pgs.prepare_node_factory(nfac);
+
+  /* spawn motion thread */
+  motion_thread_object mto = motion_thread_object(nfac, local_bo_instances,
+    app.get_scene_shared());
 
   size_t saved_stat_num_objects;
 
   const test_scroll_mode = false;
-  input_control ictl;
-
-  player_info player;
-  /*
-  player.posang.angle = glm::make_quat_wxyz(1.0, 0.0, 0.0, 0.0);
-  player.posang.position = glm::make_vec3(0.0, 0.0, 200.0);
-  */
-  player.posang.angle = glm::make_quat_wxyz(0.70711, 0.70711, 0.0, 0.0);
-  player.posang.position = glm::make_vec3(0.0, -10.0, 0.0);
 
   projection_info cam_drawing_frame;
 
@@ -783,10 +216,10 @@ function void main_loop()
 	  frctl.start();
 	  sdllog("resized w=", w, " h=", h);
 	} else if (ev.window.event == SDL_WINDOWEVENT_HIDDEN) {
-	  /* sdllog("hidden"); */
+	  sdllog("hidden");
 	} else if (ev.window.event == SDL_WINDOWEVENT_MINIMIZED ||
 	    ev.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
-	  // paused = true; // FIXME
+	  paused = true;
 	  sdllog("paused");
 	} else if (ev.window.event == SDL_WINDOWEVENT_RESTORED ||
 	    ev.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) {
@@ -798,161 +231,19 @@ function void main_loop()
 	  sdllog("window event ", cast_int(ev.window.event));
 	  */
 	}
-      } else if (etype == SDL_MOUSEBUTTONDOWN) {
-	const bx = cast_float(ev.button.x) / cast_float(pgs.cam.screen_width);
-	const by = cast_float(ev.button.y) / cast_float(pgs.cam.screen_height);
-	if (bx < 0.1 && by < 0.1) {
-	  scene_next_flag = true;
-	}
-	if (bx > 0.9 && by < 0.1) {
-	}
-	if (bx > 0.9 && by > 0.9) {
-	  pgs.cam.light_on = pgs.cam.light_on > 0.5f ? 0.0f : 1.0f;
-	}
-	sdllog("mousedown", ev.button.x, ev.button.y, ev.button.button);
-	ictl.finger_down(
-	  cast_float(ev.button.x) / cast_float(pgs.cam.screen_width),
-	  cast_float(ev.button.y) / cast_float(pgs.cam.screen_height),
-	  0);
-	/*
-	*/
-      } else if (etype == SDL_MOUSEBUTTONUP) {
-	/*
-	sdllog("mouseup", ev.button.button);
-	ictl.finger_up(0);
-	 */
-      } else if (etype == SDL_MOUSEMOTION) {
-	/*
-	sdllog("mousemotion", ev.button.x, ev.button.y, ev.button.button);
-	 */
-      } else if (etype == SDL_FINGERDOWN) {
-	/*
-	sdllog("fingerdown", ev.tfinger.x, ev.tfinger.y, ev.tfinger.fingerId);
-	*/
-	ictl.finger_down(ev.tfinger.x, ev.tfinger.y, ev.tfinger.fingerId);
-	if (ev.tfinger.x < 0.1 && ev.tfinger.y < 0.1) {
-	  scene_next_flag = true;
-	}
-	if (ev.tfinger.x > 0.9 && ev.tfinger.y < 0.1) {
-	}
-	if (ev.tfinger.x > 0.9 && ev.tfinger.y > 0.9) {
-	  player.accel = !player.accel;
-	  pgs.cam.light_on = pgs.cam.light_on > 0.5f ? 0.0f : 1.0f;
-	}
-      } else if (etype == SDL_FINGERUP) {
-	/*
-	sdllog("fingerup", ev.tfinger.fingerId);
-	*/
-	ictl.finger_up(ev.tfinger.fingerId);
-      } else if (etype == SDL_FINGERMOTION) {
-	if (m::or{is_android, is_ios}) {
-	  ictl.finger_motion(ev.tfinger.x, ev.tfinger.y,
-	      ev.tfinger.dx, ev.tfinger.dy, ev.tfinger.fingerId);
-	  /*
-	  sdllog("fingermotion", ev.tfinger.x, ev.tfinger.y,
-	    ev.tfinger.dx, ev.tfinger.dy, ev.tfinger.fingerId);
-	  */
-	}
-      } else if (etype == SDL_APP_WILLENTERBACKGROUND) {
-	sdllog("paused");
-	paused = true;
-      } else if (etype == SDL_APP_DIDENTERFOREGROUND) {
-	sdllog("resumed");
-	paused = false;
-	int w;
-	int h;
-	SDL_GL_GetDrawableSize(sdlc.sdl_window, address(w), address(h));
-	pgs.resize_screen(w, h);
-	frctl.start();
       } else if (etype == SDL_QUIT) {
 	done = true;
 	break;
-      } else if (etype == SDL_MULTIGESTURE) {
-      } else if (etype == SDL_KEYDOWN) {
-	// sdllog("KEYDOWN event");
-	if (ev.key.keysym.scancode == SDL_SCANCODE_TAB) {
-	  scene_next_flag = true;
-	}
-	if (ev.key.keysym.scancode == SDL_SCANCODE_F) {
-	}
-      } else {
-	string s;
-	integral_to_hexadecimal{int}(cast_int(ev.type), s);
-	sdllog("unknown event", s);
-	/* */
       }
+      /* invoke event handler */
+      app.on_event(ev, frctl.frame_speed_mul, pgs.cam);
     }
     {
       int numkeys;
       const ksp = SDL_GetKeyboardState(address(numkeys));
       const ks = ksp.to_cslice(static_cast{size_t}(numkeys));
-      function uint get_key(SDL_Scancode k) {
-	return ks[static_cast{uint}(k)];
-      }
-      // SDL_KeyboardState const ks;
-      if (get_key(SDL_SCANCODE_ESCAPE) != 0) {
-	done = true;
-      }
-      if (test_scroll_mode) {
-	player.posang.rotate_angle_axis(
-	    to_radians(1.0f * frctl.frame_speed_mul),
-	    1.0, 0.0, 0.0);
-      }
-      if (get_key(SDL_SCANCODE_UP) != 0) {
-	player.posang.rotate_angle_axis(
-	    to_radians(1.0f * frctl.frame_speed_mul),
-	    1.0, 0.0, 0.0);
-      }
-      if (get_key(SDL_SCANCODE_DOWN) != 0) {
-	player.posang.rotate_angle_axis(
-	    to_radians(-1.0f * frctl.frame_speed_mul),
-	    1.0, 0.0, 0.0);
-      }
-      if (get_key(SDL_SCANCODE_LEFT) != 0) {
-	player.posang.rotate_angle_axis(
-	    to_radians(1.0f * frctl.frame_speed_mul),
-	    0.0, 1.0, 0.0);
-      }
-      if (get_key(SDL_SCANCODE_RIGHT) != 0) {
-	player.posang.rotate_angle_axis(
-	    to_radians(-1.0f * frctl.frame_speed_mul),
-	    0.0, 1.0, 0.0);
-      }
-      if (get_key(SDL_SCANCODE_SPACE) != 0) {
-	ictl.add_zdelta(-0.001f, frctl);
-      }
-      if (get_key(SDL_SCANCODE_LSHIFT) != 0) {
-	ictl.add_zdelta(0.001f, frctl);
-      }
-      if (get_key(SDL_SCANCODE_A) != 0) {
-	player.posang.translate_relative(
-	    glm::make_vec3(-0.05, 0.0, 0.0) * frctl.frame_speed_mul);
-      }
-      if (get_key(SDL_SCANCODE_D) != 0) {
-	player.posang.translate_relative(
-	    glm::make_vec3(0.05, 0.0, 0.0) * frctl.frame_speed_mul);
-      }
-      if (get_key(SDL_SCANCODE_S) != 0) {
-	player.posang.translate_relative(
-	    glm::make_vec3(0.0, -0.05, 0.0) * frctl.frame_speed_mul);
-      }
-      if (get_key(SDL_SCANCODE_W) != 0) {
-	player.posang.translate_relative(
-	    glm::make_vec3(0.0, 0.05, 0.0) * frctl.frame_speed_mul);
-      }
-      if (get_key(SDL_SCANCODE_Z) != 0) {
-	player.posang.rotate_angle_axis(
-	    to_radians(1.0f * frctl.frame_speed_mul), 0.0, 0.0, 1.0);
-      }
-      if (get_key(SDL_SCANCODE_X) != 0) {
-	player.posang.rotate_angle_axis(
-	    to_radians(-1.0f * frctl.frame_speed_mul), 0.0, 0.0, 1.0);
-      }
-      if (get_key(SDL_SCANCODE_RETURN) != 0) {
-	ictl.finger_zmove_delta = 0.0;
-	ictl.finger_zmove_mode = 1;
-      }
-      ictl.finger_action_step(player, player.pos_delta, frctl);
+      /* invoke key handler */
+      app.on_scankeys(ks, frctl.frame_speed_mul, pgs.cam);
     }
     fr.save_ticks(0, SDL_GetTicks());
     if (paused) {
@@ -960,19 +251,11 @@ function void main_loop()
       fr.tprevsec = SDL_GetTicks();
       continue;
     }
-    /* set camera and light */
-    {
-      pgs.cam.camera = player.posang;
-      pgs.cam.light.position = pgs.cam.camera.position +
-	pgs.cam.camera.angle.to_mat3() * glm::make_vec3(3.0, 3.0, 5.0);
-      pgs.cam.light.angle = pgs.cam.camera.angle;
-    }
     /* motion and prepare instance data */
     {
       const mess = string_join{" "}(fr.fps, frctl.frame_speed_mul,
 	fr.ticks_sum_saved,
 	saved_stat_num_objects,
-	ictl.finger_zmove_delta,
 	pgs.cam.camera.angle, pgs.cam.camera.position);
       mto.wait_and_exec{swap_data_cl}();
       function void swap_data_cl(motion_thread_shared mutable& mts) {
@@ -980,10 +263,7 @@ function void main_loop()
 	cam_drawing_frame = mts.cam;
 	mts.cam = pgs.cam;
 	mts.frame_speed_mul = frctl.frame_speed_mul;
-	mts.scene_reset = scene_next_flag ? 0 : -1;
 	mts.message = mess;
-	mts.font_width = pgs.fti.char_w;
-	mts.font_height = pgs.fti.char_h;
 	local_bo_instances.swap(mts.bo_instances);
 	saved_stat_num_objects = mts.stat_num_objects;
       }
@@ -1011,17 +291,6 @@ function void main_loop()
     if (scene_next_flag) {
       frctl.start();
     }
-  }
-}
-
-{
-sdllog(m::to_string{m::at0{m::field_names{main_vertex_attributes}}});
-sdllog(main_vertex_attributes());
-  GL::base::set_check_error_enabled(1);
-  try {
-    main_loop();
-  } catch (exception::c_exception ex) {
-    sdllog("uncaught exception", ex);
   }
 }
 

@@ -1,0 +1,31 @@
+public namespace pglapi;
+public import common -;
+
+public import glnode *;
+public import pglbase *;
+//public import pglcommon -;
+//public import pglshader -;
+
+public import SDL2::api_base *;
+public import SDL2::api_types *;
+
+public interface pgl3d_application {
+  public function tptr{pgl3d_scene_shared} get_scene_shared();
+  public function void on_build_vertices(make_vertices_i mutable& mvx);
+  public function void on_event(SDL_Event const& ev, float speed,
+    projection_info const& pjinfo);
+  public function void on_scankeys(cslice{Uint8} const& keys, float speed,
+    projection_info const& pjinfo);
+}
+
+public multithreaded interface pgl3d_scene_shared {
+  public function ptr{pgl3d_scene} make_scene(node_factory const& nodefac);
+}
+
+public threaded interface pgl3d_scene {
+  public function ptr{scene_node{node_data}} on_motion_step(float frame_speed,
+    projection_info const& pjinfo, cstrref const& status_message,
+    pgl3d_scene_shared mutable& ss, position_angle mutable& camera_r,
+    position_angle mutable& light_r);
+}
+

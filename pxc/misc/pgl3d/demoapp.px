@@ -1,0 +1,978 @@
+public namespace demoapp;
+public import common -;
+public import meta m;
+public import pglapi -;
+public import pgl3d -;
+public import pglcommon -;
+public import glconf -;
+public import glgeometry -;
+public import wfobj -;
+public import glm;
+public import text::string::positional -;
+
+// FIXME: projection_infoではなくscreen_infoだけ渡すように
+
+{
+  demoapp_application app;
+  pgl3d::main(app);
+}
+
+public struct demoapp_application()
+  <pgl3d_application>
+{	
+  public app_impl app;
+  public function void on_build_vertices(make_vertices_i mutable& mvx) {
+    build_vertices(app, mvx);
+  }
+  public function void on_event(SDL_Event const& ev, float speed,
+    projection_info const& pjinfo) {
+    handle_event(app, ev, speed, pjinfo);
+  }
+  public function void on_scankeys(cslice{Uint8} const& keys, float speed,
+    projection_info const& pjinfo) {
+    handle_keys(app, keys, speed, pjinfo);
+  }
+  public function tptr{pgl3d_scene_shared} get_scene_shared() {
+    return app.scene_shared;
+  }
+}
+
+private struct app_impl()
+{
+  public tptr{demoapp_scene_shared} const scene_shared
+    = make_tptr{demoapp_scene_shared}();
+  public player_info player;
+  public input_control ictl;
+  public bool scene_next_flag;
+  public float light_on = 1.0f;
+  init();
+  private function void init() {
+    player.posang.angle = glm::make_quat_wxyz(0.70711, 0.70711, 0.0, 0.0);
+    player.posang.position = glm::make_vec3(0.0, -10.0, 0.0);
+  }
+}
+
+public multithreaded struct demoapp_scene_shared()
+  <pgl3d_scene_shared>
+{
+  function ptr{pgl3d_scene} make_scene(node_factory const& nodefac) {
+    return make_ptr{demoapp_scene}(nodefac);
+  }
+  public position_angle posang;
+  public bool scene_next_flag;
+  public float light_on;
+  public texture_info default_font_texture_info;
+}
+
+public threaded struct demoapp_scene(node_factory const& nodefac0)
+  <pgl3d_scene>
+{
+  public scene_control sctl = scene_control(nodefac0);
+  public function ptr{scene_node{node_data}} on_motion_step(float frame_speed,
+    projection_info const& pjinfo, cstrref const& status_message,
+    pgl3d_scene_shared mutable& ss, position_angle mutable& camera_r,
+    position_angle mutable& light_r)
+  {
+    mutable& dss = downcast_mutable{demoapp_scene_shared}(ss);
+    scene_control_step(sctl, dss, frame_speed);
+    scene_control_update_buttons(sctl, *sctl.snode->children[2]);
+    scene_control_set_message(sctl, *sctl.snode->children[1], status_message,
+      0, 0,
+      dss.default_font_texture_info.char_w,
+      dss.default_font_texture_info.char_h,
+      static_cast{float}(pjinfo.screen_width),
+      static_cast{float}(pjinfo.screen_height));
+    camera_r = dss.posang;
+    light_r.position = camera_r.position +
+      camera_r.angle.to_mat3() * glm::make_vec3(3.0, 3.0, 5.0);
+    light_r.angle = camera_r.angle;
+    return sctl.snode;
+  }
+}
+
+private valuetype struct
+player_info()
+{
+  public position_angle posang;
+  public glm::vec3 pos_delta;
+  public bool accel;
+  public float accel_ratio = 0.1f;
+}
+
+private struct
+input_control()
+{
+  public varray{SDL_FingerID} fingerids;
+  public farray{bool, 2} fingdown;
+  public farray{size_t, 2} fingerdown_time;
+  public farray{glm::vec2, 2} start_pos;
+  public farray{glm::vec2, 2} cur_pos;
+  public glm::vec2 finger_xyrotate_delta;
+  public float finger_zmove_delta;
+  public int finger_zmove_mode = 0;
+  public function void finger_motion(float x, float y, float dx, float dy,
+    SDL_FingerID fng)
+  {
+    size_t fid = 2;
+    if (fingerids.size() > 0 && fingerids[0] == fng) {
+      fid = 0;
+    } else if (fingerids.size() > 1 && fingerids[1] == fng) {
+      fid = 1;
+    }
+    if (fid < 2) {
+      cur_pos[fid] = glm::make_vec2(x, y);
+      /*
+      sdllog("finger_motion", x, y, fid, fng);
+      */
+    } else {
+      /*
+      sdllog("finger_motion(ignored)", x, y, fng,
+	"fingerids:", fingerids);
+      */
+    }
+  }
+  public function void finger_down(float x, float y, SDL_FingerID fng) {
+    size_t fid = 2;
+    if (fingerids.size() > 0 && fingerids[0] == fng) {
+      fid = 0;
+    } else if (fingerids.size() > 1 && fingerids[1] == fng) {
+      fid = 1;
+    } else if (fingerids.size() < 2) {
+      fid = fingerids.size();
+      fingerids.push_back(fng);
+    }
+    if (fid < 2) {
+      fingdown[fid] = true;
+      start_pos[fid] = glm::make_vec2(x, y);
+      cur_pos[fid] = start_pos[fid];
+      /*
+      sdllog("finger_down", x, y, fid);
+      */
+      fingerdown_time[0] = 0;
+      fingerdown_time[1] = 0;
+      finger_zmove_mode = 0;
+    }
+    /*
+    sdllog("finger_down_post", fingerids);
+    */
+  }
+  public function void finger_up(SDL_FingerID fng) {
+    size_t fid = 2;
+    if (fingerids.size() > 0 && fingerids[0] == fng) {
+      fid = 0;
+    } else if (fingerids.size() > 1 && fingerids[1] == fng) {
+      fid = 1;
+    }
+    if (fid < 2) {
+      fingdown[fid] = false;
+      /*
+      sdllog("finger_up", fid);
+      */
+      if (fid == 1) {
+	start_pos[0] = cur_pos[0];
+	fingerids.resize(1, 0);
+	fingdown[1] = false;
+      } else {
+	fingerids.erase(0, 1);
+	if (fingerids.empty()) {
+	  fingdown[0] = false;
+	} else {
+	  cur_pos[0] = cur_pos[1];
+	  start_pos[0] = cur_pos[1];
+	  fingdown[0] = fingdown[1];
+	  fingdown[1] = false;
+	}
+      }
+      fingerdown_time[0] = 0;
+      fingerdown_time[1] = 0;
+      finger_zmove_mode = 0;
+    }
+    /*
+    sdllog("finger_up_post", fingerids);
+    */
+  }
+  public function void finger_action_one_finger(position_angle mutable& target,
+      float frame_speed, size_t fid)
+  {
+    mutable dx = (cur_pos[fid].x - start_pos[fid].x);
+    mutable dy = (cur_pos[fid].y - start_pos[fid].y);
+    const d = glm::distance(start_pos[fid], cur_pos[fid]);
+    if (d > 3.0) {
+      dx /= d / 3.0;
+      dy /= d / 3.0;
+    }
+    /*
+    sdllog("onefinger", dx, dy);
+    */
+    target.rotate_angle_axis(to_radians(-dy * 5.0 * frame_speed),
+	1.0, 0.0, 0.0);
+    target.rotate_angle_axis(to_radians(-dx * 5.0 * frame_speed),
+	0.0, 1.0, 0.0);
+    finger_xyrotate_delta.x = dx;
+    finger_xyrotate_delta.y = dy;
+  }
+  public function void finger_action_two_fingers(position_angle mutable& target,
+      float frame_speed)
+  {
+    const d0 = cur_pos[0] - start_pos[0];
+    const d1 = cur_pos[1] - start_pos[1];
+    if (glm::dot(d0, d1) < 0.0f) {
+      /* z move */
+      if (finger_zmove_mode != 2) {
+	const distance_start = glm::distance(start_pos[0], start_pos[1]);
+	mutable distance_cur = glm::distance(cur_pos[0], cur_pos[1]);
+	if (distance_cur <= 0.0001f) {
+	  distance_cur = 0.0001f;
+	}
+	const rat = distance_start / distance_cur;
+	const prev = finger_zmove_delta;
+	if (rat > 1.2) {
+	  finger_zmove_delta += 0.001f * frame_speed;
+	  if (finger_zmove_delta >= 1.0) {
+	    finger_zmove_delta = 1.0;
+	  }
+	  finger_zmove_mode = 1;
+	} else if (rat < 0.8) {
+	  finger_zmove_delta -= 0.001f * frame_speed;
+	  if (finger_zmove_delta <= -1.0) {
+	    finger_zmove_delta = -1.0;
+	  }
+	  finger_zmove_mode = 1;
+	}
+	if ((prev < 0.0f && finger_zmove_delta > 0.0f) ||
+	  (prev > 0.0f && finger_zmove_delta < 0.0f)) {
+	  /* stop */
+	  finger_zmove_delta = 0.0f;
+	  finger_zmove_mode = 2;
+	}
+      }
+    } else {
+      /* xy move */
+      const d0 = cur_pos[0] - start_pos[0];
+      const d1 = cur_pos[1] - start_pos[1];
+      mutable avg = (d0 + d1) / 2.0f;
+      const d = (glm::distance(start_pos[0], cur_pos[0]),
+	glm::distance(start_pos[1], cur_pos[0])) / 2.0f;
+      if (d > 3.0) {
+	avg /= d / 3.0;
+      }
+      avg /= 32.0f;
+      target.translate_relative(
+	  glm::make_vec3(avg.x, -avg.y, 0.0) * frame_speed);
+    }
+  }
+  public function void finger_action_step(player_info mutable& pl,
+      glm::vec3 mutable& pos_delta, float frame_speed)
+  {
+    position_angle mutable& posang = pl.posang;
+    /*
+    sdllog("finger_action_step", fingdown[0], fingdown[1]);
+    */
+    if (fingdown[0] && !fingdown[1]) {
+      if (fingerdown_time[0] >= 2) {
+	finger_action_one_finger(posang, frame_speed, 0);
+      } else {
+	start_pos[0] = (start_pos[0] + cur_pos[0]) / 2.0f;
+	fingerdown_time[0] += 1;
+      }
+      if (fingerids[0] == 0) {
+	/* mouse button */
+	/*
+	finger_zmove_delta -= 0.0001;
+	if (finger_zmove_delta <= -0.01) {
+	  finger_zmove_delta = -0.01;
+	}
+	*/
+      }
+    } else if (!fingdown[0] && fingdown[1]) {
+      if (fingerdown_time[1] >= 2) {
+	finger_action_one_finger(posang, frame_speed, 0);
+      } else {
+	start_pos[1] = (start_pos[1] + cur_pos[1]) / 2.0f;
+	fingerdown_time[1] += 1;
+      }
+    } else if (fingdown[0] && fingdown[1]) {
+      if (fingerdown_time[0] >= 2 && fingerdown_time[1] >= 2) {
+	finger_action_two_fingers(posang, frame_speed);
+      } else {
+	start_pos[0] = (start_pos[0] + cur_pos[0]) / 2.0f;
+	fingerdown_time[0] += 1;
+	start_pos[1] = (start_pos[1] + cur_pos[1]) / 2.0f;
+	fingerdown_time[1] += 1;
+      }
+    } else {
+      const len = glm::length(finger_xyrotate_delta);
+      posang.rotate_angle_axis(
+	  to_radians(-finger_xyrotate_delta.y * 2.0 * frame_speed),
+	  1.0, 0.0, 0.0);
+      posang.rotate_angle_axis(
+	  to_radians(-finger_xyrotate_delta.x * 2.0 * frame_speed),
+	  0.0, 1.0, 0.0);
+      const decay = 0.03f * frame_speed;
+      if (len < decay) {
+	finger_xyrotate_delta = glm::make_vec2(0.0f, 0.0f);
+      } else {
+	finger_xyrotate_delta -= finger_xyrotate_delta * decay / len;
+      }
+    }
+    posang.position += pl.pos_delta * frame_speed;
+    if (pl.accel) {
+      pl.accel_ratio = min(
+	  pl.accel_ratio + 0.003f * frame_speed, 1.0f);
+    } else {
+      pl.accel_ratio = max(
+	  pl.accel_ratio - 0.003f * frame_speed, 0.01f);
+    }
+    pl.accel_ratio = 1.0f;
+    pl.pos_delta =
+      pl.pos_delta * (1.0f - pl.accel_ratio)
+      + posang.angle.to_mat3()
+	* glm::make_vec3(0.0, 0.0, finger_zmove_delta * pl.accel_ratio);
+    /*
+    target.translate_relative(glm::make_vec3(0.0, 0.0, finger_zmove_delta)
+	* frame_speed);
+    */
+  }
+  public function void add_zdelta(float zaccel, float frame_speed)
+  {
+    finger_zmove_delta += zaccel * frame_speed;
+    if (finger_zmove_delta <= -1.0) {
+      finger_zmove_delta = -1.0;
+    }
+    if (finger_zmove_delta >= 1.0) {
+      finger_zmove_delta = 1.0;
+    }
+    finger_zmove_mode = 1;
+  }
+}
+
+function void handle_event(app_impl mutable& app,
+  SDL_Event const& ev, float frame_speed, projection_info const& pjinfo)
+{
+  const etype = ev.type;
+  if (etype == SDL_WINDOWEVENT) {
+  } else if (etype == SDL_QUIT) {
+  } else if (etype == SDL_MULTIGESTURE) {
+  } else if (etype == SDL_MOUSEBUTTONDOWN) {
+    const bx = cast_float(ev.button.x) / cast_float(pjinfo.screen_width);
+    const by = cast_float(ev.button.y) / cast_float(pjinfo.screen_height);
+    if (bx < 0.1 && by < 0.1) {
+      app.scene_next_flag = true;
+    }
+    if (bx > 0.9 && by < 0.1) {
+    }
+    if (bx > 0.9 && by > 0.9) {
+      app.light_on = app.light_on > 0.5f ? 0.0f : 1.0f;
+    }
+    sdllog("mousedown", ev.button.x, ev.button.y, ev.button.button);
+    app.ictl.finger_down(
+      cast_float(ev.button.x) / cast_float(pjinfo.screen_width),
+      cast_float(ev.button.y) / cast_float(pjinfo.screen_height),
+      0);
+  } else if (etype == SDL_MOUSEBUTTONUP) {
+    /*
+    sdllog("mouseup", ev.button.button);
+    ictl.finger_up(0);
+     */
+  } else if (etype == SDL_MOUSEMOTION) {
+    /*
+    sdllog("mousemotion", ev.button.x, ev.button.y, ev.button.button);
+     */
+  } else if (etype == SDL_FINGERDOWN) {
+    /*
+    sdllog("fingerdown", ev.tfinger.x, ev.tfinger.y, ev.tfinger.fingerId);
+    */
+    app.ictl.finger_down(ev.tfinger.x, ev.tfinger.y, ev.tfinger.fingerId);
+    if (ev.tfinger.x < 0.1 && ev.tfinger.y < 0.1) {
+      app.scene_next_flag = true;
+    }
+    if (ev.tfinger.x > 0.9 && ev.tfinger.y < 0.1) {
+    }
+    if (ev.tfinger.x > 0.9 && ev.tfinger.y > 0.9) {
+      app.player.accel = !app.player.accel;
+      app.light_on = app.light_on > 0.5f ? 0.0f : 1.0f;
+    }
+  } else if (etype == SDL_FINGERUP) {
+    /*
+    sdllog("fingerup", ev.tfinger.fingerId);
+    */
+    app.ictl.finger_up(ev.tfinger.fingerId);
+  } else if (etype == SDL_FINGERMOTION) {
+    if (m::or{is_android, is_ios}) {
+      app.ictl.finger_motion(ev.tfinger.x, ev.tfinger.y,
+	  ev.tfinger.dx, ev.tfinger.dy, ev.tfinger.fingerId);
+      /*
+      sdllog("fingermotion", ev.tfinger.x, ev.tfinger.y,
+	ev.tfinger.dx, ev.tfinger.dy, ev.tfinger.fingerId);
+      */
+    }
+  } else if (etype == SDL_APP_WILLENTERBACKGROUND) {
+  } else if (etype == SDL_APP_DIDENTERFOREGROUND) {
+  } else if (etype == SDL_KEYDOWN) {
+    // sdllog("KEYDOWN event");
+    if (ev.key.keysym.scancode == SDL_SCANCODE_TAB) {
+      app.scene_next_flag = true;
+    }
+    if (ev.key.keysym.scancode == SDL_SCANCODE_F) {
+    }
+  } else {
+    string s;
+    integral_to_hexadecimal{int}(cast_int(ev.type), s);
+    sdllog("unknown event", s);
+    /* */
+  }
+}
+
+function void handle_keys(app_impl mutable& app,
+  cslice{Uint8} const& keys, float frame_speed, projection_info const& pjinfo)
+{
+  function uint get_key(SDL_Scancode k) {
+    return keys[static_cast{uint}(k)];
+  }
+  /*
+  if (test_scroll_mode) {
+    app.player.posang.rotate_angle_axis(
+	to_radians(1.0f * frame_speed),
+	1.0, 0.0, 0.0);
+  }
+  */
+  if (get_key(SDL_SCANCODE_UP) != 0) {
+    app.player.posang.rotate_angle_axis(
+	to_radians(1.0f * frame_speed),
+	1.0, 0.0, 0.0);
+  }
+  if (get_key(SDL_SCANCODE_DOWN) != 0) {
+    app.player.posang.rotate_angle_axis(
+	to_radians(-1.0f * frame_speed),
+	1.0, 0.0, 0.0);
+  }
+  if (get_key(SDL_SCANCODE_LEFT) != 0) {
+    app.player.posang.rotate_angle_axis(
+	to_radians(1.0f * frame_speed),
+	0.0, 1.0, 0.0);
+  }
+  if (get_key(SDL_SCANCODE_RIGHT) != 0) {
+    app.player.posang.rotate_angle_axis(
+	to_radians(-1.0f * frame_speed),
+	0.0, 1.0, 0.0);
+  }
+  if (get_key(SDL_SCANCODE_SPACE) != 0) {
+    app.ictl.add_zdelta(-0.001f, frame_speed);
+  }
+  if (get_key(SDL_SCANCODE_LSHIFT) != 0) {
+    app.ictl.add_zdelta(0.001f, frame_speed);
+  }
+  if (get_key(SDL_SCANCODE_A) != 0) {
+    app.player.posang.translate_relative(
+	glm::make_vec3(-0.05, 0.0, 0.0) * frame_speed);
+  }
+  if (get_key(SDL_SCANCODE_D) != 0) {
+    app.player.posang.translate_relative(
+	glm::make_vec3(0.05, 0.0, 0.0) * frame_speed);
+  }
+  if (get_key(SDL_SCANCODE_S) != 0) {
+    app.player.posang.translate_relative(
+	glm::make_vec3(0.0, -0.05, 0.0) * frame_speed);
+  }
+  if (get_key(SDL_SCANCODE_W) != 0) {
+    app.player.posang.translate_relative(
+	glm::make_vec3(0.0, 0.05, 0.0) * frame_speed);
+  }
+  if (get_key(SDL_SCANCODE_Z) != 0) {
+    app.player.posang.rotate_angle_axis(
+	to_radians(1.0f * frame_speed), 0.0, 0.0, 1.0);
+  }
+  if (get_key(SDL_SCANCODE_X) != 0) {
+    app.player.posang.rotate_angle_axis(
+	to_radians(-1.0f * frame_speed), 0.0, 0.0, 1.0);
+  }
+  if (get_key(SDL_SCANCODE_RETURN) != 0) {
+    app.ictl.finger_zmove_delta = 0.0;
+    app.ictl.finger_zmove_mode = 1;
+  }
+  app.ictl.finger_action_step(app.player, app.player.pos_delta, frame_speed);
+  {
+    mutable& ss = *app.scene_shared;
+    ss.light_on = app.light_on;
+    ss.scene_next_flag = app.scene_next_flag;
+    ss.posang = app.player.posang;
+    app.scene_next_flag = false;
+    // sdllog("posang = ", ss.posang);
+  }
+}
+
+private function void build_vertices(app_impl mutable& app,
+  make_vertices_i mutable& pgs)
+{
+  metafunction tattr main_vertex_attributes;
+  metafunction fill_v fill{tattr};
+  metafunction joint_v poly_joint{tattr};
+  metafunction point_joint_v point_joint{tattr};
+  metafunction tattr2 main2_vertex_attributes;
+  metafunction fill2_v fill{tattr2};
+  metafunction joint2_v poly_joint{tattr2};
+  metafunction point2_joint_v point_joint{tattr2};
+  /* import */
+  const objs = make_farray{string}(
+      "parts"
+      // "al",
+      // "cessna",
+      // "skyscraper",
+      // "airboat"
+      );
+  for (const i, const name: objs) {
+    string fn = name + ".obj";
+    sdllog("load", fn);
+    const wfobjp = wfobject_read(sdl_read_file(fn));
+    const vtxs = pgs.make_vertices(vbid_main2, name);
+    const t = fill2_v(vtxs);
+    for (const j, mutable& v: wfobjp->v) {
+      // v *= 10.0f;
+    }
+    for (const k, const g: wfobjp->groups) {
+      // debug_log("group", k, *g);
+      import_wfobj(*wfobjp, *g, t)(poly_t(), mesh_index());
+      // break;
+    }
+    vtxs->num_copies_hint = 32;
+  }
+  sdllog("load prebuild");
+  {
+    const vtx = pgs.make_vertices(vbid_main, "ab-multi");
+    const t = fill_v(vtx);
+    regular_polygon(50.0, 30,
+      bump_rec(1.0, 1.0, 1, joint_v(vtx, "airboat", hole()), hole()),
+      hole())
+      (poly_t(), mesh_index());
+  }
+  /* vtx0 */
+  {
+    const vtxs = pgs.make_vertices(vbid_main, "saucer");
+    const fsmooth = fill_smooth{tattr}(vtxs);
+    const t = fill_v(vtxs);
+    regular_polygon(3.0, 40,
+      bump_rec(0.2, 0.5, 1, t, t),
+      bump_rec(0.01, 0.9, 5,
+	t,
+	sphere(10, fsmooth)))
+      (poly_t(), mesh_index());
+    vtxs->num_copies_hint = 32;
+  }
+  /* vtx2 */
+  {
+    const vtx2 = pgs.make_vertices(vbid_main, "saucer-multi");
+    const t2 = fill_v(vtx2);
+    regular_polygon(50.0, 3,
+      bump_rec(1.0, 1.0, 1, joint_v(vtx2, "saucer", hole()), hole()),
+      hole())
+      (poly_t(), mesh_index());
+  }
+  /* vtx8 */
+  {
+    const vtx = pgs.make_vertices(vbid_main, "block-multi");
+    const t = fill_v(vtx);
+    regular_polygon(600.0, 4,
+      rectangle_split(9, 8, joint_v(vtx, "block", hole())),
+      hole())
+      (poly_t(), mesh_index());
+  }
+  /* vtx9 */
+  {
+    const vtx = pgs.make_vertices(vbid_main2, "block");
+    const t = fill2_v(vtx);
+    const rnd = make_rand_generator(1U);
+    regular_polygon(50.0, 4,
+      rotate_local(glm::make_quat_angle_axis(to_radians(45.0), 0.0, 0.0, 1.0),
+	rectangle_split(30, 30,
+	  rand_bump(1, 0.8, 0.2, 0.8, 0.2, 0.8, 1.0, 4.0, rnd,
+	    t, t, t))),
+      rotate_local(glm::make_quat_angle_axis(to_radians(-45.0), 0.0, 0.0, 1.0),
+	bump_rec(0.01, 1.0, 1, t, t)))
+      (poly_t(), mesh_index());
+  }
+  /* vtx10 */
+  {
+    const vtx = pgs.make_vertices(vbid_main, "bullet");
+    const t = fill_v(vtx);
+    mutable m = glm::mat4()
+      .translate(glm::make_vec3(0.0, 0.0, 1.0))
+      .rotate(to_radians(10.0), glm::make_vec3(0.0, 0.0, 1.0));
+    regular_polygon(1.0, 6,
+      bump_apply(m, false, t, t),
+      bump_apply(m, false, t, t))
+      (poly_t(), mesh_index());
+    vtx->num_copies_hint = 32;
+  }
+  {
+    /* 60fps, macosx/linux mbp gt750m */
+    const vtx = pgs.make_vertices(vbid_main, "bullet-multi");
+    const t = fill_v(vtx);
+    regular_polygon(600.0, 4,
+      rectangle_split(170, 170, joint_v(vtx, "bullet", hole())),
+      hole())
+      (poly_t(), mesh_index());
+  }
+  {
+    const vtx = pgs.make_vertices(vbid_main, "bullet2");
+    const t = fill_v(vtx);
+    mutable m = glm::mat4()
+      .translate(glm::make_vec3(0.0, 0.0, 1.0))
+      .rotate(10.0, glm::make_vec3(0.0, 0.0, 1.0));
+    regular_polygon(1.0, 5,
+      bump_rec(0.8, 0.8, 1, t, t),
+      bump_rec(0.8, 0.8, 1, t, t))
+      (poly_t(), mesh_index());
+    vtx->num_copies_hint = 32;
+  }
+  /*
+  {
+    // 60fbp mbp intel gpu
+    const vtx = pgs.make_vertices(vbid_main, "bullet2-multi");
+    const t = fill_v(vtx);
+    const rnd = make_rand_generator(991U);
+    rand_sphere(200.0, 40000, false, false, rnd,
+      joint_v(vtx, "bullet2", hole()))
+      (poly_t(), mesh_index());
+  }
+  */
+  {
+    const vtx = pgs.make_vertices(vbid_main, "bullet2-multi");
+    const t = fill_v(vtx);
+    const rnd = make_rand_generator(991U);
+    rand_sphere(200.0, 37000, false, true, rnd,
+      point_joint_v(vtx, "bullet2", hole()))
+      (poly_t(), mesh_index());
+  }
+  {
+    const vtx = pgs.make_vertices(vbid_main, "bullet2-multi2");
+    const t = fill_v(vtx);
+    const rnd = make_rand_generator(991U);
+    rand_sphere(200.0, 20000, false, true, rnd,
+      point_joint_v(vtx, "bullet2", hole()))
+      (poly_t(), mesh_index());
+  }
+  {
+    const vtx = pgs.make_vertices(vbid_main, "bullet2-multi3");
+    const t = fill_v(vtx);
+    const rnd = make_rand_generator(991U);
+    rand_sphere(200.0, 2000, false, true, rnd,
+      point_joint_v(vtx, "bullet2", hole()))
+      (poly_t(), mesh_index());
+  }
+  {
+    const vtx = pgs.make_vertices(vbid_main, "bullet-multi-2");
+    const t = fill_v(vtx);
+    regular_polygon(600.0, 4,
+      rectangle_split(80, 80, joint_v(vtx, "bullet", hole())),
+      hole())
+      (poly_t(), mesh_index());
+  }
+  {
+    const vtx = pgs.make_vertices(vbid_main, "saucer-multi3");
+    const t = fill_v(vtx);
+    const rnd = make_rand_generator(991U);
+    rand_sphere(200.0, 200, false, true, rnd,
+      point_joint_v(vtx, "saucer", hole()))
+      (poly_t(), mesh_index());
+  }
+  {
+    const vtx = pgs.make_vertices(vbid_main, "ab-multi3");
+    const t = fill_v(vtx);
+    const rnd = make_rand_generator(991U);
+    rand_sphere(100.0, 100, false, true, rnd,
+      point_joint_v(vtx, "airboat", hole()))
+      (poly_t(), mesh_index());
+  }
+  {
+    /* particle */
+    const vtx = pgs.make_vertices(vbid_particle, "particle");
+    const p = particle(vtx);
+    const rnd = make_rand_generator(1U);
+    rand_sphere(1.0, 100, true, true, rnd, p)
+    //rand_sphere(1.0, 250, true, rnd, p)
+      (poly_t(), mesh_index());
+  }
+  {
+    /* particle multi */
+    const vtx = pgs.make_vertices(vbid_particle, "particle-multi");
+    /*
+    regular_polygon(600.0, 4,
+      // rectangle_split(200, 200, joint_v(vtx, "particle", hole())),
+      rectangle_split(100, 100, joint_v(vtx, "particle", hole())),
+      hole())
+      (poly_t(), mesh_index());
+    const vtx = bos[2]->get("particle-bb-multi")->vtxs;
+    */
+    const rnd = make_rand_generator(991U);
+    rand_sphere(60.0, 30000, true, true, rnd,
+      point_joint_v(vtx, "particle", hole()))
+      (poly_t(), mesh_index());
+  }
+  {
+    /* particle-bb */
+    const vtx = pgs.make_vertices(vbid_particle_bb, "particle-bb");
+    const p = particle_bb(vtx);
+    const rnd = make_rand_generator(1U);
+    rand_sphere(1.0, 100, true, true, rnd, p)
+      (poly_t(), mesh_index());
+  }
+  {
+    /* particle-bb multi */
+    const vtx = pgs.make_vertices(vbid_particle_bb, "particle-bb-multi");
+    const rnd = make_rand_generator(991U);
+    rand_sphere(60.0, 10000, true, true, rnd,
+      point_joint_v(vtx, "particle-bb", hole()))
+      (poly_t(), mesh_index());
+  }
+  {
+    const vtx = pgs.make_vertices(vbid_particle_bb, "mixed");
+    regular_polygon(1.0, 5,
+      bump_rec(1.0, 10.0, 1, hole(), joint_v(vtx, "saucer", hole())),
+      // joint_v(vtx, "bullet2", hole()),
+      // joint_v(vtx, "particle", hole()),
+      joint_v(vtx, "particle-bb", hole()))
+      (poly_t(), mesh_index());
+  }
+  {
+    /* for lineparticle shader */
+    const vtx = pgs.make_vertices(vbid_lineparticle, "lineparticle");
+    farray{lineparticle_vertex_attributes, 4} vs;
+    vs[0].vert = glm::make_vec2(0.0, -0.5);
+    vs[1].vert = glm::make_vec2(1.0, -0.5);
+    vs[2].vert = glm::make_vec2(1.0, 0.5);
+    vs[3].vert = glm::make_vec2(0.0, 0.5);
+    vtx->push_polygon_distinct{lineparticle_vertex_attributes, 0}(vs);
+  }
+  {
+    /* for rect2d shader */
+    const vtx = pgs.make_vertices(vbid_rect2d, "rect2d");
+    farray{rect2d_vertex_attributes, 4} vs;
+    vs[0].vert = glm::make_vec2(0.0, 0.0);
+    vs[1].vert = glm::make_vec2(1.0, 0.0);
+    vs[2].vert = glm::make_vec2(1.0, 1.0);
+    vs[3].vert = glm::make_vec2(0.0, 1.0);
+    vtx->push_polygon_distinct{rect2d_vertex_attributes, 0}(vs);
+  }
+  {
+    /* for font2 shader */
+    const vtx = pgs.make_vertices(vbid_font2, "default_font");
+    const ti = pgs.get_texture_info("font");
+    const char_w = static_cast{float}(ti.char_w);
+    const char_h = static_cast{float}(ti.char_h);
+    const point_size = static_cast{float}(max(ti.char_w, ti.char_h));
+    const char_size_px = glm::make_vec2(char_w, char_h);
+    const texture_size_px = glm::make_vec2(
+      static_cast{float}(ti.surface_w),
+      static_cast{float}(ti.surface_h));
+    const clamp_x = char_w / point_size;
+    const clamp_y = char_h / point_size;
+    font2_vertex_attributes v;
+    v.char_size_px = char_size_px;
+    v.texture_size_px = texture_size_px;
+    v.texture_origin_px = glm::make_vec2(0.0, 0.0);
+    v.coord_clamp = glm::make_vec2(clamp_x, clamp_y);
+    v.char_px = static_cast{float}(ti.char_w);
+    v.char_point_size = point_size;
+    vtx->push_point{font2_vertex_attributes}(v);
+  }
+  /* save default font metrics */
+  app.scene_shared->default_font_texture_info = pgs.get_texture_info("font");
+}
+
+metafunction nodeptr ptr{scene_node{node_data}};
+
+threaded function nodeptr make_nodeptr()
+{
+  return make_ptr{scene_node{node_data}}(joint_id_type(), glm::mat4());
+}
+
+threaded struct
+scene_control(node_factory const& nfac)
+{
+  public node_factory nodefac = nfac;
+  public float prev_spawn = 0.0;
+  public int motion_count = 0;
+  public joint_id_type joint_id_lp =
+    nodefac.get_joint_id_by_name("lineparticle");
+  public joint_id_type joint_id_font =
+    nodefac.get_joint_id_by_name("default_font");
+  public joint_id_type joint_id_rect2d =
+    nodefac.get_joint_id_by_name("rect2d");
+  public size_t cur_scene = 0;
+  public nodeptr const snode = make_nodeptr();
+  public nodeptr const node_scene = make_nodeptr();
+  public nodeptr const node_status_message = make_nodeptr();
+  public nodeptr const node_buttons = make_nodeptr();
+  public nodeptr const node_lineparticles = make_nodeptr();
+  public darray{string} const scene_names = make_darray{string}(
+    // "untitled", "saucer", "saucer-multi", "block-multi", "block",
+    // "ab-multi", "ab-multi3", "skyscraper",
+    "parts",
+    // "al", "cessna", "skyscraper", "airboat",
+    "saucer", "saucer-multi", "block-multi", "block",
+    "bullet2-multi3", "bullet2-multi2", "bullet2-multi",
+    "bullet-multi", "saucer-multi3",
+    "particle", "particle-multi",
+    "particle-bb", "particle-bb-multi");
+  init();
+  private function void init()
+  {
+    snode->children.push_back(node_scene);
+    snode->children.push_back(node_status_message);
+    snode->children.push_back(node_buttons);
+    snode->children.push_back(node_lineparticles);
+    node_scene->children.push_back(instantiate_cur_scene());
+  }
+  private function nodeptr instantiate_cur_scene()
+  {
+    const name = scene_names[cur_scene];
+    return nodefac.make_node_by_name{node_data, node_init}(name, glm::mat4());
+  }
+  public function void scene_next()
+  {
+    ++cur_scene;
+    if (cur_scene >= scene_names.size()) {
+      cur_scene = 0;
+    }
+    node_scene->children[0] = instantiate_cur_scene();
+  }
+}
+
+threaded function void
+scene_control_set_message(scene_control mutable& sctl,
+  scene_node{node_data} mutable& sn_text,
+  cstrref const& text, uint x, uint y, uint font_width, uint font_height,
+  float screen_w, float screen_h)
+{
+  {
+    mutable& nd = sn_text;
+    const n = text.size();
+    while (nd.children.size() < n) {
+      const p = make_ptr{scene_node{node_data}}(sctl.joint_id_font,
+	glm::mat4());
+      nd.children.push_back(p);
+    }
+    if (nd.children.size() > n) {
+      nd.children.erase(n, nd.children.size());
+    }
+    for (const i, const p: nd.children) {
+      const& sli = p->trans.to_slice();
+      sli[2] = (static_cast{float}(x) / screen_w) * 2.0f - 1.0f;
+      sli[3] = (static_cast{float}(y) / screen_h) * 2.0f - 1.0f;
+      x += font_width;
+     if (i < text.size()) {
+	sli[0] = static_cast{float}(text[i] - 0x20);
+      } else {
+	sli[0] = 0.0f;
+      }
+    }
+  }
+}
+
+threaded function void
+scene_control_update_buttons(scene_control mutable& sctl,
+  scene_node{node_data} mutable& sn_buttons)
+{
+  /* box */
+  mutable& nd = sn_buttons;
+  if (nd.children.size() < 1) {
+    const p = make_ptr{scene_node{node_data}}(sctl.joint_id_rect2d,
+      glm::mat4());
+    nd.children.push_back(p);
+  }
+  const cn = nd.children[0];
+  const& sli = cn->trans.to_slice();
+  sli[0] = -0.99f;
+  sli[1] = 0.81f;
+  sli[2] = 0.18f;
+  sli[3] = 0.18f;
+}
+
+threaded function void
+scene_control_step(scene_control mutable& sctl,
+  demoapp_scene_shared const& ss, float frame_speed)
+{
+  if (ss.scene_next_flag) {
+    sctl.scene_next();
+  }
+  const speed = frame_speed;
+  mutable& snode = *sctl.snode;
+  threaded function void step_lp(scene_node{node_data} mutable& sn_lp)
+  {
+    for (const i, const& snp: sn_lp.children) {
+      const& sli = snp->trans.to_slice();
+      mutable vec0 = glm::make_vec3(sli[0], sli[1], sli[2]);
+      mutable vec1 = glm::make_vec3(sli[3], sli[4], sli[5]);
+      const vd = vec1 - vec0;
+      vec0 += vd * speed / 4.0f;
+      vec1 += vd * speed / 4.0f;
+      sli[0] = vec0.x;
+      sli[1] = vec0.y;
+      sli[2] = vec0.z;
+      sli[3] = vec1.x;
+      sli[4] = vec1.y;
+      sli[5] = vec1.z;
+      const step = sli[7] + speed;
+      const sz = min(1.0f, (200.0f - step) / 20.0f);
+      sli[6] = 0.25f * sz;
+      sli[7] = step;
+    }
+    threaded function bool is_finished(ptr{scene_node{node_data}} const& snp) {
+      const& sli = snp->trans.to_slice();
+      return sli[7] > 200.0f;
+    }
+    // sdllog("erase?", sn_lp.children.size());
+    erase_cond{is_finished}(sn_lp.children);
+  }
+  threaded function void spawn_lp(scene_control mutable& sctl,
+    scene_node{node_data} mutable& sn_lp, glm::mat4 const& tr, float speed)
+  {
+    // size_t const lim = is_gles != 0 ? 20000U : 200000U;
+    size_t const lim = 200000U;
+    if (sn_lp.children.size() > lim) {
+      return;
+    }
+    const p3 = make_ptr{scene_node{node_data}}(sctl.joint_id_lp, glm::mat4());
+    const& sli = p3->trans.to_slice();
+    const p0 = tr * glm::make_vec4(0.0f, 0.0f, -5.0f, 1.0f);
+    const p1 = tr * glm::make_vec4(0.0f, 0.0f, -10.0f, 1.0f);
+    sli[0] = p0.x; /* position0 */
+    sli[1] = p0.y;
+    sli[2] = p0.z;
+    sli[3] = p1.x; /* position1 */
+    sli[4] = p1.y;
+    sli[5] = p1.z;
+    sli[6] = 0.25f; /* point_size_base */
+    sli[7] = 0.0f; /* step */
+    sn_lp.children.push_back(p3);
+  }
+  threaded function void step_snobj(scene_node{node_data} mutable& sn_scene,
+    scene_node{node_data} mutable& sn_lp)
+  {
+    const& snobj = *sn_scene.children[0];
+    for (const ci, const& csnp: snobj.children) {
+      mutable& csn = *csnp;
+      const ang = glm::make_quat_angle_axis(
+	to_radians(static_cast{float}(sctl.motion_count)), 1.0, 0.0, 0.0);
+      csn.trans = csn.data.trans_initial * ang.to_mat4();
+      if (spawn_now) {
+	spawn_lp(sctl, sn_lp, csn.trans, speed);
+      }
+    }
+  }
+  step_lp(*sctl.node_lineparticles);
+  bool spawn_now = false;
+  {
+    sctl.prev_spawn += speed;
+    if (sctl.prev_spawn > 3.0) {
+      spawn_now = ss.light_on != 0.0f;
+      sctl.prev_spawn -= 3.0;
+    }
+  }
+  step_snobj(*sctl.node_scene, *sctl.node_lineparticles);
+  sctl.motion_count += 1 * static_cast{int}(speed);
+  if (sctl.motion_count >= 360) {
+    sctl.motion_count -= 360;
+  }
+}
+

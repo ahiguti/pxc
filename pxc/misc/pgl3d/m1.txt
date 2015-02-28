@@ -1,4 +1,13 @@
 
+- parts.obj 頂点座標が完全に一致しているものがあるせいで三角形分割できない
+f 514 486 485 528 548
+  vertex	{x,1.0123960,y,-4.8927202,z,0.0000000}
+  vertex	{x,1.0123960,y,-4.8927202,z,0.0000000}
+  vertex	{x,0.9611670,y,-4.9025478,z,-0.1911880}
+  vertex	{x,1.8766540,y,-4.6193981,z,-0.3732890}
+  vertex	{x,1.9134190,y,-4.6193981,z,-0.0000000}
+
+
 - particleもinstance化してみる
 - instance化しない版のvbo_mainを作り、頂点データが大きいものはそちらを使う
 - vboが大きくなったら性能が落ちる
@@ -20,4 +29,80 @@ polygon三角形分割
 (i, i+1)と(i, j)の外積
 (i+1, i-1)と(i+1, j)の外積
 が全て同じ負号
+
+---------------------------------------------------------------------------
+エンジンの外に出すべき項目
+
+pgl3d.px
+  build_vertices()
+    pgs.make_vertices() を起点にして頂点データをセットしている。
+    これはinit_texture実行後でないといけない。フォントの情報を必要とするから。
+  input_control ictl;
+    これは入力デバイスの状態を保存するデータ
+  player_info player;
+    入力デバイスで制御するカメラ
+pglscene.px
+  struct scene_control
+    シーンノードを構築・更新する
+pglshader.px
+  init_texture 画像ファイルやフォントを読んでテクスチャにセットする
+
+motionスレッドに渡すデータ
+  frame_speed_mul フレーム時間
+  scene_reset シーンを次に進めるかどうか
+  message 画面下に出す文字列
+  font_width
+  font_height
+motionスレッドから受け取るでーた
+  cam カメラ
+  bo_instances 描画インスタンスデータ
+  stat_num_objects オブジェクト数の
+
+エンジンの外に持つデータとコード
+- 頂点データを構築するコード
+- イベントとキー状態からカメラやシーンなどを更新するコード
+
+motionスレッドに移動しないもの:
+  SDL_QUIT
+  pausedフラグ
+  SDL_WINDOWEVENT - リサイズなどのハンドルはメインスレッドで
+  frctl - フレームレート計算はメインスレッドでやる
+motionスレッドに移動するもの:
+  キーイベント
+  キーボード状態
+  MOUSE, FINGERイベント
+
+---------------------------------------------------------------------------
+motionスレッドに移動せずにエンジン分離だけ実装
+
+interface pgl3d_application {
+  function void on_build_vertices();
+  function void on_frame(float speed); // フレーム処理の最初に呼ばれる
+  function void on_event(SDL_Event const& ev);
+  function void on_keystate(cslice{Uint8} const& keys);
+  function void on_prepare_motion(); // motionスレッドのフレーム処理の直前
+}
+
+multithreaded interface pgl3d_motion {
+  function ptr{pgl3d_scene} make_scene(); // motionスレッドから呼ばれる
+}
+
+threaded interface pgl3d_scene {
+  function void on_motion_step();
+}
+
+公開関数
+function string pgl3d_get_statistics_message();
+
+demoappに分離
+- build_vertices() 移動
+- struct input_control; 移動
+- struct player_info; 移動
+- motion_thread_sharedのうち以下のもの
+    int scene_reset;
+    string message;
+- struct scene_control; 移動
+
+---------------------------------------------------------------------------
+テクスチャ、フォントを複数読み込んで利用できるようにする
 

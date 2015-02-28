@@ -2,6 +2,9 @@ public threaded namespace pglbase;
 public import common -;
 public import meta m;
 public import glm;
+public import glvertex *;
+public import glgeometry *;
+public import glconf -;
 
 public multithreaded struct instance_data {
   public varray{float} instance_buffer;
@@ -41,10 +44,6 @@ projection_info()
   public position_angle light;
   public int screen_width;
   public int screen_height;
-  public int screen_size_base;
-  public bool proj_light;
-  public float light_on = 1.0;
-  public float const distance_max = 10000.0;
 }
 
 public enum vertex_buffer_id {
@@ -61,4 +60,214 @@ public enum vertex_buffer_id {
 public function {tto, tfrom} size_t vertex_buffer_id___to(vertex_buffer_id x) {
   return static_cast{size_t}(x);
 }
+
+public tsvaluetype struct
+texture_info()
+{
+  public uint surface_w;
+  public uint surface_h;
+  public uint char_w;
+  public uint char_h;
+}
+
+public interface make_vertices_i {
+  public function ptr{vertices} make_vertices(vertex_buffer_id bo_id,
+    cstrref const& name);
+  public function texture_info get_texture_info(cstrref const& name);
+}
+
+/* built-in shaders */
+
+private metafunction instance_id_type
+  m::cond{use_copying_instancing, float, unit};
+
+public tsvaluetype struct main_uniforms
+{
+  public glm::mat4 view_projection_matrix;
+  public int sampler;
+  public int sampler_tilemap;
+  public int sampler_sm;
+  public glm::vec3 camera_pos;
+  public glm::vec3 light_pos;
+  public float light_on;
+  public glm::mat4 shadowmap_vp;
+}
+
+public tsvaluetype struct main_vertex_attributes
+{
+  public instance_id_type instance_id;
+  public glm::vec3 position;
+  public glm::vec3 normal;
+  public glm::vec3 tangent;
+  public glm::vec3 uvw;
+}
+
+public tsvaluetype struct main2_vertex_attributes
+{
+  public glm::vec3 position;
+  public glm::vec3 normal;
+  public glm::vec3 tangent;
+  public glm::vec3 uvw;
+}
+
+public tsvaluetype struct zprepass_vertex_attributes
+{
+  public instance_id_type instance_id;
+  public glm::vec3 position;
+}
+
+public tsvaluetype struct zprepass2_vertex_attributes
+{
+  public glm::vec3 position;
+}
+
+public tsvaluetype struct shadowmap_vertex_attributes
+{
+  public instance_id_type instance_id;
+  public glm::vec3 position;
+}
+
+public tsvaluetype struct shadowmap2_vertex_attributes
+{
+  public glm::vec3 position;
+}
+
+public tsvaluetype struct main_instance_attributes
+{
+  public glm::mat4 model_matrix;
+}
+
+public tsvaluetype struct ds1st_uniforms
+{
+  public glm::mat4 view_projection_matrix;
+}
+
+public tsvaluetype struct ds2nd_uniforms
+{
+  public int sampler;
+  public int sampler_tilemap;
+  public int sampler_sm;
+  public int sampler_ds0;
+  public int sampler_ds1;
+  public int sampler_ds2;
+  public int sampler_ds3;
+  public glm::vec3 camera_pos;
+  public glm::vec3 light_pos;
+  public float light_on;
+  public glm::mat4 shadowmap_vp;
+}
+
+public tsvaluetype struct ds2nd_vertex_attributes
+{
+  public glm::vec2 position;
+}
+
+public tsvaluetype struct zprepass_uniforms
+{
+  public glm::mat4 view_projection_matrix;
+}
+
+public tsvaluetype struct shadowmap_uniforms
+{
+  public glm::mat4 shadowmap_vp;
+}
+
+public tsvaluetype struct font_uniforms
+{
+  public int sampler;
+}
+
+public tsvaluetype struct font_instance_attributes
+{
+}
+
+public tsvaluetype struct font_vertex_attributes
+{
+  public glm::vec2 pos;
+  public glm::vec2 uvpos;
+}
+
+public tsvaluetype struct font2_uniforms
+{
+  public glm::vec2 screen_size_px;
+  public int sampler;
+}
+
+public tsvaluetype struct font2_instance_attributes
+{
+  public glm::vec4 idata;
+}
+
+public tsvaluetype struct font2_vertex_attributes
+{
+  public instance_id_type instance_id;
+  public glm::vec2 texture_size_px;
+  public glm::vec2 texture_origin_px;
+  public glm::vec2 char_size_px;
+  public glm::vec2 coord_clamp;
+  public float char_px;
+  public float char_point_size;
+}
+
+public tsvaluetype struct rect2d_vertex_attributes
+{
+  public instance_id_type instance_id;
+  public glm::vec2 vert;
+}
+
+public tsvaluetype struct rect2d_instance_attributes
+{
+  public glm::vec4 idata; /* x0, y0, dx, dy */
+}
+
+public tsvaluetype struct rect2d_uniforms
+{
+}
+
+public tsvaluetype struct particle_uniforms
+{
+  public float point_size_base;
+}
+
+public tsvaluetype struct particle_instance_attributes
+{
+  public glm::mat4 model_matrix; /* vp applied */
+}
+
+public tsvaluetype struct particle_vertex_attributes
+{
+  public glm::vec3 position;
+}
+
+public tsvaluetype struct particle_bb_uniforms
+{
+  public glm::mat4 view_projection_matrix;
+  public glm::mat4 camera_matrix;
+  public float point_size_base;
+}
+
+public tsvaluetype struct particle_bb_vertex_attributes
+{
+  public glm::vec3 position;
+  public glm::vec2 local_position;
+}
+
+public tsvaluetype struct lineparticle_uniforms
+{
+  public glm::mat4 view_projection_matrix;
+  public glm::vec2 screen_size_px;
+  public float screen_size_base;
+}
+
+public tsvaluetype struct lineparticle_vertex_attributes
+{
+  public instance_id_type instance_id;
+  public glm::vec2 vert;
+}
+
+public tsvaluetype struct lineparticle_instance_attributes
+{
+  public glm::mat3 idata;
+}
+
 

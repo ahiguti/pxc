@@ -11,41 +11,29 @@ public import text::string::positional -;
 public import glnode -;
 public import pglbase -;
 public import pglcommon -;
-
-public threaded struct node_data
-{
-  public glm::mat4 trans_initial;
-  public glm::mat4 trans_cur;
-}
-
-public threaded function void
-node_init(scene_node{node_data} mutable& sn)
-{
-  sn.data.trans_initial = sn.trans;
-  sn.data.trans_cur = sn.trans;
-}
+public import pglapi -;
 
 public multithreaded struct
-motion_thread_shared(varray{instances_type} const& bo_instances0)
+motion_thread_shared(varray{instances_type} const& bo_instances0,
+  tptr{pgl3d_scene_shared} const& pss0)
 {
+  public varray{instances_type} bo_instances = bo_instances0;
+  public tptr{pgl3d_scene_shared} pss = pss0;
   public bool modifying = false;
   public bool terminate_motion_thread = false;
   public float frame_speed_mul = 1.0f;
-  public int scene_reset = -1;
   public projection_info cam;
   public string message;
-  public uint font_width = 1;
-  public uint font_height = 1;
-  public varray{instances_type} bo_instances = bo_instances0;
   public size_t stat_num_objects;
 }
 
 public struct
 motion_thread_object(node_factory const& nfac,
-  varray{instances_type} const& bo_instances)
+  varray{instances_type} const& bo_instances,
+  tptr{pgl3d_scene_shared} const& pss)
 {
   public tptr{motion_thread_shared} const sharedp =
-    make_tptr{motion_thread_shared}(bo_instances);
+    make_tptr{motion_thread_shared}(bo_instances, pss);
   private callable_ptr{void, m::nil} const thr =
     make_thread_ptr{motion_thread_main}(sharedp, nfac);
   function ~ {
@@ -75,10 +63,11 @@ threaded function void
 motion_thread_main(tptr{motion_thread_shared} const& sptr,
   node_factory const& nfac0)
 {
-  mutable sctl = scene_control(nfac0);
+  ptr{pgl3d_scene} const ps = sptr->pss->make_scene(nfac0);
   mutable lck = lock_guard{motion_thread_shared}(sptr);
   while (true) {
     mutable& shared = *lck;
+    /* wait until shared.modifying == false */
     if (shared.terminate_motion_thread) {
       break;
     }
@@ -88,25 +77,22 @@ motion_thread_main(tptr{motion_thread_shared} const& sptr,
     }
     /* motion step */
     {
-      if (shared.scene_reset >= 0) {
-	sctl.scene_next();
-      }
-    }
-    {
+      position_angle camera_upd;
+      position_angle light_upd;
+      const nodep = ps->on_motion_step(shared.frame_speed_mul, shared.cam,
+	shared.message, *shared.pss, camera_upd, light_upd);
+      shared.cam.camera = camera_upd;
+      shared.cam.light = light_upd;
       const sm_view = shared.cam.light.to_mat4().inverse();
       const sm_vp = shared.cam.sm_projection * sm_view;
       const vp = shared.cam.projection * shared.cam.camera.to_mat4().inverse();
       node_common_data ncd;
       ncd.shadowmapping_vp = sm_vp;
       ncd.vp = vp;
-      scene_control_step(sctl, shared);
-      scene_control_set_message(sctl, *sctl.snode->children[1],
-	shared.message,
-	0, 0, shared.font_width, shared.font_height,
-	static_cast{float}(shared.cam.screen_width),
-	static_cast{float}(shared.cam.screen_height));
-      scene_control_update_buttons(sctl, *sctl.snode->children[2]);
-      scene_control_prepare_instance_data(sctl, ncd, shared.bo_instances);
+      {
+	clear_instances(shared.bo_instances);
+	prepare_instance_data(*nodep, ncd, shared.bo_instances);
+      }
       shared.stat_num_objects = ncd.stat_num_objects;
     }
     shared.modifying = false;
@@ -119,193 +105,6 @@ metafunction nodeptr ptr{scene_node{node_data}};
 threaded function nodeptr make_nodeptr()
 {
   return make_ptr{scene_node{node_data}}(joint_id_type(), glm::mat4());
-}
-
-threaded struct
-scene_control(node_factory const& nfac)
-{
-  public node_factory nodefac = nfac;
-  public float prev_spawn = 0.0;
-  public int motion_count = 0;
-  public joint_id_type joint_id_lp =
-    nodefac.get_joint_id_by_name("lineparticle");
-  public joint_id_type joint_id_font =
-    nodefac.get_joint_id_by_name("default_font");
-  public joint_id_type joint_id_rect2d =
-    nodefac.get_joint_id_by_name("rect2d");
-  public size_t cur_scene = 0;
-  public nodeptr const snode = make_nodeptr();
-  public nodeptr const node_scene = make_nodeptr();
-  public nodeptr const node_status_message = make_nodeptr();
-  public nodeptr const node_buttons = make_nodeptr();
-  public nodeptr const node_lineparticles = make_nodeptr();
-  public darray{string} const scene_names = make_darray{string}(
-    // "untitled", "saucer", "saucer-multi", "block-multi", "block",
-    // "ab-multi", "ab-multi3", "skyscraper",
-    "parts",
-    // "al", "cessna", "skyscraper", "airboat",
-    "saucer", "saucer-multi", "block-multi", "block",
-    "bullet2-multi3", "bullet2-multi2", "bullet2-multi",
-    "bullet-multi", "saucer-multi3",
-    "particle", "particle-multi",
-    "particle-bb", "particle-bb-multi");
-  init();
-  private function void init()
-  {
-    snode->children.push_back(node_scene);
-    snode->children.push_back(node_status_message);
-    snode->children.push_back(node_buttons);
-    snode->children.push_back(node_lineparticles);
-    node_scene->children.push_back(instantiate_cur_scene());
-  }
-  private function nodeptr instantiate_cur_scene()
-  {
-    const name = scene_names[cur_scene];
-    return nodefac.make_node_by_name{node_data, node_init}(name, glm::mat4());
-  }
-  public function void scene_next()
-  {
-    ++cur_scene;
-    if (cur_scene >= scene_names.size()) {
-      cur_scene = 0;
-    }
-    node_scene->children[0] = instantiate_cur_scene();
-  }
-}
-
-threaded function void
-scene_control_set_message(scene_control mutable& sctl,
-  scene_node{node_data} mutable& sn_text,
-  cstrref const& text, uint x, uint y, uint font_width, uint font_height,
-  float screen_w, float screen_h)
-{
-  {
-    mutable& nd = sn_text;
-    const n = text.size();
-    while (nd.children.size() < n) {
-      const p = make_ptr{scene_node{node_data}}(sctl.joint_id_font,
-	glm::mat4());
-      nd.children.push_back(p);
-    }
-    if (nd.children.size() > n) {
-      nd.children.erase(n, nd.children.size());
-    }
-    for (const i, const p: nd.children) {
-      const& sli = p->trans.to_slice();
-      sli[2] = (static_cast{float}(x) / screen_w) * 2.0f - 1.0f;
-      sli[3] = (static_cast{float}(y) / screen_h) * 2.0f - 1.0f;
-      x += font_width;
-     if (i < text.size()) {
-	sli[0] = static_cast{float}(text[i] - 0x20);
-      } else {
-	sli[0] = 0.0f;
-      }
-    }
-  }
-}
-
-threaded function void
-scene_control_update_buttons(scene_control mutable& sctl,
-  scene_node{node_data} mutable& sn_buttons)
-{
-  /* box */
-  mutable& nd = sn_buttons;
-  if (nd.children.size() < 1) {
-    const p = make_ptr{scene_node{node_data}}(sctl.joint_id_rect2d,
-      glm::mat4());
-    nd.children.push_back(p);
-  }
-  const cn = nd.children[0];
-  const& sli = cn->trans.to_slice();
-  sli[0] = -0.99f;
-  sli[1] = 0.81f;
-  sli[2] = 0.18f;
-  sli[3] = 0.18f;
-}
-
-threaded function void
-scene_control_step(scene_control mutable& sctl,
-  motion_thread_shared const& mts)
-{
-  const speed = mts.frame_speed_mul;
-  mutable& snode = *sctl.snode;
-  threaded function void step_lp(scene_node{node_data} mutable& sn_lp)
-  {
-    for (const i, const& snp: sn_lp.children) {
-      const& sli = snp->trans.to_slice();
-      mutable vec0 = glm::make_vec3(sli[0], sli[1], sli[2]);
-      mutable vec1 = glm::make_vec3(sli[3], sli[4], sli[5]);
-      const vd = vec1 - vec0;
-      vec0 += vd * speed / 4.0f;
-      vec1 += vd * speed / 4.0f;
-      sli[0] = vec0.x;
-      sli[1] = vec0.y;
-      sli[2] = vec0.z;
-      sli[3] = vec1.x;
-      sli[4] = vec1.y;
-      sli[5] = vec1.z;
-      const step = sli[7] + speed;
-      const sz = min(1.0f, (200.0f - step) / 20.0f);
-      sli[6] = 0.25f * sz;
-      sli[7] = step;
-    }
-    threaded function bool is_finished(ptr{scene_node{node_data}} const& snp) {
-      const& sli = snp->trans.to_slice();
-      return sli[7] > 200.0f;
-    }
-    // sdllog("erase?", sn_lp.children.size());
-    erase_cond{is_finished}(sn_lp.children);
-  }
-  threaded function void spawn_lp(scene_control mutable& sctl,
-    scene_node{node_data} mutable& sn_lp, glm::mat4 const& tr, float speed)
-  {
-    // size_t const lim = is_gles != 0 ? 20000U : 200000U;
-    size_t const lim = 200000U;
-    if (sn_lp.children.size() > lim) {
-      return;
-    }
-    const p3 = make_ptr{scene_node{node_data}}(sctl.joint_id_lp, glm::mat4());
-    const& sli = p3->trans.to_slice();
-    const p0 = tr * glm::make_vec4(0.0f, 0.0f, -5.0f, 1.0f);
-    const p1 = tr * glm::make_vec4(0.0f, 0.0f, -10.0f, 1.0f);
-    sli[0] = p0.x; /* position0 */
-    sli[1] = p0.y;
-    sli[2] = p0.z;
-    sli[3] = p1.x; /* position1 */
-    sli[4] = p1.y;
-    sli[5] = p1.z;
-    sli[6] = 0.25f; /* point_size_base */
-    sli[7] = 0.0f; /* step */
-    sn_lp.children.push_back(p3);
-  }
-  threaded function void step_snobj(scene_node{node_data} mutable& sn_scene,
-    scene_node{node_data} mutable& sn_lp)
-  {
-    const& snobj = *sn_scene.children[0];
-    for (const ci, const& csnp: snobj.children) {
-      mutable& csn = *csnp;
-      const ang = glm::make_quat_angle_axis(
-	to_radians(static_cast{float}(sctl.motion_count)), 1.0, 0.0, 0.0);
-      csn.trans = csn.data.trans_initial * ang.to_mat4();
-      if (spawn_now) {
-	spawn_lp(sctl, sn_lp, csn.trans, speed);
-      }
-    }
-  }
-  step_lp(*sctl.node_lineparticles);
-  bool spawn_now = false;
-  {
-    sctl.prev_spawn += speed;
-    if (sctl.prev_spawn > 3.0) {
-      spawn_now = mts.cam.light_on != 0.0f;
-      sctl.prev_spawn -= 3.0;
-    }
-  }
-  step_snobj(*sctl.node_scene, *sctl.node_lineparticles);
-  sctl.motion_count += 1 * static_cast{int}(speed);
-  if (sctl.motion_count >= 360) {
-    sctl.motion_count -= 360;
-  }
 }
 
 threaded struct node_common_data
@@ -385,13 +184,5 @@ prepare_instance_data(tsn const& sn, node_common_data mutable& ncd,
   for (const i, const& snp: sn.children) {
     prepare_instance_data(*snp, ncd, ibs);
   }
-}
-
-threaded function void
-scene_control_prepare_instance_data(scene_control mutable& sctl,
-  node_common_data mutable& ncd, varray{instances_type} mutable& ibs)
-{
-  clear_instances(ibs);
-  prepare_instance_data(*sctl.snode, ncd, ibs);
 }
 
