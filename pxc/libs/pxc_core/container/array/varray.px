@@ -4,6 +4,7 @@ public import container::array::refguard;
 
 extern "types" inline
 #include <limits>
+#include <boost/type_traits.hpp>
 namespace pxcrt {
 
 template <typename T>
@@ -224,7 +225,7 @@ struct pxcvarray : public refguard_base {
   pxcvarray(pxcvarray&& x)
     { move_construct_internal(x); }
   pxcvarray(pxcvarray& x) {
-    if (std::is_copy_constructible<T>::value) {
+    if (boost::is_copy_constructible<T>::value) {
       construct_internal(x.start, x.valid_len);
     } else {
       move_construct_internal(x);
@@ -249,7 +250,7 @@ struct pxcvarray : public refguard_base {
     return *this;
   }
   pxcvarray& operator =(pxcvarray& x) {
-    if (std::is_copy_assignable<T>::value) {
+    if (boost::is_copy_assignable<T>::value) {
       return *this = const_cast<const pxcvarray&>(x);
     } else {
       return *this = const_cast<pxcvarray&&>(x);

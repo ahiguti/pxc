@@ -12,7 +12,7 @@ LOCAL_C_INCLUDES := \
 
 LOCAL_EXPORT_C_INCLUDES := $(LOCAL_C_INCLUDES)
 
-LOCAL_SRC_FILES := gen/pgl3d.px.cc
+LOCAL_SRC_FILES := gen/demoapp.px.cc
 
 LOCAL_LDLIBS := -lGLESv2 -llog
 LOCAL_CPP_FEATURES += rtti exceptions
