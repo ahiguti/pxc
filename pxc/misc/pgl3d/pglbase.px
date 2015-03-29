@@ -5,6 +5,7 @@ public import glm;
 public import glvertex *;
 public import glgeometry *;
 public import glconf -;
+public import scenenode -;
 
 public multithreaded struct instance_data {
   public varray{float} instance_buffer;
@@ -46,6 +47,22 @@ projection_info()
   public int screen_height;
 }
 
+/*
+public struct vertex_buffer_id(uint value0) {
+  public uint const value = value0;
+}
+
+public function {tto, tfrom} size_t vertex_buffer_id___to(vertex_buffer_id x) {
+  return x.value;
+}
+
+public internface
+initialize_instance_data_i
+{
+  public function initialize_instance_data(cstrref const& name) const;
+}
+*/
+
 public enum vertex_buffer_id {
   vbid_main = 0,
   vbid_main2 = 1,
@@ -60,6 +77,8 @@ public enum vertex_buffer_id {
 public function {tto, tfrom} size_t vertex_buffer_id___to(vertex_buffer_id x) {
   return static_cast{size_t}(x);
 }
+/*
+*/
 
 public tsvaluetype struct
 texture_info()
@@ -73,7 +92,23 @@ texture_info()
 public interface make_vertices_i {
   public function ptr{vertices} make_vertices(vertex_buffer_id bo_id,
     cstrref const& name);
-  public function texture_info get_texture_info(cstrref const& name);
+  public function texture_info get_texture_info(cstrref const& name) const;
+  /*
+  public function vertex_buffer_id get_vertex_buffer_id(cstrref const& name)
+    const;
+  */
+}
+
+public threaded struct node_common_data
+{
+  public glm::mat4 shadowmapping_vp;
+  public glm::mat4 vp;
+  public size_t stat_num_objects;
+}
+
+public multithreaded interface prepare_instance_data_i {
+  public function void prepare_instance_data(scene_node{node_data} const& sn,
+    node_common_data mutable& ncd, varray{instances_type} mutable& ibs);
 }
 
 /* built-in shaders */
@@ -135,31 +170,6 @@ public tsvaluetype struct shadowmap2_vertex_attributes
 public tsvaluetype struct main_instance_attributes
 {
   public glm::mat4 model_matrix;
-}
-
-public tsvaluetype struct ds1st_uniforms
-{
-  public glm::mat4 view_projection_matrix;
-}
-
-public tsvaluetype struct ds2nd_uniforms
-{
-  public int sampler;
-  public int sampler_tilemap;
-  public int sampler_sm;
-  public int sampler_ds0;
-  public int sampler_ds1;
-  public int sampler_ds2;
-  public int sampler_ds3;
-  public glm::vec3 camera_pos;
-  public glm::vec3 light_pos;
-  public float light_on;
-  public glm::mat4 shadowmap_vp;
-}
-
-public tsvaluetype struct ds2nd_vertex_attributes
-{
-  public glm::vec2 position;
 }
 
 public tsvaluetype struct zprepass_uniforms

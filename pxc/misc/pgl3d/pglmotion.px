@@ -1,0 +1,117 @@
+public namespace pglmotion;
+public import common -;
+public import numeric::fpmath -;
+public import glm;
+public import io::time -;
+public import io::environ -;
+public import exception -;
+public import meta m;
+public import text::string::positional -;
+
+public import scenenode -;
+public import pglbase -;
+public import pglcommon -;
+public import pglapi -;
+
+public multithreaded struct
+motion_thread_shared(varray{instances_type} const& bo_instances0,
+  tptr{pgl3d_scene_shared} const& pss0,
+  tptr{prepare_instance_data_i} const& pidi0)
+{
+  public varray{instances_type} bo_instances = bo_instances0;
+  public tptr{pgl3d_scene_shared} pss = pss0;
+  public tptr{prepare_instance_data_i} pidi = pidi0;
+  public bool modifying = false;
+  public bool terminate_motion_thread = false;
+  public float frame_speed_mul = 1.0f;
+  public projection_info cam;
+  public string message;
+  public size_t stat_num_objects;
+}
+
+public struct
+motion_thread_object(node_factory const& nfac,
+  varray{instances_type} const& bo_instances,
+  tptr{pgl3d_scene_shared} const& pss,
+  tptr{prepare_instance_data_i} const& pidi)
+{
+  public tptr{motion_thread_shared} const sharedp =
+    make_tptr{motion_thread_shared}(bo_instances, pss, pidi);
+  private callable_ptr{void, m::nil} const thr =
+    make_thread_ptr{motion_thread_main}(sharedp, nfac);
+  function ~ {
+    mutable lck = lock_guard{motion_thread_shared}(sharedp);
+    lck->terminate_motion_thread = true;
+    lck.notify_one();
+  }
+  public function {f} void wait_and_exec()
+  {
+    mutable lck = lock_guard{motion_thread_shared}(sharedp);
+    mutable& shared = *lck;
+    while (true) {
+      if (!shared.modifying) {
+	break;
+      }
+      lck.wait();
+    }
+    f(shared);
+    shared.modifying = true;
+    lck.notify_one();
+  }
+}
+
+/* private */
+
+threaded function void
+motion_thread_main(tptr{motion_thread_shared} const& sptr,
+  node_factory const& nfac0)
+{
+  ptr{pgl3d_scene} const ps = sptr->pss->make_scene(nfac0);
+  mutable lck = lock_guard{motion_thread_shared}(sptr);
+  while (true) {
+    mutable& shared = *lck;
+    /* wait until shared.modifying == false */
+    if (shared.terminate_motion_thread) {
+      break;
+    }
+    if (!shared.modifying) {
+      lck.wait();
+      continue;
+    }
+    /* motion step */
+    {
+      position_angle camera_upd;
+      position_angle light_upd;
+      const nodep = ps->on_motion_step(shared.frame_speed_mul, shared.cam,
+	shared.message, *shared.pss, camera_upd, light_upd);
+      shared.cam.camera = camera_upd;
+      shared.cam.light = light_upd;
+      const sm_view = shared.cam.light.to_mat4().inverse();
+      const sm_vp = shared.cam.sm_projection * sm_view;
+      const vp = shared.cam.projection * shared.cam.camera.to_mat4().inverse();
+      node_common_data ncd;
+      ncd.shadowmapping_vp = sm_vp;
+      ncd.vp = vp;
+      {
+	clear_instances(shared.bo_instances);
+	shared.pidi->prepare_instance_data(*nodep, ncd, shared.bo_instances);
+      }
+      shared.stat_num_objects = ncd.stat_num_objects;
+    }
+    shared.modifying = false;
+    lck.notify_one();
+  }
+}
+
+threaded function void
+clear_instances(varray{instances_type} mutable& ibs)
+{
+  for (const bo_id, mutable& instances: ibs) {
+    for (const i, mutable& ai: instances) {
+      for (const j, mutable& aj: ai) {
+	aj.instance_buffer.clear();
+      }
+    }
+  }
+}
+

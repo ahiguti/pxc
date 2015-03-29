@@ -1,4 +1,11 @@
 
+- シェーダを抽象化
+- テクスチャ、フォントを複数読み込んで利用できるようにする
+- 頂点データを入れ替えられるようにする
+- buffer_appendをコード共通化
+
+---------------------------------------------------------------------------
+
 - parts.obj 頂点座標が完全に一致しているものがあるせいで三角形分割できない
 f 514 486 485 528 548
   vertex	{x,1.0123960,y,-4.8927202,z,0.0000000}
@@ -105,4 +112,83 @@ demoappに分離
 
 ---------------------------------------------------------------------------
 テクスチャ、フォントを複数読み込んで利用できるようにする
+
+---------------------------------------------------------------------------
+シェーダ抽象化
+
+solidシェーダ群:
+  - shadowmapシェーダ
+  - zprepassシェーダ
+  - mainシェーダ
+  不透過で多面体で構成されるオブジェクトのためのシェーダ。
+  それぞれinstancingするかどうかの違いで二種類のシェーダがあり、
+  対応してvboがvbid_mainとvbid_main2の二種類ある。
+  現状一つの実装しかない。
+particleシェーダ:
+  - particleシェーダ
+  - particle_bbシェーダ
+  - lineparticleシェーダ
+  - font2シェーダ
+  - rect2dシェーダ
+  これらはshadowmappingやz-prepassをおこなわない単体のシェーダ
+  描画順序を指定できるようにしなければならない
+  シェーダ毎にインスタンスデータのフォーマットが違う
+  シェーダ毎にprepare_instance_dataで入れる内容が違う
+
+solidシェーダは3パスに分かれているのでGLSLプログラムは3つ作る必要がある
+particleシェーダは1パスでGLSLプログラムは1つだけ
+
+prepare_instance_data
+  varray{instances_type} mutable& ibs これにインスタンスデータを入れる
+  ibs[bo_id] : bo_idはvbid_???のいずれか。
+  これの実装を抽象化する必要がある。
+
+struct vertex_buffer
+  vbo_valuesとvbo_elemsの二つのVBOハンドルを持つ
+
+metafunction instance_type varray{varray{instance_data}};
+  [vs_id][0or1]
+  vs_id: vboに入れた頂点データのid
+  0or1: 0にはmodel行列 1にはmvp行列を入れる
+struct instance_data
+  varray{float} instance_buffer;
+  インスタンス1つのmodel行列など
+
+draw_instancedの6番目の引数(0or1)はインスタンスデータのうち、
+model or mvpのどちらを使うかの区別。shadowmapシェーダがmvpのほうを
+使っている(やめるか？)
+
+---------------------------------------------------------------------------
+シェーダのインタフェース
+
+- ドローコール前のuniformなど設定、ドローコールの発行
+- インスタンスデータ作成
+
+interface shader_solid {
+  ;
+}
+
+interface shader_particle {
+  ;
+}
+
+---------------------------------------------------------------------------
+シェーダ抽象化で切り出しが必要な箇所
+
+pglscene.px
+  prepare_instance_data
+    シーングラフからインスタンスデータを作る処理。
+pglshareder.px
+  pglshaderコンストラクタ
+    vbidを実行時に払い出すように変更必要。
+    vbidごとのvertex_bufferを作る処理。
+  draw_frame
+    ドローコールを発行する。
+
+手順:
+とりあえずvbidの払い出しとvertex_buffer構築から書き換える。
+  vbidはグローバルではなくpglshaderに問い合わせて取得するように変更。
+  make_vertices_iに問い合わせることもできるように。
+その前にprepare_instance_dataの実装をシェーダの側にもってくる。
+tcallableをpglshaderで作り、それをpglsceneに渡す。
 
