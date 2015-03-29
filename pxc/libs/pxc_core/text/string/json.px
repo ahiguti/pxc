@@ -83,18 +83,18 @@ public threaded struct ser_json {
   public metafunction des_value_skip string_parse_token_skip;
 }
 
-private threaded function {t} void unknown_to_string(t const& v,
+public threaded function {t} void unknown_to_string(t const& v,
   string mutable& buf)
 {
   buf.append("null");
 }
 
-private threaded function void unit_to_string(unit v, string mutable& buf)
+public threaded function void unit_to_string(unit v, string mutable& buf)
 {
   buf.append("null");
 }
 
-private threaded function void bool_to_string(bool v, string mutable& buf)
+public threaded function void bool_to_string(bool v, string mutable& buf)
 {
   if (v) {
     buf.append("true");
@@ -103,22 +103,22 @@ private threaded function void bool_to_string(bool v, string mutable& buf)
   }
 }
 
-private threaded function {t} void string_append_encode(t const& x,
+public threaded function {t} void string_append_encode(t const& x,
   string mutable& v)
 {
   e::json_encode(x, v);
 }
 
-private threaded function {ch} void string_append_char(string mutable& v)
+public threaded function {ch} void string_append_char(string mutable& v)
 {
   v.push_back(ch);
 }
 
-private threaded function void string_append_none(string mutable& v)
+public threaded function void string_append_none(string mutable& v)
 {
 } 
 
-private threaded function size_t token_length(cstrref const& s)
+public threaded function size_t token_length(cstrref const& s)
 {
   if (s.empty()) {
     return 0;
@@ -139,7 +139,7 @@ private threaded function size_t token_length(cstrref const& s)
   return s.size();
 }
 
-private threaded function size_t find_brace_close(cstrref const& s)
+public threaded function size_t find_brace_close(cstrref const& s)
 {
   size_t level = 1;
   bool qstr = false;
@@ -163,7 +163,7 @@ private threaded function size_t find_brace_close(cstrref const& s)
   return s.size();
 }
 
-private threaded function size_t find_string_close(cstrref const& s)
+public threaded function size_t find_string_close(cstrref const& s)
 {
   for (size_t i, uchar ch : s) {
     if (ch == '"') {
@@ -173,7 +173,7 @@ private threaded function size_t find_string_close(cstrref const& s)
   return s.size();
 }
 
-private threaded function void string_skip_space(cstrref mutable& s)
+public threaded function void string_skip_space(cstrref mutable& s)
 {
   while (!s.empty()) {
     uchar ch = s[0];
@@ -184,7 +184,7 @@ private threaded function void string_skip_space(cstrref mutable& s)
   }
 }
 
-private threaded function {t, f} t string_parse_token(cstrref mutable& s)
+public threaded function {t, f} t string_parse_token(cstrref mutable& s)
 {
   string_skip_space(s);
   size_t const toklen = token_length(s);
@@ -193,7 +193,7 @@ private threaded function {t, f} t string_parse_token(cstrref mutable& s)
   return f(stok);
 }
 
-private threaded function string string_parse_string_unescape(
+public threaded function string string_parse_string_unescape(
   cstrref mutable& s)
 {
   return string_parse_token{string, str_decode}(s);
@@ -208,13 +208,13 @@ private threaded function string string_parse_string_unescape(
   }
 }
 
-private metafunction string_parse_integral{t}
+public metafunction string_parse_integral{t}
   string_parse_token{t, p::decimal_to_integral{t}};
 
-private metafunction string_parse_fp{t}
+public metafunction string_parse_fp{t}
   string_parse_token{t, p::decimal_to_fp{t}};
 
-private threaded function bool string_parse_bool(cstrref mutable& s)
+public threaded function bool string_parse_bool(cstrref mutable& s)
 {
   return string_parse_token{bool, parse_bool}(s);
   threaded function bool parse_bool(cstrref const& stok) {
@@ -226,13 +226,13 @@ private threaded function bool string_parse_bool(cstrref mutable& s)
   }
 }
 
-private threaded function unit string_parse_unit(cstrref mutable& s)
+public threaded function unit string_parse_unit(cstrref mutable& s)
 {
   string_parse_token_skip(s);
   return unit();
 }
 
-private threaded function size_t string_parse_symbol_peek(
+public threaded function size_t string_parse_symbol_peek(
   cstrref mutable& stok)
 {
   size_t const sz0 = stok.size();
@@ -248,7 +248,7 @@ private threaded function size_t string_parse_symbol_peek(
   // debug_log("spsp", stok);
 }
 
-private threaded function void string_parse_symbol(cstrref mutable& stok,
+public threaded function void string_parse_symbol(cstrref mutable& stok,
   cstrref mutable& s)
 {
   size_t const sz0 = stok.size();
@@ -263,7 +263,7 @@ private threaded function void string_parse_symbol(cstrref mutable& stok,
   }
 }
 
-private threaded function {ch} bool string_parse_char_cond(cstrref mutable& s)
+public threaded function {ch} bool string_parse_char_cond(cstrref mutable& s)
 {
   string_skip_space(s);
   if (s.size() > 0 && s[0] == ch) {
@@ -274,7 +274,7 @@ private threaded function {ch} bool string_parse_char_cond(cstrref mutable& s)
   }
 }
 
-private threaded function {ch0, ch1} void string_parse_char_skip(
+public threaded function {ch0, ch1} void string_parse_char_skip(
   cstrref mutable& s)
 {
   string_skip_space(s);
@@ -291,14 +291,14 @@ private threaded function {ch0, ch1} void string_parse_char_skip(
   }
 }
 
-private threaded function void string_parse_token_skip(cstrref mutable& s)
+public threaded function void string_parse_token_skip(cstrref mutable& s)
 {
   string_skip_space(s);
   size_t const toklen = token_length(s);
   s.increment_front(toklen);
 }
 
-private threaded function {ch} bool string_parse_char_peek_cond(
+public threaded function {ch} bool string_parse_char_peek_cond(
   cstrref mutable& s)
 {
   string_skip_space(s);

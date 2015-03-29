@@ -4403,8 +4403,13 @@ void expr_funcdef::check_type(symbol_table *lookup)
     }
   }
   if (ext_pxc && !block->tinfo.template_descent) {
-    /* external and not template. stmts are not necessary. */
+    /* imported and not template. stmts are not necessary. */
     block->stmts = 0;
+    if ((this->get_attribute() & attribute_public) == 0 &&
+      !this->is_virtual_or_member_function()) {
+      /* imported, private, and not template. argdecls are not necessary. */
+      block->argdecls = 0;
+    }
   }
   fn_check_type(block, lookup);
 }
