@@ -1520,6 +1520,9 @@ static term eval_meta_characteristic(const term_list_range& tlev,
     return term(is_default_constructible(tlev[0]));
   } else if (s == "copyable") {
     return term(is_copyable(tlev[0]));
+  } else if (s == "threaded") {
+    attribute_e attr = get_term_threading_attribute(tlev[0]);
+    return term((attr & attribute_threaded) != 0);
   }
   return term();
 }

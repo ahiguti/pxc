@@ -3,7 +3,7 @@ public import common -;
 public import meta m;
 public import pointer::func -;
 
-public threaded function extern "pxcrt::get_fp" funcptr{int, {int}}
+public threaded function extern "pxcrt::get_fp" funcptr{int, {{int, 1, 1}}}
 get_fp();
 public threaded function extern "pxcrt::get_fp2" funcptr{void, {int, double}}
 get_fp2();
@@ -11,10 +11,10 @@ get_fp2();
 extern "types" inline
 namespace pxcrt {
 
-int test_fp(int x);
+int test_fp(int& x);
 void test_fp2(int x, double y);
 
-static inline typename funcptr1<int, int>::type get_fp()
+static inline typename funcptr1<int, int&>::type get_fp()
 { return &test_fp; }
 static inline typename funcptr2<void, int, double>::type get_fp2()
 { return &test_fp2; }
@@ -26,15 +26,17 @@ extern "implementation" inline
 #include <stdio.h>
 namespace pxcrt {
 
-int test_fp(int x) { return x * 2; }
+int test_fp(int& x) { x += 3; return x * 2; }
 void test_fp2(int x, double y) { printf("value=%d,%f\n", x, y); }
 
 };
 ;
 
 {
-  funcptr{int, {int}} f = get_fp();
-  const y = f(123);
+  funcptr{int, {{int, 1, 1}}} f = get_fp();
+  int v = 123;
+  const y = f(v);
+  println(v);
   println(y);
   funcptr{void, {int, double}} g = get_fp2();
   g(500, 12.5);

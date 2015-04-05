@@ -1,8 +1,169 @@
 public namespace pointer::func "use-unsafe";
 public import numeric::integral -;
 public import meta m;
+public import meta::vararg va;
 
 public metafunction funcptr{t, ts}
+  funcptr_ctype{t, m::map{ts, to_ctype}};
+
+public metafunction funcptr_for_function{f}
+  funcptr{m::ret_type{f}, m::map{m::args{f}, metafunction{ai}
+    m::slice{ai, 1, 4}}};
+
+public threaded function {f} funcptr_for_function{f} to_funcptr()
+{
+  if (m::eq{m::characteristic{f, "threaded"}, 0}) {
+    m::error{m::concat{"function ", f, " is not threaded"}};
+  }
+  mutable r = funcptr_null{funcptr_for_function{f}}();
+  metafunction expr m::concat{"r$ = &(", m::csymbol{f}, ")"};
+  extern "emit" expr;
+  return r;
+}
+
+public threaded function {tilist} call_check{tilist}
+funcptr0___call(expand(va::arg_decls_byref{tilist}))
+{
+  return funcptr0___call_impl(expand(a: va::arg_names{m::size{tilist}}; a));
+}
+
+public threaded function {tilist} call_check{tilist}
+funcptr1___call(expand(va::arg_decls_byref{tilist}))
+{
+  return funcptr1___call_impl(expand(a: va::arg_names{m::size{tilist}}; a));
+}
+
+public threaded function {tilist} call_check{tilist}
+funcptr2___call(expand(va::arg_decls_byref{tilist}))
+{
+  return funcptr2___call_impl(expand(a: va::arg_names{m::size{tilist}}; a));
+}
+
+public threaded function {tilist} call_check{tilist}
+funcptr3___call(expand(va::arg_decls_byref{tilist}))
+{
+  return funcptr3___call_impl(expand(a: va::arg_names{m::size{tilist}}; a));
+}
+
+public threaded function {tilist} call_check{tilist}
+funcptr4___call(expand(va::arg_decls_byref{tilist}))
+{
+  return funcptr4___call_impl(expand(a: va::arg_names{m::size{tilist}}; a));
+}
+
+public threaded function {tilist} call_check{tilist}
+funcptr5___call(expand(va::arg_decls_byref{tilist}))
+{
+  return funcptr5___call_impl(expand(a: va::arg_names{m::size{tilist}}; a));
+}
+
+public threaded function {tilist} call_check{tilist}
+funcptr6___call(expand(va::arg_decls_byref{tilist}))
+{
+  return funcptr6___call_impl(expand(a: va::arg_names{m::size{tilist}}; a));
+}
+
+public threaded function {tilist} call_check{tilist}
+funcptr7___call(expand(va::arg_decls_byref{tilist}))
+{
+  return funcptr7___call_impl(expand(a: va::arg_names{m::size{tilist}}; a));
+}
+
+public threaded function {tilist} call_check{tilist}
+funcptr8___call(expand(va::arg_decls_byref{tilist}))
+{
+  return funcptr8___call_impl(expand(a: va::arg_names{m::size{tilist}}; a));
+}
+
+public threaded function {tilist} call_check{tilist}
+funcptr9___call(expand(va::arg_decls_byref{tilist}))
+{
+  return funcptr9___call_impl(expand(a: va::arg_names{m::size{tilist}}; a));
+}
+
+public threaded function {tilist} call_check{tilist}
+funcptr10___call(expand(va::arg_decls_byref{tilist}))
+{
+  return funcptr10___call_impl(expand(a: va::arg_names{m::size{tilist}}; a));
+}
+
+/* private */
+
+private threaded function extern "pxcrt::funcptr_null" {t} t funcptr_null();
+
+private metafunction call_check{tilist}
+  m::cond{
+    call_check_args{tilist},
+    call_rettype{tilist},
+    call_rettype{tilist}};
+private metafunction call_rettype{tilist}
+  m::at0{m::at0{m::at0{tilist}}};
+private metafunction call_fptype{tilist}
+  m::at0{m::at0{tilist}};
+private metafunction call_fpargtypes{tilist}
+  m::slice{call_fptype{tilist}, 1};
+private metafunction call_argtypes{tilist}
+  m::slice{tilist, 1};
+private metafunction call_check_args{tilist}
+  m::apply{metafunction{fpargtypes, argtypes}
+    m::map{m::seq{m::sub{m::size{tilist}, 1}}, metafunction{i}
+      call_check_arg{i, m::at{fpargtypes, i}, m::at{argtypes, i}}},
+    call_fpargtypes{tilist}, call_argtypes{tilist}};
+private metafunction call_check_arg{i, fparg, arg}
+  m::cond{
+    m::and{is_cxxmutableref{fparg}, m::not{m::at1{arg}}},
+    m::error{m::concat{"argument ", i, " must have lvalue"}},
+    1};
+private metafunction is_cxxmutableref{t}
+  m::and{
+    m::eq{m::nameof{t}, "pointer::func::cxxref"},
+    m::ne{m::nameof{m::at0{t}}, "pointer::func::cxxconst"}};
+
+private tsvaluetype struct extern "pxcrt::funcptr0<>::type" "nocascade"
+{tr}
+funcptr0 { }
+
+private tsvaluetype struct extern "pxcrt::funcptr1<>::type" "nocascade"
+{tr, t0}
+funcptr1 { }
+
+private tsvaluetype struct extern "pxcrt::funcptr2<>::type" "nocascade"
+{tr, t0, t1}
+funcptr2 { }
+
+private tsvaluetype struct extern "pxcrt::funcptr3<>::type" "nocascade"
+{tr, t0, t1, t2}
+funcptr3 { }
+
+private tsvaluetype struct extern "pxcrt::funcptr4<>::type" "nocascade"
+{tr, t0, t1, t2, t3}
+funcptr4 { }
+
+private tsvaluetype struct extern "pxcrt::funcptr5<>::type" "nocascade"
+{tr, t0, t1, t2, t3, t4}
+funcptr5 { }
+
+private tsvaluetype struct extern "pxcrt::funcptr6<>::type" "nocascade"
+{tr, t0, t1, t2, t3, t4, t5}
+funcptr6 { }
+
+private tsvaluetype struct extern "pxcrt::funcptr7<>::type" "nocascade"
+{tr, t0, t1, t2, t3, t4, t5, t6}
+funcptr7 { }
+
+private tsvaluetype struct extern "pxcrt::funcptr8<>::type" "nocascade"
+{tr, t0, t1, t2, t3, t4, t5, t6, t7}
+funcptr8 { }
+
+private tsvaluetype struct extern "pxcrt::funcptr9<>::type" "nocascade"
+{tr, t0, t1, t2, t3, t4, t5, t6, t7, t8}
+funcptr9 { }
+
+private tsvaluetype struct extern "pxcrt::funcptr10<>::type" "nocascade"
+{tr, t0, t1, t2, t3, t4, t5, t6, t7, t8, t9}
+funcptr10 { }
+
+private metafunction funcptr_ctype{t, ts}
   m::cond{
     m::eq{m::size{ts}, 0}, funcptr0{t},
     m::eq{m::size{ts}, 1}, funcptr1{t, m::at0{ts}},
@@ -25,106 +186,92 @@ public metafunction funcptr{t, ts}
       m::at9{ts}},
     m::error{"too many arguments"}};
 
-public tsvaluetype struct extern "pxcrt::funcptr0<>::type" "nocascade"
-{tr}
-funcptr0 { }
+private metafunction to_ctype{t}
+  /* t is just a type or {type, byref, mutable} */
+  m::cond{m::is_list{t},
+    m::cond{m::at1{t},
+      m::cond{m::at2{t},
+	cxxref{m::at0{t}},
+	cxxref{cxxconst{m::at0{t}}}},
+      m::cond{m::at2{t},
+	m::at0{t},
+	cxxconst{m::at0{t}}}},
+    t};
 
-public tsvaluetype struct extern "pxcrt::funcptr1<>::type" "nocascade"
-{tr, t0}
-funcptr1 { }
+private tsvaluetype struct extern "pxcrt::cxxref<>::type" "nocascade" {t}
+cxxref{ }
 
-public tsvaluetype struct extern "pxcrt::funcptr2<>::type" "nocascade"
-{tr, t0, t1}
-funcptr2 { }
+private tsvaluetype struct extern "pxcrt::cxxconst<>::type" "nocascade" {t}
+cxxconst{ }
 
-public tsvaluetype struct extern "pxcrt::funcptr3<>::type" "nocascade"
-{tr, t0, t1, t2}
-funcptr3 { }
-
-public tsvaluetype struct extern "pxcrt::funcptr4<>::type" "nocascade"
-{tr, t0, t1, t2, t3}
-funcptr4 { }
-
-public tsvaluetype struct extern "pxcrt::funcptr5<>::type" "nocascade"
-{tr, t0, t1, t2, t3, t4}
-funcptr5 { }
-
-public tsvaluetype struct extern "pxcrt::funcptr6<>::type" "nocascade"
-{tr, t0, t1, t2, t3, t4, t5}
-funcptr6 { }
-
-public tsvaluetype struct extern "pxcrt::funcptr7<>::type" "nocascade"
-{tr, t0, t1, t2, t3, t4, t5, t6}
-funcptr7 { }
-
-public tsvaluetype struct extern "pxcrt::funcptr8<>::type" "nocascade"
-{tr, t0, t1, t2, t3, t4, t5, t6, t7}
-funcptr8 { }
-
-public tsvaluetype struct extern "pxcrt::funcptr9<>::type" "nocascade"
-{tr, t0, t1, t2, t3, t4, t5, t6, t7, t8}
-funcptr9 { }
-
-public tsvaluetype struct extern "pxcrt::funcptr10<>::type" "nocascade"
-{tr, t0, t1, t2, t3, t4, t5, t6, t7, t8, t9}
-funcptr10 { }
-
-public threaded function extern "pxcrt::funcptr0___call"
+private threaded function extern "pxcrt::funcptr0___call"
 {tr} tr
-funcptr0___call(funcptr0{tr} f);
+funcptr0___call_impl(funcptr0{tr} f);
 
-public threaded function extern "pxcrt::funcptr1___call"
-{tr, t0} tr
-funcptr1___call(funcptr1{tr, t0} f,
-  t0 a0);
+private threaded function extern "pxcrt::funcptr1___call"
+{tr, t0, ta0} tr
+funcptr1___call_impl(funcptr1{tr, t0} f, ta0 a0);
 
-public threaded function extern "pxcrt::funcptr2___call"
-{tr, t0, t1} tr
-funcptr2___call(funcptr2{tr, t0, t1} f,
-  t0 a0, t1 a1);
+private threaded function extern "pxcrt::funcptr2___call"
+{tr, t0, t1, ta0, ta1} tr
+funcptr2___call_impl(funcptr2{tr, t0, t1} f,
+  ta0 a0, ta1 a1);
 
-public threaded function extern "pxcrt::funcptr3___call"
-{tr, t0, t1, t2} tr
-funcptr3___call(funcptr3{tr, t0, t1, t2} f,
-  t0 a0, t1 a1, t2 a2);
+private threaded function extern "pxcrt::funcptr3___call"
+{tr, t0, t1, t2, ta0, ta1, ta2} tr
+funcptr3___call_impl(funcptr3{tr, t0, t1, t2} f,
+  ta0 a0, ta1 a1, ta2 a2);
 
-public threaded function extern "pxcrt::funcptr4___call"
-{tr, t0, t1, t2, t3} tr
-funcptr4___call(funcptr4{tr, t0, t1, t2, t3} f,
-  t0 a0, t1 a1, t2 a2, t3 a3);
+private threaded function extern "pxcrt::funcptr4___call"
+{tr, t0, t1, t2, t3, ta0, ta1, ta2, ta3} tr
+funcptr4___call_impl(funcptr4{tr, t0, t1, t2, t3} f,
+  ta0 a0, ta1 a1, ta2 a2, ta3 a3);
 
-public threaded function extern "pxcrt::funcptr5___call"
-{tr, t0, t1, t2, t3, t4} tr
-funcptr5___call(funcptr5{tr, t0, t1, t2, t3, t4} f,
-  t0 a0, t1 a1, t2 a2, t3 a3, t4 a4);
+private threaded function extern "pxcrt::funcptr5___call"
+{tr, t0, t1, t2, t3, t4, ta0, ta1, ta2, ta3, ta4} tr
+funcptr5___call_impl(funcptr5{tr, t0, t1, t2, t3, t4} f,
+  ta0 a0, ta1 a1, ta2 a2, ta3 a3, ta4 a4);
 
-public threaded function extern "pxcrt::funcptr6___call"
-{tr, t0, t1, t2, t3, t4, t5} tr
-funcptr6___call(funcptr6{tr, t0, t1, t2, t3, t4, t5} f,
-  t0 a0, t1 a1, t2 a2, t3 a3, t4 a4, t5 a5);
+private threaded function extern "pxcrt::funcptr6___call"
+{tr, t0, t1, t2, t3, t4, t5, ta0, ta1, ta2, ta3, ta4, ta5} tr
+funcptr6___call_impl(funcptr6{tr, t0, t1, t2, t3, t4, t5} f,
+  ta0 a0, ta1 a1, ta2 a2, ta3 a3, ta4 a4, ta5 a5);
 
-public threaded function extern "pxcrt::funcptr7___call"
-{tr, t0, t1, t2, t3, t4, t5, t6} tr
-funcptr7___call(funcptr7{tr, t0, t1, t2, t3, t4, t5, t6} f,
-  t0 a0, t1 a1, t2 a2, t3 a3, t4 a4, t5 a5, t6 a6);
+private threaded function extern "pxcrt::funcptr7___call"
+{tr, t0, t1, t2, t3, t4, t5, t6, ta0, ta1, ta2, ta3, ta4, ta5, ta6} tr
+funcptr7___call_impl(funcptr7{tr, t0, t1, t2, t3, t4, t5, t6} f,
+  ta0 a0, ta1 a1, ta2 a2, ta3 a3, ta4 a4, ta5 a5, ta6 a6);
 
-public threaded function extern "pxcrt::funcptr8___call"
-{tr, t0, t1, t2, t3, t4, t5, t6, t7} tr
-funcptr8___call(funcptr8{tr, t0, t1, t2, t3, t4, t5, t6, t7} f,
-  t0 a0, t1 a1, t2 a2, t3 a3, t4 a4, t5 a5, t6 a6, t7 a7);
+private threaded function extern "pxcrt::funcptr8___call"
+{tr, t0, t1, t2, t3, t4, t5, t6, t7, ta0, ta1, ta2, ta3, ta4, ta5, ta6, ta7} tr
+funcptr8___call_impl(funcptr8{tr, t0, t1, t2, t3, t4, t5, t6, t7} f,
+  ta0 a0, ta1 a1, ta2 a2, ta3 a3, ta4 a4, ta5 a5, ta6 a6, ta7 a7);
 
-public threaded function extern "pxcrt::funcptr9___call"
-{tr, t0, t1, t2, t3, t4, t5, t6, t7, t8} tr
-funcptr9___call(funcptr9{tr, t0, t1, t2, t3, t4, t5, t6, t7, t8} f,
-  t0 a0, t1 a1, t2 a2, t3 a3, t4 a4, t5 a5, t6 a6, t7 a7, t8 a8);
+private threaded function extern "pxcrt::funcptr9___call"
+{tr, t0, t1, t2, t3, t4, t5, t6, t7, t8, ta0, ta1, ta2, ta3, ta4, ta5, ta6,
+  ta7, ta8} tr
+funcptr9___call_impl(funcptr9{tr, t0, t1, t2, t3, t4, t5, t6, t7, t8} f,
+  ta0 a0, ta1 a1, ta2 a2, ta3 a3, ta4 a4, ta5 a5, ta6 a6, ta7 a7, ta8 a8);
 
-public threaded function extern "pxcrt::funcptr10___call"
-{tr, t0, t1, t2, t3, t4, t5, t6, t7, t8, t9} tr
-funcptr10___call(funcptr10{tr, t0, t1, t2, t3, t4, t5, t6, t7, t8, t9} f,
-  t0 a0, t1 a1, t2 a2, t3 a3, t4 a4, t5 a5, t6 a6, t7 a7, t8 a8, t9 a9);
+private threaded function extern "pxcrt::funcptr10___call"
+{tr, t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, ta0, ta1, ta2, ta3, ta4, ta5, ta6,
+  ta7, ta8, ta9} tr
+funcptr10___call_impl(funcptr10{tr, t0, t1, t2, t3, t4, t5, t6, t7, t8, t9} f,
+  ta0 a0, ta1 a1, ta2 a2, ta3 a3, ta4 a4, ta5 a5, ta6 a6, ta7 a7, ta8 a8,
+  ta9 a9);
 
 extern "types" inline
 namespace pxcrt {
+
+template <typename T>
+struct cxxref {
+  typedef T& type;
+};
+
+template <typename T>
+struct cxxconst {
+  typedef T const type;
+};
 
 template <typename Tr>
 struct funcptr0 {
@@ -193,6 +340,8 @@ struct funcptr10 {
 extern "functions" inline
 namespace pxcrt {
 
+template <typename T> static inline T funcptr_null() { return T(); }
+
 template <typename Tr>
 static inline Tr
 funcptr0___call(
@@ -201,7 +350,7 @@ funcptr0___call(
   return f();
 }
 
-template <typename Tr, typename T0>
+template <typename Tr, typename T0, typename Ta0>
 static inline Tr
 funcptr1___call(
   typename funcptr1<Tr, T0>::type f,
@@ -210,7 +359,7 @@ funcptr1___call(
   return f(a0);
 }
 
-template <typename Tr, typename T0, typename T1>
+template <typename Tr, typename T0, typename T1, typename Ta0, typename Ta1>
 static inline Tr
 funcptr2___call(
   typename funcptr2<Tr, T0, T1>::type f,
@@ -219,7 +368,8 @@ funcptr2___call(
   return f(a0, a1);
 }
 
-template <typename Tr, typename T0, typename T1, typename T2>
+template <typename Tr, typename T0, typename T1, typename T2, typename Ta0,
+  typename Ta1, typename Ta2>
 static inline Tr
 funcptr3___call(
   typename funcptr3<Tr, T0, T1, T2>::type f,
@@ -228,7 +378,8 @@ funcptr3___call(
   return f(a0, a1, a2);
 }
 
-template <typename Tr, typename T0, typename T1, typename T2, typename T3>
+template <typename Tr, typename T0, typename T1, typename T2, typename T3,
+  typename Ta0, typename Ta1, typename Ta2, typename Ta3>
 static inline Tr
 funcptr4___call(
   typename funcptr4<Tr, T0, T1, T2, T3>::type f,
@@ -238,7 +389,8 @@ funcptr4___call(
 }
 
 template <typename Tr, typename T0, typename T1, typename T2, typename T3,
-  typename T4>
+  typename T4, typename Ta0, typename Ta1, typename Ta2, typename Ta3,
+  typename Ta4>
 static inline Tr
 funcptr5___call(
   typename funcptr5<Tr, T0, T1, T2, T3, T4>::type f,
@@ -248,7 +400,8 @@ funcptr5___call(
 }
 
 template <typename Tr, typename T0, typename T1, typename T2, typename T3,
-  typename T4, typename T5>
+  typename T4, typename T5, typename Ta0, typename Ta1, typename Ta2,
+  typename Ta3, typename Ta4, typename Ta5>
 static inline Tr
 funcptr6___call(
   typename funcptr6<Tr, T0, T1, T2, T3, T4, T5>::type f,
@@ -258,7 +411,8 @@ funcptr6___call(
 }
 
 template <typename Tr, typename T0, typename T1, typename T2, typename T3,
-  typename T4, typename T5, typename T6>
+  typename T4, typename T5, typename T6, typename Ta0, typename Ta1,
+  typename Ta2, typename Ta3, typename Ta4, typename Ta5, typename Ta6>
 static inline Tr
 funcptr7___call(
   typename funcptr7<Tr, T0, T1, T2, T3, T4, T5, T6>::type f,
@@ -268,7 +422,9 @@ funcptr7___call(
 }
 
 template <typename Tr, typename T0, typename T1, typename T2, typename T3,
-  typename T4, typename T5, typename T6, typename T7>
+  typename T4, typename T5, typename T6, typename T7, typename Ta0,
+  typename Ta1, typename Ta2, typename Ta3, typename Ta4, typename Ta5,
+  typename Ta6, typename Ta7>
 static inline Tr
 funcptr8___call(
   typename funcptr8<Tr, T0, T1, T2, T3, T4, T5, T6, T7>::type f,
@@ -278,7 +434,9 @@ funcptr8___call(
 }
 
 template <typename Tr, typename T0, typename T1, typename T2, typename T3,
-  typename T4, typename T5, typename T6, typename T7, typename T8>
+  typename T4, typename T5, typename T6, typename T7, typename T8,
+  typename Ta0, typename Ta1, typename Ta2, typename Ta3, typename Ta4,
+  typename Ta5, typename Ta6, typename Ta7, typename Ta8>
 static inline Tr
 funcptr9___call(
   typename funcptr9<Tr, T0, T1, T2, T3, T4, T5, T6, T7, T8>::type f,
@@ -288,7 +446,9 @@ funcptr9___call(
 }
 
 template <typename Tr, typename T0, typename T1, typename T2, typename T3,
-  typename T4, typename T5, typename T6, typename T7, typename T8, typename T9>
+  typename T4, typename T5, typename T6, typename T7, typename T8, typename T9,
+  typename Ta0, typename Ta1, typename Ta2, typename Ta3, typename Ta4,
+  typename Ta5, typename Ta6, typename Ta7, typename Ta8, typename Ta9>
 static inline Tr
 funcptr10___call(
   typename funcptr10<Tr, T0, T1, T2, T3, T4, T5, T6, T7, T8, T9>::type f,

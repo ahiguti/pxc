@@ -10,6 +10,7 @@ public import io::environ -;
 public import exception -;
 public import meta m;
 public import text::string::positional -;
+public import pointer::func;
 
 public import glresource -;
 public import glshader -;
@@ -1637,82 +1638,107 @@ buffer_append(varray{float} mutable& arr, t const& v)
   }
 }
 
-public threaded interface vbid_prepare_instance_data_i {
-  public function void vbid_prepare_instance_data(
-    node_common_data mutable& ncd, varray{instances_type} mutable& ibs);
+private threaded function void prepare_instance_data_default(
+  scene_node{node_data} const& sn, node_common_data mutable& ncd,
+  varray{instance_data} mutable& ibarr)
+{
+  buffer_append(ibarr[0].instance_buffer, sn.trans);
 }
 
-/* main */
-private threaded struct vbid_prepare_instance_data_main
-<vbid_prepare_instance_data_i>
+private threaded function void prepare_instance_data_main(
+  scene_node{node_data} const& sn, node_common_data mutable& ncd,
+  varray{instance_data} mutable& ibarr)
 {
-  public function void vbid_prepare_instance_data(
-    node_common_data mutable& ncd, varray{instances_type} mutable& ibs)
-  {
-    /* ibuf_id == 0 for model matrix */
-    buffer_append(ibarr[0].instance_buffer, sn.trans);
-    if (bo_id == vbid_main || bo_id == vbid_main2) {
-      /* ibuf_id == 1 for shadowmapping mvp */
-      const smvp = ncd.shadowmapping_vp * sn.trans;
-      buffer_append(ibarr[1].instance_buffer, smvp);
+  /* ibuf_id == 0 for model matrix */
+  buffer_append(ibarr[0].instance_buffer, sn.trans);
+  /* ibuf_id == 1 for shadowmapping mvp */
+  const smvp = ncd.shadowmapping_vp * sn.trans;
+  buffer_append(ibarr[1].instance_buffer, smvp);
+}
+
+private threaded function void prepare_instance_data_particle(
+  scene_node{node_data} const& sn, node_common_data mutable& ncd,
+  varray{instance_data} mutable& ibarr)
+{
+  const mvp = ncd.vp * sn.trans;
+  buffer_append(ibarr[0].instance_buffer, mvp);
+}
+
+private threaded function void prepare_instance_data_lineparticle(
+  scene_node{node_data} const& sn, node_common_data mutable& ncd,
+  varray{instance_data} mutable& ibarr)
+{
+  const sli = sn.trans.to_cslice();
+  ibarr[0].instance_buffer.append(sli[0 .. 9]);
+}
+
+private threaded function void prepare_instance_data_rect2d(
+  scene_node{node_data} const& sn, node_common_data mutable& ncd,
+  varray{instance_data} mutable& ibarr)
+{
+  const sli = sn.trans.to_cslice();
+  ibarr[0].instance_buffer.append(sli[0 .. 4]);
+}
+
+private threaded function void prepare_instance_data_font2(
+  scene_node{node_data} const& sn, node_common_data mutable& ncd,
+  varray{instance_data} mutable& ibarr)
+{
+  const sli = sn.trans.to_cslice();
+  ibarr[0].instance_buffer.append(sli[0 .. 4]);
+}
+
+private threaded function void prepare_instance_data_rec(
+  scene_node{node_data} const& sn, node_common_data mutable& ncd,
+  varray{instances_type} mutable& ibs)
+{
+  const bo_id = sn.joint_id.bo_id;
+  const vs_id = sn.joint_id.vs_id;
+  if (bo_id >= 0 && vs_id >= 0) {
+    ++ncd.stat_num_objects;
+    mutable& ibarr = ibs[bo_id][static_cast{size_t}(vs_id)];
+    if (bo_id == vbid_particle) {
+      /* particle */
+      const mvp = ncd.vp * sn.trans;
+      buffer_append(ibarr[0].instance_buffer, mvp);
+    } else if (bo_id == vbid_lineparticle) {
+      /* lineparticle */
+      const sli = sn.trans.to_cslice();
+      ibarr[0].instance_buffer.append(sli[0 .. 9]);
+    } else if (bo_id == vbid_rect2d) {
+      /* rect2d */
+      const sli = sn.trans.to_cslice();
+      ibarr[0].instance_buffer.append(sli[0 .. 4]);
+    } else if (bo_id == vbid_font2) {
+      const sli = sn.trans.to_cslice();
+      ibarr[0].instance_buffer.append(sli[0 .. 4]);
+    } else {
+      /* ibuf_id == 0 for model matrix */
+      buffer_append(ibarr[0].instance_buffer, sn.trans);
+      if (bo_id == vbid_main || bo_id == vbid_main2) {
+	/* ibuf_id == 1 for shadowmapping mvp */
+	const smvp = ncd.shadowmapping_vp * sn.trans;
+	buffer_append(ibarr[1].instance_buffer, smvp);
+      }
     }
   }
-}
-
-/* particle */
-private threaded struct vbid_prepare_instance_data_particle
-<vbid_prepare_instance_data_i>
-{
-  public function void vbid_prepare_instance_data(
-    node_common_data mutable& ncd, varray{instances_type} mutable& ibs)
-  {
-    const mvp = ncd.vp * sn.trans;
-    buffer_append(ibarr[0].instance_buffer, mvp);
+  for (const i, const& snp: sn.children) {
+    prepare_instance_data_rec(*snp, ncd, ibs);
   }
 }
 
-// FIXME
-
+public metafunction prepare_instance_data_funcptr
+  pointer::func::funcptr_for_function{prepare_instance_data_default};
 
 private multithreaded struct prepare_instance_data_cb
 <prepare_instance_data_i>
 {
+  // FIXME: here
+  // public varray{prepare_instance_data_funcptr} func_table;
   public function void prepare_instance_data(scene_node{node_data} const& sn,
     node_common_data mutable& ncd, varray{instances_type} mutable& ibs)
   {
-    const bo_id = sn.joint_id.bo_id;
-    const vs_id = sn.joint_id.vs_id;
-    if (bo_id >= 0 && vs_id >= 0) {
-      ++ncd.stat_num_objects;
-      mutable& ibarr = ibs[bo_id][static_cast{size_t}(vs_id)];
-      if (bo_id == vbid_particle) {
-	/* particle */
-	const mvp = ncd.vp * sn.trans;
-	buffer_append(ibarr[0].instance_buffer, mvp);
-      } else if (bo_id == vbid_lineparticle) {
-	/* lineparticle */
-	const sli = sn.trans.to_cslice();
-	ibarr[0].instance_buffer.append(sli[0 .. 9]);
-      } else if (bo_id == vbid_rect2d) {
-	/* rect2d */
-	const sli = sn.trans.to_cslice();
-	ibarr[0].instance_buffer.append(sli[0 .. 4]);
-      } else if (bo_id == vbid_font2) {
-	const sli = sn.trans.to_cslice();
-	ibarr[0].instance_buffer.append(sli[0 .. 4]);
-      } else {
-	/* ibuf_id == 0 for model matrix */
-	buffer_append(ibarr[0].instance_buffer, sn.trans);
-	if (bo_id == vbid_main || bo_id == vbid_main2) {
-	  /* ibuf_id == 1 for shadowmapping mvp */
-	  const smvp = ncd.shadowmapping_vp * sn.trans;
-	  buffer_append(ibarr[1].instance_buffer, smvp);
-	}
-      }
-    }
-    for (const i, const& snp: sn.children) {
-      prepare_instance_data(*snp, ncd, ibs);
-    }
+    prepare_instance_data_rec(sn, ncd, ibs);
   }
 }
 

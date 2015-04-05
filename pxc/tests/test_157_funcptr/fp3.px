@@ -1,0 +1,39 @@
+public namespace fp3;
+public import common -;
+public import meta m;
+public import pointer::func -;
+
+public threaded function int test_fp(int mutable& x)
+{
+  x += 3;
+  return x * 2;
+}
+
+public threaded function double test_fp2(int x, double y)
+{
+  return static_cast{double}(x) + y;
+}
+
+threaded function int ex(funcptr{int, {{int, 1, 1}}} fp, int mutable& v)
+{
+  return fp(v);
+}
+
+threaded function funcptr{int, {{int, 1, 1}}} get_fp()
+{
+  return to_funcptr{test_fp}();
+}
+
+{
+  const f = get_fp();
+  println(m::full_string{m::typeof{f}});
+  int v = 123;
+  // const y = f(v);
+  const y = ex(f, v);
+  println(v);
+  println(y);
+  const g = to_funcptr{test_fp2}();
+  const r = g(500, 12.5);
+  println(r);
+}
+

@@ -1,0 +1,28 @@
+public namespace fp4;
+public import common -;
+public import meta m;
+public import pointer::func -;
+
+public threaded function int test_fp(int mutable& x)
+{
+  x += 3;
+  return x * 2;
+}
+
+public function double test_fp2(int x, double y)
+{
+  return static_cast{double}(x) + y;
+}
+
+{
+  const f = to_funcptr{test_fp}();
+  println(m::full_string{m::typeof{f}});
+  int v = 123;
+  const y = f(v);
+  println(v);
+  println(y);
+  const g = to_funcptr{test_fp2}(); // test_fp2 is not threaded
+  const r = g(500, 12.5);
+  println(r);
+}
+
