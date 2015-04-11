@@ -1,0 +1,132 @@
+public namespace sdlcontext "export-unsafe";
+public import common -;
+public import meta m;
+public import io::environ -;
+public import GL::compat -;
+public import glresource -;
+
+public struct sdlcontext()
+{
+  public int init_w = 128;
+  public int init_h = 128;
+  public bool enable_msaa = false;
+  public bool gles_flag = false;
+  public int glmajor;
+  public int glminor;
+  public int vsync = 1;
+  public scoped_nullable{SDL_DestroyWindow} sdl_window;
+  private scoped_nullable{SDL_GL_DeleteContext} sdl_glcontext;
+  init();
+  function void init()
+  {
+    SDL_Init(SDL_INIT_VIDEO);
+    TTF_Init();
+    const num_modes = SDL_GetNumDisplayModes(0);
+    for (int i: 0 .. num_modes) {
+      SDL_DisplayMode mode;
+      SDL_GetDisplayMode(0, i, address(mode));
+      if (mode.w * mode.h > init_w * init_h) {
+	// init_w = mode.w;
+	// init_h = mode.h;
+      }
+      if (mode.w * mode.h < init_w * init_h) {
+	// init_w = mode.w;
+	// init_h = mode.h;
+      }
+      sdllog("displaymode", mode.w, mode.h);
+    }
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+
+    if (enable_msaa) {
+      SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+      SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
+    }
+    mutable wflags = SDL_WINDOW_OPENGL;
+    wflags |= SDL_WINDOW_RESIZABLE;
+    wflags |= SDL_WINDOW_ALLOW_HIGHDPI;
+    /*
+    wflags |= SDL_WINDOW_FULLSCREEN;
+     */
+    mutable vsync = 1;
+    if (get_option("-f") == "1") { wflags |= SDL_WINDOW_FULLSCREEN_DESKTOP; }
+    if (get_option("-d") == "1") { wflags |= SDL_WINDOW_FULLSCREEN_DESKTOP; }
+    if (get_option("-v") == "1") { vsync = 0; }
+    if (get_option("-h") == "1") { wflags &= ~SDL_WINDOW_ALLOW_HIGHDPI; }
+    if (get_option("-w") != "") { init_w = from_string{int}(get_option("-w")); }
+    if (get_option("-h") != "") { init_h = from_string{int}(get_option("-h")); }
+    if (m::ne{is_gles, 0}) {
+      wflags |= SDL_WINDOW_FULLSCREEN | SDL_WINDOW_BORDERLESS;
+    }
+
+    sdllog("create_window", init_w, init_h);
+    sdl_window.reset(SDL_CreateWindow("PGL3D", 0, 0, init_w, init_h, wflags));
+    const wnd = sdl_window.get();
+    // SDL_SetWindowFullscreen(wnd, SDL_WINDOW_FULLSCREEN_DESKTOP);
+      // // FIXME????
+    // FIXME: 3.3 -> 3.2 -> 2.1
+    if (m::eq{is_gles, 0}) {
+      /* try opengl 3.3 */
+      SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+      SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+      // SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+      SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
+      SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,
+	SDL_GL_CONTEXT_PROFILE_CORE);
+      glmajor = 3;
+      glminor = 3;
+      // glminor = 2;
+      gles_flag = false;
+    } else {
+      if (m::ne{is_android, 0}) {
+	/* android: opengles 2.0 */
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+	glmajor = 2;
+	glminor = 0;
+      } else {
+	/* ios: opengles 3.0 */
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+	glmajor = 3;
+	glminor = 0;
+      }
+      gles_flag = true;
+    }
+    mutable glctx = SDL_GL_CreateContext(wnd);
+    const verstr = cubptr_to_string(glGetString_nocheck(GL_VERSION));
+    if (verstr.empty()) {
+      if (m::eq{is_gles, 0}) {
+	/* fallback to opengl 2.1 */
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+	glctx = SDL_GL_CreateContext(wnd);
+	glmajor = 2;
+	glminor = 1;
+      } else {
+	/* fallback to opengles 2.0 */
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+	glctx = SDL_GL_CreateContext(wnd);
+	glmajor = 2;
+	glminor = 0;
+      }
+    }
+    sdl_glcontext.reset(glctx);
+    SDL_GL_GetDrawableSize(wnd, address(init_w), address(init_h));
+    sdllog("drawable size", init_w, init_h);
+    sdllog("GL_VERSION",
+      cubptr_to_string(glGetString(GL_VERSION)));
+    /*
+    sdllog("GL_EXTENSIONS", cubptr_to_string(glGetString(GL_EXTENSIONS)));
+    */
+    /*
+    int num_ext;
+    glGetIntegerv(GL_NUM_EXTENSIONS, address(num_ext));
+    for (int i: 0 .. num_ext) {
+      sdllog("GL_EXTENSION", cubptr_to_string(glGetStringi(GL_EXTENSIONS,
+	static_cast{uint}(i))));
+    }
+    */
+  }
+}
+

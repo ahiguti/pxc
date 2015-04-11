@@ -1,0 +1,48 @@
+public threaded namespace numeric::distinct "use-unsafe";
+public import numeric::integral -;
+public import meta m;
+public import meta::family mf;
+
+/* distinct_int{tbase, tid} creates a distinct int type which is compiled to
+   the same c++ type as 'tbase'. parameter 'tid' is a type used for generating
+   a unique type. */
+
+public metafunction distinct_int{tbase, tid}
+  distinct_int_impl{check_signed_integral{tbase}, check_type{tid}};
+public metafunction distinct_uint{tbase, tid}
+  distinct_int_impl{check_unsigned_integral{tbase}, check_type{tid}};
+public metafunction distinct_enum{tbase, tid}
+  distinct_int_impl{check_unsigned_integral{tbase}, check_type{tid}};
+public metafunction distinct_bitmask{tbase, tid}
+  distinct_int_impl{check_unsigned_integral{tbase}, check_type{tid}};
+
+private tsvaluetype struct extern "::pxcrt::distinct<>::type" "extint"
+{tbase, tid}
+distinct_int_impl { }
+private tsvaluetype struct extern "::pxcrt::distinct<>::type" "extuint"
+{tbase, tid}
+distinct_uint_impl { }
+private tsvaluetype struct extern "::pxcrt::distinct<>::type" "extenum"
+{tbase, tid}
+distinct_enum_impl { }
+private tsvaluetype struct extern "::pxcrt::distinct<>::type" "extbitmask"
+{tbase, tid}
+distinct_bitmask_impl { }
+
+private metafunction check_signed_integral{t}
+  m::cond{mf::is_signed_integral_type{t}, t,
+    m::error{"signed integral type expected"}};
+private metafunction check_unsigned_integral{t}
+  m::cond{mf::is_unsigned_integral_type{t}, t,
+    m::error{"unsigned integral type expected"}};
+private metafunction check_type{t}
+  m::cond{m::is_type{t}, t,
+    m::error{"type expected"}};
+
+extern "types" inline
+namespace pxcrt {
+template <typename Tbase, typename Tid>
+struct distinct { typedef Tbase type; };
+};
+;
+
