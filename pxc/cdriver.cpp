@@ -1044,6 +1044,9 @@ static bool compile_modules_rec(const parser_options& po,
 {
   module_info& md = get_modinfo_by_name(ami, modname);
   bool modified = false;
+  if (md.compile_completed) {
+    return false;
+  }
   try {
     /* build imports first */
     if (!po.gen_single_cc) {
@@ -1068,7 +1071,8 @@ static bool compile_modules_rec(const parser_options& po,
       + s;
     throw std::runtime_error(s);
   }
-  return modified;
+  md.compile_completed = true;
+  return modified; /* unused */
 }
 
 static int execute_mod(const auto_dl& dl, const std::string& symbol_name)

@@ -49,11 +49,12 @@ struct module_info {
   bool source_loaded;
   bool source_modified;
   bool need_rebuild;
+  bool compile_completed;
   std::string get_name() const {
     return aux_filename.empty() ? unique_namespace : aux_filename;
   }
   module_info() : src_mask(0), source_loaded(false), source_modified(false),
-    need_rebuild(false) { }
+    need_rebuild(false), compile_completed(false) { }
 };
 
 enum compile_mode {

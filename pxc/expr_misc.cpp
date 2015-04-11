@@ -2481,6 +2481,10 @@ attribute_e get_term_threading_attribute(const term& t)
   } else {
     attr = get_expr_threading_attribute(e);
   }
+  const typefamily_e cat = get_family(e);
+  if (cat == typefamily_e_nocascade) {
+    return attribute_e(attr);
+  }
   const term_list *const args = t.get_args_or_metalist();
   if (args == 0) {
     return attribute_e(attr);
