@@ -19,6 +19,7 @@
 #define DBG_TIMING(x)
 #define DBG_EXT(x)
 #define DBG_FIND(x)
+#define DBG_PRIV(x)
 
 namespace pxc {
 
@@ -100,6 +101,30 @@ expr_i *symbol_table::resolve_name_nothrow_ns(const symbol& fullname,
   return v.edef;
 }
 
+static bool is_private_memfld(localvar_info const& v, const symbol& curns)
+{
+  if (v.edef == 0) {
+    return false;
+  }
+  if (v.has_attrib_private()) {
+    return true;
+  }
+  symbol_table *psymbol = v.edef->symtbl_lexical;
+  if (psymbol != 0) {
+    expr_i const *fe = get_current_frame_expr(psymbol);
+    expr_struct const *est = dynamic_cast<expr_struct const *>(fe);
+    if (est != 0 && est->local_flds) {
+      symbol fens(fe->get_unique_namespace()); /* TODO: slow */
+      if (fens != curns) {
+	DBG_PRIV(fprintf(stderr, "private frame v=%s fe=%s\n",
+	  v.edef->dump().c_str(), fe->dump().c_str()));
+	return true;
+      }
+    }
+  }
+  return false;
+}
+
 expr_i *symbol_table::resolve_name_nothrow_memfld(const symbol& fullname,
   bool no_private, bool no_generated, const symbol& curns, expr_i *pos)
 {
@@ -108,7 +133,7 @@ expr_i *symbol_table::resolve_name_nothrow_memfld(const symbol& fullname,
   bool is_memfld_dmy = false;
   localvar_info v = resolve_name_nothrow_internal(fullname, curns, pos, true,
     no_generated, is_global_dmy, is_upvalue_dmy, is_memfld_dmy);
-  if (v.has_attrib_private()) {
+  if (is_private_memfld(v, curns)) {
     if (no_private) {
       return 0;
     }
@@ -176,6 +201,9 @@ localvar_info symbol_table::resolve_global_internal(const symbol& shortname,
 
 symbol get_lexical_context_ns(expr_i *pos)
 {
+  if (pos == 0) {
+    return symbol();
+  }
   symbol_table *stbl = pos->symtbl_lexical;
   while (stbl != 0) {
     expr_i *e = stbl->block_backref;

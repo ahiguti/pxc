@@ -3,8 +3,26 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- private importが使いづらいのでやめる。pimplイディオムのための
+  (オーバーヘッドの全く無い)interface分離方法を別途考える。
+
+- structのコンストラクタに対するprivate, フィールドに対するprivateに
+  ついて文法変更
+  private struct foo private { ... }
+
+- unionのフィールドはunion自体がpublicでないとアクセスできない。
+  内部的にoperator名前空間から引くため。
+
+- threaded名前空間のthreaded関数は副作用を持たない、という仕様にするか。
+  threadedではない名前空間のthreaded関数は、暗黙裡にアクセスするグロー
+  バルオブジェクトに関してマルチスレッドスレッドセーフだが副作用は持つ
+  ことがある、とする。
+  あるいはthreaded関数が副作用を持つかどうか別途指定できるようにするか。
+  あるいはexport-unsafeならthreaded関数が副作用を持つとするか。
+
 - 型パラメータがmultithreadedでなくてもfuncptrはmultithreaded。
   そのようなケース(スレッド属性をデグレードしない)のための属性を用意する。
+  (done)
 
 - threadedではない関数から関数ポインタを作るとthreaded関数として呼べて
   しまうのではないか？(done)
@@ -14,7 +32,7 @@ FIXME/TODO M1
     10:   e9 00 00 00 00          jmpq   15 <int pxcrt::func_wrap_call1<pointer$n:
     15:   66 66 2e 0f 1f 84 00    data32 nopw %cs:0x0(%rax,%rax,1)
     1c:   00 00 00 00 
-  直接cxxの関数ポインタを取得するコードをemitする方法を考える。
+  直接cxxの関数ポインタを取得するコードをemitする方法を考える。(done)
 
 - 関数ポインタ型
   funcptr1___callなど、引数のbyrefはpxc側では付けずに宣言しているため

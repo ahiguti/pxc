@@ -89,7 +89,7 @@ static term eval_meta_local_internal(const term_list_range& tlev,
   }
   symbol_table *const symtbl = &bl->symtbl;
   assert(symtbl);
-  const std::string sym_ns;
+  const symbol sym_ns = get_lexical_context_ns(pos);
   const bool no_private = true;
   const bool no_memfld_generated = false;
   expr_i *const rsym = symtbl->resolve_name_nothrow_memfld(name, no_private,

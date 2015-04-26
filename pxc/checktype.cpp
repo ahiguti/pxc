@@ -1940,14 +1940,14 @@ void expr_op::check_type(symbol_table *lookup)
 	  "trying non-member arg0=%s fullsym=%s ns=%s parent_symtbl=%p\n",
 	  arg0->dump(0).c_str(), sc->get_fullsym().c_str(), uniqns.c_str(),
 	  parent_symtbl));
-	no_private = false;
+	no_private = true;
 	expr_i *fo = parent_symtbl->resolve_name_nothrow_ns(
 	  uniqns + "::" + funcname_w_prefix, no_private, uniqns, this);
 	bool is_generic_invoke = false;
 	if (fo == 0) {
 	  /* "foo__invoke" function */
 	  funcname_w_prefix = i->sym_prefix + "__invoke";
-	    /* TODO: don't use std::string */
+	    /* TODO: don't use std::string. use symbol instead. */
 	  fo = parent_symtbl->resolve_name_nothrow_ns(
 	    uniqns + "::" + funcname_w_prefix, no_private, uniqns, this);
 	  is_generic_invoke = true;

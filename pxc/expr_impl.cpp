@@ -1731,11 +1731,11 @@ std::string expr_metafdef::dump(int indent) const
 
 expr_struct::expr_struct(const char *fn, int line, const char *sym,
   const char *cname, const char *family, expr_i *block, attribute_e attr,
-  bool has_udcon, bool private_udcon)
+  bool has_udcon, bool local_flds)
   : expr_i(fn, line), sym(sym), cnamei(cname), typefamily_str(family),
     block(ptr_down_cast<expr_block>(block)),
     attr(attr), value_texpr(), typefamily(typefamily_e_none),
-    has_udcon(has_udcon), private_udcon(private_udcon), builtin_typestub(0),
+    has_udcon(has_udcon), local_flds(local_flds), builtin_typestub(0),
     metafunc_strict(0), metafunc_nonstrict(0)
 {
   assert(block);

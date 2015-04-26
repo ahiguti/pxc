@@ -622,26 +622,27 @@ opt_attribute_threading
 	;
 struct_stmt
 	: opt_attribute TOK_STRUCT opt_extern opt_strlit opt_tparams_expr
-		TOK_SYMBOL opt_inherit_expr '{' struct_body_stmt_list '}'
-	  { $$ = expr_struct_new(cur_fname, @2.first_line, $6,
-		$3 != 0 ? arena_dequote_strdup($3) : 0,
-		$4 != 0 ? arena_dequote_strdup($4) : 0,
-		expr_block_new(cur_fname, @2.first_line, $5, $7, 0, 0,
-			passby_e_mutable_value, $9),
-		$1, false, false); }
-	| opt_attribute TOK_STRUCT opt_extern opt_strlit opt_tparams_expr
-		TOK_SYMBOL opt_private '(' argdecl_list ')' opt_inherit_expr
+		TOK_SYMBOL opt_inherit_expr opt_private
 		'{' struct_body_stmt_list '}'
 	  { $$ = expr_struct_new(cur_fname, @2.first_line, $6,
 		$3 != 0 ? arena_dequote_strdup($3) : 0,
 		$4 != 0 ? arena_dequote_strdup($4) : 0,
-		expr_block_new(cur_fname, @2.first_line, $5, $11, $9, 0,
+		expr_block_new(cur_fname, @2.first_line, $5, $7, 0, 0,
+			passby_e_mutable_value, $10),
+		$1, false, $8 != 0 ? true : false); }
+	| opt_attribute TOK_STRUCT opt_extern opt_strlit opt_tparams_expr
+		TOK_SYMBOL '(' argdecl_list ')' opt_inherit_expr opt_private 
+		'{' struct_body_stmt_list '}'
+	  { $$ = expr_struct_new(cur_fname, @2.first_line, $6,
+		$3 != 0 ? arena_dequote_strdup($3) : 0,
+		$4 != 0 ? arena_dequote_strdup($4) : 0,
+		expr_block_new(cur_fname, @2.first_line, $5, $10, $8, 0,
 			passby_e_mutable_value, $13),
-		$1, true, $7 != 0 ? true : false); }
+		$1, true, $11 != 0 ? true : false); }
 	;
 opt_private
 	:
-	  { $$ = 1; }
+	  { $$ = 0; }
 	| TOK_PUBLIC
 	  { $$ = 0; }
 	| TOK_PRIVATE

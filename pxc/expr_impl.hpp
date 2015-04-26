@@ -1332,7 +1332,7 @@ public:
 struct expr_struct : public expr_i {
   expr_struct(const char *fn, int line, const char *sym, const char *cname,
     const char *family, expr_i *block, attribute_e attr, bool has_udcon,
-    bool private_udcon);
+    bool local_flds);
   expr_struct *clone() const;
   expr_e get_esort() const { return expr_e_struct; }
   int get_num_children() const { return 1; }
@@ -1373,7 +1373,7 @@ public:
   term value_texpr;
   typefamily_e typefamily;
   bool has_udcon : 1;
-  bool private_udcon : 1; /* unused */
+  bool local_flds : 1; /* public fields are visible only from the local ns */
   const term *builtin_typestub;
   builtin_strict_metafunc_t metafunc_strict;
   builtin_nonstrict_metafunc_t metafunc_nonstrict;

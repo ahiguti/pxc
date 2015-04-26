@@ -107,7 +107,7 @@ expr_i *expr_metafdef_new(const char *fn, int line, const char *sym,
   expr_i *tparams, expr_i *rhs, attribute_e visi);
 expr_i *expr_struct_new(const char *fn, int line, const char *sym,
   const char *cname, const char *family, expr_i *block, attribute_e visi,
-  bool has_udcon, bool private_udcon);
+  bool has_udcon, bool local_flds);
 expr_i *expr_dunion_new(const char *fn, int line, const char *sym,
   expr_i *block, attribute_e visi);
 expr_i *expr_interface_new(const char *fn, int line, const char *sym,

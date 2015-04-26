@@ -124,9 +124,9 @@ expr_i *expr_metafdef_new(const char *fn, int line, const char *sym,
 { return arena_push(new expr_metafdef(fn, line, sym, tparams, rhs, attr)); }
 expr_i *expr_struct_new(const char *fn, int line, const char *sym,
   const char *cname, const char *family, expr_i *block, attribute_e attr,
-  bool has_udcon, bool private_udcon)
+  bool has_udcon, bool local_flds)
 { return arena_push(new expr_struct(fn, line, sym, cname, family, block, attr,
-  has_udcon, private_udcon)); }
+  has_udcon, local_flds)); }
 expr_i *expr_dunion_new(const char *fn, int line, const char *sym,
   expr_i *block, attribute_e attr)
 { return arena_push(new expr_dunion(fn, line, sym, block, attr)); }

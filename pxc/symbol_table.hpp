@@ -130,12 +130,14 @@ public:
   symbol_table *get_lexical_parent() const;
   void define_name(const symbol& shortname, const symbol& ns,
     expr_i *e, attribute_e visi, expr_stmts *stmt);
+  /* */
   expr_i *resolve_name_nothrow_ns(const symbol& fullname,
     bool no_private_curns, const symbol& curns, expr_i *pos);
   expr_i *resolve_name_nothrow_memfld(const symbol& fullname,
     bool no_private, bool no_generated, const symbol& curns, expr_i *pos);
   expr_i *resolve_name(const symbol& fullname, const symbol& curns,
     expr_i *e, bool& is_global_r, bool& is_upvalue_r);
+  /* */
   void clear_symbols();
   int generate_tempvar();
 private:
