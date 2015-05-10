@@ -504,16 +504,16 @@ function void handle_keys(app_impl mutable& app,
 private function void build_vertices(app_impl mutable& app,
   make_vertices_i mutable& pgs)
 {
-  metafunction tattr main_vertex_attributes;
+  metafunction tattr triangles_vertex_attributes;
   metafunction fill_v fill{tattr};
   metafunction joint_v poly_joint{tattr};
   metafunction point_joint_v point_joint{tattr};
-  metafunction tattr2 main2_vertex_attributes;
+  metafunction tattr2 triangles2_vertex_attributes;
   metafunction fill2_v fill{tattr2};
   metafunction joint2_v poly_joint{tattr2};
   metafunction point2_joint_v point_joint{tattr2};
-  const vbid_main = pgs.to_vbid("vbid_main");
-  const vbid_main2 = pgs.to_vbid("vbid_main2");
+  const vbid_triangles = pgs.to_vbid("vbid_triangles");
+  const vbid_triangles2 = pgs.to_vbid("vbid_triangles2");
   const vbid_particle = pgs.to_vbid("vbid_particle");
   const vbid_particle_bb = pgs.to_vbid("vbid_particle_bb");
   const vbid_font2 = pgs.to_vbid("vbid_font2");
@@ -532,7 +532,7 @@ private function void build_vertices(app_impl mutable& app,
     string fn = name + ".obj";
     sdllog("load", fn);
     const wfobjp = wfobject_read(sdl_read_file(fn));
-    const vtxs = pgs.make_vertices(vbid_main2, name);
+    const vtxs = pgs.make_vertices(vbid_triangles2, name);
     const t = fill2_v(vtxs);
     for (const j, mutable& v: wfobjp->v) {
       // v *= 10.0f;
@@ -546,16 +546,15 @@ private function void build_vertices(app_impl mutable& app,
   }
   sdllog("load prebuild");
   {
-    const vtx = pgs.make_vertices(vbid_main, "ab-multi");
+    const vtx = pgs.make_vertices(vbid_triangles, "ab-multi");
     const t = fill_v(vtx);
     regular_polygon(50.0, 30,
       bump_rec(1.0, 1.0, 1, joint_v(vtx, "airboat", hole()), hole()),
       hole())
       (poly_t(), mesh_index());
   }
-  /* vtx0 */
   {
-    const vtxs = pgs.make_vertices(vbid_main, "saucer");
+    const vtxs = pgs.make_vertices(vbid_triangles, "saucer");
     const fsmooth = fill_smooth{tattr}(vtxs);
     const t = fill_v(vtxs);
     regular_polygon(3.0, 40,
@@ -566,27 +565,24 @@ private function void build_vertices(app_impl mutable& app,
       (poly_t(), mesh_index());
     vtxs->num_copies_hint = 32;
   }
-  /* vtx2 */
   {
-    const vtx2 = pgs.make_vertices(vbid_main, "saucer-multi");
-    const t2 = fill_v(vtx2);
-    regular_polygon(50.0, 3,
-      bump_rec(1.0, 1.0, 1, joint_v(vtx2, "saucer", hole()), hole()),
+    const vtx = pgs.make_vertices(vbid_triangles, "saucer-multi");
+    const t = fill_v(vtx);
+    regular_polygon(15.0, 3,
+      bump_rec(1.0, 1.0, 1, joint_v(vtx, "saucer", hole()), hole()),
       hole())
       (poly_t(), mesh_index());
   }
-  /* vtx8 */
   {
-    const vtx = pgs.make_vertices(vbid_main, "block-multi");
+    const vtx = pgs.make_vertices(vbid_triangles, "block-multi");
     const t = fill_v(vtx);
     regular_polygon(600.0, 4,
       rectangle_split(9, 8, joint_v(vtx, "block", hole())),
       hole())
       (poly_t(), mesh_index());
   }
-  /* vtx9 */
   {
-    const vtx = pgs.make_vertices(vbid_main2, "block");
+    const vtx = pgs.make_vertices(vbid_triangles2, "block");
     const t = fill2_v(vtx);
     const rnd = make_rand_generator(1U);
     regular_polygon(50.0, 4,
@@ -598,9 +594,8 @@ private function void build_vertices(app_impl mutable& app,
 	bump_rec(0.01, 1.0, 1, t, t)))
       (poly_t(), mesh_index());
   }
-  /* vtx10 */
   {
-    const vtx = pgs.make_vertices(vbid_main, "bullet");
+    const vtx = pgs.make_vertices(vbid_triangles, "bullet");
     const t = fill_v(vtx);
     mutable m = glm::mat4()
       .translate(glm::make_vec3(0.0, 0.0, 1.0))
@@ -612,8 +607,8 @@ private function void build_vertices(app_impl mutable& app,
     vtx->num_copies_hint = 32;
   }
   {
-    /* 60fps, macosx/linux mbp gt750m */
-    const vtx = pgs.make_vertices(vbid_main, "bullet-multi");
+    // 60fps, macosx/linux mbp gt750m
+    const vtx = pgs.make_vertices(vbid_triangles, "bullet-multi");
     const t = fill_v(vtx);
     regular_polygon(600.0, 4,
       rectangle_split(170, 170, joint_v(vtx, "bullet", hole())),
@@ -621,7 +616,7 @@ private function void build_vertices(app_impl mutable& app,
       (poly_t(), mesh_index());
   }
   {
-    const vtx = pgs.make_vertices(vbid_main, "bullet2");
+    const vtx = pgs.make_vertices(vbid_triangles, "bullet2");
     const t = fill_v(vtx);
     mutable m = glm::mat4()
       .translate(glm::make_vec3(0.0, 0.0, 1.0))
@@ -632,19 +627,17 @@ private function void build_vertices(app_impl mutable& app,
       (poly_t(), mesh_index());
     vtx->num_copies_hint = 32;
   }
-  /*
-  {
+  if (false) {
     // 60fbp mbp intel gpu
-    const vtx = pgs.make_vertices(vbid_main, "bullet2-multi");
+    const vtx = pgs.make_vertices(vbid_triangles, "bullet2-multi");
     const t = fill_v(vtx);
     const rnd = make_rand_generator(991U);
     rand_sphere(200.0, 40000, false, false, rnd,
       joint_v(vtx, "bullet2", hole()))
       (poly_t(), mesh_index());
   }
-  */
   {
-    const vtx = pgs.make_vertices(vbid_main, "bullet2-multi");
+    const vtx = pgs.make_vertices(vbid_triangles, "bullet2-multi");
     const t = fill_v(vtx);
     const rnd = make_rand_generator(991U);
     rand_sphere(200.0, 37000, false, true, rnd,
@@ -652,7 +645,7 @@ private function void build_vertices(app_impl mutable& app,
       (poly_t(), mesh_index());
   }
   {
-    const vtx = pgs.make_vertices(vbid_main, "bullet2-multi2");
+    const vtx = pgs.make_vertices(vbid_triangles, "bullet2-multi2");
     const t = fill_v(vtx);
     const rnd = make_rand_generator(991U);
     rand_sphere(200.0, 20000, false, true, rnd,
@@ -660,7 +653,7 @@ private function void build_vertices(app_impl mutable& app,
       (poly_t(), mesh_index());
   }
   {
-    const vtx = pgs.make_vertices(vbid_main, "bullet2-multi3");
+    const vtx = pgs.make_vertices(vbid_triangles, "bullet2-multi3");
     const t = fill_v(vtx);
     const rnd = make_rand_generator(991U);
     rand_sphere(200.0, 2000, false, true, rnd,
@@ -668,7 +661,7 @@ private function void build_vertices(app_impl mutable& app,
       (poly_t(), mesh_index());
   }
   {
-    const vtx = pgs.make_vertices(vbid_main, "bullet-multi-2");
+    const vtx = pgs.make_vertices(vbid_triangles, "bullet-multi-2");
     const t = fill_v(vtx);
     regular_polygon(600.0, 4,
       rectangle_split(80, 80, joint_v(vtx, "bullet", hole())),
@@ -676,7 +669,7 @@ private function void build_vertices(app_impl mutable& app,
       (poly_t(), mesh_index());
   }
   {
-    const vtx = pgs.make_vertices(vbid_main, "saucer-multi3");
+    const vtx = pgs.make_vertices(vbid_triangles, "saucer-multi3");
     const t = fill_v(vtx);
     const rnd = make_rand_generator(991U);
     rand_sphere(200.0, 200, false, true, rnd,
@@ -684,7 +677,7 @@ private function void build_vertices(app_impl mutable& app,
       (poly_t(), mesh_index());
   }
   {
-    const vtx = pgs.make_vertices(vbid_main, "ab-multi3");
+    const vtx = pgs.make_vertices(vbid_triangles, "ab-multi3");
     const t = fill_v(vtx);
     const rnd = make_rand_generator(991U);
     rand_sphere(100.0, 100, false, true, rnd,
