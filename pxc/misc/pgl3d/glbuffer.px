@@ -113,26 +113,6 @@ public threaded struct async_buffer() {
   }
 }
 
-public threaded struct instance_buffer_type() {
-  private varray{ptr{async_buffer}} async_buffers;
-  public size_t async_buffer_current; // FIXME: private
-  public function ptr{async_buffer} get_current() const {
-    return async_buffers[async_buffer_current];
-  }
-  public function void switch_buffer() {
-    ++async_buffer_current;
-    if (async_buffer_current >= async_buffers.size()) {
-      async_buffer_current = 0;
-    }
-  }
-  init();
-  private function void init() {
-    for (const i: 0 .. 2) {
-      async_buffers.push_back(make_ptr{async_buffer}());
-    }
-  }
-}
-
 public threaded struct
 vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0)
 {

@@ -1,0 +1,175 @@
+public namespace instance_buffer "export-unsafe";
+public import common -;
+public import pointer::raw_unsafe -;
+public import numeric::fpmath -;
+public import glm;
+public import GL::compat -;
+public import io::time -;
+public import meta m;
+public import exception -;
+public import glshader -;
+public import glresource -;
+public import glvertex -;
+public import glbuffer -;
+public import pglbase -;
+
+public threaded struct instance_buffer_type() {
+  private varray{ptr{async_buffer}} buffers;
+  private size_t buffer_current;
+  public function ptr{async_buffer} get_current() const {
+    return buffers[buffer_current];
+  }
+  public function void switch_buffer() {
+    ++buffer_current;
+    if (buffer_current >= buffers.size()) {
+      buffer_current = 0;
+    }
+  }
+  init();
+  private function void init() {
+    for (const i: 0 .. 2) {
+      buffers.push_back(make_ptr{async_buffer}());
+    }
+  }
+}
+
+// FIXME: rename
+public function void
+send_instance_data(varray{instances_type} mutable& ibs,
+  instance_buffer_type mutable& gibuf, bool enable_instanced,
+  bool enable_uniform_instancing)
+{
+  if (enable_instanced && !enable_uniform_instancing) {
+    size_t offset_float = 0;
+    for (const bo_id, mutable& ib: ibs) {
+      for (const vs_id, mutable& vs: ib) {
+	for (const i, mutable& inst: vs) {
+	  mutable& arr = inst.instance_buffer;
+	  inst.glbuffer_offset_float = offset_float;
+	  offset_float += arr.size();
+	}
+      }
+    }
+    if (offset_float != 0) {
+      mutable& cur_buf = *gibuf.get_current();
+      const size_t total_size_float = offset_float;
+      offset_float = 0;
+      cur_buf.client_wait_sync(1000000000 * 10);
+      cur_buf.map_buffer(total_size_float * 4U);
+      const rawptr{float} mapped_ptr = cur_buf.mapped_ptr;
+      //sdllog("mapped_ptr", mapped_ptr, total_size_float * 4U);
+      for (const bo_id, mutable& ib: ibs) {
+	for (const vs_id, mutable& vs: ib) {
+	  for (const i, mutable& inst: vs) {
+	    mutable& arr = inst.instance_buffer;
+	    // if (bo_id == 3) { sdllog("font2 instance", arr); }
+	    const size_t sz = arr.size();
+	    const sli = rawptr_to_slice{float}(mapped_ptr + offset_float, sz);
+	    for (const j: 0 .. sz) {
+	      sli[j] = arr[j];
+	    }
+	    offset_float += sz;
+	  }
+	}
+      }
+      cur_buf.unmap_buffer();
+    }
+  }
+}
+
+
+// FIXME: rename
+public function void
+finished_using_instance_data(instance_buffer_type mutable& gibuf,
+  bool enable_instanced, bool enable_uniform_instancing)
+{
+  if (enable_instanced && !enable_uniform_instancing) {
+    gibuf.get_current()->fence_sync();
+    gibuf.switch_buffer();
+  }
+}
+
+// FIXME: rename
+public function void
+draw_instanced(glshader_i mutable& sdr, vertex_buffer const& bo,
+  instances_type const& ibs,
+  instance_buffer_type const& gibuf, vertex_buffer_id bo_id,
+  size_t ibuf_id, bool enable_instanced, bool enable_uniform_instancing)
+{
+  bo.draw_pre(sdr);
+  if (enable_instanced && !enable_uniform_instancing) {
+    sdr.enable_instance_attrib_array(true);
+    glBindBuffer(GL_ARRAY_BUFFER, gibuf.get_current()->vbo.get());
+  }
+  for (const vs_id: 0 .. bo.num_vs()) {
+    const& instance = ibs[static_cast{size_t}(vs_id)][ibuf_id];
+    const& arr = instance.instance_buffer;
+    // sdllog("draw_elems", ji.bo_id, ji.vs_id, "model=", arr.size());
+    if (enable_instanced && !enable_uniform_instancing) {
+      if (m::ne{is_gl3_or_gles3, 0}) {
+	/*
+	sdllog("instancing bo", bo_id, "iattr_num_float",
+	  sdr.instance_attrib_num_float());
+	*/
+	sdr.instance_attrib_pointer(instance.glbuffer_offset_float);
+	bo.draw_elems_instanced(static_cast{size_t}(vs_id),
+	  arr.size() / sdr.instance_attrib_num_float());
+      }
+    } else if (enable_uniform_instancing) {
+      size_t const iattr_num_float = sdr.instance_attrib_num_float();
+      size_t j;
+      size_t const jmax = arr.size() / iattr_num_float;
+      /*
+      sdllog("uniforminstancing bo", bo_id, "iattr_num_float",
+	iattr_num_float, jmax);
+      */
+      for (j = 0; j < jmax; j += uniform_instancing_mul) {
+	size_t k = min((jmax - j), uniform_instancing_mul);
+	sdr.instance_attrib_set_uniform(arr, j * iattr_num_float, k);
+	bo.draw_elems_instanced(static_cast{size_t}(vs_id), k);
+      }
+      /*
+      size_t const jmax = arr.size();
+      sdllog("uniforminstancing bo", bo_id, "iattr_num_float",
+	iattr_num_float, jmax);
+      for (j = 0; j < jmax; j += iattr_num_float * uniform_instancing_mul) {
+	size_t k = min((jmax - j) / iattr_num_float, uniform_instancing_mul);
+	sdr.instance_attrib_set_uniform(arr, j, k);
+	bo.draw_elems_instanced(static_cast{size_t}(vs_id), k);
+      }
+      */
+    } else { /* copying instancing */
+      size_t const iattr_num_float = sdr.instance_attrib_num_float();
+      size_t j;
+      const& be = *bo.get_by_id(static_cast{size_t}(vs_id));
+      size_t const jmax = arr.size() / iattr_num_float;
+      const inst_mul = be.vtxs->num_copies;
+      /*
+      sdllog("copyinginstancing bo", bo_id, "iattr_num_float",
+	iattr_num_float, jmax);
+      */
+      for (j = 0; j < jmax; j += inst_mul) {
+	size_t k = min((jmax - j), inst_mul);
+	sdr.instance_attrib_set_uniform(arr, j * iattr_num_float, k);
+	bo.draw_elems(static_cast{size_t}(vs_id), k);
+      }
+      /*
+      size_t const jmax = arr.size();
+      const inst_mul = be.vtxs->num_copies;
+      sdllog("copyinginstancing bo", bo_id, "iattr_num_float",
+	iattr_num_float, jmax);
+      for (j = 0; j < jmax; j += iattr_num_float * inst_mul) {
+	size_t k = min((jmax - j) / iattr_num_float, inst_mul);
+	sdr.instance_attrib_set_uniform(arr, j, k);
+	bo.draw_elems(static_cast{size_t}(vs_id), k);
+      }
+      */
+    }
+  }
+  if (enable_instanced && !enable_uniform_instancing) {
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    sdr.enable_instance_attrib_array(false);
+  }
+  bo.draw_post(sdr);
+}
+
