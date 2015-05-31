@@ -7,7 +7,7 @@ public import glm::raw;
 public import io::time -;
 public import exception -;
 public import meta m;
-public import pointer::func -;
+public import pointer::tfuncptr -;
 public import GL::compat -;
 public import glresource -;
 public import glshader -;
@@ -17,38 +17,33 @@ public import scenenode -;
 public import pglbase -;
 public import intern_pool -;
 public import shader_config -;
-public import instance_buffer -;
+public import aggregated_ibuffer -;
 public import drawer -;
 
 private function varray{ptr{pgldrawer_i}}
-init_drawers(shader_config const& glc)
+downcast_drawers(varray{ptr{pgldrawer_export_i}} const& drawers)
 {
   varray{ptr{pgldrawer_i}} r;
-  r.push_back(make_ptr{drawer_triangles}(glc));
-  r.push_back(make_ptr{drawer_triangles2}(glc));
-  r.push_back(make_ptr{drawer_lineparticle}(glc));
-  r.push_back(make_ptr{drawer_particle}(glc));
-  r.push_back(make_ptr{drawer_particle_bb}(glc));
-  r.push_back(make_ptr{drawer_rect2d}(glc));
-  r.push_back(make_ptr{drawer_font2}(glc));
+  for (size_t i, const& e: drawers) {
+    r.push_back(pointer_downcast{ptr{pgldrawer_i}}(e));
+  }
   return r;
 }
 
 public struct
-pglshader(bool gles_flag0, int glmajor0, int glminor0, bool enable_msaa0,
-  int width0, int height0)
+pglshader(shader_config const& sconf0,
+  varray{ptr{pgldrawer_export_i}} const& drawers0, int width0, int height0)
 <make_vertices_i>
 {
-  public shader_config glc = shader_config(gles_flag0, glmajor0, glminor0,
-    enable_msaa0);
-  public varray{ptr{pgldrawer_i}} drawers = init_drawers(glc);
+  public shader_config glc = sconf0;
+  public varray{ptr{pgldrawer_i}} drawers = downcast_drawers(drawers0);
   public varray{vertex_buffer_id} vbids;
   public shadowmap_fbo sfbo;
   public main_texture_info mti;
   public font_texture_info fti;
   public projection_info cam;
   public varray{ptr{vertex_buffer}} vertex_buffers;
-  public instance_buffer_type global_ibuffer;
+  public aggregated_ibuffer agg_ibuffer;
   public tptr{prepare_instance_data_cb} const prepare_instance
     = make_tptr{prepare_instance_data_cb}();
   private auto_vertexarray vtxarr;
@@ -212,7 +207,7 @@ pglshader_draw_frame(pglshader mutable& pgs,
   const sm_view = cam_df.light.to_mat4().inverse();
   const sm_vp = cam_df.sm_projection * sm_view;
   const tick1 = SDL_GetTicks();
-  send_instance_data(bo_instances, pgs.global_ibuffer,
+  pgs.agg_ibuffer.frame_begin(bo_instances,
       pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
   const tick2 = SDL_GetTicks();
   /* shadowmapping shader */
@@ -239,7 +234,7 @@ pglshader_draw_frame(pglshader mutable& pgs,
       const bo_id = pgs.vbids[i];
       pd->draw(draw_step_shadowmapping,
 	*bos[static_cast{size_t}(bo_id)],
-	bo_instances[static_cast{size_t}(bo_id)], pgs.global_ibuffer,
+	bo_instances[static_cast{size_t}(bo_id)], pgs.agg_ibuffer,
 	bo_id, pgs.glc, cam_df);
     }
     /* restore fb */
@@ -261,7 +256,7 @@ pglshader_draw_frame(pglshader mutable& pgs,
       const bo_id = pgs.vbids[i];
       pd->draw(draw_step_zprepass,
 	*bos[static_cast{size_t}(bo_id)],
-	bo_instances[static_cast{size_t}(bo_id)], pgs.global_ibuffer,
+	bo_instances[static_cast{size_t}(bo_id)], pgs.agg_ibuffer,
 	bo_id, pgs.glc, cam_df);
     }
   }
@@ -285,7 +280,7 @@ pglshader_draw_frame(pglshader mutable& pgs,
       const bo_id = pgs.vbids[i];
       pd->draw(draw_step_solid,
 	*bos[static_cast{size_t}(bo_id)],
-	bo_instances[static_cast{size_t}(bo_id)], pgs.global_ibuffer,
+	bo_instances[static_cast{size_t}(bo_id)], pgs.agg_ibuffer,
 	bo_id, pgs.glc, cam_df);
     }
   }
@@ -301,12 +296,12 @@ pglshader_draw_frame(pglshader mutable& pgs,
       const bo_id = pgs.vbids[i];
       pd->draw(draw_step_blend,
 	*bos[static_cast{size_t}(bo_id)],
-	bo_instances[static_cast{size_t}(bo_id)], pgs.global_ibuffer,
+	bo_instances[static_cast{size_t}(bo_id)], pgs.agg_ibuffer,
 	bo_id, pgs.glc, cam_df);
     }
   }
-  finished_using_instance_data(pgs.global_ibuffer,
-      pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
+  pgs.agg_ibuffer.frame_end(pgs.glc.enable_instanced,
+    pgs.glc.enable_uniform_instancing);
   return make_varray{uint}(tick1, tick2);
 }
 

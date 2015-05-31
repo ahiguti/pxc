@@ -7,7 +7,7 @@ public import glm::raw;
 public import io::time -;
 public import exception -;
 public import meta m;
-public import pointer::func -;
+public import pointer::tfuncptr -;
 public import GL::compat -;
 public import glresource -;
 public import glshader -;
@@ -17,7 +17,7 @@ public import scenenode -;
 public import pglbase -;
 public import intern_pool -;
 public import shader_config -;
-public import instance_buffer -;
+public import aggregated_ibuffer -;
 
 public enum draw_step {
   draw_step_shadowmapping = 1,
@@ -27,7 +27,7 @@ public enum draw_step {
 }
 
 public metafunction prepare_instance_data_funcptr
-  pointer::func::funcptr_for_function{prepare_instance_data_default};
+  pointer::tfuncptr::tfuncptr_matching_function{prepare_instance_data_default};
 
 public multithreaded struct prepare_instance_data_cb
 <prepare_instance_data_i>
@@ -47,18 +47,18 @@ public threaded function void prepare_instance_data_cb_add(
   size_t i = static_cast{size_t}(vbid);
   if (picb.func_table.size() <= i) {
     picb.func_table.resize(i + 1,
-      make_funcptr{prepare_instance_data_default}());
+      make_tfuncptr{prepare_instance_data_default}());
   }
   picb.func_table[i] = fp;
 }
 
-public interface pgldrawer_i {
+public interface pgldrawer_i <pgldrawer_export_i> {
   public function string get_vbid_name() const;
   public function prepare_instance_data_funcptr
     get_prepare_instance_data_funcptr() const;
   public function ptr{vertex_buffer} make_vertex_buffer() const;
   public function void draw(draw_step step, vertex_buffer const& bo,
-    instances_type const& ibs, instance_buffer_type const& gibuf,
+    instances_type const& ibs, aggregated_ibuffer const& aibuf,
     vertex_buffer_id bo_id, shader_config const& glc,
     projection_info const& cam_df);
 }
@@ -72,7 +72,7 @@ public struct drawer_triangles(shader_config const& glc)
   public function string get_vbid_name() const { return "vbid_triangles"; }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
-    return make_funcptr{prepare_instance_data_triangles}();
+    return make_tfuncptr{prepare_instance_data_triangles}();
   }
   public function ptr{vertex_buffer} make_vertex_buffer() const {
     return make_ptr{vertex_buffer}(
@@ -80,14 +80,14 @@ public struct drawer_triangles(shader_config const& glc)
       false);
   }
   public function void draw(draw_step step, vertex_buffer const& bo,
-    instances_type const& ibs, instance_buffer_type const& gibuf,
+    instances_type const& ibs, aggregated_ibuffer const& aibuf,
     vertex_buffer_id bo_id, shader_config const& glc,
     projection_info const& cam_df)
   {
     if (step == draw_step_shadowmapping) {
       glUseProgram(sdr_shadow->program);
-      draw_instanced(*sdr_shadow, bo, ibs, gibuf, bo_id, 1,
-	glc.enable_instanced, glc.enable_uniform_instancing);
+      aibuf.draw(*sdr_shadow, bo, ibs, bo_id, 1, glc.enable_instanced,
+	glc.enable_uniform_instancing);
     } else if (step == draw_step_zprepass) {
       mutable view = glm::mat4();
       view = cam_df.camera.to_mat4().inverse();
@@ -96,7 +96,7 @@ public struct drawer_triangles(shader_config const& glc)
       glUseProgram(sdr.program);
       glUniformMatrix4fv(sdr.u_view_projection_matrix, 1, 0,
 	vp.to_crawptr());
-      draw_instanced(sdr, bo, ibs, gibuf, bo_id, 0, glc.enable_instanced,
+      aibuf.draw(sdr, bo, ibs, bo_id, 0, glc.enable_instanced,
 	  glc.enable_uniform_instancing);
     } else if (step == draw_step_solid) {
       const sm_view = cam_df.light.to_mat4().inverse();
@@ -116,7 +116,7 @@ public struct drawer_triangles(shader_config const& glc)
       glUniform1f(sdr.u_light_on, 1.0f);
       glUniformMatrix4fv(sdr.u_shadowmap_vp, 1, 0, sm_vp.to_crawptr());
       glUniformMatrix4fv(sdr.u_view_projection_matrix, 1, 0, vp.to_crawptr());
-      draw_instanced(sdr, bo, ibs, gibuf, bo_id, 0, glc.enable_instanced,
+      aibuf.draw(sdr, bo, ibs, bo_id, 0, glc.enable_instanced,
 	glc.enable_uniform_instancing);
     }
   }
@@ -131,7 +131,7 @@ public struct drawer_triangles2(shader_config const& glc)
   public function string get_vbid_name() const { return "vbid_triangles2"; }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
-    return make_funcptr{prepare_instance_data_triangles}();
+    return make_tfuncptr{prepare_instance_data_triangles}();
   }
   public function ptr{vertex_buffer} make_vertex_buffer() const {
     return make_ptr{vertex_buffer}(
@@ -139,13 +139,13 @@ public struct drawer_triangles2(shader_config const& glc)
       false);
   }
   public function void draw(draw_step step, vertex_buffer const& bo,
-    instances_type const& ibs, instance_buffer_type const& gibuf,
+    instances_type const& ibs, aggregated_ibuffer const& aibuf,
     vertex_buffer_id bo_id, shader_config const& glc,
     projection_info const& cam_df)
   {
     if (step == draw_step_shadowmapping) {
       glUseProgram(sdr_shadow->program);
-      draw_instanced(*sdr_shadow, bo, ibs, gibuf, bo_id, 1, false, false);
+      aibuf.draw(*sdr_shadow, bo, ibs, bo_id, 1, false, false);
     } else if (step == draw_step_zprepass) {
       mutable view = glm::mat4();
       view = cam_df.camera.to_mat4().inverse();
@@ -153,7 +153,7 @@ public struct drawer_triangles2(shader_config const& glc)
       glUseProgram(sdr_zp->program);
       glUniformMatrix4fv(sdr_zp->u_view_projection_matrix, 1, 0,
 	vp.to_crawptr());
-      draw_instanced(*sdr_zp, bo, ibs, gibuf, bo_id, 0, false, false);
+      aibuf.draw(*sdr_zp, bo, ibs, bo_id, 0, false, false);
     } else if (step == draw_step_solid) {
       const sm_view = cam_df.light.to_mat4().inverse();
       const sm_vp = cam_df.sm_projection * sm_view;
@@ -174,7 +174,7 @@ public struct drawer_triangles2(shader_config const& glc)
       glUniformMatrix4fv(sdr.u_shadowmap_vp, 1, 0, sm_vp.to_crawptr());
       glUniformMatrix4fv(sdr.u_view_projection_matrix, 1, 0,
 	vp.to_crawptr());
-      draw_instanced(sdr, bo, ibs, gibuf, bo_id, 0, false, false);
+      aibuf.draw(sdr, bo, ibs, bo_id, 0, false, false);
     }
   }
 }
@@ -186,7 +186,7 @@ public struct drawer_lineparticle(shader_config const& glc)
   public function string get_vbid_name() const { return "vbid_lineparticle"; }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
-    return make_funcptr{prepare_instance_data_lineparticle}();
+    return make_tfuncptr{prepare_instance_data_lineparticle}();
   }
   public function ptr{vertex_buffer} make_vertex_buffer() const {
     return make_ptr{vertex_buffer}(
@@ -194,7 +194,7 @@ public struct drawer_lineparticle(shader_config const& glc)
       false);
   }
   public function void draw(draw_step step, vertex_buffer const& bo,
-    instances_type const& ibs, instance_buffer_type const& gibuf,
+    instances_type const& ibs, aggregated_ibuffer const& aibuf,
     vertex_buffer_id bo_id, shader_config const& glc,
     projection_info const& cam_df)
   {
@@ -215,7 +215,7 @@ public struct drawer_lineparticle(shader_config const& glc)
 	vp.to_crawptr());
       glUniform2fv(sdr.u_screen_size_px, 1, screen_size_px.to_crawptr());
       glUniform1fv(sdr.u_screen_size_base, 1, caddress(screen_size_base));
-      draw_instanced(sdr, bo, ibs, gibuf, bo_id, 0, glc.enable_instanced,
+      aibuf.draw(sdr, bo, ibs, bo_id, 0, glc.enable_instanced,
 	glc.enable_uniform_instancing);
     }
   }
@@ -228,14 +228,14 @@ public struct drawer_particle(shader_config const& glc)
   public function string get_vbid_name() const { return "vbid_particle"; }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
-    return make_funcptr{prepare_instance_data_particle}();
+    return make_tfuncptr{prepare_instance_data_particle}();
   }
   public function ptr{vertex_buffer} make_vertex_buffer() const {
     return make_ptr{vertex_buffer}(
       static_cast{size_t}(num_float_struct{particle_vertex_attributes}), true);
   }
   public function void draw(draw_step step, vertex_buffer const& bo,
-    instances_type const& ibs, instance_buffer_type const& gibuf,
+    instances_type const& ibs, aggregated_ibuffer const& aibuf,
     vertex_buffer_id bo_id, shader_config const& glc,
     projection_info const& cam_df)
   {
@@ -246,7 +246,7 @@ public struct drawer_particle(shader_config const& glc)
       glUniform1f(sdr.u_point_size_base,
 	0.1f * static_cast{float}(max(
 	  cam_df.screen_width, cam_df.screen_height)));
-      draw_instanced(sdr, bo, ibs, gibuf, bo_id, 0, glc.enable_instanced,
+      aibuf.draw(sdr, bo, ibs, bo_id, 0, glc.enable_instanced,
 	glc.enable_uniform_instancing);
     }
   }
@@ -259,7 +259,7 @@ public struct drawer_particle_bb(shader_config const& glc)
   public function string get_vbid_name() const { return "vbid_particle_bb"; }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
-    return make_funcptr{prepare_instance_data_default}();
+    return make_tfuncptr{prepare_instance_data_default}();
   }
   public function ptr{vertex_buffer} make_vertex_buffer() const {
     return make_ptr{vertex_buffer}(
@@ -267,7 +267,7 @@ public struct drawer_particle_bb(shader_config const& glc)
       false);
   }
   public function void draw(draw_step step, vertex_buffer const& bo,
-    instances_type const& ibs, instance_buffer_type const& gibuf,
+    instances_type const& ibs, aggregated_ibuffer const& aibuf,
     vertex_buffer_id bo_id, shader_config const& glc,
     projection_info const& cam_df)
   {
@@ -283,7 +283,7 @@ public struct drawer_particle_bb(shader_config const& glc)
       glUniformMatrix3fv(sdr.u_camera_matrix, 1, 0,
 	cam_mat.to_3().to_crawptr());
       glUniform1f(sdr.u_point_size_base, 0.1f);
-      draw_instanced(sdr, bo, ibs, gibuf, bo_id, 0, 
+      aibuf.draw(sdr, bo, ibs, bo_id, 0, 
 	glc.enable_instanced, glc.enable_uniform_instancing);
     }
   }
@@ -296,14 +296,14 @@ public struct drawer_font2(shader_config const& glc)
   public function string get_vbid_name() const { return "vbid_font2"; }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
-    return make_funcptr{prepare_instance_data_font2}();
+    return make_tfuncptr{prepare_instance_data_font2}();
   }
   public function ptr{vertex_buffer} make_vertex_buffer() const {
     return make_ptr{vertex_buffer}(
       static_cast{size_t}(num_float_struct{font2_vertex_attributes}), true);
   }
   public function void draw(draw_step step, vertex_buffer const& bo,
-    instances_type const& ibs, instance_buffer_type const& gibuf,
+    instances_type const& ibs, aggregated_ibuffer const& aibuf,
     vertex_buffer_id bo_id, shader_config const& glc,
     projection_info const& cam_df)
   {
@@ -316,7 +316,7 @@ public struct drawer_font2(shader_config const& glc)
       glUseProgram(sdr.program);
       glUniform1i(sdr.u_sampler, 0);
       glUniform2fv(sdr.u_screen_size_px, 1, screen_size_px.to_crawptr());
-      draw_instanced(sdr, bo, ibs, gibuf, bo_id, 0,
+      aibuf.draw(sdr, bo, ibs, bo_id, 0,
 	glc.enable_instanced, glc.enable_uniform_instancing);
     }
   }
@@ -329,14 +329,14 @@ public struct drawer_rect2d(shader_config const& glc)
   public function string get_vbid_name() const { return "vbid_rect2d"; }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
-    return make_funcptr{prepare_instance_data_rect2d}();
+    return make_tfuncptr{prepare_instance_data_rect2d}();
   }
   public function ptr{vertex_buffer} make_vertex_buffer() const {
     return make_ptr{vertex_buffer}(
       static_cast{size_t}(num_float_struct{rect2d_vertex_attributes}), false);
   }
   public function void draw(draw_step step, vertex_buffer const& bo,
-    instances_type const& ibs, instance_buffer_type const& gibuf,
+    instances_type const& ibs, aggregated_ibuffer const& aibuf,
     vertex_buffer_id bo_id, shader_config const& glc,
     projection_info const& cam_df)
   {
@@ -344,7 +344,7 @@ public struct drawer_rect2d(shader_config const& glc)
       glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
       mutable& sdr = *sdr_re;
       glUseProgram(sdr.program);
-      draw_instanced(sdr, bo, ibs, gibuf, bo_id, 0, glc.enable_instanced,
+      aibuf.draw(sdr, bo, ibs, bo_id, 0, glc.enable_instanced,
 	glc.enable_uniform_instancing);
     }
   }

@@ -1,4 +1,4 @@
-public namespace instance_buffer "export-unsafe";
+public namespace aggregated_ibuffer "export-unsafe";
 public import common -;
 public import pointer::raw_unsafe -;
 public import numeric::fpmath -;
@@ -13,7 +13,8 @@ public import glvertex -;
 public import glbuffer -;
 public import pglbase -;
 
-public threaded struct instance_buffer_type() {
+public threaded struct aggregated_ibuffer()
+{
   private varray{ptr{async_buffer}} buffers;
   private size_t buffer_current;
   public function ptr{async_buffer} get_current() const {
@@ -33,10 +34,9 @@ public threaded struct instance_buffer_type() {
   }
 }
 
-// FIXME: rename
 public function void
-send_instance_data(varray{instances_type} mutable& ibs,
-  instance_buffer_type mutable& gibuf, bool enable_instanced,
+aggregated_ibuffer_frame_begin(aggregated_ibuffer mutable& aibuf,
+  varray{instances_type} mutable& ibs, bool enable_instanced,
   bool enable_uniform_instancing)
 {
   if (enable_instanced && !enable_uniform_instancing) {
@@ -51,7 +51,7 @@ send_instance_data(varray{instances_type} mutable& ibs,
       }
     }
     if (offset_float != 0) {
-      mutable& cur_buf = *gibuf.get_current();
+      mutable& cur_buf = *aibuf.get_current();
       const size_t total_size_float = offset_float;
       offset_float = 0;
       cur_buf.client_wait_sync(1000000000 * 10);
@@ -78,28 +78,26 @@ send_instance_data(varray{instances_type} mutable& ibs,
 }
 
 
-// FIXME: rename
 public function void
-finished_using_instance_data(instance_buffer_type mutable& gibuf,
+aggregated_ibuffer_frame_end(aggregated_ibuffer mutable& aibuf,
   bool enable_instanced, bool enable_uniform_instancing)
 {
   if (enable_instanced && !enable_uniform_instancing) {
-    gibuf.get_current()->fence_sync();
-    gibuf.switch_buffer();
+    aibuf.get_current()->fence_sync();
+    aibuf.switch_buffer();
   }
 }
 
-// FIXME: rename
 public function void
-draw_instanced(glshader_i mutable& sdr, vertex_buffer const& bo,
-  instances_type const& ibs,
-  instance_buffer_type const& gibuf, vertex_buffer_id bo_id,
-  size_t ibuf_id, bool enable_instanced, bool enable_uniform_instancing)
+aggregated_ibuffer_draw(aggregated_ibuffer const& aibuf,
+  glshader_i mutable& sdr, vertex_buffer const& bo, instances_type const& ibs,
+  vertex_buffer_id bo_id, size_t ibuf_id, bool enable_instanced,
+  bool enable_uniform_instancing)
 {
   bo.draw_pre(sdr);
   if (enable_instanced && !enable_uniform_instancing) {
     sdr.enable_instance_attrib_array(true);
-    glBindBuffer(GL_ARRAY_BUFFER, gibuf.get_current()->vbo.get());
+    glBindBuffer(GL_ARRAY_BUFFER, aibuf.get_current()->vbo.get());
   }
   for (const vs_id: 0 .. bo.num_vs()) {
     const& instance = ibs[static_cast{size_t}(vs_id)][ibuf_id];

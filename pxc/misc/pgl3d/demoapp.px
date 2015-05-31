@@ -9,6 +9,7 @@ public import glgeometry -;
 public import wfobj -;
 public import glm;
 public import text::string::positional -;
+public import drawer_export -;
 
 // FIXME: projection_infoではなくscreen_infoだけ渡すように
 
@@ -21,6 +22,10 @@ public struct demoapp_application()
   <pgl3d_application>
 {	
   public app_impl app;
+  public function varray{ptr{pgldrawer_export_i}} on_init_drawers(
+    shader_config const& conf) {
+    return init_drawers(app, conf);
+  }
   public function void on_build_vertices(make_vertices_i mutable& mvx) {
     build_vertices(app, mvx);
   }
@@ -499,6 +504,20 @@ function void handle_keys(app_impl mutable& app,
     app.scene_next_flag = false;
     // sdllog("posang = ", ss.posang);
   }
+}
+
+private function varray{ptr{pgldrawer_export_i}} init_drawers(
+  app_impl mutable& app, shader_config const& sconf)
+{
+  varray{ptr{pgldrawer_export_i}} r;
+  r.push_back(make_drawer_triangles(sconf));
+  r.push_back(make_drawer_triangles2(sconf));
+  r.push_back(make_drawer_lineparticle(sconf));
+  r.push_back(make_drawer_particle(sconf));
+  r.push_back(make_drawer_particle_bb(sconf));
+  r.push_back(make_drawer_rect2d(sconf));
+  r.push_back(make_drawer_font2(sconf));
+  return r;
 }
 
 private function void build_vertices(app_impl mutable& app,

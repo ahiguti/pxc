@@ -176,8 +176,14 @@ private function void main_loop(pgl3d_application mutable& app)
 
   sdllog("PGL3D init0");
 
+  shader_config sconf = shader_config(sdlc.gles_flag, sdlc.glmajor,
+    sdlc.glminor, sdlc.enable_msaa);
+  varray{ptr{pgldrawer_export_i}} drawers = app.on_init_drawers(sconf);
+  pglshader pgs = pglshader(sconf, drawers, sdlc.init_w, sdlc.init_h);
+  /*
   pglshader pgs = pglshader(sdlc.gles_flag, sdlc.glmajor, sdlc.glminor,
     sdlc.enable_msaa, sdlc.init_w, sdlc.init_h);
+  */
   app.on_build_vertices(pgs);
   varray{instances_type} local_bo_instances;
   pgs.prepare_vertex_buffers();
