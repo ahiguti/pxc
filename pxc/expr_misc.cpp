@@ -63,6 +63,7 @@ nspropmap_type nspropmap;
 nsthrmap_type nsthrmap;
 std::string emit_threaded_dll_func;
 compiled_ns_type compiled_ns;
+std::vector<std::string> instantiating_ns_stack;
 /* end: global variables */
 
 static expr_i *string_to_nssym(expr_i *e, const std::string& str)
@@ -3563,6 +3564,39 @@ bool is_safe_namespace(const std::string& ns)
     arena_error_throw(0, "Namespace '%s' not found", ns.c_str());
   }
   return i->second.safety == nssafety_e_safe;
+}
+
+bool is_sibling_namespace(const std::string& ns0, const std::string& ns1)
+{
+  size_t p0 = ns0.rfind("::");
+  size_t p1 = ns1.rfind("::");
+  std::string s0 = ns0.substr(0, p0);
+  std::string s1 = ns1.substr(0, p1);
+  if (s0 == s1) {
+    return true;
+  }
+  size_t q0 = s0.rfind("::");
+  size_t q1 = s1.rfind("::");
+  std::string t0 = s0.substr(0, q0);
+  std::string t1 = s1.substr(0, q1);
+  if (t0 == t1) {
+    return true;
+  }
+  return false;
+}
+
+bool is_accessible_namespace(const std::string& ns0, const std::string& ns1)
+{
+  if (is_sibling_namespace(ns0, ns1)) {
+    return true;
+  }
+  for (size_t i = 0; i < instantiating_ns_stack.size(); ++i) {
+    const std::string& s = instantiating_ns_stack[i];
+    if (is_sibling_namespace(ns0, s)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 bool is_compiled(const expr_block *bl)

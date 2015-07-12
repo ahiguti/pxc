@@ -97,8 +97,7 @@ expr_i *symbol_common::resolve_symdef(symbol_table *lookup)
       }
       assert(i != nspropmap.end());
       if (!i->second.is_public) {
-	const std::string p = smns + "::";
-	if (sdns.substr(0, p.size()) != p) {
+	if (!is_accessible_namespace(sdns, smns)) {
 	  arena_error_push(parent_expr,
 	    "Symbol '%s' is defined in private namespace '%s'",
 	    this->get_fullsym().c_str(), sdns.c_str());

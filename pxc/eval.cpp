@@ -246,10 +246,23 @@ static expr_i *instantiate_template_internal(expr_i *tmpl_root,
   return rcpy;
 }
 
+static std::string get_ns(expr_i *pos)
+{
+  while (pos != 0) {
+    std::string s = pos->get_unique_namespace();
+    if (!s.empty()) {
+      return s;
+    }
+    pos = pos->parent_expr;
+  }
+  return std::string();
+}
+
 expr_i *instantiate_template(expr_i *tmpl_root, const term_list_range& targs,
   expr_i *pos)
 {
   arena_error_throw_pushed(); /* it's necessary! */
+  scoped_instantiating_ns scoped_inst_ns(get_ns(pos));
   try {
     expr_i *const re = instantiate_template_internal(tmpl_root, targs);
     arena_error_throw_pushed();

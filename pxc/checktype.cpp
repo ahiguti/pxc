@@ -291,8 +291,7 @@ void expr_ns::check_type(symbol_table *lookup)
 	uniq_nsstr.c_str());
     }
     if (!j->second.is_public) {
-      std::string p = src_uniq_nsstr + "::";
-      if (uniq_nsstr.substr(0, p.size()) != p) {
+      if (!is_sibling_namespace(src_uniq_nsstr, uniq_nsstr)) {
 	arena_error_throw(this, "Can not import private namespace '%s'",
 	  uniq_nsstr.c_str());
       }

@@ -43,6 +43,7 @@ extern nsthrmap_type nsthrmap;
 extern std::string emit_threaded_dll_func;
 typedef std::map<symbol, bool> compiled_ns_type;
 extern compiled_ns_type compiled_ns;
+extern std::vector<std::string> instantiating_ns_stack;
 /* end: global variables */
 
 expr_i *string_to_te(expr_i *epos, const std::string& str);
@@ -179,6 +180,8 @@ bool is_vardef_or_vardefset(expr_i *e);
 bool is_noexec_expr(expr_i *e);
 
 bool is_safe_namespace(const std::string& ns);
+bool is_sibling_namespace(const std::string& ns0, const std::string& ns1);
+bool is_accessible_namespace(const std::string& ns0, const std::string& ns1);
 
 bool is_compiled(const expr_block *bl);
 
@@ -197,6 +200,18 @@ void fn_check_final(expr_i *e);
 void fn_prepare_imports();
 void fn_compile(expr_i *e, expr_i *p, bool is_template);
 expr_i *fn_drop_non_exports(expr_i *e);
+
+struct scoped_instantiating_ns {
+  scoped_instantiating_ns(const std::string& ns) {
+    instantiating_ns_stack.push_back(ns);
+  }
+  ~scoped_instantiating_ns() {
+    instantiating_ns_stack.pop_back();
+  }
+private:
+  scoped_instantiating_ns(const scoped_instantiating_ns&);
+  scoped_instantiating_ns& operator =(const scoped_instantiating_ns&);
+};
 
 };
 
