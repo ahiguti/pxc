@@ -4,8 +4,10 @@ public import numeric::fp -;
 public import numeric::cast -;
 public import io +;
 
-public tsvaluetype struct extern "std::time_t" "extint" time_t { }   //SLONG
-public tsvaluetype struct extern "::suseconds_t" "extint" suseconds_t { }
+public tsvaluetype struct extern "std::time_t" "extint"
+time_t { }   //SLONG
+public tsvaluetype struct extern "pxcrt::suseconds_t" "extint"
+suseconds_t { }
 
 public tsvaluetype struct extern "::timeval" timeval {
   public time_t tv_sec;
@@ -32,21 +34,53 @@ io_gettimeofday_double(io::io const& iop)
 
 private function extern "pxcrt::time_init" void time_init(); /* not mtsafe */
 
+extern "types" inline
+namespace pxcrt {
+#ifdef PXC_POSIX
+typedef ::suseconds_t suseconds_t;
+#else
+typedef long suseconds_t;
+#endif
+};
+;
+
 extern "functions" inline
 #include <ctime>
+#ifdef PXC_POSIX
 #include <sys/time.h>
+#endif
 ;
 
 extern "implementation" inline
 namespace pxcrt {
 using namespace pxcrt;
 
+#ifdef PXC_POSIX
 ::timeval gettimeofday(io const& iop)
 {
   ::timeval tv = { };
   ::gettimeofday(&tv, 0); /* no need to check error */
   return tv;
 }
+#endif
+
+#ifdef PXC_WINDOWS
+::timeval gettimeofday(io const& iop)
+{
+  FILETIME ft = { };
+  unsigned __int64 v = 0;
+  GetSystemTimeAsFileTime(&ft);
+  v = ft.dwHighDateTime;
+  v <<= 32u;
+  v += ft.dwLowDateTime;
+  v -= 11644473600000000Ui64; /* to unix epoch */
+  v /= 10; /* to microsec */
+  ::timeval tv = { };
+  tv.tv_sec = (long)(v / 1000000);
+  tv.tv_usec = (long)(v % 1000000);
+  return tv;
+}
+#endif
 
 std::time_t time(io const& iop)
 {
@@ -55,18 +89,32 @@ std::time_t time(io const& iop)
 
 bt_uint io_sleep(io const& iop, bt_uint sec)
 {
-  return ::sleep(sec);
+#ifdef PXC_POSIX
+  ::sleep(sec);
+#else
+  Sleep(sec * 1000);
+#endif
+  return 0;
 }
 
 bt_uint io_usleep(io const& iop, bt_uint usec)
 {
-  return ::usleep(usec);
+#ifdef PXC_POSIX
+  ::usleep(usec);
+#else
+  Sleep(usec / 1000);
+#endif
+  return 0;
 }
 
 void time_init()
 {
   /* not multi-thread safe */
-  tzset();
+#ifdef PXC_POSIX
+  ::tzset();
+#else
+  _tzset();
+#endif
 }
 
 }; // namespace pxcrt

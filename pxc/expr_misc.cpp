@@ -3053,36 +3053,39 @@ static void check_var_defcon(expr_i *e)
 
 void fn_check_final(expr_i *e)
 {
-  if (e == 0) {
-    return;
-  }
-  check_var_defcon(e);
-  check_type_threading(e);
-  check_interface_impl(e);
-  check_use_before_def(e);
-  /* check instances */
-  expr_block *const bl = dynamic_cast<expr_block *>(e);
-  if (bl != 0) {
-    template_info& ti = bl->tinfo;
-    for (template_info::instances_type::iterator i = ti.instances.begin();
-      i != ti.instances.end(); ++i) {
-      fn_check_final(i->second->parent_expr);
+  while (e != 0) {
+    check_var_defcon(e);
+    check_type_threading(e);
+    check_interface_impl(e);
+    check_use_before_def(e);
+    /* check instances */
+    expr_block *const bl = dynamic_cast<expr_block *>(e);
+    if (bl != 0) {
+      template_info& ti = bl->tinfo;
+      for (template_info::instances_type::iterator i = ti.instances.begin();
+	i != ti.instances.end(); ++i) {
+	fn_check_final(i->second->parent_expr);
+      }
+      if (ti.is_uninstantiated()) {
+	/* don't check children of an uninstantiated block */
+	return;
+      }
     }
-    if (ti.is_uninstantiated()) {
-      /* don't check children of an uninstantiated block */
+    expr_metafdef *const ma = dynamic_cast<expr_metafdef *>(e);
+    if (ma != 0) {
+      /* don't check macro body */
       return;
     }
-  }
-  expr_metafdef *const ma = dynamic_cast<expr_metafdef *>(e);
-  if (ma != 0) {
-    /* don't check macro body */
-    return;
-  }
-  /* check children */
-  const int num = e->get_num_children();
-  for (int i = 0; i < num; ++i) {
-    expr_i *c = e->get_child(i);
-    fn_check_final(c);
+    /* check children */
+    const int num = e->get_num_children();
+    if (num == 0) {
+      return;
+    }
+    for (int i = 0; i + 1 < num; ++i) {
+      expr_i *c = e->get_child(i);
+      fn_check_final(c);
+    }
+    e = e->get_child(num - 1);
   }
 }
 

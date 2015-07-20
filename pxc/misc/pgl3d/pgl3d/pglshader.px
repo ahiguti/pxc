@@ -477,27 +477,64 @@ function void init_shadowmap_fbo(shader_config const& glc,
   }
 }
 
+private function extern "sdl_byteorder" int sdl_byteorder();
+private function extern "sdl_lil_endian" int sdl_lil_endian();
+private function extern "sdl_big_endian" int sdl_big_endian();
+
+extern "functions" inline
+namespace pgl3d$n { namespace pglshader$n {
+static inline ::pxcrt::bt_int sdl_byteorder()
+{ return SDL_BYTEORDER; }
+static inline ::pxcrt::bt_int sdl_lil_endian()
+{ return SDL_LIL_ENDIAN; }
+static inline ::pxcrt::bt_int sdl_big_endian()
+{ return SDL_BIG_ENDIAN; }
+}; };
+;
+
+function void check_byteorder()
+{
+  if (sdl_byteorder() != sdl_lil_endian()
+      && sdl_byteorder() != sdl_big_endian()) {
+      throw runtime_error_template{"unknown byteorder"}("1");
+  }
+  sdllog("byteorder ", sdl_byteorder());
+}
+
 function uint read_3_uint(cslice{uchar} const& buf, size_t o)
 {
-  /* FIXME: endianness */
   uint v;
-  v += buf[o+2]; v *= 256;
-  v += buf[o+1]; v *= 256;
-  v += buf[o+0];
+  if (sdl_byteorder() == sdl_lil_endian()) {
+    v += buf[o+2]; v *= 256;
+    v += buf[o+1]; v *= 256;
+    v += buf[o+0];
+  } else if (sdl_byteorder() == sdl_big_endian()) {
+    v += buf[o+0]; v *= 256;
+    v += buf[o+1]; v *= 256;
+    v += buf[o+2];
+  }
   return v;
 }
 function void write_4_uint(slice{uchar} const& buf, size_t o, uint val)
 {
   /* FIXME: endianness */
-  buf[o+3] = static_cast{uchar}(val >> 24);
-  buf[o+2] = static_cast{uchar}(val >> 16);
-  buf[o+1] = static_cast{uchar}(val >>  8);
-  buf[o+0] = static_cast{uchar}(val);
+  if (sdl_byteorder() == sdl_lil_endian()) {
+    buf[o+3] = static_cast{uchar}(val >> 24);
+    buf[o+2] = static_cast{uchar}(val >> 16);
+    buf[o+1] = static_cast{uchar}(val >>  8);
+    buf[o+0] = static_cast{uchar}(val);
+  } else if (sdl_byteorder() == sdl_big_endian()) {
+    buf[o+0] = static_cast{uchar}(val >> 24);
+    buf[o+1] = static_cast{uchar}(val >> 16);
+    buf[o+2] = static_cast{uchar}(val >>  8);
+    buf[o+3] = static_cast{uchar}(val);
+  }
 }
 
 function void
 init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
 {
+  check_byteorder();
   metafunction SDL_Surface_Scoped scoped_nullable{SDL_FreeSurface};
   {
     /* font */

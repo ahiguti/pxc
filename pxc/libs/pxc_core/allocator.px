@@ -11,6 +11,9 @@ extern "types" inline
 #if defined(__APPLE__) && !defined(PXCRT_NO_LOCAL_POOL)
 #define PXCRT_NO_LOCAL_POOL
 #endif
+#if defined(PXC_WINDOWS) && !defined(PXCRT_NO_LOCAL_POOL)
+#define PXCRT_NO_LOCAL_POOL
+#endif
 
 #include <cstdio>
 #include <cstdlib>
@@ -49,7 +52,7 @@ void clear_local_pool();
 
 /* thread-local allocator */
 
-extern __thread void *local_pool_blocks;
+extern thread_local void *local_pool_blocks;
 
 enum {
   local_pool_block_size = 2000,
@@ -92,10 +95,10 @@ private:
     }
   }
 private:
-  static __thread void *free_list;
+  static thread_local void *free_list;
 };
 
-template <size_t sz> __thread void *local_pool<sz>::free_list = 0;
+template <size_t sz> thread_local void *local_pool<sz>::free_list = 0;
 
 template <bool is_small> struct local_pool_allocator;
 
@@ -239,7 +242,7 @@ namespace pxcrt {
 
 #ifndef PXCRT_NO_LOCAL_POOL
 
-__thread void *local_pool_blocks;
+thread_local void *local_pool_blocks;
 
 void __attribute__((destructor(101))) clear_local_pool()
 {

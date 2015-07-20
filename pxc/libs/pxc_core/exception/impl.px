@@ -69,7 +69,9 @@ void c_exception_log_stderr(const std::exception& ex);
 
 extern "implementation" inline
 #include <string>
-#include <unistd.h>
+// #ifdef PXC_POSIX
+// #include <unistd.h>
+// #endif
 #ifdef __GLIBC__
 #include <execinfo.h>
 #endif
@@ -207,7 +209,11 @@ std::string c_exception_to_stdstring(const std::exception& ex)
 void c_exception_log_stderr(const std::exception& ex)
 {
   const std::string mess = c_exception_to_stdstring(ex);
+#ifdef PXC_POSIX
   ::write(2, mess.data(), mess.size());
+#else
+  _write(2, mess.data(), mess.size());
+#endif
 }
 
 int main_nothrow(void (*main_f)(void))
@@ -223,7 +229,11 @@ int main_nothrow(void (*main_f)(void))
     }
   } PXC_CATCH(...) {
     const char *const mess = "PXCMAIN: Uncaught exception\n";
+#ifdef PXC_POSIX
     ::write(2, mess, strlen(mess));
+#else
+    _write(2, mess, strlen(mess));
+#endif
     return 1;
   }
   return 0;

@@ -100,9 +100,7 @@ private metafunction check_pointer_downcast{tto, tfrom}
 extern "types" inline
 
 #include <string>
-#include <pthread.h>
 #include <errno.h>
-#include <unistd.h>
 
 #ifdef PXCRT_DBG_RC
 #define DBG_RC(x) x
@@ -121,121 +119,23 @@ extern "types" inline
 #endif
 
 #include <cstdlib>
+#include <mutex>
+#include <condition_variable>
+#include <atomic>
 
 namespace pxcrt {
 
-struct condition_variable;
-
-struct mutex {
-  friend struct condition_variable;
-  mutex() {
-    init();
-  }
-  mutex(const mutex&) {
-    init();
-  }
-  mutex& operator =(const mutex&) {
-    return *this;
-  }
-  ~mutex() {
-    const int __attribute__((unused)) e = pthread_mutex_destroy(&mtx);
-    assert(e == 0);
-  }
-  void lock() {
-    DBG_MTX(fprintf(stderr, "lock %p\n", &mtx));
-    const int __attribute__((unused)) e = pthread_mutex_lock(&mtx);
-    assert(e == 0);
-  }
-  void unlock() {
-    DBG_MTX(fprintf(stderr, "unlock %p\n", &mtx));
-    const int __attribute__((unused)) e = pthread_mutex_unlock(&mtx);
-    assert(e == 0);
-  }
-private:
-  void init() {
-    pthread_mutexattr_t mattr;
-    pthread_mutexattr_init(&mattr);
-    pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_RECURSIVE);
-    const int e = pthread_mutex_init(&mtx, &mattr);
-    pthread_mutexattr_destroy(&mattr);
-    if (e != 0) {
-      PXC_THROW(std::runtime_error("pthread_mutex_init")); // TODO
-    }
-  }
-private:
-  pthread_mutex_t mtx;
-};
-
-struct condition_variable {
-  condition_variable() {
-    init();
-  }
-  condition_variable(const condition_variable&) {
-    init();
-  }
-  condition_variable& operator =(const condition_variable&) {
-    return *this;
-  }
-  ~condition_variable() {
-    DBG_COND(fprintf(stderr, "cond destroy %p\n", &cond));
-    const int __attribute__((unused)) e = pthread_cond_destroy(&cond);
-    assert(e == 0);
-  }
-  void wait(mutex& mtx) {
-    const int __attribute__((unused)) e = pthread_cond_wait(&cond, &mtx.mtx);
-    assert(e == 0);
-  }
-  bool timedwait(mutex& mtx, const ::timespec& ts) {
-    const int e = pthread_cond_timedwait(&cond, &mtx.mtx, &ts);
-    if (e == ETIMEDOUT) {
-      return false;
-    }
-    assert(e == 0);
-    return true;
-  }
-  void notify_one() {
-    const int __attribute__((unused)) e = pthread_cond_signal(&cond);
-    assert(e == 0);
-  }
-  void notify_all() {
-    const int __attribute__((unused)) e = pthread_cond_broadcast(&cond);
-    assert(e == 0);
-  }
-private:
-  void init() {
-    const int e = pthread_cond_init(&cond, 0);
-    DBG_COND(fprintf(stderr, "cond init %p %d\n", &cond, e));
-    if (e != 0) {
-      PXC_THROW(std::runtime_error("pthread_cond_init")); // TODO
-    }
-  }
-private:
-  pthread_cond_t cond;
-};
+typedef std::recursive_mutex mutex;
+typedef std::condition_variable_any condition_variable;
 
 struct monitor {
+  monitor() { }
+  monitor(monitor const& x) { }
+  monitor& operator =(monitor const& x) {
+    return *this;
+  }
   mutex mtx;
   condition_variable cond;
-};
-
-struct mtcount { /* reference counter for multi-threaded shared objects */ 
-  mtcount() : count$z(1) { }
-  /* atomic counter. requires gcc >= 4. */
-  /* TODO: use std::atomic or boost::atomic */
-  void incref$z() { __sync_fetch_and_add(&count$z, 1); }
-  bool decref$z() { return (__sync_fetch_and_add(&count$z, -1) == 1); }
-  long refcnt$z() { return __sync_fetch_and_add(&count$z, 0); }
-private:
-  long count$z;
-};
-
-struct stcount { /* reference counter for single-threaded shared objects */
-  stcount() : count$z(1) { }
-  void incref$z() { ++count$z; }
-  bool decref$z() { return (--count$z == 0); }
-  long refcnt$z() { return count$z; }
-private:
-  long count$z;
 };
 
 template <typename T>

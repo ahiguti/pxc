@@ -18,15 +18,47 @@ extern "types" inline
 #define PXC_RETHROW throw
 #endif
 
+#if defined(_MSC_VER)
+#define PXC_MSVC
+#define PXC_WINDOWS
+#else
+#define PXC_POSIX
+#endif
+
+#if defined(PXC_MSVC)
+#pragma warning(disable: 4521 4522)
+/* TODO */
+#define _CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES 1
+#endif
+
 #include <stdint.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <cassert>
 #include <climits>
-#include <alloca.h>
 #include <stdexcept>
+#include <atomic>
 
+#if defined(PXC_MSVC)
+#pragma warning(disable: 4521 4522)
+/* TODO */
+#define sscanf sscanf_s
+#define SSIZE_MAX _I64_MAX
+#include <windows.h>
+#include <malloc.h>
+#undef min
+#undef max
+#define alloca _alloca
+#endif
+
+#ifdef PXC_POSIX
+#include <alloca.h>
+#endif
+
+#if defined(PXC_MSVC)
+#define __attribute__(x)
+#endif
 #ifdef BOOST_NO_EXCEPTIONS
 namespace boost {
 template <typename T> void throw_exception(T const& x) { ::abort(); }
@@ -54,10 +86,46 @@ typedef long bt_long;
 typedef unsigned long long bt_ulonglong;
 typedef long long bt_longlong;
 typedef ::size_t bt_size_t;
+#if defined(PXC_MSVC)
+#include <BaseTsd.h>
+typedef SSIZE_T bt_ssize_t;
+#else
 typedef ::ssize_t bt_ssize_t;
+#endif
 typedef float bt_float;
 typedef double bt_double;
 struct bt_tpdummy;
+
+struct mtcount { /* reference counter for multi-threaded shared objects */
+  mtcount(long x = 1) : count$z(1) { }
+  mtcount(const mtcount& x) : count$z(1) { }
+  mtcount& operator =(const mtcount& x) { return *this; }
+  void incref$z() {
+    std::atomic_fetch_add_explicit(&count$z, 1L, std::memory_order_relaxed);
+  }
+  bool decref$z() {
+    if (std::atomic_fetch_sub_explicit(&count$z, 1L, std::memory_order_release)
+      == 1) {
+      std::atomic_thread_fence(std::memory_order_acquire);
+      return true;
+    }
+    return false;
+  }
+  long refcnt$z() const { return count$z.load(std::memory_order_seq_cst); }
+private:
+  std::atomic_long count$z;
+};
+
+struct stcount { /* reference counter for single-threaded shared objects */
+  stcount() : count$z(1) { }
+  stcount(const stcount& x) : count$z(1) { }
+  stcount& operator =(const stcount& x) { return *this; }
+  void incref$z() { ++count$z; }
+  bool decref$z() { return (--count$z == 0); }
+  long refcnt$z() const { return count$z; }
+private:
+  long count$z;
+};
 
 }; // namespace pxcrt
 

@@ -441,15 +441,14 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
       em.set_file_line(est);
       em.indent('b');
       em.puts("size_t refcnt$z() const "
-	"{ return __sync_fetch_and_add(&count$z, 0); }\n");
+	"{ return count$z.refcnt$z(); }\n");
       em.set_file_line(est);
       em.indent('b');
-      em.puts("void incref$z() const "
-	"{ __sync_fetch_and_add(&count$z, 1); }\n");
+      em.puts("void incref$z() const { count$z.incref$z(); }\n");
       em.set_file_line(est);
       em.indent('b');
-      em.puts("void decref$z() const "
-	"{ if (__sync_fetch_and_add(&count$z, -1) == 1) { this->~");
+      em.puts(
+	"void decref$z() const { if (count$z.decref$z()) { this->~");
       em.puts(name_c);
       em.puts("(); this->deallocate(this); } }\n");
       em.set_file_line(est);
@@ -484,6 +483,9 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
       em.set_file_line(est);
       em.indent('b');
       em.puts("mutable pxcrt::monitor monitor$z;\n");
+      em.set_file_line(est);
+      em.indent('b');
+      em.puts("mutable pxcrt::mtcount count$z;\n");
     } else {
       em.set_file_line(est);
       em.indent('b');
@@ -511,10 +513,10 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
       em.puts(" const *ptr) { pxcrt::deallocate_single< ");
       em.puts(name_c);
       em.puts(" >(ptr); }\n");
+      em.set_file_line(est);
+      em.indent('b');
+      em.puts("mutable long count$z;\n");
     }
-    em.set_file_line(est);
-    em.indent('b');
-    em.puts("mutable long count$z;\n");
   }
   expr_block *const bl = est->block;
   const bool is_funcbody = false;
@@ -2020,8 +2022,32 @@ static void emit_split_expr(emit_context& em, expr_i *e, bool noemit_last)
   }
 }
 
+static void expr_stmts_emit_value(expr_stmts *est, emit_context& em)
+{
+  while (est != 0) {
+    /* line */
+    if (est->head == 0) {
+      assert(est->rest == 0);
+      return;
+    }
+    if (is_noexec_expr(est->head)) {
+      /* nothing to emit */
+    } else if (!is_block_stmt(est->head)) {
+      emit_split_expr(em, est->head, false); /* line */
+    } else {
+      /* block statement */
+      em.indent('S');
+      fn_emit_value(em, est->head); /* noline  */
+      em.puts("\n");
+    }
+    est = est->rest;
+  }
+}
+
 void expr_stmts::emit_value(emit_context& em)
 {
+  expr_stmts_emit_value(this, em);
+#if 0
   /* line */
   if (head == 0) {
     assert(rest == 0);
@@ -2052,6 +2078,7 @@ void expr_stmts::emit_value(emit_context& em)
   if (rest != 0) {
     fn_emit_value(em, rest);
   }
+#endif
 }
 
 static void emit_global_vars(emit_context& em, expr_block *gl_blk)

@@ -33,8 +33,9 @@ pxc_l.o: pxc_l.cpp
 	$(CXX) -c $(CXXFLAGS) -Wno-sign-compare $^
 
 pxc: $(OBJS)
-	cd tests; $(MAKE) clean
-	$(CXX) -rdynamic $(CXXFLAGS) -o $@ $^ -ldl -lpthread
+	# cd tests; $(MAKE) clean
+	# $(CXX) -rdynamic $(CXXFLAGS) -o $@ $^ -ldl -lpthread
+	$(CXX) $(CXXFLAGS) -o $@ $^ -ldl -lpthread
 
 test:
 	cd tests; $(MAKE)

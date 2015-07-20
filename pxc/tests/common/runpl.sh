@@ -14,7 +14,7 @@ errnames=''
 for i in $TESTS; do
   bn=`basename $i .pl`
   echo -n ".";
-  /usr/bin/time perl "$i" > $bn.log 2> $bn.log2
+  perl "$i" > $bn.log 2> $bn.log2
   bn=`basename $i .pl`
   if ! diff -u $bn.log $bn.exp > /dev/null 2>&1; then
     echo

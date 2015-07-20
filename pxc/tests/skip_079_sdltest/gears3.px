@@ -38,10 +38,13 @@ metafunction debug_matrix 0;
 import common -;
 import pointer::raw -;
 import numeric::fpmath -;
-import numeric::quaternion -;
-import SDL2 -;
-import SDL2::Image -;
-import GL::gles2 -;
+// import numeric::quaternion -;
+import GL::compat -;
+import SDL2::api_base -;
+import SDL2::api_types -;
+import SDL2::api_functions -;
+import SDL2::api_wrappers -;
+import SDL2::misc -;
 import GL::glm glm;
 import io::time -;
 import io::environ -;
@@ -67,7 +70,7 @@ int screen_height = 0;
 float perspective_distance = 1.1;
 float min_distance = 1.0;
 
-function void varray_push3(varray{float} mutable& vec, float a, float b,
+public function void varray_push3(varray{float} mutable& vec, float a, float b,
   float c)
 {
   vec.push_back(a);
@@ -282,10 +285,13 @@ function uint make_gear_vbo(float inner_radius, float outer_radius,
   ofs_r[5] = vec.size();
 
   farray{uint, 1} bufs;
-  glGenBuffers(1, bufs.rawptr());
+  glGenBuffers(1, bufs.to_rawptr());
   glBindBuffer(GL_ARRAY_BUFFER, bufs[0]);
+  println(m::trace{m::full_string{GLsizeiptr}});
+  println(m::trace{m::family{GL::base::GLsizeiptr}});
+  println(m::trace{m::family{size_t}});
   glBufferData(GL_ARRAY_BUFFER, static_cast{GLsizeiptr}(vec.size() * 4),
-    vec.crawptr().void(), GL_STATIC_DRAW);
+    vec.to_crawptr().to_cvoidptr(), GL_STATIC_DRAW);
   return bufs[0];
 }
 
@@ -372,13 +378,13 @@ function void draw_gear_vbo_one(int i, glm::mat4 const& mv,
   const green = make_farray{float}(0.0, 0.8, 0.2, 1.0);
   const blue = make_farray{float}(0.2, 0.2, 1.0, 1.0);
   if (i == 0) {
-    glUniform4fv(loc_mate_color, 1, red.crawptr());
+    glUniform4fv(loc_mate_color, 1, red.to_crawptr());
     draw_gear_vbo(gear_vbos[0].name, gear_vbos[0].ofs);
   } else if (i == 1) {
-    glUniform4fv(loc_mate_color, 1, green.crawptr());
+    glUniform4fv(loc_mate_color, 1, green.to_crawptr());
     draw_gear_vbo(gear_vbos[1].name, gear_vbos[1].ofs);
   } else if (i == 2) {
-    glUniform4fv(loc_mate_color, 1, blue.crawptr());
+    glUniform4fv(loc_mate_color, 1, blue.to_crawptr());
     draw_gear_vbo(gear_vbos[2].name, gear_vbos[2].ofs);
   }
 }

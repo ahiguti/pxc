@@ -1261,7 +1261,7 @@ static void load_profile(parser_options& po)
       arena_error_throw(0, "-:-: uname() failed: errno=%d", errno);
     }
     platform = std::string(utsn.sysname);
-    /* fprintf(stderr, "uname: %s", platform.c_str()); */
+    // fprintf(stderr, "uname: %s", platform.c_str());
     po.profile.mapval["platform"] = platform;
   }
   iter = po.profile.mapval.find("generate_dynamic");

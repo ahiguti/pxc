@@ -1,6 +1,6 @@
 incdir=../pxc_core:../pxc_ext:../pxc_test:.
 safe_mode=0
-cxx=ccache g++ --std=c++11
+cxx=ccache g++ --std=gnu++11
 # cxx=clang++
 cflags=-g -O3 -DNDEBUG -Wall -Wno-unused -Wno-strict-aliasing -I/usr/local/include
 ldflags=-L/usr/local/lib

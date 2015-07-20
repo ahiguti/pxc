@@ -26,7 +26,7 @@ public threaded function void io_abort(io const& sys)
   abort_internal(sys);
 }
 
-public tsvaluetype struct extern "::pid_t" "extint" pid_t { }
+public tsvaluetype struct extern "pxcrt::pid_t" "extint" pid_t { }
 public tsvaluetype struct extern "int" "extbitmask" wait_options_t { }
 public extern "WNOHANG" wait_options_t WNOHANG;
 
@@ -178,15 +178,24 @@ errno_t dup2_internal(io const& sys, file const& ofp, file const& nfp);
 
 private function extern "pxcrt::io_process_init" void io_process_init();
 
-extern "implementation" inline
-extern "C" {
-extern char **environ;
-}
-namespace pxcrt {
-
+extern "types" inline
+#ifdef PXC_POSIX
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#endif
+
+namespace pxcrt {
+#ifdef PXC_POSIX
+typedef ::pid_t pid_t;
+#else
+typedef int pid_t; /* dummy */
+#endif
+};
+;
+
+extern "implementation" inline
+namespace pxcrt {
 
 using namespace pxcrt;
 
@@ -205,44 +214,74 @@ void abort_internal(io const& sys)
   abort();
 }
 
-::pid_t fork_internal(io const& sys)
+pxcrt::pid_t fork_internal(io const& sys)
 {
+#ifdef PXC_POSIX
   return fork();
+#else
+  abort();
+#endif
 }
 
-::pid_t wait_internal(io const& sys, int& st_r)
+pxcrt::pid_t wait_internal(io const& sys, int& st_r)
 {
+#ifdef PXC_POSIX
   return wait(&st_r);
+#else
+  abort();
+#endif
 }
 
-::pid_t waitpid_internal(io const& sys, ::pid_t pid, int& st_r, int opt)
+pxcrt::pid_t waitpid_internal(io const& sys, pxcrt::pid_t pid, int& st_r,
+  int opt)
 {
+#ifdef PXC_POSIX
   return waitpid(pid, &st_r, opt);
+#else
+  abort();
+#endif
 }
 
 bool wifexited(int st)
 {
+#ifdef PXC_POSIX
   return WIFEXITED(st) != 0;
+#else
+  return true;
+#endif
 }
 
 int wexitstatus(int st)
 {
+#ifdef PXC_POSIX
   return WIFEXITED(st) ? WEXITSTATUS(st) : 0;
+#else
+  return st;
+#endif
 }
 
 bool wifsignaled(int st)
 {
+#ifdef PXC_POSIX
   return WIFSIGNALED(st) != 0;
+#else
+  return false;
+#endif
 }
 
 int wtermsig(int st)
 {
+#ifdef PXC_POSIX
   return WIFSIGNALED(st) ? WTERMSIG(st) : 0;
+#else
+  return 0;
+#endif
 }
 
 static int execv_internal(bool execvp_flag, cstrref const& path,
   bt_cslice<bt_string> const& argv)
 {
+#ifdef PXC_POSIX
   PXCRT_ALLOCA_NTSTRING(path_nt, path);
   pxcvarray<bt_string> argv_nt;
   argv_nt.resize(argv.size(), bt_string());
@@ -259,6 +298,9 @@ static int execv_internal(bool execvp_flag, cstrref const& path,
     ::execv(path_nt.get(), argv_rp);
   }
   return errno;
+#else
+  abort();
+#endif
 }
 
 int execv(io const& sys, cstrref const& path,
@@ -281,7 +323,11 @@ int shell_exec_internal(io const& sys, cstrref const& cmd)
 
 int dup2_internal(io const& sys, file const& ofp, file const& nfp)
 {
+#ifdef PXC_POSIX
   if (dup2(ofp.get(), nfp.get()) < 0) {
+#else
+  if (_dup2(ofp.get(), nfp.get()) < 0) {
+#endif
     return errno;
   }
   return 0;

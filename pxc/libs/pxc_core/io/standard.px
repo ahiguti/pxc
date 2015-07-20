@@ -87,7 +87,11 @@ file_st io_stderr(io const& iop) {
 }
 void debug_log_internal(cstrref const& s)
 {
-  write(2, s.rawarr(), s.size());
+#ifdef PXC_POSIX
+  ::write(2, s.rawarr(), s.size());
+#else
+  _write(2, s.rawarr(), s.size());
+#endif
 }
 
 };

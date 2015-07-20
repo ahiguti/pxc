@@ -24,7 +24,7 @@ thread(expand(m::args{f}))
   private metafunction tfuncobj thread_main_funcobj{f};
   private tfuncobj mutable fobj = tfuncobj(expand(a: m::arg_names{f}; a));
   private bool need_join = false;
-  private thread_id thd;
+  private thread_ptr thd;
   init();
   private function void init() {
     const err = thread_create{tfuncobj}(thd, fobj);
@@ -68,20 +68,21 @@ thread_main_funcobj(expand(m::args{f}))
   }
 }
 
-private threaded struct extern "pxcrt::thread_id" "nonmovable" thread_id { }
+private threaded struct extern "pxcrt::thread_ptr" "nonmovable" thread_ptr { }
 
 private threaded function extern "pxcrt::thread_create" {tfuncobj} errno_t
-thread_create(thread_id mutable& thd, tfuncobj mutable& funcobj);
+thread_create(thread_ptr mutable& thd, tfuncobj mutable& funcobj);
 private threaded function extern "pxcrt::thread_join" {tfuncobj} errno_t
-thread_join(thread_id mutable& thd);
+thread_join(thread_ptr mutable& thd);
 
 extern "types" inline
 
-#include <pthread.h>
+#include <thread>
+#include <system_error>
 
 namespace pxcrt {
 
-typedef pthread_t thread_id;
+typedef std::thread *thread_ptr;
 
 };
 
@@ -100,15 +101,25 @@ funcobj_wrap(void *arg)
 }
 
 template <typename Tfuncobj> int
-thread_create(thread_id& thd, Tfuncobj& funcobj)
+thread_create(thread_ptr& thd, Tfuncobj& funcobj)
 {
-  return pthread_create(&thd, 0, &funcobj_wrap<Tfuncobj>, &funcobj);
+  try {
+    thd = new std::thread(&funcobj_wrap<Tfuncobj>, &funcobj);
+  } catch (std::system_error const& ex) {
+    return ex.code().value();
+  } catch (std::exception const& ex) {
+    return 1;
+  }
+  return 0;
 }
 
 template <typename Tfuncobj> int
-thread_join(thread_id& thd)
+thread_join(thread_ptr& thd)
 {
-  return pthread_join(thd, 0);
+  if (thd) {
+    thd->join();
+  }
+  return 0;
 }
 
 };
