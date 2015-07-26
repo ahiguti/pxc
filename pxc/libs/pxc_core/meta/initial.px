@@ -1,4 +1,5 @@
-private threaded namespace numeric::impl "use-unsafe";
+public threaded namespace meta::initial "use-unsafe";
+public import meta m;
 
 extern "types" inline
 
@@ -26,9 +27,13 @@ extern "types" inline
 #endif
 
 #if defined(PXC_MSVC)
-#pragma warning(disable: 4521 4522)
-/* TODO */
-#define _CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES 1
+#pragma warning(disable: 4521 4522 4146)
+#define SSIZE_MAX _I64_MAX
+#include <windows.h>
+#include <malloc.h>
+#undef min
+#undef max
+#define alloca _alloca
 #endif
 
 #include <stdint.h>
@@ -40,25 +45,19 @@ extern "types" inline
 #include <stdexcept>
 #include <atomic>
 
-#if defined(PXC_MSVC)
-#pragma warning(disable: 4521 4522)
-/* TODO */
-#define sscanf sscanf_s
-#define SSIZE_MAX _I64_MAX
-#include <windows.h>
-#include <malloc.h>
-#undef min
-#undef max
-#define alloca _alloca
-#endif
-
 #ifdef PXC_POSIX
 #include <alloca.h>
 #endif
 
 #if defined(PXC_MSVC)
 #define __attribute__(x)
+#define PXC_NO_INLINE __declspec(noinline)
+#define PXC_FORCE_INLINE __forceinline
+#else
+#define PXC_NO_INLINE __attribute__((noinline))
+#define PXC_FORCE_INLINE inline
 #endif
+
 #ifdef BOOST_NO_EXCEPTIONS
 namespace boost {
 template <typename T> void throw_exception(T const& x) { ::abort(); }
@@ -128,16 +127,17 @@ private:
 };
 
 }; // namespace pxcrt
-
-;
-
-extern "functions" inline
-
+// extern "types" inline
 ;
 
 extern "implementation" inline
+
 namespace pxcrt {
+
 bt_unit unit_value;
 char **process_argv;
+
 }; // namespace pxcrt
+// extern "implementation" inline
 ;
+

@@ -3,14 +3,15 @@ public import container::array::varray;
 
 extern "types" inline
 #include <limits>
-#include <deque>
+#include <boost/container/deque.hpp>
+  /* boost::container::deque<T> allows T to be incomplete */
 namespace pxcrt {
 
 template <typename T>
 struct deque_cslice {
   typedef T mapped_type;
-  typedef typename std::deque<T>::const_iterator iterator;
-  typedef typename std::deque<T>::const_iterator const_iterator;
+  typedef typename boost::container::deque<T>::const_iterator iterator;
+  typedef typename boost::container::deque<T>::const_iterator const_iterator;
   deque_cslice() : v() { }
   template <typename Tc> deque_cslice(const Tc& c)
     : v(c.begin(), c.end()) { }
@@ -68,8 +69,8 @@ protected:
 template <typename T>
 struct deque_slice {
   typedef T mapped_type;
-  typedef typename std::deque<T>::iterator iterator;
-  typedef typename std::deque<T>::const_iterator const_iterator;
+  typedef typename boost::container::deque<T>::iterator iterator;
+  typedef typename boost::container::deque<T>::const_iterator const_iterator;
   deque_slice() : v() { }
   template <typename Tc> deque_slice(Tc& c)
     : v(c.begin(), c.end()) { }
@@ -127,7 +128,7 @@ template <typename T>
 struct pxcdeque : public refguard_base {
   typedef T mapped_type;
   typedef pxcrt::bt_size_t size_type;
-  typedef std::deque<T> base_deque;
+  typedef boost::container::deque<T> base_deque;
   typedef typename base_deque::iterator iterator;
   typedef typename base_deque::const_iterator const_iterator;
   typedef deque_slice<T> range_type;

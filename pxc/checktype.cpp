@@ -941,6 +941,34 @@ static void check_return_expr(expr_funcdef *fdef)
   check_return_expr_block(fdef, fdef->block);
 }
 
+#if 0
+static void inject_function_entry(expr_block *blk)
+{
+  expr_stmts *o_stmts = blk->stmts;
+  if (o_stmts == 0) {
+    return;
+  }
+  const char *fn = o_stmts->fname;
+  int ln = o_stmts->line;
+  expr_i *te = expr_te_new(fn, ln, 
+    expr_nssym_new(fn, ln,
+      expr_nssym_new(fn, ln,
+	expr_nssym_new(fn, ln, 0, "meta"),
+	"initial"),
+      "__macro_function_entry__"),
+    expr_telist_new(fn, ln, expr_int_literal_new(fn, ln,
+      arena_strdup("0"), false), 0));
+  expr_i *epnd = expr_expand_new(fn, ln, te, 0, 0, 0, 0, expand_e_statement,
+    0);
+  expr_stmts *stmts = static_cast<expr_stmts *>(
+    expr_stmts_new(fn, ln, epnd, o_stmts));
+  expr_i *parent = o_stmts->parent_expr;
+  fn_set_tree_and_define_static(stmts, parent, o_stmts->symtbl_lexical, 0, 
+    o_stmts->symtbl_lexical->block_backref->tinfo.template_descent);
+  blk->stmts = stmts;
+}
+#endif
+
 void expr_block::check_type(symbol_table *lookup)
 {
   if (tparams_error != 0) {
@@ -966,6 +994,11 @@ void expr_block::check_type(symbol_table *lookup)
     DBG_CT_BLOCK(fprintf(stderr, "%s: %s: instantiated\n",
       __PRETTY_FUNCTION__, this->dump(0).c_str()));
     fn_check_type(inherit, &symtbl);
+    #if 0
+    if (parent_expr != 0 && parent_expr->get_esort() == expr_e_funcdef) {
+      inject_function_entry(this);
+    }
+    #endif
     fn_check_type(stmts, &symtbl);
     if (parent_expr != 0 && parent_expr->get_esort() == expr_e_funcdef) {
       expr_funcdef *efd = ptr_down_cast<expr_funcdef>(parent_expr);

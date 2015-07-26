@@ -85,9 +85,18 @@ public struct drawer_triangles(shader_config const& glc)
     projection_info const& cam_df)
   {
     if (step == draw_step_shadowmapping) {
+      const sm_view = cam_df.light.to_mat4().inverse();
+      const sm_vp = cam_df.sm_projection * sm_view;
       glUseProgram(sdr_shadow->program);
-      aibuf.draw(*sdr_shadow, bo, ibs, bo_id, 1, glc.enable_instanced,
-	glc.enable_uniform_instancing);
+      if (m::ne{use_shadowmap_vp_cpu, 0}) {
+	aibuf.draw(*sdr_shadow, bo, ibs, bo_id, 1, glc.enable_instanced,
+	  glc.enable_uniform_instancing);
+      } else {
+	glUniformMatrix4fv(sdr_shadow->u_shadowmap_vp, 1, 0,
+	  sm_vp.to_crawptr());
+	aibuf.draw(*sdr_shadow, bo, ibs, bo_id, 0, glc.enable_instanced,
+	  glc.enable_uniform_instancing);
+      }
     } else if (step == draw_step_zprepass) {
       mutable view = glm::mat4();
       view = cam_df.camera.to_mat4().inverse();
@@ -144,8 +153,16 @@ public struct drawer_triangles2(shader_config const& glc)
     projection_info const& cam_df)
   {
     if (step == draw_step_shadowmapping) {
+      const sm_view = cam_df.light.to_mat4().inverse();
+      const sm_vp = cam_df.sm_projection * sm_view;
       glUseProgram(sdr_shadow->program);
-      aibuf.draw(*sdr_shadow, bo, ibs, bo_id, 1, false, false);
+      if (m::ne{use_shadowmap_vp_cpu, 0}) {
+	aibuf.draw(*sdr_shadow, bo, ibs, bo_id, 1, false, false);
+      } else {
+	glUniformMatrix4fv(sdr_shadow->u_shadowmap_vp, 1, 0,
+	  sm_vp.to_crawptr());
+	aibuf.draw(*sdr_shadow, bo, ibs, bo_id, 0, false, false);
+      }
     } else if (step == draw_step_zprepass) {
       mutable view = glm::mat4();
       view = cam_df.camera.to_mat4().inverse();
@@ -388,7 +405,9 @@ init_shadowmap_shader(shader_config const& g)
 {
   string v;
   v += g.prepend();
-  /* note: passes mvp as model_matrix */
+  if (m::eq{use_shadowmap_vp_cpu, 0}) {
+    v += "uniform mat4 shadowmap_vp;\n";
+  }
   v += g.decl_instance_id(true);
   v += g.decl_instance_attr("mat4", "model_matrix", instancing != 0, true);
   v += g.vert_in() + "vec3 position;\n";
@@ -396,7 +415,12 @@ init_shadowmap_shader(shader_config const& g)
     v += g.vert_out() + "vec4 vary_smpos;\n";
   }
   v += "void main(void) {\n";
-  v += "vec4 p = " + g.instance_attr("model_matrix", instancing != 0, true);
+  if (m::ne{use_shadowmap_vp_cpu, 0}) {
+    v += "vec4 p = ";
+  } else {
+    v += "vec4 p = shadowmap_vp * ";
+  }
+  v += g.instance_attr("model_matrix", instancing != 0, true);
   v += "  * vec4(position, 1.0);\n";
   v += "gl_Position = p;\n";
   if (!g.enable_depth_texture) {
@@ -904,8 +928,10 @@ private threaded function void prepare_instance_data_triangles(
   varray{instance_data} mutable& ibarr)
 {
   buffer_append(ibarr[0].instance_buffer, sn.trans); /* model matrix */
-  const smvp = ncd.shadowmapping_vp * sn.trans;
-  buffer_append(ibarr[1].instance_buffer, smvp); /* shadowmapping mvp */
+  if (m::ne{use_shadowmap_vp_cpu, 0}) {
+    const smvp = ncd.shadowmapping_vp * sn.trans;
+    buffer_append(ibarr[1].instance_buffer, smvp); /* shadowmapping mvp */
+  }
 }
 
 private threaded function void prepare_instance_data_particle(
@@ -945,8 +971,8 @@ private threaded function void prepare_instance_data_ft_rec(
   cslice{prepare_instance_data_funcptr} const& ftable,
   varray{instances_type} mutable& ibs)
 {
-  const bo_id = sn.joint_id.bo_id;
-  const vs_id = sn.joint_id.vs_id;
+  const& bo_id = sn.joint_id.bo_id;
+  const& vs_id = sn.joint_id.vs_id;
   if (bo_id >= 0 && vs_id >= 0) {
     ++ncd.stat_num_objects;
     mutable& ibarr = ibs[bo_id][static_cast{size_t}(vs_id)];

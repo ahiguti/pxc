@@ -41,6 +41,7 @@
 #define DBG_METALOCAL(x)
 #define DBG_ATTR(x)
 #define DBG_TYPEOF(x)
+#define DBG_CONTEXT(x)
 
 namespace pxc {
 
@@ -961,6 +962,26 @@ static term eval_meta_typeof(const term_list_range& tlev, eval_context& ectx,
   DBG_TYPEOF(fprintf(stderr, "eval_meta_typeof: %s -> %s\n",
     term_tostr_human(t).c_str(), term_tostr_human(rt).c_str()));
   return rt;
+}
+
+static term eval_meta_context(const term_list_range& tlev, eval_context& ectx,
+  expr_i *pos)
+{
+  if (tlev.size() != 1) {
+    arena_error_throw(pos, "context: Invalid argument");
+    return term();
+  }
+  expr_i *const e0 = pos; // tlev[0].get_expr();
+  if (e0 == 0) { /* TODO: integer etc */
+    arena_error_throw(pos, "context: Invalid context");
+    return term();
+  }
+  symbol_table *const ctx = e0->symtbl_lexical;
+  expr_i *const frex = get_current_frame_expr(ctx);
+  std::string rt = term_tostr_human(frex->get_value_texpr());
+  DBG_CONTEXT(fprintf(stderr, "eval_meta_context: %s -> %s\n",
+    term_tostr_human(tlev[0]).c_str(), rt.c_str()));
+  return term(rt);
 }
 
 static term eval_meta_list(const term_list_range& tlev, eval_context& ectx,
@@ -2019,6 +2040,7 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@targs", &eval_meta_targs },
   { "@values", &eval_meta_values },
   { "@typeof", &eval_meta_typeof },
+  { "@context", &eval_meta_context },
   { "@is_type", &eval_meta_is_type },
   { "@is_function", &eval_meta_is_function },
   { "@is_member_function", &eval_meta_is_member_function },

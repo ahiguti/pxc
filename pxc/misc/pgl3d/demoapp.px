@@ -13,6 +13,8 @@ public import pgl3d::drawer_export -;
 
 // FIXME: projection_infoではなくscreen_infoだけ渡すように
 
+// public import pushtest -;
+
 {
   demoapp_application app;
   pgl3d::mainloop::mainloop(app);
@@ -664,6 +666,14 @@ private function void build_vertices(app_impl mutable& app,
       (poly_t(), mesh_index());
   }
   {
+    const vtx = pgs.make_vertices(vbid_triangles, "block-multi2");
+    const t = fill_v(vtx);
+    const rnd = make_rand_generator(991U);
+    rand_sphere(500.0, 200, false, true, rnd,
+      point_joint_v(vtx, "block", hole()))
+      (poly_t(), mesh_index());
+  }
+  {
     const vtx = pgs.make_vertices(vbid_triangles, "bullet2-multi2");
     const t = fill_v(vtx);
     const rnd = make_rand_generator(991U);
@@ -829,7 +839,7 @@ scene_control(node_factory const& nfac)
     // "ab-multi", "ab-multi3", "skyscraper",
     "parts",
     // "al", "cessna", "skyscraper", "airboat",
-    "saucer", "saucer-multi", "block-multi", "block",
+    "saucer", "saucer-multi", "block-multi", "block-multi2", "block",
     "bullet2-multi3", "bullet2-multi2", "bullet2-multi",
     "bullet-multi", "saucer-multi3",
     "particle", "particle-multi",
@@ -969,6 +979,7 @@ scene_control_step(scene_control mutable& sctl,
   threaded function void step_snobj(scene_node{node_data} mutable& sn_scene,
     scene_node{node_data} mutable& sn_lp)
   {
+  // return; // FIXME
     const& snobj = *sn_scene.children[0];
     for (const ci, const& csnp: snobj.children) {
       mutable& csn = *csnp;

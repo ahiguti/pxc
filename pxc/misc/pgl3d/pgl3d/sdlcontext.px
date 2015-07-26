@@ -3,6 +3,7 @@ public import common -;
 public import meta m;
 public import io::environ -;
 public import GL::compat -;
+public import GL::glew -;
 public import pgl3d::glresource -;
 
 public struct sdlcontext()
@@ -42,11 +43,14 @@ public struct sdlcontext()
       SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
     }
     mutable wflags = SDL_WINDOW_OPENGL;
-    wflags |= SDL_WINDOW_RESIZABLE;
-    wflags |= SDL_WINDOW_ALLOW_HIGHDPI;
-    /*
-    wflags |= SDL_WINDOW_FULLSCREEN;
-     */
+    if (m::ne{is_windows, 0}) {
+      // wflags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+      // wflags |= SDL_WINDOW_BORDERLESS;
+      wflags |= SDL_WINDOW_RESIZABLE;
+    } else {
+      wflags |= SDL_WINDOW_RESIZABLE;
+      wflags |= SDL_WINDOW_ALLOW_HIGHDPI;
+    }
     mutable vsync = 1;
     if (get_option("-f") == "1") { wflags |= SDL_WINDOW_FULLSCREEN_DESKTOP; }
     if (get_option("-d") == "1") { wflags |= SDL_WINDOW_FULLSCREEN_DESKTOP; }
@@ -59,7 +63,7 @@ public struct sdlcontext()
     }
 
     sdllog("create_window", init_w, init_h);
-    sdl_window.reset(SDL_CreateWindow("PGL3D", 0, 0, init_w, init_h, wflags));
+    sdl_window.reset(SDL_CreateWindow("PGL3D", 128, 128, init_w, init_h, wflags));
     const wnd = sdl_window.get();
     // SDL_SetWindowFullscreen(wnd, SDL_WINDOW_FULLSCREEN_DESKTOP);
       // // FIXME????
@@ -93,6 +97,7 @@ public struct sdlcontext()
       gles_flag = true;
     }
     mutable glctx = SDL_GL_CreateContext(wnd);
+    GL::glew::glewInit();
     const verstr = cubptr_to_string(glGetString_nocheck(GL_VERSION));
     if (verstr.empty()) {
       if (m::eq{is_gles, 0}) {

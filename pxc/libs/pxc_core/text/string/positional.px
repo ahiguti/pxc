@@ -264,7 +264,11 @@ bt_double decimal_to_fp_nocheck_double(cstrref const& buf)
   cstrref pbuf = get_decimal_part(buf);
   PXCRT_ALLOCA_NTSTRING(buf_nt, pbuf);
   double r = 0;
+#ifdef _MSC_VER
+  sscanf_s(buf_nt.get(), "%lf", &r);
+#else
   sscanf(buf_nt.get(), "%lf", &r);
+#endif
   return r;
 }
 
@@ -273,7 +277,11 @@ bt_float decimal_to_fp_nocheck_float(cstrref const& buf)
   cstrref pbuf = get_decimal_part(buf);
   PXCRT_ALLOCA_NTSTRING(buf_nt, pbuf);
   float r = 0;
+#ifdef _MSC_VER
+  sscanf_s(buf_nt.get(), "%f", &r);
+#else
   sscanf(buf_nt.get(), "%f", &r);
+#endif
   return r;
 }
 
@@ -283,7 +291,11 @@ bt_double decimal_to_fp_double(cstrref& buf)
   PXCRT_ALLOCA_NTSTRING(buf_nt, pbuf);
   double r = 0;
   int n = 0;
+#ifdef _MSC_VER
+  sscanf_s(buf_nt.get(), "%lf%n", &r, &n);
+#else
   sscanf(buf_nt.get(), "%lf%n", &r, &n);
+#endif
   if (n > 0) {
     buf.increment_front(n);
   }
@@ -296,7 +308,11 @@ bt_float decimal_to_fp_float(cstrref& buf)
   PXCRT_ALLOCA_NTSTRING(buf_nt, pbuf);
   float r = 0;
   int n = 0;
+#ifdef _MSC_VER
+  sscanf_s(buf_nt.get(), "%f%n", &r, &n);
+#else
   sscanf(buf_nt.get(), "%f%n", &r, &n);
+#endif
   if (n > 0) {
     buf.increment_front(n);
   }
