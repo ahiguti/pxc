@@ -327,6 +327,17 @@ hash_podarr(const T& x)
   return r;
 }
 
+template <typename Tx, typename Ty> PXC_FORCE_INLINE void
+copy_memmove(const Tx& x, Ty& y)
+{
+  BOOST_STATIC_ASSERT((
+    sizeof(typename Tx::mapped_type) == sizeof(typename Ty::mapped_type)));
+  const size_t xlen = x.size();
+  const size_t ylen = y.size();
+  const size_t clen = std::min(xlen, ylen);
+  memmove(y.rawarr(), x.rawarr(), clen * sizeof(typename Tx::mapped_type));
+}
+
 template <typename Tx, typename Tv> static PXC_FORCE_INLINE void
 array_push_back(Tx& x, Tv const& v)
 { x.push_back(v); }

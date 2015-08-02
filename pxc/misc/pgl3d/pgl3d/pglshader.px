@@ -13,22 +13,13 @@ public import pgl3d::glresource -;
 public import pgl3d::glshader -;
 public import pgl3d::glgeometry -;
 public import pgl3d::glbuffer -;
-public import pgl3d::scenenode -;
+public import pgl3d::scene_node -;
 public import pgl3d::pglbase -;
 public import pgl3d::intern_pool -;
 public import pgl3d::shader_config -;
 public import pgl3d::aggregated_ibuffer -;
+public import pgl3d::drawer_base -;
 public import pgl3d::drawer -;
-
-private function varray{ptr{pgldrawer_i}}
-downcast_drawers(varray{ptr{pgldrawer_export_i}} const& drawers)
-{
-  varray{ptr{pgldrawer_i}} r;
-  for (size_t i, const& e: drawers) {
-    r.push_back(pointer_downcast{ptr{pgldrawer_i}}(e));
-  }
-  return r;
-}
 
 public struct
 pglshader(shader_config const& sconf0,
@@ -38,14 +29,12 @@ pglshader(shader_config const& sconf0,
   public shader_config glc = sconf0;
   public varray{ptr{pgldrawer_i}} drawers = downcast_drawers(drawers0);
   public varray{vertex_buffer_id} vbids;
+  public varray{size_t} vbid_to_drawer_one;
   public shadowmap_fbo sfbo;
-  public main_texture_info mti;
-  public font_texture_info fti;
   public projection_info cam;
   public varray{ptr{vertex_buffer}} vertex_buffers;
   public aggregated_ibuffer agg_ibuffer;
-  public tptr{prepare_instance_data_cb} const prepare_instance
-    = make_tptr{prepare_instance_data_cb}();
+  public tptr{pidf_table} const pidft = make_tptr{pidf_table}();
   private auto_vertexarray vtxarr;
   private tree_map{string, vertex_buffer_id} vertex_buffer_id_map;
   private intern_pool{vertex_buffer_pool_key} vbid_pool;
@@ -79,7 +68,6 @@ pglshader(shader_config const& sconf0,
       glGetFloatv(GL_POINT_SIZE_GRANULARITY, address(step));
       sdllog("GL_POINT_SIZE_RANGE", arr, step);
     }
-    init_texture(mti, fti);
     /*
     if (m::ne{is_gl3_or_gles3, 0}) {
       if (glc.enable_msaa) {
@@ -97,12 +85,38 @@ pglshader(shader_config const& sconf0,
     vbids.resize(drawers.size(), 0);
     for (const i, const& pd: drawers) {
       vbids[i] = intern_vbid(pd->get_vbid_name());
-      prepare_instance_data_cb_add(*prepare_instance, vbids[i],
-	pd->get_prepare_instance_data_funcptr());
+      size_t j = static_cast{size_t}(vbids[i]);
+      if (vbid_to_drawer_one.size() <= j) {
+	vbid_to_drawer_one.resize(j + 1, 0);
+      }
+      vbid_to_drawer_one[j] = i;
+      {
+	mutable& pidftv = *pidft;
+	if (pidftv.size() <= j) {
+	  pidftv.resize(j + 1, make_tfuncptr{prepare_instance_data_noop}());
+	  pidftv[j] = pd->get_prepare_instance_data_funcptr();
+	}
+      }
       set_vertex_buffer(vbids[i], pd->make_vertex_buffer());
     }
   }
-  public function void prepare_vertex_buffers()
+  public function void prepare(whole_instances_type mutable& whole_instances_r,
+    node_factory mutable& nfac_r)
+  {
+    prepare_builtin_vertex_sets();
+    prepare_vertex_buffers();
+    prepare_whole_instances(whole_instances_r);
+    prepare_node_factory(nfac_r);
+  }
+  private function void prepare_builtin_vertex_sets()
+  {
+    for (const i, const& pd: drawers) {
+      const bo_id = vbids[i];
+      const vtx = make_vertices(bo_id, "");
+      pd->make_builtin_vertex_sets(vtx);
+    }
+  }
+  private function void prepare_vertex_buffers()
   {
     metafunction max_instance_data 2;
     const enable_copying_instancing = !glc.enable_instanced;
@@ -110,29 +124,25 @@ pglshader(shader_config const& sconf0,
       bo->create_vbo(enable_copying_instancing);
     }
   }
-  public function void prepare_bo_instances(
-      varray{instances_type} mutable& bo_instances) const
+  private function void prepare_whole_instances(
+      whole_instances_type mutable& whole_instances) const
   {
     metafunction max_instance_data 2;
     const enable_copying_instancing = !glc.enable_instanced;
-    bo_instances.resize(vertex_buffers.size(), instances_type());
+    whole_instances.resize(vertex_buffers.size(), bo_instances_type());
     for (const i, const& bo: vertex_buffers) {
-      mutable& instances = bo_instances[i];
+      mutable& instances = whole_instances[i];
       for (const j: 0 .. bo->vs_arr.size()) {
-	instances.push_back(varray{instance_data}());
-	mutable& e = instances[j];
-	for (const k: 0 .. max_instance_data) {
-	  e.push_back(instance_data());
-	}
+	instances.push_back(instance_data());
       }
     }
   }
-  public function void prepare_node_factory(node_factory mutable& nf) const
+  private function void prepare_node_factory(node_factory mutable& nf) const
   {
     for (size_t bo_id, const& bop: vertex_buffers) {
       for (const& n, const id: bop->vs_names) {
 	joint_id_type jid;
-	jid.bo_id = bo_id;
+	jid.bo_id = static_cast{uint}(bo_id);
 	jid.vs_id = static_cast{int}(id);
 	nf.name_to_id[n] = jid;
       }
@@ -156,7 +166,7 @@ pglshader(shader_config const& sconf0,
     joint_id_type scene_id;
     for (const i, const& bo: vertex_buffers) {
       if (bo->has_name(name)) {
-        scene_id.bo_id = i;
+        scene_id.bo_id = static_cast{uint}(i);
         scene_id.vs_id = static_cast{int}(bo->get_id_by_name(name));
         break;
       }
@@ -168,17 +178,26 @@ pglshader(shader_config const& sconf0,
   {
     return vertex_buffers[static_cast{size_t}(bo_id)]->get(name)->vtxs;
   }
+  public function void make_vertex_set(cstrref const& bo_name,
+    cstrref const& name, gf_poly const& expr)
+  {
+    const bo_id = to_vbid(bo_name);
+    size_t i = vbid_to_drawer_one[static_cast{size_t}(bo_id)];
+    ptr{vertices} vptr = make_vertices(bo_id, name);
+    dgf_filler filler = drawers[i]->make_filler(vptr);
+    ptr{build_context_i} ctx = make_ptr{build_context_impl}(vptr, filler);
+    expr(*ctx, poly_t(), mesh_index());
+  }
   public function texture_info get_texture_info(cstrref const& name) const
   {
     texture_info r;
-    if (name == "main") {
-      r.surface_w = mti.surface_w;
-      r.surface_h = mti.surface_h;
-    } else if (name == "font") {
-      r.surface_w = fti.surface_w;
-      r.surface_h = fti.surface_h;
-      r.char_w = fti.char_w;
-      r.char_h = fti.char_h;
+    // FIXME: slow
+    for (const i, const& pd: drawers) {
+      const bo_id = vbids[i];
+      r = pd->get_texture_info(name);
+      if (r.surface_w != 0) {
+	break;
+      }
     }
     return r;
   }
@@ -200,14 +219,14 @@ pglshader(shader_config const& sconf0,
 
 public function varray{uint}
 pglshader_draw_frame(pglshader mutable& pgs,
-  varray{instances_type} mutable& bo_instances, projection_info const& cam_df)
+  whole_instances_type mutable& whole_instances, projection_info const& cam_df)
 {
   const& bos = pgs.vertex_buffers;
   /* prepare instance data */
   const sm_view = cam_df.light.to_mat4().inverse();
   const sm_vp = cam_df.sm_projection * sm_view;
   const tick1 = SDL_GetTicks();
-  pgs.agg_ibuffer.frame_begin(bo_instances,
+  pgs.agg_ibuffer.frame_begin(whole_instances,
       pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
   const tick2 = SDL_GetTicks();
   /* shadowmapping shader */
@@ -234,7 +253,7 @@ pglshader_draw_frame(pglshader mutable& pgs,
       const bo_id = pgs.vbids[i];
       pd->draw(draw_step_shadowmapping,
 	*bos[static_cast{size_t}(bo_id)],
-	bo_instances[static_cast{size_t}(bo_id)], pgs.agg_ibuffer,
+	whole_instances[static_cast{size_t}(bo_id)], pgs.agg_ibuffer,
 	bo_id, pgs.glc, cam_df);
     }
     /* restore fb */
@@ -256,7 +275,7 @@ pglshader_draw_frame(pglshader mutable& pgs,
       const bo_id = pgs.vbids[i];
       pd->draw(draw_step_zprepass,
 	*bos[static_cast{size_t}(bo_id)],
-	bo_instances[static_cast{size_t}(bo_id)], pgs.agg_ibuffer,
+	whole_instances[static_cast{size_t}(bo_id)], pgs.agg_ibuffer,
 	bo_id, pgs.glc, cam_df);
     }
   }
@@ -280,7 +299,7 @@ pglshader_draw_frame(pglshader mutable& pgs,
       const bo_id = pgs.vbids[i];
       pd->draw(draw_step_solid,
 	*bos[static_cast{size_t}(bo_id)],
-	bo_instances[static_cast{size_t}(bo_id)], pgs.agg_ibuffer,
+	whole_instances[static_cast{size_t}(bo_id)], pgs.agg_ibuffer,
 	bo_id, pgs.glc, cam_df);
     }
   }
@@ -296,7 +315,7 @@ pglshader_draw_frame(pglshader mutable& pgs,
       const bo_id = pgs.vbids[i];
       pd->draw(draw_step_blend,
 	*bos[static_cast{size_t}(bo_id)],
-	bo_instances[static_cast{size_t}(bo_id)], pgs.agg_ibuffer,
+	whole_instances[static_cast{size_t}(bo_id)], pgs.agg_ibuffer,
 	bo_id, pgs.glc, cam_df);
     }
   }
@@ -307,22 +326,63 @@ pglshader_draw_frame(pglshader mutable& pgs,
 
 /* private */
 
-threaded struct main_texture_info
+private function varray{ptr{pgldrawer_i}}
+downcast_drawers(varray{ptr{pgldrawer_export_i}} const& drawers)
 {
-  public uint surface_w;
-  public uint surface_h;
-  public auto_texture main_texture_id;
-  public auto_texture tilemap_texture_id;
+  varray{ptr{pgldrawer_i}} r;
+  for (size_t i, const& e: drawers) {
+    r.push_back(pointer_downcast{ptr{pgldrawer_i}}(e));
+  }
+  return r;
 }
 
-threaded struct font_texture_info
+private threaded struct
+build_context_impl(ptr{vertices} const& vptr0, dgf_filler const& filler0)
+  <build_context_i>
 {
-  public varray{uint} char_x;
-  public uint char_w;
-  public uint char_h;
-  public uint surface_w;
-  public uint surface_h;
-  public auto_texture font_texture_id;
+  public ptr{vertices} vptr = vptr0;
+  public dgf_filler filler = filler0;
+  function void fill(bool flat_flag, bool polyjoint, string const& joint_name,
+    poly_t const& poly, mesh_index const& mp) const {
+    if (joint_name.empty()) {
+      filler(flat_flag, poly, mp);
+    } else if (polyjoint) {
+      dgf_poly_joint_internal(vptr, joint_name, poly, mp);
+    } else {
+      dgf_point_joint_internal(vptr, joint_name, poly, mp);
+    }
+  }
+}
+
+private threaded function void
+dgf_poly_joint_internal(ptr{vertices} const& vptr, string const& joint_name,
+  poly_t const& poly, mesh_index const& mp)
+{
+  // calculates normal/tangent from poly
+  if (poly.size() < 1) { return; }
+  node_joint e;
+  e.trans = poly_trans(poly);
+  e.joint_name = joint_name;
+  vptr->push_joint(e);
+}
+
+private threaded function void
+dgf_point_joint_internal(ptr{vertices} const& vptr, string const& joint_name,
+  poly_t const& poly, mesh_index const& mp)
+{
+  if (poly.size() < 1) { return; }
+  const p = poly[0].pos;
+  const ex = poly[0].nor.normalize();
+  const ey = poly[0].tan.normalize();
+  const ez = glm::cross(ex, ey);
+  node_joint e;
+  e.trans = glm::make_mat4(
+    ex.x, ex.y, ex.z,  0.0,
+    ey.x, ey.y, ey.z,  0.0,
+    ez.x, ez.y, ez.z,  0.0,
+     p.x,  p.y,  p.z,  1.0);
+  e.joint_name = joint_name;
+  vptr->push_joint(e);
 }
 
 function void update_mvp(projection_info mutable& cam)
@@ -359,13 +419,6 @@ function void update_mvp(projection_info mutable& cam)
     cam.sm_projection = glm::frustum{float}(left, right, bottom, top, near,
       far);
   }
-}
-
-threaded function {t} t power_of_2(t v)
-{
-  mutable t r = static_cast{t}(1);
-  while (r != 0 && r < v) { r <<= 1; }
-  return r;
 }
 
 struct shadowmap_fbo
@@ -474,361 +527,6 @@ function void init_shadowmap_fbo(shader_config const& glc,
       sdllog("complete framebuffer");
     }
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
-  }
-}
-
-private function extern "sdl_byteorder" int sdl_byteorder();
-private function extern "sdl_lil_endian" int sdl_lil_endian();
-private function extern "sdl_big_endian" int sdl_big_endian();
-
-extern "functions" inline
-namespace pgl3d$n { namespace pglshader$n {
-static inline ::pxcrt::bt_int sdl_byteorder()
-{ return SDL_BYTEORDER; }
-static inline ::pxcrt::bt_int sdl_lil_endian()
-{ return SDL_LIL_ENDIAN; }
-static inline ::pxcrt::bt_int sdl_big_endian()
-{ return SDL_BIG_ENDIAN; }
-}; };
-;
-
-function void check_byteorder()
-{
-  if (sdl_byteorder() != sdl_lil_endian()
-      && sdl_byteorder() != sdl_big_endian()) {
-      throw runtime_error_template{"unknown byteorder"}("1");
-  }
-  sdllog("byteorder ", sdl_byteorder());
-}
-
-function uint read_3_uint(cslice{uchar} const& buf, size_t o)
-{
-  uint v;
-  if (sdl_byteorder() == sdl_lil_endian()) {
-    v += buf[o+2]; v *= 256;
-    v += buf[o+1]; v *= 256;
-    v += buf[o+0];
-  } else if (sdl_byteorder() == sdl_big_endian()) {
-    v += buf[o+0]; v *= 256;
-    v += buf[o+1]; v *= 256;
-    v += buf[o+2];
-  }
-  return v;
-}
-function void write_4_uint(slice{uchar} const& buf, size_t o, uint val)
-{
-  if (sdl_byteorder() == sdl_lil_endian()) {
-    buf[o+3] = static_cast{uchar}(val >> 24);
-    buf[o+2] = static_cast{uchar}(val >> 16);
-    buf[o+1] = static_cast{uchar}(val >>  8);
-    buf[o+0] = static_cast{uchar}(val);
-  } else if (sdl_byteorder() == sdl_big_endian()) {
-    buf[o+0] = static_cast{uchar}(val >> 24);
-    buf[o+1] = static_cast{uchar}(val >> 16);
-    buf[o+2] = static_cast{uchar}(val >>  8);
-    buf[o+3] = static_cast{uchar}(val);
-  }
-}
-
-function void
-init_texture(main_texture_info mutable& mti, font_texture_info mutable& fti)
-{
-  check_byteorder();
-  metafunction SDL_Surface_Scoped scoped_nullable{SDL_FreeSurface};
-  {
-    /* font */
-    mutable fnames = make_farray{string}(
-      "mplus-1m-bold.ttf",
-      // "/Library/Fonts/Tahoma.ttf",
-      "/Library/Fonts/Osaka.ttf",
-      "/usr/share/fonts/mplus/mplus-1m-bold.ttf",
-      "/usr/share/fonts/liberation/LiberationMono-Regular.ttf");
-    scoped_nullable{TTF_CloseFont} font;
-    for (size_t i, mutable& fn: fnames) {
-      const p = TTF_OpenFont(fn.c_str(), 18);
-      sdllog("openfont", fn, p.to_size_t());
-      font.reset(p);
-      if (font.get() != rawptr{TTF_Font}()) {
-	break;
-      }
-    }
-    if (font.get() == rawptr{TTF_Font}()) {
-      sdllog("failed to load font");
-      throw runtime_error_template{"load font"}("1");
-    }
-    SDL_Color mutable fg;
-    fg.r = 255;
-    fg.g = 255;
-    fg.b = 255;
-    fg.a = 255;
-    uint hmax = 0;
-    uint wmax = 0;
-    // uint wtotal = 0;
-    varray{ptr{SDL_Surface_Scoped}} sur_arr;
-    for (const i: 0 .. 0x60) {
-      farray{uchar, 2} z;
-      z[0] = static_cast{uchar}(i + 0x20);
-      z[1] = 0u;
-      const sur = make_ptr{SDL_Surface_Scoped}();
-      sur->reset(TTF_RenderUTF8_Blended(font,
-	z.range().to_crawptr().to_ccharptr(), fg));
-      /* sdllog(z, sur.W(), sur.H()); */
-      sur_arr.push_back(sur);
-      const sur_ref = sur->get().to_slice(1);
-      hmax = max(hmax, static_cast{uint}(sur_ref->h));
-      wmax = max(wmax, static_cast{uint}(sur_ref->w));
-    }
-    SDL_Surface_Scoped sur_chars;
-    sur_chars.reset(SDL_CreateRGBSurface(0,
-      cast_int(power_of_2(wmax * 0x60u)),
-      cast_int(power_of_2(hmax)), 32, 0, 0, 0, 0));
-    sdllog("wmax, hmax", wmax, hmax);
-    fti.char_x.clear();
-    uint xcur = 0;
-    for (const i, const ep: sur_arr) {
-      const& e = *ep->get().to_slice(1);
-      SDL_Rect r0;
-      SDL_Rect r1;
-      r0.x = 0;
-      r0.y = 0;
-      r0.w = e.w;
-      r0.h = e.h;
-      r1.x = cast_int(xcur);
-      r1.y = 0;
-      r1.w = r0.w;
-      r1.h = r1.h;
-      const v = SDL_UpperBlit(*ep, caddress(r0), sur_chars, address(r1));
-      xcur += cast_uint(wmax);
-      fti.char_x.push_back(xcur);
-    }
-    fti.char_w = wmax;
-    fti.char_h = hmax;
-    const& sur_chars_ref = *sur_chars.get().to_slice(1);
-    fti.surface_w = static_cast{uint}(sur_chars_ref.w);
-    fti.surface_h = static_cast{uint}(sur_chars_ref.h);
-    /* const sur = sur_chars; */
-    const sur_chars_buf = sur_chars_ref.pixels.reinterpret_cast{uchar}()
-      .to_slice(static_cast{size_t}(sur_chars_ref.pitch * sur_chars_ref.h));
-    // const sur_chars_buf = sur_chars.Pixels();
-    for (const x: 0 .. sur_chars_ref.w) {
-      for (const y: 0 .. sur_chars_ref.h) {
-	const i = static_cast{size_t}((y * sur_chars_ref.w + x) * 4);
-	sur_chars_buf[i+0] = 255;
-	sur_chars_buf[i+1] = 255;
-	sur_chars_buf[i+2] = 255;
-      }
-    }
-    /* font texture */
-    glActiveTexture(GL_TEXTURE0);
-    fti.font_texture_id.generate();
-    sdllog("font_texture_id", fti.font_texture_id.get());
-    glBindTexture(GL_TEXTURE_2D, fti.font_texture_id.get());
-    glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_RGBA),
-      sur_chars_ref.w, sur_chars_ref.h,
-      0, GL_RGBA, GL_UNSIGNED_BYTE, sur_chars_ref.pixels);
-    /*
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
-      cast_int(GL_LINEAR));
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-      cast_int(GL_LINEAR));
-    */
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
-      cast_int(GL_NEAREST));
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-      cast_int(GL_NEAREST));
-  }
-  {
-    // const sur = IMG_Load("img-c1024.jpg").some;
-    SDL_Surface_Scoped sur0;
-    sur0.reset(IMG_Load("dpat.png"));
-    const& sur0ref = *sur0.get().to_slice(1);
-    const fmtp = sur0ref.format;
-    const& fmt = *sur0ref.format.to_slice(1);
-    const bpp = fmt.BytesPerPixel;
-    if (bpp != 4 && bpp != 3) {
-      throw runtime_error_template{"img_load"}("1");
-    }
-    const sur0_w = static_cast{uint}(sur0ref.w);
-    const sur0_h = static_cast{uint}(sur0ref.h);
-    mutable tex_w = power_of_2(sur0_w);
-    mutable tex_h = power_of_2(sur0_h);
-    varray{uint} uibuf;
-    uibuf.resize(tex_w * tex_h, 0);
-    uint rmask = fmt.Rmask;
-    uint gmask = fmt.Gmask;
-    uint bmask = fmt.Bmask;
-    uint amask = fmt.Amask;
-    function uint get_shift(uint m) {
-      uint r = 0;
-      for (uint i: 0 .. 32) {
-	if ((m & 1) != 0) {
-	  break;
-	}
-	r += 1;
-	m >>= 1;
-      }
-      return r;
-    }
-    uint rshift = get_shift(rmask);
-    uint gshift = get_shift(gmask);
-    uint bshift = get_shift(bmask);
-    uint ashift = get_shift(amask);
-    /*
-    sdllog("Masks", rmask, gmask, bmask, amask, rshift, gshift, bshift,
-      ashift);
-    */
-    const& sur0_ref = *sur0.get().to_slice(1);
-    const sur0buf = sur0_ref.pixels.reinterpret_cast{uchar}()
-      .to_slice(static_cast{size_t}(sur0_ref.pitch * sur0_ref.h));
-    // const sur0buf = sur0_ref.Pixels();
-    for (const by: 0 .. sur0_h / 64) {
-      for (const iy: 0 .. 32U) {
-	for (const x: 0 .. sur0_w) {
-	  const o0n = ((by * 64 + iy     ) * sur0_w + x) * bpp;
-	  const o0c = ((by * 64 + iy + 32) * sur0_w + x) * bpp;
-	  const o1 = ((by * 32 + iy) * tex_w + x) * 4;
-	  const nor0 = read_3_uint(sur0buf, o0n);
-	  const col0 = read_3_uint(sur0buf, o0c);
-	  uint norr = (nor0 >> rshift) & 0xffU;
-	  uint norg = (nor0 >> gshift) & 0xffU;
-	  uint norb = (nor0 >> bshift) & 0xffU;
-	  const nor = (norr << 16) | (norg << 8) | norb;
-	  uint colr = (col0 >> rshift) & 0xffU;
-	  uint colg = (col0 >> gshift) & 0xffU;
-	  uint colb = (col0 >> bshift) & 0xffU;
-	  const col = (colb << 16) | (colg << 8) | colr;
-	  uint val; /* avol for higher 4bits, alv for lower 4bits */
-	  if (nor == 0xff0000) {
-	    val = 0x91; /* convex left-upper */
-	  } else if (nor == 0x00ff00) {
-	    val = 0x92; /* convex upper, or concave lower */
-	  } else if (nor == 0xffff00) {
-	    val = 0x93; /* convex right-upper */
-	  } else if (nor == 0x0000ff) {
-	    val = 0x94; /* convex right, or concave left */
-	  } else if (nor == 0xff00ff) {
-	    val = 0x95; /* convex right-lower */
-	  } else if (nor == 0x00ffff) {
-	    val = 0x72; /* convex lower, or concave upper */
-	  } else if (nor == 0xffffff) {
-	    val = 0x97; /* convex left-lower */
-	  } else if (nor == 0x808080) {
-	    val = 0x74; /* convex left, or concave right */
-	  } else if (nor == 0xc04040) {
-	    val = 0x71; /* concave left-upper */
-	  } else if (nor == 0xc0c040) {
-	    val = 0x73; /* concave right-upper */
-	  } else if (nor == 0xc040c0) {
-	    val = 0x75; /* concave right-lower */
-	  } else if (nor == 0xc0c0c0) {
-	    val = 0x77; /* concave left-lower */
-	  } else if (nor == 0x8080c0) {
-	    val = 0x0a; /* emission */
-	  }
-	  uibuf[(by * 32 + iy) * tex_w + x] = (val << 24) | col;
-	}
-      }
-    }
-    const mode = GL_RGBA;
-    glActiveTexture(GL_TEXTURE1);
-    mti.main_texture_id.generate();
-    glBindTexture(GL_TEXTURE_2D, mti.main_texture_id.get());
-    /*
-    glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, cast_int(GL_TRUE));
-    */
-    int mipmap_level = 0;
-    while (true) {
-      glTexImage2D(GL_TEXTURE_2D, mipmap_level, cast_int(mode),
-	cast_int(tex_w), cast_int(tex_h),
-	0, mode, GL_UNSIGNED_BYTE, uibuf.to_crawptr().to_cvoidptr());
-      const tex_w_prev = tex_w;
-      const tex_h_prev = tex_h;
-      tex_w /= 2;
-      tex_h /= 2;
-      // if (tex_w == 0 || tex_h == 0 || mipmap_level >= 5) {
-      if (tex_w == 0 || tex_h == 0 || mipmap_level >= 0) {
-	break;
-      }
-      ++mipmap_level;
-      for (const y: 0 .. tex_h) {
-	for (const x: 0 .. tex_w) {
-	  farray{uint, 4} v;
-	  v[0] = uibuf[(y * 2 + 0) * tex_w_prev + (x * 2 + 0)];
-	  v[1] = uibuf[(y * 2 + 0) * tex_w_prev + (x * 2 + 1)];
-	  v[2] = uibuf[(y * 2 + 1) * tex_w_prev + (x * 2 + 0)];
-	  v[3] = uibuf[(y * 2 + 1) * tex_w_prev + (x * 2 + 1)];
-	  uint mutable val_b;
-	  uint mutable val_g;
-	  uint mutable val_r;
-	  size_t opaque_count = 0;
-	  for (size_t j: 0 .. 4) {
-	    val_b += (v[j] >> 16) & 0xff;
-	    val_g += (v[j] >>  8) & 0xff;
-	    val_r += (v[j] >>  0) & 0xff;
-	    if (((v[j] >> 24) & 0x0f) == 10) { ++opaque_count; }
-	  }
-	  val_b /= 4;
-	  val_g /= 4;
-	  val_r /= 4;
-	  const val_a = opaque_count > 0 ? 10U : (v[0] >> 24) & 0xff; // TODO
-	  /*
-	  uibuf[y * tex_w + x] = (val_a << 24) +
-	    (val_b << 16) + (val_g << 8) + (val_r << 0);
-	  uibuf[y * tex_w + x] = v[0];
-	  */
-	}
-      }
-    }
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
-      cast_int(GL_NEAREST));
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-      cast_int(mipmap_level > 0 ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST));
-    mti.surface_w = tex_w;
-    mti.surface_h = tex_h;
-    if (m::ne{is_gl3_or_gles3, 0}) {
-      if (mipmap_level != 0) {
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mipmap_level);
-      }
-    }
-  }
-  {
-    /* tile map */
-    SDL_Surface_Scoped sur1;
-    sur1.reset(SDL_CreateRGBSurface(0, 128, 128, 32, 0, 0, 0, 0));
-    const& sur1_ref = *sur1.get().to_slice(1);
-    const sur1buf = sur1_ref.pixels.reinterpret_cast{uchar}()
-      .to_slice(static_cast{size_t}(sur1_ref.pitch * sur1_ref.h));
-    const sur1_w = static_cast{uint}(sur1_ref.w);
-    const sur1_h = static_cast{uint}(sur1_ref.h);
-    // const sur1buf = sur1.Pixels();
-    const rnd = make_rand_generator(333U);
-    for (const y: 0 .. sur1_h) {
-      for (const x: 0 .. sur1_w) {
-	const o1 = (y * sur1_w + x) * 4;
-	const v0 = rnd->generate() / 65536;
-	const v1 = v0 % 8;
-	const v2 = (v0 / 8) % 8;
-	const uint specular_ambient = 0xff60;
-	if (x == 0 && y == 0) {
-	  write_4_uint(sur1buf, o1, specular_ambient << 16);
-	} else {
-	  write_4_uint(sur1buf, o1, (v1 % 8) | specular_ambient << 16);
-	}
-      }
-    }
-    sdllog("sur1buf", sur1_w, sur1_h);
-    const mode = GL_RGBA;
-    glActiveTexture(GL_TEXTURE2);
-    mti.tilemap_texture_id.generate();
-    glBindTexture(GL_TEXTURE_2D, mti.tilemap_texture_id.get());
-    glTexImage2D(GL_TEXTURE_2D, 0, cast_int(mode),
-      cast_int(sur1_ref.w), cast_int(sur1_ref.h),
-      0, mode, GL_UNSIGNED_BYTE, sur1buf.to_crawptr().to_cvoidptr());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
-      cast_int(GL_NEAREST));
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-      cast_int(GL_NEAREST));
   }
 }
 

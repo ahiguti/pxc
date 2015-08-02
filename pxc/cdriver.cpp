@@ -211,6 +211,9 @@ static bool check_source_timestamp(const parser_options& po, module_info& mi,
       src_mask |= src_mask_bit;
       break;
     }
+    if (src_mask != 0) {
+      break;
+    }
   }
   if (src_mask != mi.src_mask) {
     if (po.verbose > 1) {

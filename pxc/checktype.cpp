@@ -1692,8 +1692,8 @@ static void subst_user_defined_fldop(expr_op *eop)
     fn_check_type(eop->arg0, eop->symtbl_lexical);
     term ta0 = eop->arg0->resolve_texpr();
     expr_i *const einst0 = term_get_instance(ta0);
-    expr_block *const tblk = einst0->get_template_block();
-    if (einst0->get_esort() == expr_e_struct && tblk != 0) {
+    expr_block *const tblk = einst0 != 0 ? einst0->get_template_block() : 0;
+    if (einst0 != 0 && einst0->get_esort() == expr_e_struct && tblk != 0) {
       /* user-defined field op? */
       expr_struct *const est0 = ptr_down_cast<expr_struct>(einst0);
       const bool no_generated = true;
@@ -1723,7 +1723,7 @@ static void subst_user_defined_fldop(expr_op *eop)
 	  eop->dump(0).c_str()));
       }
     }
-    if (einst0->get_esort() == expr_e_dunion && tblk != 0) {
+    if (einst0 != 0 && einst0->get_esort() == expr_e_dunion && tblk != 0) {
       /* union field op is substituted to operator::union_field, in order
        * to throw detailed exception when it is invalid. */
       bool skip = false;

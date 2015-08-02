@@ -13,11 +13,13 @@ public import pgl3d::glresource -;
 public import pgl3d::glshader -;
 public import pgl3d::glgeometry -;
 public import pgl3d::glbuffer -;
-public import pgl3d::scenenode -;
+public import pgl3d::scene_node -;
 public import pgl3d::pglbase -;
 public import pgl3d::intern_pool -;
 public import pgl3d::shader_config -;
 public import pgl3d::aggregated_ibuffer -;
+public import pgl3d::drawer_base -;
+private import io::time -;
 
 public enum draw_step {
   draw_step_shadowmapping = 1,
@@ -26,39 +28,17 @@ public enum draw_step {
   draw_step_blend = 4
 }
 
-public metafunction prepare_instance_data_funcptr
-  pointer::tfuncptr::tfuncptr_matching_function{prepare_instance_data_default};
-
-public multithreaded struct prepare_instance_data_cb
-<prepare_instance_data_i>
-{
-  public varray{prepare_instance_data_funcptr} func_table;
-  public function void prepare_instance_data(scene_node{node_data} const& sn,
-    node_common_data mutable& ncd, varray{instances_type} mutable& ibs)
-  {
-    prepare_instance_data_ft_rec(sn, ncd, func_table, ibs);
-  }
-}
-
-public threaded function void prepare_instance_data_cb_add(
-  prepare_instance_data_cb mutable& picb, vertex_buffer_id vbid,
-  prepare_instance_data_funcptr const& fp)
-{
-  size_t i = static_cast{size_t}(vbid);
-  if (picb.func_table.size() <= i) {
-    picb.func_table.resize(i + 1,
-      make_tfuncptr{prepare_instance_data_default}());
-  }
-  picb.func_table[i] = fp;
-}
-
 public interface pgldrawer_i <pgldrawer_export_i> {
   public function string get_vbid_name() const;
   public function prepare_instance_data_funcptr
     get_prepare_instance_data_funcptr() const;
   public function ptr{vertex_buffer} make_vertex_buffer() const;
+  public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
+    const;
+  public function dgf_filler make_filler(ptr{vertices} const& vptr) const;
+  public function texture_info get_texture_info(cstrref const& name) const;
   public function void draw(draw_step step, vertex_buffer const& bo,
-    instances_type const& ibs, aggregated_ibuffer const& aibuf,
+    bo_instances_type const& bo_ib, aggregated_ibuffer const& aibuf,
     vertex_buffer_id bo_id, shader_config const& glc,
     projection_info const& cam_df);
 }
@@ -66,21 +46,44 @@ public interface pgldrawer_i <pgldrawer_export_i> {
 public struct drawer_triangles(shader_config const& glc)
 <pgldrawer_i>
 {
+  metafunction tattr triangles_vertex_attributes;
   triangles_shader_ptr{1} const sdr_solid = init_triangles_shader{1}(glc);
   zprepass_shader_ptr{1} const sdr_zp = init_zprepass_shader{1}(glc);
   shadowmap_shader_ptr{1} const sdr_shadow = init_shadowmap_shader{1}(glc);
+  texture_data texture_dpat;
+  texture_data texture_tilemap;
+  init();
+  private function void init()
+  {
+    init_main_texture(texture_dpat, texture_tilemap);
+  }
   public function string get_vbid_name() const { return "vbid_triangles"; }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
     return make_tfuncptr{prepare_instance_data_triangles}();
   }
   public function ptr{vertex_buffer} make_vertex_buffer() const {
-    return make_ptr{vertex_buffer}(
-      static_cast{size_t}(num_float_struct{triangles_vertex_attributes}),
-      false);
+    return make_tattr_vertex_buffer{tattr}(false);
+  }
+  public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
+    const
+  {
+  }
+  public function dgf_filler make_filler(ptr{vertices} const& vptr) const
+  {
+    return make_dgf_polygon_filler{tattr}(vptr);
+  }
+  public function texture_info get_texture_info(cstrref const& name) const
+  {
+    texture_info r;
+    if (name == "main") {
+      r.surface_w = texture_dpat.surface_w;
+      r.surface_h = texture_dpat.surface_h;
+    }
+    return r;
   }
   public function void draw(draw_step step, vertex_buffer const& bo,
-    instances_type const& ibs, aggregated_ibuffer const& aibuf,
+    bo_instances_type const& bo_ib, aggregated_ibuffer const& aibuf,
     vertex_buffer_id bo_id, shader_config const& glc,
     projection_info const& cam_df)
   {
@@ -88,13 +91,10 @@ public struct drawer_triangles(shader_config const& glc)
       const sm_view = cam_df.light.to_mat4().inverse();
       const sm_vp = cam_df.sm_projection * sm_view;
       glUseProgram(sdr_shadow->program);
-      if (m::ne{use_shadowmap_vp_cpu, 0}) {
-	aibuf.draw(*sdr_shadow, bo, ibs, bo_id, 1, glc.enable_instanced,
-	  glc.enable_uniform_instancing);
-      } else {
+      {
 	glUniformMatrix4fv(sdr_shadow->u_shadowmap_vp, 1, 0,
 	  sm_vp.to_crawptr());
-	aibuf.draw(*sdr_shadow, bo, ibs, bo_id, 0, glc.enable_instanced,
+	aibuf.draw(*sdr_shadow, bo, bo_ib, bo_id, glc.enable_instanced,
 	  glc.enable_uniform_instancing);
       }
     } else if (step == draw_step_zprepass) {
@@ -105,7 +105,7 @@ public struct drawer_triangles(shader_config const& glc)
       glUseProgram(sdr.program);
       glUniformMatrix4fv(sdr.u_view_projection_matrix, 1, 0,
 	vp.to_crawptr());
-      aibuf.draw(sdr, bo, ibs, bo_id, 0, glc.enable_instanced,
+      aibuf.draw(sdr, bo, bo_ib, bo_id, glc.enable_instanced,
 	  glc.enable_uniform_instancing);
     } else if (step == draw_step_solid) {
       const sm_view = cam_df.light.to_mat4().inverse();
@@ -125,7 +125,7 @@ public struct drawer_triangles(shader_config const& glc)
       glUniform1f(sdr.u_light_on, 1.0f);
       glUniformMatrix4fv(sdr.u_shadowmap_vp, 1, 0, sm_vp.to_crawptr());
       glUniformMatrix4fv(sdr.u_view_projection_matrix, 1, 0, vp.to_crawptr());
-      aibuf.draw(sdr, bo, ibs, bo_id, 0, glc.enable_instanced,
+      aibuf.draw(sdr, bo, bo_ib, bo_id, glc.enable_instanced,
 	glc.enable_uniform_instancing);
     }
   }
@@ -134,6 +134,7 @@ public struct drawer_triangles(shader_config const& glc)
 public struct drawer_triangles2(shader_config const& glc)
 <pgldrawer_i>
 {
+  metafunction tattr triangles2_vertex_attributes;
   triangles_shader_ptr{0} sdr_solid = init_triangles_shader{0}(glc);
   zprepass_shader_ptr{0} sdr_zp = init_zprepass_shader{0}(glc);
   shadowmap_shader_ptr{0} sdr_shadow = init_shadowmap_shader{0}(glc);
@@ -143,12 +144,22 @@ public struct drawer_triangles2(shader_config const& glc)
     return make_tfuncptr{prepare_instance_data_triangles}();
   }
   public function ptr{vertex_buffer} make_vertex_buffer() const {
-    return make_ptr{vertex_buffer}(
-      static_cast{size_t}(num_float_struct{triangles2_vertex_attributes}),
-      false);
+    return make_tattr_vertex_buffer{tattr}(false);
+  }
+  public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
+    const
+  {
+  }
+  public function dgf_filler make_filler(ptr{vertices} const& vptr) const
+  {
+    return make_dgf_polygon_filler{tattr}(vptr);
+  }
+  public function texture_info get_texture_info(cstrref const& name) const
+  {
+    return texture_info();
   }
   public function void draw(draw_step step, vertex_buffer const& bo,
-    instances_type const& ibs, aggregated_ibuffer const& aibuf,
+    bo_instances_type const& bo_ib, aggregated_ibuffer const& aibuf,
     vertex_buffer_id bo_id, shader_config const& glc,
     projection_info const& cam_df)
   {
@@ -156,12 +167,10 @@ public struct drawer_triangles2(shader_config const& glc)
       const sm_view = cam_df.light.to_mat4().inverse();
       const sm_vp = cam_df.sm_projection * sm_view;
       glUseProgram(sdr_shadow->program);
-      if (m::ne{use_shadowmap_vp_cpu, 0}) {
-	aibuf.draw(*sdr_shadow, bo, ibs, bo_id, 1, false, false);
-      } else {
+      {
 	glUniformMatrix4fv(sdr_shadow->u_shadowmap_vp, 1, 0,
 	  sm_vp.to_crawptr());
-	aibuf.draw(*sdr_shadow, bo, ibs, bo_id, 0, false, false);
+	aibuf.draw(*sdr_shadow, bo, bo_ib, bo_id, false, false);
       }
     } else if (step == draw_step_zprepass) {
       mutable view = glm::mat4();
@@ -170,7 +179,7 @@ public struct drawer_triangles2(shader_config const& glc)
       glUseProgram(sdr_zp->program);
       glUniformMatrix4fv(sdr_zp->u_view_projection_matrix, 1, 0,
 	vp.to_crawptr());
-      aibuf.draw(*sdr_zp, bo, ibs, bo_id, 0, false, false);
+      aibuf.draw(*sdr_zp, bo, bo_ib, bo_id, false, false);
     } else if (step == draw_step_solid) {
       const sm_view = cam_df.light.to_mat4().inverse();
       const sm_vp = cam_df.sm_projection * sm_view;
@@ -191,7 +200,7 @@ public struct drawer_triangles2(shader_config const& glc)
       glUniformMatrix4fv(sdr.u_shadowmap_vp, 1, 0, sm_vp.to_crawptr());
       glUniformMatrix4fv(sdr.u_view_projection_matrix, 1, 0,
 	vp.to_crawptr());
-      aibuf.draw(sdr, bo, ibs, bo_id, 0, false, false);
+      aibuf.draw(sdr, bo, bo_ib, bo_id, false, false);
     }
   }
 }
@@ -199,6 +208,7 @@ public struct drawer_triangles2(shader_config const& glc)
 public struct drawer_lineparticle(shader_config const& glc)
 <pgldrawer_i>
 {
+  metafunction tattr lineparticle_vertex_attributes;
   lineparticle_shader_ptr sdr_lp = init_lineparticle_shader(glc);
   public function string get_vbid_name() const { return "vbid_lineparticle"; }
   public function prepare_instance_data_funcptr
@@ -206,12 +216,22 @@ public struct drawer_lineparticle(shader_config const& glc)
     return make_tfuncptr{prepare_instance_data_lineparticle}();
   }
   public function ptr{vertex_buffer} make_vertex_buffer() const {
-    return make_ptr{vertex_buffer}(
-      static_cast{size_t}(num_float_struct{lineparticle_vertex_attributes}),
-      false);
+    return make_tattr_vertex_buffer{tattr}(false);
+  }
+  public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
+    const
+  {
+  }
+  public function dgf_filler make_filler(ptr{vertices} const& vptr) const
+  {
+    return make_dgf_noop(vptr);
+  }
+  public function texture_info get_texture_info(cstrref const& name) const
+  {
+    return texture_info();
   }
   public function void draw(draw_step step, vertex_buffer const& bo,
-    instances_type const& ibs, aggregated_ibuffer const& aibuf,
+    bo_instances_type const& bo_ib, aggregated_ibuffer const& aibuf,
     vertex_buffer_id bo_id, shader_config const& glc,
     projection_info const& cam_df)
   {
@@ -232,7 +252,7 @@ public struct drawer_lineparticle(shader_config const& glc)
 	vp.to_crawptr());
       glUniform2fv(sdr.u_screen_size_px, 1, screen_size_px.to_crawptr());
       glUniform1fv(sdr.u_screen_size_base, 1, caddress(screen_size_base));
-      aibuf.draw(sdr, bo, ibs, bo_id, 0, glc.enable_instanced,
+      aibuf.draw(sdr, bo, bo_ib, bo_id, glc.enable_instanced,
 	glc.enable_uniform_instancing);
     }
   }
@@ -241,6 +261,7 @@ public struct drawer_lineparticle(shader_config const& glc)
 public struct drawer_particle(shader_config const& glc)
 <pgldrawer_i>
 {
+  metafunction tattr particle_vertex_attributes;
   particle_shader_ptr sdr_sp = init_particle_shader(glc);
   public function string get_vbid_name() const { return "vbid_particle"; }
   public function prepare_instance_data_funcptr
@@ -248,11 +269,22 @@ public struct drawer_particle(shader_config const& glc)
     return make_tfuncptr{prepare_instance_data_particle}();
   }
   public function ptr{vertex_buffer} make_vertex_buffer() const {
-    return make_ptr{vertex_buffer}(
-      static_cast{size_t}(num_float_struct{particle_vertex_attributes}), true);
+    return make_tattr_vertex_buffer{tattr}(true);
+  }
+  public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
+    const
+  {
+  }
+  public function dgf_filler make_filler(ptr{vertices} const& vptr) const
+  {
+    return make_dgf_particle_filler(vptr);
+  }
+  public function texture_info get_texture_info(cstrref const& name) const
+  {
+    return texture_info();
   }
   public function void draw(draw_step step, vertex_buffer const& bo,
-    instances_type const& ibs, aggregated_ibuffer const& aibuf,
+    bo_instances_type const& bo_ib, aggregated_ibuffer const& aibuf,
     vertex_buffer_id bo_id, shader_config const& glc,
     projection_info const& cam_df)
   {
@@ -263,7 +295,7 @@ public struct drawer_particle(shader_config const& glc)
       glUniform1f(sdr.u_point_size_base,
 	0.1f * static_cast{float}(max(
 	  cam_df.screen_width, cam_df.screen_height)));
-      aibuf.draw(sdr, bo, ibs, bo_id, 0, glc.enable_instanced,
+      aibuf.draw(sdr, bo, bo_ib, bo_id, glc.enable_instanced,
 	glc.enable_uniform_instancing);
     }
   }
@@ -272,6 +304,7 @@ public struct drawer_particle(shader_config const& glc)
 public struct drawer_particle_bb(shader_config const& glc)
 <pgldrawer_i>
 {
+  metafunction tattr particle_bb_vertex_attributes;
   particle_bb_shader_ptr sdr_pb = init_particle_bb_shader(glc);
   public function string get_vbid_name() const { return "vbid_particle_bb"; }
   public function prepare_instance_data_funcptr
@@ -279,12 +312,22 @@ public struct drawer_particle_bb(shader_config const& glc)
     return make_tfuncptr{prepare_instance_data_default}();
   }
   public function ptr{vertex_buffer} make_vertex_buffer() const {
-    return make_ptr{vertex_buffer}(
-      static_cast{size_t}(num_float_struct{particle_bb_vertex_attributes}),
-      false);
+    return make_tattr_vertex_buffer{tattr}(false);
+  }
+  public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
+    const
+  {
+  }
+  public function dgf_filler make_filler(ptr{vertices} const& vptr) const
+  {
+    return make_dgf_particle_bb_filler(vptr);
+  }
+  public function texture_info get_texture_info(cstrref const& name) const
+  {
+    return texture_info();
   }
   public function void draw(draw_step step, vertex_buffer const& bo,
-    instances_type const& ibs, aggregated_ibuffer const& aibuf,
+    bo_instances_type const& bo_ib, aggregated_ibuffer const& aibuf,
     vertex_buffer_id bo_id, shader_config const& glc,
     projection_info const& cam_df)
   {
@@ -300,7 +343,7 @@ public struct drawer_particle_bb(shader_config const& glc)
       glUniformMatrix3fv(sdr.u_camera_matrix, 1, 0,
 	cam_mat.to_3().to_crawptr());
       glUniform1f(sdr.u_point_size_base, 0.1f);
-      aibuf.draw(sdr, bo, ibs, bo_id, 0, 
+      aibuf.draw(sdr, bo, bo_ib, bo_id,
 	glc.enable_instanced, glc.enable_uniform_instancing);
     }
   }
@@ -309,18 +352,43 @@ public struct drawer_particle_bb(shader_config const& glc)
 public struct drawer_font2(shader_config const& glc)
 <pgldrawer_i>
 {
+  metafunction tattr font2_vertex_attributes;
   font2_shader_ptr sdr_fn = init_font2_shader(glc);
+  texture_data texture_font;
+  init();
+  private function void init()
+  {
+    init_font(texture_font);
+  }
   public function string get_vbid_name() const { return "vbid_font2"; }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
     return make_tfuncptr{prepare_instance_data_font2}();
   }
   public function ptr{vertex_buffer} make_vertex_buffer() const {
-    return make_ptr{vertex_buffer}(
-      static_cast{size_t}(num_float_struct{font2_vertex_attributes}), true);
+    return make_tattr_vertex_buffer{tattr}(true);
+  }
+  public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
+    const
+  {
+  }
+  public function dgf_filler make_filler(ptr{vertices} const& vptr) const
+  {
+    return make_dgf_noop(vptr);
+  }
+  public function texture_info get_texture_info(cstrref const& name) const
+  {
+    texture_info r;
+    if (name == "font") {
+      r.surface_w = texture_font.surface_w;
+      r.surface_h = texture_font.surface_h;
+      r.char_w = texture_font.char_w;
+      r.char_h = texture_font.char_h;
+    }
+    return r;
   }
   public function void draw(draw_step step, vertex_buffer const& bo,
-    instances_type const& ibs, aggregated_ibuffer const& aibuf,
+    bo_instances_type const& bo_ib, aggregated_ibuffer const& aibuf,
     vertex_buffer_id bo_id, shader_config const& glc,
     projection_info const& cam_df)
   {
@@ -333,7 +401,7 @@ public struct drawer_font2(shader_config const& glc)
       glUseProgram(sdr.program);
       glUniform1i(sdr.u_sampler, 0);
       glUniform2fv(sdr.u_screen_size_px, 1, screen_size_px.to_crawptr());
-      aibuf.draw(sdr, bo, ibs, bo_id, 0,
+      aibuf.draw(sdr, bo, bo_ib, bo_id,
 	glc.enable_instanced, glc.enable_uniform_instancing);
     }
   }
@@ -342,6 +410,7 @@ public struct drawer_font2(shader_config const& glc)
 public struct drawer_rect2d(shader_config const& glc)
 <pgldrawer_i>
 {
+  metafunction tattr rect2d_vertex_attributes;
   rect2d_shader_ptr sdr_re = init_rect2d_shader(glc);
   public function string get_vbid_name() const { return "vbid_rect2d"; }
   public function prepare_instance_data_funcptr
@@ -349,11 +418,22 @@ public struct drawer_rect2d(shader_config const& glc)
     return make_tfuncptr{prepare_instance_data_rect2d}();
   }
   public function ptr{vertex_buffer} make_vertex_buffer() const {
-    return make_ptr{vertex_buffer}(
-      static_cast{size_t}(num_float_struct{rect2d_vertex_attributes}), false);
+    return make_tattr_vertex_buffer{tattr}(false);
+  }
+  public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
+    const
+  {
+  }
+  public function dgf_filler make_filler(ptr{vertices} const& vptr) const
+  {
+    return make_dgf_noop(vptr);
+  }
+  public function texture_info get_texture_info(cstrref const& name) const
+  {
+    return texture_info();
   }
   public function void draw(draw_step step, vertex_buffer const& bo,
-    instances_type const& ibs, aggregated_ibuffer const& aibuf,
+    bo_instances_type const& bo_ib, aggregated_ibuffer const& aibuf,
     vertex_buffer_id bo_id, shader_config const& glc,
     projection_info const& cam_df)
   {
@@ -361,13 +441,185 @@ public struct drawer_rect2d(shader_config const& glc)
       glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
       mutable& sdr = *sdr_re;
       glUseProgram(sdr.program);
-      aibuf.draw(sdr, bo, ibs, bo_id, 0, glc.enable_instanced,
+      aibuf.draw(sdr, bo, bo_ib, bo_id, glc.enable_instanced,
 	glc.enable_uniform_instancing);
     }
   }
 }
 
 /* private */
+
+private function {tattr} ptr{vertex_buffer}
+make_tattr_vertex_buffer(bool points_mode)
+{
+  return make_ptr{vertex_buffer}(static_cast{size_t}(num_float_struct{tattr}),
+    points_mode);
+}
+
+private threaded function {tattr} void
+dgf_fill_tattr_internal(ptr{vertices} const& vptr, bool flat_flag,
+  poly_t const& poly, mesh_index const& mp)
+{
+  const sz = poly.size();
+  if (sz < 3) { return; }
+  glm::vec3 mutable nor;
+  glm::vec3 mutable tang;
+  if (flat_flag) {
+    nor = normal_from_poly(poly);
+    tang = (poly[1].pos - poly[0].pos).normalize();
+  }
+  mutable vtxs = darrayst{tattr}(sz, tattr());
+  for (const i: 0 .. sz) {
+    mutable& v = vtxs[i];
+    v.position = poly[i].pos;
+    if (flat_flag) {
+      v.normal = nor;
+      v.tangent = glm::make_vec3(tang.x, tang.y, tang.z);
+    } else {
+      v.normal = poly[i].nor;
+      v.tangent = poly[i].tan;
+    }
+    v.uvw = glm::vec3();
+  }
+  if (sz == 4) {
+    const c0 = (poly[0].pos + poly[1].pos);
+    const c1 = (poly[1].pos + poly[2].pos);
+    const c2 = (poly[2].pos + poly[3].pos);
+    const c3 = (poly[3].pos + poly[0].pos);
+    const c02 = c2 - c0;
+    const c13 = c3 - c1;
+    if (fabs(glm::dot(c02, c13)) < glm::length(c02) * glm::length(c13) * 0.05)
+    {
+      /* 01, 23 */
+      const v01 = poly[1].pos - poly[0].pos;
+      const v23 = poly[3].pos - poly[2].pos;
+      const dotv0123 = glm::dot(v01, -v23);
+      const lenv01 = glm::length(v01);
+      const lenv23 = glm::length(v23);
+      const cosv0123 = dotv0123 / (lenv01 * lenv23);
+      const ratv2301 = lenv23 / lenv01;
+      /* 12, 30 */
+      const v12 = poly[2].pos - poly[1].pos;
+      const v30 = poly[0].pos - poly[3].pos;
+      const dotv1230 = glm::dot(v12, -v30);
+      const lenv12 = glm::length(v12);
+      const lenv30 = glm::length(v30);
+      const cosv1230 = dotv1230 / (lenv12 * lenv30);
+      const ratv3012 = lenv30 / lenv12;
+      /* */
+      const lenv0123 = lenv01 + lenv23;
+      const lenv1230 = lenv12 + lenv30;
+      mutable co = glm::make_vec2(32.0f, 32.0f);
+      co.x = max(4.0f, min(128.0f, floor(lenv0123)));
+      co.y = max(4.0f, min(128.0f, floor(lenv1230)));
+      /*
+      if (lenv0123 > lenv1230) {
+	co.y = min(floor(lenv0123 * 4.0f / lenv1230), 128.0f);
+      } else {
+	co.x = min(floor(lenv1230 * 4.0f / lenv0123), 128.0f);
+      }
+      */
+      if (cosv0123 > cosv1230) {
+	if (ratv2301 > 0.25 && ratv2301 < 4.0 && cosv0123 > 0.95f) {
+	  vtxs[0].uvw = glm::make_vec3(0.0f, 0.0f, 1.0f);
+	  vtxs[1].uvw = glm::make_vec3(co.x, 0.0f, 1.0f);
+	  vtxs[2].uvw = glm::make_vec3(co.x, co.y, 1.0f);
+	  vtxs[3].uvw = glm::make_vec3(0.0f, co.y, 1.0f);
+	  if (ratv2301 > 1.0f) {
+	    vtxs[2].uvw *= ratv2301;
+	    vtxs[3].uvw *= ratv2301;
+	  } else if (ratv2301 < 1.0f) {
+	    vtxs[0].uvw /= ratv2301;
+	    vtxs[1].uvw /= ratv2301;
+	  }
+	}
+      } else {
+	if (ratv3012 > 0.25 && ratv3012 < 4.0 && cosv1230 > 0.95f) {
+	  vtxs[0].uvw = glm::make_vec3(0.0f, 0.0f, 1.0f);
+	  vtxs[1].uvw = glm::make_vec3(co.x, 0.0f, 1.0f);
+	  vtxs[2].uvw = glm::make_vec3(co.x, co.y, 1.0f);
+	  vtxs[3].uvw = glm::make_vec3(0.0f, co.y, 1.0f);
+	  if (ratv3012 > 1.0f) {
+	    vtxs[3].uvw *= ratv3012;
+	    vtxs[0].uvw *= ratv3012;
+	  } else if (ratv3012 < 1.0f) {
+	    vtxs[1].uvw /= ratv3012;
+	    vtxs[2].uvw /= ratv3012;
+	  }
+	}
+      }
+    }
+  }
+  vptr->push_polygon_distinct{tattr, 1}(vtxs);
+}
+
+private threaded function {tattr} void
+dgf_polygon_filler_tattr(ptr{vertices} const& vptr, bool flat_flag,
+  poly_t const& poly, mesh_index const& mp)
+{
+  dgf_fill_tattr_internal{tattr}(vptr, flat_flag, poly, mp);
+}
+
+private threaded function void
+dgf_particle_internal(ptr{vertices} const& vptr, bool flat_flag,
+  poly_t const& poly, mesh_index const& mp)
+{
+  for (const i, const& p: poly) {
+    particle_vertex_attr x;
+    x.pos = p.pos;
+    vptr->push_point{particle_vertex_attr}(x);
+  }
+}
+
+private threaded function void
+dgf_particle_bb_internal(ptr{vertices} const& vptr, bool flat_flag,
+  poly_t const& poly, mesh_index const& mp)
+{
+  for (const i, const& p: poly) {
+    farray{particle_bb_vertex_attr, 4} vtxs;
+    for (const j, mutable& v: vtxs) {
+      v.pos = p.pos;
+    }
+    vtxs[0].lpos = glm::make_vec2(-1.0, -1.0);
+    vtxs[1].lpos = glm::make_vec2( 1.0, -1.0);
+    vtxs[2].lpos = glm::make_vec2( 1.0,  1.0);
+    vtxs[3].lpos = glm::make_vec2(-1.0,  1.0);
+    vptr->push_polygon_distinct{particle_bb_vertex_attr, 0}(vtxs);
+  }
+}
+
+private threaded function void
+dgf_noop(ptr{vertices} const& vptr, bool flat_flag, poly_t const& poly,
+  mesh_index const& mp)
+{
+}
+
+public metafunction dgf_filler
+  callable_ptr{void, {bool, poly_t, mesh_index}};
+
+private threaded function {tattr} dgf_filler
+make_dgf_polygon_filler(ptr{vertices} const& vptr)
+{
+  return make_callable_ptr{dgf_polygon_filler_tattr{tattr}, 1}(vptr);
+}
+
+private threaded function dgf_filler
+make_dgf_particle_filler(ptr{vertices} const& vptr)
+{
+  return make_callable_ptr{dgf_particle_internal, 1}(vptr);
+}
+
+private threaded function dgf_filler
+make_dgf_particle_bb_filler(ptr{vertices} const& vptr)
+{
+  return make_callable_ptr{dgf_particle_bb_internal, 1}(vptr);
+}
+
+private threaded function dgf_filler
+make_dgf_noop(ptr{vertices} const& vptr)
+{
+  return make_callable_ptr{dgf_noop, 1}(vptr);
+}
 
 metafunction triangles_shader_ptr{instancing}
   ptr{glshader{
@@ -405,9 +657,7 @@ init_shadowmap_shader(shader_config const& g)
 {
   string v;
   v += g.prepend();
-  if (m::eq{use_shadowmap_vp_cpu, 0}) {
-    v += "uniform mat4 shadowmap_vp;\n";
-  }
+  v += "uniform mat4 shadowmap_vp;\n";
   v += g.decl_instance_id(true);
   v += g.decl_instance_attr("mat4", "model_matrix", instancing != 0, true);
   v += g.vert_in() + "vec3 position;\n";
@@ -415,11 +665,7 @@ init_shadowmap_shader(shader_config const& g)
     v += g.vert_out() + "vec4 vary_smpos;\n";
   }
   v += "void main(void) {\n";
-  if (m::ne{use_shadowmap_vp_cpu, 0}) {
-    v += "vec4 p = ";
-  } else {
-    v += "vec4 p = shadowmap_vp * ";
-  }
+  v += "vec4 p = shadowmap_vp * ";
   v += g.instance_attr("model_matrix", instancing != 0, true);
   v += "  * vec4(position, 1.0);\n";
   v += "gl_Position = p;\n";
@@ -917,69 +1163,447 @@ buffer_append(varray{float} mutable& arr, t const& v)
 }
 
 private threaded function void prepare_instance_data_default(
-  scene_node{node_data} const& sn, node_common_data mutable& ncd,
-  varray{instance_data} mutable& ibarr)
+  scene_node const& sn, node_common_data mutable& ncd,
+  instance_data mutable& idata)
 {
-  buffer_append(ibarr[0].instance_buffer, sn.trans);
+  buffer_append(idata.instance_buffer, sn.trans);
 }
 
 private threaded function void prepare_instance_data_triangles(
-  scene_node{node_data} const& sn, node_common_data mutable& ncd,
-  varray{instance_data} mutable& ibarr)
+  scene_node const& sn, node_common_data mutable& ncd,
+  instance_data mutable& idata)
 {
-  buffer_append(ibarr[0].instance_buffer, sn.trans); /* model matrix */
-  if (m::ne{use_shadowmap_vp_cpu, 0}) {
-    const smvp = ncd.shadowmapping_vp * sn.trans;
-    buffer_append(ibarr[1].instance_buffer, smvp); /* shadowmapping mvp */
-  }
+  buffer_append(idata.instance_buffer, sn.trans); /* model matrix */
 }
 
 private threaded function void prepare_instance_data_particle(
-  scene_node{node_data} const& sn, node_common_data mutable& ncd,
-  varray{instance_data} mutable& ibarr)
+  scene_node const& sn, node_common_data mutable& ncd,
+  instance_data mutable& idata)
 {
   const mvp = ncd.vp * sn.trans;
-  buffer_append(ibarr[0].instance_buffer, mvp);
+  buffer_append(idata.instance_buffer, mvp);
 }
 
 private threaded function void prepare_instance_data_lineparticle(
-  scene_node{node_data} const& sn, node_common_data mutable& ncd,
-  varray{instance_data} mutable& ibarr)
+  scene_node const& sn, node_common_data mutable& ncd,
+  instance_data mutable& idata)
 {
   const sli = sn.trans.to_cslice();
-  ibarr[0].instance_buffer.append(sli[0 .. 9]);
+  idata.instance_buffer.append(sli[0 .. 9]);
 }
 
 private threaded function void prepare_instance_data_rect2d(
-  scene_node{node_data} const& sn, node_common_data mutable& ncd,
-  varray{instance_data} mutable& ibarr)
+  scene_node const& sn, node_common_data mutable& ncd,
+  instance_data mutable& idata)
 {
   const sli = sn.trans.to_cslice();
-  ibarr[0].instance_buffer.append(sli[0 .. 4]);
+  idata.instance_buffer.append(sli[0 .. 4]);
 }
 
 private threaded function void prepare_instance_data_font2(
-  scene_node{node_data} const& sn, node_common_data mutable& ncd,
-  varray{instance_data} mutable& ibarr)
+  scene_node const& sn, node_common_data mutable& ncd,
+  instance_data mutable& idata)
 {
   const sli = sn.trans.to_cslice();
-  ibarr[0].instance_buffer.append(sli[0 .. 4]);
+  idata.instance_buffer.append(sli[0 .. 4]);
 }
 
 private threaded function void prepare_instance_data_ft_rec(
-  scene_node{node_data} const& sn, node_common_data mutable& ncd,
+  scene_node const& sn, node_common_data mutable& ncd,
   cslice{prepare_instance_data_funcptr} const& ftable,
-  varray{instances_type} mutable& ibs)
+  whole_instances_type mutable& whole_instances)
 {
   const& bo_id = sn.joint_id.bo_id;
   const& vs_id = sn.joint_id.vs_id;
   if (bo_id >= 0 && vs_id >= 0) {
     ++ncd.stat_num_objects;
-    mutable& ibarr = ibs[bo_id][static_cast{size_t}(vs_id)];
-    ftable[bo_id](sn, ncd, ibarr);
+    mutable& idata = whole_instances[bo_id][static_cast{size_t}(vs_id)];
+    ftable[bo_id](sn, ncd, idata);
   }
   for (const i, const& snp: sn.children) {
-    prepare_instance_data_ft_rec(*snp, ncd, ftable, ibs);
+    prepare_instance_data_ft_rec(snp, ncd, ftable, whole_instances);
+  }
+}
+
+private threaded function {t} t power_of_2(t v)
+{
+  mutable t r = static_cast{t}(1);
+  while (r != 0 && r < v) { r <<= 1; }
+  return r;
+}
+
+private threaded struct texture_data
+{
+  public uint surface_w;
+  public uint surface_h;
+  public uint char_w;
+  public uint char_h;
+  public varray{uint} char_x;
+  public auto_texture texture_id;
+}
+
+private function extern "sdl_byteorder" int sdl_byteorder();
+private function extern "sdl_lil_endian" int sdl_lil_endian();
+private function extern "sdl_big_endian" int sdl_big_endian();
+
+extern "functions" inline
+namespace pgl3d$n { namespace drawer$n {
+static inline ::pxcrt::bt_int sdl_byteorder()
+{ return SDL_BYTEORDER; }
+static inline ::pxcrt::bt_int sdl_lil_endian()
+{ return SDL_LIL_ENDIAN; }
+static inline ::pxcrt::bt_int sdl_big_endian()
+{ return SDL_BIG_ENDIAN; }
+}; };
+;
+
+function void check_byteorder()
+{
+  if (sdl_byteorder() != sdl_lil_endian()
+      && sdl_byteorder() != sdl_big_endian()) {
+      throw runtime_error_template{"unknown byteorder"}("1");
+  }
+  sdllog("byteorder ", sdl_byteorder());
+}
+
+function uint read_3_uint(cslice{uchar} const& buf, size_t o)
+{
+  uint v;
+  if (sdl_byteorder() == sdl_lil_endian()) {
+    v += buf[o+2]; v *= 256;
+    v += buf[o+1]; v *= 256;
+    v += buf[o+0];
+  } else if (sdl_byteorder() == sdl_big_endian()) {
+    v += buf[o+0]; v *= 256;
+    v += buf[o+1]; v *= 256;
+    v += buf[o+2];
+  }
+  return v;
+}
+function void write_4_uint(slice{uchar} const& buf, size_t o, uint val)
+{
+  if (sdl_byteorder() == sdl_lil_endian()) {
+    buf[o+3] = static_cast{uchar}(val >> 24);
+    buf[o+2] = static_cast{uchar}(val >> 16);
+    buf[o+1] = static_cast{uchar}(val >>  8);
+    buf[o+0] = static_cast{uchar}(val);
+  } else if (sdl_byteorder() == sdl_big_endian()) {
+    buf[o+0] = static_cast{uchar}(val >> 24);
+    buf[o+1] = static_cast{uchar}(val >> 16);
+    buf[o+2] = static_cast{uchar}(val >>  8);
+    buf[o+3] = static_cast{uchar}(val);
+  }
+}
+
+metafunction SDL_Surface_Scoped scoped_nullable{SDL_FreeSurface};
+
+function void
+init_font(texture_data mutable& fnt)
+{
+  check_byteorder();
+  {
+    /* font */
+    mutable fnames = make_farray{string}(
+      "mplus-1m-bold.ttf",
+      // "/Library/Fonts/Tahoma.ttf",
+      "/Library/Fonts/Osaka.ttf",
+      "/usr/share/fonts/mplus/mplus-1m-bold.ttf",
+      "/usr/share/fonts/liberation/LiberationMono-Regular.ttf");
+    scoped_nullable{TTF_CloseFont} font;
+    for (size_t i, mutable& fn: fnames) {
+      const p = TTF_OpenFont(fn.c_str(), 18);
+      sdllog("openfont", fn, p.to_size_t());
+      font.reset(p);
+      if (font.get() != rawptr{TTF_Font}()) {
+	break;
+      }
+    }
+    if (font.get() == rawptr{TTF_Font}()) {
+      sdllog("failed to load font");
+      throw runtime_error_template{"load font"}("1");
+    }
+    SDL_Color mutable fg;
+    fg.r = 255;
+    fg.g = 255;
+    fg.b = 255;
+    fg.a = 255;
+    uint hmax = 0;
+    uint wmax = 0;
+    // uint wtotal = 0;
+    varray{ptr{SDL_Surface_Scoped}} sur_arr;
+    for (const i: 0 .. 0x60) {
+      farray{uchar, 2} z;
+      z[0] = static_cast{uchar}(i + 0x20);
+      z[1] = 0u;
+      const sur = make_ptr{SDL_Surface_Scoped}();
+      sur->reset(TTF_RenderUTF8_Blended(font,
+	z.range().to_crawptr().to_ccharptr(), fg));
+      /* sdllog(z, sur.W(), sur.H()); */
+      sur_arr.push_back(sur);
+      const sur_ref = sur->get().to_slice(1);
+      hmax = max(hmax, static_cast{uint}(sur_ref->h));
+      wmax = max(wmax, static_cast{uint}(sur_ref->w));
+    }
+    SDL_Surface_Scoped sur_chars;
+    sur_chars.reset(SDL_CreateRGBSurface(0,
+      cast_int(power_of_2(wmax * 0x60u)),
+      cast_int(power_of_2(hmax)), 32, 0, 0, 0, 0));
+    sdllog("wmax, hmax", wmax, hmax);
+    fnt.char_x.clear();
+    uint xcur = 0;
+    for (const i, const ep: sur_arr) {
+      const& e = *ep->get().to_slice(1);
+      SDL_Rect r0;
+      SDL_Rect r1;
+      r0.x = 0;
+      r0.y = 0;
+      r0.w = e.w;
+      r0.h = e.h;
+      r1.x = cast_int(xcur);
+      r1.y = 0;
+      r1.w = r0.w;
+      r1.h = r1.h;
+      const v = SDL_UpperBlit(*ep, caddress(r0), sur_chars, address(r1));
+      xcur += cast_uint(wmax);
+      fnt.char_x.push_back(xcur);
+    }
+    fnt.char_w = wmax;
+    fnt.char_h = hmax;
+    const& sur_chars_ref = *sur_chars.get().to_slice(1);
+    fnt.surface_w = static_cast{uint}(sur_chars_ref.w);
+    fnt.surface_h = static_cast{uint}(sur_chars_ref.h);
+    /* const sur = sur_chars; */
+    const sur_chars_buf = sur_chars_ref.pixels.reinterpret_cast{uchar}()
+      .to_slice(static_cast{size_t}(sur_chars_ref.pitch * sur_chars_ref.h));
+    // const sur_chars_buf = sur_chars.Pixels();
+    for (const x: 0 .. sur_chars_ref.w) {
+      for (const y: 0 .. sur_chars_ref.h) {
+	const i = static_cast{size_t}((y * sur_chars_ref.w + x) * 4);
+	sur_chars_buf[i+0] = 255;
+	sur_chars_buf[i+1] = 255;
+	sur_chars_buf[i+2] = 255;
+      }
+    }
+    /* font texture */
+    glActiveTexture(GL_TEXTURE0);
+    fnt.texture_id.generate();
+    sdllog("font_texture_id", fnt.texture_id.get());
+    glBindTexture(GL_TEXTURE_2D, fnt.texture_id.get());
+    glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_RGBA),
+      sur_chars_ref.w, sur_chars_ref.h,
+      0, GL_RGBA, GL_UNSIGNED_BYTE, sur_chars_ref.pixels);
+    /*
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+      cast_int(GL_LINEAR));
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+      cast_int(GL_LINEAR));
+    */
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+      cast_int(GL_NEAREST));
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+      cast_int(GL_NEAREST));
+  }
+}
+
+function void
+init_main_texture(texture_data mutable& tex_dpat,
+  texture_data mutable& tex_tilemap)
+{
+  check_byteorder();
+  {
+    // const sur = IMG_Load("img-c1024.jpg").some;
+    SDL_Surface_Scoped sur0;
+    sur0.reset(IMG_Load("dpat.png"));
+    const& sur0ref = *sur0.get().to_slice(1);
+    const fmtp = sur0ref.format;
+    const& fmt = *sur0ref.format.to_slice(1);
+    const bpp = fmt.BytesPerPixel;
+    if (bpp != 4 && bpp != 3) {
+      throw runtime_error_template{"img_load"}("1");
+    }
+    const sur0_w = static_cast{uint}(sur0ref.w);
+    const sur0_h = static_cast{uint}(sur0ref.h);
+    mutable tex_w = power_of_2(sur0_w);
+    mutable tex_h = power_of_2(sur0_h);
+    varray{uint} uibuf;
+    uibuf.resize(tex_w * tex_h, 0);
+    uint rmask = fmt.Rmask;
+    uint gmask = fmt.Gmask;
+    uint bmask = fmt.Bmask;
+    uint amask = fmt.Amask;
+    function uint get_shift(uint m) {
+      uint r = 0;
+      for (uint i: 0 .. 32) {
+	if ((m & 1) != 0) {
+	  break;
+	}
+	r += 1;
+	m >>= 1;
+      }
+      return r;
+    }
+    uint rshift = get_shift(rmask);
+    uint gshift = get_shift(gmask);
+    uint bshift = get_shift(bmask);
+    uint ashift = get_shift(amask);
+    /*
+    sdllog("Masks", rmask, gmask, bmask, amask, rshift, gshift, bshift,
+      ashift);
+    */
+    const& sur0_ref = *sur0.get().to_slice(1);
+    const sur0buf = sur0_ref.pixels.reinterpret_cast{uchar}()
+      .to_slice(static_cast{size_t}(sur0_ref.pitch * sur0_ref.h));
+    // const sur0buf = sur0_ref.Pixels();
+    for (const by: 0 .. sur0_h / 64) {
+      for (const iy: 0 .. 32U) {
+	for (const x: 0 .. sur0_w) {
+	  const o0n = ((by * 64 + iy     ) * sur0_w + x) * bpp;
+	  const o0c = ((by * 64 + iy + 32) * sur0_w + x) * bpp;
+	  const o1 = ((by * 32 + iy) * tex_w + x) * 4;
+	  const nor0 = read_3_uint(sur0buf, o0n);
+	  const col0 = read_3_uint(sur0buf, o0c);
+	  uint norr = (nor0 >> rshift) & 0xffU;
+	  uint norg = (nor0 >> gshift) & 0xffU;
+	  uint norb = (nor0 >> bshift) & 0xffU;
+	  const nor = (norr << 16) | (norg << 8) | norb;
+	  uint colr = (col0 >> rshift) & 0xffU;
+	  uint colg = (col0 >> gshift) & 0xffU;
+	  uint colb = (col0 >> bshift) & 0xffU;
+	  const col = (colb << 16) | (colg << 8) | colr;
+	  uint val; /* avol for higher 4bits, alv for lower 4bits */
+	  if (nor == 0xff0000) {
+	    val = 0x91; /* convex left-upper */
+	  } else if (nor == 0x00ff00) {
+	    val = 0x92; /* convex upper, or concave lower */
+	  } else if (nor == 0xffff00) {
+	    val = 0x93; /* convex right-upper */
+	  } else if (nor == 0x0000ff) {
+	    val = 0x94; /* convex right, or concave left */
+	  } else if (nor == 0xff00ff) {
+	    val = 0x95; /* convex right-lower */
+	  } else if (nor == 0x00ffff) {
+	    val = 0x72; /* convex lower, or concave upper */
+	  } else if (nor == 0xffffff) {
+	    val = 0x97; /* convex left-lower */
+	  } else if (nor == 0x808080) {
+	    val = 0x74; /* convex left, or concave right */
+	  } else if (nor == 0xc04040) {
+	    val = 0x71; /* concave left-upper */
+	  } else if (nor == 0xc0c040) {
+	    val = 0x73; /* concave right-upper */
+	  } else if (nor == 0xc040c0) {
+	    val = 0x75; /* concave right-lower */
+	  } else if (nor == 0xc0c0c0) {
+	    val = 0x77; /* concave left-lower */
+	  } else if (nor == 0x8080c0) {
+	    val = 0x0a; /* emission */
+	  }
+	  uibuf[(by * 32 + iy) * tex_w + x] = (val << 24) | col;
+	}
+      }
+    }
+    const mode = GL_RGBA;
+    glActiveTexture(GL_TEXTURE1);
+    tex_dpat.texture_id.generate();
+    glBindTexture(GL_TEXTURE_2D, tex_dpat.texture_id.get());
+    /*
+    glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, cast_int(GL_TRUE));
+    */
+    int mipmap_level = 0;
+    while (true) {
+      glTexImage2D(GL_TEXTURE_2D, mipmap_level, cast_int(mode),
+	cast_int(tex_w), cast_int(tex_h),
+	0, mode, GL_UNSIGNED_BYTE, uibuf.to_crawptr().to_cvoidptr());
+      const tex_w_prev = tex_w;
+      const tex_h_prev = tex_h;
+      tex_w /= 2;
+      tex_h /= 2;
+      // if (tex_w == 0 || tex_h == 0 || mipmap_level >= 5) {
+      if (tex_w == 0 || tex_h == 0 || mipmap_level >= 0) {
+	break;
+      }
+      ++mipmap_level;
+      for (const y: 0 .. tex_h) {
+	for (const x: 0 .. tex_w) {
+	  farray{uint, 4} v;
+	  v[0] = uibuf[(y * 2 + 0) * tex_w_prev + (x * 2 + 0)];
+	  v[1] = uibuf[(y * 2 + 0) * tex_w_prev + (x * 2 + 1)];
+	  v[2] = uibuf[(y * 2 + 1) * tex_w_prev + (x * 2 + 0)];
+	  v[3] = uibuf[(y * 2 + 1) * tex_w_prev + (x * 2 + 1)];
+	  uint mutable val_b;
+	  uint mutable val_g;
+	  uint mutable val_r;
+	  size_t opaque_count = 0;
+	  for (size_t j: 0 .. 4) {
+	    val_b += (v[j] >> 16) & 0xff;
+	    val_g += (v[j] >>  8) & 0xff;
+	    val_r += (v[j] >>  0) & 0xff;
+	    if (((v[j] >> 24) & 0x0f) == 10) { ++opaque_count; }
+	  }
+	  val_b /= 4;
+	  val_g /= 4;
+	  val_r /= 4;
+	  const val_a = opaque_count > 0 ? 10U : (v[0] >> 24) & 0xff; // TODO
+	  /*
+	  uibuf[y * tex_w + x] = (val_a << 24) +
+	    (val_b << 16) + (val_g << 8) + (val_r << 0);
+	  uibuf[y * tex_w + x] = v[0];
+	  */
+	}
+      }
+    }
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+      cast_int(GL_NEAREST));
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+      cast_int(mipmap_level > 0 ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST));
+    tex_dpat.surface_w = tex_w;
+    tex_dpat.surface_h = tex_h;
+    if (m::ne{is_gl3_or_gles3, 0}) {
+      if (mipmap_level != 0) {
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mipmap_level);
+      }
+    }
+  }
+  {
+    /* tile map */
+    SDL_Surface_Scoped sur1;
+    sur1.reset(SDL_CreateRGBSurface(0, 128, 128, 32, 0, 0, 0, 0));
+    const& sur1_ref = *sur1.get().to_slice(1);
+    const sur1buf = sur1_ref.pixels.reinterpret_cast{uchar}()
+      .to_slice(static_cast{size_t}(sur1_ref.pitch * sur1_ref.h));
+    const sur1_w = static_cast{uint}(sur1_ref.w);
+    const sur1_h = static_cast{uint}(sur1_ref.h);
+    // const sur1buf = sur1.Pixels();
+    const rnd = make_rand_generator(333U);
+    for (const y: 0 .. sur1_h) {
+      for (const x: 0 .. sur1_w) {
+	const o1 = (y * sur1_w + x) * 4;
+	const v0 = rnd->generate() / 65536;
+	const v1 = v0 % 8;
+	const v2 = (v0 / 8) % 8;
+	const uint specular_ambient = 0xff60;
+	if (x == 0 && y == 0) {
+	  write_4_uint(sur1buf, o1, specular_ambient << 16);
+	} else {
+	  write_4_uint(sur1buf, o1, (v1 % 8) | specular_ambient << 16);
+	}
+      }
+    }
+    sdllog("sur1buf", sur1_w, sur1_h);
+    const mode = GL_RGBA;
+    glActiveTexture(GL_TEXTURE2);
+    tex_tilemap.surface_w = sur1_w;
+    tex_tilemap.surface_h = sur1_h;
+    tex_tilemap.texture_id.generate();
+    glBindTexture(GL_TEXTURE_2D, tex_tilemap.texture_id.get());
+    glTexImage2D(GL_TEXTURE_2D, 0, cast_int(mode),
+      cast_int(sur1_ref.w), cast_int(sur1_ref.h),
+      0, mode, GL_UNSIGNED_BYTE, sur1buf.to_crawptr().to_cvoidptr());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+      cast_int(GL_NEAREST));
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+      cast_int(GL_NEAREST));
   }
 }
 

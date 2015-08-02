@@ -6,6 +6,7 @@ public metafunction vec2 tvec2{float};
 public metafunction vec3 tvec3{float};
 public metafunction vec4 tvec4{float};
 public metafunction quat tquat{float};
+public metafunction dualquat tdualquat{float};
 public metafunction mat2 tmat2{float};
 public metafunction mat3 tmat3{float};
 public metafunction mat4 tmat4{float};
@@ -47,6 +48,14 @@ public tsvaluetype struct extern "pxcrt::glmpx::tquat<>::type" {t} tquat {
   public t y;
   public t z;
   public t w;
+}
+
+public tsvaluetype struct extern "pxcrt::glmpx::tdualquat<>::type" {t}
+tdualquat {
+  public metafunction __static_assert__ check_param_type{t};
+  public metafunction value_type t;
+  public tquat{t} real;
+  public tquat{t} dual;
 }
 
 public tsvaluetype struct extern "pxcrt::glmpx::tmat2<>::type" {t} tmat2 {
@@ -139,6 +148,10 @@ public threaded function extern "pxcrt::glmpx::make_tquat_wxyz" {t}
 tquat{t} make_tquat_wxyz(t w, t x, t y, t z);
 public threaded function extern "pxcrt::glmpx::make_tquat_angle_axis" {t}
 tquat{t} make_tquat_angle_axis(t angle_degrees, t x, t y, t z);
+public threaded function extern "pxcrt::glmpx::make_tdualquat" {t}
+tdualquat{t} make_tdualquat(tquat{t} const& re, tquat{t} const& du);
+public threaded function extern "pxcrt::glmpx::make_tdualquat_ori_tr" {t}
+tdualquat{t} make_tdualquat_ori_tr(tquat{t} const& ori, tvec3{t} const& tr);
 
 public threaded function extern "pxcrt::glmpx::tvec2_to_cslice" {t}
 cslice{t} tvec2_to_cslice(tvec2{t} const& x);
@@ -148,6 +161,8 @@ public threaded function extern "pxcrt::glmpx::tvec4_to_cslice" {t}
 cslice{t} tvec4_to_cslice(tvec4{t} const& x);
 public threaded function extern "pxcrt::glmpx::tquat_to_cslice" {t}
 cslice{t} tquat_to_cslice(tquat{t} const& x);
+public threaded function extern "pxcrt::glmpx::tdualquat_to_cslice" {t}
+cslice{t} tdualquat_to_cslice(tquat{t} const& x);
 public threaded function extern "pxcrt::glmpx::tmat2_to_cslice" {t}
 cslice{t} tmat2_to_cslice(tmat2{t} const& x);
 public threaded function extern "pxcrt::glmpx::tmat3_to_cslice" {t}
@@ -163,6 +178,8 @@ public threaded function extern "pxcrt::glmpx::tvec4_to_slice" {t}
 slice{t} tvec4_to_slice(tvec4{t} mutable& x);
 public threaded function extern "pxcrt::glmpx::tquat_to_slice" {t}
 slice{t} tquat_to_slice(tquat{t} mutable& x);
+public threaded function extern "pxcrt::glmpx::tdualquat_to_slice" {t}
+slice{t} tdualquat_to_slice(tquat{t} mutable& x);
 public threaded function extern "pxcrt::glmpx::tmat2_to_slice" {t}
 slice{t} tmat2_to_slice(tmat2{t} mutable& x);
 public threaded function extern "pxcrt::glmpx::tmat3_to_slice" {t}
@@ -177,7 +194,9 @@ farray{t, 3} tvec3_to_farray(tvec3{t} const& x);
 public threaded function extern "pxcrt::glmpx::tvec4_to_farray" {t}
 farray{t, 4} tvec4_to_farray(tvec4{t} const& x);
 public threaded function extern "pxcrt::glmpx::tquat_to_farray" {t}
-farray{t, 4} tquat_to_farray(tmat4{t} const& x);
+farray{t, 4} tquat_to_farray(tquat{t} const& x);
+public threaded function extern "pxcrt::glmpx::tdualquat_to_farray" {t}
+farray{t, 8} tdualquat_to_farray(tdualquat{t} const& x);
 public threaded function extern "pxcrt::glmpx::tmat2_to_farray" {t}
 farray{t, 4} tmat2_to_farray(tmat2{t} const& x);
 public threaded function extern "pxcrt::glmpx::tmat3_to_farray" {t}
@@ -189,68 +208,80 @@ public metafunction tvec2___add{tx, ty} op_add{tx};
 public metafunction tvec3___add{tx, ty} op_add{tx};
 public metafunction tvec4___add{tx, ty} op_add{tx};
 public metafunction tquat___add{tx, ty} op_add{tx};
+public metafunction tdualquat___add{tx, ty} op_add{tx};
 
 public metafunction tvec2___adda{tx, ty} op_adda{tx};
 public metafunction tvec3___adda{tx, ty} op_adda{tx};
 public metafunction tvec4___adda{tx, ty} op_adda{tx};
 public metafunction tquat___adda{tx, ty} op_adda{tx};
+public metafunction tdualquat___adda{tx, ty} op_adda{tx};
 
 public metafunction tvec2___sub{tx, ty} op_sub{tx};
 public metafunction tvec3___sub{tx, ty} op_sub{tx};
 public metafunction tvec4___sub{tx, ty} op_sub{tx};
 public metafunction tquat___sub{tx, ty} op_sub{tx};
+public metafunction tdualquat___sub{tx, ty} op_sub{tx};
 
 public metafunction tvec2___suba{tx, ty} op_suba{tx};
 public metafunction tvec3___suba{tx, ty} op_suba{tx};
 public metafunction tvec4___suba{tx, ty} op_suba{tx};
 public metafunction tquat___suba{tx, ty} op_suba{tx};
+public metafunction tdualquat___suba{tx, ty} op_suba{tx};
 
 public metafunction tvec2___eq{tx, ty} op_eq{tx};
 public metafunction tvec3___eq{tx, ty} op_eq{tx};
 public metafunction tvec4___eq{tx, ty} op_eq{tx};
 public metafunction tquat___eq{tx, ty} op_eq{tx};
+public metafunction tdualquat___eq{tx, ty} op_eq{tx};
 
 public metafunction tvec2___ne{tx, ty} op_ne{tx};
 public metafunction tvec3___ne{tx, ty} op_ne{tx};
 public metafunction tvec4___ne{tx, ty} op_ne{tx};
 public metafunction tquat___ne{tx, ty} op_ne{tx};
+public metafunction tdualquat___ne{tx, ty} op_ne{tx};
 
 public metafunction tvec2___minus{tx} op_minus{tx};
 public metafunction tvec3___minus{tx} op_minus{tx};
 public metafunction tvec4___minus{tx} op_minus{tx};
 public metafunction tquat___minus{tx} op_minus{tx};
+public metafunction tdualquat___minus{tx} op_minus{tx};
 
-public metafunction tvec2___mul{tx, ty} op_mul{tx, ty, tx};
-public metafunction tvec3___mul{tx, ty} op_mul{tx, ty, tx};
-public metafunction tvec4___mul{tx, ty} op_mul{tx, ty, tx};
-public metafunction tquat___mul{tx, ty} op_mul{tx, ty, ty};
-public metafunction tmat2___mul{tx, ty} op_mul{tx, ty, ty};
-public metafunction tmat3___mul{tx, ty} op_mul{tx, ty, ty};
-public metafunction tmat4___mul{tx, ty} op_mul{tx, ty, ty};
+public metafunction tvec2___mul{tx, ty} op_mul_check{tx, ty};
+public metafunction tvec3___mul{tx, ty} op_mul_check{tx, ty};
+public metafunction tvec4___mul{tx, ty} op_mul_check{tx, ty};
+public metafunction tquat___mul{tx, ty} op_mul_check{tx, ty};
+public metafunction tdualquat___mul{tx, ty} op_mul_check{tx, ty};
+public metafunction tmat2___mul{tx, ty} op_mul_check{tx, ty};
+public metafunction tmat3___mul{tx, ty} op_mul_check{tx, ty};
+public metafunction tmat4___mul{tx, ty} op_mul_check{tx, ty};
 
 public metafunction tvec2___div{tx, ty} op_div{tx, ty};
 public metafunction tvec3___div{tx, ty} op_div{tx, ty};
 public metafunction tvec4___div{tx, ty} op_div{tx, ty};
 public metafunction tquat___div{tx, ty} op_div{tx, ty};
+public metafunction tdualquat___div{tx, ty} op_div{tx, ty};
+public metafunction tmat2___div{tx, ty} op_div{tx, ty};
+public metafunction tmat3___div{tx, ty} op_div{tx, ty};
+public metafunction tmat4___div{tx, ty} op_div{tx, ty};
 
 private threaded function extern "pxcrt::glmpx::op_add" {t}
-check_tvec_tquat_type{t} op_add(t const& x, t const& y);
+check_tvec_tquat_tdualquat_type{t} op_add(t const& x, t const& y);
 private threaded function extern "pxcrt::glmpx::op_sub" {t}
-check_tvec_tquat_type{t} op_sub(t const& x, t const& y);
+check_tvec_tquat_tdualquat_type{t} op_sub(t const& x, t const& y);
 private threaded function extern "pxcrt::glmpx::op_add" {t}
-m::cond{check_tvec_tquat_type{t}, void, void}
+m::cond{check_tvec_tquat_tdualquat_type{t}, void, void}
 op_adda(t mutable& x, t const& y);
 private threaded function extern "pxcrt::glmpx::op_sub" {t}
-m::cond{check_tvec_tquat_type{t}, void, void}
+m::cond{check_tvec_tquat_tdualquat_type{t}, void, void}
 op_suba(t mutable& x, t const& y);
 private threaded function extern "pxcrt::glmpx::op_eq" {t}
-m::cond{check_tvec_tquat_type{t}, bool, bool}
+m::cond{check_tvec_tquat_tdualquat_type{t}, bool, bool}
 op_eq(t const& x, t const& y);
 private threaded function extern "pxcrt::glmpx::op_ne" {t}
-m::cond{check_tvec_tquat_type{t}, bool, bool}
+m::cond{check_tvec_tquat_tdualquat_type{t}, bool, bool}
 op_ne(t const& x, t const& y);
 private threaded function extern "pxcrt::glmpx::op_minus" {t}
-check_tvec_tquat_type{t}
+check_tvec_tquat_tdualquat_type{t}
 op_minus(t const& x);
 
 public threaded function extern "pxcrt::glmpx::length" {t}
@@ -270,6 +301,8 @@ public threaded function extern "glm::normalize" {t}
 tvec4{t} tvec4_normalize(tvec4{t} const& x);
 public threaded function extern "glm::normalize" {t}
 tquat{t} tquat_normalize(tquat{t} const& x);
+public threaded function extern "glm::normalize" {t}
+tdualquat{t} tdualquat_normalize(tdualquat{t} const& x);
 
 public threaded function extern "glm::cross" {t}
 tvec3{t} cross(tvec3{t} const& x, tvec3{t} const& y);
@@ -296,9 +329,15 @@ public threaded function extern "glm::mat4_cast" {t}
 tmat4{t} tquat_to_mat4(tquat{t} const& x);
 
 public threaded function extern "glm::quat_cast" {t}
-tquat{t} mat3_to_tquat(tmat3{t} const& x);
+tquat{t} tmat3_to_tquat(tmat3{t} const& x);
 public threaded function extern "glm::quat_cast" {t}
-tquat{t} mat4_to_tquat(tmat4{t} const& x);
+tquat{t} tmat4_to_tquat(tmat4{t} const& x);
+
+public threaded function extern "glm::dualquat_cast" {t}
+tdualquat{t} tmat3x4_to_tdualquat(tmat3x4{t} const& x);
+
+public threaded function extern "glm::mat3x4_cast" {t}
+tmat3x4{t} tdualquat_to_tmat3x4(tdualquat{t} const& x);
 
 public threaded function extern "glm::rotate" {t}
 tmat2{t} tmat2_rotate(tmat2{t} const& x, t angle, tvec2{t} const& axis);
@@ -322,6 +361,8 @@ public threaded function extern "glm::inverse" {t}
 tmat4{t} tmat4_inverse(tmat4{t} const& x);
 public threaded function extern "glm::inverse" {t}
 tquat{t} tquat_inverse(tquat{t} const& x);
+public threaded function extern "glm::inverse" {t}
+tdualquat{t} tdualquat_inverse(tquat{t} const& x);
 
 public threaded function extern "glm::conjugate" {t}
 tquat{t} tquat_conjugate(tquat{t} const& x);
@@ -349,13 +390,16 @@ tmat4{t} perspective(t fovy, t aspect, t zNear, t zFar);
 
 /* private */
 
+private metafunction op_mul_check{tx, ty}
+  op_mul{tx, ty, check_mul_type{tx, ty}};
+
 private threaded function extern "pxcrt::glmpx::op_mul" {tx, ty, tr}
-check_mul_type{tx, ty} op_mul(tx const& x, ty const& y);
+tr op_mul(tx const& x, ty const& y);
 
 private metafunction check_mul_type{tx, ty}
   m::cond{
     /* (mat * mat) */
-    m::and{is_tmat_type{tx}, m::eq{tx, ty}}, // FIXME: 2x3 etc
+    m::and{is_tmat_type{tx}, m::eq{tx, ty}},
     ty,
     /* (mat * vec) */
     m::and{is_tmat_type{tx}, m::eq{m::symbol{tx, "row_type"}, ty}},
@@ -363,12 +407,26 @@ private metafunction check_mul_type{tx, ty}
     /* (vec * mat) */
     m::and{is_tmat_type{ty}, m::eq{m::symbol{ty, "col_type"}, tx}},
     m::symbol{ty, "row_type"},
-    /* (vec * sca) */
-    m::and{is_tvec_type{tx}, m::eq{m::symbol{tx, "value_type"}, ty}},
+    /* (any * sca) */
+    m::and{is_tvec_tmat_tquat_tdualquat_type{tx},
+      m::eq{m::symbol{tx, "value_type"}, ty}},
     tx,
     /* (quat * quat) */
     m::and{is_tquat_type{tx}, m::eq{tx, ty}},
     tx,
+    /* (quat * vec3) */
+    m::and{is_tquat_type{tx}, is_tvec3_type{ty},
+      m::eq{m::symbol{tx, "value_type"}, m::symbol{ty, "value_type"}}},
+    ty,
+    /* (dualquat * dualquat) */
+    m::and{is_tdualquat_type{tx}, m::eq{tx, ty}},
+    tx,
+    /* (quat_dualquat * vec) */
+    m::and{is_tquat_tdualquat_type{tx},
+      m::or{is_tvec3_type{ty}, is_tvec4_type{ty}}, 
+      m::eq{m::symbol{tx, "value_type"}, m::symbol{ty, "value_type"}}},
+    tx,
+    /* TODO: 2x3 etc */
     m::error{m::concat{ty, ": invalid type for operator mul"}}};
 
 private threaded function extern "pxcrt::glmpx::op_div" {tx, ty}
@@ -376,8 +434,8 @@ check_div_type{tx, ty} op_div(tx const& x, ty const& y);
 
 private metafunction check_div_type{tx, ty}
   m::cond{
-    /* (vec / sca) */
-    m::and{is_tvec_type{tx}, m::eq{m::symbol{tx, "value_type"}, ty}},
+    m::and{is_tvec_tmat_tquat_tdualquat_type{tx},
+      m::eq{m::symbol{tx, "value_type"}, ty}},
     tx, 
     m::error{m::concat{ty, ": invalid type for operator div"}}};
 
@@ -401,6 +459,17 @@ private metafunction check_tvec_tquat_type{t}
     t,
     m::error{m::concat{t, ": invalid type (tvec or tquat expected)"}}};
 
+private metafunction check_tvec_tquat_tdualquat_type{t}
+  m::cond{
+    is_tvec_type{t},
+    t,
+    is_tquat_type{t},
+    t,
+    is_tdualquat_type{t},
+    t,
+    m::error{m::concat{t,
+      ": invalid type (tvec, tquat, or tdualquat expected)"}}};
+
 private metafunction check_tmat_type{t}
   m::cond{
     is_tmat_type{t},
@@ -416,6 +485,16 @@ private metafunction is_tvec_type{t}
       m::eq{m::nameof{t}, "glm::tvec2"},
       m::eq{m::nameof{t}, "glm::tvec3"},
       m::eq{m::nameof{t}, "glm::tvec4"}},
+    is_param_type{m::symbol{t, "value_type"}}};
+
+private metafunction is_tvec3_type{t}
+  m::and{
+    m::eq{m::nameof{t}, "glm::tvec3"},
+    is_param_type{m::symbol{t, "value_type"}}};
+
+private metafunction is_tvec4_type{t}
+  m::and{
+    m::eq{m::nameof{t}, "glm::tvec4"},
     is_param_type{m::symbol{t, "value_type"}}};
 
 private metafunction is_tmat_type{t}
@@ -437,12 +516,32 @@ private metafunction is_tquat_type{t}
     m::eq{m::nameof{t}, "glm::tquat"},
     is_param_type{m::symbol{t, "value_type"}}};
 
+private metafunction is_tdualquat_type{t}
+  m::and{
+    m::eq{m::nameof{t}, "glm::tdualquat"},
+    is_param_type{m::symbol{t, "value_type"}}};
+
+private metafunction is_tquat_tdualquat_type{t}
+  m::or{
+    is_tquat_type{t},
+    is_tdualquat_type{t}};
+
+private metafunction is_tvec_tmat_tquat_tdualquat_type{t}
+  m::or{
+    is_tvec_type{t},
+    is_tmat_type{t},
+    is_tquat_tdualquat_type{t}};
+
 extern "types" inline
 
+#ifdef _MSC_VER
+#define GLM_FORCE_INLINE
+#endif
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/dual_quaternion.hpp>
 
 namespace pxcrt { namespace glmpx {
 
@@ -450,6 +549,8 @@ template <typename T> struct tvec2 { typedef glm::vec2 type; };
 template <typename T> struct tvec3 { typedef glm::vec3 type; };
 template <typename T> struct tvec4 { typedef glm::vec4 type; };
 template <typename T> struct tquat { typedef glm::quat type; };
+template <typename T> struct tdualquat {
+  typedef glm::tdualquat<T, glm::highp> type; };
 template <typename T> struct tmat2 { typedef glm::mat2 type; };
 template <typename T> struct tmat3 { typedef glm::mat3 type; };
 template <typename T> struct tmat4 { typedef glm::mat4 type; };
@@ -495,6 +596,14 @@ make_tquat_wxyz(T w, T x, T y, T z)
 template <typename T> static inline typename tquat<T>::type
 make_tquat_angle_axis(T angle_degrees, T x, T y, T z)
 { return glm::angleAxis(angle_degrees, typename tvec3<T>::type(x, y, z)); }
+template <typename T> static inline typename tdualquat<T>::type
+make_tdualquat(typename tquat<T>::type const& re,
+  typename tquat<T>::type const& du)
+{ return typename glm::tdualquat<T, glm::highp>::type(re, du); }
+template <typename T> static inline typename tdualquat<T>::type
+make_tdualquat_ori_tr(typename tquat<T>::type const& ori,
+  typename tvec3<T>::type const& tr)
+{ return typename glm::tdualquat<T, glm::highp>::type(ori, tr); }
 
 template <typename T> static inline pxcrt::bt_cslice<T>
 tvec2_to_cslice(typename tvec2<T>::type const& x)
@@ -516,7 +625,9 @@ tmat4_to_cslice(typename tmat4<T>::type const& x)
 { return pxcrt::bt_cslice<T>(glm::value_ptr(x), 16); }
 template <typename T> static inline pxcrt::bt_cslice<T>
 tquat_to_cslice(typename tquat<T>::type const& x)
-
+{ return pxcrt::bt_cslice<T>(glm::value_ptr(x), 4); }
+template <typename T> static inline pxcrt::bt_cslice<T>
+tdualquat_to_cslice(typename tdualquat<T>::type const& x)
 { return pxcrt::bt_cslice<T>(glm::value_ptr(x), 4); }
 
 template <typename T> static inline pxcrt::bt_slice<T>
@@ -540,6 +651,9 @@ tmat4_to_slice(typename tmat4<T>::type& x)
 template <typename T> static inline pxcrt::bt_slice<T>
 tquat_to_slice(typename tquat<T>::type& x)
 { return pxcrt::bt_slice<T>(glm::value_ptr(x), 4); }
+template <typename T> static inline pxcrt::bt_slice<T>
+tdualquat_to_slice(typename tdualquat<T>::type& x)
+{ return pxcrt::bt_slice<T>(glm::value_ptr(x), 4); }
 
 template <typename T> static inline T const *
 tvec2_to_crawptr(typename tvec2<T>::type const& x)
@@ -562,6 +676,9 @@ tmat4_to_crawptr(typename tmat4<T>::type const& x)
 template <typename T> static inline T const *
 tquat_to_crawptr(typename tquat<T>::type const& x)
 { return glm::value_ptr(x); }
+template <typename T> static inline T const *
+tdualquat_to_crawptr(typename tdualquat<T>::type const& x)
+{ return glm::value_ptr(x); }
 
 template <typename T> static inline T *
 tvec2_to_rawptr(typename tvec2<T>::type& x)
@@ -583,6 +700,9 @@ tmat4_to_rawptr(typename tmat4<T>::type& x)
 { return glm::value_ptr(x); }
 template <typename T> static inline T *
 tquat_to_rawptr(typename tquat<T>::type& x)
+{ return glm::value_ptr(x); }
+template <typename T> static inline T *
+tdualquat_to_rawptr(typename tdualquat<T>::type& x)
 { return glm::value_ptr(x); }
 
 template <typename T> static inline pxcrt::farray<T, 2>
@@ -632,6 +752,13 @@ tquat_to_farray(typename tquat<T>::type const& x)
 {
   pxcrt::farray<T, 4> r;
   std::memcpy(r.rawarr(), glm::value_ptr(x), 4 * sizeof(T));
+  return r;
+}
+template <typename T> static inline pxcrt::farray<T, 8>
+tdualquat_to_farray(typename tquat<T>::type const& x)
+{
+  pxcrt::farray<T, 8> r;
+  std::memcpy(r.rawarr(), glm::value_ptr(x), 8 * sizeof(T));
   return r;
 }
 

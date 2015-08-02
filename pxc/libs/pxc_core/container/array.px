@@ -549,7 +549,7 @@ public metafunction is_pod_dense_array{t}
   m::and{
     mf::is_array_or_slice_type{t},
     m::symbol{t, "is_dense_array", 0},
-    mf::is_integral_enum_bitmask_type{m::symbol{t, "mapped_type", 0}}};
+    mf::is_numeric_enum_bitmask_type{m::symbol{t, "mapped_type", 0}}};
 
 public metafunction is_pod_raw_sarray_pair{tx, ty}
   m::and{
@@ -581,6 +581,11 @@ public metafunction pod_array_hash{t}
     is_pod_raw_sarray{t}, pod_sarray_hash_impl{t},
     is_pod_dense_array{t}, pod_array_hash_impl{t},
     m::error{m::concat{t, ": invalid type"}}};
+
+public metafunction pod_array_copy{tx, ty}
+  m::cond{
+    is_pod_dense_array_pair{tx, ty}, pod_array_copy_impl{tx, ty},
+    m::error{m::concat{tx, ", ", ty, ": invalid type"}}};
 
 public threaded function {t, tk, tm} tk
 find_mapped(t const& c, tk k, tm const& x)
@@ -732,6 +737,8 @@ private threaded function extern "::pxcrt::pod_array_compare" {tx, ty} int
 pod_array_compare_impl(tx const& x, ty const& y);
 private threaded function extern "::pxcrt::pod_array_hash" {t} size_t
 pod_array_hash_impl(t const& x);
+private threaded function extern "::pxcrt::pod_array_copy" {tx, ty} void
+pod_array_copy_impl(tx const& x, ty mutable& y);
 private threaded function extern "::pxcrt::pod_sarray_eq" {tx, ty} bool
 pod_sarray_eq_impl(tx const& x, ty const& y);
 private threaded function extern "::pxcrt::pod_sarray_compare" {tx, ty} int

@@ -8,19 +8,19 @@ public import exception -;
 public import meta m;
 public import text::string::positional -;
 
-public import pgl3d::scenenode -;
+public import pgl3d::scene_node -;
 public import pgl3d::pglbase -;
 public import pgl3d::pglcommon -;
 public import pgl3d::application -;
+public import pgl3d::drawer_base -;
 
 public multithreaded struct
-motion_thread_shared(varray{instances_type} const& bo_instances0,
-  tptr{pgl3d_scene_shared} const& pss0,
-  tptr{prepare_instance_data_i} const& pidi0)
+motion_thread_shared(whole_instances_type const& whole_instances0,
+  tptr{pgl3d_scene_shared} const& pss0, tptr{pidf_table} const& pidft0)
 {
-  public varray{instances_type} bo_instances = bo_instances0;
+  public whole_instances_type whole_instances = whole_instances0;
   public tptr{pgl3d_scene_shared} pss = pss0;
-  public tptr{prepare_instance_data_i} pidi = pidi0;
+  public tptr{pidf_table} pidft = pidft0;
   public bool modifying = false;
   public bool terminate_motion_thread = false;
   public float frame_speed_mul = 1.0f;
@@ -31,12 +31,11 @@ motion_thread_shared(varray{instances_type} const& bo_instances0,
 
 public struct
 motion_thread_object(node_factory const& nfac,
-  varray{instances_type} const& bo_instances,
-  tptr{pgl3d_scene_shared} const& pss,
-  tptr{prepare_instance_data_i} const& pidi)
+  whole_instances_type const& whole_instances,
+  tptr{pgl3d_scene_shared} const& pss, tptr{pidf_table} const& pidft)
 {
   public tptr{motion_thread_shared} const sharedp =
-    make_tptr{motion_thread_shared}(bo_instances, pss, pidi);
+    make_tptr{motion_thread_shared}(whole_instances, pss, pidft);
   private callable_ptr{void, m::nil} const thr =
     make_thread_ptr{motion_thread_main}(sharedp, nfac);
   function ~ {
@@ -80,12 +79,15 @@ motion_thread_main(tptr{motion_thread_shared} const& sptr,
     }
     /* motion step */
     {
+      clear_instances(shared.whole_instances);
       position_angle camera_upd;
       position_angle light_upd;
-      const nodep = ps->on_motion_step(shared.frame_speed_mul, shared.cam,
-	shared.message, *shared.pss, camera_upd, light_upd);
+      ps->on_motion_step(shared.frame_speed_mul, shared.cam, shared.message,
+	*shared.pidft, shared.whole_instances, *shared.pss, camera_upd,
+	light_upd);
       shared.cam.camera = camera_upd;
       shared.cam.light = light_upd;
+      /*
       const sm_view = shared.cam.light.to_mat4().inverse();
       const sm_vp = shared.cam.sm_projection * sm_view;
       const vp = shared.cam.projection * shared.cam.camera.to_mat4().inverse();
@@ -93,10 +95,11 @@ motion_thread_main(tptr{motion_thread_shared} const& sptr,
       ncd.shadowmapping_vp = sm_vp;
       ncd.vp = vp;
       {
-	clear_instances(shared.bo_instances);
-	shared.pidi->prepare_instance_data(*nodep, ncd, shared.bo_instances);
+	// shared.stat_num_objects = ps->on_prepare_instance_data(ncd, *shared.pidft, shared.whole_instances);
+	// shared.pidi->prepare_instance_data(*nodep, ncd, shared.whole_instances);
       }
       shared.stat_num_objects = ncd.stat_num_objects;
+      */
     }
     shared.modifying = false;
     lck.notify_one();
@@ -104,13 +107,11 @@ motion_thread_main(tptr{motion_thread_shared} const& sptr,
 }
 
 private threaded function void
-clear_instances(varray{instances_type} mutable& ibs)
+clear_instances(whole_instances_type mutable& whole_instances)
 {
-  for (const bo_id, mutable& instances: ibs) {
+  for (const bo_id, mutable& instances: whole_instances) {
     for (const i, mutable& ai: instances) {
-      for (const j, mutable& aj: ai) {
-	aj.instance_buffer.clear();
-      }
+      ai.instance_buffer.clear();
     }
   }
 }

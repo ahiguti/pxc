@@ -5,7 +5,7 @@ public import glm;
 public import pgl3d::glvertex *;
 public import pgl3d::glgeometry *;
 public import pgl3d::glconf -;
-public import pgl3d::scenenode -;
+public import pgl3d::scene_node -;
 public import pgl3d::intern_pool -;
 
 public multithreaded struct instance_data {
@@ -13,7 +13,9 @@ public multithreaded struct instance_data {
   public size_t glbuffer_offset_float;
 }
 
-public metafunction instances_type varray{varray{instance_data}};
+// public metafunction vs_instances_type varray{instance_data};
+public metafunction bo_instances_type varray{instance_data};
+public metafunction whole_instances_type varray{bo_instances_type};
 
 public tsvaluetype struct position_angle
 {
@@ -63,8 +65,19 @@ texture_info()
 
 public interface make_vertices_i
 {
+  public function void make_vertex_set(cstrref const& bo_name,
+    cstrref const& name, gf_poly const& expr);
+  // FIXME:remove
   public function ptr{vertices} make_vertices(vertex_buffer_id bo_id,
     cstrref const& name);
+  /*
+  // FIXME:remove
+  public function gf_poly make_filler(ptr{vertices} const& vptr,
+    vertex_buffer_id bo_id, bool smooth, cstrref const& name) const;
+  // FIXME:remove
+  public function gf_poly make_joint(ptr{vertices} const& vptr,
+    vertex_buffer_id bo_id, bool polyjoint, cstrref const& name) const;
+  */
   public function texture_info get_texture_info(cstrref const& name) const;
   public function vertex_buffer_id to_vbid(cstrref const& name) const;
 }
@@ -74,12 +87,6 @@ public threaded struct node_common_data
   public glm::mat4 shadowmapping_vp;
   public glm::mat4 vp;
   public size_t stat_num_objects;
-}
-
-public multithreaded interface prepare_instance_data_i
-{
-  public function void prepare_instance_data(scene_node{node_data} const& sn,
-    node_common_data mutable& ncd, varray{instances_type} mutable& ibs);
 }
 
 public interface pgldrawer_export_i { }

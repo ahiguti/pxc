@@ -1,4 +1,23 @@
 
+- lineparticle, rect2d, font2の頂点データをdemoappで作っているのをdrawerに
+  移動、そのためにはfont読み込みをdrawerに移動する必要が有る。
+
+- textureのサイズ power_of_2必要なのか？
+
+- 頂点データの作り方を改良、triangles_vertex_attributesのようなものをpublic
+  にしないようにできないか。
+
+- リソース読み込みをdrawerに移す
+
+- use_shadowmap_vp_cpuを廃止しても性能落ちないか各デバイスで確認
+- use_shadowmap_vp_cpuを廃止したらibarrを配列でなくす。
+- motion_stepとprepare_instance_dataを一つのコールバックでするようにする
+- scene_nodeテンプレ引数なくす。
+
+- 正方行列ではない行列はGLES3以降
+
+- scene_nodeメモリ食いすぎ
+
 - aggregated_ibuffer 2個 or 3個
 - prepare_instance_data_defaultの効率
 
@@ -246,4 +265,57 @@ drawer_font2がfontを使っている
 glActiveTexture/glBindTextureを毎フレーム呼ぶ。各デバイスで変更前後に性能差
 あるか確認。
 
+
+---------------------------------------------------------------------------
+scene_nodeメモリ食いすぎ
+
+geometryデータから子ノードの変換行列を得るためにscene_nodeを使っている。
+インスタンスの状態を保持するためにはscene_nodeである必要はない。
+GPUに渡すインスタンスデータを作るためにprepare_instance_data_ft_rec()
+でノードについて再帰的に積んでいるが、ここではsn.transしか見ていない。
+sn.transの全体または一部から(必要なら何らかの変換をして)対応するバッファ
+に対してappendする。
+(案1)
+scene_nodeはテンプレ引数なくす。
+scene_node使うのはgeometryから接点情報を取る箇所だけ。
+インスタンスの状態はアプリが独自に型付けて保持。
+描画のためのGPUに渡すインスタンスデータを作るのはcslice{float}を渡すよう
+にし、アプリが付けた型がそれを呼ぶ。
+(移行手順)
+
+1. まずアプリ定義型実装
+2. GPUへのインスタンスデータ渡すところを書き換え
+3. scene_nodeのテンプレ引数削除
+
+---------------------------------------------------------------------------
+アプリ定義型インタフェース
+
+scene_nodeへのポインタを持つ。
+move_stepメソッド: 
+  ステップ移動
+prepare_instance_dataメソッド
+  自分の位置データを引数に指定してscene_nodeごとの関数ポインタを呼び出す。
+
+---------------------------------------------------------------------------
+頂点データの作り方を改良
+
+triangles_vertex_attributesのようなものをpublicにしない。
+
+drawerを指定して利用するvboを決定する。
+  triangles, font2のように。
+pgs.make_vertex_set(name, 式);
+式は評価コンテキストを引数に持つようにする。
+  fill, fill_smooth, poly_joint, point_jointはテンプレ引数を取るが、
+  これらはdrawer?がインスタンス化する。
+  gf_surface()というのを用意し、これは評価コンテキストからfillなどを
+  呼び出す。 particle, particle_bbもgf_surfaceから呼び出す。
+pgs.make_vertex_set("saucer",
+  regular_polygon(3.0, 40,
+    bump_rec(0.2, 0.5, 1, surf_flat(), surf_flat()),
+    bump_rec(0.01, 0.9, 5, surf_flat(), sphere(10, surf_smooth()))));
+コンテキストは、
+  ptr{vertices} vptr;
+  tcallable{gf_poly, {vptr, 
+
+評価コンテキストはthreadedでなければならない。pglshaderはdrawerに対して
 

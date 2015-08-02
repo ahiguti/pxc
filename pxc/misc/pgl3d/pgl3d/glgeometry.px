@@ -10,7 +10,17 @@ public import pgl3d::wfobj -;
 private import pgl3d::glconf -;
 private import pgl3d::glvertex -;
 
-public metafunction modifier_t callable_ptr{darray{vertex_attr}, {poly_t}};
+public threaded interface build_context_i
+{
+  public function void fill(bool flat_flat, bool polyjoint,
+    string const& joint_name, poly_t const& poly, mesh_index const& mp) const;
+}
+
+public threaded struct build_context <build_context_i> {
+  public function void fill(bool flat_flat, bool polyjoint,
+    string const& joint_name, poly_t const& poly, mesh_index const& mp) const
+  { }
+}
 
 public tsvaluetype struct
 vertex_attr()
@@ -40,9 +50,10 @@ tvec3___to(vec3 const& x)
 }
 
 public metafunction poly_t cslice{vertex_attr};
-public metafunction gf_poly callable_ptr{void, {poly_t, mesh_index}};
+public metafunction gf_poly
+  callable_ptr{void, {build_context_i, poly_t, mesh_index}};
 public metafunction to_gf_poly{f}
-  make_callable_ptr{f, m::sub{m::size{m::args{f}}, 2}};
+  make_callable_ptr{f, m::sub{m::size{m::args{f}}, 3}};
 
 public metafunction rand_generator_ptr ptr{rand_generator};
 public metafunction make_rand_generator make_ptr{rand_generator};
@@ -68,6 +79,10 @@ public metafunction poly_joint{tattr} to_gf_poly{gf_poly_joint{tattr}};
 public metafunction point_joint{tattr} to_gf_poly{gf_point_joint{tattr}};
 public metafunction fill{tattr} to_gf_poly{gf_fill{tattr}};
 public metafunction fill_smooth{tattr} to_gf_poly{gf_fill_smooth{tattr}};
+public metafunction ctx_fill to_gf_poly{gf_ctx_fill};
+public metafunction ctx_fill_smooth to_gf_poly{gf_ctx_fill_smooth};
+public metafunction ctx_poly_joint to_gf_poly{gf_ctx_poly_joint};
+public metafunction ctx_point_joint to_gf_poly{gf_ctx_point_joint};
 public metafunction lid to_gf_poly{gf_lid};
 public metafunction hole to_gf_poly{gf_hole};
 public metafunction sphere to_gf_poly{gf_sphere};
@@ -126,6 +141,11 @@ public threaded function float polygon_radius(poly_t const& poly)
   return r;
 }
 
+public threaded function vec3 normal_from_poly(poly_t const& poly)
+{
+  return normal_scale_from_poly(poly).normalize();
+}
+
 /* private */
 
 private threaded function vec3 poly_cross_at(poly_t const& poly, size_t i)
@@ -151,14 +171,9 @@ private threaded function vec3 normal_scale_from_poly(poly_t const& poly)
   }
 }
 
-private threaded function vec3 normal_from_poly(poly_t const& poly)
-{
-  return normal_scale_from_poly(poly).normalize();
-}
-
 private threaded function void gf_regular_polygon(float radius, size_t n,
-  gf_poly const& c0, gf_poly const& c1, poly_t const& poly,
-  mesh_index const& mp)
+  gf_poly const& c0, gf_poly const& c1, build_context_i const& ctx,
+  poly_t const& poly, mesh_index const& mp)
 {
   /* poly is ignored */
   mutable arr = darray{vertex_attr}(n, vertex_attr());
@@ -168,43 +183,25 @@ private threaded function void gf_regular_polygon(float radius, size_t n,
     arr[i].pos.y = -cos(a) * radius;
     arr[i].pos.z = 0.0f;
   }
-  c0(arr, mesh_index());
+  c0(ctx, arr, mesh_index());
   reverse(arr.range());
-  c1(arr, mesh_index());
+  c1(ctx, arr, mesh_index());
 }
 
 private threaded function void gf_polygon_points(poly_t const& pts, 
-  gf_poly const& c0, gf_poly const& c1, poly_t const& poly,
-  mesh_index const& mp)
+  gf_poly const& c0, gf_poly const& c1, build_context_i const& ctx,
+  poly_t const& poly, mesh_index const& mp)
 {
   /* poly is ignored */
   darrayst{vertex_attr} arr = pts;
-  c0(arr, mesh_index());
+  c0(ctx, arr, mesh_index());
   reverse(arr.range());
-  c1(arr, mesh_index());
-}
-
-private threaded function void gf_bump_modifier(modifier_t const& mo,
-  gf_poly const& c0, gf_poly const& c1, poly_t const& poly,
-  mesh_index const& mp)
-{
-  darray{vertex_attr} front = mo(poly);
-  if (front.size() < 3) { return; }
-  /* front */
-  c1(front, mesh_index());
-  /* side */
-  const sz = front.size();
-  for (const i: 0 .. sz) {
-    const i1 = i + 1 != sz ? i + 1 : 0;
-    const side = make_farray{vertex_attr}(poly[i], poly[i1], front[i1],
-      front[i]);
-    c0(side, mesh_index());
-  }
+  c1(ctx, arr, mesh_index());
 }
 
 private threaded function void gf_bump_rec(float z, float scale, int recurse,
-  gf_poly const& c0, gf_poly const& c1, poly_t const& poly,
-  mesh_index const& mp)
+  gf_poly const& c0, gf_poly const& c1, build_context_i const& ctx,
+  poly_t const& poly, mesh_index const& mp)
 {
   if (poly.size() < 3) { return; }
   darrayst{vertex_attr} front = poly;
@@ -215,9 +212,9 @@ private threaded function void gf_bump_rec(float z, float scale, int recurse,
   polygon_scale(front, scale);
   /* front */
   if (recurse > 1) {
-    gf_bump_rec(z, scale, recurse - 1, c0, c1, front, mesh_index());
+    gf_bump_rec(z, scale, recurse - 1, c0, c1, ctx, front, mesh_index());
   } else {
-    c1(front, mesh_index());
+    c1(ctx, front, mesh_index());
   }
   /* side */
   const sz = front.size();
@@ -225,14 +222,15 @@ private threaded function void gf_bump_rec(float z, float scale, int recurse,
     const i1 = i + 1 != sz ? i + 1 : 0;
     const side = make_farray{vertex_attr}(poly[i], poly[i1], front[i1],
       front[i]);
-    c0(side, mesh_index());
+    c0(ctx, side, mesh_index());
   }
 }
 
 private threaded function void gf_rand_bump(size_t num, float scale,
   float xmin, float xmax, float ymin, float ymax, float zmin, float zmax,
   rand_generator_ptr const& rnd, gf_poly const& c0, gf_poly const& c1,
-  gf_poly const& c2, poly_t const& poly, mesh_index const& mp)
+  gf_poly const& c2, build_context_i const& ctx, poly_t const& poly,
+  mesh_index const& mp)
 {
   if (poly.size() != 4) { return; }
   darrayst{vertex_attr} front = poly;
@@ -257,10 +255,10 @@ private threaded function void gf_rand_bump(size_t num, float scale,
     const t2 = s1 + (s2 - s1) * (yp + ysz);
     const t3 = s0 + (s3 - s0) * (yp + ysz);
     const poly1 = make_farray{vertex_attr}(t0, t1, t2, t3);
-    gf_bump_rec(zsz, 1.0, 1, c0, c1, poly1, mp);
+    gf_bump_rec(zsz, 1.0, 1, c0, c1, ctx, poly1, mp);
   }
   /* front */
-  c2(poly, mesh_index());
+  c2(ctx, poly, mesh_index());
 }
 
 public threaded function mat4
@@ -287,7 +285,8 @@ poly_trans(poly_t const& poly)
 
 private threaded function {tattr} void
 gf_poly_joint(ptr{vertices} const& vptr, string const& joint_name,
-  gf_poly const& c0, poly_t const& poly, mesh_index const& mp)
+  gf_poly const& c0, build_context_i const& ctx, poly_t const& poly,
+  mesh_index const& mp)
 {
   /* calculates normal/tangent from poly */
   if (poly.size() < 1) { return; }
@@ -295,12 +294,13 @@ gf_poly_joint(ptr{vertices} const& vptr, string const& joint_name,
   e.trans = poly_trans(poly);
   e.joint_name = joint_name;
   vptr->push_joint(e);
-  c0(poly, mesh_index());
+  c0(ctx, poly, mesh_index());
 }
 
 private threaded function {tattr} void
 gf_point_joint(ptr{vertices} const& vptr, string const& joint_name,
-  gf_poly const& c0, poly_t const& poly, mesh_index const& mp)
+  gf_poly const& c0, build_context_i const& ctx, poly_t const& poly,
+  mesh_index const& mp)
 {
   if (poly.size() < 1) { return; }
   const p = poly[0].pos;
@@ -315,12 +315,12 @@ gf_point_joint(ptr{vertices} const& vptr, string const& joint_name,
      p.x,  p.y,  p.z,  1.0);  
   e.joint_name = joint_name;
   vptr->push_joint(e);
-  c0(poly, mesh_index());
+  c0(ctx, poly, mesh_index());
 }
 
 private threaded function void
-gf_particle(ptr{vertices} const& vptr, poly_t const& poly,
-  mesh_index const& mp)
+gf_particle(ptr{vertices} const& vptr, build_context_i const& ctx,
+  poly_t const& poly, mesh_index const& mp)
 {
   for (const i, const& p: poly) {
     particle_vertex_attr x;
@@ -330,8 +330,8 @@ gf_particle(ptr{vertices} const& vptr, poly_t const& poly,
 }
 
 private threaded function void
-gf_particle_bb(ptr{vertices} const& vptr, poly_t const& poly,
-  mesh_index const& mp)
+gf_particle_bb(ptr{vertices} const& vptr, build_context_i const& ctx,
+  poly_t const& poly, mesh_index const& mp)
 {
   for (const i, const& p: poly) {
     farray{particle_bb_vertex_attr, 4} vtxs;
@@ -372,7 +372,8 @@ private threaded function vec3 generate_rand_sphere(
   return r;
 }
 
-private threaded function quat generate_rand_quat(rand_generator_ptr const& rnd)
+private threaded function quat generate_rand_quat(
+  rand_generator_ptr const& rnd)
 {
   const x = rnd->generate_float();
   const y = rnd->generate_float();
@@ -389,7 +390,8 @@ private threaded function quat generate_rand_quat(rand_generator_ptr const& rnd)
 
 private threaded function void gf_rand_sphere(float radius, size_t n,
   bool surface_flag, bool rotate_flag, rand_generator_ptr const& rnd,
-  gf_poly const& c0, poly_t const& poly, mesh_index const& mp)
+  gf_poly const& c0, build_context_i const& ctx, poly_t const& poly,
+  mesh_index const& mp)
 {
   /* poly is ignored */
   farray{vertex_attr, 1} arr;
@@ -401,14 +403,14 @@ private threaded function void gf_rand_sphere(float radius, size_t n,
       arr[0].nor = m * make_vec3(1.0, 0.0, 0.0);
       arr[0].tan = m * make_vec3(0.0, 1.0, 0.0);
     }
-    c0(arr, mesh_index());
+    c0(ctx, arr, mesh_index());
     ++i;
   }
 }
 
 private threaded function {tattr} void
 gf_fill_internal(ptr{vertices} const& vptr, bool flat_flag,
-  poly_t const& poly, mesh_index const& mp)
+  build_context_i const& ctx, poly_t const& poly, mesh_index const& mp)
 {
   const sz = poly.size();
   if (sz < 3) { return; }
@@ -505,39 +507,64 @@ gf_fill_internal(ptr{vertices} const& vptr, bool flat_flag,
 }
 
 private threaded function {tattr} void
-gf_fill(ptr{vertices} const& vptr, poly_t const& poly,
-  mesh_index const& mp)
+gf_fill(ptr{vertices} const& vptr, build_context_i const& ctx,
+  poly_t const& poly, mesh_index const& mp)
 {
-  gf_fill_internal{tattr}(vptr, true, poly, mp);
+  gf_fill_internal{tattr}(vptr, true, ctx, poly, mp);
 }
 
 private threaded function {tattr} void
-gf_fill_smooth(ptr{vertices} const& vptr, poly_t const& poly,
-  mesh_index const& mp)
+gf_fill_smooth(ptr{vertices} const& vptr, build_context_i const& ctx,
+  poly_t const& poly, mesh_index const& mp)
 {
-  gf_fill_internal{tattr}(vptr, false, poly, mp);
+  gf_fill_internal{tattr}(vptr, false, ctx, poly, mp);
 }
 
 private threaded function void gf_lid(gf_poly const& c0, gf_poly const& c1,
-  poly_t const& poly, mesh_index const& mp)
+  build_context_i const& ctx, poly_t const& poly, mesh_index const& mp)
 {
   darrayst{vertex_attr} arr = poly;
-  c0(arr, mesh_index());
+  c0(ctx, arr, mesh_index());
   reverse(arr.range());
-  c1(arr, mesh_index());
+  c1(ctx, arr, mesh_index());
 }
 
-private threaded function void gf_hole(poly_t const& poly,
-  mesh_index const& mp)
+private threaded function void gf_ctx_fill(build_context_i const& ctx,
+  poly_t const& poly, mesh_index const& mp)
+{
+  ctx.fill(true, false, "", poly, mp);
+}
+
+private threaded function void gf_ctx_fill_smooth(build_context_i const& ctx,
+  poly_t const& poly, mesh_index const& mp)
+{
+  ctx.fill(false, false, "", poly, mp);
+}
+
+private threaded function void gf_ctx_poly_joint(string const& joint_name,
+  build_context_i const& ctx, poly_t const& poly, mesh_index const& mp)
+{
+  ctx.fill(true, true, joint_name, poly, mp);
+}
+
+private threaded function void gf_ctx_point_joint(string const& joint_name,
+  build_context_i const& ctx, poly_t const& poly, mesh_index const& mp)
+{
+  ctx.fill(true, false, joint_name, poly, mp);
+}
+
+
+private threaded function void gf_hole(build_context_i const& ctx,
+  poly_t const& poly, mesh_index const& mp)
 {
 }
 
 private threaded function void gf_sphere(size_t split, gf_poly const& c0,
-  poly_t const& poly, mesh_index const& mp)
+  build_context_i const& ctx, poly_t const& poly, mesh_index const& mp)
 {
   const poly_sz = poly.size();
   if (poly_sz < 3) { return; }
-  if (split == 0) { c0(poly, mesh_index()); }
+  if (split == 0) { c0(ctx, poly, mesh_index()); }
   const pcenter = polygon_center(poly);
   const nor = normal_from_poly(poly);
   const radius = polygon_radius(poly);
@@ -558,7 +585,7 @@ private threaded function void gf_sphere(size_t split, gf_poly const& c0,
 	p.nor = (p.pos - pcenter).normalize();
       }
       mp1.y = j;
-      c0(side, mp1);
+      c0(ctx, side, mp1);
     }
     for (const j: 0 .. poly_sz) {
       sp[j] = p[j];
@@ -571,13 +598,13 @@ private threaded function void gf_sphere(size_t split, gf_poly const& c0,
     for (size_t i, mutable& p: side) {
       p.nor = (p.pos - pcenter).normalize();
     }
-    c0(side, mesh_index());
+    c0(ctx, side, mesh_index());
   }
 }
 
 private threaded function void gf_import_wfobj(wfobject const& wfo,
-  wfgroup const& wfgrp, gf_poly const& c0, poly_t const& poly,
-  mesh_index const& mp)
+  wfgroup const& wfgrp, gf_poly const& c0, build_context_i const& ctx,
+  poly_t const& poly, mesh_index const& mp)
 {
   mesh_index midx;
   varray{vertex_attr} arr;
@@ -609,12 +636,13 @@ private threaded function void gf_import_wfobj(wfobject const& wfo,
     }
     midx.x = i;
     // if (arr.size() >= 5) { debug_log("polygon", p, arr); }
-    c0(arr, midx);
+    c0(ctx, arr, midx);
   }
 }
 
 private threaded function void gf_rectangle_split(size_t split_x,
-  size_t split_y, gf_poly const& c0, poly_t const& poly, mesh_index const& mp)
+  size_t split_y, gf_poly const& c0, build_context_i const& ctx,
+  poly_t const& poly, mesh_index const& mp)
 {
   if (poly.size() != 4) { return; }
   threaded function vec3 pos(vec3 const& vec, size_t i, size_t imax)
@@ -634,13 +662,14 @@ private threaded function void gf_rectangle_split(size_t split_x,
       const t1 = s1 + pos(s2 - s1, j, split_y);
       const t2 = s1 + pos(s2 - s1, j + 1, split_y);
       const t3 = s0 + pos(s3 - s0, j + 1, split_y);
-      c0(make_farray{vertex_attr}(t0, t1, t2, t3), mp1);
+      c0(ctx, make_farray{vertex_attr}(t0, t1, t2, t3), mp1);
     }
   }
 }
 
 private threaded function void gf_rotate_local(quat const& q,
-  gf_poly const& c0, poly_t const& poly, mesh_index const& mp)
+  gf_poly const& c0, build_context_i const& ctx, poly_t const& poly,
+  mesh_index const& mp)
 {
   const trans = poly_trans(poly);
   const trans_inv = trans.inverse();
@@ -650,12 +679,12 @@ private threaded function void gf_rotate_local(quat const& q,
     const v1 = m * make_vec4(v.pos.x, v.pos.y, v.pos.z, 1.0);
     v.pos = make_vec3(v1.x, v1.y, v1.z);
   }
-  c0(p, mp);
+  c0(ctx, p, mp);
 }
 
 private threaded function void gf_bump_apply(mat4 const& m,
-  bool split_reverse, gf_poly const& c0, gf_poly const& c1, poly_t const& poly,
-  mesh_index const& mp)
+  bool split_reverse, gf_poly const& c0, gf_poly const& c1,
+  build_context_i const& ctx, poly_t const& poly, mesh_index const& mp)
 {
   const trans = poly_trans(poly);
   const trans_inv = trans.inverse();
@@ -666,7 +695,7 @@ private threaded function void gf_bump_apply(mat4 const& m,
     v.pos = make_vec3(v1.x / v1.w, v1.y / v1.w, v1.z / v1.w);
   }
   /* front */
-  c1(front, mp);
+  c1(ctx, front, mp);
   /* side */
   const sz = poly.size();
   for (const i: 0 .. sz) {
@@ -674,13 +703,13 @@ private threaded function void gf_bump_apply(mat4 const& m,
     if (split_reverse) {
       const s0 = make_farray{vertex_attr}(poly[i], poly[i1], front[i1]);
       const s1 = make_farray{vertex_attr}(front[i1], front[i], poly[i]);
-      c0(s0, mesh_index());
-      c0(s1, mesh_index());
+      c0(ctx, s0, mesh_index());
+      c0(ctx, s1, mesh_index());
     } else {
       const s0 = make_farray{vertex_attr}(poly[i], poly[i1], front[i]);
       const s1 = make_farray{vertex_attr}(front[i], poly[i1], front[i1]);
-      c0(s0, mesh_index());
-      c0(s1, mesh_index());
+      c0(ctx, s0, mesh_index());
+      c0(ctx, s1, mesh_index());
     }
   }
 }

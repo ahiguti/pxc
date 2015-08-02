@@ -1,9 +1,10 @@
 public threaded namespace pgl3d::application;
 public import common -;
 
-public import pgl3d::scenenode *;
+public import pgl3d::scene_node *;
 public import pgl3d::pglbase *;
 public import pgl3d::shader_config *;
+public import pgl3d::drawer_export *;
 public import SDL2::api_base *;
 public import SDL2::api_types *;
 
@@ -23,8 +24,10 @@ public multithreaded interface pgl3d_scene_shared {
 }
 
 public threaded interface pgl3d_scene {
-  public function ptr{scene_node{node_data}} on_motion_step(float frame_speed,
+  public function void on_motion_step(float frame_speed,
     projection_info const& pjinfo, cstrref const& status_message,
+    cslice{prepare_instance_data_funcptr} const& ftable,
+    whole_instances_type mutable& whole_instances,
     pgl3d_scene_shared mutable& ss, position_angle mutable& camera_r,
     position_angle mutable& light_r);
 }

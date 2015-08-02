@@ -9,7 +9,7 @@ public import exception -;
 public import meta m;
 public import text::string::positional -;
 public import pgl3d::glgeometry -;
-public import pgl3d::scenenode -;
+public import pgl3d::scene_node -;
 public import pgl3d::pglmotion -;
 public import pgl3d::pglbase -;
 public import pgl3d::pglcommon -;
@@ -154,7 +154,8 @@ framerate_control(int vsync0)
     time_before_swapwindow = io::system.gettimeofday_double();
     const slept = time_before_swapwindow - now;
     sleep_carry = max(min(sleep_sec - slept, 0.1), -0.1);
-    frame_speed_mul = static_cast{float}(target_interval * 60.0);
+    // FIXME
+    // frame_speed_mul = static_cast{float}(target_interval * 60.0);
   }
 }
 
@@ -186,15 +187,18 @@ private function void mainloop_internal(pgl3d_application mutable& app)
     sdlc.enable_msaa, sdlc.init_w, sdlc.init_h);
   */
   app.on_build_vertices(pgs);
-  varray{instances_type} local_bo_instances;
-  pgs.prepare_vertex_buffers();
-  pgs.prepare_bo_instances(local_bo_instances);
+  whole_instances_type local_whole_instances;
   node_factory nfac;
+  pgs.prepare(local_whole_instances, nfac);
+  /*
+  pgs.prepare_vertex_buffers();
+  pgs.prepare_whole_instances(local_whole_instances);
   pgs.prepare_node_factory(nfac);
+  */
 
   /* spawn motion thread */
-  motion_thread_object mto = motion_thread_object(nfac, local_bo_instances,
-    app.get_scene_shared(), pgs.prepare_instance);
+  motion_thread_object mto = motion_thread_object(nfac, local_whole_instances,
+    app.get_scene_shared(), pgs.pidft);
 
   size_t saved_stat_num_objects;
 
@@ -212,8 +216,8 @@ private function void mainloop_internal(pgl3d_application mutable& app)
     SDL_Event ev;
     while (SDL_PollEvent(address(ev)) != 0) {
       const etype = ev.type;
-       sdllog("event", cast_int(ev.type));
       /*
+      sdllog("event", cast_int(ev.type));
        */
       if (etype == SDL_WINDOWEVENT) {
 	if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
@@ -279,7 +283,7 @@ private function void mainloop_internal(pgl3d_application mutable& app)
 	mts.cam = pgs.cam;
 	mts.frame_speed_mul = frctl.frame_speed_mul;
 	mts.message = mess;
-	local_bo_instances.swap(mts.bo_instances);
+	local_whole_instances.swap(mts.whole_instances);
 	saved_stat_num_objects = mts.stat_num_objects;
       }
     }
@@ -287,7 +291,7 @@ private function void mainloop_internal(pgl3d_application mutable& app)
     {
       /* draw frame */
       varray{uint} tick_draw;
-      tick_draw = pgs.draw_frame(local_bo_instances, cam_drawing_frame);
+      tick_draw = pgs.draw_frame(local_whole_instances, cam_drawing_frame);
       if (tick_draw.size() > 2) {
 	fr.save_ticks(2, tick_draw[0]);
 	fr.save_ticks(3, tick_draw[1]);
