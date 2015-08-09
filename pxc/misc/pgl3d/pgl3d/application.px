@@ -8,15 +8,17 @@ public import pgl3d::drawer_export *;
 public import SDL2::api_base *;
 public import SDL2::api_types *;
 
+public metafunction string_map tree_map{string, string};
+
 public interface pgl3d_application {
   public function tptr{pgl3d_scene_shared} get_scene_shared();
-  public function varray{ptr{pgldrawer_export_i}} on_init_drawers(
+  public function tree_map{string, ptr{pgldrawer_export_i}} on_init_drawers(
     shader_config const& sconf);
   public function void on_build_vertices(make_vertices_i mutable& mvx);
   public function void on_event(SDL_Event const& ev, float speed,
-    projection_info const& pjinfo);
+    projection_info const& pjinfo, string_map mutable& commands_r);
   public function void on_scankeys(cslice{Uint8} const& keys, float speed,
-    projection_info const& pjinfo);
+    projection_info const& pjinfo, string_map mutable& commands_r);
 }
 
 public multithreaded interface pgl3d_scene_shared {
@@ -29,6 +31,6 @@ public threaded interface pgl3d_scene {
     cslice{prepare_instance_data_funcptr} const& ftable,
     whole_instances_type mutable& whole_instances,
     pgl3d_scene_shared mutable& ss, position_angle mutable& camera_r,
-    position_angle mutable& light_r);
+    position_angle mutable& light_r, string_map mutable& commands_r);
 }
 

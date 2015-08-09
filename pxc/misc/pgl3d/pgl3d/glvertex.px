@@ -122,6 +122,7 @@ vertices(size_t num_float_per_vertex0)
   public function {tattr, split_convex} void
   push_polygon_distinct(cslice{tattr} const& vals)
   {
+    /* tattr must have 'public glm::vec3 position' */
     if (num_float_per_vertex != num_float_struct{tattr}) {
       throw runtime_error_template{"vertices::push_polygon_distinct"}(
 	  string_join{" "}(m::to_string{tattr}, num_float_struct{tattr},
@@ -164,14 +165,8 @@ vertices(size_t num_float_per_vertex0)
       for (const i, mutable& v: ia) {
 	v = i;
       }
-      threaded function glm::vec3 getpos(tattr const& x) {
-	expand (fld: m::filter{m::field_names{tattr},
-	  metafunction{x} m::or{m::eq{x, "pos"}, m::eq{x, "position"}}}) {
-	  return x.fld;
-	}
-      }
       threaded function glm::vec3 ia_pos(size_t i) {
-	return getpos(vals[ia[i]]);
+	return vals[ia[i]].position;
       }
       threaded function size_t ia_prev(size_t i) {
 	return (i == 0) ? (ia.size() - 1) : (i - 1);
@@ -181,6 +176,7 @@ vertices(size_t num_float_per_vertex0)
       }
       threaded function glm::vec3 cross_one(size_t i)
       {
+	/* TODO: optimize */
 	return glm::cross(
 	  ia_pos(i) - ia_pos(ia_prev(i)),
 	  ia_pos(ia_next(i)) - ia_pos(i));

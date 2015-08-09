@@ -483,12 +483,12 @@ sub dump_struct
   my $cn = "$obj->{struct_ns}$obj->{struct_cname}";
   if (!$obj->{is_public}) {
     $extfamily = ' "nodefault"';
-    $constr_str = " private() "; # impossible to construct
+    $constr_str = " private"; # impossible to construct
   } elsif ($obj->{defcon}) {
     if ($obj->{copycon} && !$obj->{has_virtual}) {
       # copyable and defcon
     } else {
-      $extfamily = ' "noncopyable"';
+      $extfamily = ' "nonmovable"';
     }
   } else {
     $extfamily = ' "nodefault"';
@@ -497,7 +497,7 @@ sub dump_struct
       $constr_str = "($args0) ";
       # shift(@constr_list);
     } else {
-      $constr_str = " private() "; # impossible to construct
+      $constr_str = " private"; # impossible to construct
     }
   }
   for (my $i = 0; $i < scalar(@constr_list); ++$i) {

@@ -108,14 +108,28 @@ static term eval_meta_local_internal(const term_list_range& tlev,
   return eval_term_internal(rt, true, ectx, pos); /* is this necessary? */
 }
 
-static void check_public_namespace(const std::string& name)
+static std::string pos_ns(expr_i *pos)
+{
+  while (pos != 0) {
+    std::string s = pos->get_unique_namespace();
+    if (!s.empty()) {
+      return s;
+    }
+    pos = pos->parent_expr;
+  }
+  return std::string();
+}
+
+static void check_public_namespace(const std::string& name, expr_i *pos)
 {
   nspropmap_type::const_iterator i = nspropmap.find(name);
   if (i == nspropmap.end()) {
     arena_error_throw(0, "Namespace '%s' not imported", name.c_str());
   }
   if (!i->second.is_public) {
-    arena_error_throw(0, "Namespace '%s' is private", name.c_str());
+    if (!is_accessible_namespace(name, pos_ns(pos))) {
+      arena_error_throw(0, "Namespace '%s' is private", name.c_str());
+    }
   }
 }
 
@@ -128,7 +142,7 @@ static term eval_meta_symbol_global(const std::string& sym_ns,
   }
   symbol_table *const symtbl = &global_block->symtbl;
   assert(symtbl);
-  check_public_namespace(sym_ns);
+  check_public_namespace(sym_ns, pos);
     /* note that metafunctions must be always pure functional, or generated
        template functions can be inconsistent among compilation units. we
        must generate an error here instead of returning 'notfound', in order
@@ -582,7 +596,7 @@ static term eval_meta_imports(const term_list_range& tlev, eval_context& ectx,
     return term();
   }
   const std::string name = meta_term_to_string(tlev[0], false);
-  check_public_namespace(name);
+  check_public_namespace(name, pos);
   loaded_namespaces_type::const_iterator iter = loaded_namespaces.find(name);
   if (iter == loaded_namespaces.end()) {
     /* not reached */
@@ -639,7 +653,7 @@ static term eval_meta_functions(const term_list_range& tlev,
     return term();
   }
   const std::string name = meta_term_to_string(tlev[0], false);
-  check_public_namespace(name);
+  check_public_namespace(name, pos);
   symbol_table *const symtbl = &global_block->symtbl;
   std::list< std::pair<symbol, localvar_info> > syms;
   symtbl->get_ns_symbols(name, syms);
@@ -666,7 +680,7 @@ static term eval_meta_types(const term_list_range& tlev, eval_context& ectx,
     return term();
   }
   const std::string name = meta_term_to_string(tlev[0], false);
-  check_public_namespace(name);
+  check_public_namespace(name, pos);
   symbol_table *const symtbl = &global_block->symtbl;
   std::list< std::pair<symbol, localvar_info> > syms;
   symtbl->get_ns_symbols(name, syms);
@@ -715,7 +729,7 @@ static term eval_meta_global_variables(const term_list_range& tlev,
     return term();
   }
   const std::string name = meta_term_to_string(tlev[0], false);
-  check_public_namespace(name);
+  check_public_namespace(name, pos);
   symbol_table *const symtbl = &global_block->symtbl;
   term_list tl;
   long long idx = 0;
@@ -1211,15 +1225,23 @@ static term eval_meta_list_find(const term_list_range& tlev,
   eval_context& ectx, expr_i *pos)
 {
   if (tlev.size() != 2) {
+    arena_error_throw(pos, "list_find: Invalid number of arguments (got: %zu)",
+      tlev.size());
     return term();
   }
   const term& t = tlev[0];
   if (!t.is_metalist()) {
+    arena_error_throw(pos, "list_find: Invalid argument: %s",
+      term_tostr_human(t).c_str());
     return term();
   }
+  /*
   if (!tlev[1].is_long() && !tlev[1].is_string()) {
+    arena_error_throw(pos, "list_find: Invalid argument: %s",
+      term_tostr_human(tlev[1]).c_str());
     return term();
   }
+  */
   long v = t.assoc_find(tlev[1]);
   return term(v);
 }

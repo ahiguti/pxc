@@ -28,13 +28,194 @@ public enum draw_step {
   draw_step_blend = 4
 }
 
+private metafunction instance_id_type
+  m::cond{use_copying_instancing, float, unit};
+
+private tsvaluetype struct triangles_uniforms
+{
+  public glm::mat4 view_projection_matrix;
+  public int sampler;
+  public int sampler_tilemap;
+  public int sampler_sm;
+  public glm::vec3 camera_pos;
+  public glm::vec3 light_pos;
+  public float light_on;
+  public glm::mat4 shadowmap_vp;
+}
+
+private tsvaluetype struct triangles_vertex_attributes
+{
+  public instance_id_type instance_id;
+  public glm::vec3 position;
+  public glm::vec3 normal;
+  public glm::vec3 tangent;
+  public glm::vec3 uvw;
+}
+
+private tsvaluetype struct triangles2_vertex_attributes
+{
+  public glm::vec3 position;
+  public glm::vec3 normal;
+  public glm::vec3 tangent;
+  public glm::vec3 uvw;
+}
+
+private tsvaluetype struct zprepass_vertex_attributes
+{
+  public instance_id_type instance_id;
+  public glm::vec3 position;
+  public glm::vec3 normal;
+  public glm::vec3 tangent;
+  public glm::vec3 uvw;
+}
+
+private tsvaluetype struct zprepass2_vertex_attributes
+{
+  public glm::vec3 position;
+  public glm::vec3 normal;
+  public glm::vec3 tangent;
+  public glm::vec3 uvw;
+}
+
+private tsvaluetype struct shadowmap_vertex_attributes
+{
+  public instance_id_type instance_id;
+  public glm::vec3 position;
+  public glm::vec3 normal;
+  public glm::vec3 tangent;
+  public glm::vec3 uvw;
+}
+
+private tsvaluetype struct shadowmap2_vertex_attributes
+{
+  public glm::vec3 position;
+  public glm::vec3 normal;
+  public glm::vec3 tangent;
+  public glm::vec3 uvw;
+}
+
+private tsvaluetype struct triangles_instance_attributes
+{
+  public glm::mat4 model_matrix;
+}
+
+private tsvaluetype struct zprepass_uniforms
+{
+  public glm::mat4 view_projection_matrix;
+}
+
+private tsvaluetype struct shadowmap_uniforms
+{
+  public glm::mat4 shadowmap_vp;
+}
+
+private tsvaluetype struct font_uniforms
+{
+  public int sampler;
+}
+
+private tsvaluetype struct font2_uniforms
+{
+  public glm::vec2 screen_size_px;
+  public int sampler;
+}
+
+private tsvaluetype struct font2_instance_attributes
+{
+  public glm::vec4 idata;
+}
+
+private tsvaluetype struct font2_vertex_attributes
+{
+  public instance_id_type instance_id;
+  public glm::vec2 texture_size_px;
+  public glm::vec2 texture_origin_px;
+  public glm::vec2 char_size_px;
+  public glm::vec2 coord_clamp;
+  public float char_px;
+  public float char_point_size;
+}
+
+private tsvaluetype struct rect2d_vertex_attributes
+{
+  public instance_id_type instance_id;
+  public glm::vec2 vert;
+}
+
+private tsvaluetype struct rect2d_instance_attributes
+{
+  public glm::vec4 idata; // x0, y0, dx, dy
+}
+
+private tsvaluetype struct rect2d_uniforms
+{
+}
+
+private tsvaluetype struct particle_uniforms
+{
+  public float point_size_base;
+}
+
+private tsvaluetype struct particle_instance_attributes
+{
+  public glm::mat4 model_matrix; // vp applied
+}
+
+private tsvaluetype struct particle_vertex_attributes
+{
+  public glm::vec3 position;
+}
+
+private tsvaluetype struct particle_bb_uniforms
+{
+  public glm::mat4 view_projection_matrix;
+  public glm::mat4 camera_matrix;
+  public float point_size_base;
+}
+
+private tsvaluetype struct particle_bb_vertex_attributes
+{
+  public glm::vec3 position;
+  public glm::vec2 local_position;
+}
+
+private tsvaluetype struct lineparticle_uniforms
+{
+  public glm::mat4 view_projection_matrix;
+  public glm::vec2 screen_size_px;
+  public float screen_size_base;
+}
+
+private tsvaluetype struct lineparticle_vertex_attributes
+{
+  public instance_id_type instance_id;
+  public glm::vec2 vert;
+}
+
+private tsvaluetype struct lineparticle_instance_attributes
+{
+  public glm::mat3 idata;
+}
+
+private function {tattr} ptr{vertex_buffer}
+make_tattr_vertex_buffer(bool points_mode, bool is_sub)
+{
+  return make_ptr{vertex_buffer}(static_cast{size_t}(num_float_struct{tattr}),
+    points_mode, is_sub);
+}
+
 public interface pgldrawer_i <pgldrawer_export_i> {
   public function string get_vbid_name() const;
+  public function string get_main_vbid_name() const;
+    /* returns get_vbid_name() if it's a main drawer */
   public function prepare_instance_data_funcptr
     get_prepare_instance_data_funcptr() const;
   public function ptr{vertex_buffer} make_vertex_buffer() const;
+  public function string builtin_vertex_set_name() const;
+    /* empty if no builtin vertex set */
   public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
     const;
+    /* called when builtin_vertex_set_name is not empty */
   public function dgf_filler make_filler(ptr{vertices} const& vptr) const;
   public function texture_info get_texture_info(cstrref const& name) const;
   public function void draw(draw_step step, vertex_buffer const& bo,
@@ -43,13 +224,14 @@ public interface pgldrawer_i <pgldrawer_export_i> {
     projection_info const& cam_df);
 }
 
-public struct drawer_triangles(shader_config const& glc)
+public struct drawer_triangles(shader_config const& glc, int opt0)
 <pgldrawer_i>
 {
   metafunction tattr triangles_vertex_attributes;
-  triangles_shader_ptr{1} const sdr_solid = init_triangles_shader{1}(glc);
-  zprepass_shader_ptr{1} const sdr_zp = init_zprepass_shader{1}(glc);
-  shadowmap_shader_ptr{1} const sdr_shadow = init_shadowmap_shader{1}(glc);
+  int const opt = opt0;
+  triangles_shader_ptr{1} const sdr_solid = init_triangles_shader{1}(glc, opt);
+  zprepass_shader_ptr{1} const sdr_zp = init_zprepass_shader{1}(glc, opt);
+  shadowmap_shader_ptr{1} const sdr_shadow = init_shadowmap_shader{1}(glc, opt);
   texture_data texture_dpat;
   texture_data texture_tilemap;
   init();
@@ -57,18 +239,22 @@ public struct drawer_triangles(shader_config const& glc)
   {
     init_main_texture(texture_dpat, texture_tilemap);
   }
-  public function string get_vbid_name() const { return "vbid_triangles"; }
+  public function string get_vbid_name() const {
+    return "vbid_triangles_" + to_string(opt);
+  }
+  public function string get_main_vbid_name() const {
+    return "vbid_triangles_0";
+  }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
     return make_tfuncptr{prepare_instance_data_triangles}();
   }
   public function ptr{vertex_buffer} make_vertex_buffer() const {
-    return make_tattr_vertex_buffer{tattr}(false);
+    return make_tattr_vertex_buffer{tattr}(false, opt != 0);
   }
+  public function string builtin_vertex_set_name() const { return ""; }
   public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
-    const
-  {
-  }
+    const { }
   public function dgf_filler make_filler(ptr{vertices} const& vptr) const
   {
     return make_dgf_polygon_filler{tattr}(vptr);
@@ -135,21 +321,22 @@ public struct drawer_triangles2(shader_config const& glc)
 <pgldrawer_i>
 {
   metafunction tattr triangles2_vertex_attributes;
-  triangles_shader_ptr{0} sdr_solid = init_triangles_shader{0}(glc);
-  zprepass_shader_ptr{0} sdr_zp = init_zprepass_shader{0}(glc);
-  shadowmap_shader_ptr{0} sdr_shadow = init_shadowmap_shader{0}(glc);
+  triangles_shader_ptr{0} sdr_solid = init_triangles_shader{0}(glc, 0);
+  zprepass_shader_ptr{0} sdr_zp = init_zprepass_shader{0}(glc, 0);
+  shadowmap_shader_ptr{0} sdr_shadow = init_shadowmap_shader{0}(glc, 0);
   public function string get_vbid_name() const { return "vbid_triangles2"; }
+  public function string get_main_vbid_name() const {
+    return "vbid_triangles2"; }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
     return make_tfuncptr{prepare_instance_data_triangles}();
   }
   public function ptr{vertex_buffer} make_vertex_buffer() const {
-    return make_tattr_vertex_buffer{tattr}(false);
+    return make_tattr_vertex_buffer{tattr}(false, false);
   }
+  public function string builtin_vertex_set_name() const { return ""; }
   public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
-    const
-  {
-  }
+    const { }
   public function dgf_filler make_filler(ptr{vertices} const& vptr) const
   {
     return make_dgf_polygon_filler{tattr}(vptr);
@@ -211,16 +398,27 @@ public struct drawer_lineparticle(shader_config const& glc)
   metafunction tattr lineparticle_vertex_attributes;
   lineparticle_shader_ptr sdr_lp = init_lineparticle_shader(glc);
   public function string get_vbid_name() const { return "vbid_lineparticle"; }
+  public function string get_main_vbid_name() const {
+    return "vbid_lineparticle"; }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
     return make_tfuncptr{prepare_instance_data_lineparticle}();
   }
   public function ptr{vertex_buffer} make_vertex_buffer() const {
-    return make_tattr_vertex_buffer{tattr}(false);
+    return make_tattr_vertex_buffer{tattr}(false, false);
+  }
+  public function string builtin_vertex_set_name() const {
+    return "lineparticle";
   }
   public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
     const
   {
+    farray{lineparticle_vertex_attributes, 4} vs;
+    vs[0].vert = glm::make_vec2(0.0, -0.5);
+    vs[1].vert = glm::make_vec2(1.0, -0.5);
+    vs[2].vert = glm::make_vec2(1.0, 0.5);
+    vs[3].vert = glm::make_vec2(0.0, 0.5);
+    vptr->push_polygon_distinct{lineparticle_vertex_attributes, 0}(vs);
   }
   public function dgf_filler make_filler(ptr{vertices} const& vptr) const
   {
@@ -235,8 +433,8 @@ public struct drawer_lineparticle(shader_config const& glc)
     vertex_buffer_id bo_id, shader_config const& glc,
     projection_info const& cam_df)
   {
-    if (step == draw_step_solid) {
-      glDisable(GL_CULL_FACE);
+    if (step == draw_step_blend) {
+      // glDisable(GL_CULL_FACE);
       glDepthFunc(GL_LEQUAL);
       glDepthMask(1);
       mutable cam_mat = glm::mat4();
@@ -264,17 +462,17 @@ public struct drawer_particle(shader_config const& glc)
   metafunction tattr particle_vertex_attributes;
   particle_shader_ptr sdr_sp = init_particle_shader(glc);
   public function string get_vbid_name() const { return "vbid_particle"; }
+  public function string get_main_vbid_name() const { return "vbid_particle"; }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
     return make_tfuncptr{prepare_instance_data_particle}();
   }
   public function ptr{vertex_buffer} make_vertex_buffer() const {
-    return make_tattr_vertex_buffer{tattr}(true);
+    return make_tattr_vertex_buffer{tattr}(true, false);
   }
+  public function string builtin_vertex_set_name() const { return ""; }
   public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
-    const
-  {
-  }
+    const { }
   public function dgf_filler make_filler(ptr{vertices} const& vptr) const
   {
     return make_dgf_particle_filler(vptr);
@@ -307,17 +505,18 @@ public struct drawer_particle_bb(shader_config const& glc)
   metafunction tattr particle_bb_vertex_attributes;
   particle_bb_shader_ptr sdr_pb = init_particle_bb_shader(glc);
   public function string get_vbid_name() const { return "vbid_particle_bb"; }
+  public function string get_main_vbid_name() const {
+    return "vbid_particle_bb"; }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
     return make_tfuncptr{prepare_instance_data_default}();
   }
   public function ptr{vertex_buffer} make_vertex_buffer() const {
-    return make_tattr_vertex_buffer{tattr}(false);
+    return make_tattr_vertex_buffer{tattr}(false, false);
   }
+  public function string builtin_vertex_set_name() const { return ""; }
   public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
-    const
-  {
-  }
+    const { }
   public function dgf_filler make_filler(ptr{vertices} const& vptr) const
   {
     return make_dgf_particle_bb_filler(vptr);
@@ -361,16 +560,38 @@ public struct drawer_font2(shader_config const& glc)
     init_font(texture_font);
   }
   public function string get_vbid_name() const { return "vbid_font2"; }
+  public function string get_main_vbid_name() const { return "vbid_font2"; }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
     return make_tfuncptr{prepare_instance_data_font2}();
   }
   public function ptr{vertex_buffer} make_vertex_buffer() const {
-    return make_tattr_vertex_buffer{tattr}(true);
+    return make_tattr_vertex_buffer{tattr}(true, false);
+  }
+  public function string builtin_vertex_set_name() const {
+    return "default_font";
   }
   public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
     const
   {
+    const ti = get_texture_info("font");
+    const char_w = static_cast{float}(ti.char_w);
+    const char_h = static_cast{float}(ti.char_h);
+    const point_size = static_cast{float}(max(ti.char_w, ti.char_h));
+    const char_size_px = glm::make_vec2(char_w, char_h);
+    const texture_size_px = glm::make_vec2(
+      static_cast{float}(ti.surface_w),
+      static_cast{float}(ti.surface_h));
+    const clamp_x = char_w / point_size;
+    const clamp_y = char_h / point_size;
+    font2_vertex_attributes v;
+    v.char_size_px = char_size_px;
+    v.texture_size_px = texture_size_px;
+    v.texture_origin_px = glm::make_vec2(0.0, 0.0);
+    v.coord_clamp = glm::make_vec2(clamp_x, clamp_y);
+    v.char_px = static_cast{float}(ti.char_w);
+    v.char_point_size = point_size;
+    vptr->push_point{font2_vertex_attributes}(v);
   }
   public function dgf_filler make_filler(ptr{vertices} const& vptr) const
   {
@@ -413,16 +634,24 @@ public struct drawer_rect2d(shader_config const& glc)
   metafunction tattr rect2d_vertex_attributes;
   rect2d_shader_ptr sdr_re = init_rect2d_shader(glc);
   public function string get_vbid_name() const { return "vbid_rect2d"; }
+  public function string get_main_vbid_name() const { return "vbid_rect2d"; }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
     return make_tfuncptr{prepare_instance_data_rect2d}();
   }
   public function ptr{vertex_buffer} make_vertex_buffer() const {
-    return make_tattr_vertex_buffer{tattr}(false);
+    return make_tattr_vertex_buffer{tattr}(false, false);
   }
+  public function string builtin_vertex_set_name() const { return "rect2d"; }
   public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
     const
   {
+    farray{rect2d_vertex_attributes, 4} vs;
+    vs[0].vert = glm::make_vec2(0.0, 0.0);
+    vs[1].vert = glm::make_vec2(1.0, 0.0);
+    vs[2].vert = glm::make_vec2(1.0, 1.0);
+    vs[3].vert = glm::make_vec2(0.0, 1.0);
+    vptr->push_polygon_distinct{rect2d_vertex_attributes, 0}(vs);
   }
   public function dgf_filler make_filler(ptr{vertices} const& vptr) const
   {
@@ -448,13 +677,6 @@ public struct drawer_rect2d(shader_config const& glc)
 }
 
 /* private */
-
-private function {tattr} ptr{vertex_buffer}
-make_tattr_vertex_buffer(bool points_mode)
-{
-  return make_ptr{vertex_buffer}(static_cast{size_t}(num_float_struct{tattr}),
-    points_mode);
-}
 
 private threaded function {tattr} void
 dgf_fill_tattr_internal(ptr{vertices} const& vptr, bool flat_flag,
@@ -565,9 +787,9 @@ dgf_particle_internal(ptr{vertices} const& vptr, bool flat_flag,
   poly_t const& poly, mesh_index const& mp)
 {
   for (const i, const& p: poly) {
-    particle_vertex_attr x;
-    x.pos = p.pos;
-    vptr->push_point{particle_vertex_attr}(x);
+    particle_vertex_attributes x;
+    x.position = p.pos;
+    vptr->push_point{particle_vertex_attributes}(x);
   }
 }
 
@@ -576,15 +798,15 @@ dgf_particle_bb_internal(ptr{vertices} const& vptr, bool flat_flag,
   poly_t const& poly, mesh_index const& mp)
 {
   for (const i, const& p: poly) {
-    farray{particle_bb_vertex_attr, 4} vtxs;
+    farray{particle_bb_vertex_attributes, 4} vtxs;
     for (const j, mutable& v: vtxs) {
-      v.pos = p.pos;
+      v.position = p.pos;
     }
-    vtxs[0].lpos = glm::make_vec2(-1.0, -1.0);
-    vtxs[1].lpos = glm::make_vec2( 1.0, -1.0);
-    vtxs[2].lpos = glm::make_vec2( 1.0,  1.0);
-    vtxs[3].lpos = glm::make_vec2(-1.0,  1.0);
-    vptr->push_polygon_distinct{particle_bb_vertex_attr, 0}(vtxs);
+    vtxs[0].local_position = glm::make_vec2(-1.0, -1.0);
+    vtxs[1].local_position = glm::make_vec2( 1.0, -1.0);
+    vtxs[2].local_position = glm::make_vec2( 1.0,  1.0);
+    vtxs[3].local_position = glm::make_vec2(-1.0,  1.0);
+    vptr->push_polygon_distinct{particle_bb_vertex_attributes, 0}(vtxs);
   }
 }
 
@@ -653,7 +875,7 @@ metafunction lineparticle_shader_ptr
     lineparticle_vertex_attributes}};
 
 function {instancing} shadowmap_shader_ptr{instancing}
-init_shadowmap_shader(shader_config const& g)
+init_shadowmap_shader(shader_config const& g, int opt)
 {
   string v;
   v += g.prepend();
@@ -661,6 +883,10 @@ init_shadowmap_shader(shader_config const& g)
   v += g.decl_instance_id(true);
   v += g.decl_instance_attr("mat4", "model_matrix", instancing != 0, true);
   v += g.vert_in() + "vec3 position;\n";
+  if (opt != 0) {
+    v += g.vert_in() + "vec3 uvw;\n";
+    v += g.vert_out() + "vec3 vary_uvw;\n";
+  }
   if (!g.enable_depth_texture) {
     v += g.vert_out() + "vec4 vary_smpos;\n";
   }
@@ -672,24 +898,48 @@ init_shadowmap_shader(shader_config const& g)
   if (!g.enable_depth_texture) {
     v += "vary_smpos = p;\n";
   }
+  if (opt != 0) {
+    v += "vary_uvw = uvw;\n";
+  }
   v += "}\n";
   string f;
-  if (g.enable_depth_texture) {
+  if (g.enable_depth_texture && opt == 0) {
     f += g.empty_shader_frag();
   } else {
     f += g.prepend();
-    f += g.frag_in() + "vec4 vary_smpos;\n";
-    f += g.decl_fragcolor();
+    if (opt != 0) {
+      f += g.frag_in() + "vec3 vary_uvw;\n";
+    }
+    if (!g.enable_depth_texture) {
+      f += g.frag_in() + "vec4 vary_smpos;\n";
+      f += g.decl_fragcolor();
+    }
     f += "void main(void) {\n";
-    f += "vec4 p = vary_smpos;\n";
-    f += "  float pz = (p.z/p.w + 1.0) / 2.0;\n";
-    f += "  float z = pz * 256.0;\n";/* [0.0, 256.0] */
-    f += "  float z0 = floor(z);\n"; /* [0, 256] */
-    f += "  z = (z - z0) * 256.0;\n"; /* [0.0, 256.0) */
-    f += "  float z1 = floor(z);\n"; /* [0, 256) */
-    f += "  z = (z - z1) * 256.0;\n"; /* [0.0, 256.0) */
-    f += "  float z2 = floor(z);\n";  /* [0, 256) */
-    f += g.fragcolor() + "= vec4(z0/255.0, z1/255.0, z2/255.0, 1.0);\n";
+    if (opt != 0) {
+      if (g.enable_normalmapping) {
+	f += "const float tile_size = 32.0;\n";
+	f += "const float tilemap_size = 128.0;\n";
+	f += "const float tiletex_size = 256.0;\n";
+	f += "vec2 uv0 = vary_uvw.xy / vary_uvw.z;\n";
+	f += "vec2 uv_tm = floor(uv0);\n";
+	      /* tilemap coordinate */
+	f += "vec2 uv_tmfr = uv0 - uv_tm;\n";
+	      /* coordinate inside a tile (0, 1) */
+	f += "vec2 uvp = uv_tmfr - 0.5;\n";
+	f += "if (dot(uvp, uvp) < 0.125) { discard; }\n";
+      }
+    }
+    if (!g.enable_depth_texture) {
+      f += "  vec4 p = vary_smpos;\n";
+      f += "  float pz = (p.z/p.w + 1.0) / 2.0;\n";
+      f += "  float z = pz * 256.0;\n";/* [0.0, 256.0] */
+      f += "  float z0 = floor(z);\n"; /* [0, 256] */
+      f += "  z = (z - z0) * 256.0;\n"; /* [0.0, 256.0) */
+      f += "  float z1 = floor(z);\n"; /* [0, 256) */
+      f += "  z = (z - z1) * 256.0;\n"; /* [0.0, 256.0) */
+      f += "  float z2 = floor(z);\n";  /* [0, 256) */
+      f += g.fragcolor() + "= vec4(z0/255.0, z1/255.0, z2/255.0, 1.0);\n";
+    }
     f += "}\n";
   }
   return make_glshader_ptr{
@@ -702,7 +952,7 @@ init_shadowmap_shader(shader_config const& g)
 }
 
 function {instancing} zprepass_shader_ptr{instancing}
-init_zprepass_shader(shader_config const& g)
+init_zprepass_shader(shader_config const& g, int opt)
 {
   string v;
   v += g.prepend();
@@ -710,12 +960,40 @@ init_zprepass_shader(shader_config const& g)
   v += g.decl_instance_id(true);
   v += g.decl_instance_attr("mat4", "model_matrix", instancing != 0, true);
   v += g.vert_in() + "vec3 position;\n";
+  if (opt != 0) {
+    v += g.vert_in() + "vec3 uvw;\n";
+    v += g.vert_out() + "vec3 vary_uvw;\n";
+  }
   v += "void main(void) {\n";
   v += "vec4 gpos4 = " + g.instance_attr("model_matrix", instancing != 0, true);
   v += "  * vec4(position, 1.0);\n";
   v += "gl_Position = view_projection_matrix * gpos4;\n";
+  if (opt != 0) {
+    v += "vary_uvw = uvw;\n";
+  }
   v += "}\n";
-  string f = g.empty_shader_frag();
+  string f;
+  if (opt == 0) {
+    f = g.empty_shader_frag();
+  } else {
+    f += g.prepend();
+    f += g.frag_in() + "vec3 vary_uvw;\n";
+    // f += g.decl_fragcolor();
+    f += "void main(void) {\n";
+    if (g.enable_normalmapping) {
+      f += "const float tile_size = 32.0;\n";
+      f += "const float tilemap_size = 128.0;\n";
+      f += "const float tiletex_size = 256.0;\n";
+      f += "vec2 uv0 = vary_uvw.xy / vary_uvw.z;\n";
+      f += "vec2 uv_tm = floor(uv0);\n";
+	    /* tilemap coordinate */
+      f += "vec2 uv_tmfr = uv0 - uv_tm;\n";
+	    /* coordinate inside a tile (0, 1) */
+      f += "vec2 p = uv_tmfr - 0.5;\n";
+      f += "if (dot(p, p) < 0.125) { discard; }\n";
+    }
+    f += "}\n";
+  }
   return make_glshader_ptr{
     zprepass_uniforms,
     triangles_instance_attributes,
@@ -726,7 +1004,7 @@ init_zprepass_shader(shader_config const& g)
 }
 
 function string
-triangles_shader_vert(shader_config const& g, bool instancing)
+triangles_shader_vert(shader_config const& g, bool instancing, int opt)
 {
   string v;
   v += g.prepend();
@@ -772,7 +1050,8 @@ triangles_shader_vert(shader_config const& g, bool instancing)
   return v;
 }
 
-function string triangles_shader_frag(shader_config const& g, bool instancing)
+function string triangles_shader_frag(shader_config const& g, bool instancing,
+  int opt)
 {
   string f;
   f += g.prepend();
@@ -800,28 +1079,23 @@ function string triangles_shader_frag(shader_config const& g, bool instancing)
   f += "vec3 light_dir = normalize(light_pos - vary_position);\n";
   f += "float light_distance = length(light_pos - vary_position);\n";
   f += "vec4 color = vec4(0.0, 0.0, 0.0, 1.0);\n";
-  if (instancing) {
+  if (opt != 0) {
+    f += "vec4 color_dif = vec4(0.52, 0.28, 0.42, 1.0);\n";
+  } else if (instancing) {
     f += "vec4 color_dif = vec4(0.42, 0.42, 0.42, 1.0);\n";
   } else {
     f += "vec4 color_dif = vec4(0.43, 0.42, 0.44, 1.0);\n";
   }
   f += "float mate_ambient = 0.2;\n";
   f += "float mate_specular = 0.5;\n";
-  if (g.enable_shadowmapping) {
-    f += "vec4 smp = vary_smpos;\n";
-    f += "vec3 smpos = ((smp.xyz / smp.w) + 1.0) * 0.5;\n";
-    f += "float lflag = float(int(smpos.x <= 0.0) + int(smpos.x >= 1.0)";
-    f += "  + int(smpos.y <= 0.0) + int(smpos.y >= 1.0) == 0);\n";
-  } else {
-    f += "float lflag = 1.0;\n";
-  }
-  f += "float lstr = lflag;\n";
   /*
   f += "float distbr = min(3000.0 / (light_distance * light_distance), ";
   f += "  light_on);\n";
   */
   f += "float distbr = min(100.0 / light_distance , light_on);\n";
   f += "vec3 nor = vary_normal;\n";
+  f += "vec3 camera_dir = normalize(camera_pos - vary_position);\n";
+  f += "float is_front = float(dot(camera_dir, nor) > 0.0);\n";
   if (g.enable_normalmapping) {
     f += "const float tile_size = 32.0;\n";
     f += "const float tilemap_size = 128.0;\n";
@@ -831,6 +1105,10 @@ function string triangles_shader_frag(shader_config const& g, bool instancing)
 	  /* tilemap coordinate */
     f += "vec2 uv_tmfr = uv0 - uv_tm;\n";
 	  /* coordinate inside a tile (0, 1) */
+    if (opt != 0) {
+      f += "vec2 p = uv_tmfr - 0.5;\n";
+      f += "if (dot(p, p) < 0.125) { discard; }\n";
+    }
     f += "vec2 uv_ti = uv_tmfr * tile_size;\n";
     f += "vec2 uvi = floor(uv_ti);\n";
 	  /* coordinate inside a tile, integral */
@@ -861,15 +1139,32 @@ function string triangles_shader_frag(shader_config const& g, bool instancing)
     f += "color += vec4(c0.xyz, 0.0) * float(alv == 10);\n";
     // f += "color_dif = vec4(c0.xyz, 0.0) * float(alv != 10);\n";
     f += "distbr *= float(alv != 10);\n";
-    f += "nor += vary_tangent * ut1 * avol;\n";
-    f += "nor += vary_binormal * vt1 * avol;\n";
-    f += "nor = normalize(nor);\n";
+    f += "vec3 nor_delta = vary_tangent * ut1 * avol\n";
+    f += "  + vary_binormal * vt1 * avol;\n";
+    if (opt != 0) {
+      f += "nor_delta *= is_front;\n";
+    }
+    f += "nor = normalize(nor + nor_delta);\n";
   }
   f += "vec3 reflection_vec = reflect(-light_dir, nor);\n";
-  f += "vec3 camera_dir = normalize(camera_pos - vary_position);\n";
   f += "float cos_angle = max(0.0, dot(camera_dir, reflection_vec));\n";
   f += "float specular = pow(cos_angle, 16.0);\n";
   f += "float diffuse = clamp(dot(light_dir, nor), 0.0, 1.0);\n";
+  if (opt == 0) {
+    /* no specular and diffuse for opt0 shader */
+    f += "specular = min(specular, is_front);\n";
+    f += "diffuse = min(diffuse, is_front);\n";
+  }
+  if (g.enable_shadowmapping) {
+    f += "vec4 smp = vary_smpos;\n";
+    f += "vec3 smpos = ((smp.xyz / smp.w) + 1.0) * 0.5;\n";
+    f += "float lflag = float(int(smpos.x <= 0.0) + int(smpos.x >= 1.0)";
+    f += "  + int(smpos.y <= 0.0) + int(smpos.y >= 1.0) == 0);\n";
+  } else {
+    f += "float lflag = 1.0;\n";
+  }
+  f += "float lstr = lflag;\n";
+    /* lstr := 0 for backface */
   if (g.enable_shadowmapping) {
     if (g.enable_depth_texture) {
       if (g.enable_sampler2dshadow) {
@@ -915,10 +1210,10 @@ function string triangles_shader_frag(shader_config const& g, bool instancing)
 }
 
 function {instancing} triangles_shader_ptr{instancing}
-init_triangles_shader(shader_config const& g)
+init_triangles_shader(shader_config const& g, int opt)
 {
-  const v = triangles_shader_vert(g, instancing != 0);
-  const f = triangles_shader_frag(g, instancing != 0);
+  const v = triangles_shader_vert(g, instancing != 0, opt);
+  const f = triangles_shader_frag(g, instancing != 0, opt);
 //sdllog("triangles_shader", v);
   return
     make_glshader_ptr{
@@ -1496,7 +1791,7 @@ init_main_texture(texture_data mutable& tex_dpat,
 	  } else if (nor == 0xc0c0c0) {
 	    val = 0x77; /* concave left-lower */
 	  } else if (nor == 0x8080c0) {
-	    val = 0x0a; /* emission */
+	    val = 0x0f; /* discard */
 	  }
 	  uibuf[(by * 32 + iy) * tex_w + x] = (val << 24) | col;
 	}

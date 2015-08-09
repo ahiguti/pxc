@@ -114,9 +114,11 @@ public threaded struct async_buffer() {
 }
 
 public threaded struct
-vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0)
+vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0,
+  bool is_sub_drawer0)
 {
   public bool const draw_mode_points = draw_mode_points0;
+  public bool const is_sub_drawer = is_sub_drawer0;
   public size_t const num_float_per_vertex = num_float_per_vertex0;
   public auto_buffer vbo_values;
   public auto_buffer vbo_elems;
@@ -124,7 +126,7 @@ vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0)
   public size_t num_elements;
   public tree_map{string, size_t} vs_names;
   public varray{ptr{vertex_set}} vs_arr;
-  public function ptr{vertex_set} get(string const& name)
+  public function ptr{vertex_set} make_if(string const& name)
   {
     if (const id: vs_names[name]) {
       return vs_arr[id];
@@ -270,8 +272,8 @@ vertex_buffer_draw_elems(vertex_buffer const& bo, size_t vs_id,
   const elem_num = be.vtxs->elements_size_per_copy * num_instance;
   GLenum mode = bo.draw_mode_points ? GL_POINTS :
     use_primitive_restart ? GL_TRIANGLE_FAN : GL_TRIANGLES;
-  //sdllog("draw_elems", be.vtxs->elements_size_per_copy,
-  //  be.vtxs->elements.size());
+//sdllog("draw_elems", elem_num);
+//if (elem_num == 0) { sdllog("elem_num == 0"); }
   if (m::ne{use_draw_range, 0}) {
     const arr_offset = be.vertex_values_offset / bo.num_float_per_vertex;
     const arr_num = be.vtxs->vertex_values_size_per_copy * num_instance
@@ -307,8 +309,9 @@ vertex_buffer_draw_elems_instanced(vertex_buffer const& bo, size_t vs_id,
     }
     GLenum mode = bo.draw_mode_points ? GL_POINTS :
       use_primitive_restart ? GL_TRIANGLE_FAN : GL_TRIANGLES;
-    //sdllog("drawelementsinstanced", static_cast{uint}(mode), elem_num, elem_offset, num_instance);
+//sdllog("drawelementsinstanced", static_cast{uint}(mode), elem_num, elem_offset, num_instance);
     // if (num_instance != 0) {
+//if (elem_num == 0) { sdllog("elem_num == 0"); }
     glDrawElementsInstanced(mode, static_cast{GLsizei}(elem_num),
       GL_UNSIGNED_INT, offset_to_void_cp(elem_offset * 4),
       static_cast{GLsizei}(num_instance));

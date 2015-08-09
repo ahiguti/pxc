@@ -1,22 +1,16 @@
 
-- lineparticle, rect2d, font2の頂点データをdemoappで作っているのをdrawerに
-  移動、そのためにはfont読み込みをdrawerに移動する必要が有る。
+- sdlutil.px ファイルからオプション読み込み
 
-- textureのサイズ power_of_2必要なのか？
+- discardするシェーダはzprepassとshadowmappingのシェーダでもdiscard必要
 
-- 頂点データの作り方を改良、triangles_vertex_attributesのようなものをpublic
-  にしないようにできないか。
+- 頂点データかインスタンスデータが空のときはdrawしない。
 
-- リソース読み込みをdrawerに移す
+- textureのサイズ power_of_2 やめる
+  だいたいの環境で non power of two テクスチャ使えるはず
 
-- use_shadowmap_vp_cpuを廃止しても性能落ちないか各デバイスで確認
-- use_shadowmap_vp_cpuを廃止したらibarrを配列でなくす。
-- motion_stepとprepare_instance_dataを一つのコールバックでするようにする
-- scene_nodeテンプレ引数なくす。
+- num_copies_hintが効いているか確認
 
 - 正方行列ではない行列はGLES3以降
-
-- scene_nodeメモリ食いすぎ
 
 - aggregated_ibuffer 2個 or 3個
 - prepare_instance_data_defaultの効率
@@ -25,16 +19,20 @@
 - テクスチャ、フォントを複数読み込んで利用できるようにする
 - 頂点属性型を整理、num_float的マクロ整理
 
-- シェーダを抽象化
-- 頂点データを入れ替えられるようにする
-- buffer_appendをコード共通化
-- appから必要なdrawerを指定する方法を決める
+- 頂点データを動的に入れ替えられるようにする
 
 ---------------------------------------------------------------------------
 ビルドメモ
 
 iOS8.3でEAGLContext_renderbufferStorageがEXC_ARM_DA_ALIGNで死ぬのを回避
 するにはGPU Frame Captureを無効にする。
+
+windowsビルド
+SDL/
+SDL_image/
+SDL_ttf/
+PXCTest1/
+のように配置
 
 ---------------------------------------------------------------------------
 
@@ -318,4 +316,53 @@ pgs.make_vertex_set("saucer",
   tcallable{gf_poly, {vptr, 
 
 評価コンテキストはthreadedでなければならない。pglshaderはdrawerに対して
+
+---------------------------------------------------------------------------
+triangles_vertex_attributesのようなものをpublicにしない。
+
+glvertex::vertices::push_polygon_distinct{tattr, split_convex}
+これはtattrがpos又はpositionという名前のフィールドを持っていることを
+期待している。glgeometryの中ではpoly_tがvertex_attrの配列で、vertex_attr
+はpos, nor, tan, uvwのそれぞれvec3を持っている。
+glvertex::vertices
+  push_polygon_distinct(cslice{tattr} const& vals);
+  push_point(tattr const& val);
+  push_joint(node_joint const& e);
+
+glbuffer::vertex_set(num_float_per_vertex0)
+  ptr{vertices} vtxs = make_ptr{vertices}(num_float_per_vertex0);
+glbuffer::vertex_buffer(num_float_per_vertex0)
+  varray{ptr{vertex_set}} vs_arr;
+
+---------------------------------------------------------------------------
+シェーダ混在
+
+特定の面だけを別シェーダで描きたいときに使う
+頂点セットを作るときに複数のbo_idへfillする必要がある
+シェーダごとに頂点属性は変わる
+vs_id
+
+頂点データ
+vertex_buffer: 特定シェーダ向けvertex_setの集まり。これにbo_idが振られる。
+  (vbidとbo_idは同じもの)
+vertex_set: 特定シェーダ向け芋一個ぶんの頂点データと
+  vertex_buffer中のオフセット情報。これにvs_idが振られる。
+vertices: 特定シェーダ向け芋一個ぶんの頂点データ(values, elements)。
+
+インスタンスデータ
+aggregated_ibuffer: async_bufferが3つ。
+async_buffer: 1フレーム1回glBufferDataでまとめて送る全インスタンスデータ。
+whole_instances_type: 1フレームの全インスタンスデータ。async_bufferにコピー。
+bo_instances_type: 特定シェーダ向け全インスタンスデータ。
+instance_data: 特定の芋一個向けインスタンスデータ。async_buffer中のオフセット。
+
+実現方法
+- subdrawerなるものを作れるようにする。subdrawerはそれ自体用のインスタンス
+  データを持たず、関連するmain_drawerのインスタンスデータを使って描画する。
+- zprepass, shadowmappingは共通化すると効率良いかもしれないが後回し。
+- 「このbo_idは別bo_idのインスタンスデータを使って描画せよ」
+  pglshader_draw_frameのpd->draw()中、whole_instances[bo_id]を渡している
+  部分、これをmain_drawerのbo_idに変換すればよい。
+- subdrawerとmaindrawerは別々の頂点データを持つ。
+- plshader::make_vertex_setで複数のdrawer名を指定できるようにする。
 

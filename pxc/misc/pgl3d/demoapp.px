@@ -12,6 +12,22 @@ public import pgl3d::wfobj -;
 public import pgl3d::drawer_export -;
 public import pgl3d::device_motion -;
 
+// FIXME
+public import pgl3d::sdlutil -;
+{
+  string cnf;
+  sdl_load_file("pgl3d.cnf", cnf);
+  // println(cnf);
+  string_map m;
+  split_foreach{function void(cstrref const& line) {
+    const a = make_farray_split{2}(line, '=');
+    if (!a[0].empty()) {
+      m[a[0]] = a[1];
+    }
+  }}(cnf, '\n');
+  println("map=", m);
+}
+
 // FIXME: projection_infoではなくscreen_infoだけ渡すように
 
 // public import pushtest -;
@@ -25,7 +41,7 @@ public struct demoapp_application()
   <pgl3d_application>
 {	
   public app_impl app;
-  public function varray{ptr{pgldrawer_export_i}} on_init_drawers(
+  public function tree_map{string, ptr{pgldrawer_export_i}} on_init_drawers(
     shader_config const& conf) {
     return init_drawers(app, conf);
   }
@@ -33,12 +49,12 @@ public struct demoapp_application()
     build_vertices(app, mvx);
   }
   public function void on_event(SDL_Event const& ev, float speed,
-    projection_info const& pjinfo) {
-    handle_event(app, ev, speed, pjinfo);
+    projection_info const& pjinfo, string_map mutable& commands_r) {
+    handle_event(app, ev, speed, pjinfo, commands_r);
   }
   public function void on_scankeys(cslice{Uint8} const& keys, float speed,
-    projection_info const& pjinfo) {
-    handle_keys(app, keys, speed, pjinfo);
+    projection_info const& pjinfo, string_map mutable& commands_r) {
+    handle_keys(app, keys, speed, pjinfo, commands_r);
   }
   public function tptr{pgl3d_scene_shared} get_scene_shared() {
     return app.scene_shared;
@@ -82,7 +98,7 @@ public threaded struct demoapp_scene(node_factory const& nodefac0)
     cslice{prepare_instance_data_funcptr} const& ftable,
     whole_instances_type mutable& whole_instances,
     pgl3d_scene_shared mutable& ss, position_angle mutable& camera_r,
-    position_angle mutable& light_r)
+    position_angle mutable& light_r, string_map mutable& commands_r)
   {
     mutable& dss = downcast_mutable{demoapp_scene_shared}(ss);
     // const t0 = io::debug_system().gettimeofday_double();
@@ -412,7 +428,8 @@ input_control(io const& iop)
 }
 
 function void handle_event(app_impl mutable& app,
-  SDL_Event const& ev, float frame_speed, projection_info const& pjinfo)
+  SDL_Event const& ev, float frame_speed, projection_info const& pjinfo,
+  string_map mutable& commands_r)
 {
   const etype = ev.type;
   if (etype == SDL_WINDOWEVENT) {
@@ -474,11 +491,15 @@ function void handle_event(app_impl mutable& app,
   } else if (etype == SDL_APP_WILLENTERBACKGROUND) {
   } else if (etype == SDL_APP_DIDENTERFOREGROUND) {
   } else if (etype == SDL_KEYDOWN) {
-    // sdllog("KEYDOWN event");
+    sdllog("KEYDOWN event", static_cast{int}(ev.key.keysym.scancode));
     if (ev.key.keysym.scancode == SDL_SCANCODE_TAB) {
       app.scene_next_flag = true;
     }
-    if (ev.key.keysym.scancode == SDL_SCANCODE_F) {
+    if (ev.key.keysym.scancode == SDL_SCANCODE_0) {
+      commands_r["fullscreen"] = "1";
+    }
+    if (ev.key.keysym.scancode == SDL_SCANCODE_LEFTBRACKET) {
+      commands_r["vsync"] = "1";
     }
   } else {
     string s;
@@ -489,7 +510,8 @@ function void handle_event(app_impl mutable& app,
 }
 
 function void handle_keys(app_impl mutable& app,
-  cslice{Uint8} const& keys, float frame_speed, projection_info const& pjinfo)
+  cslice{Uint8} const& keys, float frame_speed, projection_info const& pjinfo,
+  string_map mutable& commands_r)
 {
   function uint get_key(SDL_Scancode k) {
     return keys[static_cast{uint}(k)];
@@ -563,39 +585,24 @@ function void handle_keys(app_impl mutable& app,
   }
 }
 
-private function varray{ptr{pgldrawer_export_i}} init_drawers(
+private function tree_map{string, ptr{pgldrawer_export_i}} init_drawers(
   app_impl mutable& app, shader_config const& sconf)
 {
-  varray{ptr{pgldrawer_export_i}} r;
-  r.push_back(make_drawer_triangles(sconf));
-  r.push_back(make_drawer_triangles2(sconf));
-  r.push_back(make_drawer_lineparticle(sconf));
-  r.push_back(make_drawer_particle(sconf));
-  r.push_back(make_drawer_particle_bb(sconf));
-  r.push_back(make_drawer_rect2d(sconf));
-  r.push_back(make_drawer_font2(sconf));
+  tree_map{string, ptr{pgldrawer_export_i}} r;
+  r.insert("drawer_triangles", make_drawer_triangles(sconf, 0));
+  r.insert("drawer_triangles_alt", make_drawer_triangles(sconf, 1));
+  r.insert("drawer_triangles2", make_drawer_triangles2(sconf));
+  r.insert("drawer_lineparticle", make_drawer_lineparticle(sconf));
+  r.insert("drawer_particle", make_drawer_particle(sconf));
+  r.insert("drawer_particle_bb", make_drawer_particle_bb(sconf));
+  r.insert("drawer_rect2d", make_drawer_rect2d(sconf));
+  r.insert("drawer_font2", make_drawer_font2(sconf));
   return r;
 }
 
 private function void build_vertices(app_impl mutable& app,
   make_vertices_i mutable& pgs)
 {
-  metafunction tattr triangles_vertex_attributes;
-  metafunction fill_v fill{tattr};
-  metafunction joint_v poly_joint{tattr};
-  metafunction point_joint_v point_joint{tattr};
-  metafunction tattr2 triangles2_vertex_attributes;
-  metafunction fill2_v fill{tattr2};
-  metafunction joint2_v poly_joint{tattr2};
-  metafunction point2_joint_v point_joint{tattr2};
-  const vbid_triangles = pgs.to_vbid("vbid_triangles");
-  const vbid_triangles2 = pgs.to_vbid("vbid_triangles2");
-  const vbid_particle = pgs.to_vbid("vbid_particle");
-  const vbid_particle_bb = pgs.to_vbid("vbid_particle_bb");
-  const vbid_font2 = pgs.to_vbid("vbid_font2");
-  const vbid_lineparticle = pgs.to_vbid("vbid_lineparticle");
-  const vbid_rect2d = pgs.to_vbid("vbid_rect2d");
-
   /* import */
   const objs = make_farray{string}(
       "parts"
@@ -604,6 +611,11 @@ private function void build_vertices(app_impl mutable& app,
       // "skyscraper",
       // "airboat"
       );
+  const tr = make_varray{string}("drawer_triangles", "drawer_triangles_alt");
+  // const tr = make_varray{string}("drawer_triangles");
+  const tr2 = make_varray{string}("drawer_triangles2");
+  const parti = make_varray{string}("drawer_particle");
+  const parti_bb = make_varray{string}("drawer_particle_bb");
   for (const i, const name: objs) {
     string fn = name + ".obj";
     sdllog("load", fn);
@@ -612,420 +624,104 @@ private function void build_vertices(app_impl mutable& app,
       // v *= 10.0f;
     }
     for (const k, const g: wfobjp->groups) {
-      pgs.make_vertex_set("vbid_triangles2", name,
-	import_wfobj(*wfobjp, *g, ctx_fill()));
+      pgs.make_vertex_set(tr, name,
+	import_wfobj(*wfobjp, *g, ctx_fill(0)));
     }
-    /*
-    const vtxs = pgs.make_vertices(vbid_triangles2, name);
-    const t = fill2_v(vtxs);
-    for (const k, const g: wfobjp->groups) {
-      // debug_log("group", k, *g);
-      import_wfobj(*wfobjp, *g, t)(build_context(), poly_t(), mesh_index());
-      // break;
-    }
-    vtxs->num_copies_hint = 32;
-    */
   }
   sdllog("load prebuild");
-  /*
-  {
-    const vtx = pgs.make_vertices(vbid_triangles, "ab-multi");
-    const t = fill_v(vtx);
-    regular_polygon(50.0, 30,
-      bump_rec(1.0, 1.0, 1, joint_v(vtx, "airboat", hole()), hole()),
-      hole())
-      (build_context(), poly_t(), mesh_index());
-  }
-  */
-  {
-    pgs.make_vertex_set("vbid_triangles", "saucer",
-      regular_polygon(3.0, 40,
-	bump_rec(0.2, 0.5, 1, ctx_fill(), ctx_fill()),
-	bump_rec(0.01, 0.9, 5,
-	  ctx_fill(),
-	  sphere(10, ctx_fill_smooth()))));
-  }
-  /*
-  {
-    const vtxs = pgs.make_vertices(vbid_triangles, "saucer");
-    const fsmooth = fill_smooth{tattr}(vtxs);
-    const t = fill_v(vtxs);
+  mutable rnd = make_rand_generator(1U);
+  mutable m = glm::mat4();
+  pgs.make_vertex_set(tr, "saucer",
     regular_polygon(3.0, 40,
-      bump_rec(0.2, 0.5, 1, t, t),
+      bump_rec(0.2, 0.5, 1, ctx_fill(0), ctx_fill(0)),
       bump_rec(0.01, 0.9, 5,
-	t,
-	sphere(10, fsmooth)))
-      (build_context(), poly_t(), mesh_index());
-    vtxs->num_copies_hint = 32;
-  }
-  */
-  {
-    pgs.make_vertex_set("vbid_triangles", "saucer-multi",
-    regular_polygon(15.0, 3,
-      bump_rec(1.0, 1.0, 1, ctx_poly_joint("saucer"), hole()),
-      hole()));
-  }
-  /*
-  {
-    const vtx = pgs.make_vertices(vbid_triangles, "saucer-multi");
-    const t = fill_v(vtx);
-    regular_polygon(15.0, 3,
-      bump_rec(1.0, 1.0, 1, joint_v(vtx, "saucer", hole()), hole()),
-      hole())
-      (build_context(), poly_t(), mesh_index());
-  }
-  */
-  {
-    pgs.make_vertex_set("vbid_triangles", "block-multi",
-      regular_polygon(600.0, 4,
-	rectangle_split(9, 8, ctx_poly_joint("block")),
-	hole()));
-  }
-  /*
-  {
-    const vtx = pgs.make_vertices(vbid_triangles, "block-multi");
-    const t = fill_v(vtx);
+	ctx_fill(0),
+	sphere(10, ctx_fill_smooth(1)))));
+  pgs.make_vertex_set(tr, "saucer-multi",
+  regular_polygon(15.0, 3,
+    bump_rec(1.0, 1.0, 1, ctx_poly_joint("saucer"), hole()),
+    hole()));
+  pgs.make_vertex_set(tr, "block-multi",
     regular_polygon(600.0, 4,
-      rectangle_split(9, 8, joint_v(vtx, "block", hole())),
-      hole())
-      (build_context(), poly_t(), mesh_index());
-  }
-  */
-  {
-    const rnd = make_rand_generator(1U);
-    pgs.make_vertex_set("vbid_triangles", "block",
-      regular_polygon(50.0, 4,
-	rotate_local(glm::make_quat_angle_axis(to_radians(45.0),
-	  0.0, 0.0, 1.0),
-	  rectangle_split(30, 30,
-	    rand_bump(1, 0.8, 0.2, 0.8, 0.2, 0.8, 1.0, 4.0, rnd,
-	      ctx_fill(), ctx_fill(), ctx_fill()))),
-	rotate_local(glm::make_quat_angle_axis(to_radians(-45.0),
-	  0.0, 0.0, 1.0),
-	  bump_rec(0.01, 1.0, 1, ctx_fill(), ctx_fill()))));
-  }
-  /*
-  {
-    const vtx = pgs.make_vertices(vbid_triangles2, "block");
-    const t = fill2_v(vtx);
-    const rnd = make_rand_generator(1U);
+      rectangle_split(9, 8, ctx_poly_joint("block")),
+      hole()));
+  rnd = make_rand_generator(1U);
+  pgs.make_vertex_set(tr, "block",
     regular_polygon(50.0, 4,
-      rotate_local(glm::make_quat_angle_axis(to_radians(45.0), 0.0, 0.0, 1.0),
+      rotate_local(glm::make_quat_angle_axis(to_radians(45.0),
+	0.0, 0.0, 1.0),
 	rectangle_split(30, 30,
 	  rand_bump(1, 0.8, 0.2, 0.8, 0.2, 0.8, 1.0, 4.0, rnd,
-	    t, t, t))),
-      rotate_local(glm::make_quat_angle_axis(to_radians(-45.0), 0.0, 0.0, 1.0),
-	bump_rec(0.01, 1.0, 1, t, t)))
-      (build_context(), poly_t(), mesh_index());
-  }
-  */
-  {
-    mutable m = glm::mat4()
-      .translate(glm::make_vec3(0.0, 0.0, 1.0))
-      .rotate(to_radians(10.0), glm::make_vec3(0.0, 0.0, 1.0));
-    pgs.make_vertex_set("vbid_triangles", "bullet",
-      regular_polygon(1.0, 6,
-	bump_apply(m, false, ctx_fill(), ctx_fill()),
-	bump_apply(m, false, ctx_fill(), ctx_fill())));
-  }
-  /*
-  {
-    const vtx = pgs.make_vertices(vbid_triangles, "bullet");
-    const t = fill_v(vtx);
-    mutable m = glm::mat4()
-      .translate(glm::make_vec3(0.0, 0.0, 1.0))
-      .rotate(to_radians(10.0), glm::make_vec3(0.0, 0.0, 1.0));
+	    ctx_fill(1), ctx_fill(1), ctx_fill(1)))),
+      rotate_local(glm::make_quat_angle_axis(to_radians(-45.0),
+	0.0, 0.0, 1.0),
+	bump_rec(0.01, 1.0, 1, ctx_fill(0), ctx_fill(0)))));
+  m = glm::mat4()
+    .translate(glm::make_vec3(0.0, 0.0, 1.0))
+    .rotate(to_radians(10.0), glm::make_vec3(0.0, 0.0, 1.0));
+  pgs.make_vertex_set(tr, "bullet",
     regular_polygon(1.0, 6,
-      bump_apply(m, false, t, t),
-      bump_apply(m, false, t, t))
-      (build_context(), poly_t(), mesh_index());
-    vtx->num_copies_hint = 32;
-  }
-  */
-  {
-    // 60fps, macosx/linux mbp gt750m
-    pgs.make_vertex_set("vbid_triangles", "bullet-multi",
-      regular_polygon(600.0, 4,
-	rectangle_split(170, 170, ctx_poly_joint("bullet")),
-	hole()));
-  }
-  /*
-  {
-    // 60fps, macosx/linux mbp gt750m
-    const vtx = pgs.make_vertices(vbid_triangles, "bullet-multi");
-    const t = fill_v(vtx);
+      bump_apply(m, false, ctx_fill(0), ctx_fill(0)),
+      bump_apply(m, false, ctx_fill(0), ctx_fill(0))));
+  // 60fps, macosx/linux mbp gt750m
+  pgs.make_vertex_set(tr, "bullet-multi",
     regular_polygon(600.0, 4,
-      rectangle_split(170, 170, joint_v(vtx, "bullet", hole())),
-      hole())
-      (build_context(), poly_t(), mesh_index());
-  }
-  */
-  {
-    mutable m = glm::mat4()
-      .translate(glm::make_vec3(0.0, 0.0, 1.0))
-      .rotate(10.0, glm::make_vec3(0.0, 0.0, 1.0));
-    pgs.make_vertex_set("vbid_triangles", "bullet2",
-      regular_polygon(1.0, 5,
-	bump_rec(3.8, 0.8, 1, ctx_fill(), ctx_fill()),
-	bump_rec(0.8, 0.8, 1, ctx_fill(), ctx_fill())));
-  }
-  /*
-  {
-    const vtx = pgs.make_vertices(vbid_triangles, "bullet2");
-    const t = fill_v(vtx);
-    mutable m = glm::mat4()
-      .translate(glm::make_vec3(0.0, 0.0, 1.0))
-      .rotate(10.0, glm::make_vec3(0.0, 0.0, 1.0));
+      rectangle_split(170, 170, ctx_poly_joint("bullet")),
+      hole()));
+  m = glm::mat4()
+    .translate(glm::make_vec3(0.0, 0.0, 1.0))
+    .rotate(10.0, glm::make_vec3(0.0, 0.0, 1.0));
+  pgs.make_vertex_set(tr, "bullet2",
     regular_polygon(1.0, 5,
-      bump_rec(3.8, 0.8, 1, t, t),
-      bump_rec(0.8, 0.8, 1, t, t))
-      (build_context(), poly_t(), mesh_index());
-    vtx->num_copies_hint = 32;
-  }
-  */
-  /*
-  if (false) {
-    // 60fbp mbp intel gpu
-    const vtx = pgs.make_vertices(vbid_triangles, "bullet2-multi");
-    const t = fill_v(vtx);
-    const rnd = make_rand_generator(991U);
-    rand_sphere(200.0, 40000, false, false, rnd,
-      joint_v(vtx, "bullet2", hole()))
-      (build_context(), poly_t(), mesh_index());
-  }
-  */
-  {
-    const rnd = make_rand_generator(991U);
-    pgs.make_vertex_set("vbid_triangles", "bullet2-multi",
-      rand_sphere(200.0, 37000, false, true, rnd,
-	ctx_point_joint("bullet2")));
-  }
-  /*
-  {
-    const vtx = pgs.make_vertices(vbid_triangles, "bullet2-multi");
-    const t = fill_v(vtx);
-    const rnd = make_rand_generator(991U);
+      bump_rec(3.8, 0.8, 1, ctx_fill(1), ctx_fill(1)),
+      bump_rec(0.8, 0.8, 1, ctx_fill(0), ctx_fill(0))));
+  rnd = make_rand_generator(991U);
+  pgs.make_vertex_set(tr, "bullet2-multi",
     rand_sphere(200.0, 37000, false, true, rnd,
-      point_joint_v(vtx, "bullet2", hole()))
-      (build_context(), poly_t(), mesh_index());
-  }
-  */
-  {
-    const rnd = make_rand_generator(991U);
-    pgs.make_vertex_set("vbid_triangles", "block-multi2",
-      rand_sphere(500.0, 200, false, true, rnd,
-	ctx_point_joint("block")));
-  }
-  /*
-  {
-    const vtx = pgs.make_vertices(vbid_triangles, "block-multi2");
-    const t = fill_v(vtx);
-    const rnd = make_rand_generator(991U);
+      ctx_point_joint("bullet2")));
+  rnd = make_rand_generator(991U);
+  pgs.make_vertex_set(tr, "block-multi2",
     rand_sphere(500.0, 200, false, true, rnd,
-      point_joint_v(vtx, "block", hole()))
-      (build_context(), poly_t(), mesh_index());
-  }
-  */
-  {
-    const rnd = make_rand_generator(991U);
-    pgs.make_vertex_set("vbid_triangles", "bullet2-multi2",
-      rand_sphere(200.0, 20000, false, true, rnd,
-	ctx_point_joint("bullet2")));
-  }
-  /*
-  {
-    const vtx = pgs.make_vertices(vbid_triangles, "bullet2-multi2");
-    const t = fill_v(vtx);
-    const rnd = make_rand_generator(991U);
+      ctx_point_joint("block")));
+  rnd = make_rand_generator(991U);
+  pgs.make_vertex_set(tr, "bullet2-multi2",
     rand_sphere(200.0, 20000, false, true, rnd,
-      point_joint_v(vtx, "bullet2", hole()))
-      (build_context(), poly_t(), mesh_index());
-  }
-  */
-  {
-    const rnd = make_rand_generator(991U);
-    pgs.make_vertex_set("vbid_triangles", "bullet2-multi3",
-      rand_sphere(200.0, 2000, false, true, rnd,
-	ctx_point_joint("bullet2")));
-  }
-  /*
-  {
-    const vtx = pgs.make_vertices(vbid_triangles, "bullet2-multi3");
-    const t = fill_v(vtx);
-    const rnd = make_rand_generator(991U);
+      ctx_point_joint("bullet2")));
+  rnd = make_rand_generator(991U);
+  pgs.make_vertex_set(tr, "bullet2-multi3",
     rand_sphere(200.0, 2000, false, true, rnd,
-      point_joint_v(vtx, "bullet2", hole()))
-      (build_context(), poly_t(), mesh_index());
-  }
-  */
-  {
-    pgs.make_vertex_set("vbid_triangles", "bullet-multi-2",
-      regular_polygon(600.0, 4,
-	rectangle_split(80, 80, ctx_poly_joint("bullet")),
-	hole()));
-  }
-  /*
-  {
-    const vtx = pgs.make_vertices(vbid_triangles, "bullet-multi-2");
-    const t = fill_v(vtx);
+      ctx_point_joint("bullet2")));
+  pgs.make_vertex_set(tr, "bullet-multi-2",
     regular_polygon(600.0, 4,
-      rectangle_split(80, 80, joint_v(vtx, "bullet", hole())),
-      hole())
-      (build_context(), poly_t(), mesh_index());
-  }
-  */
-  {
-    const rnd = make_rand_generator(991U);
-    pgs.make_vertex_set("vbid_triangles", "saucer-multi3",
-      rand_sphere(200.0, 200, false, true, rnd,
-	ctx_point_joint("saucer")));
-  }
-  /*
-  {
-    const vtx = pgs.make_vertices(vbid_triangles, "saucer-multi3");
-    const t = fill_v(vtx);
-    const rnd = make_rand_generator(991U);
+      rectangle_split(80, 80, ctx_poly_joint("bullet")),
+      hole()));
+  rnd = make_rand_generator(991U);
+  pgs.make_vertex_set(tr, "saucer-multi3",
     rand_sphere(200.0, 200, false, true, rnd,
-      point_joint_v(vtx, "saucer", hole()))
-      (build_context(), poly_t(), mesh_index());
-  }
-  */
-  {
-    const rnd = make_rand_generator(991U);
-    pgs.make_vertex_set("vbid_triangles", "ab-multi3",
-      rand_sphere(100.0, 100, false, true, rnd,
-	ctx_point_joint("airboat")));
-  }
-  /*
-  {
-    const vtx = pgs.make_vertices(vbid_triangles, "ab-multi3");
-    const t = fill_v(vtx);
-    const rnd = make_rand_generator(991U);
+      ctx_point_joint("saucer")));
+  rnd = make_rand_generator(991U);
+  pgs.make_vertex_set(tr, "ab-multi3",
     rand_sphere(100.0, 100, false, true, rnd,
-      point_joint_v(vtx, "airboat", hole()))
-      (build_context(), poly_t(), mesh_index());
-  }
-  */
-  {
-    const rnd = make_rand_generator(1U);
-    pgs.make_vertex_set("vbid_particle", "particle",
-      rand_sphere(1.0, 100, true, true, rnd, ctx_fill()));
-  }
-  /*
-  {
-    const vtx = pgs.make_vertices(vbid_particle, "particle");
-    const p = particle(vtx);
-    const rnd = make_rand_generator(1U);
-    rand_sphere(1.0, 100, true, true, rnd, p)
-    //rand_sphere(1.0, 250, true, rnd, p)
-      (build_context(), poly_t(), mesh_index());
-  }
-  */
-  /*
-  {
-    const rnd = make_rand_generator(991U);
-    pgs.make_vertex_set("vbid_particle", "particle-multi",
-      rand_sphere(60.0, 30000, true, true, rnd,
-	ctx_point_joint("particle")));
-  }
-  */
-  {
-    const vtx = pgs.make_vertices(vbid_particle, "particle-multi");
-    const rnd = make_rand_generator(991U);
+      ctx_point_joint("airboat")));
+  rnd = make_rand_generator(1U);
+  pgs.make_vertex_set(parti, "particle",
+    rand_sphere(1.0, 100, true, true, rnd, ctx_fill(0)));
+  rnd = make_rand_generator(991U);
+  pgs.make_vertex_set(parti, "particle-multi",
     rand_sphere(60.0, 30000, true, true, rnd,
-      point_joint_v(vtx, "particle", hole()))
-      (build_context(), poly_t(), mesh_index());
-  }
-  /*
-  */
-  {
-    const rnd = make_rand_generator(1U);
-    pgs.make_vertex_set("vbid_particle_bb", "particle-bb",
-      rand_sphere(1.0, 100, true, true, rnd, ctx_fill()));
-  }
-  /*
-  {
-    const vtx = pgs.make_vertices(vbid_particle_bb, "particle-bb");
-    const p = particle_bb(vtx);
-    const rnd = make_rand_generator(1U);
-    rand_sphere(1.0, 100, true, true, rnd, p)
-      (build_context(), poly_t(), mesh_index());
-  }
-  */
-  {
-    const rnd = make_rand_generator(991U);
-    pgs.make_vertex_set("vbid_particle_bb", "particle-bb-multi",
-      rand_sphere(60.0, 10000, true, true, rnd,
-	ctx_point_joint("particle-bb")));
-  }
-  /*
-  {
-    const vtx = pgs.make_vertices(vbid_particle_bb, "particle-bb-multi");
-    const rnd = make_rand_generator(991U);
+      ctx_point_joint("particle")));
+  rnd = make_rand_generator(1U);
+  pgs.make_vertex_set(parti, "particle-bb",
+    rand_sphere(1.0, 100, true, true, rnd, ctx_fill(0)));
+  rnd = make_rand_generator(991U);
+  pgs.make_vertex_set(parti_bb, "particle-bb-multi",
     rand_sphere(60.0, 10000, true, true, rnd,
-      point_joint_v(vtx, "particle-bb", hole()))
-      (build_context(), poly_t(), mesh_index());
-  }
-  */
-  {
-    pgs.make_vertex_set("vbid_particle_bb", "mixed",
-      regular_polygon(1.0, 5,
-	bump_rec(1.0, 10.0, 1, hole(), ctx_poly_joint("saucer")),
-	ctx_poly_joint("particle-bb")));
-  }
-  /*
-  {
-    const vtx = pgs.make_vertices(vbid_particle_bb, "mixed");
+      ctx_point_joint("particle-bb")));
+  pgs.make_vertex_set(parti_bb, "mixed",
     regular_polygon(1.0, 5,
-      bump_rec(1.0, 10.0, 1, hole(), joint_v(vtx, "saucer", hole())),
-      // joint_v(vtx, "bullet2", hole()),
-      // joint_v(vtx, "particle", hole()),
-      joint_v(vtx, "particle-bb", hole()))
-      (build_context(), poly_t(), mesh_index());
-  }
-  */
-  {
-    /* for lineparticle shader */
-    const vtx = pgs.make_vertices(vbid_lineparticle, "lineparticle");
-    farray{lineparticle_vertex_attributes, 4} vs;
-    vs[0].vert = glm::make_vec2(0.0, -0.5);
-    vs[1].vert = glm::make_vec2(1.0, -0.5);
-    vs[2].vert = glm::make_vec2(1.0, 0.5);
-    vs[3].vert = glm::make_vec2(0.0, 0.5);
-    vtx->push_polygon_distinct{lineparticle_vertex_attributes, 0}(vs);
-  }
-  {
-    /* for rect2d shader */
-    const vtx = pgs.make_vertices(vbid_rect2d, "rect2d");
-    farray{rect2d_vertex_attributes, 4} vs;
-    vs[0].vert = glm::make_vec2(0.0, 0.0);
-    vs[1].vert = glm::make_vec2(1.0, 0.0);
-    vs[2].vert = glm::make_vec2(1.0, 1.0);
-    vs[3].vert = glm::make_vec2(0.0, 1.0);
-    vtx->push_polygon_distinct{rect2d_vertex_attributes, 0}(vs);
-  }
-  {
-    /* for font2 shader */
-    const vtx = pgs.make_vertices(vbid_font2, "default_font");
-    const ti = pgs.get_texture_info("font");
-    const char_w = static_cast{float}(ti.char_w);
-    const char_h = static_cast{float}(ti.char_h);
-    const point_size = static_cast{float}(max(ti.char_w, ti.char_h));
-    const char_size_px = glm::make_vec2(char_w, char_h);
-    const texture_size_px = glm::make_vec2(
-      static_cast{float}(ti.surface_w),
-      static_cast{float}(ti.surface_h));
-    const clamp_x = char_w / point_size;
-    const clamp_y = char_h / point_size;
-    font2_vertex_attributes v;
-    v.char_size_px = char_size_px;
-    v.texture_size_px = texture_size_px;
-    v.texture_origin_px = glm::make_vec2(0.0, 0.0);
-    v.coord_clamp = glm::make_vec2(clamp_x, clamp_y);
-    v.char_px = static_cast{float}(ti.char_w);
-    v.char_point_size = point_size;
-    vtx->push_point{font2_vertex_attributes}(v);
-  }
+      bump_rec(1.0, 10.0, 1, hole(), ctx_poly_joint("saucer")),
+      ctx_poly_joint("particle-bb")));
+
   /* save default font metrics */
   app.scene_shared->default_font_texture_info = pgs.get_texture_info("font");
 }
@@ -1046,7 +742,7 @@ scene_control(node_factory const& nfac)
 {
   public node_factory nodefac = nfac;
   public float prev_spawn = 0.0;
-  public int motion_count = 0;
+  public float motion_count = 0.0;
   public joint_id_type joint_id_lp =
     nodefac.get_joint_id_by_name("lineparticle");
   public joint_id_type joint_id_font =
@@ -1217,7 +913,7 @@ scene_control_step(scene_control mutable& sctl,
       mutable& csn = csnp;
       sn_work.joint_id = csn.joint_id;
       sn_work.trans = csn.trans.rotate(
-	to_radians(static_cast{float}(sctl.motion_count)),
+	to_radians(sctl.motion_count),
 	glm::make_vec3(1.0, 0.0, 0.0));
       if (spawn_now) {
 	spawn_lp(sctl, sn_work.trans, speed);
@@ -1235,9 +931,9 @@ scene_control_step(scene_control mutable& sctl,
     }
   }
   step_snobj(sctl.node_scene);
-  sctl.motion_count += 1 * static_cast{int}(speed);
-  if (sctl.motion_count >= 360) {
-    sctl.motion_count -= 360;
+  sctl.motion_count += speed;
+  if (sctl.motion_count >= 360.0) {
+    sctl.motion_count -= 360.0;
   }
 }
 

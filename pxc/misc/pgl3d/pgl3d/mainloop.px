@@ -99,63 +99,46 @@ private function int set_swap_interval(int vsync)
 struct
 framerate_control(int vsync0)
 {
-  public int const vsync = vsync0;
-  public int const swap_interval = set_swap_interval(vsync0);
-  public double time_before_swapwindow = io::system.gettimeofday_double();
-  public farray{double, 2} frame_intervals;
-  public double sleep_carry = 0.0;
-  public double max_fps = 60.0;
-  public double target_interval = 1.0 / max_fps;
+  public int vsync = vsync0;
+  public int swap_interval = set_swap_interval(vsync0);
+  public ulonglong const timer_res
+    = io::system.high_resolution_timer_frequency();
+  public double const timer_res_inv = 1.0 / static_cast{double}(timer_res);
+  public farray{ulonglong, 12} values;
+  public size_t cur = 0;
   public float frame_speed_mul = 1.0;
+  public float target_frame_speed_mul = 1.0;
+  public function void toggle_vsync()
+  {
+    vsync = vsync != 0 ? 0 : 1;
+    sdllog("vsync=", vsync);
+    swap_interval = set_swap_interval(vsync);
+  }
   public function void start()
   {
-    target_interval = 1.0 / max_fps;
-    for (const i, mutable& v: frame_intervals) {
-      v = target_interval;
+    const t = io::system.high_resolution_timer();
+    sdllog("t=", t);
+    for (const i, mutable& v: values) {
+      v = t;
     }
-    time_before_swapwindow = io::system.gettimeofday_double();
+    cur = 0;
   }
   public function void control()
   {
-    const now = io::system.gettimeofday_double();
-    const cur_interval = max(now - time_before_swapwindow, 0.0);
-    double sum_interval = cur_interval;
-    for (const i: 0 .. frame_intervals.size() - 1) {
-      const v = frame_intervals[i + 1];
-      frame_intervals[i] = v;
-      sum_interval += v;
+    const t = io::system.high_resolution_timer();
+    // sdllog("t=", t);
+    const t0 = values[cur];
+    values[cur] = t;
+    mutable tdiff = static_cast{double}(t - t0) * timer_res_inv
+      / static_cast{double}(values.size());
+    if (tdiff < 0.0001 || tdiff > 1.0) {
+      tdiff = 1.0 / 60.0;
     }
-    if (frame_intervals.size() > 1) {
-      frame_intervals[frame_intervals.size() - 1] = cur_interval;
+    target_frame_speed_mul = static_cast{float}(tdiff * 60.0);
+    frame_speed_mul = target_frame_speed_mul;
+    if (++cur >= values.size()) {
+      cur = 0;
     }
-    const avg_interval = sum_interval
-      / static_cast{double}(frame_intervals.size());
-    if (target_interval > avg_interval) {
-      mutable tfr = 1.0 / target_interval;
-      //if (target_interval > 0.1) {
-//	tfr = 1.0 / cur_interval;
-//      } else
-      {
-	// tfr += max(0.1, target_interval * 3.0f);
-	// tfr += target_interval * 10.0f;
-	tfr += 0.1f;
-      }
-      tfr = max(min(tfr, max_fps), 1.0);
-      target_interval = 1.0 / tfr;
-    } else {
-      target_interval = avg_interval;
-    }
-    const sleep_sec = target_interval - cur_interval + sleep_carry;
-//sdllog("target", target_interval, "cur", cur_interval, "sleep", sleep_sec);
-    if (sleep_sec > 0.01) {
-      const ss = min(sleep_sec, 0.1);
-      // io::system.usleep(static_cast{uint}((ss - 0.01) * 1000000.0));
-    }
-    time_before_swapwindow = io::system.gettimeofday_double();
-    const slept = time_before_swapwindow - now;
-    sleep_carry = max(min(sleep_sec - slept, 0.1), -0.1);
-    // FIXME
-    // frame_speed_mul = static_cast{float}(target_interval * 60.0);
   }
 }
 
@@ -180,7 +163,8 @@ private function void mainloop_internal(pgl3d_application mutable& app)
 
   shader_config sconf = shader_config(sdlc.gles_flag, sdlc.glmajor,
     sdlc.glminor, sdlc.enable_msaa);
-  varray{ptr{pgldrawer_export_i}} drawers = app.on_init_drawers(sconf);
+  tree_map{string, ptr{pgldrawer_export_i}} drawers
+    = app.on_init_drawers(sconf);
   pglshader pgs = pglshader(sconf, drawers, sdlc.init_w, sdlc.init_h);
   /*
   pglshader pgs = pglshader(sdlc.gles_flag, sdlc.glmajor, sdlc.glminor,
@@ -208,6 +192,30 @@ private function void mainloop_internal(pgl3d_application mutable& app)
 
   frame_statistics mutable fr;
   framerate_control mutable frctl = framerate_control(sdlc.vsync);
+
+  int fullscreen = 0;
+  function void toggle_fullscreen()
+  {
+    fullscreen = fullscreen != 0 ? 0 : 1;
+    sdllog("fullscreen=", fullscreen);
+    SDL_SetWindowFullscreen(sdlc.sdl_window,
+      fullscreen != 0 ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+  }
+
+  string_map commands;
+  function void do_commands()
+  {
+    if (!commands.empty()) {
+      for (const& k, const& v: commands) {
+	if (k == "vsync") {
+	  frctl.toggle_vsync();
+	} else if (k == "fullscreen") {
+	  toggle_fullscreen();
+	}
+      }
+      commands.clear();
+    }
+  }
 
   bool done = false;
   bool paused = false;
@@ -243,26 +251,21 @@ private function void mainloop_internal(pgl3d_application mutable& app)
 	  sdllog("window event ", cast_int(ev.window.event));
 	  */
 	}
-      } else if (etype == SDL_KEYDOWN) {
-	sdllog("keydown");
-	if (ev.key.keysym.scancode == SDL_SCANCODE_F) {
-	  sdllog("fullscreen");
-	  SDL_SetWindowFullscreen(sdlc.sdl_window,
-	    SDL_WINDOW_FULLSCREEN_DESKTOP);
-	}
       } else if (etype == SDL_QUIT) {
 	done = true;
 	break;
       }
       /* invoke event handler */
-      app.on_event(ev, frctl.frame_speed_mul, pgs.cam);
+      app.on_event(ev, frctl.frame_speed_mul, pgs.cam, commands);
+      do_commands();
     }
     {
       int numkeys;
       const ksp = SDL_GetKeyboardState(address(numkeys));
       const ks = ksp.to_cslice(static_cast{size_t}(numkeys));
       /* invoke key handler */
-      app.on_scankeys(ks, frctl.frame_speed_mul, pgs.cam);
+      app.on_scankeys(ks, frctl.frame_speed_mul, pgs.cam, commands);
+      do_commands();
     }
     fr.save_ticks(0, SDL_GetTicks());
     if (paused) {
@@ -276,16 +279,18 @@ private function void mainloop_internal(pgl3d_application mutable& app)
 	fr.ticks_sum_saved,
 	saved_stat_num_objects,
 	pgs.cam.camera.angle, pgs.cam.camera.position);
-      mto.wait_and_exec{swap_data_cl}();
       function void swap_data_cl(motion_thread_shared mutable& mts) {
 	// fr.save_ticks(1, SDL_GetTicks());
 	cam_drawing_frame = mts.cam;
 	mts.cam = pgs.cam;
 	mts.frame_speed_mul = frctl.frame_speed_mul;
 	mts.message = mess;
+	mts.commands.swap(commands);
 	local_whole_instances.swap(mts.whole_instances);
 	saved_stat_num_objects = mts.stat_num_objects;
       }
+      mto.wait_and_exec{swap_data_cl}();
+      do_commands();
     }
     fr.save_ticks(1, SDL_GetTicks());
     {

@@ -34,6 +34,9 @@ extern "types" inline
 #undef min
 #undef max
 #define alloca _alloca
+#if _MSC_VER < 1900
+#define snprintf _snprintf
+#endif
 #endif
 
 #include <stdint.h>
@@ -96,8 +99,13 @@ typedef double bt_double;
 struct bt_tpdummy;
 
 struct mtcount { /* reference counter for multi-threaded shared objects */
+#if defined(PXC_MSVC)
+  mtcount(long x = 1) { std::atomic_init(&count$z, 1); }
+  mtcount(const mtcount& x) { std::atomic_init(&count$z, 1); }
+#else
   mtcount(long x = 1) : count$z(1) { }
   mtcount(const mtcount& x) : count$z(1) { }
+#endif
   mtcount& operator =(const mtcount& x) { return *this; }
   void incref$z() {
     std::atomic_fetch_add_explicit(&count$z, 1L, std::memory_order_relaxed);
@@ -116,7 +124,7 @@ private:
 };
 
 struct stcount { /* reference counter for single-threaded shared objects */
-  stcount() : count$z(1) { }
+  stcount(long x = 1) : count$z(1) { }
   stcount(const stcount& x) : count$z(1) { }
   stcount& operator =(const stcount& x) { return *this; }
   void incref$z() { ++count$z; }

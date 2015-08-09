@@ -20,6 +20,7 @@ public struct sdlcontext()
   init();
   function void init()
   {
+    set_high_dpi(0);
     SDL_Init(SDL_INIT_VIDEO);
     TTF_Init();
     const num_modes = SDL_GetNumDisplayModes(0);
@@ -63,7 +64,8 @@ public struct sdlcontext()
     }
 
     sdllog("create_window", init_w, init_h);
-    sdl_window.reset(SDL_CreateWindow("PGL3D", 128, 128, init_w, init_h, wflags));
+    sdl_window.reset(SDL_CreateWindow("PGL3D", 128, 128, init_w, init_h,
+      wflags));
     const wnd = sdl_window.get();
     // SDL_SetWindowFullscreen(wnd, SDL_WINDOW_FULLSCREEN_DESKTOP);
       // // FIXME????
@@ -134,4 +136,23 @@ public struct sdlcontext()
     */
   }
 }
+
+private function extern "pgl3d$n::set_high_dpi" void set_high_dpi(int value);
+
+extern "types" inline
+#ifdef _MSC_VER
+#include <ShellScalingAPI.h>
+#endif
+;
+
+extern "functions" inline
+namespace pgl3d$n {
+static inline void set_high_dpi(int value)
+{
+#ifdef _MSC_VER
+  SetProcessDpiAwareness((PROCESS_DPI_AWARENESS)value);
+#endif
+}
+};
+;
 

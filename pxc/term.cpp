@@ -177,19 +177,11 @@ term_string *term::get_term_string() const
 
 ssize_t term_metalist::assoc_find(const term& x) const
 {
-  if (!x.is_long() && !x.is_string()) {
-    return -1;
-  }
   ssize_t c = 0;
   for (term_list::const_iterator i = v.begin(); i != v.end();
     ++i, ++c) {
     const term& v = *i;
-    /* element is a long or string */
-    if (v.is_long() || v.is_string()) {
-      if (v == x) {
-	return c;
-      }
-    } else if (v.is_metalist()) {
+    if (v.is_metalist()) {
       /* element is a metalist */
       const term_list *const ml = v.get_metalist();
       if (ml->size() > 0) {
@@ -197,6 +189,11 @@ ssize_t term_metalist::assoc_find(const term& x) const
 	if (x == e) {
 	  return c;
 	}
+      }
+    } else {
+      /* element is a value */
+      if (v == x) {
+	return c;
       }
     }
   }
