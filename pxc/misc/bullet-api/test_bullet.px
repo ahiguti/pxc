@@ -1,4 +1,5 @@
 public namespace test_bullet "export-unsafe";
+public import pgl3d::dynamics_world -;
 public import common -;
 public import Bullet::base -;
 public import Bullet::api +;
@@ -6,98 +7,69 @@ public import pointer::raw_unsafe -;
 public import meta m;
 public import meta::vararg va;
 
-struct myDynamicsWorld()
-{
-  /* TODO: noncopyable */
-  public btDefaultCollisionConfiguration mutable collisionConfiguration 
-    = btDefaultCollisionConfiguration(btDefaultCollisionConstructionInfo());
-  public btCollisionDispatcher mutable dispatcher
-    = btCollisionDispatcher(address(collisionConfiguration));
-  public btDbvtBroadphase mutable overlappingPairCache
-    = btDbvtBroadphase(rawptr{btOverlappingPairCache}());
-  public btSequentialImpulseConstraintSolver mutable solver;
-  public btDiscreteDynamicsWorld mutable dynamicsWorldObject
-    = btDiscreteDynamicsWorld(address(dispatcher),
-      address(overlappingPairCache), address(solver),
-      address(collisionConfiguration));
-  public rawptr{btDynamicsWorld} const dynamicsWorld
-    = address(dynamicsWorldObject);
-  public varray{rawptr{btCollisionShape}} mutable collisionShapes;
-  function ~
-  {
-    int j;
-    for (j = dynamicsWorld->getNumCollisionObjects() - 1; j >= 0; --j) {
-      const obj = dynamicsWorld->getCollisionObjectArray().at(j);
-      const body = btRigidBody_upcast_btCollisionObject_p(obj);
-      if (!body.is_null()) {
-	delete(body->getMotionState());
-      }
-      dynamicsWorld->removeCollisionObject(obj);
-      delete(obj);
-    }
-    for (const j : 0 .. collisionShapes.size()) {
-      const shape = collisionShapes[j];
-      collisionShapes[j] = rawptr{btCollisionShape}();
-      delete(shape);
-    }
-  }
-  public function void addShape(rawptr{btCollisionShape} shape)
-  {
-    collisionShapes.push_back(shape);
-  }
-  public function rawptr{btRigidBody} makeRigidBody(
-    rawptr{btCollisionShape} shape, btScalar mass, btTransform const& tr0)
-  {
-    const isDynamic = (mass != 0.0f);
-    mutable localInertia = btVector3_(0.0f, 0.0f, 0.0f);
-    if (isDynamic) {
-      shape->calculateLocalInertia(mass, localInertia);
-    }
-    const myMotionState = new{btDefaultMotionState}(tr0,
-	btTransform_getIdentity());
-    const rbInfo = btRigidBody_btRigidBodyConstructionInfo(mass,
-      myMotionState, shape, localInertia);
-    const body = new{btRigidBody}(rbInfo);
-    dynamicsWorld->addRigidBody(body);
-    return body;
-  }
-}
 
+function void test1()
 {
-  myDynamicsWorld dyn;
-  dyn.dynamicsWorld->setGravity(btVector3_(0.0f, -10.0f, 0.0f));
-  {
-    const groundShape = new{btBoxShape}(
-      btVector3_(50.0f, 50.0f, 50.0f));
-    dyn.addShape(groundShape);
-    dyn.makeRigidBody(groundShape, 0.0f,
-      btTransform_(btQuaternion_getIdentity(), btVector3_(0.0f, -56.0f, 0.0f)));
-  }
-  {
-    const colShape = new{btBoxShape}(btVector3_(1.0f, 1.0f, 1.0f));
-    dyn.addShape(colShape);
-    dyn.makeRigidBody(colShape, 1.0f,
-      btTransform_(btQuaternion_getIdentity(), btVector3_(2.0f, 10.0f, 0.0f)));
-  }
+  pgl3dDynamicsWorld dyn;
+  dyn.dynamicsWorld.setGravity(btVector3_(0.0f, -10.0f, 0.0f));
+  const groundShape = make_ptr{pgl3dCollisionShape{btBoxShape}}(
+    btVector3_(50.0f, 50.0f, 50.0f));
+  const rbGround = make_ptr{pgl3dRigidBody}(groundShape, 0.0f, 
+    btTransform_(btQuaternion_getIdentity(), btVector3_(0.0f, -56.0f, 0.0f)));
+  dyn.addRigidBody(rbGround);
+  const colShape = make_ptr{pgl3dCollisionShape{btBoxShape}}(
+    btVector3_(1.0f, 1.0f, 1.0f));
+  const rb = make_ptr{pgl3dRigidBody}(colShape, 1.0f,
+    btTransform_(btQuaternion_getIdentity(), btVector3_(2.0f, 10.0f, 0.0f)));
+  dyn.addRigidBody(rb);
   for (const i: 0 .. 1000) {
     const fixedTimeStep = 1.0f / 60.0f;
-    dyn.dynamicsWorld->stepSimulation(1.0f / 60.0f, 10, fixedTimeStep);
-    int j;
-    for (j = dyn.dynamicsWorld->getNumCollisionObjects() - 1; j >= 0; --j) {
-      const obj = dyn.dynamicsWorld->getCollisionObjectArray().at(j);
-      const body = btRigidBody_upcast_btCollisionObject_p(obj);
-      if (!body.is_null() &&
-	body->cgetMotionState() != crptr{btMotionState}())
-      {
-	btTransform trans;
-	body->cgetMotionState()->getWorldTransform(trans);
-	println("step", i, "obj", j,
+    dyn.dynamicsWorld.stepSimulation(1.0f / 60.0f, 10, fixedTimeStep);
+    btTransform trans;
+    rb->motionState.getWorldTransform(trans);
+    println("step", i,
 	  trans.getOrigin().getX(), 
 	  trans.getOrigin().getY(), 
 	  trans.getOrigin().getZ());
-      }
+  }
+  println("done");
+}
+
+function void test2()
+{
+  pgl3dDynamicsWorld dyn;
+  dyn.dynamicsWorld.setGravity(btVector3_(0.0f, -10.0f, 0.0f));
+  const groundShape = make_ptr{pgl3dCollisionShape{btBoxShape}}(
+    btVector3_(50.0f, 50.0f, 50.0f));
+  const rbGround = make_ptr{pgl3dRigidBody}(groundShape, 0.0f, 
+    btTransform_(btQuaternion_getIdentity(), btVector3_(0.0f, -56.0f, 0.0f)));
+  dyn.addRigidBody(rbGround);
+  const colShape = make_ptr{pgl3dCollisionShape{btBoxShape}}(
+    btVector3_(1.0f, 1.0f, 1.0f));
+  varray{ptr{pgl3dRigidBody}} boxes;
+  for (size_t i: 0 .. 10) {
+    const rb = make_ptr{pgl3dRigidBody}(colShape, 1.0f,
+      btTransform_(
+	btQuaternion_getIdentity(),
+	btVector3_(2.0f, 10.0f * static_cast{btScalar}(i), 0.0f)));
+    dyn.addRigidBody(rb);
+    boxes.push_back(rb);
+  }
+  for (const i: 0 .. 1000) {
+    const fixedTimeStep = 1.0f / 60.0f;
+    dyn.dynamicsWorld.stepSimulation(1.0f / 60.0f, 10, fixedTimeStep);
+    for (size_t j: 0 .. 10) {
+      btTransform trans;
+      boxes[j]->motionState.getWorldTransform(trans);
+      println("step", i, "obj", j,
+	    trans.getOrigin().getX(), 
+	    trans.getOrigin().getY(), 
+	    trans.getOrigin().getZ());
     }
   }
   println("done");
 }
 
+{
+  test2();
+}

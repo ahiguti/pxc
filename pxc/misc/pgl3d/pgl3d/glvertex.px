@@ -73,8 +73,9 @@ public multithreaded struct
 vertices(size_t num_float_per_vertex0)
 {
   public size_t const num_float_per_vertex = num_float_per_vertex0;
-  public varray{float} vertex_values;
-  public varray{uint} elements;
+  public varray{float} vertex_values; /* for glDrawElements */
+  public varray{uint} elements;       /* for glDrawElements */
+  public varray{float} positions;     /* used for physics engine */
   public varray{node_joint} joints;
   public size_t num_copies_hint = 1;
   public bool has_instance_id;
@@ -139,6 +140,14 @@ vertices(size_t num_float_per_vertex0)
     const first_id = vertex_values.size() / num_float_struct{tattr};
     for (const i, const& val: vals) {
       push_float{tattr}(vertex_values, val);
+      if (m::symbol_exists{tattr, "position"}) {
+	positions.append(val.position.to_cslice());
+	/*
+	positions.push_back(val.position.x);
+	positions.push_back(val.position.y);
+	positions.push_back(val.position.z);
+	*/
+      }
     }
     threaded function void push_convex()
     {
@@ -270,6 +279,14 @@ vertices(size_t num_float_per_vertex0)
     //sdllog("push_point1", vertex_values.size());
     //sdllog("push_point val", val);
     elements.push_back(static_cast{uint}(first_id));
+    if (m::symbol_exists{tattr, "position"}) {
+      positions.append(val.position.to_cslice());
+      /*
+      positions.push_back(val.position.x);
+      positions.push_back(val.position.y);
+      positions.push_back(val.position.z);
+      */
+    }
   }
   public function void push_joint(node_joint const& e)
   {
