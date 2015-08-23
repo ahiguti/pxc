@@ -1,0 +1,51 @@
+public namespace pgl3d::collision_shape "export-unsafe";
+public import common -;
+public import Bullet::base -;
+public import Bullet::api +;
+public import pointer::raw_unsafe -;
+public import meta m;
+public import meta::vararg va;
+
+public threaded interface pgl3dCollisionShape_i {
+  public function rawptr{btCollisionShape} get();
+}
+
+public threaded struct {t} pgl3dCollisionShape(expand(m::args{t}))
+  <pgl3dCollisionShape_i>
+{
+  public t value = t(expand(a: m::arg_names{t}; a));
+  public function rawptr{btCollisionShape} get() {
+    return address(value);
+  }
+}
+
+public threaded struct pgl3dRigidBody(
+  ptr{pgl3dCollisionShape_i} const& collisionShape0, btScalar mass,
+  btTransform const& tr0)
+{
+  public ptr{pgl3dCollisionShape_i} const collisionShape = collisionShape0;
+  public btDefaultMotionState motionState = btDefaultMotionState(tr0,
+	btTransform_getIdentity());
+  public btRigidBody rigidBody = makeRigidBody(collisionShape->get(),
+    address(motionState), mass);
+  public size_t offset = static_cast{size_t}(-1);
+}
+
+private threaded function btRigidBody makeRigidBody(
+  rawptr{btCollisionShape} shape, rawptr{btDefaultMotionState} motionState,
+  btScalar mass)
+{
+  const isDynamic = (mass != 0.0f);
+  mutable localInertia = btVector3_(0.0f, 0.0f, 0.0f);
+  if (isDynamic) {
+    shape->calculateLocalInertia(mass, localInertia);
+  }
+  mutable rbInfo = btRigidBody_btRigidBodyConstructionInfo(mass,
+    motionState, shape, localInertia);
+  rbInfo.m_friction = 0.0f;
+  rbInfo.m_rollingFriction = 0.0f;
+  rbInfo.m_restitution = 0.0f;
+  const r = btRigidBody(rbInfo);
+  return r;
+}
+

@@ -1,0 +1,397 @@
+
+- rigidbodyをscene_nodeと関連付ける
+
+- btShapeHullで単純化
+
+- convex hullをglgeometry頂点データから作る
+  イモから
+
+- skybox
+
+- bulletがarm64でNEON効いているか
+
+- bulletのアラインメント要件が全環境で満たせるか確認
+
+- 物体のemit
+
+- sdlutil.px ファイルからオプション読み込み
+
+- discardするシェーダはzprepassとshadowmappingのシェーダでもdiscard必要
+
+- 頂点データかインスタンスデータが空のときはdrawしない。
+
+- textureのサイズ power_of_2 やめる
+  だいたいの環境で non power of two テクスチャ使えるはず
+
+- num_copies_hintが効いているか確認
+
+- 正方行列ではない行列はGLES3以降
+
+- aggregated_ibuffer 2個 or 3個
+- prepare_instance_data_defaultの効率
+
+- テクスチャとフォントの読み込みと利用の手順整理
+- テクスチャ、フォントを複数読み込んで利用できるようにする
+- 頂点属性型を整理、num_float的マクロ整理
+
+- 頂点データを動的に入れ替えられるようにする
+
+---------------------------------------------------------------------------
+ビルドメモ
+
+iOS8.3でEAGLContext_renderbufferStorageがEXC_ARM_DA_ALIGNで死ぬのを回避
+するにはEdit SchemeのOptionsのGPU Frame Captureを無効にする。
+
+iosビルド
+bulletは ./premake4_osx --ios xcode4 でios用xcodeprojができる
+Architecturesがおかしいので修正。
+Valid Architecturesがおかしいので修正。
+Base SDKがOSXになっているので修正。
+pgl3dプロジェクトにAdd Files ToでSDL, SDL_image, BulletCollisionなどの
+xcodeprojを追加
+Build PhasesのLink Binary With Librariesに.aを追加
+TARGETSのpgl3dのHeader Search Pathsに
+"$(SRCROOT)/pgl3d-extlib/SDL2/include"などを追加
+
+
+windowsビルド
+SDL/
+SDL_image/
+SDL_ttf/
+PXCTest1/
+のように配置
+
+---------------------------------------------------------------------------
+
+- parts.obj 頂点座標が完全に一致しているものがあるせいで三角形分割できない
+f 514 486 485 528 548
+  vertex	{x,1.0123960,y,-4.8927202,z,0.0000000}
+  vertex	{x,1.0123960,y,-4.8927202,z,0.0000000}
+  vertex	{x,0.9611670,y,-4.9025478,z,-0.1911880}
+  vertex	{x,1.8766540,y,-4.6193981,z,-0.3732890}
+  vertex	{x,1.9134190,y,-4.6193981,z,-0.0000000}
+
+
+- particleもinstance化してみる
+- instance化しない版のvbo_mainを作り、頂点データが大きいものはそちらを使う
+- vboが大きくなったら性能が落ちる
+  - vbo分割で回避できるか？
+  - glDrawRangeElementsが効くか？
+- glgeometryの頂点属性を積むコードはtattrとしてmain_vertex_attributesと
+  だいたい同じ構造体を渡すことを期待している。これを汎用化できるか。
+- zprepassが効いていることを簡単に確認できないか
+
+polygon三角形分割
+外積を全て足し合わせる。向きが決定。
+どれか一つの頂点とその前後で外積を取り、それが三角形と同じ向きだったら
+その頂点をpolygonから削除し、三角形をpush
+無くなるまで繰り返す。
+三角形の内側に他の頂点があるときは削れない
+
+頂点jが(i-1, i, i+1)の内側にあるかどうかの判定
+(i-1, i)と(i-1, j)の外積
+(i, i+1)と(i, j)の外積
+(i+1, i-1)と(i+1, j)の外積
+が全て同じ負号
+
+---------------------------------------------------------------------------
+エンジンの外に出すべき項目
+
+pgl3d.px
+  build_vertices()
+    pgs.make_vertices() を起点にして頂点データをセットしている。
+    これはinit_texture実行後でないといけない。フォントの情報を必要とするから。
+  input_control ictl;
+    これは入力デバイスの状態を保存するデータ
+  player_info player;
+    入力デバイスで制御するカメラ
+pglscene.px
+  struct scene_control
+    シーンノードを構築・更新する
+pglshader.px
+  init_texture 画像ファイルやフォントを読んでテクスチャにセットする
+
+motionスレッドに渡すデータ
+  frame_speed_mul フレーム時間
+  scene_reset シーンを次に進めるかどうか
+  message 画面下に出す文字列
+  font_width
+  font_height
+motionスレッドから受け取るでーた
+  cam カメラ
+  bo_instances 描画インスタンスデータ
+  stat_num_objects オブジェクト数の
+
+エンジンの外に持つデータとコード
+- 頂点データを構築するコード
+- イベントとキー状態からカメラやシーンなどを更新するコード
+
+motionスレッドに移動しないもの:
+  SDL_QUIT
+  pausedフラグ
+  SDL_WINDOWEVENT - リサイズなどのハンドルはメインスレッドで
+  frctl - フレームレート計算はメインスレッドでやる
+motionスレッドに移動するもの:
+  キーイベント
+  キーボード状態
+  MOUSE, FINGERイベント
+
+---------------------------------------------------------------------------
+motionスレッドに移動せずにエンジン分離だけ実装
+
+interface pgl3d_application {
+  function void on_build_vertices();
+  function void on_frame(float speed); // フレーム処理の最初に呼ばれる
+  function void on_event(SDL_Event const& ev);
+  function void on_keystate(cslice{Uint8} const& keys);
+  function void on_prepare_motion(); // motionスレッドのフレーム処理の直前
+}
+
+multithreaded interface pgl3d_motion {
+  function ptr{pgl3d_scene} make_scene(); // motionスレッドから呼ばれる
+}
+
+threaded interface pgl3d_scene {
+  function void on_motion_step();
+}
+
+公開関数
+function string pgl3d_get_statistics_message();
+
+demoappに分離
+- build_vertices() 移動
+- struct input_control; 移動
+- struct player_info; 移動
+- motion_thread_sharedのうち以下のもの
+    int scene_reset;
+    string message;
+- struct scene_control; 移動
+
+---------------------------------------------------------------------------
+テクスチャ、フォントを複数読み込んで利用できるようにする
+
+---------------------------------------------------------------------------
+シェーダのインタフェース
+
+- ドローコール前のuniformなど設定、ドローコールの発行
+- インスタンスデータ作成
+
+interface shader_solid {
+  ;
+}
+
+interface shader_particle {
+  ;
+}
+
+---------------------------------------------------------------------------
+シェーダ抽象化で切り出しが必要な箇所
+
+pglscene.px
+  prepare_instance_data
+    シーングラフからインスタンスデータを作る処理。
+pglshareder.px
+  pglshaderコンストラクタ
+    vbidを実行時に払い出すように変更必要。
+    vbidごとのvertex_bufferを作る処理。
+  draw_frame
+    ドローコールを発行する。
+
+手順:
+とりあえずvbidの払い出しとvertex_buffer構築から書き換える。
+  vbidはグローバルではなくpglshaderに問い合わせて取得するように変更。
+  make_vertices_iに問い合わせることもできるように。
+シェーダGLSL, uniform, 頂点属性, インスタンス属性
+
+---------------------------------------------------------------------------
+シェーダ抽象化
+
+solidシェーダ群:
+  - shadowmapシェーダ
+  - zprepassシェーダ
+  - mainシェーダ
+  不透過で多面体で構成されるオブジェクトのためのシェーダ。
+  それぞれinstancingするかどうかの違いで二種類のシェーダがあり、
+  対応してvboがvbid_mainとvbid_main2の二種類ある。
+  現状一つの実装しかない。
+particleシェーダ:
+  - particleシェーダ
+  - particle_bbシェーダ
+  - lineparticleシェーダ
+  - font2シェーダ
+  - rect2dシェーダ
+  これらはshadowmappingやz-prepassをおこなわない単体のシェーダ
+  描画順序を指定できるようにしなければならない
+  シェーダ毎にインスタンスデータのフォーマットが違う
+  シェーダ毎にprepare_instance_dataで入れる内容が違う
+
+solidシェーダは3パスに分かれているのでGLSLプログラムは3つ作る必要がある
+particleシェーダは1パスでGLSLプログラムは1つだけ
+
+prepare_instance_data
+  varray{instances_type} mutable& ibs これにインスタンスデータを入れる
+  ibs[bo_id] : bo_idはvbid_???のいずれか。
+  これの実装を抽象化する必要がある。
+
+struct vertex_buffer
+  vbo_valuesとvbo_elemsの二つのVBOハンドルを持つ
+
+metafunction instance_type varray{varray{instance_data}};
+  [vs_id][0or1]
+  vs_id: vboに入れた頂点データのid
+  0or1: 0にはmodel行列 1にはmvp行列を入れる
+struct instance_data
+  varray{float} instance_buffer;
+  インスタンス1つのmodel行列など
+
+draw_instancedの6番目の引数(0or1)はインスタンスデータのうち、
+model or mvpのどちらを使うかの区別。shadowmapシェーダがmvpのほうを
+使っている(やめるか？)
+
+---------------------------------------------------------------------------
+描画順序
+
+pglshader_draw_frame()
+
+shadowmapping
+  vbid_main / smsdr
+  vbid_main2 / sm2sdr
+  インスタンスデータのmvpのほうを使う
+zprepass
+  vbid_main zpsdr
+  vbid_main2 zp2sdr
+main ---- solid
+  vbid_main sdr
+  vbid_main2 m2sdr
+lineparticle ---- solid
+  cullface無効、depthtest有効、depthmask有効、blend無効
+  vbid_lineparticle lpsdr
+particle_bb ---- blend
+  cullface無効、depthtest有効、depthmask無効、blend有効
+  vbid_particle_bb prtbsdr
+particle ---- blend
+  cullface無効、depthtest有効、depthmask無効、blend有効
+  vbid_particle spsdr
+rect2d ---- blend
+  cullface無効、depthtest無効、depthmask無効、blend有効
+  vbid_rect2d rsdr
+font ---- blend
+  cullface無効、depthtest無効、depthmask無効、blend有効
+  vbid_font2 f2sdr
+
+
+---------------------------------------------------------------------------
+テクスチャ
+
+drawer_triangles/triangles2がdpat.pngを使っている
+  sampler, sampler_tilemap, sampler_smが1, 2, 3
+drawer_font2がfontを使っている
+  samplerが0
+glActiveTexture/glBindTextureを毎フレーム呼ぶ。各デバイスで変更前後に性能差
+あるか確認。
+
+
+---------------------------------------------------------------------------
+scene_nodeメモリ食いすぎ
+
+geometryデータから子ノードの変換行列を得るためにscene_nodeを使っている。
+インスタンスの状態を保持するためにはscene_nodeである必要はない。
+GPUに渡すインスタンスデータを作るためにprepare_instance_data_ft_rec()
+でノードについて再帰的に積んでいるが、ここではsn.transしか見ていない。
+sn.transの全体または一部から(必要なら何らかの変換をして)対応するバッファ
+に対してappendする。
+(案1)
+scene_nodeはテンプレ引数なくす。
+scene_node使うのはgeometryから接点情報を取る箇所だけ。
+インスタンスの状態はアプリが独自に型付けて保持。
+描画のためのGPUに渡すインスタンスデータを作るのはcslice{float}を渡すよう
+にし、アプリが付けた型がそれを呼ぶ。
+(移行手順)
+
+1. まずアプリ定義型実装
+2. GPUへのインスタンスデータ渡すところを書き換え
+3. scene_nodeのテンプレ引数削除
+
+---------------------------------------------------------------------------
+アプリ定義型インタフェース
+
+scene_nodeへのポインタを持つ。
+move_stepメソッド: 
+  ステップ移動
+prepare_instance_dataメソッド
+  自分の位置データを引数に指定してscene_nodeごとの関数ポインタを呼び出す。
+
+---------------------------------------------------------------------------
+頂点データの作り方を改良
+
+triangles_vertex_attributesのようなものをpublicにしない。
+
+drawerを指定して利用するvboを決定する。
+  triangles, font2のように。
+pgs.make_vertex_set(name, 式);
+式は評価コンテキストを引数に持つようにする。
+  fill, fill_smooth, poly_joint, point_jointはテンプレ引数を取るが、
+  これらはdrawer?がインスタンス化する。
+  gf_surface()というのを用意し、これは評価コンテキストからfillなどを
+  呼び出す。 particle, particle_bbもgf_surfaceから呼び出す。
+pgs.make_vertex_set("saucer",
+  regular_polygon(3.0, 40,
+    bump_rec(0.2, 0.5, 1, surf_flat(), surf_flat()),
+    bump_rec(0.01, 0.9, 5, surf_flat(), sphere(10, surf_smooth()))));
+コンテキストは、
+  ptr{vertices} vptr;
+  tcallable{gf_poly, {vptr, 
+
+評価コンテキストはthreadedでなければならない。pglshaderはdrawerに対して
+
+---------------------------------------------------------------------------
+triangles_vertex_attributesのようなものをpublicにしない。
+
+glvertex::vertices::push_polygon_distinct{tattr, split_convex}
+これはtattrがpos又はpositionという名前のフィールドを持っていることを
+期待している。glgeometryの中ではpoly_tがvertex_attrの配列で、vertex_attr
+はpos, nor, tan, uvwのそれぞれvec3を持っている。
+glvertex::vertices
+  push_polygon_distinct(cslice{tattr} const& vals);
+  push_point(tattr const& val);
+  push_joint(node_joint const& e);
+
+glbuffer::vertex_set(num_float_per_vertex0)
+  ptr{vertices} vtxs = make_ptr{vertices}(num_float_per_vertex0);
+glbuffer::vertex_buffer(num_float_per_vertex0)
+  varray{ptr{vertex_set}} vs_arr;
+
+---------------------------------------------------------------------------
+シェーダ混在
+
+特定の面だけを別シェーダで描きたいときに使う
+頂点セットを作るときに複数のbo_idへfillする必要がある
+シェーダごとに頂点属性は変わる
+vs_id
+
+頂点データ
+vertex_buffer: 特定シェーダ向けvertex_setの集まり。これにbo_idが振られる。
+  (vbidとbo_idは同じもの)
+vertex_set: 特定シェーダ向け芋一個ぶんの頂点データと
+  vertex_buffer中のオフセット情報。これにvs_idが振られる。
+vertices: 特定シェーダ向け芋一個ぶんの頂点データ(values, elements)。
+
+インスタンスデータ
+aggregated_ibuffer: async_bufferが3つ。
+async_buffer: 1フレーム1回glBufferDataでまとめて送る全インスタンスデータ。
+whole_instances_type: 1フレームの全インスタンスデータ。async_bufferにコピー。
+bo_instances_type: 特定シェーダ向け全インスタンスデータ。
+instance_data: 特定の芋一個向けインスタンスデータ。async_buffer中のオフセット。
+
+実現方法
+- subdrawerなるものを作れるようにする。subdrawerはそれ自体用のインスタンス
+  データを持たず、関連するmain_drawerのインスタンスデータを使って描画する。
+- zprepass, shadowmappingは共通化すると効率良いかもしれないが後回し。
+- 「このbo_idは別bo_idのインスタンスデータを使って描画せよ」
+  pglshader_draw_frameのpd->draw()中、whole_instances[bo_id]を渡している
+  部分、これをmain_drawerのbo_idに変換すればよい。
+- subdrawerとmaindrawerは別々の頂点データを持つ。
+- plshader::make_vertex_setで複数のdrawer名を指定できるようにする。
+
+---------------------------------------------------------------------------
+

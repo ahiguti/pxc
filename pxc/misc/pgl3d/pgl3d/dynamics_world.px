@@ -1,0 +1,59 @@
+public namespace pgl3d::dynamics_world "export-unsafe";
+public import common -;
+public import Bullet::base -;
+public import Bullet::api +;
+public import pointer::raw_unsafe -;
+public import pgl3d::collision_shape *;
+public import meta m;
+public import meta::vararg va;
+
+public threaded struct pgl3dDynamicsWorld()
+  // <pgl3dDynamicsWorld_i>
+{
+  public btDefaultCollisionConfiguration mutable collisionConfiguration 
+    = btDefaultCollisionConfiguration(btDefaultCollisionConstructionInfo());
+  public btCollisionDispatcher mutable dispatcher
+    = btCollisionDispatcher(address(collisionConfiguration));
+  public btDbvtBroadphase mutable broadphase
+    = btDbvtBroadphase(rawptr{btOverlappingPairCache}());
+  public btSequentialImpulseConstraintSolver mutable solver;
+  public btDiscreteDynamicsWorld mutable dynamicsWorld
+    = btDiscreteDynamicsWorld(address(dispatcher), address(broadphase),
+      address(solver), address(collisionConfiguration));
+  private varray{ptr{pgl3dRigidBody}} rigidBodies;
+  function ~
+  {
+    clear();
+  }
+  public function void clear()
+  {
+    for (size_t i, const& rb: rigidBodies) {
+      dynamicsWorld.removeCollisionObject(address(rb->rigidBody));
+    }
+    rigidBodies.clear();
+  }
+  public function void addRigidBody(ptr{pgl3dRigidBody} const& rigidBody)
+  {
+    if (rigidBody->offset != static_cast{size_t}(-1)) {
+      return;
+    }
+    dynamicsWorld.addRigidBody(address(rigidBody->rigidBody));
+    rigidBody->offset = rigidBodies.size();
+    rigidBodies.push_back(rigidBody);
+  }
+  public function void removeRigidBody(ptr{pgl3dRigidBody} const& rigidBody)
+  {
+    const offset = rigidBody->offset;
+    if (offset == static_cast{size_t}(-1)) {
+      return;
+    }
+    dynamicsWorld.removeCollisionObject(address(rigidBody->rigidBody));
+    const sz = rigidBodies.size();
+    if (sz > 1) {
+      swap(rigidBodies[offset], rigidBodies[sz - 1]);
+      rigidBodies[offset]->offset = offset;
+    }
+    rigidBodies.erase(sz - 1, sz);
+  }
+}
+

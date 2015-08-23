@@ -1,0 +1,48 @@
+public namespace test_bullet "export-unsafe";
+public import pgl3d::dynamics_world -;
+public import common -;
+public import Bullet::base -;
+public import Bullet::api +;
+public import pointer::raw_unsafe -;
+public import meta m;
+public import meta::vararg va;
+
+
+{
+  pgl3dDynamicsWorld dyn;
+  dyn.dynamicsWorld->setGravity(btVector3_(0.0f, -10.0f, 0.0f));
+  {
+    const groundShape = new{btBoxShape}(
+      btVector3_(50.0f, 50.0f, 50.0f));
+    dyn.addShape(groundShape);
+    dyn.makeRigidBody(groundShape, 0.0f,
+      btTransform_(btQuaternion_getIdentity(), btVector3_(0.0f, -56.0f, 0.0f)));
+  }
+  {
+    const colShape = new{btBoxShape}(btVector3_(1.0f, 1.0f, 1.0f));
+    dyn.addShape(colShape);
+    dyn.makeRigidBody(colShape, 1.0f,
+      btTransform_(btQuaternion_getIdentity(), btVector3_(2.0f, 10.0f, 0.0f)));
+  }
+  for (const i: 0 .. 1000) {
+    const fixedTimeStep = 1.0f / 60.0f;
+    dyn.dynamicsWorld->stepSimulation(1.0f / 60.0f, 10, fixedTimeStep);
+    int j;
+    for (j = dyn.dynamicsWorld->getNumCollisionObjects() - 1; j >= 0; --j) {
+      const obj = dyn.dynamicsWorld->getCollisionObjectArray().at(j);
+      const body = btRigidBody_upcast_btCollisionObject_p(obj);
+      if (!body.is_null() &&
+	body->cgetMotionState() != crptr{btMotionState}())
+      {
+	btTransform trans;
+	body->cgetMotionState()->getWorldTransform(trans);
+	println("step", i, "obj", j,
+	  trans.getOrigin().getX(), 
+	  trans.getOrigin().getY(), 
+	  trans.getOrigin().getZ());
+      }
+    }
+  }
+  println("done");
+}
+

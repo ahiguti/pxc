@@ -1,5 +1,6 @@
 public namespace demoapp "use-unsafe"; // FIXME?
 public import common -;
+public import numeric::fpmath -;
 public import meta m;
 public import glm;
 public import text::string::positional -;
@@ -75,7 +76,7 @@ private struct app_impl()
   public string_map app_commands;
   init();
   private function void init() {
-    player.position = glm::make_vec3(0.0, -20.0, 0.0);
+    player.position = glm::make_vec3(0.0, -30.0, 0.0);
     player.angle = glm::make_quat_wxyz(0.70711, 0.70711, 0.0, 0.0);
   }
 }
@@ -718,7 +719,7 @@ private function void build_vertices(app_impl mutable& app,
     .rotate(10.0, glm::make_vec3(0.0, 0.0, 1.0)); // FIXME: to_radians?
   pgs.make_vertex_set(tr, "bullet2",
     regular_polygon(1.0, 5,
-      bump_rec(0.3, 0.8, 1, ctx_fill(0), ctx_fill(0)),
+      bump_rec(1.3, 0.8, 1, ctx_fill(0), ctx_fill(0)),
       bump_rec(0.8, 0.8, 1, ctx_fill(0), ctx_fill(0))));
   rnd = make_rand_generator(991U);
   pgs.make_vertex_set(tr, "bullet2-multi",
@@ -776,9 +777,42 @@ private function void build_vertices(app_impl mutable& app,
   app.scene_shared->default_font_texture_info = pgs.get_texture_info("font");
 
   /* save shapes for physics engine */
+  function void shapes_add(cstrref const& name) {
+    const& posdt = pgs.get_vertices(name)->positions;
+    const reduced = reduce_vertices(posdt, 0.00001f);
+    app.scene_shared->shapes.insert(name, make_tptr{varray{float}}(reduced));
+    debug_log("reduced", name, posdt.size()/3, reduced.size()/3);
+  }
+  shapes_add("box");
+  shapes_add("bullet2");
+  /*
   const& posdt = pgs.get_vertices("box")->positions;
   app.scene_shared->shapes.insert("box", make_tptr{varray{float}}(posdt));
-  debug_log("vtxs", posdt.size(), posdt);
+  */
+}
+
+function varray{float} reduce_vertices(cslice{float} const& shape, float delta)
+{
+  varray{float} a;
+  for (size_t i : 0 .. shape.size() / 3) {
+    const oi = i * 3;
+    const vec = glm::make_vec3(shape[oi], shape[oi+1], shape[oi+2]);
+    size_t j = 0;
+    const asz = a.size() / 3;
+    for (j = 0; j < asz; ++j) {
+      const oj = j * 3;
+      const dx = a[oj    ] - vec.x;
+      const dy = a[oj + 1] - vec.y;
+      const dz = a[oj + 2] - vec.z;
+      if (fabs(dx) + fabs(dy) + fabs(dz) < delta) {
+	break;
+      }
+    }
+    if (j == asz) {
+      a.append(vec.to_cslice());
+    }
+  }
+  return a;
 }
 
 metafunction node scene_node;
@@ -790,6 +824,41 @@ threaded function node make_node()
 
 threaded struct lpbullet_data {
   public farray{float, 9} value;
+}
+
+// FIXME : here
+threaded struct
+collision_object(joint_id_type const& joint_id0,
+  ptr{pgl3dRigidBody} const& rigid_body0)
+{
+  public joint_id_type joint_id = joint_id0;
+  public ptr{pgl3dRigidBody} rigid_body = rigid_body0;
+}
+
+threaded struct
+collision_objects()
+{
+  public pgl3dDynamicsWorld dynamics_world;
+  public varray{collision_object} objects;
+}
+
+threaded function void
+add_collision_object(collision_objects mutable& dy, scene_node const& sn,
+  ptr{pgl3dCollisionShape_i} const& colShape)
+{
+  if (sn.joint_id.vs_id < 0) {
+    return;
+  }
+  const& t = sn.trans.value.to_cslice();
+  const m3 = btMatrix3x3_(
+    t[0], t[1], t[2], t[4], t[5], t[6], t[8], t[9], t[10]);
+  const v3 = btVector3_(t[3], t[7], t[11]);
+  const btr = btTransform_(m3, v3);
+  const rb = make_ptr{pgl3dRigidBody}(colShape, 1.0f, btr);
+  btRigidBody_upcast_btCollisionObject_p(address(rb->rigidBody))
+    ->setFriction(1.0f);
+  dy.objects.push_back(collision_object(sn.joint_id, rb));
+  dy.dynamics_world.addRigidBody(rb);
 }
 
 threaded struct
@@ -813,14 +882,18 @@ scene_control(node_factory const& nfac, shapes_type const& shapes0)
   public varray{ptr{pgl3dRigidBody}} boxes;
   public shapes_type shapes = shapes0;
   public darray{string} const scene_names = make_darray{string}(
-    "rigidbody-multi"
+    "rigidbody-multi",
     // "untitled", "saucer", "saucer-multi", "block-multi", "block",
     // "ab-multi", "ab-multi3", "skyscraper",
     // "al", "cessna", "skyscraper", "airboat",
     /*
     "parts",
     "saucer", "saucer-multi", "block-multi", "block-multi2", "block",
-    "bullet2-multi3", "bullet2-multi2", "bullet2-multi",
+    "bullet2-multi3",
+    */
+    "bullet2-multi2"
+    /*
+    "bullet2-multi",
     "bullet-multi", "saucer-multi3",
     "particle", "particle-multi",
     "particle-bb", "particle-bb-multi"
@@ -853,8 +926,11 @@ scene_control(node_factory const& nfac, shapes_type const& shapes0)
       dynamics_world.addRigidBody(rbGround);
       const colShape = make_ptr{pgl3dCollisionShape{btBoxShape}}(
 	btVector3_(1.0f, 1.0f, 1.0f));
-      // const& points = **shapes.equal_range("box");
+      const& points = **shapes.equal_range("box");
+      /*
+      */
       // FIXME FIXME FIXME
+      /*
       const points = make_farray{float}(
 	-1.0f, -1.0f, -1.0f,
 	-1.0f, -1.0f,  1.0f,
@@ -864,6 +940,7 @@ scene_control(node_factory const& nfac, shapes_type const& shapes0)
 	 1.0f, -1.0f,  1.0f,
 	 1.0f,  1.0f,  1.0f,
 	 1.0f,  1.0f, -1.0f);
+      */
       const colShape1 = make_ptr{pgl3dCollisionShape{btConvexHullShape}}(
 	points.to_crawptr(), static_cast{int}(points.size() / 3), 3 * 4);
       int xsize = 20;
@@ -882,7 +959,7 @@ scene_control(node_factory const& nfac, shapes_type const& shapes0)
 	  for (int j: 0 .. zsize) {
 	    const x = 3.5f * static_cast{float}(k) + start_x;
 	    const y = 20.0f + 3.5f * static_cast{float}(i) + start_y;
-	    const z = 40.0f + 2.1f * static_cast{float}(j) + start_z;
+	    const z = 10.0f + 2.1f * static_cast{float}(j) + start_z;
 	    startTransform.setOrigin(btVector3_(x, y, z));
 	    const rb = make_ptr{pgl3dRigidBody}(colShape, 1.0f,
 	      startTransform);

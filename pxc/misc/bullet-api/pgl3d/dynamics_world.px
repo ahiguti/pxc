@@ -1,0 +1,73 @@
+public namespace pgl3d::dynamics_world "export-unsafe";
+public import common -;
+public import Bullet::base -;
+public import Bullet::api +;
+public import pointer::raw_unsafe -;
+public import meta m;
+public import meta::vararg va;
+
+public interface pgl3dCollisionShape_i {
+  public function rawptr{btCollisionShape} get();
+}
+
+public struct {t} pgl3dCollisionShape(expand(m::args{t}))
+  <pgl3dCollisionShape_i>
+{
+  public t value = t(expand(a: m::arg_names{t}; a));
+  public function rawptr{btCollisionShape} get() {
+    return address(value);
+  }
+}
+
+public struct pgl3dRigidBody(
+  ptr{pgl3dCollisionShape_i} const& collisionShape0, btScalar mass,
+  btTransform const& tr0)
+{
+  public ptr{pgl3dCollisionShape_i} const collisionShape = collisionShape0;
+  public btDefaultMotionState motionState = btDefaultMotionState(tr0,
+	btTransform_getIdentity());
+  public btRigidBody rigidBody = makeRigidBody(collisionShape->get(),
+    address(motionState), mass);
+}
+
+private function btRigidBody makeRigidBody(rawptr{btCollisionShape} shape,
+  rawptr{btDefaultMotionState} motionState, btScalar mass)
+{
+  const isDynamic = (mass != 0.0f);
+  mutable localInertia = btVector3_(0.0f, 0.0f, 0.0f);
+  if (isDynamic) {
+    shape->calculateLocalInertia(mass, localInertia);
+  }
+  const rbInfo = btRigidBody_btRigidBodyConstructionInfo(mass,
+    motionState, shape, localInertia);
+  return btRigidBody(rbInfo);
+}
+
+public struct pgl3dDynamicsWorld()
+  // <pgl3dDynamicsWorld_i>
+{
+  public btDefaultCollisionConfiguration mutable collisionConfiguration 
+    = btDefaultCollisionConfiguration(btDefaultCollisionConstructionInfo());
+  public btCollisionDispatcher mutable dispatcher
+    = btCollisionDispatcher(address(collisionConfiguration));
+  public btDbvtBroadphase mutable overlappingPairCache
+    = btDbvtBroadphase(rawptr{btOverlappingPairCache}());
+  public btSequentialImpulseConstraintSolver mutable solver;
+  public btDiscreteDynamicsWorld mutable dynamicsWorld
+    = btDiscreteDynamicsWorld(address(dispatcher),
+      address(overlappingPairCache), address(solver),
+      address(collisionConfiguration));
+  private varray{ptr{pgl3dRigidBody}} rigidBodies;
+  function ~
+  {
+    for (size_t i, const& rb: rigidBodies) {
+      dynamicsWorld.removeCollisionObject(address(rb->rigidBody));
+    }
+  }
+  public function void addRigidBody(ptr{pgl3dRigidBody} const& rigidBody)
+  {
+    dynamicsWorld.addRigidBody(address(rigidBody->rigidBody));
+    rigidBodies.push_back(rigidBody);
+  }
+}
+

@@ -139,9 +139,9 @@ sub args_str
       $r .= ', ';
     }
     my $argname = get_pxname($ent);
-    if ($argname eq '') {
-      $argname = "_$i";
-    }
+    #if ($argname eq '') {
+      $argname .= "_$i";
+    #}
     $r .= passinfo_str($ent->{type}) . " " . $argname;
   }
   return $r;
