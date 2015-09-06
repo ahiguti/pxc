@@ -31,7 +31,7 @@ public enum draw_step {
 private metafunction instance_id_type
   m::cond{use_copying_instancing, float, unit};
 
-private tsvaluetype struct triangles_uniforms
+private tsvaluetype struct triangles_uniforms()
 {
   public glm::mat4 view_projection_matrix;
   public int sampler;
@@ -43,7 +43,7 @@ private tsvaluetype struct triangles_uniforms
   public glm::mat4 shadowmap_vp;
 }
 
-private tsvaluetype struct triangles_vertex_attributes
+private tsvaluetype struct triangles_vertex_attributes()
 {
   public instance_id_type instance_id;
   public glm::vec3 position;
@@ -52,7 +52,7 @@ private tsvaluetype struct triangles_vertex_attributes
   public glm::vec3 uvw;
 }
 
-private tsvaluetype struct triangles2_vertex_attributes
+private tsvaluetype struct triangles2_vertex_attributes()
 {
   public glm::vec3 position;
   public glm::vec3 normal;
@@ -60,24 +60,7 @@ private tsvaluetype struct triangles2_vertex_attributes
   public glm::vec3 uvw;
 }
 
-private tsvaluetype struct zprepass_vertex_attributes
-{
-  public instance_id_type instance_id;
-  public glm::vec3 position;
-  public glm::vec3 normal;
-  public glm::vec3 tangent;
-  public glm::vec3 uvw;
-}
-
-private tsvaluetype struct zprepass2_vertex_attributes
-{
-  public glm::vec3 position;
-  public glm::vec3 normal;
-  public glm::vec3 tangent;
-  public glm::vec3 uvw;
-}
-
-private tsvaluetype struct shadowmap_vertex_attributes
+private tsvaluetype struct zprepass_vertex_attributes()
 {
   public instance_id_type instance_id;
   public glm::vec3 position;
@@ -86,7 +69,7 @@ private tsvaluetype struct shadowmap_vertex_attributes
   public glm::vec3 uvw;
 }
 
-private tsvaluetype struct shadowmap2_vertex_attributes
+private tsvaluetype struct zprepass2_vertex_attributes()
 {
   public glm::vec3 position;
   public glm::vec3 normal;
@@ -94,38 +77,55 @@ private tsvaluetype struct shadowmap2_vertex_attributes
   public glm::vec3 uvw;
 }
 
-private tsvaluetype struct triangles_instance_attributes
+private tsvaluetype struct shadowmap_vertex_attributes()
+{
+  public instance_id_type instance_id;
+  public glm::vec3 position;
+  public glm::vec3 normal;
+  public glm::vec3 tangent;
+  public glm::vec3 uvw;
+}
+
+private tsvaluetype struct shadowmap2_vertex_attributes()
+{
+  public glm::vec3 position;
+  public glm::vec3 normal;
+  public glm::vec3 tangent;
+  public glm::vec3 uvw;
+}
+
+private tsvaluetype struct triangles_instance_attributes()
 {
   public glm::mat4 model_matrix;
 }
 
-private tsvaluetype struct zprepass_uniforms
+private tsvaluetype struct zprepass_uniforms()
 {
   public glm::mat4 view_projection_matrix;
 }
 
-private tsvaluetype struct shadowmap_uniforms
+private tsvaluetype struct shadowmap_uniforms()
 {
   public glm::mat4 shadowmap_vp;
 }
 
-private tsvaluetype struct font_uniforms
+private tsvaluetype struct font_uniforms()
 {
   public int sampler;
 }
 
-private tsvaluetype struct font2_uniforms
+private tsvaluetype struct font2_uniforms()
 {
   public glm::vec2 screen_size_px;
   public int sampler;
 }
 
-private tsvaluetype struct font2_instance_attributes
+private tsvaluetype struct font2_instance_attributes()
 {
   public glm::vec4 idata;
 }
 
-private tsvaluetype struct font2_vertex_attributes
+private tsvaluetype struct font2_vertex_attributes()
 {
   public instance_id_type instance_id;
   public glm::vec2 texture_size_px;
@@ -136,63 +136,63 @@ private tsvaluetype struct font2_vertex_attributes
   public float char_point_size;
 }
 
-private tsvaluetype struct rect2d_vertex_attributes
+private tsvaluetype struct rect2d_vertex_attributes()
 {
   public instance_id_type instance_id;
   public glm::vec2 vert;
 }
 
-private tsvaluetype struct rect2d_instance_attributes
+private tsvaluetype struct rect2d_instance_attributes()
 {
   public glm::vec4 idata; // x0, y0, dx, dy
 }
 
-private tsvaluetype struct rect2d_uniforms
+private tsvaluetype struct rect2d_uniforms()
 {
 }
 
-private tsvaluetype struct particle_uniforms
+private tsvaluetype struct particle_uniforms()
 {
   public float point_size_base;
 }
 
-private tsvaluetype struct particle_instance_attributes
+private tsvaluetype struct particle_instance_attributes()
 {
   public glm::mat4 model_matrix; // vp applied
 }
 
-private tsvaluetype struct particle_vertex_attributes
+private tsvaluetype struct particle_vertex_attributes()
 {
   public glm::vec3 position;
 }
 
-private tsvaluetype struct particle_bb_uniforms
+private tsvaluetype struct particle_bb_uniforms()
 {
   public glm::mat4 view_projection_matrix;
   public glm::mat4 camera_matrix;
   public float point_size_base;
 }
 
-private tsvaluetype struct particle_bb_vertex_attributes
+private tsvaluetype struct particle_bb_vertex_attributes()
 {
   public glm::vec3 position;
   public glm::vec2 local_position;
 }
 
-private tsvaluetype struct lineparticle_uniforms
+private tsvaluetype struct lineparticle_uniforms()
 {
   public glm::mat4 view_projection_matrix;
   public glm::vec2 screen_size_px;
   public float screen_size_base;
 }
 
-private tsvaluetype struct lineparticle_vertex_attributes
+private tsvaluetype struct lineparticle_vertex_attributes()
 {
   public instance_id_type instance_id;
   public glm::vec2 vert;
 }
 
-private tsvaluetype struct lineparticle_instance_attributes
+private tsvaluetype struct lineparticle_instance_attributes()
 {
   public glm::mat3 idata;
 }
@@ -1021,21 +1021,20 @@ triangles_shader_vert(shader_config const& g, bool instancing, int opt)
   v += g.vert_out() + "vec3 vary_tangent;\n";
   v += g.vert_out() + "vec3 vary_uvw;\n";
   v += g.vert_out() + "vec3 vary_binormal;\n";
+  v += g.vert_out() + "vec3 vary_color;\n";
   if (g.enable_shadowmapping) {
     v += g.vert_out() + "vec4 vary_smpos;\n";
   }
   v += "void main(void) {\n";
-  v += "  vec4 gpos4 = " + g.instance_attr("model_matrix", instancing, true);
-  v += "    * vec4(position, 1.0);\n";
+  v += "  mat4 mm = "
+    + g.instance_attr("model_matrix", instancing, true)
+    + ";\n";
+  v += "  vary_color = vec3(0.5 + float(gl_InstanceID % 4) * 0.0625, 0.4, float(gl_InstanceID % 8) * 0.0625);\n";
+  v += "  vec4 gpos4 = mm * vec4(position, 1.0);\n";
   v += "  gl_Position = view_projection_matrix * gpos4;\n";
   if (g.is_gl3_or_gles3()) {
-    v += "  mat3 normal_matrix = mat3("
-      + g.instance_attr("model_matrix", instancing, true)
-      + ");\n";
+    v += "  mat3 normal_matrix = mat3(mm);\n";
   } else {
-    v += "  mat4 mm = "
-      + g.instance_attr("model_matrix", instancing, true)
-      + ";\n";
     v += "  mat3 normal_matrix = mat3(mm[0].xyz, mm[1].xyz, mm[2].xyz);\n";
   }
   v += "  vary_position = gpos4.xyz / gpos4.w;\n";
@@ -1071,6 +1070,7 @@ function string triangles_shader_frag(shader_config const& g, bool instancing,
   f += g.frag_in() + "vec3 vary_tangent;\n";
   f += g.frag_in() + "vec3 vary_uvw;\n";
   f += g.frag_in() + "vec3 vary_binormal;\n";
+  f += g.frag_in() + "vec3 vary_color;\n";
   if (g.enable_shadowmapping) {
     f += g.frag_in() + "vec4 vary_smpos;\n";
   }
@@ -1082,9 +1082,11 @@ function string triangles_shader_frag(shader_config const& g, bool instancing,
   if (opt != 0) {
     f += "vec4 color_dif = vec4(0.52, 0.28, 0.42, 1.0);\n";
   } else if (instancing) {
-    f += "vec4 color_dif = vec4(0.42, 0.42, 0.42, 1.0);\n";
+    f += "vec4 color_dif = vec4(vary_color, 1.0);\n";
+    // f += "vec4 color_dif = vec4(0.50, 0.70, 0.18, 1.0);\n";
   } else {
-    f += "vec4 color_dif = vec4(0.43, 0.42, 0.44, 1.0);\n";
+    f += "vec4 color_dif = vec4(vary_color, 1.0);\n";
+    // f += "vec4 color_dif = vec4(0.20, 0.22, 0.21, 1.0);\n";
   }
   f += "float mate_ambient = 0.2;\n";
   f += "float mate_specular = 0.5;\n";
@@ -1119,7 +1121,7 @@ function string triangles_shader_frag(shader_config const& g, bool instancing,
 	  /* lookup the tilemap */
     f += "vec2 uv_pixel = floor(ti.xy * 255.0 + 0.5) * tile_size + uvi;\n";
 	  /* tile pattern coordinate */
-    f += "mate_ambient = ti.z;\n";
+    // f += "mate_ambient = ti.z;\n";
     f += "mate_specular = ti.w;\n";
     f += "vec4 c0 = " + g.texture2d();
     f += "  (sampler, uv_pixel / tiletex_size);\n";

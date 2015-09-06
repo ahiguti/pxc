@@ -8,6 +8,8 @@ extern "types" inline
 #define DBG_POOL(x)
 #endif
 
+#define PXCRT_NO_LOCAL_POOL
+
 #if defined(__APPLE__) && !defined(PXCRT_NO_LOCAL_POOL)
 #define PXCRT_NO_LOCAL_POOL
 #endif
@@ -28,7 +30,12 @@ namespace pxcrt {
 
 static inline void *global_allocate_n(size_t sz)
 {
+#if defined(_MSC_VER) && !defined(_WIN64)
+  // TODO: use malloc instead
+  void *const p = _aligned_malloc(sz, 16);
+#else
   void *const p = malloc(sz);
+#endif
   if (p == 0) {
     throw std::bad_alloc();
   }
@@ -37,7 +44,11 @@ static inline void *global_allocate_n(size_t sz)
 
 static inline void *global_reallocate_n(void *optr, size_t osz, size_t nsz)
 {
+#if defined(_MSC_VER) && !defined(_WIN64)
+  void *const p = _aligned_realloc(optr, nsz, 16);
+#else
   void *const p = realloc(optr, nsz);
+#endif
   if (p == 0) {
     throw std::bad_alloc();
   }
@@ -46,7 +57,11 @@ static inline void *global_reallocate_n(void *optr, size_t osz, size_t nsz)
 
 static inline void global_deallocate_n(void *ptr, size_t sz)
 {
+#if defined(_MSC_VER) && !defined(_WIN64)
+  _aligned_free(ptr);
+#else
   free(ptr);
+#endif
 }
 
 void clear_local_pool();

@@ -7,6 +7,12 @@ public import pgl3d::collision_shape *;
 public import meta m;
 public import meta::vararg va;
 
+// extern "types" inline
+// #include <bullet/BulletCollision/CollisionDispatch/btSimulationIslandManager.h>
+// ;
+
+public metafunction broadphase_to_use 2;
+
 public threaded struct pgl3dDynamicsWorld()
   // <pgl3dDynamicsWorld_i>
 {
@@ -14,13 +20,31 @@ public threaded struct pgl3dDynamicsWorld()
     = btDefaultCollisionConfiguration(btDefaultCollisionConstructionInfo());
   public btCollisionDispatcher mutable dispatcher
     = btCollisionDispatcher(address(collisionConfiguration));
+  expand(s: m::seq{m::eq{broadphase_to_use, 2}}) {
+  public btSimpleBroadphase mutable broadphase
+    = btSimpleBroadphase(65536U, rawptr{btOverlappingPairCache}());
+  }
+  expand(s: m::seq{m::eq{broadphase_to_use, 1}}) {
   public btDbvtBroadphase mutable broadphase
     = btDbvtBroadphase(rawptr{btOverlappingPairCache}());
+  }
+  expand(s: m::seq{m::eq{broadphase_to_use, 0}}) {
+  public bt32BitAxisSweep3 mutable broadphase
+    = bt32BitAxisSweep3_(
+      btVector3_(-1000.0f, -1000.0f, -1000.0f),
+      btVector3_( 1000.0f,  1000.0f,  1000.0f),
+      65536U, rawptr{btOverlappingPairCache}(), false);
+  }
   public btSequentialImpulseConstraintSolver mutable solver;
   public btDiscreteDynamicsWorld mutable dynamicsWorld
     = btDiscreteDynamicsWorld(address(dispatcher), address(broadphase),
       address(solver), address(collisionConfiguration));
   private varray{ptr{pgl3dRigidBody}} rigidBodies;
+  init();
+  private function void init() {
+    dynamicsWorld.setForceUpdateAllAabbs(false);
+    // dynamicsWorld.getSimulationIslandManager()->setSplitIslands(false);
+  }
   function ~
   {
     clear();

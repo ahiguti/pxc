@@ -1,5 +1,6 @@
 public namespace demoapp "use-unsafe"; // FIXME?
 public import common -;
+public import exception -;
 public import numeric::fpmath -;
 public import meta m;
 public import glm;
@@ -11,10 +12,13 @@ public import pgl3d::glconf -;
 public import pgl3d::glgeometry -;
 public import pgl3d::wfobj -;
 public import pgl3d::drawer_export -;
-public import pgl3d::device_motion -;
+public import pgl3d::input_control -;
 private import pgl3d::dynamics_world -;
 private import Bullet::base -;
 private import Bullet::api -;
+public import io::time -;
+
+public import testbroadphase -; // FIXME
 
 // FIXME
 public import pgl3d::sdlutil -;
@@ -31,6 +35,7 @@ public import pgl3d::sdlutil -;
   }}(cnf, '\n');
   println("map=", m);
 }
+
 
 // FIXME: projection_infoではなくscreen_infoだけ渡すように
 
@@ -68,8 +73,8 @@ public struct demoapp_application()
 private struct app_impl()
 {
   public tptr{demoapp_scene_shared} const scene_shared
-    = make_tptr{demoapp_scene_shared}();
-  public player_info player;
+    = make_tptr{demoapp_scene_shared}(io::system);
+  public input_control_target player;
   public input_control ictl = input_control(io::system);
   public bool scene_next_flag;
   public float light_on = 1.0f;
@@ -81,9 +86,30 @@ private struct app_impl()
   }
 }
 
-public metafunction shapes_type tree_map{string, tcptr{varray{float}}};
+public tsvaluetype enum collision_shape_e {
+  collision_shape_e_sphere = 0,
+  collision_shape_e_box = 1,
+  collision_shape_e_convex_hull = 2,
+  collision_shape_e_concave = 3,
+}
 
-public multithreaded struct demoapp_scene_shared()
+public multithreaded struct
+collision_shape_data(string const& name0, joint_id_type joint_id0,
+  float mass0, collision_shape_e shape0, varray{float} const& values0,
+  varray{uint} elements0)
+{
+  public string name = name0;
+  public joint_id_type joint_id = joint_id0;
+  public float mass = mass0;
+  public collision_shape_e shape = shape0;
+  public varray{float} values = values0;
+  public varray{uint} elements = elements0;
+}
+
+public metafunction collision_shape_data_array
+  varray{tcptr{collision_shape_data}};
+
+public multithreaded struct demoapp_scene_shared(io const& sys0)
   <pgl3d_scene_shared>
 {
   public position_angle posang;
@@ -91,19 +117,33 @@ public multithreaded struct demoapp_scene_shared()
   public float light_on;
   public texture_info default_font_texture_info;
   public string_map app_commands;
+  public io::io sys = sys0;
   /* constatnt */
-  public shapes_type shapes;
+  public collision_shape_data_array shapes;
   function ptr{pgl3d_scene} make_scene(node_factory const& nodefac) {
-    return make_ptr{demoapp_scene}(nodefac, shapes);
+    return make_ptr{demoapp_scene}(nodefac, shapes, sys);
   }
 }
 
+public threaded function double get_time(io::io const& sys)
+{
+  const t = sys.high_resolution_timer();
+  const d = sys.high_resolution_timer_frequency();
+  return static_cast{double}(t) / static_cast{double}(d);
+}
+
+private threaded function float time_diff(double t0, double t1)
+{
+  return static_cast{float}(t1 - t0);
+}
+
 public threaded struct demoapp_scene(node_factory const& nodefac0,
-  shapes_type const& shapes)
+  collision_shape_data_array const& shapes0, io::io const& sys0)
   <pgl3d_scene>
 {
-  public scene_control sctl = scene_control(nodefac0, shapes);
-  // public device_motion dmotion = device_motion(iop, 1.0 / 30.0);
+  public scene_control sctl = scene_control(nodefac0, shapes0);
+  public io::io sys = sys0;
+  public string timings;
   public function void on_motion_step(float frame_speed,
     projection_info const& pjinfo, cstrref const& status_message,
     cslice{prepare_instance_data_funcptr} const& ftable,
@@ -111,9 +151,11 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
     pgl3d_scene_shared mutable& ss, position_angle mutable& camera_r,
     position_angle mutable& light_r, string_map mutable& commands_r)
   {
+    const t0 = get_time(sys);
     mutable& dss = downcast_mutable{demoapp_scene_shared}(ss);
     // const t0 = io::debug_system().gettimeofday_double();
     camera_r = dss.posang;
+    // camera_r.position += camera_r.angle * glm::make_vec3(0.0, 0.0, 3.0);
     light_r.position = camera_r.position +
       camera_r.angle.to_mat3() * glm::make_vec3(3.0, 3.0, 5.0);
     light_r.angle = camera_r.angle;
@@ -124,18 +166,30 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
     ncd.shadowmapping_vp = sm_vp;
     ncd.vp = vp;
     scene_control_update_buttons(sctl, sctl.node_buttons);
-    scene_control_set_message(sctl, sctl.node_status_message, status_message,
+    string s = string_join{" "}("O:", sctl.sco.objects.size(),
+      sctl.active_count, "T:", timings, status_message);
+    scene_control_set_message(sctl, sctl.node_status_message, s,
       0, 0,
       dss.default_font_texture_info.char_w,
       dss.default_font_texture_info.char_h,
       static_cast{float}(pjinfo.screen_width),
       static_cast{float}(pjinfo.screen_height));
+    const t1 = get_time(sys);
     scene_control_step(sctl, dss, frame_speed, ncd, ftable, whole_instances);
+    const t2 = get_time(sys);
     prepare_instance_data_ft_rec(ncd, sctl.node_status_message, ftable,
       whole_instances);
+    const t3 = get_time(sys);
     prepare_instance_data_ft_rec(ncd, sctl.node_buttons, ftable,
       whole_instances);
+    const t4 = get_time(sys);
     prepare_instance_data_lp(ncd, ftable, whole_instances);
+    const t5 = get_time(sys);
+    timings = string_join{" "}(
+      time_diff(t0, t1),
+      time_diff(t1, t2),
+      time_diff(t2, t5));
+//    debug_log("timings", timings);
   }
   private function size_t prepare_instance_data_ft_rec(
     node_common_data mutable& ncd,
@@ -173,439 +227,57 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
   }
 }
 
-private valuetype struct
-player_info()
-{
-  public glm::quat device_rot_prev;
-  public glm::quat angle;
-  public glm::vec3 position;
-  public glm::vec3 pos_delta;
-  public bool accel;
-  public float accel_ratio = 0.1f;
-}
-
-private struct
-input_control(io const& iop)
-{
-  public device_motion dmotion = device_motion(iop, 1.0 / 30.0);
-  public varray{SDL_FingerID} fingerids;
-  public farray{bool, 2} fingdown;
-  public farray{size_t, 2} fingerdown_time;
-  public farray{glm::vec2, 2} start_pos;
-  public farray{glm::vec2, 2} cur_pos;
-  public farray{float, 2} pos_distance_max;
-  public glm::vec2 finger_xyrotate_delta;
-  public float finger_zmove_delta;
-  public int finger_zmove_mode = 0;
-  public function void finger_motion(float x, float y, float dx, float dy,
-    SDL_FingerID fng)
-  {
-    size_t fid = 2;
-    if (fingerids.size() > 0 && fingerids[0] == fng) {
-      fid = 0;
-    } else if (fingerids.size() > 1 && fingerids[1] == fng) {
-      fid = 1;
-    }
-    if (fid < 2) {
-      cur_pos[fid] = glm::make_vec2(x, y);
-      pos_distance_max[fid] = max(glm::distance(cur_pos[fid], start_pos[fid]),
-	pos_distance_max[fid]);
-      /*
-      sdllog("finger_motion", pos_distance_max);
-      */
-      /*
-      sdllog("finger_motion", x, y, fid, fng);
-      */
-    } else {
-      /*
-      sdllog("finger_motion(ignored)", x, y, fng,
-	"fingerids:", fingerids);
-      */
-    }
-  }
-  public function void finger_down(float x, float y, SDL_FingerID fng) {
-    size_t fid = 2;
-    if (fingerids.size() > 0 && fingerids[0] == fng) {
-      fid = 0;
-    } else if (fingerids.size() > 1 && fingerids[1] == fng) {
-      fid = 1;
-    } else if (fingerids.size() < 2) {
-      fid = fingerids.size();
-      fingerids.push_back(fng);
-    }
-    if (fid < 2) {
-      fingdown[fid] = true;
-      start_pos[fid] = glm::make_vec2(x, y);
-      cur_pos[fid] = start_pos[fid];
-      pos_distance_max[fid] = 0.0f;
-      /*
-      sdllog("finger_down", x, y, fid);
-      */
-      fingerdown_time[0] = 0;
-      fingerdown_time[1] = 0;
-      finger_zmove_mode = 0;
-    }
-    /*
-    sdllog("finger_down_post", fingerids);
-    */
-  }
-  public function int finger_up(SDL_FingerID fng) {
-    int tap_finger = -1;
-    size_t fid = 2;
-    if (fingerids.size() > 0 && fingerids[0] == fng) {
-      fid = 0;
-    } else if (fingerids.size() > 1 && fingerids[1] == fng) {
-      fid = 1;
-    }
-    if (fid < 2) {
-      if (pos_distance_max[fid] < 0.01f && fingdown[fid]) {
-	tap_finger = static_cast{int}(fid);
-      }
-      fingdown[fid] = false;
-      /*
-      sdllog("finger_up", fid);
-      */
-      if (fid == 1) {
-	start_pos[0] = cur_pos[0];
-	fingerids.resize(1, 0);
-	fingdown[1] = false;
-      } else {
-	fingerids.erase(0, 1);
-	if (fingerids.empty()) {
-	  fingdown[0] = false;
-	} else {
-	  cur_pos[0] = cur_pos[1];
-	  start_pos[0] = cur_pos[1];
-	  fingdown[0] = fingdown[1];
-	  fingdown[1] = false;
-	}
-      }
-      fingerdown_time[0] = 0;
-      fingerdown_time[1] = 0;
-      finger_zmove_mode = 0;
-    }
-    return tap_finger;
-    /*
-    sdllog("finger_up_post", fingerids);
-    */
-  }
-  public function void finger_action_one_finger(glm::quat mutable& rot,
-      float frame_speed, size_t fid)
-  {
-    mutable dx = (cur_pos[fid].x - start_pos[fid].x);
-    mutable dy = (cur_pos[fid].y - start_pos[fid].y);
-    const d = glm::distance(start_pos[fid], cur_pos[fid]);
-    if (d > 3.0) {
-      dx /= d / 3.0;
-      dy /= d / 3.0;
-    }
-    /*
-    sdllog("onefinger", dx, dy);
-    */
-    rot *= glm::make_quat_angle_axis(to_radians(dy * 5.0 * frame_speed),
-	1.0, 0.0, 0.0);
-    rot *= glm::make_quat_angle_axis(to_radians(dx * 5.0 * frame_speed),
-	0.0, 1.0, 0.0);
-    finger_xyrotate_delta.x = dx;
-    finger_xyrotate_delta.y = dy;
-  }
-  public function void finger_action_two_fingers(glm::quat const& angle,
-      glm::vec3 mutable& pos, float frame_speed)
-  {
-    const d0 = cur_pos[0] - start_pos[0];
-    const d1 = cur_pos[1] - start_pos[1];
-    if (glm::dot(d0, d1) < 0.0f) {
-      /* z move */
-      if (finger_zmove_mode != 2) {
-	const distance_start = glm::distance(start_pos[0], start_pos[1]);
-	mutable distance_cur = glm::distance(cur_pos[0], cur_pos[1]);
-	if (distance_cur <= 0.0001f) {
-	  distance_cur = 0.0001f;
-	}
-	const rat = distance_start / distance_cur;
-	const prev = finger_zmove_delta;
-	if (rat > 1.2) {
-	  finger_zmove_delta += 0.001f * frame_speed;
-	  if (finger_zmove_delta >= 1.0) {
-	    finger_zmove_delta = 1.0;
-	  }
-	  finger_zmove_mode = 1;
-	} else if (rat < 0.8) {
-	  finger_zmove_delta -= 0.001f * frame_speed;
-	  if (finger_zmove_delta <= -1.0) {
-	    finger_zmove_delta = -1.0;
-	  }
-	  finger_zmove_mode = 1;
-	}
-	if ((prev < 0.0f && finger_zmove_delta > 0.0f) ||
-	  (prev > 0.0f && finger_zmove_delta < 0.0f)) {
-	  /* stop */
-	  finger_zmove_delta = 0.0f;
-	  finger_zmove_mode = 2;
-	}
-      }
-    } else {
-      /* xy move */
-      const d0 = cur_pos[0] - start_pos[0];
-      const d1 = cur_pos[1] - start_pos[1];
-      mutable avg = (d0 + d1) / 2.0f;
-      const d = (glm::distance(start_pos[0], cur_pos[0]),
-	glm::distance(start_pos[1], cur_pos[0])) / 2.0f;
-      if (d > 3.0) {
-	avg /= d / 3.0;
-      }
-      avg /= 32.0f;
-      pos += angle * (glm::make_vec3(avg.x, -avg.y, 0.0) * frame_speed);
-    }
-  }
-  public function void finger_action_step(player_info mutable& pl,
-      glm::vec3 mutable& pos_delta, float frame_speed)
-  {
-    dmotion.update();
-    glm::quat mutable device_rot;
-    device_rot.x = dmotion.value_xyzw[0U];
-    device_rot.y = dmotion.value_xyzw[1U];
-    device_rot.z = dmotion.value_xyzw[2U];
-    device_rot.w = dmotion.value_xyzw[3U];
-    pl.angle *= pl.device_rot_prev.conjugate();
-    pl.angle *= device_rot;
-    pl.angle = pl.angle.normalize();
-    pl.device_rot_prev = device_rot;
-    /*
-    sdllog("finger_action_step", fingdown[0], fingdown[1]);
-    */
-    if (fingdown[0] && !fingdown[1]) {
-      if (fingerdown_time[0] >= 2) {
-	finger_action_one_finger(pl.angle, frame_speed, 0);
-      } else {
-	start_pos[0] = (start_pos[0] + cur_pos[0]) / 2.0f;
-	fingerdown_time[0] += 1;
-      }
-      if (fingerids[0] == 0) {
-	/* mouse button */
-	/*
-	finger_zmove_delta -= 0.0001;
-	if (finger_zmove_delta <= -0.01) {
-	  finger_zmove_delta = -0.01;
-	}
-	*/
-      }
-    } else if (!fingdown[0] && fingdown[1]) {
-      if (fingerdown_time[1] >= 2) {
-	finger_action_one_finger(pl.angle, frame_speed, 0);
-      } else {
-	start_pos[1] = (start_pos[1] + cur_pos[1]) / 2.0f;
-	fingerdown_time[1] += 1;
-      }
-    } else if (fingdown[0] && fingdown[1]) {
-      if (fingerdown_time[0] >= 2 && fingerdown_time[1] >= 2) {
-	finger_action_two_fingers(pl.angle, pl.position,
-	    frame_speed);
-      } else {
-	start_pos[0] = (start_pos[0] + cur_pos[0]) / 2.0f;
-	fingerdown_time[0] += 1;
-	start_pos[1] = (start_pos[1] + cur_pos[1]) / 2.0f;
-	fingerdown_time[1] += 1;
-      }
-    } else {
-      const len = glm::length(finger_xyrotate_delta);
-      pl.angle *= glm::make_quat_angle_axis(
-	  to_radians(-finger_xyrotate_delta.y * 2.0 * frame_speed),
-	  1.0, 0.0, 0.0);
-      pl.angle *= glm::make_quat_angle_axis(
-	  to_radians(-finger_xyrotate_delta.x * 2.0 * frame_speed),
-	  0.0, 1.0, 0.0);
-      const decay = 0.03f * frame_speed;
-      if (len < decay) {
-	finger_xyrotate_delta = glm::make_vec2(0.0f, 0.0f);
-      } else {
-	finger_xyrotate_delta -= finger_xyrotate_delta * decay / len;
-      }
-    }
-    /*
-    if (pl.accel) {
-      pl.accel_ratio = min(
-	  pl.accel_ratio + 0.003f * frame_speed, 1.0f);
-    } else {
-      pl.accel_ratio = max(
-	  pl.accel_ratio - 0.003f * frame_speed, 0.01f);
-    }
-    */
-    pl.pos_delta = pl.angle.to_mat3()
-	* glm::make_vec3(0.0, 0.0, finger_zmove_delta /* * pl.accel_ratio */);
-    pl.position += pl.pos_delta * frame_speed;
-    /*
-    target.translate_relative(glm::make_vec3(0.0, 0.0, finger_zmove_delta)
-	* frame_speed);
-    */
-  }
-  public function void add_zdelta(float zaccel, float frame_speed)
-  {
-    finger_zmove_delta += zaccel * frame_speed;
-    /*
-    sdllog("zdelta", finger_zmove_delta);
-    */
-    if (finger_zmove_delta <= -1.0) {
-      finger_zmove_delta = -1.0;
-    }
-    if (finger_zmove_delta >= 1.0) {
-      finger_zmove_delta = 1.0;
-    }
-    finger_zmove_mode = 1;
-  }
-}
-
 function void handle_event(app_impl mutable& app,
   SDL_Event const& ev, float frame_speed, projection_info const& pjinfo,
   string_map mutable& commands_r)
 {
   const etype = ev.type;
-  if (etype == SDL_WINDOWEVENT) {
-  } else if (etype == SDL_QUIT) {
-  } else if (etype == SDL_MULTIGESTURE) {
-  } else if (etype == SDL_MOUSEBUTTONDOWN) {
+  if (etype == SDL_MOUSEBUTTONDOWN) {
     const bx = cast_float(ev.button.x) / cast_float(pjinfo.screen_width);
     const by = cast_float(ev.button.y) / cast_float(pjinfo.screen_height);
     if (bx < 0.1 && by < 0.1) {
       app.scene_next_flag = true;
-    } else if (bx > 0.9 && by < 0.1) {
+      return;
     } else if (bx > 0.9 && by > 0.9) {
       app.light_on = app.light_on > 0.5f ? 0.0f : 1.0f;
-    } else {
-      sdllog("mousedown", ev.button.x, ev.button.y, ev.button.button);
-      app.ictl.finger_down(
-	cast_float(ev.button.x) / cast_float(pjinfo.screen_width),
-	cast_float(ev.button.y) / cast_float(pjinfo.screen_height),
-	0);
+      return;
     }
-  } else if (etype == SDL_MOUSEBUTTONUP) {
-    /*
-    sdllog("mouseup", ev.button.button);
-    ictl.finger_up(0);
-     */
-  } else if (etype == SDL_MOUSEMOTION) {
-    /*
-    sdllog("mousemotion", ev.button.x, ev.button.y, ev.button.button);
-     */
   } else if (etype == SDL_FINGERDOWN) {
-    /*
-    sdllog("fingerdown", ev.tfinger.x, ev.tfinger.y, ev.tfinger.fingerId);
-    */
     if (ev.tfinger.x < 0.1 && ev.tfinger.y < 0.1) {
       app.scene_next_flag = true;
-    } else if (ev.tfinger.x > 0.9 && ev.tfinger.y < 0.1) {
+      return;
     } else if (ev.tfinger.x > 0.9 && ev.tfinger.y > 0.9) {
-      app.player.accel = !app.player.accel;
       app.light_on = app.light_on > 0.5f ? 0.0f : 1.0f;
-    } else {
-      app.ictl.finger_down(ev.tfinger.x, ev.tfinger.y, ev.tfinger.fingerId);
+      return;
     }
-  } else if (etype == SDL_FINGERUP) {
-    /*
-    sdllog("fingerup", ev.tfinger.fingerId);
-    */
-    int tap_finger = app.ictl.finger_up(ev.tfinger.fingerId);
-    if (tap_finger == 0) {
-      app.app_commands["throw"] = "1";
-    }
-  } else if (etype == SDL_FINGERMOTION) {
-    if (m::or{is_android, is_ios}) {
-      app.ictl.finger_motion(ev.tfinger.x, ev.tfinger.y,
-	  ev.tfinger.dx, ev.tfinger.dy, ev.tfinger.fingerId);
-      /*
-      sdllog("fingermotion", ev.tfinger.x, ev.tfinger.y,
-	ev.tfinger.dx, ev.tfinger.dy, ev.tfinger.fingerId);
-      */
-    }
-  } else if (etype == SDL_APP_WILLENTERBACKGROUND) {
-  } else if (etype == SDL_APP_DIDENTERFOREGROUND) {
   } else if (etype == SDL_KEYDOWN) {
-    sdllog("KEYDOWN event", static_cast{int}(ev.key.keysym.scancode));
+    // sdllog("KEYDOWN event", static_cast{int}(ev.key.keysym.scancode));
     if (ev.key.keysym.scancode == SDL_SCANCODE_TAB) {
       app.scene_next_flag = true;
+      return;
     }
     if (ev.key.keysym.scancode == SDL_SCANCODE_0) {
       commands_r["fullscreen"] = "1";
+      return;
     }
     if (ev.key.keysym.scancode == SDL_SCANCODE_LEFTBRACKET) {
       commands_r["vsync"] = "1";
+      return;
     }
     if (ev.key.keysym.scancode == SDL_SCANCODE_T) {
       app.app_commands["throw"] = "1";
+      return;
     }
-  } else {
-    string s;
-    integral_to_hexadecimal{int}(cast_int(ev.type), s);
-    sdllog("unknown event", s);
-    /* */
   }
+  app.ictl.handle_event(ev, frame_speed, pjinfo, commands_r);
 }
 
 function void handle_keys(app_impl mutable& app,
   cslice{Uint8} const& keys, float frame_speed, projection_info const& pjinfo,
   string_map mutable& commands_r)
 {
-  function uint get_key(SDL_Scancode k) {
-    return keys[static_cast{uint}(k)];
-  }
-  /*
-  if (test_scroll_mode) {
-    app.player.posang.rotate_angle_axis(
-	to_radians(1.0f * frame_speed),
-	1.0, 0.0, 0.0);
-  }
-  */
-  if (get_key(SDL_SCANCODE_UP) != 0) {
-    app.player.angle *= glm::make_quat_angle_axis(
-	to_radians(1.0f * frame_speed), 1.0, 0.0, 0.0);
-  }
-  if (get_key(SDL_SCANCODE_DOWN) != 0) {
-    app.player.angle *= glm::make_quat_angle_axis(
-	to_radians(-1.0f * frame_speed), 1.0, 0.0, 0.0);
-  }
-  if (get_key(SDL_SCANCODE_LEFT) != 0) {
-    app.player.angle *= glm::make_quat_angle_axis(
-	to_radians(1.0f * frame_speed), 0.0, 1.0, 0.0);
-  }
-  if (get_key(SDL_SCANCODE_RIGHT) != 0) {
-    app.player.angle *= glm::make_quat_angle_axis(
-	to_radians(-1.0f * frame_speed), 0.0, 1.0, 0.0);
-  }
-  if (get_key(SDL_SCANCODE_SPACE) != 0) {
-    app.ictl.add_zdelta(-0.001f, frame_speed);
-  }
-  if (get_key(SDL_SCANCODE_LSHIFT) != 0) {
-    app.ictl.add_zdelta(0.001f, frame_speed);
-  }
-  if (get_key(SDL_SCANCODE_A) != 0) {
-    app.player.position += app.player.angle *
-	glm::make_vec3(-0.05, 0.0, 0.0) * frame_speed;
-  }
-  if (get_key(SDL_SCANCODE_D) != 0) {
-    app.player.position += app.player.angle *
-	glm::make_vec3(0.05, 0.0, 0.0) * frame_speed;
-  }
-  if (get_key(SDL_SCANCODE_S) != 0) {
-    app.player.position += app.player.angle *
-	glm::make_vec3(0.0, -0.05, 0.0) * frame_speed;
-  }
-  if (get_key(SDL_SCANCODE_W) != 0) {
-    app.player.position += app.player.angle *
-	glm::make_vec3(0.0, 0.05, 0.0) * frame_speed;
-  }
-  if (get_key(SDL_SCANCODE_Z) != 0) {
-    app.player.angle *= glm::make_quat_angle_axis(
-	to_radians(1.0f * frame_speed), 0.0, 0.0, 1.0);
-  }
-  if (get_key(SDL_SCANCODE_X) != 0) {
-    app.player.angle *= glm::make_quat_angle_axis(
-	to_radians(-1.0f * frame_speed), 0.0, 0.0, 1.0);
-  }
-  if (get_key(SDL_SCANCODE_RETURN) != 0) {
-    app.ictl.finger_zmove_delta = 0.0;
-    app.ictl.finger_zmove_mode = 1;
-  }
-  app.ictl.finger_action_step(app.player, app.player.pos_delta, frame_speed);
+  app.ictl.handle_keys(app.player, keys, frame_speed, pjinfo, commands_r);
+  app.ictl.action_step(app.player, app.player.pos_delta, frame_speed);
   {
     mutable& ss = *app.scene_shared;
     ss.light_on = app.light_on;
@@ -677,6 +349,12 @@ private function void build_vertices(app_impl mutable& app,
 	bump_apply(m, false, ctx_fill(0), ctx_fill(0))),
       apply(m1,
 	ctx_fill(0))));
+  pgs.make_vertex_set(tr, "box50",
+    regular_polygon(1.4142f * 50.0f, 4,
+      apply(m1,
+	bump_apply(m, false, ctx_fill(0), ctx_fill(0))),
+      apply(m1,
+	ctx_fill(0))));
   pgs.make_vertex_set(tr, "saucer",
     regular_polygon(3.0, 40,
       bump_rec(0.2, 0.5, 1, ctx_fill(0), ctx_fill(0)),
@@ -698,7 +376,7 @@ private function void build_vertices(app_impl mutable& app,
 	0.0, 0.0, 1.0),
 	rectangle_split(30, 30,
 	  rand_bump(1, 0.8, 0.2, 0.8, 0.2, 0.8, 1.0, 4.0, rnd,
-	    ctx_fill(1), ctx_fill(1), ctx_fill(1)))),
+	    ctx_fill(0), ctx_fill(0), ctx_fill(0)))),
       rotate_local(glm::make_quat_angle_axis(to_radians(-45.0),
 	0.0, 0.0, 1.0),
 	bump_rec(0.01, 1.0, 1, ctx_fill(0), ctx_fill(0)))));
@@ -733,6 +411,56 @@ private function void build_vertices(app_impl mutable& app,
   pgs.make_vertex_set(tr, "bullet2-multi2",
     rand_sphere(200.0, 20000, false, true, rnd,
       ctx_point_joint("bullet2")));
+  {
+  rnd = make_rand_generator(991U);
+  pgs.make_vertex_set(tr, "bullet2-multi2s1",
+    rand_sphere(200.0, 4000, false, true, rnd,
+      ctx_point_joint("bullet2")));
+  rnd = make_rand_generator(991U);
+  pgs.make_vertex_set(tr, "bullet2-multi2s2",
+    rand_sphere(200.0, 8000, false, true, rnd,
+      ctx_point_joint("bullet2")));
+  rnd = make_rand_generator(991U);
+  pgs.make_vertex_set(tr, "bullet2-multi2s3",
+    rand_sphere(200.0, 10000, false, true, rnd,
+      ctx_point_joint("bullet2")));
+  rnd = make_rand_generator(991U);
+  pgs.make_vertex_set(tr, "bullet2-multi2s4",
+    rand_sphere(200.0, 12000, false, true, rnd,
+      ctx_point_joint("bullet2")));
+  rnd = make_rand_generator(991U);
+  pgs.make_vertex_set(tr, "bullet2-multi2s5",
+    rand_sphere(200.0, 14000, false, true, rnd,
+      ctx_point_joint("bullet2")));
+  rnd = make_rand_generator(991U);
+  pgs.make_vertex_set(tr, "bullet2-multi2s6",
+    rand_sphere(200.0, 16000, false, true, rnd,
+      ctx_point_joint("bullet2")));
+  rnd = make_rand_generator(991U);
+  pgs.make_vertex_set(tr, "bullet2-multi2s7",
+    rand_sphere(200.0, 18000, false, true, rnd,
+      ctx_point_joint("bullet2")));
+  rnd = make_rand_generator(991U);
+  pgs.make_vertex_set(tr, "bullet2-multi2s8",
+    rand_sphere(200.0, 20000, false, true, rnd,
+      ctx_point_joint("bullet2")));
+  rnd = make_rand_generator(991U);
+  pgs.make_vertex_set(tr, "bullet2-multi2s9",
+    rand_sphere(200.0, 22000, false, true, rnd,
+      ctx_point_joint("bullet2")));
+  rnd = make_rand_generator(991U);
+  pgs.make_vertex_set(tr, "bullet2-multi2s10",
+    rand_sphere(200.0, 24000, false, true, rnd,
+      ctx_point_joint("bullet2")));
+  rnd = make_rand_generator(991U);
+  pgs.make_vertex_set(tr, "bullet2-multi2s11",
+    rand_sphere(200.0, 26000, false, true, rnd,
+      ctx_point_joint("bullet2")));
+  rnd = make_rand_generator(991U);
+  pgs.make_vertex_set(tr, "bullet2-multi2s12",
+    rand_sphere(200.0, 28000, false, true, rnd,
+      ctx_point_joint("bullet2")));
+  }
   rnd = make_rand_generator(991U);
   pgs.make_vertex_set(tr, "bullet2-multi3",
     rand_sphere(200.0, 2000, false, true, rnd,
@@ -777,18 +505,36 @@ private function void build_vertices(app_impl mutable& app,
   app.scene_shared->default_font_texture_info = pgs.get_texture_info("font");
 
   /* save shapes for physics engine */
-  function void shapes_add(cstrref const& name) {
+  function void shapes_add_convex(cstrref const& name, float mass) {
     const& posdt = pgs.get_vertices(name)->positions;
     const reduced = reduce_vertices(posdt, 0.00001f);
-    app.scene_shared->shapes.insert(name, make_tptr{varray{float}}(reduced));
     debug_log("reduced", name, posdt.size()/3, reduced.size()/3);
+    app.scene_shared->shapes.push_back(make_tptr{collision_shape_data}(
+      name, pgs.get_joint_id(name), mass,
+      collision_shape_e_convex_hull, reduced, varray{uint}()));
   }
-  shapes_add("box");
-  shapes_add("bullet2");
-  /*
-  const& posdt = pgs.get_vertices("box")->positions;
-  app.scene_shared->shapes.insert("box", make_tptr{varray{float}}(posdt));
-  */
+  function void shapes_add_sphere(cstrref const& name, float radius,
+    float mass) {
+    varray{float} v = make_varray{float}(radius);
+    app.scene_shared->shapes.push_back(make_tptr{collision_shape_data}(
+      name, pgs.get_joint_id(name), mass,
+      collision_shape_e_sphere, v, varray{uint}()));
+  }
+  function void shapes_add_concave(cstrref const& name, float mass) {
+    const& p = pgs.get_vertices(name)->positions;
+    const& elems = pgs.get_vertices(name)->elements;
+    app.scene_shared->shapes.push_back(make_tptr{collision_shape_data}(
+      name, pgs.get_joint_id(name), mass,
+      collision_shape_e_concave, p, elems));
+  }
+  shapes_add_convex("box", 1.0f);
+  shapes_add_convex("box50", 250.0f);
+  shapes_add_convex("bullet2", 2.0f);
+  // shapes_add_sphere("bullet2", 1.0f, 2.0f);
+  shapes_add_convex("bullet", 2.0f);
+  shapes_add_convex("saucer", 10.0f);
+  // shapes_add_concave("block", 0.0f);
+  shapes_add_convex("block", 100.0f);
 }
 
 function varray{float} reduce_vertices(cslice{float} const& shape, float delta)
@@ -826,7 +572,6 @@ threaded struct lpbullet_data {
   public farray{float, 9} value;
 }
 
-// FIXME : here
 threaded struct
 collision_object(joint_id_type const& joint_id0,
   ptr{pgl3dRigidBody} const& rigid_body0)
@@ -836,33 +581,112 @@ collision_object(joint_id_type const& joint_id0,
 }
 
 threaded struct
-collision_objects()
+collision_shape_ptr(ptr{pgl3dCollisionShape_i} const& ptr0, float mass0)
 {
-  public pgl3dDynamicsWorld dynamics_world;
-  public varray{collision_object} objects;
-}
-
-threaded function void
-add_collision_object(collision_objects mutable& dy, scene_node const& sn,
-  ptr{pgl3dCollisionShape_i} const& colShape)
-{
-  if (sn.joint_id.vs_id < 0) {
-    return;
-  }
-  const& t = sn.trans.value.to_cslice();
-  const m3 = btMatrix3x3_(
-    t[0], t[1], t[2], t[4], t[5], t[6], t[8], t[9], t[10]);
-  const v3 = btVector3_(t[3], t[7], t[11]);
-  const btr = btTransform_(m3, v3);
-  const rb = make_ptr{pgl3dRigidBody}(colShape, 1.0f, btr);
-  btRigidBody_upcast_btCollisionObject_p(address(rb->rigidBody))
-    ->setFriction(1.0f);
-  dy.objects.push_back(collision_object(sn.joint_id, rb));
-  dy.dynamics_world.addRigidBody(rb);
+  public ptr{pgl3dCollisionShape_i} shape_ptr = ptr0;
+  public float mass = mass0;
 }
 
 threaded struct
-scene_control(node_factory const& nfac, shapes_type const& shapes0)
+scene_objects(collision_shape_data_array const& shape0)
+{
+  public pgl3dDynamicsWorld dynamics_world;
+  public tree_map{string, collision_shape_ptr} shapes_by_name;
+  public tree_map{joint_id_type, collision_shape_ptr} shapes_by_id;
+  public tree_map{string, joint_id_type} name_to_joint_id;
+  public varray{collision_object} objects;
+  add_collision_shapes(shape0);
+  public function void clear_objects() 
+  {
+    dynamics_world.clear();
+    objects.clear();
+    dynamics_world.dynamicsWorld.setGravity(btVector3_(0.0f, 0.0f, 0.0f));
+  }
+  public function void
+  add_collision_shapes(collision_shape_data_array const& sa)
+  {
+    for (const i, const& val: sa) {
+      add_collision_shape(*val);
+    }
+  }
+  private function void
+  add_collision_shape(collision_shape_data const& sh)
+  {
+    const& name = sh.name;
+    const& joint_id = sh.joint_id;
+    name_to_joint_id.insert(name, joint_id);
+    const& v = sh.values;
+    const& e = sh.elements;
+    const mass = sh.mass;
+    if (sh.shape == collision_shape_e_sphere) {
+      add_collision_shape_one(name, joint_id,
+	make_ptr{pgl3dCollisionShape{btSphereShape}}(v[0]), mass);
+    } else if (sh.shape == collision_shape_e_box) {
+      add_collision_shape_one(name, joint_id,
+	make_ptr{pgl3dCollisionShape{btBoxShape}}(
+	  btVector3_(v[0], v[1], v[2])), mass);
+    } else if (sh.shape == collision_shape_e_convex_hull) {
+      const s = make_ptr{pgl3dCollisionShape{btConvexHullShape}}(
+	v.to_crawptr(), static_cast{int}(v.size() / 3), 3 * 4);
+      add_collision_shape_one(name, joint_id, s, mass);
+    } else if (sh.shape == collision_shape_e_concave) {
+      ptr{btTriangleMesh} trmesh = make_ptr{btTriangleMesh}(true, true);
+      mutable& m = *trmesh;
+      size_t eidx = 0;
+      while (eidx < e.size()) {
+	if (static_cast{size_t}(e[eidx]) >= v.size()) {
+	  // TODO: primitive restart
+	}
+	const i0 = e[eidx + 0] * 3;
+	const i1 = e[eidx + 1] * 3;
+	const i2 = e[eidx + 2] * 3;
+	const v0 = btVector3_(v[i0 + 0], v[i0 + 1], v[i0 + 2]);
+	const v1 = btVector3_(v[i1 + 0], v[i1 + 1], v[i1 + 2]);
+	const v2 = btVector3_(v[i2 + 0], v[i2 + 1], v[i2 + 2]);
+	m.addTriangle(v2, v1, v0, true); // enable dedup
+	eidx += 3;
+      }
+      const s = make_ptr{pgl3dTriangleMeshShape}(trmesh);
+      add_collision_shape_one(name, joint_id, s, mass);
+    }
+  }
+  private function void add_collision_shape_one(string const& name,
+    joint_id_type const& id, ptr{pgl3dCollisionShape_i} const& sh,
+    float mass)
+  {
+    const csp = collision_shape_ptr(sh, mass);
+    shapes_by_name.insert(name, csp);
+    shapes_by_id.insert(id, csp);
+  }
+  public function option{ptr{pgl3dRigidBody}} add_collision_object(
+    scene_node const& sn)
+  {
+    option{ptr{pgl3dRigidBody}} r;
+    if (sn.joint_id.vs_id < 0) {
+      return r;
+    }
+    if (const& shape: shapes_by_id[sn.joint_id]) {
+      const& t = sn.trans.value.to_cslice();
+      const m3 = btMatrix3x3_(
+	t[0], t[4], t[8], t[1], t[5], t[9], t[2], t[6], t[10]);
+      const v3 = btVector3_(t[12], t[13], t[14]);
+      const btr = btTransform_(m3, v3);
+      const rb = make_ptr{pgl3dRigidBody}(shape.shape_ptr,
+	shape.mass, btr);
+      btRigidBody_upcast_btCollisionObject_p(address(rb->rigidBody))
+	->setFriction(1.0f);
+      objects.push_back(collision_object(sn.joint_id, rb));
+      dynamics_world.addRigidBody(rb);
+      r.some = rb;
+      return r;
+    }
+    return r;
+  }
+}
+
+threaded struct
+scene_control(node_factory const& nfac,
+  collision_shape_data_array const& shapes0)
 {
   public node_factory nodefac = nfac;
   public float prev_spawn = 0.0;
@@ -878,20 +702,47 @@ scene_control(node_factory const& nfac, shapes_type const& shapes0)
   public node mutable node_scene = make_node();
   public node mutable node_status_message = make_node();
   public node mutable node_buttons = make_node();
-  public pgl3dDynamicsWorld dynamics_world;
-  public varray{ptr{pgl3dRigidBody}} boxes;
-  public shapes_type shapes = shapes0;
+  public scene_objects sco = scene_objects(shapes0);
+  public size_t active_count = 0; // FIXME: remove
+  /*
+  public pgl3dDynamicsWorld dynamics_world; // FIXME: remove
+  public varray{ptr{pgl3dRigidBody}} boxes; // FIXME: remove
+  public collision_shape_data_array shapes = shapes0; // FIXME: remove
+  public function tcptr{collision_shape_data} find_shape(string const& name)
+    const
+  {
+  // FIXME: remove
+    for (const i, const& e: shapes) {
+      if (e->name == name) {
+	return e;
+      }
+    }
+    throw runtime_error_template{"scene_control::find_shape"}(name);
+  }
+  */
   public darray{string} const scene_names = make_darray{string}(
-    "rigidbody-multi",
     // "untitled", "saucer", "saucer-multi", "block-multi", "block",
     // "ab-multi", "ab-multi3", "skyscraper",
     // "al", "cessna", "skyscraper", "airboat",
     /*
     "parts",
-    "saucer", "saucer-multi", "block-multi", "block-multi2", "block",
-    "bullet2-multi3",
     */
-    "bullet2-multi2"
+    "bullet2-multi2s8",
+    // "bullet2-multi2s1",
+    // "bullet2-multi2s2",
+    // "bullet2-multi2s3",
+    "bullet2-multi2s4",
+    // "bullet2-multi2s5",
+    "bullet2-multi2s6",
+    // "bullet2-multi2s7",
+    // "bullet2-multi2s8",
+    // "bullet2-multi2s9",
+    // "bullet2-multi2s10",
+    // "bullet2-multi2s11",
+    "bullet2-multi2s12",
+    "rigidbody-multi",
+    "saucer", "saucer-multi", "block-multi", "block-multi2", "block",
+    "bullet2-multi3"
     /*
     "bullet2-multi",
     "bullet-multi", "saucer-multi3",
@@ -908,9 +759,42 @@ scene_control(node_factory const& nfac, shapes_type const& shapes0)
   {
     const name = scene_names[cur_scene];
     mutable r = nodefac.make_node_by_name(name, glm::mat4());
-    dynamics_world.clear();
-    boxes.clear();
+    sco.clear_objects();
+    if (r.children.empty()) {
+      sco.add_collision_object(r);
+    } else {
+      /*
+      size_t p_max = 0;
+      size_t p_min = static_cast{size_t}(-1);
+      */
+      mutable rnd = make_rand_generator(1U);
+      for (const i, const& ch: r.children) {
+	const rb = sco.add_collision_object(ch).some;
+        rb->rigidBody.applyTorqueImpulse(btVector3_(
+	  rnd->generate_float() * 10.0f - 5.0f,
+	  rnd->generate_float() * 10.0f - 5.0f,
+	  rnd->generate_float() * 10.0f - 5.0f));
+	/*
+	*/
+        rb->rigidBody.applyCentralImpulse(btVector3_(
+	  rnd->generate_float() * 10.0f - 5.0f,
+	  rnd->generate_float() * 10.0f - 5.0f,
+	  rnd->generate_float() * 10.0f - 5.0f));
+	/*
+	*/
+	size_t p = address(rb->rigidBody).to_size_t();
+	/*
+	debug_log("rb", p);
+	p_min = min(p, p_min);
+	p_max = max(p, p_max);
+	*/
+      }
+      /*
+      debug_log("min/max", p_max - p_min);
+      */
+    }
     if (cur_scene == 0) {
+      /*
       dynamics_world.dynamicsWorld.setGravity(btVector3_(0.0f, 0.0f, -10.0f));
       const groundShape = make_ptr{pgl3dCollisionShape{btBoxShape}}(
 	btVector3_(50.0f, 50.0f, 50.0f));
@@ -923,24 +807,13 @@ scene_control(node_factory const& nfac, shapes_type const& shapes0)
 	btRigidBody_upcast_btCollisionObject_p(address(rbGround->rigidBody))
 	  ->setRestitution(0.3f);
       */
+      /*
       dynamics_world.addRigidBody(rbGround);
+      */
+      /*
       const colShape = make_ptr{pgl3dCollisionShape{btBoxShape}}(
 	btVector3_(1.0f, 1.0f, 1.0f));
-      const& points = **shapes.equal_range("box");
-      /*
-      */
-      // FIXME FIXME FIXME
-      /*
-      const points = make_farray{float}(
-	-1.0f, -1.0f, -1.0f,
-	-1.0f, -1.0f,  1.0f,
-	-1.0f,  1.0f,  1.0f,
-	-1.0f,  1.0f, -1.0f,
-	 1.0f, -1.0f, -1.0f,
-	 1.0f, -1.0f,  1.0f,
-	 1.0f,  1.0f,  1.0f,
-	 1.0f,  1.0f, -1.0f);
-      */
+      const& points = find_shape("box")->values;
       const colShape1 = make_ptr{pgl3dCollisionShape{btConvexHullShape}}(
 	points.to_crawptr(), static_cast{int}(points.size() / 3), 3 * 4);
       int xsize = 20;
@@ -961,7 +834,7 @@ scene_control(node_factory const& nfac, shapes_type const& shapes0)
 	    const y = 20.0f + 3.5f * static_cast{float}(i) + start_y;
 	    const z = 10.0f + 2.1f * static_cast{float}(j) + start_z;
 	    startTransform.setOrigin(btVector3_(x, y, z));
-	    const rb = make_ptr{pgl3dRigidBody}(colShape, 1.0f,
+	    const rb = make_ptr{pgl3dRigidBody}(colShape1, 1.0f,
 	      startTransform);
 	    btRigidBody_upcast_btCollisionObject_p(address(rb->rigidBody))
 	      ->setFriction(1.0f);
@@ -981,6 +854,7 @@ scene_control(node_factory const& nfac, shapes_type const& shapes0)
 	  }
 	}
       }
+      */
       /*
       for (size_t i: 0 .. 100) {
 	const rb = make_ptr{pgl3dRigidBody}(colShape, 10.0f,
@@ -1164,13 +1038,19 @@ scene_control_step(scene_control mutable& sctl,
   threaded function void step_snobj_dynamics(scene_node mutable& sn_scene,
     bool spawn_obj)
   {
-    if (spawn_obj && sn_scene.children.size() > 0) {
-      mutable csn = sn_scene.children[0];
-      const a = ss.posang.angle * glm::make_vec3(0.0f, 0.0f, -200.0f);
+    if (spawn_obj) {
+      const a = ss.posang.angle * glm::make_vec3(0.0f, 0.0f, -20.0f);
       mutable posang = ss.posang;
       posang.position += a / 500.0f;
       const startTransform = to_btTransform(posang);
-      const rb = make_ptr{pgl3dRigidBody}(sctl.boxes[0]->collisionShape, 2.0f,
+      scene_node cnode = scene_node(
+	sctl.sco.name_to_joint_id["box"], ss.posang.to_mat4());
+      const rb = sctl.sco.add_collision_object(cnode).some;
+      rb->rigidBody.applyCentralImpulse(btVector3_(a.x, a.y, a.z));
+      rb->rigidBody.activate(true);
+      debug_log("spawn_obj", sctl.sco.objects.size());
+      /*
+      const rb = make_ptr{pgl3dRigidBody}(shape, 2.0f,
 	      startTransform);
       rb->rigidBody.applyCentralImpulse(btVector3_(a.x, a.y, a.z));
       rb->rigidBody.activate(true);
@@ -1179,6 +1059,7 @@ scene_control_step(scene_control mutable& sctl,
       sn_scene.children.push_back(csn);
       sctl.boxes.push_back(rb);
       debug_log("spawn_obj", sn_scene.children.size());
+      */
     }
     float fixedstep = 0.1f / 60.0f;
     float step = speed / 60.0f;
@@ -1186,7 +1067,33 @@ scene_control_step(scene_control mutable& sctl,
       fixedstep = step;
     }
     int substep = static_cast{int}(step / fixedstep) + 1;
-    sctl.dynamics_world.dynamicsWorld.stepSimulation(step, 1, 1.0f/60.0f);
+    // sctl.sco.dynamics_world.dynamicsWorld.stepSimulation(step, 1, 1.0f/60.0f);
+    sctl.sco.dynamics_world.dynamicsWorld.stepSimulation(1.0f/60.0f, 1, 1.0f/60.0f);
+    // btTransform trans;
+    scene_node cursn = scene_node(joint_id_type(), glm::mat4());
+    size_t active_count = 0;
+    for (const i, const& obj: sctl.sco.objects) {
+      cursn.joint_id = obj.joint_id;
+      // obj.rigid_body->motionState.getWorldTransform(trans);
+      const& trans = obj.rigid_body->rigidBody.getWorldTransform();
+      const sli = cursn.trans.value.to_slice();
+      trans.getOpenGLMatrix(sli.to_rawptr());
+      /* color: [3] [7] [11]  */
+       // sli[3] = 0.20;
+       // sli[7] = 0.20;
+       // sli[11] = 0.20;
+      // sli[3] = static_cast{float}((i & 511) >> 6) * 0.125;
+      // sli[7] = static_cast{float}((i & 63) >> 3) * 0.125;
+      // sli[11] = static_cast{float}(i & 7) * 0.125;
+      // debug_log("col", sli[3], sli[7], sli[11]);
+      // debug_log(sli);
+      prepare_one(cursn);
+      if (obj.rigid_body->rigidBody.isActive()) {
+        ++active_count;
+      }
+    }
+    sctl.active_count = active_count;
+    /*
     size_t i = 0;
     for (i = 0; i < sctl.boxes.size() && i < sn_scene.children.size(); ++i) {
       mutable& csn = sn_scene.children[i];
@@ -1195,6 +1102,7 @@ scene_control_step(scene_control mutable& sctl,
       trans.getOpenGLMatrix(csn.trans.value.to_slice().to_rawptr());
       prepare_one(csn);
     }
+    */
   }
   step_lp(); /* lineparticle */
   bool spawn_now = false;
@@ -1205,15 +1113,17 @@ scene_control_step(scene_control mutable& sctl,
       sctl.prev_spawn -= 3.0;
     }
   }
-  if (sctl.cur_scene == 0) {
+  // if (sctl.cur_scene == 0)
+  {
     bool spawn_obj = false;
     if (const& v: ss.app_commands["throw"]) {
       spawn_obj = true;
     }
     step_snobj_dynamics(sctl.node_scene, spawn_obj);
-  } else {
-    step_snobj(sctl.node_scene);
   }
+  // else {
+  //  step_snobj(sctl.node_scene);
+  //}
   sctl.motion_count += speed;
   if (sctl.motion_count >= 360.0) {
     sctl.motion_count -= 360.0;

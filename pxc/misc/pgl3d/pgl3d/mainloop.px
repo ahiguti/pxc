@@ -158,6 +158,11 @@ private function void mainloop_internal(pgl3d_application mutable& app)
     SDL_EventState(SDL_MOUSEBUTTONUP, 0);
     SDL_EventState(SDL_MOUSEMOTION, 0);
   }
+  if (m::ne{is_macos, 0}) {
+    SDL_EventState(SDL_FINGERDOWN, 0);
+    SDL_EventState(SDL_FINGERUP, 0);
+    SDL_EventState(SDL_FINGERMOTION, 0);
+  }
 
   sdllog("PGL3D init0");
 
@@ -199,7 +204,7 @@ private function void mainloop_internal(pgl3d_application mutable& app)
     fullscreen = fullscreen != 0 ? 0 : 1;
     sdllog("fullscreen=", fullscreen);
     SDL_SetWindowFullscreen(sdlc.sdl_window,
-      fullscreen != 0 ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+      fullscreen != 0 ? SDL_WINDOW_FULLSCREEN : 0);
   }
 
   string_map commands;
@@ -275,11 +280,10 @@ private function void mainloop_internal(pgl3d_application mutable& app)
     }
     /* motion and prepare instance data */
     {
-debug_log(fr.fps, "fps");
+//debug_log(fr.fps, "fps");
       const mess = string_join{" "}(fr.fps, frctl.frame_speed_mul,
 	fr.ticks_sum_saved,
-	saved_stat_num_objects,
-	pgs.cam.camera.angle, pgs.cam.camera.position);
+	saved_stat_num_objects);
       function void swap_data_cl(motion_thread_shared mutable& mts) {
 	// fr.save_ticks(1, SDL_GetTicks());
 	cam_drawing_frame = mts.cam;
