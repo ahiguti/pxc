@@ -217,12 +217,12 @@ struct template_info {
   expr_tparams *tparams;
   instances_type instances;
   expr_block *instances_backref;
+  expr_i *instantiated_context;
   std::string self_key;
   bool template_descent : 1;
   bool instantiated : 1; 
-  template_info() : tparams(0), instances_backref(0),
-    template_descent(false),
-    instantiated(false) { }
+  template_info() : tparams(0), instances_backref(0), instantiated_context(0),
+    template_descent(false), instantiated(false) { }
   bool has_tparams() const { return tparams != 0; }
   bool is_uninstantiated() const {
     return template_descent && !instantiated;
@@ -1418,13 +1418,18 @@ public:
 
 struct expr_interface : public expr_i {
   expr_interface(const char *fn, int line, const char *sym, const char *cname,
-    expr_i *block, attribute_e attr);
+    expr_i *impl_st, expr_i *block, attribute_e attr);
   expr_i *clone() const;
   expr_e get_esort() const { return expr_e_interface; }
-  int get_num_children() const { return 1; }
-  expr_i *get_child(int i) { return i == 0 ? block : 0; }
+  int get_num_children() const { return 2; }
+  expr_i *get_child(int i) {
+    if (i == 0) { return block; }
+    if (i == 1) { return impl_st; }
+    return 0;
+  }
   void set_child(int i, expr_i *e) {
     if (i == 0) { block = ptr_down_cast<expr_block>(e); }
+    if (i == 1) { impl_st = ptr_down_cast<expr_symbol>(e); }
   }
   expr_block *get_template_block() { return block; }
   const term& get_value_texpr() const { return value_texpr; }
@@ -1445,6 +1450,7 @@ struct expr_interface : public expr_i {
   std::string dump(int indent) const;
 public:
   const char *const sym;
+  expr_symbol *impl_st;
   std::string uniqns;
   cname_info cnamei;
   // const char *const cname;

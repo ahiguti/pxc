@@ -111,7 +111,7 @@ expr_i *expr_struct_new(const char *fn, int line, const char *sym,
 expr_i *expr_dunion_new(const char *fn, int line, const char *sym,
   expr_i *block, attribute_e visi);
 expr_i *expr_interface_new(const char *fn, int line, const char *sym,
-  const char *cname, expr_i *block, attribute_e visi);
+  const char *cname, expr_i *impl_st, expr_i *block, attribute_e visi);
 expr_i *expr_try_new(const char *fn, int line, expr_i *tblock, expr_i *cblock,
   expr_i *rest);
 expr_i *expr_tparams_new(const char *fn, int line, const char *sym,

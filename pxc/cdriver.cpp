@@ -622,12 +622,10 @@ static void prepare_workdir(const parser_options& po, all_modules_info& ami,
 }
 
 static void get_indirect_imports(const parser_options& po,
-  const all_modules_info& ami,
-  const std::string& modname, bool follow_private, bool is_main,
-  strset& cc_srcs_r, strlist& cc_srcs_ord_r)
+  const all_modules_info& ami, const std::string& modname,
+  bool is_main, strset& cc_srcs_r, strlist& cc_srcs_ord_r)
 {
   if (po.gen_single_cc) {
-    follow_private = true;
     is_main = true;
   }
   if (cc_srcs_r.find(modname) != cc_srcs_r.end()) {
@@ -639,10 +637,7 @@ static void get_indirect_imports(const parser_options& po,
   const module_info& md = ami.modules.find(modname)->second;
   for (imports_type::deps_type::const_iterator i = md.imports.deps.begin();
     i != md.imports.deps.end(); ++i) {
-    if (is_main || i->import_public || follow_private) {
-      get_indirect_imports(po, ami, i->ns, follow_private, false, cc_srcs_r,
-	cc_srcs_ord_r);
-    }
+    get_indirect_imports(po, ami, i->ns, false, cc_srcs_r, cc_srcs_ord_r);
     DBG(fprintf(stderr, "%s imports %s pub=%d\n", modname.c_str(),
       i->ns.c_str(), (int)i->import_public));
   }
@@ -1020,8 +1015,8 @@ static void get_mi_srcs(const parser_options& po, all_modules_info& ami,
   strlist cc_srcs_ord;
   strset link_srcs;
   strlist link_srcs_ord;
-  get_indirect_imports(po, ami, modname, false, true, cc_srcs, cc_srcs_ord);
-  get_indirect_imports(po, ami, modname, true, true, link_srcs, link_srcs_ord);
+  get_indirect_imports(po, ami, modname, true, cc_srcs, cc_srcs_ord);
+  get_indirect_imports(po, ami, modname, true, link_srcs, link_srcs_ord);
   module_info& mi_main = get_modinfo_by_name(ami, modname);
   mi_main.cc_srcs = cc_srcs;
   mi_main.cc_srcs_ord = cc_srcs_ord;
@@ -1344,7 +1339,7 @@ static int compile_and_execute(parser_options& po,
       }
       get_indirect_imports(po, ami,
 	!mi.aux_filename.empty() ? mi.aux_filename : mi.unique_namespace,
-	false, true, mi.cc_srcs, mi.cc_srcs_ord);
+	true, mi.cc_srcs, mi.cc_srcs_ord);
       loaded |= check_need_rebuild(po, ami, mi);
     }
     if (!loaded) {

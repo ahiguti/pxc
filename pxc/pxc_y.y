@@ -672,8 +672,17 @@ interface_stmt
 	: opt_attribute TOK_INTERFACE opt_extern opt_tparams_expr TOK_SYMBOL
 		opt_inherit_expr '{' interface_body_stmt_list '}'
 	  { $$ = expr_interface_new(cur_fname, @2.first_line, $5,
-		$3 != 0 ? arena_dequote_strdup($3) : 0,
+		$3 != 0 ? arena_dequote_strdup($3) : 0, 0,
 		expr_block_new(cur_fname, @2.first_line, $4, $6, 0, 0,
+			passby_e_mutable_value, $8),
+		$1); }
+	| opt_attribute TOK_INTERFACE opt_extern opt_tparams_expr TOK_SYMBOL
+		TOK_SYMBOL '{' interface_body_stmt_list '}'
+	  { $$ = expr_interface_new(cur_fname, @2.first_line, $5,
+		$3 != 0 ? arena_dequote_strdup($3) : 0,
+		expr_symbol_new(cur_fname, @2.first_line,
+			expr_nssym_new(cur_fname, @1.first_line, 0, $6)),
+		expr_block_new(cur_fname, @2.first_line, $4, 0, 0, 0,
 			passby_e_mutable_value, $8),
 		$1); }
 	;

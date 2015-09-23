@@ -2,24 +2,28 @@ public threaded namespace pgl3d::shader_config "use-unsafe";
 public import common -;
 public import meta m;
 public import pgl3d::glconf -;
+public import pgl3d::pglconfig -;
 // public import glresource -;
 
 public valuetype struct
-shader_config(bool is_gles0, int major0, int minor0, bool msaa0)
+shader_config(bool is_gles0, int major0, int minor0, bool msaa0,
+  pgl3d_config const& conf)
 {
   public bool const is_gles = is_gles0;
   public int const major = major0;
   public int const minor = minor0;
-  public bool enable_shadowmapping = true;
-  public bool enable_shadowmapping_multisample = false;
-  public bool enable_normalmapping = true;
+  public bool enable_shadowmapping = conf.get("shadow", 1) != 0;
+  public bool enable_shadowmapping_multisample = conf.get("shadow_ms", 0) != 0;
+  public bool enable_normalmapping = conf.get("normalmapping", 1) != 0;
   public bool enable_zprepass = !is_gles;
   public bool enable_msaa = msaa0;
   public bool enable_instanced = major >= 3 && use_copying_instancing == 0;
   public bool enable_uniform_instancing = enable_instanced &&
     (major < 3 || is_gles || (!is_gles && minor < 3));
   public bool enable_depth_texture = (major >= 3);
-  public bool enable_sampler2dshadow = enable_depth_texture && !is_gles;
+  public bool enable_sampler2dshadow = false; // enable_depth_texture && !is_gles;
+  public bool light_fixed = conf.get("light_fixed", 1) != 0;
+  // public bool enable_sampler2dshadow = enable_depth_texture && !is_gles;
   public function bool is_gl3_or_gles3() const { return major >= 3; }
   public function bool is_gl33_or_gles3() const {
     return major >= 3 && (is_gles || minor >= 3); }
@@ -100,10 +104,20 @@ shader_config(bool is_gles0, int major0, int minor0, bool msaa0)
       }
     }
   }
-  public function string empty_shader_vert() const {
+  public function string empty_shader_vert() const
+  {
+    /*
+    return "";
+    */
     return prepend() +
-      "void main(void) { gl_Position = vec4(0.0, 0.0, 0.0, 1.0); }\n"; }
-  public function string empty_shader_frag() const {
-    return prepend() + "void main(void) { }\n"; }
+      "void main(void) { gl_Position = vec4(0.0, 0.0, 0.0, 1.0); }\n";
+  }
+  public function string empty_shader_frag() const
+  {
+    /*
+    return "";
+    */
+    return prepend() + "void main(void) { }\n";
+  }
 }
 

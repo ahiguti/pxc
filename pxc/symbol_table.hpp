@@ -148,8 +148,6 @@ private:
     const symbol& ns, const symbol& curns, bool no_generated, expr_i *pos);
 };
 
-symbol get_lexical_context_ns(expr_i *pos);
-
 };
 
 #endif

@@ -86,6 +86,7 @@ expr_i *symbol_common::resolve_symdef(symbol_table *lookup)
     symtbl_defined = lookup;
     upvalue_flag = is_upvalue;
     assert(symbol_def);
+    #if 0
     /* check private ns */
     const std::string sdns = symbol_def->get_unique_namespace();
     const std::string smns = parent_expr->get_unique_namespace();
@@ -104,6 +105,7 @@ expr_i *symbol_common::resolve_symdef(symbol_table *lookup)
 	}
       }
     }
+    #endif
   } else {
     DBG_TE2(fprintf(stderr,
       "expr_te::resolve_symdef already resolved: %p [%s]\n", this,
@@ -144,6 +146,9 @@ term& symbol_common::resolve_evaluated()
     const bool need_partial_eval = cur_frame_uninstantiated(
       parent_expr->symtbl_lexical);
     evaluated = eval_expr(parent_expr, need_partial_eval);
+#if 0
+    if (term_tostr_human(evaluated) == "callable::callable{meta::ret_type{f},meta::nil}") { abort(); } // FIXME
+#endif
   }
   return evaluated;
 }
@@ -1901,9 +1906,10 @@ std::string expr_dunion::dump(int indent) const
 }
 
 expr_interface::expr_interface(const char *fn, int line, const char *sym,
-  const char *cname, expr_i *block, attribute_e attr)
-  : expr_i(fn, line), sym(sym), cnamei(cname),
-    block(ptr_down_cast<expr_block>(block)), attr(attr), value_texpr()
+  const char *cname, expr_i *impl_st, expr_i *block, attribute_e attr)
+  : expr_i(fn, line), sym(sym), impl_st(ptr_down_cast<expr_symbol>(impl_st)),
+    cnamei(cname), block(ptr_down_cast<expr_block>(block)), attr(attr),
+    value_texpr()
 {
   assert(block);
   this->block->symtbl.set_block_esort(expr_e_interface);

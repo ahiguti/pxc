@@ -15,6 +15,7 @@ public import pgl3d::pglbase -;
 public import pgl3d::pglcommon -;
 public import pgl3d::application -;
 public import pgl3d::wfobj -;
+public import pgl3d::pglconfig -;
 
 private import GL::compat -;
 private import pgl3d::glresource -;
@@ -22,35 +23,20 @@ private import pgl3d::glshader -;
 private import pgl3d::glbuffer -;
 private import pgl3d::pglshader -;
 private import pgl3d::sdlcontext -;
+private import pgl3d::sdlutil -;
 
-
-public function void mainloop(pgl3d_application mutable& app)
+public function void mainloop(pgl3d_application mutable& app,
+  cstrref const& conf_filename)
 {
-  GL::base::set_check_error_enabled(1); // FIXME
+  string confstr;
+  sdl_load_file(conf_filename, confstr);
+  const conf = pgl3d_config(confstr);
+  GL::base::set_check_error_enabled(conf.get("gldebug", 0));
   try {
-    mainloop_internal(app);
+    mainloop_internal(app, conf);
   } catch (exception::c_exception ex) {
     sdllog("uncaught exception", ex);
   }
-}
-
-public function string sdl_read_file(string mutable& fn)
-{
-  string r;
-  scoped_nullable{SDL_RWclose} rwop;
-  rwop.reset(SDL_RWFromFile(fn.c_str(), "rb"));
-  if (rwop.get() == rawptr{SDL_RWops}()) {
-    throw runtime_error_template{"sdl_read_file"}(fn);
-  }
-  farray{uchar, 16384} buf;
-  while (true) {
-    const n = SDL_RWread(rwop, buf.range().to_rawptr().to_voidptr(), 1, 16384);
-    if (n == 0) {
-      break;
-    }
-    r.append(buf[0 .. n]);
-  }
-  return r;
 }
 
 struct
@@ -142,11 +128,12 @@ framerate_control(int vsync0)
   }
 }
 
-private function void mainloop_internal(pgl3d_application mutable& app)
+private function void mainloop_internal(pgl3d_application mutable& app,
+  pgl3d_config const& conf)
 {
   sdllog("PGL3D main");
 
-  sdlcontext sdlc;
+  sdlcontext sdlc = sdlcontext(conf);
 
   // SDL_EventState(SDL_KEYDOWN, 0);
     // FIXME
@@ -167,7 +154,7 @@ private function void mainloop_internal(pgl3d_application mutable& app)
   sdllog("PGL3D init0");
 
   shader_config sconf = shader_config(sdlc.gles_flag, sdlc.glmajor,
-    sdlc.glminor, sdlc.enable_msaa);
+    sdlc.glminor, sdlc.enable_msaa, conf);
   tree_map{string, ptr{pgldrawer_export_i}} drawers
     = app.on_init_drawers(sconf);
   pglshader pgs = pglshader(sconf, drawers, sdlc.init_w, sdlc.init_h);
@@ -203,8 +190,13 @@ private function void mainloop_internal(pgl3d_application mutable& app)
   {
     fullscreen = fullscreen != 0 ? 0 : 1;
     sdllog("fullscreen=", fullscreen);
-    SDL_SetWindowFullscreen(sdlc.sdl_window,
-      fullscreen != 0 ? SDL_WINDOW_FULLSCREEN : 0);
+    SDL_Enum flag = 0;
+    if (m::ne{is_macos, 0}) {
+      flag = SDL_WINDOW_FULLSCREEN_DESKTOP;
+    } else {
+      flag = SDL_WINDOW_FULLSCREEN;
+    }
+    SDL_SetWindowFullscreen(sdlc.sdl_window, fullscreen != 0 ? flag : 0);
   }
 
   string_map commands;
@@ -296,6 +288,54 @@ private function void mainloop_internal(pgl3d_application mutable& app)
       }
       mto.wait_and_exec{swap_data_cl}();
       do_commands();
+    }
+    // FIXME: shadowmapping
+    {
+      // const cam_inv = cam_drawing_frame.cam.conjugate().to_mat3();
+      /*
+      const cam_inv = cam_drawing_frame.camera.angle.to_mat3().inverse(); // TODO:slow
+      mutable pers = cam_drawing_frame.camera_pers;
+      pers.far /= 10.0f;
+      const w2 = pers.width * pers.far / pers.near;
+      const h2 = pers.height * pers.far / pers.near;
+      farray{glm::vec3, 8} arr;
+      arr[0] = cam_inv * glm::make_vec3(-pers.width, -pers.height, pers.near);
+      arr[1] = cam_inv * glm::make_vec3( pers.width, -pers.height, pers.near);
+      arr[2] = cam_inv * glm::make_vec3( pers.width,  pers.height, pers.near);
+      arr[3] = cam_inv * glm::make_vec3(-pers.width,  pers.height, pers.near);
+      arr[4] = cam_inv * glm::make_vec3(-w2, -h2, pers.far);
+      arr[5] = cam_inv * glm::make_vec3( w2, -h2, pers.far);
+      arr[6] = cam_inv * glm::make_vec3( w2,  h2, pers.far);
+      arr[7] = cam_inv * glm::make_vec3(-w2,  h2, pers.far);
+      glm::vec3 mi = arr[0];
+      glm::vec3 mx = arr[0];
+      for (size_t i: 1 .. 8) {
+	mi.x = min(mi.x, arr[i].x);
+	mi.y = min(mi.y, arr[i].y);
+	mi.z = min(mi.z, arr[i].z);
+	mx.x = max(mx.x, arr[i].x);
+	mx.y = max(mx.y, arr[i].y);
+	mx.z = max(mx.z, arr[i].z);
+      }
+      */
+      /*
+      debug_log("mi", mi.to_cslice(), "mx", mx.to_cslice());
+      */
+      /*
+      cam_drawing_frame.sm_projection =
+	glm::ortho(mi.x, mx.x, mi.y, mx.y, mi.z, mx.z);
+      */
+      /*
+      debug_log("lipos", cam_drawing_frame.light.position.to_slice());
+      debug_log("liang", cam_drawing_frame.light.angle.to_slice());
+      debug_log("capos", cam_drawing_frame.camera.position.to_slice());
+      debug_log("caang", cam_drawing_frame.camera.angle.to_slice());
+      */
+      // cam_drawing_frame.light.position = glm::make_vec3(0.0f, -60.0f, 0.0f);
+      // cam_drawing_frame.light.angle = glm::make_quat_wxyz(0.70711f, 0.70711f, 0.0f, 0.0f);
+      /*
+      */
+// FIXME : here
     }
     fr.save_ticks(1, SDL_GetTicks());
     {

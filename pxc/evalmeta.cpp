@@ -90,7 +90,7 @@ static term eval_meta_local_internal(const term_list_range& tlev,
   }
   symbol_table *const symtbl = &bl->symtbl;
   assert(symtbl);
-  const symbol sym_ns = get_lexical_context_ns(pos);
+  const symbol sym_ns = get_ns(pos);
   const bool no_private = true;
   const bool no_memfld_generated = false;
   expr_i *const rsym = symtbl->resolve_name_nothrow_memfld(name, no_private,
@@ -108,6 +108,7 @@ static term eval_meta_local_internal(const term_list_range& tlev,
   return eval_term_internal(rt, true, ectx, pos); /* is this necessary? */
 }
 
+#if 0
 static std::string pos_ns(expr_i *pos)
 {
   while (pos != 0) {
@@ -119,19 +120,28 @@ static std::string pos_ns(expr_i *pos)
   }
   return std::string();
 }
+#endif
 
-static void check_public_namespace(const std::string& name, expr_i *pos)
+static void check_visible_namespace(const std::string& name, expr_i *pos)
 {
   nspropmap_type::const_iterator i = nspropmap.find(name);
   if (i == nspropmap.end()) {
     arena_error_throw(0, "Namespace '%s' not imported", name.c_str());
   }
+  if (!is_visible_from_pos_or_inst_context(name, pos)) {
+    arena_error_throw(0, "Namespace '%s' is not accessible", name.c_str());
+  }
+#if 0
   if (!i->second.is_public) {
-    if (!is_accessible_namespace(name, pos_ns(pos))) {
+    // if (!is_accessible_namespace(name, pos_ns(pos))) {
+    if (!is_visible_namespace(name, pos)) {
       arena_error_throw(0, "Namespace '%s' is private", name.c_str());
     }
   }
+#endif
 }
+#if 0
+#endif
 
 static term eval_meta_symbol_global(const std::string& sym_ns,
   const std::string& name, const term& defval, bool check_only,
@@ -140,16 +150,32 @@ static term eval_meta_symbol_global(const std::string& sym_ns,
   if (name.find(':') != name.npos) {
     arena_error_throw(pos, "meta_symbol: Invalid name '%s'", name.c_str());
   }
+  if (sym_ns.empty()) {
+    arena_error_throw(pos, "meta_symbol: Invalid namespace ''");
+  }
   symbol_table *const symtbl = &global_block->symtbl;
   assert(symtbl);
+  #if 0
   check_public_namespace(sym_ns, pos);
+  #endif
+  check_visible_namespace(sym_ns, pos);
     /* note that metafunctions must be always pure functional, or generated
        template functions can be inconsistent among compilation units. we
        must generate an error here instead of returning 'notfound', in order
        to avoid such inconsistency. */
   bool no_private = true;
-  expr_i *const rsym = symtbl->resolve_name_nothrow_ns(name, no_private,
-    sym_ns, pos);
+  expr_i *rsym = 0;
+  if (sym_ns.empty()) {
+    // FIXME: should reject????
+    rsym = symtbl->resolve_name_nothrow_ns(name, no_private, sym_ns, pos);
+  } else {
+    rsym = symtbl->resolve_name_nothrow_ns(name, no_private, sym_ns, pos);
+    #if 0
+    rsym = symtbl->resolve_name_nothrow_ns(sym_ns + "::" + name, no_private,
+      symbol(), pos);
+    #endif
+//fprintf(stderr, "resolve sym_ns=[%s] name=[%s]\n", sym_ns.c_str(), name.c_str());
+  }
   DBG_METASYM(fprintf(stderr, "meta_symbol name=[%s] ns=[%s] rsym=%p[%s]\n",
     name.c_str(), sym_ns.c_str(), rsym, rsym ? rsym->dump(0).c_str() : ""));
   if (rsym == 0) {
@@ -596,7 +622,7 @@ static term eval_meta_imports(const term_list_range& tlev, eval_context& ectx,
     return term();
   }
   const std::string name = meta_term_to_string(tlev[0], false);
-  check_public_namespace(name, pos);
+  check_visible_namespace(name, pos);
   loaded_namespaces_type::const_iterator iter = loaded_namespaces.find(name);
   if (iter == loaded_namespaces.end()) {
     /* not reached */
@@ -653,7 +679,7 @@ static term eval_meta_functions(const term_list_range& tlev,
     return term();
   }
   const std::string name = meta_term_to_string(tlev[0], false);
-  check_public_namespace(name, pos);
+  check_visible_namespace(name, pos);
   symbol_table *const symtbl = &global_block->symtbl;
   std::list< std::pair<symbol, localvar_info> > syms;
   symtbl->get_ns_symbols(name, syms);
@@ -680,7 +706,7 @@ static term eval_meta_types(const term_list_range& tlev, eval_context& ectx,
     return term();
   }
   const std::string name = meta_term_to_string(tlev[0], false);
-  check_public_namespace(name, pos);
+  check_visible_namespace(name, pos);
   symbol_table *const symtbl = &global_block->symtbl;
   std::list< std::pair<symbol, localvar_info> > syms;
   symtbl->get_ns_symbols(name, syms);
@@ -729,7 +755,7 @@ static term eval_meta_global_variables(const term_list_range& tlev,
     return term();
   }
   const std::string name = meta_term_to_string(tlev[0], false);
-  check_public_namespace(name, pos);
+  check_visible_namespace(name, pos);
   symbol_table *const symtbl = &global_block->symtbl;
   term_list tl;
   long long idx = 0;

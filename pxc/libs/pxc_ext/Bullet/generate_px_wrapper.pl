@@ -439,7 +439,9 @@ sub dump_struct
       my $sym_3 = $sym_2->{$name_long_px};
       $sym_3->{$constness} ||= $mtd;
     }
-    while (my ($name_px, $sym_1) = each (%sym_map)) {
+    # while (my ($name_px, $sym_1) = each (%sym_map)) {
+    for my $name_px (sort keys %sym_map) {
+      my $sym_1 = $sym_map{$name_px};
       my $mtdlist = [ ];
       push(@method_wrappers, [$obj->{struct_name}, $name_px, $mtdlist]);
       my $need_middle = (scalar(keys %$sym_1) > 1);
@@ -734,6 +736,7 @@ print $out_fp qq{public namespace Bullet::api "export-unsafe";
 public import common -;
 public import Bullet::base -;
 public import container::raw -;
+public import pointer::raw -;
 public import meta m;
 public import meta::vararg va;
 };

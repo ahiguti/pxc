@@ -174,7 +174,7 @@ fprintf(stderr, "used_as_funcobj %s\n", term_tostr_human(*i).c_str());
 }
 
 static expr_i *instantiate_template_internal(expr_i *tmpl_root,
-  const term_list_range& targs)
+  const term_list_range& targs, expr_i *pos)
 {
   expr_block *const tmpl_block = tmpl_root->get_template_block();
   assert(tmpl_root != 0);
@@ -197,6 +197,7 @@ static expr_i *instantiate_template_internal(expr_i *tmpl_root,
   /* set tmpl <-> inst mapping */
   expr_block *const rcpy_block = rcpy->get_template_block();
   rcpy_block->tinfo.instances_backref = tmpl_block;
+  rcpy_block->tinfo.instantiated_context = pos;
   rcpy_block->tinfo.instances.clear();
   rcpy_block->tinfo.self_key = k;
   tmpl_block->tinfo.instances[k] = rcpy_block;
@@ -246,25 +247,12 @@ static expr_i *instantiate_template_internal(expr_i *tmpl_root,
   return rcpy;
 }
 
-static std::string get_ns(expr_i *pos)
-{
-  while (pos != 0) {
-    std::string s = pos->get_unique_namespace();
-    if (!s.empty()) {
-      return s;
-    }
-    pos = pos->parent_expr;
-  }
-  return std::string();
-}
-
 expr_i *instantiate_template(expr_i *tmpl_root, const term_list_range& targs,
   expr_i *pos)
 {
   arena_error_throw_pushed(); /* it's necessary! */
-  scoped_instantiating_ns scoped_inst_ns(get_ns(pos));
   try {
-    expr_i *const re = instantiate_template_internal(tmpl_root, targs);
+    expr_i *const re = instantiate_template_internal(tmpl_root, targs, pos);
     arena_error_throw_pushed();
     return re;
   } catch (const std::exception& e) {
@@ -1020,11 +1008,11 @@ term eval_expr(expr_i *e, bool need_partial_eval)
   return t;
 }
 
-term eval_term(const term& t, bool need_partial_eval)
+term eval_term(const term& t, expr_i *pos, bool need_partial_eval)
 {
   eval_context ectx;
   ectx.need_partial_eval = need_partial_eval;
-  term tr = eval_term_internal(t, false, ectx, t.get_expr());
+  term tr = eval_term_internal(t, false, ectx, pos);
   return tr;
 }
 

@@ -170,3 +170,28 @@ thread装飾の意味
   - namespace bar が import foo + とすると、擬似メンバ関数のlookup時に
     fooに加えてbarを検索するようになる。
 
+- interface
+  - restricted interface と non-restricted interfaceの二種類がある
+    - restricted は、そのインタフェースを実装できる型が一つだけ
+      - 構造体のインタフェースの一部だけを渡したいときに使う
+      - メソッド呼び出しが非仮想関数になるのでわずかに速い
+      - ダウンキャストが必ず成功する。
+  - non-restricted interfaceの定義と実装
+    interface foo_i {
+      public function void m1();
+    }
+    struct foo <foo_i> {
+      public function void m1() { }
+    }
+    struct bar <foo_i> {
+      public function void m1() { }
+    }
+  - restricted interfaceの定義と実装
+    interface foo_i foo {
+      public function void m1();
+    }
+    struct foo <foo_i> {
+      public function void m1() { }
+    }
+    foo以外がfoo_iを実装することはできない
+

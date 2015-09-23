@@ -43,7 +43,6 @@ extern nsthrmap_type nsthrmap;
 extern std::string emit_threaded_dll_func;
 typedef std::map<symbol, bool> compiled_ns_type;
 extern compiled_ns_type compiled_ns;
-extern std::vector<std::string> instantiating_ns_stack;
 /* end: global variables */
 
 expr_i *string_to_te(expr_i *epos, const std::string& str);
@@ -94,10 +93,10 @@ bool is_ctypedef(const term& t);
 bool is_struct(const term& t);
 bool is_dunion(const term& t);
 bool is_interface(const term& t);
-bool is_interface_or_impl(const term& t);
+bool is_intrusive(const term& t);
 bool is_dereferencable(const term& t);
-bool is_noninterface_pointer(const term& t);
-bool is_interface_pointer(const term& t);
+bool is_nonintrusive_pointer(const term& t);
+bool is_intrusive_pointer(const term& t);
 bool is_const_or_immutable_pointer_family(const term& t);
 bool is_cm_pointer_family(const term& t);
 bool is_const_or_immutable_pointer_family(const term& t);
@@ -181,7 +180,11 @@ bool is_noexec_expr(expr_i *e);
 
 bool is_safe_namespace(const std::string& ns);
 bool is_sibling_namespace(const std::string& ns0, const std::string& ns1);
-bool is_accessible_namespace(const std::string& ns0, const std::string& ns1);
+
+symbol get_ns(expr_i *pos);
+bool is_visible_from_ns(const symbol& ns, const symbol& nsfrom);
+bool is_visible_from_pos(const symbol& ns, expr_i *pos);
+bool is_visible_from_pos_or_inst_context(const symbol& ns, expr_i *pos);
 
 bool is_compiled(const expr_block *bl);
 
@@ -200,18 +203,6 @@ void fn_check_final(expr_i *e);
 void fn_prepare_imports();
 void fn_compile(expr_i *e, expr_i *p, bool is_template);
 expr_i *fn_drop_non_exports(expr_i *e);
-
-struct scoped_instantiating_ns {
-  scoped_instantiating_ns(const std::string& ns) {
-    instantiating_ns_stack.push_back(ns);
-  }
-  ~scoped_instantiating_ns() {
-    instantiating_ns_stack.pop_back();
-  }
-private:
-  scoped_instantiating_ns(const scoped_instantiating_ns&);
-  scoped_instantiating_ns& operator =(const scoped_instantiating_ns&);
-};
 
 };
 

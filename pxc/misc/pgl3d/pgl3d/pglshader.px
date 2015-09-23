@@ -1,5 +1,6 @@
 private namespace pgl3d::pglshader "export-unsafe";
 public import common -;
+public import pointer::raw -;
 public import pointer::raw_unsafe -;
 public import numeric::fpmath -;
 public import glm;
@@ -33,7 +34,7 @@ pglshader(shader_config const& sconf0,
   public varray{vertex_buffer_id} drawer_vbids;
   public varray{vertex_buffer_id} drawer_main_vbids;
   // public varray{size_t} vbid_to_drawer_one;
-  public shadowmap_fbo sfbo;
+  public varray{ptr{shadowmap_fbo}} sfbo_array;
   public projection_info cam;
   public varray{ptr{vertex_buffer}} vertex_buffers;
   public aggregated_ibuffer agg_ibuffer;
@@ -61,6 +62,13 @@ pglshader(shader_config const& sconf0,
   }
   private function void init()
   {
+    /*
+    {
+      int val;
+      glGetIntegerv(GL_DEPTH_BITS, address(val));
+      sdllog("depth bits", val);
+    }
+    */
     if (m::ne{is_gl3_or_gles3, 0}) {
       vtxarr.generate();
       glBindVertexArray(vtxarr.get());
@@ -107,6 +115,11 @@ pglshader(shader_config const& sconf0,
 	}
       }
       set_vertex_buffer(drawer_vbids[i], pd->make_vertex_buffer());
+    }
+    if (sfbo_array.empty()) {
+      for (size_t i: 0 .. 4) {
+	sfbo_array.push_back(make_ptr{shadowmap_fbo}());
+      }
     }
   }
   public function void prepare(whole_instances_type mutable& whole_instances_r,
@@ -238,14 +251,25 @@ pglshader(shader_config const& sconf0,
   {
     cam.screen_width = width;
     cam.screen_height = height;
-    if (m::ne{is_gles, 0}) {
-      sfbo.sm_width = 1024;
-      sfbo.sm_height = 1024;
-    } else {
-      sfbo.sm_width = width;
-      sfbo.sm_height = height;
+    int sm_size = 1;
+    for (int i: 8 .. 14) {
+      sm_size = 1 << i;
+      if (sm_size > width * 2) {
+	break;
+      }
     }
-    init_shadowmap_fbo(glc, sfbo);
+    for (size_t i: 0 .. 4) {
+      mutable& sfbo = *sfbo_array[i];
+      if (m::ne{is_gles, 0}) {
+	sfbo.sm_width = sm_size / 4;
+	sfbo.sm_height = sm_size / 4;
+      } else {
+	sfbo.sm_width = i == 3 ? sm_size : sm_size / 2;
+	sfbo.sm_height = sfbo.sm_width;
+      }
+      init_shadowmap_fbo(glc, sfbo,
+	static_cast{GLenum}(static_cast{size_t}(GL_TEXTURE3) + i));
+    }
     update_mvp(cam);
   }
 }
@@ -256,8 +280,6 @@ pglshader_draw_frame(pglshader mutable& pgs,
 {
   const& bos = pgs.vertex_buffers;
   /* prepare instance data */
-  const sm_view = cam_df.light.to_mat4().inverse();
-  const sm_vp = cam_df.sm_projection * sm_view;
   const tick1 = SDL_GetTicks();
   pgs.agg_ibuffer.frame_begin(whole_instances,
       pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
@@ -266,11 +288,11 @@ pglshader_draw_frame(pglshader mutable& pgs,
   if (pgs.glc.enable_shadowmapping) {
     int saved_fb;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
-    /* set fb */
-    glBindFramebuffer(GL_FRAMEBUFFER, pgs.sfbo.fbo.get());
-    glViewport(0, 0, static_cast{GLsizei}(pgs.sfbo.sm_width),
-      static_cast{GLsizei}(pgs.sfbo.sm_height));
     glDisable(GL_CULL_FACE);
+    /*
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_FRONT);
+    */
     glEnable(GL_DEPTH_TEST);
     glDepthMask(1);
     if (pgs.glc.enable_depth_texture) {
@@ -280,15 +302,23 @@ pglshader_draw_frame(pglshader mutable& pgs,
     }
     glDepthFunc(GL_LEQUAL);
     glDisable(GL_BLEND);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    /* note: view_projection is pre-applied to model_matrix */
-    for (const i, const& pd: pgs.drawers) {
-      const bo_id = pgs.drawer_vbids[i];
-      const main_bo_id = pgs.drawer_main_vbids[i];
-      pd->draw(draw_step_shadowmapping,
-	*bos[static_cast{size_t}(bo_id)],
-	whole_instances[static_cast{size_t}(main_bo_id)], pgs.agg_ibuffer,
-	bo_id, pgs.glc, cam_df);
+    for (size_t iter: 0 .. 4) {
+      /* set fb */
+      const& sfbo = *pgs.sfbo_array[iter];
+      glBindFramebuffer(GL_FRAMEBUFFER, sfbo.fbo.get());
+      glViewport(0, 0, static_cast{GLsizei}(sfbo.sm_width),
+	static_cast{GLsizei}(sfbo.sm_height));
+      glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+      /* note: view_projection is pre-applied to model_matrix */
+      // FIXME: cascading
+      for (const i, const& pd: pgs.drawers) {
+	const bo_id = pgs.drawer_vbids[i];
+	const main_bo_id = pgs.drawer_main_vbids[i];
+	pd->draw(draw_step_shadowmapping, iter,
+	  *bos[static_cast{size_t}(bo_id)],
+	  whole_instances[static_cast{size_t}(main_bo_id)], pgs.agg_ibuffer,
+	  bo_id, pgs.glc, cam_df);
+      }
     }
     /* restore fb */
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
@@ -308,7 +338,7 @@ pglshader_draw_frame(pglshader mutable& pgs,
     for (const i, const& pd: pgs.drawers) {
       const bo_id = pgs.drawer_vbids[i];
       const main_bo_id = pgs.drawer_main_vbids[i];
-      pd->draw(draw_step_zprepass,
+      pd->draw(draw_step_zprepass, 0,
 	*bos[static_cast{size_t}(bo_id)],
 	whole_instances[static_cast{size_t}(main_bo_id)], pgs.agg_ibuffer,
 	bo_id, pgs.glc, cam_df);
@@ -317,12 +347,12 @@ pglshader_draw_frame(pglshader mutable& pgs,
   /* main */
   {
     glDisable(GL_BLEND);
-    glDisable(GL_CULL_FACE);
-    // glCullFace(GL_BACK);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
     glEnable(GL_DEPTH_TEST);
     if (pgs.glc.enable_zprepass) {
       glColorMask(1, 1, 1, 1);
-      glDepthFunc(GL_EQUAL);
+      glDepthFunc(GL_LEQUAL); // FIXME GL_EQUAL is better?
       glClear(GL_COLOR_BUFFER_BIT);
     } else {
       glDepthMask(1);
@@ -333,7 +363,7 @@ pglshader_draw_frame(pglshader mutable& pgs,
     for (const i, const& pd: pgs.drawers) {
       const bo_id = pgs.drawer_vbids[i];
       const main_bo_id = pgs.drawer_main_vbids[i];
-      pd->draw(draw_step_solid,
+      pd->draw(draw_step_solid, 0,
 	*bos[static_cast{size_t}(bo_id)],
 	whole_instances[static_cast{size_t}(main_bo_id)], pgs.agg_ibuffer,
 	bo_id, pgs.glc, cam_df);
@@ -350,7 +380,7 @@ pglshader_draw_frame(pglshader mutable& pgs,
     for (const i, const& pd: pgs.drawers) {
       const bo_id = pgs.drawer_vbids[i];
       const main_bo_id = pgs.drawer_main_vbids[i];
-      pd->draw(draw_step_blend,
+      pd->draw(draw_step_blend, 0,
 	*bos[static_cast{size_t}(bo_id)],
 	whole_instances[static_cast{size_t}(main_bo_id)], pgs.agg_ibuffer,
 	bo_id, pgs.glc, cam_df);
@@ -441,7 +471,7 @@ dgf_point_joint_internal(ptr{vertices} const& vptr, string const& joint_name,
 function void update_mvp(projection_info mutable& cam)
 {
   float const perspective_distance = 1.0;
-  float const distance_max = 1000.0;
+  float const distance_max = 999.0;
   const ssbase = max(cam.screen_height, cam.screen_width);
   const h = cast_float(cam.screen_height) / cast_float(ssbase);
   const w = cast_float(cam.screen_width) / cast_float(ssbase);
@@ -458,8 +488,13 @@ function void update_mvp(projection_info mutable& cam)
     const right = cast_float(w);
     const bottom = cast_float(-h);
     const top = cast_float(h);
+    cam.camera_pers.near = near;
+    cam.camera_pers.far = far;
+    cam.camera_pers.width = w;
+    cam.camera_pers.height = h;
     cam.projection = glm::frustum{float}(left, right, bottom, top, near, far);
   }
+  /*
   {
     const sm_w = max(1.0, w);
     const sm_h = max(1.0, h);
@@ -471,6 +506,30 @@ function void update_mvp(projection_info mutable& cam)
     const top = cast_float(sm_h);
     cam.sm_projection = glm::frustum{float}(left, right, bottom, top, near,
       far);
+  }
+  */
+  {
+    const sm_w = 1.0f;
+    const sm_h = 1.0f;
+    const near = cast_float(d);
+    function void set_sm(glm::mat4 mutable& dst, float mutable& distance_r,
+      float far)
+    {
+      const near = -far;
+      const left = -far;
+      const right = far;
+      const bottom = -far;
+      const top = far;
+      dst = glm::ortho{float}(left, right, bottom, top, near, far);
+      distance_r = far;
+    }
+    set_sm(cam.sm_projection0, cam.sm_distances.x, 40.0f);
+    set_sm(cam.sm_projection1, cam.sm_distances.y, 120.0f);
+    set_sm(cam.sm_projection2, cam.sm_distances.z, 360.0f);
+    set_sm(cam.sm_projection3, cam.sm_distances.w, 1080.0f);
+    debug_log(cam.sm_distances.to_cslice());
+    debug_log("smp0", cam.sm_projection0.to_cslice());
+    debug_log("smp1", cam.sm_projection1.to_cslice());
   }
 }
 
@@ -484,14 +543,15 @@ struct shadowmap_fbo
 }
 
 function void init_shadowmap_fbo(shader_config const& glc,
-  shadowmap_fbo mutable& sfbo)
+  shadowmap_fbo mutable& sfbo, GLenum tex)
 {
   if (glc.enable_shadowmapping) {
     sdllog("shadowmap size", sfbo.sm_width, sfbo.sm_height);
     int saved_fb;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
     /* texture */
-    glActiveTexture(GL_TEXTURE3);
+    // glActiveTexture(GL_TEXTURE3 + i);
+    glActiveTexture(tex);
     sfbo.sm_texture.generate();
     glBindTexture(GL_TEXTURE_2D, sfbo.sm_texture.get());
     if (glc.enable_depth_texture) {
@@ -499,7 +559,8 @@ function void init_shadowmap_fbo(shader_config const& glc,
       const f = glc.enable_sampler2dshadow ? GL_LINEAR : GL_NEAREST;
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, cast_int(f));
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, cast_int(f));
-      if (m::ne{is_gl3_or_gles3, 0}) {
+      // if (m::ne{is_gl3_or_gles3, 0}) {
+      if (glc.enable_sampler2dshadow) {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE,
 	  cast_int(GL_COMPARE_REF_TO_TEXTURE));
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC,
@@ -539,9 +600,11 @@ function void init_shadowmap_fbo(shader_config const& glc,
     }
     if (m::eq{is_gles, 0}) {
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
-	cast_int(GL_CLAMP_TO_EDGE));
+	cast_int(GL_CLAMP_TO_BORDER));
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
-	cast_int(GL_CLAMP_TO_EDGE));
+	cast_int(GL_CLAMP_TO_BORDER));
+      const border = make_farray{float}(1.0, 1.0, 1.0, 1.0);
+      glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border.crange().to_crawptr());
     }
     /* framebuffer */
     sfbo.fbo.generate();

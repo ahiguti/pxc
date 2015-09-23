@@ -148,6 +148,7 @@ expr_i *symbol_table::resolve_name_nothrow_memfld(const symbol& fullname,
 static void check_compiled_ns(const symbol& fullname, const symbol& nspart,
   const symbol& curns, expr_i *pos)
 {
+  /* check if nspart is already compiled */
   compiled_ns_type::const_iterator iter = compiled_ns.find(nspart);
   if (iter != compiled_ns.end() && !iter->second) {
     /* ns defined, but not compiled yet */
@@ -197,43 +198,6 @@ localvar_info symbol_table::resolve_global_internal(const symbol& shortname,
     check_compiled_ns(pname, ns, curns, pos);
   }
   return v;
-}
-
-symbol get_lexical_context_ns(expr_i *pos)
-{
-  if (pos == 0) {
-    return symbol();
-  }
-  symbol_table *stbl = pos->symtbl_lexical;
-  while (stbl != 0) {
-    expr_i *e = stbl->block_backref;
-    std::string s = e->get_unique_namespace();
-    if (!s.empty()) {
-      return symbol(s);
-    }
-    stbl = stbl->get_lexical_parent();
-  }
-  return symbol();
-}
-
-static bool is_visible_from_pos(const symbol& ns, expr_i *pos)
-{
-  const symbol posns = get_lexical_context_ns(pos);
-  if (ns == posns) {
-    return true;
-  }
-  if (nsimports_rec.find(std::make_pair(posns, ns)) != nsimports_rec.end()) {
-    #if 0
-    fprintf(stderr, "visible %s from %s [%s]\n", ns.c_str(), posns.c_str(),
-      pos->dump(0).c_str());
-    #endif
-    return true;
-  }
-  #if 0
-  fprintf(stderr, "invisible %s from %s [%s]\n", ns.c_str(), posns.c_str(),
-    pos->dump(0).c_str());
-  #endif
-  return false;
 }
 
 symbol_table::locals_type::const_iterator symbol_table::find(const symbol& k,
@@ -324,7 +288,7 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
   localvar_info v;
   DBG_TIMING(double t[16] = { 0 });
   DBG_TIMING(t[0] = gettimeofday_double());
-  do {
+  do { /* while (0) */
     is_upvalue_r = false;
     is_memfld_r = block_esort == expr_e_struct;
     is_global_r = (get_lexical_parent() == 0);
@@ -339,8 +303,17 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
 	int(i != locals.end())));
       if (i != locals.end() &&
 	(!memfld_nogen || !i->second.edef->generated_flag)) {
-	v = i->second;
-	return v;
+	const symbol nspart = get_namespace_part(fullname);
+	if (!fullname.has_ns() ||
+	  is_visible_from_ns(nspart, curns) ||
+	  is_visible_from_pos_or_inst_context(nspart, pos)) {
+	  v = i->second;
+	  return v;
+	} else {
+#if 0
+fprintf(stderr, "invisible '%s' from '%s' '%s'\n", fullname.c_str(), curns.c_str(), get_lexical_context_ns(pos).c_str()); // FIXME
+#endif
+	}
       }
       /* missed */
       {
@@ -363,7 +336,7 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
     DBG_TIMING(t[2] = gettimeofday_double());
     symbol_table *psymtbl = get_lexical_parent();
     if (psymtbl != 0) {
-      /* non-global */
+      /* non-global symbol table */
       v = psymtbl->resolve_name_nothrow_internal(fullname, curns, pos,
 	false, false, is_global_r, is_upvalue_r, is_memfld_r);
       if (v.edef != 0 && block_esort != expr_e_block) {
@@ -419,7 +392,7 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
       DBG_TIMING(t[3] = gettimeofday_double());
       return v;
     } else {
-      /* global */
+      /* global symbol table */
       DBG_EXT(fprintf(stderr, "global %s\n", fullname.c_str()));
       DBG_TIMING(t[4] = gettimeofday_double());
       if (!fullname.has_ns()) {

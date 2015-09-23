@@ -39,7 +39,7 @@ struct module_info {
   imports_type imports; /* direct imports */
   strset cc_srcs;
   strlist cc_srcs_ord;
-  strset link_srcs;
+  strset link_srcs; /* TODO: not used anymore */
   strlist link_srcs_ord;
   coptions self_copts;
   depsrc_checksum_type depsrc_checksum;

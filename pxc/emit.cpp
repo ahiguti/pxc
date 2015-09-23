@@ -258,6 +258,11 @@ static void emit_inherit(emit_context& em, expr_block *block, bool inh_virtual)
 {
   expr_telist *ih = block->inherit;
   while (ih != 0) {
+    const term& t = ih->head->get_sdef()->get_evaluated();
+    if (!is_intrusive(t)) {
+      /* restricted interface */
+      break;
+    }
     if (ih == block->inherit) {
       em.puts(" : ");
     } else {
@@ -266,7 +271,7 @@ static void emit_inherit(emit_context& em, expr_block *block, bool inh_virtual)
     if (inh_virtual) {
       em.puts("virtual ");
     }
-    em.puts(term_tostr_cname(ih->head->get_sdef()->get_evaluated()));
+    em.puts(term_tostr_cname(t));
     ih = ih->rest;
   }
 }
@@ -1358,7 +1363,7 @@ static void emit_type_definitions(emit_context& em)
   for (expr_arena_type::iterator i = expr_arena.begin();
     i != expr_arena.end(); ++i) {
     expr_interface *const ei = dynamic_cast<expr_interface *>(*i);
-    if (ei != 0) {
+    if (ei != 0 && ei->impl_st == 0) {
       const bool proto_only = true;
       emit_interface_def_one(em, ei, proto_only);
     }
@@ -1382,7 +1387,7 @@ static void emit_type_definitions(emit_context& em)
   for (expr_arena_type::iterator i = expr_arena.begin();
     i != expr_arena.end(); ++i) {
     expr_interface *const ei = dynamic_cast<expr_interface *>(*i);
-    if (ei != 0) {
+    if (ei != 0 && ei->impl_st == 0) {
       const bool proto_only = false;
       emit_interface_def_one(em, ei, proto_only);
     }
@@ -2346,8 +2351,8 @@ void expr_op::emit_value(emit_context& em)
     em.puts(")");
     return;
   case TOK_PTR_DEREF:
-    if (is_noninterface_pointer(arg0->get_texpr())) {
-      /* non-interface pointer dereference */
+    if (is_nonintrusive_pointer(arg0->get_texpr())) {
+      /* non-intrusive pointer dereference */
       if (need_to_emit_expr_returning_value(this)) {
 	em.puts("(pxcrt::deref_value(");
 	fn_emit_value(em, arg0);
@@ -2358,7 +2363,7 @@ void expr_op::emit_value(emit_context& em)
 	em.puts(")->value)");
       }
     } else if (is_cm_pointer_family(arg0->get_texpr())) {
-      /* interface pointer dereference */
+      /* intrusive pointer dereference */
       if (need_to_emit_expr_returning_value(this)) {
 	em.puts("(pxcrt::deref(");
 	fn_emit_value(em, arg0);
@@ -3376,14 +3381,14 @@ static void emit_vardef_constructor_fast_boxing(emit_context& em,
   const std::string otyp_cstr = term_tostr_cname(otyp); /* foo */
   DBG_FBC(fprintf(stderr, "type=%s atyp=%s\n", term_tostr_human(typ).c_str(),
     term_tostr_human(otyp).c_str()));
-  const bool is_interf_impl = is_interface_or_impl(otyp);
+  const bool is_intr = is_intrusive(otyp);
   {
     const std::string varp1 = var_csymbol + "p1";
     const typefamily_e cat = get_family(typ);
     std::string otypcnt_cstr;
     std::string rcval_cstr;
     std::string count_type_cstr;
-    if (is_interf_impl) {
+    if (is_intr) {
       otypcnt_cstr = otyp_cstr;
     } else {
       if (cat == typefamily_e_tptr || cat == typefamily_e_tcptr) {
@@ -3406,14 +3411,14 @@ static void emit_vardef_constructor_fast_boxing(emit_context& em,
       em.puts("try {\n");
       em.indent('x');
     }
-    if (is_interf_impl) {
+    if (is_intr) {
       em.puts("new (" + varp1 + ") " + otyp_cstr + "(");
     } else {
       em.puts("new (&" + varp1 + "->value) " + otyp_cstr + "(");
     }
     fn_emit_value(em, fast_boxing_cfunc->arg);
     em.puts(");\n");
-    if (!is_interf_impl) {
+    if (!is_intr) {
       /* initialize intrusive reference counter */
       em.indent('x');
       em.puts("new (&" + varp1 + "->count$z) " + count_type_cstr
@@ -3714,7 +3719,7 @@ void fn_emit_value(emit_context& em, expr_i *e, bool expand_composite,
       /* emit ptr<te> instead of type_conv_to, so that fast boxing works. */
       const term& te = e->get_texpr();
       em.puts("(");
-      if (is_interface_pointer(e->type_conv_to)) {
+      if (is_intrusive_pointer(e->type_conv_to)) {
 	em.puts("pxcrt::rcptr< ");
 	emit_term(em, te);
 	em.puts(" >");

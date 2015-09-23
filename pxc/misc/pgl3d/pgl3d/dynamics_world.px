@@ -1,45 +1,109 @@
-public namespace pgl3d::dynamics_world "export-unsafe";
+public namespace pgl3d::dynamics_world "use-unsafe";
 public import common -;
-public import Bullet::base -;
-public import Bullet::api +;
-public import pointer::raw_unsafe -;
-public import pgl3d::collision_shape *;
+private import Bullet::base -;
+private import Bullet::constants -;
+private import Bullet::api +;
+public import pointer::raw -;
+private import pointer::raw_unsafe -;
 public import meta m;
 public import meta::vararg va;
+public import pgl3d::scene_node -;
+public import glm;
 
-// extern "types" inline
-// #include <bullet/BulletCollision/CollisionDispatch/btSimulationIslandManager.h>
-// ;
-
-public metafunction broadphase_to_use 2;
-
-public threaded struct pgl3dDynamicsWorld()
-  // <pgl3dDynamicsWorld_i>
+public threaded interface
+collision_shape_i
 {
-  public btDefaultCollisionConfiguration mutable collisionConfiguration 
+}
+
+public threaded interface triangle_mesh_i triangle_mesh
+{
+  public function void add_triangle(
+    float v00, float v01, float v02,
+    float v10, float v11, float v12,
+    float v20, float v21, float v22);
+}
+
+public threaded function ptr{triangle_mesh_i}
+make_triangle_mesh()
+{
+  return make_ptr{triangle_mesh}();
+}
+
+public threaded function ptr{collision_shape_i}
+make_triangle_mesh_shape(ptr{triangle_mesh_i} const& mesh0)
+{
+  return make_ptr{triangle_mesh_shape}(
+    pointer_downcast{ptr{triangle_mesh}}(mesh0));
+}
+
+public threaded function ptr{collision_shape_i}
+make_sphere_shape(float radius)
+{
+  return make_ptr{collision_shape_tmpl{btSphereShape}}(radius);
+}
+
+public threaded function ptr{collision_shape_i}
+make_box_shape(float x, float y, float z)
+{
+  return make_ptr{collision_shape_tmpl{btBoxShape}}(btVector3_(x, y, z));
+}
+
+public threaded function ptr{collision_shape_i}
+make_convex_hull_shape(cslice{float} const& v)
+{
+  return make_ptr{collision_shape_tmpl{btConvexHullShape}}(
+    v.to_crawptr(), static_cast{int}(v.size() / 3), 3 * 4);
+}
+
+public threaded interface
+rigid_body_i rigid_body
+{
+  public function joint_id_type get_joint_id() const;
+  public function void apply_central_impulse(float x, float y, float z);
+  public function void apply_torque_impulse(float x, float y, float z);
+  public function void get_world_transform_mat4(glm::mat4 mutable& m);
+}
+
+public threaded function ptr{rigid_body_i}
+make_rigid_body(joint_id_type const& joint_id,
+  ptr{collision_shape_i} const& shape, float mass, cslice{float} const& t)
+{
+  const m3 = btMatrix3x3_(
+    t[0], t[4], t[8], t[1], t[5], t[9], t[2], t[6], t[10]);
+  const v3 = btVector3_(t[12], t[13], t[14]);
+  const btr = btTransform_(m3, v3);
+  const sh = pointer_downcast{ptr{collision_shape_priv_i}}(shape);
+  return make_ptr{rigid_body}(joint_id, sh, mass, btr);
+}
+
+public threaded struct
+dynamics_world()
+{
+  private metafunction broadphase_to_use 2;
+  private btDefaultCollisionConfiguration mutable collisionConfiguration 
     = btDefaultCollisionConfiguration(btDefaultCollisionConstructionInfo());
-  public btCollisionDispatcher mutable dispatcher
+  private btCollisionDispatcher mutable dispatcher
     = btCollisionDispatcher(address(collisionConfiguration));
   expand(s: m::seq{m::eq{broadphase_to_use, 2}}) {
-  public btSimpleBroadphase mutable broadphase
+  private btSimpleBroadphase mutable broadphase
     = btSimpleBroadphase(65536U, rawptr{btOverlappingPairCache}());
   }
   expand(s: m::seq{m::eq{broadphase_to_use, 1}}) {
-  public btDbvtBroadphase mutable broadphase
+  private btDbvtBroadphase mutable broadphase
     = btDbvtBroadphase(rawptr{btOverlappingPairCache}());
   }
   expand(s: m::seq{m::eq{broadphase_to_use, 0}}) {
-  public bt32BitAxisSweep3 mutable broadphase
+  private bt32BitAxisSweep3 mutable broadphase
     = bt32BitAxisSweep3_(
       btVector3_(-1000.0f, -1000.0f, -1000.0f),
       btVector3_( 1000.0f,  1000.0f,  1000.0f),
       65536U, rawptr{btOverlappingPairCache}(), false);
   }
-  public btSequentialImpulseConstraintSolver mutable solver;
-  public btDiscreteDynamicsWorld mutable dynamicsWorld
+  private btSequentialImpulseConstraintSolver mutable solver;
+  private btDiscreteDynamicsWorld mutable dynamicsWorld
     = btDiscreteDynamicsWorld(address(dispatcher), address(broadphase),
       address(solver), address(collisionConfiguration));
-  private varray{ptr{pgl3dRigidBody}} rigidBodies;
+  private varray{ptr{rigid_body}} objects;
   init();
   private function void init() {
     dynamicsWorld.setForceUpdateAllAabbs(false);
@@ -49,35 +113,155 @@ public threaded struct pgl3dDynamicsWorld()
   {
     clear();
   }
+  public function size_t objects_size() const {
+    return objects.size();
+  }
+  public function void set_gravity(float x, float y, float z)
+  {
+    dynamicsWorld.setGravity(btVector3_(x, y, z));
+  }
   public function void clear()
   {
-    for (size_t i, const& rb: rigidBodies) {
+    for (size_t i, const& rb: objects) {
       dynamicsWorld.removeCollisionObject(address(rb->rigidBody));
     }
-    rigidBodies.clear();
+    objects.clear();
   }
-  public function void addRigidBody(ptr{pgl3dRigidBody} const& rigidBody)
+  public function void add_rigid_body(ptr{rigid_body_i} const& rb)
   {
-    if (rigidBody->offset != static_cast{size_t}(-1)) {
+    const rb1 = pointer_downcast{ptr{rigid_body}}(rb);
+    if (rb1->offset != static_cast{size_t}(-1)) {
       return;
     }
-    dynamicsWorld.addRigidBody(address(rigidBody->rigidBody));
-    rigidBody->offset = rigidBodies.size();
-    rigidBodies.push_back(rigidBody);
+    dynamicsWorld.addRigidBody(address(rb1->rigidBody));
+    rb1->offset = objects.size();
+    objects.push_back(rb1);
   }
-  public function void removeRigidBody(ptr{pgl3dRigidBody} const& rigidBody)
+  public function void remove_rigid_body(ptr{rigid_body_i} const& rb)
   {
-    const offset = rigidBody->offset;
+    const rb1 = pointer_downcast{ptr{rigid_body}}(rb);
+    const offset = rb1->offset;
     if (offset == static_cast{size_t}(-1)) {
       return;
     }
-    dynamicsWorld.removeCollisionObject(address(rigidBody->rigidBody));
-    const sz = rigidBodies.size();
+    dynamicsWorld.removeCollisionObject(address(rb1->rigidBody));
+    const sz = objects.size();
     if (sz > 1) {
-      swap(rigidBodies[offset], rigidBodies[sz - 1]);
-      rigidBodies[offset]->offset = offset;
+      swap(objects[offset], objects[sz - 1]);
+      objects[offset]->offset = offset;
     }
-    rigidBodies.erase(sz - 1, sz);
+    objects.erase(sz - 1, sz);
   }
+  public function {f} void objects_foreach()
+  {
+    for (const i, const& obj: objects) {
+      f(i, obj);
+    }
+  }
+  public function void step_simulation(float timestep, int max_sub_steps,
+    float fixed_timestep)
+  {
+    dynamicsWorld.stepSimulation(timestep, max_sub_steps, fixed_timestep);
+  }
+}
+
+/* private */
+
+private threaded interface collision_shape_priv_i <collision_shape_i> {
+  public function crawptr{btCollisionShape} get() const;
+}
+
+private threaded struct {t}
+collision_shape_tmpl(expand(m::args{t}))
+  <collision_shape_priv_i>
+{
+  public t value = t(expand(a: m::arg_names{t}; a));
+  public function crawptr{btCollisionShape} get() const
+  {
+    return caddress(value);
+  }
+}
+
+private threaded struct
+triangle_mesh()
+<triangle_mesh_i>
+{
+  public btTriangleMesh mesh = btTriangleMesh(true, true);
+  public function void add_triangle(
+    float v00, float v01, float v02,
+    float v10, float v11, float v12,
+    float v20, float v21, float v22)
+  {
+    mesh.addTriangle(btVector3_(v00, v01, v02), btVector3_(v10, v11, v12),
+      btVector3_(v20, v21, v22), true);
+  }
+}
+
+private threaded struct
+triangle_mesh_shape(ptr{triangle_mesh} const& mesh0)
+  <collision_shape_priv_i>
+{
+  public ptr{triangle_mesh} mesh = mesh0;
+  public btBvhTriangleMeshShape value = btBvhTriangleMeshShape(
+    address(mesh->mesh), true, true);
+  public function crawptr{btCollisionShape} get() const
+  {
+    return caddress(value);
+  }
+}
+
+private threaded struct
+rigid_body(joint_id_type const& joint_id0,
+  ptr{collision_shape_priv_i} const& shape0, btScalar mass0,
+  btTransform const& tr0)
+<rigid_body_i>
+{
+  public joint_id_type const joint_id = joint_id0;
+  public ptr{collision_shape_priv_i} const shape = shape0;
+  public btRigidBody rigidBody = makeRigidBody(shape->get(), tr0, mass0);
+  public size_t offset = static_cast{size_t}(-1);
+  init(mass0);
+  function void init(float mass) {
+    if (mass == 0.0f) {
+      rigidBody.setCollisionFlags(rigidBody.getCollisionFlags() |
+	CF_KINEMATIC_OBJECT);
+      rigidBody.setActivationState(DISABLE_DEACTIVATION);
+    }
+  }
+  public function joint_id_type get_joint_id() const
+  {
+    return joint_id;
+  }
+  public function void apply_central_impulse(float x, float y, float z)
+  {
+    rigidBody.applyCentralImpulse(btVector3_(x, y, z));
+  }
+  public function void apply_torque_impulse(float x, float y, float z)
+  {
+    rigidBody.applyTorqueImpulse(btVector3_(x, y, z));
+  }
+  public function void get_world_transform_mat4(glm::mat4 mutable& m)
+  {
+    const sli = m.to_slice();
+    rigidBody.getWorldTransform().getOpenGLMatrix(sli.to_rawptr());
+  }
+}
+
+private threaded function btRigidBody makeRigidBody(
+  crawptr{btCollisionShape} shape, btTransform const& tr0, btScalar mass)
+{
+  const isDynamic = (mass != 0.0f);
+  mutable localInertia = btVector3_(0.0f, 0.0f, 0.0f);
+  if (isDynamic) {
+    shape->calculateLocalInertia(mass, localInertia);
+  }
+  mutable rbInfo = btRigidBody_btRigidBodyConstructionInfo(mass,
+    rawptr{btDefaultMotionState}(), shape.const_cast(), localInertia);
+  rbInfo.m_startWorldTransform = tr0;
+  // rbInfo.m_friction = 0.0f;
+  // rbInfo.m_rollingFriction = 0.0f;
+  // rbInfo.m_restitution = 0.0f;
+  const r = btRigidBody(rbInfo);
+  return r;
 }
 

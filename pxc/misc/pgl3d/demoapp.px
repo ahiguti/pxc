@@ -1,7 +1,8 @@
-public namespace demoapp "use-unsafe"; // FIXME?
+public namespace demoapp;
 public import common -;
 public import exception -;
 public import numeric::fpmath -;
+public import pointer::raw -;
 public import meta m;
 public import glm;
 public import text::string::positional -;
@@ -13,29 +14,12 @@ public import pgl3d::glgeometry -;
 public import pgl3d::wfobj -;
 public import pgl3d::drawer_export -;
 public import pgl3d::input_control -;
-private import pgl3d::dynamics_world -;
-private import Bullet::base -;
-private import Bullet::api -;
+public import pgl3d::dynamics_world -;
+public import pgl3d::pglconfig -;
+public import pgl3d::sdlutil -;
 public import io::time -;
 
-public import testbroadphase -; // FIXME
-
-// FIXME
-public import pgl3d::sdlutil -;
-{
-  string cnf;
-  sdl_load_file("pgl3d.cnf", cnf);
-  // println(cnf);
-  string_map m;
-  split_foreach{function void(cstrref const& line) {
-    const a = make_farray_split{2}(line, '=');
-    if (!a[0].empty()) {
-      m[a[0]] = a[1];
-    }
-  }}(cnf, '\n');
-  println("map=", m);
-}
-
+public import pgl3d::grid_broadphase -; // FIXME
 
 // FIXME: projection_infoではなくscreen_infoだけ渡すように
 
@@ -43,7 +27,7 @@ public import pgl3d::sdlutil -;
 
 {
   demoapp_application app;
-  pgl3d::mainloop::mainloop(app);
+  pgl3d::mainloop::mainloop(app, "pgl3d.cnf");
 }
 
 public struct demoapp_application()
@@ -77,7 +61,7 @@ private struct app_impl()
   public input_control_target player;
   public input_control ictl = input_control(io::system);
   public bool scene_next_flag;
-  public float light_on = 1.0f;
+  public float light_on = 0.0f;
   public string_map app_commands;
   init();
   private function void init() {
@@ -144,30 +128,50 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
   public scene_control sctl = scene_control(nodefac0, shapes0);
   public io::io sys = sys0;
   public string timings;
+  private function void update_camera_light(position_angle mutable& camera,
+    position_angle mutable& light)
+  {
+    light.position = // camera.angle * glm::make_vec3(0.0, 0.0, -50.0) +
+      camera.position + glm::make_vec3(0.0, 0.0, 0.0);
+    /*
+    light.position = glm::make_vec3(0.0, -50.0, 0.0);
+    */
+    light.angle = glm::make_quat_wxyz(1.0, 0.0, 0.0, 0.0);
+    // light.angle = generate_rand_quat(make_rand_generator(1234U));
+    // light.angle.normalize();
+    // debug_log("light", light.angle.to_cslice());
+    //debug_log("light m4", light.to_mat4().inverse().to_cslice());
+    //debug_log("campos", camera.position.to_cslice());
+    /*
+    debug_log("cam m4", camera.to_mat4().to_cslice());
+    debug_log("cam axis", glm::axis(camera.angle).to_cslice());
+    */
+    /*
+    light.position = camera.position +
+      camera.angle.to_mat3() * glm::make_vec3(3.0, 3.0, 5.0);
+    light.angle = camera.angle;
+    */
+  }
   public function void on_motion_step(float frame_speed,
-    projection_info const& pjinfo, cstrref const& status_message,
+    projection_info mutable& pjinfo, cstrref const& status_message,
     cslice{prepare_instance_data_funcptr} const& ftable,
     whole_instances_type mutable& whole_instances,
-    pgl3d_scene_shared mutable& ss, position_angle mutable& camera_r,
-    position_angle mutable& light_r, string_map mutable& commands_r)
+    pgl3d_scene_shared mutable& ss, string_map mutable& commands_r)
   {
     const t0 = get_time(sys);
     mutable& dss = downcast_mutable{demoapp_scene_shared}(ss);
     // const t0 = io::debug_system().gettimeofday_double();
-    camera_r = dss.posang;
-    // camera_r.position += camera_r.angle * glm::make_vec3(0.0, 0.0, 3.0);
-    light_r.position = camera_r.position +
-      camera_r.angle.to_mat3() * glm::make_vec3(3.0, 3.0, 5.0);
-    light_r.angle = camera_r.angle;
-    const sm_view = light_r.to_mat4().inverse();
-    const sm_vp = pjinfo.sm_projection * sm_view;
-    const vp = pjinfo.projection * camera_r.to_mat4().inverse();
+    pjinfo.camera = dss.posang;
+    update_camera_light(pjinfo.camera, pjinfo.light);
+    const sm_view = pjinfo.light.to_mat4().inverse();
+    // const sm_vp = pjinfo.sm_projection * sm_view;
+    const vp = pjinfo.projection * pjinfo.camera.to_mat4().inverse();
     node_common_data ncd;
-    ncd.shadowmapping_vp = sm_vp;
+    // ncd.shadowmapping_vp = sm_vp; // FIXME: remove: unused
     ncd.vp = vp;
     scene_control_update_buttons(sctl, sctl.node_buttons);
-    string s = string_join{" "}("O:", sctl.sco.objects.size(),
-      sctl.active_count, "T:", timings, status_message);
+    string s = string_join{" "}("O:", sctl.sco.dworld.objects_size(),
+      sctl.lpbullet.size(), "T:", timings, status_message);
     scene_control_set_message(sctl, sctl.node_status_message, s,
       0, 0,
       dss.default_font_texture_info.char_w,
@@ -268,6 +272,10 @@ function void handle_event(app_impl mutable& app,
       app.app_commands["throw"] = "1";
       return;
     }
+    if (ev.key.keysym.scancode == SDL_SCANCODE_L) {
+      app.light_on = app.light_on > 0.5f ? 0.0f : 1.0f;
+      return;
+    }
   }
   app.ictl.handle_event(ev, frame_speed, pjinfo, commands_r);
 }
@@ -325,7 +333,9 @@ private function void build_vertices(app_impl mutable& app,
   for (const i, const name: objs) {
     string fn = name + ".obj";
     sdllog("load", fn);
-    const wfobjp = wfobject_read(sdl_read_file(fn));
+    string fcontent;
+    sdl_load_file(fn, fcontent);
+    const wfobjp = wfobject_read(fcontent);
     for (const j, mutable& v: wfobjp->v) {
       // v *= 10.0f;
     }
@@ -357,21 +367,31 @@ private function void build_vertices(app_impl mutable& app,
 	ctx_fill(0))));
   pgs.make_vertex_set(tr, "saucer",
     regular_polygon(3.0, 40,
-      bump_rec(0.2, 0.5, 1, ctx_fill(0), ctx_fill(0)),
-      bump_rec(0.01, 0.9, 5,
+      bump_rec(10.8, 0.5, 1, ctx_fill(0), ctx_fill(0)),
+      bump_rec(0.05, 0.9, 5,
 	ctx_fill(0),
-	sphere(10, ctx_fill_smooth(1)))));
+	sphere(10, ctx_fill_smooth(0)))));
   pgs.make_vertex_set(tr, "saucer-multi",
-  regular_polygon(15.0, 3,
-    bump_rec(1.0, 1.0, 1, ctx_poly_joint("saucer"), hole()),
-    hole()));
+    regular_polygon(1.0, 3,
+      bump_rec(1.0, 1.0, 1, ctx_poly_joint("saucer"), hole()),
+      hole()));
   pgs.make_vertex_set(tr, "block-multi",
     regular_polygon(600.0, 4,
       rectangle_split(9, 8, ctx_poly_joint("block")),
       hole()));
+  {
+    const m1 = glm::mat4().rotate(to_radians(90.0),
+	glm::make_vec3(1.0, 0.0, 0.0));
+    const m2 = glm::mat4().rotate(to_radians(-90.0),
+	glm::make_vec3(1.0, 0.0, 0.0));
+    pgs.make_vertex_set(tr, "block-smtest",
+      regular_polygon(3.0, 4,
+	ctx_poly_joint("box"),
+	apply(m1, bump_rec(1.0, 1.0, 1, hole(), ctx_poly_joint("block")))));
+  }
   rnd = make_rand_generator(1U);
   pgs.make_vertex_set(tr, "block",
-    regular_polygon(50.0, 4,
+    regular_polygon(30.0, 4,
       rotate_local(glm::make_quat_angle_axis(to_radians(45.0),
 	0.0, 0.0, 1.0),
 	rectangle_split(30, 30,
@@ -379,7 +399,32 @@ private function void build_vertices(app_impl mutable& app,
 	    ctx_fill(0), ctx_fill(0), ctx_fill(0)))),
       rotate_local(glm::make_quat_angle_axis(to_radians(-45.0),
 	0.0, 0.0, 1.0),
-	bump_rec(0.01, 1.0, 1, ctx_fill(0), ctx_fill(0)))));
+	bump_rec(0.5, 1.0, 1, ctx_fill(0), ctx_fill(0)))));
+  rnd = make_rand_generator(1U);
+  pgs.make_vertex_set(tr, "nest",
+    regular_polygon(100.0, 4,
+      rotate_local(glm::make_quat_angle_axis(to_radians(45.0), 0.0, 0.0, 1.0),
+	bump_rec(0.03, 1.0, 1, ctx_fill(0),
+	  rand_bump2(100, 0.5, 0.2, 0.8, 0.05, 0.05, 0.5, 0.5, rnd,
+	    ctx_fill(0),
+	    rand_bump2(30, 10.0, 0.1, 0.2, 0.1, 0.2, 0.2, 0.5, rnd,
+	      ctx_fill(0), ctx_fill(0), ctx_fill(0)),
+	    ctx_fill(0)))),
+      rotate_local(glm::make_quat_angle_axis(to_radians(45.0), 0.0, 0.0, 1.0),
+	bump_rec(0.03, 1.0, 1, ctx_fill(0),
+	  rand_bump2(100, 0.5, 0.2, 0.8, 0.05, 0.05, 0.5, 0.5, rnd,
+	    ctx_fill(0),
+	    rand_bump2(30, 10.0, 0.1, 0.2, 0.1, 0.2, 0.2, 0.5, rnd,
+	      ctx_fill(0), ctx_fill(0), ctx_fill(0)),
+	    ctx_fill(0))))));
+  m = glm::mat4()
+    .translate(glm::make_vec3(100.0, 100.0, 100.0))
+    .rotate(to_radians(30.0), glm::make_vec3(0.0, 0.0, 1.0));
+  pgs.make_vertex_set(tr, "nest-multi",
+    regular_polygon(600.0, 4,
+      bump_apply(m, false, hole(),
+	rectangle_split(5, 5, ctx_poly_joint("nest"))),
+      hole()));
   m = glm::mat4()
     .translate(glm::make_vec3(0.0, 0.0, 1.0))
     .rotate(to_radians(10.0), glm::make_vec3(0.0, 0.0, 1.0));
@@ -405,7 +450,7 @@ private function void build_vertices(app_impl mutable& app,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
   pgs.make_vertex_set(tr, "block-multi2",
-    rand_sphere(500.0, 200, false, true, rnd,
+    rand_sphere(500.0, 350, false, true, rnd,
       ctx_point_joint("block")));
   rnd = make_rand_generator(991U);
   pgs.make_vertex_set(tr, "bullet2-multi2",
@@ -463,7 +508,7 @@ private function void build_vertices(app_impl mutable& app,
   }
   rnd = make_rand_generator(991U);
   pgs.make_vertex_set(tr, "bullet2-multi3",
-    rand_sphere(200.0, 2000, false, true, rnd,
+    rand_sphere(50.0, 1000, false, true, rnd,
       ctx_point_joint("bullet2")));
   pgs.make_vertex_set(tr, "bullet-multi-2",
     regular_polygon(600.0, 4,
@@ -528,6 +573,7 @@ private function void build_vertices(app_impl mutable& app,
       collision_shape_e_concave, p, elems));
   }
   shapes_add_convex("box", 1.0f);
+  shapes_add_convex("nest", 1000.0f);
   shapes_add_convex("box50", 250.0f);
   shapes_add_convex("bullet2", 2.0f);
   // shapes_add_sphere("bullet2", 1.0f, 2.0f);
@@ -573,34 +619,24 @@ threaded struct lpbullet_data {
 }
 
 threaded struct
-collision_object(joint_id_type const& joint_id0,
-  ptr{pgl3dRigidBody} const& rigid_body0)
+collision_shape_ptr(ptr{collision_shape_i} const& ptr0, float mass0)
 {
-  public joint_id_type joint_id = joint_id0;
-  public ptr{pgl3dRigidBody} rigid_body = rigid_body0;
-}
-
-threaded struct
-collision_shape_ptr(ptr{pgl3dCollisionShape_i} const& ptr0, float mass0)
-{
-  public ptr{pgl3dCollisionShape_i} shape_ptr = ptr0;
+  public ptr{collision_shape_i} shape_ptr = ptr0;
   public float mass = mass0;
 }
 
 threaded struct
 scene_objects(collision_shape_data_array const& shape0)
 {
-  public pgl3dDynamicsWorld dynamics_world;
+  public dynamics_world dworld;
   public tree_map{string, collision_shape_ptr} shapes_by_name;
   public tree_map{joint_id_type, collision_shape_ptr} shapes_by_id;
   public tree_map{string, joint_id_type} name_to_joint_id;
-  public varray{collision_object} objects;
   add_collision_shapes(shape0);
   public function void clear_objects() 
   {
-    dynamics_world.clear();
-    objects.clear();
-    dynamics_world.dynamicsWorld.setGravity(btVector3_(0.0f, 0.0f, 0.0f));
+    dworld.clear();
+    dworld.set_gravity(0.0f, 0.0f, 0.0f);
   }
   public function void
   add_collision_shapes(collision_shape_data_array const& sa)
@@ -619,19 +655,14 @@ scene_objects(collision_shape_data_array const& shape0)
     const& e = sh.elements;
     const mass = sh.mass;
     if (sh.shape == collision_shape_e_sphere) {
-      add_collision_shape_one(name, joint_id,
-	make_ptr{pgl3dCollisionShape{btSphereShape}}(v[0]), mass);
+      add_collision_shape_one(name, joint_id, make_sphere_shape(v[0]), mass);
     } else if (sh.shape == collision_shape_e_box) {
-      add_collision_shape_one(name, joint_id,
-	make_ptr{pgl3dCollisionShape{btBoxShape}}(
-	  btVector3_(v[0], v[1], v[2])), mass);
+      add_collision_shape_one(name, joint_id, make_box_shape(v[0], v[1], v[2]),
+	mass);
     } else if (sh.shape == collision_shape_e_convex_hull) {
-      const s = make_ptr{pgl3dCollisionShape{btConvexHullShape}}(
-	v.to_crawptr(), static_cast{int}(v.size() / 3), 3 * 4);
-      add_collision_shape_one(name, joint_id, s, mass);
+      add_collision_shape_one(name, joint_id, make_convex_hull_shape(v), mass);
     } else if (sh.shape == collision_shape_e_concave) {
-      ptr{btTriangleMesh} trmesh = make_ptr{btTriangleMesh}(true, true);
-      mutable& m = *trmesh;
+      ptr{triangle_mesh_i} trmesh = make_triangle_mesh();
       size_t eidx = 0;
       while (eidx < e.size()) {
 	if (static_cast{size_t}(e[eidx]) >= v.size()) {
@@ -640,43 +671,41 @@ scene_objects(collision_shape_data_array const& shape0)
 	const i0 = e[eidx + 0] * 3;
 	const i1 = e[eidx + 1] * 3;
 	const i2 = e[eidx + 2] * 3;
+	/*
 	const v0 = btVector3_(v[i0 + 0], v[i0 + 1], v[i0 + 2]);
 	const v1 = btVector3_(v[i1 + 0], v[i1 + 1], v[i1 + 2]);
 	const v2 = btVector3_(v[i2 + 0], v[i2 + 1], v[i2 + 2]);
 	m.addTriangle(v2, v1, v0, true); // enable dedup
+	*/
+	trmesh->add_triangle(
+	  v[i0 + 0], v[i0 + 1], v[i0 + 2],
+	  v[i1 + 0], v[i1 + 1], v[i1 + 2],
+	  v[i2 + 0], v[i2 + 1], v[i2 + 2]);
 	eidx += 3;
       }
-      const s = make_ptr{pgl3dTriangleMeshShape}(trmesh);
+      const s = make_triangle_mesh_shape(trmesh);
       add_collision_shape_one(name, joint_id, s, mass);
     }
   }
   private function void add_collision_shape_one(string const& name,
-    joint_id_type const& id, ptr{pgl3dCollisionShape_i} const& sh,
+    joint_id_type const& id, ptr{collision_shape_i} const& sh,
     float mass)
   {
     const csp = collision_shape_ptr(sh, mass);
     shapes_by_name.insert(name, csp);
     shapes_by_id.insert(id, csp);
   }
-  public function option{ptr{pgl3dRigidBody}} add_collision_object(
+  public function option{ptr{rigid_body_i}} add_collision_object(
     scene_node const& sn)
   {
-    option{ptr{pgl3dRigidBody}} r;
+    option{ptr{rigid_body_i}} r;
     if (sn.joint_id.vs_id < 0) {
       return r;
     }
     if (const& shape: shapes_by_id[sn.joint_id]) {
       const& t = sn.trans.value.to_cslice();
-      const m3 = btMatrix3x3_(
-	t[0], t[4], t[8], t[1], t[5], t[9], t[2], t[6], t[10]);
-      const v3 = btVector3_(t[12], t[13], t[14]);
-      const btr = btTransform_(m3, v3);
-      const rb = make_ptr{pgl3dRigidBody}(shape.shape_ptr,
-	shape.mass, btr);
-      btRigidBody_upcast_btCollisionObject_p(address(rb->rigidBody))
-	->setFriction(1.0f);
-      objects.push_back(collision_object(sn.joint_id, rb));
-      dynamics_world.addRigidBody(rb);
+      const rb = make_rigid_body(sn.joint_id, shape.shape_ptr, shape.mass, t);
+      dworld.add_rigid_body(rb);
       r.some = rb;
       return r;
     }
@@ -703,23 +732,6 @@ scene_control(node_factory const& nfac,
   public node mutable node_status_message = make_node();
   public node mutable node_buttons = make_node();
   public scene_objects sco = scene_objects(shapes0);
-  public size_t active_count = 0; // FIXME: remove
-  /*
-  public pgl3dDynamicsWorld dynamics_world; // FIXME: remove
-  public varray{ptr{pgl3dRigidBody}} boxes; // FIXME: remove
-  public collision_shape_data_array shapes = shapes0; // FIXME: remove
-  public function tcptr{collision_shape_data} find_shape(string const& name)
-    const
-  {
-  // FIXME: remove
-    for (const i, const& e: shapes) {
-      if (e->name == name) {
-	return e;
-      }
-    }
-    throw runtime_error_template{"scene_control::find_shape"}(name);
-  }
-  */
   public darray{string} const scene_names = make_darray{string}(
     // "untitled", "saucer", "saucer-multi", "block-multi", "block",
     // "ab-multi", "ab-multi3", "skyscraper",
@@ -727,6 +739,12 @@ scene_control(node_factory const& nfac,
     /*
     "parts",
     */
+    "block-smtest",
+    "nest",
+    "nest-multi",
+    "block-multi",
+    "bullet2-multi3",
+    "saucer-multi",
     "bullet2-multi2s8",
     // "bullet2-multi2s1",
     // "bullet2-multi2s2",
@@ -741,8 +759,8 @@ scene_control(node_factory const& nfac,
     // "bullet2-multi2s11",
     "bullet2-multi2s12",
     "rigidbody-multi",
-    "saucer", "saucer-multi", "block-multi", "block-multi2", "block",
-    "bullet2-multi3"
+    "saucer",
+    "block-multi2"
     /*
     "bullet2-multi",
     "bullet-multi", "saucer-multi3",
@@ -763,119 +781,24 @@ scene_control(node_factory const& nfac,
     if (r.children.empty()) {
       sco.add_collision_object(r);
     } else {
-      /*
-      size_t p_max = 0;
-      size_t p_min = static_cast{size_t}(-1);
-      */
       mutable rnd = make_rand_generator(1U);
-      for (const i, const& ch: r.children) {
+      if (cur_scene == 0) {
+	const ch = r.children[1];
 	const rb = sco.add_collision_object(ch).some;
-        rb->rigidBody.applyTorqueImpulse(btVector3_(
-	  rnd->generate_float() * 10.0f - 5.0f,
-	  rnd->generate_float() * 10.0f - 5.0f,
-	  rnd->generate_float() * 10.0f - 5.0f));
-	/*
-	*/
-        rb->rigidBody.applyCentralImpulse(btVector3_(
-	  rnd->generate_float() * 10.0f - 5.0f,
-	  rnd->generate_float() * 10.0f - 5.0f,
-	  rnd->generate_float() * 10.0f - 5.0f));
-	/*
-	*/
-	size_t p = address(rb->rigidBody).to_size_t();
-	/*
-	debug_log("rb", p);
-	p_min = min(p, p_min);
-	p_max = max(p, p_max);
-	*/
-      }
-      /*
-      debug_log("min/max", p_max - p_min);
-      */
-    }
-    if (cur_scene == 0) {
-      /*
-      dynamics_world.dynamicsWorld.setGravity(btVector3_(0.0f, 0.0f, -10.0f));
-      const groundShape = make_ptr{pgl3dCollisionShape{btBoxShape}}(
-	btVector3_(50.0f, 50.0f, 50.0f));
-      const rbGround = make_ptr{pgl3dRigidBody}(groundShape, 0.0f, 
-	btTransform_(btQuaternion_getIdentity(),
-	  btVector3_(0.0f, 20.0f, -60.0f)));
-      btRigidBody_upcast_btCollisionObject_p(address(rbGround->rigidBody))
-	->setFriction(0.1f);
-      /*
-	btRigidBody_upcast_btCollisionObject_p(address(rbGround->rigidBody))
-	  ->setRestitution(0.3f);
-      */
-      /*
-      dynamics_world.addRigidBody(rbGround);
-      */
-      /*
-      const colShape = make_ptr{pgl3dCollisionShape{btBoxShape}}(
-	btVector3_(1.0f, 1.0f, 1.0f));
-      const& points = find_shape("box")->values;
-      const colShape1 = make_ptr{pgl3dCollisionShape{btConvexHullShape}}(
-	points.to_crawptr(), static_cast{int}(points.size() / 3), 3 * 4);
-      int xsize = 20;
-      int ysize = 20;
-      int zsize = 20;
-      float start_x = static_cast{float}(-xsize - xsize/2);
-      float start_y = static_cast{float}(-ysize - ysize/2);
-      float start_z = static_cast{float}(-zsize);
-      int k;
-      int i;
-      int j;
-      mutable startTransform = btTransform_(btQuaternion_getIdentity(),
-	btVector3_(0.0f, 0.0f, 0.0f));
-      for (int k: 0 .. xsize) {
-	for (int i: 0 .. ysize) {
-	  for (int j: 0 .. zsize) {
-	    const x = 3.5f * static_cast{float}(k) + start_x;
-	    const y = 20.0f + 3.5f * static_cast{float}(i) + start_y;
-	    const z = 10.0f + 2.1f * static_cast{float}(j) + start_z;
-	    startTransform.setOrigin(btVector3_(x, y, z));
-	    const rb = make_ptr{pgl3dRigidBody}(colShape1, 1.0f,
-	      startTransform);
-	    btRigidBody_upcast_btCollisionObject_p(address(rb->rigidBody))
-	      ->setFriction(1.0f);
-	    dynamics_world.addRigidBody(rb);
-	    if (boxes.size() >= r.children.size()) {
-	      const v = r.children[r.children.size() - 1];
-	      r.children.push_back(v);
-	    }
-	    if (boxes.size() < r.children.size()) {
-	      size_t p = boxes.size();
-	      mutable& csn = r.children[p];
-	      glm::vec3 pos = glm::make_vec3(x, y, z);
-	      glm::mat4 m = glm::mat4().translate(pos);
-	      csn.trans.value = m;
-	    }
-	    boxes.push_back(rb);
-	  }
+	rb->apply_central_impulse(1.0f, 0.0f, 0.0f);
+      } else {
+	for (const i, const& ch: r.children) {
+	  const rb = sco.add_collision_object(ch).some;
+	  rb->apply_torque_impulse(
+	    rnd->generate_float() * 10.0f - 5.0f,
+	    rnd->generate_float() * 10.0f - 5.0f,
+	    rnd->generate_float() * 10.0f - 5.0f);
+	  rb->apply_central_impulse(
+	    rnd->generate_float() * 10.0f - 5.0f,
+	    rnd->generate_float() * 10.0f - 5.0f,
+	    rnd->generate_float() * 10.0f - 5.0f);
 	}
       }
-      */
-      /*
-      for (size_t i: 0 .. 100) {
-	const rb = make_ptr{pgl3dRigidBody}(colShape, 10.0f,
-	  btTransform_(
-	    btQuaternion_getIdentity(),
-	    btVector3_(2.0f, 3.0f * static_cast{btScalar}(i), 0.0f)));
-	// btRigidBody_upcast_btCollisionObject_p(address(rb->rigidBody))
-	//  ->setFriction(0.2f);
-	//btRigidBody_upcast_btCollisionObject_p(address(rb->rigidBody))
-	//  ->setRestitution(0.3f);
-	dynamics_world.addRigidBody(rb);
-	boxes.push_back(rb);
-	if (i < r.children.size()) {
-	  mutable& csn = r.children[i];
-	  glm::vec3 pos = glm::make_vec3(2.0f, 0.0f,
-	    10.0f * static_cast{float}(i));
-	  glm::mat4 m = glm::mat4().translate(pos);
-	  csn.trans.value = m;
-	}
-      }
-      */
     }
     return r;
   }
@@ -917,15 +840,6 @@ scene_control_set_message(scene_control mutable& sctl,
       }
     }
   }
-}
-
-threaded function btTransform to_btTransform(position_angle const& posang)
-{
-  const& p = posang.position;
-  const& a = posang.angle;
-  const q = btQuaternion_(a.x, a.y, a.z, a.w);
-  const v = btVector3_(p.x, p.y, p.z);
-  return btTransform_(q, v);
 }
 
 threaded function void
@@ -984,8 +898,7 @@ scene_control_step(scene_control mutable& sctl,
     }
     erase_cond{lp_is_finished}(sctl.lpbullet);
   }
-  threaded function void spawn_lp(scene_control mutable& sctl,
-    glm::mat4 const& tr, float speed)
+  threaded function void spawn_lp_one(glm::mat4 const& m, float speed)
   {
     // size_t const lim = is_gles != 0 ? 20000U : 200000U;
     size_t const lim = 200000U;
@@ -994,17 +907,21 @@ scene_control_step(scene_control mutable& sctl,
     }
     {
       lpbullet_data lpb;
+      const& s = m.to_cslice();
+      const pos = glm::make_vec3(s[12], s[13], s[14]);
+      const rot = m.to_3();
+      const dir = rot * glm::make_vec3(0.0f, 0.0f, -5.0f);
+      const p0 = pos;
+      const p1 = pos + dir;
       const& sli = lpb.value.range();
-      const p0 = tr * glm::make_vec4(0.0f, 0.0f, -5.0f, 1.0f);
-      const p1 = tr * glm::make_vec4(0.0f, 0.0f, -10.0f, 1.0f);
-      sli[0] = p0.x; /* position0 */
+      sli[0] = p0.x; // position0
       sli[1] = p0.y;
       sli[2] = p0.z;
-      sli[3] = p1.x; /* position1 */
+      sli[3] = p1.x; // position1
       sli[4] = p1.y;
       sli[5] = p1.z;
-      sli[6] = 0.25f; /* point_size_base */
-      sli[7] = 0.0f; /* step */
+      sli[6] = 0.25f; // point_size_base
+      sli[7] = 0.0f; // step
       sctl.lpbullet.push_back(lpb);
     }
     return;
@@ -1019,111 +936,48 @@ scene_control_step(scene_control mutable& sctl,
       ftable[bo_id](sn, ncd, idata);
     }	
   }
-  threaded function void step_snobj(scene_node mutable& sn_scene)
-  {
-    mutable& snobj = sn_scene;
-    prepare_one(snobj);
-    for (const ci, mutable& csnp: snobj.children) {
-      mutable& csn = csnp;
-      sn_work.joint_id = csn.joint_id;
-      sn_work.trans.value = csn.trans.value.rotate(
-	to_radians(sctl.motion_count),
-	glm::make_vec3(1.0, 0.0, 0.0));
-      if (spawn_now) {
-	spawn_lp(sctl, sn_work.trans.value, speed);
-      }
-      prepare_one(sn_work);
-    }
-  }
   threaded function void step_snobj_dynamics(scene_node mutable& sn_scene,
-    bool spawn_obj)
+    bool spawn_obj, bool spawn_lp_flag)
   {
     if (spawn_obj) {
-      const a = ss.posang.angle * glm::make_vec3(0.0f, 0.0f, -20.0f);
+      const a = ss.posang.angle * glm::make_vec3(0.0f, 0.0f, -50.0f);
       mutable posang = ss.posang;
-      posang.position += a / 500.0f;
-      const startTransform = to_btTransform(posang);
+      posang.position += a * 0.1f;
       scene_node cnode = scene_node(
-	sctl.sco.name_to_joint_id["box"], ss.posang.to_mat4());
+	sctl.sco.name_to_joint_id["box"], posang.to_mat4());
       const rb = sctl.sco.add_collision_object(cnode).some;
-      rb->rigidBody.applyCentralImpulse(btVector3_(a.x, a.y, a.z));
-      rb->rigidBody.activate(true);
-      debug_log("spawn_obj", sctl.sco.objects.size());
-      /*
-      const rb = make_ptr{pgl3dRigidBody}(shape, 2.0f,
-	      startTransform);
-      rb->rigidBody.applyCentralImpulse(btVector3_(a.x, a.y, a.z));
-      rb->rigidBody.activate(true);
-      sctl.dynamics_world.addRigidBody(rb);
-      csn.trans.value = ss.posang.to_mat4();
-      sn_scene.children.push_back(csn);
-      sctl.boxes.push_back(rb);
-      debug_log("spawn_obj", sn_scene.children.size());
-      */
+      rb->apply_central_impulse(a.x, a.y, a.z);
+      // debug_log("spawn_obj", sctl.sco.dworld.objects_size());
     }
-    float fixedstep = 0.1f / 60.0f;
-    float step = speed / 60.0f;
-    if (step < fixedstep) {
-      fixedstep = step;
-    }
-    int substep = static_cast{int}(step / fixedstep) + 1;
-    // sctl.sco.dynamics_world.dynamicsWorld.stepSimulation(step, 1, 1.0f/60.0f);
-    sctl.sco.dynamics_world.dynamicsWorld.stepSimulation(1.0f/60.0f, 1, 1.0f/60.0f);
-    // btTransform trans;
+    sctl.sco.dworld.step_simulation(speed*1.0f/60.0f, 10, 1.0f/60.0f);
     scene_node cursn = scene_node(joint_id_type(), glm::mat4());
-    size_t active_count = 0;
-    for (const i, const& obj: sctl.sco.objects) {
-      cursn.joint_id = obj.joint_id;
-      // obj.rigid_body->motionState.getWorldTransform(trans);
-      const& trans = obj.rigid_body->rigidBody.getWorldTransform();
-      const sli = cursn.trans.value.to_slice();
-      trans.getOpenGLMatrix(sli.to_rawptr());
-      /* color: [3] [7] [11]  */
-       // sli[3] = 0.20;
-       // sli[7] = 0.20;
-       // sli[11] = 0.20;
-      // sli[3] = static_cast{float}((i & 511) >> 6) * 0.125;
-      // sli[7] = static_cast{float}((i & 63) >> 3) * 0.125;
-      // sli[11] = static_cast{float}(i & 7) * 0.125;
-      // debug_log("col", sli[3], sli[7], sli[11]);
-      // debug_log(sli);
+    threaded function void step_obj(size_t i, ptr{rigid_body_i} const& obj)
+    {
+      cursn.joint_id = obj->get_joint_id();
+      obj->get_world_transform_mat4(cursn.trans.value);
       prepare_one(cursn);
-      if (obj.rigid_body->rigidBody.isActive()) {
-        ++active_count;
+      if (spawn_lp_flag) {
+	spawn_lp_one(cursn.trans.value, speed);
       }
     }
-    sctl.active_count = active_count;
-    /*
-    size_t i = 0;
-    for (i = 0; i < sctl.boxes.size() && i < sn_scene.children.size(); ++i) {
-      mutable& csn = sn_scene.children[i];
-      btTransform trans;
-      sctl.boxes[i]->motionState.getWorldTransform(trans);
-      trans.getOpenGLMatrix(csn.trans.value.to_slice().to_rawptr());
-      prepare_one(csn);
-    }
-    */
+    sctl.sco.dworld.objects_foreach{step_obj}();
   }
   step_lp(); /* lineparticle */
-  bool spawn_now = false;
+  bool spawn_lp_flag = false;
   {
     sctl.prev_spawn += speed;
     if (sctl.prev_spawn > 3.0) {
-      spawn_now = ss.light_on != 0.0f;
+      spawn_lp_flag = ss.light_on != 0.0f;
       sctl.prev_spawn -= 3.0;
     }
   }
-  // if (sctl.cur_scene == 0)
   {
-    bool spawn_obj = false;
+    bool spawn_obj_flag = false;
     if (const& v: ss.app_commands["throw"]) {
-      spawn_obj = true;
+      spawn_obj_flag = true;
     }
-    step_snobj_dynamics(sctl.node_scene, spawn_obj);
+    step_snobj_dynamics(sctl.node_scene, spawn_obj_flag, spawn_lp_flag);
   }
-  // else {
-  //  step_snobj(sctl.node_scene);
-  //}
   sctl.motion_count += speed;
   if (sctl.motion_count >= 360.0) {
     sctl.motion_count -= 360.0;

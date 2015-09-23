@@ -63,7 +63,6 @@ nspropmap_type nspropmap;
 nsthrmap_type nsthrmap;
 std::string emit_threaded_dll_func;
 compiled_ns_type compiled_ns;
-std::vector<std::string> instantiating_ns_stack;
 /* end: global variables */
 
 static expr_i *string_to_nssym(expr_i *e, const std::string& str)
@@ -773,34 +772,47 @@ bool is_interface(const term& t)
   return ti != 0;
 }
 
-bool is_interface_or_impl(const term& t)
+bool is_intrusive(const term& t)
 {
-  const expr_struct *const tsd = dynamic_cast<const expr_struct *>(
-    t.get_expr());
-  const expr_interface *const ti =
-    dynamic_cast<const expr_interface *>(t.get_expr());
-  if ((tsd != 0 && tsd->block->inherit) || ti != 0) {
-    return true;
+  /* return true if type has an intrusive reference counter and a monitor */
+  const expr_i *const et = term_get_instance_const(t);
+  const expr_interface *const ti = dynamic_cast<const expr_interface *>(et);
+  if (ti != 0) {
+    return ti->impl_st == 0;
+  }
+  const expr_struct *const tsd = dynamic_cast<const expr_struct *>(et);
+  if (tsd != 0 && tsd->block->inherit) {
+    /* return whether 1st base interface is restricted */
+    term ti = tsd->block->inherit->head->get_sdef()->resolve_evaluated();
+    // const expr_i *eb = ti.get_expr(); // FIXME FIXME
+    const expr_i *eb = term_get_instance(ti);
+    #if 0
+    #endif
+    #if 0
+    const expr_i *eb = tsd->block->inherit->head->get_sdef()->get_symdef();
+    #endif
+    const expr_interface *ei = ptr_down_cast<const expr_interface>(eb);
+    return ei->impl_st == 0;
   }
   return false;
 }
 
-bool is_noninterface_pointer(const term& t)
+bool is_nonintrusive_pointer(const term& t)
 {
   term tt = get_pointer_target(t);
   if (tt.get_expr() == 0) {
     return false;
   }
-  return !is_interface_or_impl(tt);
+  return !is_intrusive(tt);
 }
 
-bool is_interface_pointer(const term& t)
+bool is_intrusive_pointer(const term& t)
 {
   term tt = get_pointer_target(t);
   if (tt.get_expr() == 0) {
     return false;
   }
-  return is_interface_or_impl(tt);
+  return is_intrusive(tt);
 }
 
 bool is_dereferencable(const term& t)
@@ -1363,6 +1375,15 @@ std::string term_tostr(const term& t, term_tostr_sort s)
   if (tdef == 0) {
     return std::string();
   }
+  if (s == term_tostr_sort_cname && tdef->get_esort() == expr_e_interface) {
+    /* restricted interface? */
+    const expr_interface *const ei = ptr_down_cast<const expr_interface>(tdef);
+    if (ei->impl_st != 0) {
+      const expr_i *eimpl = ei->impl_st->get_symdef();
+      const term timpl = eimpl->get_value_texpr();
+      return term_tostr(timpl, s);
+    }
+  }
   const term_list *const args = t.get_args();
   const char *sym = 0;
   const char *cname = 0;
@@ -1513,13 +1534,13 @@ fprintf(stderr, "pxc-defined %s\n", cname); // FIXME
 	if (is_cm_lock_guard_family(t)) {
 	  const std::string s = (cat == typefamily_e_lock_guard)
 	    ? "pxcrt::lock_guard" : "pxcrt::lock_cguard";
-	  if (is_interface_pointer(t)) {
+	  if (is_intrusive_pointer(t)) {
 	    rstr += s;
 	  } else {
 	    rstr += s + "< pxcrt::trcval";
 	    rstr_post = " >";
 	  }
-	} else if (is_interface_pointer(t)) {
+	} else if (is_intrusive_pointer(t)) {
 	  rstr += "pxcrt::rcptr";
 	} else {
 	  if (cat == typefamily_e_tcptr || cat == typefamily_e_tptr) {
@@ -2025,7 +2046,7 @@ static term get_implicit_conversion_func(const term& tfrom, const term& tto,
     global_block, is_global_dummy, is_upvalue_dummy);
   const term tic_ta[2] = { tto, tfrom };
   const term tic = term(eic, term_list_range(tic_ta, 2));
-  term term_convfunc = eval_term(tic);
+  term term_convfunc = eval_term(tic, pos);
   check_convfunc_validity(term_convfunc, tfrom, tto, pos);
   return term_convfunc;
 }
@@ -2871,6 +2892,21 @@ static void check_interface_impl_one(expr_i *esub, expr_block *esub_block,
       }
     }
   }
+  if (ei_super->impl_st != 0) {
+    if (ei_super->impl_st->get_symdef() != esub) {
+      arena_error_push(esub,
+	"Interface '%s' is not a restricted interface for '%s'",
+	term_tostr_human(ei_super->get_value_texpr()).c_str(),
+	term_tostr_human(esub->get_value_texpr()).c_str());
+    }
+    if (esub->get_esort() != expr_e_struct) {
+      arena_error_push(esub,
+	"Interface '%s' is a restricted interface for '%s' "
+	"which is not a struct",
+	term_tostr_human(ei_super->get_value_texpr()).c_str(),
+	term_tostr_human(esub->get_value_texpr()).c_str());
+    }
+  }
 }
 
 static void check_interface_impl(expr_i *e)
@@ -2891,8 +2927,33 @@ static void check_interface_impl(expr_i *e)
   }
   expr_block::inherit_list_type& inh = block->resolve_inherit_transitive();
   expr_block::inherit_list_type::iterator i;
+  const expr_interface *thin = 0;
+  const expr_interface *thick = 0;
   for (i = inh.begin(); i != inh.end(); ++i) {
     check_interface_impl_one(e, block, *i);
+    /* check thin/thick */
+    const expr_interface *const ei_super =
+      dynamic_cast<const expr_interface *>(*i);
+    if (ei_super == 0) {
+      continue;
+    }
+    if (ei_super->impl_st != 0) {
+      if (thin == 0) {
+	thin = ei_super;
+      }
+    } else {
+      if (thick == 0) {
+	thick = ei_super;
+      }
+    }
+  }
+  if (thin != 0 && thick != 0) {
+    arena_error_push(e,
+      "Type '%s' implements a non-restricted interface '%s' "
+      " and a restricted interface '%s'",
+      term_tostr_human(e->get_value_texpr()).c_str(),
+      term_tostr_human(thick->get_value_texpr()).c_str(),
+      term_tostr_human(thick->get_value_texpr()).c_str());
   }
 }
 
@@ -3588,15 +3649,102 @@ bool is_sibling_namespace(const std::string& ns0, const std::string& ns1)
   return false;
 }
 
-bool is_accessible_namespace(const std::string& ns0, const std::string& ns1)
+symbol get_ns(expr_i *pos)
 {
-  if (is_sibling_namespace(ns0, ns1)) {
+  while (pos != 0) {
+    std::string s = pos->get_unique_namespace();
+    if (!s.empty()) {
+      return symbol(s);
+    }
+    pos = pos->parent_expr;
+  }
+  return symbol();
+}
+
+#if 0
+symbol get_ns_2(expr_i *pos)
+{
+  if (pos == 0) {
+    return symbol();
+  }
+  if (pos->get_esort() == expr_e_block) {
+    /* pos itself is a block. e.g., global block */
+    expr_block *bl = ptr_down_cast<expr_block>(pos);
+    std::string s = bl->get_unique_namespace();
+    if (!s.empty()) {
+      return symbol(s);
+    }
+  }
+  symbol_table *stbl = pos->symtbl_lexical;
+  while (stbl != 0) {
+    expr_i *e = stbl->block_backref;
+    std::string s = e->get_unique_namespace();
+    if (!s.empty()) {
+      return symbol(s);
+    }
+    stbl = stbl->get_lexical_parent();
+  }
+  /* the toplevel (global) block has no namespace. assume it as the main ns */
+    /* TODO: is this correct? */
+  // return symbol(main_namespace); // FIXME????
+  return symbol();
+}
+#endif
+
+#if 0
+symbol get_ns(expr_i *pos)
+{
+  symbol s1 = get_ns_1(pos);
+  symbol s2 = get_ns_2(pos);
+  if (s1 != s2) {
+    // abort();
+  }
+  return s1;
+}
+#endif
+
+bool is_visible_from_ns(const symbol& ns, const symbol& nsfrom)
+{
+  if (ns == nsfrom) {
     return true;
   }
-  for (size_t i = 0; i < instantiating_ns_stack.size(); ++i) {
-    const std::string& s = instantiating_ns_stack[i];
-    if (is_sibling_namespace(ns0, s)) {
-      return true;
+  if (nsimports_rec.find(std::make_pair(nsfrom, ns)) != nsimports_rec.end()) {
+    #if 0
+    fprintf(stderr, "visible '%s' from '%s' [%s]\n", ns.c_str(), posns.c_str(),
+      pos->dump(0).c_str());
+    #endif
+    return true;
+  }
+  if (ns == symbol("operator")) { // TODO: intern
+    /* namespace 'operator' is visible from any namespace */
+    return true;
+  }
+  return false;
+}
+
+bool is_visible_from_pos(const symbol& ns, expr_i *pos)
+{
+  const symbol posns = get_ns(pos);
+  const bool r = is_visible_from_ns(ns, posns);
+  return r;
+}
+
+bool is_visible_from_pos_or_inst_context(const symbol& ns, expr_i *pos)
+{
+  const bool r = is_visible_from_pos(ns, pos);
+  if (r) {
+    return true;
+  }
+  for (expr_i *e = pos; e != 0; e = e->parent_expr) {
+    if (e->get_esort() == expr_e_block) {
+      expr_block *bl = ptr_down_cast<expr_block>(e);
+      if (bl->tinfo.instantiated_context != 0) {
+        if (is_visible_from_pos_or_inst_context(ns,
+          bl->tinfo.instantiated_context)) {
+          /* visible from instantiated context */
+          return true;
+        }
+      }
     }
   }
   return false;

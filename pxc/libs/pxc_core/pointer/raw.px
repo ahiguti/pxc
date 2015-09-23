@@ -55,7 +55,10 @@ to_crawptr(t const& x)
   return caddress(*x);
 }
 
-public threaded function {tto, tfrom} tto rawptr___to(tfrom x)
+public metafunction crawptr___to{tto, tfrom} chk_rawptr_upcast{tto, tfrom};
+public metafunction rawptr___to{tto, tfrom} chk_rawptr_upcast{tto, tfrom};
+
+public threaded function {tto, tfrom} tto chk_rawptr_upcast(tfrom x)
 {
   metafunction tf m::nameof{tfrom};
   metafunction tt m::nameof{tto};
@@ -195,6 +198,9 @@ rawptr_reinterpret_cast(rawptr{tfrom} x);
 public threaded function extern "pxcrt::crawptr_cast" {tto, tfrom} crawptr{tto}
 crawptr_reinterpret_cast(crawptr{tfrom} x);
 
+public threaded function extern "pxcrt::crawptr_const_cast" {t} rawptr{t}
+crawptr_const_cast(crawptr{t} x);
+
 public threaded function extern "pxcrt::rawptr_eq" {tx, ty}
 bool rawptr___eq(tx x, tx y);
 public threaded function extern "pxcrt::rawptr_eq" {tx, ty}
@@ -314,6 +320,9 @@ template <typename Tto, typename Tfrom> static inline Tto *
 rawptr_cast(Tfrom *x) { return reinterpret_cast<Tto *>(x); }
 template <typename Tto, typename Tfrom> static inline Tto const *
 crawptr_cast(Tfrom const *x) { return reinterpret_cast<Tto const *>(x); }
+
+template <typename T> static inline T *
+crawptr_const_cast(T const *x) { return const_cast<T *>(x); }
 
 template <typename T> static inline T *
 size_t_to_rawptr(size_t x) { return reinterpret_cast<T *>(x); }

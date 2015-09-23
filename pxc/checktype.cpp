@@ -1013,7 +1013,7 @@ void expr_block::check_type(symbol_table *lookup)
       no_private, no_generated, "", this);
     if (sa != 0 && sa->get_esort() == expr_e_metafdef) {
       const term t = eval_term(
-	term(ptr_down_cast<expr_metafdef>(sa)->get_rhs()));
+	term(ptr_down_cast<expr_metafdef>(sa)->get_rhs()), this);
       #if 0
       if (t != term(1LL)) {
 	arena_error_throw(sa, "Static assertion failed");
@@ -1738,7 +1738,7 @@ static void subst_user_defined_fldop(expr_op *eop)
 	  skip = true;
 	}
       }
-      const symbol sym = get_lexical_context_ns(eop);
+      const symbol sym = get_ns(eop);
       if (!skip && sym != "operator") {
 	/* operator::union_field{fld}(arg0) */
 	expr_symbol *sym = ptr_down_cast<expr_symbol>(eop->arg1);
@@ -2329,13 +2329,13 @@ void expr_op::check_type(symbol_table *lookup)
 }
 
 static term_list tparams_apply_tvmap(expr_i *e, expr_tparams *tp,
-  const term_list *partial_targs, const tvmap_type& tvm)
+  const term_list *partial_targs, const tvmap_type& tvm, expr_i *inst_pos)
 {
   term_list tl;
   if (partial_targs != 0) {
     for (term_list::const_iterator i = partial_targs->begin();
       i != partial_targs->end() && tp != 0; ++i, tp = tp->rest) {
-      term iev = eval_term(*i);
+      term iev = eval_term(*i, inst_pos);
       tl.push_back(iev);
     }
   }
@@ -2358,7 +2358,8 @@ static expr_i *create_tpfunc_texpr(expr_i *e, const term_list *partial_targs,
   try {
     expr_block *const bl = e->get_template_block();
     assert(bl);
-    telist = tparams_apply_tvmap(e, bl->tinfo.tparams, partial_targs, tvm);
+    telist = tparams_apply_tvmap(e, bl->tinfo.tparams, partial_targs, tvm,
+      inst_pos);
     arena_error_throw_pushed();
   } catch (const std::exception& ex) {
     const term t(e);
@@ -2633,7 +2634,7 @@ void expr_funccall::check_type(symbol_table *lookup)
 	  term_tostr_human(func_te).c_str());
     }
     const term t_un(func_te.get_expr(), tas);
-    func_te = eval_term(t_un);
+    func_te = eval_term(t_un, this);
     DBG_VARIADIC(fprintf(stderr, "variadic %s -> %s\n",
       term_tostr_human(t_un).c_str(), term_tostr_human(func_te).c_str()));
     set_type_inference_result_for_funccall(this, term_get_instance(func_te));
@@ -4009,7 +4010,7 @@ static void check_type_expr_expand(expr_expand *const epnd,
     }
     term_list tal;
     while (tlarg != 0) {
-      const term t = eval_term(term(tlarg->head));
+      const term t = eval_term(term(tlarg->head), epnd);
       const std::string n(callee_tps->sym);
       expfunc_subst[n] = term_litexpr_to_literal(t);
       tlarg = tlarg->rest;
@@ -4514,8 +4515,8 @@ void expr_struct::check_type(symbol_table *lookup)
 {
   eval_cname_info(cnamei, this, sym);
   fn_check_type(block, lookup);
-  check_inherit_threading(this, this->get_template_block());
   if (!block->tinfo.is_uninstantiated()) {
+    check_inherit_threading(this, this->get_template_block());
     check_constr_restrictions(this);
   }
   if (typefamily_str != 0 && typefamily_str[0] != '@'
@@ -4533,6 +4534,7 @@ void expr_interface::check_type(symbol_table *lookup)
 {
   eval_cname_info(cnamei, this, sym);
   fn_check_type(block, lookup);
+  fn_check_type(impl_st, &block->symtbl);
   check_inherit_threading(this, this->get_template_block());
 }
 
@@ -4592,8 +4594,9 @@ fprintf(stderr, "ns %s %d\n", ens->uniq_nsstr.c_str(), int(ens->thr));
       const std::string etdstr = iter->second;
       bool is_global_dummy = false;
       bool is_upvalue_dummy = false;
-      expr_i *const etd = glo_block->symtbl.resolve_name(etdstr, "", glo,
-	is_global_dummy, is_upvalue_dummy);
+      const std::string nspart = get_namespace_part(etdstr);
+      expr_i *const etd = glo_block->symtbl.resolve_name(etdstr,
+	get_namespace_part(etdstr), glo, is_global_dummy, is_upvalue_dummy);
       if (etd->get_esort() != expr_e_struct) {
 	arena_error_throw(glo, "Invalid configuration for emit_threaded_dll: "
 	  "symbol '%s' is not a struct", etdstr.c_str());
@@ -4611,8 +4614,8 @@ fprintf(stderr, "ns %s %d\n", ens->uniq_nsstr.c_str(), int(ens->thr));
       std::string emfname = main_namespace + "::" + efnstr;
       is_global_dummy = false;
       is_upvalue_dummy = false;
-      expr_i *emf = glo_block->symtbl.resolve_name(emfname, "", glo,
-	is_global_dummy, is_upvalue_dummy);
+      expr_i *emf = glo_block->symtbl.resolve_name(emfname,
+	get_namespace_part(emfname), glo, is_global_dummy, is_upvalue_dummy);
       if (emf->get_esort() != expr_e_funcdef) {
 	arena_error_throw(glo, "Invalid configuration for emit_threaded_dll: "
 	  "symbol '%s' is not a function", emfname.c_str());

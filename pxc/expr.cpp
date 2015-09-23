@@ -131,8 +131,9 @@ expr_i *expr_dunion_new(const char *fn, int line, const char *sym,
   expr_i *block, attribute_e attr)
 { return arena_push(new expr_dunion(fn, line, sym, block, attr)); }
 expr_i *expr_interface_new(const char *fn, int line, const char *sym,
-  const char *cname, expr_i *block, attribute_e attr)
-{ return arena_push(new expr_interface(fn, line, sym, cname, block, attr)); }
+  const char *cname, expr_i *impl_st, expr_i *block, attribute_e attr)
+{ return arena_push(new expr_interface(fn, line, sym, cname, impl_st, block,
+  attr)); }
 expr_i *expr_try_new(const char *fn, int line, expr_i *tblock, expr_i *cblock,
   expr_i *rest)
 { return arena_push(new expr_try(fn, line, tblock, cblock, rest)); }
@@ -499,8 +500,14 @@ void arena_append_topval(std::list<expr_i *>& tvs, bool is_main,
     fn_set_namespace(topval, uniqns, block_id_ns,
       nspropmap[uniqns].safety != nssafety_e_safe);
     nsthrmap[uniqns] = ns_is_thr;
-//fprintf(stderr, "compiled_ns init %s\n", uniqns.c_str());
+#if 0
+fprintf(stderr, "compiled_ns init %s %p\n", uniqns.c_str(), topval);
+#endif
     compiled_ns[uniqns] = false; /* defined, but not compiled yet */
+  } else {
+#if 0
+    abort();
+#endif
   }
   if (is_main) {
     main_namespace = uniqns;

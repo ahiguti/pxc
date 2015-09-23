@@ -3,6 +3,23 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- 無名関数のthreaded装飾できない？
+
+- implicit_conversionの定義、import foo + によって拡張されると衝突
+  して期待通りのメタ関数が利用されない問題
+  pointer::raw::strlit___to で問題になる。
+
+- get_nsの実装を正しく(done)
+
+- コンパイルmainから間接的にimportされている名前空間もコンパイルされる
+  ようにしたので、それら間接的importされた名前空間のグローバルスコープ
+  のシンボルはprivateにしなければならない
+  - nsimportsにmainが入っていないのを入れる？
+  - symbol_table.cpp:344の箇所でvisibleなnsであるかチェック？- 
+  - visi_to_main削除
+
+- cdriver動作整理。
+
 - tupleからコンテナに自動変換 tuple___to をコンテナ名前空間で定義
 
 - unique_ptr: dereferenceはunsafe。スコープ抜けるまで有効であることを
@@ -3785,4 +3802,43 @@ public function extern "pop_front" t pop_front();
 関数bodyの先頭に次の行を入れる。
 expand __macro_function_entry__{m::context{0}};
 デフォルトの定義はmeta::initialで用意。
+
+---------------------------------------------------------------------
+
+private importは推移的importをprivateアクセス化する。
+  BがAをprivate importしていて、CがBをimportしているとき、CからAのシン
+  ボルはアクセスできない。
+private namespaceは兄弟ns以外から直接importできない。
+  間接的にはimportできるが、import時にprivate importすることによって
+  private namespaceへのアクセスをprivateアクセスに制限できる。
+  private namespaceをimportするときは必ずprivate importでなければならない？
+
+---------------------------------------------------------------------
+制限interface
+
+pimplイディオムのためのオーバーヘッドの無いinterface
+
+interface foo1_i foo {
+  public function void m2();
+}
+
+interface foo2_i foo {
+  public function void m2();
+}
+
+struct foo <foo1_i, foo2_i> {
+  public function void m1() { }
+  public function void m2() { }
+}
+
+実装として、同じ名前空間のクラスを指定しなければならない。
+実装する型は、制限インタフェース以外を実装してはならない。
+暗黙裡にダウンキャスト可能。
+通常のインタフェースとのemit上の違いは、参照カウンタ等を埋め込まないこと。
+型のemitは実装する型のほうを常にemitする。
+
+public threaded struct {f}
+thread(expand(m::args{f})) <callable{m::ret_type{f}, m::nil}> { ... }
+このfがbindされていない
+ret_type{f}
 
