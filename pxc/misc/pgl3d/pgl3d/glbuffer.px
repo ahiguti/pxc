@@ -174,13 +174,13 @@ vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0,
   {
     return vs_arr.size();
   }
-  public function bool create_vbo(bool enable_copying_instancing)
+  public function bool create_vbo()
   {
     if (vbo_values.get() != 0 || vbo_elems.get() != 0) {
       return false;
     }
     for (const i, const& be: vs_arr) {
-      be->vtxs->prepare_multiple_copies(enable_copying_instancing);
+      be->vtxs->prepare();
     }
     varray{float} vertex_values;
     varray{uint} elements;
@@ -271,9 +271,6 @@ vertex_buffer_draw_elems(vertex_buffer const& bo, size_t vs_id,
   size_t num_instance)
 {
   const& be = *bo.get_by_id(vs_id);
-  if (num_instance > be.vtxs->num_copies) {
-    throw runtime_error_template{"vertex_buffer_draw_elems"}("");
-  }
   const elem_offset = be.elements_offset;
   const elem_num = be.vtxs->elements_size_per_copy * num_instance;
   GLenum mode = bo.draw_mode_points ? GL_POINTS :

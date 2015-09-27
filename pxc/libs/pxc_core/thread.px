@@ -103,6 +103,7 @@ funcobj_wrap(void *arg)
 template <typename Tfuncobj> int
 thread_create(thread_ptr& thd, Tfuncobj& funcobj)
 {
+#ifndef PXC_EMSCRIPTEN
   try {
     thd = new std::thread(&funcobj_wrap<Tfuncobj>, &funcobj);
   } catch (std::system_error const& ex) {
@@ -110,6 +111,7 @@ thread_create(thread_ptr& thd, Tfuncobj& funcobj)
   } catch (std::exception const& ex) {
     return 1;
   }
+#endif
   return 0;
 }
 

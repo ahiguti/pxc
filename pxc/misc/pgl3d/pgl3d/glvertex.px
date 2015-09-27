@@ -78,48 +78,50 @@ vertices(size_t num_float_per_vertex0)
   public varray{uint} elements;       /* for glDrawElements */
   public varray{float} positions;     /* used for physics engine */
   public varray{node_joint} joints;
-  public size_t num_copies_hint = 1;
-  public bool has_instance_id;
-  public size_t num_copies = 1;
   public size_t vertex_values_size_per_copy;
   public size_t elements_size_per_copy;
-  public function void prepare_multiple_copies(bool enable_copying_instancing)
+  public function void prepare()
   {
     vertex_values_size_per_copy = vertex_values.size();
     elements_size_per_copy = elements.size();
-    num_copies = 1;
-    if (!has_instance_id || !use_copying_instancing ||
-	!enable_copying_instancing) {
-      return;
+  }
+  public function void
+  set_triangles(cslice{float} const& verts, size_t nfpv,
+    cslice{uint} const& elems)
+  {
+    // set vertices and elements directly
+    size_t num_v = verts.size() / nfpv;
+    if (nfpv > num_float_per_vertex) {
+      throw runtime_error_template{"vertices::set_triangles"}(
+	string_join{" "}(nfpv, num_float_per_vertex));
     }
-    num_copies = min(num_copies_hint, uniform_instancing_mul);
-    sdllog("vertices::prepare_multiple_copies", num_copies);
-    const num_vertices = vertex_values.size() / num_float_per_vertex;
-    vertex_values.resize(vertex_values_size_per_copy * num_copies, float());
-    elements.resize(elements_size_per_copy * num_copies, uint());
-    for (const i: 1 .. num_copies) {
-      const vi = vertex_values_size_per_copy * i;
-      const ei = elements_size_per_copy * i;
-      for (const j: 0 .. vertex_values_size_per_copy) {
-	vertex_values[vi + j] = vertex_values[j];
+    vertex_values.resize(num_v * num_float_per_vertex, 0.0f);
+    positions.clear();
+    for (const i: 0 .. num_v) {
+      for (const j: 0 .. nfpv) {
+	vertex_values[i * num_float_per_vertex + j] = verts[i * nfpv + j];
       }
-      for (const j: 0 .. num_vertices) {
-	/* set instance_id */
-	/* instance_id must be the first field of tattr */
-	vertex_values[vi + j * num_float_per_vertex] = static_cast{float}(i);
-	/*
-	const k = vi + j * num_float_per_vertex;
-	float_slice_set_int(vertex_values[k .. k + 1], static_cast{int}(i));
-	*/
-      }
-      for (const j: 0 .. elements_size_per_copy) {
-	mutable e = elements[j];
-	if (e != 0xffffffffU) {
-	  e += static_cast{uint}(num_vertices * i);
-	}
-	elements[ei + j] = e;
+      // assumes first 3 floats are position coords
+      for (const j: 0 .. 3U) {
+	positions.push_back(verts[i * nfpv + j]);
       }
     }
+    if (m::ne{use_primitive_restart, 0}) {
+      size_t n = elems.size() / 3;
+      elements.resize(n * 4);
+      for (const i: 0 .. n) {
+	elements[i * 4 + 0] = 0xffffffffU;
+	elements[i * 4 + 1] = elems[i * 3 + 0];
+	elements[i * 4 + 2] = elems[i * 3 + 1];
+	elements[i * 4 + 3] = elems[i * 3 + 2];
+      }
+    } else {
+      elements.resize(elems.size(), 0);
+      for (const i, const& e: elems) {
+	elements[i] = e;
+      }
+    }
+    debug_log("set_triangles: ", vertex_values.size(), elements.size());
   }
   public function {tattr, split_convex} void
   push_polygon_distinct(cslice{tattr} const& vals)
@@ -129,13 +131,6 @@ vertices(size_t num_float_per_vertex0)
       throw runtime_error_template{"vertices::push_polygon_distinct"}(
 	  string_join{" "}(m::to_string{tattr}, num_float_struct{tattr},
 	    num_float_per_vertex));
-    }
-    if (m::eq{m::at0{m::field_names{tattr}}, "instance_id"}) {
-      //sdllog("has_instance_id true", m::to_string{tattr});
-      has_instance_id = true;
-    } else {
-      //sdllog("has_instance_id false", m::to_string{tattr},
-      //  m::to_string{m::at0{m::field_names{tattr}}});
     }
     /* no dedup */
     const first_id = vertex_values.size() / num_float_struct{tattr};

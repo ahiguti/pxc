@@ -7,7 +7,7 @@ clean:
 	cd hmtest && $(MAKE) clean
 	cd tmtiming && $(MAKE) clean
 	rm -f decimal
-	-find . -name "clean.sh" -exec {} ";"
+	-find . -name "pxc_clean.sh" -exec {} ";"
 
 decimal:
 	g++ -O9 decimal.cpp -o decimal

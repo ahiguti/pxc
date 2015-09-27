@@ -1,10 +1,13 @@
 public namespace sdltest2 "use-unsafe";
 import common -;
+import pointer::raw -;
 import SDL2::api_base -;
 import SDL2::api_types -;
 import SDL2::api_functions -;
 import SDL2::api_wrappers -;
+import SDL2::misc -;
 
+/*
 metafunction SDL_CreateWindow_Scoped
   scoped{SDL_CreateWindow, SDL_DestroyWindow};
 metafunction SDL_LoadBMP_RW_Scoped
@@ -15,15 +18,20 @@ metafunction SDL_CreateTextureFromSurface_Scoped
   scoped{SDL_CreateTextureFromSurface, SDL_DestroyTexture};
 metafunction SDL_RWFromFile_Scoped
   scoped{SDL_RWFromFile, SDL_RWclose};
+*/
 
 {
   SDL_Init(SDL_INIT_VIDEO);
-  const wnd = SDL_CreateWindow_Scoped("sdltest",
-    0, 0, 640, 480, SDL_WINDOW_RESIZABLE);
-  const rnd = SDL_CreateRenderer_Scoped(wnd, -1, 0);
-  const rw = SDL_RWFromFile_Scoped("test.bmp", "rb");
-  const sur = SDL_LoadBMP_RW_Scoped(rw, 0);
-  const tx = SDL_CreateTextureFromSurface_Scoped(rnd, sur);
+  scoped_nullable{SDL_DestroyWindow} wnd;
+  wnd.reset(SDL_CreateWindow("sdltest", 0, 0, 640, 480, SDL_WINDOW_RESIZABLE));
+  scoped_nullable{SDL_DestroyRenderer} rnd;
+  rnd.reset(SDL_CreateRenderer(wnd, -1, 0));
+  scoped_nullable{SDL_RWclose} rw;
+  rw.reset(SDL_RWFromFile("test.bmp", "rb"));
+  scoped_nullable{SDL_FreeSurface} sur;
+  sur.reset(SDL_LoadBMP_RW(rw, 0));
+  scoped_nullable{SDL_DestroyTexture} tx;
+  tx.reset(SDL_CreateTextureFromSurface(rnd, sur));
   SDL_Rect src;
   src.x = 0;
   src.y = 0;
@@ -31,7 +39,7 @@ metafunction SDL_RWFromFile_Scoped
   src.h = 170;
   mutable dst = src;
   SDL_RenderCopy(rnd, tx, caddress(src), caddress(dst));
-  bool done = true;
+  bool done = false;
   int x = 0;
   while (!done) {
     SDL_Event ev;

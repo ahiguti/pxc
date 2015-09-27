@@ -100,7 +100,7 @@ public struct sdlcontext(pgl3d_config const& config0)
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 32); // MEMO: worked on osx
     mutable glctx = SDL_GL_CreateContext(wnd);
     GL::glew::glewInit();
-    const verstr = cubptr_to_string(glGetString_nocheck(GL_VERSION));
+    string verstr = cubptr_to_string(glGetString_nocheck(GL_VERSION));
     if (verstr.empty()) {
       if (m::eq{is_gles, 0}) {
 	/* fallback to opengl 2.1 */
@@ -117,12 +117,23 @@ public struct sdlcontext(pgl3d_config const& config0)
 	glmajor = 2;
 	glminor = 0;
       }
+      verstr = cubptr_to_string(glGetString_nocheck(GL_VERSION));
     }
     sdl_glcontext.reset(glctx);
     SDL_GL_GetDrawableSize(wnd, address(init_w), address(init_h));
     sdllog("drawable size", init_w, init_h);
-    sdllog("GL_VERSION",
-      cubptr_to_string(glGetString(GL_VERSION)));
+    sdllog("GL_VERSION", verstr);
+    {
+      string vn;
+      string_split{' '}(verstr, vn);
+      // sdllog("vn", vn);
+      string_split{'.'}(vn, glmajor, glminor);
+    }
+    /*
+    glGetIntegerv(GL_MAJOR_VERSION, address(glmajor));
+    glGetIntegerv(GL_MINOR_VERSION, address(glminor));
+    */
+    sdllog("opengl", glmajor, glminor);
     /*
     sdllog("GL_EXTENSIONS", cubptr_to_string(glGetString(GL_EXTENSIONS)));
     */

@@ -144,17 +144,13 @@ pglshader(shader_config const& sconf0,
   }
   private function void prepare_vertex_buffers()
   {
-    metafunction max_instance_data 2;
-    const enable_copying_instancing = !glc.enable_instanced;
     for (const i, const& bo: vertex_buffers) {
-      bo->create_vbo(enable_copying_instancing);
+      bo->create_vbo();
     }
   }
   private function void prepare_whole_instances(
     whole_instances_type mutable& whole_instances) const
   {
-    metafunction max_instance_data 2;
-    const enable_copying_instancing = !glc.enable_instanced;
     whole_instances.resize(vertex_buffers.size(), bo_instances_type());
     for (const i, const& bo: vertex_buffers) {
       mutable& instances = whole_instances[i];
@@ -219,20 +215,30 @@ pglshader(shader_config const& sconf0,
     return vertex_buffers[static_cast{size_t}(bo_id)]->make_if(name)->vtxs;
   }
   public function void make_vertex_set(cslice{string} const& dr_names,
-    cstrref const& name, gf_poly const& expr)
+    cstrref const& shape_name, gf_poly const& expr)
   {
+    // make vertex set by geometry expression
     varray{ptr{vertices}} vptrs;
     varray{dgf_filler} fillers;
     for (const i, const& dr_name: dr_names) {
       size_t dr_id = *drawer_names.equal_range(dr_name);
       const bo_id = drawer_vbids[dr_id];
-      ptr{vertices} vptr = make_vertices(bo_id, name);
+      ptr{vertices} vptr = make_vertices(bo_id, shape_name);
       dgf_filler filler = drawers[dr_id]->make_filler(vptr);
       vptrs.push_back(vptr);
       fillers.push_back(filler);
     }
     ptr{build_context_i} ctx = make_ptr{build_context_impl}(vptrs, fillers);
     expr(*ctx, poly_t(), mesh_index());
+  }
+  public function void make_vertex_set_by_triangles(string const& dr_name,
+    cstrref const& shape_name, cslice{float} const& verts, size_t nfpv,
+    cslice{uint} const& elems)
+  {
+    size_t dr_id = *drawer_names.equal_range(dr_name);
+    const bo_id = drawer_vbids[dr_id];
+    ptr{vertices} vptr = make_vertices(bo_id, shape_name);
+    vptr->set_triangles(verts, nfpv, elems);
   }
   public function texture_info get_texture_info(cstrref const& name) const
   {
@@ -249,15 +255,16 @@ pglshader(shader_config const& sconf0,
   }
   public function void resize_screen(int width, int height)
   {
-    cam.screen_width = width;
-    cam.screen_height = height;
     int sm_size = 1;
     for (int i: 8 .. 14) {
       sm_size = 1 << i;
-      if (sm_size > width * 2) {
+      if (sm_size > width) {
 	break;
       }
     }
+    cam.screen_width = width;
+    cam.screen_height = height;
+    cam.shadowmap_size = sm_size;
     for (size_t i: 0 .. 4) {
       mutable& sfbo = *sfbo_array[i];
       if (m::ne{is_gles, 0}) {
@@ -308,6 +315,9 @@ pglshader_draw_frame(pglshader mutable& pgs,
       glBindFramebuffer(GL_FRAMEBUFFER, sfbo.fbo.get());
       glViewport(0, 0, static_cast{GLsizei}(sfbo.sm_width),
 	static_cast{GLsizei}(sfbo.sm_height));
+      if (!pgs.glc.enable_depth_texture) {
+	glClearColor(1.0, 1.0, 1.0, 1.0);
+      }
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
       /* note: view_projection is pre-applied to model_matrix */
       // FIXME: cascading
@@ -353,11 +363,13 @@ pglshader_draw_frame(pglshader mutable& pgs,
     if (pgs.glc.enable_zprepass) {
       glColorMask(1, 1, 1, 1);
       glDepthFunc(GL_LEQUAL); // FIXME GL_EQUAL is better?
+      glClearColor(0.0, 0.0, 0.0, 0.0);
       glClear(GL_COLOR_BUFFER_BIT);
     } else {
       glDepthMask(1);
       glDepthFunc(GL_LESS);
       glColorMask(1, 1, 1, 1);
+      glClearColor(0.0, 0.0, 0.0, 0.0);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
     for (const i, const& pd: pgs.drawers) {
@@ -479,6 +491,7 @@ function void update_mvp(projection_info mutable& cam)
     static_cast{GLsizei}(cam.screen_height));
   glDepthMask(1);
   glColorMask(1, 1, 1, 1);
+  glClearColor(1.0, 1.0, 1.0, 1.0);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   const d = cast_float(perspective_distance);
   {

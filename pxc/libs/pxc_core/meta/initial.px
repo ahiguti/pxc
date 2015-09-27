@@ -3,6 +3,18 @@ public import meta m;
 
 extern "types" inline
 
+#if defined(_MSC_VER)
+#define PXC_MSVC
+#define PXC_WINDOWS
+#else
+#define PXC_POSIX
+#endif
+
+#if defined(__EMSCRIPTEN__)
+#define PXC_EMSCRIPTEN
+#define PXC_NO_ATOMIC
+#endif
+
 #if PXC_PROFILE_noexceptions
 #define PXC_NOEXCEPTIONS 1
 #define PXC_THROW(x) ::abort();
@@ -17,13 +29,6 @@ extern "types" inline
 #define PXC_CATCH(x) catch(x)
 #define PXC_NOTHROW throw()
 #define PXC_RETHROW throw
-#endif
-
-#if defined(_MSC_VER)
-#define PXC_MSVC
-#define PXC_WINDOWS
-#else
-#define PXC_POSIX
 #endif
 
 #if defined(PXC_MSVC)
@@ -46,7 +51,9 @@ extern "types" inline
 #include <cassert>
 #include <climits>
 #include <stdexcept>
+#ifndef PXC_NO_ATOMIC
 #include <atomic>
+#endif
 
 #ifdef PXC_POSIX
 #include <alloca.h>
@@ -107,6 +114,17 @@ struct mtcount { /* reference counter for multi-threaded shared objects */
   mtcount(const mtcount& x) : count$z(1) { }
 #endif
   mtcount& operator =(const mtcount& x) { return *this; }
+#ifdef PXC_NO_ATOMIC
+  void incref$z() {
+    ++count$z;
+  }
+  bool decref$z() {
+    return (--count$z == 0);
+  }
+  long refcnt$z() const { return count$z; }
+private:
+  long count$z;
+#else
   void incref$z() {
     std::atomic_fetch_add_explicit(&count$z, 1L, std::memory_order_relaxed);
   }
@@ -121,6 +139,7 @@ struct mtcount { /* reference counter for multi-threaded shared objects */
   long refcnt$z() const { return count$z.load(std::memory_order_seq_cst); }
 private:
   std::atomic_long count$z;
+#endif
 };
 
 struct stcount { /* reference counter for single-threaded shared objects */

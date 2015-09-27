@@ -51,10 +51,10 @@ public interface glshader_i {
 
 public function {tuni, tinst, tvert} ptr{glshader{tuni, tinst, tvert}}
 make_glshader_ptr(cstrref const& prog_v, cstrref const& prog_f,
-  strlit const& attrib_to_avoid_0)
+  strlit const& attrib_to_avoid_0, int debug_level)
 {
   return make_ptr{glshader{tuni, tinst, tvert}}(
-    prog_v, prog_f, attrib_to_avoid_0);
+    prog_v, prog_f, attrib_to_avoid_0, debug_level);
 }
 
 private function {t} void
@@ -81,7 +81,7 @@ set_uniform(GLint loc, cslice{float} const& value, size_t offset, int cnt)
 
 public struct {tuni, tinst, tvert}
 glshader(cstrref const& prog_v, cstrref const& prog_f,
-  strlit const& attrib_to_avoid_0)
+  strlit const& attrib_to_avoid_0, int debug_level)
 <glshader_i>
 {
   public metafunction uniforms_type tuni;
@@ -105,11 +105,12 @@ glshader(cstrref const& prog_v, cstrref const& prog_f,
   public uint program = 0;
   public string error;
   /* private */
-  init(prog_v, prog_f, attrib_to_avoid_0);
+  init(prog_v, prog_f, attrib_to_avoid_0, debug_level);
   private function void init(cstrref const& prog_v, cstrref const& prog_f,
-    strlit const& attrib_to_avoid_0)
+    strlit const& attrib_to_avoid_0, int debug_level)
   {
-    program = create_program(prog_v, prog_f, attrib_to_avoid_0, error);
+    program = create_program(prog_v, prog_f, attrib_to_avoid_0, debug_level,
+      error);
     if (program == 0) {
       throw runtime_error_template{"create_program"}("1");
     }
@@ -310,8 +311,22 @@ glshader(cstrref const& prog_v, cstrref const& prog_f,
   }
 }
 
+private function string format_glsl(cstrref const& src)
+{
+  string r;
+  size_t ln = 1;
+  split_foreach{function void(cstrref const& line) {
+    r += to_string(ln);
+    r += ":\t";
+    r.append(line);
+    r.append("\n");
+    ++ln;
+  }}(src, '\n');
+  return r;
+}
+
 private function uint compile_shader(cstrref const& src, GLenum type,
-  string mutable& err_r)
+  int debug_level, string mutable& err_r)
 {
   mutable res = glCreateShader(type);
   mutable source = make_farray{ccharptr}(src.to_crawptr().to_ccharptr());
@@ -332,7 +347,13 @@ private function uint compile_shader(cstrref const& src, GLenum type,
     GLsizei len;
     glGetShaderInfoLog(res, static_cast{GLsizei}(sz), address(len),
       buf.to_rawptr().to_charptr());
+    if (buf.size() > 0 && buf[buf.size() - 1] == 0) {
+      buf.resize(buf.size() - 1, 0); // drop trailing nul
+    }
     sdllog("compile_shader failed:", static_cast{int}(type), success, buf);
+    if (debug_level > 0) {
+      sdllog("source: \n" + format_glsl(src));
+    }
     err_r = string_join{"\t"}(static_cast{int}(type), success, buf);
     glDeleteShader(res);
     res = 0;
@@ -342,13 +363,14 @@ private function uint compile_shader(cstrref const& src, GLenum type,
 
 private function uint
 create_program(cstrref const& vertex_shader, cstrref const& fragment_shader,
-  strlit const& attrib_to_avoid_0, string mutable& err_r)
+  strlit const& attrib_to_avoid_0, int debug_level, string mutable& err_r)
 {
   mutable prog = glCreateProgram();
   uint shader;
   int success = 1;
   if (!vertex_shader.empty()) {
-    shader = compile_shader(vertex_shader, GL_VERTEX_SHADER, err_r);
+    shader = compile_shader(vertex_shader, GL_VERTEX_SHADER, debug_level,
+      err_r);
     if (shader != 0) {
       glAttachShader(prog, shader);
     } else {
@@ -356,7 +378,8 @@ create_program(cstrref const& vertex_shader, cstrref const& fragment_shader,
     }
   }
   if (!fragment_shader.empty()) {
-    shader = compile_shader(fragment_shader, GL_FRAGMENT_SHADER, err_r);
+    shader = compile_shader(fragment_shader, GL_FRAGMENT_SHADER, debug_level,
+      err_r);
     if (shader != 0) {
       glAttachShader(prog, shader);
       if (!attrib_to_avoid_0.empty()) {

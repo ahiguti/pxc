@@ -1,0 +1,46 @@
+public namespace sdltest3 "use-unsafe";
+import common -;
+import pointer::raw -;
+import pointer::raw_unsafe -;
+import SDL2::api_base -;
+import SDL2::api_types -;
+import SDL2::api_functions -;
+import SDL2::api_wrappers -;
+import SDL2::misc -;
+
+{
+  SDL_Init(SDL_INIT_VIDEO);
+  scoped_nullable{SDL_DestroyWindow} wnd;
+  wnd.reset(SDL_CreateWindow("sdltest", 0, 0, 640, 480, SDL_WINDOW_RESIZABLE));
+  scoped_nullable{SDL_DestroyRenderer} rnd;
+  rnd.reset(SDL_CreateRenderer(wnd, -1, 0));
+  scoped_nullable{SDL_FreeSurface} sur;
+  sur.reset(SDL_CreateRGBSurface(0, 64, 64, 32, 0, 0, 0, 0));
+  bool done = false;
+  int x = 0;
+  SDL_Rect srect;
+  srect.x = 0;
+  srect.y = 0;
+  srect.w = 64;
+  srect.h = 64;
+  SDL_FillRect(sur, caddress(srect), SDL_MapRGB(sur.get()->format, 255, 0, 0));
+  scoped_nullable{SDL_DestroyTexture} tx;
+  tx.reset(SDL_CreateTextureFromSurface(rnd, sur));
+  mutable drect = srect;
+  while (!done) {
+    SDL_Event ev;
+    while (SDL_PollEvent(address(ev)) != 0) {
+      if (ev.type == SDL_QUIT) {
+	done = true;
+	break;
+      }
+    }
+    SDL_RenderClear(rnd);
+    x = (x + 1) & 127;
+    drect.x = (x >= 64) ? 128 - x : x;
+    SDL_RenderCopy(rnd, tx, caddress(srect), caddress(drect));
+    SDL_RenderPresent(rnd);
+    SDL_Delay(5);
+  }
+}
+

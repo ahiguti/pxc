@@ -12,12 +12,13 @@ shader_config(bool is_gles0, int major0, int minor0, bool msaa0,
   public bool const is_gles = is_gles0;
   public int const major = major0;
   public int const minor = minor0;
+  public int const debug_level = conf.get("gldebug", 0);
   public bool enable_shadowmapping = conf.get("shadow", 1) != 0;
   public bool enable_shadowmapping_multisample = conf.get("shadow_ms", 0) != 0;
   public bool enable_normalmapping = conf.get("normalmapping", 1) != 0;
   public bool enable_zprepass = !is_gles;
   public bool enable_msaa = msaa0;
-  public bool enable_instanced = major >= 3 && use_copying_instancing == 0;
+  public bool enable_instanced = major >= 3;
   public bool enable_uniform_instancing = enable_instanced &&
     (major < 3 || is_gles || (!is_gles && minor < 3));
   public bool enable_depth_texture = (major >= 3);
@@ -56,52 +57,31 @@ shader_config(bool is_gles0, int major0, int minor0, bool msaa0,
     return is_gl3_or_gles3() ? "fragcolor" : "gl_FragColor"; }
   public function strlit decl_fragcolor() const {
     return is_gl3_or_gles3() ? "out vec4 fragcolor;\n" : "\n"; }
-  public function string decl_instance_id(bool shader_has_iid) const
+  public function string decl_instance_attr(cstrref const& t, cstrref const& n)
+    const
   {
-    if (use_copying_instancing != 0 && shader_has_iid) {
-      return vert_in() + "float instance_id;\n";
-    } else {
-      return "";
-    }
-  }
-  public function string decl_instance_attr(cstrref const& t, cstrref const& n,
-      bool shader_support_instancing, bool shader_has_iid) const
-  {
-    if (use_copying_instancing != 0 && shader_has_iid) {
-      /* shader has 'instance_id' variable */
-      return "uniform " + t + " " + n + "["
-	+ m::to_string{uniform_instancing_mul} + "];\n";
-    } else {
-      if (shader_support_instancing && enable_instanced) {
-	if (enable_uniform_instancing) {
-	  /* use gl_InstanceID and uniform arrays */
-	  return "uniform " + t + " " + n + "["
-	    + m::to_string{uniform_instancing_mul} + "];\n";
-	} else {
-	  /* use gl_InstanceID and glVertexAttribDivisor */
-	  return vert_in() + t + " " + n + ";\n";
-	}
-      } else {
-	return "uniform " + t + " " + n + ";\n";
-      }
-    }
-  }
-  public function string instance_attr(cstrref const& n,
-    bool shader_support_instancing, bool shader_has_iid) const
-  {
-    if (use_copying_instancing != 0 && shader_has_iid) {
-      /* shader has 'instance_id' variable */
-      return n + "[int(instance_id)]";
-    } else {
-      if (shader_support_instancing && enable_instanced &&
-	enable_uniform_instancing) {
+    if (enable_instanced) {
+      if (enable_uniform_instancing) {
 	/* use gl_InstanceID and uniform arrays */
-	return n + "[gl_InstanceID]";
+	return "uniform " + t + " " + n + "["
+	  + m::to_string{uniform_instancing_mul} + "];\n";
       } else {
 	/* use gl_InstanceID and glVertexAttribDivisor */
-	/* or no instancing */
-	return n;
+	return vert_in() + t + " " + n + ";\n";
       }
+    } else {
+      return "uniform " + t + " " + n + ";\n";
+    }
+  }
+  public function string instance_attr(cstrref const& n) const
+  {
+    if (enable_instanced && enable_uniform_instancing) {
+      /* use gl_InstanceID and uniform arrays */
+      return n + "[gl_InstanceID]";
+    } else {
+      /* use gl_InstanceID and glVertexAttribDivisor */
+      /* or no instancing */
+      return n;
     }
   }
   public function string empty_shader_vert() const

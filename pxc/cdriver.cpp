@@ -53,12 +53,13 @@ struct profile_settings {
   std::string cflags;
   std::string ldflags;
   std::string emit_threaded_dll;
+  bool gcc_compat;
   bool generate_dynamic; /* TODO */
   bool show_warnings;
   size_t recursion_limit;
   size_t safe_mode;
-  profile_settings() : generate_dynamic(false), show_warnings(false),
-    recursion_limit(0), safe_mode(1) { }
+  profile_settings() : gcc_compat(true), generate_dynamic(false),
+    show_warnings(false), recursion_limit(0), safe_mode(1) { }
 };
 
 typedef std::list<source_info> sources_type;
@@ -411,7 +412,7 @@ static void load_source_and_calc_checksum(const parser_options& po,
     ++i, src_mask_bit <<= 1) {
     bool loaded = false;
     const std::string& fn = i->filename;
-    if (po.verbose > 0) {
+    if (po.verbose > 9) {
       fprintf(stderr, "loading source %s\n", fn.c_str());
     }
     while (true) {
@@ -419,7 +420,7 @@ static void load_source_and_calc_checksum(const parser_options& po,
       struct stat sbuf1, sbuf2;
       if (stat(fn.c_str(), &sbuf1) != 0) {
 	if (errno == ENOENT) {
-	  if (po.verbose > 0) {
+	  if (po.verbose > 9) {
 	    fprintf(stderr, "loading source %s: not found\n", fn.c_str());
 	  }
 	  if (!notfound_fnlist.empty()) {
@@ -432,7 +433,7 @@ static void load_source_and_calc_checksum(const parser_options& po,
 	  fn.c_str(), errno);
       }
       const std::string content = read_file_content(fn, true);
-      if (po.verbose > 0 && !content.empty()) {
+      if (po.verbose > 9 && !content.empty()) {
 	fprintf(stderr, "loading source %s: found\n", fn.c_str());
       }
       if (stat(fn.c_str(), &sbuf2) != 0) {
@@ -772,8 +773,20 @@ static bool need_to_relink(const parser_options& po,
   return false;
 }
 
-/* compiles cc files and generate a so file */
-static void compile_cxx_all(const parser_options& po,
+static std::string get_cxx_and_cflags(const parser_options& po,
+  module_info const& mi_main)
+{
+  const std::string cflags_str = make_cxx_opts(
+    mi_main.self_copts.cflags, "");
+  const std::string incdir_str = make_cxx_opts(
+    mi_main.self_copts.incdir, "-I");
+  const std::string opt_gcc = po.profile.gcc_compat ? " -g -fPIC" : "";
+  const std::string cmd = po.profile.cxx + " " + po.profile.cflags
+    + opt_gcc + cflags_str + incdir_str + " -I.";
+  return cmd;
+}
+
+static std::string get_link_flags(const parser_options& po,
   all_modules_info& ami, module_info& mi_main)
 {
   coptions copt;
@@ -782,29 +795,57 @@ static void compile_cxx_all(const parser_options& po,
   const std::string link_str = make_cxx_opts(copt.link, "-l");
   const std::string ldflags_str = make_cxx_opts(copt.ldflags, "");
   DBG_LINK(fprintf(stderr, "copt.link sz=%d\n", copt.link.list_val.size()));
-  const std::string ofn = po.profile.generate_dynamic ?
-    get_so_filename(po, mi_main) : get_exe_filename(po, mi_main);
   std::string genopt;
-  if (!po.profile.generate_dynamic) {
-    genopt = "-lpthread";
+  if (!po.profile.gcc_compat) {
+    genopt = " ";
+  } else if (!po.profile.generate_dynamic) {
+    genopt = " -lpthread ";
   } else {
     const strmap::const_iterator i = po.profile.mapval.find("platform");
     if (i != po.profile.mapval.end() && i->second == "Darwin") {
-      genopt = "-fPIC -undefined dynamic_lookup -bundle -bundle_loader "
-	+ po.argv0 + " -lpthread";
+      genopt = " -fPIC -undefined dynamic_lookup -bundle -bundle_loader "
+	+ po.argv0 + " -lpthread ";
     } else {
-      genopt = "-fPIC -shared -lpthread";
+      genopt = " -fPIC -shared -lpthread ";
     }
   }
-  const std::string ofn_tmp = ofn + ".tmp";
-  std::string cmd = po.profile.cxx + " " + po.profile.cflags + " " + genopt
-    + " -o '" + ofn_tmp + "'";
-  for (all_modules_info::modules_type::const_iterator i = ami.modules.begin();
-    i != ami.modules.end(); ++i) {
-    const std::string fn = get_o_filename(po, i->second);
-    cmd += " '" + fn + "'";
+  const std::string link_str_all = genopt + po.profile.ldflags
+    + ldflags_str + libdir_str + link_str;
+  return link_str_all;
+}
+
+/* compiles cc files and generate a so file */
+static void compile_cxx_all(const parser_options& po,
+  all_modules_info& ami, module_info& mi_main)
+{
+  std::string ofn;
+  if (po.gen_single_cc) {
+    ofn = mi_main.aux_filename + ".exe";
+  } else {
+    ofn = po.profile.generate_dynamic ?
+      get_so_filename(po, mi_main) : get_exe_filename(po, mi_main);
   }
-  cmd += " " + po.profile.ldflags + ldflags_str + libdir_str + link_str;
+  const std::string ofn_tmp = ofn + ".tmp";
+  std::string cmd = po.profile.cxx + " " + po.profile.cflags
+    + " -o '" + ofn_tmp + "'";
+  if (po.gen_single_cc) {
+    cmd += " '" + mi_main.aux_filename + ".o" + "'";
+  } else {
+    for (all_modules_info::modules_type::const_iterator i
+      = ami.modules.begin(); i != ami.modules.end(); ++i) {
+      const std::string fn = get_o_filename(po, i->second);
+      cmd += " '" + fn + "'";
+    }
+  }
+  const std::string link_str = get_link_flags(po, ami, mi_main);
+  /*
+  if (po.gen_single_cc) {
+    const std::string cxx_str = get_cxx_and_cflags(po, mi_main);
+    printf("%s\n", cxx_str.c_str());
+    printf("%s\n", link_str.c_str());
+  }
+  */
+  cmd += link_str;
   int r = 0;
   std::string obuf;
   tmpfile_guard g(ofn_tmp);
@@ -976,16 +1017,27 @@ static void compile_module_to_cc_srcs(const parser_options& po,
     }
   }
   /* compile to o */
-  if (po.gen_cc_dir.empty()) {
-    const std::string cfn = get_cc_filename(po, mi_main);
-    const std::string ofn = get_o_filename(po, mi_main);
-    const std::string cflags_str = make_cxx_opts(
-      mi_main.self_copts.cflags, "");
-    const std::string incdir_str = make_cxx_opts(
-      mi_main.self_copts.incdir, "-I");
-    const std::string cmd = po.profile.cxx + " " + po.profile.cflags
-      + " -g -fPIC"
-      + cflags_str + incdir_str + " -I. -c '" + cfn + "' -o '" + ofn + "'";
+  if (po.no_build) {
+    return;
+  }
+  if (po.gen_cc_dir.empty() || po.gen_single_cc) {
+    std::string cfn;
+    std::string ofn;
+    if (po.gen_single_cc) {
+      std::string bp;
+      if (!mi_main.aux_filename.empty() && mi_main.aux_filename[0] == '/') {
+	bp = mi_main.aux_filename;
+      } else {
+	bp = po.gen_cc_dir + "/" + mi_main.aux_filename;
+      }
+      cfn = bp + ".cc";
+      ofn = bp + ".o";
+    } else {
+      cfn = get_cc_filename(po, mi_main);
+      ofn = get_o_filename(po, mi_main);
+    }
+    const std::string cmd = get_cxx_and_cflags(po, mi_main) +
+      " -c '" + cfn + "' -o '" + ofn + "'";
     std::string obuf;
     int r = popen_cmd(cmd + " 2>&1", obuf);
     if (r != 0) {
@@ -1102,7 +1154,7 @@ static bool check_need_rebuild(const parser_options& po,
     if (mi_imp.source_modified) {
       DBG_CHK(fprintf(stderr, "need_rebuild=%s import=%s\n", mi.ns.c_str(),
 	mi_imp.ns.c_str()));
-      if (po.verbose > 0) {
+      if (po.verbose > 9) {
 	fprintf(stderr, "%s: source modified => %s: need rebuild\n",
 	  mi_imp.get_name().c_str(), mi.get_name().c_str());
       }
@@ -1117,7 +1169,7 @@ static bool check_need_rebuild(const parser_options& po,
     if (mi_dep.source_checksum != i->second) {
       DBG_CHK(fprintf(stderr, "need_rebuild=%s dep=%s\n", mi.ns.c_str(),
 	mi_dep.ns.c_str()));
-      if (po.verbose > 0) {
+      if (po.verbose > 9) {
 	fprintf(stderr, "checksum mismatch %s:%s %s:%s\n",
 	  mi_dep.get_name().c_str(),
 	  checksum_string(mi_dep.source_checksum).c_str(),
@@ -1143,7 +1195,7 @@ static bool check_need_rebuild(const parser_options& po,
       }
     }
   } else {
-    if (po.verbose > 0) {
+    if (po.verbose > 9) {
       fprintf(stderr, "%s: need not to rebuild\n",
 	mi.get_name().c_str());
     }
@@ -1223,7 +1275,7 @@ static std::string subst_variables(const std::string& str,
 
 static void load_profile(parser_options& po)
 {
-  if (po.verbose > 0) {
+  if (po.verbose > 1) {
     fprintf(stderr, "loading profile %s\n", po.profile_name.c_str());
   }
   const std::string pstr = read_file_content(po.profile_name, true);
@@ -1261,6 +1313,10 @@ static void load_profile(parser_options& po)
     platform = std::string(utsn.sysname);
     // fprintf(stderr, "uname: %s", platform.c_str());
     po.profile.mapval["platform"] = platform;
+  }
+  iter = po.profile.mapval.find("gcc_compat");
+  if (iter != po.profile.mapval.end()) {
+    po.profile.gcc_compat = atoi(iter->second.c_str()) != 0;
   }
   iter = po.profile.mapval.find("generate_dynamic");
   if (iter != po.profile.mapval.end() && atoi(iter->second.c_str()) != 0) {
@@ -1353,15 +1409,18 @@ static int compile_and_execute(parser_options& po,
     exe_fn = "./" + exe_fn;
   }
   /* compile to .o */
-  if (!po.no_build && (!po.no_update || !file_exist(exe_fn))) {
+  if (!po.no_update || !file_exist(exe_fn)) {
     compile_modules_rec(po, ami, fn,
       po.profile.generate_dynamic ? generate_main_dl : generate_main_exe);
   }
-  if (!po.gen_cc_dir.empty() && po.no_execute) {
+  if (po.no_build) {
+    return 0;
+  }
+  if (!po.gen_cc_dir.empty() && !po.gen_single_cc && po.no_execute) {
     return 0;
   }
   /* compile to exe or so */
-  if (need_to_relink(po, ami, mi_main)) {
+  if (po.gen_single_cc || need_to_relink(po, ami, mi_main)) {
     get_mi_srcs(po, ami, fn);
       /* need to set link_srcs for mi_main here because it is not set when
        * compilation to cc/o is skipped */

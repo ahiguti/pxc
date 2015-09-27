@@ -19,7 +19,9 @@ public import pgl3d::pglconfig -;
 public import pgl3d::sdlutil -;
 public import io::time -;
 
-public import pgl3d::grid_broadphase -; // FIXME
+// public import KnightModel -; // FIXME
+
+// public import pgl3d::grid_broadphase -; // FIXME
 
 // FIXME: projection_infoではなくscreen_infoだけ渡すように
 
@@ -276,6 +278,10 @@ function void handle_event(app_impl mutable& app,
       app.light_on = app.light_on > 0.5f ? 0.0f : 1.0f;
       return;
     }
+    if (ev.key.keysym.scancode == SDL_SCANCODE_M) {
+      app.app_commands["scene_pause"] = "1";
+      return;
+    }
   }
   app.ictl.handle_event(ev, frame_speed, pjinfo, commands_r);
 }
@@ -305,7 +311,6 @@ private function tree_map{string, ptr{pgldrawer_export_i}} init_drawers(
   tree_map{string, ptr{pgldrawer_export_i}} r;
   r.insert("drawer_triangles", make_drawer_triangles(sconf, 0));
   r.insert("drawer_triangles_alt", make_drawer_triangles(sconf, 1));
-  r.insert("drawer_triangles2", make_drawer_triangles2(sconf));
   r.insert("drawer_lineparticle", make_drawer_lineparticle(sconf));
   r.insert("drawer_particle", make_drawer_particle(sconf));
   r.insert("drawer_particle_bb", make_drawer_particle_bb(sconf));
@@ -545,6 +550,30 @@ private function void build_vertices(app_impl mutable& app,
     regular_polygon(100.0, 4,
       rectangle_split(10, 10, ctx_poly_joint("box")),
       hole()));
+  /* for shadowmapping test */
+  /*
+  {
+    float scale = 10.0;
+    const& sli = KnightModel::vertices.to_cslice();
+    const& elems = KnightModel::indices.to_cslice();
+    varray{float} verts;
+    debug_log("knight: ", sli.size(), elems.size());
+    for (const i: 0 .. sli.size()) {
+      const& p = sli[i].position.to_cslice();
+      for (const j, const& v: p) {
+	verts.push_back(v * scale);
+      }
+      verts.append(sli[i].normal.to_cslice());
+    }
+    size_t nfpv = 6; // position and normal
+    pgs.make_vertex_set_by_triangles("drawer_triangles", "knight", verts,
+      nfpv, elems);
+    pgs.make_vertex_set(tr, "knight-multi",
+      regular_polygon(600.0, 4,
+	rectangle_split(50, 50, ctx_poly_joint("knight")),
+	hole()));
+  }
+  */
 
   /* save default font metrics */
   app.scene_shared->default_font_texture_info = pgs.get_texture_info("font");
@@ -581,6 +610,7 @@ private function void build_vertices(app_impl mutable& app,
   shapes_add_convex("saucer", 10.0f);
   // shapes_add_concave("block", 0.0f);
   shapes_add_convex("block", 100.0f);
+  // shapes_add_convex("knight", 10.0f);
 }
 
 function varray{float} reduce_vertices(cslice{float} const& shape, float delta)
@@ -718,8 +748,8 @@ scene_control(node_factory const& nfac,
   collision_shape_data_array const& shapes0)
 {
   public node_factory nodefac = nfac;
+  public bool scene_paused = false;
   public float prev_spawn = 0.0;
-  public float motion_count = 0.0;
   public joint_id_type joint_id_lp =
     nodefac.get_joint_id_by_name("lineparticle");
   public joint_id_type joint_id_font =
@@ -739,6 +769,7 @@ scene_control(node_factory const& nfac,
     /*
     "parts",
     */
+    // "knight-multi",
     "block-smtest",
     "nest",
     "nest-multi",
@@ -782,11 +813,14 @@ scene_control(node_factory const& nfac,
       sco.add_collision_object(r);
     } else {
       mutable rnd = make_rand_generator(1U);
+      /*
       if (cur_scene == 0) {
 	const ch = r.children[1];
 	const rb = sco.add_collision_object(ch).some;
 	rb->apply_central_impulse(1.0f, 0.0f, 0.0f);
-      } else {
+      } else
+      */
+      {
 	for (const i, const& ch: r.children) {
 	  const rb = sco.add_collision_object(ch).some;
 	  rb->apply_torque_impulse(
@@ -939,17 +973,19 @@ scene_control_step(scene_control mutable& sctl,
   threaded function void step_snobj_dynamics(scene_node mutable& sn_scene,
     bool spawn_obj, bool spawn_lp_flag)
   {
-    if (spawn_obj) {
-      const a = ss.posang.angle * glm::make_vec3(0.0f, 0.0f, -50.0f);
-      mutable posang = ss.posang;
-      posang.position += a * 0.1f;
-      scene_node cnode = scene_node(
-	sctl.sco.name_to_joint_id["box"], posang.to_mat4());
-      const rb = sctl.sco.add_collision_object(cnode).some;
-      rb->apply_central_impulse(a.x, a.y, a.z);
-      // debug_log("spawn_obj", sctl.sco.dworld.objects_size());
+    if (!sctl.scene_paused) {
+      if (spawn_obj) {
+	const a = ss.posang.angle * glm::make_vec3(0.0f, 0.0f, -50.0f);
+	mutable posang = ss.posang;
+	posang.position += a * 0.1f;
+	scene_node cnode = scene_node(
+	  sctl.sco.name_to_joint_id["box"], posang.to_mat4());
+	const rb = sctl.sco.add_collision_object(cnode).some;
+	rb->apply_central_impulse(a.x, a.y, a.z);
+	// debug_log("spawn_obj", sctl.sco.dworld.objects_size());
+      }
+      sctl.sco.dworld.step_simulation(speed*1.0f/60.0f, 10, 1.0f/60.0f);
     }
-    sctl.sco.dworld.step_simulation(speed*1.0f/60.0f, 10, 1.0f/60.0f);
     scene_node cursn = scene_node(joint_id_type(), glm::mat4());
     threaded function void step_obj(size_t i, ptr{rigid_body_i} const& obj)
     {
@@ -971,16 +1007,15 @@ scene_control_step(scene_control mutable& sctl,
       sctl.prev_spawn -= 3.0;
     }
   }
+  if (const& v: ss.app_commands["scene_pause"]) {
+    sctl.scene_paused = !sctl.scene_paused;
+  }
   {
     bool spawn_obj_flag = false;
     if (const& v: ss.app_commands["throw"]) {
       spawn_obj_flag = true;
     }
     step_snobj_dynamics(sctl.node_scene, spawn_obj_flag, spawn_lp_flag);
-  }
-  sctl.motion_count += speed;
-  if (sctl.motion_count >= 360.0) {
-    sctl.motion_count -= 360.0;
   }
 }
 

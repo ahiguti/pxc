@@ -141,15 +141,15 @@ aggregated_ibuffer_draw(aggregated_ibuffer const& aibuf,
 	bo.draw_elems_instanced(static_cast{size_t}(vs_id), k);
       }
       */
-    } else { /* copying instancing */
+    } else { /* no instancing (copying is not supported anymore) */
       size_t const iattr_num_float = sdr.instance_attrib_num_float();
       size_t j;
       const& be = *bo.get_by_id(static_cast{size_t}(vs_id));
       size_t const jmax = arr.size() / iattr_num_float;
-      const inst_mul = be.vtxs->num_copies;
+      size_t inst_mul = 1; // this value was > 1 when copying is supported
+      sdllog("noinstancing bo", bo_id, "iattr_num_float",
+	iattr_num_float, jmax, inst_mul);
       /*
-      sdllog("copyinginstancing bo", bo_id, "iattr_num_float",
-	iattr_num_float, jmax);
       */
       for (j = 0; j < jmax; j += inst_mul) {
 	size_t k = min((jmax - j), inst_mul);
@@ -159,7 +159,7 @@ aggregated_ibuffer_draw(aggregated_ibuffer const& aibuf,
       /*
       size_t const jmax = arr.size();
       const inst_mul = be.vtxs->num_copies;
-      sdllog("copyinginstancing bo", bo_id, "iattr_num_float",
+      sdllog("noinstancing bo", bo_id, "iattr_num_float",
 	iattr_num_float, jmax);
       for (j = 0; j < jmax; j += iattr_num_float * inst_mul) {
 	size_t k = min((jmax - j) / iattr_num_float, inst_mul);
