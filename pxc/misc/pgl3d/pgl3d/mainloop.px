@@ -134,12 +134,15 @@ private function void mainloop_internal(pgl3d_application mutable& app,
   sdllog("PGL3D main");
 
   sdlcontext sdlc = sdlcontext(conf);
+  varray{short} joy_axes;
+  varray{bool} joy_buttons;
 
   // SDL_EventState(SDL_KEYDOWN, 0);
     // FIXME
   SDL_EventState(SDL_KEYUP, 0);
   SDL_EventState(SDL_TEXTEDITING, 0);
   SDL_EventState(SDL_TEXTINPUT, 0);
+  SDL_JoystickEventState(0);
   if (m::or{is_android, is_ios}) {
     SDL_EventState(SDL_MOUSEBUTTONDOWN, 0);
     SDL_EventState(SDL_MOUSEBUTTONUP, 0);
@@ -256,12 +259,27 @@ private function void mainloop_internal(pgl3d_application mutable& app,
       app.on_event(ev, frctl.frame_speed_mul, pgs.cam, commands);
       do_commands();
     }
+    if (sdlc.joystick.get() != rawptr{SDL_Joystick}()) {
+      SDL_JoystickUpdate();
+      joy_axes.resize(static_cast{size_t}(sdlc.joystick_num_axes), 0);
+      joy_buttons.resize(static_cast{size_t}(sdlc.joystick_num_buttons), 0);
+      for (const i: 0 .. sdlc.joystick_num_axes) {
+	const v = SDL_JoystickGetAxis(sdlc.joystick.get(), i);
+	joy_axes[static_cast{size_t}(i)] = v;
+      }
+      for (const i: 0 .. sdlc.joystick_num_buttons) {
+	const v = SDL_JoystickGetButton(sdlc.joystick.get(), i);
+	joy_buttons[static_cast{size_t}(i)] = (v != 0);
+      }
+      // sdllog("joy", joy_axes, joy_buttons);
+    }
     {
       int numkeys;
       const ksp = SDL_GetKeyboardState(address(numkeys));
       const ks = ksp.to_cslice(static_cast{size_t}(numkeys));
       /* invoke key handler */
-      app.on_scankeys(ks, frctl.frame_speed_mul, pgs.cam, commands);
+      app.on_scankeys(ks, joy_axes, joy_buttons, frctl.frame_speed_mul,
+	pgs.cam, commands);
       do_commands();
     }
     fr.save_ticks(0, SDL_GetTicks());

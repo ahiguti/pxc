@@ -27,6 +27,7 @@ input_control(io const& iop)
   public glm::vec2 finger_xyrotate_delta;
   public float finger_zmove_delta;
   public int finger_zmove_mode = 0;
+  public short joy_deadzone = 6000;
   public function void finger_motion(float x, float y, float dx, float dy,
     SDL_FingerID fng)
   {
@@ -272,16 +273,49 @@ input_control(io const& iop)
   public function void add_zdelta(float zaccel, float frame_speed)
   {
     finger_zmove_delta += zaccel * frame_speed;
-    /*
-    sdllog("zdelta", finger_zmove_delta);
-    */
     if (finger_zmove_delta <= -1.0) {
       finger_zmove_delta = -1.0;
     }
     if (finger_zmove_delta >= 1.0) {
       finger_zmove_delta = 1.0;
     }
+    // sdllog("zdelta", finger_zmove_delta);
     finger_zmove_mode = 1;
+  }
+  public function uint get_key(cslice{Uint8} const& keys, SDL_Scancode k)
+  {
+    const i = static_cast{size_t}(k);
+    return i < keys.size() ? keys[i] : 0U;
+  }
+  public function int get_button(cslice{bool} const& buttons, size_t i)
+  {
+    const r = i < buttons.size() ? buttons[i] : false;
+    return r ? 1 : 0;
+  }
+  public function float get_axis_linear(cslice{short} const& axes, size_t i)
+  {
+    if (axes.size() <= i) {
+      return 0.0f;
+    }
+    int v = axes[i];
+    return static_cast{float}(v + 32768) / 65535.0f;
+  }
+  public function float get_axis(cslice{short} const& axes, size_t i)
+  {
+    if (axes.size() <= i) {
+      return 0.0f;
+    }
+    const v = axes[i];
+    if (v >= -joy_deadzone && v <= joy_deadzone) {
+      return 0.0f;
+    }
+    if (v < 0) {
+      return static_cast{float}(v + joy_deadzone)
+	/ static_cast{float}(32768 - joy_deadzone);
+    } else {
+      return static_cast{float}(v - joy_deadzone)
+	/ static_cast{float}(32767 - joy_deadzone);
+    }
   }
 }
 
@@ -317,7 +351,7 @@ public function void input_control_handle_event(input_control mutable& ictl,
   } else if (etype == SDL_FINGERUP) {
     int tap_finger = ictl.finger_up(ev.tfinger.fingerId);
     if (tap_finger == 0) {
-      commands_r["throw"] = "1";
+      commands_r["throw"] = "1"; // FIXME
     }
   } else if (etype == SDL_FINGERMOTION) {
     if (m::or{is_android, is_ios}) {
@@ -329,60 +363,101 @@ public function void input_control_handle_event(input_control mutable& ictl,
 
 public function void input_control_handle_keys(input_control mutable& ictl,
   input_control_target mutable& target, cslice{Uint8} const& keys,
+  cslice{short} const& axes, cslice{bool} const& buttons,
   float frame_speed, projection_info const& pjinfo,
   tree_map{string, string} mutable& commands_r)
 {
   function uint get_key(SDL_Scancode k) {
     return keys[static_cast{uint}(k)];
   }
-  if (get_key(SDL_SCANCODE_UP) != 0) {
-    target.angle *= glm::make_quat_angle_axis(
-	to_radians(1.0f * frame_speed), 1.0, 0.0, 0.0);
+  function int get_button(size_t i) {
+    const r = i < buttons.size() ? buttons[i] : false;
+    return r ? 1 : 0;
   }
-  if (get_key(SDL_SCANCODE_DOWN) != 0) {
-    target.angle *= glm::make_quat_angle_axis(
-	to_radians(-1.0f * frame_speed), 1.0, 0.0, 0.0);
+  function float get_axis_linear(size_t i) {
+    if (axes.size() <= i) {
+      return 0.0f;
+    }
+    int v = axes[i];
+    return static_cast{float}(v + 32768) / 65535.0f;
   }
-  if (get_key(SDL_SCANCODE_LEFT) != 0) {
-    target.angle *= glm::make_quat_angle_axis(
-	to_radians(1.0f * frame_speed), 0.0, 1.0, 0.0);
+  function float get_axis(size_t i) {
+    if (axes.size() <= i) {
+      return 0.0f;
+    }
+    const v = axes[i];
+    const joy_deadzone = ictl.joy_deadzone;
+    if (v >= -joy_deadzone && v <= joy_deadzone) {
+      return 0.0f;
+    }
+    if (v < 0) {
+      return static_cast{float}(v + joy_deadzone)
+	/ static_cast{float}(32768 - joy_deadzone);
+    } else {
+      return static_cast{float}(v - joy_deadzone)
+	/ static_cast{float}(32767 - joy_deadzone);
+    }
   }
-  if (get_key(SDL_SCANCODE_RIGHT) != 0) {
-    target.angle *= glm::make_quat_angle_axis(
-	to_radians(-1.0f * frame_speed), 0.0, 1.0, 0.0);
+  float angle_x = to_radians(-get_axis(1) * frame_speed);
+  float angle_y = to_radians(-get_axis(0) * frame_speed);
+  float angle_z = 0.0f;
+  if (get_key(SDL_SCANCODE_UP) != 0 || get_button(0) != 0) {
+    angle_x += to_radians(1.0f * frame_speed);
   }
+  if (get_key(SDL_SCANCODE_DOWN) != 0 || get_button(1) != 0) {
+    angle_x -= to_radians(1.0f * frame_speed);
+  }
+  if (get_key(SDL_SCANCODE_LEFT) != 0 || get_button(2) != 0) {
+    angle_y += to_radians(1.0f * frame_speed);
+  }
+  if (get_key(SDL_SCANCODE_RIGHT) != 0 || get_button(3) != 0) {
+    angle_y -= to_radians(1.0f * frame_speed);
+  }
+  if (get_key(SDL_SCANCODE_Z) != 0 || get_button(9) != 0) {
+    angle_z += to_radians(1.0f * frame_speed);
+  }
+  if (get_key(SDL_SCANCODE_X) != 0 || get_button(8) != 0) {
+    angle_z -= to_radians(1.0f * frame_speed);
+  }
+  target.angle *= glm::make_quat_angle_axis(angle_x, 1.0, 0.0, 0.0);
+  target.angle *= glm::make_quat_angle_axis(angle_y, 0.0, 1.0, 0.0);
+  target.angle *= glm::make_quat_angle_axis(angle_z, 0.0, 0.0, 1.0);
+  float zdelta = 0.0f;
+  zdelta += (get_axis_linear(4) - get_axis_linear(5)) * 0.002f;
   if (get_key(SDL_SCANCODE_SPACE) != 0) {
-    ictl.add_zdelta(-0.001f, frame_speed);
+    zdelta -= 0.001f;
   }
   if (get_key(SDL_SCANCODE_LSHIFT) != 0) {
-    ictl.add_zdelta(0.001f, frame_speed);
+    zdelta += 0.001f;
   }
+  // sdllog("zdelta", zdelta);
+  ictl.add_zdelta(zdelta, frame_speed);
+  glm::vec3 pos_delta;
+  /*
+  pos_delta.x += get_axis(2) * 0.1f;
+  pos_delta.y -= get_axis(3) * 0.1f;
+  */
   if (get_key(SDL_SCANCODE_A) != 0) {
-    target.position += target.angle *
-	glm::make_vec3(-0.05, 0.0, 0.0) * frame_speed;
+    pos_delta.x -= 0.1f;
   }
   if (get_key(SDL_SCANCODE_D) != 0) {
-    target.position += target.angle *
-	glm::make_vec3(0.05, 0.0, 0.0) * frame_speed;
+    pos_delta.x += 0.1f;
   }
   if (get_key(SDL_SCANCODE_S) != 0) {
-    target.position += target.angle *
-	glm::make_vec3(0.0, -0.05, 0.0) * frame_speed;
+    pos_delta.y -= 0.1f;
   }
   if (get_key(SDL_SCANCODE_W) != 0) {
-    target.position += target.angle *
-	glm::make_vec3(0.0, 0.05, 0.0) * frame_speed;
+    pos_delta.y += 0.1f;
   }
-  if (get_key(SDL_SCANCODE_Z) != 0) {
-    target.angle *= glm::make_quat_angle_axis(
-	to_radians(1.0f * frame_speed), 0.0, 0.0, 1.0);
-  }
-  if (get_key(SDL_SCANCODE_X) != 0) {
-    target.angle *= glm::make_quat_angle_axis(
-	to_radians(-1.0f * frame_speed), 0.0, 0.0, 1.0);
-  }
-  if (get_key(SDL_SCANCODE_RETURN) != 0) {
-    ictl.finger_zmove_delta = 0.0;
+  target.position += target.angle * pos_delta * frame_speed;
+  if (get_key(SDL_SCANCODE_RETURN) != 0 || get_button(6) != 0) {
+    if (ictl.finger_zmove_delta > 0.01f) {
+      ictl.finger_zmove_delta -= 0.01f;
+    } else if (ictl.finger_zmove_delta < -0.01f) {
+      ictl.finger_zmove_delta += 0.01f;
+    } else {
+      ictl.finger_zmove_delta = 0.0;
+    }
     ictl.finger_zmove_mode = 1;
   }
 }

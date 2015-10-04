@@ -37,21 +37,28 @@ public struct demoapp_application()
 {	
   public app_impl app;
   public function tree_map{string, ptr{pgldrawer_export_i}} on_init_drawers(
-    shader_config const& conf) {
+    shader_config const& conf)
+  {
     return init_drawers(app, conf);
   }
-  public function void on_build_vertices(make_vertices_i mutable& mvx) {
+  public function void on_build_vertices(make_vertices_i mutable& mvx)
+  {
     build_vertices(app, mvx);
   }
   public function void on_event(SDL_Event const& ev, float speed,
-    projection_info const& pjinfo, string_map mutable& commands_r) {
+    projection_info const& pjinfo, string_map mutable& commands_r)
+  {
     handle_event(app, ev, speed, pjinfo, commands_r);
   }
-  public function void on_scankeys(cslice{Uint8} const& keys, float speed,
-    projection_info const& pjinfo, string_map mutable& commands_r) {
-    handle_keys(app, keys, speed, pjinfo, commands_r);
+  public function void on_scankeys(cslice{Uint8} const& keys,
+    cslice{short} const& joy_axes, cslice{bool} const& joy_buttons,
+    float speed, projection_info const& pjinfo,
+    string_map mutable& commands_r)
+  {
+    handle_keys(app, keys, joy_axes, joy_buttons, speed, pjinfo, commands_r);
   }
-  public function tptr{pgl3d_scene_shared} get_scene_shared() {
+  public function tptr{pgl3d_scene_shared} get_scene_shared()
+  {
     return app.scene_shared;
   }
 }
@@ -65,6 +72,7 @@ private struct app_impl()
   public bool scene_next_flag;
   public float light_on = 0.0f;
   public string_map app_commands;
+  public varray{bool} prev_joy_buttons;
   init();
   private function void init() {
     player.position = glm::make_vec3(0.0, -30.0, 0.0);
@@ -172,8 +180,8 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
     // ncd.shadowmapping_vp = sm_vp; // FIXME: remove: unused
     ncd.vp = vp;
     scene_control_update_buttons(sctl, sctl.node_buttons);
-    string s = string_join{" "}("O:", sctl.sco.dworld.objects_size(),
-      sctl.lpbullet.size(), "T:", timings, status_message);
+    string s = string_join{" "}("O:", sctl.sco.dworld.rigid_bodies_size(),
+      sctl.lpbullet->size(), "T:", timings, status_message);
     scene_control_set_message(sctl, sctl.node_status_message, s,
       0, 0,
       dss.default_font_texture_info.char_w,
@@ -225,11 +233,12 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
     const bo_id = sctl.joint_id_lp.bo_id;
     const vs_id = sctl.joint_id_lp.vs_id;
     mutable& idata = whole_instances[bo_id][static_cast{size_t}(vs_id)];
-    for (const i, const& lpb: sctl.lpbullet) {
+    const& lparr = sctl.lpbullet->lparr;
+    for (const i, const& lpb: lparr) {
       const sli = lpb.value.crange();
       idata.instance_buffer.append(sli[0 .. 9]);
     }
-    return sctl.lpbullet.size();
+    return lparr.size();
   }
 }
 
@@ -287,22 +296,41 @@ function void handle_event(app_impl mutable& app,
 }
 
 function void handle_keys(app_impl mutable& app,
-  cslice{Uint8} const& keys, float frame_speed, projection_info const& pjinfo,
-  string_map mutable& commands_r)
+  cslice{Uint8} const& keys, cslice{short} const& axes,
+  cslice{bool} const& buttons, float frame_speed,
+  projection_info const& pjinfo, string_map mutable& commands_r)
 {
-  app.ictl.handle_keys(app.player, keys, frame_speed, pjinfo, commands_r);
+  app.ictl.handle_keys(app.player, keys, axes, buttons, frame_speed, pjinfo,
+    commands_r);
+  if (app.ictl.get_button(buttons, 10) != 0) {
+    app.app_commands["throw"] = "1";
+  }
+  if (app.ictl.get_button(buttons, 4) != 0 &&
+    app.ictl.get_button(app.prev_joy_buttons, 4) == 0) {
+    app.scene_next_flag = true;
+  }
+  glm::quat camera_rel;
+  const cam_ax0 = app.ictl.get_axis(axes, 3);
+  const cam_ax1 = app.ictl.get_axis(axes, 2);
+  if (cam_ax0 != 0.0f || cam_ax1 != 0.0f) {
+    camera_rel *= glm::make_quat_angle_axis(
+      app.ictl.get_axis(axes, 3) * -3.14159f / 2.0f, 1.0, 0.0, 0.0);
+    camera_rel *= glm::make_quat_angle_axis(
+      app.ictl.get_axis(axes, 2) * -3.14159f / 2.0f, 0.0, 1.0, 0.0);
+  }
   app.ictl.action_step(app.player, app.player.pos_delta, frame_speed);
   {
     mutable& ss = *app.scene_shared;
     ss.light_on = app.light_on;
     ss.scene_next_flag = app.scene_next_flag;
     ss.posang.position = app.player.position;
-    ss.posang.angle = app.player.angle;
+    ss.posang.angle = app.player.angle * camera_rel;
     ss.app_commands.swap(app.app_commands);
     app.scene_next_flag = false;
     // sdllog("posang = ", ss.posang);
   }
   app.app_commands.clear();
+  app.prev_joy_buttons = buttons;
 }
 
 private function tree_map{string, ptr{pgldrawer_export_i}} init_drawers(
@@ -407,7 +435,7 @@ private function void build_vertices(app_impl mutable& app,
 	bump_rec(0.5, 1.0, 1, ctx_fill(0), ctx_fill(0)))));
   rnd = make_rand_generator(1U);
   pgs.make_vertex_set(tr, "nest",
-    regular_polygon(100.0, 4,
+    regular_polygon(50.0, 4,
       rotate_local(glm::make_quat_angle_axis(to_radians(45.0), 0.0, 0.0, 1.0),
 	bump_rec(0.03, 1.0, 1, ctx_fill(0),
 	  rand_bump2(100, 0.5, 0.2, 0.8, 0.05, 0.05, 0.5, 0.5, rnd,
@@ -428,7 +456,8 @@ private function void build_vertices(app_impl mutable& app,
   pgs.make_vertex_set(tr, "nest-multi",
     regular_polygon(600.0, 4,
       bump_apply(m, false, hole(),
-	rectangle_split(5, 5, ctx_poly_joint("nest"))),
+	bump_rec_seq(0.2, 1.0, 5, hole(),
+	  rectangle_split(10, 10, ctx_poly_joint("nest")))),
       hole()));
   m = glm::mat4()
     .translate(glm::make_vec3(0.0, 0.0, 1.0))
@@ -464,51 +493,51 @@ private function void build_vertices(app_impl mutable& app,
   {
   rnd = make_rand_generator(991U);
   pgs.make_vertex_set(tr, "bullet2-multi2s1",
-    rand_sphere(200.0, 4000, false, true, rnd,
+    rand_sphere(200.0, 2000, false, true, rnd,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
   pgs.make_vertex_set(tr, "bullet2-multi2s2",
-    rand_sphere(200.0, 8000, false, true, rnd,
+    rand_sphere(200.0, 3000, false, true, rnd,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
   pgs.make_vertex_set(tr, "bullet2-multi2s3",
-    rand_sphere(200.0, 10000, false, true, rnd,
+    rand_sphere(200.0, 4000, false, true, rnd,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
   pgs.make_vertex_set(tr, "bullet2-multi2s4",
-    rand_sphere(200.0, 12000, false, true, rnd,
+    rand_sphere(200.0, 5000, false, true, rnd,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
   pgs.make_vertex_set(tr, "bullet2-multi2s5",
-    rand_sphere(200.0, 14000, false, true, rnd,
+    rand_sphere(200.0, 6000, false, true, rnd,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
   pgs.make_vertex_set(tr, "bullet2-multi2s6",
-    rand_sphere(200.0, 16000, false, true, rnd,
+    rand_sphere(200.0, 7000, false, true, rnd,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
   pgs.make_vertex_set(tr, "bullet2-multi2s7",
-    rand_sphere(200.0, 18000, false, true, rnd,
+    rand_sphere(200.0, 8000, false, true, rnd,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
   pgs.make_vertex_set(tr, "bullet2-multi2s8",
-    rand_sphere(200.0, 20000, false, true, rnd,
+    rand_sphere(200.0, 9000, false, true, rnd,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
   pgs.make_vertex_set(tr, "bullet2-multi2s9",
-    rand_sphere(200.0, 22000, false, true, rnd,
+    rand_sphere(200.0, 10000, false, true, rnd,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
   pgs.make_vertex_set(tr, "bullet2-multi2s10",
-    rand_sphere(200.0, 24000, false, true, rnd,
+    rand_sphere(200.0, 11000, false, true, rnd,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
   pgs.make_vertex_set(tr, "bullet2-multi2s11",
-    rand_sphere(200.0, 26000, false, true, rnd,
+    rand_sphere(200.0, 12000, false, true, rnd,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
   pgs.make_vertex_set(tr, "bullet2-multi2s12",
-    rand_sphere(200.0, 28000, false, true, rnd,
+    rand_sphere(200.0, 13000, false, true, rnd,
       ctx_point_joint("bullet2")));
   }
   rnd = make_rand_generator(991U);
@@ -532,7 +561,7 @@ private function void build_vertices(app_impl mutable& app,
     rand_sphere(1.0, 100, true, true, rnd, ctx_fill(0)));
   rnd = make_rand_generator(991U);
   pgs.make_vertex_set(parti, "particle-multi",
-    rand_sphere(60.0, 30000, true, true, rnd,
+    rand_sphere(60.0, 10000, true, true, rnd,
       ctx_point_joint("particle")));
   rnd = make_rand_generator(1U);
   pgs.make_vertex_set(parti, "particle-bb",
@@ -581,11 +610,11 @@ private function void build_vertices(app_impl mutable& app,
   /* save shapes for physics engine */
   function void shapes_add_convex(cstrref const& name, float mass) {
     const& posdt = pgs.get_vertices(name)->positions;
-    const reduced = reduce_vertices(posdt, 0.00001f);
-    debug_log("reduced", name, posdt.size()/3, reduced.size()/3);
+    // const reduced = reduce_vertices(posdt, 0.00001f);
+    // debug_log("reduced", name, posdt.size()/3, reduced.size()/3);
     app.scene_shared->shapes.push_back(make_tptr{collision_shape_data}(
       name, pgs.get_joint_id(name), mass,
-      collision_shape_e_convex_hull, reduced, varray{uint}()));
+      collision_shape_e_convex_hull, posdt, varray{uint}()));
   }
   function void shapes_add_sphere(cstrref const& name, float radius,
     float mass) {
@@ -611,6 +640,8 @@ private function void build_vertices(app_impl mutable& app,
   // shapes_add_concave("block", 0.0f);
   shapes_add_convex("block", 100.0f);
   // shapes_add_convex("knight", 10.0f);
+  shapes_add_sphere("particle", 1.0f, 3.0f);
+  shapes_add_sphere("particle-bb", 1.0f, 3.0f);
 }
 
 function varray{float} reduce_vertices(cslice{float} const& shape, float delta)
@@ -644,8 +675,36 @@ threaded function node make_node()
   return scene_node(joint_id_type(), glm::mat4());
 }
 
-threaded struct lpbullet_data {
+tsvaluetype struct lpbullet_data {
   public farray{float, 9} value;
+  public function glm::vec3 get_pos0() const {
+    return glm::make_vec3(value[0], value[1], value[2]);
+  }
+  public function glm::vec3 get_pos1() const {
+    return glm::make_vec3(value[3], value[4], value[5]);
+  }
+  public function float get_size() const {
+    return value[6];
+  }
+  public function float get_step() const {
+    return value[7];
+  }
+  public function void set_pos0(glm::vec3 const& v) {
+    value[0] = v.x;
+    value[1] = v.y;
+    value[2] = v.z;
+  }
+  public function void set_pos1(glm::vec3 const& v) {
+    value[3] = v.x;
+    value[4] = v.y;
+    value[5] = v.z;
+  }
+  public function void set_size(float v) {
+    value[6] = v;
+  }
+  public function void set_step(float v) {
+    value[7] = v;
+  }
 }
 
 threaded struct
@@ -743,6 +802,46 @@ scene_objects(collision_shape_data_array const& shape0)
   }
 }
 
+multithreaded struct
+lpbullet_swarm <swarm_i>
+{
+  public varray{lpbullet_data} lparr;
+  public function size_t size() const { return lparr.size(); }
+  public function uint get(size_t i, glm::vec3 mutable& pos_r,
+    float mutable& radius_r) const
+  {
+    const& o = lparr[i];
+    pos_r = (o.get_pos0() + o.get_pos1()) * 0.5f;
+    radius_r = 5.0f;
+    return o.get_step() > 5.0f ? 0xffffffffU : 0U;
+  }
+  public function void on_collide(size_t i, size_t o)
+  {
+    lparr[i].value[7] = 100000.0f;
+  }
+  public function void on_step(float speed)
+  {
+    for (const i, mutable& lpb: lparr) {
+      mutable vec0 = lpb.get_pos0();
+      mutable vec1 = lpb.get_pos1();
+      const vd = vec1 - vec0;
+      vec0 += vd * speed / 4.0f;
+      vec1 += vd * speed / 4.0f;
+      const step = lpb.get_step() + speed;
+      const sz = min(1.0f, (200.0f - step) / 20.0f);
+      lpb.set_pos0(vec0);
+      lpb.set_pos1(vec1);
+      lpb.set_size(0.25f * sz);
+      lpb.set_step(step);
+    }
+    threaded function bool lp_is_finished(lpbullet_data const& lpb)
+    {
+      return lpb.value[7] > 200.0f;
+    }
+    erase_cond{lp_is_finished}(lparr);
+  }
+}
+
 threaded struct
 scene_control(node_factory const& nfac,
   collision_shape_data_array const& shapes0)
@@ -757,7 +856,8 @@ scene_control(node_factory const& nfac,
   public joint_id_type joint_id_rect2d =
     nodefac.get_joint_id_by_name("rect2d");
   public size_t cur_scene = 0;
-  public varray{lpbullet_data} lpbullet;
+  public tptr{lpbullet_swarm} lpbullet = make_tptr{lpbullet_swarm}();
+  // public varray{lpbullet_data} lpbullet;
   public node mutable node_scene = make_node();
   public node mutable node_status_message = make_node();
   public node mutable node_buttons = make_node();
@@ -771,33 +871,31 @@ scene_control(node_factory const& nfac,
     */
     // "knight-multi",
     "block-smtest",
-    "nest",
-    "nest-multi",
     "block-multi",
-    "bullet2-multi3",
-    "saucer-multi",
-    "bullet2-multi2s8",
-    // "bullet2-multi2s1",
-    // "bullet2-multi2s2",
-    // "bullet2-multi2s3",
+    "bullet2-multi2s1",
+    "bullet2-multi2s2",
+    "bullet2-multi2s3",
     "bullet2-multi2s4",
-    // "bullet2-multi2s5",
+    "bullet2-multi2s5",
     "bullet2-multi2s6",
-    // "bullet2-multi2s7",
+    "bullet2-multi2s7",
     // "bullet2-multi2s8",
     // "bullet2-multi2s9",
     // "bullet2-multi2s10",
     // "bullet2-multi2s11",
-    "bullet2-multi2s12",
+    // "bullet2-multi2s12",
+    "saucer-multi",
+    "nest",
+    "nest-multi",
     "rigidbody-multi",
     "saucer",
-    "block-multi2"
+    "block-multi2",
     /*
     "bullet2-multi",
     "bullet-multi", "saucer-multi3",
+    */
     "particle", "particle-multi",
     "particle-bb", "particle-bb-multi"
-    */
     );
   init();
   private function void init()
@@ -809,6 +907,7 @@ scene_control(node_factory const& nfac,
     const name = scene_names[cur_scene];
     mutable r = nodefac.make_node_by_name(name, glm::mat4());
     sco.clear_objects();
+    sco.dworld.add_swarm(lpbullet);
     if (r.children.empty()) {
       sco.add_collision_object(r);
     } else {
@@ -908,6 +1007,8 @@ scene_control_step(scene_control mutable& sctl,
   // mutable& snode = *sctl.snode;
   threaded function void step_lp()
   {
+    sctl.lpbullet->on_step(speed);
+    /*
     for (const i, mutable& lpb: sctl.lpbullet) {
       const sli = lpb.value.range();
       mutable vec0 = glm::make_vec3(sli[0], sli[1], sli[2]);
@@ -931,12 +1032,13 @@ scene_control_step(scene_control mutable& sctl,
       return lpb.value[7] > 200.0f;
     }
     erase_cond{lp_is_finished}(sctl.lpbullet);
+    */
   }
   threaded function void spawn_lp_one(glm::mat4 const& m, float speed)
   {
     // size_t const lim = is_gles != 0 ? 20000U : 200000U;
     size_t const lim = 200000U;
-    if (sctl.lpbullet.size() > lim) {
+    if (sctl.lpbullet->size() > lim) {
       return;
     }
     {
@@ -945,8 +1047,8 @@ scene_control_step(scene_control mutable& sctl,
       const pos = glm::make_vec3(s[12], s[13], s[14]);
       const rot = m.to_3();
       const dir = rot * glm::make_vec3(0.0f, 0.0f, -5.0f);
-      const p0 = pos;
-      const p1 = pos + dir;
+      const p0 = pos + dir * 2.0f;
+      const p1 = pos + dir * 3.0f;
       const& sli = lpb.value.range();
       sli[0] = p0.x; // position0
       sli[1] = p0.y;
@@ -956,7 +1058,7 @@ scene_control_step(scene_control mutable& sctl,
       sli[5] = p1.z;
       sli[6] = 0.25f; // point_size_base
       sli[7] = 0.0f; // step
-      sctl.lpbullet.push_back(lpb);
+      sctl.lpbullet->lparr.push_back(lpb);
     }
     return;
   }
@@ -984,7 +1086,7 @@ scene_control_step(scene_control mutable& sctl,
 	rb->apply_central_impulse(a.x, a.y, a.z);
 	// debug_log("spawn_obj", sctl.sco.dworld.objects_size());
       }
-      sctl.sco.dworld.step_simulation(speed*1.0f/60.0f, 10, 1.0f/60.0f);
+      sctl.sco.dworld.step_simulation(speed*1.0f/60.0f, 1, speed*1.0f/60.0f);
     }
     scene_node cursn = scene_node(joint_id_type(), glm::mat4());
     threaded function void step_obj(size_t i, ptr{rigid_body_i} const& obj)
@@ -996,7 +1098,7 @@ scene_control_step(scene_control mutable& sctl,
 	spawn_lp_one(cursn.trans.value, speed);
       }
     }
-    sctl.sco.dworld.objects_foreach{step_obj}();
+    sctl.sco.dworld.rigid_bodies_foreach{step_obj}();
   }
   step_lp(); /* lineparticle */
   bool spawn_lp_flag = false;

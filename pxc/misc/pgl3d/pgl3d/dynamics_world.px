@@ -8,14 +8,18 @@ private import pointer::raw_unsafe -;
 public import meta m;
 public import meta::vararg va;
 public import pgl3d::scene_node -;
+public import numeric::fpmath -;
 public import glm;
+private import pgl3d::grid_broadphase -;
+private import pgl3d::collision_gjk -;
 
 public threaded interface
 collision_shape_i
 {
 }
 
-public threaded interface triangle_mesh_i triangle_mesh
+public threaded interface
+triangle_mesh_i triangle_mesh
 {
   public function void add_triangle(
     float v00, float v01, float v02,
@@ -39,20 +43,36 @@ make_triangle_mesh_shape(ptr{triangle_mesh_i} const& mesh0)
 public threaded function ptr{collision_shape_i}
 make_sphere_shape(float radius)
 {
-  return make_ptr{collision_shape_tmpl{btSphereShape}}(radius);
+  const r = make_ptr{collision_shape_tmpl{btSphereShape}}(radius);
+  r->radius = radius;
+  return r;
 }
 
 public threaded function ptr{collision_shape_i}
 make_box_shape(float x, float y, float z)
 {
-  return make_ptr{collision_shape_tmpl{btBoxShape}}(btVector3_(x, y, z));
+  const r = make_ptr{collision_shape_tmpl{btBoxShape}}(btVector3_(x, y, z));
+  const sq = x * x + y * y + z * z;
+  r->radius = sqrt(sq);
+  return r;
 }
 
 public threaded function ptr{collision_shape_i}
 make_convex_hull_shape(cslice{float} const& v)
 {
-  return make_ptr{collision_shape_tmpl{btConvexHullShape}}(
+  const r = make_ptr{collision_shape_tmpl{btConvexHullShape}}(
     v.to_crawptr(), static_cast{int}(v.size() / 3), 3 * 4);
+  float sqmax = 0.0f;
+  for (const i: 0 .. v.size() / 3) {
+    const x = v[i * 3];
+    const y = v[i * 3 + 1];
+    const z = v[i * 3 + 2];
+    const sq = x * x + y * y + z * z;
+    sqmax = max(sqmax, sq);
+  }
+  r->radius = sqrt(sqmax);
+  debug_log("ch", r->radius);
+  return r;
 }
 
 public threaded interface
@@ -76,9 +96,46 @@ make_rigid_body(joint_id_type const& joint_id,
   return make_ptr{rigid_body}(joint_id, sh, mass, btr);
 }
 
+public threaded interface
+dynamic_object_i
+{
+  public function void on_collide();
+  public function void on_step(float speed);
+}
+
+public multithreaded interface
+swarm_i
+{
+  public function size_t size() const;
+  public function uint get(size_t i, glm::vec3 mutable& pos_r,
+    float mutable& radius_r) const;
+  public function void on_collide(size_t i, size_t dynobj_id);
+  public function void on_step(float speed);
+}
+
 public threaded struct
 dynamics_world()
 {
+  private tsvaluetype struct grid_rbinfo
+  {
+    public btTransform trans;
+    public float radius;
+    public crawptr{btCollisionShape} shape;
+    public function glm::vec3 get_aabb_min() const {
+      const& org = trans.cgetOrigin();
+      return glm::make_vec3(
+	org.x() - radius,
+	org.y() - radius,
+	org.z() - radius);
+    }
+    public function glm::vec3 get_aabb_max() const {
+      const& org = trans.cgetOrigin();
+      return glm::make_vec3(
+	org.x() + radius,
+	org.y() + radius,
+	org.z() + radius);
+    }
+  }
   private metafunction broadphase_to_use 2;
   private btDefaultCollisionConfiguration mutable collisionConfiguration 
     = btDefaultCollisionConfiguration(btDefaultCollisionConstructionInfo());
@@ -103,18 +160,23 @@ dynamics_world()
   private btDiscreteDynamicsWorld mutable dynamicsWorld
     = btDiscreteDynamicsWorld(address(dispatcher), address(broadphase),
       address(solver), address(collisionConfiguration));
-  private varray{ptr{rigid_body}} objects;
+  private grid_broadphase mutable grid_bp = grid_broadphase(6, 10.0f);
+  private varray{bool} grid_bp_work_near;
+  private varray{uint} grid_bp_work_near_ents;
+  private varray{ptr{rigid_body}} rigid_bodies;
+  private varray{grid_rbinfo} grid_rbinfo_array; // same size as rigid_bodies
+  private varray{tptr{swarm_i}} swarms;
   init();
   private function void init() {
     dynamicsWorld.setForceUpdateAllAabbs(false);
     // dynamicsWorld.getSimulationIslandManager()->setSplitIslands(false);
   }
-  function ~
+  private function ~
   {
     clear();
   }
-  public function size_t objects_size() const {
-    return objects.size();
+  public function size_t rigid_bodies_size() const {
+    return rigid_bodies.size();
   }
   public function void set_gravity(float x, float y, float z)
   {
@@ -122,10 +184,16 @@ dynamics_world()
   }
   public function void clear()
   {
-    for (size_t i, const& rb: objects) {
+    for (size_t i, const& rb: rigid_bodies) {
       dynamicsWorld.removeCollisionObject(address(rb->rigidBody));
     }
-    objects.clear();
+    rigid_bodies.clear();
+    grid_rbinfo_array.clear();
+    swarms.clear();
+  }
+  public function void add_swarm(tptr{swarm_i} const& s)
+  {
+    swarms.push_back(s);
   }
   public function void add_rigid_body(ptr{rigid_body_i} const& rb)
   {
@@ -133,9 +201,13 @@ dynamics_world()
     if (rb1->offset != static_cast{size_t}(-1)) {
       return;
     }
+    rb1->offset = rigid_bodies.size();
+    grid_rbinfo rbi;
+    rbi.radius = rb1->shape->get_radius();
+    rbi.shape = rb1->shape->get();
+    rigid_bodies.push_back(rb1);
+    grid_rbinfo_array.push_back(rbi);
     dynamicsWorld.addRigidBody(address(rb1->rigidBody));
-    rb1->offset = objects.size();
-    objects.push_back(rb1);
   }
   public function void remove_rigid_body(ptr{rigid_body_i} const& rb)
   {
@@ -144,24 +216,119 @@ dynamics_world()
     if (offset == static_cast{size_t}(-1)) {
       return;
     }
-    dynamicsWorld.removeCollisionObject(address(rb1->rigidBody));
-    const sz = objects.size();
+    const sz = rigid_bodies.size();
     if (sz > 1) {
-      swap(objects[offset], objects[sz - 1]);
-      objects[offset]->offset = offset;
+      swap(rigid_bodies[offset], rigid_bodies[sz - 1]);
+      swap(grid_rbinfo_array[offset], grid_rbinfo_array[sz - 1]);
+      rigid_bodies[offset]->offset = offset;
     }
-    objects.erase(sz - 1, sz);
+    rigid_bodies.erase(sz - 1, sz);
+    grid_rbinfo_array.erase(sz - 1, sz);
+    dynamicsWorld.removeCollisionObject(address(rb1->rigidBody));
   }
-  public function {f} void objects_foreach()
+  public function {f} void rigid_bodies_foreach()
   {
-    for (const i, const& obj: objects) {
+    for (const i, const& obj: rigid_bodies) {
       f(i, obj);
     }
   }
   public function void step_simulation(float timestep, int max_sub_steps,
     float fixed_timestep)
   {
+    start_grid_collision();
     dynamicsWorld.stepSimulation(timestep, max_sub_steps, fixed_timestep);
+    finish_grid_collision();
+  }
+  private function void start_grid_collision()
+  {
+    float rad_sum = 0.0f;
+    // copy position from rigid bodies
+    {
+      const rbisli = grid_rbinfo_array.range();
+      for (const i, const& obj: rigid_bodies) {
+	mutable& rbi = rbisli[i];
+	rbi.trans = obj->rigidBody.cgetWorldTransform();
+	rad_sum += rbi.radius;
+      }
+    }
+    const rad_avg = rad_sum / static_cast{float}(rigid_bodies.size());
+    grid_bp.set_mesh_size(rad_avg * 4.0f);
+    // fill grid
+    grid_bp.add_objects(grid_rbinfo_array);
+    /*
+    debug_log("fillings", rad_avg, grid_rbinfo_array.size(),
+      grid_bp.fillings.size());
+    */
+    glm::vec3 pos;
+    float radius;
+    collision_gjk gjk;
+    size_t bp_count = 0;
+    size_t bp1_count = 0;
+    size_t np_count = 0;
+    size_t np1_count = 0;
+    if (grid_bp_work_near.size() < rigid_bodies.size()) {
+      grid_bp_work_near.resize(rigid_bodies.size(), false);
+    }
+    for (const i, const& swp: swarms) {
+      mutable& sw = *swp;
+      const sz = sw.size();
+      // debug_log("sw", i, sz);
+      for (const j: 0 .. sz) {
+	// debug_log("j", j);
+	if (j + 1 < sz) {
+	  // prefetch
+	  /*
+	  if (sw.get(j + 1, pos, radius) != 0U) {
+	    const btpos = btVector3_(pos.x, pos.y, pos.z);
+	    const d = glm::make_vec3(radius, radius, radius);
+	    grid_bp.prefetch(pos - d, pos + d);
+	  }
+	  */
+	}
+	if (sw.get(j, pos, radius) != 0U) {
+	  const btpos = btVector3_(pos.x, pos.y, pos.z);
+	  const d = glm::make_vec3(radius, radius, radius);
+	  threaded function bool near_cb(col_id_type col_id) {
+	    ++bp_count;
+	    if (!grid_bp_work_near[col_id]) {
+	      grid_bp_work_near[col_id] = true;
+	      grid_bp_work_near_ents.push_back(col_id);
+	    }
+	    return false;
+	  }
+	  grid_bp.find{near_cb}(pos - d, pos + d);
+	  bp1_count += grid_bp_work_near_ents.size();
+	  for (const k, const col_id: grid_bp_work_near_ents) {
+	    grid_bp_work_near[col_id] = false;
+	    // sw.on_collide(j, col_id);
+	    const& rbi = grid_rbinfo_array[col_id];
+	    const& rbpos = rbi.trans.cgetOrigin();
+	    const rel = glm::make_vec3(pos.x - rbpos.x(), pos.y - rbpos.y(),
+	      pos.z - rbpos.z());
+	    const reldist2 = glm::dot(rel, rel);
+	    const radsum = rbi.radius + radius;
+	    if (reldist2 >= radsum * radsum) {
+	      continue;
+	    }
+	    ++np_count;
+	    /*
+	    const p = rbi.shape.dynamic_cast{btConvexShape}();
+	    if (!gjk.collide_convex_sphere(*p, rbi.trans, radius, btpos)) {
+	      continue;
+	    }
+	    */
+	    ++np1_count;
+	    sw.on_collide(j, col_id);
+	  }
+	  grid_bp_work_near_ents.clear();
+	}
+      }
+    }
+    // debug_log("bp", bp_count, bp1_count, "np", np_count, np1_count);
+  }
+  private function void finish_grid_collision()
+  {
+    grid_bp.clear();
   }
 }
 
@@ -169,6 +336,7 @@ dynamics_world()
 
 private threaded interface collision_shape_priv_i <collision_shape_i> {
   public function crawptr{btCollisionShape} get() const;
+  public function float get_radius() const;
 }
 
 private threaded struct {t}
@@ -176,9 +344,14 @@ collision_shape_tmpl(expand(m::args{t}))
   <collision_shape_priv_i>
 {
   public t value = t(expand(a: m::arg_names{t}; a));
+  public float radius = 0.0f;
   public function crawptr{btCollisionShape} get() const
   {
     return caddress(value);
+  }
+  public function float get_radius() const
+  {
+    return radius;
   }
 }
 
@@ -187,6 +360,7 @@ triangle_mesh()
 <triangle_mesh_i>
 {
   public btTriangleMesh mesh = btTriangleMesh(true, true);
+  public float radius_square = 0.0f;
   public function void add_triangle(
     float v00, float v01, float v02,
     float v10, float v11, float v12,
@@ -194,6 +368,14 @@ triangle_mesh()
   {
     mesh.addTriangle(btVector3_(v00, v01, v02), btVector3_(v10, v11, v12),
       btVector3_(v20, v21, v22), true);
+    update_radius(v00, v01, v02);
+    update_radius(v10, v11, v12);
+    update_radius(v20, v21, v22);
+  }
+  private function void update_radius(float x, float y, float z)
+  {
+    const v = x * x + y * y + z * z;
+    radius_square = max(radius_square, v);
   }
 }
 
@@ -204,9 +386,14 @@ triangle_mesh_shape(ptr{triangle_mesh} const& mesh0)
   public ptr{triangle_mesh} mesh = mesh0;
   public btBvhTriangleMeshShape value = btBvhTriangleMeshShape(
     address(mesh->mesh), true, true);
+  public float const radius = sqrt(mesh->radius_square);
   public function crawptr{btCollisionShape} get() const
   {
     return caddress(value);
+  }
+  public function float get_radius() const
+  {
+    return radius;
   }
 }
 

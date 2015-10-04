@@ -367,16 +367,26 @@ static void emit_argdecls(emit_context& em, expr_argdecls *ads, bool is_first)
   }
 }
 
+static bool is_intrusive_struct(const expr_struct *est)
+{
+  if (est->block->inherit) {
+    expr_telist *ih = est->block->inherit;
+    const term& t = ih->head->get_sdef()->get_evaluated();
+    return is_intrusive(t);
+  }
+  return false;
+}
+
 static void emit_struct_constr_initializer(emit_context& em,
   const expr_struct *est, const std::list<expr_var *>& flds,
   bool emit_default_init, bool emit_fast_init)
 {
-  if (est->block->inherit) {
+  if (is_intrusive_struct(est)) {
     em.puts(" : count$z(1)");
   }
   std::list<expr_var *>::const_iterator i;
   for (i = flds.begin(); i != flds.end(); ++i) {
-    if (i == flds.begin() && est->block->inherit == 0) {
+    if (i == flds.begin() && !is_intrusive_struct(est)) {
       em.puts(" : ");
     } else {
       em.puts(", ");
@@ -431,7 +441,7 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
   emit_inherit(em, est->block, false);
   em.puts(" {\n");
   em.add_indent(1);
-  if (est->block->inherit != 0) {
+  if (is_intrusive_struct(est)) {
     if (est->block->symtbl.find("~", false)
       == est->block->symtbl.end()) { /* no userdefined destr */
       /* nothrow destructor */

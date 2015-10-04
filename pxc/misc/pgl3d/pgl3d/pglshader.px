@@ -28,7 +28,7 @@ pglshader(shader_config const& sconf0,
   int height0)
 <make_vertices_i>
 {
-  public shader_config glc = sconf0;
+  public shader_config const glc = sconf0;
   public tree_map{string, size_t} drawer_names = get_drawer_names(drawers0);
   public varray{ptr{pgldrawer_i}} drawers = downcast_drawers(drawers0);
   public varray{vertex_buffer_id} drawer_vbids;
@@ -255,10 +255,14 @@ pglshader(shader_config const& sconf0,
   }
   public function void resize_screen(int width, int height)
   {
+    const default_scale = m::ne{is_gles, 0} ? 0.25f : 1.0f;
+    const scale = glc.conf.get("shadowmap_resolution", default_scale);
+    const wh = static_cast{int}(static_cast{float}(max(width, height))
+      * scale);
     int sm_size = 1;
-    for (int i: 8 .. 14) {
+    for (int i: 8 .. 16) {
       sm_size = 1 << i;
-      if (sm_size > width) {
+      if (sm_size > wh) {
 	break;
       }
     }
@@ -268,11 +272,11 @@ pglshader(shader_config const& sconf0,
     for (size_t i: 0 .. 4) {
       mutable& sfbo = *sfbo_array[i];
       if (m::ne{is_gles, 0}) {
-	sfbo.sm_width = sm_size / 4;
-	sfbo.sm_height = sm_size / 4;
+	sfbo.sm_width = sm_size;
+	sfbo.sm_height = sm_size;
       } else {
-	sfbo.sm_width = i == 3 ? sm_size : sm_size / 2;
-	sfbo.sm_height = sfbo.sm_width;
+	sfbo.sm_width = sm_size;
+	sfbo.sm_height = sm_size;
       }
       init_shadowmap_fbo(glc, sfbo,
 	static_cast{GLenum}(static_cast{size_t}(GL_TEXTURE3) + i));
@@ -572,12 +576,13 @@ function void init_shadowmap_fbo(shader_config const& glc,
       const f = glc.enable_sampler2dshadow ? GL_LINEAR : GL_NEAREST;
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, cast_int(f));
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, cast_int(f));
-      // if (m::ne{is_gl3_or_gles3, 0}) {
-      if (glc.enable_sampler2dshadow) {
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE,
-	  cast_int(GL_COMPARE_REF_TO_TEXTURE));
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC,
-	  cast_int(GL_LEQUAL));
+      if (m::ne{is_gl3_or_gles3, 0}) {
+	if (glc.enable_sampler2dshadow) {
+	  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE,
+	    cast_int(GL_COMPARE_REF_TO_TEXTURE));
+	  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC,
+	    cast_int(GL_LEQUAL));
+	}
       }
       if (!glc.is_gles) {
 	sdllog("depth_texture byte");

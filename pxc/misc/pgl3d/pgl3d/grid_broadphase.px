@@ -1,7 +1,9 @@
-public namespace pgl3d::grid_broadphase;
+public namespace pgl3d::grid_broadphase "use-unsafe";
 public import common -;
 public import glm -;
 public import numeric::fpmath -;
+public import pointer::raw -;
+public import meta m;
 
 public metafunction col_id_type uint;
 public metafunction filling_index_type uint;
@@ -28,14 +30,20 @@ grid_broadphase(uint split_log2_0, float mesh_size0)
   public varray{filling_entry} fillings;
   public uint const split_log2 = split_log2_0;
   public uint const split = (1U << split_log2);
-  public float const mesh_size = mesh_size0;
-  public float const mesh_size_inv = 1.0f / mesh_size0;
-  public float const world_size = mesh_size0 * static_cast{float}(split);
+  public float mutable mesh_size = mesh_size0;
+  public float mutable mesh_size_inv = 1.0f / mesh_size0;
+  public float mutable world_size = mesh_size0 * static_cast{float}(split);
   init();
   private function void init()
   {
     pos_to_filling.resize(static_cast{size_t}(split * split * split),
       filling_none());
+  }
+  public function void set_mesh_size(float mesh_size0)
+  {
+    mesh_size = mesh_size0;
+    mesh_size_inv = 1.0f / mesh_size0;
+    world_size = mesh_size0 * static_cast{float}(split);
   }
   public function void clear()
   {
@@ -167,11 +175,30 @@ grid_broadphase_find(grid_broadphase const& bp, vec3 const& aabb_min,
       if (func(fe.id)) {
 	return true;
       }
+      fi = fe.next_filling;
     }
     return false;
   }
   bp.quantize_foreach{cb}(aabb_min, aabb_max);
 }
+
+/*
+public threaded function void
+grid_broadphase_prefetch(grid_broadphase const& bp, vec3 const& aabb_min,
+  vec3 const& aabb_max)
+{
+  threaded function bool cb(geom_index_type x, geom_index_type y,
+    geom_index_type z)
+  {
+    const gidx = bp.get_geom_index(x, y, z);
+    const sli = bp.pos_to_filling.crange();
+    const ptr = sli.to_crawptr().to_ccharptr() + gidx;
+    extern "emit" m::to_string{"_mm_prefetch((const char *)((size_t)ptr$/64*64), _MM_HINT_T0)"};
+    return false;
+  }
+  bp.quantize_foreach{cb}(aabb_min, aabb_max);
+}
+*/
 
 public threaded function {t} void
 grid_broadphase_get_collision_pairs(grid_broadphase const& bp,
