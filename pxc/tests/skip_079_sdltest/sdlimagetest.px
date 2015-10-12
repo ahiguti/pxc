@@ -1,28 +1,44 @@
-public namespace sdlimagetest;
+public namespace sdlimagetest "use-unsafe";
 import common -;
-import SDL2 -;
-import SDL2::Image -;
+import SDL2::api_base -;
+import SDL2::api_types -;
+import SDL2::api_functions -;
+import SDL2::api_wrappers -;
+import SDL2::misc -;
+import pointer::raw -;
+import pointer::raw_unsafe -;
+import mainloop -;
 
+struct t1_mainloop() <mainloop_i>
 {
-  const ini = SDL_Init(SDL_INIT_VIDEO);
-  const wnd = SDL_CreateWindow("sdltest", 0, 0, 500, 500,
-    SDL_WINDOW_RESIZABLE).some;
-  const rnd = SDL_CreateRenderer(wnd, -1, 0).some;
-  const sur = IMG_Load("img-c256.jpg").some;
-  // const sur = SDL_LoadBMP("test.bmp").some;
-  const tx = SDL_CreateTextureFromSurface(rnd, sur).some;
-  SDL2::SDL_Rect src;
-  src.x = 0;
-  src.y = 0;
-  src.w = 256;
-  src.h = 256;
-  mutable dst = src;
-  SDL_RenderCopy(rnd, tx, src, dst);
+  SDL_Rect src;
+  SDL_Rect dst;
   bool done = false;
   int x = 0;
-  while (!done) {
+  rawptr{SDL_Renderer} rnd;
+  rawptr{SDL_Texture} tx;
+  init();
+  function void init()
+  {
+    const ini = SDL_Init(SDL_INIT_VIDEO);
+    const wnd = SDL_CreateWindow("sdltest", 0, 0, 500, 500,
+      SDL_WINDOW_RESIZABLE);
+    rnd = SDL_CreateRenderer(wnd, -1, 0);
+    const sur = IMG_Load("img-c256.jpg");
+    debug_log("ptr=", sur.to_size_t());
+    // const sur = SDL_LoadBMP("test.bmp").some;
+    tx = SDL_CreateTextureFromSurface(rnd, sur);
+    src.x = 0;
+    src.y = 0;
+    src.w = 256;
+    src.h = 256;
+    dst = src;
+    SDL_RenderCopy(rnd, tx, address(src), address(dst));
+  }
+  function bool step()
+  {
     SDL_Event ev;
-    while (SDL_PollEvent(ev)) {
+    while (SDL_PollEvent(address(ev)) != 0) {
       if (ev.type == SDL_QUIT) {
 	done = true;
 	break;
@@ -31,9 +47,13 @@ import SDL2::Image -;
     SDL_RenderClear(rnd);
     x = (x + 1) & 127;
     dst.x = (x >= 64) ? 128 - x : x;
-    SDL_RenderCopy(rnd, tx, src, dst);
+    SDL_RenderCopy(rnd, tx, address(src), address(dst));
     SDL_RenderPresent(rnd);
-    SDL_Delay(5);
+    // SDL_Delay(5);
+    return done;
   }
 }
 
+{
+  set_mainloop(make_ptr{t1_mainloop}());
+}

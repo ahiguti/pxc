@@ -37,8 +37,9 @@ metafunction debug_matrix 0;
 
 import common -;
 import pointer::raw -;
+import pointer::raw_unsafe -;
 import numeric::fpmath -;
-// import numeric::quaternion -;
+import numeric::quaternion -;
 import GL::compat -;
 import SDL2::api_base -;
 import SDL2::api_types -;
@@ -50,6 +51,7 @@ import io::time -;
 import io::environ -;
 import meta m;
 private import container::array +; /* extends varray */
+import mainloop -;
 
 float const M_PI = 3.14159265;
 
@@ -477,9 +479,9 @@ function void update_mvp()
 function uint compile_shader(cstrref const& src, GLenum type)
 {
   mutable res = glCreateShader(type);
-  mutable source = make_farray{ccharptr}(src.crawptr().char());
+  mutable source = make_farray{ccharptr}(src.to_crawptr().to_ccharptr());
   const length = make_farray{int}(static_cast{int}(src.size()));
-  glShaderSource(res, 1, source.rawptr(), length.crawptr());
+  glShaderSource(res, 1, source.to_rawptr(), length.to_crawptr());
   glCompileShader(res);
   int success;
   glGetShaderiv(res, GL_COMPILE_STATUS, address(success));
@@ -490,7 +492,7 @@ function uint compile_shader(cstrref const& src, GLenum type)
     buf.resize(static_cast{size_t}(sz), 0);
     GLsizei len;
     glGetShaderInfoLog(res, static_cast{GLsizei}(sz), address(len),
-      buf.rawptr().char());
+      buf.to_rawptr().to_charptr());
     debug_log("compile_shader failed:",
       string_join{"\t"}(static_cast{int}(type), success, buf));
     glDeleteShader(res);
@@ -532,6 +534,7 @@ function uint create_program(cstrref const& vertex_shader,
 function void set_program()
 {
   const vert = m::concat{
+    "precision highp float;\n",
     "uniform mat4 model_view_projection;\n",
     "uniform mat3 normal_matrix;\n",
     "uniform vec4 lightpos;\n",
@@ -550,6 +553,7 @@ function void set_program()
     "  brightness = max(dot(light, nor), 0.0) + 0.4;\n",
     "}\n"};
   const frag = m::concat{
+    "precision highp float;\n",
     "uniform sampler2D sampler;\n",
     "uniform vec4 mate_color;\n",
     "varying vec2 texcoord;\n",
@@ -567,14 +571,19 @@ function void set_program()
     glUseProgram(prog);
     /* mvp */
     loc_mvp = glGetUniformLocation(prog,
-      "model_view_projection".crawptr().char());
+      "model_view_projection".to_crawptr().to_ccharptr());
     loc_normal_matrix = glGetUniformLocation(prog,
-      "normal_matrix".crawptr().char());
-    loc_lightpos = glGetUniformLocation(prog, "lightpos".crawptr().char());
-    loc_mate_color = glGetUniformLocation(prog, "mate_color".crawptr().char());
-    loc_sampler = glGetUniformLocation(prog, "sampler".crawptr().char());
-    loc_vertex = glGetAttribLocation(prog, "vertex".crawptr().char());
-    loc_normal = glGetAttribLocation(prog, "normal".crawptr().char());
+      "normal_matrix".to_crawptr().to_ccharptr());
+    loc_lightpos = glGetUniformLocation(prog,
+      "lightpos".to_crawptr().to_ccharptr());
+    loc_mate_color = glGetUniformLocation(prog,
+      "mate_color".to_crawptr().to_ccharptr());
+    loc_sampler = glGetUniformLocation(prog,
+      "sampler".to_crawptr().to_ccharptr());
+    loc_vertex = glGetAttribLocation(prog,
+      "vertex".to_crawptr().to_ccharptr());
+    loc_normal = glGetAttribLocation(prog,
+      "normal".to_crawptr().to_ccharptr());
     println("loc_vertex: ", loc_vertex);
     println("loc_normal: ", loc_normal);
     println("loc_lightpos: ", loc_lightpos);
@@ -596,9 +605,10 @@ function void check_error()
 function void prepare_texture()
 {
   sdllog("prepare_texture");
-  const sur = IMG_Load("img-c256.jpg").some;
+  const sur = IMG_Load("img-c256.jpg");
   // const sur = IMG_Load("img-c1024.jpg").some;
-  const mode = sur.BytesPerPixel() == 4 ? GL_RGBA : GL_RGB;
+  const fmt = sur->format;
+  const mode = fmt->BytesPerPixel == 4 ? GL_RGBA : GL_RGB;
   sdllog("prepare_texture 1");
   glActiveTexture(GL_TEXTURE0);
   sdllog("prepare_texture 2");
@@ -606,9 +616,11 @@ function void prepare_texture()
   sdllog("prepare_texture 3");
   glBindTexture(GL_TEXTURE_2D, texture_id);
   sdllog(string_join{""}("texture_id", texture_id));
+  const sur_buf = sur->pixels.reinterpret_cast{uchar}()
+    .to_slice(static_cast{size_t}(sur->pitch * sur->h));
   glTexImage2D(GL_TEXTURE_2D, 0, static_cast{int}(mode),
-    static_cast{int}(sur.W()), static_cast{int}(sur.H()),
-    0, mode, GL_UNSIGNED_BYTE, sur.Pixels().crawptr().void());
+    static_cast{int}(sur->w), static_cast{int}(sur->h),
+    0, mode, GL_UNSIGNED_BYTE, sur_buf.to_crawptr().to_cvoidptr());
   check_error();
 
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
@@ -616,7 +628,7 @@ function void prepare_texture()
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
     static_cast{int}(GL_NEAREST));
 
-  sdllog(string_join{""}("wh", sur.W(), sur.H()));
+  sdllog(string_join{""}("wh", sur->w, sur->h));
   sdllog(string_join{""}("loc_sampler", loc_sampler));
   glUniform1i(loc_sampler, 0);
   sdllog(string_join{""}("prepare_texture done"));
@@ -637,43 +649,82 @@ function void init_gl()
 }
 
 {
-  sdllog("PXC-SDL2Gears main");
-  const ini = SDL_Init(SDL_INIT_VIDEO);
-  int init_w = 300;
-  int init_h = 300;
-  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-  mutable fl = SDL_WINDOW_OPENGL;
-  if (argv.size() > 1 && argv[1] == "--fullscreen") {
-    fl |= SDL_WINDOW_FULLSCREEN;
-  } else {
-    fl |= SDL_WINDOW_RESIZABLE;
+}
+
+struct touch_status {
+  public float x0; /* finger 0 */
+  public float y0; /* finger 0 */
+  public float x1; /* finger 1 */
+  public float y1; /* finger 1 */
+  public bool f1down;
+  public function void update(SDL_FingerID fng, float x, float y) {
+    if (fng == 0) {
+      x0 = x;
+      y0 = y;
+    } else if (fng == 1) {
+      x1 = x;
+      y1 = y;
+    }
   }
-  const wnd = SDL_CreateWindow("PXC-SDL2Gears", 0, 0, init_w, init_h, fl).some;
-  SDL_GetWindowSize(wnd, init_w, init_h);
-  const glctx = SDL_GL_CreateContext(wnd);
-  SDL_GL_SetSwapInterval(0);
-  // SDL_GL_SetSwapInterval(1);
+  public function float distance() const {
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    return sqrt(dx * dx + dy * dy);
+  }
+  public function float angle() const {
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    return atan2(dy, dx);
+  }
+}
 
-  sdllog("PXC-SDL2Gears init_gl");
-  init_gl();
-
-  sdllog("PXC-SDL2Gears reshape");
-  reshape(init_w, init_h);
-
-  uint t0 = 0;
-  uint t1 = 0;
-  uint tprev = SDL_GetTicks();
-  uint frames = 0;
-  mutable view_angle = quaternion{float}(1.0, 0.0, 0.0, 0.0);
-  mutable float view_object_size = 0.08;
-
+struct gears_mainloop() <mainloop_i>
+{
+  const ini = SDL_Init(SDL_INIT_VIDEO);
+  rawptr{SDL_Window} wnd;
   metafunction ticks_t farray{uint, 5};
   ticks_t ticks;
   ticks_t ticks_sum;
-  for (const i, mutable& e : ticks) {
-    e = tprev;
+  uint tprev = SDL_GetTicks();
+  bool done = false;
+  bool paused = false;
+  mutable view_angle = quaternion{float}(1.0, 0.0, 0.0, 0.0);
+  mutable float view_object_size = 0.08;
+  uint frames = 0;
+  uint t0 = 0;
+  uint t1 = 0;
+  touch_status touch;
+  init();
+  function void init()
+  {
+    sdllog("PXC-SDL2Gears main");
+    int init_w = 300;
+    int init_h = 300;
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+    mutable fl = SDL_WINDOW_OPENGL;
+    if (argv.size() > 1 && argv[1] == "--fullscreen") {
+      fl |= SDL_WINDOW_FULLSCREEN;
+    } else {
+      fl |= SDL_WINDOW_RESIZABLE;
+    }
+    wnd = SDL_CreateWindow("PXC-SDL2Gears", 0, 0, init_w, init_h, fl);
+    SDL_GetWindowSize(wnd, address(init_w), address(init_h));
+    const glctx = SDL_GL_CreateContext(wnd);
+    SDL_GL_SetSwapInterval(0);
+    // SDL_GL_SetSwapInterval(1);
+
+    sdllog("PXC-SDL2Gears init_gl");
+    init_gl();
+
+    sdllog("PXC-SDL2Gears reshape");
+    reshape(init_w, init_h);
+
+
+    for (const i, mutable& e : ticks) {
+      e = tprev;
+    }
   }
   function void save_ticks(size_t idx) {
     const prev_tick = ticks[idx == 0 ? ticks.size() - 1 : idx - 1];
@@ -681,9 +732,6 @@ function void init_gl()
     cur_tick = SDL_GetTicks();
     ticks_sum[idx] += cur_tick - prev_tick;
   }
-
-  bool done = false;
-  bool paused = false;
   function void view_angle_rotate_rad(float x, float y, float z,
     float angle_rad)
   {
@@ -698,37 +746,11 @@ function void init_gl()
     view_object_size *= v;
     sdllog(string_join{" "}("object_size", view_object_size));
   }
-  struct touch_status {
-    public float x0; /* finger 0 */
-    public float y0; /* finger 0 */
-    public float x1; /* finger 1 */
-    public float y1; /* finger 1 */
-    public bool f1down;
-    public function void update(SDL_FingerID fng, float x, float y) {
-      if (fng == 0) {
-	x0 = x;
-	y0 = y;
-      } else if (fng == 1) {
-	x1 = x;
-	y1 = y;
-      }
-    }
-    public function float distance() const {
-      const dx = x1 - x0;
-      const dy = y1 - y0;
-      return sqrt(dx * dx + dy * dy);
-    }
-    public function float angle() const {
-      const dx = x1 - x0;
-      const dy = y1 - y0;
-      return atan2(dy, dx);
-    }
-  }
-  touch_status touch;
-  while (!done) {
+  function bool step()
+  {
     save_ticks(0);
     SDL_Event ev;
-    while (SDL_PollEvent(ev)) {
+    while (SDL_PollEvent(address(ev)) != 0) {
       const etype = ev.type;
       if (etype == SDL_WINDOWEVENT) {
 	if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
@@ -785,7 +807,7 @@ function void init_gl()
 	paused = false;
 	int w;
 	int h;
-	SDL_GetWindowSize(wnd, w, h);
+	SDL_GetWindowSize(wnd, address(w), address(h));
 	reshape(w, h);
       } else if (etype == SDL_QUIT) {
 	done = true;
@@ -794,7 +816,7 @@ function void init_gl()
     }
     if (paused) {
       SDL_Delay(100);
-      continue;
+      return done;
     }
     save_ticks(1);
     {
@@ -826,10 +848,18 @@ function void init_gl()
 	if (t - t1 >= 10) {
 	  t1 += 10;
 	}
-	SDL_KeyboardState const ks;
-	if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) { done = true; }
-	if (ks.Key(SDL_SCANCODE_UP) != 0) {
-	  if (ks.Key(SDL_SCANCODE_LCTRL) != 0) {
+	int numkeys;
+	const ksp = SDL_GetKeyboardState(address(numkeys));
+	const ks = ksp.to_cslice(static_cast{size_t}(numkeys));
+	public function uint get_key(SDL_Scancode k)
+	{
+	  const i = static_cast{size_t}(k);
+	  return i < ks.size() ? ks[i] : 0U;
+	}
+	// SDL_KeyboardState const ks;
+	if (get_key(SDL_SCANCODE_ESCAPE) != 0) { done = true; }
+	if (get_key(SDL_SCANCODE_UP) != 0) {
+	  if (get_key(SDL_SCANCODE_LCTRL) != 0) {
 	    set_distance(perspective_distance + 0.01);
 	    SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("distance",
 	      perspective_distance));
@@ -837,8 +867,8 @@ function void init_gl()
 	    view_angle_rotate(1.0, 0.0, 0.0, 2.0);
 	  }
 	}
-	if (ks.Key(SDL_SCANCODE_DOWN) != 0) {
-	  if (ks.Key(SDL_SCANCODE_LCTRL) != 0) {
+	if (get_key(SDL_SCANCODE_DOWN) != 0) {
+	  if (get_key(SDL_SCANCODE_LCTRL) != 0) {
 	    set_distance(perspective_distance - 0.01);
 	    SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("distance",
 	      perspective_distance));
@@ -846,19 +876,24 @@ function void init_gl()
 	    view_angle_rotate(1.0, 0.0, 0.0, -2.0);
 	  }
 	}
-	if (ks.Key(SDL_SCANCODE_LEFT) != 0) {
+	if (get_key(SDL_SCANCODE_LEFT) != 0) {
 	  view_angle_rotate(0.0, 1.0, 0.0, 2.0); }
-	if (ks.Key(SDL_SCANCODE_RIGHT) != 0) {
+	if (get_key(SDL_SCANCODE_RIGHT) != 0) {
 	  view_angle_rotate(0.0, 1.0, 0.0, -2.0); }
-	if (ks.Key(SDL_SCANCODE_SPACE) != 0) {
+	if (get_key(SDL_SCANCODE_SPACE) != 0) {
 	  view_object_size_multiply(1.01); }
-	if (ks.Key(SDL_SCANCODE_LSHIFT) != 0) {
+	if (get_key(SDL_SCANCODE_LSHIFT) != 0) {
 	  view_object_size_multiply(0.99); }
       }
     }
     save_ticks(4);
+    return done;
   }
-  deinit_gear_vbos();
-  io::system._exit(0);
+  // deinit_gear_vbos();
+  // io::system._exit(0);
 }
 
+{
+  set_check_error_enabled(1); // opengl error check
+  set_mainloop(make_ptr{gears_mainloop}());
+}

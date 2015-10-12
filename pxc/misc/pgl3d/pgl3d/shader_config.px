@@ -6,9 +6,10 @@ public import pgl3d::pglconfig -;
 // public import glresource -;
 
 public valuetype struct
-shader_config(bool is_gles0, int major0, int minor0, bool msaa0,
-  pgl3d_config const& conf)
+shader_config(bool is_gles0, int major0, int minor0, int msaa0,
+  pgl3d_config const& conf0)
 {
+  public pgl3d_config const conf = conf0;
   public bool const is_gles = is_gles0;
   public int const major = major0;
   public int const minor = minor0;
@@ -17,10 +18,10 @@ shader_config(bool is_gles0, int major0, int minor0, bool msaa0,
   public bool enable_shadowmapping_multisample = conf.get("shadow_ms", 0) != 0;
   public bool enable_normalmapping = conf.get("normalmapping", 1) != 0;
   public bool enable_zprepass = !is_gles;
-  public bool enable_msaa = msaa0;
+  public int enable_msaa = msaa0;
   public bool enable_instanced = major >= 3;
   public bool enable_uniform_instancing = enable_instanced &&
-    (major < 3 || is_gles || (!is_gles && minor < 3));
+    (major < 3 /* || is_gles */|| (!is_gles && minor < 3));
   public bool enable_depth_texture = (major >= 3);
   public bool enable_sampler2dshadow = false; // enable_depth_texture && !is_gles;
   public bool light_fixed = conf.get("light_fixed", 1) != 0;

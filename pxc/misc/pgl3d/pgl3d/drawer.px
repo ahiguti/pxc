@@ -20,7 +20,6 @@ public import pgl3d::intern_pool -;
 public import pgl3d::shader_config -;
 public import pgl3d::aggregated_ibuffer -;
 public import pgl3d::drawer_base -;
-private import io::time -;
 
 public enum draw_step {
   draw_step_shadowmapping = 1,
@@ -386,10 +385,7 @@ public struct drawer_lineparticle(shader_config const& glc)
     aggregated_ibuffer const& aibuf, vertex_buffer_id bo_id,
     shader_config const& glc, projection_info const& cam_df)
   {
-    if (step == draw_step_blend) {
-      // glDisable(GL_CULL_FACE);
-      glDepthFunc(GL_LEQUAL);
-      glDepthMask(1);
+    if (step == draw_step_solid) {
       mutable cam_mat = glm::mat4();
       cam_mat = cam_df.camera.to_mat4();
       const vp = cam_df.projection * (cam_mat.inverse());
@@ -440,6 +436,7 @@ public struct drawer_particle(shader_config const& glc)
     shader_config const& glc, projection_info const& cam_df)
   {
     if (step == draw_step_blend) {
+      glEnable(GL_DEPTH_TEST);
       glBlendFunc(GL_ONE, GL_ONE);
       mutable& sdr = *sdr_sp;
       glUseProgram(sdr.program);
@@ -484,6 +481,7 @@ public struct drawer_particle_bb(shader_config const& glc)
     shader_config const& glc, projection_info const& cam_df)
   {
     if (step == draw_step_blend) {
+      glEnable(GL_DEPTH_TEST);
       glBlendFunc(GL_ONE, GL_ONE);
       mutable& sdr = *sdr_pb;
       glUseProgram(sdr.program);
@@ -567,6 +565,7 @@ public struct drawer_font2(shader_config const& glc)
     shader_config const& glc, projection_info const& cam_df)
   {
     if (step == draw_step_blend) {
+      glDisable(GL_DEPTH_TEST);
       glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
       const screen_size_px = glm::make_vec2(
 	static_cast{float}(cam_df.screen_width),
@@ -620,6 +619,7 @@ public struct drawer_rect2d(shader_config const& glc)
     shader_config const& glc, projection_info const& cam_df)
   {
     if (step == draw_step_blend) {
+      glDisable(GL_DEPTH_TEST);
       glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
       mutable& sdr = *sdr_re;
       glUseProgram(sdr.program);
@@ -1106,7 +1106,7 @@ function string triangles_shader_frag(shader_config const& g, int opt)
   f += "vec3 camera_dir = normalize(rel_camera_pos);\n";
   f += "float is_front = float(dot(camera_dir, nor) > 0.0);\n";
   f += "float frag_distance = length(rel_camera_pos);\n";
-  f += "float distbr = clamp(10.0 / frag_distance , 0.0, 1.0);\n";
+  f += "float distbr = clamp(30.0 / frag_distance , 0.0, 1.0);\n";
   if (g.enable_normalmapping) {
     f += "const float tile_size = 32.0;\n";
     f += "const float tilemap_size = 128.0;\n";
@@ -1653,6 +1653,7 @@ init_font(texture_data mutable& fnt)
 {
   check_byteorder();
   {
+    sdllog("loading fonts");
     /* font */
     mutable fnames = make_farray{string}(
       "mplus-1m-bold.ttf",
@@ -1673,6 +1674,7 @@ init_font(texture_data mutable& fnt)
       sdllog("failed to load font");
       throw runtime_error_template{"load font"}("1");
     }
+    sdllog("loading fonts: loaded");
     SDL_Color mutable fg;
     fg.r = 255;
     fg.g = 255;
@@ -1762,9 +1764,15 @@ init_main_texture(texture_data mutable& tex_dpat,
 {
   check_byteorder();
   {
+    sdllog("loading images");
     // const sur = IMG_Load("img-c1024.jpg").some;
     SDL_Surface_Scoped sur0;
     sur0.reset(IMG_Load("dpat.png"));
+    if (sur0.get() == rawptr{SDL_Surface}()) {
+      sdllog("failed to load", "dpat.png");
+      throw runtime_error_template{"img_load"}("dpat.png");
+    }
+    sdllog("loading images: loaded");
     const& sur0ref = *sur0.get().to_slice(1);
     const fmtp = sur0ref.format;
     const& fmt = *sur0ref.format.to_slice(1);

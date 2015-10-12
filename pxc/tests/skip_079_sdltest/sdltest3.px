@@ -7,27 +7,19 @@ import SDL2::api_types -;
 import SDL2::api_functions -;
 import SDL2::api_wrappers -;
 import SDL2::misc -;
+import mainloop -;
 
+struct mainloop_obj <mainloop_i>
 {
-  SDL_Init(SDL_INIT_VIDEO);
-  scoped_nullable{SDL_DestroyWindow} wnd;
-  wnd.reset(SDL_CreateWindow("sdltest", 0, 0, 640, 480, SDL_WINDOW_RESIZABLE));
-  scoped_nullable{SDL_DestroyRenderer} rnd;
-  rnd.reset(SDL_CreateRenderer(wnd, -1, 0));
-  scoped_nullable{SDL_FreeSurface} sur;
-  sur.reset(SDL_CreateRGBSurface(0, 64, 64, 32, 0, 0, 0, 0));
-  bool done = false;
-  int x = 0;
-  SDL_Rect srect;
-  srect.x = 0;
-  srect.y = 0;
-  srect.w = 64;
-  srect.h = 64;
-  SDL_FillRect(sur, caddress(srect), SDL_MapRGB(sur.get()->format, 255, 0, 0));
-  scoped_nullable{SDL_DestroyTexture} tx;
-  tx.reset(SDL_CreateTextureFromSurface(rnd, sur));
-  mutable drect = srect;
-  while (!done) {
+  public scoped_nullable{SDL_DestroyRenderer} rnd;
+  public scoped_nullable{SDL_DestroyTexture} tx;
+  public SDL_Rect srect;
+  public SDL_Rect drect;
+  public bool done;
+  public int x;
+  public function bool step()
+  {
+    bool done = false;
     SDL_Event ev;
     while (SDL_PollEvent(address(ev)) != 0) {
       if (ev.type == SDL_QUIT) {
@@ -40,7 +32,29 @@ import SDL2::misc -;
     drect.x = (x >= 64) ? 128 - x : x;
     SDL_RenderCopy(rnd, tx, caddress(srect), caddress(drect));
     SDL_RenderPresent(rnd);
-    SDL_Delay(5);
+    // SDL_Delay(5);
+    return done;
   }
+}
+
+{
+  const m = make_ptr{mainloop_obj}();
+  SDL_Init(SDL_INIT_VIDEO);
+  scoped_nullable{SDL_DestroyWindow} wnd;
+  wnd.reset(SDL_CreateWindow("sdltest", 0, 0, 640, 480, SDL_WINDOW_RESIZABLE));
+  m->rnd.reset(SDL_CreateRenderer(wnd, -1, 0));
+  scoped_nullable{SDL_FreeSurface} sur;
+  sur.reset(SDL_CreateRGBSurface(0, 64, 64, 32, 0, 0, 0, 0));
+  bool done = false;
+  m->x = 0;
+  m->srect.x = 0;
+  m->srect.y = 0;
+  m->srect.w = 64;
+  m->srect.h = 64;
+  SDL_FillRect(sur, caddress(m->srect), SDL_MapRGB(sur.get()->format,
+    255, 0, 0));
+  m->tx.reset(SDL_CreateTextureFromSurface(m->rnd, sur));
+  m->drect = m->srect;
+  set_mainloop(m);
 }
 

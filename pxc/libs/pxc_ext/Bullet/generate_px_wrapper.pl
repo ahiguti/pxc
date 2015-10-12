@@ -12,6 +12,12 @@ my $px_filename = "api.px";
 my $filter_path = '/usr/include/bullet/';
 my $filter_name = '(^bt|^Bvh|^Quantized|^PHY_|^IndexedMeshArray|^size_type)';
 
+my %types_mt = (
+  'btVector3' => 'tsvaluetype',
+  'btMatrix3x3' => 'tsvaluetype',
+  'btTransform' => 'tsvaluetype',
+);
+
 my %fundamental_typemap = (
   'int' => 'int',
   'long int' => 'long',
@@ -514,7 +520,8 @@ sub dump_struct
   if ($cn =~ '\.') {
     $out_types .= qq[/* skip $obj->{struct_name} : unnamed */\n];
   } else {
-    $out_types .= qq[public threaded struct extern];
+    my $mt = $types_mt{$obj->{struct_name}} || 'threaded';
+    $out_types .= qq[public $mt struct extern];
     $out_types .= qq[ "$cn"$extfamily $obj->{struct_name}$constr_str {\n];
     $out_types .= $bodystr;
     $out_types .= "}\n";

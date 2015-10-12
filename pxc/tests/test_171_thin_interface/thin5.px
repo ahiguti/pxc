@@ -1,0 +1,32 @@
+public namespace thin5 "use-unsafe";
+import common -;
+
+extern "types" inline
+
+namespace pxcrt {
+template <typename T> size_t c_sizeof(T const& x)
+{
+  return sizeof(T);
+}
+};
+;
+
+public interface foo_i foo {
+  public function void m1();
+}
+
+public struct foo(int v0) <foo_i> {
+  public function void m1() { println("m1", v); }
+  public function void m2() { println("m2", v); }
+  private int v = v0;
+}
+
+{
+  ptr{foo_i} p = make_ptr{foo}(123);
+  p->m1();
+  const x = c_sizeof(*p) == c_sizeof(3);
+  println(x); // expected to be true
+}
+
+public function extern "pxcrt::c_sizeof" {t} size_t c_sizeof(t const& x);
+

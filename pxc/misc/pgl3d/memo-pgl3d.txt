@@ -1,4 +1,23 @@
 
+- grid: box shape collider
+        voxel collider? multi-aabb collider?
+	gjkよりは速い方法を何か探せ。
+
+- grid_bp_tasks 各スレッドでgridを埋める処理をやらずにgridを埋めてからfork
+  したほうが処理に無駄がなくなる。
+
+- main描画でglDepthMask(0)にするとlineparticleの重ね合わせがおかしく
+  なる。alpha加算であれば正しくなるが、glDepthMask(1)とどっちがいいか。
+
+- emscripten IDBFS
+  test_idbfs_sync.c  
+
+- lineseg_point_distance2
+
+- grid_broadphase別スレ化(done)
+
+- collision_shapeと球を衝突判定する方法調べよ(done)
+
 - particle復活
 - dynamics使わないオブジェクトの動作
 - 
@@ -6,6 +25,8 @@
 
 - kinematic_object_i
   GameObject的なもの?
+
+- shadowmap無効の時もspecular付ける
 
 - emccバックエンド: SDL2_ttfがportsに来たらもう一度try
 
@@ -486,4 +507,168 @@ copying instancingは止める。vertexattribdivisorかuniform instancingのど�
 model_matrixをuniformにするかvertexattribにしてEnableVertexAttribArrayするか
 
 
+
+---------------------------------------------------------------------------
+kinematic_object_i
+
+- dynamic objectかどうか。dynamics_worldに登録される。
+- 子オブジェクトをもつこともある
+- フレームごとに自分自身の位置を移動したりする。
+- 衝突したときのコールバック。
+- その他全体に関わる処理(シーン切り替えなど)も実行できるようにしておく。 
+- kinematic_object_factoryにmake_scene()で再帰的にkinematic_object一式を
+  作成してdynamics_worldに登録される。
+- prepare_instance_dataでインスタンスデータを詰めこむ。
+
+interface scene_factory_i {
+  function ptr{scene_object_i} make_scene(application_i mutable& app);
+}
+scene_objectはdynamics_worldを保持する。make_sceneはscene_objectの
+コンストラクタを呼び、その中ではkinematic_objectをたくさん作って
+dynamics_worldに登録する。
+
+interface scene_object_i {
+  function void on_motion_step(application_i mutable& app);
+}
+on_motion_stepは各kinematic_objectのupdate_stepを呼んでから、
+dynamics_worldのmotion_stepを実行する。衝突のコールバック
+on_collideが呼ばれる？
+
+interface kinematic_object_i {
+  function void update_step(scene_object_i mutable& sco);
+  function void on_collide(scene_object_i mutable& sco,
+    kinematic_object_i mutable& other);
+}
+
+種類毎に分けた密な配列にデータを詰め込めば効率よいはず。
+全ての種類について密配列化するか、
+極端にインスタンスが多い物だけにするか、
+kinematic(dynamicではない)なものだけにするか。
+
+
+---------------------------------------------------------------------------
+collision_shapeと球を衝突判定する方法調べよ
+
+CollisionShapeのペアに対し、そのペアを衝突判定するにふさわしいアルゴリズム
+を作るのが、
+btDefaultCollisionConfiguration::getCollisionAlgorithmCreateFunc(i,j) これ。
+たとえばConvexHullとSphereであればbtConvexConvexAlgorithmで、これは中で
+btGjkPairDetectorを毎回作って近い点を探している。
+btGjkPairDetector::getClosestPoints() これ。
+The ConvexHullDistance demo demonstrates direct use of btGjkPairDetector.
+とのこと。
+
+ConcaveConvexの組についてはbtConvexConcaveCollisionAlgorithm これは単独で
+取り出すのは難しい？
+processCollision()
+concaveの各triangleに対して相手と衝突判定してるだけ？全量ではない。
+
+
+---------------------------------------------------------------------------
+
+rigid_bodyにcallbackオブジェクトを付ける。callbackオブジェクトはrigid_body
+インスタンス毎のデータを持たないのであれば共有してもいい。
+
+dynamics_worldにgrid_broadphase追加。衝突判定のみのオブジェクトの衝突判定
+に使う。
+
+swarm_iをdynamics_worldに追加できるようにする。
+- swarm_i自体は多数のオブジェクトを配列として保持する。
+- swarm_iはmultithreadedにする。dynamicsとは別スレで衝突判定するため。
+- 各オブジェクトのデータはmodel matrixの大きさより多分小さい
+
+各swarm_iはフレーム毎にstep()が呼ばれる。位置にデルタを加算したり、向きを
+変えたりする。
+
+grid_broadphaseには毎フレーム、rigidbodyの全インスタンスの情報をgridに
+入れ、swarm_iの全インスタンスに対して衝突判定する。衝突していればswarm_i
+のコールバックを呼ぶ。
+
+grid_broadphaseの衝突判定narrow phaseは、とりあえずGJKだけ試してみる。
+
+シーンを初期化すると、dynamic_object_iとswarm_iが複数dynamics_worldに
+追加される。dynamic_object_iがdynamics_worldに追加されると、含まれる
+collision_shapeとtransformの情報を見て複数かもしれないrigid_bodyが作ら
+れる。dynamic_objectがdynamics_worldから削除されるときにはrigid_body
+が削除される。dynamics_worldはdynamics_objectの強参照を保持する。
+swarm_iについてもdynamic_objectとだいたい同じ。
+
+threaded interface dynamic_object_i
+{
+  public ptr{rigid_body_i} get_rigid_body() const;
+  public void on_collide();
+  public void on_step(float speed);
+}
+
+multithreaded interface swarm_i
+{
+  public size_t size() const;
+  public uint_t get(size_t idx, vec3 mutable& pos_r, float mutable& radius_r)
+    const; // マスクを返す
+  public void on_collide(size_t idx, dynamic_object_i const& o);
+  // 消滅させるかどうか判定できるデータを各要素に持たせる必要がある。
+}
+
+swarmの衝突判定
+1 dynamic_object一式をgridに登録。このときbtCollisionShapeの生ポインタも
+  gridに保持しておく。これはnarrow phaseをするために必要。
+2 swarmの各オブジェクトをgridで判定、相手のdynamic_objectのshapeに
+  応じてnarrow phase判定。
+
+collision_shapeにradiusを追加。grid_broadphaseに追加するのに必要
+(あるいはgetAabbを使うほうがよい？)
+
+---------------------------------------------------------------------------
+bulletのNP並列化切り戻し
+
+NP並列化関連
+CMakeLists.txt
+btBroadphaseProxy.h
+btCollisionAlgorithm.h
+btDbvtBroadphase.cpp
+btDispatcher.h
+btCollisionCreateFunc.h
+btCollisionDispatcher.cpp
+btCollisionDispatcher.h
+btCompoundCollisionAlgorithm.cpp
+btCompoundCompoundCollisionAlgorithm.cpp
+btConvexConcaveCollisionAlgorithm.cpp
+btConvexConcaveCollisionAlgorithm.h
+btConvexConvexAlgorithm.cpp
+btConvexConvexAlgorithm.h
+btDefaultCollisionConfiguration.cpp
+btDefaultCollisionConfiguration.h
+btSoftBodyConcaveCollisionAlgorithm.cpp
+btSoftBodyConcaveCollisionAlgorithm.h
+
+BP高速化関連
+btSimpleBroadphase.cpp
+btSimpleBroadphase.h
+btSequentialImpulseConstraintSolver.cpp
+btDiscreteDynamicsWorld.cpp
+btRigidBody.cpp
+btScalar.h
+btTransformUtil.h
+
+
+無関係
+OpenGlexampleBrowser.cpp
+btOverlappingPairCache.h
+btDimulationIslandManager.cpp
+btAlignedAllocator.cpp
+btAlignedAllocator.h
+btPoolAllocator.h
+
+---------------------------------------------------------------------------
+線分ABと点Cの距離
+
+CからABに垂線を下ろした点をDとする
+cos_theta = dot(AB, AC) / (length(AB)*length(AC))
+adlen = length(AC) * cos_theta
+ = dot(AB, AC) / length(AB)
+adlenが負ならAが近接 return length(AC)
+adlenが1以上ならBが近接 return length(BC)
+それ以外なら線分上で近接
+D = A + AB * adlen 
+return length(DC)
 

@@ -75,6 +75,7 @@ public threaded function quat generate_rand_quat(
 
 public metafunction regular_polygon to_gf_poly{gf_regular_polygon};
 public metafunction bump_rec to_gf_poly{gf_bump_rec};
+public metafunction bump_rec_seq to_gf_poly{gf_bump_rec_seq};
 public metafunction rand_bump to_gf_poly{gf_rand_bump};
 public metafunction rand_bump2 to_gf_poly{gf_rand_bump2};
 public metafunction ctx_fill to_gf_poly{gf_ctx_fill};
@@ -196,9 +197,9 @@ private threaded function void gf_polygon_points(poly_t const& pts,
   c1(ctx, arr, mesh_index());
 }
 
-private threaded function void gf_bump_rec(float z, float scale, int recurse,
-  gf_poly const& c0, gf_poly const& c1, build_context_i const& ctx,
-  poly_t const& poly, mesh_index const& mp)
+private threaded function void gf_bump_rec_internal(float z, float scale,
+  int recurse, bool seq_flag, gf_poly const& c0, gf_poly const& c1,
+  build_context_i const& ctx, poly_t const& poly, mesh_index const& mp)
 {
   if (poly.size() < 3) { return; }
   darrayst{vertex_attr} front = poly;
@@ -209,7 +210,11 @@ private threaded function void gf_bump_rec(float z, float scale, int recurse,
   polygon_scale(front, scale);
   /* front */
   if (recurse > 1) {
-    gf_bump_rec(z, scale, recurse - 1, c0, c1, ctx, front, mesh_index());
+    if (seq_flag) {
+      c1(ctx, front, mesh_index());
+    }
+    gf_bump_rec_internal(z, scale, recurse - 1, seq_flag, c0, c1, ctx, front,
+      mesh_index());
   } else {
     c1(ctx, front, mesh_index());
   }
@@ -221,6 +226,20 @@ private threaded function void gf_bump_rec(float z, float scale, int recurse,
       front[i]);
     c0(ctx, side, mesh_index());
   }
+}
+
+private threaded function void gf_bump_rec(float z, float scale, int recurse,
+  gf_poly const& c0, gf_poly const& c1, build_context_i const& ctx,
+  poly_t const& poly, mesh_index const& mp)
+{
+  gf_bump_rec_internal(z, scale, recurse, false, c0, c1, ctx, poly, mp);
+}
+
+private threaded function void gf_bump_rec_seq(float z, float scale,
+  int recurse, gf_poly const& c0, gf_poly const& c1,
+  build_context_i const& ctx, poly_t const& poly, mesh_index const& mp)
+{
+  gf_bump_rec_internal(z, scale, recurse, true, c0, c1, ctx, poly, mp);
 }
 
 private threaded function void gf_rand_bump(size_t num, float scale,

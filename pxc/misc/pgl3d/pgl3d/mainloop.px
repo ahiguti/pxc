@@ -16,6 +16,7 @@ public import pgl3d::pglcommon -;
 public import pgl3d::application -;
 public import pgl3d::wfobj -;
 public import pgl3d::pglconfig -;
+public import mainloop -;
 
 private import GL::compat -;
 private import pgl3d::glresource -;
@@ -25,18 +26,15 @@ private import pgl3d::pglshader -;
 private import pgl3d::sdlcontext -;
 private import pgl3d::sdlutil -;
 
-public function void mainloop(pgl3d_application mutable& app,
+public function void mainloop(ptr{pgl3d_application} const& app,
   cstrref const& conf_filename)
 {
   string confstr;
   sdl_load_file(conf_filename, confstr);
   const conf = pgl3d_config(confstr);
   GL::base::set_check_error_enabled(conf.get("gldebug", 0));
-  try {
-    mainloop_internal(app, conf);
-  } catch (exception::c_exception ex) {
-    sdllog("uncaught exception", ex);
-  }
+  const ml = make_ptr{mainloop_internal}(app, conf);
+  set_mainloop(ml);
 }
 
 struct
@@ -128,65 +126,60 @@ framerate_control(int vsync0)
   }
 }
 
-private function void mainloop_internal(pgl3d_application mutable& app,
+private struct mainloop_internal(ptr{pgl3d_application} const& app0,
   pgl3d_config const& conf)
+<mainloop_i>
 {
-  sdllog("PGL3D main");
-
-  sdlcontext sdlc = sdlcontext(conf);
-
-  // SDL_EventState(SDL_KEYDOWN, 0);
-    // FIXME
-  SDL_EventState(SDL_KEYUP, 0);
-  SDL_EventState(SDL_TEXTEDITING, 0);
-  SDL_EventState(SDL_TEXTINPUT, 0);
-  if (m::or{is_android, is_ios}) {
-    SDL_EventState(SDL_MOUSEBUTTONDOWN, 0);
-    SDL_EventState(SDL_MOUSEBUTTONUP, 0);
-    SDL_EventState(SDL_MOUSEMOTION, 0);
-  }
-  if (m::ne{is_macos, 0}) {
-    SDL_EventState(SDL_FINGERDOWN, 0);
-    SDL_EventState(SDL_FINGERUP, 0);
-    SDL_EventState(SDL_FINGERMOTION, 0);
-  }
-
-  sdllog("PGL3D init0");
-
-  shader_config sconf = shader_config(sdlc.gles_flag, sdlc.glmajor,
+  private ptr{pgl3d_application} app = app0;
+  private sdlcontext sdlc = sdlcontext(conf);
+  private shader_config sconf = shader_config(sdlc.gles_flag, sdlc.glmajor,
     sdlc.glminor, sdlc.enable_msaa, conf);
-  tree_map{string, ptr{pgldrawer_export_i}} drawers
-    = app.on_init_drawers(sconf);
-  pglshader pgs = pglshader(sconf, drawers, sdlc.init_w, sdlc.init_h);
-  /*
-  pglshader pgs = pglshader(sdlc.gles_flag, sdlc.glmajor, sdlc.glminor,
-    sdlc.enable_msaa, sdlc.init_w, sdlc.init_h);
-  */
-  app.on_build_vertices(pgs);
-  whole_instances_type local_whole_instances;
-  node_factory nfac;
-  pgs.prepare(local_whole_instances, nfac);
-  /*
-  pgs.prepare_vertex_buffers();
-  pgs.prepare_whole_instances(local_whole_instances);
-  pgs.prepare_node_factory(nfac);
-  */
+  private tree_map{string, ptr{pgldrawer_export_i}} drawers
+    = app->on_init_drawers(sconf);
+  private pglshader pgs = pglshader(sconf, drawers, sdlc.init_w, sdlc.init_h);
+  private whole_instances_type local_whole_instances;
+  private node_factory nfac;
+  private option{ptr{motion_thread_client}} motion_thr;
+  private size_t saved_stat_num_objects;
+  private projection_info cam_drawing_frame;
+  private frame_statistics mutable fr;
+  private framerate_control mutable frctl = framerate_control(sdlc.vsync);
+  private string_map commands;
+  private int fullscreen = 0;
+  private bool done = false;
+  private bool paused = false;
+  private varray{short} joy_axes;
+  private varray{bool} joy_buttons;
+  init();
+  private function void init()
+  {
+    sdllog("PGL3D main");
+    sdllog("shader config", sconf);
+    // SDL_EventState(SDL_KEYDOWN, 0); // FIXME
+    SDL_EventState(SDL_KEYUP, 0);
+    SDL_EventState(SDL_TEXTEDITING, 0);
+    SDL_EventState(SDL_TEXTINPUT, 0);
+    SDL_JoystickEventState(0);
+    if (m::or{is_android, is_ios}) {
+      SDL_EventState(SDL_MOUSEBUTTONDOWN, 0);
+      SDL_EventState(SDL_MOUSEBUTTONUP, 0);
+      SDL_EventState(SDL_MOUSEMOTION, 0);
+    }
+    if (m::ne{is_macos, 0}) {
+      SDL_EventState(SDL_FINGERDOWN, 0);
+      SDL_EventState(SDL_FINGERUP, 0);
+      SDL_EventState(SDL_FINGERMOTION, 0);
+    }
+    sdllog("PGL3D init0");
+    app->on_build_vertices(pgs);
+    pgs.prepare(local_whole_instances, nfac);
 
-  /* spawn motion thread */
-  motion_thread_object mto = motion_thread_object(nfac, local_whole_instances,
-    app.get_scene_shared(), pgs.pidft);
-
-  size_t saved_stat_num_objects;
-
-  const test_scroll_mode = false;
-
-  projection_info cam_drawing_frame;
-
-  frame_statistics mutable fr;
-  framerate_control mutable frctl = framerate_control(sdlc.vsync);
-
-  int fullscreen = 0;
-  function void toggle_fullscreen()
+    /* spawn motion thread */
+    motion_thr.some = make_ptr{motion_thread_client}(nfac,
+      local_whole_instances, app->get_scene_shared(), pgs.pidft);
+    motion_thr.some->start();
+  }
+  private function void toggle_fullscreen()
   {
     fullscreen = fullscreen != 0 ? 0 : 1;
     sdllog("fullscreen=", fullscreen);
@@ -198,9 +191,7 @@ private function void mainloop_internal(pgl3d_application mutable& app,
     }
     SDL_SetWindowFullscreen(sdlc.sdl_window, fullscreen != 0 ? flag : 0);
   }
-
-  string_map commands;
-  function void do_commands()
+  private function void do_commands()
   {
     if (!commands.empty()) {
       for (const& k, const& v: commands) {
@@ -213,11 +204,18 @@ private function void mainloop_internal(pgl3d_application mutable& app,
       commands.clear();
     }
   }
-
-  bool done = false;
-  bool paused = false;
-  while (!done) {
-    bool scene_next_flag = false;
+  public function bool step()
+  {
+    try {
+      return step_internal();
+    } catch (exception::c_exception ex) {
+      sdllog("uncaught exception", ex);
+    }
+    return true;
+  }
+  private function bool step_internal()
+  {
+    // bool scene_next_flag = false;
     SDL_Event ev;
     while (SDL_PollEvent(address(ev)) != 0) {
       const etype = ev.type;
@@ -253,22 +251,37 @@ private function void mainloop_internal(pgl3d_application mutable& app,
 	break;
       }
       /* invoke event handler */
-      app.on_event(ev, frctl.frame_speed_mul, pgs.cam, commands);
+      app->on_event(ev, frctl.frame_speed_mul, pgs.cam, commands);
       do_commands();
+    }
+    if (sdlc.joystick.get() != rawptr{SDL_Joystick}()) {
+      SDL_JoystickUpdate();
+      joy_axes.resize(static_cast{size_t}(sdlc.joystick_num_axes), 0);
+      joy_buttons.resize(static_cast{size_t}(sdlc.joystick_num_buttons), 0);
+      for (const i: 0 .. sdlc.joystick_num_axes) {
+	const v = SDL_JoystickGetAxis(sdlc.joystick.get(), i);
+	joy_axes[static_cast{size_t}(i)] = v;
+      }
+      for (const i: 0 .. sdlc.joystick_num_buttons) {
+	const v = SDL_JoystickGetButton(sdlc.joystick.get(), i);
+	joy_buttons[static_cast{size_t}(i)] = (v != 0);
+      }
+      // sdllog("joy", joy_axes, joy_buttons);
     }
     {
       int numkeys;
       const ksp = SDL_GetKeyboardState(address(numkeys));
       const ks = ksp.to_cslice(static_cast{size_t}(numkeys));
       /* invoke key handler */
-      app.on_scankeys(ks, frctl.frame_speed_mul, pgs.cam, commands);
+      app->on_scankeys(ks, joy_axes, joy_buttons, frctl.frame_speed_mul,
+	pgs.cam, commands);
       do_commands();
     }
     fr.save_ticks(0, SDL_GetTicks());
     if (paused) {
       SDL_Delay(100);
       fr.tprevsec = SDL_GetTicks();
-      continue;
+      return done;
     }
     /* motion and prepare instance data */
     {
@@ -276,7 +289,9 @@ private function void mainloop_internal(pgl3d_application mutable& app,
       const mess = string_join{" "}(fr.fps, frctl.frame_speed_mul,
 	fr.ticks_sum_saved,
 	saved_stat_num_objects);
-      function void swap_data_cl(motion_thread_shared mutable& mts) {
+      motion_thr.some->finish();
+      {
+	mutable& mts = *motion_thr.some->shared;
 	// fr.save_ticks(1, SDL_GetTicks());
 	cam_drawing_frame = mts.cam;
 	mts.cam = pgs.cam;
@@ -286,7 +301,7 @@ private function void mainloop_internal(pgl3d_application mutable& app,
 	local_whole_instances.swap(mts.whole_instances);
 	saved_stat_num_objects = mts.stat_num_objects;
       }
-      mto.wait_and_exec{swap_data_cl}();
+      motion_thr.some->start();
       do_commands();
     }
     // FIXME: shadowmapping
@@ -357,9 +372,8 @@ private function void mainloop_internal(pgl3d_application mutable& app,
     fr.save_ticks(6, SDL_GetTicks());
     SDL_GL_SwapWindow(sdlc.sdl_window);
     fr.save_ticks(7, SDL_GetTicks());
-    if (scene_next_flag) {
-      frctl.start();
-    }
+    // if (scene_next_flag) { frctl.start(); }
+    return done;
   }
 }
 

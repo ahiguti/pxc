@@ -25,11 +25,6 @@ public threaded function extern "pxcrt::high_resolution_timer_frequency"
 ulonglong
 io_high_resolution_timer_frequency(io const& iop);
 
-public threaded function extern "pxcrt::io_sleep" uint
-io_sleep(io const& iop, uint sec);
-public threaded function extern "pxcrt::io_usleep" uint
-io_usleep(io const& iop, uint usec);
-
 public threaded function double
 io_gettimeofday_double(io::io const& iop)
 {
@@ -38,6 +33,21 @@ io_gettimeofday_double(io::io const& iop)
     + static_cast{double, suseconds_t}(tv.tv_usec) / 1000000.0;
   return rv;
 }
+
+public threaded function double
+io_high_resolution_timer_double(io::io const& iop)
+{
+  const vn = iop.high_resolution_timer();
+  const vd = iop.high_resolution_timer_frequency();
+  double const rv = static_cast{double, ulonglong}(vn)
+    / static_cast{double, ulonglong}(vd);
+  return rv;
+}
+
+public threaded function extern "pxcrt::io_sleep" uint
+io_sleep(io const& iop, uint sec);
+public threaded function extern "pxcrt::io_usleep" uint
+io_usleep(io const& iop, uint usec);
 
 private function extern "pxcrt::time_init" void time_init(); /* not mtsafe */
 

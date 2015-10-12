@@ -13,19 +13,28 @@ public struct sdlcontext(pgl3d_config const& config0)
   public pgl3d_config config = config0;
   public int init_w = 640;
   public int init_h = 128;
-  public bool enable_msaa = false;
+  public int enable_msaa = 0;
   public bool gles_flag = false;
   public int glmajor;
   public int glminor;
   public int vsync = 0;
   public scoped_nullable{SDL_DestroyWindow} sdl_window;
   private scoped_nullable{SDL_GL_DeleteContext} sdl_glcontext;
+  public scoped_nullable{SDL_JoystickClose} joystick;
+  public int joystick_num_axes;
+  public int joystick_num_buttons;
   init();
   function void init()
   {
+    enable_msaa = config.get("msaa", 0);
     set_high_dpi(config.get("highdpi", 1));
-    SDL_Init(SDL_INIT_VIDEO);
+    SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK);
     TTF_Init();
+    init_video();
+    init_joystick();
+  }
+  function void init_video()
+  {
     const num_modes = SDL_GetNumDisplayModes(0);
     for (int i: 0 .. num_modes) {
       SDL_DisplayMode mode;
@@ -34,9 +43,10 @@ public struct sdlcontext(pgl3d_config const& config0)
     }
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 
-    if (enable_msaa) {
+    if (enable_msaa != 0) {
       SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
       SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
+      sdllog("enable_msaa");
     }
     mutable wflags = SDL_WINDOW_OPENGL;
     if (m::ne{is_windows, 0}) {
@@ -82,8 +92,8 @@ public struct sdlcontext(pgl3d_config const& config0)
       // glminor = 2;
       gles_flag = false;
     } else {
-      if (m::ne{is_android, 0}) {
-	/* android: opengles 2.0 */
+      if (m::or{is_android, is_emscripten}) {
+	/* android/emscripten: opengles 2.0 */
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 	glmajor = 2;
@@ -97,7 +107,7 @@ public struct sdlcontext(pgl3d_config const& config0)
       }
       gles_flag = true;
     }
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 32); // MEMO: worked on osx
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 32); // FIXME: 24?
     mutable glctx = SDL_GL_CreateContext(wnd);
     GL::glew::glewInit();
     string verstr = cubptr_to_string(glGetString_nocheck(GL_VERSION));
@@ -124,10 +134,18 @@ public struct sdlcontext(pgl3d_config const& config0)
     sdllog("drawable size", init_w, init_h);
     sdllog("GL_VERSION", verstr);
     {
-      string vn;
-      string_split{' '}(verstr, vn);
-      // sdllog("vn", vn);
-      string_split{'.'}(vn, glmajor, glminor);
+      string vn0;
+      string vn1;
+      string vn2;
+      string_split{' '}(verstr, vn0, vn1, vn2);
+      sdllog("vn", vn0, vn1, vn2);
+      string_split{'.'}(vn0, glmajor, glminor);
+      if (glmajor == 0) {
+	string_split{'.'}(vn1, glmajor, glminor);
+	if (glmajor == 0) {
+	  string_split{'.'}(vn2, glmajor, glminor);
+	}
+      }
     }
     /*
     glGetIntegerv(GL_MAJOR_VERSION, address(glmajor));
@@ -145,6 +163,22 @@ public struct sdlcontext(pgl3d_config const& config0)
 	static_cast{uint}(i))));
     }
     */
+  }
+  function void init_joystick()
+  {
+    for (const i: 0 .. SDL_NumJoysticks()) {
+      const j = SDL_JoystickOpen(i);
+      sdllog("joystick", i, ccharptr_to_string(SDL_JoystickName(j)));
+      if (i == 0) {
+	joystick.reset(j);
+	joystick_num_axes = SDL_JoystickNumAxes(j);
+	joystick_num_buttons = SDL_JoystickNumButtons(j);
+	sdllog("axes", joystick_num_axes);
+	sdllog("buttons", joystick_num_buttons);
+      } else {
+	SDL_JoystickClose(j);
+      }
+    }
   }
 }
 

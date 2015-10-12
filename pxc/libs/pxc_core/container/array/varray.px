@@ -391,22 +391,21 @@ private:
   }
   template <typename Tx> void push_back_internal(Tx& x) {
     /* re-ordered for speed */
-    if (refguard_is_zero()) {
-      /* valid_len + 1 never overflows */
-      if (valid_len + 1 < alloc_len) {
-	/* fast path */
-	initialize_1(start + valid_len, x);
-	valid_len++;
-	return;
-      } else {
-	/* slow path */
-	reserve_internal(valid_len + 1);
-	initialize_1(start + valid_len, x);
-	valid_len++;
-	return;
-      }
-    } else {
+    if (!refguard_is_zero()) {
       pxcrt::throw_would_invalidate();
+    }
+    /* valid_len + 1 never overflows */
+    if (valid_len + 1 < alloc_len) {
+      /* fast path */
+      initialize_1(start + valid_len, x);
+      valid_len++;
+      return;
+    } else {
+      /* slow path */
+      reserve_internal(valid_len + 1);
+      initialize_1(start + valid_len, x);
+      valid_len++;
+      return;
     }
   }
   void append_internal(const T *p, size_type len) {
@@ -476,19 +475,18 @@ pxcvarray_swap(pxcvarray<T>& x, pxcvarray<T>& y)
 template <typename T> static inline T&
 pxcvarray_push_back_uninitialized(pxcvarray<T>& v)
 {
-  /* re-ordered for speed */
-  if (v.refguard_count == 0) {
-    /* valid_len + 1 never overflows */
-    if (v.valid_len + 1 < v.alloc_len) {
-      /* fast path */
-      return v.start[v.valid_len];
-    } else {
-      /* slow path */
-      v.reserve_internal(v.valid_len + 1);
-      return v.start[v.valid_len];
-    }
-  } else {
+  if (v.refguard_count != 0) {
     pxcrt::throw_would_invalidate();
+  }
+  /* re-ordered for speed */
+  /* valid_len + 1 never overflows */
+  if (v.valid_len + 1 < v.alloc_len) {
+    /* fast path */
+    return v.start[v.valid_len];
+  } else {
+    /* slow path */
+    v.reserve_internal(v.valid_len + 1);
+    return v.start[v.valid_len];
   }
 }
 
