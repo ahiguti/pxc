@@ -31,7 +31,8 @@ public enum draw_step {
 private tsvaluetype struct triangles_uniforms()
 {
   public glm::mat4 view_projection_matrix;
-  public int sampler;
+  public int sampler_dpat;
+  public int sampler_pmpat;
   public int sampler_tilemap;
   public int sampler_sm0;
   public int sampler_sm1;
@@ -92,13 +93,13 @@ private tsvaluetype struct shadowmap_uniforms()
 
 private tsvaluetype struct font_uniforms()
 {
-  public int sampler;
+  public int sampler_font;
 }
 
 private tsvaluetype struct font2_uniforms()
 {
   public glm::vec2 screen_size_px;
-  public int sampler;
+  public int sampler_font;
 }
 
 private tsvaluetype struct font2_instance_attributes()
@@ -211,11 +212,12 @@ public struct drawer_triangles(shader_config const& glc, int opt0)
   zprepass_shader_ptr const sdr_zp = init_zprepass_shader(glc, opt);
   shadowmap_shader_ptr const sdr_shadow = init_shadowmap_shader(glc, opt);
   texture_data texture_dpat;
+  texture_data texture_pmpat;
   texture_data texture_tilemap;
   init();
   private function void init()
   {
-    init_main_texture(texture_dpat, texture_tilemap);
+    init_triangles_texture(texture_dpat, texture_pmpat, texture_tilemap);
   }
   public function string get_vbid_name() const {
     return "vbid_triangles_" + to_string(opt);
@@ -299,6 +301,8 @@ public struct drawer_triangles(shader_config const& glc, int opt0)
       const vp = cam_df.projection * view;
       const red = make_farray{float}(0.8, 0.1, 0.0, 1.0);
       mutable& sdr = *sdr_solid;
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, texture_dpat.texture_id.get());
       glUseProgram(sdr.program);
       if (glc.light_fixed) {
 	glUniform3fv(sdr.u_light_dir, 1,
@@ -309,7 +313,8 @@ public struct drawer_triangles(shader_config const& glc, int opt0)
       }
       glUniform3fv(sdr.u_camera_pos, 1,
 	cam_df.camera.position.to_crawptr());
-      glUniform1i(sdr.u_sampler, 1);
+      glUniform1i(sdr.u_sampler_dpat, 0);
+      glUniform1i(sdr.u_sampler_pmpat, 1);
       glUniform1i(sdr.u_sampler_tilemap, 2);
       glUniform1i(sdr.u_sampler_sm0, 3);
       glUniform1i(sdr.u_sampler_sm1, 4);
@@ -565,6 +570,8 @@ public struct drawer_font2(shader_config const& glc)
     shader_config const& glc, projection_info const& cam_df)
   {
     if (step == draw_step_blend) {
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, texture_font.texture_id.get());
       glDisable(GL_DEPTH_TEST);
       glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
       const screen_size_px = glm::make_vec2(
@@ -572,7 +579,7 @@ public struct drawer_font2(shader_config const& glc)
 	static_cast{float}(cam_df.screen_height));
       mutable& sdr = *sdr_fn;
       glUseProgram(sdr.program);
-      glUniform1i(sdr.u_sampler, 0);
+      glUniform1i(sdr.u_sampler_font, 0);
       glUniform2fv(sdr.u_screen_size_px, 1, screen_size_px.to_crawptr());
       aibuf.draw(sdr, bo, bo_ib, bo_id,
 	glc.enable_instanced, glc.enable_uniform_instancing);
@@ -1045,7 +1052,8 @@ function string triangles_shader_frag(shader_config const& g, int opt)
 {
   string f;
   f += g.prepend();
-  f += "uniform sampler2D sampler;\n";
+  f += "uniform sampler2D sampler_dpat;\n";
+  f += "uniform sampler2D sampler_pmpat;\n";
   f += "uniform sampler2D sampler_tilemap;\n";
   f += "uniform vec4 shadowmap_distances;\n";
   if (g.enable_sampler2dshadow) {
@@ -1079,6 +1087,124 @@ function string triangles_shader_frag(shader_config const& g, int opt)
     }
   }
   f += g.decl_fragcolor();
+  if (g.enable_normalmapping) {
+    f += "void tilemap(in vec2 uv0, out vec4 tex_val, out vec2 subtex_uv) {\n";
+    f += "const float tile_size = 32.0;\n";
+    f += "const float tilemap_size = 128.0;\n";
+    f += "const float tiletex_size = 256.0;\n";
+    f += "vec2 uv_tm = floor(uv0);\n";
+	  // tilemap coordinate
+    f += "vec2 uv_tmfr = uv0 - uv_tm;\n";
+	  // coordinate inside a tile (0, 1)
+    if (opt != 0) {
+      f += "vec2 p = uv_tmfr - 0.5;\n";
+      f += "if (dot(p, p) < 0.125) { discard; }\n";
+    }
+    f += "vec2 uv_ti = uv_tmfr * tile_size;\n";
+    f += "vec2 uvi = floor(uv_ti);\n";
+	  // coordinate inside a tile, integral
+    f += "subtex_uv = uv_ti - uvi;\n";
+	  // subtexel coordinate
+    f += "vec4 ti_val = " +  g.texture2d();
+    f += "  (sampler_tilemap, uv_tm / tilemap_size);\n";
+	  // lookup the tilemap
+    f += "vec2 uv_pixel = floor(ti_val.xy * 255.0 + 0.5) * tile_size + uvi;\n";
+	  // tile pattern coordinate
+    // f += "mate_ambient = ti_val.z;\n";
+    // f += "mate_specular = ti_val.w;\n";
+    f += "tex_val = " + g.texture2d();
+    f += "  (sampler_dpat, uv_pixel / tiletex_size);\n";
+	  // lookup the tilepattern
+    f += "}\n";
+  }
+  if (g.enable_parallax) {
+    f += "void parallax(in vec2 uv0, out vec4 tex_val, out vec2 subtex_uv) {\n";
+    f += "const float tile_size = 32.0;\n";
+    f += "const float tilemap_size = 128.0;\n";
+    f += "const float tiletex_size = 256.0;\n";
+    f += "vec2 uv_tm = floor(uv0);\n";
+	  // tilemap coordinate
+    f += "vec2 uv_tmfr = uv0 - uv_tm;\n";
+	  // coordinate inside a tile (0, 1)
+    if (opt != 0) {
+      f += "vec2 p = uv_tmfr - 0.5;\n";
+      f += "if (dot(p, p) < 0.125) { discard; }\n";
+    }
+    f += "vec2 uv_ti = uv_tmfr * tile_size;\n";
+    f += "vec2 uvi = floor(uv_ti);\n";
+	  // coordinate inside a tile, integral
+    f += "subtex_uv = uv_ti - uvi;\n";
+	  // subtexel coordinate
+    f += "vec4 ti_val = " +  g.texture2d();
+    f += "  (sampler_tilemap, uv_tm / tilemap_size);\n";
+	  // lookup the tilemap
+    f += "vec2 uv_pixel = floor(ti_val.xy * 255.0 + 0.5) * tile_size + uvi;\n";
+	  // tile pattern coordinate
+    // f += "mate_ambient = ti_val.z;\n";
+    // f += "mate_specular = ti_val.w;\n";
+    f += "tex_val = " + g.texture2d();
+    f += "  (sampler_pmpat, uv_pixel / tiletex_size);\n";
+	  // lookup the tilepattern
+    f += "}\n";
+    // FIXME HERE
+    f += "vec2 parallax_next(inout vec3 tsub, in vec3 d) {\n";
+    f += "vec2 r = vec2(0.0, 0.0);\n";
+    f += "float dypos = float(d.y > 0.0);\n";
+    f += "float nx = tsub.x + (dypos - tsub.y) * d.x / d.y;\n";
+    f += "if (d.y != 0.0 && nx > 0.0 && nx < 1.0) {\n";
+    f += "float nz = tsub.z + (dypos - tsub.y) * d.z / d.y;\n";
+    f += "tsub = vec3(nx, dypos, nz);\n";
+    f += "r.y = dypos * 2.0 - 1.0;\n";
+    f += "} else if (d.x != 0.0) {\n";
+    f += "float dxpos = float(d.x > 0.0);\n";
+    f += "float ny = tsub.y + (dxpos - tsub.x) * d.y / d.x;\n";
+    f += "float nz = tsub.z + (dxpos - tsub.x) * d.z / d.x;\n";
+    f += "tsub = vec3(dxpos, ny, nz);\n";
+    f += "r.x = dxpos * 2.0 - 1.0;\n";
+    f += "} else {\n";
+    f += "tsub.z = 1024.0;\n";
+    f += "}\n";
+    f += "return r;\n";
+    f += "}\n";
+    f += "vec3 parallax_loop(inout vec2 pos, in vec3 eye, out float z, out float dbg) {\n";
+    f += "dbg = 0.0;\n";
+    f += "const float tile_size = 32.0;\n";
+    f += "eye.z *= 0.01;\n";
+    f += "pos *= tile_size;\n"; // tile coord to texel coord
+    f += "vec2 tpos = floor(pos);\n";
+    f += "vec3 tsub = vec3(pos - tpos, 0.0);\n";
+    f += "vec2 sub_dummy;\n"; // FIXME: unused
+    f += "vec4 tval;\n";
+    f += "parallax(tpos / 32.0, tval, sub_dummy);\n";
+    f += "if (tval.z == 0.0) {\n";
+    f += "pos = (tpos + max(tsub.xy, vec2(0.999, 0.999))) / tile_size;\n";
+    f += "z = tval.z;\n";
+//    f += "z = 0.5;\n"; // FIXME1
+    f += "return vary_normal;\n";
+    f += "}\n";
+    f += "for (int i = 0; i < 128; ++i) {\n";
+    f += "vec2 tnext_diff = parallax_next(tsub, eye);\n";
+    f += "if (tsub.x < -0.01 || tsub.x > 1.01 || tsub.y < -0.01 || tsub.y > 1.01) { dbg = float(i + 1); return vary_normal; }\n"; // FIXME
+    f += "if (tval.z <= tsub.z) {\n";
+    f += "pos = (tpos + max(tsub.xy, vec2(0.999, 0.999))) / tile_size;\n";
+    f += "z = tval.z;\n";
+    f += "return vary_normal;\n";
+    f += "}\n";
+    f += "tpos += tnext_diff;\n";
+    f += "tsub.xy -= tnext_diff;\n";
+    f += "parallax(tpos / 32.0, tval, sub_dummy);\n";
+    f += "if (tval.z <= tsub.z) {\n";
+    f += "pos = (tpos + max(tsub.xy, vec2(0.999, 0.999))) / tile_size;\n";
+    f += "z = tval.z;\n";
+    f += "return vary_tangent * (-tnext_diff.x) ";
+    f += "  + vary_binormal * (-tnext_diff.y);\n";
+    f += "}\n";
+    f += "}\n";
+    f += "z = tval.z;\n"; // FIXME??? infinite loop
+    f += "dbg = 10.0;\n"; // FIXME1
+    f += "return vary_normal;\n";
+    f += "}\n";
+  }
   f += "void main(void) {\n";
   /*
   f += "vec3 light_dir = normalize(light_pos - vary_position);\n";
@@ -1108,54 +1234,45 @@ function string triangles_shader_frag(shader_config const& g, int opt)
   f += "float frag_distance = length(rel_camera_pos);\n";
   f += "float distbr = clamp(30.0 / frag_distance , 0.0, 1.0);\n";
   if (g.enable_normalmapping) {
-    f += "const float tile_size = 32.0;\n";
-    f += "const float tilemap_size = 128.0;\n";
-    f += "const float tiletex_size = 256.0;\n";
     f += "vec2 uv0 = vary_uvw.xy / vary_uvw.z;\n";
-    f += "vec2 uv_tm = floor(uv0);\n";
-	  // tilemap coordinate
-    f += "vec2 uv_tmfr = uv0 - uv_tm;\n";
-	  // coordinate inside a tile (0, 1)
-    if (opt != 0) {
-      f += "vec2 p = uv_tmfr - 0.5;\n";
-      f += "if (dot(p, p) < 0.125) { discard; }\n";
+    f += "vec2 subtex_uv;\n";
+    if (g.enable_parallax) {
+      f += "vec4 para_val;\n";
+      f += "vec3 eye_tan = vec3("; // eye vector, tangent space
+      f += "  -dot(camera_dir, vary_tangent), ";
+      f += "  -dot(camera_dir, vary_binormal),";
+      f += "  dot(camera_dir, vary_normal));\n";
+      f += "float zval = 0.0;\n";
+      f += "float dbgval = 0.0;\n";
+      f += "nor = parallax_loop(uv0, eye_tan, zval, dbgval);\n";
+      // f += "color.rgb += eye_tan;\n";
+      f += "color.r += dbgval;\n"; // FIXME
+//    } else {
+      f += "vec4 tex_val;\n";
+      f += "tilemap(uv0, tex_val, subtex_uv);\n";
+      f += "float alv0 = floor(tex_val.a * 255.0 + 0.5);\n";
+      f += "float avol = floor(alv0 / 16.0);\n";
+      f += "int alv = int(alv0 - avol * 16.0 + 0.5);\n";
+      f += "float lt = float(subtex_uv.y - subtex_uv.x >= 0.0);\n";
+      f += "float lb = float(subtex_uv.y + subtex_uv.x <= 1.0);\n";
+      f += "vec4 avlv = vec4(float(alv == 1), float(alv == 3), ";
+      f += "  float(alv == 5), float(alv == 7));\n";
+      f += "float ut1 = dot(avlv, vec4(-lt, 1.0-lb, 1.0-lt, -lb));\n";
+      f += "float vt1 = dot(avlv, vec4(lt-1.0, -lb, lt, 1.0-lb));\n";
+      f += "ut1 += float(alv == 4);\n";
+      f += "vt1 -= float(alv == 2);\n";
+      f += "avol = (avol - 8.0) * distbr * 0.2;\n";
+      f += "color += vec4(tex_val.xyz, 0.0) * float(alv == 10);\n";
+      // f += "color_dif = vec4(tex_val.xyz, 0.0) * float(alv != 10);\n";
+      f += "distbr *= float(alv != 10);\n";
+      f += "vec3 nor_delta = vary_tangent * ut1 * avol\n";
+      f += "  + vary_binormal * vt1 * avol;\n";
+      if (opt != 0) {
+	f += "nor_delta *= is_front;\n";
+      }
+      // FIXME
+      f += "nor = normalize(nor + nor_delta);\n";
     }
-    f += "vec2 uv_ti = uv_tmfr * tile_size;\n";
-    f += "vec2 uvi = floor(uv_ti);\n";
-	  // coordinate inside a tile, integral
-    f += "vec2 uvj = uv_ti - uvi;\n";
-	  // subpixel coordinate
-    f += "vec4 ti = " +  g.texture2d();
-    f += "  (sampler_tilemap, uv_tm / tilemap_size);\n";
-	  // lookup the tilemap
-    f += "vec2 uv_pixel = floor(ti.xy * 255.0 + 0.5) * tile_size + uvi;\n";
-	  // tile pattern coordinate
-    // f += "mate_ambient = ti.z;\n";
-    f += "mate_specular = ti.w;\n";
-    f += "vec4 c0 = " + g.texture2d();
-    f += "  (sampler, uv_pixel / tiletex_size);\n";
-	  // lookup the tilepattern
-    f += "float alv0 = floor(c0.a * 255.0 + 0.5);\n";
-    f += "float avol = floor(alv0 / 16.0);\n";
-    f += "int alv = int(alv0 - avol * 16.0 + 0.5);\n";
-    f += "float lt = float(uvj.y - uvj.x >= 0.0);\n";
-    f += "float lb = float(uvj.y + uvj.x <= 1.0);\n";
-    f += "vec4 avlv = vec4(float(alv == 1), float(alv == 3), ";
-    f += "  float(alv == 5), float(alv == 7));\n";
-    f += "float ut1 = dot(avlv, vec4(-lt, 1.0-lb, 1.0-lt, -lb));\n";
-    f += "float vt1 = dot(avlv, vec4(lt-1.0, -lb, lt, 1.0-lb));\n";
-    f += "ut1 += float(alv == 4);\n";
-    f += "vt1 -= float(alv == 2);\n";
-    f += "avol = (avol - 8.0) * distbr * 0.2;\n";
-    f += "color += vec4(c0.xyz, 0.0) * float(alv == 10);\n";
-    // f += "color_dif = vec4(c0.xyz, 0.0) * float(alv != 10);\n";
-    f += "distbr *= float(alv != 10);\n";
-    f += "vec3 nor_delta = vary_tangent * ut1 * avol\n";
-    f += "  + vary_binormal * vt1 * avol;\n";
-    if (opt != 0) {
-      f += "nor_delta *= is_front;\n";
-    }
-    f += "nor = normalize(nor + nor_delta);\n";
   }
   f += "vec3 reflection_vec = reflect(-light_dir, nor);\n";
   f += "float cos_angle = max(0.0, dot(camera_dir, reflection_vec));\n";
@@ -1450,7 +1567,7 @@ init_font2_shader(shader_config const& g)
   v += "}\n";
   string f;
   f += g.prepend();
-  f += "uniform sampler2D sampler;\n";
+  f += "uniform sampler2D sampler_font;\n";
   f += g.frag_in() + "vec2 vary_texture_size_px;\n";
   f += g.frag_in() + "vec2 vary_texture_origin_px;\n";
   f += g.frag_in() + "vec2 vary_char_size_px;\n";
@@ -1463,7 +1580,7 @@ init_font2_shader(shader_config const& g)
   f += "vec2 pcoord = vary_point_size * xy;\n";
   f += "vec2 texcoord = (vary_texture_origin_px + pcoord)";
   f += "  / vary_texture_size_px;\n";
-  f += "vec4 col = " +  g.texture2d() + "(sampler, texcoord);\n";
+  f += "vec4 col = " +  g.texture2d() + "(sampler_font, texcoord);\n";
   f += g.fragcolor() + " = vec4(1.0, 1.0, 0.0, col.a);\n";
   f += "}\n";
   return make_glshader_ptr{font2_uniforms, font2_instance_attributes,
@@ -1758,172 +1875,213 @@ init_font(texture_data mutable& fnt)
   }
 }
 
-function void
-init_main_texture(texture_data mutable& tex_dpat,
-  texture_data mutable& tex_tilemap)
+function void merge_png_to_texture(strlit const& fn, texture_data mutable& tex,
+  GLenum texture_unit,
+  callable_ptr{uint, {uint, uint, uint, uint}} const& merge_func)
 {
-  check_byteorder();
-  {
-    sdllog("loading images");
-    // const sur = IMG_Load("img-c1024.jpg").some;
-    SDL_Surface_Scoped sur0;
-    sur0.reset(IMG_Load("dpat.png"));
-    if (sur0.get() == rawptr{SDL_Surface}()) {
-      sdllog("failed to load", "dpat.png");
-      throw runtime_error_template{"img_load"}("dpat.png");
-    }
-    sdllog("loading images: loaded");
-    const& sur0ref = *sur0.get().to_slice(1);
-    const fmtp = sur0ref.format;
-    const& fmt = *sur0ref.format.to_slice(1);
-    const bpp = fmt.BytesPerPixel;
-    if (bpp != 4 && bpp != 3) {
-      throw runtime_error_template{"img_load"}("1");
-    }
-    const sur0_w = static_cast{uint}(sur0ref.w);
-    const sur0_h = static_cast{uint}(sur0ref.h);
-    mutable tex_w = power_of_2(sur0_w);
-    mutable tex_h = power_of_2(sur0_h);
-    varray{uint} uibuf;
-    uibuf.resize(tex_w * tex_h, 0);
-    uint rmask = fmt.Rmask;
-    uint gmask = fmt.Gmask;
-    uint bmask = fmt.Bmask;
-    uint amask = fmt.Amask;
-    function uint get_shift(uint m) {
-      uint r = 0;
-      for (uint i: 0 .. 32) {
-	if ((m & 1) != 0) {
-	  break;
-	}
-	r += 1;
-	m >>= 1;
-      }
-      return r;
-    }
-    uint rshift = get_shift(rmask);
-    uint gshift = get_shift(gmask);
-    uint bshift = get_shift(bmask);
-    uint ashift = get_shift(amask);
-    /*
-    sdllog("Masks", rmask, gmask, bmask, amask, rshift, gshift, bshift,
-      ashift);
-    */
-    const& sur0_ref = *sur0.get().to_slice(1);
-    const sur0buf = sur0_ref.pixels.reinterpret_cast{uchar}()
-      .to_slice(static_cast{size_t}(sur0_ref.pitch * sur0_ref.h));
-    // const sur0buf = sur0_ref.Pixels();
-    for (const by: 0 .. sur0_h / 64) {
-      for (const iy: 0 .. 32U) {
-	for (const x: 0 .. sur0_w) {
-	  const o0n = ((by * 64 + iy     ) * sur0_w + x) * bpp;
-	  const o0c = ((by * 64 + iy + 32) * sur0_w + x) * bpp;
-	  const o1 = ((by * 32 + iy) * tex_w + x) * 4;
-	  const nor0 = read_3_uint(sur0buf, o0n);
-	  const col0 = read_3_uint(sur0buf, o0c);
-	  uint norr = (nor0 >> rshift) & 0xffU;
-	  uint norg = (nor0 >> gshift) & 0xffU;
-	  uint norb = (nor0 >> bshift) & 0xffU;
-	  const nor = (norr << 16) | (norg << 8) | norb;
-	  uint colr = (col0 >> rshift) & 0xffU;
-	  uint colg = (col0 >> gshift) & 0xffU;
-	  uint colb = (col0 >> bshift) & 0xffU;
-	  const col = (colb << 16) | (colg << 8) | colr;
-	  uint val; /* avol for higher 4bits, alv for lower 4bits */
-	  if (nor == 0xff0000) {
-	    val = 0x91; /* convex left-upper */
-	  } else if (nor == 0x00ff00) {
-	    val = 0x92; /* convex upper, or concave lower */
-	  } else if (nor == 0xffff00) {
-	    val = 0x93; /* convex right-upper */
-	  } else if (nor == 0x0000ff) {
-	    val = 0x94; /* convex right, or concave left */
-	  } else if (nor == 0xff00ff) {
-	    val = 0x95; /* convex right-lower */
-	  } else if (nor == 0x00ffff) {
-	    val = 0x72; /* convex lower, or concave upper */
-	  } else if (nor == 0xffffff) {
-	    val = 0x97; /* convex left-lower */
-	  } else if (nor == 0x808080) {
-	    val = 0x74; /* convex left, or concave right */
-	  } else if (nor == 0xc04040) {
-	    val = 0x71; /* concave left-upper */
-	  } else if (nor == 0xc0c040) {
-	    val = 0x73; /* concave right-upper */
-	  } else if (nor == 0xc040c0) {
-	    val = 0x75; /* concave right-lower */
-	  } else if (nor == 0xc0c0c0) {
-	    val = 0x77; /* concave left-lower */
-	  } else if (nor == 0x8080c0) {
-	    val = 0x0f; /* discard */
-	  }
-	  uibuf[(by * 32 + iy) * tex_w + x] = (val << 24) | col;
-	}
-      }
-    }
-    const mode = GL_RGBA;
-    glActiveTexture(GL_TEXTURE1);
-    tex_dpat.texture_id.generate();
-    glBindTexture(GL_TEXTURE_2D, tex_dpat.texture_id.get());
-    /*
-    glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, cast_int(GL_TRUE));
-    */
-    int mipmap_level = 0;
-    while (true) {
-      glTexImage2D(GL_TEXTURE_2D, mipmap_level, cast_int(mode),
-	cast_int(tex_w), cast_int(tex_h),
-	0, mode, GL_UNSIGNED_BYTE, uibuf.to_crawptr().to_cvoidptr());
-      const tex_w_prev = tex_w;
-      const tex_h_prev = tex_h;
-      tex_w /= 2;
-      tex_h /= 2;
-      // if (tex_w == 0 || tex_h == 0 || mipmap_level >= 5) {
-      if (tex_w == 0 || tex_h == 0 || mipmap_level >= 0) {
+  sdllog("loading image");
+  // const sur = IMG_Load("img-c1024.jpg").some;
+  SDL_Surface_Scoped sur0;
+  sur0.reset(IMG_Load(fn));
+  if (sur0.get() == rawptr{SDL_Surface}()) {
+    sdllog("failed to load", fn);
+    throw runtime_error_template{"img_load"}(fn);
+  }
+  sdllog("loading image: loaded", fn);
+  const& sur0ref = *sur0.get().to_slice(1);
+  const fmtp = sur0ref.format;
+  const& fmt = *sur0ref.format.to_slice(1);
+  const bpp = fmt.BytesPerPixel;
+  if (bpp != 4 && bpp != 3) {
+    throw runtime_error_template{"img_load"}("bpp");
+  }
+  const sur0_w = static_cast{uint}(sur0ref.w);
+  const sur0_h = static_cast{uint}(sur0ref.h);
+  mutable tex_w = power_of_2(sur0_w);
+  mutable tex_h = power_of_2(sur0_h);
+  varray{uint} uibuf;
+  uibuf.resize(tex_w * tex_h, 0);
+  uint rmask = fmt.Rmask;
+  uint gmask = fmt.Gmask;
+  uint bmask = fmt.Bmask;
+  uint amask = fmt.Amask;
+  function uint get_shift(uint m) {
+    uint r = 0;
+    for (uint i: 0 .. 32) {
+      if ((m & 1) != 0) {
 	break;
       }
-      ++mipmap_level;
-      for (const y: 0 .. tex_h) {
-	for (const x: 0 .. tex_w) {
-	  farray{uint, 4} v;
-	  v[0] = uibuf[(y * 2 + 0) * tex_w_prev + (x * 2 + 0)];
-	  v[1] = uibuf[(y * 2 + 0) * tex_w_prev + (x * 2 + 1)];
-	  v[2] = uibuf[(y * 2 + 1) * tex_w_prev + (x * 2 + 0)];
-	  v[3] = uibuf[(y * 2 + 1) * tex_w_prev + (x * 2 + 1)];
-	  uint mutable val_b;
-	  uint mutable val_g;
-	  uint mutable val_r;
-	  size_t opaque_count = 0;
-	  for (size_t j: 0 .. 4) {
-	    val_b += (v[j] >> 16) & 0xff;
-	    val_g += (v[j] >>  8) & 0xff;
-	    val_r += (v[j] >>  0) & 0xff;
-	    if (((v[j] >> 24) & 0x0f) == 10) { ++opaque_count; }
-	  }
-	  val_b /= 4;
-	  val_g /= 4;
-	  val_r /= 4;
-	  const val_a = opaque_count > 0 ? 10U : (v[0] >> 24) & 0xff; // TODO
-	  /*
-	  uibuf[y * tex_w + x] = (val_a << 24) +
-	    (val_b << 16) + (val_g << 8) + (val_r << 0);
-	  uibuf[y * tex_w + x] = v[0];
-	  */
-	}
-      }
+      r += 1;
+      m >>= 1;
     }
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
-      cast_int(GL_NEAREST));
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-      cast_int(mipmap_level > 0 ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST));
-    tex_dpat.surface_w = tex_w;
-    tex_dpat.surface_h = tex_h;
-    if (m::ne{is_gl3_or_gles3, 0}) {
-      if (mipmap_level != 0) {
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mipmap_level);
+    return r;
+  }
+  uint rshift = get_shift(rmask);
+  uint gshift = get_shift(gmask);
+  uint bshift = get_shift(bmask);
+  uint ashift = get_shift(amask);
+  /*
+  sdllog("Masks", rmask, gmask, bmask, amask, rshift, gshift, bshift,
+    ashift);
+  */
+  const& sur0_ref = *sur0.get().to_slice(1);
+  const sur0buf = sur0_ref.pixels.reinterpret_cast{uchar}()
+    .to_slice(static_cast{size_t}(sur0_ref.pitch * sur0_ref.h));
+  // const sur0buf = sur0_ref.Pixels();
+  for (const by: 0 .. sur0_h / 64) {
+    for (const iy: 0 .. 32U) {
+      for (const x: 0 .. sur0_w) {
+	const o0n = ((by * 64 + iy     ) * sur0_w + x) * bpp;
+	const o0c = ((by * 64 + iy + 32) * sur0_w + x) * bpp;
+	const o1 = ((by * 32 + iy) * tex_w + x) * 4;
+	const nor0 = read_3_uint(sur0buf, o0n);
+	const col0 = read_3_uint(sur0buf, o0c);
+	uint norr = (nor0 >> rshift) & 0xffU;
+	uint norg = (nor0 >> gshift) & 0xffU;
+	uint norb = (nor0 >> bshift) & 0xffU;
+	const nor = (norr << 16) | (norg << 8) | norb;
+	uint colr = (col0 >> rshift) & 0xffU;
+	uint colg = (col0 >> gshift) & 0xffU;
+	uint colb = (col0 >> bshift) & 0xffU;
+	const col = (colb << 16) | (colg << 8) | colr;
+	const y = by * 32 + iy;
+	uibuf[(by * 32 + iy) * tex_w + x] = merge_func(nor, col, x, y);
       }
     }
   }
+  const mode = GL_RGBA;
+  glActiveTexture(texture_unit);
+  tex.texture_id.generate();
+  glBindTexture(GL_TEXTURE_2D, tex.texture_id.get());
+  /*
+  glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, cast_int(GL_TRUE));
+  */
+  int mipmap_level = 0;
+  while (true) {
+    glTexImage2D(GL_TEXTURE_2D, mipmap_level, cast_int(mode),
+      cast_int(tex_w), cast_int(tex_h),
+      0, mode, GL_UNSIGNED_BYTE, uibuf.to_crawptr().to_cvoidptr());
+    const tex_w_prev = tex_w;
+    const tex_h_prev = tex_h;
+    tex_w /= 2;
+    tex_h /= 2;
+    // if (tex_w == 0 || tex_h == 0 || mipmap_level >= 5) {
+    if (tex_w == 0 || tex_h == 0 || mipmap_level >= 0) {
+      break; // disable mipmap
+    }
+    ++mipmap_level;
+    for (const y: 0 .. tex_h) {
+      for (const x: 0 .. tex_w) {
+	farray{uint, 4} v;
+	v[0] = uibuf[(y * 2 + 0) * tex_w_prev + (x * 2 + 0)];
+	v[1] = uibuf[(y * 2 + 0) * tex_w_prev + (x * 2 + 1)];
+	v[2] = uibuf[(y * 2 + 1) * tex_w_prev + (x * 2 + 0)];
+	v[3] = uibuf[(y * 2 + 1) * tex_w_prev + (x * 2 + 1)];
+	uint mutable val_b;
+	uint mutable val_g;
+	uint mutable val_r;
+	size_t opaque_count = 0;
+	for (size_t j: 0 .. 4) {
+	  val_b += (v[j] >> 16) & 0xff;
+	  val_g += (v[j] >>  8) & 0xff;
+	  val_r += (v[j] >>  0) & 0xff;
+	  if (((v[j] >> 24) & 0x0f) == 10) { ++opaque_count; }
+	}
+	val_b /= 4;
+	val_g /= 4;
+	val_r /= 4;
+	const val_a = opaque_count > 0 ? 10U : (v[0] >> 24) & 0xff; // TODO
+	/*
+	uibuf[y * tex_w + x] = (val_a << 24) +
+	  (val_b << 16) + (val_g << 8) + (val_r << 0);
+	uibuf[y * tex_w + x] = v[0];
+	*/
+      }
+    }
+  }
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+    cast_int(GL_NEAREST));
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+    cast_int(mipmap_level > 0 ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST));
+  tex.surface_w = tex_w;
+  tex.surface_h = tex_h;
+  if (m::ne{is_gl3_or_gles3, 0}) {
+    if (mipmap_level != 0) {
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mipmap_level);
+    }
+  }
+}
+
+threaded function uint merge_dpat(uint nor, uint col, uint x, uint y)
+{
+  uint val; /* avol for higher 4bits, alv for lower 4bits */
+  if (nor == 0xff0000) {
+    val = 0x91; /* convex left-upper */
+  } else if (nor == 0x00ff00) {
+    val = 0x92; /* convex upper, or concave lower */
+  } else if (nor == 0xffff00) {
+    val = 0x93; /* convex right-upper */
+  } else if (nor == 0x0000ff) {
+    val = 0x94; /* convex right, or concave left */
+  } else if (nor == 0xff00ff) {
+    val = 0x95; /* convex right-lower */
+  } else if (nor == 0x00ffff) {
+    val = 0x72; /* convex lower, or concave upper */
+  } else if (nor == 0xffffff) {
+    val = 0x97; /* convex left-lower */
+  } else if (nor == 0x808080) {
+    val = 0x74; /* convex left, or concave right */
+  } else if (nor == 0xc04040) {
+    val = 0x71; /* concave left-upper */
+  } else if (nor == 0xc0c040) {
+    val = 0x73; /* concave right-upper */
+  } else if (nor == 0xc040c0) {
+    val = 0x75; /* concave right-lower */
+  } else if (nor == 0xc0c0c0) {
+    val = 0x77; /* concave left-lower */
+  } else if (nor == 0x8080c0) {
+    val = 0x0f; /* discard */
+  }
+  return (val << 24) | col;
+}
+
+threaded function uint merge_pmpat(uint nor, uint col, uint x, uint y)
+{
+  threaded function int babs(int x) {
+    return x < 0 ? (-1 - x) : x;
+  }
+  int mx = static_cast{int}(x % 32U);
+  int my = static_cast{int}(y % 32U);
+  int x1 = babs(mx - 16); // [0, 15]
+  int y1 = babs(my - 16); // [0, 15]
+  uint nx = 0;
+  uint ny = 0;
+  uint z = 0;
+  if (x1 > y1) {
+    nx = x1 >= 8 ? 255U : 0U;
+    // z = 7U - static_cast{uint}(babs(x1 - 8));
+    z = 15U - static_cast{uint}(x1);
+  } else {
+    ny = y1 >= 8 ? 255U : 0U;
+    // z = 7U - static_cast{uint}(babs(y1 - 8));
+    z = 15U - static_cast{uint}(y1);
+  }
+  z = (x1 < 8 && y1 < 8) ? 3U : 0U;
+  ny = ((mx & 3) == 0 || (my & 3) == 0) ? 255U : 0U; nx = ny; // test
+  z *= 16U;
+  return (z << 16) | (ny << 8) | nx;
+}
+
+function void
+init_triangles_texture(texture_data mutable& tex_dpat,
+  texture_data mutable& tex_pmpat, texture_data mutable& tex_tilemap)
+{
+  check_byteorder();
+  merge_png_to_texture("dpat.png", tex_dpat, GL_TEXTURE0,
+    make_callable_ptr{merge_dpat, 0}());
+  merge_png_to_texture("pmpat.png", tex_pmpat, GL_TEXTURE1,
+    make_callable_ptr{merge_pmpat, 0}());
   {
     /* tile map */
     SDL_Surface_Scoped sur1;
@@ -1933,7 +2091,6 @@ init_main_texture(texture_data mutable& tex_dpat,
       .to_slice(static_cast{size_t}(sur1_ref.pitch * sur1_ref.h));
     const sur1_w = static_cast{uint}(sur1_ref.w);
     const sur1_h = static_cast{uint}(sur1_ref.h);
-    // const sur1buf = sur1.Pixels();
     const rnd = make_rand_generator(333U);
     for (const y: 0 .. sur1_h) {
       for (const x: 0 .. sur1_w) {

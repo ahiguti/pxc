@@ -5,12 +5,13 @@ cd `dirname $0` &&
   pxc -p=./emscripten/pxc_emscripten.profile --generate-single-cc -nb \
     --generate-cc=./emscripten/gen/ \
     demoapp.px && \
-  em++ -std=c++11 -O3 -I./emscripten/ \
+  em++ -std=c++11 -O0 -I./emscripten/ \
     -s USE_SDL=2 -s USE_SDL_IMAGE=2 -s USE_SDL_TTF=2 -s USE_FREETYPE=1 \
     -s USE_BULLET=1 -s TOTAL_MEMORY=100000000 \
     -s EXPORTED_FUNCTIONS="['_main','_load_fs_cb','_save_fs_cb']" \
     ./emscripten/gen/demoapp.px.cc -o ./emscripten/gen/demoapp.html \
-    --preload-file dpat.png --preload-file mplus-1m-bold.ttf \
+    --preload-file dpat.png --preload-file pmpat.png \
+    --preload-file mplus-1m-bold.ttf \
     --preload-file pgl3d.cnf --emrun && \
   popd &&
   emrun --browser=firefox gen/demoapp.html
