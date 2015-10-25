@@ -352,7 +352,10 @@ private function uint compile_shader(cstrref const& src, GLenum type,
     }
     sdllog("compile_shader failed:", static_cast{int}(type), success, buf);
     if (debug_level > 0) {
-      sdllog("source: \n" + format_glsl(src));
+      const lines = format_glsl(src);
+      split_foreach{function void(cstrref const& line) {
+	sdllog(line);
+      }}(lines, '\n');
     }
     err_r = string_join{"\t"}(static_cast{int}(type), success, buf);
     glDeleteShader(res);

@@ -334,6 +334,13 @@ pglshader_draw_frame(pglshader mutable& pgs,
 	  whole_instances[static_cast{size_t}(main_bo_id)], pgs.agg_ibuffer,
 	  bo_id, pgs.glc, cam_df);
       }
+      /*
+      if (pgs.glc.enable_vsm) {
+	// FIXME FIXME
+	glActiveTexture(static_cast{GLenum}(static_cast{size_t}(GL_TEXTURE3) + iter));
+	glGenerateMipmap(GL_TEXTURE_2D);
+      }
+      */
     }
     /* restore fb */
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
@@ -573,7 +580,16 @@ function void init_shadowmap_fbo(shader_config const& glc,
     glActiveTexture(tex);
     sfbo.sm_texture.generate();
     glBindTexture(GL_TEXTURE_2D, sfbo.sm_texture.get());
-    if (glc.enable_depth_texture) {
+    if (glc.enable_vsm) {
+      GLenum t_internal_format = GL_RG32F;
+      GLenum t_format = GL_RG;
+      GLenum t_type = GL_FLOAT;
+      glTexImage2D(GL_TEXTURE_2D, 0, cast_int(t_internal_format),
+	sfbo.sm_width, sfbo.sm_height, 0, t_format, t_type,
+	offset_to_void_cp(0));
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, cast_int(GL_LINEAR));
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, cast_int(GL_LINEAR));
+    } else if (glc.enable_depth_texture) {
       sdllog("depth_texture");
       const f = glc.enable_sampler2dshadow ? GL_LINEAR : GL_NEAREST;
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, cast_int(f));
@@ -586,26 +602,51 @@ function void init_shadowmap_fbo(shader_config const& glc,
 	    cast_int(GL_LEQUAL));
 	}
       }
+      GLenum t_internal_format = GL_DEPTH_COMPONENT;
+      GLenum t_format = GL_DEPTH_COMPONENT;
+      GLenum t_type = GL_UNSIGNED_BYTE;
       if (!glc.is_gles) {
-	sdllog("depth_texture byte");
+	sdllog("depth_texture byte", sfbo.sm_width, sfbo.sm_height);
+      } else {
+	if (glc.is_gl3_or_gles3()) {
+	  sdllog("depth_texture int");
+	  t_internal_format = GL_DEPTH_COMPONENT16;
+	  t_format = GL_DEPTH_COMPONENT;
+	  t_type = GL_UNSIGNED_INT;
+	} else {
+	  sdllog("depth_texture short");
+	  t_internal_format = GL_DEPTH_COMPONENT;
+	  t_format = GL_DEPTH_COMPONENT;
+	  t_type = GL_UNSIGNED_SHORT;
+	}
+      }
+      glTexImage2D(GL_TEXTURE_2D, 0, cast_int(t_internal_format),
+	sfbo.sm_width, sfbo.sm_height, 0, t_format, t_type,
+	offset_to_void_cp(0));
+      /*
+      if (!glc.is_gles) {
+	if (m::true{is_gl3_or_gles3}) {
+	}
+	sdllog("depth_texture byte", sfbo.sm_width, sfbo.sm_height);
 	glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_DEPTH_COMPONENT),
 	  sfbo.sm_width, sfbo.sm_height, 0, GL_DEPTH_COMPONENT,
 	  GL_UNSIGNED_BYTE, offset_to_void_cp(0));
       } else {
 	if (glc.is_gl3_or_gles3()) {
-	  /* ios gles3: COMPONENT16, UNSIGNED_INT */
+	  // ios gles3: COMPONENT16, UNSIGNED_INT
 	  sdllog("depth_texture int");
 	  glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_DEPTH_COMPONENT16),
 	    sfbo.sm_width, sfbo.sm_height, 0, GL_DEPTH_COMPONENT,
 	    GL_UNSIGNED_INT, offset_to_void_cp(0));
 	} else {
-	  /* ios gles2: COMPONENT, UNSIGNED_SHORT */
+	  // ios gles2: COMPONENT, UNSIGNED_SHORT
 	  sdllog("depth_texture short");
 	  glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_DEPTH_COMPONENT),
 	    sfbo.sm_width, sfbo.sm_height, 0, GL_DEPTH_COMPONENT,
 	    GL_UNSIGNED_SHORT, offset_to_void_cp(0));
 	}
       }
+      */
       sdllog("depth_texture done");
     } else {
       sdllog("no depth_texture");

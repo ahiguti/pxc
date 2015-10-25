@@ -1,4 +1,14 @@
 
+- FIXME: mbp gt750m macosxでゴミが出る。intel graphicsだと出ない。windowsだと
+  同ハードでも出ない。
+
+- subtexel specular: -1から1の値。負のときは内側が反射、正のときは外側が
+  反射。0.8のときは内側から80%の範囲が非反射。
+
+- smpos0 .. smpos3 共通化
+
+- ライトの姿勢をカメラになるべく合わせる？
+
 - parallax: タイルマップを無駄に引かないようにしたほうが速いと思われる。
 
 - parallax: uv座標がどちらかに間延びしていると視差も間延びして歪んでしまう
@@ -8,7 +18,8 @@
 	gjkよりは速い方法を何か探せ。
 
 - grid_bp_tasks 各スレッドでgridを埋める処理をやらずにgridを埋めてからfork
-  したほうが処理に無駄がなくなる。
+  したほうが処理に無駄がなくなる。-> gridを埋める処理にはさほど時間食って
+  ないのでいらない
 
 - main描画でglDepthMask(0)にするとlineparticleの重ね合わせがおかしく
   なる。alpha加算であれば正しくなるが、glDepthMask(1)とどっちがいいか。
@@ -662,4 +673,25 @@ btDimulationIslandManager.cpp
 btAlignedAllocator.cpp
 btAlignedAllocator.h
 btPoolAllocator.h
+
+---------------------------------------------------------------------------
+parallax_warp
+
+warp有効にすると、特に深さが深いときに速くなる。
+
+// W = unused(8), Z = depth(8), Y = CPP(4) CPN(4), X = CNP(4) CNN(4)
+
+void parallax_warp(in vec3 dir, inout vec4 tval, inout vec2 tpos,
+  inout vec3 tsub)
+{
+  float cvt = floor((dir.x > 0.0 ? tex_val.y : tex_val.x) * 255.0 + 0.5);
+  float cval = dir.y > 0.0 ? floor(cvt / 16.0) : fract(cvt / 16.0) * 16.0;
+  cval = clamp(cval, 0.001, (tval.z - tsub.z) / dir.z);
+    // tsubが1.0ちょうどになるのを回避するために0.001だけ動かす
+  vec3 delta = dir * cval;
+  vec2 npos = tpos + tsub.xy + delta.xy;
+  tpos = floor(npos);
+  tsub = vec3(npos - tpos, tsub.z + delta.z);
+  parallax_read(tpos / tile_size, tval);
+}
 

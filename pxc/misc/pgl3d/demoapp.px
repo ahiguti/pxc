@@ -132,6 +132,29 @@ private threaded function float time_diff(double t0, double t1)
   return static_cast{float}(t1 - t0);
 }
 
+private threaded function glm::mat3 light_angle(glm::vec3 const& dir,
+  glm::mat3 const& cam)
+{
+  const sli = cam.to_cslice();
+  const v0 = glm::make_vec3(sli[0], sli[1], sli[2]);
+  const v1 = glm::make_vec3(sli[3], sli[4], sli[5]);
+  const v2 = glm::make_vec3(sli[6], sli[7], sli[8]);
+  const d0 = fabs(glm::dot(dir, v0));
+  const d1 = fabs(glm::dot(dir, v1));
+  const d2 = fabs(glm::dot(dir, v2));
+  glm::vec3 x;
+  if (d0 >= d1 && d0 >= d2) {
+    x = glm::cross(v0, dir);
+  } else if (d1 >= d0 && d1 >= d2) {
+    x = glm::cross(v1, dir);
+  } else {
+    x = glm::cross(v2, dir);
+  }
+  x = x.normalize();
+  const y = glm::cross(dir, x).normalize();
+  return glm::make_tmat3(x.x, x.y, x.z, y.x, y.y, y.z, dir.x, dir.y, dir.z);
+}
+
 public threaded struct demoapp_scene(node_factory const& nodefac0,
   collision_shape_data_array const& shapes0, io::io const& sys0)
   <pgl3d_scene>
@@ -144,10 +167,12 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
   {
     light.position = // camera.angle * glm::make_vec3(0.0, 0.0, -50.0) +
       camera.position + glm::make_vec3(0.0, 0.0, 0.0);
+    light.angle = glm::make_quat_wxyz(1.0, 0.0, 0.0, 0.0);
+    //light.angle = light_angle(glm::make_vec3(0.0, 0.0, 1.0),
+    //  camera.angle.to_mat3()).to_quat();
     /*
     light.position = glm::make_vec3(0.0, -50.0, 0.0);
     */
-    light.angle = glm::make_quat_wxyz(1.0, 0.0, 0.0, 0.0);
     // light.angle = generate_rand_quat(make_rand_generator(1234U));
     // light.angle.normalize();
     // debug_log("light", light.angle.to_cslice());
