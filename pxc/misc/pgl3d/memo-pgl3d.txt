@@ -1,6 +1,9 @@
 
+- 衝突判定がよくわかるようにカメラの前に衝突判定用オブジェクトを置く。
+
 - FIXME: mbp gt750m macosxでゴミが出る。intel graphicsだと出ない。windowsだと
   同ハードでも出ない。
+  enable_macos_nvidia_wa
 
 - subtexel specular: -1から1の値。負のときは内側が反射、正のときは外側が
   反射。0.8のときは内側から80%の範囲が非反射。
@@ -16,6 +19,7 @@
 - grid: box shape collider
         voxel collider? multi-aabb collider?
 	gjkよりは速い方法を何か探せ。
+	6方向からのハイトマップを作るのはどうか？
 
 - grid_bp_tasks 各スレッドでgridを埋める処理をやらずにgridを埋めてからfork
   したほうが処理に無駄がなくなる。-> gridを埋める処理にはさほど時間食って
@@ -694,4 +698,111 @@ void parallax_warp(in vec3 dir, inout vec4 tval, inout vec2 tpos,
   tsub = vec3(npos - tpos, tsub.z + delta.z);
   parallax_read(tpos / tile_size, tval);
 }
+
+---------------------------------------------------------------------------
+6方向hightmap
+
+三角形をzが負からみたときの高さを計算
+三角形の(x, y)座標が視点の(x, y)を含むか判定。
+ ABxAP, BCxBP, CAxCPの負号が全て同じ
+含むなら、平面とP(x, y)の交点となるz座標が高さとなる。
+平面上のどこか一点A、視線と平面の交点P、法線ベクトルNとすると
+平面の方程式: dot(P - A, N) = 0
+(Px - Ax) * Nx + (Py - Ay) * Ny + (Pz - Az) * Nz = 0
+(Pz - Az) * Nz = (Ax - Px) * Nx + (Ay - Py) * Ny
+(Pz - Az) = ((Ax - Px) * Nx + (Ay - Py) * Ny) / Nz
+Pz = ((Ax - Px) * Nx + (Ay - Py) * Ny) / Nz + Az
+外積使うのは遅いので三角形の内部の点を網羅するほうがいい。
+3点のAABBを調べ、x最小の点A, x最大の点Bとする。
+for (px = floor(ax + 0.9999) + 0.5; px < bx; px += 1.0) {
+  rat = (px - ax) / (bx - ax);
+  pab = a + (b - a) * rat;
+  if (px < cx) {
+    rat = (px - ax) / (cx - ax);
+    pacb = a + (c - a) * rat;
+  } else {
+    ra = (px - cx) / (bx - cx);
+    pacb = c + (b - c) * rat;
+  }
+  y0 = pab.y;
+  y1 = pacb.y;
+  if (y0 < y1) { swap(y0, y1); }
+  for (py = floor(y0 + 0.9999) + 0.5; py < y1; py += 1.0) {
+    pz = ((ax - px) * nx + (ay - py) * ny) / nz + az;
+    floor(px, py)の位置の深さがpzである
+  }
+}
+ループの中は最低一回まわるように調整する?
+px0 = floor(ax + 0.9999) + 0.5; // グリッドの中心
+px1 = bx;
+if (px0 >= px1) {
+  px0 = (ax + bx + cx) / 3.0;
+  px1 = px0 + 1.0;
+}
+function pair{float} calc_range(float ax, float bx)
+{
+  pair{float} r;
+  r.first = floor(ax + 0.9999) + 0.5;
+  r.second = bx;
+  if (r.first >= r.second) {
+    r.first = (ax + bx) / 2.0; // なるべく近いグリッド
+    r.second = r.first + 1.0;
+  }
+  return r;
+}
+
+shapeのローカルaabbを求め、各三角形を(0,sz)にスケール。szは分割数。
+
+衝突判定
+3x2枚のheightmapのすべてについて衝突していれば衝突。
+各heightmapについては、x,yのマップを引いてzが最小と最大の範囲に
+はいっていれば衝突。
+
+---------------------------------------------------------------------------
+
+float linear_01(in float x, in float a, in float b)
+{
+  return clamp((x - a) / (b - a), 0.0, 1.0);
+}
+
+float linear_10(in float x, in float a, in float b)
+{
+  return clamp((b - x) / (b - a), 0.0, 1.0);
+}
+
+float max_vec3(in vec3 v)
+{
+  return max(v.x, max(v.y, v.z));
+}
+
+f += "bool n1 = all(lessThan(abs(p1),vec3(0.32,0.32,0.32))) &&";
+フラグメントの位置がシャドウマップの中央1/3に入っている(カメラに近い)なら1
+linear_10(max_vec3(abs(p1)), 0.28, 0.32);
+f += "  abs(zval1 - 0.5) * 2.0 < zval_thr;\n";
+フラグメントとキャスタの距離が閾値より近いなら1
+linear_10(max_vec3(abs(zval1 - 0.5)), zval_thr * 0.8, zval_thr);
+f += "float smv1 = min(1.0, sml1 + float(n1 ||";
+f += "  any(greaterThanEqual(p1, vec3(1.0,1.0,1.0)))));\n";
+フラグメントの位置がシャドウマップの範囲外なら1
+linear_01(max_vec3(abs(p1)), 0.9, 1.0);
+
+float smv1 = min(1.0, sml1
+  + linear_10(max_vec3(abs(p1)), 0.33 * 0.9, 0.33)
+  + linear_10(max_vec3((zval1 - 0.5) * 2.0, zval_thr * 0.9, zval_thr)
+  + linear_01(max_vec3(abs(p1)), 0.9, 1.0));
+
+---------------------------------------------------------------------------
+box collider
+
+radiusで判定した後にlocal aabbで判定できるようにする。
+collision_shape_iにlocal_aabbを返す関数追加? 判定関数を作る？
+さらに、local_aabbで判定した後にheightmapで判定できるようにする。
+function bool collide(btVector3 const& pos, float ra);
+  shapeのローカル座標へ変換。
+
+各shapeにlocal判定の有無を返す関数を用意。それがtrueを返したら
+local座標に変換したターゲット座標を渡してlocal判定実行。
+
+function bool has_local_collision();
+function bool local_collision(vec3 const& local_pos, float radius);
 

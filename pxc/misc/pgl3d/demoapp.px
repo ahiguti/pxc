@@ -14,6 +14,7 @@ public import pgl3d::glgeometry -;
 public import pgl3d::wfobj -;
 public import pgl3d::drawer_export -;
 public import pgl3d::input_control -;
+public import pgl3d::collision_shape -;
 public import pgl3d::dynamics_world -;
 public import pgl3d::pglconfig -;
 public import pgl3d::sdlutil -;
@@ -640,12 +641,13 @@ private function void build_vertices(app_impl mutable& app,
 
   /* save shapes for physics engine */
   function void shapes_add_convex(cstrref const& name, float mass) {
-    const& posdt = pgs.get_vertices(name)->positions;
+    const& p = pgs.get_vertices(name)->positions;
+    const& elems = pgs.get_vertices(name)->elements;
     // const reduced = reduce_vertices(posdt, 0.00001f);
     // debug_log("reduced", name, posdt.size()/3, reduced.size()/3);
     app.scene_shared->shapes.push_back(make_tptr{collision_shape_data}(
       name, pgs.get_joint_id(name), mass,
-      collision_shape_e_convex_hull, posdt, varray{uint}()));
+      collision_shape_e_convex_hull, p, elems));
   }
   function void shapes_add_sphere(cstrref const& name, float radius,
     float mass) {
@@ -720,6 +722,9 @@ tsvaluetype struct lpbullet_data {
   public function float get_step() const {
     return value[7];
   }
+  public function float get_step_limit() const {
+    return value[8];
+  }
   public function void set_pos0(glm::vec3 const& v) {
     value[0] = v.x;
     value[1] = v.y;
@@ -735,6 +740,9 @@ tsvaluetype struct lpbullet_data {
   }
   public function void set_step(float v) {
     value[7] = v;
+  }
+  public function void set_step_limit(float v) {
+    value[8] = v;
   }
 }
 
@@ -774,38 +782,20 @@ scene_objects(collision_shape_data_array const& shape0, size_t num_split0)
     const& v = sh.values;
     const& e = sh.elements;
     const mass = sh.mass;
-    if (sh.shape == collision_shape_e_sphere) {
-      add_collision_shape_one(name, joint_id, make_sphere_shape(v[0]), mass);
-    } else if (sh.shape == collision_shape_e_box) {
-      add_collision_shape_one(name, joint_id, make_box_shape(v[0], v[1], v[2]),
-	mass);
-    } else if (sh.shape == collision_shape_e_convex_hull) {
-      add_collision_shape_one(name, joint_id, make_convex_hull_shape(v), mass);
-    } else if (sh.shape == collision_shape_e_concave) {
-      ptr{triangle_mesh_i} trmesh = make_triangle_mesh();
-      size_t eidx = 0;
-      while (eidx < e.size()) {
-	if (static_cast{size_t}(e[eidx]) >= v.size()) {
-	  // TODO: primitive restart
-	}
-	const i0 = e[eidx + 0] * 3;
-	const i1 = e[eidx + 1] * 3;
-	const i2 = e[eidx + 2] * 3;
-	/*
-	const v0 = btVector3_(v[i0 + 0], v[i0 + 1], v[i0 + 2]);
-	const v1 = btVector3_(v[i1 + 0], v[i1 + 1], v[i1 + 2]);
-	const v2 = btVector3_(v[i2 + 0], v[i2 + 1], v[i2 + 2]);
-	m.addTriangle(v2, v1, v0, true); // enable dedup
-	*/
-	trmesh->add_triangle(
-	  v[i0 + 0], v[i0 + 1], v[i0 + 2],
-	  v[i1 + 0], v[i1 + 1], v[i1 + 2],
-	  v[i2 + 0], v[i2 + 1], v[i2 + 2]);
-	eidx += 3;
+    threaded function ptr{collision_shape_i} get_shape() {
+      if (sh.shape == collision_shape_e_sphere) {
+	return make_sphere_shape(v[0]);
+      } else if (sh.shape == collision_shape_e_box) {
+	return make_box_shape(v[0], v[1], v[2]);
+      } else if (sh.shape == collision_shape_e_convex_hull) {
+	return make_convex_hull_shape(v, e);
+      } else if (sh.shape == collision_shape_e_concave) {
+	return make_triangle_mesh_shape(v, e);
+      } else {
+	throw runtime_error_template{"get_shape"}("1");
       }
-      const s = make_triangle_mesh_shape(trmesh);
-      add_collision_shape_one(name, joint_id, s, mass);
     }
+    add_collision_shape_one(name, joint_id, get_shape(), mass);
   }
   private function void add_collision_shape_one(string const& name,
     joint_id_type const& id, ptr{collision_shape_i} const& sh,
@@ -848,7 +838,8 @@ lpbullet_swarm <swarm_i>
   }
   public function void on_collide(size_t i, size_t o)
   {
-    lparr[i].value[7] = 100000.0f;
+    mutable& lpb = lparr[i];
+    lpb.set_step(lpb.get_step_limit());
   }
   public function void on_step(float speed)
   {
@@ -859,7 +850,8 @@ lpbullet_swarm <swarm_i>
       vec0 += vd * speed / 4.0f;
       vec1 += vd * speed / 4.0f;
       const step = lpb.get_step() + speed;
-      const sz = min(1.0f, (200.0f - step) / 20.0f);
+      const slim = lpb.get_step_limit();
+      const sz = min(1.0f, (slim - step) / 20.0f);
       lpb.set_pos0(vec0);
       lpb.set_pos1(vec1);
       lpb.set_size(0.25f * sz);
@@ -867,7 +859,7 @@ lpbullet_swarm <swarm_i>
     }
     threaded function bool lp_is_finished(lpbullet_data const& lpb)
     {
-      return lpb.value[7] > 200.0f;
+      return lpb.get_step() > lpb.get_step_limit();
     }
     erase_cond{lp_is_finished}(lparr);
   }
@@ -932,10 +924,10 @@ scene_control(node_factory const& nfac,
   init();
   private function void init()
   {
-    node_scene = instantiate_cur_scene();
     for (const i: 0 .. num_split) {
       lpbullet_swarms.push_back(make_tptr{lpbullet_swarm}());
     }
+    node_scene = instantiate_cur_scene();
   }
   private function node instantiate_cur_scene()
   {
@@ -1048,7 +1040,8 @@ scene_control_step(scene_control mutable& sctl,
       lpbsw->on_step(speed);
     }
   }
-  threaded function void spawn_lp_one(glm::mat4 const& m, float speed)
+  threaded function void spawn_lp_one(glm::mat4 const& m, float steplim,
+    float length)
   {
     // size_t const lim = is_gles != 0 ? 20000U : 200000U;
     size_t const lim = static_cast{size_t}(200000U)
@@ -1071,16 +1064,12 @@ scene_control_step(scene_control mutable& sctl,
       const rot = m.to_3();
       const dir = rot * glm::make_vec3(0.0f, 0.0f, -1.5f);
       const p0 = pos + dir * 2.0f;
-      const p1 = pos + dir * 3.0f;
-      const& sli = lpb.value.range();
-      sli[0] = p0.x; // position0
-      sli[1] = p0.y;
-      sli[2] = p0.z;
-      sli[3] = p1.x; // position1
-      sli[4] = p1.y;
-      sli[5] = p1.z;
-      sli[6] = 0.25f; // point_size_base
-      sli[7] = 0.0f; // step
+      const p1 = pos + dir * (2.0f + length);
+      lpb.set_pos0(p0);
+      lpb.set_pos1(p1);
+      lpb.set_size(0.25f);
+      lpb.set_step(0.0f);
+      lpb.set_step_limit(steplim);
       sctl.lpbullet_swarms[min_lpsw]->lparr.push_back(lpb);
     }
     return;
@@ -1095,8 +1084,7 @@ scene_control_step(scene_control mutable& sctl,
       ftable[bo_id](sn, ncd, idata);
     }	
   }
-  threaded function void step_snobj_dynamics(scene_node mutable& sn_scene,
-    bool spawn_obj, bool spawn_lp_flag)
+  threaded function void step_snobj_dynamics(bool spawn_obj, bool spawn_lp_flag)
   {
     if (!sctl.scene_paused) {
       if (spawn_obj) {
@@ -1117,11 +1105,19 @@ scene_control_step(scene_control mutable& sctl,
       cursn.joint_id = obj->get_joint_id();
       obj->get_world_transform_mat4(cursn.trans.value);
       prepare_one(cursn);
-      if (spawn_lp_flag) {
-	spawn_lp_one(cursn.trans.value, speed);
+      if (!sctl.scene_paused && spawn_lp_flag) {
+	spawn_lp_one(cursn.trans.value, 200.0f, 1.0f);
       }
     }
     sctl.sco.dworld.rigid_bodies_foreach{step_obj}();
+    if (sctl.scene_paused && spawn_lp_flag) {
+      mutable posang = ss.posang;
+      posang.position += posang.angle * glm::make_vec3(0.0f, 5.0f, -5.0f);
+      posang.angle *= glm::make_quat_angle_axis(to_radians(-90.0f),
+	1.0f, 0.0f, 0.0f);
+      const m = posang.to_mat4();
+      spawn_lp_one(m, 10000.0f, 0.1f);
+    }
   }
   step_lp(); /* lineparticle */
   bool spawn_lp_flag = false;
@@ -1140,7 +1136,7 @@ scene_control_step(scene_control mutable& sctl,
     if (const& v: ss.app_commands["throw"]) {
       spawn_obj_flag = true;
     }
-    step_snobj_dynamics(sctl.node_scene, spawn_obj_flag, spawn_lp_flag);
+    step_snobj_dynamics(spawn_obj_flag, spawn_lp_flag);
   }
 }
 

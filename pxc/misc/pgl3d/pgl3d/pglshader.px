@@ -81,7 +81,7 @@ pglshader(shader_config const& sconf0,
       glGetFloatv(GL_POINT_SIZE_GRANULARITY, address(step));
       sdllog("GL_POINT_SIZE_RANGE", arr, step);
     }
-    if (m::ne{is_gl3_or_gles3, 0}) {
+    if (m::and{is_gl3_or_gles3, m::not{is_gles}}) {
       if (glc.enable_msaa != 0) {
 	glEnable(GL_MULTISAMPLE);
       }
@@ -257,16 +257,19 @@ pglshader(shader_config const& sconf0,
   {
     const default_scale = m::ne{is_gles, 0} ? 0.5f : 1.0f;
     const scale = glc.conf.get("shadowmap_resolution", default_scale);
-    const wh = static_cast{int}(static_cast{float}(max(width, height))
+    mutable wh = static_cast{int}(static_cast{float}(max(width, height))
       * scale);
+    if (scale >= 512.0f) {
+      wh = static_cast{int}(scale);
+    }
     int sm_size = 1;
     for (int i: 8 .. 16) {
       sm_size = 1 << i;
-      if (sm_size > wh) {
+      if (sm_size >= wh) {
 	break;
       }
     }
-    sdllog("shadowmap size", sm_size);
+    sdllog("shadowmap size", sm_size, scale);
     cam.screen_width = width;
     cam.screen_height = height;
     cam.shadowmap_size = sm_size;
@@ -581,20 +584,24 @@ function void init_shadowmap_fbo(shader_config const& glc,
     sfbo.sm_texture.generate();
     glBindTexture(GL_TEXTURE_2D, sfbo.sm_texture.get());
     if (glc.enable_vsm) {
-      GLenum t_internal_format = GL_RG32F;
-      GLenum t_format = GL_RG;
-      GLenum t_type = GL_FLOAT;
-      glTexImage2D(GL_TEXTURE_2D, 0, cast_int(t_internal_format),
-	sfbo.sm_width, sfbo.sm_height, 0, t_format, t_type,
-	offset_to_void_cp(0));
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, cast_int(GL_LINEAR));
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, cast_int(GL_LINEAR));
+      if (m::is_true{is_gl3_or_gles3}) {
+	GLenum t_internal_format = GL_RG32F;
+	GLenum t_format = GL_RG;
+	GLenum t_type = GL_FLOAT;
+	glTexImage2D(GL_TEXTURE_2D, 0, cast_int(t_internal_format),
+	  sfbo.sm_width, sfbo.sm_height, 0, t_format, t_type,
+	  offset_to_void_cp(0));
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+	  cast_int(GL_LINEAR));
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+	  cast_int(GL_LINEAR));
+      }
     } else if (glc.enable_depth_texture) {
       sdllog("depth_texture");
       const f = glc.enable_sampler2dshadow ? GL_LINEAR : GL_NEAREST;
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, cast_int(f));
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, cast_int(f));
-      if (m::ne{is_gl3_or_gles3, 0}) {
+      if (m::is_true{is_gl3_or_gles3}) {
 	if (glc.enable_sampler2dshadow) {
 	  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE,
 	    cast_int(GL_COMPARE_REF_TO_TEXTURE));
@@ -623,30 +630,6 @@ function void init_shadowmap_fbo(shader_config const& glc,
       glTexImage2D(GL_TEXTURE_2D, 0, cast_int(t_internal_format),
 	sfbo.sm_width, sfbo.sm_height, 0, t_format, t_type,
 	offset_to_void_cp(0));
-      /*
-      if (!glc.is_gles) {
-	if (m::true{is_gl3_or_gles3}) {
-	}
-	sdllog("depth_texture byte", sfbo.sm_width, sfbo.sm_height);
-	glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_DEPTH_COMPONENT),
-	  sfbo.sm_width, sfbo.sm_height, 0, GL_DEPTH_COMPONENT,
-	  GL_UNSIGNED_BYTE, offset_to_void_cp(0));
-      } else {
-	if (glc.is_gl3_or_gles3()) {
-	  // ios gles3: COMPONENT16, UNSIGNED_INT
-	  sdllog("depth_texture int");
-	  glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_DEPTH_COMPONENT16),
-	    sfbo.sm_width, sfbo.sm_height, 0, GL_DEPTH_COMPONENT,
-	    GL_UNSIGNED_INT, offset_to_void_cp(0));
-	} else {
-	  // ios gles2: COMPONENT, UNSIGNED_SHORT
-	  sdllog("depth_texture short");
-	  glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_DEPTH_COMPONENT),
-	    sfbo.sm_width, sfbo.sm_height, 0, GL_DEPTH_COMPONENT,
-	    GL_UNSIGNED_SHORT, offset_to_void_cp(0));
-	}
-      }
-      */
       sdllog("depth_texture done");
     } else {
       sdllog("no depth_texture");

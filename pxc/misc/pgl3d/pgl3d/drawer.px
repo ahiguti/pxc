@@ -1055,6 +1055,18 @@ triangles_shader_vert(shader_config const& g, int opt)
 
 function string triangles_shader_frag(shader_config const& g, int opt)
 {
+  bool enable_macos_nvidia_wa = false;
+  if (m::is_true{is_macos}) {
+    string verstr = cubptr_to_string(glGetString_nocheck(GL_VERSION));
+    string vn0;
+    string vn1;
+    string_split{' '}(verstr, vn0, vn1);
+    string s = vn1[0 .. 6];
+    if (s == "NVIDIA") {
+      enable_macos_nvidia_wa = true;
+      sdllog("macos nvidia workaround enabled");
+    }
+  }
   string f;
   f += g.prepend();
   f += "uniform sampler2D sampler_dpat;\n";
@@ -1090,6 +1102,18 @@ function string triangles_shader_frag(shader_config const& g, int opt)
     } else {
       f += "uniform float ndelta_scale;\n"; // 0.02 / 40.0
     }
+    f += "float linear_01(in float x, in float a, in float b) {\n";
+    f += "return clamp((x - a) / (b - a), 0.0, 1.0);\n";
+    f += "}\n";
+    f += "float linear_10(in float x, in float a, in float b) {\n";
+    f += "return clamp((b - x) / (b - a), 0.0, 1.0);\n";
+    f += "}\n";
+    f += "float max_vec3(in vec3 v) {\n";
+    f += "return max(v.x, max(v.y, v.z));\n";
+    f += "}\n";
+    f += "float max3(in float x0, in float x1, in float x2) {\n";
+    f += "return max(x0, max(x1, x2));\n";
+    f += "}\n";
   }
   f += g.decl_fragcolor();
   if (g.enable_normalmapping) {
@@ -1138,7 +1162,8 @@ function string triangles_shader_frag(shader_config const& g, int opt)
     f += "tex_val = " + g.texture2d(); // lookup the tilepattern
     f += "  (sampler_pmpat, uv_pixel / tiletex_size);\n";
     f += "}\n";
-    f += "vec2 parallax_next(in vec3 tsub, out vec3 tsub_next, in vec3 d) {\n";
+    f += "vec2 parallax_next(in vec3 tsub, out vec3 tsub_next, in float z,";
+    f += " in vec3 d) {\n";
     f += "vec2 r = vec2(0.0, 0.0);\n";
     f += "float dypos = float(d.y > 0.0);\n";
     f += "float nx = tsub.x + (dypos - tsub.y) * d.x / d.y;\n";
@@ -1153,7 +1178,7 @@ function string triangles_shader_frag(shader_config const& g, int opt)
     f += "tsub_next = vec3(dxpos, ny, nz);\n";
     f += "r.x = dxpos * 2.0 - 1.0;\n";
     f += "} else {\n";
-    f += "tsub_next = vec3(tsub.xy, 1024.0);\n";
+    f += "tsub_next = vec3(tsub.xy, z);\n";
     f += "}\n";
     f += "return r;\n";
     f += "}\n";
@@ -1161,6 +1186,9 @@ function string triangles_shader_frag(shader_config const& g, int opt)
     f += " inout vec3 tsub, inout float dbg) {\n";
     f += "const float tile_size = 32.0;\n";
     f += "tsub.xy = clamp(tsub.xy, 0.001, 0.999);\n";
+    if (enable_macos_nvidia_wa) {
+      f += "return;\n";
+    }
     f += "dir /= max(abs(dir.x), abs(dir.y));\n"; // FIXME: compute by caller?
     // W = unused(8), Z = depth(8), Y = CNN(4) CNP(4), X = CPN(4) CPP(4)
     f += "float cvt = floor((dir.x > 0.0 ? tval.x : tval.y) * 255.0 + 0.5);\n";
@@ -1192,26 +1220,25 @@ function string triangles_shader_frag(shader_config const& g, int opt)
     f += "void parallax_loop(inout vec2 pos, in vec3 eye, in vec3 light,";
     f += " out float z, out vec3 nor, out bool vertical, out float shval,";
     f += " out float dbg) {\n";
-    f += "dbg = 0.0;\n"; // FIXME: debug
-    f += "shval = 1.0;\n";
+    f += "z = 0.0;\n";
     f += "nor = vary_normal;\n";
     f += "vertical = false;\n";
+    f += "shval = 1.0;\n";
+    f += "dbg = 0.0;\n"; // FIXME: debug
     f += "const float tile_size = 32.0;\n";
     f += "eye.z /= tile_size;\n";
     f += "light.z /= tile_size;\n";
-    f += "pos *= tile_size;\n"; // tile coord to texel coord
-    f += "vec2 tpos = floor(pos);\n";
-    f += "vec3 tsub = vec3(pos - tpos, 0.0);\n";
+    f += "vec2 pos_m = pos * tile_size;\n"; // tile coord to texel coord
+    f += "vec2 tpos = floor(pos_m);\n";
+    f += "vec3 tsub = vec3(pos_m - tpos, 0.0);\n";
     f += "vec4 tval;\n";
     f += "parallax_read(tpos / tile_size, tval);\n";
-    f += "int i = 0;\n";
-    f += "do {\n";
     f += "if (tval.z == 0.0) {\n";
-    f += "break;\n";
+    f += "return;\n";
     f += "}\n";
-    f += "for (i = 0; i < 128; ++i) {\n";
+    f += "for (int i = 0; i < 128; ++i) {\n";
     f += "vec3 tsub_next;\n";
-    f += "vec2 tnext_diff = parallax_next(tsub, tsub_next, eye);\n";
+    f += "vec2 tnext_diff = parallax_next(tsub, tsub_next, tval.z, eye);\n";
     //f += "if (tsub_next.x < -0.01 || tsub_next.x > 1.01 ||";
     //f += " tsub_next.y < -0.01 || tsub_next.y > 1.01) {\n"; // FIXME: debug
     //f += "  dbg = float(i + 1); return;\n";
@@ -1233,19 +1260,14 @@ function string triangles_shader_frag(shader_config const& g, int opt)
     f += "break;\n";
     f += "}\n";
     f += "parallax_warp(eye, tval, tpos, tsub, dbg);\n";
-    f += "}\n"; // for (...)
-    f += "} while (false);\n";
+    // f += "if (i > 30) { dbg = 1.0; }\n";
+    f += "}\n"; // for (i)
     f += "pos = (tpos + tsub.xy) / tile_size;\n";
     f += "z = tval.z;\n";
-    // f += "if (i > 30) { dbg = 1.0; }\n";
     if (g.enable_parallax_shadow) {
-      f += "do {\n";
-      f += "if (tsub.z <= 0.0) {\n";
-      f += "break;\n";
-      f += "}\n";
-      f += "for (i = 0; i < 128; ++i) {\n";
+      f += "for (int i = 0; i < 128; ++i) {\n";
       f += "vec3 tsub_next;\n";
-      f += "vec2 tnext_diff = parallax_next(tsub, tsub_next, light);\n";
+      f += "vec2 tnext_diff = parallax_next(tsub, tsub_next, 0.0, light);\n";
       f += "if (tsub_next.z <= 0.0) {\n";
       f += "break;\n";
       f += "}\n";
@@ -1257,11 +1279,10 @@ function string triangles_shader_frag(shader_config const& g, int opt)
       f += "shval = 0.0;\n";
       f += "break;\n";
       f += "}\n";
-      // f += "parallax_warp2(light, tval, tpos, tsub);\n";
-      f += "}\n"; // for (...)
-      f += "} while (false);\n";
+      f += "parallax_warp2(light, tval, tpos, tsub);\n";
+      // f += "if (i > 30) { dbg = 1.0; }\n";
+      f += "}\n"; // for (i)
     }
-    // f += "if (i > 30) { dbg = 1.0; }\n";
     f += "}\n";
   }
   f += "void main(void) {\n";
@@ -1374,9 +1395,10 @@ function string triangles_shader_frag(shader_config const& g, int opt)
 	  f += "for (float i = -1.; i <= 1.; ++i) {\n";
 	  f += "for (float j = -1.; j <= 1.; ++j) {\n";
 	  f += "zval"+x+"_cur = " + g.texture2d();
-	  f += "  (sampler_sm"+x+", smpos.xy + vec2(i,j)/8192.0).x;\n";
+	  f += "  (sampler_sm"+x+", smpos.xy + vec2(i,j)/4096.0).x;\n";
 	  f += "zval"+x+" = min(zval"+x+", zval"+x+"_cur);\n";
-	  f += "sml"+x+" += float(smpos.z < zval"+x+"_cur * (1.0005 + (abs(i)+abs(j))/4096.0))/9.0;\n";
+	  f += "sml"+x+" += float(smpos.z < zval"+x+"_cur";
+	  f += " * (1.0005 + (abs(i)+abs(j))/4096.0))/9.0;\n";
 	  f += "}\n";
 	  f += "}\n";
 	} else {
@@ -1393,25 +1415,45 @@ function string triangles_shader_frag(shader_config const& g, int opt)
 	  f += "vec3 smpos;\n";
 	  f += "vec2 smz;\n";
 	  f += "float dist;\n";
-	  //f += "float dist2;\n";
 	  f += "float variance;\n";
 	}
-	f += "smpos = (p"+x+" + 1.0) * 0.5;\n";
-	f += "smz = " + g.texture2d();
-	f += "  (sampler_sm"+x+", smpos.xy).rg;\n";
-	f += "float zval"+x+" = smz.r;\n";
-	f += "float zval"+x+"_sq = smz.g;\n";
-	f += "float sml"+x+";\n";
-	f += "dist = smpos.z - smz.r * 1.001;\n";
-	f += "if (dist <= 0.0) {\n";
-	f += "sml"+x+" = 1.0;\n";
-	f += "} else {\n";
-	f += "variance = smz.g - smz.r * smz.r;\n";
-	f += "variance = max(variance, 0.000001);\n";
-	// f += "sml"+x+" = smoothstep(0.1, 1.0,";
-	f += "sml"+x+" = (";
-	f += " variance / (variance + dist * dist));\n";
-	f += "}\n";
+	if (g.enable_shadowmapping_multisample) {
+	  f += "smpos = (p"+x+" + 1.0) * 0.5;\n";
+	  f += "float zval"+x+" = 99999.0;\n";
+	  f += "float sml"+x+" = 0.0;\n";
+	  f += "for (float i = -1.0; i <= 1.0; i += 2.0) {\n";
+	  f += "for (float j = -1.0; j <= 1.0; j += 2.0) {\n";
+	  f += "smz = " + g.texture2d();
+	  f += "  (sampler_sm"+x+", smpos.xy + vec2(i, j) / 8192.0).rg;\n";
+	  f += "zval"+x+" = min(zval"+x+", smz.r);\n";
+	  f += "dist = smpos.z - smz.r * 1.001;\n";
+	  f += "if (dist <= 0.0) {\n";
+	  f += "sml"+x+" += 0.25;\n";
+	  f += "} else {\n";
+	  f += "variance = smz.g - smz.r * smz.r;\n";
+	  f += "variance = max(variance, 0.000001);\n";
+	  f += "sml"+x+" += 0.25 * variance / (variance + dist * dist);\n";
+	  f += "}\n";
+	  f += "}\n"; // for (j)
+	  f += "}\n"; // for (i)
+	  f += "sml"+x+" = clamp(sml"+x+" * 1.5 - 0.1, 0.0, 1.0);\n";
+	} else {
+	  f += "smpos = (p"+x+" + 1.0) * 0.5;\n";
+	  f += "smz = " + g.texture2d();
+	  f += "  (sampler_sm"+x+", smpos.xy).rg;\n";
+	  f += "float zval"+x+" = smz.r;\n";
+	  f += "float zval"+x+"_sq = smz.g;\n";
+	  f += "float sml"+x+" = 0.0;\n";
+	  f += "dist = smpos.z - smz.r * 1.001;\n";
+	  f += "if (dist <= 0.0) {\n";
+	  f += "sml"+x+" = 1.0;\n";
+	  f += "} else {\n";
+	  f += "variance = smz.g - smz.r * smz.r;\n";
+	  f += "variance = max(variance, 0.000001);\n";
+	  f += "sml"+x+" = clamp(";
+	  f += " variance / (variance + dist * dist) * 1.5 - 0.1, 0.0, 1.0);\n";
+	  f += "}\n";
+	}
 	debug_log("VSM enabled");
       } else {
 	if (i == 0) {
@@ -1428,11 +1470,29 @@ function string triangles_shader_frag(shader_config const& g, int opt)
       }
     }
     if (g.enable_vsm) {
-      f += "const float zval_thr = 0.02;\n";
+      f += "const float zval_thr = 0.1;\n";
     } else {
       f += "const float zval_thr = 0.32;\n";
     }
+    f += "const float psm_thr = 0.30;\n";
     f += "if (zval0 < 0.0) { color.g += 1.0; };\n"; // FIXME
+    f += "float smv0 = min(1.0, sml0";
+    f += "  + linear_01(max_vec3(abs(p0)), 0.9, 1.0));\n";
+    f += "float smv1 = max3(sml1,";
+    f += "  min(linear_10(max_vec3(abs(p1)), psm_thr * 0.9, psm_thr),";
+    f += "  linear_10(abs(zval1 - 0.5) * 2.0, zval_thr * 0.9, zval_thr)),";
+    f += "  linear_01(max_vec3(abs(p1)), 0.9, 1.0));\n";
+    f += "float smv2 = max3(sml2,";
+    f += "  min(linear_10(max_vec3(abs(p2)), psm_thr * 0.9, psm_thr),";
+    f += "  linear_10(abs(zval2 - 0.5) * 2.0, zval_thr * 0.9, zval_thr)),";
+    f += "  linear_01(max_vec3(abs(p2)), 0.9, 1.0));\n";
+    f += "float smv3 = max3(sml3,";
+    f += "  min(linear_10(max_vec3(abs(p3)), psm_thr * 0.9, psm_thr),";
+    f += "  linear_10(abs(zval3 - 0.5) * 2.0, zval_thr * 0.9, zval_thr)),";
+    f += "  linear_01(max_vec3(abs(p3)), 0.9, 1.0));\n";
+    f += "lstr = min(lstr, min(min(smv0, smv1), min(smv2, smv3)));\n";
+    // f += "lstr = min(lstr, min(smv0, smv1));\n";
+    /*
     f += "float smv0 = min(1.0, sml0 + float(";
     f += "  any(greaterThanEqual(p0, vec3(1.0,1.0,1.0)))));\n";
     f += "bool n1 = all(lessThan(abs(p1),vec3(0.32,0.32,0.32))) &&";
@@ -1448,6 +1508,7 @@ function string triangles_shader_frag(shader_config const& g, int opt)
     f += "float smv3 = min(1.0, sml3 + float(n3 ||";
     f += "  any(greaterThanEqual(p3, vec3(1.0,1.0,1.0)))));\n";
     f += "lstr *= smv0 * smv1 * smv2 * smv3;\n";
+    */
     // f += "lstr = 1.0;\n";
     // f += "lstr = smv0;\n"; // FIXME
     // f += "lstr = smv0 * smv1 * smv2;\n";
@@ -1612,13 +1673,13 @@ init_lineparticle_shader(shader_config const& g)
   f += g.decl_fragcolor();
   f += g.frag_in() + "vec3 vary_coord;\n";
   f += g.frag_in() + "vec2 edge;\n";
+  f += g.frag_in() + "float lpstep;\n";
   f += "void main(void) {\n";
   f += "vec2 c = vary_coord.xy / vary_coord.z;\n";
   f += "c.x = max(abs(c.x) - edge.x, 0.0) * edge.y;\n";
   f += "float a = 1.0 - length(c);\n";
   f += "if (a < 0.25) { discard; };\n";
   f += g.fragcolor() + " = vec4(a * 2.0, a * 2.0, a * 4.0, 1.0);\n";
-  // f += g.fragcolor() + " = vec4(1.0, 1.0, 0.0, 1.0);\n";
   f += "}\n";
   return make_glshader_ptr{lineparticle_uniforms,
     lineparticle_instance_attributes, lineparticle_vertex_attributes}
