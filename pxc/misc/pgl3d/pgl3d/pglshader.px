@@ -19,16 +19,17 @@ public import pgl3d::pglbase -;
 public import pgl3d::intern_pool -;
 public import pgl3d::shader_config -;
 public import pgl3d::aggregated_ibuffer -;
-public import pgl3d::drawer_base -;
-public import pgl3d::drawer -;
+public import pgl3d::drawer::internal -;
+public import pgl3d::resource_pool -;
 
 public struct
-pglshader(shader_config const& sconf0,
+pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
   tree_map{string, ptr{pgldrawer_export_i}} const& drawers0, int width0,
   int height0)
 <make_vertices_i>
 {
   public shader_config const glc = sconf0;
+  public ptr{resource_pool} const respool = respool0;
   public tree_map{string, size_t} drawer_names = get_drawer_names(drawers0);
   public varray{ptr{pgldrawer_i}} drawers = downcast_drawers(drawers0);
   public varray{vertex_buffer_id} drawer_vbids;
@@ -117,7 +118,7 @@ pglshader(shader_config const& sconf0,
       set_vertex_buffer(drawer_vbids[i], pd->make_vertex_buffer());
     }
     if (sfbo_array.empty()) {
-      for (size_t i: 0 .. 4) {
+      for (size_t i: 0 .. static_cast{size_t}(glc.num_shadowmaps)) {
 	sfbo_array.push_back(make_ptr{shadowmap_fbo}());
       }
     }
@@ -256,7 +257,8 @@ pglshader(shader_config const& sconf0,
   public function void resize_screen(int width, int height)
   {
     const default_scale = m::ne{is_gles, 0} ? 0.5f : 1.0f;
-    const scale = glc.conf.get("shadowmap_resolution", default_scale);
+    const scale = glc.conf.get("shadowmap_resolution", default_scale,
+      256.0f, 16384.0f);
     mutable wh = static_cast{int}(static_cast{float}(max(width, height))
       * scale);
     if (scale >= 512.0f) {
@@ -273,7 +275,7 @@ pglshader(shader_config const& sconf0,
     cam.screen_width = width;
     cam.screen_height = height;
     cam.shadowmap_size = sm_size;
-    for (size_t i: 0 .. 4) {
+    for (size_t i: 0 .. sfbo_array.size()) {
       mutable& sfbo = *sfbo_array[i];
       if (m::ne{is_gles, 0}) {
 	sfbo.sm_width = sm_size;
@@ -285,7 +287,7 @@ pglshader(shader_config const& sconf0,
       init_shadowmap_fbo(glc, sfbo,
 	static_cast{GLenum}(static_cast{size_t}(GL_TEXTURE3) + i));
     }
-    update_mvp(cam);
+    update_mvp(glc, cam);
   }
 }
 
@@ -300,6 +302,10 @@ pglshader_draw_frame(pglshader mutable& pgs,
       pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
   const tick2 = SDL_GetTicks();
   /* shadowmapping shader */
+  darrayst{GLuint} smtex_arr = darrayst{GLuint}(pgs.sfbo_array.size(), 0U);
+  for (size_t iter: 0 .. pgs.sfbo_array.size()) {
+    smtex_arr[iter] = pgs.sfbo_array[iter]->sm_texture.get();
+  }
   if (pgs.glc.enable_shadowmapping) {
     int saved_fb;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
@@ -317,7 +323,7 @@ pglshader_draw_frame(pglshader mutable& pgs,
     }
     glDepthFunc(GL_LEQUAL);
     glDisable(GL_BLEND);
-    for (size_t iter: 0 .. 4) {
+    for (size_t iter: 0 .. pgs.sfbo_array.size()) {
       /* set fb */
       const& sfbo = *pgs.sfbo_array[iter];
       glBindFramebuffer(GL_FRAMEBUFFER, sfbo.fbo.get());
@@ -335,7 +341,7 @@ pglshader_draw_frame(pglshader mutable& pgs,
 	pd->draw(draw_step_shadowmapping, iter,
 	  *bos[static_cast{size_t}(bo_id)],
 	  whole_instances[static_cast{size_t}(main_bo_id)], pgs.agg_ibuffer,
-	  bo_id, pgs.glc, cam_df);
+	  bo_id, pgs.glc, cam_df, smtex_arr);
       }
       /*
       if (pgs.glc.enable_vsm) {
@@ -366,7 +372,7 @@ pglshader_draw_frame(pglshader mutable& pgs,
       pd->draw(draw_step_zprepass, 0,
 	*bos[static_cast{size_t}(bo_id)],
 	whole_instances[static_cast{size_t}(main_bo_id)], pgs.agg_ibuffer,
-	bo_id, pgs.glc, cam_df);
+	bo_id, pgs.glc, cam_df, smtex_arr);
     }
   }
   /* main */
@@ -394,7 +400,7 @@ pglshader_draw_frame(pglshader mutable& pgs,
       pd->draw(draw_step_solid, 0,
 	*bos[static_cast{size_t}(bo_id)],
 	whole_instances[static_cast{size_t}(main_bo_id)], pgs.agg_ibuffer,
-	bo_id, pgs.glc, cam_df);
+	bo_id, pgs.glc, cam_df, smtex_arr);
     }
   }
   /* blend */
@@ -411,7 +417,7 @@ pglshader_draw_frame(pglshader mutable& pgs,
       pd->draw(draw_step_blend, 0,
 	*bos[static_cast{size_t}(bo_id)],
 	whole_instances[static_cast{size_t}(main_bo_id)], pgs.agg_ibuffer,
-	bo_id, pgs.glc, cam_df);
+	bo_id, pgs.glc, cam_df, smtex_arr);
     }
   }
   pgs.agg_ibuffer.frame_end(pgs.glc.enable_instanced,
@@ -496,10 +502,13 @@ dgf_point_joint_internal(ptr{vertices} const& vptr, string const& joint_name,
   vptr->push_joint(e);
 }
 
-function void update_mvp(projection_info mutable& cam)
+function void
+update_mvp(shader_config const& glc, projection_info mutable& cam)
 {
-  float const perspective_distance = 1.0;
-  float const distance_max = 999.0;
+  float const perspective_near =
+    glc.conf.get("perspective_near", 1.0f, 1.0f, 100.0f);
+  float const perspective_far =
+    glc.conf.get("perspective_far", 10000.0f, 10.0f, 1000000.0f);
   const ssbase = max(cam.screen_height, cam.screen_width);
   const h = cast_float(cam.screen_height) / cast_float(ssbase);
   const w = cast_float(cam.screen_width) / cast_float(ssbase);
@@ -509,10 +518,10 @@ function void update_mvp(projection_info mutable& cam)
   glColorMask(1, 1, 1, 1);
   glClearColor(1.0, 1.0, 1.0, 1.0);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  const d = cast_float(perspective_distance);
   {
-    const near = cast_float(d);
-    const far = cast_float(d + distance_max);
+    // camera projection
+    const near = perspective_near;
+    const far = perspective_far;
     const left = cast_float(-w);
     const right = cast_float(w);
     const bottom = cast_float(-h);
@@ -523,26 +532,11 @@ function void update_mvp(projection_info mutable& cam)
     cam.camera_pers.height = h;
     cam.projection = glm::frustum{float}(left, right, bottom, top, near, far);
   }
-  /*
   {
-    const sm_w = max(1.0, w);
-    const sm_h = max(1.0, h);
-    const near = cast_float(d);
-    const far = cast_float(d + distance_max);
-    const left = cast_float(-sm_w);
-    const right = cast_float(sm_w);
-    const bottom = cast_float(-sm_h);
-    const top = cast_float(sm_h);
-    cam.sm_projection = glm::frustum{float}(left, right, bottom, top, near,
-      far);
-  }
-  */
-  {
+    // shadowmap projection
     const sm_w = 1.0f;
     const sm_h = 1.0f;
-    const near = cast_float(d);
-    function void set_sm(glm::mat4 mutable& dst, float mutable& distance_r,
-      float far)
+    function void set_sm(glm::mat4 mutable& dst, float far)
     {
       const near = -far;
       const left = -far;
@@ -550,25 +544,24 @@ function void update_mvp(projection_info mutable& cam)
       const bottom = -far;
       const top = far;
       dst = glm::ortho{float}(left, right, bottom, top, near, far);
-      distance_r = far;
     }
-    set_sm(cam.sm_projection0, cam.sm_distances.x, 40.0f);
-    set_sm(cam.sm_projection1, cam.sm_distances.y, 120.0f);
-    set_sm(cam.sm_projection2, cam.sm_distances.z, 360.0f);
-    set_sm(cam.sm_projection3, cam.sm_distances.w, 1080.0f);
-    debug_log(cam.sm_distances.to_cslice());
-    debug_log("smp0", cam.sm_projection0.to_cslice());
-    debug_log("smp1", cam.sm_projection1.to_cslice());
+    float far = glc.shadowmap_distance;
+    for (const i: 0 .. static_cast{size_t}(glc.num_shadowmaps)) {
+      set_sm(cam.sm_projection[i], far);
+      far *= glc.shadowmap_scale;
+    }
+    debug_log("smp0", cam.sm_projection[0].to_cslice());
+    debug_log("smp1", cam.sm_projection[1].to_cslice());
   }
 }
 
 struct shadowmap_fbo
 {
   public auto_framebuffer fbo;
+  public auto_renderbuffer depthbuf;
   public auto_texture sm_texture;
   public int sm_width;
   public int sm_height;
-  public auto_renderbuffer depthbuf;
 }
 
 function void init_shadowmap_fbo(shader_config const& glc,

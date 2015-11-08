@@ -39,9 +39,9 @@ public struct demoapp_application()
 {	
   public app_impl app;
   public function tree_map{string, ptr{pgldrawer_export_i}} on_init_drawers(
-    shader_config const& conf)
+    shader_config const& conf, resource_pool_ptr const& res)
   {
-    return init_drawers(app, conf);
+    return init_drawers(app, conf, res);
   }
   public function void on_build_vertices(make_vertices_i mutable& mvx)
   {
@@ -207,6 +207,7 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
     // ncd.shadowmapping_vp = sm_vp; // FIXME: remove: unused
     ncd.vp = vp;
     scene_control_update_buttons(sctl, sctl.node_buttons);
+    scene_control_update_skybox(sctl, sctl.node_skybox);
     size_t swarm_total = 0;
     for (const i, const& lpb: sctl.lpbullet_swarms) {
       swarm_total += lpb->size();
@@ -226,6 +227,8 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
       whole_instances);
     const t3 = get_time(sys);
     prepare_instance_data_ft_rec(ncd, sctl.node_buttons, ftable,
+      whole_instances);
+    prepare_instance_data_ft_rec(ncd, sctl.node_skybox, ftable,
       whole_instances);
     const t4 = get_time(sys);
     prepare_instance_data_lp(ncd, ftable, whole_instances);
@@ -366,16 +369,18 @@ function void handle_keys(app_impl mutable& app,
 }
 
 private function tree_map{string, ptr{pgldrawer_export_i}} init_drawers(
-  app_impl mutable& app, shader_config const& sconf)
+  app_impl mutable& app, shader_config const& sconf,
+  resource_pool_ptr const& res)
 {
   tree_map{string, ptr{pgldrawer_export_i}} r;
-  r.insert("drawer_0_triangles", make_drawer_triangles(sconf, 0));
-  r.insert("drawer_0_triangles_alt", make_drawer_triangles(sconf, 1));
-  r.insert("drawer_lineparticle", make_drawer_lineparticle(sconf));
-  r.insert("drawer_particle", make_drawer_particle(sconf));
-  r.insert("drawer_particle_bb", make_drawer_particle_bb(sconf));
-  r.insert("drawer_rect2d", make_drawer_rect2d(sconf));
-  r.insert("drawer_font2", make_drawer_font2(sconf));
+  r.insert("drawer_0_triangles", make_drawer_triangles(sconf, res, 0));
+  r.insert("drawer_0_triangles_alt", make_drawer_triangles(sconf, res, 1));
+  r.insert("drawer_1_lineparticle", make_drawer_lineparticle(sconf, res));
+  r.insert("drawer_2_skybox", make_drawer_skybox(sconf, res));
+  r.insert("drawer_particle", make_drawer_particle(sconf, res));
+  r.insert("drawer_particle_bb", make_drawer_particle_bb(sconf, res));
+  r.insert("drawer_rect2d", make_drawer_rect2d(sconf, res));
+  r.insert("drawer_font2", make_drawer_font2(sconf, res));
   return r;
 }
 
@@ -460,6 +465,8 @@ private function void build_vertices(app_impl mutable& app,
       rotate_local(glm::make_quat_angle_axis(to_radians(45.0),
 	0.0, 0.0, 1.0),
 	rectangle_split(30, 30,
+	// rectangle_split(1, 1,
+	// rectangle_split(4, 4,
 	  rand_bump(1, 0.8, 0.4, 0.4, 0.4, 0.4, 2.0, 2.0, rnd,
 	    ctx_fill(0), ctx_fill(0), ctx_fill(0)))),
       rotate_local(glm::make_quat_angle_axis(to_radians(-45.0),
@@ -663,13 +670,13 @@ private function void build_vertices(app_impl mutable& app,
       name, pgs.get_joint_id(name), mass,
       collision_shape_e_concave, p, elems));
   }
-  shapes_add_convex("box", 1.0f);
+  shapes_add_sphere("box", 1.0f, 1.0f);
   shapes_add_convex("nest", 1000.0f);
-  shapes_add_convex("box50", 250.0f);
-  shapes_add_convex("bullet2", 2.0f);
+  shapes_add_sphere("box50", 50.0f, 1.0f);
+  shapes_add_sphere("bullet2", 2.0f, 1.0f);
   // shapes_add_sphere("bullet2", 1.0f, 2.0f);
-  shapes_add_convex("bullet", 2.0f);
-  shapes_add_convex("saucer", 10.0f);
+  shapes_add_sphere("bullet", 2.0f, 1.0f);
+  shapes_add_sphere("saucer", 10.0f, 1.0f);
   // shapes_add_concave("block", 0.0f);
   shapes_add_convex("block", 100.0f);
   // shapes_add_convex("knight", 10.0f);
@@ -879,12 +886,15 @@ scene_control(node_factory const& nfac,
     nodefac.get_joint_id_by_name("default_font");
   public joint_id_type joint_id_rect2d =
     nodefac.get_joint_id_by_name("rect2d");
+  public joint_id_type joint_id_skybox =
+    nodefac.get_joint_id_by_name("skybox");
   public size_t cur_scene = 0;
   public varray{tptr{lpbullet_swarm}} lpbullet_swarms;
   // public varray{lpbullet_data} lpbullet;
   public node mutable node_scene = make_node();
   public node mutable node_status_message = make_node();
   public node mutable node_buttons = make_node();
+  public node mutable node_skybox = make_node();
   public scene_objects sco = scene_objects(shapes0, num_split);
   public darray{string} const scene_names = make_darray{string}(
     // "untitled", "saucer", "saucer-multi", "block-multi", "block",
@@ -1023,6 +1033,17 @@ scene_control_update_buttons(scene_control mutable& sctl,
 }
 
 threaded function void
+scene_control_update_skybox(scene_control mutable& sctl,
+  scene_node mutable& sn_skybox)
+{
+  mutable& nd = sn_skybox;
+  if (nd.children.size() < 1) {
+    const p = scene_node(sctl.joint_id_skybox, glm::mat4());
+    nd.children.push_back(p);
+  }
+}
+
+threaded function void
 scene_control_step(scene_control mutable& sctl,
   demoapp_scene_shared const& ss, float frame_speed,
     node_common_data mutable& ncd,
@@ -1097,8 +1118,9 @@ scene_control_step(scene_control mutable& sctl,
 	rb->apply_central_impulse(a.x, a.y, a.z);
 	// debug_log("spawn_obj", sctl.sco.dworld.objects_size());
       }
-      sctl.sco.dworld.step_simulation(speed*1.0f/60.0f, 1, speed*1.0f/60.0f);
     }
+    sctl.sco.dworld.step_simulation(sctl.scene_paused, speed*1.0f/60.0f, 1,
+      speed*1.0f/60.0f);
     scene_node cursn = scene_node(joint_id_type(), glm::mat4());
     threaded function void step_obj(size_t i, ptr{rigid_body_i} const& obj)
     {

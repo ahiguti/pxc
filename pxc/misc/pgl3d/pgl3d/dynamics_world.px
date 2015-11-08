@@ -181,15 +181,16 @@ grid_bp_thread_object(tptr{grid_bp_shared} const& shared0)
 	    }
 	    */
 	    ++np1_count;
-	    // debug_log("collide");
 	    if (rbi.colshape->has_near_collision()) {
-	      debug_log("has_near");
 	      const trinv = rbi.trans.inverse();
 	      // FIXME: avoid conversion between btVector and vec3
 	      const lpos = op_mul{btTransform, btVector3, btVector3}(trinv, btVector3_(pos.x, pos.y, pos.z));
 	      if (!rbi.colshape->near_collision(
 		glm::make_vec3(lpos.x(), lpos.y(), lpos.z()), radius)) {
+		//debug_log("near_collision: false");
 		continue;
+	      } else {
+		//debug_log("near_collision: true");
 	      }
 	    }
 	    sw.on_collide(j, col_id);
@@ -311,7 +312,7 @@ dynamics_world(size_t num_grid_bp_tasks0)
   }
   public function void add_swarm(tptr{swarm_i} const& s, size_t num_bp)
   {
-    debug_log("add_swarm");
+    // debug_log("add_swarm");
     grid_bp_tasks[num_bp]->shared->swarms.push_back(s);
   }
   public function void add_rigid_body(ptr{rigid_body_i} const& rb)
@@ -356,13 +357,15 @@ dynamics_world(size_t num_grid_bp_tasks0)
       f(i, obj);
     }
   }
-  public function void step_simulation(float timestep, int max_sub_steps,
-    float fixed_timestep)
+  public function void step_simulation(bool paused, float timestep,
+    int max_sub_steps, float fixed_timestep)
   {
     const t0 = io::debug_system().high_resolution_timer_double();
     start_grid_collision();
     const t1 = io::debug_system().high_resolution_timer_double();
-    dynamicsWorld.stepSimulation(timestep, max_sub_steps, fixed_timestep);
+    if (!paused) {
+      dynamicsWorld.stepSimulation(timestep, max_sub_steps, fixed_timestep);
+    }
     const t2 = io::debug_system().high_resolution_timer_double();
     finish_grid_collision();
     const t3 = io::debug_system().high_resolution_timer_double();

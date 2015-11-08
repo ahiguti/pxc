@@ -3,7 +3,7 @@ public import common -;
 public import numeric::fpmath -;
 public import glm;
 
-public multithreaded struct
+public threaded struct
 collision_heightmap()
 {
   public glm::vec3 aabb_min;
@@ -36,13 +36,15 @@ collision_heightmap_collide(collision_heightmap const& hm,
   if (ix >= hm.x_isize || iy >= hm.y_isize || iz >= hm.z_isize) {
     return false;
   }
-  const cx = collide_one(ix, iy, pos_rel.z, hm.x_isize, hm.y_isize,
+  const cx = collide_one(ix, iy, pos.z, hm.x_isize, hm.y_isize,
     hm.zmin, hm.zmax);
-  const cy = collide_one(iy, iz, pos_rel.x, hm.y_isize, hm.z_isize,
+  const cy = collide_one(iy, iz, pos.x, hm.y_isize, hm.z_isize,
     hm.xmin, hm.xmax);
-  const cz = collide_one(iz, ix, pos_rel.y, hm.z_isize, hm.x_isize,
+  const cz = collide_one(iz, ix, pos.y, hm.z_isize, hm.x_isize,
     hm.ymin, hm.ymax);
-  return cx & cy & cz;
+  const r = cx & cy & cz;
+  // debug_log("hm", ix, iy, iz, pos, r);
+  return r;
 }
 
 threaded function bool
@@ -52,15 +54,15 @@ collide_one(uint ix, uint iy, float z, uint x_isize, uint y_isize,
   const offset = iy * x_isize + ix;
   const zmin = zmin_arr[offset];
   const zmax = zmax_arr[offset];
-  return z >= zmin & z <= zmax;
+  // debug_log("v=", z, "vmin=", zmin, "vmax=", zmax);
+  return (z >= zmin) & (z <= zmax);
 }
 
 
-public threaded function ptr{collision_heightmap}
+public threaded function collision_heightmap
 make_collision_heightmap(float mesh_size0, cslice{float} const v)
 {
-  const p = make_ptr{collision_heightmap}();
-  mutable& hm = *p;
+  mutable hm = collision_heightmap();
   hm.mesh_size = mesh_size0;
   hm.mesh_size_inv = 1.0f / mesh_size0;
   const num_vert = v.size() / 3;
@@ -78,6 +80,8 @@ make_collision_heightmap(float mesh_size0, cslice{float} const v)
     hm.aabb_max.y = max(hm.aabb_max.y, y);
     hm.aabb_max.z = max(hm.aabb_max.z, z);
   }
+  const& aabb_min = hm.aabb_min;
+  const& aabb_max = hm.aabb_max;
   /*
   const aabb_sz = hm.aabb_max - hm.aabb_min;
   hm.scale = glm::make_vec3(1.0f / aabb_sz.x, 1.0f / aabb_sz.y,
@@ -95,8 +99,18 @@ make_collision_heightmap(float mesh_size0, cslice{float} const v)
   hm.ymax.resize(hm.z_isize * hm.x_isize, 0.0f);
   hm.zmin.resize(hm.x_isize * hm.y_isize, static_cast{float}(hm.z_isize));
   hm.zmax.resize(hm.x_isize * hm.y_isize, 0.0f);
-  const& aabb_min = hm.aabb_min;
-  const& aabb_max = hm.aabb_max;
+  for (const i: 0 .. hm.y_isize * hm.z_isize) {
+    hm.xmin[i] = aabb_max.x;
+    hm.xmax[i] = aabb_min.x;
+  }
+  for (const i: 0 .. hm.z_isize * hm.x_isize) {
+    hm.ymin[i] = aabb_max.y;
+    hm.ymax[i] = aabb_min.y;
+  }
+  for (const i: 0 .. hm.x_isize * hm.y_isize) {
+    hm.zmin[i] = aabb_max.z;
+    hm.zmax[i] = aabb_min.z;
+  }
   const aabb_min_yzx = glm::make_vec3(aabb_min.y, aabb_min.z, aabb_min.x);
   const aabb_max_yzx = glm::make_vec3(aabb_max.y, aabb_max.z, aabb_max.x);
   const aabb_min_zxy = glm::make_vec3(aabb_min.z, aabb_min.x, aabb_min.y);
@@ -106,26 +120,32 @@ make_collision_heightmap(float mesh_size0, cslice{float} const v)
     mutable b = glm::make_vec3(v[i * 9 + 3], v[i * 9 + 4], v[i * 9 + 5]);
     mutable c = glm::make_vec3(v[i * 9 + 6], v[i * 9 + 7], v[i * 9 + 8]);
     examine_tri(a, b, c, hm.x_isize, hm.y_isize, hm.mesh_size,
-      aabb_min, aabb_max, hm.zmin, hm.zmax);
+      aabb_min, aabb_max, hm.zmin, hm.zmax, 0);
     a = glm::make_vec3(a.y, a.z, a.x);
     b = glm::make_vec3(b.y, b.z, b.x);
     c = glm::make_vec3(c.y, c.z, c.x);
     examine_tri(a, b, c, hm.y_isize, hm.z_isize, hm.mesh_size,
-      aabb_min_yzx, aabb_max_yzx, hm.xmin, hm.xmax);
+      aabb_min_yzx, aabb_max_yzx, hm.xmin, hm.xmax, 1);
     a = glm::make_vec3(a.y, a.z, a.x);
     b = glm::make_vec3(b.y, b.z, b.x);
     c = glm::make_vec3(c.y, c.z, c.x);
     examine_tri(a, b, c, hm.z_isize, hm.x_isize, hm.mesh_size,
-      aabb_min_zxy, aabb_max_zxy, hm.ymin, hm.ymax);
+      aabb_min_zxy, aabb_max_zxy, hm.ymin, hm.ymax, 1);
   }
-  return p;
+  for (const iy: 0 .. hm.y_isize) {
+    for (const ix: 0 .. hm.x_isize) {
+      const idx = iy * hm.x_isize + ix;
+      // debug_log("ix,iy,minz,maxz", ix, iy, hm.zmin[idx], hm.zmax[idx]);
+    }
+  }
+  return hm;
 }
 
 threaded function void
 examine_tri(glm::vec3 const& a0, glm::vec3 const& b0, glm::vec3 const& c0,
   uint x_isize, uint y_isize, float mesh_size, glm::vec3 const& aabb_min,
   glm::vec3 const& aabb_max, varray{float} mutable& zmin,
-  varray{float} mutable zmax)
+  varray{float} mutable& zmax, size_t dbg_i)
 {
   mutable a = a0;
   mutable b = b0;
@@ -133,14 +153,28 @@ examine_tri(glm::vec3 const& a0, glm::vec3 const& b0, glm::vec3 const& c0,
   if (a.x > b.x) { swap(a, b); }
   if (b.x > c.x) { swap(b, c); }
   if (a.x > b.x) { swap(a, b); }
+  /*
+  if (dbg_i == 0) {
+    debug_log("examine_tri", "a,b,c", a0, b0, c0, "aabb", aabb_min, aabb_max,
+      "xysize", x_isize, y_isize, "meshsize", mesh_size);
+  }
+  */
   const n = glm::cross(b - a, c - b).normalize();
+  if (fabs(n.z) < 0.0001f) {
+    return;
+  }
   // a.x <= b.x <= c.x
   a = (a - aabb_min) / mesh_size;
   b = (b - aabb_min) / mesh_size;
   c = (c - aabb_min) / mesh_size;
   const xr = calc_range(a.x, c.x);
+  /*
+  if (dbg_i == 0) {
+    debug_log("a,b,c,xr,nor", a, b, c, xr, n);
+  }
+  */
   float px;
-  for (px = xr.first; px < xr.second; px += 1.0f) {
+  for (px = xr.first; px <= xr.second; px += 1.0f) {
     float rat = (c.x - a.x > 0.0001) ? (px - a.x) / (c.x - a.x) : 0.0f;
     const pac = a + (c - a) * rat;
     glm::vec3 pabc;
@@ -153,7 +187,7 @@ examine_tri(glm::vec3 const& a0, glm::vec3 const& b0, glm::vec3 const& c0,
     }
     const yr = calc_range(pac.y, pabc.y);
     float py;
-    for (py = yr.first; py < yr.second; py += 1.0f) {
+    for (py = yr.first; py <= yr.second; py += 1.0f) {
       const pz = ((a.x - px) * n.x + (a.y - py) * n.y) / n.z + a.z;
       const ix = static_cast{uint}(floor(px));
       const iy = static_cast{uint}(floor(py));
@@ -161,8 +195,14 @@ examine_tri(glm::vec3 const& a0, glm::vec3 const& b0, glm::vec3 const& c0,
 	continue;
       }
       const offset = iy * x_isize + ix;
-      zmin[offset] = min(zmin[offset], pz);
-      zmax[offset] = max(zmax[offset], pz);
+      const pzs = pz * mesh_size + aabb_min.z;
+      /*
+      if (dbg_i == 0) {
+	debug_log("px,py,pz,ix,iy", px, py, pz, ix, iy, pzs, zmin[offset], zmax[offset]);
+      }
+      */
+      zmin[offset] = min(zmin[offset], pzs);
+      zmax[offset] = max(zmax[offset], pzs);
     }
   }
 }
@@ -173,11 +213,13 @@ calc_range(float ax, float bx)
   if (ax > bx) { swap(ax, bx); }
   pair{float, float} r = pair(0.0f, 0.0f);
   r.first = floor(ax + 0.9999f) + 0.5f;
-  r.second = bx;
+  r.second = floor(bx + 0.9999f) + 0.5f;
+  /*
   if (r.first >= r.second) {
     r.first = (ax + bx) / 2.0;
-    r.second = r.first + 1.0;
+    r.second = r.first;
   }
+  */
   return r;
 }
 

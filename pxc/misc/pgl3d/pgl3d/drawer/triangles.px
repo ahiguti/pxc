@@ -1,0 +1,954 @@
+private threaded namespace pgl3d::drawer::triangles "export-unsafe";
+public import common -;
+public import pgl3d::drawer::internal -;
+public import meta m;
+
+private tsvaluetype struct triangles_uniforms()
+{
+  public glm::mat4 view_projection_matrix;
+  public int sampler_dpat;
+  public int sampler_pmpat;
+  public int sampler_tilemap;
+  public int sampler_sm; // array
+//  public int sampler_sm1;
+//  public int sampler_sm2;
+//  public int sampler_sm3;
+  public glm::vec3 camera_pos;
+  public glm::vec3 light_dir;
+  public float light_on;
+  public float ndelta_scale; // 0.02 / 40. if light_fixed, 0.02 otherwise
+  public glm::mat4 shadowmap_vp; // array
+  // public glm::mat4 shadowmap_vp1;
+  // public glm::mat4 shadowmap_vp2;
+  // public glm::mat4 shadowmap_vp3;
+}
+
+private tsvaluetype struct triangles_vertex_attributes()
+{
+  public glm::vec3 position;
+  public glm::vec3 normal;
+  public glm::vec3 tangent;
+  public glm::vec3 uvw;
+}
+
+private tsvaluetype struct zprepass_vertex_attributes()
+{
+  public glm::vec3 position;
+  public glm::vec3 normal;
+  public glm::vec3 tangent;
+  public glm::vec3 uvw;
+}
+
+private tsvaluetype struct shadowmap_vertex_attributes()
+{
+  public glm::vec3 position;
+  public glm::vec3 normal;
+  public glm::vec3 tangent;
+  public glm::vec3 uvw;
+}
+
+private tsvaluetype struct triangles_instance_attributes()
+{
+  public glm::mat4 model_matrix;
+}
+
+private tsvaluetype struct zprepass_uniforms()
+{
+  public glm::mat4 view_projection_matrix;
+}
+
+private tsvaluetype struct shadowmap_uniforms()
+{
+  public glm::mat4 shadowmap_vp;
+  public glm::vec3 trans; // used if light_fixed
+  public float scale;     // used if light_fixed
+}
+
+public struct drawer_triangles(shader_config const& glc,
+  resource_pool_ptr const& res, int opt0)
+<pgldrawer_i>
+{
+  metafunction tattr triangles_vertex_attributes;
+  int const opt = opt0;
+  triangles_shader_ptr const sdr_solid = init_triangles_shader(glc, opt);
+  zprepass_shader_ptr const sdr_zp = init_zprepass_shader(glc, opt);
+  shadowmap_shader_ptr const sdr_shadow = init_shadowmap_shader(glc, opt);
+  gl_texture texture_dpat;
+  gl_texture texture_pmpat;
+  gl_texture texture_tilemap;
+  init();
+  private function void init()
+  {
+    load_tilemap_texture(texture_dpat, texture_pmpat, texture_tilemap,
+      "dpat.png", "pmpat.png");
+  }
+  public function string get_vbid_name() const {
+    return "vbid_triangles_" + to_string(opt);
+  }
+  public function string get_main_vbid_name() const {
+    return "vbid_triangles_0";
+  }
+  public function prepare_instance_data_funcptr
+  get_prepare_instance_data_funcptr() const {
+    return make_tfuncptr{prepare_instance_data_triangles}();
+  }
+  public function ptr{vertex_buffer} make_vertex_buffer() const {
+    return make_tattr_vertex_buffer{tattr}(false, opt != 0);
+  }
+  public function string builtin_vertex_set_name() const { return ""; }
+  public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
+    const { }
+  public function dgf_filler make_filler(ptr{vertices} const& vptr) const
+  {
+    return make_dgf_polygon_filler{tattr}(vptr);
+  }
+  public function texture_info get_texture_info(cstrref const& name) const
+  {
+    texture_info r;
+    if (name == "main") {
+      r.surface_w = texture_dpat.surface_w;
+      r.surface_h = texture_dpat.surface_h;
+    }
+    return r;
+  }
+  public function void draw(draw_step step, size_t iter,
+    vertex_buffer const& bo, bo_instances_type const& bo_ib,
+    aggregated_ibuffer const& aibuf, vertex_buffer_id bo_id,
+    shader_config const& glc, projection_info const& cam_df,
+    cslice{GLuint} const& smtex_arr)
+  {
+    if (step == draw_step_shadowmapping) {
+      const sm_view = cam_df.light.to_mat4().inverse();
+      const sm_vp = cam_df.sm_projection[iter] * sm_view;
+      float scale = 1.0f / glc.shadowmap_distance;
+      for (const i: 0 .. iter) {
+	scale /= glc.shadowmap_scale;
+      }
+      glUseProgram(sdr_shadow->program);
+      if (glc.light_fixed) {
+	//debug_log("scale", scale);
+	const trans = -cam_df.camera.position;
+	glUniform3fv(sdr_shadow->u_trans, 1, trans.to_crawptr());
+	glUniform1f(sdr_shadow->u_scale, scale);
+      } else {
+	glUniformMatrix4fv(sdr_shadow->u_shadowmap_vp, 1, 0,
+	  sm_vp.to_crawptr());
+      }
+      aibuf.draw(*sdr_shadow, bo, bo_ib, bo_id, glc.enable_instanced,
+	glc.enable_uniform_instancing);
+    } else if (step == draw_step_zprepass) {
+      mutable view = glm::mat4();
+      view = cam_df.camera.to_mat4().inverse();
+      const vp = cam_df.projection * view;
+      mutable& sdr = *sdr_zp;
+      glUseProgram(sdr.program);
+      glUniformMatrix4fv(sdr.u_view_projection_matrix, 1, 0,
+	vp.to_crawptr());
+      aibuf.draw(sdr, bo, bo_ib, bo_id, glc.enable_instanced,
+	  glc.enable_uniform_instancing);
+    } else if (step == draw_step_solid) {
+      mutable view = glm::mat4();
+      view = cam_df.camera.to_mat4().inverse();
+      const vp = cam_df.projection * view;
+      const red = make_farray{float}(0.8, 0.1, 0.0, 1.0);
+      mutable& sdr = *sdr_solid;
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, texture_dpat.texture_id.get());
+      /*
+      // FIXME: enable
+      glActiveTexture(GL_TEXTURE1);
+      glBindTexture(GL_TEXTURE_2D, texture_pmpat.texture_id.get());
+      glActiveTexture(GL_TEXTURE2);
+      glBindTexture(GL_TEXTURE_2D, texture_tilemap.texture_id.get());
+      */
+      glUseProgram(sdr.program);
+      if (glc.light_fixed) {
+	glUniform3fv(sdr.u_light_dir, 1,
+	  glm::make_vec3(0.0, 0.0, -1.0).to_crawptr());
+      } else {
+	glUniform3fv(sdr.u_light_dir, 1,
+	  (cam_df.light.angle * glm::make_vec3(0.0, 0.0, 1.0)).to_crawptr());
+      }
+      glUniform3fv(sdr.u_camera_pos, 1,
+	cam_df.camera.position.to_crawptr());
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, texture_dpat.texture_id.get());
+      glActiveTexture(GL_TEXTURE1);
+      glUniform1i(sdr.u_sampler_dpat, 0);
+      glBindTexture(GL_TEXTURE_2D, texture_pmpat.texture_id.get());
+      glUniform1i(sdr.u_sampler_pmpat, 1);
+      glActiveTexture(GL_TEXTURE2);
+      glBindTexture(GL_TEXTURE_2D, texture_tilemap.texture_id.get());
+      glUniform1i(sdr.u_sampler_tilemap, 2);
+      darrayst{int} sampler_smarr = darrayst{int}(
+	static_cast{size_t}(glc.num_shadowmaps), 0);
+      for (const i: 0 .. glc.num_shadowmaps) {
+	glActiveTexture(static_cast{GLenum}(
+	  static_cast{int}(GL_TEXTURE3) + i));
+	glBindTexture(GL_TEXTURE_2D, smtex_arr[static_cast{size_t}(i)]);
+	sampler_smarr[static_cast{size_t}(i)] = 3 + i;
+      }
+      glUniform1iv(sdr.u_sampler_sm, glc.num_shadowmaps,
+	caddress(sampler_smarr[0]));
+      if (glc.light_fixed) {
+	glUniform1f(sdr.u_ndelta_scale,
+	  static_cast{float}(8192 / cam_df.shadowmap_size)
+	    * 0.02f / glc.shadowmap_distance);
+      } else {
+	const sm_view = cam_df.light.to_mat4().inverse();
+	darrayst{glm::mat4} sm_vparr = darrayst{glm::mat4}(
+	  static_cast{size_t}(glc.num_shadowmaps), glm::mat4());
+	for (const i: 0 .. static_cast{size_t}(glc.num_shadowmaps)) {
+	  sm_vparr[i] = cam_df.sm_projection[i] * sm_view;
+	}
+	glUniformMatrix4fv(sdr.u_shadowmap_vp, glc.num_shadowmaps, 0,
+	  sm_vparr[0].to_crawptr());
+	glUniform1f(sdr.u_ndelta_scale,
+	  static_cast{float}(8192 / cam_df.shadowmap_size) * 0.02);
+      }
+      glUniformMatrix4fv(sdr.u_view_projection_matrix, 1, 0, vp.to_crawptr());
+      aibuf.draw(sdr, bo, bo_ib, bo_id, glc.enable_instanced,
+	glc.enable_uniform_instancing);
+    }
+  }
+}
+
+private threaded function void prepare_instance_data_triangles(
+  scene_node const& sn, node_common_data mutable& ncd,
+  instance_data mutable& idata)
+{
+  buffer_append(idata.instance_buffer, sn.trans); /* model matrix */
+}
+
+private threaded function {tattr} void
+dgf_polygon_filler_tattr(ptr{vertices} const& vptr, bool flat_flag,
+  poly_t const& poly, mesh_index const& mp)
+{
+  dgf_fill_tattr_internal{tattr}(vptr, flat_flag, poly, mp);
+}
+
+private threaded function {tattr} dgf_filler
+make_dgf_polygon_filler(ptr{vertices} const& vptr)
+{
+  return make_callable_ptr{dgf_polygon_filler_tattr{tattr}, 1}(vptr);
+}
+
+private metafunction shadowmap_shader_ptr
+  ptr{glshader{
+    shadowmap_uniforms, triangles_instance_attributes,
+    shadowmap_vertex_attributes}};
+
+private function shadowmap_shader_ptr
+init_shadowmap_shader(shader_config const& g, int opt)
+{
+  string v;
+  v += g.prepend();
+  if (g.light_fixed) {
+    v += "uniform vec3 trans;\n";
+    v += "uniform float scale;\n";
+  } else {
+    v += "uniform mat4 shadowmap_vp;\n";
+  }
+  v += g.decl_instance_attr("mat4", "model_matrix");
+  v += g.vert_in() + "vec3 position;\n";
+  if (opt != 0) {
+    v += g.vert_in() + "vec3 uvw;\n";
+    v += g.vert_out() + "vec3 vary_uvw;\n";
+  }
+  if (!g.enable_depth_texture) {
+    v += g.vert_out() + "vec4 vary_smpos;\n";
+  }
+  v += "void main(void) {\n";
+  if (g.light_fixed) {
+    v += "vec4 p = ";
+    v += g.instance_attr("model_matrix");
+    v += "  * vec4(position, 1.0);\n";
+    v += "vec3 p1 = p.xyz + trans;\n";
+    v += "p1 *= scale;\n";
+    // v += "p1.z = -p1.z;\n";
+    v += "p = vec4(p1, 1.0);\n";
+    v += "gl_Position = p;\n";
+  } else {
+    v += "vec4 p = shadowmap_vp * (";
+    v += g.instance_attr("model_matrix");
+    v += "  * vec4(position, 1.0));\n";
+    v += "gl_Position = p;\n";
+  }
+  if (!g.enable_depth_texture) {
+    v += "vary_smpos = p;\n";
+  }
+  if (opt != 0) {
+    v += "vary_uvw = uvw;\n";
+  }
+  v += "}\n";
+  string f;
+  if (g.enable_depth_texture && opt == 0) {
+    f += g.empty_shader_frag();
+  } else {
+    f += g.prepend();
+    if (opt != 0) {
+      f += g.frag_in() + "vec3 vary_uvw;\n";
+    }
+    if (!g.enable_depth_texture) {
+      f += g.frag_in() + "vec4 vary_smpos;\n";
+      f += g.decl_fragcolor();
+    }
+    f += "void main(void) {\n";
+    if (opt != 0) {
+      if (g.enable_normalmapping) {
+	f += "const float tile_size = 32.0;\n";
+	f += "const float tilemap_size = 128.0;\n";
+	f += "const float tiletex_size = 256.0;\n";
+	f += "vec2 uv0 = vary_uvw.xy / vary_uvw.z;\n";
+	f += "vec2 uv_tm = floor(uv0);\n";
+	      /* tilemap coordinate */
+	f += "vec2 uv_tmfr = uv0 - uv_tm;\n";
+	      /* coordinate inside a tile (0, 1) */
+	f += "vec2 uvp = uv_tmfr - 0.5;\n";
+	f += "if (dot(uvp, uvp) < 0.125) { discard; }\n";
+      }
+    }
+    if (g.enable_vsm) {
+      f += "  vec4 p = vary_smpos;\n";
+      f += "  float pz = (p.z/p.w + 1.0) / 2.0;\n"; // TODO: calc in vsh
+      f += g.fragcolor() + "= vec4(pz, pz * pz, 0.0, 0.0);\n";
+    } else if (!g.enable_depth_texture) {
+      f += "  vec4 p = vary_smpos;\n";
+      f += "  float pz = (p.z/p.w + 1.0) / 2.0;\n"; // TODO: calc in vsh
+      // TODO: vectorize
+      f += "  float z = pz * 256.0;\n"; // [0.0, 256.0]
+      f += "  float z0 = floor(z);\n"; // [0, 256]
+      f += "  z = (z - z0) * 256.0;\n"; // [0.0, 256.0)
+      f += "  float z1 = floor(z);\n"; // [0, 256)
+      f += "  z = (z - z1) * 256.0;\n"; // [0.0, 256.0)
+      f += "  float z2 = floor(z);\n";  // [0, 256)
+      f += g.fragcolor() + "= vec4(z0/255.0, z1/255.0, z2/255.0, 1.0);\n";
+    }
+    f += "}\n";
+  }
+  return make_glshader_ptr{
+    shadowmap_uniforms,
+    triangles_instance_attributes,
+    shadowmap_vertex_attributes
+  }(v, f, "model_matrix", g.debug_level);
+}
+
+private metafunction zprepass_shader_ptr
+  ptr{glshader{
+    zprepass_uniforms, triangles_instance_attributes,
+    zprepass_vertex_attributes}};
+
+private function zprepass_shader_ptr
+init_zprepass_shader(shader_config const& g, int opt)
+{
+  string v;
+  v += g.prepend();
+  v += "uniform mat4 view_projection_matrix;\n";
+  v += g.decl_instance_attr("mat4", "model_matrix");
+  v += g.vert_in() + "vec3 position;\n";
+  if (opt != 0) {
+    v += g.vert_in() + "vec3 uvw;\n";
+    v += g.vert_out() + "vec3 vary_uvw;\n";
+  }
+  v += "void main(void) {\n";
+  v += "vec4 gpos4 = " + g.instance_attr("model_matrix");
+  v += "  * vec4(position, 1.0);\n";
+  v += "gl_Position = view_projection_matrix * gpos4;\n";
+  if (opt != 0) {
+    v += "vary_uvw = uvw;\n";
+  }
+  v += "}\n";
+  string f;
+  if (opt == 0) {
+    f = g.empty_shader_frag();
+  } else {
+    f += g.prepend();
+    f += g.frag_in() + "vec3 vary_uvw;\n";
+    // f += g.decl_fragcolor();
+    f += "void main(void) {\n";
+    if (g.enable_normalmapping) {
+      f += "const float tile_size = 32.0;\n";
+      f += "const float tilemap_size = 128.0;\n";
+      f += "const float tiletex_size = 256.0;\n";
+      f += "vec2 uv0 = vary_uvw.xy / vary_uvw.z;\n";
+      f += "vec2 uv_tm = floor(uv0);\n";
+	    /* tilemap coordinate */
+      f += "vec2 uv_tmfr = uv0 - uv_tm;\n";
+	    /* coordinate inside a tile (0, 1) */
+      f += "vec2 p = uv_tmfr - 0.5;\n";
+      f += "if (dot(p, p) < 0.125) { discard; }\n";
+    }
+    f += "}\n";
+  }
+  return make_glshader_ptr{
+    zprepass_uniforms,
+    triangles_instance_attributes,
+    zprepass_vertex_attributes
+  }(v, f, "model_matrix", g.debug_level);
+}
+
+private metafunction triangles_shader_ptr
+  ptr{glshader{
+    triangles_uniforms, triangles_instance_attributes,
+    triangles_vertex_attributes}};
+
+private function triangles_shader_ptr
+init_triangles_shader(shader_config const& g, int opt)
+{
+  const v = triangles_shader_vert(g, opt);
+  const f = triangles_shader_frag(g, opt);
+  return
+    make_glshader_ptr{
+      triangles_uniforms,
+      triangles_instance_attributes,
+      triangles_vertex_attributes
+    }(v, f, "model_matrix", g.debug_level);
+}
+
+private function string
+triangles_shader_vert(shader_config const& g, int opt)
+{
+  const smsz = g.num_shadowmaps_str();
+  string v;
+  v += g.prepend();
+  v += "uniform mat4 view_projection_matrix;\n";
+  if (g.light_fixed) {
+    v += "uniform vec3 camera_pos;\n";
+  } else {
+    v += "uniform mat4 shadowmap_vp["+smsz+"];\n";
+  }
+  v += g.decl_instance_attr("mat4", "model_matrix");
+  v += g.vert_in() + "vec3 position;\n";
+  v += g.vert_in() + "vec3 normal;\n";
+  v += g.vert_in() + "vec3 tangent;\n";
+  v += g.vert_in() + "vec3 uvw;\n";
+  v += g.vert_out() + "vec3 vary_position;\n";
+  v += g.vert_out() + "vec3 vary_normal;\n";
+  v += g.vert_out() + "vec3 vary_tangent;\n";
+  v += g.vert_out() + "vec3 vary_uvw;\n";
+  v += g.vert_out() + "vec3 vary_binormal;\n";
+  v += g.vert_out() + "vec3 vary_color;\n";
+  if (g.enable_shadowmapping) {
+    if (!g.light_fixed) {
+      v += g.vert_out() + "vec3 vary_smposa["+smsz+"];\n";
+      v += "uniform float ndelta_scale;\n"; // 0.02
+    }
+  }
+  v += "void main(void) {\n";
+  v += "  mat4 mm = "
+    + g.instance_attr("model_matrix")
+    + ";\n";
+  if (g.is_gl3_or_gles3()) {
+    v += "  vary_color = vec3(0.5 + float(gl_InstanceID % 4) * 0.0625, 0.7,";
+    v += "    0.5 + float(gl_InstanceID % 8) * 0.0625);\n";
+  } else {
+    v += "  vary_color = vec3(0.5, 0.4, 0.5);\n";
+  }
+  v += "  vec4 gpos4 = mm * vec4(position, 1.0);\n";
+  v += "  gl_Position = view_projection_matrix * gpos4;\n";
+  if (g.is_gl3_or_gles3()) {
+    v += "  mat3 normal_matrix = mat3(mm);\n";
+  } else {
+    v += "  mat3 normal_matrix = mat3(mm[0].xyz, mm[1].xyz, mm[2].xyz);\n";
+  }
+  v += "  vary_position = gpos4.xyz / gpos4.w;\n";
+  v += "  vary_normal = normal_matrix * normal;\n";
+  v += "  vary_tangent = normal_matrix * tangent;\n";
+  v += "  vary_uvw = uvw;\n";
+  v += "  vary_binormal = cross(vary_normal, vary_tangent);\n";
+  if (g.enable_shadowmapping) {
+    if (!g.light_fixed) {
+      v += "  vec3 ndelta = mat3(shadowmap_vp[0]) * vary_normal ";
+      v += "    * ndelta_scale;\n"; // 0.02
+      v += "  vec4 p;\n";
+      v += "  vec4 ngpos4 = vec4(vary_position, 1.0);\n";
+      int den = 1;
+      for (int i: 0 .. g.num_shadowmaps) {
+	const i_s = to_string(i);
+	const den_s = to_string(den);
+	v += "  p = shadowmap_vp["+i_s+"] * ngpos4;\n";
+	v += "  vary_smposa["+i_s+"] = p.xyz / p.w + ndelta / "+den_s+";\n";
+	den *= 3;
+      }
+    }
+  }
+  v += "}\n";
+  return v;
+}
+
+private function string triangles_shader_frag(shader_config const& g, int opt)
+{
+  bool enable_macos_nvidia_wa = false;
+  if (m::is_true{is_macos}) {
+    string verstr = cubptr_to_string(glGetString_nocheck(GL_VERSION));
+    string vn0;
+    string vn1;
+    string_split{' '}(verstr, vn0, vn1);
+    string s = vn1[0 .. 6];
+    if (s == "NVIDIA" && g.enable_macos_nvidia_wa) {
+      enable_macos_nvidia_wa = true;
+      sdllog("macos nvidia workaround enabled");
+    }
+  }
+  const smsz = g.num_shadowmaps_str();
+  string f;
+  f += g.prepend();
+  f += "uniform sampler2D sampler_dpat;\n";
+  f += "uniform sampler2D sampler_pmpat;\n";
+  f += "uniform sampler2D sampler_tilemap;\n";
+  if (g.enable_sampler2dshadow) {
+    f += "uniform sampler2DShadow sampler_sm["+smsz+"];\n";
+  } else {
+    f += "uniform sampler2D sampler_sm["+smsz+"];\n";
+  }
+  f += "uniform vec3 camera_pos;\n";
+  f += "uniform vec3 light_dir;\n";
+  f += "uniform float light_on;\n";
+  f += g.frag_in() + "vec3 vary_position;\n";
+  f += g.frag_in() + "vec3 vary_normal;\n";
+  f += g.frag_in() + "vec3 vary_tangent;\n";
+  f += g.frag_in() + "vec3 vary_uvw;\n";
+  f += g.frag_in() + "vec3 vary_binormal;\n";
+  f += g.frag_in() + "vec3 vary_color;\n";
+  if (g.enable_shadowmapping) {
+    if (!g.light_fixed) {
+      f += g.frag_in() + "vec3 vary_smposa["+smsz+"];\n";
+    } else {
+      f += "uniform float ndelta_scale;\n"; // 0.02 / 40.0
+    }
+    f += "float linear_01(in float x, in float a, in float b) {\n";
+    f += "return clamp((x - a) / (b - a), 0.0, 1.0);\n";
+    f += "}\n";
+    f += "float linear_10(in float x, in float a, in float b) {\n";
+    f += "return clamp((b - x) / (b - a), 0.0, 1.0);\n";
+    f += "}\n";
+    f += "float max_vec3(in vec3 v) {\n";
+    f += "return max(v.x, max(v.y, v.z));\n";
+    f += "}\n";
+    f += "float max3(in float x0, in float x1, in float x2) {\n";
+    f += "return max(x0, max(x1, x2));\n";
+    f += "}\n";
+  }
+  f += g.decl_fragcolor();
+  if (g.enable_normalmapping) {
+    f += "void tilemap(in vec2 uv0, out vec4 tex_val, out vec2 subtex_uv) {\n";
+    f += "const float tile_size = 32.0;\n";
+    f += "const float tilemap_size = 128.0;\n";
+    f += "const float tiletex_size = 256.0;\n";
+    f += "vec2 uv_tm = floor(uv0);\n";
+	  // tilemap coordinate
+    f += "vec2 uv_tmfr = uv0 - uv_tm;\n";
+	  // coordinate inside a tile (0, 1)
+    if (opt != 0) {
+      f += "vec2 p = uv_tmfr - 0.5;\n";
+      f += "if (dot(p, p) < 0.125) { discard; }\n";
+    }
+    f += "vec2 uv_ti = uv_tmfr * tile_size;\n";
+    f += "vec2 uvi = floor(uv_ti);\n";
+	  // coordinate inside a tile, integral
+    f += "subtex_uv = uv_ti - uvi;\n";
+	  // subtexel coordinate
+    f += "vec4 ti_val = " +  g.texture2d();
+    f += "  (sampler_tilemap, uv_tm / tilemap_size);\n";
+	  // lookup the tilemap
+    f += "vec2 uv_pixel = floor(ti_val.xy * 255.0 + 0.5) * tile_size + uvi;\n";
+	  // tile pattern coordinate
+    // f += "mate_ambient = ti_val.z;\n";
+    // f += "mate_specular = ti_val.w;\n";
+    f += "tex_val = " + g.texture2d();
+    f += "  (sampler_dpat, uv_pixel / tiletex_size);\n";
+	  // lookup the tilepattern
+    f += "}\n";
+  }
+  if (g.enable_parallax) {
+    f += "void parallax_read(in vec2 uv0, out vec4 tex_val) {\n";
+    f += "const float tile_size = 32.0;\n";
+    f += "const float tilemap_size = 128.0;\n";
+    f += "const float tiletex_size = 256.0;\n";
+    f += "vec2 uv_tm = floor(uv0);\n"; // tilemap coordinate
+    f += "vec2 uv_tmfr = uv0 - uv_tm;\n"; // coordinate inside a tile (0, 1)
+    f += "vec2 uvi = floor(uv_tmfr * tile_size);\n";
+      // coordinate inside a tile (0, tile_size)
+    f += "vec4 ti_val = " +  g.texture2d(); // lookup the tilemap
+    f += "  (sampler_tilemap, uv_tm / tilemap_size);\n";
+    f += "vec2 uv_pixel = floor(ti_val.xy * 255.0 + 0.5) * tile_size + uvi;\n";
+	  // tile pattern coordinate
+    f += "tex_val = " + g.texture2d(); // lookup the tilepattern
+    f += "  (sampler_pmpat, uv_pixel / tiletex_size);\n";
+    f += "}\n";
+    f += "vec2 parallax_next(in vec3 tsub, out vec3 tsub_next, in float z,";
+    f += " in vec3 d) {\n";
+    f += "tsub.xy = clamp(tsub.xy, 0.0, 1.0);\n";
+    f += "vec2 r = vec2(0.0, 0.0);\n";
+    f += "float dypos = float(d.y > 0.0);\n";
+    f += "float nx = tsub.x + (dypos - tsub.y) * d.x / d.y;\n";
+    f += "if (d.y != 0.0 && nx > 0.0 && nx < 1.0) {\n";
+    f += "float nz = tsub.z + (dypos - tsub.y) * d.z / d.y;\n";
+    f += "tsub_next = vec3(nx, dypos, nz);\n";
+    f += "r.y = dypos * 2.0 - 1.0;\n";
+    f += "} else if (d.x != 0.0) {\n";
+    f += "float dxpos = float(d.x > 0.0);\n";
+    f += "float ny = tsub.y + (dxpos - tsub.x) * d.y / d.x;\n";
+    f += "float nz = tsub.z + (dxpos - tsub.x) * d.z / d.x;\n";
+    f += "tsub_next = vec3(dxpos, ny, nz);\n"; // clamp ny?
+    f += "r.x = dxpos * 2.0 - 1.0;\n";
+    f += "} else {\n";
+    f += "tsub_next = vec3(tsub.xy, z);\n";
+    f += "}\n";
+    f += "return r;\n";
+    f += "}\n";
+    f += "void parallax_warp(in vec3 dir, inout vec4 tval, inout vec2 tpos,";
+    f += " inout vec3 tsub, inout vec4 dbg) {\n";
+    f += "const float tile_size = 32.0;\n";
+    f += "tsub.xy = clamp(tsub.xy, 0.001, 0.999);\n";
+    if (enable_macos_nvidia_wa) {
+      f += "return;\n";
+    }
+    f += "dir /= max(abs(dir.x), abs(dir.y));\n"; // FIXME: compute by caller?
+    // W = unused(8), Z = depth(8), Y = CNN(4) CNP(4), X = CPN(4) CPP(4)
+    f += "float cvt = floor((dir.x > 0.0 ? tval.x : tval.y) * 255.0 + 0.5);\n";
+    f += "float cval = dir.y > 0.0 ? fract(cvt / 16.0) * 16.0";
+    f += " : floor(cvt / 16.0);\n";
+    // f += "if (cval >= 2.0) { dbg.x = 1.0; }\n";
+    // f += "if (tval.x > 0.0) { dbg.x = 1.0; }\n";
+    f += "cval = min(cval, (tval.z - tsub.z) / dir.z);\n"; // crop cval
+    f += "vec3 delta = dir * cval;\n";
+    f += "vec2 npos = tpos + tsub.xy + delta.xy;\n";
+    f += "tpos = floor(npos);\n";
+    f += "tsub = vec3(npos - tpos, tsub.z + delta.z);\n";
+    f += "parallax_read(tpos / tile_size, tval);\n";
+    f += "}\n";
+    f += "void parallax_warp2(in vec3 dir, inout vec4 tval, inout vec2 tpos,";
+    f += " inout vec3 tsub) {\n";
+    f += "const float tile_size = 32.0;\n";
+    f += "tsub.xy = clamp(tsub.xy, 0.001, 0.999);\n";
+    f += "dir /= max(abs(dir.x), abs(dir.y));\n";
+    f += "float cvt = floor((dir.x > 0.0 ? tval.x : tval.y) * 255.0 + 0.5);\n";
+    f += "float cval = dir.y > 0.0 ? fract(cvt / 16.0) * 16.0";
+    f += " : floor(cvt / 16.0);\n";
+    f += "vec3 delta = dir * cval;\n"; // does not crop cval
+    f += "vec2 npos = tpos + tsub.xy + delta.xy;\n";
+    f += "tpos = floor(npos);\n";
+    f += "tsub = vec3(npos - tpos, tsub.z + delta.z);\n";
+    f += "parallax_read(tpos / tile_size, tval);\n";
+    f += "}\n";
+    /*
+    f += "float round_delta(in float v) {\n";
+    f += "return (v >= -0.001 && v < 0.001) ? 0.0 : v;\n";
+    f += "}\n";
+    */
+    f += "void parallax_loop(inout vec2 pos, in vec3 eye, in vec3 light,";
+    f += " out float z, out vec3 nor, out bool vertical, out float shval,";
+    f += " inout vec4 dbg) {\n";
+    f += "z = 0.0;\n";
+    f += "nor = vary_normal;\n";
+    f += "vertical = false;\n";
+    f += "shval = 1.0;\n";
+    f += "dbg.x = 0.0;\n"; // FIXME: debug
+    f += "const float tile_size = 32.0;\n";
+    // f += "eye.x = round_delta(eye.x);\n";
+    // f += "eye.y = round_delta(eye.y);\n";
+    f += "eye.z /= tile_size;\n";
+    // f += "light.x = round_delta(light.x);\n";
+    // f += "light.y = round_delta(light.y);\n";
+    f += "light.z /= tile_size;\n";
+    f += "vec2 pos_m = pos * tile_size;\n"; // tile coord to texel coord
+    f += "vec2 tpos = floor(pos_m);\n";
+    f += "vec3 tsub = vec3(pos_m - tpos, 0.0);\n";
+    f += "vec4 tval;\n";
+    f += "parallax_read(tpos / tile_size, tval);\n";
+    f += "if (tval.z == 0.0) {\n";
+    f += "return;\n";
+    f += "}\n";
+    f += "for (int i = 0; i < 128; ++i) {\n";
+    // f += "tsub.xy = clamp(tsub.xy, 0.001, 0.999);\n";
+    f += "vec3 tsub_next;\n";
+    f += "vec2 tnext_diff = parallax_next(tsub, tsub_next, tval.z, eye);\n";
+    /*
+    f += "if (tsub_next.x < -0.01 || tsub_next.x > 1.01 ||";
+    f += " tsub_next.y < -0.01 || tsub_next.y > 1.01) {\n"; // FIXME: debug
+    f += "  dbg.x = float(i + 1); return;\n";
+    f += "}\n";
+    */
+    f += "if (tsub_next.z >= tval.z) {\n"; // horizontal surface
+    // f += "if (tsub_next.z - tsub.z <= 0.0) { dbg.x = 1.0; };\n";
+    f += "if (tsub_next.z > tsub.z) {\n";
+    f += "float ra = (tval.z - tsub.z) / (tsub_next.z - tsub.z);\n";
+    // f += "if (abs(ra) >= 1.0) { dbg.x = 1.0; }\n";
+    f += "tsub += (tsub_next - tsub) * ra;\n";
+    // f += "tsub.xy = clamp(tsub.xy, 0.001, 0.999);\n";
+    f += "}\n";
+    f += "tsub.z = tval.z;\n";
+    // f += "dbg.b = 1.0;\n"; // FIXME
+    f += "break;\n";
+    f += "}\n";
+    f += "tsub = tsub_next;\n";
+    f += "tpos += tnext_diff;\n";
+    f += "tsub.xy -= tnext_diff;\n";
+    f += "parallax_read(tpos / tile_size, tval);\n";
+    f += "if (tval.z < tsub.z) {\n"; // vertical surface
+    f += "vertical = true;\n";
+    // f += "dbg.x = 1.0;\n";
+    f += "nor = vary_tangent * (-tnext_diff.x)";
+    f += "  + vary_binormal * (-tnext_diff.y);\n";
+    // f += "tsub.xy = clamp(tsub.xy, vec2(0.001, 0.001), vec2(0.999, 0.999));\n";
+    f += "break;\n";
+    f += "}\n";
+    f += "parallax_warp(eye, tval, tpos, tsub, dbg);\n";
+    // f += "if (i > 30) { dbg.x = 1.0; }\n";
+    f += "}\n"; // for (i)
+    f += "pos = (tpos + clamp(tsub.xy, 0.001, 0.999)) / tile_size;\n";
+    f += "z = tval.z;\n";
+    // f += "if (tval.z < tsub.z) { dbg.r = 1.0; }\n";
+    if (g.enable_parallax_shadow) {
+      f += "for (int i = 0; i < 128; ++i) {\n";
+      // f += "tsub.xy = clamp(tsub.xy, 0.001, 0.999);\n";
+      // f += "vec3 tsub_prev = tsub;\n"; // FIXME: debug
+      f += "vec3 tsub_next;\n";
+      f += "vec2 tnext_diff = parallax_next(tsub, tsub_next, 0.0, light);\n";
+      f += "if (tsub_next.z <= 0.0) {\n";
+      f += "break;\n";
+      f += "}\n";
+      f += "tsub = tsub_next;\n";
+      f += "tpos += tnext_diff;\n";
+      f += "tsub.xy -= tnext_diff;\n";
+      // f += "vec4 tval_prev = tval;\n"; // FIXME: debug
+      f += "parallax_read(tpos / tile_size, tval);\n";
+      f += "if (tval.z < tsub.z) {\n";
+      f += "shval = 0.0;\n";
+      // f += "dbg.b = 1.0;\n";
+      // f += "if (i < 1 && tsub_prev.z < tsub.z) { dbg.g = 1.0; }\n"; // FIXME FIXME FIXME: reaches here
+      // f += "if (i < 1 && tval_prev.z < tsub.z) { dbg.g = 1.0; }\n";
+      // f += "if (tval.z <= 16.0) { dbg.g = 1.0; }\n";
+      // f += "if (tval_prev.z < tsub.z) { dbg.g = 1.0; }\n";
+      f += "break;\n";
+      f += "}\n";
+      f += "parallax_warp2(light, tval, tpos, tsub);\n";
+      // f += "if (i > 30) { dbg.x = 1.0; }\n";
+      f += "}\n"; // for (i)
+    }
+    f += "}\n";
+  }
+  f += "void main(void) {\n";
+  f += "vec4 color = vec4(0.0, 0.0, 0.0, 1.0);\n";
+  if (opt != 0) {
+    f += "vec4 color_dif = vec4(0.52, 0.28, 0.42, 1.0);\n";
+  } else {
+    f += "vec4 color_dif = vec4(vary_color, 1.0);\n";
+    // f += "vec4 color_dif = vec4(0.20, 0.22, 0.21, 1.0);\n";
+  }
+  f += "float mate_ambient = 0.2;\n";
+  f += "float mate_specular = 0.5;\n";
+  f += "vec3 nor = vary_normal;\n";
+  f += "vec3 rel_camera_pos = camera_pos - vary_position;\n";
+  f += "vec3 camera_dir = normalize(rel_camera_pos);\n";
+  f += "float is_front = float(dot(camera_dir, nor) > 0.0);\n";
+  f += "float frag_distance = length(rel_camera_pos);\n";
+  f += "float distbr = clamp(30.0 / frag_distance , 0.0, 1.0);\n";
+  f += "float lstr = 1.0;\n";
+    /* lstr := 0 for backface */
+  if (g.enable_normalmapping) {
+    f += "vec2 uv0 = vary_uvw.xy / vary_uvw.z;\n";
+    if (g.enable_parallax) {
+      f += "vec4 para_val;\n";
+      f += "vec3 eye_tan = vec3("; // eye vector, tangent space
+      f += "  -dot(camera_dir, vary_tangent), ";
+      f += "  -dot(camera_dir, vary_binormal),";
+      f += "  dot(camera_dir, vary_normal));\n";
+      f += "vec3 light_tan = vec3("; // light vector, tangent space
+      f += "  dot(light_dir, vary_tangent), ";
+      f += "  dot(light_dir, vary_binormal),";
+      f += "  -dot(light_dir, vary_normal));\n";
+      f += "float zval = 0.0;\n";
+      f += "bool vertical = false;\n";
+      f += "vec4 dbgval = vec4(0.0,0.0,0.0,0.0);\n";
+      f += "if (light_tan.z < 0.0) {\n";
+      f += "parallax_loop(uv0, eye_tan, light_tan, zval, nor, vertical,";
+      f += "  lstr, dbgval);\n";
+      // f += "if (lstr < 0.01) { color.r += 1.0; }\n";
+      f += "}\n";
+      // f += "nor = vary_normal;\n"; // FIXME: remove
+      // f += "color.rgb += eye_tan;\n";
+      f += "color += dbgval;\n"; // FIXME
+    }
+    f += "vec2 subtex_uv;\n";
+    f += "vec4 tex_val;\n";
+    f += "tilemap(uv0, tex_val, subtex_uv);\n";
+    f += "float alv0 = floor(tex_val.a * 255.0 + 0.5);\n";
+    f += "float avol = floor(alv0 / 16.0);\n";
+    f += "int alv = int(alv0 - avol * 16.0 + 0.5);\n";
+    f += "if (!vertical) {\n";
+    f += "float lt = float(subtex_uv.y - subtex_uv.x >= 0.0);\n";
+    f += "float lb = float(subtex_uv.y + subtex_uv.x <= 1.0);\n";
+    f += "vec4 avlv = vec4(float(alv == 1), float(alv == 3), ";
+    f += "  float(alv == 5), float(alv == 7));\n";
+    f += "float ut1 = dot(avlv, vec4(-lt, 1.0-lb, 1.0-lt, -lb));\n";
+    f += "float vt1 = dot(avlv, vec4(lt-1.0, -lb, lt, 1.0-lb));\n";
+    f += "ut1 += float(alv == 4);\n";
+    f += "vt1 -= float(alv == 2);\n";
+    f += "avol = (avol - 8.0) * distbr * 0.2;\n";
+    f += "color += vec4(tex_val.xyz, 0.0) * float(alv == 10);\n";
+    // f += "color_dif = vec4(tex_val.xyz, 0.0) * float(alv != 10);\n";
+    f += "vec3 nor_delta = vary_tangent * ut1 * avol\n";
+    f += "  + vary_binormal * vt1 * avol;\n";
+    if (opt != 0) {
+      f += "nor_delta *= is_front;\n";
+    }
+    f += "nor = normalize(nor + nor_delta);\n";
+    f += "}\n";
+    f += "distbr *= float(alv != 10);\n";
+  }
+  f += "vec3 reflection_vec = reflect(-light_dir, nor);\n";
+  f += "float cos_angle = max(0.0, dot(camera_dir, reflection_vec));\n";
+  f += "float specular = pow(cos_angle, 16.0);\n";
+  f += "float diffuse = clamp(dot(light_dir, nor), 0.0, 1.0);\n";
+  if (opt == 0) {
+    /* no specular and diffuse for opt0 shader */
+    f += "specular = min(specular, is_front);\n";
+    f += "diffuse = min(diffuse, is_front);\n";
+  }
+  if (g.enable_shadowmapping) {
+    if (g.light_fixed) {
+      f += "vec3 ndelta = vary_normal * ndelta_scale;\n"; // 0.02 / 40.
+      f += "vec3 prel = vary_position - camera_pos;\n";
+      f += "vec3 p["+smsz+"];\n";
+      float den = g.shadowmap_distance;
+      for (int i: 0 .. g.num_shadowmaps) {
+	const i_s = to_string(i);
+	const den_s = to_string(den);
+	f += "p["+i_s+"] = prel / "+den_s+" + ndelta;\n";
+	den *= g.shadowmap_scale;
+      }
+    } else {
+      f += "vec3 p["+smsz+"] = vary_smposa;\n";
+    }
+    for (int i: 0 .. g.num_shadowmaps) {
+      const x = to_string(i);
+      if (g.enable_depth_texture) {
+	if (g.enable_shadowmapping_multisample) {
+	  if (i == 0) {
+	    f += "vec3 smpos;\n";
+	  }
+	  f += "smpos = (p["+x+"] + 1.0) * 0.5;\n";
+	  f += "float zval"+x+" = 0.0;\n";
+	  f += "float zval"+x+"_cur = 0.0;\n";
+	  f += "float sml"+x+" = 0.0;\n";
+	  f += "for (float i = -1.; i <= 1.; ++i) {\n";
+	  f += "for (float j = -1.; j <= 1.; ++j) {\n";
+	  f += "zval"+x+"_cur = " + g.texture2d();
+	  f += "  (sampler_sm["+x+"], smpos.xy + vec2(i,j)/4096.0).x;\n";
+	  f += "zval"+x+" = min(zval"+x+", zval"+x+"_cur);\n";
+	  f += "sml"+x+" += float(smpos.z < zval"+x+"_cur";
+	  f += " * (1.0005 + (abs(i)+abs(j))/4096.0))/9.0;\n";
+	  f += "}\n";
+	  f += "}\n";
+	} else {
+	  // no multisample
+	  if (i == 0) {
+	    f += "vec3 smpos;\n";
+	  }
+	  f += "smpos = (p["+x+"] + 1.0) * 0.5;\n";
+	  f += "float zval"+x+" = " + g.texture2d();
+	  f += "  (sampler_sm["+x+"], smpos.xy).x;\n";
+	  f += "float sml"+x+" = float(smpos.z < zval"+x+" * 1.0005);\n";
+	}
+      } else if (g.enable_vsm) {
+	// vsm, no depth texture
+	if (i == 0) {
+	  f += "vec3 smpos;\n";
+	  f += "vec2 smz;\n";
+	  f += "float dist;\n";
+	  f += "float variance;\n";
+	}
+	if (g.enable_shadowmapping_multisample) {
+	  f += "smpos = (p["+x+"] + 1.0) * 0.5;\n";
+	  f += "float zval"+x+" = 99999.0;\n";
+	  f += "float sml"+x+" = 0.0;\n";
+	  f += "for (float i = -1.0; i <= 1.0; i += 2.0) {\n";
+	  f += "for (float j = -1.0; j <= 1.0; j += 2.0) {\n";
+	  f += "smz = " + g.texture2d();
+	  f += "  (sampler_sm["+x+"], smpos.xy + vec2(i, j) / 8192.0).rg;\n";
+	  f += "zval"+x+" = min(zval"+x+", smz.r);\n";
+	  f += "dist = smpos.z - smz.r * 1.001;\n";
+	  f += "if (dist <= 0.0) {\n";
+	  f += "sml"+x+" += 0.25;\n";
+	  f += "} else {\n";
+	  f += "variance = smz.g - smz.r * smz.r;\n";
+	  f += "variance = max(variance, 0.000001);\n";
+	  f += "sml"+x+" += 0.25 * variance / (variance + dist * dist);\n";
+	  f += "}\n";
+	  f += "}\n"; // for (j)
+	  f += "}\n"; // for (i)
+	  f += "sml"+x+" = clamp(sml"+x+" * 1.5 - 0.1, 0.0, 1.0);\n";
+	} else {
+	  // no multisample
+	  f += "smpos = (p["+x+"] + 1.0) * 0.5;\n";
+	  f += "smz = " + g.texture2d();
+	  f += "  (sampler_sm["+x+"], smpos.xy).rg;\n";
+	  f += "float zval"+x+" = smz.r;\n";
+	  f += "float zval"+x+"_sq = smz.g;\n";
+	  f += "float sml"+x+" = 0.0;\n";
+	  f += "dist = smpos.z - smz.r * 1.001;\n";
+	  f += "if (dist <= 0.0) {\n";
+	  f += "sml"+x+" = 1.0;\n";
+	  f += "} else {\n";
+	  f += "variance = smz.g - smz.r * smz.r;\n";
+	  f += "variance = max(variance, 0.000001);\n";
+	  f += "sml"+x+" = clamp(";
+	  f += " variance / (variance + dist * dist) * 1.5 - 0.1, 0.0, 1.0);\n";
+	  f += "}\n";
+	}
+	debug_log("VSM enabled");
+      } else {
+	// no depth texture, no vsm
+	if (i == 0) {
+	  f += "vec3 smpos;\n";
+	  f += "vec3 smz;\n";
+	}
+	f += "smpos = (p["+x+"] + 1.0) * 0.5;\n";
+	f += "smz = " + g.texture2d();
+	f += "  (sampler_sm["+x+"], smpos.xy).rgb;\n";
+	f += "smz = floor(smz * 255.0 + 0.5);\n";
+	f += "float zval"+x+" = ";
+	f += "  smz.r / 256. + smz.g / 65536.0 + smz.b / 16777216.;\n";
+	f += "float sml"+x+" = float(smpos.z < zval"+x+" * 1.0005);\n";
+      }
+    }
+    if (g.enable_vsm) {
+      f += "const float zval_thr = 0.1;\n";
+    } else {
+      f += "const float zval_thr = "+to_string(0.97f/g.shadowmap_scale)+";\n";
+    }
+    f += "const float psm_thr = "+to_string(0.9f/g.shadowmap_scale)+";\n";
+    f += "if (zval0 < 0.0) { color.g += 1.0; };\n"; // FIXME
+    f += "float smv0 = min(1.0, sml0";
+    f += "  + linear_01(max_vec3(abs(p[0])), 0.9, 1.0));\n";
+    f += "lstr = min(lstr, smv0);\n";
+    for (int i: 1 .. g.num_shadowmaps) {
+      const x = to_string(i);
+      f += "float smv"+x+" = max3(sml"+x+",";
+      f += "  min(linear_10(max_vec3(abs(p["+x+"])), psm_thr * 0.9, psm_thr),";
+      f += "  linear_10(abs(zval"+x+"-0.5)*2.0, zval_thr * 0.9, zval_thr)),";
+      f += "  linear_01(max_vec3(abs(p["+x+"])), 0.9, 1.0));\n";
+      f += "lstr = min(lstr, smv"+x+");\n";
+    }
+    /*
+    f += "float smv2 = max3(sml2,";
+    f += "  min(linear_10(max_vec3(abs(p[2])), psm_thr * 0.9, psm_thr),";
+    f += "  linear_10(abs(zval2 - 0.5) * 2.0, zval_thr * 0.9, zval_thr)),";
+    f += "  linear_01(max_vec3(abs(p[2])), 0.9, 1.0));\n";
+    f += "float smv3 = max3(sml3,";
+    f += "  min(linear_10(max_vec3(abs(p[3])), psm_thr * 0.9, psm_thr),";
+    f += "  linear_10(abs(zval3 - 0.5) * 2.0, zval_thr * 0.9, zval_thr)),";
+    f += "  linear_01(max_vec3(abs(p[3])), 0.9, 1.0));\n";
+    f += "lstr = min(lstr, min(min(smv0, smv1), min(smv2, smv3)));\n";
+    */
+    f += "color += vec4(1.0, 1.0, 1.0, 1.0)";
+    f += "  * (mate_specular * specular * lstr);\n";
+  }
+  f += g.fragcolor() +  " = color + ";
+  f += "  (color_dif * (diffuse * lstr + mate_ambient));\n";
+  f += "}\n";
+  return f;
+}
+

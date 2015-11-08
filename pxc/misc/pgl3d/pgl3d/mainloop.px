@@ -25,6 +25,7 @@ private import pgl3d::glbuffer -;
 private import pgl3d::pglshader -;
 private import pgl3d::sdlcontext -;
 private import pgl3d::sdlutil -;
+private import pgl3d::resource_pool -;
 
 public function void mainloop(ptr{pgl3d_application} const& app,
   cstrref const& conf_filename)
@@ -32,7 +33,7 @@ public function void mainloop(ptr{pgl3d_application} const& app,
   string confstr;
   sdl_load_file(conf_filename, confstr);
   const conf = pgl3d_config(confstr);
-  GL::base::set_check_error_enabled(conf.get("gldebug", 0));
+  GL::base::set_check_error_enabled(conf.get("gldebug", 0, 0, 1));
   const ml = make_ptr{mainloop_internal}(app, conf);
   set_mainloop(ml);
 }
@@ -134,9 +135,11 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
   private sdlcontext sdlc = sdlcontext(conf);
   private shader_config sconf = shader_config(sdlc.gles_flag, sdlc.glmajor,
     sdlc.glminor, sdlc.enable_msaa, conf);
+  private ptr{resource_pool} respool = make_ptr{resource_pool}();
   private tree_map{string, ptr{pgldrawer_export_i}} drawers
-    = app->on_init_drawers(sconf);
-  private pglshader pgs = pglshader(sconf, drawers, sdlc.init_w, sdlc.init_h);
+    = app->on_init_drawers(sconf, respool);
+  private pglshader pgs = pglshader(sconf, respool, drawers, sdlc.init_w,
+    sdlc.init_h);
   private whole_instances_type local_whole_instances;
   private node_factory nfac;
   private option{ptr{motion_thread_client}} motion_thr;

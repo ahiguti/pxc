@@ -77,11 +77,11 @@ calc_aabb(cslice{float} const& triangles)
   mutable mx = mi;
   for (const i: 0 .. triangles.size() / 3) {
     mi.x = min(mi.x, triangles[i * 3 + 0]);
-    mx.x = max(mi.x, triangles[i * 3 + 0]);
-    mi.y = min(mi.x, triangles[i * 3 + 1]);
-    mx.y = max(mi.x, triangles[i * 3 + 1]);
-    mi.z = min(mi.x, triangles[i * 3 + 2]);
-    mx.z = max(mi.x, triangles[i * 3 + 2]);
+    mx.x = max(mx.x, triangles[i * 3 + 0]);
+    mi.y = min(mi.y, triangles[i * 3 + 1]);
+    mx.y = max(mx.y, triangles[i * 3 + 1]);
+    mi.z = min(mi.z, triangles[i * 3 + 2]);
+    mx.z = max(mx.z, triangles[i * 3 + 2]);
   }
   return pair(mi, mx);
 }
@@ -95,8 +95,8 @@ convex_hull_shape(cslice{float} const& v, cslice{float} const& triangles,
     static_cast{int}(v.size() / 3), 3 * 4);
   public float const radius = radius0;
   public pair{glm::vec3, glm::vec3} const aabb = calc_aabb(triangles);
-  public ptr{collision_heightmap} shape_hm
-    = make_collision_heightmap(1.0f, triangles);
+  public collision_heightmap shape_hm
+    = make_collision_heightmap(0.1f, triangles);
   public function crawptr{btCollisionShape} get() const
   {
     return caddress(value);
@@ -112,10 +112,18 @@ convex_hull_shape(cslice{float} const& v, cslice{float} const& triangles,
   public function bool near_collision(glm::vec3 const& pos, float radius)
     const
   {
-    return
-      pos.x >= aabb.first.x && pos.x <= aabb.second.x &&
-      pos.y >= aabb.first.y && pos.y <= aabb.second.y &&
-      pos.z >= aabb.first.z && pos.z <= aabb.second.z;
+    radius = min(radius, 0.5f); // FIXME
+    const aabb_col =
+      pos.x >= aabb.first.x - radius && pos.x <= aabb.second.x + radius &&
+      pos.y >= aabb.first.y - radius && pos.y <= aabb.second.y + radius &&
+      pos.z >= aabb.first.z - radius && pos.z <= aabb.second.z + radius;
+    if (!aabb_col) {
+      //debug_log("near_collision !aabb", radius, pos, aabb.first, aabb.second);
+      return false;
+    }
+    const r = shape_hm.collide(pos, radius);
+    //debug_log("near_collision", r, radius, pos, aabb.first, aabb.second);
+    return r;
   }
 }
 
@@ -124,6 +132,7 @@ make_convex_hull_shape(cslice{float} const& v, cslice{uint} const& e)
 {
   varray{float} triangles;
   threaded function void add_tri(cslice{float} const& fv) {
+    // debug_log("tri: ", fv);
     triangles.append(fv);
   }
   triangles_foreach{add_tri}(v, e);
@@ -248,8 +257,8 @@ triangle_mesh_shape(ptr{triangle_mesh} const& mesh0,
   public btBvhTriangleMeshShape value = btBvhTriangleMeshShape(
     address(mesh->mesh), true, true);
   public float const radius = sqrt(mesh->radius_square);
-  public ptr{collision_heightmap} shape_hm
-    = make_collision_heightmap(1.0f, triangles);
+  public collision_heightmap shape_hm
+    = make_collision_heightmap(0.1f, triangles);
   init();
   private function void init()
   {

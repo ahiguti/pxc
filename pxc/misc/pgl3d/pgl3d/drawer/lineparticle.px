@@ -1,0 +1,159 @@
+private threaded namespace pgl3d::drawer::lineparticle "export-unsafe";
+public import common -;
+public import pgl3d::drawer::internal -;
+
+private tsvaluetype struct lineparticle_uniforms()
+{
+  public glm::mat4 view_projection_matrix;
+  public glm::vec2 screen_size_px;
+  public float screen_size_base;
+}
+
+private tsvaluetype struct lineparticle_vertex_attributes()
+{
+  public glm::vec2 vert;
+}
+
+private tsvaluetype struct lineparticle_instance_attributes()
+{
+  public glm::mat3 idata;
+}
+
+public struct drawer_lineparticle(shader_config const& glc,
+  resource_pool_ptr const& res)
+<pgldrawer_i>
+{
+  metafunction tattr lineparticle_vertex_attributes;
+  lineparticle_shader_ptr sdr_lp = init_lineparticle_shader(glc);
+  public function string get_vbid_name() const { return "vbid_lineparticle"; }
+  public function string get_main_vbid_name() const {
+    return "vbid_lineparticle"; }
+  public function prepare_instance_data_funcptr
+  get_prepare_instance_data_funcptr() const {
+    return make_tfuncptr{prepare_instance_data_lineparticle}();
+  }
+  public function ptr{vertex_buffer} make_vertex_buffer() const {
+    return make_tattr_vertex_buffer{tattr}(false, false);
+  }
+  public function string builtin_vertex_set_name() const {
+    return "lineparticle";
+  }
+  public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
+    const
+  {
+    farray{lineparticle_vertex_attributes, 4} vs;
+    vs[0].vert = glm::make_vec2(0.0, -0.5);
+    vs[1].vert = glm::make_vec2(1.0, -0.5);
+    vs[2].vert = glm::make_vec2(1.0, 0.5);
+    vs[3].vert = glm::make_vec2(0.0, 0.5);
+    vptr->push_polygon_distinct{lineparticle_vertex_attributes, 0}(vs);
+  }
+  public function dgf_filler make_filler(ptr{vertices} const& vptr) const
+  {
+    return make_dgf_noop(vptr);
+  }
+  public function texture_info get_texture_info(cstrref const& name) const
+  {
+    return texture_info();
+  }
+  public function void draw(draw_step step, size_t iter,
+    vertex_buffer const& bo, bo_instances_type const& bo_ib,
+    aggregated_ibuffer const& aibuf, vertex_buffer_id bo_id,
+    shader_config const& glc, projection_info const& cam_df,
+    cslice{GLuint} const& smtex_arr)
+  {
+    if (step == draw_step_solid) {
+      mutable cam_mat = glm::mat4();
+      cam_mat = cam_df.camera.to_mat4();
+      const vp = cam_df.projection * (cam_mat.inverse());
+      const screen_size_px = make_farray{float}(
+	cast_float(cam_df.screen_width), cast_float(cam_df.screen_height));
+      const screen_size_base = cast_float(
+	max(cam_df.screen_width, cam_df.screen_height));
+      mutable& sdr = *sdr_lp;
+      glUseProgram(sdr.program);
+      glUniformMatrix4fv(sdr.u_view_projection_matrix, 1, 0,
+	vp.to_crawptr());
+      glUniform2fv(sdr.u_screen_size_px, 1, screen_size_px.to_crawptr());
+      glUniform1fv(sdr.u_screen_size_base, 1, caddress(screen_size_base));
+      aibuf.draw(sdr, bo, bo_ib, bo_id, glc.enable_instanced,
+	glc.enable_uniform_instancing);
+    }
+  }
+}
+
+private metafunction lineparticle_shader_ptr
+  ptr{glshader{lineparticle_uniforms, lineparticle_instance_attributes,
+    lineparticle_vertex_attributes}};
+
+private function lineparticle_shader_ptr
+init_lineparticle_shader(shader_config const& g)
+{
+  string v;
+  v += g.prepend();
+  v += g.decl_instance_attr("mat3", "idata");
+  v += "uniform mat4 view_projection_matrix;\n";
+  v += "uniform vec2 screen_size_px;\n";
+  v += "uniform float screen_size_base;\n";
+  v += g.vert_in() + "vec2 vert;\n";
+  v += g.vert_out() + "vec3 vary_coord;\n";
+  v += g.vert_out() + "vec2 edge;\n";
+  v += "void main(void) {\n";
+  v += "vec4 p0p = view_projection_matrix * vec4("
+    + g.instance_attr("idata") + "[0], 1.0);\n";
+  v += "vec4 p1p = view_projection_matrix * vec4("
+    + g.instance_attr("idata") + "[1], 1.0);\n";
+  v += "float pz0 = p0p.z / p0p.w;\n";
+  v += "float pz1 = p1p.z / p1p.w;\n";
+  v += "float pz = (pz0 + pz1) * 0.5;\n";
+  v += "vec2 p0 = p0p.xy * screen_size_px / p0p.w;\n";
+  v += "vec2 p1 = p1p.xy * screen_size_px / p1p.w;\n";
+  v += "float is_posi = min(float(p0p.w > 0.0), float(p1p.w > 0.0));\n"; 
+  v += "vec2 pvec = p1 - p0;\n"; // FIXME: must be non-zero
+  v += "float plen = length(pvec);\n";
+  v += "vec2 r = screen_size_base * "
+    + g.instance_attr("idata") + "[2].x"
+    + " / vec2(p0p.w, p1p.w);\n";
+  v += "float rmx = max(r[0], r[1]);\n";
+  // v += "r = max(r, rmx - plen * 0.0625);\n";
+  v += "r = max(r, rmx - plen * 0.5);\n";
+  v += "float rp = r[0] + (r[1] - r[0]) * vert.x;\n";
+  v += "vec2 qvec = normalize(vec2(-pvec.y, pvec.x)) * rp;\n";
+  v += "float x_extend_0 = (vert.x - 1.0) * r[0] * 0.5 / plen;\n";
+  v += "float x_extend_1 = vert.x * r[1] * 0.5 / plen;\n";
+  v += "vec2 vert_ex = vec2(vert.x + x_extend_0 + x_extend_1, vert.y);\n";
+  v += "vec2 vpos = p0 + mat2(pvec, qvec) * vert_ex;\n";
+  v += "gl_Position = vec4(vpos * is_posi / screen_size_px, pz, 1.0);\n";
+  v += "vec2 c = vec2(vert.x - 0.5, vert.y) * 2.0;\n";
+  v += "float rrat = r[1] / r[0];\n";
+  v += "float rrat_v = 1.0 + (rrat - 1.0) * vert.x;\n";
+  v += "vary_coord = vec3(c, 1.0) * rrat_v;\n";
+  v += "float edge_rat = clamp(max(r[0], r[1]) / plen, 0.125, 1.0);\n";
+  v += "edge = vec2(1.0 - edge_rat, 1.0 / edge_rat);\n";
+  v += "}\n";
+  string f;
+  f += g.prepend();
+  f += g.decl_fragcolor();
+  f += g.frag_in() + "vec3 vary_coord;\n";
+  f += g.frag_in() + "vec2 edge;\n";
+  f += g.frag_in() + "float lpstep;\n";
+  f += "void main(void) {\n";
+  f += "vec2 c = vary_coord.xy / vary_coord.z;\n";
+  f += "c.x = max(abs(c.x) - edge.x, 0.0) * edge.y;\n";
+  f += "float a = 1.0 - length(c);\n";
+  f += "if (a < 0.25) { discard; };\n";
+  f += g.fragcolor() + " = vec4(a * 2.0, a * 2.0, a * 4.0, 1.0);\n";
+  f += "}\n";
+  return make_glshader_ptr{lineparticle_uniforms,
+    lineparticle_instance_attributes, lineparticle_vertex_attributes}
+    (v, f, "", g.debug_level);
+}
+
+private threaded function void prepare_instance_data_lineparticle(
+  scene_node const& sn, node_common_data mutable& ncd,
+  instance_data mutable& idata)
+{
+  const sli = sn.trans.value.to_cslice();
+  idata.instance_buffer.append(sli[0 .. 9]);
+}
+
