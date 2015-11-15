@@ -15,6 +15,6 @@ cd `dirname $0` &&
     --preload-file mplus-1m-bold.ttf \
     --preload-file pgl3d.cnf --emrun && \
   popd &&
-  emrun --browser=firefox gen/demoapp.html
+  emrun --browser=firefox gen/demoapp.html 2>&1 | tee /tmp/z
 
     # -s NO_EXIT_RUNTIME=1 \

@@ -9,6 +9,7 @@ private tsvaluetype struct triangles_uniforms()
   public int sampler_dpat;
   public int sampler_pmpat;
   public int sampler_tilemap;
+  public int sampler_env;
   public int sampler_sm; // array
 //  public int sampler_sm1;
 //  public int sampler_sm2;
@@ -65,22 +66,27 @@ private tsvaluetype struct shadowmap_uniforms()
 }
 
 public struct drawer_triangles(shader_config const& glc,
-  resource_pool_ptr const& res, int opt0)
+  resource_pool_ptr const& res0, int opt0)
 <pgldrawer_i>
 {
   metafunction tattr triangles_vertex_attributes;
+  ptr{resource_pool} res = pointer_downcast{ptr{resource_pool}}(res0);
   int const opt = opt0;
   triangles_shader_ptr const sdr_solid = init_triangles_shader(glc, opt);
   zprepass_shader_ptr const sdr_zp = init_zprepass_shader(glc, opt);
   shadowmap_shader_ptr const sdr_shadow = init_shadowmap_shader(glc, opt);
-  gl_texture texture_dpat;
-  gl_texture texture_pmpat;
-  gl_texture texture_tilemap;
+  ptr{gl_texture} texture_dpat = make_ptr{gl_texture}();
+  ptr{gl_texture} texture_pmpat = make_ptr{gl_texture}();
+  ptr{gl_texture} texture_tilemap = make_ptr{gl_texture}();
+  ptr{gl_texture} texture_env = make_ptr{gl_texture}();
   init();
   private function void init()
   {
-    load_tilemap_texture(texture_dpat, texture_pmpat, texture_tilemap,
+    load_tilemap_texture(*texture_dpat, *texture_pmpat, *texture_tilemap,
       "dpat.png", "pmpat.png");
+    res->textures.insert("tile_color", texture_dpat);
+    res->textures.insert("tile_parallax", texture_pmpat);
+    res->textures.insert("tile", texture_tilemap);
   }
   public function string get_vbid_name() const {
     return "vbid_triangles_" + to_string(opt);
@@ -106,8 +112,8 @@ public struct drawer_triangles(shader_config const& glc,
   {
     texture_info r;
     if (name == "main") {
-      r.surface_w = texture_dpat.surface_w;
-      r.surface_h = texture_dpat.surface_h;
+      r.surface_w = texture_dpat->surface_w;
+      r.surface_h = texture_dpat->surface_h;
     }
     return r;
   }
@@ -153,7 +159,7 @@ public struct drawer_triangles(shader_config const& glc,
       const red = make_farray{float}(0.8, 0.1, 0.0, 1.0);
       mutable& sdr = *sdr_solid;
       glActiveTexture(GL_TEXTURE0);
-      glBindTexture(GL_TEXTURE_2D, texture_dpat.texture_id.get());
+      glBindTexture(GL_TEXTURE_2D, texture_dpat->texture_id.get());
       /*
       // FIXME: enable
       glActiveTexture(GL_TEXTURE1);
@@ -172,21 +178,32 @@ public struct drawer_triangles(shader_config const& glc,
       glUniform3fv(sdr.u_camera_pos, 1,
 	cam_df.camera.position.to_crawptr());
       glActiveTexture(GL_TEXTURE0);
-      glBindTexture(GL_TEXTURE_2D, texture_dpat.texture_id.get());
+      glBindTexture(GL_TEXTURE_2D, texture_dpat->texture_id.get());
       glActiveTexture(GL_TEXTURE1);
       glUniform1i(sdr.u_sampler_dpat, 0);
-      glBindTexture(GL_TEXTURE_2D, texture_pmpat.texture_id.get());
+      glBindTexture(GL_TEXTURE_2D, texture_pmpat->texture_id.get());
       glUniform1i(sdr.u_sampler_pmpat, 1);
       glActiveTexture(GL_TEXTURE2);
-      glBindTexture(GL_TEXTURE_2D, texture_tilemap.texture_id.get());
+      glBindTexture(GL_TEXTURE_2D, texture_tilemap->texture_id.get());
       glUniform1i(sdr.u_sampler_tilemap, 2);
+      if (texture_env->texture_id.get() == 0) { // TODO: cleanup
+	if (const te: res->textures["environ"]) {
+	  texture_env = te;
+	  // debug_log("texture_env", texture_env);
+	}
+      }
+      if (texture_env->texture_id.get() != 0) {
+	glActiveTexture(GL_TEXTURE3);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, texture_env->texture_id.get());
+	glUniform1i(sdr.u_sampler_env, 3);
+      }
       darrayst{int} sampler_smarr = darrayst{int}(
 	static_cast{size_t}(glc.num_shadowmaps), 0);
       for (const i: 0 .. glc.num_shadowmaps) {
 	glActiveTexture(static_cast{GLenum}(
-	  static_cast{int}(GL_TEXTURE3) + i));
+	  static_cast{int}(GL_TEXTURE4) + i));
 	glBindTexture(GL_TEXTURE_2D, smtex_arr[static_cast{size_t}(i)]);
-	sampler_smarr[static_cast{size_t}(i)] = 3 + i;
+	sampler_smarr[static_cast{size_t}(i)] = 4 + i;
       }
       glUniform1iv(sdr.u_sampler_sm, glc.num_shadowmaps,
 	caddress(sampler_smarr[0]));
@@ -496,6 +513,7 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
   f += "uniform sampler2D sampler_dpat;\n";
   f += "uniform sampler2D sampler_pmpat;\n";
   f += "uniform sampler2D sampler_tilemap;\n";
+  f += "uniform samplerCube sampler_env;\n";
   if (g.enable_sampler2dshadow) {
     f += "uniform sampler2DShadow sampler_sm["+smsz+"];\n";
   } else {
@@ -553,8 +571,6 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
 	  // lookup the tilemap
     f += "vec2 uv_pixel = floor(ti_val.xy * 255.0 + 0.5) * tile_size + uvi;\n";
 	  // tile pattern coordinate
-    // f += "mate_ambient = ti_val.z;\n";
-    // f += "mate_specular = ti_val.w;\n";
     f += "tex_val = " + g.texture2d();
     f += "  (sampler_dpat, uv_pixel / tiletex_size);\n";
 	  // lookup the tilepattern
@@ -729,16 +745,29 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
     }
     f += "}\n";
   }
+  // fresnel
+  f += "vec3 reflection_fresnel(in float cos_l_n, in vec3 fresnel0) {\n";
+  f += "float fre_exp = pow(1.0 - cos_l_n, 5.0);\n";
+  f += "return fresnel0 + (vec3(1.0, 1.0, 1.0) - fresnel0) * fre_exp;\n";
+  f += "}\n";
+  f += "vec3 light_specular_brdf(in float cos_l_h, in float cos_n_h,\n";
+  f += " in float cos_n_v, in float cos_n_l, in float cos_v_h, float alpha,";
+  f += " in vec3 material_specular) {\n";
+  f += "float alpha2 = alpha * alpha;\n";
+  f += "float den = cos_n_h * cos_n_h * (alpha2 - 1.0) + 1.0;\n";
+  f += "float distribution = alpha2 / (3.141592 * den * den);\n";
+  f += "float geo = 1.0;\n";
+  // f += "geo = min(geo, 2 * cos_n_h * cos_n_v / cos_v_h);\n";
+  // f += "geo = min(geo, 2 * cos_n_h * cos_n_l / cos_v_h);\n";
+  // f += "geo /= (cos_n_l * cos_n_v);\n";
+  f += "vec3 fresnel = reflection_fresnel(cos_l_h, material_specular);\n";
+  f += "return fresnel * (distribution * geo * 3.141592 / 4.0);\n";
+  f += "}\n";
+  f += "vec3 light_diffuse(in float cos_n_l, in vec3 material_diffuse) {\n";
+  f += "return material_diffuse * cos_n_l / 3.141592;\n";
+  f += "}\n";
   f += "void main(void) {\n";
   f += "vec4 color = vec4(0.0, 0.0, 0.0, 1.0);\n";
-  if (opt != 0) {
-    f += "vec4 color_dif = vec4(0.52, 0.28, 0.42, 1.0);\n";
-  } else {
-    f += "vec4 color_dif = vec4(vary_color, 1.0);\n";
-    // f += "vec4 color_dif = vec4(0.20, 0.22, 0.21, 1.0);\n";
-  }
-  f += "float mate_ambient = 0.2;\n";
-  f += "float mate_specular = 0.5;\n";
   f += "vec3 nor = vary_normal;\n";
   f += "vec3 rel_camera_pos = camera_pos - vary_position;\n";
   f += "vec3 camera_dir = normalize(rel_camera_pos);\n";
@@ -746,7 +775,7 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
   f += "float frag_distance = length(rel_camera_pos);\n";
   f += "float distbr = clamp(30.0 / frag_distance , 0.0, 1.0);\n";
   f += "float lstr = 1.0;\n";
-    /* lstr := 0 for backface */
+  f += "float para_zval = 0.0;\n";
   if (g.enable_normalmapping) {
     f += "vec2 uv0 = vary_uvw.xy / vary_uvw.z;\n";
     if (g.enable_parallax) {
@@ -759,13 +788,16 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
       f += "  dot(light_dir, vary_tangent), ";
       f += "  dot(light_dir, vary_binormal),";
       f += "  -dot(light_dir, vary_normal));\n";
-      f += "float zval = 0.0;\n";
       f += "bool vertical = false;\n";
       f += "vec4 dbgval = vec4(0.0,0.0,0.0,0.0);\n";
       f += "if (light_tan.z < 0.0) {\n";
-      f += "parallax_loop(uv0, eye_tan, light_tan, zval, nor, vertical,";
+      f += "parallax_loop(uv0, eye_tan, light_tan, para_zval, nor, vertical,";
       f += "  lstr, dbgval);\n";
       // f += "if (lstr < 0.01) { color.r += 1.0; }\n";
+      f += "} else {\n";
+      f += "vec4 tval;\n";
+      f += "parallax_read(uv0, tval);\n";
+      f += "para_zval = tval.z;\n";
       f += "}\n";
       // f += "nor = vary_normal;\n"; // FIXME: remove
       // f += "color.rgb += eye_tan;\n";
@@ -787,8 +819,7 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
     f += "ut1 += float(alv == 4);\n";
     f += "vt1 -= float(alv == 2);\n";
     f += "avol = (avol - 8.0) * distbr * 0.2;\n";
-    f += "color += vec4(tex_val.xyz, 0.0) * float(alv == 10);\n";
-    // f += "color_dif = vec4(tex_val.xyz, 0.0) * float(alv != 10);\n";
+    // f += "color += vec4(tex_val.xyz, 0.0) * float(alv == 10);\n";
     f += "vec3 nor_delta = vary_tangent * ut1 * avol\n";
     f += "  + vary_binormal * vt1 * avol;\n";
     if (opt != 0) {
@@ -797,15 +828,6 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
     f += "nor = normalize(nor + nor_delta);\n";
     f += "}\n";
     f += "distbr *= float(alv != 10);\n";
-  }
-  f += "vec3 reflection_vec = reflect(-light_dir, nor);\n";
-  f += "float cos_angle = max(0.0, dot(camera_dir, reflection_vec));\n";
-  f += "float specular = pow(cos_angle, 16.0);\n";
-  f += "float diffuse = clamp(dot(light_dir, nor), 0.0, 1.0);\n";
-  if (opt == 0) {
-    /* no specular and diffuse for opt0 shader */
-    f += "specular = min(specular, is_front);\n";
-    f += "diffuse = min(diffuse, is_front);\n";
   }
   if (g.enable_shadowmapping) {
     if (g.light_fixed) {
@@ -932,22 +954,58 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
       f += "  linear_01(max_vec3(abs(p["+x+"])), 0.9, 1.0));\n";
       f += "lstr = min(lstr, smv"+x+");\n";
     }
-    /*
-    f += "float smv2 = max3(sml2,";
-    f += "  min(linear_10(max_vec3(abs(p[2])), psm_thr * 0.9, psm_thr),";
-    f += "  linear_10(abs(zval2 - 0.5) * 2.0, zval_thr * 0.9, zval_thr)),";
-    f += "  linear_01(max_vec3(abs(p[2])), 0.9, 1.0));\n";
-    f += "float smv3 = max3(sml3,";
-    f += "  min(linear_10(max_vec3(abs(p[3])), psm_thr * 0.9, psm_thr),";
-    f += "  linear_10(abs(zval3 - 0.5) * 2.0, zval_thr * 0.9, zval_thr)),";
-    f += "  linear_01(max_vec3(abs(p[3])), 0.9, 1.0));\n";
-    f += "lstr = min(lstr, min(min(smv0, smv1), min(smv2, smv3)));\n";
-    */
-    f += "color += vec4(1.0, 1.0, 1.0, 1.0)";
-    f += "  * (mate_specular * specular * lstr);\n";
+    // FIXME?
+    f += "lstr = clamp(dot(vary_normal, light_dir) * 4.0, 0.0, lstr);\n";
+    // f += "lstr = clamp(dot(vary_normal, light_dir) * 32.0, 0.0, lstr);\n";
+    // f += "lstr = min(lstr, float(dot(vary_normal, light_dir) > 0.0));\n";
   }
+  // fresnel
+  f += "vec3 half_l_v = normalize(light_dir + camera_dir);\n";
+  f += "float cos_l_h = clamp(dot(light_dir, half_l_v), 0.0, 1.0);\n";
+  f += "float cos_n_h = clamp(dot(nor, half_l_v), 0.0, 1.0);\n";
+  f += "float cos_n_l = clamp(dot(nor, light_dir), 0.0, 1.0);\n";
+  f += "float cos_n_v = clamp(dot(nor, camera_dir), 0.0, 1.0);\n";
+  f += "float cos_v_h = clamp(dot(camera_dir, half_l_v), 0.0, 1.0);\n";
+  f += "float mate_alpha = 0.1;\n";
+  f += "vec3 mate_specular = vec3(0.02, 0.02, 0.02);\n";
+  f += "vec3 mate_diffuse = vec3(0.3, 0.0, 0.0);\n";
+  f += "vec3 light_color = vec3(5.0, 5.0, 5.0) * lstr;\n";
+  f += "vec3 light_sp_di = light_color * (\n";
+  f += " light_specular_brdf(cos_l_h, cos_n_h, cos_n_v, cos_n_l, cos_v_h,";
+  f += "  mate_alpha, mate_specular) +\n";
+  f += " light_diffuse(cos_n_l, mate_diffuse));\n";
+  f += "vec3 reflection_vec = reflect(-camera_dir, nor);\n";
+  f += "vec3 env = " + g.texture_cube();
+  f += "(sampler_env, reflection_vec).xyz;\n";
+  f += "env = env * env * reflection_fresnel(";
+  f += " clamp(dot(nor, reflection_vec), 0.0, 1.0), mate_specular)";
+  f += " * float(para_zval == 0.0) * 0.5;\n";
+  f += "color.xyz += sqrt(light_sp_di + env);\n";
+  f += g.fragcolor() + " = color;\n";
+  /*
+  // ADS
+  f += "vec3 reflection_vec = reflect(-camera_dir, nor);\n";
+  f += "float cos_angle = max(0.0, dot(light_dir, reflection_vec));\n";
+  f += "float specular = pow(cos_angle, 16.0);\n";
+  f += "float diffuse = clamp(dot(light_dir, nor), 0.0, 1.0);\n";
+  f += "vec3 env = " + g.texture_cube();
+  f += "(sampler_env, reflection_vec).xyz;\n";
+  if (opt == 0) {
+    f += "specular = min(specular, is_front);\n";
+    f += "diffuse = min(diffuse, is_front);\n";
+  }
+  if (opt != 0) {
+    f += "vec4 color_dif = vec4(0.52, 0.28, 0.42, 1.0);\n";
+  } else {
+    f += "vec4 color_dif = vec4(vary_color, 1.0);\n";
+  }
+  f += "float mate_ambient = 0.2;\n";
+  f += "vec3 mate_specular = vec3(0.3, 0.3, 0.3);\n";
+  f += "color.xyz += mate_specular * (specular * lstr);\n";
+  f += "color.xyz += mate_specular * env;\n";
   f += g.fragcolor() +  " = color + ";
   f += "  (color_dif * (diffuse * lstr + mate_ambient));\n";
+  */
   f += "}\n";
   return f;
 }

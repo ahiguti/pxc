@@ -206,8 +206,10 @@ load_cube_texture(gl_texture mutable& ctex, cslice{string} const& fnames)
     cast_int(GL_CLAMP_TO_EDGE));
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T,
     cast_int(GL_CLAMP_TO_EDGE));
-  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R,
-    cast_int(GL_CLAMP_TO_EDGE));
+  if (m::is_true{is_gl3_or_gles3}) {
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R,
+      cast_int(GL_CLAMP_TO_EDGE));
+  }
 }
 
 public function void
@@ -456,7 +458,7 @@ function void set_gl_texture(texture_data mutable& td, gl_texture mutable& ti,
       cast_int(GL_NEAREST));
     glTexParameteri(target, GL_TEXTURE_MIN_FILTER,
       cast_int(mipmap_level >= 1 ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST));
-    if (m::ne{is_gl3_or_gles3, 0}) {
+    if (m::is_true{is_gl3_or_gles3}) {
       if (mipmap_level != 0) {
 	glTexParameteri(target, GL_TEXTURE_BASE_LEVEL, 0);
 	glTexParameteri(target, GL_TEXTURE_MAX_LEVEL, mipmap_level);

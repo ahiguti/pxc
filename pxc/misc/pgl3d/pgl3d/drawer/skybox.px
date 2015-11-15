@@ -23,12 +23,13 @@ private tsvaluetype struct skybox_uniforms()
 }
 
 public struct drawer_skybox(shader_config const& glc,
-  resource_pool_ptr const& res)
+  resource_pool_ptr const& res0)
 <pgldrawer_i>
 {
   metafunction tattr skybox_vertex_attributes;
+  ptr{resource_pool} res = pointer_downcast{ptr{resource_pool}}(res0);
   skybox_shader_ptr sdr_sb = init_skybox_shader(glc);
-  gl_texture texture_cube;
+  ptr{gl_texture} texture_cube = make_ptr{gl_texture}();
   // gl_texture texture_2dtex; // FIXME
   init();
   private function void init()
@@ -45,7 +46,8 @@ public struct drawer_skybox(shader_config const& glc,
       "cube_bottom4.png",
       "cube_front5.png",
       "cube_back6.png");
-    load_cube_texture(texture_cube, fnames);
+    load_cube_texture(*texture_cube, fnames);
+    res->textures.insert("environ", texture_cube);
     // load_2d_texture(texture_2dtex, "cube0.png"); // FIXME
   }
   public function string get_vbid_name() const { return "vbid_skybox"; }
@@ -104,7 +106,7 @@ debug_log("far,near", cam_df.camera_pers.far, cam_df.camera_pers.near);
       glUseProgram(sdr.program);
       glActiveTexture(GL_TEXTURE0);
       // FIXME
-      glBindTexture(GL_TEXTURE_CUBE_MAP, texture_cube.texture_id.get());
+      glBindTexture(GL_TEXTURE_CUBE_MAP, texture_cube->texture_id.get());
       // glBindTexture(GL_TEXTURE_2D, texture_2dtex.texture_id.get());
       // debug_log("cube texture", texture_cube.texture_id.get());
       // debug_log("2d texture", texture_2dtex.texture_id.get());

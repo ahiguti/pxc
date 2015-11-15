@@ -84,15 +84,73 @@ private function int set_swap_interval(int vsync)
 struct
 framerate_control(int vsync0)
 {
-  public int vsync = vsync0;
+  public int mutable vsync = vsync0;
+  public int mutable swap_interval = set_swap_interval(vsync0);
+  public ulonglong time_prev = io::system.high_resolution_timer();
+  public ulonglong time_den = io::system.high_resolution_timer_frequency();
+  public double sleep_carry = 0.0;
+  public double max_fps = 60.0;
+  public double target_interval = 1.0 / max_fps;
+  public float frame_speed_mul = 1.0;
+  public function void start()
+  {
+    target_interval = 1.0 / max_fps;
+    time_prev = io::system.high_resolution_timer();
+  }
+  public function void toggle_vsync()
+  {
+    vsync = vsync != 0 ? 0 : 1;
+    sdllog("vsync=", vsync);
+    swap_interval = set_swap_interval(vsync);
+  }
+  public function double time_subtract_sec(ulonglong tx, ulonglong ty)
+  {
+    const v = static_cast{double}(tx - ty) / static_cast{double}(time_den);
+    return min(v, 1.0);
+  }
+  public function void rate_control()
+  {
+    const time_now = io::system.high_resolution_timer();
+    const cur_interval = time_subtract_sec(time_now, time_prev);
+    if (target_interval > cur_interval) {
+      mutable tfr = 1.0 / target_interval;
+      tfr += min(1.0 / tfr, 1.0); // increase 1.0 fps per sec
+      tfr = max(min(tfr, max_fps), 1.0);
+      target_interval = 1.0 / tfr;
+      //sdllog("tfr", tfr, sleep_carry);
+    } else {
+      target_interval = cur_interval;
+    }
+    const sleep_sec = target_interval - cur_interval + sleep_carry;
+    //const sleep_sec = target_interval - cur_interval;
+    //sdllog("tgt", target_interval, "cur", cur_interval, "sl", sleep_sec);
+    if (sleep_sec > 0.002 && target_interval > 0.02) {
+      const ss = sleep_sec;
+      io::system.usleep(static_cast{uint}((ss - 0.002) * 1000000.0));
+    }
+    const time_before_swapwindow = io::system.high_resolution_timer();
+    const slept = time_subtract_sec(time_before_swapwindow, time_now);
+    sleep_carry = max(min(sleep_sec - slept, 0.01), -0.01);
+    time_prev = time_before_swapwindow;
+    frame_speed_mul = static_cast{float}(target_interval * 60.0);
+  }
+}
+
+/*
+struct
+framerate_control(int vsync0)
+{
+  public bool const vsync_adaptive = vsync0 > 1;
+  public int vsync = vsync0 > 0 ? 1 : 0;
   public int swap_interval = set_swap_interval(vsync0);
   public ulonglong const timer_res
     = io::system.high_resolution_timer_frequency();
   public double const timer_res_inv = 1.0 / static_cast{double}(timer_res);
-  public farray{ulonglong, 12} values;
+  public farray{ulonglong, 2} values;
   public size_t cur = 0;
   public float frame_speed_mul = 1.0;
-  public float target_frame_speed_mul = 1.0;
+  public int fast_frame_count = 0;
+  public int slow_frame_count = 0;
   public function void toggle_vsync()
   {
     vsync = vsync != 0 ? 0 : 1;
@@ -114,18 +172,48 @@ framerate_control(int vsync0)
     // sdllog("t=", t);
     const t0 = values[cur];
     values[cur] = t;
-    mutable tdiff = static_cast{double}(t - t0) * timer_res_inv
+    mutable avg_tdiff = static_cast{double}(t - t0) * timer_res_inv
       / static_cast{double}(values.size());
-    if (tdiff < 0.0001 || tdiff > 1.0) {
-      tdiff = 1.0 / 60.0;
+    if (avg_tdiff < 0.0001 || avg_tdiff > 1.0) {
+      avg_tdiff = 1.0 / 60.0;
     }
-    target_frame_speed_mul = static_cast{float}(tdiff * 60.0);
-    frame_speed_mul = target_frame_speed_mul;
+    frame_speed_mul = static_cast{float}(avg_tdiff * 60.0);
+    if (vsync_adaptive) {
+      if (frame_speed_mul > 1.2 && vsync != 0) {
+	if (++slow_frame_count > 4) {
+	  slow_frame_count = 0;
+	  vsync = 0;
+	  debug_log("adaptive vsync", vsync);
+	  set_swap_interval(vsync);
+	}
+      } else if (frame_speed_mul <= 1.0 && vsync == 0) {
+	if (++fast_frame_count > 20) {
+	  fast_frame_count = 0;
+	  vsync = 1;
+	  debug_log("adaptive vsync", vsync);
+	  set_swap_interval(vsync);
+	}
+      }
+      if (frame_speed_mul < 1.2) {
+	slow_frame_count = 0;
+      }
+      if (frame_speed_mul > 1.0) {
+	fast_frame_count = 0;
+      }
+    }
     if (++cur >= values.size()) {
       cur = 0;
     }
+    // const t_prev = values[cur > 0 ? cur : values.size() - 1];
+    // const last_tdiff = static_cast{double}(t - t_prev) * timer_res_inv;
+    //if (last_tdiff < avg_tdiff - 0.002) {
+    //  const time_to_sleep = (avg_tdiff - 0.002) - last_tdiff;
+    //  debug_log("sleep", time_to_sleep);
+    //  io::system.usleep(static_cast{uint}(time_to_sleep * 1000000.0));
+    //}
   }
 }
+*/
 
 private struct mainloop_internal(ptr{pgl3d_application} const& app0,
   pgl3d_config const& conf)
@@ -371,9 +459,10 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
       fr.measure();
     }
     fr.save_ticks(5, SDL_GetTicks());
-    frctl.control();
+    frctl.rate_control();
     fr.save_ticks(6, SDL_GetTicks());
     SDL_GL_SwapWindow(sdlc.sdl_window);
+    // debug_log("swapwindow");
     fr.save_ticks(7, SDL_GetTicks());
     // if (scene_next_flag) { frctl.start(); }
     return done;
