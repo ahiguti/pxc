@@ -25,12 +25,14 @@ public import pgl3d::shader_config *;
 public import pgl3d::aggregated_ibuffer *;
 public import pgl3d::texture *;
 public import pgl3d::resource_pool *;
+public import pgl3d::framebuffer *;
 
 public enum draw_step {
   draw_step_shadowmapping = 1,
   draw_step_zprepass = 2,
   draw_step_solid = 3,
-  draw_step_blend = 4
+  draw_step_blend = 4,
+  draw_step_postprocess = 5
 }
 
 public metafunction dgf_filler
@@ -51,6 +53,10 @@ public interface pgldrawer_i <pgldrawer_export_i>
     /* called when builtin_vertex_set_name is not empty */
   public function dgf_filler make_filler(ptr{vertices} const& vptr) const;
   public function texture_info get_texture_info(cstrref const& name) const;
+  public function void resize_screen(shader_config const& glc, int width,
+    int height);
+  public function uint get_postprocess_framebuffer() const;
+  public function bool has_step(draw_step step) const;
   public function void draw(draw_step step, size_t iter,
     vertex_buffer const& bo, bo_instances_type const& bo_ib,
     aggregated_ibuffer const& aibuf, vertex_buffer_id bo_id,

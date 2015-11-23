@@ -91,6 +91,7 @@ private struct app_impl()
   public input_control ictl = input_control(io::system);
   public bool scene_next_flag;
   public float light_on = 0.0f;
+  public float option_value = 0.0f;
   public string_map app_commands;
   public varray{bool} prev_joy_buttons;
   init();
@@ -129,6 +130,7 @@ public multithreaded struct demoapp_scene_shared(io const& sys0)
   public position_angle posang;
   public bool scene_next_flag;
   public float light_on;
+  public float option_value = 0.0f;
   public texture_info default_font_texture_info;
   public string_map app_commands;
   public io::io sys = sys0;
@@ -218,6 +220,7 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
     // const t0 = io::debug_system().gettimeofday_double();
     pjinfo.camera = dss.posang;
     update_camera_light(pjinfo.camera, pjinfo.light);
+    pjinfo.option_value = dss.option_value;
     const sm_view = pjinfo.light.to_mat4().inverse();
     // const sm_vp = pjinfo.sm_projection * sm_view;
     const vp = pjinfo.projection * pjinfo.camera.to_mat4().inverse();
@@ -225,7 +228,6 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
     // ncd.shadowmapping_vp = sm_vp; // FIXME: remove: unused
     ncd.vp = vp;
     scene_control_update_buttons(sctl, sctl.node_buttons);
-    scene_control_update_skybox(sctl, sctl.node_skybox);
     size_t swarm_total = 0;
     for (const i, const& lpb: sctl.lpbullet_swarms) {
       swarm_total += lpb->size();
@@ -246,8 +248,6 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
     const t3 = get_time(sys);
     prepare_instance_data_ft_rec(ncd, sctl.node_buttons, ftable,
       whole_instances);
-    prepare_instance_data_ft_rec(ncd, sctl.node_skybox, ftable,
-      whole_instances);
     const t4 = get_time(sys);
     prepare_instance_data_lp(ncd, ftable, whole_instances);
     const t5 = get_time(sys);
@@ -266,9 +266,9 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
     size_t r = 0;
     const& bo_id = sn.joint_id.bo_id;
     const& vs_id = sn.joint_id.vs_id;
-    if (bo_id >= 0 && vs_id >= 0) {
+    if (bo_id != bo_id_invalid() && vs_id != vs_id_invalid()) {
       ++r;
-      mutable& idata = whole_instances[bo_id][static_cast{size_t}(vs_id)];
+      mutable& idata = whole_instances[bo_id][vs_id];
       ftable[bo_id](sn, ncd, idata);
     }
     for (const i, const& snp: sn.children) {
@@ -284,7 +284,7 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
     // FIXME: 
     const bo_id = sctl.joint_id_lp.bo_id;
     const vs_id = sctl.joint_id_lp.vs_id;
-    mutable& idata = whole_instances[bo_id][static_cast{size_t}(vs_id)];
+    mutable& idata = whole_instances[bo_id][vs_id];
     for (const k, const& lpbsw: sctl.lpbullet_swarms) {
       const& lparr = lpbsw->lparr;
       for (const i, const& lpb: lparr) {
@@ -301,13 +301,20 @@ function void handle_event(app_impl mutable& app,
 {
   const etype = ev.type;
   if (etype == SDL_MOUSEBUTTONDOWN) {
-    const bx = cast_float(ev.button.x) / cast_float(pjinfo.screen_width);
-    const by = cast_float(ev.button.y) / cast_float(pjinfo.screen_height);
+    const bx = cast_float(ev.button.x) / cast_float(pjinfo.window_width);
+    const by = cast_float(ev.button.y) / cast_float(pjinfo.window_height);
+    debug_log("down", bx, by, ev.button.x, ev.button.y, pjinfo.window_width, pjinfo.window_height);
     if (bx < 0.1 && by < 0.1) {
       app.scene_next_flag = true;
+      debug_log("next", app.scene_next_flag);
       return;
     } else if (bx > 0.9 && by > 0.9) {
       app.light_on = app.light_on > 0.5f ? 0.0f : 1.0f;
+      return;
+    } else if (bx > 0.9 && by < 0.1) {
+      app.option_value = static_cast{float}(
+	(static_cast{int}(app.option_value) + 1) % 8);
+      debug_log("option_value", app.option_value);
       return;
     }
   } else if (etype == SDL_FINGERDOWN) {
@@ -315,7 +322,13 @@ function void handle_event(app_impl mutable& app,
       app.scene_next_flag = true;
       return;
     } else if (ev.tfinger.x > 0.9 && ev.tfinger.y > 0.9) {
-      app.light_on = app.light_on > 0.5f ? 0.0f : 1.0f;
+      app.app_commands["scene_pause"] = "1";
+      // app.light_on = app.light_on > 0.5f ? 0.0f : 1.0f;
+      return;
+    } else if (ev.tfinger.x > 0.9 && ev.tfinger.y < 0.1) {
+      app.option_value = static_cast{float}(
+	(static_cast{int}(app.option_value) + 1) % 4);
+      debug_log("option_value", app.option_value);
       return;
     }
   } else if (etype == SDL_KEYDOWN) {
@@ -375,6 +388,7 @@ function void handle_keys(app_impl mutable& app,
   {
     mutable& ss = *app.scene_shared;
     ss.light_on = app.light_on;
+    ss.option_value = app.option_value;
     ss.scene_next_flag = app.scene_next_flag;
     ss.posang.position = app.player.position;
     ss.posang.angle = app.player.angle * camera_rel;
@@ -399,6 +413,7 @@ private function tree_map{string, ptr{pgldrawer_export_i}} init_drawers(
   r.insert("drawer_particle_bb", make_drawer_particle_bb(sconf, res));
   r.insert("drawer_rect2d", make_drawer_rect2d(sconf, res));
   r.insert("drawer_font2", make_drawer_font2(sconf, res));
+  r.insert("drawer_fxaa", make_drawer_fxaa(sconf, res));
   return r;
 }
 
@@ -454,7 +469,7 @@ private function void build_vertices(app_impl mutable& app,
       apply(m1,
 	ctx_fill(0))));
   pgs.make_vertex_set(tr, "saucer",
-    regular_polygon(3.0, 40,
+    regular_polygon(15.0, 40,
       bump_rec(10.8, 0.5, 1, ctx_fill(0), ctx_fill(0)),
       bump_rec(0.05, 0.9, 5,
 	ctx_fill(0),
@@ -665,41 +680,38 @@ private function void build_vertices(app_impl mutable& app,
   app.scene_shared->default_font_texture_info = pgs.get_texture_info("font");
 
   /* save shapes for physics engine */
-  function void shapes_add_convex(cstrref const& name, float mass) {
-    const& p = pgs.get_vertices(name)->positions;
-    const& elems = pgs.get_vertices(name)->elements;
-    // const reduced = reduce_vertices(posdt, 0.00001f);
-    // debug_log("reduced", name, posdt.size()/3, reduced.size()/3);
-    app.scene_shared->shapes.push_back(make_tptr{collision_shape_data}(
-      name, pgs.get_joint_id(name), mass,
-      collision_shape_e_convex_hull, p, elems));
-  }
-  function void shapes_add_sphere(cstrref const& name, float radius,
-    float mass) {
-    varray{float} v = make_varray{float}(radius);
-    app.scene_shared->shapes.push_back(make_tptr{collision_shape_data}(
-      name, pgs.get_joint_id(name), mass,
-      collision_shape_e_sphere, v, varray{uint}()));
-  }
-  function void shapes_add_concave(cstrref const& name, float mass) {
+  function void shapes_add(cstrref const& name, float mass,
+    collision_shape_e shape)
+  {
     const& p = pgs.get_vertices(name)->positions;
     const& elems = pgs.get_vertices(name)->elements;
     app.scene_shared->shapes.push_back(make_tptr{collision_shape_data}(
-      name, pgs.get_joint_id(name), mass,
-      collision_shape_e_concave, p, elems));
+      name, pgs.get_joint_id(name), mass, shape, p, elems));
   }
-  shapes_add_sphere("box", 1.0f, 1.0f);
+  function void shapes_add_convex(cstrref const& name, float mass)
+  {
+    shapes_add(name, mass, collision_shape_e_convex_hull);
+  }
+  function void shapes_add_sphere(cstrref const& name, float mass)
+  {
+    shapes_add(name, mass, collision_shape_e_sphere);
+  }
+  function void shapes_add_concave(cstrref const& name, float mass)
+  {
+    shapes_add(name, mass, collision_shape_e_concave);
+  }
+  shapes_add_sphere("box", 1.0f);
   shapes_add_convex("nest", 1000.0f);
-  shapes_add_sphere("box50", 50.0f, 1.0f);
+  shapes_add_sphere("box50", 50.0f);
   shapes_add_convex("bullet2", 2.0f);
-  // shapes_add_sphere("bullet2", 1.0f, 2.0f);
-  shapes_add_sphere("bullet", 2.0f, 1.0f);
-  shapes_add_sphere("saucer", 10.0f, 1.0f);
+  // shapes_add_sphere("bullet2", 1.0f);
+  shapes_add_sphere("bullet", 2.0f);
+  shapes_add_sphere("saucer", 10.0f);
   // shapes_add_concave("block", 0.0f);
   shapes_add_convex("block", 100.0f);
   // shapes_add_convex("knight", 10.0f);
-  shapes_add_sphere("particle", 1.0f, 3.0f);
-  shapes_add_sphere("particle-bb", 1.0f, 3.0f);
+  shapes_add_sphere("particle", 1.0f);
+  shapes_add_sphere("particle-bb", 1.0f);
 }
 
 function varray{float} reduce_vertices(cslice{float} const& shape, float delta)
@@ -809,9 +821,9 @@ scene_objects(collision_shape_data_array const& shape0, size_t num_split0)
     const mass = sh.mass;
     threaded function ptr{collision_shape_i} get_shape() {
       if (sh.shape == collision_shape_e_sphere) {
-	return make_sphere_shape(v[0]);
+	return make_sphere_shape(v, e);
       } else if (sh.shape == collision_shape_e_box) {
-	return make_box_shape(v[0], v[1], v[2]);
+	return make_box_shape(v, e);
       } else if (sh.shape == collision_shape_e_convex_hull) {
 	return make_convex_hull_shape(v, e);
       } else if (sh.shape == collision_shape_e_concave) {
@@ -904,15 +916,12 @@ scene_control(node_factory const& nfac,
     nodefac.get_joint_id_by_name("default_font");
   public joint_id_type joint_id_rect2d =
     nodefac.get_joint_id_by_name("rect2d");
-  public joint_id_type joint_id_skybox =
-    nodefac.get_joint_id_by_name("skybox");
   public size_t cur_scene = 0;
   public varray{tptr{lpbullet_swarm}} lpbullet_swarms;
   // public varray{lpbullet_data} lpbullet;
   public node mutable node_scene = make_node();
   public node mutable node_status_message = make_node();
   public node mutable node_buttons = make_node();
-  public node mutable node_skybox = make_node();
   public scene_objects sco = scene_objects(shapes0, num_split);
   public darray{string} const scene_names = make_darray{string}(
     // "untitled", "saucer", "saucer-multi", "block-multi", "block",
@@ -1051,17 +1060,6 @@ scene_control_update_buttons(scene_control mutable& sctl,
 }
 
 threaded function void
-scene_control_update_skybox(scene_control mutable& sctl,
-  scene_node mutable& sn_skybox)
-{
-  mutable& nd = sn_skybox;
-  if (nd.children.size() < 1) {
-    const p = scene_node(sctl.joint_id_skybox, glm::mat4());
-    nd.children.push_back(p);
-  }
-}
-
-threaded function void
 scene_control_step(scene_control mutable& sctl,
   demoapp_scene_shared const& ss, float frame_speed,
     node_common_data mutable& ncd,
@@ -1118,8 +1116,8 @@ scene_control_step(scene_control mutable& sctl,
   {
     const& bo_id = sn.joint_id.bo_id;
     const& vs_id = sn.joint_id.vs_id;
-    if (bo_id >= 0 && vs_id >= 0) {
-      mutable& idata = whole_instances[bo_id][static_cast{size_t}(vs_id)];
+    if (bo_id != bo_id_invalid() && vs_id != vs_id_invalid()) {
+      mutable& idata = whole_instances[bo_id][vs_id];
       ftable[bo_id](sn, ncd, idata);
     }	
   }

@@ -114,7 +114,11 @@ framerate_control(int vsync0)
     const cur_interval = time_subtract_sec(time_now, time_prev);
     if (target_interval > cur_interval) {
       mutable tfr = 1.0 / target_interval;
-      tfr += min(1.0 / tfr, 1.0); // increase 1.0 fps per sec
+      double inc = 1.0; // increase 1.0 fps per sec
+      if (tfr < 28.0 || tfr > 35.0) {
+	inc = 5.0;
+      }
+      tfr += min(inc / tfr, 1.0);
       tfr = max(min(tfr, max_fps), 1.0);
       target_interval = 1.0 / tfr;
       //sdllog("tfr", tfr, sleep_carry);
@@ -264,6 +268,7 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
     sdllog("PGL3D init0");
     app->on_build_vertices(pgs);
     pgs.prepare(local_whole_instances, nfac);
+    update_window_size();
 
     /* spawn motion thread */
     motion_thr.some = make_ptr{motion_thread_client}(nfac,
@@ -304,6 +309,18 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
     }
     return true;
   }
+  private function void update_window_size()
+  {
+    int w;
+    int h;
+    int wi_w;
+    int wi_h;
+    SDL_GL_GetDrawableSize(sdlc.sdl_window, address(w), address(h));
+    SDL_GetWindowSize(sdlc.sdl_window, address(wi_w), address(wi_h));
+    pgs.resize_screen(w, h, wi_w, wi_h);
+    frctl.start();
+    sdllog("resized w=", w, " h=", h, " win_w=", wi_w, " win_h=", wi_h);
+  }
   private function bool step_internal()
   {
     // bool scene_next_flag = false;
@@ -315,12 +332,7 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
        */
       if (etype == SDL_WINDOWEVENT) {
 	if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
-	  int w;
-	  int h;
-	  SDL_GL_GetDrawableSize(sdlc.sdl_window, address(w), address(h));
-	  pgs.resize_screen(w, h);
-	  frctl.start();
-	  sdllog("resized w=", w, " h=", h);
+	  update_window_size();
 	} else if (ev.window.event == SDL_WINDOWEVENT_HIDDEN) {
 	  sdllog("hidden");
 	} else if (ev.window.event == SDL_WINDOWEVENT_MINIMIZED ||

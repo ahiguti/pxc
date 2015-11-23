@@ -1,0 +1,178 @@
+private threaded namespace pgl3d::drawer::fxaa "export-unsafe";
+public import common -;
+public import pgl3d::drawer::internal -;
+public import meta m;
+
+private tsvaluetype struct fxaa_vertex_attributes()
+{
+  public glm::vec2 vert;
+}
+
+private tsvaluetype struct fxaa_instance_attributes()
+{
+}
+
+private tsvaluetype struct fxaa_uniforms()
+{
+  public glm::vec2 pixel_delta;
+  public int sampler_tex;
+  public float option_value;
+}
+
+public struct drawer_fxaa(shader_config const& glc,
+  resource_pool_ptr const& res)
+<pgldrawer_i>
+{
+  metafunction tattr fxaa_vertex_attributes;
+  public gl_framebuffer ppfbo;
+  fxaa_shader_ptr sdr_re = init_fxaa_shader(glc);
+  public function string get_vbid_name() const { return "vbid_fxaa"; }
+  public function string get_main_vbid_name() const { return "vbid_fxaa"; }
+  public function prepare_instance_data_funcptr
+  get_prepare_instance_data_funcptr() const {
+    return make_tfuncptr{prepare_instance_data_default}();
+  }
+  public function ptr{vertex_buffer} make_vertex_buffer() const {
+    return make_tattr_vertex_buffer{tattr}(false, false);
+  }
+  public function string builtin_vertex_set_name() const { return "fxaa"; }
+  public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
+    const
+  {
+    farray{fxaa_vertex_attributes, 4} vs;
+    vs[0].vert = glm::make_vec2(-1.0, -1.0);
+    vs[1].vert = glm::make_vec2( 1.0, -1.0);
+    vs[2].vert = glm::make_vec2( 1.0,  1.0);
+    vs[3].vert = glm::make_vec2(-1.0,  1.0);
+    vptr->push_polygon_distinct{fxaa_vertex_attributes, 0}(vs);
+  }
+  public function dgf_filler make_filler(ptr{vertices} const& vptr) const
+  {
+    return make_dgf_noop(vptr);
+  }
+  public function texture_info get_texture_info(cstrref const& name) const
+  {
+    return texture_info();
+  }
+  public function void resize_screen(shader_config const& glc, int width,
+    int height)
+  {
+    ppfbo.width = width;
+    ppfbo.height = height;
+    init_postprocess_fbo(glc, ppfbo);
+    debug_log("fxaa", width, height);
+  }
+  public function uint get_postprocess_framebuffer() const
+  {
+    return ppfbo.fbo.get();
+  }
+  public function bool has_step(draw_step step) const
+  {
+    if (step == draw_step_postprocess) {
+      return true;
+    }
+    return false;
+  }
+  public function void draw(draw_step step, size_t iter,
+    vertex_buffer const& bo, bo_instances_type const& bo_ib,
+    aggregated_ibuffer const& aibuf, vertex_buffer_id bo_id,
+    shader_config const& glc, projection_info const& cam_df,
+    cslice{GLuint} const& smtex_arr)
+  {
+    if (step == draw_step_postprocess) {
+      // debug_log("fxaa draw");
+      glDisable(GL_DEPTH_TEST);
+      glDepthMask(0);
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, ppfbo.texture.get());
+      mutable& sdr = *sdr_re;
+      glUseProgram(sdr.program);
+      glUniform1i(sdr.u_sampler_tex, 0);
+      const pixel_delta = glm::make_vec2(
+	1.0f / static_cast{float}(ppfbo.width),
+	1.0f / static_cast{float}(ppfbo.height));
+      // debug_log("delta", pixel_delta);
+      glUniform2fv(sdr.u_pixel_delta, 1, pixel_delta.to_crawptr());
+      mutable opval = static_cast{int}(cam_df.option_value);
+      opval %= 2;
+      glUniform1f(sdr.u_option_value, static_cast{float}(opval));
+      bo.draw(0, sdr);
+    }
+  }
+}
+
+metafunction fxaa_shader_ptr
+  ptr{glshader{
+    fxaa_uniforms, fxaa_instance_attributes, fxaa_vertex_attributes}};
+
+function fxaa_shader_ptr
+init_fxaa_shader(shader_config const& g)
+{
+  string v;
+  string f;
+  v += g.prepend();
+  v += g.vert_in() + "vec2 vert;\n";
+  v += g.vert_out() + "vec2 vary_coord;\n";
+  v += "void main(void) {\n";
+  v += "vary_coord = (vert + 1.0) * 0.5;\n";
+  v += "gl_Position = vec4(vert, 0.0, 1.0);\n";
+  v += "}\n";
+  f += g.prepend();
+  f += g.decl_fragcolor();
+  f += g.frag_in() + "vec2 vary_coord;\n";
+  f += "uniform vec2 pixel_delta;\n";
+  f += "uniform sampler2D sampler_tex;\n";
+  f += "uniform float option_value;\n";
+  f += "void main(void) {\n";
+  f += "if (option_value != 0.0) {\n";
+  f += "vec4 tval = " + g.texture2d() + "(sampler_tex, vary_coord);\n";
+  f += g.fragcolor() + " = vec4(tval.rgb, 1.0);\n";
+  f += "} else {\n";
+  f += "float span_max = 8.0;\n";
+  f += "float reduce_mul = 1.0/8.0;\n";
+  f += "float reduce_min = 1.0/128.0;\n";
+  f += "vec3 rgb_nw = " + g.texture2d() + "(sampler_tex, vary_coord +";
+  f += " vec2(-1.0, -1.0) * pixel_delta).xyz;\n";
+  f += "vec3 rgb_ne = " + g.texture2d() + "(sampler_tex, vary_coord +";
+  f += " vec2( 1.0, -1.0) * pixel_delta).xyz;\n";
+  f += "vec3 rgb_sw = " + g.texture2d() + "(sampler_tex, vary_coord +";
+  f += " vec2(-1.0,  1.0) * pixel_delta).xyz;\n";
+  f += "vec3 rgb_se = " + g.texture2d() + "(sampler_tex, vary_coord +";
+  f += " vec2( 1.0,  1.0) * pixel_delta).xyz;\n";
+  f += "vec3 rgb_m  = " + g.texture2d() + "(sampler_tex, vary_coord).xyz;\n";
+  f += "vec3 l = vec3(0.299, 0.587, 0.114);\n";
+  f += "float l_nw = dot(rgb_nw, l);\n";
+  f += "float l_ne = dot(rgb_ne, l);\n";
+  f += "float l_sw = dot(rgb_sw, l);\n";
+  f += "float l_se = dot(rgb_se, l);\n";
+  f += "float l_m  = dot(rgb_m,  l);\n";
+  f += "float l_min = min(l_m, min(min(l_nw, l_ne), min(l_sw, l_se)));\n";
+  f += "float l_max = max(l_m, max(max(l_nw, l_ne), max(l_sw, l_se)));\n";
+  f += "vec2 dir;\n";
+  f += "dir.x = -((l_nw + l_ne) - (l_sw + l_se));\n";
+  f += "dir.y =  ((l_nw + l_sw) - (l_ne + l_se));\n";
+  f += "float dir_reduce = max(";
+  f += "(l_nw + l_ne + l_sw + l_se) * (0.25 * reduce_mul), reduce_min);\n";
+  f += "float rcp_dmin = 1.0 / (min(abs(dir.x), abs(dir.y)) + dir_reduce);\n";
+  f += "dir = min(vec2(span_max, span_max),";
+  f += " max(vec2(-span_max, -span_max), dir * rcp_dmin)) * pixel_delta;\n";
+  f += "vec3 va = 0.5 * (";
+  f += g.texture2d() + "(sampler_tex, vary_coord+dir*(1.0/3.0-0.5)).xyz +";
+  f += g.texture2d() + "(sampler_tex, vary_coord+dir*(2.0/3.0-0.5)).xyz);\n";
+  f += "vec3 vb = va * 0.5 + 0.25 * (";
+  f += g.texture2d() + "(sampler_tex, vary_coord+dir*(0.0/3.0-0.5)).xyz +";
+  f += g.texture2d() + "(sampler_tex, vary_coord+dir*(3.0/3.0-0.5)).xyz);\n";
+  f += "float lb = dot(vb, l);\n";
+  f += "vec4 color = vec4(0.0, 0.0, 0.0, 1.0);\n";
+  f += "if ((lb < l_min) || (lb > l_max)) {\n";
+  f += "color.xyz = va;\n";
+  f += "} else {\n";
+  f += "color.xyz = vb;\n";
+  f += "}\n";
+  f += g.fragcolor() + " = color;\n";
+  f += "}\n";
+  f += "}\n";
+  return make_glshader_ptr{fxaa_uniforms, fxaa_instance_attributes,
+    fxaa_vertex_attributes}(v, f, "", g.debug_level);
+}
+

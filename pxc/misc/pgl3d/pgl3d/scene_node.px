@@ -5,11 +5,19 @@ public import glm;
 public import meta m;
 public import exception -;
 
+public metafunction vs_id_t distinct_uint{uint, "pgl3d::vs_id"};
+public metafunction bo_id_t distinct_uint{uint, "pgl3d::bo_id"};
+
+public threaded function bo_id_t
+bo_id_invalid() { return static_cast{bo_id_t}(-1); }
+public threaded function vs_id_t
+vs_id_invalid() { return static_cast{vs_id_t}(-1); }
+
 public tsvaluetype struct
 joint_id_type()
 {
-  public uint bo_id = 0;
-  public int vs_id = -1;
+  public bo_id_t bo_id = bo_id_invalid();
+  public vs_id_t vs_id = vs_id_invalid();
 }
 
 public threaded struct
@@ -30,9 +38,11 @@ node_factory
   make_node_by_id(joint_id_type const& joint_id, glm::mat4 const& trans) const
   {
     mutable sn = scene_node(joint_id, trans);
-    if (joint_id.vs_id >= 0) {
+    if (joint_id.bo_id != bo_id_invalid() &&
+      joint_id.vs_id != vs_id_invalid())
+    {
       const& nbi = binfo[joint_id.bo_id];
-      const& nvi = nbi.vs_arr[static_cast{size_t}(joint_id.vs_id)];
+      const& nvi = nbi.vs_arr[joint_id.vs_id];
       for (const i, const& nji: nvi.joints) {
 	const csn = make_node_by_id(nji.joint_id, nji.trans);
 	sn.children.push_back(csn);

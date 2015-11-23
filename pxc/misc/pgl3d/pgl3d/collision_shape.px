@@ -17,7 +17,8 @@ private import pgl3d::grid_broadphase -;
 private import pgl3d::collision_gjk -;
 private import pgl3d::collision_heightmap -;
 
-public threaded interface collision_shape_i {
+public threaded interface collision_shape_i
+{
   public function crawptr{btCollisionShape} get() const;
   public function float get_radius() const;
   public function bool has_near_collision() const;
@@ -52,36 +53,54 @@ make_triangle_mesh_shape(cslice{float} const& v, cslice{uint} const& e)
 }
 
 public threaded function ptr{collision_shape_i}
-make_sphere_shape(float radius)
+make_sphere_shape(cslice{float} const& v, cslice{uint} const& e)
 {
+  const radius = calc_radius(v);
   const r = make_ptr{collision_shape_tmpl{btSphereShape}}(radius);
   r->radius = radius;
   return r;
 }
 
-public threaded function ptr{collision_shape_i}
-make_box_shape(float x, float y, float z)
+private threaded function float
+calc_radius(cslice{float} const& v)
 {
-  const sq = x * x + y * y + z * z;
-  return make_ptr{box_shape}(btVector3_(x, y, z), sqrt(sq));
+  float radius_sq = 0.0f;
+  for (const i: 0 .. v.size() / 3) {
+    const ix = i * 3;
+    const sq = v[ix + 0] * v[ix + 0] + v[ix + 1] * v[ix + 1]
+      + v[ix + 2] * v[ix + 2];
+    radius_sq = max(radius_sq, sq);
+  }
+  return sqrt(radius_sq);
+}
+
+public threaded function ptr{collision_shape_i}
+make_box_shape(cslice{float} const& v, cslice{uint} const& e)
+{
+  const aabb = calc_aabb(v);
+  const x = max(fabs(aabb.first.x), fabs(aabb.second.x));
+  const y = max(fabs(aabb.first.y), fabs(aabb.second.y));
+  const z = max(fabs(aabb.first.z), fabs(aabb.second.z));
+  const radius_sq = x * x + y * y + z * z;
+  return make_ptr{box_shape}(btVector3_(x, y, z), sqrt(radius_sq));
 }
 
 private threaded function pair{glm::vec3, glm::vec3}
-calc_aabb(cslice{float} const& triangles)
+calc_aabb(cslice{float} const& v)
 {
-  if (triangles.size() < 3) {
+  if (v.size() < 3) {
     const e = glm::make_vec3(0.0, 0.0, 0.0);
     return pair(e, e);
   }
-  mutable mi = glm::make_vec3(triangles[0], triangles[1], triangles[2]);
+  mutable mi = glm::make_vec3(v[0], v[1], v[2]);
   mutable mx = mi;
-  for (const i: 0 .. triangles.size() / 3) {
-    mi.x = min(mi.x, triangles[i * 3 + 0]);
-    mx.x = max(mx.x, triangles[i * 3 + 0]);
-    mi.y = min(mi.y, triangles[i * 3 + 1]);
-    mx.y = max(mx.y, triangles[i * 3 + 1]);
-    mi.z = min(mi.z, triangles[i * 3 + 2]);
-    mx.z = max(mx.z, triangles[i * 3 + 2]);
+  for (const i: 0 .. v.size() / 3) {
+    mi.x = min(mi.x, v[i * 3 + 0]);
+    mx.x = max(mx.x, v[i * 3 + 0]);
+    mi.y = min(mi.y, v[i * 3 + 1]);
+    mx.y = max(mx.y, v[i * 3 + 1]);
+    mi.z = min(mi.z, v[i * 3 + 2]);
+    mx.z = max(mx.z, v[i * 3 + 2]);
   }
   return pair(mi, mx);
 }

@@ -101,7 +101,7 @@ aggregated_ibuffer_draw(aggregated_ibuffer const& aibuf,
     glBindBuffer(GL_ARRAY_BUFFER, aibuf.get_current()->vbo.get());
   }
   for (const vs_id: 0 .. bo.num_vs()) {
-    const& instance = bo_ib[static_cast{size_t}(vs_id)];
+    const& instance = bo_ib[vs_id];
     const& arr = instance.instance_buffer;
     if (arr.empty()) {
       continue;
@@ -114,7 +114,7 @@ aggregated_ibuffer_draw(aggregated_ibuffer const& aibuf,
 	  sdr.instance_attrib_num_float());
 	*/
 	sdr.instance_attrib_pointer(instance.glbuffer_offset_float);
-	bo.draw_elems_instanced(static_cast{size_t}(vs_id),
+	bo.draw_elems_instanced(vs_id,
 	  arr.size() / sdr.instance_attrib_num_float());
       }
     } else if (enable_uniform_instancing) {
@@ -128,7 +128,7 @@ aggregated_ibuffer_draw(aggregated_ibuffer const& aibuf,
       for (j = 0; j < jmax; j += uniform_instancing_mul) {
 	size_t k = min((jmax - j), uniform_instancing_mul);
 	sdr.instance_attrib_set_uniform(arr, j * iattr_num_float, k);
-	bo.draw_elems_instanced(static_cast{size_t}(vs_id), k);
+	bo.draw_elems_instanced(vs_id, k);
       }
       /*
       size_t const jmax = arr.size();
@@ -137,13 +137,13 @@ aggregated_ibuffer_draw(aggregated_ibuffer const& aibuf,
       for (j = 0; j < jmax; j += iattr_num_float * uniform_instancing_mul) {
 	size_t k = min((jmax - j) / iattr_num_float, uniform_instancing_mul);
 	sdr.instance_attrib_set_uniform(arr, j, k);
-	bo.draw_elems_instanced(static_cast{size_t}(vs_id), k);
+	bo.draw_elems_instanced(vs_id, k);
       }
       */
     } else { /* no instancing (copying is not supported anymore) */
       size_t const iattr_num_float = sdr.instance_attrib_num_float();
       size_t j;
-      const& be = *bo.get_by_id(static_cast{size_t}(vs_id));
+      const& be = *bo.get_by_id(vs_id);
       size_t const jmax = arr.size() / iattr_num_float;
       size_t inst_mul = 1; // this value was > 1 when copying is supported
       /*
@@ -153,7 +153,7 @@ aggregated_ibuffer_draw(aggregated_ibuffer const& aibuf,
       for (j = 0; j < jmax; j += inst_mul) {
 	size_t k = min((jmax - j), inst_mul);
 	sdr.instance_attrib_set_uniform(arr, j * iattr_num_float, k);
-	bo.draw_elems(static_cast{size_t}(vs_id), k);
+	bo.draw_elems(vs_id, k);
       }
       /*
       size_t const jmax = arr.size();
@@ -163,7 +163,7 @@ aggregated_ibuffer_draw(aggregated_ibuffer const& aibuf,
       for (j = 0; j < jmax; j += iattr_num_float * inst_mul) {
 	size_t k = min((jmax - j) / iattr_num_float, inst_mul);
 	sdr.instance_attrib_set_uniform(arr, j, k);
-	bo.draw_elems(static_cast{size_t}(vs_id), k);
+	bo.draw_elems(vs_id, k);
       }
       */
     }

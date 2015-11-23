@@ -1,84 +1,38 @@
 
-- フレネル効果
+---------------------------------------------------------------------------
+TODO
 
-- skybox(done)
+- iosでvsm可能か？
+
+- postprocessのためのダミーインスタンスを入れるのはなくせないか(done)
+- postprocess: depth bufferが不要なときはどうするか
+- postprocess
+- metalness
+- envをぼかす方法
 
 - shapeの半径などは自動で計算
-
 - vsmのときglColorMask指定する？
-
-- shadowmapを4枚でなくてよいようにする(done)
-- textureのロード時にはtexture unitは0ににし、描画時に各texture unitへ
-  textureを明示的にbindする(done)
-
-- 衝突判定がよくわかるようにカメラの前に衝突判定用オブジェクトを置く。(done)
-
 - FIXME: mbp gt750m macosxでゴミが出る。intel graphicsだと出ない。windowsだと
   同ハードでも出ない。
   enable_macos_nvidia_wa
-
 - subtexel specular: -1から1の値。負のときは内側が反射、正のときは外側が
   反射。0.8のときは内側から80%の範囲が非反射。
-
 - smpos0 .. smpos3 共通化
-
 - parallax: タイルマップを無駄に引かないようにしたほうが速いと思われる。
-
 - parallax: memo: uv座標がどちらかに間延びしていると視差も間延びして歪む
-
-- grid: box shape collider(done)
-
 - main描画でglDepthMask(0)にするとlineparticleの重ね合わせがおかしく
   なる。alpha加算であれば正しくなるが、glDepthMask(1)とどっちがいいか。
-
 - emscripten IDBFS
   test_idbfs_sync.c  
-
 - lineseg_point_distance2
 
-- grid_broadphase別スレ化(done)
-
-- collision_shapeと球を衝突判定する方法調べよ(done)
-
-- particle復活
-- dynamics使わないオブジェクトの動作
-- 
 - ios, android再テスト
-
-- kinematic_object_i
-  GameObject的なもの?
 
 - shadowmap無効の時もspecular付ける
 
-- emccバックエンド: SDL2_ttfがportsに来たらもう一度try(done)
-
-- nvのサンプルを見てshadowmapのコストが妥当か確認する(done)
-  ほぼ同等のfps、shadowmapの有無でのfps変化も同等なので妥当と思われる。
-  6043tri, 2500obj, 4shadowmaps, 4k, 24fps
-  3.6億triangles/sec, シャドーマップ4枚, z-prepass, 本描画で合計6回
-
-- init_triangles_shader{1} テンプレパラメータやめる(done)
-  trnagles2削除(done)
-
-- ライトの向きを軸と並行に固定することによって速くできるか。(done)
-
 - bulletのoperator *など
 
-- lpの衝突判定(done)
-
-- 物理エンジンの処理時間測定(done)
-
-- 衝突判定のみのオブジェクトをどのように作るか(done)
-  - 衝突のみ、kinematic、dynamicのそれぞれの振る舞いを表現するインタフェース
-  - 衝突時に呼ばれるコールバック
-
-- rigidbodyをscene_nodeと関連付ける
-
-- convex hullをglgeometry頂点データから作る(done)
-
 - 物体のemit
-
-- sdlutil.px ファイルからオプション読み込み
 
 - discardするシェーダはzprepassとshadowmappingのシェーダでもdiscard必要
 
@@ -99,6 +53,34 @@
 - 頂点属性型を整理、num_float的マクロ整理
 
 - 頂点データを動的に入れ替えられるようにする
+
+---------------------------------------------------------------------------
+DONE
+
+- フレネル効果(done)
+- skybox(done)
+- shadowmapを4枚でなくてよいようにする(done)
+- textureのロード時にはtexture unitは0ににし、描画時に各texture unitへ
+  textureを明示的にbindする(done)
+- 衝突判定がよくわかるようにカメラの前に衝突判定用オブジェクトを置く。(done)
+- grid: box shape collider(done)
+- grid_broadphase別スレ化(done)
+- collision_shapeと球を衝突判定する方法調べよ(done)
+- emccバックエンド: SDL2_ttfがportsに来たらもう一度try(done)
+- nvのサンプルを見てshadowmapのコストが妥当か確認する(done)
+  ほぼ同等のfps、shadowmapの有無でのfps変化も同等なので妥当と思われる。
+  6043tri, 2500obj, 4shadowmaps, 4k, 24fps
+  3.6億triangles/sec, シャドーマップ4枚, z-prepass, 本描画で合計6回
+- init_triangles_shader{1} テンプレパラメータやめる(done)
+  trnagles2削除(done)
+- ライトの向きを軸と並行に固定することによって速くできるか。(done)
+- lpの衝突判定(done)
+- 物理エンジンの処理時間測定(done)
+- 衝突判定のみのオブジェクトをどのように作るか(done)
+  - 衝突のみ、kinematic、dynamicのそれぞれの振る舞いを表現するインタフェース
+  - 衝突時に呼ばれるコールバック
+- rigidbodyをscene_nodeと関連付ける(done)
+- convex hullをglgeometry頂点データから作る(done)
 
 ---------------------------------------------------------------------------
 ビルドメモ
@@ -801,4 +783,61 @@ local座標に変換したターゲット座標を渡してlocal判定実行。
 
 function bool has_local_collision();
 function bool local_collision(vec3 const& local_pos, float radius);
+
+---------------------------------------------------------------------------
+マテリアル
+
+dpat: RGBとsubtexel法線パターン
+pmpat: 視差マップのためのheightとclearance
+
+float metalness;
+float roughness;
+vec3 color;
+
+現状
+  dpat:
+    tex_val.aの上4bitがavol, 下4bitがalv(0から10まで？)
+    alv: 1, 3, 5, 7がLU, RU, RD, LDの四隅。2, 4が左右と上下の辺。0は傾けない。
+  pmpat:
+    8bit: 空き
+    8bit: depth
+    4bit * 4: clearance
+変更後
+  dpat:
+    8bit: alv, avol
+    8bit * 3: RGB
+  pmpat: mipmap無し
+    8bit: metalnessが1bit、roughnessが7bit
+    8bit: depth
+    4bit * 4: clearance
+
+---------------------------------------------------------------------------
+framebuffer
+
+shadowmap用framebufferを作るところ。depth_textureではないケース。
+GL_COLOR_ATTACHMENT0はテクスチャ、GL_DEPTH_ATTACHMENTはrenderbufferを
+アタッチ。
+
+int saved_fb;
+// bindしてあるframebufferを覚えておく
+glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
+sfbo.fbo.generate();
+glBindFramebuffer(GL_FRAMEBUFFER, sfbo.fbo.get());
+// colorにtexture(sm_texture)をアタッチ
+glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+  GL_TEXTURE_2D, sfbo.sm_texture.get(), 0);
+int orig_rb;
+// bindしてあるrenderbufferを覚えておく
+glGetIntegerv(GL_RENDERBUFFER_BINDING, address(orig_rb));
+// glGenRenderbuffersでrenderbufferを作成
+sfbo.depthbuf.generate();
+glBindRenderbuffer(GL_RENDERBUFFER, sfbo.depthbuf.get());
+// renderbuffer(depthbuf)のストレージを設定
+glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16,
+  sfbo.sm_width, sfbo.sm_height);
+// framebuffer(fbo)のdepthにrenderbuffer(depthbuf)をアタッチ
+glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+  GL_RENDERBUFFER, sfbo.depthbuf.get());
+// bindしたrenderbufferを元に戻す
+glBindRenderbuffer(GL_RENDERBUFFER, static_cast{uint}(orig_rb));
 

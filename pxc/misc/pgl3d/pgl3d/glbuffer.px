@@ -11,12 +11,13 @@ public import exception -;
 public import pgl3d::glshader -;
 public import pgl3d::glresource -;
 public import pgl3d::glvertex -;
+public import pgl3d::scene_node -;
 
 private metafunction use_draw_range 0;
 
 public threaded struct vertex_set(size_t num_float_per_vertex0)
 {
-  public size_t vs_id;
+  public vs_id_t vs_id;
   public string vs_name;
   public ptr{vertices} vtxs = make_ptr{vertices}(num_float_per_vertex0);
   public size_t vertex_values_offset;
@@ -126,14 +127,14 @@ vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0,
   public auto_buffer vbo_elems;
   public size_t num_vertex_values;
   public size_t num_elements;
-  public tree_map{string, size_t} vs_names;
+  public tree_map{string, vs_id_t} vs_names;
   public varray{ptr{vertex_set}} vs_arr;
   public function ptr{vertex_set} make_if(string const& name)
   {
     if (const id: vs_names[name]) {
       return vs_arr[id];
     } else {
-      const id = vs_arr.size();
+      const id = static_cast{vs_id_t}(vs_arr.size());
       const p = make_ptr{vertex_set}(num_float_per_vertex);
       p->vs_id = id;
       p->vs_name = name;
@@ -142,15 +143,15 @@ vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0,
       return p;
     }
   }
-  public function cptr{vertices} get_vertices(size_t vs_id) const
+  public function cptr{vertices} get_vertices(vs_id_t vs_id) const
   {
     return vs_arr[vs_id]->vtxs;
   }
-  public function size_t num_vs() const
+  public function vs_id_t num_vs() const
   {
-    return vs_arr.size();
+    return static_cast{vs_id_t}(vs_arr.size());
   }
-  public function ptr{vertex_set} get_by_id(size_t vs_id) const
+  public function ptr{vertex_set} get_by_id(vs_id_t vs_id) const
   {
     return vs_arr[vs_id];
   }
@@ -162,7 +163,7 @@ vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0,
   {
     return vs_names.exists(name);
   }
-  public function size_t get_id_by_name(string const& name) const
+  public function vs_id_t get_id_by_name(string const& name) const
   {
     if (const id: vs_names[name]) {
       return id;
@@ -241,7 +242,7 @@ vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0,
 }
 
 public function void
-vertex_buffer_draw(vertex_buffer const& bo, size_t vs_id,
+vertex_buffer_draw(vertex_buffer const& bo, vs_id_t vs_id,
   glshader_i mutable& sdr)
 {
   vertex_buffer_draw_pre(bo, sdr);
@@ -273,7 +274,7 @@ vertex_buffer_draw_post(vertex_buffer const& bo, glshader_i mutable& sdr)
 }
 
 public function void
-vertex_buffer_draw_elems(vertex_buffer const& bo, size_t vs_id,
+vertex_buffer_draw_elems(vertex_buffer const& bo, vs_id_t vs_id,
   size_t num_instance)
 {
   const& be = *bo.get_by_id(vs_id);
@@ -305,7 +306,7 @@ vertex_buffer_draw_elems(vertex_buffer const& bo, size_t vs_id,
 }
 
 public function void
-vertex_buffer_draw_elems_instanced(vertex_buffer const& bo, size_t vs_id,
+vertex_buffer_draw_elems_instanced(vertex_buffer const& bo, vs_id_t vs_id,
   size_t num_instance)
 {
   if (m::ne{is_gl3_or_gles3, 0}) {

@@ -31,15 +31,6 @@ public threaded struct gl_texture
   public auto_texture texture_id;
 }
 
-public threaded struct shadowmap_fbo
-{
-  public auto_framebuffer fbo;
-  public auto_renderbuffer depthbuf;
-  public auto_texture sm_texture;
-  public int sm_width;
-  public int sm_height;
-}
-
 public function void
 load_fixedwidth_font(gl_texture mutable& fnt, cslice{string} const& fnames)
 {
@@ -138,6 +129,7 @@ load_tilemap_texture(gl_texture mutable& tex_dpat,
   gl_texture mutable& tex_pmpat, gl_texture mutable& tex_tilemap,
   string const& dpat_fn, string const& pmpat_fn)
 {
+  sdllog("load_tilemap_texture", dpat_fn, pmpat_fn);
   check_byteorder();
   merge_png_to_texture(dpat_fn, tex_dpat,
     make_callable_ptr{merge_dpat, 0}(),
@@ -181,11 +173,13 @@ load_tilemap_texture(gl_texture mutable& tex_dpat,
     cast_int(GL_NEAREST));
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
     cast_int(GL_NEAREST));
+  sdllog("load_tilemap_texture done");
 }
 
 public function void
 load_cube_texture(gl_texture mutable& ctex, cslice{string} const& fnames)
 {
+  sdllog("load_cube_texture");
   glActiveTexture(GL_TEXTURE0);
   ctex.texture_id.generate();
   glBindTexture(GL_TEXTURE_CUBE_MAP, ctex.texture_id.get());
@@ -210,6 +204,7 @@ load_cube_texture(gl_texture mutable& ctex, cslice{string} const& fnames)
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R,
       cast_int(GL_CLAMP_TO_EDGE));
   }
+  sdllog("load_cube_texture done");
 }
 
 public function void

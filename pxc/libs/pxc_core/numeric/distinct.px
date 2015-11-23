@@ -1,11 +1,12 @@
 public threaded namespace numeric::distinct "use-unsafe";
 public import numeric::integral -;
+public import numeric::cast -;
 public import meta m;
 public import meta::family mf;
 
 /* distinct_int{tbase, tid} creates a distinct int type which is compiled to
-   the same c++ type as 'tbase'. parameter 'tid' is a type used for generating
-   a unique type. */
+   the same c++ type as 'tbase'. parameter 'tid' is a type (or string) used
+   for generating a unique type. */
 
 public metafunction distinct_int{tbase, tid}
   distinct_int_impl{check_signed_integral{tbase}, check_type{tid}};
@@ -29,6 +30,29 @@ private tsvaluetype struct extern "::pxcrt::distinct<>::type" "extbitmask"
 {tbase, tid}
 distinct_bitmask_impl { }
 
+public metafunction distinct_int_impl___to{tto, tfrom}
+  static_cast{impl_conv{tto, m::at{tfrom, 0}}, tfrom};
+public metafunction distinct_uint_impl___to{tto, tfrom}
+  static_cast{impl_conv{tto, m::at{tfrom, 0}}, tfrom};
+public metafunction distinct_enum_impl___to{tto, tfrom}
+  static_cast{impl_conv{tto, m::at{tfrom, 0}}, tfrom};
+public metafunction distinct_bitmask_impl___to{tto, tfrom}
+  static_cast{impl_conv{tto, m::at{tfrom, 0}}, tfrom};
+/*
+public threaded function {tbase, tid} tbase
+distinct_int_impl___to(distinct_int{tbase, tid} v)
+{ return static_cast{tbase}(v); }
+public threaded function {tbase, tid} tbase
+distinct_uint_impl___to(distinct_uint{tbase, tid} v)
+{ return static_cast{tbase}(v); }
+public threaded function {tbase, tid} tbase
+distinct_enum_impl___to(distinct_e{tbase, tid} v)
+{ return static_cast{tbase}(v); }
+public threaded function {tbase, tid} tbase
+distinct_bitmask_impl___to(distinct_bitmask{tbase, tid} v)
+{ return static_cast{tbase}(v); }
+*/
+
 private metafunction check_signed_integral{t}
   m::cond{mf::is_signed_integral_type{t}, t,
     m::error{"signed integral type expected"}};
@@ -36,8 +60,12 @@ private metafunction check_unsigned_integral{t}
   m::cond{mf::is_unsigned_integral_type{t}, t,
     m::error{"unsigned integral type expected"}};
 private metafunction check_type{t}
-  m::cond{m::is_type{t}, t,
-    m::error{"type expected"}};
+  m::cond{
+    m::is_string{t}, string_to_type{t},
+    m::is_type{t}, t,
+    m::error{"string or type expected"}};
+
+private tsvaluetype struct {t} string_to_type { }
 
 extern "types" inline
 namespace pxcrt {
@@ -45,4 +73,28 @@ template <typename Tbase, typename Tid>
 struct distinct { typedef Tbase type; };
 };
 ;
+
+private metafunction impl_conv{tto, tfrom}
+  m::cond{
+    m::eq{tto, tfrom}, tto,
+    m::apply{
+      metafunction {idx}
+	m::and{
+	  m::le{0, idx},
+	  m::le{0, m::list_find{m::at1{m::at{impl_conv_list, idx}}, tfrom}}},
+      m::list_find{impl_conv_list, tto}},
+      tto,
+    m::error{"implicit conversion not allowed"}};
+
+private metafunction impl_conv_list
+{
+  {short, {char}},
+  {int, {char, short}},
+  {long, {char, short, int}},
+  {ssize_t, {char, short, int}},
+  {ushort, {uchar}},
+  {uint, {uchar, ushort}},
+  {ulong, {uchar, ushort, uint}},
+  {size_t, {uchar, ushort, uint}}
+};
 
