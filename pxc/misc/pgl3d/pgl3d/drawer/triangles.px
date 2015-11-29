@@ -31,6 +31,7 @@ private tsvaluetype struct triangles_vertex_attributes()
   public glm::vec3 normal;
   public glm::vec3 tangent;
   public glm::vec3 uvw;
+  public glm::vec4 uv_aabb;
 }
 
 private tsvaluetype struct zprepass_vertex_attributes()
@@ -39,6 +40,7 @@ private tsvaluetype struct zprepass_vertex_attributes()
   public glm::vec3 normal;
   public glm::vec3 tangent;
   public glm::vec3 uvw;
+  public glm::vec4 uv_aabb;
 }
 
 private tsvaluetype struct shadowmap_vertex_attributes()
@@ -47,6 +49,7 @@ private tsvaluetype struct shadowmap_vertex_attributes()
   public glm::vec3 normal;
   public glm::vec3 tangent;
   public glm::vec3 uvw;
+  public glm::vec4 uv_aabb;
 }
 
 private tsvaluetype struct triangles_instance_attributes()
@@ -83,8 +86,17 @@ public struct drawer_triangles(shader_config const& glc,
   init();
   private function void init()
   {
-    load_tilemap_texture(*texture_dpat, *texture_pmpat, *texture_tilemap,
+  /*
+    load_gl_texture_tilemap(*texture_dpat, *texture_pmpat, *texture_tilemap,
       "dpat.png", "pmpat.png");
+  */
+    const tex_col = load_texture_data("default-color.png");
+    const tex_dep = load_texture_data("default-depth.png");
+    const tex_tilemap = make_ptr{texture_data}();
+    prepare_texture_data(*tex_col, *tex_dep, *tex_tilemap);
+    texture_data_to_gl_texture_2d(*texture_dpat, tex_col);
+    texture_data_to_gl_texture_2d(*texture_pmpat, tex_dep);
+    texture_data_to_gl_texture_2d(*texture_tilemap, tex_tilemap);
     res->textures.insert("tile_color", texture_dpat);
     res->textures.insert("tile_parallax", texture_pmpat);
     res->textures.insert("tile", texture_tilemap);
@@ -252,6 +264,171 @@ public struct drawer_triangles(shader_config const& glc,
   }
 }
 
+private function void prepare_texture_data(texture_data mutable& tcol,
+  texture_data mutable& tdep, texture_data mutable& tmap)
+{
+  // generate tilemap
+  tmap.width = 128;
+  tmap.height = 128;
+  tmap.data.resize(tmap.width * tmap.height, 0U);
+  const rnd = make_rand_generator(333U);
+  for (const x: 0 .. tmap.width) {
+    for (const y: 0 .. tmap.height) {
+      const v0 = rnd->generate() / 65536;
+      const v1 = 1U + v0 % 2U;
+      // const v2 = (v0 / 8) % 8;
+      // const v1 = 1;
+      const v2 = 0U;
+      const v = v2 * 256U + v1;
+      tmap.data[y * tmap.width + x] = static_cast{uint}(v);
+    }
+  }
+  parallax_png_decode(tdep);
+  set_normal_pattern(tdep, tcol);
+  parallax_set_clearance(tdep);
+}
+
+private function void set_normal_pattern(texture_data const& tdep,
+  texture_data mutable& tcol)
+{
+  function uint read_depth(int x, int y) {
+    if (x < 0 || y < 0 || static_cast{uint}(x) >= tdep.width ||
+      static_cast{uint}(y) >= tdep.height) {
+      return 0;
+    }
+    return tdep.data[static_cast{uint}(y) * tdep.width + static_cast{uint}(x)];
+  }
+  for (const x : 0 .. tdep.width) {
+    for (const y : 0 .. tdep.height) {
+      const xi = static_cast{int}(x);
+      const yi = static_cast{int}(y);
+      const d0  = read_depth(xi, yi);
+      const dlu = read_depth(xi - 1, yi - 1);
+      const du  = read_depth(xi    , yi - 1);
+      const dru = read_depth(xi + 1, yi - 1);
+      const dl  = read_depth(xi - 1, yi    );
+      const dr  = read_depth(xi + 1, yi    );
+      const dld = read_depth(xi - 1, yi + 1);
+      const dd  = read_depth(xi    , yi + 1);
+      const drd = read_depth(xi + 1, yi + 1);
+      function bool is_convex1(uint v0, uint v1, uint v2, uint v3) {
+	return v0 > d0 && v1 <= d0 && v2 <= d0 && v3 <= d0;
+      }
+      function bool is_convex2(uint v0, uint v1, uint v2, uint v3) {
+	return v0 > d0 && v1 > d0 && v2 <= d0 && v3 <= d0;
+      }
+      function bool is_flat4() {
+	return du == d0 && dl == d0 && dr == d0 && dd == d0;
+      }
+      uint val;
+      if (is_convex1(du, dl, dd, dr)) {
+	val = 0x92; // convex upper
+	debug_log(x, y, "cu");
+      } else if (is_convex1(dl, dd, dr, du)) {
+	val = 0x74; // convex left
+	debug_log(x, y, "cl");
+      } else if (is_convex1(dd, dr, du, dl)) {
+	val = 0x72; // convex lower
+	debug_log(x, y, "cd");
+      } else if (is_convex1(dr, du, dl, dd)) {
+	val = 0x94; // convex right
+	debug_log(x, y, "cr");
+      } else if (is_convex2(du, dl, dd, dr)) {
+	val = 0x91; // convex left-upper
+	debug_log(x, y, "clu");
+      } else if (is_convex2(dl, dd, dr, du)) {
+	val = 0x97; // convex left-lower
+	debug_log(x, y, "cld");
+      } else if (is_convex2(dd, dr, du, dl)) {
+	val = 0x95; // convex right-lower
+	debug_log(x, y, "crd");
+      } else if (is_convex2(dr, du, dl, dd)) {
+	val = 0x93; // convex right-upper
+	debug_log(x, y, "cru");
+      } else if (is_flat4()) {
+	if (is_convex1(dlu, dld, drd, dru)) {
+	  val = 0x75; // concave right-lower
+	} else if (is_convex1(dld, drd, dru, dlu)) {
+	  val = 0x73; // concave right-upper
+	} else if (is_convex1(drd, dru, dlu, dld)) {
+	  val = 0x71; // concave left-upper
+	} else if (is_convex1(dru, dlu, dld, drd)) {
+	  val = 0x77; // concave left-lower
+	}
+      }
+      // debug_log(x, y, val);
+      tcol.data[y * tcol.width + x] &= 0xffffffU;
+      tcol.data[y * tcol.width + x] |= val << 24;
+    }
+  }
+}
+
+private function void parallax_png_decode(texture_data mutable& td)
+{
+  for (const i, mutable& v: td.data) {
+    const depth = (v & 0xff) / 8;
+    v = depth << 16;
+  }
+}
+
+private function void parallax_set_clearance(texture_data mutable& td)
+{
+  mutable& data = td.data;
+  uint const tile_size = 64;
+  for (const by : 0 .. td.height / tile_size) {
+    for (const bx : 0 .. td.width / tile_size) {
+      for (const y : 0 .. tile_size) {
+	for (const x : 0 .. tile_size) {
+	  const offset = (by * tile_size + y) * td.height
+	    + (bx * tile_size + x);
+	  const v0 = data[offset];
+	  const depth0 = (v0 >> 16) & 0xffU;
+	  // clearance values
+	  uint c_nn = min(x, y);
+	  uint c_np = min(x, tile_size - 1 - y);
+	  uint c_pn = min(tile_size - 1 - x, y);
+	  uint c_pp = min(tile_size - 1 - x, tile_size - 1 - y);
+	  const y1_min = (y >= 16) ? y - 16 : 0;
+	  const y1_max = (y + 16 < tile_size) ? y + 16 : tile_size;
+	  const x1_min = (x >= 16) ? x - 16 : 0;
+	  const x1_max = (x + 16 < tile_size) ? x + 16 : tile_size;
+	  // TODO: too slow
+	  for (const y1 : y1_min .. y1_max) {
+	    for (const x1 : x1_min .. x1_max) {
+	      const offset1 = (by * tile_size + y1) * td.height
+		+ (bx * tile_size + x1);
+	      const v1 = data[offset1];
+	      const depth1 = v1 >> 16 & 0xffU;
+	      if (depth1 >= depth0) {
+		continue;
+	      }
+	      // ok to wrap uint values
+	      uint nn = max(x - x1, y - y1) - 1;
+	      c_nn = min(c_nn, nn);
+	      uint np = max(x - x1, y1 - y) - 1;
+	      c_np = min(c_np, np);
+	      uint pn = max(x1 - x, y - y1) - 1;
+	      c_pn = min(c_pn, pn);
+	      uint pp = max(x1 - x, y1 - y) - 1;
+	      c_pp = min(c_pp, pp);
+	    }
+	  }
+	  c_nn = min(c_nn, 15);
+	  c_np = min(c_np, 15);
+	  c_pn = min(c_pn, 15);
+	  c_pp = min(c_pp, 15);
+	  // W = unused(8), Z = depth(8), Y = CNN(4) CNP(4), X = CPN(4) CPP(4)
+	  data[offset] = (depth0 << 16) |
+	    (c_nn << 12) | (c_np << 8) | (c_pn << 4) | (c_pp << 0);
+	  if (by == 0 && bx == 0) {
+	    // debug_log("cl", x, y, depth0, to_hexstring(data[offset]));
+	  }
+	}
+      }
+    }
+  }
+}
+
 private threaded function void prepare_instance_data_triangles(
   scene_node const& sn, node_common_data mutable& ncd,
   instance_data mutable& idata)
@@ -335,9 +512,6 @@ init_shadowmap_shader(shader_config const& g, int opt)
     f += "void main(void) {\n";
     if (opt != 0) {
       if (g.enable_normalmapping) {
-	f += "const float tile_size = 32.0;\n";
-	f += "const float tilemap_size = 128.0;\n";
-	f += "const float tiletex_size = 256.0;\n";
 	f += "vec2 uv0 = vary_uvw.xy / vary_uvw.z;\n";
 	f += "vec2 uv_tm = floor(uv0);\n";
 	      /* tilemap coordinate */
@@ -406,9 +580,6 @@ init_zprepass_shader(shader_config const& g, int opt)
     // f += g.decl_fragcolor();
     f += "void main(void) {\n";
     if (g.enable_normalmapping) {
-      f += "const float tile_size = 32.0;\n";
-      f += "const float tilemap_size = 128.0;\n";
-      f += "const float tiletex_size = 256.0;\n";
       f += "vec2 uv0 = vary_uvw.xy / vary_uvw.z;\n";
       f += "vec2 uv_tm = floor(uv0);\n";
 	    /* tilemap coordinate */
@@ -461,13 +632,13 @@ triangles_shader_vert(shader_config const& g, int opt)
   v += g.vert_in() + "vec3 normal;\n";
   v += g.vert_in() + "vec3 tangent;\n";
   v += g.vert_in() + "vec3 uvw;\n";
+  v += g.vert_in() + "vec4 uv_aabb;\n";
   v += g.vert_out() + "vec3 vary_position;\n";
   v += g.vert_out() + "vec3 vary_normal;\n";
   v += g.vert_out() + "vec3 vary_tangent;\n";
-  v += g.vert_out() + "vec3 vary_uvw;\n";
   v += g.vert_out() + "vec3 vary_binormal;\n";
-  // v += g.vert_out() + "float vary_instance_id;\n";
-  // v += g.vert_out() + "vec3 vary_color;\n";
+  v += g.vert_out() + "vec3 vary_uvw;\n";
+  v += g.vert_out() + "vec4 vary_uv_aabb;\n";
   if (g.enable_shadowmapping) {
     if (!g.light_fixed) {
       v += g.vert_out() + "vec3 vary_smposa["+smsz+"];\n";
@@ -478,17 +649,6 @@ triangles_shader_vert(shader_config const& g, int opt)
   v += "  mat4 mm = "
     + g.instance_attr("model_matrix")
     + ";\n";
-  if (g.is_gl3_or_gles3()) {
-    // v += "  vary_instance_id = float(gl_InstanceID);\n";
-  }
-  /*
-  if (g.is_gl3_or_gles3()) {
-    v += "  vary_color = vec3(0.5 + float(gl_InstanceID % 4) * 0.0625, 0.7,";
-    v += "    0.5 + float(gl_InstanceID % 8) * 0.0625);\n";
-  } else {
-    v += "  vary_color = vec3(0.5, 0.4, 0.5);\n";
-  }
-  */
   v += "  vec4 gpos4 = mm * vec4(position, 1.0);\n";
   v += "  gl_Position = view_projection_matrix * gpos4;\n";
   if (g.is_gl3_or_gles3()) {
@@ -501,6 +661,7 @@ triangles_shader_vert(shader_config const& g, int opt)
   v += "  vary_tangent = normal_matrix * tangent;\n";
   v += "  vary_uvw = uvw;\n";
   v += "  vary_binormal = cross(vary_normal, vary_tangent);\n";
+  v += "  vary_uv_aabb = uv_aabb;\n";
   if (g.enable_shadowmapping) {
     if (!g.light_fixed) {
       v += "  vec3 ndelta = mat3(shadowmap_vp[0]) * vary_normal ";
@@ -538,6 +699,9 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
   const smsz = g.num_shadowmaps_str();
   string f;
   f += g.prepend();
+  f += "const float tile_size = 64.0;\n";
+  f += "const float tilemap_size = 128.0;\n";
+  f += "const float tiletex_size = 1024.0;\n";
   f += "uniform sampler2D sampler_dpat;\n";
   f += "uniform sampler2D sampler_pmpat;\n";
   f += "uniform sampler2D sampler_tilemap;\n";
@@ -554,12 +718,9 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
   f += g.frag_in() + "vec3 vary_position;\n";
   f += g.frag_in() + "vec3 vary_normal;\n";
   f += g.frag_in() + "vec3 vary_tangent;\n";
-  f += g.frag_in() + "vec3 vary_uvw;\n";
   f += g.frag_in() + "vec3 vary_binormal;\n";
-  // f += g.frag_in() + "float vary_instance_id;\n";
-  /*
-  f += g.frag_in() + "vec3 vary_color;\n";
-  */
+  f += g.frag_in() + "vec3 vary_uvw;\n";
+  f += g.frag_in() + "vec4 vary_uv_aabb;\n";
   if (g.enable_shadowmapping) {
     if (!g.light_fixed) {
       f += g.frag_in() + "vec3 vary_smposa["+smsz+"];\n";
@@ -579,12 +740,14 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
     f += "return max(x0, max(x1, x2));\n";
     f += "}\n";
   }
+  f += "bool uv_inside_aabb(in vec2 uv) {\n";
+  f += "vec4 aabb = floor(vary_uv_aabb + 0.5);\n";
+  f += "return uv.x >= aabb.x && uv.y >= aabb.y";
+  f += " && uv.x < aabb.z && uv.y < aabb.w;\n";
+  f += "}\n";
   f += g.decl_fragcolor();
   if (g.enable_normalmapping) {
     f += "void tilemap(in vec2 uv0, out vec4 tex_val, out vec2 subtex_uv) {\n";
-    f += "const float tile_size = 32.0;\n";
-    f += "const float tilemap_size = 128.0;\n";
-    f += "const float tiletex_size = 256.0;\n";
     f += "vec2 uv_tm = floor(uv0);\n";
 	  // tilemap coordinate
     f += "vec2 uv_tmfr = uv0 - uv_tm;\n";
@@ -603,26 +766,31 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
 	  // lookup the tilemap
     f += "vec2 uv_pixel = floor(ti_val.xy * 255.0 + 0.5) * tile_size + uvi;\n";
 	  // tile pattern coordinate
+    f += "if (uv_inside_aabb(uv0)) {\n";
     f += "tex_val = " + g.texture2d();
     f += "  (sampler_dpat, uv_pixel / tiletex_size);\n";
 	  // lookup the tilepattern
+    f += "} else {\n";
+    f += "tex_val = vec4(0.5, 0.5, 0.5, 0.0);\n";
+    f += "}\n"; // if
     f += "}\n";
   }
   if (g.enable_parallax) {
     f += "void parallax_read(in vec2 uv0, out vec4 tex_val) {\n";
-    f += "const float tile_size = 32.0;\n";
-    f += "const float tilemap_size = 128.0;\n";
-    f += "const float tiletex_size = 256.0;\n";
     f += "vec2 uv_tm = floor(uv0);\n"; // tilemap coordinate
     f += "vec2 uv_tmfr = uv0 - uv_tm;\n"; // coordinate inside a tile (0, 1)
     f += "vec2 uvi = floor(uv_tmfr * tile_size);\n";
       // coordinate inside a tile (0, tile_size)
+    f += "if (uv_inside_aabb(uv0)) {\n";
     f += "vec4 ti_val = " +  g.texture2d(); // lookup the tilemap
     f += "  (sampler_tilemap, uv_tm / tilemap_size);\n";
     f += "vec2 uv_pixel = floor(ti_val.xy * 255.0 + 0.5) * tile_size + uvi;\n";
 	  // tile pattern coordinate
     f += "tex_val = " + g.texture2d(); // lookup the tilepattern
     f += "  (sampler_pmpat, uv_pixel / tiletex_size);\n";
+    f += "} else {\n";
+    f += "tex_val = vec4(0.0, 0.0, 0.0, 0.0);\n";
+    f += "}\n";
     f += "}\n";
     f += "vec2 parallax_next(in vec3 tsub, out vec3 tsub_next, in float z,";
     f += " in vec3 d) {\n";
@@ -647,7 +815,6 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
     f += "}\n";
     f += "void parallax_warp(in vec3 dir, inout vec4 tval, inout vec2 tpos,";
     f += " inout vec3 tsub, inout vec4 dbg) {\n";
-    f += "const float tile_size = 32.0;\n";
     f += "tsub.xy = clamp(tsub.xy, 0.001, 0.999);\n";
     if (enable_macos_nvidia_wa) {
       f += "return;\n";
@@ -657,8 +824,6 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
     f += "float cvt = floor((dir.x > 0.0 ? tval.x : tval.y) * 255.0 + 0.5);\n";
     f += "float cval = dir.y > 0.0 ? fract(cvt / 16.0) * 16.0";
     f += " : floor(cvt / 16.0);\n";
-    // f += "if (cval >= 2.0) { dbg.x = 1.0; }\n";
-    // f += "if (tval.x > 0.0) { dbg.x = 1.0; }\n";
     f += "cval = min(cval, (tval.z - tsub.z) / dir.z);\n"; // crop cval
     f += "vec3 delta = dir * cval;\n";
     f += "vec2 npos = tpos + tsub.xy + delta.xy;\n";
@@ -668,7 +833,6 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
     f += "}\n";
     f += "void parallax_warp2(in vec3 dir, inout vec4 tval, inout vec2 tpos,";
     f += " inout vec3 tsub) {\n";
-    f += "const float tile_size = 32.0;\n";
     f += "tsub.xy = clamp(tsub.xy, 0.001, 0.999);\n";
     f += "dir /= max(abs(dir.x), abs(dir.y));\n";
     f += "float cvt = floor((dir.x > 0.0 ? tval.x : tval.y) * 255.0 + 0.5);\n";
@@ -680,11 +844,6 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
     f += "tsub = vec3(npos - tpos, tsub.z + delta.z);\n";
     f += "parallax_read(tpos / tile_size, tval);\n";
     f += "}\n";
-    /*
-    f += "float round_delta(in float v) {\n";
-    f += "return (v >= -0.001 && v < 0.001) ? 0.0 : v;\n";
-    f += "}\n";
-    */
     f += "void parallax_loop(inout vec2 pos, in vec3 eye, in vec3 light,";
     f += " out float z, out vec3 nor, out bool vertical, out float shval,";
     f += " inout vec4 dbg) {\n";
@@ -692,13 +851,7 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
     f += "nor = vary_normal;\n";
     f += "vertical = false;\n";
     f += "shval = 1.0;\n";
-    f += "dbg.x = 0.0;\n"; // FIXME: debug
-    f += "const float tile_size = 32.0;\n";
-    // f += "eye.x = round_delta(eye.x);\n";
-    // f += "eye.y = round_delta(eye.y);\n";
     f += "eye.z /= tile_size;\n";
-    // f += "light.x = round_delta(light.x);\n";
-    // f += "light.y = round_delta(light.y);\n";
     f += "light.z /= tile_size;\n";
     f += "vec2 pos_m = pos * tile_size;\n"; // tile coord to texel coord
     f += "vec2 tpos = floor(pos_m);\n";
@@ -709,25 +862,14 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
     f += "return;\n";
     f += "}\n";
     f += "for (int i = 0; i < 128; ++i) {\n";
-    // f += "tsub.xy = clamp(tsub.xy, 0.001, 0.999);\n";
     f += "vec3 tsub_next;\n";
     f += "vec2 tnext_diff = parallax_next(tsub, tsub_next, tval.z, eye);\n";
-    /*
-    f += "if (tsub_next.x < -0.01 || tsub_next.x > 1.01 ||";
-    f += " tsub_next.y < -0.01 || tsub_next.y > 1.01) {\n"; // FIXME: debug
-    f += "  dbg.x = float(i + 1); return;\n";
-    f += "}\n";
-    */
     f += "if (tsub_next.z >= tval.z) {\n"; // horizontal surface
-    // f += "if (tsub_next.z - tsub.z <= 0.0) { dbg.x = 1.0; };\n";
     f += "if (tsub_next.z > tsub.z) {\n";
     f += "float ra = (tval.z - tsub.z) / (tsub_next.z - tsub.z);\n";
-    // f += "if (abs(ra) >= 1.0) { dbg.x = 1.0; }\n";
     f += "tsub += (tsub_next - tsub) * ra;\n";
-    // f += "tsub.xy = clamp(tsub.xy, 0.001, 0.999);\n";
     f += "}\n";
     f += "tsub.z = tval.z;\n";
-    // f += "dbg.b = 1.0;\n"; // FIXME
     f += "break;\n";
     f += "}\n";
     f += "tsub = tsub_next;\n";
@@ -736,23 +878,17 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
     f += "parallax_read(tpos / tile_size, tval);\n";
     f += "if (tval.z < tsub.z) {\n"; // vertical surface
     f += "vertical = true;\n";
-    // f += "dbg.x = 1.0;\n";
     f += "nor = vary_tangent * (-tnext_diff.x)";
     f += "  + vary_binormal * (-tnext_diff.y);\n";
-    // f += "tsub.xy = clamp(tsub.xy, vec2(0.001, 0.001), vec2(0.999, 0.999));\n";
     f += "break;\n";
     f += "}\n";
     f += "parallax_warp(eye, tval, tpos, tsub, dbg);\n";
-    // f += "if (i > 30) { dbg.x = 1.0; }\n";
     f += "}\n"; // for (i)
     f += "pos = (tpos + clamp(tsub.xy, 0.001, 0.999)) / tile_size;\n";
     f += "z = tval.z;\n";
-    // f += "if (tval.z < tsub.z) { dbg.r = 1.0; }\n";
     if (g.enable_parallax_shadow) {
       f += "if (light.z < 0.0) {\n";
       f += "for (int i = 0; i < 128; ++i) {\n";
-      // f += "tsub.xy = clamp(tsub.xy, 0.001, 0.999);\n";
-      // f += "vec3 tsub_prev = tsub;\n"; // FIXME: debug
       f += "vec3 tsub_next;\n";
       f += "vec2 tnext_diff = parallax_next(tsub, tsub_next, 0.0, light);\n";
       f += "if (tsub_next.z <= 0.0) {\n";
@@ -761,19 +897,12 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
       f += "tsub = tsub_next;\n";
       f += "tpos += tnext_diff;\n";
       f += "tsub.xy -= tnext_diff;\n";
-      // f += "vec4 tval_prev = tval;\n"; // FIXME: debug
       f += "parallax_read(tpos / tile_size, tval);\n";
       f += "if (tval.z < tsub.z) {\n";
       f += "shval = 0.0;\n";
-      // f += "dbg.b = 1.0;\n";
-      // f += "if (i < 1 && tsub_prev.z < tsub.z) { dbg.g = 1.0; }\n"; // FIXME FIXME FIXME: reaches here
-      // f += "if (i < 1 && tval_prev.z < tsub.z) { dbg.g = 1.0; }\n";
-      // f += "if (tval.z <= 16.0) { dbg.g = 1.0; }\n";
-      // f += "if (tval_prev.z < tsub.z) { dbg.g = 1.0; }\n";
       f += "break;\n";
       f += "}\n";
       f += "parallax_warp2(light, tval, tpos, tsub);\n";
-      // f += "if (i > 30) { dbg.x = 1.0; }\n";
       f += "}\n"; // for (i)
       f += "}\n"; // if (light.z < 0.0)
     }
@@ -791,9 +920,6 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
   f += "float den = cos_n_h * cos_n_h * (alpha2 - 1.0) + 1.0;\n";
   f += "float distribution = alpha2 / (3.141592 * den * den);\n";
   f += "float geo = 1.0;\n";
-  // f += "geo = min(geo, 2 * cos_n_h * cos_n_v / cos_v_h);\n";
-  // f += "geo = min(geo, 2 * cos_n_h * cos_n_l / cos_v_h);\n";
-  // f += "geo /= (cos_n_l * cos_n_v);\n";
   f += "vec3 fresnel = reflection_fresnel(cos_l_h, material_specular);\n";
   f += "return fresnel * (distribution * geo * 3.141592 / 4.0);\n";
   f += "}\n";
@@ -829,16 +955,12 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
   f += "vec3 camera_dir = normalize(rel_camera_pos);\n";
   f += "float is_front = float(dot(camera_dir, nor) > 0.0);\n";
   f += "float frag_distance = length(rel_camera_pos);\n";
-  // f += "float distbr = 1.0;\n";
-  // f += "float distbr = clamp((32.0  - frag_distance) / 32.0, 0.0, 1.0);\n";
   f += "float distbr = clamp(16.0 / frag_distance, 0.0, 1.0);\n";
-  // f += "float distbr = clamp(64.0 * dot(camera_dir, nor) / frag_distance, 0.0, 1.0);\n";
-  // f += "float distbr = clamp(4.0 / frag_distance , 0.001, 1.0);\n";
-  // f += "float distbr_inv = 1.0 / distbr;\n";
   f += "float lstr = 1.0;\n";
   f += "float lstr_para = 1.0;\n";
   f += "float para_zval = 0.0;\n";
   f += "bool vertical = false;\n";
+  f += "vec4 tex_val = vec4(0.5, 0.5, 0.5, 1.0);\n";
   if (g.enable_normalmapping) {
     f += "vec2 uv0 = vary_uvw.xy / vary_uvw.z;\n";
     if (g.enable_parallax) {
@@ -852,16 +974,10 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
       f += "  dot(light_dir, vary_binormal),";
       f += "  -dot(light_dir, vary_normal));\n";
       f += "vec4 dbgval = vec4(0.0,0.0,0.0,0.0);\n";
-      // f += "light_tan.z *= distbr_inv;\n";
-      // f += "eye_tan.z *= distbr_inv;\n";
       f += "parallax_loop(uv0, eye_tan, light_tan, para_zval, nor, vertical,";
       f += "  lstr_para, dbgval);\n";
-      // f += "nor = vary_normal;\n"; // FIXME: remove
-      // f += "color.rgb += eye_tan;\n";
-      f += "color += dbgval;\n"; // FIXME
     }
     f += "vec2 subtex_uv;\n";
-    f += "vec4 tex_val;\n";
     f += "tilemap(uv0, tex_val, subtex_uv);\n";
     f += "float alv0 = floor(tex_val.a * 255.0 + 0.5);\n";
     f += "float avol = floor(alv0 / 16.0);\n";
@@ -877,7 +993,6 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
     f += "vt1 -= float(alv == 2);\n";
     f += "float distbr2 = clamp(16.0 / frag_distance , 0.001, 1.0);\n";
     f += "avol = (avol - 8.0) * distbr2 * 0.2;\n";
-    // f += "avol = (avol - 8.0) * 0.2;\n";
     f += "vec3 nor_delta = vary_tangent * ut1 * avol\n";
     f += "  + vary_binormal * vt1 * avol;\n";
     if (opt != 0) {
@@ -1027,30 +1142,29 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
   // fresnel
   // f += "float cos_v_h = clamp(dot(camera_dir, half_l_v), 0.0, 1.0);\n";
   f += "float mate_alpha = 0.03;\n";
-  f += "vec3 mate_specular = vec3(0.95, 0.64, 0.54);\n";
+  f += "vec3 mate_specular = vec3(0.04, 0.04, 0.04);\n";
   f += "vec3 mate_diffuse = vec3(0.0, 0.0, 0.0);\n";
-  f += "if (option_value == 1.0) {\n";
-  f += "mate_alpha = 0.1;\n";
-  f += "mate_specular = vec3(0.02, 0.02, 0.02);\n";
-  f += "mate_diffuse = vec3(0.8, 0.0, 0.0);\n";
+  f += "if (max(tex_val.r, max(tex_val.g, tex_val.b)) > 0.9) {\n";
+  f += "mate_specular = tex_val.rgb;\n";
+  f += "} else {\n";
+  f += "mate_diffuse = tex_val.rgb;\n";
   f += "}\n";
-  f += "if (option_value == 2.0) {\n";
+  f += "if (int(option_value + 0.5) == 1) {\n";
+  f += "mate_alpha = 0.03;\n";
+  f += "mate_specular = vec3(0.95, 0.64, 0.54);\n";
+  f += "mate_diffuse = vec3(0.0, 0.0, 0.0);\n";
+  f += "}\n";
+  f += "if (int(option_value + 0.5) == 2) {\n";
   f += "mate_alpha = 0.03;\n";
   f += "mate_specular = vec3(0.95, 0.93, 0.88);\n";
   f += "mate_diffuse = vec3(0.0, 0.0, 0.0);\n";
   f += "}\n";
-  f += "if (option_value == 3.0) {\n";
+  f += "if (int(option_value + 0.5) == 3) {\n";
   f += "mate_alpha = 0.1;\n";
   f += "mate_specular = vec3(0.04, 0.04, 0.04);\n";
   f += "mate_diffuse = vec3(0.6, 0.7, 0.4);\n";
   f += "}\n";
-  /*
-  f += "float mate_alpha = 0.1;\n";
-  f += "vec3 mate_specular = vec3(0.02, 0.02, 0.02);\n";
-  f += "vec3 mate_diffuse = vec3(0.3, 0.0, 0.0);\n";
-  */
-  // f += "mate_alpha = clamp(mate_alpha + (1.0 - distbr) * 0.1, 0.01, 1.0);\n";
-  f += "vec3 light_color2 = vec3(2.0, 2.0, 2.0) * lstr;\n"; // FIXME
+  f += "vec3 light_color2 = vec3(2.0, 2.0, 2.0) * lstr;\n"; // FIXME???
   f += "vec3 light_color1 = light_color2 * lstr_para;\n";
   f += "vec3 li1 = light_all(light_color1, mate_specular, mate_diffuse,";
   f += " mate_alpha, camera_dir, light_dir, sampler_env, nor, vertical);\n";
@@ -1061,51 +1175,7 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
   f += "color.xyz += sqrt(mix(li2, li1, distbr));\n";
   */
   f += "color.xyz += sqrt(li1);\n";
-  /*
-  f += "vec3 half_l_v = normalize(light_dir + camera_dir);\n";
-  f += "float cos_l_h = clamp(dot(light_dir, half_l_v), 0.0, 1.0);\n";
-  f += "float cos_n_h = clamp(dot(nor, half_l_v), 0.0, 1.0);\n";
-  f += "float cos_n_l = clamp(dot(nor, light_dir), 0.0, 1.0);\n";
-  f += "float cos_n_v = clamp(dot(nor, camera_dir), 0.0, 1.0);\n";
-  f += "float cos_v_h = cos_l_h;\n";
-  f += "vec3 light_sp_di = light_color * (\n";
-  f += " light_specular_brdf(cos_l_h, cos_n_h, cos_n_v, cos_n_l, cos_v_h,";
-  f += "  mate_alpha, mate_specular) +\n";
-  f += " light_diffuse(cos_n_l, mate_diffuse));\n";
-  f += "vec3 reflection_vec = reflect(-camera_dir, nor);\n";
-  f += "vec3 env = " + g.texture_cube();
-  f += "(sampler_env, reflection_vec).xyz;\n";
-  f += "env = env * env * reflection_fresnel(";
-  f += " clamp(dot(nor, reflection_vec), 0.0, 1.0), mate_specular)";
-  f += " * (vertical ? mate_specular : vec3(1.0, 1.0, 1.0))";
-  f += " * clamp(1.0 - mate_alpha, 0.0, 1.0);\n";
-  f += "color.xyz += sqrt(light_sp_di + env);\n";
-  */
   f += g.fragcolor() + " = color;\n";
-  /*
-  // ADS
-  f += "vec3 reflection_vec = reflect(-camera_dir, nor);\n";
-  f += "float cos_angle = max(0.0, dot(light_dir, reflection_vec));\n";
-  f += "float specular = pow(cos_angle, 16.0);\n";
-  f += "float diffuse = clamp(dot(light_dir, nor), 0.0, 1.0);\n";
-  f += "vec3 env = " + g.texture_cube();
-  f += "(sampler_env, reflection_vec).xyz;\n";
-  if (opt == 0) {
-    f += "specular = min(specular, is_front);\n";
-    f += "diffuse = min(diffuse, is_front);\n";
-  }
-  if (opt != 0) {
-    f += "vec4 color_dif = vec4(0.52, 0.28, 0.42, 1.0);\n";
-  } else {
-    f += "vec4 color_dif = vec4(vary_color, 1.0);\n";
-  }
-  f += "float mate_ambient = 0.2;\n";
-  f += "vec3 mate_specular = vec3(0.3, 0.3, 0.3);\n";
-  f += "color.xyz += mate_specular * (specular * lstr);\n";
-  f += "color.xyz += mate_specular * env;\n";
-  f += g.fragcolor() +  " = color + ";
-  f += "  (color_dif * (diffuse * lstr + mate_ambient));\n";
-  */
   f += "}\n";
   return f;
 }

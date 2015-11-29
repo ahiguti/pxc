@@ -2,15 +2,17 @@
 ---------------------------------------------------------------------------
 TODO
 
-- iosでvsm可能か？
-
-- postprocessのためのダミーインスタンスを入れるのはなくせないか(done)
 - postprocess: depth bufferが不要なときはどうするか
 - postprocess
 - metalness
 - envをぼかす方法
 
-- shapeの半径などは自動で計算
+- シェーダ用テンプレートエンジン
+
+- collision_shape_iのconstメソッドがmt-safeでないといけないがエラーチェック
+  できていない。
+- grid_bp_sharedでgrid_rbinfoのmt-safeであることをチェックできていない。
+
 - vsmのときglColorMask指定する？
 - FIXME: mbp gt750m macosxでゴミが出る。intel graphicsだと出ない。windowsだと
   同ハードでも出ない。
@@ -57,6 +59,10 @@ TODO
 ---------------------------------------------------------------------------
 DONE
 
+- iosでvsm可能か？(done)
+  GL_RG32Fを16Fにしたら動く
+- postprocessのためのダミーインスタンスを入れるのはなくせないか(done)
+- shapeの半径などは自動で計算(done)
 - フレネル効果(done)
 - skybox(done)
 - shadowmapを4枚でなくてよいようにする(done)
@@ -785,33 +791,6 @@ function bool has_local_collision();
 function bool local_collision(vec3 const& local_pos, float radius);
 
 ---------------------------------------------------------------------------
-マテリアル
-
-dpat: RGBとsubtexel法線パターン
-pmpat: 視差マップのためのheightとclearance
-
-float metalness;
-float roughness;
-vec3 color;
-
-現状
-  dpat:
-    tex_val.aの上4bitがavol, 下4bitがalv(0から10まで？)
-    alv: 1, 3, 5, 7がLU, RU, RD, LDの四隅。2, 4が左右と上下の辺。0は傾けない。
-  pmpat:
-    8bit: 空き
-    8bit: depth
-    4bit * 4: clearance
-変更後
-  dpat:
-    8bit: alv, avol
-    8bit * 3: RGB
-  pmpat: mipmap無し
-    8bit: metalnessが1bit、roughnessが7bit
-    8bit: depth
-    4bit * 4: clearance
-
----------------------------------------------------------------------------
 framebuffer
 
 shadowmap用framebufferを作るところ。depth_textureではないケース。
@@ -840,4 +819,138 @@ glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
   GL_RENDERBUFFER, sfbo.depthbuf.get());
 // bindしたrenderbufferを元に戻す
 glBindRenderbuffer(GL_RENDERBUFFER, static_cast{uint}(orig_rb));
+
+---------------------------------------------------------------------------
+マテリアル
+
+dpat: RGBとsubtexel法線パターン
+pmpat: 視差マップのためのheightとclearance
+
+float metalness;
+float roughness;
+vec3 color;
+
+現状
+  dpat:
+    8bit: alv, avol
+      tex_val.aの上4bitがavol, 下4bitがalv(0から10まで？)
+      alv: 1, 3, 5, 7がLU, RU, RD, LDの四隅。2, 4が左右と上下の辺。0は傾けない。
+    8bit * 3: RGB
+  pmpat:
+    8bit: 空き
+    8bit: depth
+    4bit * 4: clearance
+変更後
+  dpat:
+    8bit: alv, avol
+    8bit * 3: RGB
+  pmpat:
+    8bit: metalnessが1bit、roughnessが7bit (これ追加した)
+    8bit: depth
+    4bit * 4: clearance
+
+dpatのpng画像
+depth値とRGB値を別pngファイルにする。タイルエディタはdepth値の画像を使う？
+gimpのレイヤでdepthとRGBを管理。
+depth値は下位ビットから、R8段階、G8段階、B4段階
+RGB値が
+
+法線データはdepth値から計算。
+計算方法:
+  タイル境界を越えた位置にあるテクセルのdepthはclamp-to-edgeとする
+  隣接する4つのテクセルの深さを読む
+  上だけが深く3方は同じ -> 上凸
+  上と左が深く2方は同じ -> 上左凸
+  ..同様に全8方向
+  浅いケースも同様に全8方向
+  それ以外のパターンでは傾斜させない
+
+法線を連続値にする？
+計算方法:
+  隣接8マスと中央との深さの差からxy方向の傾きを求め、平均する。
+  法線ベクトルを8bit値の範囲に (-127から+127)
+  depthと法線ベクトルは線形補間してよい。
+  垂直面と水平面は区別しなくてよい。
+  -> POMでよいのでは？
+
+dpat/pmpat
+64x64テクセルが16x16個、1024x1024テクセルのテクスチャが2枚。
+(もっと大きくてもよい？ 性能をみて検討)
+1テクセルあたりRGBA8が二つ(8byte)、計8Mbyte
+タイル番号は1byteで表現可能
+(横長に256個並べるか？)
+default_color.png
+default_depth.png
+
+タイルパターン
+タイルマップは1024x1024サイズ。(もっと大きくてもよい？)
+4Gテクセル
+default_tile.png
+
+タイルの貼りかた
+四角形の一番長い辺を底辺とする。
+対向の辺から垂線を下ろした線分を求める。
+対向の辺の、底辺から近いほうから底辺に水平に直線をひき、
+垂線と交わった点を求める。
+できた長方形の範囲の縦横が単純な整数比になるようにcropする。
+(具体的にはあとで考える。深さ0の枠を作るため少しマージンを持たせる。)
+cropした長方形の四隅にテクスチャ座標を決める。
+四角形の四隅のテクスチャ座標を計算。
+テクスチャ座標のaabbも4点全ての頂点データに含めておく。
+(これはcropの内側かどうか判定するため。)
+シェーダでは内側でなければ深さ0のdepthを返す。そのときの色はデフォルト色。
+
+頂点データにaabb追加
+
+---------------------------------------------------------------------------
+メモ
+
+頂点データエントリを追加するのはctx_fill()
+中でbuild_context_iのfill()()
+build_context_iインスタンスはpglshader::make_vertex_set()で作られる
+fillerはdrawer::make_filler()で作られる
+trianglesのときfillerの実体は
+dgf_fill_tattr_internal{triangles_vertex_attributes}
+これはpoly_tからarray{tattr}へデータをコピーし、push_polygon_distinct()
+を呼ぶ。頂点データの大きさはtattrの大きさで決まる。
+
+移行手順
+- trianglesの*_vertex_attributesにuv_aabbフィールド追加。vec4型。
+- dgf_fill_tattr_internalにuv_aabbをセットする処理追加。
+- parallax_read()でuv_aabbの範囲かどうか見る
+- tilemap()でuv_aabbの範囲かどうか見る
+
+---------------------------------------------------------------------------
+視差マップで平面より凸を許可
+
+適用する平面より浮かせた面(5面)を作る。shadowmappingとprepassでは非表示。
+四角形内座標として3次元値xyzを与える
+四角形内の座標をあらわすvaryingを用意。(0,1)範囲内なら内。
+テクスチャ座標の起点とオフセットを与える
+parallaxのイテレートをuvw値スタートで実行、四角形から出たらdiscard
+視線が法線に対して対向向きとは限らなくなる。
+  ->特に変更不要と思われる
+
+方針
+- uvwのw値の従来の動作は止める
+- ボーダーaabbはいらない(が、とりあえず残しておく)
+- 4頂点を0,1であらわした境界判定用の頂点データ用意
+- とりあえずprepassは無視して、浮かせた面を作る方向で
+- 底面はボーダー色で塗る
+- parallaxの始点を深さ付きで開始できるようにする
+- 境界から出たらdiscard
+
+移行手順
+- uvwのw値を使わないように変更
+- parallax_loop(): 始点を深さ付きで
+- 浮かせた面を生成
+- 境界判定用の頂点データ作る
+- 境界から出たらdiscard 
+
+parallax_loop()
+引数のzをinoutに変更する
+
+---------------------------------------------------------------------------
+cosv0123 > cosv1230
+  01と23のほうが12と30より平行に近い
 

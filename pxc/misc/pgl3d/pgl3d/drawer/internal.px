@@ -135,9 +135,9 @@ dgf_fill_tattr_internal(ptr{vertices} const& vptr, bool flat_flag,
       /* */
       const lenv0123 = lenv01 + lenv23;
       const lenv1230 = lenv12 + lenv30;
-      mutable co = glm::make_vec2(32.0f, 32.0f);
-      co.x = max(4.0f, min(128.0f, floor(lenv0123)));
-      co.y = max(4.0f, min(128.0f, floor(lenv1230)));
+      mutable co = glm::make_vec2(0.0f, 0.0f);
+      co.x = max(1.0f, min(1024.0f, floor(lenv0123 / 2.0f)));
+      co.y = max(1.0f, min(1024.0f, floor(lenv1230 / 2.0f)));
       /*
       if (lenv0123 > lenv1230) {
 	co.y = min(floor(lenv0123 * 4.0f / lenv1230), 128.0f);
@@ -145,12 +145,13 @@ dgf_fill_tattr_internal(ptr{vertices} const& vptr, bool flat_flag,
 	co.x = min(floor(lenv1230 * 4.0f / lenv0123), 128.0f);
       }
       */
+      float const border = 0.1f;
       if (cosv0123 > cosv1230) {
 	if (ratv2301 > 0.25 && ratv2301 < 4.0 && cosv0123 > 0.95f) {
-	  vtxs[0].uvw = glm::make_vec3(0.0f, 0.0f, 1.0f);
-	  vtxs[1].uvw = glm::make_vec3(co.x, 0.0f, 1.0f);
-	  vtxs[2].uvw = glm::make_vec3(co.x, co.y, 1.0f);
-	  vtxs[3].uvw = glm::make_vec3(0.0f, co.y, 1.0f);
+	  vtxs[0].uvw = glm::make_vec3(0.0f - border, 0.0f - border, 1.0f);
+	  vtxs[1].uvw = glm::make_vec3(co.x + border, 0.0f - border, 1.0f);
+	  vtxs[2].uvw = glm::make_vec3(co.x + border, co.y + border, 1.0f);
+	  vtxs[3].uvw = glm::make_vec3(0.0f - border, co.y + border, 1.0f);
 	  if (ratv2301 > 1.0f) {
 	    vtxs[2].uvw *= ratv2301;
 	    vtxs[3].uvw *= ratv2301;
@@ -158,13 +159,17 @@ dgf_fill_tattr_internal(ptr{vertices} const& vptr, bool flat_flag,
 	    vtxs[0].uvw /= ratv2301;
 	    vtxs[1].uvw /= ratv2301;
 	  }
+	  vtxs[0].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
+	  vtxs[1].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
+	  vtxs[2].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
+	  vtxs[3].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
 	}
       } else {
 	if (ratv3012 > 0.25 && ratv3012 < 4.0 && cosv1230 > 0.95f) {
-	  vtxs[0].uvw = glm::make_vec3(0.0f, 0.0f, 1.0f);
-	  vtxs[1].uvw = glm::make_vec3(co.x, 0.0f, 1.0f);
-	  vtxs[2].uvw = glm::make_vec3(co.x, co.y, 1.0f);
-	  vtxs[3].uvw = glm::make_vec3(0.0f, co.y, 1.0f);
+	  vtxs[0].uvw = glm::make_vec3(0.0f - border, 0.0f - border, 1.0f);
+	  vtxs[1].uvw = glm::make_vec3(co.x + border, 0.0f - border, 1.0f);
+	  vtxs[2].uvw = glm::make_vec3(co.x + border, co.y + border, 1.0f);
+	  vtxs[3].uvw = glm::make_vec3(0.0f - border, co.y + border, 1.0f);
 	  if (ratv3012 > 1.0f) {
 	    vtxs[3].uvw *= ratv3012;
 	    vtxs[0].uvw *= ratv3012;
@@ -172,6 +177,10 @@ dgf_fill_tattr_internal(ptr{vertices} const& vptr, bool flat_flag,
 	    vtxs[1].uvw /= ratv3012;
 	    vtxs[2].uvw /= ratv3012;
 	  }
+	  vtxs[0].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
+	  vtxs[1].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
+	  vtxs[2].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
+	  vtxs[3].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
 	}
       }
     }

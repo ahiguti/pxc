@@ -21,7 +21,14 @@ public import pgl3d::intern_pool -;
 public import pgl3d::shader_config -;
 public import pgl3d::aggregated_ibuffer -;
 
-public threaded struct gl_texture
+public struct texture_data()
+{
+  public uint width;
+  public uint height;
+  public varray{uint} data; // (a << 24) | (b << 16) | (b << 8) | (r << 0)
+}
+
+public threaded struct gl_texture()
 {
   public uint surface_w;
   public uint surface_h;
@@ -32,7 +39,8 @@ public threaded struct gl_texture
 }
 
 public function void
-load_fixedwidth_font(gl_texture mutable& fnt, cslice{string} const& fnames)
+load_gl_texture_fixedwidth_font(gl_texture mutable& fnt,
+  cslice{string} const& fnames)
 {
   check_byteorder();
   sdllog("loading fonts");
@@ -124,8 +132,9 @@ load_fixedwidth_font(gl_texture mutable& fnt, cslice{string} const& fnames)
     cast_int(GL_NEAREST));
 }
 
+// FIXME: remove
 public function void
-load_tilemap_texture(gl_texture mutable& tex_dpat,
+load_gl_texture_tilemap(gl_texture mutable& tex_dpat,
   gl_texture mutable& tex_pmpat, gl_texture mutable& tex_tilemap,
   string const& dpat_fn, string const& pmpat_fn)
 {
@@ -177,7 +186,7 @@ load_tilemap_texture(gl_texture mutable& tex_dpat,
 }
 
 public function void
-load_cube_texture(gl_texture mutable& ctex, cslice{string} const& fnames)
+load_gl_texture_cube(gl_texture mutable& ctex, cslice{string} const& fnames)
 {
   sdllog("load_cube_texture");
   glActiveTexture(GL_TEXTURE0);
@@ -208,9 +217,11 @@ load_cube_texture(gl_texture mutable& ctex, cslice{string} const& fnames)
 }
 
 public function void
-load_2d_texture(gl_texture mutable& tx, string const& fname)
+load_gl_texture_2d(gl_texture mutable& tx, string const& fname)
 {
   const td = load_texture_data(fname);
+  texture_data_to_gl_texture_2d(tx, td);
+  /*
   glActiveTexture(GL_TEXTURE0);
   tx.texture_id.generate();
   glBindTexture(GL_TEXTURE_2D, tx.texture_id.get());
@@ -218,6 +229,96 @@ load_2d_texture(gl_texture mutable& tx, string const& fname)
   tx.surface_h = td->height;
   const use_mipmap = false;
   set_gl_texture(*td, tx, GL_TEXTURE_2D, use_mipmap);
+  */
+}
+
+public function void
+texture_data_to_gl_texture_2d(gl_texture mutable& tx,
+  ptr{texture_data} const& td)
+{
+  glActiveTexture(GL_TEXTURE0);
+  tx.texture_id.generate();
+  glBindTexture(GL_TEXTURE_2D, tx.texture_id.get());
+  tx.surface_w = td->width;
+  tx.surface_h = td->height;
+  const use_mipmap = false;
+  set_gl_texture(*td, tx, GL_TEXTURE_2D, use_mipmap);
+}
+
+public function ptr{texture_data}
+load_texture_data(string const& fn0)
+{
+  const p = make_ptr{texture_data}();
+  string fn = fn0;
+  fn.push_back(0);
+  SDL_Surface_Scoped sur0;
+  sur0.reset(IMG_Load(fn.to_crawptr().to_ccharptr()));
+  if (sur0.get() == rawptr{SDL_Surface}()) {
+    sdllog("failed to load", fn);
+    throw runtime_error_template{"img_load"}(fn0);
+  }
+  sdllog("loading image: loaded", fn);
+  const& sur0ref = *sur0.get().to_slice(1);
+  const fmtp = sur0ref.format;
+  const& fmt = *sur0ref.format.to_slice(1);
+  const bpp = fmt.BytesPerPixel;
+  if (bpp != 4 && bpp != 3) {
+    throw runtime_error_template{"img_load"}("bpp");
+  }
+  const sur0_w = static_cast{uint}(sur0ref.w);
+  const sur0_h = static_cast{uint}(sur0ref.h);
+  mutable tex_w = power_of_2(sur0_w);
+  mutable tex_h = power_of_2(sur0_h);
+  p->width = tex_w;
+  p->height = tex_h;
+  mutable& uibuf = p->data;
+  uibuf.resize(tex_w * tex_h, 0);
+  uint rmask = fmt.Rmask;
+  uint gmask = fmt.Gmask;
+  uint bmask = fmt.Bmask;
+  uint amask = fmt.Amask;
+  function uint get_shift(uint m) {
+    uint r = 0;
+    for (uint i: 0 .. 32) {
+      if ((m & 1) != 0) {
+	break;
+      }
+      r += 1;
+      m >>= 1;
+    }
+    return r;
+  }
+  uint rshift = get_shift(rmask);
+  uint gshift = get_shift(gmask);
+  uint bshift = get_shift(bmask);
+  uint ashift = get_shift(amask);
+  const& sur0_ref = *sur0.get().to_slice(1);
+  const sur0buf = sur0_ref.pixels.reinterpret_cast{uchar}()
+    .to_slice(static_cast{size_t}(sur0_ref.pitch * sur0_ref.h));
+  for (const y: 0 .. sur0_h) {
+    for (const x: 0 .. sur0_w) {
+      const o = (y * sur0_w + x) * bpp;
+      uint v;
+      uint vr;
+      uint vg;
+      uint vb;
+      uint va;
+      if (bpp == 3) {
+	v = read_3_uint(sur0buf, o);
+      } else if (bpp == 4) {
+	v = read_4_uint(sur0buf, o);
+      }
+      vr = (v >> rshift) & 0xffU;
+      vg = (v >> gshift) & 0xffU;
+      vb = (v >> bshift) & 0xffU;
+      if (bpp == 4) {
+	va = (v >> ashift) & 0xffU;
+      }
+      uint v1 = (va << 24) | (vb << 16) | (vg << 8) | (vr << 0);
+      uibuf[y * tex_w + x] = v1;
+    }
+  }
+  return p;
 }
 
 /* private */
@@ -301,89 +402,6 @@ function void write_4_uint(slice{uchar} const& buf, size_t o, uint val)
 }
 
 metafunction SDL_Surface_Scoped scoped_nullable{SDL_FreeSurface};
-
-struct texture_data()
-{
-  public uint width;
-  public uint height;
-  public varray{uint} data; // (a << 24) | (b << 16) | (b << 8) | (r << 0)
-}
-
-function ptr{texture_data}
-load_texture_data(string const& fn0)
-{
-  const p = make_ptr{texture_data}();
-  string fn = fn0;
-  fn.push_back(0);
-  SDL_Surface_Scoped sur0;
-  sur0.reset(IMG_Load(fn.to_crawptr().to_ccharptr()));
-  if (sur0.get() == rawptr{SDL_Surface}()) {
-    sdllog("failed to load", fn);
-    throw runtime_error_template{"img_load"}(fn0);
-  }
-  sdllog("loading image: loaded", fn);
-  const& sur0ref = *sur0.get().to_slice(1);
-  const fmtp = sur0ref.format;
-  const& fmt = *sur0ref.format.to_slice(1);
-  const bpp = fmt.BytesPerPixel;
-  if (bpp != 4 && bpp != 3) {
-    throw runtime_error_template{"img_load"}("bpp");
-  }
-  const sur0_w = static_cast{uint}(sur0ref.w);
-  const sur0_h = static_cast{uint}(sur0ref.h);
-  mutable tex_w = power_of_2(sur0_w);
-  mutable tex_h = power_of_2(sur0_h);
-  p->width = tex_w;
-  p->height = tex_h;
-  mutable& uibuf = p->data;
-  uibuf.resize(tex_w * tex_h, 0);
-  uint rmask = fmt.Rmask;
-  uint gmask = fmt.Gmask;
-  uint bmask = fmt.Bmask;
-  uint amask = fmt.Amask;
-  function uint get_shift(uint m) {
-    uint r = 0;
-    for (uint i: 0 .. 32) {
-      if ((m & 1) != 0) {
-	break;
-      }
-      r += 1;
-      m >>= 1;
-    }
-    return r;
-  }
-  uint rshift = get_shift(rmask);
-  uint gshift = get_shift(gmask);
-  uint bshift = get_shift(bmask);
-  uint ashift = get_shift(amask);
-  const& sur0_ref = *sur0.get().to_slice(1);
-  const sur0buf = sur0_ref.pixels.reinterpret_cast{uchar}()
-    .to_slice(static_cast{size_t}(sur0_ref.pitch * sur0_ref.h));
-  for (const y: 0 .. sur0_h) {
-    for (const x: 0 .. sur0_w) {
-      const o = (y * sur0_w + x) * bpp;
-      uint v;
-      uint vr;
-      uint vg;
-      uint vb;
-      uint va;
-      if (bpp == 3) {
-	v = read_3_uint(sur0buf, o);
-      } else if (bpp == 4) {
-	v = read_4_uint(sur0buf, o);
-      }
-      vr = (v >> rshift) & 0xffU;
-      vg = (v >> gshift) & 0xffU;
-      vb = (v >> bshift) & 0xffU;
-      if (bpp == 4) {
-	va = (v >> ashift) & 0xffU;
-      }
-      uint v1 = (va << 24) | (vb << 16) | (vg << 8) | (vr << 0);
-      uibuf[y * tex_w + x] = v1;
-    }
-  }
-  return p;
-}
 
 function void dump_buf(varray{uint} const& buf)
 {
