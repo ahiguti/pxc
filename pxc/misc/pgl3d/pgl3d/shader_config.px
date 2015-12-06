@@ -3,6 +3,8 @@ public import common -;
 public import meta m;
 public import pgl3d::glconf -;
 public import pgl3d::pglconfig -;
+public import pgl3d::stempl -;
+public import exception -;
 // public import glresource -;
 
 public valuetype struct
@@ -81,7 +83,7 @@ shader_config(bool is_gles0, int major0, int minor0, int msaa0,
     return is_gl3_or_gles3() ? "fragcolor" : "gl_FragColor"; }
   public function strlit decl_fragcolor() const {
     return is_gl3_or_gles3() ? "out vec4 fragcolor;\n" : "\n"; }
-  public function string decl_instance_attr(cstrref const& t, cstrref const& n)
+  public function string decl_instance_attr(string const& t, string const& n)
     const
   {
     if (enable_instanced) {
@@ -97,7 +99,7 @@ shader_config(bool is_gles0, int major0, int minor0, int msaa0,
       return "uniform " + t + " " + n + ";\n";
     }
   }
-  public function string instance_attr(cstrref const& n) const
+  public function string instance_attr(string const& n) const
   {
     if (enable_instanced && enable_uniform_instancing) {
       /* use gl_InstanceID and uniform arrays */
@@ -123,5 +125,148 @@ shader_config(bool is_gles0, int major0, int minor0, int msaa0,
     */
     return prepend() + "void main(void) { }\n";
   }
+}
+
+private threaded function bool
+stempl_str_to_bool(cstrref const& s)
+{
+  if (s == "" || s == "0" || s == "false") {
+    return false;
+  }
+  return true;
+}
+
+private threaded function void
+check_num_args(cstrref const& sym, cslice{stempl_expr} const& args, size_t mi,
+  size_t mx)
+{
+  if (args.size() < mi && args.size() > mx) {
+    throw runtime_error_template{"invalid number of arguments"}(sym);
+  }
+}
+
+public threaded struct stempl_evaluator(shader_config const& cfg0,
+  tree_map{string, string} const& bindings0)
+<stempl_evaluator_i>
+{
+  shader_config cfg = cfg0;
+  tree_map{string, string} bindings = bindings0;
+  public function string eval(stempl_evaluator_i mutable& self,
+    string const& sym, cslice{stempl_expr} const& args)
+  {
+    if (const& m: bindings[sym]) {
+      check_num_args(sym, args, 1, 1);
+      return m;
+    }
+    if (sym == "if") {
+      check_num_args(sym, args, 2, 3);
+      const cnd = args[0].eval(self);
+      if (stempl_str_to_bool(cnd)) {
+	return args[1].eval(self);
+      } else {
+	return args.size() == 3 ? args[2].eval(self) : "";
+      }
+    }
+    if (sym == "and") {
+      for (const i, const& a: args) {
+	const v = a.eval(self);
+	if (stempl_str_to_bool(v)) {
+	  return "true";
+	}
+      }
+      return "false";
+    }
+    if (sym == "or") {
+      for (const i, const& a: args) {
+	const v = a.eval(self);
+	if (!stempl_str_to_bool(v)) {
+	  return "false";
+	}
+      }
+      return "true";
+    }
+    if (sym == "for") {
+      check_num_args(sym, args, 4, 4);
+      const vname = args[0].eval(self);
+      if (const& v: bindings[vname]) {
+	throw runtime_error_template{"overriding variable"}(vname);
+      }
+      const v0 = from_string{int}(args[1].eval(self));
+      const v1 = from_string{int}(args[2].eval(self));
+      string r;
+      for (int i: v0 .. v1) {
+	bindings[vname] = to_string(i);
+	r += args[3].eval(self);
+      }
+      bindings.erase(vname);
+      return r;
+    }
+    string s;
+    varray{string} strargs;
+    strargs.resize(args.size(), string());
+    for (const i, const& e: args) {
+      strargs[i] = e.eval(self);
+    }
+    // TODO: 
+    if (sym == "eq") {
+      if (args.size() != 2) {
+	throw runtime_error_template{"invalid number of arguments"}(sym);
+      }
+      return strargs[0] == strargs[1] ? "true" : "false";
+    }
+    if (sym == "not") {
+      if (args.size() != 1) {
+	throw runtime_error_template{"invalid number of arguments"}(sym);
+      }
+      if (stempl_str_to_bool(strargs[0])) {
+	return "false";
+      } else {
+	return "true";
+      }
+    }
+    if (!eval_shader_config(cfg, sym, strargs, s)) {
+      throw runtime_error_template{"invalid symbol"}(sym);
+    }
+    return s;
+  }
+}
+
+private threaded function {idx} string
+eval_shader_config_mf(shader_config const& cfg, string const& sym,
+  cslice{string} const& args)
+{
+  metafunction mf m::at{m::member_functions{shader_config}, idx};
+  metafunction sz m::size{m::arg_types{mf}};
+  if (args.size() != sz) {
+    throw runtime_error_template{"invalid number of arguments"}(sym);
+  }
+  expand (sym: {m::to_string{mf}}) {
+    const r = cfg.sym(expand (i: m::seq{sz}; args[i]));
+    // const r = cfg.sym(expand (i: m::seq{sz};
+    //   from_string{m::at{m::arg_types{mf}, i}}(args[i])));
+  }
+  return to_string(r);
+}
+
+private threaded function bool
+eval_shader_config(shader_config const& cfg, string const& sym,
+  cslice{string} const& args, string mutable& val_r)
+{
+  metafunction mfcs m::member_functions{shader_config};
+  expand (idx: m::seq{m::size{mfcs}}) {
+    if (sym == m::to_string{m::at{mfcs, idx}}) {
+      val_r = eval_shader_config_mf{idx}(cfg, sym, args);
+      return true;
+    }
+  }
+  metafunction mflds m::field_names{shader_config};
+  expand (idx: m::seq{m::size{mflds}}) {
+    if (sym == m::to_string{m::at{mflds, idx}}) {
+      expand (sym: {m::at{mflds, idx}}) {
+	val_r = to_string(cfg.sym);
+      }
+    }
+  }
+  return false;
 }
 

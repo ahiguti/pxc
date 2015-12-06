@@ -26,6 +26,8 @@ public import pgl3d::aggregated_ibuffer *;
 public import pgl3d::texture *;
 public import pgl3d::resource_pool *;
 public import pgl3d::framebuffer *;
+public import pgl3d::stempl *;
+public import pgl3d::sdlutil *;
 
 public enum draw_step {
   draw_step_shadowmapping = 1,
@@ -108,6 +110,68 @@ dgf_fill_tattr_internal(ptr{vertices} const& vptr, bool flat_flag,
     v.uvw = glm::vec3();
   }
   if (sz == 4) {
+    float scale = 64.0f;
+    const p0 = poly[0].pos * scale;
+    const p1 = poly[1].pos * scale;
+    const p2 = poly[2].pos * scale;
+    const p3 = poly[3].pos * scale;
+    const v01 = p1 - p0;
+    const v32 = p2 - p3;
+    const v03 = p3 - p0;
+    const v12 = p2 - p1;
+    const cos0103 = dot(v01, v03) / (length(v01) * length(v03));
+    mutable pos0 = p0;
+    if (cos0103 > 0.0f) {
+      pos0 += v01.normalize() * (length(v03) * cos0103);
+    }
+    const cos0112 = dot(v01, v12) / (length(v01) * length(v12));
+    mutable posx = p1;
+    if (cos0112 < 0.0f) {
+      posx += v01.normalize() * (length(v12) * cos0112);
+    }
+    const sin0103 = sqrt(1.0f - cos0103 * cos0103);
+    const sin0112 = sqrt(1.0f - cos0112 * cos0112);
+    const ylen = min(length(v03) * sin0103, length(v12) * sin0112);
+    const vy_t = p3 - (p0 + v01.normalize() * (length(v03) * cos0103));
+    // debug_log("vy_t dot v01", dot(vy_t, v01));
+    const posy = pos0 + vy_t.normalize() * ylen;
+    const vx = posx - pos0;
+    const lx = length(vx);
+    const ex = vx / lx;
+    const vy = posy - pos0;
+    const ly = length(vy);
+    const ey = vy / ly;
+    const margin = 1.0f / 1.0f;
+    const lxm = floor(lx - margin);
+    const xm = (lx - lxm) / 2.0f;
+    const lym = floor(ly - margin);
+    const ym = (ly - lym) / 2.0f;
+    pos0 += ex * xm;
+    pos0 += ey * ym;
+    if (lxm > 0.0f && lym > 0.0f) {
+      // debug_log("ex dot ey", dot(ex, ey));
+      // debug_log("p0", p0);
+      // debug_log("p1", p1);
+      // debug_log("p2", p2);
+      // debug_log("p3", p3);
+      // debug_log("lx,ly", lx, ly, lxm, lym);
+      threaded function vec3 to_uvw(vec3 const& pos) {
+	const v = pos - pos0;
+	return make_vec3(dot(v, ex), dot(v, ey), 1.0f);
+      }
+      const aabb = make_vec4(0.0f, 0.0f, lxm, lym);
+      vtxs[0].uvw = to_uvw(p0);
+      vtxs[1].uvw = to_uvw(p1);
+      vtxs[2].uvw = to_uvw(p2);
+      vtxs[3].uvw = to_uvw(p3);
+      vtxs[0].uv_aabb = aabb;
+      vtxs[1].uv_aabb = aabb;
+      vtxs[2].uv_aabb = aabb;
+      vtxs[3].uv_aabb = aabb;
+      // debug_log("vtxs", vtxs);
+    }
+  }
+  if (false) { // FIXME: remove
     const c0 = (poly[0].pos + poly[1].pos);
     const c1 = (poly[1].pos + poly[2].pos);
     const c2 = (poly[2].pos + poly[3].pos);
@@ -226,5 +290,19 @@ public threaded function void prepare_instance_data_default(
   instance_data mutable& idata)
 {
   buffer_append(idata.instance_buffer, sn.trans);
+}
+
+public function string
+load_shader_program(shader_config const& g,
+  tree_map{string, string} const& bindings, cstrref const& fname)
+{
+  mutable sev = stempl_evaluator(g, bindings); // TODO: avoid copying g
+  string src;
+  if (!sdl_load_file(fname, src)) {
+    throw runtime_error_template{"load_shader_program"}(fname);
+  }
+  const se = stempl_parse(src);
+  const string s = stempl_expr_eval(se, sev);
+  return s;
 }
 

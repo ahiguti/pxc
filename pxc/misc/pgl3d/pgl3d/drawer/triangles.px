@@ -510,17 +510,18 @@ init_shadowmap_shader(shader_config const& g, int opt)
       f += g.decl_fragcolor();
     }
     f += "void main(void) {\n";
+    /*
     if (opt != 0) {
       if (g.enable_normalmapping) {
 	f += "vec2 uv0 = vary_uvw.xy / vary_uvw.z;\n";
-	f += "vec2 uv_tm = floor(uv0);\n";
-	      /* tilemap coordinate */
-	f += "vec2 uv_tmfr = uv0 - uv_tm;\n";
-	      /* coordinate inside a tile (0, 1) */
+	f += "vec2 uv_tm = floor(uv0 / tile_size);\n"; // tilemap coordinate
+	f += "vec2 uv_tmfr = uv0 / tile_size - uv_tm;\n";
+	  // coordinate inside a tile (0, 1)
 	f += "vec2 uvp = uv_tmfr - 0.5;\n";
 	f += "if (dot(uvp, uvp) < 0.125) { discard; }\n";
       }
     }
+    */
     if (g.enable_vsm) {
       f += "  vec4 p = vary_smpos;\n";
       f += "  float pz = (p.z/p.w + 1.0) / 2.0;\n"; // TODO: calc in vsh
@@ -579,15 +580,16 @@ init_zprepass_shader(shader_config const& g, int opt)
     f += g.frag_in() + "vec3 vary_uvw;\n";
     // f += g.decl_fragcolor();
     f += "void main(void) {\n";
+    /*
     if (g.enable_normalmapping) {
       f += "vec2 uv0 = vary_uvw.xy / vary_uvw.z;\n";
-      f += "vec2 uv_tm = floor(uv0);\n";
-	    /* tilemap coordinate */
-      f += "vec2 uv_tmfr = uv0 - uv_tm;\n";
-	    /* coordinate inside a tile (0, 1) */
+      f += "vec2 uv_tm = floor(uv0 / tile_size);\n"; // tilemap coordinate
+      f += "vec2 uv_tmfr = uv0 / tile_size - uv_tm;\n";
+	// coordinate inside a tile (0, 1)
       f += "vec2 p = uv_tmfr - 0.5;\n";
       f += "if (dot(p, p) < 0.125) { discard; }\n";
     }
+    */
     f += "}\n";
   }
   return make_glshader_ptr{
@@ -745,12 +747,51 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
   f += "return uv.x >= aabb.x && uv.y >= aabb.y";
   f += " && uv.x < aabb.z && uv.y < aabb.w;\n";
   f += "}\n";
+  /*
+  f += "float distance_to_border(in vec2 uv, in vec3 delta) {\n";
+  f += "vec4 aabb = floor(vary_uv_aabb + 0.5);\n";
+  f += "vec2 dist = min(uv - aabb.xy, aabb.zw - uv);\n";
+  f += "return min(dist.x, dist.y);\n";
+  f += "}\n";
+  f += "float distance_to_border(in vec2 uv, in vec3 delta) {\n";
+  f += "vec4 aabb = floor(vary_uv_aabb + 0.5);\n";
+  f += "vec2 dclamp = clamp(delta.xy, aabb.xy - uv, aabb.zw - uv);\n";
+  // f += "float ratx = delta.x != 0.0 ? dclamp.x / delta.x : 0.0;\n";
+  // f += "float raty = delta.y != 0.0 ? dclamp.y / delta.y : 0.0;\n";
+  // f += "return min(ratx, raty);\n";
+  f += "vec2 rat2 = dclamp / delta.xy;\n";
+  // f += "return clamp(min(rat2.x, rat2.y), 0.0, 1.0);\n";
+  f += "return min(rat2.x, rat2.y);\n";
+  f += "}\n";
+  */
+  f += "vec3 clamp_to_border(in vec2 uv, in vec3 delta, inout vec4 dbg) {\n";
+  f += "vec4 aabb = floor(vary_uv_aabb + 0.5);\n";
+  f += "vec2 dclamp = clamp(delta.xy, aabb.xy - uv + 0.5, aabb.zw - uv - 0.5);\n";
+  	///// FIXME FIXME FIXME
+  f += "float ratx = (abs(delta.x) > 0.001) ? (dclamp.x / delta.x) : 0.0;\n";
+  f += "float raty = (abs(delta.y) > 0.001) ? (dclamp.y / delta.y) : 0.0;\n";
+  f += "float rat = clamp(min(ratx, raty), 0.0, 1.0);\n";
+  // f += "vec2 rat2 = dclamp / delta.xy;\n";
+  // f += "float rat = min(0.99, min(rat2.x, rat2.y));\n";
+  f += "vec3 r = delta * rat;\n";
+  f += "vec2 np = uv + r.xy;\n";   /// HAMIDASU
+  // f += "vec2 np = uv + dclamp;\n";  /// HAMIDASANAI
+  //////// f += "vec2 np = uv + clamp(delta.xy, vec2(0.0,0.0), aabb.zw -uv) * 0.99;\n";
+  //////// f += "vec2 np = uv + clamp(delta.xy, aabb.xy - uv, aabb.zw -uv) * 0.99;\n";
+  // f += "if (np.x >= aabb.z || np.y >= aabb.w) { dbg.r = 1.0; }\n";
+  // f += "if (ratx < 0 || raty < 0) { dbg.b = 1.0; }\n";
+  // f += "if (!uv_inside_aabb(np)) { dbg.r = 1.0; }\n";
+  // f += "if (np.x < aabb.x || np.y < aabb.y || np.x >= aabb.z || np.y >= aabb.w) { dbg.r = 1.0; }\n";
+  f += "return r;\n";
+  f += "}\n";
+  /*
+  */
   f += g.decl_fragcolor();
   if (g.enable_normalmapping) {
     f += "void tilemap(in vec2 uv0, out vec4 tex_val, out vec2 subtex_uv) {\n";
-    f += "vec2 uv_tm = floor(uv0);\n";
+    f += "vec2 uv_tm = floor(uv0 / tile_size);\n";
 	  // tilemap coordinate
-    f += "vec2 uv_tmfr = uv0 - uv_tm;\n";
+    f += "vec2 uv_tmfr = uv0 / tile_size - uv_tm;\n";
 	  // coordinate inside a tile (0, 1)
     if (opt != 0) {
       f += "vec2 p = uv_tmfr - 0.5;\n";
@@ -777,8 +818,9 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
   }
   if (g.enable_parallax) {
     f += "void parallax_read(in vec2 uv0, out vec4 tex_val) {\n";
-    f += "vec2 uv_tm = floor(uv0);\n"; // tilemap coordinate
-    f += "vec2 uv_tmfr = uv0 - uv_tm;\n"; // coordinate inside a tile (0, 1)
+    f += "vec2 uv_tm = floor(uv0 / tile_size);\n"; // tilemap coordinate
+    f += "vec2 uv_tmfr = uv0 / tile_size - uv_tm;\n";
+      // coordinate inside a tile (0, 1)
     f += "vec2 uvi = floor(uv_tmfr * tile_size);\n";
       // coordinate inside a tile (0, tile_size)
     f += "if (uv_inside_aabb(uv0)) {\n";
@@ -825,24 +867,41 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
     f += "float cval = dir.y > 0.0 ? fract(cvt / 16.0) * 16.0";
     f += " : floor(cvt / 16.0);\n";
     f += "cval = min(cval, (tval.z - tsub.z) / dir.z);\n"; // crop cval
-    f += "vec3 delta = dir * cval;\n";
+    // f += "float dtb = distance_to_border(tpos + tsub.xy, dir * cval);\n";
+    // f += "if (!uv_inside_aabb(tpos + tsub.xy)) { dbg.g = 1.0; }\n"; // FIXME
+    f += "if (!uv_inside_aabb(tpos + tsub.xy)) { return; }\n"; // FIXME
+    // f += "if (dtb < 0.0) { dbg.b = 1.0; }\n"; // FIXME
+    // f += "cval = clamp(cval, 0.0, dtb - 0.002);\n";
+    // f += "cval *= dtb;\n";
+    // f += "vec3 delta = dir * cval;\n";
+    f += "vec3 delta = clamp_to_border(tpos + tsub.xy, dir * cval, dbg);\n";
     f += "vec2 npos = tpos + tsub.xy + delta.xy;\n";
+    // f += "if (!uv_inside_aabb(npos)) { dbg.g = 1.0; }\n"; // FIXME
+    // f += "if (npos.x < 0.0 || npos.y < 0.0) { dbg.rgb = vec3(1.0, 1.0, 1.0); }\n"; // FIXME
     f += "tpos = floor(npos);\n";
     f += "tsub = vec3(npos - tpos, tsub.z + delta.z);\n";
-    f += "parallax_read(tpos / tile_size, tval);\n";
+    f += "parallax_read(tpos, tval);\n";
     f += "}\n";
     f += "void parallax_warp2(in vec3 dir, inout vec4 tval, inout vec2 tpos,";
-    f += " inout vec3 tsub) {\n";
+    f += " inout vec3 tsub, inout vec4 dbg) {\n";
     f += "tsub.xy = clamp(tsub.xy, 0.001, 0.999);\n";
-    f += "dir /= max(abs(dir.x), abs(dir.y));\n";
+    f += "dir /= max(abs(dir.x), abs(dir.y));\n"; // FIXME: compute by caller?
     f += "float cvt = floor((dir.x > 0.0 ? tval.x : tval.y) * 255.0 + 0.5);\n";
     f += "float cval = dir.y > 0.0 ? fract(cvt / 16.0) * 16.0";
     f += " : floor(cvt / 16.0);\n";
-    f += "vec3 delta = dir * cval;\n"; // does not crop cval
+    // f += "float dtb = distance_to_border(tpos + tsub.xy, dir * cval);\n";
+    // f += "if (!uv_inside_aabb(tpos + tsub.xy)) { return; }\n"; // FIXME
+    // f += "if (dtb < 0.5) { dbg.g = 1.0; }\n"; // FIXME
+    // f += "cval = clamp(cval, 0.0, dtb - 0.002);\n";
+    // f += "cval *= dtb;\n";
+    // f += "vec3 delta = dir * cval;\n";
+    f += "vec3 delta = clamp_to_border(tpos + tsub.xy, dir * cval, dbg);\n";
+    // f += "dbg.r = 0.0;\n"; // FIXME
     f += "vec2 npos = tpos + tsub.xy + delta.xy;\n";
+    // f += "if (!uv_inside_aabb(npos)) { dbg.g = 1.0; }\n"; // FIXME
     f += "tpos = floor(npos);\n";
     f += "tsub = vec3(npos - tpos, tsub.z + delta.z);\n";
-    f += "parallax_read(tpos / tile_size, tval);\n";
+    f += "parallax_read(tpos, tval);\n";
     f += "}\n";
     f += "void parallax_loop(inout vec2 pos, in vec3 eye, in vec3 light,";
     f += " out float z, out vec3 nor, out bool vertical, out float shval,";
@@ -853,11 +912,11 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
     f += "shval = 1.0;\n";
     f += "eye.z /= tile_size;\n";
     f += "light.z /= tile_size;\n";
-    f += "vec2 pos_m = pos * tile_size;\n"; // tile coord to texel coord
+    f += "vec2 pos_m = pos;\n"; // texel coord
     f += "vec2 tpos = floor(pos_m);\n";
     f += "vec3 tsub = vec3(pos_m - tpos, 0.0);\n";
     f += "vec4 tval;\n";
-    f += "parallax_read(tpos / tile_size, tval);\n";
+    f += "parallax_read(tpos, tval);\n";
     f += "if (tval.z == 0.0) {\n";
     f += "return;\n";
     f += "}\n";
@@ -875,7 +934,7 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
     f += "tsub = tsub_next;\n";
     f += "tpos += tnext_diff;\n";
     f += "tsub.xy -= tnext_diff;\n";
-    f += "parallax_read(tpos / tile_size, tval);\n";
+    f += "parallax_read(tpos, tval);\n";
     f += "if (tval.z < tsub.z) {\n"; // vertical surface
     f += "vertical = true;\n";
     f += "nor = vary_tangent * (-tnext_diff.x)";
@@ -884,7 +943,7 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
     f += "}\n";
     f += "parallax_warp(eye, tval, tpos, tsub, dbg);\n";
     f += "}\n"; // for (i)
-    f += "pos = (tpos + clamp(tsub.xy, 0.001, 0.999)) / tile_size;\n";
+    f += "pos = (tpos + clamp(tsub.xy, 0.001, 0.999));\n";
     f += "z = tval.z;\n";
     if (g.enable_parallax_shadow) {
       f += "if (light.z < 0.0) {\n";
@@ -897,12 +956,12 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
       f += "tsub = tsub_next;\n";
       f += "tpos += tnext_diff;\n";
       f += "tsub.xy -= tnext_diff;\n";
-      f += "parallax_read(tpos / tile_size, tval);\n";
+      f += "parallax_read(tpos, tval);\n";
       f += "if (tval.z < tsub.z) {\n";
       f += "shval = 0.0;\n";
       f += "break;\n";
       f += "}\n";
-      f += "parallax_warp2(light, tval, tpos, tsub);\n";
+      f += "parallax_warp2(light, tval, tpos, tsub, dbg);\n";
       f += "}\n"; // for (i)
       f += "}\n"; // if (light.z < 0.0)
     }
@@ -976,6 +1035,7 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
       f += "vec4 dbgval = vec4(0.0,0.0,0.0,0.0);\n";
       f += "parallax_loop(uv0, eye_tan, light_tan, para_zval, nor, vertical,";
       f += "  lstr_para, dbgval);\n";
+      f += "color += dbgval;\n"; // FIXME
     }
     f += "vec2 subtex_uv;\n";
     f += "tilemap(uv0, tex_val, subtex_uv);\n";

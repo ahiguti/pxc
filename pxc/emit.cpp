@@ -820,6 +820,9 @@ static bool is_nullable_dunion(const expr_dunion *ev)
   typedef std::list<expr_var *> flds_type;
   flds_type flds;
   ev->get_fields(flds);
+  if (flds.size() != 2) {
+    return false;
+  }
   flds_type::const_iterator i = flds.begin();
   if (i == flds.end()) {
     return false;

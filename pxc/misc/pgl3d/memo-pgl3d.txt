@@ -2,12 +2,18 @@
 ---------------------------------------------------------------------------
 TODO
 
+- シェーダ用テンプレートエンジン
+
+- distance_to_boundary: 4方向の距離を正しく
+
+- warp2でaabbを突き抜けるためself shadowがおかしい
+
 - postprocess: depth bufferが不要なときはどうするか
 - postprocess
 - metalness
 - envをぼかす方法
 
-- シェーダ用テンプレートエンジン
+- skyboxをpngから読んでから逆ガンマ補正する
 
 - collision_shape_iのconstメソッドがmt-safeでないといけないがエラーチェック
   できていない。
@@ -951,6 +957,89 @@ parallax_loop()
 引数のzをinoutに変更する
 
 ---------------------------------------------------------------------------
-cosv0123 > cosv1230
-  01と23のほうが12と30より平行に近い
+タイル貼り
+
+01をx軸とする。
+2から01へ垂線をおろし、01内に入っているかみる。
+  01と02のcosが正なら01内なので、そのぶん0を1側にずらした位置が原点
+    もし1をこえてしまっていれば貼れない
+  そうでないなら0が原点
+3から01へ垂線をおろし、01内に入っているか見る。
+  01と13のcosが負なら01内なので、そのぶん1を0側にずらした位置がxmax
+    もし0をこえてしまっていれば貼れない
+  そうでないなら1がxmax
+01の垂線方向、02・sin0102と03・sin0113の小さいほうがymax
+原点と単位ベクトルを求めて0123を変換した座標がuv座標。
+
+---------------------------------------------------------------------------
+ブロック単位ではなくテクセル単位で整数に丸める
+
+1. uv座標を1テクセルが1になるように変更
+
+parallax_loop()
+{
+  parallax_read();
+  if (tval.z == 0.0) {
+    return;
+  }
+  for () {
+    tnext_diff = parallax_next();
+    if (tsub_next.z >= tval.z) {
+      // horizontal
+      break;
+    }
+    tpos += tnext_diff;
+    parallax_read();
+    if (tval.z < tsub.z) {
+      // vertical
+      break;
+    }
+    この時点で現在居るテクセルの境界の内側に少し入っている。
+    現在居るテクセルの深さにはまだ到達していない。
+    parallax_warp();
+  }
+}
+
+---------------------------------------------------------------------------
+シェーダ用テンプレートエンジン
+
+<%opt 0>
+<%>
+<%/>
+<%instance_attr model_matrix/>
+<%vert_out/>
+
+文法
+- タグがない文字列はそのまま文字列リテラル
+  fobar
+  "fubar"
+- タグをシンボルと引数に。タグ内の引数は文字列へ。
+  <%foo bar baz>hoge<%/>
+  (foo "bar" "baz" "hoge")
+- ブロック引数無し
+  <%instance_attr model_matrix/>
+  (instance_attr "model_matrix")
+- 引数無しのときはconsにしない
+  <%hoge/>
+  hoge
+- タグ間に空白のみからなる文字列があったら読み飛ばす
+  <%foo/>    <%bar/>
+  foo bar
+- タグ直後の改行とタグ直前のインデントは読み飛ばす
+  <%foo>
+  <%/>
+
+意味
+- シンボルは評価
+- シンボルが先頭のconsは評価
+- シンボルが先頭で無いconsは各要素を評価して文字列連結
+
+union stempl_expr {
+  string literal;
+  ptr{stempl_expr_cons} cons;
+}
+struct stempl_expr_cons {
+  string symbol; // 性能重視しないのでinternしなくていい
+  stempl_expr args;
+}
 

@@ -1,0 +1,231 @@
+public threaded namespace pgl3d::stempl;
+public import common -;
+public import exception -;
+// public import numeric::union_tag -; // FIXME
+
+public threaded union stempl_expr
+{
+  public unit nil;
+  public ptr{string} literal;
+  public ptr{stempl_cons} cons;
+}
+
+public threaded struct stempl_cons()
+{
+  public size_t offset;
+  public string symbol;
+  public varray{stempl_expr} args;
+}
+
+public threaded interface stempl_evaluator_i
+{
+  public function string eval(stempl_evaluator_i mutable& self,
+    string const& sym, cslice{stempl_expr} const& args);
+}
+
+public threaded function stempl_expr
+stempl_parse(cstrref const& src)
+{
+  stempl_expr r;
+  const p = make_ptr{stempl_cons}();
+  size_t i = 0;
+  if (parse_cons(p->args, src, i)) {
+    throw runtime_error_template{"unexpected end tag"}(to_string(i));
+  }
+  r.cons = p;
+  // debug_log("stempl_parse: returns:", union_tag(r));
+  // debug_log("stempl_parse: returns:", r.dump());
+  return r;
+}
+
+public threaded function string
+stempl_expr_eval(stempl_expr const& expr, stempl_evaluator_i mutable& ev)
+{
+  if (case expr.literal) {
+    return *expr.literal;
+  } else if (case expr.cons) {
+    const& cons = *expr.cons;
+    const& sym = cons.symbol;
+    if (sym.empty()) {
+      string s;
+      for (const i, const& a: cons.args) {
+	s += stempl_expr_eval(a, ev);
+      }
+      return s;
+    } else {
+      return ev.eval(ev, cons.symbol, cons.args);
+    }
+  }
+  return string();
+}
+
+public threaded function string
+stempl_expr_dump(stempl_expr const& expr)
+{
+  string r;
+  stempl_expr_dump_append(expr, r);
+  return r;
+}
+
+public threaded function void
+stempl_expr_dump_append(stempl_expr const& expr, string mutable& r)
+{
+  if (case expr.literal) {
+    r += "\"";
+    r += *expr.literal;
+    r += "\"";
+  } else if (case expr.cons) {
+    const& cons = *expr.cons;
+    r += "(";
+    r += cons.symbol;
+    for (const i, const& a: cons.args) {
+      r += " ";
+      stempl_expr_dump_append(a, r);
+    }
+    r += ")";
+  } else {
+    r += "[nil]";
+  }
+}
+
+/*
+private threaded function string
+stempl_expr_dump_internal(stempl_expr const& expr, uint indent)
+{
+}
+*/
+
+private threaded function bool
+parse_cons(varray{stempl_expr} mutable& arr, cstrref const& src,
+  size_t mutable& i)
+{
+  const len = src.size();
+  while (i < len) {
+    if (parse_expr_list(arr, src, i)) {
+      return true; // found end tag
+    }
+  }
+  return false; //no end tag
+}
+
+private threaded function string
+slice_to_string(cstrref const& src, size_t i0, size_t i1)
+{
+  // TODO: is there a better way?
+  string s = src[i0 .. i1];
+  return s;
+}
+
+private threaded function bool
+parse_expr_list(varray{stempl_expr} mutable& arr, cstrref const& src,
+  size_t mutable& i)
+{
+  const srclen = src.size();
+  while (i < srclen) {
+    const ibegin = i;
+    const has_tag = find_tag(src, i);
+    // debug_log("find_tag", src, i, has_tag);
+    if (ibegin != i) {
+      // literal
+      if (!is_literal_to_skip(src, ibegin, i)) {
+	stempl_expr e;
+	e.literal = make_ptr{string}(slice_to_string(src, ibegin, i));
+	arr.push_back(e);
+	// debug_log("stempl literal", *e.literal, arr.size());
+      }
+    }
+    if (has_tag) {
+      if (i + 3 < srclen && src[i + 2] == '/' && src[i + 3] == '>') {
+	// found end tag
+	i += 4;
+	// debug_log("stempl endtag");
+	return true;
+      }
+      i += 2; // skip '<%'
+      const tend = find_mapped(src, i, '>');
+      if (tend == srclen || tend < i + 1) {
+	throw runtime_error_template{"syntax error"}(to_string(tend));
+      }
+      const is_eetag = (src[tend - 1] == '/'); // empty element tag
+      const consp = make_ptr{stempl_cons}();
+      mutable& cons = *consp;
+      parse_tag(cons, src, i, is_eetag ? tend - 1 : tend);
+      i = tend + 1; 
+      if (!is_eetag) {
+	if (!parse_expr_list(cons.args, src, i)) {
+	  throw runtime_error_template{"missing end tag"}(to_string(i));
+	}
+      }
+      stempl_expr e;
+      e.cons = consp;
+      arr.push_back(e);
+      // debug_log("stempl tag", arr.size());
+    }
+  }
+  return false; // no end tag
+}
+
+private threaded function void
+parse_tag(stempl_cons mutable& cons, cstrref const& src, size_t i0, size_t i1)
+{
+  mutable i = i0;
+  skip_nonspace(src, i, i1);
+  cons.offset = i0;
+  cons.symbol = src[i0 .. i];
+  while (i < i1) {
+    skip_space(src, i, i1);
+    const apos = i;
+    skip_nonspace(src, i, i1);
+    stempl_expr e;
+    e.literal = make_ptr{string}(slice_to_string(src, apos, i));
+    cons.args.push_back(e);
+  }
+}
+
+private threaded function void
+skip_nonspace(cstrref const& src, size_t mutable& i, size_t iend)
+{
+  while (i < iend && src[i] > ' ') {
+    ++i;
+  }
+}
+
+private threaded function void
+skip_space(cstrref const& src, size_t mutable& i, size_t iend)
+{
+  while (i < iend && src[i] <= ' ') {
+    ++i;
+  }
+}
+
+private threaded function bool
+is_literal_to_skip(cstrref const& src, size_t i0, size_t i1)
+{
+  for (const i: i0 .. i1) {
+    const ch = src[i];
+    if (ch > ' ') {
+      return false;
+    }
+  }
+  return true;
+}
+
+private threaded function bool
+find_tag(cstrref const& src, size_t mutable& i)
+{
+  const len = src.size();
+  while (i < len) {
+    const j = find_mapped(src, i, '<');
+    if (j >= len) {
+      i = len;
+      return false;
+    }
+    if (j + 1 < len && src[j + 1] == '%') {
+      i = j;
+      return true;
+    }
+    i = j + 1;
+  }
+  return false;
+}
+
