@@ -366,21 +366,29 @@ private metafunction has_nssymbol{t, name} m::symbol_exists{m::nsof{t}, name};
 private metafunction binop_ret_type{tx, ty, opstr, is_builtin}
   m::cond{
     m::and{m::ne{is_builtin, 0}, is_builtin{tx}, is_builtin{ty}},
-    tx,
-  m::cond{
+      tx,
     has_tsymbol{tx, m::concat{"__", opstr}},
-    m::ret_type{m::symbol{tx, m::concat{"__", opstr}}},
-  m::cond{
+      m::ret_type{m::symbol{tx, m::concat{"__", opstr}}},
     has_tsymbol{tx, m::concat{"__", opstr, "a"}},
-    tx,
-  m::cond{
+      tx,
     has_nssymbol{tx, m::concat{tx, "___", opstr}},
-    m::ret_type{m::apply{
-      m::symbol{m::nsof{tx}, m::concat{tx, "___", opstr}}, tx, ty}},
-  m::cond{
+      m::ret_type{m::apply{
+	m::symbol{m::nsof{tx}, m::concat{tx, "___", opstr}}, tx, ty}},
     has_nssymbol{tx, m::concat{tx, "___", opstr, "a"}},
-    tx,
-  tx}}}}};
+      tx,
+    m::eq{opstr, "eq"},
+      bool,
+    m::eq{opstr, "ne"},
+      bool,
+    m::eq{opstr, "gt"},
+      bool,
+    m::eq{opstr, "lt"},
+      bool,
+    m::eq{opstr, "ge"},
+      bool,
+    m::eq{opstr, "le"},
+      bool,
+    tx};
 
 private threaded function {tx, ty, opstr} binop_ret_type{tx, ty, opstr, 0}
 binop(tx const& x, ty const& y)
@@ -432,7 +440,7 @@ private threaded function {tx, ty} bool
 eq_folding(tx const& x, ty const& y)
 {
   if (m::and{m::eq{tx, ty}, is_pod_dense_array{tx}}) {
-    return pod_array_eq{tx}(x, y);
+    return pod_array_eq{tx, ty}(x, y);
   } else if (m::and{is_array_or_slice_type{tx}, is_array_or_slice_type{ty}}) {
     if (x.size() != y.size()) { return false; }
     for (const& k, const& m: x) {

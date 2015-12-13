@@ -1,13 +1,39 @@
 public threaded namespace pgl3d::stempl;
 public import common -;
 public import exception -;
-// public import numeric::union_tag -; // FIXME
 
 public threaded union stempl_expr
 {
   public unit nil;
   public ptr{string} literal;
   public ptr{stempl_cons} cons;
+}
+
+public mtvaluetype struct
+stempl_exception(string const& error0, size_t offset0)
+<runtime_error>
+{
+  public string const error = error0;
+  public size_t const offset = offset0;
+  public function string detail(cstrref const& src) const {
+    const line_offset = calc_line(src, offset);
+    string s = "stempl_exception{";
+    s += error;
+    s += "}(";
+    s += to_string(line_offset.first);
+    s += ", ";
+    s += to_string(offset - line_offset.second);
+    s += ")";
+    return s;
+  }
+  function string message() const {
+    string s = "stempl_exception{";
+    s += error;
+    s += "}(";
+    s += to_string(offset);
+    s += ")";
+    return s;
+  }
 }
 
 public threaded struct stempl_cons()
@@ -17,12 +43,6 @@ public threaded struct stempl_cons()
   public varray{stempl_expr} args;
 }
 
-public threaded interface stempl_evaluator_i
-{
-  public function string eval(stempl_evaluator_i mutable& self,
-    string const& sym, cslice{stempl_expr} const& args);
-}
-
 public threaded function stempl_expr
 stempl_parse(cstrref const& src)
 {
@@ -30,33 +50,12 @@ stempl_parse(cstrref const& src)
   const p = make_ptr{stempl_cons}();
   size_t i = 0;
   if (parse_cons(p->args, src, i)) {
-    throw runtime_error_template{"unexpected end tag"}(to_string(i));
+    throw stempl_exception("unexpected end tag", i);
   }
   r.cons = p;
   // debug_log("stempl_parse: returns:", union_tag(r));
   // debug_log("stempl_parse: returns:", r.dump());
   return r;
-}
-
-public threaded function string
-stempl_expr_eval(stempl_expr const& expr, stempl_evaluator_i mutable& ev)
-{
-  if (case expr.literal) {
-    return *expr.literal;
-  } else if (case expr.cons) {
-    const& cons = *expr.cons;
-    const& sym = cons.symbol;
-    if (sym.empty()) {
-      string s;
-      for (const i, const& a: cons.args) {
-	s += stempl_expr_eval(a, ev);
-      }
-      return s;
-    } else {
-      return ev.eval(ev, cons.symbol, cons.args);
-    }
-  }
-  return string();
 }
 
 public threaded function string
@@ -88,12 +87,21 @@ stempl_expr_dump_append(stempl_expr const& expr, string mutable& r)
   }
 }
 
-/*
-private threaded function string
-stempl_expr_dump_internal(stempl_expr const& expr, uint indent)
+private threaded function pair{size_t, size_t}
+calc_line(cstrref const& src, size_t offset)
 {
+  size_t i = 0;
+  size_t lbegin = 0;
+  size_t lcnt = 0;
+  for (i = 0; i < src.size() && i < offset; ++i) {
+    const ch = src[i];
+    if (ch == '\n') {
+      lbegin = ch;
+      ++lcnt;
+    }
+  }
+  return pair(lcnt, lbegin);
 }
-*/
 
 private threaded function bool
 parse_cons(varray{stempl_expr} mutable& arr, cstrref const& src,
@@ -141,10 +149,16 @@ parse_expr_list(varray{stempl_expr} mutable& arr, cstrref const& src,
 	// debug_log("stempl endtag");
 	return true;
       }
+      const tstart = i;
       i += 2; // skip '<%'
       const tend = find_mapped(src, i, '>');
-      if (tend == srclen || tend < i + 1) {
-	throw runtime_error_template{"syntax error"}(to_string(tend));
+      if (tend == i) {
+	// found delimiter
+	i += 1;
+	continue;
+      }
+      if (tend == srclen) {
+	throw stempl_exception("syntax error", tend);
       }
       const is_eetag = (src[tend - 1] == '/'); // empty element tag
       const consp = make_ptr{stempl_cons}();
@@ -153,7 +167,7 @@ parse_expr_list(varray{stempl_expr} mutable& arr, cstrref const& src,
       i = tend + 1; 
       if (!is_eetag) {
 	if (!parse_expr_list(cons.args, src, i)) {
-	  throw runtime_error_template{"missing end tag"}(to_string(i));
+	  throw stempl_exception("missing end tag", tstart);
 	}
       }
       stempl_expr e;

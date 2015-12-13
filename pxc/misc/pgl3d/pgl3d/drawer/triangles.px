@@ -323,28 +323,28 @@ private function void set_normal_pattern(texture_data const& tdep,
       uint val;
       if (is_convex1(du, dl, dd, dr)) {
 	val = 0x92; // convex upper
-	debug_log(x, y, "cu");
+	// debug_log(x, y, "cu");
       } else if (is_convex1(dl, dd, dr, du)) {
 	val = 0x74; // convex left
-	debug_log(x, y, "cl");
+	// debug_log(x, y, "cl");
       } else if (is_convex1(dd, dr, du, dl)) {
 	val = 0x72; // convex lower
-	debug_log(x, y, "cd");
+	// debug_log(x, y, "cd");
       } else if (is_convex1(dr, du, dl, dd)) {
 	val = 0x94; // convex right
-	debug_log(x, y, "cr");
+	// debug_log(x, y, "cr");
       } else if (is_convex2(du, dl, dd, dr)) {
 	val = 0x91; // convex left-upper
-	debug_log(x, y, "clu");
+	// debug_log(x, y, "clu");
       } else if (is_convex2(dl, dd, dr, du)) {
 	val = 0x97; // convex left-lower
-	debug_log(x, y, "cld");
+	// debug_log(x, y, "cld");
       } else if (is_convex2(dd, dr, du, dl)) {
 	val = 0x95; // convex right-lower
-	debug_log(x, y, "crd");
+	// debug_log(x, y, "crd");
       } else if (is_convex2(dr, du, dl, dd)) {
 	val = 0x93; // convex right-upper
-	debug_log(x, y, "cru");
+	// debug_log(x, y, "cru");
       } else if (is_flat4()) {
 	if (is_convex1(dlu, dld, drd, dru)) {
 	  val = 0x75; // concave right-lower
@@ -457,6 +457,13 @@ private metafunction shadowmap_shader_ptr
 private function shadowmap_shader_ptr
 init_shadowmap_shader(shader_config const& g, int opt)
 {
+  tree_map{string, string} bnd;
+  bnd["opt"] = to_string(opt);
+  const v = load_shader_program(g, bnd, "triangles-sm.vsh");
+  const f = load_shader_program(g, bnd, "triangles-sm.fsh");
+/*
+*/
+/*
   string v;
   v += g.prepend();
   if (g.light_fixed) {
@@ -510,18 +517,16 @@ init_shadowmap_shader(shader_config const& g, int opt)
       f += g.decl_fragcolor();
     }
     f += "void main(void) {\n";
-    /*
-    if (opt != 0) {
-      if (g.enable_normalmapping) {
-	f += "vec2 uv0 = vary_uvw.xy / vary_uvw.z;\n";
-	f += "vec2 uv_tm = floor(uv0 / tile_size);\n"; // tilemap coordinate
-	f += "vec2 uv_tmfr = uv0 / tile_size - uv_tm;\n";
-	  // coordinate inside a tile (0, 1)
-	f += "vec2 uvp = uv_tmfr - 0.5;\n";
-	f += "if (dot(uvp, uvp) < 0.125) { discard; }\n";
-      }
-    }
-    */
+    // if (opt != 0) {
+    //   if (g.enable_normalmapping) {
+	//f += "vec2 uv0 = vary_uvw.xy / vary_uvw.z;\n";
+	//f += "vec2 uv_tm = floor(uv0 / tile_size);\n"; // tilemap coordinate
+	//f += "vec2 uv_tmfr = uv0 / tile_size - uv_tm;\n";
+	  //// coordinate inside a tile (0, 1)
+	//f += "vec2 uvp = uv_tmfr - 0.5;\n";
+	//f += "if (dot(uvp, uvp) < 0.125) { discard; }\n";
+      //}
+    //}
     if (g.enable_vsm) {
       f += "  vec4 p = vary_smpos;\n";
       f += "  float pz = (p.z/p.w + 1.0) / 2.0;\n"; // TODO: calc in vsh
@@ -540,6 +545,9 @@ init_shadowmap_shader(shader_config const& g, int opt)
     }
     f += "}\n";
   }
+*/
+debug_log("shadowmap_vsh", v);
+debug_log("shadowmap_fsh", f);
   return make_glshader_ptr{
     shadowmap_uniforms,
     triangles_instance_attributes,
@@ -555,6 +563,11 @@ private metafunction zprepass_shader_ptr
 private function zprepass_shader_ptr
 init_zprepass_shader(shader_config const& g, int opt)
 {
+  tree_map{string, string} bnd;
+  bnd["opt"] = to_string(opt);
+  const v = load_shader_program(g, bnd, "triangles-zp.vsh");
+  const f = load_shader_program(g, bnd, "triangles-zp.fsh");
+/*
   string v;
   v += g.prepend();
   v += "uniform mat4 view_projection_matrix;\n";
@@ -589,9 +602,12 @@ init_zprepass_shader(shader_config const& g, int opt)
       f += "vec2 p = uv_tmfr - 0.5;\n";
       f += "if (dot(p, p) < 0.125) { discard; }\n";
     }
-    */
+    *
     f += "}\n";
   }
+*/
+debug_log("zp_vsh", v);
+debug_log("zp_fsh", f);
   return make_glshader_ptr{
     zprepass_uniforms,
     triangles_instance_attributes,
@@ -620,6 +636,10 @@ init_triangles_shader(shader_config const& g, int opt)
 private function string
 triangles_shader_vert(shader_config const& g, int opt)
 {
+  tree_map{string, string} bnd;
+  bnd["smsz"] = g.num_shadowmaps_str();
+  const v = load_shader_program(g, bnd, "triangles.vsh");
+/*
   const smsz = g.num_shadowmaps_str();
   string v;
   v += g.prepend();
@@ -681,6 +701,8 @@ triangles_shader_vert(shader_config const& g, int opt)
     }
   }
   v += "}\n";
+*/
+debug_log("triangles_vsh", v);
   return v;
 }
 
@@ -699,6 +721,12 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
     }
   }
   const smsz = g.num_shadowmaps_str();
+  tree_map{string, string} bnd;
+  bnd["smsz"] = g.num_shadowmaps_str();
+  bnd["opt"] = to_string(opt);
+  bnd["enable_macos_nvidia_wa"] = to_string(enable_macos_nvidia_wa);
+  const f = load_shader_program(g, bnd, "triangles.fsh");
+/*
   string f;
   f += g.prepend();
   f += "const float tile_size = 64.0;\n";
@@ -763,7 +791,7 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
   // f += "return clamp(min(rat2.x, rat2.y), 0.0, 1.0);\n";
   f += "return min(rat2.x, rat2.y);\n";
   f += "}\n";
-  */
+  *
   f += "vec3 clamp_to_border(in vec2 uv, in vec3 delta, inout vec4 dbg) {\n";
   f += "vec4 aabb = floor(vary_uv_aabb + 0.5);\n";
   f += "vec2 dclamp = clamp(delta.xy, aabb.xy - uv + 0.5, aabb.zw - uv - 0.5);\n";
@@ -785,7 +813,7 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
   f += "return r;\n";
   f += "}\n";
   /*
-  */
+  *
   f += g.decl_fragcolor();
   if (g.enable_normalmapping) {
     f += "void tilemap(in vec2 uv0, out vec4 tex_val, out vec2 subtex_uv) {\n";
@@ -1233,10 +1261,12 @@ private function string triangles_shader_frag(shader_config const& g, int opt)
   f += " mate_alpha, camera_dir, light_dir, sampler_env,";
   f += " normalize(vary_normal), false);\n";
   f += "color.xyz += sqrt(mix(li2, li1, distbr));\n";
-  */
+  *
   f += "color.xyz += sqrt(li1);\n";
   f += g.fragcolor() + " = color;\n";
   f += "}\n";
+*/
+debug_log("triangles fsh", f);
   return f;
 }
 

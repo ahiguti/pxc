@@ -1,7 +1,7 @@
 
 <%if><%and><%enable_depth_texture/><%eq><%opt/>0<%/><%/>
   <%empty_shader_frag/>
-<%>
+<%else/>
   <%prepend/>
   <%if><%not><%eq><%opt/>0<%/><%/>
     <%frag_in/> vec3 vary_uvw;
@@ -28,7 +28,7 @@
       vec4 p = vary_smpos;
       float pz = (p.z/p.w + 1.0) / 2.0; // TODO: calc in vsh
       <%fragcolor/> = vec4(pz, pz * pz, 0.0, 0.0);
-    <%>
+    <%else/>
       <%if><%not><%enable_depth_texture/><%/>
 	vec4 p = vary_smpos;
 	float pz = (p.z/p.w + 1.0) / 2.0; // TODO: calc in vsh

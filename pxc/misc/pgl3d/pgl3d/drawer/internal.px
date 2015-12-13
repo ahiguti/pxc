@@ -27,6 +27,7 @@ public import pgl3d::texture *;
 public import pgl3d::resource_pool *;
 public import pgl3d::framebuffer *;
 public import pgl3d::stempl *;
+public import pgl3d::stempl_eval *;
 public import pgl3d::sdlutil *;
 
 public enum draw_step {
@@ -296,13 +297,26 @@ public function string
 load_shader_program(shader_config const& g,
   tree_map{string, string} const& bindings, cstrref const& fname)
 {
-  mutable sev = stempl_evaluator(g, bindings); // TODO: avoid copying g
+  mutable sev = stempl_evaluator();
+  const p = make_ptr{shader_config}(g);
+  sev.add_global_object(p);
+  for (const& k, const& m: bindings) {
+    sev.add_global_const(k, m);
+  }
   string src;
   if (!sdl_load_file(fname, src)) {
     throw runtime_error_template{"load_shader_program"}(fname);
   }
-  const se = stempl_parse(src);
-  const string s = stempl_expr_eval(se, sev);
-  return s;
+  debug_log("shader program:", src);
+  try {
+    const se = stempl_parse(src);
+    const string s = sev.eval(se);
+    return s;
+  } catch (stempl_exception ex) {
+    const string s = fname + ", " + ex.detail(src) + ", " +
+      src[ex.offset .. find_mapped(src, ex.offset, '\n')];
+    throw runtime_error_template{"load_shader_program"}(s);
+  }
+  return string();
 }
 
