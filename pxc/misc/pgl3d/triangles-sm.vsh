@@ -8,10 +8,6 @@
 <%/>
 <%decl_instance_attr mat4 model_matrix/>
 <%vert_in/> vec3 position;
-<%if><%not><%eq><%opt/>0<%/><%/>
-  <%vert_in/> vec3 uvw;
-  <%vert_out/> vec3 vary_uvw;
-<%/>
 <%if><%not><%enable_depth_texture/><%/>
   <%vert_out/> vec4 vary_smpos;
 <%/>
@@ -30,8 +26,5 @@ void main(void)
   <%/>
   <%if><%not><%enable_depth_texture/><%/>
     vary_smpos = p;
-  <%/>
-  <%if><%not><%eq><%opt/>0<%/><%/>
-    vary_uvw = uvw;
   <%/>
 }

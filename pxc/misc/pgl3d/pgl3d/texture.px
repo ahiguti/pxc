@@ -25,13 +25,15 @@ public struct texture_data()
 {
   public uint width;
   public uint height;
-  public varray{uint} data; // (a << 24) | (b << 16) | (b << 8) | (r << 0)
+  public uint depth;
+  public varray{uint} data; // (a << 24) | (b << 16) | (g << 8) | (r << 0)
 }
 
 public threaded struct gl_texture()
 {
   public uint surface_w;
   public uint surface_h;
+  public uint surface_d;
   public uint char_w;
   public uint char_h;
   public varray{uint} char_x; // for variable width font
@@ -220,29 +222,21 @@ public function void
 load_gl_texture_2d(gl_texture mutable& tx, string const& fname)
 {
   const td = load_texture_data(fname);
-  texture_data_to_gl_texture_2d(tx, td);
-  /*
-  glActiveTexture(GL_TEXTURE0);
-  tx.texture_id.generate();
-  glBindTexture(GL_TEXTURE_2D, tx.texture_id.get());
-  tx.surface_w = td->width;
-  tx.surface_h = td->height;
-  const use_mipmap = false;
-  set_gl_texture(*td, tx, GL_TEXTURE_2D, use_mipmap);
-  */
+  texture_data_to_gl_texture(GL_TEXTURE_2D, tx, td);
 }
 
 public function void
-texture_data_to_gl_texture_2d(gl_texture mutable& tx,
+texture_data_to_gl_texture(GLenum target, gl_texture mutable& tx,
   ptr{texture_data} const& td)
 {
   glActiveTexture(GL_TEXTURE0);
   tx.texture_id.generate();
-  glBindTexture(GL_TEXTURE_2D, tx.texture_id.get());
+  glBindTexture(target, tx.texture_id.get());
   tx.surface_w = td->width;
   tx.surface_h = td->height;
+  tx.surface_d = td->depth;
   const use_mipmap = false;
-  set_gl_texture(*td, tx, GL_TEXTURE_2D, use_mipmap);
+  set_gl_texture(*td, tx, target, use_mipmap);
 }
 
 public function ptr{texture_data}
@@ -417,15 +411,26 @@ function void set_gl_texture(texture_data mutable& td, gl_texture mutable& ti,
 {
   uint tex_w = td.width;
   uint tex_h = td.height;
+  uint tex_d = td.height;
   mutable& uibuf = td.data;
   int mipmap_level = 0;
   const mode = GL_RGBA;
   while (true) {
     // dump_buf(uibuf);
     // TODO: assumes little endian
-    glTexImage2D(target, mipmap_level, cast_int(mode),
-      cast_int(tex_w), cast_int(tex_h),
-      0, mode, GL_UNSIGNED_BYTE, uibuf.to_crawptr().to_cvoidptr());
+    if (sdl_byteorder() != sdl_lil_endian()) {
+      throw runtime_error_template{"set_gl_texture"}("");
+    }
+    if (target == GL_TEXTURE_3D || target == GL_PROXY_TEXTURE_3D) {
+debug_log("3dtex", tex_w, tex_h, tex_d);
+      glTexImage3D(target, mipmap_level, cast_int(mode),
+	cast_int(tex_w), cast_int(tex_h), cast_int(tex_d),
+	0, mode, GL_UNSIGNED_BYTE, uibuf.to_crawptr().to_cvoidptr());
+    } else {
+      glTexImage2D(target, mipmap_level, cast_int(mode),
+	cast_int(tex_w), cast_int(tex_h),
+	0, mode, GL_UNSIGNED_BYTE, uibuf.to_crawptr().to_cvoidptr());
+    }
     const tex_w_prev = tex_w;
     const tex_h_prev = tex_h;
     tex_w /= 2;
@@ -436,6 +441,7 @@ function void set_gl_texture(texture_data mutable& td, gl_texture mutable& ti,
     if (tex_w == 0 || tex_h == 0) {
       break;
     }
+    // TODO: 3d
     ++mipmap_level;
     for (const y: 0 .. tex_h) {
       for (const x: 0 .. tex_w) {
@@ -466,7 +472,7 @@ function void set_gl_texture(texture_data mutable& td, gl_texture mutable& ti,
       }
     }
   }
-  if (target == GL_TEXTURE_2D) {
+  if (target == GL_TEXTURE_2D || target == GL_TEXTURE_3D) {
     glTexParameteri(target, GL_TEXTURE_MAG_FILTER,
       cast_int(GL_NEAREST));
     glTexParameteri(target, GL_TEXTURE_MIN_FILTER,

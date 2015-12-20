@@ -460,9 +460,9 @@ private function void build_vertices(app_impl mutable& app,
   pgs.make_vertex_set(tr, "box",
     regular_polygon(1.4142f * 1.0f, 4,
       apply(m1,
-	bump_apply(m, false, ctx_fill(0), ctx_fill(0))),
+	bump_apply(m, false, ctx_fill(1), ctx_fill(1))),
       apply(m1,
-	ctx_fill(0))));
+	ctx_fill(1))));
   pgs.make_vertex_set(tr, "box50",
     regular_polygon(1.4142f * 50.0f, 4,
       apply(m1,
@@ -684,8 +684,9 @@ private function void build_vertices(app_impl mutable& app,
   function void shapes_add(cstrref const& name, float mass,
     collision_shape_e shape)
   {
-    const& p = pgs.get_vertices(name)->positions;
-    const& elems = pgs.get_vertices(name)->elements;
+    const vp = pgs.get_nonempty_vertices(name);
+    const& p = vp->positions;
+    const& elems = vp->elements;
     app.scene_shared->shapes.push_back(make_tptr{collision_shape_data}(
       name, pgs.get_joint_id(name), mass, shape, p, elems));
   }

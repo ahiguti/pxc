@@ -24,6 +24,12 @@ uniform mat4 view_projection_matrix;
     uniform float ndelta_scale; // 0.02
   <%/>
 <%/>
+<%if><%not><%eq><%opt/>0<%/><%/>
+<%vert_out/> mat4 vary_model_matrix;
+<%vert_out/> vec3 vary_position_local;
+//  <%vert_out/> vec3 vary_camera_local;
+//  <%vert_out/> vec3 vary_light_local;
+<%/>
 void main(void)
 {
   mat4 mm = <%instance_attr model_matrix/>;
@@ -37,7 +43,11 @@ void main(void)
   vary_position = gpos4.xyz / gpos4.w;
   vary_normal = normal_matrix * normal;
   vary_tangent = normal_matrix * tangent;
-  vary_uvw = uvw;
+  <%if><%not><%eq><%opt/>0<%/><%/>
+    vary_uvw = position; // FIXME
+  <%else/>
+    vary_uvw = uvw;
+  <%/>
   vary_binormal = cross(vary_normal, vary_tangent);
   vary_uv_aabb = uv_aabb;
   <%if><%enable_shadowmapping/>
@@ -54,5 +64,11 @@ void main(void)
 	<%/>
       <%/>
     <%/>
+  <%/>
+  <%if><%not><%eq><%opt/>0<%/><%/>
+    vary_model_matrix = mm;
+    vary_position_local = position;
+//    vary_camera_local = camera * normal_matrix;
+//    vary_light_local = light * normal_matrix;
   <%/>
 }

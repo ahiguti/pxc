@@ -22,6 +22,11 @@ uniform float option_value;
 <%frag_in/> vec3 vary_binormal;
 <%frag_in/> vec3 vary_uvw;
 <%frag_in/> vec4 vary_uv_aabb;
+<%if><%not><%eq><%opt/>0<%/><%/>
+  uniform sampler3D sampler_voxpat;
+  <%frag_in/> mat4 vary_model_matrix;
+  <%frag_in/> vec3 vary_position_local;
+<%/>
 <%decl_fragcolor/>
 
 <%if><%enable_shadowmapping/>
@@ -91,10 +96,6 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta, inout vec4 dbg)
 	    // tilemap coordinate
     vec2 uv_tmfr = uv0 / tile_size - uv_tm;
 	    // coordinate inside a tile (0, 1)
-    <%if><%not><%eq><%opt/>0<%/><%/>
-      vec2 p = uv_tmfr - 0.5;
-      if (dot(p, p) < 0.125) { discard; }
-    <%/>
     vec2 uv_ti = uv_tmfr * tile_size;
     vec2 uvi = floor(uv_ti);
 	    // coordinate inside a tile, integral
@@ -114,6 +115,98 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta, inout vec4 dbg)
   }
 
 <%/> // enable_normalmapping
+
+<%if><%not><%eq><%opt/>0<%/><%/>
+
+  bool pos3_inside(in vec3 pos, in float mi, in float mx)
+  {
+    return pos.x >= mi && pos.y >= mi && pos.z >= mi &&
+      pos.x < mx && pos.y < mx && pos.z < mx;
+  }
+
+  bool pos2_inside(in vec2 pos, in float mi, in float mx)
+  {
+    return min(pos.x, pos.y) >= mi && max(pos.x, pos.y) < mx;
+  }
+
+  vec4 voxel_read(in vec3 pos, vec3 offset, float scale)
+  {
+    vec3 p = pos * scale + offset;
+    if (pos3_inside(p, 0.0, 1.0)) {
+//      if (dot(p, p) < 1.0) {
+//	return vec4(0.2, 0.1, 0.2, 1.0);
+//      } else {
+//	return vec4(0.0);
+//      }
+      return <%texture3d/>(sampler_voxpat, p);
+    } else {
+      return vec4(0.0);
+    }
+  }
+
+  vec3 voxel_next(in vec3 tsub, out vec3 tsub_next, in vec3 d)
+  {
+    vec3 r = vec3(0.0);
+    float dzpos = float(d.z > 0.0);
+    float nz = (dzpos - tsub.z) / d.z;
+    vec2 xy = tsub.xy + d.xy * nz;
+    if (d.z != 0.0 && pos2_inside(xy, 0.0, 1.0)) {
+      tsub_next = vec3(xy.x, xy.y, dzpos);
+      r.z = dzpos * 2.0 - 1.0;
+      return r;
+    }
+    float dxpos = float(d.x > 0.0);
+    float nx = (dxpos - tsub.x) / d.x;
+    vec2 yz = tsub.yz + d.yz * nx;
+    if (d.x != 0.0 && pos2_inside(yz, 0.0, 1.0)) {
+      tsub_next = vec3(dxpos, yz.x, yz.y);
+      r.x = dxpos * 2.0 - 1.0;
+      return r;
+    }
+    float dypos = float(d.y > 0.0);
+    float ny = (dypos - tsub.y) / d.y;
+    vec2 zx = tsub.zx + d.zx * ny;
+    tsub_next = vec3(zx.y, dypos, zx.x);
+    r.y = dypos * 2.0 - 1.0;
+    return r;
+  }
+
+  void voxel_loop(in vec3 pos, in vec3 camera_dir, in vec3 light_dir,
+    out vec3 nor, out vec4 col)
+  {
+    vec3 offset = vec3(0.0);
+    float voxel_size = 64.0;
+    float scale = 1.0 / voxel_size;
+    pos = (pos * 0.5 + 0.5) * voxel_size;
+    vec3 tpos = floor(pos);
+    vec3 tsub = pos - tpos;
+    vec3 tnext_diff = vec3(0.0);
+    col = vec4(0.0);
+    nor = vec3(0.0);
+    for (int i = 0; i < 256; ++i) {
+      tsub = clamp(tsub, 0.001, 0.999);
+      if (!pos3_inside(tpos + tsub, -3.0 * voxel_size, 3.0 * voxel_size)) {
+//	col = vec4(1.0, 1.0, 0.0, 1.0); // FIXME
+//	return; // FIXME
+	discard;
+      }
+      vec4 tval = voxel_read(tpos + tsub, offset, scale);
+      if (tval.a > 0.0) {
+	col = tval;
+	nor = -tnext_diff;
+//	col = vec4(1.0, 0.0, 1.0, 0.0); // FIXME
+	return;
+      }
+      vec3 tsub_next;
+      tnext_diff = voxel_next(tsub, tsub_next, camera_dir);
+      tsub = tsub_next;
+      tpos += tnext_diff;
+      tsub -= tnext_diff;
+    }
+    discard;
+  }
+
+<%/>
 
 <%if><%enable_parallax/>
 
@@ -158,38 +251,29 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta, inout vec4 dbg)
     return r;
   }
 
-  void parallax_warp(in vec3 dir, inout vec4 tval, inout vec2 tpos,
+  void parallax_move_zcrop(in vec3 dir, inout vec4 tval, inout vec2 tpos,
    inout vec3 tsub, inout vec4 dbg)
   {
     tsub.xy = clamp(tsub.xy, 0.001, 0.999);
-    <%if><%enable_macos_nvidia_wa/>
-      return;
-    <%/>
     dir /= max(abs(dir.x), abs(dir.y)); // FIXME: compute by caller?
       // W = unused(8), Z = depth(8), Y = CNN(4) CNP(4), X = CPN(4) CPP(4)
     float cvt = floor((dir.x > 0.0 ? tval.x : tval.y) * 255.0 + 0.5);
     float cval = dir.y > 0.0
       ? fract(cvt / 16.0) * 16.0
       : floor(cvt / 16.0);
-    cval = min(cval, (tval.z - tsub.z) / dir.z); // crop cval
-      // float dtb = distance_to_border(tpos + tsub.xy, dir * cval);
-      // if (!uv_inside_aabb(tpos + tsub.xy)) { dbg.g = 1.0; } // FIXME
-    if (!uv_inside_aabb(tpos + tsub.xy)) { return; } // FIXME
-      // if (dtb < 0.0) { dbg.b = 1.0; } // FIXME
-      // cval = clamp(cval, 0.0, dtb - 0.002);
-      // cval *= dtb;
-      // vec3 delta = dir * cval;
+    cval = min(cval, max(0.0, (tval.z - tsub.z - 0.001) / dir.z)); // crop cval
+    // if (cval > 3.0) { dbg.r = 1.0; } // FIXME
+    // cval = 0; // FIXME
+    // if (dir.x <= 0.0 && dir.y > 0.0) { cval = 0; } // FIXME
     vec3 delta = clamp_to_border(tpos + tsub.xy, dir * cval, dbg);
+    // vec3 delta = dir * cval; // FIXME
     vec2 npos = tpos + tsub.xy + delta.xy;
-      // if (!uv_inside_aabb(npos)) { dbg.g = 1.0; } // FIXME
-      // if (npos.x < 0.0 || npos.y < 0.0) {
-      //    dbg.rgb = vec3(1.0, 1.0, 1.0); } // FIXME
     tpos = floor(npos);
     tsub = vec3(npos - tpos, tsub.z + delta.z);
     parallax_read(tpos, tval);
   }
 
-  void parallax_warp2(in vec3 dir, inout vec4 tval, inout vec2 tpos,
+  void parallax_move_nozcrop(in vec3 dir, inout vec4 tval, inout vec2 tpos,
    inout vec3 tsub, inout vec4 dbg)
   {
     tsub.xy = clamp(tsub.xy, 0.001, 0.999);
@@ -198,16 +282,12 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta, inout vec4 dbg)
     float cval = dir.y > 0.0
       ? fract(cvt / 16.0) * 16.0
       : floor(cvt / 16.0);
-      // float dtb = distance_to_border(tpos + tsub.xy, dir * cval);
-      // if (!uv_inside_aabb(tpos + tsub.xy)) { return; } // FIXME
-      // if (dtb < 0.5) { dbg.g = 1.0; } // FIXME
-      // cval = clamp(cval, 0.0, dtb - 0.002);
-      // cval *= dtb;
-      // vec3 delta = dir * cval;
+    // if (cval > 3.0) { dbg.g = 1.0; } // FIXME
+    // cval = 0; // FIXME
+    // cval = max(0.0, cval - 0.1); // FIXME??
     vec3 delta = clamp_to_border(tpos + tsub.xy, dir * cval, dbg);
-      // dbg.r = 0.0; // FIXME
+    // vec3 delta = dir * cval; // FIXME
     vec2 npos = tpos + tsub.xy + delta.xy;
-      // if (!uv_inside_aabb(npos)) { dbg.g = 1.0; } // FIXME
     tpos = floor(npos);
     tsub = vec3(npos - tpos, tsub.z + delta.z);
     parallax_read(tpos, tval);
@@ -231,9 +311,10 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta, inout vec4 dbg)
     if (tval.z == 0.0) {
       return;
     }
+    vec2 tnext_diff = vec2(0.0, 0.0);
     for (int i = 0; i < 128; ++i) {
       vec3 tsub_next;
-      vec2 tnext_diff = parallax_next(tsub, tsub_next, tval.z, eye);
+      tnext_diff = parallax_next(tsub, tsub_next, tval.z, eye);
       if (tsub_next.z >= tval.z) { // horizontal surface
 	if (tsub_next.z > tsub.z) {
 	  float ra = (tval.z - tsub.z) / (tsub_next.z - tsub.z);
@@ -245,18 +326,25 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta, inout vec4 dbg)
       tsub = tsub_next;
       tpos += tnext_diff;
       tsub.xy -= tnext_diff;
-      parallax_read(tpos, tval);
+      parallax_move_zcrop(eye, tval, tpos, tsub, dbg);
       if (tval.z < tsub.z) { // vertical surface
 	vertical = true;
 	nor = vary_tangent * (-tnext_diff.x)
 	  + vary_binormal * (-tnext_diff.y);
 	break;
       }
-      parallax_warp(eye, tval, tpos, tsub, dbg);
+      // if (i > 32) { dbg.g = 1.0; }
     } // for (i)
     pos = (tpos + clamp(tsub.xy, 0.001, 0.999));
     z = tval.z;
     <%if><%enable_parallax_shadow/>
+      if (vertical) {
+	// move to the previous texel, which is not be filled
+	tpos -= tnext_diff;
+	tsub.xy += tnext_diff;
+	tsub.xy = clamp(tsub.xy, 0.001, 0.999);
+	parallax_read(tpos + tsub.xy, tval); // FIXME??
+      }
       if (light.z < 0.0) {
 	for (int i = 0; i < 128; ++i) {
 	  vec3 tsub_next;
@@ -267,12 +355,12 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta, inout vec4 dbg)
 	  tsub = tsub_next;
 	  tpos += tnext_diff;
 	  tsub.xy -= tnext_diff;
-	  parallax_read(tpos, tval);
+	  parallax_move_nozcrop(light, tval, tpos, tsub, dbg);
 	  if (tval.z < tsub.z) {
 	    shval = 0.0;
 	    break;
 	  }
-	  parallax_warp2(light, tval, tpos, tsub, dbg);
+	  // if (i > 32) { dbg.b = 1.0; }
 	} // for (i)
       } // if (light.z < 0.0)
     <%/>
@@ -340,8 +428,25 @@ void main(void)
   float para_zval = 0.0;
   bool vertical = false;
   vec4 tex_val = vec4(0.5, 0.5, 0.5, 1.0);
-  <%if><%enable_normalmapping/>
-    vec2 uv0 = vary_uvw.xy / vary_uvw.z;
+<%if><%not><%eq><%opt/>0<%/><%/>
+// FIXME
+<%/>
+  <%if><%not><%eq><%opt/>0<%/><%/>
+    <%if><%is_gl3_or_gles3/>
+      mat3 normal_matrix = mat3(vary_model_matrix);
+    <%else/>
+      mat4 mm = vary_model_matrix;
+      mat3 normal_matrix = mat3([0].xyz, mm[1].xyz, mm[2].xyz);
+    <%/>
+    vec3 camera_local = -camera_dir * normal_matrix;
+    vec3 light_local = light_dir * normal_matrix;
+    vec4 v_col;
+    voxel_loop(vary_position_local, camera_local, light_local, nor, v_col);
+    nor = normal_matrix * nor; // local to global
+    color += v_col;
+    // FIXME
+  <%elseif/><%enable_normalmapping/>
+    vec2 uv0 = vary_uvw.xy;
     <%if><%enable_parallax/>
       vec4 para_val;
       vec3 eye_tan = vec3( // eye vector, tangent space
@@ -375,13 +480,12 @@ void main(void)
       avol = (avol - 8.0) * distbr2 * 0.2;
       vec3 nor_delta = vary_tangent * ut1 * avol
 	+ vary_binormal * vt1 * avol;
-      <%if><%not><%eq><%opt/>0<%/><%/>
-	nor_delta *= is_front;
-      <%/>
       nor = normalize(nor + nor_delta);
     }
-  <%/> // enable_normalmapping
-  <%if><%enable_shadowmapping/>
+  <%else/>
+  //
+  <%/> // opt, enable_normalmapping
+  <%if><%and><%eq><%opt/>0<%/><%enable_shadowmapping/><%/>
     <%if><%light_fixed/>
       vec3 ndelta = vary_normal * ndelta_scale; // 0.02 / 40.
       vec3 prel = vary_position - camera_pos;
@@ -514,7 +618,7 @@ void main(void)
     lstr = clamp(dot(vary_normal, light_dir) * 4.0, 0.0, lstr);
     // lstr = clamp(dot(vary_normal, light_dir) * 32.0, 0.0, lstr);
     // lstr = min(lstr, float(dot(vary_normal, light_dir) > 0.0));
-  <%/> // enable_shadowmapping
+  <%/> // opt==0 enable_shadowmapping
   // fresnel
   // float cos_v_h = clamp(dot(camera_dir, half_l_v), 0.0, 1.0);
   float mate_alpha = 0.03;
@@ -551,5 +655,11 @@ void main(void)
   color.xyz += sqrt(mix(li2, li1, distbr));
   */
   color.xyz += sqrt(li1);
+<%if><%not><%eq><%opt/>0<%/><%/>
+// color.xyz = vary_uvw;
+// color.xyz = vec3(1.0, 0.0, 0.0);
+// FIXME
+<%/>
   <%fragcolor/> = color;
 }
+

@@ -82,20 +82,26 @@ private function int set_swap_interval(int vsync)
 }
 
 struct
-framerate_control(int vsync0)
+framerate_control(int vsync0, double max_fps0, int frame_sleep0)
 {
   public int mutable vsync = vsync0;
-  public int mutable swap_interval = set_swap_interval(vsync0);
+  public int mutable swap_interval = set_swap_interval(vsync0 > 0 ? 1 : 0);
+  public int frame_sleep = frame_sleep0;
   public ulonglong time_prev = io::system.high_resolution_timer();
   public ulonglong time_den = io::system.high_resolution_timer_frequency();
+  public ulonglong time_before_swapwindow
+    = io::system.high_resolution_timer_frequency();
   public double sleep_carry = 0.0;
-  public double max_fps = 60.0;
+  public double max_fps = max_fps0;
   public double target_interval = 1.0 / max_fps;
+  public double prev_interval = 1.0 / max_fps;
+  public double prev_sw = 1.0 / max_fps;
   public float frame_speed_mul = 1.0;
   public function void start()
   {
     target_interval = 1.0 / max_fps;
     time_prev = io::system.high_resolution_timer();
+    sdllog("maxfps=", max_fps);
   }
   public function void toggle_vsync()
   {
@@ -112,7 +118,13 @@ framerate_control(int vsync0)
   {
     const time_now = io::system.high_resolution_timer();
     const cur_interval = time_subtract_sec(time_now, time_prev);
-    if (target_interval > cur_interval) {
+    const cur_sw = time_subtract_sec(time_now, time_before_swapwindow);
+    time_prev = time_now;
+    const est_interval = (prev_interval + cur_interval) * 0.5;
+    const est_sw = (prev_sw + cur_sw) * 0.5;
+    prev_interval = cur_interval;
+    prev_sw = cur_sw;
+    if (target_interval > est_sw) {
       mutable tfr = 1.0 / target_interval;
       double inc = 1.0; // increase 1.0 fps per sec
       if (tfr < 28.0 || tfr > 35.0) {
@@ -123,20 +135,28 @@ framerate_control(int vsync0)
       target_interval = 1.0 / tfr;
       //sdllog("tfr", tfr, sleep_carry);
     } else {
-      target_interval = cur_interval;
+      target_interval = max(est_sw, 1.0 / max_fps);
     }
-    const sleep_sec = target_interval - cur_interval + sleep_carry;
+    // sdllog("ci,pi,ti", cur_interval, prev_interval, target_interval);
+    const sleep_sec = target_interval - cur_sw + sleep_carry;
     //const sleep_sec = target_interval - cur_interval;
-    //sdllog("tgt", target_interval, "cur", cur_interval, "sl", sleep_sec);
-    if (sleep_sec > 0.002 && target_interval > 0.02) {
+    if (frame_sleep != 0 && sleep_sec > 0.002 && target_interval > 0.02) {
       const ss = sleep_sec;
       io::system.usleep(static_cast{uint}((ss - 0.002) * 1000000.0));
+      // sdllog("sleep", ss, target_interval);
     }
-    const time_before_swapwindow = io::system.high_resolution_timer();
+    time_before_swapwindow = io::system.high_resolution_timer();
     const slept = time_subtract_sec(time_before_swapwindow, time_now);
     sleep_carry = max(min(sleep_sec - slept, 0.01), -0.01);
-    time_prev = time_before_swapwindow;
-    frame_speed_mul = static_cast{float}(target_interval * 60.0);
+    // time_prev = time_before_swapwindow;
+    if (frame_sleep != 0) {
+      frame_speed_mul = static_cast{float}(target_interval * 60.0);
+    } else {
+      frame_speed_mul = static_cast{float}(
+	min(cur_interval, est_interval) * 60.0);
+    }
+    // sdllog("tgt", target_interval, "cur", cur_interval, "sl",
+    //   sleep_sec, "est", est_interval, "mu", frame_speed_mul);
   }
 }
 
@@ -146,7 +166,7 @@ framerate_control(int vsync0)
 {
   public bool const vsync_adaptive = vsync0 > 1;
   public int vsync = vsync0 > 0 ? 1 : 0;
-  public int swap_interval = set_swap_interval(vsync0);
+  public int swap_interval = set_swap_interval(vsync);
   public ulonglong const timer_res
     = io::system.high_resolution_timer_frequency();
   public double const timer_res_inv = 1.0 / static_cast{double}(timer_res);
@@ -238,7 +258,9 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
   private size_t saved_stat_num_objects;
   private projection_info cam_drawing_frame;
   private frame_statistics mutable fr;
-  private framerate_control mutable frctl = framerate_control(sdlc.vsync);
+  private framerate_control mutable frctl = framerate_control(sdlc.vsync,
+    conf.get("fps", 60.0, 1.0, 3600.0),
+    conf.get("frame_sleep", 1, 0, 1));
   private string_map commands;
   private int fullscreen = 0;
   private bool done = false;
@@ -460,7 +482,7 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
       /* draw frame */
       varray{uint} tick_draw;
       tick_draw = pgs.draw_frame(local_whole_instances, cam_drawing_frame);
-      if (tick_draw.size() > 2) {
+      if (tick_draw.size() >= 2) {
 	fr.save_ticks(2, tick_draw[0]);
 	fr.save_ticks(3, tick_draw[1]);
       } else {

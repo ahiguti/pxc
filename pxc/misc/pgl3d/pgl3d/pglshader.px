@@ -200,7 +200,7 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
   {
     joint_id_type scene_id;
     for (const i, const& bo: vertex_buffers) {
-      // sub_drawer bo_id must not used for joint_id
+      // sub-drawer bo_id must not used for joint_id
       if (!bo->is_sub_drawer && bo->has_name(name)) {
         scene_id.bo_id = static_cast{bo_id_t}(i);
         scene_id.vs_id = bo->get_id_by_name(name);
@@ -209,11 +209,26 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
     }
     return scene_id;
   }
-  public function cptr{vertices} get_vertices(cstrref const& name) const
+  public function cptr{vertices} get_nonempty_vertices(cstrref const& name)
+    const
   {
+    joint_id_type scene_id;
+    for (const i, const& bo: vertex_buffers) {
+      // allow sub-drawer bo_id
+      if (bo->has_name(name)) {
+        scene_id.bo_id = static_cast{bo_id_t}(i);
+        scene_id.vs_id = bo->get_id_by_name(name);
+	if (!vertex_buffers[scene_id.bo_id]->get_vertices(scene_id.vs_id)
+	    ->vertex_values.empty()) {
+	  break;
+	}
+      }
+    }
+    /*
     joint_id_type jid = find_joint_id_by_name(name);
-    return vertex_buffers[jid.bo_id]
-      ->get_vertices(jid.vs_id);
+    */
+    return vertex_buffers[scene_id.bo_id]
+      ->get_vertices(scene_id.vs_id);
   }
   public function joint_id_type get_joint_id(cstrref const& name) const {
     return find_joint_id_by_name(name);
@@ -310,10 +325,9 @@ pglshader_draw_frame(pglshader mutable& pgs,
 {
   const& bos = pgs.vertex_buffers;
   /* prepare instance data */
-  const tick1 = SDL_GetTicks();
   pgs.agg_ibuffer.frame_begin(whole_instances,
       pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
-  const tick2 = SDL_GetTicks();
+  const tick1 = SDL_GetTicks();
   /* shadowmapping shader */
   darrayst{GLuint} smtex_arr = darrayst{GLuint}(pgs.sfbo_array.size(), 0U);
   for (size_t iter: 0 .. pgs.sfbo_array.size()) {
@@ -394,6 +408,7 @@ pglshader_draw_frame(pglshader mutable& pgs,
 	bo_id, pgs.glc, cam_df, smtex_arr);
     }
   }
+  const tick2 = SDL_GetTicks();
   /* main */
   {
     glDisable(GL_BLEND);

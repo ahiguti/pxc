@@ -2,7 +2,9 @@
 ---------------------------------------------------------------------------
 TODO
 
-- シェーダ用テンプレートエンジン
+- sub-drawerの頂点データを作るとdrawer
+
+- シェーダ用テンプレートエンジン(done)
 
 - distance_to_boundary: 4方向の距離を正しく
 
@@ -1056,4 +1058,321 @@ stempl bind文、set文
 
 closureを許可すると循環参照作れてしまうので、コンテキストは
 グローバルとローカルだけにするか
+
+---------------------------------------------------------------------------
+
+parallax_next: 次に接触するのがxyzどの方向かを返す。テクスチャ読まない。
+parallax_read: テクスチャを読む。
+parallax_warp: 
+
+parallax_read();
+for {
+  parallax_next() 次にどの方向へ移動するか決める
+  if (tsub_next.z >= tval.z) { break; } 先にz方向に接触(テクセル水平面)
+  tsub, tpos更新
+  parallax_read() 移動先のテクセルを読む
+  if (tval.z < tsub.z) { break; } xy方向に接触(垂直面)
+  parallax_warp() clearanceを見て複数テクセル移動
+}
+
+parallax_read()
+for {
+  parallax_next() 次の隣接テクセルを決める
+  if (tsub_next.z >= tval.z) { break; } 先にz方向に接触(テクセル水平面)
+  parallax_warp() 接触しない範囲で可能なら複数テクセル移動 readは止める
+  parallax_read() 移動先のテクセルを読む
+  if (tval.z < tsub.z) { break; } xy方向に接触(垂直面)
+}
+
+垂直壁のとき、影判定の始点は、最後の移動方向の反対向きのテクセルへ
+移動したうえでtsubをclampする
+
+---------------------------------------------------------------------------
+voxel
+
+voxel_read()
+if (すでに接触) { return; }
+for {
+  voxel_next() 次の隣接ボクセルを決める
+  移動
+  voxel_read()
+  if (接触) { break; }
+}
+
+隣接するvoxelのどの方向に移動するか決める
+vec3 voxel_next(in vec3 tsub, out vec3 tsub_next, in vec3 d)
+{
+  vec3 r = vec3(0.0, 0.0, 0.0);
+  float dzpos = float(d.z > 0.0);
+  float nz = (dzpos - tsub.z) / d.z;
+  vec2 xy = tsub.xy + d.xy * nz;
+  if (d.z != 0.0 && in_01(xy)) {
+    tsub_next = vec3(xy.x, xy.y, dzpos);
+    r.z = dzpos * 2.0 - 1.0;
+  }
+  float dxpos = float(d.x > 0.0);
+  float nx = (dxpos - tsub.x) / d.x;
+  vec2 yz = tsub.yz + d.yz * nx;
+  if (d.x != 0.0 && in_01(yz)) {
+    tsub_next = vec3(dxpos, yz.x, yz.y);
+    r.x = dxpos * 2.0 - 1.0;
+  }
+  float dypos = float(d.y > 0.0);
+  float ny = (dypos - tsub.y) / d.y;
+  vec2 zx = tsub.zx + d.zx * ny;
+  tsub_next = vec3(zx.y, dypos, zx.x);
+  r.y = dypos * 2.0 - 1.0;
+}
+
+bool in_01(in vec2 v)
+{
+  // return v.x > 0.0 && v.y > 0.0 && v.x < 1.0 && v.y < 1.0;
+  return min(v.x, v.y) > 0.0 && max(v.x, v.y) < 1.0;
+}
+
+z=1またはz=0と接触する位置を計算
+  tz = d.z > 0.0 ? 1.0 : 0.0
+  tsub + n * d == (px, py, tz)
+  tsub.z + n * d.z == tz
+  n == (tz - tsub.z) / d.z
+  >> p.xy = tsub.xy + d.xy * (tz - tsub.z) / d.z
+p.xyが(0,1)内であればz方向に移動する。return。
+同様にxとyについても接触位置を計算する
+
+最小ブロック 8*8*8 最低64byte必要
+4096*4096の、およそ平らな物体であれば 64*64*2 = 8192 ブロック程度必要。
+  重複パタンが無いとすると 64 * 8192 = 524288 byte
+  タイルid 32bitとすると タイルデータは 64*64*2*4 = 32768 byte
+  (8*8*8ブロック、32bitタイルで16倍の圧縮率)
+4096*4096*4096 の物体、非重複 8192ブロックであればタイルデータ 1048576 byte
+  タイルデータ1mb パターン512k
+ブロック 8*8*8 = 512 色と法線で8byte 4096byte / ブロック
+  8192ブロックで32Mb
+ブロック 8*8*8 = 512 色と法線は平面なら 512byteですむ
+  8192ブロックで4Mb
+
+手順と変更箇所
+sampler_dpat, sampler_pmpat, sampler_tilemapはとりあえず使わない
+sampler_voxpatを用意。とりあえずRGB色をいれておく。
+  64*64*64くらいの3dテクスチャを作る。
+trianglesのopt=1を使う
+enable_normalmappingとenable_shadowmappingのブロックのあたり
+頂点シェーダでvary_uvwにローカル座標系での頂点座標を渡す(positionそのまま?)
+normal, tangent, binormalは接空間ではなくローカル座標系
+
+必要なもの
+- グローバル座標をローカル座標に変換する行列(モデル行列の逆行列)
+  ライトとカメラの向きをローカル座標に変換したものを頂点シェーダで計算
+- 3dテクスチャ
+
+---------------------------------------------------------------------------
+八分木探索
+
+多重タイル化と比較するべし
+ノードは8テクセルからなる。あるいは64=4*4*4、512=8*8*8などでもよいかも
+ノードには葉フラグ、節なら子ポインタなど、葉なら色など
+256*256*256の3dテクスチャRGBAなら16Mb
+RGBA32Fのほうがよいかも
+テクスチャは1次元でもよいかも
+
+根となるテクスチャ位置を渡す。
+現在位置を8分割のうちのどれかをしらべ、テクスチャを読む
+  葉ならば空白かどうか調べ、そうでないなら終了
+  空白ならば次の隣接ポイントを計算
+    それがブロックの外側ならば親に戻る
+    そうでないならそこへ移動
+  節なら子テクスチャのオフセットをしらべ、そこへ移動
+
+GLSLで実装するために、再帰の上限を決めてループに直す必要あり。
+各レベルにおいてどの枝にいるのかを表す値を配列で持つ
+  vec3 texpos[32];
+    整数値を取る。テクスチャ座標(をテクスチャのサイズで乗じたもの)。
+    xyz座標をそれぞれ2(64分木なら4)で割った余りがブロック内位置になる。
+  int level;
+    再帰のレベル。texpos[level未満]が使われる。
+  vec3 curtex;
+    現在見ているブロックのテクスチャ座標。2の倍数しかとらない。
+    (64分木なら4の倍数)
+  vec3 curpos_i;
+  vec3 curpos_f;
+    現在見ているブロック内位置の整数部と小数部。整数部は0,1しかとらない。
+    (64分木なら0,1,2,3)
+
+出発点となる座標を(0,1)値で与える。 curpos_i, curpos_fにセット。
+出発点となるブロックをテクスチャ座標(テクスチャサイズを乗じたもの)で与える。
+curtexにセット。
+while (true) {
+  テクスチャを読む。位置はcurtex + curpos_i(をテクスチャサイズで割ったもの)。
+  if (葉) {
+    色がついていればbreak。
+    次の隣接ポイントを計算。
+    while (true) {
+      if (ブロックの外側) {
+	親がなければ外側ループをbreak;
+	texpos[]をpop。
+	親の位置を計算しそこへ移動。
+      } else {
+	その隣接ポイントへ移動。
+	break;
+      }
+    }
+  } else {
+    現在の curtex + curpos_i を texpos[]へpush。
+    子の位置を読んだテクスチャから求め、その位置へ移動。
+  }
+}
+
+bool raycast_octree(inout vec3 pos, in vec3 roottexpos, in vec3 ray,
+  out vec4 value_r, out vec3 dir_r)
+{
+  const float texture_size = 64.0;
+  const float texture_scale = 1.0 / texture_size;
+  const int level_max = 32;
+  vec3 texpos_arr[level_max];
+    // 整数値を取る。テクスチャ座標(をテクスチャのサイズで乗じたもの)。
+    // xyz座標をそれぞれ2で割った余りがブロック内位置になる。
+  int level = 0;
+    // 再帰レベル
+  vec3 curpos_t = roottexpos;
+    // 現在見ているブロックのテクスチャ座標。2の倍数しかとらない。
+  vec3 curpos_i = floor(pos * 2.0);
+  vec3 curpos_f = (pos * 2.0) - curpos_i;
+    // 現在見ているブロック内位置の整数部と小数部。整数部は0,1しかとらない。
+  vec4 value;
+  vec3 dir = vec3(0.0); // 最初の位置が接触していれば0をそのまま返す
+  int i;
+  for (i = 0; i < 65535; ++i) {
+    value = voxel_read((curpos_t + curpos_i) * texture_scale);
+    int node_type = int(value.a * 255.0 + 0.5);
+    if (node_type > 1) { // 色のついた葉
+      while (level > 0) {
+	--level;
+	vec3 parent = texpos_arr[level];
+	curpos_f = (curpos_i + curpos_f) * 0.5;
+	curpos_t = floor(parent * 0.5) * 2.0;
+	curpos_i = parent - curpos_t;
+      }
+      break;
+    }
+    if (node_type == 0) { // 空白
+      curpos_f = clamp(curpos_f, 0.001, 0.999);
+      dir = voxel_move(curpos_f, ray); // updates curpos_f
+      int j;
+      while (true) {
+	vec3 curpos_i_next = curpos_i + dir;
+	if (inside(curpos_i_next, 0.0, 1.0)) {
+	  curpos_i = curpos_i_next;
+	  break;
+	}
+	--level;
+	if (level < 0) {
+	  break;
+	}
+	vec3 parent = texpos_arr[level];
+	curpos_f = (curpos_i + curpos_f) * 0.5;
+	curpos_t = floor(parent * 0.5) * 2.0;
+	curpos_i = parent - curpos_t;
+      }
+      if (level < 0) {
+	break;
+      }
+      curpos_i_next += dir;
+      curpos_f -= dir;
+    } else { // 節 node_type == 1
+      texpos_arr[level] = curpos_t + curpos_i;
+      ++level;
+      curpos_t = floor(value.xyz * 255.0 + 0.5) * 2.0;
+      curpos_i = floor(curpos_f * 2.0);
+      curpos_f = (curpos_f * 2.0) - curpos_i;
+    }
+  }
+  pos = (curpos_i + curpos_f) * 0.5;
+  if (i >= 65536 || level < 0 || level >= level_max) {
+    value_r = vec(0.0);
+    dir_r = vec(0.0);
+    return false;
+  }
+  value_r = value;
+  dir_r = dir;
+  return true;
+}
+
+---------------------------------------------------------------------------
+八分木構築
+
+metafunction node_value farray{uint, 8};
+
+2n*2n*2nサイズの3次元配列。各要素に色(RGBA)。これが最小レベル。
+
+make_octree_one_level()
+  2n*2n*2nサイズのuintの配列を引数に取る
+  n*n*nサイズのuintの配列と不定サイズのnode_valueの配列を返す
+  tree_map{node_value, uint} nodeset;
+  for x, for y, for z
+    8テクセルを読んでnode_valueを作り、それがnodesetに入っているか調べ、
+    入っていればその値、そうでないなら新しい値を割り当ててその値をえる。
+    得た値がlocal idになる。
+  このlocal idの配列が返値1、nodesetのキーをid順に並べたものを返値2。
+
+最小のレベルをmake_octree_one_levelに適用し、その返値1が次のレベルとなる。
+返値1が1*1*1サイズであるようなものまで適用したら終了。
+
+各レベルの返値2のそれぞれについて、葉となるかどうか調べる。
+  葉となる条件は、node_valueが8つとも同じ値を持っていて、かつその値(次に
+  小さいレベルの返値2のインデックス)を引いた結果が葉となること。最小レベ
+  ルの返値2が葉となる条件は、node_valueが8つとも同じ値を持っていること。
+葉ならばその色(空白ならa=0,そうでないならa=1)を記録。
+各レベルの返値2のそれぞれについて、葉でないならoctnodeを一つ割り当てる。
+ただし根レベルでは葉であってもoctnodeを一つ割りあてる。octnode idが0。
+(テクスチャ全体が同じ値を持つような場合に根レベルが葉になる)
+(octnode割り当ては根レベルから順にやる)
+octnode idの大きさのnode_value配列を作る。
+各octnodeについて、node_value配列のoctnode idの位置を埋める。
+値は、返値2エントリの以下のもの。
+  - 葉ならばその値
+  - そうでないならnode_value値をlocal idからoctnode idに変換したもの。
+
+struct node_entry {
+  node_value nvalue;
+  uint leaf;
+  uint octnode_id;
+}
+
+struct level_data {
+  size_t size;              // power of 2
+  varray{uint} values;      // size*size*size
+  varray{node_entry} nodes; // variable length
+}
+
+function void
+make_octree_one_level(level_data mutable& olevel, level_data const& clevel)
+{
+  const sz2 = clevel.size;
+  const sz = sz2 / 2;
+  olevel.size = sz;
+  olevel.values.resize(sz * sz * sz, 0);
+  tree_map{node_value, uint} nodeset;
+  uint local_id = 0;
+  for (const x: 0 .. sz) { for (const y: 0 .. sz) { for (const z: 0 .. sz) {
+    node_value nvalue;
+    for (const xi: 0 .. 1) { for (const yi: 0 .. 1) { for (const zi: 0 .. 1) {
+      nvalue[zi * 4 + yi + 2 + xi] =
+	ilevel.values[
+	  (z * 2 + zi) * sz * sz +
+	  (y * 2 + yi) * sz +
+	  (x * 2 + xi)];
+    } } }
+    if (const& m: nodeset[nvalue]) {
+      nodeset[nvalue] = local_id;
+      olevel.values[(z * sz + y) * sz + x] = local_id;
+      ++local_id;
+    } else {
+      olevel.values[(z * sz + y) * sz + x] = m;
+    }
+  } } }
+  olevel.nodes.resize(local_id, node_entry());
+  for (const& k, const& m: nodeset) {
+    olevel.nodes[m].nvalue = k;
+  }
+}
 
