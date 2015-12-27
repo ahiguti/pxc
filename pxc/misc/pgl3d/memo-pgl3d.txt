@@ -2,6 +2,13 @@
 ---------------------------------------------------------------------------
 TODO
 
+- 元絵の仮想サイズがbshiftに制限されないように
+  - 元絵をpixmapではなく関数として渡すようにする
+  - 初期ノードの全体ではなく一部の領域だけを貼り付けられるようにする。
+- nodesのサイズをxyzそれぞれ異なる値を取れるように(done)
+- boxを拡大
+- 4096*4096*4096試してみる
+
 - sub-drawerの頂点データを作るとdrawer
 
 - シェーダ用テンプレートエンジン(done)
@@ -1300,21 +1307,83 @@ bool raycast_octree(inout vec3 pos, in vec3 roottexpos, in vec3 ray,
 ---------------------------------------------------------------------------
 八分木構築
 
-metafunction node_value farray{uint, 8};
+metafunction texel_value distinct_integral{uint};
+metafunction node_value farray{texel_value, 8};
 
-2n*2n*2nサイズの3次元配列。各要素に色(RGBA)。これが最小レベル。
+texel_value: 0x01000000のビットが立っていればノード参照
+
+struct level_data {
+  size_t size;                  // must be a power of 2
+  varray{texel_value} values;   // size*size*size
+  uint octnode_id_base;         // nodesの最初のエントリのoctnode_id
+  varray{node_value} nodes;     // variable length
+}
+
+末端レベル
+  valuesの各要素に色(RGBA)。
+  level_dataのvaluesにそれを入れる。nodesは空。
+  octnode_id_baseは0。
 
 make_octree_one_level()
-  2n*2n*2nサイズのuintの配列を引数に取る
-  n*n*nサイズのuintの配列と不定サイズのnode_valueの配列を返す
-  tree_map{node_value, uint} nodeset;
+  入力と出力level_dataを引数に取る。ilevel, olevel。
+  最初のoctnode_idを引数に取る。使ったぶんだけ加えて返値にする。
+  octnode_id_cur;
+  tree_map{node_value, texel_value} nodeset; // mappedは常にノード参照
   for x, for y, for z
-    8テクセルを読んでnode_valueを作り、それがnodesetに入っているか調べ、
-    入っていればその値、そうでないなら新しい値を割り当ててその値をえる。
-    得た値がlocal idになる。
-  このlocal idの配列が返値1、nodesetのキーをid順に並べたものを返値2。
+    8テクセルを読む。
+    もし8つとも同じ値であってその値が葉ならば、valueはその値。
+      (ただし根レベルの時は例外で、葉にはしない)
+    そうでないなら、8テクセルを読んでnode_valueを作り、それがnodesetに
+    入っているか調べ、入っていればそのmapped値、そうでないなら新しい
+    octnode_idをnodesetに入れ、そのoctnode_id値をvalueとする。
+    valueをolevel.values[x,y,z]にセット。
 
-最小のレベルをmake_octree_one_levelに適用し、その返値1が次のレベルとなる。
+octreeデータ作成
+  一次元テクスチャ
+  octnode_id_curの値 * 8がテクセルの数になるのでその大きさにリサイズ
+  全レベルについて、nodesの値
+
+make_octree_one_level(uint mutable& octnode_id_cur, level_data mutable& olevel,
+  level_data const& ilevel)
+{
+  const sz2 = ilevel.size;
+  const sz = sz2 / 2;
+  olevel.size = sz;
+  olevel.values.resize(sz * sz * sz, 0);
+  olevel.octnode_id_base = octnode_id_cur;
+  tree_map{node_value, uint} nodeset;
+  for (const x: 0 .. sz) { for (const y: 0 .. sz) { for (const z: 0 .. sz) {
+    node_value nvalue;
+    for (const xi: 0 .. 1) { for (const yi: 0 .. 1) { for (const zi: 0 .. 1) {
+      nvalue[zi * 4 + yi + 2 + xi] =
+	ilevel.values[
+	  (z * 2 + zi) * sz * sz +
+	  (y * 2 + yi) * sz +
+	  (x * 2 + xi)];
+    } } }
+    texel_value tvalue;
+    if (sz != 1 && is_leaf_value(nvalue)) {
+      tvalue = nvalue[0];
+    } else if (const& m: nodeset[nvalue]) {
+      tvalue = m;
+    } else {
+      nodeset[nvalue] = octnode_id_cur;
+      tvalue = octnode_id_cur | 0x01000000U;
+      ++octnode_id_cur;
+    }
+    olevel.values[(z * sz + y) * sz + x] = tvalue;
+  } } }
+  const id_base = olevel.octnode_id_base;
+  olevel.nodes.resize(octnode_id_cur - id_base, node_entry());
+  for (const& k, const& m: nodeset) {
+    olevel.nodes[m - id_base] = k;
+  }
+}
+
+----
+old
+
+非圧縮レベルをmake_octree_one_levelに適用し、その返値1が次のレベルとなる。
 返値1が1*1*1サイズであるようなものまで適用したら終了。
 
 各レベルの返値2のそれぞれについて、葉となるかどうか調べる。
@@ -1332,22 +1401,10 @@ octnode idの大きさのnode_value配列を作る。
   - 葉ならばその値
   - そうでないならnode_value値をlocal idからoctnode idに変換したもの。
 
-struct node_entry {
-  node_value nvalue;
-  uint leaf;
-  uint octnode_id;
-}
-
-struct level_data {
-  size_t size;              // power of 2
-  varray{uint} values;      // size*size*size
-  varray{node_entry} nodes; // variable length
-}
-
 function void
-make_octree_one_level(level_data mutable& olevel, level_data const& clevel)
+make_octree_one_level(level_data mutable& olevel, level_data const& ilevel)
 {
-  const sz2 = clevel.size;
+  const sz2 = ilevel.size;
   const sz = sz2 / 2;
   olevel.size = sz;
   olevel.values.resize(sz * sz * sz, 0);
@@ -1375,4 +1432,171 @@ make_octree_one_level(level_data mutable& olevel, level_data const& clevel)
     olevel.nodes[m].nvalue = k;
   }
 }
+
+---------------------------------------------------------------------------
+八分木構築retry
+
+非圧縮レベル: 2*2*2テクセルの値をキーにして、同じ値を持つものを
+
+metafunction node_value farray{uint, 8};
+tree_map{node_value, uint} nodeset;
+
+struct texel_value {
+  bool is_reference;
+  uint value; // is_referenceなら参照先のoctnode_id、そうでないなら色
+}
+
+---------------------------------------------------------------------------
+八分木の一次元テクスチャ化
+
+とりあえずRGBAのまま一次元化する。あとで小さくする。
+大きくできなくて困る。
+ループ回数を見てみる
+
+---------------------------------------------------------------------------
+4*4*4分木
+
+4*4*4分木などにすると元絵のサイズに制約が出る。
+2^(n*3)分木ならば元絵の幅のlog2がnの倍数でなければならない。
+4*4*4分木ならば元絵の幅のlog2が2の倍数でなければならない。
+元絵を2倍等すればいい。そうすれば元絵の幅は2の冪であればよい。
+-> だめ。データが無駄に大きくなる。
+
+---------------------------------------------------------------------------
+空白長さ
+
+ブロック内各ボクセルについて、隣接空白の範囲を長方形で。
+長方形の取りかたは複数ありうる。
+最長の軸を優先方式:
+- xyz正負それぞれの方向で空白の長さを調べ、最長のものを基準とする。
+- xが最長だったとする。
+- 確保したxの範囲でxy最長の空白の長さを調べ、長いほうを基準とする。
+- yが長かったとする。
+- 確保したxyの範囲でz最長の空白の長さを調べる。
+最短距離優先方式:
+- xを正方向に一つ伸ばす
+- xを負方向に一つ伸ばす
+- yとzについても同じく
+
+
+---------------------------------------------------------------------------
+sponge問題
+
+octree_bshift 1;      2*2*2 = 8分木
+octree_size_l2 4;     16*16*16 = 4096ノード
+
+block_factor = 2;
+texture_size = 16 * block_factor;
+
+prepare_texture_data_3d(7u); 128*128*128 ボクセル
+convert_to_octree{1}(4); 8分木 4096ノード
+
+convert_to_texture{1}(4)
+sz_l2 = 7のはず。
+sz = 128のはず
+rsz = 16のはず
+rsz2_l2 = 5
+rsz2 = 32のはず
+rtd->width = 32 16*16*16ノード、32*32*32ボクセル
+data = 32768 あってる
+nodes = 4546
+16*16*16 = 4096ノードまでしか格納できないのであふれる
+
+意図的に壊してフラクタルにするなら特定ノードまでで剰余を取るのがよい。
+
+---------------------------------------------------------------------------
+距離埋め込み
+
+16*16*16 又は 8*8*8
+a==0のとき空白
+空白のときはrgb値には周辺の空白のaabb min/maxを書き込む。
+上位4bitが-aabb_min, 下位4bitがaabb_max-1。最大16voxelまでしかskipできない。
+
+vec3 voxel_next(inout vec3 curpos_i, inout vec3 curpos_f, in vec3 aabb_min,
+ in vec3 aabb_max, in vec3 ray)
+aabb_min, aabb_maxは最短で(0,0), (1,1)、最長になる
+
+変更前:
+float dzpos = float(d.z > 0.0);
+float nz = (dzpos - tsub.z) / d.z;
+vec2 xy = tsub.xy + d.xy * nz;
+if (d.z != 0.0 && pos2_inside(xy, 0.0, 1.0)) {
+  tsub = vec3(xy.x, xy.y, dzpos);
+  r.z = dzpos * 2.0 - 1.0;
+  return r;
+}
+
+変更後:
+aabb_min += 0.001;  truncしたときに小数部がギリギリ境界手前になるように
+aabb_max -= 0.001;
+float dzpos = d.z > 0.0 ? aabb_max.z : aabb_min.z;
+// float zdelta = dzpos - tsub.z;
+// vec2 xydelta = d.xy * nz / d.z;
+vec3 delta = vec3(d.xy * nz / d.z, dzpos - tsub.z);
+if (d.z != 0.0 && pos2_inside(tsub.xy + delta.xy, aabb_min.xy, aabb_max.xy)) {
+  vec3 diff_i = trunc(delta); // 0方向に切り捨て。GLSL1.2では使えない。
+  tval += diff_i;
+  tsub += delta - diff_i;
+  r.z = d.z > 0.0 ? 1.0 : -1.0;
+}
+
+変更前:
+if (node_type == 0) { // 空白
+  curpos_f = clamp(curpos_f, 0.001, 0.999);
+  dir = voxel_next(curpos_f, ray);
+  while (true) {
+    if (pos3_inside(curpos_i + dir, -0.5, block_factor - 0.5)) {
+      break;
+    }
+    --level;
+    if (level < 0) {
+      break;
+    }
+    curpos_f = (curpos_i + curpos_f) * block_scale;
+    vec3 parent = texpos_arr[level];
+    curpos_t = floor(parent * block_scale) * block_factor;
+    curpos_i = parent - curpos_t;
+    // decode_coord(texpos_arr[level], curpos_t, curpos_i);
+  }
+  if (level < 0) {
+    break;
+  }
+  curpos_i += dir;
+  curpos_f -= dir;
+} else { // 節 node_type == 1
+
+変更後:
+if (node_type == 0) { // 空白
+  curpos_f = clamp(curpos_f, 0.001, 0.999);
+  vec3 distval = floor(value.xyz * 255.0 + 0.5);
+  vec3 dist_p = floor(distval.xyz / 16.0);
+  vec3 dist_n = distval.xyz  - dist_p * 16.0;
+  dir = voxel_next(curpos_i, curpos_f, 0.0001 - dist_n, 0.9999 + dist_p, ray);
+  while (true) {
+    if (pos3_inside(curpos_i + dir, -0.5, block_factor - 0.5)) {
+      break;
+    }
+    --level;
+    if (level < 0) {
+      break;
+    }
+    curpos_f = (curpos_i + curpos_f) * block_scale;
+    vec3 parent = texpos_arr[level];
+    curpos_t = floor(parent * block_scale) * block_factor;
+    curpos_i = parent - curpos_t;
+    // decode_coord(texpos_arr[level], curpos_t, curpos_i);
+  }
+  if (level < 0) {
+    break;
+  }
+  curpos_i += dir;
+  curpos_f -= dir;
+} else { // 節 node_type == 1
+
+---------------------------------------------------------------------------
+nodesのサイズ
+
+nodesのサイズより小さくない最小の2の冪を計算。
+9ならばw,h,d=3,3,3
+3で割ってw,h,dをその値に。割った余りはdに加える。
 

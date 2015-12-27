@@ -20,6 +20,8 @@ public import pgl3d::pglbase -;
 public import pgl3d::intern_pool -;
 public import pgl3d::shader_config -;
 public import pgl3d::aggregated_ibuffer -;
+public import pgl3d::pglcommon -;
+public import pgl3d::voxel_octree -;
 
 public struct texture_data()
 {
@@ -421,11 +423,15 @@ function void set_gl_texture(texture_data mutable& td, gl_texture mutable& ti,
     if (sdl_byteorder() != sdl_lil_endian()) {
       throw runtime_error_template{"set_gl_texture"}("");
     }
-    if (target == GL_TEXTURE_3D || target == GL_PROXY_TEXTURE_3D) {
-debug_log("3dtex", tex_w, tex_h, tex_d);
+    if (target == GL_TEXTURE_3D ) {
+      // debug_log("3dtex", tex_w, tex_h, tex_d);
       glTexImage3D(target, mipmap_level, cast_int(mode),
 	cast_int(tex_w), cast_int(tex_h), cast_int(tex_d),
 	0, mode, GL_UNSIGNED_BYTE, uibuf.to_crawptr().to_cvoidptr());
+    } else if (target == GL_TEXTURE_1D) {
+      glTexImage1D(target, mipmap_level, cast_int(mode),
+	cast_int(tex_w), 0, mode, GL_UNSIGNED_BYTE,
+	uibuf.to_crawptr().to_cvoidptr());
     } else {
       glTexImage2D(target, mipmap_level, cast_int(mode),
 	cast_int(tex_w), cast_int(tex_h),
@@ -441,7 +447,7 @@ debug_log("3dtex", tex_w, tex_h, tex_d);
     if (tex_w == 0 || tex_h == 0) {
       break;
     }
-    // TODO: 3d
+    // TODO: 3d, 1d
     ++mipmap_level;
     for (const y: 0 .. tex_h) {
       for (const x: 0 .. tex_w) {
@@ -472,7 +478,9 @@ debug_log("3dtex", tex_w, tex_h, tex_d);
       }
     }
   }
-  if (target == GL_TEXTURE_2D || target == GL_TEXTURE_3D) {
+  if (target == GL_TEXTURE_1D || target == GL_TEXTURE_2D ||
+    target == GL_TEXTURE_3D)
+  {
     glTexParameteri(target, GL_TEXTURE_MAG_FILTER,
       cast_int(GL_NEAREST));
     glTexParameteri(target, GL_TEXTURE_MIN_FILTER,
@@ -649,5 +657,100 @@ function void modify_func_parallax(ptr{texture_data} const& td)
       }
     }
   }
+}
+
+function uint calc_width_height(uint node_size)
+{
+  return integral_log2(node_size) / 3u;
+}
+
+function uint calc_depth(uint node_size, uint wh)
+{
+  for (uint i: 0 .. 32u) {
+    if ((1u << (wh + i)) >= node_size) {
+      return i;
+    }
+  }
+  throw runtime_error_template{"convert_to_octree"}(
+    "nodes size is too large");
+  return 0u;
+}
+
+public function {bshift} ptr{texture_data}
+convert_to_octree(ptr{texture_data} const& td, uint rwh_l2)
+{
+  ptr{texture_data} const rtd = make_ptr{texture_data}();
+  const sz_l2 = integral_log2(td->width);
+  const sz = 1u << sz_l2;
+  octree{bshift} ot;
+  ot.build(td->data, sz_l2);
+  if (rwh_l2 == 0) {
+    rwh_l2 = calc_width_height(static_cast{uint}(ot.nodes.size()));
+  }
+  const rwh = (1u << rwh_l2);
+  const rd_l2 = calc_depth(static_cast{uint}(ot.nodes.size()), rwh_l2 * 2);
+  const rd = (1u << rd_l2);
+  const rwh2_l2 = rwh_l2 + bshift;
+  const rwh2 = (1u << rwh2_l2);
+  const rd2_l2 = rd_l2 + bshift;
+  const rd2 = (1u << rd2_l2);
+  rtd->width = rwh2;
+  rtd->height = rwh2;
+  rtd->depth = rd2;
+  rtd->data.resize(rwh2 * rwh2 * rd2, 0u);
+  mutable& rdata = rtd->data;
+  debug_log("octree data", rdata.size());
+  debug_log("octree nodes", ot.nodes.size());
+  debug_log("octree nodes whd", rwh, rwh, rd);
+  if (ot.nodes.size() > rwh * rwh * rd) {
+    throw runtime_error_template{"convert_to_octree"}(
+      "nodes size is too small");
+  }
+  debug_log("octree width", rtd->width);
+  /*
+  for (const i, const& m: ot.nodes[0]) {
+    debug_log("octree node0", to_hexstring(m));
+  }
+  */
+  {
+    const rwh_mask = rwh - 1u;
+    const rd_mask = rd - 1u;
+    for (const i, const& m: ot.nodes) {
+      const bx = i & rwh_mask;
+      const by = (i >> rwh_l2) & rwh_mask;
+      const bz = (i >> (rwh_l2 * 2)) & rd_mask;
+      const bsz = 1u << bshift;
+      const bmask = bsz - 1;
+      for (const j: 0 .. bsz * bsz * bsz) {
+	const xi = j & bmask;
+	const yi = (j >> bshift) & bmask;
+	const zi = (j >> (bshift * 2)) & bmask;
+	const x = bx * bsz + xi;
+	const y = by * bsz + yi;
+	const z = bz * bsz + zi;
+	const idx = (z << (rwh2_l2 * 2)) + (y << rwh2_l2) + x;
+	mutable v = m[j];
+	if ((v & 0xff000000u) == 0x01000000u) {
+	  // convert node reference value
+	  v &= 0x00ffffffu;
+	  const vx = v & rwh_mask;
+	  v >>= rwh_l2;
+	  const vy = v & rwh_mask;
+	  v >>= rwh_l2;
+	  const vz = v & rd_mask;
+	  v = (vz << 16) + (vy << 8) + vx;
+	  v |= 0x01000000u;
+	}
+	rdata[idx] = v;
+	/*
+	if (i == 0 || i == 0x3d1) {
+	  debug_log("i,j,idx=", i, j, idx, to_hexstring(m[j]), to_hexstring(v));
+	}
+	*/
+      }
+    }
+  }
+  // debug_log("rdata[0]", to_hexstring(rdata[0]));
+  return rtd;
 }
 
