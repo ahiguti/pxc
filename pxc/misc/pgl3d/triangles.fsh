@@ -1,5 +1,6 @@
 
 <%prepend/>
+const float epsilon = 1e-6;
 const float tile_size = 64.0;
 const float tilemap_size = 128.0;
 const float tiletex_size = 1024.0;
@@ -27,6 +28,7 @@ uniform float option_value;
   uniform sampler3D sampler_voxpat;
   <%frag_in/> mat4 vary_model_matrix;
   <%frag_in/> vec3 vary_position_local;
+  <%frag_in/> vec3 vary_camerapos_local;
 <%/>
 <%decl_fragcolor/>
 
@@ -136,6 +138,81 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta, inout vec4 dbg)
       pos.x < mx.x && pos.y < mx.y;
   }
 
+/*
+  vec3 voxel_next_noclamp(inout vec3 pos_f, in vec3 d)
+  {
+    vec3 r = vec3(0.0);
+    float dzpos = float(d.z > 0.0);
+    float zdelta = dzpos - pos_f.z;
+    vec2 xy = pos_f.xy + d.xy * zdelta / d.z;
+    if (d.z != 0.0 && pos2_inside(xy, 0.0, 1.0)) {
+      r.z = d.z > 0.0 ? 1.0 : -1.0;
+      pos_f = vec3(xy, dzpos);
+      return r;
+    }
+    float dxpos = float(d.x > 0.0);
+    float xdelta = dxpos - pos_f.x;
+    vec2 yz = pos_f.yz + d.yz * xdelta / d.x;
+    if (d.x != 0.0 && pos2_inside(yz, 0.0, 1.0)) {
+      r.x = d.x > 0.0 ? 1.0 : -1.0;
+      pos_f = vec3(dxpos, yz.xy);
+      return r;
+    }
+    float dypos = float(d.y > 0.0);
+    float ydelta = dypos - pos_f.y;
+    vec2 zx = pos_f.zx + d.zx * ydelta / d.y;
+    {
+      r.y = d.y > 0.0 ? 1.0 : -1.0;
+      pos_f = vec3(zx.y, dypos, zx.x);
+      return r;
+    }
+  }
+*/
+
+  vec3 voxel_next_noclamp(inout vec3 pos_f, in vec3 d)
+  {
+    vec3 pos_i = vec3(0.0);
+    vec3 spmin = vec3(0.0);
+    vec3 spmax = vec3(1.0 - epsilon);
+    vec3 r = vec3(0.0);
+    float dzpos = d.z > 0.0 ? spmax.z : spmin.z;
+    float zdelta = dzpos - pos_f.z;
+    vec2 xy = pos_f.xy + d.xy * zdelta / d.z;
+    if (d.z != 0.0 && pos2_inside_2(xy, spmin.xy, spmax.xy)) {
+      r.z = d.z > 0.0 ? 1.0 : -1.0;
+      vec3 npos = vec3(xy, dzpos);
+      npos = clamp(npos, spmin, spmax);
+      npos += pos_i;
+      pos_i = floor(npos);
+      pos_f = npos; //  - pos_i;
+      return r;
+    }
+    float dxpos = d.x > 0.0 ? spmax.x : spmin.x;
+    float xdelta = dxpos - pos_f.x;
+    vec2 yz = pos_f.yz + d.yz * xdelta / d.x;
+    if (d.x != 0.0 && pos2_inside_2(yz, spmin.yz, spmax.yz)) {
+      r.x = d.x > 0.0 ? 1.0 : -1.0;
+      vec3 npos = vec3(dxpos, yz.xy);
+      npos = clamp(npos, spmin, spmax);
+      npos += pos_i;
+      pos_i = floor(npos);
+      pos_f = npos; //  - pos_i;
+      return r;
+    }
+    float dypos = d.y > 0.0 ? spmax.y : spmin.y;
+    float ydelta = dypos - pos_f.y;
+    vec2 zx = pos_f.zx + d.zx * ydelta / d.y;
+    {
+      r.y = d.y > 0.0 ? 1.0 : -1.0;
+      vec3 npos = vec3(zx.y, dypos, zx.x);
+      npos = clamp(npos, spmin, spmax);
+      npos += pos_i;
+      pos_i = floor(npos);
+      pos_f = npos; //  - pos_i;
+      return r;
+    }
+  }
+
   vec3 voxel_next(inout vec3 pos_i, inout vec3 pos_f, in vec3 spmin,
     in vec3 spmax, in vec3 d)
   {
@@ -146,7 +223,7 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta, inout vec4 dbg)
     if (d.z != 0.0 && pos2_inside_2(xy, spmin.xy, spmax.xy)) {
       r.z = d.z > 0.0 ? 1.0 : -1.0;
       vec3 npos = vec3(xy, dzpos);
-      npos = clamp(npos, spmin + 0.0001, spmax - 0.0001);
+      npos = clamp(npos, spmin, spmax - epsilon);
       npos += pos_i;
       pos_i = floor(npos);
       pos_f = npos - pos_i;
@@ -158,7 +235,7 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta, inout vec4 dbg)
     if (d.x != 0.0 && pos2_inside_2(yz, spmin.yz, spmax.yz)) {
       r.x = d.x > 0.0 ? 1.0 : -1.0;
       vec3 npos = vec3(dxpos, yz.xy);
-      npos = clamp(npos, spmin + 0.0001, spmax - 0.0001);
+      npos = clamp(npos, spmin, spmax - epsilon);
       npos += pos_i;
       pos_i = floor(npos);
       pos_f = npos - pos_i;
@@ -170,7 +247,7 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta, inout vec4 dbg)
     {
       r.y = d.y > 0.0 ? 1.0 : -1.0;
       vec3 npos = vec3(zx.y, dypos, zx.x);
-      npos = clamp(npos, spmin + 0.0001, spmax - 0.0001);
+      npos = clamp(npos, spmin, spmax - epsilon);
       npos += pos_i;
       pos_i = floor(npos);
       pos_f = npos - pos_i;
@@ -178,13 +255,18 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta, inout vec4 dbg)
     }
   }
 
-  bool raycast_octree(inout vec3 pos, in vec3 roottexpos, in vec3 ray,
-    out vec4 value_r, out vec3 dir_r, inout vec4 dbgval)
+  bool raycast_octree(inout vec3 pos, in vec3 roottexpos, in vec3 eye,
+    in vec3 light, out vec4 value_r, out vec3 dir_r, inout float lstr_para,
+    inout vec4 dbgval)
   {
+    bool hit = false;
+    value_r = vec4(0.0);
+    dir_r = vec3(0.0);
+    vec3 ray = eye;
     const float block_factor = <%octree_block_factor/>;
     const float block_scale = 1.0 / block_factor;
     const vec3 texture_scale = <%octree_texture_scale/>;
-    const int level_max = 2;
+    const int level_max = 3;
     vec3 texpos_arr[level_max];
       // 整数値を取る。テクスチャ座標(をテクスチャのサイズで乗じたもの)。
       // xyz座標をそれぞれblock_factorで割った余りがブロック内位置になる。
@@ -198,22 +280,69 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta, inout vec4 dbg)
     vec4 value;
     vec3 dir = vec3(0.0); // 最初の位置が接触していれば0をそのまま返す
     int i;
-    for (i = 0; i < 4096; ++i) {
+    for (i = 0; i < 128; ++i) {
       vec3 coord = curpos_t + curpos_i;
       value = <%texture3d/>(sampler_voxpat, coord * texture_scale);
       int node_type = int(floor(value.a * 255.0 + 0.5));
       if (node_type > 1) { // 色のついた葉
-	while (level > 0) {
+	if (hit) {
+	  lstr_para = 0.0;
+	  break;
+	}
+	value_r = value;
+	dir_r = - dir;
+	{
+	  // 衝突した座標を計算(必要？)
+	  vec3 hpos_t = curpos_t;
+	  vec3 hpos_i = curpos_i;
+	  vec3 hpos_f = curpos_f;
+	  int hl = level;
+	  while (hl > 0) {
+	    --hl;
+	    hpos_f = (hpos_i + hpos_f) * block_scale;
+	    vec3 parent = texpos_arr[hl];
+	    hpos_t = floor(parent * block_scale) * block_factor;
+	    hpos_i = parent - hpos_t;
+	  }
+	  pos = (hpos_i + hpos_f) * block_scale;
+	}
+	hit = true;
+	dir = -dir;
+	float cos_light_dir = dot(light, dir);
+	lstr_para = clamp(cos_light_dir * 64.0 - 1.0, 0.0, 1.0);
+	if (lstr_para <= 0.0) {
+	  break;
+	}
+	ray = light;
+	//
+	while (true) {
+	  if (pos3_inside(curpos_i + dir, -0.5, block_factor - 0.5)) {
+	    break;
+	  }
 	  --level;
+	  if (level < 0) {
+	    break;
+	  }
 	  curpos_f = (curpos_i + curpos_f) * block_scale;
- 	  vec3 parent = texpos_arr[level];
+	  vec3 parent = texpos_arr[level];
 	  curpos_t = floor(parent * block_scale) * block_factor;
 	  curpos_i = parent - curpos_t;
 	}
-	break;
-      }
-      if (node_type == 0) { // 空白
-	curpos_f = clamp(curpos_f, 0.001, 0.999);
+	if (level < 0) {
+	  break;
+	}
+	curpos_i += dir;
+	curpos_f -= dir;
+	//
+      } else if (node_type == 1) { // 節
+	texpos_arr[level] = coord;
+	++level;
+	curpos_t = floor(value.rgb * 255.0 + 0.5) * block_factor;
+	curpos_f = clamp(curpos_f, 0.0, 1.0 - epsilon);
+	curpos_i = floor(curpos_f * block_factor);
+	curpos_f = (curpos_f * block_factor) - curpos_i;
+      } else { // 空白 node_type == 0
+	curpos_f = clamp(curpos_f, 0.0, 1.0 - epsilon);
 	vec3 distval = floor(value.xyz * 255.0 + 0.5);
 	vec3 dist_p = floor(distval / 16.0);
 	vec3 dist_n = distval - dist_p * 16.0;
@@ -238,26 +367,12 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta, inout vec4 dbg)
 	}
 	curpos_i += dir;
 	curpos_f -= dir;
-      } else { // 節 node_type == 1
-	texpos_arr[level] = coord;
-	++level;
-	curpos_t = floor(value.rgb * 255.0 + 0.5) * block_factor;
-	curpos_f = clamp(curpos_f, 0.001, 0.999);
-	curpos_i = floor(curpos_f * block_factor);
-	curpos_f = (curpos_f * block_factor) - curpos_i;
       }
     }
     // dbgval.r = float(i) / 16.0;
-    // dbgval.g = float(i) / 128.0;
-    pos = (curpos_i + curpos_f) * block_scale;
-    if (i >= 4096 || level < 0 || level >= level_max) {
-      value_r = vec4(0.0);
-      dir_r = vec3(0.0);
-      return false;
-    }
-    value_r = value;
-    dir_r = - dir;
-    return true;
+    // dbgval.g = float(i) / 64.0;
+    // dbgval.b = float(i) / 256.0;
+    return hit;
   }
 
 <%/>
@@ -494,16 +609,42 @@ void main(void)
     <%/>
     vec3 camera_local = -camera_dir * normal_matrix;
     vec3 light_local = light_dir * normal_matrix;
-    vec4 v_col;
-    // voxel_loop(vary_position_local, camera_local, light_local, nor, v_col);
-    vec3 pos = clamp(vary_position_local * 0.5 + 0.5, 0.0001, 0.9999);
+    const float obj_scale = 1.0 / 64.0;
+    vec3 pos = clamp(vary_position_local * obj_scale + 0.5, 0.0, 1.0 - epsilon);
+    vec3 campos = vary_camerapos_local * obj_scale + 0.5;
+    vec3 sur_nor = vec3(0.0);
+    bool dbg_inside = false; // FIXME
+    if (pos3_inside(campos, 0.0, 1.0)) {
+      pos = campos;
+    //<%fragcolor/> = vec4(1.0,1.0,0.0,1.0); return;
+    // color += vec4(1.0,1.0,0.0,1.0);
+      dbg_inside = true; // FIXME
+    } else {
+//      color += vec4(1.0,0.0,0.0,1.0); return; // FIXME
+      sur_nor = voxel_next_noclamp(pos, -camera_local);
+    //<%fragcolor/> = vec4(pos,1.0); return;
+    // color.r += 1.0;
+    }
     // color = vec4(pos.xyz, 1.0);
     vec4 dbgval = vec4(0.0,0.0,0.0,0.0);
-    if (!raycast_octree(pos, vec3(0.0), camera_local, v_col, nor, dbgval)) {
+    if (!raycast_octree(pos, vec3(0.0), camera_local, light_local, tex_val, nor,
+      lstr_para, dbgval))
+    {
+      // <%fragcolor/> = dbgval; return;
       discard;
     }
+    // if (dbg_inside) { tex_val.r += .5; } // FIXME
+    // tex_val.a = 0.0; // FIXME?
+    if (length(nor) < 0.1) {
+      // <%fragcolor/> = vec4(1.0); return;
+      // nor = vec3(1.0, 0.0, 0.0); // FIXME
+      nor = sur_nor;
+      // tex_val = vec4(0.3, 0.1, 0.2, 1.0);
+      lstr_para = 1.0;
+      // if (length(nor) < 0.1) { <%fragcolor/> = vec4(1.0); return; }
+    }
     nor = normal_matrix * nor; // local to global
-    color += v_col;
+    // color += v_col;
     // FIXME
     // <%fragcolor/> = dbgval; return;
   <%elseif/><%enable_normalmapping/>
@@ -705,7 +846,7 @@ void main(void)
     mate_specular = vec3(0.04, 0.04, 0.04);
     mate_diffuse = vec3(0.6, 0.7, 0.4);
   }
-  vec3 light_color2 = vec3(2.0, 2.0, 2.0) * lstr; // FIXME???
+  vec3 light_color2 = vec3(1.0, 1.0, 1.0) * lstr; // FIXME???
   vec3 light_color1 = light_color2 * lstr_para;
   vec3 li1 = light_all(light_color1, mate_specular, mate_diffuse,
     mate_alpha, camera_dir, light_dir, sampler_env, nor, vertical);

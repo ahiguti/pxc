@@ -44,7 +44,7 @@ retest:
 	cd tests; $(MAKE) retest
 
 clean:
-	rm -f *.o pxc pxc_y.output
+	rm -f *.o pxc pxc.exe pxc_y.output
 	cd tests && $(MAKE) clean
 	cd misc && $(MAKE) clean
 

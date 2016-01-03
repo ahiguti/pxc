@@ -22,6 +22,7 @@ public import pgl3d::shader_config -;
 public import pgl3d::aggregated_ibuffer -;
 public import pgl3d::pglcommon -;
 public import pgl3d::voxel_octree -;
+public import pgl3d::sdlutil -;
 
 public struct texture_data()
 {
@@ -242,6 +243,23 @@ texture_data_to_gl_texture(GLenum target, gl_texture mutable& tx,
 }
 
 public function ptr{texture_data}
+load_texture_data_raw(string const& fn0)
+{
+  const p = make_ptr{texture_data}();
+  string buf;
+  sdl_load_file(fn0, buf);
+  *p = from_string{texture_data}(buf);
+  return p;
+}
+
+public function bool
+save_texture_data_raw(string const& fn0, texture_data const& td)
+{
+  const buf = to_string(td);
+  return sdl_save_file(fn0, buf);
+}
+
+public function ptr{texture_data}
 load_texture_data(string const& fn0)
 {
   const p = make_ptr{texture_data}();
@@ -413,7 +431,7 @@ function void set_gl_texture(texture_data mutable& td, gl_texture mutable& ti,
 {
   uint tex_w = td.width;
   uint tex_h = td.height;
-  uint tex_d = td.height;
+  uint tex_d = td.depth;
   mutable& uibuf = td.data;
   int mipmap_level = 0;
   const mode = GL_RGBA;
@@ -538,13 +556,6 @@ function void merge_png_to_texture(string const& fn,
 
 function void modify_func_noop(ptr{texture_data} const& td)
 {
-}
-
-threaded function {t} string to_hexstring(t v)
-{
-  string r;
-  integral_to_hexadecimal{t}(v, r);
-  return r;
 }
 
 threaded function uint merge_dpat(uint v0, uint v1, uint x, uint y)
@@ -677,16 +688,29 @@ function uint calc_depth(uint node_size, uint wh)
 }
 
 public function {bshift} ptr{texture_data}
-convert_to_octree(ptr{texture_data} const& td, uint rwh_l2)
+convert_to_octree(ptr{texture_data} const& tpat, ptr{texture_data} const& tmap)
 {
   ptr{texture_data} const rtd = make_ptr{texture_data}();
-  const sz_l2 = integral_log2(td->width);
-  const sz = 1u << sz_l2;
+  // const psz_l2 = integral_log2(tpat->width);
+  // const psz = 1u << psz_l2;
+  // const msz_l2 = integral_log2(tmap->width);
+  // const msz = 1u << msz_l2;
+  // debug_log("convert_to_octree psz, msz", psz_l2, msz_l2);
   octree{bshift} ot;
-  ot.build(td->data, sz_l2);
-  if (rwh_l2 == 0) {
-    rwh_l2 = calc_width_height(static_cast{uint}(ot.nodes.size()));
-  }
+  ptr{level_data} const ltpat = make_ptr{level_data}();
+  ptr{level_data} const ltmap = make_ptr{level_data}();
+  ltpat->set_size_l2(
+    integral_log2(tpat->width),
+    integral_log2(tpat->height),
+    integral_log2(tpat->depth));
+  ltmap->set_size_l2(
+    integral_log2(tmap->width),
+    integral_log2(tmap->height),
+    integral_log2(tmap->depth));
+  ltpat->values = tpat->data; // copy
+  ltmap->values = tmap->data; // copy
+  ot.build(ltpat, ltmap);
+  const rwh_l2 = calc_width_height(static_cast{uint}(ot.nodes.size()));
   const rwh = (1u << rwh_l2);
   const rd_l2 = calc_depth(static_cast{uint}(ot.nodes.size()), rwh_l2 * 2);
   const rd = (1u << rd_l2);

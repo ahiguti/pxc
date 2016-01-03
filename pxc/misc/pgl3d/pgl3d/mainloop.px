@@ -118,6 +118,7 @@ framerate_control(int vsync0, double max_fps0, int frame_sleep0)
   {
     const time_now = io::system.high_resolution_timer();
     const cur_interval = time_subtract_sec(time_now, time_prev);
+    // debug_log("cur_interval", cur_interval);
     const cur_sw = time_subtract_sec(time_now, time_before_swapwindow);
     time_prev = time_now;
     const est_interval = (prev_interval + cur_interval) * 0.5;
@@ -138,7 +139,7 @@ framerate_control(int vsync0, double max_fps0, int frame_sleep0)
       target_interval = max(est_sw, 1.0 / max_fps);
     }
     // sdllog("ci,pi,ti", cur_interval, prev_interval, target_interval);
-    const sleep_sec = target_interval - cur_sw + sleep_carry;
+    const sleep_sec = target_interval - cur_sw; //  + sleep_carry;
     //const sleep_sec = target_interval - cur_interval;
     if (frame_sleep != 0 && sleep_sec > 0.002 && target_interval > 0.02) {
       const ss = sleep_sec;
@@ -150,10 +151,12 @@ framerate_control(int vsync0, double max_fps0, int frame_sleep0)
     sleep_carry = max(min(sleep_sec - slept, 0.01), -0.01);
     // time_prev = time_before_swapwindow;
     if (frame_sleep != 0) {
-      frame_speed_mul = static_cast{float}(target_interval * 60.0);
+      // frame_speed_mul = static_cast{float}(target_interval * 60.0);
+      frame_speed_mul = static_cast{float}(est_interval * 60.0);
     } else {
-      frame_speed_mul = static_cast{float}(
-	min(cur_interval, est_interval) * 60.0);
+      // frame_speed_mul = static_cast{float}(
+      //   min(cur_interval, est_interval) * 60.0);
+      frame_speed_mul = static_cast{float}(est_interval * 60.0);
     }
     // sdllog("tgt", target_interval, "cur", cur_interval, "sl",
     //   sleep_sec, "est", est_interval, "mu", frame_speed_mul);

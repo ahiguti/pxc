@@ -16,6 +16,14 @@ private struct sdl_file()
     }
     ptr.value = p;
   }
+  public function int close() {
+    if (is_null()) {
+      return 0;
+    }
+    int r = SDL_RWclose(ptr.value);
+    ptr.value = rawptr{SDL_RWops}();
+    return r;
+  }
   private function ~ {
     reset(rawptr{SDL_RWops}());
   }
@@ -39,6 +47,26 @@ public function bool sdl_load_file(string const& fname,
   buf_r.clear();
   buf_r.resize(usz, 0);
   if (SDL_RWread(fp.get(), buf_r.to_rawptr().to_voidptr(), 1, usz) != usz) {
+    return false;
+  }
+  return true;
+}
+
+public function bool sdl_save_file(string const& fname,
+  varray{uchar} const& buf)
+{
+  sdl_file fp;
+  string fn = fname;
+  fn.push_back(0); /* nul-term */
+  fp.reset(SDL_RWFromFile(fn.to_crawptr().to_ccharptr(), "w"));
+  if (fp.is_null()) {
+    return false;
+  }
+  const usz = buf.size();
+  if (SDL_RWwrite(fp.get(), buf.to_crawptr().to_cvoidptr(), 1, usz) != usz) {
+    return false;
+  }
+  if (fp.close() != 0) {
     return false;
   }
   return true;

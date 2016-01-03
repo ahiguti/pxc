@@ -1,8 +1,9 @@
 
 <%prepend/>
 uniform mat4 view_projection_matrix;
+uniform vec3 camera_pos;
 <%if><%light_fixed/>
-  uniform vec3 camera_pos;
+  // uniform vec3 camera_pos;
 <%else/>
   uniform mat4 shadowmap_vp[<%smsz/>];
 <%/>
@@ -27,6 +28,7 @@ uniform mat4 view_projection_matrix;
 <%if><%not><%eq><%opt/>0<%/><%/>
 <%vert_out/> mat4 vary_model_matrix;
 <%vert_out/> vec3 vary_position_local;
+<%vert_out/> vec3 vary_camerapos_local;
 //  <%vert_out/> vec3 vary_camera_local;
 //  <%vert_out/> vec3 vary_light_local;
 <%/>
@@ -68,6 +70,8 @@ void main(void)
   <%if><%not><%eq><%opt/>0<%/><%/>
     vary_model_matrix = mm;
     vary_position_local = position;
+    vec4 cp4 = inverse(mm) * vec4(camera_pos, 1.0); // FIXME inverse
+    vary_camerapos_local = cp4.xyz / cp4.w;
 //    vary_camera_local = camera * normal_matrix;
 //    vary_light_local = light * normal_matrix;
   <%/>
