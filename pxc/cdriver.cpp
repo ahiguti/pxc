@@ -1328,11 +1328,8 @@ static void load_profile(parser_options& po)
   incstr = subst_variables(incstr, po.profile.mapval);
   split_string(incstr, ':', po.profile.incdir);
   if (po.profile.incdir.empty()) {
-    po.profile.incdir.push_back("/usr/share/pxc_" + platform + "/");
-    po.profile.incdir.push_back("/usr/share/pxc_core/");
-    po.profile.incdir.push_back("/usr/local/share/pxc_" + platform + "/");
-    po.profile.incdir.push_back("/usr/local/share/pxc_core/");
-    po.profile.incdir.push_back("./" + platform + "/");
+    po.profile.incdir.push_back("/usr/local/share/pxclib/");
+    po.profile.incdir.push_back("/usr/share/pxclib/");
     po.profile.incdir.push_back(".");
   }
   iter = po.profile.mapval.find("cxx");

@@ -146,9 +146,6 @@ term& symbol_common::resolve_evaluated()
     const bool need_partial_eval = cur_frame_uninstantiated(
       parent_expr->symtbl_lexical);
     evaluated = eval_expr(parent_expr, need_partial_eval);
-#if 0
-    if (term_tostr_human(evaluated) == "callable::callable{meta::ret_type{f},meta::nil}") { abort(); } // FIXME
-#endif
   }
   return evaluated;
 }

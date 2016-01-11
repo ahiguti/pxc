@@ -5,7 +5,7 @@ public import numeric::fpmath -;
 public import pointer::raw -;
 public import meta m;
 public import glm;
-public import text::string::positional -;
+public import text::positional -;
 public import pgl3d::application -;
 public import pgl3d::mainloop -;
 public import pgl3d::pglcommon -;
@@ -19,7 +19,7 @@ public import pgl3d::dynamics_world -;
 public import pgl3d::pglconfig -;
 public import pgl3d::sdlutil -;
 public import io::time -;
-public import mainloop -;
+public import fundamental::mainloop -;
 
 // public import pgl3d::bullet_test -;
 // public import KnightModel -; // FIXME
@@ -96,8 +96,15 @@ private struct app_impl()
   public varray{bool} prev_joy_buttons;
   init();
   private function void init() {
-    player.position = glm::make_vec3(0.0, -30.0, 0.0);
-    player.angle = glm::make_quat_wxyz(0.70711, 0.70711, 0.0, 0.0);
+    string s;
+    if (sdl_load_file("saved_state.raw", s)) {
+      player = from_string{input_control_target}(s);
+    } else {
+      // player.position = glm::make_vec3(0.0, 0.0, -40.0);
+      // player.angle = glm::make_quat_wxyz(0.70711, 0.70711, 0.0, 0.0);
+      player.position = glm::make_vec3(0.0, 0.0, -40.0);
+      player.angle = glm::make_quat_wxyz(0.0, 1.0, 0.0, 0.0);
+    }
   }
 }
 
@@ -188,7 +195,8 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
   {
     light.position = // camera.angle * glm::make_vec3(0.0, 0.0, -50.0) +
       camera.position + glm::make_vec3(0.0, 0.0, 0.0);
-    light.angle = glm::make_quat_wxyz(1.0, 0.0, 0.0, 0.0);
+    // light.angle = glm::make_quat_wxyz(1.0, 0.0, 0.0, 0.0);
+    light.angle = glm::make_quat_angle_axis(3.14, 1.0, 0.0, 0.0);
     //light.angle = light_angle(glm::make_vec3(0.0, 0.0, 1.0),
     //  camera.angle.to_mat3()).to_quat();
     /*
@@ -295,6 +303,14 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
   }
 }
 
+function void save_state(app_impl const& app)
+{
+  const& pl = app.player;
+  const s = to_string(pl);
+  debug_log("save", s);
+  sdl_save_file("saved_state.raw", s);
+}
+
 function void handle_event(app_impl mutable& app,
   SDL_Event const& ev, float frame_speed, projection_info const& pjinfo,
   string_map mutable& commands_r)
@@ -356,6 +372,7 @@ function void handle_event(app_impl mutable& app,
     }
     if (ev.key.keysym.scancode == SDL_SCANCODE_M) {
       app.app_commands["scene_pause"] = "1";
+      save_state(app);
       return;
     }
   }

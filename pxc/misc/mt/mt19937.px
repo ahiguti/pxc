@@ -1,0 +1,50 @@
+public threaded namespace mt19937;
+public import common -;
+
+public threaded struct mt19937(uint seed)
+{
+  public uint index = 624;
+  public farray{uint, 624} mt;
+  init(seed);
+  public function uint generate()
+  {
+    if (index >= 624) {
+      twist();
+    }
+    mutable y = mt[index];
+    y ^= y >> 11u;
+    y ^= (y << 7u) & 2636928640u;
+    y ^= (y << 15u) & 4022730752u;
+    y ^= y >> 18u;
+    ++index;
+    return y;
+  }
+  private function void init(uint seed)
+  {
+    index = 624;
+    mt[0] = seed;
+    for (const i: 1 .. 624u) {
+      mt[i] = 1812433253u * (mt[i - 1] ^ mt[i - 1] >> 30u) + i;
+    }
+  }
+  private function void twist()
+  {
+    for (const i: 0 .. 624u) {
+      const y = (mt[i] & 0x80000000u) + (mt[(i + 1u) % 624u] & 0x7fffffff);
+      mt[i] = mt[(i + 397u) % 624u] ^ (y >> 1u);
+      if (y % 2 != 0) {
+	mt[i] = mt[i] ^ 0x9908b0df;
+      }
+    }
+    index = 0u;
+  }
+}
+
+/*
+{
+  mutable m = mt19937(123u);
+  for (const i: 0 .. 1024u) {
+    println(m.generate());
+  }
+}
+*/

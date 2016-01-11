@@ -1,4 +1,4 @@
-incdir=/usr/local/share/pxc/pxc_core:/usr/share/pxc/pxc_core:/usr/local/share/pxc/pxc_ext:/usr/share/pxc/pxc_ext:.
+incdir=/usr/local/share/pxclib/:.
 show_warnings
 platform=ios
 safe_mode=0

@@ -46,6 +46,9 @@ public function void init_shadowmap_fbo(shader_config const& glc,
       if (m::is_true{is_gl3_or_gles3}) {
 	// GLenum t_internal_format = GL_RG16F; // FIXME? RG32F?
 	GLenum t_internal_format = GL_RG32F;
+	if (m::is_true{is_gles}) {
+	  t_internal_format = GL_RG16F; // iOS
+	}
 	GLenum t_format = GL_RG;
 	GLenum t_type = GL_FLOAT;
 	glTexImage2D(GL_TEXTURE_2D, 0, cast_int(t_internal_format),
@@ -192,6 +195,7 @@ public function void init_postprocess_fbo(shader_config const& glc,
     */
     ppfbo.depthbuf.generate();
     glBindRenderbuffer(GL_RENDERBUFFER, ppfbo.depthbuf.get());
+    // if (m::and{m::is_true{is_gl3_or_gles3}, m::not{is_gles}}) {
     if (m::is_true{is_gl3_or_gles3}) {
       glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24,
 	ppfbo.width, ppfbo.height);

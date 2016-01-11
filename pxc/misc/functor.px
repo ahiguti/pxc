@@ -1,0 +1,93 @@
+public namespace functor;
+public import common -;
+public import meta m;
+
+public tsvaluetype union {t} maybe
+{
+  public unit nothing;
+  public t just;
+}
+
+/*
+public threaded function {t} maybe{t}
+nothing_(t const& x)
+{
+  maybe{t} r;
+  r.nothing = unit();
+  return r;
+}
+
+public threaded function {t} maybe{t}
+just_(t const& x)
+{
+  maybe{t} r;
+  r.just = x;
+  return r;
+}
+*/
+
+public tsvaluetype struct {t} pair2
+{
+  public t x;
+  public t y;
+}
+
+public threaded function {f} maybe{m::ret_type{f}}
+maybe_fmap(maybe{m::at0{m::arg_types{f}}} const& x)
+{
+  maybe{m::ret_type{f}} r;
+  if (case x.nothing) {
+    r.nothing = unit();
+  } else {
+    r.just = f(x.just);
+  }
+  return r;
+}
+
+public threaded function {f} pair2{m::ret_type{f}}
+pair2_fmap(pair2{m::at0{m::arg_types{f}}} const& v)
+{
+  pair2{m::ret_type{f}} r;
+  r.x = f(v.x);
+  r.y = f(v.y);
+  return r;
+}
+
+// fmap_func{f, t} := f if argument type of f is t
+// fmap_func{f, fnct{t}} := impl{fmap_func{f, t}} for functors
+public metafunction fmap_func{f, t}
+  m::cond{
+    m::eq{m::at0{m::arg_types{f}}, t}, f,
+    m::apply{m::symbol{m::nsof{t}, m::concat{t, "_fmap"}, 0},
+       fmap_func{f, m::at0{t}}}};
+
+// equivalent to fmap_func except that t can be inferred from arg
+public threaded function {f, t} m::ret_type{fmap_func{f, t}}
+fmap(t const& x)
+{
+  return fmap_func{f, t}(x);
+}
+
+{
+  int aval = 100;
+  function int afunc(int x) { return x + aval; }
+  int i;
+  i = 99;
+  maybe{int} v;
+  pair2{int} w;
+  pair2{maybe{int}} u;
+  v.just = 5;
+  w.x = 8;
+  w.y = 10;
+  u.x.just = 6;
+  u.y.just = 7;
+  const i1 = fmap{afunc}(i);
+  println(i, "->", i1);
+  const v1 = fmap{afunc}(v);
+  println(v, "->", v1);
+  const w1 = fmap{afunc}(w);
+  println(w, "->", w1);
+  const u1 = fmap{afunc}(u);
+  println(u, "->", u1);
+}
+

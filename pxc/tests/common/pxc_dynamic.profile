@@ -1,4 +1,4 @@
-incdir=../pxc_%{platform}:../pxc_core:../pxc_ext:.
+incdir=../pxclib:.
 generate_dynamic=1
 cflags=--std=c++11 -rdynamic -g -O3 -DNDEBUG -Wall -Wno-strict-aliasing -I/usr/local/include
 ldflags=-L/usr/local/lib

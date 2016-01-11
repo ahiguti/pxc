@@ -10,8 +10,22 @@ function bool less_int_simple(int x, int y)
 // when c++ optimization is enabled
 function bool less_int_generic(int x, int y)
 {
-  return ordered::compare_strict_weak{int}(x, y) < 0;
+  return generic::ordered::compare_strict_weak{int}(x, y) < 0;
 }
+
+// 0000000000000000 <com$n::less_int_simple$f(int, int)>:
+//    0:   39 f7                   cmp    %esi,%edi
+//    2:   0f 9c c0                setl   %al
+//    5:   c3                      retq   
+//    6:   66 2e 0f 1f 84 00 00    nopw   %cs:0x0(%rax,%rax,1)
+//    d:   00 00 00 
+
+// 0000000000000010 <com$n::less_int_generic$f(int, int)>:
+//   10:   39 f7                   cmp    %esi,%edi
+//   12:   0f 9c c0                setl   %al
+//   15:   c3                      retq   
+//   16:   66 2e 0f 1f 84 00 00    nopw   %cs:0x0(%rax,%rax,1)
+//   1d:   00 00 00 
 
 // 00000000 <$n::less_int_simple$f(int, int)>:
 //    0:   55                      push   %ebp

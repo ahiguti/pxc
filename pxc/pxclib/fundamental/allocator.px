@@ -1,0 +1,284 @@
+public threaded namespace fundamental::allocator "use-unsafe";
+
+extern "types" inline
+
+#ifdef PXCRT_DBG_POOL
+#define DBG_POOL(x) x
+#else
+#define DBG_POOL(x)
+#endif
+
+#define PXCRT_NO_LOCAL_POOL
+
+#if defined(__APPLE__) && !defined(PXCRT_NO_LOCAL_POOL)
+#define PXCRT_NO_LOCAL_POOL
+#endif
+#if defined(PXC_WINDOWS) && !defined(PXCRT_NO_LOCAL_POOL)
+#define PXCRT_NO_LOCAL_POOL
+#endif
+#if defined(ANDROID) && !defined(PXCRT_NO_LOCAL_POOL)
+#define PXCRT_NO_LOCAL_POOL
+#endif
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <stdexcept>
+#include <memory>
+
+namespace pxcrt {
+
+static inline void *global_allocate_n(size_t sz)
+{
+#if defined(_MSC_VER) && !defined(_WIN64)
+  // TODO: use malloc instead
+  void *const p = _aligned_malloc(sz, 16);
+#else
+  void *const p = malloc(sz);
+#endif
+  if (p == 0) {
+    throw std::bad_alloc();
+  }
+  return p;
+}
+
+static inline void *global_reallocate_n(void *optr, size_t osz, size_t nsz)
+{
+#if defined(_MSC_VER) && !defined(_WIN64)
+  void *const p = _aligned_realloc(optr, nsz, 16);
+#else
+  void *const p = realloc(optr, nsz);
+#endif
+  if (p == 0) {
+    throw std::bad_alloc();
+  }
+  return p;
+}
+
+static inline void global_deallocate_n(void *ptr, size_t sz)
+{
+#if defined(_MSC_VER) && !defined(_WIN64)
+  _aligned_free(ptr);
+#else
+  free(ptr);
+#endif
+}
+
+void clear_local_pool();
+
+#ifndef PXCRT_NO_LOCAL_POOL
+
+/* thread-local allocator */
+
+extern thread_local void *local_pool_blocks;
+
+enum {
+  local_pool_block_size = 2000,
+  local_pool_block_alloc_size = local_pool_block_size + sizeof(void *)
+};
+
+template <size_t sz> struct local_pool
+{
+  static void *allocate() {
+    if (free_list != 0) {
+      void *r = free_list;
+      free_list = *(void **)free_list;
+      DBG_POOL(fprintf(stderr, "a %zu %p\n", sz, r));
+      return r;
+    }
+    extend();
+    void *r = free_list;
+    free_list = *(void **)free_list;
+    DBG_POOL(fprintf(stderr, "A %zu %p\n", sz, r));
+    return r;
+  }
+  static void deallocate(void *p) {
+    DBG_POOL(fprintf(stderr, "d %zu %p\n", sz, p));
+    append_free_list(p);
+  }
+  static void append_free_list(void *p) {
+    *(void **)p = free_list;
+    free_list = p;
+  }
+private:
+  static void extend() {
+    DBG_POOL(fprintf(stderr, "X %zu\n", sz));
+    char *b = (char *)global_allocate_n(local_pool_block_alloc_size);
+    *(void **)(b) = local_pool_blocks;
+    local_pool_blocks = b;
+    b += sizeof(void *);
+    size_t const bsz = local_pool_block_size / sz;
+    for (size_t i = 0; i < bsz; ++i) {
+      append_free_list(b + i * sz);
+    }
+  }
+private:
+  static thread_local void *free_list;
+};
+
+template <size_t sz> thread_local void *local_pool<sz>::free_list = 0;
+
+template <bool is_small> struct local_pool_allocator;
+
+template <size_t sz, size_t seg, bool fit> struct local_pool_segment_size;
+
+template <size_t sz, size_t seg>
+struct local_pool_segment_size<sz, seg, true> {
+  enum { value = seg };
+};
+
+template <size_t sz, size_t seg>
+struct local_pool_segment_size<sz, seg, false> {
+  enum { nfit = (sz <= seg * 2) };
+  enum { value = local_pool_segment_size<sz, seg * 2, nfit>::value };
+};
+
+template <> struct local_pool_allocator<true>
+{
+  template <size_t sz> static void *allocate() {
+    /* 8, 16, 32, 64, ... */
+    enum { pool_block_sz = local_pool_segment_size<sz, 4, false>::value };
+    return local_pool<pool_block_sz>::allocate();
+  }
+  template <size_t sz> static void deallocate(void *ptr) {
+    enum { pool_block_sz = local_pool_segment_size<sz, 4, false>::value };
+    return local_pool<pool_block_sz>::deallocate(ptr);
+  }
+};
+
+template <> struct local_pool_allocator<false>
+{
+  template <size_t sz> static void *allocate() {
+    return global_allocate_n(sz);
+  }
+  template <size_t sz> static void deallocate(void *ptr) {
+    global_deallocate_n(ptr, sz);
+  }
+};
+
+template <typename T> static inline T *local_allocate()
+{
+  enum { is_small = sizeof(T) <= 64 ? true : false };
+  return static_cast<T *>(
+    local_pool_allocator<is_small>::template allocate<sizeof(T)>());
+}
+
+template <typename T> static inline void local_deallocate(const T *ptr)
+{
+  enum { is_small = sizeof(T) <= 64 ? true : false };
+  local_pool_allocator<is_small>::template deallocate<sizeof(T)>(
+    const_cast<T *>(ptr));
+}
+
+enum { use_local_threshold = 64 };
+
+static inline void *local_allocate_n(size_t sz)
+{
+  if (sz <= use_local_threshold) {
+    return local_pool_allocator<true>::allocate<use_local_threshold>();
+  } else {
+    return global_allocate_n(sz);
+  }
+}
+
+static inline void *local_reallocate_n(void *optr, size_t osz, size_t nsz)
+{
+  if (osz <= use_local_threshold) {
+    if (nsz <= use_local_threshold) {
+      return optr;
+    } else {
+      void *nptr = global_allocate_n(nsz);
+      memcpy(nptr, optr, osz);
+      local_pool_allocator<true>::deallocate<use_local_threshold>(optr);
+      return nptr;
+    }
+  } else {
+    if (nsz <= use_local_threshold) {
+      void *nptr = local_pool_allocator<true>::allocate<use_local_threshold>();
+      memcpy(nptr, optr, nsz);
+      global_deallocate_n(optr, osz);
+      return nptr;
+    } else {
+      return global_reallocate_n(optr, osz, nsz);
+    }
+  }
+}
+
+static inline void local_deallocate_n(void *ptr, size_t sz)
+{
+  if (sz <= use_local_threshold) {
+    local_pool_allocator<true>::deallocate<use_local_threshold>(ptr);
+  } else {
+    global_deallocate_n(ptr, sz);
+  }
+}
+
+#else
+
+template <typename T> static inline T *local_allocate()
+{
+  return static_cast<T *>(global_allocate_n(sizeof(T)));
+}
+
+template <typename T> static inline void local_deallocate(const T *ptr)
+{
+  return global_deallocate_n(const_cast<T *>(ptr), sizeof(T));
+}
+
+static inline void *local_allocate_n(size_t sz)
+{
+  return global_allocate_n(sz);
+}
+
+static inline void *local_reallocate_n(void *optr, size_t osz, size_t nsz)
+{
+  return global_reallocate_n(optr, osz, nsz);
+}
+
+static inline void local_deallocate_n(void *ptr, size_t sz)
+{
+  global_deallocate_n(ptr, sz);
+}
+
+#endif
+
+template <typename T> static inline T *allocate_single()
+{
+  return reinterpret_cast<T *>(global_allocate_n(sizeof(T)));
+}
+
+template <typename T> static inline void deallocate_single(const T *ptr)
+{
+  global_deallocate_n(const_cast<T *>(ptr), sizeof(T));
+}
+
+}; // namespace pxcrt
+;
+
+extern "implementation" inline
+namespace pxcrt {
+
+#ifndef PXCRT_NO_LOCAL_POOL
+
+thread_local void *local_pool_blocks;
+
+void __attribute__((destructor(101))) clear_local_pool()
+{
+  while (local_pool_blocks != 0) {
+    void *next = *(void **)local_pool_blocks;
+    global_deallocate_n(local_pool_blocks, local_pool_block_alloc_size);
+    local_pool_blocks = next;
+  }
+}
+
+#else
+
+void clear_local_pool()
+{
+}
+
+#endif
+
+}; // namespace pxcrt
+;
+

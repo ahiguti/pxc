@@ -1,0 +1,439 @@
+public threaded namespace pointer "use-unsafe";
+public import numeric::integral -;
+public import meta m;
+public import meta::vararg v;
+public import meta::family mf;
+public import fundamental::allocator;
+
+/* public */
+
+/* reference-counting shared pointer types */
+public threaded      struct extern "pxcrt::ptr"   "ptr"   {t} ptr   { } 
+public threaded      struct extern "pxcrt::cptr"  "cptr"  {t} cptr  { }
+public valuetype     struct extern "pxcrt::iptr"  "iptr"  {t} iptr  { }
+public multithreaded struct extern "pxcrt::tptr"  "tptr"  {t} tptr  { }
+public multithreaded struct extern "pxcrt::tcptr" "tcptr" {t} tcptr { }
+public tsvaluetype   struct extern "pxcrt::tiptr" "tiptr" {t} tiptr { }
+
+public mtvaluetype struct extern "pxcrt::lock_guard" "lock_guard" {t}
+lock_guard
+{
+  metafunction __static_assert__ check_monitor{t};
+    /* note: some types does not implement monitor */
+  public function extern "wait" void wait();
+  public function extern "notify_one" void notify_one();
+  public function extern "notify_all" void notify_all();
+}
+public mtvaluetype struct extern "pxcrt::lock_cguard" "lock_cguard" {t}
+lock_cguard
+{
+  metafunction __static_assert__ check_monitor{t};
+  public function extern "wait" void wait();
+  public function extern "notify_one" void notify_one();
+  public function extern "notify_all" void notify_all();
+}
+
+public threaded function {t, tis} ptr{t} make_ptr(expand(argdecls{tis}))
+{ return box_pointer{ptr{t}, tis}(expand(a: arg_names{tis}; a)); }
+public threaded function {t, tis} cptr{t} make_cptr(expand(argdecls{tis}))
+{ return box_pointer{cptr{t}, tis}(expand(a: arg_names{tis}; a)); }
+public threaded function {t, tis} iptr{t} make_iptr(expand(argdecls{tis}))
+{ return box_pointer{iptr{t}, tis}(expand(a: arg_names{tis}; a)); }
+public threaded function {t, tis} tptr{t} make_tptr(expand(argdecls{tis}))
+{ return box_pointer{tptr{t}, tis}(expand(a: arg_names{tis}; a)); }
+public threaded function {t, tis} tcptr{t} make_tcptr(expand(argdecls{tis}))
+{ return box_pointer{tcptr{t}, tis}(expand(a: arg_names{tis}; a)); }
+public threaded function {t, tis} tiptr{t} make_tiptr(expand(argdecls{tis}))
+{ return box_pointer{tiptr{t}, tis}(expand(a: arg_names{tis}; a)); }
+
+public threaded function {tp, tis} tp box_pointer(expand(argdecls{tis}))
+{
+  if (m::eq{m::list{m::at0{tp}}, m::map{tis, m::at0}}) {
+    tp r = tp(a0);
+    return r;
+  } else {
+    tp r = tp(m::at0{tp}(expand(a: arg_names{tis}; a)));
+    return r;
+  }
+}
+
+public threaded function extern "pxcrt::downcast_const" {tto, tfrom}
+check_polymorphic{tto, tfrom} const& downcast_const(tfrom const& x);
+
+public threaded function extern "pxcrt::downcast_mutable" {tto, tfrom}
+check_polymorphic{tto, tfrom} mutable& downcast_mutable(tfrom mutable& x);
+
+public threaded function extern "pxcrt::instanceof" {t, tobj}
+bool instanceof(check_polymorphic{tobj, t} const& x);
+
+public threaded function extern "pxcrt::pointer_downcast" {tto, tfrom}
+check_pointer_downcast{tto, tfrom} pointer_downcast(tfrom const& x);
+
+
+/* private */
+
+private metafunction argdecls{tis} v::arg_decls_byref{tis};
+private metafunction arg_names{tis} v::arg_names{m::size{tis}};
+
+private metafunction check_monitor{t}
+  /* error if t has "monitor" attribute with zero */
+  m::cond{
+    m::type_attribute{t, "monitor", 1}, t,
+    m::error{"not a monitor type"}};
+
+private metafunction check_polymorphic{t1, t2}
+  m::cond{
+    m::and{m::is_polymorphic_type{t1}, m::is_polymorphic_type{t2}},
+    t1,
+    m::error{"polymorphic type expected"}};
+
+private metafunction check_pointer_downcast{tto, tfrom}
+  m::cond{
+    m::and{
+      m::eq{m::family{tto}, m::family{tfrom}},
+      mf::is_pointer_type{tto},
+      m::is_polymorphic_type{m::at0{tfrom}},
+      m::is_polymorphic_type{m::at0{tto}}},
+    tto,
+    m::error{"invalid pointer_downcast"}};
+
+extern "types" inline
+
+#include <string>
+#include <errno.h>
+
+#ifdef PXCRT_DBG_RC
+#define DBG_RC(x) x
+#else
+#define DBG_RC(x)
+#endif
+#ifdef PXCRT_DBG_MTX
+#define DBG_MTX(x) x
+#else
+#define DBG_MTX(x)
+#endif
+#ifdef PXCRT_DBG_COND
+#define DBG_COND(x) x
+#else
+#define DBG_COND(x)
+#endif
+
+#include <cstdlib>
+#include <mutex>
+#include <condition_variable>
+
+namespace pxcrt {
+
+typedef std::recursive_mutex mutex;
+typedef std::condition_variable_any condition_variable;
+
+struct monitor {
+  monitor() { }
+  monitor(monitor const& x) { }
+  monitor& operator =(monitor const& x) {
+    return *this;
+  }
+  mutex mtx;
+  condition_variable cond;
+};
+
+template <typename T>
+struct rcval {
+  /* rcval: single threaded, mutable or immutable */
+  typedef T value_type;
+  rcval() : value() {
+    DBG_RC(fprintf(stdout, "c1 %p\n", this));
+  }
+  explicit rcval(const T& v) : value(v) {
+    DBG_RC(fprintf(stdout, "c2 %p\n", this));
+  }
+  template <typename T0> explicit
+  rcval(const T0& a0) : value(a0) { }
+  template <typename T0, typename T1>
+  rcval(const T0& a0, const T1& a1) : value(a0, a1) { }
+  template <typename T0, typename T1, typename T2>
+  rcval(const T0& a0, const T1& a1, const T2& a2) : value(a0, a1, a2) { }
+  void incref$z() const {
+    DBG_RC(fprintf(stdout, "%p %ld +1\n", this, refcnt$z()));
+    count$z.incref$z();
+  }
+  void decref$z() const {
+    DBG_RC(fprintf(stdout, "%p %ld -1\n", this, refcnt$z()));
+    if (count$z.decref$z()) {
+      this->~rcval<T>();
+      this->deallocate(this);
+      DBG_RC(fprintf(stdout, "d  %p\n", this));
+    }
+  }
+  size_t refcnt$z() const { return count$z.refcnt$z(); }
+  /* void lock$z() const { } */
+  /* void unlock$z() const { } */
+  /* void wait$z() const { } */
+  /* void notify_one$z() const { } */
+  /* void notify_all$z() const { } */
+  static rcval<T> *allocate() {
+    return local_allocate< rcval<T> >();
+  }
+  static void deallocate(const rcval<T> *ptr) {
+    local_deallocate< rcval<T> >(ptr);
+  }
+public:
+  mutable stcount count$z;
+  T value;
+private:
+  rcval(const rcval&);
+  rcval& operator =(const rcval&);
+};
+
+template <typename T>
+struct trcval {
+  /* trcval: multithreaded, mutable */
+  typedef T value_type;
+  trcval() : value() {
+    DBG_RC(fprintf(stdout, "c1 %p\n", this));
+  }
+  explicit trcval(const T& v) : value(v) {
+    DBG_RC(fprintf(stdout, "c2 %p\n", this));
+  }
+  template <typename T0> explicit
+  trcval(const T0& a0) : value(a0) { }
+  template <typename T0, typename T1>
+  trcval(const T0& a0, const T1& a1) : value(a0, a1) { }
+  template <typename T0, typename T1, typename T2>
+  trcval(const T0& a0, const T1& a1, const T2& a2) : value(a0, a1, a2) { }
+  void incref$z() const {
+    DBG_RC(fprintf(stdout, "ir %p %ld +1\n", this, refcnt$z()));
+    count$z.incref$z();
+  }
+  void decref$z() const {
+    DBG_RC(fprintf(stdout, "dr %p %ld -1\n", this, refcnt$z()));
+    if (count$z.decref$z()) {
+      this->~trcval<T>();
+      this->deallocate(this);
+      DBG_RC(fprintf(stdout, "de %p\n", this));
+    }
+  }
+  size_t refcnt$z() const { return count$z.refcnt$z(); }
+  void lock$z() const { monitor$z.mtx.lock(); }
+  void unlock$z() const { monitor$z.mtx.unlock(); }
+  void wait$z() const { monitor$z.cond.wait(monitor$z.mtx); }
+  void notify_one$z() const { monitor$z.cond.notify_one(); }
+  void notify_all$z() const { monitor$z.cond.notify_all(); }
+  static trcval<T> *allocate() {
+    return allocate_single< trcval<T> >();
+  }
+  static void deallocate(const trcval<T> *ptr) {
+    deallocate_single< trcval<T> >(ptr);
+  }
+public:
+  mutable mtcount count$z;
+  mutable monitor monitor$z;
+  T value;
+private:
+  trcval(const trcval&);
+  trcval& operator =(const trcval&);
+};
+
+template <typename T>
+struct tircval {
+  /* tircval: multithreded, immutable */
+  typedef T value_type;
+  tircval() : value() {
+    DBG_RC(fprintf(stdout, "c1 %p\n", this));
+  }
+  explicit tircval(const T& v) : value(v) {
+    DBG_RC(fprintf(stdout, "c2 %p\n", this));
+  }
+  template <typename T0> explicit
+  tircval(const T0& a0) : value(a0) { }
+  template <typename T0, typename T1>
+  tircval(const T0& a0, const T1& a1) : value(a0, a1) { }
+  template <typename T0, typename T1, typename T2>
+  tircval(const T0& a0, const T1& a1, const T2& a2) : value(a0, a1, a2) { }
+  void incref$z() const {
+    DBG_RC(fprintf(stdout, "ir %p %ld +1\n", this, refcnt$z()));
+    count$z.incref$z();
+  }
+  void decref$z() const {
+    DBG_RC(fprintf(stdout, "dr %p %ld -1\n", this, refcnt$z()));
+    if (count$z.decref$z()) {
+      this->~tircval<T>();
+      this->deallocate(this);
+      DBG_RC(fprintf(stdout, "de %p\n", this));
+    }
+  }
+  size_t refcnt$z() const { return count$z.refcnt$z(); }
+  /* void lock$z() const { } */
+  /* void unlock$z() const { } */
+  /* void wait$z() const { } */
+  static tircval<T> *allocate() {
+    return allocate_single< tircval<T> >();
+  }
+  static void deallocate(const tircval<T> *ptr) {
+    deallocate_single< tircval<T> >(ptr);
+  }
+public:
+  mutable mtcount count$z;
+  T value;
+private:
+  tircval(const tircval&);
+  tircval& operator =(const tircval&);
+};
+
+template <typename T>
+struct rcptr { /* T must have an intrusive count */
+  typedef T target_type;
+  typedef void range_type; /* guard object requires this */
+  typedef void crange_type; /* guard object requires this */
+  template <typename Tx> friend struct rcptr;
+  rcptr(T *rawptr) : ptr(rawptr) { } /* for fast boxing constr */
+  rcptr(const rcptr& x) : ptr(x.ptr) { ptr->incref$z(); }
+  /* ptr{foo} to ptr{ifoo} */
+  template <typename Tx> rcptr(const rcptr<Tx>& x) : ptr(x.get()) {
+    ptr->incref$z();
+  }
+  /* boxing foo to ptr{ifoo} */
+  template <typename Tx> explicit rcptr(const Tx& x)
+    : ptr(make_rawptr(x)) { }
+  ~rcptr() { ptr->decref$z(); }
+  rcptr& operator =(T *x) { return set(x); }
+  template <typename Tx> rcptr& operator =(Tx *x) { return set(x); }
+  rcptr& operator =(const rcptr& x) { return set(x.ptr); }
+  template <typename Tx> rcptr& operator =(const rcptr<Tx>& x) {
+    return set(x.ptr);
+  }
+  T *get() const { return ptr; }
+  T& operator *() const { return *ptr; }
+  T *operator ->() const { return ptr; }
+  void inc_refguard() const { ptr->lock$z(); }
+  void dec_refguard() const { ptr->unlock$z(); }
+  template <typename Tx> static inline T *make_rawptr(const Tx& x) {
+    T *p = T::allocate();
+    PXC_TRY {
+      new (p) T(x);
+    } PXC_CATCH(...) {
+      T::deallocate(p);
+      PXC_RETHROW;
+    }
+    return p;
+  }
+  static inline T *make_rawptr() {
+    T *p = T::allocate();
+    PXC_TRY {
+      new (p) T();
+    } PXC_CATCH(...) {
+      T::deallocate(p);
+      PXC_RETHROW;
+    }
+    return p;
+  }
+  template <typename Tc> struct guard_ref {
+    guard_ref(Tc& x) : v(x) { v.inc_refguard(); }
+    ~guard_ref() { v.dec_refguard(); }
+    Tc& get() { return v; }
+    typename Tc::range_type get_range() 
+      { return typename Tc::range_type(v); }
+    typename Tc::crange_type get_crange() 
+      { return typename Tc::crange_type(v); }
+  private:
+    Tc& v;
+    guard_ref(const guard_ref&);
+    guard_ref& operator =(const guard_ref&);
+  };
+  template <typename Tc> struct guard_val {
+    guard_val(const Tc& x) : v(x) { v.inc_refguard(); }
+    ~guard_val() { v.dec_refguard(); }
+    Tc& get() { return v; }
+    typename Tc::range_type get_range() 
+      { return typename Tc::range_type(v); }
+    typename Tc::crange_type get_crange() 
+      { return typename Tc::crange_type(v); }
+  private:
+    Tc v;
+    guard_val(const guard_val&);
+    guard_val& operator =(const guard_val&);
+  };
+private:
+  T *ptr; /* not nullable */
+private:
+  rcptr& set(T *x) {
+    x->incref$z();
+    ptr->decref$z();
+    ptr = x;
+    return *this;
+  }
+};
+
+template <typename T> struct lock_guard
+{
+  lock_guard(const rcptr<T>& p) : ptr(p), objref(*p) { objref.lock$z(); }
+  ~lock_guard() { objref.unlock$z(); }
+  T *get() const { return &objref; }
+  T& operator *() const { return objref; }
+  T *operator ->() const { return &objref; }
+  void wait() { objref.wait$z(); }
+  void notify_one() { objref.notify_one$z(); }
+  void notify_all() { objref.notify_all$z(); }
+private:
+  lock_guard(const lock_guard&);
+  lock_guard& operator =(const lock_guard&);
+private:
+  rcptr<T> ptr;
+  T& objref;
+};
+
+template <typename T> struct lock_cguard
+{
+  lock_cguard(const rcptr<const T>& p) : ptr(p), objref(*p)
+    { objref.lock$z(); }
+  ~lock_cguard() { objref.unlock$z(); }
+  const T *get() const { return &objref; }
+  const T& operator *() const { return objref; }
+  const T *operator ->() const { return &objref; }
+  void wait() { objref.wait$z(); }
+  void notify_one() { objref.notify_one$z(); }
+  void notify_all() { objref.notify_all$z(); }
+private:
+  lock_cguard(const lock_cguard&);
+  lock_cguard& operator =(const lock_cguard&);
+private:
+  rcptr<const T> ptr;
+  const T& objref;
+};
+
+template <typename T> typename T::value_type deref_value(const rcptr<T>& p)
+{
+  return p->value;
+}
+
+template <typename T> T deref(const rcptr<T>& p)
+{
+  return *p;
+}
+
+template <typename Tto, typename Tfrom> Tto const&
+downcast_const(Tfrom const& from) {
+  return dynamic_cast<Tto const&>(from);
+}
+
+template <typename Tto, typename Tfrom> Tto&
+downcast_mutable(Tfrom& from) {
+  return dynamic_cast<Tto&>(from);
+}
+
+template <typename T, typename Tobj> bool
+instanceof(Tobj const& x) {
+  return dynamic_cast<T const *>(&x) != 0;
+}
+
+template <typename Tto, typename Tfrom> Tto
+pointer_downcast(Tfrom const& from) {
+  typename Tto::target_type& ref = dynamic_cast<typename Tto::target_type&>(
+    *(from.get()));
+  ref.incref$z();
+  return Tto(&ref);
+}
+
+}; // namespace pxcrt
+;
+

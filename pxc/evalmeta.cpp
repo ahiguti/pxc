@@ -206,13 +206,9 @@ static term eval_meta_symbol_internal(const term_list_range& tlev,
       arena_error_throw(pos, "meta_symbol: Invalid argument '%s'", 
 	term_tostr_human(tlev[1]).c_str());
     }
-    if (tlev.size() == 2) {
-      /* find symbol from the specified namespace */
-      sym_ns = tlev[0].get_string();
-      name = tlev[1].get_string();
-    } else {
-      return term();
-    }
+    /* find symbol from the specified namespace */
+    sym_ns = tlev[0].get_string();
+    name = tlev[1].get_string();
     const term defval = tlev.size() > 2 ? tlev[2] : term(0LL);
     return eval_meta_symbol_global(sym_ns, name, defval, check_only, ectx, pos);
   } else {

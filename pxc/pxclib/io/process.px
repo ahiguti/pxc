@@ -1,0 +1,338 @@
+public threaded namespace io::process "use-unsafe";
+public import numeric::integral -;
+public import numeric::cast -;
+public import container::array -;
+public import generic::datatype -;
+public import meta -;
+public import io +;
+public import io::standard -;
+public import io::errno -;
+public import io::signal -;
+public import io::file -;
+public import exception;
+
+public threaded function void io__exit(io const& sys, int st)
+{
+  _exit_internal(sys, st);
+}
+
+public function void exit(int st)
+{
+  exit_internal(io::system, st);
+}
+
+public threaded function void io_abort(io const& sys)
+{
+  abort_internal(sys);
+}
+
+public tsvaluetype struct extern "pxcrt::pid_t" "extint" pid_t { }
+public tsvaluetype struct extern "int" "extbitmask" wait_options_t { }
+public extern "WNOHANG" wait_options_t WNOHANG;
+
+public threaded function errno_or_value{pid_t} io_fork(io const& sys)
+{
+  pid_t const pid = fork_internal(sys);
+  errno_or_value{pid_t} r;
+  if (pid < 0) {
+    r.errno = sys.get_errno();
+  } else {
+    r.value = pid;
+  }
+  return r;
+}
+
+public multithreaded struct pipe_process(pid_t pid0, file_mt const& file0)
+{
+  public pid_t const pid = pid0;
+  public file_mt file = file0;
+}
+
+public threaded function errno_or_value{pipe_process}
+io_popen(io const& sys, cstrref const& command, cslice{string} const& argv,
+  bool for_write, bool search_path)
+{
+  errno_or_value{pipe_process} r;
+  mutable p = sys.pipe();
+  if (const e : p.errno) {
+    r.errno = e;
+    return r;
+  }
+  const rfork = sys.fork();
+  if (const e : rfork.errno) {
+    r.errno = e;
+    return r;
+  }
+  const pid = rfork.value;
+  if (pid == 0) {
+    /* child process */
+    try {
+      errno_t err;
+      if (for_write) {
+	err = dup2_internal(sys, p.value.first, sys.stdin());
+      } else {
+	err = dup2_internal(sys, p.value.second, sys.stdout());
+      }
+      p.errno = EOK; /* close pipe fds */
+      if (err == EOK) {
+	if (search_path) {
+	  sys.execvp(command, argv);
+	} else {
+	  sys.execv(command, argv);
+	}
+      }
+    } catch (exception::c_exception ex) {
+      /* bad_alloc for example */
+    }
+    sys._exit(127);
+  }
+  if (for_write) {
+    r.value = pipe_process(pid, p.value.second);
+  } else {
+    r.value = pipe_process(pid, p.value.first);
+  }
+  return r;
+}
+
+public tsvaluetype struct extern "int" "extint" status_t { }
+
+public tsvaluetype struct wait_t {
+  public pid_t pid;
+  public status_t status;
+}
+
+public threaded function errno_or_value{wait_t} io_wait(io const& sys,
+  status_t mutable& st_r)
+{
+  status_t st;
+  pid_t const pid = wait_internal(sys, st);
+  errno_or_value{wait_t} r;
+  if (pid < 0) {
+    r.errno = sys.get_errno();
+  } else {
+    r.value = wait_t(pid, st);
+  }
+  return r;
+}
+
+public threaded function errno_or_value{wait_t} io_waitpid(io const& sys,
+  pid_t p, wait_options_t opt)
+{
+  status_t st;
+  pid_t const pid = waitpid_internal(sys, p, st, opt);
+  errno_or_value{wait_t} r;
+  if (pid < 0) {
+    r.errno = sys.get_errno();
+  } else {
+    r.value = wait_t(pid, st);
+  }
+  return r;
+}
+
+public threaded function errno_or_value{status_t} io_shell_exec(io const& sys,
+  cstrref const& cmd)
+{
+  int const st = shell_exec_internal(sys, cmd);
+  errno_or_value{status_t} r;
+  if (st < 0) {
+    r.errno = sys.get_errno();
+  } else {
+    r.value = static_cast{status_t}(st);
+  }
+  return r;
+}
+
+public threaded function extern "pxcrt::wifexited"
+bool WIFEXITED(status_t st);
+public threaded function extern "pxcrt::wexitstatus"
+int WEXITSTATTUS(status_t st);
+public threaded function extern "pxcrt::wifsignaled"
+bool WIFSIGNALED(status_t st);
+public threaded function extern "pxcrt::wtermsig"
+signal_t WTERMSIG(status_t st);
+
+public threaded function extern "pxcrt::execv"
+errno_t io_execv(io const& sys, cstrref const& path,
+  cslice{string} const& argv);
+public threaded function extern "pxcrt::execvp"
+errno_t io_execvp(io const& sys, cstrref const& path,
+  cslice{string} const& argv);
+
+private threaded function extern "pxcrt::_exit_internal"
+void _exit_internal(io const& sys, int status);
+private function extern "pxcrt::exit_internal"
+void exit_internal(io const& sys, int status);
+private threaded function extern "pxcrt::abort_internal"
+void abort_internal(io const& sys);
+private threaded function extern "pxcrt::fork_internal"
+pid_t fork_internal(io const& sys);
+private threaded function extern "pxcrt::wait_internal"
+pid_t wait_internal(io const& sys, status_t mutable& st_r);
+private threaded function extern "pxcrt::waitpid_internal"
+pid_t waitpid_internal(io const& sys, pid_t pid, status_t mutable& st_r,
+  wait_options_t opt);
+private threaded function extern "pxcrt::shell_exec_internal"
+int shell_exec_internal(io const& sys, cstrref const& cmd);
+private threaded function extern "pxcrt::dup2_internal"
+errno_t dup2_internal(io const& sys, file const& ofp, file const& nfp);
+
+private function extern "pxcrt::io_process_init" void io_process_init();
+
+extern "types" inline
+#ifdef PXC_POSIX
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#endif
+
+namespace pxcrt {
+#ifdef PXC_POSIX
+typedef ::pid_t pid_t;
+#else
+typedef int pid_t; /* dummy */
+#endif
+};
+;
+
+extern "implementation" inline
+namespace pxcrt {
+
+using namespace pxcrt;
+
+void _exit_internal(io const& sys, bt_int st)
+{
+  _exit(st);
+}
+
+void exit_internal(io const& sys, bt_int st)
+{
+  exit(st);
+}
+
+void abort_internal(io const& sys)
+{
+  abort();
+}
+
+pxcrt::pid_t fork_internal(io const& sys)
+{
+#ifdef PXC_POSIX
+  return fork();
+#else
+  abort();
+#endif
+}
+
+pxcrt::pid_t wait_internal(io const& sys, int& st_r)
+{
+#ifdef PXC_POSIX
+  return wait(&st_r);
+#else
+  abort();
+#endif
+}
+
+pxcrt::pid_t waitpid_internal(io const& sys, pxcrt::pid_t pid, int& st_r,
+  int opt)
+{
+#ifdef PXC_POSIX
+  return waitpid(pid, &st_r, opt);
+#else
+  abort();
+#endif
+}
+
+bool wifexited(int st)
+{
+#ifdef PXC_POSIX
+  return WIFEXITED(st) != 0;
+#else
+  return true;
+#endif
+}
+
+int wexitstatus(int st)
+{
+#ifdef PXC_POSIX
+  return WIFEXITED(st) ? WEXITSTATUS(st) : 0;
+#else
+  return st;
+#endif
+}
+
+bool wifsignaled(int st)
+{
+#ifdef PXC_POSIX
+  return WIFSIGNALED(st) != 0;
+#else
+  return false;
+#endif
+}
+
+int wtermsig(int st)
+{
+#ifdef PXC_POSIX
+  return WIFSIGNALED(st) ? WTERMSIG(st) : 0;
+#else
+  return 0;
+#endif
+}
+
+static int execv_internal(bool execvp_flag, cstrref const& path,
+  bt_cslice<bt_string> const& argv)
+{
+#ifdef PXC_POSIX
+  PXCRT_ALLOCA_NTSTRING(path_nt, path);
+  pxcvarray<bt_string> argv_nt;
+  argv_nt.resize(argv.size(), bt_string());
+  char *argv_rp[argv.size() + 1];
+  for (size_t i = 0; i < argv.size(); ++i) {
+    argv_nt[i] = argv[i];
+    argv_nt[i].push_back('\0');
+    argv_rp[i] = reinterpret_cast<char *>(argv_nt[i].rawarr());
+  }
+  argv_rp[argv.size()] = 0;
+  if (execvp_flag) {
+    ::execvp(path_nt.get(), argv_rp);
+  } else {
+    ::execv(path_nt.get(), argv_rp);
+  }
+  return errno;
+#else
+  abort();
+#endif
+}
+
+int execv(io const& sys, cstrref const& path,
+  bt_cslice<bt_string> const& argv)
+{
+  return execv_internal(false, path, argv);
+}
+
+int execvp(io const& sys, cstrref const& file,
+  bt_cslice<bt_string> const& argv)
+{
+  return execv_internal(true, file, argv);
+}
+
+int shell_exec_internal(io const& sys, cstrref const& cmd)
+{
+  PXCRT_ALLOCA_NTSTRING(cmd_nt, cmd);
+  return std::system(cmd_nt.get());
+}
+
+int dup2_internal(io const& sys, file const& ofp, file const& nfp)
+{
+#ifdef PXC_POSIX
+  if (dup2(ofp.get(), nfp.get()) < 0) {
+#else
+  if (_dup2(ofp.get(), nfp.get()) < 0) {
+#endif
+    return errno;
+  }
+  return 0;
+}
+
+};
+;
+

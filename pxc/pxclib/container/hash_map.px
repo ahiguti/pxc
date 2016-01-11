@@ -1,0 +1,403 @@
+public threaded namespace container::hash_map "use-unsafe";
+public import container::array::varray;
+public import numeric::integral -;
+public import numeric::cast -;
+public import exception;
+public import meta m;
+public import operator;
+public import generic::equality;
+
+public metafunction hash_map{lst*}
+  hash_map_hash_equal{
+    m::at0{lst},
+    m::at1{lst},
+    hash_o{m::cond{m::ge{m::size{lst}, 3}, m::at2{lst},
+      generic::equality::hash_c{m::at0{lst}}}},
+    equal_o{m::cond{m::ge{m::size{lst}, 4}, m::at3{lst},
+      operator::eq{m::at0{lst}, m::at0{lst}}}}};
+
+private mtvaluetype struct extern "::pxcrt::hash_map" "map" {t, s, h, e}
+hash_map_hash_equal (size_t initial_size) public {
+  public metafunction key_type t;
+  public metafunction mapped_type s;
+  public metafunction hash_type h;
+  public function extern "size" size_t size() const;
+  public function extern "insert" bool insert(t const& k, s const& v);
+  public function extern "rehash" void rehash(size_t nsz);
+}
+
+private tsvaluetype struct{f} equal_o () public {
+  public function bool __call(m::arg_type{f, 0} const& x,
+    m::arg_type{f, 1} const& y) const {
+    return f(x, y);
+  }
+}
+
+private tsvaluetype struct{f} hash_o () public {
+  public function size_t __call(m::arg_type{f, 0} const& x) const {
+    return f(x);
+  }
+}
+
+private metafunction primes {
+  17, 29, 37, 53, 67, 79, 97, 131, 193, 257, 389, 521, 769, 1031, 1543,
+  2053, 3079, 6151, 12289, 24593, 49157, 98317, 196613, 393241, 786433,
+  1572869, 3145739, 6291469, 12582917, 25165843, 50331653, 100663319,
+  201326611, 402653189, 805306457, 1610612741, 3221225473, 4294967291};
+private metafunction num_primes m::size{primes};
+private metafunction emit_primes
+  m::fold{
+    primes,
+    metafunction{x, y} m::concat{x, m::cond{m::eq{x, ""}, "", ","},
+      "{", y, ",&modulo_fixed<", y, ">}"},
+    ""};
+
+extern "types" inline
+
+#include <algorithm>
+
+#define PXCRT_DBG_HASH(x)
+
+namespace pxcrt {
+
+struct denom_info {
+  size_t num;
+  size_t (*func)(size_t);
+};
+
+struct compare_denom_info {
+  bool operator ()(const denom_info& x, const denom_info& y) const {
+    return x.num < y.num;
+  }
+};
+
+extern const denom_info denom_list[%{num_primes}%];
+
+template <size_t N> size_t modulo_fixed(size_t x)
+{
+  return x % N;
+}
+
+template <typename Tk, typename Tm>
+struct hmap_entry {
+  Tk first;
+  Tm second;
+  hmap_entry(const Tk& k, const Tm& m) : first(k), second(m) { }
+};
+
+template <typename Tk, typename Tm>
+struct hmap_node {
+  typedef hmap_entry<Tk, Tm> entry_type;
+  typedef Tk key_type;
+  typedef Tm mapped_type;
+  hmap_node *next;
+  entry_type entry;
+  hmap_node(hmap_node *n, const Tk& k, const Tm& m)
+    : next(n), entry(k, m) { }
+};
+
+template <typename Tnode, bool is_const> struct hmap_iterator;
+
+template <typename Tnode> struct hmap_iterator<Tnode, false> {
+  typedef typename Tnode::key_type key_type;
+  typedef typename Tnode::mapped_type mapped_type;
+  typedef Tnode node_type;
+  node_type *pnode;
+  node_type **pbucket;
+};
+
+template <typename Tnode> struct hmap_iterator<Tnode, true> {
+  typedef const typename Tnode::key_type key_type;
+  typedef const typename Tnode::mapped_type mapped_type;
+  typedef const Tnode node_type;
+  node_type *pnode;
+  node_type **pbucket;
+};
+
+template <typename Tnode, bool is_const>
+struct hmap_range {
+  typedef hmap_iterator<Tnode, is_const> iterator;
+  typedef hmap_iterator<Tnode, true> const_iterator;
+  typedef typename iterator::key_type key_type;
+  typedef typename iterator::mapped_type mapped_type;
+  typedef typename iterator::node_type node_type;
+  hmap_range() { start.pnode = 0; start.pbucket = 0; pbucket_end = 0; }
+  template <typename Tc> hmap_range(Tc& c) {
+    node_type **b = c.get_buckets();
+    node_type **b_end = b + c.hdr.num_buckets;
+    start.pnode = 0;
+    for (; b != b_end; ++b) {
+      if (*b != 0) {
+	start.pnode = *b;
+	break;
+      }
+    }
+    start.pbucket = b;
+    pbucket_end = b_end;
+  }
+  bool empty() const { return start.pbucket == pbucket_end; }
+  void increment_front(size_t n) {
+    for (size_t i = 0; i < n; ++i) {
+      increment_front_one();
+    }
+  }
+private:
+  void increment_front_one() {
+    if (empty()) { pxcrt::throw_invalid_index(); }
+    node_type *p = start.pnode->next;
+    if (p != 0) {
+      start.pnode = p;
+      return;
+    }
+    node_type **b = start.pbucket + 1;
+    for (node_type *b = start.pbucket + 1; b != pbucket_end; ++b) {
+      if (*b != 0) {
+	start.pnode = *b;
+	start.pbucket = b;
+	return;
+      }
+    }
+    start.pnode = 0;
+    start.pbucket = pbucket_end;
+  }
+  mapped_type& deref() const {
+    if (empty()) { pxcrt::throw_invalid_index(); }
+    return start.pnode->entry.second;
+  }
+  mapped_type const& cderef() const {
+    if (empty()) { pxcrt::throw_invalid_index(); }
+    return start.pnode->entry.second;
+  }
+  static inline key_type const& get_key(const iterator& iter) {
+    return iter.pnode->first;
+  }
+  static inline key_type const& get_ckey(const const_iterator& iter) {
+    return iter.pnode->first;
+  }
+  static inline mapped_type& get_mapped(const iterator& iter) {
+    return iter.pnode->second;
+  }
+  static inline mapped_type const& get_cmapped(const const_iterator& iter) {
+    return iter.pnode->second;
+  }
+  iterator begin() const { return start; }
+  iterator end() const {
+    iterator i;
+    i.pnode = 0;
+    i.pbucket = pbucket_end;
+    return i;
+  }
+private:
+  iterator start;
+  node_type **pbucket_end;
+};
+
+struct hmbuckets_hdr {
+  size_t num_buckets;
+  size_t (*buckets_modf)(size_t);
+  size_t num_entries;
+  size_t denom_ent;
+};
+
+template <typename Tk, typename Tm, typename Thash, typename Teq>
+struct hash_map : public refguard_base {
+  typedef Tk key_type;
+  typedef Tm mapped_type;
+  typedef Tm *find_type;
+  typedef Tm const *cfind_type;
+  typedef hmap_node<Tk, Tm> node_type;
+  typedef hmap_entry<Tk, Tm> entry_type;
+  typedef hmap_range<node_type, false> range_type;
+  typedef hmap_range<node_type, true> crange_type;
+  typedef hmap_iterator<node_type, false> iterator;
+  typedef hmap_iterator<node_type, true> const_iterator;
+  typedef size_t size_type;
+  hash_map(size_t initial_size) {
+    const size_t n = %{num_primes}%;
+    const denom_info e = { initial_size, 0 };
+    const denom_info *p = std::lower_bound(denom_list, denom_list + n, e,
+      compare_denom_info());
+    if (p == denom_list + n) {
+      --p;
+    }
+    const size_t sz = p->num;
+    const size_t max_len = (-sizeof(hmbuckets_hdr)) / sizeof(node_type *) - 1;
+    if (sz >= max_len) { pxcrt::throw_bad_alloc(); }
+    hdr = static_cast<hmbuckets_hdr *>(global_allocate_n(
+      sizeof(hmbuckets_hdr) + sz * sizeof(node_type *)));
+    hmbuckets_hdr& h = *hdr;
+    node_type **const buckets = get_buckets();
+    h.num_buckets = sz;
+    h.buckets_modf = p->func;
+    h.num_entries = 0;
+    h.denom_ent = p - denom_list;
+    for (size_type i = 0; i < h.num_buckets; ++i) {
+      buckets[i] = 0;
+    }
+  }
+  ~hash_map() {
+    hmbuckets_hdr& h = *hdr;
+    node_type **const buckets = get_buckets();
+    for (size_type i = 0; i < h.num_buckets; ++i) {
+      node_type *p = buckets[i];
+      while (p != 0) {
+	node_type *np = p->next;
+	delete p;
+	p = np;
+      }
+    }
+    global_deallocate_n(hdr,
+      sizeof(hmbuckets_hdr) + hdr->num_buckets * sizeof(node_type *));
+  }
+  Tm& operator [](const Tk& k) {
+    rehash_if();
+    hmbuckets_hdr& h = *hdr;
+    size_t const hashval = hash.__call$f(k);
+    size_t const bkt = h.buckets_modf(hashval);
+    node_type **const buckets = get_buckets();
+    assert(bkt < h.num_buckets);
+    node_type *cur = buckets[bkt];
+    for (node_type *p = cur; p != 0; p = p->next) {
+      entry_type& pe = p->entry;
+      if (eq.__call$f(pe.first, k)) {
+	return pe.second;
+      }
+    }
+    node_type *const nn = new node_type(cur, k, Tm());
+    buckets[bkt] = nn;
+    ++h.num_entries;
+    return nn->entry.second;
+  }
+  bool insert(const Tk& k, const Tm& m, size_type hashval) {
+    rehash_if();
+    hmbuckets_hdr& h = *hdr;
+    size_t const bkt = h.buckets_modf(hashval);
+    node_type **const buckets = get_buckets();
+    assert(bkt < h.num_buckets);
+    node_type *cur = buckets[bkt];
+    for (node_type *p = cur; p != 0; p = p->next) {
+      entry_type& pe = p->entry;
+      if (eq.__call$f(pe.first, k)) {
+	pe.second = m;
+	return false; /* not created */
+      }
+    }
+    node_type *const nn = new node_type(cur, k, m);
+    buckets[bkt] = nn;
+    ++h.num_entries;
+    return true; /* created */
+  }
+  bool insert(const Tk& k, const Tm& m) {
+    return insert(k, m, hash.__call$f(k));
+  }
+  const Tm *find(const Tk& k, size_type hashval) const {
+    size_t const bkt = hdr->buckets_modf(hashval);
+    return find_internal(k, bkt);
+  }
+  Tm *find(const Tk& k, size_type hashval) {
+    size_t const bkt = hdr->buckets_modf(hashval);
+    return find_internal(k, bkt);
+  }
+  const Tm *find(const Tk& k) const {
+    return find(k, hash.__call$f(k));
+  }
+  Tm *find(const Tk& k) {
+    return find(k, hash.__call$f(k));
+  }
+  const Tm *notfound() const { return 0; }
+  Tm *notfound() { return 0; }
+  static inline Tm& get_mapped(Tm *ptr) { return *ptr; }
+  static inline const Tm& get_cmapped(const Tm *ptr) { return *ptr; }
+  void rehash_if() {
+    if (!refguard_is_zero()) {
+      return;
+    }
+    size_t const n = hdr->denom_ent;
+    const denom_info& di = denom_list[n];
+    if (hdr->num_entries > di.num && n < %{num_primes}% - 1) {
+      rehash_internal(hdr->num_entries);
+    }
+  }
+  void rehash(size_type nsz) {
+    if (!refguard_is_zero()) {
+      return;
+    }
+    rehash_internal(nsz);
+  }
+  size_t size() const { return hdr->num_entries; }
+  size_t bucket_count() const { return hdr->num_buckets; }
+  size_t bucket_size(size_t bkt) const {
+    if (bkt >= hdr->num_buckets) { return 0; }
+    node_type *p = get_buckets()[bkt];
+    size_t r = 0;
+    for (p = get_buckets()[bkt]; p != 0; p = p->next, ++r) { }
+    return r;
+  }
+private:
+  void swap_internal(hash_map& x) {
+    hmbuckets_hdr *hdr_x = x.hdr;
+    x.hdr = hdr;
+    hdr = hdr_x;
+  }
+  void rehash_internal(size_type nsz) {
+    PXCRT_DBG_HASH(fprintf(stderr, "rehash %zu\n", nsz));
+    hash_map x(nsz);
+    node_type **const buckets = get_buckets();
+    node_type **const x_buckets = x.get_buckets();
+    hmbuckets_hdr& h= *hdr;
+    hmbuckets_hdr& x_h = *x.hdr;
+    for (node_type **b = buckets; b != buckets + h.num_buckets; ++b) {
+      while (*b != 0) {
+	node_type *p = *b;
+	node_type *p_next = p->next;
+	size_t const x_hashval = x.hash.__call$f(p->entry.first);
+	size_t const x_bkt = x_h.buckets_modf(x_hashval);
+	p->next = x_buckets[x_bkt];
+	x_buckets[x_bkt] = p;
+	*b = p_next;
+	++x_h.num_entries;
+	--h.num_entries;
+      }
+    }
+    swap_internal(x);
+  }
+  Tm *find_internal(const Tk& k, size_type bkt) const {
+    node_type **const buckets = get_buckets();
+    assert(bkt < hdr->num_buckets);
+    for (node_type *p = buckets[bkt]; p != 0; p = p->next) {
+      entry_type& pe = p->entry;
+      if (eq.__call$f(pe.first, k)) {
+	return &pe.second;
+      }
+    }
+    return 0;
+  }
+  node_type **get_buckets() const {
+    return reinterpret_cast<node_type **>(
+      reinterpret_cast<char *>(hdr) + sizeof(hmbuckets_hdr));
+  }
+private:
+  hash_map(const hash_map& x);
+  hash_map& operator =(const hash_map& x);
+private:
+  hmbuckets_hdr *hdr;
+  Thash hash;
+  Teq eq;
+};
+
+}; // namespace pxcrt
+
+#undef PXCRT_DBG_HASH
+
+;
+
+extern "implementation" inline
+
+namespace pxcrt {
+
+const denom_info denom_list[%{num_primes}%] = {%{emit_primes}%};
+
+}; // namespace pxcrt
+
+;
+

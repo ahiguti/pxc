@@ -1,4 +1,4 @@
-incdir=../pxc_core:../pxc_ext:../pxc_test:.
+incdir=../pxclib:../common:.
 safe_mode=0
 cxx=ccache g++ --std=gnu++11
 # cxx=clang++
@@ -10,4 +10,3 @@ ldflags=-L/usr/local/lib
 # cxx=clang++
 # cflags=-g -O3 -DNDEBUG -DNO_LOCAL_POOL=1 -fno-exceptions
 # noexceptions=1
-# incdir=../pxc_%{platform}:../pxc_core:.

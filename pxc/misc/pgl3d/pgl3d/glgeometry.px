@@ -46,11 +46,41 @@ public metafunction make_rand_generator make_ptr{rand_generator};
 public tsvaluetype struct
 rand_generator(uint seed0)
 {
-  private uint seed = seed0;
-  public function uint generate() {
-    uint rv = seed;
-    seed = seed * 1664525U + 1013904223U;
-    return rv;
+  // mersenne twister
+  public uint index = 624u;
+  public farray{uint, 624} mt;
+  init(seed0);
+  public function uint generate()
+  {
+    if (index >= 624u) {
+      twist();
+    }
+    mutable y = mt[index];
+    y ^= y >> 11u;
+    y ^= (y << 7u) & 2636928640u;
+    y ^= (y << 15u) & 4022730752u;
+    y ^= y >> 18u;
+    ++index;
+    return y;
+  }
+  private function void init(uint seed)
+  {
+    index = 624u;
+    mt[0] = seed;
+    for (const i: 1 .. 624u) {
+      mt[i] = 1812433253u * (mt[i - 1] ^ mt[i - 1] >> 30u) + i;
+    }
+  }
+  private function void twist()
+  {
+    for (const i: 0 .. 624u) {
+      const y = (mt[i] & 0x80000000u) + (mt[(i + 1u) % 624u] & 0x7fffffff);
+      mt[i] = mt[(i + 397u) % 624u] ^ (y >> 1u);
+      if (y % 2u != 0) {
+        mt[i] = mt[i] ^ 0x9908b0df;
+      }
+    }
+    index = 0u;
   }
   public function float generate_float() {
     return cast_float(generate()) / 4294967296.0;

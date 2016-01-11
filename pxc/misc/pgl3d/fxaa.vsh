@@ -7,3 +7,4 @@ void main(void)
   vary_coord = (vert + 1.0) * 0.5;
   gl_Position = vec4(vert, 0.0, 1.0);
 }
+

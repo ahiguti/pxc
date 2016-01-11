@@ -1,0 +1,277 @@
+public threaded namespace container::tree_map::tree_map "use-unsafe";
+public import container::array::varray;
+public import generic::ordered;
+
+extern "types" inline
+#include <map>
+#include <set>
+namespace pxcrt {
+
+template <typename Tk, typename Tm, typename Tcmp>
+struct map_conf {
+  typedef std::map<Tk, Tm, compare_less<Tcmp> > base_map;
+  typedef typename base_map::key_type key_type;
+  typedef typename base_map::mapped_type mapped_type;
+  typedef typename base_map::iterator iterator;
+  typedef typename base_map::const_iterator const_iterator;
+  static inline key_type const& get_key(iterator const& iter)
+    { return iter->first; }
+  static inline key_type const& get_ckey(const_iterator const& iter)
+    { return iter->first; }
+  static inline mapped_type& get_mapped(iterator const& iter)
+    { return iter->second; }
+  static inline mapped_type const& get_cmapped(const_iterator const& iter)
+    { return iter->second; }
+  static inline mapped_type& get_mapped(base_map& m, key_type const& k)
+    { return m[k]; }
+  static inline bool insert(base_map& m, key_type const& k,
+    mapped_type const& v)
+    { return m.insert(typename base_map::value_type(k, v)).second; }
+  static inline bool erase(base_map& m, key_type const& k)
+    { return m.erase(k); }
+};
+
+template <typename Tk, typename Tcmp>
+struct set_conf {
+  typedef std::set<Tk, compare_less<Tcmp> > base_map;
+  typedef typename base_map::key_type key_type;
+  typedef pxcrt::bt_unit mapped_type;
+  typedef typename base_map::const_iterator iterator; /* always const */
+  typedef typename base_map::const_iterator const_iterator;
+  static inline key_type const& get_key(iterator const& iter)
+    { return *iter; }
+  static inline key_type const& get_ckey(const_iterator const& iter)
+    { return *iter; }
+  static inline mapped_type& get_mapped(iterator const& iter)
+    { return pxcrt::unit_value; }
+  static inline mapped_type const& get_cmapped(const_iterator const& iter)
+    { return pxcrt::unit_value; }
+  static inline mapped_type& get_mapped(base_map& m, key_type const& k)
+    { m.insert(k); return pxcrt::unit_value; }
+  static inline bool insert(base_map& m, key_type const& key,
+    mapped_type const& val)
+    { return m.insert(key).second; }
+  static inline bool erase(base_map& m, key_type const& k)
+    { return m.erase(k); }
+};
+
+template <typename Tk, typename Tm, typename Tcmp>
+struct multimap_conf {
+  typedef std::multimap<Tk, Tm, compare_less<Tcmp> > base_map;
+  typedef typename base_map::key_type key_type;
+  typedef typename base_map::mapped_type mapped_type;
+  typedef typename base_map::value_type value_type;
+  typedef typename base_map::iterator iterator;
+  typedef typename base_map::const_iterator const_iterator;
+  static inline key_type const& get_key(iterator const& iter)
+    { return iter->first; }
+  static inline key_type const& get_ckey(const_iterator const& iter)
+    { return iter->first; }
+  static inline mapped_type& get_mapped(iterator const& iter)
+    { return iter->second; }
+  static inline mapped_type const& get_cmapped(const_iterator const& iter)
+    { return iter->second; }
+  static inline mapped_type& get_mapped(base_map& m, key_type const& k) {
+    iterator i = m.find(k);
+    if (i == m.end()) {
+      i = m.insert(value_type(k, mapped_type()));
+    }
+    return i->second;
+  }
+  static inline bool insert(base_map& m, key_type const& key,
+    mapped_type const& val)
+    { m.insert(value_type(key, val)); return true; }
+  static inline bool erase(base_map& m, key_type const& k)
+    { return m.erase(k); }
+};
+
+template <typename Tcnf> struct with_guard;
+
+template <typename Tcnf, bool is_const> struct range_conf;
+
+template <typename Tcnf> struct range_conf<Tcnf, false> {
+  typedef typename Tcnf::iterator iterator;
+  typedef typename Tcnf::mapped_type mapped_type;
+  typedef with_guard<Tcnf> map_type;
+};
+
+template <typename Tcnf> struct range_conf<Tcnf, true> {
+  typedef typename Tcnf::const_iterator iterator;
+  typedef typename Tcnf::mapped_type const mapped_type;
+  typedef with_guard<Tcnf> const map_type;
+};
+
+template <typename Tcnf, bool is_const> struct range_base {
+  typedef typename Tcnf::base_map base_map;
+  typedef typename base_map::key_type key_type;
+  typedef typename range_conf<Tcnf, is_const>::mapped_type mapped_type;
+  typedef typename range_conf<Tcnf, is_const>::iterator iterator;
+  typedef typename base_map::const_iterator const_iterator;
+  typedef typename base_map::key_compare key_compare;
+  typedef typename range_conf<Tcnf, is_const>::map_type map_type;
+  range_base() : start(), finish() { }
+  range_base(const iterator& i0, const iterator& i1)
+    : start(i0), finish(i1) { }
+  range_base(map_type& c, const key_type& k0, const key_type& k1)
+    : start(), finish() {
+    key_compare cmp;
+    if (cmp(k0, k1)) {
+      start = c.lower_bound(k0);
+      finish = c.upper_bound(k1);
+    }
+  }
+  template <typename Tc> range_base(Tc& c)
+    : start(c.begin()), finish(c.end()) { }
+  bt_bool empty() const { return start == finish; }
+  mapped_type& deref() const {
+    if (empty()) { pxcrt::throw_invalid_index(); }
+    return Tcnf::get_mapped(start);
+  }
+  mapped_type const& cderef() const {
+    if (empty()) { pxcrt::throw_invalid_index(); }
+    return Tcnf::get_cmapped(start);
+  }
+  static inline key_type const& get_key(const iterator& iter) {
+    return Tcnf::get_key(iter);
+  }
+  static inline key_type const& get_ckey(const const_iterator& iter) {
+    return Tcnf::get_ckey(iter);
+  }
+  static inline mapped_type& get_mapped(const iterator& iter) {
+    return Tcnf::get_mapped(iter);
+  }
+  static inline const mapped_type& get_cmapped(const const_iterator& iter) {
+    return Tcnf::get_cmapped(iter);
+  }
+  void increment_front(size_t i) {
+    while (i > 0) {
+      if (empty()) { pxcrt::throw_invalid_index(); }
+      ++start;
+      --i;
+    }
+  }
+  range_base<Tcnf, is_const> range() const {
+    return range_base<Tcnf, is_const>(start, finish);
+  }
+  range_base<Tcnf, true> crange() const {
+    return range_base<Tcnf, true>(start, finish);
+  }
+  iterator begin() const { return start; }
+  iterator end() const { return finish; }
+public:
+  iterator start;
+  iterator finish;
+};
+
+template <typename Tcnf>
+struct with_guard : public refguard_base {
+  typedef Tcnf conf_type;
+  typedef typename Tcnf::base_map base_map;
+  typedef range_base<Tcnf, false> range_type;
+  typedef range_base<Tcnf, true> crange_type;
+  typedef typename base_map::key_type key_type;
+  typedef typename Tcnf::mapped_type mapped_type;
+  typedef typename base_map::size_type size_type;
+  typedef typename base_map::iterator iterator;
+  typedef typename base_map::const_iterator const_iterator;
+  typedef typename base_map::iterator find_type;
+  typedef typename base_map::const_iterator cfind_type;
+  with_guard() { }
+  with_guard(const with_guard& x)
+    : v(x.v) { }
+  with_guard(with_guard&& x)
+    : v(x.v) { }
+  with_guard(const range_type& x)
+    : v(x.start, x.finish) { }
+  with_guard(const crange_type& x)
+    : v(x.start, x.finish) { }
+  with_guard& operator =(const with_guard& x) {
+    check_resize();
+    v = x.v;
+    return *this;
+  }
+  with_guard& operator =(with_guard&& x) {
+    check_resize();
+    v = x.v;
+    return *this;
+  }
+  mapped_type& operator [](const key_type& k) {
+    /* no need to call check_resize() because v[k] never invalidate any
+     * iterators */
+    return Tcnf::get_mapped(v, k);
+  }
+  mapped_type value_at(const key_type& k) { return Tcnf::get_mapped(v, k); }
+  static inline key_type const& get_key(const iterator& iter) {
+    return Tcnf::get_key(iter);
+  }
+  static inline key_type const& get_ckey(const const_iterator& iter) {
+    return Tcnf::get_ckey(iter);
+  }
+  static inline mapped_type& get_mapped(const iterator& iter) {
+    return Tcnf::get_mapped(iter);
+  }
+  static inline const mapped_type& get_cmapped(const const_iterator& iter) {
+    return Tcnf::get_cmapped(iter);
+  }
+  bool exists(const key_type& k) const { return v.find(k) != v.end(); }
+  iterator find(const key_type& k) { return v.find(k); }
+  const_iterator find(const key_type& k) const { return v.find(k); }
+  iterator notfound() { return end(); }
+  const_iterator notfound() const { return end(); }
+  iterator lower_bound(const key_type& k) { return v.lower_bound(k); }
+  const_iterator lower_bound(const key_type& k) const {
+    return v.lower_bound(k);
+  }
+  iterator upper_bound(const key_type& k) { return v.upper_bound(k); }
+  const_iterator upper_bound(const key_type& k) const {
+    return v.upper_bound(k);
+  }
+  bt_bool empty() const { return v.empty(); }
+  size_type size() const { return v.size(); }
+  bool insert(const key_type& k, const mapped_type& m) {
+    /* insert() does not invalidate iterators */
+    return Tcnf::insert(v, k, m);
+  }
+  size_type erase(const key_type& k) {
+    check_resize();
+    return v.erase(k);
+  }
+  void clear() {
+    check_resize();
+    v.clear();
+  }
+  void swap(with_guard& x) {
+    check_resize();
+    x.check_resize();
+    v.swap(x.v);
+  }
+  range_type range() {
+    return range_type(v.begin(), v.end());
+  }
+  crange_type crange() const {
+    return crange_type(v.begin(), v.end());
+  }
+  range_type equal_range(const key_type& k) {
+    const std::pair<iterator, iterator> r = v.equal_range(k);
+    return range_type(r.first, r.second);
+  }
+  crange_type equal_crange(const key_type& k) const {
+    const std::pair<const_iterator, const_iterator> r = v.equal_range(k);
+    return crange_type(r.first, r.second);
+  }
+  iterator begin() { return v.begin(); }
+  const_iterator begin() const { return v.begin(); }
+  iterator end() { return v.end(); }
+  const_iterator end() const { return v.end(); }
+private:
+  base_map v;
+};
+
+template <typename T> static inline void memfunc_swap(T& x, T& y)
+{
+  x.swap(y);
+}
+
+}; // namespace pxcrt
+;
+

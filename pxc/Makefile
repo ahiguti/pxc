@@ -57,13 +57,16 @@ install:
 	mkdir -p $(INSTALL_PREFIX)/share/pxc/
 	rm -rf $(INSTALL_PREFIX)/bin/pxc
 	rm -rf $(INSTALL_PREFIX)/etc/pxc.profile
-	rm -rf $(INSTALL_PREFIX)/share/pxc/pxc_*
+	rm -rf $(INSTALL_PREFIX)/share/pxc
+	rm -rf $(INSTALL_PREFIX)/share/pxclib
 	install -m 755 pxc $(INSTALL_PREFIX)/bin/
 	cp -R profile/* $(INSTALL_PREFIX)/etc/pxc/
-	cp -R libs/pxc_* $(INSTALL_PREFIX)/share/pxc/
+	cp -R pxclib $(INSTALL_PREFIX)/share/pxclib/
 
 uninstall:
 	rm -rf $(INSTALL_PREFIX)/bin/pxc
 	rm -rf $(INSTALL_PREFIX)/etc/pxc.profile
 	rm -rf $(INSTALL_PREFIX)/share/pxc_*
+	rm -rf $(INSTALL_PREFIX)/share/pxc
+	rm -rf $(INSTALL_PREFIX)/share/pxclib
 

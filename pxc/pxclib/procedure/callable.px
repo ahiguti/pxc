@@ -1,0 +1,97 @@
+public threaded namespace procedure::callable;
+public import operator -;
+public import pointer -;
+public import meta m;
+
+public threaded interface {rt, tlist} callable
+{
+  public function rt __call(expand(ailist{tlist})); /* non-const */
+}
+
+public multithreaded interface {rt, tlist} tcallable
+{
+  public function rt __call(expand(ailist{tlist})); /* non-const */
+}
+
+public threaded struct {rt, tlist}
+callable_ptr(ptr{callable{rt, tlist}} const& p0)
+{
+  private ptr{callable{rt, tlist}} const p = p0;
+  public function rt __call(expand(ailist{tlist})) const {
+    return p->__call(expand(a: anlist{tlist}; a));
+  }
+}
+
+public multithreaded struct {rt, tlist}
+tcallable_ptr(tptr{tcallable{rt, tlist}} const& p0)
+{
+  private tptr{tcallable{rt, tlist}} const p = p0;
+  public function rt __call(expand(ailist{tlist})) const {
+    return p->__call(expand(a: anlist{tlist}; a));
+  }
+}
+
+public threaded function {f, nbind}
+callable_ptr{m::ret_type{f}, rest_atlist{f, nbind}}
+make_callable_ptr(expand(m::slice{m::args{f}, 0, nbind}))
+{
+  return callable_ptr{m::ret_type{f}, rest_atlist{f, nbind}}(
+    make_ptr{callable_tpl{f, nbind}}(expand(a: bind_anlist{f, nbind}; a)));
+}
+
+public threaded function {f, nbind}
+tcallable_ptr{m::ret_type{f}, rest_atlist{f, nbind}}
+make_tcallable_ptr(expand(m::slice{m::args{f}, 0, nbind}))
+{
+  return tcallable_ptr{m::ret_type{f}, rest_atlist{f, nbind}}(
+    make_tptr{tcallable_tpl{f, nbind}}(expand(a: bind_anlist{f, nbind}; a)));
+}
+
+/* private */
+
+private threaded struct {f, nbind}
+callable_tpl(expand(bind_ailist{f, nbind}))
+  <callable{m::ret_type{f}, rest_atlist{f, nbind}}>
+{
+  private metafunction tfld tuple{bind_atlist{f, nbind}, m::nil};
+  public tfld const fld = tfld(expand(a: bind_anlist{f, nbind}; a));
+  public function m::ret_type{f} __call(expand(bargs_bycref{f, nbind})) {
+    return f(
+      expand(f: m::field_names{tfld}; fld.f),
+      expand(a: m::slice{m::arg_names{f}, nbind}; a));
+  }
+}
+
+private multithreaded struct {f, nbind}
+tcallable_tpl(expand(bind_ailist{f, nbind}))
+  <tcallable{m::ret_type{f}, rest_atlist{f, nbind}}>
+{
+  private metafunction tfld tuple{bind_atlist{f, nbind}, m::nil};
+  public tfld const fld = tfld(expand(a: bind_anlist{f, nbind}; a));
+  public function m::ret_type{f} __call(expand(bargs_bycref{f, nbind})) {
+    return f(
+      expand(f: m::field_names{tfld}; fld.f),
+      expand(a: m::slice{m::arg_names{f}, nbind}; a));
+  }
+}
+
+private metafunction ailist{tlist} 
+  m::map{
+    m::seq{m::size{tlist}},
+    metafunction{i} {m::concat{"a", i}, m::at{tlist, i}, 1, 0}};
+private metafunction anlist{tlist}
+  m::map{
+    m::seq{m::size{tlist}},
+    metafunction{i} m::concat{"a", i}};
+
+private metafunction rest_atlist{f, nbind} m::slice{m::arg_types{f}, nbind};
+private metafunction bind_atlist{f, nbind} m::slice{m::arg_types{f}, 0, nbind};
+private metafunction rest_anlist{f, nbind} m::slice{m::arg_names{f}, nbind};
+private metafunction bind_anlist{f, nbind} m::slice{m::arg_names{f}, 0, nbind};
+private metafunction rest_ailist{f, nbind} m::slice{m::args{f}, nbind};
+private metafunction bind_ailist{f, nbind} m::slice{m::args{f}, 0, nbind};
+
+private metafunction bargs_bycref{f, nbind}
+  m::map{m::slice{m::args{f}, nbind},
+    metafunction{e} {m::at0{e}, m::at1{e}, 1, 0}};
+

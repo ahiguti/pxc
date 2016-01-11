@@ -33,14 +33,15 @@ octree_build(octree{bshift} mutable& ot, ptr{level_data} const& pattern,
   bool apply_tile = (tiles->get_w_l2() != 0);
   if (apply_tile) {
     const p = tiles;
+    debug_log("tile", p->get_h_l2(), p->get_w_l2(), p->get_d_l2());
 /*
     if (p->get_w_l2() != p->get_h_l2() || p->get_w_l2() != p->get_d_l2()) {
       throw runtime_error_template{"octree"}("tile whd");
     }
 */
-    check_size{bshift}(p->get_w_l2(), "tile width");
-    check_size{bshift}(p->get_h_l2(), "tile height");
-    check_size{bshift}(p->get_d_l2(), "tile depth");
+    // check_size{bshift}(p->get_w_l2(), "tile width");
+    // check_size{bshift}(p->get_h_l2(), "tile height");
+    // check_size{bshift}(p->get_d_l2(), "tile depth");
   } else {
     const p = pattern;
     if (p->get_w_l2() != p->get_h_l2() || p->get_w_l2() != p->get_d_l2()) {
@@ -50,6 +51,7 @@ octree_build(octree{bshift} mutable& ot, ptr{level_data} const& pattern,
     check_size{bshift}(pattern->get_h_l2(), "pattern height");
     check_size{bshift}(pattern->get_d_l2(), "pattern depth");
   }
+  debug_log("pat", pattern->get_h_l2(), pattern->get_w_l2(), pattern->get_d_l2());
   ptr{level_data} ilevel = pattern;
   ptr{level_data} olevel = make_ptr{level_data}();
   ot.nodes.clear();
@@ -93,7 +95,9 @@ octree_build(octree{bshift} mutable& ot, ptr{level_data} const& pattern,
     ilevel = o2level;
     olevel = make_ptr{level_data}();
   }
-  while (ilevel->get_w_l2() > 0) {
+  while (ilevel->get_w_l2() > 0 || ilevel->get_h_l2() > 0 ||
+    ilevel->get_d_l2() > 0)
+  {
     debug_log("make_otree", ilevel->get_w_l2(), ilevel->get_h_l2(),
       ilevel->get_d_l2());
     make_octree_one_level{bshift}(ot.nodes, *olevel, *ilevel);
@@ -409,15 +413,13 @@ function {bshift} void
 make_octree_one_level(varray{node_value{bshift}} mutable& nodes,
   level_data mutable& olevel, level_data const& ilevel)
 {
-  olevel.set_size_l2(
-    ilevel.get_w_l2() - bshift,
-    ilevel.get_h_l2() - bshift,
-    ilevel.get_d_l2() - bshift);
   const bsz = 1u << bshift;
   const bmask = bsz - 1;
   const iw_l2 = ilevel.get_w_l2();
   const ih_l2 = ilevel.get_h_l2();
   const id_l2 = ilevel.get_d_l2();
+  const sl2 = (max(iw_l2, max(ih_l2, id_l2)) + bshift - 1) / bshift * bshift;
+  olevel.set_size_l2(sl2 - bshift, sl2 - bshift, sl2 - bshift);
   const ow_l2 = olevel.get_w_l2();
   const oh_l2 = olevel.get_h_l2();
   const od_l2 = olevel.get_d_l2();
@@ -427,17 +429,22 @@ make_octree_one_level(varray{node_value{bshift}} mutable& nodes,
   const  octnode_id_base = static_cast{uint}(nodes.size());
   mutable octnode_id_cur = octnode_id_base;
   tree_map{node_value{bshift}, uint} nodeset;
-  const imax = static_cast{uint}(ilevel.values.size() >> (bshift * 3));
+  // const imax = static_cast{uint}(ilevel.values.size() >> (bshift * 3));
+  // for (const i: 0 .. imax) {
+  const imax = static_cast{uint}(olevel.values.size());
   for (const i: 0 .. imax) {
     const x = i & owmask;
     const y = (i >> ow_l2) & ohmask;
     const z = (i >> (ow_l2 + oh_l2)) & odmask;
     node_value{bshift} nvalue;
-    for (const j: 0 .. bsz * bsz * bsz) {
-      const xj = j & bmask;
-      const yj = (j >> bshift) & bmask;
-      const zj = (j >> (bshift * 2)) & bmask;
-      nvalue[j] = ilevel.get(x * bsz + xj, y * bsz + yj, z * bsz + zj);
+    if (x * bsz < (1u << iw_l2) && y * bsz < (1u << ih_l2) && z * bsz < (1u << id_l2))
+    {
+      for (const j: 0 .. bsz * bsz * bsz) {
+	const xj = j & bmask;
+	const yj = (j >> bshift) & bmask;
+	const zj = (j >> (bshift * 2)) & bmask;
+	nvalue[j] = ilevel.get(x * bsz + xj, y * bsz + yj, z * bsz + zj);
+      }
     }
     texel_value tvalue;
     if (ow_l2 != 0 && is_leaf_value{bshift}(nvalue)) {

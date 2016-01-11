@@ -1,0 +1,96 @@
+public threaded namespace procedure::thread::async_task;
+public import numeric::integral -;
+public import pointer -;
+public import operator -;
+public import procedure::thread -;
+public import procedure::callable -;
+public import generic::datatype -;
+public import meta m;
+public import meta::platform mp;
+
+public multithreaded interface async_task_factory_i
+{
+  // equivalent to tcallable{ptr{callable{void, m::nil}}, m::nil} except that
+  // tcallable{...} is degraded to a threaded interface
+  public function ptr{callable{void, m::nil}} __call();
+}
+
+public metafunction task_executor
+  m::cond{
+    mp::platform_has_thread,
+    async_task_executor,
+    sync_task_executor};
+
+public threaded struct
+sync_task_executor(tptr{async_task_factory_i} const& tf)
+{
+  ptr{callable{void, m::nil}} const taskp = tf->__call();
+  public function void start()
+  {
+    (*taskp)();
+  }
+  public function void finish()
+  {
+  }
+}
+
+public threaded struct
+async_task_executor(tptr{async_task_factory_i} const& tf)
+{
+  private tptr{task_state} statep = make_tptr{task_state}();
+  private callable_ptr{void, m::nil} thr =
+    make_thread_ptr{async_task_executor_child_thread_main}(tf, statep);
+  public function void start()
+  {
+    mutable lck = lock_guard{task_state}(statep);
+    if (*lck != task_stopped) {
+      return; // already running
+    }
+    *lck = task_running;
+    lck.notify_one();
+  }
+  public function void finish()
+  {
+    mutable lck = lock_guard{task_state}(statep);
+    while (true) {
+      if (*lck != task_running) {
+	break;
+      }
+      lck.wait();
+    }
+  }
+  function ~
+  {
+    mutable lck = lock_guard{task_state}(statep);
+    *lck = task_terminated;
+    lck.notify_one();
+  }
+}
+
+private tsvaluetype enum task_state {
+  task_stopped = 0,
+  task_running = 1,
+  task_terminated = 2
+}
+
+private threaded function void async_task_executor_child_thread_main(
+  tptr{async_task_factory_i} const& tf, tptr{task_state} const& statep)
+{
+  const taskp = tf->__call();
+  mutable& task = *taskp;
+  mutable lck = lock_guard{task_state}(statep);
+  while (true) {
+    const st = *lck;
+    if (st == task_terminated) {
+      break;
+    }
+    if (st != task_running) {
+      lck.wait();
+      continue;
+    }
+    task();
+    *lck = task_stopped;
+    lck.notify_one();
+  }
+}
+

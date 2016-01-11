@@ -1,0 +1,53 @@
+public threaded namespace container::array::farray "use-unsafe";
+public import container::array::varray;
+
+extern "types" inline
+namespace pxcrt {
+template <typename T, size_t len>
+struct farray {
+  typedef T mapped_type;
+  typedef size_t size_type;
+  typedef T *iterator;
+  typedef const T *const_iterator;
+  typedef pxcrt::bt_slice<T> range_type;
+  typedef pxcrt::bt_cslice<T> crange_type;
+  farray() : v() { }
+  bool empty() const { return len == 0; }
+  size_t size() const { return len; }
+  T& operator [](size_type idx) {
+    #ifndef PXC_NO_BOUNDS_CHECKING
+    if (idx >= len) { pxcrt::throw_invalid_index(); }
+    #endif
+    return v[idx];
+  }
+  const T& operator [](size_type idx) const {
+    #ifndef PXC_NO_BOUNDS_CHECKING
+    if (idx >= len) { pxcrt::throw_invalid_index(); }
+    #endif
+    return v[idx];
+  }
+  T value_at(size_type idx) const {
+    #ifndef PXC_NO_BOUNDS_CHECKING
+    if (idx >= len) { pxcrt::throw_invalid_index(); }
+    #endif
+    return v[idx];
+  }
+  bt_slice<T> range() {
+    return bt_slice<T>(v, len);
+  }
+  bt_cslice<T> crange() const {
+    return bt_cslice<T>(v, len);
+  }
+  iterator begin() { return v; }
+  const_iterator begin() const { return v; }
+  iterator end() { return v + len; }
+  const_iterator end() const { return v + len; }
+  T *rawarr() { return v; }
+  const T *rawarr() const { return v; }
+private:
+  T v[len];
+};
+
+}; // namespace pxcrt 
+;
+

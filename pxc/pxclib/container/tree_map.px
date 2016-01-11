@@ -1,0 +1,203 @@
+public threaded namespace container::tree_map "use-unsafe";
+public import numeric::integral -;
+public import container::array;
+public import container::tree_map::tree_map;
+public import generic::ordered;
+
+public metafunction tree_map{t, s}
+  tree_map_compare{t, s, cmp{t}};
+public metafunction tree_map_range{t, s}
+  tree_map_compare_range{t, s, cmp{t}};
+public metafunction tree_map_crange{t, s}
+  tree_map_compare_crange{t, s, cmp{t}};
+
+public metafunction tree_set{t}
+  tree_set_compare{t, cmp{t}};
+public metafunction tree_set_range{t}
+  tree_set_compare_range{t, cmp{t}};
+public metafunction tree_set_crange{t}
+  tree_set_compare_crange{t, cmp{t}};
+
+public metafunction tree_multimap{t, s}
+  tree_multimap_compare{t, s, cmp{t}};
+public metafunction tree_multimap_range{t, s}
+  tree_multimap_compare_range{t, s, cmp{t}};
+public metafunction tree_multimap_crange{t, s}
+  tree_multimap_compare_crange{t, s, cmp{t}};
+
+public threaded function {t, s, f} void
+tree_map_compare_swap(tree_map_compare{t, s, f} mutable& x,
+  tree_map_compare{t, s, f} mutable& y)
+{
+  memfunc_swap(x, y);
+}
+
+public threaded function {t, f} void
+tree_set_compare_swap(tree_set_compare{t, f} mutable& x,
+  tree_set_compare{t, f} mutable& y)
+{
+  memfunc_swap(x, y);
+}
+
+public threaded function {t, s, f} void
+tree_multimap_compare_swap(tree_multimap_compare{t, s, f} mutable& x,
+  tree_multimap_compare{t, s, f} mutable& y)
+{
+  memfunc_swap(x, y);
+}
+
+private threaded function extern "::pxcrt::memfunc_swap" {t} void
+memfunc_swap(t mutable& x, t mutable& y);
+
+private tsvaluetype struct {t} cmp {
+  public function int call(t const& x, t const& y) const
+    { return generic::ordered::compare_strict_weak(x, y); }
+}
+
+private mtvaluetype struct
+extern "pxcrt::with_guard< pxcrt::map_conf<> >" "map"
+{t, s, f} tree_map_compare () public {
+  public metafunction key_type t;
+  public metafunction mapped_type s;
+  public metafunction range_type tree_map_range{t, s};
+  public metafunction crange_type tree_map_crange{t, s};
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "clear" void clear();
+  public function extern "exists" bool exists(t const& k) const;
+  public function extern "insert" bool insert(t const& k, s const& v);
+  public function extern "erase" size_t erase(t const& k);
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange();
+  public function extern "equal_range"
+    range_type equal_range(t const& k);
+  public function extern "equal_crange"
+    crange_type equal_crange(t const& k) const;
+}
+
+private mtvaluetype struct
+extern "pxcrt::range_base< pxcrt::map_conf<>, false >" "map_range"
+{t, s, f} tree_map_compare_range () public {
+  public metafunction key_type t;
+  public metafunction mapped_type s;
+  public metafunction range_type tree_map_compare_range{t, s, f};
+  public metafunction crange_type tree_map_compare_crange{t, s, f};
+  public metafunction non_ephemeral_type tree_map_compare{t, s, f};
+  public function extern "empty" bool empty() const;
+  public function extern "increment_front" void increment_front(size_t i);
+  public function extern "range" range_type range() const;
+  public function extern "crange" crange_type crange() const;
+}
+
+private mtvaluetype struct
+extern "pxcrt::range_base< pxcrt::map_conf<>, true >" "map_crange"
+{t, s, f} tree_map_compare_crange () public {
+  public metafunction key_type t;
+  public metafunction mapped_type s;
+  public metafunction range_type tree_map_compare_crange{t, s, f};
+  public metafunction crange_type tree_map_compare_crange{t, s, f};
+  public metafunction non_ephemeral_type tree_map_compare{t, s, f};
+  public function extern "empty" bool empty() const;
+  public function extern "increment_front" void increment_front(size_t i);
+  public function extern "range" range_type range() const;
+  public function extern "crange" crange_type crange() const;
+}
+
+private mtvaluetype struct
+extern "pxcrt::with_guard< pxcrt::set_conf<> >" "map"
+{t, f} tree_set_compare () public {
+  public metafunction key_type t;
+  public metafunction mapped_type unit;
+  public metafunction range_type tree_set_range{t};
+  public metafunction crange_type tree_set_crange{t};
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "clear" void clear();
+  public function extern "exists" bool exists(t const& k) const;
+  public function extern "insert" bool insert(t const& k, unit const& v);
+  public function extern "erase" size_t erase(t const& k);
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
+  public function extern "equal_range"
+    range_type equal_range(t const& k);
+  public function extern "equal_crange"
+    crange_type equal_crange(t const& k) const;
+}
+
+private mtvaluetype struct
+extern "pxcrt::range_base< pxcrt::set_conf<>, false >" "map"
+{t, f} tree_set_compare_range () public {
+  public metafunction key_type t;
+  public metafunction mapped_type unit;
+  public metafunction range_type tree_set_compare_range{t, f};
+  public metafunction crange_type tree_set_compare_crange{t, f};
+  public metafunction non_ephemeral_type tree_set_compare{t, f};
+  public function extern "empty" bool empty() const;
+  public function extern "increment_front" void increment_front(size_t i);
+  public function extern "range" range_type range() const;
+  public function extern "crange" crange_type crange() const;
+}
+
+private mtvaluetype struct
+extern "pxcrt::range_base< pxcrt::set_conf<>, true >" "map"
+{t, f} tree_set_compare_crange () public {
+  public metafunction key_type t;
+  public metafunction mapped_type unit;
+  public metafunction range_type tree_set_compare_crange{t, f};
+  public metafunction crange_type tree_set_compare_crange{t, f};
+  public metafunction non_ephemeral_type tree_set_compare{t, f};
+  public function extern "empty" bool empty() const;
+  public function extern "increment_front" void increment_front(size_t i);
+  public function extern "range" range_type range() const;
+  public function extern "crange" crange_type crange() const;
+}
+
+private mtvaluetype struct
+extern "pxcrt::with_guard< pxcrt::multimap_conf<> >" "map"
+{t, s, f} tree_multimap_compare () public {
+  public metafunction key_type t;
+  public metafunction mapped_type s;
+  public metafunction range_type tree_multimap_range{t, s};
+  public metafunction crange_type tree_multimap_crange{t, s};
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "clear" void clear();
+  public function extern "exists" bool exists(t const& k) const;
+  public function extern "insert" bool insert(t const& k, s const& v);
+  public function extern "erase" size_t erase(t const& k);
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
+  public function extern "equal_range"
+    range_type equal_range(t const& k);
+  public function extern "equal_crange"
+    crange_type equal_crange(t const& k) const;
+}
+
+private mtvaluetype struct
+extern "pxcrt::range_base< pxcrt::map_conf<>, false >" "map_range"
+{t, s, f} tree_multimap_compare_range () public {
+  public metafunction key_type t;
+  public metafunction mapped_type s;
+  public metafunction range_type tree_multimap_compare_range{t, s, f};
+  public metafunction crange_type tree_multimap_compare_crange{t, s, f};
+  public metafunction non_ephemeral_type tree_multimap_compare{t, s, f};
+  public function extern "empty" bool empty() const;
+  public function extern "increment_front" void increment_front(size_t i);
+  public function extern "range" range_type range() const;
+  public function extern "crange" crange_type crange() const;
+}
+
+private mtvaluetype struct
+extern "pxcrt::range_base< pxcrt::map_conf<>, true >" "map_crange"
+{t, s, f} tree_multimap_compare_crange () public {
+  public metafunction key_type t;
+  public metafunction mapped_type s;
+  public metafunction range_type tree_multimap_compare_crange{t, s, f};
+  public metafunction crange_type tree_multimap_compare_crange{t, s, f};
+  public metafunction non_ephemeral_type tree_multimap_compare{t, s, f};
+  public function extern "empty" bool empty() const;
+  public function extern "increment_front" void increment_front(size_t i);
+  public function extern "range" range_type range() const;
+  public function extern "crange" crange_type crange() const;
+}
+

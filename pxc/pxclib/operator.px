@@ -1,0 +1,576 @@
+public threaded namespace operator;
+public import numeric::integral -;
+public import container::array -;
+public import meta::family -;
+public import exception -;
+public import text::serialize -;
+public import meta m;
+public import meta::vararg va;
+
+/* public */
+
+/* operator '+' */
+public threaded function {tx, ty}
+binop_ret_type{tx, ty, "add", is_numeric_type}
+add(tx const& x, ty const& y)
+{
+  if (m::and{is_numeric_type{tx}, is_numeric_type{ty}}) { return x + y; }
+  else { return binop{tx, ty, "add"}(x, y); }
+}
+
+/* operator '-' */
+public threaded function {tx, ty}
+binop_ret_type{tx, ty, "sub", is_numeric_type}
+sub(tx const& x, ty const& y)
+{
+  if (m::and{is_numeric_type{tx}, is_numeric_type{ty}}) { return x - y; }
+  else { return binop{tx, ty, "sub"}(x, y); }
+}
+
+/* operator '*' */
+public threaded function {tx, ty}
+binop_ret_type{tx, ty, "mul", is_numeric_type}
+mul(tx const& x, ty const& y)
+{
+  if (m::and{is_numeric_type{tx}, is_numeric_type{ty}}) { return x * y; }
+  else { return binop{tx, ty, "mul"}(x, y); }
+}
+
+/* operator '/' */
+public threaded function {tx, ty}
+binop_ret_type{tx, ty, "div", is_numeric_type}
+div(tx const& x, ty const& y)
+{
+  if (m::and{is_numeric_type{tx}, is_numeric_type{ty}}) { return x / y; }
+  else { return binop{tx, ty, "div"}(x, y); }
+}
+
+/* operator '%' */
+public threaded function {tx, ty}
+binop_ret_type{tx, ty, "mod", is_numeric_type}
+mod(tx const& x, ty const& y)
+{
+  if (m::and{is_numeric_type{tx}, is_numeric_type{ty}}) { return x % y; }
+  else { return binop{tx, ty, "mod"}(x, y); }
+}
+
+/* operator '|' */
+public threaded function {tx, ty}
+binop_ret_type{tx, ty, "or", is_boolean_type}
+or(tx const& x, ty const& y)
+{
+  if (m::and{is_boolean_type{tx}, is_boolean_type{ty}}) { return x | y; }
+  else { return binop{tx, ty, "or"}(x, y); }
+}
+
+/* operator '&' */
+public threaded function {tx, ty}
+binop_ret_type{tx, ty, "and", is_boolean_type}
+and(tx const& x, ty const& y)
+{
+  if (m::and{is_boolean_type{tx}, is_boolean_type{ty}}) { return x & y; }
+  else { return binop{tx, ty, "and"}(x, y); }
+}
+
+/* operator '^' */
+public threaded function {tx, ty}
+binop_ret_type{tx, ty, "xor", is_boolean_type}
+xor(tx const& x, ty const& y)
+{
+  if (m::and{is_boolean_type{tx}, is_boolean_type{ty}}) { return x ^ y; }
+  else { return binop{tx, ty, "xor"}(x, y); }
+}
+
+/* operator '==' */
+public threaded function {tx, ty} bool
+eq(tx const& x, ty const& y)
+{
+  if (m::and{is_equality_type{tx}, is_equality_type{ty}}) { return x == y; }
+  else { return binop{tx, ty, "eq"}(x, y); }
+}
+
+/* operator '!=' */
+public threaded function {tx, ty} bool
+ne(tx const& x, ty const& y)
+{
+  if (m::and{is_equality_type{tx}, is_equality_type{ty}}) { return x != y; }
+  else { return binop{tx, ty, "ne"}(x, y); }
+}
+
+/* operator '>' */
+public threaded function {tx, ty} bool
+gt(tx const& x, ty const& y)
+{
+  if (m::and{is_ordered_type{tx}, is_ordered_type{ty}}) { return x > y; }
+  else { return binop{tx, ty, "gt"}(x, y); }
+}
+
+/* operator '<' */
+public threaded function {tx, ty} bool
+lt(tx const& x, ty const& y)
+{
+  if (m::and{is_ordered_type{tx}, is_ordered_type{ty}}) { return x < y; }
+  else { return binop{tx, ty, "lt"}(x, y); }
+}
+
+/* operator '>=' */
+public threaded function {tx, ty} bool
+ge(tx const& x, ty const& y)
+{
+  if (m::and{is_ordered_type{tx}, is_ordered_type{ty}}) { return x >= y; }
+  else { return binop{tx, ty, "ge"}(x, y); }
+}
+
+/* operator '<=' */
+public threaded function {tx, ty} bool
+le(tx const& x, ty const& y)
+{
+  if (m::and{is_ordered_type{tx}, is_ordered_type{ty}}) { return x <= y; }
+  else { return binop{tx, ty, "le"}(x, y); }
+}
+
+/* operator '<<' */
+public threaded function {tx, ty}
+binop_ret_type{tx, ty, "shiftl", is_integral_type}
+shiftl(tx const& x, ty const& y)
+{
+  if (m::and{is_integral_type{tx}, is_integral_type{ty}}) { return x << y; }
+  else { return binop{tx, ty, "shiftl"}(x, y); }
+}
+
+/* operator '>>' */
+public threaded function {tx, ty}
+binop_ret_type{tx, ty, "shiftl", is_integral_type}
+shiftr(tx const& x, ty const& y)
+{
+  if (m::and{is_integral_type{tx}, is_integral_type{ty}}) { return x >> y; }
+  else { return binop{tx, ty, "shiftr"}(x, y); }
+}
+
+/* operator '+=' */
+public threaded function {tx, ty} void adda(tx mutable& x, ty const& y)
+{
+  if (m::and{is_numeric_type{tx}, is_numeric_type{ty}}) { x += y; }
+  else { binopa{tx, ty, "add"}(x, y); }
+}
+
+/* operator '-=' */
+public threaded function {tx, ty} void suba(tx mutable& x, ty const& y)
+{
+  if (m::and{is_numeric_type{tx}, is_numeric_type{ty}}) { x -= y; }
+  else { binopa{tx, ty, "sub"}(x, y); }
+}
+
+/* operator '*=' */
+public threaded function {tx, ty} void mula(tx mutable& x, ty const& y)
+{
+  if (m::and{is_numeric_type{tx}, is_numeric_type{ty}}) { x *= y; }
+  else { binopa{tx, ty, "mul"}(x, y); }
+}
+
+/* operator '/=' */
+public threaded function {tx, ty} void diva(tx mutable& x, ty const& y)
+{
+  if (m::and{is_numeric_type{tx}, is_numeric_type{ty}}) { x /= y; }
+  else { binopa{tx, ty, "div"}(x, y); }
+}
+
+/* operator '%=' */
+public threaded function {tx, ty} void moda(tx mutable& x, ty const& y)
+{
+  if (m::and{is_numeric_type{tx}, is_numeric_type{ty}}) { x %= y; }
+  else { binopa{tx, ty, "mod"}(x, y); }
+}
+
+/* operator '|=' */
+public threaded function {tx, ty} void ora(tx mutable& x, ty const& y)
+{
+  if (m::and{is_boolean_type{tx}, is_boolean_type{ty}}) { x |= y; }
+  else { binopa{tx, ty, "or"}(x, y); }
+}
+
+/* operator '&=' */
+public threaded function {tx, ty} void anda(tx mutable& x, ty const& y)
+{
+  if (m::and{is_boolean_type{tx}, is_boolean_type{ty}}) { x &= y; }
+  else { binopa{tx, ty, "and"}(x, y); }
+}
+
+/* operator '^=' */
+public threaded function {tx, ty} void xora(tx mutable& x, ty const& y)
+{
+  if (m::and{is_boolean_type{tx}, is_boolean_type{ty}}) { x ^= y; }
+  else { binopa{tx, ty, "xor"}(x, y); }
+}
+
+/* operator '<<=' */
+public threaded function {tx, ty} void shiftla(tx mutable& x, ty const& y)
+{
+  if (m::and{is_integral_type{tx}, is_integral_type{ty}}) { x <<= y; }
+  else { binopa{tx, ty, "shiftl"}(x, y); }
+}
+
+/* operator '>>=' */
+public threaded function {tx, ty} void shiftra(tx mutable& x, ty const& y)
+{
+  if (m::and{is_integral_type{tx}, is_integral_type{ty}}) { x >>= y; }
+  else { binopa{tx, ty, "shiftr"}(x, y); }
+}
+
+/* unary operator '+' */
+public threaded function {tx} unaryop_ret_type{tx, "plus", is_numeric_type}
+plus(tx const& x)
+{
+  if (is_numeric_type{tx}) { return x; }
+  else { return unaryop{tx, "plus", is_numeric_type}(x); }
+}
+
+/* unary operator '-' */
+public threaded function {tx} unaryop_ret_type{tx, "minus", is_numeric_type}
+minus(tx const& x)
+{
+  if (is_numeric_type{tx}) { return -x; }
+  else { return unaryop{tx, "minus", is_numeric_type}(x); }
+}
+
+/* operator '~' */
+public threaded function {tx} unaryop_ret_type{tx, "neg", is_boolean_type}
+neg(tx const& x)
+{
+  if (is_boolean_type{tx}) { return ~x; }
+  else { return unaryop{tx, "neg", is_boolean_type}(x); }
+}
+
+/* operator '!' */
+public threaded function {tx} unaryop_ret_type{tx, "not", is_boolean_type}
+not(tx const& x)
+{
+  if (is_boolean_type{tx}) { return !x; }
+  else { return unaryop{tx, "not", is_boolean_type}(x); }
+}
+
+/* user-defined operator '[]', rvalue */
+public threaded function {tx, ty} mapped_type{tx}
+getelem(tx const& x, ty const& y)
+{
+  if (is_container_or_range_type{tx}) { return x[y]; }
+  else { return x.__getelem(y); }
+}
+
+/* user-defined operator '[]', lvalue */
+public threaded function {tx, ty, tz} void
+setelem(tx mutable& x, ty const& y, tz const& z)
+{
+  if (is_container_or_range_type{tx}) { x[y] = z; }
+  else { x.__setelem(y, z); }
+}
+
+/* user-defined operator '.', rvalue */
+public threaded function {fld, tx}
+m::ret_type{m::apply{
+  m::symbol{m::nsof{tx}, m::concat{tx, "___getfld"}}, fld, tx}}
+getfld(tx const& x)
+{
+  return m::apply{m::symbol{m::nsof{tx}, m::concat{tx, "___getfld"}},
+    fld, tx}(x);
+}
+
+/* user-defined operator '.', lvalue */
+public threaded function {fld, tx, ty} void
+setfld(tx mutable& x, ty const& y)
+{
+  m::apply{m::symbol{m::nsof{tx}, m::concat{tx, "___setfld"}},
+    fld, tx, ty}(x, y);
+}
+
+/* operator '.' for union is substituted to operator::union_field, in
+ * order to instantiate unexpected_value_template and throw it when
+ * necessary */
+public threaded function {fld, t}
+m::field_type{t, fld}
+union_field(t const& x)
+{
+  expand (sym: {fld}) {
+    if (!case x.sym) {
+      expand (fsym, idx: m::field_names{t}) {
+	if (m::ne{m::to_string{sym}, m::to_string{fsym}}) {
+	  if (case x.fsym) {
+	    throw exception::unexpected_value_template{
+	      m::to_string{m::field_type{t, fsym}}}(to_string(x.fsym));
+	  }
+	}
+      }
+    }
+    return x.sym;
+  }
+}
+
+/* operator::implicit_conversion is called when no built-in conversion
+ * is possible from 'tfrom' to 'tto'. */
+public metafunction implicit_conversion{tto, tfrom}
+  m::cond{
+    /* conversion member function */
+    has_tsymbol{tfrom, "__to"},
+    implicit_conversion_mf{tto, tfrom},
+    /* conversion function defined in the tfrom ns? */
+    has_nssymbol{tfrom, conv_funcname_nons{tto, tfrom}},
+    implicit_conversion_ns{tto, tfrom, 0},
+    /* conversion function defined in the tto ns? */
+    has_nssymbol{tto, conv_funcname_nons{tto, tfrom}},
+    implicit_conversion_ns{tto, tfrom, 1},
+    0};
+
+/* operator '{ ... }' is substituted to operator::tuple */
+public tsvaluetype struct {types, ord}
+tuple(expand(
+  m::map{
+    m::seq{m::size{types}},
+    metafunction{i} m::list{m::concat{"a", i}, m::at{types, i}, 1, 0}}))
+{
+  public metafunction __static_assert__
+    m::fold{ord, metafunction{r, x} m::and{r, m::is_int{x}}, 1};
+    /* ord must be a list of int */
+  public metafunction __attribute__ {{"__order__", ord}};
+  expand (s, idx:
+    m::map{m::seq{m::size{types}}, metafunction{i} m::concat{"_", i}})
+  {
+    expand (a: m::list{m::concat{"a", idx}}) {
+      public m::at{types, idx} s = a;
+    }
+  }
+}
+
+public threaded function {tlist} tuple{m::map{tlist, m::at0}, m::nil}
+make_tuple(expand(va::arg_decls_bycref{tlist}))
+{
+  metafunction typ tuple{m::map{tlist, m::at0}, m::nil};
+  return typ(expand(a: va::arg_names{m::size{tlist}}; a));
+}
+
+/* private */
+
+private metafunction mapped_type{t}
+  m::cond{
+    is_container_or_range_type{t},
+    m::symbol{t, "mapped_type"},
+    has_tsymbol{t, "mapped_type"},
+    m::symbol{t, "mapped_type"},
+    has_tsymbol{t, "__getelem"},
+    m::ret_type{m::symbol{t, "__getelem"}},
+    m::ret_type{m::symbol{m::nsof{t},
+      m::concat{m::to_string{t}, "___getelem"}}}};
+
+private metafunction has_tsymbol{t, name} m::symbol_exists{t, name};
+private metafunction has_nssymbol{t, name} m::symbol_exists{m::nsof{t}, name};
+
+private metafunction binop_ret_type{tx, ty, opstr, is_builtin}
+  m::cond{
+    m::and{m::ne{is_builtin, 0}, is_builtin{tx}, is_builtin{ty}},
+      tx,
+    has_tsymbol{tx, m::concat{"__", opstr}},
+      m::ret_type{m::symbol{tx, m::concat{"__", opstr}}},
+    has_tsymbol{tx, m::concat{"__", opstr, "a"}},
+      tx,
+    has_nssymbol{tx, m::concat{tx, "___", opstr}},
+      m::ret_type{m::apply{
+	m::symbol{m::nsof{tx}, m::concat{tx, "___", opstr}}, tx, ty}},
+    has_nssymbol{tx, m::concat{tx, "___", opstr, "a"}},
+      tx,
+    m::eq{opstr, "eq"},
+      bool,
+    m::eq{opstr, "ne"},
+      bool,
+    m::eq{opstr, "gt"},
+      bool,
+    m::eq{opstr, "lt"},
+      bool,
+    m::eq{opstr, "ge"},
+      bool,
+    m::eq{opstr, "le"},
+      bool,
+    tx};
+
+private threaded function {tx, ty, opstr} binop_ret_type{tx, ty, opstr, 0}
+binop(tx const& x, ty const& y)
+{
+  metafunction opstr_bin m::concat{"__", opstr};
+  metafunction op_bin m::symbol{tx, opstr_bin};
+  metafunction opstr_assign m::concat{"__", opstr, "a"};
+  metafunction op_assign m::symbol{tx, opstr_assign};
+  metafunction fstr_bin m::concat{tx, "___", opstr};
+  metafunction f_bin m::symbol{m::nsof{tx}, fstr_bin};
+  metafunction fstr_assign m::concat{tx, "___", opstr, "a"};
+  metafunction f_assign m::symbol{m::nsof{tx}, fstr_assign};
+  if (m::ne{op_bin, 0}) {
+    /* return foo.__add(x, y); */
+    expand(sym: m::list{opstr_bin}) { return x.sym(y); }
+  } else if (m::ne{op_assign, 0}) {
+    /* r = x; foo.__adda(r, y); return x; */
+    tx r = x; expand(sym: m::list{opstr_assign}) { r.sym(y); } return r;
+  } else if (m::ne{f_bin, 0}) {
+    /* return foo___add(x, y); */
+    return f_bin{tx, ty}(x, y);
+  } else if (m::ne{f_assign, 0}) {
+    /* r = x; foo___adda(r, y); return r; */
+    tx r = x;
+    f_assign{tx, ty}(r, y);
+    return r;
+  } else if (m::eq{opstr, "eq"}) {
+    return eq_folding{tx, ty}(x, y);
+  } else if (m::eq{opstr, "ne"}) {
+    return !eq_folding{tx, ty}(x, y);
+  } else if (m::eq{opstr, "gt"}) {
+    return op_lexi{0, tx, ty}(x, y);
+  } else if (m::eq{opstr, "lt"}) {
+    return op_lexi{1, tx, ty}(x, y);
+  } else if (m::eq{opstr, "ge"}) {
+    return !op_lexi{1, tx, ty}(x, y);
+  } else if (m::eq{opstr, "le"}) {
+    return !op_lexi{0, tx, ty}(x, y);
+  } else if (extend_op_fields{tx, ty}) {
+     /* apply binop for each field */
+     metafunction op m::symbol{"operator", opstr};
+     return tx(expand(fld: m::field_names{tx}; op(x.fld, y.fld)));
+  } else {
+    return m::error{m::concat{tx, ": operator ", opstr, " is not defined"}};
+  }
+}
+
+private threaded function {tx, ty} bool
+eq_folding(tx const& x, ty const& y)
+{
+  if (m::and{m::eq{tx, ty}, is_pod_dense_array{tx}}) {
+    return pod_array_eq{tx, ty}(x, y);
+  } else if (m::and{is_array_or_slice_type{tx}, is_array_or_slice_type{ty}}) {
+    if (x.size() != y.size()) { return false; }
+    for (const& k, const& m: x) {
+      if (y[k] != m) { return false; }
+    }
+    return true;
+  } else if (m::and{is_map_or_range_type{tx}, is_map_or_range_type{ty}}) {
+    if (x.size() != y.size()) { return false; }
+    for (const& k, const& m: x) {
+      if (const& ym : y[k]) {
+	if (ym != m) { return false; }
+      } else {
+	return false;
+      }
+    }
+    return true;
+  } else {
+    return m::error{m::concat{tx, ": equality is not defined"}};
+  }
+}
+
+private threaded function {lt, tx, ty} bool
+op_lexi(tx const& x, ty const& y)
+{
+  if (m::and{is_array_or_slice_type{tx}, is_array_or_slice_type{ty}}) {
+    const xsz = x.size();
+    const ysz = x.size();
+    const sz = xsz > ysz ? xsz : ysz;
+    for (const& k, const& m: x) {
+      if (m::ne{lt, 0}) {
+	if (m < y[k]) { return true; }
+      } else {
+	if (m > y[k]) { return true; }
+      }
+    }
+    if (m::ne{lt, 0}) {
+      if (xsz < ysz) { return true; }
+    } else {
+      if (xsz > ysz) { return true; }
+    }
+    return false;
+  } else {
+    return m::error{m::concat{tx, ": lexicographical order is not defined"}};
+  }
+}
+
+private metafunction extend_op_fields{tx, ty}
+  m::and{m::eq{tx, ty}, is_struct_type{tx}, m::not{m::empty{m::fields{tx}}}};
+
+private threaded function {tx, ty, opstr} void
+binopa(tx mutable& x, ty const& y)
+{
+  metafunction opstr_bin m::concat{"__", opstr};
+  metafunction op_bin m::symbol{tx, opstr_bin};
+  metafunction opstr_assign m::concat{"__", opstr, "a"};
+  metafunction op_assign m::symbol{tx, opstr_assign};
+  metafunction fstr_bin m::concat{tx, "___", opstr};
+  metafunction f_bin m::symbol{m::nsof{tx}, fstr_bin};
+  metafunction fstr_assign m::concat{tx, "___", opstr, "a"};
+  metafunction f_assign m::symbol{m::nsof{tx}, fstr_assign};
+  if (m::ne{op_bin, 0}) {
+    /* x = foo.__add(x, y); */
+    expand(sym: m::list{op_bin}) { x = x.sym(y); }
+  } else if (m::ne{op_assign, 0}) {
+    /* foo.__adda(x, y); */
+    expand(sym: m::list{opstr_assign}) { x.sym(y); }
+  } else if (m::ne{f_bin, 0}) {
+    /* x = foo___add(x, y); */
+    x = f_bin{tx, ty}(x, y);
+  } else if (m::ne{f_assign, 0}) {
+    /* foo___adda(x, y); */
+    f_assign{tx, ty}(x, y);
+  } else if (extend_op_fields{tx, ty}) {
+     /* apply binop for each field */
+     metafunction op m::symbol{"operator", m::concat{opstr, "a"}};
+     expand(fld: m::field_names{tx}; op(x.fld, y.fld));
+  } else {
+    return m::error{m::concat{tx, ": operator ", opstr, " is not defined"}};
+  }
+}
+
+private metafunction unaryop_ret_type{tx, opstr, is_builtin}
+  m::cond{
+    m::and{m::ne{is_builtin, 0}, is_builtin{tx}},
+    tx,
+  m::cond{
+    has_tsymbol{tx, m::concat{"__", opstr}},
+    m::ret_type{m::symbol{tx, m::concat{"__", opstr}}},
+  m::cond{
+    has_nssymbol{tx, m::concat{tx, "___", opstr}},
+    m::ret_type{m::apply{
+      m::symbol{m::nsof{tx}, m::concat{tx, "___", opstr}}, tx}},
+  tx}}};
+
+private threaded function {tx, opstr, is_builtin}
+unaryop_ret_type{tx, opstr, is_builtin}
+unaryop(tx const& x)
+{
+  metafunction opstr_u m::concat{"__", opstr};
+  metafunction fstr_u m::concat{tx, "___", opstr};
+  metafunction f_u m::symbol{m::nsof{tx}, fstr_u};
+  if (has_tsymbol{tx, opstr_u}) {
+    /* return foo.__plus(x); */
+    expand(sym: m::list{opstr_u}) { return x.sym(); }
+  } else if (has_nssymbol{tx, fstr_u}) {
+    /* return foo___plus(x); */
+    return f_u{tx}(x);
+  } else if (extend_op_fields{tx, tx}) {
+     /* apply unaryop for each field */
+     metafunction op m::symbol{"operator", opstr};
+     return tx(expand(fld: m::field_names{tx}; op(x.fld)));
+  } else {
+    return m::error{m::concat{tx, ": operator ", opstr, " is not defined"}};
+  }
+}
+
+private metafunction conv_funcname_nons{tto, tfrom}
+  m::concat{m::to_string{tfrom}, "___to"};
+
+private metafunction implicit_conversion_ns{tto, tfrom, tons}
+  m::apply{
+    m::symbol{
+      m::nsof{m::cond{tons, tto, tfrom}},
+      conv_funcname_nons{tto, tfrom}},
+    tto,
+    tfrom};
+
+private threaded function {tto, tfrom} tto
+implicit_conversion_mf(tfrom const& x)
+{
+  return x.__to{tto}();
+}
+
