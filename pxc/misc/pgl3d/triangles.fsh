@@ -14,6 +14,7 @@ uniform samplerCube sampler_env;
 <%else/>
   uniform sampler2D sampler_sm[<%smsz/>];
 <%/>
+uniform mat4 view_projection_matrix;
 uniform vec3 camera_pos;
 uniform vec3 light_dir;
 uniform float light_on;
@@ -257,10 +258,10 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta, inout vec4 dbg)
     }
   }
 
-  const float block_factor = <%octree_block_factor/>;
-  const float block_scale = 1.0 / block_factor;
+  // const float block_factor = <%octree_block_factor/>;
+  // const float block_scale = 1.0 / block_factor;
   const vec3 texture_scale = <%octree_texture_scale/>;
-  const int level_max = 3; // or 2
+  const int level_max = 2; // or 2
 
   vec3 raycast_next(inout vec3 curpos_t, inout vec3 curpos_i,
     inout vec3 curpos_f, in vec3 spmin, in vec3 spmax, in vec3 ray,
@@ -269,16 +270,17 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta, inout vec4 dbg)
     curpos_f = clamp(curpos_f, 0.0, 1.0 - epsilon);
     vec3 dir = voxel_next(curpos_i, curpos_f, spmin, spmax, ray);
     while (true) {
-      if (pos3_inside(curpos_i + dir, -0.5, block_factor - 0.5)) {
+      if (pos3_inside(curpos_i + dir, -0.5, <%octree_block_factor/> - 0.5)) {
 	break;
       }
       --level;
       if (level < 0) {
 	break;
       }
-      curpos_f = (curpos_i + curpos_f) * block_scale;
+      curpos_f = (curpos_i + curpos_f) / <%octree_block_factor/>;
       vec3 parent = texpos_arr[level];
-      curpos_t = floor(parent * block_scale) * block_factor;
+      curpos_t = floor(parent / <%octree_block_factor/>)
+	* <%octree_block_factor/>;
       curpos_i = parent - curpos_t;
     }
     curpos_i += dir;
@@ -301,8 +303,8 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta, inout vec4 dbg)
       // 再帰レベル
     vec3 curpos_t = roottexpos;
       // 現在見ているノード
-    vec3 curpos_i = floor(pos * block_factor);
-    vec3 curpos_f = (pos * block_factor) - curpos_i;
+    vec3 curpos_i = floor(pos * <%octree_block_factor/>);
+    vec3 curpos_f = (pos * <%octree_block_factor/>) - curpos_i;
       // 現在見ているブロック内位置の整数部と小数部。整数部はblock_factor未満
     vec4 value;
     vec3 dir = vec3(0.0); // 最初の位置が接触していれば0をそのまま返す
@@ -323,13 +325,13 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta, inout vec4 dbg)
 	  break;
 	}
 	continue;
-      } else if (node_type == 1) { // 節
+      } else if (level < level_max && node_type == 1) { // 節
 	texpos_arr[level] = coord;
 	++level;
-	curpos_t = floor(value.rgb * 255.0 + 0.5) * block_factor;
+	curpos_t = floor(value.rgb * 255.0 + 0.5) * <%octree_block_factor/>;
 	curpos_f = clamp(curpos_f, 0.0, 1.0 - epsilon);
-	curpos_i = floor(curpos_f * block_factor);
-	curpos_f = (curpos_f * block_factor) - curpos_i;
+	curpos_i = floor(curpos_f * <%octree_block_factor/>);
+	curpos_f = (curpos_f * <%octree_block_factor/>) - curpos_i;
 	continue;
       } else { // if (node_type > 1) { // 色のついた葉
 	bool hit_wall = false;
@@ -373,12 +375,13 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta, inout vec4 dbg)
 	    int hl = level;
 	    while (hl > 0) {
 	      --hl;
-	      hpos_f = (hpos_i + hpos_f) * block_scale;
+	      hpos_f = (hpos_i + hpos_f) / <%octree_block_factor/>;
 	      vec3 parent = texpos_arr[hl];
-	      hpos_t = floor(parent * block_scale) * block_factor;
+	      hpos_t = floor(parent / <%octree_block_factor/>)
+		* <%octree_block_factor/>;
 	      hpos_i = parent - hpos_t;
 	    }
-	    pos = (hpos_i + hpos_f) * block_scale;
+	    pos = (hpos_i + hpos_f) / <%octree_block_factor/>;
 	  }
 	  float cos_light_dir = dot(light, dir);
 	  // 法線と光源が逆向きのときは必ず影になる
@@ -391,16 +394,18 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta, inout vec4 dbg)
 	  //
 	  if (hit_wall) {
 	    while (true) {
-	      if (pos3_inside(curpos_i + dir, -0.5, block_factor - 0.5)) {
+	      if (pos3_inside(curpos_i + dir, -0.5,
+		<%octree_block_factor/> - 0.5)) {
 		break;
 	      }
 	      --level;
 	      if (level < 0) {
 		break;
 	      }
-	      curpos_f = (curpos_i + curpos_f) * block_scale;
+	      curpos_f = (curpos_i + curpos_f) / <%octree_block_factor/>;
 	      vec3 parent = texpos_arr[level];
-	      curpos_t = floor(parent * block_scale) * block_factor;
+	      curpos_t = floor(parent / <%octree_block_factor/>)
+		* <%octree_block_factor/>;
 	      curpos_i = parent - curpos_t;
 	    }
 	    if (level < 0) {
@@ -665,7 +670,8 @@ void main(void)
     vec3 camera_local = -camera_dir * normal_matrix;
     vec3 light_local = light_dir * normal_matrix;
     const float obj_scale = 1.0 / 64.0;
-    vec3 pos = clamp(vary_position_local * obj_scale + 0.5, 0.0, 1.0 - epsilon);
+    vec3 pos = clamp(vary_position_local * obj_scale + 0.5, 0.0,
+      1.0 - epsilon);
     vec3 campos = vary_camerapos_local * obj_scale + 0.5;
     vec3 sur_nor = vec3(0.0);
     bool dbg_inside = false; // FIXME
@@ -682,8 +688,8 @@ void main(void)
     }
     // color = vec4(pos.xyz, 1.0);
     vec4 dbgval = vec4(0.0,0.0,0.0,0.0);
-    if (!raycast_octree(pos, vec3(0.0), camera_local, light_local, tex_val, nor,
-      lstr_para, dbgval))
+    if (!raycast_octree(pos, vec3(0.0), camera_local, light_local, tex_val,
+      nor, lstr_para, dbgval))
     {
       // <%fragcolor/> = dbgval; return;
       discard;
@@ -699,9 +705,16 @@ void main(void)
       // if (length(nor) < 0.1) { <%fragcolor/> = vec4(1.0); return; }
     }
     nor = normal_matrix * nor; // local to global
-    // color += v_col;
-    // FIXME
-    // <%fragcolor/> = dbgval; return;
+    if (false) { // FragDepth更新するならこの節を有効にする
+      // posは3dテクスチャ座標。object座標系に戻す。
+      pos = (pos - 0.5) / obj_scale;
+      // posはobject座標系のfrag位置。depth値を更新するためmvpを掛ける。
+      vec4 gpos = vary_model_matrix * vec4(pos, 1.0);
+      vec4 vpos = view_projection_matrix * gpos;
+      gl_FragDepth = vpos.w > epsilon ? clamp(vpos.z / vpos.w, 0.0, 1.0) : 0.0;
+      // dbgval.r = clamp(vpos.z / vpos.w, 0.0, 1.0);
+    }
+    // <%fragcolor/> = dbgval; return; // FIXME
   <%elseif/><%enable_normalmapping/>
     vec2 uv0 = vary_uvw.xy;
     <%if><%enable_parallax/>
