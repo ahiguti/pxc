@@ -1,0 +1,225 @@
+public threaded namespace pgl3d::physics::collision_heightmap;
+public import common -;
+public import numeric::fpmath -;
+public import glm;
+
+public threaded struct
+collision_heightmap()
+{
+  public glm::vec3 aabb_min;
+  public glm::vec3 aabb_max;
+  public varray{float} xmin;
+  public varray{float} xmax;
+  public varray{float} ymin;
+  public varray{float} ymax;
+  public varray{float} zmin;
+  public varray{float} zmax;
+  public float mesh_size;
+  public float mesh_size_inv;
+  public uint x_isize;
+  public uint y_isize;
+  public uint z_isize;
+}
+
+public threaded function bool
+collision_heightmap_collide(collision_heightmap const& hm,
+  glm::vec3 const& pos, float radius)
+{
+  // TODO: radius
+  const pos_rel = (pos - hm.aabb_min) * hm.mesh_size_inv;
+  if (pos_rel.x < 0.0 || pos_rel.y < 0.0 || pos_rel.z < 0.0) {
+    return false;
+  }
+  const ix = static_cast{uint}(floor(pos_rel.x));
+  const iy = static_cast{uint}(floor(pos_rel.y));
+  const iz = static_cast{uint}(floor(pos_rel.z));
+  if (ix >= hm.x_isize || iy >= hm.y_isize || iz >= hm.z_isize) {
+    return false;
+  }
+  const cx = collide_one(ix, iy, pos.z, hm.x_isize, hm.y_isize,
+    hm.zmin, hm.zmax);
+  const cy = collide_one(iy, iz, pos.x, hm.y_isize, hm.z_isize,
+    hm.xmin, hm.xmax);
+  const cz = collide_one(iz, ix, pos.y, hm.z_isize, hm.x_isize,
+    hm.ymin, hm.ymax);
+  const r = cx & cy & cz;
+  // debug_log("hm", ix, iy, iz, pos, r);
+  return r;
+}
+
+threaded function bool
+collide_one(uint ix, uint iy, float z, uint x_isize, uint y_isize,
+  cslice{float} const& zmin_arr, cslice{float} const& zmax_arr)
+{
+  const offset = iy * x_isize + ix;
+  const zmin = zmin_arr[offset];
+  const zmax = zmax_arr[offset];
+  // debug_log("v=", z, "vmin=", zmin, "vmax=", zmax);
+  return (z >= zmin) & (z <= zmax);
+}
+
+
+public threaded function collision_heightmap
+make_collision_heightmap(float mesh_size0, cslice{float} const v)
+{
+  mutable hm = collision_heightmap();
+  hm.mesh_size = mesh_size0;
+  hm.mesh_size_inv = 1.0f / mesh_size0;
+  const num_vert = v.size() / 3;
+  const num_tri = v.size() / 9;
+  hm.aabb_min = glm::make_vec3(v[0], v[1], v[2]);
+  hm.aabb_max = hm.aabb_min;
+  for (const i: 1 .. num_vert) {
+    const x = v[i * 3 + 0];
+    const y = v[i * 3 + 1];
+    const z = v[i * 3 + 2];
+    hm.aabb_min.x = min(hm.aabb_min.x, x);
+    hm.aabb_min.y = min(hm.aabb_min.y, y);
+    hm.aabb_min.z = min(hm.aabb_min.z, z);
+    hm.aabb_max.x = max(hm.aabb_max.x, x);
+    hm.aabb_max.y = max(hm.aabb_max.y, y);
+    hm.aabb_max.z = max(hm.aabb_max.z, z);
+  }
+  const& aabb_min = hm.aabb_min;
+  const& aabb_max = hm.aabb_max;
+  /*
+  const aabb_sz = hm.aabb_max - hm.aabb_min;
+  hm.scale = glm::make_vec3(1.0f / aabb_sz.x, 1.0f / aabb_sz.y,
+    1.0f / aabb_sz.z);
+  */
+  hm.x_isize = static_cast{uint}((hm.aabb_max.x - hm.aabb_min.x) / mesh_size0)
+    + 1;
+  hm.y_isize = static_cast{uint}((hm.aabb_max.y - hm.aabb_min.y) / mesh_size0)
+    + 1;
+  hm.z_isize = static_cast{uint}((hm.aabb_max.z - hm.aabb_min.z) / mesh_size0)
+    + 1;
+  hm.xmin.resize(hm.y_isize * hm.z_isize, static_cast{float}(hm.x_isize));
+  hm.xmax.resize(hm.y_isize * hm.z_isize, 0.0f);
+  hm.ymin.resize(hm.z_isize * hm.x_isize, static_cast{float}(hm.y_isize));
+  hm.ymax.resize(hm.z_isize * hm.x_isize, 0.0f);
+  hm.zmin.resize(hm.x_isize * hm.y_isize, static_cast{float}(hm.z_isize));
+  hm.zmax.resize(hm.x_isize * hm.y_isize, 0.0f);
+  for (const i: 0 .. hm.y_isize * hm.z_isize) {
+    hm.xmin[i] = aabb_max.x;
+    hm.xmax[i] = aabb_min.x;
+  }
+  for (const i: 0 .. hm.z_isize * hm.x_isize) {
+    hm.ymin[i] = aabb_max.y;
+    hm.ymax[i] = aabb_min.y;
+  }
+  for (const i: 0 .. hm.x_isize * hm.y_isize) {
+    hm.zmin[i] = aabb_max.z;
+    hm.zmax[i] = aabb_min.z;
+  }
+  const aabb_min_yzx = glm::make_vec3(aabb_min.y, aabb_min.z, aabb_min.x);
+  const aabb_max_yzx = glm::make_vec3(aabb_max.y, aabb_max.z, aabb_max.x);
+  const aabb_min_zxy = glm::make_vec3(aabb_min.z, aabb_min.x, aabb_min.y);
+  const aabb_max_zxy = glm::make_vec3(aabb_max.z, aabb_max.x, aabb_max.y);
+  for (const i: 0 .. num_tri) {
+    mutable a = glm::make_vec3(v[i * 9 + 0], v[i * 9 + 1], v[i * 9 + 2]);
+    mutable b = glm::make_vec3(v[i * 9 + 3], v[i * 9 + 4], v[i * 9 + 5]);
+    mutable c = glm::make_vec3(v[i * 9 + 6], v[i * 9 + 7], v[i * 9 + 8]);
+    examine_tri(a, b, c, hm.x_isize, hm.y_isize, hm.mesh_size,
+      aabb_min, aabb_max, hm.zmin, hm.zmax, 0);
+    a = glm::make_vec3(a.y, a.z, a.x);
+    b = glm::make_vec3(b.y, b.z, b.x);
+    c = glm::make_vec3(c.y, c.z, c.x);
+    examine_tri(a, b, c, hm.y_isize, hm.z_isize, hm.mesh_size,
+      aabb_min_yzx, aabb_max_yzx, hm.xmin, hm.xmax, 1);
+    a = glm::make_vec3(a.y, a.z, a.x);
+    b = glm::make_vec3(b.y, b.z, b.x);
+    c = glm::make_vec3(c.y, c.z, c.x);
+    examine_tri(a, b, c, hm.z_isize, hm.x_isize, hm.mesh_size,
+      aabb_min_zxy, aabb_max_zxy, hm.ymin, hm.ymax, 1);
+  }
+  for (const iy: 0 .. hm.y_isize) {
+    for (const ix: 0 .. hm.x_isize) {
+      const idx = iy * hm.x_isize + ix;
+      // debug_log("ix,iy,minz,maxz", ix, iy, hm.zmin[idx], hm.zmax[idx]);
+    }
+  }
+  return hm;
+}
+
+threaded function void
+examine_tri(glm::vec3 const& a0, glm::vec3 const& b0, glm::vec3 const& c0,
+  uint x_isize, uint y_isize, float mesh_size, glm::vec3 const& aabb_min,
+  glm::vec3 const& aabb_max, varray{float} mutable& zmin,
+  varray{float} mutable& zmax, size_t dbg_i)
+{
+  mutable a = a0;
+  mutable b = b0;
+  mutable c = c0;
+  if (a.x > b.x) { swap(a, b); }
+  if (b.x > c.x) { swap(b, c); }
+  if (a.x > b.x) { swap(a, b); }
+  /*
+  if (dbg_i == 0) {
+    debug_log("examine_tri", "a,b,c", a0, b0, c0, "aabb", aabb_min, aabb_max,
+      "xysize", x_isize, y_isize, "meshsize", mesh_size);
+  }
+  */
+  const n = glm::cross(b - a, c - b).normalize();
+  if (fabs(n.z) < 0.0001f) {
+    return;
+  }
+  // a.x <= b.x <= c.x
+  a = (a - aabb_min) / mesh_size;
+  b = (b - aabb_min) / mesh_size;
+  c = (c - aabb_min) / mesh_size;
+  const xr = calc_range(a.x, c.x);
+  /*
+  if (dbg_i == 0) {
+    debug_log("a,b,c,xr,nor", a, b, c, xr, n);
+  }
+  */
+  float px;
+  for (px = xr.first; px <= xr.second; px += 1.0f) {
+    float rat = (c.x - a.x > 0.0001) ? (px - a.x) / (c.x - a.x) : 0.0f;
+    const pac = a + (c - a) * rat;
+    glm::vec3 pabc;
+    if (px < b.x) {
+      rat = (b.x - a.x > 0.0001) ? (px - a.x) / (b.x - a.x) : 0.0f;
+      pabc = a + (b - a) * rat;
+    } else {
+      rat = (c.x - b.x > 0.0001) ? (px - b.x) / (c.x - b.x) : 0.0f;
+      pabc = b + (c - b) * rat;
+    }
+    const yr = calc_range(pac.y, pabc.y);
+    float py;
+    for (py = yr.first; py <= yr.second; py += 1.0f) {
+      const pz = ((a.x - px) * n.x + (a.y - py) * n.y) / n.z + a.z;
+      const ix = static_cast{uint}(floor(px));
+      const iy = static_cast{uint}(floor(py));
+      if (ix >= x_isize || iy >= y_isize) {
+	continue;
+      }
+      const offset = iy * x_isize + ix;
+      const pzs = pz * mesh_size + aabb_min.z;
+      /*
+      if (dbg_i == 0) {
+	debug_log("px,py,pz,ix,iy", px, py, pz, ix, iy, pzs, zmin[offset], zmax[offset]);
+      }
+      */
+      zmin[offset] = min(zmin[offset], pzs);
+      zmax[offset] = max(zmax[offset], pzs);
+    }
+  }
+}
+
+threaded function pair{float, float}
+calc_range(float ax, float bx)
+{
+  if (ax > bx) { swap(ax, bx); }
+  pair{float, float} r = pair(0.0f, 0.0f);
+  r.first = floor(ax + 0.9999f) + 0.5f;
+  r.second = floor(bx + 0.9999f) + 0.5f;
+  /*
+  if (r.first >= r.second) {
+    r.first = (ax + bx) / 2.0;
+    r.second = r.first;
+  }
+  */
+  return r;
+}
+

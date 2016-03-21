@@ -1,0 +1,303 @@
+public namespace pgl3d::physics::collision_shape "use-unsafe";
+public import common -;
+public import exception -;
+public import pointer::raw -;
+public import meta m;
+public import meta::vararg va;
+public import numeric::fpmath -;
+public import procedure::thread::async_task -;
+public import glm;
+private import meta::platform mp;
+private import Bullet::base -;
+private import Bullet::constants -;
+private import Bullet::api +;
+private import pointer::raw_unsafe -;
+private import pgl3d::physics::grid_broadphase -;
+private import pgl3d::physics::collision_gjk -;
+private import pgl3d::physics::collision_heightmap -;
+
+public threaded interface collision_shape_i
+{
+  public function crawptr{btCollisionShape} get() const;
+  public function float get_radius() const;
+  public function bool has_near_collision() const;
+  public function bool near_collision(glm::vec3 const& pos, float radius)
+    const;
+}
+
+public threaded interface
+triangle_mesh_i triangle_mesh
+{
+  public function void add_triangle(cslice{float} const& v);
+}
+
+public threaded function ptr{triangle_mesh_i}
+make_triangle_mesh()
+{
+  return make_ptr{triangle_mesh}();
+}
+
+public threaded function ptr{collision_shape_i}
+make_triangle_mesh_shape(cslice{float} const& v, cslice{uint} const& e)
+{
+  ptr{triangle_mesh_i} trmesh = make_triangle_mesh();
+  varray{float} triangles;
+  threaded function void add_tri(cslice{float} const& fv) {
+    trmesh->add_triangle(fv);
+    triangles.append(fv);
+  }
+  triangles_foreach{add_tri}(v, e);
+  return make_ptr{triangle_mesh_shape}(
+    pointer_downcast{ptr{triangle_mesh}}(trmesh), triangles);
+}
+
+public threaded function ptr{collision_shape_i}
+make_sphere_shape(cslice{float} const& v, cslice{uint} const& e)
+{
+  const radius = calc_radius(v);
+  const r = make_ptr{collision_shape_tmpl{btSphereShape}}(radius);
+  r->radius = radius;
+  return r;
+}
+
+private threaded function float
+calc_radius(cslice{float} const& v)
+{
+  float radius_sq = 0.0f;
+  for (const i: 0 .. v.size() / 3) {
+    const ix = i * 3;
+    const sq = v[ix + 0] * v[ix + 0] + v[ix + 1] * v[ix + 1]
+      + v[ix + 2] * v[ix + 2];
+    radius_sq = max(radius_sq, sq);
+  }
+  return sqrt(radius_sq);
+}
+
+public threaded function ptr{collision_shape_i}
+make_box_shape(cslice{float} const& v, cslice{uint} const& e)
+{
+  const aabb = calc_aabb(v);
+  const x = max(fabs(aabb.first.x), fabs(aabb.second.x));
+  const y = max(fabs(aabb.first.y), fabs(aabb.second.y));
+  const z = max(fabs(aabb.first.z), fabs(aabb.second.z));
+  const radius_sq = x * x + y * y + z * z;
+  return make_ptr{box_shape}(btVector3_(x, y, z), sqrt(radius_sq));
+}
+
+private threaded function pair{glm::vec3, glm::vec3}
+calc_aabb(cslice{float} const& v)
+{
+  if (v.size() < 3) {
+    const e = glm::make_vec3(0.0, 0.0, 0.0);
+    return pair(e, e);
+  }
+  mutable mi = glm::make_vec3(v[0], v[1], v[2]);
+  mutable mx = mi;
+  for (const i: 0 .. v.size() / 3) {
+    mi.x = min(mi.x, v[i * 3 + 0]);
+    mx.x = max(mx.x, v[i * 3 + 0]);
+    mi.y = min(mi.y, v[i * 3 + 1]);
+    mx.y = max(mx.y, v[i * 3 + 1]);
+    mi.z = min(mi.z, v[i * 3 + 2]);
+    mx.z = max(mx.z, v[i * 3 + 2]);
+  }
+  return pair(mi, mx);
+}
+
+private threaded struct
+convex_hull_shape(cslice{float} const& v, cslice{float} const& triangles,
+  float const radius0)
+  <collision_shape_i>
+{
+  public btConvexHullShape value = btConvexHullShape(v.to_crawptr(),
+    static_cast{int}(v.size() / 3), 3 * 4);
+  public float const radius = radius0;
+  public pair{glm::vec3, glm::vec3} const aabb = calc_aabb(triangles);
+  public collision_heightmap shape_hm
+    = make_collision_heightmap(0.1f, triangles);
+  public function crawptr{btCollisionShape} get() const
+  {
+    return caddress(value);
+  }
+  public function float get_radius() const
+  {
+    return radius;
+  }
+  public function bool has_near_collision() const
+  {
+    return true;
+  }
+  public function bool near_collision(glm::vec3 const& pos, float radius)
+    const
+  {
+    radius = min(radius, 0.5f); // FIXME
+    const aabb_col =
+      pos.x >= aabb.first.x - radius && pos.x <= aabb.second.x + radius &&
+      pos.y >= aabb.first.y - radius && pos.y <= aabb.second.y + radius &&
+      pos.z >= aabb.first.z - radius && pos.z <= aabb.second.z + radius;
+    if (!aabb_col) {
+      //debug_log("near_collision !aabb", radius, pos, aabb.first, aabb.second);
+      return false;
+    }
+    const r = shape_hm.collide(pos, radius);
+    //debug_log("near_collision", r, radius, pos, aabb.first, aabb.second);
+    return r;
+  }
+}
+
+public threaded function ptr{collision_shape_i}
+make_convex_hull_shape(cslice{float} const& v, cslice{uint} const& e)
+{
+  varray{float} triangles;
+  threaded function void add_tri(cslice{float} const& fv) {
+    // debug_log("tri: ", fv);
+    triangles.append(fv);
+  }
+  triangles_foreach{add_tri}(v, e);
+  float sqmax = 0.0f;
+  for (const i: 0 .. v.size() / 3) {
+    const x = v[i * 3];
+    const y = v[i * 3 + 1];
+    const z = v[i * 3 + 2];
+    const sq = x * x + y * y + z * z;
+    sqmax = max(sqmax, sq);
+  }
+  debug_log("convex_hull", sqrt(sqmax));
+  return make_ptr{convex_hull_shape}(v, triangles, sqrt(sqmax));
+}
+
+private threaded struct {t}
+collision_shape_tmpl(expand(m::args{t}))
+  <collision_shape_i>
+{
+  public t value = t(expand(a: m::arg_names{t}; a));
+  public float radius = 0.0f;
+  public function crawptr{btCollisionShape} get() const
+  {
+    return caddress(value);
+  }
+  public function float get_radius() const
+  {
+    return radius;
+  }
+  public function bool has_near_collision() const
+  {
+    return false;
+  }
+  public function bool near_collision(glm::vec3 const& pos, float radius)
+    const
+  {
+    return false;
+  }
+}
+
+private threaded struct
+box_shape(btVector3 const& ext0, float radius0)
+  <collision_shape_i>
+{
+  public btBoxShape value = btBoxShape(ext0);
+  public glm::vec3 extents = glm::make_vec3(ext0.x(), ext0.y(), ext0.z());
+  public float const radius = radius0;
+  public function crawptr{btCollisionShape} get() const
+  {
+    return caddress(value);
+  }
+  public function float get_radius() const
+  {
+    return radius;
+  }
+  public function bool has_near_collision() const
+  {
+    return true;
+  }
+  public function bool near_collision(glm::vec3 const& pos, float radius)
+    const
+  {
+    return
+      fabs(pos.x) < extents.x && // operator & is faster?
+      fabs(pos.y) < extents.y &&
+      fabs(pos.z) < extents.z;
+  }
+}
+
+private threaded function {f} void
+triangles_foreach(cslice{float} const& v, cslice{uint} const& e)
+{
+  size_t eidx = 0;
+  while (eidx < e.size()) {
+    if (static_cast{size_t}(e[eidx]) >= v.size()) {
+      // TODO: primitive restart
+      throw runtime_error_template{"triangles_foreach"}("primitive restart");
+    }
+    const i0 = e[eidx + 0] * 3;
+    const i1 = e[eidx + 1] * 3;
+    const i2 = e[eidx + 2] * 3;
+    farray{float, 9} fv = make_farray{float}(
+      v[i0 + 0], v[i0 + 1], v[i0 + 2],
+      v[i1 + 0], v[i1 + 1], v[i1 + 2],
+      v[i2 + 0], v[i2 + 1], v[i2 + 2]);
+    f(fv);
+    eidx += 3;
+  }
+}
+
+private threaded struct
+triangle_mesh()
+<triangle_mesh_i>
+{
+  public btTriangleMesh mesh = btTriangleMesh(true, true);
+  public float radius_square = 0.0f;
+  public varray{float} data;
+  public function void add_triangle(cslice{float} const& v)
+  {
+    mesh.addTriangle(
+      btVector3_(v[0], v[1], v[2]),
+      btVector3_(v[3], v[4], v[5]),
+      btVector3_(v[6], v[7], v[8]), true);
+    update_radius(v[0], v[1], v[2]);
+    update_radius(v[3], v[4], v[5]);
+    update_radius(v[6], v[7], v[8]);
+    data.append(v);
+  }
+  private function void update_radius(float x, float y, float z)
+  {
+    const v = x * x + y * y + z * z;
+    radius_square = max(radius_square, v);
+  }
+}
+
+private threaded struct
+triangle_mesh_shape(ptr{triangle_mesh} const& mesh0,
+  cslice{float} const& triangles)
+  <collision_shape_i>
+{
+  public ptr{triangle_mesh} mesh = mesh0;
+  public btBvhTriangleMeshShape value = btBvhTriangleMeshShape(
+    address(mesh->mesh), true, true);
+  public float const radius = sqrt(mesh->radius_square);
+  public collision_heightmap shape_hm
+    = make_collision_heightmap(0.1f, triangles);
+  init();
+  private function void init()
+  {
+    mesh->data.clear();
+  }
+  public function crawptr{btCollisionShape} get() const
+  {
+    return caddress(value);
+  }
+  public function float get_radius() const
+  {
+    return radius;
+  }
+  public function bool has_near_collision() const
+  {
+    return true;
+  }
+  public function bool near_collision(glm::vec3 const& pos, float radius)
+    const
+  {
+    return true;
+  }
+}
+

@@ -1,0 +1,37 @@
+private threaded namespace pgl3d::engine::intern_pool;
+public import common -;
+public import meta m;
+public import exception -;
+
+public threaded struct {t} intern_pool 
+{
+  public metafunction id_type distinct_uint{size_t, intern_pool{t}};
+  public function id_type intern(cstrref const& s) {
+    if (const& id: string_to_id[s]) {
+      return static_cast{id_type}(id);
+    }
+    size_t r = id_to_string.size();
+    id_to_string.push_back(s);
+    string_to_id.insert(s, r);
+    return static_cast{id_type}(r);
+  }
+  public function id_type to_id(cstrref const& s) const {
+    if (const& id: string_to_id[s]) {
+      return static_cast{id_type}(id);
+    }
+    throw runtime_error_template{m::full_string{intern_pool{t}}}("to_id");
+  }
+  public function string to_string(id_type id) const {
+    size_t i = static_cast{size_t}(id);
+    if (const& s: id_to_string[i]) {
+      return s;
+    }
+    throw runtime_error_template{m::full_string{intern_pool{t}}}("to_string");
+  }
+  public function id_type size() const {
+    return static_cast{id_type}(id_to_string.size());
+  }
+  private tree_map{string, size_t} string_to_id;
+  private varray{string} id_to_string;
+}
+

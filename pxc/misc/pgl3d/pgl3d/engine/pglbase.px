@@ -1,0 +1,111 @@
+public threaded namespace pgl3d::engine::pglbase;
+public import common -;
+public import meta m;
+public import glm;
+public import pgl3d::opengl::glvertex *;
+public import pgl3d::geometry::funcs *;
+public import pgl3d::engine::platform -;
+public import pgl3d::engine::scene_node -;
+public import pgl3d::engine::intern_pool -;
+
+public multithreaded struct instance_data
+{
+  public varray{float} instance_buffer;
+  public size_t glbuffer_offset_float;
+}
+
+public metafunction bo_instances_type varray{instance_data};
+public metafunction whole_instances_type varray{bo_instances_type};
+
+public metafunction max_num_shadowmaps 8;
+
+public tsvaluetype struct position_angle
+{
+  public glm::vec3 position;
+  public glm::quat angle;
+  public function glm::mat4 to_mat4() const
+  {
+    return glm::mat4().translate(position) * angle.to_mat4();
+  }
+  public function void translate_relative(glm::vec3 const& v)
+  {
+    position += angle.to_mat3() * v;
+  }
+  public function void rotate_angle_axis(float a, float x, float y, float z)
+  {
+    angle *= glm::make_quat_angle_axis(a, x, y, z);
+  }
+  public function void normalize()
+  {
+    angle.normalize();
+  }
+}
+
+public tsvaluetype struct
+perspective()
+{
+  public float near;
+  public float far;
+  public float width;
+  public float height;
+}
+
+public tsvaluetype struct
+projection_info()
+{
+  public perspective camera_pers;
+  public glm::mat4 projection;
+  public farray{glm::mat4, max_num_shadowmaps} sm_projection;
+  /*
+  public glm::mat4 sm_projection0;
+  public glm::mat4 sm_projection1;
+  public glm::mat4 sm_projection2;
+  public glm::mat4 sm_projection3;
+  */
+  /*
+  public glm::vec4 sm_distances;
+  */
+  public position_angle camera;
+  public position_angle light;
+  public int screen_width = 1024;
+  public int screen_height = 512;
+  public int window_width = 1024;
+  public int window_height = 512;
+  public int shadowmap_size = 1024;
+  public float option_value = 0.0f;
+}
+
+public tsvaluetype struct vertex_buffer_pool_key { }
+public metafunction vertex_buffer_id
+  m::symbol{intern_pool{vertex_buffer_pool_key}, "id_type"};
+
+public tsvaluetype struct
+texture_info()
+{
+  public uint surface_w;
+  public uint surface_h;
+  public uint char_w;
+  public uint char_h;
+}
+
+public interface make_vertices_i
+{
+  public function void make_vertex_set(cslice{string} const& bo_name,
+    cstrref const& shape_name, gf_poly const& expr);
+  public function void make_vertex_set_by_triangles(string const& dr_name,
+    cstrref const& shape_name, cslice{float} const& verts, size_t nfpv,
+    cslice{uint} const& elems);
+  public function cptr{vertices} get_nonempty_vertices(cstrref const& name)
+    const;
+  public function joint_id_type get_joint_id(cstrref const& name) const;
+  public function texture_info get_texture_info(cstrref const& name) const;
+}
+
+public threaded struct node_common_data()
+{
+  public glm::mat4 vp;
+  public size_t stat_num_objects;
+}
+
+public interface pgldrawer_export_i { }
+

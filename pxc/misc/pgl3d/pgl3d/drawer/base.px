@@ -1,0 +1,325 @@
+private threaded namespace pgl3d::drawer::base "export-unsafe";
+public import common *;
+public import pointer::raw *;
+public import pointer::raw_unsafe *;
+public import numeric::fpmath *;
+public import glm *;
+public import glm::raw *;
+public import io::time *;
+public import exception *;
+public import meta m;
+public import pointer::tfuncptr *;
+// public import text::string::positional *;
+public import GL::base *;
+public import GL::compat *;
+public import pgl3d::opengl::glresource *;
+public import pgl3d::opengl::glshader *;
+public import pgl3d::opengl::glvertex *;
+public import pgl3d::opengl::glbuffer *;
+public import pgl3d::opengl::shader_config *;
+public import pgl3d::opengl::aggregated_ibuffer *;
+public import pgl3d::opengl::gltexture *;
+public import pgl3d::opengl::resource_pool *;
+public import pgl3d::opengl::framebuffer *;
+public import pgl3d::geometry::funcs *;
+public import pgl3d::texture::texture *;
+public import pgl3d::texture::voxel_octree *;
+public import pgl3d::engine::scene_node *;
+public import pgl3d::engine::platform *;
+public import pgl3d::engine::pglbase *;
+public import pgl3d::engine::intern_pool *;
+public import pgl3d::engine::util *;
+public import pgl3d::stempl::stempl *;
+public import pgl3d::stempl::stempl_eval *;
+public import pgl3d::sdl::sdlutil *;
+
+public enum draw_step {
+  draw_step_shadowmapping = 1,
+  draw_step_zprepass = 2,
+  draw_step_solid = 3,
+  draw_step_blend = 4,
+  draw_step_postprocess = 5
+}
+
+public metafunction dgf_filler
+  callable_ptr{void, {bool, poly_t, mesh_index}};
+
+public interface pgldrawer_i <pgldrawer_export_i>
+{
+  public function string get_vbid_name() const;
+  public function string get_main_vbid_name() const;
+    /* returns get_vbid_name() if it's a main drawer */
+  public function prepare_instance_data_funcptr
+    get_prepare_instance_data_funcptr() const;
+  public function ptr{vertex_buffer} make_vertex_buffer() const;
+  public function string builtin_vertex_set_name() const;
+    /* empty if no builtin vertex set */
+  public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
+    const;
+    /* called when builtin_vertex_set_name is not empty */
+  public function dgf_filler make_filler(ptr{vertices} const& vptr) const;
+  public function texture_info get_texture_info(cstrref const& name) const;
+  public function void resize_screen(shader_config const& glc, int width,
+    int height);
+  public function uint get_postprocess_framebuffer() const;
+  public function bool has_step(draw_step step) const;
+  public function void draw(draw_step step, size_t iter,
+    vertex_buffer const& bo, bo_instances_type const& bo_ib,
+    aggregated_ibuffer const& aibuf, vertex_buffer_id bo_id,
+    shader_config const& glc, projection_info const& cam_df,
+    cslice{GLuint} const& smtex_arr);
+}
+
+public metafunction prepare_instance_data_funcptr
+  pointer::tfuncptr::tfuncptr_matching_function{prepare_instance_data_noop};
+
+public threaded function void prepare_instance_data_noop(
+  scene_node const& sn, node_common_data mutable& ncd,
+  instance_data mutable& idata)
+{
+}
+
+public metafunction pidf_table varray{prepare_instance_data_funcptr};
+
+public function {tattr} ptr{vertex_buffer}
+make_tattr_vertex_buffer(bool points_mode, bool is_sub)
+{ 
+  return make_ptr{vertex_buffer}(static_cast{size_t}(num_float_struct{tattr}),
+    points_mode, is_sub);
+}
+
+public threaded function {tattr} void
+dgf_fill_tattr_internal(ptr{vertices} const& vptr, bool flat_flag,
+  poly_t const& poly, mesh_index const& mp)
+{
+  const sz = poly.size();
+  if (sz < 3) { return; }
+  glm::vec3 mutable nor;
+  glm::vec3 mutable tang;
+  if (flat_flag) {
+    nor = normal_from_poly(poly);
+    tang = (poly[1].pos - poly[0].pos).normalize();
+  }
+  mutable vtxs = darrayst{tattr}(sz, tattr());
+  for (const i: 0 .. sz) {
+    mutable& v = vtxs[i];
+    v.position = poly[i].pos;
+    if (flat_flag) {
+      v.normal = nor;
+      v.tangent = glm::make_vec3(tang.x, tang.y, tang.z);
+    } else {
+      v.normal = poly[i].nor;
+      v.tangent = poly[i].tan;
+    }
+    v.uvw = glm::vec3();
+  }
+  if (sz == 4) {
+    float scale = 64.0f;
+    const p0 = poly[0].pos * scale;
+    const p1 = poly[1].pos * scale;
+    const p2 = poly[2].pos * scale;
+    const p3 = poly[3].pos * scale;
+    const v01 = p1 - p0;
+    const v32 = p2 - p3;
+    const v03 = p3 - p0;
+    const v12 = p2 - p1;
+    const cos0103 = dot(v01, v03) / (length(v01) * length(v03));
+    mutable pos0 = p0;
+    if (cos0103 > 0.0f) {
+      pos0 += v01.normalize() * (length(v03) * cos0103);
+    }
+    const cos0112 = dot(v01, v12) / (length(v01) * length(v12));
+    mutable posx = p1;
+    if (cos0112 < 0.0f) {
+      posx += v01.normalize() * (length(v12) * cos0112);
+    }
+    const sin0103 = sqrt(1.0f - cos0103 * cos0103);
+    const sin0112 = sqrt(1.0f - cos0112 * cos0112);
+    const ylen = min(length(v03) * sin0103, length(v12) * sin0112);
+    const vy_t = p3 - (p0 + v01.normalize() * (length(v03) * cos0103));
+    // debug_log("vy_t dot v01", dot(vy_t, v01));
+    const posy = pos0 + vy_t.normalize() * ylen;
+    const vx = posx - pos0;
+    const lx = length(vx);
+    const ex = vx / lx;
+    const vy = posy - pos0;
+    const ly = length(vy);
+    const ey = vy / ly;
+    const margin = 1.0f / 1.0f;
+    const lxm = floor(lx - margin);
+    const xm = (lx - lxm) / 2.0f;
+    const lym = floor(ly - margin);
+    const ym = (ly - lym) / 2.0f;
+    pos0 += ex * xm;
+    pos0 += ey * ym;
+    if (lxm > 0.0f && lym > 0.0f) {
+      // debug_log("ex dot ey", dot(ex, ey));
+      // debug_log("p0", p0);
+      // debug_log("p1", p1);
+      // debug_log("p2", p2);
+      // debug_log("p3", p3);
+      // debug_log("lx,ly", lx, ly, lxm, lym);
+      threaded function vec3 to_uvw(vec3 const& pos) {
+	const v = pos - pos0;
+	return make_vec3(dot(v, ex), dot(v, ey), 1.0f);
+      }
+      const aabb = make_vec4(0.0f, 0.0f, lxm, lym);
+      vtxs[0].uvw = to_uvw(p0);
+      vtxs[1].uvw = to_uvw(p1);
+      vtxs[2].uvw = to_uvw(p2);
+      vtxs[3].uvw = to_uvw(p3);
+      vtxs[0].uv_aabb = aabb;
+      vtxs[1].uv_aabb = aabb;
+      vtxs[2].uv_aabb = aabb;
+      vtxs[3].uv_aabb = aabb;
+      // debug_log("vtxs", vtxs);
+    }
+  }
+  if (false) { // FIXME: remove
+    const c0 = (poly[0].pos + poly[1].pos);
+    const c1 = (poly[1].pos + poly[2].pos);
+    const c2 = (poly[2].pos + poly[3].pos);
+    const c3 = (poly[3].pos + poly[0].pos);
+    const c02 = c2 - c0;
+    const c13 = c3 - c1;
+    if (fabs(glm::dot(c02, c13)) < glm::length(c02) * glm::length(c13) * 0.05)
+    {
+      /* 01, 23 */
+      const v01 = poly[1].pos - poly[0].pos;
+      const v23 = poly[3].pos - poly[2].pos;
+      const dotv0123 = glm::dot(v01, -v23);
+      const lenv01 = glm::length(v01);
+      const lenv23 = glm::length(v23);
+      const cosv0123 = dotv0123 / (lenv01 * lenv23);
+      const ratv2301 = lenv23 / lenv01;
+      /* 12, 30 */
+      const v12 = poly[2].pos - poly[1].pos;
+      const v30 = poly[0].pos - poly[3].pos;
+      const dotv1230 = glm::dot(v12, -v30);
+      const lenv12 = glm::length(v12);
+      const lenv30 = glm::length(v30);
+      const cosv1230 = dotv1230 / (lenv12 * lenv30);
+      const ratv3012 = lenv30 / lenv12;
+      /* */
+      const lenv0123 = lenv01 + lenv23;
+      const lenv1230 = lenv12 + lenv30;
+      mutable co = glm::make_vec2(0.0f, 0.0f);
+      co.x = max(1.0f, min(1024.0f, floor(lenv0123 / 2.0f)));
+      co.y = max(1.0f, min(1024.0f, floor(lenv1230 / 2.0f)));
+      /*
+      if (lenv0123 > lenv1230) {
+	co.y = min(floor(lenv0123 * 4.0f / lenv1230), 128.0f);
+      } else {
+	co.x = min(floor(lenv1230 * 4.0f / lenv0123), 128.0f);
+      }
+      */
+      float const border = 0.1f;
+      if (cosv0123 > cosv1230) {
+	if (ratv2301 > 0.25 && ratv2301 < 4.0 && cosv0123 > 0.95f) {
+	  vtxs[0].uvw = glm::make_vec3(0.0f - border, 0.0f - border, 1.0f);
+	  vtxs[1].uvw = glm::make_vec3(co.x + border, 0.0f - border, 1.0f);
+	  vtxs[2].uvw = glm::make_vec3(co.x + border, co.y + border, 1.0f);
+	  vtxs[3].uvw = glm::make_vec3(0.0f - border, co.y + border, 1.0f);
+	  if (ratv2301 > 1.0f) {
+	    vtxs[2].uvw *= ratv2301;
+	    vtxs[3].uvw *= ratv2301;
+	  } else if (ratv2301 < 1.0f) {
+	    vtxs[0].uvw /= ratv2301;
+	    vtxs[1].uvw /= ratv2301;
+	  }
+	  vtxs[0].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
+	  vtxs[1].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
+	  vtxs[2].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
+	  vtxs[3].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
+	}
+      } else {
+	if (ratv3012 > 0.25 && ratv3012 < 4.0 && cosv1230 > 0.95f) {
+	  vtxs[0].uvw = glm::make_vec3(0.0f - border, 0.0f - border, 1.0f);
+	  vtxs[1].uvw = glm::make_vec3(co.x + border, 0.0f - border, 1.0f);
+	  vtxs[2].uvw = glm::make_vec3(co.x + border, co.y + border, 1.0f);
+	  vtxs[3].uvw = glm::make_vec3(0.0f - border, co.y + border, 1.0f);
+	  if (ratv3012 > 1.0f) {
+	    vtxs[3].uvw *= ratv3012;
+	    vtxs[0].uvw *= ratv3012;
+	  } else if (ratv3012 < 1.0f) {
+	    vtxs[1].uvw /= ratv3012;
+	    vtxs[2].uvw /= ratv3012;
+	  }
+	  vtxs[0].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
+	  vtxs[1].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
+	  vtxs[2].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
+	  vtxs[3].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
+	}
+      }
+    }
+  }
+  vptr->push_polygon_distinct{tattr, 1}(vtxs);
+}
+
+public threaded function void
+dgf_noop(ptr{vertices} const& vptr, bool flat_flag, poly_t const& poly,
+  mesh_index const& mp)
+{
+}
+
+public threaded function dgf_filler
+make_dgf_noop(ptr{vertices} const& vptr)
+{
+  return make_callable_ptr{dgf_noop, 1}(vptr);
+}
+
+public threaded function {t} void
+buffer_append(varray{float} mutable& arr, t const& v)
+{
+  if (m::eq{t, float}) {
+    arr.push_back(v);
+  } else if (m::or{
+    m::eq{t, glm::vec2},
+    m::eq{t, glm::vec3},
+    m::eq{t, glm::vec4},
+    m::eq{t, glm::mat2},
+    m::eq{t, glm::mat3},
+    m::eq{t, glm::mat4}}) {
+    arr.append(v.to_cslice());
+  } else {
+    expand (sym: m::field_names{t})
+    { 
+      buffer_append(arr, v.sym);
+    }
+  }
+}
+
+public threaded function void prepare_instance_data_default(
+  scene_node const& sn, node_common_data mutable& ncd,
+  instance_data mutable& idata)
+{
+  buffer_append(idata.instance_buffer, sn.trans);
+}
+
+public function string
+load_shader_program(shader_config const& g,
+  tree_map{string, string} const& bindings, cstrref const& fname)
+{
+  mutable sev = stempl_evaluator();
+  const p = make_ptr{shader_config}(g);
+  sev.add_global_object(p);
+  for (const& k, const& m: bindings) {
+    sev.add_global_const(k, m);
+  }
+  string src;
+  if (!sdl_load_file(fname, src)) {
+    throw runtime_error_template{"load_shader_program"}(fname);
+  }
+  // debug_log("shader program:", src);
+  try {
+    const se = stempl_parse(src);
+    const string s = sev.eval(se);
+    return s;
+  } catch (stempl_exception ex) {
+    const string s = fname + ", " + ex.detail(src) + ", " +
+      src[ex.offset .. find_mapped(src, ex.offset, '\n')];
+    throw runtime_error_template{"load_shader_program"}(s);
+  }
+  return string();
+}
+

@@ -1,0 +1,465 @@
+public namespace pgl3d::physics::dynamics_world "use-unsafe";
+public import common -;
+public import exception -;
+public import pointer::raw -;
+public import meta m;
+public import meta::vararg va;
+public import pgl3d::engine::scene_node -;
+public import numeric::fpmath -;
+public import procedure::thread::async_task -;
+public import glm;
+public import pgl3d::physics::collision_shape -;
+private import meta::platform mp;
+private import Bullet::base -;
+private import Bullet::constants -;
+private import Bullet::api +;
+private import Bullet::all -;
+private import pointer::raw_unsafe -;
+private import pgl3d::physics::grid_broadphase -;
+private import pgl3d::physics::collision_gjk -;
+
+public threaded interface
+rigid_body_i rigid_body
+{
+  public function joint_id_type get_joint_id() const;
+  public function void apply_central_impulse(float x, float y, float z);
+  public function void apply_torque_impulse(float x, float y, float z);
+  public function void get_world_transform_mat4(glm::mat4 mutable& m);
+}
+
+public threaded function ptr{rigid_body_i}
+make_rigid_body(joint_id_type const& joint_id,
+  ptr{collision_shape_i} const& shape, float mass, cslice{float} const& t)
+{
+  const m3 = btMatrix3x3_(
+    t[0], t[4], t[8], t[1], t[5], t[9], t[2], t[6], t[10]);
+  const v3 = btVector3_(t[12], t[13], t[14]);
+  const btr = btTransform_(m3, v3);
+  const sh = pointer_downcast{ptr{collision_shape_i}}(shape);
+  return make_ptr{rigid_body}(joint_id, sh, mass, btr);
+}
+
+public threaded interface
+dynamic_object_i
+{
+  public function void on_collide();
+  public function void on_step(float speed);
+}
+
+public multithreaded interface
+swarm_i
+{
+  public function size_t size() const;
+  public function uint get(size_t i, glm::vec3 mutable& pos_r,
+    float mutable& radius_r) const;
+  public function void on_collide(size_t i, size_t dynobj_id);
+  public function void on_step(float speed);
+}
+
+private tsvaluetype struct grid_rbinfo
+{
+  public btTransform trans;
+  public crawptr{collision_shape_i} colshape;
+  public function glm::vec3 get_aabb_min() const {
+    const& org = trans.cgetOrigin();
+    const radius = colshape->get_radius();
+    return glm::make_vec3(
+      org.x() - radius,
+      org.y() - radius,
+      org.z() - radius);
+  }
+  public function glm::vec3 get_aabb_max() const {
+    const& org = trans.cgetOrigin();
+    const radius = colshape->get_radius();
+    return glm::make_vec3(
+      org.x() + radius,
+      org.y() + radius,
+      org.z() + radius);
+  }
+}
+
+private multithreaded struct
+grid_bp_shared(size_t i0, size_t n0)
+{
+  public size_t const split_i = i0;
+  public size_t const split_n = n0;
+  public rawptr{grid_rbinfo} grid_rbinfo_array_ptr;
+  public size_t grid_rbinfo_array_size;
+  public float grid_mesh_size = 1.0f;
+  public varray{tptr{swarm_i}} swarms;
+  /*
+  public bool run_flag = false;
+  public bool term_flag = false;
+  */
+  public double tm0;
+  public double tm1;
+  public double tm2;
+  public double tm3;
+}
+
+private threaded struct
+grid_bp_thread_object(tptr{grid_bp_shared} const& shared0)
+<callable{void, m::nil}>
+{
+  public grid_broadphase mutable grid_bp = grid_broadphase(6, 10.0f);
+  public varray{bool} grid_bp_work_near;
+  public varray{uint} grid_bp_work_near_ents;
+  public tptr{grid_bp_shared} sharedp = shared0;
+  public function void __call()
+  {
+    mutable& shared = *sharedp;
+    // debug_log("grid_bp_thread_object::__call", shared.swarms.size());
+    // grid_bp.set_mesh_size(shared.grid_mesh_size);
+    grid_bp.set_mesh_size(10.0f);
+    const grid_rbinfo_array = shared.grid_rbinfo_array_ptr.to_slice(
+      shared.grid_rbinfo_array_size); // create slice from rawptr and size
+    shared.tm1 = io::debug_system().high_resolution_timer_double();
+    if (shared.tm1 - shared.tm0 > 0.1) {
+      // debug_log("step t0", t0 - shared.tm1, grid_rbinfo_array.size());
+    }
+    grid_bp.add_objects(grid_rbinfo_array);
+    shared.tm2 = io::debug_system().high_resolution_timer_double();
+    /*
+    debug_log("fillings", rad_avg, grid_rbinfo_array.size(),
+      grid_bp.fillings.size());
+    */
+    glm::vec3 pos;
+    float radius;
+    // collision_gjk gjk;
+    size_t bp_count = 0;
+    size_t bp1_count = 0;
+    size_t np_count = 0;
+    size_t np1_count = 0;
+    if (grid_bp_work_near.size() < grid_rbinfo_array.size()) {
+      grid_bp_work_near.resize(grid_rbinfo_array.size(), false);
+    }
+    for (const i, const& swp: shared.swarms) {
+      mutable& sw = *swp;
+      // debug_log("i", i);
+      for (const j: 0 .. sw.size()) {
+	// debug_log("j", j);
+	/*
+	if (j + 1 < sz) {
+	  // prefetch
+	  if (sw.get(j + 1, pos, radius) != 0U) {
+	    const btpos = btVector3_(pos.x, pos.y, pos.z);
+	    const d = glm::make_vec3(radius, radius, radius);
+	    grid_bp.prefetch(pos - d, pos + d);
+	  }
+	}
+	*/
+	if (sw.get(j, pos, radius) != 0U) {
+	  const btpos = btVector3_(pos.x, pos.y, pos.z);
+	  const d = glm::make_vec3(radius, radius, radius);
+	  threaded function bool near_cb(col_id_type col_id) {
+	    ++bp_count;
+	    if (!grid_bp_work_near[col_id]) {
+	      grid_bp_work_near[col_id] = true;
+	      grid_bp_work_near_ents.push_back(col_id);
+	    }
+	    return false;
+	  }
+	  grid_bp.find{near_cb}(pos - d, pos + d);
+	  bp1_count += grid_bp_work_near_ents.size();
+	  for (const k, const col_id: grid_bp_work_near_ents) {
+	    grid_bp_work_near[col_id] = false;
+	    // sw.on_collide(j, col_id);
+	    const& rbi = grid_rbinfo_array[col_id];
+	    const& rbpos = rbi.trans.cgetOrigin();
+	    const rel = glm::make_vec3(pos.x - rbpos.x(), pos.y - rbpos.y(),
+	      pos.z - rbpos.z());
+	    const reldist2 = glm::dot(rel, rel);
+	    const radsum = rbi.colshape->get_radius() + radius;
+	    if (reldist2 >= radsum * radsum) {
+	      continue;
+	    }
+	    ++np_count;
+	    /*
+	    const p = rbi.shape.dynamic_cast{btConvexShape}();
+	    if (!gjk.collide_convex_sphere(*p, rbi.trans, radius, btpos)) {
+	      continue;
+	    }
+	    */
+	    ++np1_count;
+	    if (rbi.colshape->has_near_collision()) {
+	      const trinv = rbi.trans.inverse();
+	      // FIXME: avoid conversion between btVector and vec3
+	      const lpos = op_mul{btTransform, btVector3, btVector3}(trinv, btVector3_(pos.x, pos.y, pos.z));
+	      if (!rbi.colshape->near_collision(
+		glm::make_vec3(lpos.x(), lpos.y(), lpos.z()), radius)) {
+		//debug_log("near_collision: false");
+		continue;
+	      } else {
+		//debug_log("near_collision: true");
+	      }
+	    }
+	    sw.on_collide(j, col_id);
+	  }
+	  grid_bp_work_near_ents.clear();
+	}
+      }
+    }
+    // debug_log("bp", bp_count, bp1_count, "np", np_count, np1_count);
+    shared.tm3 = io::debug_system().high_resolution_timer_double();
+    /*
+    debug_log("bp", shared.split_i,
+      shared.tm1 - shared.tm0,
+      shared.tm2 - shared.tm1,
+      shared.tm3 - shared.tm2);
+    */
+    if (shared.tm3 - shared.tm1 > 0.1) {
+      // debug_log("step t1", t1 - shared.tm1);
+    }
+    grid_bp.clear();
+  }
+}
+
+private multithreaded struct
+grid_bp_thread_factory(tptr{grid_bp_shared} const& shared0)
+<async_task_factory_i>
+{
+  tptr{grid_bp_shared} shared = shared0;
+  public function ptr{callable{void, m::nil}} __call()
+  {
+    return make_ptr{grid_bp_thread_object}(shared);
+  }
+}
+
+private threaded struct
+grid_bp_task(size_t i, size_t n)
+{
+  public tptr{grid_bp_shared} const shared = make_tptr{grid_bp_shared}(i, n);
+  public task_executor executor = task_executor(
+    make_tptr{grid_bp_thread_factory}(shared));
+}
+
+public threaded struct
+dynamics_world(size_t num_grid_bp_tasks0)
+{
+  private metafunction broadphase_to_use
+    m::cond{mp::platform_emscripten, 1, 2};
+  private size_t num_grid_bp_tasks = num_grid_bp_tasks0;
+  private btDefaultCollisionConfiguration mutable collisionConfiguration 
+    = btDefaultCollisionConfiguration(btDefaultCollisionConstructionInfo());
+  private btCollisionDispatcher mutable dispatcher
+    = btCollisionDispatcher(address(collisionConfiguration));
+  expand(s: m::seq{m::eq{broadphase_to_use, 2}}) {
+  private btSimpleBroadphase mutable broadphase
+    = btSimpleBroadphase(65536U, rawptr{btOverlappingPairCache}());
+  }
+  expand(s: m::seq{m::eq{broadphase_to_use, 1}}) {
+  private btDbvtBroadphase mutable broadphase
+    = btDbvtBroadphase(rawptr{btOverlappingPairCache}());
+  }
+  expand(s: m::seq{m::eq{broadphase_to_use, 0}}) {
+  private bt32BitAxisSweep3 mutable broadphase
+    = bt32BitAxisSweep3_(
+      btVector3_(-1000.0f, -1000.0f, -1000.0f),
+      btVector3_( 1000.0f,  1000.0f,  1000.0f),
+      65536U, rawptr{btOverlappingPairCache}(), false);
+  }
+  private btSequentialImpulseConstraintSolver mutable solver;
+  private btDiscreteDynamicsWorld mutable dynamicsWorld
+    = btDiscreteDynamicsWorld(address(dispatcher), address(broadphase),
+      address(solver), address(collisionConfiguration));
+  private varray{ptr{rigid_body}} rigid_bodies;
+  private varray{grid_rbinfo} grid_rbinfo_array; // same size as rigid_bodies
+  private varray{ptr{grid_bp_task}} grid_bp_tasks;
+  /*
+  private tptr{grid_bp_shared} const grid_bp_sharedp =
+    make_tptr{grid_bp_shared}();
+  private task_executor grid_bp_cli = task_executor(
+    make_tptr{grid_bp_thread_factory}(grid_bp_sharedp));
+  */
+  private bool grid_bp_thread_running = false;
+  init();
+  private function void init() {
+    dynamicsWorld.setForceUpdateAllAabbs(false);
+    // dynamicsWorld.getSimulationIslandManager()->setSplitIslands(false);
+    for (const i: 0 .. num_grid_bp_tasks) {
+      grid_bp_tasks.push_back(make_ptr{grid_bp_task}(i, num_grid_bp_tasks));
+    }
+  }
+  private function ~
+  {
+    clear();
+  }
+  public function size_t rigid_bodies_size() const {
+    return rigid_bodies.size();
+  }
+  public function void set_gravity(float x, float y, float z)
+  {
+    dynamicsWorld.setGravity(btVector3_(x, y, z));
+  }
+  private function void check_grid_bp_thread_is_not_running() const
+  {
+    // grid_rbinfo_array must not be modified while grid_bp_thread is running
+    if (grid_bp_thread_running) {
+      throw runtime_error_template{"grid_bp thread is running"}("");
+    }
+  }
+  public function void clear()
+  {
+    check_grid_bp_thread_is_not_running();
+    for (size_t i, const& rb: rigid_bodies) {
+      dynamicsWorld.removeCollisionObject(address(rb->rigidBody));
+    }
+    rigid_bodies.clear();
+    grid_rbinfo_array.clear();
+    for (const i, const& bpt: grid_bp_tasks) {
+      bpt->shared->swarms.clear();
+    }
+  }
+  public function void add_swarm(tptr{swarm_i} const& s, size_t num_bp)
+  {
+    // debug_log("add_swarm");
+    grid_bp_tasks[num_bp]->shared->swarms.push_back(s);
+  }
+  public function void add_rigid_body(ptr{rigid_body_i} const& rb)
+  {
+    check_grid_bp_thread_is_not_running();
+    const rb1 = pointer_downcast{ptr{rigid_body}}(rb);
+    if (rb1->offset != static_cast{size_t}(-1)) {
+      return;
+    }
+    rb1->offset = rigid_bodies.size();
+    grid_rbinfo rbi;
+    rbi.colshape = address(*rb1->shape);
+    /*
+    rbi.radius = rb1->shape->get_radius();
+    rbi.shape = rb1->shape->get();
+    */
+    rigid_bodies.push_back(rb1);
+    grid_rbinfo_array.push_back(rbi);
+    dynamicsWorld.addRigidBody(address(rb1->rigidBody));
+  }
+  public function void remove_rigid_body(ptr{rigid_body_i} const& rb)
+  {
+    check_grid_bp_thread_is_not_running();
+    const rb1 = pointer_downcast{ptr{rigid_body}}(rb);
+    const offset = rb1->offset;
+    if (offset == static_cast{size_t}(-1)) {
+      return;
+    }
+    const sz = rigid_bodies.size();
+    if (sz > 1) {
+      swap(rigid_bodies[offset], rigid_bodies[sz - 1]);
+      swap(grid_rbinfo_array[offset], grid_rbinfo_array[sz - 1]);
+      rigid_bodies[offset]->offset = offset;
+    }
+    rigid_bodies.erase(sz - 1, sz);
+    grid_rbinfo_array.erase(sz - 1, sz);
+    dynamicsWorld.removeCollisionObject(address(rb1->rigidBody));
+  }
+  public function {f} void rigid_bodies_foreach()
+  {
+    for (const i, const& obj: rigid_bodies) {
+      f(i, obj);
+    }
+  }
+  public function void step_simulation(bool paused, float timestep,
+    int max_sub_steps, float fixed_timestep)
+  {
+    const t0 = io::debug_system().high_resolution_timer_double();
+    start_grid_collision();
+    const t1 = io::debug_system().high_resolution_timer_double();
+    if (!paused) {
+      dynamicsWorld.stepSimulation(timestep, max_sub_steps, fixed_timestep);
+    }
+    const t2 = io::debug_system().high_resolution_timer_double();
+    finish_grid_collision();
+    const t3 = io::debug_system().high_resolution_timer_double();
+    // debug_log("step_simulation", t1 - t0, t2 - t1, t3 - t2);
+    // if (t3 - t0 > 0.001) { debug_log("slow", t1 - t0, t2 - t1, t3 - t2); }
+  }
+  private function void start_grid_collision()
+  {
+    grid_bp_thread_running = true;
+    float rad_sum = 0.0f;
+    // update position from rigid bodies
+    {
+      const rbisli = grid_rbinfo_array.range();
+      for (const i, const& obj: rigid_bodies) {
+	mutable& rbi = rbisli[i];
+	rbi.trans = obj->rigidBody.cgetWorldTransform();
+	rad_sum += rbi.colshape->get_radius();
+      }
+    }
+    const rad_avg = rad_sum / static_cast{float}(rigid_bodies.size());
+    for (const i, mutable& bpt: grid_bp_tasks) {
+      {
+	mutable& gsh = *bpt->shared;
+	gsh.grid_rbinfo_array_ptr = grid_rbinfo_array.range().to_rawptr();
+	gsh.grid_rbinfo_array_size = grid_rbinfo_array.size();
+	gsh.grid_mesh_size = rad_avg * 4.0f;
+	gsh.tm0 = io::debug_system().high_resolution_timer_double();
+      }
+      bpt->executor.start();
+    }
+  }
+  private function void finish_grid_collision()
+  {
+    for (const i, mutable& bpt: grid_bp_tasks) {
+      bpt->executor.finish();
+    }
+    grid_bp_thread_running = false;
+  }
+}
+
+/* private */
+
+private threaded struct
+rigid_body(joint_id_type const& joint_id0,
+  ptr{collision_shape_i} const& shape0, btScalar mass0,
+  btTransform const& tr0)
+<rigid_body_i>
+{
+  public joint_id_type const joint_id = joint_id0;
+  public ptr{collision_shape_i} const shape = shape0;
+  public btRigidBody rigidBody = makeRigidBody(shape->get(), tr0, mass0);
+  public size_t offset = static_cast{size_t}(-1);
+  init(mass0);
+  function void init(float mass) {
+    if (mass == 0.0f) {
+      rigidBody.setCollisionFlags(rigidBody.getCollisionFlags() |
+	CF_KINEMATIC_OBJECT);
+      rigidBody.setActivationState(DISABLE_DEACTIVATION);
+    }
+  }
+  public function joint_id_type get_joint_id() const
+  {
+    return joint_id;
+  }
+  public function void apply_central_impulse(float x, float y, float z)
+  {
+    rigidBody.applyCentralImpulse(btVector3_(x, y, z));
+  }
+  public function void apply_torque_impulse(float x, float y, float z)
+  {
+    rigidBody.applyTorqueImpulse(btVector3_(x, y, z));
+  }
+  public function void get_world_transform_mat4(glm::mat4 mutable& m)
+  {
+    const sli = m.to_slice();
+    rigidBody.getWorldTransform().getOpenGLMatrix(sli.to_rawptr());
+  }
+}
+
+private threaded function btRigidBody makeRigidBody(
+  crawptr{btCollisionShape} shape, btTransform const& tr0, btScalar mass)
+{
+  const isDynamic = (mass != 0.0f);
+  mutable localInertia = btVector3_(0.0f, 0.0f, 0.0f);
+  if (isDynamic) {
+    shape->calculateLocalInertia(mass, localInertia);
+  }
+  mutable rbInfo = btRigidBody_btRigidBodyConstructionInfo(mass,
+    rawptr{btDefaultMotionState}(), shape.const_cast(), localInertia);
+  rbInfo.m_startWorldTransform = tr0;
+  // rbInfo.m_friction = 0.0f;
+  // rbInfo.m_rollingFriction = 0.0f;
+  // rbInfo.m_restitution = 0.0f;
+  const r = btRigidBody(rbInfo);
+  return r;
+}
+

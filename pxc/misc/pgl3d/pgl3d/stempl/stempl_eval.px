@@ -1,0 +1,358 @@
+public threaded namespace pgl3d::stempl::stempl_eval;
+public import common -;
+public import exception -;
+public import pgl3d::stempl::stempl +;
+public import meta m;
+public import pointer::tfuncptr -;
+
+public threaded struct
+stempl_evaluator()
+{
+  public tree_map{string, stempl_binding_entry} functions;
+  public tree_map{string, string} locals;
+  public function {f} void add_lazy_function(string const& name, size_t mi,
+    size_t mx)
+  {
+    functions.insert(name, stempl_binding_entry(
+      make_ptr{stempl_function_lazy{f}}(), mi, mx));
+  }
+  public function {f} void add_strict_function(string const& name)
+  {
+    size_t const num_args = m::size{m::arg_types{f}};
+    functions.insert(name, stempl_binding_entry(
+      make_ptr{stempl_function_strict{f}}(), num_args, num_args));
+  }
+  public function {pt} void add_global_object(pt const& ptr)
+  {
+    metafunction t m::at{pt, 0};
+    metafunction mfcs m::member_functions{t};
+    expand (idx: m::seq{m::size{mfcs}}) {
+      functions.insert(m::to_string{m::at{mfcs, idx}},
+	stempl_binding_entry(
+	  make_ptr{stempl_function_strict_method{t, idx}}(ptr),
+	  m::size{m::arg_types{m::at{mfcs, idx}}},
+	  m::size{m::arg_types{m::at{mfcs, idx}}}));
+    }
+    metafunction mflds m::field_names{t};
+    expand (idx: m::seq{m::size{mflds}}) {
+      functions.insert(m::to_string{m::at{mflds, idx}},
+	stempl_binding_entry(
+	  make_ptr{stempl_function_const}(get_field{t, idx}(*ptr)), 0, 0));
+    }
+  }
+  public function void add_global_const(string const& name, string const& val)
+  {
+    functions.insert(name, stempl_binding_entry(
+      make_ptr{stempl_function_const}(val), 0, 0));
+  }
+  public function string eval_cons(stempl_evaluator mutable& self,
+    stempl_cons const& cons)
+  {
+    const& sym = cons.symbol;
+    const& args = cons.args;
+    if (const& fe: functions[sym]) {
+      // debug_log("func", sym);
+      check_num_args(cons.args, fe.min_args, fe.max_args, cons.offset);
+      return fe.func->call(self, cons);
+    }
+    if (const& m: locals[sym]) {
+      // debug_log("var", sym, cons.args.size());
+      check_num_args(cons.args, 0, 0, cons.offset);
+      return m;
+    }
+    throw stempl_exception("invalid symbol", cons.offset);
+  }
+  init();
+  private function void init()
+  {
+    const nolimit = static_cast{size_t}(-1);
+    add_lazy_function{stempl_func_if}("if", 2, nolimit);
+    add_lazy_function{stempl_func_invalid}("else", 0, nolimit);
+    add_lazy_function{stempl_func_invalid}("elseif", 0, nolimit);
+    add_lazy_function{stempl_func_and}("and", 0, nolimit);
+    add_lazy_function{stempl_func_or}("or", 0, nolimit);
+    add_lazy_function{stempl_func_variable}("variable", 1, nolimit);
+    add_lazy_function{stempl_func_set}("set", 2, 2);
+    add_lazy_function{stempl_func_for}("for", 3, nolimit);
+    add_strict_function{operator::eq{string, string}}("eq");
+    add_strict_function{operator::ne{string, string}}("ne");
+    add_strict_function{operator::not{bool}}("not");
+    add_strict_function{operator::add{int, int}}("add");
+    add_strict_function{operator::sub{int, int}}("sub");
+    add_strict_function{operator::mul{int, int}}("mul");
+    add_strict_function{operator::div{int, int}}("div");
+    add_strict_function{operator::mod{int, int}}("mod");
+    add_strict_function{operator::add{float, float}}("fadd");
+    add_strict_function{operator::sub{float, float}}("fsub");
+    add_strict_function{operator::mul{float, float}}("fmul");
+    add_strict_function{operator::div{float, float}}("fdiv");
+  }
+}
+
+public threaded function string
+stempl_evaluator_eval(stempl_evaluator mutable& ev, stempl_expr const& expr)
+{
+  if (case expr.literal) {
+    return *expr.literal;
+  } else if (case expr.cons) {
+    const& cons = *expr.cons;
+    const& sym = cons.symbol;
+    string s;
+    if (sym.empty()) {
+      for (const i, const& a: cons.args) {
+        s += stempl_evaluator_eval(ev, a);
+      }
+    } else {
+      s = ev.eval_cons(ev, cons);
+    }
+    // trace_eval(expr, s);
+    return s;
+  }
+  return string();
+}
+
+public threaded function string
+stempl_func_noop(string const& a0, string const& a1)
+{
+  return string();
+}
+
+public metafunction stempl_func_lazy
+  tfuncptr_matching_function{stempl_func_invalid};
+
+public threaded function string
+stempl_func_invalid(stempl_evaluator mutable& self, stempl_cons const& cons)
+{
+  throw stempl_exception("invalid expression", cons.offset);
+}
+
+public threaded function string
+stempl_func_if(stempl_evaluator mutable& self, stempl_cons const& cons)
+{
+  const& args = cons.args;
+  const sz = args.size();
+  size_t i = 0;
+  while (true) {
+    if (i + 1 >= sz) {
+      throw stempl_exception("invalid if-clause", cons.offset);
+    }
+    const cnd = from_string{bool}(stempl_evaluator_eval(self, args[i]));
+    if (++i >= sz) {
+      break;
+    }
+    size_t else_pos = i;
+    bool else_if = false;
+    while (else_pos < sz) {
+      const& a = args[else_pos];
+      if (case a.cons) {
+	const& acons = *a.cons;
+	const& sym = acons.symbol;
+	if (sym == "else") {
+	  if (!acons.args.empty()) {
+	    throw stempl_exception("invalid else-expression", acons.offset);
+	  }
+	  break;
+	}
+	if (sym == "elseif") {
+	  if (!acons.args.empty()) {
+	    throw stempl_exception("invalid elseif-expression", acons.offset);
+	  }
+	  else_if = true;
+	  break;
+	}
+      }
+      ++else_pos;
+    }
+    if (cnd) {
+      return eval_concat(self, args, i, else_pos);
+    }
+    if (!else_if) {
+      return eval_concat(self, args, else_pos + 1, sz);
+    }
+    // elseif
+    i = else_pos + 1;
+  }
+  return string();
+}
+
+public threaded function string
+stempl_func_or(stempl_evaluator mutable& self, stempl_cons const& cons)
+{
+  for (const i, const& a: cons.args) {
+    if (from_string{bool}(stempl_evaluator_eval(self, a))) {
+      return to_string(true);
+    }
+  }
+  return to_string(false);
+}
+
+public threaded function string
+stempl_func_and(stempl_evaluator mutable& self, stempl_cons const& cons)
+{
+  for (const i, const& a: cons.args) {
+    if (!from_string{bool}(stempl_evaluator_eval(self, a))) {
+      return to_string(false);
+    }
+  }
+  return to_string(true);
+}
+
+public threaded function string
+stempl_func_variable(stempl_evaluator mutable& self, stempl_cons const& cons)
+{
+  const vname = stempl_evaluator_eval(self, cons.args[0]);
+  if (const& v: self.locals[vname]) {
+    throw stempl_exception("overriding variable", cons.offset);
+  }
+  // debug_log("bind-init", vname);
+  self.locals[vname] = string();
+  string r;
+  for (const j: 1 .. cons.args.size()) {
+    r += stempl_evaluator_eval(self, cons.args[j]);
+  }
+  // debug_log("bind-reset", vname);
+  self.locals.erase(vname);
+  return r;
+}
+
+public threaded function string
+stempl_func_set(stempl_evaluator mutable& self, stempl_cons const& cons)
+{
+  const vname = stempl_evaluator_eval(self, cons.args[0]);
+  if (const& v: self.locals[vname]) {
+    self.locals[vname] = stempl_evaluator_eval(self, cons.args[1]);
+    // debug_log("bind-set", vname, self.locals[vname]);
+  } else {
+    throw stempl_exception("overriding variable", cons.offset);
+  }
+  return string();
+}
+
+public threaded function string
+stempl_func_for(stempl_evaluator mutable& self, stempl_cons const& cons)
+{
+  const vname = stempl_evaluator_eval(self, cons.args[0]);
+  if (const& v: self.locals[vname]) {
+    throw stempl_exception("overriding variable", cons.offset);
+  }
+  const v0 = from_string{int}(stempl_evaluator_eval(self, cons.args[1]));
+  const v1 = from_string{int}(stempl_evaluator_eval(self, cons.args[2]));
+  string r;
+  for (int i: v0 .. v1) {
+    self.locals[vname] = to_string(i);
+    for (const j: 3 .. cons.args.size()) {
+      r += stempl_evaluator_eval(self, cons.args[j]);
+    }
+  }
+  self.locals.erase(vname);
+  return r;
+}
+
+/* private */
+
+private threaded interface stempl_function_i
+{
+  public function string call(stempl_evaluator mutable& self,
+    stempl_cons const& cons);
+}
+
+private threaded struct {f} stempl_function_lazy
+<stempl_function_i>
+{
+  public function string call(stempl_evaluator mutable& self,
+    stempl_cons const& cons)
+  {
+    return f(self, cons);
+  }
+}
+
+private threaded struct {f} stempl_function_strict
+<stempl_function_i>
+{
+  public function string call(stempl_evaluator mutable& self,
+    stempl_cons const& cons)
+  {
+    metafunction sz m::size{m::arg_types{f}};
+    const& args = cons.args;
+    return to_string(
+      f(expand (i: m::seq{sz};
+	from_string{m::arg_type{f, i}}(
+	  stempl_evaluator_eval(self, args[i])))));
+  }
+}
+
+private threaded struct {t, idx}
+stempl_function_strict_method(ptr{t} const& pointer0)
+<stempl_function_i>
+{
+  ptr{t} const pointer = pointer0;
+  public function string call(stempl_evaluator mutable& self,
+    stempl_cons const& cons)
+  {
+    metafunction mf m::at{m::member_functions{t}, idx};
+    metafunction sz m::size{m::arg_types{mf}};
+    expand (sym: {m::to_string{mf}}) {
+      return to_string(
+	pointer->sym(expand (i: m::seq{sz};
+	  from_string{m::arg_type{mf, i}}(
+	    stempl_evaluator_eval(self, cons.args[i])))));
+    }
+  }
+}
+
+private threaded struct
+stempl_function_const(string const& value0)
+<stempl_function_i>
+{
+  string const value = value0;
+  public function string call(stempl_evaluator mutable& self,
+    stempl_cons const& cons)
+  {
+    return value;
+  }
+}
+
+private threaded struct
+stempl_binding_entry(ptr{stempl_function_i} const& func0, size_t min_args0,
+  size_t max_args0)
+{
+  public ptr{stempl_function_i} const func = func0;
+  public size_t const min_args = min_args0;
+  public size_t const max_args = max_args0;
+}
+
+private threaded function void
+trace_eval(stempl_expr const& expr, cstrref const& s)
+{
+  debug_log("stempl trace: ", expr.dump(), s);
+}
+
+private threaded function {t, idx} string
+get_field(t const& obj)
+{
+  metafunction mflds m::field_names{t};
+  expand (sym: {m::at{mflds, idx}}) {
+    return to_string(obj.sym);
+  }
+}
+
+private threaded function {t} void
+check_num_args(t const& lst, size_t mi, size_t mx, size_t src_offset)
+{
+  if (lst.size() < mi || lst.size() > mx) {
+    throw stempl_exception("invalid number of arguments", src_offset);
+  }
+}
+
+private threaded function string
+eval_concat(stempl_evaluator mutable& self, cslice{stempl_expr} const& exprs,
+  size_t i0, size_t i1)
+{
+  string s;
+  while (i0 < i1) {
+    s += stempl_evaluator_eval(self, exprs[i0]);
+    ++i0;
+  }
+  return s;
+}
+

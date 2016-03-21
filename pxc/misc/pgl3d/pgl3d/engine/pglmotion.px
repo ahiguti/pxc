@@ -1,0 +1,84 @@
+private threaded namespace pgl3d::engine::pglmotion;
+public import common -;
+public import numeric::fpmath -;
+public import glm;
+public import io::time -;
+public import exception -;
+public import meta m;
+public import procedure::thread::async_task -;
+public import pgl3d::engine::pglbase -;
+public import pgl3d::engine::util -;
+public import pgl3d::engine::application -;
+public import pgl3d::drawer::drawer -;
+
+public multithreaded struct
+motion_thread_shared(whole_instances_type const& whole_instances0,
+  tptr{pgl3d_scene_shared} const& pss0, tptr{pidf_table} const& pidft0)
+{
+  public whole_instances_type whole_instances = whole_instances0;
+  public tptr{pgl3d_scene_shared} pss = pss0;
+  public tptr{pidf_table} pidft = pidft0;
+  public float frame_speed_mul = 1.0f;
+  public projection_info cam;
+  public string message;
+  public size_t stat_num_objects;
+  public string_map commands; // queued from on_motion_step()
+}
+
+public threaded struct
+motion_thread_client(node_factory const& nfac,
+  whole_instances_type const& whole_instances,
+  tptr{pgl3d_scene_shared} const& pss, tptr{pidf_table} const& pidft)
+{
+  public tptr{motion_thread_shared} const shared =
+    make_tptr{motion_thread_shared}(whole_instances, pss, pidft);
+  public task_executor executor = task_executor(
+    make_tptr{motion_thread_factory}(shared, nfac));
+  public function void start()
+  {
+    executor.start();
+  }
+  public function void finish()
+  {
+    executor.finish();
+  }
+}
+
+private multithreaded struct
+motion_thread_factory(tptr{motion_thread_shared} const& shared0,
+  node_factory const& nfac0)
+<async_task_factory_i>
+{
+  private tptr{motion_thread_shared} sharedp = shared0;
+  private node_factory nfac = nfac0; // copy
+  public function ptr{callable{void, m::nil}} __call()
+  {
+    return make_ptr{motion_thread_task}(sharedp, nfac);
+  }
+}
+
+private threaded struct
+motion_thread_task(tptr{motion_thread_shared} const& shared0,
+  node_factory const& nfac0)
+<callable{void, m::nil}>
+{
+  private tptr{motion_thread_shared} const sharedp = shared0;
+  private ptr{pgl3d_scene} const ps = sharedp->pss->make_scene(nfac0);
+  public function void __call()
+  {
+    mutable& shared = *sharedp;
+    clear_instances(shared.whole_instances);
+    ps->on_motion_step(shared.frame_speed_mul, shared.cam, shared.message,
+      *shared.pidft, shared.whole_instances, *shared.pss, shared.commands);
+  }
+  private function void
+  clear_instances(whole_instances_type mutable& whole_instances)
+  {
+    for (const bo_id, mutable& instances: whole_instances) {
+      for (const i, mutable& ai: instances) {
+	ai.instance_buffer.clear();
+      }
+    }
+  }
+}
+

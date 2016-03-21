@@ -1,0 +1,233 @@
+private threaded namespace pgl3d::texture::texture "use-unsafe";
+public import common -;
+public import pointer::raw -;
+private import pointer::raw_unsafe -;
+public import numeric::fpmath -;
+public import glm;
+private import glm::raw;
+public import io::time -;
+public import exception -;
+public import meta m;
+public import pointer::tfuncptr -;
+public import pgl3d::engine::util -;
+public import pgl3d::sdl::sdlutil -;
+public import pgl3d::texture::voxel_octree -;
+private import SDL2::api_base -;
+private import SDL2::api_types -;
+private import SDL2::api_functions -;
+private import SDL2::api_wrappers -;
+private import SDL2::misc -;
+
+public struct texture_data()
+{
+  public uint width;
+  public uint height;
+  public uint depth;
+  public varray{uint} data; // (a << 24) | (b << 16) | (g << 8) | (r << 0)
+}
+
+public function ptr{texture_data}
+load_texture_data_raw(string const& fn0)
+{
+  const p = make_ptr{texture_data}();
+  string buf;
+  sdl_load_file(fn0, buf);
+  *p = from_string{texture_data}(buf);
+  return p;
+}
+
+public function bool
+save_texture_data_raw(string const& fn0, texture_data const& td)
+{
+  const buf = to_string(td);
+  return sdl_save_file(fn0, buf);
+}
+
+public function ptr{texture_data}
+load_texture_data(string const& fn0)
+{
+  const p = make_ptr{texture_data}();
+  string fn = fn0;
+  fn.push_back(0);
+  SDL_Surface_Scoped sur0;
+  sur0.reset(IMG_Load(fn.to_crawptr().to_ccharptr()));
+  if (sur0.get() == rawptr{SDL_Surface}()) {
+    sdl_log("failed to load", fn);
+    throw runtime_error_template{"img_load"}(fn0);
+  }
+  sdl_log("loading image: loaded", fn);
+  const& sur0ref = *sur0.get().to_slice(1);
+  const fmtp = sur0ref.format;
+  const& fmt = *sur0ref.format.to_slice(1);
+  const bpp = fmt.BytesPerPixel;
+  if (bpp != 4 && bpp != 3) {
+    throw runtime_error_template{"img_load"}("bpp");
+  }
+  const sur0_w = static_cast{uint}(sur0ref.w);
+  const sur0_h = static_cast{uint}(sur0ref.h);
+  mutable tex_w = power_of_2(sur0_w);
+  mutable tex_h = power_of_2(sur0_h);
+  p->width = tex_w;
+  p->height = tex_h;
+  mutable& uibuf = p->data;
+  uibuf.resize(tex_w * tex_h, 0);
+  uint rmask = fmt.Rmask;
+  uint gmask = fmt.Gmask;
+  uint bmask = fmt.Bmask;
+  uint amask = fmt.Amask;
+  function uint get_shift(uint m) {
+    uint r = 0;
+    for (uint i: 0 .. 32) {
+      if ((m & 1) != 0) {
+	break;
+      }
+      r += 1;
+      m >>= 1;
+    }
+    return r;
+  }
+  uint rshift = get_shift(rmask);
+  uint gshift = get_shift(gmask);
+  uint bshift = get_shift(bmask);
+  uint ashift = get_shift(amask);
+  const& sur0_ref = *sur0.get().to_slice(1);
+  const sur0buf = sur0_ref.pixels.reinterpret_cast{uchar}()
+    .to_slice(static_cast{size_t}(sur0_ref.pitch * sur0_ref.h));
+  for (const y: 0 .. sur0_h) {
+    for (const x: 0 .. sur0_w) {
+      const o = (y * sur0_w + x) * bpp;
+      uint v;
+      uint vr;
+      uint vg;
+      uint vb;
+      uint va;
+      if (bpp == 3) {
+	v = read_3_uint(sur0buf, o);
+      } else if (bpp == 4) {
+	v = read_4_uint(sur0buf, o);
+      }
+      vr = (v >> rshift) & 0xffU;
+      vg = (v >> gshift) & 0xffU;
+      vb = (v >> bshift) & 0xffU;
+      if (bpp == 4) {
+	va = (v >> ashift) & 0xffU;
+      }
+      uint v1 = (va << 24) | (vb << 16) | (vg << 8) | (vr << 0);
+      uibuf[y * tex_w + x] = v1;
+    }
+  }
+  return p;
+}
+
+public function {bshift} ptr{texture_data}
+convert_to_octree(ptr{texture_data} const& tpat, ptr{texture_data} const& tmap)
+{
+  ptr{texture_data} const rtd = make_ptr{texture_data}();
+  // const psz_l2 = integral_log2(tpat->width);
+  // const psz = 1u << psz_l2;
+  // const msz_l2 = integral_log2(tmap->width);
+  // const msz = 1u << msz_l2;
+  // debug_log("convert_to_octree psz, msz", psz_l2, msz_l2);
+  octree{bshift} ot;
+  ptr{level_data} const ltpat = make_ptr{level_data}();
+  ptr{level_data} const ltmap = make_ptr{level_data}();
+  ltpat->set_size_l2(
+    integral_log2(tpat->width),
+    integral_log2(tpat->height),
+    integral_log2(tpat->depth));
+  ltmap->set_size_l2(
+    integral_log2(tmap->width),
+    integral_log2(tmap->height),
+    integral_log2(tmap->depth));
+  ltpat->values = tpat->data; // copy
+  ltmap->values = tmap->data; // copy
+  ot.build(ltpat, ltmap);
+  const rwh_l2 = calc_width_height(static_cast{uint}(ot.nodes.size()));
+  const rwh = (1u << rwh_l2);
+  const rd_l2 = calc_depth(static_cast{uint}(ot.nodes.size()), rwh_l2 * 2);
+  const rd = (1u << rd_l2);
+  const rwh2_l2 = rwh_l2 + bshift;
+  const rwh2 = (1u << rwh2_l2);
+  const rd2_l2 = rd_l2 + bshift;
+  const rd2 = (1u << rd2_l2);
+  rtd->width = rwh2;
+  rtd->height = rwh2;
+  rtd->depth = rd2;
+  rtd->data.resize(rwh2 * rwh2 * rd2, 0u);
+  mutable& rdata = rtd->data;
+  debug_log("octree data", rdata.size());
+  debug_log("octree nodes", ot.nodes.size());
+  debug_log("octree nodes whd", rwh, rwh, rd);
+  if (ot.nodes.size() > rwh * rwh * rd) {
+    throw runtime_error_template{"convert_to_octree"}(
+      "nodes size is too small");
+  }
+  debug_log("octree width", rtd->width);
+  /*
+  for (const i, const& m: ot.nodes[0]) {
+    debug_log("octree node0", to_hexstring(m));
+  }
+  */
+  {
+    const rwh_mask = rwh - 1u;
+    const rd_mask = rd - 1u;
+    for (const i, const& m: ot.nodes) {
+      const bx = i & rwh_mask;
+      const by = (i >> rwh_l2) & rwh_mask;
+      const bz = (i >> (rwh_l2 * 2)) & rd_mask;
+      const bsz = 1u << bshift;
+      const bmask = bsz - 1;
+      for (const j: 0 .. bsz * bsz * bsz) {
+	const xi = j & bmask;
+	const yi = (j >> bshift) & bmask;
+	const zi = (j >> (bshift * 2)) & bmask;
+	const x = bx * bsz + xi;
+	const y = by * bsz + yi;
+	const z = bz * bsz + zi;
+	const idx = (z << (rwh2_l2 * 2)) + (y << rwh2_l2) + x;
+	mutable v = m[j];
+	if ((v & 0xff000000u) == 0x01000000u) {
+	  // convert node reference value
+	  v &= 0x00ffffffu;
+	  const vx = v & rwh_mask;
+	  v >>= rwh_l2;
+	  const vy = v & rwh_mask;
+	  v >>= rwh_l2;
+	  const vz = v & rd_mask;
+	  v = (vz << 16) + (vy << 8) + vx;
+	  v |= 0x01000000u;
+	}
+	rdata[idx] = v;
+	/*
+	if (i == 0 || i == 0x3d1) {
+	  debug_log("i,j,idx=", i, j, idx, to_hexstring(m[j]), to_hexstring(v));
+	}
+	*/
+      }
+    }
+  }
+  // debug_log("rdata[0]", to_hexstring(rdata[0]));
+  return rtd;
+}
+
+/* private */
+
+metafunction SDL_Surface_Scoped scoped_nullable{SDL_FreeSurface};
+
+function uint calc_width_height(uint node_size)
+{
+  return integral_log2(node_size) / 3u;
+}
+
+function uint calc_depth(uint node_size, uint wh)
+{
+  for (uint i: 0 .. 32u) {
+    if ((1u << (wh + i)) >= node_size) {
+      return i;
+    }
+  }
+  throw runtime_error_template{"convert_to_octree"}(
+    "nodes size is too large");
+  return 0u;
+}
+

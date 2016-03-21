@@ -1,0 +1,36 @@
+public threaded namespace pgl3d::engine::application;
+public import common -;
+
+public import pgl3d::engine::scene_node *;
+public import pgl3d::engine::pglbase *;
+public import pgl3d::engine::pglconfig *;
+public import pgl3d::opengl::shader_config *;
+public import pgl3d::drawer::drawer *;
+public import SDL2::api_base *;
+public import SDL2::api_types *;
+
+public interface pgl3d_application {
+  public function tptr{pgl3d_scene_shared} get_scene_shared();
+  public function tree_map{string, ptr{pgldrawer_export_i}} on_init_drawers(
+    shader_config const& sconf, resource_pool_ptr const& res);
+  public function void on_build_vertices(make_vertices_i mutable& mvx);
+  public function void on_event(SDL_Event const& ev, float speed,
+    projection_info const& pjinfo, string_map mutable& commands_r);
+  public function void on_scankeys(cslice{Uint8} const& keys,
+    cslice{short} const& joy_axes, cslice{bool} const& joy_buttons,
+    float speed, projection_info const& pjinfo,
+    string_map mutable& commands_r);
+}
+
+public multithreaded interface pgl3d_scene_shared {
+  public function ptr{pgl3d_scene} make_scene(node_factory const& nodefac);
+}
+
+public threaded interface pgl3d_scene {
+  public function void on_motion_step(float frame_speed,
+    projection_info mutable& pjinfo, cstrref const& status_message,
+    cslice{prepare_instance_data_funcptr} const& ftable,
+    whole_instances_type mutable& whole_instances,
+    pgl3d_scene_shared mutable& ss, string_map mutable& commands_r);
+}
+

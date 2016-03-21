@@ -1,0 +1,431 @@
+public namespace pgl3d::physics::grid_broadphase "use-unsafe";
+public import common -;
+public import glm -;
+public import numeric::fpmath -;
+public import pointer::raw -;
+public import meta m;
+
+public metafunction col_id_type uint;
+public metafunction filling_index_type uint;
+public metafunction geom_index_type uint;
+
+public tsvaluetype struct
+filling_entry(geom_index_type pos0, filling_index_type next_filling0,
+  col_id_type id0)
+{
+  public geom_index_type pos = pos0;
+  public filling_index_type next_filling = next_filling0;
+  public col_id_type id = id0;
+}
+
+public threaded function filling_index_type filling_none()
+{
+  return static_cast{filling_index_type}(-1);
+}
+
+public multithreaded struct
+grid_broadphase(uint split_log2_0, float mesh_size0)
+{
+  public varray{filling_index_type} pos_to_filling; // [split * split * split]
+  public varray{filling_entry} fillings;
+  public uint const split_log2 = split_log2_0;
+  public uint const split = (1U << split_log2);
+  public float mutable mesh_size = mesh_size0;
+  public float mutable mesh_size_inv = 1.0f / mesh_size0;
+  public float mutable world_size = mesh_size0 * static_cast{float}(split);
+  init();
+  private function void init()
+  {
+    pos_to_filling.resize(static_cast{size_t}(split * split * split),
+      filling_none());
+  }
+  public function void set_mesh_size(float mesh_size0)
+  {
+    mesh_size = mesh_size0;
+    mesh_size_inv = 1.0f / mesh_size0;
+    world_size = mesh_size0 * static_cast{float}(split);
+  }
+  public function void clear()
+  {
+    for (const i, const& filling: fillings) {
+      const pos = filling.pos;
+      pos_to_filling[pos] = filling_none();
+    }
+    fillings.clear();
+  }
+  public function geom_index_type split_mask() const
+  {
+    return static_cast{geom_index_type}(split - 1);
+  }
+  public function geom_index_type quantize(float val) const
+  {
+    // const v = static_cast{geom_index_type}(floor(val * mesh_size_inv));
+    const v = static_cast{geom_index_type}(val * mesh_size_inv) -
+      (val < 0.0f ? 1U : 0U);
+    return v; //  & split_mask();
+  }
+  public function geom_index_type get_geom_index(geom_index_type x,
+    geom_index_type y, geom_index_type z) const
+  {
+    return (x << (split_log2 + split_log2)) + (y << (split_log2)) + (z);
+  }
+  public function void add_object_quantized(col_id_type id, geom_index_type x,
+    geom_index_type y, geom_index_type z)
+  {
+    geom_index_type const pos = get_geom_index(x, y, z);
+    filling_index_type filling_index =
+      static_cast{filling_index_type}(fillings.size());
+    filling_index_type next = pos_to_filling[pos];
+    pos_to_filling[pos] = filling_index;
+    fillings.emplace_back(pos, next, id);
+  }
+}
+
+public threaded function {func} void
+grid_broadphase_quantize_foreach(grid_broadphase const& bp,
+  vec3 const& aabb_min, vec3 const& aabb_max)
+{
+  const mask = bp.split_mask();
+  mutable x0 = bp.quantize(aabb_min.x);
+  mutable x1 = bp.quantize(aabb_max.x);
+  if (x1 - x0 > mask) { x1 = x0 + mask; }
+  x0 &= mask;
+  x1 &= mask;
+  mutable y0 = bp.quantize(aabb_min.y);
+  mutable y1 = bp.quantize(aabb_max.y);
+  if (y1 - y0 > mask) { y1 = y0 + mask; }
+  y0 &= mask;
+  y1 &= mask;
+  mutable z0 = bp.quantize(aabb_min.z);
+  mutable z1 = bp.quantize(aabb_max.z);
+  if (z1 - z0 > mask) { z1 = z0 + mask; }
+  z0 &= mask;
+  z1 &= mask;
+  filling_index_type x = x0;
+  while (true) {
+    filling_index_type y = y0;
+    while (true) {
+      filling_index_type z = z0;
+      while (true) {
+	if (func(x, y, z)) { return; }
+	if (z == z1) { break; }
+	z = (z + 1) & mask;
+      }
+      if (y == y1) { break; }
+      y = (y + 1) & mask;
+    }
+    if (x == x1) { break; }
+    x = (x + 1) & mask;
+  }
+}
+
+public threaded function void
+grid_broadphase_add(grid_broadphase mutable& bp, col_id_type id,
+  vec3 const& aabb_min, vec3 const& aabb_max)
+{
+  threaded function bool cb(geom_index_type x, geom_index_type y,
+    geom_index_type z)
+  {
+    bp.add_object_quantized(id, x, y, z);
+    return false;
+  }
+  bp.quantize_foreach{cb}(aabb_min, aabb_max);
+}
+
+public threaded function {t} void
+grid_broadphase_add_objects(grid_broadphase mutable& bp,
+  t const& objects)
+{
+  for (const i, const& obj: objects) {
+    bp.add(static_cast{col_id_type}(i), obj.get_aabb_min(),
+      obj.get_aabb_max());
+  }
+}
+
+public threaded function {func} void
+grid_broadphase_collision_pairs_foreach(grid_broadphase const& bp)
+{
+  size_t j = bp.fillings.size();
+  const fil = bp.fillings.crange();
+  while (j > 0) {
+    --j;
+    const& jfilling = fil[j];
+    filling_index_type k = jfilling.next_filling;
+    while (k != filling_none()) {
+      const& kfilling = fil[k];
+      if (func(jfilling.id, kfilling.id)) {
+	return;
+      }
+      k = kfilling.next_filling;
+    }
+  }
+}
+
+public threaded function {func} void
+grid_broadphase_find(grid_broadphase const& bp, vec3 const& aabb_min,
+  vec3 const& aabb_max)
+{
+  threaded function bool cb(geom_index_type x, geom_index_type y,
+    geom_index_type z)
+  {
+    const gidx = bp.get_geom_index(x, y, z);
+    filling_index_type fi = bp.pos_to_filling[gidx];
+    while (fi != filling_none()) {
+      const& fe = bp.fillings[fi];
+      if (func(fe.id)) {
+	return true;
+      }
+      fi = fe.next_filling;
+    }
+    return false;
+  }
+  bp.quantize_foreach{cb}(aabb_min, aabb_max);
+}
+
+public threaded function void
+grid_broadphase_prefetch(grid_broadphase const& bp, vec3 const& aabb_min,
+  vec3 const& aabb_max)
+{
+  threaded function bool cb(geom_index_type x, geom_index_type y,
+    geom_index_type z)
+  {
+/*
+    const gidx = bp.get_geom_index(x, y, z);
+    const sli = bp.pos_to_filling.crange();
+    const ptr = sli.to_crawptr().to_ccharptr() + gidx;
+    extern "emit" m::to_string{"_mm_prefetch((const char *)((size_t)ptr$/64*64), _MM_HINT_T0)"};
+*/
+    return false;
+  }
+  bp.quantize_foreach{cb}(aabb_min, aabb_max);
+}
+
+public threaded function {t} void
+grid_broadphase_get_collision_pairs(grid_broadphase const& bp,
+  t const& objects, tree_set{pair{col_id_type, col_id_type}} mutable& pairs)
+{
+  const sli = objects.crange();
+  threaded function bool cb(col_id_type id0, col_id_type id1) {
+    const& obj0 = sli[id0];
+    const& obj1 = sli[id1];
+    if (obj0.collide(obj1)) {
+      pairs.insert(pair{col_id_type, col_id_type}(id0, id1), unit());
+    }
+    return false;
+  }
+  bp.collision_pairs_foreach{cb}();
+}
+
+public threaded function {t0, t1} col_id_type
+grid_broadphase_find_first(grid_broadphase const& bp,
+  cslice{t0} const& objects, t1 const& obj)
+{
+  col_id_type r = static_cast{col_id_type}(objects.size());
+  threaded function bool check_collide(col_id_type id)
+  {
+    const& o = objects[id];
+    if (obj.collide(o)) {
+      r = id;
+      return true;
+    }
+    return false;
+  }
+  bp.find{check_collide}(obj.get_min(), obj.get_max());
+  return r;
+}
+
+public tsvaluetype struct
+aabb
+{
+  public vec3 aabb_min;
+  public vec3 aabb_max;
+}
+
+public threaded function vec3
+aabb_get_aabb_min(aabb const& a)
+{
+  return a.aabb_min;
+}
+
+public threaded function vec3
+aabb_get_aabb_max(aabb const& a)
+{
+  return a.aabb_max;
+}
+
+public threaded function bool
+aabb_collide(aabb const& a, aabb const& b)
+{
+  return
+    (a.aabb_min.x <= b.aabb_max.x) &
+    (a.aabb_max.x >= b.aabb_min.x) &
+    (a.aabb_min.y <= b.aabb_max.y) &
+    (a.aabb_max.y >= b.aabb_min.y) &
+    (a.aabb_min.z <= b.aabb_max.z) &
+    (a.aabb_max.z >= b.aabb_min.z);
+/*
+*/
+/*
+  return
+    (a.aabb_min.x <= b.aabb_max.x) &&
+    (a.aabb_max.x >= b.aabb_min.x) &&
+    (a.aabb_min.y <= b.aabb_max.y) &&
+    (a.aabb_max.y >= b.aabb_min.y) &&
+    (a.aabb_min.z <= b.aabb_max.z) &&
+    (a.aabb_max.z >= b.aabb_min.z);
+*/
+}
+
+public tsvaluetype struct
+sphere
+{
+  public vec3 center;
+  public float radius;
+}
+
+public threaded function bool
+sphere_collide(sphere const& a, sphere const& b)
+{
+  const diff = a.center - b.center;
+  const dist2 = dot(diff, diff);
+  const radius = a.radius + b.radius;
+  return dist2 < radius * radius;
+}
+
+public threaded function vec3
+sphere_get_aabb_min(sphere const& a)
+{
+  vec3 r = a.center;
+  r.x -= a.radius;
+  r.y -= a.radius;
+  r.z -= a.radius;
+  return r;
+}
+
+public threaded function vec3
+sphere_get_aabb_max(sphere const& a)
+{
+  vec3 r = a.center;
+  r.x += a.radius;
+  r.y += a.radius;
+  r.z += a.radius;
+  return r;
+}
+
+public tsvaluetype struct
+sphere_inf
+{
+  public vec3 center;
+  public float radius;
+}
+
+public threaded function bool
+sphere_inf_collide(sphere_inf const& a, sphere_inf const& b)
+{
+  const d = a.center - b.center;
+  const norm = max(fabs(d.x), max(fabs(d.y), fabs(d.z)));
+  return norm < a.radius + b.radius;
+}
+
+public threaded function vec3
+sphere_inf_get_aabb_min(sphere_inf const& a)
+{
+  vec3 r = a.center;
+  r.x -= a.radius;
+  r.y -= a.radius;
+  r.z -= a.radius;
+  return r;
+}
+
+public threaded function vec3
+sphere_inf_get_aabb_max(sphere_inf const& a)
+{
+  vec3 r = a.center;
+  r.x += a.radius;
+  r.y += a.radius;
+  r.z += a.radius;
+  return r;
+}
+
+/* */
+
+public metafunction rand_generator_ptr ptr{rand_generator};
+public metafunction make_rand_generator make_ptr{rand_generator};
+
+public tsvaluetype struct
+rand_generator(uint seed0)
+{
+  private uint seed = seed0;
+  public function uint generate() {
+    uint rv = seed;
+    seed = seed * 1664525U + 1013904223U;
+    return rv;
+  }
+  public function float generate_float() {
+    return static_cast{float}(generate()) / 4294967296.0;
+  }
+}
+
+public function void do_test()
+{
+  const rndp = make_rand_generator(0U);
+  size_t const test_size = 20000U;
+  size_t const test_loop = 60U;
+  // varray{sphere_inf} test_data;
+  varray{aabb} test_data;
+  // test_data.resize(test_size, sphere_inf());
+  test_data.resize(test_size, aabb());
+  for (const i: 0 .. test_size) {
+    float x = rndp->generate_float() * 200.0f - 100.0f;
+    float y = rndp->generate_float() * 200.0f - 100.0f;
+    float z = rndp->generate_float() * 200.0f - 100.0f;
+    test_data[i].aabb_min = make_vec3(x, y, z) - make_vec3(1.0f, 1.0f, 1.0f);
+    test_data[i].aabb_max = make_vec3(x, y, z) + make_vec3(1.0f, 1.0f, 1.0f);
+    // test_data[i].center = make_vec3(x, y, z);
+    // test_data[i].radius = 1.0f;
+  }
+  grid_broadphase broadphase = grid_broadphase(6, 10.0f);
+  tree_set{pair{col_id_type, col_id_type}} pairs;
+  const t0 = io::system.gettimeofday_double();
+  for (const loop: 0 .. test_loop) {
+    broadphase.add_objects(test_data);
+    broadphase.get_collision_pairs(test_data, pairs);
+    if (loop == 0) {
+      for (const& p, const& m: pairs) {
+	// println("near", p.first, p.second, test_data[p.first].center,
+	//   test_data[p.second].center);
+	// println("near", p.first, p.second);
+      }
+    }
+    // println("test", loop, broadphase.fillings.size());
+    if (loop == 0) {
+      println("fillings", broadphase.fillings.size(), "pairs", pairs.size());
+    }
+    broadphase.clear();
+    pairs.clear();
+
+  }
+  const t1 = io::system.gettimeofday_double();
+  println("time", t1 - t0, "test_size", test_size, "test_loop", test_loop);
+  {
+    /* check results */
+    size_t cnt = 0;
+    size_t i;
+    for (i = 0; i + 1 < test_data.size(); ++i) {
+      const& d0 = test_data[i];
+      size_t j;
+      for (j = i + 1; j < test_data.size(); ++j) {
+	const& d1 = test_data[j];
+	if (d0.collide(d1)) {
+	  ++cnt;
+	}
+      }
+    }
+    println("chk cnt", cnt);
+  }
+  const t2 = io::system.gettimeofday_double();
+  println("chk time", t2 - t1);
+}
+
+// do_test();
+

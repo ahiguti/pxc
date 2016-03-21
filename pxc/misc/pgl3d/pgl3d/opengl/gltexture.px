@@ -1,0 +1,493 @@
+private threaded namespace pgl3d::opengl::gltexture "export-unsafe";
+public import common -;
+public import pointer::raw -;
+public import pointer::raw_unsafe -;
+public import numeric::fpmath -;
+public import glm;
+public import glm::raw;
+public import io::time -;
+public import exception -;
+public import meta m;
+public import pointer::tfuncptr -;
+public import GL::compat -;
+public import pgl3d::opengl::glresource -;
+public import pgl3d::opengl::glshader -;
+public import pgl3d::geometry::funcs -;
+public import pgl3d::opengl::glbuffer -;
+public import pgl3d::opengl::shader_config -;
+public import pgl3d::opengl::aggregated_ibuffer -;
+public import pgl3d::sdl::sdlutil -;
+public import pgl3d::texture::texture -;
+public import pgl3d::texture::voxel_octree -;
+public import pgl3d::engine::pglbase -;
+public import pgl3d::engine::intern_pool -;
+public import pgl3d::engine::util -;
+
+public threaded struct gl_texture()
+{
+  public uint surface_w;
+  public uint surface_h;
+  public uint surface_d;
+  public uint char_w;
+  public uint char_h;
+  public varray{uint} char_x; // for variable width font
+  public auto_texture texture_id;
+}
+
+public function void
+load_gl_texture_fixedwidth_font(gl_texture mutable& fnt,
+  cslice{string} const& fnames)
+{
+  check_byteorder();
+  sdl_log("loading fonts");
+  scoped_nullable{TTF_CloseFont} font;
+  for (size_t i, const& fn0: fnames) {
+    string fn = fn0;
+    const p = TTF_OpenFont(fn.c_str(), 18);
+    sdl_log("openfont", fn, p.to_size_t());
+    font.reset(p);
+    if (font.get() != rawptr{TTF_Font}()) {
+      break;
+    }
+  }
+  if (font.get() == rawptr{TTF_Font}()) {
+    sdl_log("failed to load font");
+    throw runtime_error_template{"load font"}("1");
+  }
+  sdl_log("loading fonts: loaded");
+  SDL_Color mutable fg;
+  fg.r = 255;
+  fg.g = 255;
+  fg.b = 255;
+  fg.a = 255;
+  uint hmax = 0;
+  uint wmax = 0;
+  // uint wtotal = 0;
+  varray{ptr{SDL_Surface_Scoped}} sur_arr;
+  for (const i: 0 .. 0x60) {
+    farray{uchar, 2} z;
+    z[0] = static_cast{uchar}(i + 0x20);
+    z[1] = 0u;
+    const sur = make_ptr{SDL_Surface_Scoped}();
+    sur->reset(TTF_RenderUTF8_Blended(font,
+      z.range().to_crawptr().to_ccharptr(), fg));
+    // sdl_log(z, sur.W(), sur.H());
+    sur_arr.push_back(sur);
+    const sur_ref = sur->get().to_slice(1);
+    hmax = max(hmax, static_cast{uint}(sur_ref->h));
+    wmax = max(wmax, static_cast{uint}(sur_ref->w));
+  }
+  SDL_Surface_Scoped sur_chars;
+  sur_chars.reset(SDL_CreateRGBSurface(0,
+    cast_int(power_of_2(wmax * 0x60u)),
+    cast_int(power_of_2(hmax)), 32, 0, 0, 0, 0));
+  sdl_log("wmax, hmax", wmax, hmax);
+  fnt.char_x.clear();
+  uint xcur = 0;
+  for (const i, const ep: sur_arr) {
+    const& e = *ep->get().to_slice(1);
+    SDL_Rect r0;
+    SDL_Rect r1;
+    r0.x = 0;
+    r0.y = 0;
+    r0.w = e.w;
+    r0.h = e.h;
+    r1.x = cast_int(xcur);
+    r1.y = 0;
+    r1.w = r0.w;
+    r1.h = r1.h;
+    const v = SDL_UpperBlit(*ep, caddress(r0), sur_chars, address(r1));
+    xcur += cast_uint(wmax);
+    fnt.char_x.push_back(xcur);
+  }
+  fnt.char_w = wmax;
+  fnt.char_h = hmax;
+  const& sur_chars_ref = *sur_chars.get().to_slice(1);
+  fnt.surface_w = static_cast{uint}(sur_chars_ref.w);
+  fnt.surface_h = static_cast{uint}(sur_chars_ref.h);
+  const sur_chars_buf = sur_chars_ref.pixels.reinterpret_cast{uchar}()
+    .to_slice(static_cast{size_t}(sur_chars_ref.pitch * sur_chars_ref.h));
+  for (const x: 0 .. sur_chars_ref.w) {
+    for (const y: 0 .. sur_chars_ref.h) {
+      const i = static_cast{size_t}((y * sur_chars_ref.w + x) * 4);
+      sur_chars_buf[i+0] = 255;
+      sur_chars_buf[i+1] = 255;
+      sur_chars_buf[i+2] = 255;
+    }
+  }
+  glActiveTexture(GL_TEXTURE0);
+  fnt.texture_id.generate();
+  sdl_log("font_texture_id", fnt.texture_id.get());
+  glBindTexture(GL_TEXTURE_2D, fnt.texture_id.get());
+  glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_RGBA),
+    sur_chars_ref.w, sur_chars_ref.h,
+    0, GL_RGBA, GL_UNSIGNED_BYTE, sur_chars_ref.pixels);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+    cast_int(GL_NEAREST));
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+    cast_int(GL_NEAREST));
+}
+
+public function void
+load_gl_texture_tilemap(gl_texture mutable& tex_dpat,
+  gl_texture mutable& tex_pmpat, gl_texture mutable& tex_tilemap,
+  string const& dpat_fn, string const& pmpat_fn)
+{
+  sdl_log("load_tilemap_texture", dpat_fn, pmpat_fn);
+  check_byteorder();
+  merge_png_to_texture(dpat_fn, tex_dpat,
+    make_callable_ptr{merge_dpat, 0}(),
+    make_callable_ptr{modify_func_noop, 0}());
+  merge_png_to_texture(pmpat_fn, tex_pmpat,
+    make_callable_ptr{merge_pmpat, 0}(),
+    make_callable_ptr{modify_func_parallax, 0}());
+  SDL_Surface_Scoped sur1;
+  sur1.reset(SDL_CreateRGBSurface(0, 128, 128, 32, 0, 0, 0, 0));
+  const& sur1_ref = *sur1.get().to_slice(1);
+  const sur1buf = sur1_ref.pixels.reinterpret_cast{uchar}()
+    .to_slice(static_cast{size_t}(sur1_ref.pitch * sur1_ref.h));
+  const sur1_w = static_cast{uint}(sur1_ref.w);
+  const sur1_h = static_cast{uint}(sur1_ref.h);
+  const rnd = make_rand_generator(333U);
+  for (const y: 0 .. sur1_h) {
+    for (const x: 0 .. sur1_w) {
+      const o1 = (y * sur1_w + x) * 4;
+      const v0 = rnd->generate() / 65536;
+      const v1 = v0 % 8;
+      const v2 = (v0 / 8) % 8;
+      const uint specular_ambient = 0xff60;
+      if (x == 0 && y == 0) {
+	write_4_uint(sur1buf, o1, specular_ambient << 16);
+      } else {
+	write_4_uint(sur1buf, o1, (v1 % 8) | specular_ambient << 16);
+      }
+    }
+  }
+  sdl_log("sur1buf", sur1_w, sur1_h);
+  const mode = GL_RGBA;
+  glActiveTexture(GL_TEXTURE0);
+  tex_tilemap.surface_w = sur1_w;
+  tex_tilemap.surface_h = sur1_h;
+  tex_tilemap.texture_id.generate();
+  glBindTexture(GL_TEXTURE_2D, tex_tilemap.texture_id.get());
+  glTexImage2D(GL_TEXTURE_2D, 0, cast_int(mode),
+    cast_int(sur1_ref.w), cast_int(sur1_ref.h),
+    0, mode, GL_UNSIGNED_BYTE, sur1buf.to_crawptr().to_cvoidptr());
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+    cast_int(GL_NEAREST));
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+    cast_int(GL_NEAREST));
+  sdl_log("load_tilemap_texture done");
+}
+
+public function void
+load_gl_texture_cube(gl_texture mutable& ctex, cslice{string} const& fnames)
+{
+  sdl_log("load_cube_texture");
+  glActiveTexture(GL_TEXTURE0);
+  ctex.texture_id.generate();
+  glBindTexture(GL_TEXTURE_CUBE_MAP, ctex.texture_id.get());
+  for (const i: 0 .. 6) {
+    const td = load_texture_data(fnames[static_cast{uint}(i)]);
+    ctex.surface_w = td->width;
+    ctex.surface_h = td->height;
+    const use_mipmap = false;
+    const tgt = static_cast{GLenum}(
+      static_cast{int}(GL_TEXTURE_CUBE_MAP_POSITIVE_X) + i);
+    set_gl_texture(*td, ctex, tgt, use_mipmap);
+  }
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER,
+    cast_int(GL_LINEAR));
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER,
+    cast_int(GL_LINEAR));
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S,
+    cast_int(GL_CLAMP_TO_EDGE));
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T,
+    cast_int(GL_CLAMP_TO_EDGE));
+  if (m::is_true{is_gl3_or_gles3}) {
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R,
+      cast_int(GL_CLAMP_TO_EDGE));
+  }
+  sdl_log("load_cube_texture done");
+}
+
+public function void
+load_gl_texture_2d(gl_texture mutable& tx, string const& fname)
+{
+  const td = load_texture_data(fname);
+  texture_data_to_gl_texture(GL_TEXTURE_2D, tx, td);
+}
+
+public function void
+texture_data_to_gl_texture(GLenum target, gl_texture mutable& tx,
+  ptr{texture_data} const& td)
+{
+  glActiveTexture(GL_TEXTURE0);
+  tx.texture_id.generate();
+  glBindTexture(target, tx.texture_id.get());
+  tx.surface_w = td->width;
+  tx.surface_h = td->height;
+  tx.surface_d = td->depth;
+  const use_mipmap = false;
+  set_gl_texture(*td, tx, target, use_mipmap);
+}
+
+/* private */
+
+metafunction SDL_Surface_Scoped scoped_nullable{SDL_FreeSurface};
+
+function void dump_buf(varray{uint} const& buf)
+{
+  debug_log("dump_buf_begin");
+  for (const i, const& v: buf) {
+    debug_log(i, v);
+  }
+  debug_log("dump_buf_end");
+}
+
+function void set_gl_texture(texture_data mutable& td, gl_texture mutable& ti,
+  GLenum target, bool use_mipmap)
+{
+  uint tex_w = td.width;
+  uint tex_h = td.height;
+  uint tex_d = td.depth;
+  mutable& uibuf = td.data;
+  int mipmap_level = 0;
+  const mode = GL_RGBA;
+  while (true) {
+    // dump_buf(uibuf);
+    // TODO: assumes little endian
+    if (sdl_byteorder() != sdl_lil_endian()) {
+      throw runtime_error_template{"set_gl_texture"}("");
+    }
+    if (target == GL_TEXTURE_3D ) {
+      // debug_log("3dtex", tex_w, tex_h, tex_d);
+      glTexImage3D(target, mipmap_level, cast_int(mode),
+	cast_int(tex_w), cast_int(tex_h), cast_int(tex_d),
+	0, mode, GL_UNSIGNED_BYTE, uibuf.to_crawptr().to_cvoidptr());
+/*
+    } else if (target == GL_TEXTURE_1D) {
+      glTexImage1D(target, mipmap_level, cast_int(mode),
+	cast_int(tex_w), 0, mode, GL_UNSIGNED_BYTE,
+	uibuf.to_crawptr().to_cvoidptr());
+*/
+    } else {
+      glTexImage2D(target, mipmap_level, cast_int(mode),
+	cast_int(tex_w), cast_int(tex_h),
+	0, mode, GL_UNSIGNED_BYTE, uibuf.to_crawptr().to_cvoidptr());
+    }
+    const tex_w_prev = tex_w;
+    const tex_h_prev = tex_h;
+    tex_w /= 2;
+    tex_h /= 2;
+    if (!use_mipmap) {
+      break;
+    }
+    if (tex_w == 0 || tex_h == 0) {
+      break;
+    }
+    // TODO: 3d, 1d
+    ++mipmap_level;
+    for (const y: 0 .. tex_h) {
+      for (const x: 0 .. tex_w) {
+	farray{uint, 4} v;
+	v[0] = uibuf[(y * 2 + 0) * tex_w_prev + (x * 2 + 0)];
+	v[1] = uibuf[(y * 2 + 0) * tex_w_prev + (x * 2 + 1)];
+	v[2] = uibuf[(y * 2 + 1) * tex_w_prev + (x * 2 + 0)];
+	v[3] = uibuf[(y * 2 + 1) * tex_w_prev + (x * 2 + 1)];
+	uint mutable val_b;
+	uint mutable val_g;
+	uint mutable val_r;
+	size_t opaque_count = 0;
+	for (size_t j: 0 .. 4) {
+	  val_b += (v[j] >> 16) & 0xff;
+	  val_g += (v[j] >>  8) & 0xff;
+	  val_r += (v[j] >>  0) & 0xff;
+	  if (((v[j] >> 24) & 0x0f) == 10) { ++opaque_count; }
+	}
+	val_b /= 4;
+	val_g /= 4;
+	val_r /= 4;
+	const val_a = opaque_count > 0 ? 10U : (v[0] >> 24) & 0xff; // TODO
+	/*
+	uibuf[y * tex_w + x] = (val_a << 24) +
+	  (val_b << 16) + (val_g << 8) + (val_r << 0);
+	uibuf[y * tex_w + x] = v[0];
+	*/
+      }
+    }
+  }
+  if (/* target == GL_TEXTURE_1D || */ target == GL_TEXTURE_2D ||
+    target == GL_TEXTURE_3D)
+  {
+    glTexParameteri(target, GL_TEXTURE_MAG_FILTER,
+      cast_int(GL_NEAREST));
+    glTexParameteri(target, GL_TEXTURE_MIN_FILTER,
+      cast_int(mipmap_level >= 1 ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST));
+    if (m::is_true{is_gl3_or_gles3}) {
+      if (mipmap_level != 0) {
+	glTexParameteri(target, GL_TEXTURE_BASE_LEVEL, 0);
+	glTexParameteri(target, GL_TEXTURE_MAX_LEVEL, mipmap_level);
+      }
+    }
+  }
+}
+
+function ptr{texture_data} merge_tile(texture_data mutable& td, uint tile_size,
+  callable_ptr{uint, {uint, uint, uint, uint}} const& merge_func)
+{
+  const r = make_ptr{texture_data}();
+  r->width = td.width;
+  r->height = td.width;
+  mutable& ndata = r->data;
+  {
+    const& data = td.data;
+    ndata.resize(data.size(), 0U);
+    for (const by : 0 .. td.height / tile_size / 2) {
+      for (const iy: 0 .. tile_size) {
+	for (const x: 0 .. td.width) {
+	  const o0 = (by * tile_size * 2 + iy            ) * td.width + x;
+	  const o1 = (by * tile_size * 2 + iy + tile_size) * td.width + x;
+	  const v0 = data[o0];
+	  const v1 = data[o1];
+	  const y = by * tile_size + iy;
+	  ndata[y * td.width + x] = merge_func(v0, v1, x, y);
+	}
+      }
+    }
+  }
+  return r;
+}
+
+function void merge_png_to_texture(string const& fn,
+  gl_texture mutable& tex,
+  callable_ptr{uint, {uint, uint, uint, uint}} const& merge_func,
+  callable_ptr{void, {ptr{texture_data}}} const& modify_func)
+{
+  const td = load_texture_data(fn);
+  const td2 = merge_tile(*td, 32, merge_func);
+  modify_func(td2);
+  glActiveTexture(GL_TEXTURE0);
+  tex.texture_id.generate();
+  glBindTexture(GL_TEXTURE_2D, tex.texture_id.get());
+  tex.surface_w = td->width;
+  tex.surface_h = td->height;
+  set_gl_texture(*td2, tex, GL_TEXTURE_2D, false);
+}
+
+function void modify_func_noop(ptr{texture_data} const& td)
+{
+}
+
+threaded function uint merge_dpat(uint v0, uint v1, uint x, uint y)
+{
+  // debug_log(x, y, to_hexstring(v0), to_hexstring(v1));
+  const nor = v0 & 0xffffffU;
+  const col = v1 & 0xffffffU;
+  uint val; /* avol for higher 4bits, alv for lower 4bits */
+  if (nor == 0x0000ff) {
+    val = 0x91; /* convex left-upper */
+  } else if (nor == 0x00ff00) {
+    val = 0x92; /* convex upper, or concave lower */
+  } else if (nor == 0x00ffff) {
+    val = 0x93; /* convex right-upper */
+  } else if (nor == 0xff0000) {
+    val = 0x94; /* convex right, or concave left */
+  } else if (nor == 0xff00ff) {
+    val = 0x95; /* convex right-lower */
+  } else if (nor == 0xffff00) {
+    val = 0x72; /* convex lower, or concave upper */
+  } else if (nor == 0xffffff) {
+    val = 0x97; /* convex left-lower */
+  } else if (nor == 0x808080) {
+    val = 0x74; /* convex left, or concave right */
+  } else if (nor == 0x4040c0) {
+    val = 0x71; /* concave left-upper */
+  } else if (nor == 0x40c0c0) {
+    val = 0x73; /* concave right-upper */
+  } else if (nor == 0xc040c0) {
+    val = 0x75; /* concave right-lower */
+  } else if (nor == 0xc0c0c0) {
+    val = 0x77; /* concave left-lower */
+  } else if (nor == 0xc08080) {
+    val = 0x0f; /* discard */
+  }
+  return (val << 24) | col;
+}
+
+threaded function uint merge_pmpat(uint v0, uint v1, uint x, uint y)
+{
+  const nor = v0 >> 8;
+  const col = v1 >> 8;
+  threaded function int babs(int x) {
+    return x < 0 ? (-1 - x) : x;
+  }
+  int mx = static_cast{int}(x % 32U);
+  int my = static_cast{int}(y % 32U);
+  int x1 = babs(mx - 16); // [0, 15]
+  int y1 = babs(my - 16); // [0, 15]
+  uint z = 0;
+  if (x1 >= 12 || y1 >= 12) {
+    z = 0;
+  } else if (x1 == 0 || y1 == 0) {
+    z = 1;
+  } else {
+    z = 2;
+  }
+  z *= 16U;
+  return z << 16;
+}
+
+function void modify_func_parallax(ptr{texture_data} const& td)
+{
+  mutable& data = td->data;
+  uint const tile_size = 32;
+  for (const by : 0 .. td->height / tile_size) {
+    for (const bx : 0 .. td->width / tile_size) {
+      for (const y : 0 .. tile_size) {
+	for (const x : 0 .. tile_size) {
+	  const offset = (by * tile_size + y) * td->height
+	    + (bx * tile_size + x);
+	  const v0 = data[offset];
+	  const depth0 = (v0 >> 16) & 0xffU;
+	  // clearance values
+	  uint c_nn = min(x, y);
+	  uint c_np = min(x, tile_size - 1 - y);
+	  uint c_pn = min(tile_size - 1 - x, y);
+	  uint c_pp = min(tile_size - 1 - x, tile_size - 1 - y);
+	  for (const y1 : 0 .. tile_size) {
+	    for (const x1 : 0 .. tile_size) {
+	      const offset1 = (by * tile_size + y1) * td->height
+		+ (bx * tile_size + x1);
+	      const v1 = data[offset1];
+	      const depth1 = v1 >> 16 & 0xffU;
+	      if (depth1 >= depth0) {
+		continue;
+	      }
+	      // ok to wrap uint values
+	      uint nn = max(x - x1, y - y1) - 1;
+	      c_nn = min(c_nn, nn);
+	      uint np = max(x - x1, y1 - y) - 1;
+	      c_np = min(c_np, np);
+	      uint pn = max(x1 - x, y - y1) - 1;
+	      c_pn = min(c_pn, pn);
+	      uint pp = max(x1 - x, y1 - y) - 1;
+	      c_pp = min(c_pp, pp);
+	    }
+	  }
+	  c_nn = min(c_nn, 15);
+	  c_np = min(c_np, 15);
+	  c_pn = min(c_pn, 15);
+	  c_pp = min(c_pp, 15);
+	  // W = unused(8), Z = depth(8), Y = CNN(4) CNP(4), X = CPN(4) CPP(4)
+	  data[offset] = (depth0 << 16) |
+	    (c_nn << 12) | (c_np << 8) | (c_pn << 4) | (c_pp << 0);
+	  if (by == 0 && bx == 0) {
+	    // debug_log("cl", x, y, depth0, to_hexstring(data[offset]));
+	  }
+	}
+      }
+    }
+  }
+}
+

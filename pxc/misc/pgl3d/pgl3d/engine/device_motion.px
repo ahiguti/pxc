@@ -1,0 +1,44 @@
+public threaded namespace pgl3d::engine::device_motion "use-unsafe";
+public import common -;
+public import container::raw -;
+
+public threaded struct extern "::pxcrt::ext::device_motion"
+device_motion(io const& iop, double interval)
+{
+  public rawarray{float, 4} value_xyzw;
+  public function extern "%" void update();
+}
+
+extern "types" inline
+
+#undef PXC_HAS_DEVICE_MOTION
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#if TARGET_OS_IPHONE
+#include "pgl3d_device_motion.h"
+#define PXC_HAS_DEVICE_MOTION
+#endif
+#endif
+
+#ifndef PXC_HAS_DEVICE_MOTION
+
+namespace pxcrt { namespace ext {
+
+struct device_motion
+{
+  device_motion(io const& iop, double interval) {
+    value_xyzw[0] = 0;
+    value_xyzw[1] = 0;
+    value_xyzw[2] = 0;
+    value_xyzw[3] = 1;
+  }
+  float value_xyzw[4];
+  void update() { }
+};
+
+}; };
+
+#endif
+
+;
+

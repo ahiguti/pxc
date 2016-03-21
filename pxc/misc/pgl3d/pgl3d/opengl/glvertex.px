@@ -1,0 +1,282 @@
+public threaded namespace pgl3d::opengl::glvertex "use-unsafe";
+public import common -;
+private import pointer::raw -;
+private import pointer::raw_unsafe -;
+public import numeric::fpmath -;
+public import glm;
+public import io::time -;
+public import meta m;
+public import exception -;
+public import pgl3d::engine::platform -;
+public import pgl3d::sdl::sdlutil -;
+
+public metafunction num_float_struct{t}
+  m::fold{m::map{m::field_types{t}, num_float_fld}, m::add, 0};
+
+public metafunction num_float_fld{t}
+  m::cond{
+    m::eq{t, float}, 1,
+    m::eq{t, int}, 1,
+    m::eq{t, unit}, 0,
+    m::eq{t, glm::vec2}, 2,
+    m::eq{t, glm::vec3}, 3,
+    m::eq{t, glm::vec4}, 4,
+    m::eq{t, glm::mat2}, 4,
+    m::eq{t, glm::mat3}, 9,
+    m::eq{t, glm::mat4}, 16,
+    m::error{"invalid type"}};
+
+public metafunction num_attrib_fld{t}
+  m::cond{
+    m::eq{t, float}, 1,
+    m::eq{t, int}, 1,
+    m::eq{t, unit}, 0,
+    m::eq{t, glm::vec2}, 1,
+    m::eq{t, glm::vec3}, 1,
+    m::eq{t, glm::vec4}, 1,
+    m::eq{t, glm::mat2}, 2,
+    m::eq{t, glm::mat3}, 3,
+    m::eq{t, glm::mat4}, 4,
+    m::error{"invalid type"}};
+
+public multithreaded struct node_joint()
+{
+  public string joint_name;
+  public glm::mat4 trans; /* or quat and vec3 ? */
+}
+
+private threaded function void
+float_slice_set_int(slice{float} const& s, int v)
+{
+  if (s.size() < 1) {
+    return;
+  }
+  const si = size_t_to_rawptr{int}(slice_to_rawptr(s).to_size_t()).to_slice(1);
+  si[0] = v;
+}
+
+private threaded function {t} void
+push_float(varray{float} mutable& arr, t const& v)
+{
+  if (m::eq{t, float}) {
+    arr.push_back(v);
+  } else if (m::eq{t, int}) {
+    arr.push_back(0.0f);
+    float_slice_set_int(arr[arr.size() - 1 .. arr.size()], v);
+  } else {
+    expand (fld: m::field_names{t}) {
+      push_float(arr, v.fld);
+    }
+  }
+}
+
+public multithreaded struct
+vertices(size_t num_float_per_vertex0)
+{
+  public size_t const num_float_per_vertex = num_float_per_vertex0;
+  public varray{float} vertex_values; /* for glDrawElements */
+  public varray{uint} elements;       /* for glDrawElements */
+  public varray{float} positions;     /* used for physics engine */
+  public varray{node_joint} joints;
+  public size_t vertex_values_size_per_copy;
+  public size_t elements_size_per_copy;
+  public function void prepare()
+  {
+    vertex_values_size_per_copy = vertex_values.size();
+    elements_size_per_copy = elements.size();
+  }
+  public function void
+  set_triangles(cslice{float} const& verts, size_t nfpv,
+    cslice{uint} const& elems)
+  {
+    // set vertices and elements directly
+    size_t num_v = verts.size() / nfpv;
+    if (nfpv > num_float_per_vertex) {
+      throw runtime_error_template{"vertices::set_triangles"}(
+	string_join{" "}(nfpv, num_float_per_vertex));
+    }
+    vertex_values.resize(num_v * num_float_per_vertex, 0.0f);
+    positions.clear();
+    for (const i: 0 .. num_v) {
+      for (const j: 0 .. nfpv) {
+	vertex_values[i * num_float_per_vertex + j] = verts[i * nfpv + j];
+      }
+      // assumes first 3 floats are position coords
+      for (const j: 0 .. 3U) {
+	positions.push_back(verts[i * nfpv + j]);
+      }
+    }
+    if (m::ne{use_primitive_restart, 0}) {
+      size_t n = elems.size() / 3;
+      elements.resize(n * 4);
+      for (const i: 0 .. n) {
+	elements[i * 4 + 0] = 0xffffffffU;
+	elements[i * 4 + 1] = elems[i * 3 + 0];
+	elements[i * 4 + 2] = elems[i * 3 + 1];
+	elements[i * 4 + 3] = elems[i * 3 + 2];
+      }
+    } else {
+      elements.resize(elems.size(), 0);
+      for (const i, const& e: elems) {
+	elements[i] = e;
+      }
+    }
+    debug_log("set_triangles: ", vertex_values.size(), elements.size());
+  }
+  public function {tattr, split_convex} void
+  push_polygon_distinct(cslice{tattr} const& vals)
+  {
+    /* tattr must have 'public glm::vec3 position' */
+    if (num_float_per_vertex != num_float_struct{tattr}) {
+      throw runtime_error_template{"vertices::push_polygon_distinct"}(
+	  string_join{" "}(m::to_string{tattr}, num_float_struct{tattr},
+	    num_float_per_vertex));
+    }
+    /* no dedup */
+    const first_id = vertex_values.size() / num_float_struct{tattr};
+    for (const i, const& val: vals) {
+      push_float{tattr}(vertex_values, val);
+      if (m::symbol_exists{tattr, "position"}) {
+	positions.append(val.position.to_cslice());
+      }
+    }
+    threaded function void push_convex()
+    {
+      if (m::ne{use_primitive_restart, 0}) {
+	elements.push_back(0xffffffffU);
+	for (const i, const& val: vals) {
+	  elements.push_back(static_cast{uint}(first_id + i));
+	}
+      } else {
+	for (const i: 0 .. vals.size() - 2) {
+	  elements.push_back(static_cast{uint}(first_id));
+	  elements.push_back(static_cast{uint}(first_id + i + 1));
+	  elements.push_back(static_cast{uint}(first_id + i + 2));
+	}
+      }
+    }
+    if (m::eq{split_convex, 0}) {
+      push_convex();
+    } else {
+      /* polygon triangulation */
+      /* TODO: optimize for use_primitive_restart and convex polygons */
+      varray{size_t} ia;
+      ia.resize(vals.size(), 0u);
+      for (const i, mutable& v: ia) {
+	v = i;
+      }
+      threaded function glm::vec3 ia_pos(size_t i) {
+	return vals[ia[i]].position;
+      }
+      threaded function size_t ia_prev(size_t i) {
+	return (i == 0) ? (ia.size() - 1) : (i - 1);
+      }
+      threaded function size_t ia_next(size_t i) {
+	return (i != ia.size() - 1) ? (i + 1) : 0u;
+      }
+      threaded function glm::vec3 cross_one(size_t i)
+      {
+	/* TODO: optimize */
+	return glm::cross(
+	  ia_pos(i) - ia_pos(ia_prev(i)),
+	  ia_pos(ia_next(i)) - ia_pos(i));
+      }
+      glm::vec3 cross_sum;
+      for (const i: 0 .. ia.size()) {
+	cross_sum += cross_one(i);
+      }
+      while (ia.size() >= 3) {
+	size_t i = ia.size() - 1;
+	while (true) {
+	  threaded function bool removable() {
+	    const ci = cross_one(i);
+	    if (m::is_true{debug_triangulation}) {
+	      if (vals.size() >= 5) {
+		sdl_log("dir", ia.size(), i, glm::dot(cross_sum, ci));
+	      }
+	    }
+	    if (glm::dot(cross_sum, ci) <= -0.000001f) {
+	      return false;
+	    }
+	    size_t j;
+	    for (j = ia_next(ia_next(i)); j != ia_prev(i); j = ia_next(j)) {
+	      const c0 = glm::cross(
+		ia_pos(i) - ia_pos(ia_prev(i)),
+		ia_pos(j) - ia_pos(i));
+	      const c1 = glm::cross(
+		ia_pos(ia_next(i)) - ia_pos(i),
+		ia_pos(j) - ia_pos(ia_next(i)));
+	      const c2 = glm::cross(
+		ia_pos(ia_prev(i)) - ia_pos(ia_next(i)),
+		ia_pos(j) - ia_pos(ia_prev(i)));
+	      const s0 = glm::dot(c0, c1);
+	      const s1 = glm::dot(c0, c2);
+
+	      if (s0 > 0.0f && s1 > 0.0f) {
+		if (m::is_true{debug_triangulation}) {
+		  if (vals.size() >= 5)
+		  {
+		    sdl_log("posi012", ia_pos(ia_prev(i)), ia_pos(i),
+			ia_pos(ia_next(i)));
+		    sdl_log("posj", ia_pos(j));
+		    sdl_log("s0s1", ia.size(), i, j, s0, s1);
+		  }
+		}
+		return false;
+	      }
+	      /*
+	      if (glm::dot(ci, c0) > 0.0f && glm::dot(ci, c1) > 0.0f &&
+		glm::dot(ci, c2) > 0.0f) {
+		return false;
+	      }
+	      */
+	    }
+	    return true;
+	  }
+	  threaded function void push_one()
+	  {
+	    if (m::ne{use_primitive_restart, 0}) {
+	      elements.push_back(0xffffffffU);
+	    }
+	    elements.push_back(static_cast{uint}(first_id + ia[ia_prev(i)]));
+	    elements.push_back(static_cast{uint}(first_id + ia[i]));
+	    elements.push_back(static_cast{uint}(first_id + ia[ia_next(i)]));
+	  }
+	  if (removable()) {
+	    push_one();
+	    ia.erase(i, i + 1);
+	    break;
+	  }
+	  if (i == 0) {
+	    sdl_log("warning: split_convex failed", ia.size(), vals.size(),
+	      vals, ia);
+	    i = ia.size() - 1;
+	    push_one();
+	    ia.erase(i, i + 1);
+	  }
+	  --i;
+	}
+      }
+    }
+  }
+  public function {tattr} void push_point(tattr const& val)
+  {
+    if (num_float_per_vertex != num_float_struct{tattr}) {
+      throw runtime_error_template{"vertices::push_point"}("");
+    }
+    //sdl_log("push_point0", vertex_values.size());
+    const first_id = vertex_values.size() / num_float_struct{tattr};
+    push_float{tattr}(vertex_values, val);
+    //sdl_log("push_point1", vertex_values.size());
+    //sdl_log("push_point val", val);
+    elements.push_back(static_cast{uint}(first_id));
+    if (m::symbol_exists{tattr, "position"}) {
+      positions.append(val.position.to_cslice());
+    }
+  }
+  public function void push_joint(node_joint const& e)
+  {
+    joints.push_back(e);
+  }
+}
+

@@ -1,0 +1,76 @@
+public threaded namespace pgl3d::geometry::wfobj;
+public import common -;
+public import io::text -;
+public import io::errno -;
+public import exception -;
+public import glm;
+public import meta m;
+
+public threaded struct wfobject {
+  public string mtllib;         /* material file name */
+  public varray{glm::vec3} v;   /* vertex coordinate */
+  public varray{glm::vec3} vn;  /* normal */
+  public varray{glm::vec2} vt;  /* texture coordinate */
+  public tree_map{string, ptr{wfgroup}} groups;
+}
+
+public threaded struct wfgroup {
+  public string usemtl;
+  public varray{varray{wfelement}} f;
+}
+
+public threaded struct wfelement {
+  public uint vertex;
+  public uint normal;
+  public uint texcoord;
+}
+
+public threaded function ptr{wfobject}
+wfobject_read(cstrref const& str)
+{
+  const p = make_ptr{wfobject}();
+  const g = make_ptr{wfgroup}(); 
+  varray{wfelement} elems_work;
+  split_foreach{parse_line}(str, '\n');
+  threaded function void parse_line(cstrref mutable line) {
+    if (line.size() >= 2) {
+      const ch0 = line[0];
+      const ch1 = line[1];
+      if (ch0 == 'v' && ch1 == ' ') {
+	line.increment_front(2);
+	const arr = make_farray_split{3}(line, ' ');
+	glm::vec3 vtx;
+	vtx.x = from_string{float}(arr[0]);
+	vtx.y = from_string{float}(arr[1]);
+	vtx.z = from_string{float}(arr[2]);
+	p->v.push_back(vtx);
+	// debug_log("read vtx", vtx);
+      }
+      if (ch0 == 'f' && ch1 == ' ') {
+	line.increment_front(2);
+	elems_work.clear();
+	threaded function void parse_token(cstrref const& tok) {
+	  const earr = make_farray_split{3}(tok, '/');
+	  wfelement e;
+	  e.vertex = from_string{uint}(earr[0]);
+	  e.normal = from_string{uint}(earr[1]);
+	  e.texcoord = from_string{uint}(earr[2]);
+	  elems_work.push_back(e);
+	}
+	split_foreach{parse_token, cstrref, uchar}(line, ' ');
+	// debug_log("read f", elems_work);
+	g->f.push_back(elems_work);
+      }
+    }
+  }
+  p->groups.insert("", g);
+  return p;
+}
+
+function void
+wfobject_test()
+{
+  const str = system.read_file("untitled.obj").value;
+  wfobject_read(*str);
+}
+

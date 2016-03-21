@@ -1,0 +1,82 @@
+private threaded namespace pgl3d::opengl::glresource "export-unsafe";
+public import common -;
+public import glm;
+public import GL::compat -;
+public import meta m;
+public import meta::vararg v;
+public import exception -;
+public import pointer::raw -;
+public import SDL2::api_base *;
+public import SDL2::api_types *;
+public import SDL2::api_functions *;
+public import SDL2::api_wrappers *;
+public import SDL2::misc *;
+public import pgl3d::engine::platform *;
+
+public threaded struct extern "pgl3d$n::glresource$n::handle" "nonmovable" {t}
+handle(t const& v)
+{
+  public t value;
+}
+
+extern "types" inline
+namespace pgl3d$n {
+namespace glresource$n {
+template <typename T> struct handle
+{
+  handle(T const& v) : value(v) { }
+  T value;
+private:
+  handle(handle const&);
+  handle& operator =(handle const&);
+};
+};
+};
+;
+
+public metafunction auto_buffer
+  auto_handle{uint, 0, glGenBuffers, glDeleteBuffers};
+public metafunction auto_texture
+  auto_handle{uint, 0, glGenTextures, glDeleteTextures};
+public metafunction auto_framebuffer
+  auto_handle{uint, 0, glGenFramebuffers, glDeleteFramebuffers};
+public metafunction auto_renderbuffer
+  auto_handle{uint, 0, glGenRenderbuffers, glDeleteRenderbuffers};
+expand (sym: m::seq{is_gl3_or_gles3}) {
+  public metafunction auto_vertexarray
+    auto_handle{uint, 0, glGenVertexArrays, glDeleteVertexArrays};
+}
+expand (sym: m::seq{m::not{is_gl3_or_gles3}}) {
+  public metafunction auto_vertexarray
+    auto_handle{uint, 0, 0, 0};
+}
+
+private threaded struct {t, init, generate_func, release_func}
+auto_handle()
+{
+  private handle{t} hnd = handle{t}(init);
+  public function t get() const
+  {
+    return hnd.value;
+  }
+  public function void generate()
+  {
+    reset();
+    if (m::ne{generate_func, 0}) {
+      generate_func(1, address(hnd.value));
+    }
+  }
+  public function void reset()
+  {
+    if (hnd.value > 0) {
+      if (m::ne{release_func, 0}) {
+	release_func(1, caddress(hnd.value));
+      }
+      hnd.value = 0;
+    }
+  }
+  private function ~ {
+    reset();
+  }
+}
+

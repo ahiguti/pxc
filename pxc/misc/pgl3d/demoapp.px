@@ -6,20 +6,20 @@ public import pointer::raw -;
 public import meta m;
 public import glm;
 public import text::positional -;
-public import pgl3d::application -;
-public import pgl3d::mainloop -;
-public import pgl3d::pglcommon -;
-public import pgl3d::glconf -;
-public import pgl3d::glgeometry -;
-public import pgl3d::wfobj -;
-public import pgl3d::drawer_export -;
-public import pgl3d::input_control -;
-public import pgl3d::collision_shape -;
-public import pgl3d::dynamics_world -;
-public import pgl3d::pglconfig -;
-public import pgl3d::sdlutil -;
 public import io::time -;
 public import fundamental::mainloop -;
+public import pgl3d::engine::application -;
+public import pgl3d::engine::mainloop -;
+public import pgl3d::engine::util -;
+public import pgl3d::engine::platform -;
+public import pgl3d::engine::input_control -;
+public import pgl3d::engine::pglconfig -;
+public import pgl3d::geometry::funcs -;
+public import pgl3d::drawer::drawer -;
+public import pgl3d::physics::collision_shape -;
+public import pgl3d::physics::dynamics_world -;
+public import pgl3d::sdl::sdlutil -;
+public import pgl3d::geometry::wfobj -;
 
 // public import pgl3d::bullet_test -;
 // public import KnightModel -; // FIXME
@@ -49,7 +49,8 @@ load_filesystem_async{app_main}("/persist");
 
 public function void app_main()
 {
-  pgl3d::mainloop::mainloop(make_ptr{demoapp_application}(), "pgl3d.cnf");
+  pgl3d::engine::mainloop::mainloop(make_ptr{demoapp_application}(),
+    "pgl3d.cnf");
 }
 
 public struct demoapp_application()
@@ -349,7 +350,7 @@ function void handle_event(app_impl mutable& app,
       return;
     }
   } else if (etype == SDL_KEYDOWN) {
-    // sdllog("KEYDOWN event", static_cast{int}(ev.key.keysym.scancode));
+    // sdl_log("KEYDOWN event", static_cast{int}(ev.key.keysym.scancode));
     if (ev.key.keysym.scancode == SDL_SCANCODE_TAB) {
       app.scene_next_flag = true;
       return;
@@ -412,7 +413,7 @@ function void handle_keys(app_impl mutable& app,
     ss.posang.angle = app.player.angle * camera_rel;
     ss.app_commands.swap(app.app_commands);
     app.scene_next_flag = false;
-    // sdllog("posang = ", ss.posang);
+    // sdl_log("posang = ", ss.posang);
   }
   app.app_commands.clear();
   app.prev_joy_buttons = buttons;
@@ -453,7 +454,7 @@ private function void build_vertices(app_impl mutable& app,
   const parti_bb = make_varray{string}("drawer_particle_bb");
   for (const i, const name: objs) {
     string fn = name + ".obj";
-    sdllog("load", fn);
+    sdl_log("load", fn);
     string fcontent;
     sdl_load_file(fn, fcontent);
     const wfobjp = wfobject_read(fcontent);
@@ -465,7 +466,7 @@ private function void build_vertices(app_impl mutable& app,
 	import_wfobj(*wfobjp, *g, ctx_fill(0)));
     }
   }
-  sdllog("load prebuild");
+  sdl_log("load prebuild");
   mutable rnd = make_rand_generator(1U);
   mutable m = glm::mat4();
   mutable m1 = glm::mat4();

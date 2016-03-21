@@ -1,0 +1,334 @@
+private threaded namespace pgl3d::opengl::glbuffer "export-unsafe";
+public import common -;
+public import pointer::raw -;
+public import pointer::raw_unsafe -;
+public import numeric::fpmath -;
+public import glm;
+public import GL::compat -;
+public import io::time -;
+public import meta m;
+public import exception -;
+public import pgl3d::opengl::glshader -;
+public import pgl3d::opengl::glresource -;
+public import pgl3d::opengl::glvertex -;
+public import pgl3d::engine::scene_node -;
+public import pgl3d::sdl::sdlutil -;
+
+private metafunction use_draw_range 0;
+
+public threaded struct vertex_set(size_t num_float_per_vertex0)
+{
+  public vs_id_t vs_id;
+  public string vs_name;
+  public ptr{vertices} vtxs = make_ptr{vertices}(num_float_per_vertex0);
+  public size_t vertex_values_offset;
+  public size_t elements_offset;
+}
+
+public metafunction glsync_compat m::cond{is_gl3_or_gles3, GLsync, unit};
+
+public threaded struct async_buffer() {
+  public auto_buffer vbo; /* noncopyable */
+  public rawptr{float} mapped_ptr;
+  public glsync_compat fence;
+  public size_t size_bytes;
+  init();
+  /*
+  public function void extend_buffer(size_t sz) {
+    if (sz >= size_bytes) {
+      return;
+    }
+    glBindBuffer(GL_ARRAY_BUFFER, vbo.get());
+    glBufferData(GL_ARRAY_BUFFER, sz, size_t_crawptr{void}(0),
+      GL_STREAM_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    size_bytes = sz;
+  }
+  */
+  public function void map_buffer(size_t sz_bytes) {
+    if (m::ne{is_gl3_or_gles3, 0}) {
+      glBindBuffer(GL_ARRAY_BUFFER, vbo.get());
+      //sdl_log("glbindbuffer", vbo.get());
+      if (rawptr_to_size_t(mapped_ptr) != 0U) {
+	//sdl_log("glunmapbuffer");
+	glUnmapBuffer(GL_ARRAY_BUFFER);
+	mapped_ptr = size_t_to_rawptr{float}(0U);
+      }
+      if (sz_bytes > size_bytes) {
+	sdl_log("glbufferdata resize:", size_bytes, sz_bytes);
+	glBufferData(GL_ARRAY_BUFFER, static_cast{GLsizeiptr}(sz_bytes),
+	  size_t_to_crawptr{void}(0), GL_STREAM_DRAW);
+	size_bytes = sz_bytes;
+      }
+      mutable mask = static_cast{GLbitfield}(GL_MAP_WRITE_BIT);
+      if (m::ne{is_gl3_or_gles3, 0}) {
+	mask |= static_cast{GLbitfield}(GL_MAP_UNSYNCHRONIZED_BIT);
+      }
+      //sdl_log("mapbufferrange", size_bytes, mask);
+      rawptr{void} p = glMapBufferRange(GL_ARRAY_BUFFER,
+	static_cast{GLintptr}(0), static_cast{GLsizeiptr}(size_bytes),
+	mask);
+      //sdl_log("mapbufferrange", "ptr", rawptr_to_size_t(p));
+      mapped_ptr = size_t_to_rawptr{float}(rawptr_to_size_t(p));
+      glBindBuffer(GL_ARRAY_BUFFER, 0);
+    }
+  }
+  public function void unmap_buffer() {
+    if (m::ne{is_gl3_or_gles3, 0}) {
+      if (rawptr_to_size_t(mapped_ptr) != 0U) {
+	//sdl_log("glunmapbuffer", vbo.get());
+	glBindBuffer(GL_ARRAY_BUFFER, vbo.get());
+	glUnmapBuffer(GL_ARRAY_BUFFER);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	mapped_ptr = size_t_to_rawptr{float}(0U);
+      }
+    }
+  }
+  public function GLenum client_wait_sync(long timeout) {
+    if (m::ne{is_gl3_or_gles3, 0}) {
+      return glClientWaitSync(fence, 0, static_cast{GLint64}(timeout));
+    } else {
+      return GLenum();
+    }
+  }
+  private function void init() {
+    vbo.generate();
+    fence_sync();
+  }
+  public function void fence_sync() {
+    //sdl_log("fence_sync", vbo.get());
+    delete_sync();
+    if (m::ne{is_gl3_or_gles3, 0}) {
+      fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    }
+  }
+  private function void delete_sync() {
+    if (m::ne{is_gl3_or_gles3, 0}) {
+      // if (glIsSync(fence) != 0) {
+      if (fence != GLsync()) {
+	glDeleteSync(fence);
+	fence = GLsync();
+      }
+    }
+  }
+  private function ~ {
+    unmap_buffer();
+    delete_sync();
+  }
+}
+
+public threaded struct
+vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0,
+  bool is_sub_drawer0)
+{
+  public bool const draw_mode_points = draw_mode_points0;
+  public bool const is_sub_drawer = is_sub_drawer0;
+  public size_t const num_float_per_vertex = num_float_per_vertex0;
+  public auto_buffer vbo_values;
+  public auto_buffer vbo_elems;
+  public size_t num_vertex_values;
+  public size_t num_elements;
+  public tree_map{string, vs_id_t} vs_names;
+  public varray{ptr{vertex_set}} vs_arr;
+  public function ptr{vertex_set} make_if(string const& name)
+  {
+    if (const id: vs_names[name]) {
+      return vs_arr[id];
+    } else {
+      const id = static_cast{vs_id_t}(vs_arr.size());
+      const p = make_ptr{vertex_set}(num_float_per_vertex);
+      p->vs_id = id;
+      p->vs_name = name;
+      vs_arr.push_back(p);
+      vs_names[name] = id;
+      return p;
+    }
+  }
+  public function cptr{vertices} get_vertices(vs_id_t vs_id) const
+  {
+    return vs_arr[vs_id]->vtxs;
+  }
+  public function vs_id_t num_vs() const
+  {
+    return static_cast{vs_id_t}(vs_arr.size());
+  }
+  public function ptr{vertex_set} get_by_id(vs_id_t vs_id) const
+  {
+    return vs_arr[vs_id];
+  }
+  public function bool exists(string const& name) const
+  {
+    return vs_names.exists(name);
+  }
+  public function bool has_name(string const& name) const
+  {
+    return vs_names.exists(name);
+  }
+  public function vs_id_t get_id_by_name(string const& name) const
+  {
+    if (const id: vs_names[name]) {
+      return id;
+    } else {
+      throw runtime_error_template{"vertex_buffer.get_id_by_name"}("");
+    }
+  }
+  public function size_t num_vs_ids() const
+  {
+    return vs_arr.size();
+  }
+  public function bool create_vbo()
+  {
+    if (vbo_values.get() != 0 || vbo_elems.get() != 0) {
+      return false;
+    }
+    for (const i, const& be: vs_arr) {
+      be->vtxs->prepare();
+    }
+    varray{float} vertex_values;
+    varray{uint} elements;
+    size_t num_v = 0;
+    size_t num_e = 0;
+    for (const i, const& be: vs_arr) {
+      num_v += be->vtxs->vertex_values.size();
+      num_e += be->vtxs->elements.size();
+    }
+    vertex_values.resize(num_v, 0.0);
+    elements.resize(num_e, 0);
+    num_vertex_values = num_v;
+    num_elements = num_e;
+    num_v = 0;
+    num_e = 0;
+    for (const i, mutable& be: vs_arr) {
+      for (const j, const& v: be->vtxs->vertex_values) {
+	vertex_values[num_v + j] = v;
+      }
+      for (const j, const& e: be->vtxs->elements) {
+	if (e == 0xffffffffU) {
+	  elements[num_e + j] = e;
+	} else {
+	  elements[num_e + j] = e +
+	    static_cast{uint}(num_v / num_float_per_vertex);
+	}
+      }
+      be->vertex_values_offset = num_v;
+      be->elements_offset = num_e;
+      num_v += be->vtxs->vertex_values.size();
+      num_e += be->vtxs->elements.size();
+    }
+    {
+      vbo_values.generate();
+      vbo_elems.generate();
+      if (vbo_values.get() == 0 || vbo_elems.get() == 0) {
+	return false;
+      }
+      glBindBuffer(GL_ARRAY_BUFFER, vbo_values.get());
+      sdl_log("glbufferdata vertex_values.size():", vertex_values.size());
+      if (vertex_values.size() != 0) {
+	glBufferData(GL_ARRAY_BUFFER,
+	  static_cast{GLsizeiptr}(vertex_values.size()) * 4,
+	  vertex_values.to_crawptr().to_cvoidptr(), GL_STATIC_DRAW);
+      }
+      glBindBuffer(GL_ARRAY_BUFFER, 0);
+      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo_elems.get());
+      sdl_log("glbufferdata elements.size():", elements.size());
+      if (elements.size() != 0) {
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+	  static_cast{GLsizeiptr}(elements.size()) * 4,
+	  elements.to_crawptr().to_cvoidptr(), GL_STATIC_DRAW);
+      }
+      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    }
+    return true;
+  }
+}
+
+public function void
+vertex_buffer_draw(vertex_buffer const& bo, vs_id_t vs_id,
+  glshader_i mutable& sdr)
+{
+  vertex_buffer_draw_pre(bo, sdr);
+  vertex_buffer_draw_elems(bo, vs_id, 1);
+  vertex_buffer_draw_post(bo, sdr);
+}
+
+public function void
+vertex_buffer_draw_pre(vertex_buffer const& bo, glshader_i mutable& sdr)
+{
+  glBindBuffer(GL_ARRAY_BUFFER, bo.vbo_values.get());
+  sdr.enable_vertex_attrib_array(bo.num_float_per_vertex);
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bo.vbo_elems.get());
+  if (m::ne{use_primitive_restart, 0}) {
+    glEnable(GL_PRIMITIVE_RESTART);
+    glPrimitiveRestartIndex(0xffffffff);
+  }
+}
+
+public function void
+vertex_buffer_draw_post(vertex_buffer const& bo, glshader_i mutable& sdr)
+{
+  sdr.disable_vertex_attrib_array();
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+  if (m::ne{use_primitive_restart, 0}) {
+    glDisable(GL_PRIMITIVE_RESTART);
+  }
+}
+
+public function void
+vertex_buffer_draw_elems(vertex_buffer const& bo, vs_id_t vs_id,
+  size_t num_instance)
+{
+  const& be = *bo.get_by_id(vs_id);
+  const elem_offset = be.elements_offset;
+  const elem_num = be.vtxs->elements_size_per_copy * num_instance;
+  GLenum mode = bo.draw_mode_points ? GL_POINTS :
+    use_primitive_restart ? GL_TRIANGLE_FAN : GL_TRIANGLES;
+//sdl_log("draw_elems", elem_num);
+//if (elem_num == 0) { sdl_log("elem_num == 0"); }
+  if (m::ne{use_draw_range, 0}) {
+    const arr_offset = be.vertex_values_offset / bo.num_float_per_vertex;
+    const arr_num = be.vtxs->vertex_values_size_per_copy * num_instance
+      / bo.num_float_per_vertex;
+    /*
+    if (elem_num > 0) {
+      sdl_log("DrawRangeElements", arr_offset, arr_num,
+	be.vtxs->elements[elem_num-1]);
+    }
+    */
+    glDrawRangeElements(mode,
+      static_cast{GLuint}(arr_offset),
+      static_cast{GLuint}(arr_offset + arr_num - 1),
+      static_cast{GLsizei}(elem_num), GL_UNSIGNED_INT,
+      offset_to_void_cp(elem_offset * 4));
+  } else {
+    glDrawElements(mode, static_cast{GLsizei}(elem_num), GL_UNSIGNED_INT,
+      offset_to_void_cp(elem_offset * 4));
+  }
+}
+
+public function void
+vertex_buffer_draw_elems_instanced(vertex_buffer const& bo, vs_id_t vs_id,
+  size_t num_instance)
+{
+  if (m::ne{is_gl3_or_gles3, 0}) {
+    size_t elem_offset;
+    size_t elem_num;
+    {
+      const& be = *bo.get_by_id(vs_id);
+      elem_offset = be.elements_offset;
+      elem_num = be.vtxs->elements_size_per_copy;
+    }
+    GLenum mode = bo.draw_mode_points ? GL_POINTS :
+      use_primitive_restart ? GL_TRIANGLE_FAN : GL_TRIANGLES;
+//sdl_log("drawelementsinstanced", static_cast{uint}(mode), elem_num, elem_offset, num_instance);
+    // if (num_instance != 0) {
+//if (elem_num == 0) { sdl_log("elem_num == 0"); }
+    glDrawElementsInstanced(mode, static_cast{GLsizei}(elem_num),
+      GL_UNSIGNED_INT, offset_to_void_cp(elem_offset * 4),
+      static_cast{GLsizei}(num_instance));
+    // }
+  } else {
+    throw runtime_error_template{"vertex_buffer_draw_elems_instanced"}("");
+  }
+}
+
