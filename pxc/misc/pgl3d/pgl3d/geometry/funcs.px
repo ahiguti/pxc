@@ -20,6 +20,7 @@ vertex_attr()
   public vec3 nor;
   public vec3 tan;
   public vec3 uvw;
+  public vec4 aabb_or_tconv;
 }
 
 /* implicit conversion from vec3 to vertex_attr */
@@ -109,6 +110,7 @@ public metafunction ctx_fill to_gf_poly{gf_ctx_fill};
 public metafunction ctx_fill_smooth to_gf_poly{gf_ctx_fill_smooth};
 public metafunction ctx_poly_joint to_gf_poly{gf_ctx_poly_joint};
 public metafunction ctx_point_joint to_gf_poly{gf_ctx_point_joint};
+public metafunction ctx_tex3d to_gf_poly{gf_ctx_tex3d};
 public metafunction lid to_gf_poly{gf_lid};
 public metafunction hole to_gf_poly{gf_hole};
 public metafunction sphere to_gf_poly{gf_sphere};
@@ -460,6 +462,67 @@ private threaded function void gf_ctx_point_joint(string const& joint_name,
   build_context_i const& ctx, poly_t const& poly, mesh_index const& mp)
 {
   ctx.fill(true, false, 0, joint_name, poly, mp);
+}
+
+private threaded function void gf_ctx_tex3d(size_t nbase, size_t ntex, float z, 
+  build_context_i const& ctx, poly_t const& poly, mesh_index const& mp)
+{
+  gf_ctx_fill(nbase, ctx, poly, mp);
+  if (poly.size() != 4) { return; }
+  // FIXME: 正方形のときしか動かない
+  darrayst{vertex_attr} front = poly;
+  mutable nor = normal_scale_from_poly(poly) / static_cast{float}(poly.size());
+  for (const i, mutable& e: front) {
+    e.pos += nor * z;
+  }
+  const tan = (poly[1].pos - poly[0].pos).normalize();
+  const len = glm::length(poly[1].pos - poly[0].pos);
+  const texscale = len;
+  mutable attr0 = poly[0];
+  attr0.nor = nor.normalize();
+  attr0.tan = tan;
+  attr0.aabb_or_tconv = glm::make_vec4(0.0, 0.0, 0.0, texscale);
+  front[0] = attr0;
+  front[1] = attr0;
+  front[2] = attr0;
+  front[3] = attr0;
+  front[0].uvw = glm::make_vec3(0.0, 0.0, z);
+  front[1].uvw = glm::make_vec3(1.0, 0.0, z);
+  front[2].uvw = glm::make_vec3(1.0, 1.0, z);
+  front[3].uvw = glm::make_vec3(0.0, 1.0, z);
+  /* front */
+  gf_ctx_fill_smooth(ntex, ctx, front, mesh_index());
+  /* side */
+  const sz = front.size();
+  for (const i: 0 .. sz) {
+    const i1 = i + 1 != sz ? i + 1 : 0;
+    mutable side = make_farray{vertex_attr}(poly[i], poly[i1], front[i1],
+      front[i]);
+    side[0] = attr0;
+    side[1] = attr0;
+    side[2] = attr0;
+    side[3] = attr0;
+    side[0].uvw = front[i].uvw;
+    side[1].uvw = front[i1].uvw;
+    side[2].uvw = front[i1].uvw;
+    side[3].uvw = front[i].uvw;
+    side[0].uvw.z = 0.0;
+    side[1].uvw.z = 0.0;
+    side[2].uvw.z = z;
+    side[3].uvw.z = z;
+    gf_ctx_fill_smooth(ntex, ctx, side, mesh_index());
+  }
+  /* back */
+  mutable back = make_farray{vertex_attr}(poly[3], poly[2], poly[1], poly[0]);
+  back[0] = attr0;
+  back[1] = attr0;
+  back[2] = attr0;
+  back[3] = attr0;
+  back[0].uvw = glm::make_vec3(0.0, 1.0, 0.0);
+  back[1].uvw = glm::make_vec3(1.0, 1.0, 0.0);
+  back[2].uvw = glm::make_vec3(1.0, 0.0, 0.0);
+  back[3].uvw = glm::make_vec3(0.0, 0.0, 0.0);
+  gf_ctx_fill_smooth(ntex, ctx, back, mesh_index());
 }
 
 

@@ -24,7 +24,7 @@ uniform float option_value;
 <%frag_in/> vec3 vary_tangent;
 <%frag_in/> vec3 vary_binormal;
 <%frag_in/> vec3 vary_uvw;
-<%frag_in/> vec4 vary_uv_aabb;
+<%frag_in/> vec4 vary_aabb_or_tconv;
 <%if><%not><%eq><%opt/>0<%/><%/>
   // uniform sampler1D sampler_voxpat;
   uniform <%mediump_sampler3d/> sampler_voxpat;
@@ -66,13 +66,13 @@ uniform float option_value;
 
 bool uv_inside_aabb(in vec2 uv)
 {
-  vec4 aabb = floor(vary_uv_aabb + 0.5);
+  vec4 aabb = floor(vary_aabb_or_tconv + 0.5);
   return uv.x >= aabb.x && uv.y >= aabb.y && uv.x < aabb.z && uv.y < aabb.w;
 }
 
 vec3 clamp_to_border(in vec2 uv, in vec3 delta, inout vec4 dbg)
 {
-  vec4 aabb = floor(vary_uv_aabb + 0.5);
+  vec4 aabb = floor(vary_aabb_or_tconv + 0.5);
   vec2 dclamp = clamp(delta.xy, aabb.xy - uv + 0.5, aabb.zw - uv - 0.5);
 	  ///// FIXME FIXME FIXME
   float ratx = (abs(delta.x) > 0.001) ? (dclamp.x / delta.x) : 0.0;
@@ -687,13 +687,22 @@ void main(void)
     <%/>
     vec3 camera_local = -camera_dir * normal_matrix;
     vec3 light_local = light_dir * normal_matrix;
+    /*
     const float obj_scale = 1.0 / 64.0;
     vec3 pos = clamp(vary_position_local * obj_scale + 0.5, 0.0,
       1.0 - epsilon);
     vec3 campos = vary_camerapos_local * obj_scale + 0.5;
+    */
+    float texscale = 1.0 / vary_aabb_or_tconv.w;
+    vec3 texpos = - vary_aabb_or_tconv.xyz * texscale;
+    vec3 pos    = texpos + vary_position_local * texscale;
+    vec3 campos = texpos + vary_camerapos_local * texscale;
     vec3 sur_nor = vec3(0.0);
     bool dbg_inside = false; // FIXME
-    if (pos3_inside(campos, 0.0, 1.0)) {
+/*
+// このへん現在使っていない。カメラが内側に入ってもレンダリングできるように
+// する処理。表面カリングを有効にしたうえで以下の処理をすることを想定。
+    if (pos3_inside(campos, 0.0, 1.0)) { // TODO: 内側に入った時
       pos = campos;
     //<%fragcolor/> = vec4(1.0,1.0,0.0,1.0); return;
     // color += vec4(1.0,1.0,0.0,1.0);
@@ -704,9 +713,10 @@ void main(void)
     //<%fragcolor/> = vec4(pos,1.0); return;
     // color.r += 1.0;
     }
+*/
     // color = vec4(pos.xyz, 1.0);
     vec4 dbgval = vec4(0.0,0.0,0.0,0.0);
-    if (!raycast_octree_transformed(vec3(0, 0, 0), vec3(1.0, 1.0, 0.25),
+    if (!raycast_octree_transformed(vec3(0, 0, 0), vec3(1.0, 1.0, 1.0/4.0),
       pos, vec3(0.0), camera_local, light_local, tex_val,
       nor, lstr_para, dbgval))
     {
@@ -726,7 +736,10 @@ void main(void)
     nor = normal_matrix * nor; // local to global
     if (false) { // FragDepth更新するならこの節を有効にする
       // posは3dテクスチャ座標。object座標系に戻す。
+      /*
       pos = (pos - 0.5) / obj_scale;
+      */
+      pos = vary_aabb_or_tconv.xyz + pos * vary_aabb_or_tconv.w;
       // posはobject座標系のfrag位置。depth値を更新するためmvpを掛ける。
       vec4 gpos = vary_model_matrix * vec4(pos, 1.0);
       vec4 vpos = view_projection_matrix * gpos;

@@ -470,17 +470,32 @@ private function void build_vertices(app_impl mutable& app,
   mutable rnd = make_rand_generator(1U);
   mutable m = glm::mat4();
   mutable m1 = glm::mat4();
+  float box_size = 32.0f;
+  // float box_size = 1.0f;
+  m = glm::mat4()
+    .translate(glm::make_vec3(0.0, 0.0, box_size * 2.0f));
+  m1 = glm::mat4()
+    .translate(glm::make_vec3(0.0, 0.0, box_size * (-1.0f)))
+    .rotate(to_radians(45.0), glm::make_vec3(0.0, 0.0, 1.0));
+  /*
+  pgs.make_vertex_set(tr, "box",
+    regular_polygon(1.4142f * box_size, 4,
+      apply(m1,
+	bump_apply(m, false, ctx_fill(1), ctx_fill(1))),
+      apply(m1,
+	ctx_fill(1))));
+  */
+  pgs.make_vertex_set(tr, "box",
+    regular_polygon(1.4142f * box_size, 4,
+      apply(m1,
+	bump_apply(m, false, ctx_fill(0), ctx_fill(0))),
+      apply(m1,
+	ctx_tex3d(0, 1, 1.0f))));
   m = glm::mat4()
     .translate(glm::make_vec3(0.0, 0.0, 64.0));
   m1 = glm::mat4()
     .translate(glm::make_vec3(0.0, 0.0, -32.0))
     .rotate(to_radians(45.0), glm::make_vec3(0.0, 0.0, 1.0));
-  pgs.make_vertex_set(tr, "box",
-    regular_polygon(1.4142f * 32.0f, 4,
-      apply(m1,
-	bump_apply(m, false, ctx_fill(1), ctx_fill(1))),
-      apply(m1,
-	ctx_fill(1))));
   pgs.make_vertex_set(tr, "box50",
     regular_polygon(1.4142f * 50.0f, 4,
       apply(m1,

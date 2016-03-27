@@ -154,7 +154,10 @@ thread装飾の意味
 
 - namespaceの属性
   - threaded namespace は、ロード時実行文を持たない名前空間
-  - private namespace は、親または先祖namespaceからのみimportできる
+  - private namespace は、親またはその子孫のnamespaceからのみimportできる
+  - "use-unsafe" namespaceは、"export-unsafe" namespaceをprivate importできる
+  - "export-unsafe" namespaceは、どのようなunsafe属性のnamespaceもimportできる
+  - unsafe属性の無いnamespaceは、"use-unsafe", "export-unsafe"をimportできない
 
 - importの属性
   - namespace bar が private import foo していて、namespace baz が
@@ -163,10 +166,13 @@ thread装飾の意味
   - namespace bar が public import foo していて、namespace baz が
     (private or public) import bar しているとき、bazにはfooのシンボル
     は見える。
+  - namespaceのpublic importは推移的。
   - import foo f とすると、fooのシンボルは名前空間プレフィックスとして
     「f」を付けて参照できる。
   - import foo - とすると、fooのシンボルは名前空間プレフィックス無し
     で参照できる。
+  - namespace bar が import foo * とすると、barやbarをimportした名前空間
+    からfooのシンボルは名前区間プレフィックス無しで参照できる。
   - namespace bar が import foo + とすると、擬似メンバ関数のlookup時に
     fooに加えてbarを検索するようになる。
 
@@ -174,8 +180,9 @@ thread装飾の意味
   - restricted interface と non-restricted interfaceの二種類がある
     - restricted は、そのインタフェースを実装できる型が一つだけ
       - 構造体のインタフェースの一部だけを渡したいときに使う
-      - メソッド呼び出しが非仮想関数になるのでわずかに速い
-      - ダウンキャストが必ず成功する。
+	(メソッド呼び出しが非仮想関数になるのでわずかに速い)
+      - ダウンキャストは必ず成功する。
+      - 一つの構造体が複数のrestricted interfaceを実装することができる
   - non-restricted interfaceの定義と実装
     interface foo_i {
       public function void m1();
@@ -194,4 +201,10 @@ thread装飾の意味
       public function void m1() { }
     }
     foo以外がfoo_iを実装することはできない
+
+- 擬似メンバ関数(TBD)
+
+- ユーザ定義演算子(TBD)
+
+- メタ関数(TBD)
 

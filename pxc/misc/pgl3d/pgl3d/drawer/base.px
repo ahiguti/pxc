@@ -90,7 +90,7 @@ make_tattr_vertex_buffer(bool points_mode, bool is_sub)
 
 public threaded function {tattr} void
 dgf_fill_tattr_internal(ptr{vertices} const& vptr, bool flat_flag,
-  poly_t const& poly, mesh_index const& mp)
+  bool override_uvw, poly_t const& poly, mesh_index const& mp)
 {
   const sz = poly.size();
   if (sz < 3) { return; }
@@ -111,9 +111,11 @@ dgf_fill_tattr_internal(ptr{vertices} const& vptr, bool flat_flag,
       v.normal = poly[i].nor;
       v.tangent = poly[i].tan;
     }
-    v.uvw = glm::vec3();
+    // v.uvw = glm::vec3();
+    v.uvw = poly[i].uvw;
+    v.aabb_or_tconv = poly[i].aabb_or_tconv;
   }
-  if (sz == 4) {
+  if (sz == 4 && override_uvw) {
     float scale = 64.0f;
     const p0 = poly[0].pos * scale;
     const p1 = poly[1].pos * scale;
@@ -168,10 +170,10 @@ dgf_fill_tattr_internal(ptr{vertices} const& vptr, bool flat_flag,
       vtxs[1].uvw = to_uvw(p1);
       vtxs[2].uvw = to_uvw(p2);
       vtxs[3].uvw = to_uvw(p3);
-      vtxs[0].uv_aabb = aabb;
-      vtxs[1].uv_aabb = aabb;
-      vtxs[2].uv_aabb = aabb;
-      vtxs[3].uv_aabb = aabb;
+      vtxs[0].aabb_or_tconv = aabb;
+      vtxs[1].aabb_or_tconv = aabb;
+      vtxs[2].aabb_or_tconv = aabb;
+      vtxs[3].aabb_or_tconv = aabb;
       // debug_log("vtxs", vtxs);
     }
   }
@@ -227,10 +229,10 @@ dgf_fill_tattr_internal(ptr{vertices} const& vptr, bool flat_flag,
 	    vtxs[0].uvw /= ratv2301;
 	    vtxs[1].uvw /= ratv2301;
 	  }
-	  vtxs[0].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
-	  vtxs[1].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
-	  vtxs[2].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
-	  vtxs[3].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
+	  vtxs[0].aabb_or_tconv = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
+	  vtxs[1].aabb_or_tconv = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
+	  vtxs[2].aabb_or_tconv = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
+	  vtxs[3].aabb_or_tconv = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
 	}
       } else {
 	if (ratv3012 > 0.25 && ratv3012 < 4.0 && cosv1230 > 0.95f) {
@@ -245,10 +247,10 @@ dgf_fill_tattr_internal(ptr{vertices} const& vptr, bool flat_flag,
 	    vtxs[1].uvw /= ratv3012;
 	    vtxs[2].uvw /= ratv3012;
 	  }
-	  vtxs[0].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
-	  vtxs[1].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
-	  vtxs[2].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
-	  vtxs[3].uv_aabb = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
+	  vtxs[0].aabb_or_tconv = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
+	  vtxs[1].aabb_or_tconv = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
+	  vtxs[2].aabb_or_tconv = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
+	  vtxs[3].aabb_or_tconv = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
 	}
       }
     }

@@ -165,6 +165,23 @@ PXCTest1/
 のように配置
 
 ---------------------------------------------------------------------------
+メモ: glsl
+
+https://en.wikibooks.org/wiki/GLSL_Programming/Vector_and_Matrix_Operations
+
+mat3 m = mat3(
+   1.1, 2.1, 3.1, // first column (not row!)
+   1.2, 2.2, 3.2, // second column
+   1.3, 2.3, 3.3  // third column
+);
+mat3 id = mat3(1.0); // puts 1.0 on the diagonal
+                     // all other components are 0.0
+vec3 column0 = vec3(0.0, 1.0, 0.0);
+vec3 column1 = vec3(1.0, 0.0, 0.0);
+vec3 column2 = vec3(0.0, 0.0, 1.0);
+mat3 n = mat3(column0, column1, column2); // sets columns of matrix n
+
+---------------------------------------------------------------------------
 
 - parts.obj 頂点座標が完全に一致しているものがあるせいで三角形分割できない
 f 514 486 485 528 548
@@ -1869,6 +1886,138 @@ bool raycast_octree
 
 
 ---------------------------------------------------------------------------
-バンプ根元に斜面を作る
+表面に3dテクスチャを貼る
 
+ctx_fill(n)
+-> build_context_i#fill(true, false, n, "", poly, mp)
+-> build_context_impl#fill(...)
+-> fillers[n](...)
+   pglshader#make_vertex_set(...)
+   n番目のdrawersのfillerが実行される
+    r.insert("drawer_0_triangles", make_drawer_triangles(sconf, res, 0));
+    r.insert("drawer_0_triangles_alt", make_drawer_triangles(sconf, res, 1));
+  n == 1ならdrawer_0_traiangles_alt
+  drawer_triangles#make_fillerは make_dgf_polygon_filler
+-> dgf_fill_tattr_internal
+  uvwとuv_aabbに書き込んでいるが_altシェーダでは見ないのでは？
+  poly_tはcslice{vertex_attr}
+  vertex_attrはstruct { vec3 pos, nor, tan, uvw; }
+
+- gf_ctx_fill(n)のかわりに、3dテクスチャのための立体を作りuvwを設定して
+  gf_ctx_fillするようなgfを作る
+  gf_ctx_tex3d(n) ?
+- dgf_fill_tattr_internal: uvwをpoly_tのものを反映するフラグかなにかを作る
+- fshでuvwをテクスチャ座標として反映させるようにする
+
+従来のシェーダ
+<%vert_in/> vec3 position;
+<%vert_in/> vec3 normal;
+<%vert_in/> vec3 tangent;
+<%vert_in/> vec3 uvw;
+<%vert_in/> vec4 uv_aabb;
+tex3dで渡す情報
+- 3dテクスチャを貼る座標系(接空間)への変換行列が必要
+- 各頂点の接空間での座標が必要
+- 各頂点のuvw座標が必要
+positionで接空間の原点位置、normalとtangentとその外積で回転、uvwでテクスチャ座標
+
+dgf_polygon_filler_tattrのoverride_uvwフラグはtriangles drawerのoptが0のとき
+有効になる。
+optが1のときはuv_aabbのかわりにlocal_positionを入れるか
+接空間からテクスチャ座標への変換とその逆変換が必要(gl_FragDepth計算に必要)
+aabb_lposのxyzにuvw原点の接空間座標、wにuvwから接空間座標へのスケールを入れる。
+
+tex3dシェーダでの頂点属性の解釈まとめ
+- position, normal, tangentにはモデル座標から接空間座標への変換を入れる
+- uvwには頂点のテクスチャ座標を入れる
+- uv_aabb(名前変える)に頂点のテクスチャ座標から接空間座標への変換を入れる
+
+手順
+- uv_aabb -> aabb_or_lconv
+- geometry::funcs::vertex_attrにlocal_pos追加(接空間での頂点座標)
+- drawer::base::dgf_fill_tattr_internalでoverride_uvwが偽のときに
+  local_posからaabb_or_lconvをセット
+- gf_ctx_tex3dがpos, nor, tanを接空間の原点位置と回転、uvwにテクスチャ座標、
+  local_posに接空間での頂点座標を入れるように変更
+- vshの変更点
+  - 方針: 接空間への変換も含めてmodel matrixとする
+  - uvw以外のパラメータは全頂点で共通(勿体無い？)
+
+頂点シェーダ
+in vec3 position; // オブジェクト座標系での接空間の原点座標
+in vec3 normal; // オブジェクト座標系での接空間のz軸
+in vec3 tangent;  // オブジェクト座標系での接空間のx軸
+in vec4 aabb_or_tconv;  // テクスチャ座標から接空間への変換
+in vec3 uvw;  // 頂点のテクスチャ座標
+out vec3 vary_position; // グローバルでの頂点座標 --------?
+out vec3 vary_normal; // グローバルでの法線
+out vec3 vary_tangent; // グローバルでの接線
+out vec3 vary_binormal; // グローバルでの従法線
+out vec3 vary_uvw; // 頂点のテクスチャ座標
+out vec3 vary_aabb_or_tconv; // テクスチャ座標から接空間への変換
+out mat4 vary_model_matrix; // 
+out vec3 vary_position_local; // 接空間での頂点座標
+out vec3 vary_camerapos_local; // 接空間でのカメラの位置
+vary_uvw = uvw; // 頂点のテクスチャ座標
+vary_position_local = aabb_or_tconv.xyz + uvw * aabb_or_tconv.w;
+  // 接空間での頂点座標
+binormal = cross(normal, tangent); // オブジェクト座標系での接空間のy軸
+mat4 tan_to_obj = mat4(
+    vec4(tangent, 0.0),
+    vec4(binormal, 0.0),
+    vec4(normal, 0.0),
+    vec4(position, 1.0)) // 接空間からオブジェクト座標系への変換
+mat4 obj_to_tan = inverse(tan_to_obj);
+  // 接空間からオブジェクト座標系への変換
+mat4 mm = <%instance_attr_model_matrix/>;
+  // モデル行列(オブジェクト座標からグローバルへの変換)
+mat4 tan_to_world = mm * tan_to_obj; // 接空間からグローバルへの変換
+vec4 gpos4 = tan_to_world * vec4(vary_position_local, 1.0);
+  // グローバルでの頂点の座標
+gl_Position = view_projection_matrix * gpos4; // gl_Position書き込み
+vary_position = gpos4.xyz / gpos4.w; // グローバルでの頂点の座標
+vary_model_matrix = tan_to_world;
+  // グローバルから接空間への変換
+vec4 cp4 = = inverse(vary_model_matrix) * camera_pos;
+vary_camerapos_local = cp4.xyz / cp4.w;
+  // 接空間でのカメラ位置
+
+接空間座標sをテクスチャ座標に変換
+ts = texpos.xyz + s.xyz * texscale
+  texscale = 1.0 / aabb_or_tconv.w
+  texpos = - aabb_or_tconv.xyz * texscale
+
+フラグメントシェーダ
+vary_aabb_or_tconv = vec4(-32.0, -32.0, -32.0, 64.0);に一旦してテスト
+テクスチャ座標posを接空間座標に戻すには
+lpos = vary_aabb_or_tconv.xyz + pos * vary_aabb_or_tconv.w;
+
+vec3 tpos = vary_uvw; // テクスチャ座標
+vec3 lpos = vary_aabb_or_tconv.xyz + tpos * vary_aabb_or_tconv.w; // 接空間座標
+
+
+頂点データの計算
+入力:
+  - オブジェクト座標系での各頂点の座標pos
+  - 貼り付けるテクスチャのオフセットtexpos
+  - テクスチャのスケールtexscale (2ならばオブジェクト座標系の1がテクスチャの2)
+多角形を覆う長方形を決め、その頂点の一つを接空間の原点とする。
+その座標がposition属性(オブジェクト座標系での接空間の原点座標)。
+オブジェクト座標での多角形の法線がnormal属性。
+オブジェクト座標での原点から次の頂点へのベクトルをnormalizeしたのがtangent属性。
+外積をとったのがbinormal(属性にはセット不要)。
+原点から残りの頂点へのベクトルをtangent, binormal, normalと内積をとったものが
+各頂点の接空間座標xyzとなる。
+各頂点のテクスチャ座標は、texpos + 接空間座標 * texscale となる。uvw属性。
+1.0/texscaleをaabb_or_tconv属性のw。
+-texpos/texscaleをaabb_or_tconv属性のxyz。
+検算
+  原点のuvw属性はtexpos。
+  vary_position_local
+    = aot.xyz + uvw * aot.w
+    = -texpos/texscale + texpos / texscale
+    = 0
+  あってる。
+
+TODO: カメラが立体の内側に入ったかどうかの判定？
 
