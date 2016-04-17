@@ -15,6 +15,10 @@ uniform vec3 camera_pos;
 <%vert_in/> vec3 uvw;      // 頂点のテクスチャ座標
 <%vert_in/> vec4 aabb_or_tconv; // opt==0のときテクスチャ座標の範囲aabb
                                 // opt==1のときテクスチャ座標から接空間への変換
+<%if><%not><%eq><%opt/>0<%/><%/>
+  <%vert_in/> vec3 aabb_min; // テクスチャ座標の範囲aabb
+  <%vert_in/> vec3 aabb_max; // テクスチャ座標の範囲aabb
+<%/>
 <%vert_out/> vec3 vary_position; // ワールドの頂点座標
 <%vert_out/> vec3 vary_normal;   // ワールドでの法線
 <%vert_out/> vec3 vary_tangent;  // ワールドでの接線
@@ -22,6 +26,8 @@ uniform vec3 camera_pos;
 <%vert_out/> vec3 vary_uvw;      // 頂点のテクスチャ座標
 <%vert_out/> vec4 vary_aabb_or_tconv; // aabb_or_tconvと同じ
 <%if><%not><%eq><%opt/>0<%/><%/>
+  <%vert_out/> vec3 vary_aabb_min;
+  <%vert_out/> vec3 vary_aabb_max;
   <%vert_out/> mat4 vary_model_matrix;    // 接空間からワールドへの変換
   <%vert_out/> vec3 vary_position_local;  // 接空間での頂点座標
   <%vert_out/> vec3 vary_camerapos_local; // 接空間でのカメラ座標
@@ -81,6 +87,8 @@ void main(void)
     vec4 cp4 = inverse(mm) * vec4(camera_pos, 1.0);
     vary_camerapos_local = cp4.xyz / cp4.w; // 接空間でのカメラ位置
     vary_aabb_or_tconv = aabb_or_tconv;
+    vary_aabb_min = aabb_min;
+    vary_aabb_max = aabb_max;
   <%/>
   <%if><%enable_shadowmapping/>
     <%if><%not><%light_fixed/><%/>

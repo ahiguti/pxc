@@ -281,6 +281,7 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
     conf.get("frame_sleep", 1, 0, 1));
   private string_map commands;
   private int fullscreen = 0;
+  private bool async_motion_thread = false; // conf.get("async_motion_thread", 0, 1, 0) == 1;
   private bool done = false;
   private bool paused = false;
   private varray{short} joy_axes;
@@ -312,8 +313,11 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
 
     /* spawn motion thread */
     motion_thr.some = make_ptr{motion_thread_client}(nfac,
-      local_whole_instances, app->get_scene_shared(), pgs.pidft);
-    motion_thr.some->start();
+      local_whole_instances, app->get_scene_shared(), pgs.pidft,
+      async_motion_thread);
+    if (async_motion_thread) {
+      motion_thr.some->start();
+    }
   }
   private function void toggle_fullscreen()
   {
@@ -432,19 +436,39 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
       const mess = string_join{" "}(fr.fps, frctl.frame_speed_mul,
 	fr.ticks_sum_saved,
 	saved_stat_num_objects);
-      motion_thr.some->finish();
-      {
-	mutable& mts = *motion_thr.some->shared;
-	// fr.save_ticks(1, SDL_GetTicks());
-	cam_drawing_frame = mts.cam;
-	mts.cam = pgs.cam;
-	mts.frame_speed_mul = frctl.frame_speed_mul;
-	mts.message = mess;
-	mts.commands.swap(commands);
-	local_whole_instances.swap(mts.whole_instances);
-	saved_stat_num_objects = mts.stat_num_objects;
+      if (async_motion_thread) {
+	motion_thr.some->finish();
+	{
+	  mutable& mts = *motion_thr.some->shared;
+	  // fr.save_ticks(1, SDL_GetTicks());
+	  cam_drawing_frame = mts.cam;
+	  mts.cam = pgs.cam;
+	  mts.frame_speed_mul = frctl.frame_speed_mul;
+	  mts.message = mess;
+	  mts.commands.swap(commands);
+	  local_whole_instances.swap(mts.whole_instances);
+	  saved_stat_num_objects = mts.stat_num_objects;
+	}
+	motion_thr.some->start();
+      } else {
+	{
+	  mutable& mts = *motion_thr.some->shared;
+	  mts.cam = pgs.cam;
+	  mts.frame_speed_mul = frctl.frame_speed_mul;
+	  mts.message = mess;
+	  mts.commands.swap(commands);
+	  local_whole_instances.swap(mts.whole_instances);
+	}
+	motion_thr.some->start();
+	motion_thr.some->finish();
+	{
+	  mutable& mts = *motion_thr.some->shared;
+	  cam_drawing_frame = mts.cam;
+	  mts.commands.swap(commands);
+	  local_whole_instances.swap(mts.whole_instances);
+	  saved_stat_num_objects = mts.stat_num_objects;
+	}
       }
-      motion_thr.some->start();
       do_commands();
     }
     // FIXME: shadowmapping

@@ -28,19 +28,39 @@ motion_thread_shared(whole_instances_type const& whole_instances0,
 public threaded struct
 motion_thread_client(node_factory const& nfac,
   whole_instances_type const& whole_instances,
-  tptr{pgl3d_scene_shared} const& pss, tptr{pidf_table} const& pidft)
+  tptr{pgl3d_scene_shared} const& pss, tptr{pidf_table} const& pidft,
+  bool enable_async)
 {
   public tptr{motion_thread_shared} const shared =
     make_tptr{motion_thread_shared}(whole_instances, pss, pidft);
-  public task_executor executor = task_executor(
-    make_tptr{motion_thread_factory}(shared, nfac));
+  public option{ptr{task_executor}} async_executor;
+  public option{ptr{sync_task_executor}} sync_executor;
+  init(nfac, enable_async);
+  private function void init(node_factory const& nfac, bool enable_async)
+  {
+    if (enable_async) {
+      async_executor.some = make_ptr{task_executor}(
+	make_tptr{motion_thread_factory}(shared, nfac));
+    } else {
+      sync_executor.some = make_ptr{sync_task_executor}(
+	make_tptr{motion_thread_factory}(shared, nfac));
+    }
+  }
   public function void start()
   {
-    executor.start();
+    if (case async_executor.some) {
+      async_executor.some->start();
+    } else {
+      sync_executor.some->start();
+    }
   }
   public function void finish()
   {
-    executor.finish();
+    if (case async_executor.some) {
+      async_executor.some->finish();
+    } else {
+      sync_executor.some->finish();
+    }
   }
 }
 

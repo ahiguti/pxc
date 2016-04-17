@@ -2,6 +2,8 @@
 ---------------------------------------------------------------------------
 TODO
 
+- 頂点データ重複排除を再び有効に(tex3dで効果大きい)
+
 - 初期ノードの全体ではなく一部の領域だけを貼り付けられるようにする。
   - raycast_octreeは接触点と影点を返すようにし、呼ぶ側で判定するか。
   - 「一部の領域」がaabbでよいのであれば最上位レベルのaabbをraycast_octree
@@ -1995,6 +1997,9 @@ lpos = vary_aabb_or_tconv.xyz + pos * vary_aabb_or_tconv.w;
 vec3 tpos = vary_uvw; // テクスチャ座標
 vec3 lpos = vary_aabb_or_tconv.xyz + tpos * vary_aabb_or_tconv.w; // 接空間座標
 
+tangent spaceの意味が曖昧
+- tangent vector space 接ベクトル空間。接線が成すベクトル空間。
+- tangent space (2) 接線と法線と従法線で作られるベクトル空間。
 
 頂点データの計算
 入力:
@@ -2020,4 +2025,14 @@ vec3 lpos = vary_aabb_or_tconv.xyz + tpos * vary_aabb_or_tconv.w; // 接空間�
   あってる。
 
 TODO: カメラが立体の内側に入ったかどうかの判定？
+
+geometry生成時に設定するパラメータ
+- テクスチャのxyサイズは、座標との比をパラメータとして渡して計算する？
+- テクスチャのzサイズはgfに引数として渡す？
+- テクスチャ座標offsetはgfにパラメータとして渡す。いずれテクスチャ生成関数を
+  挟めるようにする
+- テクスチャ座標のaabbをシェーダに渡す必要がある。頂点属性に追加する。
+
+
+whに対しdが1/32のとき。
 
