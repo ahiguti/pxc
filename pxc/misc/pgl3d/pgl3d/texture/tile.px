@@ -40,6 +40,12 @@ public function void prepare_texture_data_3d_tmap(texture_data mutable& tmap,
   metafunction ui static_cast{uint};
   metafunction si static_cast{int};
   function void set(int x, int y, int z, uint v) {
+    if (x < 0 || y < 0 || z < 0 ||
+      x >= static_cast{int}(tmap.width) ||
+      y >= static_cast{int}(tmap.height) ||
+      z >= static_cast{int}(tmap.depth)) {
+      return;
+    }
     const idx = (ui(z) << (vy_l2 + vx_l2)) | (ui(y) << vx_l2) | ui(x);
     tmap.data[idx] = v;
   }
@@ -83,6 +89,7 @@ public function void prepare_texture_data_3d_tmap(texture_data mutable& tmap,
 	  } else {
 	    continue;
 	  }
+	  // if ((rnd->generate() & 0xff) < 0x7f) { continue; }
 	  mutable rv = rnd->generate();
 	  const px = rv & ptmask;
 	  rv >>= ptshift;
@@ -101,6 +108,7 @@ public function void prepare_texture_data_3d_tmap(texture_data mutable& tmap,
     return si(rnd->generate() % ui(v));
   }
   if (false) {
+    // 6dir bump
     function void fill_range(int x0, int y0, int z0, int w)
     {
       for (const x: x0 - w .. x0 + w + 1) {
@@ -149,48 +157,51 @@ public function void prepare_texture_data_3d_tmap(texture_data mutable& tmap,
       }
     }
     for (int d: 0 .. 6) {
-      make_branch_rec(vtxsz / 2, vtysz / 2, vtzsz / 2, 9, d);
+      // make_branch_rec(vtxsz / 2, vtysz / 2, vtzsz / 2, 9, d);
+      make_branch_rec(vtxsz / 2, vtysz / 2, vtzsz / 4, 9, d);
     }
     append_6dir();
-  } else if (false) {
-    // 6dir bump
-    for (const x: 2 .. vtxsz - 2) {
-      for (const y: 2 .. vtysz - 2) {
-	for (const z: vtzsz - 4 .. vtzsz - 3) {
+  } else if (true) {
+    // recursive bump
+    for (const x: 0 .. vtxsz) {
+      for (const y: 0 .. vtysz) {
+	for (const z: 0 .. 1) {
 	  set(x, y, z, 0xffb090a0);
 	}
       }
     }
     function void make_bump_rec(int rec, int x0, int x1, int y0, int y1, int z)
     {
-      if (x1 - x0 < 2 || y1 - y0 < 2 || z < 4) {
+      if (x1 - x0 < 2 || y1 - y0 < 2 || z >= vtzsz) {
 	return;
       }
-      for (const i: 0 .. 30) {
+      const num = rec > 7 ? 15000 : rec > 6 ? 100 : 30;
+      for (const i: 0 .. num) {
+	const szdiv = rec > 7 ? 128 : 32;
 	const x = rand_gen(x1 - x0) + x0;
 	const y = rand_gen(y1 - y0) + y0;
-	const w = rand_gen((x1 - x0) / 8) + (x1 - x0) / 8;
-	const h = rand_gen((y1 - y0) / 16) + (y1 - y0) / 8;
-	const d = rand_gen(z / 6) + (z / 8);
+	const w = rand_gen((x1 - x0) / szdiv) + 1;
+	const h = rand_gen((y1 - y0) / szdiv) + 1;
+	const d = rand_gen((vtzsz - z) / 2) + 1;
 	// debug_log("xywhd", x, y, w, h, d);
 	if (x - w < x0 || x + w >= x1 || y - h < y0 || y + h >= y1 ||
-	  z - d < 0)
+	  z + d >= vtzsz)
 	{
 	  continue;
 	}
 	for (const ix: x - w .. x + w + 1) {
 	  for (const iy: y - h .. y + h + 1) {
-	    for (const iz: z - d .. z) {
+	    for (const iz: z .. z + d) {
 	      set(ix, iy, iz, 0xffb090a0);
 	    }
 	  }
 	}
 	if (rec > 0) {
-	  make_bump_rec(rec - 1, x - w, x + w, y - h, y + h, z - d);
+	  make_bump_rec(rec - 1, x - w, x + w, y - h, y + h, z + d);
 	}
       }
     }
-    make_bump_rec(5, 0 + 2, vtxsz - 2, 0 + 2, vtysz - 2, vtzsz - 2);
+    make_bump_rec(8, 0 + 1, vtxsz - 1, 0 + 1, vtysz - 1, 1);
     append_6dir();
   } else {
     // repeat tpat data
@@ -258,28 +269,35 @@ public function void prepare_texture_data_3d_tpat(texture_data mutable& tpat,
   tpat.data.resize(usz * usz * usz, 0U);
   metafunction si static_cast{int};
   metafunction ui static_cast{uint};
-  if (false) {
+  if (true) {
     // 6dir bump
     const rnd = make_rand_generator(333U);
     function void set_bump(uint bx, uint by, uint bz, uint x0, uint y0,
-      uint z0, uint dir)
+      uint z0, bool plain, glm::vec4 const& p0, uint dir)
     {
       const bsz = 1u << bshift;
       uint x;
       uint y;
       uint z;
+      vec4 p;
       if (dir == 0u) {
 	x = bsz - z0 - 1; y = x0; z = y0;
+	p = make_vec4(-p0.z, p0.x, p0.y, p0.w - p0.z);
       } else if (dir == 1u) {
 	x = z0; y = x0; z = y0;
+	p = make_vec4(p0.z, p0.x, p0.y, p0.w);
       } else if (dir == 2u) {
 	x = y0; y = bsz - z0 - 1; z = x0;
+	p = make_vec4(p0.y, -p0.z, p0.x, p0.w - p0.z);
       } else if (dir == 3u) {
 	x = y0; y = z0; z = x0;
+	p = make_vec4(p0.y, p0.z, p0.x, p0.w);
       } else if (dir == 4u) {
 	x = x0; y = y0; z = bsz - z0 - 1;
+	p = make_vec4(p0.x, p0.y, -p0.z, p0.w - p0.z);
       } else {
 	x = x0; y = y0; z = z0;
+	p = make_vec4(p0.x, p0.y, p0.z, p0.w);
       }
       x += bx;
       y += by;
@@ -289,7 +307,25 @@ public function void prepare_texture_data_3d_tpat(texture_data mutable& tpat,
       }
       const idx = (z << (pattern_sz_l2 * 2)) | (y << pattern_sz_l2) | x;
       // debug_log("set_color", x & 16, y & 16, z, x0, y0, z0, dir);
-      tpat.data[idx] = 0xffb090a0;
+      if (!plain) {
+	tpat.data[idx] = 0xffb090a0;
+      } else {
+	const vec4 cval = p + make_vec4(128.0f, 128.0f, 128.0f, 128.0f);
+	const cx = static_cast{uint}(cval.x + 0.5);
+	const cy = static_cast{uint}(cval.y + 0.5);
+	const cz = static_cast{uint}(cval.z + 0.5);
+	const cwval = p.w / 2.0f + 128.0f;
+	const cw = static_cast{uint}(cwval  + 0.5);
+	  // cw must be greater than 1
+	if (cx >= 256 || cy >= 256 || cz >= 256) {
+	  throw runtime_error_template{"3d_tpat"}("invalid cval");
+	}
+	if (cw >= 254 || cw <= 1) {
+	  throw runtime_error_template{"3d_tpat"}("invalid cw");
+	}
+	const vc = (cw << 24u) | (cz << 16u) | (cy << 8u) | cx;
+	tpat.data[idx] = vc;
+      }
     }
     function void make_bump_one(uint x0, uint y0, uint z0, uint dir) {
       const bsz = 1 << bshift;
@@ -299,7 +335,7 @@ public function void prepare_texture_data_3d_tpat(texture_data mutable& tpat,
       rv >>= bshift;
       const y = si(rv & bmask);
       rv >>= bshift;
-      mutable w = si(rv & bmask) / 4;
+      mutable w = si(rv & bmask) / 2;
       rv >>= bshift;
       mutable h = si(rv & bmask) / 4;
       rv >>= bshift;
@@ -312,7 +348,16 @@ public function void prepare_texture_data_3d_tpat(texture_data mutable& tpat,
       for (const ix: x - w .. x + w + 1) {
 	for (const iy: y - h .. y + h + 1) {
 	  for (const iz: 0 .. d) {
-	    set_bump(x0, y0, z0, ui(ix), ui(iy), ui(iz), dir);
+	    if (iz == d - 1 && ix == x - w) {
+	      vec4 p = make_vec4(-2.0, 0.0, 2.0, 0.0);
+	      set_bump(x0, y0, z0, ui(ix), ui(iy), ui(iz), true, p, dir);
+	    } else if (iz == d - 1 && ix == x + w) {
+	      vec4 p = make_vec4(2.0, 0.0, 2.0, 2.0);
+	      set_bump(x0, y0, z0, ui(ix), ui(iy), ui(iz), true, p, dir);
+	    } else {
+	      vec4 const p;
+	      set_bump(x0, y0, z0, ui(ix), ui(iy), ui(iz), false, p, dir);
+	    }
 	  }
 	}
       }
@@ -323,7 +368,7 @@ public function void prepare_texture_data_3d_tpat(texture_data mutable& tpat,
     for (const z: 0 .. 6u) {
       for (const y: 0 .. usz >> bshift) {
 	for (const x: 0 .. usz >> bshift) {
-	  debug_log("bump xyz", x, y, z);
+	  // debug_log("bump xyz", x, y, z);
 	  for (const i: 0 .. 20u) {
 	    make_bump_one(x << bshift, y << bshift, z << bshift, z);
 	  }

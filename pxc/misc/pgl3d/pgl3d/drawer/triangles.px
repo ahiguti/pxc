@@ -4,6 +4,8 @@ public import meta m;
 public import pgl3d::drawer::base -;
 public import pgl3d::texture::tile -;
 
+private metafunction raycast_cull_front 1;
+
 private tsvaluetype struct triangles_uniforms()
 {
   public glm::mat4 view_projection_matrix;
@@ -28,6 +30,8 @@ private tsvaluetype struct triangles_vertex_attributes()
   public glm::vec3 tangent;
   public glm::vec3 uvw;
   public glm::vec4 aabb_or_tconv;
+  public glm::vec3 aabb_min;
+  public glm::vec3 aabb_max;
 }
 
 private tsvaluetype struct zprepass_vertex_attributes()
@@ -37,6 +41,8 @@ private tsvaluetype struct zprepass_vertex_attributes()
   public glm::vec3 tangent;
   public glm::vec3 uvw;
   public glm::vec4 aabb_or_tconv;
+  public glm::vec3 aabb_min;
+  public glm::vec3 aabb_max;
 }
 
 private tsvaluetype struct shadowmap_vertex_attributes()
@@ -46,6 +52,8 @@ private tsvaluetype struct shadowmap_vertex_attributes()
   public glm::vec3 tangent;
   public glm::vec3 uvw;
   public glm::vec4 aabb_or_tconv;
+  public glm::vec3 aabb_min;
+  public glm::vec3 aabb_max;
 }
 
 private tsvaluetype struct triangles_instance_attributes()
@@ -65,14 +73,14 @@ private tsvaluetype struct shadowmap_uniforms()
   public float scale;     // used if light_fixed
 }
 
-public struct drawer_triangles(shader_config const& glc,
+public struct drawer_triangles(shader_config const& glc0,
   resource_pool_ptr const& res0, int opt0)
 <pgldrawer_i>
 {
   metafunction tattr triangles_vertex_attributes;
   metafunction octree_bshift 5;
   ptr{resource_pool} res = pointer_downcast{ptr{resource_pool}}(res0);
-  int const opt = opt0;
+  int const stype = opt0;
   option{triangles_shader_ptr} sdr_solid;
   option{zprepass_shader_ptr} sdr_zp;
   option{shadowmap_shader_ptr} sdr_shadow;
@@ -81,6 +89,9 @@ public struct drawer_triangles(shader_config const& glc,
   ptr{gl_texture} texture_tilemap = make_ptr{gl_texture}();
   ptr{gl_texture} texture_env = make_ptr{gl_texture}();
   ptr{gl_texture} texture_voxpat = make_ptr{gl_texture}();
+  shader_config glc = glc0;
+  uint octree_wh_l2 = 4;
+  uint octree_d_l2 = octree_wh_l2;
   init(glc);
   private function void init(shader_config const& glc)
   {
@@ -98,25 +109,27 @@ public struct drawer_triangles(shader_config const& glc,
     res->textures.insert("tile_color", texture_dpat);
     res->textures.insert("tile_parallax", texture_pmpat);
     res->textures.insert("tile", texture_tilemap);
-    uint mutable octree_wh_l2 = 4;
-    uint mutable octree_d_l2 = octree_wh_l2;
-    if (opt != 0) {
+    // uint mutable octree_wh_l2 = 4;
+    // uint mutable octree_d_l2 = octree_wh_l2;
+    if (stype == 1) {
       mutable tex_octree = load_texture_data_raw("octree.raw");
       if (tex_octree->width == 0) {
 	debug_log("generate octree.raw");
 	const bshift = static_cast{uint}(octree_bshift);
 	const tex_voxpat = make_ptr{texture_data}();
 	const tex_voxmap = make_ptr{texture_data}();
-	const pattern_size = 8u;
+	const pattern_size = 9u;
 	const virt_size_x = 15u;
 	const virt_size_y = 15u;
-	const virt_size_z = 13u;
+	const virt_size_z = 8u;
 	prepare_texture_data_3d_tpat(*tex_voxpat, pattern_size, bshift);
 	prepare_texture_data_3d_tmap(*tex_voxmap, pattern_size,
 	  virt_size_x - bshift, virt_size_y - bshift, virt_size_z - bshift,
 	  bshift);
+	bool enable_calc_distance =
+	  glc.conf.get("calc_distance", 0, 1, 1) != 0;
 	tex_octree = convert_to_octree{octree_bshift}(tex_voxpat,
-	  tex_voxmap);
+	  tex_voxmap, enable_calc_distance);
 	save_texture_data_raw("octree.raw", *tex_octree);
 	debug_log("saved octree.raw", tex_octree->width,
 	  tex_octree->height, tex_octree->depth, tex_octree->data.size());
@@ -128,15 +141,11 @@ public struct drawer_triangles(shader_config const& glc,
       texture_data_to_gl_texture(GL_TEXTURE_3D, *texture_voxpat, tex_octree);
       octree_wh_l2 = integral_log2(tex_octree->width) - octree_bshift;
       octree_d_l2 = integral_log2(tex_octree->depth) - octree_bshift;
-      debug_log("octree_d_l2", octree_d_l2);
     }
-    sdr_solid.some = init_triangles_shader(glc, opt, octree_bshift,
-      octree_wh_l2, octree_d_l2);
-    sdr_zp.some = init_zprepass_shader(glc, opt);
-    sdr_shadow.some = init_shadowmap_shader(glc, opt);
+    reload_shaders();
   }
   public function string get_vbid_name() const {
-    return "vbid_triangles_" + to_string(opt);
+    return "vbid_triangles_" + to_string(stype);
   }
   public function string get_main_vbid_name() const {
     return "vbid_triangles_0";
@@ -146,14 +155,14 @@ public struct drawer_triangles(shader_config const& glc,
     return make_tfuncptr{prepare_instance_data_triangles}();
   }
   public function ptr{vertex_buffer} make_vertex_buffer() const {
-    return make_tattr_vertex_buffer{tattr}(false, opt != 0);
+    return make_tattr_vertex_buffer{tattr}(false, stype != 0);
   }
   public function string builtin_vertex_set_name() const { return ""; }
   public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
     const { }
   public function dgf_filler make_filler(ptr{vertices} const& vptr) const
   {
-    bool override_uvw = (opt == 0);
+    bool override_uvw = (stype != 1);
     return make_dgf_polygon_filler{tattr}(vptr, override_uvw);
   }
   public function texture_info get_texture_info(cstrref const& name) const
@@ -169,23 +178,55 @@ public struct drawer_triangles(shader_config const& glc,
     int height)
   {
   }
+  public function void reload_shaders()
+  {
+    option{triangles_shader_ptr} s0;
+    option{zprepass_shader_ptr} s1;
+    option{shadowmap_shader_ptr} s2;
+    try {
+      debug_log("octree_d_l2", octree_d_l2);
+      s0.some = init_triangles_shader(glc, stype, octree_bshift,
+	octree_wh_l2, octree_d_l2);
+      s1.some = init_zprepass_shader(glc, stype);
+      s2.some = init_shadowmap_shader(glc, stype);
+    } catch (runtime_error ex) {
+      sdl_log("reload failed: " + ex.message());
+      return;
+    }
+    sdr_solid = s0;
+    sdr_zp = s1;
+    sdr_shadow = s2;
+  }
   public function uint get_postprocess_framebuffer() const
   {
     return 0U;
   }
   public function bool has_step(draw_step step) const
   {
-    if (opt != 0) {
-      if (// step == draw_step_shadowmapping ||
+    if (stype == 1) {
+      if (
 	step == draw_step_solid) {
 	return true;
       }
-    } else {
+    } else if (stype == 0) {
       if (step == draw_step_shadowmapping ||
 	step == draw_step_zprepass ||
 	step == draw_step_solid) {
 	return true;
       }
+    } else if (stype == 2) {
+      /*
+      // FIXME
+      if (step == draw_step_shadowmapping) {
+	return true;
+      }
+      */
+      if (step == draw_step_shadowmapping ||
+	step == draw_step_zprepass) {
+	return true;
+      }
+      /*
+      */
     }
     return false;
   }
@@ -196,7 +237,7 @@ public struct drawer_triangles(shader_config const& glc,
     cslice{GLuint} const& smtex_arr)
   {
     if (step == draw_step_shadowmapping) {
-      if (opt != 0) { return; }
+      if (stype == 1) { return; }
       const sm_view = cam_df.light.to_mat4().inverse();
       const sm_vp = cam_df.sm_projection[iter] * sm_view;
       float scale = 1.0f / glc.shadowmap_distance;
@@ -216,7 +257,8 @@ public struct drawer_triangles(shader_config const& glc,
       aibuf.draw(*sdr_shadow.some, bo, bo_ib, bo_id, glc.enable_instanced,
 	glc.enable_uniform_instancing);
     } else if (step == draw_step_zprepass) {
-      if (opt != 0) { return; }
+      if (stype == 1) { return; }
+      // debug_log("zprepass " + to_string(stype));
       mutable view = glm::mat4();
       view = cam_df.camera.to_mat4().inverse();
       const vp = cam_df.projection * view;
@@ -226,7 +268,11 @@ public struct drawer_triangles(shader_config const& glc,
 	vp.to_crawptr());
       aibuf.draw(sdr, bo, bo_ib, bo_id, glc.enable_instanced,
 	  glc.enable_uniform_instancing);
+// FIXME
+/*
+*/
     } else if (step == draw_step_solid) {
+      if (stype == 2) { return; }
       mutable view = glm::mat4();
       view = cam_df.camera.to_mat4().inverse();
       const vp = cam_df.projection * view;
@@ -271,8 +317,10 @@ public struct drawer_triangles(shader_config const& glc,
 	glBindTexture(GL_TEXTURE_CUBE_MAP, texture_env->texture_id.get());
 	glUniform1i(sdr.u_sampler_env, 3);
       }
-      if (opt != 0) {
-	// glCullFace(GL_FRONT);
+      if (stype == 1) {
+	if (m::is_true{raycast_cull_front}) {
+	  glCullFace(GL_FRONT);
+	}
 	glActiveTexture(GL_TEXTURE4);
 	glBindTexture(GL_TEXTURE_3D, texture_voxpat->texture_id.get());
 	// glBindTexture(GL_TEXTURE_1D, texture_voxpat->texture_id.get());
@@ -311,8 +359,10 @@ public struct drawer_triangles(shader_config const& glc,
       glUniformMatrix4fv(sdr.u_view_projection_matrix, 1, 0, vp.to_crawptr());
       aibuf.draw(sdr, bo, bo_ib, bo_id, glc.enable_instanced,
 	glc.enable_uniform_instancing);
-      if (opt != 0) {
-	// glCullFace(GL_BACK);
+      if (stype == 1) {
+	if (m::is_true{raycast_cull_front}) {
+	  glCullFace(GL_BACK);
+	}
       }
     }
   }
@@ -512,10 +562,10 @@ private metafunction shadowmap_shader_ptr
     shadowmap_vertex_attributes}};
 
 private function shadowmap_shader_ptr
-init_shadowmap_shader(shader_config const& g, int opt)
+init_shadowmap_shader(shader_config const& g, int stype)
 {
   tree_map{string, string} bnd;
-  bnd["opt"] = to_string(opt);
+  bnd["stype"] = to_string(stype);
   const v = load_shader_program(g, bnd, "triangles-sm.vsh");
   const f = load_shader_program(g, bnd, "triangles-sm.fsh");
 //debug_log("shadowmap_vsh", v);
@@ -533,10 +583,10 @@ private metafunction zprepass_shader_ptr
     zprepass_vertex_attributes}};
 
 private function zprepass_shader_ptr
-init_zprepass_shader(shader_config const& g, int opt)
+init_zprepass_shader(shader_config const& g, int stype)
 {
   tree_map{string, string} bnd;
-  bnd["opt"] = to_string(opt);
+  bnd["stype"] = to_string(stype);
   const v = load_shader_program(g, bnd, "triangles-zp.vsh");
   const f = load_shader_program(g, bnd, "triangles-zp.fsh");
 //debug_log("zp_vsh", v);
@@ -554,13 +604,13 @@ private metafunction triangles_shader_ptr
     triangles_vertex_attributes}};
 
 private function triangles_shader_ptr
-init_triangles_shader(shader_config const& g, int opt, uint octree_bshift,
+init_triangles_shader(shader_config const& g, int stype, uint octree_bshift,
   uint octree_wh_l2, uint octree_d_l2)
 {
   const smsz = g.num_shadowmaps_str();
   tree_map{string, string} bnd;
+  bnd["stype"] = to_string(stype);
   bnd["smsz"] = g.num_shadowmaps_str();
-  bnd["opt"] = to_string(opt);
   bnd["octree_block_factor"] = to_string(
     static_cast{float}(1u << octree_bshift));
   const wh_s = "1.0 / " + to_string(static_cast{float}(
@@ -570,6 +620,7 @@ init_triangles_shader(shader_config const& g, int opt, uint octree_bshift,
   debug_log("scale: ", wh_s, wh_s, d_s);
   bnd["octree_texture_scale"] = "vec3(" + wh_s + "," + wh_s + "," + d_s + ")";
   // bnd["octree_size"] = to_string(1u << octree_size_l2);
+  bnd["raycast_cull_front"] = to_string(raycast_cull_front);
   const v = triangles_shader_vert(g, bnd);
   const f = triangles_shader_frag(g, bnd);
   return

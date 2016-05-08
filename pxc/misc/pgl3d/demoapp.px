@@ -45,7 +45,7 @@ if (false) {
   }
 }
 
-load_filesystem_async{app_main}("/persist");
+load_filesystem_async{app_main}("/persist"); // emscripten
 
 public function void app_main()
 {
@@ -359,6 +359,10 @@ function void handle_event(app_impl mutable& app,
       commands_r["fullscreen"] = "1";
       return;
     }
+    if (ev.key.keysym.scancode == SDL_SCANCODE_1) {
+      commands_r["reload"] = "1";
+      return;
+    }
     if (ev.key.keysym.scancode == SDL_SCANCODE_LEFTBRACKET) {
       commands_r["vsync"] = "1";
       return;
@@ -426,6 +430,7 @@ private function tree_map{string, ptr{pgldrawer_export_i}} init_drawers(
   tree_map{string, ptr{pgldrawer_export_i}} r;
   r.insert("drawer_0_triangles", make_drawer_triangles(sconf, res, 0));
   r.insert("drawer_0_triangles_alt", make_drawer_triangles(sconf, res, 1));
+  r.insert("drawer_0_triangles_null", make_drawer_triangles(sconf, res, 2));
   r.insert("drawer_1_lineparticle", make_drawer_lineparticle(sconf, res));
   r.insert("drawer_2_skybox", make_drawer_skybox(sconf, res));
   r.insert("drawer_particle", make_drawer_particle(sconf, res));
@@ -448,7 +453,9 @@ private function void build_vertices(app_impl mutable& app,
       // "airboat"
       );
   const tr = make_varray{string}(
-    "drawer_0_triangles", "drawer_0_triangles_alt");
+    "drawer_0_triangles",
+    "drawer_0_triangles_alt",
+    "drawer_0_triangles_null");
   // const tr = make_varray{string}("drawer_triangles");
   const parti = make_varray{string}("drawer_particle");
   const parti_bb = make_varray{string}("drawer_particle_bb");
@@ -490,7 +497,7 @@ private function void build_vertices(app_impl mutable& app,
       apply(m1,
 	bump_apply(m, false, ctx_fill(0), ctx_fill(0))),
       apply(m1,
-	ctx_tex3d(0, 1, 1.0f))));
+	ctx_tex3d(2, 1, 1.0f/128.0f))));
   m = glm::mat4()
     .translate(glm::make_vec3(0.0, 0.0, 64.0));
   m1 = glm::mat4()

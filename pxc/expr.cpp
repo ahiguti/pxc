@@ -246,9 +246,17 @@ void arena_error_throw(const expr_i *e, const char *format, ...)
   va_list ap;
   va_start(ap, format);
   char *buf = 0;
+#ifdef __CYGWIN__
+  buf = (char *)malloc(1024);
+  if (buf == 0) {
+    abort();
+  }
+  vsnprintf(buf, 1024, format, ap);
+#else
   if (vasprintf(&buf, format, ap) < 0) {
     abort();
   }
+#endif
   va_end(ap);
   auto_free abuf(buf);
   std::string s(buf);
@@ -263,9 +271,17 @@ void arena_error_push(const expr_i *e, const char *format, ...)
   va_list ap;
   va_start(ap, format);
   char *buf = 0;
+#ifdef __CYGWIN__
+  buf = (char *)malloc(1024);
+  if (buf == 0) {
+    abort();
+  }
+  vsnprintf(buf, 1024, format, ap);
+#else
   if (vasprintf(&buf, format, ap) < 0) {
     abort();
   }
+#endif
   va_end(ap);
   auto_free abuf(buf);
   const std::string s(buf);

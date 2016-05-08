@@ -15,6 +15,7 @@ public import pgl3d::engine::scene_node -;
 public import pgl3d::sdl::sdlutil -;
 
 private metafunction use_draw_range 0;
+private metafunction use_map_unsynchronized 0;
 
 public threaded struct vertex_set(size_t num_float_per_vertex0)
 {
@@ -25,7 +26,8 @@ public threaded struct vertex_set(size_t num_float_per_vertex0)
   public size_t elements_offset;
 }
 
-public metafunction glsync_compat m::cond{is_gl3_or_gles3, GLsync, unit};
+public metafunction glsync_compat
+  m::cond{m::and{is_gl3_or_gles3, use_map_unsynchronized}, GLsync, unit};
 
 public threaded struct async_buffer() {
   public auto_buffer vbo; /* noncopyable */
@@ -46,7 +48,7 @@ public threaded struct async_buffer() {
   }
   */
   public function void map_buffer(size_t sz_bytes) {
-    if (m::ne{is_gl3_or_gles3, 0}) {
+    if (m::is_true{is_gl3_or_gles3}) {
       glBindBuffer(GL_ARRAY_BUFFER, vbo.get());
       //sdl_log("glbindbuffer", vbo.get());
       if (rawptr_to_size_t(mapped_ptr) != 0U) {
@@ -61,7 +63,7 @@ public threaded struct async_buffer() {
 	size_bytes = sz_bytes;
       }
       mutable mask = static_cast{GLbitfield}(GL_MAP_WRITE_BIT);
-      if (m::ne{is_gl3_or_gles3, 0}) {
+      if (m::is_true{use_map_unsynchronized}) {
 	mask |= static_cast{GLbitfield}(GL_MAP_UNSYNCHRONIZED_BIT);
       }
       //sdl_log("mapbufferrange", size_bytes, mask);
@@ -74,7 +76,7 @@ public threaded struct async_buffer() {
     }
   }
   public function void unmap_buffer() {
-    if (m::ne{is_gl3_or_gles3, 0}) {
+    if (m::is_true{is_gl3_or_gles3}) {
       if (rawptr_to_size_t(mapped_ptr) != 0U) {
 	//sdl_log("glunmapbuffer", vbo.get());
 	glBindBuffer(GL_ARRAY_BUFFER, vbo.get());
@@ -85,8 +87,10 @@ public threaded struct async_buffer() {
     }
   }
   public function GLenum client_wait_sync(long timeout) {
-    if (m::ne{is_gl3_or_gles3, 0}) {
-      return glClientWaitSync(fence, 0, static_cast{GLint64}(timeout));
+    if (m::and{is_gl3_or_gles3, use_map_unsynchronized}) {
+      const r = glClientWaitSync(fence, 0, static_cast{GLint64}(timeout));
+      delete_sync();
+      return r;
     } else {
       return GLenum();
     }
@@ -98,12 +102,15 @@ public threaded struct async_buffer() {
   public function void fence_sync() {
     //sdl_log("fence_sync", vbo.get());
     delete_sync();
-    if (m::ne{is_gl3_or_gles3, 0}) {
+    if (m::and{is_gl3_or_gles3, use_map_unsynchronized}) {
       fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+      if (fence == GLsync()) {
+	throw runtime_error_template{"vertex_buffer.fence_sync"}("");
+      }
     }
   }
   private function void delete_sync() {
-    if (m::ne{is_gl3_or_gles3, 0}) {
+    if (m::and{is_gl3_or_gles3, use_map_unsynchronized}) {
       // if (glIsSync(fence) != 0) {
       if (fence != GLsync()) {
 	glDeleteSync(fence);

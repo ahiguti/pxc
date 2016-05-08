@@ -120,7 +120,8 @@ load_texture_data(string const& fn0)
 }
 
 public function {bshift} ptr{texture_data}
-convert_to_octree(ptr{texture_data} const& tpat, ptr{texture_data} const& tmap)
+convert_to_octree(ptr{texture_data} const& tpat, ptr{texture_data} const& tmap,
+  bool enable_calc_distance)
 {
   ptr{texture_data} const rtd = make_ptr{texture_data}();
   // const psz_l2 = integral_log2(tpat->width);
@@ -141,7 +142,7 @@ convert_to_octree(ptr{texture_data} const& tpat, ptr{texture_data} const& tmap)
     integral_log2(tmap->depth));
   ltpat->values = tpat->data; // copy
   ltmap->values = tmap->data; // copy
-  ot.build(ltpat, ltmap);
+  ot.build(ltpat, ltmap, enable_calc_distance);
   const rwh_l2 = calc_width_height(static_cast{uint}(ot.nodes.size()));
   const rwh = (1u << rwh_l2);
   const rd_l2 = calc_depth(static_cast{uint}(ot.nodes.size()), rwh_l2 * 2);

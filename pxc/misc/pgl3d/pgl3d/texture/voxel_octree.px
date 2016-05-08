@@ -27,7 +27,7 @@ private function {bshift} void check_size(uint v, cstrref const& msg)
 
 public function {bshift} void
 octree_build(octree{bshift} mutable& ot, ptr{level_data} const& pattern,
-  ptr{level_data} const& tiles)
+  ptr{level_data} const& tiles, bool enable_calc_distance)
 {
 
   bool apply_tile = (tiles->get_w_l2() != 0);
@@ -51,7 +51,8 @@ octree_build(octree{bshift} mutable& ot, ptr{level_data} const& pattern,
     check_size{bshift}(pattern->get_h_l2(), "pattern height");
     check_size{bshift}(pattern->get_d_l2(), "pattern depth");
   }
-  debug_log("pat", pattern->get_h_l2(), pattern->get_w_l2(), pattern->get_d_l2());
+  debug_log("pat", pattern->get_h_l2(), pattern->get_w_l2(),
+    pattern->get_d_l2());
   ptr{level_data} ilevel = pattern;
   ptr{level_data} olevel = make_ptr{level_data}();
   ot.nodes.clear();
@@ -84,7 +85,8 @@ octree_build(octree{bshift} mutable& ot, ptr{level_data} const& pattern,
 	      const pz = (pat_id >> (tpw_b_l2 + tph_b_l2)) & tpd_b_mask;
 	      const v = ddmap.get(px, py, pz);
 	      trmap.set(x, y, z, v);
-	      // debug_log("trmap", x, y, z, "p", px, py, pz, "patid", to_hexstring(pat_id), "v", to_hexstring(v));
+	      // debug_log("trmap", x, y, z, "p", px, py, pz, "patid",
+	      //   to_hexstring(pat_id), "v", to_hexstring(v));
 	    } else {
 	      trmap.set(x, y, z, pat_id);
 	    }
@@ -115,10 +117,12 @@ octree_build(octree{bshift} mutable& ot, ptr{level_data} const& pattern,
     debug_log("eq", values == dbgval);
     throw runtime_error_template{"octree"}("");
   }
-  if (bshift > 1) {
+  if (bshift > 1 && enable_calc_distance) {
+    debug_log("calc_distance begin");
     for (const i, mutable& node: ot.nodes) {
       calc_distance{bshift}(node);
     }
+    debug_log("calc_distance end");
   }
 }
 
@@ -373,6 +377,9 @@ public struct level_data
     }
   }
   public function texel_value get(uint x, uint y, uint z) const {
+    if (x >= (1u << w_l2) || y >= (1u << h_l2) || z >= (1u << d_l2)) {
+      return texel_value();
+    }
     return values[(z << (w_l2 + h_l2)) | (y << w_l2) | x];
   }
   public function void set(uint x, uint y, uint z, texel_value v) {

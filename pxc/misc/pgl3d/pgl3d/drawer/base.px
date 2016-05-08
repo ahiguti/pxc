@@ -61,6 +61,7 @@ public interface pgldrawer_i <pgldrawer_export_i>
   public function texture_info get_texture_info(cstrref const& name) const;
   public function void resize_screen(shader_config const& glc, int width,
     int height);
+  public function void reload_shaders();
   public function uint get_postprocess_framebuffer() const;
   public function bool has_step(draw_step step) const;
   public function void draw(draw_step step, size_t iter,
@@ -114,6 +115,8 @@ dgf_fill_tattr_internal(ptr{vertices} const& vptr, bool flat_flag,
     // v.uvw = glm::vec3();
     v.uvw = poly[i].uvw;
     v.aabb_or_tconv = poly[i].aabb_or_tconv;
+    v.aabb_min = poly[i].aabb_min;
+    v.aabb_max = poly[i].aabb_max;
   }
   if (sz == 4 && override_uvw) {
     float scale = 64.0f;
@@ -297,6 +300,56 @@ public threaded function void prepare_instance_data_default(
 {
   buffer_append(idata.instance_buffer, sn.trans);
 }
+
+/*
+public struct reloadable_shader(option{ptr{reloader_i}} const& reloader0)
+{
+  public option{ptr{glshader_i}} shader;
+  private option{ptr{reloader_i}} reloader = reloader0;
+  public function void reload() {
+    option{ptr{glshader_i}} p = reloader->load();
+    if (case p.some) {
+      shader = p;
+    }
+  }
+  reload();
+}
+
+private interface reloader_i
+{
+  public function option{ptr{glshader_i}} load();
+}
+
+private struct {tuni, tinst, tvert}
+reloader(cptr{shader_config} const& sconf0,
+  tree_map{string, string} const& bindings0, string const& fn_v0,
+  string const& fn_f0, string const& attrib_to_avoid0, int debug_level0)
+{
+  public function option{ptr{glshader_i}} load()
+  {
+    option{ptr{glshader_i}} r;
+    string prog_v;
+    string prog_f;
+    try {
+      prog_v = load_shader_program(*sconf, bindings, fn_v);
+      prog_f = load_shader_program(*sconf, bindings, fn_f);
+      r.some = make_glshader_ptr(prog_v, prog_f, attrib_to_avoid, debug_level);
+    } catch (runtime_error ex) {
+      sdl_log("failed to load shader '" + fn_v + "' '" + fn_f + "': "
+	+ ex.message());
+    }
+    return r;
+  }
+  private cptr{shader_config} sconf = sconf0;
+  private tree_map{string, string} bindings = bindings0;
+  private string fn_v = fn_v0;
+  private string fn_f = fn_f0;
+  private string attrib_to_avoid = attrib_to_avoid0; 
+  private int debug_level = debug_level0;
+  private string prog_v;
+  private string prog_f;
+}
+*/
 
 public function string
 load_shader_program(shader_config const& g,

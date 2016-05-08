@@ -316,6 +316,12 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
     }
     update_mvp(glc, cam);
   }
+  public function void reload_shaders()
+  {
+    for (const i, const& pd: drawers) {
+      pd->reload_shaders();
+    }
+  }
 }
 
 public function varray{uint}
@@ -560,12 +566,16 @@ function void
 update_mvp(shader_config const& glc, projection_info mutable& cam)
 {
   float const perspective_near =
-    glc.conf.get("perspective_near", 1.0f, 1.0f, 100.0f);
+    glc.conf.get("perspective_near", 1.0f, 0.001f, 100.0f);
   float const perspective_far =
     glc.conf.get("perspective_far", 10000.0f, 10.0f, 1000000.0f);
+  float const perspective_wh =
+    glc.conf.get("perspective_wh", 1.0f, 0.001f, 100.0f);
   const ssbase = max(cam.screen_height, cam.screen_width);
-  const h = cast_float(cam.screen_height) / cast_float(ssbase);
-  const w = cast_float(cam.screen_width) / cast_float(ssbase);
+  const h = perspective_wh * cast_float(cam.screen_height)
+    / cast_float(ssbase);
+  const w = perspective_wh * cast_float(cam.screen_width)
+    / cast_float(ssbase);
   glViewport(0, 0, static_cast{GLsizei}(cam.screen_width),
     static_cast{GLsizei}(cam.screen_height));
   glDepthMask(1);

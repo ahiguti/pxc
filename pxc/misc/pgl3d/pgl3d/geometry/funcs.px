@@ -21,6 +21,8 @@ vertex_attr()
   public vec3 tan;
   public vec3 uvw;
   public vec4 aabb_or_tconv;
+  public vec3 aabb_min;
+  public vec3 aabb_max;
 }
 
 /* implicit conversion from vec3 to vertex_attr */
@@ -470,26 +472,29 @@ private threaded function void gf_ctx_tex3d(size_t nbase, size_t ntex, float z,
   gf_ctx_fill(nbase, ctx, poly, mp);
   if (poly.size() != 4) { return; }
   // FIXME: 正方形のときしか動かない
-  darrayst{vertex_attr} front = poly;
-  mutable nor = normal_scale_from_poly(poly) / static_cast{float}(poly.size());
-  for (const i, mutable& e: front) {
-    e.pos += nor * z;
-  }
   const tan = (poly[1].pos - poly[0].pos).normalize();
   const len = glm::length(poly[1].pos - poly[0].pos);
-  const texscale = len;
+  const texscale = len; // テクスチャ座標からローカル座標への倍率
+  darrayst{vertex_attr} front = poly;
+  mutable nor = normal_from_poly(poly);
+  const eps = 0.000001f; // 必要？
+  // const eps = 0.0f;
+  const zm = z - eps;
+  const onem = 1.0f - eps;
   mutable attr0 = poly[0];
-  attr0.nor = nor.normalize();
+  attr0.nor = nor;
   attr0.tan = tan;
   attr0.aabb_or_tconv = glm::make_vec4(0.0, 0.0, 0.0, texscale);
+  attr0.aabb_min = glm::make_vec3(0.0, 0.0, 0.0);
+  attr0.aabb_max = glm::make_vec3(onem, onem, zm);
   front[0] = attr0;
   front[1] = attr0;
   front[2] = attr0;
   front[3] = attr0;
-  front[0].uvw = glm::make_vec3(0.0, 0.0, z);
-  front[1].uvw = glm::make_vec3(1.0, 0.0, z);
-  front[2].uvw = glm::make_vec3(1.0, 1.0, z);
-  front[3].uvw = glm::make_vec3(0.0, 1.0, z);
+  front[0].uvw = glm::make_vec3(0.0, 0.0, zm);
+  front[1].uvw = glm::make_vec3(onem, 0.0, zm);
+  front[2].uvw = glm::make_vec3(onem, onem, zm);
+  front[3].uvw = glm::make_vec3(0.0, onem, zm);
   /* front */
   gf_ctx_fill_smooth(ntex, ctx, front, mesh_index());
   /* side */
@@ -508,8 +513,8 @@ private threaded function void gf_ctx_tex3d(size_t nbase, size_t ntex, float z,
     side[3].uvw = front[i].uvw;
     side[0].uvw.z = 0.0;
     side[1].uvw.z = 0.0;
-    side[2].uvw.z = z;
-    side[3].uvw.z = z;
+    side[2].uvw.z = zm;
+    side[3].uvw.z = zm;
     gf_ctx_fill_smooth(ntex, ctx, side, mesh_index());
   }
   /* back */
@@ -518,9 +523,9 @@ private threaded function void gf_ctx_tex3d(size_t nbase, size_t ntex, float z,
   back[1] = attr0;
   back[2] = attr0;
   back[3] = attr0;
-  back[0].uvw = glm::make_vec3(0.0, 1.0, 0.0);
-  back[1].uvw = glm::make_vec3(1.0, 1.0, 0.0);
-  back[2].uvw = glm::make_vec3(1.0, 0.0, 0.0);
+  back[0].uvw = glm::make_vec3(0.0, onem, 0.0);
+  back[1].uvw = glm::make_vec3(onem, onem, 0.0);
+  back[2].uvw = glm::make_vec3(onem, 0.0, 0.0);
   back[3].uvw = glm::make_vec3(0.0, 0.0, 0.0);
   gf_ctx_fill_smooth(ntex, ctx, back, mesh_index());
 }
