@@ -78,7 +78,18 @@ public struct drawer_triangles(shader_config const& glc0,
 <pgldrawer_i>
 {
   metafunction tattr triangles_vertex_attributes;
+  /*
   metafunction octree_bshift 5;
+  metafunction pattern_size 9;
+  metafunction virt_size_x 15;
+  metafunction virt_size_y 15;
+  metafunction virt_size_z 8;
+  */
+  metafunction octree_bshift 4;
+  metafunction pattern_size 8;
+  metafunction virt_size_x 12;
+  metafunction virt_size_y 12;
+  metafunction virt_size_z 8;
   ptr{resource_pool} res = pointer_downcast{ptr{resource_pool}}(res0);
   int const stype = opt0;
   option{triangles_shader_ptr} sdr_solid;
@@ -95,6 +106,7 @@ public struct drawer_triangles(shader_config const& glc0,
   init(glc);
   private function void init(shader_config const& glc)
   {
+    debug_log("drawer_triangles init ", stype);
   /*
     load_gl_texture_tilemap(*texture_dpat, *texture_pmpat, *texture_tilemap,
       "dpat.png", "pmpat.png");
@@ -118,18 +130,19 @@ public struct drawer_triangles(shader_config const& glc0,
 	const bshift = static_cast{uint}(octree_bshift);
 	const tex_voxpat = make_ptr{texture_data}();
 	const tex_voxmap = make_ptr{texture_data}();
-	const pattern_size = 9u;
-	const virt_size_x = 15u;
-	const virt_size_y = 15u;
-	const virt_size_z = 8u;
 	prepare_texture_data_3d_tpat(*tex_voxpat, pattern_size, bshift);
+	debug_log("tpat done");
 	prepare_texture_data_3d_tmap(*tex_voxmap, pattern_size,
-	  virt_size_x - bshift, virt_size_y - bshift, virt_size_z - bshift,
-	  bshift);
+	  static_cast{uint}(virt_size_x) - bshift,
+	  static_cast{uint}(virt_size_y) - bshift,
+	  static_cast{uint}(virt_size_z) - bshift,
+	  static_cast{uint}(bshift));
+	debug_log("tmap done");
 	bool enable_calc_distance =
 	  glc.conf.get("calc_distance", 0, 1, 1) != 0;
 	tex_octree = convert_to_octree{octree_bshift}(tex_voxpat,
 	  tex_voxmap, enable_calc_distance);
+	debug_log("octree done");
 	save_texture_data_raw("octree.raw", *tex_octree);
 	debug_log("saved octree.raw", tex_octree->width,
 	  tex_octree->height, tex_octree->depth, tex_octree->data.size());
@@ -143,6 +156,7 @@ public struct drawer_triangles(shader_config const& glc0,
       octree_d_l2 = integral_log2(tex_octree->depth) - octree_bshift;
     }
     reload_shaders();
+    debug_log("drawer_triangles init ", stype, "done");
   }
   public function string get_vbid_name() const {
     return "vbid_triangles_" + to_string(stype);

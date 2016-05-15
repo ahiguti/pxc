@@ -69,6 +69,10 @@ namespace pxcrt {
 
 typedef %{dummy_type_csymbol}% optfile;
 
+#ifdef ANDROID
+#include <android/log.h>
+#endif
+
 /* TODO: slow */
 file_st io_stdin(io const& iop)  {
   optfile pxc_stdin;
@@ -87,10 +91,15 @@ file_st io_stderr(io const& iop) {
 }
 void debug_log_internal(cstrref const& s)
 {
+#ifdef ANDROID
+  __android_log_print(ANDROID_LOG_INFO, "pxcrt", "%.*s", (int)s.size(),
+    s.rawarr());
+#else
 #ifdef PXC_POSIX
   ::write(2, s.rawarr(), s.size());
 #else
   _write(2, s.rawarr(), s.size());
+#endif
 #endif
 }
 

@@ -402,7 +402,8 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
     inout vec3 aabb_max)
   {
     curpos_f = clamp(curpos_f, 0.0, 1.0 - epsilon);
-    vec3 dir = voxel_next(curpos_i, curpos_f, spmin, spmax, epsilon * 3, ray);
+    vec3 dir = voxel_next(curpos_i, curpos_f, spmin, spmax, epsilon * 3.0, ray);
+      // FIXME: epsilon * 3.0 ????
     raycast_move(curpos_t, curpos_i, curpos_f, dir, texpos_arr, level,
       aabb_min, aabb_max);
     return dir;
@@ -489,14 +490,14 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
 	} else {
 	  vec3 sp_nor = vec3(0.0);
 	  float length_ae = voxel_collision_sphere(ray, curpos_f, vec3(0.0),
-	    vec3(1.0,0.0,1.0), 0.26, hit_wall, sp_nor);
+	    vec3(1.0,0.8,1.0), 0.25, hit_wall, sp_nor);
 //hit_wall = true;	  // FIXME
 //dbgval = vec4(1.0); // FIXME
 	  vec3 tp = curpos_f + ray * length_ae;
 	  if (hit_wall) {
 	    dir = -dir;
 //dbgval = vec4(dir, 1.0); // FIXME
-	    value = vec4(0.2, 0.3, 0.9, 1.0);
+	    value = vec4(0.9, 0.3, 0.3, 1.0);
 //if (hit < 0) dbgval = vec4(1.0); // FIXME
 //if (hit < 0) dbgval = vec4(dir, 1.0); // FIXME
 	  } else if (!pos3_inside(tp, 0.0, 1.0)) {

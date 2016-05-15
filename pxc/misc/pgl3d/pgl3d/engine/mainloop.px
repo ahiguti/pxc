@@ -26,12 +26,16 @@ private import GL::compat -;
 public function void mainloop(ptr{pgl3d_application} const& app,
   cstrref const& conf_filename)
 {
-  string confstr;
-  sdl_load_file(conf_filename, confstr);
-  const conf = pgl3d_config(confstr);
-  GL::base::set_check_error_enabled(conf.get("gldebug", 0, 0, 1));
-  const ml = make_ptr{mainloop_internal}(app, conf);
-  set_mainloop(ml);
+  try {
+    string confstr;
+    sdl_load_file(conf_filename, confstr);
+    const conf = pgl3d_config(confstr);
+    GL::base::set_check_error_enabled(conf.get("gldebug", 0, 0, 1));
+    const ml = make_ptr{mainloop_internal}(app, conf);
+    set_mainloop(ml);
+  } catch (exception::c_exception ex) {
+    sdl_log("app mainloop init: uncaught exception", ex);
+  }
 }
 
 struct
@@ -386,25 +390,32 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
 	if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
 	  update_window_size();
 	} else if (ev.window.event == SDL_WINDOWEVENT_HIDDEN) {
-	  sdl_log("hidden");
-	} else if (ev.window.event == SDL_WINDOWEVENT_MINIMIZED ||
-	    ev.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
-	  // paused = true;
-	  // sdl_log("paused");
-	} else if (ev.window.event == SDL_WINDOWEVENT_RESTORED ||
-	    ev.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) {
+	  sdl_log("hidden ", ev.window.windowID);
+	} else if (ev.window.event == SDL_WINDOWEVENT_MINIMIZED) {
+	  sdl_log("minimized ", ev.window.windowID);
+	} else if (ev.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
+	  paused = true;
+	  sdl_log("focuslost ", ev.window.windowID);
+	  sdlc.pause();
+	} else if (ev.window.event == SDL_WINDOWEVENT_RESTORED) {
+	  sdl_log("restored ", ev.window.windowID);
+	} else if (ev.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) {
+	  sdl_log("focusgained ", ev.window.windowID);
 	  paused = false;
+	  sdlc.resume();
+	  // sdlc.make_current();
+	  sdl_log("gl version ", sdlc.get_gl_version());
 	  if (sconf.auto_reload) {
 	    reload_shaders();
 	  }
 	  frctl.start();
-	  sdl_log("restored");
 	} else {
 	  /*
 	  sdl_log("window event ", cast_int(ev.window.event));
 	  */
 	}
       } else if (etype == SDL_QUIT) {
+	sdl_log("quit");
 	done = true;
 	break;
       }

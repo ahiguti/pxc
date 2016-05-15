@@ -6,7 +6,7 @@
 APP_STL := gnustl_static
 
 #APP_ABI := all
-APP_ABI := armeabi-v7a
+APP_ABI := armeabi-v7a arm64-v8a
 
 APP_CPPFLAGS += --std=c++11
 
@@ -16,4 +16,4 @@ else
   APP_CFLAGS += -O3
 endif
 
-APP_PLATFORM := android-10
+APP_PLATFORM := android-18

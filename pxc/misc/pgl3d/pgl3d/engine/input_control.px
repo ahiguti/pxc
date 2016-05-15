@@ -174,6 +174,7 @@ input_control(io const& iop)
   public function void action_step(input_control_target mutable& pl,
       glm::vec3 mutable& pos_delta, float frame_speed)
   {
+    /*
     dmotion.update();
     glm::quat mutable device_rot;
     device_rot.x = dmotion.value_xyzw[0U];
@@ -182,8 +183,9 @@ input_control(io const& iop)
     device_rot.w = dmotion.value_xyzw[3U];
     pl.angle *= pl.device_rot_prev.conjugate();
     pl.angle *= device_rot;
-    pl.angle = pl.angle.normalize();
     pl.device_rot_prev = device_rot;
+    */
+    pl.angle = pl.angle.normalize();
     // sdl_log("action_step", fingdown[0], fingdown[1]);
     if (fingdown[0] && !fingdown[1]) {
       if (fingerdown_time[0] >= 2) {
@@ -317,12 +319,12 @@ public function void input_control_handle_event(input_control mutable& ictl,
 {
   const etype = ev.type;
   if (etype == SDL_MOUSEBUTTONDOWN) {
-    const bx = cast_float(ev.button.x) / cast_float(pjinfo.screen_width);
-    const by = cast_float(ev.button.y) / cast_float(pjinfo.screen_height);
+    const bx = cast_float(ev.button.x) / cast_float(pjinfo.virt_width);
+    const by = cast_float(ev.button.y) / cast_float(pjinfo.virt_height);
     // sdl_log("mousedown", ev.button.x, ev.button.y, ev.button.button);
     ictl.finger_down(
-      cast_float(ev.button.x) / cast_float(pjinfo.screen_width),
-      cast_float(ev.button.y) / cast_float(pjinfo.screen_height),
+      cast_float(ev.button.x) / cast_float(pjinfo.virt_width),
+      cast_float(ev.button.y) / cast_float(pjinfo.virt_height),
       0);
   } else if (etype == SDL_MOUSEBUTTONUP) {
   } else if (etype == SDL_MOUSEMOTION) {

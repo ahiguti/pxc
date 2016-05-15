@@ -41,6 +41,7 @@ aggregated_ibuffer_frame_begin(aggregated_ibuffer mutable& aibuf,
   bool enable_uniform_instancing)
 {
   if (enable_instanced && !enable_uniform_instancing) {
+    //debug_log("ibuffer_frame_begin begin");
     size_t offset_float = 0;
     for (const bo_id, mutable& bo_ib: whole_instances) {
       for (const vs_id, mutable& inst: bo_ib) {
@@ -49,14 +50,19 @@ aggregated_ibuffer_frame_begin(aggregated_ibuffer mutable& aibuf,
 	offset_float += arr.size();
       }
     }
+    //debug_log("ibuffer_frame_begin begin1");
     if (offset_float != 0) {
+      //debug_log("ibuffer_frame_begin begin2");
       mutable& cur_buf = *aibuf.get_current();
       const size_t total_size_float = offset_float;
       offset_float = 0;
+      //debug_log("ibuffer_frame_begin begin3");
       cur_buf.client_wait_sync(1000000000 * 10);
+      //debug_log("ibuffer_frame_begin begin4");
       cur_buf.map_buffer(total_size_float * 4U);
+      //debug_log("ibuffer_frame_begin begin5");
       const rawptr{float} mapped_ptr = cur_buf.mapped_ptr;
-      //sdl_log("mapped_ptr", mapped_ptr, total_size_float * 4U);
+      //debug_log("mapped_ptr", mapped_ptr, total_size_float * 4U);
       for (const bo_id, mutable& bo_ib: whole_instances) {
 	for (const vs_id, mutable& inst: bo_ib) {
 	  const& arr = inst.instance_buffer;
@@ -74,8 +80,10 @@ aggregated_ibuffer_frame_begin(aggregated_ibuffer mutable& aibuf,
 	  offset_float += sz;
 	}
       }
+      //debug_log("ibuffer_frame_begin begin6");
       cur_buf.unmap_buffer();
     }
+    //debug_log("ibuffer_frame_begin end");
   }
 }
 

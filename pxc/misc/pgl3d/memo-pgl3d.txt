@@ -2115,3 +2115,45 @@ len_de_pt = sqrt(rad2_pt - len2_cd_pt); // DEの大きさ
 len_ae_pt = ac_v - len_de_pt; // AEの大きさ
 len_ae = len_ae_pt / len_v_pt; // 逆変換したAEの大きさ
 e = a + v * len_ae; // 変換前の交点
+
+---------------------------------------------------------------------------
+android pause/resume
+
+シェーダ
+
+テクスチャ
+
+インスタンスデータ
+aggregated_ibuffer aibuffer pglshderが保持
+
+GL3用VAO
+auto_vertexarray vtxarr  pglshaderが保持
+
+頂点データ
+vertex_buffers pglshaderが保持
+vertex_buffer glbuffer.px
+auto_buffer vbo_values;
+auto_buffer vbo_elems;
+create_vbo()でGPU側に作成
+  これの後半を分離、リロードできるようにする
+  auto_buffer の generateをすればよい。自動で古い値は解放される。
+
+#define SDL_EGL_MakeCurrent_impl(BACKEND) int \
+BACKEND ## _GLES_MakeCurrent(_THIS, SDL_Window * window, SDL_GLContext context) \
+{\
+    if (window && context) { \
+        return SDL_EGL_MakeCurrent(_this, ((SDL_WindowData *) window->driverdata)->egl_surface, context); \
+    }\
+    else {\
+        return SDL_EGL_MakeCurrent(_this, NULL, NULL);\
+    }\
+}
+
+#define SDL_EGL_CreateContext_impl(BACKEND) SDL_GLContext \
+BACKEND ## _GLES_CreateContext(_THIS, SDL_Window * window) \
+{\
+    return SDL_EGL_CreateContext(_this, ((SDL_WindowData *) window->driverdata)->egl_surface);\
+}
+
+windowはnullでないからwindow->driverdata->egl_surfaceがnullになっている
+

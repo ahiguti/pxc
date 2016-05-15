@@ -65,6 +65,7 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
   }
   private function void init()
   {
+    sdl_log("pglshader init");
     /*
     {
       int val;
@@ -129,6 +130,7 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
 	drawers_postprocess.push_back(i);
       }
     }
+    sdl_log("pglshader init done");
   }
   public function void prepare(whole_instances_type mutable& whole_instances_r,
     node_factory mutable& nfac_r)
@@ -276,16 +278,22 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
     }
     return r;
   }
-  public function void resize_screen(int width, int height, int w_width,
-    int w_height)
+  public function void resize_screen(int disp_width, int disp_height,
+    int w_width, int w_height)
   {
-    const default_scale = m::ne{is_gles, 0} ? 0.5f : 1.0f;
-    const scale = glc.conf.get("shadowmap_resolution", default_scale,
+    const virt_scale = glc.conf.get("virt_scale", 1.0f, 0.25f, 4.0f);
+    const virt_width = static_cast{int}(static_cast{float}(disp_width)
+      * virt_scale);
+    const virt_height = static_cast{int}(static_cast{float}(disp_height)
+      * virt_scale);
+    const default_sm_scale = m::ne{is_gles, 0} ? 0.5f : 1.0f;
+    const sm_scale = glc.conf.get("shadowmap_resolution", default_sm_scale,
       256.0f, 16384.0f);
-    mutable wh = static_cast{int}(static_cast{float}(max(width, height))
-      * scale);
-    if (scale >= 512.0f) {
-      wh = static_cast{int}(scale);
+    mutable wh = static_cast{int}(static_cast{float}(max(virt_width,
+      virt_height))
+      * sm_scale);
+    if (sm_scale >= 512.0f) {
+      wh = static_cast{int}(sm_scale);
     }
     int sm_size = 1;
     for (int i: 8 .. 16) {
@@ -294,9 +302,14 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
 	break;
       }
     }
-    sdl_log("shadowmap size", sm_size, scale);
-    cam.screen_width = width;
-    cam.screen_height = height;
+    sdl_log("disp size", disp_width, disp_height);
+    sdl_log("virt size", virt_width, virt_height);
+    sdl_log("virt size", sm_size, sm_scale);
+    sdl_log("shadowmap size", sm_size, sm_scale);
+    cam.virt_width = virt_width;
+    cam.virt_height = virt_height;
+    cam.display_width = disp_width;
+    cam.display_height = disp_height;
     cam.window_width = w_width;
     cam.window_height = w_height;
     cam.shadowmap_size = sm_size;
@@ -312,7 +325,7 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
       init_shadowmap_fbo(glc, sfbo);
     }
     for (const i, const& pd: drawers) {
-      pd->resize_screen(glc, width, height);
+      pd->resize_screen(glc, virt_width, virt_height);
     }
     update_mvp(glc, cam);
   }
@@ -386,13 +399,14 @@ pglshader_draw_frame(pglshader mutable& pgs,
     /* restore fb */
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
   }
-  glViewport(0, 0, static_cast{GLsizei}(pgs.cam.screen_width),
-    static_cast{GLsizei}(pgs.cam.screen_height));
+  glViewport(0, 0, static_cast{GLsizei}(pgs.cam.virt_width),
+    static_cast{GLsizei}(pgs.cam.virt_height));
   int saved_fb = 0;
   if (!pgs.drawers_postprocess.empty()) {
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
     glBindFramebuffer(GL_FRAMEBUFFER,
       pgs.drawers[pgs.drawers_postprocess[0]]->get_postprocess_framebuffer());
+  } else {
   }
   /* z-prepass shader */
   if (pgs.glc.enable_zprepass) {
@@ -468,6 +482,9 @@ pglshader_draw_frame(pglshader mutable& pgs,
       if (i < n - 1) {
 	fb = pgs.drawers[pgs.drawers_postprocess[i + 1]]
 	  ->get_postprocess_framebuffer();
+      } else {
+	glViewport(0, 0, static_cast{GLsizei}(pgs.cam.display_width),
+	  static_cast{GLsizei}(pgs.cam.display_height));
       }
       glBindFramebuffer(GL_FRAMEBUFFER, fb);
       const j = pgs.drawers_postprocess[i];
@@ -571,13 +588,13 @@ update_mvp(shader_config const& glc, projection_info mutable& cam)
     glc.conf.get("perspective_far", 10000.0f, 10.0f, 1000000.0f);
   float const perspective_wh =
     glc.conf.get("perspective_wh", 1.0f, 0.001f, 100.0f);
-  const ssbase = max(cam.screen_height, cam.screen_width);
-  const h = perspective_wh * cast_float(cam.screen_height)
+  const ssbase = max(cam.virt_height, cam.virt_width);
+  const h = perspective_wh * cast_float(cam.virt_height)
     / cast_float(ssbase);
-  const w = perspective_wh * cast_float(cam.screen_width)
+  const w = perspective_wh * cast_float(cam.virt_width)
     / cast_float(ssbase);
-  glViewport(0, 0, static_cast{GLsizei}(cam.screen_width),
-    static_cast{GLsizei}(cam.screen_height));
+  glViewport(0, 0, static_cast{GLsizei}(cam.virt_width),
+    static_cast{GLsizei}(cam.virt_height));
   glDepthMask(1);
   glColorMask(1, 1, 1, 1);
   glClearColor(1.0, 1.0, 1.0, 1.0);

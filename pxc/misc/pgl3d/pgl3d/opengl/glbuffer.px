@@ -50,9 +50,9 @@ public threaded struct async_buffer() {
   public function void map_buffer(size_t sz_bytes) {
     if (m::is_true{is_gl3_or_gles3}) {
       glBindBuffer(GL_ARRAY_BUFFER, vbo.get());
-      //sdl_log("glbindbuffer", vbo.get());
+      // sdl_log("glbindbuffer", vbo.get());
       if (rawptr_to_size_t(mapped_ptr) != 0U) {
-	//sdl_log("glunmapbuffer");
+	// sdl_log("glunmapbuffer");
 	glUnmapBuffer(GL_ARRAY_BUFFER);
 	mapped_ptr = size_t_to_rawptr{float}(0U);
       }
@@ -64,14 +64,22 @@ public threaded struct async_buffer() {
       }
       mutable mask = static_cast{GLbitfield}(GL_MAP_WRITE_BIT);
       if (m::is_true{use_map_unsynchronized}) {
+	// debug_log("map_unsynchronized");
 	mask |= static_cast{GLbitfield}(GL_MAP_UNSYNCHRONIZED_BIT);
       }
-      //sdl_log("mapbufferrange", size_bytes, mask);
+      // sdl_log("mapbufferrange", size_bytes, mask);
       rawptr{void} p = glMapBufferRange(GL_ARRAY_BUFFER,
 	static_cast{GLintptr}(0), static_cast{GLsizeiptr}(size_bytes),
 	mask);
-      //sdl_log("mapbufferrange", "ptr", rawptr_to_size_t(p));
+      // sdl_log("mapbufferrange", "ptr", rawptr_to_size_t(p));
       mapped_ptr = size_t_to_rawptr{float}(rawptr_to_size_t(p));
+      if (rawptr_to_size_t(p) == 0) {
+	sdl_log("mapbufferrange returns null");
+	gl_check_error("mapbufferrange");
+/*
+	sdl_log("mapbufferrange err:", static_cast{int}(glGetError()));
+*/
+      }
       glBindBuffer(GL_ARRAY_BUFFER, 0);
     }
   }
@@ -88,6 +96,7 @@ public threaded struct async_buffer() {
   }
   public function GLenum client_wait_sync(long timeout) {
     if (m::and{is_gl3_or_gles3, use_map_unsynchronized}) {
+      // debug_log("client_wait_sync");
       const r = glClientWaitSync(fence, 0, static_cast{GLint64}(timeout));
       delete_sync();
       return r;
@@ -103,6 +112,7 @@ public threaded struct async_buffer() {
     //sdl_log("fence_sync", vbo.get());
     delete_sync();
     if (m::and{is_gl3_or_gles3, use_map_unsynchronized}) {
+      // debug_log("fence_sync");
       fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
       if (fence == GLsync()) {
 	throw runtime_error_template{"vertex_buffer.fence_sync"}("");
@@ -111,6 +121,7 @@ public threaded struct async_buffer() {
   }
   private function void delete_sync() {
     if (m::and{is_gl3_or_gles3, use_map_unsynchronized}) {
+      // debug_log("delete_sync");
       // if (glIsSync(fence) != 0) {
       if (fence != GLsync()) {
 	glDeleteSync(fence);

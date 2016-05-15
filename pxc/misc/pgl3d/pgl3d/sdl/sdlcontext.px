@@ -31,6 +31,10 @@ public struct sdlcontext(pgl3d_config const& config0)
     const highdpi_value = config.get("highdpi", 1, 0, 1);
     debug_log("highdpi_value", highdpi_value);
     set_high_dpi(highdpi_value);
+    const accelerometer_as_joystick = config.get("accelerometer_as_joystick",
+      0, 0, 1);
+    SDL_SetHint("SDL_ACCELEROMETER_AS_JOYSTICK",
+      accelerometer_as_joystick != 0 ? "1" : "0");
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK);
     TTF_Init();
     init_video();
@@ -77,10 +81,6 @@ public struct sdlcontext(pgl3d_config const& config0)
       init_h = config.get("height", 0, 0, 16384);
     }
 
-    sdl_log("create_window", init_w, init_h);
-    sdl_window.reset(SDL_CreateWindow("PGL3D", 128, 128, init_w, init_h,
-      wflags));
-    const wnd = sdl_window.get();
     // FIXME: 3.3 -> 3.2 -> 2.1
     if (m::eq{is_gles, 0}) {
       /* try opengl 3.3 */
@@ -95,14 +95,14 @@ public struct sdlcontext(pgl3d_config const& config0)
       // glminor = 2;
       gles_flag = false;
     } else {
-      if (m::or{is_android, is_emscripten}) {
-	/* android/emscripten: opengles 2.0 */
+      if (m::is_true{is_emscripten}) {
+	/* emscripten: opengles 2.0 */
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 	glmajor = 2;
 	glminor = 0;
       } else {
-	/* ios: opengles 3.0 */
+	/* ios/android: opengles 3.0 */
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 	glmajor = 3;
@@ -110,12 +110,24 @@ public struct sdlcontext(pgl3d_config const& config0)
       }
       gles_flag = true;
     }
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 32); // FIXME: 24?
+    SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
+    SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
+    SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
+    SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
+    if (m::not{is_gles}) {
+      SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 32); // FIXME: 24?
+    }
+    sdl_log("set depth 32\n");
+    sdl_log("create_window", init_w, init_h);
+    sdl_window.reset(SDL_CreateWindow("PGL3D", 128, 128, init_w, init_h,
+      wflags));
+    const wnd = sdl_window.get();
     mutable glctx = SDL_GL_CreateContext(wnd);
     GL::glew::glewInit();
     string verstr = cubptr_to_string(glGetString_nocheck(GL_VERSION));
     if (verstr.empty()) {
       if (m::eq{is_gles, 0}) {
+	SDL_GL_DeleteContext(glctx);
 	/* fallback to opengl 2.1 */
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
@@ -124,6 +136,7 @@ public struct sdlcontext(pgl3d_config const& config0)
 	glminor = 1;
       } else {
 	/* fallback to opengles 2.0 */
+	SDL_GL_DeleteContext(glctx);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 	glctx = SDL_GL_CreateContext(wnd);
@@ -136,6 +149,7 @@ public struct sdlcontext(pgl3d_config const& config0)
     SDL_GL_GetDrawableSize(wnd, address(init_w), address(init_h));
     sdl_log("drawable size", init_w, init_h);
     sdl_log("GL_VERSION", verstr);
+    sdl_log("glmajor/minor", glmajor, glminor);
     {
       string vn0;
       string vn1;
@@ -182,6 +196,50 @@ public struct sdlcontext(pgl3d_config const& config0)
 	SDL_JoystickClose(j);
       }
     }
+  }
+  public function string get_gl_version()
+  {
+    string verstr = cubptr_to_string(glGetString_nocheck(GL_VERSION));
+    return verstr;
+  }
+  public function void pause()
+  {
+    /*
+    int r = SDL_GL_MakeCurrent(sdl_window.get(), SDL_GLContext());
+    if (r != 0) {
+      sdl_log("pause: make_current failed:", r);
+    }
+    sdl_glcontext.reset(SDL_GLContext());
+    */
+  }
+  public function void resume()
+  {
+    /*
+    // FIXME
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+    mutable glctx = SDL_GL_CreateContext(sdl_window.get());
+    sdl_log("create context: isnull=", (glctx == SDL_GLContext()));
+    int r = SDL_GL_MakeCurrent(sdl_window.get(), sdl_glcontext.get());
+    if (r != 0) {
+      sdl_log("make_current failed:", r);
+    }
+    sdl_glcontext.reset(glctx);
+    sdl_log("resume version: [", get_gl_version(), "]");
+    */
+    make_current();
+  }
+  public function void make_current()
+  {
+    // mutable glctx = SDL_GL_CreateContext(sdl_window.get());
+    // sdl_glcontext.reset(glctx);
+    sdl_log("make_current", SDL_GetWindowID(sdl_window.get()));
+    int r = SDL_GL_MakeCurrent(sdl_window.get(), sdl_glcontext.get());
+    if (r != 0) {
+      sdl_log("make_current failed:", r);
+    }
+    /*
+    */
   }
 }
 

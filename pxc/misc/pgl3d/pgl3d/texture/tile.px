@@ -175,9 +175,9 @@ public function void prepare_texture_data_3d_tmap(texture_data mutable& tmap,
       if (x1 - x0 < 2 || y1 - y0 < 2 || z >= vtzsz) {
 	return;
       }
-      const num = rec > 7 ? 15000 : rec > 6 ? 100 : 30;
+      const num = rec > 3 ? 100 : 10;
       for (const i: 0 .. num) {
-	const szdiv = rec > 7 ? 128 : 32;
+	const szdiv = 16;
 	const x = rand_gen(x1 - x0) + x0;
 	const y = rand_gen(y1 - y0) + y0;
 	const w = rand_gen((x1 - x0) / szdiv) + 1;
@@ -185,7 +185,7 @@ public function void prepare_texture_data_3d_tmap(texture_data mutable& tmap,
 	const d = rand_gen((vtzsz - z) / 2) + 1;
 	// debug_log("xywhd", x, y, w, h, d);
 	if (x - w < x0 || x + w >= x1 || y - h < y0 || y + h >= y1 ||
-	  z + d >= vtzsz)
+	  z + d + 2 >= vtzsz)
 	{
 	  continue;
 	}
@@ -201,7 +201,11 @@ public function void prepare_texture_data_3d_tmap(texture_data mutable& tmap,
 	}
       }
     }
-    make_bump_rec(8, 0 + 1, vtxsz - 1, 0 + 1, vtysz - 1, 1);
+    if (bshift > 4) {
+      make_bump_rec(8, 0 + 1, vtxsz - 1, 0 + 1, vtysz - 1, 1);
+    } else {
+      make_bump_rec(5, 0 + 1, vtxsz - 1, 0 + 1, vtysz - 1, 1);
+    }
     append_6dir();
   } else {
     // repeat tpat data
@@ -307,7 +311,7 @@ public function void prepare_texture_data_3d_tpat(texture_data mutable& tpat,
       }
       const idx = (z << (pattern_sz_l2 * 2)) | (y << pattern_sz_l2) | x;
       // debug_log("set_color", x & 16, y & 16, z, x0, y0, z0, dir);
-      if (!plain) {
+      if (!plain || tpat.data[idx] != 0) { // FIXME
 	tpat.data[idx] = 0xffb090a0;
       } else {
 	const vec4 cval = p + make_vec4(128.0f, 128.0f, 128.0f, 128.0f);
@@ -369,7 +373,9 @@ public function void prepare_texture_data_3d_tpat(texture_data mutable& tpat,
       for (const y: 0 .. usz >> bshift) {
 	for (const x: 0 .. usz >> bshift) {
 	  // debug_log("bump xyz", x, y, z);
-	  for (const i: 0 .. 20u) {
+	  // uint const loop_lim = bshift > 4 ? 20u : 1u;
+	  uint const loop_lim = 20u;
+	  for (const i: 0 .. loop_lim) {
 	    make_bump_one(x << bshift, y << bshift, z << bshift, z);
 	  }
 	}

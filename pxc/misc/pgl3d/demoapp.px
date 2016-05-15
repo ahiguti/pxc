@@ -247,8 +247,8 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
       0, 0,
       dss.default_font_texture_info.char_w,
       dss.default_font_texture_info.char_h,
-      static_cast{float}(pjinfo.screen_width),
-      static_cast{float}(pjinfo.screen_height));
+      static_cast{float}(pjinfo.virt_width),
+      static_cast{float}(pjinfo.virt_height));
     const t1 = get_time(sys);
     scene_control_step(sctl, dss, frame_speed, ncd, ftable, whole_instances);
     const t2 = get_time(sys);
@@ -427,6 +427,8 @@ private function tree_map{string, ptr{pgldrawer_export_i}} init_drawers(
   app_impl mutable& app, shader_config const& sconf,
   resource_pool_ptr const& res)
 {
+  sdl_log("app_init_drawers");
+  const t0 = get_time(io::system);
   tree_map{string, ptr{pgldrawer_export_i}} r;
   r.insert("drawer_0_triangles", make_drawer_triangles(sconf, res, 0));
   r.insert("drawer_0_triangles_alt", make_drawer_triangles(sconf, res, 1));
@@ -438,6 +440,8 @@ private function tree_map{string, ptr{pgldrawer_export_i}} init_drawers(
   r.insert("drawer_rect2d", make_drawer_rect2d(sconf, res));
   r.insert("drawer_font2", make_drawer_font2(sconf, res));
   r.insert("drawer_fxaa", make_drawer_fxaa(sconf, res));
+  const t1 = get_time(io::system);
+  sdl_log("app_init_drawers done", t1 - t0);
   return r;
 }
 
@@ -497,7 +501,7 @@ private function void build_vertices(app_impl mutable& app,
       apply(m1,
 	bump_apply(m, false, ctx_fill(0), ctx_fill(0))),
       apply(m1,
-	ctx_tex3d(2, 1, 1.0f/128.0f))));
+	ctx_tex3d(2, 1, 1.0f/32.0f))));
   m = glm::mat4()
     .translate(glm::make_vec3(0.0, 0.0, 64.0));
   m1 = glm::mat4()

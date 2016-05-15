@@ -15,7 +15,7 @@ LOCAL_EXPORT_C_INCLUDES := $(LOCAL_C_INCLUDES)
 
 LOCAL_SRC_FILES := gen/demoapp.px.cc
 
-LOCAL_LDLIBS := -lGLESv2 -llog
+LOCAL_LDLIBS := -lGLESv3 -llog
 LOCAL_CPP_FEATURES += rtti exceptions
 
 LOCAL_SHARED_LIBRARIES := SDL2 SDL2_image SDL2_ttf bullet

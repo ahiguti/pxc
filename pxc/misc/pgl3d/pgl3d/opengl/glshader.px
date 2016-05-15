@@ -338,10 +338,15 @@ private function uint compile_shader(cstrref const& src, GLenum type,
   glGetShaderiv(res, GL_COMPILE_STATUS, address(success));
   if (success == 0) {
     int sz;
-    if (m::eq{m::profile{"platform"}, "android"}) {
-      sz = 4096; /* android bug workaround */
-    } else {
+//    if (m::is_true{is_android}) {
+    //if (m::eq{m::profile{"platform"}, "android"}) {
+//      sz = 4096; /* android bug workaround */
+//    } else
+    {
       glGetShaderiv(res, GL_INFO_LOG_LENGTH, address(sz));
+      if (sz == 0) {
+	sz = 4096; // android bug workaround
+      }
     }
     string buf;
     buf.resize(static_cast{size_t}(sz), 0);
@@ -353,10 +358,11 @@ private function uint compile_shader(cstrref const& src, GLenum type,
     }
     sdl_log("compile_shader failed:", static_cast{int}(type), success, buf);
     debug_log("compile_shader failed:", static_cast{int}(type), success, buf);
-    if (debug_level > 0) {
+//    if (debug_level > 0)
+    {
       const lines = format_glsl(src);
       split_foreach{function void(cstrref const& line) {
-	sdl_log(line);
+//	sdl_log(line);
 	debug_log(line);
       }}(lines, '\n');
     }
