@@ -17,14 +17,9 @@ uniform samplerCube sampler_env;
 <%/>
 uniform mat4 view_projection_matrix;
 uniform vec3 camera_pos;
-<%if><%not><%light_fixed/><%/>
-  uniform mat4 shadowmap_vp[<%smsz/>];
-  uniform float ndelta_scale; // 0.02
-<%/>
 uniform vec3 light_dir;
 uniform float light_on;
 uniform float option_value;
-uniform float exposure;
 <%frag_in/> vec3 vary_position;
 <%frag_in/> vec3 vary_normal;
 <%frag_in/> vec3 vary_tangent;
@@ -46,12 +41,11 @@ uniform float exposure;
 vec4 dbgval = vec4(0.0);
 
 <%if><%enable_shadowmapping/>
-  <%if><%ne><%stype/>1<%/>
-    <%if><%not><%light_fixed/><%/>
-      <%frag_in/> vec3 vary_smposa[<%smsz/>];
-    <%else/>
-      uniform float ndelta_scale; // 0.02 / 40.0
-    <%/>
+
+  <%if><%not><%light_fixed/><%/>
+    <%frag_in/> vec3 vary_smposa[<%smsz/>];
+  <%else/>
+    uniform float ndelta_scale; // 0.02 / 40.0
   <%/>
 
   float linear_01(in float x, in float a, in float b)
@@ -74,7 +68,7 @@ vec4 dbgval = vec4(0.0);
     return max(x0, max(x1, x2));
   }
 
-<%/> // !stype == 1 && enable_shadowmapping
+<%/> // enable_shadowmapping
 
 bool uv_inside_aabb(in vec2 uv)
 {
@@ -137,29 +131,46 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
 
   bool pos3_inside(in vec3 pos, in float mi, in float mx)
   {
+    /*
+    return all(greaterThanEqual(pos, vec3(mi)))
+      && all(greaterThan(vec3(mx), pos));
+    */
     return pos.x >= mi && pos.y >= mi && pos.z >= mi &&
       pos.x < mx && pos.y < mx && pos.z < mx;
   }
 
   bool pos3_inside_3(in vec3 pos, in vec3 mi, in vec3 mx)
   {
+    /*
+    return all(greaterThanEqual(pos, mi)) && all(greaterThan(mx, pos));
+    */
     return pos.x >= mi.x && pos.y >= mi.y && pos.z >= mi.z &&
       pos.x < mx.x && pos.y < mx.y && pos.z < mx.z;
   }
 
   bool pos3_inside_3_ge_le(in vec3 pos, in vec3 mi, in vec3 mx)
   {
+    /*
+    return all(greaterThanEqual(pos, mi)) && all(greaterThanEqual(mx, pos));
+    */
     return pos.x >= mi.x && pos.y >= mi.y && pos.z >= mi.z &&
       pos.x <= mx.x && pos.y <= mx.y && pos.z <= mx.z;
   }
 
   bool pos2_inside(in vec2 pos, in float mi, in float mx)
   {
+    /*
+    return all(greaterThanEqual(pos, vec2(mi)))
+      && all(greaterThan(vec2(mx), pos));
+    */
     return min(pos.x, pos.y) >= mi && max(pos.x, pos.y) < mx;
   }
 
   bool pos2_inside_2(in vec2 pos, in vec2 mi, in vec2 mx)
   {
+    /*
+    return all(greaterThanEqual(pos, mi)) && all(greaterThan(mx, pos));
+    */
     return pos.x >= mi.x && pos.y >= mi.y &&
       pos.x < mx.x && pos.y < mx.y;
   }
@@ -467,15 +478,13 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
     return (hpos_i + hpos_f) / <%octree_block_factor/>;
   }
 
-  int raycast_octree(inout vec3 pos, in vec3 roottexpos, in vec3 eye,
-    in vec3 light, in vec3 aabb_min, in vec3 aabb_max, out vec4 value_r,
-    out vec3 dir_r, inout float lstr_para)
+  bool raycast_octree(in bool update_pos, inout vec3 pos, in vec3 roottexpos,
+    in vec3 ray, in vec3 aabb_min, in vec3 aabb_max, out vec4 value,
+    out vec3 dir)
   {
     // roottexposノードの(aabb_min, aabb_max)(0-1値)範囲を貼り付ける
-    int hit = -1;
-    value_r = vec4(0.0, 0.0, 0.0, 1.0);
-    dir_r = vec3(0.0);
-    vec3 ray = eye;
+    value = vec4(0.0, 0.0, 0.0, 1.0); // 衝突した位置の色
+    dir = vec3(0.0); // 衝突したときの法線
     vec3 texpos_arr[level_max];
       // 整数値を取る。テクスチャ座標(をテクスチャのサイズで乗じたもの)。
       // xyz座標をそれぞれblock_factorで割った余りがブロック内位置になる。
@@ -486,11 +495,9 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
     vec3 curpos_i = floor(pos * <%octree_block_factor/>);
     vec3 curpos_f = (pos * <%octree_block_factor/>) - curpos_i;
       // 現在見ているブロック内位置の整数部と小数部。整数部はblock_factor未満
-    vec4 value;
-    vec3 dir = vec3(0.0); // 最初の位置が接触していれば0をそのまま返す
+    int loop_limit = 64;
     int i;
-    int imax = 256;
-    for (i = 0; i < imax && level >= 0; ++i) {
+    for (i = 0; i < loop_limit && level >= 0; ++i) {
       vec3 spmin = vec3(0.0);
       vec3 spmax = vec3(1.0);
       vec3 coord = curpos_t + curpos_i;
@@ -515,68 +522,38 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
 	curpos_f = (curpos_f * <%octree_block_factor/>) - curpos_i;
 	continue;
       } else { // if (node_type > 1) { // 色のついた葉
-	bool hit_wall = false;
-	bool notouch = false;
 	// 接触判定
 	if (node_type == 255) {
 	  // node_type == 255のボクセルは法線データを見ずに壁面に衝突する
-	  hit_wall = true;
-	  dir = -dir;
 	  value = vec4(0.2, 0.2, 0.9, 1.0);
+	  break;
 	} else {
+	  bool hit_wall = false;
 	  vec3 sp_nor = vec3(0.0);
 	  float length_ae = voxel_collision_sphere(ray, curpos_f, vec3(0.0),
 	    vec3(1.0,0.8,1.0), 0.25, hit_wall, sp_nor);
 	  vec3 tp = curpos_f + ray * length_ae;
 	  if (hit_wall) {
-	    dir = -dir;
+	    // 壁面に接触
 	    value = vec4(0.9, 0.3, 0.3, 1.0);
-	  } else if (!pos3_inside(tp, 0.0, 1.0)) {
-	    notouch = true;
-	  } else {
+	    break;
+	  } else if (pos3_inside(tp, 0.0, 1.0)) {
 	    // ボクセル内で曲面に接触
-	    dir = sp_nor;
+	    dir = -sp_nor;
 	    curpos_f = tp;
 	    value = vec4(0.9, 0.3, 0.3, 1.0);
-	  }
-	}
-	if (!notouch) {
-	  // 接触した
-	  if (hit >= 0) {
-	    lstr_para = 0.0; // FIXME
 	    break;
 	  }
-	  hit = i;
-	  dir_r = dir;
-	  value_r = value;
-	  if (true) {
-	    // 衝突した座標を計算(TODO: 必要なときだけ計算するようにする)
-	    pos = calc_pos(curpos_t, curpos_i, curpos_f, texpos_arr, level);
-	  }
-	  // 法線と光源が逆向きのときは必ず影になる
-	  float cos_light_dir = dot(light, dir);
-	  lstr_para = clamp(cos_light_dir * 64.0 - 1.0, 0.0, 1.0);
-	  if (lstr_para <= 0.0) {
-	    break;
-	  }
-	  // 影判定開始
-	  ray = light;
-	  if (hit_wall) {
-	    raycast_move(curpos_t, curpos_i, curpos_f, dir, texpos_arr,
-	      level, aabb_min, aabb_max);
-	    continue;
-	  }
-	  // fallthru
 	}
-	// 接触しなかった
       }
       dir = raycast_next(curpos_t, curpos_i, curpos_f, spmin, spmax, ray,
 	texpos_arr, level, aabb_min, aabb_max);
     }
-    if (i == imax) {
-      lstr_para = 0.0;
-      hit = i;
+    bool hit = (level >= 0);
+    if (update_pos && hit) {
+      pos = calc_pos(curpos_t, curpos_i, curpos_f, texpos_arr, level);
     }
+    dir = -dir;
     return hit;
   }
 
@@ -764,10 +741,9 @@ vec3 light_diffuse(in float cos_n_l, in vec3 material_diffuse)
   return material_diffuse * cos_n_l / 3.141592;
 }
 
-vec3 light_all(in vec3 light_color, in float lstr, in vec3 mate_specular,
+vec3 light_all(in vec3 light_color, in vec3 mate_specular,
   in vec3 mate_diffuse, in float mate_alpha, in vec3 camera_dir,
-  in vec3 light_dir, samplerCube samp, in vec3 nor, bool vertical,
-  in float ambient)
+  in vec3 light_dir, samplerCube samp, in vec3 nor, bool vertical)
 {
   vec3 half_l_v = normalize(light_dir + camera_dir);
   float cos_l_h = clamp(dot(light_dir, half_l_v), 0.0, 1.0);
@@ -777,13 +753,12 @@ vec3 light_all(in vec3 light_color, in float lstr, in vec3 mate_specular,
   float cos_v_h = cos_l_h;
   vec3 light_sp_di = light_color * (
     light_specular_brdf(cos_l_h, cos_n_h, cos_n_v, cos_n_l, cos_v_h,
-      mate_alpha, mate_specular) * lstr +
-    light_diffuse(cos_n_l * (lstr + ambient), mate_diffuse));
+    mate_alpha, mate_specular) +
+    light_diffuse(cos_n_l, mate_diffuse));
   vec3 reflection_vec = reflect(-camera_dir, nor);
   vec3 sampler_vec = mate_diffuse.x > 0.0
     ? vec3(0.01, 0.01, 0.2) : reflection_vec;
-  float env_coefficient = 0.125;
-  vec3 env = <%texture_cube/>(sampler_env, sampler_vec).xyz * env_coefficient;
+  vec3 env = <%texture_cube/>(sampler_env, sampler_vec).xyz;
   env = env * env * reflection_fresnel(
     clamp(dot(nor, reflection_vec), 0.0, 1.0), mate_specular)
     * (vertical ? mate_specular : vec3(1.0, 1.0, 1.0))
@@ -796,6 +771,9 @@ void main(void)
   vec4 color = vec4(0.0, 0.0, 0.0, 1.0);
   vec3 nor = vary_normal;
   vec3 rel_camera_pos = camera_pos - vary_position;
+  //if (camera_pos.z > -32.2480792) { <%fragcolor/> = vec4(1.0,0.0,0.0,1.0); return; }
+  //if (vary_position.z < -32.2480792) { <%fragcolor/> = vec4(1.0,1.0,0.0,1.0); return; }
+  //if (rel_camera_pos.z < 0.0) { <%fragcolor/> = vec4(0.0,0.0,1.0,1.0); return; }
   vec3 camera_dir = normalize(rel_camera_pos);
   float is_front = float(dot(camera_dir, nor) > 0.0);
   float frag_distance = length(rel_camera_pos);
@@ -804,8 +782,10 @@ void main(void)
   float lstr_para = 1.0;
   float para_zval = 0.0;
   bool vertical = false;
-  float ambient = 0.005;
   vec4 tex_val = vec4(0.5, 0.5, 0.5, 1.0);
+<%if><%eq><%stype/>1<%/>
+// FIXME
+<%/>
   <%if><%eq><%stype/>1<%/>
     <%if><%is_gl3_or_gles3/>
       mat3 normal_matrix = mat3(vary_model_matrix);
@@ -820,17 +800,16 @@ void main(void)
     vec3 pos    = texpos + vary_position_local * texscale;
       // 接線空間での座標からテクスチャ座標を計算
     vec3 campos = texpos + vary_camerapos_local * texscale;
+    //if (campos.z < 0.0038762468615) { <%fragcolor/> = vec4(1.0,1.0,0.0,1.0); return; }
     vec3 sur_nor = vec3(0.0);
     bool dbg_inside = false; // FIXME
     vec3 aabb_min = vary_aabb_min;
     vec3 aabb_max = vary_aabb_max;
 
-    bool cam_inside_aabb = false;
     <%if><%raycast_cull_front/>
       // カメラが直方体の内側に入ってもレンダリングできるように
       // する処理。表面カリングを有効にしたうえで以下の処理をすることを想定。
-      cam_inside_aabb = pos3_inside_3_ge_le(campos, aabb_min, aabb_max);
-      if (cam_inside_aabb) {
+      if (pos3_inside_3_ge_le(campos, aabb_min, aabb_max)) {
 	// カメラは直方体の内側にある
 	pos = campos;
 	// <%fragcolor/> = vec4(1.0,1.0,0.0,1.0); return;
@@ -840,37 +819,69 @@ void main(void)
 	vec3 pos_i = vec3(0.0);
 	sur_nor = voxel_next(pos_i, pos, aabb_min, aabb_max, 0.0,
 	  -camera_local);
+//	sur_nor = voxel_next_dbg(pos_i, pos, aabb_min, aabb_max, 0.0,
+//	  -camera_local);
+//if (dbgval.a > 0.0) { <%fragcolor/> = dbgval; return; } // FIXME
+// aabb_maxをclampしないと1.0を超えていることがあり、そのときにpos_iがnonzeroになってしまう
+	//pos += pos_i; // 丸めにより整数部分がでてしまうことの対策
+	  // TODO: voxel_nextではなく専用の関数作って無駄をなくす
+	// <%fragcolor/> = vec4(1.0,0.0,1.0,1.0); return;
       }
     <%/>
-    int hit = raycast_octree(pos, vec3(0.0), camera_local, light_local,
-      aabb_min, aabb_max, tex_val, nor, lstr_para);
-    if (hit < 0) {
+    // if (!raycast_octree(pos, vec3(0.0), camera_local, light_local,
+    //   aabb_min, aabb_max, tex_val, nor, lstr_para))
+    if (!raycast_octree(true, pos, vec3(0.0), camera_local,
+      aabb_min, aabb_max, tex_val, nor))
+    {
+      // if (dbgval.a > 0.0) { <%fragcolor/> = dbgval; return; } // FIXME
+//<%fragcolor/> = vec4(0.0,1.0,1.0,1.0); return; // FIXME
       discard;
     }
-    // ambient = max(0.0, 0.005 - float(hit) * 0.0001);
-    // if (dbgval.a > 0.0) { <%fragcolor/> = dbgval; return; } // FIXME
+    pos += nor * epsilon2;
+    float cos_light_nor = dot(light_local, nor);
+    lstr_para = clamp(cos_light_nor * 64.0 - 1.0, 0.0, 1.0);
+    vec4 tex_val_dmy;
+    vec3 nor_dmy;
+    if (raycast_octree(false, pos, vec3(0.0), light_local, 
+      aabb_min, aabb_max, tex_val_dmy, nor_dmy))
+    {
+      lstr_para = 0.0;
+    }
+if (dbgval.a > 0.0) { <%fragcolor/> = dbgval; return; } // FIXME
+//<%fragcolor/> = vec4(1.0); return; // FIXME
+//if (pos.z < campos.z) { <%fragcolor/> = vec4(1.0); return; } // FIXME
+//if (pos.z < 0.970 / 128.0) { <%fragcolor/> = vec4(pos, 1.0); return; } // FIXME
+//    if (dbgval.a >= 0.9) {
+//      <%fragcolor/> = dbgval; return; // FIXME
+//    }
+    // if (lstr_para < 0.1) { <%fragcolor/> = vec4(1.0, 0.0, 0.0, 1.0); return; } // FIXME
+    // if (dbg_inside) { tex_val.r += .5; } // FIXME
+    // tex_val.a = 0.0; // FIXME?
     if (length(nor) < 0.1) {
-      // raycastの始点から衝突していた
       // <%fragcolor/> = vec4(1.0); return;
+      // nor = vec3(1.0, 0.0, 0.0); // FIXME
       nor = sur_nor;
       // tex_val = vec4(0.3, 0.1, 0.2, 1.0);
-      // lstr_para = 1.0;
-      float cos_light_dir = dot(light_local, nor);
-      lstr_para = clamp(cos_light_dir * 64.0 - 1.0, 0.0, 1.0);
-      if (cam_inside_aabb) {
-	lstr_para = 0.0;
-      }
+      lstr_para = 1.0;
+      // if (length(nor) < 0.1) { <%fragcolor/> = vec4(1.0); return; }
     }
     nor = normal_matrix * nor; // local to global
-    // posは3dテクスチャ座標。object座標系に戻す。
-    pos = vary_aabb_or_tconv.xyz + pos * vary_aabb_or_tconv.w;
-      // posをテクスチャ座標から接線空間の座標に変換
-    vec4 gpos = vary_model_matrix * vec4(pos, 1.0);
-      // vary_model_matrixは接線空間からワールドへの変換
     <%if><%update_frag_depth/>
       {
 	// FragDepth更新するならこの節を有効にする
+	// posは3dテクスチャ座標。object座標系に戻す。
+	/*
+	pos = (pos - 0.5) / obj_scale;
+	*/
+	pos = vary_aabb_or_tconv.xyz + pos * vary_aabb_or_tconv.w;
+	  // posをテクスチャ座標から接線空間の座標に変換
+	vec4 gpos = vary_model_matrix * vec4(pos, 1.0);
+	  // vary_model_matrixは接線空間からワールドへの変換
 	vec4 vpos = view_projection_matrix * gpos;
+	/*
+	float cdepth = vpos.w > epsilon ?
+	  clamp(vpos.z / vpos.w, 0.0, 1.0) : 0.0;
+	*/
 	float cdepth = vpos.z / vpos.w;
 	float depthrange_max = 1.0;
 	float depthrange_min = 0.0;
@@ -900,7 +911,7 @@ void main(void)
 	-dot(light_dir, vary_normal));
       parallax_loop(uv0, eye_tan, light_tan, para_zval, nor, vertical,
 	lstr_para);
-      // color += dbgval; // FIXME
+      color += dbgval; // FIXME
     <%/>
     vec2 subtex_uv;
     tilemap(uv0, tex_val, subtex_uv);
@@ -925,43 +936,25 @@ void main(void)
   <%else/>
   //
   <%/> // if stype == 1
-  <%if><%enable_shadowmapping/>
-    <%if><%eq><%stype/>1<%/>
-// FIXME FIXME FIXME HERE HERE
-//lstr = 1.0; // FIXME not necessary
+  <%if><%and><%eq><%stype/>0<%/><%enable_shadowmapping/><%/>
+    <%if><%light_fixed/>
+      vec3 ndelta = vary_normal * ndelta_scale; // 0.02 / 40.
+      vec3 prel = vary_position - camera_pos;
       vec3 p[<%smsz/>];
-      vec3 ndelta = mat3(shadowmap_vp[0]) * vary_normal * ndelta_scale; // 0.02
-      vec4 sp;
-//      vec4 ngpos = vec4(gpos.xyz / gpos.w, 1.0); // FIXME 正規化いらない
-      <%variable d>
-        <%set d 1/>
-        <%for i 0><%smsz/>
-          sp = shadowmap_vp[<%i/>] * gpos;
-          p[<%i/>] = sp.xyz / sp.w + ndelta / <%d/>.;
-          <%set d><%mul><%d/>3<%/><%/>
-        <%/>
+      <%variable den>
+	<%set den><%shadowmap_distance/><%/>
+	<%for i 0><%num_shadowmaps/>
+	  p[<%i/>] = prel / <%den/>. + ndelta;
+	  <%set den><%mul><%den/><%shadowmap_scale/><%/><%/>
+	<%/>
       <%/>
     <%else/>
-      // stype != 1
-      <%if><%light_fixed/>
-	vec3 ndelta = vary_normal * ndelta_scale; // 0.02 / 40.
-	vec3 prel = vary_position - camera_pos;
-	vec3 p[<%smsz/>];
-	<%variable den>
-	  <%set den><%shadowmap_distance/><%/>
-	  <%for i 0><%num_shadowmaps/>
-	    p[<%i/>] = prel / <%den/>. + ndelta;
-	    <%set den><%mul><%den/><%shadowmap_scale/><%/><%/>
-	  <%/>
-	<%/>
+      <%if><%is_gl3_or_gles3/>
+	vec3 p[<%smsz/>] = vary_smposa;
       <%else/>
-	<%if><%is_gl3_or_gles3/>
-	  vec3 p[<%smsz/>] = vary_smposa;
-	<%else/>
-	  vec3 p[<%smsz/>];
-	  <%for i 0><%num_shadowmaps/>
-	    p[<%i/>] = vary_smposa[<%i/>];
-	  <%/>
+	vec3 p[<%smsz/>];
+	<%for i 0><%num_shadowmaps/>
+	  p[<%i/>] = vary_smposa[<%i/>];
 	<%/>
       <%/>
     <%/>
@@ -1004,36 +997,24 @@ void main(void)
 	<%/>
 	<%if><%enable_shadowmapping_multisample/>
 	  smpos = (p[<%x/>] + 1.0) * 0.5;
-//<%fragcolor/> = vec4(smpos.zzz, 1.0); return; // FIXME
 	  float zval<%x/> = 99999.0;
 	  float sml<%x/> = 0.0;
-	  // 4箇所サンプリングする
-	  for (int i = -1; i <= 1; i += 2) {
-	    for (int j = -1; j <= 1; j += 2) {
-	      // キャスト位置
+	  for (float i = -1.0; i <= 1.0; i += 2.0) {
+	    for (float j = -1.0; j <= 1.0; j += 2.0) {
 	      smz = <%texture2d/>
-		(sampler_sm[<%x/>], smpos.xy
-		  + vec2(float(i), float(j)) / 8192.0).rg;
+		(sampler_sm[<%x/>], smpos.xy + vec2(i, j) / 8192.0).rg;
 	      zval<%x/> = min(zval<%x/>, smz.r);
 	      dist = smpos.z - smz.r * 1.001;
-		// フラグメント位置からキャスト位置を引く
 	      if (dist <= 0.0) {
-		// キャスト位置のほうが遠いので影でない
-		sml<%x/> += 1.0 / 4.0;
-//	      } else if (<%x/> == 2 && length(p[<%x/>]) < 0.25 /* && abs(smz.r - 0.5) * 2.0 <= 0.25 */) {
-//		<%fragcolor/> = vec4(1.0); return; // FIXME
-//		// sml<%x/> += 1.0 / 4.0;
+	      sml<%x/> += 0.25;
 	      } else {
-		// キャスト位置のほうが近い
-		variance = smz.g - smz.r * smz.r;
-		variance = max(variance, 0.000001);
-		sml<%x/> += (1.0 / 4.0) * variance / (variance + dist * dist);
+	      variance = smz.g - smz.r * smz.r;
+	      variance = max(variance, 0.000001);
+	      sml<%x/> += 0.25 * variance / (variance + dist * dist);
 	      }
 	    } // for (j)
 	  } // for (i)
-	  // 少量の光漏れを影にする
-	  float bias<%x/> = clamp(0.2 + dist * (float(<%x/>) * 0.0 + 0.0), 0.0, 1.0);
-	  sml<%x/> = clamp(sml<%x/> * (1.0 + bias<%x/>) - bias<%x/>, 0.0, 1.0);
+	  sml<%x/> = clamp(sml<%x/> * 1.5 - 0.1, 0.0, 1.0);
 	<%else/>
 	  // no multisample
 	  smpos = (p[<%x/>] + 1.0) * 0.5;
@@ -1044,12 +1025,12 @@ void main(void)
 	  float sml<%x/> = 0.0;
 	  dist = smpos.z - smz.r * 1.001;
 	  if (dist <= 0.0) {
-	    sml<%x/> = 1.0;
+	  sml<%x/> = 1.0;
 	  } else {
-	    variance = smz.g - smz.r * smz.r;
-	    variance = max(variance, 0.000001);
-	    sml<%x/> = clamp(
-	     variance / (variance + dist * dist) * 1.5 - 0.1, 0.0, 1.0);
+	  variance = smz.g - smz.r * smz.r;
+	  variance = max(variance, 0.000001);
+	  sml<%x/> = clamp(
+	   variance / (variance + dist * dist) * 1.5 - 0.1, 0.0, 1.0);
 	  }
 	<%/>
       <%else/>
@@ -1068,44 +1049,30 @@ void main(void)
       <%/>
     <%/>
     <%if><%enable_vsm/>
-      // const float zval_thr = 0.1;
-      const float zval_thr = <%fdiv>0.97f<%shadowmap_scale/><%/>;
+      const float zval_thr = 0.1;
     <%else/>
       const float zval_thr = <%fdiv>0.97f<%shadowmap_scale/><%/>;
     <%/>
     const float psm_thr = <%fdiv>0.9f<%shadowmap_scale/><%/>;
-    // if (zval0 < 0.0) { color.g += 1.0; }; // FIXME
+    if (zval0 < 0.0) { color.g += 1.0; }; // FIXME
     float smv0 = min(1.0, sml0
       + linear_01(max_vec3(abs(p[0])), 0.9, 1.0));
     lstr = min(lstr, smv0);
     <%for x 1><%num_shadowmaps/>
-      float smv<%x/> = max3(
-	sml<%x/>,
-	min(
-	  linear_10(max_vec3(abs(p[<%x/>])), psm_thr * 0.9, psm_thr),
-	  linear_10(abs(zval<%x/> - 0.5) * 2.0, zval_thr * 0.9, zval_thr)
-	),
-	  // フラグメント位置とキャスト元位置が一つ内側のシャドウマップに
-	  // 収まるなら影をささない
-	linear_01(max_vec3(abs(p[<%x/>])), 0.9, 1.0)
-	  // フラグメント位置がシャドウマップ境界近くのときは影をささない
-	  // TODO: キャスト元位置についても同様にするか？
-      );
-      smv<%x/> = min(smv<%x/> * 1.6, 1.0);
-	// zval_thrによってわずかな影が切り落とされることによる不連続を埋める
+      float smv<%x/> = max3(sml<%x/>,
+	min(linear_10(max_vec3(abs(p[<%x/>])), psm_thr * 0.9, psm_thr),
+	linear_10(abs(zval<%x/>-0.5)*2.0, zval_thr * 0.9, zval_thr)),
+	linear_01(max_vec3(abs(p[<%x/>])), 0.9, 1.0));
       lstr = min(lstr, smv<%x/>);
     <%/>
-    <%if><%eq><%stype/>1<%/>
-      lstr = clamp(dot(nor, light_dir) * 4.0, 0.0, lstr);
-    <%else/>
-      lstr = clamp(dot(vary_normal, light_dir) * 4.0, 0.0, lstr);
-    <%/>
+    // FIXME?
+    lstr = clamp(dot(vary_normal, light_dir) * 4.0, 0.0, lstr);
     // lstr = clamp(dot(vary_normal, light_dir) * 32.0, 0.0, lstr);
     // lstr = min(lstr, float(dot(vary_normal, light_dir) > 0.0));
-  <%/> // enable_shadowmapping
+  <%/> // stype==0 and enable_shadowmapping
   // fresnel
   // float cos_v_h = clamp(dot(camera_dir, half_l_v), 0.0, 1.0);
-  float mate_alpha = 1.0;
+  float mate_alpha = 0.03;
   vec3 mate_specular = vec3(0.04, 0.04, 0.04);
   vec3 mate_diffuse = vec3(0.0, 0.0, 0.0);
   if (max(tex_val.r, max(tex_val.g, tex_val.b)) > 0.9) {
@@ -1128,18 +1095,16 @@ void main(void)
     mate_specular = vec3(0.04, 0.04, 0.04);
     mate_diffuse = vec3(0.6, 0.7, 0.4);
   }
-  // vec3 light_color2 = vec3(1.0, 1.0, 1.0) * lstr; // FIXME???
-  // vec3 light_color1 = light_color2 * lstr_para;
-  vec3 li1 = light_all(vec3(1.0, 1.0, 1.0), lstr * lstr_para, mate_specular,
-    mate_diffuse, mate_alpha, camera_dir, light_dir, sampler_env, nor,
-    vertical, ambient);
+  vec3 light_color2 = vec3(1.0, 1.0, 1.0) * lstr; // FIXME???
+  vec3 light_color1 = light_color2 * lstr_para;
+  vec3 li1 = light_all(light_color1, mate_specular, mate_diffuse,
+    mate_alpha, camera_dir, light_dir, sampler_env, nor, vertical);
   /*
   vec3 li2 = light_all(light_color2, mate_specular, mate_diffuse,
     mate_alpha, camera_dir, light_dir, sampler_env,
-    normalize(vary_normal), false, ambient);
+    normalize(vary_normal), false);
   color.xyz += sqrt(mix(li2, li1, distbr));
   */
-  li1 *= exposure;
   color.xyz += sqrt(li1);
 <%if><%eq><%stype/>1<%/>
 // color.xyz = vary_uvw;

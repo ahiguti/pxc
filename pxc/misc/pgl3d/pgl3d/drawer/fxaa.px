@@ -55,7 +55,7 @@ public struct drawer_fxaa(shader_config const& glc,
     return texture_info();
   }
   public function void resize_screen(shader_config const& glc, int width,
-    int height)
+    int height, int sm_width, int sm_height)
   {
     ppfbo.width = width;
     ppfbo.height = height;
@@ -65,9 +65,12 @@ public struct drawer_fxaa(shader_config const& glc,
   public function void reload_shaders()
   {
   }
-  public function uint get_postprocess_framebuffer() const
+  public function uint get_postprocess_framebuffer(draw_step step) const
   {
-    return ppfbo.fbo.get();
+    if (step == draw_step_postprocess) {
+      return ppfbo.fbo.get();
+    }
+    return 0U;
   }
   public function bool has_step(draw_step step) const
   {

@@ -18,6 +18,7 @@ private tsvaluetype struct skybox_uniforms()
   public glm::mat3 camera_dir_matrix;
   public glm::vec3 light_dir;
   public int sampler_cube;
+  public float exposure;
 }
 
 public struct drawer_skybox(shader_config const& glc,
@@ -70,13 +71,13 @@ public struct drawer_skybox(shader_config const& glc,
     return texture_info();
   }
   public function void resize_screen(shader_config const& glc, int width,
-    int height) 
+    int height, int sm_width, int sm_height) 
   { 
   }
   public function void reload_shaders()
   {
   }
-  public function uint get_postprocess_framebuffer() const
+  public function uint get_postprocess_framebuffer(draw_step step) const
   {
     return 0U;
   }
@@ -110,6 +111,7 @@ public struct drawer_skybox(shader_config const& glc,
 	glUniform3fv(sdr.u_light_dir, 1,
 	  (cam_df.light.angle * glm::make_vec3(0.0, 0.0, 1.0)).to_crawptr());
       }
+      glUniform1f(sdr.u_exposure, cam_df.exposure);
       bo.draw(0, sdr);
     }
   }
@@ -139,14 +141,16 @@ init_skybox_shader(shader_config const& g)
   f += g.decl_fragcolor();
   f += "uniform samplerCube sampler_cube;\n";
   f += "uniform vec3 light_dir;\n";
+  f += "uniform float exposure;\n";
   f += g.frag_in() + "vec3 vary_dir;\n";
   f += "void main(void) {\n";
-  f += "vec4 color = vec4(" + g.texture_cube();
-  f += "(sampler_cube, vary_dir).xyz, 1.0);\n";
+  f += "vec3 color = " + g.texture_cube();
+  f += "(sampler_cube, vary_dir).xyz * 0.25;\n";
   f += "float cos_angle = max(0.0, dot(normalize(vary_dir), light_dir));\n";
   f += "float s = pow(cos_angle, 32.0);\n";
-  f += "color += vec4(s, s, s, 0.0);\n";
-  f += g.fragcolor() + " = color;\n";
+  f += "color += vec3(s, s, s);\n";
+  f += "color *= sqrt(exposure);\n";
+  f += g.fragcolor() + " = vec4(color, 1.0);\n";
   f += "}\n";
   return make_glshader_ptr{skybox_uniforms, skybox_instance_attributes,
     skybox_vertex_attributes}(v, f, "", g.debug_level);

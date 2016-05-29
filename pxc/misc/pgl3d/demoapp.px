@@ -92,6 +92,7 @@ private struct app_impl()
   public input_control ictl = input_control(io::system);
   public bool scene_next_flag;
   public float light_on = 0.0f;
+  public float exposure = 1.0f;
   public float option_value = 0.0f;
   public string_map app_commands;
   public varray{bool} prev_joy_buttons;
@@ -138,6 +139,7 @@ public multithreaded struct demoapp_scene_shared(io const& sys0)
   public position_angle posang;
   public bool scene_next_flag;
   public float light_on;
+  public float exposure = 1.0f;
   public float option_value = 0.0f;
   public texture_info default_font_texture_info;
   public string_map app_commands;
@@ -194,10 +196,11 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
   private function void update_camera_light(position_angle mutable& camera,
     position_angle mutable& light)
   {
-    light.position = // camera.angle * glm::make_vec3(0.0, 0.0, -50.0) +
-      camera.position + glm::make_vec3(0.0, 0.0, 0.0);
+    light.position = camera.position + glm::make_vec3(0.0, 0.0, 0.0);
     // light.angle = glm::make_quat_wxyz(1.0, 0.0, 0.0, 0.0);
-    light.angle = glm::make_quat_angle_axis(3.14, 1.0, 0.0, 0.0);
+    light.angle = glm::make_quat_angle_axis(3.14f * 0.55f, 0.707107, 0.707107, 0.0).normalize();
+    // light.position = camera.angle * glm::make_vec3(0.0, 0.0, -50.0) +
+    //   camera.position + glm::make_vec3(0.0, 0.0, 0.0);
     //light.angle = light_angle(glm::make_vec3(0.0, 0.0, 1.0),
     //  camera.angle.to_mat3()).to_quat();
     /*
@@ -229,6 +232,7 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
     // const t0 = io::debug_system().gettimeofday_double();
     pjinfo.camera = dss.posang;
     update_camera_light(pjinfo.camera, pjinfo.light);
+    pjinfo.exposure = dss.exposure;
     pjinfo.option_value = dss.option_value;
     const sm_view = pjinfo.light.to_mat4().inverse();
     // const sm_vp = pjinfo.sm_projection * sm_view;
@@ -327,7 +331,10 @@ function void handle_event(app_impl mutable& app,
       debug_log("next", app.scene_next_flag);
       return;
     } else if (bx > 0.9 && by > 0.9) {
-      app.light_on = app.light_on > 0.5f ? 0.0f : 1.0f;
+      app.exposure *= 2.0;
+      if (app.exposure > 16.0f) {
+	app.exposure = 1.0f / 16.0f;
+      }
       return;
     } else if (bx > 0.9 && by < 0.1) {
       app.option_value = static_cast{float}(
@@ -342,6 +349,12 @@ function void handle_event(app_impl mutable& app,
     } else if (ev.tfinger.x > 0.9 && ev.tfinger.y > 0.9) {
       app.app_commands["scene_pause"] = "1";
       // app.light_on = app.light_on > 0.5f ? 0.0f : 1.0f;
+      return;
+    } else if (ev.tfinger.x < 0.1 && ev.tfinger.y > 0.9) {
+      app.exposure *= 2.0;
+      if (app.exposure > 16.0f) {
+	app.exposure = 1.0f / 16.0f;
+      }
       return;
     } else if (ev.tfinger.x > 0.9 && ev.tfinger.y < 0.1) {
       app.option_value = static_cast{float}(
@@ -362,6 +375,12 @@ function void handle_event(app_impl mutable& app,
     if (ev.key.keysym.scancode == SDL_SCANCODE_1) {
       commands_r["reload"] = "1";
       return;
+    }
+    if (ev.key.keysym.scancode == SDL_SCANCODE_J) {
+      app.exposure *= 2.0;
+    }
+    if (ev.key.keysym.scancode == SDL_SCANCODE_K) {
+      app.exposure *= 0.5;
     }
     if (ev.key.keysym.scancode == SDL_SCANCODE_LEFTBRACKET) {
       commands_r["vsync"] = "1";
@@ -411,6 +430,7 @@ function void handle_keys(app_impl mutable& app,
   {
     mutable& ss = *app.scene_shared;
     ss.light_on = app.light_on;
+    ss.exposure = app.exposure;
     ss.option_value = app.option_value;
     ss.scene_next_flag = app.scene_next_flag;
     ss.posang.position = app.player.position;
@@ -439,7 +459,12 @@ private function tree_map{string, ptr{pgldrawer_export_i}} init_drawers(
   r.insert("drawer_particle_bb", make_drawer_particle_bb(sconf, res));
   r.insert("drawer_rect2d", make_drawer_rect2d(sconf, res));
   r.insert("drawer_font2", make_drawer_font2(sconf, res));
-  r.insert("drawer_fxaa", make_drawer_fxaa(sconf, res));
+  r.insert("drawer_blur", make_drawer_blur(sconf, res));
+  /*
+  if (sconf.conf.get("fxaa", 1, 0, 1) != 0) {
+    r.insert("drawer_fxaa", make_drawer_fxaa(sconf, res));
+  }
+  */
   const t1 = get_time(io::system);
   sdl_log("app_init_drawers done", t1 - t0);
   return r;

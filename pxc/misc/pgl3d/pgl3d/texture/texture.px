@@ -46,6 +46,7 @@ save_texture_data_raw(string const& fn0, texture_data const& td)
 public function ptr{texture_data}
 load_texture_data(string const& fn0)
 {
+  debug_log("load_texture_data", fn0);
   const p = make_ptr{texture_data}();
   string fn = fn0;
   fn.push_back(0);
@@ -56,6 +57,7 @@ load_texture_data(string const& fn0)
     throw runtime_error_template{"img_load"}(fn0);
   }
   sdl_log("loading image: loaded", fn);
+  debug_log("load_texture_data p0");
   const& sur0ref = *sur0.get().to_slice(1);
   const fmtp = sur0ref.format;
   const& fmt = *sur0ref.format.to_slice(1);
@@ -63,14 +65,19 @@ load_texture_data(string const& fn0)
   if (bpp != 4 && bpp != 3) {
     throw runtime_error_template{"img_load"}("bpp");
   }
+  debug_log("load_texture_data p1");
   const sur0_w = static_cast{uint}(sur0ref.w);
   const sur0_h = static_cast{uint}(sur0ref.h);
+  debug_log("load_texture_data p2", sur0_w, sur0_h);
   mutable tex_w = power_of_2(sur0_w);
   mutable tex_h = power_of_2(sur0_h);
   p->width = tex_w;
   p->height = tex_h;
   mutable& uibuf = p->data;
   uibuf.resize(tex_w * tex_h, 0);
+  debug_log("uibuf_size", uibuf.size());
+const rawp = cslice_to_crawptr(uibuf.crange()).to_size_t();
+debug_log("uibuf_ptr", rawp);
   uint rmask = fmt.Rmask;
   uint gmask = fmt.Gmask;
   uint bmask = fmt.Bmask;
@@ -93,9 +100,11 @@ load_texture_data(string const& fn0)
   const& sur0_ref = *sur0.get().to_slice(1);
   const sur0buf = sur0_ref.pixels.reinterpret_cast{uchar}()
     .to_slice(static_cast{size_t}(sur0_ref.pitch * sur0_ref.h));
+  debug_log("load_texture_data p3", sur0_w, sur0_h);
   for (const y: 0 .. sur0_h) {
     for (const x: 0 .. sur0_w) {
       const o = (y * sur0_w + x) * bpp;
+      // debug_log("load_texture_data p4r", x, y, o);
       uint v;
       uint vr;
       uint vg;
@@ -106,16 +115,32 @@ load_texture_data(string const& fn0)
       } else if (bpp == 4) {
 	v = read_4_uint(sur0buf, o);
       }
-      vr = (v >> rshift) & 0xffU;
-      vg = (v >> gshift) & 0xffU;
+      // debug_log("load_texture_data p5r", v);
+      // debug_log("load_texture_data p5r00", v);
+      // debug_log("load_texture_data p5r0", rshift, gshift, bshift);
+      // debug_log("load_texture_data p5r030", (v >> 16));
+      // debug_log("load_texture_data p5r031", (v >> 8));
+      // debug_log("load_texture_data p5r032", (v >> 0));
+      // debug_log("load_texture_data p5r03", (v >> bshift));
       vb = (v >> bshift) & 0xffU;
+      // debug_log("load_texture_data p5r02", vb);
+      vg = (v >> gshift) & 0xffU;
+      // debug_log("load_texture_data p5r02", vg);
+      vr = (v >> rshift) & 0xffU;
+      // debug_log("load_texture_data p5r02", vr);
+      // debug_log("load_texture_data p5r1", vr, vg, vb);
       if (bpp == 4) {
 	va = (v >> ashift) & 0xffU;
       }
+      // debug_log("load_texture_data p5r2", va);
       uint v1 = (va << 24) | (vb << 16) | (vg << 8) | (vr << 0);
+      // debug_log("load_texture_data p5r3", v1);
+      // debug_log("load_texture_data p7r", x, y, tex_w, x * tex_w + x);
       uibuf[y * tex_w + x] = v1;
+      // debug_log("load_texture_data p6r", y * tex_w + x, v1);
     }
   }
+  debug_log("load_texture_data done", fn0);
   return p;
 }
 

@@ -20,6 +20,7 @@ private tsvaluetype struct triangles_uniforms()
   public float light_on;
   public float ndelta_scale; // 0.02 / 40. if light_fixed, 0.02 otherwise
   public glm::mat4 shadowmap_vp; // array
+  public float exposure;
   public float option_value;
 }
 
@@ -189,11 +190,12 @@ public struct drawer_triangles(shader_config const& glc0,
     return r;
   }
   public function void resize_screen(shader_config const& glc, int width,
-    int height)
+    int height, int sm_width, int sm_height)
   {
   }
   public function void reload_shaders()
   {
+    debug_log("triangles reload_shaders init");
     option{triangles_shader_ptr} s0;
     option{zprepass_shader_ptr} s1;
     option{shadowmap_shader_ptr} s2;
@@ -204,14 +206,15 @@ public struct drawer_triangles(shader_config const& glc0,
       s1.some = init_zprepass_shader(glc, stype);
       s2.some = init_shadowmap_shader(glc, stype);
     } catch (runtime_error ex) {
-      sdl_log("reload failed: " + ex.message());
+      debug_log("reload failed: " + ex.message());
       return;
     }
     sdr_solid = s0;
     sdr_zp = s1;
     sdr_shadow = s2;
+    debug_log("triangles reload_shaders done");
   }
-  public function uint get_postprocess_framebuffer() const
+  public function uint get_postprocess_framebuffer(draw_step step) const
   {
     return 0U;
   }
@@ -366,6 +369,7 @@ public struct drawer_triangles(shader_config const& glc0,
 	glUniform1f(sdr.u_ndelta_scale,
 	  static_cast{float}(8192 / cam_df.shadowmap_size) * 0.02);
       }
+      glUniform1f(sdr.u_exposure, cam_df.exposure);
       mutable opval = static_cast{int}(cam_df.option_value);
       opval /= 2;
       opval %= 4;
@@ -635,6 +639,8 @@ init_triangles_shader(shader_config const& g, int stype, uint octree_bshift,
   bnd["octree_texture_scale"] = "vec3(" + wh_s + "," + wh_s + "," + d_s + ")";
   // bnd["octree_size"] = to_string(1u << octree_size_l2);
   bnd["raycast_cull_front"] = to_string(raycast_cull_front);
+  bnd["update_frag_depth"] = to_string(
+    g.conf.get("update_frag_depth", 0, 1, 1));
   const v = triangles_shader_vert(g, bnd);
   const f = triangles_shader_frag(g, bnd);
   return

@@ -36,7 +36,7 @@ uniform vec3 camera_pos;
 <%else/>
   <%vert_out/> vec4 vary_aabb_or_tconv; // aabb_or_tconvと同じ
 <%/>
-<%if><%enable_shadowmapping/>
+<%if><%and><%ne><%stype/>1<%/><%enable_shadowmapping/><%/>
   <%if><%not><%light_fixed/><%/>
     <%vert_out/> vec3 vary_smposa[<%smsz/>];
     uniform float ndelta_scale; // 0.02
@@ -94,7 +94,7 @@ void main(void)
     vary_aabb_min = aabb_min;
     vary_aabb_max = aabb_max;
   <%/>
-  <%if><%enable_shadowmapping/>
+  <%if><%and><%ne><%stype/>1<%/><%enable_shadowmapping/><%/>
     <%if><%not><%light_fixed/><%/>
       vec3 ndelta = mat3(shadowmap_vp[0]) * vary_normal * ndelta_scale; // 0.02
       vec4 p;

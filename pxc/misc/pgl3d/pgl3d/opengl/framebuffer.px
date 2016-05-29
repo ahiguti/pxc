@@ -105,14 +105,17 @@ public function void init_shadowmap_fbo(shader_config const& glc,
 	sfbo.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
 	offset_to_void_cp(0));
     }
-    if (m::eq{is_gles, 0}) {
+    // if (m::eq{is_gles, 0})
+    {
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
-	cast_int(GL_CLAMP_TO_BORDER));
+	cast_int(GL_CLAMP_TO_EDGE));
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
-	cast_int(GL_CLAMP_TO_BORDER));
+	cast_int(GL_CLAMP_TO_EDGE));
       const border = make_farray{float}(1.0, 1.0, 1.0, 1.0);
       glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR,
 	border.crange().to_crawptr());
+      /*
+      */
     }
     /* framebuffer */
     sfbo.fbo.generate();
@@ -173,14 +176,17 @@ public function void init_postprocess_fbo(shader_config const& glc,
     glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_RGBA), ppfbo.width,
       ppfbo.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
       offset_to_void_cp(0));
-    if (m::eq{is_gles, 0}) {
+    // if (m::eq{is_gles, 0})
+    {
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
-	cast_int(GL_CLAMP_TO_BORDER));
+	cast_int(GL_CLAMP_TO_EDGE));
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
-	cast_int(GL_CLAMP_TO_BORDER));
-      const border = make_farray{float}(1.0, 1.0, 1.0, 1.0);
+	cast_int(GL_CLAMP_TO_EDGE));
+      /*
+      const border = make_farray{float}(0.0, 0.0, 0.0, 0.0);
       glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR,
 	border.crange().to_crawptr());
+      */
     }
     /* framebuffer */
     ppfbo.fbo.generate();
