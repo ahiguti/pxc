@@ -778,21 +778,23 @@ bool is_intrusive(const term& t)
   const expr_i *const et = term_get_instance_const(t);
   const expr_interface *const ti = dynamic_cast<const expr_interface *>(et);
   if (ti != 0) {
-    return ti->impl_st == 0;
+    if (ti->impl_st == 0) {
+      return true; // non-restricted interface
+    }
+    const expr_i *eimpl = ti->impl_st->get_symdef();
+    const term timpl = eimpl->get_value_texpr();
+    return is_intrusive(timpl);
   }
   const expr_struct *const tsd = dynamic_cast<const expr_struct *>(et);
   if (tsd != 0 && tsd->block->inherit) {
-    /* return whether 1st base interface is restricted */
-    term ti = tsd->block->inherit->head->get_sdef()->resolve_evaluated();
-    // const expr_i *eb = ti.get_expr(); // FIXME FIXME
-    const expr_i *eb = term_get_instance(ti);
-    #if 0
-    #endif
-    #if 0
-    const expr_i *eb = tsd->block->inherit->head->get_sdef()->get_symdef();
-    #endif
-    const expr_interface *ei = ptr_down_cast<const expr_interface>(eb);
-    return ei->impl_st == 0;
+    for (expr_telist *inh = tsd->block->inherit ; inh != 0; inh = inh->rest) {
+      term ti = inh->head->get_sdef()->resolve_evaluated();
+      const expr_i *eb = term_get_instance(ti);
+      const expr_interface *ei = dynamic_cast<const expr_interface *>(eb);
+      if (ei == 0 || ei->impl_st == 0) {
+	return true; // inherits a non-restricted interface or a struct
+      }
+    }
   }
   return false;
 }
@@ -1702,7 +1704,7 @@ bool is_same_type(const term& t0, const term& t1)
   return t0 == t1;
 }
 
-bool implements_interface(expr_block *blk, const expr_interface *ei)
+bool implements_interface(expr_block *blk, const expr_i *ei)
 {
   expr_block::inherit_list_type& inh = blk->resolve_inherit_transitive();
   expr_block::inherit_list_type::const_iterator i;
@@ -1737,8 +1739,7 @@ bool is_sub_type(const term& t0, const term& t1)
     DBG_SUB(fprintf(stderr, "is_sub_type: t0blk null\n"));
     return false;
   }
-  const expr_interface *const t1ei = dynamic_cast<const expr_interface *>(
-    term_get_instance_const(t1));
+  const expr_i *const t1ei = term_get_instance_const(t1);
   if (t1ei == 0) {
     return false;
   }
@@ -2798,8 +2799,7 @@ symbol_table *find_current_symbol_table(expr_i *e)
   return &eb->symtbl;
 }
 
-static bool check_function_argtypes(const expr_interface *ei,
-  expr_funcdef *efd, expr_funcdef *efd_impl)
+static bool check_function_argtypes(expr_funcdef *efd, expr_funcdef *efd_impl)
 {
   if (!is_same_type(efd->get_rettype(), efd_impl->get_rettype())) {
     arena_error_push(efd_impl,
@@ -2846,12 +2846,13 @@ static void check_interface_impl_one(expr_i *esub, expr_block *esub_block,
 {
   const expr_interface *const ei_super =
     dynamic_cast<const expr_interface *>(esuper);
-  if (ei_super == 0) {
-    arena_error_push(esub, "Type '%s' is not an interface",
-      term_tostr_human(esub->get_texpr()).c_str());
+  if (esuper->get_esort() != expr_e_interface &&
+    esuper->get_esort() != expr_e_struct) {
+    arena_error_push(esuper, "Type '%s' is invalid for a base type",
+      term_tostr_human(esuper->get_texpr()).c_str());
     return;
   }
-  const symbol_table& symtbl = ei_super->block->symtbl;
+  const symbol_table& symtbl = esuper->get_template_block()->symtbl;
   symbol_table::local_names_type const& local_names = symtbl.get_local_names();
   symbol_table::local_names_type::const_iterator k;
   symbol_table::locals_type::const_iterator i, j;
@@ -2862,7 +2863,8 @@ static void check_interface_impl_one(expr_i *esub, expr_block *esub_block,
       continue;
     }
     j = esub_block->symtbl.find(i->first, false);
-    if (esub->get_esort() == expr_e_struct) {
+    if (esub->get_esort() == expr_e_struct &&
+      esuper->get_esort() == expr_e_interface) {
       if (j == esub_block->symtbl.end() ||
 	j->second.edef->get_esort() != expr_e_funcdef) {
 	arena_error_push(esub, "Method '%s' is not implemented",
@@ -2877,7 +2879,7 @@ static void check_interface_impl_one(expr_i *esub, expr_block *esub_block,
     if (j != esub_block->symtbl.end()) {
       expr_funcdef *const efd_impl =
 	ptr_down_cast<expr_funcdef>(j->second.edef);
-      if (!check_function_argtypes(ei_super, efd, efd_impl)) {
+      if (!check_function_argtypes(efd, efd_impl)) {
 	#if 0
 	arena_error_push(efd_impl, "Function type mismatch");
 	#endif
@@ -2892,7 +2894,17 @@ static void check_interface_impl_one(expr_i *esub, expr_block *esub_block,
       }
     }
   }
-  if (ei_super->impl_st != 0) {
+  if (esuper->get_esort() == expr_e_struct &&
+    esub->get_esort() == expr_e_struct) {
+    /* base struct must be polymorphic */
+    if (!is_intrusive(esuper->get_value_texpr()) ) {
+      arena_error_push(esub,
+	"Can not inherit struct '%s' which does not "
+	"inherit any non-restricted interface",
+	term_tostr_human(esuper->get_value_texpr()).c_str());
+    }
+  }
+  if (ei_super != 0 && ei_super->impl_st != 0) {
     if (ei_super->impl_st->get_symdef() != esub) {
       arena_error_push(esub,
 	"Interface '%s' is not a restricted interface for '%s'",
@@ -2947,6 +2959,7 @@ static void check_interface_impl(expr_i *e)
       }
     }
   }
+/*
   if (thin != 0 && thick != 0) {
     arena_error_push(e,
       "Type '%s' implements a non-restricted interface '%s' "
@@ -2955,6 +2968,7 @@ static void check_interface_impl(expr_i *e)
       term_tostr_human(thick->get_value_texpr()).c_str(),
       term_tostr_human(thick->get_value_texpr()).c_str());
   }
+*/
 }
 
 typedef std::map< expr_var *, std::pair<expr_i *, const expr_funcdef *> >

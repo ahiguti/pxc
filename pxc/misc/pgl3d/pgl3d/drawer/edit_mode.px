@@ -1,0 +1,345 @@
+private threaded namespace pgl3d::drawer::edit_mode "export-unsafe";
+public import common -;
+public import meta m;
+public import pgl3d::drawer::base -;
+public import pgl3d::texture::tile -;
+public import SDL2::api_types -;
+public import text::serialize::compact_pod -;
+
+private struct edit_pos {
+  public uint node_x;
+  public uint node_y;
+  public uint node_z;
+  public uint x;
+  public uint y;
+  public uint z;
+}
+
+private struct edit_state {
+  public edit_pos pos;
+  public varray{edit_pos} pos_stack;
+}
+
+public struct edit_mode(uint bshift0,
+  ptr{texture_data} const& tex_octree0, ptr{gl_texture} const& texture_voxpat0)
+<edit_mode_i>
+{
+  private uint const bshift = bshift0;
+  private uint const bsize = (1u << bshift);
+  private uint const bmask = bsize - 1;
+  private ptr{texture_data} tex_octree = tex_octree0;
+  private ptr{gl_texture} texture_voxpat = texture_voxpat0;
+  private edit_state stat;
+  private uint frame_cnt;
+  private uint copy_value;
+  private int edit_params;
+  private glm::quat camera_angle;
+  init();
+  private function void init()
+  {
+    string buf;
+    sdl_load_file("edit_state.raw", buf);
+    if (!buf.empty()) {
+      stat = from_string_compact_pod{edit_state}(buf);
+    }
+  }
+  private function void save_state()
+  {
+    debug_log("edit_mode: save");
+    const buf = to_string_compact_pod(stat);
+    sdl_save_file("edit_state.raw", buf);
+    save_texture_data_raw("octree.raw", *tex_octree);
+  }
+  public function void set_camera_angle(glm::quat const& angle)
+  {
+    camera_angle = angle;
+  }
+  public function void on_key_pressed(int scancode)
+  {
+    SDL_Scancode key = static_cast{SDL_Scancode}(scancode);
+    mutable& pos = stat.pos;
+    if (key == SDL_SCANCODE_KP_0) {
+      save_state();
+    } else if (key == SDL_SCANCODE_KP_MINUS) {
+      set_space();
+    } else if (key == SDL_SCANCODE_KP_PLUS) {
+      set_brick();
+    } else if (key == SDL_SCANCODE_KP_ENTER) {
+      restore_blink();
+      edit_params = (edit_params + 1) % 3;
+    } else if (key == SDL_SCANCODE_C) {
+      set_copy_value();
+    } else if (key == SDL_SCANCODE_V) {
+      paste_value();
+    }
+    if (edit_params == 0) {
+      if (key == SDL_SCANCODE_KP_4) {
+	restore_blink();
+	move_cursor(-1, 0, 0);
+      } else if (key == SDL_SCANCODE_KP_6) {
+	restore_blink();
+	move_cursor(1, 0, 0);
+      } else if (key == SDL_SCANCODE_KP_2) {
+	restore_blink();
+	move_cursor(0, -1, 0);
+      } else if (key == SDL_SCANCODE_KP_8) {
+	restore_blink();
+	move_cursor(0, 1, 0);
+      } else if (key == SDL_SCANCODE_KP_1) {
+	restore_blink();
+	move_cursor(0, 0, -1);
+      } else if (key == SDL_SCANCODE_KP_3) {
+	restore_blink();
+	move_cursor(0, 0, 1);
+      } else if (key == SDL_SCANCODE_KP_7) {
+	restore_blink();
+	go_down();
+      } else if (key == SDL_SCANCODE_KP_9) {
+	restore_blink();
+	go_up();
+      }
+    } else {
+      if (key == SDL_SCANCODE_KP_4) {
+	restore_blink();
+	set_offset_scale(-1, 0, 0);
+      } else if (key == SDL_SCANCODE_KP_6) {
+	restore_blink();
+	set_offset_scale(1, 0, 0);
+      } else if (key == SDL_SCANCODE_KP_2) {
+	restore_blink();
+	set_offset_scale(0, -1, 0);
+      } else if (key == SDL_SCANCODE_KP_8) {
+	restore_blink();
+	set_offset_scale(0, 1, 0);
+      } else if (key == SDL_SCANCODE_KP_1) {
+	restore_blink();
+	set_offset_scale(0, 0, -1);
+      } else if (key == SDL_SCANCODE_KP_3) {
+	restore_blink();
+	set_offset_scale(0, 0, 1);
+      } else if (key == SDL_SCANCODE_KP_7) {
+	restore_blink();
+	set_radius(1);
+      } else if (key == SDL_SCANCODE_KP_9) {
+	restore_blink();
+	set_radius(-1);
+      }
+    }
+    // debug_log("scancode", scancode);
+  }
+  private function void rotate_dir(int mutable& x, int mutable& y,
+    int mutable& z)
+  {
+  /*
+    const v = glm::make_vec3(static_cast{float}(x), static_cast{float}(y),
+      static_cast{float}(z));
+    const nv = camera_angle.inverse() * v;
+    const ax = fabs(nv.x);
+    const ay = fabs(nv.y);
+    const az = fabs(nv.z);
+    x = 0;
+    y = 0;
+    z = 0;
+    if (ax > ay && ax > az) {
+      x = nv.x > 0.0 ? 1 : -1;
+    } else if (ay >= ax && ay > az) {
+      y = nv.y > 0.0 ? 1 : -1;
+    } else {
+      z = nv.z > 0.0 ? 1 : -1;
+    }
+  */
+  }
+  private function void move_cursor(int x, int y, int z)
+  {
+    rotate_dir(x, y, z);
+    mutable& pos = stat.pos;
+    pos.x = static_cast{uint}(static_cast{int}(pos.x) + x) & bmask;
+    pos.y = static_cast{uint}(static_cast{int}(pos.y) + y) & bmask;
+    pos.z = static_cast{uint}(static_cast{int}(pos.z) + z) & bmask;
+  }
+  private function void set_offset_scale(int x, int y, int z)
+  {
+    rotate_dir(x, y, z);
+    int px = 0;
+    int py = 0;
+    int pz = 0;
+    int sx = 0;
+    int sy = 0;
+    int sz = 0;
+    if (edit_params == 1) {
+      px = x;
+      py = y;
+      pz = z;
+    } else {
+      sx = x;
+      sy = y;
+      sz = z;
+    }
+    mutable& tex = *tex_octree;
+    mutable v = tex.data[cur_offset()];
+    const node_type = (v >> 24u);
+    if (node_type == 1) {
+      return;
+    }
+    uint rad = 0;
+    if (node_type == 0 || node_type == 255) {
+      v = 0x05484848;
+      rad = 4;
+    } else {
+      rad = node_type - 1;
+    }
+    px = static_cast{int}(v         & 0x0fu) - 8 + px;
+    py = static_cast{int}((v >>  8) & 0x0fu) - 8 + py;
+    pz = static_cast{int}((v >> 16) & 0x0fu) - 8 + pz;
+    sx = static_cast{int}((v >>  4) & 0x0fu) + sx;
+    sy = static_cast{int}((v >> 12) & 0x0fu) + sy;
+    sz = static_cast{int}((v >> 20) & 0x0fu) + sz;
+    function void clip_i7(int mutable& v) {
+      if (v < -7) { v = -7; }
+      if (v >  7) { v =  7; }
+    }
+    function void clip_u15(int mutable& v) {
+      if (v <  0) { v = 0; }
+      if (v > 15) { v = 15; }
+    }
+    clip_i7(px);
+    clip_i7(py);
+    clip_i7(pz);
+    clip_u15(sx);
+    clip_u15(sy);
+    clip_u15(sz);
+    debug_log("p:", px, py, pz, "s:", sx, sy, sz, "r:", rad);
+    uint nv = 0;
+    nv |= static_cast{uint}(px + 8)      ;
+    nv |= static_cast{uint}(py + 8) <<  8;
+    nv |= static_cast{uint}(pz + 8) << 16;
+    nv |= static_cast{uint}(sx    ) <<  4;
+    nv |= static_cast{uint}(sy    ) << 12;
+    nv |= static_cast{uint}(sz    ) << 20;
+    tex.data[cur_offset()] = (nv & 0xffffffu) | ((rad + 1) << 24u);
+  }
+  private function void set_radius(int diff)
+  {
+    mutable& tex = *tex_octree;
+    mutable v = tex.data[cur_offset()];
+    const node_type = (v >> 24u);
+    if (node_type == 1) {
+      return;
+    }
+    int rad = 0;
+    if (node_type == 0 || node_type == 255) {
+      v = 0x05484848;
+      rad = 4;
+    } else {
+      rad = static_cast{int}(node_type - 1);
+      rad += diff;
+      if (rad < 1) { rad = 64; }
+      if (rad > 64) { rad = 1; }
+    }
+    debug_log("r:", rad);
+    tex.data[cur_offset()] =
+      (v & 0xffffffu) | ((static_cast{uint}(rad) + 1) << 24u);
+  }
+  private function void set_copy_value()
+  {
+    mutable& tex = *tex_octree;
+    const v = tex.data[cur_offset()];
+    const node_type = (v >> 24u);
+    if (node_type == 1) {
+      return;
+    }
+    copy_value = v;
+  }
+  private function void paste_value()
+  {
+    mutable& tex = *tex_octree;
+    const v = tex.data[cur_offset()];
+    const node_type = (v >> 24u);
+    if (node_type == 1) {
+      return;
+    }
+    tex.data[cur_offset()] = copy_value;
+  }
+  private function void set_space()
+  {
+    mutable& tex = *tex_octree;
+    const v = tex.data[cur_offset()];
+    const node_type = (v >> 24u);
+    if (node_type == 1) {
+      return;
+    }
+    tex.data[cur_offset()] = 0;
+  }
+  private function void set_brick()
+  {
+    mutable& tex = *tex_octree;
+    const v = tex.data[cur_offset()];
+    const node_type = (v >> 24u);
+    if (node_type == 1) {
+      return;
+    }
+    tex.data[cur_offset()] = 0xff808080;
+  }
+  private function void go_down()
+  {
+    mutable& tex = *tex_octree;
+    const v = tex.data[cur_offset()];
+    const node_type = (v >> 24u);
+    if (node_type != 1) {
+      return;
+    }
+    mutable& pos = stat.pos;
+    const bx = (v      ) & 0xff;
+    const by = (v >>  8) & 0xff;
+    const bz = (v >> 16) & 0xff;
+    stat.pos_stack.push_back(pos);
+    pos.node_x = bx;
+    pos.node_y = by;
+    pos.node_z = bz;
+    pos.x = 0;
+    pos.y = 0;
+    pos.z = 0;
+  }
+  private function void go_up()
+  {
+    if (stat.pos_stack.empty()) {
+      return;
+    }
+    stat.pos = stat.pos_stack.pop_back();
+  }
+  private function uint cur_offset() const
+  {
+    mutable& tex = *tex_octree;
+    const& pos = stat.pos;
+    uint cur_x = (pos.node_x << bshift) | pos.x;
+    uint cur_y = (pos.node_y << bshift) | pos.y;
+    uint cur_z = (pos.node_z << bshift) | pos.z;
+    return (cur_z * tex.width * tex.height) | (cur_y * tex.width) | cur_x;
+  }
+  private function void restore_blink()
+  {
+    update_voxel(false);
+    frame_cnt = 0;
+  }
+  private function void update_voxel(bool blink)
+  {
+    const& pos = stat.pos;
+    uint cur_x = (pos.node_x << bshift) | pos.x;
+    uint cur_y = (pos.node_y << bshift) | pos.y;
+    uint cur_z = (pos.node_z << bshift) | pos.z;
+    uint value = (!blink) ? tex_octree->data[cur_offset()] :
+      edit_params == 0 ? 0xffff0000u :
+      edit_params == 1 ? 0xff0000ffu : 0xff00ff00u;
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_3D, texture_voxpat->texture_id.get());
+    glTexSubImage3D(GL_TEXTURE_3D, 0, cast_int(cur_x),
+      cast_int(cur_y), cast_int(cur_z), 1, 1, 1, GL_RGBA,
+      GL_UNSIGNED_BYTE, caddress(value).to_cvoidptr());
+  }
+  public function void on_frame()
+  {
+    update_voxel(frame_cnt < 32);
+    frame_cnt = (frame_cnt + 1) & 63;
+  }
+}
+

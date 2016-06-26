@@ -14,6 +14,7 @@ public import pgl3d::engine::util -;
 public import pgl3d::engine::platform -;
 public import pgl3d::engine::input_control -;
 public import pgl3d::engine::pglconfig -;
+public import pgl3d::engine::nvidia_optimus_switch;
 public import pgl3d::geometry::funcs -;
 public import pgl3d::drawer::drawer -;
 public import pgl3d::physics::collision_shape -;
@@ -96,6 +97,7 @@ private struct app_impl()
   public float option_value = 0.0f;
   public string_map app_commands;
   public varray{bool} prev_joy_buttons;
+  public option{ptr{edit_mode_i}} edit_mode;
   init();
   private function void init() {
     string s;
@@ -151,7 +153,7 @@ public multithreaded struct demoapp_scene_shared(io const& sys0)
   }
 }
 
-public threaded function double get_time(io::io const& sys)
+private threaded function double get_time(io::io const& sys)
 {
   const t = sys.high_resolution_timer();
   const d = sys.high_resolution_timer_frequency();
@@ -197,8 +199,9 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
     position_angle mutable& light)
   {
     light.position = camera.position + glm::make_vec3(0.0, 0.0, 0.0);
+    light.angle = glm::make_quat_angle_axis(
+      -3.14f * 0.55f, 0.707107, 0.707107, 0.0).normalize();
     // light.angle = glm::make_quat_wxyz(1.0, 0.0, 0.0, 0.0);
-    light.angle = glm::make_quat_angle_axis(3.14f * 0.55f, 0.707107, 0.707107, 0.0).normalize();
     // light.position = camera.angle * glm::make_vec3(0.0, 0.0, -50.0) +
     //   camera.position + glm::make_vec3(0.0, 0.0, 0.0);
     //light.angle = light_angle(glm::make_vec3(0.0, 0.0, 1.0),
@@ -368,7 +371,7 @@ function void handle_event(app_impl mutable& app,
       app.scene_next_flag = true;
       return;
     }
-    if (ev.key.keysym.scancode == SDL_SCANCODE_0) {
+    if (ev.key.keysym.scancode == SDL_SCANCODE_RIGHTBRACKET) {
       commands_r["fullscreen"] = "1";
       return;
     }
@@ -378,9 +381,11 @@ function void handle_event(app_impl mutable& app,
     }
     if (ev.key.keysym.scancode == SDL_SCANCODE_J) {
       app.exposure *= 2.0;
+      return;
     }
     if (ev.key.keysym.scancode == SDL_SCANCODE_K) {
       app.exposure *= 0.5;
+      return;
     }
     if (ev.key.keysym.scancode == SDL_SCANCODE_LEFTBRACKET) {
       commands_r["vsync"] = "1";
@@ -399,6 +404,12 @@ function void handle_event(app_impl mutable& app,
       save_state(app);
       return;
     }
+    if (case app.edit_mode.some) {
+      app.edit_mode.some->set_camera_angle(app.player.angle);
+      app.edit_mode.some->on_key_pressed(
+	static_cast{int}(ev.key.keysym.scancode));
+    }
+    // debug_log("key", static_cast{int}(ev.key.keysym.scancode));
   }
   app.ictl.handle_event(ev, frame_speed, pjinfo, app.app_commands);
 }
@@ -451,7 +462,9 @@ private function tree_map{string, ptr{pgldrawer_export_i}} init_drawers(
   const t0 = get_time(io::system);
   tree_map{string, ptr{pgldrawer_export_i}} r;
   r.insert("drawer_0_triangles", make_drawer_triangles(sconf, res, 0));
-  r.insert("drawer_0_triangles_alt", make_drawer_triangles(sconf, res, 1));
+  const dr = make_drawer_triangles(sconf, res, 1);
+  app.edit_mode = dr->get_edit_mode();
+  r.insert("drawer_0_triangles_alt", dr);
   r.insert("drawer_0_triangles_null", make_drawer_triangles(sconf, res, 2));
   r.insert("drawer_1_lineparticle", make_drawer_lineparticle(sconf, res));
   r.insert("drawer_2_skybox", make_drawer_skybox(sconf, res));
@@ -460,11 +473,9 @@ private function tree_map{string, ptr{pgldrawer_export_i}} init_drawers(
   r.insert("drawer_rect2d", make_drawer_rect2d(sconf, res));
   r.insert("drawer_font2", make_drawer_font2(sconf, res));
   r.insert("drawer_blur", make_drawer_blur(sconf, res));
-  /*
-  if (sconf.conf.get("fxaa", 1, 0, 1) != 0) {
-    r.insert("drawer_fxaa", make_drawer_fxaa(sconf, res));
-  }
-  */
+  // if (sconf.conf.get("fxaa", 1, 0, 1) != 0) {
+  //   r.insert("drawer_fxaa", make_drawer_fxaa(sconf, res));
+  // }
   const t1 = get_time(io::system);
   sdl_log("app_init_drawers done", t1 - t0);
   return r;
@@ -517,16 +528,38 @@ private function void build_vertices(app_impl mutable& app,
   pgs.make_vertex_set(tr, "box",
     regular_polygon(1.4142f * box_size, 4,
       apply(m1,
-	bump_apply(m, false, ctx_fill(1), ctx_fill(1))),
+	bump_apply(m, true, ctx_fill(1), ctx_fill(1))),
       apply(m1,
 	ctx_fill(1))));
   */
   pgs.make_vertex_set(tr, "box",
     regular_polygon(1.4142f * box_size, 4,
       apply(m1,
-	bump_apply(m, false, ctx_fill(0), ctx_fill(0))),
+	bump_apply(m, true,
+	  ctx_tex3d(2, 1, 1.0f/32.0f),
+	  ctx_tex3d(2, 1, 1.0f/32.0f))),
       apply(m1,
 	ctx_tex3d(2, 1, 1.0f/32.0f))));
+  m1 = glm::mat4().translate(glm::make_vec3(0.0, 0.0, -50.0f));
+  m = glm::mat4()
+    .translate(glm::make_vec3(0.0, 0.0, 32.0f));
+  pgs.make_vertex_set(tr, "mstex3d",
+    regular_polygon(300.0f, 100,
+      apply(m1,
+	bump_rec(1.0, 1.0, 16,
+	  lid(
+	    ctx_tex3d(2, 1, 1.0f/32.0f),
+	    bump_rec(0.01, 1.0, 1,
+	      ctx_fill(0),
+	      ctx_tex3d(2, 1, 1.0f/32.0f)
+	    )
+	  ),
+	  hole()
+	)
+      ),
+      hole()
+    )
+  );
   m = glm::mat4()
     .translate(glm::make_vec3(0.0, 0.0, 64.0));
   m1 = glm::mat4()
@@ -535,7 +568,7 @@ private function void build_vertices(app_impl mutable& app,
   pgs.make_vertex_set(tr, "box50",
     regular_polygon(1.4142f * 50.0f, 4,
       apply(m1,
-	bump_apply(m, false, ctx_fill(0), ctx_fill(0))),
+	bump_apply(m, true, ctx_fill(0), ctx_fill(0))),
       apply(m1,
 	ctx_fill(0))));
   pgs.make_vertex_set(tr, "saucer",
@@ -597,7 +630,7 @@ private function void build_vertices(app_impl mutable& app,
     .rotate(to_radians(30.0), glm::make_vec3(0.0, 0.0, 1.0));
   pgs.make_vertex_set(tr, "nest-multi",
     regular_polygon(600.0, 4,
-      bump_apply(m, false, hole(),
+      bump_apply(m, true, hole(),
 	bump_rec_seq(0.2, 1.0, 5, hole(),
 	  rectangle_split(10, 10, ctx_poly_joint("nest")))),
       hole()));
@@ -606,8 +639,8 @@ private function void build_vertices(app_impl mutable& app,
     .rotate(to_radians(10.0), glm::make_vec3(0.0, 0.0, 1.0));
   pgs.make_vertex_set(tr, "bullet",
     regular_polygon(1.0, 6,
-      bump_apply(m, false, ctx_fill(0), ctx_fill(0)),
-      bump_apply(m, false, ctx_fill(0), ctx_fill(0))));
+      bump_apply(m, true, ctx_fill(0), ctx_fill(0)),
+      bump_apply(m, true, ctx_fill(0), ctx_fill(0))));
   // 60fps, macosx/linux mbp gt750m
   pgs.make_vertex_set(tr, "bullet-multi",
     regular_polygon(600.0, 4,
@@ -772,6 +805,7 @@ private function void build_vertices(app_impl mutable& app,
     shapes_add(name, mass, collision_shape_e_concave);
   }
   shapes_add_sphere("box", 1.0f);
+  shapes_add_convex("mstex3d", 1000.0f);
   shapes_add_convex("nest", 1000.0f);
   shapes_add_sphere("box50", 50.0f);
   shapes_add_convex("bullet2", 2.0f);
@@ -1004,6 +1038,7 @@ scene_control(node_factory const& nfac,
     // "knight-multi",
     "box",
     "rigidbody-multi",
+    "mstex3d",
     "block-smtest",
     "block-multi",
     "bullet2-multi2s1",

@@ -1139,16 +1139,18 @@ static void calc_inherit_transitive_rec(expr_i *pos,
         term_tostr_human(t).c_str());
     } else if (s.find(einst) != s.end()) {
       /* skip */
+    /*
     } else if (einst->get_esort() != expr_e_interface) {
       arena_error_throw(pos, "Not an interface: '%s'",
 	term_tostr_human(t).c_str());
+    */
     } else {
       lst.push_back(einst);
       s.insert(einst);
-      expr_interface *ei = ptr_down_cast<expr_interface>(einst);
-      if (ei->block->inherit != 0) {
+      expr_block *blk = einst->get_template_block();
+      if (einst->get_esort() == expr_e_interface && blk->inherit != 0) {
         p.insert(einst);
-        calc_inherit_transitive_rec(pos, lst, s, p, ei->block->inherit);
+        calc_inherit_transitive_rec(pos, lst, s, p, blk->inherit);
         p.erase(einst);
       }
     }

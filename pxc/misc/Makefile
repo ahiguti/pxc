@@ -8,6 +8,7 @@ clean:
 	cd tmtiming && $(MAKE) clean
 	rm -f decimal
 	-find . -name "pxc_clean.sh" -exec {} ";"
+	-find . -name "clean_all.sh" -exec {} ";"
 
 decimal:
 	g++ -O9 decimal.cpp -o decimal

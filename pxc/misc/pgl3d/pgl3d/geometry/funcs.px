@@ -170,9 +170,29 @@ public threaded function float polygon_radius(poly_t const& poly)
   return r;
 }
 
-public threaded function vec3 normal_from_poly(poly_t const& poly)
+public threaded function vec3 normal_from_poly(poly_t const& poly,
+  bool scale_flag)
 {
-  return normal_scale_from_poly(poly).normalize();
+  const sz = poly.size();
+  if (sz < 3) { return vec3(); }
+  vec3 v;
+  if (sz == 3) {
+    v = cross(poly[1].pos - poly[0].pos, poly[2].pos - poly[1].pos);
+  } else {
+    for (const i: 0 .. sz) {
+      v += poly_cross_at(poly, i);
+    }
+  }
+  v = v.normalize();
+  if (scale_flag) {
+    float len;
+    for (const i: 0 .. sz - 1) {
+      len += length(poly[i].pos - poly[i + 1].pos);
+    }
+    len /= static_cast{float}(sz - 1);
+    v *= len;
+  }
+  return v;
 }
 
 /* private */
@@ -185,20 +205,23 @@ private threaded function vec3 poly_cross_at(poly_t const& poly, size_t i)
   return cross(poly[i1].pos - poly[i].pos, poly[i2].pos - poly[i1].pos);
 }
 
+/*
 private threaded function vec3 normal_scale_from_poly(poly_t const& poly)
 {
   const sz = poly.size();
   if (sz < 3) { return vec3(); }
   vec3 v;
   if (sz == 3) {
-    v = cross(poly[1].pos - poly[0].pos, poly[2].pos - poly[1].pos) * 3.0f;
+    v = cross(poly[1].pos - poly[0].pos, poly[2].pos - poly[1].pos);
   } else {
     for (const i: 0 .. sz) {
       v += poly_cross_at(poly, i);
     }
+    v /= static_cast{float}(sz);
   }
   return v / sqrt(length(v));
 }
+*/
 
 private threaded function void gf_regular_polygon(float radius, size_t n,
   gf_poly const& c0, gf_poly const& c1, build_context_i const& ctx,
@@ -234,7 +257,7 @@ private threaded function void gf_bump_rec_internal(float z, float scale,
 {
   if (poly.size() < 3) { return; }
   darrayst{vertex_attr} front = poly;
-  const nor = normal_scale_from_poly(poly) / static_cast{float}(poly.size());
+  const nor = normal_from_poly(poly, true);
   for (const i, mutable& e: front) {
     e.pos += nor * z;
   }
@@ -373,7 +396,7 @@ poly_trans(poly_t const& poly)
   vec3 ez;
   if (poly.size() >= 3) {
     ex = (poly[1].pos - poly[0].pos).normalize();
-    ez = normal_from_poly(poly);
+    ez = normal_from_poly(poly, false);
   } else {
     ex = make_vec3(1.0, 0.0, 0.0);
     ez = make_vec3(0.0, 1.0, 0.0);
@@ -476,7 +499,7 @@ private threaded function void gf_ctx_tex3d(size_t nbase, size_t ntex, float z,
   const len = glm::length(poly[1].pos - poly[0].pos);
   const texscale = len; // テクスチャ座標からローカル座標への倍率
   darrayst{vertex_attr} front = poly;
-  mutable nor = normal_from_poly(poly);
+  mutable nor = normal_from_poly(poly, false);
   const eps = 0.000001f; // 必要？
   // const eps = 0.0f;
   const zm = z - eps;
@@ -543,7 +566,7 @@ private threaded function void gf_sphere(size_t split, gf_poly const& c0,
   if (poly_sz < 3) { return; }
   if (split == 0) { c0(ctx, poly, mesh_index()); }
   const pcenter = polygon_center(poly);
-  const nor = normal_from_poly(poly);
+  const nor = normal_from_poly(poly, false);
   const radius = polygon_radius(poly);
   darrayst{vertex_attr} sp = poly;
   mesh_index mp1;
@@ -689,15 +712,21 @@ private threaded function void gf_bump_apply(mat4 const& m,
   for (const i: 0 .. sz) {
     const i1 = i + 1 != sz ? i + 1 : 0;
     if (split_reverse) {
-      const s0 = make_farray{vertex_attr}(poly[i], poly[i1], front[i1]);
-      const s1 = make_farray{vertex_attr}(front[i1], front[i], poly[i]);
+      // const s0 = make_farray{vertex_attr}(poly[i], poly[i1], front[i1]);
+      // const s1 = make_farray{vertex_attr}(front[i1], front[i], poly[i]);
+      // c0(ctx, s0, mesh_index());
+      // c0(ctx, s1, mesh_index());
+      const s0 = make_farray{vertex_attr}(poly[i], poly[i1], front[i1],
+	front[i]);
       c0(ctx, s0, mesh_index());
-      c0(ctx, s1, mesh_index());
     } else {
-      const s0 = make_farray{vertex_attr}(poly[i], poly[i1], front[i]);
-      const s1 = make_farray{vertex_attr}(front[i], poly[i1], front[i1]);
+      // const s0 = make_farray{vertex_attr}(poly[i], poly[i1], front[i]);
+      // const s1 = make_farray{vertex_attr}(front[i], poly[i1], front[i1]);
+      // c0(ctx, s0, mesh_index());
+      // c0(ctx, s1, mesh_index());
+      const s0 = make_farray{vertex_attr}(poly[i], poly[i1], front[i],
+	poly[i1]);
       c0(ctx, s0, mesh_index());
-      c0(ctx, s1, mesh_index());
     }
   }
 }

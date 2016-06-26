@@ -1,5 +1,11 @@
 
 <%prepend/>
+// #extension GL_ARB_conservative_depth : enable
+// <%if><%eq><%stype/>1<%/>
+// layout (depth_unchanged) out float gl_FragDepth;
+// <%else/>
+// layout (depth_unchanged) out float gl_FragDepth;
+// <%/>
 const float epsilon = 1e-6;
 // const float epsilon = 1e-5;
 const float epsilon2 = 1e-4;
@@ -441,9 +447,9 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
     in vec3 texpos_arr[level_max], inout int level, inout vec3 aabb_min,
     inout vec3 aabb_max)
   {
-    curpos_f = clamp(curpos_f, 0.0, 1.0 - epsilon);
+    curpos_f = clamp(curpos_f, 0.0, 1.0 - epsilon * 0.0);
     vec3 dir = voxel_next(curpos_i, curpos_f, spmin, spmax, epsilon * 3.0, ray);
-      // FIXME: epsilon * 3.0 ????
+      // epsilon * 3.0 これが小さすぎるとbshift=5のとき乱れる
     raycast_move(curpos_t, curpos_i, curpos_f, dir, texpos_arr, level,
       aabb_min, aabb_max);
     return dir;
@@ -510,9 +516,12 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
 	aabb_max = aabb_max * <%octree_block_factor/> - curpos_i;
 	++level;
 	curpos_t = floor(value.rgb * 255.0 + 0.5) * <%octree_block_factor/>;
-	curpos_f = clamp(curpos_f, 0.0, 1.0 - epsilon);
-	curpos_i = floor(curpos_f * <%octree_block_factor/>);
+	// curpos_f = clamp(curpos_f, 0.0, 1.0 - epsilon);
+	// curpos_i = floor(curpos_f * <%octree_block_factor/>);
+	curpos_i = clamp(floor(curpos_f * <%octree_block_factor/>), 0.0,
+	  <%octree_block_factor/> - 1.0);
 	curpos_f = (curpos_f * <%octree_block_factor/>) - curpos_i;
+	curpos_f = clamp(curpos_f, 0.0, 1.0 - epsilon * 0.0);
 	continue;
       } else { // if (node_type > 1) { // 色のついた葉
 	bool hit_wall = false;
@@ -522,27 +531,39 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
 	  // node_type == 255のボクセルは法線データを見ずに壁面に衝突する
 	  hit_wall = true;
 	  dir = -dir;
-	  value = vec4(0.2, 0.2, 0.9, 1.0);
+	  // value = vec4(0.2, 0.2, 0.9, 1.0);
+	  value = vec4(value.xyz, 1.0);
 	} else {
+	  /// FIXME: node_type == 0 のdist_p, dist_nの計算と共通化
+	  vec3 surf_val = floor(value.xyz * 255.0 + 0.5);
+	  vec3 surf_s = floor(surf_val / 16.0);   // 上位4bit
+	  vec3 surf_p = surf_val - surf_s * 16.0; // 下位4bit
+	  float surf_rad = float(node_type - 1) * 0.25;
+	  surf_p -= 8.0;
 	  vec3 sp_nor = vec3(0.0);
-	  float length_ae = voxel_collision_sphere(ray, curpos_f, vec3(0.0),
-	    vec3(1.0,0.8,1.0), 0.25, hit_wall, sp_nor);
+	  float length_ae = voxel_collision_sphere(ray, curpos_f,
+	    surf_p * -0.25, // vec3(-0.5, -0.5, -0.5),
+	    surf_s * 0.125, // vec3(1.0, 1.0, 1.0),
+	    surf_rad * surf_rad, // 1.001 - (hit >= 0 ? 0.01 : 0),
+	    hit_wall, sp_nor);
 	  vec3 tp = curpos_f + ray * length_ae;
 	  if (hit_wall) {
 	    dir = -dir;
-	    value = vec4(0.9, 0.3, 0.3, 1.0);
-	  } else if (!pos3_inside(tp, 0.0, 1.0)) {
+	    value = vec4(0.5, 0.5, 0.5, 1.0);
+	  } else if (!pos3_inside(tp, 0.0 - epsilon, 1.0 + epsilon)) {
+	    // 曲面と境界平面の境目の誤差を見えなくするためにepsilonだけ広げる
 	    notouch = true;
 	  } else {
 	    // ボクセル内で曲面に接触
 	    dir = sp_nor;
 	    curpos_f = tp;
-	    value = vec4(0.9, 0.3, 0.3, 1.0);
+	    value = vec4(0.5, 0.5, 0.5, 1.0);
 	  }
 	}
 	if (!notouch) {
 	  // 接触した
 	  if (hit >= 0) {
+	    // dbgval = vec4(1.0);
 	    lstr_para = 0.0; // FIXME
 	    break;
 	  }
@@ -561,11 +582,13 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
 	  }
 	  // 影判定開始
 	  ray = light;
+	  /*
 	  if (hit_wall) {
 	    raycast_move(curpos_t, curpos_i, curpos_f, dir, texpos_arr,
 	      level, aabb_min, aabb_max);
 	    continue;
 	  }
+	  */
 	  // fallthru
 	}
 	// 接触しなかった
@@ -848,7 +871,7 @@ void main(void)
       discard;
     }
     // ambient = max(0.0, 0.005 - float(hit) * 0.0001);
-    // if (dbgval.a > 0.0) { <%fragcolor/> = dbgval; return; } // FIXME
+if (dbgval.a > 0.0) { <%fragcolor/> = dbgval; return; } // FIXME
     if (length(nor) < 0.1) {
       // raycastの始点から衝突していた
       // <%fragcolor/> = vec4(1.0); return;

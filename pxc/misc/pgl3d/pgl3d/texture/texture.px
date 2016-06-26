@@ -3,6 +3,7 @@ public import common -;
 public import pointer::raw -;
 private import pointer::raw_unsafe -;
 public import numeric::fpmath -;
+public import text::serialize::compact_pod -;
 public import glm;
 private import glm::raw;
 public import io::time -;
@@ -32,14 +33,14 @@ load_texture_data_raw(string const& fn0)
   const p = make_ptr{texture_data}();
   string buf;
   sdl_load_file(fn0, buf);
-  *p = from_string{texture_data}(buf);
+  *p = from_string_compact_pod{texture_data}(buf);
   return p;
 }
 
 public function bool
 save_texture_data_raw(string const& fn0, texture_data const& td)
 {
-  const buf = to_string(td);
+  const buf = to_string_compact_pod(td);
   return sdl_save_file(fn0, buf);
 }
 
@@ -76,8 +77,8 @@ load_texture_data(string const& fn0)
   mutable& uibuf = p->data;
   uibuf.resize(tex_w * tex_h, 0);
   debug_log("uibuf_size", uibuf.size());
-const rawp = cslice_to_crawptr(uibuf.crange()).to_size_t();
-debug_log("uibuf_ptr", rawp);
+  const rawp = cslice_to_crawptr(uibuf.crange()).to_size_t();
+  debug_log("uibuf_ptr", rawp);
   uint rmask = fmt.Rmask;
   uint gmask = fmt.Gmask;
   uint bmask = fmt.Bmask;

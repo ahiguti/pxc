@@ -60,7 +60,7 @@ public function void prepare_texture_data_3d_tmap(texture_data mutable& tmap,
   {
     for (const x: 0 .. vtxsz) {
       for (const y: 0 .. vtysz) {
-	for (const z: 0 .. vtzsz) {
+	for (const z: 0 .. vtzsz - 3) {
 	  function bool cval(int x, int y, int z) {
 	    const v = get(x, y, z);
 	    return (v & 0xff000000) >= 0x02000000;
@@ -277,31 +277,39 @@ public function void prepare_texture_data_3d_tpat(texture_data mutable& tpat,
     // 6dir bump
     const rnd = make_rand_generator(333U);
     function void set_bump(uint bx, uint by, uint bz, uint x0, uint y0,
-      uint z0, bool plain, glm::vec4 const& p0, uint dir)
+      uint z0, bool cut, glm::vec3 const& p0, glm::vec3 const& s0,
+      float radius, uint dir)
     {
       const bsz = 1u << bshift;
       uint x;
       uint y;
       uint z;
-      vec4 p;
+      vec3 p;
+      vec3 s;
       if (dir == 0u) {
 	x = bsz - z0 - 1; y = x0; z = y0;
-	p = make_vec4(-p0.z, p0.x, p0.y, p0.w - p0.z);
+	p = make_vec3(-p0.z, p0.x, p0.y);
+	s = make_vec3(s0.z, s0.x, s0.y);
       } else if (dir == 1u) {
 	x = z0; y = x0; z = y0;
-	p = make_vec4(p0.z, p0.x, p0.y, p0.w);
+	p = make_vec3(p0.z, p0.x, p0.y);
+	s = make_vec3(s0.z, s0.x, s0.y);
       } else if (dir == 2u) {
 	x = y0; y = bsz - z0 - 1; z = x0;
-	p = make_vec4(p0.y, -p0.z, p0.x, p0.w - p0.z);
+	p = make_vec3(p0.y, -p0.z, p0.x);
+	s = make_vec3(s0.y, s0.z, s0.x);
       } else if (dir == 3u) {
 	x = y0; y = z0; z = x0;
-	p = make_vec4(p0.y, p0.z, p0.x, p0.w);
+	p = make_vec3(p0.y, p0.z, p0.x);
+	s = make_vec3(s0.y, s0.z, s0.x);
       } else if (dir == 4u) {
 	x = x0; y = y0; z = bsz - z0 - 1;
-	p = make_vec4(p0.x, p0.y, -p0.z, p0.w - p0.z);
+	p = make_vec3(p0.x, p0.y, -p0.z);
+	s = make_vec3(s0.x, s0.y, s0.z);
       } else {
 	x = x0; y = y0; z = z0;
-	p = make_vec4(p0.x, p0.y, p0.z, p0.w);
+	p = make_vec3(p0.x, p0.y, p0.z);
+	s = make_vec3(s0.x, s0.y, s0.z);
       }
       x += bx;
       y += by;
@@ -311,23 +319,25 @@ public function void prepare_texture_data_3d_tpat(texture_data mutable& tpat,
       }
       const idx = (z << (pattern_sz_l2 * 2)) | (y << pattern_sz_l2) | x;
       // debug_log("set_color", x & 16, y & 16, z, x0, y0, z0, dir);
-      if (!plain || tpat.data[idx] != 0) { // FIXME
-	tpat.data[idx] = 0xffb090a0;
+      if (!cut || tpat.data[idx] != 0) { // FIXME
+	tpat.data[idx] = 0xff808080;
       } else {
-	const vec4 cval = p + make_vec4(128.0f, 128.0f, 128.0f, 128.0f);
-	const cx = static_cast{uint}(cval.x + 0.5);
-	const cy = static_cast{uint}(cval.y + 0.5);
-	const cz = static_cast{uint}(cval.z + 0.5);
-	const cwval = p.w / 2.0f + 128.0f;
-	const cw = static_cast{uint}(cwval  + 0.5);
-	  // cw must be greater than 1
-	if (cx >= 256 || cy >= 256 || cz >= 256) {
-	  throw runtime_error_template{"3d_tpat"}("invalid cval");
-	}
-	if (cw >= 254 || cw <= 1) {
-	  throw runtime_error_template{"3d_tpat"}("invalid cw");
-	}
-	const vc = (cw << 24u) | (cz << 16u) | (cy << 8u) | cx;
+	p = p * 4.0f; // pは0.25刻み
+	s = s * 8.0f; // sは0.125刻み
+	radius = radius * 4.0f; // 半径は0.25刻み
+	const vec3 pv = p + make_vec3(8.0f, 8.0f, 8.0f);
+	const vec3 sv = s;
+	const pvx = static_cast{uint}(pv.x + 0.5);
+	const pvy = static_cast{uint}(pv.y + 0.5);
+	const pvz = static_cast{uint}(pv.z + 0.5);
+	const svx = static_cast{uint}(sv.x + 0.5);
+	const svy = static_cast{uint}(sv.y + 0.5);
+	const svz = static_cast{uint}(sv.z + 0.5);
+	const vx = (svx << 4u) | pvx;
+	const vy = (svy << 4u) | pvy;
+	const vz = (svz << 4u) | pvz;
+	const cw = static_cast{uint}(radius + 0.5) + 1u;
+	const vc = (cw << 24u) | (vz << 16u) | (vy << 8u) | vx;
 	tpat.data[idx] = vc;
       }
     }
@@ -352,16 +362,38 @@ public function void prepare_texture_data_3d_tpat(texture_data mutable& tpat,
       for (const ix: x - w .. x + w + 1) {
 	for (const iy: y - h .. y + h + 1) {
 	  for (const iz: 0 .. d) {
-	    if (iz == d - 1 && ix == x - w) {
-	      vec4 p = make_vec4(-2.0, 0.0, 2.0, 0.0);
-	      set_bump(x0, y0, z0, ui(ix), ui(iy), ui(iz), true, p, dir);
-	    } else if (iz == d - 1 && ix == x + w) {
-	      vec4 p = make_vec4(2.0, 0.0, 2.0, 2.0);
-	      set_bump(x0, y0, z0, ui(ix), ui(iy), ui(iz), true, p, dir);
-	    } else {
-	      vec4 const p;
-	      set_bump(x0, y0, z0, ui(ix), ui(iy), ui(iz), false, p, dir);
+	    vec3 pshift;
+	    vec3 pscale;
+	    bool cutx = false;
+	    bool cuty = false;
+	    if (ix == x - w) {
+	      pshift.x -= 0.5;
+	      pscale.x = 1.0;
+	      cutx = true;
+	    } else if (ix == x + w) {
+	      pshift.x += 0.5;
+	      pscale.x = 1.0;
+	      cutx = true;
 	    }
+	    if (iy == y - h) {
+	      pshift.y -= 0.5;
+	      pscale.y = 1.0;
+	      cuty = true;
+	    } else if (iy == y + h) {
+	      pshift.y += 0.5;
+	      pscale.y = 1.0;
+	      cuty = true;
+	    }
+	    bool cut = false;
+	    if ((cutx || cuty) && iz == d - 1) {
+	      pshift.z = 0.5;
+	      pscale.z = 1.0;
+	      cut = true;
+	    } else if (cutx && cuty) {
+	      cut = true;
+	    }
+	    set_bump(x0, y0, z0, ui(ix), ui(iy), ui(iz), cut, pshift,
+	      pscale, 1.0, dir);
 	  }
 	}
       }

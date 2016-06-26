@@ -11,7 +11,7 @@ void main(void)
   // stype 2はボクセルマップの底に表示するzprepassとshadowのみのポリゴン
   // TODO: バイアスはデプスバッファのビット数に合わせて決める?
   // gl_Position = pos + vec4(0.0, 0.0, 0.0001 * pos.w, 0.0);
-  gl_Position = pos + vec4(0.0, 0.0, 0.001 * pos.w, 0.0);
+  gl_Position = pos + vec4(0.0, 0.0, 0.0001 * pos.w, 0.0);
   <%else/>
   gl_Position = pos;
   <%/>

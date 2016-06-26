@@ -33,16 +33,13 @@ octree_build(octree{bshift} mutable& ot, ptr{level_data} const& pattern,
   bool apply_tile = (tiles->get_w_l2() != 0);
   if (apply_tile) {
     const p = tiles;
-    debug_log("tile", p->get_h_l2(), p->get_w_l2(), p->get_d_l2());
-/*
-    if (p->get_w_l2() != p->get_h_l2() || p->get_w_l2() != p->get_d_l2()) {
-      throw runtime_error_template{"octree"}("tile whd");
-    }
-*/
+    debug_log("octree_build: tile", p->get_h_l2(), p->get_w_l2(),
+      p->get_d_l2());
     // check_size{bshift}(p->get_w_l2(), "tile width");
     // check_size{bshift}(p->get_h_l2(), "tile height");
     // check_size{bshift}(p->get_d_l2(), "tile depth");
   } else {
+    debug_log("octree_build: no tile");
     const p = pattern;
     if (p->get_w_l2() != p->get_h_l2() || p->get_w_l2() != p->get_d_l2()) {
       throw runtime_error_template{"octree"}("pattern whd");
@@ -56,7 +53,7 @@ octree_build(octree{bshift} mutable& ot, ptr{level_data} const& pattern,
   ptr{level_data} ilevel = pattern;
   ptr{level_data} olevel = make_ptr{level_data}();
   ot.nodes.clear();
-  ot.nodes.push_back(node_value{bshift}()); // for root node
+  ot.nodes.push_back(node_value{bshift}()); // reserved for the root node
   if (apply_tile) {
     make_octree_one_level{bshift}(ot.nodes, *olevel, *ilevel);
     ptr{level_data} o2level = make_ptr{level_data}();
@@ -371,7 +368,7 @@ public struct level_data
     w_l2 = w;
     h_l2 = h;
     d_l2 = d;
-    values.resize(1u << (w + h + d), 0u);
+    values.resize(static_cast{size_t}(1ul << (w + h + d)), 0u);
     if (values.size() == 0) {
       throw runtime_error_template{"octree"}("level_data size");
     }

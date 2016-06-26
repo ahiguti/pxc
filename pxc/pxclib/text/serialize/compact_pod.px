@@ -1,47 +1,52 @@
-public threaded namespace text::serialize::compact_pod_array "use-unsafe";
+public threaded namespace text::serialize::compact_pod "use-unsafe";
 public import common -;
 public import meta m;
 public import meta::family mf;
 public import text::serialize -;
 
 public threaded function {t} string
-to_string_compact_pod_array(t const& x)
+to_string_compact_pod(t const& x)
 {
-  // same as to_string() except that this function uses memcpy for pod arrays.
+  // same as to_string() except that this function uses memcpy for pod types.
   // note: endian dependent
+  // todo: pod structs
   string s;
-  serialize{ser_compact_pod_array, t}(x, s);
+  serialize{ser_compact_pod, t}(x, s);
   return s;
 }
 
 public threaded function {t} t
-from_string_compact_pod_array(cstrref const& s)
+from_string_compact_pod(cstrref const& s)
 {
   mutable s1 = s;
-  return deserialize{ser_compact_pod_array, t}(s1);
+  return deserialize{ser_compact_pod, t}(s1);
 }
 
-public threaded struct ser_compact_pod_array {
+public threaded struct ser_compact_pod {
   public metafunction __find__ ser_default; // inherits ser_default
   public metafunction ser_specialized{t}
     m::cond{
+      mf::is_numeric_enum_bitmask_type{t}, ser_pod_single{t},
       is_pod_dense_array{t}, ser_pod_array{t},
       m::apply{m::symbol{ser_default, "ser_specialized", 0}, t}};
-    /*
-    m::cond{
-      m::symbol_exists{m::nsof{t}, m::concat{t, "_append_to_string"}},
-	m::symbol{m::nsof{t}, m::concat{t, "_append_to_string"}},
-      mf::is_string_or_slice_type{t}, string_append_escape{t},
-      mf::is_integral_type{t}, p::integral_to_decimal{t},
-      mf::is_fp_type{t}, p::fp_to_decimal,
-      m::eq{t, bool}, bool_to_string,
-      m::eq{t, unit}, unit_to_string,
-      0};
-    */
   public metafunction des_specialized{t}
     m::cond{
+      mf::is_numeric_enum_bitmask_type{t}, des_pod_single{t},
       is_pod_dense_array{t}, des_pod_array{t},
       m::apply{m::symbol{ser_default, "des_specialized", 0}, t}};
+}
+
+private threaded function {t} void ser_pod_single(t const& x,
+  string mutable& v)
+{
+  ser_memcpy(x, 1, v);
+}
+
+private threaded function {t} t des_pod_single(cstrref mutable& s)
+{
+   mutable r = t();
+   des_memcpy(r, 1, s);
+   return r;
 }
 
 private threaded function {t} void ser_pod_array(t const& x,
@@ -101,6 +106,4 @@ des_memcpy(T& x, bt_size_t len, cstrref& s)
 }; // namespace pxcrt
 
 ;
-
-
 

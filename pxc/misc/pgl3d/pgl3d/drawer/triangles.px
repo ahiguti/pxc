@@ -3,6 +3,7 @@ public import common -;
 public import meta m;
 public import pgl3d::drawer::base -;
 public import pgl3d::texture::tile -;
+public import pgl3d::drawer::edit_mode -;
 
 private metafunction raycast_cull_front 1;
 
@@ -79,28 +80,32 @@ public struct drawer_triangles(shader_config const& glc0,
 <pgldrawer_i>
 {
   metafunction tattr triangles_vertex_attributes;
-  /*
+/*
   metafunction octree_bshift 5;
   metafunction pattern_size 9;
   metafunction virt_size_x 15;
   metafunction virt_size_y 15;
   metafunction virt_size_z 8;
-  */
+*/
   metafunction octree_bshift 4;
   metafunction pattern_size 8;
   metafunction virt_size_x 12;
   metafunction virt_size_y 12;
-  metafunction virt_size_z 8;
+  metafunction virt_size_z 9;
+  /*
+  */
   ptr{resource_pool} res = pointer_downcast{ptr{resource_pool}}(res0);
   int const stype = opt0;
   option{triangles_shader_ptr} sdr_solid;
   option{zprepass_shader_ptr} sdr_zp;
   option{shadowmap_shader_ptr} sdr_shadow;
+  ptr{texture_data} tex_octree = make_ptr{texture_data}();
   ptr{gl_texture} texture_dpat = make_ptr{gl_texture}();
   ptr{gl_texture} texture_pmpat = make_ptr{gl_texture}();
   ptr{gl_texture} texture_tilemap = make_ptr{gl_texture}();
   ptr{gl_texture} texture_env = make_ptr{gl_texture}();
   ptr{gl_texture} texture_voxpat = make_ptr{gl_texture}();
+  option{ptr{edit_mode_i}} edit_mode_ptr;
   shader_config glc = glc0;
   uint octree_wh_l2 = 4;
   uint octree_d_l2 = octree_wh_l2;
@@ -125,7 +130,7 @@ public struct drawer_triangles(shader_config const& glc0,
     // uint mutable octree_wh_l2 = 4;
     // uint mutable octree_d_l2 = octree_wh_l2;
     if (stype == 1) {
-      mutable tex_octree = load_texture_data_raw("octree.raw");
+      tex_octree = load_texture_data_raw("octree.raw");
       if (tex_octree->width == 0) {
 	debug_log("generate octree.raw");
 	const bshift = static_cast{uint}(octree_bshift);
@@ -140,7 +145,7 @@ public struct drawer_triangles(shader_config const& glc0,
 	  static_cast{uint}(bshift));
 	debug_log("tmap done");
 	bool enable_calc_distance =
-	  glc.conf.get("calc_distance", 0, 1, 1) != 0;
+	  glc.conf.get("calc_distance", 1, 0, 1) != 0;
 	tex_octree = convert_to_octree{octree_bshift}(tex_voxpat,
 	  tex_voxmap, enable_calc_distance);
 	debug_log("octree done");
@@ -155,6 +160,12 @@ public struct drawer_triangles(shader_config const& glc0,
       texture_data_to_gl_texture(GL_TEXTURE_3D, *texture_voxpat, tex_octree);
       octree_wh_l2 = integral_log2(tex_octree->width) - octree_bshift;
       octree_d_l2 = integral_log2(tex_octree->depth) - octree_bshift;
+      uint bshift = octree_bshift;
+      if (glc.conf.get("edit_mode", 0, 0, 1) != 0) {
+	ptr{edit_mode_i} em = make_ptr{edit_mode}(bshift, tex_octree,
+	  texture_voxpat);
+	edit_mode_ptr = make_option(em);
+      }
     }
     reload_shaders();
     debug_log("drawer_triangles init ", stype, "done");
@@ -226,7 +237,8 @@ public struct drawer_triangles(shader_config const& glc0,
 	return true;
       }
     } else if (stype == 0) {
-      if (step == draw_step_shadowmapping ||
+      if (
+	step == draw_step_shadowmapping ||
 	step == draw_step_zprepass ||
 	step == draw_step_solid) {
 	return true;
@@ -285,9 +297,6 @@ public struct drawer_triangles(shader_config const& glc0,
 	vp.to_crawptr());
       aibuf.draw(sdr, bo, bo_ib, bo_id, glc.enable_instanced,
 	  glc.enable_uniform_instancing);
-// FIXME
-/*
-*/
     } else if (step == draw_step_solid) {
       if (stype == 2) { return; }
       mutable view = glm::mat4();
@@ -295,15 +304,12 @@ public struct drawer_triangles(shader_config const& glc0,
       const vp = cam_df.projection * view;
       const red = make_farray{float}(0.8, 0.1, 0.0, 1.0);
       mutable& sdr = *sdr_solid.some;
-      glActiveTexture(GL_TEXTURE0);
-      glBindTexture(GL_TEXTURE_2D, texture_dpat->texture_id.get());
-      /*
-      // FIXME: enable
-      glActiveTexture(GL_TEXTURE1);
-      glBindTexture(GL_TEXTURE_2D, texture_pmpat.texture_id.get());
-      glActiveTexture(GL_TEXTURE2);
-      glBindTexture(GL_TEXTURE_2D, texture_tilemap.texture_id.get());
-      */
+      // glActiveTexture(GL_TEXTURE0);
+      // glBindTexture(GL_TEXTURE_2D, texture_dpat->texture_id.get());
+      // glActiveTexture(GL_TEXTURE1);
+      // glBindTexture(GL_TEXTURE_2D, texture_pmpat->texture_id.get());
+      // glActiveTexture(GL_TEXTURE2);
+      // glBindTexture(GL_TEXTURE_2D, texture_tilemap->texture_id.get());
       glUseProgram(sdr.program);
       if (glc.light_fixed) {
 	glUniform3fv(sdr.u_light_dir, 1,
@@ -381,8 +387,15 @@ public struct drawer_triangles(shader_config const& glc0,
 	if (m::is_true{raycast_cull_front}) {
 	  glCullFace(GL_BACK);
 	}
+	if (case edit_mode_ptr.some) {
+	  edit_mode_ptr.some->on_frame();
+	}
       }
     }
+  }
+  public function option{ptr{edit_mode_i}} get_edit_mode() const
+  {
+    return edit_mode_ptr;
   }
 }
 
@@ -539,8 +552,6 @@ private function void parallax_set_clearance(texture_data mutable& td)
 	  c_np = min(c_np, 15);
 	  c_pn = min(c_pn, 15);
 	  c_pp = min(c_pp, 15);
-// c_nn = 0; // FIXME
-// c_np = 0; // FIXME
 	  // W = unused(8), Z = depth(8), Y = CNN(4) CNP(4), X = CPN(4) CPP(4)
 	  data[offset] = (depth0 << 16) |
 	    (c_nn << 12) | (c_np << 8) | (c_pn << 4) | (c_pp << 0);
@@ -586,8 +597,8 @@ init_shadowmap_shader(shader_config const& g, int stype)
   bnd["stype"] = to_string(stype);
   const v = load_shader_program(g, bnd, "triangles-sm.vsh");
   const f = load_shader_program(g, bnd, "triangles-sm.fsh");
-//debug_log("shadowmap_vsh", v);
-//debug_log("shadowmap_fsh", f);
+  //debug_log("shadowmap_vsh", v);
+  //debug_log("shadowmap_fsh", f);
   return make_glshader_ptr{
     shadowmap_uniforms,
     triangles_instance_attributes,
@@ -607,8 +618,8 @@ init_zprepass_shader(shader_config const& g, int stype)
   bnd["stype"] = to_string(stype);
   const v = load_shader_program(g, bnd, "triangles-zp.vsh");
   const f = load_shader_program(g, bnd, "triangles-zp.fsh");
-//debug_log("zp_vsh", v);
-//debug_log("zp_fsh", f);
+  //debug_log("zp_vsh", v);
+  //debug_log("zp_fsh", f);
   return make_glshader_ptr{
     zprepass_uniforms,
     triangles_instance_attributes,
@@ -656,7 +667,7 @@ triangles_shader_vert(shader_config const& g,
   tree_map{string, string} const& bnd)
 {
   const v = load_shader_program(g, bnd, "triangles.vsh");
-//debug_log("triangles_vsh", v);
+  //debug_log("triangles_vsh", v);
   return v;
 }
 
@@ -664,7 +675,7 @@ private function string triangles_shader_frag(shader_config const& g,
   tree_map{string, string} const& bnd)
 {
   const f = load_shader_program(g, bnd, "triangles.fsh");
-//debug_log("triangles fsh", f);
+  //debug_log("triangles fsh", f);
   return f;
 }
 

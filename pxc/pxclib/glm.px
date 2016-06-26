@@ -423,12 +423,21 @@ private metafunction check_mul_type{tx, ty}
     m::and{is_tquat_type{tx}, is_tvec3_type{ty},
       m::eq{m::symbol{tx, "value_type"}, m::symbol{ty, "value_type"}}},
     ty,
+    /* (vec3 * quat) */
+    m::and{is_tquat_type{ty}, is_tvec3_type{tx},
+      m::eq{m::symbol{tx, "value_type"}, m::symbol{ty, "value_type"}}},
+    tx,
     /* (dualquat * dualquat) */
     m::and{is_tdualquat_type{tx}, m::eq{tx, ty}},
     tx,
     /* (quat_dualquat * vec) */
     m::and{is_tquat_tdualquat_type{tx},
       m::or{is_tvec3_type{ty}, is_tvec4_type{ty}}, 
+      m::eq{m::symbol{tx, "value_type"}, m::symbol{ty, "value_type"}}},
+    ty,
+    /* (vec * quat_dualquat) */
+    m::and{is_tquat_tdualquat_type{ty},
+      m::or{is_tvec3_type{tx}, is_tvec4_type{tx}}, 
       m::eq{m::symbol{tx, "value_type"}, m::symbol{ty, "value_type"}}},
     tx,
     /* TODO: 2x3 etc */

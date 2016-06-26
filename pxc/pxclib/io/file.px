@@ -551,15 +551,18 @@ errno_t file_read_impl(file const& f, bt_string& buf, size_t& len)
 {
   int const fd = f.get();
   bt_size_t sz = len;
-  if (sz > SSIZE_MAX) {
-    sz = SSIZE_MAX;
-  }
   bt_size_t osz = buf.size();
   void *const ptr = buf.reserve_back<1>(sz);
 #ifdef PXC_POSIX
+  if (sz > SSIZE_MAX) {
+    sz = SSIZE_MAX;
+  }
   const pxcrt::bt_ssize_t rlen = ::read(fd, ptr, sz);
 #else
-  const pxcrt::bt_ssize_t rlen = ::_read(fd, ptr, sz);
+  if (sz > UINT_MAX) {
+    sz = UINT_MAX;
+  }
+  const pxcrt::bt_ssize_t rlen = ::_read(fd, ptr, (unsigned)sz);
 #endif
   if (rlen < 0) {
     return errno;
@@ -573,14 +576,17 @@ errno_t file_write_impl(file const& f, cstrref const& buf, size_t& len_r)
 {
   int const fd = f.get();
   bt_size_t sz = buf.size();
+  const unsigned char *const ptr = buf.rawarr();
+#ifdef PXC_POSIX
   if (sz > SSIZE_MAX) {
     sz = SSIZE_MAX;
   }
-  const unsigned char *const ptr = buf.rawarr();
-#ifdef PXC_POSIX
   const pxcrt::bt_ssize_t wlen = ::write(fd, ptr, sz);
 #else
-  const pxcrt::bt_ssize_t wlen = ::_write(fd, ptr, sz);
+  if (sz > UINT_MAX) {
+    sz = UINT_MAX;
+  }
+  const pxcrt::bt_ssize_t wlen = ::_write(fd, ptr, (unsigned)sz);
 #endif
   if (wlen < 0) {
     return errno;

@@ -254,17 +254,48 @@ template <typename T> static std::string get_type_cname_wo_ns(T e)
   return to_short_name(term_tostr(e->value_texpr, term_tostr_sort_cname));
 }
 
+static void
+get_base_types(expr_telist *inherit, expr_e sort,
+  std::list<const expr_i *>& lst_r)
+{
+  for (expr_telist *ih = inherit; ih != 0; ih = ih->rest) {
+    const term& t = ih->head->get_sdef()->get_evaluated();
+    const expr_i *const ei = term_get_instance_const(t);
+    if (ei->get_esort() == sort) {
+      lst_r.push_back(ei);
+    }
+  }
+}
+
 static void emit_inherit(emit_context& em, expr_block *block, bool inh_virtual)
 {
-  expr_telist *ih = block->inherit;
-  while (ih != 0) {
-    const term& t = ih->head->get_sdef()->get_evaluated();
-    if (!is_intrusive(t)) {
-      /* restricted interface */
-      break;
+  std::list<const expr_i *> base_structs;
+  std::set<const expr_i *> base_struct_itfs;
+  get_base_types(block->inherit, expr_e_struct, base_structs);
+  for (std::list<const expr_i *>::const_iterator i = base_structs.begin();
+    i != base_structs.end(); ++i) {
+    const expr_struct *const es = ptr_down_cast<const expr_struct>(*i);
+    expr_block::inherit_list_type& esbs =
+      es->block->resolve_inherit_transitive();
+    for (expr_block::inherit_list_type::const_iterator j = esbs.begin();
+      j != esbs.end(); ++j) {
+      base_struct_itfs.insert(*j);
     }
-    if (ih == block->inherit) {
+  }
+  bool is_first = true;
+  for (expr_telist *ih = block->inherit; ih != 0; ih = ih->rest) {
+    const term& t = ih->head->get_sdef()->get_evaluated();
+    const expr_interface *const ei = dynamic_cast<const expr_interface *>(
+      term_get_instance_const(t));
+    if (ei != 0 && ei->impl_st != 0) {
+      continue; // restricted interface
+    }
+    if (base_struct_itfs.find(ei) != base_struct_itfs.end()) {
+      continue; // implemented by a base struct
+    }
+    if (is_first) {
       em.puts(" : ");
+      is_first = false;
     } else {
       em.puts(", ");
     }
@@ -272,7 +303,6 @@ static void emit_inherit(emit_context& em, expr_block *block, bool inh_virtual)
       em.puts("virtual ");
     }
     em.puts(term_tostr_cname(t));
-    ih = ih->rest;
   }
 }
 
