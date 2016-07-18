@@ -2,6 +2,15 @@
 ---------------------------------------------------------------------------
 TODO
 
+- tex3d: prepassも外部覆いのメッシュで
+
+- tex3dの頂点データは無駄が多いのでデータ量を削る余地あり。
+  - 少なくともpush_polygon_distinctはやめるか
+
+- voxelカバー面実装したときに表面カリングを有効にするとメッシュの法線を
+  知る必要がある(raycastの始点で衝突するケース)。頂点データに埋め込むの
+  ではなく計算で求められないか。
+
 - editmode: カメラの向きに近い軸を決めてカーソル移動
 
 - windows: dbghelp.dllでminidump (google breakpadつかう?)
@@ -2181,4 +2190,22 @@ nvidia control panel
 レンダリング前最大フレーム数を小さくするとわずかに速くなる。
 遅延も小さくなるので1にするのがよいか。
 それ以外の項目はすべてデフォルト。
+
+---------------------------------------------------------------------------
+voxel_surface
+
+ctx_tex3d
+darrayst{vertex_attr} front = poly;
+
+TODO: 境界値
+
+---------------------------------------------------------------------------
+raycast_tilemap
+
+移行手順
+1. calc_distanceをtexture_dataに適用できるよう改修
+2. tpatとtmapをcalc_distance適用, tpatは16境界まで、tmapは境界なし
+3. drawer/trianglesでtmapとtpatをuniformで渡す
+4. triangles.fshにraycast_tilemap追加
+
 

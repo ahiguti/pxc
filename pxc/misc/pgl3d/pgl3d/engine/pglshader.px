@@ -274,11 +274,23 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
   public function texture_info get_texture_info(cstrref const& name) const
   {
     texture_info r;
-    // FIXME: slow
     for (const i, const& pd: drawers) {
       const bo_id = drawer_vbids[i];
       r = pd->get_texture_info(name);
       if (r.surface_w != 0) {
+	break;
+      }
+    }
+    return r;
+  }
+  public function option{cptr{texture_data}} get_texture_data(
+    cstrref const& name) const
+  {
+    option{cptr{texture_data}} r;
+    for (const i, const& pd: drawers) {
+      const bo_id = drawer_vbids[i];
+      r = pd->get_texture_data(name);
+      if (case r.some) {
 	break;
       }
     }

@@ -208,10 +208,13 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
       motion_thr.some->start();
     }
   }
-  private function void toggle_fullscreen()
+  private function void update_fullscreen()
   {
-    fullscreen = fullscreen != 0 ? 0 : 1;
-    sdl_log("fullscreen=", fullscreen);
+    if (fullscreen != 0) {
+      // 最大化されたウインドウをもとに戻す。最大化されたままフルスクリーンに
+      // するとAlt-Tabで切り替えた時にサイズがおかしくなる。
+      SDL_RestoreWindow(sdlc.sdl_window);
+    }
     SDL_Enum flag = 0;
     if (m::ne{is_macos, 0}) {
       flag = SDL_WINDOW_FULLSCREEN_DESKTOP;
@@ -219,6 +222,12 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
       flag = SDL_WINDOW_FULLSCREEN;
     }
     SDL_SetWindowFullscreen(sdlc.sdl_window, fullscreen != 0 ? flag : 0);
+  }
+  private function void toggle_fullscreen()
+  {
+    fullscreen = fullscreen != 0 ? 0 : 1;
+    sdl_log("fullscreen=", fullscreen);
+    update_fullscreen();
   }
   private function void reload_shaders()
   {

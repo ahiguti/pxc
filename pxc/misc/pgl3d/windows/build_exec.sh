@@ -1,5 +1,5 @@
 #!/bin/bash
 cd `dirname $0`
-./build_release.sh && \
+./release_build.sh && \
 cd .. && \
-exec ./windows/x64/Release/pgl3d_demoapp.exe
+./windows/x64/Release/pgl3d_demoapp.exe 2>&1 | tee /tmp/z

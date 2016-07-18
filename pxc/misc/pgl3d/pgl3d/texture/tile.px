@@ -4,6 +4,7 @@ public import meta m;
 public import pgl3d::geometry::funcs -;
 public import glm -;
 private import pgl3d::texture::texture -;
+private import pgl3d::engine::util -;
 
 public function void prepare_texture_data_3d_tmap(texture_data mutable& tmap,
   uint pattern_sz_l2, uint vx_l2, uint vy_l2, uint vz_l2, uint bshift)
@@ -27,11 +28,13 @@ public function void prepare_texture_data_3d_tmap(texture_data mutable& tmap,
   const uvtzmask = uvtzsz - 1u;
   const ptshift = pattern_sz_l2 - bshift;
   const ptmask = (1u << ptshift) - 1u;
+  debug_log("ptshift", ptshift);
   debug_log("ptmask", ptmask);
   debug_log("vtxsz", vtxsz);
   tmap.width = uvtxsz;
   tmap.height = uvtysz;
   tmap.depth = uvtzsz;
+  tmap.bshift = bshift;
   tmap.data.resize(static_cast{size_t}(uvtxsz) * uvtysz * uvtzsz, 0U);
   if (tmap.data.size() == 0) {
     throw runtime_error_template{"texture_3d_tmap"}("size0");
@@ -48,6 +51,12 @@ public function void prepare_texture_data_3d_tmap(texture_data mutable& tmap,
     }
     const idx = (ui(z) << (vy_l2 + vx_l2)) | (ui(y) << vx_l2) | ui(x);
     tmap.data[idx] = v;
+// FIXME
+/*
+    if (x == 0 && y == 0 && z == 1) {
+      debug_log("0,0,1 wr idx=", idx, "v=", to_hexstring(v), to_hexstring(tmap.get(ui(x), ui(y), ui(z))));
+    }
+*/
   }
   function uint get(int x, int y, int z) {
     if (x < 0 || x >= vtxsz) { return 0; }
@@ -96,7 +105,7 @@ public function void prepare_texture_data_3d_tmap(texture_data mutable& tmap,
 	  const py = rv & ptmask;
 	  const idx = (pz << (ptshift * 2)) | (py << ptshift) | px;
 	  const v = 0x01000000u | idx;
-	  // debug_log("detail", x, y, z, to_hexstring(v));
+	  // debug_log("tmap detail", x, y, z, to_hexstring(v));
 	  set(x, y, z, v);
 	}
       }
@@ -257,6 +266,7 @@ public function void prepare_texture_data_3d_tmap(texture_data mutable& tmap,
       }
     }
   }
+  debug_log("prepare tmap 0,0,1", to_hexstring(tmap.get(0, 0, 1)));
 }
 
 public function void prepare_texture_data_3d_tpat(texture_data mutable& tpat,
@@ -270,6 +280,7 @@ public function void prepare_texture_data_3d_tpat(texture_data mutable& tpat,
   tpat.width = usz;
   tpat.height = usz;
   tpat.depth = usz;
+  tpat.bshift = bshift;
   tpat.data.resize(usz * usz * usz, 0U);
   metafunction si static_cast{int};
   metafunction ui static_cast{uint};

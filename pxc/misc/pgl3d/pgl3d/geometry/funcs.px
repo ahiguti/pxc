@@ -6,6 +6,7 @@ public import glm -;
 public import numeric::fpmath -;
 public import operator op;
 public import pgl3d::geometry::wfobj -;
+public import pgl3d::texture::voxel_surface -;
 
 public threaded interface build_context_i
 {
@@ -113,6 +114,7 @@ public metafunction ctx_fill_smooth to_gf_poly{gf_ctx_fill_smooth};
 public metafunction ctx_poly_joint to_gf_poly{gf_ctx_poly_joint};
 public metafunction ctx_point_joint to_gf_poly{gf_ctx_point_joint};
 public metafunction ctx_tex3d to_gf_poly{gf_ctx_tex3d};
+public metafunction ctx_tex3d_opt to_gf_poly{gf_ctx_tex3d_opt};
 public metafunction lid to_gf_poly{gf_lid};
 public metafunction hole to_gf_poly{gf_hole};
 public metafunction sphere to_gf_poly{gf_sphere};
@@ -492,6 +494,40 @@ private threaded function void gf_ctx_point_joint(string const& joint_name,
 private threaded function void gf_ctx_tex3d(size_t nbase, size_t ntex, float z, 
   build_context_i const& ctx, poly_t const& poly, mesh_index const& mp)
 {
+  varray{varray{vec3}} quads;
+  const front = make_varray{vec3}(
+    make_vec3(0.0f, 0.0f, z),
+    make_vec3(1.0f, 0.0f, z),
+    make_vec3(1.0f, 1.0f, z),
+    make_vec3(0.0f, 1.0f, z));
+  quads.push_back(front);
+  const back = make_varray{vec3}(
+    make_vec3(0.0f, 1.0f, 0.0f),
+    make_vec3(1.0f, 1.0f, 0.0f),
+    make_vec3(1.0f, 0.0f, 0.0f),
+    make_vec3(0.0f, 0.0f, 0.0f));
+  quads.push_back(back);
+  for (const i: 0 .. 4u) {
+    const i1 = i + 1 != 4u ? i + 1 : 0u;
+    varray{vec3} side;
+    side.resize(4, vec3());
+    side[0] = front[i];
+    side[1] = front[i1];
+    side[2] = front[i1];
+    side[3] = front[i];
+    side[0].z = 0.0f;
+    side[1].z = 0.0f;
+    side[2].z = z;
+    side[3].z = z;
+    quads.push_back(side);
+  }
+  gf_ctx_tex3d_opt(nbase, ntex, z, quads, ctx, poly, mp);
+}
+
+private threaded function void gf_ctx_tex3d_opt(size_t nbase, size_t ntex,
+  float z, varray{varray{vec3}} const& surf_quads,
+  build_context_i const& ctx, poly_t const& poly, mesh_index const& mp)
+{
   gf_ctx_fill(nbase, ctx, poly, mp);
   if (poly.size() != 4) { return; }
   // FIXME: 正方形のときしか動かない
@@ -500,59 +536,29 @@ private threaded function void gf_ctx_tex3d(size_t nbase, size_t ntex, float z,
   const texscale = len; // テクスチャ座標からローカル座標への倍率
   darrayst{vertex_attr} front = poly;
   mutable nor = normal_from_poly(poly, false);
+  // debug_log("poly", poly[0].pos, poly[1].pos, poly[2].pos, poly[3].pos);
+  // debug_log("nor", nor);
   const eps = 0.000001f; // 必要？
   // const eps = 0.0f;
   const zm = z - eps;
   const onem = 1.0f - eps;
   mutable attr0 = poly[0];
-  attr0.nor = nor;
+    // posはpoly[0]の値をそのままコピーする。接線空間原点のグローバル座標。
+  attr0.nor = nor; // 基準平面の法線ベクトル
   attr0.tan = tan;
   attr0.aabb_or_tconv = glm::make_vec4(0.0, 0.0, 0.0, texscale);
   attr0.aabb_min = glm::make_vec3(0.0, 0.0, 0.0);
   attr0.aabb_max = glm::make_vec3(onem, onem, zm);
-  front[0] = attr0;
-  front[1] = attr0;
-  front[2] = attr0;
-  front[3] = attr0;
-  front[0].uvw = glm::make_vec3(0.0, 0.0, zm);
-  front[1].uvw = glm::make_vec3(onem, 0.0, zm);
-  front[2].uvw = glm::make_vec3(onem, onem, zm);
-  front[3].uvw = glm::make_vec3(0.0, onem, zm);
-  /* front */
-  gf_ctx_fill_smooth(ntex, ctx, front, mesh_index());
-  /* side */
-  const sz = front.size();
-  for (const i: 0 .. sz) {
-    const i1 = i + 1 != sz ? i + 1 : 0;
-    mutable side = make_farray{vertex_attr}(poly[i], poly[i1], front[i1],
-      front[i]);
-    side[0] = attr0;
-    side[1] = attr0;
-    side[2] = attr0;
-    side[3] = attr0;
-    side[0].uvw = front[i].uvw;
-    side[1].uvw = front[i1].uvw;
-    side[2].uvw = front[i1].uvw;
-    side[3].uvw = front[i].uvw;
-    side[0].uvw.z = 0.0;
-    side[1].uvw.z = 0.0;
-    side[2].uvw.z = zm;
-    side[3].uvw.z = zm;
-    gf_ctx_fill_smooth(ntex, ctx, side, mesh_index());
+    // 頂点データのuvw以外の属性はすべての頂点で同じ値(無駄大きい？)
+  mutable quad_attr = make_farray{vertex_attr}(attr0, attr0, attr0, attr0);
+  for (const i, const q: surf_quads) {
+    quad_attr[0].uvw = q[0];
+    quad_attr[1].uvw = q[1];
+    quad_attr[2].uvw = q[2];
+    quad_attr[3].uvw = q[3];
+    gf_ctx_fill_smooth(ntex, ctx, quad_attr, mesh_index());
   }
-  /* back */
-  mutable back = make_farray{vertex_attr}(poly[3], poly[2], poly[1], poly[0]);
-  back[0] = attr0;
-  back[1] = attr0;
-  back[2] = attr0;
-  back[3] = attr0;
-  back[0].uvw = glm::make_vec3(0.0, onem, 0.0);
-  back[1].uvw = glm::make_vec3(onem, onem, 0.0);
-  back[2].uvw = glm::make_vec3(onem, 0.0, 0.0);
-  back[3].uvw = glm::make_vec3(0.0, 0.0, 0.0);
-  gf_ctx_fill_smooth(ntex, ctx, back, mesh_index());
 }
-
 
 private threaded function void gf_hole(build_context_i const& ctx,
   poly_t const& poly, mesh_index const& mp)

@@ -7,10 +7,26 @@ public import pgl3d::engine::util -;
 private metafunction debug_octree 0;
 
 public metafunction texel_value uint;
-public metafunction node_value{bshift}
-  farray{texel_value, pow{2, m::mul{bshift, 3}}};
-private metafunction pow{x, y}
-  m::cond{m::le{y, 0}, 1, m::mul{x, pow{x, m::sub{y, 1}}}};
+
+private multithreaded struct {bshift} node_value
+{
+  public function uint get_width() const { return 1u << bshift; }
+  public function uint get_height() const { return 1u << bshift; }
+  public function uint get_depth() const { return 1u << bshift; }
+  // public function uint get_bshift() const { return bshift; }
+  public function texel_value get(uint x, uint y, uint z) const {
+    const i = (z << (bshift * 2)) | (y << bshift) | x;
+    return value[i];
+  }
+  public function void set(uint x, uint y, uint z, texel_value v) {
+    const i = (z << (bshift * 2)) | (y << bshift) | x;
+    value[i] = v;
+  }
+  private metafunction pow{x, y}
+    m::cond{m::le{y, 0}, 1, m::mul{x, pow{x, m::sub{y, 1}}}};
+  public farray{texel_value, pow{2, m::mul{bshift, 3}}} value;
+    // tree_mapのキーにするのでpublicにする必要がある
+}
 
 public struct {bshift} octree
 {
@@ -29,7 +45,8 @@ public function {bshift} void
 octree_build(octree{bshift} mutable& ot, ptr{level_data} const& pattern,
   ptr{level_data} const& tiles, bool enable_calc_distance)
 {
-
+  // tilesが指定されている場合はpatternとtilesでタイル化されたボクセルデータ、
+  // そうでないときはpatternは単純なボクセルデータ。
   bool apply_tile = (tiles->get_w_l2() != 0);
   if (apply_tile) {
     const p = tiles;
@@ -117,22 +134,10 @@ octree_build(octree{bshift} mutable& ot, ptr{level_data} const& pattern,
   if (bshift > 1 && enable_calc_distance) {
     debug_log("calc_distance begin");
     for (const i, mutable& node: ot.nodes) {
-      calc_distance{bshift}(node);
+      set_distance(node);
     }
     debug_log("calc_distance end");
   }
-}
-
-public function {bshift} uint
-octree_get(octree{bshift} const& ot, varray{uint} mutable& values_r)
-{
-  values_r.resize(ot.nodes.size() * 8u, 0u);
-  for (const i, const& m: ot.nodes) {
-    for (const j: 0 .. 8u) {
-      values_r[i * 8u + j] = m[j];
-    }
-  }
-  return ot.size_l2;
 }
 
 public function {bshift} uint
@@ -146,17 +151,28 @@ octree_extract(octree{bshift} const& ot, uint root,
   return ot.size_l2;
 }
 
-function {bshift} void
-calc_distance(node_value{bshift} mutable& node)
+public function {t} void
+set_distance(t mutable& node)
 {
+  metafunction si static_cast{int};
+  for (const z : 0 .. node.get_depth()) {
+    for (const y : 0 .. node.get_height()) {
+      for (const x : 0 .. node.get_width()) {
+	set_distance_pos(node, si(x), si(y), si(z));
+      }
+    }
+  }
+  /*
+  const bshift = node.get_bshift();
   const bsz = 1u << bshift;
   const bmask = bsz - 1;
   for (const i: 0 .. bsz * bsz * bsz) {
     const x = static_cast{int}(i >> (bshift * 0) & bmask);
     const y = static_cast{int}(i >> (bshift * 1) & bmask);
     const z = static_cast{int}(i >> (bshift * 2) & bmask);
-    calc_dist_one{bshift}(node, x, y, z);
+    set_distance_pos(node, x, y, z);
   }
+  */
 }
 
 struct dist_3d {
@@ -168,37 +184,23 @@ struct dist_3d {
   public int zn;
 }
 
-function {bshift} void
-node_set(node_value{bshift} mutable& node, uint x, uint y, uint z, uint value)
-{
-  const i = (z << (bshift * 2)) | (y << bshift) | x;
-  node[i] = value;
-}
-
-function {bshift} uint
-node_get(node_value{bshift} const& node, uint x, uint y, uint z)
-{
-  const i = (z << (bshift * 2)) | (y << bshift) | x;
-  return node[i];
-}
-
-function {bshift} void
-calc_dist_one(node_value{bshift} mutable& node, int x, int y, int z)
+function {t} void
+set_distance_pos(t mutable& node, int x, int y, int z)
 {
   metafunction ui static_cast{uint};
-  if (!is_space_voxel(node_get{bshift}(node, ui(x), ui(y), ui(z)))) {
+  if (!is_space_voxel(node.get(ui(x), ui(y), ui(z)))) {
     return;
   }
   dist_3d dv;
-  const n = min(1 << bshift, 15); // fits 4 bit
+  const n = 15; // min(1 << bshift, 15); // fits 4 bit
   for (int d: 0 .. n) {
     bool ext = false;
-    ext |= check_extend{bshift}(node, x, y, z, d, dv, 1, 0, 0);
-    ext |= check_extend{bshift}(node, x, y, z, d, dv, -1, 0, 0);
-    ext |= check_extend{bshift}(node, x, y, z, d, dv, 0, 1, 0);
-    ext |= check_extend{bshift}(node, x, y, z, d, dv, 0, -1, 0);
-    ext |= check_extend{bshift}(node, x, y, z, d, dv, 0, 0, 1);
-    ext |= check_extend{bshift}(node, x, y, z, d, dv, 0, 0, -1);
+    ext |= check_extend{t}(node, x, y, z, d, dv, 1, 0, 0);
+    ext |= check_extend{t}(node, x, y, z, d, dv, -1, 0, 0);
+    ext |= check_extend{t}(node, x, y, z, d, dv, 0, 1, 0);
+    ext |= check_extend{t}(node, x, y, z, d, dv, 0, -1, 0);
+    ext |= check_extend{t}(node, x, y, z, d, dv, 0, 0, 1);
+    ext |= check_extend{t}(node, x, y, z, d, dv, 0, 0, -1);
     if (!ext) {
       break;
     }
@@ -209,33 +211,36 @@ calc_dist_one(node_value{bshift} mutable& node, int x, int y, int z)
   const wv = ui((zv << 16) + (yv << 8) + (xv << 0));
   // debug_check{bshift}(node, x, y, z, dv);
   // debug_log("calc_dist", x, y, z, to_hexstring(wv));
-  node_set{bshift}(node, ui(x), ui(y), ui(z), wv);
+  node.set(ui(x), ui(y), ui(z), wv);
 }
 
-function {bshift} void
-debug_check(node_value{bshift} const& node, int x, int y, int z,
+function {t} void
+debug_check(t const& node, int x, int y, int z,
   dist_3d const& dv)
 {
-  bool r = node_space{bshift}(node, x - dv.xn, x + dv.xp, y - dv.yn, y + dv.yp,
+  bool r = node_space{t}(node, x - dv.xn, x + dv.xp, y - dv.yn, y + dv.yp,
     z - dv.zn, z + dv.zp);
   if (!r) {
     throw runtime_error_template{"octree"}("debug check failed");
   }
 }
 
-function {bshift} bool
-node_space(node_value{bshift} const& node, int x0, int x1, int y0, int y1,
+function {t} bool
+node_space(t const& node, int x0, int x1, int y0, int y1,
   int z0, int z1)
 {
   metafunction ui static_cast{uint};
-  int bsz = 1 << bshift;
-  if (x0 < 0 || x1 >= bsz || y0 < 0 || y1 >= bsz || z0 < 0 || z1 >= bsz) {
+  metafunction si static_cast{int};
+  int w = si(node.get_width());
+  int h = si(node.get_height());
+  int d = si(node.get_depth());
+  if (x0 < 0 || x1 >= w || y0 < 0 || y1 >= h || z0 < 0 || z1 >= d) {
     return false;
   }
   for (const x: ui(x0) .. ui(x1 + 1)) {
     for (const y: ui(y0) .. ui(y1 + 1)) {
       for (const z: ui(z0) .. ui(z1 + 1)) {
-	if (!is_space_voxel(node_get{bshift}(node, x, y, z))) {
+	if (!is_space_voxel(node.get(x, y, z))) {
 	  return false;
 	}
       }
@@ -244,14 +249,14 @@ node_space(node_value{bshift} const& node, int x0, int x1, int y0, int y1,
   return true;
 }
 
-function {bshift} bool
-check_extend(node_value{bshift} const& node, int x, int y, int z, int d,
+function {t} bool
+check_extend(t const& node, int x, int y, int z, int d,
   dist_3d mutable& dv, int dx, int dy, int dz)
 {
   if (dx > 0) {
     // x positive
     if (dv.xp < d) { return false; }
-    if (node_space{bshift}(node,
+    if (node_space{t}(node,
       x + dv.xp + 1, x + dv.xp + 1,
       y - dv.yn, y + dv.yp,
       z - dv.zn, z + dv.zp))
@@ -262,7 +267,7 @@ check_extend(node_value{bshift} const& node, int x, int y, int z, int d,
   } else if (dx < 0) {
     // x negative
     if (dv.xn < d) { return false; }
-    if (node_space{bshift}(node,
+    if (node_space{t}(node,
       x - dv.xn - 1, x - dv.xn - 1,
       y - dv.yn, y + dv.yp,
       z - dv.zn, z + dv.zp))
@@ -273,7 +278,7 @@ check_extend(node_value{bshift} const& node, int x, int y, int z, int d,
   } else if (dy > 0) {
     // y positive
     if (dv.yp < d) { return false; }
-    if (node_space{bshift}(node,
+    if (node_space{t}(node,
       x - dv.xn, x + dv.xp,
       y + dv.yp + 1, y + dv.yp + 1,
       z - dv.zn, z + dv.zp))
@@ -284,7 +289,7 @@ check_extend(node_value{bshift} const& node, int x, int y, int z, int d,
   } else if (dy < 0) {
     // y negative
     if (dv.yn < d) { return false; }
-    if (node_space{bshift}(node,
+    if (node_space{t}(node,
       x - dv.xn, x + dv.xp,
       y - dv.yn - 1, y - dv.yn - 1,
       z - dv.zn, z + dv.zp))
@@ -295,7 +300,7 @@ check_extend(node_value{bshift} const& node, int x, int y, int z, int d,
   } else if (dz > 0) {
     // z positive
     if (dv.zp < d) { return false; }
-    if (node_space{bshift}(node,
+    if (node_space{t}(node,
       x - dv.xn, x + dv.xp,
       y - dv.yn, y + dv.yp,
       z + dv.zp + 1, z + dv.zp + 1))
@@ -306,7 +311,7 @@ check_extend(node_value{bshift} const& node, int x, int y, int z, int d,
   } else if (dz < 0) {
     // z negative
     if (dv.zn < d) { return false; }
-    if (node_space{bshift}(node,
+    if (node_space{t}(node,
       x - dv.xn, x + dv.xp,
       y - dv.yn, y + dv.yp,
       z - dv.zn - 1, z - dv.zn - 1))
@@ -357,6 +362,8 @@ extract_node_rec(varray{uint} mutable& values_r, uint sz_l2,
 
 public struct level_data
 {
+  // 三次元テクスチャ。各ボクセルは色またはノード参照を表す32bit値。
+  // texture_dataと統合する？
   public uint w_l2;
   public uint h_l2;
   public uint d_l2;
@@ -390,23 +397,38 @@ public struct level_data
   }
 }
 
-function bool is_node_reference(texel_value v)
+public threaded function bool is_node_reference(texel_value v)
 {
   return (v & 0xff000000) == 0x01000000;
 }
 
-function bool is_space_voxel(texel_value v)
+public threaded function texel_value make_node_reference(texel_value v)
+{
+  return get_node_reference(v) | 0x01000000;
+}
+
+public threaded function uint get_node_reference(texel_value v)
+{
+  return v & 0x00ffffff;
+}
+
+public threaded function bool is_space_voxel(texel_value v)
 {
   return (v & 0xff000000) == 0x00000000;
 }
 
-function {bshift} bool is_leaf_value(node_value{bshift} const& nv)
+threaded function {bshift} bool is_leaf_value(node_value{bshift} const& nv)
 {
-  if (is_node_reference(nv[0])) {
+  const bsz = 1u << bshift;
+  const bmask = bsz - 1;
+  if (is_node_reference(nv.get(0u, 0u, 0u))) {
     return false;
   }
-  for (const i: 1u .. (1u << (bshift * 3))) {
-    if (nv[i] != nv[0]) {
+  for (const j: 1u .. (1u << (bshift * 3))) {
+    const xj = j & bmask;
+    const yj = (j >> bshift) & bmask;
+    const zj = (j >> (bshift * 2)) & bmask;
+    if (nv.get(0, 0, 0) != nv.get(xj, yj, zj)) {
       return false;
     }
   }
@@ -444,16 +466,18 @@ make_octree_one_level(varray{node_value{bshift}} mutable& nodes,
     if (x * bsz < (1u << iw_l2) && y * bsz < (1u << ih_l2) &&
       z * bsz < (1u << id_l2))
     {
-      for (const j: 0 .. bsz * bsz * bsz) {
+      for (const j: 0u .. bsz * bsz * bsz) {
 	const xj = j & bmask;
 	const yj = (j >> bshift) & bmask;
 	const zj = (j >> (bshift * 2)) & bmask;
-	nvalue[j] = ilevel.get(x * bsz + xj, y * bsz + yj, z * bsz + zj);
+	// nvalue[j] = ilevel.get(x * bsz + xj, y * bsz + yj, z * bsz + zj);
+	nvalue.set(xj, yj, zj,
+	  ilevel.get(x * bsz + xj, y * bsz + yj, z * bsz + zj));
       }
     }
     texel_value tvalue;
     if (ow_l2 != 0 && is_leaf_value{bshift}(nvalue)) {
-      tvalue = nvalue[0];
+      tvalue = nvalue.get(0, 0, 0);
     } else {
       if (const& m: nodeset[nvalue]) {
 	tvalue = m | 0x01000000u;

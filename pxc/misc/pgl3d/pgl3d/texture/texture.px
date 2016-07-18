@@ -1,4 +1,4 @@
-private threaded namespace pgl3d::texture::texture "use-unsafe";
+public threaded namespace pgl3d::texture::texture "use-unsafe";
 public import common -;
 public import pointer::raw -;
 private import pointer::raw_unsafe -;
@@ -19,12 +19,26 @@ private import SDL2::api_functions -;
 private import SDL2::api_wrappers -;
 private import SDL2::misc -;
 
-public struct texture_data()
+public threaded struct texture_data()
 {
   public uint width;
   public uint height;
   public uint depth;
+  public uint bshift; // for power-of-two textures only
   public varray{uint} data; // (a << 24) | (b << 16) | (g << 8) | (r << 0)
+  // valid only when bshift is set
+  public function uint get_width() const { return width; }
+  public function uint get_height() const { return height; }
+  public function uint get_depth() const { return depth; }
+  // public function uint get_bshift() const { return bshift; }
+  public function void set(uint x, uint y, uint z, uint v) {
+    const i = (z * width * height) | (y * width) | x;
+    data[i] = v;
+  }
+  public function uint get(uint x, uint y, uint z) const {
+    const i = (z * width * height) | (y * width) | x;
+    return data[i];
+  }
 }
 
 public function ptr{texture_data}
@@ -212,7 +226,8 @@ convert_to_octree(ptr{texture_data} const& tpat, ptr{texture_data} const& tmap,
 	const y = by * bsz + yi;
 	const z = bz * bsz + zi;
 	const idx = (z << (rwh2_l2 * 2)) + (y << rwh2_l2) + x;
-	mutable v = m[j];
+	// mutable v = m[j];
+	mutable v = m.get(xi, yi, zi);
 	if ((v & 0xff000000u) == 0x01000000u) {
 	  // convert node reference value
 	  v &= 0x00ffffffu;
@@ -234,6 +249,7 @@ convert_to_octree(ptr{texture_data} const& tpat, ptr{texture_data} const& tmap,
     }
   }
   // debug_log("rdata[0]", to_hexstring(rdata[0]));
+  rtd->bshift = bshift;
   return rtd;
 }
 

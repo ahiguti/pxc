@@ -15,6 +15,8 @@ public import pgl3d::engine::platform -;
 public import pgl3d::engine::input_control -;
 public import pgl3d::engine::pglconfig -;
 public import pgl3d::engine::nvidia_optimus_switch;
+public import pgl3d::texture::texture -;
+public import pgl3d::texture::voxel_surface -;
 public import pgl3d::geometry::funcs -;
 public import pgl3d::drawer::drawer -;
 public import pgl3d::physics::collision_shape -;
@@ -98,6 +100,7 @@ private struct app_impl()
   public string_map app_commands;
   public varray{bool} prev_joy_buttons;
   public option{ptr{edit_mode_i}} edit_mode;
+  public option{cptr{texture_data}} tex_octree;
   init();
   private function void init() {
     string s;
@@ -249,7 +252,7 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
       swarm_total += lpb->size();
     }
     string s = string_join{" "}("O:", sctl.sco.dworld.rigid_bodies_size(),
-      swarm_total, "T:", timings, status_message);
+      swarm_total, status_message, "T:", timings);
     scene_control_set_message(sctl, sctl.node_status_message, s,
       0, 0,
       dss.default_font_texture_info.char_w,
@@ -271,7 +274,7 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
       time_diff(t0, t1),
       time_diff(t1, t2),
       time_diff(t2, t5));
-//    debug_log("timings", timings);
+    // debug_log("timings", timings);
   }
   private function size_t prepare_instance_data_ft_rec(
     node_common_data mutable& ncd,
@@ -484,6 +487,48 @@ private function tree_map{string, ptr{pgldrawer_export_i}} init_drawers(
 private function void build_vertices(app_impl mutable& app,
   make_vertices_i mutable& pgs)
 {
+  app.tex_octree = pgs.get_texture_data("octree");
+  bitarray3 otb = octree_external(app.tex_octree.some, 2);
+  uint const zmax = 1u << otb.d_l2;
+  for (const z: zmax / 32 .. zmax) {
+    for (const y: 0 .. (1u << otb.h_l2)) {
+      for (const x: 0 .. (1u << otb.w_l2)) {
+	otb.set(x, y, z, false);
+      }
+    }
+  }
+  otb = otb.resize{operator::or}();
+  otb = otb.resize{operator::or}();
+  /*
+  bitarray3 otb;
+  otb.w_l2 = 1;
+  otb.h_l2 = 1;
+  otb.d_l2 = 1;
+  otb.data.resize(8, false);
+  otb.set(0, 0, 0, true);
+  otb.set(1, 1, 1, true);
+  */
+  /*
+  if (false) {
+    for (const z: 0 .. 16u) {
+      debug_log("z=", z);
+      for (const y: 0 .. 16u) {
+	string s;
+	for (const x: 0 .. 16u) {
+	  bool v = otb.get(x, y, z);
+	  s += (v ? "1" : "0");
+	}
+	debug_log("", s);
+      }
+    }
+  }
+  */
+  varray{varray{glm::vec3}} quads = get_surface_quads(otb);
+  debug_log("quads:", quads.size());
+
+  // if (case app.tex_octree.some) {
+  //   sdl_log("tex_octree", app.tex_octree.some);
+  // }
   /* import */
   const objs = make_farray{string}(
       "parts"
@@ -540,9 +585,36 @@ private function void build_vertices(app_impl mutable& app,
 	  ctx_tex3d(2, 1, 1.0f/32.0f))),
       apply(m1,
 	ctx_tex3d(2, 1, 1.0f/32.0f))));
+  /*
+  */
+  /*
+  pgs.make_vertex_set(tr, "box",
+    regular_polygon(1.4142f * box_size, 4,
+      apply(m1,
+	bump_apply(m, true,
+	  ctx_fill(1),
+	  ctx_fill(1))),
+      apply(m1,
+	ctx_tex3d(2, 1, 1.0f/32.0f))));
+  */
+  /*
+  pgs.make_vertex_set(tr, "box",
+    regular_polygon(1.4142f * box_size, 4,
+      apply(m1,
+	bump_apply(m, true,
+	  ctx_fill(1),
+	  ctx_fill(1))),
+      apply(m1,
+	ctx_tex3d_opt(2, 1, 1.0f/32.0f, quads))));
+  */
+  /*
+  pgs.make_vertex_set(tr, "box",
+    polygon_values(quads, ctx_fill(1)));
   m1 = glm::mat4().translate(glm::make_vec3(0.0, 0.0, -50.0f));
   m = glm::mat4()
     .translate(glm::make_vec3(0.0, 0.0, 32.0f));
+  */
+/*
   pgs.make_vertex_set(tr, "mstex3d",
     regular_polygon(300.0f, 100,
       apply(m1,
@@ -560,6 +632,7 @@ private function void build_vertices(app_impl mutable& app,
       hole()
     )
   );
+*/
   m = glm::mat4()
     .translate(glm::make_vec3(0.0, 0.0, 64.0));
   m1 = glm::mat4()
@@ -805,7 +878,7 @@ private function void build_vertices(app_impl mutable& app,
     shapes_add(name, mass, collision_shape_e_concave);
   }
   shapes_add_sphere("box", 1.0f);
-  shapes_add_convex("mstex3d", 1000.0f);
+  // shapes_add_convex("mstex3d", 1000.0f);
   shapes_add_convex("nest", 1000.0f);
   shapes_add_sphere("box50", 50.0f);
   shapes_add_convex("bullet2", 2.0f);
@@ -1038,7 +1111,7 @@ scene_control(node_factory const& nfac,
     // "knight-multi",
     "box",
     "rigidbody-multi",
-    "mstex3d",
+    // "mstex3d",
     "block-smtest",
     "block-multi",
     "bullet2-multi2s1",
