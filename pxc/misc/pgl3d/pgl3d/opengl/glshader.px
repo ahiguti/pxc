@@ -113,6 +113,7 @@ glshader(cstrref const& prog_v, cstrref const& prog_f,
     program = create_program(prog_v, prog_f, attrib_to_avoid_0, debug_level,
       error);
     if (program == 0) {
+      sdl_log("create_program: ", error);
       throw runtime_error_template{"create_program"}("1");
     }
     expand (sym: m::field_names{tuni}) {
@@ -326,6 +327,14 @@ private function string format_glsl(cstrref const& src)
   return r;
 }
 
+private function void glsl_format_log(cstrref const& src)
+{
+  const lines = format_glsl(src);
+  split_foreach{function void(cstrref const& line) {
+    debug_log(line);
+  }}(lines, '\n');
+}
+
 private function uint compile_shader(cstrref const& src, GLenum type,
   int debug_level, string mutable& err_r)
 {
@@ -358,14 +367,7 @@ private function uint compile_shader(cstrref const& src, GLenum type,
     }
     sdl_log("compile_shader failed:", static_cast{int}(type), success, buf);
     debug_log("compile_shader failed:", static_cast{int}(type), success, buf);
-//    if (debug_level > 0)
-    {
-      const lines = format_glsl(src);
-      split_foreach{function void(cstrref const& line) {
-//	sdl_log(line);
-	debug_log(line);
-      }}(lines, '\n');
-    }
+    glsl_format_log(src);
     err_r = string_join{"\t"}(static_cast{int}(type), success, buf);
     glDeleteShader(res);
     res = 0;
@@ -403,7 +405,7 @@ create_program(cstrref const& vertex_shader, cstrref const& fragment_shader,
     }
   }
   if (success == 0) {
-    sdl_log("create_program failed:", success);
+    debug_log("create_program failed:", success);
     glDeleteProgram(prog);
     prog = 0;
   } else {
@@ -417,13 +419,15 @@ create_program(cstrref const& vertex_shader, cstrref const& fragment_shader,
       glGetProgramInfoLog(prog, static_cast{GLsizei}(buf.size()), address(len),
 	buf.to_rawptr().to_charptr());
       buf.resize(static_cast{size_t}(len), 0);
-      sdl_log("linkprogram failed:", prog, buf);
-      sdl_log("vert:", vertex_shader);
-      sdl_log("frag:", fragment_shader);
+      debug_log("linkprogram failed:", prog, buf);
+      glsl_format_log(vertex_shader);
+      glsl_format_log(fragment_shader);
+      // debug_log("vert:", vertex_shader);
+      // debug_log("frag:", fragment_shader);
       glDeleteProgram(prog);
       prog = 0;
     } else {
-      sdl_log("linkprogram succeeded:", prog);
+      debug_log("linkprogram succeeded:", prog);
     }
   }
   return prog;

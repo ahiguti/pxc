@@ -1,5 +1,12 @@
 
 <%prepend/>
+
+// #pragma optionNV(inline all)
+// #pragma optionNV(unroll none)
+// #pragma optionNV(fastmath off)
+// #pragma optionNV(fastprecision off)
+// #pragma optionNV(strict off)
+
 // #extension GL_ARB_conservative_depth : enable
 // <%if><%eq><%stype/>1<%/>
 // layout (depth_unchanged) out float gl_FragDepth;
@@ -50,7 +57,9 @@ uniform float exposure;
   <%frag_in/> vec4 vary_aabb_or_tconv;
 <%/>
 <%decl_fragcolor/>
+<%if><%eq><%get_config dbgval/>1<%/>
 vec4 dbgval = vec4(0.0);
+<%/>
 
 <%if><%enable_shadowmapping/>
   <%if><%ne><%stype/>1<%/>
@@ -438,7 +447,9 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
     if (len2_cd_pt > rad2_pt) {
       return 256.0; // 球と直線は接触しない
     }
-//dbgval = vec4(1.0); hit_wall_r = true; return 0.0; // FIXME
+    <%if><%eq><%get_config dbgval/>1<%/>
+    // dbgval = vec4(1.0); hit_wall_r = true; return 0.0;
+    <%/>
     float len_de_pt = sqrt(rad2_pt - len2_cd_pt);
     float len_ae_pt = ac_v_pt - len_de_pt;
     vec3 e_pt = a_pt + v_ptn * len_ae_pt;
@@ -644,102 +655,135 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
     return hit;
   }
 
-  int raycast_tilemap(inout vec3 pos, in vec3 eye, in vec3 light,
+  const ivec3 tile3_size = <%tile3_size/>;
+  const ivec3 pat3_size = <%pat3_size/>;
+  const ivec3 pattex3_size = tile3_size * pat3_size;
+  const ivec3 map3_size = <%map3_size/>;
+  const ivec3 virt3_size = <%virt3_size/>;
+
+  int raycast_tilemap(
+    inout vec3 pos, in vec3 eye, in vec3 light,
     in vec3 aabb_min, in vec3 aabb_max, out vec4 value_r, inout vec3 hit_nor,
     inout float lstr_para)
   {
-    pos = clamp(pos, aabb_min, aabb_max - epsilon * 3.0); // FIXME?
     vec3 ray = eye;
-    vec3 dir = - hit_nor;
-    vec3 curpos = pos * 4096.0;
-    int hit = -1;
+    vec3 dir = -hit_nor;
+    vec3 curpos_f = pos * virt3_size;
+    vec3 curpos_i = div_rem(curpos_f, 1.0);
     value_r = vec4(0.0, 0.0, 0.0, 1.0);
+    int hit = -1;
     int i;
     int imax = 256;
     for (i = 0; i < imax; ++i) {
-      vec3 curpos_f = curpos; // 1迄
-      vec3 curpos_t = div_rem(curpos_f, 16.0) * 16.0;  // 16刻み4096迄
-      vec3 curpos_i = div_rem(curpos_f, 1.0); // 1刻み16迄
-      // vec4 value = vec4(1.0);
-      vec4 value = <%texture3d/>(sampler_voxtmap,
-	curpos_t / vec3(4096.0, 4096.0, 512.0));
+      vec3 curpos_t = floor(curpos_i / tile3_size);
+      vec3 curpos_tr = curpos_i - curpos_t * tile3_size; // 0から15の整数
+      // texelFetchのほうがわずかに速い
+      vec4 value = texelFetch(sampler_voxtmap, ivec3(curpos_t), 0);
+      // vec4 value = <%texture3d/>(sampler_voxtmap, curpos_t / map3_size);
       int node_type = int(floor(value.a * 255.0 + 0.5));
       bool is_pat = (node_type == 1);
       if (is_pat) {
 	vec3 curpos_tp = floor(value.rgb * 255.0 + 0.5) * 16.0; // 16刻み4096迄
-	value = <%texture3d/>(sampler_voxtpat,
-	  (curpos_tp + curpos_i) / vec3(256.0, 256.0, 256.0));
+	value = texelFetch(sampler_voxtpat, ivec3(curpos_tp + curpos_tr), 0);
+	// value = <%texture3d/>(sampler_voxtpat,
+	//   (curpos_tp + curpos_tr) / pattex3_size);
 	node_type = int(floor(value.a * 255.0 + 0.5));
       }
       vec3 spmin = vec3(0.0);
       vec3 spmax = vec3(1.0);
+      vec3 distval = floor(value.xyz * 255.0 + 0.5);
+      vec3 dist_p = floor(distval / 16.0);
+      vec3 dist_n = distval - dist_p * 16.0;
       if (node_type == 0) { // 空白
-	vec3 distval = floor(value.xyz * 255.0 + 0.5);
-	vec3 dist_p = floor(distval / 16.0);
-	vec3 dist_n = distval - dist_p * 16.0;
 	spmin = vec3(0.0) - dist_n;
 	spmax = vec3(1.0) + dist_p;
       } else {
 	bool hit_flag = true;
-/*
+	bool hit_wall = false;
 	if (node_type == 255) { // 壁
-*/
-//dbgval = vec4(1.0);
-/*
-	} else {
-	  // 二次曲面
+	  value_r = vec4(0.5, 0.5, 0.5, 1.0);
+	  hit_wall = true;
+	} else { // 二次曲面
+	  vec3 surf_s = dist_p;
+	  vec3 surf_p = dist_n;
+	  float surf_rad = float(node_type - 1) * 0.25;
+	  surf_p -= 8.0;
+	  vec3 sp_nor = vec3(0.0);
+	  float length_ae = voxel_collision_sphere(ray, curpos_f,
+	    surf_p * -0.25, // vec3(-0.5, -0.5, -0.5),
+	    surf_s * 0.125, // vec3(1.0, 1.0, 1.0),
+	    surf_rad * surf_rad, // 1.001 - (hit >= 0 ? 0.01 : 0),
+	    hit_wall, sp_nor);
+	  vec3 tp = curpos_f + ray * length_ae;
+	  if (hit_wall) {
+	    value_r = vec4(0.5, 0.5, 0.5, 1.0);
+	  } else if (!pos3_inside(tp, 0.0 - epsilon, 1.0 + epsilon)) {
+	    // 曲面と境界平面の境目の誤差を見えなくするためにepsilonだけ広げる
+	    hit_flag = false;
+	  } else {
+	    // ボクセル内で曲面に接触
+	    dir = -sp_nor;
+	    curpos_f = tp;
+	    value_r = vec4(0.5, 0.5, 0.5, 1.0);
+	  }
 	}
-	if (hit_wall) {
-	}
-	if (!notouch) {
-	}
-*/
-        if (hit_flag) {
+	if (hit_flag) {
+	  // 接触した
 	  if (hit >= 0) {
 	    // lightが衝突したので影にする
 	    lstr_para = 0.0;
 	    break;
 	  }
-	  dir = -dir;
-	  value_r = vec4(0.3, 0.3, 0.2, 1.0);
-	  hit_nor = dir;
-          hit = i;
-	  pos = curpos / 4096.0; // eyeが衝突した位置
+	  hit_nor = -dir;
+	  hit = i;
+	  pos = (curpos_i + curpos_f) / virt3_size; // eyeが衝突した位置
 	  // 法線と光が逆向きのときは必ず影(陰)
-	  float cos_light_dir = dot(light, dir);
+	  float cos_light_dir = dot(light, hit_nor);
 	  lstr_para = clamp(cos_light_dir * 64.0 - 1.0, 0.0, 1.0);
 	  if (lstr_para <= 0.0) {
 	    break;
 	  }
+	  if (i == 0 && hit_wall) {
+	    // raycast始点がすでに石の中にいるのでセルフシャドウは差さない
+	    break;
+	  }
 	  // 影判定開始
 	  ray = light;
+	  spmin = vec3(0.0); // TODO: -dir方向へ一回移動するか
+	  spmax = vec3(1.0);
 	}
       }
       // タイルの移動なら16倍
-      vec3 p_f = is_pat ? curpos : (curpos / 16.0);
-      vec3 p_i = div_rem(p_f, 1.0);
+      vec3 p_f;
+      if (is_pat) {
+	p_f = curpos_f;
+      } else {
+	p_f = (curpos_tr + curpos_f) / 16.0;
+	curpos_i = curpos_t * 16.0; // 16未満を切り捨てる
+      }
+      p_f = clamp(p_f, 0.0, 1.0); // FIXME: 必要？
       vec3 npos;
-      p_f = clamp(p_f, 0.0, 0.9999);
-      dir = voxel_get_next(p_f, spmin - 0.0003, spmax, ray, npos);
-      npos += p_i; // TODO: 速くて誤差少ない方法を考えよ
-      /*
-      */
-      /*
       dir = voxel_get_next(p_f, spmin, spmax, ray, npos);
-      npos += p_i + dir * 0.0003;
-      */
-      // curposへ書き戻す
-      curpos = is_pat ? npos : (npos * 16.0);
-      bool is_inside_aabb = pos3_inside_3_ge_le(curpos,
-	aabb_min * 4096, aabb_max * 4096);
+      vec3 npos_i;
+      if (is_pat) {
+	npos_i = min(floor(npos), spmax - 1.0); // ギリギリボクセル整数部分
+      } else {
+	npos *= 16.0;
+	npos_i = min(floor(npos), spmax * 16.0 - 1.0);
+      }
+      npos_i += dir; // 壁を突破
+      npos = npos - npos_i; // 0, 1の範囲に収まっているはず
+      curpos_i += npos_i;
+      curpos_f = npos;
+      bool is_inside_aabb = pos3_inside_3(curpos_i /* + curpos_f */,
+	aabb_min * virt3_size, aabb_max * virt3_size);
       if (!is_inside_aabb) {
 	break;
       }
-    }
+    } // for
     if (i == imax) {
       lstr_para = 0.0;
       hit = i;
-      dbgval = vec4(1.0);
     }
     return hit;
   }
@@ -955,14 +999,19 @@ vec3 light_all(in vec3 light_color, in float lstr, in vec3 mate_specular,
   return clamp(light_sp_di + env, 0.0, 1.0);
 }
 
+float generate_random(vec3 v)
+{
+  return fract(sin(dot(v.xy, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
 void main(void)
 {
   vec4 color = vec4(0.0, 0.0, 0.0, 1.0);
   vec3 nor = vary_normal;
   vec3 rel_camera_pos = camera_pos - vary_position;
   vec3 camera_dir = normalize(rel_camera_pos);
-  // float is_front = float(dot(camera_dir, nor) > 0.0);
   float frag_distance = length(rel_camera_pos);
+    // TODO: このへんの変数の計算方法はraycastの後でやる
   float distbr = clamp(16.0 / frag_distance, 0.0, 1.0);
   float lstr = 1.0;
   float lstr_para = 1.0;
@@ -971,6 +1020,7 @@ void main(void)
   float ambient = 0.005;
   vec4 tex_val = vec4(0.5, 0.5, 0.5, 1.0);
   <%if><%eq><%stype/>1<%/>
+    // raycast
     <%if><%is_gl3_or_gles3/>
       mat3 normal_matrix = mat3(vary_model_matrix);
     <%else/>
@@ -978,7 +1028,6 @@ void main(void)
       mat3 normal_matrix = mat3(mm[0].xyz, mm[1].xyz, mm[2].xyz);
     <%/>
     nor = vary_normal * normal_matrix;
-    // <%fragcolor/> = vec4(abs(nor), 1.0); return; // FIXME HERE
     vec3 camera_local = -camera_dir * normal_matrix;
     vec3 light_local = light_dir * normal_matrix;
     float texscale = 1.0 / vary_aabb_or_tconv.w;
@@ -986,15 +1035,15 @@ void main(void)
     vec3 pos    = texpos + vary_position_local * texscale;
       // 接線空間での座標からテクスチャ座標を計算
     vec3 campos = texpos + vary_camerapos_local * texscale;
-    // vec3 sur_nor = nor; // 直方体表面の法線
-    bool dbg_inside = false; // FIXME
+      // テクスチャ座標でのカメラ位置
     vec3 aabb_min = vary_aabb_min;
     vec3 aabb_max = vary_aabb_max;
 
     bool cam_inside_aabb = false;
     <%if><%raycast_cull_front/>
       // カメラが直方体の内側に入ってもレンダリングできるように
-      // する処理。表面カリングを有効にしたうえで以下の処理をすることを想定。
+      // する処理。Frontカリングを有効にしていることを前提。
+      float epsi = epsilon * 3.0;
       cam_inside_aabb = pos3_inside_3_ge_le(campos, aabb_min, aabb_max);
       if (cam_inside_aabb) {
 	// カメラは直方体の内側にある
@@ -1002,33 +1051,28 @@ void main(void)
 	// <%fragcolor/> = vec4(1.0,1.0,0.0,1.0); return;
       } else {
 	// カメラは直方体の外側にある
-        // color += vec4(1.0,0.0,0.0,1.0); return; // FIXME
-	vec3 pos_i = vec3(0.0);
-	nor = voxel_next(pos_i, pos, aabb_min, aabb_max, 0.0, -camera_local);
+	pos = clamp(pos, aabb_min + epsi, aabb_max - epsi);
+	vec3 pos_n;
+	nor = voxel_get_next(pos, aabb_min, aabb_max, -camera_local, pos_n);
+	pos = pos_n;
       }
+      pos = clamp(pos, aabb_min + epsi, aabb_max - epsi);
     <%/>
-//<%fragcolor/> = vec4(pos, 1.0); return; // FIXME
 /*
     int hit = raycast_octree(pos, vec3(0.0), camera_local, light_local,
       aabb_min, aabb_max, tex_val, nor, lstr_para);
 */
-    int hit = 1;
+    int hit = -1;
     hit = raycast_tilemap(pos, camera_local, light_local,
       aabb_min, aabb_max, tex_val, nor, lstr_para);
-/*
-*/
-//if (false) {
-//<%fragcolor/> = vec4(0.2, 0.4, 0.8, 1.0); return;
-//} else {
-//<%fragcolor/> = vec4(0.5, 0.2, 0.5, 1.0); return;
-//}
-if (dbgval.a > 0.0) { <%fragcolor/> = dbgval; return; } // FIXME
+    <%if><%eq><%get_config dbgval/>1<%/>
+    if (dbgval.a > 0.0) { <%fragcolor/> = dbgval; return; }
+    <%/>
     if (hit < 0) {
       discard;
     }
     // ambient = max(0.0, 0.005 - float(hit) * 0.0001);
     nor = normal_matrix * nor; // local to global
-    // posは3dテクスチャ座標。object座標系に戻す。
     pos = vary_aabb_or_tconv.xyz + pos * vary_aabb_or_tconv.w;
       // posをテクスチャ座標から接線空間の座標に変換
     vec4 gpos = vary_model_matrix * vec4(pos, 1.0);
@@ -1047,7 +1091,7 @@ if (dbgval.a > 0.0) { <%fragcolor/> = dbgval; return; } // FIXME
 	if (depth < 0.0) { // nearプレーンより近い
 	  dbgval.r = 1.0;
 	  dbgval.a = 1.0;
-	  <%fragcolor/> = dbgval; return; // FIXME
+	  <%fragcolor/> = dbgval; return;
 	}
 	*/
       }
@@ -1067,7 +1111,7 @@ if (dbgval.a > 0.0) { <%fragcolor/> = dbgval; return; } // FIXME
 	-dot(light_dir, vary_normal));
       parallax_loop(uv0, eye_tan, light_tan, para_zval, nor, vertical,
 	lstr_para);
-      // color += dbgval; // FIXME
+      // color += dbgval;
     <%/>
     vec2 subtex_uv;
     tilemap(uv0, tex_val, subtex_uv);
@@ -1091,22 +1135,19 @@ if (dbgval.a > 0.0) { <%fragcolor/> = dbgval; return; } // FIXME
     }
   <%else/>
   //
-  <%/> // if stype == 1
+  <%/> // endif stype == 1
   <%if><%enable_shadowmapping/>
     <%if><%eq><%stype/>1<%/>
-// FIXME FIXME FIXME HERE HERE
-//lstr = 1.0; // FIXME not necessary
       vec3 p[<%smsz/>];
       vec3 ndelta = mat3(shadowmap_vp[0]) * vary_normal * ndelta_scale; // 0.02
       vec4 sp;
-//      vec4 ngpos = vec4(gpos.xyz / gpos.w, 1.0); // FIXME 正規化いらない
       <%variable d>
-        <%set d 1/>
-        <%for i 0><%smsz/>
-          sp = shadowmap_vp[<%i/>] * gpos;
-          p[<%i/>] = sp.xyz / sp.w + ndelta / <%d/>.;
-          <%set d><%mul><%d/>3<%/><%/>
-        <%/>
+	<%set d 1/>
+	<%for i 0><%smsz/>
+	  sp = shadowmap_vp[<%i/>] * gpos;
+	  p[<%i/>] = sp.xyz / sp.w + ndelta / <%d/>.;
+	  <%set d><%mul><%d/>3<%/><%/>
+	<%/>
       <%/>
     <%else/>
       // stype != 1
@@ -1171,7 +1212,6 @@ if (dbgval.a > 0.0) { <%fragcolor/> = dbgval; return; } // FIXME
 	<%/>
 	<%if><%enable_shadowmapping_multisample/>
 	  smpos = (p[<%x/>] + 1.0) * 0.5;
-//<%fragcolor/> = vec4(smpos.zzz, 1.0); return; // FIXME
 	  float zval<%x/> = 99999.0;
 	  float sml<%x/> = 0.0;
 	  // 4箇所サンプリングする
@@ -1187,9 +1227,6 @@ if (dbgval.a > 0.0) { <%fragcolor/> = dbgval; return; } // FIXME
 	      if (dist <= 0.0) {
 		// キャスト位置のほうが遠いので影でない
 		sml<%x/> += 1.0 / 4.0;
-//	      } else if (<%x/> == 2 && length(p[<%x/>]) < 0.25 /* && abs(smz.r - 0.5) * 2.0 <= 0.25 */) {
-//		<%fragcolor/> = vec4(1.0); return; // FIXME
-//		// sml<%x/> += 1.0 / 4.0;
 	      } else {
 		// キャスト位置のほうが近い
 		variance = smz.g - smz.r * smz.r;
@@ -1199,7 +1236,8 @@ if (dbgval.a > 0.0) { <%fragcolor/> = dbgval; return; } // FIXME
 	    } // for (j)
 	  } // for (i)
 	  // 少量の光漏れを影にする
-	  float bias<%x/> = clamp(0.2 + dist * (float(<%x/>) * 0.0 + 0.0), 0.0, 1.0);
+	  float bias<%x/> = clamp(0.2 + dist * (float(<%x/>) * 0.0 + 0.0),
+	    0.0, 1.0);
 	  sml<%x/> = clamp(sml<%x/> * (1.0 + bias<%x/>) - bias<%x/>, 0.0, 1.0);
 	<%else/>
 	  // no multisample
@@ -1235,13 +1273,11 @@ if (dbgval.a > 0.0) { <%fragcolor/> = dbgval; return; } // FIXME
       <%/>
     <%/>
     <%if><%enable_vsm/>
-      // const float zval_thr = 0.1;
       const float zval_thr = <%fdiv>0.97f<%shadowmap_scale/><%/>;
     <%else/>
       const float zval_thr = <%fdiv>0.97f<%shadowmap_scale/><%/>;
     <%/>
     const float psm_thr = <%fdiv>0.9f<%shadowmap_scale/><%/>;
-    // if (zval0 < 0.0) { color.g += 1.0; }; // FIXME
     float smv0 = min(1.0, sml0
       + linear_01(max_vec3(abs(p[0])), 0.9, 1.0));
     lstr = min(lstr, smv0);
@@ -1269,7 +1305,7 @@ if (dbgval.a > 0.0) { <%fragcolor/> = dbgval; return; } // FIXME
     <%/>
     // lstr = clamp(dot(vary_normal, light_dir) * 32.0, 0.0, lstr);
     // lstr = min(lstr, float(dot(vary_normal, light_dir) > 0.0));
-  <%/> // enable_shadowmapping
+  <%/> // endif enable_shadowmapping
   // fresnel
   // float cos_v_h = clamp(dot(camera_dir, half_l_v), 0.0, 1.0);
   float mate_alpha = 1.0;
@@ -1295,23 +1331,22 @@ if (dbgval.a > 0.0) { <%fragcolor/> = dbgval; return; } // FIXME
     mate_specular = vec3(0.04, 0.04, 0.04);
     mate_diffuse = vec3(0.6, 0.7, 0.4);
   }
-  // vec3 light_color2 = vec3(1.0, 1.0, 1.0) * lstr; // FIXME???
-  // vec3 light_color1 = light_color2 * lstr_para;
   vec3 li1 = light_all(vec3(1.0, 1.0, 1.0), lstr * lstr_para, mate_specular,
     mate_diffuse, mate_alpha, camera_dir, light_dir, sampler_env, nor,
     vertical, ambient);
   /*
+  // vec3 light_color2 = vec3(1.0, 1.0, 1.0) * lstr;
+  // vec3 light_color1 = light_color2 * lstr_para;
   vec3 li2 = light_all(light_color2, mate_specular, mate_diffuse,
     mate_alpha, camera_dir, light_dir, sampler_env,
     normalize(vary_normal), false, ambient);
   color.xyz += sqrt(mix(li2, li1, distbr));
   */
   li1 *= exposure;
-  color.xyz += sqrt(li1);
-<%if><%eq><%stype/>1<%/>
-// color.xyz = vary_uvw;
-// color.xyz = vec3(1.0, 0.0, 0.0);
-// FIXME
-<%/>
+  li1 = sqrt(li1);
+  // vec3 v01 = clamp(li1, 0.0, 1.0);
+  // vec3 ve = 1.0 - 1.0 / exp(li1 * 10.0);
+  // color.xyz += mix(v01, ve, v01);
+  color.xyz += 1.0 - 1.0 / exp(li1);
   <%fragcolor/> = color;
 }

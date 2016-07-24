@@ -237,10 +237,30 @@ public struct drawer_triangles(shader_config const& glc0,
     option{shadowmap_shader_ptr} s2;
     try {
       debug_log("reload_shaders: octree_d_l2", octree_d_l2);
-      s0.some = init_triangles_shader(glc, stype, octree_bshift,
-	octree_wh_l2, octree_d_l2);
-      s1.some = init_zprepass_shader(glc, stype);
-      s2.some = init_shadowmap_shader(glc, stype);
+      tree_map{string, string} bnd;
+      bnd["stype"] = to_string(stype);
+      bnd["tile3_size"] = "ivec3(16)";
+      bnd["pat3_size"] = "ivec3(16, 16, 16)";
+      bnd["map3_size"] = "ivec3(256, 256, 32)";
+      bnd["virt3_size"] = "ivec3(4096)";
+      bnd["smsz"] = glc.num_shadowmaps_str();
+      uint const bshift = octree_bshift;
+      bnd["octree_block_factor"] = to_string(
+	static_cast{float}(1u << bshift));
+      const wh_s = "1.0 / " + to_string(static_cast{float}(
+	1u << (bshift + octree_wh_l2)));
+      const d_s = "1.0 / " + to_string(static_cast{float}(
+	1u << (bshift + octree_d_l2)));
+      debug_log("scale: ", wh_s, wh_s, d_s);
+      bnd["octree_texture_scale"] =
+	"vec3(" + wh_s + "," + wh_s + "," + d_s + ")";
+      // bnd["octree_size"] = to_string(1u << octree_size_l2);
+      bnd["raycast_cull_front"] = to_string(raycast_cull_front);
+      bnd["update_frag_depth"] = to_string(
+	glc.conf.get("update_frag_depth", 0, 1, 1));
+      s0.some = init_triangles_shader(glc, bnd);
+      s1.some = init_zprepass_shader(glc, bnd);
+      s2.some = init_shadowmap_shader(glc, bnd);
     } catch (runtime_error ex) {
       debug_log("reload failed: " + ex.message());
       return;
@@ -516,7 +536,7 @@ private function void prepare_voxel_tilemap(texture_data mutable& tpat,
   tile.height = 1u << bshift;
   tile.depth = 1u << bshift;
   tile.bshift = bshift;
-  tile.data.resize(1u << (bshift * 3), 0u);
+  tile.data.resize(static_cast{size_t}(1u) << (bshift * 3), 0u);
   for (const bx: 0 .. tpat.width >> bshift) {
     for (const by: 0 .. tpat.height >> bshift) {
       for (const bz: 0 .. tpat.depth >> bshift) {
@@ -744,10 +764,9 @@ private metafunction shadowmap_shader_ptr
     shadowmap_vertex_attributes}};
 
 private function shadowmap_shader_ptr
-init_shadowmap_shader(shader_config const& g, int stype)
+init_shadowmap_shader(shader_config const& g,
+  tree_map{string, string} const& bnd)
 {
-  tree_map{string, string} bnd;
-  bnd["stype"] = to_string(stype);
   const v = load_shader_program(g, bnd, "triangles-sm.vsh");
   const f = load_shader_program(g, bnd, "triangles-sm.fsh");
   //debug_log("shadowmap_vsh", v);
@@ -765,10 +784,9 @@ private metafunction zprepass_shader_ptr
     zprepass_vertex_attributes}};
 
 private function zprepass_shader_ptr
-init_zprepass_shader(shader_config const& g, int stype)
+init_zprepass_shader(shader_config const& g,
+  tree_map{string, string} const& bnd)
 {
-  tree_map{string, string} bnd;
-  bnd["stype"] = to_string(stype);
   const v = load_shader_program(g, bnd, "triangles-zp.vsh");
   const f = load_shader_program(g, bnd, "triangles-zp.fsh");
   //debug_log("zp_vsh", v);
@@ -786,25 +804,9 @@ private metafunction triangles_shader_ptr
     triangles_vertex_attributes}};
 
 private function triangles_shader_ptr
-init_triangles_shader(shader_config const& g, int stype, uint octree_bshift,
-  uint octree_wh_l2, uint octree_d_l2)
+init_triangles_shader(shader_config const& g,
+  tree_map{string, string} const& bnd)
 {
-  const smsz = g.num_shadowmaps_str();
-  tree_map{string, string} bnd;
-  bnd["stype"] = to_string(stype);
-  bnd["smsz"] = g.num_shadowmaps_str();
-  bnd["octree_block_factor"] = to_string(
-    static_cast{float}(1u << octree_bshift));
-  const wh_s = "1.0 / " + to_string(static_cast{float}(
-    1 << (octree_bshift + octree_wh_l2)));
-  const d_s = "1.0 / " + to_string(static_cast{float}(
-    1 << (octree_bshift + octree_d_l2)));
-  debug_log("scale: ", wh_s, wh_s, d_s);
-  bnd["octree_texture_scale"] = "vec3(" + wh_s + "," + wh_s + "," + d_s + ")";
-  // bnd["octree_size"] = to_string(1u << octree_size_l2);
-  bnd["raycast_cull_front"] = to_string(raycast_cull_front);
-  bnd["update_frag_depth"] = to_string(
-    g.conf.get("update_frag_depth", 0, 1, 1));
   const v = triangles_shader_vert(g, bnd);
   const f = triangles_shader_frag(g, bnd);
   return

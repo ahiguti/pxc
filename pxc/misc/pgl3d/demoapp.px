@@ -475,8 +475,10 @@ private function tree_map{string, ptr{pgldrawer_export_i}} init_drawers(
   r.insert("drawer_particle_bb", make_drawer_particle_bb(sconf, res));
   r.insert("drawer_rect2d", make_drawer_rect2d(sconf, res));
   r.insert("drawer_font2", make_drawer_font2(sconf, res));
-  r.insert("drawer_blur", make_drawer_blur(sconf, res));
-  // if (sconf.conf.get("fxaa", 1, 0, 1) != 0) {
+  if (sconf.conf.get("blur_filter", 0, 0, 1) != 0) {
+    r.insert("drawer_blur", make_drawer_blur(sconf, res));
+  }
+  // if (sconf.conf.get("fxaa_filter", 1, 0, 1) != 0) {
   //   r.insert("drawer_fxaa", make_drawer_fxaa(sconf, res));
   // }
   const t1 = get_time(io::system);
@@ -614,7 +616,6 @@ private function void build_vertices(app_impl mutable& app,
   m = glm::mat4()
     .translate(glm::make_vec3(0.0, 0.0, 32.0f));
   */
-/*
   pgs.make_vertex_set(tr, "mstex3d",
     regular_polygon(300.0f, 100,
       apply(m1,
@@ -632,6 +633,7 @@ private function void build_vertices(app_impl mutable& app,
       hole()
     )
   );
+/*
 */
   m = glm::mat4()
     .translate(glm::make_vec3(0.0, 0.0, 64.0));
@@ -878,7 +880,7 @@ private function void build_vertices(app_impl mutable& app,
     shapes_add(name, mass, collision_shape_e_concave);
   }
   shapes_add_sphere("box", 1.0f);
-  // shapes_add_convex("mstex3d", 1000.0f);
+  shapes_add_convex("mstex3d", 1000.0f);
   shapes_add_convex("nest", 1000.0f);
   shapes_add_sphere("box50", 50.0f);
   shapes_add_convex("bullet2", 2.0f);
@@ -1110,8 +1112,8 @@ scene_control(node_factory const& nfac,
     */
     // "knight-multi",
     "box",
+    "mstex3d",
     "rigidbody-multi",
-    // "mstex3d",
     "block-smtest",
     "block-multi",
     "bullet2-multi2s1",
