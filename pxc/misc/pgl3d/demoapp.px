@@ -23,6 +23,9 @@ public import pgl3d::physics::collision_shape -;
 public import pgl3d::physics::dynamics_world -;
 public import pgl3d::sdl::sdlutil -;
 public import pgl3d::geometry::wfobj -;
+public import io::environ;
+
+public import demoapp::texture::triangles_texture -;
 
 // public import pgl3d::bullet_test -;
 // public import KnightModel -; // FIXME
@@ -52,8 +55,12 @@ load_filesystem_async{app_main}("/persist"); // emscripten
 
 public function void app_main()
 {
+  string config_fn = "pgl3d.cnf";
+  if (io::environ::argv.size() != 0) {
+    config_fn = io::environ::argv[1];
+  }
   pgl3d::engine::mainloop::mainloop(make_ptr{demoapp_application}(),
-    "pgl3d.cnf");
+    config_fn);
 }
 
 public struct demoapp_application()
@@ -101,6 +108,7 @@ private struct app_impl()
   public varray{bool} prev_joy_buttons;
   public option{ptr{edit_mode_i}} edit_mode;
   public option{cptr{texture_data}} tex_octree;
+  public textures_ptr const textures = make_textures_ptr();
   init();
   private function void init() {
     string s;
@@ -463,12 +471,15 @@ private function tree_map{string, ptr{pgldrawer_export_i}} init_drawers(
 {
   sdl_log("app_init_drawers");
   const t0 = get_time(io::system);
+  prepare_triangles_texture_data(sconf.conf, app.textures);
   tree_map{string, ptr{pgldrawer_export_i}} r;
-  r.insert("drawer_0_triangles", make_drawer_triangles(sconf, res, 0));
-  const dr = make_drawer_triangles(sconf, res, 1);
+  r.insert("drawer_0_triangles", make_drawer_triangles(sconf, app.textures,
+    res, 0));
+  const dr = make_drawer_triangles(sconf, app.textures, res, 1);
   app.edit_mode = dr->get_edit_mode();
   r.insert("drawer_0_triangles_alt", dr);
-  r.insert("drawer_0_triangles_null", make_drawer_triangles(sconf, res, 2));
+  r.insert("drawer_0_triangles_null", make_drawer_triangles(sconf,
+    app.textures, res, 2));
   r.insert("drawer_1_lineparticle", make_drawer_lineparticle(sconf, res));
   r.insert("drawer_2_skybox", make_drawer_skybox(sconf, res));
   r.insert("drawer_particle", make_drawer_particle(sconf, res));

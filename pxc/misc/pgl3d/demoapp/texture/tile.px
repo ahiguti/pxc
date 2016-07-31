@@ -1,0 +1,549 @@
+private threaded namespace demoapp::texture::tile;
+public import common -;
+public import meta m;
+public import pgl3d::geometry::funcs -;
+public import glm -;
+private import pgl3d::texture::texture -;
+private import pgl3d::engine::util -;
+
+public function void prepare_texture_data_3d_tmap(texture_data mutable& tmap,
+  uint pattern_sz_l2, uint vx_l2, uint vy_l2, uint vz_l2, uint bshift)
+{
+/*
+  const tsz_l2 = max(vx_l2, max(vy_l2, vz_l2));
+  const tsz = 1 << tsz_l2;
+  const utsz = static_cast{uint}(tsz);
+  if (tsz_l2 >= 32u) {
+    throw runtime_error_template{"texture_3d_tmap"}("1");
+  }
+*/
+  const vtxsz = 1 << vx_l2;
+  const uvtxsz = static_cast{uint}(vtxsz);
+  const uvtxmask = uvtxsz - 1u;
+  const vtysz = 1 << vy_l2;
+  const uvtysz = static_cast{uint}(vtysz);
+  const uvtymask = uvtysz - 1u;
+  const vtzsz = 1 << vz_l2;
+  const uvtzsz = static_cast{uint}(vtzsz);
+  const uvtzmask = uvtzsz - 1u;
+  const ptshift = pattern_sz_l2 - bshift;
+  const ptmask = (1u << ptshift) - 1u;
+  debug_log("ptshift", ptshift);
+  debug_log("ptmask", ptmask);
+  debug_log("vtxsz", vtxsz);
+  tmap.width = uvtxsz;
+  tmap.height = uvtysz;
+  tmap.depth = uvtzsz;
+  tmap.bshift = bshift;
+  tmap.data.resize(static_cast{size_t}(uvtxsz) * uvtysz * uvtzsz, 0U);
+  if (tmap.data.size() == 0) {
+    throw runtime_error_template{"texture_3d_tmap"}("size0");
+  }
+  const rnd = make_rand_generator(1u);
+  metafunction ui static_cast{uint};
+  metafunction si static_cast{int};
+  function void set(int x, int y, int z, uint v) {
+    if (x < 0 || y < 0 || z < 0 ||
+      x >= static_cast{int}(tmap.width) ||
+      y >= static_cast{int}(tmap.height) ||
+      z >= static_cast{int}(tmap.depth)) {
+      return;
+    }
+    const idx = (ui(z) << (vy_l2 + vx_l2)) | (ui(y) << vx_l2) | ui(x);
+    tmap.data[idx] = v;
+// FIXME
+/*
+    if (x == 0 && y == 0 && z == 1) {
+      debug_log("0,0,1 wr idx=", idx, "v=", to_hexstring(v), to_hexstring(tmap.get(ui(x), ui(y), ui(z))));
+    }
+*/
+  }
+  function uint get(int x, int y, int z) {
+    if (x < 0 || x >= vtxsz) { return 0; }
+    if (y < 0 || y >= vtysz) { return 0; }
+    if (z < 0 || z >= vtzsz) { return 0; }
+    const idx = (ui(z) << (vy_l2 + vx_l2)) | (ui(y) << vx_l2) | ui(x);
+    return tmap.data[idx];
+  }
+  function void append_6dir()
+  {
+    for (const x: 0 .. vtxsz) {
+      for (const y: 0 .. vtysz) {
+	for (const z: 0 .. vtzsz - 3) {
+	  function bool cval(int x, int y, int z) {
+	    const v = get(x, y, z);
+	    return (v & 0xff000000) >= 0x02000000;
+	  }
+	  const v0 = cval(x, y, z);
+	  if (v0) { continue; }
+	  const vxp = cval(x + 1, y, z);
+	  const vxn = cval(x - 1, y, z);
+	  const vyp = cval(x, y + 1, z);
+	  const vyn = cval(x, y - 1, z);
+	  const vzp = cval(x, y, z + 1);
+	  const vzn = cval(x, y, z - 1);
+	  mutable pz = 6u;
+	  if (vxp && !vxn) {
+	    pz = 0;
+	  } else if (!vxp && vxn) {
+	    pz = 1;
+	  } else if (vyp && !vyn) {
+	    pz = 2;
+	  } else if (!vyp && vyn) {
+	    pz = 3;
+	  } else if (vzp && !vzn) {
+	    pz = 4;
+	  } else if (!vzp && vzn) {
+	    pz = 5;
+	  } else {
+	    continue;
+	  }
+	  // if ((rnd->generate() & 0xff) < 0x7f) { continue; }
+	  mutable rv = rnd->generate();
+	  const px = rv & ptmask;
+	  rv >>= ptshift;
+	  const py = rv & ptmask;
+	  const idx = (pz << (ptshift * 2)) | (py << ptshift) | px;
+	  const v = 0x01000000u | idx;
+	  // debug_log("tmap detail", x, y, z, to_hexstring(v));
+	  set(x, y, z, v);
+	}
+      }
+    }
+  }
+  function int rand_gen(int v)
+  {
+    if (v < 1) { return 0; }
+    return si(rnd->generate() % ui(v));
+  }
+  if (false) {
+    // 6dir bump
+    function void fill_range(int x0, int y0, int z0, int w)
+    {
+      for (const x: x0 - w .. x0 + w + 1) {
+	for (const y: y0 - w .. y0 + w + 1) {
+	  for (const z: z0 - w .. z0 + w + 1) {
+	    set(x, y, z, 0xffb090a0);
+	  }
+	}
+      }
+    }
+    function void make_branch_rec(int x, int y, int z, int w, int dir)
+    {
+      int dx = 0;
+      int dy = 0;
+      int dz = 0;
+      int len = 0;
+      if (dir == 0) { // xp
+	dx =  1; len = rand_gen(min(vtxsz - 1 - x - w, vtxsz / 8));
+      } else if (dir == 1) {
+	dx = -1; len = rand_gen(min(x - w, vtxsz / 8));
+      } else if (dir == 2) {
+	dy =  1; len = rand_gen(min(vtysz - 1 - y - w, vtysz / 8));
+      } else if (dir == 3) {
+	dy = -1; len = rand_gen(min(y - w, vtysz / 8));
+      } else if (dir == 4) {
+	dz =  1; len = rand_gen(min(vtzsz - 1 - z - w, vtzsz / 8));
+      } else if (dir == 5) {
+	dz = -1; len = rand_gen(min(z - w, vtzsz / 8));
+      }
+      if (len == 0) {
+	return;
+      }
+      for (int i: 0 .. len + 1) {
+	x += dx;
+	y += dy;
+	z += dz;
+	fill_range(x, y, z, w);
+      }
+      if (w > 1) {
+	for (int d: 0 .. 6) {
+	  if (d == dir) {
+	    continue;
+	  }
+	  make_branch_rec(x, y, z, w - 1, d);
+	}
+      }
+    }
+    for (int d: 0 .. 6) {
+      // make_branch_rec(vtxsz / 2, vtysz / 2, vtzsz / 2, 9, d);
+      make_branch_rec(vtxsz / 2, vtysz / 2, vtzsz / 4, 9, d);
+    }
+    append_6dir();
+  } else if (true) {
+    // recursive bump
+    for (const x: 0 .. vtxsz) {
+      for (const y: 0 .. vtysz) {
+	for (const z: 0 .. 1) {
+	  set(x, y, z, 0xffb090a0);
+	}
+      }
+    }
+    function void make_bump_rec(int rec, int x0, int x1, int y0, int y1, int z)
+    {
+      if (x1 - x0 < 2 || y1 - y0 < 2 || z >= vtzsz) {
+	return;
+      }
+      const num = rec > 3 ? 100 : 10;
+      for (const i: 0 .. num) {
+	const szdiv = 16;
+	const x = rand_gen(x1 - x0) + x0;
+	const y = rand_gen(y1 - y0) + y0;
+	const w = rand_gen((x1 - x0) / szdiv) + 1;
+	const h = rand_gen((y1 - y0) / szdiv) + 1;
+	const d = rand_gen((vtzsz - z) / 2) + 1;
+	// debug_log("xywhd", x, y, w, h, d);
+	if (x - w < x0 || x + w >= x1 || y - h < y0 || y + h >= y1 ||
+	  z + d + 2 >= vtzsz)
+	{
+	  continue;
+	}
+	for (const ix: x - w .. x + w + 1) {
+	  for (const iy: y - h .. y + h + 1) {
+	    for (const iz: z .. z + d) {
+	      set(ix, iy, iz, 0xffb090a0);
+	    }
+	  }
+	}
+	if (rec > 0) {
+	  make_bump_rec(rec - 1, x - w, x + w, y - h, y + h, z + d);
+	}
+      }
+    }
+    if (bshift > 4) {
+      make_bump_rec(8, 0 + 1, vtxsz - 1, 0 + 1, vtysz - 1, 1);
+    } else {
+      make_bump_rec(5, 0 + 1, vtxsz - 1, 0 + 1, vtysz - 1, 1);
+    }
+    append_6dir();
+  } else {
+    // repeat tpat data
+    for (const i, mutable& m: tmap.data) {
+      const px = i & uvtxmask;
+      const py = (i >> vx_l2) & uvtymask;
+      const pz = (i >> (vy_l2 + vx_l2)) & uvtzmask;
+/*
+      const mg1 = 32u;
+      const mg2 = 0u;
+      if (px >= mg1 && px < uvtxsz - mg1 &&
+	  py >= mg1 && py < uvtysz - mg1 &&
+	  pz >= mg1 && pz < uvtzsz - mg1)
+      {
+	const w = (px + py + pz) & 1;
+	const v = w != 0 ? 0xff040400 : 0xffd0d0d0;
+	m = static_cast{uint}(v);
+//      } else if (pz == 0) {
+//	m = 0xff00d0d0;
+      } else if (
+	  px >= mg2 && px < uvtxsz - mg2 &&
+	  py >= mg2 && py < uvtysz - mg2 &&
+	  pz >= mg2 && pz < uvtzsz - mg2)
+*/
+      {
+	const x = (i & ptmask);
+	const y = ((i >> vx_l2) & ptmask);
+	const z = ((i >> (vx_l2 + vy_l2)) & ptmask);
+	mutable v = (z << (ptshift * 2)) | (y << ptshift) | x | 0x01000000;
+	  // node reference flag
+	// debug_log("i,x,y,z", to_hexstring(i), to_hexstring(x), to_hexstring(y), to_hexstring(z));
+/*
+	if (x >= 0u || y >= 0u) {
+	  // mutable v = rnd->generate();
+	  const x0 = static_cast{uint}(rnd->generate()) % ptmask;
+	  const y0 = static_cast{uint}(rnd->generate()) % ptmask;
+	  const z0 = static_cast{uint}(rnd->generate()) % ptmask;
+	  v = (z0 << (ptshift * 2)) | (y0 << ptshift) | x0 | 0x01000000u;
+	  // v = (static_cast{uint}(rnd->generate()) &
+	  //   ((1u << (ptshift * 3)) - 1u)) | 0x01000000;
+	}
+*/
+	m = static_cast{uint}(v);
+	// debug_log("i,v", to_hexstring(i), to_hexstring(v));
+/*
+      } else {
+	m = 0u;
+*/
+      }
+    }
+  }
+  debug_log("prepare tmap 0,0,1", to_hexstring(tmap.get(0, 0, 1)));
+}
+
+public function void prepare_texture_data_3d_tpat(texture_data mutable& tpat,
+  uint pattern_sz_l2, uint bshift)
+{
+  const color0 = 0x00000000u;
+  const color1 = 0xff102020u;
+  const color2 = 0xff201010u;
+  const psz = 1 << pattern_sz_l2;
+  const usz = static_cast{uint}(psz);
+  tpat.width = usz;
+  tpat.height = usz;
+  tpat.depth = usz;
+  tpat.bshift = bshift;
+  tpat.data.resize(usz * usz * usz, 0U);
+  metafunction si static_cast{int};
+  metafunction ui static_cast{uint};
+  if (true) {
+    // 6dir bump
+    const rnd = make_rand_generator(333U);
+    function void set_bump(uint bx, uint by, uint bz, uint x0, uint y0,
+      uint z0, bool cut, glm::vec3 const& p0, glm::vec3 const& s0,
+      float radius, uint dir)
+    {
+      const bsz = 1u << bshift;
+      uint x;
+      uint y;
+      uint z;
+      vec3 p;
+      vec3 s;
+      if (dir == 0u) {
+	x = bsz - z0 - 1; y = x0; z = y0;
+	p = make_vec3(-p0.z, p0.x, p0.y);
+	s = make_vec3(s0.z, s0.x, s0.y);
+      } else if (dir == 1u) {
+	x = z0; y = x0; z = y0;
+	p = make_vec3(p0.z, p0.x, p0.y);
+	s = make_vec3(s0.z, s0.x, s0.y);
+      } else if (dir == 2u) {
+	x = y0; y = bsz - z0 - 1; z = x0;
+	p = make_vec3(p0.y, -p0.z, p0.x);
+	s = make_vec3(s0.y, s0.z, s0.x);
+      } else if (dir == 3u) {
+	x = y0; y = z0; z = x0;
+	p = make_vec3(p0.y, p0.z, p0.x);
+	s = make_vec3(s0.y, s0.z, s0.x);
+      } else if (dir == 4u) {
+	x = x0; y = y0; z = bsz - z0 - 1;
+	p = make_vec3(p0.x, p0.y, -p0.z);
+	s = make_vec3(s0.x, s0.y, s0.z);
+      } else {
+	x = x0; y = y0; z = z0;
+	p = make_vec3(p0.x, p0.y, p0.z);
+	s = make_vec3(s0.x, s0.y, s0.z);
+      }
+      x += bx;
+      y += by;
+      z += bz;
+      if (x > 255 || y > 255 || z > 255) { // FIXME
+	// debug_log("set_bump", x, y, z, bx, by, bz, x0, y, z0, dir);
+      }
+      const idx = (z << (pattern_sz_l2 * 2)) | (y << pattern_sz_l2) | x;
+      // debug_log("set_color", x & 16, y & 16, z, x0, y0, z0, dir);
+      if (!cut || tpat.data[idx] != 0) { // FIXME
+	tpat.data[idx] = 0xff808080;
+      } else {
+	p = p * 4.0f; // pは0.25刻み
+	s = s * 8.0f; // sは0.125刻み
+	radius = radius * 4.0f; // 半径は0.25刻み
+	const vec3 pv = p + make_vec3(8.0f, 8.0f, 8.0f);
+	const vec3 sv = s;
+	const pvx = static_cast{uint}(pv.x + 0.5);
+	const pvy = static_cast{uint}(pv.y + 0.5);
+	const pvz = static_cast{uint}(pv.z + 0.5);
+	const svx = static_cast{uint}(sv.x + 0.5);
+	const svy = static_cast{uint}(sv.y + 0.5);
+	const svz = static_cast{uint}(sv.z + 0.5);
+	const vx = (svx << 4u) | pvx;
+	const vy = (svy << 4u) | pvy;
+	const vz = (svz << 4u) | pvz;
+	const cw = static_cast{uint}(radius + 0.5) + 1u;
+	const vc = (cw << 24u) | (vz << 16u) | (vy << 8u) | vx;
+	tpat.data[idx] = vc;
+      }
+    }
+    function void make_bump_one(uint x0, uint y0, uint z0, uint dir) {
+      const bsz = 1 << bshift;
+      const bmask = (1u << bshift) - 1u;
+      mutable rv = rnd->generate();
+      const x = si(rv & bmask);
+      rv >>= bshift;
+      const y = si(rv & bmask);
+      rv >>= bshift;
+      mutable w = si(rv & bmask) / 2;
+      rv >>= bshift;
+      mutable h = si(rv & bmask) / 4;
+      rv >>= bshift;
+      const d = si(rv & bmask);
+      rv >>= bshift;
+      if (x - w < 0) { w = x; }
+      if (x + w >= bsz) { w = bsz - x - 1; }
+      if (y - h < 0) { h = y; }
+      if (y + h >= bsz) { h = bsz - y - 1; }
+      for (const ix: x - w .. x + w + 1) {
+	for (const iy: y - h .. y + h + 1) {
+	  for (const iz: 0 .. d) {
+	    vec3 pshift;
+	    vec3 pscale;
+	    bool cutx = false;
+	    bool cuty = false;
+	    if (ix == x - w) {
+	      pshift.x -= 0.5;
+	      pscale.x = 1.0;
+	      cutx = true;
+	    } else if (ix == x + w) {
+	      pshift.x += 0.5;
+	      pscale.x = 1.0;
+	      cutx = true;
+	    }
+	    if (iy == y - h) {
+	      pshift.y -= 0.5;
+	      pscale.y = 1.0;
+	      cuty = true;
+	    } else if (iy == y + h) {
+	      pshift.y += 0.5;
+	      pscale.y = 1.0;
+	      cuty = true;
+	    }
+	    bool cut = false;
+	    if ((cutx || cuty) && iz == d - 1) {
+	      pshift.z = 0.5;
+	      pscale.z = 1.0;
+	      cut = true;
+	    } else if (cutx && cuty) {
+	      cut = true;
+	    }
+	    set_bump(x0, y0, z0, ui(ix), ui(iy), ui(iz), cut, pshift,
+	      pscale, 1.0, dir);
+	  }
+	}
+      }
+    }
+    if ((usz >> bshift) < 6u) {
+      throw runtime_error_template{"3d_tpat"}("usz is too small");
+    }
+    for (const z: 0 .. 6u) {
+      for (const y: 0 .. usz >> bshift) {
+	for (const x: 0 .. usz >> bshift) {
+	  // debug_log("bump xyz", x, y, z);
+	  // uint const loop_lim = bshift > 4 ? 20u : 1u;
+	  uint const loop_lim = 20u;
+	  for (const i: 0 .. loop_lim) {
+	    make_bump_one(x << bshift, y << bshift, z << bshift, z);
+	  }
+	}
+      }
+    }
+  } else if (false) {
+    const rnd = make_rand_generator(333U);
+    for (const i: 0 .. 500) {
+      mutable v = static_cast{uint}(rnd->generate());
+      const x0 = static_cast{int}(v % usz);
+      v /= usz;
+      const y0 = static_cast{int}(v % usz);
+      v /= usz;
+      const z0 = static_cast{int}(v % usz);
+      v /= usz;
+      v = static_cast{uint}(rnd->generate());
+      const w0 = static_cast{int}(v % 8 + 1);
+      v /= 8;
+      const h0 = static_cast{int}(v % 32 + 1);
+      v /= 32;
+      const d0 = static_cast{int}(v % 16 + 5);
+      v /= 16;
+      mutable uv = static_cast{uint}(rnd->generate());
+      /*
+      const r0 = static_cast{uint}(x0) / 3u;
+      const g0 = static_cast{uint}(y0) / 3u;
+      const b0 = static_cast{uint}(z0) / 3u;
+      const r0 = (uv % 4 + 1) * 16;
+      uv /= 4;
+      const g0 = (uv % 4 + 1) * 16;
+      uv /= 4;
+      const b0 = (uv % 4 + 1) * 16;
+      uv /= 4;
+      const c0 = 0xff000000u | (b0 << 16u) | (g0 << 8u) | (r0 << 0u);
+      {
+	string s;
+	integral_to_hexadecimal{uint}(c0, s);
+	// debug_log("color", s, r0, g0, b0);
+      }
+      */
+      for (const x: x0 - w0 .. x0 + w0 + 1) {
+	if (x < 0 || x >= psz - 0) { continue; }
+	for (const y: y0 - h0 .. y0 + h0 + 1) {
+	  if (y < 0 || y >= psz - 0) { continue; }
+	  for (const z: z0 - d0 .. z0 + d0 + 1) {
+	    if (z < 0 || z >= psz - 0) { continue; }
+	    const r0 = static_cast{uint}(x) / 3u;
+	    const g0 = static_cast{uint}(y) / 3u;
+	    const b0 = static_cast{uint}(z) / 3u;
+	    const c0 = 0xff000000u | (b0 << 16u) | (g0 << 8u) | (r0 << 0u);
+	    tpat.data[static_cast{size_t}(((z * psz) + y) * psz + x)] = c0;
+	  }
+	}
+      }
+    }
+  } else if (false) {
+    // sphere clamped
+    for (const x: 0 .. psz) {
+      for (const y: 0 .. psz) {
+	for (const z: 0 .. psz) {
+	  const x1 = static_cast{float}(x * 2 + 1 - psz)
+	      / static_cast{float}(psz);
+	  const y1 = static_cast{float}(y * 2 + 1 - psz)
+	      / static_cast{float}(psz);
+	  const z1 = static_cast{float}(z * 2 + 1 - psz)
+	      / static_cast{float}(psz);
+	  const n2 = x1 * x1 + y1 * y1 + z1 * z1;
+	  const m = (x + y + z) & 1;
+	  mutable v = (n2 < 1.5f) ? ((m != 0) ? color2 : color1) : color0;
+	  // debug_log(x1, y1, z1, v != color0);
+	  tpat.data[static_cast{size_t}(((z * psz) + y) * psz + x)] = v;
+	}
+      }
+    }
+  } else {
+    // sphere
+    const sphere_radius = 0.9f;
+    const fpsz = static_cast{float}(psz);
+    const fipsz = 1.0f / fpsz;
+    for (const x: 0 .. psz) {
+      for (const y: 0 .. psz) {
+	for (const z: 0 .. psz) {
+	  const x1 = static_cast{float}(x * 2 + 1 - psz) * fipsz;
+	  const y1 = static_cast{float}(y * 2 + 1 - psz) * fipsz;
+	  const z1 = static_cast{float}(z * 2 + 1 - psz) * fipsz;
+	  const n2 = x1 * x1 + y1 * y1 + z1 * z1;
+	  const vec3 nor = make_vec3(x1, y1, z1).normalize();
+	  const vec3 pos = nor * sphere_radius;
+	  const vec3 v0pos = make_vec3(x1 - fipsz, y1 - fipsz, z1 - fipsz);
+	  const vec3 lpos = (pos - v0pos) * fpsz * 0.5f;
+	    // voxel-local (0,1) coordinate
+	  const float mi = min(nor.x, 0.0f) + min(nor.y, 0.0f)
+	    + min(nor.z, 0.0f);
+	  const float mx = max(nor.x, 0.0f) + max(nor.y, 0.0f)
+	    + max(nor.z, 0.0f);
+	  const d = dot(nor, lpos); // ax+by+cz=d, abc=nor, xyz=lpos
+	  mutable v = color0;
+	  if (d < mi) {
+	    v = color0;
+	  } else if (d > mx + 0.3f) {
+	    v = color0; // FIXME
+	  } else {
+	    const vec3 cval = (nor * 127.0f)
+	      + make_vec3(128.0f, 128.0f, 128.0f);
+	    const cx = static_cast{uint}(cval.x + 0.5);
+	    const cy = static_cast{uint}(cval.y + 0.5);
+	    const cz = static_cast{uint}(cval.z + 0.5);
+	    const cw = static_cast{uint}(d / 2.0f * 127.0f + 128.0f + 0.5);
+	    // cw must be greater than 1
+	    const vc = (cw << 24u) | (cz << 16u) | (cy << 8u) | cx;
+	    v = vc;
+	    // v = color2; // FIXME
+	  }
+	  /*
+	  const cw = 0xffu;
+	  const vc = (cw << 24u) | (cz << 16u) | (cy << 8u) | cx;
+	  const v = (n2 < sphere_radius) ? vc : 0u;
+	  */
+	  // const m = (x + y + z) & 1;
+	  // mutable v = (n2 < 0.9f) ? ((m != 0) ? color2 : color1) : color0;
+	  // debug_log(x1, y1, z1, v != color0);
+	  tpat.data[static_cast{size_t}(((z * psz) + y) * psz + x)] = v;
+	}
+      }
+    }
+  }
+}
+

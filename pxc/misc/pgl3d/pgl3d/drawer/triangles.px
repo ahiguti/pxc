@@ -2,7 +2,6 @@ private threaded namespace pgl3d::drawer::triangles "export-unsafe";
 public import common -;
 public import meta m;
 public import pgl3d::drawer::base -;
-public import pgl3d::texture::tile -;
 public import pgl3d::drawer::edit_mode -;
 
 private metafunction raycast_cull_front 1;
@@ -78,39 +77,28 @@ private tsvaluetype struct shadowmap_uniforms()
 }
 
 public struct drawer_triangles(shader_config const& glc0,
-  resource_pool_ptr const& res0, int opt0)
+  textures_ptr const& textures0, resource_pool_ptr const& res0, int opt0)
 <pgldrawer_i>
 {
   metafunction tattr triangles_vertex_attributes;
-/*
-  metafunction octree_bshift 5;
-  metafunction pattern_size 9;
-  metafunction virt_size_x 15;
-  metafunction virt_size_y 15;
-  metafunction virt_size_z 8;
-*/
-  metafunction octree_bshift 4;
-  metafunction pattern_size 8;
-  metafunction virt_size_x 12;
-  metafunction virt_size_y 12;
-  metafunction virt_size_z 9;
-  /*
-  */
+  textures_ptr textures = textures0;
   ptr{resource_pool} res = pointer_downcast{ptr{resource_pool}}(res0);
   int const stype = opt0;
   option{triangles_shader_ptr} sdr_solid;
   option{zprepass_shader_ptr} sdr_zp;
   option{shadowmap_shader_ptr} sdr_shadow;
   ptr{texture_data} tex_octree = make_ptr{texture_data}();
-  ptr{texture_data} tex_voxtpat = make_ptr{texture_data}();
-  ptr{texture_data} tex_voxtmap = make_ptr{texture_data}();
+  // cptr{texture_data} tex_voxtmap = make_ptr{texture_data}();
+  // cptr{texture_data} tex_voxtpat = make_ptr{texture_data}();
+  varray{cptr{texture_data}} voxtmap_mip;
+  varray{cptr{texture_data}} voxtpat_mip;
   ptr{gl_texture} texture_dpat = make_ptr{gl_texture}();
   ptr{gl_texture} texture_pmpat = make_ptr{gl_texture}();
   ptr{gl_texture} texture_tilemap = make_ptr{gl_texture}();
   ptr{gl_texture} texture_env = make_ptr{gl_texture}();
   ptr{gl_texture} texture_octree = make_ptr{gl_texture}();
-  ptr{gl_texture} texture_voxtpat = make_ptr{gl_texture}();
   ptr{gl_texture} texture_voxtmap = make_ptr{gl_texture}();
+  ptr{gl_texture} texture_voxtpat = make_ptr{gl_texture}();
   option{ptr{edit_mode_i}} edit_mode_ptr;
   shader_config glc = glc0;
   uint octree_wh_l2 = 4;
@@ -119,63 +107,53 @@ public struct drawer_triangles(shader_config const& glc0,
   private function void init(shader_config const& glc)
   {
     debug_log("drawer_triangles init ", stype);
-  /*
-    load_gl_texture_tilemap(*texture_dpat, *texture_pmpat, *texture_tilemap,
-      "dpat.png", "pmpat.png");
-  */
-    const tex_col = load_texture_data("default-color.png");
-    const tex_dep = load_texture_data("default-depth.png");
-    const tex_tilemap = make_ptr{texture_data}();
-    prepare_texture_data(*tex_col, *tex_dep, *tex_tilemap);
+    const tex_col = *textures->equal_range("triangles.tile_color");
+    const tex_dep = *textures->equal_range("triangles.tile_depth");
+    const tex_map = *textures->equal_range("triangles.tile_map");
     texture_data_to_gl_texture(GL_TEXTURE_2D, *texture_dpat, tex_col);
     texture_data_to_gl_texture(GL_TEXTURE_2D, *texture_pmpat, tex_dep);
-    texture_data_to_gl_texture(GL_TEXTURE_2D, *texture_tilemap, tex_tilemap);
+    texture_data_to_gl_texture(GL_TEXTURE_2D, *texture_tilemap, tex_map);
     res->textures.insert("tile_color", texture_dpat);
     res->textures.insert("tile_parallax", texture_pmpat);
     res->textures.insert("tile", texture_tilemap);
-    // uint mutable octree_wh_l2 = 4;
-    // uint mutable octree_d_l2 = octree_wh_l2;
     if (stype == 1) {
-      tex_voxtpat = load_texture_data_raw("voxtpat.raw");
-      tex_voxtmap = load_texture_data_raw("voxtmap.raw");
-      tex_octree = load_texture_data_raw("octree.raw");
-      if (tex_octree->width == 0 || tex_voxtpat->width == 0
-	|| tex_voxtmap->width == 0) {
-	debug_log("generate octree.raw");
-	const bshift = static_cast{uint}(octree_bshift);
-	prepare_texture_data_3d_tpat(*tex_voxtpat, pattern_size, bshift);
-	debug_log("tpat done");
-	prepare_texture_data_3d_tmap(*tex_voxtmap, pattern_size,
-	  static_cast{uint}(virt_size_x) - bshift,
-	  static_cast{uint}(virt_size_y) - bshift,
-	  static_cast{uint}(virt_size_z) - bshift,
-	  static_cast{uint}(bshift));
-	debug_log("tmap done");
-	debug_log("tmap 0,0,1", to_hexstring(tex_voxtmap->get(0, 0, 1)));
-	bool enable_calc_distance =
-	  glc.conf.get("calc_distance", 1, 0, 1) != 0;
-	tex_octree = convert_to_octree{octree_bshift}(tex_voxtpat,
-	  tex_voxtmap, enable_calc_distance);
-	debug_log("octree done");
-	// 移行中。voxtmap, voxtpatにもdistanceを入れる。
-	prepare_voxel_tilemap(*tex_voxtpat, *tex_voxtmap,
-	  pattern_size, bshift, enable_calc_distance);
-	save_texture_data_raw("octree.raw", *tex_octree);
-	save_texture_data_raw("voxtpat.raw", *tex_voxtpat);
-	save_texture_data_raw("voxtmap.raw", *tex_voxtmap);
-	debug_log("saved octree.raw", tex_octree->width,
-	  tex_octree->height, tex_octree->depth, tex_octree->data.size());
-      } else {
-	debug_log("loaded from octree.raw", tex_octree->width,
-	  tex_octree->height, tex_octree->depth,
-	  "bytes=", tex_octree->data.size() * 4u);
+      tex_octree = *textures->equal_range("triangles.octree");
+      // tex_voxtmap = *textures->equal_range("triangles.voxtmap");
+      // tex_voxtpat = *textures->equal_range("triangles.voxtpat");
+      {
+	int i = 0;
+	while (true) {
+	  string k = "triangles.voxtmap." + to_string(i);
+	  const e = textures->equal_range(k);
+	  if (e.empty()) {
+	    break;
+	  }
+	  voxtmap_mip.push_back(*e);
+	  ++i;
+	}
+	i = 0;
+	while (true) {
+	  string k = "triangles.voxtpat." + to_string(i);
+	  const e = textures->equal_range(k);
+	  if (e.empty()) {
+	    break;
+	  }
+	  voxtpat_mip.push_back(*e);
+	  ++i;
+	}
       }
       texture_data_to_gl_texture(GL_TEXTURE_3D, *texture_octree, tex_octree);
+      /*
       texture_data_to_gl_texture(GL_TEXTURE_3D, *texture_voxtpat, tex_voxtpat);
       texture_data_to_gl_texture(GL_TEXTURE_3D, *texture_voxtmap, tex_voxtmap);
-      octree_wh_l2 = integral_log2(tex_octree->width) - octree_bshift;
-      octree_d_l2 = integral_log2(tex_octree->depth) - octree_bshift;
-      uint bshift = octree_bshift;
+      */
+      texture_data_array_to_gl_texture(GL_TEXTURE_3D, *texture_voxtpat,
+	voxtpat_mip);
+      texture_data_array_to_gl_texture(GL_TEXTURE_3D, *texture_voxtmap,
+	voxtmap_mip);
+      uint const bshift = tex_octree->bshift;
+      octree_wh_l2 = integral_log2(tex_octree->width) - bshift;
+      octree_d_l2 = integral_log2(tex_octree->depth) - bshift;
       if (glc.conf.get("edit_mode", 0, 0, 1) != 0) {
 	ptr{edit_mode_i} em = make_ptr{edit_mode}(bshift, tex_octree,
 	  texture_octree);
@@ -244,7 +222,7 @@ public struct drawer_triangles(shader_config const& glc0,
       bnd["map3_size"] = "ivec3(256, 256, 32)";
       bnd["virt3_size"] = "ivec3(4096)";
       bnd["smsz"] = glc.num_shadowmaps_str();
-      uint const bshift = octree_bshift;
+      uint const bshift = tex_octree->bshift;
       bnd["octree_block_factor"] = to_string(
 	static_cast{float}(1u << bshift));
       const wh_s = "1.0 / " + to_string(static_cast{float}(
@@ -446,294 +424,6 @@ public struct drawer_triangles(shader_config const& glc0,
   public function option{ptr{edit_mode_i}} get_edit_mode() const
   {
     return edit_mode_ptr;
-  }
-}
-
-private function void prepare_voxel_tilemap(texture_data mutable& tpat,
-  texture_data mutable& tmap, uint pattern_size, uint bshift,
-  bool enable_calc_distance)
-{
-  debug_log("tmap 0,0,1", to_hexstring(tmap.get(0, 0, 1)));
-  function void dump_cnt(texture_data const& t, string msg)
-  {
-    size_t sp_cnt = 0;
-    size_t co_cnt = 0;
-    size_t di_cnt = 0;
-    size_t re_cnt = 0;
-    for (const z: 0 .. t.depth) {
-      for (const y: 0 .. t.height) {
-	for (const x: 0 .. t.width) {
-	  const v = t.get(x, y, z);
-	  if ((v & 0xff000000) == 0x00000000) {
-	    sp_cnt += 1;
-	    if ((v & 0x00ffffff) != 0) {
-	      di_cnt += 1;
-	    }
-	  } else if ((v & 0xff000000) == 0xff000000) {
-	    co_cnt += 1;
-	    // debug_log("co", x, y, z, to_hexstring(v));
-	  } else if ((v & 0xff000000) == 0x01000000) {
-	    re_cnt += 1;
-	  } else {
-	  }
-	}
-      }
-    }
-    debug_log(msg, t.width, t.height, t.depth);
-    debug_log(msg, "sp_cnt", sp_cnt, "di_cnt", di_cnt, "co_cnt", co_cnt,
-      "re_cnt", re_cnt);
-  }
-  dump_cnt(tmap, "tmap");
-  dump_cnt(tpat, "tpat");
-  // tmapのノード参照値を変換する。
-  {
-    uint s_l2 = pattern_size - bshift;
-    uint s_mask = (1u << s_l2) - 1u;
-    // 変換前のノード参照のxyzそれぞれのビット幅はs_l2になっている。
-    // これをxyzそれぞれ8bitにする
-    for (const z: 0 .. tmap.depth) {
-      for (const y: 0 .. tmap.height) {
-	for (const x: 0 .. tmap.width) {
-	  const v = tmap.get(x, y, z);
-	  if (!is_node_reference(v)) {
-	    continue;
-	  }
-	  const nr = get_node_reference(v);
-	  const nx = nr & s_mask;
-	  const ny = (nr >> s_l2) & s_mask;
-	  const nz = (nr >> (s_l2 * 2)) & s_mask;
-	  const tnv = (nz << 16) | (ny << 8) | nx;
-	  const tv = make_node_reference(tnv);
-	  tmap.set(x, y, z, tv);
-	}
-      }
-    }
-  }
-  /*
-  for (const z: 0 .. 10u) {
-    for (const y: 0 .. 10u) {
-      for (const x: 0 .. 10u) {
-	const v = tmap.get(x, y, z);
-	debug_log("tmap", x, y, z, to_hexstring(v));
-      }
-    }
-  }
-  for (const z: 0 .. 10u) {
-    for (const y: 0 .. 10u) {
-      for (const x: 0 .. 10u) {
-	const v = tpat.get(x, y, z);
-	debug_log("tpat", x, y, z, to_hexstring(v));
-      }
-    }
-  }
-  */
-  // tmapはタイル境界は無いので各ボクセルに全体の境界までの距離を埋め込む
-  set_distance(tmap);
-  // tpatはタイル境界までの距離を最大値とする。各タイルごとに個別に計算
-  // const bshift = tpat.bshift;
-  texture_data tile;
-  tile.width = 1u << bshift;
-  tile.height = 1u << bshift;
-  tile.depth = 1u << bshift;
-  tile.bshift = bshift;
-  tile.data.resize(static_cast{size_t}(1u) << (bshift * 3), 0u);
-  for (const bx: 0 .. tpat.width >> bshift) {
-    for (const by: 0 .. tpat.height >> bshift) {
-      for (const bz: 0 .. tpat.depth >> bshift) {
-	// copy to tile
-	for (const x: 0 .. 1u << bshift) {
-	  for (const y: 0 .. 1u << bshift) {
-	    for (const z: 0 .. 1u << bshift) {
-	      tile.set(x, y, z, tpat.get(
-		(bx << bshift) + x,
-		(by << bshift) + y,
-		(bz << bshift) + z));
-	    }
-	  }
-	}
-	// set distance
-	set_distance(tile);
-	// copy back to tpat
-	for (const x: 0 .. 1u << bshift) {
-	  for (const y: 0 .. 1u << bshift) {
-	    for (const z: 0 .. 1u << bshift) {
-	      tpat.set(
-		(bx << bshift) + x,
-		(by << bshift) + y,
-		(bz << bshift) + z,
-		tile.get(x, y, z));
-	    }
-	  }
-	}
-      }
-    }
-  }
-  dump_cnt(tmap, "tmap");
-  dump_cnt(tpat, "tpat");
-}
-
-private function void prepare_texture_data(texture_data mutable& tcol,
-  texture_data mutable& tdep, texture_data mutable& tmap)
-{
-  // generate tilemap
-  tmap.width = 128;
-  tmap.height = 128;
-  tmap.data.resize(tmap.width * tmap.height, 0U);
-  const rnd = make_rand_generator(333U);
-  for (const x: 0 .. tmap.width) {
-    for (const y: 0 .. tmap.height) {
-      const v0 = rnd->generate() / 65536;
-      const v1 = 1U + v0 % 2U;
-      // const v2 = (v0 / 8) % 8;
-      // const v1 = 1;
-      const v2 = 0U;
-      const v = v2 * 256U + v1;
-      tmap.data[y * tmap.width + x] = static_cast{uint}(v);
-    }
-  }
-  parallax_png_decode(tdep);
-  set_normal_pattern(tdep, tcol);
-  parallax_set_clearance(tdep);
-}
-
-private function void set_normal_pattern(texture_data const& tdep,
-  texture_data mutable& tcol)
-{
-  function uint read_depth(int x, int y) {
-    if (x < 0 || y < 0 || static_cast{uint}(x) >= tdep.width ||
-      static_cast{uint}(y) >= tdep.height) {
-      return 0;
-    }
-    return tdep.data[static_cast{uint}(y) * tdep.width + static_cast{uint}(x)];
-  }
-  for (const x : 0 .. tdep.width) {
-    for (const y : 0 .. tdep.height) {
-      const xi = static_cast{int}(x);
-      const yi = static_cast{int}(y);
-      const d0  = read_depth(xi, yi);
-      const dlu = read_depth(xi - 1, yi - 1);
-      const du  = read_depth(xi    , yi - 1);
-      const dru = read_depth(xi + 1, yi - 1);
-      const dl  = read_depth(xi - 1, yi    );
-      const dr  = read_depth(xi + 1, yi    );
-      const dld = read_depth(xi - 1, yi + 1);
-      const dd  = read_depth(xi    , yi + 1);
-      const drd = read_depth(xi + 1, yi + 1);
-      function bool is_convex1(uint v0, uint v1, uint v2, uint v3) {
-	return v0 > d0 && v1 <= d0 && v2 <= d0 && v3 <= d0;
-      }
-      function bool is_convex2(uint v0, uint v1, uint v2, uint v3) {
-	return v0 > d0 && v1 > d0 && v2 <= d0 && v3 <= d0;
-      }
-      function bool is_flat4() {
-	return du == d0 && dl == d0 && dr == d0 && dd == d0;
-      }
-      uint val;
-      if (is_convex1(du, dl, dd, dr)) {
-	val = 0x92; // convex upper
-	// debug_log(x, y, "cu");
-      } else if (is_convex1(dl, dd, dr, du)) {
-	val = 0x74; // convex left
-	// debug_log(x, y, "cl");
-      } else if (is_convex1(dd, dr, du, dl)) {
-	val = 0x72; // convex lower
-	// debug_log(x, y, "cd");
-      } else if (is_convex1(dr, du, dl, dd)) {
-	val = 0x94; // convex right
-	// debug_log(x, y, "cr");
-      } else if (is_convex2(du, dl, dd, dr)) {
-	val = 0x91; // convex left-upper
-	// debug_log(x, y, "clu");
-      } else if (is_convex2(dl, dd, dr, du)) {
-	val = 0x97; // convex left-lower
-	// debug_log(x, y, "cld");
-      } else if (is_convex2(dd, dr, du, dl)) {
-	val = 0x95; // convex right-lower
-	// debug_log(x, y, "crd");
-      } else if (is_convex2(dr, du, dl, dd)) {
-	val = 0x93; // convex right-upper
-	// debug_log(x, y, "cru");
-      } else if (is_flat4()) {
-	if (is_convex1(dlu, dld, drd, dru)) {
-	  val = 0x75; // concave right-lower
-	} else if (is_convex1(dld, drd, dru, dlu)) {
-	  val = 0x73; // concave right-upper
-	} else if (is_convex1(drd, dru, dlu, dld)) {
-	  val = 0x71; // concave left-upper
-	} else if (is_convex1(dru, dlu, dld, drd)) {
-	  val = 0x77; // concave left-lower
-	}
-      }
-      // debug_log(x, y, val);
-      tcol.data[y * tcol.width + x] &= 0xffffffU;
-      tcol.data[y * tcol.width + x] |= val << 24;
-    }
-  }
-}
-
-private function void parallax_png_decode(texture_data mutable& td)
-{
-  for (const i, mutable& v: td.data) {
-    const depth = (v & 0xff) / 1;
-    v = depth << 16;
-  }
-}
-
-private function void parallax_set_clearance(texture_data mutable& td)
-{
-  mutable& data = td.data;
-  uint const tile_size = 64;
-  for (const by : 0 .. td.height / tile_size) {
-    for (const bx : 0 .. td.width / tile_size) {
-      for (const y : 0 .. tile_size) {
-	for (const x : 0 .. tile_size) {
-	  const offset = (by * tile_size + y) * td.height
-	    + (bx * tile_size + x);
-	  const v0 = data[offset];
-	  const depth0 = (v0 >> 16) & 0xffU;
-	  // clearance values
-	  uint c_nn = min(x, y);
-	  uint c_np = min(x, tile_size - 1 - y);
-	  uint c_pn = min(tile_size - 1 - x, y);
-	  uint c_pp = min(tile_size - 1 - x, tile_size - 1 - y);
-	  const y1_min = (y >= 16) ? y - 16 : 0;
-	  const y1_max = (y + 16 < tile_size) ? y + 16 : tile_size;
-	  const x1_min = (x >= 16) ? x - 16 : 0;
-	  const x1_max = (x + 16 < tile_size) ? x + 16 : tile_size;
-	  // TODO: too slow
-	  for (const y1 : y1_min .. y1_max) {
-	    for (const x1 : x1_min .. x1_max) {
-	      const offset1 = (by * tile_size + y1) * td.height
-		+ (bx * tile_size + x1);
-	      const v1 = data[offset1];
-	      const depth1 = v1 >> 16 & 0xffU;
-	      if (depth1 >= depth0) {
-		continue;
-	      }
-	      // ok to wrap uint values
-	      uint nn = max(x - x1, y - y1) - 1;
-	      c_nn = min(c_nn, nn);
-	      uint np = max(x - x1, y1 - y) - 1;
-	      c_np = min(c_np, np);
-	      uint pn = max(x1 - x, y - y1) - 1;
-	      c_pn = min(c_pn, pn);
-	      uint pp = max(x1 - x, y1 - y) - 1;
-	      c_pp = min(c_pp, pp);
-	    }
-	  }
-	  c_nn = min(c_nn, 15);
-	  c_np = min(c_np, 15);
-	  c_pn = min(c_pn, 15);
-	  c_pp = min(c_pp, 15);
-	  // W = unused(8), Z = depth(8), Y = CNN(4) CNP(4), X = CPN(4) CPP(4)
-	  data[offset] = (depth0 << 16) |
-	    (c_nn << 12) | (c_np << 8) | (c_pn << 4) | (c_pp << 0);
-	  if (by == 0 && bx == 0) {
-	    // debug_log("cl", x, y, depth0, to_hexstring(data[offset]));
-	  }
-	}
-      }
-    }
   }
 }
 

@@ -683,10 +683,15 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
       int node_type = int(floor(value.a * 255.0 + 0.5));
       bool is_pat = (node_type == 1);
       if (is_pat) {
+	// if (eye.x < -0.95) { dbgval = vec4(0,1,1,1); return 1; }
 	vec3 curpos_tp = floor(value.rgb * 255.0 + 0.5) * 16.0; // 16刻み4096迄
-	value = texelFetch(sampler_voxtpat, ivec3(curpos_tp + curpos_tr), 0);
+	int tpat_mip = 0;
+	value = texelFetch(sampler_voxtpat,
+	  ivec3(curpos_tp + curpos_tr) >> tpat_mip, tpat_mip);
 	// value = <%texture3d/>(sampler_voxtpat,
 	//   (curpos_tp + curpos_tr) / pattex3_size);
+	// value = vec4(1.0, 1.0, 1.0, 1.0);
+	// value.xyz = vec3(0.0);
 	node_type = int(floor(value.a * 255.0 + 0.5));
       }
       vec3 spmin = vec3(0.0);
@@ -764,6 +769,8 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
       p_f = clamp(p_f, 0.0, 1.0); // FIXME: 必要？
       vec3 npos;
       dir = voxel_get_next(p_f, spmin, spmax, ray, npos);
+      // if (dot(dir, ray) <= 0.0) { dbgval=vec4(1,1,1,1); return -1; }
+      // npos = clamp(npos, spmin, spmax); // FIXME: ???
       vec3 npos_i;
       if (is_pat) {
 	npos_i = min(floor(npos), spmax - 1.0); // ギリギリボクセル整数部分
@@ -773,6 +780,9 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
       }
       npos_i += dir; // 壁を突破
       npos = npos - npos_i; // 0, 1の範囲に収まっているはず
+      // if (length(npos_i) < 0.1) {
+	// dbgval=vec4(0.0,1.0,1.0,1.0);  return -1;
+      // }
       curpos_i += npos_i;
       curpos_f = npos;
       bool is_inside_aabb = pos3_inside_3(curpos_i /* + curpos_f */,
@@ -785,6 +795,8 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
       lstr_para = 0.0;
       hit = i;
     }
+    // if (i > 35) { dbgval = vec4(1.0, 1.0, 0.0, 1.0); }
+    // if (hit > 32) { dbgval = vec4(1.0, 0.0, 0.0, 1.0); } // FIXME
     return hit;
   }
 
