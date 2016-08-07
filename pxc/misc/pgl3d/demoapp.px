@@ -502,16 +502,22 @@ private function void build_vertices(app_impl mutable& app,
 {
   app.tex_octree = pgs.get_texture_data("octree");
   bitarray3 otb = octree_external(app.tex_octree.some, 2);
+  bitarray3 itb = octree_internal(app.tex_octree.some, 2);
   uint const zmax = 1u << otb.d_l2;
   for (const z: zmax / 32 .. zmax) {
     for (const y: 0 .. (1u << otb.h_l2)) {
       for (const x: 0 .. (1u << otb.w_l2)) {
 	otb.set(x, y, z, false);
+	itb.set(x, y, z, false);
       }
     }
   }
   otb = otb.resize{operator::or}();
   otb = otb.resize{operator::or}();
+  otb = otb.resize{operator::or}();
+  itb = itb.resize{operator::and}();
+  itb = itb.resize{operator::and}();
+  itb = itb.resize{operator::and}();
   /*
   bitarray3 otb;
   otb.w_l2 = 1;
@@ -536,8 +542,33 @@ private function void build_vertices(app_impl mutable& app,
     }
   }
   */
-  varray{varray{glm::vec3}} quads = get_surface_quads(otb);
-  debug_log("quads:", quads.size());
+  varray{varray{glm::vec3}} oquads = get_surface_quads(otb);
+  varray{varray{glm::vec3}} iquads = get_surface_quads(itb);
+  {
+    function {t} t clamp(t x, t mi, t mx) {
+      return x < mi ? mi : x > mx ? mx : x;
+    }
+    float tex3d_0 = 0.00001f;
+    float tex3d_1 = 1.0f - 0.00001f;
+    float tex3d_z = 1.0f / 32.0f - 0.00001f;
+    for (const i, mutable& q: oquads) {
+      for (const j, mutable& p: q) {
+	p = glm::make_vec3(
+	  clamp(p.x, tex3d_0, tex3d_1),
+	  clamp(p.y, tex3d_0, tex3d_1),
+	  clamp(p.z, tex3d_0, tex3d_z));
+      }
+    }
+    for (const i, mutable& q: iquads) {
+      for (const j, mutable& p: q) {
+	p = glm::make_vec3(
+	  clamp(p.x, tex3d_0, tex3d_1),
+	  clamp(p.y, tex3d_0, tex3d_1),
+	  clamp(p.z, tex3d_0, tex3d_z));
+      }
+    }
+  }
+  debug_log("quads:", oquads.size());
 
   // if (case app.tex_octree.some) {
   //   sdl_log("tex_octree", app.tex_octree.some);
@@ -586,9 +617,11 @@ private function void build_vertices(app_impl mutable& app,
   pgs.make_vertex_set(tr, "box",
     regular_polygon(1.4142f * box_size, 4,
       apply(m1,
-	bump_apply(m, true, ctx_fill(1), ctx_fill(1))),
+	bump_apply(m, true,
+	  ctx_tex3d_int_surf(2, 1, 1.0f/32.0f, true, iquads, oquads),
+	  ctx_tex3d_int_surf(2, 1, 1.0f/32.0f, true, iquads, oquads))),
       apply(m1,
-	ctx_fill(1))));
+	ctx_tex3d_int_surf(2, 1, 1.0f/32.0f, true, iquads, oquads))));
   */
   pgs.make_vertex_set(tr, "box",
     regular_polygon(1.4142f * box_size, 4,
@@ -599,6 +632,14 @@ private function void build_vertices(app_impl mutable& app,
       apply(m1,
 	ctx_tex3d(2, 1, 1.0f/32.0f))));
   /*
+  */
+  /*
+  pgs.make_vertex_set(tr, "box",
+    regular_polygon(1.4142f * box_size, 4,
+      apply(m1,
+	bump_apply(m, true, ctx_fill(1), ctx_fill(1))),
+      apply(m1,
+	ctx_fill(1))));
   */
   /*
   pgs.make_vertex_set(tr, "box",

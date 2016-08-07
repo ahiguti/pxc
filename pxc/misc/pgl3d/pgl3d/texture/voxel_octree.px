@@ -134,7 +134,7 @@ octree_build(octree{bshift} mutable& ot, ptr{level_data} const& pattern,
   if (bshift > 1 && enable_calc_distance) {
     debug_log("calc_distance begin");
     for (const i, mutable& node: ot.nodes) {
-      set_distance(node, 0);
+      set_distance(node);
     }
     debug_log("calc_distance end");
   }
@@ -152,13 +152,13 @@ octree_extract(octree{bshift} const& ot, uint root,
 }
 
 public function {t} void
-set_distance(t mutable& node, uint mipshift)
+set_distance(t mutable& node)
 {
   metafunction si static_cast{int};
   for (const z : 0 .. node.get_depth()) {
     for (const y : 0 .. node.get_height()) {
       for (const x : 0 .. node.get_width()) {
-	set_distance_pos(node, mipshift, si(x), si(y), si(z));
+	set_distance_pos(node, si(x), si(y), si(z));
       }
     }
   }
@@ -185,7 +185,7 @@ struct dist_3d {
 }
 
 function {t} void
-set_distance_pos(t mutable& node, uint mipshift, int x, int y, int z)
+set_distance_pos(t mutable& node, int x, int y, int z)
 {
   metafunction ui static_cast{uint};
   if (!is_space_voxel(node.get(ui(x), ui(y), ui(z)))) {
@@ -205,6 +205,7 @@ set_distance_pos(t mutable& node, uint mipshift, int x, int y, int z)
       break;
     }
   }
+  /*
   // mipmap levelが一つあがるごとにvoxelの大きさが各辺2倍になる
   dv.xp = min(dv.xp << mipshift, 15);
   dv.xn = min(dv.xn << mipshift, 15);
@@ -212,6 +213,7 @@ set_distance_pos(t mutable& node, uint mipshift, int x, int y, int z)
   dv.yn = min(dv.yn << mipshift, 15);
   dv.zp = min(dv.zp << mipshift, 15);
   dv.zn = min(dv.zn << mipshift, 15);
+  */
   const xv = (dv.xp << 4) + dv.xn;
   const yv = (dv.yp << 4) + dv.yn;
   const zv = (dv.zp << 4) + dv.zn;
@@ -402,6 +404,11 @@ public struct level_data
     y = (idx >> w_l2) & ((1u << h_l2) - 1);
     z = (idx >> (w_l2 + h_l2)) & ((1u << d_l2) - 1);
   }
+}
+
+public threaded function bool is_filled(texel_value v)
+{
+  return (v & 0xff000000) == 0xff000000;
 }
 
 public threaded function bool is_node_reference(texel_value v)

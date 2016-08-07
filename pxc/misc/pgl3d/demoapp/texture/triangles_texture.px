@@ -89,6 +89,7 @@ prepare_raycasting_texture_data(pgl3d_config const& cfg,
     tex_octree = convert_to_octree{octree_bshift}(tex_voxtpat,
       tex_voxtmap, enable_calc_distance);
     debug_log("octree done");
+    const rnd = make_ptr{rand_generator}(333U);
     // FIXME HERE HERE HERE
     function void texture_make_mipmap(texture_data const& tsrc,
       texture_data mutable& tdest, uint bshift, uint miplevel)
@@ -100,8 +101,14 @@ prepare_raycasting_texture_data(pgl3d_config const& cfg,
       for (const x: 0 .. tdest.width) {
 	for (const y: 0 .. tdest.height) {
 	  for (const z: 0 .. tdest.depth) {
-	    // TODO: random
-	    const v = tsrc.get(x * 2, y * 2, z * 2);
+	    const v0 = rnd->generate() >> 24;
+	    const x1 = x * 2 + (v0 & 1);
+	    const y1 = y * 2 + ((v0 >> 1) & 1);
+	    const z1 = z * 2 + ((v0 >> 2) & 1);
+	    mutable v = tsrc.get(x1, y1, z1);
+	    if (!is_space_voxel(v)) {
+	      v |= 0xff000000; // 空白以外は塗りつぶしに変換
+	    }
 	    tdest.set(x, y, z, v);
 	  }
 	}
@@ -233,7 +240,7 @@ function void prepare_voxel_tmap(texture_data mutable& tmap,
   }
   */
   // tmapはタイル境界は無いので各ボクセルに全体の境界までの距離を埋め込む
-  set_distance(tmap, miplevel);
+  set_distance(tmap);
   dump_cnt(tmap, "tmap");
 }
 
@@ -264,7 +271,7 @@ function void prepare_voxel_tpat(texture_data mutable& tpat,
           }
         }
         // set distance
-        set_distance(tile, miplevel);
+        set_distance(tile);
         // copy back to tpat
         for (const x: 0 .. 1u << sh) {
           for (const y: 0 .. 1u << sh) {

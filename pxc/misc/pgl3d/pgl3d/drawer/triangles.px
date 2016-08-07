@@ -4,8 +4,6 @@ public import meta m;
 public import pgl3d::drawer::base -;
 public import pgl3d::drawer::edit_mode -;
 
-private metafunction raycast_cull_front 1;
-
 private tsvaluetype struct triangles_uniforms()
 {
   public glm::mat4 view_projection_matrix;
@@ -103,6 +101,8 @@ public struct drawer_triangles(shader_config const& glc0,
   shader_config glc = glc0;
   uint octree_wh_l2 = 4;
   uint octree_d_l2 = octree_wh_l2;
+  bool const raycast_cull_front =
+    (glc.conf.get("raycast_cull_front", 0, 0, 1) != 0);
   init(glc);
   private function void init(shader_config const& glc)
   {
@@ -147,10 +147,17 @@ public struct drawer_triangles(shader_config const& glc0,
       texture_data_to_gl_texture(GL_TEXTURE_3D, *texture_voxtpat, tex_voxtpat);
       texture_data_to_gl_texture(GL_TEXTURE_3D, *texture_voxtmap, tex_voxtmap);
       */
-      texture_data_array_to_gl_texture(GL_TEXTURE_3D, *texture_voxtpat,
-	voxtpat_mip);
-      texture_data_array_to_gl_texture(GL_TEXTURE_3D, *texture_voxtmap,
-	voxtmap_mip);
+      if (glc.is_gl3_or_gles3()) {
+	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *texture_voxtpat,
+	  voxtpat_mip);
+	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *texture_voxtmap,
+	  voxtmap_mip);
+      } else {
+	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *texture_voxtpat,
+	  voxtpat_mip[0 .. 1]);
+	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *texture_voxtmap,
+	  voxtmap_mip[0 .. 1]);
+      }
       uint const bshift = tex_octree->bshift;
       octree_wh_l2 = integral_log2(tex_octree->width) - bshift;
       octree_d_l2 = integral_log2(tex_octree->depth) - bshift;
@@ -233,7 +240,7 @@ public struct drawer_triangles(shader_config const& glc0,
       bnd["octree_texture_scale"] =
 	"vec3(" + wh_s + "," + wh_s + "," + d_s + ")";
       // bnd["octree_size"] = to_string(1u << octree_size_l2);
-      bnd["raycast_cull_front"] = to_string(raycast_cull_front);
+      bnd["raycast_cull_front"] = to_string(raycast_cull_front ? 1 : 0);
       bnd["update_frag_depth"] = to_string(
 	glc.conf.get("update_frag_depth", 0, 1, 1));
       s0.some = init_triangles_shader(glc, bnd);
@@ -364,7 +371,7 @@ public struct drawer_triangles(shader_config const& glc0,
 	glUniform1i(sdr.u_sampler_env, 3);
       }
       if (stype == 1) {
-	if (m::is_true{raycast_cull_front}) {
+	if (raycast_cull_front) {
 	  glCullFace(GL_FRONT);
 	}
 	glActiveTexture(GL_TEXTURE4);
@@ -412,7 +419,7 @@ public struct drawer_triangles(shader_config const& glc0,
       aibuf.draw(sdr, bo, bo_ib, bo_id, glc.enable_instanced,
 	glc.enable_uniform_instancing);
       if (stype == 1) {
-	if (m::is_true{raycast_cull_front}) {
+	if (raycast_cull_front) {
 	  glCullFace(GL_BACK);
 	}
 	if (case edit_mode_ptr.some) {

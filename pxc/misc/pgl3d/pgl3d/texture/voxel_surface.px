@@ -136,6 +136,54 @@ octree_external_rec(texture_data const& tex, bitarray3 mutable& arr, uint nx,
   }
 }
 
+public threaded function bitarray3
+octree_internal(cptr{texture_data} const& tex, uint reclevel)
+{
+  /*
+  octree_info const oi = octree_info(tex);
+  */
+  uint const size_l2 = reclevel * tex->bshift;
+  bitarray3 arr;
+  arr.w_l2 = size_l2;
+  arr.h_l2 = size_l2;
+  arr.d_l2 = size_l2;
+  arr.data.resize(static_cast{size_t}(1u) << (size_l2 * 3u), false);
+  octree_internal_rec(*tex, arr, 0, 0, 0, 0, 0, 0, size_l2 - tex->bshift);
+  return arr;
+}
+
+threaded function void
+octree_internal_rec(texture_data const& tex, bitarray3 mutable& arr, uint nx,
+  uint ny, uint nz, uint bwx, uint bwy, uint bwz, uint fill_size_l2)
+{
+  const bshift = tex.bshift;
+  const bsz = 1u << bshift;
+  const bmask = bsz - 1;
+  for (const i: 0 .. bsz * bsz * bsz) {
+    const ix = (i >> (bshift * 0)) & bmask;
+    const iy = (i >> (bshift * 1)) & bmask;
+    const iz = (i >> (bshift * 2)) & bmask;
+    const e = tex.get((nx << bshift) + ix, (ny << bshift) + iy,
+      (nz << bshift) + iz);
+    const wx = (ix << fill_size_l2) + bwx;
+    const wy = (iy << fill_size_l2) + bwy;
+    const wz = (iz << fill_size_l2) + bwz;
+    if (fill_size_l2 == 0) {
+      // debug_log("oer", wx, wy, wz, !is_space_voxel(e));
+      arr.set(wx, wy, wz, is_filled(e));
+    } else if (!is_node_reference(e)) {
+      bitarray3_fill(arr, wx, wy, wz, fill_size_l2, is_filled(e));
+    } else {
+      const nref = get_node_reference(e);
+      const cnx = (nref & 0xffu);
+      const cny = ((nref >> 8u) & 0xffu);
+      const cnz = ((nref >> 16u) & 0xffu);
+      octree_internal_rec(tex, arr, cnx, cny, cnz, wx, wy, wz,
+	fill_size_l2 - bshift);
+    }
+  }
+}
+
 public threaded function varray{varray{vec3}}
 get_surface_quads(bitarray3 const& ba)
 {

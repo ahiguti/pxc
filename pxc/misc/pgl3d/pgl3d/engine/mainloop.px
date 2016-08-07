@@ -171,6 +171,7 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
   private string_map commands;
   private int fullscreen = 0;
   private bool async_motion_thread = false; // conf.get("async_motion_thread", 0, 1, 0) == 1;
+  private bool glfinish = conf.get("glfinish", 0, 0, 1) == 1;
   private bool done = false;
   private bool paused = false;
   private varray{short} joy_axes;
@@ -456,6 +457,10 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
     fr.save_ticks(6, SDL_GetTicks());
     SDL_GL_SwapWindow(sdlc.sdl_window);
     // debug_log("swapwindow");
+    if (glfinish) {
+      // debug_log("glfinish\n");
+      glFinish();
+    }
     fr.save_ticks(7, SDL_GetTicks());
     // if (scene_next_flag) { frctl.start(); }
     return done;

@@ -2,8 +2,26 @@
 ---------------------------------------------------------------------------
 TODO
 
-- なんでmipmapレベル大きいほうが遅いのか
-  -> mip4の空白部のdistanceが0
+- voxel平面切断
+
+- voxelのsurface抽出処理がoctreeに依存しているのをやめ、tilemapから抽出。
+- 仮想テクスチャサイズを4096から可変にする
+  mapが256^3のとき64Mbyte(タイル番号が32bitのとき)
+  mapが512^3のとき512Mbyte
+  mapが1024^3のとき4Gbyte
+  patが256^3のとき64Mbyte(16Mvoxel)
+  patが512^3のとき512Mbyte(128Mvoxel)
+
+- tilemapの一部から切り出して貼り付けられるようにする。
+
+- 表面voxel貼り付け、単体voxelの二種類にわける。
+  - 単体voxelは内側抽出でshadowとzprepass
+  - 表面voxelは底面shadowとzprepass
+
+- 底面はzrepassとshadow 内接はshadowだけ、表面は裏面カリングで書く。
+
+- mipleveの1以上は2次元曲面はやめるか(done)
+
 
 - tex3d: タイルとパターンのサイズを変えられるように
   tile3_size = (16, 16, 16)                  パターンのボクセル数
@@ -35,21 +53,11 @@ TODO
 
 - windows: dbghelp.dllでminidump (google breakpadつかう?)
 
-- ボクセルに二次曲線パラメータを埋め込む (done)
 
 - パターンエディタ
 
-- 複数板貼り付けた大きなオブジェクトを作る (done)
-
-- cameraが内側外側の境目で乱れる (done)
 
 - voxel: 斜面を使うデータを生成
-
-- zprepass効いてない(done)
-
-- FIXME 真横あたりから見ると乱れる(done)
-
-- stype=2を使ってraycastシェーダの後ろを表示(done)
 
 - 頂点データ重複排除を再び有効に(tex3dで効果大きい)
 
@@ -82,23 +90,10 @@ TODO
 
 - raycast_octreeループ内整理
 
-- normal値をボクセルに持たせる(done)
-- 乱数(done)
 - webglで3dテクスチャ使えないので何か考える。
 
-- 元絵の仮想サイズがbshiftに制限されないように(done)
-- 中にめりこんだときとそうでないときに少しずれている。epsilon調整(done) 
-- 中にめりこんでも表示できるよう裏面描画処理(done)
-- self影(done)
-- triangles-o1.fsh なぜ遅いのか(done)
-  -> value_r = valueの位置
-- boxを拡大(done)
-- nodesのサイズをxyzそれぞれ異なる値を取れるように(done)
-- 4096*4096*4096試してみる(done)
 
 - sub-drawerの頂点データを作るとdrawer
-
-- シェーダ用テンプレートエンジン(done)
 
 - distance_to_boundary: 4方向の距離を正しく
 
@@ -161,6 +156,26 @@ TODO
 ---------------------------------------------------------------------------
 DONE
 
+- なんでmipmapレベル大きいほうが遅いのか(done)
+  -> mip4の空白部のdistanceが0
+- ボクセルに二次曲線パラメータを埋め込む (done)
+- 複数板貼り付けた大きなオブジェクトを作る (done)
+- cameraが内側外側の境目で乱れる (done)
+- zprepass効いてない(done)
+- FIXME 真横あたりから見ると乱れる(done)
+- stype=2を使ってraycastシェーダの後ろを表示(done)
+- normal値をボクセルに持たせる(done)
+- 乱数(done)
+- 元絵の仮想サイズがbshiftに制限されないように(done)
+- 中にめりこんだときとそうでないときに少しずれている。epsilon調整(done) 
+- 中にめりこんでも表示できるよう裏面描画処理(done)
+- self影(done)
+- triangles-o1.fsh なぜ遅いのか(done)
+  -> value_r = valueの位置
+- boxを拡大(done)
+- nodesのサイズをxyzそれぞれ異なる値を取れるように(done)
+- 4096*4096*4096試してみる(done)
+- シェーダ用テンプレートエンジン(done)
 - iosでvsm可能か？(done)
   GL_RG32Fを16Fにしたら動く
 - postprocessのためのダミーインスタンスを入れるのはなくせないか(done)
@@ -2246,4 +2261,43 @@ distanceは2,4,8..倍した値を埋め込んでおく
 calc_distanceにmipmap_levelを渡す
 tpatのdistanceは16, 8, 4, 2, 1単位で
 
+
+---------------------------------------------------------------------------
+Version対応
+
+OpenGL	GLSL
+1.5	1.0
+2.0	1.1
+2.1	1.2
+3.0	1.3
+3.1	1.4
+3.2	1.5
+3.3	3.3
+
+---------------------------------------------------------------------------
+gf_ctx_tex3d_opt
+
+テクスチャ座標
+接線空間
+  基準平面をxy軸とするような空間。
+  フラグメントシェーダではローカル座標系ではなく専らこちらを使う。
+  シェーダのmodel_matrixも接線空間からワールドへの変換。
+ローカル座標系
+  インスタンスデータのmodel_matrixがあらわす座標系。
+ワールド座標系
+
+aabb_or_tconvをセットする。テクスチャ座標からローカル座標への変換。
+テクスチャ座標から接線空間への変換:
+  pos = vary_aabb_or_tconv.xyz + pos * vary_aabb_or_tconv.w;
+
+---------------------------------------------------------------------------
+voxel_collision_sphere
+
+v: (rayから) 光線の方向
+a: (curpos_fから) 始点 中で-0.5から+0.5に移動される。
+c: (rgb下位4bitから) 球の中心座標 -2から+1.75まで0.25きざみ
+mul: (rgb上位4bitから) 倍率 0から1.875まで0.125きざみ
+rad: (node_typeから) 半径 1/4から253/4まで0.25きざみ 中で2乗される。
+aにmulを掛ける(楕円体や円柱にできる)
+acの距離がradより小さいなら衝突
 
