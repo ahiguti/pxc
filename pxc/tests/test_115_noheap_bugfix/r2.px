@@ -3,9 +3,13 @@ import common -;
 
 {
   exception::set_stack_trace_limit(0);
-  mutable vec = make_varray{int}(1, 2, 3, 4, 5, 6);
-  const vv = make_varray{cslice{int}}(vec); // must root elements of vec also
-  println(vv);
-  vec.resize(1000, 0); // must throw would_invalidate
-  println(vv);
+  try {
+    mutable vec = make_varray{int}(1, 2, 3, 4, 5, 6);
+    const vv = make_varray{cslice{int}}(vec); // must root elements of vec also
+    println(vv);
+    vec.resize(1000, 0); // must throw would_invalidate
+    println(vv);
+  } catch (c_exception ex) {
+    println("caught", ex);
+  }
 }

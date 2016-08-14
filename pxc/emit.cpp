@@ -1585,16 +1585,6 @@ static void emit_function_decl_one(emit_context& em, expr_funcdef *efd,
   }
 }
 
-bool exceptions_disabled()
-{
-  typedef std::map<std::string, std::string> profile_type;
-  profile_type::const_iterator i = cur_profile->find("noexceptions");
-  if (i != cur_profile->end()) {
-    return atoi(i->second.c_str()) != 0;
-  }
-  return false;
-}
-
 static void emit_function_def_one(emit_context& em, expr_funcdef *efd)
 {
   if ((efd->ext_pxc && !efd->block->tinfo.template_descent) || efd->no_def) {
@@ -1613,14 +1603,7 @@ static void emit_function_def_one(emit_context& em, expr_funcdef *efd)
       em.puts("{\n");
       em.add_indent(1);
       em.indent('D');
-      const bool noe = exceptions_disabled();
-      if (!noe) {
-	em.puts("try ");
-      }
       fn_emit_value(em, efd->block);
-      if (!noe) {
-	em.puts(" catch (...) { ::abort(); }\n");
-      }
       em.add_indent(-1);
       em.indent('D');
       em.puts("}\n");
@@ -3373,25 +3356,20 @@ void expr_interface::emit_value(emit_context& em)
 
 void expr_try::emit_value(emit_context& em)
 {
-  const bool noe = exceptions_disabled();
   if (tblock != 0) {
-    if (!noe) {
-      em.puts("try ");
-    }
+    em.puts("PXC_TRY ");
     fn_emit_value(em, tblock);
   }
-  if (!noe) {
-    em.puts(" catch (const ");
-    assert(cblock->argdecls);
-    /* don't use call-traits. always catch by const reference. */
-    emit_term(em, cblock->argdecls->get_texpr());
-    em.puts("& ");
-    cblock->argdecls->emit_symbol(em);
-    em.puts(") ");
-    fn_emit_value(em, cblock);
-    if (rest != 0) {
-      fn_emit_value(em, rest);
-    }
+  em.puts(" PXC_CATCH(const ");
+  assert(cblock->argdecls);
+  /* don't use call-traits. always catch by const reference. */
+  emit_term(em, cblock->argdecls->get_texpr());
+  em.puts("& ");
+  cblock->argdecls->emit_symbol(em);
+  em.puts(") ");
+  fn_emit_value(em, cblock);
+  if (rest != 0) {
+    fn_emit_value(em, rest);
   }
 }
 
@@ -3446,14 +3424,8 @@ static void emit_vardef_constructor_fast_boxing(emit_context& em,
       }
       otypcnt_cstr = rcval_cstr + "< " + otyp_cstr + " >"; /* rcval<foo> */
     }
-    em.puts(otypcnt_cstr + "*const " + varp1 + " = "
-      + otypcnt_cstr + "::allocate();\n");
+    em.puts("::pxcrt::auto_deallocate<" + otypcnt_cstr + "> " + varp1 + ";\n");
     em.indent('x');
-    const bool noe = exceptions_disabled();
-    if (!noe) {
-      em.puts("try {\n");
-      em.indent('x');
-    }
     if (is_intr) {
       em.puts("new (" + varp1 + ") " + otyp_cstr + "(");
     } else {
@@ -3469,42 +3441,28 @@ static void emit_vardef_constructor_fast_boxing(emit_context& em,
       if (is_multithreaded_pointer_family(typ)) {
 	/* initialize monitor */
 	em.indent('x');
-	if (!noe) {
-	  em.puts("try {\n");
-	  em.indent('x');
-	}
+	em.puts("PXC_TRY {\n");
+	em.indent('x');
 	em.puts("new (&" + varp1 + "->monitor$z) pxcrt::monitor();\n");
 	em.indent('x');
-	if (!noe) {
-	  em.puts("} catch (...) {\n");
-	  em.indent('x');
-	  em.puts("typedef ");
-	  em.puts(term_tostr_cname(otyp));
-	  em.puts(" ");
-	  em.puts(dtor_typedef_name(otyp));
-	  em.puts(";\n");
-	  em.indent('x');
-	  em.puts(varp1 + "->value." + destructor_cstr(otyp) + "();\n");
-	  em.indent('x');
-	  em.puts("throw;\n");
-	  em.indent('x');
-	  em.puts("}\n");
-	}
+	em.puts("} PXC_CATCH (...) {\n");
+	em.indent('x');
+	em.puts("typedef ");
+	em.puts(term_tostr_cname(otyp));
+	em.puts(" ");
+	em.puts(dtor_typedef_name(otyp));
+	em.puts(";\n");
+	em.indent('x');
+	em.puts(varp1 + "->value." + destructor_cstr(otyp) + "();\n");
+	em.indent('x');
+	em.puts("PXC_RETHROW;\n");
+	em.indent('x');
+	em.puts("}\n");
       }
-    }
-    if (!noe) {
-      em.indent('x');
-      em.puts("} catch (...) {\n");
-      em.indent('x');
-      em.puts(otypcnt_cstr + "::deallocate(" + varp1 + ");\n");
-      em.indent('x');
-      em.puts("throw;\n");
-      em.indent('x');
-      em.puts("}\n");
     }
     em.indent('x');
     em.puts(cs0 + " " + var_csymbol);
-    em.puts("((" + varp1 + "))");
+    em.puts("((" + varp1 + ".release()))");
   }
 }
 
@@ -3841,11 +3799,13 @@ static void emit_profile(emit_context& em)
     em.puts(" \"");
     em.puts(i->second);
     em.puts("\"\n");
+    /*
     if (i->first == "platform") {
       em.puts("#define PXC_PLATFORM_");
       em.puts(i->second);
       em.puts("\n");
     }
+    */
   }
 
 }
@@ -3934,7 +3894,8 @@ void emit_code(const std::string& dest_filename, expr_block *gl_block,
       em.printf(" i$%s$init = 0;\n", mainfn.c_str());
 	/* namespace body will be executed more than once if main() is called
 	 * more than once */
-      em.printf(" return pxcrt::main_nothrow(& %s$c);\n", mainfn.c_str());
+      em.printf(" %s$c();\n", mainfn.c_str());
+      em.puts(" return 0;\n");
       em.puts("}\n");
       if (gmain == generate_main_dl) {
 	if (!emit_threaded_dll_func.empty()) {
@@ -3944,12 +3905,13 @@ void emit_code(const std::string& dest_filename, expr_block *gl_block,
 	  em.puts("}\n");
 	} else {
 	  em.puts("int pxc_library_init()\n{\n");
-	  em.printf(" return pxcrt::main_nothrow(& %s$c);\n", mainfn.c_str());
+	  em.printf(" %s$c();\n", mainfn.c_str());
+	  em.puts(" return 0;\n");
 	  em.puts("}\n");
 	}
       }
     }
-    em.puts("}; /* extern \"C\" */\n");
+    em.puts("} /* extern \"C\" */\n");
   }
   em.puts("#endif /* PXC_IMPORT_HEADER */\n");
 }

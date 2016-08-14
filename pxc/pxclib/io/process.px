@@ -66,24 +66,19 @@ io_popen(io const& sys, cstrref const& command, cslice{string} const& argv,
   const pid = rfork.value;
   if (pid == 0) {
     /* child process */
-    try {
-      errno_t err;
-      if (for_write) {
-	err = dup2_internal(sys, p.value.first, sys.stdin());
+    errno_t err;
+    if (for_write) {
+      err = dup2_internal(sys, p.value.first, sys.stdin());
+    } else {
+      err = dup2_internal(sys, p.value.second, sys.stdout());
+    }
+    p.errno = EOK; /* close pipe fds */
+    if (err == EOK) {
+      if (search_path) {
+	sys.execvp(command, argv);
       } else {
-	err = dup2_internal(sys, p.value.second, sys.stdout());
+	sys.execv(command, argv);
       }
-      p.errno = EOK; /* close pipe fds */
-      if (err == EOK) {
-	if (search_path) {
-	  sys.execvp(command, argv);
-	} else {
-	  sys.execv(command, argv);
-	}
-      }
-    } catch (exception::c_exception ex) {
-      value_unused(ex);
-      /* bad_alloc for example */
     }
     sys._exit(127);
   }

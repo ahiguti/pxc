@@ -12,34 +12,80 @@ public import meta m;
 public import pointer::tfuncptr -;
 public import pgl3d::engine::util -;
 public import pgl3d::sdl::sdlutil -;
-public import pgl3d::texture::voxel_octree -;
+public import pgl3d::texture::voxel -;
 private import SDL2::api_base -;
 private import SDL2::api_types -;
 private import SDL2::api_functions -;
 private import SDL2::api_wrappers -;
 private import SDL2::misc -;
 
-public threaded struct texture_data()
+public tsvaluetype struct {t} array3_pot()
 {
-  public uint width;
-  public uint height;
-  public uint depth;
-  public uint bshift; // for power-of-two textures only
-  public varray{uint} data; // (a << 24) | (b << 16) | (g << 8) | (r << 0)
-  // valid only when bshift is set
-  public function uint get_width() const { return width; }
-  public function uint get_height() const { return height; }
-  public function uint get_depth() const { return depth; }
-  // public function uint get_bshift() const { return bshift; }
-  public function void set(uint x, uint y, uint z, uint v) {
-    const i = (z * width * height) | (y * width) | x;
+  public metafunction mapped_type m::symbol{t, "mapped_type"};
+  public function void set_size_l2(uint w_l2, uint h_l2, uint d_l2) {
+    data.resize(0u, mapped_type());
+    width_l2 = w_l2;
+    height_l2 = h_l2;
+    depth_l2 = d_l2;
+    size_t sz = static_cast{size_t}(1u) << (width_l2 + height_l2 + depth_l2);
+    data.resize(sz, mapped_type());
+  }
+  public function uint get_width_l2() const { return width_l2; }
+  public function uint get_height_l2() const { return height_l2; }
+  public function uint get_depth_l2() const { return depth_l2; }
+  public function uint get_width() const { return 1u << width_l2; }
+  public function uint get_height() const { return 1u << height_l2; }
+  public function uint get_depth() const { return 1u << depth_l2; }
+  public function uint index(uint x, uint y, uint z) const {
+    return (z << (width_l2 + height_l2)) | (y << width_l2) | x;
+  }
+  public function uint size() const {
+    return 1u << (width_l2 + height_l2 + depth_l2);
+  }
+  public function void set(uint x, uint y, uint z, mapped_type v) {
+    data[index(x, y, z)] = v;
+  }
+  public function mapped_type get(uint x, uint y, uint z) const {
+    return data[index(x, y, z)];
+  }
+  public function void set_index(uint i, mapped_type v) {
     data[i] = v;
   }
-  public function uint get(uint x, uint y, uint z) const {
-    const i = (z * width * height) | (y * width) | x;
+  public function mapped_type get_index(uint i) {
     return data[i];
   }
+  public function {tpl} void
+  append_to_string(m::find{tpl, "ser_target_type", 0} mutable& s) const
+  {
+    serialize_sequence{tpl}(width_l2, height_l2, depth_l2, data, s);
+  }
+  public function {tpl} void
+  parse_from_string(m::find{tpl, "des_source_type", 0} mutable& s) {
+    deserialize_sequence{tpl}(s, width_l2, height_l2, depth_l2, data);
+  }
+  public function crawptr{mapped_type} get_crawptr() const {
+    if (m::or{m::symbol_exists{t, "to_crawptr"},
+      m::symbol_exists{m::nsof{t}, m::concat{t, "_to_crawptr"}}}) {
+      return data.to_crawptr();
+    } else {
+      return crawptr{mapped_type}();
+    }
+  }
+  public function rawptr{mapped_type} get_rawptr() {
+    if (m::or{m::symbol_exists{t, "to_rawptr"},
+      m::symbol_exists{m::nsof{t}, m::concat{t, "_to_rawptr"}}}) {
+      return data.to_rawptr();
+    } else {
+      return rawptr{mapped_type}();
+    }
+  }
+  private uint width_l2;
+  private uint height_l2;
+  private uint depth_l2;
+  private t data;
 }
+
+public metafunction texture_data array3_pot{varray{uint}};
 
 public function ptr{texture_data}
 load_texture_data_raw(string const& fn0)
@@ -102,13 +148,8 @@ load_texture_data(string const& fn0)
   debug_log("load_texture_data p2", sur0_w, sur0_h);
   mutable tex_w = power_of_2(sur0_w);
   mutable tex_h = power_of_2(sur0_h);
-  p->width = tex_w;
-  p->height = tex_h;
-  mutable& uibuf = p->data;
-  uibuf.resize(tex_w * tex_h, 0);
-  debug_log("uibuf_size", uibuf.size());
-  const rawp = cslice_to_crawptr(uibuf.crange()).to_size_t();
-  debug_log("uibuf_ptr", rawp);
+  p->set_size_l2(integral_log2(tex_w), integral_log2(tex_h), 0);
+  mutable& buf = *p;
   uint rmask = fmt.Rmask;
   uint gmask = fmt.Gmask;
   uint bmask = fmt.Bmask;
@@ -167,7 +208,7 @@ load_texture_data(string const& fn0)
       uint v1 = (va << 24) | (vb << 16) | (vg << 8) | (vr << 0);
       // debug_log("load_texture_data p5r3", v1);
       // debug_log("load_texture_data p7r", x, y, tex_w, x * tex_w + x);
-      uibuf[y * tex_w + x] = v1;
+      buf.set(x, y, 0, v1);
       // debug_log("load_texture_data p6r", y * tex_w + x, v1);
     }
   }
@@ -175,118 +216,5 @@ load_texture_data(string const& fn0)
   return p;
 }
 
-public function {bshift} ptr{texture_data}
-convert_to_octree(ptr{texture_data} const& tpat, ptr{texture_data} const& tmap,
-  bool enable_calc_distance)
-{
-  ptr{texture_data} const rtd = make_ptr{texture_data}();
-  // const psz_l2 = integral_log2(tpat->width);
-  // const psz = 1u << psz_l2;
-  // const msz_l2 = integral_log2(tmap->width);
-  // const msz = 1u << msz_l2;
-  // debug_log("convert_to_octree psz, msz", psz_l2, msz_l2);
-  octree{bshift} ot;
-  ptr{level_data} const ltpat = make_ptr{level_data}();
-  ptr{level_data} const ltmap = make_ptr{level_data}();
-  ltpat->set_size_l2(
-    integral_log2(tpat->width),
-    integral_log2(tpat->height),
-    integral_log2(tpat->depth));
-  ltmap->set_size_l2(
-    integral_log2(tmap->width),
-    integral_log2(tmap->height),
-    integral_log2(tmap->depth));
-  ltpat->values = tpat->data; // copy
-  ltmap->values = tmap->data; // copy
-  ot.build(ltpat, ltmap, enable_calc_distance);
-  const rwh_l2 = calc_width_height(static_cast{uint}(ot.nodes.size()));
-  const rwh = (1u << rwh_l2);
-  const rd_l2 = calc_depth(static_cast{uint}(ot.nodes.size()), rwh_l2 * 2);
-  const rd = (1u << rd_l2);
-  const rwh2_l2 = rwh_l2 + bshift;
-  const rwh2 = (1u << rwh2_l2);
-  const rd2_l2 = rd_l2 + bshift;
-  const rd2 = (1u << rd2_l2);
-  rtd->width = rwh2;
-  rtd->height = rwh2;
-  rtd->depth = rd2;
-  rtd->data.resize(rwh2 * rwh2 * rd2, 0u);
-  mutable& rdata = rtd->data;
-  debug_log("octree data", rdata.size());
-  debug_log("octree nodes", ot.nodes.size());
-  debug_log("octree nodes whd", rwh, rwh, rd);
-  if (ot.nodes.size() > rwh * rwh * rd) {
-    throw runtime_error_template{"convert_to_octree"}(
-      "nodes size is too small");
-  }
-  debug_log("octree width", rtd->width);
-  /*
-  for (const i, const& m: ot.nodes[0]) {
-    debug_log("octree node0", to_hexstring(m));
-  }
-  */
-  {
-    const rwh_mask = rwh - 1u;
-    const rd_mask = rd - 1u;
-    for (const i, const& m: ot.nodes) {
-      const bx = i & rwh_mask;
-      const by = (i >> rwh_l2) & rwh_mask;
-      const bz = (i >> (rwh_l2 * 2)) & rd_mask;
-      const bsz = 1u << bshift;
-      const bmask = bsz - 1;
-      for (const j: 0 .. bsz * bsz * bsz) {
-	const xi = j & bmask;
-	const yi = (j >> bshift) & bmask;
-	const zi = (j >> (bshift * 2)) & bmask;
-	const x = bx * bsz + xi;
-	const y = by * bsz + yi;
-	const z = bz * bsz + zi;
-	const idx = (z << (rwh2_l2 * 2)) + (y << rwh2_l2) + x;
-	// mutable v = m[j];
-	mutable v = m.get(xi, yi, zi);
-	if ((v & 0xff000000u) == 0x01000000u) {
-	  // convert node reference value
-	  v &= 0x00ffffffu;
-	  const vx = v & rwh_mask;
-	  v >>= rwh_l2;
-	  const vy = v & rwh_mask;
-	  v >>= rwh_l2;
-	  const vz = v & rd_mask;
-	  v = (vz << 16) + (vy << 8) + vx;
-	  v |= 0x01000000u;
-	}
-	rdata[idx] = v;
-	/*
-	if (i == 0 || i == 0x3d1) {
-	  debug_log("i,j,idx=", i, j, idx, to_hexstring(m[j]), to_hexstring(v));
-	}
-	*/
-      }
-    }
-  }
-  // debug_log("rdata[0]", to_hexstring(rdata[0]));
-  rtd->bshift = bshift;
-  return rtd;
-}
-
-/* private */
-
 metafunction SDL_Surface_Scoped scoped_nullable{SDL_FreeSurface};
-
-function uint calc_width_height(uint node_size)
-{
-  return integral_log2(node_size) / 3u;
-}
-
-function uint calc_depth(uint node_size, uint wh)
-{
-  for (uint i: 0 .. 32u) {
-    if ((1u << (wh + i)) >= node_size) {
-      return i;
-    }
-  }
-  throw runtime_error_template{"convert_to_octree"}(
-    "nodes size is too large");
-  return 0u;
-}
 

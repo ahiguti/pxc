@@ -11,3 +11,4 @@ rm -rf `find . -name .DS_Store`
 rm -f *.exe *.o *.cc
 rm -f *.ttf
 rm -f *.raw
+rm -f glprog.*.bin

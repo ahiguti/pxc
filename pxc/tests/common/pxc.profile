@@ -1,6 +1,6 @@
 incdir=../pxclib:../common:.
 safe_mode=0
-cxx=ccache g++ --std=gnu++11
+cxx=g++ --std=gnu++11
 # cxx=clang++
 cflags=-g -O3 -DNDEBUG -Wall -Wno-unused -Wno-strict-aliasing -I/usr/local/include
 ldflags=-L/usr/local/lib

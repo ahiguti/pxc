@@ -1156,6 +1156,26 @@ static term eval_meta_join(const term_list_range& tlev, eval_context& ectx,
   return term(rtl);
 }
 
+static term eval_meta_reverse(const term_list_range& tlev, eval_context& ectx,
+  expr_i *pos)
+{
+  if (tlev.size() != 1) {
+    return term();
+  }
+  const term& t = tlev[0];
+  const term_list *const targs = t.is_metalist()
+    ? t.get_metalist() : t.get_args();
+  if (targs == 0) {
+    return term();
+  }
+  term_list rtl;
+  size_t sz = targs->size();
+  for (size_t i = 0; i < sz; ++i) {
+    rtl.push_back((*targs)[sz - i - 1]);
+  }
+  return term(rtl);
+}
+
 static term eval_meta_transposev(const term_list_range& tlev,
   eval_context& ectx, expr_i *pos)
 {
@@ -2045,6 +2065,7 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@seq", &eval_meta_seq },
   { "@join_list", &eval_meta_join_list },
   { "@join", &eval_meta_join },
+  { "@reverse", &eval_meta_reverse },
   { "@transpose", &eval_meta_transpose },
   { "@sort", &eval_meta_sort },
   { "@unique", &eval_meta_unique },

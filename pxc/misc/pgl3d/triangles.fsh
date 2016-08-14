@@ -44,7 +44,6 @@ uniform float exposure;
 <%frag_in/> vec3 vary_binormal;
 <%frag_in/> vec3 vary_uvw;
 <%if><%eq><%stype/>1<%/>
-  uniform <%mediump_sampler3d/> sampler_octree;
   uniform <%mediump_sampler3d/> sampler_voxtpat;
   uniform <%mediump_sampler3d/> sampler_voxtmap;
   <%flat/> <%frag_in/> vec4 vary_aabb_or_tconv;
@@ -187,131 +186,6 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
       pos.x < mx.x && pos.y < mx.y;
   }
 
-/*
-  vec3 voxel_next_noclamp(inout vec3 pos_f, in vec3 d)
-  {
-    vec3 r = vec3(0.0);
-    float dzpos = float(d.z > 0.0);
-    float zdelta = dzpos - pos_f.z;
-    vec2 xy = pos_f.xy + d.xy * zdelta / d.z;
-    if (d.z != 0.0 && pos2_inside(xy, 0.0, 1.0)) {
-      r.z = d.z > 0.0 ? 1.0 : -1.0;
-      pos_f = vec3(xy, dzpos);
-      return r;
-    }
-    float dxpos = float(d.x > 0.0);
-    float xdelta = dxpos - pos_f.x;
-    vec2 yz = pos_f.yz + d.yz * xdelta / d.x;
-    if (d.x != 0.0 && pos2_inside(yz, 0.0, 1.0)) {
-      r.x = d.x > 0.0 ? 1.0 : -1.0;
-      pos_f = vec3(dxpos, yz.xy);
-      return r;
-    }
-    float dypos = float(d.y > 0.0);
-    float ydelta = dypos - pos_f.y;
-    vec2 zx = pos_f.zx + d.zx * ydelta / d.y;
-    {
-      r.y = d.y > 0.0 ? 1.0 : -1.0;
-      pos_f = vec3(zx.y, dypos, zx.x);
-      return r;
-    }
-  }
-*/
-
-/*
-  vec3 voxel_next_noclamp(inout vec3 pos_f, in vec3 d)
-  {
-    vec3 pos_i = vec3(0.0);
-    vec3 spmin = vec3(0.0);
-    vec3 spmax = vec3(1.0 - epsilon);
-    vec3 r = vec3(0.0);
-    float dzpos = d.z > 0.0 ? spmax.z : spmin.z;
-    float zdelta = dzpos - pos_f.z;
-    vec2 xy = pos_f.xy + d.xy * zdelta / d.z;
-    if (d.z != 0.0 && pos2_inside_2(xy, spmin.xy, spmax.xy)) {
-      r.z = d.z > 0.0 ? 1.0 : -1.0;
-      vec3 npos = vec3(xy, dzpos);
-      npos = clamp(npos, spmin, spmax);
-      npos += pos_i;
-      pos_i = floor(npos);
-      pos_f = npos; //  - pos_i;
-      return r;
-    }
-    float dxpos = d.x > 0.0 ? spmax.x : spmin.x;
-    float xdelta = dxpos - pos_f.x;
-    vec2 yz = pos_f.yz + d.yz * xdelta / d.x;
-    if (d.x != 0.0 && pos2_inside_2(yz, spmin.yz, spmax.yz)) {
-      r.x = d.x > 0.0 ? 1.0 : -1.0;
-      vec3 npos = vec3(dxpos, yz.xy);
-      npos = clamp(npos, spmin, spmax);
-      npos += pos_i;
-      pos_i = floor(npos);
-      pos_f = npos; //  - pos_i;
-      return r;
-    }
-    float dypos = d.y > 0.0 ? spmax.y : spmin.y;
-    float ydelta = dypos - pos_f.y;
-    vec2 zx = pos_f.zx + d.zx * ydelta / d.y;
-    {
-      r.y = d.y > 0.0 ? 1.0 : -1.0;
-      vec3 npos = vec3(zx.y, dypos, zx.x);
-      npos = clamp(npos, spmin, spmax);
-      npos += pos_i;
-      pos_i = floor(npos);
-      pos_f = npos; //  - pos_i;
-      return r;
-    }
-  }
-*/
-
-/*
-  vec3 voxel_next_dbg(inout vec3 pos_i, inout vec3 pos_f, in vec3 spmin,
-    in vec3 spmax, in float epsi, in vec3 d)
-  {
-    vec3 r = vec3(0.0);
-    float dzpos = d.z > 0.0 ? spmax.z : spmin.z;
-    float zdelta = dzpos - pos_f.z;
-    vec2 xy = pos_f.xy + d.xy * zdelta / d.z;
-    if (d.z != 0.0 && pos2_inside_2(xy, spmin.xy, spmax.xy)) {
-      r.z = d.z > 0.0 ? 1.0 : -1.0;
-      vec3 npos = vec3(xy, dzpos);
-      npos = clamp(npos, spmin, spmax - epsi);
-      npos += pos_i;
-      pos_i = floor(npos);
-//if (pos_i != vec3(0)) { dbgval=vec4(1); }
-      pos_f = npos - pos_i;
-      return r;
-    }
-    float dxpos = d.x > 0.0 ? spmax.x : spmin.x;
-    float xdelta = dxpos - pos_f.x;
-    vec2 yz = pos_f.yz + d.yz * xdelta / d.x;
-    if (d.x != 0.0 && pos2_inside_2(yz, spmin.yz, spmax.yz)) {
-      r.x = d.x > 0.0 ? 1.0 : -1.0;
-      vec3 npos = vec3(dxpos, yz.xy);
-      npos = clamp(npos, spmin, spmax - epsi);
-      npos += pos_i;
-      pos_i = floor(npos);
-      pos_f = npos - pos_i;
-//if (pos_i != vec3(0)) { dbgval=vec4(1); }
-      return r;
-    }
-    float dypos = d.y > 0.0 ? spmax.y : spmin.y;
-    float ydelta = dypos - pos_f.y;
-    vec2 zx = pos_f.zx + d.zx * ydelta / d.y;
-    {
-//if (spmax.y >= 1) { dbgval=vec4(0,1,0,1); }
-      r.y = d.y > 0.0 ? 1.0 : -1.0;
-      vec3 npos = vec3(zx.y, dypos, zx.x);
-      npos = clamp(npos, spmin, spmax - epsi);
-      npos += pos_i;
-      pos_i = floor(npos);
-      pos_f = npos - pos_i;
-//if (pos_i.y == 1) { dbgval=vec4(1,0,0,1); }
-      return r;
-    }
-  }
-*/
-
   vec3 voxel_get_next(inout vec3 pos_f, in vec3 spmin,
     in vec3 spmax, in vec3 d, out vec3 npos)
   {
@@ -336,40 +210,6 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
       r.z = d.z > 0.0 ? 1.0 : -1.0;
       npos = vec3(c0.z, c1.z, dpos.z);
     }
-    return r;
-  }
-
-  vec3 voxel_next(inout vec3 pos_i, inout vec3 pos_f, in vec3 spmin,
-    in vec3 spmax, in float epsi, in vec3 d)
-  {
-    vec3 r = vec3(0.0);
-    <%if><%is_gl3_or_gles3/>
-    vec3 dpos = mix(spmin, spmax, greaterThan(d, vec3(0.0)));
-    <%else/>
-    vec3 gtz = vec3(greaterThan(d, vec3(0.0)));
-    vec3 dpos = <%mix>spmin<%>spmax<%>gtz<%/>;
-    <%/>
-    vec3 delta = dpos - pos_f;
-    vec3 delta_div_d = delta / d;
-    vec3 c0 = pos_f.yzx + d.yzx * delta_div_d;
-    vec3 c1 = pos_f.zxy + d.zxy * delta_div_d;
-    vec3 npos;
-    if (pos2_inside_2(vec2(c0.x, c1.x), spmin.yz, spmax.yz)) {
-      r.x = d.x > 0.0 ? 1.0 : -1.0;
-      npos = vec3(dpos.x, c0.x, c1.x);
-    } else if (pos2_inside_2(vec2(c0.y, c1.y), spmin.zx, spmax.zx)) {
-      r.y = d.y > 0.0 ? 1.0 : -1.0;
-      npos = vec3(c1.y, dpos.y, c0.y);
-    } else {
-      r.z = d.z > 0.0 ? 1.0 : -1.0;
-      npos = vec3(c0.z, c1.z, dpos.z);
-    }
-    // 超える壁のぎりぎりまでpos_iとpos_fを移動する。rは超える壁を向いた単位
-    // ベクトル。壁を超えるにはpos_i += r, pos_f -= rとする。
-    npos = clamp(npos, spmin, spmax - epsi);
-    npos += pos_i;
-    pos_i = floor(npos);
-    pos_f = npos - pos_i;
     return r;
     /*
     float dxpos = dpos.x;
@@ -459,202 +299,6 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
     return len_ae;
   }
 
-  // const float block_factor = <%octree_block_factor/>;
-  // const float block_scale = 1.0 / block_factor;
-  const vec3 texture_scale = <%octree_texture_scale/>;
-  const int level_max = 2;
-
-  void raycast_move(inout vec3 curpos_t, inout vec3 curpos_i,
-    inout vec3 curpos_f, in vec3 dir, in vec3 texpos_arr[level_max],
-    inout int level, inout vec3 aabb_min, inout vec3 aabb_max)
-  {
-    bool is_inside_aabb = pos3_inside_3_ge_le(curpos_i + curpos_f,
-      aabb_min * <%octree_block_factor/>,
-      aabb_max * <%octree_block_factor/>);
-      // TODO: min < pos < max ??
-    while (true) {
-      // dir方向へ移動してもブロック境界を超えないようになるまで上へ移動
-      if (is_inside_aabb &&
-	pos3_inside(curpos_i + dir, -0.5, <%octree_block_factor/> - 0.5)) {
-	break;
-      }
-      // move up
-      --level;
-      if (level < 0) {
-	break;
-      }
-      vec3 parent = texpos_arr[level];
-      curpos_f = (curpos_i + curpos_f) / <%octree_block_factor/>;
-      curpos_t = floor(parent / <%octree_block_factor/>)
-	* <%octree_block_factor/>;
-      curpos_i = parent - curpos_t;
-      aabb_min = (aabb_min + curpos_i) / <%octree_block_factor/>;
-      aabb_max = (aabb_max + curpos_i) / <%octree_block_factor/>;
-    }
-    curpos_i += dir;
-    curpos_f -= dir;
-  }
-
-  vec3 raycast_next(inout vec3 curpos_t, inout vec3 curpos_i,
-    inout vec3 curpos_f, in vec3 spmin, in vec3 spmax, in vec3 ray,
-    in vec3 texpos_arr[level_max], inout int level, inout vec3 aabb_min,
-    inout vec3 aabb_max)
-  {
-    curpos_f = clamp(curpos_f, 0.0, 1.0 - epsilon * 0.0);
-    vec3 dir = voxel_next(curpos_i, curpos_f, spmin, spmax, epsilon * 3.0, ray);
-      // epsilon * 3.0 これが小さすぎるとbshift=5のとき乱れる
-    raycast_move(curpos_t, curpos_i, curpos_f, dir, texpos_arr, level,
-      aabb_min, aabb_max);
-    return dir;
-  }
-
-  vec3 calc_pos(in vec3 pos_t, in vec3 pos_i, in vec3 pos_f,
-    in vec3 texpos_arr[level_max], in int level)
-  {
-    vec3 hpos_t = pos_t;
-    vec3 hpos_i = pos_i;
-    vec3 hpos_f = pos_f;
-    int hl = level;
-    while (hl > 0) {
-      --hl;
-      hpos_f = (hpos_i + hpos_f) / <%octree_block_factor/>;
-      vec3 parent = texpos_arr[hl];
-      hpos_t = floor(parent / <%octree_block_factor/>)
-	* <%octree_block_factor/>;
-      hpos_i = parent - hpos_t;
-    }
-    return (hpos_i + hpos_f) / <%octree_block_factor/>;
-  }
-
-  int raycast_octree(inout vec3 pos, in vec3 roottexpos, in vec3 eye,
-    in vec3 light, in vec3 aabb_min, in vec3 aabb_max, out vec4 value_r,
-    inout vec3 hit_nor, inout float lstr_para)
-  {
-    // roottexposノードの(aabb_min, aabb_max)(0-1値)範囲を貼り付ける
-    int hit = -1;
-    value_r = vec4(0.0, 0.0, 0.0, 1.0);
-    vec3 ray = eye;
-    vec3 texpos_arr[level_max];
-      // 整数値を取る。テクスチャ座標(をテクスチャのサイズで乗じたもの)。
-      // xyz座標をそれぞれblock_factorで割った余りがブロック内位置になる。
-    int level = 0;
-      // 再帰レベル
-    vec3 curpos_t = roottexpos;
-      // 現在見ているノード
-    vec3 curpos_i = floor(pos * <%octree_block_factor/>);
-    vec3 curpos_f = (pos * <%octree_block_factor/>) - curpos_i;
-      // 現在見ているブロック内位置の整数部と小数部。整数部はblock_factor未満
-    vec4 value;
-    vec3 dir = -hit_nor;
-    int i;
-    int imax = 256;
-    for (i = 0; i < imax && level >= 0; ++i) {
-      vec3 spmin = vec3(0.0);
-      vec3 spmax = vec3(1.0);
-      vec3 coord = curpos_t + curpos_i;
-      value = <%texture3d/>(sampler_octree, coord * texture_scale);
-      int node_type = int(floor(value.a * 255.0 + 0.5));
-      if (node_type == 0) {
-	// 空白
-	vec3 distval = floor(value.xyz * 255.0 + 0.5);
-	vec3 dist_p = floor(distval / 16.0);
-	vec3 dist_n = distval - dist_p * 16.0;
-	spmin = vec3(0.0) - dist_n;
-	spmax = vec3(1.0) + dist_p;
-      } else if (level < level_max && node_type == 1) { // 節
-	// move down
-	texpos_arr[level] = coord;
-	aabb_min = aabb_min * <%octree_block_factor/> - curpos_i;
-	aabb_max = aabb_max * <%octree_block_factor/> - curpos_i;
-	++level;
-	curpos_t = floor(value.rgb * 255.0 + 0.5) * <%octree_block_factor/>;
-	// curpos_f = clamp(curpos_f, 0.0, 1.0 - epsilon);
-	// curpos_i = floor(curpos_f * <%octree_block_factor/>);
-	curpos_i = clamp(floor(curpos_f * <%octree_block_factor/>), 0.0,
-	  <%octree_block_factor/> - 1.0);
-	curpos_f = (curpos_f * <%octree_block_factor/>) - curpos_i;
-	curpos_f = clamp(curpos_f, 0.0, 1.0 - epsilon * 0.0);
-	continue;
-      } else { // if (node_type > 1) { // 色のついた葉
-	bool hit_wall = false;
-	bool notouch = false;
-	// 接触判定
-	if (node_type == 255) {
-	  // node_type == 255のボクセルは法線データを見ずに壁面に衝突する
-	  hit_wall = true;
-	  dir = -dir;
-	  // value = vec4(0.2, 0.2, 0.9, 1.0);
-	  value = vec4(value.xyz, 1.0);
-	} else {
-	  /// FIXME: node_type == 0 のdist_p, dist_nの計算と共通化
-	  vec3 surf_val = floor(value.xyz * 255.0 + 0.5);
-	  vec3 surf_s = floor(surf_val / 16.0);   // 上位4bit
-	  vec3 surf_p = surf_val - surf_s * 16.0; // 下位4bit
-	  float surf_rad = float(node_type - 1) * 0.25;
-	  surf_p -= 8.0;
-	  vec3 sp_nor = vec3(0.0);
-	  float length_ae = voxel_collision_sphere(ray, curpos_f,
-	    surf_p * -0.25, // vec3(-0.5, -0.5, -0.5),
-	    surf_s * 0.125, // vec3(1.0, 1.0, 1.0),
-	    surf_rad * surf_rad, // 1.001 - (hit >= 0 ? 0.01 : 0),
-	    hit_wall, sp_nor);
-	  vec3 tp = curpos_f + ray * length_ae;
-	  if (hit_wall) {
-	    dir = -dir;
-	    value = vec4(0.5, 0.5, 0.5, 1.0);
-	  } else if (!pos3_inside(tp, 0.0 - epsilon, 1.0 + epsilon)) {
-	    // 曲面と境界平面の境目の誤差を見えなくするためにepsilonだけ広げる
-	    notouch = true;
-	  } else {
-	    // ボクセル内で曲面に接触
-	    dir = sp_nor;
-	    curpos_f = tp;
-	    value = vec4(0.5, 0.5, 0.5, 1.0);
-	  }
-	}
-	if (!notouch) {
-	  // 接触した
-	  if (hit >= 0) {
-	    // dbgval = vec4(1.0);
-	    lstr_para = 0.0; // FIXME
-	    break;
-	  }
-	  hit = i;
-	  hit_nor = dir;
-	  value_r = value;
-	  if (true) {
-	    // 衝突した座標を計算(TODO: 必要なときだけ計算するようにする)
-	    pos = calc_pos(curpos_t, curpos_i, curpos_f, texpos_arr, level);
-	  }
-	  // 法線と光源が逆向きのときは必ず影になる
-	  float cos_light_dir = dot(light, dir);
-	  lstr_para = clamp(cos_light_dir * 64.0 - 1.0, 0.0, 1.0);
-	  if (lstr_para <= 0.0) {
-	    break;
-	  }
-	  // 影判定開始
-	  ray = light;
-	  /*
-	  if (hit_wall) {
-	    raycast_move(curpos_t, curpos_i, curpos_f, dir, texpos_arr,
-	      level, aabb_min, aabb_max);
-	    continue;
-	  }
-	  */
-	  // fallthru
-	}
-	// 接触しなかった
-      }
-      dir = raycast_next(curpos_t, curpos_i, curpos_f, spmin, spmax, ray,
-	texpos_arr, level, aabb_min, aabb_max);
-    }
-    if (i == imax) {
-      lstr_para = 0.0;
-      hit = i;
-    }
-    return hit;
-  }
-
   const ivec3 tile3_size = <%tile3_size/>;
   const ivec3 pat3_size = <%pat3_size/>;
   const ivec3 pattex3_size = tile3_size * pat3_size;
@@ -694,7 +338,8 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
       if (is_pat) {
 	distance_unit = 1.0;
 	// if (eye.x < -0.95) { dbgval = vec4(0,1,1,1); return 1; }
-	vec3 curpos_tp = floor(value.rgb * 255.0 + 0.5) * 16.0; // 16刻み4096迄
+	vec3 curpos_tp = floor(value.rgb * 255.0 + 0.5) * tile3_size;
+	  // 16刻み4096迄
 	distance_unit = distance_unit_tpat_mip;
 	<%if><%is_gl3_or_gles3/>
 	value = texelFetch(sampler_voxtpat,
@@ -772,7 +417,6 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
 	  hit_nor = -dir;
 	  hit = i;
 	  pos = (curpos_i + curpos_f) / virt3_size; // eyeが衝突した位置
-	  // break; // FIXME
 	  // 法線と光が逆向きのときは必ず影(陰)
 	  float cos_light_dir = dot(light, hit_nor);
 	  lstr_para = clamp(cos_light_dir * 64.0 - 1.0, 0.0, 1.0);
@@ -1111,23 +755,20 @@ void main(void)
       }
       pos = clamp(pos, aabb_min + epsi, aabb_max - epsi);
     <%/>
-/*
-    int hit = raycast_octree(pos, vec3(0.0), camera_local, light_local,
-      aabb_min, aabb_max, tex_val, nor, lstr_para);
-*/
     float dist_pos_campos_2 = dot(pos - campos, pos - campos) + 0.01;
     float dist_rnd = generate_random(pos) * 0.25;
     float dist_log2 = log(dist_pos_campos_2) * 0.5 / log(2.0);
     int miplevel = clamp(int(dist_log2 + dist_rnd + 2.0), 0, 8);
+    // miplevel = 0;
     // if (miplevel > 2) { <%fragcolor/> = vec4(1,0,1,1); return; }
     // if (miplevel > 1) { <%fragcolor/> = vec4(1,1,0,1); return; }
     // if (miplevel > 0) { <%fragcolor/> = vec4(1,0,0,1); return; }
-    if (int(option_value + 0.5) == 1) {
-      miplevel = 0;
-    }
+    // if (int(option_value + 0.5) == 1) { miplevel = 0; }
     int hit = -1;
     hit = raycast_tilemap(pos, camera_local, light_local,
       aabb_min, aabb_max, tex_val, nor, lstr_para, miplevel);
+/*
+*/
     <%if><%eq><%get_config dbgval/>1<%/>
     if (dbgval.a > 0.0) { <%fragcolor/> = dbgval; return; }
     <%/>
@@ -1406,10 +1047,13 @@ void main(void)
   color.xyz += sqrt(mix(li2, li1, distbr));
   */
   li1 *= exposure;
+  // li1 = min(li1, 1.0 - 0.5 / exp(li1));
+  li1 = 1.0 - 1.0 / exp(li1);
   li1 = sqrt(li1);
   // vec3 v01 = clamp(li1, 0.0, 1.0);
   // vec3 ve = 1.0 - 1.0 / exp(li1 * 10.0);
   // color.xyz += mix(v01, ve, v01);
-  color.xyz += 1.0 - 1.0 / exp(li1);
+  /// color.xyz += 1.0 - 1.0 / exp(li1);
+  color.xyz += li1;
   <%fragcolor/> = color;
 }

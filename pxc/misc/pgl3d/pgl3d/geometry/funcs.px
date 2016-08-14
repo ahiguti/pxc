@@ -570,32 +570,36 @@ private threaded function void gf_ctx_tex3d_surf(size_t ntex,
   float z, varray{varray{vec3}} const& surf_quads,
   build_context_i const& ctx, poly_t const& poly, mesh_index const& mp)
 {
+  const coord_min = make_vec3(0.0, 0.0, 0.0);
+  const coord_max = make_vec3(1.0, 1.0, z);
+    // TODO: これらを引数で取る
   if (poly.size() != 4) { return; }
-  // FIXME: 正方形のときしか動かない
   const tan = (poly[1].pos - poly[0].pos).normalize();
   const len = glm::length(poly[1].pos - poly[0].pos);
-  const texscale = len; // テクスチャ座標からローカル座標への倍率
+  const coord_len = coord_max.x - coord_min.x;
+  const texscale = len / coord_len;
+    // テクスチャ座標からローカル座標への倍率
   darrayst{vertex_attr} front = poly;
   mutable nor = normal_from_poly(poly, false);
-  // debug_log("poly", poly[0].pos, poly[1].pos, poly[2].pos, poly[3].pos);
-  // debug_log("nor", nor);
-  const onem = 1.0f;
-  const zm = z * 1.0f;
   mutable attr0 = poly[0];
     // posはpoly[0]の値をそのままコピーする。接線空間原点のグローバル座標。
   attr0.nor = nor; // 基準平面の法線ベクトル
   attr0.tan = tan;
-  attr0.aabb_or_tconv = glm::make_vec4(0.0, 0.0, 0.0, texscale);
-    // FIXME: テクスチャ座標からローカル座標への変換
-  attr0.aabb_min = glm::make_vec3(0.0, 0.0, 0.0);
-  attr0.aabb_max = glm::make_vec3(onem, onem, zm);
+  attr0.aabb_or_tconv = glm::make_vec4(
+    -coord_min.x * texscale,
+    -coord_min.y * texscale,
+    -coord_min.z * texscale,
+    texscale);
+    // テクスチャ座標からローカル座標への変換
+  attr0.aabb_min = coord_min;
+  attr0.aabb_max = coord_max;
     // 頂点データのuvw以外の属性はすべての頂点で同じ値(無駄大きい？)
   mutable quad_attr = make_farray{vertex_attr}(attr0, attr0, attr0, attr0);
   for (const i, const q: surf_quads) {
-    quad_attr[0].uvw = q[0];
-    quad_attr[1].uvw = q[1];
-    quad_attr[2].uvw = q[2];
-    quad_attr[3].uvw = q[3];
+    quad_attr[0].uvw = coord_min + q[0] * coord_len;
+    quad_attr[1].uvw = coord_min + q[1] * coord_len;
+    quad_attr[2].uvw = coord_min + q[2] * coord_len;
+    quad_attr[3].uvw = coord_min + q[3] * coord_len;
     gf_ctx_fill_smooth(ntex, ctx, quad_attr, mesh_index());
   }
 }

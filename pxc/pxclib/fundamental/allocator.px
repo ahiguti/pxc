@@ -252,6 +252,30 @@ template <typename T> static inline void deallocate_single(const T *ptr)
   global_deallocate_n(const_cast<T *>(ptr), sizeof(T));
 }
 
+template <typename T> struct auto_deallocate
+{
+  auto_deallocate() : ptr(T::allocate()) { }
+  ~auto_deallocate() {
+    if (ptr) {
+      T::deallocate(ptr);
+    }
+  }
+  T *release() {
+    T *r = ptr;
+    ptr = 0;
+    return r;
+  }
+  operator T *() {
+    return ptr;
+  }
+  T& operator *() const { return *ptr; }
+  T *operator ->() const { return ptr; }
+private:
+  T *ptr;
+  auto_deallocate(auto_deallocate const&);
+  auto_deallocate& operator =(auto_deallocate const&);
+};
+
 }; // namespace pxcrt
 ;
 

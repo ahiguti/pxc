@@ -175,7 +175,7 @@ public struct edit_mode(uint bshift0,
       sz = z;
     }
     mutable& tex = *tex_octree;
-    mutable v = tex.data[cur_offset()];
+    mutable v = tex.get_index(cur_offset());
     const node_type = (v >> 24u);
     if (node_type == 1) {
       return;
@@ -215,12 +215,12 @@ public struct edit_mode(uint bshift0,
     nv |= static_cast{uint}(sx    ) <<  4;
     nv |= static_cast{uint}(sy    ) << 12;
     nv |= static_cast{uint}(sz    ) << 20;
-    tex.data[cur_offset()] = (nv & 0xffffffu) | ((rad + 1) << 24u);
+    tex.set_index(cur_offset(), (nv & 0xffffffu) | ((rad + 1) << 24u));
   }
   private function void set_radius(int diff)
   {
     mutable& tex = *tex_octree;
-    mutable v = tex.data[cur_offset()];
+    mutable v = tex.get_index(cur_offset());
     const node_type = (v >> 24u);
     if (node_type == 1) {
       return;
@@ -236,13 +236,13 @@ public struct edit_mode(uint bshift0,
       if (rad > 64) { rad = 1; }
     }
     debug_log("r:", rad);
-    tex.data[cur_offset()] =
-      (v & 0xffffffu) | ((static_cast{uint}(rad) + 1) << 24u);
+    tex.set_index(cur_offset(),
+      (v & 0xffffffu) | ((static_cast{uint}(rad) + 1) << 24u));
   }
   private function void set_copy_value()
   {
     mutable& tex = *tex_octree;
-    const v = tex.data[cur_offset()];
+    const v = tex.get_index(cur_offset());
     const node_type = (v >> 24u);
     if (node_type == 1) {
       return;
@@ -252,37 +252,37 @@ public struct edit_mode(uint bshift0,
   private function void paste_value()
   {
     mutable& tex = *tex_octree;
-    const v = tex.data[cur_offset()];
+    const v = tex.get_index(cur_offset());
     const node_type = (v >> 24u);
     if (node_type == 1) {
       return;
     }
-    tex.data[cur_offset()] = copy_value;
+    tex.set_index(cur_offset(), copy_value);
   }
   private function void set_space()
   {
     mutable& tex = *tex_octree;
-    const v = tex.data[cur_offset()];
+    const v = tex.get_index(cur_offset());
     const node_type = (v >> 24u);
     if (node_type == 1) {
       return;
     }
-    tex.data[cur_offset()] = 0;
+    tex.set_index(cur_offset(), 0);
   }
   private function void set_brick()
   {
     mutable& tex = *tex_octree;
-    const v = tex.data[cur_offset()];
+    const v = tex.get_index(cur_offset());
     const node_type = (v >> 24u);
     if (node_type == 1) {
       return;
     }
-    tex.data[cur_offset()] = 0xff808080;
+    tex.set_index(cur_offset(), 0xff808080);
   }
   private function void go_down()
   {
     mutable& tex = *tex_octree;
-    const v = tex.data[cur_offset()];
+    const v = tex.get_index(cur_offset());
     const node_type = (v >> 24u);
     if (node_type != 1) {
       return;
@@ -313,7 +313,7 @@ public struct edit_mode(uint bshift0,
     uint cur_x = (pos.node_x << bshift) | pos.x;
     uint cur_y = (pos.node_y << bshift) | pos.y;
     uint cur_z = (pos.node_z << bshift) | pos.z;
-    return (cur_z * tex.width * tex.height) | (cur_y * tex.width) | cur_x;
+    return tex.index(cur_x, cur_y, cur_z);
   }
   private function void restore_blink()
   {
@@ -326,7 +326,7 @@ public struct edit_mode(uint bshift0,
     uint cur_x = (pos.node_x << bshift) | pos.x;
     uint cur_y = (pos.node_y << bshift) | pos.y;
     uint cur_z = (pos.node_z << bshift) | pos.z;
-    uint value = (!blink) ? tex_octree->data[cur_offset()] :
+    uint value = (!blink) ? tex_octree->get_index(cur_offset()) :
       edit_params == 0 ? 0xffff0000u :
       edit_params == 1 ? 0xff0000ffu : 0xff00ff00u;
     glActiveTexture(GL_TEXTURE0);

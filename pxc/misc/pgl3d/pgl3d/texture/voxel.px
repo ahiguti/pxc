@@ -1,0 +1,259 @@
+public threaded namespace pgl3d::texture::voxel;
+public import common -;
+public import exception -;
+public import meta m;
+public import pgl3d::engine::util -;
+
+public metafunction texel_value uint;
+
+public function {t} void
+set_distance(bool enable_short_circuit, t mutable& node)
+{
+  metafunction si static_cast{int};
+  for (const z : 0 .. node.get_depth()) {
+    for (const y : 0 .. node.get_height()) {
+      for (const x : 0 .. node.get_width()) {
+	set_distance_pos(enable_short_circuit, node, si(x), si(y), si(z));
+      }
+    }
+  }
+}
+
+threaded struct dist_3d {
+  public int xp;
+  public int xn;
+  public int yp;
+  public int yn;
+  public int zp;
+  public int zn;
+}
+
+threaded function {t} void
+set_distance_pos(bool enable_short_circuit, t mutable& node, int x, int y,
+  int z)
+{
+  metafunction ui static_cast{uint};
+  metafunction si static_cast{int};
+  if (!is_space_voxel(node.get(ui(x), ui(y), ui(z)))) {
+    return;
+  }
+  dist_3d dv;
+  threaded function bool short_circuit(int xd, int yd, int zd) {
+    int x1 = x + xd;
+    int y1 = y + yd;
+    int z1 = z + zd;
+    if (x1 < 0 || y1 < 0 || z1 < 0) {
+      return false;
+    }
+    if (ui(x1) >= node.get_width() || ui(y1) >= node.get_height()
+      || ui(z1) >= node.get_depth()) {
+      return false;
+    }
+    const v = node.get(ui(x1), ui(y1), ui(z1));
+    if (!is_space_voxel(v)) {
+      return false;
+    }
+    mutable zp = si((v >> 20u) & 0xfu);
+    mutable zn = si((v >> 16u) & 0xfu);
+    mutable yp = si((v >> 12u) & 0xfu);
+    mutable yn = si((v >> 8u) & 0xfu);
+    mutable xp = si((v >> 4u) & 0xfu);
+    mutable xn = si((v >> 0u) & 0xfu);
+    if (xd < 0 && xp < 1) {
+      return false;
+    }
+    if (yd < 0 && yp < 1) {
+      return false;
+    }
+    if (zd < 0 && zp < 1) {
+      return false;
+    }
+    dv.zp = max(dv.zp, zp - max(0, -zd));
+    dv.zn = max(dv.zn, zn - max(0, zd));
+    dv.yp = max(dv.yp, yp - max(0, -yd));
+    dv.yn = max(dv.yn, yn - max(0, yd));
+    dv.xp = max(dv.xp, xp - max(0, -xd));
+    dv.xn = max(dv.xn, xn - max(0, xd));
+    return true;
+  }
+  // 隣接するボクセルのdistanceを読んで無用な計算を省く
+  // TODO: これすると描画少し遅い
+  if (enable_short_circuit) {
+    short_circuit(0, -1, 0) ||
+    short_circuit(-1, 0, 0) ||
+    short_circuit(0, 0, -1);
+  }
+  const n = 15; // min(1 << bshift, 15); // fits 4 bit
+  uint done = 0;
+  for (int d: 0 .. n) {
+    if (dv.xp >= 15) { done |= 1u; }
+    if ((done & 1) == 0) {
+      done |= check_extend{t}(node, x, y, z, d, dv, 1, 0, 0) << 0;
+    }
+    if (dv.xn >= 15) { done |= 2u; }
+    if ((done & 2) == 0) {
+      done |= check_extend{t}(node, x, y, z, d, dv, -1, 0, 0) << 1;
+    }
+    if (dv.yp >= 15) { done |= 4u; }
+    if ((done & 4) == 0) {
+      done |= check_extend{t}(node, x, y, z, d, dv, 0, 1, 0) << 2;
+    }
+    if (dv.yn >= 15) { done |= 8u; }
+    if ((done & 8) == 0) {
+      done |= check_extend{t}(node, x, y, z, d, dv, 0, -1, 0) << 3;
+    }
+    if (dv.zp >= 15) { done |= 16u; }
+    if ((done & 16) == 0) {
+      done |= check_extend{t}(node, x, y, z, d, dv, 0, 0, 1) << 4;
+    }
+    if (dv.zn >= 15) { done |= 32u; }
+    if ((done & 32) == 0) {
+      done |= check_extend{t}(node, x, y, z, d, dv, 0, 0, -1) << 5;
+    }
+    if (done == (1u << 6u) - 1u) {
+      break;
+    }
+  }
+  const xv = (dv.xp << 4) + dv.xn;
+  const yv = (dv.yp << 4) + dv.yn;
+  const zv = (dv.zp << 4) + dv.zn;
+  const wv = ui((zv << 16) + (yv << 8) + (xv << 0));
+  // debug_check{bshift}(node, x, y, z, dv);
+  // debug_log("calc_dist", x, y, z, to_hexstring(wv));
+  node.set(ui(x), ui(y), ui(z), wv);
+}
+
+function {t} void
+debug_check(t const& node, int x, int y, int z,
+  dist_3d const& dv)
+{
+  bool r = node_space{t}(node, x - dv.xn, x + dv.xp, y - dv.yn, y + dv.yp,
+    z - dv.zn, z + dv.zp);
+  if (!r) {
+    throw runtime_error_template{"voxel"}("debug check failed");
+  }
+}
+
+threaded function {t} bool
+node_space(t const& node, int x0, int x1, int y0, int y1,
+  int z0, int z1)
+{
+  metafunction ui static_cast{uint};
+  metafunction si static_cast{int};
+  int w = si(node.get_width());
+  int h = si(node.get_height());
+  int d = si(node.get_depth());
+  if (x0 < 0 || x1 >= w || y0 < 0 || y1 >= h || z0 < 0 || z1 >= d) {
+    return false;
+  }
+  for (const x: ui(x0) .. ui(x1 + 1)) {
+    for (const y: ui(y0) .. ui(y1 + 1)) {
+      for (const z: ui(z0) .. ui(z1 + 1)) {
+	if (!is_space_voxel(node.get(x, y, z))) {
+	  return false;
+	}
+      }
+    }
+  }
+  return true;
+}
+
+threaded function {t} uint
+check_extend(t const& node, int x, int y, int z, int d,
+  dist_3d mutable& dv, int dx, int dy, int dz)
+{
+  if (dx > 0) {
+    // x positive
+    if (dv.xp < d) { return 1; }
+    if (node_space{t}(node,
+      x + dv.xp + 1, x + dv.xp + 1,
+      y - dv.yn, y + dv.yp,
+      z - dv.zn, z + dv.zp))
+    {
+      ++dv.xp;
+      return 0;
+    }
+  } else if (dx < 0) {
+    // x negative
+    if (dv.xn < d) { return 1; }
+    if (node_space{t}(node,
+      x - dv.xn - 1, x - dv.xn - 1,
+      y - dv.yn, y + dv.yp,
+      z - dv.zn, z + dv.zp))
+    {
+      ++dv.xn;
+      return 0;
+    }
+  } else if (dy > 0) {
+    // y positive
+    if (dv.yp < d) { return 1; }
+    if (node_space{t}(node,
+      x - dv.xn, x + dv.xp,
+      y + dv.yp + 1, y + dv.yp + 1,
+      z - dv.zn, z + dv.zp))
+    {
+      ++dv.yp;
+      return 0;
+    }
+  } else if (dy < 0) {
+    // y negative
+    if (dv.yn < d) { return 1; }
+    if (node_space{t}(node,
+      x - dv.xn, x + dv.xp,
+      y - dv.yn - 1, y - dv.yn - 1,
+      z - dv.zn, z + dv.zp))
+    {
+      ++dv.yn;
+      return 0;
+    }
+  } else if (dz > 0) {
+    // z positive
+    if (dv.zp < d) { return 1; }
+    if (node_space{t}(node,
+      x - dv.xn, x + dv.xp,
+      y - dv.yn, y + dv.yp,
+      z + dv.zp + 1, z + dv.zp + 1))
+    {
+      ++dv.zp;
+      return 0;
+    }
+  } else if (dz < 0) {
+    // z negative
+    if (dv.zn < d) { return 1; }
+    if (node_space{t}(node,
+      x - dv.xn, x + dv.xp,
+      y - dv.yn, y + dv.yp,
+      z - dv.zn - 1, z - dv.zn - 1))
+    {
+      ++dv.zn;
+      return 0;
+    }
+  }
+  return 1;
+}
+
+public threaded function bool is_filled(texel_value v)
+{
+  return (v & 0xff000000) == 0xff000000;
+}
+
+public threaded function bool is_node_reference(texel_value v)
+{
+  return (v & 0xff000000) == 0x01000000;
+}
+
+public threaded function texel_value make_node_reference(texel_value v)
+{
+  return get_node_reference(v) | 0x01000000;
+}
+
+public threaded function uint get_node_reference(texel_value v)
+{
+  return v & 0x00ffffff;
+}
+
+public threaded function bool is_space_voxel(texel_value v)
+{
+  return (v & 0xff000000) == 0x00000000;
+}
+

@@ -2,17 +2,18 @@
 ---------------------------------------------------------------------------
 TODO
 
-- voxel平面切断
+- tilemapの一部から切り出して貼り付けられるようにする。
 
-- voxelのsurface抽出処理がoctreeに依存しているのをやめ、tilemapから抽出。
-- 仮想テクスチャサイズを4096から可変にする
+- inline c の末尾に余分なセミコロンが出ている
+
+- deserialize_sequenceテスト
+
+- 仮想テクスチャサイズを4096から可変にする(done)
   mapが256^3のとき64Mbyte(タイル番号が32bitのとき)
   mapが512^3のとき512Mbyte
   mapが1024^3のとき4Gbyte
   patが256^3のとき64Mbyte(16Mvoxel)
   patが512^3のとき512Mbyte(128Mvoxel)
-
-- tilemapの一部から切り出して貼り付けられるようにする。
 
 - 表面voxel貼り付け、単体voxelの二種類にわける。
   - 単体voxelは内側抽出でshadowとzprepass
@@ -20,7 +21,6 @@ TODO
 
 - 底面はzrepassとshadow 内接はshadowだけ、表面は裏面カリングで書く。
 
-- mipleveの1以上は2次元曲面はやめるか(done)
 
 
 - tex3d: タイルとパターンのサイズを変えられるように
@@ -156,6 +156,10 @@ TODO
 ---------------------------------------------------------------------------
 DONE
 
+- append_to_string/parse_from_stringはテンプレ引数としてser_?を取る(done)
+- voxel平面切断(done)
+- voxelのsurface抽出をoctreeでなくtilemapから。(done)
+- mipleveの1以上は2次元曲面はやめるか(done)
 - なんでmipmapレベル大きいほうが遅いのか(done)
   -> mip4の空白部のdistanceが0
 - ボクセルに二次曲線パラメータを埋め込む (done)
@@ -2301,3 +2305,64 @@ rad: (node_typeから) 半径 1/4から253/4まで0.25きざみ 中で2乗され
 aにmulを掛ける(楕円体や円柱にできる)
 acの距離がradより小さいなら衝突
 
+---------------------------------------------------------------------------
+box_pointerの実装
+
+rcval<foo> *const p = rcval<foo>::allocate();
+try {
+  new (p->value) foo(引数いろいろ);     // foo自体を初期化
+  new (p->count) stcount(); // 参照カウンタを初期化(nothrow)
+  try {
+    new (p->monitor) monitor(); // モニタを初期化(throw)
+  } catch (...) {
+    // カウンタはpodなのでデストラクタ呼ばなくてよい
+    p->value.~p(); // fooのデストラクタ
+  }
+} catch (...) {
+  rcval<foo>::deallocate(p);
+  throw;
+}
+rcptr<rcval<foo>> r(p);
+return r;
+
+template <typename T> auto_deallocate {
+  auto_deallocate() : ptr(T::allocate()) { }
+  ~auto_deallocate() { if (ptr) { T::deallocate(ptr); } }
+  T *release() { T *r = ptr; ptr = 0; return r; }
+  operator T *() { return ptr; }
+private:
+  T *ptr;
+  auto_deallocate(auto_deallocate const&);
+  auto_deallocate& operator =(auto_deallocate const&);
+}
+
+---------------------------------------------------------------------------
+tilemapの一部から切り出し
+
+gf_ctx_tex3d_int_surfのint_quadsはオブジェクト座標系で指定しているので
+変更不要
+
+gf_ctx_tex3d_surfのsurf_quadsはattr.aabb_minとaabb_maxが0.0と1.0で、
+attr.posは接線空間原点のグローバル座標
+attr.norは基準平面の法線ベクトル(接線空間のz軸) ノーマライズ
+attr.tanは接線空間のx軸 ノーマライズ
+attr.aabb_or_tconv = vec4(0, 0, 0, texscale);
+  これのxyzはテクスチャ座標原点に対応する接線空間での座標
+ここでtexscale = length(poly[1].pos - poly[0].pos);
+  これはテクスチャ座標から接線空間座標への倍率
+各頂点のattr.uvwにテクスチャ座標を入れる 0.0と1.0など
+(vsh内)
+vary_position_local = aabb_or_tconv.xyz + uvw * aabb_or_tconv.w
+  // 接線空間での頂点座標をテクスチャ座標から計算
+
+変更点
+attr.aabb_minとaabb_maxでテクスチャ座標の範囲を示すように変更。
+ (これはgf_ctx_tex3d_surfの引数で受け取る)
+attr.uvw = aabb_min + uvw * (aabb_max - aabb_min) に変更。
+aabb_or_tconv.w = texscale / (aabb_max.x - aabb_min.x) に変更。大きくなる。
+aabb_or_tconv.xyz = -aabb_min * aabb_or_tconv.w に変更。
+
+// poslocal = tconv.xyz + attr_uvw * tconv.w これが
+// attr_uvw=aabb_minのとき0になる必要があるから
+// tconv.xyz + aabb_min * tconv.w = 0
+// tconv.xyz = -aabb_min * tconv.w

@@ -4,10 +4,17 @@ public import meta m;
 extern "types" inline
 
 #if defined(_MSC_VER)
-#define PXC_MSVC
-#define PXC_WINDOWS
+  #define PXC_MSVC
+  #define PXC_WINDOWS
+  #ifndef _CPPUNWIND
+    #define PXC_NO_EXCEPTIONS
+  #else
+  #endif
 #else
-#define PXC_POSIX
+  #define PXC_POSIX
+  #ifndef __cpp_exceptions
+    #define PXC_NO_EXCEPTIONS
+  #endif
 #endif
 
 #if defined(__EMSCRIPTEN__)
@@ -19,8 +26,7 @@ extern "types" inline
 #define PXC_NO_THREAD
 #endif
 
-#if PXC_PROFILE_noexceptions
-#define PXC_NOEXCEPTIONS 1
+#ifdef PXC_NO_EXCEPTIONS
 #define PXC_THROW(x) ::abort();
 #define PXC_TRY
 #define PXC_CATCH(x) if(0)
@@ -28,7 +34,7 @@ extern "types" inline
 #define PXC_RETHROW
 #define BOOST_NO_EXCEPTIONS
 #else
-#define PXC_THROW(x) throw x;
+#define PXC_THROW(x) throw (x);
 #define PXC_TRY try
 #define PXC_CATCH(x) catch(x)
 #define PXC_NOTHROW throw()

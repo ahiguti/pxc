@@ -17,6 +17,19 @@ public metafunction mat4x2 tmat4x2{float};
 public metafunction mat3x4 tmat3x4{float};
 public metafunction mat4x3 tmat4x3{float};
 
+public metafunction ivec2 tvec2{int};
+public metafunction ivec3 tvec3{int};
+public metafunction ivec4 tvec4{int};
+public metafunction imat2 tmat2{int};
+public metafunction imat3 tmat3{int};
+public metafunction imat4 tmat4{int};
+public metafunction imat2x3 tmat2x3{int};
+public metafunction imat3x2 tmat3x2{int};
+public metafunction imat2x4 tmat2x4{int};
+public metafunction imat4x2 tmat4x2{int};
+public metafunction imat3x4 tmat3x4{int};
+public metafunction imat4x3 tmat4x3{int};
+
 public tsvaluetype struct extern "pxcrt::glmpx::tvec2<>::type" {t} tvec2 {
   public metafunction __static_assert__ check_param_type{t};
   public metafunction value_type t;
@@ -129,6 +142,13 @@ public metafunction make_mat3 make_tmat3{float};
 public metafunction make_mat4 make_tmat4{float};
 public metafunction make_quat_wxyz make_tquat_wxyz{float};
 public metafunction make_quat_angle_axis make_tquat_angle_axis{float};
+
+public metafunction make_ivec2 make_tvec2{int};
+public metafunction make_ivec3 make_tvec3{int};
+public metafunction make_ivec4 make_tvec4{int};
+public metafunction make_imat2 make_tmat2{int};
+public metafunction make_imat3 make_tmat3{int};
+public metafunction make_imat4 make_tmat4{int};
 
 public threaded function extern "pxcrt::glmpx::make_tvec2" {t}
 tvec2{t} make_tvec2(t x, t y);
@@ -491,7 +511,7 @@ private metafunction check_tmat_type{t}
     m::error{m::concat{t, ": invalid type (tmat expected)"}}};
 
 private metafunction is_param_type{t}
-  m::or{m::eq{t, float}, m::eq{t, double}};
+  m::or{m::eq{t, float}, m::eq{t, double}, m::eq{t, int}};
 
 private metafunction is_tvec_type{t}
   m::and{
@@ -562,23 +582,24 @@ extern "types" inline
 
 namespace pxcrt { namespace glmpx {
 
-template <typename T> struct tvec2 { typedef glm::vec2 type; };
-template <typename T> struct tvec3 { typedef glm::vec3 type; };
-template <typename T> struct tvec4 { typedef glm::vec4 type; };
-template <typename T> struct tquat { typedef glm::quat type; };
+template <typename T> struct tvec2 { typedef glm::tvec2<T> type; };
+template <typename T> struct tvec3 { typedef glm::tvec3<T> type; };
+template <typename T> struct tvec4 { typedef glm::tvec4<T> type; };
+template <typename T> struct tquat {
+  typedef glm::tquat<T, glm::defaultp> type; };
 #ifdef PXC_GLM_ENABLE_DUALQUAT
 template <typename T> struct tdualquat {
-  typedef glm::tdualquat<T, glm::highp> type; };
+  typedef glm::tdualquat<T, glm::defaultp> type; };
 #endif
-template <typename T> struct tmat2 { typedef glm::mat2 type; };
-template <typename T> struct tmat3 { typedef glm::mat3 type; };
-template <typename T> struct tmat4 { typedef glm::mat4 type; };
-template <typename T> struct tmat2x3 { typedef glm::mat2x3 type; };
-template <typename T> struct tmat3x2 { typedef glm::mat3x2 type; };
-template <typename T> struct tmat2x4 { typedef glm::mat2x4 type; };
-template <typename T> struct tmat4x2 { typedef glm::mat4x2 type; };
-template <typename T> struct tmat3x4 { typedef glm::mat3x4 type; };
-template <typename T> struct tmat4x3 { typedef glm::mat4x3 type; };
+template <typename T> struct tmat2 { typedef glm::tmat2x2<T> type; };
+template <typename T> struct tmat3 { typedef glm::tmat3x3<T> type; };
+template <typename T> struct tmat4 { typedef glm::tmat4x4<T> type; };
+template <typename T> struct tmat2x3 { typedef glm::tmat2x3<T> type; };
+template <typename T> struct tmat3x2 { typedef glm::tmat3x2<T> type; };
+template <typename T> struct tmat2x4 { typedef glm::tmat2x4<T> type; };
+template <typename T> struct tmat4x2 { typedef glm::tmat4x2<T> type; };
+template <typename T> struct tmat3x4 { typedef glm::tmat3x4<T> type; };
+template <typename T> struct tmat4x3 { typedef glm::tmat4x3<T> type; };
 
 }; };
 

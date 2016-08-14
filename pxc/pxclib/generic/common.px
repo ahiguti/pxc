@@ -2,6 +2,7 @@ public threaded namespace generic::common;
 public import numeric::integral -;
 public import meta m;
 public import meta::family mf;
+public import meta::vararg va;
 
 public threaded function {t} t identity(t const& x) { return x; }
 
@@ -39,7 +40,7 @@ public threaded function {t} t make_default()
     metafunction ats m::arg_types{t};
     metafunction ans m::map{m::seq{m::size{ats}},
       metafunction{i} m::concat{"a", i}};
-    expand(sym, idx: ans) {
+    expand (sym, idx: ans) {
       const sym = make_default{m::at{ats, idx}}();
     }
     return t(expand(a: ans; a));
@@ -53,14 +54,84 @@ method_as_function(expand(
       m::not{m::is_const_member_function{m::symbol{t, name}}}}},
     subst_arg_names{m::args{m::symbol{t, name}}}}))
 {
-  expand(sym: m::list{name}) {
+  expand (sym: m::list{name}) {
     return o.sym(expand(a : m::map{m::seq{m::arg_size{m::symbol{t, name}}},
       metafunction{i} m::concat{"a", i}}; a));
   }
 }
 
-private metafunction subst_arg_names{xs}
+metafunction subst_arg_names{xs}
   m::map{m::seq{m::size{xs}}, metafunction{i}
     m::list{m::concat{"a", i}, m::at1{m::at{xs, i}}, m::at2{m::at{xs, i}},
       m::at3{m::at{xs, i}}}};
+
+public threaded function {t, f, tlist} t
+map(expand(va::arg_decls_bycref{tlist}))
+{
+  if (mf::is_array_or_slice_type{t}) {
+    if (m::eq{m::family{t}, "darray"}) {
+      t r = t(a0.size(), m::at0{t}());
+      for (const i, mutable& v: r) {
+	v = f(expand(a: va::arg_names{m::size{tlist}}; arr_get(a, i)));
+      }
+      return r;
+    } else if (m::eq{m::family{t}, "farray"}) {
+      t r;
+      for (const i, mutable& v: r) {
+	v = f(expand(a: va::arg_names{m::size{tlist}}; arr_get(a, i)));
+      }
+      return r;
+    } else {
+      t r = t();
+      for (const i: 0 .. a0.size()) {
+	r.push_back(
+	  f(expand(a: va::arg_names{m::size{tlist}}; arr_get(a, i))));
+      }
+      return r;
+    }
+  } else if (mf::is_map_or_range_type{t}) {
+    t r = t();
+    for (const& k, const& m: a0) {
+      r.insert(k, f(expand(a: va::arg_names{m::size{tlist}}; map_get(a, k))));
+    }
+    return r;
+  } else if (mf::is_pointer_type{t}) {
+    return box_pointer{t}(f(expand(a: va::arg_names{m::size{tlist}}; *a)));
+  } else if (mf::is_struct_type{t}) {
+    t r = make_default{t}();
+    expand (fld: m::field_names{t}) {
+      r.fld = f(expand(a: va::arg_names{m::size{tlist}}; a.fld));
+    }
+    return r;
+  } else if (mf::is_union_type{t}) {
+    t r = make_default{t}();
+    expand (fld, idx: m::field_names{t}) {
+      if (case a0.fld) {
+	r.fld = f(expand(a: va::arg_names{m::size{tlist}};
+	  (case a.fld)
+	    ? a.fld
+	    : make_default{m::at{m::field_types{t}, idx}}()));
+	return r;
+      }
+    }
+    return r;
+  } else {
+    m::error{"invalid type"};
+  }
+}
+
+threaded function {tm, tk} m::symbol{tm, "mapped_type"}
+arr_get(tm const& m, tk i)
+{
+  return (i < m.size()) ? m[i] : make_default{m::symbol{tm, "mapped_type"}}();
+}
+
+threaded function {tm, tk} m::symbol{tm, "mapped_type"}
+map_get(tm const& m, tk const& k)
+{
+  if (const& v: m[k]) {
+    return v;
+  }
+  return make_default{m::symbol{tm, "mapped_type"}}();
+}
 

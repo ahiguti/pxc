@@ -24,6 +24,7 @@ public import pgl3d::physics::dynamics_world -;
 public import pgl3d::sdl::sdlutil -;
 public import pgl3d::geometry::wfobj -;
 public import io::environ;
+public import debug_helper -;
 
 public import demoapp::texture::triangles_texture -;
 
@@ -55,6 +56,8 @@ load_filesystem_async{app_main}("/persist"); // emscripten
 
 public function void app_main()
 {
+  debug_helper::dump_modules();
+  debug_helper::dump_backtrace();
   string config_fn = "pgl3d.cnf";
   if (io::environ::argv.size() != 0) {
     config_fn = io::environ::argv[1];
@@ -107,7 +110,7 @@ private struct app_impl()
   public string_map app_commands;
   public varray{bool} prev_joy_buttons;
   public option{ptr{edit_mode_i}} edit_mode;
-  public option{cptr{texture_data}} tex_octree;
+  public bool raycast_cull_front = false;
   public textures_ptr const textures = make_textures_ptr();
   init();
   private function void init() {
@@ -452,7 +455,7 @@ function void handle_keys(app_impl mutable& app,
   {
     mutable& ss = *app.scene_shared;
     ss.light_on = app.light_on;
-    ss.exposure = app.exposure;
+    ss.exposure = sqrt(app.exposure); // 半段単位
     ss.option_value = app.option_value;
     ss.scene_next_flag = app.scene_next_flag;
     ss.posang.position = app.player.position;
@@ -492,6 +495,7 @@ private function tree_map{string, ptr{pgldrawer_export_i}} init_drawers(
   // if (sconf.conf.get("fxaa_filter", 1, 0, 1) != 0) {
   //   r.insert("drawer_fxaa", make_drawer_fxaa(sconf, res));
   // }
+  app.raycast_cull_front = sconf.conf.get("raycast_cull_front", 0, 0, 1) != 0;
   const t1 = get_time(io::system);
   sdl_log("app_init_drawers done", t1 - t0);
   return r;
@@ -500,9 +504,11 @@ private function tree_map{string, ptr{pgldrawer_export_i}} init_drawers(
 private function void build_vertices(app_impl mutable& app,
   make_vertices_i mutable& pgs)
 {
-  app.tex_octree = pgs.get_texture_data("octree");
-  bitarray3 otb = octree_external(app.tex_octree.some, 2);
-  bitarray3 itb = octree_internal(app.tex_octree.some, 2);
+  bitarray3 otb = tilemap_external(
+    *app.textures->equal_range("triangles.voxtmap.0"));
+  bitarray3 itb = tilemap_internal(
+    *app.textures->equal_range("triangles.voxtmap.0"));
+  /*
   uint const zmax = 1u << otb.d_l2;
   for (const z: zmax / 32 .. zmax) {
     for (const y: 0 .. (1u << otb.h_l2)) {
@@ -512,12 +518,19 @@ private function void build_vertices(app_impl mutable& app,
       }
     }
   }
-  otb = otb.resize{operator::or}();
-  otb = otb.resize{operator::or}();
-  otb = otb.resize{operator::or}();
-  itb = itb.resize{operator::and}();
-  itb = itb.resize{operator::and}();
-  itb = itb.resize{operator::and}();
+  */
+  debug_log("otb", otb.get_width_l2(), otb.get_height_l2(),
+    otb.get_depth_l2());
+  debug_log("itb", itb.get_width_l2(), itb.get_height_l2(),
+    itb.get_depth_l2());
+  otb = bitarray3_resize{operator::or}(otb);
+  otb = bitarray3_resize{operator::or}(otb);
+  // otb = bitarray3_resize{operator::or}(otb);
+  itb = bitarray3_resize{operator::and}(itb);
+  itb = bitarray3_resize{operator::and}(itb);
+  // itb = bitarray3_resize{operator::and}(itb);
+  /*
+  */
   /*
   bitarray3 otb;
   otb.w_l2 = 1;
@@ -527,20 +540,20 @@ private function void build_vertices(app_impl mutable& app,
   otb.set(0, 0, 0, true);
   otb.set(1, 1, 1, true);
   */
-  /*
   if (false) {
     for (const z: 0 .. 16u) {
       debug_log("z=", z);
       for (const y: 0 .. 16u) {
 	string s;
 	for (const x: 0 .. 16u) {
-	  bool v = otb.get(x, y, z);
+	  bool v = itb.get(x, y, z);
 	  s += (v ? "1" : "0");
 	}
 	debug_log("", s);
       }
     }
   }
+  /*
   */
   varray{varray{glm::vec3}} oquads = get_surface_quads(otb);
   varray{varray{glm::vec3}} iquads = get_surface_quads(itb);
@@ -570,9 +583,6 @@ private function void build_vertices(app_impl mutable& app,
   }
   debug_log("quads:", oquads.size());
 
-  // if (case app.tex_octree.some) {
-  //   sdl_log("tex_octree", app.tex_octree.some);
-  // }
   /* import */
   const objs = make_farray{string}(
       "parts"
@@ -613,24 +623,27 @@ private function void build_vertices(app_impl mutable& app,
   m1 = glm::mat4()
     .translate(glm::make_vec3(0.0, 0.0, box_size * (-1.0f)))
     .rotate(to_radians(45.0), glm::make_vec3(0.0, 0.0, 1.0));
-  /*
-  pgs.make_vertex_set(tr, "box",
-    regular_polygon(1.4142f * box_size, 4,
-      apply(m1,
-	bump_apply(m, true,
-	  ctx_tex3d_int_surf(2, 1, 1.0f/32.0f, true, iquads, oquads),
-	  ctx_tex3d_int_surf(2, 1, 1.0f/32.0f, true, iquads, oquads))),
-      apply(m1,
-	ctx_tex3d_int_surf(2, 1, 1.0f/32.0f, true, iquads, oquads))));
-  */
-  pgs.make_vertex_set(tr, "box",
-    regular_polygon(1.4142f * box_size, 4,
-      apply(m1,
-	bump_apply(m, true,
-	  ctx_tex3d(2, 1, 1.0f/32.0f),
-	  ctx_tex3d(2, 1, 1.0f/32.0f))),
-      apply(m1,
-	ctx_tex3d(2, 1, 1.0f/32.0f))));
+  if (app.raycast_cull_front) {
+    // cull_front, 直方体をレンダリング
+    pgs.make_vertex_set(tr, "box",
+      regular_polygon(1.4142f * box_size, 4,
+	apply(m1,
+	  bump_apply(m, true,
+	    ctx_tex3d(2, 1, 1.0f/32.0f),
+	    ctx_tex3d(2, 1, 1.0f/32.0f))),
+	apply(m1,
+	  ctx_tex3d(2, 1, 1.0f/32.0f))));
+  } else {
+    // cull_back, 表面oquads, shadowmapとzprepassにiquads
+    pgs.make_vertex_set(tr, "box",
+      regular_polygon(1.4142f * box_size, 4,
+	apply(m1,
+	  bump_apply(m, true,
+	    ctx_tex3d_int_surf(2, 1, 1.0f/32.0f, true, iquads, oquads),
+	    ctx_tex3d_int_surf(2, 1, 1.0f/32.0f, true, iquads, oquads))),
+	apply(m1,
+	  ctx_tex3d_int_surf(2, 1, 1.0f/32.0f, true, iquads, oquads))));
+  }
   /*
   */
   /*

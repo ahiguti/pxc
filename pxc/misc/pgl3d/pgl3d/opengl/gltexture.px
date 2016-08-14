@@ -18,7 +18,7 @@ public import pgl3d::opengl::shader_config -;
 public import pgl3d::opengl::aggregated_ibuffer -;
 public import pgl3d::sdl::sdlutil -;
 public import pgl3d::texture::texture -;
-public import pgl3d::texture::voxel_octree -;
+public import pgl3d::texture::voxel -;
 public import pgl3d::engine::pglbase -;
 public import pgl3d::engine::intern_pool -;
 public import pgl3d::engine::util -;
@@ -145,8 +145,8 @@ load_gl_texture_cube(gl_texture mutable& ctex, cslice{string} const& fnames)
   glBindTexture(GL_TEXTURE_CUBE_MAP, ctex.texture_id.get());
   for (const i: 0 .. 6) {
     const td = load_texture_data(fnames[static_cast{uint}(i)]);
-    ctex.surface_w = td->width;
-    ctex.surface_h = td->height;
+    ctex.surface_w = td->get_width();
+    ctex.surface_h = td->get_height();
     const tgt = static_cast{GLenum}(
       static_cast{int}(GL_TEXTURE_CUBE_MAP_POSITIVE_X) + i);
     set_gl_texture(to_varray(td), ctex, tgt);
@@ -180,9 +180,9 @@ texture_data_to_gl_texture(GLenum target, gl_texture mutable& tx,
   glActiveTexture(GL_TEXTURE0);
   tx.texture_id.generate();
   glBindTexture(target, tx.texture_id.get());
-  tx.surface_w = td->width;
-  tx.surface_h = td->height;
-  tx.surface_d = td->depth;
+  tx.surface_w = td->get_width();
+  tx.surface_h = td->get_height();
+  tx.surface_d = td->get_depth();
   set_gl_texture(to_varray(td), tx, target);
 }
 
@@ -193,9 +193,9 @@ texture_data_array_to_gl_texture(GLenum target, gl_texture mutable& tx,
   glActiveTexture(GL_TEXTURE0);
   tx.texture_id.generate();
   glBindTexture(target, tx.texture_id.get());
-  tx.surface_w = tds[0]->width;
-  tx.surface_h = tds[0]->height;
-  tx.surface_d = tds[0]->depth;
+  tx.surface_w = tds[0]->get_width();
+  tx.surface_h = tds[0]->get_height();
+  tx.surface_d = tds[0]->get_depth();
   set_gl_texture(tds, tx, target);
 }
 
@@ -219,10 +219,10 @@ function void set_gl_texture(cslice{cptr{texture_data}} const& tds,
   const mode = GL_RGBA;
   for (size_t i: 0 .. tds.size()) {
     const& td = *tds[i];
-    const& uibuf = td.data;
-    uint tex_w = td.width;
-    uint tex_h = td.height;
-    uint tex_d = td.depth;
+    const crawp = td.get_crawptr();
+    uint tex_w = td.get_width();
+    uint tex_h = td.get_height();
+    uint tex_d = td.get_depth();
     int mipmap_level = cast_int(i);
     // dump_buf(uibuf);
     if (sdl_byteorder() != sdl_lil_endian()) {
@@ -232,11 +232,11 @@ function void set_gl_texture(cslice{cptr{texture_data}} const& tds,
       // debug_log("3dtex", tex_w, tex_h, tex_d);
       glTexImage3D(target, mipmap_level, cast_int(mode),
 	cast_int(tex_w), cast_int(tex_h), cast_int(tex_d),
-	0, mode, GL_UNSIGNED_BYTE, uibuf.to_crawptr().to_cvoidptr());
+	0, mode, GL_UNSIGNED_BYTE, crawp.to_cvoidptr());
     } else {
       glTexImage2D(target, mipmap_level, cast_int(mode),
 	cast_int(tex_w), cast_int(tex_h),
-	0, mode, GL_UNSIGNED_BYTE, uibuf.to_crawptr().to_cvoidptr());
+	0, mode, GL_UNSIGNED_BYTE, crawp.to_cvoidptr());
     }
   }
   if (target == GL_TEXTURE_2D || target == GL_TEXTURE_3D)

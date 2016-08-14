@@ -26,16 +26,12 @@ private import GL::compat -;
 public function void mainloop(ptr{pgl3d_application} const& app,
   cstrref const& conf_filename)
 {
-  try {
-    string confstr;
-    sdl_load_file(conf_filename, confstr);
-    const conf = pgl3d_config(confstr);
-    GL::base::set_check_error_enabled(conf.get("gldebug", 0, 0, 1));
-    const ml = make_ptr{mainloop_internal}(app, conf);
-    set_mainloop(ml);
-  } catch (exception::c_exception ex) {
-    sdl_log("app mainloop init: uncaught exception", ex);
-  }
+  string confstr;
+  sdl_load_file(conf_filename, confstr);
+  const conf = pgl3d_config(confstr);
+  GL::base::set_check_error_enabled(conf.get("gldebug", 0, 0, 1));
+  const ml = make_ptr{mainloop_internal}(app, conf);
+  set_mainloop(ml);
 }
 
 struct
@@ -253,12 +249,7 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
   }
   public function bool step()
   {
-    try {
-      return step_internal();
-    } catch (exception::c_exception ex) {
-      sdl_log("uncaught exception", ex);
-    }
-    return true;
+    return step_internal();
   }
   private function void update_window_size()
   {

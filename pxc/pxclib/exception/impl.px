@@ -216,29 +216,6 @@ void c_exception_log_stderr(const std::exception& ex)
 #endif
 }
 
-int main_nothrow(void (*main_f)(void))
-{
-  PXC_TRY {
-    PXC_TRY {
-      (*main_f)();
-    } PXC_CATCH(const std::exception& ex) {
-      #if !PXC_NOEXCEPTIONS
-      c_exception_log_stderr(ex);
-      return 1;
-      #endif
-    }
-  } PXC_CATCH(...) {
-    const char *const mess = "PXCMAIN: Uncaught exception\n";
-#ifdef PXC_POSIX
-    ::write(2, mess, strlen(mess));
-#else
-    _write(2, mess, (unsigned)strlen(mess));
-#endif
-    return 1;
-  }
-  return 0;
-}
-
 }; // namespace pxcrt
 ;
 

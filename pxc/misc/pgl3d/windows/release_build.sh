@@ -1,6 +1,7 @@
 #!/bin/bash
 cd `dirname $0`
 mkdir -p ./x64/Release
+rm -f ./x64/Release/*.exe
 cp -af c:/build/ext/*.dll ./x64/Release/
 cp -af c:/build/ext/*.ttf ../
 ./pxc2cc-windows.sh && \

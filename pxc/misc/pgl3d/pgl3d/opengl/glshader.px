@@ -52,10 +52,10 @@ public interface glshader_i {
 
 public function {tuni, tinst, tvert} ptr{glshader{tuni, tinst, tvert}}
 make_glshader_ptr(cstrref const& prog_v, cstrref const& prog_f,
-  strlit const& attrib_to_avoid_0, int debug_level)
+  strlit const& attrib_to_avoid_0, int debug_level, cstrref const& fname_hint)
 {
   return make_ptr{glshader{tuni, tinst, tvert}}(
-    prog_v, prog_f, attrib_to_avoid_0, debug_level);
+    prog_v, prog_f, attrib_to_avoid_0, debug_level, fname_hint);
 }
 
 private function {t} void
@@ -82,7 +82,7 @@ set_uniform(GLint loc, cslice{float} const& value, size_t offset, int cnt)
 
 public struct {tuni, tinst, tvert}
 glshader(cstrref const& prog_v, cstrref const& prog_f,
-  strlit const& attrib_to_avoid_0, int debug_level)
+  strlit const& attrib_to_avoid_0, int debug_level, cstrref const& fname_hint)
 <glshader_i>
 {
   public metafunction uniforms_type tuni;
@@ -106,9 +106,10 @@ glshader(cstrref const& prog_v, cstrref const& prog_f,
   public uint program = 0;
   public string error;
   /* private */
-  init(prog_v, prog_f, attrib_to_avoid_0, debug_level);
+  init(prog_v, prog_f, attrib_to_avoid_0, debug_level, fname_hint);
   private function void init(cstrref const& prog_v, cstrref const& prog_f,
-    strlit const& attrib_to_avoid_0, int debug_level)
+    strlit const& attrib_to_avoid_0, int debug_level,
+    cstrref const& fname_hint)
   {
     program = create_program(prog_v, prog_f, attrib_to_avoid_0, debug_level,
       error);
@@ -162,6 +163,9 @@ glshader(cstrref const& prog_v, cstrref const& prog_f,
 	sdl_log("attribute", m::to_string{sym}, vsym);
 	*/
       }
+    }
+    if (debug_level > 0) {
+      dump_program_binary(fname_hint);
     }
   }
   public function void instance_attrib_prepare(slice{float} const& arr,
@@ -311,6 +315,21 @@ glshader(cstrref const& prog_v, cstrref const& prog_f,
       }
     }
   }
+  private function void dump_program_binary(cstrref const& fname_hint)
+  {
+    if (m::is_true{is_gl44}) {
+      GLsizei len;
+      // glGetProgramiv(prog, GL_PROGRAM_BINARY_LENGTH, address(len));
+      string buf;
+      // buf.resize(static_cast{size_t}(len), 0);
+      buf.resize(1024u * 1024u * 1024u, 0);
+      GLenum binfmt;
+      glGetProgramBinary(program, static_cast{GLsizei}(buf.size()),
+	address(len), address(binfmt), buf.to_rawptr().to_voidptr());
+      buf.resize(static_cast{size_t}(len), 0);
+      sdl_save_file("glprog." + fname_hint + ".bin", buf);
+    }
+  }
 }
 
 private function string format_glsl(cstrref const& src)
@@ -428,6 +447,18 @@ create_program(cstrref const& vertex_shader, cstrref const& fragment_shader,
       prog = 0;
     } else {
       debug_log("linkprogram succeeded:", prog);
+      /*
+      GLsizei len;
+      // glGetProgramiv(prog, GL_PROGRAM_BINARY_LENGTH, address(len));
+      string buf;
+      // buf.resize(static_cast{size_t}(len), 0);
+      buf.resize(1024u * 1024u * 32u, 0);
+      GLenum binfmt;
+      glGetProgramBinary(prog, static_cast{GLsizei}(buf.size()), address(len),
+	address(binfmt), buf.to_rawptr().to_voidptr());
+      buf.resize(static_cast{size_t}(len), 0);
+      sdl_save_file("glprog" + to_string(prog) + ".bin", buf);
+      */
     }
   }
   return prog;

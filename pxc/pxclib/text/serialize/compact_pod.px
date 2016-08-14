@@ -24,16 +24,16 @@ from_string_compact_pod(cstrref const& s)
 
 public threaded struct ser_compact_pod {
   public metafunction __find__ ser_default; // inherits ser_default
-  public metafunction ser_specialized{t}
+  public metafunction ser_specialized{tpl, t}
     m::cond{
       mf::is_numeric_enum_bitmask_type{t}, ser_pod_single{t},
       is_pod_dense_array{t}, ser_pod_array{t},
-      m::apply{m::symbol{ser_default, "ser_specialized", 0}, t}};
-  public metafunction des_specialized{t}
+      m::apply{m::symbol{ser_default, "ser_specialized", 0}, tpl, t}};
+  public metafunction des_specialized{tpl, t}
     m::cond{
       mf::is_numeric_enum_bitmask_type{t}, des_pod_single{t},
       is_pod_dense_array{t}, des_pod_array{t},
-      m::apply{m::symbol{ser_default, "des_specialized", 0}, t}};
+      m::apply{m::symbol{ser_default, "des_specialized", 0}, tpl, t}};
 }
 
 private threaded function {t} void ser_pod_single(t const& x,
