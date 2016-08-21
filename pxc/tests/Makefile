@@ -59,24 +59,15 @@ clean:
 	$(MAKE) cleanlogs > /dev/null
 
 cleanlogs:
+	rm -rf */*.log */*.log2 */*.log2h */*.exe */*.o */*.class */*.so \
+	  */*.pyc */gen */*.px.cc */DONE */*.html */*.js */*.data */*.mem
 	for i in test_* skip_* fixme_*; do \
-	  pushd $$i > /dev/null; \
+	  pushd $$i; \
 	  if [ -f Makefile ]; then \
 	    $(MAKE) clean; \
 	  fi; \
-	  rm -f ./DONE; \
-	  popd > /dev/null; \
+	  popd; \
 	done; \
-	exit 0;
-	rm -f all.log valgrind.log efence.log
-	rm -f test_*/*.log
-	rm -f test_*/*.out
-	rm -f test_*/*.dll
-	rm -f test_*/*.idb
-	rm -f test_*/*.obj
-	rm -f test_*/*.manifest
-	rm -f test_*/*.so
-	rm -rf work/
 
 cleanprepare:
 	rm -f ../run/*.exe

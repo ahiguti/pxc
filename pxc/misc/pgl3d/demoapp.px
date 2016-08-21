@@ -56,8 +56,8 @@ load_filesystem_async{app_main}("/persist"); // emscripten
 
 public function void app_main()
 {
-  debug_helper::dump_modules();
-  debug_helper::dump_backtrace();
+  // debug_helper::dump_modules();
+  // debug_helper::dump_backtrace();
   string config_fn = "pgl3d.cnf";
   if (io::environ::argv.size() != 0) {
     config_fn = io::environ::argv[1];
@@ -73,10 +73,12 @@ public struct demoapp_application()
   public function tree_map{string, ptr{pgldrawer_export_i}} on_init_drawers(
     shader_config const& conf, resource_pool_ptr const& res)
   {
+debug_log("init_drawers");
     return init_drawers(app, conf, res);
   }
   public function void on_build_vertices(make_vertices_i mutable& mvx)
   {
+debug_log("build_vertices");
     build_vertices(app, mvx);
   }
   public function void on_event(SDL_Event const& ev, float speed,
@@ -623,26 +625,29 @@ private function void build_vertices(app_impl mutable& app,
   m1 = glm::mat4()
     .translate(glm::make_vec3(0.0, 0.0, box_size * (-1.0f)))
     .rotate(to_radians(45.0), glm::make_vec3(0.0, 0.0, 1.0));
+  float zmax = 1.0f / 32.0f;
+  if (case app.edit_mode.some) {
+    zmax = 1.0f;
+  }
   if (app.raycast_cull_front) {
     // cull_front, 直方体をレンダリング
     pgs.make_vertex_set(tr, "box",
       regular_polygon(1.4142f * box_size, 4,
 	apply(m1,
 	  bump_apply(m, true,
-	    ctx_tex3d(2, 1, 1.0f/32.0f),
-	    ctx_tex3d(2, 1, 1.0f/32.0f))),
+	    hole(), hole())),
 	apply(m1,
-	  ctx_tex3d(2, 1, 1.0f/32.0f))));
+	  ctx_tex3d(2, 1, zmax))));
   } else {
     // cull_back, 表面oquads, shadowmapとzprepassにiquads
     pgs.make_vertex_set(tr, "box",
       regular_polygon(1.4142f * box_size, 4,
 	apply(m1,
 	  bump_apply(m, true,
-	    ctx_tex3d_int_surf(2, 1, 1.0f/32.0f, true, iquads, oquads),
-	    ctx_tex3d_int_surf(2, 1, 1.0f/32.0f, true, iquads, oquads))),
+	    ctx_tex3d_int_surf(2, 1, zmax, true, iquads, oquads),
+	    ctx_tex3d_int_surf(2, 1, zmax, true, iquads, oquads))),
 	apply(m1,
-	  ctx_tex3d_int_surf(2, 1, 1.0f/32.0f, true, iquads, oquads))));
+	  ctx_tex3d_int_surf(2, 1, zmax, true, iquads, oquads))));
   }
   /*
   */

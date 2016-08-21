@@ -148,6 +148,10 @@ public struct drawer_triangles(shader_config const& glc0,
 	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *texture_voxtmap,
 	  voxtmap_mip[0 .. 1]);
       }
+      if (glc.conf.get("edit_mode", 0, 0, 1) != 0) {
+	edit_mode_ptr.some = make_ptr{edit_mode}(voxtile, voxtpat_mip[0],
+	  voxtmap_mip[0], texture_voxtpat, texture_voxtmap);
+      }
     }
     reload_shaders();
     debug_log("drawer_triangles init ", stype, "done");
@@ -180,12 +184,6 @@ public struct drawer_triangles(shader_config const& glc0,
       r.surface_w = texture_dpat->surface_w;
       r.surface_h = texture_dpat->surface_h;
     }
-    return r;
-  }
-  public function option{cptr{texture_data}} get_texture_data(
-    cstrref const& name) const
-  {
-    option{cptr{texture_data}} r;
     return r;
   }
   public function void resize_screen(shader_config const& glc, int width,

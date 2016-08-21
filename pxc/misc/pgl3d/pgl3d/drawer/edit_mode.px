@@ -6,28 +6,28 @@ public import SDL2::api_types -;
 public import text::serialize::compact_pod -;
 
 private struct edit_pos {
-  public uint node_x;
-  public uint node_y;
-  public uint node_z;
-  public uint x;
-  public uint y;
-  public uint z;
+  public uint mx;
+  public uint my;
+  public uint mz;
+  public uint px;
+  public uint py;
+  public uint pz;
 }
 
 private struct edit_state {
   public edit_pos pos;
-  public varray{edit_pos} pos_stack;
 }
 
-public struct edit_mode(uint bshift0,
-  ptr{texture_data} const& tex_octree0, ptr{gl_texture} const& texture_voxpat0)
+public struct edit_mode(cptr{texture_data} const& voxtile0,
+  cptr{texture_data} const& voxtpat0, cptr{texture_data} const& voxtmap0,
+  ptr{gl_texture} const& gl_tpat0, ptr{gl_texture} const& gl_tmap0)
 <edit_mode_i>
 {
-  private uint const bshift = bshift0;
-  private uint const bsize = (1u << bshift);
-  private uint const bmask = bsize - 1;
-  private ptr{texture_data} tex_octree = tex_octree0;
-  private ptr{gl_texture} texture_voxpat = texture_voxpat0;
+  private cptr{texture_data} const voxtile = voxtile0;
+  private cptr{texture_data} const voxtpat = voxtpat0;
+  private cptr{texture_data} const voxtmap = voxtmap0;
+  private ptr{gl_texture} const gl_tpat = gl_tpat0;
+  private ptr{gl_texture} const gl_tmap = gl_tmap0;
   private edit_state stat;
   private uint frame_cnt;
   private uint copy_value;
@@ -47,7 +47,7 @@ public struct edit_mode(uint bshift0,
     debug_log("edit_mode: save");
     const buf = to_string_compact_pod(stat);
     sdl_save_file("edit_state.raw", buf);
-    save_texture_data_raw("octree.raw", *tex_octree);
+    // save_texture_data_raw("octree.raw", *tex_octree);
   }
   public function void set_camera_angle(glm::quat const& angle)
   {
@@ -150,14 +150,17 @@ public struct edit_mode(uint bshift0,
   }
   private function void move_cursor(int x, int y, int z)
   {
+    /*
     rotate_dir(x, y, z);
     mutable& pos = stat.pos;
-    pos.x = static_cast{uint}(static_cast{int}(pos.x) + x) & bmask;
-    pos.y = static_cast{uint}(static_cast{int}(pos.y) + y) & bmask;
-    pos.z = static_cast{uint}(static_cast{int}(pos.z) + z) & bmask;
+    pos.px = static_cast{uint}(static_cast{int}(pos.px) + x) & bmask;
+    pos.py = static_cast{uint}(static_cast{int}(pos.py) + y) & bmask;
+    pos.pz = static_cast{uint}(static_cast{int}(pos.pz) + z) & bmask;
+    */
   }
   private function void set_offset_scale(int x, int y, int z)
   {
+    /*
     rotate_dir(x, y, z);
     int px = 0;
     int py = 0;
@@ -216,9 +219,11 @@ public struct edit_mode(uint bshift0,
     nv |= static_cast{uint}(sy    ) << 12;
     nv |= static_cast{uint}(sz    ) << 20;
     tex.set_index(cur_offset(), (nv & 0xffffffu) | ((rad + 1) << 24u));
+    */
   }
   private function void set_radius(int diff)
   {
+    /*
     mutable& tex = *tex_octree;
     mutable v = tex.get_index(cur_offset());
     const node_type = (v >> 24u);
@@ -238,9 +243,11 @@ public struct edit_mode(uint bshift0,
     debug_log("r:", rad);
     tex.set_index(cur_offset(),
       (v & 0xffffffu) | ((static_cast{uint}(rad) + 1) << 24u));
+    */
   }
   private function void set_copy_value()
   {
+    /*
     mutable& tex = *tex_octree;
     const v = tex.get_index(cur_offset());
     const node_type = (v >> 24u);
@@ -248,9 +255,11 @@ public struct edit_mode(uint bshift0,
       return;
     }
     copy_value = v;
+    */
   }
   private function void paste_value()
   {
+    /*
     mutable& tex = *tex_octree;
     const v = tex.get_index(cur_offset());
     const node_type = (v >> 24u);
@@ -258,9 +267,11 @@ public struct edit_mode(uint bshift0,
       return;
     }
     tex.set_index(cur_offset(), copy_value);
+    */
   }
   private function void set_space()
   {
+    /*
     mutable& tex = *tex_octree;
     const v = tex.get_index(cur_offset());
     const node_type = (v >> 24u);
@@ -268,9 +279,11 @@ public struct edit_mode(uint bshift0,
       return;
     }
     tex.set_index(cur_offset(), 0);
+    */
   }
   private function void set_brick()
   {
+    /*
     mutable& tex = *tex_octree;
     const v = tex.get_index(cur_offset());
     const node_type = (v >> 24u);
@@ -278,9 +291,11 @@ public struct edit_mode(uint bshift0,
       return;
     }
     tex.set_index(cur_offset(), 0xff808080);
+    */
   }
   private function void go_down()
   {
+    /*
     mutable& tex = *tex_octree;
     const v = tex.get_index(cur_offset());
     const node_type = (v >> 24u);
@@ -298,30 +313,39 @@ public struct edit_mode(uint bshift0,
     pos.x = 0;
     pos.y = 0;
     pos.z = 0;
+    */
   }
   private function void go_up()
   {
+    /*
     if (stat.pos_stack.empty()) {
       return;
     }
     stat.pos = stat.pos_stack.pop_back();
+    */
   }
   private function uint cur_offset() const
   {
+    return 0u;
+    /*
     mutable& tex = *tex_octree;
     const& pos = stat.pos;
     uint cur_x = (pos.node_x << bshift) | pos.x;
     uint cur_y = (pos.node_y << bshift) | pos.y;
     uint cur_z = (pos.node_z << bshift) | pos.z;
     return tex.index(cur_x, cur_y, cur_z);
+    */
   }
   private function void restore_blink()
   {
+    /*
     update_voxel(false);
     frame_cnt = 0;
+    */
   }
   private function void update_voxel(bool blink)
   {
+    /*
     const& pos = stat.pos;
     uint cur_x = (pos.node_x << bshift) | pos.x;
     uint cur_y = (pos.node_y << bshift) | pos.y;
@@ -334,6 +358,7 @@ public struct edit_mode(uint bshift0,
     glTexSubImage3D(GL_TEXTURE_3D, 0, cast_int(cur_x),
       cast_int(cur_y), cast_int(cur_z), 1, 1, 1, GL_RGBA,
       GL_UNSIGNED_BYTE, caddress(value).to_cvoidptr());
+    */
   }
   public function void on_frame()
   {

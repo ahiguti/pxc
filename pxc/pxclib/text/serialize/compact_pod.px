@@ -26,48 +26,52 @@ public threaded struct ser_compact_pod {
   public metafunction __find__ ser_default; // inherits ser_default
   public metafunction ser_specialized{tpl, t}
     m::cond{
-      mf::is_numeric_enum_bitmask_type{t}, ser_pod_single{t},
-      is_pod_dense_array{t}, ser_pod_array{t},
+      mf::is_numeric_enum_bitmask_type{t}, ser_pod_single_with_prefix{t},
+      is_pod_dense_array{t}, ser_pod_array_with_prefix{t},
       m::apply{m::symbol{ser_default, "ser_specialized", 0}, tpl, t}};
   public metafunction des_specialized{tpl, t}
     m::cond{
-      mf::is_numeric_enum_bitmask_type{t}, des_pod_single{t},
-      is_pod_dense_array{t}, des_pod_array{t},
+      mf::is_numeric_enum_bitmask_type{t}, des_pod_single_with_prefix{t},
+      is_pod_dense_array{t}, des_pod_array_with_prefix{t},
       m::apply{m::symbol{ser_default, "des_specialized", 0}, tpl, t}};
 }
 
-private threaded function {t} void ser_pod_single(t const& x,
+private threaded function {t} void ser_pod_single_with_prefix(t const& x,
   string mutable& v)
 {
+  v.push_back('!'); // prefix to distinguish with end-of-list '}' mark
   ser_memcpy(x, 1, v);
 }
 
-private threaded function {t} t des_pod_single(cstrref mutable& s)
+private threaded function {t} t des_pod_single_with_prefix(cstrref mutable& s)
 {
-   mutable r = t();
-   des_memcpy(r, 1, s);
-   return r;
+  s.increment_front(1); // skip prefix
+  mutable r = make_default{t}();
+  des_memcpy(r, 1, s);
+  return r;
 }
 
-private threaded function {t} void ser_pod_array(t const& x,
+private threaded function {t} void ser_pod_array_with_prefix(t const& x,
   string mutable& v)
 {
+  v.push_back('!'); // prefix to distinguish with end-of-list '}' mark
   size_t len = x.size();
   ser_memcpy(len, 1u, v);
   ser_memcpy(x[0], x.size(), v);
 }
 
-private threaded function {t} t des_pod_array(cstrref mutable& s)
+private threaded function {t} t des_pod_array_with_prefix(cstrref mutable& s)
 {
+  s.increment_front(1); // skip '!'
   size_t len = 0;
   des_memcpy(len, 1, s);
   if (m::eq{m::family{t}, "darray"}) {
-    t r = t(len, m::symbol{t, "mapped_type", unit}());
+    t r = t(len, make_default{m::symbol{t, "mapped_type", unit}}());
     des_memcpy(r[0], r.size(), s);
     return r;
   } else {
     t r;
-    r.resize(len, m::symbol{t, "mapped_type", unit}());
+    r.resize(len, make_default{m::symbol{t, "mapped_type", unit}}());
     des_memcpy(r[0], r.size(), s);
     return r;
   }

@@ -10,11 +10,31 @@ public import pgl3d::geometry::funcs -;
 public import demoapp::texture::tile -;
 public import glm -;
 
+struct demoapp_textures(bool edit_mode)
+{
+  public ivec3 const voxtile_size_l2 = make_ivec3(4, 4, 4);
+  public ivec3 const voxtpat_size_l2 = make_ivec3(4, 4, 4);
+  // public ivec3 const voxtmap_size_l2 = make_ivec3(10, 10, 7);
+  public ivec3 const voxtmap_size_l2 = edit_mode
+    ? make_ivec3(4, 4, 4)
+    : make_ivec3(8, 8, 5);
+  // 3d texture, voxel raycasting
+  public ptr{texture_data} tex_voxtpat = make_ptr{texture_data}();
+  public ptr{texture_data} tex_voxtmap = make_ptr{texture_data}();
+  public ptr{texture_data} tex_voxtile = make_ptr{texture_data}();
+  public varray{ptr{texture_data}} voxtpat_mip;
+  public varray{ptr{texture_data}} voxtmap_mip;
+  // 2d texture, parallax mapping
+  public ptr{texture_data} tex_tcol = make_ptr{texture_data}();
+  public ptr{texture_data} tex_tdep = make_ptr{texture_data}();
+  public ptr{texture_data} tex_tmap = make_ptr{texture_data}();
+}
+
 public function void
 prepare_triangles_texture_data(pgl3d_config const& cfg,
   textures_ptr const& textures)
 {
-  demoapp_textures txs;
+  demoapp_textures txs = demoapp_textures(cfg.get("edit_mode", 0, 0, 1) != 0);
   prepare_parallax_mapping_texture_data(txs);
   prepare_raycasting_texture_data(cfg, txs);
   textures->insert("triangles.tile_color", txs.tex_tcol);
@@ -29,24 +49,6 @@ prepare_triangles_texture_data(pgl3d_config const& cfg,
     textures->insert(k, t);
   }
   textures->insert("triangles.voxtile", txs.tex_voxtile);
-}
-
-struct demoapp_textures()
-{
-  public ivec3 const voxtile_size_l2 = make_ivec3(4, 4, 4);
-  public ivec3 const voxtpat_size_l2 = make_ivec3(4, 4, 4);
-  // public ivec3 const voxtmap_size_l2 = make_ivec3(10, 10, 7);
-  public ivec3 const voxtmap_size_l2 = make_ivec3(8, 8, 5);
-  // 3d texture, voxel raycasting
-  public ptr{texture_data} tex_voxtpat = make_ptr{texture_data}();
-  public ptr{texture_data} tex_voxtmap = make_ptr{texture_data}();
-  public ptr{texture_data} tex_voxtile = make_ptr{texture_data}();
-  public varray{ptr{texture_data}} voxtpat_mip;
-  public varray{ptr{texture_data}} voxtmap_mip;
-  // 2d texture, parallax mapping
-  public ptr{texture_data} tex_tcol = make_ptr{texture_data}();
-  public ptr{texture_data} tex_tdep = make_ptr{texture_data}();
-  public ptr{texture_data} tex_tmap = make_ptr{texture_data}();
 }
 
 function void

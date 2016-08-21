@@ -54,11 +54,6 @@ public struct drawer_fxaa(shader_config const& glc,
   {
     return texture_info();
   }
-  public function option{cptr{texture_data}} get_texture_data(
-    cstrref const& name) const
-  { 
-    return option{cptr{texture_data}}();
-  }
   public function void resize_screen(shader_config const& glc, int width,
     int height, int sm_width, int sm_height)
   {
@@ -126,90 +121,6 @@ init_fxaa_shader(shader_config const& g)
   tree_map{string, string} bnd;
   const v = load_shader_program(g, bnd, "fxaa.vsh");
   const f = load_shader_program(g, bnd, "fxaa.fsh");
-/*
-*/
-/*
-  mutable sev = stempl_evaluator(g);
-  string vsh_src;
-  sdl_load_file("fxaa.vsh", vsh_src);
-  const vsh_se = stempl_parse(vsh_src);
-  debug_log("fxaa vsh dump:", vsh_se.dump());
-  const string v = stempl_expr_eval(vsh_se, sev);
-  debug_log("fxaa vsh", vsh_src, "dump:", vsh_se.dump(), "evaluated:", v);
-  string fsh_src;
-  sdl_load_file("fxaa.fsh", fsh_src);
-  const fsh_se = stempl_parse(fsh_src);
-  const string f = stempl_expr_eval(fsh_se, sev);
-  debug_log("fxaa fsh", fsh_se.dump(), f);
-*/
-/*
-  string v;
-  string f;
-  v += g.prepend();
-  v += g.vert_in() + "vec2 vert;\n";
-  v += g.vert_out() + "vec2 vary_coord;\n";
-  v += "void main(void) {\n";
-  v += "vary_coord = (vert + 1.0) * 0.5;\n";
-  v += "gl_Position = vec4(vert, 0.0, 1.0);\n";
-  v += "}\n";
-  f += g.prepend();
-  f += g.decl_fragcolor();
-  f += g.frag_in() + "vec2 vary_coord;\n";
-  f += "uniform vec2 pixel_delta;\n";
-  f += "uniform sampler2D sampler_tex;\n";
-  f += "uniform float option_value;\n";
-  f += "void main(void) {\n";
-  f += "if (option_value != 0.0) {\n";
-  f += "vec4 tval = " + g.texture2d() + "(sampler_tex, vary_coord);\n";
-  f += g.fragcolor() + " = vec4(tval.rgb, 1.0);\n";
-  f += "} else {\n";
-  f += "float span_max = 8.0;\n";
-  f += "float reduce_mul = 1.0/8.0;\n";
-  f += "float reduce_min = 1.0/128.0;\n";
-  f += "vec3 rgb_nw = " + g.texture2d() + "(sampler_tex, vary_coord +";
-  f += " vec2(-1.0, -1.0) * pixel_delta).xyz;\n";
-  f += "vec3 rgb_ne = " + g.texture2d() + "(sampler_tex, vary_coord +";
-  f += " vec2( 1.0, -1.0) * pixel_delta).xyz;\n";
-  f += "vec3 rgb_sw = " + g.texture2d() + "(sampler_tex, vary_coord +";
-  f += " vec2(-1.0,  1.0) * pixel_delta).xyz;\n";
-  f += "vec3 rgb_se = " + g.texture2d() + "(sampler_tex, vary_coord +";
-  f += " vec2( 1.0,  1.0) * pixel_delta).xyz;\n";
-  f += "vec3 rgb_m  = " + g.texture2d() + "(sampler_tex, vary_coord).xyz;\n";
-  f += "vec3 l = vec3(0.299, 0.587, 0.114);\n";
-  f += "float l_nw = dot(rgb_nw, l);\n";
-  f += "float l_ne = dot(rgb_ne, l);\n";
-  f += "float l_sw = dot(rgb_sw, l);\n";
-  f += "float l_se = dot(rgb_se, l);\n";
-  f += "float l_m  = dot(rgb_m,  l);\n";
-  f += "float l_min = min(l_m, min(min(l_nw, l_ne), min(l_sw, l_se)));\n";
-  f += "float l_max = max(l_m, max(max(l_nw, l_ne), max(l_sw, l_se)));\n";
-  f += "vec2 dir;\n";
-  f += "dir.x = -((l_nw + l_ne) - (l_sw + l_se));\n";
-  f += "dir.y =  ((l_nw + l_sw) - (l_ne + l_se));\n";
-  f += "float dir_reduce = max(";
-  f += "(l_nw + l_ne + l_sw + l_se) * (0.25 * reduce_mul), reduce_min);\n";
-  f += "float rcp_dmin = 1.0 / (min(abs(dir.x), abs(dir.y)) + dir_reduce);\n";
-  f += "dir = min(vec2(span_max, span_max),";
-  f += " max(vec2(-span_max, -span_max), dir * rcp_dmin)) * pixel_delta;\n";
-  f += "vec3 va = 0.5 * (";
-  f += g.texture2d() + "(sampler_tex, vary_coord+dir*(1.0/3.0-0.5)).xyz +";
-  f += g.texture2d() + "(sampler_tex, vary_coord+dir*(2.0/3.0-0.5)).xyz);\n";
-  f += "vec3 vb = va * 0.5 + 0.25 * (";
-  f += g.texture2d() + "(sampler_tex, vary_coord+dir*(0.0/3.0-0.5)).xyz +";
-  f += g.texture2d() + "(sampler_tex, vary_coord+dir*(3.0/3.0-0.5)).xyz);\n";
-  f += "float lb = dot(vb, l);\n";
-  f += "vec4 color = vec4(0.0, 0.0, 0.0, 1.0);\n";
-  f += "if ((lb < l_min) || (lb > l_max)) {\n";
-  f += "color.xyz = va;\n";
-  f += "} else {\n";
-  f += "color.xyz = vb;\n";
-  f += "}\n";
-  f += g.fragcolor() + " = color;\n";
-  f += "}\n";
-  f += "}\n";
-*/
-// debug_log("fxaa vsh", v);
-// debug_log("fxaa fsh", f);
   return make_glshader_ptr{fxaa_uniforms, fxaa_instance_attributes,
     fxaa_vertex_attributes}(v, f, "", g.debug_level, "fxaa");
 }
