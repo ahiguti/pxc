@@ -16,6 +16,7 @@ private tsvaluetype struct blur_uniforms()
 {
   public glm::vec2 pixel_delta;
   public int sampler_tex;
+  public int sampler_tex_depth;
   public float option_value;
 }
 
@@ -26,9 +27,10 @@ public struct drawer_blur(shader_config const& glc,
   metafunction tattr blur_vertex_attributes;
   public gl_framebuffer ppfbo;
   public gl_framebuffer sppfbo;
-  blur_shader_ptr sdr_re = init_blur_shader(glc);
+  bool const enable_bokeh = glc.conf.get("bokeh", 1, 0, 1) != 0;
   bool const enable_bilinear = glc.conf.get("blur_bilinear", 0, 0, 1) != 0;
   bool const enable_shadow_blur = glc.conf.get("blur_shadow", 1, 0, 1) != 0;
+  blur_shader_ptr sdr_re = init_blur_shader(glc, enable_bokeh);
   public function string get_vbid_name() const { return "vbid_blur"; }
   public function string get_main_vbid_name() const { return "vbid_blur"; }
   public function prepare_instance_data_funcptr
@@ -58,22 +60,22 @@ public struct drawer_blur(shader_config const& glc,
     return texture_info();
   }
   public function void resize_screen(shader_config const& glc, int width,
-    int height, int sm_width, int sm_height)
+    int height)
   {
     ppfbo.width = width;
     ppfbo.height = height;
-    init_postprocess_fbo(glc, ppfbo);
+    init_postprocess_fbo(glc, enable_bokeh, ppfbo);
     if (enable_bilinear) {
       glActiveTexture(GL_TEXTURE0);
-      glBindTexture(GL_TEXTURE_2D, ppfbo.texture.get());
+      glBindTexture(GL_TEXTURE_2D, ppfbo.texture0.get());
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
 	static_cast{int}(GL_LINEAR));
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
 	static_cast{int}(GL_LINEAR));
     }
     if (enable_shadow_blur) {
-      sppfbo.width = sm_width;
-      sppfbo.height = sm_height;
+      sppfbo.width = glc.shadowmap_resolution;
+      sppfbo.height = glc.shadowmap_resolution;
       init_shadowmap_fbo(glc, sppfbo);
     }
     debug_log("blur", width, height);
@@ -111,10 +113,15 @@ public struct drawer_blur(shader_config const& glc,
       glDisable(GL_DEPTH_TEST);
       glDepthMask(0);
       glActiveTexture(GL_TEXTURE0);
-      glBindTexture(GL_TEXTURE_2D, ppfbo.texture.get());
+      glBindTexture(GL_TEXTURE_2D, ppfbo.texture0.get());
+      if (enable_bokeh) {
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, ppfbo.texture1.get());
+      }
       mutable& sdr = *sdr_re;
       glUseProgram(sdr.program);
       glUniform1i(sdr.u_sampler_tex, 0);
+      glUniform1i(sdr.u_sampler_tex_depth, 1);
       const pixel_delta = glm::make_vec2(
 	1.0f / static_cast{float}(ppfbo.width),
 	1.0f / static_cast{float}(ppfbo.height));
@@ -129,7 +136,7 @@ public struct drawer_blur(shader_config const& glc,
       glDisable(GL_DEPTH_TEST);
       glDepthMask(0);
       glActiveTexture(GL_TEXTURE0);
-      glBindTexture(GL_TEXTURE_2D, sppfbo.texture.get());
+      glBindTexture(GL_TEXTURE_2D, sppfbo.texture0.get());
       mutable& sdr = *sdr_re;
       glUseProgram(sdr.program);
       glUniform1i(sdr.u_sampler_tex, 0);
@@ -159,10 +166,11 @@ metafunction blur_shader_ptr
     blur_uniforms, blur_instance_attributes, blur_vertex_attributes}};
 
 function blur_shader_ptr
-init_blur_shader(shader_config const& g)
+init_blur_shader(shader_config const& g, bool enable_bokeh)
 {
   tree_map{string, string} bnd;
   bnd["blur_param"] = to_string(g.conf.get("blur_param", 0.7, 0.334, 1.0));
+  bnd["enable_bokeh"] = enable_bokeh ? "1" : "0";
   const v = load_shader_program(g, bnd, "blur.vsh");
   const f = load_shader_program(g, bnd, "blur.fsh");
   return make_glshader_ptr{blur_uniforms, blur_instance_attributes,

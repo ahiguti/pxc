@@ -61,6 +61,7 @@ prepare_raycasting_texture_data(pgl3d_config const& cfg,
   mutable& tex_voxtile = txs.tex_voxtile;
   tex_voxtile->set_size_l2(ui(txs.voxtile_size_l2.x),
     ui(txs.voxtile_size_l2.y), ui(txs.voxtile_size_l2.z));
+  const edit_mode = cfg.get("edit_mode", 0, 0, 1) != 0;
   txs.voxtpat_mip = load_texture_data_array_raw("voxtpat_mip.raw");
   txs.voxtmap_mip = load_texture_data_array_raw("voxtmap_mip.raw");
   if (!txs.voxtpat_mip.empty()) {
@@ -78,7 +79,8 @@ prepare_raycasting_texture_data(pgl3d_config const& cfg,
       txs.voxtmap_size_l2);
     debug_log("tmap done");
     debug_log("tmap 0,0,1", to_hexstring(tex_voxtmap->get(0, 0, 1)));
-    bool enable_calc_distance = cfg.get("calc_distance", 1, 0, 1) != 0;
+    bool enable_calc_distance = cfg.get("calc_distance", 1, 0, 1) != 0
+      && !edit_mode;
     bool enable_short_circuit = cfg.get("short_circuit", 0, 0, 1) != 0;
     const rnd = make_ptr{rand_generator}(333U);
     function void texture_make_mipmap(texture_data const& tsrc,
@@ -138,6 +140,14 @@ prepare_raycasting_texture_data(pgl3d_config const& cfg,
     save_texture_data_array_raw("voxtmap_mip.raw", txs.voxtmap_mip);
   } else {
     debug_log("loaded from raw");
+  }
+  if (edit_mode) {
+    const tp = load_texture_data_raw("voxtpat_edit.raw");
+    const tm = load_texture_data_raw("voxtmap_edit.raw");
+    if (tp->get_width() != 1 && tm->get_width() != 1) {
+      txs.voxtpat_mip[0] = tp;
+      txs.voxtmap_mip[0] = tm;
+    }
   }
 }
 

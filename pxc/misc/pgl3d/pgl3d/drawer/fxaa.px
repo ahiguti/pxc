@@ -55,11 +55,11 @@ public struct drawer_fxaa(shader_config const& glc,
     return texture_info();
   }
   public function void resize_screen(shader_config const& glc, int width,
-    int height, int sm_width, int sm_height)
+    int height)
   {
     ppfbo.width = width;
     ppfbo.height = height;
-    init_postprocess_fbo(glc, ppfbo);
+    init_postprocess_fbo(glc, false, ppfbo);
     debug_log("fxaa", width, height);
   }
   public function void reload_shaders()
@@ -90,7 +90,7 @@ public struct drawer_fxaa(shader_config const& glc,
       glDisable(GL_DEPTH_TEST);
       glDepthMask(0);
       glActiveTexture(GL_TEXTURE0);
-      glBindTexture(GL_TEXTURE_2D, ppfbo.texture.get());
+      glBindTexture(GL_TEXTURE_2D, ppfbo.texture0.get());
       mutable& sdr = *sdr_re;
       glUseProgram(sdr.program);
       glUniform1i(sdr.u_sampler_tex, 0);

@@ -4,6 +4,7 @@
 <%frag_in/> vec2 vary_coord;
 uniform vec2 pixel_delta;
 uniform sampler2D sampler_tex;
+uniform sampler2D sampler_tex_depth;
 uniform float option_value;
 
 vec3 tex_read(in vec2 delta, in float k)
@@ -18,7 +19,14 @@ void main(void)
     vec4 v = <%texture2d/>(sampler_tex, vary_coord);
     <%fragcolor/> = vec4(v.rgb, 1.0);
   } else {
-    float p0 = <%blur_param/>; // 0.333 <= k0 <= 1.0
+    float p0;
+    <%if><%enable_bokeh/>
+      vec4 dep = <%texture2d/>(sampler_tex_depth, vary_coord);
+      float depval = dep.x;
+      p0 = 1.0 - max((depval - 0.995) * 200.0, 0.0) * 0.5;
+    <%else/>
+      p0 = <%blur_param/>; // 0.333 <= k0 <= 1.0
+    <%/>
     float p1 = (1.0 - p0) * 0.5;
     float k0 = p0 * p0;
     float k1 = p0 * p1;

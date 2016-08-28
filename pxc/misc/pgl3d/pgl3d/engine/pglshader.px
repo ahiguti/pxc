@@ -291,26 +291,9 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
       / virt_scale);
     const virt_height = static_cast{int}(static_cast{float}(disp_height)
       / virt_scale);
-    const default_sm_scale = m::ne{is_gles, 0} ? 0.5f : 1.0f;
-    const sm_scale = glc.conf.get("shadowmap_resolution", default_sm_scale,
-      256.0f, 16384.0f);
-    mutable wh = static_cast{int}(static_cast{float}(max(virt_width,
-      virt_height))
-      * sm_scale);
-    if (sm_scale >= 512.0f) {
-      wh = static_cast{int}(sm_scale);
-    }
-    int sm_size = 1;
-    for (int i: 8 .. 16) {
-      sm_size = 1 << i;
-      if (sm_size >= wh) {
-	break;
-      }
-    }
+    const sm_size = glc.shadowmap_resolution;
     sdl_log("disp size", disp_width, disp_height);
     sdl_log("virt size", virt_width, virt_height);
-    sdl_log("virt size", sm_size, sm_scale);
-    sdl_log("shadowmap size", sm_size, sm_scale);
     cam.virt_width = virt_width;
     cam.virt_height = virt_height;
     cam.display_width = disp_width;
@@ -330,7 +313,7 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
       init_shadowmap_fbo(glc, sfbo);
     }
     for (const i, const& pd: drawers) {
-      pd->resize_screen(glc, virt_width, virt_height, sm_size, sm_size);
+      pd->resize_screen(glc, virt_width, virt_height);
     }
     update_mvp(glc, cam);
   }
@@ -354,7 +337,7 @@ pglshader_draw_frame(pglshader mutable& pgs,
   /* shadowmapping shader */
   darrayst{GLuint} smtex_arr = darrayst{GLuint}(pgs.sfbo_array.size(), 0U);
   for (size_t iter: 0 .. pgs.sfbo_array.size()) {
-    smtex_arr[iter] = pgs.sfbo_array[iter]->texture.get();
+    smtex_arr[iter] = pgs.sfbo_array[iter]->texture0.get();
   }
   if (pgs.glc.enable_shadowmapping) {
     int saved_fb;
@@ -370,6 +353,7 @@ pglshader_draw_frame(pglshader mutable& pgs,
       if (pgs.glc.enable_depth_texture) {
 	glColorMask(0, 0, 0, 0);
       } else {
+	// FIXME: 1,1,0,0 when enable_vsm ?
 	glColorMask(1, 1, 1, 1);
       }
       glDepthFunc(GL_LEQUAL);
@@ -427,6 +411,8 @@ pglshader_draw_frame(pglshader mutable& pgs,
   }
   int saved_fb = 0;
   if (!pgs.drawers_postprocess.empty()) {
+    // postprocess処理があるならば、その最初の処理のフレームバッファ
+    // に書き込む
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
     glBindFramebuffer(GL_FRAMEBUFFER,
       pgs.drawers[pgs.drawers_postprocess[0]]
@@ -434,6 +420,7 @@ pglshader_draw_frame(pglshader mutable& pgs,
     glViewport(0, 0, static_cast{GLsizei}(pgs.cam.virt_width),
       static_cast{GLsizei}(pgs.cam.virt_height));
   } else {
+    // postprocess処理が無いので既定のフレームバッファに書き込む
     glViewport(0, 0, static_cast{GLsizei}(pgs.cam.display_width),
       static_cast{GLsizei}(pgs.cam.display_height));
   }
@@ -521,6 +508,23 @@ pglshader_draw_frame(pglshader mutable& pgs,
       const bo_id = pgs.drawer_vbids[j];
       const main_bo_id = pgs.drawer_main_vbids[j];
       pd->draw(draw_step_postprocess, 0,
+	*bos[bo_id],
+	whole_instances[main_bo_id], pgs.agg_ibuffer,
+	bo_id, pgs.glc, cam_df, smtex_arr);
+    }
+  }
+  /* hud */
+  {
+    glDisable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glDepthMask(0);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE);
+    for (const i, const& pd: pgs.drawers) {
+      const bo_id = pgs.drawer_vbids[i];
+      const main_bo_id = pgs.drawer_main_vbids[i];
+      pd->draw(draw_step_hud, 0,
 	*bos[bo_id],
 	whole_instances[main_bo_id], pgs.agg_ibuffer,
 	bo_id, pgs.glc, cam_df, smtex_arr);
@@ -646,13 +650,16 @@ update_mvp(shader_config const& glc, projection_info mutable& cam)
     // shadowmap projection
     const sm_w = 1.0f;
     const sm_h = 1.0f;
-    function void set_sm(glm::mat4 mutable& dst, float far)
+    function void set_sm(glm::mat4 mutable& dst, float di)
     {
-      const near = -far;
-      const left = -far;
-      const right = far;
-      const bottom = -far;
-      const top = far;
+      // const far = di;
+      // const near = -di;
+      const far = di * 1.0f;
+      const near = di * -1.0f;
+      const left = -di;
+      const right = di;
+      const bottom = -di;
+      const top = di;
       dst = glm::ortho{float}(left, right, bottom, top, near, far);
     }
     float far = glc.shadowmap_distance;

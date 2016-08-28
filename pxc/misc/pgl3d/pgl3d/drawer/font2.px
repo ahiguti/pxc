@@ -92,7 +92,7 @@ public struct drawer_font2(shader_config const& glc,
     return r;
   }
   public function void resize_screen(shader_config const& glc, int width,
-    int height, int sm_width, int sm_height) 
+    int height)
   { 
   }
   public function void reload_shaders()
@@ -104,7 +104,7 @@ public struct drawer_font2(shader_config const& glc,
   }
   public function bool has_step(draw_step step) const
   {
-    return step == draw_step_blend;
+    return step == draw_step_hud;
   }
   public function void draw(draw_step step, size_t iter,
     vertex_buffer const& bo, bo_instances_type const& bo_ib,
@@ -112,14 +112,14 @@ public struct drawer_font2(shader_config const& glc,
     shader_config const& glc, projection_info const& cam_df,
     cslice{GLuint} const& smtex_arr)
   {
-    if (step == draw_step_blend) {
+    if (step == draw_step_hud) {
       glActiveTexture(GL_TEXTURE0);
       glBindTexture(GL_TEXTURE_2D, texture_font.texture_id.get());
       glDisable(GL_DEPTH_TEST);
       glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
       const screen_size_px = glm::make_vec2(
-	static_cast{float}(cam_df.virt_width),
-	static_cast{float}(cam_df.virt_height));
+	static_cast{float}(cam_df.display_width),
+	static_cast{float}(cam_df.display_height));
       mutable& sdr = *sdr_fn;
       glUseProgram(sdr.program);
       glUniform1i(sdr.u_sampler_font, 0);

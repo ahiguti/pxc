@@ -382,6 +382,11 @@ function void handle_event(app_impl mutable& app,
       return;
     }
   } else if (etype == SDL_KEYDOWN) {
+    if (case app.edit_mode.some) {
+      app.edit_mode.some->set_camera_angle(app.player.angle);
+      app.edit_mode.some->on_key_pressed(
+	static_cast{int}(ev.key.keysym.scancode));
+    }
     // sdl_log("KEYDOWN event", static_cast{int}(ev.key.keysym.scancode));
     if (ev.key.keysym.scancode == SDL_SCANCODE_TAB) {
       app.scene_next_flag = true;
@@ -419,11 +424,6 @@ function void handle_event(app_impl mutable& app,
       app.app_commands["scene_pause"] = "1";
       save_state(app);
       return;
-    }
-    if (case app.edit_mode.some) {
-      app.edit_mode.some->set_camera_angle(app.player.angle);
-      app.edit_mode.some->on_key_pressed(
-	static_cast{int}(ev.key.keysym.scancode));
     }
     // debug_log("key", static_cast{int}(ev.key.keysym.scancode));
   }
@@ -635,7 +635,7 @@ private function void build_vertices(app_impl mutable& app,
       regular_polygon(1.4142f * box_size, 4,
 	apply(m1,
 	  bump_apply(m, true,
-	    hole(), hole())),
+	    ctx_tex3d(2, 1, zmax), ctx_tex3d(2, 1, zmax))),
 	apply(m1,
 	  ctx_tex3d(2, 1, zmax))));
   } else {
@@ -1186,6 +1186,7 @@ scene_control(node_factory const& nfac,
     "rigidbody-multi",
     "block-smtest",
     "block-multi",
+    "saucer-multi",
     "bullet2-multi2s1",
     "bullet2-multi2s2",
     "bullet2-multi2s3",
@@ -1198,7 +1199,6 @@ scene_control(node_factory const& nfac,
     // "bullet2-multi2s10",
     // "bullet2-multi2s11",
     // "bullet2-multi2s12",
-    "saucer-multi",
     "nest",
     "nest-multi",
     "saucer",

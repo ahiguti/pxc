@@ -20,6 +20,7 @@ private tsvaluetype struct triangles_uniforms()
   public float ndelta_scale; // 0.02 / 40. if light_fixed, 0.02 otherwise
   public glm::mat4 shadowmap_vp; // array
   public float exposure;
+  public float random_seed;
   public float option_value;
 }
 
@@ -84,8 +85,8 @@ public struct drawer_triangles(shader_config const& glc0,
   option{triangles_shader_ptr} sdr_solid;
   option{zprepass_shader_ptr} sdr_zp;
   option{shadowmap_shader_ptr} sdr_shadow;
-  varray{cptr{texture_data}} voxtmap_mip;
-  varray{cptr{texture_data}} voxtpat_mip;
+  varray{ptr{texture_data}} voxtmap_mip;
+  varray{ptr{texture_data}} voxtpat_mip;
   ivec3 voxtile_size;
   ptr{gl_texture} texture_dpat = make_ptr{gl_texture}();
   ptr{gl_texture} texture_pmpat = make_ptr{gl_texture}();
@@ -97,6 +98,7 @@ public struct drawer_triangles(shader_config const& glc0,
   shader_config glc = glc0;
   bool const raycast_cull_front =
     (glc.conf.get("raycast_cull_front", 0, 0, 1) != 0);
+  rand_generator_ptr rand_generator = make_rand_generator(123u);
   init(glc);
   private function void init(shader_config const& glc)
   {
@@ -187,7 +189,7 @@ public struct drawer_triangles(shader_config const& glc0,
     return r;
   }
   public function void resize_screen(shader_config const& glc, int width,
-    int height, int sm_width, int sm_height)
+    int height)
   {
   }
   public function void reload_shaders()
@@ -231,6 +233,7 @@ public struct drawer_triangles(shader_config const& glc0,
       bnd["raycast_cull_front"] = to_string(raycast_cull_front ? 1 : 0);
       bnd["update_frag_depth"] = to_string(
 	glc.conf.get("update_frag_depth", 0, 1, 1));
+      bnd["shadowmap_resolution"] = to_string(glc.shadowmap_resolution);
       s0.some = init_triangles_shader(glc, bnd, stype);
       s1.some = init_zprepass_shader(glc, bnd, stype);
       s2.some = init_shadowmap_shader(glc, bnd, stype);
@@ -385,6 +388,7 @@ public struct drawer_triangles(shader_config const& glc0,
 	    * 0.02f / glc.shadowmap_distance);
       } else {
 	const sm_view = cam_df.light.to_mat4().inverse();
+	// TODO: sm_viewの中心をカメラのもっと前方に置くことができる。
 	darrayst{glm::mat4} sm_vparr = darrayst{glm::mat4}(
 	  static_cast{size_t}(glc.num_shadowmaps), glm::mat4());
 	for (const i: 0 .. static_cast{size_t}(glc.num_shadowmaps)) {
@@ -396,6 +400,8 @@ public struct drawer_triangles(shader_config const& glc0,
 	  static_cast{float}(8192 / cam_df.shadowmap_size) * 0.02);
       }
       glUniform1f(sdr.u_exposure, cam_df.exposure);
+      glUniform1f(sdr.u_random_seed,
+	static_cast{float}(rand_generator->generate()) / 65536.0f);
       mutable opval = static_cast{int}(cam_df.option_value);
       opval /= 2;
       opval %= 4;

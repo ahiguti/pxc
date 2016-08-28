@@ -2,41 +2,49 @@ private threaded namespace pgl3d::drawer::edit_mode "export-unsafe";
 public import common -;
 public import meta m;
 public import pgl3d::drawer::base -;
+public import glm -;
 public import SDL2::api_types -;
 public import text::serialize::compact_pod -;
 
-private struct edit_pos {
-  public uint mx;
-  public uint my;
-  public uint mz;
-  public uint px;
-  public uint py;
-  public uint pz;
-}
-
 private struct edit_state {
-  public edit_pos pos;
+  public bool edit_tpat;
+  public ivec3 mappos;
+  public ivec3 patpos;
 }
 
-public struct edit_mode(cptr{texture_data} const& voxtile0,
-  cptr{texture_data} const& voxtpat0, cptr{texture_data} const& voxtmap0,
+public struct edit_mode(ptr{texture_data} const& voxtile0,
+  ptr{texture_data} const& voxtpat0, ptr{texture_data} const& voxtmap0,
   ptr{gl_texture} const& gl_tpat0, ptr{gl_texture} const& gl_tmap0)
 <edit_mode_i>
 {
-  private cptr{texture_data} const voxtile = voxtile0;
-  private cptr{texture_data} const voxtpat = voxtpat0;
-  private cptr{texture_data} const voxtmap = voxtmap0;
+  metafunction ui static_cast{uint}; 
+  metafunction si static_cast{int}; 
+  private ptr{texture_data} const voxtile = voxtile0;
+  private ptr{texture_data} const voxtpat = voxtpat0;
+  private ptr{texture_data} const voxtmap = voxtmap0;
   private ptr{gl_texture} const gl_tpat = gl_tpat0;
   private ptr{gl_texture} const gl_tmap = gl_tmap0;
+  private glm::ivec3 const tile_size = glm::make_ivec3(
+    si(voxtile->get_width()), si(voxtile->get_height()),
+    si(voxtile->get_depth()));
+  private glm::ivec3 const map_size = glm::make_ivec3(
+    si(voxtmap->get_width()), si(voxtmap->get_height()),
+    si(voxtmap->get_depth()));
+  private glm::ivec3 const pat_size = map{glm::ivec3, operator::div}(
+    glm::make_ivec3(si(voxtpat->get_width()), si(voxtpat->get_height()),
+      si(voxtpat->get_depth())),
+    tile_size);
   private edit_state stat;
   private uint frame_cnt;
-  private uint copy_value;
+  private uint copy_single;
+  private texture_data copy_block;
   private int edit_params;
   private glm::quat camera_angle;
   init();
   private function void init()
   {
     string buf;
+    stat.mappos.z = 1u;
     sdl_load_file("edit_state.raw", buf);
     if (!buf.empty()) {
       stat = from_string_compact_pod{edit_state}(buf);
@@ -47,7 +55,8 @@ public struct edit_mode(cptr{texture_data} const& voxtile0,
     debug_log("edit_mode: save");
     const buf = to_string_compact_pod(stat);
     sdl_save_file("edit_state.raw", buf);
-    // save_texture_data_raw("octree.raw", *tex_octree);
+    save_texture_data_raw("voxtmap_edit.raw", *voxtmap);
+    save_texture_data_raw("voxtpat_edit.raw", *voxtpat);
   }
   public function void set_camera_angle(glm::quat const& angle)
   {
@@ -56,8 +65,7 @@ public struct edit_mode(cptr{texture_data} const& voxtile0,
   public function void on_key_pressed(int scancode)
   {
     SDL_Scancode key = static_cast{SDL_Scancode}(scancode);
-    mutable& pos = stat.pos;
-    if (key == SDL_SCANCODE_KP_0) {
+    if (key == SDL_SCANCODE_M) {
       save_state();
     } else if (key == SDL_SCANCODE_KP_MINUS) {
       set_space();
@@ -67,7 +75,7 @@ public struct edit_mode(cptr{texture_data} const& voxtile0,
       restore_blink();
       edit_params = (edit_params + 1) % 3;
     } else if (key == SDL_SCANCODE_C) {
-      set_copy_value();
+      copy_value();
     } else if (key == SDL_SCANCODE_V) {
       paste_value();
     }
@@ -92,10 +100,12 @@ public struct edit_mode(cptr{texture_data} const& voxtile0,
 	move_cursor(0, 0, 1);
       } else if (key == SDL_SCANCODE_KP_7) {
 	restore_blink();
-	go_down();
+	if (is_cur_tmap_node_reference()) {
+	  stat.edit_tpat = true;
+	}
       } else if (key == SDL_SCANCODE_KP_9) {
 	restore_blink();
-	go_up();
+	stat.edit_tpat = false;
       }
     } else {
       if (key == SDL_SCANCODE_KP_4) {
@@ -129,27 +139,21 @@ public struct edit_mode(cptr{texture_data} const& voxtile0,
   private function void rotate_dir(int mutable& x, int mutable& y,
     int mutable& z)
   {
-  /*
-    const v = glm::make_vec3(static_cast{float}(x), static_cast{float}(y),
-      static_cast{float}(z));
-    const nv = camera_angle.inverse() * v;
-    const ax = fabs(nv.x);
-    const ay = fabs(nv.y);
-    const az = fabs(nv.z);
-    x = 0;
-    y = 0;
-    z = 0;
-    if (ax > ay && ax > az) {
-      x = nv.x > 0.0 ? 1 : -1;
-    } else if (ay >= ax && ay > az) {
-      y = nv.y > 0.0 ? 1 : -1;
-    } else {
-      z = nv.z > 0.0 ? 1 : -1;
-    }
-  */
   }
   private function void move_cursor(int x, int y, int z)
   {
+    ivec3 d = make_ivec3(x, y, z);
+    if (stat.edit_tpat) {
+      mutable& pos = stat.patpos;
+      pos = map{glm::ivec3, operator::add}(pos, d);
+      pos = map{glm::ivec3, operator::add}(pos, pat_size);
+      pos = map{glm::ivec3, operator::mod}(pos, pat_size);
+    } else {
+      mutable& pos = stat.mappos;
+      pos = map{glm::ivec3, operator::add}(pos, d);
+      pos = map{glm::ivec3, operator::add}(pos, map_size);
+      pos = map{glm::ivec3, operator::mod}(pos, map_size);
+    }
     /*
     rotate_dir(x, y, z);
     mutable& pos = stat.pos;
@@ -245,29 +249,21 @@ public struct edit_mode(cptr{texture_data} const& voxtile0,
       (v & 0xffffffu) | ((static_cast{uint}(rad) + 1) << 24u));
     */
   }
-  private function void set_copy_value()
+  private function void copy_value()
   {
-    /*
-    mutable& tex = *tex_octree;
-    const v = tex.get_index(cur_offset());
-    const node_type = (v >> 24u);
-    if (node_type == 1) {
-      return;
+    if (stat.edit_tpat) {
+      copy_single = get_cur_tpat();
+    } else {
+      copy_block = copy_cur_tile();
     }
-    copy_value = v;
-    */
   }
   private function void paste_value()
   {
-    /*
-    mutable& tex = *tex_octree;
-    const v = tex.get_index(cur_offset());
-    const node_type = (v >> 24u);
-    if (node_type == 1) {
-      return;
+    if (stat.edit_tpat) {
+      set_cur_tpat(copy_single);
+    } else {
+      paste_cur_tile(copy_block);
     }
-    tex.set_index(cur_offset(), copy_value);
-    */
   }
   private function void set_space()
   {
@@ -338,32 +334,144 @@ public struct edit_mode(cptr{texture_data} const& voxtile0,
   }
   private function void restore_blink()
   {
-    /*
-    update_voxel(false);
     frame_cnt = 0;
-    */
+    sync_gl_texture();
   }
-  private function void update_voxel(bool blink)
+  private function ivec3 cur_tpat_base() const
   {
-    /*
-    const& pos = stat.pos;
-    uint cur_x = (pos.node_x << bshift) | pos.x;
-    uint cur_y = (pos.node_y << bshift) | pos.y;
-    uint cur_z = (pos.node_z << bshift) | pos.z;
-    uint value = (!blink) ? tex_octree->get_index(cur_offset()) :
-      edit_params == 0 ? 0xffff0000u :
-      edit_params == 1 ? 0xff0000ffu : 0xff00ff00u;
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_3D, texture_voxpat->texture_id.get());
-    glTexSubImage3D(GL_TEXTURE_3D, 0, cast_int(cur_x),
-      cast_int(cur_y), cast_int(cur_z), 1, 1, 1, GL_RGBA,
-      GL_UNSIGNED_BYTE, caddress(value).to_cvoidptr());
-    */
+    const& mp = stat.mappos;
+    const v = voxtmap->get(ui(mp.x), ui(mp.y), ui(mp.z));
+    if (!is_node_reference(v)) {
+      return glm::ivec3();
+    }
+    const z = (v >> 16u) & 0xff;
+    const y = (v >>  8u) & 0xff;
+    const x = (v >>  0u) & 0xff;
+    const r = glm::make_ivec3(si(x), si(y), si(z));
+    return map{glm::ivec3, operator::mul}(r, tile_size);
+  }
+  private function uint get_cur_tmap() const
+  {
+    const& mp = stat.mappos;
+    return voxtmap->get(ui(mp.x), ui(mp.y), ui(mp.z));
+  }
+  private function void set_cur_tmap(uint value)
+  {
+    const& mp = stat.mappos;
+    return voxtmap->set(ui(mp.x), ui(mp.y), ui(mp.z), value);
+  }
+  private function bool is_cur_tmap_node_reference() const
+  {
+    const& mp = stat.mappos;
+    const v = voxtmap->get(ui(mp.x), ui(mp.y), ui(mp.z));
+    return is_node_reference(v);
+  }
+  private function ivec3 cur_tpat_index() const
+  {
+    return map{glm::ivec3, operator::add}(cur_tpat_base(), stat.patpos);
+  }
+  private function uint get_cur_tpat() const
+  {
+    const p = cur_tpat_index();
+    return voxtpat->get(ui(p.x), ui(p.y), ui(p.z));
+  }
+  private function void set_cur_tpat(uint value)
+  {
+    const p = cur_tpat_index();
+    voxtpat->set(ui(p.x), ui(p.y), ui(p.z), value);
+  }
+  private function texture_data copy_cur_tile() const
+  {
+    ivec3 bp = cur_tpat_base();
+    const& tp = *voxtpat;
+    mutable tl = *voxtile;
+    // debug_log("mp", stat.mappos, "bp", bp);
+    for (const z: 0 .. tl.get_depth()) {
+      for (const y: 0 .. tl.get_height()) {
+	for (const x: 0 .. tl.get_width()) {
+	  const v = tp.get(x + ui(bp.x), y + ui(bp.y), z + ui(bp.z));
+	  tl.set(x, y, z, v);
+	}
+      }
+    }
+    return tl;
+  }
+  private function void paste_cur_tile(texture_data const& tl)
+  {
+    ivec3 bp = cur_tpat_base();
+    mutable& tp = *voxtpat;
+    for (const z: 0 .. tl.get_depth()) {
+      for (const y: 0 .. tl.get_height()) {
+	for (const x: 0 .. tl.get_width()) {
+	  const v = tl.get(x, y, z);
+	  tp.set(x + ui(bp.x), y + ui(bp.y), z + ui(bp.z), v);
+	}
+      }
+    }
+  }
+  private function void sync_gl_texture()
+  {
+    const& tp = stat.patpos;
+    const& mp = stat.mappos;
+    mutable tl = copy_cur_tile();
+    mutable md = *voxtmap; // copy
+    if (stat.edit_tpat) {
+      for (const z: ui(tp.z) + 1 .. tl.get_depth()) {
+	for (const y: 0 .. tl.get_height()) {
+	  for (const x: 0 .. tl.get_width()) {
+	    tl.set(x, y, z, 0u);
+	  }
+	}
+      }
+    }
+    const blink = frame_cnt >= 8;
+    if (blink) {
+      if (stat.edit_tpat) {
+	tl.set(ui(tp.x), ui(tp.y), ui(tp.z), 0xffff0000u);
+      } else {
+	if (is_cur_tmap_node_reference()) {
+	  for (const z: 0 .. tl.get_depth()) {
+	    for (const y: 0 .. tl.get_height()) {
+	      for (const x: 0 .. tl.get_width()) {
+		tl.set(x, y, z, 0xff00ff00u);
+	      }
+	    }
+	  }
+	} else {
+	  md.set(ui(mp.x), ui(mp.y), ui(mp.z), 0u);
+	}
+      }
+    }
+    const z0 = ui(stat.edit_tpat ? mp.z : mp.z + 1);
+    for (const z: z0 .. md.get_depth()) {
+      for (const x: 0 .. md.get_width()) {
+	for (const y: 0 .. md.get_height()) {
+	  if (z == ui(mp.z) && x == ui(mp.x) && y == ui(mp.y)) {
+	    continue;
+	  }
+	  md.set(x, y, z, 0u);
+	}
+      }
+    }
+    {
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_3D, gl_tmap->texture_id.get());
+      glTexSubImage3D(GL_TEXTURE_3D, 0, 0, 0, 0, si(md.get_width()),
+	si(md.get_height()), si(md.get_depth()), GL_RGBA, GL_UNSIGNED_BYTE,
+	md.get_crawptr().to_cvoidptr());
+    }
+    {
+      const cp = cur_tpat_base();
+      glBindTexture(GL_TEXTURE_3D, gl_tpat->texture_id.get());
+      glTexSubImage3D(GL_TEXTURE_3D, 0, cp.x, cp.y, cp.z, tile_size.x,
+	tile_size.y, tile_size.z, GL_RGBA, GL_UNSIGNED_BYTE,
+	tl.get_crawptr().to_cvoidptr());
+    }
   }
   public function void on_frame()
   {
-    update_voxel(frame_cnt < 32);
-    frame_cnt = (frame_cnt + 1) & 63;
+    sync_gl_texture();
+    frame_cnt = (frame_cnt + 1) & 15;
   }
 }
 

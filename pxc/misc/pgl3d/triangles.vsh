@@ -2,11 +2,7 @@
 <%prepend/>
 uniform mat4 view_projection_matrix;
 uniform vec3 camera_pos;
-<%if><%light_fixed/>
-  // uniform vec3 camera_pos;
-<%else/>
-  uniform mat4 shadowmap_vp[<%smsz/>];
-<%/>
+uniform mat4 shadowmap_vp[<%smsz/>];
 <%decl_instance_attr mat4 model_matrix/>
 <%vert_in/> vec3 position;
   // stype==0のとき頂点のオブジェクト座標
@@ -37,10 +33,8 @@ uniform vec3 camera_pos;
   <%vert_out/> vec4 vary_aabb_or_tconv; // aabb_or_tconvと同じ
 <%/>
 <%if><%and><%ne><%stype/>1<%/><%enable_shadowmapping/><%/>
-  <%if><%not><%light_fixed/><%/>
-    <%vert_out/> vec3 vary_smposa[<%smsz/>];
-    uniform float ndelta_scale; // 0.02
-  <%/>
+  <%vert_out/> vec3 vary_smposa[<%smsz/>];
+  uniform float ndelta_scale; // 0.02
 <%/>
 void main(void)
 {
@@ -97,17 +91,15 @@ void main(void)
     vary_aabb_max = aabb_max;
   <%/>
   <%if><%and><%ne><%stype/>1<%/><%enable_shadowmapping/><%/>
-    <%if><%not><%light_fixed/><%/>
-      vec3 ndelta = mat3(shadowmap_vp[0]) * vary_normal * ndelta_scale; // 0.02
-      vec4 p;
-      vec4 ngpos4 = vec4(vary_position, 1.0);
-      <%variable d>
-	<%set d 1/>
-	<%for i 0><%smsz/>
-	  p = shadowmap_vp[<%i/>] * ngpos4;
-	  vary_smposa[<%i/>] = p.xyz / p.w + ndelta / <%d/>.;
-	  <%set d><%mul><%d/>3<%/><%/>
-	<%/>
+    vec3 ndelta = mat3(shadowmap_vp[0]) * vary_normal * ndelta_scale; // 0.02
+    vec4 p;
+    vec4 ngpos4 = vec4(vary_position, 1.0);
+    <%variable d>
+      <%set d 1/>
+      <%for i 0><%smsz/>
+	p = shadowmap_vp[<%i/>] * ngpos4;
+	vary_smposa[<%i/>] = p.xyz / p.w + ndelta / <%d/>.;
+	<%set d><%mul><%d/>3<%/><%/>
       <%/>
     <%/>
   <%/>

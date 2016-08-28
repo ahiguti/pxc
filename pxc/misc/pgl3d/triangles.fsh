@@ -30,14 +30,13 @@ uniform samplerCube sampler_env;
 <%/>
 uniform mat4 view_projection_matrix;
 uniform vec3 camera_pos;
-<%if><%not><%light_fixed/><%/>
-  uniform mat4 shadowmap_vp[<%smsz/>];
-  uniform float ndelta_scale; // 0.02
-<%/>
+uniform mat4 shadowmap_vp[<%smsz/>];
+uniform float ndelta_scale; // 0.02
 uniform vec3 light_dir;
 uniform float light_on;
 uniform float option_value;
 uniform float exposure;
+uniform float random_seed;
 <%frag_in/> vec3 vary_position;
 <%frag_in/> vec3 vary_normal;
 <%frag_in/> vec3 vary_tangent;
@@ -62,11 +61,7 @@ vec4 dbgval = vec4(0.0);
 
 <%if><%enable_shadowmapping/>
   <%if><%ne><%stype/>1<%/>
-    <%if><%not><%light_fixed/><%/>
-      <%frag_in/> vec3 vary_smposa[<%smsz/>];
-    <%else/>
-      uniform float ndelta_scale; // 0.02 / 40.0
-    <%/>
+    <%frag_in/> vec3 vary_smposa[<%smsz/>];
   <%/>
 
   float linear_01(in float x, in float a, in float b)
@@ -308,7 +303,7 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
   int raycast_tilemap(
     inout vec3 pos, in vec3 eye, in vec3 light,
     in vec3 aabb_min, in vec3 aabb_max, out vec4 value_r, inout vec3 hit_nor,
-    inout float lstr_para, in int miplevel)
+    in float selfshadow_para, inout float lstr_para, in int miplevel)
   {
     int tmap_mip = clamp(miplevel - 4, 0, 4);
     int tpat_mip = min(miplevel, 4);
@@ -364,7 +359,7 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
 	bool hit_flag = true;
 	bool hit_wall = false;
 	if (node_type == 255) { // 壁
-	  value_r = vec4(0.5, 0.5, 0.5, 1.0);
+	  value_r = value; // vec4(0.5, 0.5, 0.5, 1.0);
 	  hit_wall = true;
 	} else { // 平面または二次曲面で切断
 	  // node_type = 208 + 0; 
@@ -411,7 +406,7 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
 	  // 接触した
 	  if (hit >= 0) {
 	    // lightが衝突したので影にする
-	    lstr_para = 0.0;
+	    lstr_para = lstr_para * selfshadow_para;
 	    break;
 	  }
 	  hit_nor = -dir;
@@ -698,6 +693,8 @@ vec3 light_all(in vec3 light_color, in float lstr, in vec3 mate_specular,
 
 float generate_random(vec3 v)
 {
+  v.x += fract(random_seed);
+  v.y += fract(random_seed);
   return fract(sin(dot(v.xy, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
@@ -758,17 +755,17 @@ void main(void)
     float dist_pos_campos_2 = dot(pos - campos, pos - campos) + 0.01;
     float dist_rnd = generate_random(pos) * 0.25;
     float dist_log2 = log(dist_pos_campos_2) * 0.5 / log(2.0);
-    int miplevel = clamp(int(dist_log2 + dist_rnd + 2.0), 0, 8);
-    // miplevel = 0;
+    int miplevel = clamp(int(dist_log2 + dist_rnd + 1.0), 0, 8);
     // if (miplevel > 2) { <%fragcolor/> = vec4(1,0,1,1); return; }
     // if (miplevel > 1) { <%fragcolor/> = vec4(1,1,0,1); return; }
     // if (miplevel > 0) { <%fragcolor/> = vec4(1,0,0,1); return; }
     // if (int(option_value + 0.5) == 1) { miplevel = 0; }
     int hit = -1;
+    // float selfshadow_para = clamp(1.0 - dist_log2 * 0.1, 0.0, 1.0);
+    float selfshadow_para = 0.0f;
     hit = raycast_tilemap(pos, camera_local, light_local,
-      aabb_min, aabb_max, tex_val, nor, lstr_para, miplevel);
-/*
-*/
+      aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para, miplevel);
+    /* */
     <%if><%eq><%get_config dbgval/>1<%/>
     if (dbgval.a > 0.0) { <%fragcolor/> = dbgval; return; }
     <%/>
@@ -841,167 +838,123 @@ void main(void)
   //
   <%/> // endif stype == 1
   <%if><%enable_shadowmapping/>
+    int sm_to_use = 0;
     <%if><%eq><%stype/>1<%/>
-      vec3 p[<%smsz/>];
-      vec3 ndelta = mat3(shadowmap_vp[0]) * vary_normal * ndelta_scale; // 0.02
+      vec3 cp_sm; // shadowmapの視錘台でのカメラ位置
+      // vec3 ndelta = mat3(shadowmap_vp[0]) * vary_normal * ndelta_scale;
+	// 0.02
       vec4 sp;
-      <%variable d>
-	<%set d 1/>
-	<%for i 0><%smsz/>
-	  sp = shadowmap_vp[<%i/>] * gpos;
-	  p[<%i/>] = sp.xyz / sp.w + ndelta / <%d/>.;
-	  <%set d><%mul><%d/>3<%/><%/>
-	<%/>
-      <%/>
+      // float d = 1.0;
+      for (sm_to_use = 0; sm_to_use < <%smsz/>; ++sm_to_use) {
+	sp = shadowmap_vp[sm_to_use] * gpos;
+	cp_sm = sp.xyz / sp.w; //  + ndelta / d;
+	// d = d * 3.0;
+	if (max_vec3(abs(cp_sm)) < 0.8 || sm_to_use + 1 == <%smsz/>) {
+	  break;
+	}
+      }
     <%else/>
       // stype != 1
-      <%if><%light_fixed/>
-	vec3 ndelta = vary_normal * ndelta_scale; // 0.02 / 40.
-	vec3 prel = vary_position - camera_pos;
-	vec3 p[<%smsz/>];
-	<%variable den>
-	  <%set den><%shadowmap_distance/><%/>
-	  <%for i 0><%num_shadowmaps/>
-	    p[<%i/>] = prel / <%den/>. + ndelta;
-	    <%set den><%mul><%den/><%shadowmap_scale/><%/><%/>
-	  <%/>
-	<%/>
-      <%else/>
-	<%if><%is_gl3_or_gles3/>
-	  vec3 p[<%smsz/>] = vary_smposa;
-	<%else/>
-	  vec3 p[<%smsz/>];
-	  <%for i 0><%num_shadowmaps/>
-	    p[<%i/>] = vary_smposa[<%i/>];
-	  <%/>
-	<%/>
-      <%/>
+      vec3 cp_sm;
+      for (sm_to_use = 0; sm_to_use < <%smsz/>; ++sm_to_use) {
+	cp_sm = vary_smposa[sm_to_use];
+	// if (sm_to_use == 0) break;
+	if (max_vec3(abs(cp_sm)) < 0.8 || sm_to_use + 1 == <%smsz/>) { break; }
+      }
     <%/>
-    <%for x 0><%num_shadowmaps/>
-      <%if><%enable_depth_texture/>
-	<%if><%enable_shadowmapping_multisample/>
-	  <%if><%eq><%x/>0<%/>
-	    vec3 smpos;
-	  <%/>
-	  smpos = (p[<%x/>] + 1.0) * 0.5;
-	  float zval<%x/> = 0.0;
-	  float zval<%x/>_cur = 0.0;
-	  float sml<%x/> = 0.0;
-	  for (float i = -1.; i <= 1.; ++i) {
-	    for (float j = -1.; j <= 1.; ++j) {
-	      zval<%x/>_cur = <%texture2d/>
-		(sampler_sm[<%x/>], smpos.xy + vec2(i,j)/4096.0).x;
-	      zval<%x/> = min(zval<%x/>, zval<%x/>_cur);
-	      sml<%x/> += float(smpos.z < zval<%x/>_cur
-	       * (1.0005 + (abs(i)+abs(j))/4096.0))/9.0;
+    <%if><%enable_depth_texture/>
+      <%if><%enable_shadowmapping_multisample/>
+	vec3 smpos;
+	smpos = (cp_sm + 1.0) * 0.5;
+	float zval = 0.0;
+	float zval_cur = 0.0;
+	float sml = 0.0;
+	for (float i = -1.; i <= 1.; ++i) {
+	  for (float j = -1.; j <= 1.; ++j) {
+	    zval_cur = <%texture2d/>
+	      (sampler_sm[sm_to_use], smpos.xy +
+		(vec2(i,j) + generate_random(rel_camera_pos) * 1.0)/4096.0).x;
+	    zval = min(zval, zval_cur);
+	    sml += float(smpos.z < zval_cur
+	     * (1.0005 + (abs(i)+abs(j))/4096.0))/9.0;
+	  }
+	}
+      <%else/>
+	// no multisample
+	vec3 smpos;
+	smpos = (cp_sm + 1.0) * 0.5;
+	float zval = <%texture2d/>
+	  (sampler_sm[sm_to_use], smpos.xy).x;
+	float sml = float(smpos.z < zval * 1.0005);
+      <%/>
+    <%elseif/><%enable_vsm/>
+      // vsm, no depth texture
+      vec3 smpos;
+      vec2 smz;
+      float dist;
+      float variance;
+      <%if><%enable_shadowmapping_multisample/>
+	smpos = (cp_sm + 1.0) * 0.5;
+	float zval = 99999.0;
+	float sml = 0.0;
+	// 4箇所サンプリングする
+	for (int i = -1; i <= 1; i += 2) {
+	  for (int j = -1; j <= 1; j += 2) {
+	    // キャスト位置
+	    smz = <%texture2d/>
+	      (sampler_sm[sm_to_use], smpos.xy
+		+ vec2(float(i), float(j)) / 8192.0).rg;
+	    zval = min(zval, smz.r);
+	    dist = smpos.z - smz.r * 1.001;
+	      // フラグメント位置からキャスト位置を引く
+	    if (dist <= 0.0) {
+	      // キャスト位置のほうが遠いので影でない
+	      sml += 1.0 / 4.0;
+	    } else {
+	      // キャスト位置のほうが近い
+	      variance = smz.g - smz.r * smz.r;
+	      variance = max(variance, 0.000001);
+	      sml += (1.0 / 4.0) * variance / (variance + dist * dist);
 	    }
-	  }
-	<%else/>
-	  // no multisample
-	  <%if><%eq><%x/>0<%/>
-	    vec3 smpos;
-	  <%/>
-	  smpos = (p[<%x/>] + 1.0) * 0.5;
-	  float zval<%x/> = <%texture2d/>
-	    (sampler_sm[<%x/>], smpos.xy).x;
-	  float sml<%x/> = float(smpos.z < zval<%x/> * 1.0005);
-	<%/>
-      <%elseif/><%enable_vsm/>
-	// vsm, no depth texture
-	<%if><%eq><%x/>0<%/>
-	  vec3 smpos;
-	  vec2 smz;
-	  float dist;
-	  float variance;
-	<%/>
-	<%if><%enable_shadowmapping_multisample/>
-	  smpos = (p[<%x/>] + 1.0) * 0.5;
-	  float zval<%x/> = 99999.0;
-	  float sml<%x/> = 0.0;
-	  // 4箇所サンプリングする
-	  for (int i = -1; i <= 1; i += 2) {
-	    for (int j = -1; j <= 1; j += 2) {
-	      // キャスト位置
-	      smz = <%texture2d/>
-		(sampler_sm[<%x/>], smpos.xy
-		  + vec2(float(i), float(j)) / 8192.0).rg;
-	      zval<%x/> = min(zval<%x/>, smz.r);
-	      dist = smpos.z - smz.r * 1.001;
-		// フラグメント位置からキャスト位置を引く
-	      if (dist <= 0.0) {
-		// キャスト位置のほうが遠いので影でない
-		sml<%x/> += 1.0 / 4.0;
-	      } else {
-		// キャスト位置のほうが近い
-		variance = smz.g - smz.r * smz.r;
-		variance = max(variance, 0.000001);
-		sml<%x/> += (1.0 / 4.0) * variance / (variance + dist * dist);
-	      }
-	    } // for (j)
-	  } // for (i)
-	  // 少量の光漏れを影にする
-	  float bias<%x/> = clamp(0.2 + dist * (float(<%x/>) * 0.0 + 0.0),
-	    0.0, 1.0);
-	  sml<%x/> = clamp(sml<%x/> * (1.0 + bias<%x/>) - bias<%x/>, 0.0, 1.0);
-	<%else/>
-	  // no multisample
-	  smpos = (p[<%x/>] + 1.0) * 0.5;
-	  smz = <%texture2d/>
-	    (sampler_sm[<%x/>], smpos.xy).rg;
-	  float zval<%x/> = smz.r;
-	  float zval<%x/>_sq = smz.g;
-	  float sml<%x/> = 0.0;
-	  dist = smpos.z - smz.r * 1.001;
-	  if (dist <= 0.0) {
-	    sml<%x/> = 1.0;
-	  } else {
-	    variance = smz.g - smz.r * smz.r;
-	    variance = max(variance, 0.000001);
-	    sml<%x/> = clamp(
-	     variance / (variance + dist * dist) * 1.5 - 0.1, 0.0, 1.0);
-	  }
-	<%/>
+	  } // for (j)
+	} // for (i)
+	// 少量の光漏れを影にする
+	float bias = clamp(0.2 + dist * (float(sm_to_use) * 0.0 + 0.0),
+	  0.0, 1.0);
+	sml = clamp(sml * (1.0 + bias) - bias, 0.0, 1.0);
       <%else/>
-	// no depth texture, no vsm
-	<%if><%eq><%x/>0<%/>
-	  vec3 smpos;
-	  vec3 smz;
-	<%/>
-	smpos = (p[<%x/>] + 1.0) * 0.5;
+	// no multisample
+	smpos = (cp_sm + 1.0) * 0.5;
 	smz = <%texture2d/>
-	    (sampler_sm[<%x/>], smpos.xy).rgb;
-	smz = floor(smz * 255.0 + 0.5);
-	float zval<%x/> = 
-	  smz.r / 256. + smz.g / 65536.0 + smz.b / 16777216.;
-	float sml<%x/> = float(smpos.z < zval<%x/> * 1.0005);
+	  (sampler_sm[sm_to_use], smpos.xy).rg;
+	float zval = smz.r;
+	float zval_sq = smz.g;
+	float sml = 0.0;
+	dist = smpos.z - smz.r * 1.001;
+	if (dist <= 0.0) {
+	  sml = 1.0;
+	} else {
+	  variance = smz.g - smz.r * smz.r;
+	  variance = max(variance, 0.000001);
+	  sml = clamp(
+	   variance / (variance + dist * dist) * 1.5 - 0.1, 0.0, 1.0);
+	}
       <%/>
-    <%/>
-    <%if><%enable_vsm/>
-      const float zval_thr = <%fdiv>0.97f<%shadowmap_scale/><%/>;
     <%else/>
-      const float zval_thr = <%fdiv>0.97f<%shadowmap_scale/><%/>;
+      // no depth texture, no vsm
+      vec3 smpos;
+      vec3 smz;
+      smpos = (cp_sm + 1.0) * 0.5;
+      smz = <%texture2d/>
+	  (sampler_sm[sm_to_use], smpos.xy).rgb;
+      smz = floor(smz * 255.0 + 0.5);
+      float zval = 
+	smz.r / 256. + smz.g / 65536.0 + smz.b / 16777216.;
+      float sml = float(smpos.z < zval * 1.0005);
     <%/>
-    const float psm_thr = <%fdiv>0.9f<%shadowmap_scale/><%/>;
-    float smv0 = min(1.0, sml0
-      + linear_01(max_vec3(abs(p[0])), 0.9, 1.0));
+    float smv0 = min(1.0, sml);
+//if (sm_to_use == 1) { <%fragcolor/> = vec4(1.0, smv0, 0.0, 1.0); return; }
     lstr = min(lstr, smv0);
-    <%for x 1><%num_shadowmaps/>
-      float smv<%x/> = max3(
-	sml<%x/>,
-	min(
-	  linear_10(max_vec3(abs(p[<%x/>])), psm_thr * 0.9, psm_thr),
-	  linear_10(abs(zval<%x/> - 0.5) * 2.0, zval_thr * 0.9, zval_thr)
-	),
-	  // フラグメント位置とキャスト元位置が一つ内側のシャドウマップに
-	  // 収まるなら影をささない
-	linear_01(max_vec3(abs(p[<%x/>])), 0.9, 1.0)
-	  // フラグメント位置がシャドウマップ境界近くのときは影をささない
-	  // TODO: キャスト元位置についても同様にするか？
-      );
-      smv<%x/> = min(smv<%x/> * 1.6, 1.0);
-	// zval_thrによってわずかな影が切り落とされることによる不連続を埋める
-      lstr = min(lstr, smv<%x/>);
-    <%/>
     <%if><%eq><%stype/>1<%/>
       lstr = clamp(dot(nor, light_dir) * 4.0, 0.0, lstr);
     <%else/>
