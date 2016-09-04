@@ -39,13 +39,14 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
   private uint copy_single;
   private texture_data copy_block;
   private int edit_params;
+  private string param_str;
   private glm::quat camera_angle;
   init();
   private function void init()
   {
     string buf;
     stat.mappos.z = 1u;
-    sdl_load_file("edit_state.raw", buf);
+    sdl_load_file("c:/build/edit_state.raw", buf);
     if (!buf.empty()) {
       stat = from_string_compact_pod{edit_state}(buf);
     }
@@ -54,9 +55,9 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
   {
     debug_log("edit_mode: save");
     const buf = to_string_compact_pod(stat);
-    sdl_save_file("edit_state.raw", buf);
-    save_texture_data_raw("voxtmap_edit.raw", *voxtmap);
-    save_texture_data_raw("voxtpat_edit.raw", *voxtpat);
+    sdl_save_file("c:/build/edit_state.raw", buf);
+    save_texture_data_raw("c:/build/voxtmap_edit.raw", *voxtmap);
+    save_texture_data_raw("c:/build/voxtpat_edit.raw", *voxtpat);
   }
   public function void set_camera_angle(glm::quat const& angle)
   {
@@ -64,6 +65,7 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
   }
   public function void on_key_pressed(int scancode)
   {
+    restore_blink();
     SDL_Scancode key = static_cast{SDL_Scancode}(scancode);
     if (key == SDL_SCANCODE_M) {
       save_state();
@@ -72,7 +74,6 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
     } else if (key == SDL_SCANCODE_KP_PLUS) {
       set_brick();
     } else if (key == SDL_SCANCODE_KP_ENTER) {
-      restore_blink();
       edit_params = (edit_params + 1) % 3;
     } else if (key == SDL_SCANCODE_C) {
       copy_value();
@@ -81,64 +82,44 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
     }
     if (edit_params == 0) {
       if (key == SDL_SCANCODE_KP_4) {
-	restore_blink();
 	move_cursor(-1, 0, 0);
       } else if (key == SDL_SCANCODE_KP_6) {
-	restore_blink();
 	move_cursor(1, 0, 0);
       } else if (key == SDL_SCANCODE_KP_2) {
-	restore_blink();
 	move_cursor(0, -1, 0);
       } else if (key == SDL_SCANCODE_KP_8) {
-	restore_blink();
 	move_cursor(0, 1, 0);
       } else if (key == SDL_SCANCODE_KP_1) {
-	restore_blink();
 	move_cursor(0, 0, -1);
       } else if (key == SDL_SCANCODE_KP_3) {
-	restore_blink();
 	move_cursor(0, 0, 1);
       } else if (key == SDL_SCANCODE_KP_7) {
-	restore_blink();
 	if (is_cur_tmap_node_reference()) {
 	  stat.edit_tpat = true;
 	}
       } else if (key == SDL_SCANCODE_KP_9) {
-	restore_blink();
 	stat.edit_tpat = false;
       }
-    } else {
+    } else if (stat.edit_tpat) {
       if (key == SDL_SCANCODE_KP_4) {
-	restore_blink();
-	set_offset_scale(-1, 0, 0);
+	set_param(0);
       } else if (key == SDL_SCANCODE_KP_6) {
-	restore_blink();
-	set_offset_scale(1, 0, 0);
+	set_param(1);
       } else if (key == SDL_SCANCODE_KP_2) {
-	restore_blink();
-	set_offset_scale(0, -1, 0);
+	set_param(2);
       } else if (key == SDL_SCANCODE_KP_8) {
-	restore_blink();
-	set_offset_scale(0, 1, 0);
+	set_param(3);
       } else if (key == SDL_SCANCODE_KP_1) {
-	restore_blink();
-	set_offset_scale(0, 0, -1);
+	set_param(4);
       } else if (key == SDL_SCANCODE_KP_3) {
-	restore_blink();
-	set_offset_scale(0, 0, 1);
+	set_param(5);
       } else if (key == SDL_SCANCODE_KP_7) {
-	restore_blink();
-	set_radius(1);
+	set_param(6);
       } else if (key == SDL_SCANCODE_KP_9) {
-	restore_blink();
-	set_radius(-1);
+	set_param(7);
       }
     }
     // debug_log("scancode", scancode);
-  }
-  private function void rotate_dir(int mutable& x, int mutable& y,
-    int mutable& z)
-  {
   }
   private function void move_cursor(int x, int y, int z)
   {
@@ -154,13 +135,119 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
       pos = map{glm::ivec3, operator::add}(pos, map_size);
       pos = map{glm::ivec3, operator::mod}(pos, map_size);
     }
-    /*
-    rotate_dir(x, y, z);
-    mutable& pos = stat.pos;
-    pos.px = static_cast{uint}(static_cast{int}(pos.px) + x) & bmask;
-    pos.py = static_cast{uint}(static_cast{int}(pos.py) + y) & bmask;
-    pos.pz = static_cast{uint}(static_cast{int}(pos.pz) + z) & bmask;
-    */
+  }
+  private function void set_param(int v)
+  {
+    // edit_params != 0
+    const cur = get_cur_tpat();
+    const node_type = cur >> 24u;
+    int r = si(cur & 0xffu);
+    int g = si((cur >> 8u) & 0xffu);
+    int b = si((cur >> 16u) & 0xffu);
+    int a = si(node_type);
+    if (node_type == 0 || node_type == 255) {
+      return;
+    }
+    function int abs(int x) {
+      return x > 0 ? x : -x;
+    }
+    if (node_type >= 160) {
+      // 平面切断
+      a = a - 208;
+      r = r / 16 - 8;
+      g = g / 16 - 8;
+      b = b / 16 - 8;
+      if (v == 0) {
+	r = (r > -7) ? (r - 1) : r;
+	a = 0;
+      } else if (v == 1) {
+	r = (r < 7) ? (r + 1) : r;
+	a = 0;
+      } else if (v == 2) {
+	g = (g > -7) ? (g - 1) : g;
+	a = 0;
+      } else if (v == 3) {
+	g = (g < 7) ? (g + 1) : g;
+	a = 0;
+      } else if (v == 4) {
+	b = (b > -7) ? (b - 1) : b;
+	a = 0;
+      } else if (v == 5) {
+	b = (b < 7) ? (b + 1) : b;
+	a = 0;
+      } else if (v == 6) {
+	const d = abs(r) + abs(g) + abs(b);
+	if (a > -d + 1) { a -= 1; }
+      } else if (v == 7) {
+	const d = abs(r) + abs(g) + abs(b);
+	if (a < d - 1) { a += 1; }
+      }
+      if (r == 0 && g == 0 && b == 0) {
+	return;
+      }
+      a = a + 208;
+      r = (r + 8) * 16;
+      g = (g + 8) * 16;
+      b = (b + 8) * 16;
+    } else {
+      // sp_scaleは座標aを(-0.5,0.5)から何倍に拡大するか
+      //   rgbの上位4bit
+      // sp_centerは球の中心座標でa*sp_scaleと比較
+      //   rgbの下位64bitから32を引く
+      // radiusは半径
+      //   (node_type - 1)
+      a = a - 1;
+      ivec3 val = make_ivec3(r, g, b);
+      ivec3 sc = map{glm::ivec3, operator::div}(val, make_ivec3(64, 64, 64));
+      ivec3 ce = map{glm::ivec3, operator::mod}(val, make_ivec3(64, 64, 64));
+      ce = map{glm::ivec3, operator::sub}(ce, make_ivec3(32, 32, 32));
+      if (edit_params == 1) {
+	if (v == 0) {
+	  ce.x = (ce.x > -31) ? (ce.x - 1) : ce.x;
+	} else if (v == 1) {
+	  ce.x = (ce.x < 31) ? (ce.x + 1) : ce.x;
+	} else if (v == 2) {
+	  ce.y = (ce.y > -31) ? (ce.y - 1) : ce.y;
+	} else if (v == 3) {
+	  ce.y = (ce.y < 31) ? (ce.y + 1) : ce.y;
+	} else if (v == 4) {
+	  ce.z = (ce.z > -31) ? (ce.z - 1) : ce.z;
+	} else if (v == 5) {
+	  ce.z = (ce.z < 31) ? (ce.z + 1) : ce.z;
+	}
+      } else {
+	if (v == 0) {
+	  sc.x = (sc.x > 0) ? (sc.x - 1) : sc.x;
+	} else if (v == 1) {
+	  sc.x = (sc.x < 3) ? (sc.x + 1) : sc.x;
+	} else if (v == 2) {
+	  sc.y = (sc.y > 0) ? (sc.y - 1) : sc.y;
+	} else if (v == 3) {
+	  sc.y = (sc.y < 3) ? (sc.y + 1) : sc.y;
+	} else if (v == 4) {
+	  sc.z = (sc.z > 0) ? (sc.z - 1) : sc.z;
+	} else if (v == 5) {
+	  sc.z = (sc.z < 3) ? (sc.z + 1) : sc.z;
+	}
+	if (sc.x == 0 && sc.y == 0 && sc.z == 0) {
+	  return;
+	}
+      }
+      if (v == 6) {
+	a = (a > 1) ? (a - 1) : a;
+      } else if (v == 7) {
+	a = (a < 127) ? (a + 1) : a;
+      }
+      ce = map{glm::ivec3, operator::add}(ce, make_ivec3(32, 32, 32));
+      sc = map{glm::ivec3, operator::mul}(sc, make_ivec3(64, 64, 64));
+      val = map{glm::ivec3, operator::add}(sc, ce);
+      a = a + 1;
+      r = val.x;
+      g = val.y;
+      b = val.z;
+    }
+    const nv = ui(a << 24u) | ui(b << 16u) | ui(g << 8u) | ui(r);
+    set_cur_tpat(nv);
   }
   private function void set_offset_scale(int x, int y, int z)
   {
@@ -267,58 +354,42 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
   }
   private function void set_space()
   {
-    /*
-    mutable& tex = *tex_octree;
-    const v = tex.get_index(cur_offset());
-    const node_type = (v >> 24u);
-    if (node_type == 1) {
-      return;
-    }
-    tex.set_index(cur_offset(), 0);
-    */
+    set_cur_tpat(0u);
   }
   private function void set_brick()
   {
-    /*
-    mutable& tex = *tex_octree;
-    const v = tex.get_index(cur_offset());
-    const node_type = (v >> 24u);
-    if (node_type == 1) {
+    if (!stat.edit_tpat) {
       return;
     }
-    tex.set_index(cur_offset(), 0xff808080);
-    */
-  }
-  private function void go_down()
-  {
-    /*
-    mutable& tex = *tex_octree;
-    const v = tex.get_index(cur_offset());
-    const node_type = (v >> 24u);
-    if (node_type != 1) {
-      return;
+    const cur = get_cur_tpat();
+    const node_type = cur >> 24u;
+    uint r;
+    uint g;
+    uint b;
+    uint a;
+    if (node_type == 0u) { // 空白
+      a = 255u; // 壁
+    } else if (node_type == 255u) { // 壁
+      a = 208u; // 平面
+      r = 9;
+      g = 9;
+      b = 9;
+    } else if (node_type >= 160u) { // 曲面
+      // sp_scaleは座標aを(-0.5,0.5)から何倍に拡大するか
+      //   rgbの上位4bit
+      // sp_centerは球の中心座標でa*sp_scaleと比較
+      //   rgbの下位64bitから32を引く
+      // radiusは半径
+      //   (node_type - 1)
+      a = 2u; // 曲面
+      r = 64u * 2u + 32u;
+      g = 64u * 2u + 32u;
+      b = 64u * 2u + 32u;
+    } else { // 曲面
+      a = 255u; // 壁
     }
-    mutable& pos = stat.pos;
-    const bx = (v      ) & 0xff;
-    const by = (v >>  8) & 0xff;
-    const bz = (v >> 16) & 0xff;
-    stat.pos_stack.push_back(pos);
-    pos.node_x = bx;
-    pos.node_y = by;
-    pos.node_z = bz;
-    pos.x = 0;
-    pos.y = 0;
-    pos.z = 0;
-    */
-  }
-  private function void go_up()
-  {
-    /*
-    if (stat.pos_stack.empty()) {
-      return;
-    }
-    stat.pos = stat.pos_stack.pop_back();
-    */
+    const v = (a << 24u) | (b << 16u) | (g << 8u) | r;
+    set_cur_tpat(v);
   }
   private function uint cur_offset() const
   {
@@ -427,13 +498,19 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
     const blink = frame_cnt >= 8;
     if (blink) {
       if (stat.edit_tpat) {
-	tl.set(ui(tp.x), ui(tp.y), ui(tp.z), 0xffff0000u);
+	uint v = 0xffff0000u;
+	if (edit_params == 1) {
+	  v = 0xff00ff00u;
+	} else if (edit_params == 2) {
+	  v = 0xff0000ffu;
+	}
+	tl.set(ui(tp.x), ui(tp.y), ui(tp.z), v);
       } else {
 	if (is_cur_tmap_node_reference()) {
 	  for (const z: 0 .. tl.get_depth()) {
 	    for (const y: 0 .. tl.get_height()) {
 	      for (const x: 0 .. tl.get_width()) {
-		tl.set(x, y, z, 0xff00ff00u);
+		tl.set(x, y, z, 0xffffffffu);
 	      }
 	    }
 	  }

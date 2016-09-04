@@ -256,23 +256,24 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
     */
   }
 
-  float voxel_collision_sphere(in vec3 v, in vec3 a, in vec3 c_pt,
+  float voxel_collision_sphere(in vec3 v, in vec3 a, in vec3 c,
     in vec3 mul_pt, float rad2_pt, out bool hit_wall_r, out vec3 nor_r)
   {
     hit_wall_r = false;
     nor_r = vec3(0.0);
-    // vはray単位ベクトル, aは0-1, mul_ptはaからの拡大率, c_ptは球の中心座標,
-    // rad2_ptは球の半径の2乗
-    // hit_wallは開始点で衝突していればtrue
+    // vはray単位ベクトル, aは始点(-0.5,0.5)範囲, mul_ptはaからの拡大率,
+    // c_ptは球の中心座標, rad2_ptは球の半径の2乗,
+    // hit_wallは開始点で衝突していればtrue,
     // 返値len_aeは交点までの距離, 交点は a + v * len_aeで求まる
-    vec3 a_pt = mul_pt * (a - 0.5);
+    vec3 a_pt = mul_pt * a;
     vec3 v_pt = mul_pt * v;
+    vec3 c_pt = c;
     float len_v_pt = length(v_pt);
     vec3 v_ptn = normalize(v_pt);
     vec3 ac_pt = c_pt - a_pt;
     float len2_ac_pt = dot(ac_pt, ac_pt);
     if (len2_ac_pt <= rad2_pt) {
-      hit_wall_r = true;
+      hit_wall_r = true; // 始点がすでに球の内側
       return 0.0;
     }
     float ac_v_pt = dot(ac_pt, v_ptn);
@@ -289,7 +290,7 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
     float len_ae_pt = ac_v_pt - len_de_pt;
     vec3 e_pt = a_pt + v_ptn * len_ae_pt;
     vec3 ce_pt = e_pt - c_pt;
-    nor_r = normalize(ce_pt / max(mul_pt, 1.0)); // 0除算しない
+    nor_r = normalize(ce_pt / max(mul_pt, 0.125)); // 0除算しない
     float len_ae = len_ae_pt / len_v_pt;
     return len_ae;
   }
@@ -317,6 +318,9 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
     int hit = -1;
     int i;
     int imax = 256;
+    <%if><%eq><%get_config edit_mode/>1<%/>
+    imax = 1024;
+    <%/>
     for (i = 0; i < imax; ++i) {
       vec3 curpos_t = floor(curpos_i / tile3_size);
       vec3 curpos_tr = curpos_i - curpos_t * tile3_size; // 0から15の整数
@@ -359,7 +363,11 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
 	bool hit_flag = true;
 	bool hit_wall = false;
 	if (node_type == 255) { // 壁
-	  value_r = value; // vec4(0.5, 0.5, 0.5, 1.0);
+	  <%if><%eq><%get_config edit_mode/>1<%/>
+	  value_r = value;
+	  <%else/>
+	  vec4(0.5, 0.5, 0.5, 1.0);
+	  <%/>
 	  hit_wall = true;
 	} else { // 平面または二次曲面で切断
 	  // node_type = 208 + 0; 
@@ -377,17 +385,17 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
 	    length_ae = (-pl) * 0.5 / dot(param_abc, ray);
 	    sp_nor = -normalize(param_abc);
 	  } else {
-	    // 曲面
-	    vec3 surf_s = dist_p;
-	    vec3 surf_p = dist_n;
-	    float surf_rad = float(node_type - 1) * 0.25;
-	    surf_p -= 8.0;
+	    // 楕円体
+	    vec3 sp_scale = floor(distval / 64.0);
+	    vec3 sp_center = distval - sp_scale * 64.0 - 32.0;
+	    /*
+	    vec3 sp_scale = dist_p; // 拡大率
+	    vec3 sp_center = dist_n - 8.0; // 球の中心の相対位置
+	    */
+	    float sp_radius = float(node_type - 1) * 1.0;
 	    sp_nor = vec3(0.0);
-	    length_ae = voxel_collision_sphere(ray, curpos_f,
-	      surf_p * -0.25, // vec3(-0.5, -0.5, -0.5),
-	      surf_s * 0.125, // vec3(1.0, 1.0, 1.0),
-	      surf_rad * surf_rad, // 1.001 - (hit >= 0 ? 0.01 : 0),
-	      hit_wall, sp_nor);
+	    length_ae = voxel_collision_sphere(ray, curpos_f - 0.5,
+	      sp_center, sp_scale, sp_radius * sp_radius, hit_wall, sp_nor);
 	  }
 	  vec3 tp = curpos_f + ray * length_ae;
 	  if (hit_wall) {
@@ -763,6 +771,9 @@ void main(void)
     int hit = -1;
     // float selfshadow_para = clamp(1.0 - dist_log2 * 0.1, 0.0, 1.0);
     float selfshadow_para = 0.0f;
+    <%if><%eq><%get_config edit_mode/>1<%/>
+    miplevel = 0;
+    <%/>
     hit = raycast_tilemap(pos, camera_local, light_local,
       aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para, miplevel);
     /* */
