@@ -6,10 +6,189 @@ public import glm -;
 public import SDL2::api_types -;
 public import text::serialize::compact_pod -;
 
+metafunction ui static_cast{uint}; 
+metafunction si static_cast{int}; 
+metafunction to_ivec3 map{ivec3, static_cast{int, uint}};
+metafunction to_uvec3 map{uvec3, static_cast{uint, int}};
+
 private struct edit_state {
   public bool edit_tpat;
-  public ivec3 mappos;
-  public ivec3 patpos;
+  public uvec3 mappos;
+  public uvec3 patpos;
+}
+
+/*
+private struct copy_buffer {
+  public texture_data data;
+  public uvec3 size;
+}
+*/
+
+private function void texture_data_copy_range(texture_data mutable& dest,
+  uvec3 const& dpos, texture_data const& src, uvec3 const& spos,
+  uvec3 const& sz)
+{
+  for (uint z: 0 .. sz.z) {
+    for (uint y: 0 .. sz.y) {
+      for (uint x: 0 .. sz.x) {
+	const v = src.get(spos.x + x, spos.y + y, spos.z + z);
+	dest.set(dpos.x + x, dpos.y + y, dpos.z + z, v);
+      }
+    }
+  }
+}
+
+private function void texture_data_set_range(texture_data mutable& dest,
+  uvec3 const& dpos, uvec3 const& sz, uint v)
+{
+  for (uint z: 0 .. sz.z) {
+    for (uint y: 0 .. sz.y) {
+      for (uint x: 0 .. sz.x) {
+	dest.set(dpos.x + x, dpos.y + y, dpos.z + z, v);
+      }
+    }
+  }
+}
+
+private struct texture_edit(texture_data const& data0,
+  texture_data const& grid0)
+{
+  private ptr{texture_data} const data = make_ptr{texture_data}(data0);
+  private texture_data grid = grid0;
+  private uvec3 const grid_size = make_uvec3(grid.get_width(),
+    grid.get_height(), grid.get_depth());
+  private uvec3 modified_pos;
+  private uvec3 modified_sz;
+  public function cptr{texture_data} get_texture_data() const {
+    return data;
+  }
+  public function pair{uvec3, uvec3} get_modified_range(bool reset_flag) {
+    const r = pair{uvec3, uvec3}(modified_pos, modified_sz);
+    if (reset_flag) {
+      modified_pos = uvec3();
+      modified_sz = uvec3();
+    }
+    return r;
+  }
+  public function void set(uvec3 const& pos, uint v)
+  {
+    const prev = data->get(pos.x, pos.y, pos.z);
+    data->set(pos.x, pos.y, pos.z, v);
+    recalc_distance_range(pos, make_uvec3(1, 1, 1), is_space_voxel(v));
+  }
+  public function void copy_range(uvec3 const& dpos, uvec3 const& sz,
+    texture_data const& src, uvec3 const& spos)
+  {
+    texture_data_copy_range(*data, dpos, src, spos, sz);
+    recalc_distance_range(dpos, sz, false);
+  }
+  public function void set_range(uvec3 const& dpos, uvec3 const& sz, uint v)
+  {
+    if (v == 0) {
+      clear_range(dpos, sz);
+    } else {
+      texture_data_set_range(*data, dpos, sz, v);
+      recalc_distance_range(dpos, sz, false);
+    }
+  }
+  public function void clear_range(uvec3 const& dpos, uvec3 const& sz)
+  {
+    texture_data_set_range(*data, dpos, sz, 0);
+    recalc_distance_range(dpos, sz, true);
+  }
+  private function void recalc_distance_range(uvec3 const& pos,
+    uvec3 const& sz, bool clear_flag)
+  {
+    ivec3 mod_mi = to_ivec3(pos);
+    ivec3 mod_mx = mod_mi + to_ivec3(sz) - make_ivec3(1, 1, 1);
+    if (grid_size.x == 1) {
+      update_distance(true, *data, mod_mi, mod_mx, clear_flag);
+      modified_pos = to_uvec3(mod_mi);
+      modified_sz = to_uvec3(mod_mx - mod_mi + make_ivec3(1, 1, 1));
+    } else {
+      ivec3 mod_mi_g = map{ivec3, operator::div}(mod_mi, to_ivec3(grid_size));
+      ivec3 mod_mx_g = map{ivec3, operator::div}(mod_mx, to_ivec3(grid_size));
+      for (const z: mod_mi_g.z .. mod_mx_g.z + 1) {
+	for (const y: mod_mi_g.y .. mod_mx_g.y + 1) {
+	  for (const x: mod_mi_g.x .. mod_mx_g.x + 1) {
+	    const p = map{uvec3, operator::mul}(
+	      make_uvec3(ui(x), ui(y), ui(z)),
+	      grid_size);
+	    texture_data_copy_range(grid, uvec3(), *data, p, grid_size);
+	    set_distance(true, grid);
+	    texture_data_copy_range(*data, p, grid, uvec3(), grid_size);
+	  }
+	}
+      }
+      modified_pos = map{uvec3, operator::mul}(
+	to_uvec3(mod_mi_g), grid_size);
+      modified_sz = map{uvec3, operator::mul}(
+	to_uvec3(mod_mx_g - mod_mi_g + make_ivec3(1, 1, 1)), grid_size);
+    }
+  }
+}
+
+private struct texture_edit_view(texture_data const& data0,
+  texture_data const& grid0)
+{
+  private ptr{texture_edit} current_edit =
+    make_ptr{texture_edit}(data0, grid0);
+  private ptr{texture_edit} current_view =
+    make_ptr{texture_edit}(data0, grid0);
+  private uint cursor_color;
+  private uvec3 cursor_mi = make_uvec3(0, 0, data0.get_depth() - 1);
+  private uvec3 cursor_mx = make_uvec3(0, 0, data0.get_depth() - 1);
+  private edit_state state;
+  private uvec3 const tex_sz = make_uvec3(data0.get_width(),
+    data0.get_height(), data0.get_depth());
+  private function uvec3 clamp(uvec3 v) const {
+    v = map{uvec3, min}(v, make_uvec3(tex_sz.z - 1, tex_sz.z - 1,
+      tex_sz.z - 1));
+    return v;
+  }
+  public function cptr{texture_edit} get_edit() const {
+    return current_edit;
+  }
+  public function cptr{texture_edit} get_view() const {
+    return current_edit;
+  }
+  public function void set_cursor_color(uint c)
+  {
+    if (c == cursor_color) {
+      return;
+    }
+    if (c == 0) {
+      current_view->copy_range(cursor_mi,
+	map{uvec3, operator::add}(
+	  map{uvec3, operator::sub}(cursor_mx, cursor_mi),
+	  make_uvec3(1, 1, 1)), *current_edit->get_texture_data(), cursor_mi);
+    } else {
+      current_view->set_range(cursor_mi,
+	map{uvec3, operator::add}(
+	  map{uvec3, operator::sub}(cursor_mx, cursor_mi),
+	  make_uvec3(1, 1, 1)),
+	c);
+    }
+    cursor_color = c;
+  }
+  public function void set_cursor_pos(uvec3 mi, uvec3 mx)
+  {
+    mi = clamp(mi);
+    mx = clamp(mx);
+    mx = map{uvec3, max}(mx, mi);
+    uint const prev_z = cursor_mx.z;
+    uint const next_z = mx.z;
+    if (prev_z > next_z) {
+      current_view->clear_range(make_uvec3(0, 0, next_z + 1),
+	make_uvec3(tex_sz.x, tex_sz.y, prev_z - next_z));
+    } else if (prev_z < next_z) {
+      current_view->copy_range(make_uvec3(0, 0, prev_z + 1),
+	make_uvec3(tex_sz.x, tex_sz.y, next_z - prev_z),
+	*current_edit->get_texture_data(), make_uvec3(0, 0, prev_z + 1));
+    }
+    cursor_mi = mi;
+    cursor_mx = mx;
+  }
 }
 
 public struct edit_mode(ptr{texture_data} const& voxtile0,
@@ -17,22 +196,22 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
   ptr{gl_texture} const& gl_tpat0, ptr{gl_texture} const& gl_tmap0)
 <edit_mode_i>
 {
-  metafunction ui static_cast{uint}; 
-  metafunction si static_cast{int}; 
   private ptr{texture_data} const voxtile = voxtile0;
-  private ptr{texture_data} const voxtpat = voxtpat0;
-  private ptr{texture_data} const voxtmap = voxtmap0;
+  private ptr{texture_data} const voxtpat = voxtpat0; // FIXME: remove
+  private ptr{texture_data} const voxtmap = voxtmap0; // FIXME: remove
+  private ptr{texture_edit_view} const ev_tpat =
+    make_ptr{texture_edit_view}(*voxtpat, *voxtile);
+  private ptr{texture_edit_view} const ev_tmap =
+    make_ptr{texture_edit_view}(*voxtmap, texture_data());
   private ptr{gl_texture} const gl_tpat = gl_tpat0;
   private ptr{gl_texture} const gl_tmap = gl_tmap0;
-  private glm::ivec3 const tile_size = glm::make_ivec3(
-    si(voxtile->get_width()), si(voxtile->get_height()),
-    si(voxtile->get_depth()));
-  private glm::ivec3 const map_size = glm::make_ivec3(
-    si(voxtmap->get_width()), si(voxtmap->get_height()),
-    si(voxtmap->get_depth()));
-  private glm::ivec3 const pat_size = map{glm::ivec3, operator::div}(
-    glm::make_ivec3(si(voxtpat->get_width()), si(voxtpat->get_height()),
-      si(voxtpat->get_depth())),
+  private glm::uvec3 const tile_size = glm::make_uvec3(
+    voxtile->get_width(), voxtile->get_height(), voxtile->get_depth());
+  private glm::uvec3 const map_size = glm::make_uvec3(
+    voxtmap0->get_width(), voxtmap0->get_height(), voxtmap0->get_depth());
+  private glm::uvec3 const pat_size = map{glm::uvec3, operator::div}(
+    glm::make_uvec3(voxtpat0->get_width(), voxtpat0->get_height(),
+      voxtpat0->get_depth()),
     tile_size);
   private edit_state stat;
   private uint frame_cnt;
@@ -56,6 +235,12 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
     debug_log("edit_mode: save");
     const buf = to_string_compact_pod(stat);
     sdl_save_file("c:/build/edit_state.raw", buf);
+    /*
+    save_texture_data_raw("c:/build/voxtmap_edit.raw",
+      *ev_tmap->get_edit()->get_texture_data());
+    save_texture_data_raw("c:/build/voxtpat_edit.raw",
+      *);
+    */
     save_texture_data_raw("c:/build/voxtmap_edit.raw", *voxtmap);
     save_texture_data_raw("c:/build/voxtpat_edit.raw", *voxtpat);
   }
@@ -79,6 +264,8 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
       copy_value();
     } else if (key == SDL_SCANCODE_V) {
       paste_value();
+    } else if (key == SDL_SCANCODE_I) {
+      set_mark();
     }
     if (edit_params == 0) {
       if (key == SDL_SCANCODE_KP_4) {
@@ -121,19 +308,22 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
     }
     // debug_log("scancode", scancode);
   }
+  private function void set_mark()
+  {
+  }
   private function void move_cursor(int x, int y, int z)
   {
-    ivec3 d = make_ivec3(x, y, z);
+    uvec3 d = make_uvec3(ui(x), ui(y), ui(z));
     if (stat.edit_tpat) {
       mutable& pos = stat.patpos;
-      pos = map{glm::ivec3, operator::add}(pos, d);
-      pos = map{glm::ivec3, operator::add}(pos, pat_size);
-      pos = map{glm::ivec3, operator::mod}(pos, pat_size);
+      pos = map{glm::uvec3, operator::add}(pos, d);
+      pos = map{glm::uvec3, operator::add}(pos, pat_size);
+      pos = map{glm::uvec3, operator::mod}(pos, pat_size);
     } else {
       mutable& pos = stat.mappos;
-      pos = map{glm::ivec3, operator::add}(pos, d);
-      pos = map{glm::ivec3, operator::add}(pos, map_size);
-      pos = map{glm::ivec3, operator::mod}(pos, map_size);
+      pos = map{glm::uvec3, operator::add}(pos, d);
+      pos = map{glm::uvec3, operator::add}(pos, map_size);
+      pos = map{glm::uvec3, operator::mod}(pos, map_size);
     }
   }
   private function void set_param(int v)
@@ -408,18 +598,18 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
     frame_cnt = 0;
     sync_gl_texture();
   }
-  private function ivec3 cur_tpat_base() const
+  private function uvec3 cur_tpat_base() const
   {
     const& mp = stat.mappos;
     const v = voxtmap->get(ui(mp.x), ui(mp.y), ui(mp.z));
     if (!is_node_reference(v)) {
-      return glm::ivec3();
+      return glm::uvec3();
     }
     const z = (v >> 16u) & 0xff;
     const y = (v >>  8u) & 0xff;
     const x = (v >>  0u) & 0xff;
-    const r = glm::make_ivec3(si(x), si(y), si(z));
-    return map{glm::ivec3, operator::mul}(r, tile_size);
+    const r = glm::make_uvec3(x, y, z);
+    return map{glm::uvec3, operator::mul}(r, tile_size);
   }
   private function uint get_cur_tmap() const
   {
@@ -429,7 +619,7 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
   private function void set_cur_tmap(uint value)
   {
     const& mp = stat.mappos;
-    return voxtmap->set(ui(mp.x), ui(mp.y), ui(mp.z), value);
+    return voxtmap->set(mp.x, mp.y, mp.z, value);
   }
   private function bool is_cur_tmap_node_reference() const
   {
@@ -437,30 +627,30 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
     const v = voxtmap->get(ui(mp.x), ui(mp.y), ui(mp.z));
     return is_node_reference(v);
   }
-  private function ivec3 cur_tpat_index() const
+  private function uvec3 cur_tpat_index() const
   {
-    return map{glm::ivec3, operator::add}(cur_tpat_base(), stat.patpos);
+    return map{glm::uvec3, operator::add}(cur_tpat_base(), stat.patpos);
   }
   private function uint get_cur_tpat() const
   {
     const p = cur_tpat_index();
-    return voxtpat->get(ui(p.x), ui(p.y), ui(p.z));
+    return voxtpat->get(p.x, p.y, p.z);
   }
   private function void set_cur_tpat(uint value)
   {
     const p = cur_tpat_index();
-    voxtpat->set(ui(p.x), ui(p.y), ui(p.z), value);
+    voxtpat->set(p.x, p.y, p.z, value);
   }
   private function texture_data copy_cur_tile() const
   {
-    ivec3 bp = cur_tpat_base();
+    uvec3 bp = cur_tpat_base();
     const& tp = *voxtpat;
     mutable tl = *voxtile;
     // debug_log("mp", stat.mappos, "bp", bp);
     for (const z: 0 .. tl.get_depth()) {
       for (const y: 0 .. tl.get_height()) {
 	for (const x: 0 .. tl.get_width()) {
-	  const v = tp.get(x + ui(bp.x), y + ui(bp.y), z + ui(bp.z));
+	  const v = tp.get(x + bp.x, y + bp.y, z + bp.z);
 	  tl.set(x, y, z, v);
 	}
       }
@@ -469,13 +659,13 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
   }
   private function void paste_cur_tile(texture_data const& tl)
   {
-    ivec3 bp = cur_tpat_base();
+    uvec3 bp = cur_tpat_base();
     mutable& tp = *voxtpat;
     for (const z: 0 .. tl.get_depth()) {
       for (const y: 0 .. tl.get_height()) {
 	for (const x: 0 .. tl.get_width()) {
 	  const v = tl.get(x, y, z);
-	  tp.set(x + ui(bp.x), y + ui(bp.y), z + ui(bp.z), v);
+	  tp.set(x + bp.x, y + bp.y, z + bp.z, v);
 	}
       }
     }
@@ -487,6 +677,7 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
     mutable tl = copy_cur_tile();
     mutable md = *voxtmap; // copy
     if (stat.edit_tpat) {
+      // パターン編集中は座標+1より上を非表示
       for (const z: ui(tp.z) + 1 .. tl.get_depth()) {
 	for (const y: 0 .. tl.get_height()) {
 	  for (const x: 0 .. tl.get_width()) {
@@ -540,9 +731,9 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
     {
       const cp = cur_tpat_base();
       glBindTexture(GL_TEXTURE_3D, gl_tpat->texture_id.get());
-      glTexSubImage3D(GL_TEXTURE_3D, 0, cp.x, cp.y, cp.z, tile_size.x,
-	tile_size.y, tile_size.z, GL_RGBA, GL_UNSIGNED_BYTE,
-	tl.get_crawptr().to_cvoidptr());
+      glTexSubImage3D(GL_TEXTURE_3D, 0, si(cp.x), si(cp.y), si(cp.z),
+	si(tile_size.x), si(tile_size.y), si(tile_size.z),
+	GL_RGBA, GL_UNSIGNED_BYTE, tl.get_crawptr().to_cvoidptr());
     }
   }
   public function void on_frame()
