@@ -15,9 +15,7 @@ struct demoapp_textures(bool edit_mode)
   public ivec3 const voxtile_size_l2 = make_ivec3(4, 4, 4);
   public ivec3 const voxtpat_size_l2 = make_ivec3(4, 4, 4);
   // public ivec3 const voxtmap_size_l2 = make_ivec3(10, 10, 7);
-  public ivec3 const voxtmap_size_l2 = edit_mode
-    ? make_ivec3(4, 4, 4)
-    : make_ivec3(8, 8, 5);
+  public ivec3 const voxtmap_size_l2 = make_ivec3(8, 8, 5);
   // 3d texture, voxel raycasting
   public ptr{texture_data} tex_voxtpat = make_ptr{texture_data}();
   public ptr{texture_data} tex_voxtmap = make_ptr{texture_data}();
@@ -81,8 +79,7 @@ prepare_raycasting_texture_data(pgl3d_config const& cfg,
       txs.voxtmap_size_l2);
     debug_log("tmap done");
     debug_log("tmap 0,0,1", to_hexstring(tex_voxtmap->get(0, 0, 1)));
-    bool enable_calc_distance = cfg.get("calc_distance", 1, 0, 1) != 0
-      && !edit_mode;
+    bool enable_calc_distance = cfg.get("calc_distance", 1, 0, 1) != 0;
     bool enable_short_circuit = cfg.get("short_circuit", 0, 0, 1) != 0;
     const rnd = make_ptr{rand_generator}(333U);
     function void texture_make_mipmap(texture_data const& tsrc,
@@ -177,6 +174,12 @@ function void dump_cnt(texture_data const& t, string msg)
 	  re_cnt += 1;
 	} else {
 	}
+	/*
+	if (x >= t.get_width() - 16 && y >= t.get_height() - 16 && z >= t.get_depth() - 16) {
+	  dist_3d dv = get_dist_3d(v);
+	  debug_log(msg, x - (t.get_width() - 16), y - (t.get_height() - 16), z - (t.get_depth() - 16), dv);
+	}
+	*/
       }
     }
   }

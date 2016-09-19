@@ -317,10 +317,7 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
     value_r = vec4(0.0, 0.0, 0.0, 1.0);
     int hit = -1;
     int i;
-    int imax = 256;
-    <%if><%eq><%get_config edit_mode/>1<%/>
-    imax = 1024;
-    <%/>
+    const int imax = 256;
     for (i = 0; i < imax; ++i) {
       vec3 curpos_t = floor(curpos_i / tile3_size);
       vec3 curpos_tr = curpos_i - curpos_t * tile3_size; // 0から15の整数
@@ -365,8 +362,10 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
 	if (node_type == 255) { // 壁
 	  <%if><%eq><%get_config edit_mode/>1<%/>
 	  value_r = value;
+	  // vec4(0.5, 0.5, 0.5, 1.0);
 	  <%else/>
-	  vec4(0.5, 0.5, 0.5, 1.0);
+	  value_r = value;
+	  // vec4(0.5, 0.5, 0.5, 1.0);
 	  <%/>
 	  hit_wall = true;
 	} else { // 平面または二次曲面で切断

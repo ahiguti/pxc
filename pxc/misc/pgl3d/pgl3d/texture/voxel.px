@@ -34,6 +34,8 @@ update_distance(bool enable_short_circuit, texture_data mutable& node,
       si(node.get_width() - 1),
       si(node.get_height() - 1),
       si(node.get_depth() - 1)));
+  debug_log("update_distance", mi, mx, "shortcircuit", enable_short_circuit,
+    "clear_flag", clear_flag);
   for (const z: mi.z .. mx.z + 1) {
     for (const y: mi.y .. mx.y + 1) {
       for (const x: mi.x .. mx.x + 1) {
@@ -41,15 +43,18 @@ update_distance(bool enable_short_circuit, texture_data mutable& node,
 	if (!is_space_voxel(v)) {
 	  continue;
 	}
-	dist_3d dv = get_dist_3d(v);
+	dist_3d dv;
 	uint done = 0;
-	if (!in_range3(x, y, z, mod_mi, mod_mx)) {
+	if (in_range3(x, y, z, mod_mi, mod_mx)) {
+	  /* 変更があった領域の内部。距離ゼロから計算 */
 	  if (enable_short_circuit) {
 	    short_circuit(node, dv, x, y, z, 0, -1, 0) ||
 	    short_circuit(node, dv, x, y, z, -1, 0, 0) ||
 	    short_circuit(node, dv, x, y, z, 0, 0, -1);
 	  }
 	} else if (clear_flag) {
+	  /* クリア。変更があった領域の外側。現在より伸ばせる */
+	  dv = get_dist_3d(v);
 	  const spmi = make_ivec3(x - dv.xn, y - dv.yn, z - dv.zn);
 	  const spmx = make_ivec3(x + dv.xp, y + dv.yp, z + dv.zp);
 	  if (!in_range(x + dv.xp + 1, mod_mi.x, mod_mx.x) ||
@@ -71,6 +76,7 @@ update_distance(bool enable_short_circuit, texture_data mutable& node,
 	    !has_intersect2(spmi.x, spmi.y, spmx.x, spmx.y,
 	      mod_mi.x, mod_mi.y, mod_mx.x, mod_mx.y)) { done |= (1u << 5u); }
 	} else {
+	  /* 非クリア。変更があった領域の外側。距離ゼロから計算 */
 	  // TODO: もっと計算省略可能
 	  if (enable_short_circuit) {
 	    short_circuit(node, dv, x, y, z, 0, -1, 0) ||
@@ -91,20 +97,20 @@ update_distance(bool enable_short_circuit, texture_data mutable& node,
   }
 }
 
-threaded function bool
+public threaded function bool
 in_range(int x, int mi, int mx)
 {
   return x >= mi && x <= mx;
 }
 
-threaded function bool
+public threaded function bool
 in_range3(int x, int y, int z, ivec3 const& mi, ivec3 const& mx)
 {
   return x >= mi.x && x <= mx.x && y >= mi.y && y <= mx.y &&
     z >= mi.z && z <= mx.z;
 }
 
-threaded function bool 
+public threaded function bool 
 has_intersect2(int ax0, int ay0, int ax1, int ay1, int bx0, int by0,
   int bx1, int by1)
 {
@@ -113,7 +119,7 @@ has_intersect2(int ax0, int ay0, int ax1, int ay1, int bx0, int by0,
     has_intersect1(ay0, ay1, by0, by1);
 }
 
-threaded function bool
+public threaded function bool
 has_intersect1(int a0, int a1, int b0, int b1)
 {
   return max(a0, b0) >= min(a1, b1);
@@ -143,6 +149,16 @@ get_dist_3d(texel_value v)
   dv.xp = si((v >> 4u) & 0xfu);
   dv.xn = si((v >> 0u) & 0xfu);
   return dv;
+}
+
+public threaded function texel_value
+dist_3d_to_texel_value(dist_3d const& dv)
+{
+  const xv = (dv.xp << 4) + dv.xn;
+  const yv = (dv.yp << 4) + dv.yn;
+  const zv = (dv.zp << 4) + dv.zn;
+  const wv = ui((zv << 16) + (yv << 8) + (xv << 0));
+  return wv;
 }
 
 threaded function void
@@ -241,11 +257,14 @@ distance_pos_dist(texture_data const& node, dist_3d mutable& dv,
       break;
     }
   }
+  return dist_3d_to_texel_value(dv);
+  /*
   const xv = (dv.xp << 4) + dv.xn;
   const yv = (dv.yp << 4) + dv.yn;
   const zv = (dv.zp << 4) + dv.zn;
   const wv = ui((zv << 16) + (yv << 8) + (xv << 0));
   return wv;
+  */
   // debug_check{bshift}(node, x, y, z, dv);
   // debug_log("calc_dist", x, y, z, to_hexstring(wv));
   // node.set(ui(x), ui(y), ui(z), wv);

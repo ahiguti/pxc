@@ -249,6 +249,10 @@ pc windows 8.1 gtx980m           282 fps
 2016/07/24 pgl3d-720.conf
 pc windows 8.1 gtx980m           287 fps
 
+2016/09/19 pgl3d-720.conf
+pc windows 8.1 gtx980m           310 fps
+その後高さ1/8に変更
+
 ---------------------------------------------------------------------------
 メモ: glsl
 
@@ -2450,6 +2454,60 @@ xy空白aabbを計算。それが範囲のxyと交わらないなら不要。
 ---------------------------------------------------------------------------
 edit mode 描画更新
 
-texture_edit current_edit; 編集結果を保持する。
-texture_edit current_view; 現在見えるべきテクスチャを保持する。
+int cursor_flick;
+uint cursor_color;
+bool edit_pat;
+uvec3 cursor_tpat;
+uvec3 cursor_tmap;
+
+flick_cursor()
+  - cursor_flick をインクリメントし、値に応じてカーソル点滅
+reset_cursor()
+  - cursor_flickを0にし、カーソルが点灯であればカーソル位置を書き戻す
+edit_pat_switch()
+  - reset_cursorする
+  - edit_tpat 切り替え。
+  - tmapからtpatに変更するときはcursor_tpatより上をviewクリア
+  - tpatからtmapに変更するときはcursor_tpatより上をview戻し
+set_cursor_color()
+  - reset_cursorする
+  - cursor_color書き換え
+set_tpat()
+  - edit_tpatでなければreturn
+  - reset_cursorする
+  - editとview両方に書き込み
+set_tmap()
+  - edit_tpatであればreturn
+  - reset_cursorする
+  - editとview両方に書き込み
+move_cursor_tpat()
+  - edit_tpatでなければreturn
+  - reset_cursorする
+  - 上に移動する場合は移動した領域をview戻し
+  - 下に移動する場合は移動した領域をviewクリア
+move_cursor_tmap()
+  - edit_tpatであればreturn
+  - reset_cursorする
+  - 上に移動する場合は移動した領域をview戻し
+  - 下に移動する場合は移動した領域をviewクリア
+
+
+---------------------------------------------------------------------------
+edit_mode z-clip
+
+viewのz-clipを速くしないと実用にならない。
+clipされない部分についてはeditからdistance変更なし。
+clipされる部分については境界までの距離をdistanceとする。
+
+カーソル点灯のときは、15以内に近接する部分はコンサバにdistanceを削る。
+たとえばそのボクセルのxpは、カーソルの最小xがそのボクセルより大きいときは
+その位置に届かないように削る。
+
+カーソル消灯のときは、editからコピーするだけでよい。
+
+---------------------------------------------------------------------------
+edit_mode z-clip動作
+
+tmapのカーソルより上は、カーソルがtmapにあるかどうかにかかわらず非表示
+tpatにカーソルがあるときはの、現在のパターン内のカーソルより上は非表示
 
