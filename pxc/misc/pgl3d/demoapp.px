@@ -107,6 +107,7 @@ private struct app_impl()
   public input_control ictl = input_control(io::system);
   public bool scene_next_flag;
   public float light_on = 0.0f;
+  public float light = 0.55f;
   public float exposure = 1.0f;
   public float option_value = 0.0f;
   public string_map app_commands;
@@ -157,6 +158,7 @@ public multithreaded struct demoapp_scene_shared(io const& sys0)
   public position_angle posang;
   public bool scene_next_flag;
   public float light_on;
+  public float light;
   public float exposure = 1.0f;
   public float option_value = 0.0f;
   public texture_info default_font_texture_info;
@@ -181,6 +183,7 @@ private threaded function float time_diff(double t0, double t1)
   return static_cast{float}(t1 - t0);
 }
 
+/*
 private threaded function glm::mat3 light_angle(glm::vec3 const& dir,
   glm::mat3 const& cam)
 {
@@ -203,6 +206,7 @@ private threaded function glm::mat3 light_angle(glm::vec3 const& dir,
   const y = glm::cross(dir, x).normalize();
   return glm::make_tmat3(x.x, x.y, x.z, y.x, y.y, y.z, dir.x, dir.y, dir.z);
 }
+*/
 
 public threaded struct demoapp_scene(node_factory const& nodefac0,
   collision_shape_data_array const& shapes0, io::io const& sys0)
@@ -212,11 +216,11 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
   public io::io sys = sys0;
   public string timings;
   private function void update_camera_light(position_angle mutable& camera,
-    position_angle mutable& light)
+    position_angle mutable& light, float light_val)
   {
     light.position = camera.position + glm::make_vec3(0.0, 0.0, 0.0);
     light.angle = glm::make_quat_angle_axis(
-      -3.14f * 0.55f, 0.707107, 0.707107, 0.0).normalize();
+      -3.14f * light_val, 0.707107, 0.707107, 0.0).normalize();
     // light.angle = glm::make_quat_wxyz(1.0, 0.0, 0.0, 0.0);
     // light.position = camera.angle * glm::make_vec3(0.0, 0.0, -50.0) +
     //   camera.position + glm::make_vec3(0.0, 0.0, 0.0);
@@ -250,7 +254,7 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
     mutable& dss = downcast_mutable{demoapp_scene_shared}(ss);
     // const t0 = io::debug_system().gettimeofday_double();
     pjinfo.camera = dss.posang;
-    update_camera_light(pjinfo.camera, pjinfo.light);
+    update_camera_light(pjinfo.camera, pjinfo.light, dss.light);
     pjinfo.exposure = dss.exposure;
     pjinfo.option_value = dss.option_value;
     const sm_view = pjinfo.light.to_mat4().inverse();
@@ -425,6 +429,14 @@ function void handle_event(app_impl mutable& app,
       save_state(app);
       return;
     }
+    if (ev.key.keysym.scancode == SDL_SCANCODE_PAGEDOWN) {
+      app.light += 0.01f;
+      return;
+    }
+    if (ev.key.keysym.scancode == SDL_SCANCODE_PAGEUP) {
+      app.light -= 0.01f;
+      return;
+    }
     // debug_log("key", static_cast{int}(ev.key.keysym.scancode));
   }
   app.ictl.handle_event(ev, frame_speed, pjinfo, app.app_commands);
@@ -457,6 +469,7 @@ function void handle_keys(app_impl mutable& app,
   {
     mutable& ss = *app.scene_shared;
     ss.light_on = app.light_on;
+    ss.light = app.light;
     ss.exposure = sqrt(app.exposure); // 半段単位
     ss.option_value = app.option_value;
     ss.scene_next_flag = app.scene_next_flag;
@@ -491,12 +504,12 @@ private function tree_map{string, ptr{pgldrawer_export_i}} init_drawers(
   r.insert("drawer_particle_bb", make_drawer_particle_bb(sconf, res));
   r.insert("drawer_rect2d", make_drawer_rect2d(sconf, res));
   r.insert("drawer_font2", make_drawer_font2(sconf, res));
+  if (sconf.conf.get("fxaa_filter", 0, 0, 1) != 0) {
+    r.insert("drawer_fxaa", make_drawer_fxaa(sconf, res));
+  }
   if (sconf.conf.get("blur_filter", 0, 0, 1) != 0) {
     r.insert("drawer_blur", make_drawer_blur(sconf, res));
   }
-  // if (sconf.conf.get("fxaa_filter", 1, 0, 1) != 0) {
-  //   r.insert("drawer_fxaa", make_drawer_fxaa(sconf, res));
-  // }
   app.raycast_cull_front = sconf.conf.get("raycast_cull_front", 0, 0, 1) != 0;
   const t1 = get_time(io::system);
   sdl_log("app_init_drawers done", t1 - t0);

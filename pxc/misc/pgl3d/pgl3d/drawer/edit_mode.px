@@ -11,11 +11,13 @@ metafunction si static_cast{int};
 metafunction to_ivec3 map{ivec3, static_cast{int, uint}};
 metafunction to_uvec3 map{uvec3, static_cast{uint, int}};
 
+/*
 private struct edit_state {
   public bool edit_tpat;
   public uvec3 mappos;
   public uvec3 patpos;
 }
+*/
 
 /*
 private struct copy_buffer {
@@ -225,46 +227,79 @@ private struct modified_range
   }
 }
 
+private function bool lt_all_uvec3(uvec3 const& a, uvec3 const& b)
+{
+  return a.x < b.x && a.y < b.y && a.z < b.z;
+}
+
+private function bool le_all_uvec3(uvec3 const& a, uvec3 const& b)
+{
+  return a.x <= b.x && a.y <= b.y && a.z <= b.z;
+}
+
 private struct texture_edit(texture_data const& data0,
   texture_data const& grid0)
 {
   private ptr{texture_data} const data = make_ptr{texture_data}(data0);
   private texture_data grid = grid0;
-  private uvec3 const grid_size = make_uvec3(grid.get_width(),
-    grid.get_height(), grid.get_depth());
+  private uvec3 const data_size = texture_data_get_size(*data);
+  private uvec3 const grid_size = texture_data_get_size(grid);
   private modified_range modified;
   public function cptr{texture_data} get_texture_data() const
   {
     return data;
   }
-  public function pair{uvec3, uvec3} get_modified(bool reset_flag) {
+  public function pair{uvec3, uvec3} get_modified(bool reset_flag)
+  {
     return modified.get_modified(reset_flag);
   }
   public function uint get(uvec3 const& pos)
   {
+    if (!lt_all_uvec3(pos, data_size)) {
+      return 0u;
+    }
     return data->get(pos.x, pos.y, pos.z);
   }
   public function void set(uvec3 const& pos, uint v)
   {
+    if (!lt_all_uvec3(pos, data_size)) {
+      return;
+    }
     debug_log("texture_edit::set", pos, v);
     v = is_space_voxel(v) ? 0u : v;
     const prev = data->get(pos.x, pos.y, pos.z);
     data->set(pos.x, pos.y, pos.z, v);
     recalc_distance_range(pos, make_uvec3(1, 1, 1), v == 0);
   }
-  /*
-  public function void copy_range(uvec3 const& dpos, uvec3 const& sz,
-    texture_data const& src, uvec3 const& spos)
-  {
-    texture_data_copy_range(*data, dpos, src, spos, sz);
-    recalc_distance_range(dpos, sz, false);
-  }
-  */
   public function void fill_range(uvec3 const& dpos, uvec3 const& sz, uint v)
   {
+    if (!lt_all_uvec3(dpos, data_size)) {
+      return;
+    }
     v = is_space_voxel(v) ? 0u : v;
     texture_data_fill_range(*data, dpos, sz, v);
     recalc_distance_range(dpos, sz, v == 0);
+  }
+  public function void copy_range(uvec3 const& spos, uvec3 const& sz,
+    texture_data mutable& dest, uvec3 const& dpos) const
+  {
+    if (!lt_all_uvec3(spos, data_size) ||
+      !le_all_uvec3(dpos + sz, texture_data_get_size(dest))) {
+      return;
+    }
+    debug_log("copy_range", spos, sz, dpos);
+    texture_data_copy_range(dest, dpos, *data, spos, sz);
+  }
+  public function void paste_range(uvec3 const& dpos, uvec3 const& sz,
+    texture_data const& src, uvec3 const& spos)
+  {
+    if (!lt_all_uvec3(dpos, data_size) ||
+      !le_all_uvec3(spos + sz, texture_data_get_size(src))) {
+      return;
+    }
+    debug_log("paste_range", spos, sz, dpos);
+    texture_data_copy_range(*data, dpos, src, spos, sz);
+    recalc_distance_range(dpos, sz, false);
   }
   private function void recalc_distance_range(uvec3 const& pos,
     uvec3 const& sz, bool clear_flag)
@@ -315,7 +350,7 @@ private struct texture_edit_view(texture_data const& data0,
   private uint cursor_color_1 = 0xff00ffff;
   private uvec3 cursor_0 = make_uvec3(0, 0, data0.get_depth() - 1);
   private uvec3 cursor_1 = make_uvec3(0, 0, data0.get_depth() - 1);
-  private edit_state state;
+  // private edit_state state;
   private modified_range modified;
   private uvec3 const tex_sz = texture_data_get_size(data0);
   private function bool has_grid() const
@@ -441,14 +476,17 @@ private struct texture_edit_view(texture_data const& data0,
     current_edit->fill_range(dpos, sz, v);
     merge_edit_view();
   }
-  /*
-  public function void edit_copy_range(uvec3 const& dpos, uvec3 const& sz,
+  public function void edit_copy_range(uvec3 const& spos, uvec3 const& sz,
+    texture_data mutable& dest, uvec3 const& dpos) const
+  {
+    current_edit->copy_range(spos, sz, dest, dpos);
+  }
+  public function void edit_paste_range(uvec3 const& dpos, uvec3 const& sz,
     texture_data const& src, uvec3 const& spos)
   {
-    current_edit->copy_range(dpos, sz, src, spos);
+    current_edit->paste_range(dpos, sz, src, spos);
     merge_edit_view();
   }
-  */
   private function void merge_edit_view()
   {
     /* editの更新された領域をviewに反映させる */
@@ -534,6 +572,10 @@ tiled_texture_edit_view(texture_data const& tmap0, texture_data const& tpat0,
   {
     return pair{uint, uint}(state.cursor_color_0, state.cursor_color_1);
   }
+  public function pair{uvec3, uvec3} get_cursor_pos() const
+  {
+    return state.cursor_tpat ? get_tpat_cursor_pos() : get_tmap_cursor_pos();
+  }
   public function pair{uvec3, uvec3} get_tmap_cursor_pos() const
   {
     return pair{uvec3, uvec3}(state.cursor_tmap_0, state.cursor_tmap_1);
@@ -542,9 +584,22 @@ tiled_texture_edit_view(texture_data const& tmap0, texture_data const& tpat0,
   {
     return pair{uvec3, uvec3}(state.cursor_tpat_0, state.cursor_tpat_1);
   }
-  public function pair{uvec3, uvec3} get_cursor_pos() const
+  public function pair{uvec3, uvec3} get_cursor_range() const
   {
-    return state.cursor_tpat ? get_tpat_cursor_pos() : get_tmap_cursor_pos();
+    return state.cursor_tpat
+      ? get_tpat_cursor_range() : get_tmap_cursor_range();
+  }
+  public function pair{uvec3, uvec3} get_tmap_cursor_range() const
+  {
+    const mi = map{uvec3, min}(state.cursor_tmap_0, state.cursor_tmap_1);
+    const mx = map{uvec3, max}(state.cursor_tmap_0, state.cursor_tmap_1);
+    return pair{uvec3, uvec3}(mi, mx + make_uvec3(1, 1, 1) - mi);
+  }
+  public function pair{uvec3, uvec3} get_tpat_cursor_range() const
+  {
+    const mi = map{uvec3, min}(state.cursor_tpat_0, state.cursor_tpat_1);
+    const mx = map{uvec3, max}(state.cursor_tpat_0, state.cursor_tpat_1);
+    return pair{uvec3, uvec3}(mi, mx + make_uvec3(1, 1, 1) - mi);
   }
   public function uint tmap_edit_get(uvec3 const& pos) const
   {
@@ -622,7 +677,7 @@ tiled_texture_edit_view(texture_data const& tmap0, texture_data const& tpat0,
   public function void tmap_edit_set(uvec3 const& pos, uint v)
   {
     const tmap_fixed = map{uvec3, operator::div}(tpat_size, tile_size);
-    if (pos.x < tmap_fixed.x && pos.y < tmap_fixed.y && pos.z < tmap_fixed.z) {
+    if (le_all_uvec3(pos, tmap_fixed)) {
       /* パターンが固定されている領域 */
       debug_log("tmap_edit_set: fixed area", pos);
       return;
@@ -637,7 +692,15 @@ tiled_texture_edit_view(texture_data const& tmap0, texture_data const& tpat0,
     tev_tpat.edit_set(pos, v);
     cursor_flick();
   }
-  /*
+  public function void edit_fill_range(uvec3 const& dpos, uvec3 const& sz,
+    uint v)
+  {
+    if (get_cursor_tpat()) {
+      tpat_edit_fill_range(dpos, sz, v);
+    } else {
+      tmap_edit_fill_range(dpos, sz, v);
+    }
+  }
   public function void tmap_edit_fill_range(uvec3 const& dpos, uvec3 const& sz,
     uint v)
   {
@@ -652,23 +715,48 @@ tiled_texture_edit_view(texture_data const& tmap0, texture_data const& tpat0,
     tev_tpat.edit_fill_range(dpos, sz, v);
     cursor_flick();
   }
-  */
-  /*
-  public function void tmap_edit_copy_range(uvec3 const& dpos, uvec3 const& sz,
-    texture_data const& src, uvec3 const& spos)
+  public function void edit_copy_range(uvec3 const& spos, uvec3 const& sz,
+    texture_data mutable& dest, uvec3 const& dpos)
+  {
+    if (get_cursor_tpat()) {
+      tpat_edit_copy_range(spos, sz, dest, dpos);
+    } else {
+      tmap_edit_copy_range(spos, sz, dest, dpos);
+    }
+  }
+  public function void tmap_edit_copy_range(uvec3 const& spos, uvec3 const& sz,
+    texture_data mutable& dest, uvec3 const& dpos)
+  {
+    tev_tmap.edit_copy_range(spos, sz, dest, dpos);
+  }
+  public function void tpat_edit_copy_range(uvec3 const& spos, uvec3 const& sz,
+    texture_data mutable& dest, uvec3 const& dpos)
+  {
+    tev_tpat.edit_copy_range(spos, sz, dest, dpos);
+  }
+  public function void edit_paste_range(uvec3 const& dpos,
+    uvec3 const& sz, texture_data const& src, uvec3 const& spos)
+  {
+    if (get_cursor_tpat()) {
+      tpat_edit_paste_range(dpos, sz, src, spos);
+    } else {
+      tmap_edit_paste_range(dpos, sz, src, spos);
+    }
+  }
+  public function void tmap_edit_paste_range(uvec3 const& dpos,
+    uvec3 const& sz, texture_data const& src, uvec3 const& spos)
   {
     reset_cursor_flick_nosyncgl();
-    tev_tmap.edit_copy_range(dpos, sz, src, spos);
+    tev_tmap.edit_paste_range(dpos, sz, src, spos);
     cursor_flick();
   }
-  public function void tpat_edit_copy_range(uvec3 const& dpos, uvec3 const& sz,
-    texture_data const& src, uvec3 const& spos)
+  public function void tpat_edit_paste_range(uvec3 const& dpos,
+    uvec3 const& sz, texture_data const& src, uvec3 const& spos)
   {
     reset_cursor_flick_nosyncgl();
-    tev_tpat.edit_copy_range(dpos, sz, src, spos);
+    tev_tpat.edit_paste_range(dpos, sz, src, spos);
     cursor_flick();
   }
-  */
   private function bool cursor_shown() const
   {
     return state.cursor_flick > 1 && state.cursor_flick < 30;
@@ -726,7 +814,9 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
       gl_tmap0, gl_tpat0);
   private texture_data const tile = *voxtile0;
   private uint copy_single;
-  private texture_data copy_block;
+  private uvec3 copy_size;
+  private texture_data copy_data;
+  private int edit_nodetype;
   private int edit_params;
   private bool mark_set;
   init(voxtmap0);
@@ -812,6 +902,11 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
 	set_param(7);
       }
     }
+    /*
+    if (key != SDL_SCANCODE_KP_PLUS) {
+      edit_nodetype = 0;
+    }
+    */
     // debug_log("scancode", scancode);
   }
   private function void set_mark()
@@ -960,11 +1055,19 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
   }
   private function void copy_value()
   {
-    copy_single = get_cur_value();
+    const cur = ttev->get_cursor_range();
+    copy_size = cur.second;
+    const copy_size_l2 = map{uvec3, integral_log2{uint}}(copy_size);
+    copy_data.set_size_l2(copy_size_l2.x, copy_size_l2.y, copy_size_l2.z);
+    debug_log("copy_size", copy_size, texture_data_get_size(copy_data));
+    ttev->edit_copy_range(cur.first, cur.second, copy_data, uvec3());
   }
   private function void paste_value()
   {
-    set_cur_value(copy_single);
+    mutable cur = ttev->get_cursor_range();
+    // cur.second = map{uvec3, min}(cur.second, copy_size);
+    cur.second = copy_size;
+    ttev->edit_paste_range(cur.first, cur.second, copy_data, uvec3());
   }
   private function void set_space()
   {
@@ -972,20 +1075,18 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
   }
   private function void set_brick()
   {
-    const cur = get_cur_value();
-    const node_type = cur >> 24u;
     uint r;
     uint g;
     uint b;
     uint a;
-    if (node_type == 0u) { // 空白
+    if (edit_nodetype == 0) { // 空白
       a = 255u; // 壁
-    } else if (node_type == 255u) { // 壁
+    } else if (edit_nodetype == 1) { // 壁
       a = 208u; // 平面
       r = 9;
       g = 9;
       b = 9;
-    } else if (node_type >= 160u) { // 曲面
+    } else if (edit_nodetype == 2) { // 曲面
       // sp_scaleは座標aを(-0.5,0.5)から何倍に拡大するか
       //   rgbの上位4bit
       // sp_centerは球の中心座標でa*sp_scaleと比較
@@ -1001,6 +1102,7 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
     }
     const v = (a << 24u) | (b << 16u) | (g << 8u) | r;
     set_cur_value(v);
+    edit_nodetype = (edit_nodetype + 1) % 4;
   }
   private function uvec3 cur_tpat_base() const
   {
@@ -1033,21 +1135,42 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
   }
   private function void set_cur_tmap(uint value)
   {
-    const mp = ttev->get_tmap_cursor_pos().first;
-    return ttev->tmap_edit_set(mp, value);
+    const m = ttev->get_tmap_cursor_pos();
+    const mi = map{uvec3, min}(m.first, m.second);
+    const mx = map{uvec3, max}(m.first, m.second);
+    debug_log("set_cur_tmap", m);
+    for (const z: mi.z .. mx.z + 1) {
+      for (const y: mi.y .. mx.y + 1) {
+	for (const x: mi.x .. mx.x + 1) {
+	  debug_log("set_cur_tmap", x, y, z, value);
+	  ttev->tmap_edit_set(make_uvec3(x, y, z), value);
+	}
+      }
+    }
+    // return ttev->tmap_edit_set(get_cur_tmap_center(), value);
   }
   private function uint get_cur_tpat() const
   {
-    const mp = ttev->get_tpat_cursor_pos().first;
-    return ttev->tpat_edit_get(mp);
+    return ttev->tpat_edit_get(get_cur_tpat_center());
   }
   private function void set_cur_tpat(uint value)
   {
     if (is_node_reference(value)) {
       return; // ignore
     }
-    const mp = ttev->get_tpat_cursor_pos().first;
-    return ttev->tpat_edit_set(mp, value);
+    return ttev->tpat_edit_set(get_cur_tpat_center(), value);
+  }
+  private function uvec3 get_cur_tpat_center() const
+  {
+    return map{uvec3, operator::div}(
+      ttev->get_tpat_cursor_pos().first + ttev->get_tpat_cursor_pos().second,
+      make_uvec3(2, 2, 2));
+  }
+  private function uvec3 get_cur_tmap_center() const
+  {
+    return map{uvec3, operator::div}(
+      ttev->get_tmap_cursor_pos().first + ttev->get_tmap_cursor_pos().second,
+      make_uvec3(2, 2, 2));
   }
   private function bool is_cur_tmap_node_reference() const
   {
@@ -1091,5 +1214,61 @@ public struct edit_mode(ptr{texture_data} const& voxtile0,
   {
     ttev->cursor_flick();
   }
+}
+
+private threaded function bool is_plane_node(uint node_type)
+{
+  return node_type >= 160 && node_type <= 254;
+}
+
+private threaded function bool is_sphere_node(uint node_type)
+{
+  return node_type >= 1 && node_type <= 159;
+}
+
+private threaded function uint encode_plane_node(ivec3 const& n, int d)
+{
+  if (n.x < -7 || n.x > 7 || n.y < -7 || n.y > 7 || n.z < -7 || n.z > 7) {
+    return 0u;
+  }
+  if (n.x == 0 && n.y == 0 && n.z == 0) {
+    return 0u;
+  }
+  if (d < -48 || d > 48) {
+    return 0u;
+  }
+  const r = ui(n.x + 8);
+  const g = ui(n.y + 8);
+  const b = ui(n.z + 8);
+  const a = ui(d + 208);
+  const v = (a << 24u) | (b << 16u) | (g << 8u) | r;
+  return v;
+}
+
+private threaded function uint make_plane_node(ivec3 const& nor, int d,
+  ivec3 const& offset)
+{
+  const d1 = d - dot_int(nor, offset) * 2;
+    // offsetが0のボクセルの距離パラメタがdのとき、その平面がoffsetだけ
+    // 移動した位置のボクセルを切断するような距離パラメタはd1になる
+  const drange = abs(nor.x) + abs(nor.y) + abs(nor.z);
+    // ax+by+czの(x,y,z)が-1,+1の範囲での最小最大は-drange,+drange
+  if (d1 <= -drange) {
+    return 0u; // d1が小さすぎるので空白
+  }
+  if (d1 >= drange) {
+    return 255u; // d1が大きすぎるので壁
+  }
+  return encode_plane_node(nor, d1);
+}
+
+private threaded function int dot_int(ivec3 const& a, ivec3 const& b)
+{
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+private threaded function {t} t abs(t x)
+{
+  return x < t() ? -x : x;
 }
 

@@ -348,6 +348,15 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
 	// value.xyz = vec3(0.0);
 	node_type = int(floor(value.a * 255.0 + 0.5));
       }
+      // ボクセルの大きさを掛ける。タイルの移動なら16倍
+      curpos_t = floor(curpos_i / distance_unit);
+      curpos_tr = curpos_i - curpos_t * distance_unit;
+      curpos_f = (curpos_tr + curpos_f) / distance_unit;
+      curpos_f = clamp(curpos_f, 0.0, 1.0); // FIXME: 必要？
+      curpos_i = curpos_t * distance_unit;
+	// curpos_iだけはdistance_unit単位にはしない
+	// 現在座標は curpos_i + curpos_f * distance_unit で求まる
+      // 衝突判定
       vec3 spmin = vec3(0.0);
       vec3 spmax = vec3(1.0);
       vec3 distval = floor(value.xyz * 255.0 + 0.5);
@@ -418,7 +427,8 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
 	  }
 	  hit_nor = -dir;
 	  hit = i;
-	  pos = (curpos_i + curpos_f) / virt3_size; // eyeが衝突した位置
+	  pos = (curpos_i + curpos_f * distance_unit) / virt3_size;
+	    // eyeが衝突した位置
 	  // 法線と光が逆向きのときは必ず影(陰)
 	  float cos_light_dir = dot(light, hit_nor);
 	  lstr_para = clamp(cos_light_dir * 64.0 - 1.0, 0.0, 1.0);
@@ -435,23 +445,8 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
 	  spmax = vec3(1.0);
 	}
       }
-      // タイルの移動なら16倍
-      curpos_t = floor(curpos_i / distance_unit);
-      curpos_tr = curpos_i - curpos_t * distance_unit;
-      vec3 p_f = (curpos_tr + curpos_f) / distance_unit;
-      curpos_i = curpos_t * distance_unit;
-      /*
-      vec3 p_f;
-      if (is_pat) {
-	p_f = curpos_f;
-      } else {
-	p_f = (curpos_tr + curpos_f) / 16.0;
-	curpos_i = curpos_t * 16.0; // 16未満を切り捨てる
-      }
-      */
-      p_f = clamp(p_f, 0.0, 1.0); // FIXME: 必要？
       vec3 npos;
-      dir = voxel_get_next(p_f, spmin, spmax, ray, npos);
+      dir = voxel_get_next(curpos_f, spmin, spmax, ray, npos);
       // if (dot(dir, ray) <= 0.0) { dbgval=vec4(1,1,1,1); return -1; }
       // npos = clamp(npos, spmin, spmax); // FIXME: ???
       npos *= distance_unit;
