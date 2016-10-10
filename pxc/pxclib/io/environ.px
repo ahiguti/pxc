@@ -66,6 +66,32 @@ namespace pxcrt {
 #include <sys/wait.h>
 #endif
 
+#ifdef PXC_WINDOWS
+pxcrt::bt_string wcs_to_string(wchar_t const *wcs)
+{
+  size_t len = wcslen(wcs);
+  pxcrt::bt_string s;
+  int len1 = (int)(len * 4);
+  if ((int)(len) < 0 || len1 < 0 || (size_t)(len1 / 4) != len) {
+    return s;
+  }
+  s.resize(len1, 0);
+  int clen = WideCharToMultiByte(CP_UTF8, 0, wcs, (int)len,
+    reinterpret_cast<char *>(s.rawarr()), (int)len1, 0, 0);
+  s.resize(clen, 0);
+  return s;
+}
+
+struct auto_local_free {
+  auto_local_free(void *ptr0) : ptr(ptr0) { }
+  ~auto_local_free() { LocalFree(ptr); }
+private:
+  void *ptr;
+  auto_local_free(auto_local_free const&);
+  auto_local_free& operator =(auto_local_free const&);
+};
+#endif
+
 pxcrt::pxcvarray<pxcrt::bt_string> pxc_argv;
 pxcrt::pxcvarray<pxcrt::bt_string> pxc_environ;
 
@@ -73,7 +99,6 @@ using namespace pxcrt;
 
 void io_environ_init()
 {
-/* windows is not supported yet */
 #ifdef PXC_POSIX
   pxc_argv.clear();
   {
@@ -109,6 +134,16 @@ void io_environ_init()
       pxc_environ.push_back(s);
       ++p;
     }
+  }
+#endif
+#ifdef PXC_WINDOWS
+  pxc_argv.clear();
+  int argc = 0;
+  LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+  auto_local_free alf(argv);
+  for (int i = 0; i < argc; ++i) {
+    pxcrt::bt_string s = wcs_to_string(argv[i]);
+    pxc_argv.push_back(s);
   }
 #endif
 }

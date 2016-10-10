@@ -2,6 +2,10 @@
 ---------------------------------------------------------------------------
 TODO
 
+- PXC_ARG%d やめる
+
+- 引数で設定ファイルを指定できるように
+
 - モーションブラー
 
 - postprocessフィルタのテクスチャを共有、サイズ指定
@@ -2518,6 +2522,66 @@ tmapのカーソルより上は、カーソルがtmapにあるかどうかにか
 tpatにカーソルがあるときはの、現在のパターン内のカーソルより上は非表示
 
 ---------------------------------------------------------------------------
-AO
 
+KP_PLUSで塗りつぶしブロック種類を切り替え。
+  0空白、1壁、2平面、3球面。
+  パラメータはリセットする。
+KP_ENTERでedit_params_modeを0, 1, 2の順に切り替え
+  空白か壁のときはパラメータは無い。
+  平面のときは法線と距離だけを変更可能
+  球面のときはオフセットと距離が1、拡大率が2
+
+---------------------------------------------------------------------------
+
+vec3 sp_scale = floor(distval / 64.0);
+  上位2bit
+vec3 sp_center = distval - scale * 64.0 - 32.0;
+  下位6bit、0-63の範囲から32を引いて-32から+31の範囲
+float sp_radius = float(node_type - 1) * 1.0;
+  node_type=2がradius=1になる
+voxel_collision_sphere(ray, curpos_f - 0.5, sp_center, sp_scale,
+  sp_radius * sp_radius, hit_wall, sp_nor);
+  curpos_fは0から1の範囲
+a = curpos_f - 0.5
+  -0.5から+0.5の範囲
+c = sp_center;
+  -32から+32の範囲
+mul_pt = sp_scale;
+  0から3の範囲
+rad2_pt = sp_radius * sp_radius;
+  1から63^2の範囲
+a_pt = mul_pt * a;
+c_pt = c;
+ac_pt = c_pt - a_pt;
+float len2_ac_pt = dot(ac_pt,, ac_pt);
+if (len2_ac_pt <= rad2_pt) {
+  始点aが球の内側
+}
+
+---------------------------------------------------------------------------
+キーバインド
+
+UP, DOWN, LEFT, RIGHT 向き
+Z, X 回転
+SPACE 加速
+SHIFT 減速
+RETURN 停止
+W, A, S, D シフト
+TAB シーン
+RIGHTBRACKET -> F11 フルスクリーン
+1 -> F5 リロード
+LEFTBRACKET -> F10 VSYNC有効切り替え
+M -> F1, F12 PAUSEと保存
+J, K -> F8, F9 露出
+PAGEDOWN, PAGEUP 太陽
+T -> E 投げる
+L -> Q パーティクル
+
+---------------------------------------------------------------------------
+sphereとplaneのパラメタがオフセットでどう変わるか
+
+make_sphere_node:
+  const c = p.center - offset * p.scale;
+make_plane_node:
+  const d1 = d - dot(nor, offset) * 2;
 

@@ -59,9 +59,10 @@ public function void app_main()
   // debug_helper::dump_modules();
   // debug_helper::dump_backtrace();
   string config_fn = "pgl3d.cnf";
-  if (io::environ::argv.size() != 0) {
+  if (io::environ::argv.size() > 1) {
     config_fn = io::environ::argv[1];
   }
+  debug_log("config_fn", config_fn);
   pgl3d::engine::mainloop::mainloop(make_ptr{demoapp_application}(),
     config_fn);
 }
@@ -396,36 +397,49 @@ function void handle_event(app_impl mutable& app,
       app.scene_next_flag = true;
       return;
     }
-    if (ev.key.keysym.scancode == SDL_SCANCODE_RIGHTBRACKET) {
+    if (ev.key.keysym.scancode == SDL_SCANCODE_F11) {
       commands_r["fullscreen"] = "1";
       return;
     }
-    if (ev.key.keysym.scancode == SDL_SCANCODE_1) {
+    if (ev.key.keysym.scancode == SDL_SCANCODE_F5) {
       commands_r["reload"] = "1";
       return;
     }
-    if (ev.key.keysym.scancode == SDL_SCANCODE_J) {
+    if (ev.key.keysym.scancode == SDL_SCANCODE_F9) {
       app.exposure *= 2.0;
       return;
     }
-    if (ev.key.keysym.scancode == SDL_SCANCODE_K) {
+    if (ev.key.keysym.scancode == SDL_SCANCODE_F8) {
       app.exposure *= 0.5;
       return;
     }
-    if (ev.key.keysym.scancode == SDL_SCANCODE_LEFTBRACKET) {
+    if (ev.key.keysym.scancode == SDL_SCANCODE_F10) {
       commands_r["vsync"] = "1";
       return;
     }
-    if (ev.key.keysym.scancode == SDL_SCANCODE_T) {
+    if (ev.key.keysym.scancode == SDL_SCANCODE_E) {
       app.app_commands["throw"] = "1";
       return;
     }
-    if (ev.key.keysym.scancode == SDL_SCANCODE_L) {
+    if (ev.key.keysym.scancode == SDL_SCANCODE_Q) {
       app.light_on = app.light_on > 0.5f ? 0.0f : 1.0f;
       return;
     }
-    if (ev.key.keysym.scancode == SDL_SCANCODE_M) {
+    if (ev.key.keysym.scancode == SDL_SCANCODE_F1) {
       app.app_commands["scene_pause"] = "1";
+      return;
+    }
+    if (ev.key.keysym.scancode == SDL_SCANCODE_F2) {
+      app.option_value = static_cast{float}(
+	(static_cast{int}(app.option_value) + 2) % 8);
+      return;
+    }
+    if (ev.key.keysym.scancode == SDL_SCANCODE_F3) {
+      app.option_value = static_cast{float}(
+	static_cast{int}(app.option_value) ^ 1);
+      return;
+    }
+    if (ev.key.keysym.scancode == SDL_SCANCODE_F12) {
       save_state(app);
       return;
     }
