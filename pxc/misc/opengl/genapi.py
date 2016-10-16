@@ -58,9 +58,11 @@ typeArr = [
   'const GLintptr *', # 50
   'const GLsizeiptr *',
   'const GLfixed *',
+  'void **',
   'GLvoid **',
+  'const void *const*',
   'const GLvoid *const*',
-  'const GLchar *const*',
+  'const GLchar *const*', # 57
 
   'const GLuint64 *',
   'GLuint64EXT',
@@ -90,66 +92,7 @@ def splitWord(s):
     ms = m.group()
   return [ dropSpace(s[0 : len(s) - len(ms)]), ms ]
 def convertType(s):
-  return str(typeMap[s]) if (s in typeMap) else "\""+s+"\""
-def convertTypeX(s):
-  if s == 'void': return 'v'
-  elif s == 'GLenum': return 'e'
-  elif s == 'GLbitfield': return 'm'
-  elif s == 'GLfloat': return 'f'
-  elif s == 'GLdouble': return 'd'
-  elif s == 'GLboolean': return 'b'
-  elif s == 'GLbyte': return 'by'
-  elif s == 'GLubyte': return 'uby'
-  elif s == 'GLshort': return 's'
-  elif s == 'GLushort': return 'us'
-  elif s == 'GLint': return 'i'
-  elif s == 'GLuint': return 'ui'
-  elif s == 'GLuint64': return 'ul'
-  elif s == 'GLsizei': return 'szi'
-  elif s == 'GLintptr': return 'ip'
-  elif s == 'GLsizeiptr': return 'szip'
-  elif s == 'GLfixed': return 'fx'
-  elif s == 'GLclampx': return 'cx'
-  elif s == 'GLDEBUGPROC': return 'DP'
-  elif s == 'GLsync': return 'sync'
-  elif s == 'void *': return '*'
-  elif s == 'GLvoid *': return 'v*'
-  elif s == 'GLenum *': return 'e*'
-  elif s == 'GLfloat *': return 'f*'
-  elif s == 'GLdouble *': return 'd*'
-  elif s == 'GLboolean *': return 'b*'
-  elif s == 'GLchar *': return 'c*'
-  elif s == 'GLubyte *': return 'uby*'
-  elif s == 'GLshort *': return 's*'
-  elif s == 'GLushort *': return 'us*'
-  elif s == 'GLint *': return 'i*'
-  elif s == 'GLuint *': return 'ui*'
-  elif s == 'GLint64 *': return 'l*'
-  elif s == 'GLuint64 *': return 'ul*'
-  elif s == 'GLsizei *': return 'szi*'
-  elif s == 'GLfixed *': return 'fx*'
-  elif s == 'const void *': return '_*'
-  elif s == 'const GLvoid *': return '_v*'
-  elif s == 'const GLenum *': return '_e*'
-  elif s == 'const GLfloat *': return '_f*'
-  elif s == 'const GLdouble *': return '_d*'
-  elif s == 'const GLboolean *': return '_b*'
-  elif s == 'const GLchar *': return '_c*'
-  elif s == 'const GLbyte *': return '_by*'
-  elif s == 'const GLubyte *': return '_uby*'
-  elif s == 'const GLshort *': return '_s*'
-  elif s == 'const GLushort *': return '_us*'
-  elif s == 'const GLint *': return '_i*'
-  elif s == 'const GLuint *': return '_ui*'
-  elif s == 'const GLsizei *': return '_szi*'
-  elif s == 'const GLintptr *': return '_ip*'
-  elif s == 'const GLsizeiptr *': return '_szip*'
-  elif s == 'const GLfixed *': return '_fx*'
-  elif s == 'GLvoid **': return 'v**'
-  elif s == 'const GLvoid *const*': return '_v*_*'
-  elif s == 'const GLchar *const*': return '_c*_*'
-  print("TYPE " + s)
-  return s
+  return str(typeMap[s]) if (s in typeMap) else "\"FIXME "+s+"\""
 
 class PXOutputGenerator(reg.COutputGenerator):
   """ """

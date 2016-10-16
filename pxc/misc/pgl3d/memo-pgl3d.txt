@@ -2,6 +2,10 @@
 ---------------------------------------------------------------------------
 TODO
 
+- raycast_waffle
+
+- cull_frontでもiquadsでシャドウマップを書くようにする
+
 - PXC_ARG%d やめる
 
 - 引数で設定ファイルを指定できるように
@@ -2584,4 +2588,71 @@ make_sphere_node:
   const c = p.center - offset * p.scale;
 make_plane_node:
   const d1 = d - dot(nor, offset) * 2;
+
+---------------------------------------------------------------------------
+shadowmapとprepass課題整理
+
+事前計算なしにraycastシェーダのshadowmapとprepassできるか。
+1. raycastする物体を囲む直方体
+2. raycastする3dテクスチャ
+
+prepass案
+1. カメラに近いほうからソート、デプステストあり、fsデプス書き込み無し
+  - 大きい物体と小さい物体の順序が正しくなくなる
+2. ソートしないでprepass、大小二回にわけで描画
+  - 全オブジェクトの外側を表面カリングでprepass描画
+  - 一回目は大きい物体、別バッファにデプス値を書き込む
+  - 二回目は別バッファの値を読んで自前でデプステスト。
+  - だめ。小さい物体のprepass書き込みにより描画漏れがおきる
+  - raycastせずにprepass描画するためには、物体よりも内側の概形を知る必要がある
+3. ソート、デプステストあり、大小二回にわけて描画
+  - 一回目は大きい物体、別バッファにデプス値を書き込む
+  - 二回目は別バッファの値を読んで自前でデプステスト。
+    - あるいは一回目のデプス値とデプスバッファをマージするか
+  - この方法が良さそう。
+
+shadowmap
+
+1. 大きい物体のディテールが小さい物体に影をさすようにできないか。
+2. 3dテクスチャ変更に追従できないか。
+
+shadowmap案
+
+1. ワッフル状の頂点データ、ディテールも頂点データ
+  - 頂点データは増えるがfsを空にできる
+  - 事前計算は必要なので3dテクスチャ追従は難しい
+  - iquadsをそのまま使えるがワッフル状に作ったほうが速くなるか
+2. ワッフル状の頂点データ、ディテールは3dテクスチャを読む
+  - 頂点データは少なくてよいがfsが少し重くなる
+    - fsで一点のテクスチャを読む必要がある
+  - 板をカメラに近いほうから順に描画する。fs無駄打ち防止のため。
+3. 直方体の頂点データ、ディテールは3dテクスチャを読む
+  - 完全なraycastではなく、ワッフル状の座標だけを拾う。
+  - 頂点データはraycastと共通でよい。
+  - 巨大な物体でも3ワッフルくらいで十分か。
+  - 光源に近い順にソート。colorバッファにdepth値を書き込む。
+4. ワッフル状の頂点データ、ディテールは2dテクスチャ
+  - discard使うだけで相当遅くなるのではないか
+
+
+---------------------------------------------------------------------------
+
+テクスチャに描画し、またそのテクスチャをbindしてシェーダから読めるように
+すると、テクスチャへの書き込みが読み出しに反映されることを保証するには
+glTextureBarrierすればよい。
+
+
+---------------------------------------------------------------------------
+glewのinclude/GL/glew.h
+
+constが抜けていてコンパイル通らなかったので以下のように直接書き換え。
+typedef void (GLAPIENTRY * PFNGLCLEARNAMEDFRAMEBUFFERFVPROC) (GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLfloat* value);
+仕様ではglClearNamedFramebufferfvの型は以下のとおり。
+        <command>
+            <proto>void <name>glClearNamedFramebufferfv</name></proto>
+            <param><ptype>GLuint</ptype> <name>framebuffer</name></param>
+            <param><ptype>GLenum</ptype> <name>buffer</name></param>
+            <param><ptype>GLint</ptype> <name>drawbuffer</name></param>
+            <param>const <ptype>GLfloat</ptype> *<name>value</name></param>
+        </command>
 
