@@ -70,8 +70,11 @@ private tsvaluetype struct zprepass_uniforms()
 private tsvaluetype struct shadowmap_uniforms()
 {
   public glm::mat4 shadowmap_vp;
+  public glm::vec3 light_dir;
   public glm::vec3 trans; // used if light_fixed
   public float scale;     // used if light_fixed
+  public int sampler_voxtmap;
+  public int sampler_voxtpat;
 }
 
 public struct drawer_triangles(shader_config const& glc0,
@@ -288,7 +291,18 @@ public struct drawer_triangles(shader_config const& glc0,
     cslice{GLuint} const& smtex_arr)
   {
     if (step == draw_step_shadowmapping) {
-      if (stype == 1) { return; }
+      if (stype == 1) {
+	if (raycast_cull_front) {
+	  glCullFace(GL_FRONT);
+	}
+	glActiveTexture(GL_TEXTURE5);
+	glBindTexture(GL_TEXTURE_3D, texture_voxtpat->texture_id.get());
+	glUniform1i(sdr_shadow.some->u_sampler_voxtpat, 5);
+	glActiveTexture(GL_TEXTURE6);
+	glBindTexture(GL_TEXTURE_3D, texture_voxtmap->texture_id.get());
+	glUniform1i(sdr_shadow.some->u_sampler_voxtmap, 6);
+      }
+      // if (stype == 1) { return; } // FIXME: HERE HERE HERE
       const sm_view = cam_df.light.to_mat4().inverse();
       const sm_vp = cam_df.sm_projection[iter] * sm_view;
       float scale = 1.0f / glc.shadowmap_distance;
@@ -305,8 +319,15 @@ public struct drawer_triangles(shader_config const& glc0,
 	glUniformMatrix4fv(sdr_shadow.some->u_shadowmap_vp, 1, 0,
 	  sm_vp.to_crawptr());
       }
+      glUniform3fv(sdr_shadow.some->u_light_dir, 1,
+	(cam_df.light.angle * glm::make_vec3(0.0, 0.0, 1.0)).to_crawptr());
       aibuf.draw(*sdr_shadow.some, bo, bo_ib, bo_id, glc.enable_instanced,
 	glc.enable_uniform_instancing);
+      if (stype == 1) {
+	if (raycast_cull_front) {
+	  glCullFace(GL_BACK);
+	}
+      }
     } else if (step == draw_step_zprepass) {
       if (stype == 1) { return; }
       // debug_log("zprepass " + to_string(stype));

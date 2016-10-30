@@ -2,6 +2,14 @@
 ---------------------------------------------------------------------------
 TODO
 
+- 小さいオブジェクトを作る
+
+- 大きいオブジェクトのソート
+
+- その次: mainとsmのオブジェクトソート、大小重ね合わせ
+
+- 小さなオブジェクトは近接する大きなオブジェクトが差す影をraycastで計算
+
 - raycast_waffle
 
 - cull_frontでもiquadsでシャドウマップを書くようにする
@@ -18,20 +26,10 @@ TODO
 
 - AO
 
-- 文字はフィルターの後に(done)
-
-- tilemapの一部から切り出して貼り付けられるようにする。(done)
-
 - inline c の末尾に余分なセミコロンが出ている
 
 - deserialize_sequenceテスト
 
-- 仮想テクスチャサイズを4096から可変にする(done)
-  mapが256^3のとき64Mbyte(タイル番号が32bitのとき)
-  mapが512^3のとき512Mbyte
-  mapが1024^3のとき4Gbyte
-  patが256^3のとき64Mbyte(16Mvoxel)
-  patが512^3のとき512Mbyte(128Mvoxel)
 
 - 表面voxel貼り付け、単体voxelの二種類にわける。
   - 単体voxelは内側抽出でshadowとzprepass
@@ -79,10 +77,6 @@ TODO
 
 - 頂点データ重複排除を再び有効に(tex3dで効果大きい)
 
-- 初期ノードの全体ではなく一部の領域だけを貼り付けられるようにする。(done)
-  - raycast_octreeは接触点と影点を返すようにし、呼ぶ側で判定するか。
-  - 「一部の領域」がaabbでよいのであれば最上位レベルのaabbをraycast_octree
-    の引数で渡し、eyeとlightを適当に変換するようにすればよい。
 
 - 切断面データ無し、法線のみで球のデータを作る
 
@@ -97,14 +91,6 @@ TODO
     dとして255をセットする。壁に衝突する。hit_wallの処理で空白ボクセルへ
     移動する。
 
-- ループ回数上限に達した時には影にする(done)
-
-- curpos_t削除したほうがよいか(done)
-  curpos_t + curpos_iをcurpos_tiに。block_factorの剰余が旧curpos_iになる
-  curpos_t : pos_tile(curpos_x)
-    floor(curpos_x * block_scale) * block_factor;
-  curpos_i : pos_pat(curpos_x)
-    fract(curpos_x * block_scale) * block_factor;
 
 - raycast_octreeループ内整理
 
@@ -174,6 +160,26 @@ TODO
 ---------------------------------------------------------------------------
 DONE
 
+- 仮想テクスチャサイズを4096から可変にする(done)
+  mapが256^3のとき64Mbyte(タイル番号が32bitのとき)
+  mapが512^3のとき512Mbyte
+  mapが1024^3のとき4Gbyte
+  patが256^3のとき64Mbyte(16Mvoxel)
+  patが512^3のとき512Mbyte(128Mvoxel)
+- 初期ノードの全体ではなく一部の領域だけを貼り付けられるようにする。(done)
+  - raycast_octreeは接触点と影点を返すようにし、呼ぶ側で判定するか。
+  - 「一部の領域」がaabbでよいのであれば最上位レベルのaabbをraycast_octree
+    の引数で渡し、eyeとlightを適当に変換するようにすればよい。
+- ループ回数上限に達した時には影にする(done)
+- curpos_t削除したほうがよいか(done)
+  curpos_t + curpos_iをcurpos_tiに。block_factorの剰余が旧curpos_iになる
+  curpos_t : pos_tile(curpos_x)
+    floor(curpos_x * block_scale) * block_factor;
+  curpos_i : pos_pat(curpos_x)
+    fract(curpos_x * block_scale) * block_factor;
+- 文字はフィルターの後に(done)
+- tilemapの一部から切り出して貼り付けられるようにする。(done)
+- 次: waffleをsmに (done)
 - append_to_string/parse_from_stringはテンプレ引数としてser_?を取る(done)
 - voxel平面切断(done)
 - voxelのsurface抽出をoctreeでなくtilemapから。(done)
@@ -2655,4 +2661,102 @@ typedef void (GLAPIENTRY * PFNGLCLEARNAMEDFRAMEBUFFERFVPROC) (GLuint framebuffer
             <param><ptype>GLint</ptype> <name>drawbuffer</name></param>
             <param>const <ptype>GLfloat</ptype> *<name>value</name></param>
         </command>
+
+---------------------------------------------------------------------------
+ワッフル
+
+raycastの始点posは直方体の裏面。テクスチャ座標。
+aabb_min, aabb_maxは直方体の端。テクスチャ座標。
+ray=camera_localはテクスチャ座標での視線。
+
+fz=(aabb_min.z + aabb_max.z) * 0.5 の平面と視線が交わる位置を求める。
+pos.z + ray.z * a = fz
+a = (fz - pos.z) / ray.z
+交点c = pos + ray * a になる
+
+---
+vec3 pos = texpos + vary_position_local * texscale;
+  // テクスチャ座標でのフラグメント位置
+vec3 f = (aabb_min + aabb_max) * 0.5;
+vec3 a = (f - pos) / ray; // 三か所の交点を一度に求める
+cx = pos + ray * a.x; yz面との交点
+cy = pos + ray * a.y; zx面との交点
+cz = pos + ray * a.z; xy面との交点
+
+triangles.fsh -> triangles-sm.fsh
+uniform mat4 view_projection_matrix;
+  -> shadowmap_vp
+uniform vec3 camera_pos;
+  -> とりあえず光源は無限遠のみを想定するので不要
+uniform mat4 shadowmap_vp[<%smsz/>];
+  -> 不要
+<%decl_instance_attr mat4 model_matrix/>
+  -> 同じ
+<%vert_in/> vec3 position;
+  // stype==1のときオブエジェクト座標系での接線空間の原点
+  -> 同じ
+<%vert_in/> vec3 normal;   // オブジェクト座標系での法線(接線空間のz軸)
+  -> 同じ
+<%vert_in/> vec3 tangent;  // オブジェクト座標系での接線(接線空間のx軸)
+  -> 同じ
+<%vert_in/> vec3 uvw;      // 頂点のテクスチャ座標
+  -> 同じ
+<%vert_in/> vec4 aabb_or_tconv;
+  // stype==1のときテクスチャ座標から接線空間への変換
+  -> 同じ
+<%if><%eq><%stype/>1<%/>
+  <%vert_in/> vec3 aabb_min; // テクスチャ座標の範囲aabb
+    -> 同じ
+  <%vert_in/> vec3 aabb_max; // テクスチャ座標の範囲aabb
+    -> 同じ
+<%/>
+<%vert_out/> vec3 vary_position; // ワールドの頂点座標(オブジェクト原点)
+  -> 同じ
+<%vert_out/> vec3 vary_normal;   // ワールドでの法線
+  -> 不要
+<%vert_out/> vec3 vary_tangent;  // ワールドでの接線
+  -> 不要
+<%vert_out/> vec3 vary_binormal; // ワールドでの従法線
+  -> 不要
+<%if><%eq><%stype/>1<%/>
+  <%flat/> <%vert_out/> vec4 vary_aabb_or_tconv; // aabb_or_tconvと同じ
+    -> 同じ
+  <%flat/> <%vert_out/> vec3 vary_aabb_min;
+    -> 同じ
+  <%flat/> <%vert_out/> vec3 vary_aabb_max;
+    -> 同じ
+  <%flat/> <%vert_out/> mat4 vary_model_matrix; // 接線空間からワールドへの変換
+    -> 同じ
+  <%vert_out/> vec3 vary_position_local; // 接線空間での頂点座標
+    -> 同じ
+  <%flat/> <%vert_out/> vec3 vary_camerapos_local; // 接線空間でのカメラ座標
+    -> とりあえず不要
+<%/>
+mat4 mm = <%instance_attr model_matrix/>;
+vary_position_local = aabb_or_tconv.xyz + uvw * aabb_or_tconv.w;
+vec3 binormal = cross(normal, tangent);
+mat4 tan_to_obj = mat4(
+  vec4(tangent, 0.0),
+  vec4(binormal, 0.0),
+  vec4(normal, 0.0),
+  vec4(position, 1.0)); // 接線空間からオブジェクト座標系への変換
+mm = mm * tan_to_obj; // 接線空間からワールド座標への変換
+mat3 normal_matrix = mat3(mm);
+vec3 model_transform = mm[3].xyz;
+
+---------------------------------------------------------------------------
+大小オブジェクト重ね合わせ
+
+1. まず大きいオブジェクトを手前から描画。表面カリング
+   - depthには裏面のdepth値が入る。
+   - depthとは別にdepth_auxフレームバッファに頂点のdepth値を書く
+2. 小さいオブジェクトを描画。
+
+---------------------------------------------------------------------------
+ctx_tex3d
+
+引数にはテクスチャ座標の範囲を指定する。
+polyの最初の辺をx軸の大きさとして、それがテクスチャのx幅に一致するように
+scaleを決める。
+
 

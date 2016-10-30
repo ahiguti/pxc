@@ -21,15 +21,15 @@ uniform mat4 shadowmap_vp[<%smsz/>];
 <%vert_out/> vec3 vary_normal;   // ワールドでの法線
 <%vert_out/> vec3 vary_tangent;  // ワールドでの接線
 <%vert_out/> vec3 vary_binormal; // ワールドでの従法線
-<%vert_out/> vec3 vary_uvw;      // 頂点のテクスチャ座標
 <%if><%eq><%stype/>1<%/>
   <%flat/> <%vert_out/> vec4 vary_aabb_or_tconv; // aabb_or_tconvと同じ
   <%flat/> <%vert_out/> vec3 vary_aabb_min;
   <%flat/> <%vert_out/> vec3 vary_aabb_max;
-  <%flat/> <%vert_out/> mat4 vary_model_matrix;    // 接線空間からワールドへの変換
-  <%vert_out/> vec3 vary_position_local;  // 接線空間での頂点座標
+  <%flat/> <%vert_out/> mat4 vary_model_matrix; // 接線空間からワールドへの変換
+  <%vert_out/> vec3 vary_position_local; // 接線空間での頂点座標
   <%flat/> <%vert_out/> vec3 vary_camerapos_local; // 接線空間でのカメラ座標
 <%else/>
+  <%vert_out/> vec3 vary_uvw;      // 頂点のテクスチャ座標
   <%vert_out/> vec4 vary_aabb_or_tconv; // aabb_or_tconvと同じ
 <%/>
 <%if><%and><%ne><%stype/>1<%/><%enable_shadowmapping/><%/>
@@ -51,8 +51,8 @@ void main(void)
     vary_position = gpos4.xyz / gpos4.w;
     vary_normal = normal_matrix * normal;
     vary_tangent = normal_matrix * tangent;
-    vary_uvw = uvw;
     vary_binormal = cross(vary_normal, vary_tangent);
+    vary_uvw = uvw;
     vary_aabb_or_tconv = aabb_or_tconv;
   <%else/>
     // opt==1 voxel raycasting
@@ -82,7 +82,6 @@ void main(void)
     vary_normal = normal_matrix * vec3(0.0, 0.0, 1.0);
     vary_tangent = normal_matrix * vec3(1.0, 0.0, 0.0);
     vary_binormal = normal_matrix * vec3(0.0, 1.0, 0.0);
-    vary_uvw = uvw;
     vary_model_matrix = mm; // 接線空間からワールドへの変換
     vary_camerapos_local = (camera_pos - model_transform) * normal_matrix;
       // mmは等倍回転と加算だけなので右辺は inverse(mm) * camera_posに等しい

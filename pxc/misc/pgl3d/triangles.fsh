@@ -41,7 +41,6 @@ uniform float random_seed;
 <%frag_in/> vec3 vary_normal;
 <%frag_in/> vec3 vary_tangent;
 <%frag_in/> vec3 vary_binormal;
-<%frag_in/> vec3 vary_uvw;
 <%if><%eq><%stype/>1<%/>
   uniform <%mediump_sampler3d/> sampler_voxtpat;
   uniform <%mediump_sampler3d/> sampler_voxtmap;
@@ -52,6 +51,7 @@ uniform float random_seed;
   <%frag_in/> vec3 vary_position_local;
   <%flat/> <%frag_in/> vec3 vary_camerapos_local;
 <%else/>
+  <%frag_in/> vec3 vary_uvw;
   <%frag_in/> vec4 vary_aabb_or_tconv;
 <%/>
 <%decl_fragcolor/>
@@ -301,11 +301,118 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
   const ivec3 map3_size = <%map3_size/>;
   const ivec3 virt3_size = <%virt3_size/>;
 
+  int tilemap_fetch(in vec3 pos, int tmap_mip, int tpat_mip)
+  {
+    // float distance_unit = distance_unit_tmap_mip;
+    vec3 curpos_f = pos * virt3_size;
+    vec3 curpos_i = div_rem(curpos_f, 1.0);
+    vec3 curpos_t = floor(curpos_i / tile3_size);
+    vec3 curpos_tr = curpos_i - curpos_t * tile3_size; // 0から15の整数
+    <%if><%is_gl3_or_gles3/>
+    vec4 value = texelFetch(sampler_voxtmap, ivec3(curpos_t) >> tmap_mip, 
+      tmap_mip);
+    <%else/>
+    vec4 value = <%texture3d/>(sampler_voxtmap, curpos_t / map3_size);
+    <%/>
+    int node_type = int(floor(value.a * 255.0 + 0.5));
+    bool is_pat = (node_type == 1);
+    if (is_pat) {
+      vec3 curpos_tp = floor(value.rgb * 255.0 + 0.5) * tile3_size;
+	// 16刻み4096迄
+      // distance_unit = distance_unit_tpat_mip;
+      <%if><%is_gl3_or_gles3/>
+      value = texelFetch(sampler_voxtpat,
+	ivec3(curpos_tp + curpos_tr) >> tpat_mip, tpat_mip);
+      <%else/>
+      value = <%texture3d/>(sampler_voxtpat,
+	(curpos_tp + curpos_tr) / pattex3_size);
+      <%/>
+      // value = vec4(1.0, 1.0, 1.0, 1.0);
+      // value.xyz = vec3(0.0);
+      node_type = int(floor(value.a * 255.0 + 0.5));
+    }
+    return node_type;
+  }
+
+  int raycast_waffle(
+    inout vec3 pos, inout vec3 fragpos, in vec3 eye, in vec3 light,
+    in vec3 mi, in vec3 mx, out vec4 value_r, inout vec3 hit_nor,
+    in float selfshadow_para, inout float lstr_para, in int miplevel)
+  {
+    float dist_max = length(pos - fragpos);
+    vec3 ray = eye;
+    float di = 10.0;
+    float near = 65536;
+    if (true) { // どっちが速い？
+      vec3 d = (mx - mi) / di;
+      vec3 ad = d / ray;
+      bvec3 ad_nega = lessThan(ad, vec3(0.0));
+      vec3 f = mi + d * (0.5 + vec3(ad_nega) * (di - 1.0)) + epsilon;
+	// adが正ならmiから0.5, 負ならmxから0.5
+      ad = abs(ad);
+      vec3 a = (f - pos) / ray;
+      for (float i = 0.0; i < di; i = i + 1.0, a.x = a.x + ad.x) {
+	if (a.x > 0 && a.x < dist_max) {
+	  if (tilemap_fetch(pos + ray * a.x, 0, 0) != 0) {
+	    near = min(a.x, near);
+	    break;
+	  }
+	}
+      }
+      for (float i = 0.0; i < di; i = i + 1.0, a.y = a.y + ad.y) {
+	if (a.y > 0 && a.y < dist_max) {
+	  if (tilemap_fetch(pos + ray * a.y, 0, 0) != 0) {
+	    near = min(a.y, near);
+	    break;
+	  }
+	}
+      }
+      for (float i = 0.0; i < di; i = i + 1.0, a.z = a.z + ad.z) {
+	if (a.z > 0 && a.z < dist_max) {
+	  if (tilemap_fetch(pos + ray * a.z, 0, 0) != 0) {
+	    near = min(a.z, near);
+	    break;
+	  }
+	}
+      }
+    } else {
+      vec3 d = (mx - mi) / di;
+      vec3 f = mi + d * 0.5  + epsilon;
+      vec3 ad = d / ray;
+      vec3 a = (f - pos) / ray;
+      for (float i = 0.0; i < di; i = i + 1.0, a = a + ad) {
+	if (a.x > 0 && a.x < dist_max) {
+	  if (tilemap_fetch(pos + ray * a.x, 0, 0) != 0) {
+	    near = min(a.x, near);
+	  }
+	}
+	if (a.y > 0 && a.y < dist_max) {
+	  if (tilemap_fetch(pos + ray * a.y, 0, 0) != 0) {
+	    near = min(a.y, near);
+	  }
+	}
+	if (a.z > 0 && a.z < dist_max) {
+	  if (tilemap_fetch(pos + ray * a.z, 0, 0) != 0) {
+	    near = min(a.z, near);
+	  }
+	}
+      }
+    }
+    value_r = vec4(1.0, 1.0, 1.0, 1.0);
+    hit_nor = -eye;
+    if (near < 65535) {
+      pos = pos + ray * near;
+      return 1;
+    }
+    return -1;
+  }
+
   int raycast_tilemap(
     inout vec3 pos, in vec3 eye, in vec3 light,
     in vec3 aabb_min, in vec3 aabb_max, out vec4 value_r, inout vec3 hit_nor,
     in float selfshadow_para, inout float lstr_para, in int miplevel)
   {
+    // eyeはカメラから物体への向き、lightは物体から光源への向き
     int tmap_mip = clamp(miplevel - 4, 0, 4);
     int tpat_mip = min(miplevel, 4);
     float distance_unit_tmap_mip = float(<%lshift>16<%>tmap_mip<%/>);
@@ -725,16 +832,19 @@ void main(void)
     <%/>
     nor = vary_normal * normal_matrix;
     vec3 camera_local = -camera_dir * normal_matrix;
+      // カメラから物体への向き、接線空間
     vec3 light_local = light_dir * normal_matrix;
+      // 光源への向き、接線空間
     float texscale = 1.0 / vary_aabb_or_tconv.w;
     vec3 texpos = - vary_aabb_or_tconv.xyz * texscale;
-    vec3 pos    = texpos + vary_position_local * texscale;
-      // 接線空間での座標からテクスチャ座標を計算
+      // texpos,texscaleは接線空間からテクスチャ座標への変換のパラメータ
+    vec3 fragpos = texpos + vary_position_local * texscale;
+      // テクスチャ座標でのフラグメント位置
     vec3 campos = texpos + vary_camerapos_local * texscale;
       // テクスチャ座標でのカメラ位置
     vec3 aabb_min = vary_aabb_min;
     vec3 aabb_max = vary_aabb_max;
-
+    vec3 pos = fragpos;
     bool cam_inside_aabb = false;
     <%if><%raycast_cull_front/>
       // カメラが直方体の内側に入ってもレンダリングできるように
@@ -770,7 +880,13 @@ void main(void)
     <%/>
     hit = raycast_tilemap(pos, camera_local, light_local,
       aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para, miplevel);
-    /* */
+    /*
+    hit = raycast_waffle(pos, fragpos, camera_local, light_local,
+      aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para, miplevel);
+    if (hit > 0) {
+      <%fragcolor/> = vec4(0.5, 0.5, 0.5, 1.0); return;
+    }
+    */
     <%if><%eq><%get_config dbgval/>1<%/>
     if (dbgval.a > 0.0) { <%fragcolor/> = dbgval; return; }
     <%/>

@@ -7,6 +7,6 @@ if [ "`uname | cut -d '_' -f 1`" == "CYGWIN" ]; then
 	  tee /tmp/pgl3d.log
 else
 	./unix/release_build.sh && \
-	  exec ./demoapp.px.exe 2>&1 | \
+	  exec ./demoapp.px.exe $* 2>&1 | \
 	  tee /tmp/pgl3d.log
 fi

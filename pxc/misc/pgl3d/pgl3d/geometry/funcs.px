@@ -497,7 +497,7 @@ private threaded function void gf_ctx_tex3d(size_t nbase,
   mesh_index const& mp)
 {
   varray{varray{vec3}} e;
-  gf_ctx_tex3d_int_surf(nbase, ntex, z, true, e, e, ctx, poly, mp);
+  gf_ctx_tex3d_int_surf(nbase, ntex, z, false, e, e, ctx, poly, mp);
 }
 
 private threaded function void gf_ctx_tex3d_int_surf(size_t nbase,
@@ -506,18 +506,22 @@ private threaded function void gf_ctx_tex3d_int_surf(size_t nbase,
   varray{varray{vec3}} const& surf_quads,
   build_context_i const& ctx, poly_t const& poly, mesh_index const& mp)
 {
+  const mi = make_vec3(0.0, 0.0, 0.0);
+  const sz = make_vec3(1.0, 1.0, z);
+    // TODO: 引数で指定
+  const mx = mi + sz;
   varray{varray{vec3}} quads = surf_quads;
   if (quads.empty()) {
     const front = make_varray{vec3}(
-      make_vec3(0.0f, 0.0f, z),
-      make_vec3(1.0f, 0.0f, z),
-      make_vec3(1.0f, 1.0f, z),
-      make_vec3(0.0f, 1.0f, z));
+      make_vec3(0.0f, 0.0f, sz.z),
+      make_vec3(sz.x, 0.0f, sz.z),
+      make_vec3(sz.x, sz.y, sz.z),
+      make_vec3(0.0f, sz.y, sz.z));
     quads.push_back(front);
     const back = make_varray{vec3}(
-      make_vec3(0.0f, 1.0f, 0.0f),
-      make_vec3(1.0f, 1.0f, 0.0f),
-      make_vec3(1.0f, 0.0f, 0.0f),
+      make_vec3(0.0f, sz.y, 0.0f),
+      make_vec3(sz.x, sz.y, 0.0f),
+      make_vec3(sz.x, 0.0f, 0.0f),
       make_vec3(0.0f, 0.0f, 0.0f));
     quads.push_back(back);
     for (const i: 0 .. 4u) {
@@ -530,8 +534,8 @@ private threaded function void gf_ctx_tex3d_int_surf(size_t nbase,
       side[3] = front[i];
       side[0].z = 0.0f;
       side[1].z = 0.0f;
-      side[2].z = z;
-      side[3].z = z;
+      side[2].z = sz.z;
+      side[3].z = sz.z;
       quads.push_back(side);
     }
   }
@@ -555,24 +559,23 @@ private threaded function void gf_ctx_tex3d_int_surf(size_t nbase,
       gf_ctx_fill(nbase, ctx, q, mp);
     }
   }
-  gf_ctx_tex3d_surf(ntex, z, quads, ctx, poly, mp);
+  gf_ctx_tex3d_surf(ntex, mi, mx, quads, ctx, poly, mp);
 }
 
 private threaded function void gf_ctx_tex3d_opt(size_t nbase, size_t ntex,
-  float z, varray{varray{vec3}} const& surf_quads,
+  vec3 const& mi, vec3 const& mx, varray{varray{vec3}} const& surf_quads,
   build_context_i const& ctx, poly_t const& poly, mesh_index const& mp)
 {
   gf_ctx_fill(nbase, ctx, poly, mp);
-  gf_ctx_tex3d_surf(ntex, z, surf_quads, ctx, poly, mp);
+  gf_ctx_tex3d_surf(ntex, mi, mx, surf_quads, ctx, poly, mp);
 }
 
 private threaded function void gf_ctx_tex3d_surf(size_t ntex,
-  float z, varray{varray{vec3}} const& surf_quads,
+  vec3 const& mi, vec3 const& mx, varray{varray{vec3}} const& surf_quads,
   build_context_i const& ctx, poly_t const& poly, mesh_index const& mp)
 {
-  const coord_min = make_vec3(0.0, 0.0, 0.0);
-  const coord_max = make_vec3(1.0, 1.0, z);
-    // TODO: これらを引数で取る
+  const& coord_min = mi;
+  const& coord_max = mx;
   if (poly.size() != 4) { return; }
   const tan = (poly[1].pos - poly[0].pos).normalize();
   const len = glm::length(poly[1].pos - poly[0].pos);
@@ -596,10 +599,10 @@ private threaded function void gf_ctx_tex3d_surf(size_t ntex,
     // 頂点データのuvw以外の属性はすべての頂点で同じ値(無駄大きい？)
   mutable quad_attr = make_farray{vertex_attr}(attr0, attr0, attr0, attr0);
   for (const i, const q: surf_quads) {
-    quad_attr[0].uvw = coord_min + q[0] * coord_len;
-    quad_attr[1].uvw = coord_min + q[1] * coord_len;
-    quad_attr[2].uvw = coord_min + q[2] * coord_len;
-    quad_attr[3].uvw = coord_min + q[3] * coord_len;
+    quad_attr[0].uvw = coord_min + q[0];
+    quad_attr[1].uvw = coord_min + q[1];
+    quad_attr[2].uvw = coord_min + q[2];
+    quad_attr[3].uvw = coord_min + q[3];
     gf_ctx_fill_smooth(ntex, ctx, quad_attr, mesh_index());
   }
 }

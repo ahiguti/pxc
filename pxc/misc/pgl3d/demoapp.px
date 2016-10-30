@@ -471,6 +471,7 @@ function void handle_keys(app_impl mutable& app,
     app.scene_next_flag = true;
   }
   glm::quat camera_rel;
+  /*
   const cam_ax0 = app.ictl.get_axis(axes, 3);
   const cam_ax1 = app.ictl.get_axis(axes, 2);
   if (cam_ax0 != 0.0f || cam_ax1 != 0.0f) {
@@ -479,6 +480,7 @@ function void handle_keys(app_impl mutable& app,
     camera_rel *= glm::make_quat_angle_axis(
       app.ictl.get_axis(axes, 2) * -3.14159f / 2.0f, 0.0, 1.0, 0.0);
   }
+  */
   app.ictl.action_step(app.player, app.player.pos_delta, frame_speed);
   {
     mutable& ss = *app.scene_shared;
@@ -659,6 +661,7 @@ private function void build_vertices(app_impl mutable& app,
   if (case app.edit_mode.some) {
     zmax = 1.0f / 8.0f;
   }
+  /*
   if (app.raycast_cull_front) {
     // cull_front, 直方体をレンダリング
     pgs.make_vertex_set(tr, "box",
@@ -679,7 +682,6 @@ private function void build_vertices(app_impl mutable& app,
 	apply(m1,
 	  ctx_tex3d_int_surf(2, 1, zmax, true, iquads, oquads))));
   }
-  /*
   */
   /*
   pgs.make_vertex_set(tr, "box",
@@ -689,15 +691,12 @@ private function void build_vertices(app_impl mutable& app,
       apply(m1,
 	ctx_fill(1))));
   */
-  /*
   pgs.make_vertex_set(tr, "box",
     regular_polygon(1.4142f * box_size, 4,
+      apply(m1, hole()),
       apply(m1,
-	bump_apply(m, true,
-	  ctx_fill(1),
-	  ctx_fill(1))),
-      apply(m1,
-	ctx_tex3d(2, 1, 1.0f/32.0f))));
+	ctx_tex3d(2, 1, zmax))));
+  /*
   */
   /*
   pgs.make_vertex_set(tr, "box",
@@ -707,7 +706,7 @@ private function void build_vertices(app_impl mutable& app,
 	  ctx_fill(1),
 	  ctx_fill(1))),
       apply(m1,
-	ctx_tex3d_opt(2, 1, 1.0f/32.0f, quads))));
+	ctx_tex3d_opt(2, 1, zmax, quads))));
   */
   /*
   pgs.make_vertex_set(tr, "box",
