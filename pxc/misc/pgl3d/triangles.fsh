@@ -415,6 +415,7 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
     // eyeはカメラから物体への向き、lightは物体から光源への向き
     int tmap_mip = clamp(miplevel - 4, 0, 4);
     int tpat_mip = min(miplevel, 4);
+    // tpat_mip = 0; // FIXME: remove
     float distance_unit_tmap_mip = float(<%lshift>16<%>tmap_mip<%/>);
     float distance_unit_tpat_mip = float(<%lshift>1<%>tpat_mip<%/>);
     vec3 ray = eye;
@@ -867,7 +868,7 @@ void main(void)
     float dist_pos_campos_2 = dot(pos - campos, pos - campos) + 0.01;
     float dist_rnd = generate_random(pos) * 0.25;
     float dist_log2 = log(dist_pos_campos_2) * 0.5 / log(2.0);
-    int miplevel = clamp(int(dist_log2 + dist_rnd + 1.0), 0, 8);
+    int miplevel = clamp(int(dist_log2 + dist_rnd + 2.0), 0, 8);
     // if (miplevel > 2) { <%fragcolor/> = vec4(1,0,1,1); return; }
     // if (miplevel > 1) { <%fragcolor/> = vec4(1,1,0,1); return; }
     // if (miplevel > 0) { <%fragcolor/> = vec4(1,0,0,1); return; }
@@ -878,8 +879,10 @@ void main(void)
     <%if><%eq><%get_config edit_mode/>1<%/>
     miplevel = 0;
     <%/>
+    // vec3 opos = pos; // FIXME: remove
     hit = raycast_tilemap(pos, camera_local, light_local,
       aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para, miplevel);
+    // if (pos == opos) { <%fragcolor/> = vec4(1.0); return; } // FIXME: remove
     /*
     hit = raycast_waffle(pos, fragpos, camera_local, light_local,
       aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para, miplevel);

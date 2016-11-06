@@ -116,6 +116,8 @@ private struct app_impl()
   public option{ptr{edit_mode_i}} edit_mode;
   public bool raycast_cull_front = false;
   public textures_ptr const textures = make_textures_ptr();
+  public pgl3d::geometry::funcs::rand_generator rand_gen
+    = pgl3d::geometry::funcs::rand_generator(1u);
   init();
   private function void init() {
     string s;
@@ -472,6 +474,18 @@ function void handle_keys(app_impl mutable& app,
   }
   glm::quat camera_rel;
   /*
+  {
+    const rnd_x = static_cast{double}(app.rand_gen.generate() >> 16u)
+      / 65536.0 - 0.5;
+    const rnd_y = static_cast{double}(app.rand_gen.generate() >> 16u)
+      / 65536.0 - 0.5;
+    camera_rel *= glm::make_quat_angle_axis(
+      static_cast{float}(rnd_x) * 3.14159f / 16384.0f, 1.0, 0.0, 0.0);
+    camera_rel *= glm::make_quat_angle_axis(
+      static_cast{float}(rnd_y) * 3.14159f / 16384.0f, 1.0, 0.0, 0.0);
+  }
+  */
+  /*
   const cam_ax0 = app.ictl.get_axis(axes, 3);
   const cam_ax1 = app.ictl.get_axis(axes, 2);
   if (cam_ax0 != 0.0f || cam_ax1 != 0.0f) {
@@ -525,6 +539,9 @@ private function tree_map{string, ptr{pgldrawer_export_i}} init_drawers(
   }
   if (sconf.conf.get("blur_filter", 0, 0, 1) != 0) {
     r.insert("drawer_blur", make_drawer_blur(sconf, res));
+  }
+  if (sconf.conf.get("motion_blur_filter", 0, 0, 1) != 0) {
+    r.insert("drawer_motion_blur", make_drawer_motion_blur(sconf, res));
   }
   app.raycast_cull_front = sconf.conf.get("raycast_cull_front", 0, 0, 1) != 0;
   const t1 = get_time(io::system);
@@ -595,9 +612,9 @@ private function void build_vertices(app_impl mutable& app,
     float tex3d_0 = 0.00001f;
     float tex3d_1 = 1.0f - 0.00001f;
     float tex3d_z = 1.0f / 32.0f - 0.00001f;
-    if (case app.edit_mode.some) {
+    // if (case app.edit_mode.some) {
       tex3d_z = 1.0f / 8.0f - 0.00001f;
-    }
+    // }
     for (const i, mutable& q: oquads) {
       for (const j, mutable& p: q) {
 	p = glm::make_vec3(
@@ -658,9 +675,25 @@ private function void build_vertices(app_impl mutable& app,
     .translate(glm::make_vec3(0.0, 0.0, box_size * (-1.0f)))
     .rotate(to_radians(45.0), glm::make_vec3(0.0, 0.0, 1.0));
   float zmax = 1.0f / 32.0f;
-  if (case app.edit_mode.some) {
+  // if (case app.edit_mode.some) {
     zmax = 1.0f / 8.0f;
-  }
+  // }
+  const mi = glm::make_vec3(0.0, 0.0, 0.0);
+  const mx = glm::make_vec3(1.0, 1.0, zmax);
+  float small_box_size = 1.0f;
+  /*
+  glm::mat4 small_m = glm::mat4()
+    .translate(glm::make_vec3(0.0, 0.0, small_box_size * 2.0f));
+  */
+  glm::mat4 small_m1 = glm::mat4()
+    .translate(glm::make_vec3(0.0, 0.0, small_box_size * (-1.0f)))
+    .rotate(to_radians(45.0), glm::make_vec3(0.0, 0.0, 1.0));
+  const smallmi = glm::make_vec3(0.0, 0.0, 0.0);
+  const smallmx = glm::make_vec3(1.0f/256.0f, 1.0f/256.0f, 1.0f/256.0f);
+  /*
+  const smallmi = mi;
+  const smallmx = mx;
+  */
   /*
   if (app.raycast_cull_front) {
     // cull_front, 直方体をレンダリング
@@ -668,19 +701,19 @@ private function void build_vertices(app_impl mutable& app,
       regular_polygon(1.4142f * box_size, 4,
 	apply(m1,
 	  bump_apply(m, true,
-	    ctx_tex3d(2, 1, zmax), ctx_tex3d(2, 1, zmax))),
+	    ctx_tex3d(2, 1, mi, mx), ctx_tex3d(2, 1, mi, mx))),
 	apply(m1,
-	  ctx_tex3d(2, 1, zmax))));
+	  ctx_tex3d(2, 1, mi, mx))));
   } else {
     // cull_back, 表面oquads, shadowmapとzprepassにiquads
     pgs.make_vertex_set(tr, "box",
       regular_polygon(1.4142f * box_size, 4,
 	apply(m1,
 	  bump_apply(m, true,
-	    ctx_tex3d_int_surf(2, 1, zmax, true, iquads, oquads),
-	    ctx_tex3d_int_surf(2, 1, zmax, true, iquads, oquads))),
+	    ctx_tex3d_int_surf(2, 1, mi, mx, true, iquads, oquads),
+	    ctx_tex3d_int_surf(2, 1, mi, mx, true, iquads, oquads))),
 	apply(m1,
-	  ctx_tex3d_int_surf(2, 1, zmax, true, iquads, oquads))));
+	  ctx_tex3d_int_surf(2, 1, mi, mx, true, iquads, oquads))));
   }
   */
   /*
@@ -695,8 +728,18 @@ private function void build_vertices(app_impl mutable& app,
     regular_polygon(1.4142f * box_size, 4,
       apply(m1, hole()),
       apply(m1,
-	ctx_tex3d(2, 1, zmax))));
+	ctx_tex3d(2, 1, mi, mx))));
+  pgs.make_vertex_set(tr, "smallbox",
+    regular_polygon(1.4142f * small_box_size, 4,
+      apply(small_m1,
+	ctx_tex3d(2, 1, smallmi, smallmx)),
+      hole()));
   /*
+  pgs.make_vertex_set(tr, "smallbox",
+    regular_polygon(1.4142f * small_box_size, 4,
+      hole(),
+      apply(small_m1,
+	ctx_tex3d(2, 1, smallmi, smallmx))));
   */
   /*
   pgs.make_vertex_set(tr, "box",
@@ -706,7 +749,7 @@ private function void build_vertices(app_impl mutable& app,
 	  ctx_fill(1),
 	  ctx_fill(1))),
       apply(m1,
-	ctx_tex3d_opt(2, 1, zmax, quads))));
+	ctx_tex3d_opt(2, 1, mi, mx, quads))));
   */
   /*
   pgs.make_vertex_set(tr, "box",
@@ -720,10 +763,10 @@ private function void build_vertices(app_impl mutable& app,
       apply(m1,
 	bump_rec(1.0, 1.0, 16,
 	  lid(
-	    ctx_tex3d(2, 1, 1.0f/32.0f),
+	    ctx_tex3d(2, 1, mi, mx),
 	    bump_rec(0.01, 1.0, 1,
 	      ctx_fill(0),
-	      ctx_tex3d(2, 1, 1.0f/32.0f)
+	      ctx_tex3d(2, 1, mi, mx)
 	    )
 	  ),
 	  hole()
@@ -978,10 +1021,11 @@ private function void build_vertices(app_impl mutable& app,
   {
     shapes_add(name, mass, collision_shape_e_concave);
   }
-  shapes_add_sphere("box", 1.0f);
+  shapes_add_sphere("box", 32768.0f);
+  shapes_add_sphere("smallbox", 1.0f);
   shapes_add_convex("mstex3d", 1000.0f);
   shapes_add_convex("nest", 1000.0f);
-  shapes_add_sphere("box50", 50.0f);
+  shapes_add_convex("box50", 50.0f);
   shapes_add_convex("bullet2", 2.0f);
   // shapes_add_sphere("bullet2", 1.0f);
   shapes_add_sphere("bullet", 2.0f);
@@ -1362,7 +1406,7 @@ scene_control_step(scene_control mutable& sctl,
     float length)
   {
     // size_t const lim = is_gles != 0 ? 20000U : 200000U;
-    size_t const lim = static_cast{size_t}(200000U)
+    size_t const lim = static_cast{size_t}(300000U)
       / sctl.lpbullet_swarms.size();
     size_t min_n = lim;
     size_t min_lpsw = sctl.lpbullet_swarms.size();
@@ -1410,7 +1454,7 @@ scene_control_step(scene_control mutable& sctl,
 	mutable posang = ss.posang;
 	posang.position += a * 0.1f;
 	scene_node cnode = scene_node(
-	  sctl.sco.name_to_joint_id["box"], posang.to_mat4());
+	  sctl.sco.name_to_joint_id["smallbox"], posang.to_mat4());
 	const rb = sctl.sco.add_collision_object(cnode).some;
 	rb->apply_central_impulse(a.x, a.y, a.z);
 	// debug_log("spawn_obj", sctl.sco.dworld.objects_size());

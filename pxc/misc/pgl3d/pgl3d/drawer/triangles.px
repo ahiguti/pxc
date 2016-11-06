@@ -258,6 +258,7 @@ public struct drawer_triangles(shader_config const& glc0,
   {
     if (stype == 1) {
       if (
+	step == draw_step_shadowmapping ||
 	step == draw_step_solid) {
 	return true;
       }
@@ -293,7 +294,9 @@ public struct drawer_triangles(shader_config const& glc0,
     if (step == draw_step_shadowmapping) {
       if (stype == 1) {
 	if (raycast_cull_front) {
+	  // glEnable(GL_CULL_FACE);
 	  glCullFace(GL_FRONT);
+	  // debug_log("sm cull front stype=1"); // FIXME
 	}
 	glActiveTexture(GL_TEXTURE5);
 	glBindTexture(GL_TEXTURE_3D, texture_voxtpat->texture_id.get());
@@ -302,7 +305,6 @@ public struct drawer_triangles(shader_config const& glc0,
 	glBindTexture(GL_TEXTURE_3D, texture_voxtmap->texture_id.get());
 	glUniform1i(sdr_shadow.some->u_sampler_voxtmap, 6);
       }
-      // if (stype == 1) { return; } // FIXME: HERE HERE HERE
       const sm_view = cam_df.light.to_mat4().inverse();
       const sm_vp = cam_df.sm_projection[iter] * sm_view;
       float scale = 1.0f / glc.shadowmap_distance;

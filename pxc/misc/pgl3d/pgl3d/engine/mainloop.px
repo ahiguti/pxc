@@ -429,6 +429,7 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
 // FIXME : here
     }
     fr.save_ticks(1, SDL_GetTicks());
+    pgs.frame_begin(local_whole_instances);
     {
       /* draw frame */
       varray{uint} tick_draw;
@@ -443,14 +444,19 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
       fr.save_ticks(4, SDL_GetTicks());
       fr.measure();
     }
-    fr.save_ticks(5, SDL_GetTicks());
     frctl.rate_control();
-    fr.save_ticks(6, SDL_GetTicks());
+    fr.save_ticks(5, SDL_GetTicks());
     SDL_GL_SwapWindow(sdlc.sdl_window);
+    fr.save_ticks(6, SDL_GetTicks());
+    for (const i: 0 .. sconf.dummy_flip) {
+      pgs.draw_frame_lastpass(local_whole_instances, cam_drawing_frame);
+      SDL_GL_SwapWindow(sdlc.sdl_window);
+    }
+    pgs.frame_end();
     // debug_log("swapwindow");
     if (glfinish) {
       // debug_log("glfinish\n");
-      glFinish();
+      // glFinish();
     }
     fr.save_ticks(7, SDL_GetTicks());
     // if (scene_next_flag) { frctl.start(); }

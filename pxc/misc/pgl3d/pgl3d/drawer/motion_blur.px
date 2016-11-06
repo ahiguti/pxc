@@ -1,0 +1,151 @@
+private threaded namespace pgl3d::drawer::motion_blur "export-unsafe";
+public import common -;
+public import pgl3d::drawer::base -;
+public import meta m;
+
+private tsvaluetype struct motion_blur_vertex_attributes()
+{
+  public glm::vec2 vert;
+}
+
+private tsvaluetype struct motion_blur_instance_attributes()
+{
+}
+
+private tsvaluetype struct motion_blur_uniforms()
+{
+  public glm::vec2 pixel_delta;
+  public int sampler_tex; // array
+}
+
+public struct drawer_motion_blur(shader_config const& glc,
+  resource_pool_ptr const& res)
+<pgldrawer_i>
+{
+  metafunction tattr motion_blur_vertex_attributes;
+  public size_t cur_ppfbo;
+  public varray{ptr{gl_framebuffer}} ppfbos;
+  public size_t const num_frames = 4u;
+  motion_blur_shader_ptr sdr_re = init_motion_blur_shader(glc, num_frames);
+  init();
+  function void init() {
+    for (size_t i: 0 .. num_frames) {
+      ppfbos.push_back(make_ptr{gl_framebuffer}());
+    }
+  }
+  public function string get_vbid_name() const { return "vbid_motion_blur"; }
+  public function string get_main_vbid_name() const {
+    return "vbid_motion_blur"; }
+  public function prepare_instance_data_funcptr
+  get_prepare_instance_data_funcptr() const {
+    return make_tfuncptr{prepare_instance_data_default}();
+  }
+  public function ptr{vertex_buffer} make_vertex_buffer() const {
+    return make_tattr_vertex_buffer{tattr}(false, false);
+  }
+  public function string builtin_vertex_set_name() const {
+    return "motion_blur"; }
+  public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
+    const
+  {
+    farray{motion_blur_vertex_attributes, 4} vs;
+    vs[0].vert = glm::make_vec2(-1.0, -1.0);
+    vs[1].vert = glm::make_vec2( 1.0, -1.0);
+    vs[2].vert = glm::make_vec2( 1.0,  1.0);
+    vs[3].vert = glm::make_vec2(-1.0,  1.0);
+    vptr->push_polygon_distinct{motion_blur_vertex_attributes, 0}(vs);
+  }
+  public function dgf_filler make_filler(ptr{vertices} const& vptr) const
+  {
+    return make_dgf_noop(vptr);
+  }
+  public function texture_info get_texture_info(cstrref const& name) const
+  {
+    return texture_info();
+  }
+  public function void resize_screen(shader_config const& glc, int width,
+    int height)
+  {
+    for (const i, const& e: ppfbos) {
+      e->width = width;
+      e->height = height;
+      init_postprocess_fbo(glc, false, *e);
+    }
+    debug_log("motion_blur", width, height);
+  }
+  public function void reload_shaders()
+  {
+  }
+  public function uint get_postprocess_framebuffer(draw_step step) const
+  {
+    if (step == draw_step_postprocess) {
+      return ppfbos[cur_ppfbo]->fbo.get();
+    }
+    return 0U;
+  }
+  public function bool has_step(draw_step step) const
+  {
+    if (step == draw_step_postprocess) {
+      return true;
+    }
+    return false;
+  }
+  public function void draw(draw_step step, size_t iter,
+    vertex_buffer const& bo, bo_instances_type const& bo_ib,
+    aggregated_ibuffer const& aibuf, vertex_buffer_id bo_id,
+    shader_config const& glc, projection_info const& cam_df,
+    cslice{GLuint} const& smtex_arr)
+  {
+    if (step == draw_step_postprocess) {
+      // debug_log("motion_blur draw");
+      mutable& sdr = *sdr_re;
+      glUseProgram(sdr.program);
+      glDisable(GL_DEPTH_TEST);
+      glDepthMask(0);
+      darrayst{int} sampler_arr = darrayst{int}(
+	ppfbos.size(), 0);
+      for (const i, const& e: ppfbos) {
+	GLenum t = static_cast{GLenum}(static_cast{int}(GL_TEXTURE0) +
+	  static_cast{int}(i));
+	glActiveTexture(t);
+	glBindTexture(GL_TEXTURE_2D, ppfbos[i]->texture0.get());
+	sampler_arr[i] = static_cast{int}(i);
+      }
+      glUniform1iv(sdr.u_sampler_tex, static_cast{GLsizei}(ppfbos.size()),
+	caddress(sampler_arr[0]));
+      const pixel_delta = glm::make_vec2(
+	1.0f / static_cast{float}(ppfbos[0]->width),
+	1.0f / static_cast{float}(ppfbos[0]->height));
+      // debug_log("delta", pixel_delta);
+      glUniform2fv(sdr.u_pixel_delta, 1, pixel_delta.to_crawptr());
+      bo.draw(0, sdr);
+      cur_ppfbo += 1;
+      if (cur_ppfbo >= ppfbos.size()) {
+	cur_ppfbo = 0;
+      }
+    }
+  }
+  public function option{ptr{edit_mode_i}} get_edit_mode() const
+  {
+    return option{ptr{edit_mode_i}}();
+  }
+}
+
+metafunction motion_blur_shader_ptr
+  ptr{glshader{
+    motion_blur_uniforms, motion_blur_instance_attributes, motion_blur_vertex_attributes}};
+
+function motion_blur_shader_ptr
+init_motion_blur_shader(shader_config const& g, size_t num_fbos)
+{
+  tree_map{string, string} bnd;
+  bnd["motion_blur_param"] =
+    to_string(g.conf.get("motion_blur_param", 0.7, 0.334, 1.0));
+  bnd["mbsz"] = to_string(num_fbos);
+  const v = load_shader_program(g, bnd, "motion_blur.vsh");
+  const f = load_shader_program(g, bnd, "motion_blur.fsh");
+  return make_glshader_ptr{motion_blur_uniforms,
+    motion_blur_instance_attributes,
+    motion_blur_vertex_attributes}(v, f, "", g.debug_level, "motion_blur");
+}
+

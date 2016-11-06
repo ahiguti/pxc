@@ -493,23 +493,20 @@ private threaded function void gf_ctx_point_joint(string const& joint_name,
 }
 
 private threaded function void gf_ctx_tex3d(size_t nbase,
-  size_t ntex, float z, build_context_i const& ctx, poly_t const& poly,
-  mesh_index const& mp)
+  size_t ntex, vec3 const& mi, vec3 const& mx, build_context_i const& ctx,
+  poly_t const& poly, mesh_index const& mp)
 {
   varray{varray{vec3}} e;
-  gf_ctx_tex3d_int_surf(nbase, ntex, z, false, e, e, ctx, poly, mp);
+  gf_ctx_tex3d_int_surf(nbase, ntex, mi, mx, false, e, e, ctx, poly, mp);
 }
 
 private threaded function void gf_ctx_tex3d_int_surf(size_t nbase,
-  size_t ntex, float z, bool fill_bottom,
+  size_t ntex, vec3 const& mi, vec3 const& mx, bool fill_bottom,
   varray{varray{vec3}} const& int_quads,
   varray{varray{vec3}} const& surf_quads,
   build_context_i const& ctx, poly_t const& poly, mesh_index const& mp)
 {
-  const mi = make_vec3(0.0, 0.0, 0.0);
-  const sz = make_vec3(1.0, 1.0, z);
-    // TODO: 引数で指定
-  const mx = mi + sz;
+  const sz = mx - mi;
   varray{varray{vec3}} quads = surf_quads;
   if (quads.empty()) {
     const front = make_varray{vec3}(
