@@ -3029,7 +3029,7 @@ static void check_use_before_def_one(varmap_type& uvars,
     if (sdef != 0) {
       expr_var *const ev = dynamic_cast<expr_var *>(sdef->get_symdef_nochk());
       if (ev != 0 && uvars.find(ev) == uvars.end()) {
-	uvars[ev] = std::make_pair<expr_i *, expr_funcdef *>(e, 0);
+	uvars[ev] = std::pair<expr_i *, expr_funcdef *>(e, nullptr);
       }
     }
   }

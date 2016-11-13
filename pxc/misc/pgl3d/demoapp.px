@@ -407,12 +407,16 @@ function void handle_event(app_impl mutable& app,
       commands_r["reload"] = "1";
       return;
     }
-    if (ev.key.keysym.scancode == SDL_SCANCODE_F9) {
-      app.exposure *= 2.0;
+    if (ev.key.keysym.scancode == SDL_SCANCODE_F7) {
+      commands_r["dummy_flip"] = "1";
       return;
     }
     if (ev.key.keysym.scancode == SDL_SCANCODE_F8) {
       app.exposure *= 0.5;
+      return;
+    }
+    if (ev.key.keysym.scancode == SDL_SCANCODE_F9) {
+      app.exposure *= 2.0;
       return;
     }
     if (ev.key.keysym.scancode == SDL_SCANCODE_F10) {
@@ -522,12 +526,16 @@ private function tree_map{string, ptr{pgldrawer_export_i}} init_drawers(
   prepare_triangles_texture_data(sconf.conf, app.textures);
   tree_map{string, ptr{pgldrawer_export_i}} r;
   r.insert("drawer_0_triangles", make_drawer_triangles(sconf, app.textures,
-    res, 0));
-  const dr = make_drawer_triangles(sconf, app.textures, res, 1);
+    res, 0, 0));
+  const dr = make_drawer_triangles(sconf, app.textures, res, 1, 0);
   app.edit_mode = dr->get_edit_mode();
   r.insert("drawer_0_triangles_alt", dr);
+  r.insert("drawer_0_triangles_alt_opt1",
+    make_drawer_triangles(sconf, app.textures, res, 1, 1));
+  /*
+  */
   r.insert("drawer_0_triangles_null", make_drawer_triangles(sconf,
-    app.textures, res, 2));
+    app.textures, res, 2, 0));
   r.insert("drawer_1_lineparticle", make_drawer_lineparticle(sconf, res));
   r.insert("drawer_2_skybox", make_drawer_skybox(sconf, res));
   r.insert("drawer_particle", make_drawer_particle(sconf, res));
@@ -645,7 +653,9 @@ private function void build_vertices(app_impl mutable& app,
   const tr = make_varray{string}(
     "drawer_0_triangles",
     "drawer_0_triangles_alt",
-    "drawer_0_triangles_null");
+    "drawer_0_triangles_null",
+    "drawer_0_triangles_alt_opt1"
+    );
   // const tr = make_varray{string}("drawer_triangles");
   const parti = make_varray{string}("drawer_particle");
   const parti_bb = make_varray{string}("drawer_particle_bb");
@@ -729,6 +739,13 @@ private function void build_vertices(app_impl mutable& app,
       apply(m1, hole()),
       apply(m1,
 	ctx_tex3d(2, 1, mi, mx))));
+  pgs.make_vertex_set(tr, "box_opt1",
+    regular_polygon(1.4142f * box_size, 4,
+      apply(m1, hole()),
+      apply(m1,
+	ctx_tex3d(2, 3, mi, mx))));
+  /*
+  */
   pgs.make_vertex_set(tr, "smallbox",
     regular_polygon(1.4142f * small_box_size, 4,
       apply(small_m1,
@@ -966,6 +983,15 @@ private function void build_vertices(app_impl mutable& app,
     regular_polygon(1.0, 5,
       bump_rec(1.0, 10.0, 1, hole(), ctx_poly_joint("saucer")),
       ctx_poly_joint("particle-bb")));
+  /* for prepass test */
+  pgs.make_vertex_set(tr, "plane-multi-1",
+    regular_polygon(100.0, 4,
+      bump_rec_seq(0.1, 1.0, 10, hole(), ctx_poly_joint("box")),
+      hole()));
+  pgs.make_vertex_set(tr, "plane-multi-2",
+    regular_polygon(100.0, 4,
+      bump_rec_seq(0.1, 1.0, 10, hole(), backside(ctx_poly_joint("box"))),
+      hole()));
   /* for dynamics test */
   pgs.make_vertex_set(tr, "rigidbody-multi",
     regular_polygon(100.0, 4,
@@ -1021,7 +1047,7 @@ private function void build_vertices(app_impl mutable& app,
   {
     shapes_add(name, mass, collision_shape_e_concave);
   }
-  shapes_add_sphere("box", 32768.0f);
+  shapes_add_convex("box", 32768.0f);
   shapes_add_sphere("smallbox", 1.0f);
   shapes_add_convex("mstex3d", 1000.0f);
   shapes_add_convex("nest", 1000.0f);
@@ -1256,6 +1282,8 @@ scene_control(node_factory const& nfac,
     // "knight-multi",
     "box",
     "mstex3d",
+    "plane-multi-1",
+    "plane-multi-2",
     "rigidbody-multi",
     "block-smtest",
     "block-multi",
@@ -1450,7 +1478,7 @@ scene_control_step(scene_control mutable& sctl,
   {
     if (!sctl.scene_paused) {
       if (spawn_obj) {
-	const a = ss.posang.angle * glm::make_vec3(0.0f, 0.0f, -50.0f);
+	const a = ss.posang.angle * glm::make_vec3(0.0f, 0.0f, -5.0f);
 	mutable posang = ss.posang;
 	posang.position += a * 0.1f;
 	scene_node cnode = scene_node(

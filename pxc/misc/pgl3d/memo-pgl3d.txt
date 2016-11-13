@@ -2,6 +2,9 @@
 ---------------------------------------------------------------------------
 TODO
 
+現状動く環境: GL 2.1以上またはGLES 3.0以上。
+ GLES 2は3dテクスチャが使えないので不可。
+
 - dummy_flip有効のときは専用のフレームバッファに描画するように
 
 - mipmapを読むと色がおかしい
@@ -2780,4 +2783,60 @@ step1対象のフレームバッファ: color, depth, depth_alt
 step2対象のフレームバッファ: color, depth
 depth_altはstep2でuniform int sampler_depth_altに渡す
 step2のfsで遠点をdepth_altから計算、そこまでに衝突しなければdiscard
+
+---------------------------------------------------------------------------
+メモ
+
+tile3_size 16x16x16
+pat3_size 16x16x16
+map3_size 256x256x256
+virt3_size
+
+---------------------------------------------------------------------------
+FragDepth更新
+
+OpenGL 4.2以降か、GL_ARB_conservative_depth有効のとき。
+
+layout (depth_less) out float gl_FragDepth;
+gl_FragCoord.zより小さい値しかセットしない
+
+---------------------------------------------------------------------------
+重ね合わせ
+
+detail_depth_curをCOLORにセットしたFBOを用意。テクスチャにしなくてもよい？
+detail_depthテクスチャを作る。
+
+detail_depth_curを1.0で埋める
+
+大きいオブジェクト
+近い順に描画
+  detail_depthを読んで手動デプステスト
+  detail_depth_curにfragdepthを書き込む
+  draw後、detail_depth_curからdetail_depthにコピーする
+
+小さいオブジェクト
+  detail_depthを読んで手動デプステスト
+  fragdepthは書き込まない
+
+
+glTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
+  GLint x, GLint y, GLsizei width, GLsizei height);
+現在描画対象となっているフレームバッファの(x,y,width,height)領域を、
+現在bindしているテクスチャの(xoffset,yoffset)位置へコピーする。
+
+変更手順
+aggregated_ibufffer_drawを1インスタンス単位で呼べるようにする
+aggregated_ibufffer_draw
+  // 各vertex_set(形状データ)ごと
+  for (const vs_id: 0 .. bo.num_vs()) {
+    // draw call 一発で描画
+    bo.draw_elems_instanced()
+  }
+大きいオブジェクトはvertex_setを専用のものにするか
+trianglesシェーダのインスタンス間で共有データを持てるようにする。
+
+vertex_set順に描画すると手前から順にソートする意味がない。
+z-prepassも無効。
+シェーダの描画順序でfs無駄打ちを防止するのがよいか。
+分解しないオブジェクトは内接メッシュを作ってz-prepassでもよい。
 

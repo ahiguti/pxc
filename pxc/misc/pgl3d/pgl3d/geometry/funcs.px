@@ -121,6 +121,7 @@ public metafunction hole to_gf_poly{gf_hole};
 public metafunction sphere to_gf_poly{gf_sphere};
 public metafunction rectangle_split to_gf_poly{gf_rectangle_split};
 public metafunction rotate_local to_gf_poly{gf_rotate_local};
+public metafunction backside to_gf_poly{gf_backside};
 public metafunction apply to_gf_poly{gf_apply};
 public metafunction bump_apply to_gf_poly{gf_bump_apply};
 public metafunction rand_sphere to_gf_poly{gf_rand_sphere};
@@ -729,6 +730,14 @@ private threaded function void gf_rotate_local(quat const& q,
     const v1 = m * make_vec4(v.pos.x, v.pos.y, v.pos.z, 1.0);
     v.pos = make_vec3(v1.x, v1.y, v1.z);
   }
+  c0(ctx, p, mp);
+}
+
+private threaded function void gf_backside(gf_poly const& c0,
+  build_context_i const& ctx, poly_t const& poly, mesh_index const& mp)
+{
+  darrayst{vertex_attr} p = poly;
+  reverse(p.range());
   c0(ctx, p, mp);
 }
 

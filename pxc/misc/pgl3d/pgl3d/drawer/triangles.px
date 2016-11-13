@@ -78,13 +78,15 @@ private tsvaluetype struct shadowmap_uniforms()
 }
 
 public struct drawer_triangles(shader_config const& glc0,
-  textures_ptr const& textures0, resource_pool_ptr const& res0, int opt0)
+  textures_ptr const& textures0, resource_pool_ptr const& res0, int opt0,
+  int opt1)
 <pgldrawer_i>
 {
   metafunction tattr triangles_vertex_attributes;
   textures_ptr textures = textures0;
   ptr{resource_pool} res = pointer_downcast{ptr{resource_pool}}(res0);
   int const stype = opt0;
+  int const ssubtype = opt1;
   option{triangles_shader_ptr} sdr_solid;
   option{zprepass_shader_ptr} sdr_zp;
   option{shadowmap_shader_ptr} sdr_shadow;
@@ -105,7 +107,7 @@ public struct drawer_triangles(shader_config const& glc0,
   init(glc);
   private function void init(shader_config const& glc)
   {
-    debug_log("drawer_triangles init ", stype);
+    debug_log("drawer_triangles init ", stype, ssubtype);
     const tex_col = *textures->equal_range("triangles.tile_color");
     const tex_dep = *textures->equal_range("triangles.tile_depth");
     const tex_map = *textures->equal_range("triangles.tile_map");
@@ -162,10 +164,10 @@ public struct drawer_triangles(shader_config const& glc0,
     debug_log("drawer_triangles init ", stype, "done");
   }
   public function string get_vbid_name() const {
-    return "vbid_triangles_" + to_string(stype);
+    return "vbid_triangles_" + to_string(stype) + "_" + to_string(ssubtype);
   }
   public function string get_main_vbid_name() const {
-    return "vbid_triangles_0";
+    return "vbid_triangles_0_0";
   }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
@@ -217,16 +219,19 @@ public struct drawer_triangles(shader_config const& glc0,
       if (!voxtpat_mip.empty()) {
 	voxtpat_size = make_ivec3(si(voxtpat_mip[0]->get_width()),
 	  si(voxtpat_mip[0]->get_height()), si(voxtpat_mip[0]->get_depth()));
-	voxtpat_size = map{ivec3, operator::sub}(voxtpat_size, voxtile_size);
+	voxtpat_size = map{ivec3, operator::div}(voxtpat_size, voxtile_size);
+	voxtpat_size = map{ivec3, power_of_2}(voxtpat_size);
 	voxtmap_size = make_ivec3(si(voxtmap_mip[0]->get_width()),
 	  si(voxtmap_mip[0]->get_height()), si(voxtmap_mip[0]->get_depth()));
+	voxtmap_size = map{ivec3, power_of_2}(voxtmap_size);
 	const virt_size = map{ivec3, operator::mul}(voxtile_size,
 	  voxtmap_size);
 	virt3_size = fold_list{max}(0, virt_size);
       }
-      // debug_log("pat3_size: ", voxtpat_size);
-      // debug_log("map3_size: ", voxtmap_size);
-      // debug_log("virt3_size: ", virt3_size);
+      debug_log("stype: ", stype);
+      debug_log("pat3_size: ", voxtpat_size);
+      debug_log("map3_size: ", voxtmap_size);
+      debug_log("virt3_size: ", virt3_size);
       bnd["pat3_size"] = ivec3_string(voxtpat_size.x, voxtpat_size.y,
 	voxtpat_size.z);
       bnd["map3_size"] = ivec3_string(voxtmap_size.x, voxtmap_size.y,

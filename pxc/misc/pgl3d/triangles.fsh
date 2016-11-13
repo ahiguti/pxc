@@ -312,7 +312,8 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
     vec4 value = texelFetch(sampler_voxtmap, ivec3(curpos_t) >> tmap_mip, 
       tmap_mip);
     <%else/>
-    vec4 value = <%texture3d/>(sampler_voxtmap, curpos_t / map3_size);
+    vec4 value = textureLod(sampler_voxtmap, curpos_t / map3_size, 0.0);
+    // vec4 value = <%texture3d/>(sampler_voxtmap, curpos_t / map3_size);
     <%/>
     int node_type = int(floor(value.a * 255.0 + 0.5));
     bool is_pat = (node_type == 1);
@@ -324,8 +325,10 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
       value = texelFetch(sampler_voxtpat,
 	ivec3(curpos_tp + curpos_tr) >> tpat_mip, tpat_mip);
       <%else/>
-      value = <%texture3d/>(sampler_voxtpat,
-	(curpos_tp + curpos_tr) / pattex3_size);
+      value = textureLod(sampler_voxtpat,
+        (curpos_tp + curpos_tr) / pattex3_size, 0.0);
+      // value = <%texture3d/>(sampler_voxtpat,
+      //  (curpos_tp + curpos_tr) / pattex3_size);
       <%/>
       // value = vec4(1.0, 1.0, 1.0, 1.0);
       // value.xyz = vec3(0.0);
@@ -434,7 +437,8 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
       vec4 value = texelFetch(sampler_voxtmap, ivec3(curpos_t) >> tmap_mip, 
 	tmap_mip);
       <%else/>
-      vec4 value = <%texture3d/>(sampler_voxtmap, curpos_t / map3_size);
+      vec4 value = textureLod(sampler_voxtmap, curpos_t / map3_size, 0.0);
+      // vec4 value = <%texture3d/>(sampler_voxtmap, curpos_t / map3_size);
       <%/>
       int node_type = int(floor(value.a * 255.0 + 0.5));
       bool is_pat = (node_type == 1);
@@ -449,8 +453,10 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
 	value = texelFetch(sampler_voxtpat,
 	  ivec3(curpos_tp + curpos_tr) >> tpat_mip, tpat_mip);
 	<%else/>
-	value = <%texture3d/>(sampler_voxtpat,
-	  (curpos_tp + curpos_tr) / pattex3_size);
+	value = textureLod(sampler_voxtpat,
+	  (curpos_tp + curpos_tr) / pattex3_size, 0.0);
+	// value = <%texture3d/>(sampler_voxtpat,
+	//   (curpos_tp + curpos_tr) / pattex3_size);
 	<%/>
 	// value = vec4(1.0, 1.0, 1.0, 1.0);
 	// value.xyz = vec3(0.0);
@@ -808,6 +814,18 @@ float generate_random(vec3 v)
   return fract(sin(dot(v.xy, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
+vec4 get_sampler_sm(int i, vec2 p)
+{
+  <%if><%is_gl3_or_gles3/>
+    return <%texture2d/>(sampler_sm[i], p);
+  <%else/>
+    <%for x 0><%smsz/>
+      if (i == <%x/>) return <%texture2d/>(sampler_sm[<%x/>], p);
+    <%/>
+    return vec4(0.0);
+  <%/>
+}
+
 void main(void)
 {
   vec4 color = vec4(0.0, 0.0, 0.0, 1.0);
@@ -903,7 +921,7 @@ void main(void)
     vec4 gpos = vary_model_matrix * vec4(pos, 1.0);
       // vary_model_matrixは接線空間からワールドへの変換
     <%if><%update_frag_depth/>
-      {
+      if (false) {
 	// FragDepth更新するならこの節を有効にする
 	vec4 vpos = view_projection_matrix * gpos;
 	float cdepth = vpos.z / vpos.w;
@@ -995,8 +1013,8 @@ void main(void)
 	float sml = 0.0;
 	for (float i = -1.; i <= 1.; ++i) {
 	  for (float j = -1.; j <= 1.; ++j) {
-	    zval_cur = <%texture2d/>
-	      (sampler_sm[sm_to_use], smpos.xy +
+	    zval_cur = get_sampler_sm
+	      (sm_to_use, smpos.xy +
 		(vec2(i,j) + generate_random(rel_camera_pos) * 1.0)/4096.0).x;
 	    zval = min(zval, zval_cur);
 	    sml += float(smpos.z < zval_cur
@@ -1007,8 +1025,8 @@ void main(void)
 	// no multisample
 	vec3 smpos;
 	smpos = (cp_sm + 1.0) * 0.5;
-	float zval = <%texture2d/>
-	  (sampler_sm[sm_to_use], smpos.xy).x;
+	float zval = get_sampler_sm
+	  (sm_to_use, smpos.xy).x;
 	float sml = float(smpos.z < zval * 1.0005);
       <%/>
     <%elseif/><%enable_vsm/>
@@ -1025,8 +1043,8 @@ void main(void)
 	for (int i = -1; i <= 1; i += 2) {
 	  for (int j = -1; j <= 1; j += 2) {
 	    // キャスト位置
-	    smz = <%texture2d/>
-	      (sampler_sm[sm_to_use], smpos.xy
+	    smz = get_sampler_sm
+	      (sm_to_use, smpos.xy
 		+ vec2(float(i), float(j)) / 8192.0).rg;
 	    zval = min(zval, smz.r);
 	    dist = smpos.z - smz.r * 1.001;
@@ -1049,8 +1067,8 @@ void main(void)
       <%else/>
 	// no multisample
 	smpos = (cp_sm + 1.0) * 0.5;
-	smz = <%texture2d/>
-	  (sampler_sm[sm_to_use], smpos.xy).rg;
+	smz = get_sampler_sm
+	  (sm_to_use, smpos.xy).rg;
 	float zval = smz.r;
 	float zval_sq = smz.g;
 	float sml = 0.0;
@@ -1069,8 +1087,8 @@ void main(void)
       vec3 smpos;
       vec3 smz;
       smpos = (cp_sm + 1.0) * 0.5;
-      smz = <%texture2d/>
-	  (sampler_sm[sm_to_use], smpos.xy).rgb;
+      smz = get_sampler_sm
+	  (sm_to_use, smpos.xy).rgb;
       smz = floor(smz * 255.0 + 0.5);
       float zval = 
 	smz.r / 256. + smz.g / 65536.0 + smz.b / 16777216.;

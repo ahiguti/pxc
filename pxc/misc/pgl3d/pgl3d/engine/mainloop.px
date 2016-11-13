@@ -164,6 +164,7 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
   private framerate_control mutable frctl = framerate_control(sdlc.vsync,
     conf.get("fps", 60.0, 1.0, 3600.0),
     conf.get("frame_sleep", 1, 0, 1));
+  private int dummy_flip = conf.get("dummy_flip", 0, 0, 4);
   private string_map commands;
   private int fullscreen = 0;
   private bool async_motion_thread = false; // conf.get("async_motion_thread", 0, 1, 0) == 1;
@@ -172,6 +173,7 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
   private bool paused = false;
   private varray{short} joy_axes;
   private varray{bool} joy_buttons;
+  private int target_tick = 0;
   init();
   private function void init()
   {
@@ -238,6 +240,9 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
 	  frctl.toggle_vsync();
 	} else if (k == "fullscreen") {
 	  toggle_fullscreen();
+	} else if (k == "dummy_flip") {
+	  dummy_flip = (dummy_flip + 1) % 5;
+	  debug_log("dummy_flip", dummy_flip);
 /*
 	} else if (k == "reload") {
 	  reload_shaders();
@@ -448,9 +453,36 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
     fr.save_ticks(5, SDL_GetTicks());
     SDL_GL_SwapWindow(sdlc.sdl_window);
     fr.save_ticks(6, SDL_GetTicks());
-    for (const i: 0 .. sconf.dummy_flip) {
-      pgs.draw_frame_lastpass(local_whole_instances, cam_drawing_frame);
-      SDL_GL_SwapWindow(sdlc.sdl_window);
+    if (frctl.vsync != 0 && dummy_flip == 0) {
+      // vsync有効でdummy_flipが0のときは自動でdummy_flipを入れる
+      int ti = static_cast{int}(SDL_GetTicks()) * 60;
+      int flip_count = 0;
+      debug_log("target_tick,ti,delay", target_tick, ti, ti - target_tick);
+      if (target_tick - ti < -20000) {
+	target_tick = ti + 1000;
+	debug_log("adjusting prev_tick = ti - 20000");
+      } else if (target_tick - ti > 20000) {
+	target_tick = ti + 1000;
+	debug_log("adjusting prev_tick = ti + 20000");
+      } else {
+	flip_count = max((ti - 5000 - target_tick) / 1000, 0);
+	target_tick += (flip_count + 1) * 1000;
+      }
+      debug_log("flip_count", flip_count);
+      if (flip_count > 2) {
+	flip_count = 2;
+      }
+      for (int i: 0 .. flip_count) {
+	pgs.draw_frame_lastpass(local_whole_instances, cam_drawing_frame);
+	SDL_GL_SwapWindow(sdlc.sdl_window);
+      }
+      frctl.frame_speed_mul = static_cast{float}(flip_count + 1);
+    } else {
+      // dummy_flipが2以上のときはdummy_flipを入れる
+      for (const i: 1 .. dummy_flip) {
+	pgs.draw_frame_lastpass(local_whole_instances, cam_drawing_frame);
+	SDL_GL_SwapWindow(sdlc.sdl_window);
+      }
     }
     pgs.frame_end();
     // debug_log("swapwindow");
