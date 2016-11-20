@@ -71,15 +71,15 @@ public struct demoapp_application()
   <pgl3d_application>
 {	
   public app_impl app;
-  public function tree_map{string, ptr{pgldrawer_export_i}} on_init_drawers(
+  public function varray{ptr{pgldrawer_export_i}} on_init_drawers(
     shader_config const& conf, resource_pool_ptr const& res)
   {
-debug_log("init_drawers");
+    debug_log("init_drawers");
     return init_drawers(app, conf, res);
   }
   public function void on_build_vertices(make_vertices_i mutable& mvx)
   {
-debug_log("build_vertices");
+    debug_log("build_vertices");
     build_vertices(app, mvx);
   }
   public function void on_event(SDL_Event const& ev, float speed,
@@ -303,12 +303,13 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
     whole_instances_type mutable& whole_instances)
   {
     size_t r = 0;
-    const& bo_id = sn.joint_id.bo_id;
-    const& vs_id = sn.joint_id.vs_id;
-    if (bo_id != bo_id_invalid() && vs_id != vs_id_invalid()) {
+    const& vbid = sn.joint_id.vbid;
+    const& vsid = sn.joint_id.vsid;
+    if (vbid != vbid_invalid() && vsid != vsid_invalid()) {
       ++r;
-      mutable& idata = whole_instances[bo_id][vs_id];
-      ftable[bo_id](sn, ncd, idata);
+      mutable& idata = whole_instances[vbid][vsid];
+      ftable[vbid](sn, ncd, idata);
+      // debug_log("prepare instance vbid=", vbid);
     }
     for (const i, const& snp: sn.children) {
       r += prepare_instance_data_ft_rec(ncd, snp, ftable, whole_instances);
@@ -321,9 +322,9 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
     whole_instances_type mutable& whole_instances)
   {
     // FIXME: 
-    const bo_id = sctl.joint_id_lp.bo_id;
-    const vs_id = sctl.joint_id_lp.vs_id;
-    mutable& idata = whole_instances[bo_id][vs_id];
+    const vbid = sctl.joint_id_lp.vbid;
+    const vsid = sctl.joint_id_lp.vsid;
+    mutable& idata = whole_instances[vbid][vsid];
     for (const k, const& lpbsw: sctl.lpbullet_swarms) {
       const& lparr = lpbsw->lparr;
       for (const i, const& lpb: lparr) {
@@ -517,39 +518,40 @@ function void handle_keys(app_impl mutable& app,
   app.prev_joy_buttons = buttons;
 }
 
-private function tree_map{string, ptr{pgldrawer_export_i}} init_drawers(
+private function varray{ptr{pgldrawer_export_i}} init_drawers(
   app_impl mutable& app, shader_config const& sconf,
   resource_pool_ptr const& res)
 {
   sdl_log("app_init_drawers");
   const t0 = get_time(io::system);
   prepare_triangles_texture_data(sconf.conf, app.textures);
-  tree_map{string, ptr{pgldrawer_export_i}} r;
-  r.insert("drawer_0_triangles", make_drawer_triangles(sconf, app.textures,
-    res, 0, 0));
+  varray{ptr{pgldrawer_export_i}} r;
+  r.push_back(make_drawer_triangles(sconf, app.textures, res, 1, 5));
+  r.push_back(make_drawer_triangles(sconf, app.textures, res, 1, 4));
+  r.push_back(make_drawer_triangles(sconf, app.textures, res, 1, 3));
+  r.push_back(make_drawer_triangles(sconf, app.textures, res, 1, 2));
+  r.push_back(make_drawer_triangles(sconf, app.textures, res, 1, 1));
   const dr = make_drawer_triangles(sconf, app.textures, res, 1, 0);
   app.edit_mode = dr->get_edit_mode();
-  r.insert("drawer_0_triangles_alt", dr);
-  r.insert("drawer_0_triangles_alt_opt1",
-    make_drawer_triangles(sconf, app.textures, res, 1, 1));
+  r.push_back(dr);
+  r.push_back(make_drawer_triangles(sconf, app.textures, res, 0, 0));
+  r.push_back(make_drawer_triangles(sconf, app.textures, res, 2, 0));
   /*
   */
-  r.insert("drawer_0_triangles_null", make_drawer_triangles(sconf,
-    app.textures, res, 2, 0));
-  r.insert("drawer_1_lineparticle", make_drawer_lineparticle(sconf, res));
-  r.insert("drawer_2_skybox", make_drawer_skybox(sconf, res));
-  r.insert("drawer_particle", make_drawer_particle(sconf, res));
-  r.insert("drawer_particle_bb", make_drawer_particle_bb(sconf, res));
-  r.insert("drawer_rect2d", make_drawer_rect2d(sconf, res));
-  r.insert("drawer_font2", make_drawer_font2(sconf, res));
+  r.push_back(make_drawer_lineparticle(sconf, res));
+  r.push_back(make_drawer_skybox(sconf, res));
+  r.push_back(make_drawer_particle(sconf, res));
+  r.push_back(make_drawer_particle_bb(sconf, res));
+  r.push_back(make_drawer_rect2d(sconf, res));
+  r.push_back(make_drawer_font2(sconf, res));
   if (sconf.conf.get("fxaa_filter", 0, 0, 1) != 0) {
-    r.insert("drawer_fxaa", make_drawer_fxaa(sconf, res));
+    r.push_back(make_drawer_fxaa(sconf, res));
   }
   if (sconf.conf.get("blur_filter", 0, 0, 1) != 0) {
-    r.insert("drawer_blur", make_drawer_blur(sconf, res));
+    r.push_back(make_drawer_blur(sconf, res));
   }
   if (sconf.conf.get("motion_blur_filter", 0, 0, 1) != 0) {
-    r.insert("drawer_motion_blur", make_drawer_motion_blur(sconf, res));
+    r.push_back(make_drawer_motion_blur(sconf, res));
   }
   app.raycast_cull_front = sconf.conf.get("raycast_cull_front", 0, 0, 1) != 0;
   const t1 = get_time(io::system);
@@ -651,14 +653,16 @@ private function void build_vertices(app_impl mutable& app,
       // "airboat"
       );
   const tr = make_varray{string}(
-    "drawer_0_triangles",
-    "drawer_0_triangles_alt",
-    "drawer_0_triangles_null",
-    "drawer_0_triangles_alt_opt1"
-    );
-  // const tr = make_varray{string}("drawer_triangles");
-  const parti = make_varray{string}("drawer_particle");
-  const parti_bb = make_varray{string}("drawer_particle_bb");
+    "vbid_triangles_0_0");
+  const tr1_0 = make_varray{string}(
+    "vbid_triangles_1_0",
+    "vbid_triangles_2_0");
+  const tr1_1 = make_varray{string}(
+    "vbid_triangles_1_1");
+  const tr1_2 = make_varray{string}(
+    "vbid_triangles_1_2");
+  const parti = make_varray{string}("vbid_particle");
+  const parti_bb = make_varray{string}("vbid_particle_bb");
   for (const i, const name: objs) {
     string fn = name + ".obj";
     sdl_log("load", fn);
@@ -700,90 +704,35 @@ private function void build_vertices(app_impl mutable& app,
     .rotate(to_radians(45.0), glm::make_vec3(0.0, 0.0, 1.0));
   const smallmi = glm::make_vec3(0.0, 0.0, 0.0);
   const smallmx = glm::make_vec3(1.0f/256.0f, 1.0f/256.0f, 1.0f/256.0f);
-  /*
-  const smallmi = mi;
-  const smallmx = mx;
-  */
-  /*
-  if (app.raycast_cull_front) {
-    // cull_front, 直方体をレンダリング
-    pgs.make_vertex_set(tr, "box",
-      regular_polygon(1.4142f * box_size, 4,
-	apply(m1,
-	  bump_apply(m, true,
-	    ctx_tex3d(2, 1, mi, mx), ctx_tex3d(2, 1, mi, mx))),
-	apply(m1,
-	  ctx_tex3d(2, 1, mi, mx))));
-  } else {
-    // cull_back, 表面oquads, shadowmapとzprepassにiquads
-    pgs.make_vertex_set(tr, "box",
-      regular_polygon(1.4142f * box_size, 4,
-	apply(m1,
-	  bump_apply(m, true,
-	    ctx_tex3d_int_surf(2, 1, mi, mx, true, iquads, oquads),
-	    ctx_tex3d_int_surf(2, 1, mi, mx, true, iquads, oquads))),
-	apply(m1,
-	  ctx_tex3d_int_surf(2, 1, mi, mx, true, iquads, oquads))));
-  }
-  */
-  /*
-  pgs.make_vertex_set(tr, "box",
-    regular_polygon(1.4142f * box_size, 4,
-      apply(m1,
-	bump_apply(m, true, ctx_fill(1), ctx_fill(1))),
-      apply(m1,
-	ctx_fill(1))));
-  */
-  pgs.make_vertex_set(tr, "box",
+  debug_log("make box");
+  pgs.make_vertex_set(tr1_1, "box",
     regular_polygon(1.4142f * box_size, 4,
       apply(m1, hole()),
       apply(m1,
-	ctx_tex3d(2, 1, mi, mx))));
-  pgs.make_vertex_set(tr, "box_opt1",
+	ctx_tex3d(0, 0, mi, mx))));
+  debug_log("make box_opt1");
+  pgs.make_vertex_set(tr1_2, "box_opt1",
     regular_polygon(1.4142f * box_size, 4,
       apply(m1, hole()),
       apply(m1,
-	ctx_tex3d(2, 3, mi, mx))));
+	ctx_tex3d(0, 0, mi, mx))));
+  debug_log("make smallbox");
   /*
   */
-  pgs.make_vertex_set(tr, "smallbox",
+  pgs.make_vertex_set(tr1_1, "smallbox",
     regular_polygon(1.4142f * small_box_size, 4,
       apply(small_m1,
-	ctx_tex3d(2, 1, smallmi, smallmx)),
+	ctx_tex3d(0, 0, smallmi, smallmx)),
       hole()));
-  /*
-  pgs.make_vertex_set(tr, "smallbox",
-    regular_polygon(1.4142f * small_box_size, 4,
-      hole(),
-      apply(small_m1,
-	ctx_tex3d(2, 1, smallmi, smallmx))));
-  */
-  /*
-  pgs.make_vertex_set(tr, "box",
-    regular_polygon(1.4142f * box_size, 4,
-      apply(m1,
-	bump_apply(m, true,
-	  ctx_fill(1),
-	  ctx_fill(1))),
-      apply(m1,
-	ctx_tex3d_opt(2, 1, mi, mx, quads))));
-  */
-  /*
-  pgs.make_vertex_set(tr, "box",
-    polygon_values(quads, ctx_fill(1)));
-  m1 = glm::mat4().translate(glm::make_vec3(0.0, 0.0, -50.0f));
-  m = glm::mat4()
-    .translate(glm::make_vec3(0.0, 0.0, 32.0f));
-  */
-  pgs.make_vertex_set(tr, "mstex3d",
+  pgs.make_vertex_set(tr1_0, "mstex3d",
     regular_polygon(300.0f, 100,
       apply(m1,
 	bump_rec(1.0, 1.0, 16,
 	  lid(
-	    ctx_tex3d(2, 1, mi, mx),
+	    ctx_tex3d(1, 0, mi, mx),
 	    bump_rec(0.01, 1.0, 1,
 	      ctx_fill(0),
-	      ctx_tex3d(2, 1, mi, mx)
+	      ctx_tex3d(1, 0, mi, mx)
 	    )
 	  ),
 	  hole()
@@ -828,6 +777,16 @@ private function void build_vertices(app_impl mutable& app,
       regular_polygon(3.0, 4,
 	ctx_poly_joint("box"),
 	apply(m1, bump_rec(1.0, 1.0, 1, hole(), ctx_poly_joint("block")))));
+  }
+  {
+    const m1 = glm::mat4().rotate(to_radians(90.0),
+	glm::make_vec3(1.0, 0.0, 0.0));
+    const m2 = glm::mat4().rotate(to_radians(-90.0),
+	glm::make_vec3(1.0, 0.0, 0.0));
+    pgs.make_vertex_set(tr, "box-depth",
+      regular_polygon(3.0, 4,
+	ctx_poly_joint("box"),
+	apply(m1, bump_rec(1.0, 1.0, 1, hole(), ctx_poly_joint("box_opt1")))));
   }
   rnd = make_rand_generator(1U);
   pgs.make_vertex_set(tr, "block",
@@ -1013,7 +972,7 @@ private function void build_vertices(app_impl mutable& app,
       verts.append(sli[i].normal.to_cslice());
     }
     size_t nfpv = 6; // position and normal
-    pgs.make_vertex_set_by_triangles("drawer_triangles", "knight", verts,
+    pgs.make_vertex_set_by_triangles("vbid_triangles_0_0", "knight", verts,
       nfpv, elems);
     pgs.make_vertex_set(tr, "knight-multi",
       regular_polygon(600.0, 4,
@@ -1048,6 +1007,7 @@ private function void build_vertices(app_impl mutable& app,
     shapes_add(name, mass, collision_shape_e_concave);
   }
   shapes_add_convex("box", 32768.0f);
+  shapes_add_convex("box_opt1", 32768.0f);
   shapes_add_sphere("smallbox", 1.0f);
   shapes_add_convex("mstex3d", 1000.0f);
   shapes_add_convex("nest", 1000.0f);
@@ -1195,7 +1155,7 @@ scene_objects(collision_shape_data_array const& shape0, size_t num_split0)
     scene_node const& sn)
   {
     option{ptr{rigid_body_i}} r;
-    if (sn.joint_id.vs_id < 0) {
+    if (sn.joint_id.vsid < 0) {
       return r;
     }
     if (const& shape: shapes_by_id[sn.joint_id]) {
@@ -1281,6 +1241,8 @@ scene_control(node_factory const& nfac,
     */
     // "knight-multi",
     "box",
+    "box_opt1",
+    "box-depth",
     "mstex3d",
     "plane-multi-1",
     "plane-multi-2",
@@ -1467,12 +1429,13 @@ scene_control_step(scene_control mutable& sctl,
   scene_node sn_work = make_node();
   threaded function void prepare_one(scene_node const& sn)
   {
-    const& bo_id = sn.joint_id.bo_id;
-    const& vs_id = sn.joint_id.vs_id;
-    if (bo_id != bo_id_invalid() && vs_id != vs_id_invalid()) {
-      mutable& idata = whole_instances[bo_id][vs_id];
-      ftable[bo_id](sn, ncd, idata);
-    }	
+    const& vbid = sn.joint_id.vbid;
+    const& vsid = sn.joint_id.vsid;
+    if (vbid != vbid_invalid() && vsid != vsid_invalid()) {
+      mutable& idata = whole_instances[vbid][vsid];
+      // debug_log("prepare_one vbid=", vbid);
+      ftable[vbid](sn, ncd, idata);
+    }
   }
   threaded function void step_snobj_dynamics(bool spawn_obj, bool spawn_lp_flag)
   {

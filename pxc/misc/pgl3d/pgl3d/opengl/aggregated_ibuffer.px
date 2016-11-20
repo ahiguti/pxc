@@ -12,12 +12,17 @@ public import pgl3d::opengl::glshader -;
 public import pgl3d::opengl::glresource -;
 public import pgl3d::opengl::glvertex -;
 public import pgl3d::opengl::glbuffer -;
+public import pgl3d::engine::scene_node -;
 public import pgl3d::engine::pglbase -;
 
 public threaded struct aggregated_ibuffer()
 {
+  // 全インスタンスデータを一つのバイト列にまとめ、一度にGPUへ転送する機能
+  // を持つ。
   private varray{ptr{async_buffer}} buffers;
+    // VBO。3つ持つ。
   private size_t buffer_current;
+    // 現在書き込み中のVBO。0以上3未満。
   public function ptr{async_buffer} get_current() const {
     return buffers[buffer_current];
   }
@@ -40,11 +45,15 @@ aggregated_ibuffer_frame_begin(aggregated_ibuffer mutable& aibuf,
   whole_instances_type mutable& whole_instances, bool enable_instanced,
   bool enable_uniform_instancing)
 {
+  // 1フレーム描画の前に呼ばれる。全インスタンスデータを一つのVBOに転送する。
   if (enable_instanced && !enable_uniform_instancing) {
     //debug_log("ibuffer_frame_begin begin");
     size_t offset_float = 0;
-    for (const bo_id, mutable& bo_ib: whole_instances) {
-      for (const vs_id, mutable& inst: bo_ib) {
+    // 各vbid,vsidのインスタンスデータが連結されたバッファのどのオフセットに
+    // 位置するのかをglbuffer_offset_floatに記録しておく。後でdrawcall発行
+    // する際にそのオフセットを指定してdrawする。
+    for (const vbid, mutable& bo_ib: whole_instances) {
+      for (const vsid, mutable& inst: bo_ib) {
 	mutable& arr = inst.instance_buffer;
 	inst.glbuffer_offset_float = offset_float;
 	offset_float += arr.size();
@@ -63,10 +72,11 @@ aggregated_ibuffer_frame_begin(aggregated_ibuffer mutable& aibuf,
       //debug_log("ibuffer_frame_begin begin5");
       const rawptr{float} mapped_ptr = cur_buf.mapped_ptr;
       //debug_log("mapped_ptr", mapped_ptr, total_size_float * 4U);
-      for (const bo_id, mutable& bo_ib: whole_instances) {
-	for (const vs_id, mutable& inst: bo_ib) {
+      // 全インスタンスデータ(whole_instances)を連結して一つのVBOにコピーする。
+      for (const vbid, mutable& bo_ib: whole_instances) {
+	for (const vsid, mutable& inst: bo_ib) {
 	  const& arr = inst.instance_buffer;
-	  // if (bo_id == 3) { sdl_log("font2 instance", arr); }
+	  // if (vbid == 3) { sdl_log("font2 instance", arr); }
 	  const size_t sz = arr.size();
 	  mutable sli = rawptr_to_slice{float}(mapped_ptr + offset_float, sz);
 	  /*
@@ -91,6 +101,7 @@ public function void
 aggregated_ibuffer_frame_end(aggregated_ibuffer mutable& aibuf,
   bool enable_instanced, bool enable_uniform_instancing)
 {
+  // 1フレーム描画が終わったら呼ばれる。
   if (enable_instanced && !enable_uniform_instancing) {
     aibuf.get_current()->fence_sync();
     aibuf.switch_buffer();
@@ -100,7 +111,7 @@ aggregated_ibuffer_frame_end(aggregated_ibuffer mutable& aibuf,
 public function void
 aggregated_ibuffer_draw(aggregated_ibuffer const& aibuf,
   glshader_i mutable& sdr, vertex_buffer const& bo,
-  bo_instances_type const& bo_ib, vertex_buffer_id bo_id,
+  bo_instances_type const& bo_ib, vbid_t vbid,
   bool enable_instanced, bool enable_uniform_instancing)
 {
   bo.draw_pre(sdr);
@@ -108,22 +119,24 @@ aggregated_ibuffer_draw(aggregated_ibuffer const& aibuf,
     sdr.enable_instance_attrib_array(true);
     glBindBuffer(GL_ARRAY_BUFFER, aibuf.get_current()->vbo.get());
   }
-  for (const vs_id: 0 .. bo.num_vs()) {
-    // debug_log("vs_id=", vs_id, bo.num_vs(), bo_ib.size());
-    const& instance = bo_ib[vs_id];
+  // 各オブジェクト頂点データの種類(vertex set)について
+  for (const vsid: 0 .. bo.num_vs()) {
+    // debug_log("vsid=", vsid, bo.num_vs(), bo_ib.size());
+    const& instance = bo_ib[vsid];
     const& arr = instance.instance_buffer;
     if (arr.empty()) {
+      // このオブジェクト種類については描画するインスタンスは無い
       continue;
     }
-    // sdl_log("draw_elems", ji.bo_id, ji.vs_id, "model=", arr.size());
+    // sdl_log("draw_elems", ji.vbid, ji.vsid, "model=", arr.size());
     if (enable_instanced && !enable_uniform_instancing) {
       if (m::ne{is_gl3_or_gles3, 0}) {
 	/*
-	sdl_log("instancing bo", bo_id, "iattr_num_float",
+	sdl_log("instancing bo", vbid, "iattr_num_float",
 	  sdr.instance_attrib_num_float());
 	*/
 	sdr.instance_attrib_pointer(instance.glbuffer_offset_float);
-	bo.draw_elems_instanced(vs_id,
+	bo.draw_elems_instanced(vsid,
 	  arr.size() / sdr.instance_attrib_num_float());
       }
     } else if (enable_uniform_instancing) {
@@ -131,50 +144,50 @@ aggregated_ibuffer_draw(aggregated_ibuffer const& aibuf,
       size_t j;
       size_t const jmax = arr.size() / iattr_num_float;
       /*
-      sdl_log("uniforminstancing bo", bo_id, "iattr_num_float",
+      sdl_log("uniforminstancing bo", vbid, "iattr_num_float",
 	iattr_num_float, jmax);
       */
       for (j = 0; j < jmax; j += uniform_instancing_mul) {
 	size_t k = min((jmax - j), uniform_instancing_mul);
 	sdr.instance_attrib_set_uniform(arr, j * iattr_num_float, k);
-	bo.draw_elems_instanced(vs_id, k);
+	bo.draw_elems_instanced(vsid, k);
       }
       /*
       size_t const jmax = arr.size();
-      sdl_log("uniforminstancing bo", bo_id, "iattr_num_float",
+      sdl_log("uniforminstancing bo", vbid, "iattr_num_float",
 	iattr_num_float, jmax);
       for (j = 0; j < jmax; j += iattr_num_float * uniform_instancing_mul) {
 	size_t k = min((jmax - j) / iattr_num_float, uniform_instancing_mul);
 	sdr.instance_attrib_set_uniform(arr, j, k);
-	bo.draw_elems_instanced(vs_id, k);
+	bo.draw_elems_instanced(vsid, k);
       }
       */
     } else { /* no instancing (copying is not supported anymore) */
       size_t const iattr_num_float = sdr.instance_attrib_num_float();
       size_t j;
-      const& be = *bo.get_by_id(vs_id);
+      const& be = *bo.get_by_id(vsid);
       size_t const jmax = arr.size() / iattr_num_float;
       size_t inst_mul = 1; // this value was > 1 when copying is supported
       /*
-      sdl_log("noinstancing bo", bo_id, "iattr_num_float",
+      sdl_log("noinstancing bo", vbid, "iattr_num_float",
 	iattr_num_float, jmax, inst_mul);
       */
       for (j = 0; j < jmax; j += inst_mul) {
 	size_t k = min((jmax - j), inst_mul);
 	sdr.instance_attrib_set_uniform(arr, j * iattr_num_float, k);
-	bo.draw_elems(vs_id, k);
+	bo.draw_elems(vsid, k);
 	// debug_log("TextureBarrier");
 	// glTextureBarrier(); // FIXME
       }
       /*
       size_t const jmax = arr.size();
       const inst_mul = be.vtxs->num_copies;
-      sdl_log("noinstancing bo", bo_id, "iattr_num_float",
+      sdl_log("noinstancing bo", vbid, "iattr_num_float",
 	iattr_num_float, jmax);
       for (j = 0; j < jmax; j += iattr_num_float * inst_mul) {
 	size_t k = min((jmax - j) / iattr_num_float, inst_mul);
 	sdr.instance_attrib_set_uniform(arr, j, k);
-	bo.draw_elems(vs_id, k);
+	bo.draw_elems(vsid, k);
       }
       */
     }

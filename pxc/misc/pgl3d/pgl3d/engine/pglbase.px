@@ -16,7 +16,9 @@ public multithreaded struct instance_data
 }
 
 public metafunction bo_instances_type varray{instance_data};
+  // バッファオブジェクト毎(drawer毎)のインスタンスデータ
 public metafunction whole_instances_type varray{bo_instances_type};
+  // 全バッファオブジェクト(drawer)のインスタンスデータ。vbidで引く。
 
 public metafunction max_num_shadowmaps 8;
 
@@ -79,10 +81,6 @@ projection_info()
   public float option_value = 0.0f;
 }
 
-public tsvaluetype struct vertex_buffer_pool_key { }
-public metafunction vertex_buffer_id
-  m::symbol{intern_pool{vertex_buffer_pool_key}, "id_type"};
-
 public metafunction textures_ptr ptr{tree_map{string, ptr{texture_data}}};
 public metafunction make_textures_ptr
   make_ptr{tree_map{string, ptr{texture_data}}};
@@ -107,6 +105,7 @@ public interface make_vertices_i
     const;
   public function joint_id_type get_joint_id(cstrref const& name) const;
   public function texture_info get_texture_info(cstrref const& name) const;
+  public function vbid_t get_vbid(cstrref const& name) const;
 }
 
 public threaded struct node_common_data()

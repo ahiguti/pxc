@@ -22,43 +22,52 @@ public import pgl3d::drawer::base -;
 public import pgl3d::engine::pglbase -;
 public import pgl3d::engine::intern_pool -;
 
+public struct vertex_buffer_pool_key { }
+
 public struct
 pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
-  tree_map{string, ptr{pgldrawer_export_i}} const& drawers0, int width0,
+  varray{ptr{pgldrawer_export_i}} const& drawers0, int width0,
   int height0)
 <make_vertices_i>
 {
   public shader_config const glc = sconf0;
   public ptr{resource_pool} const respool = respool0;
   public tree_map{string, size_t} drawer_names = get_drawer_names(drawers0);
+    // 名前からdrawersのオフセットを返す
   public varray{ptr{pgldrawer_i}} drawers = downcast_drawers(drawers0);
+    // 全drawerを保持する
   public varray{size_t} drawers_shadow_pp;
+    // shadow_ppステップを持つようなdrawerの一覧
   public varray{size_t} drawers_postprocess;
-  public varray{vertex_buffer_id} drawer_vbids;
-  public varray{vertex_buffer_id} drawer_main_vbids;
-  // public varray{size_t} vbid_to_drawer_one;
+    // drawer_postprocessステップを持つようなdrawerの一覧
+  public varray{vbid_t} drawer_vbids;
+    // drawerのオフセットからそのdrawerのvbidを返す
+  public varray{vbid_t} drawer_instances_vbids;
+    // drawerのオフセットからそのdrawerのinstances vbidを返す
+  public varray{vbid_t} drawer_vertices_vbids;
+    // drawerのオフセットからそのdrawerのvertices vbidを返す
   public varray{ptr{gl_framebuffer}} sfbo_array;
-  // public gl_framebuffer ppfbo;
   public projection_info cam;
   public varray{ptr{vertex_buffer}} vertex_buffers;
+    // 全vertex_bufferを保持する。vbidで引く。
   public aggregated_ibuffer agg_ibuffer;
   public tptr{pidf_table} const pidft = make_tptr{pidf_table}();
   private auto_vertexarray vtxarr;
-  private tree_map{string, vertex_buffer_id} vertex_buffer_id_map;
+  private tree_map{string, vbid_t} vbid_map;
   private intern_pool{vertex_buffer_pool_key} vbid_pool;
   init();
   resize_screen(width0, height0, width0, height0);
   /*
-  public function vertex_buffer_id to_vbid(cstrref const& name) const {
+  public function vbid to_vbid(cstrref const& name) const {
     return vbid_pool.to_id(name);
   }
   */
-  public function vertex_buffer_id intern_vbid(cstrref const& name) {
+  public function vbid_t intern_vbid(cstrref const& name) {
     const r = vbid_pool.intern(name);
     sdl_log("intern ", name, r);
-    return r;
+    return static_cast{vbid_t}(r);
   }
-  public function void set_vertex_buffer(vertex_buffer_id vbid,
+  public function void set_vertex_buffer(vbid_t vbid,
     ptr{vertex_buffer} const& p) {
     vertex_buffers.resize(vbid + 1u,
       make_ptr{vertex_buffer}(0u, false, false));
@@ -101,11 +110,17 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
       glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
     }
     drawer_vbids.resize(drawers.size(), 0);
-    drawer_main_vbids.resize(drawers.size(), 0);
+    drawer_instances_vbids.resize(drawers.size(), 0);
+    drawer_vertices_vbids.resize(drawers.size(), 0);
     for (const i, const& pd: drawers) {
       drawer_vbids[i] = intern_vbid(pd->get_vbid_name());
-      debug_log("drawer_vbids", i, drawer_vbids[i], pd->get_vbid_name());
-      drawer_main_vbids[i] = intern_vbid(pd->get_main_vbid_name());
+      debug_log(i, "drawer_vbids", drawer_vbids[i], pd->get_vbid_name());
+      drawer_instances_vbids[i] = intern_vbid(pd->get_instances_vbid_name());
+      debug_log(i, "drawer_instances_vbids", drawer_instances_vbids[i],
+	pd->get_instances_vbid_name());
+      drawer_vertices_vbids[i] = intern_vbid(pd->get_vertices_vbid_name());
+      debug_log(i, "drawer_vertices_vbids", drawer_vertices_vbids[i],
+	pd->get_vertices_vbid_name());
       size_t j = drawer_vbids[i];
       /*
       if (vbid_to_drawer_one.size() <= j) {
@@ -154,8 +169,8 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
       if (name.empty()) {
 	continue;
       }
-      const bo_id = drawer_vbids[i];
-      const vtx = make_vertices(bo_id, name);
+      const vbid = drawer_vbids[i];
+      const vtx = make_vertices(vbid, name);
       pd->make_builtin_vertex_sets(vtx);
     }
   }
@@ -178,16 +193,22 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
   }
   private function void prepare_node_factory(node_factory mutable& nf) const
   {
-    for (const bo_id, const& bop: vertex_buffers) {
+    for (const vbid, const& bop: vertex_buffers) {
       for (const& n, const id: bop->vs_names) {
 	if (bop->is_sub_drawer) {
-	  // sub_drawer bo_id must not used for joint_id
+	  // sub_drawer vbid must not used for joint_id
+	  debug_log("is_sub_drawer skipped", n, "vbid=", vbid);
 	  continue;
 	}
 	joint_id_type jid;
-	jid.bo_id = static_cast{bo_id_t}(bo_id);
-	jid.vs_id = id;
-	nf.name_to_id[n] = jid;
+	jid.vbid = static_cast{vbid_t}(vbid);
+	jid.vsid = id;
+	mutable& ent = nf.name_to_id[n];
+	if (ent.vbid != vbid_invalid()) {
+	  debug_log("warning: duplicated node name", n, ent, jid);
+	}
+	ent = jid;
+	// nf.name_to_id[n] = jid;
       }
       nf.binfo.push_back(node_buffer_info());
       node_buffer_info mutable& nbi = nf.binfo[nf.binfo.size() - 1];
@@ -208,10 +229,10 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
   {
     joint_id_type scene_id;
     for (const i, const& bo: vertex_buffers) {
-      // sub-drawer bo_id must not used for joint_id
+      // sub-drawer vbid must not used for joint_id
       if (!bo->is_sub_drawer && bo->has_name(name)) {
-        scene_id.bo_id = static_cast{bo_id_t}(i);
-        scene_id.vs_id = bo->get_id_by_name(name);
+        scene_id.vbid = static_cast{vbid_t}(i);
+        scene_id.vsid = bo->get_id_by_name(name);
         break;
       }
     }
@@ -222,11 +243,11 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
   {
     joint_id_type scene_id;
     for (const i, const& bo: vertex_buffers) {
-      // allow sub-drawer bo_id
+      // allow sub-drawer vbid
       if (bo->has_name(name)) {
-        scene_id.bo_id = static_cast{bo_id_t}(i);
-        scene_id.vs_id = bo->get_id_by_name(name);
-	if (!vertex_buffers[scene_id.bo_id]->get_vertices(scene_id.vs_id)
+        scene_id.vbid = static_cast{vbid_t}(i);
+        scene_id.vsid = bo->get_id_by_name(name);
+	if (!vertex_buffers[scene_id.vbid]->get_vertices(scene_id.vsid)
 	    ->vertex_values.empty()) {
 	  break;
 	}
@@ -235,27 +256,32 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
     /*
     joint_id_type jid = find_joint_id_by_name(name);
     */
-    return vertex_buffers[scene_id.bo_id]
-      ->get_vertices(scene_id.vs_id);
+    return vertex_buffers[scene_id.vbid]
+      ->get_vertices(scene_id.vsid);
   }
   public function joint_id_type get_joint_id(cstrref const& name) const {
     return find_joint_id_by_name(name);
   }
-  public function ptr{vertices} make_vertices(vertex_buffer_id bo_id,
+  public function ptr{vertices} make_vertices(vbid_t vbid,
     cstrref const& name)
   {
-    return vertex_buffers[bo_id]->make_if(name)->vtxs;
+    debug_log("make_vertices", name, vbid);
+    return vertex_buffers[vbid]->make_if(name)->vtxs;
   }
   public function void make_vertex_set(cslice{string} const& dr_names,
     cstrref const& shape_name, gf_poly const& expr)
   {
     // make vertex set by geometry expression
+    // TODO: dr_names[0]はsubdrawerであってはならず、残りはsubdrawer
+    // でなければならない。さもないと頂点セットの名前からvsidを引くとき
+    // の一意性がなくなる。
+    // TODO: shape_nameは未使用のものでなくてはならない。
     varray{ptr{vertices}} vptrs;
     varray{dgf_filler} fillers;
     for (const i, const& dr_name: dr_names) {
       size_t dr_id = *drawer_names.equal_range(dr_name);
-      const bo_id = drawer_vbids[dr_id];
-      ptr{vertices} vptr = make_vertices(bo_id, shape_name);
+      const vbid = drawer_vbids[dr_id];
+      ptr{vertices} vptr = make_vertices(vbid, shape_name);
       dgf_filler filler = drawers[dr_id]->make_filler(vptr);
       vptrs.push_back(vptr);
       fillers.push_back(filler);
@@ -268,21 +294,25 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
     cslice{uint} const& elems)
   {
     size_t dr_id = *drawer_names.equal_range(dr_name);
-    const bo_id = drawer_vbids[dr_id];
-    ptr{vertices} vptr = make_vertices(bo_id, shape_name);
+    const vbid = drawer_vbids[dr_id];
+    ptr{vertices} vptr = make_vertices(vbid, shape_name);
     vptr->set_triangles(verts, nfpv, elems);
   }
   public function texture_info get_texture_info(cstrref const& name) const
   {
     texture_info r;
     for (const i, const& pd: drawers) {
-      const bo_id = drawer_vbids[i];
+      const vbid = drawer_vbids[i];
       r = pd->get_texture_info(name);
       if (r.surface_w != 0) {
 	break;
       }
     }
     return r;
+  }
+  public function vbid_t get_vbid(cstrref const& name) const
+  {
+    return static_cast{vbid_t}(vbid_pool.to_id(name));
   }
   public function void resize_screen(int disp_width, int disp_height,
     int w_width, int w_height)
@@ -407,12 +437,12 @@ pglshader_draw_frame_internal(bool lastpass, pglshader mutable& pgs,
 	// shadow
 	/* note: view_projection is pre-applied to model_matrix */
 	for (const i, const& pd: pgs.drawers) {
-	  const bo_id = pgs.drawer_vbids[i];
-	  const main_bo_id = pgs.drawer_main_vbids[i];
+	  const vert_vbid = pgs.drawer_vertices_vbids[i];
+	  const inst_vbid = pgs.drawer_instances_vbids[i];
 	  pd->draw(draw_step_shadowmapping, iter,
-	    *bos[bo_id],
-	    whole_instances[main_bo_id], pgs.agg_ibuffer,
-	    bo_id, pgs.glc, cam_df, smtex_arr);
+	    *bos[vert_vbid],
+	    whole_instances[inst_vbid], pgs.agg_ibuffer,
+	    vert_vbid, pgs.glc, cam_df, smtex_arr);
 	}
 	// shadow postprocess
 	if (!pgs.drawers_shadow_pp.empty()) {
@@ -428,12 +458,12 @@ pglshader_draw_frame_internal(bool lastpass, pglshader mutable& pgs,
 	    }
 	    const j = pgs.drawers_shadow_pp[i];
 	    const& pd = pgs.drawers[j];
-	    const bo_id = pgs.drawer_vbids[j];
-	    const main_bo_id = pgs.drawer_main_vbids[j];
+	    const vert_vbid = pgs.drawer_vertices_vbids[j];
+	    const inst_vbid = pgs.drawer_instances_vbids[j];
 	    pd->draw(draw_step_shadow_pp, 0,
-	      *bos[bo_id],
-	      whole_instances[main_bo_id], pgs.agg_ibuffer,
-	      bo_id, pgs.glc, cam_df, smtex_arr);
+	      *bos[vert_vbid],
+	      whole_instances[inst_vbid], pgs.agg_ibuffer,
+	      vert_vbid, pgs.glc, cam_df, smtex_arr);
 	  }
 	}
       }
@@ -465,12 +495,12 @@ pglshader_draw_frame_internal(bool lastpass, pglshader mutable& pgs,
       glClear(GL_DEPTH_BUFFER_BIT);
       glColorMask(0, 0, 0, 0);
       for (const i, const& pd: pgs.drawers) {
-	const bo_id = pgs.drawer_vbids[i];
-	const main_bo_id = pgs.drawer_main_vbids[i];
+	const vert_vbid = pgs.drawer_vertices_vbids[i];
+	const inst_vbid = pgs.drawer_instances_vbids[i];
 	pd->draw(draw_step_zprepass, 0,
-	  *bos[bo_id],
-	  whole_instances[main_bo_id], pgs.agg_ibuffer,
-	  bo_id, pgs.glc, cam_df, smtex_arr);
+	  *bos[vert_vbid],
+	  whole_instances[inst_vbid], pgs.agg_ibuffer,
+	  vert_vbid, pgs.glc, cam_df, smtex_arr);
       }
     }
     tick2 = SDL_GetTicks();
@@ -495,12 +525,12 @@ pglshader_draw_frame_internal(bool lastpass, pglshader mutable& pgs,
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
       }
       for (const i, const& pd: pgs.drawers) {
-	const bo_id = pgs.drawer_vbids[i];
-	const main_bo_id = pgs.drawer_main_vbids[i];
+	const vert_vbid = pgs.drawer_vertices_vbids[i];
+	const inst_vbid = pgs.drawer_instances_vbids[i];
 	pd->draw(draw_step_solid, 0,
-	  *bos[bo_id],
-	  whole_instances[main_bo_id], pgs.agg_ibuffer,
-	  bo_id, pgs.glc, cam_df, smtex_arr);
+	  *bos[vert_vbid],
+	  whole_instances[inst_vbid], pgs.agg_ibuffer,
+	  vert_vbid, pgs.glc, cam_df, smtex_arr);
       }
     }
     /* blend */
@@ -512,12 +542,12 @@ pglshader_draw_frame_internal(bool lastpass, pglshader mutable& pgs,
       glEnable(GL_BLEND);
       glBlendFunc(GL_ONE, GL_ONE);
       for (const i, const& pd: pgs.drawers) {
-	const bo_id = pgs.drawer_vbids[i];
-	const main_bo_id = pgs.drawer_main_vbids[i];
+	const vert_vbid = pgs.drawer_vertices_vbids[i];
+	const inst_vbid = pgs.drawer_instances_vbids[i];
 	pd->draw(draw_step_blend, 0,
-	  *bos[bo_id],
-	  whole_instances[main_bo_id], pgs.agg_ibuffer,
-	  bo_id, pgs.glc, cam_df, smtex_arr);
+	  *bos[vert_vbid],
+	  whole_instances[inst_vbid], pgs.agg_ibuffer,
+	  vert_vbid, pgs.glc, cam_df, smtex_arr);
       }
     }
   }
@@ -539,12 +569,12 @@ pglshader_draw_frame_internal(bool lastpass, pglshader mutable& pgs,
       glBindFramebuffer(GL_FRAMEBUFFER, fb);
       const j = pgs.drawers_postprocess[i];
       const& pd = pgs.drawers[j];
-      const bo_id = pgs.drawer_vbids[j];
-      const main_bo_id = pgs.drawer_main_vbids[j];
+      const vert_vbid = pgs.drawer_vertices_vbids[j];
+      const inst_vbid = pgs.drawer_instances_vbids[j];
       pd->draw(draw_step_postprocess, 0,
-	*bos[bo_id],
-	whole_instances[main_bo_id], pgs.agg_ibuffer,
-	bo_id, pgs.glc, cam_df, smtex_arr);
+	*bos[vert_vbid],
+	whole_instances[inst_vbid], pgs.agg_ibuffer,
+	vert_vbid, pgs.glc, cam_df, smtex_arr);
     }
   }
   /* hud */
@@ -556,12 +586,12 @@ pglshader_draw_frame_internal(bool lastpass, pglshader mutable& pgs,
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE);
     for (const i, const& pd: pgs.drawers) {
-      const bo_id = pgs.drawer_vbids[i];
-      const main_bo_id = pgs.drawer_main_vbids[i];
+      const vert_vbid = pgs.drawer_vertices_vbids[i];
+      const inst_vbid = pgs.drawer_instances_vbids[i];
       pd->draw(draw_step_hud, 0,
-	*bos[bo_id],
-	whole_instances[main_bo_id], pgs.agg_ibuffer,
-	bo_id, pgs.glc, cam_df, smtex_arr);
+	*bos[vert_vbid],
+	whole_instances[inst_vbid], pgs.agg_ibuffer,
+	vert_vbid, pgs.glc, cam_df, smtex_arr);
     }
   }
   return make_varray{uint}(tick1, tick2);
@@ -570,22 +600,22 @@ pglshader_draw_frame_internal(bool lastpass, pglshader mutable& pgs,
 /* private */
 
 private function tree_map{string, size_t}
-get_drawer_names(tree_map{string, ptr{pgldrawer_export_i}} const& drawers)
+get_drawer_names(varray{ptr{pgldrawer_export_i}} const& drawers)
 {
-  size_t i = 0;
   tree_map{string, size_t} r;
-  for (const& k, const& e: drawers) {
+  for (const i: 0 .. drawers.size()) {
+    const e = pointer_downcast{ptr{pgldrawer_i}}(drawers[i]);
+    const k = e->get_vbid_name();
     r[k] = i;
-    ++i;
   }
   return r;
 }
 
 private function varray{ptr{pgldrawer_i}}
-downcast_drawers(tree_map{string, ptr{pgldrawer_export_i}} const& drawers)
+downcast_drawers(varray{ptr{pgldrawer_export_i}} const& drawers)
 {
   varray{ptr{pgldrawer_i}} r;
-  for (const& k, const& e: drawers) {
+  for (const i, const& e: drawers) {
     r.push_back(pointer_downcast{ptr{pgldrawer_i}}(e));
   }
   return r;
@@ -604,11 +634,18 @@ build_context_impl(varray{ptr{vertices}} mutable& vptrs0,
     string const& joint_name, poly_t const& poly, mesh_index const& mp) const
   {
     if (joint_name.empty()) {
+      // debug_log("fill n=", n);
       fillers[n](flat_flag, poly, mp);
     } else if (polyjoint) {
-      dgf_poly_joint_internal(vptrs[0], joint_name, poly, mp);
+      // debug_log("polyjoint n=", joint_name);
+      for (const i, const& vptr: vptrs) {
+	dgf_poly_joint_internal(vptr, joint_name, poly, mp);
+      }
     } else {
-      dgf_point_joint_internal(vptrs[0], joint_name, poly, mp);
+      // debug_log("pointjoint n=", joint_name);
+      for (const i, const& vptr: vptrs) {
+	dgf_point_joint_internal(vptr, joint_name, poly, mp);
+      }
     }
   }
 }

@@ -19,7 +19,7 @@ private metafunction use_map_unsynchronized 1;
 
 public threaded struct vertex_set(size_t num_float_per_vertex0)
 {
-  public vs_id_t vs_id;
+  public vsid_t vsid;
   public string vs_name;
   public ptr{vertices} vtxs = make_ptr{vertices}(num_float_per_vertex0);
   public size_t vertex_values_offset;
@@ -135,6 +135,16 @@ public threaded struct async_buffer() {
   }
 }
 
+/*
+public threaded function vertex_buffer
+make_vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0,
+  bool is_sub_drawer0)
+{
+  return vertex_buffer(num_float_per_vertex0, draw_mode_points0,
+    is_sub_drawer0);
+}
+*/
+
 public threaded struct
 vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0,
   bool is_sub_drawer0)
@@ -146,33 +156,33 @@ vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0,
   public auto_buffer vbo_elems;
   public size_t num_vertex_values;
   public size_t num_elements;
-  public tree_map{string, vs_id_t} vs_names;
+  public tree_map{string, vsid_t} vs_names;
   public varray{ptr{vertex_set}} vs_arr;
   public function ptr{vertex_set} make_if(string const& name)
   {
     if (const id: vs_names[name]) {
       return vs_arr[id];
     } else {
-      const id = static_cast{vs_id_t}(vs_arr.size());
+      const id = static_cast{vsid_t}(vs_arr.size());
       const p = make_ptr{vertex_set}(num_float_per_vertex);
-      p->vs_id = id;
+      p->vsid = id;
       p->vs_name = name;
       vs_arr.push_back(p);
       vs_names[name] = id;
       return p;
     }
   }
-  public function cptr{vertices} get_vertices(vs_id_t vs_id) const
+  public function cptr{vertices} get_vertices(vsid_t vsid) const
   {
-    return vs_arr[vs_id]->vtxs;
+    return vs_arr[vsid]->vtxs;
   }
-  public function vs_id_t num_vs() const
+  public function vsid_t num_vs() const
   {
-    return static_cast{vs_id_t}(vs_arr.size());
+    return static_cast{vsid_t}(vs_arr.size());
   }
-  public function ptr{vertex_set} get_by_id(vs_id_t vs_id) const
+  public function ptr{vertex_set} get_by_id(vsid_t vsid) const
   {
-    return vs_arr[vs_id];
+    return vs_arr[vsid];
   }
   public function bool exists(string const& name) const
   {
@@ -182,7 +192,7 @@ vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0,
   {
     return vs_names.exists(name);
   }
-  public function vs_id_t get_id_by_name(string const& name) const
+  public function vsid_t get_id_by_name(string const& name) const
   {
     if (const id: vs_names[name]) {
       return id;
@@ -190,7 +200,7 @@ vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0,
       throw runtime_error_template{"vertex_buffer.get_id_by_name"}("");
     }
   }
-  public function size_t num_vs_ids() const
+  public function size_t num_vsids() const
   {
     return vs_arr.size();
   }
@@ -261,11 +271,11 @@ vertex_buffer(size_t num_float_per_vertex0, bool draw_mode_points0,
 }
 
 public function void
-vertex_buffer_draw(vertex_buffer const& bo, vs_id_t vs_id,
+vertex_buffer_draw(vertex_buffer const& bo, vsid_t vsid,
   glshader_i mutable& sdr)
 {
   vertex_buffer_draw_pre(bo, sdr);
-  vertex_buffer_draw_elems(bo, vs_id, 1);
+  vertex_buffer_draw_elems(bo, vsid, 1);
   vertex_buffer_draw_post(bo, sdr);
 }
 
@@ -293,10 +303,10 @@ vertex_buffer_draw_post(vertex_buffer const& bo, glshader_i mutable& sdr)
 }
 
 public function void
-vertex_buffer_draw_elems(vertex_buffer const& bo, vs_id_t vs_id,
+vertex_buffer_draw_elems(vertex_buffer const& bo, vsid_t vsid,
   size_t num_instance)
 {
-  const& be = *bo.get_by_id(vs_id);
+  const& be = *bo.get_by_id(vsid);
   const elem_offset = be.elements_offset;
   const elem_num = be.vtxs->elements_size_per_copy * num_instance;
   GLenum mode = bo.draw_mode_points ? GL_POINTS :
@@ -325,14 +335,14 @@ vertex_buffer_draw_elems(vertex_buffer const& bo, vs_id_t vs_id,
 }
 
 public function void
-vertex_buffer_draw_elems_instanced(vertex_buffer const& bo, vs_id_t vs_id,
+vertex_buffer_draw_elems_instanced(vertex_buffer const& bo, vsid_t vsid,
   size_t num_instance)
 {
   if (m::ne{is_gl3_or_gles3, 0}) {
     size_t elem_offset;
     size_t elem_num;
     {
-      const& be = *bo.get_by_id(vs_id);
+      const& be = *bo.get_by_id(vsid);
       elem_offset = be.elements_offset;
       elem_num = be.vtxs->elements_size_per_copy;
     }

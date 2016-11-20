@@ -26,7 +26,9 @@ public struct drawer_lineparticle(shader_config const& glc,
   metafunction tattr lineparticle_vertex_attributes;
   lineparticle_shader_ptr sdr_lp = init_lineparticle_shader(glc);
   public function string get_vbid_name() const { return "vbid_lineparticle"; }
-  public function string get_main_vbid_name() const {
+  public function string get_instances_vbid_name() const {
+    return "vbid_lineparticle"; }
+  public function string get_vertices_vbid_name() const {
     return "vbid_lineparticle"; }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
@@ -73,7 +75,7 @@ public struct drawer_lineparticle(shader_config const& glc,
   }
   public function void draw(draw_step step, size_t iter,
     vertex_buffer const& bo, bo_instances_type const& bo_ib,
-    aggregated_ibuffer const& aibuf, vertex_buffer_id bo_id,
+    aggregated_ibuffer const& aibuf, vbid_t vbid,
     shader_config const& glc, projection_info const& cam_df,
     cslice{GLuint} const& smtex_arr)
   {
@@ -91,7 +93,7 @@ public struct drawer_lineparticle(shader_config const& glc,
 	vp.to_crawptr());
       glUniform2fv(sdr.u_screen_size_px, 1, screen_size_px.to_crawptr());
       glUniform1fv(sdr.u_screen_size_base, 1, caddress(screen_size_base));
-      aibuf.draw(sdr, bo, bo_ib, bo_id, glc.enable_instanced,
+      aibuf.draw(sdr, bo, bo_ib, vbid, glc.enable_instanced,
 	glc.enable_uniform_instancing);
     }
   }

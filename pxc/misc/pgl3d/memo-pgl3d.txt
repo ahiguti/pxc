@@ -5,6 +5,8 @@ TODO
 現状動く環境: GL 2.1以上またはGLES 3.0以上。
  GLES 2は3dテクスチャが使えないので不可。
 
+- 使っていないssubtypeはdepth_rdコピーをしない
+
 - dummy_flip有効のときは専用のフレームバッファに描画するように
 
 - mipmapを読むと色がおかしい
@@ -2819,7 +2821,7 @@ detail_depth_curを1.0で埋める
   fragdepthは書き込まない
 
 
-glTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
+glCopyTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
   GLint x, GLint y, GLsizei width, GLsizei height);
 現在描画対象となっているフレームバッファの(x,y,width,height)領域を、
 現在bindしているテクスチャの(xoffset,yoffset)位置へコピーする。
@@ -2839,4 +2841,136 @@ vertex_set順に描画すると手前から順にソートする意味がない�
 z-prepassも無効。
 シェーダの描画順序でfs無駄打ちを防止するのがよいか。
 分解しないオブジェクトは内接メッシュを作ってz-prepassでもよい。
+
+ctx_fillなどに指定する整数値はmake_vertex_setの最初の引数として
+渡す配列のインデックスを差し、そのmappedの文字列の名前に一致する
+drawerで多角形を塗ることをいみする。fillの実体はengine/pglshader.px
+のbuild_context_impl::fill()。
+drawerごとのfillerを呼び出す。実体は各drawerのmake_fillerが返す
+インスタンスで、中身はたとえば
+dgf_fill_tattr_internal
+で、中では
+push_polygon_distinct()
+を呼んでいる
+make_vertex_setでは第二引数で示された名前のvertex setを作り、
+そのvertex setに対して第三引数の関数オブジェクトを評価して
+頂点データを埋める。
+
+glvertex::vertices: 一つのオブジェクトの頂点データを保持する
+glbuffer::vertex_set: verticesに加えてvertex_buffer内オフセットを保持する
+glbuffer::vertex_buffer: drawerの全オブジェクトの頂点データを保持しVBOを作る
+  drawerごとに一つ作られる。
+  pglshaderのvertex_buffersに保持される。
+pglshader::pglshader
+  varray{ptr{pgldrawer_i}} drawers;
+
+
+on_motion_step()のftable
+motion_thread_sharedのpidft0
+motion_thread_clientのpidft
+pglshaderのpidft
+pidf_table 各drawerのvbidに対し、get_prepare_instance_data_funcptr()を保持。
+例えばprepare_instance_data_triangles()
+  中身はinstance bufferにmodel行列を追加するだけ。
+on_motion_step()ではツリーを辿ってleafのノードについてvbidを
+見て対応するエントリをftableから取り、その関数を呼ぶ。そうするとインスタンス
+データが積まれる。
+
+不明点: main_vbidは何に使っているのか。
+
+scene_nodeのbo_idにはmain_vbidのほうが入っている？
+
+jointを作るときにctx_poly_jointを呼ぶが、
+jointの名前からvbidを引くのは最初に見つかったものを返すから
+drawersの中の先にあるdrawerのvbidを差すようになる。
+それのインスタンスを積む際にはそのvbidのインスタンスデータのみが積まれる。
+
+ctx.fill(true, true, 0, joint_name, poly, mp);
+これは実体は
+dgf_poly_joint_internal(vptrs[0], joint_name, poly, mp);
+なので、make_vertex_setの第一引数の最初のdrawerの
+
+次: ssubtype違いのシェーダ用に頂点データは完全に同一のものを用意
+しなければならない
+opt1のインスタンスデータを描画するときにはopt0の頂点データを読むようにする。
+
+---------------------------------------------------------------------------
+重ね合わせ案1
+
+大きいオブジェクトについては順序が変わっても描画結果はからわらないが、
+なるべく近い順に描くほうがfs無駄打ちが少なくなり効率的。
+デプステスト無効でよい。
+画面サイズの共有テクスチャを二つ作る。GL_R32Fでよいか。
+detail_depth_wrとdetail_depth_rd。1.0fで塗りつぶす。
+大きなオブジェクトについて、
+  detail_depth_rdはbindしてシェーダに渡す。
+  detail_depth_wrはフレームバッファを作り出力として使う。
+  fsの中では、まずraycast始点でのdepth値を計算し、detail_depth_rdを読んだ
+  値より大きければ必ず不可視なのでdiscardする。
+  raycastし、その結果detail_depth_rdより大きければdiscard。
+  そうでなければ色を塗り、detail_depth_wrにもdepth値を書き込む。
+  detail_depth_rdはdetail_depth_wrからコピー。
+  繰り返し。
+残りのオブジェクトについては、detail_depth_wrに書き込まない以外は同じ動作。
+
+---------------------------------------------------------------------------
+重ね合わせ案2
+
+ほぼ案1と同じだが、detail_depth_wrのかわりに普通のデプスバッファを使い、
+fsではgl_FragDepthを書き込む。一つの大きなオブジェクトを書き終わると
+デプスバッファをdetail_depth_rdにコピー。
+glCopyTexSubImage2Dでコピーできる。
+デプステストは無効でよく、かわりにfsで、raycast前後に1回ずつdetail_depth_rd
+と比較する。
+(あるいはdetail_depth_rdにコピーせず、デプスバッファをそのままbindして
+draw毎にglTextureBarrierする。gl4.5以上。同一のtexelに一回だけ
+read-modify-writeできる。)
+
+ssubtype = 5くらいから2まで。大きなオブジェクトをひとつづつ描画。
+ssubtype = 1。残りの大きなオブジェクトを描画。
+ssubtype = 0。デプステストはenable。depth_rdのデプステストはしない。
+  FragDepthも書き込まない。
+
+depth値の計算
+  posは接線空間の座標
+  vec4 gpos = vary_model_matrix * vec4(pos, 1.0);
+  vec4 vpos = view_projection_matrix * gpos;
+  float depth = (vpos.z / vpos.w + 1.0) * 0.5;
+  gl_FragDepth = clamp(depth, 0.0, 1.0);
+
+次
+- 描画前にdepth_rdへコピー(done)
+- fsでdepth_rdを読んでデプステスト(done)
+- 距離に応じてssubtypeの違うdrawerへ移動
+
+
+---------------------------------------------------------------------------
+drawer移動
+
+描画順序決め。
+1. 各インスタンスのmodel matrixから位置だけを取り出す。
+2. カメラの逆行列で変換、相対位置を求める。
+3. vbid,vsidの頂点データの最大半径を求める。(事前計算)
+4. 相対位置と半径から、視錘台カリング(円錐で近似)
+5. 残ったオブジェクトをzの小さい順にソート
+
+視錘台に外接する円錐と点の距離
+半画角のtangentはr/d where r=farの四隅の点の中心からの距離, d=farの距離
+  haov_tan = r/d
+オブジェクトのカメラからの相対位置をA=(ax,ay,az)とする
+Aをxy平面上で回転させてy=0に下ろした点B=(bx,by,bz)
+  bx = sqrt(ax^2 + ay^2);
+  by = 0;
+  bz = az;
+原点(カメラ位置)を頂点としz軸を中心にする円錐が、y=0に接する直線のうち、
+z>=0, x>=0の部分の半直線について、Bとの距離を計算する。
+(すべてy=0上なので2次元で計算できる)
+半直線の単位ベクトルdv
+  dv = (haov_tan, 0, 1 - sqrt(haov_tan))
+adv = dot(dv, A)
+これが負のときは半直線とBの距離はlength(B)
+これが正のときの半直線とBの距離はlength(B - dv * adv)
+もしこの距離がオブジェクトの半径より大きいならオブジェクトは不可視。
+可視なオブジェクトを、z位置の小さい順にソートする。
+
 

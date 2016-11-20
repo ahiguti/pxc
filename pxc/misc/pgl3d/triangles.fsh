@@ -28,6 +28,9 @@ uniform samplerCube sampler_env;
 <%else/>
   uniform sampler2D sampler_sm[<%smsz/>];
 <%/>
+<%if><%and><%eq><%stype/>1<%/><%ne><%ssubtype/>0<%/><%/>
+  uniform sampler2D sampler_depth_rd;
+<%/>
 uniform mat4 view_projection_matrix;
 uniform vec3 camera_pos;
 uniform mat4 shadowmap_vp[<%smsz/>];
@@ -826,6 +829,16 @@ vec4 get_sampler_sm(int i, vec2 p)
   <%/>
 }
 
+<%if><%eq><%stype/>1<%/>
+float calc_depth_from_tngpos(vec3 tngpos)
+{
+  // tngposは接線空間の座標
+  vec4 gpos = vary_model_matrix * vec4(tngpos, 1.0);
+  vec4 vpos = view_projection_matrix * gpos;
+  return (vpos.z / vpos.w + 1.0) * 0.5;
+}
+<%/>
+
 void main(void)
 {
   vec4 color = vec4(0.0, 0.0, 0.0, 1.0);
@@ -883,6 +896,25 @@ void main(void)
       }
       pos = clamp(pos, aabb_min + epsi, aabb_max - epsi);
     <%/>
+    <%if><%and><%eq><%stype/>1<%/><%ne><%ssubtype/>0<%/><%/>
+      // 計算されるdepth値は、raycast始点であるposのdepth値以上になる。
+      // もしすでにdepth_rdの値がそれより小さいならdiscardする。
+      float prev_depth = texelFetch(sampler_depth_rd, ivec2(gl_FragCoord.xy),
+	0).x;
+      if (!cam_inside_aabb) {
+	vec3 ini_tngpos = vary_aabb_or_tconv.xyz + pos * vary_aabb_or_tconv.w;
+	vec4 ini_gpos = vary_model_matrix * vec4(ini_tngpos, 1.0);
+	vec4 ini_vpos = view_projection_matrix * ini_gpos;
+	float ini_depth = (ini_vpos.z / ini_vpos.w + 1.0) * 0.5;
+	/*
+	float ini_depth = ini_vpos.w <= 0.0 ? 0.0
+	  : (ini_vpos.z / ini_vpos.w + 1.0) * 0.5;
+	*/
+	if (prev_depth < ini_depth) {
+	  discard;
+	}
+      }
+    <%/>
     float dist_pos_campos_2 = dot(pos - campos, pos - campos) + 0.01;
     float dist_rnd = generate_random(pos) * 0.25;
     float dist_log2 = log(dist_pos_campos_2) * 0.5 / log(2.0);
@@ -901,6 +933,13 @@ void main(void)
     hit = raycast_tilemap(pos, camera_local, light_local,
       aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para, miplevel);
     // if (pos == opos) { <%fragcolor/> = vec4(1.0); return; } // FIXME: remove
+
+<%if><%eq><%ssubtype/>0<%/>
+// if (hit >= 0) { <%fragcolor/> = vec4(1.0, 1.0, 1.0, 1.0); return; }
+<%/>
+<%if><%eq><%ssubtype/>1<%/>
+// if (hit >= 0) { <%fragcolor/> = vec4(1.0, 1.0, 0.0, 1.0); return; }
+<%/>
     /*
     hit = raycast_waffle(pos, fragpos, camera_local, light_local,
       aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para, miplevel);
@@ -920,16 +959,17 @@ void main(void)
       // posをテクスチャ座標から接線空間の座標に変換
     vec4 gpos = vary_model_matrix * vec4(pos, 1.0);
       // vary_model_matrixは接線空間からワールドへの変換
-    <%if><%update_frag_depth/>
-      if (false) {
+    <%if><%and><%eq><%stype/>1<%/><%ne><%ssubtype/>0<%/><%/>
+      {
 	// FragDepth更新するならこの節を有効にする
 	vec4 vpos = view_projection_matrix * gpos;
-	float cdepth = vpos.z / vpos.w;
-	float depthrange_max = 1.0;
-	float depthrange_min = 0.0;
-	float depth = ((depthrange_max - depthrange_min)
-	  * cdepth + depthrange_min + depthrange_max) * 0.5;
-	gl_FragDepth = clamp(depth, 0.0, 1.0);
+	// float depth = vpos.w <= 0.0 ? 0.0 : (vpos.z / vpos.w + 1.0) * 0.5;
+	float depth = (vpos.z / vpos.w + 1.0) * 0.5;
+	// depth = clamp(depth, 0.0, 1.0);
+	if (prev_depth < depth) {
+	  discard;
+	}
+	gl_FragDepth = depth;
 	/*
 	if (depth < 0.0) { // nearプレーンより近い
 	  dbgval.r = 1.0;

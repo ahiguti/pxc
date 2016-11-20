@@ -43,7 +43,10 @@ public struct drawer_font2(shader_config const& glc,
     load_gl_texture_fixedwidth_font(texture_font, fnames);
   }
   public function string get_vbid_name() const { return "vbid_font2"; }
-  public function string get_main_vbid_name() const { return "vbid_font2"; }
+  public function string get_instances_vbid_name() const {
+    return "vbid_font2"; }
+  public function string get_vertices_vbid_name() const {
+    return "vbid_font2"; }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
     return make_tfuncptr{prepare_instance_data_font2}();
@@ -108,7 +111,7 @@ public struct drawer_font2(shader_config const& glc,
   }
   public function void draw(draw_step step, size_t iter,
     vertex_buffer const& bo, bo_instances_type const& bo_ib,
-    aggregated_ibuffer const& aibuf, vertex_buffer_id bo_id,
+    aggregated_ibuffer const& aibuf, vbid_t vbid,
     shader_config const& glc, projection_info const& cam_df,
     cslice{GLuint} const& smtex_arr)
   {
@@ -124,7 +127,7 @@ public struct drawer_font2(shader_config const& glc,
       glUseProgram(sdr.program);
       glUniform1i(sdr.u_sampler_font, 0);
       glUniform2fv(sdr.u_screen_size_px, 1, screen_size_px.to_crawptr());
-      aibuf.draw(sdr, bo, bo_ib, bo_id,
+      aibuf.draw(sdr, bo, bo_ib, vbid,
 	glc.enable_instanced, glc.enable_uniform_instancing);
     }
   }
