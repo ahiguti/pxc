@@ -3029,7 +3029,7 @@ static void check_use_before_def_one(varmap_type& uvars,
     if (sdef != 0) {
       expr_var *const ev = dynamic_cast<expr_var *>(sdef->get_symdef_nochk());
       if (ev != 0 && uvars.find(ev) == uvars.end()) {
-	uvars[ev] = std::pair<expr_i *, expr_funcdef *>(e, nullptr);
+	uvars[ev] = std::pair<expr_i *, expr_funcdef *>(e, 0);
       }
     }
   }
@@ -3380,8 +3380,10 @@ bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
     switch (aop->op) {
     case '.':
     case TOK_ARROW:
-      /* expr 'foo.bar' has an lvalue iff foo has an lvalue */
-      return expr_has_lvalue(aop, aop->arg0, thro_flg);
+      /* expr 'foo.bar' has an lvalue iff foo has an lvalue and bar is
+       * non-const */
+      return expr_has_lvalue(aop, aop->arg0, thro_flg) &&
+	expr_has_lvalue(aop, aop->arg1, thro_flg);
     case '[':
       /* expr 'foo[]' has an lvalue iff foo has an lvalue */
       DBG_LV(fprintf(stderr, "expr_has_lvalue: op[] 0\n"));

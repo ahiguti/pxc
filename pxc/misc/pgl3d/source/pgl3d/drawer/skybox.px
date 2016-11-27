@@ -1,0 +1,167 @@
+private threaded namespace pgl3d::drawer::skybox "export-unsafe";
+public import common -;
+public import pgl3d::drawer::base -;
+public import meta m;
+
+private tsvaluetype struct skybox_vertex_attributes()
+{
+  public glm::vec2 vert;
+}
+
+private tsvaluetype struct skybox_instance_attributes()
+{
+}
+
+private tsvaluetype struct skybox_uniforms()
+{
+  public glm::mat4 projection_inv;
+  public glm::mat3 camera_dir_matrix;
+  public glm::vec3 light_dir;
+  public int sampler_cube;
+  public float exposure;
+}
+
+public struct drawer_skybox(shader_config const& glc,
+  resource_pool_ptr const& res0)
+<pgldrawer_i>
+{
+  metafunction tattr skybox_vertex_attributes;
+  ptr{resource_pool} res = pointer_downcast{ptr{resource_pool}}(res0);
+  skybox_shader_ptr sdr_sb = init_skybox_shader(glc);
+  ptr{gl_texture} texture_cube = make_ptr{gl_texture}();
+  init();
+  private function void init()
+  {
+    const fnames = make_farray{string}(
+      "res/cube_right1.png",
+      "res/cube_left2.png",
+      "res/cube_top3.png",
+      "res/cube_bottom4.png",
+      "res/cube_front5.png",
+      "res/cube_back6.png");
+    load_gl_texture_cube(*texture_cube, fnames);
+    res->textures.insert("environ", texture_cube);
+  }
+  public function string get_vbid_name() const { return "vbid_skybox"; }
+  public function string get_instances_vbid_name() const {
+    return "vbid_skybox"; }
+  public function string get_vertices_vbid_name() const {
+    return "vbid_skybox"; }
+  public function prepare_instance_data_funcptr
+  get_prepare_instance_data_funcptr() const {
+    return make_tfuncptr{prepare_instance_data_default}();
+  }
+  public function ptr{vertex_buffer} make_vertex_buffer() const {
+    return make_tattr_vertex_buffer{tattr}(false, false);
+  }
+  public function string builtin_vertex_set_name() const { return "skybox"; }
+  public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
+    const
+  {
+    farray{skybox_vertex_attributes, 4} vs;
+    vs[0].vert = glm::make_vec2(-1.0, -1.0);
+    vs[1].vert = glm::make_vec2(1.0, -1.0);
+    vs[2].vert = glm::make_vec2(1.0, 1.0);
+    vs[3].vert = glm::make_vec2(-1.0, 1.0);
+    vptr->push_polygon_distinct{skybox_vertex_attributes, 0}(vs);
+  }
+  public function dgf_filler make_filler(ptr{vertices} const& vptr) const
+  {
+    return make_dgf_noop(vptr);
+  }
+  public function texture_info get_texture_info(cstrref const& name) const
+  {
+    return texture_info();
+  }
+  public function void resize_screen(shader_config const& glc, int width,
+    int height)
+  { 
+  }
+  public function bool reload_shaders()
+  {
+    return true;
+  }
+  public function uint get_postprocess_framebuffer(draw_step step) const
+  {
+    return 0U;
+  }
+  public function bool has_step(draw_step step) const
+  {
+    return step == draw_step_solid;
+  }
+  public function void draw(draw_step step, size_t iter,
+    vertex_buffer const& bo, bo_instances_type const& bo_ib,
+    aggregated_ibuffer const& aibuf, vbid_t vbid,
+    shader_config const& glc, projection_info const& cam_df,
+    cslice{GLuint} const& smtex_arr)
+  {
+    if (step == draw_step_solid) {
+      glDepthMask(0);
+      glDepthFunc(GL_LEQUAL);
+      mutable& sdr = *sdr_sb;
+      glUseProgram(sdr.program);
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_CUBE_MAP, texture_cube->texture_id.get());
+      glUniform1i(sdr.u_sampler_cube, 0);
+      glm::mat4 proj_inv = cam_df.projection.inverse();
+      glUniformMatrix4fv(sdr.u_projection_inv, 1, 0, proj_inv.to_crawptr());
+      glm::mat3 cam_dir_mat = cam_df.camera.angle.to_mat3();
+      glUniformMatrix3fv(sdr.u_camera_dir_matrix, 1, 0,
+	cam_dir_mat.to_crawptr());
+      if (glc.light_fixed) {
+	glUniform3fv(sdr.u_light_dir, 1,
+	  glm::make_vec3(0.0, 0.0, -1.0).to_crawptr());
+      } else {
+	glUniform3fv(sdr.u_light_dir, 1,
+	  (cam_df.light.angle * glm::make_vec3(0.0, 0.0, 1.0)).to_crawptr());
+      }
+      glUniform1f(sdr.u_exposure, cam_df.exposure);
+      bo.draw(0, sdr);
+    }
+  }
+  public function option{ptr{edit_mode_i}} get_edit_mode() const
+  {
+    return option{ptr{edit_mode_i}}();
+  }
+}
+
+metafunction skybox_shader_ptr
+  ptr{glshader{
+    skybox_uniforms, skybox_instance_attributes, skybox_vertex_attributes}};
+
+function skybox_shader_ptr
+init_skybox_shader(shader_config const& g)
+{
+  string v;
+  string f;
+  v += g.prepend();
+  v += g.vert_in() + "vec2 vert;\n";
+  v += g.vert_out() + "vec3 vary_dir;\n";
+  v += "uniform mat4 projection_inv;\n";
+  v += "uniform mat3 camera_dir_matrix;\n";
+  v += "void main(void) {\n";
+  v += "vec4 pos = vec4(vert, 1.0, 1.0);\n";
+  v += "vec3 pos_unproj = (projection_inv * pos).xyz;\n";
+  v += "vary_dir = camera_dir_matrix * pos_unproj;\n";
+  v += "gl_Position = pos;\n";
+  v += "}\n";
+  f += g.prepend();
+  f += g.decl_fragcolor();
+  f += "uniform samplerCube sampler_cube;\n";
+  f += "uniform vec3 light_dir;\n";
+  f += "uniform float exposure;\n";
+  f += g.frag_in() + "vec3 vary_dir;\n";
+  f += "void main(void) {\n";
+  f += "vec3 color = " + g.texture_cube();
+  f += "(sampler_cube, vary_dir).xyz * 0.25;\n";
+  f += "color *= sqrt(exposure);\n";
+  f += "color = vec3(1.0) - 1.0 / exp(color);\n";
+  f += "float cos_angle = max(0.0, dot(normalize(vary_dir), light_dir));\n";
+  f += "float s = pow(cos_angle, 128.0);\n";
+  f += "color += vec3(s, s, s);\n";
+  f += g.fragcolor() + " = vec4(color, 1.0);\n";
+  f += "}\n";
+  return make_glshader_ptr{skybox_uniforms, skybox_instance_attributes,
+    skybox_vertex_attributes}(v, f, "", g.debug_level, "skybox");
+}
+

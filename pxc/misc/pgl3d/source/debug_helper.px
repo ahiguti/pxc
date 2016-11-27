@@ -1,0 +1,143 @@
+public namespace debug_helper "use-unsafe";
+public import common -;
+public import meta m;
+
+public function extern "::pxcrt::dump_modules" void dump_modules();
+public function extern "::pxcrt::dump_backtrace" void dump_backtrace();
+
+private function extern "::pxcrt::init_debug_helper" void init_debug_helper();
+private function extern "::pxcrt::set_unhandled_exception_handler" void
+  set_unhandled_exception_handler();
+
+init_debug_helper();
+set_unhandled_exception_handler();
+
+extern "types" inline
+
+#ifdef _MSC_VER
+extern "C" {
+#include <windows.h>
+#include <stdio.h>
+#include <psapi.h>
+#pragma warning(push)
+#pragma warning(disable: 4091)
+#include <imagehlp.h>
+#pragma warning(pop)
+#pragma comment(lib, "imagehlp.lib")
+}
+#endif
+
+;
+
+extern "implementation" inline
+
+namespace pxcrt {
+
+void init_debug_helper()
+{
+#ifdef _MSC_VER
+  HANDLE proc = GetCurrentProcess();
+  SymInitialize(proc, NULL, TRUE);
+  // fprintf(stderr, "symbol initialized\n");
+  // fflush(stderr);
+#endif
+}
+
+void dump_backtrace()
+{
+#ifdef _MSC_VER
+// FIXME: dont use stdio
+  HANDLE proc = GetCurrentProcess();
+  void *addr[512] = { };
+  unsigned short num_frames = CaptureStackBackTrace(0, 512, addr, NULL);
+  fprintf(stderr, "backtrace %i\n", num_frames);
+  for (unsigned short i = 0; i < num_frames; ++i) {
+    DWORD_PTR a = (DWORD_PTR)(addr[i]);
+    char symbol_info_buf[sizeof(SYMBOL_INFO) + 1024] = { };
+    SYMBOL_INFO *sinfo = (SYMBOL_INFO *)symbol_info_buf;
+    sinfo->MaxNameLen = 1024;
+    sinfo->SizeOfStruct = sizeof(SYMBOL_INFO);
+    SymFromAddr(proc, a, 0, sinfo);
+    IMAGEHLP_LINE64 line = { };
+    line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+    DWORD dis = 0;
+    SymGetLineFromAddr64(proc, (DWORD_PTR)(addr[i]), &dis, &line);
+    DWORD_PTR offset = a - sinfo->Address;
+    fprintf(stderr, "%u %p %s +%llx %s:%d +%llx\n", (unsigned)i, (void *)a,
+      sinfo->Name, (unsigned long long)offset, line.FileName,
+      (int)line.LineNumber, (unsigned long long)dis);
+  }
+  fflush(stderr);
+#endif
+}
+
+void dump_modules()
+{
+#ifdef _MSC_VER
+// FIXME: dont use stdio
+  HANDLE proc = GetCurrentProcess();
+  HMODULE modules[1024] = { };
+  DWORD cbneeded = 0;
+  if (EnumProcessModules(proc, modules, sizeof(modules), &cbneeded)) {
+    for (DWORD i = 0; i < cbneeded / sizeof(HMODULE); ++i) {
+      MODULEINFO minfo = { };
+      GetModuleInformation(proc, modules[i], &minfo, sizeof(minfo));
+      TCHAR mname[MAX_PATH] = { };
+      if (GetModuleFileNameEx(proc, modules[i], mname,
+	sizeof(mname) / sizeof(TCHAR))) {
+	fwprintf(stderr, TEXT("%p %08x %s\n"), modules[i],
+	  (unsigned)minfo.SizeOfImage, mname);
+      }
+    }
+  }
+  fflush(stderr);
+#endif
+}
+
+#ifdef _MSC_VER
+
+LONG unhandled_exception_handler(PEXCEPTION_POINTERS einfo)
+{
+// FIXME: dont use stdio
+  SetErrorMode(SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS);
+  fprintf(stderr, "unhandled exception: %x\n",
+    einfo->ExceptionRecord->ExceptionCode);
+  dump_backtrace();
+  std::_Exit(4);
+}
+
+LONG vectored_exception_handler(PEXCEPTION_POINTERS einfo)
+{
+  if (einfo->ExceptionRecord->ExceptionCode == 0xc0000374) {
+    // heap corruption is detected
+    unhandled_exception_handler(einfo);
+  }
+  return EXCEPTION_CONTINUE_SEARCH;
+}
+
+#endif
+
+void terminate_handler()
+{
+  fprintf(stderr, "terminate\n");
+  dump_backtrace();
+  fflush(stderr);
+  fflush(stdout);
+  std::_Exit(4);
+}
+
+void set_unhandled_exception_handler()
+{
+  fprintf(stderr, "set unhandled exception handler\n");
+  fflush(stderr);
+#ifdef _MSC_VER
+  SetUnhandledExceptionFilter(&unhandled_exception_handler);
+  AddVectoredExceptionHandler(1, &vectored_exception_handler);
+#endif
+  std::set_terminate(&terminate_handler);
+}
+
+};
+
+;
+

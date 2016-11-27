@@ -942,6 +942,7 @@ expr_var::expr_var(const char *fn, int line, const char *sym,
   varinfo.passby = passby;
   varinfo.scope_block = true;
   type_of_this_expr.clear(); /* resolve_texpr() */
+  // fprintf(stderr, "var %s passby=%d\n", sym, varinfo.passby);
 }
 
 expr_i *expr_var::clone() const

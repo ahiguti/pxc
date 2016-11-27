@@ -235,6 +235,7 @@ private struct {t, i} pxfield_obj {
   metafunction fld at{fields{t}, i};
   metafunction fld_type at1{fld};
   metafunction fld_name at0{fld};
+  metafunction fld_mutable at3{fld};
   public function rawsv call(svarr const& a) {
     t mutable& obj = rawsv_get_object{t}(a.get(0));
     if (a.size() > 1) {
@@ -254,7 +255,9 @@ private struct {t, i} pxfield_obj {
 	/*byref */
 	obj.sym = v;
 	/* byval */
-	obj.sym = value_or_ref_get(v);
+	if (is_true{fld_mutable}) {
+	  obj.sym = value_or_ref_get(v);
+	}
       }
       return rawsv_undef();
     } else {

@@ -1,0 +1,318 @@
+private threaded namespace demoapp::texture::tile;
+public import common -;
+public import meta m;
+public import pgl3d::geometry::funcs -;
+public import glm -;
+private import pgl3d::texture::texture -;
+private import pgl3d::engine::util -;
+private import pgl3d::texture::voxel -;
+
+public function void prepare_texture_data_3d_tmap(bool edit_mode,
+  texture_data mutable& tmap, ivec3 const& voxtpat_size_l2,
+  ivec3 const& voxtmap_size_l2)
+{
+  tmap.set_size_l2(ui(voxtmap_size_l2.x), ui(voxtmap_size_l2.y),
+    ui(voxtmap_size_l2.z));
+  ivec3 const pat_size = map{ivec3, operator::shiftl}(make_ivec3(1, 1, 1),
+    voxtpat_size_l2);
+  ivec3 const pat_mask = map{ivec3, operator::sub}(pat_size,
+    make_ivec3(1, 1, 1));
+  ivec3 const map_size = map{ivec3, operator::shiftl}(make_ivec3(1, 1, 1),
+    voxtmap_size_l2);
+  const rnd = make_rand_generator(1u);
+  metafunction ui static_cast{uint};
+  metafunction si static_cast{int};
+  function void set(int x, int y, int z, uint v) {
+    if (x < 0 || y < 0 || z < 0 ||
+      x >= si(tmap.get_width()) ||
+      y >= si(tmap.get_height()) ||
+      z >= si(tmap.get_depth())) {
+      return;
+    }
+    tmap.set(ui(x), ui(y), ui(z), v);
+  }
+  function uint get(int x, int y, int z) {
+    if (x < 0 || x >= si(tmap.get_width())) { return 0; }
+    if (y < 0 || y >= si(tmap.get_height())) { return 0; }
+    if (z < 0 || z >= si(tmap.get_depth())) { return 0; }
+    return tmap.get(ui(x), ui(y), ui(z));
+  }
+  function void append_6dir()
+  {
+    for (const x: 0 .. si(tmap.get_width())) {
+      for (const y: 0 .. si(tmap.get_height())) {
+	for (const z: 0 .. si(tmap.get_depth()) - 3) {
+	  function bool cval(int x, int y, int z) {
+	    const v = get(x, y, z);
+	    return (v & 0xff000000) >= 0x02000000;
+	  }
+	  const v0 = cval(x, y, z);
+	  if (v0) { continue; }
+	  const vxp = cval(x + 1, y, z);
+	  const vxn = cval(x - 1, y, z);
+	  const vyp = cval(x, y + 1, z);
+	  const vyn = cval(x, y - 1, z);
+	  const vzp = cval(x, y, z + 1);
+	  const vzn = cval(x, y, z - 1);
+	  mutable pz = 6u;
+	  if (vxp && !vxn) {
+	    pz = 0;
+	  } else if (!vxp && vxn) {
+	    pz = 1;
+	  } else if (vyp && !vyn) {
+	    pz = 2;
+	  } else if (!vyp && vyn) {
+	    pz = 3;
+	  } else if (vzp && !vzn) {
+	    pz = 4;
+	  } else if (!vzp && vzn) {
+	    pz = 5;
+	  } else {
+	    continue;
+	  }
+	  // if ((rnd->generate() & 0xff) < 0x7f) { continue; }
+	  mutable rv = rnd->generate();
+	  const px = rv & ui(pat_mask.x);
+	  rv >>= ui(voxtpat_size_l2.x);
+	  const py = rv & ui(pat_mask.y);
+	  const idx = (pz << 16u) | (py << 8u) | px;
+	  const v = make_node_reference(idx); // const v = 0x01000000u | idx;
+	  // debug_log("tmap detail", x, y, z, to_hexstring(v));
+	  set(x, y, z, v);
+	}
+      }
+    }
+  }
+  function int rand_gen(int v)
+  {
+    if (v < 1) { return 0; }
+    return si(rnd->generate() % ui(v));
+  }
+  // if (!edit_mode)
+  {
+    // recursive bump
+    for (const x: 0 .. si(tmap.get_width())) {
+      for (const y: 0 .. si(tmap.get_height())) {
+	for (const z: 0 .. 1) {
+	  set(x, y, z, 0xffb090a0);
+	}
+      }
+    }
+    function void make_bump_rec(int rec, int x0, int x1, int y0, int y1, int z)
+    {
+      if (x1 - x0 < 2 || y1 - y0 < 2 || z >= si(tmap.get_depth())) {
+	return;
+      }
+      const num = rec > 3 ? 400 : 10;
+      for (const i: 0 .. num) {
+	const szdiv = 16;
+	const x = rand_gen(x1 - x0) + x0;
+	const y = rand_gen(y1 - y0) + y0;
+	const w = rand_gen((x1 - x0) / szdiv) + 1;
+	const h = rand_gen((y1 - y0) / szdiv) + 1;
+	const d = rand_gen((si(tmap.get_depth()) - z) / 2) + 1;
+	// debug_log("xywhd", x, y, w, h, d);
+	if (x - w < x0 || x + w >= x1 || y - h < y0 || y + h >= y1 ||
+	  z + d + 2 >= si(tmap.get_depth()))
+	{
+	  continue;
+	}
+	for (const ix: x - w .. x + w + 1) {
+	  for (const iy: y - h .. y + h + 1) {
+	    for (const iz: z .. z + d) {
+	      set(ix, iy, iz, 0xffb090a0);
+	    }
+	  }
+	}
+	if (rec > 0) {
+	  make_bump_rec(rec - 1, x - w, x + w, y - h, y + h, z + d);
+	}
+      }
+    }
+    for (const x: 0 .. si(tmap.get_width())) {
+      for (const y: 0 .. si(tmap.get_height())) {
+	for (const z: 0 .. 1) {
+	  set(x, y, z, 0);
+	}
+      }
+    }
+    if (si(voxtpat_size_l2.x) > 4) {
+      make_bump_rec(8, 0 + 1, si(tmap.get_width()) - 1, 0 + 1,
+	si(tmap.get_height()) - 1, 1);
+    } else {
+      make_bump_rec(5, 0 + 1, si(tmap.get_width()) - 1, 0 + 1,
+	si(tmap.get_height()) - 1, 1);
+    }
+    append_6dir();
+  }
+  if (edit_mode) {
+    const sz = map{ivec3, min}(pat_size, map_size);
+    for (const z: 0 .. sz.z) {
+      for (const y: 0 .. sz.y) {
+	for (const x: 0 .. sz.x) {
+	  const v = (ui(z) << 16u) | (ui(y) << 8u) | ui(x);
+	  set(x, y, z, make_node_reference(v));
+	}
+      }
+    }
+  }
+  debug_log("prepare tmap 0,0,1", to_hexstring(tmap.get(0, 0, 1)));
+}
+
+public function void prepare_texture_data_3d_tpat(bool edit_mode,
+  texture_data mutable& tpat, ivec3 const& tile_size_l2,
+  ivec3 const& pat_size_l2)
+{
+  const color0 = 0x00000000u;
+  const color1 = 0xff102020u;
+  const color2 = 0xff201010u;
+  metafunction si static_cast{int};
+  metafunction ui static_cast{uint};
+  ivec3 const tex_size_l2 = map{ivec3, operator::add}(
+    tile_size_l2, pat_size_l2);
+  ivec3 const tile_size = map{ivec3, operator::shiftl}(
+    make_ivec3(1, 1, 1), tile_size_l2);
+  tpat.set_size_l2(ui(tex_size_l2.x), ui(tex_size_l2.y), ui(tex_size_l2.z));
+  if (true) {
+    // 6dir bump
+    const rnd = make_rand_generator(333U);
+    function void set_bump(uint bx, uint by, uint bz, uint x0, uint y0,
+      uint z0, bool cut, glm::vec3 const& center0, glm::vec3 const& scale0,
+      float radius, uint dir)
+    {
+      uint x;
+      uint y;
+      uint z;
+      vec3 center;
+      vec3 scale;
+      if (dir == 0u) {
+	x = ui(tile_size.x) - z0 - 1; y = x0; z = y0;
+	center = make_vec3(-center0.z, center0.x, center0.y);
+	scale = make_vec3(scale0.z, scale0.x, scale0.y);
+      } else if (dir == 1u) {
+	x = z0; y = x0; z = y0;
+	center = make_vec3(center0.z, center0.x, center0.y);
+	scale = make_vec3(scale0.z, scale0.x, scale0.y);
+      } else if (dir == 2u) {
+	x = y0; y = ui(tile_size.y) - z0 - 1; z = x0;
+	center = make_vec3(center0.y, -center0.z, center0.x);
+	scale = make_vec3(scale0.y, scale0.z, scale0.x);
+      } else if (dir == 3u) {
+	x = y0; y = z0; z = x0;
+	center = make_vec3(center0.y, center0.z, center0.x);
+	scale = make_vec3(scale0.y, scale0.z, scale0.x);
+      } else if (dir == 4u) {
+	x = x0; y = y0; z = ui(tile_size.z) - z0 - 1;
+	center = make_vec3(center0.x, center0.y, -center0.z);
+	scale = make_vec3(scale0.x, scale0.y, scale0.z);
+      } else {
+	x = x0; y = y0; z = z0;
+	center = make_vec3(center0.x, center0.y, center0.z);
+	scale = make_vec3(scale0.x, scale0.y, scale0.z);
+      }
+      if (x >= ui(tile_size.x) || y >= ui(tile_size.y) ||
+	z >= ui(tile_size.z)) {
+	return;
+      }
+      x += (bx << tile_size_l2.x);
+      y += (by << tile_size_l2.y);
+      z += (bz << tile_size_l2.z);
+      // if (x > 255 || y > 255 || z > 255) { // FIXME
+	// debug_log("set_bump", x, y, z, bx, by, bz, x0, y, z0, dir);
+      // }
+      // const idx = (z << (pattern_sz_l2 * 2)) | (y << pattern_sz_l2) | x;
+      // debug_log("set_color", x & 16, y & 16, z, x0, y0, z0, dir);
+      if (!cut || tpat.get(x, y, z) != 0) { // FIXME
+	tpat.set(x, y, z, 0xff808080);
+      } else {
+	center = center * 1.0f; // centerは1.0刻み
+	scale = scale * 1.0f; // scaleは1.0刻み
+	radius = radius * 1.0f; // 半径は1.0刻み
+	const vec3 center_v = center + make_vec3(32.0f, 32.0f, 32.0f);
+	const vec3 scale_v = scale;
+	const cvx = static_cast{uint}(center_v.x + 0.5);
+	const cvy = static_cast{uint}(center_v.y + 0.5);
+	const cvz = static_cast{uint}(center_v.z + 0.5);
+	const svx = static_cast{uint}(scale_v.x + 0.5);
+	const svy = static_cast{uint}(scale_v.y + 0.5);
+	const svz = static_cast{uint}(scale_v.z + 0.5);
+	const vx = (svx << 6u) | cvx;
+	const vy = (svy << 6u) | cvy;
+	const vz = (svz << 6u) | cvz;
+	const cw = static_cast{uint}(radius + 0.5) + 1u;
+	const vc = (cw << 24u) | (vz << 16u) | (vy << 8u) | vx;
+	tpat.set(x, y, z, vc);
+      }
+    }
+    function void make_bump_one(uint bx0, uint by0, uint bz0, uint dir) {
+      mutable rv = rnd->generate();
+      const x = si(rv & (ui(tile_size.x) - 1u));
+      rv >>= ui(tile_size_l2.x);
+      const y = si(rv & (ui(tile_size.y) - 1u));
+      rv >>= ui(tile_size_l2.y);
+      mutable w = si(rv & (ui(tile_size.x) - 1u)) / 2;
+      rv >>= ui(tile_size_l2.x);
+      mutable h = si(rv & (ui(tile_size.y) - 1u)) / 4;
+      rv >>= ui(tile_size_l2.y);
+      const d = si(rv & (ui(tile_size.z) - 1u));
+      rv >>= ui(tile_size_l2.z);
+      if (x - w < 0) { w = x; }
+      if (x + w >= tile_size.x) { w = tile_size.x - x - 1; }
+      if (y - h < 0) { h = y; }
+      if (y + h >= tile_size.y) { h = tile_size.y - y - 1; }
+      for (const ix: x - w .. x + w + 1) {
+	for (const iy: y - h .. y + h + 1) {
+	  for (const iz: 0 .. d) {
+	    vec3 center;
+	    vec3 scale;
+	    bool cutx = false;
+	    bool cuty = false;
+	    if (ix == x - w) {
+	      center.x = 1.0;
+	      scale.x = 2.0;
+	      cutx = true;
+	    } else if (ix == x + w) {
+	      center.x = -1.0;
+	      scale.x = 2.0;
+	      cutx = true;
+	    }
+	    if (iy == y - h) {
+	      center.y = 1.0;
+	      scale.y = 2.0;
+	      cuty = true;
+	    } else if (iy == y + h) {
+	      center.y = -1.0;
+	      scale.y = 2.0;
+	      cuty = true;
+	    }
+	    bool cut = false;
+	    if ((cutx || cuty) && iz == d - 1) {
+	      center.z = -1.0;
+	      scale.z = 2.0;
+	      cut = true;
+	    } else if (cutx && cuty) {
+	      cut = true;
+	    }
+	    set_bump(bx0, by0, bz0, ui(ix), ui(iy), ui(iz), cut, center,
+	      scale, 2.0, dir);
+	  }
+	}
+      }
+    }
+    if (1u << ui(pat_size_l2.z) < 6u) {
+      throw runtime_error_template{"3d_tpat"}("usz is too small");
+    }
+    for (const bz: 0 .. 6u) {
+      for (const by: 0 .. 1u << ui(pat_size_l2.x)) {
+	for (const bx: 0 .. 1u << ui(pat_size_l2.y)) {
+	  // debug_log("bump xyz", x, y, z);
+	  uint const loop_lim = 20u;
+	  for (const i: 0 .. loop_lim) {
+	    make_bump_one(bx, by, bz, bz);
+	  }
+	}
+      }
+    }
+  }
+}
+

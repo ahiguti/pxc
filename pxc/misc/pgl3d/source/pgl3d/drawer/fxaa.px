@@ -1,0 +1,131 @@
+private threaded namespace pgl3d::drawer::fxaa "export-unsafe";
+public import common -;
+public import pgl3d::drawer::base -;
+public import meta m;
+
+private tsvaluetype struct fxaa_vertex_attributes()
+{
+  public glm::vec2 vert;
+}
+
+private tsvaluetype struct fxaa_instance_attributes()
+{
+}
+
+private tsvaluetype struct fxaa_uniforms()
+{
+  public glm::vec2 pixel_delta;
+  public int sampler_tex;
+  public float option_value;
+}
+
+public struct drawer_fxaa(shader_config const& glc,
+  resource_pool_ptr const& res)
+<pgldrawer_i>
+{
+  metafunction tattr fxaa_vertex_attributes;
+  public gl_framebuffer ppfbo;
+  fxaa_shader_ptr sdr_re = init_fxaa_shader(glc);
+  public function string get_vbid_name() const { return "vbid_fxaa"; }
+  public function string get_instances_vbid_name() const {
+    return "vbid_fxaa"; }
+  public function string get_vertices_vbid_name() const {
+    return "vbid_fxaa"; }
+  public function prepare_instance_data_funcptr
+  get_prepare_instance_data_funcptr() const {
+    return make_tfuncptr{prepare_instance_data_default}();
+  }
+  public function ptr{vertex_buffer} make_vertex_buffer() const {
+    return make_tattr_vertex_buffer{tattr}(false, false);
+  }
+  public function string builtin_vertex_set_name() const { return "fxaa"; }
+  public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
+    const
+  {
+    farray{fxaa_vertex_attributes, 4} vs;
+    vs[0].vert = glm::make_vec2(-1.0, -1.0);
+    vs[1].vert = glm::make_vec2( 1.0, -1.0);
+    vs[2].vert = glm::make_vec2( 1.0,  1.0);
+    vs[3].vert = glm::make_vec2(-1.0,  1.0);
+    vptr->push_polygon_distinct{fxaa_vertex_attributes, 0}(vs);
+  }
+  public function dgf_filler make_filler(ptr{vertices} const& vptr) const
+  {
+    return make_dgf_noop(vptr);
+  }
+  public function texture_info get_texture_info(cstrref const& name) const
+  {
+    return texture_info();
+  }
+  public function void resize_screen(shader_config const& glc, int width,
+    int height)
+  {
+    ppfbo.width = width;
+    ppfbo.height = height;
+    init_postprocess_fbo(glc, false, ppfbo);
+    debug_log("fxaa", width, height);
+  }
+  public function bool reload_shaders()
+  {
+    return true;
+  }
+  public function uint get_postprocess_framebuffer(draw_step step) const
+  {
+    if (step == draw_step_postprocess) {
+      return ppfbo.fbo.get();
+    }
+    return 0U;
+  }
+  public function bool has_step(draw_step step) const
+  {
+    if (step == draw_step_postprocess) {
+      return true;
+    }
+    return false;
+  }
+  public function void draw(draw_step step, size_t iter,
+    vertex_buffer const& bo, bo_instances_type const& bo_ib,
+    aggregated_ibuffer const& aibuf, vbid_t vbid,
+    shader_config const& glc, projection_info const& cam_df,
+    cslice{GLuint} const& smtex_arr)
+  {
+    if (step == draw_step_postprocess) {
+      // debug_log("fxaa draw");
+      glDisable(GL_DEPTH_TEST);
+      glDepthMask(0);
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, ppfbo.texture0.get());
+      mutable& sdr = *sdr_re;
+      glUseProgram(sdr.program);
+      glUniform1i(sdr.u_sampler_tex, 0);
+      const pixel_delta = glm::make_vec2(
+	1.0f / static_cast{float}(ppfbo.width),
+	1.0f / static_cast{float}(ppfbo.height));
+      // debug_log("delta", pixel_delta);
+      glUniform2fv(sdr.u_pixel_delta, 1, pixel_delta.to_crawptr());
+      mutable opval = static_cast{int}(cam_df.option_value);
+      opval %= 2;
+      glUniform1f(sdr.u_option_value, static_cast{float}(opval));
+      bo.draw(0, sdr);
+    }
+  }
+  public function option{ptr{edit_mode_i}} get_edit_mode() const
+  {
+    return option{ptr{edit_mode_i}}();
+  }
+}
+
+metafunction fxaa_shader_ptr
+  ptr{glshader{
+    fxaa_uniforms, fxaa_instance_attributes, fxaa_vertex_attributes}};
+
+function fxaa_shader_ptr
+init_fxaa_shader(shader_config const& g)
+{
+  tree_map{string, string} bnd;
+  const v = load_shader_program(g, bnd, "fxaa.vsh");
+  const f = load_shader_program(g, bnd, "fxaa.fsh");
+  return make_glshader_ptr{fxaa_uniforms, fxaa_instance_attributes,
+    fxaa_vertex_attributes}(v, f, "", g.debug_level, "fxaa");
+}
+

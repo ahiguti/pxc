@@ -199,10 +199,15 @@ static void emit_var_cdecl(emit_context& em, const expr_var *ev,
 	passby = passby_e_mutable_reference;
       }
     }
+    // fprintf(stderr, "emit %s passby=%d\n", csymbol_var(ev, true).c_str(),
+    //   (int)passby);
     emit_typestr_call_traits(em, ev->type_of_this_expr, passby);
       /* passby becomes by-ref when it's passed as an upvalue */
   } else {
     emit_term(em, ev->type_of_this_expr);
+    /* note: do not emit 'const' here for const field. */
+    // fprintf(stderr, "emittm %s passby=%d\n", csymbol_var(ev, true).c_str(),
+    //   (int)ev->varinfo.passby);
   }
   em.puts(" ");
   em.puts(csymbol_var(ev, true));
