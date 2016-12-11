@@ -2,11 +2,20 @@
 
 cd `dirname $0`
 if [ "`uname | cut -d '_' -f 1`" == "CYGWIN" ]; then
-	./windows/release_build.sh && \
-	  exec ./windows/x64/Release/pgl3d_demoapp.exe $* 2>&1 | \
-	  tee ./var/pgl3d.log
+	build_script=./windows/release_build.sh
+	build_target=./windows/x64/Release/pgl3d_demoapp.exe
 else
-	./unix/release_build.sh && \
-	  exec ./source/demoapp.px.exe $* 2>&1 | \
-	  tee ./var/pgl3d.log
+	build_script=./unix/release_build.sh
+	build_target=./source/demoapp.px.exe
 fi
+newer_files=`find ./source -name "*.px" -and -newercc "$build_target" \
+	2> /dev/null`
+if [ -e "$build_target" -a -z "$newer_files" ]; then
+	echo "$build_target" is up to date 1>&2
+else
+	if ! "$build_script"; then
+		exit 1
+	fi
+fi
+exec "$build_target" $* 2>&1 | tee ./var/pgl3d.log
+

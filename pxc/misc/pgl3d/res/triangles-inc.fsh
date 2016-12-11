@@ -174,13 +174,18 @@ float voxel_collision_sphere(in vec3 v, in vec3 a, in vec3 c,
 <%if><%eq><%stype/>1<%/>
 
 const ivec3 tile3_size = <%tile3_size/>;
+const int tile3_size_log2 = <%tile3_size_log2/>.x;
 const ivec3 pat3_size = <%pat3_size/>;
 const ivec3 pattex3_size = tile3_size * pat3_size;
 const ivec3 map3_size = <%map3_size/>;
+const int map3_size_log2 = <%map3_size_log2/>.x;
 const ivec3 virt3_size = <%virt3_size/>;
+const int virt3_size_log2 = tile3_size_log2 + map3_size_log2;
 
 uniform <%mediump_sampler3d/> sampler_voxtpat;
+uniform <%mediump_sampler3d/> sampler_voxtpax;
 uniform <%mediump_sampler3d/> sampler_voxtmap;
+uniform <%mediump_sampler3d/> sampler_voxtmax;
 
 int tilemap_fetch(in vec3 pos, int tmap_mip, int tpat_mip)
 {
@@ -218,15 +223,71 @@ int tilemap_fetch(in vec3 pos, int tmap_mip, int tpat_mip)
   return node_type;
 }
 
-int raycast_waffle(inout vec3 pos, in vec3 fragpos, in vec3 ray,
-  in vec3 mi, in vec3 mx)
+int tilemap_fetch_debug(in vec3 pos, int tmap_mip, int tpat_mip)
 {
+  // float distance_unit = distance_unit_tmap_mip;
+  vec3 curpos_f = pos * virt3_size + vec3(0.5);
+  vec3 curpos_i = div_rem(curpos_f, 1.0);
+  vec3 curpos_t = floor(curpos_i / tile3_size);
+  vec3 curpos_tr = curpos_i - curpos_t * tile3_size; // 0から15の整数
+  <%if><%is_gl3_or_gles3/>
+  ivec3 icp = ivec3(curpos_t);
+  vec4 value = texelFetch(sampler_voxtmap, icp, 0);
+  //vec4 value = textureLod(sampler_voxtmap, curpos_t / map3_size, 0.0);
+  /*
+  vec4 value = texelFetch(sampler_voxtmap, ivec3(curpos_t) >> tmap_mip, 
+    tmap_mip);
+  */
+  <%else/>
+  vec4 value = textureLod(sampler_voxtmap, curpos_t / map3_size, 0.0);
+  // vec4 value = <%texture3d/>(sampler_voxtmap, curpos_t / map3_size);
+  <%/>
+  int node_type = int(floor(value.a * 255.0 + 0.5));
+  bool is_pat = (node_type == 1);
+  if (is_pat) {
+    vec3 curpos_tp = floor(value.rgb * 255.0 + 0.5) * tile3_size;
+      // 16刻み4096迄
+    // distance_unit = distance_unit_tpat_mip;
+    <%if><%is_gl3_or_gles3/>
+    value = texelFetch(sampler_voxtpat,
+      ivec3(curpos_tp + curpos_tr) >> tpat_mip, tpat_mip);
+    <%else/>
+    value = textureLod(sampler_voxtpat,
+      (curpos_tp + curpos_tr) / pattex3_size, 0.0);
+    // value = <%texture3d/>(sampler_voxtpat,
+    //  (curpos_tp + curpos_tr) / pattex3_size);
+    <%/>
+    // value = vec4(1.0, 1.0, 1.0, 1.0);
+    // value.xyz = vec3(0.0);
+    node_type = int(floor(value.a * 255.0 + 0.5));
+  }
+  return node_type;
+}
+
+int raycast_get_miplevel(in vec3 pos, in vec3 campos, in float dist_rnd)
+{
+  // テクスチャ座標でのposとcamposからmiplevelを決める
+  float dist_pos_campos_2 = dot(pos - campos, pos - campos) + 0.0001;
+  float dist_log2 = log(dist_pos_campos_2) * 0.5 / log(2.0);
+  int miplevel = clamp(int(dist_log2 + dist_rnd + virt3_size_log2 - 8.5),
+    0, 8);
+  return miplevel;
+}
+
+int raycast_waffle(inout vec3 pos, in vec3 fragpos, in vec3 ray,
+  in vec3 mi, in vec3 mx, in int miplevel)
+{
+  // 引数の座標はすべてテクスチャ座標
+  // TODO: 速くする余地あり
+  int tmap_mip = clamp(miplevel - tile3_size_log2, 0, tile3_size_log2);
+  int tpat_mip = min(miplevel, tile3_size_log2);
   float dist_max = length(pos - fragpos);
   float di = 2.0;
   float near = 65536;
   if (true) { // どっちが速い？
     vec3 d = (mx - mi) / di;
-    vec3 dd = d * 0.0625; // voxel境界付近を拾わないようにするために少しずらす
+    vec3 dd = d * 0.5 / vec3(virt3_size); // FIXME????
+      // voxel境界付近を拾わないようにするために少しずらす
     mi = mi + dd;
     mx = mx - dd;
     d = (mx - mi) / di;
@@ -238,7 +299,8 @@ int raycast_waffle(inout vec3 pos, in vec3 fragpos, in vec3 ray,
     vec3 a = (f - pos) / ray;
     for (float i = 0.0; i < di; i = i + 1.0, a.x = a.x + ad.x) {
       if (a.x > 0 && a.x < dist_max) {
-	if (tilemap_fetch(pos + ray * a.x, 0, 0) != 0) {
+//vec3 p = pos + ray * a.x; if (!pos3_inside_3(p, mi, mx)) { break; }
+	if (tilemap_fetch(pos + ray * a.x, tmap_mip, tpat_mip) == 255) {
 	  near = min(a.x, near);
 	  break;
 	}
@@ -246,7 +308,8 @@ int raycast_waffle(inout vec3 pos, in vec3 fragpos, in vec3 ray,
     }
     for (float i = 0.0; i < di; i = i + 1.0, a.y = a.y + ad.y) {
       if (a.y > 0 && a.y < dist_max) {
-	if (tilemap_fetch(pos + ray * a.y, 0, 0) != 0) {
+//vec3 p = pos + ray * a.y; if (!pos3_inside_3(p, mi, mx)) { break; }
+	if (tilemap_fetch(pos + ray * a.y, tmap_mip, tpat_mip) == 255) {
 	  near = min(a.y, near);
 	  break;
 	}
@@ -254,7 +317,8 @@ int raycast_waffle(inout vec3 pos, in vec3 fragpos, in vec3 ray,
     }
     for (float i = 0.0; i < di; i = i + 1.0, a.z = a.z + ad.z) {
       if (a.z > 0 && a.z < dist_max) {
-	if (tilemap_fetch(pos + ray * a.z, 0, 0) != 0) {
+//vec3 p = pos + ray * a.z; if (!pos3_inside_3(p, mi, mx)) { break; }
+	if (tilemap_fetch(pos + ray * a.z, tmap_mip, tpat_mip) == 255) {
 	  near = min(a.z, near);
 	  break;
 	}
@@ -262,22 +326,33 @@ int raycast_waffle(inout vec3 pos, in vec3 fragpos, in vec3 ray,
     }
   } else {
     vec3 d = (mx - mi) / di;
-    vec3 f = mi + d * 0.5  + epsilon;
+    vec3 f = mi + d * 0.5; // + epsilon;
     vec3 ad = d / ray;
     vec3 a = (f - pos) / ray;
     for (float i = 0.0; i < di; i = i + 1.0, a = a + ad) {
       if (a.x > 0 && a.x < dist_max) {
-	if (tilemap_fetch(pos + ray * a.x, 0, 0) != 0) {
+//vec3 p = pos + ray * a.x; if (!pos3_inside_3(p, mi, mx)) { break; }
+	// if (tilemap_fetch(pos + ray * a.x, tmap_mip, tpat_mip) == 255) {
+	if (tilemap_fetch(pos + ray * a.x, tmap_mip, tpat_mip) == 255) {
 	  near = min(a.x, near);
 	}
       }
       if (a.y > 0 && a.y < dist_max) {
-	if (tilemap_fetch(pos + ray * a.y, 0, 0) != 0) {
+//vec3 p = pos + ray * a.y; if (!pos3_inside_3(p, mi, mx)) { break; }
+	// if (tilemap_fetch(pos + ray * a.y, tmap_mip, tpat_mip) == 255) {
+	if (tilemap_fetch(pos + ray * a.y, tmap_mip, tpat_mip) == 255) {
+//if (p.z < 0.0001) break;
 	  near = min(a.y, near);
 	}
       }
       if (a.z > 0 && a.z < dist_max) {
-	if (tilemap_fetch(pos + ray * a.z, 0, 0) != 0) {
+//tmap_mip = 0;
+//tpat_mip = 0;
+//vec3 p = pos + ray * a.z; if (!pos3_inside_3(p, mi, mx)) { break; }
+	// if (tilemap_fetch(pos + ray * a.z, tmap_mip, tpat_mip) == 255) {
+	if (tilemap_fetch(pos + ray * a.z, tmap_mip, tpat_mip) == 255) {
+//if (p.y >= 0.9) break;
+//break;
 	  near = min(a.z, near);
 	}
       }
@@ -296,9 +371,10 @@ int raycast_tilemap(
   in vec3 aabb_min, in vec3 aabb_max, out vec4 value_r, inout vec3 hit_nor,
   in float selfshadow_para, inout float lstr_para, in int miplevel)
 {
+  // 引数の座標はすべてテクスチャ座標
   // eyeはカメラから物体への向き、lightは物体から光源への向き
-  int tmap_mip = clamp(miplevel - 4, 0, 4);
-  int tpat_mip = min(miplevel, 4);
+  int tmap_mip = clamp(miplevel - tile3_size_log2, 0, tile3_size_log2);
+  int tpat_mip = min(miplevel, tile3_size_log2);
   // tpat_mip = 0; // FIXME: remove
   float distance_unit_tmap_mip = float(<%lshift>16<%>tmap_mip<%/>);
   float distance_unit_tpat_mip = float(<%lshift>1<%>tpat_mip<%/>);
@@ -308,39 +384,36 @@ int raycast_tilemap(
   vec3 curpos_i = div_rem(curpos_f, 1.0);
   value_r = vec4(0.0, 0.0, 0.0, 1.0);
   int hit = -1;
+  bool hit_tpat;
+  vec3 hit_coord;
   int i;
   const int imax = 256;
   for (i = 0; i < imax; ++i) {
     vec3 curpos_t = floor(curpos_i / tile3_size);
     vec3 curpos_tr = curpos_i - curpos_t * tile3_size; // 0から15の整数
-    // texelFetchのほうがわずかに速い
+    vec3 tmap_coord = curpos_t;
     <%if><%is_gl3_or_gles3/>
-    vec4 value = texelFetch(sampler_voxtmap, ivec3(curpos_t) >> tmap_mip, 
+    vec4 value = texelFetch(sampler_voxtmap, ivec3(tmap_coord) >> tmap_mip, 
       tmap_mip);
     <%else/>
-    vec4 value = textureLod(sampler_voxtmap, curpos_t / map3_size, 0.0);
-    // vec4 value = <%texture3d/>(sampler_voxtmap, curpos_t / map3_size);
+    vec4 value = textureLod(sampler_voxtmap, tmap_coord / map3_size, 0.0);
     <%/>
     int node_type = int(floor(value.a * 255.0 + 0.5));
     bool is_pat = (node_type == 1);
     float distance_unit = distance_unit_tmap_mip;
+    vec3 tpat_coord;
     if (is_pat) {
       distance_unit = 1.0;
-      // if (eye.x < -0.95) { dbgval = vec4(0,1,1,1); return 1; }
       vec3 curpos_tp = floor(value.rgb * 255.0 + 0.5) * tile3_size;
 	// 16刻み4096迄
       distance_unit = distance_unit_tpat_mip;
+      tpat_coord = curpos_tp + curpos_tr;
       <%if><%is_gl3_or_gles3/>
-      value = texelFetch(sampler_voxtpat,
-	ivec3(curpos_tp + curpos_tr) >> tpat_mip, tpat_mip);
+      value = texelFetch(sampler_voxtpat, ivec3(tpat_coord) >> tpat_mip,
+	tpat_mip);
       <%else/>
-      value = textureLod(sampler_voxtpat,
-	(curpos_tp + curpos_tr) / pattex3_size, 0.0);
-      // value = <%texture3d/>(sampler_voxtpat,
-      //   (curpos_tp + curpos_tr) / pattex3_size);
+      value = textureLod(sampler_voxtpat, (tpat_coord) / pattex3_size, 0.0);
       <%/>
-      // value = vec4(1.0, 1.0, 1.0, 1.0);
-      // value.xyz = vec3(0.0);
       node_type = int(floor(value.a * 255.0 + 0.5));
     }
     // ボクセルの大きさを掛ける。タイルの移動なら16倍
@@ -364,13 +437,6 @@ int raycast_tilemap(
       bool hit_flag = true;
       bool hit_wall = false;
       if (node_type == 255) { // 壁
-	<%if><%eq><%get_config edit_mode/>1<%/>
-	value_r = value;
-	// vec4(0.5, 0.5, 0.5, 1.0);
-	<%else/>
-	value_r = value;
-	// vec4(0.5, 0.5, 0.5, 1.0);
-	<%/>
 	hit_wall = true;
       } else { // 平面または二次曲面で切断
 	// node_type = 208 + 0; 
@@ -389,8 +455,8 @@ int raycast_tilemap(
 	  sp_nor = -normalize(param_abc);
 	} else {
 	  // 楕円体
-	  vec3 sp_scale = floor(distval / 64.0);
-	  vec3 sp_center = distval - sp_scale * 64.0 - 32.0;
+	  vec3 sp_scale = floor(distval / 64.0); // 上位2bit
+	  vec3 sp_center = distval - sp_scale * 64.0 - 32.0; // 下位6bit
 	  /*
 	  vec3 sp_scale = dist_p; // 拡大率
 	  vec3 sp_center = dist_n - 8.0; // 球の中心の相対位置
@@ -402,7 +468,6 @@ int raycast_tilemap(
 	}
 	vec3 tp = curpos_f + ray * length_ae;
 	if (hit_wall) {
-	  value_r = vec4(0.5, 0.5, 0.5, 1.0);
 	} else if (!pos3_inside(tp, 0.0 - epsilon, 1.0 + epsilon)) {
 	  // 断面と境界平面の境目の誤差を見えなくするためにepsilonだけ広げる
 	  hit_flag = false;
@@ -410,7 +475,6 @@ int raycast_tilemap(
 	  // ボクセル内で断面に接触
 	  dir = -sp_nor;
 	  curpos_f = tp;
-	  value_r = vec4(0.5, 0.5, 0.5, 1.0);
 	}
       }
       if (hit_flag) {
@@ -422,6 +486,8 @@ int raycast_tilemap(
 	}
 	hit_nor = -dir;
 	hit = i;
+	hit_tpat = is_pat;
+	hit_coord = is_pat ? tpat_coord : tmap_coord;
 	pos = (curpos_i + curpos_f * distance_unit) / virt3_size;
 	  // eyeが衝突した位置
 	// 法線と光が逆向きのときは必ず影(陰)
@@ -471,6 +537,23 @@ int raycast_tilemap(
   if (i == imax) {
     lstr_para = 0.0;
     hit = i;
+  }
+  if (hit >= 0) {
+    if (!hit_tpat) {
+      <%if><%is_gl3_or_gles3/>
+      value_r = texelFetch(sampler_voxtmax, ivec3(hit_coord) >> tmap_mip, 
+	tmap_mip);
+      <%else/>
+      value_r = textureLod(sampler_voxtmax, hit_coord / map3_size, 0.0);
+      <%/>
+    } else {
+      <%if><%is_gl3_or_gles3/>
+      value_r = texelFetch(sampler_voxtpax, ivec3(hit_coord) >> tpat_mip,
+	tpat_mip);
+      <%else/>
+      value_r = textureLod(sampler_voxtpax, (hit_coord) / pattex3_size, 0.0);
+      <%/>
+    }
   }
   // if (i > 35) { dbgval = vec4(1.0, 1.0, 0.0, 1.0); }
   // if (hit > 32) { dbgval = vec4(1.0, 0.0, 0.0, 1.0); } // FIXME

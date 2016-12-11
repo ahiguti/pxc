@@ -312,8 +312,8 @@ private struct app_impl()
   public input_control ictl = input_control(io::system);
   public bool scene_next_flag;
   public float light_on = 0.0f;
-  public float light = 0.55f;
-  public float exposure = 1.0f;
+  public float light = 0.9f;
+  public float exposure = 1.414f;
   public float option_value = 0.0f;
   public string_map app_commands;
   public varray{bool} prev_joy_buttons;
@@ -369,7 +369,7 @@ public multithreaded struct demoapp_scene_shared(io const& sys0)
   public bool engine_status = true;
   public float light_on;
   public float light;
-  public float exposure = 1.0f;
+  public float exposure = 2.0f;
   public float option_value = 0.0f;
   public texture_info default_font_texture_info;
   public string_map app_commands;
@@ -795,10 +795,18 @@ private function varray{ptr{pgldrawer_export_i}} init_drawers(
 private function void build_vertices(app_impl mutable& app,
   make_vertices_i mutable& pgs)
 {
-  bitarray3 otb = tilemap_external(
-    *app.textures->equal_range("triangles.voxtmap.0"));
-  bitarray3 itb = tilemap_internal(
-    *app.textures->equal_range("triangles.voxtmap.0"));
+  const& voxtmap = *app.textures->equal_range("triangles.voxtmap.0");
+  const voxtmap_whd_max = static_cast{float}(
+    max(max(voxtmap->get_width(), voxtmap->get_height()),
+    voxtmap->get_depth()));
+  const voxtmap_whd = glm::make_vec3(
+    static_cast{float}(voxtmap->get_width()) / voxtmap_whd_max,
+    static_cast{float}(voxtmap->get_height()) / voxtmap_whd_max,
+    static_cast{float}(voxtmap->get_depth()) / voxtmap_whd_max);
+  /*
+  bitarray3 otb = tilemap_external(voxtmap);
+  bitarray3 itb = tilemap_internal(voxtmap);
+  */
   /*
   uint const zmax = 1u << otb.d_l2;
   for (const z: zmax / 32 .. zmax) {
@@ -810,6 +818,7 @@ private function void build_vertices(app_impl mutable& app,
     }
   }
   */
+  /*
   debug_log("otb", otb.get_width_l2(), otb.get_height_l2(),
     otb.get_depth_l2());
   debug_log("itb", itb.get_width_l2(), itb.get_height_l2(),
@@ -820,7 +829,6 @@ private function void build_vertices(app_impl mutable& app,
   itb = bitarray3_resize{operator::and}(itb);
   // itb = bitarray3_resize{operator::and}(itb);
   // itb = bitarray3_resize{operator::and}(itb);
-  /*
   */
   /*
   bitarray3 otb;
@@ -831,6 +839,7 @@ private function void build_vertices(app_impl mutable& app,
   otb.set(0, 0, 0, true);
   otb.set(1, 1, 1, true);
   */
+  /*
   if (false) {
     for (const z: 0 .. 16u) {
       debug_log("z=", z);
@@ -844,8 +853,8 @@ private function void build_vertices(app_impl mutable& app,
       }
     }
   }
-  /*
   */
+  /*
   varray{varray{glm::vec3}} oquads = get_surface_quads(otb);
   varray{varray{glm::vec3}} iquads = get_surface_quads(itb);
   {
@@ -853,29 +862,28 @@ private function void build_vertices(app_impl mutable& app,
       return x < mi ? mi : x > mx ? mx : x;
     }
     float tex3d_0 = 0.00001f;
-    float tex3d_1 = 1.0f - 0.00001f;
-    float tex3d_z = 1.0f / 32.0f - 0.00001f;
-    // if (case app.edit_mode.some) {
-      tex3d_z = 1.0f / 8.0f - 0.00001f;
-    // }
+    float tex3d_x = voxtmap_whd.x - 0.00001f;
+    float tex3d_y = voxtmap_whd.y - 0.00001f;
+    float tex3d_z = voxtmap_whd.z - 0.00001f;
     for (const i, mutable& q: oquads) {
       for (const j, mutable& p: q) {
 	p = glm::make_vec3(
-	  clamp(p.x, tex3d_0, tex3d_1),
-	  clamp(p.y, tex3d_0, tex3d_1),
+	  clamp(p.x, tex3d_0, tex3d_x),
+	  clamp(p.y, tex3d_0, tex3d_y),
 	  clamp(p.z, tex3d_0, tex3d_z));
       }
     }
     for (const i, mutable& q: iquads) {
       for (const j, mutable& p: q) {
 	p = glm::make_vec3(
-	  clamp(p.x, tex3d_0, tex3d_1),
-	  clamp(p.y, tex3d_0, tex3d_1),
+	  clamp(p.x, tex3d_0, tex3d_x),
+	  clamp(p.y, tex3d_0, tex3d_y),
 	  clamp(p.z, tex3d_0, tex3d_z));
       }
     }
   }
   debug_log("quads:", oquads.size());
+  */
 
   /* import */
   const objs = make_farray{string}(
@@ -926,12 +934,8 @@ private function void build_vertices(app_impl mutable& app,
   m1 = glm::mat4()
     .translate(glm::make_vec3(0.0, 0.0, box_size * (-1.0f)))
     .rotate(to_radians(45.0), glm::make_vec3(0.0, 0.0, 1.0));
-  float zmax = 1.0f / 32.0f;
-  // if (case app.edit_mode.some) {
-    zmax = 1.0f / 8.0f;
-  // }
   const mi = glm::make_vec3(0.0, 0.0, 0.0);
-  const mx = glm::make_vec3(1.0, 1.0, zmax);
+  const mx = voxtmap_whd;
   float small_box_size = 1.0f;
   /*
   glm::mat4 small_m = glm::mat4()
@@ -1498,10 +1502,10 @@ scene_control(node_factory const& nfac,
     "parts",
     */
     // "knight-multi",
+    "box",
     "box-depth",
     "plane-multi-1",
     "plane-multi-2",
-    "box",
     "box_opt1",
     "mstex3d",
     "rigidbody-multi",

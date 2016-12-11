@@ -61,6 +61,13 @@ vec4 dbgval = vec4(0.0);
   <%/>
 <%/>
 
+float generate_random(vec3 v)
+{
+  v.x += fract(random_seed);
+  v.y += fract(random_seed);
+  return fract(sin(dot(v.xy, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
 bool uv_inside_aabb(in vec2 uv)
 {
   vec4 aabb = floor(vary_aabb_or_tconv + 0.5);
@@ -327,13 +334,6 @@ vec3 light_all(in vec3 light_color, in float lstr, in vec3 mate_specular,
   return clamp(light_sp_di + env, 0.0, 1.0);
 }
 
-float generate_random(vec3 v)
-{
-  v.x += fract(random_seed);
-  v.y += fract(random_seed);
-  return fract(sin(dot(v.xy, vec2(12.9898, 78.233))) * 43758.5453);
-}
-
 vec4 get_sampler_sm(int i, vec2 p)
 {
   <%if><%is_gl3_or_gles3/>
@@ -373,6 +373,7 @@ void main(void)
   vec4 tex_val = vec4(0.5, 0.5, 0.5, 1.0);
   <%if><%eq><%stype/>1<%/>
     // raycast
+//discard;
     <%if><%is_gl3_or_gles3/>
       mat3 normal_matrix = mat3(vary_model_matrix);
     <%else/>
@@ -434,10 +435,14 @@ void main(void)
       }
     <%/>
     <%/>
-    float dist_pos_campos_2 = dot(pos - campos, pos - campos) + 0.01;
-    float dist_rnd = generate_random(pos) * 0.25;
+    float dist_rnd = generate_random(pos) * 0.5;
+    /*
+    float dist_pos_campos_2 = dot(pos - campos, pos - campos) + 0.0001;
     float dist_log2 = log(dist_pos_campos_2) * 0.5 / log(2.0);
-    int miplevel = clamp(int(dist_log2 + dist_rnd + 2.0), 0, 8);
+    // if (dist_log2 < -3.0) { <%fragcolor/> = vec4(1,0,1,1); return; }
+    int miplevel = clamp(int(dist_log2 + dist_rnd + 6.5), 0, 8);
+    */
+    int miplevel = raycast_get_miplevel(pos, campos, dist_rnd);
     // if (miplevel > 2) { <%fragcolor/> = vec4(1,0,1,1); return; }
     // if (miplevel > 1) { <%fragcolor/> = vec4(1,1,0,1); return; }
     // if (miplevel > 0) { <%fragcolor/> = vec4(1,0,0,1); return; }
@@ -472,6 +477,15 @@ void main(void)
     <%/>
     if (hit < 0) {
       discard;
+    }
+    if (cam_inside_aabb && hit == 0) {
+      /* カメラが物体にめりこんでいる。depth計算で0除算がおきないよう
+       * ここでreturnする。 */
+      <%fragcolor/> = vec4(0.0);
+      <%if><%eq><%update_frag_depth/>1<%/>
+	gl_FragDepth = -1.0;
+      <%/>
+      return;
     }
     // ambient = max(0.0, 0.005 - float(hit) * 0.0001);
     nor = normal_matrix * nor; // local to global
@@ -570,7 +584,7 @@ void main(void)
 	    zval_cur = get_sampler_sm(sm_to_use, c).x;
 	    // zval = min(zval, zval_cur);
 	    sml += float(smpos.z < zval_cur
-	     * (1.0005 + (abs(i)+abs(j))/4096.0))/9.0;
+	     * (1.005 + (abs(i)+abs(j))/4096.0))/9.0;
 	  }
 	}
       <%else/>

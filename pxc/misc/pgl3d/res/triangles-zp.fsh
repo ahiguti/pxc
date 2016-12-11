@@ -3,7 +3,6 @@ uniform vec3 camera_pos;
   <%empty_shader_frag/>
 <%else/>
   // stype == 1 raycasting
-
   <%if><%eq><%debug_zprepass/>1<%/>
     <%decl_fragcolor/>
   <%/>
@@ -57,8 +56,11 @@ uniform vec3 camera_pos;
       }
       pos = clamp(pos, aabb_min + epsi, aabb_max - epsi);
     <%/>
+    int miplevel = raycast_get_miplevel(pos, campos, 0.0);
+    // miplevel = 0;
     int hit = -1;
-    hit = raycast_waffle(pos, fragpos, camera_local, aabb_min, aabb_max);
+    hit = raycast_waffle(pos, fragpos, camera_local, aabb_min, aabb_max,
+      miplevel);
     if (hit < 0) {
       discard;
     }

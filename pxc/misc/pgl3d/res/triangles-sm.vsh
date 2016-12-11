@@ -5,6 +5,7 @@
   uniform mat4 shadowmap_vp;
 <%/>
 uniform vec3 light_dir; // unused?
+uniform vec3 camera_pos;
 <%decl_instance_attr mat4 model_matrix/>
 <%vert_in/> vec3 position;
   // stype==0のとき頂点のオブジェクト座標
@@ -23,6 +24,7 @@ uniform vec3 light_dir; // unused?
   <%flat/> <%vert_out/> vec3 vary_aabb_max;
   <%flat/> <%vert_out/> mat4 vary_model_matrix; // 接線空間からワールドへの変換
   <%vert_out/> vec3 vary_position_local; // 接線空間での頂点座標
+  <%flat/> <%vert_out/> vec3 vary_camerapos_local; // 接線空間でのカメラ座標
   <%flat/> <%vert_out/> mat4 vary_mvp;
 <%/>
 <%if><%not><%enable_depth_texture/><%/>
@@ -59,6 +61,8 @@ void main(void)
     vec4 gpos4 = mm * vec4(vary_position_local, 1.0);
       // ワールドでの頂点の座標
     vary_model_matrix = mm; // 接線空間からワールドへの変換
+    vary_camerapos_local = (camera_pos - model_transform) * normal_matrix;
+      // mmは等倍回転と加算だけなので右辺は inverse(mm) * camera_posに等しい
     vary_aabb_or_tconv = aabb_or_tconv;
     vary_aabb_min = aabb_min;
     vary_aabb_max = aabb_max;

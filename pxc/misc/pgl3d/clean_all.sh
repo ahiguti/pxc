@@ -10,5 +10,5 @@ rm -rf `find ./ios/ -name xcuserdata`
 rm -rf `find . -name .DS_Store`
 rm -f source/*.exe source/*.o source/*.cc
 rm -f res/*.ttf
-rm -f var/*
+rm -f var/*.raw
 rm -f glprog.*.bin

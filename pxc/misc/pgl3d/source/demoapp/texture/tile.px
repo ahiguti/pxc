@@ -8,10 +8,12 @@ private import pgl3d::engine::util -;
 private import pgl3d::texture::voxel -;
 
 public function void prepare_texture_data_3d_tmap(bool edit_mode,
-  texture_data mutable& tmap, ivec3 const& voxtpat_size_l2,
-  ivec3 const& voxtmap_size_l2)
+  texture_data mutable& tmap, texture_data mutable& tmap_ax,
+  ivec3 const& voxtpat_size_l2, ivec3 const& voxtmap_size_l2)
 {
   tmap.set_size_l2(ui(voxtmap_size_l2.x), ui(voxtmap_size_l2.y),
+    ui(voxtmap_size_l2.z));
+  tmap_ax.set_size_l2(ui(voxtmap_size_l2.x), ui(voxtmap_size_l2.y),
     ui(voxtmap_size_l2.z));
   ivec3 const pat_size = map{ivec3, operator::shiftl}(make_ivec3(1, 1, 1),
     voxtpat_size_l2);
@@ -30,6 +32,7 @@ public function void prepare_texture_data_3d_tmap(bool edit_mode,
       return;
     }
     tmap.set(ui(x), ui(y), ui(z), v);
+    tmap_ax.set(ui(x), ui(y), ui(z), 0xff6080c0);
   }
   function uint get(int x, int y, int z) {
     if (x < 0 || x >= si(tmap.get_width())) { return 0; }
@@ -68,6 +71,15 @@ public function void prepare_texture_data_3d_tmap(bool edit_mode,
 	  } else if (!vzp && vzn) {
 	    pz = 5;
 	  } else {
+	    // FIXME : 試験
+	    /*
+	    const g = rnd->generate() % 256;
+	    if (g < 12) {
+	      pz = g % 6;
+	    } else {
+	      continue;
+	    }
+	    */
 	    continue;
 	  }
 	  // if ((rnd->generate() & 0xff) < 0x7f) { continue; }
@@ -160,8 +172,8 @@ public function void prepare_texture_data_3d_tmap(bool edit_mode,
 }
 
 public function void prepare_texture_data_3d_tpat(bool edit_mode,
-  texture_data mutable& tpat, ivec3 const& tile_size_l2,
-  ivec3 const& pat_size_l2)
+  texture_data mutable& tpat, texture_data mutable& tpat_ax,
+  ivec3 const& tile_size_l2, ivec3 const& pat_size_l2)
 {
   const color0 = 0x00000000u;
   const color1 = 0xff102020u;
@@ -173,6 +185,7 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
   ivec3 const tile_size = map{ivec3, operator::shiftl}(
     make_ivec3(1, 1, 1), tile_size_l2);
   tpat.set_size_l2(ui(tex_size_l2.x), ui(tex_size_l2.y), ui(tex_size_l2.z));
+  tpat_ax.set_size_l2(ui(tex_size_l2.x), ui(tex_size_l2.y), ui(tex_size_l2.z));
   if (true) {
     // 6dir bump
     const rnd = make_rand_generator(333U);
@@ -224,6 +237,7 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
       // debug_log("set_color", x & 16, y & 16, z, x0, y0, z0, dir);
       if (!cut || tpat.get(x, y, z) != 0) { // FIXME
 	tpat.set(x, y, z, 0xff808080);
+	tpat_ax.set(x, y, z, 0xff808080);
       } else {
 	center = center * 1.0f; // centerは1.0刻み
 	scale = scale * 1.0f; // scaleは1.0刻み
@@ -242,6 +256,7 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
 	const cw = static_cast{uint}(radius + 0.5) + 1u;
 	const vc = (cw << 24u) | (vz << 16u) | (vy << 8u) | vx;
 	tpat.set(x, y, z, vc);
+	tpat_ax.set(x, y, z, 0xff804020);
       }
     }
     function void make_bump_one(uint bx0, uint by0, uint bz0, uint dir) {

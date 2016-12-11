@@ -36,14 +36,19 @@ uniform mat4 shadowmap_vp;
   <%/>
 <%else/>
   // stype == 1 raycasting
-
   uniform vec3 light_dir;
   <%flat/> <%frag_in/> vec4 vary_aabb_or_tconv;
   <%flat/> <%frag_in/> vec3 vary_aabb_min;
   <%flat/> <%frag_in/> vec3 vary_aabb_max;
   <%flat/> <%frag_in/> mat4 vary_model_matrix;
   <%frag_in/> vec3 vary_position_local;
+  <%flat/> <%frag_in/> vec3 vary_camerapos_local;
   <%flat/> <%frag_in/> mat4 vary_mvp;
+
+  float generate_random(vec3 v)
+  {
+    return fract(sin(dot(v.xy, vec2(12.9898, 78.233))) * 43758.5453);
+  }
 
   void main(void)
   {
@@ -60,6 +65,8 @@ uniform mat4 shadowmap_vp;
       // texpos,texscaleは接線空間からテクスチャ座標への変換のパラメータ
     vec3 fragpos = texpos + vary_position_local * texscale;
       // テクスチャ座標でのフラグメント位置
+    vec3 campos = texpos + vary_camerapos_local * texscale;
+      // テクスチャ座標でのカメラ位置
     vec3 aabb_min = vary_aabb_min;
     vec3 aabb_max = vary_aabb_max;
     vec3 pos = fragpos;
@@ -71,8 +78,11 @@ uniform mat4 shadowmap_vp;
       pos = pos_n;
     }
     pos = clamp(pos, aabb_min + epsi, aabb_max - epsi);
+    float dist_rnd = generate_random(pos) * 0.5;
+    int miplevel = raycast_get_miplevel(pos, campos, dist_rnd);
     int hit = -1;
-    hit = raycast_waffle(pos, fragpos, -light_local, aabb_min, aabb_max);
+    hit = raycast_waffle(pos, fragpos, -light_local, aabb_min, aabb_max,
+      miplevel);
     if (hit < 0) {
       discard;
     }

@@ -13,15 +13,20 @@ public import glm -;
 struct demoapp_textures(bool edit_mode)
 {
   public ivec3 const voxtile_size_l2 = make_ivec3(4, 4, 4);
-  public ivec3 const voxtpat_size_l2 = make_ivec3(4, 4, 4);
-  // public ivec3 const voxtmap_size_l2 = make_ivec3(10, 10, 7);
-  public ivec3 const voxtmap_size_l2 = make_ivec3(8, 8, 5);
+  // public ivec3 const voxtile_size_l2 = make_ivec3(5, 5, 5);
+  public ivec3 const voxtpat_size_l2 = make_ivec3(4, 4, 3);
+  public ivec3 const voxtmap_size_l2 = make_ivec3(11, 11, 6);
+  // public ivec3 const voxtmap_size_l2 = make_ivec3(8, 8, 5);
   // 3d texture, voxel raycasting
   public ptr{texture_data} tex_voxtpat = make_ptr{texture_data}();
+  public ptr{texture_data} tex_voxtpax = make_ptr{texture_data}();
   public ptr{texture_data} tex_voxtmap = make_ptr{texture_data}();
+  public ptr{texture_data} tex_voxtmax = make_ptr{texture_data}();
   public ptr{texture_data} tex_voxtile = make_ptr{texture_data}();
   public varray{ptr{texture_data}} voxtpat_mip;
+  public varray{ptr{texture_data}} voxtpax_mip;
   public varray{ptr{texture_data}} voxtmap_mip;
+  public varray{ptr{texture_data}} voxtmax_mip;
   // 2d texture, parallax mapping
   public ptr{texture_data} tex_tcol = make_ptr{texture_data}();
   public ptr{texture_data} tex_tdep = make_ptr{texture_data}();
@@ -42,8 +47,16 @@ prepare_triangles_texture_data(pgl3d_config const& cfg,
     string k = "triangles.voxtpat." + to_string(i);
     textures->insert(k, t);
   }
+  for (const i, const& t: txs.voxtpax_mip) {
+    string k = "triangles.voxtpax." + to_string(i);
+    textures->insert(k, t);
+  }
   for (const i, const& t: txs.voxtmap_mip) {
     string k = "triangles.voxtmap." + to_string(i);
+    textures->insert(k, t);
+  }
+  for (const i, const& t: txs.voxtmax_mip) {
+    string k = "triangles.voxtmax." + to_string(i);
     textures->insert(k, t);
   }
   textures->insert("triangles.voxtile", txs.tex_voxtile);
@@ -55,37 +68,82 @@ prepare_raycasting_texture_data(pgl3d_config const& cfg,
 {
   metafunction ui static_cast{uint};
   mutable& tex_voxtmap = txs.tex_voxtmap;
+  mutable& tex_voxtmax = txs.tex_voxtmax;
   mutable& tex_voxtpat = txs.tex_voxtpat;
+  mutable& tex_voxtpax = txs.tex_voxtpax;
   mutable& tex_voxtile = txs.tex_voxtile;
   tex_voxtile->set_size_l2(ui(txs.voxtile_size_l2.x),
     ui(txs.voxtile_size_l2.y), ui(txs.voxtile_size_l2.z));
   const edit_mode = cfg.get("edit_mode", 0, 0, 1) != 0;
   if (!edit_mode) {
     txs.voxtpat_mip = load_texture_data_array_raw("var/voxtpat_mip.raw");
+    txs.voxtpax_mip = load_texture_data_array_raw("var/voxtpax_mip.raw");
     txs.voxtmap_mip = load_texture_data_array_raw("var/voxtmap_mip.raw");
+    txs.voxtmax_mip = load_texture_data_array_raw("var/voxtmax_mip.raw");
   }
   if (!txs.voxtpat_mip.empty()) {
     tex_voxtpat = txs.voxtpat_mip[0];
   }
+  if (!txs.voxtpax_mip.empty()) {
+    tex_voxtpax = txs.voxtpax_mip[0];
+  }
   if (!txs.voxtmap_mip.empty()) {
     tex_voxtmap = txs.voxtmap_mip[0];
   }
+  if (!txs.voxtmax_mip.empty()) {
+    tex_voxtmax = txs.voxtmax_mip[0];
+  }
   if (tex_voxtpat->get_width() == 1 || tex_voxtmap->get_width() == 1) {
     debug_log("generate raw texture");
-    prepare_texture_data_3d_tpat(edit_mode, *tex_voxtpat, txs.voxtile_size_l2,
-      txs.voxtpat_size_l2);
+    prepare_texture_data_3d_tpat(edit_mode, *tex_voxtpat, *tex_voxtpax,
+      txs.voxtile_size_l2, txs.voxtpat_size_l2);
     debug_log("tpat done");
-    prepare_texture_data_3d_tmap(edit_mode, *tex_voxtmap, txs.voxtpat_size_l2,
-      txs.voxtmap_size_l2);
+    prepare_texture_data_3d_tmap(edit_mode, *tex_voxtmap, *tex_voxtmax,
+      txs.voxtpat_size_l2, txs.voxtmap_size_l2);
     debug_log("tmap done");
     debug_log("tmap 0,0,1", to_hexstring(tex_voxtmap->get(0, 0, 1)));
+    /*
+    {
+      // 試験: tpat から tmap にコピー
+      const& tpat = *tex_voxtpat;
+      mutable& tmap = *tex_voxtmap;
+      for (const x: 0 .. tpat.get_width()) {
+	for (const y: 0 .. tpat.get_height()) {
+	  for (const z: 0 .. tpat.get_depth()) {
+	    // debug_log("x,y,z", x, y, z);
+	    tmap.set(x, y, z, tpat.get(x, y, z));
+	  }
+	}
+      }
+    }
+    */
+    /*
+    {
+      const& tpat = *tex_voxtpat;
+      mutable& tmap = *tex_voxtmap;
+      const rnd = make_ptr{rand_generator}(333U);
+      for (const i: 0 .. 4096 * 128) {
+	const x = rnd->generate() % tmap.get_width();
+	const y = rnd->generate() % tmap.get_height();
+	const z = rnd->generate() % tmap.get_depth();
+	const px = rnd->generate() % tpat.get_width();
+	const py = rnd->generate() % tpat.get_height();
+	const pz = rnd->generate() % tpat.get_depth();
+	tmap.set(x, y, z, make_node_reference(
+	  (pz << 16) | (py << 8) | (px << 0)));
+      }
+    }
+    */
     bool enable_calc_distance = cfg.get("calc_distance", 1, 0, 1) != 0;
     bool enable_short_circuit = cfg.get("short_circuit", 0, 0, 1) != 0;
     const rnd = make_ptr{rand_generator}(333U);
     function void texture_make_mipmap(texture_data const& tsrc,
-      texture_data mutable& tdest, uint miplevel)
+      texture_data const& tsrcax, texture_data mutable& tdest,
+      texture_data mutable& tdestax, uint miplevel)
     {
       tdest.set_size_l2(tsrc.get_width_l2() - 1, tsrc.get_height_l2() - 1,
+	tsrc.get_depth_l2() - 1);
+      tdestax.set_size_l2(tsrc.get_width_l2() - 1, tsrc.get_height_l2() - 1,
 	tsrc.get_depth_l2() - 1);
       for (const x: 0 .. tdest.get_width()) {
 	for (const y: 0 .. tdest.get_height()) {
@@ -95,11 +153,12 @@ prepare_raycasting_texture_data(pgl3d_config const& cfg,
 	    const y1 = y * 2 + ((v0 >> 1) & 1);
 	    const z1 = z * 2 + ((v0 >> 2) & 1);
 	    mutable v = tsrc.get(x1, y1, z1);
+	    mutable vax = tsrcax.get(x1, y1, z1);
 	    if (!is_space_voxel(v)) {
-	      // FIXME: 色をどう決めるか
 	      v = 0xff606060; // 空白以外は塗りつぶしに変換
 	    }
 	    tdest.set(x, y, z, v);
+	    tdestax.set(x, y, z, vax);
 	  }
 	}
       }
@@ -108,37 +167,51 @@ prepare_raycasting_texture_data(pgl3d_config const& cfg,
       fold_list{max}(0, txs.voxtile_size_l2));
     {
       txs.voxtpat_mip.push_back(tex_voxtpat); // tpat miplevel 0
+      txs.voxtpax_mip.push_back(tex_voxtpax); // tpax miplevel 0
       mutable tex = tex_voxtpat;
+      mutable texax = tex_voxtpax;
       for (const miplevel: 0 .. miplevel_max) {
 	debug_log("tpat miplevel", miplevel);
 	const tex_m = make_ptr{texture_data}();
-	texture_make_mipmap(*tex, *tex_m, miplevel);
+	const texax_m = make_ptr{texture_data}();
+	texture_make_mipmap(*tex, *texax, *tex_m, *texax_m, miplevel);
 	txs.voxtpat_mip.push_back(tex_m);
+	txs.voxtpax_mip.push_back(texax_m);
 	tex = tex_m;
+	texax = texax_m;
       }
     }
     {
       txs.voxtmap_mip.push_back(tex_voxtmap); // tmap miplevel 0
+      txs.voxtmax_mip.push_back(tex_voxtmax); // tmax miplevel 0
       mutable tex = tex_voxtmap;
+      mutable texax = tex_voxtmax;
       for (const miplevel: 0 .. miplevel_max) {
 	debug_log("tmap miplevel", miplevel);
 	const tex_m = make_ptr{texture_data}();
-	texture_make_mipmap(*tex, *tex_m, miplevel);
+	const texax_m = make_ptr{texture_data}();
+	texture_make_mipmap(*tex, *texax, *tex_m, *texax_m, miplevel);
 	txs.voxtmap_mip.push_back(tex_m);
+	txs.voxtmax_mip.push_back(texax_m);
 	tex = tex_m;
+	texax = texax_m;
       }
     }
     for (const i, const& tex: txs.voxtpat_mip) {
-      prepare_voxel_tpat(*tex, miplevel_max, static_cast{uint}(i),
+      const& texax = txs.voxtpax_mip[i];
+      prepare_voxel_tpat(*tex, *texax, miplevel_max, static_cast{uint}(i),
 	enable_calc_distance, enable_short_circuit);
     }
     for (const i, const& tex: txs.voxtmap_mip) {
-      prepare_voxel_tmap(*tex, miplevel_max,
+      const& texax = txs.voxtmax_mip[i];
+      prepare_voxel_tmap(*tex, *texax, miplevel_max,
 	static_cast{uint}(i), enable_calc_distance, enable_short_circuit);
     }
     if (!edit_mode) {
       save_texture_data_array_raw("var/voxtpat_mip.raw", txs.voxtpat_mip);
+      save_texture_data_array_raw("var/voxtpax_mip.raw", txs.voxtpax_mip);
       save_texture_data_array_raw("var/voxtmap_mip.raw", txs.voxtmap_mip);
+      save_texture_data_array_raw("var/voxtmax_mip.raw", txs.voxtmax_mip);
     }
   } else {
     debug_log("loaded from raw");
@@ -190,7 +263,7 @@ function void dump_cnt(texture_data const& t, string msg)
 }
 
 function void prepare_voxel_tmap(texture_data mutable& tmap,
-  uint miplevel_max, uint miplevel,
+  texture_data mutable& tmap_ax, uint miplevel_max, uint miplevel,
   bool enable_calc_distance, bool enable_short_circuit)
 {
   // debug_log("tmap 0,0,1", to_hexstring(tmap.get(0, 0, 1)));
@@ -203,8 +276,8 @@ function void prepare_voxel_tmap(texture_data mutable& tmap,
 }
 
 function void prepare_voxel_tpat(texture_data mutable& tpat,
-  uint miplevel_max, uint miplevel, bool enable_calc_distance,
-  bool enable_short_circuit)
+  texture_data mutable& tpat_ax, uint miplevel_max, uint miplevel,
+  bool enable_calc_distance, bool enable_short_circuit)
 {
   dump_cnt(tpat, "tpat");
   // tpatはタイル境界までの距離を最大値とする。各タイルごとに個別に計算
