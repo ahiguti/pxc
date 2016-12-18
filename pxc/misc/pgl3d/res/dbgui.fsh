@@ -1,3 +1,5 @@
+<%import>pre.fsh<%/>
+
 <%decl_fragcolor/>
 <%frag_in/> vec2 vary_vert;
 uniform sampler2D sampler_sm[<%smsz/>];

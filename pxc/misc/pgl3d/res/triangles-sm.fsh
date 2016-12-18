@@ -1,3 +1,5 @@
+<%import>pre.fsh<%/>
+<%import>triangles-inc.fsh<%/>
 
 uniform mat4 shadowmap_vp;
 

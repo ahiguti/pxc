@@ -1,3 +1,5 @@
+<%import>pre.vsh<%/>
+
 <%vert_in/> vec2 vert;
 <%vert_out/> vec2 vary_coord;
 void main(void)

@@ -1,3 +1,5 @@
+<%import>pre.vsh<%/>
+
 <%if><%light_fixed/>
   uniform vec3 trans;
   uniform float scale;

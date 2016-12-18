@@ -1,3 +1,5 @@
+<%import>pre.fsh<%/>
+
 <%decl_fragcolor/>
 <%frag_in/> vec2 vary_coord;
 uniform vec2 pixel_delta; // unused

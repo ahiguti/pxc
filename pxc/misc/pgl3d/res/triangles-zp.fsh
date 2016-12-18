@@ -1,3 +1,6 @@
+<%import>pre.fsh<%/>
+<%import>triangles-inc.fsh<%/>
+
 uniform vec3 camera_pos;
 <%if><%ne><%stype/>1<%/>
   <%empty_shader_frag/>

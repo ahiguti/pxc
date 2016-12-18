@@ -1,3 +1,5 @@
+<%import>pre.vsh<%/>
+
 uniform mat4 view_projection_matrix;
 uniform vec3 camera_pos;
 uniform mat4 shadowmap_vp[<%smsz/>];

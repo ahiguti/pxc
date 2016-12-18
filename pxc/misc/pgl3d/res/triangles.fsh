@@ -1,3 +1,6 @@
+<%import>pre.fsh<%/>
+<%import>triangles-inc.fsh<%/>
+
 // #pragma optionNV(inline all)
 // #pragma optionNV(unroll none)
 // #pragma optionNV(fastmath off)
@@ -308,9 +311,10 @@ vec3 light_diffuse(in float cos_n_l, in vec3 material_diffuse)
 }
 
 vec3 light_all(in vec3 light_color, in float lstr, in vec3 mate_specular,
-  in vec3 mate_diffuse, in float mate_alpha, in vec3 camera_dir,
-  in vec3 light_dir, samplerCube samp, in vec3 nor, bool vertical,
-  in float ambient)
+  in vec3 mate_diffuse, in vec3 mate_emit, in float mate_alpha,
+  in vec3 camera_dir, in vec3 light_dir, samplerCube samp, in vec3 nor,
+  in bool vertical, in float ambient, in float local_light_str,
+  in vec3 local_light)
 {
   vec3 half_l_v = normalize(light_dir + camera_dir);
   float cos_l_h = clamp(dot(light_dir, half_l_v), 0.0, 1.0);
@@ -321,7 +325,12 @@ vec3 light_all(in vec3 light_color, in float lstr, in vec3 mate_specular,
   vec3 light_sp_di = light_color * (
     light_specular_brdf(cos_l_h, cos_n_h, cos_n_v, cos_n_l, cos_v_h,
       mate_alpha, mate_specular) * lstr +
-    light_diffuse(cos_n_l * (lstr + ambient), mate_diffuse));
+    light_diffuse(cos_n_l * (lstr + ambient), mate_diffuse))
+    + mate_emit;
+  float cos_n_ll = max(dot(nor, local_light), 0.0);
+  // local_light_str = min(local_light_str, 1.0 - lstr);
+  light_sp_di += vec3(1.0, 0.9, 0.6) *
+    mate_diffuse * local_light_str * cos_n_ll;
   vec3 reflection_vec = reflect(-camera_dir, nor);
   vec3 sampler_vec = mate_diffuse.x > 0.0
     ? vec3(0.01, 0.01, 0.2) : reflection_vec;
@@ -435,7 +444,7 @@ void main(void)
       }
     <%/>
     <%/>
-    float dist_rnd = generate_random(pos) * 0.5;
+    float dist_rnd = generate_random(vec3(gl_FragCoord.xy, 0.0)) * 0.125;
     /*
     float dist_pos_campos_2 = dot(pos - campos, pos - campos) + 0.0001;
     float dist_log2 = log(dist_pos_campos_2) * 0.5 / log(2.0);
@@ -489,9 +498,9 @@ void main(void)
     }
     // ambient = max(0.0, 0.005 - float(hit) * 0.0001);
     nor = normal_matrix * nor; // local to global
-    pos = vary_aabb_or_tconv.xyz + pos * vary_aabb_or_tconv.w;
+    vec3 tanpos = vary_aabb_or_tconv.xyz + pos * vary_aabb_or_tconv.w;
       // posをテクスチャ座標から接線空間の座標に変換
-    vec4 gpos = vary_model_matrix * vec4(pos, 1.0);
+    vec4 gpos = vary_model_matrix * vec4(tanpos, 1.0);
       // vary_model_matrixは接線空間からワールドへの変換
     <%if><%eq><%update_frag_depth/>1<%/>
     <%if><%eq><%stype/>1<%/>
@@ -676,6 +685,7 @@ void main(void)
   float mate_alpha = 1.0;
   vec3 mate_specular = vec3(0.04, 0.04, 0.04);
   vec3 mate_diffuse = vec3(0.0, 0.0, 0.0);
+  vec3 mate_emit = vec3(0.0);
   if (max(tex_val.r, max(tex_val.g, tex_val.b)) > 0.9) {
     mate_specular = tex_val.rgb;
   } else {
@@ -696,9 +706,23 @@ void main(void)
     mate_specular = vec3(0.04, 0.04, 0.04);
     mate_diffuse = vec3(0.6, 0.7, 0.4);
   }
+  float local_light_str = 0.0;
+  vec3 local_light = vec3(0.0);
+  <%if><%eq><%stype/>1<%/>
+    if (int(tex_val.a * 255.0 + 0.5) == 1) {
+      // mate_emit = tex_val.rgb / 4.0;
+      // mate_alpha = 0.0;
+      // mate_specular = vec3(0.0);
+      // mate_diffuse = vec3(0.0);
+      local_light = - 0.5 + fract(pos * map3_size);
+	// ローカルライトの相対位置
+      local_light_str = clamp(0.125 / dot(local_light, local_light), 0.0, 1.0);
+      local_light = normalize(local_light);
+    }
+  <%/>
   vec3 li1 = light_all(vec3(1.0, 1.0, 1.0), lstr * lstr_para, mate_specular,
-    mate_diffuse, mate_alpha, camera_dir, light_dir, sampler_env, nor,
-    vertical, ambient);
+    mate_diffuse, mate_emit, mate_alpha, camera_dir, light_dir, sampler_env,
+    nor, vertical, ambient, local_light_str, local_light);
   /*
   // vec3 light_color2 = vec3(1.0, 1.0, 1.0) * lstr;
   // vec3 light_color1 = light_color2 * lstr_para;
