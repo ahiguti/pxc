@@ -8,6 +8,7 @@ else
 	build_script=./unix/release_build.sh
 	build_target=./source/demoapp.px.exe
 fi
+
 newer_files=`find ./source -name "*.px" -and -newercc "$build_target" \
 	2> /dev/null`
 if [ -e "$build_target" -a -z "$newer_files" ]; then
@@ -17,5 +18,11 @@ else
 		exit 1
 	fi
 fi
-"$build_target" $* 2>&1 > /dev/null &
-exec tail -f var/demoapp.log
+
+rm -rf dist
+mkdir dist
+mkdir dist/var
+cp -a res dist/
+cp -a "$build_target" dist/
+cp -a ./windows/x64/Release/*.dll dist/
+

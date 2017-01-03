@@ -15,10 +15,9 @@ struct demoapp_textures(bool edit_mode)
   public ivec3 const voxtile_size_l2 = make_ivec3(4, 4, 4);
   // public ivec3 const voxtile_size_l2 = make_ivec3(5, 5, 5);
   public ivec3 const voxtpat_size_l2 = make_ivec3(4, 4, 4);
-  public ivec3 const voxtmap_size_l2 = make_ivec3(11, 11, 6);
   // public ivec3 const voxtmap_size_l2 = make_ivec3(11, 11, 6);
   // public ivec3 const voxtmap_size_l2 = make_ivec3(10, 10, 5);
-  // public ivec3 const voxtmap_size_l2 = make_ivec3(8, 8, 5);
+  public ivec3 const voxtmap_size_l2 = make_ivec3(8, 8, 5);
   // 3d texture, voxel raycasting
   public ptr{texture_data} tex_voxtpat = make_ptr{texture_data}();
   public ptr{texture_data} tex_voxtpax = make_ptr{texture_data}();
@@ -33,6 +32,8 @@ struct demoapp_textures(bool edit_mode)
   public ptr{texture_data} tex_tcol = make_ptr{texture_data}();
   public ptr{texture_data} tex_tdep = make_ptr{texture_data}();
   public ptr{texture_data} tex_tmap = make_ptr{texture_data}();
+  // noise texture
+  public ptr{texture_data} tex_noise = make_ptr{texture_data}();
 }
 
 public function void
@@ -45,6 +46,7 @@ prepare_triangles_texture_data(pgl3d_config const& cfg,
   textures->insert("triangles.tile_color", txs.tex_tcol);
   textures->insert("triangles.tile_depth", txs.tex_tdep);
   textures->insert("triangles.tile_map", txs.tex_tmap);
+  textures->insert("triangles.noise", txs.tex_noise);
   for (const i, const& t: txs.voxtpat_mip) {
     string k = "triangles.voxtpat." + to_string(i);
     textures->insert(k, t);
@@ -141,7 +143,8 @@ prepare_raycasting_texture_data(pgl3d_config const& cfg,
     const rnd = make_ptr{rand_generator}(333U);
     function void texture_make_mipmap(texture_data const& tsrc,
       texture_data const& tsrcax, texture_data mutable& tdest,
-      texture_data mutable& tdestax, uint miplevel)
+      texture_data mutable& tdestax, uint miplevel, uint tile_size_l2,
+      texture_data const& tpat_mipmax, texture_data const& tpatax_mipmax)
     {
       tdest.set_size_l2(tsrc.get_width_l2() - 1, tsrc.get_height_l2() - 1,
 	tsrc.get_depth_l2() - 1);
@@ -150,7 +153,45 @@ prepare_raycasting_texture_data(pgl3d_config const& cfg,
       for (const x: 0 .. tdest.get_width()) {
 	for (const y: 0 .. tdest.get_height()) {
 	  for (const z: 0 .. tdest.get_depth()) {
-	    const v0 = rnd->generate() >> 24;
+	    uint cnt = 0;
+	    uvec3 color;
+	    for (const i: 0u .. 8u) {
+	      const x1 = x * 2 + (i & 1);
+	      const y1 = y * 2 + ((i >> 1) & 1);
+	      const z1 = z * 2 + ((i >> 2) & 1);
+	      mutable v = tsrc.get(x1, y1, z1);
+	      mutable vax = tsrcax.get(x1, y1, z1);
+	      if (is_space_voxel(v)) {
+		continue;
+	      } else if (is_node_reference(v)) {
+		const nr = get_node_reference(v);
+		uvec3 pos = make_uvec3((nr >> 0) & 0xff, (nr >> 8) & 0xff,
+		  (nr >> 16) & 0xff);
+		pos = map{uvec3, operator::shiftr}(pos,
+		  make_uvec3(tile_size_l2, tile_size_l2, tile_size_l2));
+		v = tpat_mipmax.get(pos.x, pos.y, pos.z);
+		vax = tpatax_mipmax.get(pos.x, pos.y, pos.z);
+		if (is_space_voxel(v)) {
+		  continue; // possible?
+		}
+	      }
+	      ++cnt;
+	      color.x += (vax >>  0) & 0xff;
+	      color.y += (vax >>  8) & 0xff;
+	      color.z += (vax >> 16) & 0xff;
+	    }
+	    if (cnt == 0) {
+	      tdest.set(x, y, z, 0u);
+	      tdestax.set(x, y, z, 0u);
+	    } else {
+	      color = map{uvec3, operator::div}(color,
+		make_uvec3(cnt, cnt, cnt));
+	      uint cval = (color.x << 0) | (color.y << 8) | (color.z << 16);
+	      tdest.set(x, y, z, cval | 0xff000000u);
+	      tdestax.set(x, y, z, cval);
+	    }
+	    /*
+	    const v0 = (rnd->generate() >> 24) & 0x07;
 	    const x1 = x * 2 + (v0 & 1);
 	    const y1 = y * 2 + ((v0 >> 1) & 1);
 	    const z1 = z * 2 + ((v0 >> 2) & 1);
@@ -161,12 +202,14 @@ prepare_raycasting_texture_data(pgl3d_config const& cfg,
 	    }
 	    tdest.set(x, y, z, v);
 	    tdestax.set(x, y, z, vax);
+	    */
 	  }
 	}
       }
     }
     const uint miplevel_max = ui(
       fold_list{max}(0, txs.voxtile_size_l2));
+    // tpatのmipmapを作る
     {
       txs.voxtpat_mip.push_back(tex_voxtpat); // tpat miplevel 0
       txs.voxtpax_mip.push_back(tex_voxtpax); // tpax miplevel 0
@@ -176,14 +219,19 @@ prepare_raycasting_texture_data(pgl3d_config const& cfg,
 	debug_log("tpat miplevel", miplevel);
 	const tex_m = make_ptr{texture_data}();
 	const texax_m = make_ptr{texture_data}();
-	texture_make_mipmap(*tex, *texax, *tex_m, *texax_m, miplevel);
+	texture_make_mipmap(*tex, *texax, *tex_m, *texax_m, miplevel,
+	  miplevel_max, *tex_voxtpat, *tex_voxtpax);
 	txs.voxtpat_mip.push_back(tex_m);
 	txs.voxtpax_mip.push_back(texax_m);
 	tex = tex_m;
 	texax = texax_m;
       }
     }
+    // tmapのmipmapを作る
     {
+      const tpat_mipmax = txs.voxtpat_mip[txs.voxtpat_mip.size() - 1];
+      const tpatax_mipmax = txs.voxtpax_mip[txs.voxtpax_mip.size() - 1];
+	// tpatの最後のmipmapはtile1個の大きさ
       txs.voxtmap_mip.push_back(tex_voxtmap); // tmap miplevel 0
       txs.voxtmax_mip.push_back(tex_voxtmax); // tmax miplevel 0
       mutable tex = tex_voxtmap;
@@ -192,7 +240,8 @@ prepare_raycasting_texture_data(pgl3d_config const& cfg,
 	debug_log("tmap miplevel", miplevel);
 	const tex_m = make_ptr{texture_data}();
 	const texax_m = make_ptr{texture_data}();
-	texture_make_mipmap(*tex, *texax, *tex_m, *texax_m, miplevel);
+	texture_make_mipmap(*tex, *texax, *tex_m, *texax_m, miplevel,
+	  miplevel_max, *tpat_mipmax, *tpatax_mipmax);
 	txs.voxtmap_mip.push_back(tex_m);
 	txs.voxtmax_mip.push_back(texax_m);
 	tex = tex_m;
@@ -328,6 +377,17 @@ prepare_parallax_mapping_texture_data(demoapp_textures mutable& txs)
   // generate tilemap
   txs.tex_tcol = load_texture_data("res/default-color.png");
   txs.tex_tdep = load_texture_data("res/default-depth.png");
+  txs.tex_noise = load_texture_data("res/noise.png");
+  /*
+  {
+    mutable& tnoise = *txs.tex_noise;
+    for (const x: 0 .. 256u) {
+      for (const y: 0 .. 256u) {
+	debug_log(x, y, to_hexstring(tnoise.get(x, y, 0)));
+      }
+    }
+  }
+  */
   mutable& tcol = *txs.tex_tcol;
   mutable& tdep = *txs.tex_tdep;
   mutable& tmap = *txs.tex_tmap;

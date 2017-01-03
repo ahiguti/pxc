@@ -2,11 +2,21 @@
 ---------------------------------------------------------------------------
 TODO
 
+- boolの等値判定ができない
+
+- make_distしたexeを実行するとログが出ない(done)
+
+- mipmap計算を外だししてedit_modeでも使えるように
+
+- miplevelをテクスチャのスケーリングを含めて計算
+
+- zpとsolidでわずかにずれている。debug_zprepass=1にするとわかる。
+
+- voxelに更にテクスチャはりつけorプロシージャルな何か
+
 - ローカルライトテスト中
 
 - auxテクスチャの意味を決める
-
-- zpとsolidでわずかにずれている。debug_zprepass=1にするとわかる。
 
 - t6 と t5 を比較。どれだけ遅くなったか。
 
@@ -3065,4 +3075,26 @@ aux_w: ？
 - roughness
 - emission
 - ローカルライトdiffuseの情報
+
+---------------------------------------------------------------------------
+色データedit_mode
+
+texture_edit_viewにinteractiveフラグを付ける。これがfalseなら、カーソル表示
+は無効になり、メソッド呼び出しでテクスチャ更新する機能だけが使えるようになり、
+viewのテクスチャは保持せずeditテクスチャを直接GPUにコピーするようになる。
+
+editとviewでそれぞれ tpat,tpax,tmap,tmaxとそれらのmipmapを持つ。
+それぞれedit_mode_textureを保持すればよい。
+
+texture_editは変更されるとrecalc_distance_rangeが呼ばれる。
+これをmipmap更新とそれらのdistance再計算も実行するように変更する。
+
+texture_edit_viewはeditが変更されるとmerge_edit_viewが呼ばれる。
+これをmipmapもマージするように変更する。
+カーソルが移動するとset_cursor_posが呼ばれる。
+これをmipmapも反映するように変更する。
+
+移行手順:
+- mipmap levelを固定できるようにシェーダを変更
+- edit_modeのtexture_editとtexture_edit_viewをmipmap保持するように変更
 

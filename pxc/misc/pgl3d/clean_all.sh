@@ -12,3 +12,4 @@ rm -f source/*.exe source/*.o source/*.cc
 rm -f res/*.ttf
 rm -f var/*.raw
 rm -f glprog.*.bin
+rm -rf dist/

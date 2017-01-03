@@ -81,7 +81,7 @@ uniform mat4 shadowmap_vp;
     }
     pos = clamp(pos, aabb_min + epsi, aabb_max - epsi);
     float dist_rnd = generate_random(pos) * 0.5;
-    int miplevel = raycast_get_miplevel(pos, campos, dist_rnd);
+    int miplevel = clamp(raycast_get_miplevel(pos, campos, dist_rnd), 0, 8);
     int hit = -1;
     hit = raycast_waffle(pos, fragpos, -light_local, aabb_min, aabb_max,
       miplevel);

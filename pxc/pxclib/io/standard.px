@@ -57,6 +57,9 @@ debug_log(expand(v::arg_decls_bycref{tlist}))
   debug_log_internal(s);
 }
 
+public function extern "pxcrt::set_debug_log_file"
+  void set_debug_log_file(cstrref const& fname);
+
 private extern "pxcrt::dummy" option{file_st} dummy;
   /* instantiate option{file} */
 private metafunction dummy_type_csymbol m::csymbol{option{file_st}};
@@ -74,33 +77,65 @@ typedef %{dummy_type_csymbol}% optfile;
 #endif
 
 /* TODO: slow */
+
 file_st io_stdin(io const& iop)  {
   optfile pxc_stdin;
   pxc_stdin.some$$l(make_file_st(0));
   return pxc_stdin.some$$r();
 }
+
 file_st io_stdout(io const& iop) {
   optfile pxc_stdout;
   pxc_stdout.some$$l(make_file_st(1));
   return pxc_stdout.some$$r();
 }
+
 file_st io_stderr(io const& iop) {
   optfile pxc_stderr;
   pxc_stderr.some$$l(make_file_st(2));
   return pxc_stderr.some$$r();
 }
+
+static int debug_log_file = 2;
+
 void debug_log_internal(cstrref const& s)
 {
 #ifdef ANDROID
-  __android_log_print(ANDROID_LOG_INFO, "pxcrt", "%.*s", (int)s.size(),
-    s.rawarr());
-#else
+  if (debug_log_file == 2) {
+    __android_log_print(ANDROID_LOG_INFO, "pxcrt", "%.*s", (int)s.size(),
+      s.rawarr());
+    return;
+  }
+#endif
 #ifdef PXC_POSIX
-  ::write(2, s.rawarr(), s.size());
+  ::write(debug_log_file, s.rawarr(), s.size());
 #else
-  _write(2, s.rawarr(), (unsigned)s.size());
+  _write(debug_log_file, s.rawarr(), (unsigned)s.size());
 #endif
+}
+
+void set_debug_log_file(cstrref const& fname)
+{
+  PXCRT_ALLOCA_NTSTRING(fn_nt, fname);
+  if (debug_log_file > 2) {
+#ifdef PXC_POSIX
+    close(debug_log_file);
+#else
+    _close(debug_log_file);
 #endif
+    debug_log_file = 2;
+  }
+#ifdef PXC_POSIX
+  debug_log_file = open(fn_nt.get(), O_WRONLY | O_CREAT | O_APPEND | O_TRUNC,
+    0644);
+#else
+  _sopen_s(&debug_log_file, fn_nt.get(),
+    _O_WRONLY | _O_CREAT | _O_APPEND | _O_TRUNC, _SH_DENYNO,
+    _S_IREAD | _S_IWRITE);
+#endif
+  if (debug_log_file == -1) {
+    debug_log_file = 2;
+  }
 }
 
 };

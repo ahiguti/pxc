@@ -149,7 +149,7 @@ load_gl_texture_cube(gl_texture mutable& ctex, cslice{string} const& fnames)
     ctex.surface_h = td->get_height();
     const tgt = static_cast{GLenum}(
       static_cast{int}(GL_TEXTURE_CUBE_MAP_POSITIVE_X) + i);
-    set_gl_texture(to_varray(td), ctex, tgt);
+    set_gl_texture(to_varray(td), ctex, tgt, GL_RGBA, GL_RGBA, GL_LINEAR);
   }
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER,
     cast_int(GL_LINEAR));
@@ -170,12 +170,13 @@ public function void
 load_gl_texture_2d(gl_texture mutable& tx, string const& fname)
 {
   const td = load_texture_data(fname);
-  texture_data_to_gl_texture(GL_TEXTURE_2D, tx, td);
+  texture_data_to_gl_texture(GL_TEXTURE_2D, tx, td, GL_RGBA, GL_RGBA,
+    GL_NEAREST);
 }
 
 public function void
 texture_data_to_gl_texture(GLenum target, gl_texture mutable& tx,
-  ptr{texture_data} const& td)
+  ptr{texture_data} const& td, GLenum iformat, GLenum format, GLenum filter)
 {
   glActiveTexture(GL_TEXTURE0);
   tx.texture_id.generate();
@@ -183,12 +184,13 @@ texture_data_to_gl_texture(GLenum target, gl_texture mutable& tx,
   tx.surface_w = td->get_width();
   tx.surface_h = td->get_height();
   tx.surface_d = td->get_depth();
-  set_gl_texture(to_varray(td), tx, target);
+  set_gl_texture(to_varray(td), tx, target, iformat, format, filter);
 }
 
 public function void
 texture_data_array_to_gl_texture(GLenum target, gl_texture mutable& tx,
-  cslice{ptr{texture_data}} const& tds)
+  cslice{ptr{texture_data}} const& tds, GLenum iformat, GLenum format,
+  GLenum filter)
 {
   glActiveTexture(GL_TEXTURE0);
   tx.texture_id.generate();
@@ -196,7 +198,7 @@ texture_data_array_to_gl_texture(GLenum target, gl_texture mutable& tx,
   tx.surface_w = tds[0]->get_width();
   tx.surface_h = tds[0]->get_height();
   tx.surface_d = tds[0]->get_depth();
-  set_gl_texture(tds, tx, target);
+  set_gl_texture(tds, tx, target, iformat, format, filter);
 }
 
 /* private */
@@ -213,10 +215,10 @@ function void dump_buf(varray{uint} const& buf)
 }
 
 function void set_gl_texture(cslice{ptr{texture_data}} const& tds,
-  gl_texture mutable& ti, GLenum target)
+  gl_texture mutable& ti, GLenum target, GLenum iformat, GLenum format,
+  GLenum filter)
 {
   int const dim = (target == GL_TEXTURE_3D) ? 3 : 2;
-  const mode = GL_RGBA;
   for (size_t i: 0 .. tds.size()) {
     const& td = *tds[i];
     const crawp = td.get_crawptr();
@@ -230,21 +232,23 @@ function void set_gl_texture(cslice{ptr{texture_data}} const& tds,
     }
     if (dim == 3) {
       // debug_log("3dtex", tex_w, tex_h, tex_d);
-      glTexImage3D(target, mipmap_level, cast_int(mode),
+      glTexImage3D(target, mipmap_level, cast_int(iformat),
 	cast_int(tex_w), cast_int(tex_h), cast_int(tex_d),
-	0, mode, GL_UNSIGNED_BYTE, crawp.to_cvoidptr());
+	0, format, GL_UNSIGNED_BYTE, crawp.to_cvoidptr());
     } else {
-      glTexImage2D(target, mipmap_level, cast_int(mode),
+      glTexImage2D(target, mipmap_level, cast_int(iformat),
 	cast_int(tex_w), cast_int(tex_h),
-	0, mode, GL_UNSIGNED_BYTE, crawp.to_cvoidptr());
+	0, format, GL_UNSIGNED_BYTE, crawp.to_cvoidptr());
     }
   }
   if (target == GL_TEXTURE_2D || target == GL_TEXTURE_3D)
   {
-    glTexParameteri(target, GL_TEXTURE_MAG_FILTER,
-      cast_int(GL_NEAREST));
-    glTexParameteri(target, GL_TEXTURE_MIN_FILTER,
-      cast_int(tds.size() > 1 ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST));
+    mutable min_filter = filter;
+    if (filter == GL_NEAREST && tds.size() > 1) {
+      min_filter = GL_NEAREST_MIPMAP_NEAREST;
+    }
+    glTexParameteri(target, GL_TEXTURE_MAG_FILTER, cast_int(filter));
+    glTexParameteri(target, GL_TEXTURE_MIN_FILTER, cast_int(min_filter));
     if (m::is_true{is_gl3_or_gles3}) {
       if (tds.size() > 1) {
 	glTexParameteri(target, GL_TEXTURE_BASE_LEVEL, 0);

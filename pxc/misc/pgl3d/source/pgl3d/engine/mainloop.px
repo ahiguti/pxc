@@ -167,7 +167,11 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
   private int dummy_flip = conf.get("dummy_flip", 0, 0, 4);
   private string_map commands;
   private int fullscreen = 0;
-  private bool async_motion_thread = false; // conf.get("async_motion_thread", 0, 1, 0) == 1;
+  private int saved_w = 0;
+  private int saved_h = 0;
+  private Uint32 saved_window_flags = 0;
+  private bool async_motion_thread = false;
+    // conf.get("async_motion_thread", 0, 1, 0) == 1;
   private bool glfinish = conf.get("glfinish", 0, 0, 1) == 1;
   private bool done = false;
   private bool paused = false;
@@ -211,9 +215,17 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
   private function void update_fullscreen()
   {
     if (fullscreen != 0) {
+      saved_window_flags = SDL_GetWindowFlags(sdlc.sdl_window);
+      debug_log("window flags", saved_window_flags, SDL_WINDOW_MAXIMIZED);
+      int w;
+      int h;
+      SDL_GetWindowSize(sdlc.sdl_window, address(w), address(h));
       // 最大化されたウインドウをもとに戻す。最大化されたままフルスクリーンに
       // するとAlt-Tabで切り替えた時にサイズがおかしくなる。
       SDL_RestoreWindow(sdlc.sdl_window);
+      SDL_GetWindowSize(sdlc.sdl_window, address(saved_w), address(saved_h));
+      SDL_SetWindowSize(sdlc.sdl_window, w, h);
+    } else {
     }
     SDL_Enum flag = 0;
     if (m::ne{is_macos, 0}) {
@@ -222,6 +234,14 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
       flag = SDL_WINDOW_FULLSCREEN;
     }
     SDL_SetWindowFullscreen(sdlc.sdl_window, fullscreen != 0 ? flag : 0);
+    if (fullscreen == 0) {
+      if (saved_w != 0) {
+	SDL_SetWindowSize(sdlc.sdl_window, saved_w, saved_h);
+      }
+      if ((saved_window_flags & SDL_WINDOW_MAXIMIZED) != 0) {
+	SDL_MaximizeWindow(sdlc.sdl_window);
+      }
+    }
   }
   private function void toggle_fullscreen()
   {
@@ -244,10 +264,6 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
 	} else if (k == "dummy_flip") {
 	  dummy_flip = (dummy_flip + 1) % 5;
 	  debug_log("dummy_flip", dummy_flip);
-/*
-	} else if (k == "reload") {
-	  reload_shaders();
-*/
 	}
       }
       commands.clear();

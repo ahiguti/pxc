@@ -10,6 +10,7 @@ private tsvaluetype struct triangles_uniforms()
   public int sampler_dpat;
   public int sampler_pmpat;
   public int sampler_tilemap;
+  public int sampler_noise;
   public int sampler_env;
   public int sampler_voxtmap;
   public int sampler_voxtmax;
@@ -97,19 +98,23 @@ public struct drawer_triangles(shader_config const& glc0,
   option{triangles_shader_ptr} sdr_solid;
   option{zprepass_shader_ptr} sdr_zp;
   option{shadowmap_shader_ptr} sdr_shadow;
+  ivec3 voxtile_size;
+  ptr{edit_mode_texture} emt = make_ptr{edit_mode_texture}();
+  /*
   varray{ptr{texture_data}} voxtmap_mip;
   varray{ptr{texture_data}} voxtmax_mip;
   varray{ptr{texture_data}} voxtpat_mip;
   varray{ptr{texture_data}} voxtpax_mip;
-  ivec3 voxtile_size;
-  ptr{gl_texture} texture_dpat = make_ptr{gl_texture}();
-  ptr{gl_texture} texture_pmpat = make_ptr{gl_texture}();
-  ptr{gl_texture} texture_tilemap = make_ptr{gl_texture}();
-  ptr{gl_texture} texture_env = make_ptr{gl_texture}();
   ptr{gl_texture} texture_voxtmap = make_ptr{gl_texture}();
   ptr{gl_texture} texture_voxtmax = make_ptr{gl_texture}();
   ptr{gl_texture} texture_voxtpat = make_ptr{gl_texture}();
   ptr{gl_texture} texture_voxtpax = make_ptr{gl_texture}();
+  */
+  ptr{gl_texture} texture_dpat = make_ptr{gl_texture}();
+  ptr{gl_texture} texture_pmpat = make_ptr{gl_texture}();
+  ptr{gl_texture} texture_tilemap = make_ptr{gl_texture}();
+  ptr{gl_texture} texture_noise = make_ptr{gl_texture}();
+  ptr{gl_texture} texture_env = make_ptr{gl_texture}();
   ptr{gl_texture} texture_depth_rd = make_ptr{gl_texture}();
   option{ptr{edit_mode_i}} edit_mode_ptr;
   shader_config glc = glc0;
@@ -129,82 +134,64 @@ public struct drawer_triangles(shader_config const& glc0,
     const tex_col = *textures->equal_range("triangles.tile_color");
     const tex_dep = *textures->equal_range("triangles.tile_depth");
     const tex_map = *textures->equal_range("triangles.tile_map");
-    texture_data_to_gl_texture(GL_TEXTURE_2D, *texture_dpat, tex_col);
-    texture_data_to_gl_texture(GL_TEXTURE_2D, *texture_pmpat, tex_dep);
-    texture_data_to_gl_texture(GL_TEXTURE_2D, *texture_tilemap, tex_map);
+    const tex_noise = *textures->equal_range("triangles.noise");
+    texture_data_to_gl_texture(GL_TEXTURE_2D, *texture_dpat, tex_col,
+      GL_RGBA, GL_RGBA, GL_NEAREST);
+    texture_data_to_gl_texture(GL_TEXTURE_2D, *texture_pmpat, tex_dep,
+      GL_RGBA, GL_RGBA, GL_NEAREST);
+    texture_data_to_gl_texture(GL_TEXTURE_2D, *texture_tilemap, tex_map,
+      GL_RGBA, GL_RGBA, GL_NEAREST);
+    texture_data_to_gl_texture(GL_TEXTURE_2D, *texture_noise, tex_noise,
+      GL_RED, GL_RGBA, GL_NEAREST);
     res->textures.insert("tile_color", texture_dpat);
     res->textures.insert("tile_parallax", texture_pmpat);
     res->textures.insert("tile", texture_tilemap);
     if (stype == 1) {
+      function void init_mip(string const& name,
+	varray{ptr{texture_data}} mutable& mip)
       {
 	int i;
 	i = 0;
 	while (true) {
-	  string k = "triangles.voxtmap." + to_string(i);
+	  string k = name + "." + to_string(i);
 	  const e = textures->equal_range(k);
 	  if (e.empty()) {
 	    break;
 	  }
-	  voxtmap_mip.push_back(*e);
-	  ++i;
-	}
-	i = 0;
-	while (true) {
-	  string k = "triangles.voxtmax." + to_string(i);
-	  const e = textures->equal_range(k);
-	  if (e.empty()) {
-	    break;
-	  }
-	  voxtmax_mip.push_back(*e);
-	  ++i;
-	}
-	i = 0;
-	while (true) {
-	  string k = "triangles.voxtpat." + to_string(i);
-	  const e = textures->equal_range(k);
-	  if (e.empty()) {
-	    break;
-	  }
-	  voxtpat_mip.push_back(*e);
-	  ++i;
-	}
-	i = 0;
-	while (true) {
-	  string k = "triangles.voxtpax." + to_string(i);
-	  const e = textures->equal_range(k);
-	  if (e.empty()) {
-	    break;
-	  }
-	  voxtpax_mip.push_back(*e);
+	  mip.push_back(*e);
 	  ++i;
 	}
       }
-      const& voxtile = (*textures->equal_range("triangles.voxtile"));
+      init_mip("triangles.voxtmap", emt->voxtmap_mip);
+      init_mip("triangles.voxtmax", emt->voxtmax_mip);
+      init_mip("triangles.voxtpat", emt->voxtpat_mip);
+      init_mip("triangles.voxtpax", emt->voxtpax_mip);
+      emt->voxtile = (*textures->equal_range("triangles.voxtile"));
+      const& voxtile = emt->voxtile;
       voxtile_size.x = static_cast{int}(voxtile->get_width());
       voxtile_size.y = static_cast{int}(voxtile->get_height());
       voxtile_size.z = static_cast{int}(voxtile->get_depth());
       if (glc.is_gl3_or_gles3()) {
-	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *texture_voxtpat,
-	  voxtpat_mip);
-	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *texture_voxtpax,
-	  voxtpax_mip);
-	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *texture_voxtmap,
-	  voxtmap_mip);
-	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *texture_voxtmax,
-	  voxtmax_mip);
+	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtpat,
+	  emt->voxtpat_mip, GL_RGBA, GL_RGBA, GL_NEAREST);
+	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtpax,
+	  emt->voxtpax_mip, GL_RGBA, GL_RGBA, GL_NEAREST);
+	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtmap,
+	  emt->voxtmap_mip, GL_RGBA, GL_RGBA, GL_NEAREST);
+	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtmax,
+	  emt->voxtmax_mip, GL_RGBA, GL_RGBA, GL_NEAREST);
       } else {
-	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *texture_voxtpat,
-	  voxtpat_mip[0 .. 1]);
-	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *texture_voxtpax,
-	  voxtpax_mip[0 .. 1]);
-	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *texture_voxtmap,
-	  voxtmap_mip[0 .. 1]);
-	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *texture_voxtmax,
-	  voxtmax_mip[0 .. 1]);
+	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtpat,
+	  emt->voxtpat_mip[0 .. 1], GL_RGBA, GL_RGBA, GL_NEAREST);
+	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtpax,
+	  emt->voxtpax_mip[0 .. 1], GL_RGBA, GL_RGBA, GL_NEAREST);
+	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtmap,
+	  emt->voxtmap_mip[0 .. 1], GL_RGBA, GL_RGBA, GL_NEAREST);
+	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtmax,
+	  emt->voxtmax_mip[0 .. 1], GL_RGBA, GL_RGBA, GL_NEAREST);
       }
       if (glc.conf.get("edit_mode", 0, 0, 1) != 0) {
-	edit_mode_ptr.some = make_ptr{edit_mode}(voxtile, voxtpat_mip[0],
-	  voxtmap_mip[0], texture_voxtpat, texture_voxtmap);
+	edit_mode_ptr.some = make_ptr{edit_mode}(emt);
       }
     }
     reload_shaders();
@@ -307,13 +294,16 @@ public struct drawer_triangles(shader_config const& glc0,
       ivec3 voxtpat_size;
       ivec3 voxtmap_size;
       int virt3_size;
-      if (!voxtpat_mip.empty()) {
-	voxtpat_size = make_ivec3(si(voxtpat_mip[0]->get_width()),
-	  si(voxtpat_mip[0]->get_height()), si(voxtpat_mip[0]->get_depth()));
+      if (!emt->voxtpat_mip.empty()) {
+	voxtpat_size = make_ivec3(si(emt->voxtpat_mip[0]->get_width()),
+	  si(emt->voxtpat_mip[0]->get_height()),
+	  si(emt->voxtpat_mip[0]->get_depth()));
 	voxtpat_size = map{ivec3, operator::div}(voxtpat_size, voxtile_size);
 	voxtpat_size = map{ivec3, power_of_2}(voxtpat_size);
-	voxtmap_size = make_ivec3(si(voxtmap_mip[0]->get_width()),
-	  si(voxtmap_mip[0]->get_height()), si(voxtmap_mip[0]->get_depth()));
+	voxtmap_size = make_ivec3(
+	  si(emt->voxtmap_mip[0]->get_width()),
+	  si(emt->voxtmap_mip[0]->get_height()),
+	  si(emt->voxtmap_mip[0]->get_depth()));
 	voxtmap_size = map{ivec3, power_of_2}(voxtmap_size);
 	const virt_size = map{ivec3, operator::mul}(voxtile_size,
 	  voxtmap_size);
@@ -421,10 +411,10 @@ public struct drawer_triangles(shader_config const& glc0,
 	  // debug_log("sm cull front stype=1"); // FIXME
 	}
 	glActiveTexture(GL_TEXTURE5);
-	glBindTexture(GL_TEXTURE_3D, texture_voxtpat->texture_id.get());
+	glBindTexture(GL_TEXTURE_3D, emt->glt_voxtpat->texture_id.get());
 	glUniform1i(sdr_shadow.some->u_sampler_voxtpat, 5);
 	glActiveTexture(GL_TEXTURE6);
-	glBindTexture(GL_TEXTURE_3D, texture_voxtmap->texture_id.get());
+	glBindTexture(GL_TEXTURE_3D, emt->glt_voxtmap->texture_id.get());
 	glUniform1i(sdr_shadow.some->u_sampler_voxtmap, 6);
       }
       const sm_view = cam_df.light.to_mat4().inverse();
@@ -471,10 +461,10 @@ public struct drawer_triangles(shader_config const& glc0,
 	cam_df.camera.position.to_crawptr());
       if (stype == 1) {
 	glActiveTexture(GL_TEXTURE5);
-	glBindTexture(GL_TEXTURE_3D, texture_voxtpat->texture_id.get());
+	glBindTexture(GL_TEXTURE_3D, emt->glt_voxtpat->texture_id.get());
 	glUniform1i(sdr.u_sampler_voxtpat, 5);
 	glActiveTexture(GL_TEXTURE6);
-	glBindTexture(GL_TEXTURE_3D, texture_voxtmap->texture_id.get());
+	glBindTexture(GL_TEXTURE_3D, emt->glt_voxtmap->texture_id.get());
 	glUniform1i(sdr.u_sampler_voxtmap, 6);
       }
       aibuf.draw(sdr, bo, bo_ib, vbid, glc.enable_instanced,
@@ -521,17 +511,20 @@ public struct drawer_triangles(shader_config const& glc0,
 	if (raycast_cull_front) {
 	  glCullFace(GL_FRONT);
 	}
+	glActiveTexture(GL_TEXTURE4);
+	glBindTexture(GL_TEXTURE_2D, texture_noise->texture_id.get());
+	glUniform1i(sdr.u_sampler_noise, 4);
 	glActiveTexture(GL_TEXTURE5);
-	glBindTexture(GL_TEXTURE_3D, texture_voxtpat->texture_id.get());
+	glBindTexture(GL_TEXTURE_3D, emt->glt_voxtpat->texture_id.get());
 	glUniform1i(sdr.u_sampler_voxtpat, 5);
 	glActiveTexture(GL_TEXTURE6);
-	glBindTexture(GL_TEXTURE_3D, texture_voxtpax->texture_id.get());
+	glBindTexture(GL_TEXTURE_3D, emt->glt_voxtpax->texture_id.get());
 	glUniform1i(sdr.u_sampler_voxtpax, 6);
 	glActiveTexture(GL_TEXTURE7);
-	glBindTexture(GL_TEXTURE_3D, texture_voxtmap->texture_id.get());
+	glBindTexture(GL_TEXTURE_3D, emt->glt_voxtmap->texture_id.get());
 	glUniform1i(sdr.u_sampler_voxtmap, 7);
 	glActiveTexture(GL_TEXTURE8);
-	glBindTexture(GL_TEXTURE_3D, texture_voxtmax->texture_id.get());
+	glBindTexture(GL_TEXTURE_3D, emt->glt_voxtmax->texture_id.get());
 	glUniform1i(sdr.u_sampler_voxtmax, 8);
 	if (update_frag_depth) {
 	  if (texture_depth_rd->texture_id.get() == 0) {

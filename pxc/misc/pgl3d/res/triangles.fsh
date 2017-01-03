@@ -21,6 +21,7 @@ uniform sampler2D sampler_dpat;
 uniform sampler2D sampler_pmpat;
 uniform sampler2D sampler_tilemap;
 uniform samplerCube sampler_env;
+uniform sampler2D sampler_noise;
 <%if><%enable_sampler2dshadow/>
   uniform sampler2DShadow sampler_sm[<%smsz/>];
 <%else/>
@@ -355,16 +356,6 @@ vec4 get_sampler_sm(int i, vec2 p)
   <%/>
 }
 
-<%if><%eq><%stype/>1<%/>
-float calc_depth_from_tngpos(vec3 tngpos)
-{
-  // tngposは接線空間の座標
-  vec4 gpos = vary_model_matrix * vec4(tngpos, 1.0);
-  vec4 vpos = view_projection_matrix * gpos;
-  return (vpos.z / vpos.w + 1.0) * 0.5;
-}
-<%/>
-
 void main(void)
 {
   vec4 color = vec4(0.0, 0.0, 0.0, 1.0);
@@ -382,7 +373,6 @@ void main(void)
   vec4 tex_val = vec4(0.5, 0.5, 0.5, 1.0);
   <%if><%eq><%stype/>1<%/>
     // raycast
-//discard;
     <%if><%is_gl3_or_gles3/>
       mat3 normal_matrix = mat3(vary_model_matrix);
     <%else/>
@@ -451,29 +441,30 @@ void main(void)
     // if (dist_log2 < -3.0) { <%fragcolor/> = vec4(1,0,1,1); return; }
     int miplevel = clamp(int(dist_log2 + dist_rnd + 6.5), 0, 8);
     */
-    int miplevel = raycast_get_miplevel(pos, campos, dist_rnd);
-    // if (miplevel > 2) { <%fragcolor/> = vec4(1,0,1,1); return; }
-    // if (miplevel > 1) { <%fragcolor/> = vec4(1,1,0,1); return; }
-    // if (miplevel > 0) { <%fragcolor/> = vec4(1,0,0,1); return; }
-    // if (int(option_value + 0.5) == 1) { miplevel = 0; }
+    int miplevel_noclamp = raycast_get_miplevel(pos, campos, dist_rnd);
+    int miplevel_clamp = clamp(miplevel_noclamp, 0, 8);
+    // if (miplevel_clamp > 2) { <%fragcolor/> = vec4(1,0,1,1); return; }
+    // if (miplevel_clamp > 1) { <%fragcolor/> = vec4(1,1,0,1); return; }
+    // if (miplevel_clamp > 0) { <%fragcolor/> = vec4(1,0,0,1); return; }
+    // if (int(option_value + 0.5) == 1) { miplevel_clamp = 0; }
     int hit = -1;
     // float selfshadow_para = clamp(1.0 - dist_log2 * 0.1, 0.0, 1.0);
     float selfshadow_para = 0.0f;
     <%if><%eq><%get_config edit_mode/>1<%/>
-    miplevel = 0;
+    miplevel_clamp = 0;
     <%/>
     hit = raycast_tilemap(pos, camera_local, light_local,
-      aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para, miplevel);
-
-<%if><%eq><%ssubtype/>2<%/>
-// if (hit >= 0)  { <%fragcolor/> = vec4(1.0, 0.0, 0.0, 1.0); return; }
-<%/>
-<%if><%eq><%ssubtype/>4<%/>
-// if (hit >= 0) { <%fragcolor/> = vec4(1.0, 1.0, 0.0, 1.0); return; }
-<%/>
-<%if><%eq><%ssubtype/>5<%/>
-// if (hit >= 0) { <%fragcolor/> = vec4(1.0, 0.0, 1.0, 1.0); return; }
-<%/>
+      aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para,
+      miplevel_clamp);
+    <%if><%eq><%ssubtype/>2<%/>
+    // if (hit >= 0)  { <%fragcolor/> = vec4(1.0, 0.0, 0.0, 1.0); return; }
+    <%/>
+    <%if><%eq><%ssubtype/>4<%/>
+    // if (hit >= 0) { <%fragcolor/> = vec4(1.0, 1.0, 0.0, 1.0); return; }
+    <%/>
+    <%if><%eq><%ssubtype/>5<%/>
+    // if (hit >= 0) { <%fragcolor/> = vec4(1.0, 0.0, 1.0, 1.0); return; }
+    <%/>
     /*
     hit = raycast_waffle(pos, fragpos, camera_local, light_local,
       aabb_min, aabb_max);
@@ -498,22 +489,20 @@ void main(void)
     }
     // ambient = max(0.0, 0.005 - float(hit) * 0.0001);
     nor = normal_matrix * nor; // local to global
-    vec3 tanpos = vary_aabb_or_tconv.xyz + pos * vary_aabb_or_tconv.w;
+    vec3 frag_tanpos = vary_aabb_or_tconv.xyz + pos * vary_aabb_or_tconv.w;
       // posをテクスチャ座標から接線空間の座標に変換
-    vec4 gpos = vary_model_matrix * vec4(tanpos, 1.0);
+    vec4 frag_gpos = vary_model_matrix * vec4(frag_tanpos, 1.0);
       // vary_model_matrixは接線空間からワールドへの変換
-    <%if><%eq><%update_frag_depth/>1<%/>
     <%if><%eq><%stype/>1<%/>
-      // FragDepth更新するならこの節を有効にする
-      {
-	vec4 vpos = view_projection_matrix * gpos;
-	float depth = (vpos.z / vpos.w + 1.0) * 0.5;
-	if (prev_depth < depth) {
+      vec4 frag_vpos = view_projection_matrix * frag_gpos;
+      float frag_depth = (frag_vpos.z / frag_vpos.w + 1.0) * 0.5;
+      <%if><%eq><%update_frag_depth/>1<%/>
+	// FragDepth更新するならこの節を有効にする
+	if (prev_depth < frag_depth) {
 	  discard;
 	}
-	gl_FragDepth = depth;
-      }
-    <%/>
+	gl_FragDepth = frag_depth;
+      <%/>
     <%/>
   <%elseif/><%enable_normalmapping/>
     // stype==0, enable_normalmapping
@@ -561,7 +550,7 @@ void main(void)
       // vec3 ndelta = mat3(shadowmap_vp[0]) * vary_normal * ndelta_scale;
 	// 0.02
       for (sm_to_use = 0; sm_to_use < <%smsz/>; ++sm_to_use) {
-	vec4 sp = shadowmap_vp[sm_to_use] * gpos;
+	vec4 sp = shadowmap_vp[sm_to_use] * frag_gpos;
 	cp_sm = sp.xyz; // / sp.w; //  + ndelta / d;
 	if (max_vec3(abs(cp_sm)) < 0.8 || sm_to_use + 1 == <%smsz/>) {
 	  break;
@@ -589,10 +578,14 @@ void main(void)
 	  for (float j = idxmin; j <= idxmax; ++j) {
 	    vec2 c = smpos.xy + 
 		(vec2(i,j) + generate_random(rel_camera_pos) * 1.0)/4096.0;
-//if (max(c.x, c.y) > 1.0 || min(c.x, c.y) < 0.0) { <%fragcolor/> = vec4(1.0); return; }
+	    /*
+	    if (max(c.x, c.y) > 1.0 || min(c.x, c.y) < 0.0)
+	      { <%fragcolor/> = vec4(1.0); return; }
+	    */
 	    zval_cur = get_sampler_sm(sm_to_use, c).x;
 	    // zval = min(zval, zval_cur);
-	    sml += float(smpos.z < zval_cur
+	    float sm_min_dist = 0.02; // FIXME??
+	    sml += float(smpos.z < sm_min_dist + zval_cur
 	     * (1.005 + (abs(i)+abs(j))/4096.0))/9.0;
 	  }
 	}
@@ -670,7 +663,9 @@ void main(void)
       float sml = float(smpos.z < zval * 1.0005);
     <%/>
     float smv0 = min(1.0, sml);
-//if (sm_to_use == 1) { <%fragcolor/> = vec4(1.0, smv0, 0.0, 1.0); return; }
+    /*
+    if (sm_to_use == 1) { <%fragcolor/> = vec4(1.0, smv0, 0.0, 1.0); return; }
+    */
     lstr = min(lstr, smv0);
     <%if><%eq><%stype/>1<%/>
       lstr = clamp(dot(nor, light_dir) * 4.0, 0.0, lstr);
@@ -719,6 +714,24 @@ void main(void)
       local_light_str = clamp(0.125 / dot(local_light, local_light), 0.0, 1.0);
       local_light = normalize(local_light);
     }
+    // FIXME?
+    if (frag_depth < 0.7f + dist_rnd * 0.25f) {
+      // <%fragcolor/> = vec4(1.0,1.0,0.0,1.0); return;
+      /*
+      mate_alpha = clamp(mate_alpha - snoise(pos * 1024.0 * 256.0) / 1.0f,
+	0.0, 0.5);
+      */
+      vec2 nt_coord = fract(vec2(pos.x + pos.z, pos.y + pos.z) * 256.0);
+      float nval = texelFetch(sampler_noise,
+	// ivec2(gl_FragCoord.xy),
+	ivec2(nt_coord * 1024.0),
+	0).r;
+      // mate_diffuse = vec3(nval, nval, nval);
+      // mate_specular = vec3(nval, nval, nval);
+      mate_alpha = clamp(mate_alpha - nval / 1.0f, 0.0, 0.5);
+    }
+    /*
+    */
   <%/>
   vec3 li1 = light_all(vec3(1.0, 1.0, 1.0), lstr * lstr_para, mate_specular,
     mate_diffuse, mate_emit, mate_alpha, camera_dir, light_dir, sampler_env,
@@ -742,3 +755,4 @@ void main(void)
   color.xyz += li1;
   <%fragcolor/> = color;
 }
+

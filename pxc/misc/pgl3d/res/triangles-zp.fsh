@@ -59,7 +59,7 @@ uniform vec3 camera_pos;
       }
       pos = clamp(pos, aabb_min + epsi, aabb_max - epsi);
     <%/>
-    int miplevel = raycast_get_miplevel(pos, campos, 0.0);
+    int miplevel = clamp(raycast_get_miplevel(pos, campos, 0.0), 0, 8);
     // miplevel = 0;
     int hit = -1;
     hit = raycast_waffle(pos, fragpos, camera_local, aabb_min, aabb_max,
