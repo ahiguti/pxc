@@ -58,15 +58,17 @@ public function bool sdl_load_file(string const& fname,
   if (fp.is_null()) {
     return false;
   }
-  Sint64 sz = SDL_RWsize(fp.get());
-  if (sz < 0) {
-    sz = 0;
-  }
-  size_t usz = static_cast{size_t}(sz);
   buf_r.clear();
-  buf_r.resize(usz, 0);
-  if (SDL_RWread(fp.get(), buf_r.to_rawptr().to_voidptr(), 1, usz) != usz) {
-    return false;
+  while (true) {
+    const osz = buf_r.size();
+    size_t rsz = 1024u * 1024u;
+    buf_r.resize(osz + rsz, 0);
+    const r = SDL_RWread(fp.get(), (buf_r.to_rawptr() + osz).to_voidptr(), 1,
+      rsz);
+    if (r != rsz) {
+      buf_r.resize(osz + r, 0);
+      break;
+    }
   }
   return true;
 }

@@ -100,6 +100,7 @@ dgf_particle_bb_internal(ptr{vertices} const& vptr, bool flat_flag,
   poly_t const& poly, mesh_index const& mp)
 {
   for (const i, const& p: poly) {
+    farray{vertex_attr, 4} dummy_vattr;
     farray{particle_bb_vertex_attributes, 4} vtxs;
     for (const j, mutable& v: vtxs) {
       v.position = p.pos;
@@ -108,7 +109,8 @@ dgf_particle_bb_internal(ptr{vertices} const& vptr, bool flat_flag,
     vtxs[1].local_position = glm::make_vec2( 1.0, -1.0);
     vtxs[2].local_position = glm::make_vec2( 1.0,  1.0);
     vtxs[3].local_position = glm::make_vec2(-1.0,  1.0);
-    vptr->push_polygon_distinct{particle_bb_vertex_attributes, 0}(vtxs);
+    vptr->push_polygon_distinct{particle_bb_vertex_attributes, 0}(
+      dummy_vattr, vtxs);
   }
 }
 

@@ -2,21 +2,31 @@
 ---------------------------------------------------------------------------
 TODO
 
-- boolの等値判定ができない
+- edit_mode 文字列
 
-- make_distしたexeを実行するとログが出ない(done)
+- glvertexのpositionsは削除してvertex_attrsを使う
+
+- 色とroughness編集
+
+- 数字キーでmiplevelを固定できるように
 
 - mipmap計算を外だししてedit_modeでも使えるように
+
+- ローカルライトテスト中
+
+- auxテクスチャの意味を決める
+
+- raycastオブジェクトの衝突判定
+
+- depth_rd再整理。zprepassするかどうか決める。
+
+- boolの等値判定ができない
 
 - miplevelをテクスチャのスケーリングを含めて計算
 
 - zpとsolidでわずかにずれている。debug_zprepass=1にするとわかる。
 
 - voxelに更にテクスチャはりつけorプロシージャルな何か
-
-- ローカルライトテスト中
-
-- auxテクスチャの意味を決める
 
 - t6 と t5 を比較。どれだけ遅くなったか。
 
@@ -26,23 +36,14 @@ TODO
 
 - zprepassは近いインスタンスだけを描画
 
-- FIXME: scene_nodeのjoint_idなど、constにしてもassignできる。(done)
-
-- 色データ
-
-- mipmapを読むと色がおかしい
-  -> 色データの埋め込みかたを決める必要がある
-
-現状動く環境: GL 2.1以上またはGLES 3.0以上。
- GLES 2は3dテクスチャが使えないので不可。
+- 現状動く環境: GL 2.1以上またはGLES 3.0以上。
+   GLES 2は3dテクスチャが使えないので不可。
 
 - シャドウマップの届く範囲をこえたときの処理
 
 - 影の中をAO的な何かでそれらしく
 
 - waffleでz-prepass
-
-- raycastオブジェクトの衝突判定
 
 - 使っていないssubtypeはdepth_rdコピーをしない
 
@@ -56,7 +57,6 @@ TODO
 
 - 小さなオブジェクトは近接する大きなオブジェクトが差す影をraycastで計算
 
-- raycast_waffle(done)
 
 - cull_frontでもiquadsでシャドウマップを書くようにする
 
@@ -64,7 +64,6 @@ TODO
 
 - 引数で設定ファイルを指定できるように
 
-- モーションブラー(done)
 
 - postprocessフィルタのテクスチャを共有、サイズ指定
 
@@ -206,6 +205,15 @@ TODO
 ---------------------------------------------------------------------------
 DONE
 
+- merge_edit_view: blk単位の穴あけと整合性を取る(done)
+- edit_mode: pasteで範囲外をアクセスして死ぬ(done)
+- edit_mode: auxもコピペ(done)
+- edit_mode: holeのサイズを制限して1teravoxelまでの編集を可能に(done)
+- 例外backtraceがログに出ない(done)
+- make_distしたexeを実行するとログが出ない(done)
+- FIXME: scene_nodeのjoint_idなど、constにしてもassignできる。(done)
+- raycast_waffle(done)
+- モーションブラー(done)
 - 仮想テクスチャサイズを4096から可変にする(done)
   mapが256^3のとき64Mbyte(タイル番号が32bitのとき)
   mapが512^3のとき512Mbyte
@@ -3097,4 +3105,109 @@ texture_edit_viewはeditが変更されるとmerge_edit_viewが呼ばれる。
 移行手順:
 - mipmap levelを固定できるようにシェーダを変更
 - edit_modeのtexture_editとtexture_edit_viewをmipmap保持するように変更
+
+パターンを変更するとマップのmipmapを大量に更新する必要がある。
+この場合のmipmap更新はリアルタイムでなくてもよいか？
+マップの変更によるmipmap更新はリアルタイム更新する処理は作っておく。
+
+---------------------------------------------------------------------------
+edit_modeのhole
+
+texture_edit_view::set_cursor_pos()
+カーソルよりzが大きいボクセルを空白にする処理。
+if (prev_z > next_z) {
+  zが小さくなったので空白を広げる。
+  next_z+1以上prev_z+15以下の範囲をクリアする。
+} else if (prev_z < next_z) {
+  zが大きくなったので描き戻す。
+  prev_z+1以上next_z以下の範囲を描き戻す。
+  next_z+1以上next_z+15以下の範囲は距離を更新。
+}
+
+---------------------------------------------------------------------------
+edit_mode操作
+
+常時有効
+  F12: 状態セーブ
+  Slash: 通常モードとパラメータ変更モード巡回
+
+通常モード
+  HLJKNP: xyz軸カーソル移動
+  Minus: 空白にする
+  Backslash: ボクセルのフィル種別を変更する
+  At: パターン編集とマップ編集の切り替え
+  I: 領域選択On/Off
+  C: コピー
+  V: ペースト
+
+パラメータ変更モード(平面)
+  HLJKNP: 法線xyz変更
+  Comma,Period: 距離変更
+
+パラメータ変更モード(曲面1)
+  HLJKNP: 球の中心移動
+  Comma,Period: 距離変更
+
+パラメータ変更モード(曲面2)
+  HLJKNP: 球の拡大率変更
+
+---------------------------------------------------------------------------
+edit_modeカーソル移動
+
+カーソルがテクスチャ座標で移動したときにグローバルでの移動量を計算
+
+テクスチャ座標posをグローバル座標に変換
+    vec3 ini_tngpos = vary_aabb_or_tconv.xyz + pos * vary_aabb_or_tconv.w;
+      // ini_tngposはposを接空間座標に変換したもの
+    vec4 ini_gpos = vary_model_matrix * vec4(ini_tngpos, 1.0);
+      // グローバル座標に変換。
+ここでvary_model_matrixは接空間からグローバルへの変換。
+    <%vert_in/> vec3 position;
+      // stype==1のときオブエジェクト座標系での接線空間の原点
+    <%vert_in/> vec3 normal;   // オブジェクト座標系での法線(接線空間のz軸)
+    <%vert_in/> vec3 tangent;  // オブジェクト座標系での接線(接線空間のx軸)
+    <%vert_in/> vec4 aabb_or_tconv;
+      // stype==1のときテクスチャ座標から接線空間への変換
+    vec3 binormal = cross(normal, tangent);
+      // オブジェクト座標系での接線空間のy軸
+    mat4 mm = <%instance_attr model_matrix/>;
+    mat4 tan_to_obj = mat4(
+      vec4(tangent, 0.0),
+      vec4(binormal, 0.0),
+      vec4(normal, 0.0),
+      vec4(position, 1.0)); // 接線空間からオブジェクト座標系への変換
+    mm = mm * tan_to_obj; // 接線空間からワールド座標への変換
+    vary_model_matrix = mm; // 接線空間からワールドへの変換
+
+	aabb_max	{x,1.0000000,y,1.0000000,z,0.0312500}
+	aabb_min	{x,0.0000000,y,0.0000000,z,0.0000000}
+	aabb_or_tconv	{w,63.9993820,x,-0.0000000,y,-0.0000000,z,-0.0000000}
+	normal		{x,0.0000000,y,0.0000000,z,-1.0000000}
+	position	{x,-31.9996910,y,-31.9996910,z,0.0000000}
+	tangent		{x,-0.0000000,y,1.0000000,z,0.0000000}
+	uvw		{x,0.0000000,y,0.0000000,z,0.0312500}
+
+---------------------------------------------------------------------------
+コピペ範囲
+
+コピーした時点のコピー領域内のカーソルオフセットを取っておく。(copy_cur)
+ペースト時
+  ペースト先の領域の決定
+    最小: mi_0 = cursor_pos - copy_cur
+    最大: mx_0 = cursor_pos - copy_cur + copy_size - 1
+    これをクリップする。
+    mi = clip(mi_0)
+    mx = clip(mx_0)
+  コピーデータ内の最小最大
+    cd_mi = mi - mi_0
+    cd_mx = cd_mi + (mx - mi)
+
+---------------------------------------------------------------------------
+色パラメータ
+
+A値に入れる情報
+  roughness
+  metallic
+  emission
+
 

@@ -278,7 +278,7 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
   public function ptr{vertices} make_vertices(vbid_t vbid,
     cstrref const& name)
   {
-    debug_log("make_vertices", name, vbid);
+    // debug_log("make_vertices", name, vbid);
     return vertex_buffers[vbid]->make_if(name)->vtxs;
   }
   public function void make_vertex_set(cslice{string} const& dr_names,
@@ -290,6 +290,7 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
     // の一意性がなくなる。
     // TODO: shape_nameは未使用のものでなくてはならない。
     varray{ptr{vertices}} vptrs;
+    // varray{ptr{vertices}} vptrs_cpy;
     varray{dgf_filler} fillers;
     for (const i, const& dr_name: dr_names) {
       size_t dr_id = *drawer_names.equal_range(dr_name);
@@ -297,19 +298,26 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
       ptr{vertices} vptr = make_vertices(vbid, shape_name);
       dgf_filler filler = drawers[dr_id]->make_filler(vptr);
       vptrs.push_back(vptr);
+      // vptrs_cpy.push_back(vptr);
       fillers.push_back(filler);
     }
+    // debug_log("make_vertex_set", shape_name);
     ptr{build_context_i} ctx = make_ptr{build_context_impl}(vptrs, fillers);
     expr(*ctx, poly_t(), mesh_index());
+    /*
+    for (const i, const& p: vptrs_cpy) {
+      debug_log("make_vertex_set", shape_name, *p);
+    }
+    */
   }
   public function void make_vertex_set_by_triangles(string const& dr_name,
-    cstrref const& shape_name, cslice{float} const& verts, size_t nfpv,
-    cslice{uint} const& elems)
+    cstrref const& shape_name, cslice{vertex_attr} const& vattrs,
+    cslice{float} const& verts, size_t nfpv, cslice{uint} const& elems)
   {
     size_t dr_id = *drawer_names.equal_range(dr_name);
     const vbid = drawer_vbids[dr_id];
     ptr{vertices} vptr = make_vertices(vbid, shape_name);
-    vptr->set_triangles(verts, nfpv, elems);
+    vptr->set_triangles(vattrs, verts, nfpv, elems);
   }
   public function texture_info get_texture_info(cstrref const& name) const
   {

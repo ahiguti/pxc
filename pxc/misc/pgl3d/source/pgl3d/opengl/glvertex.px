@@ -9,6 +9,7 @@ public import meta m;
 public import exception -;
 public import pgl3d::engine::platform -;
 public import pgl3d::sdl::sdlutil -;
+public import pgl3d::geometry::funcs -;
 
 public metafunction num_float_struct{t}
   m::fold{m::map{m::field_types{t}, num_float_fld}, m::add, 0};
@@ -77,6 +78,8 @@ vertices(size_t num_float_per_vertex0)
   public varray{float} vertex_values; /* for glDrawElements */
   public varray{uint} elements;       /* for glDrawElements */
   public varray{float} positions;     /* used for physics engine */
+    // FIXME:remove
+  public varray{vertex_attr} vertex_attrs; /* used for physics engine */
   public varray{node_joint} joints;
   public size_t vertex_values_size_per_copy;
   public size_t elements_size_per_copy;
@@ -86,9 +89,10 @@ vertices(size_t num_float_per_vertex0)
     elements_size_per_copy = elements.size();
   }
   public function void
-  set_triangles(cslice{float} const& verts, size_t nfpv,
-    cslice{uint} const& elems)
+  set_triangles(cslice{vertex_attr} const& vattrs, cslice{float} const& verts,
+    size_t nfpv, cslice{uint} const& elems)
   {
+    // vattrsは各頂点の属性、vertsはgpuに置く頂点属性
     // set vertices and elements directly
     size_t num_v = verts.size() / nfpv;
     if (nfpv > num_float_per_vertex) {
@@ -106,6 +110,7 @@ vertices(size_t num_float_per_vertex0)
 	positions.push_back(verts[i * nfpv + j]);
       }
     }
+    vertex_attrs = vattrs;
     if (m::ne{use_primitive_restart, 0}) {
       size_t n = elems.size() / 3;
       elements.resize(n * 4);
@@ -124,11 +129,18 @@ vertices(size_t num_float_per_vertex0)
     debug_log("set_triangles: ", vertex_values.size(), elements.size());
   }
   public function {tattr, split_convex} void
-  push_polygon_distinct(cslice{tattr} const& vals)
+  push_polygon_distinct(cslice{vertex_attr} const& vattrs,
+    cslice{tattr} const& vals)
   {
+    /* vattrsは物理エンジンなどが参照するためのデータ、valsはGPUに置くデータ */
+    if (vattrs.size() != vals.size()) {
+      throw runtime_error_template{"vertices::push_polygon_distinct::vattrs"}(
+	  string_join{" "}(vattrs.size(), vals.size()));
+    }
+    vertex_attrs = vattrs;
     /* tattr must have 'public glm::vec3 position' */
     if (num_float_per_vertex != num_float_struct{tattr}) {
-      throw runtime_error_template{"vertices::push_polygon_distinct"}(
+      throw runtime_error_template{"vertices::push_polygon_distinct::tattr"}(
 	  string_join{" "}(m::to_string{tattr}, num_float_struct{tattr},
 	    num_float_per_vertex));
     }

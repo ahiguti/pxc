@@ -98,6 +98,13 @@ public struct demoapp_application()
     float speed, projection_info const& pjinfo,
     string_map mutable& commands_r)
   {
+    app.modmask = 0;
+    if (keys[static_cast{uint}(SDL_SCANCODE_LSHIFT)] != 0) {
+      app.modmask |= 1;
+    }
+    if (keys[static_cast{uint}(SDL_SCANCODE_RSHIFT)] != 0) {
+      app.modmask |= 1;
+    }
     handle_keys(app, keys, joy_axes, joy_buttons, speed, pjinfo, commands_r);
   }
   public function tptr{pgl3d_scene_shared} get_scene_shared()
@@ -317,6 +324,7 @@ private struct app_impl()
   public float exposure = 1.414f;
   public float option_value = 0.0f;
   public string_map app_commands;
+  public string app_status_message;
   public varray{bool} prev_joy_buttons;
   public option{ptr{edit_mode_i}} edit_mode;
   public bool raycast_cull_front = false;
@@ -324,6 +332,9 @@ private struct app_impl()
   public textures_ptr const textures = make_textures_ptr();
   public pgl3d::geometry::funcs::rand_generator rand_gen
     = pgl3d::geometry::funcs::rand_generator(1u);
+  public int modmask; // shift, meta
+  public glm::mat4 edit_mode_trans;
+  public vertex_attr edit_mode_vattr;
   init();
   private function void init() {
     string s;
@@ -374,6 +385,7 @@ public multithreaded struct demoapp_scene_shared(io const& sys0)
   public float option_value = 0.0f;
   public texture_info default_font_texture_info;
   public string_map app_commands;
+  public string app_status_message;
   public io::io sys = sys0;
   public raycast_drawers_info rdi;
   /* constatnt */
@@ -483,17 +495,21 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
     for (const i, const& lpb: sctl.lpbullet_swarms) {
       swarm_total += lpb->size();
     }
-    string s = string_join{" "}("O:", sctl.sco.dworld.rigid_bodies_size(),
-      swarm_total, status_message, "T:", timings);
-    if (!dss.engine_status) {
-      s = "RELOADING SHADER FAILED";
+    {
+      farray{string, 2} msg;
+      msg[0] = string_join{" "}("O:", sctl.sco.dworld.rigid_bodies_size(),
+	swarm_total, status_message, "T:", timings);
+      if (!dss.engine_status) {
+	msg[0] = "RELOADING SHADER FAILED";
+      }
+      msg[1] = dss.app_status_message;
+      scene_control_set_message(sctl, sctl.node_status_message, msg,
+	0, 0,
+	dss.default_font_texture_info.char_w,
+	dss.default_font_texture_info.char_h,
+	static_cast{float}(pjinfo.virt_width),
+	static_cast{float}(pjinfo.virt_height));
     }
-    scene_control_set_message(sctl, sctl.node_status_message, s,
-      0, 0,
-      dss.default_font_texture_info.char_w,
-      dss.default_font_texture_info.char_h,
-      static_cast{float}(pjinfo.virt_width),
-      static_cast{float}(pjinfo.virt_height));
     const t1 = get_time(sys);
     robjs.set_perspective(pjinfo.camera_pers);
     robjs.clear_objects();
@@ -616,8 +632,24 @@ function void handle_event(app_impl mutable& app,
   } else if (etype == SDL_KEYDOWN) {
     if (case app.edit_mode.some) {
       app.edit_mode.some->set_camera_angle(app.player.angle);
+      glm::vec3 cursor_move;
       app.edit_mode.some->on_key_pressed(
-	static_cast{int}(ev.key.keysym.scancode));
+	static_cast{int}(ev.key.keysym.scancode), app.modmask, cursor_move,
+	app.app_status_message);
+      // debug_log("cursor_move", cursor_move);
+      const glm::vec3 m =
+	cursor_move * app.edit_mode_vattr.aabb_or_tconv.w;
+	// 接線空間座標に変換
+      mutable mo0 = app.edit_mode_trans * glm::make_vec4(
+	0.0f, 0.0f, 0.0f, 1.0f);
+      mutable mo1 = app.edit_mode_trans * glm::make_vec4(
+	m.x, m.y, m.z, 1.0f);
+	// オブジェクト座標に変換
+      mo0 /= mo0.w;
+      mo1 /= mo1.w;
+      const mo = mo1 - mo0;
+      // edit_modeに使うsceneではオブジェクト座標がそのままグローバル座標
+      app.player.position += glm::make_vec3(mo.x, mo.y, mo.z);
     }
     // sdl_log("KEYDOWN event", static_cast{int}(ev.key.keysym.scancode));
     if (ev.key.keysym.scancode == SDL_SCANCODE_TAB) {
@@ -738,6 +770,7 @@ function void handle_keys(app_impl mutable& app,
     ss.posang.position = app.player.position;
     ss.posang.angle = app.player.angle * camera_rel;
     ss.app_commands.swap(app.app_commands);
+    ss.app_status_message = app.app_status_message;
     app.scene_next_flag = false;
     // sdl_log("posang = ", ss.posang);
   }
@@ -796,7 +829,7 @@ private function varray{ptr{pgldrawer_export_i}} init_drawers(
 private function void build_vertices(app_impl mutable& app,
   make_vertices_i mutable& pgs)
 {
-  const& voxtmap = *app.textures->equal_range("triangles.voxtmap.0");
+  const& voxtmap = *app.textures->equal_range("triangles.voxtmap_pri.0");
   const voxtmap_whd_max = static_cast{float}(
     max(max(voxtmap->get_width(), voxtmap->get_height()),
     voxtmap->get_depth()));
@@ -1245,6 +1278,26 @@ private function void build_vertices(app_impl mutable& app,
   /* save default font metrics */
   app.scene_shared->default_font_texture_info = pgs.get_texture_info("font");
 
+  /* save edit_mode transform */
+  {
+    const vp = pgs.get_nonempty_vertices("box");
+    const& vattrs = vp->vertex_attrs;
+    const& vattr = vattrs[0];
+    debug_log("edit_mode transform", vattr);
+    const& tan = vattr.tan;
+    const& nor = vattr.nor;
+    const bnr = glm::cross(nor, tan);
+    const& pos = vattr.pos;
+    const glm::mat4 tan_to_obj = glm::make_mat4(
+      tan.x, tan.y, tan.z, 0.0f,
+      bnr.x, bnr.y, bnr.z, 0.0f,
+      nor.x, nor.y, nor.z, 0.0f,
+      pos.x, pos.y, pos.z, 1.0f);
+      // 接線空間からオブジェクト座標系への変換
+    app.edit_mode_trans = tan_to_obj;
+    app.edit_mode_vattr = vattr;
+  }
+
   /* save shapes for physics engine */
   function void shapes_add(cstrref const& name, float mass,
     collision_shape_e shape)
@@ -1593,12 +1646,16 @@ scene_control(node_factory const& nfac,
 threaded function void
 scene_control_set_message(scene_control mutable& sctl,
   scene_node mutable& sn_text,
-  cstrref const& text, uint x, uint y, uint font_width, uint font_height,
+  cslice{string} const& msg, uint x, uint y, uint font_width, uint font_height,
   float screen_w, float screen_h)
 {
   {
+    const x0 = x;
     mutable& nd = sn_text;
-    const n = text.size();
+    size_t n;
+    for (const i, const& s: msg) {
+      n += s.size();
+    }
     while (nd.children.size() < n) {
       const p = scene_node(sctl.joint_id_font, glm::mat4());
       nd.children.push_back(p);
@@ -1606,16 +1663,24 @@ scene_control_set_message(scene_control mutable& sctl,
     if (nd.children.size() > n) {
       nd.children.erase(n, nd.children.size());
     }
-    for (const i, mutable& p: nd.children) {
+    size_t mi;
+    size_t mj;
+    for (const k, mutable& p: nd.children) {
       const& sli = p.trans.value.to_slice();
+      while (mj >= msg[mi].size() && mi < msg.size()) {
+	y += font_height;
+	++mi;
+	mj = 0;
+	x = x0;
+      }
+      if (mi >= msg.size()) {
+	break;
+      }
       sli[2] = (static_cast{float}(x) / screen_w) * 2.0f - 1.0f;
       sli[3] = (static_cast{float}(y) / screen_h) * 2.0f - 1.0f;
+      sli[0] = static_cast{float}(msg[mi][mj] - 0x20);
       x += font_width;
-     if (i < text.size()) {
-	sli[0] = static_cast{float}(text[i] - 0x20);
-      } else {
-	sli[0] = 0.0f;
-      }
+      ++mj;
     }
   }
 }

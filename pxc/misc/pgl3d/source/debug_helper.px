@@ -46,11 +46,12 @@ void init_debug_helper()
 void dump_backtrace()
 {
 #ifdef _MSC_VER
-// FIXME: dont use stdio
   HANDLE proc = GetCurrentProcess();
   void *addr[512] = { };
+  char buf[1024] = { };
   unsigned short num_frames = CaptureStackBackTrace(0, 512, addr, NULL);
-  fprintf(stderr, "backtrace %i\n", num_frames);
+  sprintf_s(buf, "backtrace %i\n", num_frames);
+  _write(debug_log_file, buf, (unsigned)strlen(buf));
   for (unsigned short i = 0; i < num_frames; ++i) {
     DWORD_PTR a = (DWORD_PTR)(addr[i]);
     char symbol_info_buf[sizeof(SYMBOL_INFO) + 1024] = { };
@@ -63,20 +64,20 @@ void dump_backtrace()
     DWORD dis = 0;
     SymGetLineFromAddr64(proc, (DWORD_PTR)(addr[i]), &dis, &line);
     DWORD_PTR offset = a - sinfo->Address;
-    fprintf(stderr, "%u %p %s +%llx %s:%d +%llx\n", (unsigned)i, (void *)a,
-      sinfo->Name, (unsigned long long)offset, line.FileName,
+    sprintf_s(buf, "%u %p %s +%llx %s:%d +%llx\n", (unsigned)i,
+      (void *)a, sinfo->Name, (unsigned long long)offset, line.FileName,
       (int)line.LineNumber, (unsigned long long)dis);
+    _write(debug_log_file, buf, (unsigned)strlen(buf));
   }
-  fflush(stderr);
 #endif
 }
 
 void dump_modules()
 {
 #ifdef _MSC_VER
-// FIXME: dont use stdio
   HANDLE proc = GetCurrentProcess();
   HMODULE modules[1024] = { };
+  wchar_t buf[1025] = { };
   DWORD cbneeded = 0;
   if (EnumProcessModules(proc, modules, sizeof(modules), &cbneeded)) {
     for (DWORD i = 0; i < cbneeded / sizeof(HMODULE); ++i) {
@@ -85,12 +86,11 @@ void dump_modules()
       TCHAR mname[MAX_PATH] = { };
       if (GetModuleFileNameEx(proc, modules[i], mname,
 	sizeof(mname) / sizeof(TCHAR))) {
-	fwprintf(stderr, TEXT("%p %08x %s\n"), modules[i],
+	swprintf_s(buf, TEXT("%p %08x %s\n"), modules[i],
 	  (unsigned)minfo.SizeOfImage, mname);
       }
     }
   }
-  fflush(stderr);
 #endif
 }
 
@@ -98,10 +98,11 @@ void dump_modules()
 
 LONG unhandled_exception_handler(PEXCEPTION_POINTERS einfo)
 {
-// FIXME: dont use stdio
+  char buf[1024] = { };
   SetErrorMode(SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS);
-  fprintf(stderr, "unhandled exception: %x\n",
+  sprintf_s(buf, "unhandled exception: %x\n",
     einfo->ExceptionRecord->ExceptionCode);
+  _write(debug_log_file, buf, (unsigned)strlen(buf));
   dump_backtrace();
   std::_Exit(4);
 }

@@ -96,22 +96,37 @@ file_st io_stderr(io const& iop) {
   return pxc_stderr.some$$r();
 }
 
-static int debug_log_file = 2;
+int debug_log_file = 2;
 
-void debug_log_internal(cstrref const& s)
+void debug_log_write(const void *buffer, size_t len)
 {
 #ifdef ANDROID
   if (debug_log_file == 2) {
-    __android_log_print(ANDROID_LOG_INFO, "pxcrt", "%.*s", (int)s.size(),
-      s.rawarr());
+    __android_log_print(ANDROID_LOG_INFO, "pxcrt", "%.*s", (int)len,
+      (const char *)buffer);
     return;
   }
 #endif
 #ifdef PXC_POSIX
-  ::write(debug_log_file, s.rawarr(), s.size());
+  ::write(debug_log_file, buffer, len);
 #else
-  _write(debug_log_file, s.rawarr(), (unsigned)s.size());
+  _write(debug_log_file, buffer, (unsigned)len);
 #endif
+}
+
+void debug_log_internal(cstrref const& s)
+{
+  char buf[128] = { };
+  time_t now = time(NULL);
+  struct tm t = { };
+#ifdef PXC_POSIX
+  localtime_r(&now, &t);
+#else
+  localtime_s(&t, &now);
+#endif
+  strftime(buf, 128, "%Y%m%d-%H%M%S ", &t);
+  debug_log_write(buf, strlen(buf));
+  debug_log_write(s.rawarr(), s.size());
 }
 
 void set_debug_log_file(cstrref const& fname)

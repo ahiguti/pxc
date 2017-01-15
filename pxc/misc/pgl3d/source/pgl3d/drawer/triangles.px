@@ -101,10 +101,10 @@ public struct drawer_triangles(shader_config const& glc0,
   ivec3 voxtile_size;
   ptr{edit_mode_texture} emt = make_ptr{edit_mode_texture}();
   /*
-  varray{ptr{texture_data}} voxtmap_mip;
-  varray{ptr{texture_data}} voxtmax_mip;
-  varray{ptr{texture_data}} voxtpat_mip;
-  varray{ptr{texture_data}} voxtpax_mip;
+  varray{ptr{texture_data}} vox.tmap_pri;
+  varray{ptr{texture_data}} vox.tmap_aux;
+  varray{ptr{texture_data}} vox.tpat_pri;
+  varray{ptr{texture_data}} vox.tpat_aux;
   ptr{gl_texture} texture_voxtmap = make_ptr{gl_texture}();
   ptr{gl_texture} texture_voxtmax = make_ptr{gl_texture}();
   ptr{gl_texture} texture_voxtpat = make_ptr{gl_texture}();
@@ -162,33 +162,33 @@ public struct drawer_triangles(shader_config const& glc0,
 	  ++i;
 	}
       }
-      init_mip("triangles.voxtmap", emt->voxtmap_mip);
-      init_mip("triangles.voxtmax", emt->voxtmax_mip);
-      init_mip("triangles.voxtpat", emt->voxtpat_mip);
-      init_mip("triangles.voxtpax", emt->voxtpax_mip);
-      emt->voxtile = (*textures->equal_range("triangles.voxtile"));
-      const& voxtile = emt->voxtile;
-      voxtile_size.x = static_cast{int}(voxtile->get_width());
-      voxtile_size.y = static_cast{int}(voxtile->get_height());
-      voxtile_size.z = static_cast{int}(voxtile->get_depth());
+      init_mip("triangles.voxtmap_pri", emt->vox.tmap_pri);
+      init_mip("triangles.voxtmap_aux", emt->vox.tmap_aux);
+      init_mip("triangles.voxtpat_pri", emt->vox.tpat_pri);
+      init_mip("triangles.voxtpat_aux", emt->vox.tpat_aux);
+      emt->vox.voxtile = *(*textures->equal_range("triangles.voxtile"));
+      const& voxtile = emt->vox.voxtile;
+      voxtile_size.x = static_cast{int}(voxtile.get_width());
+      voxtile_size.y = static_cast{int}(voxtile.get_height());
+      voxtile_size.z = static_cast{int}(voxtile.get_depth());
       if (glc.is_gl3_or_gles3()) {
 	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtpat,
-	  emt->voxtpat_mip, GL_RGBA, GL_RGBA, GL_NEAREST);
+	  emt->vox.tpat_pri, GL_RGBA, GL_RGBA, GL_NEAREST);
 	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtpax,
-	  emt->voxtpax_mip, GL_RGBA, GL_RGBA, GL_NEAREST);
+	  emt->vox.tpat_aux, GL_RGBA, GL_RGBA, GL_NEAREST);
 	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtmap,
-	  emt->voxtmap_mip, GL_RGBA, GL_RGBA, GL_NEAREST);
+	  emt->vox.tmap_pri, GL_RGBA, GL_RGBA, GL_NEAREST);
 	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtmax,
-	  emt->voxtmax_mip, GL_RGBA, GL_RGBA, GL_NEAREST);
+	  emt->vox.tmap_aux, GL_RGBA, GL_RGBA, GL_NEAREST);
       } else {
 	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtpat,
-	  emt->voxtpat_mip[0 .. 1], GL_RGBA, GL_RGBA, GL_NEAREST);
+	  emt->vox.tpat_pri[0 .. 1], GL_RGBA, GL_RGBA, GL_NEAREST);
 	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtpax,
-	  emt->voxtpax_mip[0 .. 1], GL_RGBA, GL_RGBA, GL_NEAREST);
+	  emt->vox.tpat_aux[0 .. 1], GL_RGBA, GL_RGBA, GL_NEAREST);
 	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtmap,
-	  emt->voxtmap_mip[0 .. 1], GL_RGBA, GL_RGBA, GL_NEAREST);
+	  emt->vox.tmap_pri[0 .. 1], GL_RGBA, GL_RGBA, GL_NEAREST);
 	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtmax,
-	  emt->voxtmax_mip[0 .. 1], GL_RGBA, GL_RGBA, GL_NEAREST);
+	  emt->vox.tmap_aux[0 .. 1], GL_RGBA, GL_RGBA, GL_NEAREST);
       }
       if (glc.conf.get("edit_mode", 0, 0, 1) != 0) {
 	edit_mode_ptr.some = make_ptr{edit_mode}(emt);
@@ -294,16 +294,16 @@ public struct drawer_triangles(shader_config const& glc0,
       ivec3 voxtpat_size;
       ivec3 voxtmap_size;
       int virt3_size;
-      if (!emt->voxtpat_mip.empty()) {
-	voxtpat_size = make_ivec3(si(emt->voxtpat_mip[0]->get_width()),
-	  si(emt->voxtpat_mip[0]->get_height()),
-	  si(emt->voxtpat_mip[0]->get_depth()));
+      if (!emt->vox.tpat_pri.empty()) {
+	voxtpat_size = make_ivec3(si(emt->vox.tpat_pri[0]->get_width()),
+	  si(emt->vox.tpat_pri[0]->get_height()),
+	  si(emt->vox.tpat_pri[0]->get_depth()));
 	voxtpat_size = map{ivec3, operator::div}(voxtpat_size, voxtile_size);
 	voxtpat_size = map{ivec3, power_of_2}(voxtpat_size);
 	voxtmap_size = make_ivec3(
-	  si(emt->voxtmap_mip[0]->get_width()),
-	  si(emt->voxtmap_mip[0]->get_height()),
-	  si(emt->voxtmap_mip[0]->get_depth()));
+	  si(emt->vox.tmap_pri[0]->get_width()),
+	  si(emt->vox.tmap_pri[0]->get_height()),
+	  si(emt->vox.tmap_pri[0]->get_depth()));
 	voxtmap_size = map{ivec3, power_of_2}(voxtmap_size);
 	const virt_size = map{ivec3, operator::mul}(voxtile_size,
 	  voxtmap_size);

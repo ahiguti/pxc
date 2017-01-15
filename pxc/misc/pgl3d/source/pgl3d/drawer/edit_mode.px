@@ -9,13 +9,37 @@ public import pgl3d::texture::voxel -;
 
 metafunction texture_data_mip varray{ptr{texture_data}};
 
+public struct tiled_voxel_texture()
+{
+  public texture_data voxtile;
+  public texture_data_mip tmap_pri;
+  public texture_data_mip tmap_aux;
+  public texture_data_mip tpat_pri;
+  public texture_data_mip tpat_aux;
+}
+
+public function void
+tiled_voxel_texture_load_file(tiled_voxel_texture mutable& vox,
+  cstrref const& fname)
+{
+  string buf;
+  sdl_load_file(fname, buf);
+  debug_log("load voxel texture", fname, buf.size());
+  if (!buf.empty()) {
+    vox = from_string_compact_pod{tiled_voxel_texture}(buf);
+  }
+}
+
+public function void
+tiled_voxel_texture_save_file(tiled_voxel_texture const& vox,
+  cstrref const& fname)
+{
+  sdl_save_file(fname, to_string_compact_pod(vox));
+}
+
 public struct edit_mode_texture()
 {
-  public ptr{texture_data} voxtile = make_ptr{texture_data}();
-  public texture_data_mip voxtmap_mip;
-  public texture_data_mip voxtmax_mip;
-  public texture_data_mip voxtpat_mip;
-  public texture_data_mip voxtpax_mip;
+  public tiled_voxel_texture vox;
   public ptr{gl_texture} glt_voxtmap = make_ptr{gl_texture}();
   public ptr{gl_texture} glt_voxtmax = make_ptr{gl_texture}();
   public ptr{gl_texture} glt_voxtpat = make_ptr{gl_texture}();
@@ -26,6 +50,211 @@ metafunction ui static_cast{uint};
 metafunction si static_cast{int}; 
 metafunction to_ivec3 map{ivec3, static_cast{int, uint}};
 metafunction to_uvec3 map{uvec3, static_cast{uint, int}};
+metafunction to_vec3 map{vec3, static_cast{float, int}};
+
+private threaded function uint encode_plane_node(ivec3 const& n, int d)
+{
+  if (n.x < -7 || n.x > 7 || n.y < -7 || n.y > 7 || n.z < -7 || n.z > 7) {
+    return 0u;
+  }
+  if (n.x == 0 && n.y == 0 && n.z == 0) {
+    return 0u;
+  }
+  if (d < -48 || d > 48) {
+    return 0u;
+  }
+  const r = ui(n.x + 8) << 4u;
+  const g = ui(n.y + 8) << 4u;
+  const b = ui(n.z + 8) << 4u;
+  const a = ui(d + 208);
+  const v = (a << 24u) | (b << 16u) | (g << 8u) | r;
+  return v;
+}
+
+private threaded function uint make_plane_node(ivec3 const& nor, int d,
+  ivec3 const& offset)
+{
+  const d1 = d - dot_int(nor, offset) * 2;
+    // offsetが0のボクセルの距離パラメタがdのとき、その平面がoffsetだけ
+    // 移動した位置のボクセルを切断するような距離パラメタはd1になる
+  const drange = abs(nor.x) + abs(nor.y) + abs(nor.z);
+    // ax+by+czの(x,y,z)が-1,+1の範囲での最小最大は-drange,+drange
+  // debug_log("plane_node pre", nor, d, offset, d1, drange);
+  if (d1 <= -drange) {
+    return 255u << 24u; // d1が小さすぎるので壁
+  }
+  if (d1 >= drange) {
+    return 0u; // d1が大きすぎるので空白
+  }
+  // debug_log("plane_node", nor, d, offset, d1, drange);
+  return encode_plane_node(nor, d1);
+}
+
+private threaded function int dot_int(ivec3 const& a, ivec3 const& b)
+{
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+private threaded function {t} t abs(t x)
+{
+  return x < t() ? -x : x;
+}
+
+valuetype struct color_param()
+{
+  public uchar roughness;
+  public uchar r;
+  public uchar g;
+  public uchar b;
+}
+
+threaded function color_param decode_color_param(uint v)
+{
+  color_param p;
+  p.roughness = static_cast{uchar}(v >> 24u);
+  p.r = static_cast{uchar}((v >> 16u) & 0xffu);
+  p.g = static_cast{uchar}((v >> 8u) & 0xffu);
+  p.b = static_cast{uchar}((v >> 0u) & 0xffu);
+  return p;
+}
+
+valuetype struct plane_param()
+{
+  public int dist = 0;
+  public ivec3 nor = make_ivec3(-1, -1, -1);
+}
+
+threaded function uint encode_color_param(color_param const& p)
+{
+  uint r;
+  r |= ui(p.roughness) << 24u;
+  r |= ui(p.r) << 16u;
+  r |= ui(p.g) << 8u;
+  r |= ui(p.b) << 0u;
+  return r;
+}
+
+threaded function plane_param decode_plane_node(uint v)
+{
+  plane_param p;
+  if (!is_plane_node(v)) {
+    return p;
+  }
+  int a = si(v >> 24u);
+  int r = si(v & 0xffu);
+  int g = si((v >> 8u) & 0xffu);
+  int b = si((v >> 16u) & 0xffu);
+  p.dist = si(a) - 208;
+  p.nor.x = ((r >> 4u) & 0x0fu) - 8;
+  p.nor.y = ((g >> 4u) & 0x0fu) - 8;
+  p.nor.z = ((b >> 4u) & 0x0fu) - 8;
+  return p;
+}
+
+valuetype struct sphere_param()
+{
+  public int dist = 1;
+  public ivec3 center;
+  public ivec3 scale = make_ivec3(2, 2, 2);
+}
+
+threaded function uint make_sphere_node(sphere_param const& p,
+  ivec3 const& offset)
+{
+  // const c = p.center - (offset + offset);
+  const c = p.center - map{ivec3, operator::mul}(offset, p.scale);
+  /* 球の内側なら負, 境界上なら0, 外側なら正 */
+  threaded function int collision(ivec3 const pos)
+  {
+    // posはシェーダでは0.5までの範囲。この関数は1までの範囲なので2倍された値。
+    const a_pt = map{ivec3, operator::mul}(p.scale, pos);
+      // シェーダのa_vtの二倍の値
+    const c_pt = c + c; // シェーダのc_vtの二倍の値
+    const ac_pt = c_pt - a_pt;
+    const len2_ac_pt = dot_int(ac_pt, ac_pt); // シェーダのlen_2_ac_ptの4倍
+    return len2_ac_pt - p.dist * p.dist * 4;
+  }
+  bool has_nega = false;
+  bool has_posi = false;
+  for (int z: -1 .. 2) {
+    for (int y: -1 .. 2) {
+      for (int x: -1 .. 2) {
+	const ivec3 pos = make_ivec3(x, y, z);
+	const v = collision(pos);
+	has_nega |= v < 0; // 球の中心からの距離がdistより小さい
+	has_posi |= v > 0; // 球の中心からの距離がdistより大きい
+      }
+    }
+  }
+  if (has_posi && (has_nega || pos3_inside_eq(c, -1, 1))) {
+    sphere_param p1 = p;
+    p1.center = c;
+    // debug_log("msn sph", p, offset);
+    return encode_sphere_node(p1);
+  } else if (has_posi) {
+    return 0u;
+  } else {
+    // debug_log("msn wall", p, offset);
+    return 255u << 24u; // 壁
+  }
+}
+
+threaded function {t, tv} bool pos3_inside_eq(t const p, tv mi, tv mx)
+{
+  return
+    p.x >= mi && p.x <= mx &&
+    p.y >= mi && p.y <= mx &&
+    p.z >= mi && p.z <= mx;
+}
+
+threaded function uint encode_sphere_node(sphere_param const& p)
+{
+  debug_log("encode_sphere", p);
+  int node_type = p.dist + 1;
+  if (node_type < 1 || node_type > 159) {
+    return 0u;
+  }
+  if (p.center.x < -31 || p.center.x > 31 ||
+      p.center.y < -31 || p.center.y > 31 ||
+      p.center.z < -31 || p.center.z > 31) {
+    return 0u;
+  }
+  if (p.scale.x < 0 || p.scale.x > 3 ||
+      p.scale.y < 0 || p.scale.y > 3 ||
+      p.scale.z < 0 || p.scale.z > 3) {
+    return 0u;
+  }
+  ivec3 rgb = map{ivec3, operator::mul}(p.scale, make_ivec3(64, 64, 64))
+    + p.center + make_ivec3(32, 32, 32);
+  uint r = ui(rgb.x);
+  uint g = ui(rgb.y);
+  uint b = ui(rgb.z);
+  uint a = ui(node_type);
+  const v = (a << 24u) | (b << 16u) | (g << 8u) | r;
+  return v;
+}
+
+threaded function sphere_param decode_sphere_node(uint v)
+{
+  sphere_param p;
+  if (!is_sphere_node(v)) {
+    return p;
+  }
+  int a = si(v >> 24u);
+  int r = si(v & 0xffu);
+  int g = si((v >> 8u) & 0xffu);
+  int b = si((v >> 16u) & 0xffu);
+  p.scale = make_ivec3(r >> 6, g >> 6, b >> 6);
+  p.center = make_ivec3((r & 0x3f) - 32, (g & 0x3f) - 32, (b & 0x3f) - 32);
+  p.dist = a - 1;
+  // sp_scaleは座標aを(-0.5,0.5)から何倍に拡大するか
+  //   rgbの上位2bit
+  // sp_centerは球の中心座標でa*sp_scaleと比較
+  //   rgbの下位6bitから32を引く
+  // radiusは半径
+  //   (node_type - 1)
+  return p;
+}
 
 private function uvec3 texture_data_get_size(texture_data const& td)
 {
@@ -184,7 +413,7 @@ texture_data_copy_range_merge_distance(texture_data mutable& dest,
 }
 
 private function void
-texture_data_sync_gl(texture_data const& tex, uvec3 const& spos,
+texture_data_sync_gl(texture_data const& tex, int level, uvec3 const& spos,
   uvec3 const& sz, ptr{gl_texture} const& gltex)
 {
   mutable buf = darray{uint}(static_cast{size_t}(sz.x * sz.y * sz.z), 0u);
@@ -199,9 +428,26 @@ texture_data_sync_gl(texture_data const& tex, uvec3 const& spos,
   }
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_3D, gltex->texture_id.get());
-  glTexSubImage3D(GL_TEXTURE_3D, 0, si(spos.x), si(spos.y), si(spos.z),
+  glTexSubImage3D(GL_TEXTURE_3D, level, si(spos.x), si(spos.y), si(spos.z),
     si(sz.x), si(sz.y), si(sz.z), GL_RGBA, GL_UNSIGNED_BYTE,
     buf.to_crawptr().to_cvoidptr());
+}
+
+private function void
+texture_data_mip_sync_gl(texture_data_mip const& mip, uvec3 const& spos,
+  uvec3 const& sz, ptr{gl_texture} const& gltex)
+{
+  uvec3 pos_a = spos;
+  uvec3 pos_b = spos + sz;
+  for (const i, const& tex: mip) {
+    uvec3 const msz = pos_b - pos_a;
+    // debug_log("mip", i, pos_a, pos_b, msz);
+    texture_data_sync_gl(*tex, si(i), pos_a, msz, gltex);
+    pos_a = pos_a + make_uvec3(1u, 1u, 1u);
+    pos_b = pos_b + make_uvec3(1u, 1u, 1u);
+    pos_a = map{uvec3, operator::div}(pos_a, make_uvec3(2u, 2u, 2u));
+    pos_b = map{uvec3, operator::div}(pos_b, make_uvec3(2u, 2u, 2u));
+  }
 }
 
 private struct modified_range
@@ -237,6 +483,22 @@ private function bool lt_all_uvec3(uvec3 const& a, uvec3 const& b)
 private function bool le_all_uvec3(uvec3 const& a, uvec3 const& b)
 {
   return a.x <= b.x && a.y <= b.y && a.z <= b.z;
+}
+
+private function bool empty_range(uvec3 const& a)
+{
+  return a.x == 0 || a.y == 0 || a.z == 0;
+}
+
+private function uvec3 clip_size(texture_data const& data, uvec3 const& pos,
+  uvec3 const& sz)
+{
+  const tsz = texture_data_get_size(data);
+  if (!lt_all_uvec3(pos, tsz)) {
+    return uvec3();
+  }
+  const trem = tsz - pos;
+  return map{uvec3, min}(trem, sz);
 }
 
 private struct texture_edit(texture_data_mip const& data0,
@@ -282,34 +544,42 @@ private struct texture_edit(texture_data_mip const& data0,
     data_0->set(pos.x, pos.y, pos.z, v);
     recalc_distance_range(pos, make_uvec3(1, 1, 1), v == 0);
   }
-  public function void fill_range(uvec3 const& dpos, uvec3 const& sz, uint v)
+  public function void fill_range(uvec3 const& dpos, uvec3 const& sz, uint v,
+    uint v_aux)
   {
     if (!lt_all_uvec3(dpos, data_size)) {
       return;
     }
     v = is_space_voxel(v) ? 0u : v;
+    v_aux = is_space_voxel(v) ? 0u : v_aux;
     texture_data_fill_range(*data_0, dpos, sz, v);
+    texture_data_fill_range(*data_aux_0, dpos, sz, v_aux);
     recalc_distance_range(dpos, sz, v == 0);
   }
-  public function void copy_range(uvec3 const& spos, uvec3 const& sz,
-    texture_data mutable& dest, uvec3 const& dpos) const
+  public function void copy_range(uvec3 const& spos, uvec3 sz,
+    texture_data mutable& dest, texture_data mutable& dest_aux,
+    uvec3 const& dpos) const
   {
-    if (!lt_all_uvec3(spos, data_size) ||
-      !le_all_uvec3(dpos + sz, texture_data_get_size(dest))) {
+    sz = clip_size(*data_0, spos, sz);
+    sz = clip_size(dest, dpos, sz);
+    if (empty_range(sz)) {
       return;
     }
-    // debug_log("copy_range", spos, sz, dpos);
+    debug_log("copy_range", spos, sz, dpos);
     texture_data_copy_range(dest, dpos, *data_0, spos, sz);
+    texture_data_copy_range(dest_aux, dpos, *data_aux_0, spos, sz);
   }
-  public function void paste_range(uvec3 const& dpos, uvec3 const& sz,
-    texture_data const& src, uvec3 const& spos)
+  public function void paste_range(uvec3 const& dpos, uvec3 sz,
+    texture_data const& src, texture_data const& src_aux, uvec3 const& spos)
   {
-    if (!lt_all_uvec3(dpos, data_size) ||
-      !le_all_uvec3(spos + sz, texture_data_get_size(src))) {
+    sz = clip_size(src, spos, sz);
+    sz = clip_size(*data_0, dpos, sz);
+    if (empty_range(sz)) {
       return;
     }
-    // debug_log("paste_range", spos, sz, dpos);
+    debug_log("paste_range", spos, sz, dpos);
     texture_data_copy_range(*data_0, dpos, src, spos, sz);
+    texture_data_copy_range(*data_aux_0, dpos, src_aux, spos, sz);
     recalc_distance_range(dpos, sz, false);
   }
   private function void recalc_distance_range(uvec3 const& pos,
@@ -382,6 +652,10 @@ private struct texture_edit_view(texture_data_mip const& data0,
   {
     return grid.get_width() > 1;
   }
+  private function uvec3 get_cursor() const
+  {
+    return cursor_0;
+  }
   private function uvec3 get_cursor_mi() const
   {
     return map{uvec3, min}(cursor_0, cursor_1);
@@ -403,13 +677,13 @@ private struct texture_edit_view(texture_data_mip const& data0,
   {
     return current_edit->get_aux_texture_data();
   }
-  public function cptr{texture_data} get_view() const
+  public function texture_data_mip get_view() const
   {
-    return current_view_0;
+    return current_view;
   }
-  public function cptr{texture_data} get_view_aux() const
+  public function texture_data_mip get_view_aux() const
   {
-    return current_view_aux_0;
+    return current_view_aux;
   }
   public function pair{uvec3, uvec3} get_view_modified(bool reset_flag) {
     return modified.get_modified(reset_flag);
@@ -425,20 +699,35 @@ private struct texture_edit_view(texture_data_mip const& data0,
       c1 = 0;
       /* editから書き戻すだけ。周囲15まで広げた領域を書き戻す */
       /* mx.zだけは15まで広げない */
-      const mi = map{ivec3, max}(
-	to_ivec3(get_cursor_mi()) - make_ivec3(15, 15, 15),
-	make_ivec3(0, 0, 0));
-      const mx = map{ivec3, min}(
-	to_ivec3(get_cursor_mx()) + make_ivec3(15, 15, 0),
-	to_ivec3(tex_sz - make_uvec3(1, 1, 1)));
-      const sz = mx + make_ivec3(1, 1, 1) - mi;
-      // debug_log("scc cr", mi, mi, sz);
-      texture_data_copy_range(*current_view_0, to_uvec3(mi),
-	*get_edit(), to_uvec3(mi), to_uvec3(sz));
-      /* auxはカーソル位置の1個だけを描き戻す */
+      {
+	const mi = map{ivec3, max}(
+	  to_ivec3(get_cursor_mi()) - make_ivec3(15, 15, 15),
+	  make_ivec3(0, 0, 0));
+	const mx = map{ivec3, min}(
+	  to_ivec3(get_cursor_mx()) + make_ivec3(15, 15, 0),
+	  to_ivec3(tex_sz - make_uvec3(1, 1, 1)));
+	const sz = mx + make_ivec3(1, 1, 1) - mi;
+	// debug_log("scc cr", mi, mi, sz);
+	texture_data_copy_range(*current_view_0, to_uvec3(mi),
+	  *get_edit(), to_uvec3(mi), to_uvec3(sz));
+	modified.set_modified(mi, mx);
+      }
+      /* auxはカーソルの領域だけを書き戻す */
+      {
+	const mi = map{ivec3, max}(
+	  to_ivec3(get_cursor_mi()),
+	  make_ivec3(0, 0, 0));
+	const mx = map{ivec3, min}(
+	  to_ivec3(get_cursor_mx()),
+	  to_ivec3(tex_sz - make_uvec3(1, 1, 1)));
+	const sz = mx + make_ivec3(1, 1, 1) - mi;
+	texture_data_copy_range(*current_view_aux_0, to_uvec3(mi),
+	  *get_edit_aux(), to_uvec3(mi), to_uvec3(sz));
+      }
+      /*
       current_view_aux_0->set(cursor_0.x, cursor_0.y, cursor_0.z,
 	get_edit_aux()->get(cursor_0.x, cursor_0.y, cursor_0.z));
-      modified.set_modified(mi, mx);
+      */
     } else {
       const sz = get_cursor_mx() + make_uvec3(1, 1, 1) - get_cursor_mi();
       // debug_log("rrdq", sz);
@@ -470,32 +759,86 @@ private struct texture_edit_view(texture_data_mip const& data0,
     const cursor_mx = get_cursor_mx();
     uint const prev_z = cursor_mx.z;
     uint const next_z = mx.z;
+    uint const blk_size = 64u;
+    const prev_blk = map{uvec3, operator::div}(get_cursor(),
+      make_uvec3(blk_size, blk_size, blk_size));
+    const next_blk = map{uvec3, operator::div}(c0,
+      make_uvec3(blk_size, blk_size, blk_size));
+    const prev_blk_base = map{uvec3, operator::mul}(prev_blk,
+      make_uvec3(blk_size, blk_size, blk_size));
+    const next_blk_base = map{uvec3, operator::mul}(next_blk,
+      make_uvec3(blk_size, blk_size, blk_size));
     // debug_log("view set_cursor_pos", has_grid(), saved_cursor_color, c0);
-    if (prev_z > next_z) {
-      /* 以前よりも小さいzまでクリアする */
+    if (prev_blk != next_blk) {
+      /* まず古いブロックの穴を埋め戻す */
+      {
+	const rx = prev_blk_base.x;
+	const ry = prev_blk_base.y;
+	texture_data_copy_range(*current_view_0,
+	  make_uvec3(rx, ry, prev_z + 1), *get_edit(),
+	  make_uvec3(rx, ry, prev_z + 1),
+	  make_uvec3(blk_size, blk_size, tex_sz.z - prev_z - 1));
+	texture_data_copy_range(*current_view_aux_0,
+	  make_uvec3(rx, ry, prev_z + 1), *get_edit_aux(),
+	  make_uvec3(rx, ry, prev_z + 1),
+	  make_uvec3(blk_size, blk_size, tex_sz.z - prev_z - 1));
+	modified.set_modified(make_ivec3(si(rx), si(ry), si(prev_z + 1)), 
+	  make_ivec3(si(rx + blk_size) - 1, si(ry + blk_size) - 1,
+	    si(tex_sz.z) - 1));
+      }
+      /* 新しいブロックに穴をあける*/
+      {
+	const rx = next_blk_base.x;
+	const ry = next_blk_base.y;
+	const zmi = next_z + 1;
+	const zmx = tex_sz.z - 1;
+	texture_data_clear_range_recalc_distance_quick(*current_view_0,
+	  make_uvec3(rx, ry, zmi),
+	  make_uvec3(blk_size, blk_size, zmx + 1 - zmi),
+	  grid_size);
+	texture_data_fill_range(*current_view_aux_0,
+	  make_uvec3(rx, ry, zmi),
+	  make_uvec3(blk_size, blk_size, zmx + 1 - zmi),
+	  0u);
+	modified.set_modified(make_ivec3(si(rx), si(ry), si(zmi)),
+	  make_ivec3(si(rx + blk_size) - 1, si(ry + blk_size) - 1, si(zmx)));
+      }
+    } else if (prev_z > next_z) {
+      /* zが小さくなった。新しいzより大きい範囲をクリアする */
       const zmi = next_z + 1;
       const zmx = min(prev_z + 15, tex_sz.z - 1);
-	/* prev_z + 15までの領域は距離を更新 */
-      const zdiff = prev_z - next_z;
+	/* prev_z + 15までの空白領域は距離を更新 */
+      const rx = next_blk_base.x;
+      const ry = next_blk_base.y;
       texture_data_clear_range_recalc_distance_quick(*current_view_0,
-	make_uvec3(0, 0, zmi), make_uvec3(tex_sz.x, tex_sz.y, zmx + 1 - zmi),
+	make_uvec3(rx, ry, zmi), make_uvec3(blk_size, blk_size, zmx + 1 - zmi),
 	grid_size);
-      modified.set_modified(make_ivec3(0, 0, si(zmi)),
-	make_ivec3(si(tex_sz.x) - 1, si(tex_sz.y) - 1, si(zmx)));
+      texture_data_fill_range(*current_view_aux_0,
+	make_uvec3(rx, ry, zmi), make_uvec3(blk_size, blk_size, zmx + 1 - zmi),
+	0u);
+      modified.set_modified(make_ivec3(si(rx), si(ry), si(zmi)),
+	make_ivec3(si(rx + blk_size) - 1, si(ry + blk_size) - 1, si(zmx)));
     } else if (prev_z < next_z) {
-      /* 以前よりも大きいzまで書き戻す */
+      /* zが大きくなった。新しいzより小さい範囲を書き戻す。 */
       // debug_log("scp cr", prev_z + 1, prev_z + 1, next_z - prev_z);
-      texture_data_copy_range(*current_view_0, make_uvec3(0, 0, prev_z + 1),
-	*get_edit(), make_uvec3(0, 0, prev_z + 1),
-	make_uvec3(tex_sz.x, tex_sz.y, next_z - prev_z));
+      const rx = prev_blk_base.x;
+      const ry = prev_blk_base.y;
+      texture_data_copy_range(*current_view_0,
+	make_uvec3(rx, ry, prev_z + 1),
+	*get_edit(), make_uvec3(rx, ry, prev_z + 1),
+	make_uvec3(blk_size, blk_size, next_z - prev_z));
+      texture_data_copy_range(*current_view_aux_0,
+	make_uvec3(rx, ry, prev_z + 1), *get_edit_aux(),
+	make_uvec3(rx, ry, prev_z + 1),
+	make_uvec3(blk_size, blk_size, next_z - prev_z));
       const zmi = next_z + 1;
       const zmx = min(next_z + 15, tex_sz.z - 1);
-	/* next_z + 15までの領域は距離を更新 */
+	/* next_z + 15までの空白領域は距離を更新 */
       texture_data_clear_range_recalc_distance_quick(*current_view_0,
-	make_uvec3(0, 0, zmi), make_uvec3(tex_sz.x, tex_sz.y, zmx + 1 - zmi),
+	make_uvec3(rx, ry, zmi), make_uvec3(blk_size, blk_size, zmx + 1 - zmi),
 	grid_size);
-      modified.set_modified(make_ivec3(0, 0, si(prev_z) + 1), 
-	make_ivec3(si(tex_sz.x) - 1, si(tex_sz.y) - 1, si(zmx)));
+      modified.set_modified(make_ivec3(si(rx), si(ry), si(prev_z) + 1), 
+	make_ivec3(si(rx + blk_size) - 1, si(ry + blk_size) - 1, si(zmx)));
     }
     cursor_0 = c0;
     cursor_1 = c1;
@@ -513,20 +856,21 @@ private struct texture_edit_view(texture_data_mip const& data0,
     merge_edit_view();
   }
   public function void edit_fill_range(uvec3 const& dpos, uvec3 const& sz,
-    uint v)
+    uint v, uint v_aux)
   {
-    current_edit->fill_range(dpos, sz, v);
+    current_edit->fill_range(dpos, sz, v, v_aux);
     merge_edit_view();
   }
   public function void edit_copy_range(uvec3 const& spos, uvec3 const& sz,
-    texture_data mutable& dest, uvec3 const& dpos) const
+    texture_data mutable& dest, texture_data mutable& dest_aux,
+    uvec3 const& dpos) const
   {
-    current_edit->copy_range(spos, sz, dest, dpos);
+    current_edit->copy_range(spos, sz, dest, dest_aux, dpos);
   }
   public function void edit_paste_range(uvec3 const& dpos, uvec3 const& sz,
-    texture_data const& src, uvec3 const& spos)
+    texture_data const& src, texture_data const& src_aux, uvec3 const& spos)
   {
-    current_edit->paste_range(dpos, sz, src, spos);
+    current_edit->paste_range(dpos, sz, src, src_aux, spos);
     merge_edit_view();
   }
   private function void merge_edit_view()
@@ -536,17 +880,19 @@ private struct texture_edit_view(texture_data_mip const& data0,
     if (edit_mod.second.x == 0) {
       return;
     }
-    const cursor_mx_z = get_cursor_mx().z;
-    if (edit_mod.first.z > cursor_mx_z) {
-      return; // カーソルより上の位置のみ変更があった
-    }
-    const mod_z = min(cursor_mx_z + 1 - edit_mod.first.z, edit_mod.second.z);
-    edit_mod.second.z = mod_z;
-    // debug_log("mev crmd");
+    /* 一旦穴を塞ぐためカーソルをz最大に移動 */
+    const c0 = cursor_0;
+    const c1 = cursor_1;
+    const c0_0 = make_uvec3(c0.x, c0.y, tex_sz.z - 1);
+    set_cursor_pos(c0_0, c1);
     texture_data_copy_range_merge_distance(*current_view_0, edit_mod.first,
       *get_edit(), edit_mod.first, edit_mod.second);
+    texture_data_copy_range(*current_view_aux_0, edit_mod.first,
+      *get_edit_aux(), edit_mod.first, edit_mod.second);
     modified.set_modified(to_ivec3(edit_mod.first),
       to_ivec3(edit_mod.first + edit_mod.second - make_uvec3(1, 1, 1)));
+    /* カーソルを元の位置に戻す */
+    set_cursor_pos(c0, c1);
   }
 }
 
@@ -570,13 +916,13 @@ ptr{gl_texture} const& gltp0)
 */
 {
   private ptr{edit_mode_texture} const emt = emt0;
-  public uvec3 const tmap_size = emt->voxtmap_mip[0]->get_size_uvec3();
-  public uvec3 const tpat_size = emt->voxtpat_mip[0]->get_size_uvec3();
-  public uvec3 const tile_size = emt->voxtile->get_size_uvec3();
+  public uvec3 const tmap_size = emt->vox.tmap_pri[0]->get_size_uvec3();
+  public uvec3 const tpat_size = emt->vox.tpat_pri[0]->get_size_uvec3();
+  public uvec3 const tile_size = emt->vox.voxtile.get_size_uvec3();
   private texture_edit_view tev_tmap = texture_edit_view(
-    emt->voxtmap_mip, emt->voxtmax_mip, texture_data());
+    emt->vox.tmap_pri, emt->vox.tmap_aux, texture_data());
   private texture_edit_view tev_tpat = texture_edit_view(
-    emt->voxtpat_mip, emt->voxtpax_mip, *emt->voxtile);
+    emt->vox.tpat_pri, emt->vox.tpat_aux, emt->vox.voxtile);
   private ptr{gl_texture} const gl_tmap = emt->glt_voxtmap;
   private ptr{gl_texture} const gl_tmap_aux = emt->glt_voxtmax;
   private ptr{gl_texture} const gl_tpat = emt->glt_voxtpat;
@@ -617,8 +963,9 @@ ptr{gl_texture} const& gltp0)
     set_tpat_cursor_pos(pc, pc);
     set_cursor_color(nst.cursor_color_0, nst.cursor_color_1);
     set_cursor_tpat(nst.cursor_tpat);
-    set_tmap_cursor_pos(nst.cursor_tmap_0, nst.cursor_tmap_1);
-    set_tpat_cursor_pos(nst.cursor_tpat_0, nst.cursor_tpat_1);
+    // 領域選択状態にはしない(cursor_*_1は無視する)
+    set_tmap_cursor_pos(nst.cursor_tmap_0, nst.cursor_tmap_0);
+    set_tpat_cursor_pos(nst.cursor_tpat_0, nst.cursor_tpat_0);
   }
   public function bool get_cursor_tpat() const
   {
@@ -630,6 +977,7 @@ ptr{gl_texture} const& gltp0)
   }
   public function pair{uvec3, uvec3} get_cursor_pos() const
   {
+    // プライマリ、セカンダリのカーソル位置を返す
     return state.cursor_tpat ? get_tpat_cursor_pos() : get_tmap_cursor_pos();
   }
   public function pair{uvec3, uvec3} get_tmap_cursor_pos() const
@@ -642,6 +990,7 @@ ptr{gl_texture} const& gltp0)
   }
   public function pair{uvec3, uvec3} get_cursor_range() const
   {
+    // カーソル範囲の始点と大きさを返す
     return state.cursor_tpat
       ? get_tpat_cursor_range() : get_tmap_cursor_range();
   }
@@ -722,6 +1071,15 @@ ptr{gl_texture} const& gltp0)
     tev_tpat.set_cursor_pos(c0, c1);
     cursor_flick();
   }
+  public function ivec3 clamp_cursor_pos(ivec3 pos)
+  {
+    const upos = to_uvec3(map{ivec3, max}(pos, ivec3()));
+    if (state.cursor_tpat) {
+      return to_ivec3(tev_tpat.clamp(upos));
+    } else {
+      return to_ivec3(tev_tmap.clamp(upos));
+    }
+  }
   public function void set_cursor_pos(uvec3 c0, uvec3 c1)
   {
     if (state.cursor_tpat) {
@@ -749,68 +1107,74 @@ ptr{gl_texture} const& gltp0)
     cursor_flick();
   }
   public function void edit_fill_range(uvec3 const& dpos, uvec3 const& sz,
-    uint v)
+    uint v, uint v_aux)
   {
     if (get_cursor_tpat()) {
-      tpat_edit_fill_range(dpos, sz, v);
+      tpat_edit_fill_range(dpos, sz, v, v_aux);
     } else {
-      tmap_edit_fill_range(dpos, sz, v);
+      tmap_edit_fill_range(dpos, sz, v, v_aux);
     }
   }
   public function void tmap_edit_fill_range(uvec3 const& dpos, uvec3 const& sz,
-    uint v)
+    uint v, uint v_aux)
   {
     reset_cursor_flick_nosyncgl();
-    tev_tmap.edit_fill_range(dpos, sz, v);
+    tev_tmap.edit_fill_range(dpos, sz, v, v_aux);
     cursor_flick();
   }
   public function void tpat_edit_fill_range(uvec3 const& dpos, uvec3 const& sz,
-    uint v)
+    uint v, uint v_aux)
   {
     reset_cursor_flick_nosyncgl();
-    tev_tpat.edit_fill_range(dpos, sz, v);
+    tev_tpat.edit_fill_range(dpos, sz, v, v_aux);
     cursor_flick();
   }
   public function void edit_copy_range(uvec3 const& spos, uvec3 const& sz,
-    texture_data mutable& dest, uvec3 const& dpos)
+    texture_data mutable& dest, texture_data mutable& dest_aux,
+    uvec3 const& dpos)
   {
     if (get_cursor_tpat()) {
-      tpat_edit_copy_range(spos, sz, dest, dpos);
+      tpat_edit_copy_range(spos, sz, dest, dest_aux, dpos);
     } else {
-      tmap_edit_copy_range(spos, sz, dest, dpos);
+      tmap_edit_copy_range(spos, sz, dest, dest_aux, dpos);
     }
   }
   public function void tmap_edit_copy_range(uvec3 const& spos, uvec3 const& sz,
-    texture_data mutable& dest, uvec3 const& dpos)
+    texture_data mutable& dest, texture_data mutable& dest_aux,
+    uvec3 const& dpos)
   {
-    tev_tmap.edit_copy_range(spos, sz, dest, dpos);
+    tev_tmap.edit_copy_range(spos, sz, dest, dest_aux, dpos);
   }
   public function void tpat_edit_copy_range(uvec3 const& spos, uvec3 const& sz,
-    texture_data mutable& dest, uvec3 const& dpos)
+    texture_data mutable& dest, texture_data mutable& dest_aux,
+    uvec3 const& dpos)
   {
-    tev_tpat.edit_copy_range(spos, sz, dest, dpos);
+    tev_tpat.edit_copy_range(spos, sz, dest, dest_aux, dpos);
   }
   public function void edit_paste_range(uvec3 const& dpos,
-    uvec3 const& sz, texture_data const& src, uvec3 const& spos)
+    uvec3 const& sz, texture_data const& src, texture_data const& src_aux,
+    uvec3 const& spos)
   {
     if (get_cursor_tpat()) {
-      tpat_edit_paste_range(dpos, sz, src, spos);
+      tpat_edit_paste_range(dpos, sz, src, src_aux, spos);
     } else {
-      tmap_edit_paste_range(dpos, sz, src, spos);
+      tmap_edit_paste_range(dpos, sz, src, src_aux, spos);
     }
   }
   public function void tmap_edit_paste_range(uvec3 const& dpos,
-    uvec3 const& sz, texture_data const& src, uvec3 const& spos)
+    uvec3 const& sz, texture_data const& src, texture_data const& src_aux,
+    uvec3 const& spos)
   {
     reset_cursor_flick_nosyncgl();
-    tev_tmap.edit_paste_range(dpos, sz, src, spos);
+    tev_tmap.edit_paste_range(dpos, sz, src, src_aux, spos);
     cursor_flick();
   }
   public function void tpat_edit_paste_range(uvec3 const& dpos,
-    uvec3 const& sz, texture_data const& src, uvec3 const& spos)
+    uvec3 const& sz, texture_data const& src, texture_data const& src_aux,
+    uvec3 const& spos)
   {
     reset_cursor_flick_nosyncgl();
-    tev_tpat.edit_paste_range(dpos, sz, src, spos);
+    tev_tpat.edit_paste_range(dpos, sz, src, src_aux, spos);
     cursor_flick();
   }
   private function bool cursor_shown() const
@@ -847,20 +1211,42 @@ ptr{gl_texture} const& gltp0)
     pair{uvec3, uvec3} tmmod = tev_tmap.get_view_modified(true);
     if (tmmod.second.x != 0u) {
       // debug_log("sync tmmod", tmmod);
-      texture_data_sync_gl(*tev_tmap.get_view(), tmmod.first, tmmod.second,
+      texture_data_mip_sync_gl(tev_tmap.get_view(), tmmod.first, tmmod.second,
 	gl_tmap);
-      texture_data_sync_gl(*tev_tmap.get_view_aux(), tmmod.first, tmmod.second,
-	gl_tmap_aux);
+      texture_data_mip_sync_gl(tev_tmap.get_view_aux(), tmmod.first,
+	tmmod.second, gl_tmap_aux);
     }
     pair{uvec3, uvec3} tpmod = tev_tpat.get_view_modified(true);
     if (tpmod.second.x != 0u) {
       // debug_log("sync tpmod", tmmod);
-      texture_data_sync_gl(*tev_tpat.get_view(), tpmod.first, tpmod.second,
-	gl_tpat);
-      texture_data_sync_gl(*tev_tpat.get_view_aux(), tpmod.first, tpmod.second,
-	gl_tpat_aux);
+      texture_data_mip_sync_gl(tev_tpat.get_view(), tpmod.first,
+	tpmod.second, gl_tpat);
+      texture_data_mip_sync_gl(tev_tpat.get_view_aux(), tpmod.first,
+	tpmod.second, gl_tpat_aux);
     }
   }
+}
+
+private enum edit_params_mode_t {
+  edit_params_mode_none = 0,
+  edit_params_mode_color = 1,
+  edit_params_mode_plane = 2,
+  edit_params_mode_sphere_1 = 3,
+  edit_params_mode_sphere_2 = 4,
+}
+
+private enum edit_fill_type_t {
+  edit_fill_type_blank = 0,
+  edit_fill_type_wall = 1,
+  edit_fill_type_plane = 2,
+  edit_fill_type_sphere = 3,
+}
+
+struct copy_data_type {
+  public texture_data tex_pri;
+  public texture_data tex_aux;
+  public uvec3 copy_size;
+  public uvec3 cursor_offset;
 }
 
 public struct edit_mode(ptr{edit_mode_texture} const& emt0)
@@ -869,20 +1255,24 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   private ptr{edit_mode_texture} emt = emt0;
   private ptr{tiled_texture_edit_view} const ttev =
     make_ptr{tiled_texture_edit_view}(emt0);
-  private texture_data const tile = *emt->voxtile;
-  private uint copy_single;
+  private texture_data const tile = emt->vox.voxtile;
+  private copy_data_type copy_data;
+  /*
   private uvec3 copy_size;
   private texture_data copy_data;
-  private uint edit_fill_type; // 0空白 1壁 2平面 3球面
-  private int edit_params_mode;
+  private texture_data copy_data_aux;
+  */
+  private edit_params_mode_t edit_params_mode;
+  private color_param edit_color_param;
   private plane_param edit_plane_param;
   private sphere_param edit_sphere_param;
   private bool mark_set;
+  private string message;
   init();
   private function void init()
   {
     debug_log("edit_mode", "voxtmap",
-      texture_data_get_size(*emt->voxtmap_mip[0]));
+      texture_data_get_size(*emt->vox.tmap_pri[0]));
     string buf;
     ttev_state stat;
     sdl_load_file("c:/build/edit_state.raw", buf);
@@ -896,20 +1286,13 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   {
     debug_log("edit_mode: save");
     const stat = ttev->get_state();
-    const buf = to_string_compact_pod(stat);
-    sdl_save_file("c:/build/edit_state.raw", buf);
-    save_texture_data_array_raw("c:/build/edit_voxtmap_mip.raw",
-      emt->voxtmap_mip);
-    save_texture_data_array_raw("c:/build/edit_voxtmax_mip.raw",
-      emt->voxtmax_mip);
-    save_texture_data_array_raw("c:/build/edit_voxtpat_mip.raw",
-      emt->voxtpat_mip);
-    save_texture_data_array_raw("c:/build/edit_voxtpax_mip.raw",
-      emt->voxtpax_mip);
-    /*
-    save_texture_data_raw("c:/build/voxtmap_edit.raw", *ttev->get_tmap());
-    save_texture_data_raw("c:/build/voxtpat_edit.raw", *ttev->get_tpat());
-    */
+    sdl_save_file("c:/build/edit_state.raw", to_string_compact_pod(stat));
+    const tsz = texture_data_get_size(*emt->vox.tmap_pri[0]);
+    const sz = map{uvec3, integral_log2{uint}}(tsz);
+    string fn = "c:/build/edit_voxel_" + to_string(sz.x) + "_"
+      + to_string(sz.y) + "_" + to_string(sz.z) + ".raw";
+    sdl_save_file(fn, to_string_compact_pod(emt->vox));
+    message = "edit_mode: saved";
   }
   public function void set_camera_angle(glm::quat const& angle)
   {
@@ -917,87 +1300,154 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   private function void update_cursor_color()
   {
     uint c =
-      edit_params_mode == 0 ? 0xffffffffu :
-      edit_params_mode == 1 ? 0xffffff00u : 0xffff00ffu;
-    ttev->set_cursor_color(c, 0xff00ffff);
+      edit_params_mode == edit_params_mode_none ? 0xffffffffu :
+      edit_params_mode == edit_params_mode_color ? 0xffff0000u :
+      edit_params_mode == edit_params_mode_plane ? 0xffffff00u :
+      edit_params_mode == edit_params_mode_sphere_1 ? 0xffff00ffu :
+      0xff0000ffu;
+    ttev->set_cursor_color(c, 0xffc08040);
+    // debug_log("update_cursor_color", c);
   }
-  public function void on_key_pressed(int scancode)
+  public function void on_key_pressed(int scancode, int modmask,
+    glm::vec3 mutable& cursor_move_r, string mutable& msg_r)
   {
+    message = "";
+    cursor_move_r = glm::vec3();
     SDL_Scancode key = static_cast{SDL_Scancode}(scancode);
+    bool mod_shift = (modmask & 1) != 0;
     if (key == SDL_SCANCODE_F12) {
       save_state();
-    } else if (key == SDL_SCANCODE_KP_ENTER) {
-      reset_edit_fill_type();
-      if (edit_fill_type == 0 || edit_fill_type == 1) {
-	edit_params_mode = 0;
-      } else if (edit_fill_type == 2) {
-	edit_params_mode = (edit_params_mode + 1) % 2;
-      } else if (edit_fill_type == 3) {
-	edit_params_mode = (edit_params_mode + 1) % 3;
+    } else if (key == SDL_SCANCODE_1) {
+      if (mod_shift) {
+	change_fill_type(edit_fill_type_blank);
+      } else {
+	edit_params_mode = edit_params_mode_none;
+	update_cursor_color();
+	message = "exiting edit-params mode";
       }
-      update_cursor_color();
+    } else if (key == SDL_SCANCODE_2) {
+      if (mod_shift) {
+	change_fill_type(edit_fill_type_wall);
+      } else {
+	reset_edit_params();
+	edit_params_mode = edit_params_mode_color;
+	update_cursor_color();
+	message = "entering edit-color mode";
+      }
+    } else if (key == SDL_SCANCODE_3) {
+      if (mod_shift) {
+	change_fill_type(edit_fill_type_plane);
+      } else {
+	reset_edit_params();
+	edit_params_mode = edit_params_mode_plane;
+	update_cursor_color();
+	message = "entering edit-plane-params mode";
+      }
+    } else if (key == SDL_SCANCODE_4) {
+      if (mod_shift) {
+	change_fill_type(edit_fill_type_sphere);
+      } else {
+	reset_edit_params();
+	edit_params_mode = edit_params_mode_sphere_1;
+	update_cursor_color();
+	message = "entering edit-sphere-center-distance mode";
+      }
+    } else if (key == SDL_SCANCODE_5) {
+      if (mod_shift) {
+	change_fill_type(edit_fill_type_sphere);
+      } else {
+	reset_edit_params();
+	edit_params_mode = edit_params_mode_sphere_2;
+	update_cursor_color();
+	message = "entering edit-sphere-scale mode";
+      }
     }
-    if (edit_params_mode == 0) {
-      if (key == SDL_SCANCODE_KP_MINUS) {
+    if (edit_params_mode == edit_params_mode_none) {
+      // パラメータ変更モードでは無い場合。カーソル移動やコピペなどの
+      // 操作を処理する。
+      if (key == SDL_SCANCODE_MINUS) {
 	set_space();
-      } else if (key == SDL_SCANCODE_KP_PLUS) {
-	change_fill_type();
       } else if (key == SDL_SCANCODE_C) {
 	copy_value();
       } else if (key == SDL_SCANCODE_V) {
 	paste_value();
       } else if (key == SDL_SCANCODE_I) {
 	set_mark();
-      } else if (key == SDL_SCANCODE_KP_4) {
-	move_cursor(-1, 0, 0);
-      } else if (key == SDL_SCANCODE_KP_6) {
-	move_cursor(1, 0, 0);
-      } else if (key == SDL_SCANCODE_KP_2) {
-	move_cursor(0, -1, 0);
-      } else if (key == SDL_SCANCODE_KP_8) {
-	move_cursor(0, 1, 0);
-      } else if (key == SDL_SCANCODE_KP_5) {
-	move_cursor(0, 0, -1);
-      } else if (key == SDL_SCANCODE_KP_0) {
-	move_cursor(0, 0, 1);
-      } else if (key == SDL_SCANCODE_KP_7) {
-	if (is_cur_tmap_node_reference()) {
+      } else if (key == SDL_SCANCODE_H) {
+	move_cursor(-1, 0, 0, cursor_move_r);
+      } else if (key == SDL_SCANCODE_L) {
+	move_cursor(1, 0, 0, cursor_move_r);
+      } else if (key == SDL_SCANCODE_J) {
+	move_cursor(0, -1, 0, cursor_move_r);
+      } else if (key == SDL_SCANCODE_K) {
+	move_cursor(0, 1, 0, cursor_move_r);
+      } else if (key == SDL_SCANCODE_N) {
+	move_cursor(0, 0, -1, cursor_move_r);
+      } else if (key == SDL_SCANCODE_P) {
+	move_cursor(0, 0, 1, cursor_move_r);
+      } else if (key == SDL_SCANCODE_0) {
+	if (get_cursor_tpat()) {
+	  set_cursor_tpat(false);
+	} else if (is_cur_tmap_node_reference()) {
 	  set_cursor_tpat(true);
 	}
-      } else if (key == SDL_SCANCODE_KP_9) {
-	set_cursor_tpat(false);
       }
     } else {
-      if (key == SDL_SCANCODE_KP_4) {
+      // パラメータ変更モードの場合。それぞれのモードに応じて動作は変わる。
+      if (key == SDL_SCANCODE_H) {
 	set_param(0);
-      } else if (key == SDL_SCANCODE_KP_6) {
+      } else if (key == SDL_SCANCODE_L) {
 	set_param(1);
-      } else if (key == SDL_SCANCODE_KP_2) {
+      } else if (key == SDL_SCANCODE_J) {
 	set_param(2);
-      } else if (key == SDL_SCANCODE_KP_8) {
+      } else if (key == SDL_SCANCODE_K) {
 	set_param(3);
-      } else if (key == SDL_SCANCODE_KP_5) {
+      } else if (key == SDL_SCANCODE_N) {
 	set_param(4);
-      } else if (key == SDL_SCANCODE_KP_0) {
+      } else if (key == SDL_SCANCODE_P) {
 	set_param(5);
-      } else if (key == SDL_SCANCODE_KP_7) {
+      } else if (key == SDL_SCANCODE_COMMA) {
 	set_param(6);
-      } else if (key == SDL_SCANCODE_KP_9) {
+      } else if (key == SDL_SCANCODE_PERIOD) {
 	set_param(7);
       }
     }
     // debug_log("scancode", scancode);
+    if (message.empty()) {
+      message = "cursor " + to_string(ttev->get_cursor_pos().first);
+      if (mark_set) {
+	message += " selecton " + to_string(
+	  ttev->get_cursor_pos().first - ttev->get_cursor_pos().second);
+      }
+      if (edit_params_mode == edit_params_mode_color) {
+	message += " [color params]";
+      } else if (edit_params_mode == edit_params_mode_plane) {
+	message += " [plane params]";
+      } else if (edit_params_mode == edit_params_mode_sphere_1) {
+	message += " [sphere center/dist]";
+      } else if (edit_params_mode == edit_params_mode_sphere_2) {
+	message += " [sphere scale]";
+      }
+    }
+    msg_r = message;
   }
   private function void set_mark()
   {
     mark_set = !mark_set;
     const cur = ttev->get_cursor_pos();
     ttev->set_cursor_pos(cur.first, cur.first);
+    if (mark_set) {
+      message = "edit_mode: set mark";
+    } else {
+      message = "edit_mode: reset mark";
+    }
   }
-  private function void move_cursor(int x, int y, int z)
+  private function void move_cursor(int x, int y, int z,
+    glm::vec3 mutable& cursor_move_r)
   {
     mutable cur = ttev->get_cursor_pos();
-    mutable pos = to_ivec3(cur.first);
+    const old_pos = to_ivec3(cur.first);
+    mutable pos = old_pos;
     pos += make_ivec3(x, y, z);
     pos = map{ivec3, max}(pos, make_ivec3(0, 0, 0));
     cur.first = to_uvec3(pos);
@@ -1006,6 +1456,17 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     }
     ttev->set_cursor_pos(cur.first, cur.second);
       // 最大値は中でclipされる
+    {
+      // テクスチャ座標でのカーソル移動量を計算
+      cursor_move_r = to_vec3(
+	to_ivec3(ttev->get_cursor_pos().first) - old_pos);
+      const tms_max = fold_list{max}(1u, ttev->tmap_size);
+      cursor_move_r /= static_cast{float}(tms_max);
+      if (get_cursor_tpat()) {
+	const ts_max = fold_list{max}(1u, ttev->tile_size);
+	cursor_move_r /= static_cast{float}(ts_max);
+      }
+    }
   }
   private function bool get_cursor_tpat() const
   {
@@ -1018,18 +1479,53 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       ttev->set_tpat_cursor_pos(tppos, tppos);
     }
     ttev->set_cursor_tpat(tpat);
+    if (tpat) {
+      message = "edit_mode: pattern edit mode";
+    } else {
+      message = "edit_mode: map edit mode";
+    }
   }
   private function void set_param(int v)
   {
-    if (edit_fill_type == 2) {
+    if (edit_params_mode == edit_params_mode_color) {
+      set_param_color(v);
+    } else if (edit_params_mode == edit_params_mode_plane) {
       set_param_plane(v);
-    } else if (edit_fill_type == 3) {
-      if (edit_params_mode == 1) {
-	set_param_sphere_1(v);
-      } else if (edit_params_mode == 2) {
-	set_param_sphere_2(v);
-      }
+    } else if (edit_params_mode == edit_params_mode_sphere_1) {
+      set_param_sphere_1(v);
+    } else if (edit_params_mode == edit_params_mode_sphere_2) {
+      set_param_sphere_2(v);
     }
+  }
+  private function void set_param_color(int v)
+  {
+    mutable& p = edit_color_param;
+    function void inc(uchar mutable& v) {
+      v = (v < 255u) ? v + 1 : 255u;
+    }
+    function void dec(uchar mutable& v) {
+      v = (v > 0u) ? v - 1 : 0u;
+    }
+    if (v == 0) {
+      dec(p.r);
+    } else if (v == 1) {
+      inc(p.r);
+    } else if (v == 2) {
+      dec(p.g);
+    } else if (v == 3) {
+      inc(p.g);
+    } else if (v == 4) {
+      dec(p.b);
+    } else if (v == 5) {
+      inc(p.b);
+    } else if (v == 6) {
+      dec(p.roughness);
+    } else if (v == 7) {
+      inc(p.roughness);
+    }
+    debug_log("color_param", p);
+    fill_range_color(p);
+    message = "edit_mode: set color " + to_string(p);
   }
   private function void set_param_plane(int v)
   {
@@ -1052,6 +1548,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       p.dist += 1;
     }
     fill_range_plane(p, false);
+    message = "edit_mode: set plane params " + to_string(p);
   }
   private function void set_param_sphere_1(int v)
   {
@@ -1074,6 +1571,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       p.dist = p.dist < 63 ? p.dist + 1 : 63;
     }
     fill_range_sphere(p, false);
+    message = "edit_mode: set sphere center/dist params " + to_string(p);
   }
   private function void set_param_sphere_2(int v)
   {
@@ -1092,27 +1590,51 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       p.scale.z = p.scale.z < 3 ? p.scale.z + 1 : 3;
     }
     fill_range_sphere(p, false);
+    message = "edit_mode: set sphere scale params " + to_string(p);
   }
   private function void copy_value()
   {
     const cur = ttev->get_cursor_range();
-    copy_size = cur.second;
-    const copy_size_l2 = map{uvec3, integral_log2{uint}}(copy_size);
-    copy_data.set_size_l2(copy_size_l2.x, copy_size_l2.y, copy_size_l2.z);
-    // debug_log("copy_size", copy_size, texture_data_get_size(copy_data));
-    ttev->edit_copy_range(cur.first, cur.second, copy_data, uvec3());
+    copy_data.copy_size = cur.second;
+    copy_data.cursor_offset = ttev->get_cursor_pos().first - cur.first;
+    debug_log("copy_value: cursor_offset", copy_data.cursor_offset);
+    const sz_l2 = map{uvec3, integral_log2{uint}}(copy_data.copy_size);
+    copy_data.tex_pri.set_size_l2(sz_l2.x, sz_l2.y, sz_l2.z);
+    copy_data.tex_aux.set_size_l2(sz_l2.x, sz_l2.y, sz_l2.z);
+    ttev->edit_copy_range(cur.first, cur.second, copy_data.tex_pri,
+      copy_data.tex_aux, uvec3());
+    message = "edit_mode: copy value " + to_string(copy_data.copy_size);
   }
   private function void paste_value()
   {
+    const cpos = ttev->get_cursor_pos().first;
+    // ペースト先の領域を計算
+    const mi_0 = to_ivec3(cpos) - to_ivec3(copy_data.cursor_offset);
+    const mx_0 = mi_0 + to_ivec3(copy_data.copy_size) - make_ivec3(1, 1, 1);
+    // ペースト先の領域をclamp
+    const mi = ttev->clamp_cursor_pos(mi_0);
+    const mx = ttev->clamp_cursor_pos(mx_0);
+    const sz = mx - mi + make_ivec3(1, 1, 1);
+    // ペースト元の領域を計算
+    const cd_mi = mi - mi_0;
+    debug_log("paste_value: cpos,mi_0,mx_0,mi,mx,sz,cd_mi", cpos,
+      mi_0, mx_0, mi, mx, sz, cd_mi);
+    ttev->edit_paste_range(to_uvec3(mi), to_uvec3(sz), copy_data.tex_pri,
+      copy_data.tex_aux, to_uvec3(cd_mi));
+    /*
     mutable cur = ttev->get_cursor_range();
-    cur.second = copy_size;
-    ttev->edit_paste_range(cur.first, cur.second, copy_data, uvec3());
+    cur.second = copy_data.copy_size;
+    ttev->edit_paste_range(cur.first, cur.second, copy_data.tex_pri,
+      copy_data.tex_aux, uvec3());
+    */
+    message = "edit_mode: paste value " + to_string(sz);
   }
   private function void set_space()
   {
     set_cur_value(0u);
+    message = "edit_mode: erased";
   }
-  private function void reset_edit_fill_type()
+  private function void reset_edit_params()
   {
     copy_value();
     const cur = ttev->get_cursor_range();
@@ -1122,10 +1644,11 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     bool has_sphere = false;
     plane_param pp;
     sphere_param sp;
+    color_param cp;
     for (const z: 0 .. sz.z) {
       for (const y: 0 .. sz.y) {
 	for (const x: 0 .. sz.x) {
-	  const v = copy_data.get(x, y, z);
+	  const v = copy_data.tex_pri.get(x, y, z);
 	  if (is_plane_node(v)) {
 	    pp = decode_plane_node(v);
 	    const offset = make_ivec3(si(x), si(y), si(z)) - to_ivec3(hsz);
@@ -1137,57 +1660,140 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
 	    sp.center += map{ivec3, operator::mul}(offset, sp.scale);
 	    has_sphere = true;
 	  }
+	  if (!is_space_voxel(v) && !is_node_reference(v)) {
+	    cp = decode_color_param(copy_data.tex_aux.get(x, y, z));
+	  }
 	}
       }
     }
     if (has_plane) {
-      edit_fill_type = 2;
       edit_plane_param = pp;
     } else if (has_sphere) {
-      edit_fill_type = 3;
       edit_sphere_param = sp;
-    } else {
-      edit_fill_type = 0;
     }
+    edit_color_param = cp;
   }
-  private function void change_fill_type()
+  private function void change_fill_type(edit_fill_type_t edit_fill_type)
   {
-    edit_fill_type = (edit_fill_type + 1) % 4;
-    if (edit_fill_type == 0) {
-      fill_range(0u);
-    } else if (edit_fill_type == 1) {
-      fill_range(255u << 24u);
-    } else if (edit_fill_type == 2) {
+    if (edit_fill_type == edit_fill_type_wall) {
+      fill_range_value(255u << 24u, 0x00808080u);
+      message = "change fill type: filled";
+    } else if (edit_fill_type == edit_fill_type_plane) {
       edit_plane_param = plane_param();
       fill_range_plane(edit_plane_param, true);
-    } else if (edit_fill_type == 3) {
+      message = "change fill type: plane";
+    } else if (edit_fill_type == edit_fill_type_sphere) {
       edit_sphere_param = sphere_param();
       fill_range_sphere(edit_sphere_param, true);
+      message = "change fill type: sphere";
+    } else {
+      fill_range_value(0u, 0u);
     }
+    debug_log("new fill type", edit_fill_type);
   }
-  private function void fill_range(uint v)
+  private function {f} void fill_range(bool clear)
   {
     const cur = ttev->get_cursor_range();
-    copy_size = cur.second;
-    const copy_size_l2 = map{uvec3, integral_log2{uint}}(copy_size);
-    copy_data.set_size_l2(copy_size_l2.x, copy_size_l2.y, copy_size_l2.z);
-    const center = map{uvec3, operator::div}(copy_size, make_uvec3(2, 2, 2));
-    for (const z: 0 .. copy_size.z) {
-      for (const y: 0 .. copy_size.y) {
-	for (const x: 0 .. copy_size.x) {
-	  copy_data.set(x, y, z, v);
+    if (clear) {
+      copy_data.copy_size = cur.second;
+      const sz_l2 = map{uvec3, integral_log2{uint}}(copy_data.copy_size);
+      copy_data.tex_pri.set_size_l2(sz_l2.x, sz_l2.y, sz_l2.z);
+      copy_data.tex_aux.set_size_l2(sz_l2.x, sz_l2.y, sz_l2.z);
+    }
+    for (const z: 0 .. copy_data.copy_size.z) {
+      for (const y: 0 .. copy_data.copy_size.y) {
+	for (const x: 0 .. copy_data.copy_size.x) {
+	  f(copy_data, x, y, z);
 	}
       }
     }
-    ttev->edit_paste_range(cur.first, cur.second, copy_data, uvec3());
+    ttev->edit_paste_range(cur.first, cur.second, copy_data.tex_pri,
+      copy_data.tex_aux, uvec3());
+  }
+  private function void fill_range_value(uint v_pri, uint v_aux)
+  {
+    function void ffunc(copy_data_type mutable& data, uint x, uint y, uint z)
+    {
+      data.tex_pri.set(x, y, z, v_pri);
+      data.tex_pri.set(x, y, z, v_pri);
+    }
+    fill_range{ffunc}(true);
+    /*
+    const cur = ttev->get_cursor_range();
+    copy_data.copy_size = cur.second;
+    const sz_l2 = map{uvec3, integral_log2{uint}}(copy_data.copy_size);
+    copy_data.tex_pri.set_size_l2(sz_l2.x, sz_l2.y, sz_l2.z);
+    copy_data.tex_aux.set_size_l2(sz_l2.x, sz_l2.y, sz_l2.z);
+    const center = map{uvec3, operator::div}(copy_data.copy_size,
+      make_uvec3(2, 2, 2));
+    for (const z: 0 .. copy_data.copy_size.z) {
+      for (const y: 0 .. copy_data.copy_size.y) {
+	for (const x: 0 .. copy_data.copy_size.x) {
+	  copy_data.tex_pri.set(x, y, z, v_pri);
+	  copy_data.tex_aux.set(x, y, z, v_aux);
+	}
+      }
+    }
+    ttev->edit_paste_range(cur.first, cur.second, copy_data.tex_pri,
+      copy_data.tex_aux, uvec3());
+    */
+  }
+  private function void fill_range_color(color_param const& p)
+  {
+    const value = encode_color_param(p);
+    function void ffunc(copy_data_type mutable& data, uint x, uint y, uint z)
+    {
+      const ov = data.tex_pri.get(x, y, z);
+      if (is_node_reference(ov) || is_space_voxel(ov)) {
+	return;
+      }
+      data.tex_aux.set(x, y, z, value);
+    }
+    fill_range{ffunc}(true);
+    /*
+    const value = encode_color_param(p);
+    const cur = ttev->get_cursor_range();
+    for (const z: 0 .. copy_size.z) {
+      for (const y: 0 .. copy_size.y) {
+	for (const x: 0 .. copy_size.x) {
+	  const ov = copy_data.get(x, y, z);
+	  if (is_node_reference(ov) || is_space_voxel(ov)) {
+	    continue;
+	  }
+	  copy_data_aux.set(x, y, z, value);
+	}
+      }
+    }
+    ttev->edit_paste_range(cur.first, cur.second, copy_data, copy_data_aux,
+      uvec3());
+    */
   }
   private function void fill_range_plane(plane_param const& p, bool clear)
   {
     const cur = ttev->get_cursor_range();
+    const copy_size = cur.second;
+    const center = map{uvec3, operator::div}(copy_size, make_uvec3(2, 2, 2));
+    function void ffunc(copy_data_type mutable& data, uint x, uint y, uint z)
+    {
+      const ov = data.tex_pri.get(x, y, z);
+      if (is_node_reference(ov) || is_sphere_node(ov)) {
+	return;
+      }
+      const v = make_plane_node(p.nor, p.dist, make_ivec3(
+	si(x) - si(center.x),
+	si(y) - si(center.y),
+	si(z) - si(center.z)));
+      data.tex_pri.set(x, y, z, v);
+    }
+    fill_range{ffunc}(clear);
+    /*
+    const cur = ttev->get_cursor_range();
     if (clear) {
-      copy_size = cur.second;
-      const copy_size_l2 = map{uvec3, integral_log2{uint}}(copy_size);
-      copy_data.set_size_l2(copy_size_l2.x, copy_size_l2.y, copy_size_l2.z);
+      copy_data.copy_size = cur.second;
+      const sz_l2 = map{uvec3, integral_log2{uint}}(copy_data.copy_size);
+      copy_data.set_size_l2(sz_l2.x, sz_l2.y, sz_l2.z);
+      copy_data_aux.set_size_l2(copy_size_l2.x, copy_size_l2.y,
+	copy_size_l2.z);
     }
     const center = map{uvec3, operator::div}(copy_size, make_uvec3(2, 2, 2));
     for (const z: 0 .. copy_size.z) {
@@ -1205,15 +1811,36 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
 	}
       }
     }
-    ttev->edit_paste_range(cur.first, cur.second, copy_data, uvec3());
+    ttev->edit_paste_range(cur.first, cur.second, copy_data, copy_data_aux,
+      uvec3());
+    */
   }
   private function void fill_range_sphere(sphere_param const& p, bool clear)
   {
+    const cur = ttev->get_cursor_range();
+    const copy_size = cur.second;
+    const center = map{uvec3, operator::div}(copy_size, make_uvec3(2, 2, 2));
+    function void ffunc(copy_data_type mutable& data, uint x, uint y, uint z)
+    {
+      const ov = data.tex_pri.get(x, y, z);
+      if (is_node_reference(ov) || is_plane_node(ov)) {
+	return;
+      }
+      const v = make_sphere_node(p, make_ivec3(
+	si(x) - si(center.x),
+	si(y) - si(center.y),
+	si(z) - si(center.z)));
+      data.tex_pri.set(x, y, z, v);
+    }
+    fill_range{ffunc}(clear);
+    /*
     const cur = ttev->get_cursor_range();
     if (clear) {
       copy_size = cur.second;
       const copy_size_l2 = map{uvec3, integral_log2{uint}}(copy_size);
       copy_data.set_size_l2(copy_size_l2.x, copy_size_l2.y, copy_size_l2.z);
+      copy_data_aux.set_size_l2(copy_size_l2.x, copy_size_l2.y,
+	copy_size_l2.z);
     }
     const center = map{uvec3, operator::div}(copy_size, make_uvec3(2, 2, 2));
     for (const z: 0 .. copy_size.z) {
@@ -1231,7 +1858,9 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
 	}
       }
     }
-    ttev->edit_paste_range(cur.first, cur.second, copy_data, uvec3());
+    ttev->edit_paste_range(cur.first, cur.second, copy_data, copy_data_aux,
+      uvec3());
+    */
   }
   private function uvec3 cur_tpat_base() const
   {
@@ -1312,181 +1941,5 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   {
     ttev->cursor_flick();
   }
-}
-
-private threaded function uint encode_plane_node(ivec3 const& n, int d)
-{
-  if (n.x < -7 || n.x > 7 || n.y < -7 || n.y > 7 || n.z < -7 || n.z > 7) {
-    return 0u;
-  }
-  if (n.x == 0 && n.y == 0 && n.z == 0) {
-    return 0u;
-  }
-  if (d < -48 || d > 48) {
-    return 0u;
-  }
-  const r = ui(n.x + 8) << 4u;
-  const g = ui(n.y + 8) << 4u;
-  const b = ui(n.z + 8) << 4u;
-  const a = ui(d + 208);
-  const v = (a << 24u) | (b << 16u) | (g << 8u) | r;
-  return v;
-}
-
-private threaded function uint make_plane_node(ivec3 const& nor, int d,
-  ivec3 const& offset)
-{
-  const d1 = d - dot_int(nor, offset) * 2;
-    // offsetが0のボクセルの距離パラメタがdのとき、その平面がoffsetだけ
-    // 移動した位置のボクセルを切断するような距離パラメタはd1になる
-  const drange = abs(nor.x) + abs(nor.y) + abs(nor.z);
-    // ax+by+czの(x,y,z)が-1,+1の範囲での最小最大は-drange,+drange
-  // debug_log("plane_node pre", nor, d, offset, d1, drange);
-  if (d1 <= -drange) {
-    return 255u << 24u; // d1が小さすぎるので壁
-  }
-  if (d1 >= drange) {
-    return 0u; // d1が大きすぎるので空白
-  }
-  // debug_log("plane_node", nor, d, offset, d1, drange);
-  return encode_plane_node(nor, d1);
-}
-
-private threaded function int dot_int(ivec3 const& a, ivec3 const& b)
-{
-  return a.x * b.x + a.y * b.y + a.z * b.z;
-}
-
-private threaded function {t} t abs(t x)
-{
-  return x < t() ? -x : x;
-}
-
-valuetype struct plane_param()
-{
-  public int dist = 0;
-  public ivec3 nor = make_ivec3(-1, -1, -1);
-}
-
-threaded function plane_param decode_plane_node(uint v)
-{
-  plane_param p;
-  if (!is_plane_node(v)) {
-    return p;
-  }
-  int a = si(v >> 24u);
-  int r = si(v & 0xffu);
-  int g = si((v >> 8u) & 0xffu);
-  int b = si((v >> 16u) & 0xffu);
-  p.dist = si(a) - 208;
-  p.nor.x = ((r >> 4u) & 0x0fu) - 8;
-  p.nor.y = ((g >> 4u) & 0x0fu) - 8;
-  p.nor.z = ((b >> 4u) & 0x0fu) - 8;
-  return p;
-}
-
-valuetype struct sphere_param()
-{
-  public int dist = 1;
-  public ivec3 center;
-  public ivec3 scale = make_ivec3(2, 2, 2);
-}
-
-threaded function uint make_sphere_node(sphere_param const& p,
-  ivec3 const& offset)
-{
-  // const c = p.center - (offset + offset);
-  const c = p.center - map{ivec3, operator::mul}(offset, p.scale);
-  /* 球の内側なら負, 境界上なら0, 外側なら正 */
-  threaded function int collision(ivec3 const pos)
-  {
-    // posはシェーダでは0.5までの範囲。この関数は1までの範囲なので2倍された値。
-    const a_pt = map{ivec3, operator::mul}(p.scale, pos);
-      // シェーダのa_vtの二倍の値
-    const c_pt = c + c; // シェーダのc_vtの二倍の値
-    const ac_pt = c_pt - a_pt;
-    const len2_ac_pt = dot_int(ac_pt, ac_pt); // シェーダのlen_2_ac_ptの4倍
-    return len2_ac_pt - p.dist * p.dist * 4;
-  }
-  bool has_nega = false;
-  bool has_posi = false;
-  for (int z: -1 .. 2) {
-    for (int y: -1 .. 2) {
-      for (int x: -1 .. 2) {
-	const ivec3 pos = make_ivec3(x, y, z);
-	const v = collision(pos);
-	has_nega |= v < 0; // 球の中心からの距離がdistより小さい
-	has_posi |= v > 0; // 球の中心からの距離がdistより大きい
-      }
-    }
-  }
-  if (has_posi && (has_nega || pos3_inside_eq(c, -1, 1))) {
-    sphere_param p1 = p;
-    p1.center = c;
-    // debug_log("msn sph", p, offset);
-    return encode_sphere_node(p1);
-  } else if (has_posi) {
-    return 0u;
-  } else {
-    // debug_log("msn wall", p, offset);
-    return 255u << 24u; // 壁
-  }
-}
-
-threaded function {t, tv} bool pos3_inside_eq(t const p, tv mi, tv mx)
-{
-  return
-    p.x >= mi && p.x <= mx &&
-    p.y >= mi && p.y <= mx &&
-    p.z >= mi && p.z <= mx;
-}
-
-threaded function uint encode_sphere_node(sphere_param const& p)
-{
-  debug_log("encode_sphere", p);
-  int node_type = p.dist + 1;
-  if (node_type < 1 || node_type > 159) {
-    return 0u;
-  }
-  if (p.center.x < -31 || p.center.x > 31 ||
-      p.center.y < -31 || p.center.y > 31 ||
-      p.center.z < -31 || p.center.z > 31) {
-    return 0u;
-  }
-  if (p.scale.x < 0 || p.scale.x > 3 ||
-      p.scale.y < 0 || p.scale.y > 3 ||
-      p.scale.z < 0 || p.scale.z > 3) {
-    return 0u;
-  }
-  ivec3 rgb = map{ivec3, operator::mul}(p.scale, make_ivec3(64, 64, 64))
-    + p.center + make_ivec3(32, 32, 32);
-  uint r = ui(rgb.x);
-  uint g = ui(rgb.y);
-  uint b = ui(rgb.z);
-  uint a = ui(node_type);
-  const v = (a << 24u) | (b << 16u) | (g << 8u) | r;
-  return v;
-}
-
-threaded function sphere_param decode_sphere_node(uint v)
-{
-  sphere_param p;
-  if (!is_sphere_node(v)) {
-    return p;
-  }
-  int a = si(v >> 24u);
-  int r = si(v & 0xffu);
-  int g = si((v >> 8u) & 0xffu);
-  int b = si((v >> 16u) & 0xffu);
-  p.scale = make_ivec3(r >> 6, g >> 6, b >> 6);
-  p.center = make_ivec3((r & 0x3f) - 32, (g & 0x3f) - 32, (b & 0x3f) - 32);
-  p.dist = a - 1;
-  // sp_scaleは座標aを(-0.5,0.5)から何倍に拡大するか
-  //   rgbの上位2bit
-  // sp_centerは球の中心座標でa*sp_scaleと比較
-  //   rgbの下位6bitから32を引く
-  // radiusは半径
-  //   (node_type - 1)
-  return p;
 }
 

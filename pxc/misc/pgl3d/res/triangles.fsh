@@ -677,15 +677,16 @@ void main(void)
   <%/> // endif enable_shadowmapping
   // fresnel
   // float cos_v_h = clamp(dot(camera_dir, half_l_v), 0.0, 1.0);
-  float mate_alpha = 1.0;
+  float mate_alpha = 0.2; // tex_val.a + 0.001;
   vec3 mate_specular = vec3(0.04, 0.04, 0.04);
   vec3 mate_diffuse = vec3(0.0, 0.0, 0.0);
   vec3 mate_emit = vec3(0.0);
-  if (max(tex_val.r, max(tex_val.g, tex_val.b)) > 0.9) {
-    mate_specular = tex_val.rgb;
-  } else {
-    mate_diffuse = tex_val.rgb;
-  }
+  mate_diffuse = tex_val.rgb;
+//  if (max(tex_val.r, max(tex_val.g, tex_val.b)) > 0.9) {
+//    mate_specular = tex_val.rgb;
+//  } else {
+//    mate_diffuse = tex_val.rgb;
+//  }
   if (int(option_value + 0.5) == 1) {
     mate_alpha = 0.03;
     mate_specular = vec3(0.95, 0.64, 0.54);
@@ -728,7 +729,7 @@ void main(void)
 	0).r;
       // mate_diffuse = vec3(nval, nval, nval);
       // mate_specular = vec3(nval, nval, nval);
-      mate_alpha = clamp(mate_alpha - nval / 1.0f, 0.0, 0.5);
+      // mate_alpha = clamp(mate_alpha - nval / 1.0f, 0.0, 0.5);
     }
     /*
     */
