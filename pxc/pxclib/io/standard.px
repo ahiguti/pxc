@@ -60,6 +60,9 @@ debug_log(expand(v::arg_decls_bycref{tlist}))
 public function extern "pxcrt::set_debug_log_file"
   void set_debug_log_file(cstrref const& fname);
 
+public function extern "pxcrt::set_debug_log_timestamp"
+  void set_debug_timestamp(bool v);
+
 private extern "pxcrt::dummy" option{file_st} dummy;
   /* instantiate option{file} */
 private metafunction dummy_type_csymbol m::csymbol{option{file_st}};
@@ -97,6 +100,7 @@ file_st io_stderr(io const& iop) {
 }
 
 int debug_log_file = 2;
+bool debug_log_timestamp = false;
 
 void debug_log_write(const void *buffer, size_t len)
 {
@@ -116,16 +120,18 @@ void debug_log_write(const void *buffer, size_t len)
 
 void debug_log_internal(cstrref const& s)
 {
-  char buf[128] = { };
-  time_t now = time(NULL);
-  struct tm t = { };
+  if (debug_log_timestamp) {
+    char buf[128] = { };
+    time_t now = ::time(NULL);
+    struct tm t = { };
 #ifdef PXC_POSIX
-  localtime_r(&now, &t);
+    localtime_r(&now, &t);
 #else
-  localtime_s(&t, &now);
+    localtime_s(&t, &now);
 #endif
-  strftime(buf, 128, "%Y%m%d-%H%M%S ", &t);
-  debug_log_write(buf, strlen(buf));
+    strftime(buf, 128, "%Y%m%d-%H%M%S ", &t);
+    debug_log_write(buf, strlen(buf));
+  }
   debug_log_write(s.rawarr(), s.size());
 }
 
@@ -151,6 +157,11 @@ void set_debug_log_file(cstrref const& fname)
   if (debug_log_file == -1) {
     debug_log_file = 2;
   }
+}
+
+void set_debug_log_timestamp(bt_bool v)
+{
+  debug_log_timestamp = v;
 }
 
 };

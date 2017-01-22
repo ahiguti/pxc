@@ -380,6 +380,7 @@ int raycast_tilemap(
   vec3 dir = -hit_nor;
   vec3 curpos_f = pos * virt3_size;
   vec3 curpos_i = div_rem(curpos_f, 1.0);
+  vec3 curpos_i_0 = curpos_i; // FIXME: remove
   value_r = vec4(0.0, 0.0, 0.0, 1.0);
   int hit = -1;
   bool hit_tpat;
@@ -387,6 +388,12 @@ int raycast_tilemap(
   int i;
   const int imax = 256;
   for (i = 0; i < imax; ++i) {
+    /*
+    if (hit == -1 && tpat_mip == 0 && length(curpos_i - curpos_i_0) > 1000.0f) {
+      // tpat_mip = 1;
+    }
+    FIXME: remove
+    */
     vec3 curpos_t = floor(curpos_i / tile3_size);
     vec3 curpos_tr = curpos_i - curpos_t * tile3_size; // 0から15の整数
     vec3 tmap_coord = curpos_t;

@@ -102,19 +102,23 @@ private threaded function {t} t abs(t x)
 
 valuetype struct color_param()
 {
-  public uchar roughness;
-  public uchar r;
-  public uchar g;
+  public uchar metalness; // 1bit
+  public uchar emission;  // 1bit
+  public uchar roughness; // 4bit
   public uchar b;
+  public uchar g;
+  public uchar r;
 }
 
 threaded function color_param decode_color_param(uint v)
 {
   color_param p;
-  p.roughness = static_cast{uchar}(v >> 24u);
-  p.r = static_cast{uchar}((v >> 16u) & 0xffu);
+  p.metalness = static_cast{uchar}((v >> 31u) & 0x01u);
+  p.emission = static_cast{uchar}((v >> 30u) & 0x01u);
+  p.roughness = static_cast{uchar}((v >> 24u) & 0x0fu);
+  p.b = static_cast{uchar}((v >> 16u) & 0xffu);
   p.g = static_cast{uchar}((v >> 8u) & 0xffu);
-  p.b = static_cast{uchar}((v >> 0u) & 0xffu);
+  p.r = static_cast{uchar}((v >> 0u) & 0xffu);
   return p;
 }
 
@@ -127,10 +131,12 @@ valuetype struct plane_param()
 threaded function uint encode_color_param(color_param const& p)
 {
   uint r;
+  r |= ui(p.metalness) << 31u;
+  r |= ui(p.emission) << 30u;
   r |= ui(p.roughness) << 24u;
-  r |= ui(p.r) << 16u;
+  r |= ui(p.b) << 16u;
   r |= ui(p.g) << 8u;
-  r |= ui(p.b) << 0u;
+  r |= ui(p.r) << 0u;
   return r;
 }
 
@@ -209,7 +215,7 @@ threaded function {t, tv} bool pos3_inside_eq(t const p, tv mi, tv mx)
 
 threaded function uint encode_sphere_node(sphere_param const& p)
 {
-  debug_log("encode_sphere", p);
+  // debug_log("encode_sphere", p);
   int node_type = p.dist + 1;
   if (node_type < 1 || node_type > 159) {
     return 0u;
@@ -957,15 +963,9 @@ ptr{gl_texture} const& gltp0)
   }
   public function void set_state(ttev_state const& nst)
   {
-    const mc = make_uvec3(0, 0, tmap_size.z - 1u);
-    set_tmap_cursor_pos(mc, mc);
-    const pc = make_uvec3(0, 0, tpat_size.z - 1u);
-    set_tpat_cursor_pos(pc, pc);
-    set_cursor_color(nst.cursor_color_0, nst.cursor_color_1);
-    set_cursor_tpat(nst.cursor_tpat);
-    // 領域選択状態にはしない(cursor_*_1は無視する)
+    set_cursor_color(0u, 0u);
     set_tmap_cursor_pos(nst.cursor_tmap_0, nst.cursor_tmap_0);
-    set_tpat_cursor_pos(nst.cursor_tpat_0, nst.cursor_tpat_0);
+    set_cursor_tpat(false);
   }
   public function bool get_cursor_tpat() const
   {
@@ -1029,7 +1029,7 @@ ptr{gl_texture} const& gltp0)
   }
   public function void set_cursor_tpat(bool ctpat)
   {
-    if (!(ctpat ^ state.cursor_tpat)) { // FIXME: boolの等値判定ができない
+    if (ctpat == state.cursor_tpat) {
       return;
     }
     reset_cursor_flick_nosyncgl();
@@ -1179,7 +1179,7 @@ ptr{gl_texture} const& gltp0)
   }
   private function bool cursor_shown() const
   {
-    return state.cursor_flick > 1 && state.cursor_flick < 30;
+    return state.cursor_flick > 0 && state.cursor_flick < 30;
   }
   private function void reset_cursor_flick_nosyncgl()
   {
@@ -1242,11 +1242,16 @@ private enum edit_fill_type_t {
   edit_fill_type_sphere = 3,
 }
 
-struct copy_data_type {
+private struct copy_data_type {
   public texture_data tex_pri;
   public texture_data tex_aux;
   public uvec3 copy_size;
   public uvec3 cursor_offset;
+}
+
+private struct edit_state {
+  public ttev_state ttev;
+  public glm::ivec3 cdir;
 }
 
 public struct edit_mode(ptr{edit_mode_texture} const& emt0)
@@ -1262,6 +1267,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   private texture_data copy_data;
   private texture_data copy_data_aux;
   */
+  private glm::ivec3 cdir = glm::make_ivec3(1, 1, 1);
   private edit_params_mode_t edit_params_mode;
   private color_param edit_color_param;
   private plane_param edit_plane_param;
@@ -1274,22 +1280,25 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     debug_log("edit_mode", "voxtmap",
       texture_data_get_size(*emt->vox.tmap_pri[0]));
     string buf;
-    ttev_state stat;
-    sdl_load_file("c:/build/edit_state.raw", buf);
+    edit_state est;
+    sdl_load_file("/build/edit_state.raw", buf);
     if (!buf.empty()) {
-      stat = from_string_compact_pod{ttev_state}(buf);
-      ttev->set_state(stat);
+      est = from_string_compact_pod{edit_state}(buf);
+      ttev->set_state(est.ttev);
+      cdir = est.cdir;
     }
     update_cursor_color();
   }
   private function void save_state()
   {
     debug_log("edit_mode: save");
-    const stat = ttev->get_state();
-    sdl_save_file("c:/build/edit_state.raw", to_string_compact_pod(stat));
+    edit_state est;
+    est.ttev = ttev->get_state();
+    est.cdir = cdir;
+    sdl_save_file("/build/edit_state.raw", to_string_compact_pod(est));
     const tsz = texture_data_get_size(*emt->vox.tmap_pri[0]);
     const sz = map{uvec3, integral_log2{uint}}(tsz);
-    string fn = "c:/build/edit_voxel_" + to_string(sz.x) + "_"
+    string fn = "/build/edit_voxel_" + to_string(sz.x) + "_"
       + to_string(sz.y) + "_" + to_string(sz.z) + ".raw";
     sdl_save_file(fn, to_string_compact_pod(emt->vox));
     message = "edit_mode: saved";
@@ -1328,39 +1337,35 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     } else if (key == SDL_SCANCODE_2) {
       if (mod_shift) {
 	change_fill_type(edit_fill_type_wall);
-      } else {
-	reset_edit_params();
-	edit_params_mode = edit_params_mode_color;
-	update_cursor_color();
-	message = "entering edit-color mode";
       }
+      reset_edit_params();
+      edit_params_mode = edit_params_mode_color;
+      update_cursor_color();
+      message = "entering edit-color mode";
     } else if (key == SDL_SCANCODE_3) {
       if (mod_shift) {
 	change_fill_type(edit_fill_type_plane);
-      } else {
-	reset_edit_params();
-	edit_params_mode = edit_params_mode_plane;
-	update_cursor_color();
-	message = "entering edit-plane-params mode";
       }
+      reset_edit_params();
+      edit_params_mode = edit_params_mode_plane;
+      update_cursor_color();
+      message = "entering edit-plane-params mode";
     } else if (key == SDL_SCANCODE_4) {
       if (mod_shift) {
 	change_fill_type(edit_fill_type_sphere);
-      } else {
-	reset_edit_params();
-	edit_params_mode = edit_params_mode_sphere_1;
-	update_cursor_color();
-	message = "entering edit-sphere-center-distance mode";
       }
+      reset_edit_params();
+      edit_params_mode = edit_params_mode_sphere_1;
+      update_cursor_color();
+      message = "entering edit-sphere-center-distance mode";
     } else if (key == SDL_SCANCODE_5) {
       if (mod_shift) {
 	change_fill_type(edit_fill_type_sphere);
-      } else {
-	reset_edit_params();
-	edit_params_mode = edit_params_mode_sphere_2;
-	update_cursor_color();
-	message = "entering edit-sphere-scale mode";
       }
+      reset_edit_params();
+      edit_params_mode = edit_params_mode_sphere_2;
+      update_cursor_color();
+      message = "entering edit-sphere-scale mode";
     }
     if (edit_params_mode == edit_params_mode_none) {
       // パラメータ変更モードでは無い場合。カーソル移動やコピペなどの
@@ -1374,17 +1379,41 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       } else if (key == SDL_SCANCODE_I) {
 	set_mark();
       } else if (key == SDL_SCANCODE_H) {
-	move_cursor(-1, 0, 0, cursor_move_r);
+	if (mod_shift) {
+	  cdir.x = -cdir.x;
+	} else {
+	  move_cursor(-cdir.x, 0, 0, cursor_move_r);
+	}
       } else if (key == SDL_SCANCODE_L) {
-	move_cursor(1, 0, 0, cursor_move_r);
+	if (mod_shift) {
+	  cdir.x = -cdir.x;
+	} else {
+	  move_cursor(cdir.x, 0, 0, cursor_move_r);
+	}
       } else if (key == SDL_SCANCODE_J) {
-	move_cursor(0, -1, 0, cursor_move_r);
+	if (mod_shift) {
+	  cdir.y = -cdir.y;
+	} else {
+	  move_cursor(0, -cdir.y, 0, cursor_move_r);
+	}
       } else if (key == SDL_SCANCODE_K) {
-	move_cursor(0, 1, 0, cursor_move_r);
+	if (mod_shift) {
+	  cdir.y = -cdir.y;
+	} else {
+	  move_cursor(0, cdir.y, 0, cursor_move_r);
+	}
       } else if (key == SDL_SCANCODE_N) {
-	move_cursor(0, 0, -1, cursor_move_r);
+	if (mod_shift) {
+	  cdir.z = -cdir.z;
+	} else {
+	  move_cursor(0, 0, -cdir.z, cursor_move_r);
+	}
       } else if (key == SDL_SCANCODE_P) {
-	move_cursor(0, 0, 1, cursor_move_r);
+	if (mod_shift) {
+	  cdir.z = -cdir.z;
+	} else {
+	  move_cursor(0, 0, cdir.z, cursor_move_r);
+	}
       } else if (key == SDL_SCANCODE_0) {
 	if (get_cursor_tpat()) {
 	  set_cursor_tpat(false);
@@ -1395,17 +1424,17 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     } else {
       // パラメータ変更モードの場合。それぞれのモードに応じて動作は変わる。
       if (key == SDL_SCANCODE_H) {
-	set_param(0);
+	set_param(cdir.x > 0 ? 0 : 1);
       } else if (key == SDL_SCANCODE_L) {
-	set_param(1);
+	set_param(cdir.x > 0 ? 1 : 0);
       } else if (key == SDL_SCANCODE_J) {
-	set_param(2);
+	set_param(cdir.y > 0 ? 2 : 3);
       } else if (key == SDL_SCANCODE_K) {
-	set_param(3);
+	set_param(cdir.y > 0 ? 3 : 2);
       } else if (key == SDL_SCANCODE_N) {
-	set_param(4);
+	set_param(cdir.z > 0 ? 4 : 5);
       } else if (key == SDL_SCANCODE_P) {
-	set_param(5);
+	set_param(cdir.z > 0 ? 5 : 4);
       } else if (key == SDL_SCANCODE_COMMA) {
 	set_param(6);
       } else if (key == SDL_SCANCODE_PERIOD) {
@@ -1519,12 +1548,22 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     } else if (v == 5) {
       inc(p.b);
     } else if (v == 6) {
-      dec(p.roughness);
-    } else if (v == 7) {
       inc(p.roughness);
+      p.roughness &= 0x0fu;
+    } else if (v == 7) {
+      if (p.emission != 0) {
+	p.emission = 0;
+	p.metalness = 1;
+      } else if (p.metalness != 0) {
+	p.emission = 0;
+	p.metalness = 0;
+      } else {
+	p.emission = 1;
+	p.metalness = 0;
+      }
     }
     debug_log("color_param", p);
-    fill_range_color(p);
+    fill_range_color(p, false);
     message = "edit_mode: set color " + to_string(p);
   }
   private function void set_param_plane(int v)
@@ -1672,11 +1711,12 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       edit_sphere_param = sp;
     }
     edit_color_param = cp;
+    // debug_log("reset_edit_params", copy_data);
   }
   private function void change_fill_type(edit_fill_type_t edit_fill_type)
   {
     if (edit_fill_type == edit_fill_type_wall) {
-      fill_range_value(255u << 24u, 0x00808080u);
+      fill_range_value(255u << 24u, 0x00808080u, false);
       message = "change fill type: filled";
     } else if (edit_fill_type == edit_fill_type_plane) {
       edit_plane_param = plane_param();
@@ -1687,17 +1727,25 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       fill_range_sphere(edit_sphere_param, true);
       message = "change fill type: sphere";
     } else {
-      fill_range_value(0u, 0u);
+      fill_range_value(0u, 0u, true);
     }
-    debug_log("new fill type", edit_fill_type);
+    // debug_log("new fill type", edit_fill_type);
   }
-  private function {f} void fill_range(bool clear)
+  private function {f} void fill_range_func(bool clear_pri, bool clear_aux)
   {
     const cur = ttev->get_cursor_range();
-    if (clear) {
+    if (clear_pri || clear_aux) {
+      copy_value();
+      /*
       copy_data.copy_size = cur.second;
-      const sz_l2 = map{uvec3, integral_log2{uint}}(copy_data.copy_size);
+      copy_data.cursor_offset = ttev->get_cursor_pos().first - cur.first;
+      */
+    }
+    const sz_l2 = map{uvec3, integral_log2{uint}}(copy_data.copy_size);
+    if (clear_pri) {
       copy_data.tex_pri.set_size_l2(sz_l2.x, sz_l2.y, sz_l2.z);
+    }
+    if (clear_aux) {
       copy_data.tex_aux.set_size_l2(sz_l2.x, sz_l2.y, sz_l2.z);
     }
     for (const z: 0 .. copy_data.copy_size.z) {
@@ -1707,17 +1755,22 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
 	}
       }
     }
+    paste_value();
+    /*
     ttev->edit_paste_range(cur.first, cur.second, copy_data.tex_pri,
       copy_data.tex_aux, uvec3());
+    */
   }
-  private function void fill_range_value(uint v_pri, uint v_aux)
+  private function void fill_range_value(uint v_pri, uint v_aux, bool set_aux)
   {
     function void ffunc(copy_data_type mutable& data, uint x, uint y, uint z)
     {
       data.tex_pri.set(x, y, z, v_pri);
-      data.tex_pri.set(x, y, z, v_pri);
+      if (set_aux) {
+	data.tex_aux.set(x, y, z, v_aux);
+      }
     }
-    fill_range{ffunc}(true);
+    fill_range_func{ffunc}(true, set_aux);
     /*
     const cur = ttev->get_cursor_range();
     copy_data.copy_size = cur.second;
@@ -1738,7 +1791,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       copy_data.tex_aux, uvec3());
     */
   }
-  private function void fill_range_color(color_param const& p)
+  private function void fill_range_color(color_param const& p, bool clear)
   {
     const value = encode_color_param(p);
     function void ffunc(copy_data_type mutable& data, uint x, uint y, uint z)
@@ -1749,7 +1802,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       }
       data.tex_aux.set(x, y, z, value);
     }
-    fill_range{ffunc}(true);
+    fill_range_func{ffunc}(false, clear);
     /*
     const value = encode_color_param(p);
     const cur = ttev->get_cursor_range();
@@ -1785,7 +1838,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
 	si(z) - si(center.z)));
       data.tex_pri.set(x, y, z, v);
     }
-    fill_range{ffunc}(clear);
+    fill_range_func{ffunc}(clear, false);
     /*
     const cur = ttev->get_cursor_range();
     if (clear) {
@@ -1832,7 +1885,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
 	si(z) - si(center.z)));
       data.tex_pri.set(x, y, z, v);
     }
-    fill_range{ffunc}(clear);
+    fill_range_func{ffunc}(clear, false);
     /*
     const cur = ttev->get_cursor_range();
     if (clear) {

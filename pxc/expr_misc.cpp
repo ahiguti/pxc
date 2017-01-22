@@ -384,6 +384,9 @@ static bool is_builtin_pod(const term& t)
 
 bool is_equality_type(const term& t)
 {
+  if (is_boolean_type(t)) {
+    return true;
+  }
   if (is_ordered_type(t)) {
     return true;
   }

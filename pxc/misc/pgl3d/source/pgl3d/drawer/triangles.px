@@ -122,6 +122,8 @@ public struct drawer_triangles(shader_config const& glc0,
     (glc.conf.get("raycast_cull_front", 1, 0, 1) != 0);
   bool const update_frag_depth =
     (glc.conf.get("update_frag_depth", 1, 0, 1) != 0);
+  bool const enable_raycast_zprepass =
+    (glc.conf.get("enable_raycast_zprepass", 0, 0, 1) != 0);
   bool const debug_zprepass =
     (glc.conf.get("debug_zprepass", 0, 0, 1) != 0);
   bool const raycast_sort =
@@ -323,6 +325,8 @@ public struct drawer_triangles(shader_config const& glc0,
       bnd["smsz"] = glc.num_shadowmaps_str();
       bnd["raycast_cull_front"] = to_string(raycast_cull_front ? 1 : 0);
       bnd["update_frag_depth"] = to_string(update_frag_depth ? 1 : 0);
+      bnd["enable_raycast_zprepass"] =
+	to_string(enable_raycast_zprepass ? 1 : 0);
       bnd["debug_zprepass"] = to_string(debug_zprepass ? 1 : 0);
       bnd["shadowmap_resolution"] = to_string(glc.shadowmap_resolution);
       bnd["shaodwmap_scale"] = to_string(
@@ -445,7 +449,9 @@ public struct drawer_triangles(shader_config const& glc0,
 	}
       }
     } else if (step == draw_step_zprepass) {
-      // if (stype == 1) { return; }
+      if (stype == 1 && !enable_raycast_zprepass) {
+	return;
+      }
       // debug_log("zprepass " + to_string(stype));
       if (debug_zprepass) {
 	// debug_zprepassが有効のときはzprepassシェーダで色を塗り、solidは
@@ -526,7 +532,7 @@ public struct drawer_triangles(shader_config const& glc0,
 	glActiveTexture(GL_TEXTURE8);
 	glBindTexture(GL_TEXTURE_3D, emt->glt_voxtmax->texture_id.get());
 	glUniform1i(sdr.u_sampler_voxtmax, 8);
-	if (update_frag_depth) {
+	if (enable_raycast_zprepass && update_frag_depth) {
 	  if (texture_depth_rd->texture_id.get() == 0) {
 	    if (const te: res->textures["depth_rd"]) {
 	      texture_depth_rd = te;

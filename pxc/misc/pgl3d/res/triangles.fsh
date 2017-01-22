@@ -417,21 +417,29 @@ void main(void)
     <%if><%eq><%stype/>1<%/>
       // 計算されるdepth値は、raycast始点であるposのdepth値以上になる。
       // もしすでにdepth_rdの値がそれより小さいならdiscardする。
+      <%if><%enable_raycast_zprepass/>
       float prev_depth = texelFetch(sampler_depth_rd, ivec2(gl_FragCoord.xy),
 	0).x;
       if (!cam_inside_aabb) {
 	vec3 ini_tngpos = vary_aabb_or_tconv.xyz + pos * vary_aabb_or_tconv.w;
 	vec4 ini_gpos = vary_model_matrix * vec4(ini_tngpos, 1.0);
 	vec4 ini_vpos = view_projection_matrix * ini_gpos;
-	float ini_depth = (ini_vpos.z / ini_vpos.w + 1.0) * 0.5;
 	/*
-	float ini_depth = ini_vpos.w <= 0.0 ? 0.0
-	  : (ini_vpos.z / ini_vpos.w + 1.0) * 0.5;
+	float ini_depth = (ini_vpos.z / ini_vpos.w + 1.0) * 0.5;
+	*/
+	// 誤差によりini_vpos.wが0以下になることがある。
+	float ini_depth = ini_vpos.w <= 0.0
+	  ? 0.0 : (ini_vpos.z / ini_vpos.w + 1.0) * 0.5;
+	/*
+	if (ini_vpos.w <= -0.0) {
+	  <%fragcolor/> = vec4(1.0,1.0,0.0,1.0); return; 
+	}
 	*/
 	if (prev_depth < ini_depth) {
 	  discard;
 	}
       }
+      <%/>
     <%/>
     <%/>
     float dist_rnd = generate_random(vec3(gl_FragCoord.xy, 0.0)) * 0.125;
@@ -453,6 +461,7 @@ void main(void)
     <%if><%eq><%get_config edit_mode/>1<%/>
     miplevel_clamp = 0;
     <%/>
+    //miplevel_clamp = 0;
     hit = raycast_tilemap(pos, camera_local, light_local,
       aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para,
       miplevel_clamp);
@@ -476,6 +485,7 @@ void main(void)
     if (dbgval.a > 0.0) { <%fragcolor/> = dbgval; return; }
     <%/>
     if (hit < 0) {
+      // <%fragcolor/> = vec4(1.0); return;
       discard;
     }
     if (cam_inside_aabb && hit == 0) {
@@ -498,9 +508,11 @@ void main(void)
       float frag_depth = (frag_vpos.z / frag_vpos.w + 1.0) * 0.5;
       <%if><%eq><%update_frag_depth/>1<%/>
 	// FragDepth更新するならこの節を有効にする
+	<%if><%enable_raycast_zprepass/>
 	if (prev_depth < frag_depth) {
 	  discard;
 	}
+	<%/>
 	gl_FragDepth = frag_depth;
       <%/>
     <%/>
@@ -556,6 +568,13 @@ void main(void)
 	  break;
 	}
       }
+      // FIXME: remove
+       if (sm_to_use == 1) {
+        // <%fragcolor/> = vec4(1.0, 0.0, 0.0, 1.0); return;
+       }
+       if (sm_to_use == 0) {
+        // <%fragcolor/> = vec4(0.0, 1.0, 0.0, 1.0); return;
+       }
     <%else/>
       // stype != 1。このときはvsでvary_smposaを計算清み。
       for (sm_to_use = 0; sm_to_use < <%smsz/>; ++sm_to_use) {
@@ -586,9 +605,12 @@ void main(void)
 	    // zval = min(zval, zval_cur);
 	    float sm_min_dist = 0.02; // FIXME??
 	    sml += float(smpos.z < sm_min_dist + zval_cur
-	     * (1.005 + (abs(i)+abs(j))/4096.0))/9.0;
+	     * (1.005 /* + (abs(i)+abs(j))/4096.0 */))/9.0;
+	    /* abs(i)+abs(j)/4096.0 を加えるとmacosxでおかしい？ */
 	  }
 	}
+// FIXME
+//if (sml < 0.8) { <%fragcolor/> = vec4(0.0, 1.0, 1.0, 1.0); return; }
       <%else/>
 	// no multisample
 	vec3 smpos;
@@ -681,12 +703,51 @@ void main(void)
   vec3 mate_specular = vec3(0.04, 0.04, 0.04);
   vec3 mate_diffuse = vec3(0.0, 0.0, 0.0);
   vec3 mate_emit = vec3(0.0);
-  mate_diffuse = tex_val.rgb;
-//  if (max(tex_val.r, max(tex_val.g, tex_val.b)) > 0.9) {
-//    mate_specular = tex_val.rgb;
-//  } else {
-//    mate_diffuse = tex_val.rgb;
-//  }
+  <%if><%eq><%stype/>1<%/>
+  {
+    // tex_val.a = 0.0;
+    float aval = floor(tex_val.a * 255.0 + 0.5);
+    float aval_me = floor(aval / 64.0);
+    aval = aval - aval_me * 64.0;
+    float aval_roughness = aval;
+    if (aval_me == 1) {
+      // emission
+      mate_emit = tex_val.rgb;
+    } else if (aval_me == 2) {
+      // metal
+      mate_specular = tex_val.rgb;
+    } else {
+      // 0か3なら非金属
+      mate_diffuse = tex_val.rgb;
+    }
+    /*
+    float aval_roughness = floor(aval / 16.0);
+    aval = aval - aval_roughness * 16.0;
+    float aval_metalness = floor(aval / 2.0);
+    aval = aval - aval_metalness * 2.0;
+    float aval_emission = aval;
+    if (aval_emission == 0.0) {
+      if (aval_metalness == 0.0) {
+	mate_diffuse = tex_val.rgb;
+      } else {
+	mate_specular = tex_val.rgb;
+      }
+    } else {
+      mate_emit = tex_val.rgb * (aval_emission + 1.0) / 8.0;
+    }
+    */
+    float p = (aval_roughness + 1.0) / 16.0;
+    mate_alpha = p * p;
+  }
+  <%else/>
+  {
+    if (max(tex_val.r, max(tex_val.g, tex_val.b)) > 0.9) {
+      mate_specular = tex_val.rgb;
+    } else {
+      mate_diffuse = tex_val.rgb;
+    }
+  }
+  <%/>
   if (int(option_value + 0.5) == 1) {
     mate_alpha = 0.03;
     mate_specular = vec3(0.95, 0.64, 0.54);
@@ -716,7 +777,7 @@ void main(void)
       local_light = normalize(local_light);
     }
     // FIXME?
-    if (frag_depth < 0.7f + dist_rnd * 0.25f) {
+    if (frag_depth < 1.7f + dist_rnd * 0.25f) {
       // <%fragcolor/> = vec4(1.0,1.0,0.0,1.0); return;
       /*
       mate_alpha = clamp(mate_alpha - snoise(pos * 1024.0 * 256.0) / 1.0f,
@@ -729,7 +790,10 @@ void main(void)
 	0).r;
       // mate_diffuse = vec3(nval, nval, nval);
       // mate_specular = vec3(nval, nval, nval);
-      // mate_alpha = clamp(mate_alpha - nval / 1.0f, 0.0, 0.5);
+      // mate_alpha = 0.3;
+      // mate_alpha = clamp(mate_alpha - nval / 8.0f, 0.0, 0.5);
+      // float p = 7.0 / 32.0;
+      // mate_alpha = p * p;
     }
     /*
     */
