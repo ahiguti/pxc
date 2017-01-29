@@ -6,6 +6,14 @@ TODO
 
 - 3dテクスチャの衝突判定
 
+- タイルパターンへ変更(done)
+
+- 球面を平面で近似(done)
+
+- 拡大縮小(done)
+
+- 左右など反転(done)
+
 - 編集
 
 - depth_rdとの比較の際にini_vpos.wが0以下となって表示が乱れる(done)
@@ -3228,3 +3236,46 @@ A値に入れる情報
 - テクスチャマッピング
 
 
+---------------------------------------------------------------------------
+拡大
+
+sphereのscaleの各成分が0か2でないと拡大できないのでは
+
+  p.dist = p.dist * 2;
+  cv = make_plane_node(p, make_ivec3(
+              x * 2 - 1,
+              y * 2 - 1,
+              z * 2 - 1),
+              1);
+  offsetは-1から1、offset_mulは1
+  const int d = p.dist;
+  const d1 = d - dot_int(nor, offset) * offset_mul;
+  // 拡大処理
+  // distを2倍する。
+  // dist -= dot_int(nor, offset)する。
+
+  p.dist = p.dist * 2;
+  p.center = p.center * 2;
+  cv = make_sphere_node(p, make_ivec3(
+              x * 2 - 1,
+              y * 2 - 1,
+              z * 2 - 1),
+              1);
+  const c = p.center -
+    map{ivec3, operator::mul}(offset, p.scale) * offset_mul / 2;
+  // 拡大処理
+  // distとcenterを2倍する
+  // center -= offset * p.scale / 2 する
+
+r2 = 球の半径の2乗(*4)
+d2 = 球の中心とボクセル中心の距離の2乗(*4)
+rdiff = sqrt(d2) - sqrt(r2) 球の表面からの距離(*2)
+nd = sqrt(dot(pp.nor, pp.nor)) a^2+b^2+c^2の平方根
+pp.dist = rdiff * nd / 2 
+
+dist 5 -1, 3, -2の位置が欠ける
+sphere_node     {center,{x,0,y,0,z,0},dist,6,scale,{x,2,y,2,z,2}}       offset  {x,1,y,3,z,2}   2       c       {x,-2,y,-6,z,-4}        rdiff   2.9666295470957653      inor    {x,-4,y,-12,z,-8}       pp      {dist,6,nor,{x,-1,y,-3,z,-2}}   r       0
+distが5でないといけない
+
+0.45: 6, 10, 14, 
+0.4: 10, 14, 

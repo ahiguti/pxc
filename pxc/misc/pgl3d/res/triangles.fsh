@@ -313,7 +313,7 @@ vec3 light_diffuse(in float cos_n_l, in vec3 material_diffuse)
 
 vec3 light_all(in vec3 light_color, in float lstr, in vec3 mate_specular,
   in vec3 mate_diffuse, in vec3 mate_emit, in float mate_alpha,
-  in vec3 camera_dir, in vec3 light_dir, samplerCube samp, in vec3 nor,
+  in vec3 camera_dir, in vec3 light_dir, in samplerCube samp, in vec3 nor,
   in bool vertical, in float ambient, in float local_light_str,
   in vec3 local_light)
 {
@@ -323,11 +323,12 @@ vec3 light_all(in vec3 light_color, in float lstr, in vec3 mate_specular,
   float cos_n_l = clamp(dot(nor, light_dir), 0.0, 1.0);
   float cos_n_v = clamp(dot(nor, camera_dir), 0.0, 1.0);
   float cos_v_h = cos_l_h;
-  vec3 light_sp_di = light_color * (
+  vec3 specular = 
     light_specular_brdf(cos_l_h, cos_n_h, cos_n_v, cos_n_l, cos_v_h,
-      mate_alpha, mate_specular) * lstr +
-    light_diffuse(cos_n_l * (lstr + ambient), mate_diffuse))
-    + mate_emit;
+      mate_alpha, mate_specular) * lstr;
+  vec3 diffuse = light_diffuse(cos_n_l * lstr + cos_n_v * ambient,
+    mate_diffuse);
+  vec3 light_sp_di = light_color * (specular + diffuse) + mate_emit;
   float cos_n_ll = max(dot(nor, local_light), 0.0);
   // local_light_str = min(local_light_str, 1.0 - lstr);
   light_sp_di += vec3(1.0, 0.9, 0.6) *
@@ -341,7 +342,8 @@ vec3 light_all(in vec3 light_color, in float lstr, in vec3 mate_specular,
     clamp(dot(nor, reflection_vec), 0.0, 1.0), mate_specular)
     * (vertical ? mate_specular : vec3(1.0, 1.0, 1.0))
     * clamp(1.0 - mate_alpha * 16.0, 0.0, 1.0);
-  return clamp(light_sp_di + env, 0.0, 1.0);
+  return light_sp_di + env;
+  // return clamp(light_sp_di + env, 0.0, 1.0);
 }
 
 vec4 get_sampler_sm(int i, vec2 p)
@@ -371,6 +373,8 @@ void main(void)
   bool vertical = false;
   float ambient = 0.005;
   vec4 tex_val = vec4(0.5, 0.5, 0.5, 1.0);
+  float frag_randval = generate_random(vec3(gl_FragCoord.xy, 0.0));
+    // フラグメントの座標から生成した乱数
   <%if><%eq><%stype/>1<%/>
     // raycast
     <%if><%is_gl3_or_gles3/>
@@ -442,7 +446,7 @@ void main(void)
       <%/>
     <%/>
     <%/>
-    float dist_rnd = generate_random(vec3(gl_FragCoord.xy, 0.0)) * 0.125;
+    float dist_rnd = frag_randval * 0.125;
     /*
     float dist_pos_campos_2 = dot(pos - campos, pos - campos) + 0.0001;
     float dist_log2 = log(dist_pos_campos_2) * 0.5 / log(2.0);
@@ -503,6 +507,8 @@ void main(void)
       // posをテクスチャ座標から接線空間の座標に変換
     vec4 frag_gpos = vary_model_matrix * vec4(frag_tanpos, 1.0);
       // vary_model_matrixは接線空間からワールドへの変換
+    frag_distance = length(frag_gpos.xyz - camera_pos);
+      // frag_distanceを更新。合っているか？
     <%if><%eq><%stype/>1<%/>
       vec4 frag_vpos = view_projection_matrix * frag_gpos;
       float frag_depth = (frag_vpos.z / frag_vpos.w + 1.0) * 0.5;
@@ -797,10 +803,17 @@ void main(void)
     }
     /*
     */
+    if (frag_distance < 0.0001) {
+      // <%fragcolor/> = vec4(1.0); return;
+    }
+    // ambient = clamp(float(10 - hit) / 1024.0, 0.0, 0.0125);
+    // ambient = clamp(1.0 / (frag_distance * 1024.0), 0.0, 0.0125);
+    ambient = clamp(1.0 / (frag_distance * 128.0), 0.0, 0.025);
   <%/>
   vec3 li1 = light_all(vec3(1.0, 1.0, 1.0), lstr * lstr_para, mate_specular,
-    mate_diffuse, mate_emit, mate_alpha, camera_dir, light_dir, sampler_env,
-    nor, vertical, ambient, local_light_str, local_light);
+    mate_diffuse, mate_emit, mate_alpha, camera_dir,
+    light_dir, sampler_env, nor, vertical, ambient, local_light_str,
+    local_light);
   /*
   // vec3 light_color2 = vec3(1.0, 1.0, 1.0) * lstr;
   // vec3 light_color1 = light_color2 * lstr_para;
@@ -818,6 +831,7 @@ void main(void)
   // color.xyz += mix(v01, ve, v01);
   /// color.xyz += 1.0 - 1.0 / exp(li1);
   color.xyz += li1;
+  color.xyz += frag_randval * (1.0f / 256.0f); // reduce color banding
   <%fragcolor/> = color;
 }
 
