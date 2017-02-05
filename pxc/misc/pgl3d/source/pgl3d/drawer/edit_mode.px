@@ -123,26 +123,6 @@ private threaded function uint encode_plane_node(plane_param const& pp)
   const v = (a << 24u) | (b << 16u) | (g << 8u) | r;
   return v;
 }
-/*
-private threaded function uint encode_plane_node(ivec3 const& n, int d)
-{
-  if (n.x < -7 || n.x > 7 || n.y < -7 || n.y > 7 || n.z < -7 || n.z > 7) {
-    return 0u;
-  }
-  if (n.x == 0 && n.y == 0 && n.z == 0) {
-    return 0u;
-  }
-  if (d < -48 || d > 48) {
-    return 0u;
-  }
-  const r = ui(n.x + 8) << 4u;
-  const g = ui(n.y + 8) << 4u;
-  const b = ui(n.z + 8) << 4u;
-  const a = ui(d + 208);
-  const v = (a << 24u) | (b << 16u) | (g << 8u) | r;
-  return v;
-}
-*/
 
 private threaded function uint make_plane_node(plane_param const& p,
   ivec3 const& offset, int offset_mul)
@@ -302,7 +282,7 @@ threaded function uint make_sphere_node(sphere_param const& p,
       }
     }
   }
-  if (modifier != 0u) {
+  if ((modifier & 12) != 0u) {
     const d2 = distance2(ivec3()); // 球の中心とボクセル中心の距離の2乗
     const r2 = p.dist * p.dist * 4; // 球の半径の2乗
     const rdiff = sqrt(static_cast{double}(d2))
@@ -340,11 +320,33 @@ threaded function uint make_sphere_node(sphere_param const& p,
       }
       */
     }
+    threaded function bool check_one(int x, int y, int z) {
+      return abs(pp.nor.x) == x && abs(pp.nor.y) == y && abs(pp.nor.z) == z;
+    }
+    threaded function void dist_modify_one(int d, int x, int y, int z, int v) {
+      if (p.dist != d) {
+	return;
+      }
+      bool r;
+      r |= check_one(x, y, z);
+      r |= check_one(x, z, y);
+      r |= check_one(y, x, z);
+      r |= check_one(y, z, x);
+      r |= check_one(z, x, y);
+      r |= check_one(z, y, x);
+      if (r) {
+	pp.dist += (pp.dist < 0) ? -v : v;
+      }
+    }
     const nd = sqrt(static_cast{double}(dot_int(pp.nor, pp.nor)));
-    if ((modifier & 4u) != 0) {
+    if ((modifier & 8u) != 0) {
       pp.dist = clamp(si(round(rdiff * 2.0)), -21, 21);
     } else {
       pp.dist = clamp(si(round_bias(rdiff * nd / 2.0, 0.4)), -21, 21);
+      // 微調整
+      dist_modify_one(10, 1, 3, 3, 1);
+      dist_modify_one(10, 4, 3, 3, -1);
+      dist_modify_one(14, 3, 4, 6, -1);
     }
     const r = make_plane_node(pp, ivec3(), 1);
     /*
@@ -853,12 +855,17 @@ private struct texture_edit(texture_data_mip const& data0,
   }
 }
 
-function texture_data_mip copy_mip(texture_data_mip const& data)
+function texture_data_mip copy_mip0(texture_data_mip const& data)
 {
+  // miplevel 0 だけはコピーし、残りは同じテクスチャを参照
   texture_data_mip r;
   for (const i, const& e: data) {
-    ptr{texture_data} p = make_ptr{texture_data}(*e);
-    r.push_back(p);
+    if (i == 0) {
+      ptr{texture_data} p = make_ptr{texture_data}(*e);
+      r.push_back(p);
+    } else {
+      r.push_back(e);
+    }
   }
   return r;
 }
@@ -871,9 +878,9 @@ private struct texture_edit_view(texture_data_mip const& data0,
    */
   private ptr{texture_edit} current_edit =
     make_ptr{texture_edit}(data0, data_aux0, grid0);
-  private texture_data_mip current_view = copy_mip(data0);
+  private texture_data_mip current_view = copy_mip0(data0);
   private ptr{texture_data} current_view_0 = current_view[0];
-  private texture_data_mip current_view_aux = copy_mip(data_aux0);
+  private texture_data_mip current_view_aux = copy_mip0(data_aux0);
   private ptr{texture_data} current_view_aux_0 = current_view_aux[0];
   private texture_data grid = grid0;
   private uvec3 const grid_size = texture_data_get_size(grid);
@@ -1469,6 +1476,211 @@ ptr{gl_texture} const& gltp0)
   }
 }
 
+private function void shrink_voxel_value(texture_data const& spri,
+  texture_data const& ssec, texel_value mutable& dpri,
+  texel_value mutable& dsec, ivec3 const& p)
+{
+  uint count_ref;
+  uint count_color;
+  uint count_plane;
+  uint count_sphere;
+  plane_param pp;
+  sphere_param sp;
+  color_param cp;
+  const x0 = p.x;
+  const y0 = p.y;
+  const z0 = p.z;
+  for (const z: 0 .. 2) {
+    for (const y: 0 .. 2) {
+      for (const x: 0 .. 2) {
+	const offset = make_ivec3(x * 2 - 1, y * 2 - 1, z * 2 - 1);
+	const v = spri.get(ui(x0 * 2 + x), ui(y0 * 2 + y), ui(z0 * 2 + z));
+	const vs = ssec.get(ui(x0 * 2 + x), ui(y0 * 2 + y), ui(z0 * 2 + z));
+	if (is_space_voxel(v)) {
+	  continue;
+	} else if (is_node_reference(v)) {
+	  ++count_ref;
+	} else if (is_filled(v)) {
+	} else if (is_plane_node(v)) {
+	  mutable p = decode_plane_node(v);
+	  // debug_log("p", p);
+	  p.dist += dot_int(p.nor, offset);
+	  p.dist /= 2;
+	  count_plane = 1;
+	  // debug_log("mod p", p);
+	  pp = p;
+	} else if (is_sphere_node(v)) {
+	  mutable p = decode_sphere_node(v);
+	  p.center += map{ivec3, operator::mul}(offset, p.scale) / 2;
+	  p.center /= 2;
+	  p.dist /= 2;
+	  count_sphere = 1;
+	  sp = p;
+	}
+	++count_color;
+	cp += decode_color_param(vs);
+      }
+    }
+  }
+  uint nv;
+  if (count_plane > 0) {
+    // pp /= count_plane;
+    nv = make_plane_node(pp, ivec3(), 1);
+  } else if (count_sphere > 0) {
+    sp /= count_sphere;
+    nv = make_sphere_node(sp, ivec3(), 1, 0u);
+  } else {
+    nv = make_filled_voxel();
+  }
+  // debug_log("set", x0, y0, z0);
+  if (count_color > 0) {
+    cp /= count_color;
+    uint nc = encode_color_param(cp);
+    dpri = nv;
+    dsec = nc;
+    /*
+    dpri.set(ui(x0 + b.x), ui(y0 + b.y), ui(z0 + b.z), nv);
+    dsec.set(ui(x0 + b.x), ui(y0 + b.y), ui(z0 + b.z), nc);
+    */
+  } else {
+    dpri = 0u;
+    dsec = 0u;
+    /*
+    dpri.set(ui(x0 + b.x), ui(y0 + b.y), ui(z0 + b.z), 0u);
+    dsec.set(ui(x0 + b.x), ui(y0 + b.y), ui(z0 + b.z), 0u);
+    */
+  }
+}
+
+private function void scale_voxel_value(uint v_pri, uint v_sec,
+  texture_data mutable& tex_pri, texture_data mutable& tex_sec,
+  int x0, int y0, int z0)
+{
+  for (const z: 0 .. 2) {
+    for (const y: 0 .. 2) {
+      for (const x: 0 .. 2) {
+	uint cv = v_pri;
+	if (is_plane_node(v_pri)) {
+	  mutable p = decode_plane_node(v_pri);
+	  p.dist = p.dist * 2;
+	  cv = make_plane_node(p, make_ivec3(
+	    x * 2 - 1,
+	    y * 2 - 1,
+	    z * 2 - 1),
+	    1);
+	} else if (is_sphere_node(v_pri)) {
+	  mutable p = decode_sphere_node(v_pri);
+	  p.dist = p.dist * 2;
+	  p.center = p.center * 2;
+	  cv = make_sphere_node(p, make_ivec3(
+	    x * 2 - 1,
+	    y * 2 - 1,
+	    z * 2 - 1),
+	    1, 0u);
+	}
+	tex_pri.set(ui(x0 + x), ui(y0 + y), ui(z0 + z), cv);
+	tex_sec.set(ui(x0 + x), ui(y0 + y), ui(z0 + z), v_sec);
+      }
+    }
+  }
+}
+
+private function void update_mipmap_all(edit_mode_texture mutable& emt)
+{
+  debug_log("update_mipmap_all begin");
+  const bool enable_short_circuit = true; // FIXME?
+  function void update_mipmap_one(texture_data mutable& pri0,
+    texture_data mutable& sec0, texture_data mutable& pri1,
+    texture_data mutable& sec1)
+  {
+    for (const z: 0 .. pri1.get_depth()) {
+      for (const y: 0 .. pri1.get_height()) {
+	for (const x: 0 .. pri1.get_width()) {
+	  ivec3 p = make_ivec3(si(x), si(y), si(z));
+	  texel_value dpri_v;
+	  texel_value dsec_v;
+	  shrink_voxel_value(pri0, sec0, dpri_v, dsec_v, p);
+	  if (!is_space_voxel(dpri_v)) {
+	    dpri_v = make_filled_voxel();
+	  }
+	  pri1.set(ui(p.x), ui(p.y), ui(p.z), dpri_v);
+	  sec1.set(ui(p.x), ui(p.y), ui(p.z), dsec_v);
+	}
+      }
+    }
+  }
+  // tpatのmipmap更新
+  const pat_mip_num = emt.vox.voxtile.get_width_l2() + 1;
+    // タイルサイズが16なら16,8,4,2,1の5枚
+  while (emt.vox.tpat_pri.size() < pat_mip_num) {
+    emt.vox.tpat_pri.push_back(make_ptr{texture_data}());
+  }
+  while (emt.vox.tpat_aux.size() < pat_mip_num) {
+    emt.vox.tpat_aux.push_back(make_ptr{texture_data}());
+  }
+  emt.vox.tpat_pri.resize(pat_mip_num, make_ptr{texture_data}());
+  emt.vox.tpat_aux.resize(pat_mip_num, make_ptr{texture_data}());
+  for (const i: 1 .. emt.vox.tpat_pri.size()) {
+    const& tppri0 = emt.vox.tpat_pri[i - 1];
+    const& tpsec0 = emt.vox.tpat_aux[i - 1];
+    const& tppri1 = emt.vox.tpat_pri[i];
+    const& tpsec1 = emt.vox.tpat_aux[i];
+    update_mipmap_one(*tppri0, *tpsec0, *tppri1, *tpsec1);
+    set_distance(enable_short_circuit, *tppri1);
+    debug_log("update_mipmap_all tpat", i);
+  }
+  // tmapのmiplevel==0の代替となるテクスチャの作成
+  texture_data pri0 = *emt.vox.tmap_pri[0];
+  texture_data sec0 = *emt.vox.tmap_aux[0];
+  for (const z: 0 .. pri0.get_depth()) {
+    for (const y: 0 .. pri0.get_height()) {
+      for (const x: 0 .. pri0.get_width()) {
+	mutable vpri = pri0.get(x, y, z);
+	mutable vsec = sec0.get(x, y, z);
+	if (is_node_reference(vpri)) {
+	  const p = make_uvec3((vpri >> 16u) & 0xffu, (vpri >> 8u) & 0xffu,
+	    (vpri >> 0u) & 0xffu);
+	  vpri = emt.vox.tpat_pri[pat_mip_num - 1]->get(p.x, p.y, p.z);
+	  vsec = emt.vox.tpat_aux[pat_mip_num - 1]->get(p.x, p.y, p.z);
+	}
+	pri0.set(x, y, z, vpri);
+	sec0.set(x, y, z, vsec);
+      }
+    }
+  }
+  // tmapのmiplevel==1の更新
+  update_mipmap_one(pri0, sec0, *emt.vox.tmap_pri[1], *emt.vox.tmap_aux[1]);
+  set_distance(enable_short_circuit, *emt.vox.tmap_pri[1]);
+  debug_log("update_mipmap_all tmap", 1);
+  // tmapのmiplevel==2以降の更新
+  for (const i: 2 .. emt.vox.tmap_pri.size()) {
+    debug_log("update_mipmap_all tmap", i);
+    const& tppri0 = emt.vox.tmap_pri[i - 1];
+    const& tpsec0 = emt.vox.tmap_aux[i - 1];
+    const& tppri1 = emt.vox.tmap_pri[i];
+    const& tpsec1 = emt.vox.tmap_aux[i];
+    update_mipmap_one(*tppri0, *tpsec0, *tppri1, *tpsec1);
+    set_distance(enable_short_circuit, *tppri1);
+  }
+  debug_log("update_mipmap_all end");
+}
+
+private function void sync_gl_mipmap_all(edit_mode_texture mutable& emt)
+{
+  for (const i: 1 .. emt.vox.tpat_pri.size()) {
+    texture_data_sync_gl(*emt.vox.tpat_pri[i], si(i), uvec3(),
+      texture_data_get_size(*emt.vox.tpat_pri[i]), emt.glt_voxtpat);
+    texture_data_sync_gl(*emt.vox.tpat_aux[i], si(i), uvec3(),
+      texture_data_get_size(*emt.vox.tpat_aux[i]), emt.glt_voxtpax);
+  }
+  for (const i: 1 .. emt.vox.tmap_pri.size()) {
+    texture_data_sync_gl(*emt.vox.tmap_pri[i], si(i), uvec3(),
+      texture_data_get_size(*emt.vox.tmap_pri[i]), emt.glt_voxtmap);
+    texture_data_sync_gl(*emt.vox.tmap_aux[i], si(i), uvec3(),
+      texture_data_get_size(*emt.vox.tmap_aux[i]), emt.glt_voxtmax);
+  }
+}
+
 private function ivec3 rotate_offset(imat3 const& m, ivec3 const& v,
   uvec3 const& sz)
 {
@@ -1485,7 +1697,6 @@ private enum edit_params_mode_t {
   edit_params_mode_color = 1,
   edit_params_mode_plane = 2,
   edit_params_mode_sphere_1 = 3,
-  edit_params_mode_sphere_2 = 4,
 }
 
 private enum edit_fill_type_t {
@@ -1587,6 +1798,9 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     const cursor_spd = mod_shift ? 16 : 1;
     if (key == SDL_SCANCODE_F12) {
       save_state();
+    } else if (key == SDL_SCANCODE_F5) {
+      update_mipmap_all(*emt);
+      sync_gl_mipmap_all(*emt);
     } else if (key == SDL_SCANCODE_1) {
       if (mod_shift) {
 	change_fill_type(edit_fill_type_blank);
@@ -1619,14 +1833,6 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       edit_params_mode = edit_params_mode_sphere_1;
       update_cursor_color();
       // message = "entering edit-sphere-center-distance mode";
-    } else if (key == SDL_SCANCODE_5) {
-      if (mod_shift) {
-	change_fill_type(edit_fill_type_sphere);
-      }
-      reset_edit_params();
-      edit_params_mode = edit_params_mode_sphere_2;
-      update_cursor_color();
-      // message = "entering edit-sphere-scale mode";
     }
     if (edit_params_mode == edit_params_mode_none) {
       // パラメータ変更モードでは無い場合。カーソル移動やコピペなどの
@@ -1779,9 +1985,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       } else if (edit_params_mode == edit_params_mode_plane) {
 	message += " [plane params]";
       } else if (edit_params_mode == edit_params_mode_sphere_1) {
-	message += " [sphere center/dist]";
-      } else if (edit_params_mode == edit_params_mode_sphere_2) {
-	message += " [sphere scale]";
+	message += " [sphere params]";
       }
       const vp = get_cur_value(texture_value_index_primary);
       const vs = get_cur_value(texture_value_index_secondary);
@@ -1893,8 +2097,6 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       set_param_plane(v);
     } else if (edit_params_mode == edit_params_mode_sphere_1) {
       set_param_sphere_1(v, modmask);
-    } else if (edit_params_mode == edit_params_mode_sphere_2) {
-      set_param_sphere_2(v, modmask);
     }
   }
   private function void set_param_color(int v, uchar mult)
@@ -1964,45 +2166,42 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   private function void set_param_sphere_1(int v, uint modifier)
   {
     mutable& p = edit_sphere_param;
-    if (v == 0) {
-      p.center.x -= 1;
-    } else if (v == 1) {
-      p.center.x += 1;
-    } else if (v == 2) {
-      p.center.y -= 1;
-    } else if (v == 3) {
-      p.center.y += 1;
-    } else if (v == 4) {
-      p.center.z -= 1;
-    } else if (v == 5) {
-      p.center.z += 1;
-    } else if (v == 6) {
-      p.dist = p.dist > 1 ? p.dist - 1 : 1;
-    } else if (v == 7) {
-      p.dist = p.dist < 63 ? p.dist + 1 : 63;
+    if ((modifier & 1) == 0) {
+      if (v == 0) {
+	p.center.x -= 1;
+      } else if (v == 1) {
+	p.center.x += 1;
+      } else if (v == 2) {
+	p.center.y -= 1;
+      } else if (v == 3) {
+	p.center.y += 1;
+      } else if (v == 4) {
+	p.center.z -= 1;
+      } else if (v == 5) {
+	p.center.z += 1;
+      } else if (v == 6) {
+	p.dist = p.dist > 1 ? p.dist - 1 : 1;
+      } else if (v == 7) {
+	p.dist = p.dist < 63 ? p.dist + 1 : 63;
+      }
+    } else {
+      if (v == 0) {
+	p.scale.x = p.scale.x > 0 ? p.scale.x - 1 : 0;
+      } else if (v == 1) {
+	p.scale.x = p.scale.x < 3 ? p.scale.x + 1 : 3;
+      } else if (v == 2) {
+	p.scale.y = p.scale.y > 0 ? p.scale.y - 1 : 0;
+      } else if (v == 3) {
+	p.scale.y = p.scale.y < 3 ? p.scale.y + 1 : 3;
+      } else if (v == 4) {
+	p.scale.z = p.scale.z > 0 ? p.scale.z - 1 : 0;
+      } else if (v == 5) {
+	p.scale.z = p.scale.z < 3 ? p.scale.z + 1 : 3;
+      }
     }
     fill_range_sphere(p, false, modifier);
     // FIXME?
     message = "edit_mode: set sphere center/dist params " + to_string(p);
-  }
-  private function void set_param_sphere_2(int v, uint modifier)
-  {
-    mutable& p = edit_sphere_param;
-    if (v == 0) {
-      p.scale.x = p.scale.x > 0 ? p.scale.x - 1 : 0;
-    } else if (v == 1) {
-      p.scale.x = p.scale.x < 3 ? p.scale.x + 1 : 3;
-    } else if (v == 2) {
-      p.scale.y = p.scale.y > 0 ? p.scale.y - 1 : 0;
-    } else if (v == 3) {
-      p.scale.y = p.scale.y < 3 ? p.scale.y + 1 : 3;
-    } else if (v == 4) {
-      p.scale.z = p.scale.z > 0 ? p.scale.z - 1 : 0;
-    } else if (v == 5) {
-      p.scale.z = p.scale.z < 3 ? p.scale.z + 1 : 3;
-    }
-    fill_range_sphere(p, false, modifier);
-    // message = "edit_mode: set sphere scale params " + to_string(p);
   }
   private function void copy_value()
   {
@@ -2157,8 +2356,14 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
 	for (const y: 0 .. sz.y) {
 	  for (const x: 0 .. sz.x) {
 	    const p = make_ivec3(si(x), si(y), si(z));
+	    texel_value dpri_v;
+	    texel_value dsec_v;
 	    shrink_voxel_value(copy_data.tex_pri, copy_data.tex_aux,
-	      dpri, daux, p, dbase);
+	      dpri_v, dsec_v, p);
+	    dpri.set(ui(p.x + dbase.x), ui(p.y + dbase.y), ui(p.z + dbase.z),
+	      dpri_v);
+	    daux.set(ui(p.x + dbase.x), ui(p.y + dbase.y), ui(p.z + dbase.z),
+	      dsec_v);
 	  }
 	}
       }
@@ -2174,73 +2379,6 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       const cpm = to_ivec3(cp.first) + cd;
       ttev->set_cursor_pos(cp.first, to_uvec3(cpm));
       copy_value();
-    }
-  }
-  private function void shrink_voxel_value(texture_data const& spri,
-    texture_data const& ssec, texture_data mutable& dpri,
-    texture_data mutable& dsec, ivec3 const& p, ivec3 const& b)
-  {
-    uint count_ref;
-    uint count_color;
-    uint count_plane;
-    uint count_sphere;
-    plane_param pp;
-    sphere_param sp;
-    color_param cp;
-    const x0 = p.x;
-    const y0 = p.y;
-    const z0 = p.z;
-    for (const z: 0 .. 2) {
-      for (const y: 0 .. 2) {
-	for (const x: 0 .. 2) {
-	  const offset = make_ivec3(x * 2 - 1, y * 2 - 1, z * 2 - 1);
-	  const v = spri.get(ui(x0 * 2 + x), ui(y0 * 2 + y), ui(z0 * 2 + z));
-	  const vs = ssec.get(ui(x0 * 2 + x), ui(y0 * 2 + y), ui(z0 * 2 + z));
-	  if (is_space_voxel(v)) {
-	    continue;
-	  } else if (is_node_reference(v)) {
-	    ++count_ref;
-	  } else if (is_filled(v)) {
-	  } else if (is_plane_node(v)) {
-	    mutable p = decode_plane_node(v);
-	    debug_log("p", p);
-	    p.dist += dot_int(p.nor, offset);
-	    p.dist /= 2;
-	    count_plane = 1;
-	    debug_log("mod p", p);
-	    pp = p;
-	  } else if (is_sphere_node(v)) {
-	    mutable p = decode_sphere_node(v);
-	    p.center += map{ivec3, operator::mul}(offset, p.scale) / 2;
-	    p.center /= 2;
-	    p.dist /= 2;
-	    count_sphere = 1;
-	    sp = p;
-	  }
-	  ++count_color;
-	  cp += decode_color_param(vs);
-	}
-      }
-    }
-    uint nv;
-    if (count_plane > 0) {
-      // pp /= count_plane;
-      nv = make_plane_node(pp, ivec3(), 1);
-    } else if (count_sphere > 0) {
-      sp /= count_sphere;
-      nv = make_sphere_node(sp, ivec3(), 1, 0u);
-    } else {
-      nv = make_filled_voxel();
-    }
-    debug_log("set", x0, y0, z0);
-    if (count_color > 0) {
-      cp /= count_color;
-      uint nc = encode_color_param(cp);
-      dpri.set(ui(x0 + b.x), ui(y0 + b.y), ui(z0 + b.z), nv);
-      dsec.set(ui(x0 + b.x), ui(y0 + b.y), ui(z0 + b.z), nc);
-    } else {
-      dpri.set(ui(x0 + b.x), ui(y0 + b.y), ui(z0 + b.z), 0u);
-      dsec.set(ui(x0 + b.x), ui(y0 + b.y), ui(z0 + b.z), 0u);
     }
   }
   private function void scale_range()
@@ -2279,38 +2417,6 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     glm::vec3 cursor_move_r;
     move_cursor(0, 0, 0, cursor_move_r);
     // debug_log("scale_range: 2: copy_data:", copy_data, ttev->get_cursor_pos());
-  }
-  private function void scale_voxel_value(uint v_pri, uint v_sec,
-    texture_data mutable& tex_pri, texture_data mutable& tex_sec,
-    int x0, int y0, int z0)
-  {
-    for (const z: 0 .. 2) {
-      for (const y: 0 .. 2) {
-	for (const x: 0 .. 2) {
-	  uint cv = v_pri;
-	  if (is_plane_node(v_pri)) {
-	    mutable p = decode_plane_node(v_pri);
-	    p.dist = p.dist * 2;
-	    cv = make_plane_node(p, make_ivec3(
-	      x * 2 - 1,
-	      y * 2 - 1,
-	      z * 2 - 1),
-	      1);
-	  } else if (is_sphere_node(v_pri)) {
-	    mutable p = decode_sphere_node(v_pri);
-	    p.dist = p.dist * 2;
-	    p.center = p.center * 2;
-	    cv = make_sphere_node(p, make_ivec3(
-	      x * 2 - 1,
-	      y * 2 - 1,
-	      z * 2 - 1),
-	      1, 0u);
-	  }
-	  tex_pri.set(ui(x0 + x), ui(y0 + y), ui(z0 + z), cv);
-	  tex_sec.set(ui(x0 + x), ui(y0 + y), ui(z0 + z), v_sec);
-	}
-      }
-    }
   }
   private function void rotate_range(imat3 const& m)
   {

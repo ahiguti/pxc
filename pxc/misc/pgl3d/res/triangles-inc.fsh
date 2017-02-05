@@ -1,4 +1,8 @@
 
+<%if><%eq><%get_config dbgval/>1<%/>
+vec4 dbgval = vec4(0.0);
+<%/>
+
 const float epsilon = 1e-6;
 
 float linear_01(in float x, in float a, in float b)
@@ -281,7 +285,7 @@ int raycast_waffle(inout vec3 pos, in vec3 fragpos, in vec3 ray,
   int tpat_mip = min(miplevel, tile3_size_log2);
   float dist_max = length(pos - fragpos);
   float di = 2.0;
-  float near = 65536;
+  float near = 65536.0;
   if (true) { // どっちが速い？
     vec3 d = (mx - mi) / di;
     vec3 dd = d * 0.5 / vec3(virt3_size); // FIXME????
@@ -360,8 +364,9 @@ int raycast_waffle(inout vec3 pos, in vec3 fragpos, in vec3 ray,
   if (near < 65535) {
     pos = pos + ray * near;
     return 1;
-  }
-  return -1;
+  } else {
+    return -1;
+  } // elseの中に入れないとnvidiaのバグに当たる
 }
 
 int raycast_tilemap(
@@ -373,7 +378,6 @@ int raycast_tilemap(
   // eyeはカメラから物体への向き、lightは物体から光源への向き
   int tmap_mip = clamp(miplevel - tile3_size_log2, 0, tile3_size_log2);
   int tpat_mip = min(miplevel, tile3_size_log2);
-  // tpat_mip = 0; // FIXME: remove
   float distance_unit_tmap_mip = float(<%lshift>16<%>tmap_mip<%/>);
   float distance_unit_tpat_mip = float(<%lshift>1<%>tpat_mip<%/>);
   vec3 ray = eye;
@@ -438,6 +442,7 @@ int raycast_tilemap(
     if (node_type == 0) { // 空白
       spmin = vec3(0.0) - dist_n;
       spmax = vec3(1.0) + dist_p;
+      // if (dist_p.y > 14.5) { dbgval = vec4(1.0, 1.0, 0.0, 1.0); }
     } else {
       bool hit_flag = true;
       bool hit_wall = false;

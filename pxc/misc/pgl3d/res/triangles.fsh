@@ -55,9 +55,8 @@ uniform float random_seed;
   <%frag_in/> vec4 vary_aabb_or_tconv;
 <%/>
 <%decl_fragcolor/>
-<%if><%eq><%get_config dbgval/>1<%/>
-vec4 dbgval = vec4(0.0);
-<%/>
+
+const float shadowmap_max_distance = <%shadowmap_max_distance/>;
 
 <%if><%enable_shadowmapping/>
   <%if><%ne><%stype/>1<%/>
@@ -479,11 +478,10 @@ void main(void)
     // if (hit >= 0) { <%fragcolor/> = vec4(1.0, 0.0, 1.0, 1.0); return; }
     <%/>
     /*
-    hit = raycast_waffle(pos, fragpos, camera_local, light_local,
-      aabb_min, aabb_max);
-    if (hit > 0) {
-      <%fragcolor/> = vec4(0.5, 0.5, 0.5, 1.0); return;
-    }
+    hit = raycast_waffle(pos, fragpos, camera_local,
+      aabb_min, aabb_max, 0);
+    if (hit < 0) { <%fragcolor/> = vec4(1.0, 0.5, 0.5, 1.0); return; }
+    if (hit >= 0) { <%fragcolor/> = vec4(0.5, 0.5, 0.5, 1.0); return; }
     */
     <%if><%eq><%get_config dbgval/>1<%/>
     if (dbgval.a > 0.0) { <%fragcolor/> = dbgval; return; }
@@ -575,12 +573,20 @@ void main(void)
 	}
       }
       // FIXME: remove
-       if (sm_to_use == 1) {
+      /*
+      if (sm_to_use == 1) {
         // <%fragcolor/> = vec4(1.0, 0.0, 0.0, 1.0); return;
-       }
-       if (sm_to_use == 0) {
+      }
+      if (sm_to_use == 3) {
         // <%fragcolor/> = vec4(0.0, 1.0, 0.0, 1.0); return;
-       }
+      }
+      if (max_vec3(abs(cp_sm)) > 1.0) {
+        // <%fragcolor/> = vec4(0.0, 1.0, 0.0, 1.0); return;
+      }
+      if (frag_distance > shadowmap_max_distance) {
+        <%fragcolor/> = vec4(0.0, 1.0, 0.0, 1.0); return;
+      }
+      */
     <%else/>
       // stype != 1。このときはvsでvary_smposaを計算清み。
       for (sm_to_use = 0; sm_to_use < <%smsz/>; ++sm_to_use) {
@@ -609,7 +615,7 @@ void main(void)
 	    */
 	    zval_cur = get_sampler_sm(sm_to_use, c).x;
 	    // zval = min(zval, zval_cur);
-	    float sm_min_dist = 0.02; // FIXME??
+	    float sm_min_dist = 0.01; // FIXME: 調整必要
 	    sml += float(smpos.z < sm_min_dist + zval_cur
 	     * (1.005 /* + (abs(i)+abs(j))/4096.0 */))/9.0;
 	    /* abs(i)+abs(j)/4096.0 を加えるとmacosxでおかしい？ */
@@ -690,6 +696,12 @@ void main(void)
 	smz.r / 256. + smz.g / 65536.0 + smz.b / 16777216.;
       float sml = float(smpos.z < zval * 1.0005);
     <%/>
+    // 距離に応じて影の濃さを調整
+    float sdistp = clamp(3.0 - frag_distance * 4.0 / shadowmap_max_distance,
+      0.0, 1.0);
+    // sml = sml * sdistp * 0.5 + (1.0 - sdistp) * 0.5;
+    sml = sml * sdistp;
+    // sml = 1.0;
     float smv0 = min(1.0, sml);
     /*
     if (sm_to_use == 1) { <%fragcolor/> = vec4(1.0, smv0, 0.0, 1.0); return; }

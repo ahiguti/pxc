@@ -16,9 +16,14 @@ sdl_log(expand(v::arg_decls_bycref{tlist}))
     sdl_log_impl(s);
 }
 
-private threaded function void sdl_log_impl(cstrref const& s)
+private threaded function void sdl_log_impl(cstrref const& s0)
 {
-  SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, s);
+  // SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, s);
+  cstrref s = s0;
+  while (s.size() > 0 && s[s.size() -1] == 0) {
+    s.decrement_back(1);
+  }
+  debug_log(s);
 }
 
 

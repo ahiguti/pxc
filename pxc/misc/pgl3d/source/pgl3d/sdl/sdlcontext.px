@@ -8,6 +8,7 @@ public import GL::glew -;
 public import pgl3d::opengl::glresource -;
 public import pgl3d::sdl::sdlutil -;
 public import pgl3d::engine::pglconfig -;
+public import pgl3d::engine::pglbase -;
 
 public struct sdlcontext(pgl3d_config const& config0)
 {
@@ -21,9 +22,8 @@ public struct sdlcontext(pgl3d_config const& config0)
   public int vsync = 0;
   public scoped_nullable{SDL_DestroyWindow} sdl_window;
   private scoped_nullable{SDL_GL_DeleteContext} sdl_glcontext;
-  public scoped_nullable{SDL_JoystickClose} joystick;
-  public int joystick_num_axes;
-  public int joystick_num_buttons;
+  public varray{ptr{scoped_nullable{SDL_JoystickClose}}} joystick_handles;
+  public varray{joystick_info} joysticks;
   init();
   function void init()
   {
@@ -40,7 +40,7 @@ public struct sdlcontext(pgl3d_config const& config0)
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK);
     TTF_Init();
     init_video();
-    init_joystick();
+    update_joystick_info();
   }
   function void init_video()
   {
@@ -191,20 +191,26 @@ public struct sdlcontext(pgl3d_config const& config0)
     }
     */
   }
-  function void init_joystick()
+  function void update_joystick_info()
   {
-    for (const i: 0 .. SDL_NumJoysticks()) {
+    joystick_handles.clear();
+    joysticks.clear();
+    metafunction make_handle_type make_ptr{scoped_nullable{SDL_JoystickClose}};
+    const n = SDL_NumJoysticks();
+    for (const i: 0 .. n) {
       const j = SDL_JoystickOpen(i);
-      sdl_log("joystick", i, ccharptr_to_string(SDL_JoystickName(j)));
-      if (i == 0) {
-	joystick.reset(j);
-	joystick_num_axes = SDL_JoystickNumAxes(j);
-	joystick_num_buttons = SDL_JoystickNumButtons(j);
-	sdl_log("axes", joystick_num_axes);
-	sdl_log("buttons", joystick_num_buttons);
-      } else {
-	SDL_JoystickClose(j);
-      }
+      // sdl_log("joystick", i, ccharptr_to_string(SDL_JoystickName(j)));
+      const hndp = make_handle_type();
+      joystick_info inf;
+      hndp->reset(j);
+      inf.id_string = ccharptr_to_string(SDL_JoystickName(j));
+      inf.num_axes = static_cast{uint}(max(SDL_JoystickNumAxes(j), 0));
+      inf.num_buttons = static_cast{uint}(max(SDL_JoystickNumButtons(j), 0));
+      inf.num_hats = static_cast{uint}(max(SDL_JoystickNumHats(j), 0));
+      inf.num_balls = static_cast{uint}(max(SDL_JoystickNumBalls(j), 0));
+      debug_log(inf);
+      joystick_handles.push_back(hndp);
+      joysticks.push_back(inf);
     }
   }
   public function string get_gl_version()
@@ -237,6 +243,7 @@ public struct sdlcontext(pgl3d_config const& config0)
     sdl_glcontext.reset(glctx);
     sdl_log("resume version: [", get_gl_version(), "]");
     */
+    update_joystick_info();
     make_current();
   }
   public function void make_current()

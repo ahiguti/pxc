@@ -93,10 +93,15 @@ public struct demoapp_application()
   {
     handle_event(app, ev, speed, pjinfo, commands_r);
   }
-  public function void on_scankeys(cslice{Uint8} const& keys,
-    cslice{short} const& joy_axes, cslice{bool} const& joy_buttons,
-    float speed, projection_info const& pjinfo,
-    string_map mutable& commands_r)
+  public function void on_joystick_changed(cslice{joystick_info} const& ji)
+  {
+    app.player_joystick.axes.resize(6, 0);
+    app.player_joystick.buttons.resize(15, false);
+    app.player_joystick.hats.resize(0, 0);
+  }
+  public function void on_scankeys(cslice{uchar} const& keys,
+    cslice{joystick_state} const& joysticks, float speed,
+    projection_info const& pjinfo, string_map mutable& commands_r)
   {
     app.modmask = 0;
     if (keys[static_cast{uint}(SDL_SCANCODE_LSHIFT)] != 0) {
@@ -111,7 +116,8 @@ public struct demoapp_application()
     if (keys[static_cast{uint}(SDL_SCANCODE_RCTRL)] != 0) {
       app.modmask |= 8;
     }
-    handle_keys(app, keys, joy_axes, joy_buttons, speed, pjinfo, commands_r);
+    handle_keys(app, keys, joysticks, speed, pjinfo, commands_r);
+    // debug_log("joy", joy_axes, "btn", joy_buttons);
   }
   public function tptr{pgl3d_scene_shared} get_scene_shared()
   {
@@ -328,6 +334,7 @@ private struct app_impl()
   public tptr{demoapp_scene_shared} const scene_shared
     = make_tptr{demoapp_scene_shared}(io::system);
   public input_control_target player;
+  public joystick_state player_joystick;
   public input_control ictl = input_control(io::system);
   public bool scene_next_flag;
   public float light_on = 0.0f;
@@ -336,7 +343,7 @@ private struct app_impl()
   public float option_value = 0.0f;
   public string_map app_commands;
   public string app_status_message;
-  public varray{bool} prev_joy_buttons;
+  // public varray{bool} prev_joy_buttons;
   public option{ptr{edit_mode_i}} edit_mode;
   public bool raycast_cull_front = false;
   public bool raycast_sort = false;
@@ -725,13 +732,54 @@ function void handle_event(app_impl mutable& app,
   app.ictl.handle_event(ev, frame_speed, pjinfo, app.app_commands);
 }
 
-function void handle_keys(app_impl mutable& app,
-  cslice{Uint8} const& keys, cslice{short} const& axes,
-  cslice{bool} const& buttons, float frame_speed,
-  projection_info const& pjinfo, string_map mutable& commands_r)
+function void update_joystick(app_impl mutable& app,
+  cslice{joystick_state} const& joysticks)
 {
-  app.ictl.handle_keys(app.player, keys, axes, buttons, frame_speed, pjinfo,
-    commands_r);
+  // TODO: マップできるようにする
+  if (joysticks.empty()) {
+    return;
+  }
+  const& ji = joysticks[0];
+  if (ji.hats.size() == 0) {
+    app.player_joystick = ji;
+    return;
+  } else if (ji.hats.size() >= 1 && ji.buttons.size() >= 16 &&
+    ji.axes.size() >= 6) {
+    mutable& axes = app.player_joystick.axes;
+    mutable& btns = app.player_joystick.buttons;
+    axes[0] = ji.axes[0];
+    axes[1] = ji.axes[1];
+    axes[2] = ji.axes[3];
+    axes[3] = ji.axes[4];
+    axes[4] = 0;
+    axes[5] = 0;
+    btns[0] = (ji.hats[0] & 1) != 0;
+    btns[1] = (ji.hats[0] & 4) != 0;
+    btns[2] = (ji.hats[0] & 8) != 0;
+    btns[3] = (ji.hats[0] & 2) != 0;
+    btns[4] = ji.buttons[11];
+    btns[5] = ji.buttons[15];
+    btns[6] = ji.buttons[13];
+    btns[7] = ji.buttons[14];
+    btns[8] = ji.buttons[6];
+    btns[9] = ji.buttons[7];
+    btns[10] = ji.buttons[0];
+    btns[11] = ji.buttons[1];
+    btns[12] = ji.buttons[3];
+    btns[13] = ji.buttons[4];
+    btns[14] = ji.buttons[16];
+  }
+  // debug_log(joysticks);
+}
+
+function void handle_keys(app_impl mutable& app,
+  cslice{uchar} const& keys, cslice{joystick_state} const& joysticks, float frame_speed, projection_info const& pjinfo,
+  string_map mutable& commands_r)
+{
+  update_joystick(app, joysticks);
+  app.ictl.handle_keys(app.player, keys, app.player_joystick,
+    frame_speed, pjinfo, commands_r);
+  /*
   if (app.ictl.get_button(buttons, 10) != 0) {
     app.app_commands["throw"] = "1";
   }
@@ -739,6 +787,7 @@ function void handle_keys(app_impl mutable& app,
     app.ictl.get_button(app.prev_joy_buttons, 4) == 0) {
     app.scene_next_flag = true;
   }
+  */
   glm::quat camera_rel;
   /*
   {
@@ -778,7 +827,7 @@ function void handle_keys(app_impl mutable& app,
     // sdl_log("posang = ", ss.posang);
   }
   app.app_commands.clear();
-  app.prev_joy_buttons = buttons;
+  // app.prev_joy_buttons = buttons;
 }
 
 private function varray{ptr{pgldrawer_export_i}} init_drawers(
@@ -984,11 +1033,14 @@ private function void build_vertices(app_impl mutable& app,
   const smallmi = glm::make_vec3(0.0, 0.0, 0.0);
   const smallmx = glm::make_vec3(1.0f/256.0f, 1.0f/256.0f, 1.0f/256.0f);
   debug_log("make box");
+  pgs.make_vertex_set(tr1_0, "box", cuboid_tex3d(mi, mx, glm::vec3(), 32.0f));
+  /*
   pgs.make_vertex_set(tr1_0, "box",
     regular_polygon(1.4142f * box_size, 4,
       apply(m0, hole()),
       apply(m0,
 	ctx_tex3d(0, 0, mi, mx))));
+  */
   debug_log("make box_opt1");
   pgs.make_vertex_set(tr1_0, "box_opt1",
     regular_polygon(1.4142f * box_size, 4,
@@ -1711,12 +1763,13 @@ scene_control_update_buttons(scene_control mutable& sctl,
     sli[3] = 0.18f;
   }
   {
+    // dbgui 左下
     mutable& cn = nd.children[1];
     const& sli = cn.trans.value.to_slice();
     sli[0] = -0.9f;
     sli[1] = -0.9f;
-    sli[2] = 1.8f;
-    sli[3] = 1.8f;
+    sli[2] = 0.9f;
+    sli[3] = 0.9f;
   }
 }
 

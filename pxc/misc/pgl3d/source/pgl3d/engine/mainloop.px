@@ -175,8 +175,12 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
   private bool glfinish = conf.get("glfinish", 0, 0, 1) == 1;
   private bool done = false;
   private bool paused = false;
+  private varray{joystick_state} joysticks;
+  /*
   private varray{short} joy_axes;
   private varray{bool} joy_buttons;
+  private varray{uchar} joy_hats;
+  */
   private int target_tick = 0;
   private bool engine_status = true;
   init();
@@ -203,6 +207,8 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
     app->on_build_vertices(pgs);
     pgs.prepare(local_whole_instances, nfac);
     update_window_size();
+
+    app->on_joystick_changed(sdlc.joysticks);
 
     /* spawn motion thread */
     motion_thr.some = make_ptr{motion_thread_client}(nfac,
@@ -334,28 +340,46 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
       app->on_event(ev, frctl.frame_speed_mul, pgs.cam, commands);
       do_commands();
     }
-    if (sdlc.joystick.get() != rawptr{SDL_Joystick}()) {
+    if (!sdlc.joysticks.empty()) {
       SDL_JoystickUpdate();
-      joy_axes.resize(static_cast{size_t}(sdlc.joystick_num_axes), 0);
-      joy_buttons.resize(static_cast{size_t}(sdlc.joystick_num_buttons),
-	false);
-      for (const i: 0 .. sdlc.joystick_num_axes) {
-	const v = SDL_JoystickGetAxis(sdlc.joystick.get(), i);
-	joy_axes[static_cast{size_t}(i)] = v;
+      if (sdlc.joysticks.size() != joysticks.size()) {
+	joysticks.resize(sdlc.joysticks.size(), joystick_state());
       }
-      for (const i: 0 .. sdlc.joystick_num_buttons) {
-	const v = SDL_JoystickGetButton(sdlc.joystick.get(), i);
-	joy_buttons[static_cast{size_t}(i)] = (v != 0);
+    }
+    for (const i: 0 .. joysticks.size()) {
+      const& hnd = *sdlc.joystick_handles[i];
+      const& inf = sdlc.joysticks[i];
+      mutable& st = joysticks[i];
+      if (st.axes.size() != inf.num_axes) {
+	st.axes.resize(inf.num_axes, 0);
       }
-      // sdl_log("joy", joy_axes, joy_buttons);
+      if (st.buttons.size() != inf.num_buttons) {
+	st.buttons.resize(inf.num_buttons, false);
+      }
+      if (st.hats.size() != inf.num_hats) {
+	st.hats.resize(inf.num_hats, 0);
+      }
+      for (const j: 0 .. inf.num_axes) {
+	const v = SDL_JoystickGetAxis(hnd.get(), static_cast{int}(j));
+	st.axes[j] = v;
+      }
+      for (const j: 0 .. inf.num_buttons) {
+	const v = SDL_JoystickGetButton(hnd.get(), static_cast{int}(j));
+	st.buttons[j] = (v != 0);
+      }
+      for (const j: 0 .. inf.num_hats) {
+	const v = SDL_JoystickGetHat(hnd.get(), static_cast{int}(j));
+	st.hats[j] = v;
+      }
+      // debug_log(i, "axes", st.axes, "btns", st.buttons, "hats", st.hats);
     }
     {
       int numkeys;
       const ksp = SDL_GetKeyboardState(address(numkeys));
       const ks = ksp.to_cslice(static_cast{size_t}(numkeys));
       /* invoke key handler */
-      app->on_scankeys(ks, joy_axes, joy_buttons, frctl.frame_speed_mul,
-	pgs.cam, commands);
+      app->on_scankeys(ks, joysticks, frctl.frame_speed_mul, pgs.cam,
+	commands);
       do_commands();
     }
     fr.save_ticks(0, SDL_GetTicks());

@@ -331,6 +331,9 @@ public struct drawer_triangles(shader_config const& glc0,
       bnd["shadowmap_resolution"] = to_string(glc.shadowmap_resolution);
       bnd["shaodwmap_scale"] = to_string(
 	static_cast{int}(glc.shadowmap_scale + 0.5f));
+      bnd["shadowmap_max_distance"] = to_string(
+	pow(glc.shadowmap_scale, static_cast{float}(glc.num_shadowmaps - 1))
+	* glc.shadowmap_distance);
       s0.some = init_triangles_shader(glc, bnd, stype);
       s1.some = init_zprepass_shader(glc, bnd, stype);
       s2.some = init_shadowmap_shader(glc, bnd, stype);
@@ -408,6 +411,7 @@ public struct drawer_triangles(shader_config const& glc0,
     }
     // debug_log("tr: has instance", get_vbid_name(), "vbid=", vbid);
     if (step == draw_step_shadowmapping) {
+      glUseProgram(sdr_shadow.some->program);
       if (stype == 1) {
 	if (raycast_cull_front) {
 	  // glEnable(GL_CULL_FACE);
@@ -417,6 +421,12 @@ public struct drawer_triangles(shader_config const& glc0,
 	glActiveTexture(GL_TEXTURE5);
 	glBindTexture(GL_TEXTURE_3D, emt->glt_voxtpat->texture_id.get());
 	glUniform1i(sdr_shadow.some->u_sampler_voxtpat, 5);
+	/*
+	debug_log("sampler_voxtpat", stype, ssubtype, iter,
+	  sdr_shadow.some->u_sampler_voxtpat,
+	  static_cast{int}(emt->glt_voxtpat->texture_id.get()),
+	  static_cast{int}(glGetError()));
+	*/
 	glActiveTexture(GL_TEXTURE6);
 	glBindTexture(GL_TEXTURE_3D, emt->glt_voxtmap->texture_id.get());
 	glUniform1i(sdr_shadow.some->u_sampler_voxtmap, 6);
@@ -427,7 +437,6 @@ public struct drawer_triangles(shader_config const& glc0,
       for (const i: 0 .. iter) {
 	scale /= glc.shadowmap_scale;
       }
-      glUseProgram(sdr_shadow.some->program);
       if (glc.light_fixed) {
 	//debug_log("scale", scale);
 	const trans = -cam_df.camera.position;

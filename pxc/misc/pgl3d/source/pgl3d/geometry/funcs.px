@@ -113,6 +113,7 @@ public metafunction ctx_fill to_gf_poly{gf_ctx_fill};
 public metafunction ctx_fill_smooth to_gf_poly{gf_ctx_fill_smooth};
 public metafunction ctx_poly_joint to_gf_poly{gf_ctx_poly_joint};
 public metafunction ctx_point_joint to_gf_poly{gf_ctx_point_joint};
+public metafunction cuboid_tex3d to_gf_poly{gf_cuboid_tex3d};
 public metafunction ctx_tex3d to_gf_poly{gf_ctx_tex3d};
 public metafunction ctx_tex3d_int_surf to_gf_poly{gf_ctx_tex3d_int_surf};
 public metafunction ctx_tex3d_opt to_gf_poly{gf_ctx_tex3d_opt};
@@ -226,6 +227,32 @@ private threaded function vec3 normal_scale_from_poly(poly_t const& poly)
   return v / sqrt(length(v));
 }
 */
+
+private threaded function void gf_cuboid_tex3d(vec3 const& coord_min,
+  vec3 const& coord_max, vec3 const& center, float scale,
+  build_context_i const& ctx, poly_t const& poly, mesh_index const& mp)
+{
+  const coord_sz = coord_max - coord_min;
+  const px = coord_sz.x * scale;
+  const py = coord_sz.y * scale;
+  const pz = coord_sz.z * scale;
+  // 底面の長方形の座標
+  farray{vertex_attr, 4} arr;
+  arr[0].pos.x = center.x - px;
+  arr[0].pos.y = center.y - py;
+  arr[0].pos.z = center.z - pz;
+  arr[1].pos.x = center.x + px;
+  arr[1].pos.y = center.y - py;
+  arr[1].pos.z = center.z - pz;
+  arr[2].pos.x = center.x + px;
+  arr[2].pos.y = center.y + py;
+  arr[2].pos.z = center.z - pz;
+  arr[3].pos.x = center.x - px;
+  arr[3].pos.y = center.y + py;
+  arr[3].pos.z = center.z - pz;
+  // 底面の長方形を指定すると直方体が作られる
+  gf_ctx_tex3d(0, 0, coord_min, coord_max, ctx, arr, mp);
+}
 
 private threaded function void gf_regular_polygon(float radius, size_t n,
   gf_poly const& c0, gf_poly const& c1, build_context_i const& ctx,
