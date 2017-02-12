@@ -374,6 +374,7 @@ void main(void)
   vec4 tex_val = vec4(0.5, 0.5, 0.5, 1.0);
   float frag_randval = generate_random(vec3(gl_FragCoord.xy, 0.0));
     // フラグメントの座標から生成した乱数
+  int miplevel = 0;
   <%if><%eq><%stype/>1<%/>
     // raycast
     <%if><%is_gl3_or_gles3/>
@@ -453,21 +454,26 @@ void main(void)
     int miplevel = clamp(int(dist_log2 + dist_rnd + 6.5), 0, 8);
     */
     int miplevel_noclamp = raycast_get_miplevel(pos, campos, dist_rnd);
-    int miplevel_clamp = clamp(miplevel_noclamp, 0, 8);
-    // if (miplevel_clamp > 2) { <%fragcolor/> = vec4(1,0,1,1); return; }
-    // if (miplevel_clamp > 1) { <%fragcolor/> = vec4(1,1,0,1); return; }
-    // if (miplevel_clamp > 0) { <%fragcolor/> = vec4(1,0,0,1); return; }
-    // if (int(option_value + 0.5) == 1) { miplevel_clamp = 0; }
+    miplevel = clamp(miplevel_noclamp, 0, 8);
+    // if (miplevel > 2) { <%fragcolor/> = vec4(1,0,1,1); return; }
+    // if (miplevel > 1) { <%fragcolor/> = vec4(1,1,0,1); return; }
+    // if (miplevel > 0) { <%fragcolor/> = vec4(1,0,0,1); return; }
+    // if (int(option_value + 0.5) == 1) { miplevel = 0; }
     int hit = -1;
     // float selfshadow_para = clamp(1.0 - dist_log2 * 0.1, 0.0, 1.0);
     float selfshadow_para = 0.0f;
     <%if><%eq><%get_config edit_mode/>1<%/>
-    miplevel_clamp = 0;
+    miplevel = 0;
     <%/>
-    //miplevel_clamp = 0;
-    hit = raycast_tilemap(pos, camera_local, light_local,
+    // miplevel = 0;
+    hit = raycast_tilemap(pos, campos, dist_rnd, camera_local, light_local,
       aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para,
-      miplevel_clamp);
+      miplevel);
+/*
+    hit = raycast_tilemap_o1(pos, camera_local, light_local,
+      aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para,
+      miplevel);
+*/
     <%if><%eq><%ssubtype/>2<%/>
     // if (hit >= 0)  { <%fragcolor/> = vec4(1.0, 0.0, 0.0, 1.0); return; }
     <%/>
@@ -728,6 +734,8 @@ void main(void)
     float aval_me = floor(aval / 64.0);
     aval = aval - aval_me * 64.0;
     float aval_roughness = aval;
+    lstr = max(0.0, lstr - float(miplevel) * 0.125 * 0.5);
+      // miplevelが上がると暗く
     if (aval_me == 1) {
       // emission
       mate_emit = tex_val.rgb;

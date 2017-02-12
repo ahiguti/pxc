@@ -3,6 +3,7 @@ public import common -;
 public import exception -;
 public import meta m;
 public import glm -;
+public import numeric::fpmath -;
 public import pgl3d::engine::util -;
 public import pgl3d::texture::texture -;
 
@@ -426,4 +427,356 @@ public threaded function bool is_sphere_node(uint v)
   return node_type >= 1 && node_type <= 159;
 }
 
+public valuetype struct plane_param()
+{
+  public int dist = 0;
+  public ivec3 nor = make_ivec3(-1, -1, -1);
+  public function void clamp_param()
+  {
+    nor.x = clamp(nor.x, -7, 7);
+    nor.y = clamp(nor.y, -7, 7);
+    nor.z = clamp(nor.z, -7, 7);
+    dist = clamp(dist, -48, 48);
+  }
+  public function void __adda(plane_param const& v)
+  {
+    nor += v.nor;
+    dist += v.dist;
+  }
+  public function void __diva(uint v)
+  {
+    nor /= si(v);
+    dist /= si(v);
+  }
+}
+
+public threaded function plane_param decode_plane_node(uint v)
+{
+  plane_param p;
+  if (!is_plane_node(v)) {
+    return p;
+  }
+  int a = si(v >> 24u);
+  int r = si(v & 0xffu);
+  int g = si((v >> 8u) & 0xffu);
+  int b = si((v >> 16u) & 0xffu);
+  p.dist = si(a) - 208;
+  p.nor.x = ((r >> 4u) & 0x0fu) - 8;
+  p.nor.y = ((g >> 4u) & 0x0fu) - 8;
+  p.nor.z = ((b >> 4u) & 0x0fu) - 8;
+  p.clamp_param();
+  return p;
+}
+
+public threaded function uint encode_plane_node(plane_param const& pp)
+{
+  const& n = pp.nor;
+  if (n.x < -7 || n.x > 7 || n.y < -7 || n.y > 7 || n.z < -7 || n.z > 7) {
+    return 0u;
+  }
+  if (n.x == 0 && n.y == 0 && n.z == 0) {
+    return 0u;
+  }
+  const d = pp.dist;
+  if (d < -48 || d > 48) {
+    return 0u;
+  }
+  const r = ui(n.x + 8) << 4u;
+  const g = ui(n.y + 8) << 4u;
+  const b = ui(n.z + 8) << 4u;
+  const a = ui(d + 208);
+  const v = (a << 24u) | (b << 16u) | (g << 8u) | r;
+  return v;
+}
+
+public threaded function uint make_plane_node(plane_param const& p,
+  ivec3 const& offset, int offset_mul)
+{
+  const& nor = p.nor;
+  const int d = p.dist;
+  const d1 = d - dot_int(nor, offset) * offset_mul;
+    // offsetが0のボクセルの距離パラメタがdのとき、その平面がoffsetだけ
+    // 移動した位置のボクセルを切断するような距離パラメタはd1になる
+    // offset_mulは1ボクセルあたりのoffset値の変化する量。
+  const drange = abs(nor.x) + abs(nor.y) + abs(nor.z);
+    // ax+by+czの(x,y,z)が-1,+1の範囲での最小最大は-drange,+drange
+  // debug_log("plane_node pre", nor, d, offset, d1, drange);
+  if (d1 <= -drange) {
+    return 255u << 24u; // d1が小さすぎるので壁
+  }
+  if (d1 >= drange) {
+    return 0u; // d1が大きすぎるので空白
+  }
+  // debug_log("plane_node", nor, d, offset, d1, drange);
+  plane_param pp;
+  pp.nor = nor;
+  pp.dist = d1;
+  return encode_plane_node(pp);
+}
+
+public valuetype struct rgb8()
+{
+  public uint b; // 8bit
+  public uint g; // 8bit
+  public uint r; // 8bit
+}
+
+public valuetype struct color_param()
+{
+  public uchar metalness; // 1bit
+  public uchar emission;  // 1bit
+  public uint  roughness; // 4bit
+  public rgb8 rgb;
+  public function void __adda(color_param const& v) {
+    rgb.r += v.rgb.r;
+    rgb.g += v.rgb.g;
+    rgb.b += v.rgb.b;
+    metalness |= v.metalness;
+    emission |= v.emission;
+    roughness += v.roughness;
+  }
+  public function void __diva(uint v) {
+    rgb.r /= v;
+    rgb.g /= v;
+    rgb.b /= v;
+    roughness /= v;
+  }
+}
+
+public threaded function color_param decode_color_param(uint v)
+{
+  color_param p;
+  p.metalness = static_cast{uchar}((v >> 31u) & 0x01u);
+  p.emission = static_cast{uchar}((v >> 30u) & 0x01u);
+  p.roughness = static_cast{uchar}((v >> 24u) & 0x0fu);
+  p.rgb.b = static_cast{uchar}((v >> 16u) & 0xffu);
+  p.rgb.g = static_cast{uchar}((v >> 8u) & 0xffu);
+  p.rgb.r = static_cast{uchar}((v >> 0u) & 0xffu);
+  return p;
+}
+
+public threaded function uint encode_color_param(color_param const& p0)
+{
+  mutable p = p0;
+  uchar const uc0 = 0u;
+  uchar const uc1 = 1u;
+  p.metalness = clamp(p.metalness, uc0, uc1);
+  p.emission = clamp(p.emission, uc0, uc1);
+  p.roughness = clamp(p.roughness, 0u, 15u);
+  p.rgb.r = clamp(p.rgb.r, 0u, 255u);
+  p.rgb.g = clamp(p.rgb.g, 0u, 255u);
+  p.rgb.b = clamp(p.rgb.b, 0u, 255u);
+  uint r;
+  r |= ui(p.metalness) << 31u;
+  r |= ui(p.emission) << 30u;
+  r |= ui(p.roughness) << 24u;
+  r |= ui(p.rgb.b) << 16u;
+  r |= ui(p.rgb.g) << 8u;
+  r |= ui(p.rgb.r) << 0u;
+  return r;
+}
+
+public valuetype struct sphere_param()
+{
+  public int dist = 1;
+  public ivec3 center;
+  public ivec3 scale = make_ivec3(2, 2, 2);
+  public function void __adda(sphere_param const& v)
+  {
+    dist += v.dist;
+    center += v.center;
+    scale = map{ivec3, max}(scale, v.scale);
+  }
+  public function void __diva(uint v)
+  {
+    dist /= si(v);
+    center /= si(v);
+  }
+}
+
+threaded function {t} t round(t v)
+{
+  return v > 0.0 ? (v + 0.5) : (v - 0.5);
+}
+
+threaded function {t} t round_bias(t v, t b)
+{
+  return v > 0.0 ? (v + b) : (v - b);
+}
+
+public threaded function uint make_sphere_node(sphere_param const& p,
+  ivec3 const& offset, int offset_mul, uint modifier)
+{
+  const c = p.center -
+    map{ivec3, operator::mul}(offset, p.scale) * offset_mul / 2;
+    // offset_mulは1ボクセルあたりのoffset値の変化する量。
+  threaded function int distance2(ivec3 const pos)
+  {
+    // posはシェーダでは0.5までの範囲。この関数は1までの範囲なので2倍された値。
+    const a_pt = map{ivec3, operator::mul}(p.scale, pos);
+      // シェーダのa_vtの二倍の値
+    const c_pt = c + c; // シェーダのc_vtの二倍の値
+    const ac_pt = c_pt - a_pt;
+    const len2_ac_pt = dot_int(ac_pt, ac_pt); // シェーダのlen_2_ac_ptの4倍
+    return len2_ac_pt;
+  }
+  /* 球の内側なら負, 境界上なら0, 外側なら正 */
+  threaded function int collision(ivec3 const pos)
+  {
+    return distance2(pos) - p.dist * p.dist * 4;
+  }
+  bool has_inside = false;
+  bool has_outside = false;
+  for (int z: -1 .. 2) {
+    for (int y: -1 .. 2) {
+      for (int x: -1 .. 2) {
+	const ivec3 pos = make_ivec3(x, y, z);
+	const v = collision(pos);
+	has_inside |= v < 0; // 球の中心からの距離がdistより小さい
+	has_outside |= v > 0; // 球の中心からの距離がdistより大きい
+      }
+    }
+  }
+  if ((modifier & 12) != 0u) {
+    const d2 = distance2(ivec3()); // 球の中心とボクセル中心の距離の2乗
+    const r2 = p.dist * p.dist * 4; // 球の半径の2乗
+    const rdiff = sqrt(static_cast{double}(d2))
+      - sqrt(static_cast{double}(r2));
+    const inor = map{ivec3, operator::mul}(c, p.scale);
+    // debug_log("sp inor", inor, c, p.scale);
+    plane_param pp;
+    if (true) {
+      /*
+      const m = p.dist * 2;
+      const mdiv = max((m + 6) / 7, 1);
+      pp.nor.x = clamp(inor.x / mdiv, -7, 7);
+      pp.nor.y = clamp(inor.y / mdiv, -7, 7);
+      pp.nor.z = clamp(inor.z / mdiv, -7, 7);
+      debug_log("hoge", p.dist, mdiv);
+      */
+      pp.nor.x = clamp(inor.x / 4, -7, 7);
+      pp.nor.y = clamp(inor.y / 4, -7, 7);
+      pp.nor.z = clamp(inor.z / 4, -7, 7);
+      /*
+      */
+    } else {
+      const norm2 = sqrt(static_cast{float}(dot_int(inor, inor)));
+      const nor = to_vec3(inor) * (7.0f / norm2);
+      pp.nor.x = clamp(si(round(nor.x)), -7, 7);
+      pp.nor.y = clamp(si(round(nor.y)), -7, 7);
+      pp.nor.z = clamp(si(round(nor.z)), -7, 7);
+      /*
+      {
+	ivec3 n;
+	n.x = clamp(inor.x / 4, -7, 7);
+	n.y = clamp(inor.y / 4, -7, 7);
+	n.z = clamp(inor.z / 4, -7, 7);
+	debug_log("n,ppnor,nor", n, pp.nor, nor);
+      }
+      */
+    }
+    threaded function bool check_one(int x, int y, int z) {
+      return abs(pp.nor.x) == x && abs(pp.nor.y) == y && abs(pp.nor.z) == z;
+    }
+    threaded function void dist_modify_one(int d, int x, int y, int z, int v) {
+      if (p.dist != d) {
+	return;
+      }
+      bool r;
+      r |= check_one(x, y, z);
+      r |= check_one(x, z, y);
+      r |= check_one(y, x, z);
+      r |= check_one(y, z, x);
+      r |= check_one(z, x, y);
+      r |= check_one(z, y, x);
+      if (r) {
+	pp.dist += (pp.dist < 0) ? -v : v;
+      }
+    }
+    const nd = sqrt(static_cast{double}(dot_int(pp.nor, pp.nor)));
+    if ((modifier & 8u) != 0) {
+      pp.dist = clamp(si(round(rdiff * 2.0)), -21, 21);
+    } else {
+      pp.dist = clamp(si(round_bias(rdiff * nd / 2.0, 0.4)), -21, 21);
+      // 微調整
+      dist_modify_one(10, 1, 3, 3, 1);
+      dist_modify_one(10, 4, 3, 3, -1);
+      dist_modify_one(14, 3, 4, 6, -1);
+    }
+    const r = make_plane_node(pp, ivec3(), 1);
+    /*
+    debug_log("sphere_node", p, "offset", offset, offset_mul, "c", c,
+      "rdiff", rdiff, "inor", inor, "pp", pp, "r", to_hexstring(r));
+    */
+    return r;
+  }
+  if (has_outside && (has_inside || pos3_inside_eq(c, -1, 1))) {
+    sphere_param p1 = p;
+    p1.center = c;
+    // debug_log("msn sph", p, offset);
+    return encode_sphere_node(p1);
+  } else if (has_outside) {
+    return make_space_voxel();
+  } else {
+    // debug_log("msn wall", p, offset);
+    return 255u << 24u; // 壁
+  }
+}
+
+threaded function {t, tv} bool pos3_inside_eq(t const p, tv mi, tv mx)
+{
+  return
+    p.x >= mi && p.x <= mx &&
+    p.y >= mi && p.y <= mx &&
+    p.z >= mi && p.z <= mx;
+}
+
+public threaded function uint encode_sphere_node(sphere_param const& p)
+{
+  // debug_log("encode_sphere", p);
+  int node_type = p.dist + 1;
+  if (node_type < 1 || node_type > 159) {
+    return 0u;
+  }
+  if (p.center.x < -31 || p.center.x > 31 ||
+      p.center.y < -31 || p.center.y > 31 ||
+      p.center.z < -31 || p.center.z > 31) {
+    return 0u;
+  }
+  if (p.scale.x < 0 || p.scale.x > 3 ||
+      p.scale.y < 0 || p.scale.y > 3 ||
+      p.scale.z < 0 || p.scale.z > 3) {
+    return 0u;
+  }
+  ivec3 rgb = map{ivec3, operator::mul}(p.scale, make_ivec3(64, 64, 64))
+    + p.center + make_ivec3(32, 32, 32);
+  uint r = ui(rgb.x);
+  uint g = ui(rgb.y);
+  uint b = ui(rgb.z);
+  uint a = ui(node_type);
+  const v = (a << 24u) | (b << 16u) | (g << 8u) | r;
+  return v;
+}
+
+public threaded function sphere_param decode_sphere_node(uint v)
+{
+  sphere_param p;
+  if (!is_sphere_node(v)) {
+    return p;
+  }
+  int a = si(v >> 24u);
+  int r = si(v & 0xffu);
+  int g = si((v >> 8u) & 0xffu);
+  int b = si((v >> 16u) & 0xffu);
+  p.scale = make_ivec3(r >> 6, g >> 6, b >> 6);
+  p.center = make_ivec3((r & 0x3f) - 32, (g & 0x3f) - 32, (b & 0x3f) - 32);
+  p.dist = a - 1;
+  // sp_scaleは座標aを(-0.5,0.5)から何倍に拡大するか
+  //   rgbの上位2bit
+  // sp_centerは球の中心座標でa*sp_scaleと比較
+  //   rgbの下位6bitから32を引く
+  // radiusは半径
+  //   (node_type - 1)
+  return p;
+}
 
