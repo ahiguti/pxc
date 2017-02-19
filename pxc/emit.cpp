@@ -3365,14 +3365,22 @@ void expr_try::emit_value(emit_context& em)
     em.puts("PXC_TRY ");
     fn_emit_value(em, tblock);
   }
-  em.puts(" PXC_CATCH(const ");
+  em.puts("\n");
+  em.indent('x');
+  em.puts("#ifndef PXC_NO_EXCEPTIONS\n");
+  em.indent('x');
+  em.puts("catch (const ");
   assert(cblock->argdecls);
   /* don't use call-traits. always catch by const reference. */
   emit_term(em, cblock->argdecls->get_texpr());
   em.puts("& ");
   cblock->argdecls->emit_symbol(em);
-  em.puts(") ");
+  em.puts(")\n");
+  em.indent('x');
   fn_emit_value(em, cblock);
+  em.puts("\n");
+  em.indent('x');
+  em.puts("#endif\n");
   if (rest != 0) {
     fn_emit_value(em, rest);
   }
@@ -3450,7 +3458,11 @@ static void emit_vardef_constructor_fast_boxing(emit_context& em,
 	em.indent('x');
 	em.puts("new (&" + varp1 + "->monitor$z) pxcrt::monitor();\n");
 	em.indent('x');
-	em.puts("} PXC_CATCH (...) {\n");
+	em.puts("}\n");
+	em.indent('x');
+	em.puts("#ifndef PXC_NO_EXCEPTIONS\n");
+	em.indent('x');
+	em.puts("catch (...) {\n");
 	em.indent('x');
 	em.puts("typedef ");
 	em.puts(term_tostr_cname(otyp));
@@ -3463,6 +3475,8 @@ static void emit_vardef_constructor_fast_boxing(emit_context& em,
 	em.puts("PXC_RETHROW;\n");
 	em.indent('x');
 	em.puts("}\n");
+	em.indent('x');
+	em.puts("#endif\n");
       }
     }
     em.indent('x');

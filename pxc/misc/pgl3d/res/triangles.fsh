@@ -347,7 +347,7 @@ vec3 light_all(in vec3 light_color, in float lstr, in vec3 mate_specular,
 
 vec4 get_sampler_sm(int i, vec2 p)
 {
-  <%if><%is_gl3_or_gles3/>
+  <%if><%is_gl3/>
     return <%texture2d/>(sampler_sm[i], p);
   <%else/>
     <%for x 0><%smsz/>
@@ -464,15 +464,16 @@ void main(void)
     float selfshadow_para = 0.0f;
     <%if><%eq><%get_config edit_mode/>1<%/>
     miplevel = 0;
-    <%/>
+    hit = raycast_tilemap_em(pos, camera_local, light_local,
+      aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para,
+      miplevel);
+    <%else/>
     // miplevel = 0;
     hit = raycast_tilemap(pos, campos, dist_rnd, camera_local, light_local,
       aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para,
       miplevel);
+    <%/>
 /*
-    hit = raycast_tilemap_o1(pos, camera_local, light_local,
-      aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para,
-      miplevel);
 */
     <%if><%eq><%ssubtype/>2<%/>
     // if (hit >= 0)  { <%fragcolor/> = vec4(1.0, 0.0, 0.0, 1.0); return; }
@@ -622,8 +623,11 @@ void main(void)
 	    zval_cur = get_sampler_sm(sm_to_use, c).x;
 	    // zval = min(zval, zval_cur);
 	    float sm_min_dist = 0.01; // FIXME: 調整必要
+	    /*
 	    sml += float(smpos.z < sm_min_dist + zval_cur
-	     * (1.005 /* + (abs(i)+abs(j))/4096.0 */))/9.0;
+	     * (1.005 + (abs(i)+abs(j))/4096.0))/9.0;
+	    */
+	    sml += float(smpos.z < sm_min_dist + zval_cur * 1.005)/9.0;
 	    /* abs(i)+abs(j)/4096.0 を加えるとmacosxでおかしい？ */
 	  }
 	}
@@ -736,10 +740,10 @@ void main(void)
     float aval_roughness = aval;
     lstr = max(0.0, lstr - float(miplevel) * 0.125 * 0.5);
       // miplevelが上がると暗く
-    if (aval_me == 1) {
+    if (aval_me == 1.0) {
       // emission
       mate_emit = tex_val.rgb;
-    } else if (aval_me == 2) {
+    } else if (aval_me == 2.0) {
       // metal
       mate_specular = tex_val.rgb;
     } else {

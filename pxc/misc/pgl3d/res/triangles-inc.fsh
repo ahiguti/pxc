@@ -177,13 +177,13 @@ float voxel_collision_sphere(in vec3 v, in vec3 a, in vec3 c,
 
 <%if><%eq><%stype/>1<%/>
 
-const ivec3 tile3_size = <%tile3_size/>;
+const vec3 tile3_size = vec3(<%tile3_size/>);
 const int tile3_size_log2 = <%tile3_size_log2/>.x;
-const ivec3 pat3_size = <%pat3_size/>;
-const ivec3 pattex3_size = tile3_size * pat3_size;
-const ivec3 map3_size = <%map3_size/>;
+const vec3 pat3_size = vec3(<%pat3_size/>);
+const vec3 pattex3_size = tile3_size * pat3_size;
+const vec3 map3_size = vec3(<%map3_size/>);
 const int map3_size_log2 = <%map3_size_log2/>.x;
-const ivec3 virt3_size = <%virt3_size/>;
+const vec3 virt3_size = vec3(<%virt3_size/>);
 const int virt3_size_log2 = tile3_size_log2 + map3_size_log2;
 
 uniform <%mediump_sampler3d/> sampler_voxtpat;
@@ -292,7 +292,7 @@ int raycast_waffle(inout vec3 pos, in vec3 fragpos, in vec3 ray,
     ad = abs(ad);
     vec3 a = (f - pos) / ray;
     for (float i = 0.0; i < di; i = i + 1.0, a.x = a.x + ad.x) {
-      if (a.x > 0 && a.x < dist_max) {
+      if (a.x > 0.0 && a.x < dist_max) {
 //vec3 p = pos + ray * a.x; if (!pos3_inside_3(p, mi, mx)) { break; }
 	if (tilemap_fetch(pos + ray * a.x, tmap_mip, tpat_mip) == 255) {
 	  near = min(a.x, near);
@@ -301,7 +301,7 @@ int raycast_waffle(inout vec3 pos, in vec3 fragpos, in vec3 ray,
       }
     }
     for (float i = 0.0; i < di; i = i + 1.0, a.y = a.y + ad.y) {
-      if (a.y > 0 && a.y < dist_max) {
+      if (a.y > 0.0 && a.y < dist_max) {
 //vec3 p = pos + ray * a.y; if (!pos3_inside_3(p, mi, mx)) { break; }
 	if (tilemap_fetch(pos + ray * a.y, tmap_mip, tpat_mip) == 255) {
 	  near = min(a.y, near);
@@ -310,7 +310,7 @@ int raycast_waffle(inout vec3 pos, in vec3 fragpos, in vec3 ray,
       }
     }
     for (float i = 0.0; i < di; i = i + 1.0, a.z = a.z + ad.z) {
-      if (a.z > 0 && a.z < dist_max) {
+      if (a.z > 0.0 && a.z < dist_max) {
 //vec3 p = pos + ray * a.z; if (!pos3_inside_3(p, mi, mx)) { break; }
 	if (tilemap_fetch(pos + ray * a.z, tmap_mip, tpat_mip) == 255) {
 	  near = min(a.z, near);
@@ -324,14 +324,14 @@ int raycast_waffle(inout vec3 pos, in vec3 fragpos, in vec3 ray,
     vec3 ad = d / ray;
     vec3 a = (f - pos) / ray;
     for (float i = 0.0; i < di; i = i + 1.0, a = a + ad) {
-      if (a.x > 0 && a.x < dist_max) {
+      if (a.x > 0.0 && a.x < dist_max) {
 //vec3 p = pos + ray * a.x; if (!pos3_inside_3(p, mi, mx)) { break; }
 	// if (tilemap_fetch(pos + ray * a.x, tmap_mip, tpat_mip) == 255) {
 	if (tilemap_fetch(pos + ray * a.x, tmap_mip, tpat_mip) == 255) {
 	  near = min(a.x, near);
 	}
       }
-      if (a.y > 0 && a.y < dist_max) {
+      if (a.y > 0.0 && a.y < dist_max) {
 //vec3 p = pos + ray * a.y; if (!pos3_inside_3(p, mi, mx)) { break; }
 	// if (tilemap_fetch(pos + ray * a.y, tmap_mip, tpat_mip) == 255) {
 	if (tilemap_fetch(pos + ray * a.y, tmap_mip, tpat_mip) == 255) {
@@ -339,7 +339,7 @@ int raycast_waffle(inout vec3 pos, in vec3 fragpos, in vec3 ray,
 	  near = min(a.y, near);
 	}
       }
-      if (a.z > 0 && a.z < dist_max) {
+      if (a.z > 0.0 && a.z < dist_max) {
 //tmap_mip = 0;
 //tpat_mip = 0;
 //vec3 p = pos + ray * a.z; if (!pos3_inside_3(p, mi, mx)) { break; }
@@ -353,7 +353,7 @@ int raycast_waffle(inout vec3 pos, in vec3 fragpos, in vec3 ray,
     }
   }
   // return near < 65535 ? near : -1.0f;
-  if (near < 65535) {
+  if (near < 65535.0) {
     pos = pos + ray * near;
     return 1;
   } else {
@@ -366,7 +366,7 @@ int raycast_get_miplevel(in vec3 pos, in vec3 campos, in float dist_rnd)
   // テクスチャ座標でのposとcamposからmiplevelを決める
   float dist_pos_campos_2 = dot(pos - campos, pos - campos) + 0.0001;
   float dist_log2 = log(dist_pos_campos_2) * 0.5 / log(2.0);
-  return int(dist_log2 + dist_rnd + virt3_size_log2 - 9.0);
+  return int(dist_log2 + dist_rnd + float(virt3_size_log2) - 9.0);
 }
 
 int raycast_tilemap(
@@ -478,7 +478,7 @@ int raycast_tilemap(
 	  vec3 coord = (curpos_f - 0.5) * 2.0;
 	  float dot_abc_p = dot(param_abc, coord);
 	  float pl = dot_abc_p - param_d; // 正なら現在位置では空白
-	  hit_wall = pl > 0;
+	  hit_wall = pl > 0.0;
 	  length_ae = (-pl) * 0.5 / dot(param_abc, ray);
 	  sp_nor = -normalize(param_abc);
 	} else {
@@ -590,7 +590,7 @@ int raycast_tilemap(
   return hit;
 }
 
-int raycast_tilemap_o1(
+int raycast_tilemap_em(
   inout vec3 pos, in vec3 eye, in vec3 light,
   in vec3 aabb_min, in vec3 aabb_max, out vec4 value_r, inout vec3 hit_nor,
   in float selfshadow_para, inout float lstr_para, in int miplevel)
@@ -680,7 +680,7 @@ int raycast_tilemap_o1(
 	  vec3 coord = (curpos_f - 0.5) * 2.0;
 	  float dot_abc_p = dot(param_abc, coord);
 	  float pl = dot_abc_p - param_d; // 正なら現在位置では空白
-	  hit_wall = pl > 0;
+	  hit_wall = pl > 0.0;
 	  length_ae = (-pl) * 0.5 / dot(param_abc, ray);
 	  sp_nor = -normalize(param_abc);
 	} else {

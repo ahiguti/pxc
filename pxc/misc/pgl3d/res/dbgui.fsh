@@ -22,10 +22,11 @@ void main(void)
   v = <%texture2d/>(sampler_sm[2], (p - 0.5) / 9.0 + 0.5);
   float b = v.r;
   // コメントを外すとshadowmapを可視化する
-  // <%fragcolor/> = vec4(r, g, b, 1.0);
+  <%fragcolor/> = vec4(r, g, b, 1.0);
+  // <%fragcolor/> = vec4(1.0);
 
-  /*
   // nvidiaだとfoo()が0を返す。
+  /*
   if (foo() == 0) {
     <%fragcolor/> = vec4(1.0);
   }

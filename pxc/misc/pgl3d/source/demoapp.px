@@ -338,7 +338,7 @@ private struct app_impl()
   public input_control ictl = input_control(io::system);
   public bool scene_next_flag;
   public float light_on = 0.0f;
-  public glm::vec2 light = glm::make_vec2(0.9f, 0.0f);
+  public glm::vec2 light = glm::make_vec2(0.1f, 0.2f);
   public float exposure = 1.414f;
   public float option_value = 0.0f;
   public string_map app_commands;
@@ -347,6 +347,7 @@ private struct app_impl()
   public option{ptr{edit_mode_i}} edit_mode;
   public bool raycast_cull_front = false;
   public bool raycast_sort = false;
+  public bool enable_dbgui = false;
   public textures_ptr const textures = make_textures_ptr();
   public pgl3d::geometry::funcs::rand_generator rand_gen
     = pgl3d::geometry::funcs::rand_generator(1u);
@@ -363,8 +364,8 @@ private struct app_impl()
     } else {
       // player.position = glm::make_vec3(0.0, 0.0, -40.0);
       // player.angle = glm::make_quat_wxyz(0.70711, 0.70711, 0.0, 0.0);
-      player.position = glm::make_vec3(0.0, 0.0, -40.0);
-      player.angle = glm::make_quat_wxyz(0.0, 1.0, 0.0, 0.0);
+      player.position = glm::make_vec3(0.0, 0.0, 40.0);
+      player.angle = glm::make_quat_wxyz(1.0, 0.0, 0.0, 0.0);
     }
   }
 }
@@ -837,6 +838,7 @@ private function varray{ptr{pgldrawer_export_i}} init_drawers(
   sdl_log("app_init_drawers");
   app.raycast_cull_front = sconf.conf.get("raycast_cull_front", 0, 0, 1) != 0;
   app.raycast_sort = sconf.conf.get("raycast_sort", 0, 0, 1) != 0;
+  app.enable_dbgui = sconf.conf.get("enable_dbgui", 0, 0, 1) != 0;
   app.scene_shared->raycast_sort = app.raycast_sort;
   const t0 = get_time(io::system);
   prepare_triangles_texture_data(sconf.conf, app.textures);
@@ -862,7 +864,10 @@ private function varray{ptr{pgldrawer_export_i}} init_drawers(
   r.push_back(make_drawer_particle(sconf, res));
   r.push_back(make_drawer_particle_bb(sconf, res));
   r.push_back(make_drawer_rect2d(sconf, res));
-  r.push_back(make_drawer_dbgui(sconf, res));
+  if (app.enable_dbgui) {
+    r.push_back(make_drawer_dbgui(sconf, res));
+    r.push_back(make_drawer_dbgui2(sconf, res));
+  }
   r.push_back(make_drawer_font2(sconf, res));
   if (sconf.conf.get("fxaa_filter", 0, 0, 1) != 0) {
     r.push_back(make_drawer_fxaa(sconf, res));
@@ -1007,6 +1012,7 @@ private function void build_vertices(app_impl mutable& app,
     }
   }
   sdl_log("load prebuild");
+  pgs.make_vertex_set(tr1_0, "empty-scene", hole());
   mutable rnd = make_rand_generator(1U);
   mutable m = glm::mat4();
   mutable m0 = glm::mat4();
@@ -1030,8 +1036,6 @@ private function void build_vertices(app_impl mutable& app,
   glm::mat4 small_m1 = glm::mat4()
     .translate(glm::make_vec3(0.0, 0.0, small_box_size * (-1.0f)))
     .rotate(to_radians(45.0), glm::make_vec3(0.0, 0.0, 1.0));
-  const smallmi = glm::make_vec3(0.0, 0.0, 0.0);
-  const smallmx = glm::make_vec3(1.0f/256.0f, 1.0f/256.0f, 1.0f/256.0f);
   debug_log("make box");
   pgs.make_vertex_set(tr1_0, "box", cuboid_tex3d(mi, mx, glm::vec3(), 32.0f));
   /*
@@ -1047,12 +1051,21 @@ private function void build_vertices(app_impl mutable& app,
       apply(m0, hole()),
       apply(m0,
 	ctx_tex3d(0, 0, mi, mx))));
+  // (80, 0, 35), (16, 21, 2) 全体は2048x2048x64
+  const tmi = glm::make_vec3(80.0f, 0.0f, 35.0f);
+  const tsz = glm::make_vec3(16.0f, 21.0f, 2.0f);
+  const smallmi = tmi / 2048.0f;
+  const smallmx = (tmi + tsz) / 2048.0f;
   debug_log("make smallbox");
+  pgs.make_vertex_set(tr1_0, "smallbox", cuboid_tex3d(smallmi, smallmx,
+    glm::vec3(), 32.0f));
+  /*
   pgs.make_vertex_set(tr1_0, "smallbox",
     regular_polygon(1.4142f * small_box_size, 4,
       apply(small_m1,
 	ctx_tex3d(0, 0, smallmi, smallmx)),
       hole()));
+  */
   pgs.make_vertex_set(tr1_0, "mstex3d",
     regular_polygon(300.0f, 100,
       apply(m1,
@@ -1376,12 +1389,12 @@ private function void build_vertices(app_impl mutable& app,
     shapes_add(name, mass, collision_shape_e_concave);
   }
   shapes_add_sphere("box", 32768.0f);
-  shapes_add_convex("box_opt1", 32768.0f);
+  shapes_add_sphere("box_opt1", 32768.0f);
   shapes_add_sphere("smallbox", 1.0f);
-  shapes_add_convex("mstex3d", 1000.0f);
-  shapes_add_convex("nest", 1000.0f);
-  shapes_add_convex("box50", 50.0f);
-  shapes_add_convex("bullet2", 2.0f);
+  shapes_add_sphere("mstex3d", 1000.0f);
+  shapes_add_sphere("nest", 1000.0f);
+  shapes_add_sphere("box50", 50.0f);
+  shapes_add_sphere("bullet2", 2.0f);
   // shapes_add_sphere("bullet2", 1.0f);
   shapes_add_sphere("bullet", 2.0f);
   shapes_add_sphere("saucer", 10.0f);
@@ -1595,7 +1608,9 @@ scene_control(node_factory const& nfac,
   public joint_id_type joint_id_rect2d =
     nodefac.get_joint_id_by_name("rect2d");
   public joint_id_type joint_id_dbgui =
-    nodefac.get_joint_id_by_name("dbgui");
+    nodefac.get_joint_id_by_name_notrw("dbgui");
+  public joint_id_type joint_id_dbgui2 =
+    nodefac.get_joint_id_by_name_notrw("dbgui2");
   public size_t cur_scene = 0;
   public varray{tptr{lpbullet_swarm}} lpbullet_swarms;
   // public varray{lpbullet_data} lpbullet;
@@ -1611,6 +1626,7 @@ scene_control(node_factory const& nfac,
     "parts",
     */
     // "knight-multi",
+    "empty-scene",
     "box",
     "box-depth",
     "plane-multi-1",
@@ -1750,10 +1766,6 @@ scene_control_update_buttons(scene_control mutable& sctl,
     const p = scene_node(sctl.joint_id_rect2d, glm::mat4());
     nd.children.push_back(p);
   }
-  if (nd.children.size() < 2) {
-    const p = scene_node(sctl.joint_id_dbgui, glm::mat4());
-    nd.children.push_back(p);
-  }
   {
     mutable& cn = nd.children[0];
     const& sli = cn.trans.value.to_slice();
@@ -1762,14 +1774,33 @@ scene_control_update_buttons(scene_control mutable& sctl,
     sli[2] = 0.18f;
     sli[3] = 0.18f;
   }
-  {
-    // dbgui 左下
-    mutable& cn = nd.children[1];
-    const& sli = cn.trans.value.to_slice();
-    sli[0] = -0.9f;
-    sli[1] = -0.9f;
-    sli[2] = 0.9f;
-    sli[3] = 0.9f;
+  if (sctl.joint_id_dbgui.vbid != vbid_invalid()) { // dbgui is enabled
+    if (nd.children.size() < 2) {
+      const p = scene_node(sctl.joint_id_dbgui, glm::mat4());
+      nd.children.push_back(p);
+    }
+    if (nd.children.size() < 3) {
+      const p = scene_node(sctl.joint_id_dbgui2, glm::mat4());
+      nd.children.push_back(p);
+    }
+    {
+      // dbgui 左下
+      mutable& cn = nd.children[1];
+      const& sli = cn.trans.value.to_slice();
+      sli[0] = -0.9f;
+      sli[1] = -0.9f;
+      sli[2] = 0.9f;
+      sli[3] = 0.9f;
+    }
+    {
+      // dbgui2 全面に描画
+      mutable& cn = nd.children[2];
+      const& sli = cn.trans.value.to_slice();
+      sli[0] = -1.0f;
+      sli[1] = -1.0f;
+      sli[2] = 2.0f;
+      sli[3] = 2.0f;
+    }
   }
 }
 
@@ -1832,6 +1863,9 @@ scene_control_step(scene_control mutable& sctl,
     const& vbid = sn.joint_id.vbid;
     const& vsid = sn.joint_id.vsid;
     if (vbid != vbid_invalid() && vsid != vsid_invalid()) {
+/*
+// raycastオブジェクトのソート描画は効果微妙なので当分無効化する 
+// 影がささない？
       if (ss.raycast_sort && vbid >= ss.rdi.subdrawer_vbid_min &&
 	vbid <= ss.rdi.subdrawer_vbid_max) {
 	// debug_log("scene_control_step push robj vbid=", vbid);
@@ -1839,6 +1873,7 @@ scene_control_step(scene_control mutable& sctl,
 	  return;
 	}
       }
+*/
       mutable& idata = whole_instances[vbid][vsid];
       // debug_log("scene_control_step prepare_one vbid=", vbid);
       ftable[vbid](sn, ncd, idata);
