@@ -37,6 +37,7 @@ uniform float ndelta_scale; // 0.02
 uniform vec3 light_dir;
 uniform float light_on;
 uniform float option_value;
+uniform float option_value2;
 uniform float exposure;
 uniform float random_seed;
 <%frag_in/> vec3 vary_position;
@@ -454,6 +455,9 @@ void main(void)
     int miplevel = clamp(int(dist_log2 + dist_rnd + 6.5), 0, 8);
     */
     int miplevel_noclamp = raycast_get_miplevel(pos, campos, dist_rnd);
+    if (option_value2 >= 0.0) {
+      miplevel_noclamp = int(option_value2);
+    }
     miplevel = clamp(miplevel_noclamp, 0, 8);
     // if (miplevel > 2) { <%fragcolor/> = vec4(1,0,1,1); return; }
     // if (miplevel > 1) { <%fragcolor/> = vec4(1,1,0,1); return; }
@@ -462,19 +466,16 @@ void main(void)
     int hit = -1;
     // float selfshadow_para = clamp(1.0 - dist_log2 * 0.1, 0.0, 1.0);
     float selfshadow_para = 0.0f;
-    <%if><%eq><%get_config edit_mode/>1<%/>
-    miplevel = 0;
-    hit = raycast_tilemap_em(pos, camera_local, light_local,
-      aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para,
-      miplevel);
-    <%else/>
-    // miplevel = 0;
-    hit = raycast_tilemap(pos, campos, dist_rnd, camera_local, light_local,
-      aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para,
-      miplevel);
-    <%/>
-/*
-*/
+    if (option_value2 >= 0.0) {
+      hit = raycast_tilemap_em(pos, camera_local, light_local,
+	aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para,
+	miplevel);
+    } else {
+      hit = raycast_tilemap(pos, campos, dist_rnd, camera_local, light_local,
+	aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para,
+	miplevel);
+    }
+    //if (hit == 1)  { <%fragcolor/> = vec4(1.0, 0.0, 0.0, 1.0); return; }
     <%if><%eq><%ssubtype/>2<%/>
     // if (hit >= 0)  { <%fragcolor/> = vec4(1.0, 0.0, 0.0, 1.0); return; }
     <%/>
@@ -572,6 +573,34 @@ void main(void)
     <%if><%eq><%stype/>1<%/>
       // vec3 ndelta = mat3(shadowmap_vp[0]) * vary_normal * ndelta_scale;
 	// 0.02
+      bool smu_done = false;
+      <%for x 0><%smsz/>
+	if (!smu_done) {
+	  cp_sm = (shadowmap_vp[<%x/>] * frag_gpos).xyz;
+	  if (max_vec3(abs(cp_sm)) < 0.8) {
+	    sm_to_use = <%x/>;
+	    smu_done = true;
+	  }
+	}
+      <%/>
+      /*
+      */
+      /*
+      cp_sm = (shadowmap_vp[0] * frag_gpos).xyz;
+      if (max_vec3(abs(cp_sm)) > 0.8) {
+	sm_to_use = 1;
+	cp_sm = (shadowmap_vp[1] * frag_gpos).xyz;
+	if (max_vec3(abs(cp_sm)) > 0.8) {
+	  sm_to_use = 2;
+	  cp_sm = (shadowmap_vp[2] * frag_gpos).xyz;
+	  if (max_vec3(abs(cp_sm)) > 0.8) {
+	    sm_to_use = 3;
+	    cp_sm = (shadowmap_vp[3] * frag_gpos).xyz;
+	  }
+	}
+      }
+      */
+      /*
       for (sm_to_use = 0; sm_to_use < <%smsz/>; ++sm_to_use) {
 	vec4 sp = shadowmap_vp[sm_to_use] * frag_gpos;
 	cp_sm = sp.xyz; // / sp.w; //  + ndelta / d;
@@ -579,6 +608,7 @@ void main(void)
 	  break;
 	}
       }
+      */
       // FIXME: remove
       /*
       if (sm_to_use == 1) {
@@ -622,7 +652,7 @@ void main(void)
 	    */
 	    zval_cur = get_sampler_sm(sm_to_use, c).x;
 	    // zval = min(zval, zval_cur);
-	    float sm_min_dist = 0.01; // FIXME: 調整必要
+	    float sm_min_dist = 0.0001; // FIXME: 調整必要
 	    /*
 	    sml += float(smpos.z < sm_min_dist + zval_cur
 	     * (1.005 + (abs(i)+abs(j))/4096.0))/9.0;
@@ -710,7 +740,7 @@ void main(void)
     float sdistp = clamp(3.0 - frag_distance * 4.0 / shadowmap_max_distance,
       0.0, 1.0);
     // sml = sml * sdistp * 0.5 + (1.0 - sdistp) * 0.5;
-    sml = sml * sdistp;
+    sml = sml * sdistp + (1.0 - sdistp) * 0.67;
     // sml = 1.0;
     float smv0 = min(1.0, sml);
     /*

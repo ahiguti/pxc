@@ -367,16 +367,27 @@ private struct texture_edit(texture_data_mip const& data0,
   {
     return modified.get_modified(reset_flag);
   }
-  public function uint get(uvec3 const& pos, texture_value_index_e idx)
+  public function uint get_mip(uvec3 pos, texture_value_index_e idx,
+    size_t miplevel)
   {
+    if (miplevel >= data.size()) {
+      miplevel = data.size() - 1;
+    }
     if (!lt_all_uvec3(pos, data_size)) {
       return 0u;
     }
+    pos.x >>= static_cast{uint}(miplevel);
+    pos.y >>= static_cast{uint}(miplevel);
+    pos.z >>= static_cast{uint}(miplevel);
     if (idx == texture_value_index_primary) {
-      return data_0->get(pos.x, pos.y, pos.z);
+      return data[miplevel]->get(pos.x, pos.y, pos.z);
     } else {
-      return data_aux_0->get(pos.x, pos.y, pos.z);
+      return data_aux[miplevel]->get(pos.x, pos.y, pos.z);
     }
+  }
+  public function uint get(uvec3 const& pos, texture_value_index_e idx)
+  {
+    return get_mip(pos, idx, 0u);
   }
   public function void set(uvec3 const& pos, texture_value_index_e idx, uint v)
   {
@@ -717,10 +728,11 @@ private struct texture_edit_view(texture_data_mip const& data0,
       set_cursor_color(saved_cursor_color_0, saved_cursor_color_1);
     }
   }
-  public function uint edit_get(uvec3 const& pos, texture_value_index_e idx)
+  public function uint edit_get(uvec3 const& pos, texture_value_index_e idx,
+    size_t miplevel)
     const
   {
-    return current_edit->get(pos, idx);
+    return current_edit->get_mip(pos, idx, miplevel);
   }
   public function void edit_set(uvec3 const& pos, texture_value_index_e idx,
     uint v)
@@ -875,14 +887,14 @@ ptr{gl_texture} const& gltp0)
     return pair{uvec3, uvec3}(mi, mx + make_uvec3(1, 1, 1) - mi);
   }
   public function uint tmap_edit_get(uvec3 const& pos,
-    texture_value_index_e idx) const
+    texture_value_index_e idx, size_t miplevel) const
   {
-    return tev_tmap.edit_get(pos, idx);
+    return tev_tmap.edit_get(pos, idx, miplevel);
   }
   public function uint tpat_edit_get(uvec3 const& pos,
-    texture_value_index_e idx) const
+    texture_value_index_e idx, size_t miplevel) const
   {
-    return tev_tpat.edit_get(pos, idx);
+    return tev_tpat.edit_get(pos, idx, miplevel);
   }
   public function void reset_cursor_flick()
   {
@@ -1267,8 +1279,8 @@ private function void update_mipmap_all(edit_mode_texture mutable& emt)
 	mutable vpri = pri0.get(x, y, z);
 	mutable vsec = sec0.get(x, y, z);
 	if (is_node_reference(vpri)) {
-	  const p = make_uvec3((vpri >> 16u) & 0xffu, (vpri >> 8u) & 0xffu,
-	    (vpri >> 0u) & 0xffu);
+	  const p = make_uvec3((vpri >> 0u) & 0xffu, (vpri >> 8u) & 0xffu,
+	    (vpri >> 16u) & 0xffu);
 	  vpri = emt.vox.tpat_pri[pat_mip_num - 1]->get(p.x, p.y, p.z);
 	  vsec = emt.vox.tpat_aux[pat_mip_num - 1]->get(p.x, p.y, p.z);
 	}
@@ -1354,6 +1366,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   private ptr{tiled_texture_edit_view} const ttev =
     make_ptr{tiled_texture_edit_view}(emt0);
   private texture_data const tile = emt->vox.voxtile;
+  private projection_info prj;
   private copy_data_type copy_data;
   /*
   private uvec3 copy_size;
@@ -1616,11 +1629,19 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       } else if (edit_params_mode == edit_params_mode_sphere_1) {
 	message += " [sphere params]";
       }
-      const vp = get_cur_value(texture_value_index_primary);
-      const vs = get_cur_value(texture_value_index_secondary);
+      size_t mlv = 0u;
+      if (prj.option_value2 >= 0.0) {
+	mlv = static_cast{size_t}(prj.option_value2);
+      }
+      size_t mlpat;
+      size_t mlmap;
+      const vs = get_cur_value(texture_value_index_secondary, mlv, mlpat,
+	mlmap);
+      const vp = get_cur_value(texture_value_index_primary, mlv, mlpat, mlmap);
       if (is_space_voxel(vp)) {
 	const dv = get_dist_3d(vp);
-	message += " space " + to_string(dv);
+	message += " space " + to_string(dv) + " mip " + to_string(mlpat)
+	  + " " + to_string(mlmap);
       } else if (is_node_reference(vp)) {
 	const rv = get_node_reference(vp);
 	message += " ref " + to_hexstring(rv);
@@ -1879,7 +1900,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       return;
     }
     const cur = ttev->get_cursor_pos().first;
-    const v = ttev->tmap_edit_get(cur, texture_value_index_primary);
+    const v = ttev->tmap_edit_get(cur, texture_value_index_primary, 0u);
     if (is_node_reference(v)) {
       // debug_log("convert_to_tpat: 1");
       return;
@@ -1935,7 +1956,8 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
 	for (const y: 0 .. tsz.y) {
 	  for (const x: 0 .. tsz.x) {
 	    const cp = make_uvec3(pbase.x + x, pbase.y + y, pbase.z + z);
-	    const cv = ttev->tpat_edit_get(cp, texture_value_index_primary);
+	    const cv = ttev->tpat_edit_get(cp, texture_value_index_primary,
+	      0u);
 	    is_space &= is_space_voxel(cv);
 	  }
 	}
@@ -2257,7 +2279,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   }
   private function uvec3 cur_tpat_base() const
   {
-    const v = get_cur_tmap(texture_value_index_primary);
+    const v = get_cur_tmap(texture_value_index_primary, 0u);
     debug_log("cur_tpat_base:", to_hexstring(v));
     if (!is_node_reference(v)) {
       return glm::uvec3();
@@ -2269,9 +2291,17 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     debug_log("cur_tpat_base:", p);
     return map{uvec3, operator::mul}(p, ttev->tile_size);
   }
-  private function uint get_cur_value(texture_value_index_e idx) const
+  private function uint get_cur_value(texture_value_index_e idx,
+    size_t miplevel, size_t mutable& mlpat_r, size_t mutable mlmap_r) const
   {
-    return ttev->get_cursor_tpat() ? get_cur_tpat(idx) : get_cur_tmap(idx);
+    size_t tile_size_log2 = integral_log2(ttev->tile_size.x);
+    const mlpat = miplevel;
+    const mlmap = miplevel < tile_size_log2 ?
+      size_t() : miplevel - tile_size_log2;
+    mlpat_r = mlpat;
+    mlmap_r = mlmap;
+    return ttev->get_cursor_tpat() ?
+      get_cur_tpat(idx, mlpat) : get_cur_tmap(idx, mlmap);
   }
   private function void set_cur_value(texture_value_index_e idx, uint value)
   {
@@ -2281,10 +2311,11 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       set_cur_tmap(idx, value);
     }
   }
-  private function uint get_cur_tmap(texture_value_index_e idx) const
+  private function uint get_cur_tmap(texture_value_index_e idx,
+    size_t miplevel) const
   {
     const mp = ttev->get_tmap_cursor_pos().first;
-    return ttev->tmap_edit_get(mp, idx);
+    return ttev->tmap_edit_get(mp, idx, miplevel);
   }
   private function void set_cur_tmap(texture_value_index_e idx, uint value)
   {
@@ -2301,9 +2332,10 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       }
     }
   }
-  private function uint get_cur_tpat(texture_value_index_e idx) const
+  private function uint get_cur_tpat(texture_value_index_e idx,
+    size_t miplevel) const
   {
-    return ttev->tpat_edit_get(get_cur_tpat_center(), idx);
+    return ttev->tpat_edit_get(get_cur_tpat_center(), idx, miplevel);
   }
   private function void set_cur_tpat(texture_value_index_e idx, uint value)
   {
@@ -2326,14 +2358,15 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   }
   private function bool is_cur_tmap_node_reference() const
   {
-    return is_node_reference(get_cur_tmap(texture_value_index_primary));
+    return is_node_reference(get_cur_tmap(texture_value_index_primary, 0u));
   }
   private function uvec3 cur_tpat_index() const
   {
     return ttev->get_tpat_cursor_pos().first;
   }
-  public function void on_frame()
+  public function void on_frame(projection_info const& prj0)
   {
+    prj = prj0;
     ttev->cursor_flick();
   }
 }

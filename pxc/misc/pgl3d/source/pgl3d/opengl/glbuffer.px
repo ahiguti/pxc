@@ -15,7 +15,7 @@ public import pgl3d::engine::scene_node -;
 public import pgl3d::sdl::sdlutil -;
 
 private metafunction use_draw_range 0;
-private metafunction use_map_unsynchronized 1;
+private metafunction use_map_unsynchronized 0;
 
 public threaded struct vertex_set(size_t num_float_per_vertex0)
 {
@@ -58,9 +58,15 @@ public threaded struct async_buffer() {
       }
       if (sz_bytes > size_bytes) {
 	sdl_log("glbufferdata resize:", size_bytes, sz_bytes);
-	glBufferData(GL_ARRAY_BUFFER, static_cast{GLsizeiptr}(sz_bytes),
+	while (sz_bytes > size_bytes) {
+	  if (size_bytes < 10) {
+	    size_bytes = sz_bytes;
+	  } else {
+	    size_bytes = size_bytes * 3 / 2;
+	  }
+	}
+	glBufferData(GL_ARRAY_BUFFER, static_cast{GLsizeiptr}(size_bytes),
 	  size_t_to_crawptr{void}(0), GL_STREAM_DRAW);
-	size_bytes = sz_bytes;
       }
       mutable mask = static_cast{GLbitfield}(GL_MAP_WRITE_BIT);
       if (m::is_true{use_map_unsynchronized}) {

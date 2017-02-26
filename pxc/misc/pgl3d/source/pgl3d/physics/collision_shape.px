@@ -12,6 +12,7 @@ private import Bullet::base -;
 private import Bullet::constants -;
 private import Bullet::api +;
 private import pointer::raw_unsafe -;
+private import pgl3d::geometry::funcs -;
 private import pgl3d::physics::grid_broadphase -;
 private import pgl3d::physics::collision_gjk -;
 private import pgl3d::physics::collision_heightmap -;
@@ -164,6 +165,45 @@ make_convex_hull_shape(cslice{float} const& v, cslice{uint} const& e)
   }
   debug_log("convex_hull", sqrt(sqmax));
   return make_ptr{convex_hull_shape}(v, triangles, sqrt(sqmax));
+}
+
+public threaded function ptr{collision_shape_i}
+make_voxel_shape(cslice{vertex_attr} const& va, cslice{uint} const& e)
+{
+  varray{float} triangles;
+  float sqmax = 0.0f;
+  for (const i, const idx: e) {
+    if (static_cast{size_t}(idx) >= va.size()) {
+      debug_log("idx", idx, va.size(), va, e);
+      throw runtime_error_template{"make_voxel_shape"}("");
+    }
+    const& v = va[idx];
+    const& pos = v.pos; // オブジェクト座標系での接線空間の原点位置
+    const& tan = v.tan;
+    const& nor = v.nor;
+    const bnr = glm::cross(nor, tan);
+    const pos_loc = glm::make_vec3(
+      v.aabb_or_tconv.x,
+      v.aabb_or_tconv.y,
+      v.aabb_or_tconv.z) + v.uvw * v.aabb_or_tconv.w;
+      // 接線空間での頂点座標をテクスチャ座標から計算
+    const tan_to_obj = glm::make_mat4(
+      tan.x, tan.y, tan.z, 0.0,
+      bnr.x, bnr.y, bnr.z, 0.0,
+      nor.x, nor.y, nor.z, 0.0,
+      pos.x, pos.y, pos.z, 1.0); // 接線空間からオブジェクト座標系への変換
+    mutable pos_obj = tan_to_obj *
+      glm::make_vec4(pos_loc.x, pos_loc.y, pos_loc.z, 1.0);
+      // オブジェクト座標系での頂点の座標
+    pos_obj /= pos_obj.w;
+    triangles.push_back(pos_obj.x);
+    triangles.push_back(pos_obj.y);
+    triangles.push_back(pos_obj.z);
+    const sq = pos_obj.x * pos_obj.x + pos_obj.y * pos_obj.y
+      + pos_obj.z * pos_obj.z;
+    sqmax = max(sqmax, sq);
+  }
+  return make_ptr{convex_hull_shape}(triangles, triangles, sqrt(sqmax));
 }
 
 private threaded struct {t}

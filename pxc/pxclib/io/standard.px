@@ -75,6 +75,10 @@ namespace pxcrt {
 
 typedef %{dummy_type_csymbol}% optfile;
 
+#ifdef _MSC_VER
+#include <sys/types.h>
+#include <sys/timeb.h>
+#endif
 #ifdef ANDROID
 #include <android/log.h>
 #endif
@@ -122,15 +126,25 @@ void debug_log_internal(cstrref const& s)
 {
   if (debug_log_timestamp) {
     char buf[128] = { };
-    time_t now = ::time(NULL);
     struct tm t = { };
 #ifdef PXC_POSIX
+    struct timeval tv = { };
+    gettimeofday(&tv, NULL);
+    time_t now = tv.tv_sec;
+    unsigned msec = tv.tv_usec / 1000;
     localtime_r(&now, &t);
 #else
+    _timeb tv = { };
+    _ftime_s(&tv);
+    time_t now = tv.time;
+    unsigned msec = tv.millitm;
     localtime_s(&t, &now);
 #endif
-    strftime(buf, 128, "%Y%m%d-%H%M%S ", &t);
-    debug_log_write(buf, strlen(buf));
+    size_t len = strftime(buf, 64, "%Y%m%d-%H%M%S.", &t);
+    if (len > 0 && len < 64) {
+      snprintf(buf + len, 128 - len, "%03u ", msec);
+      debug_log_write(buf, strlen(buf));
+    }
   }
   debug_log_write(s.rawarr(), s.size());
 }

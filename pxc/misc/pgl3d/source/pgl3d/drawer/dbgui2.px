@@ -25,6 +25,7 @@ public struct drawer_dbgui2(shader_config const& glc0,
   shader_config const glc = glc0;
   metafunction tattr dbgui2_vertex_attributes;
   option{dbgui2_shader_ptr} sdr_di;
+  bool dump_done = false;
   init();
   private function void init()
   {
@@ -76,6 +77,7 @@ public struct drawer_dbgui2(shader_config const& glc0,
       return false;
     }
     sdr_di.some = s0.some;
+    dump_done = false;
     return true;
   }
   public function uint get_postprocess_framebuffer(draw_step step) const
@@ -109,6 +111,22 @@ public struct drawer_dbgui2(shader_config const& glc0,
 	caddress(sampler_smarr[0]));
       aibuf.draw(sdr, bo, bo_ib, vbid, glc.enable_instanced,
 	glc.enable_uniform_instancing);
+      if (!dump_done) {
+	varray{uchar} buf;
+	buf.resize(256u * 256u * 4u, 0u);
+	glReadPixels(0, 0, 256, 256, GL_RGBA, GL_UNSIGNED_BYTE,
+	  buf.to_rawptr().to_voidptr());
+	sdl_save_file("dbgui2.dmp", buf);
+	dump_done = true;
+	ulong sum = 0;
+	for (size_t i: 0 .. 256u * 256u) {
+	  ulong v = buf[i * 4];
+	  v <<= 8u;
+	  v |= buf[i * 4 + 1];
+	  sum += v; 
+	}
+	debug_log("sum", sum);
+      }
     }
   }
   public function option{ptr{edit_mode_i}} get_edit_mode() const

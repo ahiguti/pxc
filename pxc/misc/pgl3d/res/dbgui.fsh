@@ -13,6 +13,7 @@ int foo()
 
 void main(void)
 {
+discard;
   vec2 p = vary_vert.xy;
   vec4 v;
   v = <%texture2d/>(sampler_sm[0], (p - 0.5) / 1.0 + 0.5);

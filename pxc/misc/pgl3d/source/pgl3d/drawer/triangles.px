@@ -26,6 +26,7 @@ private tsvaluetype struct triangles_uniforms()
   public float exposure;
   public float random_seed;
   public float option_value;
+  public float option_value2;
 }
 
 private tsvaluetype struct triangles_vertex_attributes()
@@ -602,6 +603,8 @@ public struct drawer_triangles(shader_config const& glc0,
       opval /= 2;
       opval %= 4;
       glUniform1f(sdr.u_option_value, static_cast{float}(opval));
+      mutable opval2 = cam_df.option_value2;
+      glUniform1f(sdr.u_option_value2, opval2);
       glUniformMatrix4fv(sdr.u_view_projection_matrix, 1, 0, vp.to_crawptr());
       aibuf.draw(sdr, bo, bo_ib, vbid, glc.enable_instanced,
 	glc.enable_uniform_instancing);
@@ -610,7 +613,7 @@ public struct drawer_triangles(shader_config const& glc0,
 	  glCullFace(GL_BACK);
 	}
 	if (case edit_mode_ptr.some) {
-	  edit_mode_ptr.some->on_frame();
+	  edit_mode_ptr.some->on_frame(cam_df);
 	}
       }
     }

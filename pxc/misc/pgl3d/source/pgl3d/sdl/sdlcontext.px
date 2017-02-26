@@ -84,70 +84,86 @@ public struct sdlcontext(pgl3d_config const& config0)
       init_h = config.get("height", 0, 0, 16384);
     }
 
-    // FIXME: 3.3 -> 3.2 -> 2.1
     if (m::eq{is_gles, 0}) {
-      /* try opengl 3.3 */
-      SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-      SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-      // SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
       SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
       SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,
 	SDL_GL_CONTEXT_PROFILE_CORE);
-      glmajor = 3;
-      glminor = 3;
-      // glminor = 2;
+      glmajor = 4;
+      glminor = 5;
       gles_flag = false;
     } else {
       if (m::is_true{is_emscripten}) {
 	/* emscripten: opengles 2.0 */
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 	glmajor = 2;
 	glminor = 0;
       } else {
-	/* ios/android: opengles 3.0 */
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+	/* ios/android: opengles 3.2 */
 	glmajor = 3;
-	glminor = 0;
+	glminor = 2;
       }
       gles_flag = true;
     }
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, glmajor);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, glminor);
     SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
     SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
     SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
     SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
     if (m::not{is_gles}) {
-//      SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 32); // FIXME: 24?
+      // SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 32); // FIXME: 24?
+      // sdl_log("set depth 32\n");
     }
-    sdl_log("set depth 32\n");
     sdl_log("create_window", init_w, init_h);
     sdl_window.reset(SDL_CreateWindow("PGL3D", 128, 128, init_w, init_h,
       wflags));
     const wnd = sdl_window.get();
-    mutable glctx = SDL_GL_CreateContext(wnd);
-    string verstr = cubptr_to_string(glGetString_nocheck(GL_VERSION));
-    if (verstr.empty()) {
-      if (m::eq{is_gles, 0}) {
-	SDL_GL_DeleteContext(glctx);
-	/* fallback to opengl 2.1 */
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
-	glctx = SDL_GL_CreateContext(wnd);
-	glmajor = 2;
-	glminor = 1;
-      } else {
-	/* fallback to opengles 2.0 */
-	SDL_GL_DeleteContext(glctx);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-	glctx = SDL_GL_CreateContext(wnd);
-	glmajor = 2;
-	glminor = 0;
-      }
+    string verstr;
+    function bool create_context()
+    {
+      SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, glmajor);
+      SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, glminor);
+      mutable glctx = SDL_GL_CreateContext(wnd);
       verstr = cubptr_to_string(glGetString_nocheck(GL_VERSION));
+      if (verstr.empty()) {
+	SDL_GL_DeleteContext(glctx);
+	return false;
+      }
+      sdl_glcontext.reset(glctx);
+      return true;
     }
-    sdl_glcontext.reset(glctx);
+    while (true) {
+      create_context();
+      if (!verstr.empty()) {
+	break;
+      }
+      // fallback
+      if (glminor > 0) {
+	--glminor;
+      } else if (glmajor > 2) {
+	--glmajor;
+	if (m::eq{is_gles, 0}) {
+	  if (glmajor == 2) {
+	    glminor = 1;
+	  } else if (glmajor == 3) {
+	    glminor = 3;
+	  } else if (glmajor == 4) {
+	    glminor = 5;
+	  } else {
+	    glminor = 0;
+	  }
+	} else {
+	  if (glmajor == 2) {
+	    glminor = 0;
+	  } else if (glmajor == 3) {
+	    glminor = 2;
+	  } else {
+	    glminor = 0;
+	  }
+	}
+      } else {
+	break;
+      }
+    }
 
     const glew_err = static_cast{int}(GL::glew::glewInit());
     if (glew_err != 0) {

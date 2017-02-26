@@ -378,7 +378,12 @@ int raycast_tilemap(
   // 引数の座標はすべてテクスチャ座標
   // eyeはカメラから物体への向き、lightは物体から光源への向き
   int miplevel0 = miplevel;
-  miplevel = max(miplevel0, 6);
+  if (max_vec3(aabb_max - aabb_min) > 0.125f) {
+    // 長距離のイテレートを速くするために大きいmiplevelから開始する。
+    // テクスチャに余白が無いと短冊状に影ができてしまう問題があるので
+    // 大きいオブジェクトに限って適用する。
+    miplevel = max(miplevel0, 6);
+  }
   bool mip_detail = miplevel0 == miplevel;
   int tmap_mip = clamp(miplevel - tile3_size_log2, 0, tile3_size_log2);
   int tpat_mip = min(miplevel, tile3_size_log2);

@@ -58,6 +58,7 @@ load_filesystem_async{app_main}("/persist"); // emscripten
 public function void app_main()
 {
   set_debug_log_file("var/demoapp.log");
+  set_debug_timestamp(true);
   // debug_helper::dump_modules();
   // debug_helper::dump_backtrace();
   string config_fn = "res/pgl3d.cnf";
@@ -78,6 +79,11 @@ public struct demoapp_application()
   {
     debug_log("init_drawers");
     const r = init_drawers(app, conf, res);
+    if (case app.edit_mode.some) {
+      // edit_modeではデフォルトでmiplevel=0に固定する。さもないとカーソルが
+      // 見えない
+      app.option_value2 = 0.0;
+    }
     debug_log("init_drawers done");
     return r;
   }
@@ -341,6 +347,7 @@ private struct app_impl()
   public glm::vec2 light = glm::make_vec2(0.1f, 0.2f);
   public float exposure = 1.414f;
   public float option_value = 0.0f;
+  public float option_value2 = -1.0f;
   public string_map app_commands;
   public string app_status_message;
   // public varray{bool} prev_joy_buttons;
@@ -375,18 +382,20 @@ public tsvaluetype enum collision_shape_e {
   collision_shape_e_box = 1,
   collision_shape_e_convex_hull = 2,
   collision_shape_e_concave = 3,
+  collision_shape_e_voxel = 4,
 }
 
 public multithreaded struct
 collision_shape_data(string const& name0, joint_id_type joint_id0,
   float mass0, collision_shape_e shape0, varray{float} const& values0,
-  varray{uint} elements0)
+  varray{vertex_attr} const& vattrs0, varray{uint} const& elements0)
 {
   public string name = name0;
   public joint_id_type joint_id = joint_id0;
   public float mass = mass0;
   public collision_shape_e shape = shape0;
   public varray{float} values = values0;
+  public varray{vertex_attr} vattrs = vattrs0;
   public varray{uint} elements = elements0;
 }
 
@@ -404,6 +413,7 @@ public multithreaded struct demoapp_scene_shared(io const& sys0)
   public glm::vec2 light;
   public float exposure = 2.0f;
   public float option_value = 0.0f;
+  public float option_value2 = -1.0f;
   public texture_info default_font_texture_info;
   public string_map app_commands;
   public string app_status_message;
@@ -485,6 +495,7 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
     pjinfo.view_projection = pjinfo.projection * pjinfo.view;
     pjinfo.exposure = dss.exposure;
     pjinfo.option_value = dss.option_value;
+    pjinfo.option_value2 = dss.option_value2;
     const sm_view = pjinfo.light.to_mat4().inverse();
     // const sm_vp = pjinfo.sm_projection * sm_view;
     const& vp = pjinfo.view_projection;
@@ -705,6 +716,16 @@ function void handle_event(app_impl mutable& app,
 	static_cast{int}(app.option_value) ^ 1);
       return;
     }
+    if (ev.key.keysym.scancode == SDL_SCANCODE_F4) {
+      if ((app.modmask & 1) != 0) {
+	app.option_value2 = -1.0;
+      } else {
+	app.option_value2 = static_cast{float}(
+	  (static_cast{int}(app.option_value2) + 2) % 10 - 1);
+      }
+      debug_log("option_value2", app.option_value2);
+      return;
+    }
     if (ev.key.keysym.scancode == SDL_SCANCODE_F12) {
       save_state(app);
       return;
@@ -819,6 +840,7 @@ function void handle_keys(app_impl mutable& app,
     ss.light = app.light;
     ss.exposure = sqrt(app.exposure); // 半段単位
     ss.option_value = app.option_value;
+    ss.option_value2 = app.option_value2;
     ss.scene_next_flag = app.scene_next_flag;
     ss.posang.position = app.player.position;
     ss.posang.angle = app.player.angle * camera_rel;
@@ -865,8 +887,8 @@ private function varray{ptr{pgldrawer_export_i}} init_drawers(
   r.push_back(make_drawer_particle_bb(sconf, res));
   r.push_back(make_drawer_rect2d(sconf, res));
   if (app.enable_dbgui) {
-    r.push_back(make_drawer_dbgui(sconf, res));
     r.push_back(make_drawer_dbgui2(sconf, res));
+    r.push_back(make_drawer_dbgui(sconf, res));
   }
   r.push_back(make_drawer_font2(sconf, res));
   if (sconf.conf.get("fxaa_filter", 0, 0, 1) != 0) {
@@ -1052,6 +1074,7 @@ private function void build_vertices(app_impl mutable& app,
       apply(m0,
 	ctx_tex3d(0, 0, mi, mx))));
   // (80, 0, 35), (16, 21, 2) 全体は2048x2048x64
+  // const veps = glm::make_vec3(0.001f, 0.001f, 0.001f);
   const tmi = glm::make_vec3(80.0f, 0.0f, 35.0f);
   const tsz = glm::make_vec3(16.0f, 21.0f, 2.0f);
   const smallmi = tmi / 2048.0f;
@@ -1372,9 +1395,10 @@ private function void build_vertices(app_impl mutable& app,
   {
     const vp = pgs.get_nonempty_vertices(name);
     const& p = vp->positions;
+    const& va = vp->vertex_attrs;
     const& elems = vp->elements;
     app.scene_shared->shapes.push_back(make_tptr{collision_shape_data}(
-      name, pgs.get_joint_id(name), mass, shape, p, elems));
+      name, pgs.get_joint_id(name), mass, shape, p, va, elems));
   }
   function void shapes_add_convex(cstrref const& name, float mass)
   {
@@ -1388,7 +1412,11 @@ private function void build_vertices(app_impl mutable& app,
   {
     shapes_add(name, mass, collision_shape_e_concave);
   }
-  shapes_add_sphere("box", 32768.0f);
+  function void shapes_add_voxel(cstrref const& name, float mass)
+  {
+    shapes_add(name, mass, collision_shape_e_voxel);
+  }
+  shapes_add_voxel("box", 32768.0f);
   shapes_add_sphere("box_opt1", 32768.0f);
   shapes_add_sphere("smallbox", 1.0f);
   shapes_add_sphere("mstex3d", 1000.0f);
@@ -1508,6 +1536,7 @@ scene_objects(collision_shape_data_array const& shape0, size_t num_split0)
     const& joint_id = sh.joint_id;
     name_to_joint_id.insert(name, joint_id);
     const& v = sh.values;
+    const& va = sh.vattrs;
     const& e = sh.elements;
     const mass = sh.mass;
     threaded function ptr{collision_shape_i} get_shape() {
@@ -1519,6 +1548,8 @@ scene_objects(collision_shape_data_array const& shape0, size_t num_split0)
 	return make_convex_hull_shape(v, e);
       } else if (sh.shape == collision_shape_e_concave) {
 	return make_triangle_mesh_shape(v, e);
+      } else if (sh.shape == collision_shape_e_voxel) {
+	return make_voxel_shape(va, e);
       } else {
 	throw runtime_error_template{"get_shape"}("1");
       }
