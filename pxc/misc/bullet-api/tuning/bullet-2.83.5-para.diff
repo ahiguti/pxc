@@ -1,0 +1,1148 @@
+diff -ur bullet/CMakeLists.txt bullet-mod/CMakeLists.txt
+--- bullet/CMakeLists.txt	2015-08-26 22:45:14.000000000 +0900
++++ bullet-mod/CMakeLists.txt	2015-08-18 12:56:53.000000000 +0900
+@@ -1,6 +1,8 @@
+ cmake_minimum_required(VERSION 2.4.3)
+ set(CMAKE_ALLOW_LOOSE_LOOP_CONSTRUCTS true)
+ 
++LINK_LIBRARIES(pthread)
++
+ #this line has to appear before 'PROJECT' in order to be able to disable incremental linking
+ SET(MSVC_INCREMENTAL_DEFAULT ON)
+ 
+diff -ur bullet/examples/ExampleBrowser/OpenGLExampleBrowser.cpp bullet-mod/examples/ExampleBrowser/OpenGLExampleBrowser.cpp
+--- bullet/examples/ExampleBrowser/OpenGLExampleBrowser.cpp	2015-08-26 22:45:19.000000000 +0900
++++ bullet-mod/examples/ExampleBrowser/OpenGLExampleBrowser.cpp	2015-08-23 15:08:15.390217700 +0900
+@@ -77,10 +77,10 @@
+ ///some quick test variable for the OpenCL examples
+ 
+ int gPreferredOpenCLDeviceIndex=-1;
+-int gPreferredOpenCLPlatformIndex=-1;
+-int gGpuArraySizeX=15;
+-int gGpuArraySizeY=15;
+-int gGpuArraySizeZ=15;
++int gPreferredOpenCLPlatformIndex=1;
++int gGpuArraySizeX=25;
++int gGpuArraySizeY=25;
++int gGpuArraySizeZ=25;
+ 
+ //#include <float.h>
+ //unsigned int fp_control_state = _controlfp(_EM_INEXACT, _MCW_EM);
+diff -ur bullet/src/Bullet3OpenCL/Initialize/b3OpenCLUtils.cpp bullet-mod/src/Bullet3OpenCL/Initialize/b3OpenCLUtils.cpp
+--- bullet/src/Bullet3OpenCL/Initialize/b3OpenCLUtils.cpp	2015-08-26 22:45:28.000000000 +0900
++++ bullet-mod/src/Bullet3OpenCL/Initialize/b3OpenCLUtils.cpp	2015-08-23 14:58:05.344949500 +0900
+@@ -872,7 +872,7 @@
+ 
+ 		size_t program_length = kernelSource ? strlen(kernelSource) : 0;
+ #ifdef MAC //or __APPLE__?
+-		char* flags = "-cl-mad-enable -DMAC ";
++		const char *flags = ""; // char* flags = "-cl-mad-enable -DMAC ";
+ #else
+ 		const char* flags = "";
+ #endif
+diff -ur bullet/src/BulletCollision/BroadphaseCollision/btBroadphaseProxy.h bullet-mod/src/BulletCollision/BroadphaseCollision/btBroadphaseProxy.h
+--- bullet/src/BulletCollision/BroadphaseCollision/btBroadphaseProxy.h	2015-08-26 22:45:30.000000000 +0900
++++ bullet-mod/src/BulletCollision/BroadphaseCollision/btBroadphaseProxy.h	2015-08-18 13:32:46.000000000 +0900
+@@ -20,6 +20,9 @@
+ #include "LinearMath/btVector3.h"
+ #include "LinearMath/btAlignedAllocator.h"
+ 
++#include <array>
++
++#define BT_DISPATCHER_NUM_THREADS 3
+ 
+ /// btDispatcher uses these types
+ /// IMPORTANT NOTE:The types are ordered polyhedral, implicit convex and concave
+@@ -190,6 +193,7 @@
+ 	m_pProxy0(0),
+ 		m_pProxy1(0),
+ 		m_algorithm(0),
++		m_curThreadId(-1),
+ 		m_internalInfo1(0)
+ 	{
+ 	}
+@@ -200,6 +204,7 @@
+ 		:		m_pProxy0(other.m_pProxy0),
+ 				m_pProxy1(other.m_pProxy1),
+ 				m_algorithm(other.m_algorithm),
++				m_curThreadId(-1),
+ 				m_internalInfo1(other.m_internalInfo1)
+ 	{
+ 	}
+@@ -227,6 +232,7 @@
+ 	btBroadphaseProxy* m_pProxy1;
+ 	
+ 	mutable btCollisionAlgorithm* m_algorithm;
++	int m_curThreadId;
+ 	union { void* m_internalInfo1; int m_internalTmpValue;};//don't use this data, it will be removed in future version.
+ 
+ };
+diff -ur bullet/src/BulletCollision/BroadphaseCollision/btCollisionAlgorithm.h bullet-mod/src/BulletCollision/BroadphaseCollision/btCollisionAlgorithm.h
+--- bullet/src/BulletCollision/BroadphaseCollision/btCollisionAlgorithm.h	2015-08-26 22:45:30.000000000 +0900
++++ bullet-mod/src/BulletCollision/BroadphaseCollision/btCollisionAlgorithm.h	2015-08-18 12:56:53.000000000 +0900
+@@ -36,13 +36,13 @@
+ 		m_manifold(0)
+ 	{
+ 	}
+-	btCollisionAlgorithmConstructionInfo(btDispatcher* dispatcher,int temp)
++	btCollisionAlgorithmConstructionInfo(volatile btDispatcher* dispatcher,int temp)
+ 		:m_dispatcher1(dispatcher)
+ 	{
+ 		(void)temp;
+ 	}
+ 
+-	btDispatcher*	m_dispatcher1;
++	volatile btDispatcher*	m_dispatcher1;
+ 	btPersistentManifold*	m_manifold;
+ 
+ //	int	getDispatcherId();
+@@ -57,7 +57,7 @@
+ 
+ protected:
+ 
+-	btDispatcher*	m_dispatcher;
++	volatile btDispatcher*	m_dispatcher;
+ 
+ protected:
+ //	int	getDispatcherId();
+diff -ur bullet/src/BulletCollision/BroadphaseCollision/btDbvtBroadphase.cpp bullet-mod/src/BulletCollision/BroadphaseCollision/btDbvtBroadphase.cpp
+--- bullet/src/BulletCollision/BroadphaseCollision/btDbvtBroadphase.cpp	2015-08-26 22:45:30.000000000 +0900
++++ bullet-mod/src/BulletCollision/BroadphaseCollision/btDbvtBroadphase.cpp	2015-08-18 12:56:53.000000000 +0900
+@@ -433,7 +433,7 @@
+ 		btBroadphasePair previousPair;
+ 		previousPair.m_pProxy0 = 0;
+ 		previousPair.m_pProxy1 = 0;
+-		previousPair.m_algorithm = 0;
++		previousPair.m_algorithm = { };
+ 		
+ 		
+ 		for (i=0;i<overlappingPairArray.size();i++)
+diff -ur bullet/src/BulletCollision/BroadphaseCollision/btDispatcher.h bullet-mod/src/BulletCollision/BroadphaseCollision/btDispatcher.h
+--- bullet/src/BulletCollision/BroadphaseCollision/btDispatcher.h	2015-08-26 22:45:30.000000000 +0900
++++ bullet-mod/src/BulletCollision/BroadphaseCollision/btDispatcher.h	2015-08-18 14:34:49.000000000 +0900
+@@ -46,7 +46,8 @@
+ 		m_useEpa(true),
+ 		m_allowedCcdPenetration(btScalar(0.04)),
+ 		m_useConvexConservativeDistanceUtil(false),
+-		m_convexConservativeDistanceThreshold(0.0f)
++		m_convexConservativeDistanceThreshold(0.0f),
++		m_curThread(0)
+ 	{
+ 
+ 	}
+@@ -62,6 +63,7 @@
+ 	btScalar	m_allowedCcdPenetration;
+ 	bool		m_useConvexConservativeDistanceUtil;
+ 	btScalar	m_convexConservativeDistanceThreshold;
++	int		m_curThread;
+ };
+ 
+ ///The btDispatcher interface class can be used in combination with broadphase to dispatch calculations for overlapping pairs.
+@@ -73,15 +75,15 @@
+ public:
+ 	virtual ~btDispatcher() ;
+ 
+-	virtual btCollisionAlgorithm* findAlgorithm(const btCollisionObjectWrapper* body0Wrap,const btCollisionObjectWrapper* body1Wrap,btPersistentManifold* sharedManifold=0) = 0;
++	virtual btCollisionAlgorithm* findAlgorithm(const btCollisionObjectWrapper* body0Wrap,const btCollisionObjectWrapper* body1Wrap,btPersistentManifold* sharedManifold=0) volatile = 0;
+ 
+-	virtual btPersistentManifold*	getNewManifold(const btCollisionObject* b0,const btCollisionObject* b1)=0;
++	virtual btPersistentManifold*	getNewManifold(const btCollisionObject* b0,const btCollisionObject* b1) volatile = 0;
+ 
+-	virtual void releaseManifold(btPersistentManifold* manifold)=0;
++	virtual void releaseManifold(btPersistentManifold* manifold) volatile = 0;
+ 
+-	virtual void clearManifold(btPersistentManifold* manifold)=0;
++	virtual void clearManifold(btPersistentManifold* manifold) volatile = 0;
+ 
+-	virtual bool	needsCollision(const btCollisionObject* body0,const btCollisionObject* body1) = 0;
++	virtual bool	needsCollision(const btCollisionObject* body0,const btCollisionObject* body1) volatile = 0;
+ 
+ 	virtual bool	needsResponse(const btCollisionObject* body0,const btCollisionObject* body1)=0;
+ 
+@@ -97,9 +99,9 @@
+ 
+ 	virtual	const btPoolAllocator*	getInternalManifoldPool() const = 0;
+ 
+-	virtual	void* allocateCollisionAlgorithm(int size)  = 0;
++	virtual	void* allocateCollisionAlgorithm(int size) volatile = 0;
+ 
+-	virtual	void freeCollisionAlgorithm(void* ptr) = 0;
++	virtual	void freeCollisionAlgorithm(void* ptr) volatile = 0;
+ 
+ };
+ 
+diff -ur bullet/src/BulletCollision/CollisionDispatch/btCollisionCreateFunc.h bullet-mod/src/BulletCollision/CollisionDispatch/btCollisionCreateFunc.h
+--- bullet/src/BulletCollision/CollisionDispatch/btCollisionCreateFunc.h	2015-08-26 22:45:31.000000000 +0900
++++ bullet-mod/src/BulletCollision/CollisionDispatch/btCollisionCreateFunc.h	2015-08-18 14:41:18.000000000 +0900
+@@ -16,12 +16,24 @@
+ #ifndef BT_COLLISION_CREATE_FUNC
+ #define BT_COLLISION_CREATE_FUNC
+ 
++#include <array>
++
+ #include "LinearMath/btAlignedObjectArray.h"
+ class btCollisionAlgorithm;
+ class btCollisionObject;
+ struct btCollisionObjectWrapper;
+ struct btCollisionAlgorithmConstructionInfo;
+ 
++#define BT_DISPATCH_NUM_THREADS 3
++
++#include "BulletCollision/NarrowPhaseCollision/btVoronoiSimplexSolver.h"
++
++class btSimplexSolverInterface;
++class btConvexPenetrationDepthSolver;
++
++typedef std::array<btSimplexSolverInterface*,BT_DISPATCH_NUM_THREADS> btThrSimplexSolvers;
++typedef std::array<btConvexPenetrationDepthSolver*,BT_DISPATCH_NUM_THREADS> btThrPdSolvers;
++
+ ///Used by the btCollisionDispatcher to register and create instances for btCollisionAlgorithm
+ struct btCollisionAlgorithmCreateFunc
+ {
+diff -ur bullet/src/BulletCollision/CollisionDispatch/btCollisionDispatcher.cpp bullet-mod/src/BulletCollision/CollisionDispatch/btCollisionDispatcher.cpp
+--- bullet/src/BulletCollision/CollisionDispatch/btCollisionDispatcher.cpp	2015-08-26 22:45:31.000000000 +0900
++++ bullet-mod/src/BulletCollision/CollisionDispatch/btCollisionDispatcher.cpp	2015-08-25 03:06:30.600387600 +0900
+@@ -26,9 +26,53 @@
+ #include "LinearMath/btPoolAllocator.h"
+ #include "BulletCollision/CollisionDispatch/btCollisionConfiguration.h"
+ #include "BulletCollision/CollisionDispatch/btCollisionObjectWrapper.h"
++#include "BulletCollision/CollisionDispatch/btDefaultCollisionConfiguration.h"
+ 
+ int gNumManifold = 0;
+ 
++#if defined(_MSC_VER)
++thread_local int tls_thread_id;
++#elif defined(__APPLE__)
++#include <TargetConditionals.h>
++#if TARGET_OS_IPHONE
++#define BT_USE_PTHREAD_GETSPECIFIC
++pthread_key_t tls_key;
++#else
++__thread int tls_thread_id;
++#endif
++#else
++__thread int tls_thread_id;
++#endif
++
++static void init_tls()
++{
++#ifdef BT_USE_PTHREAD_GETSPECIFIC
++    static bool initialized = false;
++    if (initialized) {
++        return;
++    }
++    pthread_key_create(&tls_key, nullptr);
++#endif
++}
++
++void set_tls_thread_id(int v)
++{
++#ifdef BT_USE_PTHREAD_GETSPECIFIC
++    pthread_setspecific(tls_key, (void *)v);
++#else
++    tls_thread_id = v;
++#endif
++}
++
++int get_tls_thread_id()
++{
++#ifdef BT_USE_PTHREAD_GETSPECIFIC
++    return (size_t)pthread_getspecific(tls_key);
++#else
++    return tls_thread_id;
++#endif
++}
++
+ #ifdef BT_DEBUG
+ #include <stdio.h>
+ #endif
+@@ -39,6 +83,8 @@
+ 	m_collisionConfiguration(collisionConfiguration)
+ {
+ 	int i;
++    
++    init_tls();
+ 
+ 	setNearCallback(defaultNearCallback);
+ 	
+@@ -55,21 +101,57 @@
+ 		}
+ 	}
+ 	
+-	
+-}
++    set_tls_thread_id(0);
+ 
++	int num_threads = BT_DISPATCHER_NUM_THREADS;
++printf("bullet collisiondispatch %d threads\n", num_threads);
++	m_perThreadData.resize(num_threads);
++	for (int k = 0; k < num_threads; ++k) {
++		auto& td = m_perThreadData[k];
++		auto p = new btDefaultCollisionConfiguration();
++		td.m_threadCC = p;
++#if 0
++		for (i=0;i<MAX_BROADPHASE_COLLISION_TYPES;i++)
++		{
++			for (int j=0;j<MAX_BROADPHASE_COLLISION_TYPES;j++)
++			{
++				td.m_threadDoubleDispatch[i][j] = p->getCollisionAlgorithmCreateFunc(i,j);
++			}
++		}
++#endif
++	}
++	m_workerInfo.resize(num_threads);
++	for (int k = 0; k < num_threads; ++k) {
++		std::thread thr([&](int id) {
++			this->workerThreadMain(id);
++		}, k);
++		m_workerThreads.push_back(std::move(thr));
++	}
++}
+ 
+-void btCollisionDispatcher::registerCollisionCreateFunc(int proxyType0, int proxyType1, btCollisionAlgorithmCreateFunc *createFunc)
++btCollisionDispatcher::~btCollisionDispatcher()
+ {
+-	m_doubleDispatch[proxyType0][proxyType1] = createFunc;
++	for (auto& thr: m_workerThreads) {
++		m_finished = true;
++		m_cond.notify_all();
++		thr.join();
++	}
++	for (auto& td: m_perThreadData) {
++		delete td.m_threadCC;
++	}
+ }
+ 
+-btCollisionDispatcher::~btCollisionDispatcher()
++
++void btCollisionDispatcher::registerCollisionCreateFunc(int proxyType0, int proxyType1, btCollisionAlgorithmCreateFunc *createFunc)
+ {
++	m_doubleDispatch[proxyType0][proxyType1] = createFunc;
+ }
+ 
+-btPersistentManifold*	btCollisionDispatcher::getNewManifold(const btCollisionObject* body0,const btCollisionObject* body1) 
++btPersistentManifold*	btCollisionDispatcher::getNewManifold(const btCollisionObject* body0,const btCollisionObject* body1) volatile
+ { 
++	btCollisionDispatcher *const locked_this = const_cast<btCollisionDispatcher *>(this);
++	std::lock_guard<std::mutex> grd(locked_this->m_mutex);
++
+ 	gNumManifold++;
+ 	
+ 	//btAssert(gNumManifold < 65535);
+@@ -78,7 +160,7 @@
+ 
+ 	//optional relative contact breaking threshold, turned on by default (use setDispatcherFlags to switch off feature for improved performance)
+ 	
+-	btScalar contactBreakingThreshold =  (m_dispatcherFlags & btCollisionDispatcher::CD_USE_RELATIVE_CONTACT_BREAKING_THRESHOLD) ? 
++	btScalar contactBreakingThreshold =  (locked_this->m_dispatcherFlags & btCollisionDispatcher::CD_USE_RELATIVE_CONTACT_BREAKING_THRESHOLD) ? 
+ 		btMin(body0->getCollisionShape()->getContactBreakingThreshold(gContactBreakingThreshold) , body1->getCollisionShape()->getContactBreakingThreshold(gContactBreakingThreshold))
+ 		: gContactBreakingThreshold ;
+ 
+@@ -86,9 +168,9 @@
+ 		
+  	void* mem = 0;
+ 	
+-	if (m_persistentManifoldPoolAllocator->getFreeCount())
++	if (locked_this->m_persistentManifoldPoolAllocator->getFreeCount())
+ 	{
+-		mem = m_persistentManifoldPoolAllocator->allocate(sizeof(btPersistentManifold));
++		mem = locked_this->m_persistentManifoldPoolAllocator->allocate(sizeof(btPersistentManifold));
+ 	} else
+ 	{
+ 		//we got a pool memory overflow, by default we fallback to dynamically allocate memory. If we require a contiguous contact pool then assert.
+@@ -103,20 +185,22 @@
+ 		}
+ 	}
+ 	btPersistentManifold* manifold = new(mem) btPersistentManifold (body0,body1,0,contactBreakingThreshold,contactProcessingThreshold);
+-	manifold->m_index1a = m_manifoldsPtr.size();
+-	m_manifoldsPtr.push_back(manifold);
++	manifold->m_index1a = locked_this->m_manifoldsPtr.size();
++	locked_this->m_manifoldsPtr.push_back(manifold);
+ 
+ 	return manifold;
+ }
+ 
+-void btCollisionDispatcher::clearManifold(btPersistentManifold* manifold)
++void btCollisionDispatcher::clearManifold(btPersistentManifold* manifold) volatile
+ {
+ 	manifold->clearManifold();
+ }
+ 
+ 	
+-void btCollisionDispatcher::releaseManifold(btPersistentManifold* manifold)
++void btCollisionDispatcher::releaseManifold(btPersistentManifold* manifold) volatile
+ {
++	btCollisionDispatcher *const locked_this = const_cast<btCollisionDispatcher *>(this);
++	std::lock_guard<std::mutex> grd(locked_this->m_mutex);
+ 	
+ 	gNumManifold--;
+ 
+@@ -124,10 +208,10 @@
+ 	clearManifold(manifold);
+ 
+ 	int findIndex = manifold->m_index1a;
+-	btAssert(findIndex < m_manifoldsPtr.size());
+-	m_manifoldsPtr.swap(findIndex,m_manifoldsPtr.size()-1);
+-	m_manifoldsPtr[findIndex]->m_index1a = findIndex;
+-	m_manifoldsPtr.pop_back();
++	btAssert(findIndex < locked_this->m_manifoldsPtr.size());
++	locked_this->m_manifoldsPtr.swap(findIndex,locked_this->m_manifoldsPtr.size()-1);
++	locked_this->m_manifoldsPtr[findIndex]->m_index1a = findIndex;
++	locked_this->m_manifoldsPtr.pop_back();
+ 
+ 	manifold->~btPersistentManifold();
+ 	if (m_persistentManifoldPoolAllocator->validPtr(manifold))
+@@ -140,16 +224,15 @@
+ 	
+ }
+ 
+-	
+-
+-btCollisionAlgorithm* btCollisionDispatcher::findAlgorithm(const btCollisionObjectWrapper* body0Wrap,const btCollisionObjectWrapper* body1Wrap,btPersistentManifold* sharedManifold)
++btCollisionAlgorithm* btCollisionDispatcher::findAlgorithm(const btCollisionObjectWrapper* body0Wrap,const btCollisionObjectWrapper* body1Wrap,btPersistentManifold* sharedManifold) volatile
+ {
++	btCollisionDispatcher *const locked_this = const_cast<btCollisionDispatcher *>(this); // no need to lock
+ 	
+ 	btCollisionAlgorithmConstructionInfo ci;
+ 
+ 	ci.m_dispatcher1 = this;
+ 	ci.m_manifold = sharedManifold;
+-	btCollisionAlgorithm* algo = m_doubleDispatch[body0Wrap->getCollisionShape()->getShapeType()][body1Wrap->getCollisionShape()->getShapeType()]->CreateCollisionAlgorithm(ci,body0Wrap,body1Wrap);
++	btCollisionAlgorithm* algo = locked_this->m_doubleDispatch[body0Wrap->getCollisionShape()->getShapeType()][body1Wrap->getCollisionShape()->getShapeType()]->CreateCollisionAlgorithm(ci,body0Wrap,body1Wrap);
+ 
+ 	return algo;
+ }
+@@ -168,7 +251,7 @@
+ 	return hasResponse;
+ }
+ 
+-bool	btCollisionDispatcher::needsCollision(const btCollisionObject* body0,const btCollisionObject* body1)
++bool	btCollisionDispatcher::needsCollision(const btCollisionObject* body0,const btCollisionObject* body1) volatile
+ {
+ 	btAssert(body0);
+ 	btAssert(body1);
+@@ -227,21 +310,146 @@
+ 
+ 	virtual bool	processOverlap(btBroadphasePair& pair)
+ 	{
+-		(*m_dispatcher->getNearCallback())(pair,*m_dispatcher,m_dispatchInfo);
++		(*m_dispatcher->getNearCallback())(pair,*m_dispatcher,m_dispatchInfo, 0);
+ 
+ 		return false;
+ 	}
+ };
+ 
++#ifdef _MSC_VER
++#include <windows.h>
++#else
++#include <sys/time.h>
++#endif
+ 
++static double gettime()
++{
++#ifdef _MSC_VER
++	LARGE_INTEGER v = {};
++	if (!QueryPerformanceCounter(&v)) {
++		return 0;
++	}
++	LARGE_INTEGER v1 = {};
++	if (!QueryPerformanceFrequency(&v1)) {
++		return 0;
++	}
++	return double(v.QuadPart) / double(v1.QuadPart);
++#else
++	::timeval tv = { };
++	::gettimeofday(&tv, 0);
++	return double(tv.tv_sec) + double(tv.tv_usec) / 1000000.0;
++#endif
++}
++
++void	btCollisionDispatcher::workerThreadMain(int id)
++{
++	set_tls_thread_id(id);
++//printf("worker main %d\n", id);
++	while (true) {
++		{
++			std::unique_lock<std::mutex> lck(m_mutex);
++			if (m_finished) {
++				break;
++			}
++			auto const& wi = m_workerInfo[id];
++			if (wi.done) {
++//printf("worker wait %d\n", id);				
++				m_cond.wait(lck);
++				continue;
++			}
++		}
++//printf("worker start %d\n", id);				
++		auto& wi = m_workerInfo[id];
++		const auto& nearCallback = (*this->getNearCallback());
++		auto curDispatchInfo = *m_dispatchInfo;
++		curDispatchInfo.m_curThread = id;
++		for (int i = wi.start; i < wi.end; ++i) {
++			auto& pair = (*m_pairArray)[i];
++			nearCallback(pair, *this, curDispatchInfo, id);
++		}
++		{
++			std::unique_lock<std::mutex> lck(m_mutex);
++			wi.done = true;
++//printf("worker done %d\n", id);				
++		}
++		m_cond.notify_all();
++	}
++}
+ 
+ void	btCollisionDispatcher::dispatchAllCollisionPairs(btOverlappingPairCache* pairCache,const btDispatcherInfo& dispatchInfo,btDispatcher* dispatcher) 
+ {
+ 	//m_blockedForChanges = true;
+ 
++#if 0
+ 	btCollisionPairCallback	collisionCallback(dispatchInfo,this);
+ 
+ 	pairCache->processAllOverlappingPairs(&collisionCallback,dispatcher);
++#endif
++	double t0 = gettime();
++	btBroadphasePairArray& arr = pairCache->getOverlappingPairArray();
++#if 0
++	const auto& nearCallback = (*this->getNearCallback());
++	for (int i = 0; i < arr.size(); ++i) {
++		auto& pair = arr[i];
++		nearCallback(pair, *this, dispatchInfo);
++	}
++#endif
++#if 0
++	{
++		const auto& nearCallback = (*this->getNearCallback());
++		m_pairArray = &arr;
++		m_dispatchInfo = &dispatchInfo;
++		int nthr = m_workerThreads.size();
++		int blksz = arr.size() / nthr;
++		int cur = 0;
++		for (int i = 0; i < nthr; ++i) {
++			auto& wi = m_workerInfo[i];
++			wi.start = cur;
++			cur += blksz;
++			wi.end = (i + 1 == nthr) ? arr.size() : cur;
++			auto curDispatchInfo = *m_dispatchInfo;
++			curDispatchInfo.m_curThread = i;
++			for (int j = wi.start; j < wi.end; ++j) {
++				auto& pair = arr[j];
++				nearCallback(pair, *this, curDispatchInfo, i);
++			}
++		}
++	}
++#endif	
++#if 1
++	{
++		std::unique_lock<std::mutex> lck(m_mutex);
++		m_pairArray = &arr;
++		m_dispatchInfo = &dispatchInfo;
++		int nthr = m_workerThreads.size();
++		int blksz = arr.size() / nthr;
++		int cur = 0;
++		for (int i = 0; i < nthr; ++i) {
++			auto& wi = m_workerInfo[i];
++			wi.start = cur;
++			cur += blksz;
++			wi.end = (i + 1 == nthr) ? arr.size() : cur;
++			wi.done = false;
++		}
++		m_cond.notify_all();
++	}
++	{
++		std::unique_lock<std::mutex> lck(m_mutex);
++		while (true) {
++			bool done = true;
++			for (int i = 0; i < m_workerThreads.size(); ++i) {
++				auto& wi = m_workerInfo[i];
++				done &= wi.done;
++			}
++			if (done) {
++				break;
++			}
++			m_cond.wait(lck);
++		}
++	}
++#endif
++	double t1 = gettime();
++// printf("arr=%d %f\n", arr.size(), t1 - t0);
+ 
+ 	//m_blockedForChanges = false;
+ 
+@@ -251,7 +459,7 @@
+ 
+ 
+ //by default, Bullet will use this near callback
+-void btCollisionDispatcher::defaultNearCallback(btBroadphasePair& collisionPair, btCollisionDispatcher& dispatcher, const btDispatcherInfo& dispatchInfo)
++void btCollisionDispatcher::defaultNearCallback(btBroadphasePair& collisionPair, volatile btCollisionDispatcher& dispatcher, const btDispatcherInfo& dispatchInfo, int thread_id)
+ {
+ 		btCollisionObject* colObj0 = (btCollisionObject*)collisionPair.m_pProxy0->m_clientObject;
+ 		btCollisionObject* colObj1 = (btCollisionObject*)collisionPair.m_pProxy1->m_clientObject;
+@@ -261,11 +469,12 @@
+ 			btCollisionObjectWrapper obj0Wrap(0,colObj0->getCollisionShape(),colObj0,colObj0->getWorldTransform(),-1,-1);
+ 			btCollisionObjectWrapper obj1Wrap(0,colObj1->getCollisionShape(),colObj1,colObj1->getWorldTransform(),-1,-1);
+ 
++			collisionPair.m_curThreadId = thread_id;
+ 
+ 			//dispatcher will keep algorithms persistent in the collision pair
+ 			if (!collisionPair.m_algorithm)
+ 			{
+-				collisionPair.m_algorithm = dispatcher.findAlgorithm(&obj0Wrap,&obj1Wrap);
++				collisionPair.m_algorithm = dispatcher.findAlgorithm(&obj0Wrap,&obj1Wrap, nullptr);
+ 			}
+ 
+ 			if (collisionPair.m_algorithm)
+@@ -291,22 +500,28 @@
+ }
+ 
+ 
+-void* btCollisionDispatcher::allocateCollisionAlgorithm(int size)
++void* btCollisionDispatcher::allocateCollisionAlgorithm(int size) volatile
+ {
+-	if (m_collisionAlgorithmPoolAllocator->getFreeCount())
++	btCollisionDispatcher *const locked_this = const_cast<btCollisionDispatcher *>(this);
++	std::lock_guard<std::mutex> grd(locked_this->m_mutex);
++
++	if (locked_this->m_collisionAlgorithmPoolAllocator->getFreeCount())
+ 	{
+-		return m_collisionAlgorithmPoolAllocator->allocate(size);
++		return locked_this->m_collisionAlgorithmPoolAllocator->allocate(size);
+ 	}
+ 	
+ 	//warn user for overflow?
+ 	return	btAlignedAlloc(static_cast<size_t>(size), 16);
+ }
+ 
+-void btCollisionDispatcher::freeCollisionAlgorithm(void* ptr)
++void btCollisionDispatcher::freeCollisionAlgorithm(void* ptr) volatile
+ {
+-	if (m_collisionAlgorithmPoolAllocator->validPtr(ptr))
++	btCollisionDispatcher *const locked_this = const_cast<btCollisionDispatcher *>(this);
++	std::lock_guard<std::mutex> grd(locked_this->m_mutex);
++
++	if (locked_this->m_collisionAlgorithmPoolAllocator->validPtr(ptr))
+ 	{
+-		m_collisionAlgorithmPoolAllocator->freeMemory(ptr);
++		locked_this->m_collisionAlgorithmPoolAllocator->freeMemory(ptr);
+ 	} else
+ 	{
+ 		btAlignedFree(ptr);
+diff -ur bullet/src/BulletCollision/CollisionDispatch/btCollisionDispatcher.h bullet-mod/src/BulletCollision/CollisionDispatch/btCollisionDispatcher.h
+--- bullet/src/BulletCollision/CollisionDispatch/btCollisionDispatcher.h	2015-08-26 22:45:31.000000000 +0900
++++ bullet-mod/src/BulletCollision/CollisionDispatch/btCollisionDispatcher.h	2015-08-18 13:52:44.000000000 +0900
+@@ -24,6 +24,11 @@
+ #include "BulletCollision/BroadphaseCollision/btBroadphaseProxy.h"
+ #include "LinearMath/btAlignedObjectArray.h"
+ 
++#include <thread>
++#include <mutex>
++#include <condition_variable>
++#include <vector>
++
+ class btIDebugDraw;
+ class btOverlappingPairCache;
+ class btPoolAllocator;
+@@ -35,8 +40,9 @@
+ 
+ class btCollisionDispatcher;
+ ///user can override this nearcallback for collision filtering and more finegrained control over collision detection
+-typedef void (*btNearCallback)(btBroadphasePair& collisionPair, btCollisionDispatcher& dispatcher, const btDispatcherInfo& dispatchInfo);
++typedef void (*btNearCallback)(btBroadphasePair& collisionPair, volatile btCollisionDispatcher& dispatcher, const btDispatcherInfo& dispatchInfo, int thread_id);
+ 
++int get_tls_thread_id();
+ 
+ ///btCollisionDispatcher supports algorithms that handle ConvexConvex and ConvexConcave collision pairs.
+ ///Time of Impact, Closest Points and Penetration Depth.
+@@ -108,16 +114,16 @@
+ 
+ 	virtual ~btCollisionDispatcher();
+ 
+-	virtual btPersistentManifold*	getNewManifold(const btCollisionObject* b0,const btCollisionObject* b1);
++	virtual btPersistentManifold*	getNewManifold(const btCollisionObject* b0,const btCollisionObject* b1) volatile;
+ 	
+-	virtual void releaseManifold(btPersistentManifold* manifold);
++	virtual void releaseManifold(btPersistentManifold* manifold) volatile;
+ 
+ 
+-	virtual void clearManifold(btPersistentManifold* manifold);
++	virtual void clearManifold(btPersistentManifold* manifold) volatile;
+ 
+-	btCollisionAlgorithm* findAlgorithm(const btCollisionObjectWrapper* body0Wrap,const btCollisionObjectWrapper* body1Wrap,btPersistentManifold* sharedManifold = 0);
++	btCollisionAlgorithm* findAlgorithm(const btCollisionObjectWrapper* body0Wrap,const btCollisionObjectWrapper* body1Wrap,btPersistentManifold* sharedManifold=0) volatile;
+ 		
+-	virtual bool	needsCollision(const btCollisionObject* body0,const btCollisionObject* body1);
++	virtual bool	needsCollision(const btCollisionObject* body0,const btCollisionObject* body1) volatile;
+ 	
+ 	virtual bool	needsResponse(const btCollisionObject* body0,const btCollisionObject* body1);
+ 	
+@@ -134,11 +140,11 @@
+ 	}
+ 
+ 	//by default, Bullet will use this near callback
+-	static void  defaultNearCallback(btBroadphasePair& collisionPair, btCollisionDispatcher& dispatcher, const btDispatcherInfo& dispatchInfo);
++	static void  defaultNearCallback(btBroadphasePair& collisionPair, volatile btCollisionDispatcher& dispatcher, const btDispatcherInfo& dispatchInfo, int thread_id);
+ 
+-	virtual	void* allocateCollisionAlgorithm(int size);
++	virtual	void* allocateCollisionAlgorithm(int size) volatile;
+ 
+-	virtual	void freeCollisionAlgorithm(void* ptr);
++	virtual	void freeCollisionAlgorithm(void* ptr) volatile;
+ 
+ 	btCollisionConfiguration*	getCollisionConfiguration()
+ 	{
+@@ -165,6 +171,27 @@
+ 		return m_persistentManifoldPoolAllocator;
+ 	}
+ 
++private:
++	struct workerInfo {
++		int start = 0;
++		int end = 0;
++		bool done = true;
++	};
++	struct perThreadData {
++		btCollisionConfiguration *m_threadCC = 0;
++		btCollisionAlgorithmCreateFunc* m_threadDoubleDispatch[MAX_BROADPHASE_COLLISION_TYPES][MAX_BROADPHASE_COLLISION_TYPES] = { };
++	};
++	std::vector<std::thread> m_workerThreads;
++	std::vector<workerInfo> m_workerInfo;
++	std::vector<perThreadData> m_perThreadData;
++	mutable std::mutex m_mutex;
++	mutable std::condition_variable m_cond;
++	btAlignedObjectArray<btBroadphasePair> *m_pairArray = 0;
++	const btDispatcherInfo *m_dispatchInfo = 0;
++	bool m_finished = false;
++	
++	void workerThreadMain(int id);
++
+ };
+ 
+ #endif //BT_COLLISION__DISPATCHER_H
+diff -ur bullet/src/BulletCollision/CollisionDispatch/btCompoundCollisionAlgorithm.cpp bullet-mod/src/BulletCollision/CollisionDispatch/btCompoundCollisionAlgorithm.cpp
+--- bullet/src/BulletCollision/CollisionDispatch/btCompoundCollisionAlgorithm.cpp	2015-08-26 22:45:31.000000000 +0900
++++ bullet-mod/src/BulletCollision/CollisionDispatch/btCompoundCollisionAlgorithm.cpp	2015-08-18 13:55:31.000000000 +0900
+@@ -99,13 +99,13 @@
+ 
+ 	const btCollisionObjectWrapper* m_compoundColObjWrap;
+ 	const btCollisionObjectWrapper* m_otherObjWrap;
+-	btDispatcher* m_dispatcher;
++	volatile btDispatcher* m_dispatcher;
+ 	const btDispatcherInfo& m_dispatchInfo;
+ 	btManifoldResult*	m_resultOut;
+ 	btCollisionAlgorithm**	m_childCollisionAlgorithms;
+ 	btPersistentManifold*	m_sharedManifold;
+ 	
+-	btCompoundLeafCallback (const btCollisionObjectWrapper* compoundObjWrap,const btCollisionObjectWrapper* otherObjWrap,btDispatcher* dispatcher,const btDispatcherInfo& dispatchInfo,btManifoldResult*	resultOut,btCollisionAlgorithm**	childCollisionAlgorithms,btPersistentManifold*	sharedManifold)
++	btCompoundLeafCallback (const btCollisionObjectWrapper* compoundObjWrap,const btCollisionObjectWrapper* otherObjWrap,volatile btDispatcher* dispatcher,const btDispatcherInfo& dispatchInfo,btManifoldResult*	resultOut,btCollisionAlgorithm**	childCollisionAlgorithms,btPersistentManifold*	sharedManifold)
+ 		:m_compoundColObjWrap(compoundObjWrap),m_otherObjWrap(otherObjWrap),m_dispatcher(dispatcher),m_dispatchInfo(dispatchInfo),m_resultOut(resultOut),
+ 		m_childCollisionAlgorithms(childCollisionAlgorithms),
+ 		m_sharedManifold(sharedManifold)
+diff -ur bullet/src/BulletCollision/CollisionDispatch/btCompoundCompoundCollisionAlgorithm.cpp bullet-mod/src/BulletCollision/CollisionDispatch/btCompoundCompoundCollisionAlgorithm.cpp
+--- bullet/src/BulletCollision/CollisionDispatch/btCompoundCompoundCollisionAlgorithm.cpp	2015-08-26 22:45:31.000000000 +0900
++++ bullet-mod/src/BulletCollision/CollisionDispatch/btCompoundCompoundCollisionAlgorithm.cpp	2015-08-18 14:00:45.000000000 +0900
+@@ -96,7 +96,7 @@
+ 
+ 	const btCollisionObjectWrapper* m_compound0ColObjWrap;
+ 	const btCollisionObjectWrapper* m_compound1ColObjWrap;
+-	btDispatcher* m_dispatcher;
++	btDispatcher volatile* m_dispatcher;
+ 	const btDispatcherInfo& m_dispatchInfo;
+ 	btManifoldResult*	m_resultOut;
+ 	
+@@ -107,7 +107,7 @@
+ 	
+ 	btCompoundCompoundLeafCallback (const btCollisionObjectWrapper* compound1ObjWrap,
+ 									const btCollisionObjectWrapper* compound0ObjWrap,
+-									btDispatcher* dispatcher,
++									btDispatcher volatile* dispatcher,
+ 									const btDispatcherInfo& dispatchInfo,
+ 									btManifoldResult*	resultOut,
+ 									btHashedSimplePairCache* childAlgorithmsCache,
+diff -ur bullet/src/BulletCollision/CollisionDispatch/btConvexConcaveCollisionAlgorithm.cpp bullet-mod/src/BulletCollision/CollisionDispatch/btConvexConcaveCollisionAlgorithm.cpp
+--- bullet/src/BulletCollision/CollisionDispatch/btConvexConcaveCollisionAlgorithm.cpp	2015-08-26 22:45:31.000000000 +0900
++++ bullet-mod/src/BulletCollision/CollisionDispatch/btConvexConcaveCollisionAlgorithm.cpp	2015-08-18 12:56:53.000000000 +0900
+@@ -47,7 +47,7 @@
+ }
+ 
+ 
+-btConvexTriangleCallback::btConvexTriangleCallback(btDispatcher*  dispatcher,const btCollisionObjectWrapper* body0Wrap,const btCollisionObjectWrapper* body1Wrap,bool isSwapped):
++btConvexTriangleCallback::btConvexTriangleCallback(volatile btDispatcher*  dispatcher,const btCollisionObjectWrapper* body0Wrap,const btCollisionObjectWrapper* body1Wrap,bool isSwapped):
+ 	  m_dispatcher(dispatcher),
+ 	m_dispatchInfoPtr(0)
+ {
+diff -ur bullet/src/BulletCollision/CollisionDispatch/btConvexConcaveCollisionAlgorithm.h bullet-mod/src/BulletCollision/CollisionDispatch/btConvexConcaveCollisionAlgorithm.h
+--- bullet/src/BulletCollision/CollisionDispatch/btConvexConcaveCollisionAlgorithm.h	2015-08-26 22:45:31.000000000 +0900
++++ bullet-mod/src/BulletCollision/CollisionDispatch/btConvexConcaveCollisionAlgorithm.h	2015-08-18 12:56:53.000000000 +0900
+@@ -36,7 +36,7 @@
+ 
+ 
+ 	btManifoldResult* m_resultOut;
+-	btDispatcher*	m_dispatcher;
++	volatile btDispatcher*	m_dispatcher;
+ 	const btDispatcherInfo* m_dispatchInfoPtr;
+ 	btScalar m_collisionMarginTriangle;
+ 	
+@@ -45,7 +45,7 @@
+ 	
+ 	btPersistentManifold*	m_manifoldPtr;
+ 
+-	btConvexTriangleCallback(btDispatcher* dispatcher,const btCollisionObjectWrapper* body0Wrap,const btCollisionObjectWrapper* body1Wrap,bool isSwapped);
++	btConvexTriangleCallback(volatile btDispatcher* dispatcher,const btCollisionObjectWrapper* body0Wrap,const btCollisionObjectWrapper* body1Wrap,bool isSwapped);
+ 
+ 	void	setTimeStepAndCounters(btScalar collisionMarginTriangle,const btDispatcherInfo& dispatchInfo,const btCollisionObjectWrapper* convexBodyWrap, const btCollisionObjectWrapper* triBodyWrap, btManifoldResult* resultOut);
+ 
+diff -ur bullet/src/BulletCollision/CollisionDispatch/btConvexConvexAlgorithm.cpp bullet-mod/src/BulletCollision/CollisionDispatch/btConvexConvexAlgorithm.cpp
+--- bullet/src/BulletCollision/CollisionDispatch/btConvexConvexAlgorithm.cpp	2015-08-26 22:45:31.000000000 +0900
++++ bullet-mod/src/BulletCollision/CollisionDispatch/btConvexConvexAlgorithm.cpp	2015-08-18 14:35:24.000000000 +0900
+@@ -179,7 +179,7 @@
+ 
+ 
+ 
+-btConvexConvexAlgorithm::CreateFunc::CreateFunc(btSimplexSolverInterface*			simplexSolver, btConvexPenetrationDepthSolver* pdSolver)
++btConvexConvexAlgorithm::CreateFunc::CreateFunc(btThrSimplexSolvers*			simplexSolver, btThrPdSolvers* pdSolver)
+ {
+ 	m_numPerturbationIterations = 0;
+ 	m_minimumPointsPerturbationThreshold = 3;
+@@ -191,7 +191,7 @@
+ { 
+ }
+ 
+-btConvexConvexAlgorithm::btConvexConvexAlgorithm(btPersistentManifold* mf,const btCollisionAlgorithmConstructionInfo& ci,const btCollisionObjectWrapper* body0Wrap,const btCollisionObjectWrapper* body1Wrap,btSimplexSolverInterface* simplexSolver, btConvexPenetrationDepthSolver* pdSolver,int numPerturbationIterations, int minimumPointsPerturbationThreshold)
++btConvexConvexAlgorithm::btConvexConvexAlgorithm(btPersistentManifold* mf,const btCollisionAlgorithmConstructionInfo& ci,const btCollisionObjectWrapper* body0Wrap,const btCollisionObjectWrapper* body1Wrap,btThrSimplexSolvers* simplexSolver, btThrPdSolvers* pdSolver,int numPerturbationIterations, int minimumPointsPerturbationThreshold)
+ : btActivatingCollisionAlgorithm(ci,body0Wrap,body1Wrap),
+ m_simplexSolver(simplexSolver),
+ m_pdSolver(pdSolver),
+@@ -350,7 +350,7 @@
+ 	
+ 	btGjkPairDetector::ClosestPointInput input;
+ 
+-	btGjkPairDetector	gjkPairDetector(min0,min1,m_simplexSolver,m_pdSolver);
++	btGjkPairDetector	gjkPairDetector(min0,min1,(*m_simplexSolver)[dispatchInfo.m_curThread],(*m_pdSolver)[dispatchInfo.m_curThread]);
+ 	//TODO: if (dispatchInfo.m_useContinuous)
+ 	gjkPairDetector.setMinkowskiA(min0);
+ 	gjkPairDetector.setMinkowskiB(min1);
+diff -ur bullet/src/BulletCollision/CollisionDispatch/btConvexConvexAlgorithm.h bullet-mod/src/BulletCollision/CollisionDispatch/btConvexConvexAlgorithm.h
+--- bullet/src/BulletCollision/CollisionDispatch/btConvexConvexAlgorithm.h	2015-08-26 22:45:31.000000000 +0900
++++ bullet-mod/src/BulletCollision/CollisionDispatch/btConvexConvexAlgorithm.h	2015-08-18 14:31:11.000000000 +0900
+@@ -42,8 +42,8 @@
+ #ifdef USE_SEPDISTANCE_UTIL2
+ 	btConvexSeparatingDistanceUtil	m_sepDistance;
+ #endif
+-	btSimplexSolverInterface*		m_simplexSolver;
+-	btConvexPenetrationDepthSolver* m_pdSolver;
++	btThrSimplexSolvers*		m_simplexSolver;
++	btThrPdSolvers* m_pdSolver;
+ 
+ 	
+ 	bool	m_ownManifold;
+@@ -59,7 +59,7 @@
+ 
+ public:
+ 
+-	btConvexConvexAlgorithm(btPersistentManifold* mf,const btCollisionAlgorithmConstructionInfo& ci,const btCollisionObjectWrapper* body0Wrap,const btCollisionObjectWrapper* body1Wrap, btSimplexSolverInterface* simplexSolver, btConvexPenetrationDepthSolver* pdSolver, int numPerturbationIterations, int minimumPointsPerturbationThreshold);
++	btConvexConvexAlgorithm(btPersistentManifold* mf,const btCollisionAlgorithmConstructionInfo& ci,const btCollisionObjectWrapper* body0Wrap,const btCollisionObjectWrapper* body1Wrap, btThrSimplexSolvers* simplexSolver, btThrPdSolvers* pdSolver, int numPerturbationIterations, int minimumPointsPerturbationThreshold);
+ 
+ 	virtual ~btConvexConvexAlgorithm();
+ 
+@@ -86,12 +86,12 @@
+ 	struct CreateFunc :public 	btCollisionAlgorithmCreateFunc
+ 	{
+ 
+-		btConvexPenetrationDepthSolver*		m_pdSolver;
+-		btSimplexSolverInterface*			m_simplexSolver;
++		btThrPdSolvers*		m_pdSolver;
++		btThrSimplexSolvers*			m_simplexSolver;
+ 		int m_numPerturbationIterations;
+ 		int m_minimumPointsPerturbationThreshold;
+ 
+-		CreateFunc(btSimplexSolverInterface*			simplexSolver, btConvexPenetrationDepthSolver* pdSolver);
++		CreateFunc(btThrSimplexSolvers*			simplexSolver, btThrPdSolvers* pdSolver);
+ 		
+ 		virtual ~CreateFunc();
+ 
+diff -ur bullet/src/BulletCollision/CollisionDispatch/btDefaultCollisionConfiguration.cpp bullet-mod/src/BulletCollision/CollisionDispatch/btDefaultCollisionConfiguration.cpp
+--- bullet/src/BulletCollision/CollisionDispatch/btDefaultCollisionConfiguration.cpp	2015-08-26 22:45:31.000000000 +0900
++++ bullet-mod/src/BulletCollision/CollisionDispatch/btDefaultCollisionConfiguration.cpp	2015-08-18 14:36:00.000000000 +0900
+@@ -44,22 +44,27 @@
+ //btDefaultCollisionConfiguration::btDefaultCollisionConfiguration(btStackAlloc*	stackAlloc,btPoolAllocator*	persistentManifoldPool,btPoolAllocator*	collisionAlgorithmPool)
+ {
+ 
+-	void* mem = btAlignedAlloc(sizeof(btVoronoiSimplexSolver),16);
+-	m_simplexSolver = new (mem)btVoronoiSimplexSolver();
++	void *mem = 0;
++	for (auto& ss: m_simplexSolver) {
++		mem = btAlignedAlloc(sizeof(btVoronoiSimplexSolver),16);
++		ss = new (mem)btVoronoiSimplexSolver();
++	}
+ 
+-	if (constructionInfo.m_useEpaPenetrationAlgorithm)
+-	{
+-		mem = btAlignedAlloc(sizeof(btGjkEpaPenetrationDepthSolver),16);
+-		m_pdSolver = new (mem)btGjkEpaPenetrationDepthSolver;
+-	}else
+-	{
+-		mem = btAlignedAlloc(sizeof(btMinkowskiPenetrationDepthSolver),16);
+-		m_pdSolver = new (mem)btMinkowskiPenetrationDepthSolver;
++	for (auto& ps: m_pdSolver) {
++		if (constructionInfo.m_useEpaPenetrationAlgorithm)
++		{
++			mem = btAlignedAlloc(sizeof(btGjkEpaPenetrationDepthSolver),16);
++			ps = new (mem)btGjkEpaPenetrationDepthSolver;
++		}else
++		{
++			mem = btAlignedAlloc(sizeof(btMinkowskiPenetrationDepthSolver),16);
++			ps = new (mem)btMinkowskiPenetrationDepthSolver;
++		}
+ 	}
+ 	
+ 	//default CreationFunctions, filling the m_doubleDispatch table
+ 	mem = btAlignedAlloc(sizeof(btConvexConvexAlgorithm::CreateFunc),16);
+-	m_convexConvexCreateFunc = new(mem) btConvexConvexAlgorithm::CreateFunc(m_simplexSolver,m_pdSolver);
++	m_convexConvexCreateFunc = new(mem) btConvexConvexAlgorithm::CreateFunc(&m_simplexSolver,&m_pdSolver);
+ 	mem = btAlignedAlloc(sizeof(btConvexConcaveCollisionAlgorithm::CreateFunc),16);
+ 	m_convexConcaveCreateFunc = new (mem)btConvexConcaveCollisionAlgorithm::CreateFunc;
+ 	mem = btAlignedAlloc(sizeof(btConvexConcaveCollisionAlgorithm::CreateFunc),16);
+@@ -192,13 +197,15 @@
+ 	m_planeConvexCF->~btCollisionAlgorithmCreateFunc();
+ 	btAlignedFree( m_planeConvexCF);
+ 
+-	m_simplexSolver->~btVoronoiSimplexSolver();
+-	btAlignedFree(m_simplexSolver);
+-
+-	m_pdSolver->~btConvexPenetrationDepthSolver();
+-	
+-	btAlignedFree(m_pdSolver);
++	for (auto& ss: m_simplexSolver) {
++		ss->~btVoronoiSimplexSolver();
++		btAlignedFree(ss);
++	}
+ 
++	for (auto& ps: m_pdSolver) {
++		ps->~btConvexPenetrationDepthSolver();
++		btAlignedFree(ps);
++	}
+ 
+ }
+ 
+diff -ur bullet/src/BulletCollision/CollisionDispatch/btDefaultCollisionConfiguration.h bullet-mod/src/BulletCollision/CollisionDispatch/btDefaultCollisionConfiguration.h
+--- bullet/src/BulletCollision/CollisionDispatch/btDefaultCollisionConfiguration.h	2015-08-26 22:45:31.000000000 +0900
++++ bullet-mod/src/BulletCollision/CollisionDispatch/btDefaultCollisionConfiguration.h	2015-08-18 14:41:03.000000000 +0900
+@@ -16,6 +16,11 @@
+ #ifndef BT_DEFAULT_COLLISION_CONFIGURATION
+ #define BT_DEFAULT_COLLISION_CONFIGURATION
+ 
++#include <array>
++
++#define BT_DISPATCHER_NUM_THREADS 3
++
++#include "btCollisionCreateFunc.h"
+ #include "btCollisionConfiguration.h"
+ class btVoronoiSimplexSolver;
+ class btConvexPenetrationDepthSolver;
+@@ -41,7 +46,6 @@
+ };
+ 
+ 
+-
+ ///btCollisionConfiguration allows to configure Bullet collision detection
+ ///stack allocator, pool memory allocators
+ ///@todo: describe the meaning
+@@ -61,8 +65,8 @@
+ 	bool	m_ownsCollisionAlgorithmPool;
+ 
+ 	//default simplex/penetration depth solvers
+-	btVoronoiSimplexSolver*	m_simplexSolver;
+-	btConvexPenetrationDepthSolver*	m_pdSolver;
++	btThrSimplexSolvers	m_simplexSolver;
++	btThrPdSolvers	m_pdSolver;
+ 	
+ 	//default CreationFunctions, filling the m_doubleDispatch table
+ 	btCollisionAlgorithmCreateFunc*	m_convexConvexCreateFunc;
+@@ -102,9 +106,12 @@
+ 	}
+ 
+ 
+-	virtual	btVoronoiSimplexSolver*	getSimplexSolver()
++	virtual	btSimplexSolverInterface*	getSimplexSolver(int thread_id)
+ 	{
+-		return m_simplexSolver;
++		if (thread_id < 0 || thread_id >= BT_DISPATCHER_NUM_THREADS) {
++			abort();
++		}
++		return m_simplexSolver[thread_id];
+ 	}
+ 
+ 
+diff -ur bullet/src/BulletCollision/CollisionDispatch/btSimulationIslandManager.cpp bullet-mod/src/BulletCollision/CollisionDispatch/btSimulationIslandManager.cpp
+--- bullet/src/BulletCollision/CollisionDispatch/btSimulationIslandManager.cpp	2015-08-26 22:45:31.000000000 +0900
++++ bullet-mod/src/BulletCollision/CollisionDispatch/btSimulationIslandManager.cpp	2015-08-18 12:56:53.000000000 +0900
+@@ -435,7 +435,7 @@
+ 			if (!islandSleeping)
+ 			{
+ 				callback->processIsland(&m_islandBodies[0],m_islandBodies.size(),startManifold,numIslandManifolds, islandId);
+-	//			printf("Island callback of size:%d bodies, %d manifolds\n",islandBodies.size(),numIslandManifolds);
++	//			printf("Island callback of size:%d bodies, %d manifolds\n",m_islandBodies.size(),numIslandManifolds);
+ 			}
+ 			
+ 			if (numIslandManifolds)
+diff -ur bullet/src/BulletSoftBody/btSoftBodyConcaveCollisionAlgorithm.cpp bullet-mod/src/BulletSoftBody/btSoftBodyConcaveCollisionAlgorithm.cpp
+--- bullet/src/BulletSoftBody/btSoftBodyConcaveCollisionAlgorithm.cpp	2015-08-26 22:45:35.000000000 +0900
++++ bullet-mod/src/BulletSoftBody/btSoftBodyConcaveCollisionAlgorithm.cpp	2015-08-18 12:56:53.000000000 +0900
+@@ -49,7 +49,7 @@
+ 
+ 
+ 
+-btSoftBodyTriangleCallback::btSoftBodyTriangleCallback(btDispatcher*  dispatcher,const btCollisionObjectWrapper* body0Wrap,const btCollisionObjectWrapper* body1Wrap,bool isSwapped):
++btSoftBodyTriangleCallback::btSoftBodyTriangleCallback(volatile btDispatcher*  dispatcher,const btCollisionObjectWrapper* body0Wrap,const btCollisionObjectWrapper* body1Wrap,bool isSwapped):
+ m_dispatcher(dispatcher),
+ m_dispatchInfoPtr(0)
+ {
+diff -ur bullet/src/BulletSoftBody/btSoftBodyConcaveCollisionAlgorithm.h bullet-mod/src/BulletSoftBody/btSoftBodyConcaveCollisionAlgorithm.h
+--- bullet/src/BulletSoftBody/btSoftBodyConcaveCollisionAlgorithm.h	2015-08-26 22:45:35.000000000 +0900
++++ bullet-mod/src/BulletSoftBody/btSoftBodyConcaveCollisionAlgorithm.h	2015-08-18 12:56:53.000000000 +0900
+@@ -72,7 +72,7 @@
+ 
+ 	btManifoldResult* m_resultOut;
+ 
+-	btDispatcher*	m_dispatcher;
++	volatile btDispatcher*	m_dispatcher;
+ 	const btDispatcherInfo* m_dispatchInfoPtr;
+ 	btScalar m_collisionMarginTriangle;
+ 
+@@ -83,7 +83,7 @@
+ 
+ 	//	btPersistentManifold*	m_manifoldPtr;
+ 
+-	btSoftBodyTriangleCallback(btDispatcher* dispatcher,const btCollisionObjectWrapper* body0Wrap,const btCollisionObjectWrapper* body1Wrap,bool isSwapped);
++	btSoftBodyTriangleCallback(volatile btDispatcher* dispatcher,const btCollisionObjectWrapper* body0Wrap,const btCollisionObjectWrapper* body1Wrap,bool isSwapped);
+ 
+ 	void	setTimeStepAndCounters(btScalar collisionMarginTriangle,const btCollisionObjectWrapper* triObjWrap,const btDispatcherInfo& dispatchInfo,btManifoldResult* resultOut);
+ 
+diff -ur bullet/src/LinearMath/btAlignedAllocator.cpp bullet-mod/src/LinearMath/btAlignedAllocator.cpp
+--- bullet/src/LinearMath/btAlignedAllocator.cpp	2015-08-26 22:45:35.000000000 +0900
++++ bullet-mod/src/LinearMath/btAlignedAllocator.cpp	2015-08-18 12:56:53.000000000 +0900
+@@ -104,6 +104,56 @@
+   sFreeFunc = freeFunc ? freeFunc : btFreeDefault;
+ }
+ 
++#ifdef BT_CHECK_ALLOC
++
++#include <mutex>
++#include <map>
++#include <string.h>
++
++std::mutex check_alloc_mutex;
++struct check_alloc_ent { int tag = 0; int sz = 0; };
++typedef std::map<size_t, check_alloc_ent> check_alloc_map_type;
++check_alloc_map_type check_alloc_map;
++
++void check_alloc_alloc(void *p, size_t sz, int tag)
++{
++fprintf(stderr, "check_alloc_alloc %p %zu %d\n", p, sz, tag);
++	size_t v = (size_t)p;
++	std::lock_guard<std::mutex> lck(check_alloc_mutex);
++	if (check_alloc_map.find(v) != check_alloc_map.end()) {
++		fprintf(stderr, "err check_alloc_alloc %p %d ex=%d\n", p, tag,
++			check_alloc_map[v].tag);
++		abort();
++	}
++	check_alloc_ent e;
++	e.tag = tag;
++	e.sz = sz;
++	check_alloc_map[v] = e;
++}
++
++void check_alloc_free(void *p, int tag)
++{
++fprintf(stderr, "check_alloc_free %p %d\n", p, tag);
++	if (p == 0) {
++		return;
++	}
++	size_t v = (size_t)p;
++	std::lock_guard<std::mutex> lck(check_alloc_mutex);
++	if (check_alloc_map.find(v) == check_alloc_map.end()) {
++		fprintf(stderr, "err check_alloc_free %p", p, tag);
++		abort();
++	}
++	if (check_alloc_map[v].tag != tag) {
++		fprintf(stderr, "err check_alloc_free %p %d ex=%d", p, tag,
++			check_alloc_map[v].tag);
++		abort();
++	}
++	memset(p, 0, check_alloc_map[v].sz);
++	check_alloc_map.erase(v);
++}
++
++#endif
++
+ #ifdef BT_DEBUG_MEMORY_ALLOCATIONS
+ //this generic allocator provides the total allocated number of bytes
+ #include <stdio.h>
+@@ -131,11 +181,13 @@
+ 
+  int* ptr = (int*)ret;
+  *ptr = 12;
++check_alloc_alloc(ret, size, 1);
+  return (ret);
+ }
+ 
+ void    btAlignedFreeInternal   (void* ptr,int line,char* filename)
+ {
++check_alloc_free(ptr, 1);
+ 
+  void* real;
+  gNumAlignedFree++;
+@@ -162,6 +214,7 @@
+ 	void* ptr;
+ 	ptr = sAlignedAllocFunc(size, alignment);
+ //	printf("btAlignedAllocInternal %d, %x\n",size,ptr);
++check_alloc_alloc(ptr, size, 2);
+ 	return ptr;
+ }
+ 
+@@ -171,6 +224,7 @@
+ 	{
+ 		return;
+ 	}
++check_alloc_free(ptr, 2);
+ 
+ 	gNumAlignedFree++;
+ //	printf("btAlignedFreeInternal %x\n",ptr);
+diff -ur bullet/src/LinearMath/btAlignedAllocator.h bullet-mod/src/LinearMath/btAlignedAllocator.h
+--- bullet/src/LinearMath/btAlignedAllocator.h	2015-08-26 22:45:35.000000000 +0900
++++ bullet-mod/src/LinearMath/btAlignedAllocator.h	2015-08-18 16:09:22.000000000 +0900
+@@ -101,7 +101,15 @@
+ 	friend bool operator==( const self_type & , const self_type & ) { return true; }
+ };
+ 
++#undef BT_CHECK_ALLOC
+ 
++#ifdef BT_CHECK_ALLOC
++void check_alloc_alloc(void *p, size_t sz, int tag);
++void check_alloc_free(void *p, int tag);
++#else
++#define check_alloc_alloc(p, sz, tag)
++#define check_alloc_free(p, tag)
++#endif
+ 
+ #endif //BT_ALIGNED_ALLOCATOR
+ 
+diff -ur bullet/src/LinearMath/btPoolAllocator.h bullet-mod/src/LinearMath/btPoolAllocator.h
+--- bullet/src/LinearMath/btPoolAllocator.h	2015-08-26 22:45:35.000000000 +0900
++++ bullet-mod/src/LinearMath/btPoolAllocator.h	2015-08-18 12:56:53.000000000 +0900
+@@ -76,6 +76,7 @@
+         void* result = m_firstFree;
+         m_firstFree = *(void**)m_firstFree;
+         --m_freeCount;
++if (result != m_pool) check_alloc_alloc(result, size, 2);
+         return result;
+ 	}
+ 
+@@ -92,6 +93,7 @@
+ 
+ 	void	freeMemory(void* ptr)
+ 	{
++if (ptr != m_pool) check_alloc_free(ptr, 2);
+ 		 if (ptr) {
+             btAssert((unsigned char*)ptr >= m_pool && (unsigned char*)ptr < m_pool + m_maxElements * m_elemSize);
+ 

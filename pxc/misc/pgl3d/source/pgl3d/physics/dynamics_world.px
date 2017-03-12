@@ -22,6 +22,7 @@ public threaded interface
 rigid_body_i rigid_body
 {
   public function joint_id_type get_joint_id() const;
+  public function float get_mass() const;
   public function void apply_central_impulse(float x, float y, float z);
   public function void apply_torque_impulse(float x, float y, float z);
   public function void get_world_transform_mat4(glm::mat4 mutable& m);
@@ -182,9 +183,10 @@ grid_bp_thread_object(tptr{grid_bp_shared} const& shared0)
 	    */
 	    ++np1_count;
 	    if (rbi.colshape->has_near_collision()) {
-	      const trinv = rbi.trans.inverse();
+	      const trinv = rbi.trans.inverse(); // FIXME: don't use inverse()
 	      // FIXME: avoid conversion between btVector and vec3
-	      const lpos = op_mul{btTransform, btVector3, btVector3}(trinv, btVector3_(pos.x, pos.y, pos.z));
+	      const lpos = op_mul{btTransform, btVector3, btVector3}(trinv,
+		btVector3_(pos.x, pos.y, pos.z));
 	      if (!rbi.colshape->near_collision(
 		glm::make_vec3(lpos.x(), lpos.y(), lpos.z()), radius)) {
 		//debug_log("near_collision: false");
@@ -320,7 +322,7 @@ dynamics_world(size_t num_grid_bp_tasks0)
     check_grid_bp_thread_is_not_running();
     const rb1 = pointer_downcast{ptr{rigid_body}}(rb);
     if (rb1->offset != static_cast{size_t}(-1)) {
-      return;
+      return; // すでにrigid_bodiesの中に登録されている
     }
     rb1->offset = rigid_bodies.size();
     grid_rbinfo rbi;
@@ -331,7 +333,10 @@ dynamics_world(size_t num_grid_bp_tasks0)
     */
     rigid_bodies.push_back(rb1);
     grid_rbinfo_array.push_back(rbi);
-    dynamicsWorld.addRigidBody(address(rb1->rigidBody));
+    // massが負のときはdynamics worldに登録しない。0か正のときは登録する。
+    if (rb1->mass >= 0.0f) {
+      dynamicsWorld.addRigidBody(address(rb1->rigidBody));
+    }
   }
   public function void remove_rigid_body(ptr{rigid_body_i} const& rb)
   {
@@ -339,7 +344,7 @@ dynamics_world(size_t num_grid_bp_tasks0)
     const rb1 = pointer_downcast{ptr{rigid_body}}(rb);
     const offset = rb1->offset;
     if (offset == static_cast{size_t}(-1)) {
-      return;
+      return; // rigid_bodiesの中に登録されていない
     }
     const sz = rigid_bodies.size();
     if (sz > 1) {
@@ -349,7 +354,9 @@ dynamics_world(size_t num_grid_bp_tasks0)
     }
     rigid_bodies.erase(sz - 1, sz);
     grid_rbinfo_array.erase(sz - 1, sz);
-    dynamicsWorld.removeCollisionObject(address(rb1->rigidBody));
+    if (rb1->mass >= 0.0f) {
+      dynamicsWorld.removeCollisionObject(address(rb1->rigidBody));
+    }
   }
   public function {f} void rigid_bodies_foreach()
   {
@@ -418,8 +425,11 @@ rigid_body(joint_id_type const& joint_id0,
   public ptr{collision_shape_i} const shape = shape0;
   public btRigidBody rigidBody = makeRigidBody(shape->get(), tr0, mass0);
   public size_t offset = static_cast{size_t}(-1);
-  init(mass0);
-  function void init(float mass) {
+  public float const mass = mass0;
+  init();
+  function void init() {
+    // massが0のときはkinematic object。負のときはdynamics worldに登録しない。
+    // 正のときはdynamic。
     if (mass == 0.0f) {
       rigidBody.setCollisionFlags(rigidBody.getCollisionFlags() |
 	CF_KINEMATIC_OBJECT);
@@ -429,6 +439,10 @@ rigid_body(joint_id_type const& joint_id0,
   public function joint_id_type get_joint_id() const
   {
     return joint_id;
+  }
+  public function float get_mass() const
+  {
+    return mass;
   }
   public function void apply_central_impulse(float x, float y, float z)
   {
