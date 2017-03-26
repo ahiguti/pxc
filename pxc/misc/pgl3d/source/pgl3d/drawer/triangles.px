@@ -87,12 +87,13 @@ private tsvaluetype struct shadowmap_uniforms()
 }
 
 public struct drawer_triangles(shader_config const& glc0,
-  textures_ptr const& textures0, resource_pool_ptr const& res0, int opt0,
-  int opt1)
+  textures_ptr const& textures0, tptr{tiled_voxel_texture} const& tvt0,
+  resource_pool_ptr const& res0, int opt0, int opt1)
 <pgldrawer_i>
 {
   metafunction tattr triangles_vertex_attributes;
   textures_ptr textures = textures0;
+  tptr{tiled_voxel_texture} tvt = tvt0;
   ptr{resource_pool} res = pointer_downcast{ptr{resource_pool}}(res0);
   int const stype = opt0;
   int const ssubtype = opt1;
@@ -101,6 +102,8 @@ public struct drawer_triangles(shader_config const& glc0,
   option{shadowmap_shader_ptr} sdr_shadow;
   ivec3 voxtile_size;
   ptr{edit_mode_texture} emt = make_ptr{edit_mode_texture}();
+  /*
+  */
   /*
   varray{ptr{texture_data}} vox.tmap_pri;
   varray{ptr{texture_data}} vox.tmap_aux;
@@ -150,8 +153,9 @@ public struct drawer_triangles(shader_config const& glc0,
     res->textures.insert("tile_parallax", texture_pmpat);
     res->textures.insert("tile", texture_tilemap);
     if (stype == 1) {
+      /*
       function void init_mip(string const& name,
-	varray{ptr{texture_data}} mutable& mip)
+	varray{texture_data} mutable& mip)
       {
 	int i;
 	i = 0;
@@ -161,37 +165,41 @@ public struct drawer_triangles(shader_config const& glc0,
 	  if (e.empty()) {
 	    break;
 	  }
-	  mip.push_back(*e);
+	  mip.push_back(**e);
 	  ++i;
 	}
       }
-      init_mip("triangles.voxtmap_pri", emt->vox.tmap_pri);
-      init_mip("triangles.voxtmap_aux", emt->vox.tmap_aux);
-      init_mip("triangles.voxtpat_pri", emt->vox.tpat_pri);
-      init_mip("triangles.voxtpat_aux", emt->vox.tpat_aux);
+      init_mip("triangles.voxtmap_pri", emt->vox.tmap_edit->data_pri);
+      init_mip("triangles.voxtmap_aux", emt->vox.tmap_edit->data_sec);
+      init_mip("triangles.voxtpat_pri", emt->vox.tpat_edit->data_pri);
+      init_mip("triangles.voxtpat_aux", emt->vox.tpat_edit->data_sec);
       emt->vox.voxtile = *(*textures->equal_range("triangles.voxtile"));
+      */
+      emt->vox = *tvt;
+      debug_log("vox tpat", emt->vox.tpat_edit->data_pri.size());
+      debug_log("vox tmap", emt->vox.tmap_edit->data_pri.size());
       const& voxtile = emt->vox.voxtile;
       voxtile_size.x = static_cast{int}(voxtile.get_width());
       voxtile_size.y = static_cast{int}(voxtile.get_height());
       voxtile_size.z = static_cast{int}(voxtile.get_depth());
       if (glc.is_gl3_or_gles3()) {
 	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtpat,
-	  emt->vox.tpat_pri, GL_RGBA, GL_RGBA, GL_NEAREST);
+	  emt->vox.tpat_edit->data_pri, GL_RGBA, GL_RGBA, GL_NEAREST);
 	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtpax,
-	  emt->vox.tpat_aux, GL_RGBA, GL_RGBA, GL_NEAREST);
+	  emt->vox.tpat_edit->data_sec, GL_RGBA, GL_RGBA, GL_NEAREST);
 	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtmap,
-	  emt->vox.tmap_pri, GL_RGBA, GL_RGBA, GL_NEAREST);
+	  emt->vox.tmap_edit->data_pri, GL_RGBA, GL_RGBA, GL_NEAREST);
 	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtmax,
-	  emt->vox.tmap_aux, GL_RGBA, GL_RGBA, GL_NEAREST);
+	  emt->vox.tmap_edit->data_sec, GL_RGBA, GL_RGBA, GL_NEAREST);
       } else {
 	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtpat,
-	  emt->vox.tpat_pri[0 .. 1], GL_RGBA, GL_RGBA, GL_NEAREST);
+	  emt->vox.tpat_edit->data_pri[0 .. 1], GL_RGBA, GL_RGBA, GL_NEAREST);
 	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtpax,
-	  emt->vox.tpat_aux[0 .. 1], GL_RGBA, GL_RGBA, GL_NEAREST);
+	  emt->vox.tpat_edit->data_sec[0 .. 1], GL_RGBA, GL_RGBA, GL_NEAREST);
 	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtmap,
-	  emt->vox.tmap_pri[0 .. 1], GL_RGBA, GL_RGBA, GL_NEAREST);
+	  emt->vox.tmap_edit->data_pri[0 .. 1], GL_RGBA, GL_RGBA, GL_NEAREST);
 	texture_data_array_to_gl_texture(GL_TEXTURE_3D, *emt->glt_voxtmax,
-	  emt->vox.tmap_aux[0 .. 1], GL_RGBA, GL_RGBA, GL_NEAREST);
+	  emt->vox.tmap_edit->data_sec[0 .. 1], GL_RGBA, GL_RGBA, GL_NEAREST);
       }
       if (glc.conf.get("edit_mode", 0, 0, 1) != 0) {
 	edit_mode_ptr.some = make_ptr{edit_mode}(emt);
@@ -297,16 +305,17 @@ public struct drawer_triangles(shader_config const& glc0,
       ivec3 voxtpat_size;
       ivec3 voxtmap_size;
       int virt3_size;
-      if (!emt->vox.tpat_pri.empty()) {
-	voxtpat_size = make_ivec3(si(emt->vox.tpat_pri[0]->get_width()),
-	  si(emt->vox.tpat_pri[0]->get_height()),
-	  si(emt->vox.tpat_pri[0]->get_depth()));
+      if (!emt->vox.tpat_edit->data_pri.empty()) {
+	voxtpat_size = make_ivec3(
+	  si(emt->vox.tpat_edit->data_pri[0].get_width()),
+	  si(emt->vox.tpat_edit->data_pri[0].get_height()),
+	  si(emt->vox.tpat_edit->data_pri[0].get_depth()));
 	voxtpat_size = map{ivec3, operator::div}(voxtpat_size, voxtile_size);
 	voxtpat_size = map{ivec3, power_of_2}(voxtpat_size);
 	voxtmap_size = make_ivec3(
-	  si(emt->vox.tmap_pri[0]->get_width()),
-	  si(emt->vox.tmap_pri[0]->get_height()),
-	  si(emt->vox.tmap_pri[0]->get_depth()));
+	  si(emt->vox.tmap_edit->data_pri[0].get_width()),
+	  si(emt->vox.tmap_edit->data_pri[0].get_height()),
+	  si(emt->vox.tmap_edit->data_pri[0].get_depth()));
 	voxtmap_size = map{ivec3, power_of_2}(voxtmap_size);
 	const virt_size = map{ivec3, operator::mul}(voxtile_size,
 	  voxtmap_size);

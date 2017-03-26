@@ -1,0 +1,235 @@
+public threaded namespace generic::monoid;
+public import numeric::integral -;
+public import generic::generic -;
+public import meta m;
+public import operator;
+public import meta::family mf;
+public import meta::vararg va;
+
+public threaded function {binop, tlist} m::at0{m::at0{tlist}}
+fold(expand(va::arg_decls_bycref{tlist}))
+{
+  mutable r = a0;
+  expand(a: m::slice{va::arg_names{m::size{tlist}}, 1}) {
+    r = binop(r, a);
+  }
+  return r;
+}
+
+public threaded function {binop, tlist} m::at0{m::at{tlist, lastidx}}
+fold_right(expand(va::arg_decls_bycref{tlist}))
+{
+  metafunction nargs m::size{tlist};
+  metafunction lastidx m::sub{nargs, 1};
+  expand(a: m::list{m::concat{"a", lastidx}}) {
+    mutable r = a;
+  }
+  expand(a: m::reverse{va::arg_names{lastidx}}) {
+    r = binop(a, r);
+  }
+  return r;
+}
+
+public threaded function {binop, tv, tc} tv
+fold_list(tv const& v, tc const& c)
+{
+  mutable r = v;
+  if (mf::is_container_or_range_type{tc}) {
+    for (const& k, const& m: c) {
+      r = binop(r, m);
+    }
+  } else {
+    expand (fld: m::field_names{tc}) {
+      r = binop(r, c.fld);
+    }
+  }
+  return r;
+}
+
+public metafunction monoid_add{t} {zero{t}, operator::add{t, t}};
+public metafunction monoid_mul{t} {one{t}, operator::mul{t, t}};
+public metafunction monoid_and{t} {constant_true{t}, operator::and{t, t}};
+public metafunction monoid_or{t} {constant_false{t}, operator::or{t, t}};
+public metafunction monoid_land {constant_true{bool}, "land"};
+public metafunction monoid_lor {constant_false{bool}, "lor"};
+
+public threaded function {t, f, tlist} tr
+map(expand(va::arg_decls_bycref{tlist}))
+{
+  /* t must be a list type or a pair { identity, binop } */
+  metafunction tr m::cond{m::is_list{t}, m::ret_type{m::at0{t}}, t};
+  metafunction is_explicit_alg m::is_list{t};
+  metafunction is_darray
+    m::and{m::not{is_explicit_alg}, m::eq{m::family{t}, "darray"}};
+  metafunction is_defcon m::not{m::or{is_explicit_alg, is_darray}};
+  expand (dmy: m::seq{is_explicit_alg}) {
+    tr r = m::at0{t}(); /* identity element */
+  }
+  expand (dmy: m::seq{is_darray}) {
+    tr r = t(array_size(a0), make_default{m::at0{t}}());
+  }
+  expand (dmy: m::seq{is_defcon}) {
+    tr r = make_default{t}();
+  }
+  metafunction is_land m::eq{t, monoid_land};
+  metafunction is_lor m::eq{t, monoid_lor};
+  metafunction targ m::at0{m::at0{tlist}};
+  if (mf::is_union_type{targ}) {
+    expand (fld, i: m::field_names{targ}) {
+      if (case a0.fld) {
+	field_set{t, fld}(r, i,
+	  f(expand(a: va::arg_names{m::size{tlist}};
+	    field_get{m::at{m::field_types{targ}, i}, fld}(a, i))));
+      }
+    }
+  } else if (m::or{m::and{m::is_type{t}, mf::is_struct_type{t}},
+    mf::is_struct_type{targ}}) {
+    metafunction ts m::cond{mf::is_struct_type{targ}, targ, t};
+    expand (fld, i: m::field_names{ts}) {
+      field_set{t, fld}(r, i,
+	f(expand(a: va::arg_names{m::size{tlist}};
+	  field_get{m::at{m::field_types{ts}, i}, fld}(a, i))));
+      if (m::is_true{is_land}) { if (!r) { return false; } }
+      if (m::is_true{is_lor}) { if (r) { return true; } }
+    }
+  } else if (mf::is_array_or_slice_type{targ}) {
+    for (const i: 0 .. array_size(a0)) {
+      array_set{t}(r, i, 
+	f(expand(a: va::arg_names{m::size{tlist}}; array_get(a, i))));
+      if (m::is_true{is_land}) { if (!r) { return false; } }
+      if (m::is_true{is_lor}) { if (r) { return true; } }
+    }
+  } else if (mf::is_map_or_range_type{targ}) {
+    size_t i = 0;
+    for (const& k, const& m: a0) {
+      assoc_set{t}(r, i, k,
+	f(expand(a: va::arg_names{m::size{tlist}}; assoc_get(a, i, k))));
+      ++i;
+      if (m::is_true{is_land}) { if (!r) { return false; } }
+      if (m::is_true{is_lor}) { if (r) { return true; } }
+    }
+  } else {
+    m::error{"invalid type"};
+  }
+  if (m::is_true{is_land}) { return true; }
+  else if (m::is_true{is_lor}) { return false; }
+  else { return r; }
+}
+
+threaded function {tm} size_t
+array_size(tm const& m)
+{
+  if (mf::is_array_or_slice_type{tm}) {
+    return m.size();
+  } else {
+    m::error{"invalid type"};
+  }
+}
+
+threaded function {tm, ti} m::symbol{tm, "mapped_type"}
+array_get(tm const& m, ti i)
+{
+  if (mf::is_array_or_slice_type{tm}) {
+    return (i < m.size())
+      ? m[i] : make_default{m::symbol{tm, "mapped_type"}}();
+  } else if (mf::is_struct_type{tm}) {
+    expand (fld, idx: mf::field_names{tm}) {
+      if (idx == i) { return m.fid; }
+    }
+    return make_default{m::symbol{tm, "mapped_type"}}();
+  } else {
+    m::error{"invalid type"};
+  }
+}
+
+threaded function {talg, tm, ti, tv} void
+array_set(tm mutable& m, ti i, tv const& v)
+{
+  if (m::not{m::is_type{talg}}) {
+    metafunction binop m::at1{talg};
+    if (m::or{m::eq{talg, monoid_land}, m::eq{talg, monoid_lor}}) {
+      m = v;
+    } else if (m::eq{m::ret_type{binop}, void}) {
+      binop(m, v); /* e.g., operator::adda */
+    } else {
+      m = binop(m, v); /* e.g., operator::add */
+    }
+  } else if (mf::is_array_or_slice_type{tm}) {
+    if (m::or{m::eq{m::family{tm}, "farray"},
+      m::eq{m::family{tm}, "darray"}}) {
+      if (i < m.size()) {
+	m[i] = v;
+      }
+    } else {
+      m.push_back(v);
+    }
+  } else if (mf::is_struct_type{tm}) {
+    expand (fld, idx: mf::field_names{tm}) {
+      if (idx == i) { m.fid = v; }
+    }
+  } else {
+    m::error{"invalid type"};
+  }
+}
+
+threaded function {tm, ti, tk} m::symbol{tm, "mapped_type"}
+assoc_get(tm const& m, ti i, tk const& k)
+{
+  if (mf::is_map_or_range_type{tm}) {
+    if (const& v: m[k]) {
+      return v;
+    }
+    return make_default{m::symbol{tm, "mapped_type"}}();
+  } else {
+    return array_get(m, i);
+  }
+}
+
+threaded function {talg, tm, ti, tk, tv} void
+assoc_set(tm mutable& m, ti i, tk const& k, tv const& v)
+{
+  if (m::not{m::is_type{talg}}) {
+    array_set{talg}(m, i, v);
+  } else if (mf::is_map_or_range_type{tm}) {
+    m[k] = v;
+  } else {
+    array_set{talg}(m, i, v);
+  }
+}
+
+threaded function {tfld, fld, tm, ti} tfld
+field_get(tm const& m, ti i)
+{
+  if (mf::is_struct_type{tm}) {
+    expand (f: {fld}) {
+      return m.f;
+    }
+  } else if (mf::is_union_type{tm}) {
+    expand (f: {fld}) {
+      return (case m.f) ? m.f : make_default{tfld}();
+    }
+  } else if (mf::is_map_or_range_type{tm}) {
+    metafunction fs m::to_string{fld};
+    return (case m[fs]) ? m[fs] : make_default{tfld}();
+  } else {
+    return array_get(m, i);
+  }
+}
+
+threaded function {talg, fld, tm, ti, tv} void
+field_set(tm mutable& m, ti i, tv const& v)
+{
+  if (m::not{m::is_type{talg}}) {
+    array_set{talg}(m, i, v);
+  } else if (m::or{mf::is_struct_type{tm}, mf::is_union_type{tm}}) {
+    expand (f: {fld}) {
+      m.f = v;
+    }
+  } else if (mf::is_map_or_union_type{tm}) {
+    metafunction fs m::to_string{fld};
+    m[fs] = v;
+  } else {
+    array_set{talg}(m, i, v);
+  }
+}
+

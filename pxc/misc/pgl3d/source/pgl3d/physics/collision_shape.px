@@ -13,6 +13,7 @@ private import Bullet::constants -;
 private import Bullet::api +;
 private import pointer::raw_unsafe -;
 private import pgl3d::geometry::funcs -;
+private import pgl3d::texture::editable_voxel -;
 private import pgl3d::physics::grid_broadphase -;
 private import pgl3d::physics::collision_gjk -;
 private import pgl3d::physics::collision_heightmap -;
@@ -168,7 +169,8 @@ make_convex_hull_shape(cslice{float} const& v, cslice{uint} const& e)
 }
 
 public threaded function ptr{collision_shape_i}
-make_voxel_shape(cslice{vertex_attr} const& va, cslice{uint} const& e)
+make_voxel_shape(tptr{texture_edit} const& tedit,
+  cslice{vertex_attr} const& va, cslice{uint} const& e)
 {
   varray{float} triangles;
   float sqmax = 0.0f;
@@ -203,6 +205,7 @@ make_voxel_shape(cslice{vertex_attr} const& va, cslice{uint} const& e)
       + pos_obj.z * pos_obj.z;
     sqmax = max(sqmax, sq);
   }
+  debug_log("make_voxel_shape", triangles.size(), sqmax);
   return make_ptr{convex_hull_shape}(triangles, triangles, sqrt(sqmax));
   /*
   triangles.clear(); // FIXME

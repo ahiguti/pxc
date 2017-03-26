@@ -185,6 +185,7 @@ grid_bp_thread_object(tptr{grid_bp_shared} const& shared0)
 	    if (rbi.colshape->has_near_collision()) {
 	      const trinv = rbi.trans.inverse(); // FIXME: don't use inverse()
 	      // FIXME: avoid conversion between btVector and vec3
+	      // FIXME: inverseせずにベクトルを左から掛けることができるのでは？
 	      const lpos = op_mul{btTransform, btVector3, btVector3}(trinv,
 		btVector3_(pos.x, pos.y, pos.z));
 	      if (!rbi.colshape->near_collision(
@@ -331,9 +332,11 @@ dynamics_world(size_t num_grid_bp_tasks0)
     rbi.radius = rb1->shape->get_radius();
     rbi.shape = rb1->shape->get();
     */
+    // massが負のときはbtのdynamicsWorldに登録しない。0か正のときは登録する。
+    // grid_rbinfo_arrayにはmassにかかわらず登録する(衝突判定だけは有効)。
+    // rigid_bodiesにはmassにかかわらず登録する。
     rigid_bodies.push_back(rb1);
     grid_rbinfo_array.push_back(rbi);
-    // massが負のときはdynamics worldに登録しない。0か正のときは登録する。
     if (rb1->mass >= 0.0f) {
       dynamicsWorld.addRigidBody(address(rb1->rigidBody));
     }

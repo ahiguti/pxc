@@ -1,0 +1,70 @@
+public threaded namespace generic::generic;
+public import numeric::integral -;
+public import meta m;
+public import meta::family mf;
+public import meta::vararg va;
+
+public threaded function {t} t
+identity(t const& x) { return x; }
+
+public threaded function {t} void
+swap(t mutable& x, t mutable& y)
+{
+  if (m::symbol_exists{m::nsof{t}, m::concat{t, "_swap"}}) {
+    m::symbol{m::nsof{t}, m::concat{t, "_swap"}}(x, y);
+  } else if (m::ne{m::size{m::field_names{t}}, 0}) {
+    /* has public field */
+    /* note: not atomic */
+    expand (sym: m::field_names{t}) {
+      swap(x.sym, y.sym);
+    }
+  } else {
+    /* t need to be copyable */
+    t const x0 = x;
+    x = y;
+    y = x0;
+  }
+}
+
+public threaded function {t} t
+make_default()
+{
+  if (m::characteristic{t, "defcon"}) {
+    return t();
+  } else if (mf::is_pointer_type{t}) {
+    metafunction tv m::at0{t};
+    if (m::characteristic{tv, "defcon"}) {
+      return pointer::box_pointer{t}();
+    } else {
+      const v = make_default{tv}();
+      return pointer::box_pointer{t}(v);
+    }
+  } else {
+    metafunction ats m::arg_types{t};
+    metafunction ans m::map{m::seq{m::size{ats}},
+      metafunction{i} m::concat{"a", i}};
+    expand (sym, idx: ans) {
+      const sym = make_default{m::at{ats, idx}}();
+    }
+    return t(expand(a: ans; a));
+  }
+}
+
+public threaded function {t, name} m::ret_type{m::symbol{t, name}}
+method_as_function(expand(
+  m::join{
+    m::list{m::list{"o", t, 1,
+      m::not{m::is_const_member_function{m::symbol{t, name}}}}},
+    subst_arg_names{m::args{m::symbol{t, name}}}}))
+{
+  expand (sym: m::list{name}) {
+    return o.sym(expand(a: m::map{m::seq{m::arg_size{m::symbol{t, name}}},
+      metafunction{i} m::concat{"a", i}}; a));
+  }
+}
+
+metafunction subst_arg_names{xs}
+  m::map{m::seq{m::size{xs}}, metafunction{i}
+    m::list{m::concat{"a", i}, m::at1{m::at{xs, i}}, m::at2{m::at{xs, i}},
+      m::at3{m::at{xs, i}}}};
+

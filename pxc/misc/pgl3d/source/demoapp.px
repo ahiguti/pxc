@@ -355,7 +355,9 @@ private struct app_impl()
   public bool raycast_cull_front = false;
   public bool raycast_sort = false;
   public bool enable_dbgui = false;
-  public textures_ptr const textures = make_textures_ptr();
+  public textures_ptr const txs = make_textures_ptr();
+  public tptr{tiled_voxel_texture} const tvt
+    = make_tptr{tiled_voxel_texture}();
   public pgl3d::geometry::funcs::rand_generator rand_gen
     = pgl3d::geometry::funcs::rand_generator(1u);
   public uint modmask; // shift, meta
@@ -388,7 +390,8 @@ public tsvaluetype enum collision_shape_e {
 public multithreaded struct
 collision_shape_data(string const& name0, joint_id_type joint_id0,
   float mass0, collision_shape_e shape0, varray{float} const& values0,
-  varray{vertex_attr} const& vattrs0, varray{uint} const& elements0)
+  varray{vertex_attr} const& vattrs0, varray{uint} const& elements0,
+  tptr{tiled_voxel_texture} const& tvt0)
 {
   public string name = name0;
   public joint_id_type joint_id = joint_id0;
@@ -397,6 +400,7 @@ collision_shape_data(string const& name0, joint_id_type joint_id0,
   public varray{float} values = values0;
   public varray{vertex_attr} vattrs = vattrs0;
   public varray{uint} elements = elements0;
+  public tptr{tiled_voxel_texture} tvt = tvt0;
 }
 
 public metafunction collision_shape_data_array
@@ -863,22 +867,22 @@ private function varray{ptr{pgldrawer_export_i}} init_drawers(
   app.enable_dbgui = sconf.conf.get("enable_dbgui", 0, 0, 1) != 0;
   app.scene_shared->raycast_sort = app.raycast_sort;
   const t0 = get_time(io::system);
-  prepare_triangles_texture_data(sconf.conf, app.textures);
+  prepare_triangles_texture_data(sconf.conf, app.txs, app.tvt);
   varray{ptr{pgldrawer_export_i}} r;
   if (app.raycast_sort) {
-    r.push_back(make_drawer_triangles(sconf, app.textures, res, 1, 7));
-    r.push_back(make_drawer_triangles(sconf, app.textures, res, 1, 6));
-    r.push_back(make_drawer_triangles(sconf, app.textures, res, 1, 5));
-    r.push_back(make_drawer_triangles(sconf, app.textures, res, 1, 4));
-    r.push_back(make_drawer_triangles(sconf, app.textures, res, 1, 3));
-    r.push_back(make_drawer_triangles(sconf, app.textures, res, 1, 2));
-    r.push_back(make_drawer_triangles(sconf, app.textures, res, 1, 1));
+    r.push_back(make_drawer_triangles(sconf, app.txs, app.tvt, res, 1, 7));
+    r.push_back(make_drawer_triangles(sconf, app.txs, app.tvt, res, 1, 6));
+    r.push_back(make_drawer_triangles(sconf, app.txs, app.tvt, res, 1, 5));
+    r.push_back(make_drawer_triangles(sconf, app.txs, app.tvt, res, 1, 4));
+    r.push_back(make_drawer_triangles(sconf, app.txs, app.tvt, res, 1, 3));
+    r.push_back(make_drawer_triangles(sconf, app.txs, app.tvt, res, 1, 2));
+    r.push_back(make_drawer_triangles(sconf, app.txs, app.tvt, res, 1, 1));
   }
-  const dr = make_drawer_triangles(sconf, app.textures, res, 1, 0);
+  const dr = make_drawer_triangles(sconf, app.txs, app.tvt, res, 1, 0);
   app.edit_mode = dr->get_edit_mode();
   r.push_back(dr);
-  r.push_back(make_drawer_triangles(sconf, app.textures, res, 0, 0));
-  r.push_back(make_drawer_triangles(sconf, app.textures, res, 2, 0));
+  r.push_back(make_drawer_triangles(sconf, app.txs, app.tvt, res, 0, 0));
+  r.push_back(make_drawer_triangles(sconf, app.txs, app.tvt, res, 2, 0));
   /*
   */
   r.push_back(make_drawer_lineparticle(sconf, res));
@@ -908,14 +912,14 @@ private function varray{ptr{pgldrawer_export_i}} init_drawers(
 private function void build_vertices(app_impl mutable& app,
   make_vertices_i mutable& pgs)
 {
-  const& voxtmap = *app.textures->equal_range("triangles.voxtmap_pri.0");
+  const& voxtmap = app.tvt->tmap_edit->data_pri[0];
   const voxtmap_whd_max = static_cast{float}(
-    max(max(voxtmap->get_width(), voxtmap->get_height()),
-    voxtmap->get_depth()));
+    max(max(voxtmap.get_width(), voxtmap.get_height()),
+    voxtmap.get_depth()));
   const voxtmap_whd = glm::make_vec3(
-    static_cast{float}(voxtmap->get_width()) / voxtmap_whd_max,
-    static_cast{float}(voxtmap->get_height()) / voxtmap_whd_max,
-    static_cast{float}(voxtmap->get_depth()) / voxtmap_whd_max);
+    static_cast{float}(voxtmap.get_width()) / voxtmap_whd_max,
+    static_cast{float}(voxtmap.get_height()) / voxtmap_whd_max,
+    static_cast{float}(voxtmap.get_depth()) / voxtmap_whd_max);
   /*
   bitarray3 otb = tilemap_external(voxtmap);
   bitarray3 itb = tilemap_internal(voxtmap);
@@ -1398,7 +1402,7 @@ private function void build_vertices(app_impl mutable& app,
     const& va = vp->vertex_attrs;
     const& elems = vp->elements;
     app.scene_shared->shapes.push_back(make_tptr{collision_shape_data}(
-      name, pgs.get_joint_id(name), mass, shape, p, va, elems));
+      name, pgs.get_joint_id(name), mass, shape, p, va, elems, app.tvt));
   }
   function void shapes_add_convex(cstrref const& name, float mass)
   {
@@ -1549,7 +1553,7 @@ scene_objects(collision_shape_data_array const& shape0, size_t num_split0)
       } else if (sh.shape == collision_shape_e_concave) {
 	return make_triangle_mesh_shape(v, e);
       } else if (sh.shape == collision_shape_e_voxel) {
-	return make_voxel_shape(va, e);
+	return make_voxel_shape(sh.tvt->tmap_edit, va, e);
       } else {
 	throw runtime_error_template{"get_shape"}("1");
       }

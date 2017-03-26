@@ -1,0 +1,274 @@
+private threaded namespace pgl3d::texture::editable_voxel "export-unsafe";
+public import common -;
+public import meta m;
+public import glm -;
+public import SDL2::api_types -;
+public import text::serialize::compact_pod -;
+public import pgl3d::texture::texture -;
+public import pgl3d::texture::voxel -;
+public import pgl3d::engine::util -;
+public import pgl3d::sdl::sdlutil -;
+
+public metafunction texture_data_mip varray{texture_data};
+
+public tsvaluetype enum texture_value_index_e
+{
+  texture_value_index_primary = 0,
+  texture_value_index_secondary = 1,
+}
+
+public multithreaded struct modified_range
+{
+  private uvec3 modified_pos;
+  private uvec3 modified_sz;
+  public function pair{uvec3, uvec3} get_modified(bool reset_flag)
+  {
+    const r = pair{uvec3, uvec3}(modified_pos, modified_sz);
+    if (reset_flag) {
+      modified_pos = uvec3();
+      modified_sz = uvec3();
+    }
+    return r;
+  }
+  public function void set_modified(ivec3 mi, ivec3 mx)
+  {
+    if (modified_sz.x != 0) {
+      mi = map{ivec3, min}(to_ivec3(modified_pos), mi);
+      mx = map{ivec3, max}(
+	to_ivec3(modified_pos + modified_sz - make_uvec3(1, 1, 1)), mx);
+    }
+    modified_pos = to_uvec3(mi);
+    modified_sz = to_uvec3(mx + make_ivec3(1, 1, 1) - mi);
+  }
+}
+
+public multithreaded struct
+texture_edit()
+{
+  /* 更新可能なテクスチャを保持するクラス。更新されたら最適な距離を
+   * 再計算する。*/
+  public texture_data_mip data_pri;
+  public texture_data_mip data_sec;
+  public texture_data grid;
+  public uvec3 data_size;
+  public uvec3 grid_size = make_uvec3(1u, 1u, 1u); // (1,1,1)のときグリッド無し
+  private texture_data grid_work;
+  private modified_range modified;
+  public function pair{uvec3, uvec3} get_modified(bool reset_flag)
+  {
+    return modified.get_modified(reset_flag);
+  }
+  public function uint get_mip(uvec3 pos, texture_value_index_e idx,
+    size_t miplevel)
+  {
+    if (miplevel >= data_pri.size()) {
+      miplevel = data_pri.size() - 1;
+    }
+    if (!lt_all_uvec3(pos, data_size)) {
+      return 0u;
+    }
+    pos.x >>= static_cast{uint}(miplevel);
+    pos.y >>= static_cast{uint}(miplevel);
+    pos.z >>= static_cast{uint}(miplevel);
+    if (idx == texture_value_index_primary) {
+      return data_pri[miplevel].get(pos.x, pos.y, pos.z);
+    } else {
+      return data_sec[miplevel].get(pos.x, pos.y, pos.z);
+    }
+  }
+  public function uint get(uvec3 const& pos, texture_value_index_e idx)
+  {
+    return get_mip(pos, idx, 0u);
+  }
+  public function void set(uvec3 const& pos, texture_value_index_e idx, uint v)
+  {
+    if (!lt_all_uvec3(pos, data_size)) {
+      return;
+    }
+    v = (idx == texture_value_index_primary && is_space_voxel(v)) ? 0u : v;
+    if (idx == texture_value_index_primary) {
+      data_pri[0].set(pos.x, pos.y, pos.z, v);
+    } else {
+      data_sec[0].set(pos.x, pos.y, pos.z, v);
+    }
+    if (idx == texture_value_index_primary) {
+      recalc_distance_range(pos, make_uvec3(1, 1, 1), v == 0);
+    }
+  }
+  public function void fill_range(uvec3 const& dpos, uvec3 const& sz,
+    uint v_pri, uint v_sec)
+  {
+    if (!lt_all_uvec3(dpos, data_size)) {
+      return;
+    }
+    v_pri = is_space_voxel(v_pri) ? 0u : v_pri;
+    v_sec = is_space_voxel(v_pri) ? 0u : v_sec;
+    texture_data_fill_range(data_pri[0], dpos, sz, v_pri);
+    texture_data_fill_range(data_sec[0], dpos, sz, v_sec);
+    recalc_distance_range(dpos, sz, v_pri == 0u);
+  }
+  public function void copy_range(uvec3 const& spos, uvec3 sz,
+    texture_data mutable& dest, texture_data mutable& dest_aux,
+    uvec3 const& dpos) const
+  {
+    sz = clamp_size(data_pri[0], spos, sz);
+    sz = clamp_size(dest, dpos, sz);
+    if (empty_range(sz)) {
+      return;
+    }
+    debug_log("copy_range", spos, sz, dpos);
+    texture_data_copy_range(dest, dpos, data_pri[0], spos, sz);
+    texture_data_copy_range(dest_aux, dpos, data_sec[0], spos, sz);
+  }
+  public function void paste_range(uvec3 const& dpos, uvec3 sz,
+    texture_data const& src, texture_data const& src_aux, uvec3 const& spos,
+    uint index_mask)
+  {
+    sz = clamp_size(src, spos, sz);
+    sz = clamp_size(data_pri[0], dpos, sz);
+    if (empty_range(sz)) {
+      return;
+    }
+    // debug_log("paste_range", spos, sz, dpos);
+    bool shape_modified = false;
+    if ((index_mask & 1u) != 0) {
+      // pri and sec
+      shape_modified = texture_data_copy_range_check_modified(data_pri[0],
+	dpos, src, spos, sz);
+      if ((index_mask & 2u) != 0) {
+	texture_data_copy_range(data_sec[0], dpos, src_aux, spos, sz);
+      }
+    } else if ((index_mask & 2u) != 0) {
+      // sec only
+      texture_data_copy_range_secondary(data_pri[0], data_sec[0], dpos,
+	src_aux, spos, sz);
+    }
+    if (shape_modified) {
+      recalc_distance_range(dpos, sz, false);
+    } else {
+      modified.set_modified(to_ivec3(dpos),
+	to_ivec3(dpos + sz - make_uvec3(1, 1, 1)));
+    }
+  }
+  private function void recalc_distance_range(uvec3 const& pos,
+    uvec3 const& sz, bool clear_flag)
+  {
+    /* 領域の更新に伴う距離の更新をおこなう。領域が全て空白になったと
+     * わかっている場合はclear_flagを真にしてよい。*/
+    ivec3 mod_mi = to_ivec3(pos);
+    ivec3 mod_mx = mod_mi + to_ivec3(sz) - make_ivec3(1, 1, 1);
+    if (grid_size.x == 1) {
+      debug_log("recalc_distance_range nogrid");
+      update_distance(true, data_pri[0], mod_mi, mod_mx, clear_flag);
+      modified.set_modified(mod_mi, mod_mx);
+    } else {
+      if (grid_work.get_width_l2() == 0u) {
+	grid_work.set_size_l2(
+	  integral_log2(grid_size.x), 
+	  integral_log2(grid_size.y), 
+	  integral_log2(grid_size.z));
+      }
+      ivec3 mod_mi_g = map{ivec3, operator::div}(mod_mi, to_ivec3(grid_size));
+      ivec3 mod_mx_g = map{ivec3, operator::div}(mod_mx, to_ivec3(grid_size));
+      for (const z: mod_mi_g.z .. mod_mx_g.z + 1) {
+	for (const y: mod_mi_g.y .. mod_mx_g.y + 1) {
+	  for (const x: mod_mi_g.x .. mod_mx_g.x + 1) {
+	    const p = map{uvec3, operator::mul}(
+	      make_uvec3(ui(x), ui(y), ui(z)),
+	      grid_size);
+	    debug_log("recalc_distance_range grid", x, y, z);
+	    texture_data_copy_range(grid_work, uvec3(), data_pri[0], p,
+	      grid_size);
+	    set_distance(true, grid_work);
+	    texture_data_copy_range(data_pri[0], p, grid_work, uvec3(),
+	      grid_size);
+	  }
+	}
+      }
+      modified.set_modified(
+	map{ivec3, operator::mul}(mod_mi_g, to_ivec3(grid_size)),
+	map{ivec3, operator::mul}(mod_mx_g + make_ivec3(1, 1, 1),
+	  to_ivec3(grid_size))
+	- make_ivec3(1, 1, 1));
+    }
+  }
+}
+
+metafunction ui static_cast{uint}; 
+metafunction si static_cast{int}; 
+
+private threaded function bool texture_data_copy_range_check_modified(
+  texture_data mutable& dest,
+  uvec3 const& dpos, texture_data const& src, uvec3 const& spos,
+  uvec3 const& sz)
+{
+  bool modified = false;
+  for (uint z: 0 .. sz.z) {
+    for (uint y: 0 .. sz.y) {
+      for (uint x: 0 .. sz.x) {
+	const v = src.get(spos.x + x, spos.y + y, spos.z + z);
+	const ov = dest.get(dpos.x + x, dpos.y + y, dpos.z + z);
+	modified |= (ov != v);
+	dest.set(dpos.x + x, dpos.y + y, dpos.z + z, v);
+      }
+    }
+  }
+  return modified;
+}
+
+private threaded function void texture_data_copy_range_secondary(
+  texture_data const& dest_pri, texture_data mutable& dest_sec,
+  uvec3 const& dpos, texture_data const& src_sec, uvec3 const& spos,
+  uvec3 const& sz)
+{
+  for (uint z: 0 .. sz.z) {
+    for (uint y: 0 .. sz.y) {
+      for (uint x: 0 .. sz.x) {
+	const ov = dest_pri.get(dpos.x + x, dpos.y + y, dpos.z + z);
+	if (is_space_voxel(ov) || is_node_reference(ov)) {
+	  continue;
+	}
+	const v = src_sec.get(spos.x + x, spos.y + y, spos.z + z);
+	dest_sec.set(dpos.x + x, dpos.y + y, dpos.z + z, v);
+      }
+    }
+  }
+}
+
+
+/*
+
+map{land, lt}(a, b);
+TODO: generic::mapを、第一引数の型(ファンクタ)とは異なるものを指定できる
+ようにする。特に{bool, land}や{bool, lor}。
+
+*/
+
+// vecutil.px
+private threaded function bool lt_all_uvec3(uvec3 const& a, uvec3 const& b)
+{
+  return a.x < b.x && a.y < b.y && a.z < b.z;
+}
+
+// vecutil.px
+private threaded function bool le_all_uvec3(uvec3 const& a, uvec3 const& b)
+{
+  return a.x <= b.x && a.y <= b.y && a.z <= b.z;
+}
+
+private threaded function bool empty_range(uvec3 const& a)
+{
+  return a.x == 0 || a.y == 0 || a.z == 0;
+}
+
+private threaded function uvec3
+clamp_size(texture_data const& data, uvec3 const& pos, uvec3 const& sz)
+{
+  const tsz = data.get_size_uvec3();
+  if (!lt_all_uvec3(pos, tsz)) {
+    return uvec3();
+  }
+  const trem = tsz - pos;
+  return map{uvec3, min}(trem, sz);
+}
+

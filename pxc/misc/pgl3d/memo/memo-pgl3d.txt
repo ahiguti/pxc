@@ -2,6 +2,11 @@
 ---------------------------------------------------------------------------
 TODO
 
+- 二面、edit_modeのほうが大幅にフレームレート低い理由を調べる
+  miplevelのデフォルト値の違い(done)
+
+- edit_voxel_11_11_6.rawをシリアライズしなおし
+
 - 3dテクスチャの衝突判定
 
 - miplevelをキー操作で固定できるように(done)
@@ -3324,4 +3329,22 @@ objectを作成している。
 sco.add_collision_object(r);
 これの中ではそのjoint_idに対応するshapeがadd_collision_shape_one()で登録され
 ていればそれをもとにmake_rigid_body()する。
+それをそのままdworld.add_rigid_body(rb)する。
+add_rigid_bodyはmassが負の時はbtのdynamicsWorldに登録しない。
+massを負にしておくと、物理エンジンは使わないが衝突判定(grid_rbinfo_array)は
+有効になる。
+
+
+swarmと物体との衝突判定はgrid_bp_thread_object::__call()の中で実行している。
+colshape->has_near_collision()のときにnear_collisionメソッドを呼ぶ。
+pg3d/physics/collision_shape.pxでnear_collisionを実装すればよい。
+
+swarmではない物体とraycastオブジェクトとの衝突判定は、grid_bp_thread_object
+の__callに追加する必要がある。
+
+手順
+1. collision_shapeにraycastオブジェクトの衝突判定を追加
+  1-1. 小物体の相対位置をオブジェクト座標から接線空間に変換
+  1-2. テクスチャを読んで衝突判定
+2. grid_bp_thread_objectの__callに大物体と小物体の衝突を追加
 

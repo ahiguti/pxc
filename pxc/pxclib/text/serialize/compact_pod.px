@@ -57,7 +57,9 @@ private threaded function {t} void ser_pod_array_with_prefix(t const& x,
   v.push_back('!'); // prefix to distinguish with end-of-list '}' mark
   size_t len = x.size();
   ser_memcpy(len, 1u, v);
-  ser_memcpy(x[0], x.size(), v);
+  if (len != 0u) {
+    ser_memcpy(x[0], x.size(), v);
+  }
 }
 
 private threaded function {t} t des_pod_array_with_prefix(cstrref mutable& s)
@@ -67,12 +69,16 @@ private threaded function {t} t des_pod_array_with_prefix(cstrref mutable& s)
   des_memcpy(len, 1, s);
   if (m::eq{m::family{t}, "darray"}) {
     t r = t(len, make_default{m::symbol{t, "mapped_type", unit}}());
-    des_memcpy(r[0], r.size(), s);
+    if (len != 0u) {
+      des_memcpy(r[0], r.size(), s);
+    }
     return r;
   } else {
     t r;
     r.resize(len, make_default{m::symbol{t, "mapped_type", unit}}());
-    des_memcpy(r[0], r.size(), s);
+    if (len != 0u) {
+      des_memcpy(r[0], r.size(), s);
+    }
     return r;
   }
 }

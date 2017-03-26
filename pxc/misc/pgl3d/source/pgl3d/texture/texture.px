@@ -84,13 +84,67 @@ public tsvaluetype struct {t} array3_pot()
       return rawptr{mapped_type}();
     }
   }
+  public function void swap_data(uint mutable& w_l2, uint mutable& h_l2,
+    uint mutable& d_l2, t mutable& d) {
+    const sz_l2 = w_l2 + h_l2 + d_l2;
+    const sz = 1u << sz_l2;
+    if (d.size() != static_cast{size_t}(sz)) {
+      throw runtime_error_template{"array3_pot::swap_data"}("");
+    }
+    swap(data, d);
+    swap(width_l2, w_l2);
+    swap(height_l2, h_l2);
+    swap(depth_l2, d_l2);
+  }
   private uint width_l2;
   private uint height_l2;
   private uint depth_l2;
   private t data;
 }
 
+public function {t} void
+array3_pot_swap(array3_pot{t} mutable& a, array3_pot{t} mutable& b)
+{
+  t data;
+  metafunction mapped_type m::symbol{t, "mapped_type"};
+  data.resize(1u, mapped_type());
+  uint w_l2 = 0;
+  uint h_l2 = 0;
+  uint d_l2 = 0;
+  a.swap_data(w_l2, h_l2, d_l2, data);
+  b.swap_data(w_l2, h_l2, d_l2, data);
+}
+
 public metafunction texture_data array3_pot{varray{uint}};
+
+public threaded function void
+texture_data_copy_range(texture_data mutable& dest,
+  glm::uvec3 const& dpos, texture_data const& src, glm::uvec3 const& spos,
+  glm::uvec3 const& sz)
+{
+  for (uint z: 0 .. sz.z) {
+    for (uint y: 0 .. sz.y) {
+      for (uint x: 0 .. sz.x) {
+	const v = src.get(spos.x + x, spos.y + y, spos.z + z);
+	dest.set(dpos.x + x, dpos.y + y, dpos.z + z, v);
+      }
+    }
+  }
+}
+
+
+public threaded function void
+texture_data_fill_range(texture_data mutable& dest,
+  glm::uvec3 const& dpos, glm::uvec3 const& sz, uint v)
+{
+  for (uint z: 0 .. sz.z) {
+    for (uint y: 0 .. sz.y) {
+      for (uint x: 0 .. sz.x) {
+	dest.set(dpos.x + x, dpos.y + y, dpos.z + z, v);
+      }
+    }
+  }
+}
 
 public function ptr{texture_data}
 load_texture_data_raw(string const& fn0)
@@ -124,6 +178,8 @@ save_texture_data_array_raw(string const& fn0,
   const buf = to_string_compact_pod(tds);
   return sdl_save_file(fn0, buf);
 }
+
+metafunction SDL_Surface_Scoped scoped_nullable{SDL_FreeSurface};
 
 public function ptr{texture_data}
 load_texture_data(string const& fn0)
@@ -220,6 +276,4 @@ load_texture_data(string const& fn0)
   debug_log("load_texture_data done", fn0);
   return p;
 }
-
-metafunction SDL_Surface_Scoped scoped_nullable{SDL_FreeSurface};
 

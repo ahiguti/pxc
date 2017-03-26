@@ -128,6 +128,7 @@ load_gl_texture_fixedwidth_font(gl_texture mutable& fnt,
     cast_int(GL_NEAREST));
 }
 
+/*
 function varray{ptr{texture_data}}
 to_varray(ptr{texture_data} const& td)
 {
@@ -135,6 +136,7 @@ to_varray(ptr{texture_data} const& td)
   tds.push_back(td);
   return tds;
 }
+*/
 
 public function void
 load_gl_texture_cube(gl_texture mutable& ctex, cslice{string} const& fnames)
@@ -149,7 +151,7 @@ load_gl_texture_cube(gl_texture mutable& ctex, cslice{string} const& fnames)
     ctex.surface_h = td->get_height();
     const tgt = static_cast{GLenum}(
       static_cast{int}(GL_TEXTURE_CUBE_MAP_POSITIVE_X) + i);
-    set_gl_texture(to_varray(td), ctex, tgt, GL_RGBA, GL_RGBA, GL_LINEAR);
+    set_gl_texture(*td, ctex, tgt, GL_RGBA, GL_RGBA, GL_LINEAR);
   }
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER,
     cast_int(GL_LINEAR));
@@ -184,20 +186,20 @@ texture_data_to_gl_texture(GLenum target, gl_texture mutable& tx,
   tx.surface_w = td->get_width();
   tx.surface_h = td->get_height();
   tx.surface_d = td->get_depth();
-  set_gl_texture(to_varray(td), tx, target, iformat, format, filter);
+  set_gl_texture(*td, tx, target, iformat, format, filter);
 }
 
 public function void
 texture_data_array_to_gl_texture(GLenum target, gl_texture mutable& tx,
-  cslice{ptr{texture_data}} const& tds, GLenum iformat, GLenum format,
+  cslice{texture_data} const& tds, GLenum iformat, GLenum format,
   GLenum filter)
 {
   glActiveTexture(GL_TEXTURE0);
   tx.texture_id.generate();
   glBindTexture(target, tx.texture_id.get());
-  tx.surface_w = tds[0]->get_width();
-  tx.surface_h = tds[0]->get_height();
-  tx.surface_d = tds[0]->get_depth();
+  tx.surface_w = tds[0].get_width();
+  tx.surface_h = tds[0].get_height();
+  tx.surface_d = tds[0].get_depth();
   set_gl_texture(tds, tx, target, iformat, format, filter);
 }
 
@@ -214,13 +216,22 @@ function void dump_buf(varray{uint} const& buf)
   debug_log("dump_buf_end");
 }
 
-function void set_gl_texture(cslice{ptr{texture_data}} const& tds,
-  gl_texture mutable& ti, GLenum target, GLenum iformat, GLenum format,
-  GLenum filter)
+function {t} void set_gl_texture(t const& tds, gl_texture mutable& ti,
+  GLenum target, GLenum iformat, GLenum format, GLenum filter)
 {
   int const dim = (target == GL_TEXTURE_3D) ? 3 : 2;
-  for (size_t i: 0 .. tds.size()) {
-    const& td = *tds[i];
+  size_t tds_sz = 0;
+  if (m::eq{t, texture_data}) {
+    set_one(tds, 0);
+    tds_sz = 1;
+  } else {
+    for (size_t i, const& td: tds) {
+      set_one(td, i);
+    }
+    tds_sz = tds.size();
+  }
+  function void set_one(texture_data const& td, size_t i)
+  {
     const crawp = td.get_crawptr();
     uint tex_w = td.get_width();
     uint tex_h = td.get_height();
@@ -231,7 +242,7 @@ function void set_gl_texture(cslice{ptr{texture_data}} const& tds,
       throw runtime_error_template{"set_gl_texture"}("");
     }
     if (dim == 3) {
-      // debug_log("3dtex", tex_w, tex_h, tex_d);
+      debug_log("3dtex", tex_w, tex_h, tex_d);
       glTexImage3D(target, mipmap_level, cast_int(iformat),
 	cast_int(tex_w), cast_int(tex_h), cast_int(tex_d),
 	0, format, GL_UNSIGNED_BYTE, crawp.to_cvoidptr());
@@ -241,19 +252,20 @@ function void set_gl_texture(cslice{ptr{texture_data}} const& tds,
 	0, format, GL_UNSIGNED_BYTE, crawp.to_cvoidptr());
     }
   }
+  // glTexParameteri(target, GL_GENERATE_MIPMAP, static_cast{int}(GL_FALSE));
   if (target == GL_TEXTURE_2D || target == GL_TEXTURE_3D)
   {
     mutable min_filter = filter;
-    if (filter == GL_NEAREST && tds.size() > 1) {
+    if (filter == GL_NEAREST && tds_sz > 1) {
       min_filter = GL_NEAREST_MIPMAP_NEAREST;
     }
     glTexParameteri(target, GL_TEXTURE_MAG_FILTER, cast_int(filter));
     glTexParameteri(target, GL_TEXTURE_MIN_FILTER, cast_int(min_filter));
     if (m::is_true{is_gl3_or_gles3}) {
-      if (tds.size() > 1) {
+      if (tds_sz > 1) {
 	glTexParameteri(target, GL_TEXTURE_BASE_LEVEL, 0);
 	glTexParameteri(target, GL_TEXTURE_MAX_LEVEL,
-	  cast_int(tds.size() - 1));
+	  cast_int(tds_sz - 1));
       }
     }
   }
