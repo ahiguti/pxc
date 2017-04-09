@@ -114,8 +114,10 @@ public struct sdlcontext(pgl3d_config const& config0)
       // sdl_log("set depth 32\n");
     }
     sdl_log("create_window", init_w, init_h);
-    sdl_window.reset(SDL_CreateWindow("PGL3D", 128, 128, init_w, init_h,
-      wflags));
+    const window_x = config.get("window_x", 64, 0, 65535);
+    const window_y = config.get("window_y", 64, 0, 65535);
+    sdl_window.reset(SDL_CreateWindow("PGL3D", window_x, window_y,
+      init_w, init_h, wflags));
     const wnd = sdl_window.get();
     string verstr;
     function bool create_context()
@@ -190,11 +192,13 @@ public struct sdlcontext(pgl3d_config const& config0)
 	}
       }
     }
+    const vendor = cubptr_to_string(glGetString_nocheck(GL_VENDOR));
+    const renderer = cubptr_to_string(glGetString_nocheck(GL_RENDERER));
     /*
     glGetIntegerv(GL_MAJOR_VERSION, address(glmajor));
     glGetIntegerv(GL_MINOR_VERSION, address(glminor));
     */
-    sdl_log("opengl", glmajor, glminor);
+    sdl_log("opengl", glmajor, glminor, vendor, renderer);
     /*
     sdl_log("GL_EXTENSIONS", cubptr_to_string(glGetString(GL_EXTENSIONS)));
     */
@@ -207,7 +211,7 @@ public struct sdlcontext(pgl3d_config const& config0)
     }
     */
   }
-  function void update_joystick_info()
+  public function void update_joystick_info()
   {
     joystick_handles.clear();
     joysticks.clear();
@@ -224,7 +228,7 @@ public struct sdlcontext(pgl3d_config const& config0)
       inf.num_buttons = static_cast{uint}(max(SDL_JoystickNumButtons(j), 0));
       inf.num_hats = static_cast{uint}(max(SDL_JoystickNumHats(j), 0));
       inf.num_balls = static_cast{uint}(max(SDL_JoystickNumBalls(j), 0));
-      debug_log(inf);
+      // debug_log(inf);
       joystick_handles.push_back(hndp);
       joysticks.push_back(inf);
     }

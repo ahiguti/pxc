@@ -13,13 +13,6 @@ metafunction texture_data_mip_v0 varray{ptr{texture_data}};
 metafunction ui static_cast{uint};
 metafunction si static_cast{int};
 
-public multithreaded struct tiled_voxel_texture()
-{
-  public texture_data voxtile;
-  public tptr{texture_edit} tmap_edit = make_tptr{texture_edit}();
-  public tptr{texture_edit} tpat_edit = make_tptr{texture_edit}();
-}
-
 private struct tiled_voxel_texture_v0()
 {
   public texture_data voxtile;
@@ -79,15 +72,6 @@ tiled_voxel_texture_save_file(tiled_voxel_texture const& vox,
   cstrref const& fname)
 {
   sdl_save_file(fname, to_string_compact_pod(vox));
-}
-
-public struct edit_mode_texture()
-{
-  public tiled_voxel_texture vox;
-  public ptr{gl_texture} glt_voxtmap = make_ptr{gl_texture}();
-  public ptr{gl_texture} glt_voxtmax = make_ptr{gl_texture}();
-  public ptr{gl_texture} glt_voxtpat = make_ptr{gl_texture}();
-  public ptr{gl_texture} glt_voxtpax = make_ptr{gl_texture}();
 }
 
 // voxel.px
@@ -250,6 +234,7 @@ texture_data_sync_gl(texture_data const& tex, int level, uvec3 const& spos,
   uvec3 const& sz, ptr{gl_texture} const& gltex)
 {
   mutable buf = darray{uint}(static_cast{size_t}(sz.x * sz.y * sz.z), 0u);
+    /* TODO: 毎回ヒープ割り当てするのをやめる */
   uint i;
   for (const z: 0 .. sz.z) {
     for (const y: 0 .. sz.y) {
@@ -1164,6 +1149,62 @@ private struct copy_data_type {
 private struct edit_state {
   public ttev_state ttev;
   public glm::ivec3 cdir;
+}
+
+public struct noedit_mode(ptr{edit_mode_texture} const& emt0)
+<edit_mode_i>
+{
+  // edit_modeが無効のときのedit_mode_i実装。view無しでeditを直接glの
+  // テクスチャに反映させる。
+  private ptr{edit_mode_texture} emt = emt0;
+    // emt->voxがtiled_voxel_texture
+    // emt->vox.tmap_editとemt->vox.tpat_editがtptr{texture_edit}
+    // emt->glt_voxtmapなどがptr{gl_texture}
+  private tptr{texture_edit} tmap_edit = emt->vox.tmap_edit;
+  private tptr{texture_edit} tpat_edit = emt->vox.tpat_edit;
+  private ptr{gl_texture} glt_tmap_pri = emt->glt_voxtmap;
+  private ptr{gl_texture} glt_tmap_sec = emt->glt_voxtmax;
+  private ptr{gl_texture} glt_tpat_pri = emt->glt_voxtpat;
+  private ptr{gl_texture} glt_tpat_sec = emt->glt_voxtpax;
+  public function void on_key_pressed(int scancode, uint modmask,
+    glm::vec3 mutable& cursor_move_r, string mutable& msg_r)
+  {
+  }
+  public function void set_camera_angle(glm::quat const& angle)
+  {
+  }
+  public function void on_frame(projection_info const& prj)
+  {
+    // debug_log("noedit on_frame");
+    sync_gl();
+  }
+  public function void modify_tmap(glm::uvec3 const& pos, uint value)
+  {
+    // TODO: 範囲を一括して更新する手段を用意
+    tmap_edit->set(pos, texture_value_index_primary, value);
+    // debug_log("noedit modify_tmap");
+  }
+  private function void sync_gl()
+  {
+    mutable& tme = *tmap_edit;
+    mutable& tpe = *tpat_edit;
+    pair{uvec3, uvec3} tmmod = tme.get_modified(true);
+    if (tmmod.second.x != 0u) {
+      // debug_log("noedit sync tmmod", tmmod);
+      texture_data_mip_sync_gl(tme.data_pri[0], tme.data_pri,
+	tmmod.first, tmmod.second, glt_tmap_pri);
+      texture_data_mip_sync_gl(tme.data_sec[0], tme.data_sec,
+	tmmod.first, tmmod.second, glt_tmap_sec);
+    }
+    pair{uvec3, uvec3} tpmod = tpe.get_modified(true);
+    if (tpmod.second.x != 0u) {
+      // debug_log("noedit sync tpmod", tmmod);
+      texture_data_mip_sync_gl(tpe.data_pri[0], tpe.data_pri,
+	tpmod.first, tpmod.second, glt_tpat_pri);
+      texture_data_mip_sync_gl(tpe.data_sec[0], tpe.data_sec,
+	tpmod.first, tpmod.second, glt_tpat_sec);
+    }
+  }
 }
 
 public struct edit_mode(ptr{edit_mode_texture} const& emt0)
@@ -2176,6 +2217,10 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   {
     prj = prj0;
     ttev->cursor_flick();
+  }
+  public function void modify_tmap(uvec3 const& pos, uint value)
+  {
+    ttev->tmap_edit_set(pos, texture_value_index_primary, value);
   }
 }
 

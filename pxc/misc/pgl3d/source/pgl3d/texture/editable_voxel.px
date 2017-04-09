@@ -1,4 +1,4 @@
-private threaded namespace pgl3d::texture::editable_voxel "export-unsafe";
+private threaded namespace pgl3d::texture::editable_voxel "use-unsafe";
 public import common -;
 public import meta m;
 public import glm -;
@@ -158,7 +158,7 @@ texture_edit()
     ivec3 mod_mi = to_ivec3(pos);
     ivec3 mod_mx = mod_mi + to_ivec3(sz) - make_ivec3(1, 1, 1);
     if (grid_size.x == 1) {
-      debug_log("recalc_distance_range nogrid");
+      // debug_log("recalc_distance_range nogrid");
       update_distance(true, data_pri[0], mod_mi, mod_mx, clear_flag);
       modified.set_modified(mod_mi, mod_mx);
     } else {
@@ -176,7 +176,7 @@ texture_edit()
 	    const p = map{uvec3, operator::mul}(
 	      make_uvec3(ui(x), ui(y), ui(z)),
 	      grid_size);
-	    debug_log("recalc_distance_range grid", x, y, z);
+	    // debug_log("recalc_distance_range grid", x, y, z);
 	    texture_data_copy_range(grid_work, uvec3(), data_pri[0], p,
 	      grid_size);
 	    set_distance(true, grid_work);
@@ -193,6 +193,18 @@ texture_edit()
     }
   }
 }
+
+public multithreaded struct
+texture_update()
+{
+  // テクスチャ更新の情報をスレッド越しに渡すための構造体。詳細後でつめる。
+  public glm::uvec3 pos;
+  public uint value;
+}
+
+public metafunction texture_updates varray{texture_update};
+
+/* private */
 
 metafunction ui static_cast{uint}; 
 metafunction si static_cast{int}; 
@@ -235,25 +247,18 @@ private threaded function void texture_data_copy_range_secondary(
   }
 }
 
-
-/*
-
-map{land, lt}(a, b);
-TODO: generic::mapを、第一引数の型(ファンクタ)とは異なるものを指定できる
-ようにする。特に{bool, land}や{bool, lor}。
-
-*/
-
 // vecutil.px
 private threaded function bool lt_all_uvec3(uvec3 const& a, uvec3 const& b)
 {
-  return a.x < b.x && a.y < b.y && a.z < b.z;
+  return map{monoid_and{bool}, operator::lt}(a, b);
+  // return a.x < b.x && a.y < b.y && a.z < b.z;
 }
 
 // vecutil.px
 private threaded function bool le_all_uvec3(uvec3 const& a, uvec3 const& b)
 {
-  return a.x <= b.x && a.y <= b.y && a.z <= b.z;
+  return map{monoid_and{bool}, operator::le}(a, b);
+  // return a.x <= b.x && a.y <= b.y && a.z <= b.z;
 }
 
 private threaded function bool empty_range(uvec3 const& a)

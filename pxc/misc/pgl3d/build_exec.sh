@@ -1,6 +1,7 @@
 #!/bin/bash
 
 cd `dirname $0`
+
 if [ "`uname | cut -d '_' -f 1`" == "CYGWIN" ]; then
 	build_script=./windows/release_build.sh
 	build_target=./windows/x64/Release/pgl3d_demoapp.exe
@@ -8,9 +9,6 @@ else
 	build_script=./unix/release_build.sh
 	build_target=./source/demoapp.px.exe
 fi
-
-# trap "echo SIGINT" 2
-# trap "echo SIGTERM" 15
 
 while true; do
 	# ビルド失敗するとソースが更新されるまで待ち、
@@ -36,7 +34,16 @@ while true; do
 		fi
 	done
 done
+
+bgpid=""
+
+trap "echo got SIGINT && kill -9 $bdpid > /dev/null 2>&1" 2
+trap "echo got SIGTERM && kill -9 $bdpid > /dev/null 2>&1" 15
+
 echo > var/demoapp.log
-"$build_target" $* 2>&1 > /dev/null &
-exec tail -f var/demoapp.log
+tail -f var/demoapp.log &
+bgpid=$!
+"$build_target" $* > /dev/null 2>&1
+kill -9 "$bgpid" > /dev/null 2>&1
+wait "$bgpid" > /dev/null 2>&1
 

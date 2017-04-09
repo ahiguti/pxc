@@ -150,11 +150,12 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
   private sdlcontext sdlc = sdlcontext(conf);
   private shader_config sconf = shader_config(sdlc.gles_flag, sdlc.glmajor,
     sdlc.glminor, sdlc.enable_msaa, conf);
-  private ptr{resource_pool} respool = make_ptr{resource_pool}();
+  private drawer_shared ds;
   private varray{ptr{pgldrawer_export_i}} drawers
-    = app->on_init_drawers(sconf, respool);
-  private pglshader pgs = pglshader(sconf, respool, drawers, sdlc.init_w,
-    sdlc.init_h);
+    = app->on_init_drawers(sconf, ds);
+  private pglshader pgs = pglshader(sconf,
+    pointer_downcast{ptr{resource_pool}}(ds.gl_resources), drawers,
+    sdlc.init_w, sdlc.init_h);
   private whole_instances_type local_whole_instances;
   private node_factory nfac;
   private option{ptr{motion_thread_client}} motion_thr;
@@ -170,7 +171,7 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
   private int saved_w = 0;
   private int saved_h = 0;
   private Uint32 saved_window_flags = 0;
-  private bool async_motion_thread = false;
+  private bool async_motion_thread = true;
     // conf.get("async_motion_thread", 0, 1, 0) == 1;
   private bool glfinish = conf.get("glfinish", 0, 0, 1) == 1;
   private bool done = false;
@@ -340,7 +341,9 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
       app->on_event(ev, frctl.frame_speed_mul, pgs.cam, commands);
       do_commands();
     }
-    if (!sdlc.joysticks.empty()) {
+    // if (!sdlc.joysticks.empty()) {
+    {
+      sdlc.update_joystick_info(); // FIXME? 
       SDL_JoystickUpdate();
       if (sdlc.joysticks.size() != joysticks.size()) {
 	joysticks.resize(sdlc.joysticks.size(), joystick_state());
@@ -382,6 +385,7 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
 	commands);
       do_commands();
     }
+    app->on_frame(pgs.cam);
     fr.save_ticks(0, SDL_GetTicks());
     if (paused) {
       SDL_Delay(100);

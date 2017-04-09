@@ -9,7 +9,6 @@ public import io::time *;
 public import exception *;
 public import meta m;
 public import pointer::tfuncptr *;
-// public import text::string::positional *;
 public import GL::base *;
 public import GL::compat *;
 public import pgl3d::opengl::glresource *;
@@ -24,6 +23,7 @@ public import pgl3d::opengl::framebuffer *;
 public import pgl3d::geometry::funcs *;
 public import pgl3d::texture::texture *;
 public import pgl3d::texture::voxel *;
+public import pgl3d::texture::editable_voxel *;
 public import pgl3d::engine::scene_node *;
 public import pgl3d::engine::platform *;
 public import pgl3d::engine::pglbase *;
@@ -32,6 +32,38 @@ public import pgl3d::engine::util *;
 public import pgl3d::stempl::stempl *;
 public import pgl3d::stempl::stempl_eval *;
 public import pgl3d::sdl::sdlutil *;
+
+public multithreaded struct tiled_voxel_texture()
+{
+  public texture_data voxtile;
+  public tptr{texture_edit} tmap_edit = make_tptr{texture_edit}();
+  public tptr{texture_edit} tpat_edit = make_tptr{texture_edit}();
+}
+
+public struct edit_mode_texture()
+{
+  public tiled_voxel_texture vox;
+  public ptr{gl_texture} glt_voxtmap = make_ptr{gl_texture}();
+  public ptr{gl_texture} glt_voxtmax = make_ptr{gl_texture}();
+  public ptr{gl_texture} glt_voxtpat = make_ptr{gl_texture}();
+  public ptr{gl_texture} glt_voxtpax = make_ptr{gl_texture}();
+}
+
+public metafunction textures_ptr ptr{tree_map{string, ptr{texture_data}}};
+public metafunction make_textures_ptr
+  make_ptr{tree_map{string, ptr{texture_data}}};
+
+public struct drawer_shared()
+{
+  public textures_ptr const textures
+    = make_textures_ptr();
+  public resource_pool_ptr const gl_resources
+    = make_ptr{resource_pool}();
+  public tptr{tiled_voxel_texture} const tvt
+    = make_tptr{tiled_voxel_texture}();
+  public ptr{edit_mode_texture} const emt
+    = make_ptr{edit_mode_texture}();
+}
 
 public enum draw_step {
   draw_step_shadowmapping = 1,

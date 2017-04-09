@@ -15,6 +15,7 @@ private import Bullet::constants -;
 private import Bullet::api +;
 private import Bullet::all -;
 private import pointer::raw_unsafe -;
+private import pgl3d::texture::editable_voxel -;
 private import pgl3d::physics::grid_broadphase -;
 private import pgl3d::physics::collision_gjk -;
 
@@ -26,6 +27,8 @@ rigid_body_i rigid_body
   public function void apply_central_impulse(float x, float y, float z);
   public function void apply_torque_impulse(float x, float y, float z);
   public function void get_world_transform_mat4(glm::mat4 mutable& m);
+  public function bool get_collide() const;
+    // TODO: 単なるフラグではなく詳細な情報をとれるようにする
 }
 
 public threaded function ptr{rigid_body_i}
@@ -80,14 +83,19 @@ private tsvaluetype struct grid_rbinfo
 }
 
 private multithreaded struct
-grid_bp_shared(size_t i0, size_t n0)
+grid_bp_shared(size_t i0, size_t n0, tptr{texture_edit} const& tex0,
+  tptr{texture_updates} const& tu0, bool exec_voxel_collision0)
 {
-  public size_t const split_i = i0;
-  public size_t const split_n = n0;
+  public size_t const split_i = i0; // unused
+  public size_t const split_n = n0; // unused
+  public tptr{texture_edit} const tex = tex0; // FIXME: ロック集中しないか
+  public tptr{texture_updates} const tu = tu0; // FIXME: 同じく
   public rawptr{grid_rbinfo} grid_rbinfo_array_ptr;
   public size_t grid_rbinfo_array_size;
   public float grid_mesh_size = 1.0f;
   public varray{tptr{swarm_i}} swarms;
+  public bool exec_voxel_collision = exec_voxel_collision0;
+  public varray{uint} col_to_voxel; // voxelへ衝突したgrid_rbinfo
   /*
   public bool run_flag = false;
   public bool term_flag = false;
@@ -109,6 +117,10 @@ grid_bp_thread_object(tptr{grid_bp_shared} const& shared0)
   public function void __call()
   {
     mutable& shared = *sharedp;
+    if (shared.exec_voxel_collision) {
+      do_voxel_collision(shared);
+      return;
+    }
     // debug_log("grid_bp_thread_object::__call", shared.swarms.size());
     // grid_bp.set_mesh_size(shared.grid_mesh_size);
     grid_bp.set_mesh_size(10.0f);
@@ -118,6 +130,8 @@ grid_bp_thread_object(tptr{grid_bp_shared} const& shared0)
     if (shared.tm1 - shared.tm0 > 0.1) {
       // debug_log("step t0", t0 - shared.tm1, grid_rbinfo_array.size());
     }
+    /* この処理は同じ内容を全スレッドで実行している。一つにまとめた
+     * ほうが速いか？ */
     grid_bp.add_objects(grid_rbinfo_array);
     shared.tm2 = io::debug_system().high_resolution_timer_double();
     /*
@@ -184,12 +198,13 @@ grid_bp_thread_object(tptr{grid_bp_shared} const& shared0)
 	    ++np1_count;
 	    if (rbi.colshape->has_near_collision()) {
 	      const trinv = rbi.trans.inverse(); // FIXME: don't use inverse()
+	      // FIXME: ただしこのinverseはmat4の逆行列計算ほどは遅くないはず
 	      // FIXME: avoid conversion between btVector and vec3
-	      // FIXME: inverseせずにベクトルを左から掛けることができるのでは？
 	      const lpos = op_mul{btTransform, btVector3, btVector3}(trinv,
 		btVector3_(pos.x, pos.y, pos.z));
 	      if (!rbi.colshape->near_collision(
-		glm::make_vec3(lpos.x(), lpos.y(), lpos.z()), radius)) {
+		glm::make_vec3(lpos.x(), lpos.y(), lpos.z()), radius,
+		  shared.tex, shared.tu)) {
 		//debug_log("near_collision: false");
 		continue;
 	      } else {
@@ -215,6 +230,52 @@ grid_bp_thread_object(tptr{grid_bp_shared} const& shared0)
     }
     grid_bp.clear();
   }
+  function void do_voxel_collision(grid_bp_shared mutable& shared)
+  {
+    // swarmではないオブジェクトとvoxelオブジェクトの衝突判定
+    const grid_rbinfo_array = shared.grid_rbinfo_array_ptr.to_slice(
+      shared.grid_rbinfo_array_size); // create slice from rawptr and size
+    // voxelとそうでないものの衝突判定
+    shared.col_to_voxel.clear();
+    for (const i, const& vrbi: grid_rbinfo_array) {
+      const& vcolshape = *vrbi.colshape;
+      if (!vcolshape.is_voxel()) {
+	continue;
+      }
+      // debug_log("do_voxel_collision: voxel", i);
+      const& vrbpos = vrbi.trans.cgetOrigin();
+      const trinv = vrbi.trans.inverse();
+      const vrad = vcolshape.get_radius();
+      for (const j, const& rbi: grid_rbinfo_array) {
+	const& jcolshape = *rbi.colshape;
+	if (jcolshape.is_voxel()) {
+	  continue;
+	}
+	// debug_log("do_voxel_collision: not voxel", j);
+	const& jpos = rbi.trans.cgetOrigin();
+	const jrad = jcolshape.get_radius();
+	const d = op_sub{btVector3, btVector3, btVector3}(jpos, vrbpos);
+	const dist2 = d.dot(d);
+	const rad = vrad + jrad;
+	const rad2 = rad * rad;
+	if (dist2 > rad2) {
+	  // debug_log("dist > rad", dist2, rad2);
+	  continue;
+	}
+	// グローバル座標jposをvrbiのオブジェクト座標系へ
+	const lpos = op_mul{btTransform, btVector3, btVector3}(trinv, jpos);
+	if (!vrbi.colshape->near_collision(
+	  glm::make_vec3(lpos.x(), lpos.y(), lpos.z()), jrad, shared.tex,
+	  shared.tu)) {
+	  // debug_log("near_collision: false");
+	  continue;
+	}
+	shared.col_to_voxel.push_back(static_cast{uint}(j));
+	// debug_log("col_to_voxel", j);
+      }
+    }
+    // FIXME FIXME FIXME HERE
+  }
 }
 
 private multithreaded struct
@@ -229,15 +290,18 @@ grid_bp_thread_factory(tptr{grid_bp_shared} const& shared0)
 }
 
 private threaded struct
-grid_bp_task(size_t i, size_t n)
+grid_bp_task(size_t i, size_t n, tptr{texture_edit} const& tex,
+  tptr{texture_updates} const& tu, bool exec_voxel_collision)
 {
-  public tptr{grid_bp_shared} const shared = make_tptr{grid_bp_shared}(i, n);
+  public tptr{grid_bp_shared} const shared
+    = make_tptr{grid_bp_shared}(i, n, tex, tu, exec_voxel_collision);
   public task_executor executor = task_executor(
     make_tptr{grid_bp_thread_factory}(shared));
 }
 
 public threaded struct
-dynamics_world(size_t num_grid_bp_tasks0)
+dynamics_world(size_t num_grid_bp_tasks0, tptr{texture_edit} const& tex0,
+  tptr{texture_updates} const& tu0)
 {
   private metafunction broadphase_to_use
     m::cond{mp::platform_emscripten, 1, 2};
@@ -268,6 +332,7 @@ dynamics_world(size_t num_grid_bp_tasks0)
   private varray{ptr{rigid_body}} rigid_bodies;
   private varray{grid_rbinfo} grid_rbinfo_array; // same size as rigid_bodies
   private varray{ptr{grid_bp_task}} grid_bp_tasks;
+  private option{ptr{grid_bp_task}} grid_bp_task_voxel_collision;
   /*
   private tptr{grid_bp_shared} const grid_bp_sharedp =
     make_tptr{grid_bp_shared}();
@@ -275,13 +340,20 @@ dynamics_world(size_t num_grid_bp_tasks0)
     make_tptr{grid_bp_thread_factory}(grid_bp_sharedp));
   */
   private bool grid_bp_thread_running = false;
+  private tptr{texture_edit} const tex_edit = tex0;
+  private tptr{texture_updates} const tex_up = tu0;
   init();
   private function void init() {
     dynamicsWorld.setForceUpdateAllAabbs(false);
     // dynamicsWorld.getSimulationIslandManager()->setSplitIslands(false);
+    // collision tasks for swarm objects
     for (const i: 0 .. num_grid_bp_tasks) {
-      grid_bp_tasks.push_back(make_ptr{grid_bp_task}(i, num_grid_bp_tasks));
+      grid_bp_tasks.push_back(make_ptr{grid_bp_task}(i, num_grid_bp_tasks,
+	tex_edit, tex_up, false));
     }
+    // collision task for voxel objects
+    grid_bp_task_voxel_collision.some = make_ptr{grid_bp_task}(0u, 0u,
+      tex_edit, tex_up, true);
   }
   private function ~
   {
@@ -406,13 +478,28 @@ dynamics_world(size_t num_grid_bp_tasks0)
       }
       bpt->executor.start();
     }
+    {
+      const bpt = grid_bp_task_voxel_collision.some;
+      mutable& gsh = *bpt->shared;
+      gsh.grid_rbinfo_array_ptr = grid_rbinfo_array.range().to_rawptr();
+      gsh.grid_rbinfo_array_size = grid_rbinfo_array.size();
+      gsh.grid_mesh_size = rad_avg * 4.0f;
+      bpt->executor.start();
+    }
   }
   private function void finish_grid_collision()
   {
     for (const i, mutable& bpt: grid_bp_tasks) {
       bpt->executor.finish();
     }
+    grid_bp_task_voxel_collision.some->executor.finish();
     grid_bp_thread_running = false;
+    const& col_to_voxel = grid_bp_task_voxel_collision.some->shared
+      ->col_to_voxel;
+    for (const i, const id: col_to_voxel) {
+      mutable& rb = *rigid_bodies[id];
+      rb.collide_flag = true;
+    }
   }
 }
 
@@ -429,6 +516,7 @@ rigid_body(joint_id_type const& joint_id0,
   public btRigidBody rigidBody = makeRigidBody(shape->get(), tr0, mass0);
   public size_t offset = static_cast{size_t}(-1);
   public float const mass = mass0;
+  public bool collide_flag = false;
   init();
   function void init() {
     // massが0のときはkinematic object。負のときはdynamics worldに登録しない。
@@ -459,6 +547,10 @@ rigid_body(joint_id_type const& joint_id0,
   {
     const sli = m.to_slice();
     rigidBody.getWorldTransform().getOpenGLMatrix(sli.to_rawptr());
+  }
+  public function bool get_collide() const
+  {
+    return collide_flag;
   }
 }
 

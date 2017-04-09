@@ -422,7 +422,7 @@ void main(void)
     <%if><%eq><%stype/>1<%/>
       // 計算されるdepth値は、raycast始点であるposのdepth値以上になる。
       // もしすでにdepth_rdの値がそれより小さいならdiscardする。
-      <%if><%enable_raycast_zprepass/>
+      <%if><%check_frag_depth/>
       float prev_depth = texelFetch(sampler_depth_rd, ivec2(gl_FragCoord.xy),
 	0).x;
       if (!cam_inside_aabb) {
@@ -520,7 +520,7 @@ void main(void)
       float frag_depth = (frag_vpos.z / frag_vpos.w + 1.0) * 0.5;
       <%if><%eq><%update_frag_depth/>1<%/>
 	// FragDepth更新するならこの節を有効にする
-	<%if><%enable_raycast_zprepass/>
+	<%if><%check_frag_depth/>
 	if (prev_depth < frag_depth) {
 	  discard;
 	}

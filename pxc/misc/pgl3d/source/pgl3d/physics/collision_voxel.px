@@ -1,0 +1,78 @@
+public threaded namespace pgl3d::physics::collision_voxel "use-unsafe";
+public import common -;
+public import numeric::fpmath -;
+public import glm;
+private import pgl3d::texture::voxel -;
+private import pgl3d::texture::editable_voxel -;
+
+public metafunction texture_update
+  pgl3d::texture::editable_voxel::texture_update;
+
+public metafunction texture_updates
+  pgl3d::texture::editable_voxel::texture_updates;
+
+public threaded struct
+collision_voxel(glm::vec3 const& obj_aabb_min0, glm::vec3 const& obj_aabb_max0,
+  glm::vec3 const& tex_aabb_min0, glm::vec3 const& tex_aabb_max0,
+  glm::mat4 const& obj_to_tex0)
+{
+  public glm::vec3 obj_aabb_min = obj_aabb_min0;
+  public glm::vec3 obj_aabb_max = obj_aabb_max0;
+  public glm::vec3 tex_aabb_min = tex_aabb_min0;
+  public glm::vec3 tex_aabb_max = tex_aabb_max0;
+  public glm::mat4 obj_to_tex = obj_to_tex0;
+}
+
+public threaded function bool
+collision_voxel_collide(collision_voxel const& cv,
+  glm::vec3 const& pos, float radius, texture_edit const& tex,
+  texture_updates mutable& tup)
+{
+  const gt = map{monoid_and{bool}, operator::gt}(pos, cv.obj_aabb_min);
+  const lt = map{monoid_and{bool}, operator::lt}(pos, cv.obj_aabb_max);
+  if (!(gt & lt)) {
+    return false;
+  }
+  const tpos = cv.obj_to_tex * glm::make_vec4(pos.x, pos.y, pos.z, 1.0f);
+  const tpos3 = glm::make_vec3(tpos.x, tpos.y, tpos.z) / tpos.w;
+  uint const miplevel = 0;
+  const& data = tex.data_pri[miplevel];
+  const sz = data.get_size_uvec3();
+  const sz_l2 = fold_list{max}(0u, data.get_size_l2_uvec3());
+  threaded function uint coord_int(float v) {
+    return static_cast{uint}(ldexp(v, static_cast{int}(sz_l2)));
+  }
+  const coord = map{glm::uvec3, coord_int}(tpos3);
+  if (map{monoid_or{bool}, operator::ge}(coord, sz)) {
+    return false;
+  }
+  const val = data.get(coord.x, coord.y, coord.z);
+  if (is_space_voxel(val)) {
+    return false;
+  }
+  // debug_log("collision_voxel_collide", tpos, tpos3, sz_l2, coord);
+  texture_update tuent;
+  tuent.pos = coord;
+  tuent.value = 0u;
+  tup.push_back(tuent);
+  return true;
+}
+
+/*
+public threaded function collision_voxel
+make_collision_voxel(float mesh_size0, cslice{float} const v)
+{
+  glm::vec3 mi;
+  glm::vec3 mx;
+  if (v.size() >= 3) {
+    mi = glm::make_vec3(v[0], v[1], v[2]);
+    mx = mx;
+    size_t i;
+    for (i = 3; i < v.size(); i += 3) {
+      mi = map{glm::vec3, min}(mi, glm::make_vec3(v[i], v[i + 1], v[i + 2]));
+      mx = map{glm::vec3, max}(mx, glm::make_vec3(v[i], v[i + 1], v[i + 2]));
+    }
+  }
+  return collision_voxel(mi, mx);
+}
+*/

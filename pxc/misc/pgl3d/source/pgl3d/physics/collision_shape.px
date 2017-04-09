@@ -17,14 +17,16 @@ private import pgl3d::texture::editable_voxel -;
 private import pgl3d::physics::grid_broadphase -;
 private import pgl3d::physics::collision_gjk -;
 private import pgl3d::physics::collision_heightmap -;
+private import pgl3d::physics::collision_voxel -;
 
 public threaded interface collision_shape_i
 {
   public function crawptr{btCollisionShape} get() const;
   public function float get_radius() const;
   public function bool has_near_collision() const;
-  public function bool near_collision(glm::vec3 const& pos, float radius)
-    const;
+  public function bool near_collision(glm::vec3 const& pos, float radius,
+    tptr{texture_edit} const& tex, tptr{texture_updates} const& tup) const;
+  public function bool is_voxel() const;
 }
 
 public threaded interface
@@ -129,8 +131,8 @@ convex_hull_shape(cslice{float} const& v, cslice{float} const& triangles,
   {
     return true;
   }
-  public function bool near_collision(glm::vec3 const& pos, float radius)
-    const
+  public function bool near_collision(glm::vec3 const& pos, float radius,
+    tptr{texture_edit} const& tex, tptr{texture_updates} const& tup) const
   {
     radius = min(radius, 0.5f); // FIXME
     const aabb_col =
@@ -144,6 +146,10 @@ convex_hull_shape(cslice{float} const& v, cslice{float} const& triangles,
     const r = shape_hm.collide(pos, radius);
     //debug_log("near_collision", r, radius, pos, aabb.first, aabb.second);
     return r;
+  }
+  public function bool is_voxel() const
+  {
+    return false;
   }
 }
 
@@ -168,12 +174,71 @@ make_convex_hull_shape(cslice{float} const& v, cslice{uint} const& e)
   return make_ptr{convex_hull_shape}(v, triangles, sqrt(sqmax));
 }
 
-public threaded function ptr{collision_shape_i}
-make_voxel_shape(tptr{texture_edit} const& tedit,
-  cslice{vertex_attr} const& va, cslice{uint} const& e)
+private threaded struct
+voxel_shape(cslice{float} const& v, cslice{float} const& obj_triangles,
+  float const radius0, cslice{float} const& tan_triangles,
+  glm::mat4 const& obj_to_tan)
+  <collision_shape_i>
 {
-  varray{float} triangles;
+  public btConvexHullShape value = btConvexHullShape(v.to_crawptr(),
+    static_cast{int}(v.size() / 3), 3 * 4);
+    /* unused? */
+  public float const radius = radius0;
+  public pair{glm::vec3, glm::vec3} const obj_aabb = calc_aabb(obj_triangles);
+  public pair{glm::vec3, glm::vec3} const tan_aabb = calc_aabb(tan_triangles);
+  public collision_voxel const col_vox
+    = collision_voxel(obj_aabb.first, obj_aabb.second, tan_aabb.first,
+	tan_aabb.second, obj_to_tan);
+  public function crawptr{btCollisionShape} get() const
+  {
+    return caddress(value);
+  }
+  public function float get_radius() const
+  {
+    return radius;
+  }
+  public function bool has_near_collision() const
+  {
+    return true;
+  }
+  public function bool near_collision(glm::vec3 const& pos, float radius,
+    tptr{texture_edit} const& tex, tptr{texture_updates} const& tup) const
+  {
+    radius = min(radius, 0.0f);
+    const aabb_col =
+      pos.x >= obj_aabb.first.x - radius &&
+      pos.x <= obj_aabb.second.x + radius &&
+      pos.y >= obj_aabb.first.y - radius &&
+      pos.y <= obj_aabb.second.y + radius &&
+      pos.z >= obj_aabb.first.z - radius &&
+      pos.z <= obj_aabb.second.z + radius;
+    if (!aabb_col) {
+      /*
+      debug_log("vox near_collision !aabb", radius, pos,
+	obj_aabb.first, obj_aabb.second);
+      */
+      return false;
+    }
+    const r = col_vox.collide(pos, radius, *tex, *tup);
+    /*
+    debug_log("vox near_collision", r, radius, pos,
+      obj_aabb.first, obj_aabb.second);
+    */
+    return r;
+  }
+  public function bool is_voxel() const
+  {
+    return true;
+  }
+}
+
+public threaded function ptr{collision_shape_i}
+make_voxel_shape(cslice{vertex_attr} const& va, cslice{uint} const& e)
+{
+  varray{float} obj_triangles;
+  varray{float} tex_triangles;
   float sqmax = 0.0f;
+  glm::mat4 tex_to_obj;
   for (const i, const idx: e) {
     if (static_cast{size_t}(idx) >= va.size()) {
       debug_log("idx", idx, va.size(), va, e);
@@ -184,35 +249,35 @@ make_voxel_shape(tptr{texture_edit} const& tedit,
     const& tan = v.tan;
     const& nor = v.nor;
     const bnr = glm::cross(nor, tan);
-    const pos_loc = glm::make_vec3(
-      v.aabb_or_tconv.x,
-      v.aabb_or_tconv.y,
-      v.aabb_or_tconv.z) + v.uvw * v.aabb_or_tconv.w;
-      // 接線空間での頂点座標をテクスチャ座標から計算
+    tex_triangles.push_back(v.uvw.x);
+    tex_triangles.push_back(v.uvw.y);
+    tex_triangles.push_back(v.uvw.z);
+    const tconv = glm::make_mat4(
+      v.aabb_or_tconv.w, 0.0f, 0.0f, v.aabb_or_tconv.x,
+      0.0f, v.aabb_or_tconv.w, 0.0f, v.aabb_or_tconv.y,
+      0.0f, 0.0f, v.aabb_or_tconv.w, v.aabb_or_tconv.y,
+      0.0f, 0.0f, 0.0f, 1.0f); // テクスチャ座標から接線空間への変換
     const tan_to_obj = glm::make_mat4(
       tan.x, tan.y, tan.z, 0.0,
       bnr.x, bnr.y, bnr.z, 0.0,
       nor.x, nor.y, nor.z, 0.0,
       pos.x, pos.y, pos.z, 1.0); // 接線空間からオブジェクト座標系への変換
-    mutable pos_obj = tan_to_obj *
-      glm::make_vec4(pos_loc.x, pos_loc.y, pos_loc.z, 1.0);
+    // 実際にはすべての頂点が同じtex_to_objの値を持つので毎回計算する必要はない
+    tex_to_obj = tan_to_obj * tconv;
+    mutable pos_obj = tex_to_obj *
+      glm::make_vec4(v.uvw.x, v.uvw.y, v.uvw.z, 1.0);
       // オブジェクト座標系での頂点の座標
     pos_obj /= pos_obj.w;
-    triangles.push_back(pos_obj.x);
-    triangles.push_back(pos_obj.y);
-    triangles.push_back(pos_obj.z);
+    obj_triangles.push_back(pos_obj.x);
+    obj_triangles.push_back(pos_obj.y);
+    obj_triangles.push_back(pos_obj.z);
     const sq = pos_obj.x * pos_obj.x + pos_obj.y * pos_obj.y
       + pos_obj.z * pos_obj.z;
     sqmax = max(sqmax, sq);
   }
-  debug_log("make_voxel_shape", triangles.size(), sqmax);
-  return make_ptr{convex_hull_shape}(triangles, triangles, sqrt(sqmax));
-  /*
-  triangles.clear(); // FIXME
-  sqmax = 0.0f; // FIXME
-  return make_sphere_shape(triangles, e); // FIXME
-    // FIXME: trianglesが空でも衝突は起きる
-  */
+  debug_log("make_voxel_shape", obj_triangles.size(), sqmax);
+  return make_ptr{voxel_shape}(obj_triangles, obj_triangles, sqrt(sqmax),
+    tex_triangles, tex_to_obj.inverse());
 }
 
 private threaded struct {t}
@@ -233,8 +298,12 @@ collision_shape_tmpl(expand(m::args{t}))
   {
     return false;
   }
-  public function bool near_collision(glm::vec3 const& pos, float radius)
-    const
+  public function bool near_collision(glm::vec3 const& pos, float radius,
+    tptr{texture_edit} const& tex, tptr{texture_updates} const& tup) const
+  {
+    return false;
+  }
+  public function bool is_voxel() const
   {
     return false;
   }
@@ -259,13 +328,17 @@ box_shape(btVector3 const& ext0, float radius0)
   {
     return true;
   }
-  public function bool near_collision(glm::vec3 const& pos, float radius)
-    const
+  public function bool near_collision(glm::vec3 const& pos, float radius,
+    tptr{texture_edit} const& tex, tptr{texture_updates} const& tup) const
   {
     return
       fabs(pos.x) < extents.x && // operator & is faster?
       fabs(pos.y) < extents.y &&
       fabs(pos.z) < extents.z;
+  }
+  public function bool is_voxel() const
+  {
+    return false;
   }
 }
 
@@ -343,10 +416,14 @@ triangle_mesh_shape(ptr{triangle_mesh} const& mesh0,
   {
     return true;
   }
-  public function bool near_collision(glm::vec3 const& pos, float radius)
-    const
+  public function bool near_collision(glm::vec3 const& pos, float radius,
+    tptr{texture_edit} const& tex, tptr{texture_updates} const& tup) const
   {
     return true;
+  }
+  public function bool is_voxel() const
+  {
+    return false;
   }
 }
 

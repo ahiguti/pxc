@@ -2,6 +2,19 @@
 ---------------------------------------------------------------------------
 TODO
 
+- drawer::drawer openglのリソースはsafeにしてよいのか
+
+- drawer間共有データの整理
+
+- 衝突判定後のテクスチャ変更(done)
+
+- 衝突判定後のテクスチャ変更。edit_mode=0のとき(done)
+
+- FIXME: raycast_sortするとspawnされた小さいraycastオブジェクトが見えない。
+  (done)
+
+- "throw" 投げる元のオブジェクトからの相対速度を与えるようにする
+
 - 二面、edit_modeのほうが大幅にフレームレート低い理由を調べる
   miplevelのデフォルト値の違い(done)
 
@@ -3347,4 +3360,76 @@ swarmではない物体とraycastオブジェクトとの衝突判定は、grid_
   1-1. 小物体の相対位置をオブジェクト座標から接線空間に変換
   1-2. テクスチャを読んで衝突判定
 2. grid_bp_thread_objectの__callに大物体と小物体の衝突を追加
+
+---------------------------------------------------------------------------
+ループ
+
+async_motion_threadが有効なら、mainloopのコンストラクタで
+motion threadをforkする。
+
+fundamental::mainloopがmainloopのstepを繰り返し呼ぶ。
+mainloopのstep_internalの処理:
+1. SDL_PollEventで全てのイベントを拾う。on_event()を呼ぶ。
+2. joystickの入力を更新。
+3. motionの処理
+  3-1. async_motion_threadが有効なら、
+  3-1-1. thr->finish()を呼ぶ
+  3-1-2. whole_instancesをswapする(thrから受け取る)。カメラなど渡す。
+  3-1-3. thr->start()を呼ぶ
+  3-2. async_motion_threadが有効でないないなら、
+  3-2-1. カメラなどを渡す
+  3-2-2. thr->start()、thr->finish()を呼ぶ
+  3-2-3. whole_instancesを受け取る
+4. do_commands()
+5. frame_begin(), 描画, swapwindow, frame_end()
+
+async_motion_threadをtrueにすると多少改善するのでtrueにしておく。
+ただしinput lagは大きくなる。
+
+---------------------------------------------------------------------------
+raycast_sort
+
+raycast_sort有効のときは
+  ssubtype==0のシェーダは描画しない(何故？)
+  ssubtype==1は小さいオブジェクト用、2以上は大きいオブジェクト用で
+  ssubtypeが大きい順に描画しdepth_rdを更新する
+
+update_frag_depthも1にする必要がある。
+有効にするにはenable_raycast_zprepassも1にする必要があるのはなぜ？
+  -> 必要なくした
+大きなraycastオブジェクトを手前から順に描画、描かれたピクセルはdepth値を
+書き込む。次に描かれるオブジェクトはdepth値を自分の最小depth値と比較し、
+上塗りする可能性がないならdiscardする。
+
+10枚重ねたシーン。
+無効だと最低150fps, 有効だと最低180fpsくらい。20170408 FullHD, miplevel=-1
+
+FIXME: spawnされた小さいraycastオブジェクトが見えない。(done)
+
+prepare_oneで小さいオブジェクトはftable[]()してインスタンス出力している。
+  idta = whole_instances[vbid][vsid];
+  ftable[vbid](sn, ncd, idata);
+  on_motion_step -> scene_cotrol_step -> step_snobj_dynamics -> step_obj
+    -> prepare_one
+  prepare_one
+on_motion_stepでscene_control_stepの次にrobjs.prepare_instancesしている。
+
+---------------------------------------------------------------------------
+drawer間共有データの整理
+
+textures_ptr textures
+  これはprepare_triangles_texture_dataで作る
+tptr{tiled_voxel_texture} tvt
+  これはprepare_triangles_texture_dataで作る
+resource_pool_ptr res
+  これはon_init_drawersにわたってくる
+option{ptr{edit_mode_texture}} emt_shared
+  drawer::trianglesが埋める
+
+
+---------------------------------------------------------------------------
+edit_mode衝突更新
+
+edit_mode編集有効でなくてもedit_modeを作るようにする
+
 

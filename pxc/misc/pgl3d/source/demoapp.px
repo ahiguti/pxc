@@ -21,6 +21,7 @@ public import pgl3d::texture::voxel_surface -;
 public import pgl3d::geometry::funcs -;
 public import pgl3d::drawer::drawer -;
 public import pgl3d::physics::collision_shape -;
+public import pgl3d::physics::collision_voxel -;
 public import pgl3d::physics::dynamics_world -;
 public import pgl3d::sdl::sdlutil -;
 public import pgl3d::geometry::wfobj -;
@@ -75,10 +76,10 @@ public struct demoapp_application()
 {	
   public app_impl app;
   public function varray{ptr{pgldrawer_export_i}} on_init_drawers(
-    shader_config const& conf, resource_pool_ptr const& res)
+    shader_config const& conf, drawer_shared const& ds)
   {
     debug_log("init_drawers");
-    const r = init_drawers(app, conf, res);
+    const r = init_drawers(app, conf, ds);
     if (case app.edit_mode.some) {
       // edit_modeではデフォルトでmiplevel=0に固定する。さもないとカーソルが
       // 見えない
@@ -93,6 +94,8 @@ public struct demoapp_application()
     build_vertices(app, mvx);
     debug_log("build_vertices done");
     prepare_vbids(app.scene_shared->rdi, mvx);
+    app.scene_shared->tvt.some = app.tvt;
+    app.scene_shared->tup.some = app.tup;
   }
   public function void on_event(SDL_Event const& ev, float speed,
     projection_info const& pjinfo, string_map mutable& commands_r)
@@ -128,6 +131,20 @@ public struct demoapp_application()
   public function tptr{pgl3d_scene_shared} get_scene_shared()
   {
     return app.scene_shared;
+  }
+  public function void on_frame(projection_info const& pjinfo)
+  {
+    mutable& tup = *app.tup;
+    for (const i, const& e: tup) {
+      // debug_log("tup", e.pos, e.value);
+      if (case app.edit_mode.some) {
+	app.edit_mode.some->modify_tmap(e.pos, e.value);
+      }
+    }
+    tup.clear();
+    if (case app.edit_mode.some) {
+      app.edit_mode.some->on_frame(pjinfo);
+    }
   }
 }
 
@@ -183,11 +200,13 @@ private multithreaded struct raycast_objects()
     } else {
       debug_log("raycast_objects: push_object: unknown join_id", sn.joint_id);
     }
-    if (obj.radius < 10.0f) {
-      return false; // 小さいオブジェクトはスキップ
-    }
     const& tr = sn.trans.value;
     obj.model_matrix = tr;
+    if (obj.radius < 10.0f) {
+      // 小さいオブジェクトはnearestには入れない
+      objects.push_back(obj);
+      return true;
+    }
     const& s = tr.to_cslice();
     // debug_log("trans", s);
     const pos = glm::make_vec4(s[12], s[13], s[14], 1.0f);
@@ -224,10 +243,7 @@ private multithreaded struct raycast_objects()
     cslice{prepare_instance_data_funcptr} const& ftable,
     whole_instances_type mutable& whole_instances)
   {
-    if (nearest_objects.empty()) {
-      return;
-    }
-    scene_node sn = scene_node(joint_id_type(), glm::mat4());
+    scene_node mutable sn = scene_node(joint_id_type(), glm::mat4());
     uint const ndr = static_cast{uint}(
       rdi.subdrawer_vbid_max - rdi.subdrawer_vbid_min) + 1;
     threaded function void extend_whole_instances(vbid_t vbid, vsid_t vsid)
@@ -252,35 +268,43 @@ private multithreaded struct raycast_objects()
       sn.joint_id.vsid = vsid;
       sn.trans.value = obj.model_matrix;
       if (vbid != vbid_invalid() && vsid != vsid_invalid()) {
-	// debug_log("prepare_instance_data_ft_rec near instance vbid=", vbid,
-	//   "vsid=", vsid, "cur=", cur, "z=", z);
+	/*
+	debug_log("prepare_instance_data_ft_rec near instance vbid=", vbid,
+	  "vsid=", vsid, "cur=", cur, "z=", z);
+	*/
 	extend_whole_instances(vbid, vsid);
 	mutable& idata = whole_instances[vbid][vsid];
 	ftable[vbid](sn, ncd, idata);
 	// debug_log("inserted idata", idata.instance_buffer.size());
       }
-      if (cur > 1) {
+      // ssubtype=1は小さいオブジェクト用。
+      // ssubtype>1は大きいオブジェクト用で、large_shadow=0のとき影は差さない。
+      if (cur > 2) {
 	--cur;
       }
     }
-    /*
+    // 小さいオブジェクトはssubtype=1のdrawerで書く。影を差す。
+    cur = 1;
     for (const i, const& obj: objects) {
       if (obj.near_flag) {
 	continue;
       }
-      sn.joint_id = obj.joint_id;
+      const vbid_t vbid = rdi.subdrawer_vbids[cur];
+      const vsid_t vsid = obj.joint_id.vsid;
+      sn.joint_id.vbid = vbid;
+      sn.joint_id.vsid = vsid;
       sn.trans.value = obj.model_matrix;
-      const vbid = rdi.subdrawer_vbids[0];
-      const vsid = sn.joint_id.vsid;
       if (vbid != vbid_invalid() && vsid != vsid_invalid()) {
-	// debug_log("prepare_instance_data_ft_rec far instance vbid=", vbid,
-	//   "vsid=", vsid);
+	/*
+	debug_log("prepare_instance_data_ft_rec far instance vbid=", vbid,
+	  "vsid=", vsid, "cur=", cur);
+	*/
 	extend_whole_instances(vbid, vsid);
 	mutable& idata = whole_instances[vbid][vsid];
 	ftable[vbid](sn, ncd, idata);
+	// debug_log("inserted idata", idata.instance_buffer.size());
       }
     }
-    */
   }
 }
 
@@ -310,7 +334,7 @@ private function void prepare_vbids(raycast_drawers_info mutable& rdi,
   }
   if (static_cast{size_t}(rdi.subdrawer_vbid_max
     - rdi.subdrawer_vbid_min + 1) != rdi.subdrawer_vbids.size()) {
-    // 連続したvbidでなければならない
+    // 連続したvbidでなければならない。順序はどうてもいい。
     throw runtime_error_template{"subdrawer_vbids"}("1");
   }
   debug_log("prepare_vbids: ", rdi.subdrawer_vbids.size());
@@ -358,6 +382,8 @@ private struct app_impl()
   public textures_ptr const txs = make_textures_ptr();
   public tptr{tiled_voxel_texture} const tvt
     = make_tptr{tiled_voxel_texture}();
+  public tptr{texture_updates} const tup = make_tptr{texture_updates}();
+  public tptr{texture_updates} const tup_swap = make_tptr{texture_updates}();
   public pgl3d::geometry::funcs::rand_generator rand_gen
     = pgl3d::geometry::funcs::rand_generator(1u);
   public uint modmask; // shift, meta
@@ -423,10 +449,12 @@ public multithreaded struct demoapp_scene_shared(io const& sys0)
   public string app_status_message;
   public io::io sys = sys0;
   public raycast_drawers_info rdi;
+  public option{tptr{tiled_voxel_texture}} tvt;
+  public option{tptr{texture_updates}} tup;
   /* constatnt */
   public collision_shape_data_array shapes;
   function ptr{pgl3d_scene} make_scene(node_factory const& nodefac) {
-    return make_ptr{demoapp_scene}(nodefac, shapes, sys);
+    return make_ptr{demoapp_scene}(nodefac, shapes, tvt.some, tup.some, sys);
   }
 }
 
@@ -468,10 +496,12 @@ private threaded function glm::mat3 light_angle(glm::vec3 const& dir,
 */
 
 public threaded struct demoapp_scene(node_factory const& nodefac0,
-  collision_shape_data_array const& shapes0, io::io const& sys0)
+  collision_shape_data_array const& shapes0,
+  tptr{tiled_voxel_texture} const& tvt0, tptr{texture_updates} const& tup0,
+  io::io const& sys0)
   <pgl3d_scene>
 {
-  public scene_control sctl = scene_control(nodefac0, shapes0);
+  public scene_control sctl = scene_control(nodefac0, shapes0, tvt0, tup0);
   public io::io sys = sys0;
   public string timings;
   public raycast_objects robjs;
@@ -859,7 +889,7 @@ function void handle_keys(app_impl mutable& app,
 
 private function varray{ptr{pgldrawer_export_i}} init_drawers(
   app_impl mutable& app, shader_config const& sconf,
-  resource_pool_ptr const& res)
+  drawer_shared const& ds)
 {
   sdl_log("app_init_drawers");
   app.raycast_cull_front = sconf.conf.get("raycast_cull_front", 0, 0, 1) != 0;
@@ -868,41 +898,43 @@ private function varray{ptr{pgldrawer_export_i}} init_drawers(
   app.scene_shared->raycast_sort = app.raycast_sort;
   const t0 = get_time(io::system);
   prepare_triangles_texture_data(sconf.conf, app.txs, app.tvt);
+
+  *ds.textures = *app.txs;
+  *ds.tvt = *app.tvt;
+
   varray{ptr{pgldrawer_export_i}} r;
   if (app.raycast_sort) {
-    r.push_back(make_drawer_triangles(sconf, app.txs, app.tvt, res, 1, 7));
-    r.push_back(make_drawer_triangles(sconf, app.txs, app.tvt, res, 1, 6));
-    r.push_back(make_drawer_triangles(sconf, app.txs, app.tvt, res, 1, 5));
-    r.push_back(make_drawer_triangles(sconf, app.txs, app.tvt, res, 1, 4));
-    r.push_back(make_drawer_triangles(sconf, app.txs, app.tvt, res, 1, 3));
-    r.push_back(make_drawer_triangles(sconf, app.txs, app.tvt, res, 1, 2));
-    r.push_back(make_drawer_triangles(sconf, app.txs, app.tvt, res, 1, 1));
+    int ssid = 7;
+    for (; ssid > 0; --ssid) {
+      r.push_back(make_drawer_triangles(sconf, ds, 1, ssid));
+      debug_log("drawer ssid", ssid);
+    }
   }
-  const dr = make_drawer_triangles(sconf, app.txs, app.tvt, res, 1, 0);
+  const dr = make_drawer_triangles(sconf, ds, 1, 0);
   app.edit_mode = dr->get_edit_mode();
   r.push_back(dr);
-  r.push_back(make_drawer_triangles(sconf, app.txs, app.tvt, res, 0, 0));
-  r.push_back(make_drawer_triangles(sconf, app.txs, app.tvt, res, 2, 0));
+  r.push_back(make_drawer_triangles(sconf, ds, 0, 0));
+  r.push_back(make_drawer_triangles(sconf, ds, 2, 0));
   /*
   */
-  r.push_back(make_drawer_lineparticle(sconf, res));
-  r.push_back(make_drawer_skybox(sconf, res));
-  r.push_back(make_drawer_particle(sconf, res));
-  r.push_back(make_drawer_particle_bb(sconf, res));
-  r.push_back(make_drawer_rect2d(sconf, res));
+  r.push_back(make_drawer_lineparticle(sconf, ds));
+  r.push_back(make_drawer_skybox(sconf, ds));
+  r.push_back(make_drawer_particle(sconf, ds));
+  r.push_back(make_drawer_particle_bb(sconf, ds));
+  r.push_back(make_drawer_rect2d(sconf, ds));
   if (app.enable_dbgui) {
-    r.push_back(make_drawer_dbgui2(sconf, res));
-    r.push_back(make_drawer_dbgui(sconf, res));
+    r.push_back(make_drawer_dbgui2(sconf, ds));
+    r.push_back(make_drawer_dbgui(sconf, ds));
   }
-  r.push_back(make_drawer_font2(sconf, res));
+  r.push_back(make_drawer_font2(sconf, ds));
   if (sconf.conf.get("fxaa_filter", 0, 0, 1) != 0) {
-    r.push_back(make_drawer_fxaa(sconf, res));
+    r.push_back(make_drawer_fxaa(sconf, ds));
   }
   if (sconf.conf.get("blur_filter", 0, 0, 1) != 0) {
-    r.push_back(make_drawer_blur(sconf, res));
+    r.push_back(make_drawer_blur(sconf, ds));
   }
   if (sconf.conf.get("motion_blur_filter", 0, 0, 1) != 0) {
-    r.push_back(make_drawer_motion_blur(sconf, res));
+    r.push_back(make_drawer_motion_blur(sconf, ds));
   }
   const t1 = get_time(io::system);
   sdl_log("app_init_drawers done", t1 - t0);
@@ -1085,7 +1117,7 @@ private function void build_vertices(app_impl mutable& app,
   const smallmx = (tmi + tsz) / 2048.0f;
   debug_log("make smallbox");
   pgs.make_vertex_set(tr1_0, "smallbox", cuboid_tex3d(smallmi, smallmx,
-    glm::vec3(), 32.0f));
+    glm::vec3(), 1.0f));
   /*
   pgs.make_vertex_set(tr1_0, "smallbox",
     regular_polygon(1.4142f * small_box_size, 4,
@@ -1514,9 +1546,11 @@ collision_shape_ptr(ptr{collision_shape_i} const& ptr0, float mass0)
 }
 
 threaded struct
-scene_objects(collision_shape_data_array const& shape0, size_t num_split0)
+scene_objects(collision_shape_data_array const& shape0, size_t num_split0,
+  tptr{tiled_voxel_texture} const& tvt0, tptr{texture_updates} const& tup0)
 {
-  public dynamics_world dworld = dynamics_world(num_split0);
+  public dynamics_world dworld = dynamics_world(num_split0, tvt0->tmap_edit,
+    tup0);
   public tree_map{string, collision_shape_ptr} shapes_by_name;
   public tree_map{joint_id_type, collision_shape_ptr} shapes_by_id;
   public tree_map{string, joint_id_type} name_to_joint_id;
@@ -1553,7 +1587,7 @@ scene_objects(collision_shape_data_array const& shape0, size_t num_split0)
       } else if (sh.shape == collision_shape_e_concave) {
 	return make_triangle_mesh_shape(v, e);
       } else if (sh.shape == collision_shape_e_voxel) {
-	return make_voxel_shape(sh.tvt->tmap_edit, va, e);
+	return make_voxel_shape(va, e);
       } else {
 	throw runtime_error_template{"get_shape"}("1");
       }
@@ -1630,7 +1664,8 @@ lpbullet_swarm <swarm_i>
 
 threaded struct
 scene_control(node_factory const& nfac,
-  collision_shape_data_array const& shapes0)
+  collision_shape_data_array const& shapes0,
+  tptr{tiled_voxel_texture} const& tvt0, tptr{texture_updates} const& tup0)
 {
   public size_t const num_split = 3;
   public node_factory nodefac = nfac;
@@ -1652,7 +1687,7 @@ scene_control(node_factory const& nfac,
   public node mutable node_scene = make_node();
   public node mutable node_status_message = make_node();
   public node mutable node_buttons = make_node();
-  public scene_objects sco = scene_objects(shapes0, num_split);
+  public scene_objects sco = scene_objects(shapes0, num_split, tvt0, tup0);
   public darray{string} const scene_names = make_darray{string}(
     // "untitled", "saucer", "saucer-multi", "block-multi", "block",
     // "ab-multi", "ab-multi3", "skyscraper",
@@ -1895,22 +1930,19 @@ scene_control_step(scene_control mutable& sctl,
   scene_node sn_work = make_node();
   threaded function void prepare_one(scene_node const& sn)
   {
-    const& vbid = sn.joint_id.vbid;
-    const& vsid = sn.joint_id.vsid;
+    const vbid = sn.joint_id.vbid;
+    const vsid = sn.joint_id.vsid;
     if (vbid != vbid_invalid() && vsid != vsid_invalid()) {
-/*
-// raycastオブジェクトのソート描画は効果微妙なので当分無効化する 
-// 影がささない？
       if (ss.raycast_sort && vbid >= ss.rdi.subdrawer_vbid_min &&
 	vbid <= ss.rdi.subdrawer_vbid_max) {
 	// debug_log("scene_control_step push robj vbid=", vbid);
 	if (robjs.push_object(ss.rdi, pjinfo, sn)) {
+	  // robjsにpushされた。あとでソートしてからインスタンス生成する。
 	  return;
 	}
       }
-*/
       mutable& idata = whole_instances[vbid][vsid];
-      // debug_log("scene_control_step prepare_one vbid=", vbid);
+      // debug_log("scene_control_step prepare_one vbid,vsid=", vbid, vsid);
       ftable[vbid](sn, ncd, idata);
     }
   }
@@ -1918,7 +1950,7 @@ scene_control_step(scene_control mutable& sctl,
   {
     if (!sctl.scene_paused) {
       if (spawn_obj) {
-	const a = ss.posang.angle * glm::make_vec3(0.0f, 0.0f, -5.0f);
+	const a = ss.posang.angle * glm::make_vec3(0.0f, 0.0f, -1.0f);
 	mutable posang = ss.posang;
 	posang.position += a * 0.1f;
 	scene_node cnode = scene_node(
@@ -1930,6 +1962,21 @@ scene_control_step(scene_control mutable& sctl,
     }
     sctl.sco.dworld.step_simulation(sctl.scene_paused, speed*1.0f/60.0f, 1,
       speed*1.0f/60.0f);
+    {
+      // 大オブジェクトに小オブジェクトが衝突した。とりあえず小オブジェクト
+      // を消すようにしておく。後で修正。 TODO
+      varray{ptr{rigid_body_i}} rb_to_remove;
+      threaded function void remove_if(size_t i, ptr{rigid_body_i} const& obj)
+      {
+	if (obj->get_collide()) {
+	  rb_to_remove.push_back(obj);
+	}
+      }
+      sctl.sco.dworld.rigid_bodies_foreach{remove_if}();
+      for (const i, const& rb: rb_to_remove) {
+	sctl.sco.dworld.remove_rigid_body(rb);
+      }
+    }
     scene_node cursn = scene_node(joint_id_type(), glm::mat4());
     threaded function void step_obj(size_t i, ptr{rigid_body_i} const& obj)
     {
