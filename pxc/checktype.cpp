@@ -1016,7 +1016,7 @@ void expr_block::check_type(symbol_table *lookup)
 	term(ptr_down_cast<expr_metafdef>(sa)->get_rhs()), this);
       #if 0
       if (t != term(1LL)) {
-	arena_error_throw(sa, "Static assertion failed");
+	arena_error_push(sa, "__static_assert__ failed");
       }
       #endif
     }

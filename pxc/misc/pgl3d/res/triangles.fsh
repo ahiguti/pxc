@@ -423,8 +423,12 @@ void main(void)
       // 計算されるdepth値は、raycast始点であるposのdepth値以上になる。
       // もしすでにdepth_rdの値がそれより小さいならdiscardする。
       <%if><%check_frag_depth/>
+      <%if><%is_gl3_or_gles3/>
       float prev_depth = texelFetch(sampler_depth_rd, ivec2(gl_FragCoord.xy),
 	0).x;
+      <%else/>
+      float prev_depth = 1.0f; // TODO
+      <%/>
       if (!cam_inside_aabb) {
 	vec3 ini_tngpos = vary_aabb_or_tconv.xyz + pos * vary_aabb_or_tconv.w;
 	vec4 ini_gpos = vary_model_matrix * vec4(ini_tngpos, 1.0);
@@ -843,11 +847,13 @@ void main(void)
       mate_alpha = clamp(mate_alpha - snoise(pos * 1024.0 * 256.0) / 1.0f,
 	0.0, 0.5);
       */
+      /*
       vec2 nt_coord = fract(vec2(pos.x + pos.z, pos.y + pos.z) * 256.0);
       float nval = texelFetch(sampler_noise,
 	// ivec2(gl_FragCoord.xy),
 	ivec2(nt_coord * 1024.0),
 	0).r;
+      */
       // mate_diffuse = vec3(nval, nval, nval);
       // mate_specular = vec3(nval, nval, nval);
       // mate_alpha = 0.3;

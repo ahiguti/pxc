@@ -1,0 +1,34 @@
+public namespace vn1;
+public import common -;
+public import meta m;
+
+public metafunction make_foo foo;
+
+private struct foo() public {
+  public int x;
+  public int y;
+}
+
+public function int foo_x(foo const& v)
+{
+  return v.x;
+}
+
+public function void foo_set_x(foo mutable& v, int a)
+{
+  v.x = a;
+}
+
+public function {tpl, t} void
+foo_append_to_string(foo const& v,
+  m::find{tpl, "ser_target_type", 0} mutable& o)
+{
+  serialize_sequence{tpl}(v.x, v.y, o);
+}
+
+{
+  foo v;
+  v.x = 123;
+  println(v); // ok
+}
+

@@ -1608,6 +1608,15 @@ static term eval_meta_characteristic(const term_list_range& tlev,
   } else if (s == "threaded") {
     attribute_e attr = get_term_threading_attribute(tlev[0]);
     return term((attr & attribute_threaded) != 0);
+  } else if (s == "multithreaded") {
+    attribute_e attr = get_term_threading_attribute(tlev[0]);
+    return term((attr & attribute_multithr) != 0);
+  } else if (s == "valuetype") {
+    attribute_e attr = get_term_threading_attribute(tlev[0]);
+    return term((attr & attribute_valuetype) != 0);
+  } else if (s == "tsvaluetype") {
+    attribute_e attr = get_term_threading_attribute(tlev[0]);
+    return term((attr & attribute_tsvaluetype) != 0);
   }
   return term();
 }

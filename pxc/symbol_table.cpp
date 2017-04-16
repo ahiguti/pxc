@@ -116,8 +116,9 @@ static bool is_private_memfld(localvar_info const& v, const symbol& curns)
     if (est != 0 && est->local_flds) {
       symbol fens(fe->get_unique_namespace()); /* TODO: slow */
       if (fens != curns) {
-	DBG_PRIV(fprintf(stderr, "private frame v=%s fe=%s\n",
-	  v.edef->dump().c_str(), fe->dump().c_str()));
+	DBG_PRIV(fprintf(stderr, "private frame v=%s fe=%s fens,curns=%s,%s\n",
+	  v.edef->dump().c_str(), fe->dump().c_str(), fens.c_str(),
+	  curns.c_str()));
 	return true;
       }
     }

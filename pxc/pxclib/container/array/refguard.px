@@ -17,7 +17,7 @@ struct refguard_base {
     : refguard_count(0)
   #endif
   { }
-  template <typename Tc> struct guard_ref {
+  template <typename Tc, bool elem_cnst> struct guard_ref {
     guard_ref(Tc& x) : v(x) { v.inc_refguard(); }
     ~guard_ref() { v.dec_refguard(); }
     Tc& get() { return v; }
@@ -30,7 +30,7 @@ struct refguard_base {
     guard_ref(const guard_ref&);
     guard_ref& operator =(const guard_ref&);
   };
-  template <typename Tc> struct guard_val {
+  template <typename Tc, bool elem_cnst> struct guard_val {
     guard_val(const Tc& x) : v(x) { v.inc_refguard(); }
     ~guard_val() { v.dec_refguard(); }
     Tc& get() { return v; }

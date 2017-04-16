@@ -1,0 +1,41 @@
+public namespace rwl2;
+public import common -;
+public import meta m;
+
+// tests that exclusive lock actually works
+
+tsvaluetype struct foo(int x0, int y0)
+{
+  public int x = x0;
+  public int y = y0;
+  public function int m1() const { return x; }
+}
+
+threaded function void thr1_main(tptr{rwlock{foo}} const& p)
+{
+  debug_log("thr1_main");
+  p->value.x += 1;
+  p->value.y += 1;
+  debug_log("thr1_main done");
+}
+
+function void test_rwlock()
+{
+  const p = make_tptr{rwlock{foo}}(foo(123, 456));
+  println(p);
+  option{callable_ptr{void, m::nil}} tp;
+  {
+    mutable& m = *p;
+    tp.some = make_thread_ptr{thr1_main}(p);
+    io::system.sleep(1);
+    m.value.x = 222;
+    m.value.y = 333;
+    debug_log("m unlocked");
+    // p->value is modified in thr1_main *after* m is unlocked
+  }
+  tp.some();
+  println(p); // should be 223, 334
+}
+
+test_rwlock();
+

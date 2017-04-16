@@ -67,6 +67,16 @@ public function void app_main()
     config_fn = io::environ::argv[1];
   }
   debug_log("config_fn", config_fn);
+  /*
+  if (true) {
+    ulonglong x = 893682657u;
+    debug_log("ulong x", x);
+    x <<= 5u;
+    debug_log("ulong x", x);
+    x >>= 5u;
+    debug_log("ulong x", x);
+  }
+  */
   pgl3d::engine::mainloop::mainloop(make_ptr{demoapp_application}(),
     config_fn);
 }
@@ -436,6 +446,7 @@ public multithreaded struct demoapp_scene_shared(io const& sys0)
   <pgl3d_scene_shared>
 {
   public position_angle posang;
+  public glm::vec3 pos_delta;
   public bool scene_next_flag;
   public bool raycast_sort;
   public bool engine_status = true;
@@ -878,6 +889,7 @@ function void handle_keys(app_impl mutable& app,
     ss.scene_next_flag = app.scene_next_flag;
     ss.posang.position = app.player.position;
     ss.posang.angle = app.player.angle * camera_rel;
+    ss.pos_delta = app.player.pos_delta;
     ss.app_commands.swap(app.app_commands);
     ss.app_status_message = app.app_status_message;
     app.scene_next_flag = false;
@@ -1948,6 +1960,9 @@ scene_control_step(scene_control mutable& sctl,
   }
   threaded function void step_snobj_dynamics(bool spawn_obj, bool spawn_lp_flag)
   {
+    const physics_fps = 60;
+    const timestep = 1.0f / static_cast{float}(physics_fps);
+    const timestep_inv = static_cast{float}(physics_fps);
     if (!sctl.scene_paused) {
       if (spawn_obj) {
 	const a = ss.posang.angle * glm::make_vec3(0.0f, 0.0f, -1.0f);
@@ -1955,13 +1970,21 @@ scene_control_step(scene_control mutable& sctl,
 	posang.position += a * 0.1f;
 	scene_node cnode = scene_node(
 	  sctl.sco.name_to_joint_id["smallbox"], posang.to_mat4());
+	const& pos_delta = ss.pos_delta;
 	const rb = sctl.sco.add_collision_object(cnode).some;
+	// debug_log("pos_delta", pos_delta);
+	rb->set_linear_velocity(
+	  pos_delta.x * timestep_inv,
+	  pos_delta.y * timestep_inv,
+	  pos_delta.z * timestep_inv);
+	  // playerの速度を初速にする
 	rb->apply_central_impulse(a.x, a.y, a.z);
+	  // 向いている方向にさらにimpulseを加える
 	// debug_log("spawn_obj", sctl.sco.dworld.objects_size());
       }
     }
-    sctl.sco.dworld.step_simulation(sctl.scene_paused, speed*1.0f/60.0f, 1,
-      speed*1.0f/60.0f);
+    sctl.sco.dworld.step_simulation(sctl.scene_paused, speed * timestep, 1,
+      speed * timestep);
     {
       // 大オブジェクトに小オブジェクトが衝突した。とりあえず小オブジェクト
       // を消すようにしておく。後で修正。 TODO

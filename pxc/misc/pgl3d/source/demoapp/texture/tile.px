@@ -2,6 +2,7 @@ private threaded namespace demoapp::texture::tile;
 public import common -;
 public import meta m;
 public import pgl3d::geometry::funcs -;
+public import pgl3d::geometry::midpoint_displacement -;
 public import glm -;
 private import pgl3d::texture::texture -;
 private import pgl3d::engine::util -;
@@ -32,7 +33,7 @@ public function void prepare_texture_data_3d_tmap(bool edit_mode,
       return;
     }
     tmap.set(ui(x), ui(y), ui(z), v);
-    tmap_ax.set(ui(x), ui(y), ui(z), 0xff6080c0);
+    tmap_ax.set(ui(x), ui(y), ui(z), 0xff6080c0u);
   }
   function uint get(int x, int y, int z) {
     if (x < 0 || x >= si(tmap.get_width())) { return 0; }
@@ -44,7 +45,7 @@ public function void prepare_texture_data_3d_tmap(bool edit_mode,
   {
     for (const x: 0 .. si(tmap.get_width())) {
       for (const y: 0 .. si(tmap.get_height())) {
-	for (const z: 0 .. si(tmap.get_depth()) - 3) {
+	for (const z: 0 .. si(tmap.get_depth())) {
 	  function bool cval(int x, int y, int z) {
 	    const v = get(x, y, z);
 	    return (v & 0xff000000) >= 0x02000000;
@@ -101,7 +102,34 @@ public function void prepare_texture_data_3d_tmap(bool edit_mode,
     return si(rnd->generate() % ui(v));
   }
   // if (!edit_mode)
-  {
+  if (true) {
+    // midpoint_displacementのテスト
+    const seeds = make_farray{uint}(914241u, 1511191u);
+      // , 341451u, 99994124u);
+      // 324122u, 4141111u, 84171511u, 14124u);
+    for (const i, const seed: seeds) {
+      texture_data td;
+      td.set_size_l2(tmap.get_width_l2(), tmap.get_height_l2(), 0u);
+      debug_log("midpoint displacement", td.get_size_uvec3());
+      midpoint_displacement(td, *make_rand_generator(seed));
+      for (const x: 1 .. si(tmap.get_width()) - 1) {
+	for (const y: 1 .. si(tmap.get_height()) - 1) {
+	  mutable zm = td.get(ui(x), ui(y), 0u);
+	  zm >>= (28u - tmap.get_depth_l2());
+	  zm &= (1u << tmap.get_depth_l2()) - 1u;
+	  // zm = min(zm, tmap.get_depth());
+	  // debug_log("md", x, y, zm);
+	  mutable izm = max(min(si(zm), si(tmap.get_depth()) - 1), 1);
+	  mutable izmb = max(izm - si(tmap.get_depth()) / 16, 1);
+	  for (const z: izmb .. izm) {
+	    set(x, y, z, 0xffb090a0);
+	  }
+	}
+      }
+    }
+    append_6dir();
+  }
+  if (false) {
     // recursive bump
     for (const x: 0 .. si(tmap.get_width())) {
       for (const y: 0 .. si(tmap.get_height())) {
@@ -236,8 +264,8 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
       // const idx = (z << (pattern_sz_l2 * 2)) | (y << pattern_sz_l2) | x;
       // debug_log("set_color", x & 16, y & 16, z, x0, y0, z0, dir);
       if (!cut || tpat.get(x, y, z) != 0) { // FIXME
-	tpat.set(x, y, z, 0xff808080);
-	tpat_ax.set(x, y, z, 0xff808080);
+	tpat.set(x, y, z, 0xff808080u);
+	tpat_ax.set(x, y, z, 0xff808080u);
       } else {
 	center = center * 1.0f; // centerは1.0刻み
 	scale = scale * 1.0f; // scaleは1.0刻み
@@ -256,7 +284,7 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
 	const cw = static_cast{uint}(radius + 0.5) + 1u;
 	const vc = (cw << 24u) | (vz << 16u) | (vy << 8u) | vx;
 	tpat.set(x, y, z, vc);
-	tpat_ax.set(x, y, z, 0xff804020);
+	tpat_ax.set(x, y, z, 0xff804020u);
       }
       if (bx == 0 && by == 0) {
 	// テスト中: ローカルライト

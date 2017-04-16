@@ -1,0 +1,62 @@
+public namespace rwl3;
+public import common -;
+public import meta m;
+
+// tests that exclusive/shared lock actually works
+
+multithreaded struct bar(tcptr{rwlock{foo}} const& pfoo0)
+{
+  public int wx;
+  public int wy;
+  public tcptr{rwlock{foo}} pfoo = pfoo0;
+}
+
+tsvaluetype struct foo(int x0, int y0)
+{
+  public int x = x0;
+  public int y = y0;
+  public function int m1() const { return x; }
+}
+
+threaded function void thr1_main(tptr{bar} const& pbar)
+{
+  debug_log("thr1_main");
+  const pfoo = pbar->pfoo;
+  const& sh = *pfoo;
+  int v = 0;
+  v += sh.value.x;
+  v += sh.value.y;
+  pbar->wx = v;
+  debug_log("thr1_main done");
+}
+
+function {sh} void test_rwlock()
+{
+  const pfoo = make_tptr{rwlock{foo}}(foo(123, 456));
+  tcptr{rwlock{foo}} const cpfoo = pfoo;
+  const pbar = make_tptr{bar}(pfoo);
+  println(pfoo);
+  option{callable_ptr{void, m::nil}} tp;
+  int wx = 0;
+  {
+    expand (i: m::seq{sh}) {
+    const& cfoo = *cpfoo; // shared lock
+    }
+    expand (i: m::seq{m::not{sh}}) {
+    const& cfoo = *pfoo; // exclusive lock
+    }
+    debug_log("locked sh=", m::to_string{sh});
+    tp.some = make_thread_ptr{thr1_main}(pbar);
+    io::system.sleep(1);
+    debug_log("main wake");
+    wx = pbar->wx;
+  }
+  debug_log("unlocked");
+  tp.some();
+  println(wx);
+  debug_log("wx=", wx); // 579 if sh, 0 otherwise
+}
+
+test_rwlock{1}();
+test_rwlock{0}();
+

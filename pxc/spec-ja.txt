@@ -37,9 +37,9 @@ thread装飾の意味
 
 - コンテナ実装
   - 型カテゴリ
-    - farray: 固定長配列
-    - varray: 動的リサイズ可能な配列
-    - darray: 作成時にサイズ指定可能な配列(未実装)
+    - farray: 固定長配列 (tsvaluetype)
+    - darray: 作成時にサイズ指定可能な配列 (tsvaluetype)
+    - varray: 動的リサイズ可能な配列 (mtvaluetype)
     - slice: 配列のslice(weak)
     - cslice: 配列のslice(weak)、要素がconst
     - tree_map: ソートされた連想配列
@@ -175,6 +175,27 @@ thread装飾の意味
     からfooのシンボルは名前区間プレフィックス無しで参照できる。
   - namespace bar が import foo + とすると、擬似メンバ関数のlookup時に
     fooに加えてbarを検索するようになる。
+
+- シンボルの可視性
+  - 名前空間直下に定義された名前は、publicなら他の名前空間から可視。
+      public struct foo ... は他の名前空間から可視
+      private struct foo ... は他の名前空間から不可視
+  - enumとbitmaskの中に定義された名前は、そのenumやbitmaskと同じ可視性。
+  - structとunionの中に定義されたメンバの名前(field,メンバ関数)は、
+    - ブロックにprivate指定があるとき
+      - 各メンバにprivate指定があれば他の名前空間からは不可視(既定)
+      - 各メンバにpublic指定があれば他の名前空間から可視
+    - ブロックにpublic指定があるとき(既定)
+      - 各メンバにprivate指定があればブロックの外からは不可視(既定)
+      - 各メンバにpublic指定があればブロックの外からは可視
+    public struct foo private {
+      public int x;   // 同一名前空間からは可視
+      private int y;  // どの名前空間からも不可視。ブロック内からのみ可視
+    }
+    public struct bar /* public */ {
+      public int x;   // どの名前空間からも可視
+      private int y;  // どの名前空間からも不可視。ブロック内からのみ可視
+    }
 
 - interfaceと継承
   - interface は複数の interface を継承できる

@@ -3,7 +3,21 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
-- mapがsrcとdestで同じコンテナでなくてもよいようにする
+- Can not convert from meta::uint to numeric::integral::ulonglong
+
+- static_assertは失敗するとerrorを呼ばなければならない。網羅的に確認。
+
+- rwlock: tcptrをderefするとshared lockになるようにできないか。
+
+- rwlock: monitor属性を0にするとlock_cguardが使えないのでmonitor属性
+  を1にしている。wait()するとC++のエラーになる。
+
+- shared lock
+  rwlock.px
+
+- expr_struct_newの最後のopt_privateは何に使っているのか(done)
+
+- mapがsrcとdestで同じコンテナでなくてもよいようにする(done)
 
 - FIXME: deserializeバイナリの先頭バイトとコンテナ終端が曖昧になる
 
@@ -3959,4 +3973,35 @@ mapの型組み合わせ
 左辺がstructのとき、右辺をfield_getで取得。
 左辺がmapのとき、右辺をassoc_getで取得。
 左辺がarrayのとき、右辺をarray_getで取得。
+
+---------------------------------------------------------------------
+expr_struct_newの最後のopt_privateは何に使っているのか
+
+is_private_memfldの判定で、そのstructと参照元が同じ名前空間であれば
+publicフィールドを可視とするようになっている。
+
+フィールドがpublicであってlocal_fldがtrue(private)のときは、同一
+名前空間からは可視、それ以外からは不可視となる。
+既定ではlocal_fldはfalse(public)なので、どの名前空間からもフィールド
+の可視性そのままになる。
+
+同一名前空間の関数からはメンバにアクセス可能な構造体を作るには、
+  public struct foo private {
+    public int x;
+  }
+のようにする。
+
+private struct foo {
+  public int x;
+}
+ではだめなのか？
+現状ブロックがpublicだとstructがprivateであっても別名前空間からメンバが
+見える。これをブロックの可視性はstructの可視性と同じにすればよいのでは。
+
+---------------------------------------------------------------------
+shared lock
+
+file_mtの実装を参考に。
+interface rwlock_i を作り、それを継承した rwlockテンプレートクラスを
+作る。
 

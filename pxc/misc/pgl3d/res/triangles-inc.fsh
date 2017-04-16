@@ -202,8 +202,7 @@ int tilemap_fetch(in vec3 pos, int tmap_mip, int tpat_mip)
   vec4 value = texelFetch(sampler_voxtmap, ivec3(curpos_t) >> tmap_mip, 
     tmap_mip);
   <%else/>
-  vec4 value = textureLod(sampler_voxtmap, curpos_t / map3_size, 0.0);
-  // vec4 value = <%texture3d/>(sampler_voxtmap, curpos_t / map3_size);
+  vec4 value = <%texture3d/>(sampler_voxtmap, curpos_t / map3_size);
   <%/>
   int node_type = int(floor(value.a * 255.0 + 0.5));
   bool is_pat = (node_type == 1);
@@ -215,10 +214,8 @@ int tilemap_fetch(in vec3 pos, int tmap_mip, int tpat_mip)
     value = texelFetch(sampler_voxtpat,
       ivec3(curpos_tp + curpos_tr) >> tpat_mip, tpat_mip);
     <%else/>
-    value = textureLod(sampler_voxtpat,
-      (curpos_tp + curpos_tr) / pattex3_size, 0.0);
-    // value = <%texture3d/>(sampler_voxtpat,
-    //  (curpos_tp + curpos_tr) / pattex3_size);
+    value = <%texture3d/>(sampler_voxtpat,
+      (curpos_tp + curpos_tr) / pattex3_size);
     <%/>
     // value = vec4(1.0, 1.0, 1.0, 1.0);
     // value.xyz = vec3(0.0);
@@ -237,14 +234,8 @@ int tilemap_fetch_debug(in vec3 pos, int tmap_mip, int tpat_mip)
   <%if><%is_gl3_or_gles3/>
   ivec3 icp = ivec3(curpos_t);
   vec4 value = texelFetch(sampler_voxtmap, icp, 0);
-  //vec4 value = textureLod(sampler_voxtmap, curpos_t / map3_size, 0.0);
-  /*
-  vec4 value = texelFetch(sampler_voxtmap, ivec3(curpos_t) >> tmap_mip, 
-    tmap_mip);
-  */
   <%else/>
-  vec4 value = textureLod(sampler_voxtmap, curpos_t / map3_size, 0.0);
-  // vec4 value = <%texture3d/>(sampler_voxtmap, curpos_t / map3_size);
+  vec4 value = <%texture3d/>(sampler_voxtmap, curpos_t / map3_size);
   <%/>
   int node_type = int(floor(value.a * 255.0 + 0.5));
   bool is_pat = (node_type == 1);
@@ -256,10 +247,8 @@ int tilemap_fetch_debug(in vec3 pos, int tmap_mip, int tpat_mip)
     value = texelFetch(sampler_voxtpat,
       ivec3(curpos_tp + curpos_tr) >> tpat_mip, tpat_mip);
     <%else/>
-    value = textureLod(sampler_voxtpat,
-      (curpos_tp + curpos_tr) / pattex3_size, 0.0);
-    // value = <%texture3d/>(sampler_voxtpat,
-    //  (curpos_tp + curpos_tr) / pattex3_size);
+    value = <%texture3d/>(sampler_voxtpat,
+      (curpos_tp + curpos_tr) / pattex3_size);
     <%/>
     // value = vec4(1.0, 1.0, 1.0, 1.0);
     // value.xyz = vec3(0.0);
@@ -393,7 +382,6 @@ int raycast_tilemap(
   vec3 dir = -hit_nor;
   vec3 curpos_f = pos * virt3_size;
   vec3 curpos_i = div_rem(curpos_f, 1.0);
-  vec3 curpos_i_0 = curpos_i; // FIXME: remove
   value_r = vec4(0.0, 0.0, 0.0, 1.0);
   int hit = -1;
   bool hit_tpat;
@@ -401,12 +389,6 @@ int raycast_tilemap(
   int i;
   const int imax = 256;
   for (i = 0; i < imax; ++i) {
-    /*
-    if (hit == -1 && tpat_mip == 0 && length(curpos_i - curpos_i_0) > 1000.0f) {
-      // tpat_mip = 1;
-    }
-    FIXME: remove
-    */
     if (mip_detail && hit < 0) {
       vec3 ppos = curpos_i / virt3_size;
       miplevel = clamp(raycast_get_miplevel(ppos, campos, dist_rand), 0, 8);
@@ -422,15 +404,13 @@ int raycast_tilemap(
     vec4 value = texelFetch(sampler_voxtmap, ivec3(tmap_coord) >> tmap_mip, 
       tmap_mip);
     <%else/>
-    vec4 value = textureLod(sampler_voxtmap, tmap_coord / map3_size, 0.0);
+    vec4 value = <%texture3d/>(sampler_voxtmap, tmap_coord / map3_size);
     <%/>
     int node_type = int(floor(value.a * 255.0 + 0.5));
     if (node_type == 255 && !mip_detail) {
       mip_detail = true;
       continue;
     }
-    /*
-    */
     bool is_pat = (node_type == 1);
     float distance_unit = distance_unit_tmap_mip;
     vec3 tpat_coord;
@@ -444,7 +424,7 @@ int raycast_tilemap(
       value = texelFetch(sampler_voxtpat, ivec3(tpat_coord) >> tpat_mip,
 	tpat_mip);
       <%else/>
-      value = textureLod(sampler_voxtpat, (tpat_coord) / pattex3_size, 0.0);
+      value = <%texture3d/>(sampler_voxtpat, (tpat_coord) / pattex3_size);
       <%/>
       node_type = int(floor(value.a * 255.0 + 0.5));
     }
@@ -579,14 +559,14 @@ int raycast_tilemap(
       value_r = texelFetch(sampler_voxtmax, ivec3(hit_coord) >> tmap_mip, 
 	tmap_mip);
       <%else/>
-      value_r = textureLod(sampler_voxtmax, hit_coord / map3_size, 0.0);
+      value_r = <%texture3d/>(sampler_voxtmax, hit_coord / map3_size);
       <%/>
     } else {
       <%if><%is_gl3_or_gles3/>
       value_r = texelFetch(sampler_voxtpax, ivec3(hit_coord) >> tpat_mip,
 	tpat_mip);
       <%else/>
-      value_r = textureLod(sampler_voxtpax, (hit_coord) / pattex3_size, 0.0);
+      value_r = <%texture3d/>(sampler_voxtpax, (hit_coord) / pattex3_size);
       <%/>
     }
   }
@@ -610,7 +590,6 @@ int raycast_tilemap_em(
   vec3 dir = -hit_nor;
   vec3 curpos_f = pos * virt3_size;
   vec3 curpos_i = div_rem(curpos_f, 1.0);
-  vec3 curpos_i_0 = curpos_i; // FIXME: remove
   value_r = vec4(0.0, 0.0, 0.0, 1.0);
   int hit = -1;
   bool hit_tpat;
@@ -618,12 +597,6 @@ int raycast_tilemap_em(
   int i;
   const int imax = 256;
   for (i = 0; i < imax; ++i) {
-    /*
-    if (hit == -1 && tpat_mip == 0 && length(curpos_i - curpos_i_0) > 1000.0f) {
-      // tpat_mip = 1;
-    }
-    FIXME: remove
-    */
     vec3 curpos_t = floor(curpos_i / tile3_size);
     vec3 curpos_tr = curpos_i - curpos_t * tile3_size; // 0から15の整数
     vec3 tmap_coord = curpos_t;
@@ -631,7 +604,7 @@ int raycast_tilemap_em(
     vec4 value = texelFetch(sampler_voxtmap, ivec3(tmap_coord) >> tmap_mip, 
       tmap_mip);
     <%else/>
-    vec4 value = textureLod(sampler_voxtmap, tmap_coord / map3_size, 0.0);
+    vec4 value = <%texture3d/>(sampler_voxtmap, tmap_coord / map3_size);
     <%/>
     int node_type = int(floor(value.a * 255.0 + 0.5));
     bool is_pat = (node_type == 1);
@@ -647,7 +620,7 @@ int raycast_tilemap_em(
       value = texelFetch(sampler_voxtpat, ivec3(tpat_coord) >> tpat_mip,
 	tpat_mip);
       <%else/>
-      value = textureLod(sampler_voxtpat, (tpat_coord) / pattex3_size, 0.0);
+      value = <%texture3d/>(sampler_voxtpat, (tpat_coord) / pattex3_size);
       <%/>
       node_type = int(floor(value.a * 255.0 + 0.5));
     }
@@ -779,14 +752,14 @@ int raycast_tilemap_em(
       value_r = texelFetch(sampler_voxtmax, ivec3(hit_coord) >> tmap_mip, 
 	tmap_mip);
       <%else/>
-      value_r = textureLod(sampler_voxtmax, hit_coord / map3_size, 0.0);
+      value_r = <%texture3d/>(sampler_voxtmax, hit_coord / map3_size);
       <%/>
     } else {
       <%if><%is_gl3_or_gles3/>
       value_r = texelFetch(sampler_voxtpax, ivec3(hit_coord) >> tpat_mip,
 	tpat_mip);
       <%else/>
-      value_r = textureLod(sampler_voxtpax, (hit_coord) / pattex3_size, 0.0);
+      value_r = <%texture3d/>(sampler_voxtpax, (hit_coord) / pattex3_size);
       <%/>
     }
   }

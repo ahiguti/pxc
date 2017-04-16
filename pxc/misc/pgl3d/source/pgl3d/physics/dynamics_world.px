@@ -26,6 +26,8 @@ rigid_body_i rigid_body
   public function float get_mass() const;
   public function void apply_central_impulse(float x, float y, float z);
   public function void apply_torque_impulse(float x, float y, float z);
+  public function void set_linear_velocity(float x, float y, float z);
+  public function void set_angular_velocity(float x, float y, float z);
   public function void get_world_transform_mat4(glm::mat4 mutable& m);
   public function bool get_collide() const;
     // TODO: 単なるフラグではなく詳細な情報をとれるようにする
@@ -92,6 +94,10 @@ grid_bp_shared(size_t i0, size_t n0, tptr{texture_edit} const& tex0,
   public tptr{texture_updates} const tu = tu0; // FIXME: 同じく
   public rawptr{grid_rbinfo} grid_rbinfo_array_ptr;
   public size_t grid_rbinfo_array_size;
+    // grid_rbinfo_array_ptrとsizeはdynamics_worldのgrid_rbinfo_arrayを
+    // さしている。grid_bp_thread_object::__callを子スレッドで実行中は
+    // dynamics_worldのgrid_rbinfo_arrayを変更してはならない。
+    // TODO: rwlockを使うと安全になる。
   public float grid_mesh_size = 1.0f;
   public varray{tptr{swarm_i}} swarms;
   public bool exec_voxel_collision = exec_voxel_collision0;
@@ -542,6 +548,14 @@ rigid_body(joint_id_type const& joint_id0,
   public function void apply_torque_impulse(float x, float y, float z)
   {
     rigidBody.applyTorqueImpulse(btVector3_(x, y, z));
+  }
+  public function void set_linear_velocity(float x, float y, float z)
+  {
+    rigidBody.setLinearVelocity(btVector3_(x, y, z));
+  }
+  public function void set_angular_velocity(float x, float y, float z)
+  {
+    rigidBody.setAngularVelocity(btVector3_(x, y, z));
   }
   public function void get_world_transform_mat4(glm::mat4 mutable& m)
   {

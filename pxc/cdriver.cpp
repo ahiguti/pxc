@@ -799,14 +799,14 @@ static std::string get_link_flags(const parser_options& po,
   if (!po.profile.gcc_compat) {
     genopt = " ";
   } else if (!po.profile.generate_dynamic) {
-    genopt = " -lpthread ";
+    genopt = " -lpthread -lboost_system -lboost_thread ";
   } else {
     const strmap::const_iterator i = po.profile.mapval.find("platform");
     if (i != po.profile.mapval.end() && i->second == "Darwin") {
       genopt = " -fPIC -undefined dynamic_lookup -bundle -bundle_loader "
-	+ po.argv0 + " -lpthread ";
+	+ po.argv0 + " -lpthread -lboost_system -lboost_thread ";
     } else {
-      genopt = " -fPIC -shared -lpthread ";
+      genopt = " -fPIC -shared -lpthread -lboost_system -lboost_thread ";
     }
   }
   const std::string link_str_all = genopt + po.profile.ldflags

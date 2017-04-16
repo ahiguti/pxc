@@ -350,10 +350,16 @@ static void emit_interface_def_one(emit_context& em, expr_interface *ei,
   if (multithr) {
     em.set_file_line(ei);
     em.indent('b');
-    em.puts("virtual void lock$z() const = 0;\n");
+    em.puts("virtual void lockex$z() const = 0;\n");
     em.set_file_line(ei);
     em.indent('b');
-    em.puts("virtual void unlock$z() const = 0;\n");
+    em.puts("virtual void unlockex$z() const = 0;\n");
+    em.set_file_line(ei);
+    em.indent('b');
+    em.puts("virtual void locksh$z() const = 0;\n");
+    em.set_file_line(ei);
+    em.indent('b');
+    em.puts("virtual void unlocksh$z() const = 0;\n");
     em.set_file_line(ei);
     em.indent('b');
     em.puts("virtual void wait$z() const = 0;\n");
@@ -517,19 +523,25 @@ static void emit_struct_def_one(emit_context& em, const expr_struct *est,
       em.puts(" >(ptr); }\n");
       em.set_file_line(est);
       em.indent('b');
-      em.puts("void lock$z() const { monitor$z.mtx.lock(); }\n");
+      em.puts("void lockex$z() const { monitor$z.lockex(); }\n");
       em.set_file_line(est);
       em.indent('b');
-      em.puts("void unlock$z() const { monitor$z.mtx.unlock(); }\n");
+      em.puts("void unlockex$z() const { monitor$z.unlockex(); }\n");
       em.set_file_line(est);
       em.indent('b');
-      em.puts("void wait$z() const { monitor$z.cond.wait(monitor$z.mtx); }\n");
+      em.puts("void locksh$z() const { monitor$z.locksh(); }\n");
       em.set_file_line(est);
       em.indent('b');
-      em.puts("void notify_one$z() const { monitor$z.cond.notify_one(); }\n");
+      em.puts("void unlocksh$z() const { monitor$z.unlocksh(); }\n");
       em.set_file_line(est);
       em.indent('b');
-      em.puts("void notify_all$z() const { monitor$z.cond.notify_all(); }\n");
+      em.puts("void wait$z() const { monitor$z.wait(); }\n");
+      em.set_file_line(est);
+      em.indent('b');
+      em.puts("void notify_one$z() const { monitor$z.notify_one(); }\n");
+      em.set_file_line(est);
+      em.indent('b');
+      em.puts("void notify_all$z() const { monitor$z.notify_all(); }\n");
       em.set_file_line(est);
       em.indent('b');
       em.puts("mutable pxcrt::monitor monitor$z;\n");
@@ -3104,10 +3116,13 @@ void expr_feach::emit_value(emit_context& em)
     em.puts(cetstr);
     if (mapped_mutable_byref) {
       em.puts("::guard_ref< ");
+      em.puts(cetstr);
+      em.puts(", false");
     } else {
       em.puts("::guard_ref< const ");
+      em.puts(cetstr);
+      em.puts(", true");
     }
-    em.puts(cetstr);
     em.puts(" > ag$fg(ag$fe);\n");
   }
   const term& cet = ce->get_texpr();
@@ -3563,19 +3578,25 @@ static void emit_var_or_tempvar(emit_context& em, expr_i *e, const term& tbase,
   const term& tconvto, const variable_info& vi, const std::string& var_csymbol,
   expr_i *rhs, emit_var_e emv, bool is_unnamed)
 {
-  const std::string s0 = term_tostr_cname(tconvto.is_null() ? tbase : tconvto);
+  const term& typ = tconvto.is_null() ? tbase : tconvto;
+  const std::string s0 = term_tostr_cname(typ);
   const std::string cs0 =
     std::string(is_passby_const(vi.passby) ? "const " : "") + s0;
   if (vi.guard_elements) {
     const std::string base_s0 = term_tostr_cname(tbase);
     const std::string base_cs0 =
-      std::string(is_cm_range_family(tconvto)
-	? (is_const_range_family(tconvto) ? "const " : "")
+      std::string(is_cm_range_family(typ)
+	? (is_const_range_family(typ) ? "const " : "")
 	: (is_passby_const(vi.passby) ? "const " : ""))
       + base_s0;
     const std::string wr = is_passby_cm_reference(vi.passby)
       ? "guard_ref" : "guard_val";
-    const std::string tstr = base_s0 + "::" + wr + "< " + base_cs0 + " > ";
+    const std::string elem_cnst =
+      (is_const_or_immutable_pointer_family(typ)
+	|| is_const_range_family(typ))
+      ? "true" : "false";
+    const std::string tstr = base_s0 + "::" + wr + "< " + base_cs0
+      + ", " + elem_cnst + " > ";
     if (emv == emit_var_get || emv == emit_var_tempobj) {
       em.puts("(");
       if (emv == emit_var_tempobj) {
@@ -3586,9 +3607,9 @@ static void emit_var_or_tempvar(emit_context& em, expr_i *e, const term& tbase,
       } else {
 	em.puts(var_csymbol); /* get */
       }
-      if (is_const_range_family(tconvto)) {
+      if (is_const_range_family(typ)) {
 	em.puts(".get_crange())");
-      } else if (is_cm_range_family(tconvto)) {
+      } else if (is_cm_range_family(typ)) {
 	em.puts(".get_range())");
       } else {
 	em.puts(".get())");
@@ -3626,7 +3647,7 @@ static void emit_var_or_tempvar(emit_context& em, expr_i *e, const term& tbase,
       } else if (rhs == 0) {
 	/* defset wo rhs */
 	em.puts(cs0 + " " + var_csymbol);
-	emit_explicit_init_if(em, tconvto.is_null() ? tbase : tconvto);
+	emit_explicit_init_if(em, typ);
       } else {
 	/* defset */
 	const bool incl_byref = false;

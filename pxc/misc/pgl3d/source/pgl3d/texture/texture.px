@@ -18,101 +18,144 @@ private import SDL2::api_functions -;
 private import SDL2::api_wrappers -;
 private import SDL2::misc -;
 
-public tsvaluetype struct {t} array3_pot()
+public tsvaluetype struct {t} array3_pot() private
 {
   public metafunction mapped_type m::symbol{t, "mapped_type"};
-  public function void set_size_l2(uint w_l2, uint h_l2, uint d_l2) {
-    data.resize(0u, mapped_type());
-    width_l2 = w_l2;
-    height_l2 = h_l2;
-    depth_l2 = d_l2;
-    size_t sz = static_cast{size_t}(1u) << (width_l2 + height_l2 + depth_l2);
-    data.resize(sz, mapped_type());
-  }
-  public function glm::uvec3 get_size_uvec3() const {
-    return glm::make_uvec3(get_width(), get_height(), get_depth());
-  }
-  public function glm::uvec3 get_size_l2_uvec3() const {
-    return glm::make_uvec3(get_width_l2(), get_height_l2(), get_depth_l2());
-  }
-  public function uint get_width_l2() const { return width_l2; }
-  public function uint get_height_l2() const { return height_l2; }
-  public function uint get_depth_l2() const { return depth_l2; }
-  public function uint get_width() const { return 1u << width_l2; }
-  public function uint get_height() const { return 1u << height_l2; }
-  public function uint get_depth() const { return 1u << depth_l2; }
-  public function uint index(uint x, uint y, uint z) const {
-    return (z << (width_l2 + height_l2)) | (y << width_l2) | x;
-  }
-  public function uint size() const {
-    return 1u << (width_l2 + height_l2 + depth_l2);
-  }
-  public function void set(uint x, uint y, uint z, mapped_type v) {
-    data[index(x, y, z)] = v;
-  }
-  public function mapped_type get(uint x, uint y, uint z) const {
-    return data[index(x, y, z)];
-  }
-  public function void set_index(uint i, mapped_type v) {
-    data[i] = v;
-  }
-  public function mapped_type get_index(uint i) {
-    return data[i];
-  }
-  public function {tpl} void
-  append_to_string(m::find{tpl, "ser_target_type", 0} mutable& s) const
-  {
-    serialize_sequence{tpl}(width_l2, height_l2, depth_l2, data, s);
-  }
-  public function {tpl} void
-  parse_from_string(m::find{tpl, "des_source_type", 0} mutable& s) {
-    deserialize_sequence{tpl}(s, width_l2, height_l2, depth_l2, data);
-  }
-  public function crawptr{mapped_type} get_crawptr() const {
-    if (m::or{m::symbol_exists{t, "to_crawptr"},
-      m::symbol_exists{m::nsof{t}, m::concat{t, "_to_crawptr"}}}) {
-      return data.to_crawptr();
-    } else {
-      return crawptr{mapped_type}();
-    }
-  }
-  public function rawptr{mapped_type} get_rawptr() {
-    if (m::or{m::symbol_exists{t, "to_rawptr"},
-      m::symbol_exists{m::nsof{t}, m::concat{t, "_to_rawptr"}}}) {
-      return data.to_rawptr();
-    } else {
-      return rawptr{mapped_type}();
-    }
-  }
-  public function void swap_data(uint mutable& w_l2, uint mutable& h_l2,
-    uint mutable& d_l2, t mutable& d) {
-    const sz_l2 = w_l2 + h_l2 + d_l2;
-    const sz = 1u << sz_l2;
-    if (d.size() != static_cast{size_t}(sz)) {
-      throw runtime_error_template{"array3_pot::swap_data"}("");
-    }
-    swap(data, d);
-    swap(width_l2, w_l2);
-    swap(height_l2, h_l2);
-    swap(depth_l2, d_l2);
-  }
-  private uint width_l2;
-  private uint height_l2;
-  private uint depth_l2;
-  private t data;
+  public uint width_l2;
+  public uint height_l2;
+  public uint depth_l2;
+  public t data;
 }
 
-public function {t} void
-array3_pot_swap(array3_pot{t} mutable& a, array3_pot{t} mutable& b)
+public threaded function {t} void
+array3_pot_set_size_l2(t mutable& o, uint w_l2, uint h_l2, uint d_l2)
 {
-  t data;
   metafunction mapped_type m::symbol{t, "mapped_type"};
-  data.resize(1u, mapped_type());
-  uint w_l2 = 0;
-  uint h_l2 = 0;
-  uint d_l2 = 0;
-  a.swap_data(w_l2, h_l2, d_l2, data);
-  b.swap_data(w_l2, h_l2, d_l2, data);
+  o.data.resize(0u, mapped_type());
+  o.width_l2 = w_l2;
+  o.height_l2 = h_l2;
+  o.depth_l2 = d_l2;
+  size_t sz = static_cast{size_t}(1u) << (w_l2 + h_l2 + d_l2);
+  o.data.resize(sz, mapped_type());
+}
+
+public threaded function {t} glm::uvec3
+array3_pot_get_size_uvec3(t const& o)
+{
+  return glm::make_uvec3(o.get_width(), o.get_height(), o.get_depth());
+}
+
+public threaded function {t} glm::uvec3
+array3_pot_get_size_l2_uvec3(t const& o)
+{
+  return glm::make_uvec3(o.get_width_l2(), o.get_height_l2(),
+    o.get_depth_l2());
+}
+
+public threaded function {t} uint
+array3_pot_get_width_l2(t const& o)
+{ return o.width_l2; }
+
+public threaded function {t} uint
+array3_pot_get_height_l2(t const& o)
+{ return o.height_l2; }
+
+public threaded function {t} uint
+array3_pot_get_depth_l2(t const& o)
+{ return o.depth_l2; }
+
+public threaded function {t} uint
+array3_pot_get_width(t const& o)
+{ return 1u << o.width_l2; }
+
+public threaded function {t} uint
+array3_pot_get_height(t const& o)
+{ return 1u << o.height_l2; }
+
+public threaded function {t} uint
+array3_pot_get_depth(t const& o)
+{ return 1u << o.depth_l2; }
+
+public threaded function {t} uint
+array3_pot_index(t const& o, uint x, uint y, uint z)
+{ return (z << (o.width_l2 + o.height_l2)) | (y << o.width_l2) | x; }
+
+public threaded function {t} uint
+array3_pot_size(t const& o)
+{ return 1u << (o.width_l2 + o.height_l2 + o.depth_l2); }
+
+public threaded function {t, tv} void
+array3_pot_set(t mutable& o, uint x, uint y, uint z, tv v)
+{
+  o.data[o.index(x, y, z)] = v;
+}
+public threaded function {t} mapped_type
+array3_pot_get(t const& o, uint x, uint y, uint z)
+{
+  metafunction mapped_type m::symbol{t, "mapped_type"};
+  return o.data[o.index(x, y, z)];
+}
+
+public threaded function {t, tv} void
+array3_pot_set_index(t mutable& o, uint i, tv v)
+{
+  o.data[i] = v;
+}
+
+public threaded function {t} mapped_type
+array3_pot_get_index(t const& o, uint i)
+{
+  metafunction mapped_type m::symbol{t, "mapped_type"};
+  return o.data[i];
+}
+
+public threaded function {tpl, t} void
+array3_pot_append_to_string(t const& o,
+  m::find{tpl, "ser_target_type", 0} mutable& s)
+{
+  serialize_sequence{tpl}(o.width_l2, o.height_l2, o.depth_l2, o.data, s);
+}
+
+public threaded function {tpl, t} t
+array3_pot_parse_from_string(m::find{tpl, "des_source_type", 0} mutable& s)
+{
+  t o;
+  deserialize_sequence{tpl}(s, o.width_l2, o.height_l2, o.depth_l2, o.data);
+  return o;
+}
+
+public threaded function {ta} crawptr{mapped_type}
+array3_pot_get_crawptr(ta const& o)
+{
+  metafunction t m::at0{ta};
+  metafunction mapped_type m::symbol{t, "mapped_type"};
+  if (m::or{m::symbol_exists{t, "to_crawptr"},
+    m::symbol_exists{m::nsof{t}, m::concat{t, "_to_crawptr"}}}) {
+    return o.data.to_crawptr();
+  } else {
+    return crawptr{mapped_type}();
+  }
+}
+public threaded function {ta} rawptr{mapped_type}
+array3_pot_get_rawptr(ta mutable& o)
+{
+  metafunction t m::at0{ta};
+  metafunction mapped_type m::symbol{t, "mapped_type"};
+  if (m::or{m::symbol_exists{t, "to_rawptr"},
+    m::symbol_exists{m::nsof{t}, m::concat{t, "_to_rawptr"}}}) {
+    return o.data.to_rawptr();
+  } else {
+    return rawptr{mapped_type}();
+  }
+}
+
+public threaded function {t} void
+array3_pot_swap(t mutable& a, t mutable& b)
+{
+  swap(a.data, b.data);
+  swap(a.width_l2, b.width_l2);
+  swap(a.height_l2, b.height_l2);
+  swap(a.depth_l2, b.depth_l2);
 }
 
 public metafunction texture_data array3_pot{varray{uint}};

@@ -133,6 +133,14 @@ struct monitor {
   monitor& operator =(monitor const& x) {
     return *this;
   }
+  void lockex() { mtx.lock(); }
+  void unlockex() { mtx.unlock(); }
+  void locksh() { mtx.lock(); }
+  void unlocksh() { mtx.unlock(); }
+  void wait() { cond.wait(mtx); }
+  void notify_one() { cond.notify_one(); }
+  void notify_all() { cond.notify_all(); }
+private:
   mutex mtx;
   condition_variable cond;
 };
@@ -166,11 +174,6 @@ struct rcval {
     }
   }
   size_t refcnt$z() const { return count$z.refcnt$z(); }
-  /* void lock$z() const { } */
-  /* void unlock$z() const { } */
-  /* void wait$z() const { } */
-  /* void notify_one$z() const { } */
-  /* void notify_all$z() const { } */
   static rcval<T> *allocate() {
     return local_allocate< rcval<T> >();
   }
@@ -214,11 +217,13 @@ struct trcval {
     }
   }
   size_t refcnt$z() const { return count$z.refcnt$z(); }
-  void lock$z() const { monitor$z.mtx.lock(); }
-  void unlock$z() const { monitor$z.mtx.unlock(); }
-  void wait$z() const { monitor$z.cond.wait(monitor$z.mtx); }
-  void notify_one$z() const { monitor$z.cond.notify_one(); }
-  void notify_all$z() const { monitor$z.cond.notify_all(); }
+  void lockex$z() const { monitor$z.lockex(); }
+  void unlockex$z() const { monitor$z.unlockex(); }
+  void locksh$z() const { monitor$z.locksh(); }
+  void unlocksh$z() const { monitor$z.unlocksh(); }
+  void wait$z() const { monitor$z.wait(); }
+  void notify_one$z() const { monitor$z.notify_one(); }
+  void notify_all$z() const { monitor$z.notify_all(); }
   static trcval<T> *allocate() {
     return allocate_single< trcval<T> >();
   }
@@ -263,9 +268,6 @@ struct tircval {
     }
   }
   size_t refcnt$z() const { return count$z.refcnt$z(); }
-  /* void lock$z() const { } */
-  /* void unlock$z() const { } */
-  /* void wait$z() const { } */
   static tircval<T> *allocate() {
     return allocate_single< tircval<T> >();
   }
@@ -305,8 +307,20 @@ struct rcptr { /* T must have an intrusive count */
   T *get() const { return ptr; }
   T& operator *() const { return *ptr; }
   T *operator ->() const { return ptr; }
-  void inc_refguard() const { ptr->lock$z(); }
-  void dec_refguard() const { ptr->unlock$z(); }
+  void inc_refguard(bool elem_cnst) const {
+    if (elem_cnst) {
+      ptr->locksh$z();
+    } else {
+      ptr->lockex$z();
+    }
+  }
+  void dec_refguard(bool elem_cnst) const {
+    if (elem_cnst) {
+      ptr->unlocksh$z();
+    } else {
+      ptr->unlockex$z();
+    }
+  }
   template <typename Tx> static inline T *make_rawptr(const Tx& x) {
     T *p = T::allocate();
     PXC_TRY {
@@ -327,9 +341,9 @@ struct rcptr { /* T must have an intrusive count */
     }
     return p;
   }
-  template <typename Tc> struct guard_ref {
-    guard_ref(Tc& x) : v(x) { v.inc_refguard(); }
-    ~guard_ref() { v.dec_refguard(); }
+  template <typename Tc, bool elem_cnst> struct guard_ref {
+    guard_ref(Tc& x) : v(x) { v.inc_refguard(elem_cnst); }
+    ~guard_ref() { v.dec_refguard(elem_cnst); }
     Tc& get() { return v; }
     typename Tc::range_type get_range() 
       { return typename Tc::range_type(v); }
@@ -340,9 +354,9 @@ struct rcptr { /* T must have an intrusive count */
     guard_ref(const guard_ref&);
     guard_ref& operator =(const guard_ref&);
   };
-  template <typename Tc> struct guard_val {
-    guard_val(const Tc& x) : v(x) { v.inc_refguard(); }
-    ~guard_val() { v.dec_refguard(); }
+  template <typename Tc, bool elem_cnst> struct guard_val {
+    guard_val(const Tc& x) : v(x) { v.inc_refguard(elem_cnst); }
+    ~guard_val() { v.dec_refguard(elem_cnst); }
     Tc& get() { return v; }
     typename Tc::range_type get_range() 
       { return typename Tc::range_type(v); }
@@ -366,8 +380,8 @@ private:
 
 template <typename T> struct lock_guard
 {
-  lock_guard(const rcptr<T>& p) : ptr(p), objref(*p) { objref.lock$z(); }
-  ~lock_guard() { objref.unlock$z(); }
+  lock_guard(const rcptr<T>& p) : ptr(p), objref(*p) { objref.lockex$z(); }
+  ~lock_guard() { objref.unlockex$z(); }
   T *get() const { return &objref; }
   T& operator *() const { return objref; }
   T *operator ->() const { return &objref; }
@@ -385,8 +399,8 @@ private:
 template <typename T> struct lock_cguard
 {
   lock_cguard(const rcptr<const T>& p) : ptr(p), objref(*p)
-    { objref.lock$z(); }
-  ~lock_cguard() { objref.unlock$z(); }
+    { objref.locksh$z(); }
+  ~lock_cguard() { objref.unlocksh$z(); }
   const T *get() const { return &objref; }
   const T& operator *() const { return objref; }
   const T *operator ->() const { return &objref; }
