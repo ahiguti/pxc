@@ -50,7 +50,7 @@ rand_generator(uint seed0)
   // mersenne twister
   public uint index = 624u;
   public farray{uint, 624} mt;
-  init(seed0);
+  init_short(seed0);
   public function uint generate()
   {
     if (index >= 624u) {
@@ -64,12 +64,20 @@ rand_generator(uint seed0)
     ++index;
     return y;
   }
-  private function void init(uint seed)
+  public function void init_short(uint seed)
   {
     index = 624u;
     mt[0] = seed;
     for (const i: 1 .. 624u) {
       mt[i] = 1812433253u * (mt[i - 1] ^ mt[i - 1] >> 30u) + i;
+    }
+  }
+  public function void init_full(cslice{uint} const& seed)
+  {
+    const n = min(seed.size(), mt.size());
+    size_t i;
+    for (i = 0; i < n; ++i) {
+      mt[i] = seed[i];
     }
   }
   private function void twist()

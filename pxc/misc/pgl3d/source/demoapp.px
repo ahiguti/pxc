@@ -77,6 +77,15 @@ public function void app_main()
     debug_log("ulong x", x);
   }
   */
+  if (true) {
+    const rnd = make_rand_generator(99987124u);
+    string s = "";
+    for (const i: 0 .. 16u) {
+      uint v = (rnd->generate() >> 20u) & 0x0fu;
+      s += "," + to_string(v);
+    }
+    debug_log("s=", s);
+  }
   pgl3d::engine::mainloop::mainloop(make_ptr{demoapp_application}(),
     config_fn);
 }
@@ -90,11 +99,9 @@ public struct demoapp_application()
   {
     debug_log("init_drawers");
     const r = init_drawers(app, conf, ds);
-    if (case app.edit_mode.some) {
-      // edit_modeではデフォルトでmiplevel=0に固定する。さもないとカーソルが
-      // 見えない
-      app.option_value2 = 0.0;
-    }
+    app.option_value2 = static_cast{float}(
+      conf.conf.get("option_value2", -1, -1, 9));
+      // edit modeでは0にしないとカーソルが見えないので注意(miplevel)
     debug_log("init_drawers done");
     return r;
   }
@@ -957,6 +964,11 @@ private function void build_vertices(app_impl mutable& app,
   make_vertices_i mutable& pgs)
 {
   const& voxtmap = app.tvt->tmap_edit->data_pri[0];
+  const voxtmap_size = map{glm::vec3, static_cast{float, uint}}(
+    voxtmap.get_size_uvec3());
+  const voxtmap_size_max = fold_list{max}(0.0f, voxtmap_size);
+  const voxtmap_whd = voxtmap_size / voxtmap_size_max;
+  /*
   const voxtmap_whd_max = static_cast{float}(
     max(max(voxtmap.get_width(), voxtmap.get_height()),
     voxtmap.get_depth()));
@@ -964,6 +976,7 @@ private function void build_vertices(app_impl mutable& app,
     static_cast{float}(voxtmap.get_width()) / voxtmap_whd_max,
     static_cast{float}(voxtmap.get_height()) / voxtmap_whd_max,
     static_cast{float}(voxtmap.get_depth()) / voxtmap_whd_max);
+  */
   /*
   bitarray3 otb = tilemap_external(voxtmap);
   bitarray3 itb = tilemap_internal(voxtmap);
@@ -1121,12 +1134,14 @@ private function void build_vertices(app_impl mutable& app,
       apply(m0, hole()),
       apply(m0,
 	ctx_tex3d(0, 0, mi, mx))));
-  // (80, 0, 35), (16, 21, 2) 全体は2048x2048x64
-  // const veps = glm::make_vec3(0.001f, 0.001f, 0.001f);
-  const tmi = glm::make_vec3(80.0f, 0.0f, 35.0f);
-  const tsz = glm::make_vec3(16.0f, 21.0f, 2.0f);
-  const smallmi = tmi / 2048.0f;
-  const smallmx = (tmi + tsz) / 2048.0f;
+  // (80, 0, 35), (16, 21, 2) 全体は(2048x2048x64)
+  // const tmi = glm::make_vec3(80.0f, 0.0f, 35.0f);
+  // const tsz = glm::make_vec3(16.0f, 21.0f, 2.0f);
+  // (59,20,49) - (59,0,63), min(59,0,49), sz(1, 21, 15)
+  const tmi = glm::make_vec3(59.0f, 0.0f, 49.0f);
+  const tsz = glm::make_vec3(1.0f, 21.0f, 15.0f);
+  const smallmi = tmi / voxtmap_size_max; // map{glm::vec3, operator::div}(tmi, voxtmap_size);
+  const smallmx = (tmi + tsz) / voxtmap_size_max; // map{glm::vec3, operator::div}(tmi + tsz, voxtmap_size);
   debug_log("make smallbox");
   pgs.make_vertex_set(tr1_0, "smallbox", cuboid_tex3d(smallmi, smallmx,
     glm::vec3(), 1.0f));

@@ -387,6 +387,7 @@ public function void input_control_handle_keys(input_control mutable& ictl,
   float angle_x = to_radians(-get_axis(3) * frame_speed);
   float angle_y = to_radians(-get_axis(2) * frame_speed);
   float angle_z = 0.0f;
+  float warp = 1.0f;
   if (get_key(SDL_SCANCODE_UP) != 0 /* || get_button(0) != 0 */) {
     angle_x += to_radians(1.0f * frame_speed);
   }
@@ -404,6 +405,9 @@ public function void input_control_handle_keys(input_control mutable& ictl,
   }
   if (get_key(SDL_SCANCODE_X) != 0 || get_button(3) != 0) {
     angle_z -= to_radians(1.0f * frame_speed);
+  }
+  if (get_key(SDL_SCANCODE_G) != 0 || get_button(13) != 0) {
+    warp = 32.0;
   }
   target.angle *= glm::make_quat_angle_axis(angle_x, 1.0, 0.0, 0.0);
   target.angle *= glm::make_quat_angle_axis(angle_y, 0.0, 1.0, 0.0);
@@ -448,7 +452,7 @@ public function void input_control_handle_keys(input_control mutable& ictl,
     pos_delta.z += frame_accel;
   }
   target.pos_delta += target.angle * pos_delta * frame_speed;
-  target.position += target.pos_delta * frame_speed;
+  target.position += target.pos_delta * warp * frame_speed;
   if (get_key(SDL_SCANCODE_RETURN) != 0 || get_button(6) != 0) {
     const len = glm::length(target.pos_delta) * 2048.0f;
     if (len < frame_speed) {

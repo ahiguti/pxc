@@ -1,5 +1,6 @@
 <%import>pre.fsh<%/>
 <%import>triangles-inc.fsh<%/>
+<%import>pnoise.fsh<%/>
 
 // #pragma optionNV(inline all)
 // #pragma optionNV(unroll none)
@@ -479,7 +480,7 @@ void main(void)
 	aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para,
 	miplevel);
     }
-    //if (hit == 1)  { <%fragcolor/> = vec4(1.0, 0.0, 0.0, 1.0); return; }
+    // if (hit == 1)  { <%fragcolor/> = vec4(1.0, 0.0, 0.0, 1.0); return; }
     <%if><%eq><%ssubtype/>2<%/>
     // if (hit >= 0)  { <%fragcolor/> = vec4(1.0, 0.0, 0.0, 1.0); return; }
     <%/>
@@ -502,9 +503,10 @@ void main(void)
       // <%fragcolor/> = vec4(1.0); return;
       discard;
     }
-    if (cam_inside_aabb && hit == 0) {
+    if (cam_inside_aabb && hit <= (option_value2 < 0 ? 1 : 0)) {
       /* カメラが物体にめりこんでいる。depth計算で0除算がおきないよう
-       * ここでreturnする。 */
+       * ここでreturnする。mip_detailの処理によりhit == 1でもめりこんでいる
+       * ことがありうる(option_value2が-1のとき)。 */
       <%fragcolor/> = vec4(0.0);
       <%if><%eq><%update_frag_depth/>1<%/>
 	gl_FragDepth = -1.0;
@@ -841,7 +843,9 @@ void main(void)
       local_light = normalize(local_light);
     }
     // FIXME?
-    if (frag_depth < 1.7f + dist_rnd * 0.25f) {
+    if (frag_depth < 0.7f + dist_rnd * 0.25f) {
+      // mate_alpha = clamp(pnoise3(pos * 82492.0) * 1.01, 0.01, 1.0);
+      // mate_alpha = 0.01;
       // <%fragcolor/> = vec4(1.0,1.0,0.0,1.0); return;
       /*
       mate_alpha = clamp(mate_alpha - snoise(pos * 1024.0 * 256.0) / 1.0f,

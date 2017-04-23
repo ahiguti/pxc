@@ -33,7 +33,7 @@ public function void prepare_texture_data_3d_tmap(bool edit_mode,
       return;
     }
     tmap.set(ui(x), ui(y), ui(z), v);
-    tmap_ax.set(ui(x), ui(y), ui(z), 0xff6080c0u);
+    tmap_ax.set(ui(x), ui(y), ui(z), 0xff807060u);
   }
   function uint get(int x, int y, int z) {
     if (x < 0 || x >= si(tmap.get_width())) { return 0; }
@@ -115,14 +115,14 @@ public function void prepare_texture_data_3d_tmap(bool edit_mode,
       for (const x: 1 .. si(tmap.get_width()) - 1) {
 	for (const y: 1 .. si(tmap.get_height()) - 1) {
 	  mutable zm = td.get(ui(x), ui(y), 0u);
-	  zm >>= (28u - tmap.get_depth_l2());
+	  zm >>= (30u - tmap.get_depth_l2());
 	  zm &= (1u << tmap.get_depth_l2()) - 1u;
 	  // zm = min(zm, tmap.get_depth());
 	  // debug_log("md", x, y, zm);
 	  mutable izm = max(min(si(zm), si(tmap.get_depth()) - 1), 1);
 	  mutable izmb = max(izm - si(tmap.get_depth()) / 16, 1);
 	  for (const z: izmb .. izm) {
-	    set(x, y, z, 0xffb090a0);
+	    set(x, y, z, 0xff807060);
 	  }
 	}
       }
@@ -267,6 +267,7 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
 	tpat.set(x, y, z, 0xff808080u);
 	tpat_ax.set(x, y, z, 0xff808080u);
       } else {
+	// 面取り
 	center = center * 1.0f; // centerは1.0刻み
 	scale = scale * 1.0f; // scaleは1.0刻み
 	radius = radius * 1.0f; // 半径は1.0刻み
@@ -284,11 +285,15 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
 	const cw = static_cast{uint}(radius + 0.5) + 1u;
 	const vc = (cw << 24u) | (vz << 16u) | (vy << 8u) | vx;
 	tpat.set(x, y, z, vc);
-	tpat_ax.set(x, y, z, 0xff804020u);
+	tpat_ax.set(x, y, z, 0xff808080u);
       }
       if (bx == 0 && by == 0) {
 	// テスト中: ローカルライト
 	const v = (tpat_ax.get(x, y, z) & 0x00ffffff) | 0x01000000;
+	tpat_ax.set(x, y, z, v);
+      } else if (bx < 5 && by < 5) {
+	// 金属: vの上2bitが10
+	const v = 0x87f8f8f8u;
 	tpat_ax.set(x, y, z, v);
       }
     }
@@ -300,7 +305,7 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
       rv >>= ui(tile_size_l2.y);
       mutable w = si(rv & (ui(tile_size.x) - 1u)) / 2;
       rv >>= ui(tile_size_l2.x);
-      mutable h = si(rv & (ui(tile_size.y) - 1u)) / 4;
+      mutable h = si(rv & (ui(tile_size.y) - 1u)) / 2;
       rv >>= ui(tile_size_l2.y);
       const d = si(rv & (ui(tile_size.z) - 1u));
       rv >>= ui(tile_size_l2.z);
@@ -308,40 +313,55 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
       if (x + w >= tile_size.x) { w = tile_size.x - x - 1; }
       if (y - h < 0) { h = y; }
       if (y + h >= tile_size.y) { h = tile_size.y - y - 1; }
-      for (const ix: x - w .. x + w + 1) {
-	for (const iy: y - h .. y + h + 1) {
-	  for (const iz: 0 .. d) {
+      set_bump_pos(
+	make_uvec3(bx0, by0, bz0),
+	make_uvec3(ui(x - h), ui(y - h), 0u),
+	make_uvec3(ui(x + h), ui(y + h), ui(d)),
+	dir);
+    }
+    function void set_bump_pos(uvec3 const& blk, uvec3 const& mi,
+      uvec3 const& mx, uint dir)
+    {
+      for (const ix: mi.x .. mx.x + 1) {
+	for (const iy: mi.y .. mx.y + 1) {
+	  for (const iz: mi.z .. mx.z + 1) {
 	    vec3 center;
 	    vec3 scale;
 	    bool cutx = false;
 	    bool cuty = false;
-	    if (ix == x - w) {
+	    if (ix == mi.x) {
+	      // x最小値のボクセル
 	      center.x = 1.0;
 	      scale.x = 2.0;
 	      cutx = true;
-	    } else if (ix == x + w) {
+	    } else if (ix == mx.x) {
+	      // x最大値のボクセル
 	      center.x = -1.0;
 	      scale.x = 2.0;
 	      cutx = true;
 	    }
-	    if (iy == y - h) {
+	    if (iy == mi.y) {
+	      // y最小値のボクセル
 	      center.y = 1.0;
 	      scale.y = 2.0;
 	      cuty = true;
-	    } else if (iy == y + h) {
+	    } else if (iy == mx.y) {
+	      // y最大値のボクセル
 	      center.y = -1.0;
 	      scale.y = 2.0;
 	      cuty = true;
 	    }
 	    bool cut = false;
-	    if ((cutx || cuty) && iz == d - 1) {
+	    if ((cutx || cuty) && iz == mx.z) {
+	      // xy全方位の端で、かつz最大値のボクセル
 	      center.z = -1.0;
 	      scale.z = 2.0;
 	      cut = true;
 	    } else if (cutx && cuty) {
+	      // xyの四方の隅
 	      cut = true;
 	    }
-	    set_bump(bx0, by0, bz0, ui(ix), ui(iy), ui(iz), cut, center,
+	    set_bump(blk.x, blk.y, blk.z, ix, iy, iz, cut, center,
 	      scale, 2.0, dir);
 	  }
 	}
@@ -354,9 +374,45 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
       for (const by: 0 .. 1u << ui(pat_size_l2.x)) {
 	for (const bx: 0 .. 1u << ui(pat_size_l2.y)) {
 	  // debug_log("bump xyz", x, y, z);
-	  uint const loop_lim = 20u;
+	  uint const loop_lim = 10u;
+	  /*
 	  for (const i: 0 .. loop_lim) {
 	    make_bump_one(bx, by, bz, bz);
+	  }
+	  */
+	  const typ = rnd->generate() % 1u;
+	  if (typ == 0u) {
+	    const div = rnd->generate() % 3u;
+	    const xfsz = ui(tile_size.x >> div);
+	    const yfsz = ui(tile_size.y >> div);
+	    for (const dx: 0 .. 1u << div) {
+	      for (const dy: 0 .. 1u << div) {
+		uvec3 mi;
+		uvec3 mx;
+		mi.x = xfsz * dx + 1u;
+		mx.x = xfsz * (dx + 1u) - 2u;
+		mi.y = yfsz * dy + 1u;
+		mx.y = yfsz * (dy + 1u) - 2u;
+		mi.z = 1u;
+		mx.z = ui(rnd->generate() % (ui(tile_size.z) - 3u)) + 1u;
+		if (div != 1u) {
+		  vec3 center;
+		  vec3 scale;
+		  for (const ix: mi.x .. mx.x + 1) {
+		    for (const iy: mi.y .. mx.y + 1) {
+		      for (const iz: mi.z .. mx.z + 1) {
+			set_bump(bx, by, bz, ix, iy, iz, false, center,
+			  scale, 2.0, bz);
+		      }
+		    }
+		  }
+		} else {
+		  set_bump_pos(make_uvec3(bx, by, bz), mi, mx, bz);
+		}
+	      }
+	    }
+	  } else if (typ == 1u) {
+	  } else if (typ == 2u) {
 	  }
 	}
       }

@@ -3,11 +3,13 @@ public import common -;
 public import meta m;
 public import pgl3d::texture::texture -;
 public import pgl3d::texture::voxel -;
+public import pgl3d::texture::editable_voxel -;
 public import pgl3d::engine::util -;
 public import pgl3d::engine::pglconfig -;
 public import pgl3d::engine::pglbase -;
 public import pgl3d::geometry::funcs -;
 public import pgl3d::drawer::drawer -;
+public import pgl3d::sdl::sdlutil -;
 public import demoapp::texture::tile -;
 public import text::serialize::compact_pod -;
 public import glm -;
@@ -48,16 +50,16 @@ prepare_triangles_texture_data(pgl3d_config const& cfg,
     string k = "triangles.voxtpat_pri." + to_string(i);
     textures->insert(k, make_ptr(t));
   }
-  for (const i, const& t: txs.vox.tpat_aux) {
-    string k = "triangles.voxtpat_aux." + to_string(i);
+  for (const i, const& t: txs.vox.tpat_sec) {
+    string k = "triangles.voxtpat_sec." + to_string(i);
     textures->insert(k, make_ptr(t));
   }
   for (const i, const& t: txs.vox.tmap_pri) {
     string k = "triangles.voxtmap_pri." + to_string(i);
     textures->insert(k, make_ptr(t));
   }
-  for (const i, const& t: txs.vox.tmap_aux) {
-    string k = "triangles.voxtmap_aux." + to_string(i);
+  for (const i, const& t: txs.vox.tmap_sec) {
+    string k = "triangles.voxtmap_sec." + to_string(i);
     textures->insert(k, make_ptr(t));
   }
   textures->insert("triangles.voxtile",
@@ -76,6 +78,7 @@ prepare_raycasting_texture_data(pgl3d_config const& cfg,
   const edit_mode = cfg.get("edit_mode", 0, 0, 1) != 0;
   {
     {
+      // サイズの合った保存データがあればロードする
       const& sz = txs.voxtmap_size_l2;
       string fn = "/build/edit_2_" + to_string(sz.x) + "_"
 	+ to_string(sz.y) + "_" + to_string(sz.z) + ".raw";
@@ -86,6 +89,7 @@ prepare_raycasting_texture_data(pgl3d_config const& cfg,
     }
   }
   if (txs.vox->tpat_edit->data_pri.empty()) {
+    // ロードできなかったら新規作成
     const uint tpat_miplevel_max = ui(
       fold_list{max}(0, txs.voxtile_size_l2));
     const uint tmap_miplevel_max = ui(
@@ -107,23 +111,52 @@ prepare_raycasting_texture_data(pgl3d_config const& cfg,
     txs.vox->tpat_edit->grid_size = make_uvec3(1u, 1u, 1u);
     /*
     ptr{texture_data} voxtmap_pri = make_ptr{texture_data}();
-    ptr{texture_data} voxtmap_aux = make_ptr{texture_data}();
+    ptr{texture_data} voxtmap_sec = make_ptr{texture_data}();
     ptr{texture_data} voxtpat_pri = make_ptr{texture_data}();
-    ptr{texture_data} voxtpat_aux = make_ptr{texture_data}();
+    ptr{texture_data} voxtpat_sec = make_ptr{texture_data}();
     */
     {
       mutable& voxtpat_pri = txs.vox->tpat_edit->data_pri[0];
-      mutable& voxtpat_aux = txs.vox->tpat_edit->data_sec[0];
+      mutable& voxtpat_sec = txs.vox->tpat_edit->data_sec[0];
       mutable& voxtmap_pri = txs.vox->tmap_edit->data_pri[0];
-      mutable& voxtmap_aux = txs.vox->tmap_edit->data_sec[0];
+      mutable& voxtmap_sec = txs.vox->tmap_edit->data_sec[0];
       debug_log("generate raw texture");
-      prepare_texture_data_3d_tpat(edit_mode, voxtpat_pri, voxtpat_aux,
+      prepare_texture_data_3d_tpat(edit_mode, voxtpat_pri, voxtpat_sec,
 	txs.voxtile_size_l2, txs.voxtpat_size_l2);
       debug_log("tpat done");
-      prepare_texture_data_3d_tmap(edit_mode, voxtmap_pri, voxtmap_aux,
+      prepare_texture_data_3d_tmap(edit_mode, voxtmap_pri, voxtmap_sec,
 	txs.voxtpat_size_l2, txs.voxtmap_size_l2);
       debug_log("tmap done");
       debug_log("tmap 0,0,1", to_hexstring(voxtmap_pri.get(0, 0, 1)));
+    }
+    {
+      // edit_common_*.raw があればロードする
+      string buf;
+      sdl_load_file("/build/edit_common_tpat.raw", buf);
+      if (!buf.empty()) {
+	debug_log("loaded common tpat");
+	*txs.vox->tpat_edit = from_string_compact_pod{texture_edit}(buf);
+      }
+      buf.clear();
+      sdl_load_file("/build/edit_common_tmpri.raw", buf);
+      if (!buf.empty()) {
+	debug_log("loaded common tmpri");
+	texture_data tmpri = from_string_compact_pod{texture_data}(buf);
+	const sz = map{uvec3, min}(tmpri.get_size_uvec3(),
+	  txs.vox->tmap_edit->data_pri[0].get_size_uvec3());
+	texture_data_copy_range(txs.vox->tmap_edit->data_pri[0], uvec3(),
+	  tmpri, uvec3(), sz);
+      }
+      buf.clear();
+      sdl_load_file("/build/edit_common_tmsec.raw", buf);
+      if (!buf.empty()) {
+	debug_log("loaded common tmsec");
+	texture_data tmsec = from_string_compact_pod{texture_data}(buf);
+	const sz = map{uvec3, min}(tmsec.get_size_uvec3(),
+	  txs.vox->tmap_edit->data_sec[0].get_size_uvec3());
+	texture_data_copy_range(txs.vox->tmap_edit->data_sec[0], uvec3(),
+	  tmsec, uvec3(), sz);
+      }
     }
     /*
     {
@@ -164,6 +197,7 @@ prepare_raycasting_texture_data(pgl3d_config const& cfg,
       texture_data const& tsrcax, texture_data mutable& tdest,
       texture_data mutable& tdestax, uint miplevel, uint tile_size_l2,
       texture_data const& tpat_mipmax, texture_data const& tpatax_mipmax)
+      // TODO: remove
     {
       tdest.set_size_l2(tsrc.get_width_l2() - 1, tsrc.get_height_l2() - 1,
 	tsrc.get_depth_l2() - 1);
@@ -226,59 +260,62 @@ prepare_raycasting_texture_data(pgl3d_config const& cfg,
 	}
       }
     }
+    tiled_voxel_texture_update_mipmap(*txs.vox);
+    /*
     // tpatのmipmapを作る
     {
       // txs.vox.tpat_pri.push_back(*voxtpat_pri); // tpat pri miplevel 0
-      // txs.vox.tpat_aux.push_back(*voxtpat_aux); // tpat aux miplevel 0
+      // txs.vox.tpat_sec.push_back(*voxtpat_sec); // tpat aux miplevel 0
       // mutable tex_pri = voxtpat_pri;
-      // mutable tex_aux = voxtpat_aux;
+      // mutable tex_sec = voxtpat_sec;
       mutable& voxtpat_pri = txs.vox->tpat_edit->data_pri[0];
-      mutable& voxtpat_aux = txs.vox->tpat_edit->data_sec[0];
+      mutable& voxtpat_sec = txs.vox->tpat_edit->data_sec[0];
       for (const miplevel: 0 .. tpat_miplevel_max) {
 	debug_log("tpat miplevel", miplevel);
 	// const tex_pri_m = make_ptr{texture_data}();
-	// const tex_aux_m = make_ptr{texture_data}();
+	// const tex_sec_m = make_ptr{texture_data}();
 	mutable& tex_pri = txs.vox->tpat_edit->data_pri[miplevel];
 	mutable& tex_sec = txs.vox->tpat_edit->data_sec[miplevel];
 	mutable& tex_pri_m = txs.vox->tpat_edit->data_pri[miplevel + 1];
 	mutable& tex_sec_m = txs.vox->tpat_edit->data_sec[miplevel + 1];
 	texture_make_mipmap(tex_pri, tex_sec, tex_pri_m, tex_sec_m,
-	  miplevel, tpat_miplevel_max, voxtpat_pri, voxtpat_aux);
+	  miplevel, tpat_miplevel_max, voxtpat_pri, voxtpat_sec);
 	// txs.vox.tpat_pri.push_back(*tex_pri_m);
-	// txs.vox.tpat_aux.push_back(*tex_aux_m);
+	// txs.vox.tpat_sec.push_back(*tex_sec_m);
 	// tex_pri = tex_pri_m;
-	// tex_aux = tex_aux_m;
+	// tex_sec = tex_sec_m;
       }
     }
     // tmapのmipmapを作る
     {
       mutable& voxtmap_pri = txs.vox->tmap_edit->data_pri[0];
-      mutable& voxtmap_aux = txs.vox->tmap_edit->data_sec[0];
+      mutable& voxtmap_sec = txs.vox->tmap_edit->data_sec[0];
       const& tpat_pri_mipmax =
 	txs.vox->tpat_edit->data_pri[txs.vox->tpat_edit->data_pri.size() - 1];
-      const tpat_aux_mipmax =
+      const tpat_sec_mipmax =
 	txs.vox->tpat_edit->data_sec[txs.vox->tpat_edit->data_sec.size() - 1];
 	// tpatの最後のmipmapはtile1個の大きさ
       // txs.vox.tmap_pri.push_back(*voxtmap_pri); // tmap pri miplevel 0
-      // txs.vox.tmap_aux.push_back(*voxtmap_aux); // tmap aux miplevel 0
+      // txs.vox.tmap_sec.push_back(*voxtmap_sec); // tmap aux miplevel 0
       // mutable tex_pri = voxtmap_pri;
-      // mutable tex_aux = voxtmap_aux;
+      // mutable tex_sec = voxtmap_sec;
       for (const miplevel: 0 .. tmap_miplevel_max) {
 	debug_log("tmap miplevel", miplevel);
 	// const tex_pri_m = make_ptr{texture_data}();
-	// const tex_aux_m = make_ptr{texture_data}();
+	// const tex_sec_m = make_ptr{texture_data}();
 	mutable& tex_pri = txs.vox->tmap_edit->data_pri[miplevel];
 	mutable& tex_sec = txs.vox->tmap_edit->data_sec[miplevel];
 	mutable& tex_pri_m = txs.vox->tmap_edit->data_pri[miplevel + 1];
 	mutable& tex_sec_m = txs.vox->tmap_edit->data_sec[miplevel + 1];
 	texture_make_mipmap(tex_pri, tex_sec, tex_pri_m, tex_sec_m,
-	  miplevel, tmap_miplevel_max, tpat_pri_mipmax, tpat_aux_mipmax);
+	  miplevel, tmap_miplevel_max, tpat_pri_mipmax, tpat_sec_mipmax);
 	// txs.vox.tmap_pri.push_back(*tex_pri_m);
-	// txs.vox.tmap_aux.push_back(*tex_aux_m);
+	// txs.vox.tmap_sec.push_back(*tex_sec_m);
 	// tex_pri = tex_pri_m;
-	// tex_aux = tex_aux_m;
+	// tex_sec = tex_sec_m;
       }
     }
+    */
     for (const i, mutable& pri: txs.vox->tpat_edit->data_pri) {
       mutable& aux = txs.vox->tpat_edit->data_sec[i];
       prepare_voxel_tpat(pri, aux, tpat_miplevel_max, static_cast{uint}(i),

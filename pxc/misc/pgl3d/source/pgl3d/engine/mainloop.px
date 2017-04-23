@@ -45,13 +45,19 @@ frame_statistics()
   public ticks_t ticks_sum;
   public ticks_t ticks_sum_saved;
   init();
+  public function uint get_ticks() {
+    return SDL_GetTicks();
+  }
   function void init() {
-    const t = SDL_GetTicks();
+    const t = get_ticks();
     for (const i, mutable& e : ticks) {
       e = t;
     }
   }
-  public function void save_ticks(size_t idx, uint v) {
+  public function void save_ticks(size_t idx) {
+    save_ticks_value(idx, get_ticks());
+  }
+  public function void save_ticks_value(size_t idx, uint v) {
     const prev_tick = ticks[idx == 0 ? ticks.size() - 1 : idx - 1];
     mutable& cur_tick = ticks[idx];
     cur_tick = v;
@@ -60,7 +66,7 @@ frame_statistics()
   public function void measure()
   {
     ++frames;
-    uint t = SDL_GetTicks();
+    uint t = get_ticks();
     if (t - tprevsec >= 1000) {
       const seconds = cast_float(t - tprevsec) / 1000.0;
       fps = cast_float(frames) / seconds;
@@ -386,10 +392,10 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
       do_commands();
     }
     app->on_frame(pgs.cam);
-    fr.save_ticks(0, SDL_GetTicks());
+    fr.save_ticks(0);
     if (paused) {
       SDL_Delay(100);
-      fr.tprevsec = SDL_GetTicks();
+      fr.tprevsec = fr.get_ticks();
       return done;
     }
     /* motion and prepare instance data */
@@ -402,7 +408,7 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
 	motion_thr.some->finish();
 	{
 	  mutable& mts = *motion_thr.some->shared;
-	  // fr.save_ticks(1, SDL_GetTicks());
+	  // fr.save_ticks(1, fr.get_ticks());
 	  cam_drawing_frame = mts.cam;
 	  mts.cam = pgs.cam;
 	  mts.frame_speed_mul = frctl.frame_speed_mul;
@@ -481,26 +487,26 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
       */
 // FIXME : here
     }
-    fr.save_ticks(1, SDL_GetTicks());
+    fr.save_ticks(1);
     pgs.frame_begin(local_whole_instances);
     {
       /* draw frame */
       varray{uint} tick_draw;
       tick_draw = pgs.draw_frame(local_whole_instances, cam_drawing_frame);
       if (tick_draw.size() >= 2) {
-	fr.save_ticks(2, tick_draw[0]);
-	fr.save_ticks(3, tick_draw[1]);
+	fr.save_ticks_value(2, tick_draw[0]);
+	fr.save_ticks_value(3, tick_draw[1]);
       } else {
-	fr.save_ticks(2, SDL_GetTicks());
-	fr.save_ticks(3, SDL_GetTicks());
+	fr.save_ticks(2);
+	fr.save_ticks(3);
       }
-      fr.save_ticks(4, SDL_GetTicks());
+      fr.save_ticks(4);
       fr.measure();
     }
     frctl.rate_control();
-    fr.save_ticks(5, SDL_GetTicks());
+    fr.save_ticks(5);
     SDL_GL_SwapWindow(sdlc.sdl_window);
-    fr.save_ticks(6, SDL_GetTicks());
+    fr.save_ticks(6);
     if (frctl.vsync != 0 && dummy_flip == 0) {
       // vsync有効でdummy_flipが0のときは自動でdummy_flipを入れる
       int ti = static_cast{int}(SDL_GetTicks()) * 60;
@@ -535,10 +541,13 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
     pgs.frame_end();
     // debug_log("swapwindow");
     if (glfinish) {
-      // debug_log("glfinish\n");
-      // glFinish();
+      // debug_log("glfinish");
+      // glFlush();
+      glFinish();
+      // vsync有効のときglFinishを入れたほうが60fpsぎりぎり間に合うばあいに
+      // フレームが乱れなくなる
     }
-    fr.save_ticks(7, SDL_GetTicks());
+    fr.save_ticks(7);
     // if (scene_next_flag) { frctl.start(); }
     return done;
   }
