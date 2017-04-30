@@ -394,7 +394,7 @@ private struct app_impl()
   // public varray{bool} prev_joy_buttons;
   public option{ptr{edit_mode_i}} edit_mode;
   public bool raycast_cull_front = false;
-  public bool raycast_sort = false;
+  public int raycast_layer = 0;
   public bool enable_dbgui = false;
   public textures_ptr const txs = make_textures_ptr();
   public tptr{tiled_voxel_texture} const tvt
@@ -455,7 +455,7 @@ public multithreaded struct demoapp_scene_shared(io const& sys0)
   public position_angle posang;
   public glm::vec3 pos_delta;
   public bool scene_next_flag;
-  public bool raycast_sort;
+  public int raycast_layer;
   public bool engine_status = true;
   public float light_on;
   public glm::vec2 light;
@@ -912,9 +912,10 @@ private function varray{ptr{pgldrawer_export_i}} init_drawers(
 {
   sdl_log("app_init_drawers");
   app.raycast_cull_front = sconf.conf.get("raycast_cull_front", 0, 0, 1) != 0;
-  app.raycast_sort = sconf.conf.get("raycast_sort", 0, 0, 1) != 0;
+  app.raycast_layer = sconf.conf.get("raycast_layer", 15, 0, 63);
+    // 0のときソートしない
   app.enable_dbgui = sconf.conf.get("enable_dbgui", 0, 0, 1) != 0;
-  app.scene_shared->raycast_sort = app.raycast_sort;
+  app.scene_shared->raycast_layer = app.raycast_layer;
   const t0 = get_time(io::system);
   prepare_triangles_texture_data(sconf.conf, app.txs, app.tvt);
 
@@ -922,8 +923,8 @@ private function varray{ptr{pgldrawer_export_i}} init_drawers(
   *ds.tvt = *app.tvt;
 
   varray{ptr{pgldrawer_export_i}} r;
-  if (app.raycast_sort) {
-    int ssid = 7;
+  if (app.raycast_layer != 0) {
+    int ssid = app.raycast_layer;
     for (; ssid > 0; --ssid) {
       r.push_back(make_drawer_triangles(sconf, ds, 1, ssid));
       debug_log("drawer ssid", ssid);
@@ -1960,7 +1961,7 @@ scene_control_step(scene_control mutable& sctl,
     const vbid = sn.joint_id.vbid;
     const vsid = sn.joint_id.vsid;
     if (vbid != vbid_invalid() && vsid != vsid_invalid()) {
-      if (ss.raycast_sort && vbid >= ss.rdi.subdrawer_vbid_min &&
+      if (ss.raycast_layer != 0 && vbid >= ss.rdi.subdrawer_vbid_min &&
 	vbid <= ss.rdi.subdrawer_vbid_max) {
 	// debug_log("scene_control_step push robj vbid=", vbid);
 	if (robjs.push_object(ss.rdi, pjinfo, sn)) {

@@ -371,8 +371,8 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
       throw runtime_error_template{"3d_tpat"}("usz is too small");
     }
     for (const bz: 0 .. 6u) {
-      for (const by: 0 .. 1u << ui(pat_size_l2.x)) {
-	for (const bx: 0 .. 1u << ui(pat_size_l2.y)) {
+      for (const by: 0 .. 1u << ui(pat_size_l2.y)) {
+	for (const bx: 0 .. 1u << ui(pat_size_l2.x)) {
 	  // debug_log("bump xyz", x, y, z);
 	  uint const loop_lim = 10u;
 	  /*
@@ -382,7 +382,7 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
 	  */
 	  const typ = rnd->generate() % 1u;
 	  if (typ == 0u) {
-	    const div = rnd->generate() % 3u;
+	    const div = rnd->generate() % 4u;
 	    const xfsz = ui(tile_size.x >> div);
 	    const yfsz = ui(tile_size.y >> div);
 	    for (const dx: 0 .. 1u << div) {
@@ -393,6 +393,8 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
 		mx.x = xfsz * (dx + 1u) - 2u;
 		mi.y = yfsz * dy + 1u;
 		mx.y = yfsz * (dy + 1u) - 2u;
+		mx.x = max(mi.x, mx.x);
+		mx.y = max(mi.y, mx.y);
 		mi.z = 1u;
 		mx.z = ui(rnd->generate() % (ui(tile_size.z) - 3u)) + 1u;
 		if (div != 1u) {

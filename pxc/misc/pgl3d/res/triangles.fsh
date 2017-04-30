@@ -361,6 +361,13 @@ vec4 get_sampler_sm(int i, vec2 p)
 
 void main(void)
 {
+/*
+  <%if><%eq><%ssubtype/>7<%/> discard; <%/>
+  <%if><%eq><%ssubtype/>6<%/> discard; <%/>
+  <%if><%eq><%ssubtype/>5<%/> discard; <%/>
+  <%if><%eq><%ssubtype/>4<%/> discard; <%/>
+  <%if><%eq><%ssubtype/>3<%/> discard; <%/>
+*/
   vec4 color = vec4(0.0, 0.0, 0.0, 1.0);
   vec3 nor = vary_normal;
   vec3 rel_camera_pos = camera_pos - vary_position;
@@ -481,15 +488,29 @@ void main(void)
 	miplevel);
     }
     // if (hit == 1)  { <%fragcolor/> = vec4(1.0, 0.0, 0.0, 1.0); return; }
+    /*
+    <%if><%eq><%ssubtype/>1<%/>
+    if (hit >= 0) { <%fragcolor/> = vec4(0.5, 0.5, 1.0, 1.0); return; }
+    <%/>
     <%if><%eq><%ssubtype/>2<%/>
-    // if (hit >= 0)  { <%fragcolor/> = vec4(1.0, 0.0, 0.0, 1.0); return; }
+    if (hit >= 0) { <%fragcolor/> = vec4(1.0, 0.5, 0.0, 1.0); return; }
+    <%/>
+    <%if><%eq><%ssubtype/>3<%/>
+    if (hit >= 0) { <%fragcolor/> = vec4(0.5, 0.5, 1.0, 1.0); return; }
     <%/>
     <%if><%eq><%ssubtype/>4<%/>
-    // if (hit >= 0) { <%fragcolor/> = vec4(1.0, 1.0, 0.0, 1.0); return; }
+    if (hit >= 0) { <%fragcolor/> = vec4(1.0, 1.0, 0.0, 1.0); return; }
     <%/>
     <%if><%eq><%ssubtype/>5<%/>
-    // if (hit >= 0) { <%fragcolor/> = vec4(1.0, 0.0, 1.0, 1.0); return; }
+    if (hit >= 0) { <%fragcolor/> = vec4(1.0, 0.0, 1.0, 1.0); return; }
     <%/>
+    <%if><%eq><%ssubtype/>6<%/>
+    if (hit >= 0) { <%fragcolor/> = vec4(1.0, 0.0, 1.0, 1.0); return; }
+    <%/>
+    <%if><%eq><%ssubtype/>7<%/>
+    if (hit >= 0) { <%fragcolor/> = vec4(1.0, 1.0, 1.0, 1.0); return; }
+    <%/>
+    */
     /*
     hit = raycast_waffle(pos, fragpos, camera_local,
       aabb_min, aabb_max, 0);

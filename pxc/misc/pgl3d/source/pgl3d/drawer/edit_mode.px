@@ -1238,6 +1238,9 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   private bool copied;
   private glm::uvec3 find_empty_cur; // 空のタイルを探すのに使う
   private string message;
+  private SDL_Scancode prev_key; // 同じキーを繰り返したかどうか判定するのに使う
+  private uint prev_modmask;
+  private uint prev_key_repeat;
   init();
   private function void init()
   {
@@ -1312,12 +1315,16 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     message = "";
     cursor_move_r = glm::vec3();
     SDL_Scancode key = static_cast{SDL_Scancode}(scancode);
-    const mod_shift = (modmask & 15) == 1;
-    const mod_rshift = (modmask & 15) == 2;
-    const mod_ctrl = (modmask & 15) == 4;
-    const mod_rctrl = (modmask & 15) == 8;
-    const mod_cs = (modmask & 15) == 5;
-    const mod_rcs = (modmask & 15) == 10;
+    prev_key_repeat = (prev_key == key && prev_modmask == modmask)
+      ? prev_key_repeat + 1u : 0u;
+    prev_key = key;
+    prev_modmask = modmask;
+    const mod_shift = (modmask & 1) == 1;
+    const mod_rshift = (modmask & 2) == 2;
+    const mod_ctrl = (modmask & 4) == 4;
+    const mod_rctrl = (modmask & 8) == 8;
+    const mod_cs = (modmask & 5) == 5;
+    const mod_rcs = (modmask & 10) == 10;
     const cursor_spd = mod_shift ? 16 : 1;
     if (key == SDL_SCANCODE_F12) {
       save_state();
@@ -1326,7 +1333,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       sync_gl_mipmap_all(*emt);
     } else if (key == SDL_SCANCODE_1) {
       if (mod_shift) {
-	change_fill_type(edit_fill_type_blank);
+	change_fill_type(edit_fill_type_blank, mod_ctrl, prev_key_repeat);
       } else {
 	edit_params_mode = edit_params_mode_none;
 	update_cursor_color();
@@ -1334,7 +1341,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       }
     } else if (key == SDL_SCANCODE_2) {
       if (mod_shift) {
-	change_fill_type(edit_fill_type_wall);
+	change_fill_type(edit_fill_type_wall, mod_ctrl, prev_key_repeat);
       }
       reset_edit_params();
       edit_params_mode = edit_params_mode_color;
@@ -1342,7 +1349,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       // message = "entering edit-color mode";
     } else if (key == SDL_SCANCODE_3) {
       if (mod_shift) {
-	change_fill_type(edit_fill_type_plane);
+	change_fill_type(edit_fill_type_plane, mod_ctrl, prev_key_repeat);
       }
       reset_edit_params();
       edit_params_mode = edit_params_mode_plane;
@@ -1350,7 +1357,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       // message = "entering edit-plane-params mode";
     } else if (key == SDL_SCANCODE_4) {
       if (mod_shift) {
-	change_fill_type(edit_fill_type_sphere);
+	change_fill_type(edit_fill_type_sphere, mod_ctrl, prev_key_repeat);
       }
       reset_edit_params();
       edit_params_mode = edit_params_mode_sphere_1;
@@ -1383,78 +1390,78 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       } else if (key == SDL_SCANCODE_H) {
 	if (mod_rcs) {
 	  cdir.x = -cdir.x;
-	} else if (mod_ctrl) {
-	  rotate_range(glm::make_imat3(-1, 0, 0, 0, 1, 0, 0, 0, 1));
 	} else if (mod_cs) {
 	  const ssz = ttev->get_cursor_range().second;
 	  if (ssz.y == ssz.z) {
 	    rotate_range(glm::make_imat3(1, 0, 0, 0, 0, -1, 0, 1, 0));
 	  }
+	} else if (mod_ctrl) {
+	  rotate_range(glm::make_imat3(-1, 0, 0, 0, 1, 0, 0, 0, 1));
 	} else {
 	  move_cursor(-cdir.x * cursor_spd, 0, 0, cursor_move_r);
 	}
       } else if (key == SDL_SCANCODE_L) {
 	if (mod_rcs) {
 	  cdir.x = -cdir.x;
-	} else if (mod_ctrl) {
-	  rotate_range(glm::make_imat3(-1, 0, 0, 0, 1, 0, 0, 0, 1));
 	} else if (mod_cs) {
 	  const ssz = ttev->get_cursor_range().second;
 	  if (ssz.y == ssz.z) {
 	    rotate_range(glm::make_imat3(1, 0, 0, 0, 0, 1, 0, -1, 0));
 	  }
+	} else if (mod_ctrl) {
+	  rotate_range(glm::make_imat3(-1, 0, 0, 0, 1, 0, 0, 0, 1));
 	} else {
 	  move_cursor(cdir.x * cursor_spd, 0, 0, cursor_move_r);
 	}
       } else if (key == SDL_SCANCODE_J) {
 	if (mod_rcs) {
 	  cdir.y = -cdir.y;
-	} else if (mod_ctrl) {
-	  rotate_range(glm::make_imat3(1, 0, 0, 0, -1, 0, 0, 0, 1));
 	} else if (mod_cs) {
 	  const ssz = ttev->get_cursor_range().second;
 	  if (ssz.z == ssz.x) {
 	    rotate_range(glm::make_imat3(0, 0, 1, 0, 1, 0, -1, 0, 0));
 	  }
+	} else if (mod_ctrl) {
+	  rotate_range(glm::make_imat3(1, 0, 0, 0, -1, 0, 0, 0, 1));
 	} else {
 	  move_cursor(0, -cdir.y * cursor_spd, 0, cursor_move_r);
 	}
       } else if (key == SDL_SCANCODE_K) {
 	if (mod_rcs) {
 	  cdir.y = -cdir.y;
-	} else if (mod_ctrl) {
-	  rotate_range(glm::make_imat3(1, 0, 0, 0, -1, 0, 0, 0, 1));
 	} else if (mod_cs) {
 	  const ssz = ttev->get_cursor_range().second;
 	  if (ssz.z == ssz.x) {
 	    rotate_range(glm::make_imat3(0, 0, -1, 0, 1, 0, 1, 0, 0));
 	  }
+	} else if (mod_ctrl) {
+	  rotate_range(glm::make_imat3(1, 0, 0, 0, -1, 0, 0, 0, 1));
 	} else {
 	  move_cursor(0, cdir.y * cursor_spd, 0, cursor_move_r);
 	}
       } else if (key == SDL_SCANCODE_N) {
 	if (mod_rcs) {
 	  cdir.z = -cdir.z;
-	} else if (mod_ctrl) {
-	  rotate_range(glm::make_imat3(1, 0, 0, 0, 1, 0, 0, 0, -1));
 	} else if (mod_cs) {
 	  const ssz = ttev->get_cursor_range().second;
 	  if (ssz.x == ssz.y) {
 	    rotate_range(glm::make_imat3(0, -1, 0, 1, 0, 0, 0, 0, 1));
 	  }
+	} else if (mod_ctrl) {
+	  rotate_range(glm::make_imat3(1, 0, 0, 0, 1, 0, 0, 0, -1));
 	} else {
 	  move_cursor(0, 0, -cdir.z * cursor_spd, cursor_move_r);
 	}
       } else if (key == SDL_SCANCODE_P) {
 	if (mod_rcs) {
 	  cdir.z = -cdir.z;
-	} else if (mod_ctrl) {
-	  rotate_range(glm::make_imat3(1, 0, 0, 0, 1, 0, 0, 0, -1));
 	} else if (mod_cs) {
 	  const ssz = ttev->get_cursor_range().second;
 	  if (ssz.x == ssz.y) {
 	    rotate_range(glm::make_imat3(0, 1, 0, -1, 0, 0, 0, 0, 1));
 	  }
+	} else if (mod_ctrl) {
+	  rotate_range(glm::make_imat3(1, 0, 0, 0, 1, 0, 0, 0, -1));
 	} else {
 	  move_cursor(0, 0, cdir.z * cursor_spd, cursor_move_r);
 	}
@@ -2001,7 +2008,6 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     copy_value();
     const cur = ttev->get_cursor_range();
     const sz = cur.second;
-    const hsz = map{uvec3, operator::div}(sz, make_uvec3(2, 2, 2));
     bool has_plane = false;
     bool has_sphere = false;
     plane_param pp;
@@ -2016,13 +2022,16 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
 	  const v = copy_data.tex_pri.get(x, y, z);
 	  if (is_plane_node(v)) {
 	    pp = decode_plane_node(v);
-	    const offset = make_ivec3(si(x), si(y), si(z)) - to_ivec3(hsz);
-	    pp.dist += dot_int(pp.nor, offset) * 2;
+	    const offset = make_ivec3(si(x*2+1), si(y*2+1), si(z*2+1))
+	      - to_ivec3(sz);
+	    pp.dist += dot_int(pp.nor, offset);
 	    has_plane = true;
 	  } else if (is_sphere_node(v)) {
 	    sp = decode_sphere_node(v);
-	    const offset = make_ivec3(si(x), si(y), si(z)) - to_ivec3(hsz);
-	    sp.center += map{ivec3, operator::mul}(offset, sp.scale);
+	    const offset2 = make_ivec3(
+	      si(x * 2 + 1), si(y * 2 + 1), si(z * 2 + 1))
+	      - to_ivec3(sz); // offset値の2倍
+	    sp.center += map{ivec3, operator::mul}(offset2, sp.scale) / 2;
 	    has_sphere = true;
 	  }
 	  if (!is_space_voxel(v) && !is_node_reference(v)) {
@@ -2040,13 +2049,14 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     edit_color_param = cp;
     // debug_log("reset_edit_params", copy_data);
   }
-  private function void change_fill_type(edit_fill_type_t edit_fill_type)
+  private function void change_fill_type(edit_fill_type_t edit_fill_type,
+    bool mod_ctrl, uint repeat)
   {
     if (edit_fill_type == edit_fill_type_wall) {
       fill_range_value(255u << 24u, 0x00808080u, false);
       message = "change fill type: filled";
     } else if (edit_fill_type == edit_fill_type_plane) {
-      edit_plane_param = plane_param();
+      edit_plane_param = make_plane_param_from_cursor(mod_ctrl, repeat);
       fill_range_plane(edit_plane_param, true);
       message = "change fill type: plane";
     } else if (edit_fill_type == edit_fill_type_sphere) {
@@ -2057,6 +2067,66 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       fill_range_value(0u, 0u, true);
     }
     // debug_log("new fill type", edit_fill_type);
+  }
+  private function plane_param make_plane_param_from_cursor(bool mod_ctrl,
+    uint repeat) const
+  {
+    plane_param p;
+    const cursor = ttev->get_cursor_pos();
+    mutable cdir = to_ivec3(cursor.first) - to_ivec3(cursor.second);
+    // サイズは各軸+1。ただし終点と始点が一致するときはむきがわからない
+    cdir.x += cdir.x >= 0 ? 1 : -1;
+    cdir.y += cdir.y >= 0 ? 1 : -1;
+    cdir.z += cdir.z >= 0 ? 1 : -1;
+    if (!mod_ctrl) {
+      // どの軸とも平行でない平面で切断
+      // キーリピートされた場合は向きを反転
+      if ((repeat & 1u) != 0u) {
+	cdir.x = -cdir.x;
+      }
+      if ((repeat & 2u) != 0u) {
+	cdir.y = -cdir.y;
+      }
+      if ((repeat & 4u) != 0u) {
+	cdir.z = -cdir.z;
+      }
+      const sgn = (cdir.x > 0) ^ (cdir.y > 0) ^ (cdir.z > 0) ? -1 : 1;
+      p.nor = make_ivec3(cdir.y * cdir.z, cdir.z * cdir.x, cdir.x * cdir.y);
+      p.nor *= sgn;
+      const di = gcd(gcd(abs(p.nor.x), abs(p.nor.y)), abs(p.nor.z));
+      p.nor /= di;
+      // p.clamp_param();
+      p.dist = abs(cdir.x) * abs(cdir.y) * abs(cdir.z) / di;
+      // p.clamp_param();
+      debug_log("pp cdir=", cdir, " p=", p);
+    } else {
+      // 軸に平行な平面で切断
+      const rep = repeat % 12;
+      const rep1 = (rep & 1u) == 1u;
+      const rep2 = (rep & 2u) == 2u;
+      if (rep < 4) {
+	cdir.x = 0;
+	cdir.y = rep1 ? -cdir.y : cdir.y;
+	cdir.z = rep2 ? -cdir.z : cdir.z;
+	p.nor = make_ivec3(0, cdir.z, cdir.y);
+	p.nor /= gcd(abs(p.nor.y), abs(p.nor.z));
+      } else if (rep < 8) {
+	cdir.y = 0;
+	cdir.z = rep1 ? -cdir.z : cdir.z;
+	cdir.x = rep2 ? -cdir.x : cdir.x;
+	p.nor = make_ivec3(cdir.z, 0, cdir.x);
+	p.nor /= gcd(abs(p.nor.z), abs(p.nor.x));
+      } else {
+	cdir.z = 0;
+	cdir.x = rep1 ? -cdir.x : cdir.x;
+	cdir.y = rep2 ? -cdir.y : cdir.y;
+	p.nor = make_ivec3(cdir.y, cdir.x, 0);
+	p.nor /= gcd(abs(p.nor.x), abs(p.nor.y));
+      }
+      p.dist = 0;
+      debug_log("pp cdir=", cdir, " p=", p);
+    }
+    return p;
   }
   private function {f} void fill_range_func(bool clear_pri, bool clear_sec)
   {
@@ -2114,7 +2184,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   {
     const cur = ttev->get_cursor_range();
     const copy_size = cur.second;
-    const center = map{uvec3, operator::div}(copy_size, make_uvec3(2, 2, 2));
+    debug_log("fill_range_plane", copy_size);
     function void ffunc(copy_data_type mutable& data, uint x, uint y, uint z)
     {
       const ov = data.tex_pri.get(x, y, z);
@@ -2122,10 +2192,10 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
 	return;
       }
       const v = make_plane_node(p, make_ivec3(
-	si(x) - si(center.x),
-	si(y) - si(center.y),
-	si(z) - si(center.z)),
-	2);
+	si(x * 2 + 1) - si(copy_size.x),
+	si(y * 2 + 1) - si(copy_size.y),
+	si(z * 2 + 1) - si(copy_size.z)),
+	1);
       data.tex_pri.set(x, y, z, v);
       if (clear) {
 	data.tex_sec.set(x, y, z, 0x00808080u);
@@ -2138,7 +2208,9 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   {
     const cur = ttev->get_cursor_range();
     const copy_size = cur.second;
+    /*
     const center = map{uvec3, operator::div}(copy_size, make_uvec3(2, 2, 2));
+    */
     function void ffunc(copy_data_type mutable& data, uint x, uint y, uint z)
     {
       const ov = data.tex_pri.get(x, y, z);
@@ -2146,10 +2218,17 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
 	return;
       }
       const v = make_sphere_node(p, make_ivec3(
+	si(x * 2 + 1) - si(copy_size.x),
+	si(y * 2 + 1) - si(copy_size.y),
+	si(z * 2 + 1) - si(copy_size.z)),
+	1, modifier);
+      /*
+      const v = make_sphere_node(p, make_ivec3(
 	si(x) - si(center.x),
 	si(y) - si(center.y),
 	si(z) - si(center.z)),
 	2, modifier);
+      */
       data.tex_pri.set(x, y, z, v);
       if (clear) {
 	data.tex_sec.set(x, y, z, 0x00808080u);
@@ -2253,5 +2332,21 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   {
     ttev->tmap_edit_set(pos, texture_value_index_primary, value);
   }
+}
+
+private function int gcd(int x, int y)
+{
+  if (x < y) {
+    swap(x, y);
+  }
+  while (true) {
+    const d = x % y;
+    if (d == 0) {
+      break;
+    }
+    x = y;
+    y = d;
+  }
+  return y;
 }
 

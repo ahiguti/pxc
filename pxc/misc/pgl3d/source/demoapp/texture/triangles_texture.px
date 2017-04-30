@@ -17,7 +17,7 @@ public import glm -;
 struct demoapp_textures(bool edit_mode, int mw, int mh, int md)
 {
   public ivec3 const voxtile_size_l2 = make_ivec3(4, 4, 4);
-  public ivec3 const voxtpat_size_l2 = make_ivec3(4, 4, 4);
+  public ivec3 const voxtpat_size_l2 = make_ivec3(5, 5, 5);
   public ivec3 const voxtmap_size_l2 = make_ivec3(mw, mh, md);
   // 3d texture, voxel raycasting
   public tptr{tiled_voxel_texture} vox = make_tptr{tiled_voxel_texture}();
@@ -203,9 +203,9 @@ prepare_raycasting_texture_data(pgl3d_config const& cfg,
 	tsrc.get_depth_l2() - 1);
       tdestax.set_size_l2(tsrc.get_width_l2() - 1, tsrc.get_height_l2() - 1,
 	tsrc.get_depth_l2() - 1);
-      for (const x: 0 .. tdest.get_width()) {
+      for (const z: 0 .. tdest.get_depth()) {
 	for (const y: 0 .. tdest.get_height()) {
-	  for (const z: 0 .. tdest.get_depth()) {
+	  for (const x: 0 .. tdest.get_width()) {
 	    uint cnt = 0;
 	    uvec3 color;
 	    for (const i: 0u .. 8u) {
@@ -395,13 +395,13 @@ function void prepare_voxel_tpat(texture_data mutable& tpat,
   texture_data tile;
   const sh = miplevel_max - miplevel;
   tile.set_size_l2(sh, sh, sh);
-  for (const bx: 0 .. tpat.get_width() >> sh) {
+  for (const bz: 0 .. tpat.get_depth() >> sh) {
     for (const by: 0 .. tpat.get_height() >> sh) {
-      for (const bz: 0 .. tpat.get_depth() >> sh) {
+      for (const bx: 0 .. tpat.get_width() >> sh) {
         // copy to tile
-        for (const x: 0 .. 1u << sh) {
+	for (const z: 0 .. 1u << sh) {
           for (const y: 0 .. 1u << sh) {
-            for (const z: 0 .. 1u << sh) {
+	    for (const x: 0 .. 1u << sh) {
               tile.set(x, y, z, tpat.get(
                 (bx << sh) + x,
                 (by << sh) + y,
@@ -414,9 +414,9 @@ function void prepare_voxel_tpat(texture_data mutable& tpat,
 	  set_distance(enable_short_circuit, tile);
 	}
         // copy back to tpat
-        for (const x: 0 .. 1u << sh) {
+	for (const z: 0 .. 1u << sh) {
           for (const y: 0 .. 1u << sh) {
-            for (const z: 0 .. 1u << sh) {
+	    for (const x: 0 .. 1u << sh) {
               tpat.set(
                 (bx << sh) + x,
                 (by << sh) + y,
