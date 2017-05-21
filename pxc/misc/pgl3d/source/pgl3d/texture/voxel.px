@@ -470,15 +470,68 @@ public threaded function plane_param decode_plane_node(uint v)
   return p;
 }
 
-public threaded function uint encode_plane_node(plane_param const& pp)
+private threaded function int mul_div(int a, int m, int d)
 {
+  // a * m / d 四捨五入
+  return (a * m + d / 2) / d;
+}
+
+private threaded function void fit_plane_param(plane_param mutable& pp)
+{
+  // xyzは-7から+7まで有効
+  // dは-48から+48まで有効
   const& n = pp.nor;
+  const nz = to_vec3(n).normalize();
+  int max_xyz = max(max(abs(n.x), abs(n.y)), abs(n.z));
+  if (max_xyz <= 7) {
+    return;
+  }
+  threaded function void modify(int v, int mutable& a) {
+    mutable a1 = mul_div(a, v, max_xyz);
+    if (a1 == 0) {
+      a1 = (a > 0) ? 1 : ((a < 0) ? -1 : 0);
+    }
+    a = a1;
+  }
+  int v;
+  int best_v = 0;
+  float best_val = 0.0f;
+  ivec3 best_nor;
+  // 7から1まで縮小してみて、一番元のベクトルと近いものを採用
+  for (v = 7; v != 0; --v) {
+    mutable n1 = n;
+    modify(v, n1.x);
+    modify(v, n1.y);
+    modify(v, n1.z);
+    const n1z = to_vec3(n1).normalize();
+    const p = dot(nz, n1z);
+    if (p > best_val) {
+      best_v = v;
+      best_val = p;
+      best_nor = n1;
+    }
+  }
+  // 採用した縮小率を適用
+  debug_log("fit_plane_param", pp.nor, best_nor);
+  pp.nor = best_nor;
+  pp.dist = mul_div(pp.dist, best_v, max_xyz);
+}
+
+public threaded function uint encode_plane_node(plane_param pp)
+{
+  {
+    const& n = pp.nor;
+    if (n.x == 0 && n.y == 0 && n.z == 0) {
+      return 0u;
+    }
+  }
+  fit_plane_param(pp);
+  const& n = pp.nor;
+  /*
   if (n.x < -7 || n.x > 7 || n.y < -7 || n.y > 7 || n.z < -7 || n.z > 7) {
     return 0u;
   }
-  if (n.x == 0 && n.y == 0 && n.z == 0) {
-    return 0u;
-  }
+  */
   const d = pp.dist;
   if (d < -48 || d > 48) {
     return 0u;

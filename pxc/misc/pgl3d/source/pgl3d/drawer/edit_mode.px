@@ -1363,6 +1363,8 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       edit_params_mode = edit_params_mode_sphere_1;
       update_cursor_color();
       // message = "entering edit-sphere-center-distance mode";
+    } else if (key == SDL_SCANCODE_0) {
+      gen_test();
     }
     if (edit_params_mode == edit_params_mode_none) {
       // パラメータ変更モードでは無い場合。カーソル移動やコピペなどの
@@ -2071,13 +2073,15 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   private function plane_param make_plane_param_from_cursor(bool mod_ctrl,
     uint repeat) const
   {
-    plane_param p;
     const cursor = ttev->get_cursor_pos();
     mutable cdir = to_ivec3(cursor.first) - to_ivec3(cursor.second);
     // サイズは各軸+1。ただし終点と始点が一致するときはむきがわからない
     cdir.x += cdir.x >= 0 ? 1 : -1;
     cdir.y += cdir.y >= 0 ? 1 : -1;
     cdir.z += cdir.z >= 0 ? 1 : -1;
+    return make_plane_param_dir(cdir, !mod_ctrl, repeat);
+    /*
+    plane_param p;
     if (!mod_ctrl) {
       // どの軸とも平行でない平面で切断
       // キーリピートされた場合は向きを反転
@@ -2126,7 +2130,10 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       p.dist = 0;
       debug_log("pp cdir=", cdir, " p=", p);
     }
+    // 領域をちょうど切断するようなパラメータを返す。テクスチャエントリ
+    // に収まる範囲とはかぎらない。
     return p;
+    */
   }
   private function {f} void fill_range_func(bool clear_pri, bool clear_sec)
   {
@@ -2191,6 +2198,8 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       if (is_node_reference(ov) || is_sphere_node(ov)) {
 	return;
       }
+      // pがテクスチャエントリに収まるかどうかはわからない。収まらないときは
+      // なるべく近いパラメータが使われる。
       const v = make_plane_node(p, make_ivec3(
 	si(x * 2 + 1) - si(copy_size.x),
 	si(y * 2 + 1) - si(copy_size.y),
@@ -2332,9 +2341,20 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   {
     ttev->tmap_edit_set(pos, texture_value_index_primary, value);
   }
+  private function void gen_test()
+  {
+    // テスト中
+    debug_log("gen_test");
+    const cur = ttev->get_cursor_range();
+    const copy_size = cur.second;
+    copy_value();
+    gen_split_range(copy_data.tex_pri, copy_data.tex_sec, uvec3(), copy_size,
+      make_uvec3(3u, 3u, 3u));
+    paste_value(0xff);
+  }
 }
 
-private function int gcd(int x, int y)
+private threaded function int gcd(int x, int y)
 {
   if (x < y) {
     swap(x, y);
@@ -2348,5 +2368,184 @@ private function int gcd(int x, int y)
     y = d;
   }
   return y;
+}
+
+////////////////////////////////////////
+
+private threaded function void gen_split_range(texture_data mutable& tex_pri,
+  texture_data mutable& tex_sec, uvec3 const& pos, uvec3 const& sz,
+  uvec3 const& di)
+{
+  const fsz = map{uvec3, operator::div}(sz /* + di - make_uvec3(1, 1, 1) */,
+    di);
+  debug_log("gen fsz", fsz);
+  const sz3 = map{uvec3, max}(fsz, make_uvec3(1u, 1u, 1u));
+  const sz3d = map{uvec3, operator::div}(sz, sz3);
+  for (uint iz: 0 .. sz3d.z) {
+    // const z = iz * sz3.z;
+    // const zn = (iz + 1u) * sz3.z;
+    for (uint iy: 0 .. sz3d.y) {
+      // const y = iy * sz3.y;
+      // const yn = (iy + 1u) * sz3.y;
+      for (uint ix: 0 .. sz3d.x) {
+	const i = make_uvec3(ix, iy, iz);
+	const posi = pos + map{uvec3, operator::mul}(i, sz3);
+	const posi1 = pos + map{uvec3, min}(sz,
+	  map{uvec3, operator::mul}(i + make_uvec3(1, 1, 1), sz3));
+	const isz = posi1 - posi;
+	const ire = to_ivec3(i) * 2 + make_ivec3(1, 1, 1) - to_ivec3(sz3d);
+	  // 分割オフセットの中心からの相対位置の2倍
+	const iresgn = map{ivec3, sgn}(ire);
+	debug_log("gen i", i, "iresgn", iresgn, "posi", posi, "isz", isz);
+	gen_set_plane_dir(tex_pri, tex_sec, posi, isz, iresgn);
+      }
+    }
+  }
+}
+
+private threaded function int sgn(int x)
+{
+  return x > 0 ? 1 : (x < 0 ? -1 : 0);
+}
+
+private threaded function plane_param make_plane_param_dir(ivec3 cdir,
+  bool ax3, uint repeat)
+{
+  plane_param p;
+  if (ax3) {
+    // どの軸とも平行でない平面で切断
+    // キーリピートされた場合は向きを反転
+    if ((repeat & 1u) != 0u) {
+      cdir.x = -cdir.x;
+    }
+    if ((repeat & 2u) != 0u) {
+      cdir.y = -cdir.y;
+    }
+    if ((repeat & 4u) != 0u) {
+      cdir.z = -cdir.z;
+    }
+    const sgn = (cdir.x > 0) ^ (cdir.y > 0) ^ (cdir.z > 0) ? -1 : 1;
+    p.nor = make_ivec3(cdir.y * cdir.z, cdir.z * cdir.x, cdir.x * cdir.y);
+    p.nor *= sgn;
+    const di = gcd(gcd(abs(p.nor.x), abs(p.nor.y)), abs(p.nor.z));
+    p.nor /= di;
+    p.dist = abs(cdir.x) * abs(cdir.y) * abs(cdir.z) / di;
+    debug_log("pp cdir=", cdir, " p=", p);
+  } else {
+    // 軸に平行な平面で切断, キーリピート
+    // repeatが0,4,8のときそれぞれx,y,z方向が0になる
+    const rep = repeat % 12;
+    const rep1 = (rep & 1u) == 1u;
+    const rep2 = (rep & 2u) == 2u;
+    if (rep < 4) {
+      cdir.x = 0;
+      cdir.y = rep1 ? cdir.y : -cdir.y;
+      cdir.z = rep2 ? cdir.z : -cdir.z;
+      p.nor = make_ivec3(
+	0,
+	abs(cdir.z) * sgn(cdir.y),
+	abs(cdir.y) * sgn(cdir.z));
+      p.nor /= gcd(abs(p.nor.y), abs(p.nor.z));
+    } else if (rep < 8) {
+      cdir.y = 0;
+      cdir.z = rep1 ? cdir.z : -cdir.z;
+      cdir.x = rep2 ? cdir.x : -cdir.x;
+      p.nor = make_ivec3(
+	abs(cdir.z) * sgn(cdir.x),
+	0,
+	abs(cdir.x) * sgn(cdir.z));
+      p.nor /= gcd(abs(p.nor.z), abs(p.nor.x));
+    } else {
+      cdir.z = 0;
+      cdir.x = rep1 ? cdir.x : -cdir.x;
+      cdir.y = rep2 ? cdir.y : -cdir.y;
+      p.nor = make_ivec3(
+	abs(cdir.y) * sgn(cdir.x),
+	abs(cdir.x) * sgn(cdir.y),
+	0);
+      p.nor /= gcd(abs(p.nor.x), abs(p.nor.y));
+    }
+    p.dist = 0;
+    debug_log("pp cdir=", cdir, " p=", p);
+  }
+  // 領域をちょうど切断するようなパラメータを返す。テクスチャエントリ
+  // に収まる範囲とはかぎらない。
+  return p;
+}
+
+private threaded function void gen_set_plane_dir(texture_data mutable& tex_pri,
+  texture_data mutable& tex_sec, uvec3 const& pos, uvec3 const& sz,
+  ivec3 const& iresgn)
+{
+  const cdir = map{ivec3, operator::mul}(to_ivec3(sz), iresgn);
+  bool ax3 = true;
+  uint rep = 0;
+  uint zc = 0;
+  zc += (cdir.x == 0) ? 1u : 0u;
+  zc += (cdir.y == 0) ? 1u : 0u;
+  zc += (cdir.z == 0) ? 1u : 0u;
+  if (zc > 1u) {
+    // gen_fill_filled(tex_pri, tex_sec, pos, sz);
+  } else {
+    if (cdir.x == 0) {
+      rep = 0;
+      ax3 = false;
+    } else if (cdir.y == 0) {
+      rep = 4;
+      ax3 = false;
+    } else if (cdir.z == 0) {
+      rep = 8;
+      ax3 = false;
+    }
+    plane_param pp = make_plane_param_dir(cdir, ax3, rep);
+    gen_fill_plane(tex_pri, tex_sec, pos, sz, pp);
+  }
+}
+
+private threaded function {f} void range_foreach(uvec3 const& sz)
+{
+  for (const z: 0 .. sz.z) {
+    for (const y: 0 .. sz.y) {
+      for (const x: 0 .. sz.x) {
+	f(x, y, z);
+      }
+    }
+  }
+}
+
+private threaded function void gen_fill_filled(texture_data mutable& tex_pri,
+  texture_data mutable& tex_sec, uvec3 const& pos, uvec3 const& sz)
+{
+  threaded function void ffunc(uint x, uint y, uint z)
+  {
+    const x1 = pos.x + x;
+    const y1 = pos.y + y;
+    const z1 = pos.z + z;
+    tex_pri.set(x1, y1, z1, make_filled_voxel());
+    tex_sec.set(x1, y1, z1, 0x00808080u);
+  }
+  range_foreach{ffunc}(sz);
+}
+
+private threaded function void gen_fill_plane(texture_data mutable& tex_pri,
+  texture_data mutable& tex_sec, uvec3 const& pos, uvec3 const& sz,
+  plane_param const& pp)
+{
+  debug_log("gen_fill_plane", sz);
+  threaded function void ffunc(uint x, uint y, uint z)
+  {
+    const x1 = pos.x + x;
+    const y1 = pos.y + y;
+    const z1 = pos.z + z;
+    const ov = tex_pri.get(x1, y1, z1);
+    const v = make_plane_node(pp, make_ivec3(
+      si(x * 2 + 1) - si(sz.x),
+      si(y * 2 + 1) - si(sz.y),
+      si(z * 2 + 1) - si(sz.z)),
+      1);
+    tex_pri.set(x1, y1, z1, v);
+    tex_sec.set(x1, y1, z1, 0x00808080u);
+  }
+  range_foreach{ffunc}(sz);
 }
 

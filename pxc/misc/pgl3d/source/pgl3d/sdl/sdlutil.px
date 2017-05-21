@@ -1,5 +1,6 @@
 public threaded namespace pgl3d::sdl::sdlutil "use-unsafe";
 public import common -;
+private import GL::base -;
 private import pointer::raw -;
 private import SDL2::api_base -;
 private import SDL2::api_types -;
@@ -68,7 +69,7 @@ public function bool sdl_load_file(string const& fname,
     const osz = buf_r.size();
     size_t rsz = 1024u * 1024u;
     buf_r.resize(osz + rsz, 0);
-    const r = SDL_RWread(fp.get(), (buf_r.to_rawptr() + osz).to_voidptr(), 1,
+    const r = SDL_RWread(fp.get(), (buf_r.to_rawptr() + osz).to_voidptr(), 1u,
       rsz);
     if (r != rsz) {
       buf_r.resize(osz + r, 0);
@@ -86,16 +87,29 @@ public function bool sdl_save_file(string const& fname,
   fn.push_back(0); /* nul-term */
   fp.reset(SDL_RWFromFile(fn.to_crawptr().to_ccharptr(), "w"));
   if (fp.is_null()) {
+    // debug_log("sdl_save_file: SDL_RWFromFile");
     return false;
   }
-  const usz = buf.size();
-  if (SDL_RWwrite(fp.get(), buf.to_crawptr().to_cvoidptr(), 1, usz) != usz) {
-    return false;
+  // SDL_RWwriteはwindowsでWriteFileを使ってるのでサイズの上位32bitが
+  // 無視される。
+  bool suc = true;
+  cslice{uchar} sli = buf;
+  while (sli.size() != 0u) {
+    size_t const szmax = 1024u * 1024u * 1024u;
+    const bsz = min(sli.size(), szmax);
+    const wsz = SDL_RWwrite(fp.get(), sli.to_crawptr().to_cvoidptr(), 1, bsz);
+    if (wsz == 0u) {
+      suc = false;
+      // debug_log("sdl_save_file: SDL_RWwrite", fname, bsz, wsz);
+      break;
+    }
+    sli.increment_front(wsz);
   }
   if (fp.close() != 0) {
-    return false;
+    // debug_log("sdl_save_file: close");
+    suc = false;
   }
-  return true;
+  return suc;
 }
 
 public function void check_byteorder()
