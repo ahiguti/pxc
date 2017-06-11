@@ -478,15 +478,15 @@ void main(void)
     int hit = -1;
     // float selfshadow_para = clamp(1.0 - dist_log2 * 0.1, 0.0, 1.0);
     float selfshadow_para = 0.0f;
-    if (option_value2 >= 0.0) {
-      hit = raycast_tilemap_em(pos, camera_local, light_local,
-	aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para,
-	miplevel);
-    } else {
+    //if (option_value2 >= 0.0) {
       hit = raycast_tilemap(pos, campos, dist_rnd, camera_local, light_local,
 	aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para,
-	miplevel);
-    }
+	miplevel, option_value2 < 0.0);
+    //} else {
+    //  hit = raycast_tilemap(pos, campos, dist_rnd, camera_local, light_local,
+    //	aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para,
+    //	miplevel);
+    //}
     // if (hit == 1)  { <%fragcolor/> = vec4(1.0, 0.0, 0.0, 1.0); return; }
     /*
     <%if><%eq><%ssubtype/>1<%/>

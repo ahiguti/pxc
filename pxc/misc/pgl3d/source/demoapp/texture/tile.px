@@ -88,7 +88,9 @@ public function void prepare_texture_data_3d_tmap(bool edit_mode,
 	  const px = rv & ui(pat_mask.x);
 	  rv >>= ui(voxtpat_size_l2.x);
 	  const py = rv & ui(pat_mask.y);
-	  const idx = (pz << 16u) | (py << 8u) | px;
+	  const tpat_rot_sgn = rnd->generate() & 0x00c0c0c0;
+	    // tpatの回転反転の値をランダムに指定
+	  const idx = (pz << 16u) | (py << 8u) | px | tpat_rot_sgn;
 	  const v = make_node_reference(idx); // const v = 0x01000000u | idx;
 	  // debug_log("tmap detail", x, y, z, to_hexstring(v));
 	  set(x, y, z, v);
@@ -395,7 +397,7 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
 		mx.y = yfsz * (dy + 1u) - 2u;
 		mx.x = max(mi.x, mx.x);
 		mx.y = max(mi.y, mx.y);
-		mi.z = 1u;
+		mi.z = 0u; // 1u;
 		mx.z = ui(rnd->generate() % (ui(tile_size.z) - 3u)) + 1u;
 		if (div != 1u) {
 		  vec3 center;

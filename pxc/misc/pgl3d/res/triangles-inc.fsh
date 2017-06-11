@@ -356,24 +356,64 @@ int raycast_get_miplevel(in vec3 pos, in vec3 campos, in float dist_rnd)
   float dist_pos_campos_2 = dot(pos - campos, pos - campos) + 0.0001;
   float dist_log2 = log(dist_pos_campos_2) * 0.5 / log(2.0);
   return int(dist_log2 + dist_rnd + float(virt3_size_log2) - 9.0);
+    // TODO: LODバイアス調整できるようにする
+}
+
+vec3 tpat_sgn_rotate_tile(in vec3 value, in vec3 rot, in vec3 sgn)
+{
+  float e = 1.0; // / 65536.0; // valueは整数なので1.0でよい
+  if (sgn.x < 0.0) { value.x = tile3_size.x - e - value.x; }
+  if (sgn.y < 0.0) { value.y = tile3_size.y - e - value.y; }
+  if (sgn.z < 0.0) { value.z = tile3_size.z - e - value.z; }
+  if (rot.x != 0.0) { value.xy = value.yx; }
+  if (rot.y != 0.0) { value.yz = value.zy; }
+  if (rot.z != 0.0) { value.zx = value.xz; }
+  return value;
+}
+
+vec3 tpat_rotate_distval(in vec3 value, in vec3 rot)
+{
+  if (rot.z != 0.0) { value.zx = value.xz; }
+  if (rot.y != 0.0) { value.yz = value.zy; }
+  if (rot.x != 0.0) { value.xy = value.yx; }
+  return value;
+}
+
+void swap_float(inout float a, inout float b)
+{
+  float t = b;
+  b = a;
+  a = t;
+}
+
+void tpat_sgn_distval(in vec3 i_p, in vec3 i_n, in vec3 sgn, out vec3 o_p,
+  out vec3 o_n)
+{
+  o_p = i_p;
+  o_n = i_n;
+  if (sgn.x < 0) { swap_float(o_p.x, o_n.x); }
+  if (sgn.y < 0) { swap_float(o_p.y, o_n.y); }
+  if (sgn.z < 0) { swap_float(o_p.z, o_n.z); }
 }
 
 int raycast_tilemap(
   inout vec3 pos, in vec3 campos, in float dist_rand,
   in vec3 eye, in vec3 light,
   in vec3 aabb_min, in vec3 aabb_max, out vec4 value_r, inout vec3 hit_nor,
-  in float selfshadow_para, inout float lstr_para, inout int miplevel)
+  in float selfshadow_para, inout float lstr_para, inout int miplevel,
+  in bool enable_variable_miplevel)
 {
   // 引数の座標はすべてテクスチャ座標
   // eyeはカメラから物体への向き、lightは物体から光源への向き
   int miplevel0 = miplevel;
-  if (max_vec3(aabb_max - aabb_min) > 0.125f) {
+  bool mip_detail = false; // 詳細モードかどうか
+  if (enable_variable_miplevel && max_vec3(aabb_max - aabb_min) > 0.125f) {
     // 長距離のイテレートを速くするために大きいmiplevelから開始する。
     // テクスチャに余白が無いと短冊状に影ができてしまう問題があるので
     // 大きいオブジェクトに限って適用する。
     miplevel = max(miplevel0, 6);
+    mip_detail = miplevel0 == miplevel;
   }
-  bool mip_detail = miplevel0 == miplevel;
   int tmap_mip = clamp(miplevel - tile3_size_log2, 0, tile3_size_log2);
   int tpat_mip = min(miplevel, tile3_size_log2);
   float distance_unit_tmap_mip = float(<%lshift>16<%>tmap_mip<%/>);
@@ -390,6 +430,7 @@ int raycast_tilemap(
   const int imax = 256;
   for (i = 0; i < imax; ++i) {
     if (mip_detail && hit < 0) {
+      // 詳細モードであればカメラからの距離に応じたmiplevelでテクスチャを引く
       vec3 ppos = curpos_i / virt3_size;
       miplevel = clamp(raycast_get_miplevel(ppos, campos, dist_rand), 0, 8);
       tmap_mip = clamp(miplevel - tile3_size_log2, 0, tile3_size_log2);
@@ -407,19 +448,30 @@ int raycast_tilemap(
     vec4 value = <%texture3d/>(sampler_voxtmap, tmap_coord / map3_size);
     <%/>
     int node_type = int(floor(value.a * 255.0 + 0.5));
-    if (node_type == 255 && !mip_detail) {
+    if (node_type == 255 && !mip_detail && enable_variable_miplevel) {
+      // 詳細モードでなくてfilledと衝突したなら詳細モードに入る
       mip_detail = true;
       continue;
     }
     bool is_pat = (node_type == 1);
     float distance_unit = distance_unit_tmap_mip;
+    vec3 tpat_rot = vec3(0.0);
+    vec3 tpat_sgn = vec3(1.0);
     vec3 tpat_coord;
     if (is_pat) {
       distance_unit = 1.0;
-      vec3 curpos_tp = floor(value.rgb * 255.0 + 0.5) * tile3_size;
-	// 16刻み4096迄
+      vec3 vp = floor(value.rgb * 255.0 + 0.5);
+      tpat_rot = div_rem(vp, 128.0);
+      tpat_sgn = 1.0 - div_rem(vp, 64.0) * 2.0; // -1 or +1
+      // tpat_rot.y = 1.0; // FIXME
+      // tpat_sgn.z = -1.0; // FIXME
+      vec3 curpos_tp = vp * tile3_size; // タイルパターンの始点 16刻み4096迄
       distance_unit = distance_unit_tpat_mip;
-      tpat_coord = curpos_tp + curpos_tr;
+      tpat_coord = curpos_tp + tpat_sgn_rotate_tile(curpos_tr, tpat_rot,
+	tpat_sgn);
+	// tpat回転: curpos_trはタイル内オフセット。
+	// tile3_size未満の値。これをrotate_tile(curpos_tr, value.a)に
+	// 置き換える。
       <%if><%is_gl3_or_gles3/>
       value = texelFetch(sampler_voxtpat, ivec3(tpat_coord) >> tpat_mip,
 	tpat_mip);
@@ -439,9 +491,13 @@ int raycast_tilemap(
     // 衝突判定
     vec3 spmin = vec3(0.0);
     vec3 spmax = vec3(1.0);
-    vec3 distval = floor(value.xyz * 255.0 + 0.5);
-    vec3 dist_p = floor(distval / 16.0);
-    vec3 dist_n = distval - dist_p * 16.0;
+    vec3 distval = tpat_rotate_distval(floor(value.xyz * 255.0 + 0.5),
+      tpat_rot); // tpat回転だけ適用済み。sgnは未適用
+    vec3 distval_h = floor(distval / 16.0);
+    vec3 distval_l = distval - distval_h * 16.0;
+    vec3 dist_p;
+    vec3 dist_n;
+    tpat_sgn_distval(distval_h, distval_l, tpat_sgn, dist_p, dist_n);
     if (node_type == 0) { // 空白
       spmin = vec3(0.0) - dist_n;
       spmax = vec3(1.0) + dist_p;
@@ -459,7 +515,8 @@ int raycast_tilemap(
 	if (node_type >= 160) {
 	  // 平面
 	  float param_d = float(node_type - 208); // -48, +46
-	  vec3 param_abc = dist_p - 8.0; // dist_nは未使用
+	  vec3 param_abc = distval_h - 8.0; // distval_lは未使用
+	  param_abc = param_abc * tpat_sgn; // tpat sgnを適用
 	  vec3 coord = (curpos_f - 0.5) * 2.0;
 	  float dot_abc_p = dot(param_abc, coord);
 	  float pl = dot_abc_p - param_d; // 正なら現在位置では空白
@@ -470,6 +527,7 @@ int raycast_tilemap(
 	  // 楕円体
 	  vec3 sp_scale = floor(distval / 64.0); // 上位2bit
 	  vec3 sp_center = distval - sp_scale * 64.0 - 32.0; // 下位6bit
+	  sp_center = sp_center * tpat_sgn; // tpat sgnを適用
 	  /*
 	  vec3 sp_scale = dist_p; // 拡大率
 	  vec3 sp_center = dist_n - 8.0; // 球の中心の相対位置
@@ -575,6 +633,7 @@ int raycast_tilemap(
   return hit;
 }
 
+// 旧バージョン
 int raycast_tilemap_em(
   inout vec3 pos, in vec3 eye, in vec3 light,
   in vec3 aabb_min, in vec3 aabb_max, out vec4 value_r, inout vec3 hit_nor,

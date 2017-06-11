@@ -730,9 +730,9 @@ ptr{gl_texture} const& gltp0)
   public function void set_tmap_cursor_pos(uvec3 c0, uvec3 c1)
   {
     reset_cursor_flick_nosyncgl();
-    // debug_log("set_tmap_cursor_pos", c0);
+    debug_log("set_tmap_cursor_pos", c0);
     c0 = tev_tmap.clamp(c0);
-    // debug_log("set_tmap_cursor_pos ->", c0);
+    debug_log("set_tmap_cursor_pos ->", c0);
     c1 = tev_tmap.clamp(c1);
     state.cursor_tmap_0 = c0;
     state.cursor_tmap_1 = c1;
@@ -1078,8 +1078,9 @@ tiled_voxel_texture_update_mipmap(tiled_voxel_texture const& vox)
 	mutable vpri = pri0.get(x, y, z);
 	mutable vsec = sec0.get(x, y, z);
 	if (is_node_reference(vpri)) {
-	  const p = make_uvec3((vpri >> 0u) & 0xffu, (vpri >> 8u) & 0xffu,
-	    (vpri >> 16u) & 0xffu);
+	  // tpat回転反転パラメータが各byteの上位2bit、残りの6bitがオフセット値
+	  const p = make_uvec3((vpri >> 0u) & 0x3fu, (vpri >> 8u) & 0x3fu,
+	    (vpri >> 16u) & 0x3fu);
 	  vpri = vox.tpat_edit->data_pri[pat_mip_num - 1].get(
 	    p.x, p.y, p.z);
 	  vsec = vox.tpat_edit->data_sec[pat_mip_num - 1].get(
@@ -1365,6 +1366,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       // message = "entering edit-sphere-center-distance mode";
     } else if (key == SDL_SCANCODE_0) {
       gen_test();
+      // FIXME: このままtpat/tmapカーソル切り替えの処理に入ってしまっている
     }
     if (edit_params_mode == edit_params_mode_none) {
       // パラメータ変更モードでは無い場合。カーソル移動やコピペなどの
@@ -2252,9 +2254,9 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     if (!is_node_reference(v)) {
       return glm::uvec3();
     }
-    const z = (v >> 16u) & 0xff;
-    const y = (v >>  8u) & 0xff;
-    const x = (v >>  0u) & 0xff;
+    const z = (v >> 16u) & 0x3f;
+    const y = (v >>  8u) & 0x3f;
+    const x = (v >>  0u) & 0x3f;
     const p = make_uvec3(x, y, z);
     debug_log("cur_tpat_base:", p);
     return map{uvec3, operator::mul}(p, ttev->tile_size);
@@ -2348,9 +2350,16 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     const cur = ttev->get_cursor_range();
     const copy_size = cur.second;
     copy_value();
-    gen_split_range(copy_data.tex_pri, copy_data.tex_sec, uvec3(), copy_size,
-      make_uvec3(3u, 3u, 3u));
+    /*
+    gen_split_range_div(copy_data.tex_pri, copy_data.tex_sec, uvec3(),
+      copy_size, make_uvec3(5u, 3u, 3u));
+    */
+    //debug_log("dbg cursor", ttev->get_cursor_range());
+    gen_millefeuille(copy_data.tex_pri, copy_data.tex_sec, uvec3(),
+      copy_size);
+    //debug_log("dbg cursor", ttev->get_cursor_range());
     paste_value(0xff);
+    //debug_log("dbg cursor", ttev->get_cursor_range());
   }
 }
 
@@ -2372,12 +2381,129 @@ private threaded function int gcd(int x, int y)
 
 ////////////////////////////////////////
 
+private threaded function void gen_millefeuille(texture_data mutable& tex_pri,
+  texture_data mutable& tex_sec, uvec3 const& pos, uvec3 const& sz)
+{
+  if (sz.x <= 2 || sz.y <= 2 || sz.z <= 2) {
+    return;
+  }
+  const rndp = make_rand_generator(123u);
+  for (const iz: 0 .. sz.z) {
+    // 縦方向の大きさを決める
+    const szy = rndp->generate() % ui(sz.y / 2) + ui(sz.y) / 2;
+    if (szy == 0u) {
+      continue;
+    }
+    const szy_mi = (ui(sz.y) - szy) / 2;
+    uint szx0_prev = (rndp->generate() % ui(sz.x)) / 4;
+    uint szx1_prev = ui(sz.x) - (rndp->generate() % ui(sz.x)) / 4;
+    for (const iy: szy_mi .. szy_mi + szy) {
+      // 横方向の大きさを決める
+      const szx0 = (rndp->generate() % ui(sz.x)) / 4;
+      const szx1 = ui(sz.x) - (rndp->generate() % ui(sz.x)) / 4;
+      for (const ix: szx0 .. szx1) {
+	tex_pri.set(ix + pos.x, iy + pos.y, iz + pos.z, make_filled_voxel());
+	tex_sec.set(ix + pos.x, iy + pos.y, iz + pos.z, 0x00808080u);
+      }
+      if (szx0_prev < szx0) {
+	const xd = si(szx0 - szx0_prev);
+	plane_param pp;
+	pp.nor = make_ivec3(1, -xd, 0);
+	const po = make_uvec3(szx0_prev + pos.x, iy + pos.y, iz + pos.z);
+	const sz = make_uvec3(szx0 - szx0_prev, 1u, 1u);
+	gen_fill_plane(tex_pri, tex_sec, po, sz, pp);
+      }
+      if (szx0_prev > szx0) {
+	const xd = si(szx0_prev - szx0);
+	plane_param pp;
+	pp.nor = make_ivec3(1, xd, 0);
+	const po = make_uvec3(szx0 + pos.x, iy + pos.y, iz + pos.z);
+	const sz = make_uvec3(szx0_prev - szx0, 1u, 1u);
+	gen_fill_plane(tex_pri, tex_sec, po, sz, pp);
+      }
+      if (szx1_prev < szx1) {
+	const xd = si(szx1 - szx1_prev);
+	plane_param pp;
+	pp.nor = make_ivec3(-1, xd, 0);
+	const po = make_uvec3(szx1_prev + pos.x, iy + pos.y, iz + pos.z);
+	const sz = make_uvec3(szx1 - szx1_prev, 1u, 1u);
+	gen_fill_plane(tex_pri, tex_sec, po, sz, pp);
+      }
+      if (szx1_prev > szx1) {
+	const xd = si(szx1_prev - szx1);
+	plane_param pp;
+	pp.nor = make_ivec3(-1, -xd, 0);
+	const po = make_uvec3(szx1 + pos.x, iy + pos.y, iz + pos.z);
+	const sz = make_uvec3(szx1_prev - szx1, 1u, 1u);
+	gen_fill_plane(tex_pri, tex_sec, po, sz, pp);
+      }
+      szx0_prev = szx0;
+      szx1_prev = szx1;
+    }
+  }
+}
+
 private threaded function void gen_split_range(texture_data mutable& tex_pri,
+  texture_data mutable& tex_sec, uvec3 const& pos, slice{uint} const& xsz,
+  slice{uint} const& ysz, slice{uint} const& zsz)
+{
+  for (uint iz: 0 .. ui(zsz.size())) {
+    for (uint iy: 0 .. ui(ysz.size())) {
+      for (uint ix: 0 .. ui(xsz.size())) {
+	const i = make_uvec3(ix, iy, iz);
+	mutable posi0 = pos;
+	if (ix > 0) { posi0.x += xsz[ix - 1]; }
+	if (iy > 0) { posi0.y += ysz[iy - 1]; }
+	if (iz > 0) { posi0.z += zsz[iz - 1]; }
+	const posi1 = pos + make_uvec3(xsz[ix], ysz[iy], zsz[iz]);
+	const isz = posi1 - posi0;
+	ivec3 iresgn;
+	iresgn.x = (ix + 1u == ui(xsz.size())) ? 1 : (ix == 0u) ? -1 : 0;
+	iresgn.y = (iy + 1u == ui(ysz.size())) ? 1 : (iy == 0u) ? -1 : 0;
+	iresgn.z = (iz + 1u == ui(zsz.size())) ? 1 : (iz == 0u) ? -1 : 0;
+	if (xsz.size() == 1u) { iresgn.x = 0; }
+	if (ysz.size() == 1u) { iresgn.y = 0; }
+	if (zsz.size() == 1u) { iresgn.z = 0; }
+	debug_log("gen i", i, "iresgn", iresgn, "posi", posi0, "isz", isz);
+	gen_set_plane_dir(tex_pri, tex_sec, posi0, isz, iresgn);
+      }
+    }
+  }
+}
+
+private threaded function void
+gen_split_range_div(texture_data mutable& tex_pri,
+  texture_data mutable& tex_sec, uvec3 const& pos, uvec3 const& sz,
+  uvec3 di)
+{
+  di = map{uvec3, min}(sz, di); // 断片のサイズが1以上となるようにする
+  mutable frag_sz = map{uvec3, operator::div}(sz, di); // 断片のサイズ
+  debug_log("gen fsz", frag_sz);
+  // 3軸それぞれの分割位置を計算
+  mutable xsz = darray{uint}(di.x, 0u);
+  mutable ysz = darray{uint}(di.y, 0u);
+  mutable zsz = darray{uint}(di.z, 0u);
+  const rem_sz = sz - map{uvec3, operator::mul}(frag_sz, di);
+    // 剰余の大きさ
+  for (const i: 0 .. di.x) { xsz[i] = frag_sz.x * (i + 1u); }
+  for (const i: 0 .. di.y) { ysz[i] = frag_sz.y * (i + 1u); }
+  for (const i: 0 .. di.z) { zsz[i] = frag_sz.z * (i + 1u); }
+  // 後半のオフセットには剰余の大きさも加える。これによって中央の断片に
+  // 剰余の大きさが加算される
+  for (const i: di.x / 2 .. di.x) { xsz[i] += rem_sz.x; }
+  for (const i: di.y / 2 .. di.y) { ysz[i] += rem_sz.y; }
+  for (const i: di.z / 2 .. di.z) { zsz[i] += rem_sz.z; }
+  gen_split_range(tex_pri, tex_sec, pos, xsz, ysz, zsz);
+}
+
+/*
+private threaded function void
+gen_split_range_div(texture_data mutable& tex_pri,
   texture_data mutable& tex_sec, uvec3 const& pos, uvec3 const& sz,
   uvec3 const& di)
 {
-  const fsz = map{uvec3, operator::div}(sz /* + di - make_uvec3(1, 1, 1) */,
-    di);
+  // 領域を27分割して面取りパターンを書き込む
+  const fsz = map{uvec3, operator::div}(sz, di);
   debug_log("gen fsz", fsz);
   const sz3 = map{uvec3, max}(fsz, make_uvec3(1u, 1u, 1u));
   const sz3d = map{uvec3, operator::div}(sz, sz3);
@@ -2393,6 +2519,7 @@ private threaded function void gen_split_range(texture_data mutable& tex_pri,
 	const posi1 = pos + map{uvec3, min}(sz,
 	  map{uvec3, operator::mul}(i + make_uvec3(1, 1, 1), sz3));
 	const isz = posi1 - posi;
+	  // posiからposi1までの範囲を塗る
 	const ire = to_ivec3(i) * 2 + make_ivec3(1, 1, 1) - to_ivec3(sz3d);
 	  // 分割オフセットの中心からの相対位置の2倍
 	const iresgn = map{ivec3, sgn}(ire);
@@ -2402,6 +2529,7 @@ private threaded function void gen_split_range(texture_data mutable& tex_pri,
     }
   }
 }
+*/
 
 private threaded function int sgn(int x)
 {
@@ -2477,6 +2605,9 @@ private threaded function void gen_set_plane_dir(texture_data mutable& tex_pri,
   texture_data mutable& tex_sec, uvec3 const& pos, uvec3 const& sz,
   ivec3 const& iresgn)
 {
+  // テクスチャデータの指定された範囲を平面切断パターンで埋める。平面
+  // の向きはiresgnの符号で指定される。平面に接しないボクセルはfilledか
+  // 空白になる。
   const cdir = map{ivec3, operator::mul}(to_ivec3(sz), iresgn);
   bool ax3 = true;
   uint rep = 0;
