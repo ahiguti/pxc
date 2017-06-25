@@ -633,6 +633,8 @@ int raycast_tilemap(
   return hit;
 }
 
+/*
+
 // 旧バージョン
 int raycast_tilemap_em(
   inout vec3 pos, in vec3 eye, in vec3 light,
@@ -724,10 +726,8 @@ int raycast_tilemap_em(
 	  // 楕円体
 	  vec3 sp_scale = floor(distval / 64.0); // 上位2bit
 	  vec3 sp_center = distval - sp_scale * 64.0 - 32.0; // 下位6bit
-	  /*
-	  vec3 sp_scale = dist_p; // 拡大率
-	  vec3 sp_center = dist_n - 8.0; // 球の中心の相対位置
-	  */
+	  // vec3 sp_scale = dist_p; // 拡大率
+	  // vec3 sp_center = dist_n - 8.0; // 球の中心の相対位置
 	  float sp_radius = float(node_type - 1) * 1.0;
 	  sp_nor = vec3(0.0);
 	  length_ae = voxel_collision_sphere(ray, curpos_f - 0.5,
@@ -779,15 +779,13 @@ int raycast_tilemap_em(
     // npos = clamp(npos, spmin, spmax); // FIXME: ???
     npos *= distance_unit;
     vec3 npos_i = min(floor(npos), spmax * distance_unit - 1.0);
-    /*
-    vec3 npos_i;
-    if (is_pat) {
-      npos_i = min(floor(npos), spmax - 1.0); // ギリギリボクセル整数部分
-    } else {
-      npos *= 16.0;
-      npos_i = min(floor(npos), spmax * 16.0 - 1.0);
-    }
-    */
+    // vec3 npos_i;
+    // if (is_pat) {
+    //   npos_i = min(floor(npos), spmax - 1.0); // ギリギリボクセル整数部分
+    // } else {
+    //   npos *= 16.0;
+    //   npos_i = min(floor(npos), spmax * 16.0 - 1.0);
+    // }
     npos_i += dir; // 壁を突破
     npos = npos - npos_i; // 0, 1の範囲に収まっているはず
     // if (length(npos_i) < 0.1) {
@@ -795,7 +793,7 @@ int raycast_tilemap_em(
     // }
     curpos_i += npos_i;
     curpos_f = npos;
-    bool is_inside_aabb = pos3_inside_3(curpos_i /* + curpos_f */,
+    bool is_inside_aabb = pos3_inside_3(curpos_i, // + curpos_f
       aabb_min * virt3_size, aabb_max * virt3_size);
     if (!is_inside_aabb) {
       break;
@@ -826,5 +824,6 @@ int raycast_tilemap_em(
   // if (hit > 32) { dbgval = vec4(1.0, 0.0, 0.0, 1.0); } // FIXME
   return hit;
 }
+*/
 
 <%/>

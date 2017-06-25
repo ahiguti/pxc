@@ -417,6 +417,8 @@ private struct texture_edit_view(tptr{texture_edit} const edit)
   }
   public function void set_cursor_pos(uvec3 c0, uvec3 c1)
   {
+    // viewのカーソル位置を変更する。上部穴開けの処理をする。mipmapは
+    // 更新しないので、miplevel0以外のmipmapは正常に表示されないので注意。
     const saved_cursor_color_0 = cursor_color_0;
     const saved_cursor_color_1 = cursor_color_1;
     if (cursor_color_0 != 0) {
@@ -2355,8 +2357,11 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       copy_size, make_uvec3(5u, 3u, 3u));
     */
     //debug_log("dbg cursor", ttev->get_cursor_range());
+    /*
     gen_millefeuille(copy_data.tex_pri, copy_data.tex_sec, uvec3(),
       copy_size);
+    */
+    gen_frag1(copy_data.tex_pri, copy_data.tex_sec, uvec3(), copy_size);
     //debug_log("dbg cursor", ttev->get_cursor_range());
     paste_value(0xff);
     //debug_log("dbg cursor", ttev->get_cursor_range());
@@ -2381,64 +2386,158 @@ private threaded function int gcd(int x, int y)
 
 ////////////////////////////////////////
 
-private threaded function void gen_millefeuille(texture_data mutable& tex_pri,
+private threaded function void gen_frag1(texture_data mutable& tex_pri,
   texture_data mutable& tex_sec, uvec3 const& pos, uvec3 const& sz)
 {
-  if (sz.x <= 2 || sz.y <= 2 || sz.z <= 2) {
+  const radius2 = sz.x; // 半径の二倍
+  const minz = min(sz.x, sz.z);
+  for (const iy: 0 .. sz.y) {
+    for (const iz: 0 .. minz) {
+      for (const ix: 0 .. sz.x) {
+	sphere_param sp;
+	ivec3 offset;
+	offset.x = si(ix * 2) + 1 - si(radius2);
+	offset.y = 0;
+	offset.z = si(iz * 2) + 1 - si(radius2);
+	sp.scale = make_ivec3(2, 0, 2);
+	sp.dist = si(radius2);
+	const v = make_sphere_node(sp, offset, 1, 0);
+	tex_pri.set(pos.x + ix, pos.y + iy, pos.z + iz, v);
+	tex_sec.set(pos.x + ix, pos.y + iy, pos.z + iz, 0x00808080u);
+      }
+    }
+  }
+}
+
+private threaded function void gen_millefeuille(texture_data mutable& tex_pri,
+  texture_data mutable& tex_sec, uvec3 const& p, uvec3 const& s)
+{
+  if (s.x <= 2 || s.y <= 2 || s.z <= 0) {
     return;
   }
   const rndp = make_rand_generator(123u);
-  for (const iz: 0 .. sz.z) {
+  for (const iz: 0 .. s.z) {
     // 縦方向の大きさを決める
-    const szy = rndp->generate() % ui(sz.y / 2) + ui(sz.y) / 2;
-    if (szy == 0u) {
-      continue;
+    {
+      const szy = rndp->generate() % ui(s.y / 2 - 1) + ui(s.y) / 2;
+      const szx = rndp->generate() % ui(s.x / 2 - 1) + ui(s.x) / 2;
+      if (szx == 0u || szy == 0u) {
+	continue;
+      }
+      const szx_mi = (ui(s.x) - szx) / 2;
+      const szx_mx = szx_mi + szx;
+      const szy_mi = (ui(s.y) - szy) / 2;
+      const szy_mx = szy_mi + szy;
+      // y方向にイテレート、x方向の面を塗る
+      draw_side(make_uvec3(p.x, p.y, p.z), make_uvec3(s.x, s.y, s.z),
+	szx_mi, szx_mx, szy_mi, szy_mx, false);
+      // x方向にイテレート、y方向の面を塗る
+      draw_side(make_uvec3(p.y, p.x, p.z), make_uvec3(s.y, s.x, s.z),
+	szy_mi, szy_mx, szx_mi, szx_mx, true);
     }
-    const szy_mi = (ui(sz.y) - szy) / 2;
-    uint szx0_prev = (rndp->generate() % ui(sz.x)) / 4;
-    uint szx1_prev = ui(sz.x) - (rndp->generate() % ui(sz.x)) / 4;
-    for (const iy: szy_mi .. szy_mi + szy) {
-      // 横方向の大きさを決める
-      const szx0 = (rndp->generate() % ui(sz.x)) / 4;
-      const szx1 = ui(sz.x) - (rndp->generate() % ui(sz.x)) / 4;
-      for (const ix: szx0 .. szx1) {
-	tex_pri.set(ix + pos.x, iy + pos.y, iz + pos.z, make_filled_voxel());
-	tex_sec.set(ix + pos.x, iy + pos.y, iz + pos.z, 0x00808080u);
+    threaded function void draw_side(uvec3 const& pos, uvec3 const& sz,
+      uint szx_mi, uint szx_mx, uint szy_mi, uint szy_mx, bool swap_xy)
+    {
+      threaded function {t} void swap_xy_if(t mutable& vec)
+      {
+	if (swap_xy) {
+	  swap(vec.x, vec.y);
+	}
       }
-      if (szx0_prev < szx0) {
-	const xd = si(szx0 - szx0_prev);
-	plane_param pp;
-	pp.nor = make_ivec3(1, -xd, 0);
-	const po = make_uvec3(szx0_prev + pos.x, iy + pos.y, iz + pos.z);
-	const sz = make_uvec3(szx0 - szx0_prev, 1u, 1u);
-	gen_fill_plane(tex_pri, tex_sec, po, sz, pp);
+      const szx_rm0 = szx_mi;
+      const szx_rm1 = ui(sz.x) - szx_mx;
+      uint szx0_prev = szx_mi;
+      uint szx1_prev = szx_mx;
+      bool prev_flat0 = true;
+      bool prev_flat1 = true;
+      for (const iy: szy_mi .. szy_mx) {
+	mutable szx0 = (iy == szy_mx - 1)
+	  ? szx_mi
+	  : (rndp->generate() % 16 < 8)
+	    ? szx0_prev
+	    : (rndp->generate() % szx_rm0);
+	mutable szx1 = (iy == szy_mx - 1)
+	  ? szx_mx
+	  : (rndp->generate() % 16 < 8)
+	    ? szx1_prev
+	    : ui(sz.x) - (rndp->generate() % szx_rm1);
+	if (!prev_flat0 || iy == szy_mx - 2) {
+	  szx0 = szx0_prev;
+	}
+	if (!prev_flat1 || iy == szy_mx - 2) {
+	  szx1 = szx1_prev;
+	}
+	// debug_log("szy_mi+szy", szy_mi + szy, "iy", iy, "szx0", szx0,
+	// "prev_flat0", prev_flat0);
+	prev_flat0 = true;
+	prev_flat1 = true;
+	for (const ix: szx0 .. szx1) {
+	  mutable fpos = make_uvec3(ix + pos.x, iy + pos.y, iz + pos.z);
+	  swap_xy_if(fpos);
+	  tex_pri.set(fpos.x, fpos.y, fpos.z, make_filled_voxel());
+	  tex_sec.set(fpos.x, fpos.y, fpos.z, 0x00808080u);
+	}
+	threaded function void clamp_plane_param(plane_param mutable& pp)
+	{
+	  pp.nor.x = clamp(pp.nor.x, -7, 7);
+	  pp.nor.y = clamp(pp.nor.y, -7, 7);
+	  pp.nor.z = clamp(pp.nor.z, -7, 7);
+	}
+	if (szx0_prev < szx0) {
+	  const xd = si(szx0 - szx0_prev);
+	  plane_param pp;
+	  pp.nor = make_ivec3(1, -xd, 0);
+	  mutable po = make_uvec3(szx0_prev + pos.x, iy + pos.y, iz + pos.z);
+	  mutable sz = make_uvec3(szx0 - szx0_prev, 1u, 1u);
+	  swap_xy_if(pp.nor);
+	  swap_xy_if(po);
+	  swap_xy_if(sz);
+	  clamp_plane_param(pp);
+	  gen_fill_plane(tex_pri, tex_sec, po, sz, pp);
+	  prev_flat0 = false;
+	}
+	if (szx0_prev > szx0) {
+	  const xd = si(szx0_prev - szx0);
+	  plane_param pp;
+	  pp.nor = make_ivec3(1, xd, 0);
+	  mutable po = make_uvec3(szx0 + pos.x, iy + pos.y, iz + pos.z);
+	  mutable sz = make_uvec3(szx0_prev - szx0, 1u, 1u);
+	  swap_xy_if(pp.nor);
+	  swap_xy_if(po);
+	  swap_xy_if(sz);
+	  clamp_plane_param(pp);
+	  gen_fill_plane(tex_pri, tex_sec, po, sz, pp);
+	  prev_flat0 = false;
+	}
+	if (szx1_prev < szx1) {
+	  const xd = si(szx1 - szx1_prev);
+	  plane_param pp;
+	  pp.nor = make_ivec3(-1, xd, 0);
+	  mutable po = make_uvec3(szx1_prev + pos.x, iy + pos.y, iz + pos.z);
+	  mutable sz = make_uvec3(szx1 - szx1_prev, 1u, 1u);
+	  swap_xy_if(pp.nor);
+	  swap_xy_if(po);
+	  swap_xy_if(sz);
+	  clamp_plane_param(pp);
+	  gen_fill_plane(tex_pri, tex_sec, po, sz, pp);
+	  prev_flat1 = false;
+	}
+	if (szx1_prev > szx1) {
+	  const xd = si(szx1_prev - szx1);
+	  plane_param pp;
+	  pp.nor = make_ivec3(-1, -xd, 0);
+	  mutable po = make_uvec3(szx1 + pos.x, iy + pos.y, iz + pos.z);
+	  mutable sz = make_uvec3(szx1_prev - szx1, 1u, 1u);
+	  swap_xy_if(pp.nor);
+	  swap_xy_if(po);
+	  swap_xy_if(sz);
+	  clamp_plane_param(pp);
+	  gen_fill_plane(tex_pri, tex_sec, po, sz, pp);
+	  prev_flat1 = false;
+	}
+	szx0_prev = szx0;
+	szx1_prev = szx1;
       }
-      if (szx0_prev > szx0) {
-	const xd = si(szx0_prev - szx0);
-	plane_param pp;
-	pp.nor = make_ivec3(1, xd, 0);
-	const po = make_uvec3(szx0 + pos.x, iy + pos.y, iz + pos.z);
-	const sz = make_uvec3(szx0_prev - szx0, 1u, 1u);
-	gen_fill_plane(tex_pri, tex_sec, po, sz, pp);
-      }
-      if (szx1_prev < szx1) {
-	const xd = si(szx1 - szx1_prev);
-	plane_param pp;
-	pp.nor = make_ivec3(-1, xd, 0);
-	const po = make_uvec3(szx1_prev + pos.x, iy + pos.y, iz + pos.z);
-	const sz = make_uvec3(szx1 - szx1_prev, 1u, 1u);
-	gen_fill_plane(tex_pri, tex_sec, po, sz, pp);
-      }
-      if (szx1_prev > szx1) {
-	const xd = si(szx1_prev - szx1);
-	plane_param pp;
-	pp.nor = make_ivec3(-1, -xd, 0);
-	const po = make_uvec3(szx1 + pos.x, iy + pos.y, iz + pos.z);
-	const sz = make_uvec3(szx1_prev - szx1, 1u, 1u);
-	gen_fill_plane(tex_pri, tex_sec, po, sz, pp);
-      }
-      szx0_prev = szx0;
-      szx1_prev = szx1;
     }
   }
 }
