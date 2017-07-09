@@ -52,6 +52,7 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
     // 全vertex_bufferを保持する。vbidで引く。
   public aggregated_ibuffer agg_ibuffer;
   public tptr{pidf_table} const pidft = make_tptr{pidf_table}();
+  public ptr{varray{uchar}} const debug_ext_display = make_ptr{varray{uchar}}();
   private auto_vertexarray vtxarr;
   private tree_map{string, vbid_t} vbid_map;
   private intern_pool{vertex_buffer_pool_key} vbid_pool;
@@ -417,6 +418,8 @@ function varray{uint}
 pglshader_draw_frame_internal(bool lastpass, pglshader mutable& pgs,
   whole_instances_type mutable& whole_instances, projection_info const& cam_df)
 {
+  // lastpassが真なら、ディスプレイ直近のフレームバッファからの描画のみを
+  // 実行する。これはdummy_flipのために使う。それ以外の描画ではlastpassは偽。
   const tick1 = SDL_GetTicks();
   uint tick2;
   int saved_fb = 0;
@@ -620,6 +623,18 @@ pglshader_draw_frame_internal(bool lastpass, pglshader mutable& pgs,
 	whole_instances[inst_vbid], pgs.agg_ibuffer,
 	inst_vbid, pgs.glc, cam_df, smtex_arr);
     }
+  }
+  if (false) {
+    // FIXME: debug ext_display
+    mutable& buf = *(pgs.debug_ext_display);
+    const w = static_cast{GLsizei}(pgs.cam.display_width);
+    const h = static_cast{GLsizei}(pgs.cam.display_height);
+    if (static_cast{GLsizei}(buf.size()) < w * h * 4) {
+      buf.resize(static_cast{size_t}(w * h * 4), 0u);
+    }
+    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE,
+      buf.to_rawptr().to_voidptr());
+    // debug_log("debug ext_display");
   }
   return make_varray{uint}(tick1, tick2);
 }

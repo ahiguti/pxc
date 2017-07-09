@@ -1252,12 +1252,20 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       texture_data_get_size(emt->vox.tmap_pri[0]));
     */
     string buf;
-    edit_state est;
-    sdl_load_file("/build/edit_state.raw", buf);
-    if (!buf.empty()) {
-      est = from_string_compact_pod{edit_state}(buf);
-      ttev->set_state(est.ttev);
-      cdir = est.cdir;
+    {
+      sdl_load_file("/build/edit_selection.ser", buf);
+      if (!buf.empty()) {
+	copy_data = from_string{copy_data_type}(buf);
+      }
+    }
+    {
+      edit_state est;
+      sdl_load_file("/build/edit_state.raw", buf);
+      if (!buf.empty()) {
+	est = from_string_compact_pod{edit_state}(buf);
+	ttev->set_state(est.ttev);
+	cdir = est.cdir;
+      }
     }
     update_cursor_color();
   }
@@ -1274,6 +1282,10 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       string fn = "/build/edit_2_" + to_string(sz.x) + "_"
 	+ to_string(sz.y) + "_" + to_string(sz.z) + ".raw";
       sdl_save_file(fn, to_string_compact_pod(emt->vox));
+    }
+    {
+      string fn = "/build/edit_selection.ser";
+      sdl_save_file(fn, to_string(copy_data));
     }
     {
       texture_edit const& tpat = *emt->vox.tpat_edit;
@@ -2059,7 +2071,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     bool mod_ctrl, uint repeat)
   {
     if (edit_fill_type == edit_fill_type_wall) {
-      fill_range_value(255u << 24u, 0x00808080u, false);
+      fill_range_value(255u << 24u, 0x00808080u, true);
       message = "change fill type: filled";
     } else if (edit_fill_type == edit_fill_type_plane) {
       edit_plane_param = make_plane_param_from_cursor(mod_ctrl, repeat);
@@ -2142,6 +2154,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   private function {f} void fill_range_func(bool clear_pri, bool clear_sec)
   {
     const cur = ttev->get_cursor_range();
+    debug_log("fill_range: cursor=", cur, clear_pri, clear_sec);
     if (clear_pri || clear_sec) {
       copy_value();
     }
@@ -2361,7 +2374,11 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     gen_millefeuille(copy_data.tex_pri, copy_data.tex_sec, uvec3(),
       copy_size);
     */
-    gen_frag1(copy_data.tex_pri, copy_data.tex_sec, uvec3(), copy_size);
+    {
+      const sz = copy_size;
+      gen_frag1(copy_data.tex_pri, copy_data.tex_sec, uvec3(), sz,
+	to_ivec3(sz), make_ivec3(2, 0, 2), min(sz.x, sz.z));
+    }
     //debug_log("dbg cursor", ttev->get_cursor_range());
     paste_value(0xff);
     //debug_log("dbg cursor", ttev->get_cursor_range());
@@ -2387,19 +2404,21 @@ private threaded function int gcd(int x, int y)
 ////////////////////////////////////////
 
 private threaded function void gen_frag1(texture_data mutable& tex_pri,
-  texture_data mutable& tex_sec, uvec3 const& pos, uvec3 const& sz)
+  texture_data mutable& tex_sec, uvec3 const& pos, uvec3 const& sz,
+  ivec3 const& center2, ivec3 const scale2, uint radius2)
 {
-  const radius2 = sz.x; // 半径の二倍
-  const minz = min(sz.x, sz.z);
+  // center2は中心オフセットの2倍。szと同じ値のとき領域の中心が球の中心
+  // scale2は拡大率の逆数。2のとき1倍。0のときその軸を中心とする円柱になる。
+  // radius2は半径の二倍(scale2が2のとき)
   for (const iy: 0 .. sz.y) {
-    for (const iz: 0 .. minz) {
+    for (const iz: 0 .. sz.z) {
       for (const ix: 0 .. sz.x) {
+	const offset = map{ivec3, operator::mul}(
+	  make_ivec3(si(ix * 2), si(iy * 2), si(iz * 2))
+	    + make_ivec3(1, 1, 1) - center2,
+	  map{ivec3, sgn}(scale2));
 	sphere_param sp;
-	ivec3 offset;
-	offset.x = si(ix * 2) + 1 - si(radius2);
-	offset.y = 0;
-	offset.z = si(iz * 2) + 1 - si(radius2);
-	sp.scale = make_ivec3(2, 0, 2);
+	sp.scale = scale2;
 	sp.dist = si(radius2);
 	const v = make_sphere_node(sp, offset, 1, 0);
 	tex_pri.set(pos.x + ix, pos.y + iy, pos.z + iz, v);
