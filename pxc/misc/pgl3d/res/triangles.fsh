@@ -1,6 +1,7 @@
 <%import>pre.fsh<%/>
 <%import>triangles-inc.fsh<%/>
 <%import>pnoise.fsh<%/>
+<%import>fnoise.fsh<%/>
 
 // #pragma optionNV(inline all)
 // #pragma optionNV(unroll none)
@@ -40,7 +41,9 @@ uniform float light_on;
 uniform float option_value;
 uniform float option_value2;
 uniform float exposure;
+/*
 uniform float random_seed;
+*/
 <%frag_in/> vec3 vary_position;
 <%frag_in/> vec3 vary_normal;
 <%frag_in/> vec3 vary_tangent;
@@ -66,12 +69,14 @@ const float shadowmap_max_distance = <%shadowmap_max_distance/>;
   <%/>
 <%/>
 
+/*
 float generate_random(vec3 v)
 {
   v.x += fract(random_seed);
   v.y += fract(random_seed);
   return fract(sin(dot(v.xy, vec2(12.9898, 78.233))) * 43758.5453);
 }
+*/
 
 bool uv_inside_aabb(in vec2 uv)
 {
@@ -864,7 +869,12 @@ void main(void)
       local_light = normalize(local_light);
     }
     // FIXME?
-    if (frag_depth < 0.7f + dist_rnd * 0.25f) {
+    if (frag_depth < 1.7f + dist_rnd * 0.25f)
+    {
+
+      mate_alpha = clamp(fnoise3(pos), 0.01, 1.0);
+
+
       // mate_alpha = clamp(pnoise3(pos * 82492.0) * 1.01, 0.01, 1.0);
       // mate_alpha = 0.01;
       // <%fragcolor/> = vec4(1.0,1.0,0.0,1.0); return;
