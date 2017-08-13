@@ -872,7 +872,7 @@ void main(void)
     if (frag_depth < 1.7f + dist_rnd * 0.25f)
     {
 
-      mate_alpha = clamp(fnoise3(pos), 0.01, 1.0);
+      mate_alpha = clamp(fnoise3(pos), 0.1, 1.0);
 
 
       // mate_alpha = clamp(pnoise3(pos * 82492.0) * 1.01, 0.01, 1.0);

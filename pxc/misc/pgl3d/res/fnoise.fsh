@@ -15,7 +15,7 @@ float fnoise_func(vec2 p)
 
 float fnoise3(vec3 p)
 {
-  vec2 p0 = fract(p.xy * 256) * 512.0;
+  vec2 p0 = fract(p.xy * 1024) * 512.0;
   vec2 w = fract(p0);
   float v00 = fnoise_func(p0);
   float v01 = fnoise_func(p0 + vec2(1.0, 0.0));

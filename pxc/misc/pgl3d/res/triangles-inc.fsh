@@ -418,6 +418,7 @@ int raycast_tilemap(
   int tpat_mip = min(miplevel, tile3_size_log2);
   float distance_unit_tmap_mip = float(<%lshift>16<%>tmap_mip<%/>);
   float distance_unit_tpat_mip = float(<%lshift>1<%>tpat_mip<%/>);
+  // if (tpat_mip != 0) { dbgval = vec4(1.0, 1.0, 0.0, 1.0); }
   vec3 ray = eye;
   vec3 dir = -hit_nor;
   vec3 curpos_f = pos * virt3_size;
@@ -549,8 +550,9 @@ int raycast_tilemap(
 	}
       }
       // miplevelが0でないときは初期miplevelでのraycastのめり込み対策
-      // のためi == hit + 1のときは影にしない
-      if (hit_flag && (i != hit + 1 || hit < 0 || miplevel == 0)) {
+      // のためi == hit + 1のときは影にしない(TODO: テストケース)
+      // is_tpatのときはその処理はしない(slit1のmiplevel2でテスト)
+      if (hit_flag && (!is_pat || i != hit + 1 || hit < 0 || miplevel == 0)) {
 	// 接触した
 	if (hit >= 0) {
 	  // lightが衝突したので影にする
@@ -633,13 +635,13 @@ int raycast_tilemap(
   return hit;
 }
 
-/*
-
 // 旧バージョン
 int raycast_tilemap_em(
-  inout vec3 pos, in vec3 eye, in vec3 light,
+  inout vec3 pos, in vec3 campos, in float dist_rand,
+  in vec3 eye, in vec3 light,
   in vec3 aabb_min, in vec3 aabb_max, out vec4 value_r, inout vec3 hit_nor,
-  in float selfshadow_para, inout float lstr_para, in int miplevel)
+  in float selfshadow_para, inout float lstr_para, inout int miplevel,
+  in bool enable_variable_miplevel)
 {
   // 引数の座標はすべてテクスチャ座標
   // eyeはカメラから物体への向き、lightは物体から光源への向き
@@ -824,6 +826,5 @@ int raycast_tilemap_em(
   // if (hit > 32) { dbgval = vec4(1.0, 0.0, 0.0, 1.0); } // FIXME
   return hit;
 }
-*/
 
 <%/>

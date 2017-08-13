@@ -1,6 +1,6 @@
 
-const float pnoise_mod = 256.0;
-// const float pnoise_mod = 16.0;
+// const float pnoise_mod = 256.0;
+const float pnoise_mod = 16.0;
 
 /*
 const float pnoise_pt[] = float[](
