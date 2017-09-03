@@ -7,6 +7,8 @@ public import glm -;
 private import pgl3d::texture::texture -;
 private import pgl3d::engine::util -;
 private import pgl3d::texture::voxel -;
+private import pgl3d::texture::copy_data -;
+private import pgl3d::sdl::sdlutil -;
 
 public function void prepare_texture_data_3d_tmap(bool edit_mode,
   texture_data mutable& tmap, texture_data mutable& tmap_ax,
@@ -216,7 +218,7 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
     make_ivec3(1, 1, 1), tile_size_l2);
   tpat.set_size_l2(ui(tex_size_l2.x), ui(tex_size_l2.y), ui(tex_size_l2.z));
   tpat_ax.set_size_l2(ui(tex_size_l2.x), ui(tex_size_l2.y), ui(tex_size_l2.z));
-  if (true) {
+  if (false) {
     // 6dir bump
     const rnd = make_rand_generator(333U);
     function void set_bump(uint bx, uint by, uint bz, uint x0, uint y0,
@@ -419,6 +421,87 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
 	  } else if (typ == 2u) {
 	  }
 	}
+      }
+    }
+  }
+  if (true) {
+    varray{ptr{copy_data_type}} fragments;
+    function void add_fragment(string const& fn)
+    {
+      string buf;
+      sdl_load_file("res/fragments/" + fn + ".ser", buf);
+      if (buf.empty()) {
+        debug_log("load fragment failed", fn);
+        return;
+      }
+      debug_log("loaded ", fn);
+      ptr{copy_data_type} p = make_ptr{copy_data_type}();
+      *p = from_string{copy_data_type}(buf);
+      fragments.push_back(p);
+    }
+    add_fragment("box1");
+    add_fragment("box2");
+    add_fragment("box3");
+    add_fragment("box4");
+    add_fragment("bump1");
+    add_fragment("bump2");
+    add_fragment("dome");
+    add_fragment("frame_16x16x1");
+    add_fragment("frame_16x16x16");
+    add_fragment("hinge");
+    add_fragment("pipe1");
+    add_fragment("slit1");
+    add_fragment("tank1");
+    add_fragment("tank2");
+    // FIXME: HERE
+    function bool paste_fragment(copy_data_type const& frag, uint px,
+      uint py, uint pz)
+    {
+      for (const z: 0 .. frag.copy_size.z) {
+        for (const y: 0 .. frag.copy_size.y) {
+          for (const x: 0 .. frag.copy_size.x) {
+            const v = tpat.get(px + x, py + y, pz + z);
+            if (!is_space_voxel(v)) {
+              return false;
+            }
+          }
+        }
+      }
+      for (const z: 0 .. frag.copy_size.z) {
+        for (const y: 0 .. frag.copy_size.y) {
+          for (const x: 0 .. frag.copy_size.x) {
+            mutable v0 = frag.tex_pri.get(x, y, z);
+            if (is_space_voxel(v0)) {
+              v0 = make_space_voxel(); // drop encoded distance parameter
+            }
+            tpat.set(px + x, py + y, pz + z, v0);
+            const v1 = frag.tex_sec.get(x, y, z);
+            tpat_ax.set(px + x, py + y, pz + z, v1);
+          }
+        }
+      }
+      return true;
+    }
+    const rnd = make_rand_generator(333U);
+    for (const bz: 0 .. 6u) {
+      uint pz = bz << tile_size_l2.z;
+      uint px = 0;
+      uint py = 0;
+      while (true) {
+        debug_log("frag", px, py, pz);
+        const i = rnd->generate() % static_cast{uint}(fragments.size());
+        const& frag = *fragments[i];
+        if (px + frag.copy_size.x >= 1u << tex_size_l2.x) {
+          px = 0u;
+          py += rnd->generate() & 7;
+          if (py >= 1u << tex_size_l2.y) {
+            break;
+          }
+        }
+        if (py + frag.copy_size.y < 1u << tex_size_l2.y) {
+          paste_fragment(frag, px, py, pz);
+        }
+        px += frag.copy_size.x + rnd->generate() & 3;
       }
     }
   }
