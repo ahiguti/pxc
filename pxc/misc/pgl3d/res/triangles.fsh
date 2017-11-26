@@ -1,6 +1,5 @@
 <%import>pre.fsh<%/>
 <%import>triangles-inc.fsh<%/>
-<%import>pnoise.fsh<%/>
 <%import>fnoise.fsh<%/>
 
 // #pragma optionNV(inline all)
@@ -109,7 +108,7 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
 
 <%if><%enable_normalmapping/>
 
-  void tilemap(in vec2 uv0, out vec4 tex_val, out vec2 subtex_uv)
+  void tilemap(in vec2 uv0, out vec4 tex_val1, out vec2 subtex_uv)
   {
     vec2 uv_tm = floor(uv0 / tile_size);
 	    // tilemap coordinate
@@ -126,10 +125,10 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
     vec2 uv_pixel = floor(ti_val.xy * 255.0 + 0.5) * tile_size + uvi;
 	    // tile pattern coordinate
     if (uv_inside_aabb(uv0)) {
-      tex_val = <%texture2d/>(sampler_dpat, uv_pixel / tiletex_size);
+      tex_val1 = <%texture2d/>(sampler_dpat, uv_pixel / tiletex_size);
 	    // lookup the tilepattern
     } else {
-      tex_val = vec4(0.5, 0.5, 0.5, 0.0);
+      tex_val1 = vec4(0.5, 0.5, 0.5, 0.0);
     }
   }
 
@@ -137,7 +136,7 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
 
 <%if><%enable_parallax/>
 
-  void parallax_read(in vec2 uv0, out vec4 tex_val)
+  void parallax_read(in vec2 uv0, out vec4 tex_val1)
   {
     vec2 uv_tm = floor(uv0 / tile_size); // tilemap coordinate
     vec2 uv_tmfr = uv0 / tile_size - uv_tm;
@@ -149,10 +148,10 @@ vec3 clamp_to_border(in vec2 uv, in vec3 delta)
 	(sampler_tilemap, uv_tm / tilemap_size);
       vec2 uv_pixel = floor(ti_val.xy * 255.0 + 0.5) * tile_size + uvi;
 	      // tile pattern coordinate
-      tex_val = <%texture2d/> // lookup the tilepattern
+      tex_val1 = <%texture2d/> // lookup the tilepattern
 	(sampler_pmpat, uv_pixel / tiletex_size);
     } else {
-      tex_val = vec4(0.0, 0.0, 0.0, 0.0);
+      tex_val1 = vec4(0.0, 0.0, 0.0, 0.0);
     }
   }
 
@@ -385,7 +384,8 @@ void main(void)
   float para_zval = 0.0;
   bool vertical = false;
   float ambient = 0.005;
-  vec4 tex_val = vec4(0.5, 0.5, 0.5, 1.0);
+  vec4 tex_val0 = vec4(0.5, 0.5, 0.5, 1.0);
+  vec4 tex_val1 = vec4(0.5, 0.5, 0.5, 1.0);
   float frag_randval = generate_random(vec3(gl_FragCoord.xy, 0.0));
     // フラグメントの座標から生成した乱数
   int miplevel = 0;
@@ -485,11 +485,11 @@ void main(void)
     float selfshadow_para = 0.0f;
     //if (option_value2 >= 0.0) {
       hit = raycast_tilemap(pos, campos, dist_rnd, camera_local, light_local,
-	aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para,
+	aabb_min, aabb_max, tex_val0, tex_val1, nor, selfshadow_para, lstr_para,
 	miplevel, option_value2 < 0.0);
     //} else {
     //  hit = raycast_tilemap(pos, campos, dist_rnd, camera_local, light_local,
-    //	aabb_min, aabb_max, tex_val, nor, selfshadow_para, lstr_para,
+    //	aabb_min, aabb_max, tex_val1, nor, selfshadow_para, lstr_para,
     //	miplevel);
     //}
     // if (hit == 1)  { <%fragcolor/> = vec4(1.0, 0.0, 0.0, 1.0); return; }
@@ -577,8 +577,8 @@ void main(void)
 	lstr_para);
     <%/>
     vec2 subtex_uv;
-    tilemap(uv0, tex_val, subtex_uv);
-    float alv0 = floor(tex_val.a * 255.0 + 0.5);
+    tilemap(uv0, tex_val1, subtex_uv);
+    float alv0 = floor(tex_val1.a * 255.0 + 0.5);
     float avol = floor(alv0 / 16.0);
     int alv = int(alv0 - avol * 16.0 + 0.5);
     if (!vertical) {
@@ -789,28 +789,29 @@ void main(void)
   <%/> // endif enable_shadowmapping
   // fresnel
   // float cos_v_h = clamp(dot(camera_dir, half_l_v), 0.0, 1.0);
-  float mate_alpha = 0.2; // tex_val.a + 0.001;
+  float mate_alpha = 0.2; // tex_val1.a + 0.001;
   vec3 mate_specular = vec3(0.04, 0.04, 0.04);
   vec3 mate_diffuse = vec3(0.0, 0.0, 0.0);
   vec3 mate_emit = vec3(0.0);
   <%if><%eq><%stype/>1<%/>
   {
-    // tex_val.a = 0.0;
-    float aval = floor(tex_val.a * 255.0 + 0.5);
+    // tex_val1.a = 0.0;
+    float aval = floor(tex_val1.a * 255.0 + 0.5);
     float aval_me = floor(aval / 64.0);
     aval = aval - aval_me * 64.0;
     float aval_roughness = aval;
     lstr = max(0.0, lstr - float(miplevel) * 0.125 * 0.5);
       // miplevelが上がると暗く
-    if (aval_me == 1.0) {
+    if (aval_me == 1.0 || aval_me == 3.0) {
       // emission
-      mate_emit = tex_val.rgb;
-    } else if (aval_me == 2.0) {
+      mate_emit = tex_val0.rgb;
+    }
+    if (aval_me == 2.0 || aval_me == 3.0) {
       // metal
-      mate_specular = tex_val.rgb;
+      mate_specular = tex_val1.rgb;
     } else {
       // 0か3なら非金属
-      mate_diffuse = tex_val.rgb;
+      mate_diffuse = tex_val1.rgb;
     }
     /*
     float aval_roughness = floor(aval / 16.0);
@@ -820,12 +821,12 @@ void main(void)
     float aval_emission = aval;
     if (aval_emission == 0.0) {
       if (aval_metalness == 0.0) {
-	mate_diffuse = tex_val.rgb;
+	mate_diffuse = tex_val1.rgb;
       } else {
-	mate_specular = tex_val.rgb;
+	mate_specular = tex_val1.rgb;
       }
     } else {
-      mate_emit = tex_val.rgb * (aval_emission + 1.0) / 8.0;
+      mate_emit = tex_val1.rgb * (aval_emission + 1.0) / 8.0;
     }
     */
     float p = (aval_roughness + 1.0) / 16.0;
@@ -833,10 +834,10 @@ void main(void)
   }
   <%else/>
   {
-    if (max(tex_val.r, max(tex_val.g, tex_val.b)) > 0.9) {
-      mate_specular = tex_val.rgb;
+    if (max(tex_val1.r, max(tex_val1.g, tex_val1.b)) > 0.9) {
+      mate_specular = tex_val1.rgb;
     } else {
-      mate_diffuse = tex_val.rgb;
+      mate_diffuse = tex_val1.rgb;
     }
   }
   <%/>
@@ -858,8 +859,9 @@ void main(void)
   float local_light_str = 0.0;
   vec3 local_light = vec3(0.0);
   <%if><%eq><%stype/>1<%/>
-    if (int(tex_val.a * 255.0 + 0.5) == 1) {
-      // mate_emit = tex_val.rgb / 4.0;
+    /*
+    if (int(tex_val1.a * 255.0 + 0.5) == 1) {
+      // mate_emit = tex_val1.rgb / 4.0;
       // mate_alpha = 0.0;
       // mate_specular = vec3(0.0);
       // mate_diffuse = vec3(0.0);
@@ -868,11 +870,22 @@ void main(void)
       local_light_str = clamp(0.125 / dot(local_light, local_light), 0.0, 1.0);
       local_light = normalize(local_light);
     }
+    */
     // FIXME?
     if (frag_depth < 1.7f + dist_rnd * 0.25f)
     {
 
-      mate_alpha = clamp(fnoise3(pos), 0.1, 1.0);
+      // mate_alpha = clamp(fnoise3(pos), 0.1, 1.0);
+
+      float v = clamp(fnoise3(pos / 16.0) * 2.0, 0.0, 1.0);
+      if (v < 0.001) {
+        // mate_emit = vec3(0.8, 1.0, 1.0);
+      }
+
+      // float v1 = clamp(fnoise3(pos / 1024.0) * 4.0, 0.0, 1.0);
+      // v1 = pow(v1, 16.0);
+      // v = pow(min(v, v1), 16.0);
+      // mate_emit = vec3(v * 0.9, v * 2.0, v * 2.0) * clamp(16.0 - frag_distance * 0.9, 0.0, 0.5);
 
 
       // mate_alpha = clamp(pnoise3(pos * 82492.0) * 1.01, 0.01, 1.0);

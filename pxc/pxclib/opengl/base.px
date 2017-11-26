@@ -1,0 +1,285 @@
+public threaded namespace opengl::base "export-unsafe";
+public import common -;
+public import pointer::raw -;
+public import meta m;
+public import exception -;
+
+public metafunction GLvoid void;
+public metafunction GLchar char;
+public metafunction GLbyte schar;
+public metafunction GLubyte uchar;
+public metafunction GLshort short;
+public metafunction GLushort ushort;
+public metafunction GLint int;
+public metafunction GLuint uint;
+public metafunction GLfloat float;
+public metafunction GLdouble double;
+public metafunction GLboolean uchar;
+public metafunction GLsizei int;
+public metafunction GLclampf float;
+public metafunction GLclampd double;
+public metafunction GLclampx int;
+
+public tsvaluetype struct extern "GLenum" "extenum" GLenum { }
+public tsvaluetype struct extern "GLbitfield" "extbitmask" GLbitfield { }
+public tsvaluetype struct extern "GLint64" "extsint" GLint64 { }
+public tsvaluetype struct extern "GLuint64" "extuint" GLuint64 { }
+public tsvaluetype struct extern "GLsizeiptr" "extsint" GLsizeiptr { }
+public tsvaluetype struct extern "GLintptr" "extsint" GLintptr { }
+public tsvaluetype struct extern "GLfixed" "extsint" GLfixed { }
+public tsvaluetype struct extern "GLDEBUGPROC" GLDEBUGPROC { }
+public tsvaluetype struct extern "GLsync" "extenum" GLsync { }
+
+public function {gl_bfvals, gl_enumvals, gl_cmds} expand
+macro_define_api
+{
+  expand(sym: gl_bfvals) {
+    public extern "%" GLbitfield sym;
+  }
+  expand(sym: gl_enumvals) {
+    public extern "%" GLenum sym;
+  }
+  expand(sym0, i : m::map{gl_cmds, m::at0}) {
+    expand(sym1 : {m::concat{sym0, "_nocheck"}}) {
+      expand(sym_c : {m::concat{"::", sym0}}) {
+	public threaded function extern "sym_c"
+	opengl::base::ent_to_ret_type{m::at{gl_cmds, i}}
+	  sym1(expand(opengl::base::ent_to_argdefs{m::at{gl_cmds, i}}));
+	public threaded function opengl::base::ent_to_ret_type{m::at{gl_cmds, i}}
+	  sym0(expand(opengl::base::ent_to_argdefs{m::at{gl_cmds, i}}))
+	{
+	  metafunction cmd m::at{gl_cmds, i};
+	  metafunction rt opengl::base::ent_to_ret_type{cmd};
+	  if (m::ne{rt, void}) {
+	    const r = sym1(expand(a: opengl::base::ent_to_argnames{cmd}; a));
+	    if (m::ne{sym0, "glGetError"}) {
+	      gl_check_error_if(m::to_string{sym0});
+	    }
+	    return r;
+	  } else {
+	    sym1(expand(a: opengl::base::ent_to_argnames{cmd}; a));
+	    gl_check_error_if(m::to_string{sym0});
+	  }
+	}
+      }
+    }
+  }
+}
+
+public metafunction ent_to_ret_type{ent}
+  m::at1{find_type{m::at1{ent}}};
+
+public metafunction ent_to_argdefs{ent}
+  m::map{
+    m::slice{ent, 2},
+    metafunction{x} m::apply{
+      metafunction{xt} m::list{
+	/* name */ m::at0{x},
+	/* type */ m::at1{xt},
+	/* byref - if it's a slice-wrapper */ 0,
+	/* mutable */ 0},
+      /* xt := */ find_type{m::at1{x}}}};
+
+public metafunction ent_to_argnames{ent}
+  m::map{
+    m::slice{ent, 2},
+    metafunction{x} m::apply{
+      metafunction{xt} m::at0{x},
+      /* xt := */ find_type{m::at1{x}}}};
+
+public threaded function extern "pxcrt::gl::offset_to_void_cp" crawptr{void}
+offset_to_void_cp(size_t x); /* for glVertexPointer() */
+
+public threaded function extern "pxcrt::gl::ccharptr_to_string" string
+ccharptr_to_string(ccharptr x);
+
+public threaded function extern "pxcrt::gl::charptr_to_string" string
+charptr_to_string(charptr x);
+
+public threaded function extern "pxcrt::gl::cubptr_to_string" string
+cubptr_to_string(crawptr{GLubyte} x);
+
+public threaded function extern "pxcrt::gl::ubptr_to_string" string
+ubptr_to_string(rawptr{GLubyte} x);
+
+public threaded function extern "pxcrt::gl::get_check_error_enabled" int
+get_check_error_enabled();
+
+public threaded function extern "pxcrt::gl::set_check_error_enabled" void
+set_check_error_enabled(int v);
+
+public threaded function void gl_check_error(cstrref const& name)
+{
+  const e = gl_get_error();
+  if (static_cast{int}(e) != 0) {
+    throw runtime_error_template{"opengl_error"}(
+      string_join{" "}(name, static_cast{int}(e)));
+  }
+}
+
+public threaded function void gl_check_error_if(cstrref const& name)
+{
+  if (get_check_error_enabled() != 0) {
+    gl_check_error(name);
+  }
+}
+
+/* private */
+
+private threaded function extern "::glGetError" GLenum
+gl_get_error();
+
+expand (s : m::list{m::list{"", m::eq{m::profile{"platform"}, "Darwin"}}})
+{
+  extern "ldflags" "-lGL -lm";
+  extern "ldflags" "-framework OpenGL -lm";
+}
+
+extern "types" inline
+
+#ifndef GL_GLEXT_PROTOTYPES
+#define GL_GLEXT_PROTOTYPES
+#endif
+
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#if TARGET_OS_IPHONE
+/* ios */
+#include <OpenGLES/ES3/gl.h>
+#include <OpenGLES/ES3/glext.h>
+#include <OpenGLES/ES2/gl.h>
+#include <OpenGLES/ES2/glext.h>
+#include <OpenGLES/ES1/gl.h>
+#include <OpenGLES/ES1/glext.h>
+#else
+/* macos */
+#include <OpenGL/gl3.h>
+#include <OpenGL/gl3ext.h>
+#include <OpenGL/gl.h>
+#include <OpenGL/glext.h>
+#endif
+#elif defined ANDROID
+/* android */
+#include <GLES3/gl3.h>
+#include <GLES3/gl3ext.h>
+#include <GLES/gl.h>
+#include <GLES/glext.h>
+#elif defined _MSC_VER
+/* windows */
+#include <GL/glew.h>
+#include <GL/wglew.h>
+#else
+/* linux */
+#include <GL/gl.h>
+#include <GL/glext.h>
+#endif
+
+;
+
+extern "functions" inline
+namespace pxcrt { namespace gl {
+using namespace pxcrt;
+
+static inline const void *offset_to_void_cp(bt_size_t x)
+{ return reinterpret_cast<const void *>(x); }
+
+static inline bt_string ccharptr_to_string(const char *x)
+{
+  if (x == 0) { return bt_string(); }
+  return bt_string(reinterpret_cast<const unsigned char *>(x),
+    std::strlen(x));
+}
+
+static inline bt_string charptr_to_string(char *x)
+{ return ccharptr_to_string(reinterpret_cast<const char *>(x)); }
+
+static inline bt_string cubptr_to_string(const GLubyte *x)
+{ return ccharptr_to_string(reinterpret_cast<const char *>(x)); }
+
+static inline bt_string ubptr_to_string(GLubyte *x)
+{ return ccharptr_to_string(reinterpret_cast<const char *>(x)); }
+
+extern int check_error_enabled;
+
+static inline bt_int get_check_error_enabled()
+{ return check_error_enabled; }
+
+static inline void set_check_error_enabled(bt_int v)
+{ check_error_enabled = v; }
+
+}; };
+;
+
+extern "implementation" inline
+namespace pxcrt { namespace gl {
+
+int check_error_enabled = 0;
+
+}; };
+;
+
+private metafunction type_alist m::list{
+  /* m::list{str, ret_type, arg_type} */
+  m::list{"v", GLvoid, GLvoid}, /* 0 */
+  m::list{"e", GLenum, GLenum},
+  m::list{"m", GLbitfield, GLbitfield},
+  m::list{"f", GLfloat, GLfloat},
+  m::list{"d", GLdouble, GLdouble},
+  m::list{"b", GLboolean, GLboolean},
+  m::list{"by", GLbyte, GLbyte},
+  m::list{"uby", GLubyte, GLubyte},
+  m::list{"s", GLshort, GLshort},
+  m::list{"us", GLushort, GLushort},
+  m::list{"i", GLint}, /* 10 */
+  m::list{"ui", GLuint},
+  m::list{"l", GLint64},
+  m::list{"szi", GLsizei},
+  m::list{"ip", GLintptr},
+  m::list{"szip", GLsizeiptr},
+  m::list{"fx", GLfixed},
+  m::list{"cx", GLclampx},
+  m::list{"DP", GLDEBUGPROC},
+  m::list{"sync", GLsync},
+  m::list{"*", voidptr}, /* 20 */
+  m::list{"v*", voidptr},
+  m::list{"e*", rawptr{GLenum}},
+  m::list{"f*", rawptr{GLfloat}},
+  m::list{"d*", rawptr{GLdouble}},
+  m::list{"b*", rawptr{GLboolean}},
+  m::list{"c*", charptr},
+  m::list{"uby*", rawptr{GLubyte}},
+  m::list{"s*", rawptr{GLshort}},
+  m::list{"us*", rawptr{GLushort}},
+  m::list{"i*", rawptr{GLint}}, /* 30 */
+  m::list{"ui*", rawptr{GLuint}},
+  m::list{"l*", rawptr{GLint64}},
+  m::list{"ul*", rawptr{GLuint64}},
+  m::list{"szi*", rawptr{GLsizei}},
+  m::list{"fx*", rawptr{GLfixed}},
+  m::list{"_*", cvoidptr},
+  m::list{"_v*", cvoidptr},
+  m::list{"_e*", crawptr{GLenum}},
+  m::list{"_f*", crawptr{GLfloat}},
+  m::list{"_d*", crawptr{GLdouble}}, /* 40 */
+  m::list{"_b*", crawptr{GLboolean}},
+  m::list{"_c*", ccharptr},
+  m::list{"_by*", crawptr{GLbyte}},
+  m::list{"_uby*", crawptr{GLubyte}},
+  m::list{"_s*", crawptr{GLshort}},
+  m::list{"_us*", crawptr{GLushort}},
+  m::list{"_i*", crawptr{GLint}},
+  m::list{"_ui*", crawptr{GLuint}},
+  m::list{"_szi*", crawptr{GLsizei}},
+  m::list{"_ip*", crawptr{GLintptr}}, /* 50 */
+  m::list{"_szip*", crawptr{GLsizeiptr}},
+  m::list{"_fx*", crawptr{GLfixed}},
+  m::list{"v**", rawptr{voidptr}},
+  m::list{"v**", rawptr{voidptr}},
+  m::list{"_v*_*", crawptr{cvoidptr}},
+  m::list{"_v*_*", crawptr{cvoidptr}},
+  m::list{"_c*_*", rawptr{ccharptr}}}
+  /* workaround for android */ /* m::list{"_c*_*", crawptr{ccharptr}}} */
+  ;
+
+private metafunction find_type{s} m::at{type_alist, s};
+

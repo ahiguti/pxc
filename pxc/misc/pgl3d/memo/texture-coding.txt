@@ -1,0 +1,44 @@
+
+primary 32bit rgba
+  value = texelFetch(sampler_voxtmap)
+  node_type = int(value.a)
+  node_type == 1 (タイル参照)ならtpatを引く
+    tpat_rot, tpat_sgn = value.rgb の何か。タイルを回転させる。
+    value = texelFetch(sampler_voxtpat)
+    node_type = int(value.a)
+  node_type == 0 空白
+    distval = value.xyzの何か。空白距離をエンコードしている。
+  node_type == 255 壁
+    value.rgbは未使用
+  node_type >= 160 平面切断
+    param_d = node_type - 208 (-48, +46)
+    param_abc = distvalの上位4bit - 8
+    distvalの下位4bitは未使用
+  node_type >= 2 && node_type <= 159 球面切断
+    sp_scale = distvalの上位2bit
+    sp_center = distvalの下位6bit
+    sp_radius = node_type - 1 (1以上)
+  
+
+secondary 32bit rgba
+  aval := tex_val.a
+    aval_me := avalの上位2bit
+      aval_me == 0: 非金属
+        mate_diffuse = tex_val.rgb
+      aval_me == 1: emissionあり
+        mate_emit = tex_val.rgb
+      aval_me == 2: 金属
+        mate_specular = tex_val.rgb
+      aval_me == 3: 金属、emissionあり
+      既定値
+        mate_specular = vec3(0.04)
+        mate_diffuse = vec3(0.0)
+        mate_emit = vec3(0.0)
+
+
+raycast_tilemap()
+  raycastのジオメトリはsampler_voxtmap, sampler_voxtpatを読む。
+  衝突したときにsampler_voxtmax, sampler_voxtpaxを読む。
+    value_r = texelFetch(sampler_voxtmax)
+    value_r = texelFetch(sampler_voxtpax)
+  voxtmax, voxtpaxのテクスチャデータはそれぞれtmap_secとtpat_sec

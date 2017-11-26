@@ -1,0 +1,43 @@
+public threaded namespace sdl2::api_wrappers "export-unsafe";
+public import common -;
+public import pointer::raw -;
+public import container::raw -;
+public import sdl2::api_base -;
+public import sdl2::api_types -;
+public import sdl2::api_functions -;
+public import meta m;
+
+
+/* macro wrappers */
+public function extern "sdl2::RWsize" Sint64
+SDL_RWsize(rawptr{SDL_RWops} ctx);
+public function extern "sdl2::RWseek" Sint64
+SDL_RWseek(rawptr{SDL_RWops} ctx, Sint64 offset, int whence);
+public function extern "sdl2::RWread" size_t
+SDL_RWread(rawptr{SDL_RWops} ctx, rawptr{void} p, size_t sz, size_t maxnum);
+public function extern "sdl2::RWwrite" size_t
+SDL_RWwrite(rawptr{SDL_RWops} ctx, crawptr{void} p, size_t sz, size_t num);
+public function extern "sdl2::RWclose" int
+SDL_RWclose(rawptr{SDL_RWops} ctx);
+
+extern "functions" inline
+namespace sdl2 {
+using namespace pxcrt;
+
+static inline bt_longlong RWsize(SDL_RWops *ctx)
+{ return (bt_longlong)SDL_RWsize(ctx); }
+static inline bt_longlong RWseek(SDL_RWops *ctx, bt_longlong offset,
+  bt_int whence)
+{ return (bt_longlong)SDL_RWseek(ctx, offset, whence); }
+static inline bt_size_t RWread(SDL_RWops *ctx, void *p, bt_size_t sz,
+  bt_size_t maxnum)
+{ return SDL_RWread(ctx, p, sz, maxnum); }
+static inline bt_size_t RWwrite(SDL_RWops *ctx, void const *p, bt_size_t sz,
+  bt_size_t num)
+{ return SDL_RWwrite(ctx, p, sz, num); }
+static inline int RWclose(SDL_RWops *ctx)
+{ return SDL_RWclose(ctx); }
+
+};
+;
+

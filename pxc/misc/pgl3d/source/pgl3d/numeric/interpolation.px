@@ -1,0 +1,68 @@
+public threaded namespace pgl3d::numeric::interpolation "use-unsafe";
+public import common -;
+public import exception -;
+public import meta m;
+
+public function extern "pgl3d$n::numeric$n::interpolation$n::test_spline" void
+test_spline();
+
+public multithreaded struct
+extern "pgl3d$n::numeric$n::interpolation$n::%"
+cubic_b_spline(cslice{float} const& points, float t0, float h) { }
+
+public threaded function
+extern "pgl3d$n::numeric$n::interpolation$n::%"
+float cubic_b_spline___call(
+  cubic_b_spline const& spl, float x);
+public threaded function
+extern "pgl3d$n::numeric$n::interpolation$n::%"
+float cubic_b_spline_prime(
+  cubic_b_spline const& spl, float x);
+
+extern "types" inline
+#include <boost/math/interpolators/cubic_b_spline.hpp>
+
+namespace pgl3d$n { namespace numeric$n { namespace interpolation$n {
+
+struct cubic_b_spline {
+  boost::math::cubic_b_spline<float> spl;
+  cubic_b_spline(::pxcrt::bt_cslice<float> const& points, float t0, float h);
+};
+
+}; }; };
+
+;
+
+extern "implementation" inline
+
+namespace pgl3d$n { namespace numeric$n { namespace interpolation$n {
+
+cubic_b_spline::cubic_b_spline(::pxcrt::bt_cslice<float> const& points,
+  float t0, float h)
+  : spl(points.begin(), points.end(), t0, h)
+{
+}
+
+float cubic_b_spline___call(cubic_b_spline const& spl, float x)
+{
+  return spl.spl(x);
+}
+
+float cubic_b_spline_prime(cubic_b_spline const& spl, float x)
+{
+  return spl.spl.prime(x);
+}
+
+void test_spline()
+{
+  std::vector<double> f{0.01, -0.02, 0.3, 0.8, 1.9, -8.78, -22.6};
+  double t0 = 0;
+  double h = 0.01;
+  boost::math::cubic_b_spline<double> sp(f.begin(), f.end(), t0, h);
+  printf("test_spline done\n");
+}
+
+}; }; };
+
+;
+

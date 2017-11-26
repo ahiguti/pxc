@@ -1,0 +1,129 @@
+public threaded namespace stepfunc; // pgl3d::texture::generator;
+public import common -;
+public import numeric::fpmath -;
+public import pgl3d::numeric::interpolation -;
+public import pgl3d::texture::texture -;
+public import pgl3d::geometry::funcs -;
+
+metafunction ui static_cast{uint};
+metafunction si static_cast{int};
+
+private function float smooth_bump(float x)
+{
+  float d = 1.0f - x * x;
+  if (d <= 0.0f) {
+    return 0.0f;
+  }
+  float v = exp(-1.0f / d);
+  return v;
+}
+
+public function void generate(ptr{rand_generator} const& rndp,
+    texture_data mutable& tex)
+{
+  int split = 6;
+  function ptr{cubic_b_spline} gen_spline(bool symmetry)
+  {
+    varray{float} points;
+    points.push_back(0.0f);
+    for (int i: 1 .. split) {
+      float v = static_cast{float}(rndp->generate())
+        / static_cast{float}(0x80000000u);
+      points.push_back(v);
+    }
+    points.push_back(0.0f);
+    if (symmetry) {
+      for (int i: split / 2 .. split) {
+        points[static_cast{uint}(i)]
+          = points[static_cast{uint}(split - i)];
+      }
+    }
+    float step = 2.0f / static_cast{float}(split);
+    debug_log("gen_spline", points, "step=", step);
+    return make_ptr{cubic_b_spline}(points, -1.0f,
+        2.0f / static_cast{float}(split));
+  }
+  const sx = gen_spline(true);
+  const sy = gen_spline(false);
+  const sz = gen_spline(false);
+  int xsz = static_cast{int}(tex.get_width());
+  int ysz = static_cast{int}(tex.get_height());
+  int zsz = static_cast{int}(tex.get_depth());
+  varray{float} buf;
+  buf.resize(static_cast{size_t}(xsz * ysz * zsz), 0.0f);
+  function void set(int x, int y, int z, float v)
+  {
+    if (x >= xsz || y >= ysz || z >= zsz ||
+        x < 0 || y < 0 || z < 0) {
+      debug_log("invalid index: ", x, y, z);
+      return;
+    }
+    buf[static_cast{size_t}((z * ysz + y) * xsz + x)] = v;
+  }
+  function float get(int x, int y, int z)
+  {
+    if (x >= xsz || y >= ysz || z >= zsz ||
+        x < 0 || y < 0 || z < 0) {
+      debug_log("invalid index: ", x, y, z);
+      return 0.0f;
+    }
+    return buf[static_cast{size_t}((z * ysz + y) * xsz + x)];
+  }
+  float mi = +99999.0f;
+  float mx = -99999.0f;
+  for (int z: 0 .. zsz) {
+    for (int y: 0 .. ysz) {
+      for (int x: 0 .. xsz) {
+        float xf = static_cast{float}(x * 2 - xsz + 1)
+          / static_cast{float}(xsz - 1);
+        float yf = static_cast{float}(y * 2 - ysz + 1)
+          / static_cast{float}(ysz - 1);
+        float zf = static_cast{float}(z * 2 - zsz + 1)
+          / static_cast{float}(zsz - 1);
+        debug_log("z=", z, "zf=", zf, "pz=", (*sz)(zf));
+        float v = 0.0f;
+        v += (*sx)(xf);
+        v += (*sy)(yf);
+        v += (*sz)(zf);
+        // v += (((zf*0.2f+0.1f)*yf*0.3f+0.1f)*zf+0.2f)*yf+0.2f;
+        /*1
+          v *= smooth_bump(xf * 0.7);
+          v *= smooth_bump(yf * 0.7);
+          v *= smooth_bump(zf * 0.7);
+          */
+        set(x, y, z, v);
+        mi = min(mi, v);
+        mx = max(mx, v);
+        // debug_log(xf, yf, zf, v, smooth_bump(xf * 2.5));
+      }
+    }
+  }
+  debug_log("min", mi, "max", mx);
+  float rat = 0.5f;
+  float th = mi * rat + mx * (1.0f - rat);
+  for (int z: 0 .. zsz) {
+    for (int y: 0 .. ysz) {
+      for (int x: 0 .. xsz) {
+        float v = get(x, y, z);
+        tex.set(ui(x), ui(y), ui(z), v > th ? 1u : 0u);
+      }
+    }
+  }
+  for (int z: 0 .. zsz) {
+    debug_log("z=", z);
+    for (int y: 0 .. ysz) {
+      string s = "[";
+      for (int x: 0 .. xsz) {
+        float v = get(x, y, z);
+        if (v > th) {
+          s += "*";
+        } else {
+          s += " ";
+        }
+      }
+      s += "]";
+      debug_log(s);
+    }
+  }
+}
+

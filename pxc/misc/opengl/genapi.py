@@ -154,7 +154,7 @@ class PXOutputGenerator(reg.COutputGenerator):
     return mstr;
   def beginFile(self, genOpts):
     reg.OutputGenerator.beginFile(self, genOpts)
-    s = "public threaded namespace GL::api_" + self.apiname + ";\n" \
+    s = "public threaded namespace opengl::api_" + self.apiname + ";\n" \
       + "public import meta;\n" \
       + "private metafunction L meta::list;\n"
     print(s, end='', file=self.outFile)

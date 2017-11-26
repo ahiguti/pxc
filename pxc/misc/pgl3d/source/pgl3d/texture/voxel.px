@@ -476,7 +476,7 @@ private threaded function int mul_div(int a, int m, int d)
   return (a * m + d / 2) / d;
 }
 
-private threaded function void fit_plane_param(plane_param mutable& pp)
+public threaded function void plane_param_fit(plane_param mutable& pp)
 {
   // xyzは-7から+7まで有効
   // dは-48から+48まで有効
@@ -512,7 +512,7 @@ private threaded function void fit_plane_param(plane_param mutable& pp)
     }
   }
   // 採用した縮小率を適用
-  debug_log("fit_plane_param", pp.nor, best_nor);
+  debug_log("plane_param_fit", pp.nor, best_nor);
   pp.nor = best_nor;
   pp.dist = mul_div(pp.dist, best_v, max_xyz);
 }
@@ -525,7 +525,7 @@ public threaded function uint encode_plane_node(plane_param pp)
       return 0u;
     }
   }
-  fit_plane_param(pp);
+  plane_param_fit(pp);
   const& n = pp.nor;
   /*
   if (n.x < -7 || n.x > 7 || n.y < -7 || n.y > 7 || n.z < -7 || n.z > 7) {
@@ -533,6 +533,8 @@ public threaded function uint encode_plane_node(plane_param pp)
   }
   */
   const d = pp.dist;
+  // FIXME 208+48=256になるので収まらない
+  // どうせそんなにいらない。7+7+7=21までしかつかわない。
   if (d < -48 || d > 48) {
     return 0u;
   }

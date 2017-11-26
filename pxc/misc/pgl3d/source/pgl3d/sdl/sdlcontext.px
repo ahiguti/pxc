@@ -3,8 +3,8 @@ public import common -;
 public import meta m;
 public import pointer::raw -;
 public import io::environ -;
-public import GL::compat -;
-public import GL::glew -;
+public import opengl::compat -;
+public import opengl::glew -;
 public import pgl3d::opengl::glresource -;
 public import pgl3d::sdl::sdlutil -;
 public import pgl3d::engine::pglconfig -;
@@ -125,6 +125,9 @@ public struct sdlcontext(pgl3d_config const& config0)
       SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, glmajor);
       SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, glminor);
       mutable glctx = SDL_GL_CreateContext(wnd);
+      if (glctx == SDL_GLContext()) {
+        return false;
+      }
       verstr = cubptr_to_string(glGetString_nocheck(GL_VERSION));
       if (verstr.empty()) {
 	SDL_GL_DeleteContext(glctx);
@@ -167,7 +170,7 @@ public struct sdlcontext(pgl3d_config const& config0)
       }
     }
 
-    const glew_err = static_cast{int}(GL::glew::glewInit());
+    const glew_err = static_cast{int}(opengl::glew::glewInit());
     if (glew_err != 0) {
       sdl_log("glewinit failed", glew_err);
     } else {

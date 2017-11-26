@@ -4,9 +4,9 @@ use warnings;
 use IO::File;
 
 my $SDL_INCLUDE_PATH = $ENV{"SDL_INCLUDE_PATH"}
-  || "/opt/SDL2/include:/opt/SDL2_image:/opt/SDL2_ttf";
-# || "/usr/include/SDL2";
-my $SDL_NAMESPACE = $ENV{"SDL_NAMESPACE"} || "SDL2";
+#  || "/opt/SDL2/include:/opt/SDL2_image:/opt/SDL2_ttf"
+  || "/usr/include/SDL2";
+my $SDL_NAMESPACE = $ENV{"SDL_NAMESPACE"} || "sdl2";
 
 my %type_ucount = ();
 my %struct_defs = ();
@@ -309,6 +309,11 @@ sub read_header_file {
 	$tdn = $1;
       } else {
 	die "failed to parse typedef enum: [$cline] $fn\n";
+      }
+      {
+        # unique
+        my %hash = map{$_, 1} @vals;
+        @vals = keys %hash;
       }
       # print "TYPEDEF ENUM {", join(',', @vals), "} [$tdn]\n";
       if ($tdn) {

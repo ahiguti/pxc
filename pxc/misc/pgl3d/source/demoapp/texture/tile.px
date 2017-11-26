@@ -35,7 +35,7 @@ public function void prepare_texture_data_3d_tmap(bool edit_mode,
       return;
     }
     tmap.set(ui(x), ui(y), ui(z), v);
-    tmap_ax.set(ui(x), ui(y), ui(z), 0xff807060u);
+    tmap_ax.set(ui(x), ui(y), ui(z), 0x3f807060u);
   }
   function uint get(int x, int y, int z) {
     if (x < 0 || x >= si(tmap.get_width())) { return 0; }
@@ -126,7 +126,7 @@ public function void prepare_texture_data_3d_tmap(bool edit_mode,
 	  mutable izm = max(min(si(zm), si(tmap.get_depth()) - 1), 1);
 	  mutable izmb = max(izm - si(tmap.get_depth()) / 16, 1);
 	  for (const z: izmb .. izm) {
-	    set(x, y, z, 0xff807060);
+	    set(x, y, z, 0xff000000);
 	  }
 	}
       }
@@ -138,7 +138,7 @@ public function void prepare_texture_data_3d_tmap(bool edit_mode,
     for (const x: 0 .. si(tmap.get_width())) {
       for (const y: 0 .. si(tmap.get_height())) {
 	for (const z: 0 .. 1) {
-	  set(x, y, z, 0xffb090a0);
+	  set(x, y, z, 0xff000000);
 	}
       }
     }
@@ -164,7 +164,7 @@ public function void prepare_texture_data_3d_tmap(bool edit_mode,
 	for (const ix: x - w .. x + w + 1) {
 	  for (const iy: y - h .. y + h + 1) {
 	    for (const iz: z .. z + d) {
-	      set(ix, iy, iz, 0xffb090a0);
+	      set(ix, iy, iz, 0xff000000);
 	    }
 	  }
 	}
@@ -268,8 +268,8 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
       // const idx = (z << (pattern_sz_l2 * 2)) | (y << pattern_sz_l2) | x;
       // debug_log("set_color", x & 16, y & 16, z, x0, y0, z0, dir);
       if (!cut || tpat.get(x, y, z) != 0) { // FIXME
-	tpat.set(x, y, z, 0xff808080u);
-	tpat_ax.set(x, y, z, 0xff808080u);
+	tpat.set(x, y, z, 0xff000000u);
+	tpat_ax.set(x, y, z, 0x3f808080u);
       } else {
 	// 面取り
 	center = center * 1.0f; // centerは1.0刻み
@@ -289,7 +289,7 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
 	const cw = static_cast{uint}(radius + 0.5) + 1u;
 	const vc = (cw << 24u) | (vz << 16u) | (vy << 8u) | vx;
 	tpat.set(x, y, z, vc);
-	tpat_ax.set(x, y, z, 0xff808080u);
+	tpat_ax.set(x, y, z, 0x3f808080u);
       }
       if (bx == 0 && by == 0) {
 	// テスト中: ローカルライト
@@ -447,7 +447,7 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
     add_fragment("bump2");
     add_fragment("dome");
     add_fragment("frame_16x16x1");
-    add_fragment("frame_16x16x16");
+//    add_fragment("frame_16x16x16");
     add_fragment("hinge");
     add_fragment("pipe1");
     add_fragment("slit1");
@@ -455,7 +455,7 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
     add_fragment("tank2");
     // FIXME: HERE
     function bool paste_fragment(copy_data_type const& frag, uint px,
-      uint py, uint pz)
+      uint py, uint pz, uvec4 color_mod)
     {
       for (const z: 0 .. frag.copy_size.z) {
         for (const y: 0 .. frag.copy_size.y) {
@@ -471,11 +471,22 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
         for (const y: 0 .. frag.copy_size.y) {
           for (const x: 0 .. frag.copy_size.x) {
             mutable v0 = frag.tex_pri.get(x, y, z);
+            mutable v1 = frag.tex_sec.get(x, y, z);
             if (is_space_voxel(v0)) {
               v0 = make_space_voxel(); // drop encoded distance parameter
+            } else {
+              if (color_mod.w != 0) {
+                v1 = 0;
+                v1 |= (color_mod.x & 0xffu) << 0;
+                v1 |= (color_mod.y & 0xffu) << 8;
+                v1 |= (color_mod.z & 0xffu) << 16;
+                v1 |= (color_mod.w & 0xffu) << 24;
+                if (is_filled(v0)) {
+                  v0 |= v1 & 0x00ffffffu;
+                }
+              }
             }
             tpat.set(px + x, py + y, pz + z, v0);
-            const v1 = frag.tex_sec.get(x, y, z);
             tpat_ax.set(px + x, py + y, pz + z, v1);
           }
         }
@@ -487,8 +498,21 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
       uint pz = bz << tile_size_l2.z;
       uint px = 0;
       uint py = 0;
+      int idx = 0;
       while (true) {
         debug_log("frag", px, py, pz);
+        uvec4 color_mod;
+        color_mod.x = rnd->generate() % 256 + 0;
+        color_mod.y = rnd->generate() % 256 + 0;
+        color_mod.z = rnd->generate() % 256 + 0;
+        color_mod.w = 0;
+        // if (idx == 0) {
+        if (rnd->generate() % 256 < 4) {
+            color_mod.w = 0x40;
+            color_mod.x = 100;
+            color_mod.y = 150;
+            color_mod.z = 200;
+        }
         const i = rnd->generate() % static_cast{uint}(fragments.size());
         const& frag = *fragments[i];
         if (px + frag.copy_size.x >= 1u << tex_size_l2.x) {
@@ -499,9 +523,11 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
           }
         }
         if (py + frag.copy_size.y < 1u << tex_size_l2.y) {
-          paste_fragment(frag, px, py, pz);
+          paste_fragment(frag, px, py, pz, color_mod);
         }
-        px += frag.copy_size.x + rnd->generate() & 3;
+        // px += frag.copy_size.x + rnd->generate() & 3;
+        px += frag.copy_size.x;
+        ++idx;
       }
     }
   }

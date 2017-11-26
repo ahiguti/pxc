@@ -1,0 +1,21 @@
+public namespace opengl::glew "export-unsafe";
+public import common -;
+public import opengl::base -;
+
+public function extern "pxcrt::gl::glewInit" GLenum glewInit();
+
+extern "functions" inline
+namespace pxcrt { namespace gl {
+static inline GLenum glewInit()
+{
+#ifdef _MSC_VER
+  ::glewExperimental = 1;
+  GLenum r = ::glewInit();
+  ::glGetError();
+  return r;
+#else
+  return 0;
+#endif
+}
+}; };
+;

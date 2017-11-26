@@ -1,0 +1,104 @@
+#!/usr/bin/env pxc
+public namespace stepfunc;
+import common -;
+import interpolation -;
+import io::environ -;
+import numeric::fpmath -;
+
+function float smooth_bump(float x)
+{
+  float d = 1.0f - x * x;
+  if (d <= 0.0f) {
+    return 0.0f;
+  }
+  float v = exp(-1.0f / d);
+  return v;
+}
+
+function void gen_test()
+{
+    int xsz = 32;
+    int ysz = 32;
+    int zsz = 32;
+    varray{float} buf;
+    buf.resize(static_cast{size_t}(xsz * ysz * zsz), 0.0f);
+    function void set(int x, int y, int z, float v)
+    {
+        if (x >= xsz || y >= ysz || z >= zsz ||
+            x < 0 || y < 0 || z < 0) {
+            println("invalid index: ", x, y, z);
+            return;
+        }
+        buf[static_cast{size_t}((z * ysz + y) * xsz + x)] = v;
+    }
+    function float get(int x, int y, int z)
+    {
+        if (x >= xsz || y >= ysz || z >= zsz ||
+            x < 0 || y < 0 || z < 0) {
+            println("invalid index: ", x, y, z);
+            return 0.0f;
+        }
+        return buf[static_cast{size_t}((z * ysz + y) * xsz + x)];
+    }
+    float mi = +99999.0f;
+    float mx = -99999.0f;
+    for (int z: 0 .. zsz) {
+        for (int y: 0 .. ysz) {
+            for (int x: 0 .. xsz) {
+                float xf = static_cast{float}(x * 2 - xsz + 1)
+                    / static_cast{float}(xsz);
+                float yf = static_cast{float}(y * 2 - ysz + 1)
+                    / static_cast{float}(ysz);
+                float zf = static_cast{float}(z * 2 - zsz + 1)
+                    / static_cast{float}(zsz);
+                float v = 0.0f;
+                float xxf = xf * xf;
+                float xxxxf = xxf * xxf;
+                float yyf = yf * yf;
+                float yyyyf = yyf * yyf;
+                float zzf = zf * zf;
+                v += (((xf*0.0f+0.0f)*xf+0.1f)*xf+0.0f)*xf-0.0f;
+                v += (((yf*0.3f+0.1f)*yf-0.1f)*yf+0.0f)*yf+0.0f;
+                v += (((zf*0.2f-0.1f)*zf-0.1f)*zf+0.0f)*zf+0.0f;
+                // v += (((zf*0.2f+0.1f)*yf*0.3f+0.1f)*zf+0.2f)*yf+0.2f;
+                v *= smooth_bump(xf * 0.7);
+                v *= smooth_bump(yf * 0.7);
+                v *= smooth_bump(zf * 0.7);
+                set(x, y, z, v);
+                mi = min(mi, v);
+                mx = max(mx, v);
+                // println(xf, yf, zf, v, smooth_bump(xf * 2.5));
+            }
+        }
+    }
+    println("min", mi, "max", mx);
+    float rat = 0.5f;
+    float th = mi * rat + mx * (1.0f - rat);
+    for (int z: 0 .. zsz) {
+        println("z=", z);
+        for (int y: 0 .. ysz) {
+            string s = "[";
+            for (int x: 0 .. xsz) {
+                float v = get(x, y, z);
+                // println("v", v);
+                if (v < th) {
+                    s += "*";
+                } else {
+                    s += " ";
+                }
+            }
+            s += "]";
+            println(s);
+        }
+    }
+}
+
+/*
+int x = argv.size() > 0 ? from_string{int}(argv[0]) : 40;
+int n = argv.size() > 1 ? from_string{int}(argv[1]) : 1;
+for (int i : 0 .. n) {
+  println(fib(x));
+}
+*/
+gen_test();
+

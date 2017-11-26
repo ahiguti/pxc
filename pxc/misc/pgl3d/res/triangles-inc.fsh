@@ -355,7 +355,8 @@ int raycast_get_miplevel(in vec3 pos, in vec3 campos, in float dist_rnd)
   // テクスチャ座標でのposとcamposからmiplevelを決める
   float dist_pos_campos_2 = dot(pos - campos, pos - campos) + 0.0001;
   float dist_log2 = log(dist_pos_campos_2) * 0.5 / log(2.0);
-  return int(dist_log2 + dist_rnd + float(virt3_size_log2) - 9.0);
+  /// return int(dist_log2 + dist_rnd * 4.0 + float(virt3_size_log2) - 9.5);
+  return int(dist_log2 * 1.0 + dist_rnd * 4.0 + float(virt3_size_log2) - 9.5);
     // TODO: LODバイアス調整できるようにする
 }
 
@@ -399,7 +400,8 @@ void tpat_sgn_distval(in vec3 i_p, in vec3 i_n, in vec3 sgn, out vec3 o_p,
 int raycast_tilemap(
   inout vec3 pos, in vec3 campos, in float dist_rand,
   in vec3 eye, in vec3 light,
-  in vec3 aabb_min, in vec3 aabb_max, out vec4 value_r, inout vec3 hit_nor,
+  in vec3 aabb_min, in vec3 aabb_max, out vec4 value0_r, out vec4 value1_r,
+  inout vec3 hit_nor,
   in float selfshadow_para, inout float lstr_para, inout int miplevel,
   in bool enable_variable_miplevel)
 {
@@ -423,10 +425,13 @@ int raycast_tilemap(
   vec3 dir = -hit_nor;
   vec3 curpos_f = pos * virt3_size;
   vec3 curpos_i = div_rem(curpos_f, 1.0);
-  value_r = vec4(0.0, 0.0, 0.0, 1.0);
+  value0_r = vec4(0.0, 0.0, 0.0, 1.0);
+  value1_r = vec4(0.0, 0.0, 0.0, 1.0);
   int hit = -1;
   bool hit_tpat;
   vec3 hit_coord;
+  vec4 hit_value = vec4(0.0);
+  int node_type = 0;
   int i;
   const int imax = 256;
   for (i = 0; i < imax; ++i) {
@@ -448,7 +453,7 @@ int raycast_tilemap(
     <%else/>
     vec4 value = <%texture3d/>(sampler_voxtmap, tmap_coord / map3_size);
     <%/>
-    int node_type = int(floor(value.a * 255.0 + 0.5));
+    node_type = int(floor(value.a * 255.0 + 0.5));
     if (node_type == 255 && !mip_detail && enable_variable_miplevel) {
       // 詳細モードでなくてfilledと衝突したなら詳細モードに入る
       mip_detail = true;
@@ -563,6 +568,7 @@ int raycast_tilemap(
 	hit = i;
 	hit_tpat = is_pat;
 	hit_coord = is_pat ? tpat_coord : tmap_coord;
+        hit_value = value;
 	pos = (curpos_i + curpos_f * distance_unit) / virt3_size;
 	  // eyeが衝突した位置
 	// 法線と光が逆向きのときは必ず影(陰)
@@ -616,19 +622,23 @@ int raycast_tilemap(
   if (hit >= 0) {
     if (!hit_tpat) {
       <%if><%is_gl3_or_gles3/>
-      value_r = texelFetch(sampler_voxtmax, ivec3(hit_coord) >> tmap_mip, 
+      value1_r = texelFetch(sampler_voxtmax, ivec3(hit_coord) >> tmap_mip, 
 	tmap_mip);
       <%else/>
-      value_r = <%texture3d/>(sampler_voxtmax, hit_coord / map3_size);
+      value1_r = <%texture3d/>(sampler_voxtmax, hit_coord / map3_size);
       <%/>
     } else {
       <%if><%is_gl3_or_gles3/>
-      value_r = texelFetch(sampler_voxtpax, ivec3(hit_coord) >> tpat_mip,
+      value1_r = texelFetch(sampler_voxtpax, ivec3(hit_coord) >> tpat_mip,
 	tpat_mip);
       <%else/>
-      value_r = <%texture3d/>(sampler_voxtpax, (hit_coord) / pattex3_size);
+      value1_r = <%texture3d/>(sampler_voxtpax, (hit_coord) / pattex3_size);
       <%/>
     }
+    int hit_node_type = int(floor(hit_value.a * 255.0 + 0.5));
+    value0_r = hit_node_type == 255 ? hit_value : value1_r;
+      // value0_rはemissionのrgb値を保持する。filledならprimaryから、それ以外
+      // ならsecondaryの色をそのまま使う。
   }
   // if (i > 35) { dbgval = vec4(1.0, 1.0, 0.0, 1.0); }
   // if (hit > 32) { dbgval = vec4(1.0, 0.0, 0.0, 1.0); } // FIXME

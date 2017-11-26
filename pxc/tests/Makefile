@@ -62,6 +62,7 @@ cleanlogs:
 	rm -rf */*.log */*.log2 */*.log2h */*.exe */*.o */*.class */*.so \
 	  */*.pyc */gen */*.px.cc */DONE */*.html */*.js */*.data */*.mem
 	rm -rf work/
+	rm -rf all.log
 	for i in test_* skip_* fixme_*; do \
 	  pushd $$i; \
 	  if [ -f Makefile ]; then \
