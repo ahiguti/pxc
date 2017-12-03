@@ -1,0 +1,182 @@
+public threaded namespace generic::wellordered;
+public import numeric::integral -;
+public import numeric::limit -;
+public import generic::generic -;
+public import meta m;
+public import meta::family mf;
+
+public threaded function {t} t greatest()
+{
+  metafunction fam m::family{t};
+  if (m::symbol_exists{m::nsof{t}, m::concat{t, "_greatest"}}) {
+    metafunction sym m::symbol{m::nsof{t}, m::concat{t, "_greatest"}};
+    return sym();
+  } else if (m::eq{t, unit}) {
+    return t();
+  } else if (mf::is_integral_type{t}) {
+    return numeric_highest{t}();
+  } else if (mf::is_struct_type{t}) {
+    t r = make_default{t}();
+    expand (fld, i: m::field_names{t}) {
+      r.fld = greatest{m::at{m::field_types{t}, i}}();
+    }
+    return r;
+  } else if (mf::is_union_type{t}) {
+    t r = make_default{t}();
+    metafunction lfld m::last{m::field_names{t}};
+    metafunction tfld m::last{m::field_types{t}};
+    expand (fld: {lfld}) {
+      r.fld = greatest{tfld}();
+    }
+    return r;
+  } else {
+    return m::error{m::concat{t, ": function greatest is not defined"}};
+  }
+}
+
+public threaded function {t} t least()
+{
+  metafunction fam m::family{t};
+  if (m::symbol_exists{m::nsof{t}, m::concat{t, "_least"}}) {
+    metafunction sym m::symbol{m::nsof{t}, m::concat{t, "_least"}};
+    return sym();
+  } else if (m::eq{t, unit}) {
+    return t();
+  } else if (mf::is_integral_type{t}) {
+    return numeric_smallest{t}();
+  } else if (mf::is_struct_type{t}) {
+    t r = make_default{t}();
+    expand (fld, i: m::field_names{t}) {
+      r.fld = least{m::at{m::field_types{t}, i}}();
+    }
+    return r;
+  } else if (mf::is_union_type{t}) {
+    t r = make_default{t}();
+    metafunction lfld m::first{m::field_names{t}};
+    metafunction tfld m::first{m::field_types{t}};
+    expand (fld: {lfld}) {
+      r.fld = least{tfld}();
+    }
+    return r;
+  } else {
+    return m::error{m::concat{t, ": function least is not defined"}};
+  }
+}
+
+public threaded function {f} void
+values_foreach()
+{
+  metafunction tlist m::arg_types{f};
+  if (m::empty{tlist}) {
+    f();
+  } else {
+    metafunction tlist1 m::slice{tlist, 1};
+    metafunction t m::at{tlist, 0};
+    t x = least{t}();
+    t const xend = greatest{t}();
+    while (true) {
+      metafunction adecls m::map{
+        m::seq{m::size{tlist1}},
+        metafunction{i} {m::concat{"a", i}, m::at{tlist1, i}, 0, 0}};
+          // pass by value
+      metafunction anames m::map{
+        m::seq{m::size{tlist1}},
+        metafunction{i} m::concat{"a", i}};
+      threaded function void f1(expand(adecls))
+      {
+        f(x, expand(s: anames; s));
+      }
+      values_foreach{f1}();
+      if (x == xend) {
+        break;
+      }
+      ++x;
+    }
+  }
+}
+
+public threaded function {f} void
+range_inclusive_foreach(expand(range_foreach_xdecls{f}))
+{
+  metafunction tlist m::arg_types{f};
+  metafunction xdecls range_foreach_xdecls{f};
+  metafunction xnames m::join_list{m::map{
+    m::seq{m::size{tlist}},
+    metafunction{i}
+      {
+        m::concat{"x", m::add{i, i}},
+        m::concat{"x", m::add{i, i, 1}}
+      }}};
+  if (m::empty{tlist}) {
+    f();
+  } else {
+    metafunction tlist1 m::slice{tlist, 1};
+    metafunction t m::at{tlist, 0};
+    t x = x0;
+    while (true) {
+      metafunction adecls m::map{
+        m::seq{m::size{tlist1}},
+        metafunction{i} {m::concat{"a", i}, m::at{tlist1, i}, 0, 0}};
+          // pass by value
+      metafunction anames m::map{
+        m::seq{m::size{tlist1}},
+        metafunction{i} m::concat{"a", i}};
+      metafunction xnames1 m::slice{xnames, 2};
+      threaded function void f1(expand(adecls))
+      {
+        f(x, expand(s: anames; s));
+      }
+      range_inclusive_foreach{f1}(expand(s: xnames1; s));
+      if (x == x1) {
+        break;
+      }
+      ++x;
+    }
+  }
+}
+
+public threaded function {f} void
+range_foreach(expand(range_foreach_xdecls{f}))
+{
+  metafunction tlist m::arg_types{f};
+  metafunction xdecls range_foreach_xdecls{f};
+  metafunction xnames m::join_list{m::map{
+    m::seq{m::size{tlist}},
+    metafunction{i}
+      {
+        m::concat{"x", m::add{i, i}},
+        m::concat{"x", m::add{i, i, 1}}
+      }}};
+  if (m::empty{tlist}) {
+    f();
+  } else {
+    metafunction tlist1 m::slice{tlist, 1};
+    metafunction t m::at{tlist, 0};
+    for (t x: x0 .. x1) {
+      metafunction adecls m::map{
+        m::seq{m::size{tlist1}},
+        metafunction{i} {m::concat{"a", i}, m::at{tlist1, i}, 0, 0}};
+          // pass by value
+      metafunction anames m::map{
+        m::seq{m::size{tlist1}},
+        metafunction{i} m::concat{"a", i}};
+      metafunction xnames1 m::slice{xnames, 2};
+      threaded function void f1(expand(adecls))
+      {
+        f(x, expand(s: anames; s));
+      }
+      range_foreach{f1}(expand(s: xnames1; s));
+    }
+  }
+}
+
+private metafunction range_foreach_xdecls{f} m::join_list{m::map{
+  m::seq{m::size{m::arg_types{f}}},
+  metafunction{i}
+    {
+      {m::concat{"x", m::add{i, i}}, m::at{m::arg_types{f}, i}, 0, 0},
+        // pass by value
+      {m::concat{"x", m::add{i, i, 1}}, m::at{m::arg_types{f}, i}, 0, 0}
+        // pass by value
+    }}};
+

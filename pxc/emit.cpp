@@ -1575,6 +1575,9 @@ static void emit_function_decl_one(emit_context& em, expr_funcdef *efd,
       } else {
 	em.puts("static inline ");
       }
+    } else if (!efd->is_member_function() && !efd->is_global_function() &&
+      !efd->is_virtual_function()) {
+      em.puts("static inline ");
     }
     if (!efd->is_destructor()) {
       emit_term(em, efd->get_rettype());

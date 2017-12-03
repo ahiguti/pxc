@@ -217,6 +217,22 @@ public threaded function {tx, ty} void shiftra(tx mutable& x, ty const& y)
   else { binopa{tx, ty, "shiftr"}(x, y); }
 }
 
+/* operator '++' */
+public threaded function {tx} void
+inc(tx mutable& x)
+{
+  if (is_integral_type{tx}) { ++x; }
+  else { unaryopa{tx, "inc", is_integral_type}(x); }
+}
+
+/* operator '--' */
+public threaded function {tx} void
+dec(tx mutable& x)
+{
+  if (is_integral_type{tx}) { ++x; }
+  else { unaryopa{tx, "dec", is_integral_type}(x); }
+}
+
 /* unary operator '+' */
 public threaded function {tx} unaryop_ret_type{tx, "plus", is_numeric_type}
 plus(tx const& x)
@@ -254,7 +270,7 @@ public threaded function {tx, ty} mapped_type{tx}
 getelem(tx const& x, ty const& y)
 {
   if (is_container_or_range_type{tx}) { return x[y]; }
-  else { return x.__getelem(y); }
+  else { return x.getelem__(y); }
 }
 
 /* user-defined operator '[]', lvalue */
@@ -262,25 +278,25 @@ public threaded function {tx, ty, tz} void
 setelem(tx mutable& x, ty const& y, tz const& z)
 {
   if (is_container_or_range_type{tx}) { x[y] = z; }
-  else { x.__setelem(y, z); }
+  else { x.setelem__(y, z); }
 }
 
 /* user-defined operator '.', rvalue */
 public threaded function {fld, tx}
-m::ret_type{m::apply{
-  m::symbol{m::nsof{tx}, m::concat{tx, "___getfld"}}, fld, tx}}
+m::ret_type{apply_args_if{
+  m::symbol{m::nsof{tx}, m::concat{tx, "_getfld__"}}, {fld, tx}}}
 getfld(tx const& x)
 {
-  return m::apply{m::symbol{m::nsof{tx}, m::concat{tx, "___getfld"}},
-    fld, tx}(x);
+  return apply_args_if{m::symbol{m::nsof{tx}, m::concat{tx, "_getfld__"}},
+    {fld, tx}}(x);
 }
 
 /* user-defined operator '.', lvalue */
 public threaded function {fld, tx, ty} void
 setfld(tx mutable& x, ty const& y)
 {
-  m::apply{m::symbol{m::nsof{tx}, m::concat{tx, "___setfld"}},
-    fld, tx, ty}(x, y);
+  apply_args_if{m::symbol{m::nsof{tx}, m::concat{tx, "_setfld__"}},
+    {fld, tx, ty}}(x, y);
 }
 
 /* operator '.' for union is substituted to operator::union_field, in
@@ -310,7 +326,7 @@ union_field(t const& x)
 public metafunction implicit_conversion{tto, tfrom}
   m::cond{
     /* conversion member function */
-    has_tsymbol{tfrom, "__to"},
+    has_tsymbol{tfrom, "to__"},
     implicit_conversion_mf{tto, tfrom},
     /* conversion function defined in the tfrom ns? */
     has_nssymbol{tfrom, conv_funcname_nons{tto, tfrom}},
@@ -358,10 +374,10 @@ private metafunction mapped_type{t}
     m::symbol{t, "mapped_type"},
     has_tsymbol{t, "mapped_type"},
     m::symbol{t, "mapped_type"},
-    has_tsymbol{t, "__getelem"},
-    m::ret_type{m::symbol{t, "__getelem"}},
+    has_tsymbol{t, "getelem__"},
+    m::ret_type{m::symbol{t, "getelem__"}},
     m::ret_type{m::symbol{m::nsof{t},
-      m::concat{m::to_string{t}, "___getelem"}}}};
+      m::concat{m::to_string{t}, "_getelem__"}}}};
 
 private metafunction has_tsymbol{t, name} m::symbol_exists{t, name};
 private metafunction has_nssymbol{t, name} m::symbol_exists{m::nsof{t}, name};
@@ -370,14 +386,14 @@ private metafunction binop_ret_type{tx, ty, opstr, is_builtin}
   m::cond{
     m::and{m::ne{is_builtin, 0}, is_builtin{tx}, is_builtin{ty}},
       tx,
-    has_tsymbol{tx, m::concat{"__", opstr}},
-      m::ret_type{m::symbol{tx, m::concat{"__", opstr}}},
-    has_tsymbol{tx, m::concat{"__", opstr, "a"}},
+    has_tsymbol{tx, m::concat{opstr, "__"}},
+      m::ret_type{m::symbol{tx, m::concat{opstr, "__"}}},
+    has_tsymbol{tx, m::concat{"", opstr, "a__"}},
       tx,
-    has_nssymbol{tx, m::concat{tx, "___", opstr}},
-      m::ret_type{m::apply{
-	m::symbol{m::nsof{tx}, m::concat{tx, "___", opstr}}, tx, ty}},
-    has_nssymbol{tx, m::concat{tx, "___", opstr, "a"}},
+    has_nssymbol{tx, m::concat{tx, "_", opstr, "__"}},
+      m::ret_type{apply_args_if{
+	m::symbol{m::nsof{tx}, m::concat{tx, "_", opstr, "__"}}, {tx, ty}}},
+    has_nssymbol{tx, m::concat{tx, "_", opstr, "a__"}},
       tx,
     m::eq{opstr, "eq"},
       bool,
@@ -396,27 +412,27 @@ private metafunction binop_ret_type{tx, ty, opstr, is_builtin}
 private threaded function {tx, ty, opstr} binop_ret_type{tx, ty, opstr, 0}
 binop(tx const& x, ty const& y)
 {
-  metafunction opstr_bin m::concat{"__", opstr};
+  metafunction opstr_bin m::concat{opstr, "__"};
   metafunction op_bin m::symbol{tx, opstr_bin};
-  metafunction opstr_assign m::concat{"__", opstr, "a"};
+  metafunction opstr_assign m::concat{opstr, "a__"};
   metafunction op_assign m::symbol{tx, opstr_assign};
-  metafunction fstr_bin m::concat{tx, "___", opstr};
+  metafunction fstr_bin m::concat{tx, "_", opstr, "__"};
   metafunction f_bin m::symbol{m::nsof{tx}, fstr_bin};
-  metafunction fstr_assign m::concat{tx, "___", opstr, "a"};
+  metafunction fstr_assign m::concat{tx, "_", opstr, "a__"};
   metafunction f_assign m::symbol{m::nsof{tx}, fstr_assign};
   if (m::ne{op_bin, 0}) {
-    /* return foo.__add(x, y); */
+    /* return foo.add__(x, y); */
     expand(sym: m::list{opstr_bin}) { return x.sym(y); }
   } else if (m::ne{op_assign, 0}) {
-    /* r = x; foo.__adda(r, y); return x; */
+    /* r = x; foo.adda__(r, y); return x; */
     tx r = x; expand(sym: m::list{opstr_assign}) { r.sym(y); } return r;
   } else if (m::ne{f_bin, 0}) {
-    /* return foo___add(x, y); */
-    return f_bin{tx, ty}(x, y);
+    /* return foo_add__(x, y); */
+    return apply_args_if{f_bin, {tx, ty}}(x, y);
   } else if (m::ne{f_assign, 0}) {
-    /* r = x; foo___adda(r, y); return r; */
+    /* r = x; foo_adda__(r, y); return r; */
     tx r = x;
-    f_assign{tx, ty}(r, y);
+    apply_args_if{f_assign, {tx, ty}}(r, y);
     return r;
   } else if (m::eq{opstr, "eq"}) {
     return eq_folding{tx, ty}(x, y);
@@ -493,29 +509,35 @@ op_lexi(tx const& x, ty const& y)
 private metafunction extend_op_fields{tx, ty}
   m::and{m::eq{tx, ty}, is_struct_type{tx}, m::not{m::empty{m::fields{tx}}}};
 
+private metafunction apply_args_if{sym, args}
+  m::cond{m::is_function{sym}, 
+    m::apply_list{sym, m::slice{args, 0, m::tparam_size{sym}}},
+      // apply args only when sym has template parameters
+    m::apply_list{sym, args}};
+
 private threaded function {tx, ty, opstr} void
 binopa(tx mutable& x, ty const& y)
 {
-  metafunction opstr_bin m::concat{"__", opstr};
+  metafunction opstr_bin m::concat{opstr, "__"};
   metafunction op_bin m::symbol{tx, opstr_bin};
-  metafunction opstr_assign m::concat{"__", opstr, "a"};
+  metafunction opstr_assign m::concat{opstr, "a__"};
   metafunction op_assign m::symbol{tx, opstr_assign};
-  metafunction fstr_bin m::concat{tx, "___", opstr};
+  metafunction fstr_bin m::concat{tx, "_", opstr, "__"};
   metafunction f_bin m::symbol{m::nsof{tx}, fstr_bin};
-  metafunction fstr_assign m::concat{tx, "___", opstr, "a"};
+  metafunction fstr_assign m::concat{tx, "_", opstr, "a__"};
   metafunction f_assign m::symbol{m::nsof{tx}, fstr_assign};
   if (m::ne{op_bin, 0}) {
-    /* x = foo.__add(x, y); */
+    /* x = foo.add__(x, y); */
     expand(sym: m::list{op_bin}) { x = x.sym(y); }
   } else if (m::ne{op_assign, 0}) {
-    /* foo.__adda(x, y); */
+    /* foo.adda__(x, y); */
     expand(sym: m::list{opstr_assign}) { x.sym(y); }
   } else if (m::ne{f_bin, 0}) {
-    /* x = foo___add(x, y); */
-    x = f_bin{tx, ty}(x, y);
+    /* x = foo_add__(x, y); */
+    x = apply_args_if{f_bin, {tx, ty}}(x, y);
   } else if (m::ne{f_assign, 0}) {
-    /* foo___adda(x, y); */
-    f_assign{tx, ty}(x, y);
+    /* foo_adda__(x, y); */
+    apply_args_if{f_assign, {tx, ty}}(x, y);
   } else if (extend_op_fields{tx, ty}) {
      /* apply binop for each field */
      metafunction op m::symbol{"operator", m::concat{opstr, "a"}};
@@ -530,27 +552,27 @@ private metafunction unaryop_ret_type{tx, opstr, is_builtin}
     m::and{m::ne{is_builtin, 0}, is_builtin{tx}},
     tx,
   m::cond{
-    has_tsymbol{tx, m::concat{"__", opstr}},
-    m::ret_type{m::symbol{tx, m::concat{"__", opstr}}},
+    has_tsymbol{tx, m::concat{opstr, "__"}},
+    m::ret_type{m::symbol{tx, m::concat{opstr, "__"}}},
   m::cond{
-    has_nssymbol{tx, m::concat{tx, "___", opstr}},
-    m::ret_type{m::apply{
-      m::symbol{m::nsof{tx}, m::concat{tx, "___", opstr}}, tx}},
+    has_nssymbol{tx, m::concat{tx, "_", opstr, "__"}},
+    m::ret_type{apply_args_if{
+      m::symbol{m::nsof{tx}, m::concat{tx, "_", opstr, "__"}}, {tx}}},
   tx}}};
 
 private threaded function {tx, opstr, is_builtin}
 unaryop_ret_type{tx, opstr, is_builtin}
 unaryop(tx const& x)
 {
-  metafunction opstr_u m::concat{"__", opstr};
-  metafunction fstr_u m::concat{tx, "___", opstr};
+  metafunction opstr_u m::concat{opstr, "__"};
+  metafunction fstr_u m::concat{tx, "_", opstr, "__"};
   metafunction f_u m::symbol{m::nsof{tx}, fstr_u};
   if (has_tsymbol{tx, opstr_u}) {
-    /* return foo.__plus(x); */
+    /* return foo.plus__(x); */
     expand(sym: m::list{opstr_u}) { return x.sym(); }
   } else if (has_nssymbol{tx, fstr_u}) {
-    /* return foo___plus(x); */
-    return f_u{tx}(x);
+    /* return foo_plus__(x); */
+    return apply_args_if{f_u, {tx}}(x);
   } else if (extend_op_fields{tx, tx}) {
      /* apply unaryop for each field */
      metafunction op m::symbol{"operator", opstr};
@@ -560,20 +582,36 @@ unaryop(tx const& x)
   }
 }
 
+private threaded function {tx, opstr, is_builtin} void
+unaryopa(tx mutable& x)
+{
+  metafunction opstr_u m::concat{opstr, "__"};
+  metafunction fstr_u m::concat{tx, "_", opstr, "__"};
+  metafunction f_u m::symbol{m::nsof{tx}, fstr_u};
+  if (has_tsymbol{tx, opstr_u}) {
+    /* return foo.inc__(x); */
+    expand(sym: m::list{opstr_u}) { x.sym(); }
+  } else if (has_nssymbol{tx, fstr_u}) {
+    /* return foo_inc__(x); */
+    apply_args_if{f_u, {tx}}(x);
+  } else {
+    return m::error{m::concat{tx, ": operator ", opstr, " is not defined"}};
+  }
+}
+
 private metafunction conv_funcname_nons{tto, tfrom}
-  m::concat{m::to_string{tfrom}, "___to"};
+  m::concat{m::to_string{tfrom}, "_to__"};
 
 private metafunction implicit_conversion_ns{tto, tfrom, tons}
-  m::apply{
+  apply_args_if{
     m::symbol{
       m::nsof{m::cond{tons, tto, tfrom}},
       conv_funcname_nons{tto, tfrom}},
-    tto,
-    tfrom};
+    {tto, tfrom}};
 
 private threaded function {tto, tfrom} tto
 implicit_conversion_mf(tfrom const& x)
 {
-  return x.__to{tto}();
+  return x.to__{tto}();
 }
 

@@ -1,0 +1,66 @@
+namespace foreach2;
+public import common -;
+public import meta m;
+public import meta::vararg va;
+
+function {f} void
+range_fe(t x0, t x1)
+{
+  metafunction t m::at0{m::arg_types{f}};
+  for (t x: x0 .. x1) {
+    f(x);
+  }
+}
+
+metafunction range_felist_tlist{f} m::arg_types{f};
+metafunction range_felist_xdecls{f} m::join_list{m::map{
+    m::seq{m::size{range_felist_tlist{f}}},
+    metafunction{i}
+      {
+        {m::concat{"x", m::add{i, i}}, m::at{range_felist_tlist{f}, i}, 1, 0},
+        {m::concat{"x", m::add{i, i, 1}}, m::at{range_felist_tlist{f}, i}, 1, 0}
+      }}};
+function {f} void
+range_felist(expand(range_felist_xdecls{f}))
+{
+  metafunction tlist range_felist_tlist{f};
+  metafunction xdecls range_felist_xdecls{f};
+  metafunction xnames m::join_list{m::map{
+    m::seq{m::size{tlist}},
+    metafunction{i}
+      {
+        m::concat{"x", m::add{i, i}},
+        m::concat{"x", m::add{i, i, 1}}
+      }}};
+  if (m::empty{tlist}) {
+    f();
+  } else {
+    metafunction tlist1 m::slice{tlist, 1};
+    metafunction t m::at{tlist, 0};
+    function void f1(t x)
+    {
+      metafunction adecls m::map{
+        m::seq{m::size{tlist1}},
+        metafunction{i} {m::concat{"a", i}, m::at{tlist1, i}, 1, 0}};
+      metafunction anames m::map{
+        m::seq{m::size{tlist1}},
+        metafunction{i} m::concat{"a", i}};
+      metafunction xnames1 m::slice{xnames, 2};
+      function void f2(expand(adecls))
+      {
+        f(x, expand(s: anames; s));
+      }
+      range_felist{f2}(expand(s: xnames1; s));
+    }
+    range_fe{f1}(x0, x1);
+  }
+}
+
+{
+  function void bar(uchar x, uchar y, uchar z)
+  {
+    println(x, y, z);
+  }
+  range_felist{bar}(1, 3, 2, 5, 0, 9);
+}
+

@@ -95,7 +95,7 @@ grid_bp_shared(size_t i0, size_t n0, tptr{texture_edit} const& tex0,
   public rawptr{grid_rbinfo} grid_rbinfo_array_ptr;
   public size_t grid_rbinfo_array_size;
     // grid_rbinfo_array_ptrとsizeはdynamics_worldのgrid_rbinfo_arrayを
-    // さしている。grid_bp_thread_object::__callを子スレッドで実行中は
+    // さしている。grid_bp_thread_object::call__を子スレッドで実行中は
     // dynamics_worldのgrid_rbinfo_arrayを変更してはならない。
     // TODO: rwlockを使うと安全になる。
   public float grid_mesh_size = 1.0f;
@@ -120,14 +120,14 @@ grid_bp_thread_object(tptr{grid_bp_shared} const& shared0)
   public varray{bool} grid_bp_work_near;
   public varray{uint} grid_bp_work_near_ents;
   public tptr{grid_bp_shared} sharedp = shared0;
-  public function void __call()
+  public function void call__()
   {
     mutable& shared = *sharedp;
     if (shared.exec_voxel_collision) {
       do_voxel_collision(shared);
       return;
     }
-    // debug_log("grid_bp_thread_object::__call", shared.swarms.size());
+    // debug_log("grid_bp_thread_object::call__", shared.swarms.size());
     // grid_bp.set_mesh_size(shared.grid_mesh_size);
     grid_bp.set_mesh_size(10.0f);
     const grid_rbinfo_array = shared.grid_rbinfo_array_ptr.to_slice(
@@ -289,7 +289,7 @@ grid_bp_thread_factory(tptr{grid_bp_shared} const& shared0)
 <async_task_factory_i>
 {
   tptr{grid_bp_shared} shared = shared0;
-  public function ptr{callable{void, m::nil}} __call()
+  public function ptr{callable{void, m::nil}} call__()
   {
     return make_ptr{grid_bp_thread_object}(shared);
   }

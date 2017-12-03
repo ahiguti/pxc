@@ -22,6 +22,24 @@ test:
 	done; \
 	exit 0;
 
+regenerate:
+	export CXX="$(CXX)"; \
+	for i in test_*; do \
+	  pushd $$i > /dev/null; \
+	  echo -n "[$$i] "; \
+	  if [ -f ./DONE ]; then \
+	    echo "skip"; \
+	  elif ! ./run.sh; then \
+	    echo "$$i failed (regenerate)"; \
+	    ../common/copy_exp2_from_log2.sh \
+	  else \
+	    echo -n ""; \
+	  fi; \
+	  touch ./DONE; \
+	  popd > /dev/null; \
+	done; \
+	exit 0;
+
 valgrind: valgrind-run valgrind-check
 
 valgrind-run:
@@ -59,8 +77,9 @@ clean:
 	$(MAKE) cleanlogs > /dev/null
 
 cleanlogs:
-	rm -rf */*.log */*.log2 */*.log2h */*.exe */*.o */*.class */*.so \
-	  */*.pyc */gen */*.px.cc */DONE */*.html */*.js */*.data */*.mem
+	rm -rf */*.log */*.log2 */*.log2d */*.log2h */*.exe */*.o */*.class \
+	  */*.so */*.pyc */gen */*.px.cc */DONE */*.html */*.js */*.data \
+	  */*.mem
 	rm -rf work/
 	rm -rf all.log
 	for i in test_* skip_* fixme_*; do \

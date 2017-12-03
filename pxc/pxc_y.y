@@ -140,6 +140,7 @@ static compile_mode cur_mode;
 %type<expr_val> funcdecl_stmt
 %type<int_val> opt_passby
 %type<int_val> opt_cv
+%type<visi_val> opt_threaded
 %type<visi_val> opt_attribute
 %type<visi_val> opt_attribute_threading
 %type<visi_val> visibility
@@ -175,6 +176,7 @@ static compile_mode cur_mode;
 %type<expr_val> type_arg_list
 %type<expr_val> type_arg
 %type<expr_val> type_arg_excl_metalist
+%type<expr_val> unnamed_funcdef
 %type<expr_val> nssym_expr
 %type<expr_val> symbol_expr
 %type<expr_val> expression
@@ -375,6 +377,8 @@ forrange_argdecl
 expression_stmt
 	: expression ';'
 	  { $$ = $1; }
+	| expression unnamed_funcdef
+	  { $$ = expr_add_te(cur_fname, @1.first_line, $1, $2); }
 	| vardef_stmt
 	  { $$ = $1; }
 	;
@@ -767,6 +771,9 @@ vardef_stmt
 	  { $$ = $1; }
 	| vardef_expr '=' assign_expr ';'
 	  { $$ = expr_op_new(cur_fname, @1.first_line, '=', $1, $3); }
+	| vardef_expr '=' assign_expr unnamed_funcdef
+	  { $$ = expr_op_new(cur_fname, @1.first_line, '=', $1,
+                expr_add_te(cur_fname, @1.first_line, $3, $4)); }
 	;
 vardef_expr
 	: type_expr TOK_SYMBOL
@@ -921,12 +928,8 @@ type_arg_excl_metalist
 	  { $$ = expr_int_literal_new(cur_fname, @1.first_line, $1, true); }
 	| TOK_STRLIT
 	  { $$ = expr_str_literal_new(cur_fname, @1.first_line, $1); }
-	| TOK_FUNCTION opt_tparams_expr type_expr
-		'(' argdecl_list ')' opt_cv '{' function_body_stmt_list '}'
-	  { $$ = expr_funcdef_new(cur_fname, @1.first_line, 0, 0, 0, $7,
-		expr_block_new(cur_fname, @1.first_line, $2, 0, $5, $3,
-			passby_e_mutable_value, $9),
-		cur_mode != compile_mode_main, false, attribute_private); }
+        | unnamed_funcdef
+          { $$ = $1; }
 	| TOK_METAFUNCTION '{' tparam_list '}' type_arg
 	  { $$ = expr_metafdef_new(cur_fname, @1.first_line, 0, $3, $5,
 		attribute_private); }
@@ -935,6 +938,20 @@ type_arg_excl_metalist
 	  { $$ = expr_metafdef_new(cur_fname, @1.first_line, 0, $3, $5,
 		attribute_private); }
 	;
+unnamed_funcdef
+        : opt_threaded TOK_FUNCTION opt_tparams_expr type_expr
+		'(' argdecl_list ')' opt_cv '{' function_body_stmt_list '}'
+	  { $$ = expr_funcdef_new(cur_fname, @1.first_line, 0, 0, 0, $8,
+		expr_block_new(cur_fname, @1.first_line, $3, 0, $6, $4,
+			passby_e_mutable_value, $10),
+		cur_mode != compile_mode_main, false, $1); }
+        ;
+opt_threaded
+        :
+          { $$ = attribute_unknown; }
+        | TOK_THREADED
+          { $$ = attribute_threaded; }
+        ;
 type_arg
 	: type_arg_excl_metalist
 	  { $$ = $1; }

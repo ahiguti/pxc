@@ -1,0 +1,60 @@
+namespace foreach;
+public import common -;
+public import meta m;
+public import meta::vararg va;
+
+function {f} void
+foreach()
+{
+  metafunction t m::at0{m::arg_types{f}};
+  t i;
+  while (true) {
+    f(i);
+    if (++i == t()) {
+      break;
+    }
+  }
+}
+
+function {f} void
+foreach_list()
+{
+  metafunction tlist m::arg_types{f};
+  if (m::empty{tlist}) {
+    f();
+  } else {
+    metafunction tlist1 m::slice{tlist, 1};
+    metafunction t m::at{tlist, 0};
+    function void f1(t x)
+    {
+      metafunction adecls m::map{
+        m::seq{m::size{tlist1}},
+        metafunction{i} {m::concat{"a", i}, m::at{tlist1, i}, 1, 0}};
+      metafunction anames m::map{
+        m::seq{m::size{tlist1}},
+        metafunction{i} m::concat{"a", i}};
+      function void f2(expand(adecls))
+      {
+        f(x, expand(s: anames; s));
+      }
+      foreach_list{f2}();
+    }
+    foreach{f1}();
+  }
+}
+
+{
+  /*
+  function void foo(uchar x)
+  {
+    println(x);
+  }
+  foreach{uchar, foo}();
+  */
+  function void bar(uchar x, uchar y, uchar z)
+  {
+    println(x, y, z);
+  }
+  foreach_list{bar}();
+}
+
