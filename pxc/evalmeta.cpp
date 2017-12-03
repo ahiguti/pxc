@@ -914,13 +914,13 @@ static term eval_meta_tparam_size(const term_list_range& tlev,
   if (e == 0) {
     return term();
   }
-  expr_block *const ttbl = e->get_template_block();
-  if (ttbl == 0) {
-    return term(0LL);
+  const expr_block *const ttbl = e->get_template_block();
+  if (ttbl != 0) {
+    const long long tparams_len = ttbl->tinfo.is_uninstantiated()
+      ? elist_length(ttbl->tinfo.tparams) : 0;
+    return term(tparams_len);
   }
-  const long long tparams_len = ttbl->tinfo.is_uninstantiated()
-    ? elist_length(ttbl->tinfo.tparams) : 0;
-  return term(tparams_len);
+  return term(0LL);
 }
 
 static term eval_meta_targ_size(const term_list_range& tlev,

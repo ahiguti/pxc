@@ -1627,6 +1627,9 @@ static void subst_user_defined_op(expr_op *eop)
   case TOK_XOR_ASSIGN: func = "xora"; tc0 = tc1 = is_boolean_type; break;
   case TOK_SHIFTL_ASSIGN: func = "shiftla"; tc0 = tc1 = is_boolean_type; break;
   case TOK_SHIFTR_ASSIGN: func = "shiftra"; tc0 = tc1 = is_boolean_type; break;
+  /* unary op w side effect */
+  case TOK_INC: func = "inc"; tc0 = is_integral_type; break;
+  case TOK_DEC: func = "dec"; tc0 = is_integral_type; break;
   /* unary op wo side effect */
   case TOK_PLUS: func = "plus"; tc0 = is_numeric_type; break;
   case TOK_MINUS: func = "minus"; tc0 = is_numeric_type; break;
@@ -1660,7 +1663,7 @@ static void subst_user_defined_op(expr_op *eop)
       expr_op_new(eop->fname, eop->line, '.',
 	eop->arg0,
 	expr_symbol_new(eop->fname, eop->line, 
-	  expr_nssym_new(eop->fname, eop->line, 0, "__deref"))), 0);
+	  expr_nssym_new(eop->fname, eop->line, 0, "deref__"))), 0);
   } else {
     fc = expr_funccall_new(eop->fname, eop->line,
       expr_symbol_new(eop->fname, eop->line,
@@ -1928,8 +1931,8 @@ void expr_op::check_type(symbol_table *lookup)
 	false, sc->uniqns, this);
       bool is_generic_invoke = false;
       if (fmem == 0) {
-	/* "__invoke" member function */
-	symstr = "__invoke"; /* TODO: intern once */
+	/* "invoke__" member function */
+	symstr = "invoke__"; /* TODO: intern once */
 	fmem = symtbl->resolve_name_nothrow_memfld(symstr, no_private,
 	  false, sc->uniqns, this);
 	is_generic_invoke = true;
@@ -1977,8 +1980,8 @@ void expr_op::check_type(symbol_table *lookup)
 	  uniqns + "::" + funcname_w_prefix, no_private, uniqns, this);
 	bool is_generic_invoke = false;
 	if (fo == 0) {
-	  /* "foo__invoke" function */
-	  funcname_w_prefix = i->sym_prefix + "__invoke";
+	  /* "foo_invoke__" function */
+	  funcname_w_prefix = i->sym_prefix + "invoke__";
 	    /* TODO: don't use std::string. use symbol instead. */
 	  fo = parent_symtbl->resolve_name_nothrow_ns(
 	    uniqns + "::" + funcname_w_prefix, no_private, uniqns, this);
@@ -2544,7 +2547,7 @@ static void subst_user_defined_call(expr_funccall *fc, symbol_table *lookup)
       expr_nssym_new(fc->fname, fc->line, 0, sym->nssym->sym)),
     #endif
     expr_symbol_new(fc->fname, fc->line,
-      expr_nssym_new(fc->fname, fc->line, 0, "__call")));
+      expr_nssym_new(fc->fname, fc->line, 0, "call__")));
   fc->func = nfunc;
   const std::string uniqns = fc->uniqns;
   int block_id_ns = 0;
@@ -2613,7 +2616,7 @@ void expr_funccall::check_type(symbol_table *lookup)
     const size_t tplen = get_tparam_length(func_te.get_expr());
     term_list tas; /* resolved targs */
     if (func_sc != 0 && func_sc->is_generic_invoke()) {
-      /* "__invoke" or "foo__invoke" */
+      /* "invoke__" or "foo_invoke__" */
       const std::string method_name(func_sc->get_fullsym().to_string());
       tas.push_back(term(method_name));
       tas.push_back(tis_ml);

@@ -39,6 +39,8 @@ for i in $TESTS; do
   if [ "$i" != "pxcrt.px" ]; then
     ../../pxc --trim-path=2 -w=../work -p="$TEST_PXC_PROF" $OPTS "$i" \
     	> $bn.log 2> $bn.log2
+    cp -f $bn.log2 $bn.log2d
+    perl -pi -e 's/px\:[\d]+\:/px\:/' $bn.log2
     if [ ! "$?" ]; then
       echo "$bn failed"
     fi
@@ -46,16 +48,19 @@ for i in $TESTS; do
     touch $bn.log
   fi
   bn=`basename $i .px`
-  if ! diff -u $bn.exp $bn.log > /dev/null 2>&1; then
-    echo
-    diff -u $bn.exp $bn.log 2>&1
-    echo "error output:"
-    cat $bn.log2 2> /dev/null
-    echo "$bn failed"
-    err=$((err + 1))
-    errnames="$errnames $bn"
-    # exit 1
-  elif [ -f "$bn.exp2" ]; then
+  if [ -f "$bn.exp" ]; then
+    if ! diff -u $bn.exp $bn.log > /dev/null 2>&1; then
+      echo
+      diff -u $bn.exp $bn.log 2>&1
+      echo "error output:"
+      cat $bn.log2d 2> /dev/null
+      echo "$bn failed"
+      err=$((err + 1))
+      errnames="$errnames $bn"
+      # exit 1
+    fi
+  fi
+  if [ -f "$bn.exp2" ]; then
     if ! diff -u $bn.exp2 $bn.log2 > /dev/null 2>&1; then
       echo
       diff -u $bn.exp2 $bn.log2 2>&1

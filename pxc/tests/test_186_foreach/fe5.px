@@ -1,0 +1,66 @@
+namespace fe5;
+public import common -;
+public import meta m;
+public import meta::vararg va;
+
+metafunction range_foreach_xdecls{f} m::join_list{m::map{
+  m::seq{m::size{m::arg_types{f}}},
+  metafunction{i}
+    {
+      {m::concat{"x", m::add{i, i}}, m::at{m::arg_types{f}, i}, 0, 0},
+        // pass by value
+      {m::concat{"x", m::add{i, i, 1}}, m::at{m::arg_types{f}, i}, 0, 0}
+        // pass by value
+    }}};
+
+threaded function {f} void
+range_foreach(expand(range_foreach_xdecls{f}))
+{
+  metafunction tlist m::arg_types{f};
+  metafunction xdecls range_foreach_xdecls{f};
+  metafunction xnames m::join_list{m::map{
+    m::seq{m::size{tlist}},
+    metafunction{i}
+      {
+        m::concat{"x", m::add{i, i}},
+        m::concat{"x", m::add{i, i, 1}}
+      }}};
+  if (m::empty{tlist}) {
+    f();
+  } else {
+    metafunction tlist1 m::slice{tlist, 1};
+    metafunction t m::at{tlist, 0};
+    for (t x: x0 .. x1) {
+      metafunction adecls m::map{
+        m::seq{m::size{tlist1}},
+        metafunction{i} {m::concat{"a", i}, m::at{tlist1, i}, 0, 0}};
+          // pass by value
+      metafunction anames m::map{
+        m::seq{m::size{tlist1}},
+        metafunction{i} m::concat{"a", i}};
+      metafunction xnames1 m::slice{xnames, 2};
+      threaded function void f1(expand(adecls))
+      {
+        f(x, expand(s: anames; s));
+      }
+      range_foreach{f1}(expand(s: xnames1; s));
+    }
+  }
+}
+
+public threaded function uchar foo()
+{
+  uchar v;
+  range_foreach(0, 3, 1, 6, 3, 44)
+    threaded function void(uchar x, uchar y, uchar z)
+  {
+    v += x * y * z;
+  }
+  return v;
+}
+
+{
+  const v = foo();
+  println(v);
+}
+

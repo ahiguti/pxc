@@ -12,7 +12,7 @@ public multithreaded interface async_task_factory_i
 {
   // equivalent to tcallable{ptr{callable{void, m::nil}}, m::nil} except that
   // tcallable{...} is degraded to a threaded interface
-  public function ptr{callable{void, m::nil}} __call();
+  public function ptr{callable{void, m::nil}} call__();
 }
 
 public metafunction task_executor
@@ -24,7 +24,7 @@ public metafunction task_executor
 public threaded struct
 sync_task_executor(tptr{async_task_factory_i} const& tf)
 {
-  ptr{callable{void, m::nil}} const taskp = tf->__call();
+  ptr{callable{void, m::nil}} const taskp = tf->call__();
   public function void start()
   {
     (*taskp)();
@@ -76,7 +76,7 @@ private tsvaluetype enum task_state {
 private threaded function void async_task_executor_child_thread_main(
   tptr{async_task_factory_i} const& tf, tptr{task_state} const& statep)
 {
-  const taskp = tf->__call();
+  const taskp = tf->call__();
   mutable& task = *taskp;
   mutable lck = lock_guard{task_state}(statep);
   while (true) {

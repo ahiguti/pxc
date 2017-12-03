@@ -119,20 +119,20 @@ object_append_to_string_impl(object const& obj,
   container::array::string mutable& str);
 
 public function extern "pxc_python::object_get" object
-object___getelem(object const& obj, object const& key);
+object_getelem__(object const& obj, object const& key);
 
 public function extern "pxc_python::object_set" void
-object___setelem(object const& obj, object const& key,
+object_setelem__(object const& obj, object const& key,
   object const& val);
 
 public function {fld, tx} object
-object___getfld(object const& obj)
+object_getfld__(object const& obj)
 {
   return object_getfld(obj, m::to_string{fld});
 }
 
 public function {fld, tx, ty} void
-object___setfld(object const& obj, object const& val)
+object_setfld__(object const& obj, object const& val)
 {
   object_setfld(obj, m::to_string{fld}, val);
 }
@@ -144,7 +144,7 @@ private function extern "pxc_python::object_setfld" void
 object_setfld(object const& obj, strlit const& name, object const& val);
 
 public function {name, tlist} object
-object___invoke(expand(
+object_invoke__(expand(
   m::map{m::seq{m::size{tlist}},
     metafunction{i} {m::concat{"a", i}, object, 1, 0}}))
 {
@@ -163,7 +163,7 @@ object___invoke(expand(
 }
 
 public function {tlist} object
-object___call(expand(
+object_call__(expand(
   m::map{m::seq{m::size{tlist}},
     metafunction{i} {m::concat{"a", i}, object, 1, 0}}))
 {
@@ -209,23 +209,23 @@ public function void delattr(object const& obj, object const& key)
   extern "emit" m::concat{"return boost::python::delattr(obj$, key$)"};
 }
 
-public function {tto, tfrom} object strlit___to(strlit const& s)
+public function {tto, tfrom} object strlit_to__(strlit const& s)
 { return make_string(s); }
 
-public function {tto, tfrom} object cslice___to(cstrref const& s)
+public function {tto, tfrom} object cslice_to__(cstrref const& s)
 { return make_string(s); }
 
 public function {tto, tfrom} object
-varray___to(container::array::string const& s)
+varray_to__(container::array::string const& s)
 { return make_string(s); }
 
-public function {tto, tfrom} object int___to(int v)
+public function {tto, tfrom} object int_to__(int v)
 { return make_object{int}(v); }
 
-public function {tto, tfrom} object long___to(numeric::integral::long v)
+public function {tto, tfrom} object long_to__(numeric::integral::long v)
 { return make_object{long}(v); }
 
-public function {tto, tfrom} tto object___to(object const& v)
+public function {tto, tfrom} tto object_to__(object const& v)
 {
   if (m::characteristic{tto, "noheap"}) {
     m::error{"can not convert a python object to a noheap type"};
@@ -235,43 +235,43 @@ public function {tto, tfrom} tto object___to(object const& v)
   return tto(); /* dummy */
 }
 
-public function {tx, ty} void object___adda(object mutable& x, object const& y)
+public function {tx, ty} void object_adda__(object mutable& x, object const& y)
 { extern "emit" m::concat{"x$ += y$"}; }
 
-public function {tx, ty} void object___suba(object mutable& x, object const& y)
+public function {tx, ty} void object_suba__(object mutable& x, object const& y)
 { extern "emit" m::concat{"x$ -= y$"}; }
 
-public function {tx, ty} void object___mula(object mutable& x, object const& y)
+public function {tx, ty} void object_mula__(object mutable& x, object const& y)
 { extern "emit" m::concat{"x$ *= y$"}; }
 
-public function {tx, ty} void object___diva(object mutable& x, object const& y)
+public function {tx, ty} void object_diva__(object mutable& x, object const& y)
 { extern "emit" m::concat{"x$ /= y$"}; }
 
-public function {tx, ty} void object___moda(object mutable& x, object const& y)
+public function {tx, ty} void object_moda__(object mutable& x, object const& y)
 { extern "emit" m::concat{"x$ %= y$"}; }
 
-public function {tx, ty} bool object___or(object const& x, object const& y)
+public function {tx, ty} bool object_or__(object const& x, object const& y)
 { extern "emit" m::concat{"return x$ | y$"}; return false; }
 
-public function {tx, ty} bool object___and(object const& x, object const& y)
+public function {tx, ty} bool object_and__(object const& x, object const& y)
 { extern "emit" m::concat{"return x$ & y$"}; return false; }
 
-public function {tx, ty} bool object___eq(object const& x, object const& y)
+public function {tx, ty} bool object_eq__(object const& x, object const& y)
 { extern "emit" m::concat{"return x$ == y$"}; return false; }
 
-public function {tx, ty} bool object___ne(object const& x, object const& y)
+public function {tx, ty} bool object_ne__(object const& x, object const& y)
 { extern "emit" m::concat{"return x$ != y$"}; return false; }
 
-public function {tx, ty} bool object___gt(object const& x, object const& y)
+public function {tx, ty} bool object_gt__(object const& x, object const& y)
 { extern "emit" m::concat{"return x$ > y$"}; return false; }
 
-public function {tx, ty} bool object___lt(object const& x, object const& y)
+public function {tx, ty} bool object_lt__(object const& x, object const& y)
 { extern "emit" m::concat{"return x$ < y$"}; return false; }
 
-public function {tx, ty} bool object___ge(object const& x, object const& y)
+public function {tx, ty} bool object_ge__(object const& x, object const& y)
 { extern "emit" m::concat{"return x$ >= y$"}; return false; }
 
-public function {tx, ty} bool object___le(object const& x, object const& y)
+public function {tx, ty} bool object_le__(object const& x, object const& y)
 { extern "emit" m::concat{"return x$ <= y$"}; return false; }
 
 public struct extern "pxc_python::error_already_set"

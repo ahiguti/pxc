@@ -1,0 +1,39 @@
+namespace fe4;
+public import common -;
+public import meta m;
+public import meta::vararg va;
+
+metafunction range_foreach_xdecls{f} m::join_list{m::map{
+  m::seq{m::size{m::arg_types{f}}},
+  metafunction{i}
+    {
+      {m::concat{"x", m::add{i, i}}, m::at{m::arg_types{f}, i}, 0, 0},
+      {m::concat{"x", m::add{i, i, 1}}, m::at{m::arg_types{f}, i}, 0, 0}
+    }}};
+
+threaded function {f} void
+range_foreach(uchar x0, uchar x1, uchar y0, uchar y1, uchar z0, uchar z1)
+{
+  for (const x: x0 .. x1) {
+    for (const y: y0 .. y1) {
+      for (const z: z0 .. z1) {
+        f(x, y, z);
+      }
+    }
+  }
+}
+
+public function uchar foo()
+{
+  uchar v;
+  range_foreach{function void(uchar x, uchar y, uchar z) {
+    v += x * y * z;
+  }}(0, 3, 1, 6, 3, 44);
+  return v;
+}
+
+{
+  const v = foo();
+  println(v);
+}
+

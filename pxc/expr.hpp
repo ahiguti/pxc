@@ -118,6 +118,7 @@ expr_i *expr_tparams_new(const char *fn, int line, const char *sym,
   bool is_variadic_metaf, expr_i *rest);
 expr_i *expr_te_local_chain_new(expr_i *te1, expr_i *te2);
 expr_i *expr_metalist_new(expr_i *tl);
+expr_i *expr_add_te(const char *fn, int line, expr_i *expr, expr_i *te);
 
 /* TODO: move to parser.hpp */
 struct checksum_type {

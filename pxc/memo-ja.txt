@@ -3,6 +3,39 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- const r = foo.bar(...) function void(...) { }
+  r = foo.bar(....) function void(...) { }
+  foo.bar(...) function void(...) { }
+  これらの形だけ許可する
+
+- enumのprintln
+
+
+- 演算子の実装に使われる名前は後ろに「__」付けるルール
+
+- 総称関数の実装に使われる名前は後ろに「__」付けるルール
+  演算子であるかどうかは関係無しに「__」付ける
+
+- metafunctionのtparam_sizeを取ることはできないのか？
+  operatorのapply_args_ifで使いたい。
+
+- for_range等でbreakできるようにするか
+
+- boolean, enum, bitmaskについての最大最小、incは定義するかどうか。
+
+- values_foreachとrange_foreach
+
+- インクリメント演算子をユーザ定義できるように (done)
+
+- 無名関数の後置の構文 (done)
+
+- 無名関数のthreaded装飾できない？ (done)
+
+- 数値リテラルをターゲット型へ変換しているせいで無駄なコード吐いている?
+
+- ネストされた関数はグローバルシンボルにしないほうが良いコード吐くはず
+  (done)
+
 - Can not convert from meta::uint to numeric::integral::ulonglong
 
 - static_assertは失敗するとerrorを呼ばなければならない。網羅的に確認。
@@ -76,8 +109,6 @@ FIXME/TODO M1
 
 - thin interfaceがユーザ定義コンストラクタを持つと無駄なカウンタが
   埋め込まれてしまう (done)
-
-- 無名関数のthreaded装飾できない？
 
 - implicit_conversionの定義、import foo + によって拡張されると衝突
   して期待通りのメタ関数が利用されない問題
@@ -4004,4 +4035,17 @@ shared lock
 file_mtの実装を参考に。
 interface rwlock_i を作り、それを継承した rwlockテンプレートクラスを
 作る。
+
+---------------------------------------------------------------------
+無名関数の後置の構文
+
+expression_stmt expr_add_te()
+expression_stmt : expression ';'
+                | expression TOK_THREADED TOK_FUNCTION ... '{' ... '}'
+expressionとしては、
+expr_funccall_new()で作られる式のみ許可。
+expr_funccall_newの左辺にexpr_te_new()又はexpr_symbol_new()の式が付いている。
+expr_teの右辺にテンプレ引数リストexpr_telist_new()が入っている
+
+
 
