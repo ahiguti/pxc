@@ -24,6 +24,10 @@ public valuetype struct pgl3d_config(cstrref const& confstr)
   public function {t} t get(string const& key, t const& defval, t const& mi,
     t const& mx) const
   {
+    if (mi > defval || mx < defval) {
+      debug_log("pglconfig: invalid def/mi/mx", defval, mi, mx);
+      throw runtime_error_template{"pglconfig"}("");
+    }
     if (const& v: m[key]) {
       const r = from_string{t}(v);
       if (mi != mx) {

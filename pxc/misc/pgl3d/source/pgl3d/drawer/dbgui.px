@@ -20,21 +20,23 @@ private tsvaluetype struct dbgui_uniforms()
 
 public struct drawer_dbgui(shader_config const& glc0,
   drawer_shared const& ds)
-<pgldrawer_i>
+<drawstep_i>
 {
   shader_config const glc = glc0;
   metafunction tattr dbgui_vertex_attributes;
+  ptr{resource_pool} res = pointer_downcast{ptr{resource_pool}}(
+    ds.gl_resources);
+  varray{cptr{gl_framebuffer}} shadowmap_fbs;
   option{dbgui_shader_ptr} sdr_di;
+  vbid_t const vbid_dbgui = ds.vbid_pool->intern("vbid_generic_filter");
   init();
   private function void init()
   {
-    reload_shaders();
+    reload_shaders(glc);
   }
-  public function string get_vbid_name() const { return "vbid_dbgui"; }
-  public function string get_instances_vbid_name() const {
-    return "vbid_dbgui"; }
-  public function string get_vertices_vbid_name() const {
-    return "vbid_dbgui"; }
+  public function vbid_t get_vbid() const { return vbid_dbgui; }
+  public function vbid_t get_instances_vbid() const { return vbid_dbgui; }
+  public function vbid_t get_vertices_vbid() const { return vbid_dbgui; }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
     return make_tfuncptr{prepare_instance_data_dbgui}();
@@ -42,7 +44,8 @@ public struct drawer_dbgui(shader_config const& glc0,
   public function ptr{vertex_buffer} make_vertex_buffer() const {
     return make_tattr_vertex_buffer{tattr}(false, false);
   }
-  public function string builtin_vertex_set_name() const { return "dbgui"; }
+  public function string builtin_vertex_set_name() const {
+    return "generic_filter"; }
   public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
     const
   {
@@ -62,11 +65,21 @@ public struct drawer_dbgui(shader_config const& glc0,
   {
     return texture_info();
   }
-  public function void resize_screen(shader_config const& glc, int width,
+  public function void resize_screen(shader_config const& glc0, int width,
     int height)
   { 
+    uint i;
+    while (true) {
+      const name = "sm" + to_string(i);
+      if (const f: res->framebuffers[name]) {
+	shadowmap_fbs.push_back(f);
+      } else {
+	break;
+      }
+      ++i;
+    }
   }
-  public function bool reload_shaders()
+  public function bool reload_shaders(shader_config const& glc0)
   {
     option{dbgui_shader_ptr} s0;
     try {
@@ -78,38 +91,23 @@ public struct drawer_dbgui(shader_config const& glc0,
     sdr_di.some = s0.some;
     return true;
   }
-  public function uint get_postprocess_framebuffer(draw_step step) const
+  public function void draw_drawstep(draw_data mutable& ddata)
   {
-    return 0U;
-  }
-  public function bool has_step(draw_step step) const
-  {
-    return step == draw_step_hud;
-  }
-  public function void draw(draw_step step, size_t iter,
-    vertex_buffer const& bo, bo_instances_type const& bo_ib,
-    aggregated_ibuffer const& aibuf, vbid_t vbid,
-    shader_config const& glc, projection_info const& cam_df,
-    cslice{GLuint} const& smtex_arr)
-  {
-    if (step == draw_step_hud) {
-      glDisable(GL_DEPTH_TEST);
-      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-      mutable& sdr = *sdr_di.some;
-      glUseProgram(sdr.program);
-      darrayst{int} sampler_smarr = darrayst{int}(
-	    static_cast{size_t}(glc.num_shadowmaps), 0);
-      for (const i: 0 .. glc.num_shadowmaps) {
-	glActiveTexture(static_cast{GLenum}(
-	  static_cast{int}(GL_TEXTURE8) + i));
-	glBindTexture(GL_TEXTURE_2D, smtex_arr[static_cast{size_t}(i)]);
-	sampler_smarr[static_cast{size_t}(i)] = 8 + i;
-      }
-      glUniform1iv(sdr.u_sampler_sm, glc.num_shadowmaps,
-	caddress(sampler_smarr[0]));
-      aibuf.draw(sdr, bo, bo_ib, vbid, glc.enable_instanced,
-	glc.enable_uniform_instancing);
+    glDisable(GL_DEPTH_TEST);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    mutable& sdr = *sdr_di.some;
+    glUseProgram(sdr.program);
+    darrayst{int} sampler_smarr = darrayst{int}(
+          static_cast{size_t}(glc.num_shadowmaps), 0);
+    for (const i: 0 .. shadowmap_fbs.size()) {
+      glActiveTexture(static_cast{GLenum}(
+        static_cast{int}(GL_TEXTURE8) + static_cast{int}(i)));
+      glBindTexture(GL_TEXTURE_2D, shadowmap_fbs[i]->texture_depth.get());
+      sampler_smarr[i] = 8 + static_cast{int}(i);
     }
+    glUniform1iv(sdr.u_sampler_sm, glc.num_shadowmaps,
+      caddress(sampler_smarr[0]));
+    ddata.draw(sdr, get_vertices_vbid(), get_instances_vbid());
   }
   public function option{ptr{edit_mode_i}} get_edit_mode() const
   {

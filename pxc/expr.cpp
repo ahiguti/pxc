@@ -173,14 +173,10 @@ expr_i *expr_metalist_new(expr_i *tl)
 
 expr_i *expr_add_te(const char *fn, int line, expr_i *expr, expr_i *te)
 {
-  expr_funccall *efc = 0;
-  if (expr->get_esort() == expr_e_funccall) {
-    efc = dynamic_cast<expr_funccall *>(expr);
-  } else if (expr->get_esort() == expr_e_op) {
-    expr_op *eo = static_cast<expr_op *>(expr);
-    if (eo->op == '=') {
-      efc = dynamic_cast<expr_funccall *>(eo->arg1);
-    }
+  expr_funccall *efc = dynamic_cast<expr_funccall *>(expr);
+  if (expr->get_esort() == expr_e_op &&
+    static_cast<expr_op *>(expr)->op == '=') {
+    efc = dynamic_cast<expr_funccall *>(static_cast<expr_op *>(expr)->arg1);
   }
   if (efc == 0) {
     arena_error_push(expr,
@@ -188,6 +184,16 @@ expr_i *expr_add_te(const char *fn, int line, expr_i *expr, expr_i *te)
     return expr;
   }
   expr_i *func = efc->func;
+  expr_op *efop = dynamic_cast<expr_op *>(func);
+  if (efop != 0) {
+    if (efop->op != '.') {
+      arena_error_push(expr,
+       "Syntax error: unexpected unnamed function definition");
+      return expr;
+    }
+    func = static_cast<expr_op *>(efop)->arg1;
+      /* foo.bar(...) */
+  }
   expr_te *fcte = dynamic_cast<expr_te *>(func);
   expr_te *rte = 0;
   if (fcte == 0) {
@@ -196,26 +202,19 @@ expr_i *expr_add_te(const char *fn, int line, expr_i *expr, expr_i *te)
       arena_error_push(expr, "Internal error: symbol expected");
       return expr;
     }
+    /* func is a symbol */
     rte = static_cast<expr_te *>(expr_te_new(fn, line, sy->nssym,
       expr_telist_new(fn, line, te, 0)));
   } else {
-    /*
-    expr_telist *tl = fcte->tlarg;
-    if (tl != 0) {
-      while (tl->rest != 0) {
-        tl = tl->rest;
-      }
-      tl->rest = static_cast<expr_telist *>(expr_telist_new(fn, line, te, 0));
-      rte = fcte;
-    } else {
-      rte = static_cast<expr_te *>(expr_te_new(fn, line, fcte->nssym,
-        expr_telist_new(fn, line, te, 0)));
-    }
-    */
+    /* func is a te */
     rte = static_cast<expr_te *>(expr_te_new(fn, line, fcte->nssym,
       expr_telist_new(fn, line, te, fcte->tlarg)));
   }
-  efc->func = rte;
+  if (efop != 0) {
+    efop->arg1 = rte;
+  } else {
+    efc->func = rte;
+  }
   return expr;
 }
 

@@ -365,13 +365,6 @@ vec4 get_sampler_sm(int i, vec2 p)
 
 void main(void)
 {
-/*
-  <%if><%eq><%ssubtype/>7<%/> discard; <%/>
-  <%if><%eq><%ssubtype/>6<%/> discard; <%/>
-  <%if><%eq><%ssubtype/>5<%/> discard; <%/>
-  <%if><%eq><%ssubtype/>4<%/> discard; <%/>
-  <%if><%eq><%ssubtype/>3<%/> discard; <%/>
-*/
   vec4 color = vec4(0.0, 0.0, 0.0, 1.0);
   vec3 nor = vary_normal;
   vec3 rel_camera_pos = camera_pos - vary_position;
@@ -433,14 +426,18 @@ void main(void)
     <%/>
     <%if><%eq><%update_frag_depth/>1<%/>
     <%if><%eq><%stype/>1<%/>
-      // 計算されるdepth値は、raycast始点であるposのdepth値以上になる。
-      // もしすでにdepth_rdの値がそれより小さいならdiscardする。
+      // このフラグメントのdepth値は、raycastするまでもなく、raycast始点で
+      // あるposのdepth値以上になることはわかっている。もしすでにdepth_rdの
+      // 値がそれより小さいなら、このフラグメントが描画されることはないので
+      // 無駄にraycast計算しないようdiscardする。
+      // stype==1のシェーダはssubtypeの大きいほうから順に描画し、depth_rdに
+      // は毎回その時点のデプスバッファのコピーを保持している。
       <%if><%check_frag_depth/>
       <%if><%is_gl3_or_gles3/>
       float prev_depth = texelFetch(sampler_depth_rd, ivec2(gl_FragCoord.xy),
 	0).x;
       <%else/>
-      float prev_depth = 1.0f; // TODO
+      float prev_depth = 1.0f; // TODO?
       <%/>
       if (!cam_inside_aabb) {
 	vec3 ini_tngpos = vary_aabb_or_tconv.xyz + pos * vary_aabb_or_tconv.w;
@@ -494,29 +491,6 @@ void main(void)
     //}
     // if (hit == 1)  { <%fragcolor/> = vec4(1.0, 0.0, 0.0, 1.0); return; }
     /*
-    <%if><%eq><%ssubtype/>1<%/>
-    if (hit >= 0) { <%fragcolor/> = vec4(0.5, 0.5, 1.0, 1.0); return; }
-    <%/>
-    <%if><%eq><%ssubtype/>2<%/>
-    if (hit >= 0) { <%fragcolor/> = vec4(1.0, 0.5, 0.0, 1.0); return; }
-    <%/>
-    <%if><%eq><%ssubtype/>3<%/>
-    if (hit >= 0) { <%fragcolor/> = vec4(0.5, 0.5, 1.0, 1.0); return; }
-    <%/>
-    <%if><%eq><%ssubtype/>4<%/>
-    if (hit >= 0) { <%fragcolor/> = vec4(1.0, 1.0, 0.0, 1.0); return; }
-    <%/>
-    <%if><%eq><%ssubtype/>5<%/>
-    if (hit >= 0) { <%fragcolor/> = vec4(1.0, 0.0, 1.0, 1.0); return; }
-    <%/>
-    <%if><%eq><%ssubtype/>6<%/>
-    if (hit >= 0) { <%fragcolor/> = vec4(1.0, 0.0, 1.0, 1.0); return; }
-    <%/>
-    <%if><%eq><%ssubtype/>7<%/>
-    if (hit >= 0) { <%fragcolor/> = vec4(1.0, 1.0, 1.0, 1.0); return; }
-    <%/>
-    */
-    /*
     hit = raycast_waffle(pos, fragpos, camera_local,
       aabb_min, aabb_max, 0);
     if (hit < 0) { <%fragcolor/> = vec4(1.0, 0.5, 0.5, 1.0); return; }
@@ -551,12 +525,13 @@ void main(void)
       vec4 frag_vpos = view_projection_matrix * frag_gpos;
       float frag_depth = (frag_vpos.z / frag_vpos.w + 1.0) * 0.5;
       <%if><%eq><%update_frag_depth/>1<%/>
-	// FragDepth更新するならこの節を有効にする
 	<%if><%check_frag_depth/>
 	if (prev_depth < frag_depth) {
+          // より近くに描画されたフラグメントが既に存在するので描かない
 	  discard;
 	}
 	<%/>
+	// FragDepthを更新する
 	gl_FragDepth = frag_depth;
       <%/>
     <%/>
@@ -601,7 +576,7 @@ void main(void)
   <%/> // endif stype == 1
   <%if><%enable_shadowmapping/>
     int sm_to_use = 0;
-    vec3 cp_sm; // shadowmapの視錐台でのカメラ位置
+    vec3 cp_sm = vec3(0.0); // shadowmapの視錐台でのカメラ位置
     <%if><%eq><%stype/>1<%/>
       // vec3 ndelta = mat3(shadowmap_vp[0]) * vary_normal * ndelta_scale;
 	// 0.02

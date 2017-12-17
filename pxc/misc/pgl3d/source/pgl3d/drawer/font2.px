@@ -25,12 +25,14 @@ private tsvaluetype struct font2_vertex_attributes()
 }
 
 public struct drawer_font2(shader_config const& glc,
-  drawer_shared const& ds)
-<pgldrawer_i>
+  drawer_shared const& ds, ptr{glm::uvec2} const& psize0)
+<drawstep_i>
 {
   metafunction tattr font2_vertex_attributes;
+  ptr{glm::uvec2} const psize = psize0;
   font2_shader_ptr sdr_fn = init_font2_shader(glc);
   gl_texture texture_font;
+  vbid_t const vbid_font2 = ds.vbid_pool->intern_create("vbid_font2");
   init();
   private function void init()
   {
@@ -39,14 +41,13 @@ public struct drawer_font2(shader_config const& glc,
       // "/Library/Fonts/Tahoma.ttf",
       "/Library/Fonts/Courier New Bold.ttf",
       "/usr/share/fonts/mplus/mplus-1m-bold.ttf",
+      "/usr/share/fonts/truetype/mplus/mplus-1m-bold.ttf",
       "/usr/share/fonts/liberation/LiberationMono-Regular.ttf");
     load_gl_texture_fixedwidth_font(texture_font, fnames);
   }
-  public function string get_vbid_name() const { return "vbid_font2"; }
-  public function string get_instances_vbid_name() const {
-    return "vbid_font2"; }
-  public function string get_vertices_vbid_name() const {
-    return "vbid_font2"; }
+  public function vbid_t get_vbid() const { return vbid_font2; }
+  public function vbid_t get_instances_vbid() const { return vbid_font2; }
+  public function vbid_t get_vertices_vbid() const { return vbid_font2; }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
     return make_tfuncptr{prepare_instance_data_font2}();
@@ -98,39 +99,25 @@ public struct drawer_font2(shader_config const& glc,
     int height)
   { 
   }
-  public function bool reload_shaders()
+  public function bool reload_shaders(shader_config const& glc)
   {
     return true;
   }
-  public function uint get_postprocess_framebuffer(draw_step step) const
+  public function void draw_drawstep(draw_data mutable& ddata)
   {
-    return 0U;
-  }
-  public function bool has_step(draw_step step) const
-  {
-    return step == draw_step_hud;
-  }
-  public function void draw(draw_step step, size_t iter,
-    vertex_buffer const& bo, bo_instances_type const& bo_ib,
-    aggregated_ibuffer const& aibuf, vbid_t vbid,
-    shader_config const& glc, projection_info const& cam_df,
-    cslice{GLuint} const& smtex_arr)
-  {
-    if (step == draw_step_hud) {
-      glActiveTexture(GL_TEXTURE0);
-      glBindTexture(GL_TEXTURE_2D, texture_font.texture_id.get());
-      glDisable(GL_DEPTH_TEST);
-      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-      const screen_size_px = glm::make_vec2(
-	static_cast{float}(cam_df.display_width),
-	static_cast{float}(cam_df.display_height));
-      mutable& sdr = *sdr_fn;
-      glUseProgram(sdr.program);
-      glUniform1i(sdr.u_sampler_font, 0);
-      glUniform2fv(sdr.u_screen_size_px, 1, screen_size_px.to_crawptr());
-      aibuf.draw(sdr, bo, bo_ib, vbid,
-	glc.enable_instanced, glc.enable_uniform_instancing);
-    }
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture_font.texture_id.get());
+    glDisable(GL_DEPTH_TEST);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    const& sz = *psize;
+    const screen_size_px = glm::make_vec2(
+      static_cast{float}(sz.x),
+      static_cast{float}(sz.y));
+    mutable& sdr = *sdr_fn;
+    glUseProgram(sdr.program);
+    glUniform1i(sdr.u_sampler_font, 0);
+    glUniform2fv(sdr.u_screen_size_px, 1, screen_size_px.to_crawptr());
+    ddata.draw(sdr, get_vertices_vbid(), get_instances_vbid());
   }
   public function option{ptr{edit_mode_i}} get_edit_mode() const
   {

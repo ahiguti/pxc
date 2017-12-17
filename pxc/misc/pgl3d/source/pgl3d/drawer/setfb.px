@@ -1,0 +1,147 @@
+private threaded namespace pgl3d::drawer::setfb "export-unsafe";
+public import common -;
+public import pgl3d::drawer::base -;
+public import meta m;
+
+
+private struct setfb_attributes { }
+
+public struct drawer_setfb(shader_config const& glc,
+  drawer_shared const& ds, ptr{glm::uvec2} const& pviewport0,
+  string const& fbname0, bool owner_flag0, bool color_tex0, bool depth_tex0)
+<drawstep_i>
+{
+  /* draw()されるとフレームバッファをbindする。owner_flagが真ならフレーム
+   * バッファを作成する。fbnameが空ならtoplevel fbをbindする。
+   */
+  ptr{glm::uvec2} const pviewport = pviewport0;
+  string const fbname = fbname0;
+  bool const enable_depth_texture = glc.enable_depth_texture;
+  bool const owner_flag = owner_flag0;
+  bool const color_tex = color_tex0;
+  bool const depth_tex = depth_tex0;
+  option{ptr{gl_framebuffer}} fbo_own;
+  option{cptr{gl_framebuffer}} fbo;
+  public function vbid_t get_vbid() const { return vbid_invalid(); }
+  public function vbid_t get_instances_vbid() const { return vbid_invalid(); }
+  public function vbid_t get_vertices_vbid() const { return vbid_invalid(); }
+  init(ds);
+  function void init(drawer_shared const& ds)
+  {
+    if (fbname.empty()) {
+      return;
+    }
+    const res = pointer_downcast{ptr{resource_pool}}(ds.gl_resources);
+    if (const& fb: res->framebuffers[fbname]) {
+      /*
+      if (owner_flag) {
+        throw runtime_error_template{"setfb"}("");
+      }
+      */
+      fbo.some = fb;
+      debug_log("setfb: found frambuffer", fbname);
+    } else {
+      /*
+      if (!owner_flag) {
+        throw runtime_error_template{"setfb"}("");
+      }
+      */
+      fbo_own.some = make_ptr{gl_framebuffer}();
+      fbo.some = fbo_own.some;
+      res->framebuffers.insert(fbname, fbo.some);
+      debug_log("setfb: created frambuffer", fbname);
+    }
+  }
+  public function prepare_instance_data_funcptr
+  get_prepare_instance_data_funcptr() const {
+    return make_tfuncptr{prepare_instance_data_default}();
+  }
+  public function ptr{vertex_buffer} make_vertex_buffer() const {
+    return make_tattr_vertex_buffer{setfb_attributes}(false, false);
+  }
+  public function string builtin_vertex_set_name() const { return string(); }
+  public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
+    const { }
+  public function dgf_filler make_filler(ptr{vertices} const& vptr) const
+  {
+    return make_dgf_noop(vptr);
+  }
+  public function texture_info get_texture_info(cstrref const& name) const
+  {
+    return texture_info();
+  }
+  public function void resize_screen(shader_config const& glc, int width,
+    int height)
+  {
+    if (fbname.empty()) {
+      return;
+    }
+    if (owner_flag) {
+      if (color_tex) {
+        fbo_own.some->width = width;
+        fbo_own.some->height = height;
+        init_postprocess_fbo(glc, false, *fbo_own.some, GL_RGBA);
+        debug_log("setfb color fbo");
+      } else {
+        fbo_own.some->width = glc.shadowmap_resolution;
+        fbo_own.some->height = glc.shadowmap_resolution;
+        init_shadowmap_fbo(glc, *fbo_own.some);
+        debug_log("setfb shadowmap fbo");
+      }
+      debug_log("setfb", fbo_own.some->width, fbo_own.some->height);
+    }
+  }
+  public function bool reload_shaders(shader_config const& glc)
+  {
+    return true;
+  }
+  public function void draw_drawstep(draw_data mutable& ddata)
+  {
+    if (fbname.empty()) {
+      glBindFramebuffer(GL_FRAMEBUFFER, ddata.toplevel_fb);
+      ddata.cur_target_fb.none = unit();
+    } else if (!color_tex) {
+      glBindFramebuffer(GL_FRAMEBUFFER, fbo.some->fbo.get());
+      // debug_log("setfb: depth-only fb");
+      glEnable(GL_CULL_FACE);
+      /* glCullFace(GL_FRONT); */
+      glEnable(GL_DEPTH_TEST);
+      glDepthMask(1);
+      if (enable_depth_texture) {
+	glColorMask(0, 0, 0, 0);
+      } else {
+	glColorMask(1, 1, 1, 1); // TODO: 1,1,0,0 when enable_vsm ?
+      }
+      glDepthFunc(GL_LEQUAL);
+      glDisable(GL_BLEND);
+      if (owner_flag) {
+        if (!enable_depth_texture) {
+          glClearColor(1.0, 1.0, 1.0, 1.0);
+        }
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+      }
+      ddata.cur_target_fb.some = fbo.some;
+    } else {
+      glBindFramebuffer(GL_FRAMEBUFFER, fbo.some->fbo.get());
+      if (depth_tex) {
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LEQUAL); // LESSのほうがよい？
+        glDepthMask(1);
+      }
+      glDisable(GL_BLEND);
+      if (owner_flag) {
+        glClear(GL_DEPTH_BUFFER_BIT);
+      }
+      ddata.cur_target_fb.some = fbo.some;
+      // debug_log("setfb: color fb");
+    }
+    const& viewport = *pviewport;
+    glViewport(0, 0, static_cast{GLsizei}(viewport.x),
+      static_cast{GLsizei}(viewport.y));
+  }
+  public function option{ptr{edit_mode_i}} get_edit_mode() const
+  {
+    return option{ptr{edit_mode_i}}();
+  }
+}
+

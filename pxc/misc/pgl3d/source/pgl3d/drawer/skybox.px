@@ -22,14 +22,17 @@ private tsvaluetype struct skybox_uniforms()
 }
 
 public struct drawer_skybox(shader_config const& glc,
-  drawer_shared const& ds)
-<pgldrawer_i>
+  drawer_shared const& ds, ptr{projection_info} const& pj0)
+<drawstep_i>
 {
   metafunction tattr skybox_vertex_attributes;
   ptr{resource_pool} res =
     pointer_downcast{ptr{resource_pool}}(ds.gl_resources);
+  ptr{projection_info} const pj = pj0;
   skybox_shader_ptr sdr_sb = init_skybox_shader(glc);
+  private bool const light_fixed = glc.light_fixed;
   ptr{gl_texture} texture_cube = make_ptr{gl_texture}();
+  vbid_t const vbid_skybox = ds.vbid_pool->intern_create("vbid_skybox");
   init();
   private function void init()
   {
@@ -43,11 +46,9 @@ public struct drawer_skybox(shader_config const& glc,
     load_gl_texture_cube(*texture_cube, fnames);
     res->textures.insert("environ", texture_cube);
   }
-  public function string get_vbid_name() const { return "vbid_skybox"; }
-  public function string get_instances_vbid_name() const {
-    return "vbid_skybox"; }
-  public function string get_vertices_vbid_name() const {
-    return "vbid_skybox"; }
+  public function vbid_t get_vbid() const { return vbid_skybox; }
+  public function vbid_t get_instances_vbid() const { return vbid_skybox; }
+  public function vbid_t get_vertices_vbid() const { return vbid_skybox; }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
     return make_tfuncptr{prepare_instance_data_default}();
@@ -79,47 +80,36 @@ public struct drawer_skybox(shader_config const& glc,
     int height)
   { 
   }
-  public function bool reload_shaders()
+  public function bool reload_shaders(shader_config const& glc)
   {
     return true;
   }
-  public function uint get_postprocess_framebuffer(draw_step step) const
+  public function void draw_drawstep(draw_data mutable& ddata)
   {
-    return 0U;
-  }
-  public function bool has_step(draw_step step) const
-  {
-    return step == draw_step_solid;
-  }
-  public function void draw(draw_step step, size_t iter,
-    vertex_buffer const& bo, bo_instances_type const& bo_ib,
-    aggregated_ibuffer const& aibuf, vbid_t vbid,
-    shader_config const& glc, projection_info const& cam_df,
-    cslice{GLuint} const& smtex_arr)
-  {
-    if (step == draw_step_solid) {
-      glDepthMask(0);
-      glDepthFunc(GL_LEQUAL);
-      mutable& sdr = *sdr_sb;
-      glUseProgram(sdr.program);
-      glActiveTexture(GL_TEXTURE0);
-      glBindTexture(GL_TEXTURE_CUBE_MAP, texture_cube->texture_id.get());
-      glUniform1i(sdr.u_sampler_cube, 0);
-      glm::mat4 proj_inv = cam_df.projection.inverse();
-      glUniformMatrix4fv(sdr.u_projection_inv, 1, 0, proj_inv.to_crawptr());
-      glm::mat3 cam_dir_mat = cam_df.camera.angle.to_mat3();
-      glUniformMatrix3fv(sdr.u_camera_dir_matrix, 1, 0,
-	cam_dir_mat.to_crawptr());
-      if (glc.light_fixed) {
-	glUniform3fv(sdr.u_light_dir, 1,
-	  glm::make_vec3(0.0, 0.0, -1.0).to_crawptr());
-      } else {
-	glUniform3fv(sdr.u_light_dir, 1,
-	  (cam_df.light.angle * glm::make_vec3(0.0, 0.0, 1.0)).to_crawptr());
-      }
-      glUniform1f(sdr.u_exposure, cam_df.exposure);
-      bo.draw(0, sdr);
+    const& proj = *pj;
+    glDepthMask(0);
+    glDepthFunc(GL_LEQUAL);
+    mutable& sdr = *sdr_sb;
+    glUseProgram(sdr.program);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, texture_cube->texture_id.get());
+    glUniform1i(sdr.u_sampler_cube, 0);
+    glm::mat4 proj_inv = proj.projection.inverse();
+    glUniformMatrix4fv(sdr.u_projection_inv, 1, 0, proj_inv.to_crawptr());
+    glm::mat3 cam_dir_mat = proj.camera.angle.to_mat3();
+    glUniformMatrix3fv(sdr.u_camera_dir_matrix, 1, 0,
+      cam_dir_mat.to_crawptr());
+    if (light_fixed) {
+      glUniform3fv(sdr.u_light_dir, 1,
+        glm::make_vec3(0.0, 0.0, -1.0).to_crawptr());
+    } else {
+      glUniform3fv(sdr.u_light_dir, 1,
+        (proj.light.angle * glm::make_vec3(0.0, 0.0, 1.0))
+        .to_crawptr());
     }
+    glUniform1f(sdr.u_exposure, proj.exposure);
+    const& bo = *ddata.vertex_buffers[get_vertices_vbid()];
+    bo.draw(0, sdr);
   }
   public function option{ptr{edit_mode_i}} get_edit_mode() const
   {

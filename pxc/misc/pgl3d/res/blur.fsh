@@ -13,11 +13,31 @@ vec3 tex_read(in vec2 delta, in float k)
   return (v * v) * k;
 }
 
+const float weight[25] = float[25](
+  1., 4., 7., 4., 1.,
+  4., 16., 26., 16., 4.,
+  7., 26., 41., 26., 7.,
+  4., 16., 26., 16., 4.,
+  1., 4., 7., 4., 1.
+);
+
 void main(void)
 {
   if (option_value != 0.0) {
     vec4 v = <%texture2d/>(sampler_tex, vary_coord);
     <%fragcolor/> = vec4(v.rgb, 1.0);
+  /*
+  } else {
+    vec3 v = vec3(0.0);
+    for (int fy = 0; fy < 5; ++fy) {
+      for (int fx = 0; fx < 5; ++fx) {
+        float w = weight[fy * 5 + fx];
+        v += tex_read(vec2(float(fx) - 2.0, float(fy) - 2.0), w);
+      }
+    }
+    v *= 1.0 / 273.0;
+    <%fragcolor/> = vec4(sqrt(v), 1.0);
+  */
   } else {
     float p0;
     <%if><%enable_bokeh/>
@@ -42,6 +62,8 @@ void main(void)
       tex_read(vec2(-1.0,  1.0), k2) +
       tex_read(vec2( 1.0,  1.0), k2);
     <%fragcolor/> = vec4(sqrt(v), 1.0);
+  /*
+  */
   }
 }
 

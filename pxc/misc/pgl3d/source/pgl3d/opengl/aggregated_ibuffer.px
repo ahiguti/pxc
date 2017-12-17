@@ -15,10 +15,13 @@ public import pgl3d::opengl::glbuffer -;
 public import pgl3d::engine::scene_node -;
 public import pgl3d::engine::pglbase -;
 
-public threaded struct aggregated_ibuffer()
+public threaded struct aggregated_ibuffer(bool enable_instanced0,
+  bool enable_uniform_instancing0)
 {
   // 全インスタンスデータを一つのバイト列にまとめ、一度にGPUへ転送する機能
   // を持つ。
+  public bool const enable_instanced = enable_instanced0;
+  public bool const enable_uniform_instancing = enable_uniform_instancing0;
   private varray{ptr{async_buffer}} buffers;
     // VBO。3つ持つ。
   private size_t buffer_current;
@@ -42,11 +45,10 @@ public threaded struct aggregated_ibuffer()
 
 public function void
 aggregated_ibuffer_frame_begin(aggregated_ibuffer mutable& aibuf,
-  whole_instances_type mutable& whole_instances, bool enable_instanced,
-  bool enable_uniform_instancing)
+  whole_instances_type mutable& whole_instances)
 {
   // 1フレーム描画の前に呼ばれる。全インスタンスデータを一つのVBOに転送する。
-  if (enable_instanced && !enable_uniform_instancing) {
+  if (aibuf.enable_instanced && !aibuf.enable_uniform_instancing) {
     //debug_log("ibuffer_frame_begin begin");
     size_t offset_float = 0;
     // 各vbid,vsidのインスタンスデータが連結されたバッファのどのオフセットに
@@ -98,11 +100,10 @@ aggregated_ibuffer_frame_begin(aggregated_ibuffer mutable& aibuf,
 }
 
 public function void
-aggregated_ibuffer_frame_end(aggregated_ibuffer mutable& aibuf,
-  bool enable_instanced, bool enable_uniform_instancing)
+aggregated_ibuffer_frame_end(aggregated_ibuffer mutable& aibuf)
 {
   // 1フレーム描画が終わったら呼ばれる。
-  if (enable_instanced && !enable_uniform_instancing) {
+  if (aibuf.enable_instanced && !aibuf.enable_uniform_instancing) {
     aibuf.get_current()->fence_sync();
     aibuf.switch_buffer();
   }
@@ -111,11 +112,10 @@ aggregated_ibuffer_frame_end(aggregated_ibuffer mutable& aibuf,
 public function void
 aggregated_ibuffer_draw(aggregated_ibuffer const& aibuf,
   glshader_i mutable& sdr, vertex_buffer const& bo,
-  bo_instances_type const& bo_ib, vbid_t vbid,
-  bool enable_instanced, bool enable_uniform_instancing)
+  bo_instances_type const& bo_ib)
 {
   bo.draw_pre(sdr);
-  if (enable_instanced && !enable_uniform_instancing) {
+  if (aibuf.enable_instanced && !aibuf.enable_uniform_instancing) {
     sdr.enable_instance_attrib_array(true);
     glBindBuffer(GL_ARRAY_BUFFER, aibuf.get_current()->vbo.get());
   }
@@ -132,7 +132,7 @@ aggregated_ibuffer_draw(aggregated_ibuffer const& aibuf,
       continue;
     }
     // sdl_log("draw_elems", ji.vbid, ji.vsid, "model=", arr.size());
-    if (enable_instanced && !enable_uniform_instancing) {
+    if (aibuf.enable_instanced && !aibuf.enable_uniform_instancing) {
       if (m::ne{is_gl3_or_gles3, 0}) {
 	/*
 	sdl_log("instancing bo", vbid, "iattr_num_float",
@@ -142,7 +142,7 @@ aggregated_ibuffer_draw(aggregated_ibuffer const& aibuf,
 	bo.draw_elems_instanced(vsid,
 	  arr.size() / sdr.instance_attrib_num_float());
       }
-    } else if (enable_uniform_instancing) {
+    } else if (aibuf.enable_uniform_instancing) {
       size_t const iattr_num_float = sdr.instance_attrib_num_float();
       size_t j;
       size_t const jmax = arr.size() / iattr_num_float;
@@ -195,7 +195,7 @@ aggregated_ibuffer_draw(aggregated_ibuffer const& aibuf,
       */
     }
   }
-  if (enable_instanced && !enable_uniform_instancing) {
+  if (aibuf.enable_instanced && !aibuf.enable_uniform_instancing) {
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     sdr.enable_instance_attrib_array(false);
   }

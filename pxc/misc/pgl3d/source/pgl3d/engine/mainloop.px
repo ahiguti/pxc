@@ -148,25 +148,38 @@ framerate_control(int vsync0, double max_fps0, int frame_sleep0)
   }
 }
 
-private struct mainloop_internal(ptr{pgl3d_application} const& app0,
+private struct mainloop_internal(ptr{pgl3d_application} const& app,
   pgl3d_config const& conf)
 <mainloop_i>
+{
+  main_ctrl ctrl = main_ctrl(app, conf);
+  public function bool step()
+  {
+    return ctrl.step_internal(ctrl);
+  }
+}
+
+private interface main_ctrl_export_i
+{
+  public function glm::uvec2 get_window_size();
+}
+
+private struct main_ctrl(ptr{pgl3d_application} const& app0,
+  pgl3d_config const& conf)
+<main_ctrl_export_i>
 {
   private ptr{pgl3d_application} app = app0;
   private sdlcontext sdlc = sdlcontext(conf);
   private shader_config sconf = shader_config(sdlc.gles_flag, sdlc.glmajor,
     sdlc.glminor, sdlc.enable_msaa, conf);
   private drawer_shared ds;
-  private varray{ptr{pgldrawer_export_i}} drawers
-    = app->on_init_drawers(sconf, ds);
-  private pglshader pgs = pglshader(sconf,
-    pointer_downcast{ptr{resource_pool}}(ds.gl_resources), drawers,
+  private varray{ptr{pgldrawer_export_i}} drawsteps
+    = app->on_init_drawstep(sconf, ds);
+  private pglshader pgs = pglshader(sconf, ds, drawsteps,
     sdlc.init_w, sdlc.init_h);
-  private whole_instances_type local_whole_instances;
   private node_factory nfac;
   private option{ptr{motion_thread_client}} motion_thr;
   private size_t saved_stat_num_objects;
-  private projection_info cam_drawing_frame;
   private frame_statistics mutable fr;
   private framerate_control mutable frctl = framerate_control(sdlc.vsync,
     conf.get("fps", 60.0, 1.0, 3600.0),
@@ -177,8 +190,8 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
   private int saved_w = 0;
   private int saved_h = 0;
   private Uint32 saved_window_flags = 0;
-  private bool async_motion_thread = true;
-    // conf.get("async_motion_thread", 0, 1, 0) == 1;
+  private bool async_motion_thread =
+    conf.get("async_motion_thread", 1, 0, 1) == 1;
   private bool glfinish = conf.get("glfinish", 0, 0, 1) == 1;
   private bool done = false;
   private bool paused = false;
@@ -212,18 +225,25 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
     }
     sdl_log("PGL3D init0");
     app->on_build_vertices(pgs);
-    pgs.prepare(local_whole_instances, nfac);
+    pgs.prepare(nfac);
     update_window_size();
 
     app->on_joystick_changed(sdlc.joysticks);
 
     /* spawn motion thread */
     motion_thr.some = make_ptr{motion_thread_client}(nfac,
-      local_whole_instances, app->get_scene_shared(), pgs.pidft,
+      pgs.ddata.local_whole_instances, app->get_scene_shared(), pgs.pidft,
       async_motion_thread);
     if (async_motion_thread) {
       motion_thr.some->start();
     }
+  }
+  public function glm::uvec2 get_window_size()
+  {
+    int w;
+    int h;
+    SDL_GetWindowSize(sdlc.sdl_window, address(w), address(h));
+    return glm::make_uvec2(static_cast{uint}(w), static_cast{uint}(h));
   }
   private function void update_fullscreen()
   {
@@ -282,10 +302,6 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
       commands.clear();
     }
   }
-  public function bool step()
-  {
-    return step_internal();
-  }
   private function void update_window_size()
   {
     int w;
@@ -298,7 +314,7 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
     frctl.start();
     sdl_log("resized w=", w, " h=", h, " win_w=", wi_w, " win_h=", wi_h);
   }
-  private function bool step_internal()
+  public function bool step_internal(main_ctrl_export_i mutable& mc_ex)
   {
     // bool scene_next_flag = false;
     SDL_Event ev;
@@ -409,13 +425,13 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
 	{
 	  mutable& mts = *motion_thr.some->shared;
 	  // fr.save_ticks(1, fr.get_ticks());
-	  cam_drawing_frame = mts.cam;
 	  mts.cam = pgs.cam;
 	  mts.frame_speed_mul = frctl.frame_speed_mul;
 	  mts.message = mess;
 	  mts.commands.swap(commands);
-	  local_whole_instances.swap(mts.whole_instances);
+	  pgs.ddata.local_whole_instances.swap(mts.whole_instances);
 	  saved_stat_num_objects = mts.stat_num_objects;
+          app->on_motion_swap();
 	}
 	motion_thr.some->start();
       } else {
@@ -425,16 +441,16 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
 	  mts.frame_speed_mul = frctl.frame_speed_mul;
 	  mts.message = mess;
 	  mts.commands.swap(commands);
-	  local_whole_instances.swap(mts.whole_instances);
+	  pgs.ddata.local_whole_instances.swap(mts.whole_instances);
 	}
 	motion_thr.some->start();
 	motion_thr.some->finish();
 	{
 	  mutable& mts = *motion_thr.some->shared;
-	  cam_drawing_frame = mts.cam;
 	  mts.commands.swap(commands);
-	  local_whole_instances.swap(mts.whole_instances);
+	  pgs.ddata.local_whole_instances.swap(mts.whole_instances);
 	  saved_stat_num_objects = mts.stat_num_objects;
+          app->on_motion_swap();
 	}
       }
       do_commands();
@@ -488,11 +504,11 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
 // FIXME : here
     }
     fr.save_ticks(1);
-    pgs.frame_begin(local_whole_instances);
+    pgs.frame_begin();
     {
       /* draw frame */
       varray{uint} tick_draw;
-      tick_draw = pgs.draw_frame(local_whole_instances, cam_drawing_frame);
+      tick_draw = pgs.draw_frame();
       if (tick_draw.size() >= 2) {
 	fr.save_ticks_value(2, tick_draw[0]);
 	fr.save_ticks_value(3, tick_draw[1]);
@@ -505,6 +521,7 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
     }
     frctl.rate_control();
     fr.save_ticks(5);
+    app->on_draw_finished(pgs.cam);
     SDL_GL_SwapWindow(sdlc.sdl_window);
     fr.save_ticks(6);
     if (frctl.vsync != 0 && dummy_flip == 0) {
@@ -527,14 +544,14 @@ private struct mainloop_internal(ptr{pgl3d_application} const& app0,
 	flip_count = 2;
       }
       for (int i: 0 .. flip_count) {
-	pgs.draw_frame_lastpass(local_whole_instances, cam_drawing_frame);
+	pgs.draw_frame_lastpass();
 	SDL_GL_SwapWindow(sdlc.sdl_window);
       }
       frctl.frame_speed_mul = static_cast{float}(flip_count + 1);
     } else {
       // dummy_flipが2以上のときはdummy_flipを入れる
       for (const i: 1 .. dummy_flip) {
-	pgs.draw_frame_lastpass(local_whole_instances, cam_drawing_frame);
+	pgs.draw_frame_lastpass();
 	SDL_GL_SwapWindow(sdlc.sdl_window);
       }
     }

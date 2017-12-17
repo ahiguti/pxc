@@ -2451,9 +2451,17 @@ private threaded function wall_dir get_wall_dir(texture_data const& tex,
 
 private threaded function void spline_postprocess(pgen_context mutable& ctx)
 {
-  const& tex = ctx.tex_pri;
+  const tex = ctx.tex_pri; // copy
   const sz = tex.get_size_uvec3();
   range_foreach{pp_one}(sz);
+  range_foreach{pp_copy_back}(sz);
+  threaded function void pp_copy_back(uint x, uint y, uint z)
+  {
+    const v = get(x, y, z);
+    if (!is_space_voxel(v)) {
+      ctx.tex_pri.set(x, y, z, v);
+    }
+  }
   threaded function texel_value get(uint x, uint y, uint z)
   {
     if (x >= sz.x || y >= sz.y || z >= sz.z) {

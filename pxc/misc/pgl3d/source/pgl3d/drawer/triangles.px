@@ -86,35 +86,125 @@ private tsvaluetype struct shadowmap_uniforms()
   public int sampler_voxtpat;
 }
 
-public struct drawer_triangles(shader_config const& glc0,
-  drawer_shared const& ds,
-  int opt0, int opt1)
-<pgldrawer_i>
+public function void
+make_drawer_triangles_stype(shader_config const& glc,
+  drawer_shared const& ds, ptr{projection_info} const& pj, int stype,
+  int num_subtypes, int num_shadowmaps,
+  varray{drawer_ptr} mutable& solid_r,
+  varray{varray{drawer_ptr}} mutable& shadow_r,
+  varray{drawer_ptr} mutable& zpre_r)
 {
+  const maindr = make_ptr{drawer_triangles}(glc, ds, pj, stype);
+  for (int i: 0 .. num_subtypes) {
+    solid_r.push_back(make_ptr{drawstep_triangles}(
+      maindr, stype, num_subtypes - i - 1, draw_step_solid, 0u));
+  }
+  for (int i: 0 .. num_subtypes) {
+    zpre_r.push_back(make_ptr{drawstep_triangles}(
+      maindr, stype, num_subtypes - i - 1, draw_step_zprepass, 0u));
+  }
+  for (int j: 0 .. num_shadowmaps) {
+    varray{drawer_ptr} s;
+    for (int i: 0 .. num_subtypes) {
+      s.push_back(make_ptr{drawstep_triangles}(
+        maindr, stype, num_subtypes - i - 1, draw_step_shadowmapping,
+        static_cast{uint}(j)));
+    }
+    shadow_r.push_back(s);
+  }
+}
+
+private struct drawstep_triangles(ptr{drawer_triangles} const& drawer_tr0,
+  int stype0, int ssubtype0, draw_step step0, uint sm_index0)
+<drawstep_i>
+{
+  public ptr{drawer_triangles} main_drawer = drawer_tr0;
+  public int const stype = stype0;
+  public int const ssubtype = ssubtype0;
+  public draw_step const step = step0;
+  public uint const sm_index = sm_index0;
+  vbid_t const vbid_self = main_drawer->ds.vbid_pool->intern(
+    "vbid_triangles_" + to_string(main_drawer->stype) + "_"
+      + to_string(ssubtype));
+  public function vbid_t get_vbid() const {
+    return vbid_self;
+  }
+  public function vbid_t get_instances_vbid() const {
+    return get_vbid();
+  }
+  public function vbid_t get_vertices_vbid() const {
+    return main_drawer->get_vertices_vbid();
+  }
+  public function prepare_instance_data_funcptr
+  get_prepare_instance_data_funcptr() const {
+    return main_drawer->get_prepare_instance_data_funcptr();
+  }
+  public function ptr{vertex_buffer} make_vertex_buffer() const {
+    return main_drawer->make_vertex_buffer();
+  }
+  public function string builtin_vertex_set_name() const {
+    return main_drawer->builtin_vertex_set_name();
+  }
+  public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
+    const {
+    main_drawer->make_builtin_vertex_sets(vptr);
+  }
+  public function dgf_filler make_filler(ptr{vertices} const& vptr) const
+  {
+    return main_drawer->make_filler(vptr);
+  }
+  public function texture_info get_texture_info(cstrref const& name) const
+  {
+    return main_drawer->get_texture_info(name);
+  }
+  public function void resize_screen(shader_config const& glc, int width,
+    int height)
+  {
+    if (ssubtype == 0 && step == draw_step_solid) {
+      main_drawer->resize_screen(glc, width, height);
+    }
+  }
+  public function bool reload_shaders(shader_config const& glc)
+  {
+    if (ssubtype == 0 && step == draw_step_solid) {
+      return main_drawer->reload_shaders(glc);
+    }
+    return true;
+  }
+  public function void draw_drawstep(draw_data mutable& ddata)
+  {
+    return main_drawer->draw_sub_step(ssubtype, step, sm_index, ddata,
+      get_vertices_vbid(), get_instances_vbid());
+  }
+  public function option{ptr{edit_mode_i}} get_edit_mode() const
+  {
+    return main_drawer->get_edit_mode();
+  }
+}
+
+public struct drawer_triangles(shader_config const& glc0,
+  drawer_shared const& ds0, ptr{projection_info} const& pj0, int stype0)
+{
+  /* stype==0 は三角形をそのまま描画する。
+   * stype==1 は直方体の内部をraycastで描画する。
+   * stype==2 は三角形をzprepass/shadowmapだけ描画する。これはstype==1の底面
+   *          に使うためのものだが現在使っていない。
+   */
+  shader_config glc = glc0;
+  public drawer_shared const ds = ds0;
+  public ptr{projection_info} pj = pj0;
+  public int const stype = stype0;
   metafunction tattr triangles_vertex_attributes;
   textures_ptr textures = ds.textures;
   tptr{tiled_voxel_texture} tvt = ds.tvt;
   ptr{resource_pool} res = pointer_downcast{ptr{resource_pool}}(
     ds.gl_resources);
+  varray{cptr{gl_framebuffer}} shadowmap_fbs;
   ptr{edit_mode_texture} emt = ds.emt;
-  int const stype = opt0;
-  int const ssubtype = opt1;
   option{triangles_shader_ptr} sdr_solid;
   option{zprepass_shader_ptr} sdr_zp;
   option{shadowmap_shader_ptr} sdr_shadow;
   ivec3 voxtile_size;
-  /*
-  */
-  /*
-  varray{ptr{texture_data}} vox.tmap_pri;
-  varray{ptr{texture_data}} vox.tmap_aux;
-  varray{ptr{texture_data}} vox.tpat_pri;
-  varray{ptr{texture_data}} vox.tpat_aux;
-  ptr{gl_texture} texture_voxtmap = make_ptr{gl_texture}();
-  ptr{gl_texture} texture_voxtmax = make_ptr{gl_texture}();
-  ptr{gl_texture} texture_voxtpat = make_ptr{gl_texture}();
-  ptr{gl_texture} texture_voxtpax = make_ptr{gl_texture}();
-  */
   ptr{gl_texture} texture_dpat = make_ptr{gl_texture}();
   ptr{gl_texture} texture_pmpat = make_ptr{gl_texture}();
   ptr{gl_texture} texture_tilemap = make_ptr{gl_texture}();
@@ -122,7 +212,6 @@ public struct drawer_triangles(shader_config const& glc0,
   ptr{gl_texture} texture_env = make_ptr{gl_texture}();
   ptr{gl_texture} texture_depth_rd = make_ptr{gl_texture}();
   option{ptr{edit_mode_i}} edit_mode_ptr;
-  shader_config glc = glc0;
   bool const raycast_cull_front =
     (glc.conf.get("raycast_cull_front", 1, 0, 1) != 0);
   bool const update_frag_depth =
@@ -136,11 +225,18 @@ public struct drawer_triangles(shader_config const& glc0,
   bool const large_shadow =
     (glc.conf.get("large_shadow", 0, 0, 1) != 0);
   rand_generator_ptr rand_generator = make_rand_generator(123u);
-  init(glc);
-  private function void init(shader_config const& glc)
+  vbid_t vbid_triangles;
+  vbid_t vbid_instances;
+  vbid_t vbid_vertices;
+  init();
+  private function void init()
   {
-    debug_log("drawer_triangles init ", stype, ssubtype);
-    // FIXME: tex_colなどをdrawerごとに作っているのは無駄
+    debug_log("drawer_triangles init ", stype);
+    vbid_triangles = ds.vbid_pool->intern(
+      "vbid_triangles_" + to_string(stype) + "_0");
+    vbid_instances = vbid_triangles;
+    vbid_vertices = (stype == 1)
+      ? ds.vbid_pool->intern("vbid_triangles_1_0") : vbid_triangles;
     const tex_col = *textures->equal_range("triangles.tile_color");
     const tex_dep = *textures->equal_range("triangles.tile_depth");
     const tex_map = *textures->equal_range("triangles.tile_map");
@@ -185,36 +281,20 @@ public struct drawer_triangles(shader_config const& glc0,
       voxtile_size.x = static_cast{int}(voxtile.get_width());
       voxtile_size.y = static_cast{int}(voxtile.get_height());
       voxtile_size.z = static_cast{int}(voxtile.get_depth());
-      if (ssubtype == 0) {
-	if (glc.conf.get("edit_mode", 0, 0, 1) != 0) {
-	  edit_mode_ptr.some = make_ptr{edit_mode}(emt);
-	} else {
-	  edit_mode_ptr.some = make_ptr{noedit_mode}(emt);
-	}
+      if (glc.conf.get("edit_mode", 0, 0, 1) != 0) {
+        edit_mode_ptr.some = make_ptr{edit_mode}(emt);
+        debug_log("create edit_mode instance");
+      } else {
+        edit_mode_ptr.some = make_ptr{noedit_mode}(emt);
+        debug_log("create noedit_mode instance");
       }
     }
-    reload_shaders();
-    debug_log("drawer_triangles init ", stype, "done");
+    debug_log("drawer_triangles init ", stype, "done", vbid_triangles,
+      vbid_vertices);
   }
-  public function string get_vbid_name() const {
-    return "vbid_triangles_" + to_string(stype) + "_" + to_string(ssubtype);
-  }
-  public function string get_instances_vbid_name() const {
-    return get_vbid_name();
-    /*
-    if (stype == 2) {
-      return "vbid_triangles_0_" + to_string(ssubtype);
-    } else {
-    }
-    */
-  }
-  public function string get_vertices_vbid_name() const {
-    if (stype == 1) {
-      return "vbid_triangles_1_0";
-    } else {
-      return get_vbid_name();
-    }
-  }
+  public function vbid_t get_vbid() const { return vbid_triangles; }
+  public function vbid_t get_instances_vbid() const { return vbid_instances; }
+  public function vbid_t get_vertices_vbid() const { return vbid_vertices; }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
     return make_tfuncptr{prepare_instance_data_triangles}();
@@ -239,11 +319,25 @@ public struct drawer_triangles(shader_config const& glc0,
     }
     return r;
   }
-  public function void resize_screen(shader_config const& glc, int width,
+  public function void resize_screen(shader_config const& glc0, int width,
     int height)
   {
-    if (stype == 1 && ssubtype == 0) {
-      // デプスバッファのコピーを格納するテクスチャを作り、depth_rdの
+    {
+      shadowmap_fbs.clear();
+      uint i;
+      while (true) {
+        const name = "sm" + to_string(i);
+        if (const f: res->framebuffers[name]) {
+          shadowmap_fbs.push_back(f);
+          debug_log("found sm" + to_string(i));
+        } else {
+          break;
+        }
+        ++i;
+      }
+    }
+    if (stype == 1) {
+      // デプスバッファのコピーを格納するためのテクスチャを作り、depth_rdの
       // 名前でシェーダ間で共有する。
       // vsmはとりあえずサポートしない
       glActiveTexture(GL_TEXTURE0);
@@ -265,20 +359,20 @@ public struct drawer_triangles(shader_config const& glc0,
       }
       debug_log("create depth_rd");
     }
+    if (const e: sdr_solid.none) {
+      reload_shaders(glc);
+    }
   }
-  public function bool reload_shaders()
+  public function bool reload_shaders(shader_config const& glc0)
   {
+    sdr_solid.none = unit();
+    sdr_zp.none = unit();
+    sdr_shadow.none = unit();
     function {t} string ivec3_string(t v) {
       return "ivec3(" + to_string(v.x) + ", " + to_string(v.y) + ", "
 	+ to_string(v.z) + ")";
     }
     metafunction ivec3_log2 map{ivec3, integral_log2{int}};
-  /*
-    function {t} string ivec3_string(t x, t y, t z) {
-      return "ivec3(" + to_string(x) + ", " + to_string(y) + ", "
-	+ to_string(z) + ")";
-    }
-  */
     debug_log("triangles reload_shaders init", stype);
     option{triangles_shader_ptr} s0;
     option{zprepass_shader_ptr} s1;
@@ -287,7 +381,7 @@ public struct drawer_triangles(shader_config const& glc0,
       metafunction si static_cast{int};
       tree_map{string, string} bnd;
       bnd["stype"] = to_string(stype);
-      bnd["ssubtype"] = to_string(ssubtype);
+      // bnd["ssubtype"] = to_string(ssubtype);
       bnd["tile3_size"] = ivec3_string(voxtile_size);
       bnd["tile3_size_log2"] = ivec3_string(ivec3_log2(voxtile_size));
       ivec3 voxtpat_size;
@@ -321,7 +415,7 @@ public struct drawer_triangles(shader_config const& glc0,
       bnd["virt3_size"] = "ivec3(" + to_string(virt3_size) + ")";
       bnd["virt3_size_log2"] = "ivec3(" + to_string(integral_log2(virt3_size))
 	+ ")";
-      bnd["smsz"] = glc.num_shadowmaps_str();
+      bnd["smsz"] = to_string(shadowmap_fbs.size());
       bnd["raycast_cull_front"] = to_string(raycast_cull_front ? 1 : 0);
       bnd["update_frag_depth"] = to_string(update_frag_depth ? 1 : 0);
       bnd["check_frag_depth"] = to_string(
@@ -331,7 +425,7 @@ public struct drawer_triangles(shader_config const& glc0,
       bnd["shaodwmap_scale"] = to_string(
 	static_cast{int}(glc.shadowmap_scale + 0.5f));
       bnd["shadowmap_max_distance"] = to_string(
-	pow(glc.shadowmap_scale, static_cast{float}(glc.num_shadowmaps - 1))
+	pow(glc.shadowmap_scale, static_cast{float}(shadowmap_fbs.size() - 1))
 	* glc.shadowmap_distance);
       s0.some = init_triangles_shader(glc, bnd, stype);
       s1.some = init_zprepass_shader(glc, bnd, stype);
@@ -347,69 +441,18 @@ public struct drawer_triangles(shader_config const& glc0,
     debug_log("triangles reload_shaders done");
     return true;
   }
-  public function uint get_postprocess_framebuffer(draw_step step) const
+  public function void draw_sub_step(int ssubtype, draw_step step, size_t iter,
+    draw_data const& ddata, vbid_t vbid_v, vbid_t vbid_i)
   {
-    return 0U;
-  }
-  public function bool has_step(draw_step step) const
-  {
-    if (stype == 1) {
-      if (
-	step == draw_step_shadowmapping ||
-	step == draw_step_zprepass ||
-	step == draw_step_solid) {
-	return true;
-      }
-    } else if (stype == 0) {
-      if (
-	step == draw_step_shadowmapping ||
-	step == draw_step_zprepass ||
-	step == draw_step_solid) {
-	return true;
-      }
-    } else if (stype == 2) {
-      /*
-      // FIXME
-      if (step == draw_step_shadowmapping) {
-	return true;
-      }
-      */
-      if (step == draw_step_shadowmapping ||
-	step == draw_step_zprepass) {
-	return true;
-      }
-      /*
-      */
-    }
-    return false;
-  }
-  function bool has_instance_to_draw(vertex_buffer const& bo,
-    bo_instances_type const& bo_ib, vbid_t vbid) const
-  {
-    for (const vsid: 0 .. bo.num_vs()) {
-      if (bo_ib.size() <= static_cast{size_t}(vsid)) {
-	break;
-      }
-      const& instance = bo_ib[vsid];
-      const& arr = instance.instance_buffer;
-      if (!arr.empty()) {
-        return true;
-      }
-    }
-    return false;
-  }
-  public function void draw(draw_step step, size_t iter,
-    vertex_buffer const& bo, bo_instances_type const& bo_ib,
-    aggregated_ibuffer const& aibuf, vbid_t vbid,
-    shader_config const& glc, projection_info const& cam_df,
-    cslice{GLuint} const& smtex_arr)
-  {
-    if (!has_instance_to_draw(bo, bo_ib, vbid)) {
-      // debug_log("tr: no instance", get_vbid_name(), "vbid=", vbid);
+    const& cam_df = *pj;
+    const& bo = *ddata.vertex_buffers[vbid_v];
+    const& bo_ib = ddata.local_whole_instances[vbid_i];
+    if (!has_instance_to_draw(bo, bo_ib)) {
       return;
     }
-    // debug_log("tr: has instance", get_vbid_name(), "vbid=", vbid);
+    //debug_log("draw_sub_step", stype, ssubtype, static_cast{int}(step), iter);
     if (step == draw_step_shadowmapping) {
+      //debug_log("triangles draw step sm stype=", stype, "iter=", iter);
       glUseProgram(sdr_shadow.some->program);
       if (stype == 1) {
 	if (ssubtype != 1 && raycast_sort && !large_shadow) { return; }
@@ -418,7 +461,6 @@ public struct drawer_triangles(shader_config const& glc0,
 	if (raycast_cull_front) {
 	  // glEnable(GL_CULL_FACE);
 	  glCullFace(GL_FRONT);
-	  // debug_log("sm cull front stype=1"); // FIXME
 	}
 	glActiveTexture(GL_TEXTURE5);
 	glBindTexture(GL_TEXTURE_3D, emt->glt_voxtpat->texture_id.get());
@@ -452,8 +494,7 @@ public struct drawer_triangles(shader_config const& glc0,
 	(cam_df.light.angle * glm::make_vec3(0.0, 0.0, 1.0)).to_crawptr());
       glUniform3fv(sdr_shadow.some->u_camera_pos, 1,
 	cam_df.camera.position.to_crawptr());
-      aibuf.draw(*sdr_shadow.some, bo, bo_ib, vbid, glc.enable_instanced,
-	glc.enable_uniform_instancing);
+      ddata.draw(*sdr_shadow.some, vbid_v, vbid_i);
       if (stype == 1) {
 	if (raycast_cull_front) {
 	  glCullFace(GL_BACK);
@@ -484,8 +525,7 @@ public struct drawer_triangles(shader_config const& glc0,
 	glBindTexture(GL_TEXTURE_3D, emt->glt_voxtmap->texture_id.get());
 	glUniform1i(sdr.u_sampler_voxtmap, 6);
       }
-      aibuf.draw(sdr, bo, bo_ib, vbid, glc.enable_instanced,
-	  glc.enable_uniform_instancing);
+      ddata.draw(sdr, vbid_v, vbid_i);
     } else if (step == draw_step_solid) {
       if (stype == 2) { return; }
       if (stype == 1 && ssubtype == 0 && raycast_sort) {
@@ -547,9 +587,11 @@ public struct drawer_triangles(shader_config const& glc0,
 	glBindTexture(GL_TEXTURE_3D, emt->glt_voxtmax->texture_id.get());
 	glUniform1i(sdr.u_sampler_voxtmax, 8);
 	if ((enable_raycast_zprepass || raycast_sort) && update_frag_depth) {
+          /*
 	  // enable_raycast_zpreassフラグは読む必要ないのでは？
 	  if (texture_depth_rd->texture_id.get() == 0) {
 	    if (const te: res->textures["depth_rd"]) {
+              // 全シェーダで共有しているテクスチャ
 	      texture_depth_rd = te;
 	    }
 	  }
@@ -558,26 +600,45 @@ public struct drawer_triangles(shader_config const& glc0,
 	    glActiveTexture(GL_TEXTURE9);
 	    glBindTexture(GL_TEXTURE_2D, tex.texture_id.get());
 	    glUniform1i(sdr.u_sampler_depth_rd, 9);
-	    /*
-	    debug_log("ssubtype", ssubtype, "depth_rd", tex.texture_id.get(),
-	      tex.surface_w, tex.surface_h);
-	    */
+	    // debug_log("ssubtype", ssubtype, "depth_rd", tex.texture_id.get(),
+	    //   tex.surface_w, tex.surface_h);
 	    // if (ssubtype != 0)
 	    {
+              // 現在のフレームバッファのデプスバッファの内容をdepth_rdに
+              // コピーする。シェーダからはそれをsampler_depth_rdとして
+              // 参照し、early depth testのために使う。
 	      glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0,
 		static_cast{GLint}(tex.surface_w),
 		static_cast{GLint}(tex.surface_h));
 	    }
 	  }
+          */
+          if (const& fb: ddata.cur_target_fb.some) {
+            // 描画対象のフレームバッファ
+            const texid = fb->texture_depth.get();
+	    glActiveTexture(GL_TEXTURE9);
+	    glBindTexture(GL_TEXTURE_2D, texid);
+	    glUniform1i(sdr.u_sampler_depth_rd, 9);
+            //debug_log("got cur_target_fb");
+          } else if (const fb: res->framebuffers["first_pp"]) {
+            // 最初のpostprocessのフレームバッファ。これはmain描画の対象
+            // となるフレームバッファなので、これのdepthテクスチャを
+            // sampler_depth_rdとしてセットする。
+            const texid = fb->texture_depth.get();
+            // debug_log("depth_rd texid", texid);
+	    glActiveTexture(GL_TEXTURE9);
+	    glBindTexture(GL_TEXTURE_2D, texid);
+	    glUniform1i(sdr.u_sampler_depth_rd, 9);
+            //debug_log("got first_pp");
+          }
 	}
       }
-      darrayst{int} sampler_smarr = darrayst{int}(
-	static_cast{size_t}(glc.num_shadowmaps), 0);
-      for (const i: 0 .. glc.num_shadowmaps) {
+      darrayst{int} sampler_smarr = darrayst{int}(shadowmap_fbs.size(), 0);
+      for (const i: 0 .. shadowmap_fbs.size()) {
 	glActiveTexture(static_cast{GLenum}(
-	  static_cast{int}(GL_TEXTURE10) + i));
-	glBindTexture(GL_TEXTURE_2D, smtex_arr[static_cast{size_t}(i)]);
-	sampler_smarr[static_cast{size_t}(i)] = 10 + i;
+	  static_cast{int}(GL_TEXTURE10) + static_cast{int}(i)));
+	glBindTexture(GL_TEXTURE_2D, shadowmap_fbs[i]->texture_depth.get());
+	sampler_smarr[i] = 10 + static_cast{int}(i);
       }
       glUniform1iv(sdr.u_sampler_sm, glc.num_shadowmaps,
 	caddress(sampler_smarr[0]));
@@ -611,12 +672,23 @@ public struct drawer_triangles(shader_config const& glc0,
       mutable opval2 = cam_df.option_value2;
       glUniform1f(sdr.u_option_value2, opval2);
       glUniformMatrix4fv(sdr.u_view_projection_matrix, 1, 0, vp.to_crawptr());
-      aibuf.draw(sdr, bo, bo_ib, vbid, glc.enable_instanced,
-	glc.enable_uniform_instancing);
+      ddata.draw(sdr, vbid_v, vbid_i);
       if (stype == 1) {
 	if (raycast_cull_front) {
 	  glCullFace(GL_BACK);
 	}
+        if (m::is_true{is_gl45}) {
+          glTextureBarrier();
+          // デプスバッファへの書き込みを次回のdepth_rd読み出しに反映させる。
+          // これをしないと次回のearly depth testによる計算省略がおきず遅く
+          // なる(未定義動作のはず)。glTextureBarrier()を挟めば各フラグメント
+          // でread/modify/write処理してもよい。
+          // https://www.khronos.org/opengl/wiki/Memory_Model#Texture_barrier
+          // ... The third thing this functionality changes is that you are
+          // permitted to perform a single read/modify/write operation
+          // between a texel fetch and a framebuffer image under the
+          // following conditions: ...
+        }
       }
     }
   }
@@ -721,5 +793,21 @@ private function string triangles_shader_frag(shader_config const& g,
   const f = load_shader_program(g, bnd, "triangles.fsh");
   //debug_log("triangles fsh", f);
   return f;
+}
+
+private function bool has_instance_to_draw(vertex_buffer const& bo,
+  bo_instances_type const& bo_ib)
+{
+  for (const vsid: 0 .. bo.num_vs()) {
+    if (bo_ib.size() <= static_cast{size_t}(vsid)) {
+      break;
+    }
+    const& instance = bo_ib[vsid];
+    const& arr = instance.instance_buffer;
+    if (!arr.empty()) {
+      return true;
+    }
+  }
+  return false;
 }
 

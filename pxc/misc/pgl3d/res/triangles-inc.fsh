@@ -357,6 +357,7 @@ int raycast_get_miplevel(in vec3 pos, in vec3 campos, in float dist_rnd)
   float dist_log2 = log(dist_pos_campos_2) * 0.5 / log(2.0);
   /// return int(dist_log2 + dist_rnd * 4.0 + float(virt3_size_log2) - 9.5);
   return int(dist_log2 * 1.0 + dist_rnd * 4.0 + float(virt3_size_log2) - 9.5);
+  //return int(dist_log2 * 1.0 + dist_rnd * 4.0 + float(virt3_size_log2) - 7.5);
     // TODO: LODバイアス調整できるようにする
 }
 

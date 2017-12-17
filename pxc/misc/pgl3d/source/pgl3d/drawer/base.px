@@ -53,6 +53,25 @@ public metafunction textures_ptr ptr{tree_map{string, ptr{texture_data}}};
 public metafunction make_textures_ptr
   make_ptr{tree_map{string, ptr{texture_data}}};
 
+public struct draw_data(shader_config const& glc)
+{
+  public whole_instances_type local_whole_instances;
+  public varray{ptr{vertex_buffer}} vertex_buffers;
+  public aggregated_ibuffer agg_ibuffer
+    = aggregated_ibuffer(glc.enable_instanced, glc.enable_uniform_instancing);
+    // 全インスタンスデータの転送先VBO
+  public uint toplevel_fb;
+  public option{cptr{gl_framebuffer}} cur_target_fb;
+    // 現在bindされているframebuffer。noneのときはtoplevel_fbが描画対象
+  public function void draw(glshader_i mutable& sdr, vbid_t vert_vbid,
+    vbid_t inst_vbid) const
+  {
+    const& vb = *vertex_buffers[vert_vbid];
+    const& ib = local_whole_instances[inst_vbid];
+    agg_ibuffer.draw(sdr, vb, ib);
+  }
+}
+
 public struct drawer_shared()
 {
   public textures_ptr const textures
@@ -63,6 +82,8 @@ public struct drawer_shared()
     = make_tptr{tiled_voxel_texture}();
   public ptr{edit_mode_texture} const emt
     = make_ptr{edit_mode_texture}();
+  public ptr{intern_pool{vbid_t}} const vbid_pool
+    = make_ptr{intern_pool{vbid_t}}();
 }
 
 public enum draw_step {
@@ -78,35 +99,42 @@ public enum draw_step {
 public metafunction dgf_filler
   callable_ptr{void, {bool, poly_t, mesh_index}};
 
-public interface pgldrawer_i <pgldrawer_export_i>
+public metafunction drawer_ptr ptr{pgldrawer_export_i};
+
+public interface drawstep_i <pgldrawer_export_i>
 {
-  public function string get_vbid_name() const;
-  public function string get_instances_vbid_name() const;
+  public function vbid_t get_vbid() const;
+    /* drawer実装固有の名前を返す */
+  public function vbid_t get_instances_vbid() const;
     /* これで示されたvbid用のインスタンスデータで描画する。通常は
-     * get_vbid_name()と一致。 */
-  public function string get_vertices_vbid_name() const;
-    /* これで示された頂点データを使って描画する。通常はget_vbid_name()と
-     * 一致。 */
+     * get_vbid()と一致するが、複数のdrawer実装で同じインスタンス
+     * データを描きたいときには代表するdrawer実装のvbid名を返す。 */
+  public function vbid_t get_vertices_vbid() const;
+    /* これで示された頂点データを使って描画する。通常はget_vbid()と
+     * 一致するが、複数のdrawer実装で同じ頂点データを描きたいときには代表
+     * するdrawer実装のvbid名を返す。 */
   public function prepare_instance_data_funcptr
     get_prepare_instance_data_funcptr() const;
+    /* scene_nodeからインスタンスデータへ変換する関数オブジェクトを返す */
   public function ptr{vertex_buffer} make_vertex_buffer() const;
+    /* 頂点データを作る??? */
   public function string builtin_vertex_set_name() const;
     /* empty if no builtin vertex set */
   public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
     const;
     /* called when builtin_vertex_set_name is not empty */
   public function dgf_filler make_filler(ptr{vertices} const& vptr) const;
+    /* 頂点データを1ポリゴン等ぶんセットする関数オブジェクトを返す。ジオメ
+     * トリ生成関数から間接的にこの関数オブジェクトが呼ばれる。 */
   public function texture_info get_texture_info(cstrref const& name) const;
+    /* 名前nameのテクスチャを持っていればそのサイズなどのデータを返す。
+     * 廃止してresource poolに入れるようにする予定。 */
   public function void resize_screen(shader_config const& glc, int width,
     int height);
-  public function bool reload_shaders();
-  public function uint get_postprocess_framebuffer(draw_step step) const;
-  public function bool has_step(draw_step step) const;
-  public function void draw(draw_step step, size_t iter,
-    vertex_buffer const& bo, bo_instances_type const& bo_ib,
-    aggregated_ibuffer const& aibuf, vbid_t vbid,
-    shader_config const& glc, projection_info const& cam_df,
-    cslice{GLuint} const& smtex_arr);
+    /* 画面サイズが変更されたときに呼ばれる */
+  public function bool reload_shaders(shader_config const& glc);
+    /* シェーダの再読込みが要求されたときに呼ばれる。無視してもよい。 */
+  public function void draw_drawstep(draw_data mutable& data);
 }
 
 public metafunction prepare_instance_data_funcptr
@@ -118,7 +146,7 @@ public threaded function void prepare_instance_data_noop(
 {
 }
 
-public metafunction pidf_table varray{prepare_instance_data_funcptr};
+public metafunction prepinstf_table varray{prepare_instance_data_funcptr};
 
 public function {tattr} ptr{vertex_buffer}
 make_tattr_vertex_buffer(bool points_mode, bool is_sub)
@@ -217,84 +245,6 @@ dgf_fill_tattr_internal(ptr{vertices} const& vptr, bool flat_flag,
       vtxs[2].aabb_or_tconv = aabb;
       vtxs[3].aabb_or_tconv = aabb;
       // debug_log("vtxs", vtxs);
-    }
-  }
-  if (false) { // FIXME: remove
-    const c0 = (poly[0].pos + poly[1].pos);
-    const c1 = (poly[1].pos + poly[2].pos);
-    const c2 = (poly[2].pos + poly[3].pos);
-    const c3 = (poly[3].pos + poly[0].pos);
-    const c02 = c2 - c0;
-    const c13 = c3 - c1;
-    if (fabs(glm::dot(c02, c13)) < glm::length(c02) * glm::length(c13) * 0.05)
-    {
-      /* 01, 23 */
-      const v01 = poly[1].pos - poly[0].pos;
-      const v23 = poly[3].pos - poly[2].pos;
-      const dotv0123 = glm::dot(v01, -v23);
-      const lenv01 = glm::length(v01);
-      const lenv23 = glm::length(v23);
-      const cosv0123 = dotv0123 / (lenv01 * lenv23);
-      const ratv2301 = lenv23 / lenv01;
-      /* 12, 30 */
-      const v12 = poly[2].pos - poly[1].pos;
-      const v30 = poly[0].pos - poly[3].pos;
-      const dotv1230 = glm::dot(v12, -v30);
-      const lenv12 = glm::length(v12);
-      const lenv30 = glm::length(v30);
-      const cosv1230 = dotv1230 / (lenv12 * lenv30);
-      const ratv3012 = lenv30 / lenv12;
-      /* */
-      const lenv0123 = lenv01 + lenv23;
-      const lenv1230 = lenv12 + lenv30;
-      mutable co = glm::make_vec2(0.0f, 0.0f);
-      co.x = max(1.0f, min(1024.0f, floor(lenv0123 / 2.0f)));
-      co.y = max(1.0f, min(1024.0f, floor(lenv1230 / 2.0f)));
-      /*
-      if (lenv0123 > lenv1230) {
-	co.y = min(floor(lenv0123 * 4.0f / lenv1230), 128.0f);
-      } else {
-	co.x = min(floor(lenv1230 * 4.0f / lenv0123), 128.0f);
-      }
-      */
-      float const border = 0.1f;
-      if (cosv0123 > cosv1230) {
-	if (ratv2301 > 0.25 && ratv2301 < 4.0 && cosv0123 > 0.95f) {
-	  vtxs[0].uvw = glm::make_vec3(0.0f - border, 0.0f - border, 1.0f);
-	  vtxs[1].uvw = glm::make_vec3(co.x + border, 0.0f - border, 1.0f);
-	  vtxs[2].uvw = glm::make_vec3(co.x + border, co.y + border, 1.0f);
-	  vtxs[3].uvw = glm::make_vec3(0.0f - border, co.y + border, 1.0f);
-	  if (ratv2301 > 1.0f) {
-	    vtxs[2].uvw *= ratv2301;
-	    vtxs[3].uvw *= ratv2301;
-	  } else if (ratv2301 < 1.0f) {
-	    vtxs[0].uvw /= ratv2301;
-	    vtxs[1].uvw /= ratv2301;
-	  }
-	  vtxs[0].aabb_or_tconv = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
-	  vtxs[1].aabb_or_tconv = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
-	  vtxs[2].aabb_or_tconv = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
-	  vtxs[3].aabb_or_tconv = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
-	}
-      } else {
-	if (ratv3012 > 0.25 && ratv3012 < 4.0 && cosv1230 > 0.95f) {
-	  vtxs[0].uvw = glm::make_vec3(0.0f - border, 0.0f - border, 1.0f);
-	  vtxs[1].uvw = glm::make_vec3(co.x + border, 0.0f - border, 1.0f);
-	  vtxs[2].uvw = glm::make_vec3(co.x + border, co.y + border, 1.0f);
-	  vtxs[3].uvw = glm::make_vec3(0.0f - border, co.y + border, 1.0f);
-	  if (ratv3012 > 1.0f) {
-	    vtxs[3].uvw *= ratv3012;
-	    vtxs[0].uvw *= ratv3012;
-	  } else if (ratv3012 < 1.0f) {
-	    vtxs[1].uvw /= ratv3012;
-	    vtxs[2].uvw /= ratv3012;
-	  }
-	  vtxs[0].aabb_or_tconv = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
-	  vtxs[1].aabb_or_tconv = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
-	  vtxs[2].aabb_or_tconv = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
-	  vtxs[3].aabb_or_tconv = glm::make_vec4(0.0f, 0.0f, co.x, co.y);
-	}
-      }
     }
   }
   vptr->push_polygon_distinct{tattr, 1}(poly, vtxs);

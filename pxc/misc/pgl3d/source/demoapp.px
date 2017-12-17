@@ -27,6 +27,7 @@ public import pgl3d::sdl::sdlutil -;
 public import pgl3d::geometry::wfobj -;
 public import io::environ;
 public import debug_helper -;
+public import pgl3d::aux::d3axim -; // FIXME
 
 // public import pgl3d::texture::generator -;
 // public import pgl3d::numeric::interpolation -; // FIXME
@@ -115,15 +116,15 @@ public struct demoapp_application()
   <pgl3d_application>
 {	
   public app_impl app;
-  public function varray{ptr{pgldrawer_export_i}} on_init_drawers(
+  public function varray{ptr{pgldrawer_export_i}} on_init_drawstep(
     shader_config const& conf, drawer_shared const& ds)
   {
-    debug_log("init_drawers");
-    const r = init_drawers(app, conf, ds);
+    debug_log("init_drawstep");
+    const r = init_drawsteps(app, conf, ds);
     app.option_value2 = static_cast{float}(
       conf.conf.get("option_value2", -1, -1, 9));
       // edit modeでは0にしないとカーソルが見えないので注意(miplevel)
-    debug_log("init_drawers done");
+    debug_log("init_drawstep done");
     return r;
   }
   public function void on_build_vertices(make_vertices_i mutable& mvx)
@@ -131,7 +132,7 @@ public struct demoapp_application()
     debug_log("build_vertices");
     build_vertices(app, mvx);
     debug_log("build_vertices done");
-    prepare_vbids(app.scene_shared->rdi, mvx);
+    prepare_vbids(app.scene_shared->rdi, mvx, app.raycast_layer);
     app.scene_shared->tvt.some = app.tvt;
     app.scene_shared->tup.some = app.tup;
   }
@@ -181,7 +182,29 @@ public struct demoapp_application()
     }
     tup.clear();
     if (case app.edit_mode.some) {
+      // debug_log("edit_mode on frame");
       app.edit_mode.some->on_frame(pjinfo);
+    }
+  }
+  public function void on_motion_swap()
+  {
+    // motion threadからmain threadへ情報を移動する際に呼ばれる。
+    // ssはロックされた状態で呼ばれるのでアクセスしても待たされない。
+    const& pj = app.scene_shared->pj_drawing_frame;
+    *app.pj = pj;
+    app.dp_fxaa->option_value = pj.option_value;
+    app.dp_blur->option_value = pj.option_value;
+    *app.pviewport_main = glm::make_uvec2(
+      static_cast{uint}(pj.display_width),
+      static_cast{uint}(pj.display_height));
+    *app.pviewport_sm = glm::make_uvec2(
+      static_cast{uint}(pj.shadowmap_size),
+      static_cast{uint}(pj.shadowmap_size));
+  }
+  public function void on_draw_finished(projection_info const& pjinfo)
+  {
+    if (app.axim.is_valid() && !app.capt_data->empty()) {
+      app.axim.axi_write(0x18000000, *app.capt_data);
     }
   }
 }
@@ -238,14 +261,14 @@ private multithreaded struct raycast_objects()
     } else {
       debug_log("raycast_objects: push_object: unknown join_id", sn.joint_id);
     }
-    const& tr = sn.trans.value;
-    obj.model_matrix = tr;
+    const& trns = sn.trans.value;
+    obj.model_matrix = trns;
     if (obj.radius < 10.0f) {
       // 小さいオブジェクトはnearestには入れない
       objects.push_back(obj);
       return true;
     }
-    const& s = tr.to_cslice();
+    const& s = trns.to_cslice();
     // debug_log("trans", s);
     const pos = glm::make_vec4(s[12], s[13], s[14], 1.0f);
     const relpos = cam.view * pos;
@@ -296,6 +319,10 @@ private multithreaded struct raycast_objects()
       }
     }
 
+    // 近くて大きいオブジェクトを、先に描画するsubdrawer向けインスタンス
+    // リストに入れる。近くて大きいsubdrawer-1個のオブジェクトはそれぞれ
+    // 固有のsubdrawerで順に描画される。残りのオブジェクトは同じsubdrawer
+    // でまとめて描画される。
     size_t cur = rdi.subdrawer_vbids.size() - 1;
     for (float z, const& idx: nearest_objects) {
       mutable& obj = objects[idx];
@@ -347,12 +374,13 @@ private multithreaded struct raycast_objects()
 }
 
 private function void prepare_vbids(raycast_drawers_info mutable& rdi,
-  make_vertices_i mutable& pgs)
+  make_vertices_i mutable& pgs, int raycast_layer)
 {
   rdi.subdrawer_vbids.clear();
   rdi.subdrawer_vbid_min = 0;
   rdi.subdrawer_vbid_max = 0;
-  for (uint i : 0 .. 32u) {
+  uint const num_subdrawers = static_cast{uint}(raycast_layer);
+  for (uint i : 0 .. num_subdrawers) {
     string s = "vbid_triangles_1_" + to_string(i);
     const vbid = pgs.get_vbid(s);
     if (vbid == vbid_invalid()) {
@@ -373,6 +401,9 @@ private function void prepare_vbids(raycast_drawers_info mutable& rdi,
   if (static_cast{size_t}(rdi.subdrawer_vbid_max
     - rdi.subdrawer_vbid_min + 1) != rdi.subdrawer_vbids.size()) {
     // 連続したvbidでなければならない。順序はどうてもいい。
+    // そうなるためには、drawerの生成順を気にしなければならない。
+    // 理不尽な制約なので、できれば修正する。
+    debug_log("failed to get subdrawer_vbids");
     throw runtime_error_template{"subdrawer_vbids"}("1");
   }
   debug_log("prepare_vbids: ", rdi.subdrawer_vbids.size());
@@ -401,6 +432,11 @@ private struct app_impl()
 {
   public tptr{demoapp_scene_shared} const scene_shared
     = make_tptr{demoapp_scene_shared}(io::system);
+  public ptr{projection_info} pj = make_ptr{projection_info}();
+  public ptr{drawer_fxaa_params} dp_fxaa = make_ptr{drawer_fxaa_params}();
+  public ptr{drawer_blur_params} dp_blur = make_ptr{drawer_blur_params}();
+  public ptr{glm::uvec2} pviewport_main = make_ptr{glm::uvec2}();
+  public ptr{glm::uvec2} pviewport_sm = make_ptr{glm::uvec2}();
   public input_control_target player;
   public joystick_state player_joystick;
   public input_control ictl = input_control(io::system);
@@ -427,6 +463,8 @@ private struct app_impl()
   public uint modmask; // shift, meta
   public glm::mat4 edit_mode_trans;
   public vertex_attr edit_mode_vattr;
+  public ptr{varray{uchar}} capt_data = make_ptr{varray{uchar}}();
+  public ftd3_aximaster axim;
   init();
   private function void init() {
     string s;
@@ -490,8 +528,9 @@ public multithreaded struct demoapp_scene_shared(io const& sys0)
   public raycast_drawers_info rdi;
   public option{tptr{tiled_voxel_texture}} tvt;
   public option{tptr{texture_updates}} tup;
-  /* constatnt */
   public collision_shape_data_array shapes;
+  public projection_info pj_drawing_frame;
+    // motion stepで書き込み、motion swapでこれをdrawerに渡す
   function ptr{pgl3d_scene} make_scene(node_factory const& nodefac) {
     return make_ptr{demoapp_scene}(nodefac, shapes, tvt.some, tup.some, sys);
   }
@@ -508,31 +547,6 @@ private threaded function float time_diff(double t0, double t1)
 {
   return static_cast{float}(t1 - t0);
 }
-
-/*
-private threaded function glm::mat3 light_angle(glm::vec3 const& dir,
-  glm::mat3 const& cam)
-{
-  const sli = cam.to_cslice();
-  const v0 = glm::make_vec3(sli[0], sli[1], sli[2]);
-  const v1 = glm::make_vec3(sli[3], sli[4], sli[5]);
-  const v2 = glm::make_vec3(sli[6], sli[7], sli[8]);
-  const d0 = fabs(glm::dot(dir, v0));
-  const d1 = fabs(glm::dot(dir, v1));
-  const d2 = fabs(glm::dot(dir, v2));
-  glm::vec3 x;
-  if (d0 >= d1 && d0 >= d2) {
-    x = glm::cross(v0, dir);
-  } else if (d1 >= d0 && d1 >= d2) {
-    x = glm::cross(v1, dir);
-  } else {
-    x = glm::cross(v2, dir);
-  }
-  x = x.normalize();
-  const y = glm::cross(dir, x).normalize();
-  return glm::make_tmat3(x.x, x.y, x.z, y.x, y.y, y.z, dir.x, dir.y, dir.z);
-}
-*/
 
 public threaded struct demoapp_scene(node_factory const& nodefac0,
   collision_shape_data_array const& shapes0,
@@ -569,6 +583,7 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
     pjinfo.exposure = dss.exposure;
     pjinfo.option_value = dss.option_value;
     pjinfo.option_value2 = dss.option_value2;
+    dss.pj_drawing_frame = pjinfo; // これを介してmainスレッドのdrawersに反映
     const sm_view = pjinfo.light.to_mat4().inverse();
     // const sm_vp = pjinfo.sm_projection * sm_view;
     const& vp = pjinfo.view_projection;
@@ -600,7 +615,7 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
     robjs.clear_objects();
     scene_control_step(sctl, dss, robjs, pjinfo, frame_speed, ncd, ftable,
       whole_instances);
-      // 物理エンジンを使ったオブジェクトの移動。ついでにインスタンス出力。
+      // 物理エンジンを使ったオブジェクトの移動とインスタンス出力。
     robjs.prepare_instances(ncd, dss.rdi, ftable, whole_instances);
       // raycastシェーダの重ね合わせを決定してインスタンス出力
     const t2 = get_time(sys);
@@ -675,7 +690,10 @@ function void handle_event(app_impl mutable& app,
   string_map mutable& commands_r)
 {
   const etype = ev.type;
-  if (etype == SDL_MOUSEBUTTONDOWN) {
+  if (etype == SDL_WINDOWEVENT) {
+    if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
+    }
+  } else if (etype == SDL_MOUSEBUTTONDOWN) {
     const bx = cast_float(ev.button.x) / cast_float(pjinfo.window_width);
     const by = cast_float(ev.button.y) / cast_float(pjinfo.window_height);
     debug_log("down", bx, by, ev.button.x, ev.button.y,
@@ -927,58 +945,61 @@ function void handle_keys(app_impl mutable& app,
   // app.prev_joy_buttons = buttons;
 }
 
-private function varray{ptr{pgldrawer_export_i}} init_drawers(
+private function varray{ptr{pgldrawer_export_i}} init_drawsteps(
   app_impl mutable& app, shader_config const& sconf,
   drawer_shared const& ds)
 {
-  sdl_log("app_init_drawers");
   app.raycast_cull_front = sconf.conf.get("raycast_cull_front", 0, 0, 1) != 0;
   app.raycast_layer = sconf.conf.get("raycast_layer", 15, 0, 63);
     // 0のときソートしない
   app.enable_dbgui = sconf.conf.get("enable_dbgui", 0, 0, 1) != 0;
   app.scene_shared->raycast_layer = app.raycast_layer;
-  const t0 = get_time(io::system);
-  prepare_triangles_texture_data(sconf.conf, app.txs, app.tvt);
 
+  prepare_triangles_texture_data(sconf.conf, app.txs, app.tvt);
   *ds.textures = *app.txs;
   *ds.tvt = *app.tvt;
 
-  varray{ptr{pgldrawer_export_i}} r;
-  if (app.raycast_layer != 0) {
-    int ssid = app.raycast_layer;
-    for (; ssid > 0; --ssid) {
-      r.push_back(make_drawer_triangles(sconf, ds, 1, ssid));
-      debug_log("drawer ssid", ssid);
+  // レンダリングパスを組み立てる
+  metafunction drawer_ptr ptr{pgldrawer_export_i};
+  varray{drawer_ptr} r;
+  varray{drawer_ptr} solid;
+  varray{varray{drawer_ptr}} shadow;
+  varray{drawer_ptr} zpre;
+  make_drawstep_triangles_surface(sconf, ds, app.pj, sconf.num_shadowmaps,
+    solid, shadow, zpre);
+  make_drawstep_raycast(sconf, ds, app.pj, sconf.num_shadowmaps,
+    app.raycast_layer, solid, shadow, zpre);
+  for (int i: 0 .. sconf.num_shadowmaps) {
+    r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_sm,
+      "sm" + to_string(i), true, false, true)); // set shadowmap framebuffer i
+    r.append(shadow[static_cast{size_t}(i)]); // draw shadow
+  }
+  r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_main,
+    "col0", true, true, true)); // set color+depth framebuffer
+  r.push_back(make_drawstep_chgmode(sconf, ds, "zprepass"));
+  r.append(zpre); // draw solid z-prepass
+  r.push_back(make_drawstep_chgmode(sconf, ds, "solid"));
+  r.append(solid); // draw solid color
+  r.push_back(make_drawstep_lineparticle(sconf, ds, app.pj)); // draw solid
+  r.push_back(make_drawstep_skybox(sconf, ds, app.pj)); // draw solid
+  r.push_back(make_drawstep_chgmode(sconf, ds, "blend"));
+  r.push_back(make_drawstep_particle(sconf, ds, app.pviewport_main));
+  r.push_back(make_drawstep_particle_bb(sconf, ds, app.pj));
+  r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_main,
+    "col1", true, true, true)); // set color+depth framebuffer
+  r.push_back(make_drawstep_fxaa(sconf, ds, app.dp_fxaa, "col0"));
+    // col0からcol1へfxaaフィルタ実行
+  r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_main,
+    "", true, true, true)); // set toplevel framebuffer
+  r.push_back(make_drawstep_blur(sconf, ds, app.dp_blur, "col1"));
+  r.push_back(make_drawstep_chgmode(sconf, ds, "blend"));
+  r.push_back(make_drawstep_rect2d(sconf, ds));
+  r.push_back(make_drawstep_font2(sconf, ds, app.pviewport_main));
+  for (const i, const& p: r) {
+    if (const em: p->get_edit_mode().some) {
+      app.edit_mode.some = em;
     }
   }
-  const dr = make_drawer_triangles(sconf, ds, 1, 0);
-  app.edit_mode = dr->get_edit_mode();
-  r.push_back(dr);
-  r.push_back(make_drawer_triangles(sconf, ds, 0, 0));
-  r.push_back(make_drawer_triangles(sconf, ds, 2, 0));
-  /*
-  */
-  r.push_back(make_drawer_lineparticle(sconf, ds));
-  r.push_back(make_drawer_skybox(sconf, ds));
-  r.push_back(make_drawer_particle(sconf, ds));
-  r.push_back(make_drawer_particle_bb(sconf, ds));
-  r.push_back(make_drawer_rect2d(sconf, ds));
-  if (app.enable_dbgui) {
-    r.push_back(make_drawer_dbgui2(sconf, ds));
-    r.push_back(make_drawer_dbgui(sconf, ds));
-  }
-  r.push_back(make_drawer_font2(sconf, ds));
-  if (sconf.conf.get("fxaa_filter", 0, 0, 1) != 0) {
-    r.push_back(make_drawer_fxaa(sconf, ds));
-  }
-  if (sconf.conf.get("blur_filter", 0, 0, 1) != 0) {
-    r.push_back(make_drawer_blur(sconf, ds));
-  }
-  if (sconf.conf.get("motion_blur_filter", 0, 0, 1) != 0) {
-    r.push_back(make_drawer_motion_blur(sconf, ds));
-  }
-  const t1 = get_time(io::system);
-  sdl_log("app_init_drawers done", t1 - t0);
   return r;
 }
 
@@ -1089,11 +1110,16 @@ private function void build_vertices(app_impl mutable& app,
       // "skyscraper",
       // "airboat"
       );
-  const tr = make_varray{string}(
-    "vbid_triangles_0_0");
+  const tr0_0 = make_varray{string}("vbid_triangles_0_0");
+      // ポリゴンをparallax mappingで描画 (stype==0, ssubtype==0)
+  const tr1_0 = make_varray{string}("vbid_triangles_1_0");
+  /*
   const tr1_0 = make_varray{string}(
     "vbid_triangles_1_0",
     "vbid_triangles_2_0");
+      // 直方体をvoxel raycastingで描画 (stype==1, ssubtypeはあとで増やす)
+      // stype==2は現在使っていない?
+  */
   /*
   const tr1_1 = make_varray{string}(
     "vbid_triangles_1_1");
@@ -1112,7 +1138,7 @@ private function void build_vertices(app_impl mutable& app,
       // v *= 10.0f;
     }
     for (const k, const g: wfobjp->groups) {
-      pgs.make_vertex_set(tr, name,
+      pgs.make_vertex_set(tr0_0, name,
 	import_wfobj(*wfobjp, *g, ctx_fill(0)));
     }
   }
@@ -1215,23 +1241,23 @@ private function void build_vertices(app_impl mutable& app,
   m1 = glm::mat4()
     .translate(glm::make_vec3(0.0, 0.0, -32.0))
     .rotate(to_radians(45.0), glm::make_vec3(0.0, 0.0, 1.0));
-  pgs.make_vertex_set(tr, "box50",
+  pgs.make_vertex_set(tr0_0, "box50",
     regular_polygon(1.4142f * 50.0f, 4,
       apply(m1,
 	bump_apply(m, true, ctx_fill(0), ctx_fill(0))),
       apply(m1,
 	ctx_fill(0))));
-  pgs.make_vertex_set(tr, "saucer",
+  pgs.make_vertex_set(tr0_0, "saucer",
     regular_polygon(15.0, 40,
       bump_rec(10.8, 0.5, 1, ctx_fill(0), ctx_fill(0)),
       bump_rec(0.05, 0.9, 5,
 	ctx_fill(0),
 	sphere(10, ctx_fill_smooth(0)))));
-  pgs.make_vertex_set(tr, "saucer-multi",
+  pgs.make_vertex_set(tr0_0, "saucer-multi",
     regular_polygon(1.0, 3,
       bump_rec(1.0, 1.0, 1, ctx_poly_joint("saucer"), hole()),
       hole()));
-  pgs.make_vertex_set(tr, "block-multi",
+  pgs.make_vertex_set(tr0_0, "block-multi",
     regular_polygon(600.0, 4,
       rectangle_split(9, 8, ctx_poly_joint("block")),
       hole()));
@@ -1240,7 +1266,7 @@ private function void build_vertices(app_impl mutable& app,
 	glm::make_vec3(1.0, 0.0, 0.0));
     const m2 = glm::mat4().rotate(to_radians(-90.0),
 	glm::make_vec3(1.0, 0.0, 0.0));
-    pgs.make_vertex_set(tr, "block-smtest",
+    pgs.make_vertex_set(tr0_0, "block-smtest",
       regular_polygon(3.0, 4,
 	ctx_poly_joint("box"),
 	apply(m1, bump_rec(1.0, 1.0, 1, hole(), ctx_poly_joint("block")))));
@@ -1250,13 +1276,13 @@ private function void build_vertices(app_impl mutable& app,
 	glm::make_vec3(1.0, 0.0, 0.0));
     const m2 = glm::mat4().rotate(to_radians(-90.0),
 	glm::make_vec3(1.0, 0.0, 0.0));
-    pgs.make_vertex_set(tr, "box-depth",
+    pgs.make_vertex_set(tr0_0, "box-depth",
       regular_polygon(3.0, 4,
 	ctx_poly_joint("box"),
 	apply(m1, bump_rec(1.0, 1.0, 1, hole(), ctx_poly_joint("box_opt1")))));
   }
   rnd = make_rand_generator(1U);
-  pgs.make_vertex_set(tr, "block",
+  pgs.make_vertex_set(tr0_0, "block",
     regular_polygon(30.0, 4,
       rotate_local(glm::make_quat_angle_axis(to_radians(45.0),
 	0.0, 0.0, 1.0),
@@ -1269,7 +1295,7 @@ private function void build_vertices(app_impl mutable& app,
 	0.0, 0.0, 1.0),
 	bump_rec(0.5, 1.0, 1, ctx_fill(0), ctx_fill(0)))));
   rnd = make_rand_generator(1U);
-  pgs.make_vertex_set(tr, "nest",
+  pgs.make_vertex_set(tr0_0, "nest",
     regular_polygon(50.0, 4,
       rotate_local(glm::make_quat_angle_axis(to_radians(45.0), 0.0, 0.0, 1.0),
 	bump_rec(0.03, 1.0, 1, ctx_fill(0),
@@ -1288,7 +1314,7 @@ private function void build_vertices(app_impl mutable& app,
   m = glm::mat4()
     .translate(glm::make_vec3(100.0, 100.0, 100.0))
     .rotate(to_radians(30.0), glm::make_vec3(0.0, 0.0, 1.0));
-  pgs.make_vertex_set(tr, "nest-multi",
+  pgs.make_vertex_set(tr0_0, "nest-multi",
     regular_polygon(600.0, 4,
       bump_apply(m, true, hole(),
 	bump_rec_seq(0.2, 1.0, 5, hole(),
@@ -1297,101 +1323,101 @@ private function void build_vertices(app_impl mutable& app,
   m = glm::mat4()
     .translate(glm::make_vec3(0.0, 0.0, 1.0))
     .rotate(to_radians(10.0), glm::make_vec3(0.0, 0.0, 1.0));
-  pgs.make_vertex_set(tr, "bullet",
+  pgs.make_vertex_set(tr0_0, "bullet",
     regular_polygon(1.0, 6,
       bump_apply(m, true, ctx_fill(0), ctx_fill(0)),
       bump_apply(m, true, ctx_fill(0), ctx_fill(0))));
   // 60fps, macosx/linux mbp gt750m
-  pgs.make_vertex_set(tr, "bullet-multi",
+  pgs.make_vertex_set(tr0_0, "bullet-multi",
     regular_polygon(600.0, 4,
       rectangle_split(170, 170, ctx_poly_joint("bullet")),
       hole()));
   m = glm::mat4()
     .translate(glm::make_vec3(0.0, 0.0, 1.0))
     .rotate(10.0, glm::make_vec3(0.0, 0.0, 1.0)); // FIXME: to_radians?
-  pgs.make_vertex_set(tr, "bullet2",
+  pgs.make_vertex_set(tr0_0, "bullet2",
     regular_polygon(1.0, 5,
       bump_rec(2.3, 0.8, 1, ctx_fill(0), ctx_fill(0)),
       bump_rec(3.1, 0.8, 1, ctx_fill(0), ctx_fill(0))));
   rnd = make_rand_generator(991U);
-  pgs.make_vertex_set(tr, "bullet2-multi",
+  pgs.make_vertex_set(tr0_0, "bullet2-multi",
     rand_sphere(200.0, 37000, false, true, rnd,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
-  pgs.make_vertex_set(tr, "block-multi2",
+  pgs.make_vertex_set(tr0_0, "block-multi2",
     rand_sphere(500.0, 300, false, true, rnd,
       ctx_point_joint("block")));
-  pgs.make_vertex_set(tr, "box-multi",
+  pgs.make_vertex_set(tr0_0, "box-multi",
     rand_sphere(300.0, 500, false, true, rnd,
       ctx_point_joint("box")));
   rnd = make_rand_generator(991U);
-  pgs.make_vertex_set(tr, "bullet2-multi2",
+  pgs.make_vertex_set(tr0_0, "bullet2-multi2",
     rand_sphere(200.0, 20000, false, true, rnd,
       ctx_point_joint("bullet2")));
   {
   rnd = make_rand_generator(991U);
-  pgs.make_vertex_set(tr, "bullet2-multi2s1",
+  pgs.make_vertex_set(tr0_0, "bullet2-multi2s1",
     rand_sphere(200.0, 2000, false, true, rnd,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
-  pgs.make_vertex_set(tr, "bullet2-multi2s2",
+  pgs.make_vertex_set(tr0_0, "bullet2-multi2s2",
     rand_sphere(200.0, 3000, false, true, rnd,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
-  pgs.make_vertex_set(tr, "bullet2-multi2s3",
+  pgs.make_vertex_set(tr0_0, "bullet2-multi2s3",
     rand_sphere(200.0, 4000, false, true, rnd,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
-  pgs.make_vertex_set(tr, "bullet2-multi2s4",
+  pgs.make_vertex_set(tr0_0, "bullet2-multi2s4",
     rand_sphere(200.0, 5000, false, true, rnd,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
-  pgs.make_vertex_set(tr, "bullet2-multi2s5",
+  pgs.make_vertex_set(tr0_0, "bullet2-multi2s5",
     rand_sphere(200.0, 6000, false, true, rnd,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
-  pgs.make_vertex_set(tr, "bullet2-multi2s6",
+  pgs.make_vertex_set(tr0_0, "bullet2-multi2s6",
     rand_sphere(200.0, 7000, false, true, rnd,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
-  pgs.make_vertex_set(tr, "bullet2-multi2s7",
+  pgs.make_vertex_set(tr0_0, "bullet2-multi2s7",
     rand_sphere(200.0, 8000, false, true, rnd,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
-  pgs.make_vertex_set(tr, "bullet2-multi2s8",
+  pgs.make_vertex_set(tr0_0, "bullet2-multi2s8",
     rand_sphere(200.0, 9000, false, true, rnd,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
-  pgs.make_vertex_set(tr, "bullet2-multi2s9",
+  pgs.make_vertex_set(tr0_0, "bullet2-multi2s9",
     rand_sphere(200.0, 10000, false, true, rnd,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
-  pgs.make_vertex_set(tr, "bullet2-multi2s10",
+  pgs.make_vertex_set(tr0_0, "bullet2-multi2s10",
     rand_sphere(200.0, 11000, false, true, rnd,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
-  pgs.make_vertex_set(tr, "bullet2-multi2s11",
+  pgs.make_vertex_set(tr0_0, "bullet2-multi2s11",
     rand_sphere(200.0, 12000, false, true, rnd,
       ctx_point_joint("bullet2")));
   rnd = make_rand_generator(991U);
-  pgs.make_vertex_set(tr, "bullet2-multi2s12",
+  pgs.make_vertex_set(tr0_0, "bullet2-multi2s12",
     rand_sphere(200.0, 13000, false, true, rnd,
       ctx_point_joint("bullet2")));
   }
   rnd = make_rand_generator(991U);
-  pgs.make_vertex_set(tr, "bullet2-multi3",
+  pgs.make_vertex_set(tr0_0, "bullet2-multi3",
     rand_sphere(50.0, 1000, false, true, rnd,
       ctx_point_joint("bullet2")));
-  pgs.make_vertex_set(tr, "bullet-multi-2",
+  pgs.make_vertex_set(tr0_0, "bullet-multi-2",
     regular_polygon(600.0, 4,
       rectangle_split(80, 80, ctx_poly_joint("bullet")),
       hole()));
   rnd = make_rand_generator(991U);
-  pgs.make_vertex_set(tr, "saucer-multi3",
+  pgs.make_vertex_set(tr0_0, "saucer-multi3",
     rand_sphere(200.0, 200, false, true, rnd,
       ctx_point_joint("saucer")));
   rnd = make_rand_generator(991U);
-  pgs.make_vertex_set(tr, "ab-multi3",
+  pgs.make_vertex_set(tr0_0, "ab-multi3",
     rand_sphere(100.0, 100, false, true, rnd,
       ctx_point_joint("airboat")));
   rnd = make_rand_generator(1U);
@@ -1413,16 +1439,16 @@ private function void build_vertices(app_impl mutable& app,
       bump_rec(1.0, 10.0, 1, hole(), ctx_poly_joint("saucer")),
       ctx_poly_joint("particle-bb")));
   /* for prepass test */
-  pgs.make_vertex_set(tr, "plane-multi-1",
+  pgs.make_vertex_set(tr0_0, "plane-multi-1",
     regular_polygon(100.0, 4,
       bump_rec_seq(0.1, 1.0, 10, hole(), ctx_poly_joint("box")),
       hole()));
-  pgs.make_vertex_set(tr, "plane-multi-2",
+  pgs.make_vertex_set(tr0_0, "plane-multi-2",
     regular_polygon(100.0, 4,
       bump_rec_seq(0.1, 1.0, 10, hole(), backside(ctx_poly_joint("box"))),
       hole()));
   /* for dynamics test */
-  pgs.make_vertex_set(tr, "rigidbody-multi",
+  pgs.make_vertex_set(tr0_0, "rigidbody-multi",
     regular_polygon(100.0, 4,
       rectangle_split(10, 10, ctx_poly_joint("box")),
       hole()));
@@ -1444,7 +1470,7 @@ private function void build_vertices(app_impl mutable& app,
     size_t nfpv = 6; // position and normal
     pgs.make_vertex_set_by_triangles("vbid_triangles_0_0", "knight", verts,
       nfpv, elems);
-    pgs.make_vertex_set(tr, "knight-multi",
+    pgs.make_vertex_set(tr0_0, "knight-multi",
       regular_polygon(600.0, 4,
 	rectangle_split(50, 50, ctx_poly_joint("knight")),
 	hole()));

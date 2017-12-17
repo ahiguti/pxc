@@ -106,6 +106,10 @@ glshader(cstrref const& prog_v, cstrref const& prog_f,
   public uint program = 0;
   public string error;
   /* private */
+  private function ~
+  {
+    glDeleteProgram(program); /* ok even if program == 0 */
+  }
   init(prog_v, prog_f, attrib_to_avoid_0, debug_level, fname_hint);
   private function void init(cstrref const& prog_v, cstrref const& prog_f,
     strlit const& attrib_to_avoid_0, int debug_level,
@@ -317,7 +321,7 @@ glshader(cstrref const& prog_v, cstrref const& prog_f,
   }
   private function void dump_program_binary(cstrref const& fname_hint)
   {
-    if (m::is_true{is_gl44}) {
+    if (m::is_true{is_gl45}) {
       GLsizei len;
       // glGetProgramiv(prog, GL_PROGRAM_BINARY_LENGTH, address(len));
       string buf;
@@ -406,6 +410,7 @@ create_program(cstrref const& vertex_shader, cstrref const& fragment_shader,
       err_r);
     if (shader != 0) {
       glAttachShader(prog, shader);
+      glDeleteShader(shader); /* shader will be delete when prog is deleted */
     } else {
       success = 0;
     }
@@ -415,6 +420,7 @@ create_program(cstrref const& vertex_shader, cstrref const& fragment_shader,
       err_r);
     if (shader != 0) {
       glAttachShader(prog, shader);
+      glDeleteShader(shader); /* shader will be delete when prog is deleted */
       if (!attrib_to_avoid_0.empty()) {
 	glBindAttribLocation(prog, 1,
 	  attrib_to_avoid_0.to_crawptr().to_ccharptr());

@@ -5,7 +5,7 @@ public import exception -;
 
 public threaded struct {t} intern_pool 
 {
-  public metafunction id_type distinct_uint{size_t, intern_pool{t}};
+  public metafunction id_type t; // distinct_uint{size_t, intern_pool{t}};
   public function id_type intern(cstrref const& s) {
     if (const& id: string_to_id[s]) {
       return static_cast{id_type}(id);
@@ -13,7 +13,14 @@ public threaded struct {t} intern_pool
     size_t r = id_to_string.size();
     id_to_string.push_back(s);
     string_to_id.insert(s, r);
+    debug_log("intern", s, r);
     return static_cast{id_type}(r);
+  }
+  public function id_type intern_create(cstrref const& s) {
+    if (exists(s)) {
+      debug_log("intern_create failed", m::full_string{intern_pool{t}}, s);
+    }
+    return intern(s);
   }
   public function bool exists(cstrref const& s) const {
     if (const& id: string_to_id[s]) {
@@ -32,6 +39,7 @@ public threaded struct {t} intern_pool
     if (const& s: id_to_string[i]) {
       return s;
     }
+    debug_log("id to string failed", m::full_string{intern_pool{t}}, id);
     throw runtime_error_template{m::full_string{intern_pool{t}}}("to_string");
   }
   public function id_type size() const {

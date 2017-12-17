@@ -1,0 +1,88 @@
+private threaded namespace pgl3d::drawer::chgmode "export-unsafe";
+public import common -;
+public import pgl3d::drawer::base -;
+public import meta m;
+
+
+private struct chgmode_attributes { }
+
+public struct drawer_chgmode(shader_config const& glc,
+  drawer_shared const& ds, string const& mode0)
+<drawstep_i>
+{
+  /* 描画パラメータをmode用にセットするdrawer。
+   */
+  string const mode = mode0;
+  bool mode_zprepass = mode == "zprepass";
+  bool mode_solid = mode == "solid";
+  bool mode_blend = mode == "blend";
+  public function vbid_t get_vbid() const { return vbid_invalid(); }
+  public function vbid_t get_instances_vbid() const { return vbid_invalid(); }
+  public function vbid_t get_vertices_vbid() const { return vbid_invalid(); }
+  init(ds);
+  function void init(drawer_shared const& ds)
+  {
+    if (!mode_zprepass && !mode_solid && !mode_blend) {
+      throw runtime_error_template{"drawer_chgmode"}("");
+    }
+  }
+  public function prepare_instance_data_funcptr
+  get_prepare_instance_data_funcptr() const {
+    return make_tfuncptr{prepare_instance_data_default}();
+  }
+  public function ptr{vertex_buffer} make_vertex_buffer() const {
+    return make_tattr_vertex_buffer{chgmode_attributes}(false, false);
+  }
+  public function string builtin_vertex_set_name() const { return string(); }
+  public function void make_builtin_vertex_sets(ptr{vertices} const& vptr)
+    const { }
+  public function dgf_filler make_filler(ptr{vertices} const& vptr) const
+  {
+    return make_dgf_noop(vptr);
+  }
+  public function texture_info get_texture_info(cstrref const& name) const
+  {
+    return texture_info();
+  }
+  public function void resize_screen(shader_config const& glc, int width,
+    int height)
+  {
+  }
+  public function bool reload_shaders(shader_config const& glc)
+  {
+    return true;
+  }
+  public function void draw_drawstep(draw_data mutable& ddata)
+  {
+    if (mode_zprepass) {
+      glEnable(GL_DEPTH_TEST);
+      glDepthFunc(GL_LESS);
+      glDepthMask(1);
+      glDisable(GL_BLEND);
+      glClear(GL_DEPTH_BUFFER_BIT);
+      glDisable(GL_CULL_FACE);
+      glColorMask(0, 0, 0, 0);
+      // debug_log("chgmode zprepass");
+    } else if (mode_solid) {
+      glDisable(GL_BLEND);
+      glEnable(GL_CULL_FACE);
+      glEnable(GL_DEPTH_TEST);
+      glDepthFunc(GL_LEQUAL);
+      glColorMask(1, 1, 1, 1);
+      // debug_log("chgmode solid");
+    } else if (mode_blend) {
+      glDisable(GL_CULL_FACE);
+      glEnable(GL_DEPTH_TEST);
+      glDepthFunc(GL_LEQUAL);
+      glDepthMask(0);
+      glEnable(GL_BLEND);
+      glBlendFunc(GL_ONE, GL_ONE);
+      // debug_log("chgmode blend");
+    }
+  }
+  public function option{ptr{edit_mode_i}} get_edit_mode() const
+  {
+    return option{ptr{edit_mode_i}}();
+  }
+}
+

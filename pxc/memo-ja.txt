@@ -3,6 +3,18 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- append()の型チェックしていないせいでC++エラーが出るのを修正
+
+- expand { } の中にextern inlineが入っていると無条件で展開される？
+
+- arrayにもexists
+
+- コンテナのforeach
+  参照を返す関数はsafeにユーザ定義できないのでかわりに用意する
+
+- コンテナ同等のユーザ定義型と、それに対する処理、たとえばmap()
+  meta::family::is_array_or_slice_typeのような判定を無くす
+
 - const r = foo.bar(...) function void(...) { }
   r = foo.bar(....) function void(...) { }
   foo.bar(...) function void(...) { }
@@ -4047,5 +4059,57 @@ expr_funccall_new()で作られる式のみ許可。
 expr_funccall_newの左辺にexpr_te_new()又はexpr_symbol_new()の式が付いている。
 expr_teの右辺にテンプレ引数リストexpr_telist_new()が入っている
 
+---------------------------------------------------------------------
+コンテナのforeach
 
+引数無しのときはすべてをイテレート
+引数一つのときはキーが一致するものだけをイテレート
+引数二つのときは範囲をイテレート
+  arr.foreach() function void(int mutable& x) {
+    x += 1;
+  }
+  arr.foreach(3) function void(int mutable& x) {
+    x -= 128;
+  }
+  arr.foreach(3, 5) function void(int mutable& x) {
+    x += 4;
+  }
+
+---------------------------------------------------------------------
+配列の型クラス
+
+連想配列
+key_type
+mapped_type
+empty
+operator::getelem
+operator::setelem *
+cforeach()
+foreach() *
+
+可変長連想配列
+insert
+erase
+clear
+
+配列
+(連続である必要はない。dequeも含む。)
+key_type
+mapped_type
+empty
+size
+operator::getelem
+operator::setelem *
+cforeach
+foreach *
+
+可変長配列
+push_back
+pop_back
+operator::add
+append
+insert
+erase
+clear
+resize
 

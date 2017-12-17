@@ -7,6 +7,9 @@ public import exception -;
 public import pointer::tfuncptr -;
 // public import glresource -;
 
+metafunction dbglevel 0;
+metafunction dbg1 m::cond{m::ge{dbglevel, 1}, debug_log, no_operation};
+
 public valuetype struct
 shader_config(bool is_gles0, int major0, int minor0, int msaa0,
   pgl3d_config const& conf0)
@@ -37,7 +40,8 @@ shader_config(bool is_gles0, int major0, int minor0, int msaa0,
     (major < 3 /* || is_gles */|| (!is_gles && minor < 3));
   public bool const enable_depth_texture = (major >= 3) && !enable_vsm &&
     conf.get("depth_texture", 1, 0, 1) != 0;
-  public bool const enable_sampler2dshadow = false; // enable_depth_texture && !is_gles;
+  public bool const enable_sampler2dshadow = false;
+    // enable_depth_texture && !is_gles;
   public bool const light_fixed = conf.get("light_fixed", 1, 0, 1) != 0;
   // public bool enable_sampler2dshadow = enable_depth_texture && !is_gles;
   public int const num_shadowmaps = conf.get("num_shadowmaps", 4, 1, 8);
@@ -174,7 +178,7 @@ shader_config(bool is_gles0, int major0, int minor0, int msaa0,
   public function string get_config(string const& x) const
   {
     const r = conf.get(x, string(), string(), string());
-    debug_log("get_config", x, r);
+    dbg1("get_config", x, r);
     return r;
   }
 }

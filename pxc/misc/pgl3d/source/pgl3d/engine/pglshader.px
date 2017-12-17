@@ -22,57 +22,35 @@ public import pgl3d::drawer::base -;
 public import pgl3d::engine::pglbase -;
 public import pgl3d::engine::intern_pool -;
 
-public struct vertex_buffer_pool_key { }
-
 public struct
-pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
-  varray{ptr{pgldrawer_export_i}} const& drawers0, int width0,
+pglshader(shader_config const& sconf0, drawer_shared const& ds0,
+  varray{ptr{pgldrawer_export_i}} const& drawsteps0, int width0,
   int height0)
 <make_vertices_i>
 {
   public shader_config const glc = sconf0;
-  public ptr{resource_pool} const respool = respool0;
-  public tree_map{string, size_t} drawer_names = get_drawer_names(drawers0);
-    // 名前からdrawersのオフセットを返す
-  public varray{ptr{pgldrawer_i}} drawers = downcast_drawers(drawers0);
-    // 全drawerを保持する
-  public varray{size_t} drawers_shadow_pp;
-    // shadow_ppステップを持つようなdrawerの一覧
-  public varray{size_t} drawers_postprocess;
-    // drawer_postprocessステップを持つようなdrawerの一覧
-  public varray{vbid_t} drawer_vbids;
-    // drawerのオフセットからそのdrawerのvbidを返す
-  public varray{vbid_t} drawer_instances_vbids;
-    // drawerのオフセットからそのdrawerのinstances vbidを返す
-  public varray{vbid_t} drawer_vertices_vbids;
-    // drawerのオフセットからそのdrawerのvertices vbidを返す
-  public varray{ptr{gl_framebuffer}} sfbo_array;
+  public drawer_shared ds = ds0;
+  public ptr{resource_pool} const respool =
+    pointer_downcast{ptr{resource_pool}}(ds.gl_resources);
+  public draw_data ddata = draw_data(glc);
+    // 頂点データのコピー、インスタンスデータを保持
+  public varray{ptr{drawstep_i}} drawsteps = downcast_drawsteps(drawsteps0);
+  public tree_map{vbid_t, ptr{drawstep_i}} drawsteps_by_vbid =
+    get_drawsteps_by_vbid(ds, drawsteps0);
+    // vbidからdrawstepを返す。vbidにinvalidを返すdrawstepは含まない。
+    // 同じvbidを返すdrawstepが複数あるときは最初のものだけが入る。
   public projection_info cam;
-  public varray{ptr{vertex_buffer}} vertex_buffers;
-    // 全vertex_bufferを保持する。vbidで引く。
-  public aggregated_ibuffer agg_ibuffer;
-  public tptr{pidf_table} const pidft = make_tptr{pidf_table}();
-  public ptr{varray{uchar}} const debug_ext_display = make_ptr{varray{uchar}}();
+  public tptr{prepinstf_table} const pidft = make_tptr{prepinstf_table}();
   private auto_vertexarray vtxarr;
-  private tree_map{string, vbid_t} vbid_map;
-  private intern_pool{vertex_buffer_pool_key} vbid_pool;
   init();
   resize_screen(width0, height0, width0, height0);
-  /*
-  public function vbid to_vbid(cstrref const& name) const {
-    return vbid_pool.to_id(name);
-  }
-  */
-  public function vbid_t intern_vbid(cstrref const& name) {
-    const r = vbid_pool.intern(name);
-    sdl_log("intern ", name, r);
-    return static_cast{vbid_t}(r);
-  }
   public function void set_vertex_buffer(vbid_t vbid,
     ptr{vertex_buffer} const& p) {
-    vertex_buffers.resize(vbid + 1u,
-      make_ptr{vertex_buffer}(0u, false, false));
-    vertex_buffers[vbid] = p;
+    if (ddata.vertex_buffers.size() <= static_cast{size_t}(vbid)) {
+      ddata.vertex_buffers.resize(vbid + 1u,
+        make_ptr{vertex_buffer}(0u, false, false));
+    }
+    ddata.vertex_buffers[vbid] = p;
   }
   private function void init()
   {
@@ -80,16 +58,23 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
     /*
     {
       int val;
+      glGetIntegerv(GL_MAX_VERTEX_UNIFORM_VECTORS, address(val));
+      sdl_log("GL_MAX_VERTEX_UNIFORM_VECTORS", val);
+    }
+    */
+    /*
+    {
+      int val;
       glGetIntegerv(GL_DEPTH_BITS, address(val));
       sdl_log("depth bits", val);
     }
     */
-    if (m::ne{is_gl3_or_gles3, 0}) {
+    if (m::is_true{is_gl3_or_gles3}) {
       vtxarr.generate();
       glBindVertexArray(vtxarr.get());
       sdl_log("glBindVertexArray", vtxarr.get());
     }
-    if (m::eq{is_gles, 0}) {
+    if (m::not{is_gles}) {
       farray{float, 2} arr;
       float step;
       glGetFloatv(GL_POINT_SIZE_RANGE, arr.to_rawptr());
@@ -103,90 +88,55 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
     }
     /*
     */
-    if (m::eq{is_gles, 0}) {
+    if (m::not{is_gles}) {
       if (!glc.is_gl3_or_gles3()) {
 	glEnable(GL_POINT_SPRITE);
 	sdl_log("GL_POINT_SPRITE enabled");
       }
       glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
     }
-    drawer_vbids.resize(drawers.size(), 0);
-    drawer_instances_vbids.resize(drawers.size(), 0);
-    drawer_vertices_vbids.resize(drawers.size(), 0);
-    for (const i, const& pd: drawers) {
-      drawer_vbids[i] = intern_vbid(pd->get_vbid_name());
-      debug_log(i, "drawer_vbids", drawer_vbids[i], pd->get_vbid_name());
-      drawer_instances_vbids[i] = intern_vbid(pd->get_instances_vbid_name());
-      debug_log(i, "drawer_instances_vbids", drawer_instances_vbids[i],
-	pd->get_instances_vbid_name());
-      drawer_vertices_vbids[i] = intern_vbid(pd->get_vertices_vbid_name());
-      debug_log(i, "drawer_vertices_vbids", drawer_vertices_vbids[i],
-	pd->get_vertices_vbid_name());
-      size_t j = drawer_vbids[i];
-      /*
-      if (vbid_to_drawer_one.size() <= j) {
-	vbid_to_drawer_one.resize(j + 1, 0);
+    for (const vbid, const& p: drawsteps_by_vbid) {
+      mutable& pidftv = *pidft;
+      size_t j = vbid;
+      if (pidftv.size() <= j) {
+        pidftv.resize(j + 1, make_tfuncptr{prepare_instance_data_noop}());
       }
-      vbid_to_drawer_one[j] = i;
-      */
-      {
-	mutable& pidftv = *pidft;
-	if (pidftv.size() <= j) {
-	  pidftv.resize(j + 1, make_tfuncptr{prepare_instance_data_noop}());
-	}
-	pidftv[j] = pd->get_prepare_instance_data_funcptr();
-      }
-      set_vertex_buffer(drawer_vbids[i], pd->make_vertex_buffer());
-    }
-    if (sfbo_array.empty()) {
-      for (size_t i: 0 .. static_cast{size_t}(glc.num_shadowmaps)) {
-	sfbo_array.push_back(make_ptr{gl_framebuffer}());
-      }
-    }
-    for (const i, const& pd: drawers) {
-      if (pd->has_step(draw_step_shadow_pp)) {
-	drawers_shadow_pp.push_back(i);
-      }
-    }
-    for (const i, const& pd: drawers) {
-      if (pd->has_step(draw_step_postprocess)) {
-	drawers_postprocess.push_back(i);
-      }
+      pidftv[j] = p->get_prepare_instance_data_funcptr();
+      set_vertex_buffer(vbid, p->make_vertex_buffer());
     }
     sdl_log("pglshader init done");
   }
-  public function void prepare(whole_instances_type mutable& whole_instances_r,
-    node_factory mutable& nfac_r)
+  public function void prepare(node_factory mutable& nfac_r)
   {
     prepare_builtin_vertex_sets();
     prepare_vertex_buffers();
-    prepare_whole_instances(whole_instances_r);
+    prepare_whole_instances();
     prepare_node_factory(nfac_r);
   }
   private function void prepare_builtin_vertex_sets()
   {
-    for (const i, const& pd: drawers) {
-      const name = pd->builtin_vertex_set_name();
+    for (const vbid, const& p: drawsteps_by_vbid) {
+      const name = p->builtin_vertex_set_name();
       if (name.empty()) {
 	continue;
       }
-      const vbid = drawer_vbids[i];
       const vtx = make_vertices(vbid, name);
-      pd->make_builtin_vertex_sets(vtx);
+      p->make_builtin_vertex_sets(vtx);
+      debug_log("make builtin vertex set", name);
     }
   }
   private function void prepare_vertex_buffers()
   {
-    for (const i, const& bo: vertex_buffers) {
+    for (const i, const& bo: ddata.vertex_buffers) {
       bo->create_vbo();
     }
   }
-  private function void prepare_whole_instances(
-    whole_instances_type mutable& whole_instances) const
+  private function void prepare_whole_instances()
   {
-    whole_instances.resize(vertex_buffers.size(), bo_instances_type());
-    for (const i, const& bo: vertex_buffers) {
-      mutable& instances = whole_instances[i];
+    ddata.local_whole_instances.resize(
+      ddata.vertex_buffers.size(), bo_instances_type());
+    for (const i, const& bo: ddata.vertex_buffers) {
+      mutable& instances = ddata.local_whole_instances[i];
       for (const j: 0 .. bo->vs_arr.size()) {
 	instances.push_back(instance_data());
       }
@@ -194,7 +144,7 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
   }
   private function void prepare_node_factory(node_factory mutable& nf) const
   {
-    for (const vbid, const& bop: vertex_buffers) {
+    for (const vbid, const& bop: ddata.vertex_buffers) {
       for (const& n, const id: bop->vs_names) {
 	if (bop->is_sub_drawer) {
 	  // sub_drawer vbid must not used for joint_id
@@ -229,7 +179,7 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
     const
   {
     joint_id_type scene_id;
-    for (const i, const& bo: vertex_buffers) {
+    for (const i, const& bo: ddata.vertex_buffers) {
       // sub-drawer vbid must not used for joint_id
       if (!bo->is_sub_drawer && bo->has_name(name)) {
         scene_id.vbid = static_cast{vbid_t}(i);
@@ -243,21 +193,18 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
     const
   {
     joint_id_type scene_id;
-    for (const i, const& bo: vertex_buffers) {
+    for (const i, const& bo: ddata.vertex_buffers) {
       // allow sub-drawer vbid
       if (bo->has_name(name)) {
         scene_id.vbid = static_cast{vbid_t}(i);
         scene_id.vsid = bo->get_id_by_name(name);
-	if (!vertex_buffers[scene_id.vbid]->get_vertices(scene_id.vsid)
+	if (!ddata.vertex_buffers[scene_id.vbid]->get_vertices(scene_id.vsid)
 	    ->vertex_values.empty()) {
 	  break;
 	}
       }
     }
-    /*
-    joint_id_type jid = find_joint_id_by_name(name);
-    */
-    return vertex_buffers[scene_id.vbid]
+    return ddata.vertex_buffers[scene_id.vbid]
       ->get_vertices(scene_id.vsid);
   }
   public function joint_id_type get_joint_id(cstrref const& name) const {
@@ -266,7 +213,7 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
   public function tree_map{string, joint_id_type} get_name_to_joint_id() const
   {
     tree_map{string, joint_id_type} r;
-    for (const vbid, const& vb: vertex_buffers) {
+    for (const vbid, const& vb: ddata.vertex_buffers) {
       for (const& vsname, const vsid: vb->vs_names) {
 	joint_id_type jid;
 	jid.vbid = static_cast{vbid_t}(vbid);
@@ -277,10 +224,10 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
     return r;
   }
   public function ptr{vertices} make_vertices(vbid_t vbid,
-    cstrref const& name)
+    cstrref const& shape_name)
   {
     // debug_log("make_vertices", name, vbid);
-    return vertex_buffers[vbid]->make_if(name)->vtxs;
+    return ddata.vertex_buffers[vbid]->make_if(shape_name)->vtxs;
   }
   public function void make_vertex_set(cslice{string} const& dr_names,
     cstrref const& shape_name, gf_poly const& expr)
@@ -291,41 +238,33 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
     // の一意性がなくなる。
     // TODO: shape_nameは未使用のものでなくてはならない。
     varray{ptr{vertices}} vptrs;
-    // varray{ptr{vertices}} vptrs_cpy;
     varray{dgf_filler} fillers;
     for (const i, const& dr_name: dr_names) {
-      size_t dr_id = *drawer_names.equal_range(dr_name);
-      const vbid = drawer_vbids[dr_id];
+      const vbid = ds.vbid_pool->to_id(dr_name);
+      debug_log("make_vertex_set", dr_name);
+      const dp = *drawsteps_by_vbid.equal_range(vbid);
       ptr{vertices} vptr = make_vertices(vbid, shape_name);
-      dgf_filler filler = drawers[dr_id]->make_filler(vptr);
+      dgf_filler filler = dp->make_filler(vptr);
       vptrs.push_back(vptr);
-      // vptrs_cpy.push_back(vptr);
       fillers.push_back(filler);
     }
     // debug_log("make_vertex_set", shape_name);
     ptr{build_context_i} ctx = make_ptr{build_context_impl}(vptrs, fillers);
     expr(*ctx, poly_t(), mesh_index());
-    /*
-    for (const i, const& p: vptrs_cpy) {
-      debug_log("make_vertex_set", shape_name, *p);
-    }
-    */
   }
   public function void make_vertex_set_by_triangles(string const& dr_name,
     cstrref const& shape_name, cslice{vertex_attr} const& vattrs,
     cslice{float} const& verts, size_t nfpv, cslice{uint} const& elems)
   {
-    size_t dr_id = *drawer_names.equal_range(dr_name);
-    const vbid = drawer_vbids[dr_id];
+    const vbid = ds.vbid_pool->to_id(dr_name);
     ptr{vertices} vptr = make_vertices(vbid, shape_name);
     vptr->set_triangles(vattrs, verts, nfpv, elems);
   }
   public function texture_info get_texture_info(cstrref const& name) const
   {
     texture_info r;
-    for (const i, const& pd: drawers) {
-      const vbid = drawer_vbids[i];
-      r = pd->get_texture_info(name);
+    for (const vbid, const& p: drawsteps_by_vbid) {
+      r = p->get_texture_info(name);
       if (r.surface_w != 0) {
 	break;
       }
@@ -334,8 +273,8 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
   }
   public function vbid_t get_vbid(cstrref const& name) const
   {
-    if (vbid_pool.exists(name)) {
-      return static_cast{vbid_t}(vbid_pool.to_id(name));
+    if (ds.vbid_pool->exists(name)) {
+      return ds.vbid_pool->to_id(name);
     } else {
       return vbid_invalid();
     }
@@ -358,18 +297,7 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
     cam.window_width = w_width;
     cam.window_height = w_height;
     cam.shadowmap_size = sm_size;
-    for (size_t i: 0 .. sfbo_array.size()) {
-      mutable& sfbo = *sfbo_array[i];
-      if (m::ne{is_gles, 0}) {
-	sfbo.width = sm_size;
-	sfbo.height = sm_size;
-      } else {
-	sfbo.width = sm_size;
-	sfbo.height = sm_size;
-      }
-      init_shadowmap_fbo(glc, sfbo);
-    }
-    for (const i, const& pd: drawers) {
+    for (const i, const& pd: drawsteps) {
       pd->resize_screen(glc, virt_width, virt_height);
     }
     update_mvp(glc, cam);
@@ -377,8 +305,8 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
   public function bool reload_shaders()
   {
     bool r = true;
-    for (const i, const& pd: drawers) {
-      bool x = pd->reload_shaders();
+    for (const i, const& pd: drawsteps) {
+      bool x = pd->reload_shaders(glc);
       r = r && x;
     }
     return r;
@@ -386,279 +314,68 @@ pglshader(shader_config const& sconf0, ptr{resource_pool} const& respool0,
 }
 
 public function varray{uint}
-pglshader_draw_frame(pglshader mutable& pgs,
-  whole_instances_type mutable& whole_instances, projection_info const& cam_df)
+pglshader_draw_frame(pglshader mutable& pgs)
 {
-  return pglshader_draw_frame_internal(false, pgs, whole_instances, cam_df);
+  return pglshader_draw_frame_internal(false, pgs);
 }
 
 public function varray{uint}
-pglshader_draw_frame_lastpass(pglshader mutable& pgs,
-  whole_instances_type mutable& whole_instances, projection_info const& cam_df)
+pglshader_draw_frame_lastpass(pglshader mutable& pgs)
 {
-  return pglshader_draw_frame_internal(true, pgs, whole_instances, cam_df);
+  return pglshader_draw_frame_internal(true, pgs);
 }
 
 public function void
-pglshader_frame_begin(pglshader mutable& pgs,
-  whole_instances_type mutable& whole_instances)
+pglshader_frame_begin(pglshader mutable& pgs)
 {
-  pgs.agg_ibuffer.frame_begin(whole_instances,
-      pgs.glc.enable_instanced, pgs.glc.enable_uniform_instancing);
+  pgs.ddata.agg_ibuffer.frame_begin(pgs.ddata.local_whole_instances);
 }
 
 public function void
 pglshader_frame_end(pglshader mutable& pgs)
 {
-  pgs.agg_ibuffer.frame_end(pgs.glc.enable_instanced,
-    pgs.glc.enable_uniform_instancing);
+  pgs.ddata.agg_ibuffer.frame_end();
 }
 
 function varray{uint}
-pglshader_draw_frame_internal(bool lastpass, pglshader mutable& pgs,
-  whole_instances_type mutable& whole_instances, projection_info const& cam_df)
+pglshader_draw_frame_internal(bool lastpass, pglshader mutable& pgs)
 {
-  // lastpassが真なら、ディスプレイ直近のフレームバッファからの描画のみを
+  // TODO: lastpassが真なら、ディスプレイ直近のフレームバッファからの描画のみを
   // 実行する。これはdummy_flipのために使う。それ以外の描画ではlastpassは偽。
   const tick1 = SDL_GetTicks();
-  uint tick2;
   int saved_fb = 0;
-  const& bos = pgs.vertex_buffers;
-  /* shadowmapping shader */
-  darrayst{GLuint} smtex_arr = darrayst{GLuint}(pgs.sfbo_array.size(), 0U);
-  for (size_t iter: 0 .. pgs.sfbo_array.size()) {
-    smtex_arr[iter] = pgs.sfbo_array[iter]->texture0.get();
+  glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
+  pgs.ddata.toplevel_fb = static_cast{uint}(saved_fb);
+  for (const i, const& ds: pgs.drawsteps) {
+    ds->draw_drawstep(pgs.ddata);
   }
-  if (!lastpass) {
-    if (pgs.glc.enable_shadowmapping) {
-      glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
-      for (size_t iter: 0 .. pgs.sfbo_array.size()) {
-	/*
-	glDisable(GL_CULL_FACE);
-	*/
-	glEnable(GL_CULL_FACE);
-	/*
-	glCullFace(GL_FRONT);
-	*/
-	glEnable(GL_DEPTH_TEST);
-	glDepthMask(1);
-	if (pgs.glc.enable_depth_texture) {
-	  glColorMask(0, 0, 0, 0);
-	} else {
-	  // FIXME: 1,1,0,0 when enable_vsm ?
-	  glColorMask(1, 1, 1, 1);
-	}
-	glDepthFunc(GL_LEQUAL);
-	glDisable(GL_BLEND);
-	/* set fb */
-	const& sfbo = *pgs.sfbo_array[iter];
-	if (!pgs.drawers_shadow_pp.empty()) {
-	  glBindFramebuffer(GL_FRAMEBUFFER,
-	    pgs.drawers[pgs.drawers_shadow_pp[0]]
-	      ->get_postprocess_framebuffer(draw_step_shadow_pp));
-	} else {
-	  glBindFramebuffer(GL_FRAMEBUFFER, sfbo.fbo.get());
-	}
-	if (!pgs.glc.enable_depth_texture) {
-	  glClearColor(1.0, 1.0, 1.0, 1.0);
-	}
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	glViewport(0, 0, static_cast{GLsizei}(sfbo.width),
-	  static_cast{GLsizei}(sfbo.height));
-	// shadow
-	/* note: view_projection is pre-applied to model_matrix */
-	for (const i, const& pd: pgs.drawers) {
-	  const vert_vbid = pgs.drawer_vertices_vbids[i];
-	  const inst_vbid = pgs.drawer_instances_vbids[i];
-	  pd->draw(draw_step_shadowmapping, iter,
-	    *bos[vert_vbid],
-	    whole_instances[inst_vbid], pgs.agg_ibuffer,
-	    inst_vbid, pgs.glc, cam_df, smtex_arr);
-	}
-	// shadow postprocess
-	if (!pgs.drawers_shadow_pp.empty()) {
-	  size_t n = pgs.drawers_shadow_pp.size();
-	  size_t i;
-	  for (i = 0; i < n; ++i) {
-	    if (i < n - 1) {
-	      const fb = pgs.drawers[pgs.drawers_shadow_pp[i + 1]]
-		->get_postprocess_framebuffer(draw_step_shadow_pp);
-	      glBindFramebuffer(GL_FRAMEBUFFER, fb);
-	    } else {
-	      glBindFramebuffer(GL_FRAMEBUFFER, sfbo.fbo.get());
-	    }
-	    const j = pgs.drawers_shadow_pp[i];
-	    const& pd = pgs.drawers[j];
-	    const vert_vbid = pgs.drawer_vertices_vbids[j];
-	    const inst_vbid = pgs.drawer_instances_vbids[j];
-	    pd->draw(draw_step_shadow_pp, 0,
-	      *bos[vert_vbid],
-	      whole_instances[inst_vbid], pgs.agg_ibuffer,
-	      inst_vbid, pgs.glc, cam_df, smtex_arr);
-	  }
-	}
-      }
-      /* restore fb */
-      glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
-    }
-    if (!pgs.drawers_postprocess.empty()) {
-      // postprocess処理があるならば、その最初の処理のフレームバッファ
-      // に書き込む
-      glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
-      glBindFramebuffer(GL_FRAMEBUFFER,
-	pgs.drawers[pgs.drawers_postprocess[0]]
-	  ->get_postprocess_framebuffer(draw_step_postprocess));
-      glViewport(0, 0, static_cast{GLsizei}(pgs.cam.virt_width),
-	static_cast{GLsizei}(pgs.cam.virt_height));
-    } else {
-      // postprocess処理が無いので既定のフレームバッファに書き込む
-      glViewport(0, 0, static_cast{GLsizei}(pgs.cam.display_width),
-	static_cast{GLsizei}(pgs.cam.display_height));
-    }
-    /* clear depth buffer */
-    {
-      glEnable(GL_DEPTH_TEST);
-      glDepthFunc(GL_LESS);
-      glDepthMask(1);
-      glDisable(GL_BLEND);
-      glClear(GL_DEPTH_BUFFER_BIT);
-    }
-    /* z-prepass shader */
-    if (pgs.glc.enable_zprepass) {
-      glDisable(GL_CULL_FACE);
-      // glCullFace(GL_BACK);
-      glColorMask(0, 0, 0, 0);
-      for (const i, const& pd: pgs.drawers) {
-	const vert_vbid = pgs.drawer_vertices_vbids[i];
-	const inst_vbid = pgs.drawer_instances_vbids[i];
-	pd->draw(draw_step_zprepass, 0,
-	  *bos[vert_vbid],
-	  whole_instances[inst_vbid], pgs.agg_ibuffer,
-	  inst_vbid, pgs.glc, cam_df, smtex_arr);
-      }
-    }
-    tick2 = SDL_GetTicks();
-    /* solid */
-    {
-      glDisable(GL_BLEND);
-      glEnable(GL_CULL_FACE);
-      // glDisable(GL_CULL_FACE);
-      glCullFace(GL_BACK);
-      glEnable(GL_DEPTH_TEST);
-      if (pgs.glc.enable_zprepass) {
-	// glDepthMask(0); // TODO: disable depth mask
-	glDepthFunc(GL_LEQUAL);
-      } else {
-	glDepthFunc(GL_LESS);
-      }
-      glColorMask(1, 1, 1, 1);
-      for (const i, const& pd: pgs.drawers) {
-	const vert_vbid = pgs.drawer_vertices_vbids[i];
-	const inst_vbid = pgs.drawer_instances_vbids[i];
-	// debug_log("solid drawer vert_vbid", vert_vbid, "inst_vbid",
-	//   inst_vbid);
-	pd->draw(draw_step_solid, 0,
-	  *bos[vert_vbid],
-	  whole_instances[inst_vbid], pgs.agg_ibuffer,
-	  inst_vbid, pgs.glc, cam_df, smtex_arr);
-      }
-    }
-    /* blend */
-    {
-      glDisable(GL_CULL_FACE);
-      glEnable(GL_DEPTH_TEST);
-      glDepthFunc(GL_LEQUAL);
-      glDepthMask(0);
-      glEnable(GL_BLEND);
-      glBlendFunc(GL_ONE, GL_ONE);
-      for (const i, const& pd: pgs.drawers) {
-	const vert_vbid = pgs.drawer_vertices_vbids[i];
-	const inst_vbid = pgs.drawer_instances_vbids[i];
-	pd->draw(draw_step_blend, 0,
-	  *bos[vert_vbid],
-	  whole_instances[inst_vbid], pgs.agg_ibuffer,
-	  inst_vbid, pgs.glc, cam_df, smtex_arr);
-      }
-    }
-  }
-  if (!pgs.drawers_postprocess.empty()) {
-    size_t n = pgs.drawers_postprocess.size();
-    size_t i = 0;
-    if (lastpass) {
-      i = n - 1;
-    }
-    for (; i < n; ++i) {
-      uint fb = static_cast{uint}(saved_fb);
-      if (i < n - 1) {
-	fb = pgs.drawers[pgs.drawers_postprocess[i + 1]]
-	  ->get_postprocess_framebuffer(draw_step_postprocess);
-      } else {
-	glViewport(0, 0, static_cast{GLsizei}(pgs.cam.display_width),
-	  static_cast{GLsizei}(pgs.cam.display_height));
-      }
-      glBindFramebuffer(GL_FRAMEBUFFER, fb);
-      const j = pgs.drawers_postprocess[i];
-      const& pd = pgs.drawers[j];
-      const vert_vbid = pgs.drawer_vertices_vbids[j];
-      const inst_vbid = pgs.drawer_instances_vbids[j];
-      pd->draw(draw_step_postprocess, 0,
-	*bos[vert_vbid],
-	whole_instances[inst_vbid], pgs.agg_ibuffer,
-	inst_vbid, pgs.glc, cam_df, smtex_arr);
-    }
-  }
-  /* hud */
-  {
-    glDisable(GL_CULL_FACE);
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL);
-    glDepthMask(0);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_ONE, GL_ONE);
-    for (const i, const& pd: pgs.drawers) {
-      const vert_vbid = pgs.drawer_vertices_vbids[i];
-      const inst_vbid = pgs.drawer_instances_vbids[i];
-      pd->draw(draw_step_hud, 0,
-	*bos[vert_vbid],
-	whole_instances[inst_vbid], pgs.agg_ibuffer,
-	inst_vbid, pgs.glc, cam_df, smtex_arr);
-    }
-  }
-  if (false) {
-    // FIXME: debug ext_display
-    mutable& buf = *(pgs.debug_ext_display);
-    const w = static_cast{GLsizei}(pgs.cam.display_width);
-    const h = static_cast{GLsizei}(pgs.cam.display_height);
-    if (static_cast{GLsizei}(buf.size()) < w * h * 4) {
-      buf.resize(static_cast{size_t}(w * h * 4), 0u);
-    }
-    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE,
-      buf.to_rawptr().to_voidptr());
-    // debug_log("debug ext_display");
-  }
+  const tick2 = SDL_GetTicks();
   return make_varray{uint}(tick1, tick2);
 }
 
 /* private */
 
-private function tree_map{string, size_t}
-get_drawer_names(varray{ptr{pgldrawer_export_i}} const& drawers)
+private function tree_map{vbid_t, ptr{drawstep_i}}
+get_drawsteps_by_vbid(drawer_shared const& ds,
+  varray{ptr{pgldrawer_export_i}} const& drawsteps)
 {
-  tree_map{string, size_t} r;
-  for (const i: 0 .. drawers.size()) {
-    const e = pointer_downcast{ptr{pgldrawer_i}}(drawers[i]);
-    const k = e->get_vbid_name();
-    r[k] = i;
+  tree_map{vbid_t, ptr{drawstep_i}} r;
+  for (const i: 0 .. drawsteps.size()) {
+    const p = pointer_downcast{ptr{drawstep_i}}(drawsteps[i]);
+    const vbid = p->get_vbid();
+    if (vbid != vbid_invalid()) {
+      r.insert(vbid, p); // 同じvbidがすでにあった場合はinsertされない
+    }
   }
   return r;
 }
 
-private function varray{ptr{pgldrawer_i}}
-downcast_drawers(varray{ptr{pgldrawer_export_i}} const& drawers)
+private function varray{ptr{drawstep_i}}
+downcast_drawsteps(varray{ptr{pgldrawer_export_i}} const& drawsteps)
 {
-  varray{ptr{pgldrawer_i}} r;
-  for (const i, const& e: drawers) {
-    r.push_back(pointer_downcast{ptr{pgldrawer_i}}(e));
+  varray{ptr{drawstep_i}} r;
+  for (const i, const& e: drawsteps) {
+    r.push_back(pointer_downcast{ptr{drawstep_i}}(e));
   }
   return r;
 }
@@ -737,12 +454,14 @@ update_mvp(shader_config const& glc, projection_info mutable& cam)
     / cast_float(ssbase);
   const w = perspective_wh * cast_float(cam.virt_width)
     / cast_float(ssbase);
+  /*
   glViewport(0, 0, static_cast{GLsizei}(cam.virt_width),
     static_cast{GLsizei}(cam.virt_height));
   glDepthMask(1);
   glColorMask(1, 1, 1, 1);
   glClearColor(1.0, 1.0, 1.0, 1.0);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  */
   {
     // camera projection
     const near = perspective_near;
@@ -759,8 +478,6 @@ update_mvp(shader_config const& glc, projection_info mutable& cam)
   }
   {
     // shadowmap projection
-    const sm_w = 1.0f;
-    const sm_h = 1.0f;
     function void set_sm(glm::mat4 mutable& dst, float di)
     {
       // const far = di;

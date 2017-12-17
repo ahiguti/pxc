@@ -2,6 +2,46 @@
 ---------------------------------------------------------------------------
 TODO
 
+- resize時の動作を決め、projection_infoはすべてapp側で保持するようにする
+
+- commandsをやめてmain_ctrl_export_iを渡すようにする
+
+- setfbがvbid_invalid()を返すとtriangles surfaceが表示されなくなるのは何故？
+  -> vbid_invalid()ではなく0を返していた。(done)
+
+- camera_dfの汎用化
+
+- フィルタの頂点データ共通化
+
+- auto_reloadを有効にするとたまにコンパイル失敗する (done)
+  1203-19で壊した模様
+  cannot locate suitable resource to bind variable "vary_smposa". Possibly
+  large array.
+  -> 配列をクリアしていないせいで毎回伸びていたのが原因
+
+- projection_infoがengine側で固定なのをなおす。
+
+- glc.shadowmap_resolutionとcam.shadowmap_sizeは同じなので後者は削除
+  cam.virt_width -> シェーダの中で使っている
+  cam.display_width -> glViewportしている
+  cam.window_width -> handle_eventで使っている
+
+- 描画パスの抽象化
+
+- 外部出力
+
+- postprocessフィルタは個々がフレームバッファを持つのではなくす
+
+- ssubtype毎にdrawerインスタンス作っているのをなんとかする(done)
+
+- fxaa.pxのinit_postprocess_fboでdepth textureを作るかどうかの判定
+
+- glTextureBarrierを使えばdepth_rdコピー使わなくてよいはず (done)
+
+- 衝突判定用3d textureをreshape
+
+- grid_broadphaseを複数枚に
+
 - 造形: 斜面で補間
 
 - 衝突判定用データ構造とmipmap
@@ -3657,4 +3697,303 @@ for (x, y) {
   (x,y, x+dxlen, y+dylen)の範囲に斜面を作る
 }
 
+
+---------------------------------------------------------------------------
+grid_broadphaseを複数枚に
+
+dynamics_world.px
+  grid_bp = grid_broadphase(6, 10.0f);
+    split_log2 = 6     64*64*64個のメッシュ
+    mesh_size = 10.0   一個のメッシュの大きさ 変えられる
+
+
+---------------------------------------------------------------------------
+glTextureBarrierを使えばdepth_rdコピー使わなくてよいはず
+
+メインのフレームを描画する際の描画対象はpostprocessの最初のフレームバッファ。
+(postprocessが空のときはとりあえず考慮しない)
+
+1. glCopyTexSubImage2D削除して遅くなるのを確認
+   raycast_layer=2にして遅くなった
+2. trianglesのdrawに現在の描画対象depthテクスチャをなんとかして渡す
+3. シェーダのsampler_depth_rdにそのテクスチャを指定する
+4. ssubtypeの各々を実行するたびにglTextureBarrierを実行
+
+postprocessのdrawerの中ではinit_postprocess_fboでgl_framebufferを
+初期化している。それのtexture1がdepth textureを保持している。これを
+取得できるようにget_postprocess_framebufferがptr{gl_framebuffer}を返す
+ようにする。resource_poolに"first_pp"として保持。
+
+レイヤが深いケースで2割くらい速くなった。glTextureBarrier無し。
+136fps
+144fps
+
+---------------------------------------------------------------------------
+外部出力
+
+YUV420
+1ピクセルあたり12bit 2ピクセルあたり3バイト
+  Y[8] Y[8] U[8]
+  Y[8] Y[8] V[8]
+GL_REDで8bppのテクスチャを作る。サイズを横に3/2倍する。
+3で割って0余るとき Y
+3で割って1余るとき Y
+3で割って2余るとき 偶数ラインはU 奇数ラインはV
+
+
+---------------------------------------------------------------------------
+postprocessフィルタの動作
+
+各フィルタはフレームバッファを持っている
+前段がそのフレームバッファに書き込む
+draw()するとそのフレームバッファのテクスチャを読み、後段のフレームバッファ
+に書き込む
+
+変更後:
+自分がフレームバッファに書き込む。
+外部からテクスチャを取得できる。
+
+メイン描画の対象はnoopフィルタで、noopのdrawは何もしない
+最後のフィルタは描画対象はフレームバッファにしない
+
+-> 保留
+
+---------------------------------------------------------------------------
+描画パスの抽象化
+
+draw()の引数をまとめる
+
+const& bos = pgs.vertex_buffers
+for (const i, const& pd: pgs.drawers) {
+  const vert_vbid = pgs.drawer_vertices_vbids[i];
+    これはdrawerが使う頂点バッファの名前 「vbid_traingles_0_0」
+  const inst_vbid = pgs.drawer_instances_vbids[i];
+    これはdrawerが使うインスタンスバッファの名前 「vbid_triangles_1_3」
+  ...
+}
+
+引数は常に
+vertex_buffer const& bo
+  *bos[vert_vbid]
+bo_instances_type const& bo_ib,
+  whole_instances[inst_vbid]
+aggregated_ibuffer const& aibuf,
+  pgs.agg_ibuffer
+vbid_t vbid,
+  inst_vbid
+shader_config const& glc,
+  pgs.glc
+projection_info const& cam_df,
+  cam_df
+
+struct frame_data {
+  whole_instances_type whole_instances;
+  aggregated_ibuffer agg_ibuffer;
+  projection_info cam_df;
+}
+これをpglshaderに付ける。
+
+レンダリングパス
+フレームバッファをクリアする処理もdrawerにする
+各エントリは、以下のいずれか
+  1. フレームバッファのクリア
+  2. フレームバッファの置き換え
+  3. ドローコール発行
+各drawerは初期化の際に参照するテクスチャとフレームバッファのポインタを
+取得しておく。
+
+やること:
+1. sfbo_arrayとsmtex_arrをやめてresource_poolに入れる(done)
+   暫定的にpglshaderのinitで実行するようにする
+5. フレームバッファをapiから作れるようにする
+
+2. vbidをdrawer自体がinternするようにし、aibuf.drawにはdrawerがvbidを渡す
+   pd->drawの引数 *bos[vert_vbid]  whole_instances[inst_vbid]
+3. framebufferをセットするdrawerを作る
+4. stepをdraw_stepインタフェースに
+
+描画パス
+  for (shadowmapの数だけ) {
+    shadowmapのフレームバッファをセット
+    for (影を描画するdrawers) {
+      影を描画
+    }
+  }
+  mainのフレームバッファをセット
+  for (zprepassするdrawers) {
+    zprepassを描画
+  }
+  for (solidを描画するdrawers) {
+    solidを描画
+  }
+  for (blendを描画するdrawers) {
+    blendを描画
+  }
+  for (postprocess) {
+    postprocess先のフレームバッファをセット
+    postprocessを描画
+  }
+  for (hudを描画するdrawers) {
+    hudを描画
+  }
+
+drawerの構造
+  子drawerを複数持てる。get_children()で直接の子どもを返す。
+  resize_target()はターゲットのサイズが変わったことを示す。
+    子drawerに対して再帰的にresize_target()を呼び出す。
+    ついでにターゲットフレームバッファのポインタを渡す？
+
+フィルタ:
+  フレームバッファから読んでフィルタ結果を出力。
+  子として前段を出力するdrawerを持つ。
+
+shadowmap:
+  子として影を描くdrawerを複数持つ
+  自分は何も出力しない
+
+drawerは指定されたフォーマットの画像を出力する関数
+  引数として特定フォーマットの画像を複数個要求する
+
+シーケンス: 同じ画像に重ね塗りするdrawer
+  - 最初にフレームバッファを初期化し描画モードを設定するdrawer
+  - solidやblendなどのdrawerの列
+
+------
+
+文字列で識別されるいくつかのframebuffer
+いくつかのdrawer
+各drawerの入力と出力のframebufferが文字列で指定される
+
+案1
+fbs.append("sm1", make_fb_depth(...));
+fbs.append("sm2", make_fb_depth(...));
+fbs.append("virt", make_fb_color_depth(...));
+fbs.append("virt2", make_fb_color_depth(...));
+dws.append(make_drawer_sm("sm1"));
+dws.append(make_drawer_sm("sm2"));
+dws.append(make_drawer_solid("virt", "sm1", "sm2"));
+dws.append(make_drawer_blend("virt", "sm1", "sm2"));
+dws.append(make_drawer_fxaa("virt2", "virt"));
+dws.append(make_drawer_blur("virt", "virt2"));
+dws.append(make_drawer_resize("", "virt"));
+dws.append(make_drawer_hud(""));
+
+resize_window()はまず各framebufferに対して後ろから順に呼び、その後
+各drawerに対して呼ぶ。
+drawするときはdrawerを順に呼ぶ。
+
+案2
+フレームバッファの初期化なども全てdrawerにする。
+描画対象のフレームバッファはdrawer作成時に指定しなくてもよい。
+
+dws.append(make_drawer_fb_depth("sm1")); // フレームバッファをbindする
+dws.append(make_drawer_sm("sm1")); // 影を描画する
+dws.append(make_drawer_fb_depth("sm2")); // フレームバッファをbindする
+dws.append(make_drawer_sm("sm2")); // 影を描画する
+dws.append(make_drawer_fb_color_depth("virt"); // フレームバッファをbindする
+dws.append(make_drawer_solid(); // 色を描画する
+dws.append(make_drawer_blend(); // 色を描画する
+dws.append(make_drawer_fb_color_depth("virt2");
+dws.append(make_drawer_fxaa();
+dws.append(make_drawer_fb_color_depth("virt"); // フレームバッファをbindする
+
+変更手順:
+1. cam_dfをdraw()の引数から削除、draw_dataに入れる
+2. texture0, texture1をやめてtexture_color, texture_depthに
+3. framebufferのbind等の処理をするdrawerを作る
+   drawer_bindfb, drawer_bindfb_sm
+4. stepとiterをdraw()から削除し、別々のdrawerインスタンスを作るようにする
+   shadowmap, zprepass, solid, blendにわける
+5. cameraからvirt_width, virt_heightを削除、viewportのサイズをframebuffer
+   から読み取るようにする
+6. camera_dfを削除し、かわりに汎用のパラメータ受け渡しの仕組みを作る
+
+
+---------------------------------------------------------------------------
+汎用パラメータ受け渡し
+
+mainloopのstep_internal()
+motion_thr.some->finish()
+{
+  mutable& mts = motion_thr.some->shared; // ロック掛ける
+  pgs.ddata.camera_df = mts.cam;
+  mts.cam = pgs.cam;
+  mts.frame_speed_mul = frctl.frame_speed_mul;
+  mts.message = mess;
+  mts.commands.swap(commands);
+  pgs.ddata.local_whole_instances.swap(mts.whole_instances);
+  saved_stat_num_objects = mts.stat_num_objects;
+}
+
+motion_thread_clientはapp->get_scene_shared()で取得した
+tptr{motion_thread_shared} sharedp
+を保持。子スレッド内でsharedp->
+
+pgl3d_sceneのon_motion_step()
+  以下は汎用パラメータ受け渡しに置き換える
+  float frame_speed
+  projection_info mutable& pjinfo
+  cstrref const& status_message
+  string_map mutable& commands_r
+
+方針: drawstep作る際にオブジェクトを渡す。motion threadから渡す
+必要があるものはscene_sharedにmotion threadから書き込み、
+on_motion_swapでdrawstepと共有しているオブジェクトにコピーする。
+
+画面サイズ変更もapp側がdrawerに伝える。
+
+trianglesが使っているもの:
+  cam_df.light.to_mat4()
+  cam_df.light.angle
+  cam_df.sm_projection[iter]
+  cam_df.camera.position
+  cam_df.view_projection
+  cam_df.shadowmap_size
+  cam_df.exposure
+  cam_df.option_value
+  cam_df.option_value2
+lineparticleが使っているもの:
+  virt_width
+  virt_height
+  projection
+  camera
+particleが使っているもの:
+  virt_width
+  virt_height
+particle_bb
+  camera
+  projection
+setfb
+  display_width
+  display_height
+skybox
+  projection
+  camera
+  light
+  exposure
+blur
+  option_value
+font2
+  display_width
+  display_height
+
+display, virt, shadowmapのサイズ: uvec2
+camera: position, angle, mat4, inverse(view)
+  struct position_angle_view
+camera_projection: mat4 --- virtサイズに依存
+camera_view_projection: mat4
+light: position, angle, mat4, inverse(view)
+  struct position_angle_view
+light_projection: mat4 --- shadowmapサイズに依存、複数枚
+light_view_projection: mat4
+
+---------------------------------------------------------------------------
+resize時の動作を決め、projection_infoはすべてapp側で保持するようにする
+
+pglshaderのresize_screen
+window_widthはマウス座標を調べるのにつかう
+display_width(drawable_width) OpenGLの描画に使う
+update_mvp()
+  virt_heightとvirt_width, glcからcamera.projectionを書き込む
+  camera.sm_projection[]を書き込む
 

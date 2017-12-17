@@ -16,7 +16,6 @@ public import pgl3d::geometry::funcs -;
 public import pgl3d::opengl::glbuffer -;
 public import pgl3d::opengl::shader_config -;
 public import pgl3d::opengl::aggregated_ibuffer -;
-public import pgl3d::opengl::resource_pool -;
 public import pgl3d::engine::pglbase -;
 public import pgl3d::engine::intern_pool -;
 public import pgl3d::sdl::sdlutil -;
@@ -25,8 +24,8 @@ public threaded struct gl_framebuffer
 {
   public auto_framebuffer fbo;
   public auto_renderbuffer depthbuf;
-  public auto_texture texture0;
-  public auto_texture texture1;
+  public auto_texture texture_color;
+  public auto_texture texture_depth;
   public int width;
   public int height;
 }
@@ -68,8 +67,8 @@ public function void init_shadowmap_fbo(shader_config const& glc,
     /* texture */
     // glActiveTexture(GL_TEXTURE3 + i);
     glActiveTexture(GL_TEXTURE0);
-    sfbo.texture0.generate();
-    glBindTexture(GL_TEXTURE_2D, sfbo.texture0.get());
+    sfbo.texture_depth.generate();
+    glBindTexture(GL_TEXTURE_2D, sfbo.texture_depth.get());
     if (glc.enable_vsm) {
       if (m::is_true{is_gl3_or_gles3}) {
 	// GLenum t_internal_format = GL_RG16F; // FIXME? RG32F?
@@ -153,10 +152,11 @@ public function void init_shadowmap_fbo(shader_config const& glc,
     glBindFramebuffer(GL_FRAMEBUFFER, sfbo.fbo.get());
     if (glc.enable_depth_texture) {
       glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-	GL_TEXTURE_2D, sfbo.texture0.get(), 0);
+	GL_TEXTURE_2D, sfbo.texture_depth.get(), 0);
     } else {
+      // color attachmentだがテクスチャはtexture_depthに入っている
       glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-	GL_TEXTURE_2D, sfbo.texture0.get(), 0);
+	GL_TEXTURE_2D, sfbo.texture_depth.get(), 0);
     }
     /* renderbuffer */
     if (glc.enable_depth_texture) {
@@ -189,7 +189,7 @@ public function void init_shadowmap_fbo(shader_config const& glc,
 }
 
 public function void init_postprocess_fbo(shader_config const& glc,
-  bool save_depth_texture, gl_framebuffer mutable& ppfbo)
+  bool save_depth_texture, gl_framebuffer mutable& ppfbo, GLenum format)
 {
   if (!glc.enable_postprocess) {
     return;
@@ -201,15 +201,15 @@ public function void init_postprocess_fbo(shader_config const& glc,
   glBindFramebuffer(GL_FRAMEBUFFER, ppfbo.fbo.get());
   /* texture */
   glActiveTexture(GL_TEXTURE0);
-  ppfbo.texture0.generate();
-  glBindTexture(GL_TEXTURE_2D, ppfbo.texture0.get());
+  ppfbo.texture_color.generate();
+  glBindTexture(GL_TEXTURE_2D, ppfbo.texture_color.get());
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
     cast_int(GL_NEAREST)); // TODO: parameter
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
     cast_int(GL_NEAREST)); // TODO: parameter
   sdl_log("no depth_texture rbga byte");
-  glTexImage2D(GL_TEXTURE_2D, 0, cast_int(GL_RGBA), ppfbo.width,
-    ppfbo.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+  glTexImage2D(GL_TEXTURE_2D, 0, cast_int(format), ppfbo.width,
+    ppfbo.height, 0, format, GL_UNSIGNED_BYTE,
     offset_to_void_cp(0));
   // if (m::eq{is_gles, 0})
   {
@@ -224,17 +224,20 @@ public function void init_postprocess_fbo(shader_config const& glc,
     */
   }
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-    GL_TEXTURE_2D, ppfbo.texture0.get(), 0);
+    GL_TEXTURE_2D, ppfbo.texture_color.get(), 0);
+  save_depth_texture = true;
+    /* 最初のpostprocessのデプスバッファはテクスチャとして取る必要がある
+     * ので、どうせだから常にdepth textureを作るようにする。 */
   if (save_depth_texture) {
-    ppfbo.texture1.generate();
-    glBindTexture(GL_TEXTURE_2D, ppfbo.texture1.get());
+    ppfbo.texture_depth.generate();
+    glBindTexture(GL_TEXTURE_2D, ppfbo.texture_depth.get());
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
       cast_int(GL_NEAREST));
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
       cast_int(GL_NEAREST));
     gl_tex_image_depth(glc, ppfbo.width, ppfbo.height);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-      GL_TEXTURE_2D, ppfbo.texture1.get(), 0);
+      GL_TEXTURE_2D, ppfbo.texture_depth.get(), 0);
   } else {
     /* renderbuffer */
     int orig_rb;
