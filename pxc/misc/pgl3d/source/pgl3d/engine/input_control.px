@@ -315,18 +315,18 @@ input_control_target()
 }
 
 public function void input_control_handle_event(input_control mutable& ictl,
-  SDL_Event const& ev, float frame_speed, projection_info const& pjinfo,
+  SDL_Event const& ev, float frame_speed, glm::uvec2 const& virt_size,
   tree_map{string, string} mutable& commands_r
   /* FIXME: use callback instead */)
 {
   const etype = ev.type;
   if (etype == SDL_MOUSEBUTTONDOWN) {
-    const bx = cast_float(ev.button.x) / cast_float(pjinfo.virt_width);
-    const by = cast_float(ev.button.y) / cast_float(pjinfo.virt_height);
+    const bx = cast_float(ev.button.x) / cast_float(virt_size.x);
+    const by = cast_float(ev.button.y) / cast_float(virt_size.y);
     // sdl_log("mousedown", ev.button.x, ev.button.y, ev.button.button);
     ictl.finger_down(
-      cast_float(ev.button.x) / cast_float(pjinfo.virt_width),
-      cast_float(ev.button.y) / cast_float(pjinfo.virt_height),
+      cast_float(ev.button.x) / cast_float(virt_size.x),
+      cast_float(ev.button.y) / cast_float(virt_size.y),
       0);
   } else if (etype == SDL_MOUSEBUTTONUP) {
   } else if (etype == SDL_MOUSEMOTION) {
@@ -348,8 +348,7 @@ public function void input_control_handle_event(input_control mutable& ictl,
 public function void input_control_handle_keys(input_control mutable& ictl,
   input_control_target mutable& target, cslice{Uint8} const& keys,
   joystick_state const& joystick,
-  float frame_speed, projection_info const& pjinfo,
-  tree_map{string, string} mutable& commands_r)
+  float frame_speed, tree_map{string, string} mutable& commands_r)
 {
   const& axes = joystick.axes;
   const& buttons = joystick.buttons;

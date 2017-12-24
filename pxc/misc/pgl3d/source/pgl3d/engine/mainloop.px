@@ -166,7 +166,7 @@ private interface main_ctrl_export_i
 
 private struct main_ctrl(ptr{pgl3d_application} const& app0,
   pgl3d_config const& conf)
-<main_ctrl_export_i>
+<app_ctrl_i>
 {
   private ptr{pgl3d_application} app = app0;
   private sdlcontext sdlc = sdlcontext(conf);
@@ -185,7 +185,6 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
     conf.get("fps", 60.0, 1.0, 3600.0),
     conf.get("frame_sleep", 1, 0, 1));
   private int dummy_flip = conf.get("dummy_flip", 0, 0, 4);
-  private string_map commands;
   private int fullscreen = 0;
   private int saved_w = 0;
   private int saved_h = 0;
@@ -238,13 +237,6 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
       motion_thr.some->start();
     }
   }
-  public function glm::uvec2 get_window_size()
-  {
-    int w;
-    int h;
-    SDL_GetWindowSize(sdlc.sdl_window, address(w), address(h));
-    return glm::make_uvec2(static_cast{uint}(w), static_cast{uint}(h));
-  }
   private function void update_fullscreen()
   {
     if (fullscreen != 0) {
@@ -286,35 +278,13 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
   {
     engine_status = pgs.reload_shaders();
   }
-  private function void do_commands()
-  {
-    if (!commands.empty()) {
-      for (const& k, const& v: commands) {
-	if (k == "vsync") {
-	  frctl.toggle_vsync();
-	} else if (k == "fullscreen") {
-	  toggle_fullscreen();
-	} else if (k == "dummy_flip") {
-	  dummy_flip = (dummy_flip + 1) % 5;
-	  debug_log("dummy_flip", dummy_flip);
-	}
-      }
-      commands.clear();
-    }
-  }
   private function void update_window_size()
   {
-    int w;
-    int h;
-    int wi_w;
-    int wi_h;
-    SDL_GL_GetDrawableSize(sdlc.sdl_window, address(w), address(h));
-    SDL_GetWindowSize(sdlc.sdl_window, address(wi_w), address(wi_h));
-    pgs.resize_screen(w, h, wi_w, wi_h);
+    pgs.resize_screen();
     frctl.start();
-    sdl_log("resized w=", w, " h=", h, " win_w=", wi_w, " win_h=", wi_h);
+    sdl_log("update_window_size");
   }
-  public function bool step_internal(main_ctrl_export_i mutable& mc_ex)
+  public function bool step_internal(app_ctrl_i mutable& actrl)
   {
     // bool scene_next_flag = false;
     SDL_Event ev;
@@ -360,8 +330,7 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
 	break;
       }
       /* invoke event handler */
-      app->on_event(ev, frctl.frame_speed_mul, pgs.cam, commands);
-      do_commands();
+      app->on_event(ev, actrl, frctl.frame_speed_mul);
     }
     // if (!sdlc.joysticks.empty()) {
     {
@@ -403,11 +372,9 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
       const ksp = SDL_GetKeyboardState(address(numkeys));
       const ks = ksp.to_cslice(static_cast{size_t}(numkeys));
       /* invoke key handler */
-      app->on_scankeys(ks, joysticks, frctl.frame_speed_mul, pgs.cam,
-	commands);
-      do_commands();
+      app->on_scankeys(ks, joysticks, frctl.frame_speed_mul);
     }
-    app->on_frame(pgs.cam);
+    app->on_frame();
     fr.save_ticks(0);
     if (paused) {
       SDL_Delay(100);
@@ -425,35 +392,33 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
 	{
 	  mutable& mts = *motion_thr.some->shared;
 	  // fr.save_ticks(1, fr.get_ticks());
-	  mts.cam = pgs.cam;
+	  // mts.cam = pgs.cam;
 	  mts.frame_speed_mul = frctl.frame_speed_mul;
 	  mts.message = mess;
-	  mts.commands.swap(commands);
 	  pgs.ddata.local_whole_instances.swap(mts.whole_instances);
 	  saved_stat_num_objects = mts.stat_num_objects;
-          app->on_motion_swap();
+          app->on_motion_post();
+          app->on_motion_pre();
 	}
 	motion_thr.some->start();
       } else {
 	{
 	  mutable& mts = *motion_thr.some->shared;
-	  mts.cam = pgs.cam;
+	  // mts.cam = pgs.cam;
 	  mts.frame_speed_mul = frctl.frame_speed_mul;
 	  mts.message = mess;
-	  mts.commands.swap(commands);
 	  pgs.ddata.local_whole_instances.swap(mts.whole_instances);
+          app->on_motion_pre();
 	}
 	motion_thr.some->start();
 	motion_thr.some->finish();
 	{
 	  mutable& mts = *motion_thr.some->shared;
-	  mts.commands.swap(commands);
 	  pgs.ddata.local_whole_instances.swap(mts.whole_instances);
 	  saved_stat_num_objects = mts.stat_num_objects;
-          app->on_motion_swap();
+          app->on_motion_post();
 	}
       }
-      do_commands();
     }
     // FIXME: shadowmapping
     {
@@ -521,7 +486,7 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
     }
     frctl.rate_control();
     fr.save_ticks(5);
-    app->on_draw_finished(pgs.cam);
+    app->on_draw_finished();
     SDL_GL_SwapWindow(sdlc.sdl_window);
     fr.save_ticks(6);
     if (frctl.vsync != 0 && dummy_flip == 0) {
@@ -567,6 +532,40 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
     fr.save_ticks(7);
     // if (scene_next_flag) { frctl.start(); }
     return done;
+  }
+  /* app_ctrl_i methods */
+  public function glm::uvec2 get_drawable_size() const
+  {
+    int w;
+    int h;
+    SDL_GL_GetDrawableSize(sdlc.sdl_window, address(w), address(h));
+    return glm::make_uvec2(static_cast{uint}(w), static_cast{uint}(h));
+  }
+  public function glm::uvec2 get_window_size() const
+  {
+    int w;
+    int h;
+    SDL_GetWindowSize(sdlc.sdl_window, address(w), address(h));
+    return glm::make_uvec2(static_cast{uint}(w), static_cast{uint}(h));
+  }
+  public function void set_param(string const& k, string const& v)
+  {
+    if (k == "vsync") {
+      frctl.toggle_vsync();
+    } else if (k == "fullscreen") {
+      toggle_fullscreen();
+    } else if (k == "reload") {
+      reload_shaders();
+    } else if (k == "dummy_flip") {
+      dummy_flip = (dummy_flip + 1) % 5;
+      debug_log("dummy_flip", dummy_flip);
+    } else {
+      debug_log("unknown command:", k, v);
+    }
+  }
+  public function void geometry_changed()
+  {
+    update_window_size();
   }
 }
 

@@ -88,13 +88,14 @@ private tsvaluetype struct shadowmap_uniforms()
 
 public function void
 make_drawer_triangles_stype(shader_config const& glc,
-  drawer_shared const& ds, ptr{projection_info} const& pj, int stype,
-  int num_subtypes, int num_shadowmaps,
+  drawer_shared const& ds, ptr{projection_info} const& pj,
+  int stype, int num_subtypes, string const& smname, int num_shadowmaps,
   varray{drawer_ptr} mutable& solid_r,
   varray{varray{drawer_ptr}} mutable& shadow_r,
   varray{drawer_ptr} mutable& zpre_r)
 {
-  const maindr = make_ptr{drawer_triangles}(glc, ds, pj, stype);
+  const maindr = make_ptr{drawer_triangles}(glc, ds, pj, stype, smname,
+    num_shadowmaps);
   for (int i: 0 .. num_subtypes) {
     solid_r.push_back(make_ptr{drawstep_triangles}(
       maindr, stype, num_subtypes - i - 1, draw_step_solid, 0u));
@@ -157,11 +158,10 @@ private struct drawstep_triangles(ptr{drawer_triangles} const& drawer_tr0,
   {
     return main_drawer->get_texture_info(name);
   }
-  public function void resize_screen(shader_config const& glc, int width,
-    int height)
+  public function void resize_screen(shader_config const& glc)
   {
     if (ssubtype == 0 && step == draw_step_solid) {
-      main_drawer->resize_screen(glc, width, height);
+      main_drawer->resize_screen(glc);
     }
   }
   public function bool reload_shaders(shader_config const& glc)
@@ -183,7 +183,8 @@ private struct drawstep_triangles(ptr{drawer_triangles} const& drawer_tr0,
 }
 
 public struct drawer_triangles(shader_config const& glc0,
-  drawer_shared const& ds0, ptr{projection_info} const& pj0, int stype0)
+  drawer_shared const& ds0, ptr{projection_info} const& pj0,
+  int stype0, string const& smname0, int num_shadowmaps0)
 {
   /* stype==0 は三角形をそのまま描画する。
    * stype==1 は直方体の内部をraycastで描画する。
@@ -194,6 +195,8 @@ public struct drawer_triangles(shader_config const& glc0,
   public drawer_shared const ds = ds0;
   public ptr{projection_info} pj = pj0;
   public int const stype = stype0;
+  public string const smname = smname0;
+  public size_t const num_shadowmaps = static_cast{size_t}(num_shadowmaps0);
   metafunction tattr triangles_vertex_attributes;
   textures_ptr textures = ds.textures;
   tptr{tiled_voxel_texture} tvt = ds.tvt;
@@ -319,14 +322,13 @@ public struct drawer_triangles(shader_config const& glc0,
     }
     return r;
   }
-  public function void resize_screen(shader_config const& glc0, int width,
-    int height)
+  public function void resize_screen(shader_config const& glc0)
   {
     {
       shadowmap_fbs.clear();
       uint i;
       while (true) {
-        const name = "sm" + to_string(i);
+        const name = smname + to_string(i);
         if (const f: res->framebuffers[name]) {
           shadowmap_fbs.push_back(f);
           debug_log("found sm" + to_string(i));
@@ -335,11 +337,20 @@ public struct drawer_triangles(shader_config const& glc0,
         }
         ++i;
       }
+      if (shadowmap_fbs.size() != num_shadowmaps) {
+        debug_log("WARNING: triangles: shadowmap size mismatch",
+          num_shadowmaps, shadowmap_fbs.size());
+        throw runtime_error_template{"triangles"}("shadow map size mismatch");
+      }
     }
     if (stype == 1) {
       // デプスバッファのコピーを格納するためのテクスチャを作り、depth_rdの
       // 名前でシェーダ間で共有する。
       // vsmはとりあえずサポートしない
+      // FIXME: depth_rdテクスチャ共有はもう使っていない。sampler_depth_rdには
+      //   描画対象フレームバッファと同じものを渡し、glTextureBarrierを使った
+      //   上書きをする実装に変更した。このコードはもう要らない。
+      /*
       glActiveTexture(GL_TEXTURE0);
       if (texture_depth_rd->texture_id.get() == 0) {
 	texture_depth_rd->texture_id.generate();
@@ -358,6 +369,7 @@ public struct drawer_triangles(shader_config const& glc0,
 	res->textures.insert("depth_rd", texture_depth_rd);
       }
       debug_log("create depth_rd");
+      */
     }
     if (const e: sdr_solid.none) {
       reload_shaders(glc);
@@ -415,7 +427,7 @@ public struct drawer_triangles(shader_config const& glc0,
       bnd["virt3_size"] = "ivec3(" + to_string(virt3_size) + ")";
       bnd["virt3_size_log2"] = "ivec3(" + to_string(integral_log2(virt3_size))
 	+ ")";
-      bnd["smsz"] = to_string(shadowmap_fbs.size());
+      bnd["smsz"] = to_string(num_shadowmaps);
       bnd["raycast_cull_front"] = to_string(raycast_cull_front ? 1 : 0);
       bnd["update_frag_depth"] = to_string(update_frag_depth ? 1 : 0);
       bnd["check_frag_depth"] = to_string(
@@ -425,7 +437,7 @@ public struct drawer_triangles(shader_config const& glc0,
       bnd["shaodwmap_scale"] = to_string(
 	static_cast{int}(glc.shadowmap_scale + 0.5f));
       bnd["shadowmap_max_distance"] = to_string(
-	pow(glc.shadowmap_scale, static_cast{float}(shadowmap_fbs.size() - 1))
+	pow(glc.shadowmap_scale, static_cast{float}(num_shadowmaps - 1))
 	* glc.shadowmap_distance);
       s0.some = init_triangles_shader(glc, bnd, stype);
       s1.some = init_zprepass_shader(glc, bnd, stype);
@@ -633,14 +645,14 @@ public struct drawer_triangles(shader_config const& glc0,
           }
 	}
       }
-      darrayst{int} sampler_smarr = darrayst{int}(shadowmap_fbs.size(), 0);
-      for (const i: 0 .. shadowmap_fbs.size()) {
+      darrayst{int} sampler_smarr = darrayst{int}(num_shadowmaps, 0);
+      for (const i: 0 .. num_shadowmaps) {
 	glActiveTexture(static_cast{GLenum}(
 	  static_cast{int}(GL_TEXTURE10) + static_cast{int}(i)));
 	glBindTexture(GL_TEXTURE_2D, shadowmap_fbs[i]->texture_depth.get());
 	sampler_smarr[i] = 10 + static_cast{int}(i);
       }
-      glUniform1iv(sdr.u_sampler_sm, glc.num_shadowmaps,
+      glUniform1iv(sdr.u_sampler_sm, static_cast{int}(num_shadowmaps),
 	caddress(sampler_smarr[0]));
       if (glc.light_fixed) {
 	glUniform1f(sdr.u_ndelta_scale,
@@ -650,12 +662,12 @@ public struct drawer_triangles(shader_config const& glc0,
 	const sm_view = cam_df.light.to_mat4().inverse();
 	// TODO: sm_viewの中心をカメラのもっと前方に置くことができる。
 	darrayst{glm::mat4} sm_vparr = darrayst{glm::mat4}(
-	  static_cast{size_t}(glc.num_shadowmaps), glm::mat4());
-	for (const i: 0 .. static_cast{size_t}(glc.num_shadowmaps)) {
+          num_shadowmaps, glm::mat4());
+	for (const i: 0 .. num_shadowmaps) {
 	  sm_vparr[i] = cam_df.sm_projection[i] * sm_view;
 	}
-	glUniformMatrix4fv(sdr.u_shadowmap_vp, glc.num_shadowmaps, 0,
-	  sm_vparr[0].to_crawptr());
+	glUniformMatrix4fv(sdr.u_shadowmap_vp,
+          static_cast{int}(num_shadowmaps), 0, sm_vparr[0].to_crawptr());
 	glUniform1f(sdr.u_ndelta_scale,
 	  static_cast{float}(8192 / cam_df.shadowmap_size) * 0.02);
       }

@@ -54,33 +54,35 @@ public metafunction tiled_voxel_texture_update_mipmap
 
 public function void
 make_drawstep_triangles_surface(shader_config const& glc,
-  drawer_shared const& ds, ptr{projection_info} const& pj, int num_shadowmaps,
+  drawer_shared const& ds, ptr{projection_info} const& pj,
+  string const& smname, int num_shadowmaps,
   varray{drawer_ptr} mutable& solid_r, 
   varray{varray{drawer_ptr}} mutable& shadow_r, 
   varray{drawer_ptr} mutable& zpre_r)
 {
-  make_drawer_triangles_stype(glc, ds, pj, 0, 1, num_shadowmaps, solid_r,
-    shadow_r, zpre_r);
+  make_drawer_triangles_stype(glc, ds, pj, 0, 1, smname, num_shadowmaps,
+    solid_r, shadow_r, zpre_r);
 }
 
 public function void
 make_drawstep_raycast(shader_config const& glc,
-  drawer_shared const& ds, ptr{projection_info} const& pj, int num_shadowmaps,
+  drawer_shared const& ds, ptr{projection_info} const& pj,
+  string const& smname, int num_shadowmaps,
   int num_ssubtypes, varray{drawer_ptr} mutable& solid_r, 
   varray{varray{drawer_ptr}} mutable& shadow_r, 
   varray{drawer_ptr} mutable& zpre_r)
 {
-  make_drawer_triangles_stype(glc, ds, pj, 1, num_ssubtypes, num_shadowmaps,
-    solid_r, shadow_r, zpre_r);
+  make_drawer_triangles_stype(glc, ds, pj, 1, num_ssubtypes, smname,
+    num_shadowmaps, solid_r, shadow_r, zpre_r);
 }
 
 public function drawer_ptr
 make_drawstep_setfb(shader_config const& glc, drawer_shared const& ds,
-  ptr{glm::uvec2} const& pviewport, string const& fbname, bool owner_flag,
-  bool color_tex, bool depth_tex)
+  ptr{glm::uvec2} const& src_size, ptr{glm::uvec2} const& dst_size,
+  string const& fbname, bool owner_flag, bool color_tex, bool depth_tex)
 {
-  return make_ptr{drawer_setfb}(glc, ds, pviewport, fbname, owner_flag,
-    color_tex, depth_tex);
+  return make_ptr{drawer_setfb}(glc, ds, src_size, dst_size, fbname,
+    owner_flag, color_tex, depth_tex);
 }
 
 public function drawer_ptr
@@ -110,12 +112,14 @@ make_drawstep_rect2d(shader_config const& glc, drawer_shared const& ds)
 { return make_ptr{drawer_rect2d}(glc, ds); }
 
 public function drawer_ptr
-make_drawstep_dbgui(shader_config const& glc, drawer_shared const& ds)
-{ return make_ptr{drawer_dbgui}(glc, ds); }
+make_drawstep_dbgui(shader_config const& glc, drawer_shared const& ds,
+  string const& sm_name)
+{ return make_ptr{drawer_dbgui}(glc, ds, sm_name); }
 
 public function drawer_ptr
-make_drawstep_dbgui2(shader_config const& glc, drawer_shared const& ds)
-{ return make_ptr{drawer_dbgui2}(glc, ds); }
+make_drawstep_dbgui2(shader_config const& glc, drawer_shared const& ds,
+  string const& sm_name)
+{ return make_ptr{drawer_dbgui2}(glc, ds, sm_name); }
 
 public function drawer_ptr
 make_drawstep_font2(shader_config const& glc, drawer_shared const& ds,
@@ -158,6 +162,7 @@ make_drawstep_aberration(shader_config const& glc, drawer_shared const& ds,
 
 public function drawer_ptr
 make_drawstep_capture(shader_config const& glc, drawer_shared const& ds,
-  string const& src_fbname, ptr{varray{uchar}} const& capt_data0)
-{ return make_ptr{drawer_capture}(glc, ds, src_fbname, capt_data0); }
+  ptr{glm::uvec2} const& psize, string const& src_fbname,
+  ptr{varray{uchar}} const& capt_data0)
+{ return make_ptr{drawer_capture}(glc, ds, psize, src_fbname, capt_data0); }
 

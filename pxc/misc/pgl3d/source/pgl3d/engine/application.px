@@ -16,18 +16,19 @@ public interface pgl3d_application {
     shader_config const& sconf, drawer_shared const& ds);
   public function void on_build_vertices(make_vertices_i mutable& mvx);
   public function void on_joystick_changed(cslice{joystick_info} const& jinfo);
-  public function void on_event(SDL_Event const& ev, float speed,
-    projection_info const& pjinfo, string_map mutable& commands_r);
+  public function void on_event(SDL_Event const& ev, app_ctrl_i mutable& actrl,
+    float speed);
     // イベント一つごとに呼ばれる。
   public function void on_scankeys(cslice{uchar} const& keys,
-    cslice{joystick_state} const& joystick, float speed,
-    projection_info const& pjinfo, string_map mutable& commands_r);
+    cslice{joystick_state} const& joystick, float speed);
     // キースキャン後に呼ばれる。フレーム毎に一回。
-  public function void on_frame(projection_info const& pjinfo);
+  public function void on_frame();
     // motion 反映前に呼ばれる。フレーム毎に一回。
-  public function void on_motion_swap();
+  public function void on_motion_pre();
+    // main threadからmotion threadへ情報を移動する際に呼ばれる。
+  public function void on_motion_post();
     // motion threadからmain threadへ情報を移動する際に呼ばれる。
-  public function void on_draw_finished(projection_info const& pjinfo);
+  public function void on_draw_finished();
     // motion 反映とフレーム描画後に呼ばれる。
 }
 
@@ -38,10 +39,10 @@ public multithreaded interface pgl3d_scene_shared {
 
 public threaded interface pgl3d_scene {
   public function void on_motion_step(float frame_speed,
-    projection_info mutable& pjinfo, cstrref const& status_message,
+    cstrref const& status_message,
     cslice{prepare_instance_data_funcptr} const& ftable,
     whole_instances_type mutable& whole_instances,
-    pgl3d_scene_shared mutable& ss, string_map mutable& commands_r);
+    pgl3d_scene_shared mutable& ss);
     // motion thread上でフレーム毎に呼ばれる。
 }
 

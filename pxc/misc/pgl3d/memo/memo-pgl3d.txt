@@ -2,14 +2,22 @@
 ---------------------------------------------------------------------------
 TODO
 
-- resize時の動作を決め、projection_infoはすべてapp側で保持するようにする
+- drawerはprojection_infoではなくなるべく小さいデータを共有パラメータとして
+  取るようにする。
 
-- commandsをやめてmain_ctrl_export_iを渡すようにする
+- captureフィルタ復活
+
+- commandsをやめてmain_ctrl_export_iを渡すようにする(done)
+
+- shader_configの無駄コピー削除
+
+- resize時の動作を決め、projection_infoはすべてapp側で保持するようにする
+  (done)
 
 - setfbがvbid_invalid()を返すとtriangles surfaceが表示されなくなるのは何故？
   -> vbid_invalid()ではなく0を返していた。(done)
 
-- camera_dfの汎用化
+- camera_dfの汎用化(done)
 
 - フィルタの頂点データ共通化
 
@@ -19,14 +27,14 @@ TODO
   large array.
   -> 配列をクリアしていないせいで毎回伸びていたのが原因
 
-- projection_infoがengine側で固定なのをなおす。
+- projection_infoがengine側で固定なのをなおす。(done)
 
 - glc.shadowmap_resolutionとcam.shadowmap_sizeは同じなので後者は削除
   cam.virt_width -> シェーダの中で使っている
   cam.display_width -> glViewportしている
   cam.window_width -> handle_eventで使っている
 
-- 描画パスの抽象化
+- 描画パスの抽象化(done)
 
 - 外部出力
 
@@ -3996,4 +4004,70 @@ display_width(drawable_width) OpenGLの描画に使う
 update_mvp()
   virt_heightとvirt_width, glcからcamera.projectionを書き込む
   camera.sm_projection[]を書き込む
+
+ev.type = SDL_WINDOWEVENT
+ev.window.event == SDL_WINDOWEVENT_RESIZED
+
+struct projection_info()
+{
+  public perspective camera_pers; // windowのリサイズイベントでdemoappが更新
+    // pj_pmを書き換え
+  public glm::mat4 projection; // 同上
+    // pj_pmを書き換え
+  public farray{glm::mat4, max_num_shadowmaps} sm_projection; // 同上
+    // pj_pmを書き換え
+  public position_angle camera; // on_motion_stepでdssからコピー dssはhandle_keysでappからコピー
+    // pj_dfを書き換え
+  public position_angle light; // 同上、ただしdssではvec2の値
+    // pj_dfを書き換え
+  public glm::mat4 view; // on_motion_stepでcameraから計算
+    // pj_dfを書き換え
+  public glm::mat4 view_projection; // on_motion_stepでprojectionとviewから計算
+    // pj_dfを書き換え
+  public int display_width = 1024; // windowのリサイズイベントで更新
+    // pj_pmを書き換え
+  public int display_height = 512; // 同上
+    // pj_pmを書き換え
+  public int virt_width = 1024; // 同上
+    // pj_pmを書き換え
+  public int virt_height = 512; // 同上
+    // pj_pmを書き換え
+  public int window_width = 1024; // 同上
+  public int window_height = 512; // 同上
+  public int shadowmap_size = 1024; // 同上 FIXME: remove
+  public float exposure = 1.0f; // handle_keysでappからコピー
+  public float option_value = 0.0f; // 同上
+  public float option_value2 = -1.0f; // 同上
+}
+
+engine/input_controlにvirt_width/virt_heightのためにpjinfoを使う箇所がある。
+  -> uvec2に変更するか？
+
+engine/baseのmotion_thread_sharedにprojection_info camがある。削除するべし。
+engine/pglshaderのpglshaderにprojection_info camがある。削除するべし。
+  resize_screen削除するべし。
+  update_mvp削除するべし。
+engine/mainloopで
+  app->on_eventでpgs.cam引数
+  app->on_frameにpgs.cam引数
+  motionスレッドと交換の処理でmts.cam = pgs.camとしてmotion threadに渡している
+  app->on_draw_finishedのpgs.cam引数
+
+手順:
+  0. app.pj_pmとしてmotion前のデータ、app.pj_dfとしてmotion後の
+     データを保持。drawersとはpj_dfを共有し、geometry更新は両方に反映させる。
+  1. pgs.camを参照している部分をapp.pjに置き換えるon_event等の引数として
+     わたってきたpjinfoのかわりにapp.pjを使う。
+  2. on_event等の引数からpgs.cam削除
+  3. mts.camとしてmotion threadに渡している部分を、app.pjからscene_sharedを
+     介して渡すように変更. (motionでは書き換わらない情報)。on_motion_swap
+     でやる。またmotion後のデータをpj_drawing_frameにコピーする。
+  4. mts.cam削除
+
+motionで動く物体にカメラを配置したいときに困る。motionとinstance積み込みは
+分割すべきか。
+
+drawersはresize_window的な通知を受け取るのではなく、テクスチャサイズの
+変更などは毎回drawstepの際にチェックして必要なら作り直すようにするほうがよい。
+^^^これ最初にやる
 

@@ -19,10 +19,11 @@ private tsvaluetype struct dbgui2_uniforms()
 }
 
 public struct drawer_dbgui2(shader_config const& glc0,
-  drawer_shared const& ds)
+  drawer_shared const& ds, string const& sm_name0)
 <drawstep_i>
 {
   shader_config const glc = glc0;
+  string const sm_name = sm_name0;
   metafunction tattr dbgui2_vertex_attributes;
   ptr{resource_pool} res = pointer_downcast{ptr{resource_pool}}(
     ds.gl_resources);
@@ -66,12 +67,11 @@ public struct drawer_dbgui2(shader_config const& glc0,
   {
     return texture_info();
   }
-  public function void resize_screen(shader_config const& glc0, int width,
-    int height)
+  public function void resize_screen(shader_config const& glc0)
   { 
     uint i;
     while (true) {
-      const name = "sm" + to_string(i);
+      const name = sm_name + to_string(i);
       if (const f: res->framebuffers[name]) {
         shadowmap_fbs.push_back(f);
       } else {

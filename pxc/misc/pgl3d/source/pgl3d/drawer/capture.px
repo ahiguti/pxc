@@ -20,18 +20,22 @@ private tsvaluetype struct capture_uniforms()
 }
 
 public struct drawer_capture(shader_config const& glc,
-  drawer_shared const& ds, string const& src_fbname0,
+  drawer_shared const& ds, ptr{glm::uvec2} const& psize0,
+  string const& src_fbname0,
   ptr{varray{uchar}} const& capt_data0)
 <drawstep_i>
 {
   metafunction tattr capture_vertex_attributes;
+  ptr{glm::uvec2} const psize = psize0;
   string const src_fbname = src_fbname0;
   option{cptr{gl_framebuffer}} srcfbo;
   ptr{gl_framebuffer} ppfbo2 = make_ptr{gl_framebuffer}();
   capture_shader_ptr sdr_re = init_capture_shader(glc, true /* FIXME */);
   capture_shader_ptr sdr_re2 = init_capture_shader(glc, true);
+  /*
   int screen_width;
   int screen_height;
+  */
   ptr{varray{uchar}} capt_data = capt_data0;
   vbid_t const vbid_capture = ds.vbid_pool->intern("vbid_generic_filter");
   init(ds);
@@ -72,15 +76,16 @@ public struct drawer_capture(shader_config const& glc,
   {
     return texture_info();
   }
-  public function void resize_screen(shader_config const& glc, int width,
-    int height)
+  public function void resize_screen(shader_config const& glc)
   {
+    /*
     screen_width = width;
     screen_height = height;
-    ppfbo2->width = width;
-    ppfbo2->height = height;
+    */
+    ppfbo2->width = static_cast{int}(psize->x);
+    ppfbo2->height = static_cast{int}(psize->y);
     init_postprocess_fbo(glc, false, *ppfbo2, GL_RG);
-    debug_log("capture", width, height);
+    debug_log("capture", psize->x, psize->y);
   }
   public function bool reload_shaders(shader_config const& glc)
   {

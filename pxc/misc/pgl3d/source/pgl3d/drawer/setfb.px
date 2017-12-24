@@ -7,14 +7,16 @@ public import meta m;
 private struct setfb_attributes { }
 
 public struct drawer_setfb(shader_config const& glc,
-  drawer_shared const& ds, ptr{glm::uvec2} const& pviewport0,
-  string const& fbname0, bool owner_flag0, bool color_tex0, bool depth_tex0)
+  drawer_shared const& ds, ptr{glm::uvec2} const& src_size0,
+  ptr{glm::uvec2} const& dst_size0, string const& fbname0, bool owner_flag0,
+  bool color_tex0, bool depth_tex0)
 <drawstep_i>
 {
   /* draw()されるとフレームバッファをbindする。owner_flagが真ならフレーム
    * バッファを作成する。fbnameが空ならtoplevel fbをbindする。
    */
-  ptr{glm::uvec2} const pviewport = pviewport0;
+  ptr{glm::uvec2} const src_size = src_size0;
+  ptr{glm::uvec2} const dst_size = dst_size0;
   string const fbname = fbname0;
   bool const enable_depth_texture = glc.enable_depth_texture;
   bool const owner_flag = owner_flag0;
@@ -70,21 +72,18 @@ public struct drawer_setfb(shader_config const& glc,
   {
     return texture_info();
   }
-  public function void resize_screen(shader_config const& glc, int width,
-    int height)
+  public function void resize_screen(shader_config const& glc)
   {
     if (fbname.empty()) {
       return;
     }
     if (owner_flag) {
+      fbo_own.some->width = static_cast{int}(src_size->x);
+      fbo_own.some->height = static_cast{int}(src_size->y);
       if (color_tex) {
-        fbo_own.some->width = width;
-        fbo_own.some->height = height;
         init_postprocess_fbo(glc, false, *fbo_own.some, GL_RGBA);
         debug_log("setfb color fbo");
       } else {
-        fbo_own.some->width = glc.shadowmap_resolution;
-        fbo_own.some->height = glc.shadowmap_resolution;
         init_shadowmap_fbo(glc, *fbo_own.some);
         debug_log("setfb shadowmap fbo");
       }
@@ -135,7 +134,7 @@ public struct drawer_setfb(shader_config const& glc,
       ddata.cur_target_fb.some = fbo.some;
       // debug_log("setfb: color fb");
     }
-    const& viewport = *pviewport;
+    const& viewport = *dst_size;
     glViewport(0, 0, static_cast{GLsizei}(viewport.x),
       static_cast{GLsizei}(viewport.y));
   }

@@ -39,11 +39,10 @@ pglshader(shader_config const& sconf0, drawer_shared const& ds0,
     get_drawsteps_by_vbid(ds, drawsteps0);
     // vbidからdrawstepを返す。vbidにinvalidを返すdrawstepは含まない。
     // 同じvbidを返すdrawstepが複数あるときは最初のものだけが入る。
-  public projection_info cam;
   public tptr{prepinstf_table} const pidft = make_tptr{prepinstf_table}();
   private auto_vertexarray vtxarr;
   init();
-  resize_screen(width0, height0, width0, height0);
+  // resize_screen(width0, height0, width0, height0);
   public function void set_vertex_buffer(vbid_t vbid,
     ptr{vertex_buffer} const& p) {
     if (ddata.vertex_buffers.size() <= static_cast{size_t}(vbid)) {
@@ -279,9 +278,9 @@ pglshader(shader_config const& sconf0, drawer_shared const& ds0,
       return vbid_invalid();
     }
   }
-  public function void resize_screen(int disp_width, int disp_height,
-    int w_width, int w_height)
+  public function void resize_screen()
   {
+    /*
     const virt_scale = glc.conf.get("virt_scale", 1.0f, 0.125f, 16.0f);
     const virt_width = static_cast{int}(static_cast{float}(disp_width)
       / virt_scale);
@@ -290,6 +289,8 @@ pglshader(shader_config const& sconf0, drawer_shared const& ds0,
     const sm_size = glc.shadowmap_resolution;
     sdl_log("disp size", disp_width, disp_height);
     sdl_log("virt size", virt_width, virt_height);
+    */
+    /*
     cam.virt_width = virt_width;
     cam.virt_height = virt_height;
     cam.display_width = disp_width;
@@ -297,10 +298,13 @@ pglshader(shader_config const& sconf0, drawer_shared const& ds0,
     cam.window_width = w_width;
     cam.window_height = w_height;
     cam.shadowmap_size = sm_size;
+    */
     for (const i, const& pd: drawsteps) {
-      pd->resize_screen(glc, virt_width, virt_height);
+      pd->resize_screen(glc);
     }
+    /*
     update_mvp(glc, cam);
+    */
   }
   public function bool reload_shaders()
   {
@@ -438,65 +442,5 @@ dgf_point_joint_internal(ptr{vertices} const& vptr, string const& joint_name,
      p.x,  p.y,  p.z,  1.0);
   e.joint_name = joint_name;
   vptr->push_joint(e);
-}
-
-function void
-update_mvp(shader_config const& glc, projection_info mutable& cam)
-{
-  float const perspective_near =
-    glc.conf.get("perspective_near", 1.0f, 0.001f, 100.0f);
-  float const perspective_far =
-    glc.conf.get("perspective_far", 10000.0f, 10.0f, 1000000.0f);
-  float const perspective_wh =
-    glc.conf.get("perspective_wh", 1.0f, 0.001f, 100.0f);
-  const ssbase = max(cam.virt_height, cam.virt_width);
-  const h = perspective_wh * cast_float(cam.virt_height)
-    / cast_float(ssbase);
-  const w = perspective_wh * cast_float(cam.virt_width)
-    / cast_float(ssbase);
-  /*
-  glViewport(0, 0, static_cast{GLsizei}(cam.virt_width),
-    static_cast{GLsizei}(cam.virt_height));
-  glDepthMask(1);
-  glColorMask(1, 1, 1, 1);
-  glClearColor(1.0, 1.0, 1.0, 1.0);
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  */
-  {
-    // camera projection
-    const near = perspective_near;
-    const far = perspective_far;
-    const left = cast_float(-w);
-    const right = cast_float(w);
-    const bottom = cast_float(-h);
-    const top = cast_float(h);
-    cam.camera_pers.near = near;
-    cam.camera_pers.far = far;
-    cam.camera_pers.width = w;
-    cam.camera_pers.height = h;
-    cam.projection = glm::frustum{float}(left, right, bottom, top, near, far);
-  }
-  {
-    // shadowmap projection
-    function void set_sm(glm::mat4 mutable& dst, float di)
-    {
-      // const far = di;
-      // const near = -di;
-      const far = di * 1.0f;
-      const near = di * -1.0f;
-      const left = -di;
-      const right = di;
-      const bottom = -di;
-      const top = di;
-      dst = glm::ortho{float}(left, right, bottom, top, near, far);
-    }
-    float far = glc.shadowmap_distance;
-    for (const i: 0 .. static_cast{size_t}(glc.num_shadowmaps)) {
-      set_sm(cam.sm_projection[i], far);
-      far *= glc.shadowmap_scale;
-    }
-    // debug_log("smp0", cam.sm_projection[0].to_cslice());
-    // debug_log("smp1", cam.sm_projection[1].to_cslice());
-  }
 }
 

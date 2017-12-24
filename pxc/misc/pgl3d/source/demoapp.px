@@ -27,7 +27,7 @@ public import pgl3d::sdl::sdlutil -;
 public import pgl3d::geometry::wfobj -;
 public import io::environ;
 public import debug_helper -;
-public import pgl3d::aux::d3axim -; // FIXME
+public import pgl3d::aux::d3axim -;
 
 // public import pgl3d::texture::generator -;
 // public import pgl3d::numeric::interpolation -; // FIXME
@@ -115,11 +115,12 @@ public function void app_main()
 public struct demoapp_application()
   <pgl3d_application>
 {	
-  public app_impl app;
+  public app_demoapp app;
   public function varray{ptr{pgldrawer_export_i}} on_init_drawstep(
     shader_config const& conf, drawer_shared const& ds)
   {
     debug_log("init_drawstep");
+    app.sconf.some = make_ptr{shader_config}(conf);
     const r = init_drawsteps(app, conf, ds);
     app.option_value2 = static_cast{float}(
       conf.conf.get("option_value2", -1, -1, 9));
@@ -136,10 +137,10 @@ public struct demoapp_application()
     app.scene_shared->tvt.some = app.tvt;
     app.scene_shared->tup.some = app.tup;
   }
-  public function void on_event(SDL_Event const& ev, float speed,
-    projection_info const& pjinfo, string_map mutable& commands_r)
+  public function void on_event(SDL_Event const& ev, app_ctrl_i mutable& actrl,
+    float speed)
   {
-    handle_event(app, ev, speed, pjinfo, commands_r);
+    handle_event(app, actrl, ev, speed);
   }
   public function void on_joystick_changed(cslice{joystick_info} const& ji)
   {
@@ -148,8 +149,7 @@ public struct demoapp_application()
     app.player_joystick.hats.resize(0, 0);
   }
   public function void on_scankeys(cslice{uchar} const& keys,
-    cslice{joystick_state} const& joysticks, float speed,
-    projection_info const& pjinfo, string_map mutable& commands_r)
+    cslice{joystick_state} const& joysticks, float speed)
   {
     app.modmask = 0;
     if (keys[static_cast{uint}(SDL_SCANCODE_LSHIFT)] != 0) {
@@ -164,14 +164,14 @@ public struct demoapp_application()
     if (keys[static_cast{uint}(SDL_SCANCODE_RCTRL)] != 0) {
       app.modmask |= 8;
     }
-    handle_keys(app, keys, joysticks, speed, pjinfo, commands_r);
+    handle_keys(app, keys, joysticks, speed);
     // debug_log("joy", joy_axes, "btn", joy_buttons);
   }
   public function tptr{pgl3d_scene_shared} get_scene_shared()
   {
     return app.scene_shared;
   }
-  public function void on_frame(projection_info const& pjinfo)
+  public function void on_frame()
   {
     mutable& tup = *app.tup;
     for (const i, const& e: tup) {
@@ -183,25 +183,36 @@ public struct demoapp_application()
     tup.clear();
     if (case app.edit_mode.some) {
       // debug_log("edit_mode on frame");
-      app.edit_mode.some->on_frame(pjinfo);
+      app.edit_mode.some->on_frame(*app.proj_pm);
     }
   }
-  public function void on_motion_swap()
+  public function void on_motion_pre()
   {
     // motion threadからmain threadへ情報を移動する際に呼ばれる。
     // ssはロックされた状態で呼ばれるのでアクセスしても待たされない。
+    // projection_infoをproj_pmからmotion threadへコピーする
+    mutable& pj = app.scene_shared->pj_drawing_frame;
+    pj = *app.proj_pm;
+  }
+  public function void on_motion_post()
+  {
+    // motion threadからmain threadへ情報を移動する際に呼ばれる。
+    // ssはロックされた状態で呼ばれるのでアクセスしても待たされない。
+    // proj_dfをmotion threadのpj_drawing_frameからコピーする
     const& pj = app.scene_shared->pj_drawing_frame;
-    *app.pj = pj;
+    *app.proj_df = pj;
     app.dp_fxaa->option_value = pj.option_value;
     app.dp_blur->option_value = pj.option_value;
+    /*
     *app.pviewport_main = glm::make_uvec2(
       static_cast{uint}(pj.display_width),
       static_cast{uint}(pj.display_height));
     *app.pviewport_sm = glm::make_uvec2(
       static_cast{uint}(pj.shadowmap_size),
       static_cast{uint}(pj.shadowmap_size));
+    */
   }
-  public function void on_draw_finished(projection_info const& pjinfo)
+  public function void on_draw_finished()
   {
     if (app.axim.is_valid() && !app.capt_data->empty()) {
       app.axim.axi_write(0x18000000, *app.capt_data);
@@ -428,11 +439,15 @@ private struct camera_state {
   public glm::vec2 light;
 }
 
-private struct app_impl()
+private struct app_demoapp()
 {
   public tptr{demoapp_scene_shared} const scene_shared
     = make_tptr{demoapp_scene_shared}(io::system);
-  public ptr{projection_info} pj = make_ptr{projection_info}();
+  public option{ptr{shader_config}} sconf;
+  public ptr{projection_info} proj_df = make_ptr{projection_info}();
+    // drawing frame
+  public ptr{projection_info} proj_pm = make_ptr{projection_info}();
+    // pre-motion frame
   public ptr{drawer_fxaa_params} dp_fxaa = make_ptr{drawer_fxaa_params}();
   public ptr{drawer_blur_params} dp_blur = make_ptr{drawer_blur_params}();
   public ptr{glm::uvec2} pviewport_main = make_ptr{glm::uvec2}();
@@ -568,25 +583,26 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
       .normalize();
   }
   public function void on_motion_step(float frame_speed,
-    projection_info mutable& pjinfo, cstrref const& status_message,
+    cstrref const& status_message,
     cslice{prepare_instance_data_funcptr} const& ftable,
     whole_instances_type mutable& whole_instances,
-    pgl3d_scene_shared mutable& ss, string_map mutable& commands_r)
+    pgl3d_scene_shared mutable& ss)
   {
     const t0 = get_time(sys);
     mutable& dss = downcast_mutable{demoapp_scene_shared}(ss);
     // const t0 = io::debug_system().gettimeofday_double();
-    pjinfo.camera = dss.posang;
-    update_camera_light(pjinfo.camera, pjinfo.light, dss.light);
-    pjinfo.view = pjinfo.camera.to_mat4().inverse();
-    pjinfo.view_projection = pjinfo.projection * pjinfo.view;
-    pjinfo.exposure = dss.exposure;
-    pjinfo.option_value = dss.option_value;
-    pjinfo.option_value2 = dss.option_value2;
-    dss.pj_drawing_frame = pjinfo; // これを介してmainスレッドのdrawersに反映
-    const sm_view = pjinfo.light.to_mat4().inverse();
-    // const sm_vp = pjinfo.sm_projection * sm_view;
-    const& vp = pjinfo.view_projection;
+    projection_info mutable& pj = dss.pj_drawing_frame;
+    pj.camera = dss.posang;
+    update_camera_light(pj.camera, pj.light, dss.light);
+    pj.view = pj.camera.to_mat4().inverse();
+    pj.view_projection = pj.projection * pj.view;
+    pj.exposure = dss.exposure;
+    pj.option_value = dss.option_value;
+    pj.option_value2 = dss.option_value2;
+    // dss.pj_drawing_frame = pj; // これを介してmainスレッドのdrawersに反映
+    const sm_view = pj.light.to_mat4().inverse();
+    // const sm_vp = pj.sm_projection * sm_view;
+    const& vp = pj.view_projection;
     node_common_data ncd;
     // ncd.shadowmapping_vp = sm_vp; // FIXME: remove: unused
     ncd.vp = vp;
@@ -607,13 +623,13 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
 	0, 0,
 	dss.default_font_texture_info.char_w,
 	dss.default_font_texture_info.char_h,
-	static_cast{float}(pjinfo.virt_width),
-	static_cast{float}(pjinfo.virt_height));
+	static_cast{float}(pj.virt_width),
+	static_cast{float}(pj.virt_height));
     }
     const t1 = get_time(sys);
-    robjs.set_perspective(pjinfo.camera_pers);
+    robjs.set_perspective(pj.camera_pers);
     robjs.clear_objects();
-    scene_control_step(sctl, dss, robjs, pjinfo, frame_speed, ncd, ftable,
+    scene_control_step(sctl, dss, robjs, pj, frame_speed, ncd, ftable,
       whole_instances);
       // 物理エンジンを使ったオブジェクトの移動とインスタンス出力。
     robjs.prepare_instances(ncd, dss.rdi, ftable, whole_instances);
@@ -675,7 +691,7 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
   }
 }
 
-function void save_state(app_impl const& app)
+function void save_state(app_demoapp const& app)
 {
   camera_state st;
   st.player = app.player;
@@ -685,19 +701,109 @@ function void save_state(app_impl const& app)
   sdl_save_file("/build/camera_state.raw", s);
 }
 
-function void handle_event(app_impl mutable& app,
-  SDL_Event const& ev, float frame_speed, projection_info const& pjinfo,
-  string_map mutable& commands_r)
+function bool update_window_geometry(app_demoapp mutable& app,
+  glm::uvec2 const& drsz, glm::uvec2 const& wsz)
+{
+  const& glc = *app.sconf.some;
+  mutable& cam = *app.proj_df;
+  if (
+    cam.display_width == static_cast{int}(drsz.x) &&
+    cam.display_height == static_cast{int}(drsz.y) &&
+    cam.window_width == static_cast{int}(wsz.x) &&
+    cam.window_height == static_cast{int}(wsz.y))
+  {
+    sdl_log("display geometry not changed");
+    return false;
+  }
+  const virt_scale = glc.conf.get("virt_scale", 1.0f, 0.125f, 16.0f);
+  const virt_width = static_cast{int}(static_cast{float}(drsz.x)
+    / virt_scale);
+  const virt_height = static_cast{int}(static_cast{float}(drsz.y)
+    / virt_scale);
+  const sm_size = glc.shadowmap_resolution;
+  sdl_log("disp size", drsz.x, drsz.y);
+  sdl_log("virt size", virt_width, virt_height);
+  cam.virt_width = virt_width;
+  cam.virt_height = virt_height;
+  cam.display_width = static_cast{int}(drsz.x);
+  cam.display_height = static_cast{int}(drsz.y);
+  cam.window_width = static_cast{int}(wsz.x);
+  cam.window_height = static_cast{int}(wsz.y);
+  cam.shadowmap_size = sm_size;
+  *app.pviewport_main = glm::make_uvec2(
+    static_cast{uint}(cam.display_width),
+    static_cast{uint}(cam.display_height));
+  *app.pviewport_sm = glm::make_uvec2(
+    static_cast{uint}(cam.shadowmap_size),
+    static_cast{uint}(cam.shadowmap_size));
+  // update mvp
+  float const perspective_near =
+    glc.conf.get("perspective_near", 1.0f, 0.001f, 100.0f);
+  float const perspective_far =
+    glc.conf.get("perspective_far", 10000.0f, 10.0f, 1000000.0f);
+  float const perspective_wh =
+    glc.conf.get("perspective_wh", 1.0f, 0.001f, 100.0f);
+  const ssbase = max(cam.virt_height, cam.virt_width);
+  const h = perspective_wh * cast_float(cam.virt_height)
+    / cast_float(ssbase);
+  const w = perspective_wh * cast_float(cam.virt_width)
+    / cast_float(ssbase);
+  {
+    // camera projection
+    const near = perspective_near;
+    const far = perspective_far;
+    const left = cast_float(-w);
+    const right = cast_float(w);
+    const bottom = cast_float(-h);
+    const top = cast_float(h);
+    cam.camera_pers.near = near;
+    cam.camera_pers.far = far;
+    cam.camera_pers.width = w;
+    cam.camera_pers.height = h;
+    cam.projection = glm::frustum{float}(left, right, bottom, top, near, far);
+  }
+  {
+    // shadowmap projection
+    function void set_sm(glm::mat4 mutable& dst, float di)
+    {
+      const far = di * 1.0f;
+      const near = di * -1.0f;
+      const left = -di;
+      const right = di;
+      const bottom = -di;
+      const top = di;
+      dst = glm::ortho{float}(left, right, bottom, top, near, far);
+    }
+    float far = glc.shadowmap_distance;
+    for (const i: 0 .. static_cast{size_t}(glc.num_shadowmaps)) {
+      set_sm(cam.sm_projection[i], far);
+      far *= glc.shadowmap_scale;
+    }
+    // debug_log("smp0", cam.sm_projection[0].to_cslice());
+    // debug_log("smp1", cam.sm_projection[1].to_cslice());
+  }
+  *app.proj_pm = cam; // update proj_pm also
+  return true;
+}
+
+function void handle_event(app_demoapp mutable& app, app_ctrl_i mutable& actrl,
+  SDL_Event const& ev, float frame_speed)
 {
   const etype = ev.type;
   if (etype == SDL_WINDOWEVENT) {
-    if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
-    }
+    //if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
+      if (update_window_geometry(app, actrl.get_drawable_size(),
+        actrl.get_window_size())) {
+        actrl.geometry_changed();
+        debug_log("WINDOWEVENT");
+      }
+    //}
   } else if (etype == SDL_MOUSEBUTTONDOWN) {
-    const bx = cast_float(ev.button.x) / cast_float(pjinfo.window_width);
-    const by = cast_float(ev.button.y) / cast_float(pjinfo.window_height);
+    const& pj = *app.proj_pm;
+    const bx = cast_float(ev.button.x) / cast_float(pj.window_width);
+    const by = cast_float(ev.button.y) / cast_float(pj.window_height);
     debug_log("down", bx, by, ev.button.x, ev.button.y,
-      pjinfo.window_width, pjinfo.window_height);
+      pj.window_width, pj.window_height);
     if (bx < 0.1 && by < 0.1) {
       app.scene_next_flag = true;
       debug_log("next", app.scene_next_flag);
@@ -762,15 +868,15 @@ function void handle_event(app_impl mutable& app,
       return;
     }
     if (ev.key.keysym.scancode == SDL_SCANCODE_F11) {
-      commands_r["fullscreen"] = "1";
+      actrl.set_param("fullscreen", "1");
       return;
     }
     if (ev.key.keysym.scancode == SDL_SCANCODE_F5) {
-      commands_r["reload"] = "1";
+      actrl.set_param("reload", "1");
       return;
     }
     if (ev.key.keysym.scancode == SDL_SCANCODE_F7) {
-      commands_r["dummy_flip"] = "1";
+      actrl.set_param("dummy_flip", "1");
       return;
     }
     if (ev.key.keysym.scancode == SDL_SCANCODE_F8) {
@@ -782,7 +888,7 @@ function void handle_event(app_impl mutable& app,
       return;
     }
     if (ev.key.keysym.scancode == SDL_SCANCODE_F10) {
-      commands_r["vsync"] = "1";
+      actrl.set_param("vsync", "1");
       return;
     }
     if (ev.key.keysym.scancode == SDL_SCANCODE_E) {
@@ -794,7 +900,7 @@ function void handle_event(app_impl mutable& app,
       return;
     }
     if (ev.key.keysym.scancode == SDL_SCANCODE_F1) {
-      app.app_commands["scene_pause"] = "1";
+      actrl.set_param("scene_pause", "1");
       return;
     }
     if (ev.key.keysym.scancode == SDL_SCANCODE_F2) {
@@ -842,10 +948,13 @@ function void handle_event(app_impl mutable& app,
     ev.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) {
     app.scene_shared->engine_status = ev.window.data1 != 0;
   }
-  app.ictl.handle_event(ev, frame_speed, pjinfo, app.app_commands);
+  const& proj = *app.proj_pm;
+  const virt_sz = glm::make_uvec2(static_cast{uint}(proj.virt_width),
+    static_cast{uint}(proj.virt_height));
+  app.ictl.handle_event(ev, frame_speed, virt_sz, app.app_commands);
 }
 
-function void update_joystick(app_impl mutable& app,
+function void update_joystick(app_demoapp mutable& app,
   cslice{joystick_state} const& joysticks)
 {
   // TODO: マップできるようにする
@@ -885,13 +994,12 @@ function void update_joystick(app_impl mutable& app,
   // debug_log(joysticks);
 }
 
-function void handle_keys(app_impl mutable& app,
-  cslice{uchar} const& keys, cslice{joystick_state} const& joysticks, float frame_speed, projection_info const& pjinfo,
-  string_map mutable& commands_r)
+function void handle_keys(app_demoapp mutable& app, cslice{uchar} const& keys,
+  cslice{joystick_state} const& joysticks, float frame_speed)
 {
   update_joystick(app, joysticks);
-  app.ictl.handle_keys(app.player, keys, app.player_joystick,
-    frame_speed, pjinfo, commands_r);
+  app.ictl.handle_keys(app.player, keys, app.player_joystick, frame_speed,
+    app.app_commands);
   /*
   if (app.ictl.get_button(buttons, 10) != 0) {
     app.app_commands["throw"] = "1";
@@ -946,7 +1054,7 @@ function void handle_keys(app_impl mutable& app,
 }
 
 private function varray{ptr{pgldrawer_export_i}} init_drawsteps(
-  app_impl mutable& app, shader_config const& sconf,
+  app_demoapp mutable& app, shader_config const& sconf,
   drawer_shared const& ds)
 {
   app.raycast_cull_front = sconf.conf.get("raycast_cull_front", 0, 0, 1) != 0;
@@ -965,31 +1073,38 @@ private function varray{ptr{pgldrawer_export_i}} init_drawsteps(
   varray{drawer_ptr} solid;
   varray{varray{drawer_ptr}} shadow;
   varray{drawer_ptr} zpre;
-  make_drawstep_triangles_surface(sconf, ds, app.pj, sconf.num_shadowmaps,
-    solid, shadow, zpre);
-  make_drawstep_raycast(sconf, ds, app.pj, sconf.num_shadowmaps,
-    app.raycast_layer, solid, shadow, zpre);
-  for (int i: 0 .. sconf.num_shadowmaps) {
+  const shadowmap_name = "sm";
+  const num_shadowmaps = sconf.num_shadowmaps;
+  make_drawstep_triangles_surface(sconf, ds, app.proj_df, shadowmap_name,
+    num_shadowmaps, solid, shadow, zpre);
+  make_drawstep_raycast(sconf, ds, app.proj_df, shadowmap_name,
+    sconf.num_shadowmaps, app.raycast_layer, solid, shadow, zpre);
+  for (int i: 0 .. num_shadowmaps) {
     r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_sm,
-      "sm" + to_string(i), true, false, true)); // set shadowmap framebuffer i
+      app.pviewport_sm, shadowmap_name + to_string(i), true, false, true));
+      // set shadowmap framebuffer i
     r.append(shadow[static_cast{size_t}(i)]); // draw shadow
   }
   r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_main,
+    app.pviewport_main,
     "col0", true, true, true)); // set color+depth framebuffer
   r.push_back(make_drawstep_chgmode(sconf, ds, "zprepass"));
   r.append(zpre); // draw solid z-prepass
   r.push_back(make_drawstep_chgmode(sconf, ds, "solid"));
   r.append(solid); // draw solid color
-  r.push_back(make_drawstep_lineparticle(sconf, ds, app.pj)); // draw solid
-  r.push_back(make_drawstep_skybox(sconf, ds, app.pj)); // draw solid
+  r.push_back(make_drawstep_lineparticle(sconf, ds, app.proj_df));
+    // draw solid
+  r.push_back(make_drawstep_skybox(sconf, ds, app.proj_df)); // draw solid
   r.push_back(make_drawstep_chgmode(sconf, ds, "blend"));
   r.push_back(make_drawstep_particle(sconf, ds, app.pviewport_main));
-  r.push_back(make_drawstep_particle_bb(sconf, ds, app.pj));
+  r.push_back(make_drawstep_particle_bb(sconf, ds, app.proj_df));
   r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_main,
+    app.pviewport_main,
     "col1", true, true, true)); // set color+depth framebuffer
   r.push_back(make_drawstep_fxaa(sconf, ds, app.dp_fxaa, "col0"));
     // col0からcol1へfxaaフィルタ実行
   r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_main,
+    app.pviewport_main,
     "", true, true, true)); // set toplevel framebuffer
   r.push_back(make_drawstep_blur(sconf, ds, app.dp_blur, "col1"));
   r.push_back(make_drawstep_chgmode(sconf, ds, "blend"));
@@ -1003,7 +1118,7 @@ private function varray{ptr{pgldrawer_export_i}} init_drawsteps(
   return r;
 }
 
-private function void build_vertices(app_impl mutable& app,
+private function void build_vertices(app_demoapp mutable& app,
   make_vertices_i mutable& pgs)
 {
   const& voxtmap = app.tvt->tmap_edit->data_pri[0];
