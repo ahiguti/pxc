@@ -30,7 +30,7 @@ public threaded struct gl_framebuffer
   public int height;
 }
 
-public function void
+function void
 gl_tex_image_depth(shader_config const& glc, int width, int height)
 {
   GLenum t_internal_format = GL_DEPTH_COMPONENT;
@@ -180,39 +180,35 @@ public function void init_shadowmap_fbo(shader_config const& glc,
     }
     const e = glCheckFramebufferStatus(GL_FRAMEBUFFER);
     if (e != GL_FRAMEBUFFER_COMPLETE) {
-      sdl_log("incomplete framebuffer", cast_int(e));
+      sdl_log("init_sm_fbo: incomplete framebuffer", cast_int(e));
     } else {
-      sdl_log("complete framebuffer");
+      sdl_log("init_sm_fbo: complete framebuffer");
     }
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
   }
 }
 
-public function void init_postprocess_fbo(shader_config const& glc,
-  bool save_depth_texture, gl_framebuffer mutable& ppfbo, GLenum format)
+public function void init_color_fbo(shader_config const& glc,
+  gl_framebuffer mutable& ppfbo, GLenum c_ifmt, GLenum c_efmt, GLenum c_etyp,
+  GLenum d_ifmt, GLenum d_efmt, GLenum d_etyp)
 {
-  if (!glc.enable_postprocess) {
-    return;
-  }
-  sdl_log("pp size", ppfbo.width, ppfbo.height);
+  sdl_log("framebuffer size", ppfbo.width, ppfbo.height);
   int saved_fb;
   glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
   ppfbo.fbo.generate();
   glBindFramebuffer(GL_FRAMEBUFFER, ppfbo.fbo.get());
-  /* texture */
-  glActiveTexture(GL_TEXTURE0);
-  ppfbo.texture_color.generate();
-  glBindTexture(GL_TEXTURE_2D, ppfbo.texture_color.get());
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
-    cast_int(GL_NEAREST)); // TODO: parameter
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-    cast_int(GL_NEAREST)); // TODO: parameter
-  sdl_log("no depth_texture rbga byte");
-  glTexImage2D(GL_TEXTURE_2D, 0, cast_int(format), ppfbo.width,
-    ppfbo.height, 0, format, GL_UNSIGNED_BYTE,
-    offset_to_void_cp(0));
-  // if (m::eq{is_gles, 0})
-  {
+  if (c_ifmt != GL_NONE) {
+    /* texture */
+    glActiveTexture(GL_TEXTURE0);
+    ppfbo.texture_color.generate();
+    glBindTexture(GL_TEXTURE_2D, ppfbo.texture_color.get());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+      cast_int(GL_NEAREST)); // TODO: parameter
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+      cast_int(GL_NEAREST)); // TODO: parameter
+    sdl_log("no depth_texture rbga byte");
+    glTexImage2D(GL_TEXTURE_2D, 0, cast_int(c_ifmt), ppfbo.width,
+      ppfbo.height, 0, c_efmt, c_etyp, offset_to_void_cp(0));
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
       cast_int(GL_CLAMP_TO_EDGE));
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
@@ -222,20 +218,27 @@ public function void init_postprocess_fbo(shader_config const& glc,
     glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR,
       border.crange().to_crawptr());
     */
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+      GL_TEXTURE_2D, ppfbo.texture_color.get(), 0);
   }
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-    GL_TEXTURE_2D, ppfbo.texture_color.get(), 0);
-  save_depth_texture = true;
-    /* 最初のpostprocessのデプスバッファはテクスチャとして取る必要がある
-     * ので、どうせだから常にdepth textureを作るようにする。 */
-  if (save_depth_texture) {
+  if (d_ifmt != GL_NONE) {
     ppfbo.texture_depth.generate();
     glBindTexture(GL_TEXTURE_2D, ppfbo.texture_depth.get());
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
       cast_int(GL_NEAREST));
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
       cast_int(GL_NEAREST));
+    glTexImage2D(GL_TEXTURE_2D, 0, cast_int(d_ifmt), ppfbo.width,
+      ppfbo.height, 0, d_efmt, d_etyp, offset_to_void_cp(0));
+    /*
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
+      cast_int(GL_CLAMP_TO_EDGE));
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
+      cast_int(GL_CLAMP_TO_EDGE));
+    */
+    /*
     gl_tex_image_depth(glc, ppfbo.width, ppfbo.height);
+    */
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
       GL_TEXTURE_2D, ppfbo.texture_depth.get(), 0);
   } else {
@@ -261,9 +264,9 @@ public function void init_postprocess_fbo(shader_config const& glc,
   }
   const e = glCheckFramebufferStatus(GL_FRAMEBUFFER);
   if (e != GL_FRAMEBUFFER_COMPLETE) {
-    sdl_log("incomplete framebuffer", cast_int(e));
+    sdl_log("init_color_fbo: incomplete framebuffer", cast_int(e));
   } else {
-    sdl_log("complete framebuffer");
+    sdl_log("init_color_fbo: complete framebuffer");
   }
   glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
 }

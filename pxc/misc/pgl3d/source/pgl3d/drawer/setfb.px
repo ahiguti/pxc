@@ -3,13 +3,60 @@ public import common -;
 public import pgl3d::drawer::base -;
 public import meta m;
 
-
 private struct setfb_attributes { }
+
+private function void get_color_format(string const& s, GLenum mutable& ifmt,
+  GLenum mutable& efmt, GLenum mutable& etyp)
+{
+  if (s == "") {
+    ifmt = GL_NONE;
+    efmt = GL_NONE;
+    etyp = GL_NONE;
+  } else if (s == "GL_RGBA") {
+    ifmt = GL_RGBA;
+    efmt = GL_RGBA;
+    etyp = GL_UNSIGNED_INT;
+  } else if (s == "GL_RGB") {
+    ifmt = GL_RGB;
+    efmt = GL_RGBA;
+    etyp = GL_UNSIGNED_INT;
+  } else if (s == "GL_RG") {
+    ifmt = GL_RG;
+    efmt = GL_RG;
+    etyp = GL_UNSIGNED_SHORT;
+  } else if (s == "GL_RED") {
+    ifmt = GL_RED;
+    efmt = GL_RED;
+    etyp = GL_UNSIGNED_BYTE;
+  } else {
+    throw runtime_error_template{"color_format"}(s);
+  }
+}
+
+private function void get_depth_format(string const& s, GLenum mutable& ifmt,
+  GLenum mutable& efmt, GLenum mutable& etyp)
+{
+  if (s == "") {
+    ifmt = GL_NONE;
+    efmt = GL_NONE;
+    etyp = GL_NONE;
+  } else if (s == "GL_DEPTH_COMPONENT") {
+    ifmt = GL_DEPTH_COMPONENT;
+    efmt = GL_DEPTH_COMPONENT;
+    etyp = GL_UNSIGNED_INT;
+  } else if (s == "GL_DEPTH_COMPONENT16") {
+    ifmt = GL_DEPTH_COMPONENT;
+    efmt = GL_DEPTH_COMPONENT;
+    etyp = GL_UNSIGNED_INT;
+  } else {
+    throw runtime_error_template{"depth_format"}(s);
+  }
+}
 
 public struct drawer_setfb(shader_config const& glc,
   drawer_shared const& ds, ptr{glm::uvec2} const& src_size0,
   ptr{glm::uvec2} const& dst_size0, string const& fbname0, bool owner_flag0,
-  bool color_tex0, bool depth_tex0)
+  string const& color_fmt0, string const& depth_fmt0)
 <drawstep_i>
 {
   /* draw()されるとフレームバッファをbindする。owner_flagが真ならフレーム
@@ -20,34 +67,35 @@ public struct drawer_setfb(shader_config const& glc,
   string const fbname = fbname0;
   bool const enable_depth_texture = glc.enable_depth_texture;
   bool const owner_flag = owner_flag0;
-  bool const color_tex = color_tex0;
-  bool const depth_tex = depth_tex0;
+  bool color_tex = false;
+  bool depth_tex = false;
+  GLenum color_ifmt;
+  GLenum color_efmt;
+  GLenum color_etyp;
+  GLenum depth_ifmt;
+  GLenum depth_efmt;
+  GLenum depth_etyp;
   option{ptr{gl_framebuffer}} fbo_own;
   option{cptr{gl_framebuffer}} fbo;
   public function vbid_t get_vbid() const { return vbid_invalid(); }
   public function vbid_t get_instances_vbid() const { return vbid_invalid(); }
   public function vbid_t get_vertices_vbid() const { return vbid_invalid(); }
-  init(ds);
-  function void init(drawer_shared const& ds)
+  init(ds, color_fmt0, depth_fmt0);
+  function void init(drawer_shared const& ds, string const& color_fmt0,
+    string const& depth_fmt0)
   {
+    get_color_format(color_fmt0, color_ifmt, color_efmt, color_etyp);
+    get_depth_format(depth_fmt0, depth_ifmt, depth_efmt, depth_etyp);
+    color_tex = (color_ifmt != GL_NONE);
+    depth_tex = (depth_ifmt != GL_NONE);
     if (fbname.empty()) {
       return;
     }
     const res = pointer_downcast{ptr{resource_pool}}(ds.gl_resources);
     if (const& fb: res->framebuffers[fbname]) {
-      /*
-      if (owner_flag) {
-        throw runtime_error_template{"setfb"}("");
-      }
-      */
       fbo.some = fb;
       debug_log("setfb: found frambuffer", fbname);
     } else {
-      /*
-      if (!owner_flag) {
-        throw runtime_error_template{"setfb"}("");
-      }
-      */
       fbo_own.some = make_ptr{gl_framebuffer}();
       fbo.some = fbo_own.some;
       res->framebuffers.insert(fbname, fbo.some);
@@ -81,7 +129,8 @@ public struct drawer_setfb(shader_config const& glc,
       fbo_own.some->width = static_cast{int}(src_size->x);
       fbo_own.some->height = static_cast{int}(src_size->y);
       if (color_tex) {
-        init_postprocess_fbo(glc, false, *fbo_own.some, GL_RGBA);
+        init_color_fbo(glc, *fbo_own.some, color_ifmt, color_efmt,
+          color_etyp, depth_ifmt, depth_efmt, depth_etyp);
         debug_log("setfb color fbo");
       } else {
         init_shadowmap_fbo(glc, *fbo_own.some);

@@ -214,8 +214,20 @@ public struct demoapp_application()
   }
   public function void on_draw_finished()
   {
-    if (app.axim.is_valid() && !app.capt_data->empty()) {
-      app.axim.axi_write(0x18000000, *app.capt_data);
+    if (!app.capt_data->empty()) {
+      if (app.axim.is_valid()) {
+        {
+          mutable& d = *app.capt_data;
+          for (uint y: 719 .. 720) {
+            for (uint x: 0 .. 1280) {
+              const addr = y * 1280 + x;
+              d[addr * 2] = 255;
+              d[addr * 2 + 1] = 255;
+            }
+          }
+        }
+        app.axim.axi_write(0x18000000, *app.capt_data);
+      }
     }
   }
 }
@@ -492,6 +504,11 @@ private struct app_demoapp()
       // player.angle = glm::make_quat_wxyz(0.70711, 0.70711, 0.0, 0.0);
       player.position = glm::make_vec3(0.0, 0.0, 40.0);
       player.angle = glm::make_quat_wxyz(1.0, 0.0, 0.0, 0.0);
+    }
+    if (axim.is_valid()) {
+      debug_log("d3axim is available");
+    } else {
+      debug_log("d3axim is not available");
     }
   }
 }
@@ -1081,13 +1098,15 @@ private function varray{ptr{pgldrawer_export_i}} init_drawsteps(
     sconf.num_shadowmaps, app.raycast_layer, solid, shadow, zpre);
   for (int i: 0 .. num_shadowmaps) {
     r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_sm,
-      app.pviewport_sm, shadowmap_name + to_string(i), true, false, true));
+      app.pviewport_sm, shadowmap_name + to_string(i), true, "",
+      "GL_DEPTH_COMPONENT"));
       // set shadowmap framebuffer i
     r.append(shadow[static_cast{size_t}(i)]); // draw shadow
   }
   r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_main,
     app.pviewport_main,
-    "col0", true, true, true)); // set color+depth framebuffer
+    "col0", true, "GL_RGBA", "GL_DEPTH_COMPONENT"));
+    // set color+depth framebuffer
   r.push_back(make_drawstep_chgmode(sconf, ds, "zprepass"));
   r.append(zpre); // draw solid z-prepass
   r.push_back(make_drawstep_chgmode(sconf, ds, "solid"));
@@ -1100,16 +1119,45 @@ private function varray{ptr{pgldrawer_export_i}} init_drawsteps(
   r.push_back(make_drawstep_particle_bb(sconf, ds, app.proj_df));
   r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_main,
     app.pviewport_main,
-    "col1", true, true, true)); // set color+depth framebuffer
+    "col1", true, "GL_RGBA", "GL_DEPTH_COMPONENT"));
+    // set color+depth framebuffer
   r.push_back(make_drawstep_fxaa(sconf, ds, app.dp_fxaa, "col0"));
     // col0からcol1へfxaaフィルタ実行
-  r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_main,
-    app.pviewport_main,
-    "", true, true, true)); // set toplevel framebuffer
-  r.push_back(make_drawstep_blur(sconf, ds, app.dp_blur, "col1"));
-  r.push_back(make_drawstep_chgmode(sconf, ds, "blend"));
-  r.push_back(make_drawstep_rect2d(sconf, ds));
-  r.push_back(make_drawstep_font2(sconf, ds, app.pviewport_main));
+  if (sconf.conf.get("capture_filter", 0, 0, 1) != 0) {
+    debug_log("enable capture filter");
+    r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_main,
+      app.pviewport_main,
+      "col0", false, "GL_RGBA", "GL_DEPTH_COMPONENT"));
+      // col0再利用
+    r.push_back(make_drawstep_blur(sconf, ds, app.dp_blur, "col1"));
+      // col1からcol0へblurフィルタ実行
+    r.push_back(make_drawstep_chgmode(sconf, ds, "blend"));
+    r.push_back(make_drawstep_rect2d(sconf, ds));
+    r.push_back(make_drawstep_font2(sconf, ds, app.pviewport_main));
+    r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_main,
+      app.pviewport_main,
+      "col1", false, "GL_RGBA", "GL_DEPTH_COMPONENT"));
+      // col1再利用
+    r.push_back(make_drawstep_chgmode(sconf, ds, "solid"));
+    r.push_back(make_drawstep_capture(sconf, ds, app.pviewport_main,
+      app.capt_data, "col0"));
+      // col0からcol1へcaptureフィルタ実行
+    r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_main,
+      app.pviewport_main,
+      "", false, "", "")); // set toplevel framebuffer
+    r.push_back(make_drawstep_passthrough(sconf, ds, "col0"));
+      // col0からtoplevelへpassthroughフィルタ実行
+  } else {
+    debug_log("disable capture filter");
+    r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_main,
+      app.pviewport_main,
+      "", true, "", "")); // set toplevel framebuffer
+    r.push_back(make_drawstep_blur(sconf, ds, app.dp_blur, "col1"));
+      // col1からtoplevelへblurフィルタ実行
+    r.push_back(make_drawstep_chgmode(sconf, ds, "blend"));
+    r.push_back(make_drawstep_rect2d(sconf, ds));
+    r.push_back(make_drawstep_font2(sconf, ds, app.pviewport_main));
+  }
   for (const i, const& p: r) {
     if (const em: p->get_edit_mode().some) {
       app.edit_mode.some = em;

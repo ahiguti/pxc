@@ -21,22 +21,15 @@ private tsvaluetype struct capture_uniforms()
 
 public struct drawer_capture(shader_config const& glc,
   drawer_shared const& ds, ptr{glm::uvec2} const& psize0,
-  string const& src_fbname0,
-  ptr{varray{uchar}} const& capt_data0)
+  ptr{varray{uchar}} const& capt_data0, string const& src_fbname0)
 <drawstep_i>
 {
   metafunction tattr capture_vertex_attributes;
   ptr{glm::uvec2} const psize = psize0;
+  ptr{varray{uchar}} capt_data = capt_data0;
   string const src_fbname = src_fbname0;
   option{cptr{gl_framebuffer}} srcfbo;
-  ptr{gl_framebuffer} ppfbo2 = make_ptr{gl_framebuffer}();
-  capture_shader_ptr sdr_re = init_capture_shader(glc, true /* FIXME */);
-  capture_shader_ptr sdr_re2 = init_capture_shader(glc, true);
-  /*
-  int screen_width;
-  int screen_height;
-  */
-  ptr{varray{uchar}} capt_data = capt_data0;
+  capture_shader_ptr sdr_re = init_capture_shader(glc);
   vbid_t const vbid_capture = ds.vbid_pool->intern("vbid_generic_filter");
   init(ds);
   function void init(drawer_shared const& ds) {
@@ -78,14 +71,6 @@ public struct drawer_capture(shader_config const& glc,
   }
   public function void resize_screen(shader_config const& glc)
   {
-    /*
-    screen_width = width;
-    screen_height = height;
-    */
-    ppfbo2->width = static_cast{int}(psize->x);
-    ppfbo2->height = static_cast{int}(psize->y);
-    init_postprocess_fbo(glc, false, *ppfbo2, GL_RG);
-    debug_log("capture", psize->x, psize->y);
   }
   public function bool reload_shaders(shader_config const& glc)
   {
@@ -93,44 +78,32 @@ public struct drawer_capture(shader_config const& glc,
   }
   public function void draw_drawstep(draw_data mutable& ddata)
   {
-    // ppfbo2に対して描画する。
-    int saved_fb = 0;
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
-    {
-      const pixel_delta = glm::make_vec2(
-        1.0f / static_cast{float}(ppfbo2->width),
-        1.0f / static_cast{float}(ppfbo2->height));
-      const framebuffer_size = glm::make_vec2(
-        static_cast{float}(ppfbo2->width),
-        static_cast{float}(ppfbo2->height));
-      glBindFramebuffer(GL_FRAMEBUFFER, ppfbo2->fbo.get());
-      glViewport(0, 0, static_cast{GLsizei}(ppfbo2->width),
-        static_cast{GLsizei}(ppfbo2->height));
-      glDisable(GL_DEPTH_TEST);
-      glDepthMask(0);
-      glActiveTexture(GL_TEXTURE0);
-      glBindTexture(GL_TEXTURE_2D, srcfbo.some->texture_color.get());
-      mutable& sdr = *sdr_re2;
-      glUseProgram(sdr.program);
-      glUniform1i(sdr.u_sampler_tex, 0);
-      glUniform2fv(sdr.u_pixel_delta, 1, pixel_delta.to_crawptr());
-      glUniform2fv(sdr.u_framebuffer_size, 1,
-        framebuffer_size.to_crawptr());
-      const& bo = *ddata.vertex_buffers[get_vertices_vbid()];
-      bo.draw(0, sdr);
-      size_t sz = static_cast{size_t}(ppfbo2->width * ppfbo2->height * 2);
-      if (capt_data->size() != sz) {
-        capt_data->resize(sz, 0u);
-      }
-      glReadPixels(0, 0, ppfbo2->width, ppfbo2->height, GL_RG,
-        GL_UNSIGNED_BYTE, capt_data->to_rawptr().to_voidptr());
-      // sdl_save_file("readpixels.dmp", *capt_data);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, srcfbo.some->texture_color.get());
+    mutable& sdr = *sdr_re;
+    glUseProgram(sdr.program);
+    glUniform1i(sdr.u_sampler_tex, 0);
+    const pixel_delta = glm::make_vec2(
+      1.0f / static_cast{float}(srcfbo.some->width),
+      1.0f / static_cast{float}(srcfbo.some->height));
+    glUniform2fv(sdr.u_pixel_delta, 1, pixel_delta.to_crawptr());
+    const framebuffer_size = glm::make_vec2(
+      static_cast{float}(srcfbo.some->width),
+      static_cast{float}(srcfbo.some->height));
+    glUniform2fv(sdr.u_framebuffer_size, 1,
+      framebuffer_size.to_crawptr());
+    const& bo = *ddata.vertex_buffers[get_vertices_vbid()];
+    bo.draw(0, sdr);
+    size_t sz = static_cast{size_t}(psize->x * psize->y * 2);
+    if (capt_data->size() != sz) {
+      capt_data->resize(sz, 0u);
     }
-    // debug_log("glreadpixels done"); // FIXME
-    // フレームバッファを戻しviewportの大きさを元に戻す
-    glBindFramebuffer(GL_FRAMEBUFFER, static_cast{uint}(saved_fb));
-    glViewport(0, 0, static_cast{GLsizei}(srcfbo.some->width),
-      static_cast{GLsizei}(srcfbo.some->height));
+    glReadPixels(0, 0, static_cast{int}(psize->x), static_cast{int}(psize->y),
+      GL_RG, GL_UNSIGNED_BYTE, capt_data->to_rawptr().to_voidptr());
+    // debug_log("glReadPixels done", capt_data->size());
+    // sdl_save_file("readpixels.dmp", *capt_data);
   }
   public function option{ptr{edit_mode_i}} get_edit_mode() const
   {
@@ -143,15 +116,12 @@ metafunction capture_shader_ptr
     capture_uniforms, capture_instance_attributes, capture_vertex_attributes}};
 
 function capture_shader_ptr
-init_capture_shader(shader_config const& g, bool capt)
+init_capture_shader(shader_config const& g)
 {
   tree_map{string, string} bnd;
-  const v = load_shader_program(g, bnd,
-    capt ? "capture.vsh" : "passthrough.vsh");
-  const f = load_shader_program(g, bnd,
-    capt ? "capture.fsh" : "passthrough.fsh");
+  const v = load_shader_program(g, bnd, "capture.vsh");
+  const f = load_shader_program(g, bnd, "capture.fsh");
   return make_glshader_ptr{capture_uniforms, capture_instance_attributes,
-    capture_vertex_attributes}(v, f, "", g.debug_level,
-    capt ? "capture" : "pass");
+    capture_vertex_attributes}(v, f, "", g.debug_level, "capture");
 }
 
