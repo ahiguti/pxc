@@ -1,4 +1,5 @@
 
+SHELL = /bin/bash
 SUBDIRS = pxc
 
 all:

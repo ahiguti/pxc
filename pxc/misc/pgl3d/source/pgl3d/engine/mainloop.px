@@ -37,44 +37,113 @@ public function void mainloop(ptr{pgl3d_application} const& app,
 struct
 frame_statistics()
 {
-  public metafunction ticks_t farray{uint, 8};
-  public uint tprevsec = 0;
-  public uint frames = 0;
-  public float mutable fps = 0.0;
+  public metafunction size 16;
+  public metafunction ticks_t farray{uint, size};
   public ticks_t ticks;
-  public ticks_t ticks_sum;
-  public ticks_t ticks_sum_saved;
-  init();
-  public function uint get_ticks() {
-    return SDL_GetTicks();
-  }
-  function void init() {
-    const t = get_ticks();
-    for (const i, mutable& e : ticks) {
-      e = t;
-    }
-  }
-  public function void save_ticks(size_t idx) {
-    save_ticks_value(idx, get_ticks());
-  }
-  public function void save_ticks_value(size_t idx, uint v) {
-    const prev_tick = ticks[idx == 0 ? ticks.size() - 1 : idx - 1];
-    mutable& cur_tick = ticks[idx];
-    cur_tick = v;
-    ticks_sum[idx] += cur_tick - prev_tick;
-  }
-  public function void measure()
+  public size_t cur;
+  public function void save_ticks_value(uint value)
   {
-    ++frames;
-    uint t = get_ticks();
-    if (t - tprevsec >= 1000) {
-      const seconds = cast_float(t - tprevsec) / 1000.0;
-      fps = cast_float(frames) / seconds;
-      ticks_sum_saved = ticks_sum;
-      ticks_sum = ticks_t();
-      tprevsec = t;
-      frames = 0;
+    if (cur < ticks.size()) {
+      ticks[cur] = value;
+      ++cur;
     }
+  }
+  public function void save_ticks()
+  {
+    save_ticks_value(SDL_GetTicks());
+  }
+  public function void fill()
+  {
+    while (cur < ticks.size()) {
+      save_ticks();
+    }
+  }
+  public function ticks_t to_relative() const
+  {
+    ticks_t r;
+    for (size_t i: 1 .. size) {
+      r[i] = ticks[i] - ticks[i - 1];
+    }
+    return r;
+  }
+  public function void rewind()
+  {
+    cur = 0;
+  }
+}
+
+struct
+frame_stat_log()
+{
+  public metafunction log_length 256;
+  public float mutable fps = 0.0f;
+  public farray{frame_statistics, log_length} ents;
+  public size_t cur_ent;
+  public size_t log_count;
+  public farray{string, m::symbol{frame_statistics, "size"}} labels;
+  public function void reset()
+  {
+    log_count = 0;
+  }
+  public function size_t get_current_index() const
+  {
+    return ents[cur_ent].cur;
+  }
+  public function void save_ticks(strlit const label)
+  {
+    if (log_count == 0 && ents[cur_ent].cur < labels.size()) {
+      labels[ents[cur_ent].cur] = label;
+    }
+    ents[cur_ent].save_ticks();
+  }
+  public function void save_ticks_value(uint v, strlit const label)
+  {
+    if (log_count == 0 && ents[cur_ent].cur < labels.size()) {
+      labels[ents[cur_ent].cur] = label;
+    }
+    ents[cur_ent].save_ticks_value(v);
+  }
+  public function void next_ent()
+  {
+    ents[cur_ent].fill();
+    if (log_count >= 31 && log_count % 30 == 0) {
+      // 30 frames
+      const& prev = ents[(cur_ent + log_length - 30u) % log_length];
+      const& cur = ents[cur_ent];
+      const d = cur.ticks[cur.ticks.size() - 1]
+        - prev.ticks[prev.ticks.size() - 1];
+      if (d != 0) {
+        fps = 30000.0f / cast_float(d);
+      }
+      bool found = false;
+      for (size_t k: 0u .. m::symbol{frame_statistics, "size"}) {
+        uint sum = cur.ticks[k] - prev.ticks[k];
+        float v_avg = cast_float(sum) / 30.0f;
+        float v_min = v_avg;
+        float v_max = v_avg;
+        for (size_t i: 1u .. 30u) {
+          const& e0 = ents[(cur_ent + log_length - 30u + i) % log_length];
+          const& e1 = ents[(cur_ent + log_length - 29u + i) % log_length];
+          const df = cast_float(e1.ticks[k] - e0.ticks[k]);
+          v_min = min(v_min, df);
+          v_max = max(v_max, df);
+        }
+        if (v_max / v_min > 1.5f) {
+          debug_log("framestat", k, "avg/min/max=", v_avg, v_min, v_max);
+          found = true;
+        }
+      }
+      if (found) {
+        debug_log(labels);
+        for (size_t i: 0u .. 30u) {
+          const& e0 = ents[(cur_ent + log_length - 29u + i) % log_length];
+          debug_log("framest dmp", e0.to_relative());
+        }
+      }
+    }
+    cur_ent = (cur_ent + 1) % log_length;
+    ents[cur_ent].rewind();
+    ++log_count;
   }
 }
 
@@ -180,7 +249,7 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
   private node_factory nfac;
   private option{ptr{motion_thread_client}} motion_thr;
   private size_t saved_stat_num_objects;
-  private frame_statistics mutable fr;
+  private frame_stat_log mutable fr;
   private framerate_control mutable frctl = framerate_control(sdlc.vsync,
     conf.get("fps", 60.0, 1.0, 3600.0),
     conf.get("frame_sleep", 1, 0, 1));
@@ -286,6 +355,7 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
   }
   public function bool step_internal(app_ctrl_i mutable& actrl)
   {
+    fr.save_ticks("ini");
     // bool scene_next_flag = false;
     SDL_Event ev;
     while (SDL_PollEvent(address(ev)) != 0) {
@@ -319,6 +389,7 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
 	  ev.window.data1 = engine_status ? 1 : 0;
 	  debug_log("reload: engine status", ev.window.data1);
 	  frctl.start();
+          fr.reset();
 	} else {
 	  /*
 	  sdl_log("window event ", cast_int(ev.window.event));
@@ -332,6 +403,7 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
       /* invoke event handler */
       app->on_event(ev, actrl, frctl.frame_speed_mul);
     }
+    // fr.save_ticks("event");
     // if (!sdlc.joysticks.empty()) {
     {
       sdlc.update_joystick_info(); // FIXME? 
@@ -367,6 +439,7 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
       }
       // debug_log(i, "axes", st.axes, "btns", st.buttons, "hats", st.hats);
     }
+    // fr.save_ticks("joy");
     {
       int numkeys;
       const ksp = SDL_GetKeyboardState(address(numkeys));
@@ -374,24 +447,23 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
       /* invoke key handler */
       app->on_scankeys(ks, joysticks, frctl.frame_speed_mul);
     }
+    // fr.save_ticks("keys");
     app->on_frame();
-    fr.save_ticks(0);
+    // fr.save_ticks("app_on_frame");
     if (paused) {
       SDL_Delay(100);
-      fr.tprevsec = fr.get_ticks();
       return done;
     }
     /* motion and prepare instance data */
     {
 //debug_log(fr.fps, "fps");
       const mess = string_join{" "}(fr.fps, frctl.frame_speed_mul,
-	fr.ticks_sum_saved,
+	0.0f,
 	saved_stat_num_objects);
       if (async_motion_thread) {
 	motion_thr.some->finish();
 	{
 	  mutable& mts = *motion_thr.some->shared;
-	  // fr.save_ticks(1, fr.get_ticks());
 	  // mts.cam = pgs.cam;
 	  mts.frame_speed_mul = frctl.frame_speed_mul;
 	  mts.message = mess;
@@ -468,27 +540,25 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
       */
 // FIXME : here
     }
-    fr.save_ticks(1);
+    fr.save_ticks("motion");
     pgs.frame_begin();
     {
       /* draw frame */
       varray{uint} tick_draw;
       tick_draw = pgs.draw_frame();
       if (tick_draw.size() >= 2) {
-	fr.save_ticks_value(2, tick_draw[0]);
-	fr.save_ticks_value(3, tick_draw[1]);
+	fr.save_ticks_value(tick_draw[0], "dr0");
+	fr.save_ticks_value(tick_draw[1], "dr1");
       } else {
-	fr.save_ticks(2);
-	fr.save_ticks(3);
+	fr.save_ticks("dr0");
+	fr.save_ticks("dr1");
       }
-      fr.save_ticks(4);
-      fr.measure();
     }
     frctl.rate_control();
-    fr.save_ticks(5);
+    fr.save_ticks("ratectrl");
     app->on_draw_finished();
     SDL_GL_SwapWindow(sdlc.sdl_window);
-    fr.save_ticks(6);
+    fr.save_ticks("swapwindow");
     if (frctl.vsync != 0 && dummy_flip == 0) {
       // vsync有効でdummy_flipが0のときは自動でdummy_flipを入れる
       int ti = static_cast{int}(SDL_GetTicks()) * 60;
@@ -529,7 +599,8 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
       // vsync有効のときglFinishを入れたほうが60fpsぎりぎり間に合うばあいに
       // フレームが乱れなくなる
     }
-    fr.save_ticks(7);
+    fr.save_ticks("glfinish");
+    fr.next_ent();
     // if (scene_next_flag) { frctl.start(); }
     return done;
   }

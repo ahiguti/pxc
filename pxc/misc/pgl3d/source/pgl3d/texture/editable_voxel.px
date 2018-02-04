@@ -9,7 +9,8 @@ public import pgl3d::texture::voxel -;
 public import pgl3d::engine::util -;
 public import pgl3d::sdl::sdlutil -;
 
-public metafunction texture_data_mip varray{texture_data};
+public metafunction texture_reshaped array3_pot{varray{uint}, 4};
+public metafunction texture_data_mip varray{texture_reshaped};
 
 public tsvaluetype enum texture_value_index_e
 {
@@ -19,44 +20,71 @@ public tsvaluetype enum texture_value_index_e
 
 public multithreaded struct modified_range
 {
-  private uvec3 modified_pos;
-  private uvec3 modified_sz;
-  public function pair{uvec3, uvec3} get_modified(bool reset_flag)
+  private uvec3 merged_modified_pos;
+  private uvec3 merged_modified_sz;
+  private varray{pair{ivec3, ivec3}} modified_arr;
+  public function pair{uvec3, uvec3} get_modified_merged(bool reset_flag)
   {
-    const r = pair{uvec3, uvec3}(modified_pos, modified_sz);
+    const r = pair{uvec3, uvec3}(merged_modified_pos, merged_modified_sz);
     if (reset_flag) {
-      modified_pos = uvec3();
-      modified_sz = uvec3();
+      reset();
     }
     return r;
   }
+  public function varray{pair{ivec3, ivec3}}
+  get_modified_array(bool reset_flag)
+  {
+    const r = modified_arr;
+    if (reset_flag) {
+      reset();
+    }
+    return r;
+  }
+  private function void reset()
+  {
+    merged_modified_pos = uvec3();
+    merged_modified_sz = uvec3();
+    modified_arr.clear();
+  }
   public function void set_modified(ivec3 mi, ivec3 mx)
   {
-    if (modified_sz.x != 0) {
-      mi = map{ivec3, min}(to_ivec3(modified_pos), mi);
+    modified_arr.push_back(pair(mi, mx));
+    if (merged_modified_sz.x != 0) {
+      mi = map{ivec3, min}(to_ivec3(merged_modified_pos), mi);
       mx = map{ivec3, max}(
-	to_ivec3(modified_pos + modified_sz - make_uvec3(1, 1, 1)), mx);
+        to_ivec3(
+          merged_modified_pos +
+          merged_modified_sz -
+          make_uvec3(1, 1, 1)),
+        mx);
     }
-    modified_pos = to_uvec3(mi);
-    modified_sz = to_uvec3(mx + make_ivec3(1, 1, 1) - mi);
+    merged_modified_pos = to_uvec3(mi);
+    merged_modified_sz = to_uvec3(mx + make_ivec3(1, 1, 1) - mi);
   }
 }
 
 public multithreaded struct
 texture_edit()
 {
-  /* 更新可能なテクスチャを保持するクラス。更新されたら最適な距離を
-   * 再計算する。*/
+  /* 更新可能なボクセルデータのテクスチャを保持するクラス。更新されたら
+   * raycast用の「埋め込み距離」を再計算する。*/
   public texture_data_mip data_pri;
   public texture_data_mip data_sec;
   public texture_data grid;
   public uvec3 data_size;
-  public uvec3 grid_size = make_uvec3(1u, 1u, 1u); // (1,1,1)のときグリッド無し
+  public uvec3 grid_size = make_uvec3(1u, 1u, 1u);
+    // タイルパターンのときのグリッドサイズを指定する。
+    // タイルマップのときは(1,1,1)にする。
   private texture_data grid_work;
   private modified_range modified;
-  public function pair{uvec3, uvec3} get_modified(bool reset_flag)
+  public function pair{uvec3, uvec3} get_modified_merged(bool reset_flag)
   {
-    return modified.get_modified(reset_flag);
+    return modified.get_modified_merged(reset_flag);
+  }
+  public function varray{pair{ivec3, ivec3}}
+  get_modified_array(bool reset_flag)
+  {
+    return modified.get_modified_array(reset_flag);
   }
   public function uint get_mip(uvec3 pos, texture_value_index_e idx,
     size_t miplevel)
@@ -107,9 +135,8 @@ texture_edit()
     texture_data_fill_range(data_sec[0], dpos, sz, v_sec);
     recalc_distance_range(dpos, sz, v_pri == 0u);
   }
-  public function void copy_range(uvec3 const& spos, uvec3 sz,
-    texture_data mutable& dest, texture_data mutable& dest_aux,
-    uvec3 const& dpos) const
+  public function {t} void copy_range(uvec3 const& spos, uvec3 sz,
+    t mutable& dest, t mutable& dest_aux, uvec3 const& dpos) const
   {
     sz = clamp_size(data_pri[0], spos, sz);
     sz = clamp_size(dest, dpos, sz);
@@ -120,9 +147,8 @@ texture_edit()
     texture_data_copy_range(dest, dpos, data_pri[0], spos, sz);
     texture_data_copy_range(dest_aux, dpos, data_sec[0], spos, sz);
   }
-  public function void paste_range(uvec3 const& dpos, uvec3 sz,
-    texture_data const& src, texture_data const& src_aux, uvec3 const& spos,
-    uint index_mask)
+  public function {t} void paste_range(uvec3 const& dpos, uvec3 sz,
+    t const& src, t const& src_aux, uvec3 const& spos, uint index_mask)
   {
     sz = clamp_size(src, spos, sz);
     sz = clamp_size(data_pri[0], dpos, sz);
@@ -155,6 +181,7 @@ texture_edit()
   {
     /* 領域の更新に伴う距離の更新をおこなう。領域が全て空白になったと
      * わかっている場合はclear_flagを真にしてよい。*/
+    // debug_log("recalc_distance_range", pos, sz, clear_flag);
     ivec3 mod_mi = to_ivec3(pos);
     ivec3 mod_mx = mod_mi + to_ivec3(sz) - make_ivec3(1, 1, 1);
     if (grid_size.x == 1) {
@@ -209,9 +236,9 @@ public metafunction texture_updates varray{texture_update};
 metafunction ui static_cast{uint}; 
 metafunction si static_cast{int}; 
 
-private threaded function bool texture_data_copy_range_check_modified(
-  texture_data mutable& dest,
-  uvec3 const& dpos, texture_data const& src, uvec3 const& spos,
+private threaded function {t0, t1} bool texture_data_copy_range_check_modified(
+  t0 mutable& dest,
+  uvec3 const& dpos, t1 const& src, uvec3 const& spos,
   uvec3 const& sz)
 {
   bool modified = false;
@@ -228,9 +255,9 @@ private threaded function bool texture_data_copy_range_check_modified(
   return modified;
 }
 
-private threaded function void texture_data_copy_range_secondary(
-  texture_data const& dest_pri, texture_data mutable& dest_sec,
-  uvec3 const& dpos, texture_data const& src_sec, uvec3 const& spos,
+private threaded function {t0, t1} void texture_data_copy_range_secondary(
+  t0 const& dest_pri, t0 mutable& dest_sec,
+  uvec3 const& dpos, t1 const& src_sec, uvec3 const& spos,
   uvec3 const& sz)
 {
   for (uint z: 0 .. sz.z) {
@@ -266,8 +293,8 @@ private threaded function bool empty_range(uvec3 const& a)
   return a.x == 0 || a.y == 0 || a.z == 0;
 }
 
-private threaded function uvec3
-clamp_size(texture_data const& data, uvec3 const& pos, uvec3 const& sz)
+private threaded function {t} uvec3
+clamp_size(t const& data, uvec3 const& pos, uvec3 const& sz)
 {
   const tsz = data.get_size_uvec3();
   if (!lt_all_uvec3(pos, tsz)) {

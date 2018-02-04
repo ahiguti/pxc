@@ -18,9 +18,10 @@ private import sdl2::api_functions -;
 private import sdl2::api_wrappers -;
 private import sdl2::misc -;
 
-public tsvaluetype struct {t} array3_pot() private
+public tsvaluetype struct {t, b} array3_pot() private
 {
   public metafunction mapped_type m::symbol{t, "mapped_type"};
+  public metafunction mblk_l2 b;
   public uint width_l2;
   public uint height_l2;
   public uint depth_l2;
@@ -31,10 +32,14 @@ public threaded function {t} void
 array3_pot_set_size_l2(t mutable& o, uint w_l2, uint h_l2, uint d_l2)
 {
   metafunction mapped_type m::symbol{t, "mapped_type"};
+  metafunction mblk_l2 m::symbol{t, "mblk_l2"};
   o.data.resize(0u, mapped_type());
   o.width_l2 = w_l2;
   o.height_l2 = h_l2;
   o.depth_l2 = d_l2;
+  w_l2 = max(w_l2, mblk_l2);
+  h_l2 = max(h_l2, mblk_l2);
+  d_l2 = max(d_l2, mblk_l2);
   size_t sz = static_cast{size_t}(1u) << (w_l2 + h_l2 + d_l2);
   o.data.resize(sz, mapped_type());
 }
@@ -78,7 +83,39 @@ array3_pot_get_depth(t const& o)
 
 public threaded function {t} uint
 array3_pot_index(t const& o, uint x, uint y, uint z)
-{ return (z << (o.width_l2 + o.height_l2)) | (y << o.width_l2) | x; }
+{
+  metafunction mblk_l2 m::symbol{t, "mblk_l2"};
+  if (m::eq{mblk_l2, 0}) {
+    return (z << (o.width_l2 + o.height_l2)) | (y << o.width_l2) | x;
+  } else {
+    uint const mblk_l2_u = mblk_l2;
+    uint const mask = (1u << mblk_l2_u) - 1u;
+    uint const xh = x >> mblk_l2_u;
+    uint const yh = y >> mblk_l2_u;
+    uint const zh = z >> mblk_l2_u;
+    uint const xl = x & mask;
+    uint const yl = y & mask;
+    uint const zl = z & mask;
+    uint const idxh =
+      (zh << (o.width_l2 + o.height_l2 - mblk_l2_u * 2u)) |
+      (yh << (o.width_l2 - mblk_l2_u)) |
+      xh;
+    uint const idxl =
+      (zl << (mblk_l2_u * 2u)) |
+      (yl << mblk_l2_u) |
+      xl;
+    const r = (idxh << (mblk_l2_u * 3u)) | idxl;
+    /*
+    // FIXME
+    if (static_cast{size_t}(r) >= o.data.size()) {
+      debug_log("invalid index r=", r, o.data.size());
+      debug_log("xyz=", x, y, z);
+      debug_log("obj=", o);
+    }
+    */
+    return r;
+  }
+}
 
 public threaded function {t} uint
 array3_pot_size(t const& o)
@@ -96,6 +133,20 @@ array3_pot_get(t const& o, uint x, uint y, uint z)
   return o.data[o.index(x, y, z)];
 }
 
+public threaded function {f, t} void
+array3_pot_foreach(t mutable& o)
+{
+  // TODO: reorder?
+  for (const z: 0 .. o.get_depth()) {
+    for (const y: 0 .. o.get_height()) {
+      for (const x: 0 .. o.get_width()) {
+	f(x, y, z, o.data[o.index(x, y, z)]);
+      }
+    }
+  }
+}
+
+/*
 public threaded function {t, tv} void
 array3_pot_set_index(t mutable& o, uint i, tv v)
 {
@@ -108,6 +159,7 @@ array3_pot_get_index(t const& o, uint i)
   metafunction mapped_type m::symbol{t, "mapped_type"};
   return o.data[i];
 }
+*/
 
 public threaded function {tpl, t} void
 array3_pot_append_to_string(t const& o,
@@ -124,6 +176,24 @@ array3_pot_parse_from_string(m::find{tpl, "des_source_type", 0} mutable& s)
   return o;
 }
 
+public threaded function {ta} m::at0{ta}
+array3_pot_get_copy_linear(ta const& o)
+{
+  m::at0{ta} arr;
+  arr.resize(o.size(), 0u);
+  size_t i = 0;
+  for (const z: 0 .. o.get_depth()) {
+    for (const y: 0 .. o.get_height()) {
+      for (const x: 0 .. o.get_width()) {
+        arr[i] = o.get(x, y, z);
+        ++i;
+      }
+    }
+  }
+  return arr;
+}
+
+/*
 public threaded function {ta} crawptr{mapped_type}
 array3_pot_get_crawptr(ta const& o)
 {
@@ -148,6 +218,7 @@ array3_pot_get_rawptr(ta mutable& o)
     return rawptr{mapped_type}();
   }
 }
+*/
 
 public threaded function {t} void
 array3_pot_swap(t mutable& a, t mutable& b)
@@ -158,11 +229,11 @@ array3_pot_swap(t mutable& a, t mutable& b)
   swap(a.depth_l2, b.depth_l2);
 }
 
-public metafunction texture_data array3_pot{varray{uint}};
+public metafunction texture_data array3_pot{varray{uint}, 0};
 
-public threaded function void
-texture_data_copy_range(texture_data mutable& dest,
-  glm::uvec3 const& dpos, texture_data const& src, glm::uvec3 const& spos,
+public threaded function {t0, t1} void
+texture_data_copy_range(t0 mutable& dest,
+  glm::uvec3 const& dpos, t1 const& src, glm::uvec3 const& spos,
   glm::uvec3 const& sz)
 {
   for (uint z: 0 .. sz.z) {
@@ -176,8 +247,8 @@ texture_data_copy_range(texture_data mutable& dest,
 }
 
 
-public threaded function void
-texture_data_fill_range(texture_data mutable& dest,
+public threaded function {t0} void
+texture_data_fill_range(t0 mutable& dest,
   glm::uvec3 const& dpos, glm::uvec3 const& sz, uint v)
 {
   for (uint z: 0 .. sz.z) {

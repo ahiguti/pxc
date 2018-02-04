@@ -182,8 +182,12 @@ public struct demoapp_application()
     }
     tup.clear();
     if (case app.edit_mode.some) {
-      // debug_log("edit_mode on frame");
+      // const t0 = sdl_get_ticks();
       app.edit_mode.some->on_frame(*app.proj_pm);
+      // const t1 = sdl_get_ticks();
+      // if (t0 != t1) {
+      //   debug_log("(no)edit_mode on frame", t1 - t0);
+      // }
     }
   }
   public function void on_motion_pre()
@@ -212,6 +216,7 @@ public struct demoapp_application()
       static_cast{uint}(pj.shadowmap_size));
     */
   }
+  private uint axi_addr;
   public function void on_draw_finished()
   {
     if (!app.capt_data->empty()) {
@@ -226,7 +231,22 @@ public struct demoapp_application()
             }
           }
         }
-        app.axim.axi_write(0x18000000, *app.capt_data);
+        // debug_log("axi read pre");
+        varray{uchar} buf;
+        app.axim.axi_read(0x44a00000, 4u, buf);
+          // vsyncを待ちバッファのアドレスを得る
+        // debug_log("axi read post", buf.size());
+        if (buf.size() != 4) {
+          axi_addr = 0x18000000;
+        } else {
+          uint addr =
+            (buf[3] << 24u) | (buf[2] << 16u) | (buf[1] << 8u) | buf[0];
+          axi_addr = addr;
+        }
+        // debug_log("addr", axi_addr);
+        if (axi_addr != 0) {
+          app.axim.axi_write(axi_addr, *app.capt_data);
+        }
       }
     }
   }
@@ -1017,6 +1037,18 @@ function void handle_keys(app_demoapp mutable& app, cslice{uchar} const& keys,
   update_joystick(app, joysticks);
   app.ictl.handle_keys(app.player, keys, app.player_joystick, frame_speed,
     app.app_commands);
+  if (app.axim.is_valid()) {
+    // ラグ確認のためft601経由でLED点灯する
+    const kleft = app.ictl.get_key(keys, SDL_SCANCODE_LEFT) != 0u;
+    const kright = app.ictl.get_key(keys, SDL_SCANCODE_RIGHT) != 0u;
+    farray{uchar, 4} buf;
+    buf[0] |= static_cast{uchar}(kleft ? 1u : 0u);
+    buf[0] |= static_cast{uchar}(kright ? 2u : 0u);
+    buf[1] = buf[0];
+    buf[2] = buf[0];
+    buf[3] = buf[0];
+    app.axim.axi_write(0x44a00000, buf);
+  }
   /*
   if (app.ictl.get_button(buttons, 10) != 0) {
     app.app_commands["throw"] = "1";
@@ -1936,6 +1968,7 @@ scene_control(node_factory const& nfac,
     // "knight-multi",
     "empty-scene",
     "box",
+    "box-multi",
     "box-depth",
     "plane-multi-1",
     "plane-multi-2",
@@ -1961,7 +1994,6 @@ scene_control(node_factory const& nfac,
     "nest-multi",
     "saucer",
     "block-multi2",
-    "box-multi",
     /*
     "bullet2-multi",
     "bullet-multi", "saucer-multi3",

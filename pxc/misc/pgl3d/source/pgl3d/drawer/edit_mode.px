@@ -57,7 +57,9 @@ tiled_voxel_texture_load_file(tiled_voxel_texture mutable& vox,
         texture_data_mip mutable& dest)
       {
         for (const i, const& t: src) {
-          dest.push_back(*t);
+          texture_reshaped tr;
+          tr.set_size_l2(t->get_width(), t->get_height(), t->get_depth());
+          dest.push_back(tr);
         }
       }
       conv_one(v0.tmap_pri, vox.tmap_edit->data_pri);
@@ -77,6 +79,7 @@ tiled_voxel_texture_save_file(tiled_voxel_texture const& vox,
   sdl_save_file(fname, to_string_compact_pod(vox));
 }
 
+/*
 // voxel.px
 private threaded function void
 texture_data_copy_range(texture_data mutable& dest,
@@ -106,6 +109,7 @@ texture_data_fill_range(texture_data mutable& dest,
     }
   }
 }
+*/
 
 private function dist_3d
 dist_3d_grid_limit(int x, int y, int z, uvec3 const& grid_mask)
@@ -134,8 +138,8 @@ dist_3d_grid_limit(int x, int y, int z, uvec3 const& grid_mask)
 }
 
 
-private function void
-texture_data_clear_range_recalc_distance_quick(texture_data mutable& dest,
+private function {t} void
+texture_data_clear_range_recalc_distance_quick(t mutable& dest,
   uvec3 const& dpos, uvec3 const& sz, uvec3 const& grid)
 {
   /* 指定領域を空白にし、最適ではないが距離をセットする。 */
@@ -161,8 +165,8 @@ texture_data_clear_range_recalc_distance_quick(texture_data mutable& dest,
   }
 }
 
-private threaded function pair{ivec3, ivec3}
-texture_data_fill_range_recalc_distance_quick(texture_data mutable& dest,
+private threaded function {t} pair{ivec3, ivec3}
+texture_data_fill_range_recalc_distance_quick(t mutable& dest,
   uvec3 const& dpos, uvec3 const& sz, uint v)
 {
   /* 領域を塗りつぶし、最適ではないが距離を更新する。 */
@@ -209,9 +213,9 @@ texture_data_fill_range_recalc_distance_quick(texture_data mutable& dest,
   return pair{ivec3, ivec3}(mi, mx);
 }
 
-private function void
-texture_data_copy_range_merge_distance(texture_data mutable& dest,
-  uvec3 const& dpos, texture_data const& src, uvec3 const& spos,
+private function {t} void
+texture_data_copy_range_merge_distance(t mutable& dest,
+  uvec3 const& dpos, t const& src, uvec3 const& spos,
   uvec3 const& sz)
 {
   /* 領域を複写し、距離は更新前後の値をマージする。 */
@@ -232,8 +236,8 @@ texture_data_copy_range_merge_distance(texture_data mutable& dest,
   }
 }
 
-private function void
-texture_data_sync_gl(texture_data const& tex, int level, uvec3 const& spos,
+private function {t} void
+texture_data_sync_gl(t const& tex, int level, uvec3 const& spos,
   uvec3 const& sz, ptr{gl_texture} const& gltex)
 {
   mutable buf = darray{uint}(static_cast{size_t}(sz.x * sz.y * sz.z), 0u);
@@ -256,7 +260,7 @@ texture_data_sync_gl(texture_data const& tex, int level, uvec3 const& spos,
 }
 
 private function void
-texture_data_mip_sync_gl(texture_data const& tex0,
+texture_data_mip_sync_gl(texture_reshaped const& tex0,
   texture_data_mip const& mip, uvec3 const& spos, uvec3 const& sz,
   ptr{gl_texture} const& gltex)
 {
@@ -323,8 +327,8 @@ private struct texture_edit_view(tptr{texture_edit} const edit)
    * カーソルより大きなz位置を非表示にする機能を追加したもの
    */
   public tptr{texture_edit} current_edit = edit;
-  public texture_data tview_pri = current_edit->data_pri[0]; // copy
-  public texture_data tview_sec = current_edit->data_sec[0]; // copy
+  public texture_reshaped tview_pri = current_edit->data_pri[0]; // copy
+  public texture_reshaped tview_sec = current_edit->data_sec[0]; // copy
   /*
   public texture_data_mip current_view = current_edit->data_pri; // copy
   public texture_data_mip current_view_sec = current_edit->data_sec; // copy
@@ -359,7 +363,7 @@ private struct texture_edit_view(tptr{texture_edit} const edit)
     return v;
   }
   public function pair{uvec3, uvec3} get_view_modified(bool reset_flag) {
-    return modified.get_modified(reset_flag);
+    return modified.get_modified_merged(reset_flag);
   }
   public function void set_cursor_color(uint c0, uint c1)
   {
@@ -539,15 +543,13 @@ private struct texture_edit_view(tptr{texture_edit} const edit)
     current_edit->fill_range(dpos, sz, v, v_sec);
     merge_edit_view();
   }
-  public function void edit_copy_range(uvec3 const& spos, uvec3 const& sz,
-    texture_data mutable& dest, texture_data mutable& dest_sec,
-    uvec3 const& dpos) const
+  public function {t} void edit_copy_range(uvec3 const& spos, uvec3 const& sz,
+    t mutable& dest, t mutable& dest_sec, uvec3 const& dpos) const
   {
     current_edit->copy_range(spos, sz, dest, dest_sec, dpos);
   }
-  public function void edit_paste_range(uvec3 const& dpos, uvec3 const& sz,
-    texture_data const& src, texture_data const& src_sec, uvec3 const& spos,
-    uint index_mask)
+  public function {t} void edit_paste_range(uvec3 const& dpos, uvec3 const& sz,
+    t const& src, t const& src_sec, uvec3 const& spos, uint index_mask)
   {
     current_edit->paste_range(dpos, sz, src, src_sec, spos, index_mask);
     merge_edit_view();
@@ -555,7 +557,7 @@ private struct texture_edit_view(tptr{texture_edit} const edit)
   private function void merge_edit_view()
   {
     /* editの更新された領域をviewに反映させる */
-    mutable edit_mod = current_edit->get_modified(true);
+    mutable edit_mod = current_edit->get_modified_merged(true);
     if (edit_mod.second.x == 0) {
       return;
     }
@@ -814,8 +816,8 @@ ptr{gl_texture} const& gltp0)
     tev_tpat.edit_fill_range(dpos, sz, v, v_sec);
     cursor_flick();
   }
-  public function void edit_copy_range(uvec3 const& spos, uvec3 const& sz,
-    texture_data mutable& dest, texture_data mutable& dest_sec,
+  public function {t} void edit_copy_range(uvec3 const& spos, uvec3 const& sz,
+    t mutable& dest, t mutable& dest_sec,
     uvec3 const& dpos)
   {
     if (get_cursor_tpat()) {
@@ -824,21 +826,21 @@ ptr{gl_texture} const& gltp0)
       tmap_edit_copy_range(spos, sz, dest, dest_sec, dpos);
     }
   }
-  public function void tmap_edit_copy_range(uvec3 const& spos, uvec3 const& sz,
-    texture_data mutable& dest, texture_data mutable& dest_sec,
+  public function {t} void tmap_edit_copy_range(uvec3 const& spos,
+    uvec3 const& sz, t mutable& dest, t mutable& dest_sec,
     uvec3 const& dpos)
   {
     tev_tmap.edit_copy_range(spos, sz, dest, dest_sec, dpos);
   }
-  public function void tpat_edit_copy_range(uvec3 const& spos, uvec3 const& sz,
-    texture_data mutable& dest, texture_data mutable& dest_sec,
+  public function {t} void tpat_edit_copy_range(uvec3 const& spos,
+    uvec3 const& sz, t mutable& dest, t mutable& dest_sec,
     uvec3 const& dpos)
   {
     tev_tpat.edit_copy_range(spos, sz, dest, dest_sec, dpos);
   }
-  public function void edit_paste_range(uvec3 const& dpos,
-    uvec3 const& sz, texture_data const& src, texture_data const& src_sec,
-    uvec3 const& spos, uint index_mask)
+  public function {t} void edit_paste_range(uvec3 const& dpos,
+    uvec3 const& sz, t const& src,
+    t const& src_sec, uvec3 const& spos, uint index_mask)
   {
     if (get_cursor_tpat()) {
       tpat_edit_paste_range(dpos, sz, src, src_sec, spos, index_mask);
@@ -846,17 +848,17 @@ ptr{gl_texture} const& gltp0)
       tmap_edit_paste_range(dpos, sz, src, src_sec, spos, index_mask);
     }
   }
-  public function void tmap_edit_paste_range(uvec3 const& dpos,
-    uvec3 const& sz, texture_data const& src, texture_data const& src_sec,
-    uvec3 const& spos, uint index_mask)
+  public function {t} void tmap_edit_paste_range(uvec3 const& dpos,
+    uvec3 const& sz, t const& src,
+    t const& src_sec, uvec3 const& spos, uint index_mask)
   {
     reset_cursor_flick_nosyncgl();
     tev_tmap.edit_paste_range(dpos, sz, src, src_sec, spos, index_mask);
     cursor_flick();
   }
-  public function void tpat_edit_paste_range(uvec3 const& dpos,
-    uvec3 const& sz, texture_data const& src, texture_data const& src_sec,
-    uvec3 const& spos, uint index_mask)
+  public function {t} void tpat_edit_paste_range(uvec3 const& dpos,
+    uvec3 const& sz, t const& src,
+    t const& src_sec, uvec3 const& spos, uint index_mask)
   {
     reset_cursor_flick_nosyncgl();
     tev_tpat.edit_paste_range(dpos, sz, src, src_sec, spos, index_mask);
@@ -916,8 +918,8 @@ ptr{gl_texture} const& gltp0)
   }
 }
 
-private function void shrink_voxel_value(bool for_mipmap,
-  texture_data const& spri, texture_data const& ssec,
+private function {t} void shrink_voxel_value(bool for_mipmap,
+  t const& spri, t const& ssec,
   texel_value mutable& dpri, texel_value mutable& dsec, ivec3 const& p)
 {
   uint count_ref;
@@ -1021,8 +1023,8 @@ private function void shrink_voxel_value(bool for_mipmap,
   }
 }
 
-private function void scale_voxel_value(uint v_pri, uint v_sec,
-  texture_data mutable& tex_pri, texture_data mutable& tex_sec,
+private function {t} void scale_voxel_value(uint v_pri, uint v_sec,
+  t mutable& tex_pri, t mutable& tex_sec,
   int x0, int y0, int z0)
 {
   for (const z: 0 .. 2) {
@@ -1059,9 +1061,9 @@ tiled_voxel_texture_update_mipmap(tiled_voxel_texture const& vox)
 {
   debug_log("update_mipmap_all begin");
   const bool enable_short_circuit = true; // FIXME?
-  function void update_mipmap_one(texture_data mutable& pri0,
-    texture_data mutable& sec0, texture_data mutable& pri1,
-    texture_data mutable& sec1)
+  function void update_mipmap_one(texture_reshaped mutable& pri0,
+    texture_reshaped mutable& sec0, texture_reshaped mutable& pri1,
+    texture_reshaped mutable& sec1)
   {
     const sz = pri0.get_size_l2_uvec3();
     if (sz.x == 0u || sz.y == 0u || sz.z == 0u) {
@@ -1091,13 +1093,13 @@ tiled_voxel_texture_update_mipmap(tiled_voxel_texture const& vox)
   const pat_mip_num = vox.voxtile.get_width_l2() + 1;
     // タイルサイズが16なら16,8,4,2,1の5枚
   while (vox.tpat_edit->data_pri.size() < pat_mip_num) {
-    vox.tpat_edit->data_pri.push_back(texture_data());
+    vox.tpat_edit->data_pri.push_back(texture_reshaped());
   }
   while (vox.tpat_edit->data_sec.size() < pat_mip_num) {
-    vox.tpat_edit->data_sec.push_back(texture_data());
+    vox.tpat_edit->data_sec.push_back(texture_reshaped());
   }
-  vox.tpat_edit->data_pri.resize(pat_mip_num, texture_data());
-  vox.tpat_edit->data_sec.resize(pat_mip_num, texture_data());
+  vox.tpat_edit->data_pri.resize(pat_mip_num, texture_reshaped());
+  vox.tpat_edit->data_sec.resize(pat_mip_num, texture_reshaped());
   for (const i: 1 .. vox.tpat_edit->data_pri.size()) {
     mutable& tpri = vox.tpat_edit->data_pri;
     mutable& tsec = vox.tpat_edit->data_sec;
@@ -1106,8 +1108,8 @@ tiled_voxel_texture_update_mipmap(tiled_voxel_texture const& vox)
     debug_log("update_mipmap_all tpat", i);
   }
   // tmapのmiplevel==0の代替となるテクスチャの作成
-  texture_data pri0 = vox.tmap_edit->data_pri[0]; // copy
-  texture_data sec0 = vox.tmap_edit->data_sec[0]; // copy
+  texture_reshaped pri0 = vox.tmap_edit->data_pri[0]; // copy
+  texture_reshaped sec0 = vox.tmap_edit->data_sec[0]; // copy
   for (const z: 0 .. pri0.get_depth()) {
     for (const y: 0 .. pri0.get_height()) {
       for (const x: 0 .. pri0.get_width()) {
@@ -1213,7 +1215,6 @@ public struct noedit_mode(ptr{edit_mode_texture} const& emt0)
   }
   public function void on_frame(projection_info const& prj)
   {
-    // debug_log("noedit on_frame");
     sync_gl();
   }
   public function void modify_tmap(glm::uvec3 const& pos, uint value)
@@ -1226,17 +1227,31 @@ public struct noedit_mode(ptr{edit_mode_texture} const& emt0)
   {
     mutable& tme = *tmap_edit;
     mutable& tpe = *tpat_edit;
-    pair{uvec3, uvec3} tmmod = tme.get_modified(true);
+    const tmmodarr = tme.get_modified_array(true);
+    for (size_t i, const& pos: tmmodarr) {
+      const sz = pos.second - pos.first + make_ivec3(1, 1, 1);
+      const s = sz.x * sz.y * sz.z;
+      // debug_log("noedit sync pos", pos, s);
+      texture_data_mip_sync_gl(tme.data_pri[0], tme.data_pri,
+        to_uvec3(pos.first), to_uvec3(sz), glt_tmap_pri);
+      texture_data_mip_sync_gl(tme.data_sec[0], tme.data_sec,
+        to_uvec3(pos.first), to_uvec3(sz), glt_tmap_sec);
+    }
+    /*
+    pair{uvec3, uvec3} tmmod = tme.get_modified_merged(true); // (pos, sz)
     if (tmmod.second.x != 0u) {
-      // debug_log("noedit sync tmmod", tmmod);
+      const sz = tmmod.second;
+      const s = sz.x * sz.y * sz.z;
+      // debug_log("noedit sync tmmod", tmmod, s);
       texture_data_mip_sync_gl(tme.data_pri[0], tme.data_pri,
         tmmod.first, tmmod.second, glt_tmap_pri);
       texture_data_mip_sync_gl(tme.data_sec[0], tme.data_sec,
         tmmod.first, tmmod.second, glt_tmap_sec);
     }
-    pair{uvec3, uvec3} tpmod = tpe.get_modified(true);
+    */
+    pair{uvec3, uvec3} tpmod = tpe.get_modified_merged(true);
     if (tpmod.second.x != 0u) {
-      debug_log("noedit sync tpmod", tmmod);
+      // debug_log("noedit sync tpmod", tpmod);
       texture_data_mip_sync_gl(tpe.data_pri[0], tpe.data_pri,
         tpmod.first, tpmod.second, glt_tpat_pri);
       texture_data_mip_sync_gl(tpe.data_sec[0], tpe.data_sec,
@@ -1323,15 +1338,15 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       sdl_save_file(fn, to_string_compact_pod(tpat));
     }
     {
-      texture_data const& tmpri = emt->vox.tmap_edit->data_pri[0];
-      texture_data tmpri_cpy;
+      texture_reshaped const& tmpri = emt->vox.tmap_edit->data_pri[0];
+      texture_reshaped tmpri_cpy;
       tmpri_cpy.set_size_l2(6u, 6u, 6u);
       texture_data_copy_range(tmpri_cpy, uvec3(), tmpri, uvec3(),
         make_uvec3(64u, 64u, 64u));
       sdl_save_file("/build/edit_common_tmpri.raw",
         to_string_compact_pod(tmpri_cpy));
-      texture_data const& tmsec = emt->vox.tmap_edit->data_sec[0];
-      texture_data tmsec_cpy;
+      texture_reshaped const& tmsec = emt->vox.tmap_edit->data_sec[0];
+      texture_reshaped tmsec_cpy;
       tmsec_cpy.set_size_l2(6u, 6u, 6u);
       texture_data_copy_range(tmsec_cpy, uvec3(), tmsec, uvec3(),
         make_uvec3(64u, 64u, 64u));
@@ -2358,7 +2373,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       pgen_context ctx = pgen_context(rndp);
       swap(ctx.tex_pri, copy_data.tex_pri);
       swap(ctx.tex_sec, copy_data.tex_sec);
-      texture_data tex;
+      texture_reshaped tex;
       mutable& c = ctx;
       tex.set_size_l2(
         c.tex_pri.get_width_l2(),
@@ -2425,8 +2440,8 @@ private valuetype struct wall_dir
   public int count;
 }
 
-private threaded function wall_dir get_wall_dir(texture_data const& tex,
-  uvec3 const& p)
+private threaded function {t} wall_dir
+get_wall_dir(t const& tex, uvec3 const& p)
 {
   const sz = tex.get_size_uvec3();
   threaded function texel_value get(uint x, uint y, uint z)
@@ -2603,8 +2618,8 @@ private threaded function int gcd(int x, int y)
 
 ////////////////////////////////////////
 
-private threaded function void gen_frag1(texture_data mutable& tex_pri,
-  texture_data mutable& tex_sec, uvec3 const& pos, uvec3 const& sz,
+private threaded function void gen_frag1(texture_reshaped mutable& tex_pri,
+  texture_reshaped mutable& tex_sec, uvec3 const& pos, uvec3 const& sz,
   ivec3 const& center2, ivec3 const scale2, uint radius2)
 {
   // center2は中心オフセットの2倍。szと同じ値のとき領域の中心が球の中心

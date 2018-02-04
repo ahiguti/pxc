@@ -96,16 +96,20 @@ prepare_raycasting_texture_data(pgl3d_config const& cfg,
     const uint tmap_miplevel_max = ui(
       fold_list{max}(0, txs.voxtile_size_l2)); // FIXME?
     /* initialize tpat_edit */
-    txs.vox->tpat_edit->data_pri.resize(tpat_miplevel_max + 1u, texture_data());
-    txs.vox->tpat_edit->data_sec.resize(tpat_miplevel_max + 1u, texture_data());
+    txs.vox->tpat_edit->data_pri.resize(tpat_miplevel_max + 1u,
+      texture_reshaped());
+    txs.vox->tpat_edit->data_sec.resize(tpat_miplevel_max + 1u,
+      texture_reshaped());
     txs.vox->tpat_edit->grid = txs.vox->voxtile;
     txs.vox->tpat_edit->data_size = to_uvec3(
       map{ivec3, operator::shiftl}(make_ivec3(1, 1, 1), txs.voxtpat_size_l2));
     txs.vox->tpat_edit->grid_size = to_uvec3(
       map{ivec3, operator::shiftl}(make_ivec3(1, 1, 1), txs.voxtile_size_l2));
     /* initialize tmap_edit */
-    txs.vox->tmap_edit->data_pri.resize(tmap_miplevel_max + 1u, texture_data());
-    txs.vox->tmap_edit->data_sec.resize(tmap_miplevel_max + 1u, texture_data());
+    txs.vox->tmap_edit->data_pri.resize(tmap_miplevel_max + 1u,
+      texture_reshaped());
+    txs.vox->tmap_edit->data_sec.resize(tmap_miplevel_max + 1u,
+      texture_reshaped());
     txs.vox->tpat_edit->grid = texture_data();
     txs.vox->tmap_edit->data_size = to_uvec3(
       map{ivec3, operator::shiftl}(make_ivec3(1, 1, 1), txs.voxtmap_size_l2));
@@ -338,7 +342,7 @@ prepare_raycasting_texture_data(pgl3d_config const& cfg,
   }
 }
 
-function void dump_cnt(texture_data const& t, string msg)
+function void dump_cnt(texture_reshaped const& t, string msg)
 {
   size_t sp_cnt = 0;
   size_t co_cnt = 0;
@@ -374,8 +378,8 @@ function void dump_cnt(texture_data const& t, string msg)
     "re_cnt", re_cnt);
 }
 
-function void prepare_voxel_tmap(texture_data mutable& tmap,
-  texture_data mutable& tmap_ax, uint miplevel_max, uint miplevel,
+function void prepare_voxel_tmap(texture_reshaped mutable& tmap,
+  texture_reshaped mutable& tmap_ax, uint miplevel_max, uint miplevel,
   bool enable_calc_distance, bool enable_short_circuit)
 {
   // debug_log("tmap 0,0,1", to_hexstring(tmap.get(0, 0, 1)));
@@ -387,8 +391,8 @@ function void prepare_voxel_tmap(texture_data mutable& tmap,
   dump_cnt(tmap, "tmap");
 }
 
-function void prepare_voxel_tpat(texture_data mutable& tpat,
-  texture_data mutable& tpat_ax, uint miplevel_max, uint miplevel,
+function void prepare_voxel_tpat(texture_reshaped mutable& tpat,
+  texture_reshaped mutable& tpat_ax, uint miplevel_max, uint miplevel,
   bool enable_calc_distance, bool enable_short_circuit)
 {
   dump_cnt(tpat, "tpat");
@@ -472,10 +476,16 @@ prepare_parallax_mapping_texture_data(demoapp_textures mutable& txs)
 
 function void parallax_png_decode(texture_data mutable& td)
 {
+  td.foreach() function {t} void(uint x, uint y, uint z, t mutable& v) {
+    const depth = (v & 0xff) / 1;
+    v = depth << 16u;
+  }
+  /*
   for (const i: 0 .. td.size()) {
     const depth = (td.get_index(i) & 0xff) / 1;
     td.set_index(i, depth << 16u);
   }
+  */
 }
 
 function void set_normal_pattern(texture_data const& tdep,
@@ -559,9 +569,12 @@ function void parallax_set_clearance(texture_data mutable& td)
     for (const bx : 0 .. td.get_width() / tile_size) {
       for (const y : 0 .. tile_size) {
         for (const x : 0 .. tile_size) {
+	  /*
           const offset = (by * tile_size + y) * td.get_height()
             + (bx * tile_size + x);
           const v0 = td.get_index(offset);
+	  */
+          const v0 = td.get(bx * tile_size + x, by * tile_size + y, 0);
           const depth0 = (v0 >> 16) & 0xffU;
           // clearance values
           uint c_nn = min(x, y);
@@ -575,9 +588,12 @@ function void parallax_set_clearance(texture_data mutable& td)
           // TODO: too slow
           for (const y1 : y1_min .. y1_max) {
             for (const x1 : x1_min .. x1_max) {
+	      /*
               const offset1 = (by * tile_size + y1) * td.get_height()
                 + (bx * tile_size + x1);
               const v1 = td.get_index(offset1);
+	      */
+	      const v1 = td.get(bx * tile_size + x1, by * tile_size + y1, 0);
               const depth1 = v1 >> 16 & 0xffU;
               if (depth1 >= depth0) {
                 continue;
@@ -598,7 +614,12 @@ function void parallax_set_clearance(texture_data mutable& td)
           c_pn = min(c_pn, 15);
           c_pp = min(c_pp, 15);
           // W = unused(8), Z = depth(8), Y = CNN(4) CNP(4), X = CPN(4) CPP(4)
+	  /*
           td.set_index(offset, (depth0 << 16) |
+            (c_nn << 12) | (c_np << 8) | (c_pn << 4) | (c_pp << 0));
+	  */
+          td.set(bx * tile_size + x, by * tile_size + y, 0,
+	    (depth0 << 16) |
             (c_nn << 12) | (c_np << 8) | (c_pn << 4) | (c_pp << 0));
           if (by == 0 && bx == 0) {
             // debug_log("cl", x, y, depth0, to_hexstring(data[offset]));

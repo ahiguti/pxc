@@ -9,8 +9,8 @@ public import pgl3d::texture::texture -;
 
 public metafunction texel_value uint;
 
-public threaded function void
-set_distance(bool enable_short_circuit, texture_data mutable& node)
+public threaded function {t} void
+set_distance(bool enable_short_circuit, t mutable& node)
 {
   for (const z : 0 .. node.get_depth()) {
     for (const y : 0 .. node.get_height()) {
@@ -21,8 +21,8 @@ set_distance(bool enable_short_circuit, texture_data mutable& node)
   }
 }
 
-public threaded function void
-update_distance(bool enable_short_circuit, texture_data mutable& node,
+public threaded function {t} void
+update_distance(bool enable_short_circuit, t mutable& node,
   ivec3 mutable& mod_mi, ivec3 mutable& mod_mx, bool clear_flag)
 {
   // clear_flagは範囲はすべて空白になったとわかっているとき真
@@ -164,8 +164,8 @@ dist_3d_to_texel_value(dist_3d const& dv)
   return wv;
 }
 
-threaded function void
-set_distance_pos(bool enable_short_circuit, texture_data mutable& node,
+threaded function {t} void
+set_distance_pos(bool enable_short_circuit, t mutable& node,
   int x, int y, int z)
 {
   if (!is_space_voxel(node.get(ui(x), ui(y), ui(z)))) {
@@ -184,8 +184,8 @@ set_distance_pos(bool enable_short_circuit, texture_data mutable& node,
   node.set(ui(x), ui(y), ui(z), wv);
 }
 
-threaded function bool
-short_circuit(texture_data mutable&node, dist_3d mutable& dv,
+threaded function {t} bool
+short_circuit(t mutable&node, dist_3d mutable& dv,
   int x, int y, int z, int xd, int yd, int zd)
 {
   int x1 = x + xd;
@@ -226,8 +226,8 @@ short_circuit(texture_data mutable&node, dist_3d mutable& dv,
   return true;
 }
 
-threaded function texel_value
-distance_pos_dist(texture_data const& node, dist_3d mutable& dv,
+threaded function {t} texel_value
+distance_pos_dist(t const& node, dist_3d mutable& dv,
   int x, int y, int z, uint done)
 {
   const n = 15; // min(1 << bshift, 15); // fits 4 bit
@@ -273,8 +273,8 @@ distance_pos_dist(texture_data const& node, dist_3d mutable& dv,
   // node.set(ui(x), ui(y), ui(z), wv);
 }
 
-threaded function void
-debug_check(texture_data const& node, int x, int y, int z,
+threaded function {t} void
+debug_check(t const& node, int x, int y, int z,
   dist_3d const& dv)
 {
   bool r = node_space(node, x - dv.xn, x + dv.xp, y - dv.yn, y + dv.yp,
@@ -284,8 +284,8 @@ debug_check(texture_data const& node, int x, int y, int z,
   }
 }
 
-threaded function bool
-node_space(texture_data const& node, int x0, int x1, int y0, int y1,
+threaded function {t} bool
+node_space(t const& node, int x0, int x1, int y0, int y1,
   int z0, int z1)
 {
   metafunction ui static_cast{uint};
@@ -308,8 +308,8 @@ node_space(texture_data const& node, int x0, int x1, int y0, int y1,
   return true;
 }
 
-threaded function uint
-check_extend(texture_data const& node, int x, int y, int z, int d,
+threaded function {t} uint
+check_extend(t const& node, int x, int y, int z, int d,
   dist_3d mutable& dv, int dx, int dy, int dz)
 {
   if (dx > 0) {

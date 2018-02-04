@@ -23,7 +23,6 @@ public threaded struct aggregated_ibuffer(bool enable_instanced0,
   public bool const enable_instanced = enable_instanced0;
   public bool const enable_uniform_instancing = enable_uniform_instancing0;
   private varray{ptr{async_buffer}} buffers;
-    // VBO。3つ持つ。
   private size_t buffer_current;
     // 現在書き込み中のVBO。0以上3未満。
   public function ptr{async_buffer} get_current() const {
@@ -37,7 +36,8 @@ public threaded struct aggregated_ibuffer(bool enable_instanced0,
   }
   init();
   private function void init() {
-    for (const i: 0 .. 2) {
+    metafunction num_async_buffers 1;
+    for (const i: 0 .. num_async_buffers) {
       buffers.push_back(make_ptr{async_buffer}());
     }
   }

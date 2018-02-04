@@ -176,9 +176,9 @@ load_gl_texture_2d(gl_texture mutable& tx, string const& fname)
     GL_NEAREST);
 }
 
-public function void
+public function {t} void
 texture_data_to_gl_texture(GLenum target, gl_texture mutable& tx,
-  ptr{texture_data} const& td, GLenum iformat, GLenum format, GLenum filter)
+  t const& td, GLenum iformat, GLenum format, GLenum filter)
 {
   glActiveTexture(GL_TEXTURE0);
   tx.texture_id.generate();
@@ -189,9 +189,9 @@ texture_data_to_gl_texture(GLenum target, gl_texture mutable& tx,
   set_gl_texture(*td, tx, target, iformat, format, filter);
 }
 
-public function void
+public function {t} void
 texture_data_array_to_gl_texture(GLenum target, gl_texture mutable& tx,
-  cslice{texture_data} const& tds, GLenum iformat, GLenum format,
+  t const& tds, GLenum iformat, GLenum format,
   GLenum filter)
 {
   glActiveTexture(GL_TEXTURE0);
@@ -230,9 +230,10 @@ function {t} void set_gl_texture(t const& tds, gl_texture mutable& ti,
     }
     tds_sz = tds.size();
   }
-  function void set_one(texture_data const& td, size_t i)
+  function {t} void set_one(t const& td, size_t i)
   {
-    const crawp = td.get_crawptr();
+    const cpy = td.get_copy_linear();
+    const crawp = cpy.crange().to_crawptr();
     uint tex_w = td.get_width();
     uint tex_h = td.get_height();
     uint tex_d = td.get_depth();
