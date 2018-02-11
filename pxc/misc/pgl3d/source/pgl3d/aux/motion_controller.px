@@ -1,0 +1,64 @@
+public namespace pgl3d::aux::motion_controller;
+public import common -;
+public import meta m;
+public import glm;
+public import pgl3d::aux::serial_port -;
+
+public struct motion_controller_serial(uint index)
+{
+  serial_port sp = serial_port(index);
+  glm::quat value;
+  string buffer;
+  public function bool is_valid() const
+  {
+    return sp.is_valid();
+  }
+  public function glm::quat get_current_value()
+  {
+    update_value();
+    return value;
+  }
+  private function void update_value()
+  {
+    if (!sp.is_valid()) {
+      return;
+    }
+    size_t olen = buffer.size();
+    sp.read_nonblocking(buffer);
+    if (buffer.size() == olen) {
+      return;
+    }
+    while (true) {
+      // find two newlines from buffer
+      size_t z = 0u;
+      size_t p0 = find_mapped(buffer, z, '\n');
+      if (p0 >= buffer.size()) {
+        break;
+      }
+      size_t p1 = find_mapped(buffer, p0 + 1, '\n');
+      if (p1 >= buffer.size()) {
+        break;
+      }
+      // found
+      farray{float, 4} a;
+      {
+        const line = buffer[p0 + 1 .. p1];
+        uint i = 0;
+        split_foreach(line, ',') function void (cstrref const& s) {
+          const v = from_string{float}(s);
+          if (i < 4u) {
+            a[i] = v;
+          }
+          ++i;
+        }
+      }
+      value.x = a[0];
+      value.y = a[1];
+      value.z = -a[2];
+      value.w = a[3];
+      // debug_log("quat value", value);
+      buffer.erase(0u, p0 + 1);
+    }
+  }
+}
+

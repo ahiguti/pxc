@@ -56,10 +56,14 @@ update_distance(bool enable_short_circuit, t mutable& node,
 	    short_circuit(node, dv, x, y, z, 0, 0, -1);
 	  }
 	} else if (clear_flag) {
-	  /* クリア。変更があった領域の外側。現在より伸ばせる */
+	  /* クリア。変更があった領域の外側。現在より伸ばせる可能性がある */
 	  dv = get_dist_3d(v);
 	  const spmi = make_ivec3(x - dv.xn, y - dv.yn, z - dv.zn);
 	  const spmx = make_ivec3(x + dv.xp, y + dv.yp, z + dv.zp);
+          /* 各方向について計算省略可能かどうかチェックする
+             - 伸ばそうとする範囲と変更があった範囲が重ならないならdone
+             - 伸ばす方向でない2軸について範囲がすでに重なってないならdone
+           */
 	  if (!in_range(x + dv.xp + 1, mod_mi.x, mod_mx.x) ||
 	    !has_intersect2(spmi.y, spmi.z, spmx.y, spmx.z,
 	      mod_mi.y, mod_mi.z, mod_mx.y, mod_mx.z)) { done |= (1u << 0u); }
@@ -78,6 +82,7 @@ update_distance(bool enable_short_circuit, t mutable& node,
 	  if (!in_range(z - dv.zn - 1, mod_mi.z, mod_mx.z) ||
 	    !has_intersect2(spmi.x, spmi.y, spmx.x, spmx.y,
 	      mod_mi.x, mod_mi.y, mod_mx.x, mod_mx.y)) { done |= (1u << 5u); }
+          // debug_log("clear_flag donemask=", to_hexstring(done));
 	} else {
 	  /* 非クリア。変更があった領域の外側。距離ゼロから計算 */
 	  // TODO: もっと計算省略可能
@@ -174,6 +179,7 @@ set_distance_pos(bool enable_short_circuit, t mutable& node,
   dist_3d dv;
   if (enable_short_circuit) {
     // 隣接するボクセルのdistanceを読んで無用な計算を省く。
+    // xyz昇順に計算していることを前提にしている。
     // 無効のときと結果が一致するとは限らない。
     // TODO: これすると描画少し遅いのはなぜなのかしらべる。
     short_circuit(node, dv, x, y, z, 0, -1, 0) ||

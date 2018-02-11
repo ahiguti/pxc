@@ -1,0 +1,96 @@
+public namespace pgl3d::aux::serial_port "use-unsafe";
+public import common -;
+public import meta m;
+
+public struct extern "pgl3d::serial_port" "nonmovable"
+serial_port(uint index)
+{
+  public function extern "%" bool is_valid() const;
+  public function extern "%" void read_nonblocking(string mutable& buf_apnd);
+}
+
+extern "types" inline
+
+namespace pgl3d {
+
+struct serial_port {
+  serial_port(unsigned index);
+  ~serial_port();
+  bool is_valid() const;
+  void read_nonblocking(pxcrt::bt_string& buf_apnd);
+private:
+  HANDLE handle;
+  serial_port(serial_port const&) = delete;
+  serial_port& operator =(serial_port const&) = delete;
+};
+
+};
+
+;
+
+extern "implementation" inline
+
+#include <string>
+
+namespace pgl3d {
+
+serial_port::serial_port(unsigned index)
+{
+  std::string s = "\\\\.\\COM" + std::to_string(index);
+  handle = CreateFileA(s.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
+    OPEN_EXISTING, 0, nullptr);
+  if (!is_valid()) {
+    return;
+  }
+  SetupComm(handle, 4096, 4096);
+  DCB dcb = { };
+  GetCommState(handle, &dcb);
+  dcb.BaudRate = 9600;
+  dcb.ByteSize = 8;
+  dcb.Parity = NOPARITY;
+  dcb.StopBits = ONESTOPBIT;
+  dcb.fOutxCtsFlow = FALSE;
+  dcb.fRtsControl = RTS_CONTROL_HANDSHAKE;
+  SetCommState(handle, &dcb);
+}
+
+serial_port::~serial_port()
+{
+  if (is_valid()) {
+    CloseHandle(handle);
+  }
+}
+
+pxcrt::bt_bool
+serial_port::is_valid() const
+{
+  return handle != INVALID_HANDLE_VALUE;
+}
+
+void
+serial_port::read_nonblocking(pxcrt::bt_string& buf_apnd)
+{
+  DWORD err;
+  COMSTAT cst;
+  ClearCommError(handle, &err, &cst);
+  DWORD len = cst.cbInQue;
+  if (len == 0) {
+    return;
+  }
+  size_t olen = buf_apnd.size();
+  size_t nlen = olen + len;
+  if (olen > nlen) {
+    pxcrt::throw_bad_alloc(); /* overflow */
+  }
+  buf_apnd.resize(nlen, 0);
+  DWORD lenr = 0;
+  ReadFile(handle, buf_apnd.begin() + olen, len, &lenr, nullptr);
+  if (lenr != len) {
+    buf_apnd.resize(olen + lenr, 0);
+  }
+}
+
+
+};
+
+;

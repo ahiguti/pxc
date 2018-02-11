@@ -28,6 +28,8 @@ public import pgl3d::geometry::wfobj -;
 public import io::environ;
 public import debug_helper -;
 public import pgl3d::aux::d3axim -;
+// public import pgl3d::aux::serial_port -; // FIXME
+public import pgl3d::aux::motion_controller -;
 
 // public import pgl3d::texture::generator -;
 // public import pgl3d::numeric::interpolation -; // FIXME
@@ -63,6 +65,34 @@ public function void app_main()
 {
   set_debug_log_file("var/demoapp.log");
   set_debug_timestamp(true);
+
+  /*
+  // FIXME
+  if (false) {
+    // シリアルポートが有効かどうか見る
+    for (uint i: 0u .. 32u) {
+      const sp = serial_port(i);
+      debug_log("serial port", i, sp.is_valid());
+    }
+    mutable sp = serial_port(3);
+    string str;
+    for (uint i: 0u .. 128u) {
+      while (true) {
+        string buf;
+        sp.read_nonblocking(buf);
+        debug_log("serial", buf);
+        if (buf.empty()) {
+          io::system.usleep(10000);
+          continue;
+        }
+        str += buf;
+        break;
+      }
+    }
+    debug_log("serial", str);
+  }
+  */
+
   // debug_helper::dump_modules();
   // debug_helper::dump_backtrace();
   string config_fn = "res/pgl3d.cnf";
@@ -173,14 +203,18 @@ public struct demoapp_application()
   }
   public function void on_frame()
   {
+    // debug_log("app on_frame");
     mutable& tup = *app.tup;
+    // debug_log("app on_frame 1");
     for (const i, const& e: tup) {
       // debug_log("tup", e.pos, e.value);
       if (case app.edit_mode.some) {
 	app.edit_mode.some->modify_tmap(e.pos, e.value);
       }
     }
+    // debug_log("app on_frame 2");
     tup.clear();
+    // debug_log("app on_frame 3");
     if (case app.edit_mode.some) {
       // const t0 = sdl_get_ticks();
       app.edit_mode.some->on_frame(*app.proj_pm);
@@ -189,6 +223,7 @@ public struct demoapp_application()
       //   debug_log("(no)edit_mode on frame", t1 - t0);
       // }
     }
+    // debug_log("app on_frame done");
   }
   public function void on_motion_pre()
   {
@@ -512,6 +547,8 @@ private struct app_demoapp()
   public vertex_attr edit_mode_vattr;
   public ptr{varray{uchar}} capt_data = make_ptr{varray{uchar}}();
   public ftd3_aximaster axim;
+  public motion_controller_serial mctrl = motion_controller_serial(3u);
+    // FIXME: シリアルポート番号
   init();
   private function void init() {
     string s;
@@ -1049,6 +1086,7 @@ function void handle_keys(app_demoapp mutable& app, cslice{uchar} const& keys,
     buf[3] = buf[0];
     app.axim.axi_write(0x44a00000, buf);
   }
+  glm::quat mctrl_angle = app.mctrl.get_current_value().conjugate();
   /*
   if (app.ictl.get_button(buttons, 10) != 0) {
     app.app_commands["throw"] = "1";
@@ -1091,7 +1129,7 @@ function void handle_keys(app_demoapp mutable& app, cslice{uchar} const& keys,
     ss.option_value2 = app.option_value2;
     ss.scene_next_flag = app.scene_next_flag;
     ss.posang.position = app.player.position;
-    ss.posang.angle = app.player.angle * camera_rel;
+    ss.posang.angle = app.player.angle * mctrl_angle * camera_rel;
     ss.pos_delta = app.player.pos_delta;
     ss.app_commands.swap(app.app_commands);
     ss.app_status_message = app.app_status_message;

@@ -9,7 +9,8 @@ public import pgl3d::texture::voxel -;
 public import pgl3d::engine::util -;
 public import pgl3d::sdl::sdlutil -;
 
-public metafunction texture_reshaped array3_pot{varray{uint}, 4};
+public metafunction texture_reshaped array3_pot{varray{uint}, 0};
+  // TODO: test reshape
 public metafunction texture_data_mip varray{texture_reshaped};
 
 public tsvaluetype enum texture_value_index_e
@@ -120,6 +121,7 @@ texture_edit()
       data_sec[0].set(pos.x, pos.y, pos.z, v);
     }
     if (idx == texture_value_index_primary) {
+      // TODO: ここが遅いのがなんとかならないか
       recalc_distance_range(pos, make_uvec3(1, 1, 1), v == 0);
     }
   }
@@ -188,7 +190,14 @@ texture_edit()
       // debug_log("recalc_distance_range nogrid");
       update_distance(true, data_pri[0], mod_mi, mod_mx, clear_flag);
       modified.set_modified(mod_mi, mod_mx);
+      /*
+      {
+        const msz = mod_mx - mod_mi + make_ivec3(1, 1, 1);
+        debug_log("recalc_distance_range nogrid", sz, msz);
+      }
+      */
     } else {
+      // debug_log("recalc_distance_range grid");
       if (grid_work.get_width_l2() == 0u) {
 	grid_work.set_size_l2(
 	  integral_log2(grid_size.x), 
