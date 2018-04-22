@@ -62,6 +62,8 @@ typedef long suseconds_t;
 ;
 
 extern "functions" inline
+#include <chrono>
+#include <thread>
 #include <ctime>
 #ifdef PXC_POSIX
 #include <sys/time.h>
@@ -145,34 +147,25 @@ std::time_t time(io const& iop)
 
 bt_uint io_sleep(io const& iop, bt_uint sec)
 {
-#ifdef PXC_POSIX
-  ::sleep(sec);
-#else
-  Sleep(sec * 1000);
-#endif
+  std::this_thread::sleep_for(std::chrono::seconds(sec));
   return 0;
 }
 
 bt_uint io_usleep(io const& iop, bt_uint usec)
 {
-#ifdef PXC_POSIX
-  ::usleep(usec);
-#else
-  Sleep(usec / 1000);
-#endif
+  std::this_thread::sleep_for(std::chrono::microseconds(usec));
   return 0;
 }
 
 void time_init()
 {
   /* not multi-thread safe */
-#ifdef PXC_POSIX
-  // std::time_t tm = 0;
-  // std::time(&tm);
-  // ::localtime(&tm);
-  ::tzset();
-#else
+#ifdef PXC_WINDOWS
   _tzset();
+#else
+  #ifndef __CYGWIN__
+  ::tzset();
+  #endif
 #endif
 }
 

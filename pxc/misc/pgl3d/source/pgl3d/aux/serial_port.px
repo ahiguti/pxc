@@ -6,7 +6,9 @@ public struct extern "pgl3d::serial_port" "nonmovable"
 serial_port(uint index)
 {
   public function extern "%" bool is_valid() const;
+  public function extern "%" string get_error() const;
   public function extern "%" void read_nonblocking(string mutable& buf_apnd);
+  public function extern "%" void close();
 }
 
 extern "types" inline
@@ -17,9 +19,11 @@ struct serial_port {
   serial_port(unsigned index);
   ~serial_port();
   bool is_valid() const;
+  void close();
   void read_nonblocking(pxcrt::bt_string& buf_apnd);
 private:
   HANDLE handle;
+  pxcrt::bt_string error;
   serial_port(serial_port const&) = delete;
   serial_port& operator =(serial_port const&) = delete;
 };
@@ -40,25 +44,51 @@ serial_port::serial_port(unsigned index)
   handle = CreateFileA(s.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
     OPEN_EXISTING, 0, nullptr);
   if (!is_valid()) {
+    error = pxcrt::cstr_to_string("CreateFile failed");
     return;
   }
-  SetupComm(handle, 4096, 4096);
+  if (!SetupComm(handle, 4096, 4096)) {
+    error = pxcrt::cstr_to_string("SetupComm failed");
+    close();
+    return;
+  }
+  if (!PurgeComm(handle,
+    PURGE_TXABORT | PURGE_RXABORT | PURGE_TXCLEAR | PURGE_RXCLEAR)) {
+    error = pxcrt::cstr_to_string("PurgeComm failed");
+    close();
+    return;
+  }
   DCB dcb = { };
-  GetCommState(handle, &dcb);
+  if (!GetCommState(handle, &dcb)) {
+    error = pxcrt::cstr_to_string("GetCommState failed");
+    close();
+    return;
+  }
   dcb.BaudRate = 9600;
   dcb.ByteSize = 8;
   dcb.Parity = NOPARITY;
   dcb.StopBits = ONESTOPBIT;
   dcb.fOutxCtsFlow = FALSE;
-  dcb.fRtsControl = RTS_CONTROL_HANDSHAKE;
-  SetCommState(handle, &dcb);
+  dcb.fRtsControl = RTS_CONTROL_ENABLE;
+  if (!SetCommState(handle, &dcb)) {
+    error = pxcrt::cstr_to_string("SetCommState failed");
+    close();
+    return;
+  }
 }
 
 serial_port::~serial_port()
 {
+  close();
+}
+
+void
+serial_port::close()
+{
   if (is_valid()) {
     CloseHandle(handle);
   }
+  handle = INVALID_HANDLE_VALUE;
 }
 
 pxcrt::bt_bool
@@ -89,7 +119,6 @@ serial_port::read_nonblocking(pxcrt::bt_string& buf_apnd)
     buf_apnd.resize(olen + lenr, 0);
   }
 }
-
 
 };
 

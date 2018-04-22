@@ -2,6 +2,9 @@
 ---------------------------------------------------------------------------
 TODO
 
+- 物体切り出して動かすところまで
+  - 
+
 - 表面に貼る計算テクスチャ
 
 - filledを置き換えるためのパターン
@@ -18,46 +21,20 @@ TODO
 - drawerはprojection_infoではなくなるべく小さいデータを共有パラメータとして
   取るようにする。
 
-- captureフィルタ復活(done)
-
-- commandsをやめてmain_ctrl_export_iを渡すようにする(done)
-
 - shader_configの無駄コピー削除
 
-- resize時の動作を決め、projection_infoはすべてapp側で保持するようにする
-  (done)
-
-- setfbがvbid_invalid()を返すとtriangles surfaceが表示されなくなるのは何故？
-  -> vbid_invalid()ではなく0を返していた。(done)
-
-- camera_dfの汎用化(done)
-
 - フィルタの頂点データ共通化
-
-- auto_reloadを有効にするとたまにコンパイル失敗する (done)
-  1203-19で壊した模様
-  cannot locate suitable resource to bind variable "vary_smposa". Possibly
-  large array.
-  -> 配列をクリアしていないせいで毎回伸びていたのが原因
-
-- projection_infoがengine側で固定なのをなおす。(done)
 
 - glc.shadowmap_resolutionとcam.shadowmap_sizeは同じなので後者は削除
   cam.virt_width -> シェーダの中で使っている
   cam.display_width -> glViewportしている
   cam.window_width -> handle_eventで使っている
 
-- 描画パスの抽象化(done)
-
 - 外部出力
 
 - postprocessフィルタは個々がフレームバッファを持つのではなくす
 
-- ssubtype毎にdrawerインスタンス作っているのをなんとかする(done)
-
 - fxaa.pxのinit_postprocess_fboでdepth textureを作るかどうかの判定
-
-- glTextureBarrierを使えばdepth_rdコピー使わなくてよいはず (done)
 
 - 衝突判定用3d textureをreshape
 
@@ -73,8 +50,6 @@ TODO
 
 - emitのミップマップ
 
-- 初期テクスチャ作るときにemitも入れてみる(done)
-
 - emitをプロシージャルに
 
 - fragmentパターンを使ったtpat生成を試す
@@ -87,8 +62,6 @@ TODO
   - 1/60よりずっと小さな遅延なのにかくつくのは何が悪いのか
 
 - linuxでのjoystick有効に
-
-- 選択領域をセーブ・ロード(done)
 
 - 網目や格子状の模様をシェーダで描く
 
@@ -112,8 +85,6 @@ TODO
 
 - procedural: 再帰的領域分割
 
-- tpat回転反転: miplevelを固定すると表示がおかしい(done)
-
 - tpat回転反転の平面と球面切断テスト
 
 - tpat回転反転: edit_modeの拡大処理の対応
@@ -127,41 +98,13 @@ TODO
 - tpatのサイズを大きくして性能劣化するか見る
   (4,4,4)より(3,3,6)が少し速い? 参照パターンが減るから？
 
-- voxelテクスチャの全体サイズによらず一定の大きさの範囲だけをセーブ・ロード
-  (done)
-
 - pnoise: floatに揃えたら少し遅くなった？
 
 - mipmapのlocal lightとroughness
 
-- "throw" 投げる元のオブジェクトからの相対速度を与えるようにする(done)
-
 - drawer::drawer openglのリソースはsafeにしてよいのか
 
 - drawer間共有データの整理
-
-- 衝突判定後のテクスチャ変更(done)
-
-- 衝突判定後のテクスチャ変更。edit_mode=0のとき(done)
-
-- FIXME: raycast_sortするとspawnされた小さいraycastオブジェクトが見えない。
-  (done)
-
-- 二面、edit_modeのほうが大幅にフレームレート低い理由を調べる
-  miplevelのデフォルト値の違い(done)
-
-- edit_voxel_11_11_6.rawをシリアライズしなおし(done)
-
-- 3dテクスチャの衝突判定(done)
-
-- miplevelをキー操作で固定できるように(done)
-
-- 新raycastで欠落することがある。mipの距離がおかしい？(done)
-
-- シャドウマップ0から1の切り替え付近がIntel GPUでおかしい。Windows/Mac両方
-  で再現。(done)
-
-- 3dテクスチャを切り出してオブジェクトを作る(done)
 
 - miplevelが上がるとroughnessあるいは別のパラメータで影になりやすくする
 
@@ -361,6 +304,41 @@ TODO
 ---------------------------------------------------------------------------
 DONE
 
+- tpat回転反転: miplevelを固定すると表示がおかしい(done)
+- voxelテクスチャの全体サイズによらず一定の大きさの範囲だけをセーブ・ロード
+  (done)
+- "throw" 投げる元のオブジェクトからの相対速度を与えるようにする(done)
+- 衝突判定後のテクスチャ変更(done)
+- 衝突判定後のテクスチャ変更。edit_mode=0のとき(done)
+- FIXME: raycast_sortするとspawnされた小さいraycastオブジェクトが見えない。
+  (done)
+- 二面、edit_modeのほうが大幅にフレームレート低い理由を調べる
+  miplevelのデフォルト値の違い(done)
+- edit_voxel_11_11_6.rawをシリアライズしなおし(done)
+- 3dテクスチャの衝突判定(done)
+- miplevelをキー操作で固定できるように(done)
+- 新raycastで欠落することがある。mipの距離がおかしい？(done)
+- シャドウマップ0から1の切り替え付近がIntel GPUでおかしい。Windows/Mac両方
+  で再現。(done)
+- 3dテクスチャを切り出してオブジェクトを作る(done)
+- ssubtype毎にdrawerインスタンス作っているのをなんとかする(done)
+- glTextureBarrierを使えばdepth_rdコピー使わなくてよいはず (done)
+- 初期テクスチャ作るときにemitも入れてみる(done)
+- 選択領域をセーブ・ロード(done)
+- captureフィルタ復活(done)
+- commandsをやめてmain_ctrl_export_iを渡すようにする(done)
+- resize時の動作を決め、projection_infoはすべてapp側で保持するようにする
+  (done)
+- setfbがvbid_invalid()を返すとtriangles surfaceが表示されなくなるのは何故？
+  -> vbid_invalid()ではなく0を返していた。(done)
+- camera_dfの汎用化(done)
+- auto_reloadを有効にするとたまにコンパイル失敗する (done)
+  1203-19で壊した模様
+  cannot locate suitable resource to bind variable "vary_smposa". Possibly
+  large array.
+  -> 配列をクリアしていないせいで毎回伸びていたのが原因
+- projection_infoがengine側で固定なのをなおす。(done)
+- 描画パスの抽象化(done)
 - 遠距離で乱れる(done)
 - 初期miplevelを6にしたために格子状の影ができる(done)
 - edit_mode ミップマップ更新(done)

@@ -8,6 +8,8 @@ public struct motion_controller_serial(uint index)
 {
   serial_port sp = serial_port(index);
   glm::quat value;
+  glm::quat initial_value_inv;
+  bool initialized;
   string buffer;
   public function bool is_valid() const
   {
@@ -18,12 +20,18 @@ public struct motion_controller_serial(uint index)
     update_value();
     return value;
   }
+  public function void reset_initial()
+  {
+    initialized = false;
+    initial_value_inv = glm::quat();
+  }
   private function void update_value()
   {
     if (!sp.is_valid()) {
       return;
     }
     size_t olen = buffer.size();
+    // debug_log("motion_controller", olen);
     sp.read_nonblocking(buffer);
     if (buffer.size() == olen) {
       return;
@@ -52,10 +60,17 @@ public struct motion_controller_serial(uint index)
           ++i;
         }
       }
-      value.x = a[0];
-      value.y = a[1];
-      value.z = -a[2];
-      value.w = a[3];
+      glm::quat v;
+      v.x = a[0];
+      v.y = a[1];
+      v.z = -a[2];
+      v.w = a[3];
+      if (initialized) {
+        value = v * initial_value_inv;
+      } else {
+        initial_value_inv = v.inverse();
+        initialized = true;
+      }
       // debug_log("quat value", value);
       buffer.erase(0u, p0 + 1);
     }

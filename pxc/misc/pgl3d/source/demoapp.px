@@ -28,7 +28,7 @@ public import pgl3d::geometry::wfobj -;
 public import io::environ;
 public import debug_helper -;
 public import pgl3d::aux::d3axim -;
-// public import pgl3d::aux::serial_port -; // FIXME
+public import pgl3d::aux::enumerate_device -; // FIXME
 public import pgl3d::aux::motion_controller -;
 
 // public import pgl3d::texture::generator -;
@@ -65,33 +65,6 @@ public function void app_main()
 {
   set_debug_log_file("var/demoapp.log");
   set_debug_timestamp(true);
-
-  /*
-  // FIXME
-  if (false) {
-    // シリアルポートが有効かどうか見る
-    for (uint i: 0u .. 32u) {
-      const sp = serial_port(i);
-      debug_log("serial port", i, sp.is_valid());
-    }
-    mutable sp = serial_port(3);
-    string str;
-    for (uint i: 0u .. 128u) {
-      while (true) {
-        string buf;
-        sp.read_nonblocking(buf);
-        debug_log("serial", buf);
-        if (buf.empty()) {
-          io::system.usleep(10000);
-          continue;
-        }
-        str += buf;
-        break;
-      }
-    }
-    debug_log("serial", str);
-  }
-  */
 
   // debug_helper::dump_modules();
   // debug_helper::dump_backtrace();
@@ -156,6 +129,24 @@ public struct demoapp_application()
       conf.conf.get("option_value2", -1, -1, 9));
       // edit modeでは0にしないとカーソルが見えないので注意(miplevel)
     debug_log("init_drawstep done");
+    const ser_name = conf.conf.get("motion_serial", string(), string(),
+      string());
+    if (!ser_name.empty()) {
+      varray{device_info} devs;
+      enumerate_device(devs);
+      for (const i, const e: devs) {
+        if (e.port_name[0u .. 3u] == "COM") {
+          debug_log("device", e);
+          if (e.name == ser_name) {
+            debug_log("found serial");
+            const port_str = e.port_name[3u .. e.port_name.size()];
+            const port_num = from_string{uint}(port_str);
+            app.mctrl.some = make_ptr{motion_controller_serial}(port_num);
+            break;
+          }
+        }
+      }
+    }
     return r;
   }
   public function void on_build_vertices(make_vertices_i mutable& mvx)
@@ -547,8 +538,7 @@ private struct app_demoapp()
   public vertex_attr edit_mode_vattr;
   public ptr{varray{uchar}} capt_data = make_ptr{varray{uchar}}();
   public ftd3_aximaster axim;
-  public motion_controller_serial mctrl = motion_controller_serial(3u);
-    // FIXME: シリアルポート番号
+  public option{ptr{motion_controller_serial}} mctrl;
   init();
   private function void init() {
     string s;
@@ -1086,7 +1076,10 @@ function void handle_keys(app_demoapp mutable& app, cslice{uchar} const& keys,
     buf[3] = buf[0];
     app.axim.axi_write(0x44a00000, buf);
   }
-  glm::quat mctrl_angle = app.mctrl.get_current_value().conjugate();
+  glm::quat mctrl_angle;
+  if (const& mctrl: app.mctrl.some) {
+    mctrl_angle = mctrl->get_current_value().conjugate();
+  }
   /*
   if (app.ictl.get_button(buttons, 10) != 0) {
     app.app_commands["throw"] = "1";

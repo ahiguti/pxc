@@ -381,6 +381,7 @@ void main(void)
   vec4 tex_val1 = vec4(0.5, 0.5, 0.5, 1.0);
   float frag_randval = generate_random(vec3(gl_FragCoord.xy, 0.0));
     // フラグメントの座標から生成した乱数
+  float dist_rnd = frag_randval * 0.125;
   int miplevel = 0;
   <%if><%eq><%stype/>1<%/>
     // raycast
@@ -461,7 +462,6 @@ void main(void)
       <%/>
     <%/>
     <%/>
-    float dist_rnd = frag_randval * 0.125;
     /*
     float dist_pos_campos_2 = dot(pos - campos, pos - campos) + 0.0001;
     float dist_log2 = log(dist_pos_campos_2) * 0.5 / log(2.0);
@@ -769,6 +769,21 @@ void main(void)
   vec3 mate_diffuse = vec3(0.0, 0.0, 0.0);
   vec3 mate_emit = vec3(0.0);
   <%if><%eq><%stype/>1<%/>
+  if (false) {
+    // FIXME テクスチャテスト中
+    if (miplevel < 1.3f + dist_rnd * 0.25f) {
+      vec3 spos = pos * 512.0;
+      float v = clamp(fnoise3(floor(spos) / 32768.0) * 2.0, 0.0, 1.0);
+      if (v > 0.5) {
+        float spxf = fract(spos.x * 64.0);
+        if (spxf < 0.5) {
+          tex_val1.rgb = vec3(1.0, 0.8, 0.0);
+        } else {
+          tex_val1.rgb = vec3(0.0);
+        }
+      }
+    }
+  }
   {
     // tex_val1.a = 0.0;
     float aval = floor(tex_val1.a * 255.0 + 0.5);
