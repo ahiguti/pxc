@@ -432,7 +432,119 @@ public threaded function bool is_plane_node(uint v)
 public threaded function bool is_sphere_node(uint v)
 {
   const node_type = v >> 24u;
-  return node_type >= 1 && node_type <= 159;
+  return node_type >= 2 && node_type <= 159;
+}
+
+public valuetype struct noderef_param()
+{
+  public uvec3 rot;
+  public uvec3 sgn;
+  public uvec3 coord;
+}
+
+public threaded function noderef_param decode_noderef_param(uint v)
+{
+  uint x = (v >> 16u) & 0xffu;
+  uint y = (v >> 8u) & 0xffu;
+  uint z = v & 0xffu;
+  noderef_param p;
+  p.rot = make_uvec3(x >> 7u, y >> 7u, z >> 7u);
+  p.sgn = make_uvec3((x >> 6u) & 1u, (y >> 6u) & 1u, (z >> 6u) & 1u);
+  p.coord = make_uvec3(x & 63u, y & 63u, z & 63u);
+  return p;
+}
+
+public threaded function uint
+encode_noderef_param(noderef_param const& p)
+{
+  uvec3 v;
+  v += map{uvec3, operator::shiftl}(p.rot, make_uvec3(7u, 7u, 7u));
+  v += map{uvec3, operator::shiftl}(p.sgn, make_uvec3(6u, 6u, 6u));
+  v += p.coord;
+  return make_node_reference((v.x << 16u) | (v.y << 8u) | v.z);
+}
+
+public threaded function imat3
+noderef_param_get_imat3(noderef_param const& p)
+{
+  // TODO: 速くする
+  imat3 m;
+  if (p.sgn.x != 0) {
+    m = m * make_imat3(-1, 0, 0, 0, 1, 0, 0, 0, 1);
+  }
+  if (p.sgn.y != 0) {
+    m = m * make_imat3(1, 0, 0, 0, -1, 0, 0, 0, 1);
+  }
+  if (p.sgn.z != 0) {
+    m = m * make_imat3(1, 0, 0, 0, 1, 0, 0, 0, -1);
+  }
+  if (p.rot.x != 0) {
+    m = make_imat3(0, 1, 0, 1, 0, 0, 0, 0, 1) * m; // swap xy
+  }
+  if (p.rot.y != 0) {
+    m = make_imat3(1, 0, 0, 0, 1, 0, 0, 1, 0) * m; // swap yz
+  }
+  if (p.rot.z != 0) {
+    m = make_imat3(0, 0, 1, 0, 1, 0, 1, 0, 0) * m; // swap zx
+  }
+  return m;
+}
+
+public threaded function void
+noderef_param_set_imat3(noderef_param mutable& p, imat3 const& ma)
+{
+  /*
+  xyz -> xyz  -  -  -
+  xyz -> yxz  xy -  -
+  xyz -> xzy  -  yz -
+  xyz -> yzx  xy yz -
+  xyz -> zyx  -  -  zx
+  xyz -> zxy  xy -  zx
+  xyz -> yzx  -  yz zx (unused)
+  xyz -> xzy  xy yz zx (unused)
+  */
+  const& m = ma.to_cslice();
+  threaded function void set_sgn(uint i0, uint i1, uint i2)
+  {
+    p.sgn = make_uvec3(
+      m[i0] < 0 ? 1u : 0u,
+      m[i1] < 0 ? 1u : 0u,
+      m[i2] < 0 ? 1u : 0u);
+  }
+  if (m[0] != 0) {
+    /* x -> x */
+    if (m[4] != 0) {
+      /* y -> y */
+      p.rot = make_uvec3(0, 0, 0); /* xyz -> xyz */
+      set_sgn(0, 4, 8);
+    } else { /* m[5] != 0 */
+      /* z -> y */
+      p.rot = make_uvec3(0, 1, 0); /* xyz -> xzy */
+      set_sgn(0, 7, 5);
+    }
+  } else if (m[1] != 0) {
+    /* y -> x */
+    if (m[3] != 0) {
+      /* x -> y */
+      p.rot = make_uvec3(1, 0, 0); /* xyz -> yxz */
+      set_sgn(3, 1, 8);
+    } else { /* m[5] != 0 */
+      /* z -> y */
+      p.rot = make_uvec3(1, 1, 0); /* xyz -> yzx */
+      set_sgn(6, 1, 5);
+    }
+  } else { /* m[2] != 0 */
+    /* z -> x */
+    if (m[4] != 0) {
+      /* y -> y */
+      p.rot = make_uvec3(0, 0, 1); /* xyz -> zyx */
+      set_sgn(6, 4, 2);
+    } else { /* m[3] != 0 */
+      /* x -> y */
+      p.rot = make_uvec3(1, 0, 1); /* xyz -> zxy */
+      set_sgn(3, 7, 2);
+    }
+  }
 }
 
 public valuetype struct plane_param()

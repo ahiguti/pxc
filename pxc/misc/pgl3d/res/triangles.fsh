@@ -794,7 +794,7 @@ void main(void)
       // miplevelが上がると暗く
     if (aval_me == 1.0 || aval_me == 3.0) {
       // emission
-      mate_emit = tex_val0.rgb;
+      mate_emit = tex_val0.rgb; // FIXME これ正しいのか？
     }
     if (aval_me == 2.0 || aval_me == 3.0) {
       // metal

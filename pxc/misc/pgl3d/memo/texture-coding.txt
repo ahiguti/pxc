@@ -3,14 +3,21 @@ primary 32bit rgba
   value = texelFetch(sampler_voxtmap)
   node_type = int(value.a)
   node_type == 1 (タイル参照)ならtpatを引く
-    tpat_rot, tpat_sgn = value.rgb の何か。タイルを回転させる。
-    value = texelFetch(sampler_voxtpat)
+    tpat_sgn := value.rgbの上から2番目のbit。0なら正。
+    tpat_rot := value.rgbの最上位bit
+      rayの座標からテクスチャの座標を得るのにはsgnを適用後以下を順に適用
+        1. .xが真ならxyいれかえ
+        2. .yが真ならyzいれかえ
+        3. .zが真ならzxいれかえ
+    curpos_tp := value.rgbの下6bit
+    tpat_coord := tpat_sgn_rotate_tile(...)で計算
+    value = texelFetch(sampler_voxtpat, tpat_coord)
     node_type = int(value.a)
   node_type == 0 空白
     distval = value.xyzの何か。空白距離をエンコードしている。
   node_type == 255 壁
     value.rgbは未使用
-  node_type >= 160 平面切断
+  node_type >= 160 && node_type <= 254 平面切断
     param_d = node_type - 208 (-48, +46)
     param_abc = distvalの上位4bit - 8
     distvalの下位4bitは未使用
@@ -42,3 +49,4 @@ raycast_tilemap()
     value_r = texelFetch(sampler_voxtmax)
     value_r = texelFetch(sampler_voxtpax)
   voxtmax, voxtpaxのテクスチャデータはそれぞれtmap_secとtpat_sec
+

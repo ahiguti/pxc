@@ -73,8 +73,9 @@ frame_statistics()
 }
 
 struct
-frame_stat_log()
+frame_stat_log(double threshold0)
 {
+  public float const threshold = static_cast{float}(threshold0);
   public metafunction log_length 256;
   public float mutable fps = 0.0f;
   public farray{frame_statistics, log_length} ents;
@@ -128,7 +129,7 @@ frame_stat_log()
           v_min = min(v_min, df);
           v_max = max(v_max, df);
         }
-        if (v_max / v_min > 1.5f) {
+        if (threshold > 0.0 && v_max / v_min > threshold) {
           debug_log("framestat", k, "avg/min/max=", v_avg, v_min, v_max);
           found = true;
         }
@@ -249,7 +250,8 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
   private node_factory nfac;
   private option{ptr{motion_thread_client}} motion_thr;
   private size_t saved_stat_num_objects;
-  private frame_stat_log mutable fr;
+  private frame_stat_log mutable fr = frame_stat_log(
+    conf.get("framestat_threshold", 0.0, 0.0, 10.0));
   private framerate_control mutable frctl = framerate_control(sdlc.vsync,
     conf.get("fps", 60.0, 1.0, 3600.0),
     conf.get("frame_sleep", 1, 0, 1));

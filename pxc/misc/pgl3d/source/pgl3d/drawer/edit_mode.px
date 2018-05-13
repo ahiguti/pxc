@@ -1389,11 +1389,12 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     const mod_cs = (modmask & 5) == 5;
     const mod_rcs = (modmask & 10) == 10;
     const cursor_spd = mod_shift ? 16 : 1;
-    if (key == SDL_SCANCODE_F12) {
-      save_state();
-    } else if (key == SDL_SCANCODE_F5) {
+    if (key == SDL_SCANCODE_F5 || key == SDL_SCANCODE_F12) {
       tiled_voxel_texture_update_mipmap(emt->vox);
       sync_gl_mipmap_all(*emt);
+      if (key == SDL_SCANCODE_F12) {
+        save_state();
+      }
     } else if (key == SDL_SCANCODE_1) {
       if (mod_shift) {
         change_fill_type(edit_fill_type_blank, mod_ctrl, prev_key_repeat);
@@ -1468,6 +1469,8 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
           const ssz = ttev->get_cursor_range().second;
           if (ssz.y == ssz.z) {
             rotate_range(glm::make_imat3(1, 0, 0, 0, 0, -1, 0, 1, 0));
+          } else {
+            debug_log("ssz.y != ssz.z");
           }
         } else if (mod_ctrl) {
           rotate_range(glm::make_imat3(-1, 0, 0, 0, 1, 0, 0, 0, 1));
@@ -1481,6 +1484,8 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
           const ssz = ttev->get_cursor_range().second;
           if (ssz.y == ssz.z) {
             rotate_range(glm::make_imat3(1, 0, 0, 0, 0, 1, 0, -1, 0));
+          } else {
+            debug_log("ssz.y != ssz.z");
           }
         } else if (mod_ctrl) {
           rotate_range(glm::make_imat3(-1, 0, 0, 0, 1, 0, 0, 0, 1));
@@ -1494,6 +1499,8 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
           const ssz = ttev->get_cursor_range().second;
           if (ssz.z == ssz.x) {
             rotate_range(glm::make_imat3(0, 0, 1, 0, 1, 0, -1, 0, 0));
+          } else {
+            debug_log("ssz.z != ssz.x");
           }
         } else if (mod_ctrl) {
           rotate_range(glm::make_imat3(1, 0, 0, 0, -1, 0, 0, 0, 1));
@@ -1507,6 +1514,8 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
           const ssz = ttev->get_cursor_range().second;
           if (ssz.z == ssz.x) {
             rotate_range(glm::make_imat3(0, 0, -1, 0, 1, 0, 1, 0, 0));
+          } else {
+            debug_log("ssz.z != ssz.x");
           }
         } else if (mod_ctrl) {
           rotate_range(glm::make_imat3(1, 0, 0, 0, -1, 0, 0, 0, 1));
@@ -1520,6 +1529,8 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
           const ssz = ttev->get_cursor_range().second;
           if (ssz.x == ssz.y) {
             rotate_range(glm::make_imat3(0, -1, 0, 1, 0, 0, 0, 0, 1));
+          } else {
+            debug_log("ssz.x != ssz.y");
           }
         } else if (mod_ctrl) {
           rotate_range(glm::make_imat3(1, 0, 0, 0, 1, 0, 0, 0, -1));
@@ -1533,6 +1544,8 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
           const ssz = ttev->get_cursor_range().second;
           if (ssz.x == ssz.y) {
             rotate_range(glm::make_imat3(0, 1, 0, -1, 0, 0, 0, 0, 1));
+          } else {
+            debug_log("ssz.x != ssz.y");
           }
         } else if (mod_ctrl) {
           rotate_range(glm::make_imat3(1, 0, 0, 0, 1, 0, 0, 0, -1));
@@ -1605,8 +1618,8 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
         message += " space " + to_string(dv) + " mip " + to_string(mlpat)
           + " " + to_string(mlmap);
       } else if (is_node_reference(vp)) {
-        const rv = get_node_reference(vp);
-        message += " ref " + to_hexstring(rv);
+        const rp = decode_noderef_param(vp);
+        message += " ref " + to_string(rp);
       } else if (is_filled(vp)) {
         message += " filled";
       } else if (is_plane_node(vp)) {
@@ -2062,6 +2075,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   }
   private function uint rotate_voxel_value(imat3 const& m, uint v)
   {
+    //debug_log("rotate_voxel_value", to_hexstring(v), is_node_reference(v));
     if (is_plane_node(v)) {
       mutable pp = decode_plane_node(v);
       pp.nor = m * pp.nor;
@@ -2071,6 +2085,13 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       sp.center = m * sp.center;
       sp.scale = map{ivec3, abs}(m * sp.scale);
       v = encode_sphere_node(sp);
+    } else if (is_node_reference(v)) {
+      mutable rp = decode_noderef_param(v);
+      debug_log("old rp:", rp, "mat:", rp.get_imat3().to_cslice());
+      const rm = rp.get_imat3();
+      rp.set_imat3(m * rm);
+      debug_log("mod rp:", rp, "mat:", rp.get_imat3().to_cslice());
+      v = encode_noderef_param(rp);
     } else if (is_space_voxel(v)) {
       v = 0u;
     }
@@ -2434,16 +2455,40 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   }
 }
 
-private valuetype struct wall_dir
+private valuetype struct dir2_mask
 {
-  public bool wxn; // x-1が壁
-  public bool wxp; // x+1が壁
-  public bool wyn; // y-1が壁
-  public bool wyp; // y+1が壁
+  public bool xn; // x-1が壁
+  public bool xp; // x+1が壁
+  public bool yn; // y-1が壁
+  public bool yp; // y+1が壁
   public int count;
 }
 
-private threaded function {t} wall_dir
+private threaded function {t} dir2_mask
+get_space_dir(t const& tex, uvec3 const& p)
+{
+  const sz = tex.get_size_uvec3();
+  threaded function texel_value get(uint x, uint y, uint z)
+  {
+    if (x >= sz.x || y >= sz.y || z >= sz.z) {
+      return make_space_voxel();
+    }
+    return tex.get(x, y, z);
+  }
+  dir2_mask r;
+  const vxn = is_space_voxel(get(p.x - 1u, p.y, p.z));
+  const vxp = is_space_voxel(get(p.x + 1u, p.y, p.z));
+  const vyn = is_space_voxel(get(p.x, p.y - 1u, p.z));
+  const vyp = is_space_voxel(get(p.x, p.y + 1u, p.z));
+  r.xn = vxn & (!vxp); // x-1
+  r.xp = (!vxn) & vxp; // x+1
+  r.yn = vyn & (!vyp); // y-1
+  r.yp = (!vyn) & vyp; // y+1
+  r.count = (vxn ? 1 : 0) + (vxp ? 1 : 0) + (vyn ? 1 : 0) + (vyp ? 1 : 0);
+  return r;
+}
+
+private threaded function {t} dir2_mask
 get_wall_dir(t const& tex, uvec3 const& p)
 {
   const sz = tex.get_size_uvec3();
@@ -2454,25 +2499,28 @@ get_wall_dir(t const& tex, uvec3 const& p)
     }
     return tex.get(x, y, z);
   }
-  wall_dir r;
+  dir2_mask r;
   const vxn = is_filled(get(p.x - 1u, p.y, p.z));
   const vxp = is_filled(get(p.x + 1u, p.y, p.z));
   const vyn = is_filled(get(p.x, p.y - 1u, p.z));
   const vyp = is_filled(get(p.x, p.y + 1u, p.z));
-  r.wxn = vxn & (!vxp); // x-1が壁
-  r.wxp = (!vxn) & vxp; // x+1が壁
-  r.wyn = vyn & (!vyp); // y-1が壁
-  r.wyp = (!vyn) & vyp; // y+1が壁
+  r.xn = vxn & (!vxp); // x-1が壁
+  r.xp = (!vxn) & vxp; // x+1が壁
+  r.yn = vyn & (!vyp); // y-1が壁
+  r.yp = (!vyn) & vyp; // y+1が壁
   r.count = (vxn ? 1 : 0) + (vxp ? 1 : 0) + (vyn ? 1 : 0) + (vyp ? 1 : 0);
   return r;
 }
 
-private threaded function void spline_postprocess(pgen_context mutable& ctx)
+private threaded function void
+spline_postprocess(pgen_context mutable& ctx)
 {
-  const tex = ctx.tex_pri; // copy
+  mutable tex = ctx.tex_pri; // copy
   const sz = tex.get_size_uvec3();
   range_foreach{pp_one}(sz);
   range_foreach{pp_copy_back}(sz);
+  tex = ctx.tex_pri; // copy again
+  range_foreach{pp_right_angle_one}(sz);
   threaded function void pp_copy_back(uint x, uint y, uint z)
   {
     const v = get(x, y, z);
@@ -2487,13 +2535,43 @@ private threaded function void spline_postprocess(pgen_context mutable& ctx)
     }
     return tex.get(x, y, z);
   }
+  threaded function void pp_right_angle_one(uint x, uint y, uint z)
+  {
+    const v = get(x, y, z);
+    if (!is_filled(v)) {
+      return;
+    }
+    const pos = make_uvec3(x, y, z);
+    dir2_mask sd = get_space_dir(tex, pos);
+    if (sd.count == 4) {
+      // 四方が空白
+      const sz = make_uvec3(1u, 1u, 1u);
+      pgen_fill_value(pos, sz, make_space_voxel(), ctx);
+      return;
+    }
+    if (sd.count < 2) {
+      // 一方が空白
+      return;
+    }
+    if (sd.xn == sd.xp) {
+      // 左右両方が空白か、左右両方が非空白
+      return;
+    }
+    plane_param pp;
+    pp.dist = -2;
+    pp.nor.x = sd.xn ? 1 : -1;
+    pp.nor.y = sd.yn ? 2 : -2;
+    pp.nor.z = 0;
+    const sz = make_uvec3(1u, 1u, 1u);
+    pgen_fill_plane(pos, sz, pp, ctx);
+  }
   threaded function void pp_one(uint x, uint y, uint z)
   {
     const v = get(x, y, z);
     if (is_filled(v)) {
       return;
     }
-    wall_dir wd = get_wall_dir(tex, make_uvec3(x, y, z));
+    dir2_mask wd = get_wall_dir(tex, make_uvec3(x, y, z));
     if (wd.count >= 3) {
       // 三方以上が壁
       pgen_fill_filled(
@@ -2502,12 +2580,12 @@ private threaded function void spline_postprocess(pgen_context mutable& ctx)
         ctx);
       return;
     }
-    if (!((wd.wxn || wd.wxp) && (wd.wyn || wd.wyp))) {
+    if (!((wd.xn || wd.xp) && (wd.yn || wd.yp))) {
       return;
     }
     // 空白の二方が壁
-    const int dx = wd.wxn ? 1 : -1;
-    const int dy = wd.wyn ? 1 : -1;
+    const int dx = wd.xn ? 1 : -1;
+    const int dy = wd.yn ? 1 : -1;
     int ax;
     int ay;
     bool axw;
@@ -2521,7 +2599,7 @@ private threaded function void spline_postprocess(pgen_context mutable& ctx)
         break;
       }
       const awd = get_wall_dir(tex, make_uvec3(ui(ax), y, z));
-      if ((wd.wyn && !awd.wyn) || (wd.wyp && !awd.wyp)) {
+      if ((wd.yn && !awd.yn) || (wd.yp && !awd.yp)) {
         // y方向にあった壁が途切れた
         axw = false;
         break;
@@ -2536,7 +2614,7 @@ private threaded function void spline_postprocess(pgen_context mutable& ctx)
         break;
       }
       const awd = get_wall_dir(tex, make_uvec3(x, ui(ay), z));
-      if ((wd.wxn && !awd.wxn) || (wd.wxp && !awd.wxp)) {
+      if ((wd.xn && !awd.xn) || (wd.xp && !awd.xp)) {
         // x方向にあった壁が途切れた
         ayw = false;
         break;
@@ -2973,6 +3051,20 @@ private threaded function void pgen_fill_filled(uvec3 const& pos,
     const y1 = pos.y + y;
     const z1 = pos.z + z;
     ctx.tex_pri.set(x1, y1, z1, make_filled_voxel());
+    ctx.tex_sec.set(x1, y1, z1, 0x00808080u);
+  }
+  range_foreach{ffunc}(sz);
+}
+
+private threaded function void pgen_fill_value(uvec3 const& pos,
+  uvec3 const& sz, uint value, pgen_context mutable& ctx)
+{
+  threaded function void ffunc(uint x, uint y, uint z)
+  {
+    const x1 = pos.x + x;
+    const y1 = pos.y + y;
+    const z1 = pos.z + z;
+    ctx.tex_pri.set(x1, y1, z1, value);
     ctx.tex_sec.set(x1, y1, z1, 0x00808080u);
   }
   range_foreach{ffunc}(sz);
