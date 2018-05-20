@@ -14,12 +14,16 @@ enumerate_device(varray{device_info} mutable& devs_r);
 
 extern "implementation" inline
 
+#ifdef _MSC_VER
 #include <setupapi.h>
 #pragma comment(lib, "setupapi.lib")
+#endif
 
 namespace pgl3d {
 
 typedef pgl3d$n::aux$n::enumerate_device$n::device_info$s device_info;
+
+#ifdef _MSC_VER
 
 pxcrt::bt_string
 wstr_to_string(wchar_t const *wstr, size_t wcnt)
@@ -101,6 +105,15 @@ enumerate_device(pxcrt::pxcvarray<device_info>& devs_r)
     devs_r.push_back(di);
   }
 }
+
+#else
+
+void
+enumerate_device(pxcrt::pxcvarray<device_info>& devs_r)
+{
+}
+
+#endif
 
 }
 

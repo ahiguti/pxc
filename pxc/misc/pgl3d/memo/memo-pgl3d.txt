@@ -2,10 +2,20 @@
 ---------------------------------------------------------------------------
 TODO
 
-- rotateするとnode referenceもrotateするように
-  -> パラメータの意味がシェーダと食い違っているので直すべし
+- マージ処理つきペースト V+CTRL
+
+- 0+SHIFT node referenceをなるべく近いplaneなどに変換 convert_to_tmap()
 
 - rotate処理などの汎用処理をedit_modeから分離
+
+- pgen_contextなどの汎用処理をedit_modeから分離
+
+- rotateするとnode referenceもrotateするように(done)
+  -> パラメータの意味がシェーダと食い違っているので直すべし(done)
+
+- filledを置き換えるためのパターン
+
+- planeを置き換えるためのパターン
 
 - 物体切り出して動かすところまで
   - 
@@ -13,10 +23,6 @@ TODO
 - tpat用のパターン
 
 - 表面に貼る計算テクスチャ
-
-- filledを置き換えるためのパターン
-
-- planeを置き換えるためのパターン
 
 - texture_edit::set()すると距離の再計算が走るところが遅い。いっそ再計算やめ
   てしまうか。
@@ -4118,4 +4124,26 @@ xyz -> zxy  xy -  zx
 xyz -> yzx  -  yz zx (使用しない)
 xyz -> xzy  xy yz zx (使用しない)
 
+vec3 tpat_sgn_rotate_tile(in vec3 value, in vec3 rot, in vec3 sgn)
+{
+  // rotとsgnを適用してtpat座標を返す
+  float e = 1.0; // / 65536.0; // valueは整数なので1.0でよい
+  if (sgn.x < 0.0) { value.x = tile3_size.x - e - value.x; }
+  if (sgn.y < 0.0) { value.y = tile3_size.y - e - value.y; }
+  if (sgn.z < 0.0) { value.z = tile3_size.z - e - value.z; }
+  if (rot.x != 0.0) { value.xy = value.yx; }
+  if (rot.y != 0.0) { value.yz = value.zy; }
+  if (rot.z != 0.0) { value.zx = value.xz; }
+  return value;
+}
+
+まずsgnで負号を反転し、そのあとrotでxyzを入れ替える。
+これがtmapオフセットからtpatオフセットへの対応付けの際に適用される。
+適用前のtpatと比べて、その変換の逆変換が適用されたパターンが表示される。
+edit_modeでnode referenceを回転させるには、sgnrotの逆変換にさらに変換を
+適用したものを逆変換
+
+
+---------------------------------------------------------------------------
+planeを置き換えるパターン
 

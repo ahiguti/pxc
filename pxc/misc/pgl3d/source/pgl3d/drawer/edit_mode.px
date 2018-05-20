@@ -549,9 +549,10 @@ private struct texture_edit_view(tptr{texture_edit} const edit)
     current_edit->copy_range(spos, sz, dest, dest_sec, dpos);
   }
   public function {t} void edit_paste_range(uvec3 const& dpos, uvec3 const& sz,
-    t const& src, t const& src_sec, uvec3 const& spos, uint index_mask)
+    t const& src, t const& src_sec, uvec3 const& spos, uint index_mask,
+    merge_mode const& mmod)
   {
-    current_edit->paste_range(dpos, sz, src, src_sec, spos, index_mask);
+    current_edit->paste_range(dpos, sz, src, src_sec, spos, index_mask, mmod);
     merge_edit_view();
   }
   private function void merge_edit_view()
@@ -840,28 +841,31 @@ ptr{gl_texture} const& gltp0)
   }
   public function {t} void edit_paste_range(uvec3 const& dpos,
     uvec3 const& sz, t const& src,
-    t const& src_sec, uvec3 const& spos, uint index_mask)
+    t const& src_sec, uvec3 const& spos, uint index_mask,
+    merge_mode const& mmod)
   {
     if (get_cursor_tpat()) {
-      tpat_edit_paste_range(dpos, sz, src, src_sec, spos, index_mask);
+      tpat_edit_paste_range(dpos, sz, src, src_sec, spos, index_mask, mmod);
     } else {
-      tmap_edit_paste_range(dpos, sz, src, src_sec, spos, index_mask);
+      tmap_edit_paste_range(dpos, sz, src, src_sec, spos, index_mask, mmod);
     }
   }
   public function {t} void tmap_edit_paste_range(uvec3 const& dpos,
     uvec3 const& sz, t const& src,
-    t const& src_sec, uvec3 const& spos, uint index_mask)
+    t const& src_sec, uvec3 const& spos, uint index_mask,
+    merge_mode const& mmod)
   {
     reset_cursor_flick_nosyncgl();
-    tev_tmap.edit_paste_range(dpos, sz, src, src_sec, spos, index_mask);
+    tev_tmap.edit_paste_range(dpos, sz, src, src_sec, spos, index_mask, mmod);
     cursor_flick();
   }
   public function {t} void tpat_edit_paste_range(uvec3 const& dpos,
     uvec3 const& sz, t const& src,
-    t const& src_sec, uvec3 const& spos, uint index_mask)
+    t const& src_sec, uvec3 const& spos, uint index_mask,
+    merge_mode const& mmod)
   {
     reset_cursor_flick_nosyncgl();
-    tev_tpat.edit_paste_range(dpos, sz, src, src_sec, spos, index_mask);
+    tev_tpat.edit_paste_range(dpos, sz, src, src_sec, spos, index_mask, mmod);
     cursor_flick();
   }
   private function bool cursor_shown() const
@@ -1447,7 +1451,10 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       } else if (key == SDL_SCANCODE_C) {
         copy_value();
       } else if (key == SDL_SCANCODE_V) {
-        paste_value(mod_shift ? 0x02u : 0xffu); // mod_shiftなら色だけ貼り付け
+        merge_mode const mmod =
+          mod_ctrl ? merge_mode_or_ori() : merge_mode_opaque();
+        paste_value(mod_shift ? 0x02u : 0xffu, mmod);
+          // mod_shiftなら色だけ貼り付け
       } else if (key == SDL_SCANCODE_COMMA) {
         if (mod_shift) {
           shrink_range();
@@ -1848,7 +1855,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     copied = true;
     // message = "edit_mode: copy value " + to_string(copy_data.copy_size);
   }
-  private function void paste_value(uint index_mask)
+  private function void paste_value(uint index_mask, merge_mode const& mmod)
   {
     const cpos = ttev->get_cursor_pos().first;
     // ペースト先の領域を計算
@@ -1865,7 +1872,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       mi_0, mx_0, mi, mx, sz, cd_mi);
     */
     ttev->edit_paste_range(to_uvec3(mi), to_uvec3(sz), copy_data.tex_pri,
-      copy_data.tex_sec, to_uvec3(cd_mi), index_mask);
+      copy_data.tex_sec, to_uvec3(cd_mi), index_mask, mmod);
     // message = "edit_mode: paste value " + to_string(sz);
   }
   private function void convert_to_tmap()
@@ -1899,7 +1906,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     // debug_log("convert_to_tpat: cursor1:", ttev->get_cursor_pos());
     set_cursor_tpat(true);
     // debug_log("convert_to_tpat: cursor2:", ttev->get_cursor_pos());
-    paste_value(0xffu);
+    paste_value(0xffu, merge_mode_opaque());
     // debug_log("convert_to_tpat: cursor3:", ttev->get_cursor_pos());
     const tsz = ttev->tile_size;
     while (copy_data.copy_size.x < tsz.x) {
@@ -2000,7 +2007,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       }
       copy_data.tex_pri = dpri;
       copy_data.tex_sec = daux;
-      paste_value(0xffu);
+      paste_value(0xffu, merge_mode_opaque());
     }
     {
       // 選択領域を縮小
@@ -2041,7 +2048,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     if (o.y != 0u) { o.y += 1u; }
     if (o.z != 0u) { o.z += 1u; }
     // debug_log("scale_range: 0: copy_data:", copy_data, ttev->get_cursor_pos());
-    paste_value(0xffu);
+    paste_value(0xffu, merge_mode_opaque());
     // debug_log("scale_range: 1: copy_data:", copy_data, ttev->get_cursor_pos());
     // 選択領域を広げたので反映させるためにmove_cursorを呼ぶ
     glm::vec3 cursor_move_r;
@@ -2071,7 +2078,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
         }
       }
     }
-    paste_value(0xffu);
+    paste_value(0xffu, merge_mode_opaque());
   }
   private function uint rotate_voxel_value(imat3 const& m, uint v)
   {
@@ -2087,10 +2094,19 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       v = encode_sphere_node(sp);
     } else if (is_node_reference(v)) {
       mutable rp = decode_noderef_param(v);
-      debug_log("old rp:", rp, "mat:", rp.get_imat3().to_cslice());
+      // debug_log("old rp:", rp, "mat:", rp.get_imat3().to_cslice());
+      // debug_log("rot mat:", m.to_cslice());
       const rm = rp.get_imat3();
-      rp.set_imat3(m * rm);
-      debug_log("mod rp:", rp, "mat:", rp.get_imat3().to_cslice());
+        // これはシェーダがtmatの座標からtpatの座標に変換する際に適用する変換
+        // なので、表示の際にはtpatデータに対してこれの逆変換が適用されたパタン
+        // が表示されることになる
+      const& s = m.to_cslice();
+      const m_trans = make_imat3(
+        s[0], s[3], s[6],
+        s[1], s[4], s[7],
+        s[2], s[5], s[8]);
+      rp.set_imat3(rm * m_trans);
+      // debug_log("mod rp:", rp, "mat:", rp.get_imat3().to_cslice());
       v = encode_noderef_param(rp);
     } else if (is_space_voxel(v)) {
       v = 0u;
@@ -2200,7 +2216,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
         }
       }
     }
-    paste_value(0xffu);
+    paste_value(0xffu, merge_mode_opaque());
   }
   private function void fill_range_value(uint v_pri, uint v_sec, bool set_sec)
   {
@@ -2449,7 +2465,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     }
     */
     //debug_log("dbg cursor", ttev->get_cursor_range());
-    paste_value(0xff);
+    paste_value(0xff, merge_mode_opaque());
     //debug_log("dbg cursor", ttev->get_cursor_range());
     copied = false;
   }

@@ -22,7 +22,9 @@ struct serial_port {
   void close();
   void read_nonblocking(pxcrt::bt_string& buf_apnd);
 private:
+  #ifdef _MSC_VER
   HANDLE handle;
+  #endif
   pxcrt::bt_string error;
   serial_port(serial_port const&) = delete;
   serial_port& operator =(serial_port const&) = delete;
@@ -40,6 +42,7 @@ namespace pgl3d {
 
 serial_port::serial_port(unsigned index)
 {
+  #ifdef _MSC_VER
   std::string s = "\\\\.\\COM" + std::to_string(index);
   handle = CreateFileA(s.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
     OPEN_EXISTING, 0, nullptr);
@@ -75,31 +78,41 @@ serial_port::serial_port(unsigned index)
     close();
     return;
   }
+  #endif
 }
 
 serial_port::~serial_port()
 {
+  #ifdef _MSC_VER
   close();
+  #endif
 }
 
 void
 serial_port::close()
 {
+  #ifdef _MSC_VER
   if (is_valid()) {
     CloseHandle(handle);
   }
   handle = INVALID_HANDLE_VALUE;
+  #endif
 }
 
 pxcrt::bt_bool
 serial_port::is_valid() const
 {
+  #ifdef _MSC_VER
   return handle != INVALID_HANDLE_VALUE;
+  #else
+  return false;
+  #endif
 }
 
 void
 serial_port::read_nonblocking(pxcrt::bt_string& buf_apnd)
 {
+  #ifdef _MSC_VER
   DWORD err;
   COMSTAT cst;
   ClearCommError(handle, &err, &cst);
@@ -118,6 +131,7 @@ serial_port::read_nonblocking(pxcrt::bt_string& buf_apnd)
   if (lenr != len) {
     buf_apnd.resize(olen + lenr, 0);
   }
+  #endif
 }
 
 };

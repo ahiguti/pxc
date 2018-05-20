@@ -356,13 +356,15 @@ int raycast_get_miplevel(in vec3 pos, in vec3 campos, in float dist_rnd)
   float dist_pos_campos_2 = dot(pos - campos, pos - campos) + 0.0001;
   float dist_log2 = log(dist_pos_campos_2) * 0.5 / log(2.0);
   /// return int(dist_log2 + dist_rnd * 4.0 + float(virt3_size_log2) - 9.5);
-  return int(dist_log2 * 1.0 + dist_rnd * 4.0 + float(virt3_size_log2) - 9.5);
-  //return int(dist_log2 * 1.0 + dist_rnd * 4.0 + float(virt3_size_log2) - 7.5);
+  // return int(dist_log2 * 1.0 + dist_rnd * 4.0 + float(virt3_size_log2) - 9.5);
+  return int(dist_log2 * 1.0 + dist_rnd * 4.0 + float(virt3_size_log2) - 9.0);
+  // return int(dist_log2 * 1.0 + dist_rnd * 4.0 + float(virt3_size_log2) - 7.5);
     // TODO: LODバイアス調整できるようにする
 }
 
 vec3 tpat_sgn_rotate_tile(in vec3 value, in vec3 rot, in vec3 sgn)
 {
+  // rotとsgnを適用してtpat座標を返す
   float e = 1.0; // / 65536.0; // valueは整数なので1.0でよい
   if (sgn.x < 0.0) { value.x = tile3_size.x - e - value.x; }
   if (sgn.y < 0.0) { value.y = tile3_size.y - e - value.y; }
@@ -434,7 +436,7 @@ int raycast_tilemap(
   vec4 hit_value = vec4(0.0);
   int node_type = 0;
   int i;
-  const int imax = 256;
+  const int imax = 32; // raycastループ回数の上限
   for (i = 0; i < imax; ++i) {
     if (mip_detail && hit < 0) {
       // 詳細モードであればカメラからの距離に応じたmiplevelでテクスチャを引く

@@ -8,6 +8,7 @@ public import pgl3d::texture::texture -;
 public import pgl3d::texture::voxel -;
 public import pgl3d::engine::util -;
 public import pgl3d::sdl::sdlutil -;
+public import pointer::tfuncptr -;
 
 public metafunction texture_reshaped array3_pot{varray{uint}, 0};
   // TODO: test reshape
@@ -63,6 +64,25 @@ public multithreaded struct modified_range
     merged_modified_sz = to_uvec3(mx + make_ivec3(1, 1, 1) - mi);
   }
 }
+
+private threaded function uint
+merge_mode_f_opaque(uint ov, uint v)
+{
+  return v;
+}
+
+private threaded function uint
+merge_mode_f_or_ori(uint ov, uint v)
+{
+  return is_space_voxel(ov) ? v : ov;
+}
+
+public metafunction merge_mode
+pointer::tfuncptr::tfuncptr_matching_function{merge_mode_f_opaque};
+public metafunction merge_mode_opaque
+pointer::tfuncptr::make_tfuncptr{merge_mode_f_opaque};
+public metafunction merge_mode_or_ori
+pointer::tfuncptr::make_tfuncptr{merge_mode_f_or_ori};
 
 public multithreaded struct
 texture_edit()
@@ -150,7 +170,8 @@ texture_edit()
     texture_data_copy_range(dest_aux, dpos, data_sec[0], spos, sz);
   }
   public function {t} void paste_range(uvec3 const& dpos, uvec3 sz,
-    t const& src, t const& src_aux, uvec3 const& spos, uint index_mask)
+    t const& src, t const& src_aux, uvec3 const& spos, uint index_mask,
+    merge_mode const& mmod)
   {
     sz = clamp_size(src, spos, sz);
     sz = clamp_size(data_pri[0], dpos, sz);
@@ -160,14 +181,12 @@ texture_edit()
     // debug_log("paste_range", spos, sz, dpos);
     bool shape_modified = false;
     if ((index_mask & 1u) != 0) {
-      // pri and sec
+      // pri
       shape_modified = texture_data_copy_range_check_modified(data_pri[0],
-	dpos, src, spos, sz);
-      if ((index_mask & 2u) != 0) {
-	texture_data_copy_range(data_sec[0], dpos, src_aux, spos, sz);
-      }
-    } else if ((index_mask & 2u) != 0) {
-      // sec only
+	dpos, src, spos, sz, mmod);
+    }
+    if ((index_mask & 2u) != 0) {
+      // sec
       texture_data_copy_range_secondary(data_pri[0], data_sec[0], dpos,
 	src_aux, spos, sz);
     }
@@ -248,7 +267,7 @@ metafunction si static_cast{int};
 private threaded function {t0, t1} bool texture_data_copy_range_check_modified(
   t0 mutable& dest,
   uvec3 const& dpos, t1 const& src, uvec3 const& spos,
-  uvec3 const& sz)
+  uvec3 const& sz, merge_mode const& mmod)
 {
   bool modified = false;
   for (uint z: 0 .. sz.z) {
@@ -256,8 +275,9 @@ private threaded function {t0, t1} bool texture_data_copy_range_check_modified(
       for (uint x: 0 .. sz.x) {
 	const v = src.get(spos.x + x, spos.y + y, spos.z + z);
 	const ov = dest.get(dpos.x + x, dpos.y + y, dpos.z + z);
-	modified |= (ov != v);
-	dest.set(dpos.x + x, dpos.y + y, dpos.z + z, v);
+        const nv = mmod(ov, v);
+	modified |= (ov != nv);
+	dest.set(dpos.x + x, dpos.y + y, dpos.z + z, nv);
       }
     }
   }
