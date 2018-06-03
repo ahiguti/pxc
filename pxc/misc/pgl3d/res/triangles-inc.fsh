@@ -436,7 +436,7 @@ int raycast_tilemap(
   vec4 hit_value = vec4(0.0);
   int node_type = 0;
   int i;
-  const int imax = 32; // raycastループ回数の上限
+  const int imax = 64; // raycastループ回数の上限
   for (i = 0; i < imax; ++i) {
     if (mip_detail && hit < 0) {
       // 詳細モードであればカメラからの距離に応じたmiplevelでテクスチャを引く
