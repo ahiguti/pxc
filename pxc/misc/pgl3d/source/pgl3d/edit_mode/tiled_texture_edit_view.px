@@ -1,0 +1,339 @@
+private threaded namespace pgl3d::edit_mode::tiled_texture_edit_view
+  "use-unsafe";
+public import common -;
+public import meta m;
+private import pgl3d::edit_mode::base -;
+public import pgl3d::edit_mode::texture_edit_view -;
+public import pgl3d::edit_mode::vecutil -;
+public import pgl3d::edit_mode::sync_gl -;
+public import pgl3d::edit_mode::edit_mode_texture -;
+
+public struct
+tiled_texture_edit_view(ptr{edit_mode_texture} const& emt0)
+{
+  private ptr{edit_mode_texture} const emt = emt0;
+  public uvec3 const tmap_size =
+    emt->vox.tmap_edit->data_pri[0].get_size_uvec3();
+  public uvec3 const tpat_size =
+    emt->vox.tpat_edit->data_pri[0].get_size_uvec3();
+  public uvec3 const tile_size = emt->vox.voxtile.get_size_uvec3();
+  private texture_edit_view tev_tmap = texture_edit_view(
+    emt->vox.tmap_edit);
+  private texture_edit_view tev_tpat = texture_edit_view(
+    emt->vox.tpat_edit);
+  private ptr{gl_texture} const gl_tmap = emt->glt_voxtmap;
+  private ptr{gl_texture} const gl_tmap_sec = emt->glt_voxtmax;
+  private ptr{gl_texture} const gl_tpat = emt->glt_voxtpat;
+  private ptr{gl_texture} const gl_tpat_sec = emt->glt_voxtpax;
+  private ttev_state state;
+  init();
+  private function void init()
+  {
+    // debug_log("tmap0 size", texture_data_get_size(tmap0));
+    state.cursor_flick = 0;
+    state.cursor_color_0 = 0xffffffffu;
+    state.cursor_color_1 = 0xff00ffffu;
+    state.cursor_tpat = false;
+    state.cursor_tmap_0 = make_uvec3(0, 0, tmap_size.z - 1u);
+    state.cursor_tmap_1 = state.cursor_tmap_0;
+    state.cursor_tpat_0 = make_uvec3(0, 0, tpat_size.z - 1u);
+    state.cursor_tpat_1 = state.cursor_tpat_0;
+  }
+  public function ttev_state get_state() const
+  {
+    return state;
+  }
+  public function void set_state(ttev_state const& nst)
+  {
+    set_cursor_color(0u, 0u);
+    set_tmap_cursor_pos(nst.cursor_tmap_0, nst.cursor_tmap_0);
+    set_cursor_tpat(false);
+  }
+  public function bool get_cursor_tpat() const
+  {
+    return state.cursor_tpat;
+  }
+  public function pair{uint, uint} get_cursor_color() const
+  {
+    return pair{uint, uint}(state.cursor_color_0, state.cursor_color_1);
+  }
+  public function pair{uvec3, uvec3} get_cursor_pos() const
+  {
+    // プライマリ、セカンダリのカーソル位置を返す
+    return state.cursor_tpat ? get_tpat_cursor_pos() : get_tmap_cursor_pos();
+  }
+  public function pair{uvec3, uvec3} get_tmap_cursor_pos() const
+  {
+    return pair{uvec3, uvec3}(state.cursor_tmap_0, state.cursor_tmap_1);
+  }
+  public function pair{uvec3, uvec3} get_tpat_cursor_pos() const
+  {
+    return pair{uvec3, uvec3}(state.cursor_tpat_0, state.cursor_tpat_1);
+  }
+  public function pair{uvec3, uvec3} get_cursor_range() const
+  {
+    // カーソル範囲の始点と大きさを返す
+    return state.cursor_tpat
+      ? get_tpat_cursor_range() : get_tmap_cursor_range();
+  }
+  public function pair{uvec3, uvec3} get_tmap_cursor_range() const
+  {
+    const mi = map{uvec3, min}(state.cursor_tmap_0, state.cursor_tmap_1);
+    const mx = map{uvec3, max}(state.cursor_tmap_0, state.cursor_tmap_1);
+    return pair{uvec3, uvec3}(mi, mx + make_uvec3(1, 1, 1) - mi);
+  }
+  public function pair{uvec3, uvec3} get_tpat_cursor_range() const
+  {
+    const mi = map{uvec3, min}(state.cursor_tpat_0, state.cursor_tpat_1);
+    const mx = map{uvec3, max}(state.cursor_tpat_0, state.cursor_tpat_1);
+    return pair{uvec3, uvec3}(mi, mx + make_uvec3(1, 1, 1) - mi);
+  }
+  public function uint tmap_edit_get(uvec3 const& pos,
+    texture_value_index_e idx, size_t miplevel) const
+  {
+    return tev_tmap.edit_get(pos, idx, miplevel);
+  }
+  public function uint tpat_edit_get(uvec3 const& pos,
+    texture_value_index_e idx, size_t miplevel) const
+  {
+    return tev_tpat.edit_get(pos, idx, miplevel);
+  }
+  public function void reset_cursor_flick()
+  {
+    reset_cursor_flick_nosyncgl();
+    sync_gl();
+  }
+  public function void cursor_flick()
+  {
+    if (++state.cursor_flick >= 60) {
+      state.cursor_flick = 0;
+    }
+    view_update_cursor_color();
+    sync_gl();
+  }
+  public function void cursor_flick_hide()
+  {
+    state.cursor_flick = 30;
+    view_update_cursor_color();
+    sync_gl();
+  }
+  public function void set_cursor_tpat(bool ctpat)
+  {
+    if (ctpat == state.cursor_tpat) {
+      return;
+    }
+    reset_cursor_flick_nosyncgl();
+    if (ctpat) {
+      tev_tpat.set_cursor_pos(state.cursor_tpat_0, state.cursor_tpat_1);
+    } else {
+      tev_tpat.set_cursor_pos(make_uvec3(0, 0, tpat_size.z - 1),
+        make_uvec3(0, 0, tpat_size.z - 1));
+    }
+    state.cursor_tpat = ctpat;
+    cursor_flick();
+  }
+  public function void set_cursor_color(uint c0, uint c1)
+  {
+    reset_cursor_flick_nosyncgl();
+    state.cursor_color_0 = c0;
+    state.cursor_color_1 = c1;
+    cursor_flick();
+  }
+  public function void set_tmap_cursor_pos(uvec3 c0, uvec3 c1)
+  {
+    reset_cursor_flick_nosyncgl();
+    debug_log("set_tmap_cursor_pos", c0);
+    c0 = tev_tmap.clamp(c0);
+    debug_log("set_tmap_cursor_pos ->", c0);
+    c1 = tev_tmap.clamp(c1);
+    state.cursor_tmap_0 = c0;
+    state.cursor_tmap_1 = c1;
+    tev_tmap.set_cursor_pos(c0, c1);
+    cursor_flick();
+  }
+  public function void set_tpat_cursor_pos(uvec3 c0, uvec3 c1)
+  {
+    reset_cursor_flick_nosyncgl();
+    c0 = tev_tpat.clamp(c0);
+    c1 = tev_tpat.clamp(c1);
+    state.cursor_tpat_0 = c0;
+    state.cursor_tpat_1 = c1;
+    tev_tpat.set_cursor_pos(c0, c1);
+    cursor_flick();
+  }
+  public function ivec3 clamp_cursor_pos(ivec3 pos)
+  {
+    const upos = to_uvec3(map{ivec3, max}(pos, ivec3()));
+    if (state.cursor_tpat) {
+      return to_ivec3(tev_tpat.clamp(upos));
+    } else {
+      return to_ivec3(tev_tmap.clamp(upos));
+    }
+  }
+  public function void set_cursor_pos(uvec3 c0, uvec3 c1)
+  {
+    if (state.cursor_tpat) {
+      set_tpat_cursor_pos(c0, c1);
+    } else {
+      set_tmap_cursor_pos(c0, c1);
+    }
+  }
+  public function void tmap_edit_set(uvec3 const& pos,
+    texture_value_index_e idx, uint v)
+  {
+    const tmap_fixed = map{uvec3, operator::div}(tpat_size, tile_size);
+    if (le_all_uvec3(pos, tmap_fixed)) {
+      /* パターンが固定されている領域 */
+      debug_log("tmap_edit_set: fixed area", pos);
+      return;
+    }
+    reset_cursor_flick_nosyncgl();
+    tev_tmap.edit_set(pos, idx, v);
+    cursor_flick();
+  }
+  public function void tpat_edit_set(uvec3 const& pos,
+    texture_value_index_e idx, uint v)
+  {
+    reset_cursor_flick_nosyncgl();
+    tev_tpat.edit_set(pos, idx, v);
+    cursor_flick();
+  }
+  public function void edit_fill_range(uvec3 const& dpos, uvec3 const& sz,
+    uint v, uint v_sec)
+  {
+    if (get_cursor_tpat()) {
+      tpat_edit_fill_range(dpos, sz, v, v_sec);
+    } else {
+      tmap_edit_fill_range(dpos, sz, v, v_sec);
+    }
+  }
+  public function void tmap_edit_fill_range(uvec3 const& dpos, uvec3 const& sz,
+    uint v, uint v_sec)
+  {
+    reset_cursor_flick_nosyncgl();
+    tev_tmap.edit_fill_range(dpos, sz, v, v_sec);
+    cursor_flick();
+  }
+  public function void tpat_edit_fill_range(uvec3 const& dpos, uvec3 const& sz,
+    uint v, uint v_sec)
+  {
+    reset_cursor_flick_nosyncgl();
+    tev_tpat.edit_fill_range(dpos, sz, v, v_sec);
+    cursor_flick();
+  }
+  public function {t} void edit_copy_range(uvec3 const& spos, uvec3 const& sz,
+    t mutable& dest, t mutable& dest_sec,
+    uvec3 const& dpos)
+  {
+    if (get_cursor_tpat()) {
+      tpat_edit_copy_range(spos, sz, dest, dest_sec, dpos);
+    } else {
+      tmap_edit_copy_range(spos, sz, dest, dest_sec, dpos);
+    }
+  }
+  public function {t} void tmap_edit_copy_range(uvec3 const& spos,
+    uvec3 const& sz, t mutable& dest, t mutable& dest_sec,
+    uvec3 const& dpos)
+  {
+    tev_tmap.edit_copy_range(spos, sz, dest, dest_sec, dpos);
+  }
+  public function {t} void tpat_edit_copy_range(uvec3 const& spos,
+    uvec3 const& sz, t mutable& dest, t mutable& dest_sec,
+    uvec3 const& dpos)
+  {
+    tev_tpat.edit_copy_range(spos, sz, dest, dest_sec, dpos);
+  }
+  public function {t} void edit_paste_range(uvec3 const& dpos,
+    uvec3 const& sz, t const& src,
+    t const& src_sec, uvec3 const& spos, uint index_mask,
+    merge_mode const& mmod)
+  {
+    if (get_cursor_tpat()) {
+      tpat_edit_paste_range(dpos, sz, src, src_sec, spos, index_mask, mmod);
+    } else {
+      tmap_edit_paste_range(dpos, sz, src, src_sec, spos, index_mask, mmod);
+    }
+  }
+  public function {t} void tmap_edit_paste_range(uvec3 const& dpos,
+    uvec3 const& sz, t const& src,
+    t const& src_sec, uvec3 const& spos, uint index_mask,
+    merge_mode const& mmod)
+  {
+    reset_cursor_flick_nosyncgl();
+    tev_tmap.edit_paste_range(dpos, sz, src, src_sec, spos, index_mask, mmod);
+    cursor_flick();
+  }
+  public function {t} void tpat_edit_paste_range(uvec3 const& dpos,
+    uvec3 const& sz, t const& src,
+    t const& src_sec, uvec3 const& spos, uint index_mask,
+    merge_mode const& mmod)
+  {
+    reset_cursor_flick_nosyncgl();
+    tev_tpat.edit_paste_range(dpos, sz, src, src_sec, spos, index_mask, mmod);
+    cursor_flick();
+  }
+  private function bool cursor_shown() const
+  {
+    return state.cursor_flick > 0 && state.cursor_flick < 30;
+  }
+  private function void reset_cursor_flick_nosyncgl()
+  {
+    if (!cursor_shown()) {
+      state.cursor_flick = 0;
+      return;
+    }
+    state.cursor_flick = 0;
+    view_update_cursor_color();
+  }
+  private function void view_update_cursor_color()
+  {
+    if (state.cursor_tpat) {
+      if (cursor_shown()) {
+        tev_tpat.set_cursor_color(state.cursor_color_0, state.cursor_color_1);
+      } else {
+        tev_tpat.set_cursor_color(0, 0);
+      }
+    } else {
+      if (cursor_shown()) {
+        tev_tmap.set_cursor_color(state.cursor_color_0, state.cursor_color_1);
+      } else {
+        tev_tmap.set_cursor_color(0, 0);
+      }
+    }
+  }
+  private function void sync_gl()
+  {
+    pair{uvec3, uvec3} tmmod = tev_tmap.get_view_modified(true);
+    if (tmmod.second.x != 0u) {
+      // debug_log("sync tmmod", tmmod);
+      texture_data_mip_sync_gl(tev_tmap.tview_pri,
+        tev_tmap.current_edit->data_pri, tmmod.first,
+        tmmod.second, gl_tmap);
+      texture_data_mip_sync_gl(tev_tmap.tview_sec,
+        tev_tmap.current_edit->data_sec, tmmod.first,
+        tmmod.second, gl_tmap_sec);
+    }
+    pair{uvec3, uvec3} tpmod = tev_tpat.get_view_modified(true);
+    if (tpmod.second.x != 0u) {
+      // debug_log("sync tpmod", tmmod);
+      texture_data_mip_sync_gl(tev_tpat.tview_pri,
+        tev_tpat.current_edit->data_pri, tpmod.first,
+        tpmod.second, gl_tpat);
+      texture_data_mip_sync_gl(tev_tpat.tview_sec,
+        tev_tpat.current_edit->data_sec, tpmod.first,
+        tpmod.second, gl_tpat_sec);
+    }
+  }
+}
+
+public struct ttev_state {
+  public int cursor_flick;
+  public uint cursor_color_0;
+  public uint cursor_color_1;
+  public bool cursor_tpat;
+  public uvec3 cursor_tpat_0;
+  public uvec3 cursor_tpat_1;
+  public uvec3 cursor_tmap_0;
+  public uvec3 cursor_tmap_1;
+}
+

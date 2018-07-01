@@ -1,0 +1,79 @@
+private threaded namespace pgl3d::edit_mode::noedit_mode "use-unsafe";
+public import common -;
+public import meta m;
+private import pgl3d::edit_mode::base -;
+private import pgl3d::edit_mode::edit_mode_texture -;
+private import pgl3d::edit_mode::sync_gl -;
+
+public struct noedit_mode(ptr{edit_mode_texture} const& emt0)
+<edit_mode_i>
+{
+  // edit_modeが無効のときのedit_mode_i実装。view無しでeditを直接glの
+  // テクスチャに反映させる。
+  private ptr{edit_mode_texture} emt = emt0;
+    // emt->voxがtiled_voxel_texture
+    // emt->vox.tmap_editとemt->vox.tpat_editがtptr{texture_edit}
+    // emt->glt_voxtmapなどがptr{gl_texture}
+  private tptr{texture_edit} tmap_edit = emt->vox.tmap_edit;
+  private tptr{texture_edit} tpat_edit = emt->vox.tpat_edit;
+  private ptr{gl_texture} glt_tmap_pri = emt->glt_voxtmap;
+  private ptr{gl_texture} glt_tmap_sec = emt->glt_voxtmax;
+  private ptr{gl_texture} glt_tpat_pri = emt->glt_voxtpat;
+  private ptr{gl_texture} glt_tpat_sec = emt->glt_voxtpax;
+  public function void on_key_pressed(int scancode, uint modmask,
+    glm::vec3 mutable& cursor_move_r, string mutable& msg_r)
+  {
+  }
+  public function void set_camera_angle(glm::quat const& angle)
+  {
+  }
+  public function void on_frame(projection_info const& prj)
+  {
+    // debug_log("noedit on_frame");
+    sync_gl();
+    // debug_log("noedit on_frame done");
+  }
+  public function void modify_tmap(glm::uvec3 const& pos, uint value)
+  {
+    // TODO: 範囲を一括して更新する手段を用意
+    tmap_edit->set(pos, texture_value_index_primary, value);
+    // debug_log("noedit modify_tmap");
+  }
+  private function void sync_gl()
+  {
+    mutable& tme = *tmap_edit;
+    mutable& tpe = *tpat_edit;
+    /* tmap変更箇所のglへの反映。個々の範囲ごとにコピーする */
+    const tmmodarr = tme.get_modified_array(true);
+    for (size_t i, const& pos: tmmodarr) {
+      const sz = pos.second - pos.first + make_ivec3(1, 1, 1);
+      const s = sz.x * sz.y * sz.z;
+      // debug_log("noedit sync pos", pos, s);
+      texture_data_mip_sync_gl(tme.data_pri[0], tme.data_pri,
+        to_uvec3(pos.first), to_uvec3(sz), glt_tmap_pri);
+      texture_data_mip_sync_gl(tme.data_sec[0], tme.data_sec,
+        to_uvec3(pos.first), to_uvec3(sz), glt_tmap_sec);
+    }
+    /*
+    pair{uvec3, uvec3} tmmod = tme.get_modified_merged(true); // (pos, sz)
+    if (tmmod.second.x != 0u) {
+      const sz = tmmod.second;
+      const s = sz.x * sz.y * sz.z;
+      // debug_log("noedit sync tmmod", tmmod, s);
+      texture_data_mip_sync_gl(tme.data_pri[0], tme.data_pri,
+        tmmod.first, tmmod.second, glt_tmap_pri);
+      texture_data_mip_sync_gl(tme.data_sec[0], tme.data_sec,
+        tmmod.first, tmmod.second, glt_tmap_sec);
+    }
+    */
+    pair{uvec3, uvec3} tpmod = tpe.get_modified_merged(true);
+    if (tpmod.second.x != 0u) {
+      // debug_log("noedit sync tpmod", tpmod);
+      texture_data_mip_sync_gl(tpe.data_pri[0], tpe.data_pri,
+        tpmod.first, tpmod.second, glt_tpat_pri);
+      texture_data_mip_sync_gl(tpe.data_sec[0], tpe.data_sec,
+        tpmod.first, tpmod.second, glt_tpat_sec);
+    }
+  }
+}
+

@@ -1,0 +1,157 @@
+private threaded namespace pgl3d::edit_mode::texutil "use-unsafe";
+public import common -;
+public import meta m;
+public import glm -;
+private import pgl3d::texture::voxel -;
+private import pgl3d::engine::util -;
+private import pgl3d::edit_mode::vecutil -;
+
+public function {t} void
+shrink_voxel_value(bool for_mipmap, t const& spri, t const& ssec,
+  texel_value mutable& dpri, texel_value mutable& dsec, ivec3 const& p)
+{
+  uint count_ref;
+  uint count_filled;
+  uint count_plane;
+  uint count_sphere;
+  uint count_color;
+  uint count_color_emit;
+  plane_param pp;
+  sphere_param sp;
+  color_param cp;
+  color_param cp_emit;
+  const x0 = p.x;
+  const y0 = p.y;
+  const z0 = p.z;
+  for (const z: 0 .. 2) {
+    for (const y: 0 .. 2) {
+      for (const x: 0 .. 2) {
+        const offset = make_ivec3(x * 2 - 1, y * 2 - 1, z * 2 - 1);
+        const v = spri.get(ui(x0 * 2 + x), ui(y0 * 2 + y), ui(z0 * 2 + z));
+        const vs = ssec.get(ui(x0 * 2 + x), ui(y0 * 2 + y), ui(z0 * 2 + z));
+        if (is_space_voxel(v)) {
+          continue; // 色決定の分母に含めない
+        } else if (is_node_reference(v)) {
+          ++count_ref;
+        } else if (is_filled(v)) {
+          ++count_filled;
+        } else if (is_plane_node(v)) {
+          mutable p = decode_plane_node(v);
+          // debug_log("p", p);
+          p.dist += dot_int(p.nor, offset);
+          p.dist /= 2;
+          ++count_plane;
+          // debug_log("mod p", p);
+          pp = p;
+        } else if (is_sphere_node(v)) {
+          mutable p = decode_sphere_node(v);
+          p.center += map{ivec3, operator::mul}(offset, p.scale) / 2;
+          p.center /= 2;
+          p.dist /= 2;
+          ++count_sphere;
+          sp = p;
+        }
+        ++count_color;
+        const cpc = decode_color_param(vs);
+        cp += cpc;
+        if (cpc.emission != 0) {
+            color_param cev;
+          if (is_filled(v)) {
+            cev = decode_color_param(v & 0x00ffffffu);
+            /* 
+            if (cev.rgb.r != 0) {
+              debug_log("cev check filled", cev, to_hexstring(v));
+            }
+            */
+          } else {
+            cev = decode_color_param(vs & 0x00ffffffu);
+            /*
+            if (cev.rgb.r != 0) {
+              debug_log("cev check notfilled", cev, to_hexstring(vs));
+            }
+            */
+          }
+          cp_emit += cev;
+          ++count_color_emit;
+        }
+      }
+    }
+  }
+  uint nv;
+  if (for_mipmap) {
+    nv = make_filled_voxel();
+  } else if (count_plane > 0) {
+    nv = make_plane_node(pp, ivec3(), 1);
+  } else if (count_sphere > 0) {
+    sp /= count_sphere;
+    nv = make_sphere_node(sp, ivec3(), 1, 0u);
+  } else {
+    nv = make_filled_voxel();
+  }
+  // debug_log("set", x0, y0, z0);
+  if (count_color > 0) {
+    cp /= count_color;
+    uint nc = encode_color_param(cp);
+    if (count_color_emit > 0) {
+      nv = make_filled_voxel();
+      cp_emit /= 6u; // 8u;
+      uint nc_emit = encode_color_param(cp_emit);
+      nv |= (nc_emit & 0x00ffffffu);
+      /*
+      if ((nv & 0x0000ffffu) != 0) { // 青以外のemit色があったらログ出力
+        debug_log("nv", to_hexstring(nv), cp_emit, count_color_emit); // FIXME
+      }
+      */
+    }
+    dpri = nv;
+    dsec = nc;
+  } else {
+    dpri = 0u;
+    dsec = 0u;
+  }
+}
+
+public function {t} void
+scale_voxel_value(uint v_pri, uint v_sec, t mutable& tex_pri,
+  t mutable& tex_sec, int x0, int y0, int z0)
+{
+  for (const z: 0 .. 2) {
+    for (const y: 0 .. 2) {
+      for (const x: 0 .. 2) {
+        uint cv = v_pri;
+        if (is_plane_node(v_pri)) {
+          mutable p = decode_plane_node(v_pri);
+          p.dist = p.dist * 2;
+          cv = make_plane_node(p, make_ivec3(
+            x * 2 - 1,
+            y * 2 - 1,
+            z * 2 - 1),
+            1);
+        } else if (is_sphere_node(v_pri)) {
+          mutable p = decode_sphere_node(v_pri);
+          p.dist = p.dist * 2;
+          p.center = p.center * 2;
+          cv = make_sphere_node(p, make_ivec3(
+            x * 2 - 1,
+            y * 2 - 1,
+            z * 2 - 1),
+            1, 0u);
+        }
+        tex_pri.set(ui(x0 + x), ui(y0 + y), ui(z0 + z), cv);
+        tex_sec.set(ui(x0 + x), ui(y0 + y), ui(z0 + z), v_sec);
+      }
+    }
+  }
+}
+
+public function ivec3
+rotate_offset(imat3 const& m, ivec3 const& v, uvec3 const& sz)
+{
+  const isz = to_ivec3(sz) - glm::make_ivec3(1, 1, 1);
+  const vs = v * 2 - isz;
+  const vm = m * vs + isz;
+  const r = map{glm::ivec3, operator::div}(vm, glm::make_ivec3(2, 2, 2));
+  // debug_log("rotate", sz, v, r);
+  return r;
+}
+

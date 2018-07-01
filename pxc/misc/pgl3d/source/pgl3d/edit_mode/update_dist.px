@@ -1,0 +1,132 @@
+private threaded namespace pgl3d::edit_mode::update_dist "use-unsafe";
+public import common -;
+public import meta m;
+private import pgl3d::edit_mode::base -;
+private import pgl3d::edit_mode::vecutil -;
+
+public function {t} void
+texture_data_clear_range_recalc_distance_quick(t mutable& dest,
+  uvec3 const& dpos, uvec3 const& sz, uvec3 const& grid)
+{
+  /* 指定領域を空白にし、最適ではないが距離をセットする。 */
+  const grid_mask = grid - make_uvec3(1, 1, 1);
+  // debug_log("tdcrrdq grid", grid);
+  ivec3 const mi = to_ivec3(dpos);
+  ivec3 const mx = mi + to_ivec3(sz) - make_ivec3(1, 1, 1);
+  for (int z: mi.z .. mx.z + 1) {
+    for (int y: mi.y .. mx.y + 1) {
+      for (int x: mi.x .. mx.x + 1) {
+        dist_3d dv;
+        dv.xp = mx.x - x;
+        dv.xn = x - mi.x;
+        dv.yp = mx.y - y;
+        dv.yn = y - mi.y;
+        dv.zp = mx.z - z;
+        dv.zn = z - mi.z;
+        dv = map{dist_3d, min}(dv, dist_3d_grid_limit(x, y, z, grid_mask));
+        const wv = dist_3d_to_texel_value(dv);
+        dest.set(ui(x), ui(y), ui(z), wv);
+      }
+    }
+  }
+}
+
+public threaded function {t} pair{ivec3, ivec3}
+texture_data_fill_range_recalc_distance_quick(t mutable& dest,
+  uvec3 const& dpos, uvec3 const& sz, uint v)
+{
+  /* 領域を塗りつぶし、最適ではないが距離を更新する。 */
+  // debug_log("tdfrrdq", dpos, sz);
+  texture_data_fill_range(dest, dpos, sz, v);
+  ivec3 const dposi_mi = to_ivec3(dpos);
+  ivec3 const dposi_mx = dposi_mi + to_ivec3(sz) - make_ivec3(1, 1, 1);
+  ivec3 const mi = map{ivec3, max}(dposi_mi - make_ivec3(15, 15, 15),
+    make_ivec3(0, 0, 0));
+  ivec3 const mx = map{ivec3, min}(dposi_mx + make_ivec3(15, 15, 15),
+    to_ivec3(dest.get_size_uvec3()) - make_ivec3(1, 1, 1));
+  // debug_log("recalc", dposi_mi, dposi_mx);
+  for (int z: mi.z .. mx.z + 1) {
+    for (int y: mi.y .. mx.y + 1) {
+      for (int x: mi.x .. mx.x + 1) {
+        const v = dest.get(ui(x), ui(y), ui(z));
+        if (!is_space_voxel(v)) {
+          continue;
+        }
+        dist_3d dv = get_dist_3d(v);
+        // debug_log("recalc pre", make_ivec3(x, y, z), dv);
+        if (dposi_mi.x > x) {
+          dv.xp = min(dv.xp, dposi_mi.x - x - 1);
+        } else if (dposi_mx.x < x) {
+          dv.xn = min(dv.xn, x - dposi_mx.x - 1);
+        }
+        if (dposi_mi.y > y) {
+          dv.yp = min(dv.yp, dposi_mi.y - y - 1);
+        } else if (dposi_mx.y < y) {
+          dv.yn = min(dv.yn, y - dposi_mx.y - 1);
+        }
+        if (dposi_mi.z > z) {
+          dv.zp = min(dv.zp, dposi_mi.z - z - 1);
+        } else if (dposi_mx.z < z) {
+          dv.zn = min(dv.zn, z - dposi_mx.z - 1);
+        }
+        const wv = dist_3d_to_texel_value(dv);
+        if (v != wv) {
+          // debug_log("recalc mod", make_ivec3(x, y, z), dv);
+          dest.set(ui(x), ui(y), ui(z), wv);
+        }
+      }
+    }
+  }
+  // debug_log("tdfrrdq", "done");
+  return pair{ivec3, ivec3}(mi, mx);
+}
+
+public function {t} void
+texture_data_copy_range_merge_distance(t mutable& dest,
+  uvec3 const& dpos, t const& src, uvec3 const& spos,
+  uvec3 const& sz)
+{
+  /* 領域を複写し、距離は更新前後の値をマージする。 */
+  for (uint z: 0 .. sz.z) {
+    for (uint y: 0 .. sz.y) {
+      for (uint x: 0 .. sz.x) {
+        mutable v = src.get(spos.x + x, spos.y + y, spos.z + z);
+        if (is_space_voxel(v)) {
+          const v1 = dest.get(dpos.x + x, dpos.y + y, dpos.z + z);
+          const dv0 = get_dist_3d(v);
+          const dv1 = get_dist_3d(v1);
+          const dv = map{dist_3d, min}(dv0, dv1);
+          v = dist_3d_to_texel_value(dv);
+        }
+        dest.set(dpos.x + x, dpos.y + y, dpos.z + z, v);
+      }
+    }
+  }
+}
+
+private function dist_3d
+dist_3d_grid_limit(int x, int y, int z, uvec3 const& grid_mask)
+{
+  /* grid内に収めるために距離をどれだけまで制限すればよいのか計算 */
+  dist_3d r;
+  if (grid_mask.x == 0) {
+    r.xp = 15;
+    r.xn = 15;
+    r.yp = 15;
+    r.yn = 15;
+    r.zp = 15;
+    r.zn = 15;
+    return r;
+  }
+  const pos = make_uvec3(ui(x), ui(y), ui(z));
+  const nl = map{uvec3, operator::and}(pos, grid_mask);
+  const pl = grid_mask - nl;
+  r.xp = si(pl.x);
+  r.xn = si(nl.x);
+  r.yp = si(pl.y);
+  r.yn = si(nl.y);
+  r.zp = si(pl.z);
+  r.zn = si(nl.z);
+  return r;
+}
+

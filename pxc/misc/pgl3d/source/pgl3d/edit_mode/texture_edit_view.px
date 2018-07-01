@@ -1,0 +1,264 @@
+private threaded namespace pgl3d::edit_mode::texture_edit_view "use-unsafe";
+public import common -;
+public import meta m;
+private import pgl3d::edit_mode::base -;
+private import pgl3d::edit_mode::update_dist -;
+private import pgl3d::edit_mode::vecutil -;
+
+public struct texture_edit_view(tptr{texture_edit} const edit)
+{
+  /* texture_edit_viewはtexture_editに加えて、カーソルの表示と、
+   * カーソルより大きなz位置を非表示にする機能を追加したもの
+   */
+  public tptr{texture_edit} current_edit = edit;
+  public texture_reshaped tview_pri = current_edit->data_pri[0]; // copy
+  public texture_reshaped tview_sec = current_edit->data_sec[0]; // copy
+  /*
+  public texture_data_mip current_view = current_edit->data_pri; // copy
+  public texture_data_mip current_view_sec = current_edit->data_sec; // copy
+  */
+  private texture_data grid = current_edit->grid; // copy
+  private uvec3 const grid_size = grid.get_size_uvec3();
+  private uint cursor_color_0 = 0xffffffff;
+  private uint cursor_color_1 = 0xff00ffff;
+  private uvec3 cursor_0 = make_uvec3(0, 0, tview_pri.get_depth() - 1);
+  private uvec3 cursor_1 = make_uvec3(0, 0, tview_pri.get_depth() - 1);
+  private modified_range modified;
+  private uvec3 const tex_sz = tview_pri.get_size_uvec3();
+  private function bool has_grid() const
+  {
+    return grid.get_width() > 1;
+  }
+  private function uvec3 get_cursor() const
+  {
+    return cursor_0;
+  }
+  private function uvec3 get_cursor_mi() const
+  {
+    return map{uvec3, min}(cursor_0, cursor_1);
+  }
+  private function uvec3 get_cursor_mx() const
+  {
+    return map{uvec3, max}(cursor_0, cursor_1);
+  }
+  public function uvec3 clamp(uvec3 v) const
+  {
+    v = map{uvec3, min}(v, tex_sz - make_uvec3(1, 1, 1));
+    return v;
+  }
+  public function pair{uvec3, uvec3} get_view_modified(bool reset_flag) {
+    return modified.get_modified_merged(reset_flag);
+  }
+  public function void set_cursor_color(uint c0, uint c1)
+  {
+    if (c0 == cursor_color_0 && c1 == cursor_color_1) {
+      return;
+    }
+    const c0_rgb = c0 & 0x00ffffffu;
+    const c1_rgb = c1 & 0x00ffffffu;
+    if (c0 == 0) {
+      c1 = 0;
+      /* editから書き戻すだけ。周囲15まで広げた領域を書き戻す */
+      /* mx.zだけは15まで広げない */
+      {
+        const mi = map{ivec3, max}(
+          to_ivec3(get_cursor_mi()) - make_ivec3(15, 15, 15),
+          make_ivec3(0, 0, 0));
+        const mx = map{ivec3, min}(
+          to_ivec3(get_cursor_mx()) + make_ivec3(15, 15, 0),
+          to_ivec3(tex_sz - make_uvec3(1, 1, 1)));
+        const sz = mx + make_ivec3(1, 1, 1) - mi;
+        // debug_log("scc cr", mi, mi, sz);
+        texture_data_copy_range(tview_pri, to_uvec3(mi),
+          current_edit->data_pri[0], to_uvec3(mi), to_uvec3(sz));
+        modified.set_modified(mi, mx);
+      }
+      /* auxはカーソルの領域だけを書き戻す */
+      {
+        const mi = map{ivec3, max}(
+          to_ivec3(get_cursor_mi()),
+          make_ivec3(0, 0, 0));
+        const mx = map{ivec3, min}(
+          to_ivec3(get_cursor_mx()),
+          to_ivec3(tex_sz - make_uvec3(1, 1, 1)));
+        const sz = mx + make_ivec3(1, 1, 1) - mi;
+        texture_data_copy_range(tview_sec, to_uvec3(mi),
+          current_edit->data_sec[0], to_uvec3(mi), to_uvec3(sz));
+      }
+      /*
+      current_view_sec_0->set(cursor_0.x, cursor_0.y, cursor_0.z,
+        get_edit_sec()->get(cursor_0.x, cursor_0.y, cursor_0.z));
+      */
+    } else {
+      const sz = get_cursor_mx() + make_uvec3(1, 1, 1) - get_cursor_mi();
+      // debug_log("rrdq", sz);
+      /* 領域にc1色をセットし周囲の距離を更新する */
+      const mimx = texture_data_fill_range_recalc_distance_quick(
+        tview_pri, get_cursor_mi(), sz, c1);
+      /* secには領域にc1のrgbをセット */
+      texture_data_fill_range(tview_sec, get_cursor_mi(), sz,
+        c1_rgb);
+      /* cursor_0だけはc0色をセット */
+      tview_pri.set(cursor_0.x, cursor_0.y, cursor_0.z, c0);
+      tview_sec.set(cursor_0.x, cursor_0.y, cursor_0.z, c0_rgb);
+      modified.set_modified(mimx.first, mimx.second);
+    }
+    cursor_color_0 = c0;
+    cursor_color_1 = c1;
+  }
+  public function void set_cursor_pos(uvec3 c0, uvec3 c1)
+  {
+    // viewのカーソル位置を変更する。上部穴開けの処理をする。mipmapは
+    // 更新しないので、miplevel0以外のmipmapは正常に表示されないので注意。
+    const saved_cursor_color_0 = cursor_color_0;
+    const saved_cursor_color_1 = cursor_color_1;
+    if (cursor_color_0 != 0) {
+      set_cursor_color(0, 0);
+    }
+    c0 = clamp(c0);
+    c1 = clamp(c1);
+    const mx = map{uvec3, max}(c0, c1);
+    const mi = map{uvec3, min}(c0, c1);
+    const cursor_mx = get_cursor_mx();
+    uint const prev_z = cursor_mx.z;
+    uint const next_z = mx.z;
+    uint const blk_size = 64u;
+    const prev_blk = map{uvec3, operator::div}(get_cursor(),
+      make_uvec3(blk_size, blk_size, blk_size));
+    const next_blk = map{uvec3, operator::div}(c0,
+      make_uvec3(blk_size, blk_size, blk_size));
+    const prev_blk_base = map{uvec3, operator::mul}(prev_blk,
+      make_uvec3(blk_size, blk_size, blk_size));
+    const next_blk_base = map{uvec3, operator::mul}(next_blk,
+      make_uvec3(blk_size, blk_size, blk_size));
+    // debug_log("view set_cursor_pos", has_grid(), saved_cursor_color, c0);
+    if (prev_blk != next_blk) {
+      /* まず古いブロックの穴を埋め戻す */
+      {
+        const rx = prev_blk_base.x;
+        const ry = prev_blk_base.y;
+        texture_data_copy_range(tview_pri,
+          make_uvec3(rx, ry, prev_z + 1), current_edit->data_pri[0],
+          make_uvec3(rx, ry, prev_z + 1),
+          make_uvec3(blk_size, blk_size, tex_sz.z - prev_z - 1));
+        texture_data_copy_range(tview_sec,
+          make_uvec3(rx, ry, prev_z + 1), current_edit->data_sec[0],
+          make_uvec3(rx, ry, prev_z + 1),
+          make_uvec3(blk_size, blk_size, tex_sz.z - prev_z - 1));
+        modified.set_modified(make_ivec3(si(rx), si(ry), si(prev_z + 1)), 
+          make_ivec3(si(rx + blk_size) - 1, si(ry + blk_size) - 1,
+            si(tex_sz.z) - 1));
+      }
+      /* 新しいブロックに穴をあける*/
+      {
+        const rx = next_blk_base.x;
+        const ry = next_blk_base.y;
+        const zmi = next_z + 1;
+        const zmx = tex_sz.z - 1;
+        texture_data_clear_range_recalc_distance_quick(tview_pri,
+          make_uvec3(rx, ry, zmi),
+          make_uvec3(blk_size, blk_size, zmx + 1 - zmi),
+          grid_size);
+        texture_data_fill_range(tview_sec,
+          make_uvec3(rx, ry, zmi),
+          make_uvec3(blk_size, blk_size, zmx + 1 - zmi),
+          0u);
+        modified.set_modified(make_ivec3(si(rx), si(ry), si(zmi)),
+          make_ivec3(si(rx + blk_size) - 1, si(ry + blk_size) - 1, si(zmx)));
+      }
+    } else if (prev_z > next_z) {
+      /* zが小さくなった。新しいzより大きい範囲をクリアする */
+      const zmi = next_z + 1;
+      const zmx = min(prev_z + 15, tex_sz.z - 1);
+        /* prev_z + 15までの空白領域は距離を更新 */
+      const rx = next_blk_base.x;
+      const ry = next_blk_base.y;
+      texture_data_clear_range_recalc_distance_quick(tview_pri,
+        make_uvec3(rx, ry, zmi), make_uvec3(blk_size, blk_size, zmx + 1 - zmi),
+        grid_size);
+      texture_data_fill_range(tview_sec,
+        make_uvec3(rx, ry, zmi), make_uvec3(blk_size, blk_size, zmx + 1 - zmi),
+        0u);
+      modified.set_modified(make_ivec3(si(rx), si(ry), si(zmi)),
+        make_ivec3(si(rx + blk_size) - 1, si(ry + blk_size) - 1, si(zmx)));
+    } else if (prev_z < next_z) {
+      /* zが大きくなった。新しいzより小さい範囲を書き戻す。 */
+      // debug_log("scp cr", prev_z + 1, prev_z + 1, next_z - prev_z);
+      const rx = prev_blk_base.x;
+      const ry = prev_blk_base.y;
+      texture_data_copy_range(tview_pri,
+        make_uvec3(rx, ry, prev_z + 1),
+        current_edit->data_pri[0], make_uvec3(rx, ry, prev_z + 1),
+        make_uvec3(blk_size, blk_size, next_z - prev_z));
+      texture_data_copy_range(tview_sec,
+        make_uvec3(rx, ry, prev_z + 1), current_edit->data_sec[0],
+        make_uvec3(rx, ry, prev_z + 1),
+        make_uvec3(blk_size, blk_size, next_z - prev_z));
+      const zmi = next_z + 1;
+      const zmx = min(next_z + 15, tex_sz.z - 1);
+        /* next_z + 15までの空白領域は距離を更新 */
+      texture_data_clear_range_recalc_distance_quick(tview_pri,
+        make_uvec3(rx, ry, zmi), make_uvec3(blk_size, blk_size, zmx + 1 - zmi),
+        grid_size);
+      modified.set_modified(make_ivec3(si(rx), si(ry), si(prev_z) + 1), 
+        make_ivec3(si(rx + blk_size) - 1, si(ry + blk_size) - 1, si(zmx)));
+    }
+    cursor_0 = c0;
+    cursor_1 = c1;
+    if (saved_cursor_color_0 != 0) {
+      set_cursor_color(saved_cursor_color_0, saved_cursor_color_1);
+    }
+  }
+  public function uint edit_get(uvec3 const& pos, texture_value_index_e idx,
+    size_t miplevel)
+    const
+  {
+    return current_edit->get_mip(pos, idx, miplevel);
+  }
+  public function void edit_set(uvec3 const& pos, texture_value_index_e idx,
+    uint v)
+  {
+    current_edit->set(pos, idx, v);
+    merge_edit_view();
+  }
+  public function void edit_fill_range(uvec3 const& dpos, uvec3 const& sz,
+    uint v, uint v_sec)
+  {
+    current_edit->fill_range(dpos, sz, v, v_sec);
+    merge_edit_view();
+  }
+  public function {t} void edit_copy_range(uvec3 const& spos, uvec3 const& sz,
+    t mutable& dest, t mutable& dest_sec, uvec3 const& dpos) const
+  {
+    current_edit->copy_range(spos, sz, dest, dest_sec, dpos);
+  }
+  public function {t} void edit_paste_range(uvec3 const& dpos, uvec3 const& sz,
+    t const& src, t const& src_sec, uvec3 const& spos, uint index_mask,
+    merge_mode const& mmod)
+  {
+    current_edit->paste_range(dpos, sz, src, src_sec, spos, index_mask, mmod);
+    merge_edit_view();
+  }
+  private function void merge_edit_view()
+  {
+    /* editの更新された領域をviewに反映させる */
+    mutable edit_mod = current_edit->get_modified_merged(true);
+    if (edit_mod.second.x == 0) {
+      return;
+    }
+    /* 一旦穴を塞ぐためカーソルをz最大に移動 */
+    const c0 = cursor_0;
+    const c1 = cursor_1;
+    const c0_0 = make_uvec3(c0.x, c0.y, tex_sz.z - 1);
+    set_cursor_pos(c0_0, c1);
+    texture_data_copy_range_merge_distance(tview_pri, edit_mod.first,
+      current_edit->data_pri[0], edit_mod.first, edit_mod.second);
+    texture_data_copy_range(tview_sec, edit_mod.first,
+      current_edit->data_sec[0], edit_mod.first, edit_mod.second);
+    modified.set_modified(to_ivec3(edit_mod.first),
+      to_ivec3(edit_mod.first + edit_mod.second - make_uvec3(1, 1, 1)));
+    /* カーソルを元の位置に戻す */
+    set_cursor_pos(c0, c1);
+  }
+}
+

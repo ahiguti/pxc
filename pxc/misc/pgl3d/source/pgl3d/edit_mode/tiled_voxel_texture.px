@@ -1,0 +1,172 @@
+private threaded namespace pgl3d::edit_mode::tiled_voxel_texture "use-unsafe";
+public import common -;
+public import meta m;
+private import pgl3d::edit_mode::base -;
+public import text::serialize::compact_pod -;
+public import pgl3d::texture::voxel -;
+private import pgl3d::edit_mode::vecutil -;
+private import pgl3d::edit_mode::texutil -;
+
+public multithreaded struct tiled_voxel_texture()
+{
+  public texture_data voxtile;
+  public tptr{texture_edit} tmap_edit = make_tptr{texture_edit}();
+  public tptr{texture_edit} tpat_edit = make_tptr{texture_edit}();
+}
+
+private metafunction texture_data_mip_v0 varray{ptr{texture_data}};
+
+private struct tiled_voxel_texture_v0()
+{
+  // 古いバージョンのフォーマット
+  public texture_data voxtile;
+  public texture_data_mip_v0 tmap_pri;
+  public texture_data_mip_v0 tmap_sec;
+  public texture_data_mip_v0 tpat_pri;
+  public texture_data_mip_v0 tpat_sec;
+}
+
+public function void
+tiled_voxel_texture_load_file(tiled_voxel_texture mutable& vox,
+  cstrref const& fname, cstrref const& fname_v0)
+{
+  string buf;
+  bool load_v0 = false;
+    // trueなら古いバージョンのバイナリデータをデシリアライズする
+  sdl_load_file(fname, buf);
+  debug_log("load voxel texture", fname, buf.size());
+  if (buf.empty() && !fname_v0.empty()) {
+    sdl_load_file(fname, buf);
+    debug_log("load voxel texture", fname, buf.size());
+    load_v0 = true;
+  }
+  if (!buf.empty()) {
+    if (load_v0) {
+      const v0 = from_string_compact_pod{tiled_voxel_texture_v0}(buf);
+      vox.voxtile = v0.voxtile;
+      const tmsz = (*v0.tmap_pri[0]).get_size_uvec3();
+      const tpsz = (*v0.tpat_pri[0]).get_size_uvec3();
+      const gridsz = vox.voxtile.get_size_uvec3();
+      const nogridsz = make_uvec3(1u, 1u, 1u);
+      vox.tmap_edit = make_tptr{texture_edit}();
+      vox.tpat_edit = make_tptr{texture_edit}();
+      vox.tmap_edit->data_size = tmsz;
+      vox.tmap_edit->grid_size = nogridsz;
+      vox.tpat_edit->data_size = tpsz;
+      vox.tpat_edit->grid_size = gridsz;
+      function void conv_one(texture_data_mip_v0 const& src,
+        texture_data_mip mutable& dest)
+      {
+        for (const i, const& t: src) {
+          texture_reshaped tr;
+          tr.set_size_l2(t->get_width(), t->get_height(), t->get_depth());
+          dest.push_back(tr);
+        }
+      }
+      conv_one(v0.tmap_pri, vox.tmap_edit->data_pri);
+      conv_one(v0.tmap_sec, vox.tmap_edit->data_sec);
+      conv_one(v0.tpat_pri, vox.tpat_edit->data_pri);
+      conv_one(v0.tpat_sec, vox.tpat_edit->data_sec);
+    } else {
+      vox = from_string_compact_pod{tiled_voxel_texture}(buf);
+    }
+  }
+}
+
+public function void
+tiled_voxel_texture_save_file(tiled_voxel_texture const& vox,
+  cstrref const& fname)
+{
+  sdl_save_file(fname, to_string_compact_pod(vox));
+}
+
+
+public function void
+tiled_voxel_texture_update_mipmap(tiled_voxel_texture const& vox)
+{
+  debug_log("update_mipmap_all begin");
+  const bool enable_short_circuit = true; // FIXME?
+  function void update_mipmap_one(texture_reshaped mutable& pri0,
+    texture_reshaped mutable& sec0, texture_reshaped mutable& pri1,
+    texture_reshaped mutable& sec1)
+  {
+    const sz = pri0.get_size_l2_uvec3();
+    if (sz.x == 0u || sz.y == 0u || sz.z == 0u) {
+      debug_log("insane pri0", sz);
+    }
+    pri1.set_size_l2(sz.x - 1u, sz.y - 1u, sz.z - 1u);
+    sec1.set_size_l2(sz.x - 1u, sz.y - 1u, sz.z - 1u);
+    for (const z: 0 .. pri1.get_depth()) {
+      for (const y: 0 .. pri1.get_height()) {
+        for (const x: 0 .. pri1.get_width()) {
+          ivec3 p = make_ivec3(si(x), si(y), si(z));
+          texel_value dpri_v;
+          texel_value dsec_v;
+          shrink_voxel_value(true, pri0, sec0, dpri_v, dsec_v, p);
+          /*
+          if (!is_space_voxel(dpri_v)) {
+            dpri_v = make_filled_voxel();
+          }
+          */
+          pri1.set(ui(p.x), ui(p.y), ui(p.z), dpri_v);
+          sec1.set(ui(p.x), ui(p.y), ui(p.z), dsec_v);
+        }
+      }
+    }
+  }
+  // tpatのmipmap更新
+  const pat_mip_num = vox.voxtile.get_width_l2() + 1;
+    // タイルサイズが16なら16,8,4,2,1の5枚
+  while (vox.tpat_edit->data_pri.size() < pat_mip_num) {
+    vox.tpat_edit->data_pri.push_back(texture_reshaped());
+  }
+  while (vox.tpat_edit->data_sec.size() < pat_mip_num) {
+    vox.tpat_edit->data_sec.push_back(texture_reshaped());
+  }
+  vox.tpat_edit->data_pri.resize(pat_mip_num, texture_reshaped());
+  vox.tpat_edit->data_sec.resize(pat_mip_num, texture_reshaped());
+  for (const i: 1 .. vox.tpat_edit->data_pri.size()) {
+    mutable& tpri = vox.tpat_edit->data_pri;
+    mutable& tsec = vox.tpat_edit->data_sec;
+    update_mipmap_one(tpri[i - 1], tsec[i - 1], tpri[i], tsec[i]);
+    set_distance(enable_short_circuit, tpri[i]);
+    debug_log("update_mipmap_all tpat", i);
+  }
+  // tmapのmiplevel==0の代替となるテクスチャの作成
+  texture_reshaped pri0 = vox.tmap_edit->data_pri[0]; // copy
+  texture_reshaped sec0 = vox.tmap_edit->data_sec[0]; // copy
+  for (const z: 0 .. pri0.get_depth()) {
+    for (const y: 0 .. pri0.get_height()) {
+      for (const x: 0 .. pri0.get_width()) {
+        mutable vpri = pri0.get(x, y, z);
+        mutable vsec = sec0.get(x, y, z);
+        if (is_node_reference(vpri)) {
+          // tpat回転反転パラメータが各byteの上位2bit、残りの6bitがオフセット値
+          const p = make_uvec3((vpri >> 0u) & 0x3fu, (vpri >> 8u) & 0x3fu,
+            (vpri >> 16u) & 0x3fu);
+          vpri = vox.tpat_edit->data_pri[pat_mip_num - 1].get(
+            p.x, p.y, p.z);
+          vsec = vox.tpat_edit->data_sec[pat_mip_num - 1].get(
+            p.x, p.y, p.z);
+        }
+        pri0.set(x, y, z, vpri);
+        sec0.set(x, y, z, vsec);
+      }
+    }
+  }
+  // tmapのmiplevel==1の更新
+  update_mipmap_one(pri0, sec0, vox.tmap_edit->data_pri[1],
+    vox.tmap_edit->data_sec[1]);
+  set_distance(enable_short_circuit, vox.tmap_edit->data_pri[1]);
+  debug_log("update_mipmap_all tmap", 1);
+  // tmapのmiplevel==2以降の更新
+  for (const i: 2 .. vox.tmap_edit->data_pri.size()) {
+    debug_log("update_mipmap_all tmap", i);
+    mutable& tpri = vox.tmap_edit->data_pri;
+    mutable& tsec = vox.tmap_edit->data_sec;
+    update_mipmap_one(tpri[i - 1], tsec[i - 1], tpri[i], tsec[i]);
+    set_distance(enable_short_circuit, tpri[i]);
+  }
+  debug_log("update_mipmap_all end");
+}
+

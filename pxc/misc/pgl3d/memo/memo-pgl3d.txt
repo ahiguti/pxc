@@ -2,6 +2,9 @@
 ---------------------------------------------------------------------------
 TODO
 
+- 距離更新を軽く
+  - ついでにedit_mode::set_spaceが遅いのも直す
+
 - マージ処理つきペースト V+CTRL
 
 - 0+SHIFT node referenceをなるべく近いplaneなどに変換 convert_to_tmap()
@@ -4159,4 +4162,21 @@ planeを置き換えるパターン
 tpatは16*16*16個のタイルが使える
 6*16*16をテスト用に使用中
 
+
+---------------------------------------------------------------------------
+edit_mode::set_space
+-> set_cur_value
+-> set_cur_tmap
+-> for (zyx) tiled_texture_edit_view::tmap_edit_set
+tiled_texture_edit_view::tmap_edit_set 
+-> texture_edit_view::edit_set
+texture_edit_view::edit_set
+-> texture_edit::set, this->merge_edit_view
+texture_edit::set
+-> recalc_distance_range
+-> texture::voxel::update_distance
+
+update_distanceの処理
+- 距離が延びる方向とわかっているときはclear_flagを立ててもよいことにする？
+- 現在の空白範囲と更新領域が接触していなければ伸ばせないとわかる
 

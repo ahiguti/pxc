@@ -7,6 +7,7 @@ public import numeric::fpmath -;
 public import operator op;
 public import pgl3d::geometry::wfobj -;
 public import pgl3d::texture::voxel_surface -;
+public import pgl3d::engine::util -;
 
 public threaded interface build_context_i
 {
@@ -40,77 +41,6 @@ public metafunction gf_poly
   callable_ptr{void, {build_context_i, poly_t, mesh_index}};
 public metafunction to_gf_poly{f}
   make_callable_ptr{f, m::sub{m::size{m::args{f}}, 3}};
-
-public metafunction rand_generator_ptr ptr{rand_generator};
-public metafunction make_rand_generator make_ptr{rand_generator};
-
-public tsvaluetype struct
-rand_generator(uint seed0)
-{
-  // mersenne twister
-  public uint index = 624u;
-  public farray{uint, 624} mt;
-  init_short(seed0);
-  public function uint generate()
-  {
-    if (index >= 624u) {
-      twist();
-    }
-    mutable y = mt[index];
-    y ^= y >> 11u;
-    y ^= (y << 7u) & 2636928640u;
-    y ^= (y << 15u) & 4022730752u;
-    y ^= y >> 18u;
-    ++index;
-    return y;
-  }
-  public function void init_short(uint seed)
-  {
-    index = 624u;
-    mt[0] = seed;
-    for (const i: 1 .. 624u) {
-      mt[i] = 1812433253u * (mt[i - 1] ^ mt[i - 1] >> 30u) + i;
-    }
-  }
-  public function void init_full(cslice{uint} const& seed)
-  {
-    const n = min(seed.size(), mt.size());
-    size_t i;
-    for (i = 0; i < n; ++i) {
-      mt[i] = seed[i];
-    }
-  }
-  private function void twist()
-  {
-    for (const i: 0 .. 624u) {
-      const y = (mt[i] & 0x80000000u) + (mt[(i + 1u) % 624u] & 0x7fffffff);
-      mt[i] = mt[(i + 397u) % 624u] ^ (y >> 1u);
-      if (y % 2u != 0) {
-        mt[i] = mt[i] ^ 0x9908b0df;
-      }
-    }
-    index = 0u;
-  }
-  public function float generate_float() {
-    return cast_float(generate()) / 4294967296.0;
-  }
-}
-
-public threaded function quat generate_rand_quat(
-  rand_generator_ptr const& rnd)
-{
-  const x = rnd->generate_float();
-  const y = rnd->generate_float();
-  const z = rnd->generate_float();
-  const pi2 = pi_float() * 2.0f;
-  const xq0 = sqrt(1.0f - x);
-  const xq1 = sqrt(x);
-  return make_quat_wxyz(
-    xq0 * sin(y * pi2),
-    xq0 * cos(y * pi2),
-    xq1 * sin(z * pi2),
-    xq1 * cos(z * pi2));
-}
 
 public metafunction regular_polygon to_gf_poly{gf_regular_polygon};
 public metafunction bump_rec to_gf_poly{gf_bump_rec};
@@ -148,11 +78,6 @@ public tsvaluetype struct mesh_index {
   public size_t y;
   public size_t z;
   public size_t w;
-}
-
-public threaded function float pi_float()
-{
-  return 3.1415926535897932384626433832795;
 }
 
 public threaded function {t} void polygon_scale(t mutable& poly, float scale)
