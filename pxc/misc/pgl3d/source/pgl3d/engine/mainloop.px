@@ -22,6 +22,7 @@ private import pgl3d::engine::pglshader -;
 private import pgl3d::sdl::sdlcontext -;
 private import pgl3d::sdl::sdlutil -;
 private import opengl::compat -;
+// private import pgl3d::engine::console -;
 
 public function void mainloop(ptr{pgl3d_application} const& app,
   cstrref const& conf_filename)
@@ -266,6 +267,7 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
   private bool done = false;
   private bool paused = false;
   private varray{joystick_state} joysticks;
+  // private varray{uchar} console_input;
   /*
   private varray{short} joy_axes;
   private varray{bool} joy_buttons;
@@ -355,9 +357,24 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
     frctl.start();
     sdl_log("update_window_size");
   }
+  /*
+  private function void read_console_input(app_ctrl_i mutable& actrl)
+  {
+    while (true) {
+      int ch = pgl3d::engine::console::getch_nb();
+      if (ch > 0) {
+        console_input.push_back(static_cast{uchar}(ch));
+        // sdl_log("console: ", ch);
+      } else {
+        return;
+      }
+    }
+  }
+  */
   public function bool step_internal(app_ctrl_i mutable& actrl)
   {
     fr.save_ticks("ini");
+    // read_console_input(actrl);
     // bool scene_next_flag = false;
     SDL_Event ev;
     while (SDL_PollEvent(address(ev)) != 0) {
@@ -453,7 +470,7 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
     app->on_frame();
     fr.save_ticks("app_on_frame");
     if (paused) {
-      SDL_Delay(100);
+      SDL_Delay(10);
       return done;
     }
     /* motion and prepare instance data */

@@ -2,6 +2,7 @@ public threaded namespace pgl3d::sdl::sdlutil "use-unsafe";
 public import common -;
 private import opengl::base -;
 private import pointer::raw -;
+private import pointer::raw_unsafe -;
 private import sdl2::api_base -;
 private import sdl2::api_types -;
 private import sdl2::api_functions -;
@@ -29,6 +30,17 @@ private threaded function void sdl_log_impl(cstrref const& s0)
   debug_log(s);
 }
 
+public function string sdl_textevent_text(SDL_TextInputEvent const& ev)
+{
+  const ptr0 = ev.text.to_crawptr();
+  const ptr1 = reinterpret_cast_const{uchar}(ptr0);
+  const sli = ptr1.to_cslice(32);
+  size_t const sz = 0;
+  uchar const ch = 0;
+  const len = find_mapped(sli, sz, ch);
+  string const s = sli[0 .. len];
+  return s;
+}
 
 private struct sdl_file()
 {

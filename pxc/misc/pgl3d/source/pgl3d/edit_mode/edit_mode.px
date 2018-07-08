@@ -3,6 +3,7 @@ public import common -;
 public import meta m;
 private import pgl3d::edit_mode::base -;
 private import sdl2::api_types -;
+private import sdl2::api_functions -;
 private import text::serialize::compact_pod -;
 private import pgl3d::texture::copy_data -;
 private import pgl3d::texture::generator -;
@@ -47,6 +48,9 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   private SDL_Scancode prev_key; // 同じキーを繰り返したかどうか判定するのに使う
   private uint prev_modmask;
   private uint prev_key_repeat;
+  private bool console_mode;
+  private string console_text;
+  private size_t console_text_cursor;
   init();
   private function void init()
   {
@@ -127,6 +131,33 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     ttev->set_cursor_color(c, 0xffc08040);
     // debug_log("update_cursor_color", c);
   }
+  public function string get_console_text() const
+  {
+    string r = console_text;
+    if (console_text_cursor >= console_text.size()) {
+      r.push_back(0x20 | 0x80);
+    } else {
+      r[console_text_cursor] |= 0x80;
+    }
+    return "> " + r;
+  }
+  public function void on_textinput(string const& s, string mutable& msg_r)
+  {
+    if (console_text_cursor >= console_text.size()) {
+      console_text += s;
+    } else {
+      const r = console_text[0 .. console_text_cursor] + s
+        + console_text[console_text_cursor .. console_text.size()];
+      console_text = r;
+    }
+    console_text_cursor += s.size();
+    // debug_log("on_textinput: ", s, console_text);
+    msg_r = get_console_text();
+  }
+  public function bool is_textinput_mode() const
+  {
+    return console_mode;
+  }
   public function void on_key_pressed(int scancode, uint modmask,
     glm::vec3 mutable& cursor_move_r, string mutable& msg_r)
   {
@@ -144,7 +175,41 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     const mod_cs = (modmask & 5) == 5;
     const mod_rcs = (modmask & 10) == 10;
     const cursor_spd = mod_shift ? 16 : 1;
-    if (key == SDL_SCANCODE_F5 || key == SDL_SCANCODE_F12) {
+    if (console_mode) {
+      if (key == SDL_SCANCODE_ESCAPE) {
+        console_mode = false;
+        SDL_StopTextInput();
+        console_text = string();
+        msg_r = string();
+        return;
+      }
+      if (key == SDL_SCANCODE_BACKSPACE) {
+        if (console_text_cursor > 0) {
+          // debug_log("cur,txt", console_text_cursor, console_text);
+          const s = console_text[0 .. console_text_cursor - 1u] +
+            console_text[console_text_cursor .. console_text.size()];
+          console_text = s;
+          --console_text_cursor;
+        }
+      } else if (key == SDL_SCANCODE_LEFT) {
+        if (console_text_cursor > 0) {
+          --console_text_cursor;
+        }
+      } else if (key == SDL_SCANCODE_RIGHT) {
+        if (console_text_cursor < console_text.size()) {
+          ++console_text_cursor;
+        }
+      }
+      msg_r = get_console_text();
+      return;
+    }
+    if (key == SDL_SCANCODE_ESCAPE) {
+      console_mode = true;
+      SDL_StartTextInput();
+      console_text = string();
+      msg_r = get_console_text();
+      return;
+    } else if (key == SDL_SCANCODE_F5 || key == SDL_SCANCODE_F12) {
       emt->vox.update_mipmap();
       sync_gl_mipmap_all(*emt);
       if (key == SDL_SCANCODE_F12) {

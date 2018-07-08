@@ -1,6 +1,7 @@
 public threaded namespace container::raw "use-unsafe";
 public import numeric::integral -;
 public import container::array -;
+public import pointer::raw -;
 public import meta m;
 
 /* raw arrays, e.g., int x[32] */
@@ -21,6 +22,10 @@ public threaded function extern "::pxcrt::rawarray_to_slice" {t, n} slice{t}
 rawarray_to_slice(rawarray{t, n} mutable& x);
 public threaded function extern "::pxcrt::rawarray_to_cslice" {t, n} cslice{t}
 rawarray_to_cslice(rawarray{t, n} const& x);
+public threaded function extern "::pxcrt::rawarray_to_rawptr" {t, n} rawptr{t}
+rawarray_to_rawptr(rawarray{t, n} mutable& x);
+public threaded function extern "::pxcrt::rawarray_to_crawptr" {t, n} crawptr{t}
+rawarray_to_crawptr(rawarray{t, n} const& x);
 
 extern "types" inline
 
@@ -63,6 +68,20 @@ static inline bt_cslice<T>
 rawarray_to_cslice(typename rawarray<T, len>::type const& x)
 {
   return bt_cslice<T>(x, len);
+}
+
+template <typename T, size_t len>
+static inline T *
+rawarray_to_rawptr(T x[])
+{
+  return x;
+}
+
+template <typename T, size_t len>
+static inline T const *
+rawarray_to_crawptr(T const x[])
+{
+  return x;
 }
 
 };

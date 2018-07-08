@@ -7,7 +7,7 @@ public import pgl3d::edit_mode::noedit_mode -;
 
 private tsvaluetype struct triangles_uniforms()
 {
-  public glm::mat4 view_projection_matrix;
+  public glm::mat4 view_projection_matrix = mat4_identity();
   public int sampler_dpat;
   public int sampler_pmpat;
   public int sampler_tilemap;
@@ -23,7 +23,7 @@ private tsvaluetype struct triangles_uniforms()
   public glm::vec3 light_dir;
   public float light_on;
   public float ndelta_scale; // 0.02 / 40. if light_fixed, 0.02 otherwise
-  public glm::mat4 shadowmap_vp; // array
+  public glm::mat4 shadowmap_vp = mat4_identity(); // array
   public float exposure;
   public float random_seed;
   public float option_value;
@@ -65,12 +65,12 @@ private tsvaluetype struct shadowmap_vertex_attributes()
 
 private tsvaluetype struct triangles_instance_attributes()
 {
-  public glm::mat4 model_matrix;
+  public glm::mat4 model_matrix = mat4_identity();
 }
 
 private tsvaluetype struct zprepass_uniforms()
 {
-  public glm::mat4 view_projection_matrix;
+  public glm::mat4 view_projection_matrix = mat4_identity();
   public glm::vec3 camera_pos;
   public int sampler_voxtmap;
   public int sampler_voxtpat;
@@ -78,7 +78,7 @@ private tsvaluetype struct zprepass_uniforms()
 
 private tsvaluetype struct shadowmap_uniforms()
 {
-  public glm::mat4 shadowmap_vp;
+  public glm::mat4 shadowmap_vp = mat4_identity();
   public glm::vec3 light_dir;
   public glm::vec3 camera_pos;
   public glm::vec3 trans; // used if light_fixed
@@ -660,7 +660,7 @@ public struct drawer_triangles(shader_config const& glc0,
 	const sm_view = cam_df.light.to_mat4().inverse();
 	// TODO: sm_viewの中心をカメラのもっと前方に置くことができる。
 	darrayst{glm::mat4} sm_vparr = darrayst{glm::mat4}(
-          num_shadowmaps, glm::mat4());
+          num_shadowmaps, mat4_identity());
 	for (const i: 0 .. num_shadowmaps) {
 	  sm_vparr[i] = cam_df.sm_projection[i] * sm_view;
 	}

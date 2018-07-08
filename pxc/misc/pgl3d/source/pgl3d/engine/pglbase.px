@@ -7,6 +7,7 @@ public import pgl3d::geometry::funcs *;
 public import pgl3d::engine::platform -;
 public import pgl3d::engine::scene_node -;
 public import pgl3d::engine::intern_pool -;
+public import pgl3d::engine::util -;
 public import pgl3d::texture::texture -;
 
 public multithreaded struct instance_data
@@ -28,13 +29,13 @@ public metafunction frame_parameters_type varray{varray{float}};
 
 public metafunction max_num_shadowmaps 8;
 
-public tsvaluetype struct position_angle
+public tsvaluetype struct position_angle()
 {
   public glm::vec3 position;
-  public glm::quat angle;
+  public glm::quat angle = glm::make_quat_wxyz(1.0, 0.0, 0.0, 0.0);
   public function glm::mat4 to_mat4() const
   {
-    return glm::mat4().translate(position) * angle.to_mat4();
+    return mat4_identity().translate(position) * angle.to_mat4();
   }
   public function void translate_relative(glm::vec3 const& v)
   {
@@ -59,16 +60,29 @@ perspective()
   public float height;
 }
 
-public tsvaluetype struct
+/*
+private threaded function farray{glm::mat4, max_num_shadowmaps}
+init_sm_proj()
+{
+  glm::mat4 v = mat4_identity();
+  metafunction vs m::map{m::seq{max_num_shadowmaps}, metafunction{i} "v"};
+  return make_farray{glm::mat4}(expand(a: vs; a));
+}
+*/
+
+public multithreaded struct
 projection_info()
 {
   public perspective camera_pers;
-  public glm::mat4 projection;
-  public farray{glm::mat4, max_num_shadowmaps} sm_projection;
+  public glm::mat4 projection = mat4_identity();
+  public varray{glm::mat4} sm_projection;
+  /*
+  public farray{glm::mat4, max_num_shadowmaps} sm_projection = init_sm_proj();
+  */
   public position_angle camera;
   public position_angle light;
-  public glm::mat4 view;
-  public glm::mat4 view_projection;
+  public glm::mat4 view = mat4_identity();
+  public glm::mat4 view_projection = mat4_identity();
   public int display_width = 1024;
   public int display_height = 512;
   public int virt_width = 1024;
@@ -79,6 +93,13 @@ projection_info()
   public float exposure = 1.0f;
   public float option_value = 0.0f;
   public float option_value2 = -1.0f;
+  init();
+  private function void init()
+  {
+    for (const i: 0 .. max_num_shadowmaps) {
+      sm_projection.push_back(mat4_identity());
+    }
+  }
 }
 
 public tsvaluetype struct
@@ -115,7 +136,7 @@ public interface app_ctrl_i
 
 public threaded struct node_common_data()
 {
-  public glm::mat4 vp;
+  public glm::mat4 vp = mat4_identity();
   public size_t stat_num_objects;
 }
 
@@ -126,9 +147,11 @@ public interface pgldrawer_export_i {
 public interface edit_mode_i {
   public function void on_key_pressed(int scancode, uint modmask,
     glm::vec3 mutable& cursor_move_r, string mutable& msg_r);
+  public function void on_textinput(string const& str, string mutable& msg_r);
   public function void set_camera_angle(glm::quat const& angle);
   public function void on_frame(projection_info const& prj);
   public function void modify_tmap(glm::uvec3 const& pos, uint value);
+  public function bool is_textinput_mode() const;
 }
 
 public threaded struct joystick_info {

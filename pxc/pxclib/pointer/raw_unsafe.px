@@ -19,6 +19,11 @@ rawptr_to_slice(rawptr{t} x, size_t xlen);
 public threaded function extern "pxcrt::crawptr_to_cslice" {t} cslice{t}
 crawptr_to_cslice(crawptr{t} x, size_t xlen);
 
+public threaded function extern "pxcrt::reinterpret_cast_const" {tto, tfrom}
+crawptr{tto} reinterpret_cast_const(crawptr{tfrom} x);
+public threaded function extern "pxcrt::reinterpret_cast_mutable" {tto, tfrom}
+rawptr{tto} reinterpret_cast_mutable(rawptr{tfrom} x);
+
 public threaded function {t, tilist} rawptr{t}
 new(expand(va::arg_decls_byref{tilist}))
 {
@@ -66,6 +71,13 @@ template <typename T> static inline bt_slice<T>
 rawptr_to_slice(T *x, bt_size_t xlen) { return bt_slice<T>(x, xlen); }
 template <typename T> static inline bt_cslice<T>
 crawptr_to_cslice(T const *x, bt_size_t xlen) { return bt_cslice<T>(x, xlen); }
+
+template <typename Tto, typename Tfrom> static inline Tto const *
+reinterpret_cast_const(Tfrom const *x)
+{ return reinterpret_cast<Tto const *>(x); }
+template <typename Tto, typename Tfrom> static inline Tto *
+reinterpret_cast_mutable(Tfrom *x)
+{ return reinterpret_cast<Tto *>(x); }
 
 template <typename T> static inline void
 delete_impl(T x) { delete x; }

@@ -145,9 +145,11 @@ init_font2_shader(shader_config const& g)
   v += g.vert_out() + "vec2 vary_char_size_px;\n";
   v += g.vert_out() + "vec2 vary_coord_clamp;\n";
   v += g.vert_out() + "float vary_point_size;\n";
+  v += g.vert_out() + "float vary_trev;\n";
   v += "void main(void) {\n";
   v += "vec4 idata_i = " + g.instance_attr("idata") + ";\n";
   v += "float ch = idata_i.x;\n";
+  v += "float trev = idata_i.y;\n";
   v += "vec2 screen_pos = idata_i.zw;\n";
   v += "vec2 screen_px = ";
   v += "  floor((screen_pos + 1.0) * screen_size_px * 0.5 + 0.5);\n";
@@ -161,6 +163,7 @@ init_font2_shader(shader_config const& g)
   v += "vary_char_size_px = char_size_px;\n";
   v += "vary_coord_clamp = coord_clamp;\n";
   v += "vary_point_size = char_point_size;\n";
+  v += "vary_trev = trev;\n";
   v += "}\n";
   string f;
   f += g.prepend();
@@ -170,6 +173,7 @@ init_font2_shader(shader_config const& g)
   f += g.frag_in() + "vec2 vary_char_size_px;\n";
   f += g.frag_in() + "vec2 vary_coord_clamp;\n";
   f += g.frag_in() + "float vary_point_size;\n";
+  f += g.frag_in() + "float vary_trev;\n";
   f += g.decl_fragcolor();
   f += "void main(void) {\n";
   f += "vec2 xy = gl_PointCoord;\n";
@@ -178,7 +182,8 @@ init_font2_shader(shader_config const& g)
   f += "vec2 texcoord = (vary_texture_origin_px + pcoord)";
   f += "  / vary_texture_size_px;\n";
   f += "vec4 col = " +  g.texture2d() + "(sampler_font, texcoord);\n";
-  f += g.fragcolor() + " = vec4(1.0, 1.0, 1.0, col.a);\n";
+  f += "float a = ((col.a * 2. - 1.) * (1. - vary_trev * 2.) + 1.) * 0.5;\n";
+  f += g.fragcolor() + " = vec4(1.0, 1.0, 1.0, a);\n";
   f += "}\n";
   return make_glshader_ptr{font2_uniforms, font2_instance_attributes,
     font2_vertex_attributes}(v, f, "idata", g.debug_level, "font2");

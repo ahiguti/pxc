@@ -5,14 +5,14 @@ public import meta m;
 
 private tsvaluetype struct particle_bb_uniforms()
 {
-  public glm::mat4 view_projection_matrix;
-  public glm::mat4 camera_matrix;
+  public glm::mat4 view_projection_matrix = mat4_identity();
+  public glm::mat4 camera_matrix = mat4_identity();
   public float point_size_base;
 }
 
 private tsvaluetype struct particle_bb_instance_attributes()
 {
-  public glm::mat4 model_matrix; // vp applied
+  public glm::mat4 model_matrix = mat4_identity(); // vp applied
 }
 
 private tsvaluetype struct particle_bb_vertex_attributes()
@@ -65,7 +65,7 @@ public struct drawer_particle_bb(shader_config const& glc,
     glBlendFunc(GL_ONE, GL_ONE);
     mutable& sdr = *sdr_pb;
     glUseProgram(sdr.program);
-    mutable cam_mat = glm::mat4();
+    mutable cam_mat = mat4_identity();
     const& prj = *proj;
     cam_mat = prj.camera.to_mat4();
     const vp = prj.projection * (cam_mat.inverse());

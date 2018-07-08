@@ -4,8 +4,9 @@ use warnings;
 use IO::File;
 
 my $SDL_INCLUDE_PATH = $ENV{"SDL_INCLUDE_PATH"}
+  || "/opt/SDL/include:/opt/SDL_image:/opt/SDL_ttf";
 #  || "/opt/SDL2/include:/opt/SDL2_image:/opt/SDL2_ttf"
-  || "/usr/include/SDL2";
+#  || "/usr/include/SDL2";
 my $SDL_NAMESPACE = $ENV{"SDL_NAMESPACE"} || "sdl2";
 
 my %type_ucount = ();
@@ -128,7 +129,7 @@ sub pxc_type_string {
       die "rawarray type: $r";
       $const_flag = 0;
     } elsif ($s =~ /\[\]/) {
-      $r = "unit"; # not supported
+      $r = "rawarray{$r, 0}";
       $const_flag = 0;
     } elsif ($s eq 'const') {
       $const_flag = 1;

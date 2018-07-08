@@ -282,7 +282,7 @@ private multithreaded struct raycast_object()
 {
   public joint_id_type joint_id;
   public float radius = 1.0f; // 物体の外接球の半径
-  public glm::mat4 model_matrix;
+  public glm::mat4 model_matrix = mat4_identity();
   public glm::vec3 relative_pos; // カメラからみた座標
   public bool near_flag;
 }
@@ -373,7 +373,7 @@ private multithreaded struct raycast_objects()
     cslice{prepare_instance_data_funcptr} const& ftable,
     whole_instances_type mutable& whole_instances)
   {
-    scene_node mutable sn = scene_node(joint_id_type(), glm::mat4());
+    scene_node mutable sn = scene_node(joint_id_type(), mat4_identity());
     uint const ndr = static_cast{uint}(
       rdi.subdrawer_vbid_max - rdi.subdrawer_vbid_min) + 1;
     threaded function void extend_whole_instances(vbid_t vbid, vsid_t vsid)
@@ -534,7 +534,7 @@ private struct app_demoapp()
   public pgl3d::engine::util::rand_generator rand_gen
     = pgl3d::engine::util::rand_generator(1u);
   public uint modmask; // shift, meta
-  public glm::mat4 edit_mode_trans;
+  public glm::mat4 edit_mode_trans = mat4_identity();
   public vertex_attr edit_mode_vattr;
   public ptr{varray{uchar}} capt_data = make_ptr{varray{uchar}}();
   public ftd3_aximaster axim;
@@ -682,6 +682,7 @@ public threaded struct demoapp_scene(node_factory const& nodefac0,
       if (!dss.engine_status) {
 	msg[0] = "RELOADING SHADER FAILED";
       }
+      // debug_log("app_status_message", dss.app_status_message); // FIXME
       msg[1] = dss.app_status_message;
       scene_control_set_message(sctl, sctl.node_status_message, msg,
 	0, 0,
@@ -824,7 +825,7 @@ function bool update_window_geometry(app_demoapp mutable& app,
     cam.camera_pers.far = far;
     cam.camera_pers.width = w;
     cam.camera_pers.height = h;
-    cam.projection = glm::frustum{float}(left, right, bottom, top, near, far);
+    cam.projection = glm::frustum(left, right, bottom, top, near, far);
   }
   {
     // shadowmap projection
@@ -836,7 +837,7 @@ function bool update_window_geometry(app_demoapp mutable& app,
       const right = di;
       const bottom = -di;
       const top = di;
-      dst = glm::ortho{float}(left, right, bottom, top, near, far);
+      dst = glm::ortho(left, right, bottom, top, near, far);
     }
     float far = glc.shadowmap_distance;
     for (const i: 0 .. static_cast{size_t}(glc.num_shadowmaps)) {
@@ -911,6 +912,7 @@ function void handle_event(app_demoapp mutable& app, app_ctrl_i mutable& actrl,
       app.edit_mode.some->on_key_pressed(
 	static_cast{int}(ev.key.keysym.scancode), app.modmask, cursor_move,
 	app.app_status_message);
+      // debug_log("keydown stmsg", app.app_status_message);
       // debug_log("cursor_move", cursor_move);
       const glm::vec3 m =
 	cursor_move * app.edit_mode_vattr.aabb_or_tconv.w;
@@ -927,6 +929,11 @@ function void handle_event(app_demoapp mutable& app, app_ctrl_i mutable& actrl,
       app.player.position += glm::make_vec3(mo.x, mo.y, mo.z);
     }
     // sdl_log("KEYDOWN event", static_cast{int}(ev.key.keysym.scancode));
+    if (const ed: app.edit_mode.some) {
+      if (ed->is_textinput_mode()) {
+        return;
+      }
+    }
     if (ev.key.keysym.scancode == SDL_SCANCODE_TAB) {
       app.scene_next_flag = true;
       return;
@@ -1008,6 +1015,17 @@ function void handle_event(app_demoapp mutable& app, app_ctrl_i mutable& actrl,
       return;
     }
     // debug_log("key", static_cast{int}(ev.key.keysym.scancode));
+  } else if (etype == SDL_TEXTINPUT) {
+/*
+    const sli = ev.text.text.to_cslice().to_crawptr().to_cslice(32);
+    const len = find_mapped(sli, 0, 0);
+    const s = string(sli[0 .. len]);
+*/
+    if (const edit_mode: app.edit_mode.some) {
+      edit_mode->on_textinput(sdl_textevent_text(ev.text),
+        app.app_status_message);
+      // debug_log("ti stmsg", app.app_status_message);
+    }
   } else if (etype == SDL_WINDOWEVENT &&
     ev.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) {
     app.scene_shared->engine_status = ev.window.data1 != 0;
@@ -1061,9 +1079,17 @@ function void update_joystick(app_demoapp mutable& app,
 function void handle_keys(app_demoapp mutable& app, cslice{uchar} const& keys,
   cslice{joystick_state} const& joysticks, float frame_speed)
 {
-  update_joystick(app, joysticks);
-  app.ictl.handle_keys(app.player, keys, app.player_joystick, frame_speed,
-    app.app_commands);
+  bool no_move = false;
+  if (const em: app.edit_mode.some) {
+    if (em->is_textinput_mode()) {
+      no_move = true;
+    }
+  }
+  if (!no_move) {
+    update_joystick(app, joysticks);
+    app.ictl.handle_keys(app.player, keys, app.player_joystick, frame_speed,
+      app.app_commands);
+  }
   if (app.axim.is_valid()) {
     // ラグ確認のためft601経由でLED点灯する
     const kleft = app.ictl.get_key(keys, SDL_SCANCODE_LEFT) != 0u;
@@ -1076,7 +1102,7 @@ function void handle_keys(app_demoapp mutable& app, cslice{uchar} const& keys,
     buf[3] = buf[0];
     app.axim.axi_write(0x44a00000, buf);
   }
-  glm::quat mctrl_angle;
+  glm::quat mctrl_angle = glm::make_quat_wxyz(1.0, 0.0, 0.0, 0.0);
   if (const& mctrl: app.mctrl.some) {
     mctrl_angle = mctrl->get_current_value().conjugate();
   }
@@ -1089,7 +1115,7 @@ function void handle_keys(app_demoapp mutable& app, cslice{uchar} const& keys,
     app.scene_next_flag = true;
   }
   */
-  glm::quat camera_rel;
+  glm::quat camera_rel = glm::make_quat_wxyz(1.0, 0.0, 0.0, 0.0);
   /*
   {
     const rnd_x = static_cast{double}(app.rand_gen.generate() >> 16u)
@@ -1371,26 +1397,24 @@ private function void build_vertices(app_demoapp mutable& app,
   sdl_log("load prebuild");
   pgs.make_vertex_set(tr1_0, "empty-scene", hole());
   mutable rnd = make_rand_generator(1U);
-  mutable m = glm::mat4();
-  mutable m0 = glm::mat4();
-  mutable m1 = glm::mat4();
+  mutable m = mat4_identity();
+  mutable m0 = m;
+  mutable m1 = m;
   float box_size = 32.0f;
+  debug_log("init m,m0,m1", m.to_farray(), m0.to_farray(), m1.to_farray());
   // float box_size = 1.0f;
-  m = glm::mat4()
+  m = mat4_identity()
     .translate(glm::make_vec3(0.0, 0.0, box_size * 2.0f));
-  m0 = glm::mat4()
+  m0 = mat4_identity()
     .rotate(to_radians(45.0), glm::make_vec3(0.0, 0.0, 1.0));
-  m1 = glm::mat4()
+  m1 = mat4_identity()
     .translate(glm::make_vec3(0.0, 0.0, box_size * (-1.0f)))
     .rotate(to_radians(45.0), glm::make_vec3(0.0, 0.0, 1.0));
+  debug_log("m,m0,m1", m.to_farray(), m0.to_farray(), m1.to_farray());
   const mi = glm::make_vec3(0.0, 0.0, 0.0);
   const mx = voxtmap_whd;
   float small_box_size = 1.0f;
-  /*
-  glm::mat4 small_m = glm::mat4()
-    .translate(glm::make_vec3(0.0, 0.0, small_box_size * 2.0f));
-  */
-  glm::mat4 small_m1 = glm::mat4()
+  glm::mat4 small_m1 = mat4_identity()
     .translate(glm::make_vec3(0.0, 0.0, small_box_size * (-1.0f)))
     .rotate(to_radians(45.0), glm::make_vec3(0.0, 0.0, 1.0));
   debug_log("make box");
@@ -1462,9 +1486,9 @@ private function void build_vertices(app_demoapp mutable& app,
     )
   );
 */
-  m = glm::mat4()
+  m = mat4_identity()
     .translate(glm::make_vec3(0.0, 0.0, 64.0));
-  m1 = glm::mat4()
+  m1 = mat4_identity()
     .translate(glm::make_vec3(0.0, 0.0, -32.0))
     .rotate(to_radians(45.0), glm::make_vec3(0.0, 0.0, 1.0));
   pgs.make_vertex_set(tr0_0, "box50",
@@ -1488,9 +1512,9 @@ private function void build_vertices(app_demoapp mutable& app,
       rectangle_split(9, 8, ctx_poly_joint("block")),
       hole()));
   {
-    const m1 = glm::mat4().rotate(to_radians(90.0),
+    const m1 = mat4_identity().rotate(to_radians(90.0),
 	glm::make_vec3(1.0, 0.0, 0.0));
-    const m2 = glm::mat4().rotate(to_radians(-90.0),
+    const m2 = mat4_identity().rotate(to_radians(-90.0),
 	glm::make_vec3(1.0, 0.0, 0.0));
     pgs.make_vertex_set(tr0_0, "block-smtest",
       regular_polygon(3.0, 4,
@@ -1498,9 +1522,9 @@ private function void build_vertices(app_demoapp mutable& app,
 	apply(m1, bump_rec(1.0, 1.0, 1, hole(), ctx_poly_joint("block")))));
   }
   {
-    const m1 = glm::mat4().rotate(to_radians(90.0),
+    const m1 = mat4_identity().rotate(to_radians(90.0),
 	glm::make_vec3(1.0, 0.0, 0.0));
-    const m2 = glm::mat4().rotate(to_radians(-90.0),
+    const m2 = mat4_identity().rotate(to_radians(-90.0),
 	glm::make_vec3(1.0, 0.0, 0.0));
     pgs.make_vertex_set(tr0_0, "box-depth",
       regular_polygon(3.0, 4,
@@ -1537,7 +1561,7 @@ private function void build_vertices(app_demoapp mutable& app,
 	    rand_bump2(30, 10.0, 0.1, 0.2, 0.1, 0.2, 0.2, 0.5, rnd,
 	      ctx_fill(0), ctx_fill(0), ctx_fill(0)),
 	    ctx_fill(0))))));
-  m = glm::mat4()
+  m = mat4_identity()
     .translate(glm::make_vec3(100.0, 100.0, 100.0))
     .rotate(to_radians(30.0), glm::make_vec3(0.0, 0.0, 1.0));
   pgs.make_vertex_set(tr0_0, "nest-multi",
@@ -1546,7 +1570,7 @@ private function void build_vertices(app_demoapp mutable& app,
 	bump_rec_seq(0.2, 1.0, 5, hole(),
 	  rectangle_split(10, 10, ctx_poly_joint("nest")))),
       hole()));
-  m = glm::mat4()
+  m = mat4_identity()
     .translate(glm::make_vec3(0.0, 0.0, 1.0))
     .rotate(to_radians(10.0), glm::make_vec3(0.0, 0.0, 1.0));
   pgs.make_vertex_set(tr0_0, "bullet",
@@ -1558,7 +1582,7 @@ private function void build_vertices(app_demoapp mutable& app,
     regular_polygon(600.0, 4,
       rectangle_split(170, 170, ctx_poly_joint("bullet")),
       hole()));
-  m = glm::mat4()
+  m = mat4_identity()
     .translate(glm::make_vec3(0.0, 0.0, 1.0))
     .rotate(10.0, glm::make_vec3(0.0, 0.0, 1.0)); // FIXME: to_radians?
   pgs.make_vertex_set(tr0_0, "bullet2",
@@ -1798,7 +1822,7 @@ metafunction node scene_node;
 
 threaded function node make_node()
 {
-  return scene_node(joint_id_type(), glm::mat4());
+  return scene_node(joint_id_type(), mat4_identity());
 }
 
 tsvaluetype struct lpbullet_data {
@@ -2043,7 +2067,7 @@ scene_control(node_factory const& nfac,
   private function node instantiate_cur_scene()
   {
     const name = scene_names[cur_scene];
-    mutable r = nodefac.make_node_by_name(name, glm::mat4());
+    mutable r = nodefac.make_node_by_name(name, mat4_identity());
     sco.clear_objects();
     for (const i, const& lpbsw: lpbullet_swarms) {
       sco.dworld.add_swarm(lpbsw, i);
@@ -2099,7 +2123,7 @@ scene_control_set_message(scene_control mutable& sctl,
       n += s.size();
     }
     while (nd.children.size() < n) {
-      const p = scene_node(sctl.joint_id_font, glm::mat4());
+      const p = scene_node(sctl.joint_id_font, mat4_identity());
       nd.children.push_back(p);
     }
     if (nd.children.size() > n) {
@@ -2118,9 +2142,10 @@ scene_control_set_message(scene_control mutable& sctl,
       if (mi >= msg.size()) {
 	break;
       }
+      sli[0] = static_cast{float}((msg[mi][mj] & 0x7f) - 0x20);
+      sli[1] = msg[mi][mj] >= 0x80 ? 1.0f : 0.0f; // 反転フラグ
       sli[2] = (static_cast{float}(x) / screen_w) * 2.0f - 1.0f;
       sli[3] = (static_cast{float}(y) / screen_h) * 2.0f - 1.0f;
-      sli[0] = static_cast{float}(msg[mi][mj] - 0x20);
       x += font_width;
       ++mj;
     }
@@ -2134,7 +2159,7 @@ scene_control_update_buttons(scene_control mutable& sctl,
   /* box */
   mutable& nd = sn_buttons;
   if (nd.children.size() < 1) {
-    const p = scene_node(sctl.joint_id_rect2d, glm::mat4());
+    const p = scene_node(sctl.joint_id_rect2d, mat4_identity());
     nd.children.push_back(p);
   }
   {
@@ -2147,11 +2172,11 @@ scene_control_update_buttons(scene_control mutable& sctl,
   }
   if (sctl.joint_id_dbgui.vbid != vbid_invalid()) { // dbgui is enabled
     if (nd.children.size() < 2) {
-      const p = scene_node(sctl.joint_id_dbgui, glm::mat4());
+      const p = scene_node(sctl.joint_id_dbgui, mat4_identity());
       nd.children.push_back(p);
     }
     if (nd.children.size() < 3) {
-      const p = scene_node(sctl.joint_id_dbgui2, glm::mat4());
+      const p = scene_node(sctl.joint_id_dbgui2, mat4_identity());
       nd.children.push_back(p);
     }
     {
@@ -2289,7 +2314,7 @@ scene_control_step(scene_control mutable& sctl,
 	sctl.sco.dworld.remove_rigid_body(rb);
       }
     }
-    scene_node cursn = scene_node(joint_id_type(), glm::mat4());
+    scene_node cursn = scene_node(joint_id_type(), mat4_identity());
     threaded function void step_obj(size_t i, ptr{rigid_body_i} const& obj)
     {
       cursn.joint_id = obj->get_joint_id();
