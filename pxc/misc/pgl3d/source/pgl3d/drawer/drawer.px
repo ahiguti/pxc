@@ -14,6 +14,7 @@ private import pgl3d::drawer::font2 -;
 private import pgl3d::drawer::skybox -;
 private import pgl3d::drawer::fxaa -;
 private import pgl3d::drawer::blur -;
+private import pgl3d::drawer::ssao -;
 private import pgl3d::drawer::motion_blur -;
 private import pgl3d::drawer::passthrough -;
 private import pgl3d::drawer::aberration -;
@@ -79,7 +80,8 @@ make_drawstep_raycast(shader_config const& glc,
 public function drawer_ptr
 make_drawstep_setfb(shader_config const& glc, drawer_shared const& ds,
   ptr{glm::uvec2} const& src_size, ptr{glm::uvec2} const& dst_size,
-  string const& fbname, bool owner_flag, string const& col, string const& dep)
+  string const& fbname, bool owner_flag, cslice{string} const& col,
+  string const& dep)
 {
   return make_ptr{drawer_setfb}(glc, ds, src_size, dst_size, fbname,
     owner_flag, col, dep);
@@ -144,6 +146,13 @@ public function drawer_ptr
 make_drawstep_blur(shader_config const& glc, drawer_shared const& ds,
   ptr{drawer_blur_params} const& params, string const& src_fbname)
 { return make_ptr{drawer_blur}(glc, ds, params, src_fbname); }
+
+public metafunction drawer_ssao_params pgl3d::drawer::ssao::drawer_ssao_params;
+
+public function drawer_ptr
+make_drawstep_ssao(shader_config const& glc, drawer_shared const& ds,
+  ptr{drawer_ssao_params} const& params, string const& src_fbname)
+{ return make_ptr{drawer_ssao}(glc, ds, params, src_fbname); }
 
 public function drawer_ptr
 make_drawstep_motion_blur(shader_config const& glc, drawer_shared const& ds,

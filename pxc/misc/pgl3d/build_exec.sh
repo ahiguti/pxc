@@ -6,6 +6,7 @@ if [ "`uname | cut -d '_' -f 1`" == "CYGWIN" ]; then
 	build_script=./windows/release_build.sh
 	build_target=./windows/x64/Release/pgl3d_demoapp.exe
 else
+	#build_script=./unix/debug_build.sh
 	build_script=./unix/release_build.sh
 	build_target=./source/demoapp.px.exe
 fi

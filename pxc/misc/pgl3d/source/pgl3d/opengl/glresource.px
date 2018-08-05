@@ -13,8 +13,8 @@ public import sdl2::api_wrappers *;
 public import sdl2::misc *;
 public import pgl3d::engine::platform *;
 
-public threaded struct extern "pgl3d$n::glresource$n::handle" "nonmovable" {t}
-handle(t const& v)
+public threaded struct extern "pgl3d$n::glresource$n::handle" "noncopyable" {t}
+handle()
 {
   public t value;
 }
@@ -24,37 +24,41 @@ namespace pgl3d$n {
 namespace glresource$n {
 template <typename T> struct handle
 {
-  handle(T const& v) : value(v) { }
+  handle() : value(T()) { }
+  handle(handle&& v) : value(T()) { std::swap(value, v.value); }
+  handle(handle& v) : value(T()) { std::swap(value, v.value); }
+  handle& operator =(handle&& v) { std::swap(value, v.value); return *this; }
+  handle& operator =(handle& v) { std::swap(value, v.value); return *this; }
   T value;
 private:
-  handle(handle const&);
-  handle& operator =(handle const&);
+  handle(handle const&) = delete;
+  handle& operator =(handle const&) = delete;
 };
 };
 };
 ;
 
 public metafunction auto_buffer
-  auto_handle{uint, 0, glGenBuffers, glDeleteBuffers};
+  auto_handle{uint, glGenBuffers, glDeleteBuffers};
 public metafunction auto_texture
-  auto_handle{uint, 0, glGenTextures, glDeleteTextures};
+  auto_handle{uint, glGenTextures, glDeleteTextures};
 public metafunction auto_framebuffer
-  auto_handle{uint, 0, glGenFramebuffers, glDeleteFramebuffers};
+  auto_handle{uint, glGenFramebuffers, glDeleteFramebuffers};
 public metafunction auto_renderbuffer
-  auto_handle{uint, 0, glGenRenderbuffers, glDeleteRenderbuffers};
+  auto_handle{uint, glGenRenderbuffers, glDeleteRenderbuffers};
 expand (sym: m::seq{is_gl3_or_gles3}) {
   public metafunction auto_vertexarray
-    auto_handle{uint, 0, glGenVertexArrays, glDeleteVertexArrays};
+    auto_handle{uint, glGenVertexArrays, glDeleteVertexArrays};
 }
 expand (sym: m::seq{m::not{is_gl3_or_gles3}}) {
   public metafunction auto_vertexarray
-    auto_handle{uint, 0, 0, 0};
+    auto_handle{uint, 0, 0};
 }
 
-private threaded struct {t, init, generate_func, release_func}
+private threaded struct {t, generate_func, release_func}
 auto_handle()
 {
-  private handle{t} hnd = handle{t}(init);
+  private handle{t} hnd = handle{t}();
   public function t get() const
   {
     return hnd.value;

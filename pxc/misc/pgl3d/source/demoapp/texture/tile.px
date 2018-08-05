@@ -438,7 +438,7 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
       }
       debug_log("loaded ", fn);
       ptr{copy_data_type} p = make_ptr{copy_data_type}();
-      *p = from_string{copy_data_type}(buf);
+      *p = copy_data_type_compat_deserialize(buf);
       fragments.push_back(p);
     }
     add_fragment("box1");
@@ -472,8 +472,8 @@ public function void prepare_texture_data_3d_tpat(bool edit_mode,
       for (const z: 0 .. frag.copy_size.z) {
         for (const y: 0 .. frag.copy_size.y) {
           for (const x: 0 .. frag.copy_size.x) {
-            mutable v0 = frag.tex_pri.get(x, y, z);
-            mutable v1 = frag.tex_sec.get(x, y, z);
+            mutable v0 = frag.tex[0].get(x, y, z);
+            mutable v1 = frag.tex[1].get(x, y, z);
             if (is_space_voxel(v0)) {
               v0 = make_space_voxel(); // drop encoded distance parameter
             } else {

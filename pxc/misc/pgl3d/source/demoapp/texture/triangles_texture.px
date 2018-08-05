@@ -266,61 +266,6 @@ prepare_raycasting_texture_data(pgl3d_config const& cfg,
       }
     }
     tiled_voxel_texture_update_mipmap(*txs.vox);
-    /*
-    // tpatのmipmapを作る
-    {
-      // txs.vox.tpat_pri.push_back(*voxtpat_pri); // tpat pri miplevel 0
-      // txs.vox.tpat_sec.push_back(*voxtpat_sec); // tpat aux miplevel 0
-      // mutable tex_pri = voxtpat_pri;
-      // mutable tex_sec = voxtpat_sec;
-      mutable& voxtpat_pri = txs.vox->tpat_edit->data_pri[0];
-      mutable& voxtpat_sec = txs.vox->tpat_edit->data_sec[0];
-      for (const miplevel: 0 .. tpat_miplevel_max) {
-	debug_log("tpat miplevel", miplevel);
-	// const tex_pri_m = make_ptr{texture_data}();
-	// const tex_sec_m = make_ptr{texture_data}();
-	mutable& tex_pri = txs.vox->tpat_edit->data_pri[miplevel];
-	mutable& tex_sec = txs.vox->tpat_edit->data_sec[miplevel];
-	mutable& tex_pri_m = txs.vox->tpat_edit->data_pri[miplevel + 1];
-	mutable& tex_sec_m = txs.vox->tpat_edit->data_sec[miplevel + 1];
-	texture_make_mipmap(tex_pri, tex_sec, tex_pri_m, tex_sec_m,
-	  miplevel, tpat_miplevel_max, voxtpat_pri, voxtpat_sec);
-	// txs.vox.tpat_pri.push_back(*tex_pri_m);
-	// txs.vox.tpat_sec.push_back(*tex_sec_m);
-	// tex_pri = tex_pri_m;
-	// tex_sec = tex_sec_m;
-      }
-    }
-    // tmapのmipmapを作る
-    {
-      mutable& voxtmap_pri = txs.vox->tmap_edit->data_pri[0];
-      mutable& voxtmap_sec = txs.vox->tmap_edit->data_sec[0];
-      const& tpat_pri_mipmax =
-	txs.vox->tpat_edit->data_pri[txs.vox->tpat_edit->data_pri.size() - 1];
-      const tpat_sec_mipmax =
-	txs.vox->tpat_edit->data_sec[txs.vox->tpat_edit->data_sec.size() - 1];
-	// tpatの最後のmipmapはtile1個の大きさ
-      // txs.vox.tmap_pri.push_back(*voxtmap_pri); // tmap pri miplevel 0
-      // txs.vox.tmap_sec.push_back(*voxtmap_sec); // tmap aux miplevel 0
-      // mutable tex_pri = voxtmap_pri;
-      // mutable tex_sec = voxtmap_sec;
-      for (const miplevel: 0 .. tmap_miplevel_max) {
-	debug_log("tmap miplevel", miplevel);
-	// const tex_pri_m = make_ptr{texture_data}();
-	// const tex_sec_m = make_ptr{texture_data}();
-	mutable& tex_pri = txs.vox->tmap_edit->data_pri[miplevel];
-	mutable& tex_sec = txs.vox->tmap_edit->data_sec[miplevel];
-	mutable& tex_pri_m = txs.vox->tmap_edit->data_pri[miplevel + 1];
-	mutable& tex_sec_m = txs.vox->tmap_edit->data_sec[miplevel + 1];
-	texture_make_mipmap(tex_pri, tex_sec, tex_pri_m, tex_sec_m,
-	  miplevel, tmap_miplevel_max, tpat_pri_mipmax, tpat_sec_mipmax);
-	// txs.vox.tmap_pri.push_back(*tex_pri_m);
-	// txs.vox.tmap_sec.push_back(*tex_sec_m);
-	// tex_pri = tex_pri_m;
-	// tex_sec = tex_sec_m;
-      }
-    }
-    */
     for (const i, mutable& pri: txs.vox->tpat_edit->data_pri) {
       mutable& aux = txs.vox->tpat_edit->data_sec[i];
       prepare_voxel_tpat(pri, aux, tpat_miplevel_max, static_cast{uint}(i),

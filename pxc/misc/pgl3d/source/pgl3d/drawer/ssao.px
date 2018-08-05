@@ -1,45 +1,42 @@
-private threaded namespace pgl3d::drawer::blur "export-unsafe";
+private threaded namespace pgl3d::drawer::ssao "export-unsafe";
 public import common -;
 public import pgl3d::drawer::base -;
 public import meta m;
 
-private tsvaluetype struct blur_vertex_attributes()
+private tsvaluetype struct ssao_vertex_attributes()
 {
   public glm::vec2 vert;
 }
 
-private tsvaluetype struct blur_instance_attributes()
+private tsvaluetype struct ssao_instance_attributes()
 {
 }
 
-private tsvaluetype struct blur_uniforms()
+private tsvaluetype struct ssao_uniforms()
 {
   public glm::vec2 pixel_delta;
   public int sampler_tex;
   public int sampler_tex_depth;
   public float option_value;
+  public glm::vec3 near_far_right;
 }
 
-public struct drawer_blur_params {
+public struct drawer_ssao_params(ptr{projection_info} const& proj0) {
   public float option_value;
+  public ptr{projection_info} proj = proj0;
 }
 
-public struct drawer_blur(shader_config const& glc,
-  drawer_shared const& ds, ptr{drawer_blur_params} const& params0,
+public struct drawer_ssao(shader_config const& glc,
+  drawer_shared const& ds, ptr{drawer_ssao_params} const& params0,
   string const& src_fbname0)
 <drawstep_i>
 {
-  metafunction tattr blur_vertex_attributes;
-  ptr{drawer_blur_params} const params = params0;
+  metafunction tattr ssao_vertex_attributes;
+  ptr{drawer_ssao_params} const params = params0;
   string const src_fbname = src_fbname0;
   option{cptr{gl_framebuffer}} srcfbo;
-  bool const enable_bokeh = glc.conf.get("bokeh", 1, 0, 1) != 0;
-  /*
-  bool const enable_bilinear = glc.conf.get("blur_bilinear", 0, 0, 1) != 0;
-  bool const enable_shadow_blur = glc.conf.get("blur_shadow", 1, 0, 1) != 0;
-  */
-  blur_shader_ptr sdr_re = init_blur_shader(glc, enable_bokeh);
-  vbid_t const vbid_blur = ds.vbid_pool->intern("vbid_generic_filter");
+  ssao_shader_ptr sdr_re = init_ssao_shader(glc);
+  vbid_t const vbid_ssao = ds.vbid_pool->intern("vbid_generic_filter");
   init(ds);
   function void init(drawer_shared const& ds) {
     const respool = pointer_downcast{ptr{resource_pool}}(ds.gl_resources);
@@ -47,9 +44,9 @@ public struct drawer_blur(shader_config const& glc,
       srcfbo.some = *respool->framebuffers.equal_range(src_fbname);
     }
   }
-  public function vbid_t get_vbid() const { return vbid_blur; }
-  public function vbid_t get_instances_vbid() const { return vbid_blur; }
-  public function vbid_t get_vertices_vbid() const { return vbid_blur; }
+  public function vbid_t get_vbid() const { return vbid_ssao; }
+  public function vbid_t get_instances_vbid() const { return vbid_ssao; }
+  public function vbid_t get_vertices_vbid() const { return vbid_ssao; }
   public function prepare_instance_data_funcptr
   get_prepare_instance_data_funcptr() const {
     return make_tfuncptr{prepare_instance_data_default}();
@@ -63,12 +60,12 @@ public struct drawer_blur(shader_config const& glc,
     const
   {
     farray{vertex_attr, 4} dummy_vattr;
-    farray{blur_vertex_attributes, 4} vs;
+    farray{ssao_vertex_attributes, 4} vs;
     vs[0].vert = glm::make_vec2(-1.0, -1.0);
     vs[1].vert = glm::make_vec2( 1.0, -1.0);
     vs[2].vert = glm::make_vec2( 1.0,  1.0);
     vs[3].vert = glm::make_vec2(-1.0,  1.0);
-    vptr->push_polygon_distinct{blur_vertex_attributes, 0}(dummy_vattr, vs);
+    vptr->push_polygon_distinct{ssao_vertex_attributes, 0}(dummy_vattr, vs);
   }
   public function dgf_filler make_filler(ptr{vertices} const& vptr) const
   {
@@ -80,25 +77,6 @@ public struct drawer_blur(shader_config const& glc,
   }
   public function void resize_screen(shader_config const& glc)
   {
-    /*
-    ppfbo->width = width;
-    ppfbo->height = height;
-    init_postprocess_fbo(glc, enable_bokeh, *ppfbo, GL_RGBA);
-    if (enable_bilinear) {
-      glActiveTexture(GL_TEXTURE0);
-      glBindTexture(GL_TEXTURE_2D, ppfbo->texture_color.get());
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-	static_cast{int}(GL_LINEAR));
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
-	static_cast{int}(GL_LINEAR));
-    }
-    if (enable_shadow_blur) {
-      sppfbo->width = glc.shadowmap_resolution;
-      sppfbo->height = glc.shadowmap_resolution;
-      init_shadowmap_fbo(glc, *sppfbo);
-    }
-    debug_log("blur", width, height);
-    */
   }
   public function bool reload_shaders(shader_config const& glc)
   {
@@ -106,15 +84,13 @@ public struct drawer_blur(shader_config const& glc,
   }
   public function void draw_drawstep(draw_data mutable& ddata)
   {
-    // debug_log("blur draw");
+    // debug_log("ssao draw");
     glDisable(GL_DEPTH_TEST);
     glDepthMask(0);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, srcfbo.some->texture_color[0].get());
-    if (enable_bokeh) {
-      glActiveTexture(GL_TEXTURE1);
-      glBindTexture(GL_TEXTURE_2D, srcfbo.some->texture_depth.get());
-    }
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, srcfbo.some->texture_depth.get());
     mutable& sdr = *sdr_re;
     glUseProgram(sdr.program);
     glUniform1i(sdr.u_sampler_tex, 0);
@@ -124,6 +100,11 @@ public struct drawer_blur(shader_config const& glc,
       1.0f / static_cast{float}(srcfbo.some->height));
     // debug_log("delta", pixel_delta);
     glUniform2fv(sdr.u_pixel_delta, 1, pixel_delta.to_crawptr());
+    const near_far_right = glm::make_vec3(
+      params->proj->camera_pers.near,
+      params->proj->camera_pers.far,
+      params->proj->camera_pers.width);
+    glUniform3fv(sdr.u_near_far_right, 1, near_far_right.to_crawptr());
     mutable opval = static_cast{int}(params->option_value);
     opval %= 2;
     glUniform1f(sdr.u_option_value, static_cast{float}(opval));
@@ -136,19 +117,18 @@ public struct drawer_blur(shader_config const& glc,
   }
 }
 
-metafunction blur_shader_ptr
+metafunction ssao_shader_ptr
   ptr{glshader{
-    blur_uniforms, blur_instance_attributes, blur_vertex_attributes}};
+    ssao_uniforms, ssao_instance_attributes, ssao_vertex_attributes}};
 
-function blur_shader_ptr
-init_blur_shader(shader_config const& g, bool enable_bokeh)
+function ssao_shader_ptr
+init_ssao_shader(shader_config const& g)
 {
   tree_map{string, string} bnd;
-  bnd["blur_param"] = to_string(g.conf.get("blur_param", 0.7, 0.334, 1.0));
-  bnd["enable_bokeh"] = enable_bokeh ? "1" : "0";
-  const v = load_shader_program(g, bnd, "blur.vsh");
-  const f = load_shader_program(g, bnd, "blur.fsh");
-  return make_glshader_ptr{blur_uniforms, blur_instance_attributes,
-    blur_vertex_attributes}(v, f, "", g.debug_level, "blur");
+  bnd["ssao_param"] = to_string(g.conf.get("ssao_param", 0.7, 0.334, 1.0));
+  const v = load_shader_program(g, bnd, "ssao.vsh");
+  const f = load_shader_program(g, bnd, "ssao.fsh");
+  return make_glshader_ptr{ssao_uniforms, ssao_instance_attributes,
+    ssao_vertex_attributes}(v, f, "", g.debug_level, "ssao");
 }
 

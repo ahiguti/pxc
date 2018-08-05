@@ -231,8 +231,9 @@ public struct demoapp_application()
     // proj_dfをmotion threadのpj_drawing_frameからコピーする
     const& pj = app.scene_shared->pj_drawing_frame;
     *app.proj_df = pj;
-    app.dp_fxaa->option_value = pj.option_value;
-    app.dp_blur->option_value = pj.option_value;
+    app.dp_fxaa->option_value = 0.0; // pj.option_value;
+    app.dp_blur->option_value = 0.0; // pj.option_value;
+    app.dp_ssao->option_value = pj.option_value;
     /*
     *app.pviewport_main = glm::make_uvec2(
       static_cast{uint}(pj.display_width),
@@ -507,13 +508,15 @@ private struct app_demoapp()
   public ptr{projection_info} proj_pm = make_ptr{projection_info}();
     // pre-motion frame
   public ptr{drawer_fxaa_params} dp_fxaa = make_ptr{drawer_fxaa_params}();
+  public ptr{drawer_ssao_params} dp_ssao = make_ptr{drawer_ssao_params}(
+    proj_df);
   public ptr{drawer_blur_params} dp_blur = make_ptr{drawer_blur_params}();
   public ptr{glm::uvec2} pviewport_main = make_ptr{glm::uvec2}();
   public ptr{glm::uvec2} pviewport_sm = make_ptr{glm::uvec2}();
   public input_control_target player;
   public joystick_state player_joystick;
   public input_control ictl = input_control(io::system);
-  public bool scene_next_flag;
+  public int scene_next;
   public float light_on = 0.0f;
   public glm::vec2 light = glm::make_vec2(0.1f, 0.2f);
   public float exposure = 1.414f;
@@ -592,7 +595,7 @@ public multithreaded struct demoapp_scene_shared(io const& sys0)
 {
   public position_angle posang;
   public glm::vec3 pos_delta;
-  public bool scene_next_flag;
+  public int scene_next;
   public int raycast_layer;
   public bool engine_status = true;
   public float light_on;
@@ -870,8 +873,8 @@ function void handle_event(app_demoapp mutable& app, app_ctrl_i mutable& actrl,
     debug_log("down", bx, by, ev.button.x, ev.button.y,
       pj.window_width, pj.window_height);
     if (bx < 0.1 && by < 0.1) {
-      app.scene_next_flag = true;
-      debug_log("next", app.scene_next_flag);
+      app.scene_next = 1;
+      debug_log("next", app.scene_next);
       return;
     } else if (bx > 0.9 && by > 0.9) {
       app.exposure *= 2.0;
@@ -887,7 +890,7 @@ function void handle_event(app_demoapp mutable& app, app_ctrl_i mutable& actrl,
     }
   } else if (etype == SDL_FINGERDOWN) {
     if (ev.tfinger.x < 0.1 && ev.tfinger.y < 0.1) {
-      app.scene_next_flag = true;
+      app.scene_next = 1;
       return;
     } else if (ev.tfinger.x > 0.9 && ev.tfinger.y > 0.9) {
       app.app_commands["scene_pause"] = "1";
@@ -935,7 +938,11 @@ function void handle_event(app_demoapp mutable& app, app_ctrl_i mutable& actrl,
       }
     }
     if (ev.key.keysym.scancode == SDL_SCANCODE_TAB) {
-      app.scene_next_flag = true;
+      if ((app.modmask & 1) == 1) {
+        app.scene_next = -1;
+      } else {
+        app.scene_next = 1;
+      }
       return;
     }
     if (ev.key.keysym.scancode == SDL_SCANCODE_F11) {
@@ -1112,7 +1119,7 @@ function void handle_keys(app_demoapp mutable& app, cslice{uchar} const& keys,
   }
   if (app.ictl.get_button(buttons, 4) != 0 &&
     app.ictl.get_button(app.prev_joy_buttons, 4) == 0) {
-    app.scene_next_flag = true;
+    app.scene_next = 1;
   }
   */
   glm::quat camera_rel = glm::make_quat_wxyz(1.0, 0.0, 0.0, 0.0);
@@ -1146,13 +1153,13 @@ function void handle_keys(app_demoapp mutable& app, cslice{uchar} const& keys,
     ss.exposure = sqrt(app.exposure); // 半段単位
     ss.option_value = app.option_value;
     ss.option_value2 = app.option_value2;
-    ss.scene_next_flag = app.scene_next_flag;
+    ss.scene_next = app.scene_next;
     ss.posang.position = app.player.position;
     ss.posang.angle = app.player.angle * mctrl_angle * camera_rel;
     ss.pos_delta = app.player.pos_delta;
     ss.app_commands.swap(app.app_commands);
     ss.app_status_message = app.app_status_message;
-    app.scene_next_flag = false;
+    app.scene_next = 0;
     // sdl_log("posang = ", ss.posang);
   }
   app.app_commands.clear();
@@ -1187,14 +1194,15 @@ private function varray{ptr{pgldrawer_export_i}} init_drawsteps(
     sconf.num_shadowmaps, app.raycast_layer, solid, shadow, zpre);
   for (int i: 0 .. num_shadowmaps) {
     r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_sm,
-      app.pviewport_sm, shadowmap_name + to_string(i), true, "",
+      app.pviewport_sm, shadowmap_name + to_string(i), true,
+      make_varray{string}(),
       "GL_DEPTH_COMPONENT"));
       // set shadowmap framebuffer i
     r.append(shadow[static_cast{size_t}(i)]); // draw shadow
   }
   r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_main,
     app.pviewport_main,
-    "col0", true, "GL_RGBA", "GL_DEPTH_COMPONENT"));
+    "col1", true, make_varray{string}("GL_RGBA"), "GL_DEPTH_COMPONENT"));
     // set color+depth framebuffer
   r.push_back(make_drawstep_chgmode(sconf, ds, "zprepass"));
   r.append(zpre); // draw solid z-prepass
@@ -1208,15 +1216,21 @@ private function varray{ptr{pgldrawer_export_i}} init_drawsteps(
   r.push_back(make_drawstep_particle_bb(sconf, ds, app.proj_df));
   r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_main,
     app.pviewport_main,
-    "col1", true, "GL_RGBA", "GL_DEPTH_COMPONENT"));
+    "col0", true, make_varray{string}("GL_RGBA"), "GL_DEPTH_COMPONENT"));
     // set color+depth framebuffer
+  r.push_back(make_drawstep_ssao(sconf, ds, app.dp_ssao, "col1"));
+    // col1からcol0へssaoフィルタ実行
+  r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_main,
+    app.pviewport_main,
+    "col1", false, make_varray{string}("GL_RGBA"), "GL_DEPTH_COMPONENT"));
+    // col1再利用
   r.push_back(make_drawstep_fxaa(sconf, ds, app.dp_fxaa, "col0"));
     // col0からcol1へfxaaフィルタ実行
   if (sconf.conf.get("capture_filter", 0, 0, 1) != 0) {
     debug_log("enable capture filter");
     r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_main,
       app.pviewport_main,
-      "col0", false, "GL_RGBA", "GL_DEPTH_COMPONENT"));
+      "col0", false, make_varray{string}("GL_RGBA"), "GL_DEPTH_COMPONENT"));
       // col0再利用
     r.push_back(make_drawstep_blur(sconf, ds, app.dp_blur, "col1"));
       // col1からcol0へblurフィルタ実行
@@ -1225,7 +1239,7 @@ private function varray{ptr{pgldrawer_export_i}} init_drawsteps(
     r.push_back(make_drawstep_font2(sconf, ds, app.pviewport_main));
     r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_main,
       app.pviewport_main,
-      "col1", false, "GL_RGBA", "GL_DEPTH_COMPONENT"));
+      "col1", false, make_varray{string}("GL_RGBA"), "GL_DEPTH_COMPONENT"));
       // col1再利用
     r.push_back(make_drawstep_chgmode(sconf, ds, "solid"));
     r.push_back(make_drawstep_capture(sconf, ds, app.pviewport_main,
@@ -1233,14 +1247,14 @@ private function varray{ptr{pgldrawer_export_i}} init_drawsteps(
       // col0からcol1へcaptureフィルタ実行
     r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_main,
       app.pviewport_main,
-      "", false, "", "")); // set toplevel framebuffer
+      "", false, make_varray{string}(), "")); // set toplevel framebuffer
     r.push_back(make_drawstep_passthrough(sconf, ds, "col0"));
       // col0からtoplevelへpassthroughフィルタ実行
   } else {
     debug_log("disable capture filter");
     r.push_back(make_drawstep_setfb(sconf, ds, app.pviewport_main,
       app.pviewport_main,
-      "", true, "", "")); // set toplevel framebuffer
+      "", true, make_varray{string}(), "")); // set toplevel framebuffer
     r.push_back(make_drawstep_blur(sconf, ds, app.dp_blur, "col1"));
       // col1からtoplevelへblurフィルタ実行
     r.push_back(make_drawstep_chgmode(sconf, ds, "blend"));
@@ -2099,12 +2113,11 @@ scene_control(node_factory const& nfac,
     }
     return r;
   }
-  public function void scene_next()
+  public function void scene_next(int v)
   {
-    ++cur_scene;
-    if (cur_scene >= scene_names.size()) {
-      cur_scene = 0;
-    }
+    cur_scene = static_cast{size_t}(
+      static_cast{int}(cur_scene + scene_names.size()) + v)
+      % scene_names.size();
     node_scene = instantiate_cur_scene();
   }
 }
@@ -2158,44 +2171,37 @@ scene_control_update_buttons(scene_control mutable& sctl,
 {
   /* box */
   mutable& nd = sn_buttons;
+  /*
   if (nd.children.size() < 1) {
-    const p = scene_node(sctl.joint_id_rect2d, mat4_identity());
-    nd.children.push_back(p);
-  }
-  {
-    mutable& cn = nd.children[0];
-    const& sli = cn.trans.value.to_slice();
+    mutable p = scene_node(sctl.joint_id_rect2d, mat4_identity());
+    const& sli = p.trans.value.to_slice();
     sli[0] = -0.99f;
     sli[1] = 0.81f;
     sli[2] = 0.18f;
     sli[3] = 0.18f;
+    nd.children.push_back(p);
   }
+  */
   if (sctl.joint_id_dbgui.vbid != vbid_invalid()) { // dbgui is enabled
     if (nd.children.size() < 2) {
-      const p = scene_node(sctl.joint_id_dbgui, mat4_identity());
-      nd.children.push_back(p);
-    }
-    if (nd.children.size() < 3) {
-      const p = scene_node(sctl.joint_id_dbgui2, mat4_identity());
-      nd.children.push_back(p);
-    }
-    {
+      mutable p = scene_node(sctl.joint_id_dbgui, mat4_identity());
       // dbgui 左下
-      mutable& cn = nd.children[1];
-      const& sli = cn.trans.value.to_slice();
+      const& sli = p.trans.value.to_slice();
       sli[0] = -0.9f;
       sli[1] = -0.9f;
       sli[2] = 0.9f;
       sli[3] = 0.9f;
+      nd.children.push_back(p);
     }
-    {
+    if (nd.children.size() < 3) {
+      mutable p = scene_node(sctl.joint_id_dbgui2, mat4_identity());
       // dbgui2 全面に描画
-      mutable& cn = nd.children[2];
-      const& sli = cn.trans.value.to_slice();
+      const& sli = p.trans.value.to_slice();
       sli[0] = -1.0f;
       sli[1] = -1.0f;
       sli[2] = 2.0f;
       sli[3] = 2.0f;
+      nd.children.push_back(p);
     }
   }
 }
@@ -2208,8 +2214,8 @@ scene_control_step(scene_control mutable& sctl,
   cslice{prepare_instance_data_funcptr} const& ftable,
   whole_instances_type mutable& whole_instances)
 {
-  if (ss.scene_next_flag) {
-    sctl.scene_next();
+  if (ss.scene_next != 0) {
+    sctl.scene_next(ss.scene_next);
   }
   const speed = frame_speed;
   // mutable& snode = *sctl.snode;

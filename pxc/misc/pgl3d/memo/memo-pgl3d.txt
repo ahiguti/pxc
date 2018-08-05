@@ -2,12 +2,17 @@
 ---------------------------------------------------------------------------
 TODO
 
-- glm更新で壊れた場所がもうないか確認
-
-- projection_info tsvaluetypeに戻せないか
+- SSAOをMRT使ってもっと正確な計算にしてみる
 
 - 物体切り出して動かすところまで
   手順整理
+
+- 子threadで例外投げられるとunhandled handlerが呼ばれない
+  - とりあえずスタックトレースは出るように(done)
+
+- glm更新で壊れた場所がもうないか確認
+
+- projection_info tsvaluetypeに戻せないか
 
 - 距離更新を軽く
   - ついでにedit_mode::set_spaceが遅いのも直す
@@ -4203,6 +4208,21 @@ clear_flagが真のときにzposi方向を伸ばせる可能性があるのは�
 
 
 ---------------------------------------------------------------------------
+ssao
+
+depth値szから距離pzを計算
+pz = -fa.ne / (sz(fa - ne) - fa)
+deltaは1/rightの値。nearプレーンで1ピクセルのテクスチャ座標での長さ。
+offsetはピクセル単位の視中心からのオフセット。
+offset * pixel_deltaがテクスチャ座標でのオフセット。
+これにright値を掛けるとnearプレーンでのxy位置オフセットになる
+それにposz/nearをかけると距離poszでのxyになる
+posxy = offset * pixel_delta * right * posz / near;
+
+---------------------------------------------------------------------------
 物体切り出して動かすところまで
 
+1. console(done)
+2. save/load (done)
+3. 
 

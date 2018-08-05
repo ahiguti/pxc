@@ -38,8 +38,8 @@ void init_debug_helper()
 #ifdef _MSC_VER
   HANDLE proc = GetCurrentProcess();
   SymInitialize(proc, NULL, TRUE);
-  // fprintf(stderr, "symbol initialized\n");
-  // fflush(stderr);
+  fprintf(stderr, "init_debug_helper: symbol initialized\n");
+  fflush(stderr);
 #endif
 }
 
@@ -98,6 +98,7 @@ void dump_modules()
 
 LONG unhandled_exception_handler(PEXCEPTION_POINTERS einfo)
 {
+  fprintf(stderr, "unhandled_exception_handler\n");
   char buf[1024] = { };
   SetErrorMode(SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS);
   sprintf_s(buf, "unhandled exception: %x\n",
@@ -109,18 +110,24 @@ LONG unhandled_exception_handler(PEXCEPTION_POINTERS einfo)
 
 LONG vectored_exception_handler(PEXCEPTION_POINTERS einfo)
 {
-  if (einfo->ExceptionRecord->ExceptionCode == 0xc0000374) {
+  fprintf(stderr, "vectored_exception_handler %x\n",
+    einfo->ExceptionRecord->ExceptionCode);
+  const auto code = einfo->ExceptionRecord->ExceptionCode;
+  if (code == 0xc0000374 || code == 0xc0000005) {
     // heap corruption is detected
+    // segv
     unhandled_exception_handler(einfo);
   }
-  return EXCEPTION_CONTINUE_SEARCH;
+  dump_backtrace();
+  // return EXCEPTION_CONTINUE_SEARCH;
+  return EXCEPTION_EXECUTE_HANDLER;
 }
 
 #endif
 
 void terminate_handler()
 {
-  // fprintf(stderr, "terminate\n");
+  fprintf(stderr, "terminate_handler\n");
   dump_backtrace();
   fflush(stderr);
   fflush(stdout);
@@ -129,8 +136,8 @@ void terminate_handler()
 
 void set_unhandled_exception_handler()
 {
-  // fprintf(stderr, "set unhandled exception handler\n");
-  // fflush(stderr);
+  fprintf(stderr, "set unhandled exception handler\n");
+  fflush(stderr);
 #ifdef _MSC_VER
   SetUnhandledExceptionFilter(&unhandled_exception_handler);
   AddVectoredExceptionHandler(1, &vectored_exception_handler);

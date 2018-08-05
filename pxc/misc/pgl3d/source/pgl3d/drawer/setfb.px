@@ -5,58 +5,64 @@ public import meta m;
 
 private struct setfb_attributes { }
 
-private function void get_color_format(string const& s, GLenum mutable& ifmt,
-  GLenum mutable& efmt, GLenum mutable& etyp)
+private function texture_format get_color_format(string const& s)
 {
+  texture_format f;
   if (s == "") {
-    ifmt = GL_NONE;
-    efmt = GL_NONE;
-    etyp = GL_NONE;
+    f.ifmt = GL_NONE;
+    f.efmt = GL_NONE;
+    f.etyp = GL_NONE;
   } else if (s == "GL_RGBA") {
-    ifmt = GL_RGBA;
-    efmt = GL_RGBA;
-    etyp = GL_UNSIGNED_INT;
+    f.ifmt = GL_RGBA;
+    f.efmt = GL_RGBA;
+    f.etyp = GL_UNSIGNED_BYTE;
+  } else if (s == "GL_RGBA32F") {
+    f.ifmt = GL_RGBA32F;
+    f.efmt = GL_RGBA;
+    f.etyp = GL_FLOAT;
   } else if (s == "GL_RGB") {
-    ifmt = GL_RGB;
-    efmt = GL_RGBA;
-    etyp = GL_UNSIGNED_INT;
+    f.ifmt = GL_RGB;
+    f.efmt = GL_RGB;
+    f.etyp = GL_UNSIGNED_BYTE;
   } else if (s == "GL_RG") {
-    ifmt = GL_RG;
-    efmt = GL_RG;
-    etyp = GL_UNSIGNED_SHORT;
+    f.ifmt = GL_RG;
+    f.efmt = GL_RG;
+    f.etyp = GL_UNSIGNED_BYTE;
   } else if (s == "GL_RED") {
-    ifmt = GL_RED;
-    efmt = GL_RED;
-    etyp = GL_UNSIGNED_BYTE;
+    f.ifmt = GL_RED;
+    f.efmt = GL_RED;
+    f.etyp = GL_UNSIGNED_BYTE;
   } else {
     throw runtime_error_template{"color_format"}(s);
   }
+  return f;
 }
 
-private function void get_depth_format(string const& s, GLenum mutable& ifmt,
-  GLenum mutable& efmt, GLenum mutable& etyp)
+private function texture_format get_depth_format(string const& s)
 {
+  texture_format f;
   if (s == "") {
-    ifmt = GL_NONE;
-    efmt = GL_NONE;
-    etyp = GL_NONE;
+    f.ifmt = GL_NONE;
+    f.efmt = GL_NONE;
+    f.etyp = GL_NONE;
   } else if (s == "GL_DEPTH_COMPONENT") {
-    ifmt = GL_DEPTH_COMPONENT;
-    efmt = GL_DEPTH_COMPONENT;
-    etyp = GL_UNSIGNED_INT;
+    f.ifmt = GL_DEPTH_COMPONENT;
+    f.efmt = GL_DEPTH_COMPONENT;
+    f.etyp = GL_UNSIGNED_INT;
   } else if (s == "GL_DEPTH_COMPONENT16") {
-    ifmt = GL_DEPTH_COMPONENT;
-    efmt = GL_DEPTH_COMPONENT;
-    etyp = GL_UNSIGNED_INT;
+    f.ifmt = GL_DEPTH_COMPONENT;
+    f.efmt = GL_DEPTH_COMPONENT;
+    f.etyp = GL_UNSIGNED_INT;
   } else {
     throw runtime_error_template{"depth_format"}(s);
   }
+  return f;
 }
 
 public struct drawer_setfb(shader_config const& glc,
   drawer_shared const& ds, ptr{glm::uvec2} const& src_size0,
   ptr{glm::uvec2} const& dst_size0, string const& fbname0, bool owner_flag0,
-  string const& color_fmt0, string const& depth_fmt0)
+  cslice{string} const& color_fmt0, string const& depth_fmt0)
 <drawstep_i>
 {
   /* draw()されるとフレームバッファをbindする。owner_flagが真ならフレーム
@@ -69,25 +75,35 @@ public struct drawer_setfb(shader_config const& glc,
   bool const owner_flag = owner_flag0;
   bool color_tex = false;
   bool depth_tex = false;
+  varray{texture_format} color_fmt;
+  texture_format depth_fmt;
+  /*
   GLenum color_ifmt;
   GLenum color_efmt;
   GLenum color_etyp;
   GLenum depth_ifmt;
   GLenum depth_efmt;
   GLenum depth_etyp;
+  */
   option{ptr{gl_framebuffer}} fbo_own;
   option{cptr{gl_framebuffer}} fbo;
   public function vbid_t get_vbid() const { return vbid_invalid(); }
   public function vbid_t get_instances_vbid() const { return vbid_invalid(); }
   public function vbid_t get_vertices_vbid() const { return vbid_invalid(); }
   init(ds, color_fmt0, depth_fmt0);
-  function void init(drawer_shared const& ds, string const& color_fmt0,
+  function void init(drawer_shared const& ds, cslice{string} const& color_fmt0,
     string const& depth_fmt0)
   {
+    for (const i, const& fs: color_fmt0) {
+      color_fmt.push_back(get_color_format(fs));
+    }
+    depth_fmt = get_depth_format(depth_fmt0);
+    /*
     get_color_format(color_fmt0, color_ifmt, color_efmt, color_etyp);
     get_depth_format(depth_fmt0, depth_ifmt, depth_efmt, depth_etyp);
-    color_tex = (color_ifmt != GL_NONE);
-    depth_tex = (depth_ifmt != GL_NONE);
+    */
+    color_tex = !color_fmt.empty();
+    depth_tex = (depth_fmt.ifmt != GL_NONE);
     if (fbname.empty()) {
       return;
     }
@@ -129,8 +145,7 @@ public struct drawer_setfb(shader_config const& glc,
       fbo_own.some->width = static_cast{int}(src_size->x);
       fbo_own.some->height = static_cast{int}(src_size->y);
       if (color_tex) {
-        init_color_fbo(glc, *fbo_own.some, color_ifmt, color_efmt,
-          color_etyp, depth_ifmt, depth_efmt, depth_etyp);
+        init_color_fbo(glc, *fbo_own.some, color_fmt, depth_fmt);
         debug_log("setfb color fbo");
       } else {
         init_shadowmap_fbo(glc, *fbo_own.some);

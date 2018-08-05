@@ -67,17 +67,17 @@ get_wall_dir(t const& tex, uvec3 const& p)
 public threaded function void
 spline_postprocess(pgen_context mutable& ctx)
 {
-  mutable tex = ctx.tex_pri; // copy
+  mutable tex = ctx.tex[0]; // copy
   const sz = tex.get_size_uvec3();
   range_foreach{pp_one}(sz);
   range_foreach{pp_copy_back}(sz);
-  tex = ctx.tex_pri; // copy again
+  tex = ctx.tex[0]; // copy again
   range_foreach{pp_right_angle_one}(sz);
   threaded function void pp_copy_back(uint x, uint y, uint z)
   {
     const v = get(x, y, z);
     if (!is_space_voxel(v)) {
-      ctx.tex_pri.set(x, y, z, v);
+      ctx.tex[0].set(x, y, z, v);
     }
   }
   threaded function texel_value get(uint x, uint y, uint z)
@@ -345,8 +345,8 @@ private threaded function void pgen_millefeuille(uvec3 const& p,
         for (const ix: szx0 .. szx1) {
           mutable fpos = make_uvec3(ix + pos.x, iy + pos.y, iz + pos.z);
           swap_xy_if(fpos);
-          ctx.tex_pri.set(fpos.x, fpos.y, fpos.z, make_filled_voxel());
-          ctx.tex_sec.set(fpos.x, fpos.y, fpos.z, 0x00808080u);
+          ctx.tex[0].set(fpos.x, fpos.y, fpos.z, make_filled_voxel());
+          ctx.tex[1].set(fpos.x, fpos.y, fpos.z, 0x00808080u);
         }
         threaded function void clamp_plane_param(plane_param mutable& pp)
         {
@@ -420,8 +420,7 @@ private threaded function void pgen_millefeuille(uvec3 const& p,
 public threaded struct pgen_context(ptr{rand_generator} rndp0)
 {
   public ptr{rand_generator} rndp = rndp0;
-  public texture_data tex_pri;
-  public texture_data tex_sec;
+  public farray{texture_data, 2} tex;
   public uint rec_count;
 }
 
@@ -614,8 +613,8 @@ private threaded function void pgen_fill_filled(uvec3 const& pos,
     const x1 = pos.x + x;
     const y1 = pos.y + y;
     const z1 = pos.z + z;
-    ctx.tex_pri.set(x1, y1, z1, make_filled_voxel());
-    ctx.tex_sec.set(x1, y1, z1, 0x00808080u);
+    ctx.tex[0].set(x1, y1, z1, make_filled_voxel());
+    ctx.tex[1].set(x1, y1, z1, 0x00808080u);
   }
   range_foreach{ffunc}(sz);
 }
@@ -629,8 +628,8 @@ private threaded function void pgen_fill_value(uvec3 const& pos,
     const x1 = pos.x + x;
     const y1 = pos.y + y;
     const z1 = pos.z + z;
-    ctx.tex_pri.set(x1, y1, z1, value);
-    ctx.tex_sec.set(x1, y1, z1, 0x00808080u);
+    ctx.tex[0].set(x1, y1, z1, value);
+    ctx.tex[1].set(x1, y1, z1, 0x00808080u);
   }
   range_foreach{ffunc}(sz);
 }
@@ -645,14 +644,14 @@ private threaded function void pgen_fill_plane(uvec3 const& pos,
     const x1 = pos.x + x;
     const y1 = pos.y + y;
     const z1 = pos.z + z;
-    // const ov = ctx.tex_pri.get(x1, y1, z1);
+    // const ov = ctx.tex[0].get(x1, y1, z1);
     const v = make_plane_node(pp, make_ivec3(
       si(x * 2 + 1) - si(sz.x),
       si(y * 2 + 1) - si(sz.y),
       si(z * 2 + 1) - si(sz.z)),
       1);
-    ctx.tex_pri.set(x1, y1, z1, v);
-    ctx.tex_sec.set(x1, y1, z1, 0x00808080u);
+    ctx.tex[0].set(x1, y1, z1, v);
+    ctx.tex[1].set(x1, y1, z1, 0x00808080u);
   }
   range_foreach{ffunc}(sz);
 }

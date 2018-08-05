@@ -15,6 +15,8 @@ private import pgl3d::edit_mode::tiled_texture_edit_view -;
 private import pgl3d::edit_mode::edit_mode_texture -;
 private import pgl3d::edit_mode::sync_gl -;
 
+private metafunction save_dir "/build/saved/";
+
 public struct edit_mode(ptr{edit_mode_texture} const& emt0)
 <edit_mode_i>
 {
@@ -62,7 +64,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     {
       sdl_load_file("/build/edit_selection.ser", buf);
       if (!buf.empty()) {
-        copy_data = from_string{copy_data_type}(buf);
+        copy_data = copy_data_type_compat_deserialize(buf);
       }
     }
     {
@@ -158,6 +160,48 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   {
     return console_mode;
   }
+  private function void execute_console_command()
+  {
+    varray{string} toks;
+    string_split{' '}(console_text, toks);
+    if (toks.empty()) {
+      return;
+    }
+    const& cmd = toks[0];
+    if (cmd == "save" && toks.size() == 2) {
+      const fn = save_dir + toks[1];
+      sdl_save_file(fn, to_string(copy_data));
+      debug_log("saved", fn);
+    } else if (cmd == "load" && toks.size() == 2) {
+      string buf;
+      const fn = save_dir + toks[1];
+      sdl_load_file(fn, buf);
+      if (!buf.empty()) {
+        copy_data = copy_data_type_compat_deserialize(buf);
+        /*
+        const fst = ttev->get_cursor_pos().first;
+        const snd = to_uvec3(map{ivec3, max}(
+          to_ivec3(fst)
+          + to_ivec3(copy_data.copy_size)
+          - make_ivec3(1, 1, 1)
+          - to_ivec3(copy_data.cursor_offset), ivec3()));
+        */
+        mark_set = true;
+        copied = true;
+        // debug_log("cursor", fst, snd);
+        glm::vec3 cursor_move_r;
+        move_cursor(0, 0, 0, cursor_move_r);
+        /*
+        ttev->set_cursor_pos(fst, snd);
+        */
+        debug_log("loaded", fn);
+      } else {
+        debug_log("failed to load", fn);
+      }
+    } else {
+      debug_log("unrecognized command", toks);
+    }
+  }
   public function void on_key_pressed(int scancode, uint modmask,
     glm::vec3 mutable& cursor_move_r, string mutable& msg_r)
   {
@@ -176,10 +220,14 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     const mod_rcs = (modmask & 10) == 10;
     const cursor_spd = mod_shift ? 16 : 1;
     if (console_mode) {
-      if (key == SDL_SCANCODE_ESCAPE) {
+      if (key == SDL_SCANCODE_ESCAPE || key == SDL_SCANCODE_RETURN) {
+        if (key == SDL_SCANCODE_RETURN) {
+          execute_console_command();
+        }
         console_mode = false;
         SDL_StopTextInput();
         console_text = string();
+        console_text_cursor = 0;
         msg_r = string();
         return;
       }
@@ -207,6 +255,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       console_mode = true;
       SDL_StartTextInput();
       console_text = string();
+      console_text_cursor = 0;
       msg_r = get_console_text();
       return;
     } else if (key == SDL_SCANCODE_F5 || key == SDL_SCANCODE_F12) {
@@ -280,7 +329,9 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
           scale_range();
         }
       } else if (key == SDL_SCANCODE_I) {
-        if (mod_shift) {
+        if (mod_ctrl) {
+          select_contiguous();
+        } else if (mod_shift) {
           swap_cursor();
         } else {
           set_mark();
@@ -458,6 +509,9 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
       }
     }
     msg_r = message;
+  }
+  private function void select_contiguous()
+  {
   }
   private function void set_mark()
   {
@@ -663,10 +717,11 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     copy_data.cursor_offset = ttev->get_cursor_pos().first - cur.first;
     debug_log("copy_value: cursor_offset", copy_data.cursor_offset);
     const sz_l2 = map{uvec3, integral_log2{uint}}(copy_data.copy_size);
-    copy_data.tex_pri.set_size_l2(sz_l2.x, sz_l2.y, sz_l2.z);
-    copy_data.tex_sec.set_size_l2(sz_l2.x, sz_l2.y, sz_l2.z);
-    ttev->edit_copy_range(cur.first, cur.second, copy_data.tex_pri,
-      copy_data.tex_sec, uvec3());
+    for (const i, mutable& tex: copy_data.tex) {
+      tex.set_size_l2(sz_l2.x, sz_l2.y, sz_l2.z);
+    }
+    ttev->edit_copy_range(cur.first, cur.second, copy_data.tex[0],
+      copy_data.tex[1], uvec3());
     mark_set = true;
     copied = true;
     // message = "edit_mode: copy value " + to_string(copy_data.copy_size);
@@ -687,8 +742,8 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     debug_log("paste_value: cpos,mi_0,mx_0,mi,mx,sz,cd_mi", cpos,
       mi_0, mx_0, mi, mx, sz, cd_mi);
     */
-    ttev->edit_paste_range(to_uvec3(mi), to_uvec3(sz), copy_data.tex_pri,
-      copy_data.tex_sec, to_uvec3(cd_mi), index_mask, mmod);
+    ttev->edit_paste_range(to_uvec3(mi), to_uvec3(sz), copy_data.tex[0],
+      copy_data.tex[1], to_uvec3(cd_mi), index_mask, mmod);
     // message = "edit_mode: paste value " + to_string(sz);
   }
   private function void convert_to_tmap()
@@ -796,7 +851,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     {
       // 縮小処理
       copy_value();
-      const oszl2 = copy_data.tex_pri.get_size_l2_uvec3();
+      const oszl2 = copy_data.tex[0].get_size_l2_uvec3();
       texture_data dpri;
       texture_data daux;
       dpri.set_size_l2(oszl2.x, oszl2.y, oszl2.z);
@@ -812,7 +867,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
             const p = make_ivec3(si(x), si(y), si(z));
             texel_value dpri_v;
             texel_value dsec_v;
-            shrink_voxel_value(false, copy_data.tex_pri, copy_data.tex_sec,
+            shrink_voxel_value(false, copy_data.tex[0], copy_data.tex[1],
               dpri_v, dsec_v, p);
             dpri.set(ui(p.x + dbase.x), ui(p.y + dbase.y), ui(p.z + dbase.z),
               dpri_v);
@@ -821,8 +876,8 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
           }
         }
       }
-      copy_data.tex_pri = dpri;
-      copy_data.tex_sec = daux;
+      copy_data.tex[0] = dpri;
+      copy_data.tex[1] = daux;
       paste_value(0xffu, merge_mode_opaque());
     }
     {
@@ -842,21 +897,21 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     // debug_log("scale_range: p1: copy_data:", copy_data, ttev->get_cursor_pos());
     texture_data spri;
     texture_data saux;
-    const szl2 = copy_data.tex_pri.get_size_l2_uvec3() + make_uvec3(1, 1, 1);
+    const szl2 = copy_data.tex[0].get_size_l2_uvec3() + make_uvec3(1, 1, 1);
     spri.set_size_l2(szl2.x, szl2.y, szl2.z);
     saux.set_size_l2(szl2.x, szl2.y, szl2.z);
     const sz = copy_data.copy_size;
     for (const z: 0 .. sz.z) {
       for (const y: 0 .. sz.y) {
         for (const x: 0 .. sz.x) {
-          scale_voxel_value(copy_data.tex_pri.get(x, y, z),
-            copy_data.tex_sec.get(x, y, z), spri, saux,
+          scale_voxel_value(copy_data.tex[0].get(x, y, z),
+            copy_data.tex[1].get(x, y, z), spri, saux,
             si(x * 2), si(y * 2), si(z * 2));
         }
       }
     }
-    copy_data.tex_pri = spri;
-    copy_data.tex_sec = saux;
+    copy_data.tex[0] = spri;
+    copy_data.tex[1] = saux;
     copy_data.copy_size *= 2u;
     mutable& o = copy_data.cursor_offset;
     o *= 2u;
@@ -874,10 +929,10 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   private function void rotate_range(imat3 const& m)
   {
     copy_value();
-    const spri = copy_data.tex_pri; // copy
-    // debug_log("tex_pri", copy_data.tex_pri);
+    const spri = copy_data.tex[0]; // copy
+    // debug_log("tex[0]", copy_data.tex[0]);
     // debug_log("spri", spri);
-    const saux = copy_data.tex_sec; // copy
+    const saux = copy_data.tex[1]; // copy
     const sz = copy_data.copy_size;
     for (const z: 0 .. sz.z) {
       for (const y: 0 .. sz.y) {
@@ -888,8 +943,8 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
           // debug_log("rotate_range", x, y, z, p, vp, va);
           const up = to_uvec3(p);
           if (lt_all_uvec3(up, sz)) {
-            copy_data.tex_pri.set(ui(p.x), ui(p.y), ui(p.z), vp);
-            copy_data.tex_sec.set(ui(p.x), ui(p.y), ui(p.z), va);
+            copy_data.tex[0].set(ui(p.x), ui(p.y), ui(p.z), vp);
+            copy_data.tex[1].set(ui(p.x), ui(p.y), ui(p.z), va);
           }
         }
       }
@@ -951,7 +1006,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     for (const z: 0 .. sz.z) {
       for (const y: 0 .. sz.y) {
         for (const x: 0 .. sz.x) {
-          const v = copy_data.tex_pri.get(x, y, z);
+          const v = copy_data.tex[0].get(x, y, z);
           if (is_plane_node(v)) {
             pp = decode_plane_node(v);
             const offset = make_ivec3(si(x*2+1), si(y*2+1), si(z*2+1))
@@ -967,7 +1022,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
             has_sphere = true;
           }
           if (!is_space_voxel(v) && !is_node_reference(v)) {
-            cp = decode_color_param(copy_data.tex_sec.get(x, y, z));
+            cp = decode_color_param(copy_data.tex[1].get(x, y, z));
             debug_log("reset_edit_params: color", cp, to_hexstring(v));
           }
         }
@@ -1020,10 +1075,10 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     }
     const sz_l2 = map{uvec3, integral_log2{uint}}(copy_data.copy_size);
     if (clear_pri) {
-      copy_data.tex_pri.set_size_l2(sz_l2.x, sz_l2.y, sz_l2.z);
+      copy_data.tex[0].set_size_l2(sz_l2.x, sz_l2.y, sz_l2.z);
     }
     if (clear_sec) {
-      copy_data.tex_sec.set_size_l2(sz_l2.x, sz_l2.y, sz_l2.z);
+      copy_data.tex[1].set_size_l2(sz_l2.x, sz_l2.y, sz_l2.z);
     }
     for (const z: 0 .. copy_data.copy_size.z) {
       for (const y: 0 .. copy_data.copy_size.y) {
@@ -1039,15 +1094,15 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     function void ffunc(copy_data_type mutable& data, uint x, uint y, uint z)
     {
       if (set_sec) {
-        data.tex_sec.set(x, y, z, v_sec);
+        data.tex[1].set(x, y, z, v_sec);
       } else {
         // 変更前が空白だったときはset_secが偽でもaux値をセットする
-        const ov = data.tex_pri.get(x, y, z);
+        const ov = data.tex[0].get(x, y, z);
         if (is_node_reference(ov) || is_space_voxel(ov)) {
-          data.tex_sec.set(x, y, z, v_sec);
+          data.tex[1].set(x, y, z, v_sec);
         }
       }
-      data.tex_pri.set(x, y, z, v_pri);
+      data.tex[0].set(x, y, z, v_pri);
     }
     fill_range_func{ffunc}(false, set_sec);
   }
@@ -1056,11 +1111,11 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     const value = encode_color_param(p);
     function void ffunc(copy_data_type mutable& data, uint x, uint y, uint z)
     {
-      const ov = data.tex_pri.get(x, y, z);
+      const ov = data.tex[0].get(x, y, z);
       if (is_node_reference(ov) || is_space_voxel(ov)) {
         return;
       }
-      data.tex_sec.set(x, y, z, value);
+      data.tex[1].set(x, y, z, value);
     }
     fill_range_func{ffunc}(false, clear);
   }
@@ -1071,7 +1126,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     debug_log("fill_range_plane", copy_size);
     function void ffunc(copy_data_type mutable& data, uint x, uint y, uint z)
     {
-      const ov = data.tex_pri.get(x, y, z);
+      const ov = data.tex[0].get(x, y, z);
       if (is_node_reference(ov) || is_sphere_node(ov)) {
         return;
       }
@@ -1082,9 +1137,9 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
         si(y * 2 + 1) - si(copy_size.y),
         si(z * 2 + 1) - si(copy_size.z)),
         1);
-      data.tex_pri.set(x, y, z, v);
+      data.tex[0].set(x, y, z, v);
       if (clear) {
-        data.tex_sec.set(x, y, z, 0x00808080u);
+        data.tex[1].set(x, y, z, 0x00808080u);
       }
     }
     fill_range_func{ffunc}(clear, false);
@@ -1099,7 +1154,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     */
     function void ffunc(copy_data_type mutable& data, uint x, uint y, uint z)
     {
-      const ov = data.tex_pri.get(x, y, z);
+      const ov = data.tex[0].get(x, y, z);
       if (is_node_reference(ov) /* || is_plane_node(ov) */) {
         return;
       }
@@ -1115,9 +1170,9 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
         si(z) - si(center.z)),
         2, modifier);
       */
-      data.tex_pri.set(x, y, z, v);
+      data.tex[0].set(x, y, z, v);
       if (clear) {
-        data.tex_sec.set(x, y, z, 0x00808080u);
+        data.tex[1].set(x, y, z, 0x00808080u);
       }
     }
     fill_range_func{ffunc}(clear, false);
@@ -1227,56 +1282,56 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     copy_value();
     {
       pgen_context ctx = pgen_context(rndp);
-      swap(ctx.tex_pri, copy_data.tex_pri);
-      swap(ctx.tex_sec, copy_data.tex_sec);
+      swap(ctx.tex[0], copy_data.tex[0]);
+      swap(ctx.tex[1], copy_data.tex[1]);
       texture_reshaped tex;
       mutable& c = ctx;
       tex.set_size_l2(
-        c.tex_pri.get_width_l2(),
-        c.tex_pri.get_height_l2(),
-        c.tex_pri.get_depth_l2());
+        c.tex[0].get_width_l2(),
+        c.tex[0].get_height_l2(),
+        c.tex[0].get_depth_l2());
       generate_rand_spline(rndp, tex, copy_size, 20,
         static_cast{float}(gen_test_param) / 15.0f);
       for (uint z: 0 .. copy_size.z) {
         for (uint y: 0 .. copy_size.y) {
           for (uint x: 0 .. copy_size.x) {
             if (tex.get(x, y, z) != 0u) {
-              c.tex_pri.set(x, y, z, make_filled_voxel());
-              c.tex_sec.set(x, y, z, 0x00808080u);
+              c.tex[0].set(x, y, z, make_filled_voxel());
+              c.tex[1].set(x, y, z, 0x00808080u);
             } else {
-              c.tex_pri.set(x, y, z, make_space_voxel());
-              c.tex_sec.set(x, y, z, 0x0u);
+              c.tex[0].set(x, y, z, make_space_voxel());
+              c.tex[1].set(x, y, z, 0x0u);
             }
           }
         }
       }
       spline_postprocess(ctx);
-      swap(ctx.tex_pri, copy_data.tex_pri);
-      swap(ctx.tex_sec, copy_data.tex_sec);
+      swap(ctx.tex[0], copy_data.tex[0]);
+      swap(ctx.tex[1], copy_data.tex[1]);
     }
     /*
     {
       pgen_context ctx = pgen_context(rndp);
-      swap(ctx.tex_pri, copy_data.tex_pri);
-      swap(ctx.tex_sec, copy_data.tex_sec);
+      swap(ctx.tex[0], copy_data.tex[0]);
+      swap(ctx.tex[1], copy_data.tex[1]);
       pgen_range(uvec3(), copy_size, ctx);
-      swap(ctx.tex_pri, copy_data.tex_pri);
-      swap(ctx.tex_sec, copy_data.tex_sec);
+      swap(ctx.tex[0], copy_data.tex[0]);
+      swap(ctx.tex[1], copy_data.tex[1]);
     }
     */
     /*
-    gen_split_range_div(copy_data.tex_pri, copy_data.tex_sec, uvec3(),
+    gen_split_range_div(copy_data.tex[0], copy_data.tex[1], uvec3(),
       copy_size, make_uvec3(5u, 3u, 3u));
     */
     //debug_log("dbg cursor", ttev->get_cursor_range());
     /*
-    gen_millefeuille(copy_data.tex_pri, copy_data.tex_sec, uvec3(),
+    gen_millefeuille(copy_data.tex[0], copy_data.tex[1], uvec3(),
       copy_size);
     */
     /*
     {
       const sz = copy_size;
-      gen_frag1(copy_data.tex_pri, copy_data.tex_sec, uvec3(), sz,
+      gen_frag1(copy_data.tex[0], copy_data.tex[1], uvec3(), sz,
         to_ivec3(sz), make_ivec3(2, 0, 2), min(sz.x, sz.z));
     }
     */

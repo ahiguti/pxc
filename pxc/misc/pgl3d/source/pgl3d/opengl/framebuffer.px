@@ -24,7 +24,7 @@ public threaded struct gl_framebuffer
 {
   public auto_framebuffer fbo;
   public auto_renderbuffer depthbuf;
-  public auto_texture texture_color;
+  public farray{auto_texture, 4} texture_color;
   public auto_texture texture_depth;
   public int width;
   public int height;
@@ -188,27 +188,37 @@ public function void init_shadowmap_fbo(shader_config const& glc,
   }
 }
 
+public struct texture_format()
+{
+  public GLenum ifmt = GL_NONE;
+  public GLenum efmt = GL_NONE;
+  public GLenum etyp = GL_UNSIGNED_BYTE;
+}
+
 public function void init_color_fbo(shader_config const& glc,
-  gl_framebuffer mutable& ppfbo, GLenum c_ifmt, GLenum c_efmt, GLenum c_etyp,
-  GLenum d_ifmt, GLenum d_efmt, GLenum d_etyp)
+  gl_framebuffer mutable& ppfbo, cslice{texture_format} const& cfmt,
+  texture_format const& dfmt)
 {
   sdl_log("framebuffer size", ppfbo.width, ppfbo.height);
   int saved_fb;
   glGetIntegerv(GL_FRAMEBUFFER_BINDING, address(saved_fb));
   ppfbo.fbo.generate();
   glBindFramebuffer(GL_FRAMEBUFFER, ppfbo.fbo.get());
-  if (c_ifmt != GL_NONE) {
+  for (const i, const& f: cfmt) {
+    if (i >= 4) {
+      break;
+    }
     /* texture */
     glActiveTexture(GL_TEXTURE0);
-    ppfbo.texture_color.generate();
-    glBindTexture(GL_TEXTURE_2D, ppfbo.texture_color.get());
+    ppfbo.texture_color[i].generate();
+    glBindTexture(GL_TEXTURE_2D, ppfbo.texture_color[i].get());
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
       cast_int(GL_NEAREST)); // TODO: parameter
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
       cast_int(GL_NEAREST)); // TODO: parameter
     sdl_log("no depth_texture rbga byte");
-    glTexImage2D(GL_TEXTURE_2D, 0, cast_int(c_ifmt), ppfbo.width,
-      ppfbo.height, 0, c_efmt, c_etyp, offset_to_void_cp(0));
+    glTexImage2D(GL_TEXTURE_2D, 0, cast_int(f.ifmt), ppfbo.width,
+      ppfbo.height, 0, f.efmt, f.etyp, offset_to_void_cp(0));
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
       cast_int(GL_CLAMP_TO_EDGE));
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
@@ -218,18 +228,20 @@ public function void init_color_fbo(shader_config const& glc,
     glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR,
       border.crange().to_crawptr());
     */
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-      GL_TEXTURE_2D, ppfbo.texture_color.get(), 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER,
+      static_cast{GLenum}(
+        static_cast{uint}(GL_COLOR_ATTACHMENT0) + static_cast{uint}(i)),
+      GL_TEXTURE_2D, ppfbo.texture_color[i].get(), 0);
   }
-  if (d_ifmt != GL_NONE) {
+  if (dfmt.ifmt != GL_NONE) {
     ppfbo.texture_depth.generate();
     glBindTexture(GL_TEXTURE_2D, ppfbo.texture_depth.get());
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
       cast_int(GL_NEAREST));
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
       cast_int(GL_NEAREST));
-    glTexImage2D(GL_TEXTURE_2D, 0, cast_int(d_ifmt), ppfbo.width,
-      ppfbo.height, 0, d_efmt, d_etyp, offset_to_void_cp(0));
+    glTexImage2D(GL_TEXTURE_2D, 0, cast_int(dfmt.ifmt), ppfbo.width,
+      ppfbo.height, 0, dfmt.efmt, dfmt.etyp, offset_to_void_cp(0));
     /*
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
       cast_int(GL_CLAMP_TO_EDGE));

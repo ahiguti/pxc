@@ -7,43 +7,68 @@ public import meta m;
 public import meta::vararg va;
 public import meta::family -;
 
+private threaded function {delim, t} size_t
+find_delim(t const& a0, size_t pos)
+{
+  size_t p;
+  if (m::is_function{delim}) {
+    p = delim{0}(a0, pos);
+  } else {
+    p = find_mapped(a0, pos, static_cast{m::symbol{t, "mapped_type"}}(delim));
+  }
+  return p;
+}
+
+private threaded function {delim, t} size_t
+skip_delim(t const& a0, size_t pos)
+{
+  const sz = a0.size();
+  size_t p;
+  if (m::is_function{delim}) {
+    p = delim{1}(a0, pos);
+  } else {
+    p = pos + (pos < sz ? 1u : 0u);
+  }
+  return p;
+}
+
 public threaded function {delim, tlist} void
 string_split(expand(split_arg_decls{tlist}))
 { 
   size_t pos = 0;
-  const sz = a0.size();
-  expand(arg, idx : va::arg_names{m::size{tlist}}) {
-    if (m::ne{idx, 0}) {
-      size_t p;
-      if (m::is_function{delim}) {
-	for (p = pos; p < sz; ++p) {
-	  if (delim(a0[p])) {
-	    break;
-	  }
-	}
+  if (m::and{
+    m::eq{m::size{tlist}, 2},
+    is_array_or_slice_type{m::at0{m::at1{tlist}}},
+    m::eq{
+      m::symbol{m::at0{m::at1{tlist}}, "mapped_type"},
+      m::at0{m::at0{tlist}}}})
+  {
+    const sz = a0.size();
+    while (true) {
+      size_t const p = find_delim{delim}(a0, pos);
+      if (is_string_or_slice_type{
+        m::symbol{m::at0{m::at1{tlist}}, "mapped_type"}}) {
+        a1.push_back(a0[pos .. p]);
       } else {
-	p = find_mapped(a0, pos,
-	  static_cast{m::symbol{m::at0{m::at0{tlist}}, "mapped_type"}}(delim));
+        a1.push_back(from_string{m::at0{m::at{tlist, 1}}}(a0[pos .. p]));
       }
-      if (is_string_or_slice_type{m::at0{m::at{tlist, idx}}}) {
-	arg = a0[pos .. p];
-      } else {
-	arg = from_string{m::at0{m::at{tlist, idx}}}(a0[pos .. p]);
+      pos = skip_delim{delim}(a0, p);
+      if (pos == sz) {
+        break;
       }
-      if (m::ne{idx, m::sub{m::size{tlist}, 1}}) {
-	if (m::is_function{delim}) {
-	  for (pos = p; pos < sz; ++pos) {
-	    if (!delim(a0[pos])) {
-	      break;
-	    }
-	  }
-	} else {
-	  for (pos = p; pos < sz; ++pos) {
-	    if (a0[pos] != delim) {
-	      break;
-	    }
-	  }
-	}
+    }
+  } else {
+    expand(arg, idx : va::arg_names{m::size{tlist}}) {
+      if (m::ne{idx, 0}) {
+        size_t const p = find_delim{delim}(a0, pos);
+        if (is_string_or_slice_type{m::at0{m::at{tlist, idx}}}) {
+          arg = a0[pos .. p];
+        } else {
+          arg = from_string{m::at0{m::at{tlist, idx}}}(a0[pos .. p]);
+        }
+        if (m::ne{idx, m::sub{m::size{tlist}, 1}}) {
+          pos = skip_delim{delim}(a0, p);
+        }
       }
     }
   }

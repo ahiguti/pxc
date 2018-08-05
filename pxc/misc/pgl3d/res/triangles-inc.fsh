@@ -619,8 +619,9 @@ int raycast_tilemap(
     }
   } // for
   if (i == imax) {
+    // ループ上限に達した。eye計算中かlight計算中かは両方ありうる。
     lstr_para = 0.0;
-    hit = i;
+    // hit = i; // なんでこの行有効だったのか？
   }
   if (hit >= 0) {
     if (!hit_tpat) {
@@ -816,7 +817,8 @@ int raycast_tilemap_em(
   } // for
   if (i == imax) {
     lstr_para = 0.0;
-    hit = i;
+    // hit = i;
+      // なんでこの行有効だったのか？ 新バージョンに合わせて無効化しておく。
   }
   if (hit >= 0) {
     if (!hit_tpat) {
