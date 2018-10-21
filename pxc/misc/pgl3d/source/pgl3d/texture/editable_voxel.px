@@ -134,6 +134,7 @@ texture_edit()
     if (!lt_all_uvec3(pos, data_size)) {
       return;
     }
+    debug_log("texture_edit set", pos);
     v = (idx == texture_value_index_primary && is_space_voxel(v)) ? 0u : v;
     if (idx == texture_value_index_primary) {
       data_pri[0].set(pos.x, pos.y, pos.z, v);
@@ -155,6 +156,7 @@ texture_edit()
     v_sec = is_space_voxel(v_pri) ? 0u : v_sec;
     texture_data_fill_range(data_pri[0], dpos, sz, v_pri);
     texture_data_fill_range(data_sec[0], dpos, sz, v_sec);
+    debug_log("fill_range", dpos, sz);
     recalc_distance_range(dpos, sz, v_pri == 0u);
   }
   public function {t} void copy_range(uvec3 const& spos, uvec3 sz,
@@ -206,7 +208,7 @@ texture_edit()
     ivec3 mod_mi = to_ivec3(pos);
     ivec3 mod_mx = mod_mi + to_ivec3(sz) - make_ivec3(1, 1, 1);
     if (grid_size.x == 1) {
-      // debug_log("recalc_distance_range nogrid");
+      // debug_log("recalc_distance_range nogrid", mod_mi, mod_mx); // FIXME
       update_distance(true, data_pri[0], mod_mi, mod_mx, clear_flag);
       modified.set_modified(mod_mi, mod_mx);
       /*

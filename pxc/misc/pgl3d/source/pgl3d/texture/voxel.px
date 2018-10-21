@@ -25,6 +25,8 @@ public threaded function {t} void
 update_distance(bool enable_short_circuit, t mutable& node,
   ivec3 mutable& mod_mi, ivec3 mutable& mod_mx, bool clear_flag)
 {
+  mutable mod_mi_r = mod_mi;
+  mutable mod_mx_r = mod_mx;
   // clear_flagは範囲はすべて空白になったとわかっているとき真
   ivec3 const mi = map{ivec3, max}(
     map{ivec3, operator::sub}(mod_mi, make_ivec3(15, 15, 15)),
@@ -35,10 +37,11 @@ update_distance(bool enable_short_circuit, t mutable& node,
       si(node.get_width() - 1),
       si(node.get_height() - 1),
       si(node.get_depth() - 1)));
+  // debug_log("update_distance", mod_mi, mod_mx, "shortcircuit", enable_short_circuit, "clear_flag", clear_flag);
   /*
-  debug_log("update_distance", mi, mx, "shortcircuit", enable_short_circuit,
-    "clear_flag", clear_flag);
   */
+  int dbg_loop_cnt = 0;
+  int dbg_update_cnt = 0;
   for (const z: mi.z .. mx.z + 1) {
     for (const y: mi.y .. mx.y + 1) {
       for (const x: mi.x .. mx.x + 1) {
@@ -64,6 +67,37 @@ update_distance(bool enable_short_circuit, t mutable& node,
              - 伸ばそうとする範囲と変更があった範囲が重ならないならdone
              - 伸ばす方向でない2軸について範囲がすでに重なってないならdone
            */
+          /*
+          uint mask = 0;
+          if (mask == 0 && has_intersect2(spmi.y, spmi.z, spmx.y, spmx.z,
+	      mod_mi.y, mod_mi.z, mod_mx.y, mod_mx.z)) {
+            if (in_range(x + dv.xp + 1, mod_mi.x, mod_mx.x)) {
+              mask = 1u << 0u;
+            } else if (in_range(x - dv.xn - 1, mod_mi.x, mod_mx.x)) {
+              mask = 1u << 1u;
+            }
+          }
+          if (mask == 0 && has_intersect2(spmi.z, spmi.x, spmx.z, spmx.x,
+	      mod_mi.z, mod_mi.x, mod_mx.z, mod_mx.x)) {
+            if (in_range(y + dv.yp + 1, mod_mi.y, mod_mx.y)) {
+              mask = 1u << 2u;
+            } else if (in_range(y - dv.yn - 1, mod_mi.y, mod_mx.y)) {
+              mask = 1u << 3u;
+            }
+          }
+	  if (mask == 0 && has_intersect2(spmi.x, spmi.y, spmx.x, spmx.y,
+	      mod_mi.x, mod_mi.y, mod_mx.x, mod_mx.y)) {
+            if (in_range(z + dv.zp + 1, mod_mi.z, mod_mx.z)) {
+              mask = 1u << 4u;
+            } else if (in_range(z - dv.zn - 1, mod_mi.z, mod_mx.z)) {
+              mask = 1u << 5u;
+            }
+          }
+          done = (1u << 6u) - 1u;
+          if (mask != 0) {
+            done = done ^ mask;
+          }
+          */
 	  if (!in_range(x + dv.xp + 1, mod_mi.x, mod_mx.x) ||
 	    !has_intersect2(spmi.y, spmi.z, spmx.y, spmx.z,
 	      mod_mi.y, mod_mi.z, mod_mx.y, mod_mx.z)) { done |= (1u << 0u); }
@@ -82,7 +116,10 @@ update_distance(bool enable_short_circuit, t mutable& node,
 	  if (!in_range(z - dv.zn - 1, mod_mi.z, mod_mx.z) ||
 	    !has_intersect2(spmi.x, spmi.y, spmx.x, spmx.y,
 	      mod_mi.x, mod_mi.y, mod_mx.x, mod_mx.y)) { done |= (1u << 5u); }
-          // debug_log("clear_flag donemask=", to_hexstring(done));
+          if (done != (1u << 6u) - 1u) {
+            const v = done ^ ((1u << 6u) - 1);
+            // debug_log("clear_flag donemask=", to_hexstring(v), x, y, z, spmi, spmx, mod_mi, mod_mx);
+          }
 	} else {
 	  /* 非クリア。変更があった領域の外側。距離ゼロから計算 */
 	  // TODO: もっと計算省略可能
@@ -93,16 +130,22 @@ update_distance(bool enable_short_circuit, t mutable& node,
 	  }
 	}
 	if (done != (1u << 6u) - 1u) {
+          ++dbg_loop_cnt;
 	  const wv = distance_pos_dist(node, dv, x, y, z, done);
 	  if (wv != v) {
+            ++dbg_update_cnt;
+            // debug_log("dist update", x, y, z); // FIXME
 	    node.set(ui(x), ui(y), ui(z), wv);
-	    mod_mi = map{ivec3, min}(mod_mi, make_ivec3(x, y, z));
-	    mod_mx = map{ivec3, max}(mod_mx, make_ivec3(x, y, z));
+	    mod_mi_r = map{ivec3, min}(mod_mi_r, make_ivec3(x, y, z));
+	    mod_mx_r = map{ivec3, max}(mod_mx_r, make_ivec3(x, y, z));
 	  }
 	}
       }
     }
   }
+  mod_mi = mod_mi_r;
+  mod_mx = mod_mx_r;
+  // debug_log("dbg_loop_cnt", dbg_loop_cnt, "dbg_update_cnt", dbg_update_cnt); // FIXME
 }
 
 public threaded function bool
@@ -130,7 +173,7 @@ has_intersect2(int ax0, int ay0, int ax1, int ay1, int bx0, int by0,
 public threaded function bool
 has_intersect1(int a0, int a1, int b0, int b1)
 {
-  return max(a0, b0) >= min(a1, b1);
+  return max(a0, b0) <= min(a1, b1);
 }
 
 metafunction ui static_cast{uint};

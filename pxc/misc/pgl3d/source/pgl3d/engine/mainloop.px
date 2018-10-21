@@ -22,6 +22,7 @@ private import pgl3d::engine::pglshader -;
 private import pgl3d::sdl::sdlcontext -;
 private import pgl3d::sdl::sdlutil -;
 private import opengl::compat -;
+private import pgl3d::aux::process_priority -;
 // private import pgl3d::engine::console -;
 
 public function void mainloop(ptr{pgl3d_application} const& app,
@@ -267,6 +268,7 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
   private Uint32 saved_window_flags = 0;
   private bool async_motion_thread =
     conf.get("async_motion_thread", 1, 0, 1) == 1;
+  private Uint32 motion_thr_start_time;
   private bool glfinish = conf.get("glfinish", 0, 0, 1) == 1;
   private bool done = false;
   private bool paused = false;
@@ -284,6 +286,7 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
   {
     sdl_log("PGL3D main");
     sdl_log("shader config", sconf);
+    set_process_priority(2);
     // SDL_EventState(SDL_KEYDOWN, 0); // FIXME
     SDL_EventState(SDL_KEYUP, 0);
     SDL_EventState(SDL_TEXTEDITING, 0);
@@ -312,6 +315,7 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
       async_motion_thread);
     if (async_motion_thread) {
       motion_thr.some->start();
+      motion_thr_start_time = SDL_GetTicks();
     }
   }
   private function void update_fullscreen()
@@ -485,6 +489,8 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
 	saved_stat_num_objects);
       if (async_motion_thread) {
 	motion_thr.some->finish();
+        const mo_time = SDL_GetTicks() - motion_thr_start_time;
+        debug_log("motion_thr time", mo_time);
 	{
 	  mutable& mts = *motion_thr.some->shared;
 	  // mts.cam = pgs.cam;
@@ -496,6 +502,7 @@ private struct main_ctrl(ptr{pgl3d_application} const& app0,
           app->on_motion_pre();
 	}
 	motion_thr.some->start();
+        motion_thr_start_time = SDL_GetTicks();
       } else {
 	{
 	  mutable& mts = *motion_thr.some->shared;
