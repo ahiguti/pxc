@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# ビルドしてから実行する。ビルド時にエラーが出ると更新を待ちリビルドする。
+# pxc.profile で container_guard=0 にしているので、デバッグするときは必ず
+# debug build ですること
+
 cd `dirname $0`
 
 if [ "`uname | cut -d '_' -f 1`" == "CYGWIN" ]; then

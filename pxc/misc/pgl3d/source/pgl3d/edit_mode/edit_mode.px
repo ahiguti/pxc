@@ -986,8 +986,20 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   }
   private function void set_space()
   {
-    set_cur_value(texture_value_index_primary, 0u);
-    set_cur_value(texture_value_index_secondary, 0u);
+    if (!ttev->get_cursor_tpat()) {
+      // tmapの広範囲を更新するのが遅いので1回でfillする処理にする。
+      // ただしfixed pattern areaを書き換えてしまうので注意。
+      const m = ttev->get_tmap_cursor_pos();
+      const mi = map{uvec3, min}(m.first, m.second);
+      const mx = map{uvec3, max}(m.first, m.second);
+      debug_log("set_space tmap", m);
+      const sz = mx - mi + make_uvec3(1, 1, 1);
+      ttev->tmap_edit_fill_range(mi, sz, 0, 0);
+      debug_log("set_space tmap done", m);
+    } else {
+      set_cur_value(texture_value_index_primary, 0u);
+      set_cur_value(texture_value_index_secondary, 0u);
+    }
     // message = "edit_mode: erased";
   }
   private function void reset_edit_params()
@@ -1219,6 +1231,7 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
   }
   private function void set_cur_tmap(texture_value_index_e idx, uint value)
   {
+    // 範囲が大きいと超遅いので注意
     const m = ttev->get_tmap_cursor_pos();
     const mi = map{uvec3, min}(m.first, m.second);
     const mx = map{uvec3, max}(m.first, m.second);
@@ -1226,11 +1239,12 @@ public struct edit_mode(ptr{edit_mode_texture} const& emt0)
     for (const z: mi.z .. mx.z + 1) {
       for (const y: mi.y .. mx.y + 1) {
         for (const x: mi.x .. mx.x + 1) {
-          debug_log("set_cur_tmap", x, y, z, value);
+          // debug_log("set_cur_tmap", x, y, z, value);
           ttev->tmap_edit_set(make_uvec3(x, y, z), idx, value);
         }
       }
     }
+    debug_log("set_cur_tmap done", m);
   }
   private function uint get_cur_tpat(texture_value_index_e idx,
     size_t miplevel) const
