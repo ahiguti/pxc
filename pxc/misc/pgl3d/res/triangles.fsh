@@ -865,12 +865,13 @@ void main(void)
     if (frag_depth < 1.7f + dist_rnd * 0.25f)
     {
 
-      // mate_alpha = clamp(fnoise3(pos), 0.1, 1.0);
+      // mate_specular.r += clamp(fnoise3(pos), 0.1, 1.0);
+      // mate_diffuse.r += clamp(fnoise3(pos), 0.1, 1.0);
 
-      float v = clamp(fnoise3(pos / 16.0) * 2.0, 0.0, 1.0);
-      if (v < 0.001) {
+      // float v = clamp(fnoise3(pos / 16.0) * 2.0, 0.0, 1.0);
+      // if (v < 0.001) {
         // mate_emit = vec3(0.8, 1.0, 1.0);
-      }
+      // }
 
       // float v1 = clamp(fnoise3(pos / 1024.0) * 4.0, 0.0, 1.0);
       // v1 = pow(v1, 16.0);
@@ -921,8 +922,8 @@ void main(void)
   color.xyz += sqrt(mix(li2, li1, distbr));
   */
   li1 *= exposure;
-  // li1 = min(li1, 1.0 - 0.5 / exp(li1));
-  li1 = 1.0 - 1.0 / exp(li1);
+  li1 = min(li1, 1.0 - 0.5 / exp(li1));
+  /// li1 = 1.0 - 1.0 / exp(li1);
   li1 = sqrt(li1);
   // vec3 v01 = clamp(li1, 0.0, 1.0);
   // vec3 ve = 1.0 - 1.0 / exp(li1 * 10.0);

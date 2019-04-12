@@ -137,8 +137,11 @@ vec3 voxel_get_next(inout vec3 pos_f, in vec3 spmin,
 }
 
 float voxel_collision_sphere(in vec3 v, in vec3 a, in vec3 c,
-  in vec3 mul_pt, float rad2_pt, out bool hit_wall_r, out vec3 nor_r)
+  in vec3 mul_pt, in float rad2_pt, in bool ura, out bool hit_wall_r,
+  out vec3 nor_r)
 {
+// FIXME: 裏返しテスト中
+// ura = true;
   hit_wall_r = false;
   nor_r = vec3(0.0);
   // vはray単位ベクトル, aは始点(-0.5,0.5)範囲, mul_ptはaからの拡大率,
@@ -150,14 +153,14 @@ float voxel_collision_sphere(in vec3 v, in vec3 a, in vec3 c,
   vec3 c_pt = c;
   float len_v_pt = length(v_pt);
   vec3 v_ptn = normalize(v_pt);
-  vec3 ac_pt = c_pt - a_pt;
+  vec3 ac_pt = c_pt - a_pt; // 始点aから球の中心c
   float len2_ac_pt = dot(ac_pt, ac_pt);
-  if (len2_ac_pt <= rad2_pt) {
+  if ((len2_ac_pt > rad2_pt) == ura) {
     hit_wall_r = true; // 始点がすでに球の内側
     return 0.0;
   }
   float ac_v_pt = dot(ac_pt, v_ptn);
-  vec3 d_pt = a_pt + v_ptn * ac_v_pt;
+  vec3 d_pt = a_pt + v_ptn * ac_v_pt; // cから視線上に垂線をおろしたた点
   vec3 cd_pt = d_pt - c_pt;
   float len2_cd_pt = dot(cd_pt, cd_pt);
   if (len2_cd_pt > rad2_pt) {
@@ -167,10 +170,13 @@ float voxel_collision_sphere(in vec3 v, in vec3 a, in vec3 c,
   // dbgval = vec4(1.0); hit_wall_r = true; return 0.0;
   <%/>
   float len_de_pt = sqrt(rad2_pt - len2_cd_pt);
-  float len_ae_pt = ac_v_pt - len_de_pt;
-  vec3 e_pt = a_pt + v_ptn * len_ae_pt;
+  float len_ae_pt = ac_v_pt + (ura ? len_de_pt : -len_de_pt);
+  vec3 e_pt = a_pt + v_ptn * len_ae_pt; // 視線が球面と接触する点
   vec3 ce_pt = e_pt - c_pt;
   nor_r = normalize(ce_pt / max(mul_pt, 0.125)); // 0除算しない
+  if (ura) {
+    nor_r = -nor_r;
+  }
   float len_ae = len_ae_pt / len_v_pt;
   return len_ae;
 }
@@ -537,14 +543,14 @@ int raycast_tilemap(
 	  vec3 sp_scale = floor(distval / 64.0); // 上位2bit
 	  vec3 sp_center = distval - sp_scale * 64.0 - 32.0; // 下位6bit
 	  sp_center = sp_center * tpat_sgn; // tpat sgnを適用
-	  /*
-	  vec3 sp_scale = dist_p; // 拡大率
-	  vec3 sp_center = dist_n - 8.0; // 球の中心の相対位置
-	  */
-	  float sp_radius = float(node_type - 1) * 1.0;
+	  float sp_radius = float(node_type - 1);
+          bool ura = (node_type - 1 > 64);
+          if (ura) {
+            sp_radius -= 64.0;
+          }
 	  sp_nor = vec3(0.0);
 	  length_ae = voxel_collision_sphere(ray, curpos_f - 0.5,
-	    sp_center, sp_scale, sp_radius * sp_radius, hit_wall, sp_nor);
+	    sp_center, sp_scale, sp_radius * sp_radius, ura, hit_wall, sp_nor);
 	}
 	vec3 tp = curpos_f + ray * length_ae;
 	if (hit_wall) {
@@ -588,6 +594,27 @@ int raycast_tilemap(
 	ray = light;
 	spmin = vec3(0.0); // TODO: -dir方向へ一回移動するか
 	spmax = vec3(1.0);
+        // 裏返し球のときは影判定開始ボクセル内で衝突する可能性があるので、
+        // ここで判定する。それ以外の形状についてはその可能性はない。
+	if (node_type >= 2 + 64 && node_type < 160) {
+          bool ura = true;
+          bool light_hit_wall = false;
+	  vec3 sp_scale = floor(distval / 64.0); // 上位2bit
+	  vec3 sp_center = distval - sp_scale * 64.0 - 32.0; // 下位6bit
+	  sp_center = sp_center * tpat_sgn; // tpat sgnを適用
+	  float sp_radius = float(node_type - 64 - 1) * 1.0;
+	  vec3 sp_nor = vec3(0.0);
+          float length_ae;
+          curpos_f = curpos_f + light * 0.01;
+	  length_ae = voxel_collision_sphere(ray, curpos_f - 0.5,
+	    sp_center, sp_scale, sp_radius * sp_radius, ura, light_hit_wall,
+            sp_nor);
+          vec3 tp = curpos_f + ray * length_ae;
+          if (pos3_inside(tp, 0.0, 1.0)) {
+            lstr_para = lstr_para * selfshadow_para;
+            break;
+          }
+        }
       }
     }
     vec3 npos;
@@ -746,8 +773,10 @@ int raycast_tilemap_em(
 	  // vec3 sp_center = dist_n - 8.0; // 球の中心の相対位置
 	  float sp_radius = float(node_type - 1) * 1.0;
 	  sp_nor = vec3(0.0);
+          // ura未対応
 	  length_ae = voxel_collision_sphere(ray, curpos_f - 0.5,
-	    sp_center, sp_scale, sp_radius * sp_radius, hit_wall, sp_nor);
+	    sp_center, sp_scale, sp_radius * sp_radius, false, hit_wall,
+            sp_nor);
 	}
 	vec3 tp = curpos_f + ray * length_ae;
 	if (hit_wall) {

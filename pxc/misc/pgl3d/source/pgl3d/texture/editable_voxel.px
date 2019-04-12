@@ -12,6 +12,7 @@ public import pointer::tfuncptr -;
 
 public metafunction texture_reshaped array3_pot{varray{uint}, 0};
   // TODO: test reshape
+public metafunction texture_dist_dirty array3_pot{varray{uchar}, 0};
 public metafunction texture_data_mip varray{texture_reshaped};
 
 public tsvaluetype enum texture_value_index_e
@@ -129,6 +130,27 @@ texture_edit()
   {
     return get_mip(pos, idx, 0u);
   }
+  private function void set_space_mip(size_t miplevel, uvec3 const& pos)
+  {
+    data_pri[miplevel].set(pos.x, pos.y, pos.z, 0u);
+    if (miplevel + 1 >= data_pri.size()) {
+      return;
+    }
+    const p2 = make_uvec3((pos.x / 2) * 2, (pos.y / 2) * 2, (pos.z / 2) * 2);
+    bool is_space = true;
+    for (const z: 0 .. 2u) {
+      for (const y: 0 .. 2u) {
+        for (const x: 0 .. 2u) {
+          const v = data_pri[miplevel].get(p2.x + x, p2.y + y, p2.z + z);
+          is_space &= is_space_voxel(v);
+        }
+      }
+    }
+    if (is_space) {
+      const p = make_uvec3(pos.x / 2, pos.y / 2, pos.z / 2);
+      set_space_mip(miplevel + 1, p);
+    }
+  }
   public function void set(uvec3 const& pos, texture_value_index_e idx, uint v)
   {
     if (!lt_all_uvec3(pos, data_size)) {
@@ -137,12 +159,16 @@ texture_edit()
     // debug_log("texture_edit set", pos);
     v = (idx == texture_value_index_primary && is_space_voxel(v)) ? 0u : v;
     if (idx == texture_value_index_primary) {
-      data_pri[0].set(pos.x, pos.y, pos.z, v);
+      if (v == 0) {
+        // 空白にする。mipmapも必要なら更新する
+        set_space_mip(0, pos);
+      } else {
+        data_pri[0].set(pos.x, pos.y, pos.z, v);
+      }
     } else {
       data_sec[0].set(pos.x, pos.y, pos.z, v);
     }
     if (idx == texture_value_index_primary) {
-      // TODO: ここが遅いのがなんとかならないか
       recalc_distance_range(pos, make_uvec3(1, 1, 1), v == 0);
     }
   }
@@ -209,14 +235,14 @@ texture_edit()
     ivec3 mod_mx = mod_mi + to_ivec3(sz) - make_ivec3(1, 1, 1);
     if (grid_size.x == 1) {
       // debug_log("recalc_distance_range nogrid", mod_mi, mod_mx); // FIXME
-      update_distance(true, data_pri[0], mod_mi, mod_mx, clear_flag);
-      modified.set_modified(mod_mi, mod_mx);
-      /*
-      {
-        const msz = mod_mx - mod_mi + make_ivec3(1, 1, 1);
-        debug_log("recalc_distance_range nogrid", sz, msz);
+      if (clear_flag) {
+        /* 遅すぎるので更新しない。うまい実装があるか? */
+        /* update_distance(true, data_pri[0], mod_mi, mod_mx, clear_flag); */
+        modified.set_modified(mod_mi, mod_mx);
+      } else {
+        update_distance(true, data_pri[0], mod_mi, mod_mx, clear_flag);
+        modified.set_modified(mod_mi, mod_mx);
       }
-      */
     } else {
       // debug_log("recalc_distance_range grid");
       if (grid_work.get_width_l2() == 0u) {

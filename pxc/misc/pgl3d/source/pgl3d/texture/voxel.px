@@ -797,6 +797,7 @@ public threaded function uint encode_color_param(color_param const& p0)
 public valuetype struct sphere_param()
 {
   public int dist = 1;
+  public bool ura = false;
   public ivec3 center;
   public ivec3 scale = make_ivec3(2, 2, 2);
   public function void adda__(sphere_param const& v)
@@ -856,6 +857,7 @@ public threaded function uint make_sphere_node(sphere_param const& p,
     }
   }
   if ((modifier & 12) != 0u) {
+    // TODO: ura
     const d2 = distance2(ivec3()); // 球の中心とボクセル中心の距離の2乗
     const r2 = p.dist * p.dist * 4; // 球の半径の2乗
     const rdiff = sqrt(static_cast{double}(d2))
@@ -934,10 +936,9 @@ public threaded function uint make_sphere_node(sphere_param const& p,
     // debug_log("msn sph", p, offset);
     return encode_sphere_node(p1);
   } else if (has_outside) {
-    return make_space_voxel();
+    return p.ura ? make_filled_voxel() : make_space_voxel();
   } else {
-    // debug_log("msn wall", p, offset);
-    return 255u << 24u; // 壁
+    return p.ura ? make_space_voxel() : make_filled_voxel();
   }
 }
 
@@ -953,6 +954,9 @@ public threaded function uint encode_sphere_node(sphere_param const& p)
 {
   // debug_log("encode_sphere", p);
   int node_type = p.dist + 1;
+  if (p.ura) {
+    node_type += 64;
+  }
   if (node_type < 1 || node_type > 159) {
     return 0u;
   }
@@ -989,6 +993,11 @@ public threaded function sphere_param decode_sphere_node(uint v)
   p.scale = make_ivec3(r >> 6, g >> 6, b >> 6);
   p.center = make_ivec3((r & 0x3f) - 32, (g & 0x3f) - 32, (b & 0x3f) - 32);
   p.dist = a - 1;
+  p.ura = false;
+  if (p.dist > 64) {
+    p.dist -= 64;
+    p.ura = true;
+  }
   // sp_scaleは座標aを(-0.5,0.5)から何倍に拡大するか
   //   rgbの上位2bit
   // sp_centerは球の中心座標でa*sp_scaleと比較
