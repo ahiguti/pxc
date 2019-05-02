@@ -150,21 +150,31 @@ farray{t, 8} tdualquat_to_farray(tdualquat{t} const& x);
 public threaded function extern "pxcrt::glmpx::mat_to_farray" {n, m, t}
 farray{t, m::mul{n, m}} mat_to_farray(mat{n, m, t} const& x);
 
-public metafunction vec_add__{tx, ty} op_add{tx};
-public metafunction tquat_add__{tx, ty} op_add{tx};
-public metafunction tdualquat_add__{tx, ty} op_add{tx};
+public metafunction vec_add__{tx, ty} op_add_check{tx, ty};
+public metafunction tquat_add__{tx, ty} op_add_check{tx, ty};
+public metafunction tdualquat_add__{tx, ty} op_add_check{tx, ty};
 
-public metafunction vec_adda__{tx, ty} op_adda{tx};
-public metafunction tquat_adda__{tx, ty} op_adda{tx};
-public metafunction tdualquat_adda__{tx, ty} op_adda{tx};
+public metafunction vec_adda__{tx, ty} op_adda_check{tx, ty};
+public metafunction tquat_adda__{tx, ty} op_adda_check{tx, ty};
+public metafunction tdualquat_adda__{tx, ty} op_adda_check{tx, ty};
 
-public metafunction vec_sub__{tx, ty} op_sub{tx};
-public metafunction tquat_sub__{tx, ty} op_sub{tx};
-public metafunction tdualquat_sub__{tx, ty} op_sub{tx};
+public metafunction vec_sub__{tx, ty} op_sub_check{tx, ty};
+public metafunction tquat_sub__{tx, ty} op_sub_check{tx, ty};
+public metafunction tdualquat_sub__{tx, ty} op_sub_check{tx, ty};
 
-public metafunction vec_suba__{tx, ty} op_suba{tx};
-public metafunction tquat_suba__{tx, ty} op_suba{tx};
-public metafunction tdualquat_suba__{tx, ty} op_suba{tx};
+public metafunction vec_suba__{tx, ty} op_suba_check{tx, ty};
+public metafunction tquat_suba__{tx, ty} op_suba_check{tx, ty};
+public metafunction tdualquat_suba__{tx, ty} op_suba_check{tx, ty};
+
+public metafunction vec_mul__{tx, ty} op_mul_check{tx, ty};
+public metafunction tquat_mul__{tx, ty} op_mul_check{tx, ty};
+public metafunction tdualquat_mul__{tx, ty} op_mul_check{tx, ty};
+public metafunction mat_mul__{tx, ty} op_mul_check{tx, ty};
+
+public metafunction vec_div__{tx, ty} op_div_check{tx, ty};
+public metafunction tquat_div__{tx, ty} op_div_check{tx, ty};
+public metafunction tdualquat_div__{tx, ty} op_div_check{tx, ty};
+public metafunction mat_div__{tx, ty} op_div_check{tx, ty};
 
 public metafunction vec_eq__{tx, ty} op_eq{tx};
 public metafunction tquat_eq__{tx, ty} op_eq{tx};
@@ -178,26 +188,18 @@ public metafunction vec_minus__{tx} op_minus{tx};
 public metafunction tquat_minus__{tx} op_minus{tx};
 public metafunction tdualquat_minus__{tx} op_minus{tx};
 
-public metafunction vec_mul__{tx, ty} op_mul_check{tx, ty};
-public metafunction tquat_mul__{tx, ty} op_mul_check{tx, ty};
-public metafunction tdualquat_mul__{tx, ty} op_mul_check{tx, ty};
-public metafunction mat_mul__{tx, ty} op_mul_check{tx, ty};
-
-public metafunction vec_div__{tx, ty} op_div{tx, ty};
-public metafunction tquat_div__{tx, ty} op_div{tx, ty};
-public metafunction tdualquat_div__{tx, ty} op_div{tx, ty};
-public metafunction mat_div__{tx, ty} op_div{tx, ty};
-
-private threaded function extern "pxcrt::glmpx::op_add" {t}
-check_tvec_tquat_tdualquat_type{t} op_add(t const& x, t const& y);
-private threaded function extern "pxcrt::glmpx::op_sub" {t}
-check_tvec_tquat_tdualquat_type{t} op_sub(t const& x, t const& y);
+/*
+private threaded function extern "pxcrt::glmpx::op_add" {tx, ty, tr}
+check_tvec_tquat_tdualquat_type{t} op_add(tx const& x, ty const& y);
+private threaded function extern "pxcrt::glmpx::op_sub" {tx, ty, tr}
+check_tvec_tquat_tdualquat_type{t} op_sub(tx const& x, ty const& y);
 private threaded function extern "pxcrt::glmpx::op_add" {t}
 m::cond{check_tvec_tquat_tdualquat_type{t}, void, void}
 op_adda(t mutable& x, t const& y);
 private threaded function extern "pxcrt::glmpx::op_sub" {t}
 m::cond{check_tvec_tquat_tdualquat_type{t}, void, void}
 op_suba(t mutable& x, t const& y);
+*/
 private threaded function extern "pxcrt::glmpx::op_eq" {t}
 m::cond{check_tvec_tquat_tdualquat_type{t}, bool, bool}
 op_eq(t const& x, t const& y);
@@ -303,11 +305,48 @@ mat4 perspective(float fovy, float aspect, float zNear, float zFar);
 
 /* private */
 
+private metafunction op_add_check{tx, ty}
+  op_add{tx, ty, check_add_type{tx, ty}};
+
+private metafunction op_sub_check{tx, ty}
+  op_sub{tx, ty, check_add_type{tx, ty}};
+
+private metafunction op_adda_check{tx, ty}
+  op_adda{check_add_type{tx}, ty};
+
+private metafunction op_suba_check{tx, ty}
+  op_suba{check_add_type{tx}, ty};
+
 private metafunction op_mul_check{tx, ty}
   op_mul{tx, ty, check_mul_type{tx, ty}};
 
+private metafunction op_div_check{tx, ty}
+  op_div{tx, ty, check_div_type{tx, ty}};
+
+private threaded function extern "pxcrt::glmpx::op_add" {tx, ty, tr}
+tr op_add(tx const& x, ty const& y);
+private threaded function extern "pxcrt::glmpx::op_sub" {tx, ty, tr}
+tr op_sub(tx const& x, ty const& y);
+private threaded function extern "pxcrt::glmpx::op_adda" {tx, ty}
+void op_adda(tx mutable& x, ty const& y);
+private threaded function extern "pxcrt::glmpx::op_sub" {tx, ty}
+void op_suba(tx mutable& x, ty const& y);
+
 private threaded function extern "pxcrt::glmpx::op_mul" {tx, ty, tr}
 tr op_mul(tx const& x, ty const& y);
+private threaded function extern "pxcrt::glmpx::op_div" {tx, ty, tr}
+tr op_div(tx const& x, ty const& y);
+
+private metafunction check_add_type{tx, ty}
+  m::cond{
+    /* (vec + vec) */
+    m::and{is_tvec_type{tx}, m::eq{tx, ty}},
+    tx,
+    /* (vec + sca) */
+    m::and{is_tvec_type{tx},
+      m::eq{m::symbol{tx, "value_type"}, ty}},
+    tx,
+    m::error{m::concat{ty, ": invalid type for operator add/sub"}}};
 
 private metafunction check_mul_type{tx, ty}
   m::cond{
@@ -354,11 +393,12 @@ private metafunction check_mul_type{tx, ty}
     tx,
     m::error{m::concat{ty, ": invalid type for operator mul"}}};
 
-private threaded function extern "pxcrt::glmpx::op_div" {tx, ty}
-check_div_type{tx, ty} op_div(tx const& x, ty const& y);
-
 private metafunction check_div_type{tx, ty}
   m::cond{
+    /* (vec / vec) */
+    m::and{is_tvec_type{tx}, m::eq{tx, ty}},
+    tx,
+    /* (any / sca) */
     m::and{is_tvec_tmat_tquat_tdualquat_type{tx},
       m::eq{m::symbol{tx, "value_type"}, ty}},
     tx, 
@@ -635,17 +675,29 @@ template <typename Tm> static inline Tm
 transpose(Tm const& m)
 { return glm::transpose(m); }
 
-template <typename T> static inline T op_add(T const& x, T const& y)
+template <typename Tx, typename Ty, typename Tr> static inline Tr
+op_add(Tx const& x, Ty const& y)
 { return x + y; }
 
-template <typename T> static inline T op_sub(T const& x, T const& y)
+template <typename Tx, typename Ty, typename Tr> static inline Tr
+op_sub(Tx const& x, Ty const& y)
 { return x - y; }
 
-template <typename T> static inline void op_adda(T& x, T const& y)
+template <typename Tx, typename Ty> static inline void
+op_adda(Tx& x, Ty const& y)
 { x += y; }
 
-template <typename T> static inline void op_suba(T& x, T const& y)
+template <typename Tx, typename Ty> static inline void
+op_suba(Tx& x, Ty const& y)
 { x -= y; }
+
+template <typename Tx, typename Ty, typename Tr> static inline Tr
+op_mul(Tx const& x, Ty const& y)
+{ return x * y; }
+
+template <typename Tx, typename Ty, typename Tr> static inline Tr
+op_div(Tx const& x, Ty const& y)
+{ return x / y; }
 
 template <typename T> static inline bool op_eq(T const& x, T const& y)
 { return x == y; }
@@ -655,14 +707,6 @@ template <typename T> static inline bool op_ne(T const& x, T const& y)
 
 template <typename T> static inline T op_minus(T const& x)
 { return -x; }
-
-template <typename Tx, typename Ty, typename Tr> static inline Tr
-op_mul(Tx const& x, Ty const& y)
-{ return x * y; }
-
-template <typename Tx, typename Ty> static inline Tx
-op_div(Tx const& x, Ty const& y)
-{ return x / y; }
 
 template <typename T> static inline typename T::value_type
 length(T const& x) { return glm::length(x); }
