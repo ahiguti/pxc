@@ -378,26 +378,6 @@ reverse(t const& x)
   }
 }
 
-// FIXME: type check
-public threaded function extern "::pxcrt::array_push_back" {tx, tv} void
-array_push_back(tx mutable& x, tv const& v);
-public threaded function extern "::pxcrt::array_push_back_move" {tx, tv} void
-array_push_back_move(tx mutable& x, tv mutable& v);
-public threaded function extern "::pxcrt::array_pop_back" {tx}
-m::symbol{tx, "mapped_type"} array_pop_back(tx mutable& x);
-public threaded function extern "::pxcrt::array_push_front" {tx, tv} void
-array_push_front(tx mutable& x, tv const& v);
-public threaded function extern "::pxcrt::array_push_front_move" {tx, tv} void
-array_push_front_move(tx mutable& x, tv mutable& v);
-public threaded function extern "::pxcrt::array_pop_front" {tx}
-m::symbol{tx, "mapped_type"} array_pop_front(tx mutable& x);
-public threaded function extern "::pxcrt::array_append" {tx, tv} void
-array_append(tx mutable& x, tv const& v);
-public threaded function extern "::pxcrt::array_insert" {tx, tv} void
-array_insert(tx mutable& x, size_t i, tv const& v);
-public threaded function extern "::pxcrt::array_erase" {tx} void
-array_erase(tx mutable& x, size_t first, size_t last);
-
 public metafunction varray_push_back array_push_back;
 public metafunction varray_push_back_move array_push_back_move;
 public metafunction varray_pop_back array_pop_back;
@@ -713,4 +693,115 @@ private metafunction check_copyable{tarr, tv, tret}
 	m::eq{m::family{tarr}, "cvarray"}}},
     tret,
     m::error{m::concat{"invalid type: ", tarr, " ", tv}}};
+
+private metafunction check_varray_type{tx, rettype}
+  m::cond{
+    m::or{
+      m::eq{m::family{tx}, "varray"},
+      m::eq{m::family{tx}, "cvarray"}},
+    rettype,
+    m::error{m::concat{tx, ": invalid type"}}};
+
+private metafunction check_push_type{tx, tv, rettype}
+  m::cond{
+    m::and{
+      m::is_copyable_type{tv},
+      m::or{
+        m::eq{m::family{tx}, "varray"},
+        m::eq{m::family{tx}, "cvarray"}},
+      m::eq{m::symbol{tx, "mapped_type"}, tv}},
+    rettype,
+    m::error{m::concat{tv, ": invalid type"}}};
+
+private metafunction check_push_move_type{tx, tv, rettype}
+  m::cond{
+    m::and{
+      m::is_movable_type{tv},
+      m::or{
+        m::eq{m::family{tx}, "varray"},
+        m::eq{m::family{tx}, "cvarray"}},
+      m::eq{m::symbol{tx, "mapped_type"}, tv}},
+    rettype,
+    m::error{m::concat{tv, ": invalid type"}}};
+
+private metafunction check_append_type{tx, tv, rettype}
+  m::cond{
+    m::and{
+      m::is_copyable_type{m::symbol{tx, "mapped_type"}},
+      m::or{
+        m::eq{m::family{tx}, "varray"},
+        m::eq{m::family{tx}, "cvarray"}},
+      m::or{
+        m::eq{m::family{tv}, "varray"},
+        m::eq{m::family{tv}, "cvarray"},
+        m::eq{m::family{tv}, "farray"},
+        m::eq{m::family{tv}, "cfarray"},
+        m::eq{m::family{tv}, "darray"},
+        m::eq{m::family{tv}, "cdarray"},
+        m::eq{m::family{tv}, "darrayst"},
+        m::eq{m::family{tv}, "cdarrayst"},
+        m::eq{m::family{tv}, "slice"},
+        m::eq{m::family{tv}, "cslice"}},
+      m::eq{m::symbol{tx, "mapped_type"}, m::symbol{tv, "mapped_type"}},
+      m::eq{m::symbol{tx, "key_type"}, m::symbol{tv, "key_type"}}},
+    rettype,
+    m::error{m::concat{tv, ": invalid type"}}};
+
+private threaded function extern "::pxcrt::array_push_back" {tx, tv}
+check_push_type{tx, tv, void}
+array_push_back_noconv(tx mutable& x, tv const& v);
+
+private threaded function extern "::pxcrt::array_push_front" {tx, tv}
+check_push_type{tx, tv, void}
+array_push_front_noconv(tx mutable& x, tv const& v);
+
+private threaded function {tx, tv} void
+array_push_back(tx mutable& x, tv const& v)
+{
+  if (m::eq{m::symbol{tx, "mapped_type"}, tv}) {
+    array_push_back_noconv(x, v);
+  } else {
+    m::symbol{tx, "mapped_type"} vc = v;
+    array_push_back_move(x, vc);
+  }
+}
+
+private threaded function {tx, tv} void
+array_push_front(tx mutable& x, tv const& v)
+{
+  if (m::eq{m::symbol{tx, "mapped_type"}, tv}) {
+    array_push_front_noconv(x, v);
+  } else {
+    m::symbol{tx, "mapped_type"} vc = v;
+    array_push_front_move(x, vc);
+  }
+}
+
+private threaded function extern "::pxcrt::array_push_back_move" {tx, tv}
+check_push_move_type{tx, tv, void}
+array_push_back_move(tx mutable& x, tv mutable& v);
+
+private threaded function extern "::pxcrt::array_push_front_move" {tx, tv}
+check_push_move_type{tx, tv, void}
+array_push_front_move(tx mutable& x, tv mutable& v);
+
+private threaded function extern "::pxcrt::array_pop_back" {tx}
+m::symbol{tx, "mapped_type"}
+array_pop_back(tx mutable& x);
+
+private threaded function extern "::pxcrt::array_pop_front" {tx}
+m::symbol{tx, "mapped_type"}
+array_pop_front(tx mutable& x);
+
+private threaded function extern "::pxcrt::array_append" {tx, tv}
+check_append_type{tx, tv, void}
+array_append(tx mutable& x, tv const& v);
+
+private threaded function extern "::pxcrt::array_insert" {tx, tv}
+check_append_type{tx, tv, void}
+array_insert(tx mutable& x, size_t i, tv const& v);
+
+private threaded function extern "::pxcrt::array_erase" {tx}
+check_varray_type{tx, void}
+array_erase(tx mutable& x, size_t first, size_t last);
 
