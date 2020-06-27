@@ -885,7 +885,7 @@ static int compare_file_contents(const std::string& f0, const std::string& f1)
 static void copy_file_atomic(const std::string& src, const std::string& dst,
   bool set_exec)
 {
-  const std::string tfn = src + ".tmp";
+  const std::string tfn = dst + ".tmp";
   tmpfile_guard g(tfn);
   copy_file(src, tfn); /* throws */
   if (set_exec && chmod(tfn.c_str(), 0755) != 0) {
