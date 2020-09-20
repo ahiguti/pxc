@@ -44,6 +44,7 @@
 #define DBG_TIMING3(x)
 #define DBG_EXPAND_TIMING(x)
 #define DBG_DYNFLD(x)
+#define DBG_THRATTR(x)
 
 namespace pxc {
 
@@ -4424,6 +4425,28 @@ void expr_funcdef::check_type(symbol_table *lookup)
     (this->get_attribute() & attribute_threaded) != 0) {
     arena_error_throw(this,
       "Invalid attribute for a member/virtual function");
+  }
+  {
+    if (!this->is_virtual_or_member_function()) {
+      DBG_THRATTR(fprintf(stderr, "set thrattr? %s\n",
+        this->dump(0).c_str()));
+      symbol_table *parent = this->block->symtbl.get_lexical_parent();
+      expr_i *fr = get_current_frame_expr(parent);
+      /* nested function has the same threading attribute as its parent */
+      if (fr != 0 && fr->get_esort() == expr_e_funcdef) {
+        unsigned cur_attr = static_cast<unsigned>(this->get_attribute());
+        cur_attr &= ~static_cast<unsigned>(attribute_threaded);
+        cur_attr |= static_cast<unsigned>(get_expr_threading_attribute(fr));
+        this->set_attribute(static_cast<attribute_e>(cur_attr));
+        DBG_THRATTR(fprintf(stderr, "set thrattr %s %u\n",
+          this->dump(0).c_str(), cur_attr));
+      } else {
+        if (fr != 0) {
+          DBG_THRATTR(fprintf(stderr, "skip set thrattr %s %u\n",
+            this->dump(0).c_str(), (unsigned)fr->get_esort()));
+        }
+      }
+    }
   }
   if (!this->is_virtual_or_member_function() &&
     (this->get_attribute() & attribute_threaded) != 0) {
