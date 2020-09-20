@@ -2718,6 +2718,20 @@ void fn_set_tree_and_define_static(expr_i *e, expr_i *p, symbol_table *symtbl,
     e->define_const_symbols_one();
     e->define_vars_one(stmt);
   }
+  if (e->get_esort() == expr_e_funcdef) {
+    expr_funcdef *const ef = ptr_down_cast<expr_funcdef>(e);
+    if (!ef->is_virtual_or_member_function()) {
+      symbol_table *parent = ef->block->symtbl.get_lexical_parent();
+      expr_i *fr = get_current_frame_expr(parent);
+      /* nested function has the same threading attribute as its parent */
+      if (fr != 0 && fr->get_esort() == expr_e_funcdef) {
+        unsigned cur_attr = static_cast<unsigned>(ef->get_attribute());
+        cur_attr &= ~static_cast<unsigned>(attribute_threaded);
+        cur_attr |= static_cast<unsigned>(get_expr_threading_attribute(fr));
+        ef->set_attribute(static_cast<attribute_e>(cur_attr));
+      }
+    }
+  }
   if (e->get_esort() == expr_e_block) {
     expr_block *const eb = ptr_down_cast<expr_block>(e);
     symtbl = &eb->symtbl;

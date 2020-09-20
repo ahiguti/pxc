@@ -900,6 +900,26 @@ static expr_var *dunion_find_pod_field(const expr_dunion *ev)
   return 0;
 }
 
+static void emit_deinitialize_dunion_field_pre(emit_context& em,
+  const expr_dunion *ev, const expr_var *fld)
+{
+  if (is_unit_type(fld->get_texpr())) {
+    return;
+  }
+  if (is_possibly_nonpod(fld->get_texpr())) {
+    em.set_file_line(fld);
+    em.indent('b');
+    em.puts("typedef ");
+    em.puts(term_tostr_cname(fld->get_texpr()));
+    em.puts(" ");
+    em.puts(dtor_typedef_name(fld->get_texpr()));
+    em.puts(";\n");
+  } else {
+    /* known to be a pod */
+    return;
+  }
+}
+
 static void emit_deinitialize_dunion_field(emit_context& em,
   const expr_dunion *ev, const expr_var *fld)
 {
@@ -1030,13 +1050,7 @@ static void emit_dunion_aux_functions(emit_context& em,
     em.add_indent(1);
     if (has_non_smallpod) {
       for (i = flds.begin(); i != flds.end(); ++i) {
-	em.set_file_line(*i);
-	em.indent('b');
-	em.puts("typedef ");
-	em.puts(term_tostr_cname((*i)->get_texpr()));
-	em.puts(" ");
-	em.puts(dtor_typedef_name((*i)->get_texpr()));
-	em.puts(";\n");
+	emit_deinitialize_dunion_field_pre(em, ev, *i);
       }
       em.set_file_line(ev);
       em.indent('b');

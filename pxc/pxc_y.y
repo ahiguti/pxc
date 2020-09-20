@@ -28,7 +28,7 @@ static compile_mode cur_mode;
 %}
 
 /* %define parse.lac full */
-%error-verbose 
+%error-verbose
 
 %union {
 	int void_val;
@@ -163,19 +163,11 @@ static compile_mode cur_mode;
 %type<expr_val> argdecl_list
 %type<expr_val> argdecl_list_trail
 %type<expr_val> forrange_argdecl
-/*
-%type<expr_val> foreach_argdecl
-*/
 %type<expr_val> type_expr
-/*
-%type<expr_val> type_expr_or_const
-*/
-/*
-%type<expr_val> opt_type_expr
-*/
 %type<expr_val> type_arg_list
 %type<expr_val> type_arg
 %type<expr_val> type_arg_excl_metalist
+%type<expr_val> simple_unnamed_funcdef
 %type<expr_val> unnamed_funcdef
 %type<expr_val> nssym_expr
 %type<expr_val> symbol_expr
@@ -379,6 +371,16 @@ expression_stmt
 	  { $$ = $1; }
 	| expression unnamed_funcdef
 	  { $$ = expr_add_te(cur_fname, @1.first_line, $1, $2); }
+	| postfix_expr '(' opt_expression ')' simple_unnamed_funcdef
+	  { $$ = expr_add_te(cur_fname, @1.first_line,
+                expr_funccall_new(cur_fname, @1.first_line, $1, $3),
+                $5); }
+	| unary_expr '=' postfix_expr '(' opt_expression ')'
+                simple_unnamed_funcdef
+	  { $$ = expr_op_new(cur_fname, @1.first_line, '=', $1,
+                expr_add_te(cur_fname, @1.first_line,
+                        expr_funccall_new(cur_fname, @1.first_line, $3, $5),
+                        $7)); }
 	| vardef_stmt
 	  { $$ = $1; }
 	;
@@ -774,6 +776,12 @@ vardef_stmt
 	| vardef_expr '=' assign_expr unnamed_funcdef
 	  { $$ = expr_op_new(cur_fname, @1.first_line, '=', $1,
                 expr_add_te(cur_fname, @1.first_line, $3, $4)); }
+	| vardef_expr '=' postfix_expr '(' opt_expression ')'
+                simple_unnamed_funcdef
+	  { $$ = expr_op_new(cur_fname, @1.first_line, '=', $1,
+                expr_add_te(cur_fname, @1.first_line,
+                        expr_funccall_new(cur_fname, @1.first_line, $3, $5),
+                        $7)); }
 	;
 vardef_expr
 	: type_expr TOK_SYMBOL
@@ -938,6 +946,22 @@ type_arg_excl_metalist
 	  { $$ = expr_metafdef_new(cur_fname, @1.first_line, 0, $3, $5,
 		attribute_private); }
 	;
+simple_unnamed_funcdef
+        : '{' function_body_stmt_list '}'
+	  { $$ = expr_funcdef_new(cur_fname, @1.first_line, 0, 0, 0, 0,
+		expr_block_new(cur_fname, @1.first_line, 0, 0, 0,
+                        expr_te_new(cur_fname, @1.first_line,
+                                expr_nssym_new(cur_fname, @1.first_line,
+                                        0, "void"), 0),
+			passby_e_mutable_value, $2),
+		cur_mode != compile_mode_main, false, attribute_unknown); }
+        | type_expr '(' argdecl_list ')' opt_cv '{'
+                function_body_stmt_list '}'
+	  { $$ = expr_funcdef_new(cur_fname, @1.first_line, 0, 0, 0, $5,
+		expr_block_new(cur_fname, @1.first_line, 0, 0, $3, $1,
+			passby_e_mutable_value, $7),
+		cur_mode != compile_mode_main, false, attribute_unknown); }
+        ;
 unnamed_funcdef
         : opt_threaded TOK_FUNCTION opt_tparams_expr type_expr
 		'(' argdecl_list ')' opt_cv '{' function_body_stmt_list '}'
