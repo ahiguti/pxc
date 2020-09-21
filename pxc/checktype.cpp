@@ -4435,7 +4435,6 @@ void expr_funcdef::check_type(symbol_table *lookup)
       /* nested function has the same threading attribute as its parent */
       if (fr != 0 && fr->get_esort() == expr_e_funcdef) {
         unsigned cur_attr = static_cast<unsigned>(this->get_attribute());
-        cur_attr &= ~static_cast<unsigned>(attribute_threaded);
         cur_attr |= static_cast<unsigned>(get_expr_threading_attribute(fr));
         this->set_attribute(static_cast<attribute_e>(cur_attr));
         DBG_THRATTR(fprintf(stderr, "set thrattr %s %u\n",

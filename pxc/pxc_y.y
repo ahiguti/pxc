@@ -140,7 +140,6 @@ static compile_mode cur_mode;
 %type<expr_val> funcdecl_stmt
 %type<int_val> opt_passby
 %type<int_val> opt_cv
-%type<visi_val> opt_threaded
 %type<visi_val> opt_attribute
 %type<visi_val> opt_attribute_threading
 %type<visi_val> visibility
@@ -955,26 +954,20 @@ simple_unnamed_funcdef
                                         0, "void"), 0),
 			passby_e_mutable_value, $2),
 		cur_mode != compile_mode_main, false, attribute_unknown); }
-        | type_expr '(' argdecl_list ')' opt_cv '{'
-                function_body_stmt_list '}'
+        | type_expr '(' argdecl_list ')' opt_cv
+                '{' function_body_stmt_list '}'
 	  { $$ = expr_funcdef_new(cur_fname, @1.first_line, 0, 0, 0, $5,
 		expr_block_new(cur_fname, @1.first_line, 0, 0, $3, $1,
 			passby_e_mutable_value, $7),
 		cur_mode != compile_mode_main, false, attribute_unknown); }
         ;
 unnamed_funcdef
-        : opt_threaded TOK_FUNCTION opt_tparams_expr type_expr
+        : TOK_FUNCTION opt_tparams_expr type_expr
 		'(' argdecl_list ')' opt_cv '{' function_body_stmt_list '}'
-	  { $$ = expr_funcdef_new(cur_fname, @1.first_line, 0, 0, 0, $8,
-		expr_block_new(cur_fname, @1.first_line, $3, 0, $6, $4,
-			passby_e_mutable_value, $10),
-		cur_mode != compile_mode_main, false, $1); }
-        ;
-opt_threaded
-        :
-          { $$ = attribute_unknown; }
-        | TOK_THREADED
-          { $$ = attribute_threaded; }
+	  { $$ = expr_funcdef_new(cur_fname, @1.first_line, 0, 0, 0, $7,
+		expr_block_new(cur_fname, @1.first_line, $2, 0, $5, $3,
+			passby_e_mutable_value, $9),
+		cur_mode != compile_mode_main, false, attribute_unknown); }
         ;
 type_arg
 	: type_arg_excl_metalist
