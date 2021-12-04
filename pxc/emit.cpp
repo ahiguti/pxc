@@ -2201,11 +2201,32 @@ void expr_stmts::emit_local_decl(emit_context& em)
   }
 }
 
+static void emit_function_entry_macro(emit_context& em, expr_funcdef *efd)
+{
+  em.indent('e');
+  em.puts("PXC_FUNCTION_ENTRY(\"");
+  expr_struct *const est = efd->is_member_function();
+  if (est != 0) {
+    em.puts(get_term_cname(est->get_value_texpr()).c_str());
+    em.puts("::");
+  }
+  em.puts(get_term_cname(efd->get_value_texpr()).c_str());
+  em.puts("\", \"");
+  em.puts(efd->fname);
+  em.puts(":");
+  em.puts(long_to_string(efd->line).c_str());
+  em.puts("\");\n");
+}
+
 void expr_block::emit_value(emit_context& em)
 {
   /* noline */
   em.puts("{\n");
   em.add_indent(1);
+  if (parent_expr != 0 && parent_expr->get_esort() == expr_e_funcdef) {
+    expr_funcdef *const efd = ptr_down_cast<expr_funcdef>(parent_expr);
+    emit_function_entry_macro(em, efd);
+  }
   emit_value_nobrace(em); /* line */
   em.add_indent(-1);
   em.indent('B');
