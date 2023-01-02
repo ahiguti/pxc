@@ -833,6 +833,44 @@ static term eval_meta_member_functions(const term_list_range& tlev,
   return term(tl);
 }
 
+#if 0
+static term
+eval_meta_enumvals_internal(const term_list_range& tlev, eval_context& ectx,
+  expr_i *pos)
+{
+  if (tlev.size() != 1) {
+    return term();
+  }
+  term ttyp = tlev[0];
+  expr_i *const einst = term_get_instance(ttyp);
+  expr_typedef *const etd = dynamic_cast<expr_typedef *>(einst);
+    /* enum or bitmask */
+  term_list tl;
+  if (etd != 0) {
+    if (!blk->compiled_flag) {
+      /* necessary for referential transparency */
+      const char *sym = etd->sym;
+      arena_error_throw(blk,
+        "Failed to enumerate enum/bitfield values of '%s' "
+        "which is not compiled yet", sym);
+    }
+    expr_enumval *i = etd->enumvals;
+    while (i != 0) {
+      expr_int_literal *ilit = ptr_down_cast<expr_int_literal *>(i->value);
+      term_list tl1;
+      tl1.push_back(term(std::string((*i)->sym))); /* name */
+      if (ilit->is_unsigned) {
+        tl1.push_back(term(ilit->get_value_nosig()));
+      } else {
+        tl1.push_back(term(ilit->get_value_ll()));
+      }
+      i = i->rest;
+    }
+  }
+  return term(tl);
+}
+#endif
+
 template <int mask> static term
 eval_meta_fields_internal(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)

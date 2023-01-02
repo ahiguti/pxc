@@ -28,3 +28,6 @@ uninstallrpms:
 	- sudo rpm -e pxc
 	- sudo rpm -e pxc-debuginfo
 
+fix:
+	chmod a+rx `find . -type d`
+	chmod a+r `find . -type f`

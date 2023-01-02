@@ -66,6 +66,15 @@ serialize(t const& x, tplf{"ser_target_type"} mutable& o)
       }
     }
     tplf{"ser_union_end"}(o);
+  } else if (m::eq{m::family{t}, "enum"}) {
+    /* extenum is not supported */
+    tplf{"ser_enum_begin"}(o);
+    expand (i: m::seq{m::size{m::values{t}}}) {
+      if (x == m::at{m::values{t}, i}) {
+	tplf{"ser_enum_value"}(m::to_string{m::at{m::values{t}, i}}, o);
+      }
+    }
+    tplf{"ser_enum_end"}(o);
   } else {
     m::apply{tplf{"ser_unknown"}, t}(x, o);
   }
@@ -287,7 +296,6 @@ deserialize_macro
       m::error{"internal error"};
     }
     if (tplf{"des_union_begin_cond"}(src)) {
-      bool is_first = true;
       while (true) {
 	if (src.empty() || tplf{"des_union_end_cond"}(src)) {
 	  break;
@@ -312,6 +320,37 @@ deserialize_macro
       }
     } else {
       tplf{"des_value_skip"}(src);
+    }
+  } else if (m::eq{m::family{t}, "enum"}) {
+    /* extenum is not supported */
+    if (m::ne{noret, 0}) {
+      t r;
+      if (tplf{"des_enum_begin_cond"}(src)) {
+        tplf{"des_source_type"} s0 = src;
+        tplf{"des_enum_value"}(s0, src);
+        expand (i: m::seq{m::size{m::values{t}}}) {
+          if (s0 == m::to_string{m::at{m::values{t}, i}}) {
+            r = m::at{m::values{t}, i};
+          }
+        }
+        tplf{"des_enum_end_skip"}(src);
+      } else {
+        tplf{"des_value_skip"}(src);
+      }
+      return r;
+    } else {
+      if (tplf{"des_enum_begin_cond"}(src)) {
+        tplf{"des_source_type"} s0 = src;
+        tplf{"des_enum_value"}(s0, src);
+        expand (i: m::seq{m::size{m::values{t}}}) {
+          if (s0 == m::to_string{m::at{m::values{t}, i}}) {
+            ret = m::at{m::values{t}, i};
+          }
+        }
+        tplf{"des_enum_end_skip"}(src);
+      } else {
+        tplf{"des_value_skip"}(src);
+      }
     }
   } else {
     m::apply{tplf{"des_unknown"}, t}(src);

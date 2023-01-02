@@ -77,3 +77,6 @@ uninstall:
 	rm -rf $(INSTALL_PREFIX)/share/pxc
 	rm -rf $(INSTALL_PREFIX)/share/pxclib
 
+fix:
+	chmod a+rx `find . -type d`
+	chmod a+r `find . -type f`

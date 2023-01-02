@@ -1,0 +1,60 @@
+public namespace ser4;
+import common -;
+import text::serialize -;
+import meta m;
+import bar;
+
+public struct foo {
+  public int x;
+  public bar::bar y;
+}
+
+function void t1()
+{
+  const v = m::at0{m::values{bar::bar}};
+  if (v == bar::bar_one) {
+    println("t1 ok");
+  } else {
+    println("t1 ng");
+  }
+}
+
+function void t2()
+{
+  foo a = foo(99, bar::bar_two);
+  string s = to_string(a);
+  println(s);
+  cstrref sr = s;
+  foo b = deserialize_from_string{foo}(sr);
+  println(b);
+  string s1 = to_string(b);
+  if (s == s1) {
+    println("t2 ok");
+  } else {
+    println("t2 ng");
+  }
+}
+
+function void t3()
+{
+  varray{foo} a;
+  a.push_back(foo(55, bar::bar_one));
+  a.push_back(foo(88, bar::bar_two));
+  string s = to_string(a);
+  println(s);
+  cstrref sr = s;
+  varray{foo} b;
+  deserialize_from_string_emplace{varray{foo}}(sr, b);
+  println(b);
+  string s1 = to_string(b);
+  if (s == s1) {
+    println("t3 ok");
+  } else {
+    println("t3 ng");
+  }
+}
+
+t1();
+t2();
+t3();
+
