@@ -1,28 +1,16 @@
 #!/usr/bin/python3 -i
 #
-# Copyright (c) 2013 The Khronos Group Inc.
-#
-# Permission is hereby granted, free of charge, to any person obtaining a
-# copy of this software and/or associated documentation files (the
-# "Materials"), to deal in the Materials without restriction, including
-# without limitation the rights to use, copy, modify, merge, publish,
-# distribute, sublicense, and/or sell copies of the Materials, and to
-# permit persons to whom the Materials are furnished to do so, subject to
-# the following conditions:
-#
-# The above copyright notice and this permission notice shall be included
-# in all copies or substantial portions of the Materials.
-#
-# THE MATERIALS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-# IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-# CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
-# TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
-# MATERIALS OR THE USE OR OTHER DEALINGS IN THE MATERIALS.
+# Copyright 2013-2020 The Khronos Group Inc.
+# SPDX-License-Identifier: Apache-2.0
 
 import io,os,re,string,sys
 from lxml import etree
+
+def write(*args, **kwargs):
+    file = kwargs.pop('file', sys.stdout)
+    end = kwargs.pop('end', '\n')
+    file.write(' '.join([str(arg) for arg in args]))
+    file.write(end)
 
 # noneStr - returns string argument, or "" if argument is None.
 # Used in converting lxml Elements into text.
@@ -216,7 +204,7 @@ def regSortFeatures(featureList):
 #     the <extension>. Defaults to None. Usually the same as apiname.
 #   addExtensions - regex matching names of additional extensions
 #     to include. Defaults to None.
-#   removeExtenions - regex matching names of extensions to
+#   removeExtensions - regex matching names of extensions to
 #     remove (after defaultExtensions and addExtensions). Defaults
 #     to None.
 #   sortProcedure - takes a list of FeatureInfo objects and sorts
@@ -269,8 +257,10 @@ class GeneratorOptions:
 #     generated around a feature interface in the header file.
 #   genFuncPointers - True if function pointer typedefs should be
 #     generated
-#   protectProto - True if #ifdef..#endif protection should be
-#     generated around prototype declarations
+#   protectProto - Controls cpp protection around prototypes:
+#     False - no protection
+#     'nonzero' - protectProtoStr must be defined to a nonzero value
+#     True - protectProtoStr must be defined
 #   protectProtoStr - #ifdef symbol to use around prototype
 #     declarations, if protected
 #   apicall - string to use for the function declaration prefix,
@@ -365,16 +355,16 @@ class OutputGenerator:
         """Log a message at the given level. Can be ignored or log to a file"""
         if (level == 'error'):
             strfile = io.StringIO()
-            print('ERROR:', *args, file=strfile)
+            write('ERROR:', *args, file=strfile)
             if (self.errFile != None):
-                print(strfile.getvalue(), file=self.errFile)
+                write(strfile.getvalue(), file=self.errFile)
             raise UserWarning(strfile.getvalue())
         elif (level == 'warn'):
             if (self.warnFile != None):
-                print('WARNING:', *args, file=self.warnFile)
+                write('WARNING:', *args, file=self.warnFile)
         elif (level == 'diag'):
             if (self.diagFile != None):
-                print('DIAG:', *args, file=self.diagFile)
+                write('DIAG:', *args, file=self.diagFile)
         else:
             raise UserWarning(
                 '*** FATAL ERROR in Generator.logMsg: unknown level:' + level)
@@ -500,11 +490,11 @@ class COutputGenerator(OutputGenerator):
                     paramdecl += ', '
         else:
             paramdecl += 'void'
-        paramdecl += ");\n";
+        paramdecl += ');\n';
         return [ pdecl + paramdecl, tdecl + paramdecl ]
     #
     def newline(self):
-        print('', file=self.outFile)
+        write('', file=self.outFile)
     #
     def beginFile(self, genOpts):
         OutputGenerator.beginFile(self, genOpts)
@@ -512,43 +502,43 @@ class COutputGenerator(OutputGenerator):
         #
         # Multiple inclusion protection & C++ wrappers.
         if (genOpts.protectFile and self.genOpts.filename):
-            headerSym = '__' + re.sub('\.h', '_h_', os.path.basename(self.genOpts.filename))
-            print('#ifndef', headerSym, file=self.outFile)
-            print('#define', headerSym, '1', file=self.outFile)
+            headerSym = '__' + self.genOpts.apiname + '_' + re.sub('\.h', '_h_', os.path.basename(self.genOpts.filename))
+            write('#ifndef', headerSym, file=self.outFile)
+            write('#define', headerSym, '1', file=self.outFile)
             self.newline()
-        print('#ifdef __cplusplus', file=self.outFile)
-        print('extern "C" {', file=self.outFile)
-        print('#endif', file=self.outFile)
+        write('#ifdef __cplusplus', file=self.outFile)
+        write('extern "C" {', file=self.outFile)
+        write('#endif', file=self.outFile)
         self.newline()
         #
         # User-supplied prefix text, if any (list of strings)
         if (genOpts.prefixText):
             for s in genOpts.prefixText:
-                print(s, file=self.outFile)
+                write(s, file=self.outFile)
         #
         # Some boilerplate describing what was generated - this
         # will probably be removed later since the extensions
         # pattern may be very long.
-        print('/* Generated C header for:', file=self.outFile)
-        print(' * API:', genOpts.apiname, file=self.outFile)
+        write('/* Generated C header for:', file=self.outFile)
+        write(' * API:', genOpts.apiname, file=self.outFile)
         if (genOpts.profile):
-            print(' * Profile:', genOpts.profile, file=self.outFile)
-        print(' * Versions considered:', genOpts.versions, file=self.outFile)
-        print(' * Versions emitted:', genOpts.emitversions, file=self.outFile)
-        print(' * Default extensions included:', genOpts.defaultExtensions, file=self.outFile)
-        print(' * Additional extensions included:', genOpts.addExtensions, file=self.outFile)
-        print(' * Extensions removed:', genOpts.removeExtensions, file=self.outFile)
-        print(' */', file=self.outFile)
+            write(' * Profile:', genOpts.profile, file=self.outFile)
+        write(' * Versions considered:', genOpts.versions, file=self.outFile)
+        write(' * Versions emitted:', genOpts.emitversions, file=self.outFile)
+        write(' * Default extensions included:', genOpts.defaultExtensions, file=self.outFile)
+        write(' * Additional extensions included:', genOpts.addExtensions, file=self.outFile)
+        write(' * Extensions removed:', genOpts.removeExtensions, file=self.outFile)
+        write(' */', file=self.outFile)
     def endFile(self):
         # C-specific
         # Finish C++ wrapper and multiple inclusion protection
         self.newline()
-        print('#ifdef __cplusplus', file=self.outFile)
-        print('}', file=self.outFile)
-        print('#endif', file=self.outFile)
+        write('#ifdef __cplusplus', file=self.outFile)
+        write('}', file=self.outFile)
+        write('#endif', file=self.outFile)
         if (self.genOpts.protectFile and self.genOpts.filename):
             self.newline()
-            print('#endif', file=self.outFile)
+            write('#endif', file=self.outFile)
         # Finish processing in superclass
         OutputGenerator.endFile(self)
     def beginFeature(self, interface, emit):
@@ -568,29 +558,42 @@ class COutputGenerator(OutputGenerator):
         if (self.emit):
             self.newline()
             if (self.genOpts.protectFeature):
-                print('#ifndef', self.featureName, file=self.outFile)
-            print('#define', self.featureName, '1', file=self.outFile)
+                write('#ifndef', self.featureName, file=self.outFile)
+            write('#define', self.featureName, '1', file=self.outFile)
             if (self.typeBody != ''):
-                print(self.typeBody, end='', file=self.outFile)
+                write(self.typeBody, end='', file=self.outFile)
             #
             # Don't add additional protection for derived type declarations,
             # which may be needed by other features later on.
             if (self.featureExtraProtect != None):
-                print('#ifdef', self.featureExtraProtect, file=self.outFile)
+                write('#ifdef', self.featureExtraProtect, file=self.outFile)
             if (self.enumBody != ''):
-                print(self.enumBody, end='', file=self.outFile)
+                write(self.enumBody, end='', file=self.outFile)
             if (self.genOpts.genFuncPointers and self.cmdPointerBody != ''):
-                print(self.cmdPointerBody, end='', file=self.outFile)
+                write(self.cmdPointerBody, end='', file=self.outFile)
             if (self.cmdBody != ''):
-                if (self.genOpts.protectProto):
-                    print('#ifdef', self.genOpts.protectProtoStr, file=self.outFile)
-                print(self.cmdBody, end='', file=self.outFile)
-                if (self.genOpts.protectProto):
-                    print('#endif', file=self.outFile)
+                if (self.genOpts.protectProto == True):
+                    prefix = '#ifdef ' + self.genOpts.protectProtoStr + '\n'
+                    suffix = '#endif\n'
+                elif (self.genOpts.protectProto == 'nonzero'):
+                    prefix = '#if ' + self.genOpts.protectProtoStr + '\n'
+                    suffix = '#endif\n'
+                elif (self.genOpts.protectProto == False):
+                    prefix = ''
+                    suffix = ''
+                else:
+                    self.gen.logMsg('warn',
+                                    '*** Unrecognized value for protectProto:',
+                                    self.genOpts.protectProto,
+                                    'not generating prototype wrappers')
+                    prefix = ''
+                    suffix = ''
+
+                write(prefix + self.cmdBody + suffix, end='', file=self.outFile)
             if (self.featureExtraProtect != None):
-                print('#endif /*', self.featureExtraProtect, '*/', file=self.outFile)
+                write('#endif /*', self.featureExtraProtect, '*/', file=self.outFile)
             if (self.genOpts.protectFeature):
-                print('#endif /*', self.featureName, '*/', file=self.outFile)
+                write('#endif /*', self.featureName, '*/', file=self.outFile)
         # Finish processing in superclass
         OutputGenerator.endFeature(self)
     #
@@ -609,7 +612,7 @@ class COutputGenerator(OutputGenerator):
             else:
                 s += noneStr(elem.text) + noneStr(elem.tail)
         if (len(s) > 0):
-            self.typeBody += s + "\n"
+            self.typeBody += s + '\n'
     #
     # Enumerant generation
     def genEnum(self, enuminfo, name):
@@ -622,7 +625,7 @@ class COutputGenerator(OutputGenerator):
         t = enuminfo.elem.get('type')
         if (t != '' and t != 'i'):
             self.enumBody += enuminfo.type
-        self.enumBody += "\n"
+        self.enumBody += '\n'
     #
     # Command generation
     def genCmd(self, cmdinfo, name):
@@ -700,7 +703,7 @@ class Registry:
     #   infoName - 'type' / 'group' / 'enum' / 'command' / 'feature' / 'extension'
     #   dictionary - self.{type|group|enum|cmd|api|ext}dict
     # If the Element has an 'api' attribute, the dictionary key is the
-    # tuple (name,api). If not, the key is the name. 'name' is an 
+    # tuple (name,api). If not, the key is the name. 'name' is an
     # attribute of the Element
     def addElementInfo(self, elem, info, infoName, dictionary):
         if ('api' in elem.attrib):
@@ -793,37 +796,37 @@ class Registry:
             self.addElementInfo(feature, ei, 'extension', self.extdict)
     def dumpReg(self, maxlen = 40, filehandle = sys.stdout):
         """Dump all the dictionaries constructed from the Registry object"""
-        print('***************************************', file=filehandle)
-        print('    ** Dumping Registry contents **',     file=filehandle)
-        print('***************************************', file=filehandle)
-        print('// Types', file=filehandle)
+        write('***************************************', file=filehandle)
+        write('    ** Dumping Registry contents **',     file=filehandle)
+        write('***************************************', file=filehandle)
+        write('// Types', file=filehandle)
         for name in self.typedict:
             tobj = self.typedict[name]
-            print('    Type', name, '->', etree.tostring(tobj.elem)[0:maxlen], file=filehandle)
-        print('// Groups', file=filehandle)
+            write('    Type', name, '->', etree.tostring(tobj.elem)[0:maxlen], file=filehandle)
+        write('// Groups', file=filehandle)
         for name in self.groupdict:
             gobj = self.groupdict[name]
-            print('    Group', name, '->', etree.tostring(gobj.elem)[0:maxlen], file=filehandle)
-        print('// Enums', file=filehandle)
+            write('    Group', name, '->', etree.tostring(gobj.elem)[0:maxlen], file=filehandle)
+        write('// Enums', file=filehandle)
         for name in self.enumdict:
             eobj = self.enumdict[name]
-            print('    Enum', name, '->', etree.tostring(eobj.elem)[0:maxlen], file=filehandle)
-        print('// Commands', file=filehandle)
+            write('    Enum', name, '->', etree.tostring(eobj.elem)[0:maxlen], file=filehandle)
+        write('// Commands', file=filehandle)
         for name in self.cmddict:
             cobj = self.cmddict[name]
-            print('    Command', name, '->', etree.tostring(cobj.elem)[0:maxlen], file=filehandle)
-        print('// APIs', file=filehandle)
+            write('    Command', name, '->', etree.tostring(cobj.elem)[0:maxlen], file=filehandle)
+        write('// APIs', file=filehandle)
         for key in self.apidict:
-            print('    API Version ', key, '->',
+            write('    API Version ', key, '->',
                 etree.tostring(self.apidict[key].elem)[0:maxlen], file=filehandle)
-        print('// Extensions', file=filehandle)
+        write('// Extensions', file=filehandle)
         for key in self.extdict:
-            print('    Extension', key, '->',
+            write('    Extension', key, '->',
                 etree.tostring(self.extdict[key].elem)[0:maxlen], file=filehandle)
-        # print('***************************************', file=filehandle)
-        # print('    ** Dumping XML ElementTree **', file=filehandle)
-        # print('***************************************', file=filehandle)
-        # print(etree.tostring(self.tree.getroot(),pretty_print=True), file=filehandle)
+        # write('***************************************', file=filehandle)
+        # write('    ** Dumping XML ElementTree **', file=filehandle)
+        # write('***************************************', file=filehandle)
+        # write(etree.tostring(self.tree.getroot(),pretty_print=True), file=filehandle)
     #
     # typename - name of type
     # required - boolean (to tag features as required or not)
