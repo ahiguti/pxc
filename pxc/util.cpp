@@ -20,6 +20,7 @@
 #include "expr.hpp"
 
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -465,15 +466,110 @@ void write_file_content(const std::string& fn, const std::string& data)
   }
 }
 
+template <size_t N> struct auto_fds {
+  int fds[N];
+  auto_fds() {
+    for (size_t i = 0; i < N; ++i) {
+      fds[i] = -1;
+    }
+  }
+  auto_fds(const auto_fds&) = delete;
+  auto_fds& operator =(const auto_fds&) = delete;
+  ~auto_fds() {
+    for (size_t i = 0; i < N; ++i) {
+      if (fds[i] >= 0) {
+        close(fds[i]);
+        fds[i] = -1;
+      }
+    }
+  }
+  void close_one(size_t idx) {
+    if (idx < N && fds[idx] >= 0) {
+      close(fds[idx]);
+      fds[idx] = -1;
+    }
+  }
+  int get_one(size_t idx) {
+    if (idx < N) {
+      return fds[idx];
+    }
+    return -1;
+  }
+};
+
 int popen_cmd(const std::string& cmd, std::string& out_r)
 {
-  auto_pipe_fp fp(popen(cmd.c_str(), "r"));
-  while (!feof(fp.get())) {
-    char buf[1024];
-    const size_t r = fread(buf, 1, sizeof(buf), fp.get());
-    out_r += std::string(buf, buf + r);
+  std::vector<std::string> args;
+  std::vector<char *> raw_args;
+  {
+    std::string tok;
+    for (size_t i = 0; i < cmd.size(); ++i) {
+      const char ch = cmd[i];
+      if (ch == ' ') {
+        if (!tok.empty()) {
+          tok.push_back('\0');
+          args.push_back(tok);
+        }
+        tok = "";
+      } else {
+        tok.push_back(ch);
+      }
+    }
+    if (!tok.empty()) {
+      tok.push_back('\0');
+      args.push_back(tok);
+    }
+    for (size_t i = 0; i < args.size(); ++i) {
+      raw_args.push_back(args[i].data());
+    }
+    if (raw_args.empty()) {
+      return -1;
+    }
+    raw_args.push_back(nullptr);
   }
-  return fp.close();
+  auto_fds<2> afds;
+  if (pipe(&afds.fds[0]) < 0) {
+    return -1;
+  }
+  const pid_t pid = fork();
+  if (pid == 0) {
+    // child process
+    afds.close_one(0); // read end (stdout)
+    dup2(afds.get_one(1), 1);
+    dup2(afds.get_one(1), 2);
+    afds.close_one(1);
+    execvp(raw_args[0], &raw_args[0]);
+    _exit(-1);
+  }
+  afds.close_one(1);
+  std::vector<char> buf(4096);
+  while (true) {
+    const ssize_t rlen = read(afds.get_one(0), &buf[0], buf.size());
+    if (rlen < 0) {
+      if (errno == EAGAIN || errno == EINTR) {
+        continue;
+      }
+      return -1;
+    }
+    if (rlen == 0) {
+      break;
+    }
+    out_r.append(buf.data(), rlen);
+  }
+  while (true) {
+    int st = 0;
+    const int wpid = waitpid(pid, &st, 0);
+    if (wpid < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      return -1;
+    }
+    if (wpid == pid) {
+      break;
+    }
+  }
+  return 0;
 }
 
 void unlink_recursive(const std::string& fn)

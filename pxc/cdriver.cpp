@@ -827,14 +827,14 @@ static void compile_cxx_all(const parser_options& po,
   }
   const std::string ofn_tmp = ofn + ".tmp";
   std::string cmd = po.profile.cxx + " " + po.profile.cflags
-    + " -o '" + ofn_tmp + "'";
+    + " -o " + ofn_tmp;
   if (po.gen_single_cc) {
-    cmd += " '" + mi_main.aux_filename + ".o" + "'";
+    cmd += " " + mi_main.aux_filename + ".o";
   } else {
     for (all_modules_info::modules_type::const_iterator i
       = ami.modules.begin(); i != ami.modules.end(); ++i) {
       const std::string fn = get_o_filename(po, i->second);
-      cmd += " '" + fn + "'";
+      cmd += " " + fn;
     }
   }
   const std::string link_str = get_link_flags(po, ami, mi_main);
@@ -849,7 +849,7 @@ static void compile_cxx_all(const parser_options& po,
   int r = 0;
   std::string obuf;
   tmpfile_guard g(ofn_tmp);
-  r = popen_cmd(cmd + " 2>&1", obuf);
+  r = popen_cmd(cmd, obuf);
   if (r != 0) {
     arena_error_throw(0, "%s\n%s", cmd.c_str(), obuf.c_str());
   }
@@ -1037,9 +1037,9 @@ static void compile_module_to_cc_srcs(const parser_options& po,
       ofn = get_o_filename(po, mi_main);
     }
     const std::string cmd = get_cxx_and_cflags(po, mi_main) +
-      " -c '" + cfn + "' -o '" + ofn + "'";
+      " -c " + cfn + " -o " + ofn;
     std::string obuf;
-    int r = popen_cmd(cmd + " 2>&1", obuf);
+    int r = popen_cmd(cmd, obuf);
     if (r != 0) {
       arena_error_throw(0, "%s\n%s", cmd.c_str(), obuf.c_str());
     }
