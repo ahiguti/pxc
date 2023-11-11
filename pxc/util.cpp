@@ -46,9 +46,9 @@ std::string trim_path(const std::string& s, int trim_path)
     size_t p = s.size();
     while (p > 0) {
       if (s[p - 1] == '/') {
-	if (++n >= trim_path) {
-	  break;
-	}
+        if (++n >= trim_path) {
+          break;
+        }
       }
       --p;
     }
@@ -74,7 +74,7 @@ std::string read_file_content(const std::string& fn, bool err_thr)
     const size_t r = fread(&buf[0], 1, buf.size(), fp.get());
     if (ferror(fp.get())) {
       arena_error_throw(0, "%s:0: Failed to read: errno=%d\n",
-	fn.c_str(), errno);
+        fn.c_str(), errno);
     }
     s.append(&buf[0], r);
     if (r == 0) {
@@ -100,11 +100,11 @@ std::vector<std::string> read_directory(const std::string& dn)
     while (true) {
       struct dirent *const ent = readdir(dir.get()); /* TODO: THREAD? */
       if (ent == 0) {
-	break;
+        break;
       }
       const std::string c = ent->d_name;
       if (c == "." || c == "..") {
-	continue;
+        continue;
       }
       r.push_back(c);
     }
@@ -211,47 +211,47 @@ std::string unescape_c_str_literal(const char *str, bool& success_r)
       ch = str[i + 1];
       ++i;
       if (ch == 'x') {
-	if (i + 2 < len) {
-	  const char c1 = str[i + 1];
-	  const char c2 = str[i + 2];
-	  if (!is_valid_hexadecimal_char(c1) ||
-	    !is_valid_hexadecimal_char(c2)) {
-	    success_r = false;
-	  } else {
-	    const unsigned char rch = (uchar_from_hexadecimal(c1) << 4) |
-	      uchar_from_hexadecimal(c2);
-	    s.push_back(rch);
-	    i += 2;
-	  }
-	} else {
-	  success_r = false;
-	}
+        if (i + 2 < len) {
+          const char c1 = str[i + 1];
+          const char c2 = str[i + 2];
+          if (!is_valid_hexadecimal_char(c1) ||
+            !is_valid_hexadecimal_char(c2)) {
+            success_r = false;
+          } else {
+            const unsigned char rch = (uchar_from_hexadecimal(c1) << 4) |
+              uchar_from_hexadecimal(c2);
+            s.push_back(rch);
+            i += 2;
+          }
+        } else {
+          success_r = false;
+        }
       } else if (ch == 'a' || ch == 'A') {
-	s.push_back('\a');
+        s.push_back('\a');
       } else if (ch == 'b' || ch == 'B') {
-	s.push_back('\b');
+        s.push_back('\b');
       } else if (ch == 'f' || ch == 'F') {
-	s.push_back('\f');
+        s.push_back('\f');
       } else if (ch == 'n' || ch == 'N') {
-	s.push_back('\n');
+        s.push_back('\n');
       } else if (ch == 'r' || ch == 'R') {
-	s.push_back('\r');
+        s.push_back('\r');
       } else if (ch == 't' || ch == 'T') {
-	s.push_back('\t');
+        s.push_back('\t');
       } else if (ch == 'v' || ch == 'V') {
-	s.push_back('\v');
+        s.push_back('\v');
       } else if (ch == '\'') {
-	s.push_back('\'');
+        s.push_back('\'');
       } else if (ch == '\"') {
-	s.push_back('\"');
+        s.push_back('\"');
       } else if (ch == '\\') {
-	s.push_back('\\');
+        s.push_back('\\');
       } else if (ch == '\?') {
-	s.push_back('\?');
+        s.push_back('\?');
       } else if (ch == '0') {
-	s.push_back('\0');
+        s.push_back('\0');
       } else {
-	success_r = false;
+        success_r = false;
       }
     } else {
       s.push_back(ch);
@@ -482,7 +482,7 @@ void unlink_recursive(const std::string& fn)
   if (stat(fn.c_str(), &sbuf) != 0) {
     if (errno != ENOENT) {
       arena_error_throw(0, "-:0: Failed to stat('%s'): errno=%d",
-	fn.c_str(), errno);
+        fn.c_str(), errno);
     }
     return;
   }
@@ -491,15 +491,15 @@ void unlink_recursive(const std::string& fn)
     auto_dir dir(opendir(fn.c_str()));
     if (dir.get()) {
       while (true) {
-	struct dirent *const ent = readdir(dir.get()); /* TODO: THREAD? */
-	if (ent == 0) {
-	  break;
-	}
-	const std::string c = ent->d_name;
-	if (c == "." || c == "..") {
-	  continue;
-	}
-	cl.push_back(c);
+        struct dirent *const ent = readdir(dir.get()); /* TODO: THREAD? */
+        if (ent == 0) {
+          break;
+        }
+        const std::string c = ent->d_name;
+        if (c == "." || c == "..") {
+          continue;
+        }
+        cl.push_back(c);
       }
     }
     dir.close();
@@ -546,7 +546,7 @@ void copy_file(const std::string& ffrom, const std::string& fto)
     size_t e = fread(&buf[0], 1, buf.size(), rfp.get());
     if (ferror(rfp.get())) {
       arena_error_throw(0, "%s:0: Failed to read: errno=%d\n",
-	ffrom.c_str(), errno);
+        ffrom.c_str(), errno);
     }
     if (e == 0) {
       break;
@@ -555,7 +555,7 @@ void copy_file(const std::string& ffrom, const std::string& fto)
     e = fwrite(&buf[0], 1, wrsize, wfp.get());
     if (ferror(wfp.get()) || e != wrsize) {
       arena_error_throw(0, "%s:0: Failed to write: errno=%d\n",
-	fto.c_str(), errno);
+        fto.c_str(), errno);
     }
   }
   if (wfp.close() != 0) {
@@ -652,10 +652,10 @@ std::string escape_hex_non_alnum(const std::string& str)
     if (is_non_alnum(c)) {
       r.push_back('_');
       if (c == '_') {
-	r.push_back('_');
+        r.push_back('_');
       } else {
-	r.push_back(uchar_to_hexadecimal(c / 16));
-	r.push_back(uchar_to_hexadecimal(c % 16));
+        r.push_back(uchar_to_hexadecimal(c / 16));
+        r.push_back(uchar_to_hexadecimal(c % 16));
       }
     } else {
       r.push_back(c);

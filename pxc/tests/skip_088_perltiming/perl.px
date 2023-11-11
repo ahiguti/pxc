@@ -1,9 +1,9 @@
 public namespace perl;
-public import common -;
-public import meta m;
-public import meta::symbol;
+public import core::common -;
+public import core::meta m;
+public import core::meta::symbol;
 public import perl::impl;
-private import numeric::integral -;
+private import core::numeric::integral -;
 
 public metafunction sv perl::impl::sv;
 public metafunction av perl::impl::av;
@@ -20,7 +20,7 @@ public metafunction functions_for_ns{ns}
     meta::symbol::functions_for_ns{ns},
     metafunction{f}
       m::and{m::not{meta::family::is_ephemeral_type{m::ret_type{f}}},
-	m::not{m::ret_byref{f}}}};
+        m::not{m::ret_byref{f}}}};
 public metafunction is_constructible_non_ephemeral{t}
   m::and{
     m::is_constructible_type{t},
@@ -40,20 +40,20 @@ public function {ns} void export_all()
       metafunction typ m::at{contypes, i};
       perl::xs_make_function{typ}(m::concat{m::full_string{typ}, "::new"});
       expand (j : m::seq{m::size{m::member_functions{typ}}}) {
-	{
-	  metafunction mf m::to_string{m::at{m::member_functions{typ}, j}};
-	  perl::xs_make_function{method_as_function{typ, mf}}(
-	    m::concat{m::full_string{typ}, "::", mf});
-	}
+        {
+          metafunction mf m::to_string{m::at{m::member_functions{typ}, j}};
+          perl::xs_make_function{method_as_function{typ, mf}}(
+            m::concat{m::full_string{typ}, "::", mf});
+        }
       }
       expand (j : m::seq{m::size{m::fields{typ}}}) {
-	{
-	  metafunction fld m::at{m::fields{typ}, j};
-	  metafunction fn m::at0{fld};
-	  metafunction ft m::at1{fld};
-	  perl::xs_make_field{typ, j}(
-	    m::concat{m::full_string{typ}, "::", fn});
-	}
+        {
+          metafunction fld m::at{m::fields{typ}, j};
+          metafunction fn m::at0{fld};
+          metafunction ft m::at1{fld};
+          perl::xs_make_field{typ, j}(
+            m::concat{m::full_string{typ}, "::", fn});
+        }
       }
     }
   }

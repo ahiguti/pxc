@@ -1,10 +1,10 @@
 public namespace perl;
-public import common -;
-public import meta m;
-public import meta::family mf;
-public import meta::symbol;
+public import core::common -;
+public import core::meta m;
+public import core::meta::family mf;
+public import core::meta::symbol;
 public import perl::impl;
-private import numeric::integral -;
+private import core::numeric::integral -;
 
 public metafunction sv perl::impl::sv;
 public metafunction av perl::impl::av;
@@ -23,7 +23,7 @@ public metafunction functions_for_ns{ns}
     meta::symbol::functions_for_ns{ns},
     metafunction{f}
       m::and{m::not{meta::family::is_ephemeral_type{m::ret_type{f}}},
-	m::not{m::ret_byref{f}}}};
+        m::not{m::ret_byref{f}}}};
 public metafunction is_constructible_non_ephemeral{t}
   m::and{
     m::is_constructible_type{t},
@@ -43,26 +43,26 @@ public function {ns} void export_all()
     {
       metafunction typ m::at{contypes, i};
       metafunction memfuncs m::filter{
-	m::member_functions{typ},
-	metafunction{f}
-	  m::and{m::not{meta::family::is_ephemeral_type{m::ret_type{f}}},
-	    m::not{m::ret_byref{f}}}};
+        m::member_functions{typ},
+        metafunction{f}
+          m::and{m::not{meta::family::is_ephemeral_type{m::ret_type{f}}},
+            m::not{m::ret_byref{f}}}};
       perl::xs_make_function{typ}(m::concat{m::full_string{typ}, "::new"});
       expand (j : m::seq{m::size{memfuncs}}) {
-	{
-	  metafunction mf m::to_string{m::at{memfuncs, j}};
-	  perl::xs_make_function{method_as_function{typ, mf}}(
-	    m::concat{m::full_string{typ}, "::", mf});
-	}
+        {
+          metafunction mf m::to_string{m::at{memfuncs, j}};
+          perl::xs_make_function{method_as_function{typ, mf}}(
+            m::concat{m::full_string{typ}, "::", mf});
+        }
       }
       expand (j : m::seq{m::size{m::fields{typ}}}) {
-	{
-	  metafunction fld m::at{m::fields{typ}, j};
-	  metafunction fn m::at0{fld};
-	  metafunction ft m::at1{fld};
-	  perl::xs_make_field{typ, j}(
-	    m::concat{m::full_string{typ}, "::", fn});
-	}
+        {
+          metafunction fld m::at{m::fields{typ}, j};
+          metafunction fn m::at0{fld};
+          metafunction ft m::at1{fld};
+          perl::xs_make_field{typ, j}(
+            m::concat{m::full_string{typ}, "::", fn});
+        }
       }
     }
   }
@@ -77,18 +77,18 @@ public function {ns} void export_all()
       metafunction fn m::at{allfuncs, i};
       metafunction fnstr m::full_string{fn};
       metafunction btc m::concat{m::nsof{fn}, "::",
-	base_type_candidate{fn}};
+        base_type_candidate{fn}};
       /* debug_log(fnstr, btc); */
       if (m::eq{m::substring{fnstr, 0, m::strlen{btc}}, btc}) {
-	/* pseudo member function */
-	debug_log("pmfnstr", pmfnstr);
-	metafunction pmfnstr m::concat{
-	  m::full_string{m::arg_type{fn, 0}}, "::",
-	  m::substring{fnstr, m::strlen{btc}}};
-	perl::xs_make_function{fn}(pmfnstr);
+        /* pseudo member function */
+        debug_log("pmfnstr", pmfnstr);
+        metafunction pmfnstr m::concat{
+          m::full_string{m::arg_type{fn, 0}}, "::",
+          m::substring{fnstr, m::strlen{btc}}};
+        perl::xs_make_function{fn}(pmfnstr);
       } else {
-	/* normal function */
-	perl::xs_make_function{fn}(fnstr);
+        /* normal function */
+        perl::xs_make_function{fn}(fnstr);
       }
     }
   }
@@ -96,8 +96,8 @@ public function {ns} void export_all()
     {
       metafunction gvars m::global_variables{n};
       expand (i : m::seq{m::size{gvars}}) {
-	perl::xs_make_variable{n, i}(
-	  m::concat{n, "::", m::at0{m::at{gvars, i}}});
+        perl::xs_make_variable{n, i}(
+          m::concat{n, "::", m::at0{m::at{gvars, i}}});
       }
     }
   }

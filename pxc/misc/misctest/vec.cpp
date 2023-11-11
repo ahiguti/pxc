@@ -29,7 +29,7 @@ template <typename T> struct podvector { /* unsafe for non-pod types */
     do {
       const size_t nl_n = (nl >= 1) ? (nl * 2) : 1;
       if (nl_n <= nl || nl_n > max_len) {
-	throw std::bad_alloc(); /* overflow */
+        throw std::bad_alloc(); /* overflow */
       }
       nl = nl_n;
     } while (nl < len);
@@ -69,8 +69,8 @@ template <typename T> struct myvector {
       valid_len = 0;
     } else {
       while (valid_len > 0) {
-	(start + valid_len - 1)->T::~T(); /* destructor */
-	--valid_len;
+        (start + valid_len - 1)->T::~T(); /* destructor */
+        --valid_len;
       }
     }
   }
@@ -92,7 +92,7 @@ template <typename T> struct myvector {
     do {
       const size_t nl_n = (nl >= 1) ? (nl * 2) : 1;
       if (nl_n <= nl || nl_n > max_len) {
-	throw std::bad_alloc(); /* overflow */
+        throw std::bad_alloc(); /* overflow */
       }
       nl = nl_n;
     } while (nl < len);
@@ -100,30 +100,30 @@ template <typename T> struct myvector {
     if (t_is_trivially_copyable) {
       p = static_cast<T *>(realloc(start, nl * sizeof(T)));
       if (p == 0) {
-	throw std::bad_alloc();
+        throw std::bad_alloc();
       }
     } else {
       p = static_cast<T *>(malloc(nl * sizeof(T)));
       if (p == 0) {
-	throw std::bad_alloc();
+        throw std::bad_alloc();
       }
       size_t idx = 0;
       try {
-	for (; idx < valid_len; ++idx) {
-	  new (p + idx) T(start[idx]); /* copy constructor */
-	}
+        for (; idx < valid_len; ++idx) {
+          new (p + idx) T(start[idx]); /* copy constructor */
+        }
       } catch (...) {
-	while (idx > 0) {
-	  (start + idx - 1)->T::~T(); /* destructor */
-	  --idx;
-	}
-	free(p);
-	throw;
+        while (idx > 0) {
+          (start + idx - 1)->T::~T(); /* destructor */
+          --idx;
+        }
+        free(p);
+        throw;
       }
       idx = valid_len;
       while (idx > 0) {
-	(start + idx - 1)->T::~T(); /* destructor */
-	--idx;
+        (start + idx - 1)->T::~T(); /* destructor */
+        --idx;
       }
       free(start);
     }
@@ -158,17 +158,17 @@ private:
     } else {
       size_t idx = 0;
       try {
-	while (idx < x.valid_len) {
-	  new (start + idx) T(x.start[idx]); /* constructor */
-	  ++idx;
-	}
+        while (idx < x.valid_len) {
+          new (start + idx) T(x.start[idx]); /* constructor */
+          ++idx;
+        }
       } catch (...) {
-	while (idx > 0) {
-	  (start + idx - 1)->T::~T(); /* destructor */
-	  --idx;
-	}
-	free(start);
-	throw;
+        while (idx > 0) {
+          (start + idx - 1)->T::~T(); /* destructor */
+          --idx;
+        }
+        free(start);
+        throw;
       }
       valid_len = x.valid_len;
     }
@@ -251,35 +251,35 @@ int main(int argc, char **argv)
     printf("vector\n");
     for (size_t i = 0; i < test_param1; ++i) {
       r += test_vector< std::vector<unsigned char> >(test_param2,
-	(bool)test_param3);
+        (bool)test_param3);
     }
     break;
   case 1:
     printf("std::string\n");
     for (size_t i = 0; i < test_param1; ++i) {
       r += test_vector< std::string >(test_param2,
-	(bool)test_param3);
+        (bool)test_param3);
     }
     break;
   case 2:
     printf("podvector\n");
     for (size_t i = 0; i < test_param1; ++i) {
       r += test_vector< podvector<unsigned char> >(test_param2,
-	(bool)test_param3);
+        (bool)test_param3);
     }
     break;
   case 3:
     printf("myvector\n");
     for (size_t i = 0; i < test_param1; ++i) {
       r += test_vector< myvector<unsigned char> >(test_param2,
-	(bool)test_param3);
+        (bool)test_param3);
     }
     break;
   case 4:
     printf("vector_chk\n");
     for (size_t i = 0; i < test_param1; ++i) {
       r += test_vector_chk< std::vector<unsigned char> >(test_param2,
-	(bool)test_param3);
+        (bool)test_param3);
     }
     break;
   default:

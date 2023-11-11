@@ -49,21 +49,21 @@ void emit_context::start_ns()
       std::string s;
       size_t delim = cur_ns.find("::", pos);
       if (delim != cur_ns.npos) {
-	s = cur_ns.substr(pos, delim - pos);
-	if (cur_ns_extc) {
-	  this->printf("namespace %s { ", s.c_str());
-	} else {
-	  this->printf("namespace %s$n { ", s.c_str());
-	}
-	pos = delim + 2;
+        s = cur_ns.substr(pos, delim - pos);
+        if (cur_ns_extc) {
+          this->printf("namespace %s { ", s.c_str());
+        } else {
+          this->printf("namespace %s$n { ", s.c_str());
+        }
+        pos = delim + 2;
       } else {
-	s = cur_ns.substr(pos);
-	if (cur_ns_extc) {
-	  this->printf("namespace %s { ", s.c_str());
-	} else {
-	  this->printf("namespace %s$n { ", s.c_str());
-	}
-	break;
+        s = cur_ns.substr(pos);
+        if (cur_ns_extc) {
+          this->printf("namespace %s { ", s.c_str());
+        } else {
+          this->printf("namespace %s$n { ", s.c_str());
+        }
+        break;
       }
     }
     this->puts("\n");
@@ -79,11 +79,11 @@ void emit_context::finish_ns()
     while (true) {
       size_t delim = cur_ns.find("::", pos);
       if (delim != cur_ns.npos) {
-	this->puts("};");
-	pos = delim + 2;
+        this->puts("};");
+        pos = delim + 2;
       } else {
-	this->puts("};");
-	break;
+        this->puts("};");
+        break;
       }
     }
     this->printf(" /* namespace %s */\n", cur_ns.c_str());
@@ -116,7 +116,7 @@ void emit_context::set_stmt_context(const emit_context_stmt& s)
   sct = s;
 }
 
-void emit_context::reset_stmt_context()	
+void emit_context::reset_stmt_context()
 {
 // if (sct.stmt) { fprintf(stderr, "reset_stmt_context %p\n", sct.stmt, sct.stmt->dump(0).c_str()); }
   sct = emit_context_stmt();

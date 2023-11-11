@@ -1,13 +1,13 @@
 public namespace direct1;
-import common -;
+import core::common -;
 import orb -;
 
-public threaded interface ifoo <remote> {
+public pure interface ifoo <remote> {
   public function int hoge(int x, int y) const;
   public function string fuga(cstrref const& x, cstrref const& y) const;
 }
 
-public threaded struct foo <ifoo> {
+public pure struct foo <ifoo> {
   int intval;
   string strval;
   public function int hoge(int x, int y) const {
@@ -21,11 +21,11 @@ public threaded struct foo <ifoo> {
   }
 }
 
-private threaded struct transport_empty <orb_transport> {
+private pure struct transport_empty <orb_transport> {
   function void send_receive(string mutable& rbuf, string mutable& wbuf) { }
 }
 
-private threaded struct transport_direct(ptr{orb} const& p) <orb_transport> {
+private pure struct transport_direct(ptr{orb} const& p) <orb_transport> {
   ptr{orb} svr = p;
   function void send_receive(string mutable& rbuf, string mutable& wbuf) {
     svr->rbuf = wbuf;

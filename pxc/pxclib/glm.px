@@ -1,8 +1,8 @@
 public threaded namespace glm "use-unsafe";
-public import common -;
-public import meta m;
+public import core::common -;
+public import core::meta m;
 
-public tsvaluetype struct extern "pxcrt::glmpx::vec<>::type" {n, t} vec {
+public pure tsvaluetype struct extern "pxcrt::glmpx::vec<>::type" {n, t} vec {
   public metafunction __static_assert__ assert_param_type{t};
   public metafunction value_type t;
   expand(sym: m::seq{m::ge{n, 1}}) { public t x; }
@@ -11,7 +11,7 @@ public tsvaluetype struct extern "pxcrt::glmpx::vec<>::type" {n, t} vec {
   expand(sym: m::seq{m::ge{n, 4}}) { public t w; }
 }
 
-public tsvaluetype struct extern "pxcrt::glmpx::mat<>::type" "nodefault"
+public pure tsvaluetype struct extern "pxcrt::glmpx::mat<>::type" "nodefault"
 {n, m, t} mat {
   public metafunction __static_assert__ assert_param_type{t};
   public metafunction value_type t;
@@ -19,7 +19,7 @@ public tsvaluetype struct extern "pxcrt::glmpx::mat<>::type" "nodefault"
   public metafunction col_type vec{m, t};
 }
 
-public tsvaluetype struct extern "pxcrt::glmpx::tquat<>::type" "nodefault"
+public pure tsvaluetype struct extern "pxcrt::glmpx::tquat<>::type" "nodefault"
 {t} tquat {
   public metafunction __static_assert__ assert_param_type{t};
   public metafunction value_type t;
@@ -29,7 +29,7 @@ public tsvaluetype struct extern "pxcrt::glmpx::tquat<>::type" "nodefault"
   public t w;
 }
 
-public tsvaluetype struct extern "pxcrt::glmpx::tdualquat<>::type" {t}
+public pure tsvaluetype struct extern "pxcrt::glmpx::tdualquat<>::type" {t}
 tdualquat {
   public metafunction __static_assert__ assert_param_type{t};
   public metafunction value_type t;
@@ -106,48 +106,48 @@ private metafunction vec_arg_decls{n, t}
     m::seq{n},
     metafunction{i}
       m::list{
-	m::concat{"a", i}, t, 1, 0}};
+        m::concat{"a", i}, t, 1, 0}};
 private metafunction mat_arg_decls{n, m, t}
   vec_arg_decls{m::mul{n, m}, t};
 
-public threaded function extern "pxcrt::glmpx::make_vec" {n, t}
+public pure function extern "pxcrt::glmpx::make_vec" {n, t}
 vec{n, t} make_vec(expand(vec_arg_decls{n, t}));
-public threaded function extern "pxcrt::glmpx::make_mat" {n, m, t}
+public pure function extern "pxcrt::glmpx::make_mat" {n, m, t}
 mat{n, m, t} make_mat(expand(mat_arg_decls{n, m, t}));
-public threaded function extern "pxcrt::glmpx::make_tquat_wxyz" {t}
+public pure function extern "pxcrt::glmpx::make_tquat_wxyz" {t}
 tquat{t} make_tquat_wxyz(t w, t x, t y, t z);
-public threaded function extern "pxcrt::glmpx::make_tquat_angle_axis" {t}
+public pure function extern "pxcrt::glmpx::make_tquat_angle_axis" {t}
 tquat{t} make_tquat_angle_axis(t angle_degrees, t x, t y, t z);
-public threaded function extern "pxcrt::glmpx::make_tdualquat" {t}
+public pure function extern "pxcrt::glmpx::make_tdualquat" {t}
 tdualquat{t} make_tdualquat(tquat{t} const& re, tquat{t} const& du);
-public threaded function extern "pxcrt::glmpx::make_tdualquat_ori_tr" {t}
+public pure function extern "pxcrt::glmpx::make_tdualquat_ori_tr" {t}
 tdualquat{t} make_tdualquat_ori_tr(tquat{t} const& ori, vec{3, t} const& tr);
 
-public threaded function extern "pxcrt::glmpx::vec_to_cslice" {n, t}
+public pure function extern "pxcrt::glmpx::vec_to_cslice" {n, t}
 cslice{t} vec_to_cslice(vec{n, t} const& x);
-public threaded function extern "pxcrt::glmpx::tquat_to_cslice" {t}
+public pure function extern "pxcrt::glmpx::tquat_to_cslice" {t}
 cslice{t} tquat_to_cslice(tquat{t} const& x);
-public threaded function extern "pxcrt::glmpx::tdualquat_to_cslice" {t}
+public pure function extern "pxcrt::glmpx::tdualquat_to_cslice" {t}
 cslice{t} tdualquat_to_cslice(tquat{t} const& x);
-public threaded function extern "pxcrt::glmpx::mat_to_cslice" {n, m, t}
+public pure function extern "pxcrt::glmpx::mat_to_cslice" {n, m, t}
 cslice{t} mat_to_cslice(mat{n, m, t} const& x);
 
-public threaded function extern "pxcrt::glmpx::vec_to_slice" {n, t}
+public pure function extern "pxcrt::glmpx::vec_to_slice" {n, t}
 slice{t} vec_to_slice(vec{n, t} mutable& x);
-public threaded function extern "pxcrt::glmpx::tquat_to_slice" {t}
+public pure function extern "pxcrt::glmpx::tquat_to_slice" {t}
 slice{t} tquat_to_slice(tquat{t} mutable& x);
-public threaded function extern "pxcrt::glmpx::tdualquat_to_slice" {t}
+public pure function extern "pxcrt::glmpx::tdualquat_to_slice" {t}
 slice{t} tdualquat_to_slice(tquat{t} mutable& x);
-public threaded function extern "pxcrt::glmpx::mat_to_slice" {n, m, t}
+public pure function extern "pxcrt::glmpx::mat_to_slice" {n, m, t}
 slice{t} mat_to_slice(mat{n, m, t} mutable& x);
 
-public threaded function extern "pxcrt::glmpx::vec_to_farray" {n, t}
+public pure function extern "pxcrt::glmpx::vec_to_farray" {n, t}
 farray{t, n} vec_to_farray(vec{n, t} const& x);
-public threaded function extern "pxcrt::glmpx::tquat_to_farray" {t}
+public pure function extern "pxcrt::glmpx::tquat_to_farray" {t}
 farray{t, 4} tquat_to_farray(tquat{t} const& x);
-public threaded function extern "pxcrt::glmpx::tdualquat_to_farray" {t}
+public pure function extern "pxcrt::glmpx::tdualquat_to_farray" {t}
 farray{t, 8} tdualquat_to_farray(tdualquat{t} const& x);
-public threaded function extern "pxcrt::glmpx::mat_to_farray" {n, m, t}
+public pure function extern "pxcrt::glmpx::mat_to_farray" {n, m, t}
 farray{t, m::mul{n, m}} mat_to_farray(mat{n, m, t} const& x);
 
 public metafunction vec_add__{tx, ty} op_add_check{tx, ty};
@@ -189,118 +189,118 @@ public metafunction tquat_minus__{tx} op_minus{tx};
 public metafunction tdualquat_minus__{tx} op_minus{tx};
 
 /*
-private threaded function extern "pxcrt::glmpx::op_add" {tx, ty, tr}
+private pure function extern "pxcrt::glmpx::op_add" {tx, ty, tr}
 check_tvec_tquat_tdualquat_type{t} op_add(tx const& x, ty const& y);
-private threaded function extern "pxcrt::glmpx::op_sub" {tx, ty, tr}
+private pure function extern "pxcrt::glmpx::op_sub" {tx, ty, tr}
 check_tvec_tquat_tdualquat_type{t} op_sub(tx const& x, ty const& y);
-private threaded function extern "pxcrt::glmpx::op_add" {t}
+private pure function extern "pxcrt::glmpx::op_add" {t}
 m::cond{check_tvec_tquat_tdualquat_type{t}, void, void}
 op_adda(t mutable& x, t const& y);
-private threaded function extern "pxcrt::glmpx::op_sub" {t}
+private pure function extern "pxcrt::glmpx::op_sub" {t}
 m::cond{check_tvec_tquat_tdualquat_type{t}, void, void}
 op_suba(t mutable& x, t const& y);
 */
-private threaded function extern "pxcrt::glmpx::op_eq" {t}
+private pure function extern "pxcrt::glmpx::op_eq" {t}
 m::cond{check_tvec_tquat_tdualquat_type{t}, bool, bool}
 op_eq(t const& x, t const& y);
-private threaded function extern "pxcrt::glmpx::op_ne" {t}
+private pure function extern "pxcrt::glmpx::op_ne" {t}
 m::cond{check_tvec_tquat_tdualquat_type{t}, bool, bool}
 op_ne(t const& x, t const& y);
-private threaded function extern "pxcrt::glmpx::op_minus" {t}
+private pure function extern "pxcrt::glmpx::op_minus" {t}
 check_tvec_tquat_tdualquat_type{t}
 op_minus(t const& x);
 
-public threaded function extern "pxcrt::glmpx::length" {t}
+public pure function extern "pxcrt::glmpx::length" {t}
 m::symbol{check_tvec_tquat_type{t}, "value_type"} length(t const& x);
 
-public threaded function extern "pxcrt::glmpx::dot" {t}
+public pure function extern "pxcrt::glmpx::dot" {t}
 m::symbol{check_tvec_tquat_type{t}, "value_type"} dot(t const& x, t const& y);
 
-public threaded function extern "pxcrt::glmpx::distance" {t}
+public pure function extern "pxcrt::glmpx::distance" {t}
 m::symbol{check_tvec_type{t}, "value_type"} distance(t const& x, t const& y);
 
-public threaded function extern "glm::normalize" {n, t}
+public pure function extern "glm::normalize" {n, t}
 vec{n, t} vec_normalize(vec{n, t} const& x);
-public threaded function extern "glm::normalize" {t}
+public pure function extern "glm::normalize" {t}
 tquat{t} tquat_normalize(tquat{t} const& x);
-public threaded function extern "glm::normalize" {t}
+public pure function extern "glm::normalize" {t}
 tdualquat{t} tdualquat_normalize(tdualquat{t} const& x);
 
-public threaded function extern "pxcrt::glmpx::cross" {t}
+public pure function extern "pxcrt::glmpx::cross" {t}
 m::cond{
   is_tvec3_type{t},
   t,
   m::error{m::concat{t, ": invalid type for cross"}}}
 cross(t const& x, t const& y);
 
-public threaded function extern "glm::determinant" {n, m, t}
+public pure function extern "glm::determinant" {n, m, t}
 t mat_determinant(mat{n, t} const& x);
 
-public threaded function extern "pxcrt::glmpx::mat_to_2" {n, m, t}
+public pure function extern "pxcrt::glmpx::mat_to_2" {n, m, t}
 mat{2, 2, t} mat_to_2(mat{n, m, t} const& x);
-public threaded function extern "pxcrt::glmpx::mat_to_3" {n, m, t}
+public pure function extern "pxcrt::glmpx::mat_to_3" {n, m, t}
 mat{3, 3, t} mat_to_3(mat{n, m, t} const& x);
-public threaded function extern "pxcrt::glmpx::mat_to_4" {n, m, t}
+public pure function extern "pxcrt::glmpx::mat_to_4" {n, m, t}
 mat{4, 4, t} mat_to_4(mat{n, m, t} const& x);
 
-public threaded function extern "glm::mat3_cast" {t}
+public pure function extern "glm::mat3_cast" {t}
 mat{3, 3, t} tquat_to_mat3(tquat{t} const& x);
-public threaded function extern "glm::mat4_cast" {t}
+public pure function extern "glm::mat4_cast" {t}
 mat{4, 4, t} tquat_to_mat4(tquat{t} const& x);
 
-public threaded function extern "glm::quat_cast" {t}
+public pure function extern "glm::quat_cast" {t}
 tquat{t} mat3_to_quat(mat{3, 3, t} const& x);
-public threaded function extern "glm::quat_cast" {t}
+public pure function extern "glm::quat_cast" {t}
 tquat{t} mat4_to_quat(mat{4, 4, t} const& x);
 
-public threaded function extern "glm::dualquat_cast" {t}
+public pure function extern "glm::dualquat_cast" {t}
 tdualquat{t} tmat3x4_to_dualquat(mat{3, 4, t} const& x);
 
-public threaded function extern "glm::mat3x4_cast" {t}
+public pure function extern "glm::mat3x4_cast" {t}
 mat{3, 4, t} tdualquat_to_tmat3x4(tdualquat{t} const& x);
 
-public threaded function extern "pxcrt::glmpx::rotate" {tm}
+public pure function extern "pxcrt::glmpx::rotate" {tm}
 tm mat_rotate(tm const& x, float angle, vec3 const& axis);
 
-public threaded function extern "pxcrt::glmpx::transpose" {tm}
+public pure function extern "pxcrt::glmpx::transpose" {tm}
 tm mat_transpose(tm const& x);
 
-public threaded function extern "glm::inverse" {n, m, t}
+public pure function extern "glm::inverse" {n, m, t}
 mat{m, n, t} mat_inverse(mat{n, m, t} const& x);
-public threaded function extern "glm::inverse" {t}
+public pure function extern "glm::inverse" {t}
 tquat{t} tquat_inverse(tquat{t} const& x);
-public threaded function extern "glm::inverse" {t}
+public pure function extern "glm::inverse" {t}
 tdualquat{t} tdualquat_inverse(tquat{t} const& x);
 
-public threaded function extern "glm::conjugate" {t}
+public pure function extern "glm::conjugate" {t}
 tquat{t} tquat_conjugate(tquat{t} const& x);
 
-public threaded function extern "glm::angle" {t}
+public pure function extern "glm::angle" {t}
 t angle(tquat{t} const& x);
-public threaded function extern "glm::axis" {t}
+public pure function extern "glm::axis" {t}
 vec{3, t} axis(tquat{t} const& x);
 
-public threaded function extern "pxcrt::glmpx::scale"
+public pure function extern "pxcrt::glmpx::scale"
 mat4 mat_scale(mat4 const& m, vec3 const& fa);
 
-public threaded function extern "pxcrt::glmpx::translate"
+public pure function extern "pxcrt::glmpx::translate"
 mat4 mat_translate(mat4 const& m, vec3 const& tr);
 
-public threaded function extern "pxcrt::glmpx::frustum"
+public pure function extern "pxcrt::glmpx::frustum"
 mat4 frustum(float left, float right, float bottom, float top, float ne,
   float fa);
 
-public threaded function extern "pxcrt::glmpx::ortho"
+public pure function extern "pxcrt::glmpx::ortho"
 mat4 ortho(float left, float right, float bottom, float top, float ne,
   float fa);
 
-public threaded function extern "pxcrt::glmpx::lookAt"
+public pure function extern "pxcrt::glmpx::lookAt"
 mat4 lookAt(vec3 const& e, vec3 const& c, vec3 const& u);
 
-public threaded function extern "pxcrt::glmpx::ortho"
+public pure function extern "pxcrt::glmpx::ortho"
 mat4 ortho2D(float left, float right, float bottom, float top);
 
-public threaded function extern "pxcrt::glmpx::perspective"
+public pure function extern "pxcrt::glmpx::perspective"
 mat4 perspective(float fovy, float aspect, float zNear, float zFar);
 
 /* private */
@@ -323,18 +323,18 @@ private metafunction op_mul_check{tx, ty}
 private metafunction op_div_check{tx, ty}
   op_div{tx, ty, check_div_type{tx, ty}};
 
-private threaded function extern "pxcrt::glmpx::op_add" {tx, ty, tr}
+private pure function extern "pxcrt::glmpx::op_add" {tx, ty, tr}
 tr op_add(tx const& x, ty const& y);
-private threaded function extern "pxcrt::glmpx::op_sub" {tx, ty, tr}
+private pure function extern "pxcrt::glmpx::op_sub" {tx, ty, tr}
 tr op_sub(tx const& x, ty const& y);
-private threaded function extern "pxcrt::glmpx::op_adda" {tx, ty}
+private pure function extern "pxcrt::glmpx::op_adda" {tx, ty}
 void op_adda(tx mutable& x, ty const& y);
-private threaded function extern "pxcrt::glmpx::op_sub" {tx, ty}
+private pure function extern "pxcrt::glmpx::op_sub" {tx, ty}
 void op_suba(tx mutable& x, ty const& y);
 
-private threaded function extern "pxcrt::glmpx::op_mul" {tx, ty, tr}
+private pure function extern "pxcrt::glmpx::op_mul" {tx, ty, tr}
 tr op_mul(tx const& x, ty const& y);
-private threaded function extern "pxcrt::glmpx::op_div" {tx, ty, tr}
+private pure function extern "pxcrt::glmpx::op_div" {tx, ty, tr}
 tr op_div(tx const& x, ty const& y);
 
 private metafunction check_add_type{tx, ty}
@@ -383,12 +383,12 @@ private metafunction check_mul_type{tx, ty}
     tx,
     /* (quat_dualquat * vec) */
     m::and{is_tquat_tdualquat_type{tx},
-      m::or{is_tvec3_type{ty}, is_tvec4_type{ty}}, 
+      m::or{is_tvec3_type{ty}, is_tvec4_type{ty}},
       m::eq{m::symbol{tx, "value_type"}, m::symbol{ty, "value_type"}}},
     ty,
     /* (vec * quat_dualquat) */
     m::and{is_tquat_tdualquat_type{ty},
-      m::or{is_tvec3_type{tx}, is_tvec4_type{tx}}, 
+      m::or{is_tvec3_type{tx}, is_tvec4_type{tx}},
       m::eq{m::symbol{tx, "value_type"}, m::symbol{ty, "value_type"}}},
     tx,
     m::error{m::concat{ty, ": invalid type for operator mul"}}};
@@ -401,7 +401,7 @@ private metafunction check_div_type{tx, ty}
     /* (any / sca) */
     m::and{is_tvec_tmat_tquat_tdualquat_type{tx},
       m::eq{m::symbol{tx, "value_type"}, ty}},
-    tx, 
+    tx,
     m::error{m::concat{ty, ": invalid type for operator div"}}};
 
 private metafunction assert_param_type{t}

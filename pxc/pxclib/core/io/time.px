@@ -1,0 +1,174 @@
+public threaded namespace core::io::time "use-unsafe";
+public import core::numeric::integral -;
+public import core::numeric::fp -;
+public import core::numeric::cast -;
+public import core::io +;
+
+public pure tsvaluetype struct extern "std::time_t" "extint"
+time_t { }   //SLONG
+public pure tsvaluetype struct extern "pxcrt::suseconds_t" "extint"
+suseconds_t { }
+
+public pure tsvaluetype struct extern "::timeval" timeval {
+  public time_t tv_sec;
+  public suseconds_t tv_usec;
+}
+
+public pure function extern "pxcrt::gettimeofday" timeval
+io_gettimeofday(io const& iop);
+public pure function extern "pxcrt::time" time_t
+io_time(io const& iop);
+
+public pure function extern "pxcrt::high_resolution_timer" ulonglong
+io_high_resolution_timer(io const& iop);
+public pure function extern "pxcrt::high_resolution_timer_frequency"
+ulonglong
+io_high_resolution_timer_frequency(io const& iop);
+
+public pure function double
+io_gettimeofday_double(io const& iop)
+{
+  timeval tv = iop.gettimeofday();
+  double const rv = static_cast{double, time_t}(tv.tv_sec)
+    + static_cast{double, suseconds_t}(tv.tv_usec) / 1000000.0;
+  return rv;
+}
+
+public pure function double
+io_high_resolution_timer_double(io const& iop)
+{
+  const vn = iop.high_resolution_timer();
+  const vd = iop.high_resolution_timer_frequency();
+  double const rv = static_cast{double, ulonglong}(vn)
+    / static_cast{double, ulonglong}(vd);
+  return rv;
+}
+
+public pure function extern "pxcrt::io_sleep" uint
+io_sleep(io const& iop, uint sec);
+public pure function extern "pxcrt::io_usleep" uint
+io_usleep(io const& iop, uint usec);
+
+private function extern "pxcrt::time_init" void time_init(); /* not mtsafe */
+
+extern "types" inline
+namespace pxcrt {
+#if defined(PXC_POSIX) && !defined(PXC_EMSCRIPTEN)
+typedef ::suseconds_t suseconds_t;
+#else
+typedef long suseconds_t;
+#endif
+};
+;
+
+extern "functions" inline
+#include <chrono>
+#include <thread>
+#include <ctime>
+#ifdef PXC_POSIX
+#include <sys/time.h>
+#include <unistd.h>
+#include <time.h>
+#endif
+;
+
+extern "implementation" inline
+namespace pxcrt {
+using namespace pxcrt;
+
+#ifdef PXC_POSIX
+
+::timeval gettimeofday(io const& iop)
+{
+  ::timeval tv = { };
+  ::gettimeofday(&tv, 0); /* no need to check error */
+  return tv;
+}
+
+bt_ulonglong high_resolution_timer(io const& iop)
+{
+  ::timeval tv = { };
+  ::gettimeofday(&tv, 0); /* no need to check error */
+  unsigned long long v = tv.tv_sec;
+  v *= 1000000;
+  v += tv.tv_usec;
+  return v;
+}
+
+bt_ulonglong high_resolution_timer_frequency(io const& iop)
+{
+  return 1000000ULL;
+}
+
+#endif
+
+#ifdef PXC_WINDOWS
+
+::timeval gettimeofday(io const& iop)
+{
+  FILETIME ft = { };
+  unsigned long long v = 0;
+  GetSystemTimeAsFileTime(&ft);
+  v = ft.dwHighDateTime;
+  v <<= 32;
+  v += ft.dwLowDateTime;
+  v -= 116444736000000000ULL;
+  v /= 10;
+  ::timeval tv = { };
+  tv.tv_sec = (long)(v / 1000000);
+  tv.tv_usec = (long)(v % 1000000);
+  return tv;
+}
+
+bt_ulonglong high_resolution_timer(io const& iop)
+{
+  LARGE_INTEGER v = { };
+  if (!QueryPerformanceCounter(&v)) {
+    return 0;
+  }
+  return v.QuadPart;
+}
+
+bt_ulonglong high_resolution_timer_frequency(io const& iop)
+{
+  LARGE_INTEGER v = { };
+  if (!QueryPerformanceFrequency(&v)) {
+    return 0;
+  }
+  return v.QuadPart;
+}
+
+#endif
+
+std::time_t time(io const& iop)
+{
+  return std::time(0);
+}
+
+bt_uint io_sleep(io const& iop, bt_uint sec)
+{
+  std::this_thread::sleep_for(std::chrono::seconds(sec));
+  return 0;
+}
+
+bt_uint io_usleep(io const& iop, bt_uint usec)
+{
+  std::this_thread::sleep_for(std::chrono::microseconds(usec));
+  return 0;
+}
+
+void time_init()
+{
+  /* not multi-thread safe */
+#ifdef PXC_WINDOWS
+  _tzset();
+#else
+  #ifndef __CYGWIN__
+  ::tzset();
+  #endif
+#endif
+}
+
+}; // namespace pxcrt
+;
+

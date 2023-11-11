@@ -71,7 +71,7 @@ struct expr_var;
 
 struct localvar_info {
   expr_i *edef; /* expr_var, expr_typedef, expr_metafdef, expr_struct,
-		  expr_interface, expr_funcdef, or expr_argdecl */
+                  expr_interface, expr_funcdef, or expr_argdecl */
   attribute_e attr;
   expr_stmts *stmt;
   bool has_attrib_private() const {

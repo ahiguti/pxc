@@ -1,6 +1,6 @@
 public namespace python "use-unsafe";
-public import common -;
-public import meta m;
+public import core::common -;
+public import core::meta m;
 
 pxc_python_init();
 
@@ -69,7 +69,7 @@ make_tuple(expand(
     m::fold{
       m::seq{m::size{tlist}},
       metafunction{x, y}
-	m::concat{x, m::cond{m::eq{x, ""}, "a", ", a"}, y, "$"},
+        m::concat{x, m::cond{m::eq{x, ""}, "a", ", a"}, y, "$"},
       ""},
     ")"};
   return object(); /* dummy */
@@ -84,7 +84,7 @@ make_dict(expand(
   expand(i: m::seq{m::div{m::size{tlist}, 2}}) {
     expand(sym0: {m::concat{"a", m::mul{i, 2}}}) {
       expand(sym1: {m::concat{"a", m::add{m::mul{i, 2}, 1}}}) {
-	obj[sym0] = sym1;
+        obj[sym0] = sym1;
       }
     }
   }
@@ -175,7 +175,7 @@ object_call__(expand(
     m::fold{
       m::seq{1, m::size{tlist}},
       metafunction{x, y}
-	m::concat{x, m::cond{m::eq{x, ""}, "", ", "}, "a", y, "$"},
+        m::concat{x, m::cond{m::eq{x, ""}, "", ", "}, "a", y, "$"},
       ""},
     ");\n"};
   return object(); /* dummy */
@@ -461,14 +461,14 @@ class_cache_type class_cache;
 object
 object_getfld(object const& obj, strlit const& name)
 {
-  return boost::python::api::getattr(obj, 
+  return boost::python::api::getattr(obj,
     reinterpret_cast<const char *>(name.begin()));
 }
 
 void
 object_setfld(object const& obj, strlit const& name, object const& val)
 {
-  boost::python::api::setattr(obj, 
+  boost::python::api::setattr(obj,
     reinterpret_cast<const char *>(name.begin()), val);
 }
 
@@ -536,7 +536,7 @@ struct pystr_to_pxcstr {
     if (sval == 0) { boost::python::throw_error_already_set(); }
     void *storage =
       ((boost::python::converter::rvalue_from_python_storage<pxcstring>*)data)
-	->storage.bytes;
+        ->storage.bytes;
     const unsigned char *p = reinterpret_cast<const unsigned char *>(sval);
     new (storage) pxcstring(p, len);
     data->convertible = storage;
@@ -567,7 +567,7 @@ struct pystr_to_cstrref {
     if (sval == 0) { boost::python::throw_error_already_set(); }
     void *storage =
       ((boost::python::converter::rvalue_from_python_storage<cstrref>*)data)
-	->storage.bytes;
+        ->storage.bytes;
     const unsigned char *p = reinterpret_cast<const unsigned char *>(sval);
     new (storage) cstrref(p, len);
     data->convertible = storage;
@@ -588,7 +588,7 @@ void pxc_python_init()
     small_int_values.resize(101);
     for (size_t i = 0; i < 101; ++i) {
       small_int_values[i] = boost::python::object(boost::python::handle<>(
-	PyInt_FromLong(i));
+        PyInt_FromLong(i));
     }
     #endif
   }

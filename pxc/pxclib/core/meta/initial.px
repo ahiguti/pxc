@@ -1,0 +1,186 @@
+public threaded namespace core::meta::initial "use-unsafe";
+public import core::meta m;
+
+extern "types" inline
+
+#if defined(_MSC_VER)
+  #define PXC_MSVC
+  #define PXC_WINDOWS
+  #ifndef _CPPUNWIND
+    #define PXC_NO_EXCEPTIONS
+  #else
+  #endif
+#else
+  #define PXC_POSIX
+  #ifndef __cpp_exceptions
+    #define PXC_NO_EXCEPTIONS
+  #endif
+#endif
+
+#if defined(__EMSCRIPTEN__)
+#ifndef PXC_PLATFORM_emscripten
+#error "px source is not compiled for emscripten platform"
+#endif
+#define PXC_EMSCRIPTEN
+#define PXC_NO_ATOMIC
+#define PXC_NO_THREAD
+#endif
+
+#ifndef PXC_THROW
+#ifdef PXC_NO_EXCEPTIONS
+#define PXC_THROW(x) ::abort();
+#define PXC_TRY
+#define PXC_CATCH(x) if (0)
+#define PXC_NOTHROW throw()
+#define PXC_RETHROW
+#define BOOST_NO_EXCEPTIONS
+#else
+#define PXC_THROW(x) throw (x);
+#define PXC_TRY try
+#define PXC_CATCH(x) catch (x)
+#define PXC_NOTHROW throw()
+#define PXC_RETHROW throw
+#endif
+#endif
+
+#ifndef PXC_FUNCTION_ENTRY
+#define PXC_FUNCTION_ENTRY(name, src)
+#endif
+
+#if defined(PXC_MSVC)
+#pragma warning(disable: 4521 4522 4146)
+#define SSIZE_MAX _I64_MAX
+#include <windows.h>
+#include <malloc.h>
+#undef min
+#undef max
+#define alloca _alloca
+#if _MSC_VER < 1900
+#define snprintf _snprintf
+#endif
+#endif
+
+#include <stdint.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <cassert>
+#include <climits>
+#include <stdexcept>
+#ifndef PXC_NO_ATOMIC
+#include <atomic>
+#endif
+
+#ifdef PXC_POSIX
+#include <alloca.h>
+#endif
+
+#if defined(PXC_MSVC)
+#define __attribute__(x)
+#define PXC_NO_INLINE __declspec(noinline)
+#define PXC_FORCE_INLINE __forceinline
+#else
+#define PXC_NO_INLINE __attribute__((noinline))
+#define PXC_FORCE_INLINE inline
+#endif
+
+#ifdef BOOST_NO_EXCEPTIONS
+namespace boost {
+template <typename T> void throw_exception(T const& x) { ::abort(); }
+};
+#endif
+
+#include <boost/type_traits/is_pod.hpp>
+#include <boost/static_assert.hpp>
+
+namespace pxcrt {
+
+struct bt_unit { };
+extern bt_unit unit_value; /* used when a reference is required */
+extern char **process_argv; /* set by int main(int argc, char **argv) */
+typedef bool bt_bool;
+typedef unsigned char bt_uchar;
+typedef char bt_char;
+typedef signed char bt_schar;
+typedef unsigned short bt_ushort;
+typedef short bt_short;
+typedef unsigned int bt_uint;
+typedef int bt_int;
+typedef unsigned long bt_ulong;
+typedef long bt_long;
+typedef unsigned long long bt_ulonglong;
+typedef long long bt_longlong;
+typedef ::size_t bt_size_t;
+#if defined(PXC_MSVC)
+#include <BaseTsd.h>
+typedef SSIZE_T bt_ssize_t;
+#else
+typedef ::ssize_t bt_ssize_t;
+#endif
+typedef float bt_float;
+typedef double bt_double;
+struct bt_tpdummy;
+
+struct mtcount { /* reference counter for multi-threaded shared objects */
+#if defined(PXC_MSVC)
+  mtcount(long x = 1) { std::atomic_init(&count$z, 1); }
+  mtcount(const mtcount& x) { std::atomic_init(&count$z, 1); }
+#else
+  mtcount(long x = 1) : count$z(1) { }
+  mtcount(const mtcount& x) : count$z(1) { }
+#endif
+  mtcount& operator =(const mtcount& x) { return *this; }
+#ifdef PXC_NO_ATOMIC
+  void incref$z() {
+    ++count$z;
+  }
+  bool decref$z() {
+    return (--count$z == 0);
+  }
+  long refcnt$z() const { return count$z; }
+private:
+  long count$z;
+#else
+  void incref$z() {
+    std::atomic_fetch_add_explicit(&count$z, 1L, std::memory_order_relaxed);
+  }
+  bool decref$z() {
+    if (std::atomic_fetch_sub_explicit(&count$z, 1L, std::memory_order_release)
+      == 1) {
+      std::atomic_thread_fence(std::memory_order_acquire);
+      return true;
+    }
+    return false;
+  }
+  long refcnt$z() const { return count$z.load(std::memory_order_seq_cst); }
+private:
+  std::atomic_long count$z;
+#endif
+};
+
+struct stcount { /* reference counter for single-threaded shared objects */
+  stcount(long x = 1) : count$z(1) { }
+  stcount(const stcount& x) : count$z(1) { }
+  stcount& operator =(const stcount& x) { return *this; }
+  void incref$z() { ++count$z; }
+  bool decref$z() { return (--count$z == 0); }
+  long refcnt$z() const { return count$z; }
+private:
+  long count$z;
+};
+
+}; // namespace pxcrt
+// extern "types" inline
+;
+
+extern "implementation" inline
+
+namespace pxcrt {
+
+bt_unit unit_value;
+char **process_argv;
+
+}; // namespace pxcrt
+// extern "implementation" inline
+;
+

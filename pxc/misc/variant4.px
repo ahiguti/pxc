@@ -1,15 +1,15 @@
 #!/usr/bin/env pxc
 public namespace variant;
-import common -;
-import meta::builtin m;
-import numeric::cast n;
-import exception::builtin -;
+import core::common -;
+import core::meta::builtin m;
+import core::numeric::cast n;
+import core::exception::builtin -;
 import serialization::positional -;
 import downcast -;
 
 metafunction strlit container::string::strlit;
 
-multithreaded union variant {
+pure multithreaded union variant {
   unit unitval;
   long longval;
   ulong ulongval;
@@ -18,7 +18,7 @@ multithreaded union variant {
   tptr{iinvoke} tptrval;
 }
 
-multithreaded interface iinvoke {
+pure multithreaded interface iinvoke {
   function variant invoke(cstrref const& name, cslice{variant} const& args);
 }
 
@@ -41,7 +41,7 @@ metafunction to_non_ephemeral{t}
   m::cond{is_range_type{t}, m::symbol{t, "non_ephemeral_type"},
   t}};
 
-threaded function {t} variant to_variant(t const& x)
+pure function {t} variant to_variant(t const& x)
 {
   variant r;
   if (m::eq{t, unit}) {
@@ -64,7 +64,7 @@ threaded function {t} variant to_variant(t const& x)
   return r;
 }
 
-threaded function {t} t from_variant(variant const& x)
+pure function {t} t from_variant(variant const& x)
 {
   if (m::eq{t, unit}) {
     return unit();
@@ -112,7 +112,7 @@ threaded function {t} t from_variant(variant const& x)
   throw invalid_field();
 }
 
-multithreaded struct foo {
+pure multithreaded struct foo {
   int val;
   function void add(int x) { val += x; }
   function int get() const { return val; }
@@ -123,7 +123,7 @@ multithreaded struct foo {
   }
 }
 
-multithreaded struct {t} stub_iinvoke(expand(a : m::args{t})) : iinvoke : {
+pure multithreaded struct {t} stub_iinvoke(expand(a : m::args{t})) : iinvoke : {
   t value;
   metafunction mfuncstr{t} m::map{m::member_functions{t}, m::to_string};
   metafunction seqstr{n} m::map{m::seq{n}, m::to_string};
@@ -143,29 +143,29 @@ multithreaded struct {t} stub_iinvoke(expand(a : m::args{t})) : iinvoke : {
   function variant invoke(cstrref const& name, cslice{variant} const& args) {
     expand(fsym : mfuncstr{t}) {
       if (m::to_string{fsym} == name) {
-	expand(ae : argexp_list{fsym}) {
-	  /* const value */
-	  arg_type_noneph{fsym, ae} ae = from_variant{arg_type_noneph{fsym, ae}}(
-	    args[m::to_int{m::substring{ae, 1}}]);
-	  /* mutable value */
-	  arg_type_noneph{fsym, ae} ae = from_variant{arg_type_noneph{fsym, ae}}(
-	    args[m::to_int{m::substring{ae, 1}}]);
-	  /* const reference */
-	  arg_type_noneph{fsym, ae} const& ae =
-	    downcast_const{stub_iinvoke{arg_type_noneph{fsym, ae}}, iinvoke}(
-	      *(args[m::to_int{m::substring{ae, 1}}].tptrval)).value;
-	  /* mutable reference */
-	  arg_type_noneph{fsym, ae} mutable& ae =
-	    downcast_mutable{stub_iinvoke{arg_type_noneph{fsym, ae}}, iinvoke}(
-	      *(args[m::to_int{m::substring{ae, 1}}].tptrval)).value;
-	}
-	if (m::eq{m::ret_type{m::symbol{t, m::to_string{fsym}}}, void}) {
-	  value.fsym(expand(a : arg_names{fsym}; a));
-	  return variant();
-	} else {
-	  return to_variant{m::ret_type{m::symbol{t, m::to_string{fsym}}}}(
-	    value.fsym(expand(a : arg_names{fsym}; a)));
-	}
+        expand(ae : argexp_list{fsym}) {
+          /* const value */
+          arg_type_noneph{fsym, ae} ae = from_variant{arg_type_noneph{fsym, ae}}(
+            args[m::to_int{m::substring{ae, 1}}]);
+          /* mutable value */
+          arg_type_noneph{fsym, ae} ae = from_variant{arg_type_noneph{fsym, ae}}(
+            args[m::to_int{m::substring{ae, 1}}]);
+          /* const reference */
+          arg_type_noneph{fsym, ae} const& ae =
+            downcast_const{stub_iinvoke{arg_type_noneph{fsym, ae}}, iinvoke}(
+              *(args[m::to_int{m::substring{ae, 1}}].tptrval)).value;
+          /* mutable reference */
+          arg_type_noneph{fsym, ae} mutable& ae =
+            downcast_mutable{stub_iinvoke{arg_type_noneph{fsym, ae}}, iinvoke}(
+              *(args[m::to_int{m::substring{ae, 1}}].tptrval)).value;
+        }
+        if (m::eq{m::ret_type{m::symbol{t, m::to_string{fsym}}}, void}) {
+          value.fsym(expand(a : arg_names{fsym}; a));
+          return variant();
+        } else {
+          return to_variant{m::ret_type{m::symbol{t, m::to_string{fsym}}}}(
+            value.fsym(expand(a : arg_names{fsym}; a)));
+        }
       }
     }
     return variant();

@@ -185,15 +185,15 @@ ssize_t term_metalist::assoc_find(const term& x) const
       /* element is a metalist */
       const term_list *const ml = v.get_metalist();
       if (ml->size() > 0) {
-	const term& e = (*ml)[0];
-	if (x == e) {
-	  return c;
-	}
+        const term& e = (*ml)[0];
+        if (x == e) {
+          return c;
+        }
       }
     } else {
       /* element is a value */
       if (v == x) {
-	return c;
+        return c;
       }
     }
   }
@@ -212,13 +212,13 @@ static term_metalist_idx::index_type make_index(const term_list_range& a)
       /* element is a metalist */
       const term_list *const ml = k.get_metalist();
       if (ml->size() > 0) {
-	const term& e = (*ml)[0];
-	if (e.is_long() || e.is_string()) {
-	  term_metalist_idx::index_type::iterator iter = idx.find(e);
-	  if (iter == idx.end()) {
-	    idx[e] = i;
-	  }
-	}
+        const term& e = (*ml)[0];
+        if (e.is_long() || e.is_string()) {
+          term_metalist_idx::index_type::iterator iter = idx.find(e);
+          if (iter == idx.end()) {
+            idx[e] = i;
+          }
+        }
       }
     }
   }
@@ -290,8 +290,8 @@ bool term::operator ==(const term& x) const
       const term_bind& tb0 = *static_cast<const term_bind *>(ptr);
       const term_bind& tb1 = *static_cast<const term_bind *>(x.ptr);
       return tb0.tp == tb1.tp && tb0.tpv == tb1.tpv &&
-	tb0.tpv_lexctx == tb1.tpv_lexctx &&
-	tb0.is_upvalue == tb1.is_upvalue && tb0.next == tb1.next;
+        tb0.tpv_lexctx == tb1.tpv_lexctx &&
+        tb0.is_upvalue == tb1.is_upvalue && tb0.next == tb1.next;
     }
   case term_sort_expr:
     {
@@ -335,12 +335,12 @@ bool term::operator <(const term& x) const
       expr_tparams *tp0 = dynamic_cast<expr_tparams *>(tl0.tparams);
       expr_tparams *tp1 = dynamic_cast<expr_tparams *>(tl1.tparams);
       while (tp0 != 0 || tp1 != 0) {
-	const std::string s0 = tp0 != 0 ? tp0->sym : "";
-	const std::string s1 = tp1 != 0 ? tp1->sym : "";
-	if (s0 < s1) { return true; }
-	if (s1 < s0) { return false; }
-	tp0 = tp0 != 0 ? tp0->rest : 0;
-	tp1 = tp1 != 0 ? tp1->rest : 0;
+        const std::string s0 = tp0 != 0 ? tp0->sym : "";
+        const std::string s1 = tp1 != 0 ? tp1->sym : "";
+        if (s0 < s1) { return true; }
+        if (s1 < s0) { return false; }
+        tp0 = tp0 != 0 ? tp0->rest : 0;
+        tp1 = tp1 != 0 ? tp1->rest : 0;
       }
       return tl0.v < tl1.v;
     }
@@ -366,14 +366,14 @@ bool term::operator <(const term& x) const
     {
       /* TODO: slow */
       const std::string s0 = term_tostr(term(get_expr()),
-	term_tostr_sort_strict);
+        term_tostr_sort_strict);
       const std::string s1 = term_tostr(term(x.get_expr()),
-	term_tostr_sort_strict);
+        term_tostr_sort_strict);
       if (s0 < s1) {
-	return true;
+        return true;
       }
       if (s0 > s1) {
-	return false;
+        return false;
       }
       term_list emp;
       const term_list *a0 = get_args();
@@ -397,7 +397,7 @@ std::string meta_term_to_string(const term& t, bool detail_flag)
     const term_list& tl = *t.get_metalist();
     for (term_list::const_iterator i = tl.begin(); i != tl.end(); ++i) {
       if (i != tl.begin()) {
-	s += ",";
+        s += ",";
       }
       s += meta_term_to_string(*i, detail_flag);
     }

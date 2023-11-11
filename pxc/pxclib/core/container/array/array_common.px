@@ -1,0 +1,380 @@
+public threaded namespace core::container::array::array_common "use-unsafe";
+public import core::numeric::integral;
+public import core::fundamental::allocator;
+public import core::meta m;
+
+public metafunction pxc_no_bounds_checking
+  m::and{
+    m::eq{m::profile{"safe_mode"}, "0"},
+    m::eq{m::profile{"bounds_checking"}, "0"}};
+
+extern "types" inline
+
+#if %{pxc_no_bounds_checking}%
+#define PXC_NO_BOUNDS_CHECKING 1
+#else
+#undef PXC_NO_BOUNDS_CHECKING
+#endif
+
+#include <algorithm>
+#include <type_traits>
+
+namespace pxcrt {
+
+void throw_bad_alloc();
+void throw_would_invalidate();
+void throw_invalid_index();
+
+/* alternative to uninitialized_* functions. optimized for pod types. */
+
+template <typename T> struct is_trivially_copyable {
+  enum { value = boost::is_pod<T>::value };
+  // enum { value = std::is_trivially_copyable<T>::value };
+};
+
+template <typename T, bool copy_flag> struct placement_new;
+template <typename T> struct placement_new<T, true>
+{ void operator ()(T *dest, const T& src) { new (dest) T(src); }; };
+template <typename T> struct placement_new<T, false>
+{ void operator ()(T *dest, T& src) { new (dest) T(std::move(src)); }; };
+
+template <typename T, bool copy_flag> struct copy_or_move;
+template <typename T> struct copy_or_move<T, true>
+{ void operator ()(T& dest, const T& src) { dest = src; }; };
+template <typename T> struct copy_or_move<T, false>
+{ void operator ()(T& dest, T& src) { dest = src; }; };
+
+/*
+template <typename T, bool copyable> struct add_const_if_not;
+template <typename T> struct add_const_if_not<T, false>
+{ typedef const T type; };
+template <typename T> struct add_const_if_not<T, true>
+{ typedef T type; };
+*/
+
+template <typename T> PXC_FORCE_INLINE void
+deallocate_uninitialized(T *ptr, size_t len)
+{
+  global_deallocate_n(ptr, len * sizeof(T));
+}
+
+template <typename T> PXC_FORCE_INLINE T *
+allocate_uninitialized(size_t len)
+{
+  void *p = global_allocate_n(len * sizeof(T));
+  return static_cast<T *>(p);
+}
+
+template <typename T> PXC_FORCE_INLINE void
+deinitialize_n(T *ptr, size_t len)
+{
+  if (!is_trivially_copyable<T>::value) {
+    for (T *p = ptr + len; p != ptr; --p) {
+      (p - 1)->T::~T();
+    }
+  }
+}
+
+template <typename T> PXC_FORCE_INLINE void
+deinitialize_1(T *ptr)
+{
+  if (!is_trivially_copyable<T>::value) {
+    ptr->T::~T();
+  }
+}
+
+template <typename T, typename Tsrc> PXC_FORCE_INLINE void
+initialize_fill_n(T *ptr, size_t len, Tsrc& x)
+{
+  if (is_trivially_copyable<T>::value) {
+    for (size_t i = 0; i < len; ++i) {
+      ptr[i] = x;
+    }
+  } else {
+    size_t i = 0;
+    PXC_TRY {
+      for (; i < len; ++i) {
+        /* new (ptr + i) T(x); */
+        placement_new<T, std::is_const<Tsrc>::value>()(ptr + i, x);
+      }
+    } PXC_CATCH(...) {
+      deinitialize_n(ptr, i);
+      PXC_RETHROW;
+    }
+  }
+}
+
+template <typename T, typename Tsrc> PXC_FORCE_INLINE void
+initialize_copymove_n(T *ptr, size_t len, Tsrc *src)
+{
+  if (is_trivially_copyable<T>::value) {
+    memcpy(ptr, src, len * sizeof(T));
+  } else {
+    size_t i = 0;
+    PXC_TRY {
+      for (; i < len; ++i) {
+        /* new (ptr + i) T(src[i]); */
+        placement_new<T, std::is_const<Tsrc>::value>()(ptr + i, src[i]);
+      }
+    } PXC_CATCH(...) {
+      deinitialize_n(ptr, i);
+      PXC_RETHROW;
+    }
+  }
+}
+
+template <typename T, typename Tsrc> PXC_FORCE_INLINE void
+initialize_1(T *ptr, Tsrc& x)
+{
+  if (is_trivially_copyable<T>::value) {
+    *ptr = x;
+  } else {
+    /* new (ptr) T(x); */
+    placement_new<T, std::is_const<Tsrc>::value>()(ptr, x);
+  }
+}
+
+template <typename T> PXC_FORCE_INLINE T *
+reserve_n(T *ptr, size_t vlen, size_t alloc_olen, size_t alloc_nlen)
+{
+  if (is_trivially_copyable<T>::value) {
+    void *p = global_reallocate_n(ptr, alloc_olen * sizeof(T),
+      alloc_nlen * sizeof(T));
+    return static_cast<T *>(p);
+  } else {
+    T *p = allocate_uninitialized<T>(alloc_nlen);
+    PXC_TRY {
+      /* Tsrc is const if T is not move-constructible */
+      /*
+      typedef typename
+        add_const_if_not<T, std::is_move_constructible<T>::value>::type Tsrc;
+      initialize_copymove_n<T, Tsrc>(p, vlen, ptr);
+      */
+      initialize_copymove_n<T, T>(p, vlen, ptr);
+    } PXC_CATCH(...) {
+      deallocate_uninitialized<T>(p, alloc_nlen);
+      PXC_RETHROW;
+    }
+    deinitialize_n(ptr, vlen);
+    deallocate_uninitialized<T>(ptr, vlen);
+    return p;
+  }
+}
+
+template <typename T, typename Tsrc> PXC_FORCE_INLINE void
+copymove_n(T *ptr, size_t len, Tsrc *src)
+{
+  if (is_trivially_copyable<T>::value) {
+    memmove(ptr, src, len * sizeof(T));
+  } else {
+    for (size_t i = 0; i < len; ++i) {
+      /* ptr[i] = src[i]; */
+      copy_or_move<T, std::is_const<Tsrc>::value>()(ptr[i], src[i]);
+    }
+  }
+}
+
+template <typename T, typename Tsrc> PXC_FORCE_INLINE void
+copymove_backward_n(T *ptr, size_t len, Tsrc *src)
+{
+  if (is_trivially_copyable<T>::value) {
+    memmove(ptr, src, len * sizeof(T));
+  } else {
+    for (size_t i = len; i > 0; --i) {
+      copy_or_move<T, std::is_const<Tsrc>::value>()(ptr[i - 1], src[i - 1]);
+    }
+  }
+}
+
+template <typename T, typename Tsrc> PXC_FORCE_INLINE void
+insert_n(T *x, size_t& xlen, Tsrc *y, size_t ylen, size_t xpos)
+  /* xlen is modified so that it is always the size of initialized range */
+{
+  /* x[0 .. xlen] must be initialized, and x[xlen .. xlen + ylen]
+   * uninitialized */
+  const size_t olen = xlen;
+  const size_t nlen = olen + ylen;
+  if (olen - xpos >= ylen) {
+    /* moving size >= ylen */
+    /* append from x */
+    initialize_copymove_n<T, Tsrc>(x + xlen, ylen, x + olen - ylen);
+    xlen = nlen;
+    /* move */
+    copymove_backward_n<T, Tsrc>(x + xpos + ylen, olen - ylen - xpos, x + xpos);
+    /* copy from y */
+    copymove_n(x + xpos, ylen, y);
+  } else {
+    /* moving size < ylen */
+    /* append from y */
+    initialize_copymove_n(x + xlen, ylen - (olen - xpos), y + (olen - xpos));
+    xlen = xpos + ylen;
+    /* append from x */
+    initialize_copymove_n<T, Tsrc>(x + xlen, olen - xpos, x + xpos);
+    xlen = nlen;
+    /* copy from y */
+    copymove_n(x + xpos, olen - xpos, y);
+  }
+}
+
+/* utility functions for array types */
+
+template <typename T> static PXC_FORCE_INLINE bt_size_t
+array_find(const T *arr, bt_size_t len, bt_size_t offset, T const& value)
+{
+  if (offset >= len) {
+    return len;
+  }
+  if (sizeof(T) == 1) {
+    const T *const p = static_cast<const T *>(
+      ::memchr(arr + offset, value, len - offset));
+    return p != 0 ? (p - arr) : len;
+  } else {
+    bt_size_t i = offset;
+    for (; i < len && arr[i] != value; ++i) { }
+    return i;
+  }
+}
+
+template <typename T> static PXC_FORCE_INLINE bt_size_t
+find_mapped_memchr(const T& c, bt_size_t offset, typename T::mapped_type v)
+{
+  return array_find(c.rawarr(), c.size(), offset, v);
+}
+
+template <typename T> static PXC_FORCE_INLINE typename T::mapped_type
+get_elem_value(const T& c, bt_size_t offset)
+{
+  return c[offset];
+}
+
+template <typename T> static PXC_FORCE_INLINE typename T::mapped_type
+get_elem_value_nochek(const T& c, bt_size_t offset)
+{
+  return c.rawarr()[offset];
+}
+
+template <typename Tx, typename Ty> PXC_FORCE_INLINE int
+compare_memcmp(const Tx& x, const Ty& y)
+{
+  BOOST_STATIC_ASSERT((
+    sizeof(typename Tx::mapped_type) == sizeof(typename Ty::mapped_type)));
+  const size_t xlen = x.size();
+  const size_t ylen = y.size();
+  const size_t clen = std::min(xlen, ylen);
+  const int c = memcmp(x.rawarr(), y.rawarr(),
+    clen * sizeof(typename Tx::mapped_type));
+  if (c < 0) {
+    return -1;
+  } else if (c > 0) {
+    return 1;
+  }
+  if (xlen < ylen) {
+    return -1;
+  } else if (xlen > ylen) {
+    return 1;
+  }
+  return 0;
+}
+
+template <typename Tx, typename Ty> PXC_FORCE_INLINE bool
+eq_memcmp(const Tx& x, const Ty& y)
+{
+  BOOST_STATIC_ASSERT((
+    sizeof(typename Tx::mapped_type) == sizeof(typename Ty::mapped_type)));
+  return x.size() == y.size() &&
+    memcmp(x.rawarr(), y.rawarr(),
+      x.size() * sizeof(typename Tx::mapped_type)) == 0;
+}
+
+template <typename Tx, typename Ty> PXC_FORCE_INLINE bool
+lt_memcmp(const Tx& x, const Ty& y)
+{
+  BOOST_STATIC_ASSERT((
+    sizeof(typename Tx::mapped_type) == sizeof(typename Ty::mapped_type)));
+  const size_t xlen = x.size();
+  const size_t ylen = y.size();
+  const size_t clen = std::min(xlen, ylen);
+  const int c = memcmp(x.rawarr(), y.rawarr(),
+    clen * sizeof(typename Tx::mapped_type));
+  if (c < 0) {
+    return true;
+  } else if (c == 0 && xlen < ylen) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+template <typename Tx, typename Ty> PXC_FORCE_INLINE bool
+ne_memcmp(const Tx& x, const Ty& y) { return !eq_memcmp(x, y); }
+template <typename Tx, typename Ty> PXC_FORCE_INLINE bool
+gt_memcmp(const Tx& x, const Ty& y) { return lt_memcmp(y, x); }
+template <typename Tx, typename Ty> PXC_FORCE_INLINE bool
+le_memcmp(const Tx& x, const Ty& y) { return !lt_memcmp(y, x); }
+template <typename Tx, typename Ty> PXC_FORCE_INLINE bool
+ge_memcmp(const Tx& x, const Ty& y) { return !lt_memcmp(x, y); }
+
+template <typename T> PXC_FORCE_INLINE size_t
+hash_podarr(const T& x)
+{
+  typedef typename T::mapped_type mt;
+  mt const* const p = x.rawarr();
+  size_t n = x.size();
+  size_t r = 0;
+  for (size_t i = 0; i < n; ++i) {
+    r ^= p[i] + 0x9e3779b9 + (r << 6) + (r >> 2);
+  }
+  return r;
+}
+
+template <typename Tx, typename Ty> PXC_FORCE_INLINE void
+copy_memmove(const Tx& x, Ty& y)
+{
+  BOOST_STATIC_ASSERT((
+    sizeof(typename Tx::mapped_type) == sizeof(typename Ty::mapped_type)));
+  const size_t xlen = x.size();
+  const size_t ylen = y.size();
+  const size_t clen = std::min(xlen, ylen);
+  memmove(y.rawarr(), x.rawarr(), clen * sizeof(typename Tx::mapped_type));
+}
+
+template <typename Tx, typename Tv> static PXC_FORCE_INLINE void
+array_push_back(Tx& x, Tv const& v)
+{ x.push_back(v); }
+
+template <typename Tx, typename Tv> static PXC_FORCE_INLINE void
+array_push_back_move(Tx& x, Tv& v)
+{ x.push_back(std::move(v)); }
+
+template <typename Tx> static PXC_FORCE_INLINE typename Tx::mapped_type
+array_pop_back(Tx& x)
+{ return x.pop_back(); }
+
+template <typename Tx, typename Tv> static PXC_FORCE_INLINE void
+array_push_front(Tx& x, Tv const& v)
+{ x.push_front(v); }
+
+template <typename Tx, typename Tv> static PXC_FORCE_INLINE void
+array_push_front_move(Tx& x, Tv& v)
+{ x.push_front(std::move(v)); }
+
+template <typename Tx> static PXC_FORCE_INLINE typename Tx::mapped_type
+array_pop_front(Tx& x)
+{ return x.pop_front(); }
+
+template <typename Tx, typename Tv> static PXC_FORCE_INLINE void
+array_append(Tx& x, Tv const& v)
+{ x.append(v); }
+
+template <typename Tx, typename Tv> static PXC_FORCE_INLINE void
+array_insert(Tx& x, bt_size_t i, Tv const& v)
+{ x.insert(i, v); }
+
+template <typename Tx> static PXC_FORCE_INLINE void
+array_erase(Tx& x, bt_size_t i0, bt_size_t i1)
+{ x.erase(i0, i1); }
+
+}; // namespace pxcrt
+
+;
+

@@ -1,0 +1,86 @@
+public threaded namespace core::numeric::distinct "use-unsafe";
+public import core::numeric::integral -;
+public import core::numeric::cast -;
+public import core::meta m;
+public import core::meta::family mf;
+
+/* distinct_int{tbase, tid} creates a distinct integral type which is compiled
+   to the same c++ type as 'tbase'. parameter 'tid' is a type (or string) used
+   for generating a unique type. */
+
+public metafunction distinct_int{tbase, tid}
+  distinct_int_impl{check_signed_integral{tbase}, check_type{tid}};
+public metafunction distinct_uint{tbase, tid}
+  distinct_int_impl{check_unsigned_integral{tbase}, check_type{tid}};
+public metafunction distinct_enum{tbase, tid}
+  distinct_int_impl{check_unsigned_integral{tbase}, check_type{tid}};
+public metafunction distinct_bitmask{tbase, tid}
+  distinct_int_impl{check_unsigned_integral{tbase}, check_type{tid}};
+
+private pure tsvaluetype struct extern "::pxcrt::distinct<>::type" "extint"
+{tbase, tid}
+distinct_int_impl { }
+private pure tsvaluetype struct extern "::pxcrt::distinct<>::type" "extuint"
+{tbase, tid}
+distinct_uint_impl { }
+private pure tsvaluetype struct extern "::pxcrt::distinct<>::type" "extenum"
+{tbase, tid}
+distinct_enum_impl { }
+private pure tsvaluetype struct extern "::pxcrt::distinct<>::type" "extbitmask"
+{tbase, tid}
+distinct_bitmask_impl { }
+
+public metafunction distinct_int_impl_to__{tto, tfrom}
+  static_cast{impl_conv{tto, m::at{tfrom, 0}}, tfrom};
+public metafunction distinct_uint_impl_to__{tto, tfrom}
+  static_cast{impl_conv{tto, m::at{tfrom, 0}}, tfrom};
+public metafunction distinct_enum_impl_to__{tto, tfrom}
+  static_cast{impl_conv{tto, m::at{tfrom, 0}}, tfrom};
+public metafunction distinct_bitmask_impl_to__{tto, tfrom}
+  static_cast{impl_conv{tto, m::at{tfrom, 0}}, tfrom};
+
+private metafunction check_signed_integral{t}
+  m::cond{mf::is_signed_integral_type{t}, t,
+    m::error{"signed integral type expected"}};
+private metafunction check_unsigned_integral{t}
+  m::cond{mf::is_unsigned_integral_type{t}, t,
+    m::error{"unsigned integral type expected"}};
+private metafunction check_type{t}
+  m::cond{
+    m::is_string{t}, string_to_type{t},
+    m::is_type{t}, t,
+    m::error{"string or type expected"}};
+
+private pure tsvaluetype struct {t} string_to_type { }
+
+extern "types" inline
+namespace pxcrt {
+template <typename Tbase, typename Tid>
+struct distinct { typedef Tbase type; };
+};
+;
+
+private metafunction impl_conv{tto, tfrom}
+  m::cond{
+    m::eq{tto, tfrom}, tto,
+    m::apply{
+      metafunction {idx}
+        m::and{
+          m::le{0, idx},
+          m::le{0, m::list_find{m::at1{m::at{impl_conv_list, idx}}, tfrom}}},
+      m::list_find{impl_conv_list, tto}},
+      tto,
+    m::error{"implicit conversion not allowed"}};
+
+private metafunction impl_conv_list
+{
+  {short, {char}},
+  {int, {char, short}},
+  {long, {char, short, int}},
+  {ssize_t, {char, short, int}},
+  {ushort, {uchar}},
+  {uint, {uchar, ushort}},
+  {ulong, {uchar, ushort, uint}},
+  {size_t, {uchar, ushort, uint}}
+};
+

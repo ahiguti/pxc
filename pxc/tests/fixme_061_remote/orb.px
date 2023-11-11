@@ -1,13 +1,13 @@
 public namespace orb;
 public import ordered -;
-public import common -;
+public import core::common -;
 public import string::conversion -;
-public import meta -;
+public import core::meta -;
 public import downcast -;
-public import meta m;
-public import meta::family mf;
+public import core::meta m;
+public import core::meta::family mf;
 
-public threaded struct orb {
+public pure struct orb {
   ns_functions funcs;
   varray{methods} mets;
   string rbuf;
@@ -18,14 +18,14 @@ public threaded struct orb {
     /* remote realobject id to local stub rawptr */
 }
 
-public threaded union skeleton_mapped {
+public pure union skeleton_mapped {
   unit nothing;
   ptr{remote} real_object;
 }
 
-public threaded interface remote { }
+public pure interface remote { }
 
-public threaded function void execute(orb& o)
+public pure function void execute(orb& o)
 {
   try {
     uchar req = o.rbuf[0];
@@ -48,13 +48,13 @@ public threaded function void execute(orb& o)
   }
 }
 
-private threaded function void call_function_notfound(orb& o,
+private pure function void call_function_notfound(orb& o,
   size_t const tpos, size_t const tepos, size_t const apos, size_t const aepos)
 {
   o.wbuf.append("T\tfunction_not_found\n");
 }
 
-private threaded function {ns, i0, i1} void call_ns_function_bs(orb& o,
+private pure function {ns, i0, i1} void call_ns_function_bs(orb& o,
   size_t const tpos, size_t const tepos, size_t const apos, size_t const aepos)
 {
   if (m::eq{i0, i1}) {
@@ -79,7 +79,7 @@ private threaded function {ns, i0, i1} void call_ns_function_bs(orb& o,
   }
 }
 
-public threaded function {ns} void call_ns_function_ni(orb& o,
+public pure function {ns} void call_ns_function_ni(orb& o,
   size_t const pos, size_t const epos)
 {
   size_t args_pos = pos;
@@ -88,13 +88,13 @@ public threaded function {ns} void call_ns_function_ni(orb& o,
   call_ns_function_bs{ns, 0, m::size{fns}}(o, pos, delim_pos, args_pos, epos);
 }
 
-private threaded function void call_method_notfound(orb& o, remote& obj,
+private pure function void call_method_notfound(orb& o, remote& obj,
   size_t const tpos, size_t const tepos, size_t const apos, size_t const aepos)
 {
   o.wbuf.append("T\tmethod_not_found\n");
 }
 
-private threaded function {t, i0, i1} void call_method_bs(
+private pure function {t, i0, i1} void call_method_bs(
   orb& o, remote& obj, size_t const tpos, size_t const tepos,
   size_t const apos, size_t const aepos)
 {
@@ -120,7 +120,7 @@ private threaded function {t, i0, i1} void call_method_bs(
   }
 }
 
-public threaded function {t} void call_method_ni(orb& o, size_t const pos,
+public pure function {t} void call_method_ni(orb& o, size_t const pos,
   size_t const epos, remote& obj)
 {
   size_t args_pos = pos;
@@ -129,7 +129,7 @@ public threaded function {t} void call_method_ni(orb& o, size_t const pos,
   call_method_bs{t, 0, m::size{mf}}(o, obj, pos, delim_pos, args_pos, epos);
 }
 
-private threaded function {f} void function_call(orb& o, size_t pos,
+private pure function {f} void function_call(orb& o, size_t pos,
   size_t epos)
 {
   expand (asym, idx : func_argexp_list{f}) {
@@ -148,7 +148,7 @@ private threaded function {f} void function_call(orb& o, size_t pos,
   }
 }
 
-private threaded function {t, mi} void method_call(orb& o, size_t pos,
+private pure function {t, mi} void method_call(orb& o, size_t pos,
   size_t epos, remote& obj)
 {
   t mutable& objt = downcast_mutable{t, remote}(obj);
@@ -171,7 +171,7 @@ private threaded function {t, mi} void method_call(orb& o, size_t pos,
   }
 }
 
-private threaded function {t} t unmarshal_value(string const& buf, size_t& pos,
+private pure function {t} t unmarshal_value(string const& buf, size_t& pos,
   size_t epos)
 {
   size_t npos = pos;
@@ -181,19 +181,19 @@ private threaded function {t} t unmarshal_value(string const& buf, size_t& pos,
   return deserialize_from_string{t}(tok);
 }
 
-private threaded function {t} void marshal_value(string& buf, t const& x)
+private pure function {t} void marshal_value(string& buf, t const& x)
 {
   serialize_to_string{t}(x, buf);
 }
 
-private tsvaluetype struct extern "orb::rawptr_type" rawptr_type { }
-private threaded function extern "orb::ptr_to_rawptr" rawptr_type
+private pure tsvaluetype struct extern "orb::rawptr_type" rawptr_type { }
+private pure function extern "orb::ptr_to_rawptr" rawptr_type
 ptr_to_rawptr(ptr{remote} const& p);
-private threaded function extern "orb::rawptr_to_ptr" ptr{remote}
+private pure function extern "orb::rawptr_to_ptr" ptr{remote}
 rawptr_to_ptr(rawptr_type rawptr);
-private threaded function extern "orb::size_t_to_rawptr" rawptr_type
+private pure function extern "orb::size_t_to_rawptr" rawptr_type
 size_t_to_rawptr(size_t v);
-private threaded function extern "orb::rawptr_to_size_t" size_t
+private pure function extern "orb::rawptr_to_size_t" size_t
 rawptr_to_size_t(rawptr_type rawptr);
 
 extern "types" inline
@@ -229,7 +229,7 @@ bt_size_t rawptr_to_size_t(rawptr_type rawptr)
 }; // namespace orb
 ;
 
-private threaded function {t} void marshal_reference(orb& o, t const& x)
+private pure function {t} void marshal_reference(orb& o, t const& x)
 {
   rawptr_type const rawptr = ptr_to_rawptr(x);
   /*
@@ -248,7 +248,7 @@ private threaded function {t} void marshal_reference(orb& o, t const& x)
   }
 }
 
-private threaded function {t} t unmarshal_reference(orb& o, size_t& pos,
+private pure function {t} t unmarshal_reference(orb& o, size_t& pos,
   size_t epos)
 {
   cstrref buf = o.rbuf[pos .. epos];
@@ -277,7 +277,7 @@ private threaded function {t} t unmarshal_reference(orb& o, size_t& pos,
   }
 }
 
-private threaded function size_t skip_token(string const& buf, size_t& pos,
+private pure function size_t skip_token(string const& buf, size_t& pos,
   size_t epos)
 {
   size_t delim_pos = buf.find(pos, '\t');
@@ -309,7 +309,7 @@ private metafunction func_arg_type_ne{f, idx}
 
 /* using function/method table */
 
-public threaded function void call_ns_function(orb& o, size_t const pos,
+public pure function void call_ns_function(orb& o, size_t const pos,
   size_t const epos)
 {
   ns_functions_slice fs = o.funcs;
@@ -324,7 +324,7 @@ public threaded function void call_ns_function(orb& o, size_t const pos,
   }
 }
 
-public threaded function void call_method(orb& o, size_t const pos,
+public pure function void call_method(orb& o, size_t const pos,
   size_t const epos, size_t tid, remote& obj)
 {
   methods_slice ms = o.mets[tid];
@@ -339,14 +339,14 @@ public threaded function void call_method(orb& o, size_t const pos,
   }
 }
 
-public threaded struct func_entry (strlit const& k,
+public pure struct func_entry (strlit const& k,
   ptr{i_marshal_fcall} const& f)
 {
   strlit name = k;
   ptr{i_marshal_fcall} func = f;
 }
 
-public threaded struct method_entry (strlit const& k,
+public pure struct method_entry (strlit const& k,
   ptr{i_marshal_method} const& f)
 {
   strlit name = k;
@@ -359,7 +359,7 @@ public metafunction ns_functions_slice cslice{func_entry};
 public metafunction methods varray{method_entry};
 public metafunction methods_slice cslice{method_entry};
 
-public threaded function {ns} ns_functions create_ns_functions()
+public pure function {ns} ns_functions create_ns_functions()
 {
   ns_functions fs;
   expand (fsym, idx : m::sort{m::map{m::functions{ns}, m::to_string}}) {
@@ -374,7 +374,7 @@ public threaded function {ns} ns_functions create_ns_functions()
   return fs;
 }
 
-public threaded function {t} methods create_methods()
+public pure function {t} methods create_methods()
 {
   methods ms;
   expand (fsym, idx : m::map{member_functions_sorted{t}, m::to_string}) {
@@ -389,31 +389,31 @@ public threaded function {t} methods create_methods()
   return ms;
 }
 
-private threaded interface i_marshal_fcall
+private pure interface i_marshal_fcall
 {
   function void call(orb& o, size_t pos, size_t epos) const;
 }
 
-private threaded struct {f} marshal_fcall <i_marshal_fcall>
+private pure struct {f} marshal_fcall <i_marshal_fcall>
 {
   function void call(orb& o, size_t pos, size_t epos) const {
     function_call{f}(o, pos, epos);
   }
 }
 
-private threaded interface i_marshal_method
+private pure interface i_marshal_method
 {
   function void call(orb& o, size_t pos, size_t epos, remote& obj) const;
 }
 
-private threaded struct {t, mi} marshal_method <i_marshal_method>
+private pure struct {t, mi} marshal_method <i_marshal_method>
 {
   function void call(orb& o, size_t pos, size_t epos, remote& obj) const {
     method_call{t, mi}(o, pos, epos, obj);
   }
 }
 
-private threaded function {t, tk, cmp} size_t binary_search(cslice{t} const& s,
+private pure function {t, tk, cmp} size_t binary_search(cslice{t} const& s,
   tk const& k)
 {
   size_t first = 0;
@@ -433,13 +433,13 @@ private threaded function {t, tk, cmp} size_t binary_search(cslice{t} const& s,
   return s.size();
 }
 
-private threaded function int compare_func_entry(func_entry const& ent,
+private pure function int compare_func_entry(func_entry const& ent,
   cstrref const& k)
 {
   return compare_strict_weak{cstrref}(ent.name, k);
 }
 
-private threaded function int compare_method_entry(method_entry const& ent,
+private pure function int compare_method_entry(method_entry const& ent,
   cstrref const& k)
 {
   return compare_strict_weak{cstrref}(ent.name, k);

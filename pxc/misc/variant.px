@@ -1,12 +1,12 @@
 #!/usr/bin/env pxc
 public namespace variant;
-import common -;
-import meta::builtin m;
-import numeric::cast n;
+import core::common -;
+import core::meta::builtin m;
+import core::numeric::cast n;
 
 metafunction strlit container::string::strlit;
 
-multithreaded union variant {
+pure multithreaded union variant {
   unit unitval;
   long longval;
   double doubleval;
@@ -14,11 +14,11 @@ multithreaded union variant {
   tptr{iinvoke} tptrval;
 }
 
-multithreaded interface iinvoke {
+pure multithreaded interface iinvoke {
   function variant invoke(cstrref const& name, cslice{variant} const& args);
 }
 
-threaded function {t} variant to_variant(t const& x)
+pure function {t} variant to_variant(t const& x)
 {
   metafunction is_string_or_slice_family{t}
     m::or{
@@ -45,19 +45,19 @@ threaded function {t} variant to_variant(t const& x)
   return r;
 }
 
-threaded function {t} t from_variant(variant const& x)
+pure function {t} t from_variant(variant const& x)
 {
   return t(); // TODO
 }
 
-multithreaded struct foo {
+pure multithreaded struct foo {
   int val;
   function void add(int x) { val += x; }
   function int get() const { return val; }
 }
 
 // TODO: generic
-multithreaded struct foo_iinvoke : iinvoke : {
+pure multithreaded struct foo_iinvoke : iinvoke : {
   foo value;
   function variant invoke(cstrref const& name, cslice{variant} const& args) {
     variant r;
@@ -71,23 +71,23 @@ multithreaded struct foo_iinvoke : iinvoke : {
 }
 
 
-multithreaded struct {t} stub_iinvoke : iinvoke : {
+pure multithreaded struct {t} stub_iinvoke : iinvoke : {
   t value;
   function variant invoke(cstrref const& name, cslice{variant} const& args) {
     metafunction mfuncstr{t} m::map{m::member_functions{t}, m::to_string};
     metafunction seqstr{n} m::map{m::seq{n}, m::to_string};
     expand(fsym : mfuncstr{t}) {
       if (m::to_string{fsym} == name) {
-	metafunction f m::symbol{t, m::to_string{fsym}};
-	if (m::eq{m::ret_type{f}, void}) {
-	  value.fsym(expand(i : seqstr{m::arg_size{f}};
-	    from_variant{m::arg_type{f, i}}(args[m::to_int{i}])));
-	  return variant();
-	} else {
-	  return to_variant{m::ret_type{f}}(
-	    value.fsym(expand(i : seqstr{m::arg_size{f}};
-	      from_variant{m::arg_type{f, i}}(args[m::to_int{i}]))));
-	}
+        metafunction f m::symbol{t, m::to_string{fsym}};
+        if (m::eq{m::ret_type{f}, void}) {
+          value.fsym(expand(i : seqstr{m::arg_size{f}};
+            from_variant{m::arg_type{f, i}}(args[m::to_int{i}])));
+          return variant();
+        } else {
+          return to_variant{m::ret_type{f}}(
+            value.fsym(expand(i : seqstr{m::arg_size{f}};
+              from_variant{m::arg_type{f, i}}(args[m::to_int{i}]))));
+        }
       }
     }
     return variant();

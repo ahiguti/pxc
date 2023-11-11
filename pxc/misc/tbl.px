@@ -1,17 +1,17 @@
 #!/usr/bin/pxc
 
 public namespace tbl;
-import common -;
-import io::buffered -;
-import text::string::split -;
-import meta m;
+import core::common -;
+import core::io::buffered -;
+import core::text::string::split -;
+import core::meta m;
 
-threaded function {cb, line_delim, col_delim} void
+pure function {cb, line_delim, col_delim} void
 parse_table(file const& ifile)
 {
   metafunction enttype m::arg_type{cb, 0};
   const err = stream_foreach{file, parse_line}(ifile, line_delim, 16386);
-  threaded function bool parse_line(cstrref const& line) {
+  pure function bool parse_line(cstrref const& line) {
     enttype e;
     string_split{col_delim}(line,
       expand(fld: m::field_names{enttype}; e.fld));
@@ -19,7 +19,7 @@ parse_table(file const& ifile)
   }
 }
 
-mtvaluetype struct mapent {
+pure mtvaluetype struct mapent {
   string address;
   string perms;
   unit offset;
@@ -31,10 +31,10 @@ mtvaluetype struct mapent {
 {
   varray{mapent} vec;
   parse_table{record_cb, '\n', col_delim}(get_stdin(system));
-  threaded function bool col_delim(uchar ch) {
+  pure function bool col_delim(uchar ch) {
     return ch == ' ' || ch == '\t';
   }
-  threaded function bool record_cb(mapent const& e) {
+  pure function bool record_cb(mapent const& e) {
     vec.push_back(e);
     return true;
   }

@@ -33,6 +33,7 @@ enum attribute_e {
   attribute_multithr       = 8,
   attribute_valuetype      = 16,
   attribute_tsvaluetype    = 32,
+  attribute_pure           = 64,
 };
 
 enum passby_e {
@@ -156,14 +157,14 @@ struct coptions {
     set_val_type set_val;
     void append_if(const std::string& x) {
       if (set_val.find(x) == set_val.end()) {
-	list_val.push_back(x);
-	set_val.insert(x);
+        list_val.push_back(x);
+        set_val.insert(x);
       }
     }
     void append(const optvalues& x) {
       for (set_val_type::const_iterator i = x.set_val.begin();
-	i != x.set_val.end(); ++i) {
-	append_if(*i);
+        i != x.set_val.end(); ++i) {
+        append_if(*i);
       }
     }
   };

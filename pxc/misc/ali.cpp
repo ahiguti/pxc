@@ -33,26 +33,26 @@ struct foo {
     *p = std::string("abc");
   }
   void init(const foo& x) {
-	int * p0 = (int *)u.intval;
-	*p0 = 0;
+        int * p0 = (int *)u.intval;
+        *p0 = 0;
     switch (x.e) {
     case intval_e:
       {
-	// int *__attribute__((may_alias)) p0 = (int *)u.intval;
-	// int *__attribute__((may_alias)) p1 = (int *)x.u.intval;
-	int * p0 = (int *)u.intval;
-	int * p1 = (int *)x.u.intval;
-	*p0 = *p1;
-	*p0 = 0;
+        // int *__attribute__((may_alias)) p0 = (int *)u.intval;
+        // int *__attribute__((may_alias)) p1 = (int *)x.u.intval;
+        int * p0 = (int *)u.intval;
+        int * p1 = (int *)x.u.intval;
+        *p0 = *p1;
+        *p0 = 0;
       }
       break;
     case strval_e:
       {
-	// string *__attribute__((may_alias)) p0 = (string *)u.strval;
-	// string *__attribute__((may_alias)) p1 = (string *)x.u.strval;
-	string * p0 = (string *)u.strval;
-	string * p1 = (string *)x.u.strval;
-	new (p0) string(*p1);
+        // string *__attribute__((may_alias)) p0 = (string *)u.strval;
+        // string *__attribute__((may_alias)) p1 = (string *)x.u.strval;
+        string * p0 = (string *)u.strval;
+        string * p1 = (string *)x.u.strval;
+        new (p0) string(*p1);
       }
       break;
     }
@@ -61,17 +61,17 @@ struct foo {
     switch (e) {
     case intval_e:
       {
-	typedef int xt;
-	// int *__attribute__((may_alias)) p0 = (int *)u.intval;
-	int *p0 = (int *)u.intval;
-	p0->xt::~xt();
+        typedef int xt;
+        // int *__attribute__((may_alias)) p0 = (int *)u.intval;
+        int *p0 = (int *)u.intval;
+        p0->xt::~xt();
       }
       break;
     case strval_e:
       {
-	// string *__attribute__((may_alias)) p0 = (string *)u.strval;
-	string * p0 = (string *)u.strval;
-	p0->string::~string();
+        // string *__attribute__((may_alias)) p0 = (string *)u.strval;
+        string * p0 = (string *)u.strval;
+        p0->string::~string();
       }
       break;
     }

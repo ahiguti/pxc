@@ -1,10 +1,10 @@
 public namespace glgeometry "export-unsafe";
-public import common -;
-public import exception -;
-public import meta m;
+public import core::common -;
+public import core::exception -;
+public import core::meta m;
 public import glutil -;
 public import GL::glm -;
-public import numeric::fpmath -;
+public import core::numeric::fpmath -;
 public import operator op;
 
 public metafunction poly_t cslice{vec3};
@@ -21,12 +21,12 @@ public metafunction sphere to_gfptr{gf_sphere};
 
 /* private */
 
-private threaded function float pi()
+private pure function float pi()
 {
   return 3.14159265;
 }
 
-private threaded function {t} void polygon_scale(t mutable& poly,
+private pure function {t} void polygon_scale(t mutable& poly,
   float scale)
 {
   const c = polygon_center(poly);
@@ -35,7 +35,7 @@ private threaded function {t} void polygon_scale(t mutable& poly,
   }
 }
 
-private threaded function vec3 polygon_center(cslice{vec3} const& poly)
+private pure function vec3 polygon_center(cslice{vec3} const& poly)
 {
   vec3 mutable c;
   for (const i, const& p: poly) {
@@ -45,7 +45,7 @@ private threaded function vec3 polygon_center(cslice{vec3} const& poly)
   return c;
 }
 
-private threaded function float polygon_radius(cslice{vec3} const& poly)
+private pure function float polygon_radius(cslice{vec3} const& poly)
 {
   const c = polygon_center(poly);
   float mutable r = 0.0;
@@ -55,7 +55,7 @@ private threaded function float polygon_radius(cslice{vec3} const& poly)
   return r;
 }
 
-private threaded function void gf_regular_polygon(float radius, size_t n,
+private pure function void gf_regular_polygon(float radius, size_t n,
   gfptr const& c0, gfptr const& c1, poly_t const& poly)
 {
   mutable arr = darray{vec3}(n, vec3());
@@ -70,7 +70,7 @@ private threaded function void gf_regular_polygon(float radius, size_t n,
   c1(arr);
 }
 
-private threaded function void gf_bump(float z, float scale, int recurse,
+private pure function void gf_bump(float z, float scale, int recurse,
   gfptr const& c0, gfptr const& c1, poly_t const& poly)
 {
   if (poly.size() < 3) { return; }
@@ -95,7 +95,7 @@ private threaded function void gf_bump(float z, float scale, int recurse,
   }
 }
 
-private threaded function void gf_edge(ptr{vertices} const& vptr,
+private pure function void gf_edge(ptr{vertices} const& vptr,
   size_t edge_sort, gfptr const& c0, poly_t const& poly)
 {
   if (poly.size() < 3) { return; }
@@ -107,17 +107,17 @@ private threaded function void gf_edge(ptr{vertices} const& vptr,
   mat4 tr;
   tr = tr.translate(c);
   tr = tr * make_mat4(
-    ex.x, ex.y, ex.z,  0.0, 
+    ex.x, ex.y, ex.z,  0.0,
     ey.x, ey.y, ey.z,  0.0,
     ez.x, ez.y, ez.z,  0.0,
-     0.0,  0.0,  0.0,  1.0);  
+     0.0,  0.0,  0.0,  1.0);
   e.trans = tr;
   e.edge_sort = edge_sort;
   vptr->push_edge(e);
   c0(poly);
 }
 
-private threaded function void gf_fill(ptr{vertices} const& vptr,
+private pure function void gf_fill(ptr{vertices} const& vptr,
   poly_t const& poly)
 {
   const sz = poly.size();
@@ -141,7 +141,7 @@ private function void gf_hole(poly_t const& poly)
 {
 }
 
-private threaded function void gf_sphere(size_t split, gfptr const& c0,
+private pure function void gf_sphere(size_t split, gfptr const& c0,
   poly_t const& poly)
 {
   const poly_sz = poly.size();

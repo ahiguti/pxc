@@ -1,13 +1,13 @@
 public namespace tf2_fixme;
-import common -;
-import meta m;
+import core::common -;
+import core::meta m;
 import thread -;
 
-public multithreaded interface {t} uneval {
+public pure multithreaded interface {t} uneval {
   function t eval();
 }
 
-public threaded function {f} ptr{uneval{func_ret{f}}}
+public pure function {f} ptr{uneval{func_ret{f}}}
 make_thread_ptr(expand(m::args{f}))
 {
   const p = make_ptr(uneval_thread{f}(
@@ -18,7 +18,7 @@ make_thread_ptr(expand(m::args{f}))
 private metafunction func_arg{f} tuple{m::arg_types{f}};
 private metafunction func_ret{f} m::ret_type{f};
 
-private multithreaded struct {f}
+private pure multithreaded struct {f}
 uneval_thread_params(tptr{func_arg{f}} const& a, tptr{func_ret{f}} const& r)
 {
   tptr{func_arg{f}} argp = a;
@@ -29,7 +29,7 @@ uneval_thread_params(tptr{func_arg{f}} const& a, tptr{func_ret{f}} const& r)
   }
 }
 
-private multithreaded struct {f}
+private pure multithreaded struct {f}
 uneval_thread(tptr{func_arg{f}} const& a)
   <uneval{func_ret{f}}>
 {
@@ -42,13 +42,13 @@ uneval_thread(tptr{func_arg{f}} const& a)
   }
 }
 
-threaded function int foo(int x, int y)
+pure function int foo(int x, int y)
 {
   return x + y;
 }
 
 {
   const p = make_thread_ptr{foo}(10, 20);
-  println(p->eval()); 
+  println(p->eval());
 }
 

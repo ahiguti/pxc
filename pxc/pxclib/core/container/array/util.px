@@ -1,0 +1,60 @@
+public threaded namespace core::container::array::util "use-unsafe";
+public import core::container::array::varray;
+
+extern "types" inline
+
+#define PXCRT_ALLOCA_LIMIT 200
+#define PXCRT_ALLOCA_NTSTRING(tobj, s) \
+  pxcrt::alloca_ntstring tobj(s, \
+    (s.size() > 0 && s.rawarr()[s.size() - 1] == '\0') ? 0 : \
+    (s.size() < PXCRT_ALLOCA_LIMIT) ? alloca(s.size() + 1) : 0)
+
+namespace pxcrt {
+
+struct alloca_ntstring {
+  alloca_ntstring(bt_cslice<bt_uchar> const& s, void *extbuf)
+    : need_free(false) {
+    const unsigned char *const p = s.rawarr();
+    const size_t len = s.size();
+    if (len == 0) {
+      buffer = "";
+      return;
+    }
+    if (p[len - 1] == '\0') {
+      buffer = reinterpret_cast<const char *>(p);
+      return;
+    }
+    char *mbuf = 0;
+    if (extbuf != 0) {
+      mbuf = static_cast<char *>(extbuf);
+    } else {
+      if (len + 1 == 0) {
+        PXC_THROW(std::bad_alloc());
+      }
+      mbuf = static_cast<char *>(malloc(len + 1));
+      if (mbuf == 0) {
+        PXC_THROW(std::bad_alloc());
+      }
+      need_free = true;
+    }
+    memcpy(mbuf, p, len);
+    mbuf[len] = '\0';
+    buffer = mbuf;
+  }
+  ~alloca_ntstring() {
+    if (need_free) {
+      free(const_cast<char *>(buffer));
+    }
+  }
+  const char *get() const { return buffer; }
+private:
+  alloca_ntstring();
+  alloca_ntstring(const alloca_ntstring&);
+  alloca_ntstring& operator =(const alloca_ntstring&);
+  const char *buffer;
+  bool need_free;
+};
+
+}; // namespace pxcrt
+;
+

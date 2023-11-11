@@ -1,0 +1,44 @@
+public threaded namespace core::numeric::limit "use-unsafe";
+import core::numeric::integral -;
+
+public pure function {t} t numeric_lowest()
+  { limit_impl{t} obj; return obj.lowest(); }
+public pure function {t} t numeric_highest()
+  { limit_impl{t} obj; return obj.highest(); }
+public pure function {t} t numeric_smallest()
+  { limit_impl{t} obj; return obj.smallest(); }
+
+private pure tsvaluetype struct extern "pxcrt::numeric::limit_impl" {t}
+limit_impl {
+  public function extern "lowest" t lowest() const;
+  public function extern "highest" t highest() const;
+  public function extern "smallest" t smallest() const;
+}
+
+extern "types" inline
+
+#include <boost/type_traits.hpp>
+#include <boost/numeric/conversion/bounds.hpp>
+#include <boost/limits.hpp>
+
+namespace pxcrt {
+namespace numeric {
+
+template <typename T, bool arith> struct limit_impl_arithmetic;
+template <typename T> struct limit_impl_arithmetic <T, true> {
+  static T lowest() { return ::boost::numeric::bounds<T>::lowest(); }
+  static T highest() { return ::boost::numeric::bounds<T>::highest(); }
+  static T smallest() { return ::boost::numeric::bounds<T>::smallest(); }
+};
+template <typename T> struct limit_impl_arithmetic <T, false> {
+  static T lowest() { return T(); }
+  static T highest() { return T(); }
+  static T smallest() { return T(); }
+};
+template <typename T> struct limit_impl
+  : public limit_impl_arithmetic<T, ::boost::is_arithmetic<T>::value > { };
+
+}; // numeric
+}; // pxcrt
+
+;

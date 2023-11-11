@@ -1,12 +1,12 @@
 public namespace tx1;
-import common -;
-import meta m;
-import io -;
-import io::file -;
-import io::errno -;
-import io::standard -;
-import io::text -;
-import text::serialize -;
+import core::common -;
+import core::meta m;
+import core::io -;
+import core::io::file -;
+import core::io::errno -;
+import core::io::standard -;
+import core::io::text -;
+import core::text::serialize -;
 
 function {t} void parse_table(file const& fp, t mutable& tbl)
 {
@@ -20,14 +20,14 @@ function {t} void parse_table(file const& fp, t mutable& tbl)
       m::add{1, m::max{m::symbol{t, "key_pos"}, m::symbol{t, "mapped_pos"}}}})
     {
       {
-	size_t delim = find_mapped(line, cur, '\t');
-	cstrref col = line[cur .. delim];
-	if (m::eq{i, m::symbol{t, "key_pos"}}) {
-	  key = from_string{m::symbol{t, "key_type"}}(col);
-	} else if (m::eq{i, m::symbol{t, "mapped_pos"}}) {
-	  mapped = from_string{m::symbol{t, "mapped_type"}}(col);
-	}
-	cur = (delim < sz) ? (delim + 1) : sz;
+        size_t delim = find_mapped(line, cur, '\t');
+        cstrref col = line[cur .. delim];
+        if (m::eq{i, m::symbol{t, "key_pos"}}) {
+          key = from_string{m::symbol{t, "key_type"}}(col);
+        } else if (m::eq{i, m::symbol{t, "mapped_pos"}}) {
+          mapped = from_string{m::symbol{t, "mapped_type"}}(col);
+        }
+        cur = (delim < sz) ? (delim + 1) : sz;
       }
     }
     tbl.insert(key, mapped);
@@ -54,7 +54,7 @@ struct stbl {
 }
 
 {
-  const f = system.open("hoge3.txt");
+  const f = thread_io().open("hoge3.txt");
   stbl tv;
   parse_table(f.value, tv);
   tv.dump();

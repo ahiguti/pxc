@@ -1,21 +1,21 @@
 public namespace fe1;
-public import numeric::integral -;
-public import container::array -;
-public import io::text -;
-public import io::errno -;
-public import text::split -;
-public import text::serialize -;
-public import meta m;
-public import io +;
-public import io::file +;
-public import meta::family mf;
+public import core::numeric::integral -;
+public import core::container::array -;
+public import core::io::text -;
+public import core::io::errno -;
+public import core::text::split -;
+public import core::text::serialize -;
+public import core::meta m;
+public import core::io +;
+public import core::io::file +;
+public import core::meta::family mf;
 
 
-public import numeric::fp -;
-public import io::standard -;
+public import core::numeric::fp -;
+public import core::io::standard -;
 
-import common -;
-import operator -;
+import core::common -;
+import core::operator -;
 
 public struct {t} monoid_average {
   public metafunction value_type t;
@@ -23,8 +23,8 @@ public struct {t} monoid_average {
   public size_t count;
   public function t get() const { return value / static_cast{t}(count); }
   public function string to_string() const {
-    return text::serialize::to_string(get());
-  } 
+    return core::text::serialize::to_string(get());
+  }
 }
 
 public function {tx, ty} tx
@@ -45,7 +45,7 @@ public function {tpl, t} void
 monoid_average_append_to_string(t const& x, string mutable& str)
 {
   m::symbol{t, "value_type"} const xv = x;
-  return text::serialize::serialize_to_string(xv, str);
+  return core::text::serialize::serialize_to_string(xv, str);
 }
 
 public struct foo {
@@ -58,7 +58,7 @@ public struct foo {
 {
   varray{foo} v;
   monoid_average{double} avg;
-  system.open("hoge3.txt").value.read_table{readrec, 0}();
+  thread_io().open("hoge3.txt").value.read_table{readrec, 0}();
   function bool readrec(cstrref const& s, int i, double d) {
     v.emplace_back(s, i, d, monoid_average{double}(d, 1));
     avg = avg + monoid_average{double}(d, 1);

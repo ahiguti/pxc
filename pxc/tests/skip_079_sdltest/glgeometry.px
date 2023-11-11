@@ -1,15 +1,15 @@
 public namespace glgeometry "export-unsafe";
-public import common -;
-public import exception -;
-public import meta m;
+public import core::common -;
+public import core::exception -;
+public import core::meta m;
 public import glbuffer -;
 public import GL::glm -;
-public import numeric::fpmath -;
-public import operator op;
+public import core::numeric::fpmath -;
+public import core::operator op;
 
 public metafunction modifier_t callable_ptr{darray{vertex_attr}, {poly_t}};
 
-public tsvaluetype struct vertex_attr {
+public pure tsvaluetype struct vertex_attr {
   public vec3 pos;
   public vec3 nor;
   public vec3 tan;
@@ -32,7 +32,7 @@ public metafunction to_gf_poly{f}
 public metafunction rand_generator_ptr ptr{rand_generator};
 public metafunction make_rand_generator make_ptr{rand_generator};
 
-public tsvaluetype struct
+public pure tsvaluetype struct
 rand_generator(uint seed0)
 {
   private uint seed = seed0;
@@ -56,26 +56,26 @@ public metafunction rectangle_split to_gf_poly{gf_rectangle_split};
 public metafunction rotate_local to_gf_poly{gf_rotate_local};
 public metafunction bump_apply to_gf_poly{gf_bump_apply};
 
-public threaded function {t} float cast_float(t x)
+public pure function {t} float cast_float(t x)
 { return static_cast{float, t}(x); }
-public threaded function {t} uint cast_uint(t x)
+public pure function {t} uint cast_uint(t x)
 { return static_cast{uint, t}(x); }
-public threaded function {t} int cast_int(t x)
+public pure function {t} int cast_int(t x)
 { return static_cast{int, t}(x); }
 
-public tsvaluetype struct mesh_pos {
+public pure tsvaluetype struct mesh_pos {
   public size_t x;
   public size_t y;
   public size_t z;
   public size_t w;
 }
 
-public threaded function float pi_float()
+public pure function float pi_float()
 {
   return 3.1415926535897932384626433832795;
 }
 
-public threaded function {t} void polygon_scale(t mutable& poly, float scale)
+public pure function {t} void polygon_scale(t mutable& poly, float scale)
 {
   const c = polygon_center(poly);
   for (const i, mutable& p: poly) {
@@ -83,7 +83,7 @@ public threaded function {t} void polygon_scale(t mutable& poly, float scale)
   }
 }
 
-public threaded function vec3 polygon_center(poly_t const& poly)
+public pure function vec3 polygon_center(poly_t const& poly)
 {
   vec3 mutable c;
   for (const i, const& p: poly) {
@@ -93,7 +93,7 @@ public threaded function vec3 polygon_center(poly_t const& poly)
   return c;
 }
 
-public threaded function float polygon_radius(poly_t const& poly)
+public pure function float polygon_radius(poly_t const& poly)
 {
   const c = polygon_center(poly);
   float mutable r = 0.0;
@@ -105,20 +105,20 @@ public threaded function float polygon_radius(poly_t const& poly)
 
 /* private */
 
-private threaded function vec3 normal_from_poly(poly_t const& poly)
+private pure function vec3 normal_from_poly(poly_t const& poly)
 {
   if (poly.size() < 3) { return vec3(); }
   return cross(poly[1].pos - poly[0].pos, poly[2].pos - poly[0].pos)
     .normalize();
 }
 
-private threaded function vec3 normal_scale_from_poly(poly_t const& poly)
+private pure function vec3 normal_scale_from_poly(poly_t const& poly)
 {
   if (poly.size() < 3) { return vec3(); }
   return normal_from_poly(poly) * length(poly[1].pos - poly[0].pos);
 }
 
-private threaded function void gf_regular_polygon(float radius, size_t n,
+private pure function void gf_regular_polygon(float radius, size_t n,
   gf_poly const& c0, gf_poly const& c1, poly_t const& poly, mesh_pos const& mp)
 {
   /* poly is ignored */
@@ -134,7 +134,7 @@ private threaded function void gf_regular_polygon(float radius, size_t n,
   c1(arr, mesh_pos());
 }
 
-private threaded function void gf_polygon_points(poly_t const& pts, 
+private pure function void gf_polygon_points(poly_t const& pts,
   gf_poly const& c0, gf_poly const& c1, poly_t const& poly, mesh_pos const& mp)
 {
   /* poly is ignored */
@@ -144,7 +144,7 @@ private threaded function void gf_polygon_points(poly_t const& pts,
   c1(arr, mesh_pos());
 }
 
-private threaded function void gf_bump_modifier(modifier_t const& mo,
+private pure function void gf_bump_modifier(modifier_t const& mo,
   gf_poly const& c0, gf_poly const& c1, poly_t const& poly, mesh_pos const& mp)
 {
   darray{vertex_attr} front = mo(poly);
@@ -161,7 +161,7 @@ private threaded function void gf_bump_modifier(modifier_t const& mo,
   }
 }
 
-private threaded function void gf_bump_rec(float z, float scale, int recurse,
+private pure function void gf_bump_rec(float z, float scale, int recurse,
   gf_poly const& c0, gf_poly const& c1, poly_t const& poly, mesh_pos const& mp)
 {
   if (poly.size() < 3) { return; }
@@ -187,7 +187,7 @@ private threaded function void gf_bump_rec(float z, float scale, int recurse,
   }
 }
 
-private threaded function void gf_rand_bump(size_t num, float scale,
+private pure function void gf_rand_bump(size_t num, float scale,
   float xmin, float xmax, float ymin, float ymax, float zmin, float zmax,
   rand_generator_ptr const& rnd, gf_poly const& c0, gf_poly const& c1,
   gf_poly const& c2, poly_t const& poly, mesh_pos const& mp)
@@ -196,7 +196,7 @@ private threaded function void gf_rand_bump(size_t num, float scale,
   darrayst{vertex_attr} front = poly;
   /* bumps */
   polygon_scale(front, scale);
-  threaded function float rand01(rand_generator_ptr const& rnd) {
+  pure function float rand01(rand_generator_ptr const& rnd) {
     return cast_float(rnd->generate()) / 4294967296.0;
   }
   for (const i: 0 .. num) {
@@ -205,7 +205,7 @@ private threaded function void gf_rand_bump(size_t num, float scale,
     const zsz = zmin + (zmax - zmin) * rand01(rnd);
     const xp = (1.0f - xsz) * rand01(rnd);
     const yp = (1.0f - ysz) * rand01(rnd);
-    threaded function vec3 pos(vec3 const& vec, float x, float xmax)
+    pure function vec3 pos(vec3 const& vec, float x, float xmax)
     {
       return vec * x / xmax;
     }
@@ -224,7 +224,7 @@ private threaded function void gf_rand_bump(size_t num, float scale,
   c2(poly, mesh_pos());
 }
 
-public threaded function mat4
+public pure function mat4
 poly_trans(poly_t const& poly)
 {
   const ex = (poly[1].pos - poly[0].pos).normalize();
@@ -232,13 +232,13 @@ poly_trans(poly_t const& poly)
   const ey = cross(ez, ex);
   const c = polygon_center(poly);
   return make_mat4(
-    ex.x, ex.y, ex.z,  0.0, 
+    ex.x, ex.y, ex.z,  0.0,
     ey.x, ey.y, ey.z,  0.0,
     ez.x, ez.y, ez.z,  0.0,
-     c.x,  c.y,  c.z,  1.0);  
+     c.x,  c.y,  c.z,  1.0);
 }
 
-private threaded function {tattr} void
+private pure function {tattr} void
 gf_joint(ptr{vertices} const& vptr, string const& joint_sort,
   gf_poly const& c0, poly_t const& poly, mesh_pos const& mp)
 {
@@ -250,7 +250,7 @@ gf_joint(ptr{vertices} const& vptr, string const& joint_sort,
   c0(poly, mesh_pos());
 }
 
-private threaded function {tattr} void
+private pure function {tattr} void
 gf_fill_internal(ptr{vertices} const& vptr, bool flat_flag,
   poly_t const& poly, mesh_pos const& mp)
 {
@@ -299,21 +299,21 @@ gf_fill_internal(ptr{vertices} const& vptr, bool flat_flag,
   vptr->push_polygon_distinct{tattr}(vtxs);
 }
 
-private threaded function {tattr} void
+private pure function {tattr} void
 gf_fill(ptr{vertices} const& vptr, poly_t const& poly,
   mesh_pos const& mp)
 {
   gf_fill_internal{tattr}(vptr, true, poly, mp);
 }
 
-private threaded function {tattr} void
+private pure function {tattr} void
 gf_fill_smooth(ptr{vertices} const& vptr, poly_t const& poly,
   mesh_pos const& mp)
 {
   gf_fill_internal{tattr}(vptr, false, poly, mp);
 }
 
-private threaded function void gf_lid(gf_poly const& c0, gf_poly const& c1,
+private pure function void gf_lid(gf_poly const& c0, gf_poly const& c1,
   poly_t const& poly, mesh_pos const& mp)
 {
   darrayst{vertex_attr} arr = poly;
@@ -322,11 +322,11 @@ private threaded function void gf_lid(gf_poly const& c0, gf_poly const& c1,
   c1(arr, mesh_pos());
 }
 
-private threaded function void gf_hole(poly_t const& poly, mesh_pos const& mp)
+private pure function void gf_hole(poly_t const& poly, mesh_pos const& mp)
 {
 }
 
-private threaded function void gf_sphere(size_t split, gf_poly const& c0,
+private pure function void gf_sphere(size_t split, gf_poly const& c0,
   poly_t const& poly, mesh_pos const& mp)
 {
   const poly_sz = poly.size();
@@ -349,7 +349,7 @@ private threaded function void gf_sphere(size_t split, gf_poly const& c0,
       const j1 = j + 1 != poly_sz ? j + 1 : 0;
       mutable side = make_farray{vertex_attr}(sp[j], sp[j1], p[j1], p[j]);
       for (size_t i, mutable& p: side) {
-	p.nor = (p.pos - pcenter).normalize();
+        p.nor = (p.pos - pcenter).normalize();
       }
       mp1.y = j;
       c0(side, mp1);
@@ -369,11 +369,11 @@ private threaded function void gf_sphere(size_t split, gf_poly const& c0,
   }
 }
 
-private threaded function void gf_rectangle_split(size_t split_x,
+private pure function void gf_rectangle_split(size_t split_x,
   size_t split_y, gf_poly const& c0, poly_t const& poly, mesh_pos const& mp)
 {
   if (poly.size() != 4) { return; }
-  threaded function vec3 pos(vec3 const& vec, size_t i, size_t imax)
+  pure function vec3 pos(vec3 const& vec, size_t i, size_t imax)
   {
     return vec * (cast_float(i) / cast_float(imax));
   }
@@ -395,7 +395,7 @@ private threaded function void gf_rectangle_split(size_t split_x,
   }
 }
 
-private threaded function void gf_rotate_local(quat const& q,
+private pure function void gf_rotate_local(quat const& q,
   gf_poly const& c0, poly_t const& poly, mesh_pos const& mp)
 {
   const trans = poly_trans(poly);
@@ -409,7 +409,7 @@ private threaded function void gf_rotate_local(quat const& q,
   c0(p, mp);
 }
 
-private threaded function void gf_bump_apply(mat4 const& m,
+private pure function void gf_bump_apply(mat4 const& m,
   bool split_reverse, gf_poly const& c0, gf_poly const& c1, poly_t const& poly,
   mesh_pos const& mp)
 {

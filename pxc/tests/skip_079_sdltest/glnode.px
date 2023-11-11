@@ -1,15 +1,15 @@
 public namespace glnode "export-unsafe";
-public import common -;
-public import pointer::raw -;
-public import numeric::fpmath -;
+public import core::common -;
+public import core::pointer::raw -;
+public import core::numeric::fpmath -;
 public import GL::glm glm;
 public import GL::compat -;
-public import meta m;
-public import exception -;
+public import core::meta m;
+public import core::exception -;
 public import glshader -;
 public import glbuffer -;
 
-public threaded struct scene_node()
+public pure struct scene_node()
 {
   public int vs_id = -1;
   public glm::mat4 trans;
@@ -28,12 +28,12 @@ instantiate_scene(buffer_object const& bo, int vs_id)
     const& vs = *bo.get_by_id(static_cast{size_t}(vs_id));
     for (size_t i, const& e: vs.vtxs->joints) {
       const p = instantiate_scene(bo, static_cast{int}(
-	bo.get_id_by_name(e.joint_sort)));
+        bo.get_id_by_name(e.joint_sort)));
       p->trans = e.trans;
       p->trans_initial = e.trans;
       r->children.push_back(p);
       for (const i, const x: p->joint_sorts) {
-	r->joint_sorts[i] = unit();
+        r->joint_sorts[i] = unit();
       }
     }
   }
@@ -94,7 +94,7 @@ scene_node_prepare_instances(scene_node const& sn, tbo const& bo,
       mutable& arr = instance.client_buffer;
       glBindBuffer(GL_ARRAY_BUFFER, instance.vbo_inst);
       glBufferData(GL_ARRAY_BUFFER, static_cast{GLsizeiptr}(arr.size()) * 4,
-	arr.crawptr().void(), GL_STATIC_DRAW);
+        arr.crawptr().void(), GL_STATIC_DRAW);
       glBindBuffer(GL_ARRAY_BUFFER, 0);
     }
     // println("instances", i, arr.size());
@@ -131,29 +131,29 @@ scene_node_draw_instanced(scene_node const& sn, tbo const& bo,
       glBindBuffer(GL_ARRAY_BUFFER, instance.vbo_inst);
       /*
       glBufferData(GL_ARRAY_BUFFER, static_cast{GLsizeiptr}(arr.size()) * 4,
-	arr.crawptr().void(), GL_STATIC_DRAW);
+        arr.crawptr().void(), GL_STATIC_DRAW);
       */
       int const nfloat = 4;
       int const stride_byte = nfloat * 4 * 4;
       glVertexAttribPointer(loc + 0, nfloat, GL_FLOAT, 0,
-	stride_byte, offset_to_void_cp(0));
+        stride_byte, offset_to_void_cp(0));
       glVertexAttribPointer(loc + 1, nfloat, GL_FLOAT, 0,
-	stride_byte, offset_to_void_cp(16));
+        stride_byte, offset_to_void_cp(16));
       glVertexAttribPointer(loc + 2, nfloat, GL_FLOAT, 0,
-	stride_byte, offset_to_void_cp(32));
+        stride_byte, offset_to_void_cp(32));
       glVertexAttribPointer(loc + 3, nfloat, GL_FLOAT, 0,
-	stride_byte, offset_to_void_cp(48));
+        stride_byte, offset_to_void_cp(48));
       glBindBuffer(GL_ARRAY_BUFFER, 0);
-      bo.draw_elems_instanced(static_cast{size_t}(i), 
-	arr.size() / 16);
+      bo.draw_elems_instanced(static_cast{size_t}(i),
+        arr.size() / 16);
       // println("draw", i, arr.size());
     } else {
       for (const j : 0U .. arr.size() / 16U) {
-	glVertexAttrib4fv(loc + 0, arr.crawptr() + j * 16U +  0U);
-	glVertexAttrib4fv(loc + 1, arr.crawptr() + j * 16U +  4U);
-	glVertexAttrib4fv(loc + 2, arr.crawptr() + j * 16U +  8U);
-	glVertexAttrib4fv(loc + 3, arr.crawptr() + j * 16U + 12U);
-	bo.draw_elems(static_cast{size_t}(i));
+        glVertexAttrib4fv(loc + 0, arr.crawptr() + j * 16U +  0U);
+        glVertexAttrib4fv(loc + 1, arr.crawptr() + j * 16U +  4U);
+        glVertexAttrib4fv(loc + 2, arr.crawptr() + j * 16U +  8U);
+        glVertexAttrib4fv(loc + 3, arr.crawptr() + j * 16U + 12U);
+        bo.draw_elems(static_cast{size_t}(i));
       }
     }
   }

@@ -3,6 +3,40 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- json.px, url_encode.px 等はcoreから外に出す？
+
+- text::json : append_to_string等のescapeと、json_encodeの16進コード。
+
+- externの名前空間の頭に"::"を付けるのがよいのかどうか
+
+- FIXME: callableをpureからthreadedへ変更したことについて問題ないか確認
+  - async_taskの変更も確認
+
+- C++のnamespace内で#includeしている箇所を洗い出して修正
+
+- --std=c++11だとcygwinでunsetenvが見つからないのはなぜ？
+  - --std=gnu++11だと通る。posix固有だからこれが正しいのか？
+
+- import foo f するとfooがimport bar -しているときfでbarの名前を引く
+  (done)
+
+- expr_int_literal::emit_valueの
+  v < 0x80000000
+  は誤りでは。テストするべし。
+
+- check_expr_side_effect_freeがoperator[]を副作用無しとしているが、
+  連想配列に対する[]は副作用無しと判定してしまっていないか確認。
+
+- pure関数について可能ならコード生成しない。
+  - 次: fn_check_finalからused_flagをセットしてまわる処理
+  - 次: check_noop_children有効化
+    - "a + b" など許可する式を洗い出し
+
+- pure呼び出しを削除してしまわない仕組み。debug_logなどに使う。
+
+- pure関数からpureでない関数を呼べる何か。
+  extern "allow-impure" 1; とするか。
+
 - extenumに対してmeta::valuesが適用できない。
 
 - enumのserializeはできるがbitmaskが未サポート。
@@ -40,6 +74,8 @@ FIXME/TODO M1
 
 - enumのprintln
 
+- userdef opなどで生成したコードに一応fn_set_namespaceするように
+
 
 - 演算子の実装に使われる名前は後ろに「__」付けるルール
 
@@ -55,16 +91,8 @@ FIXME/TODO M1
 
 - values_foreachとrange_foreach
 
-- インクリメント演算子をユーザ定義できるように (done)
-
-- 無名関数の後置の構文 (done)
-
-- 無名関数のthreaded装飾できない？ (done)
-
 - 数値リテラルをターゲット型へ変換しているせいで無駄なコード吐いている?
 
-- ネストされた関数はグローバルシンボルにしないほうが良いコード吐くはず
-  (done)
 
 - Can not convert from meta::uint to numeric::integral::ulonglong
 
@@ -77,10 +105,6 @@ FIXME/TODO M1
 
 - shared lock
   rwlock.px
-
-- expr_struct_newの最後のopt_privateは何に使っているのか(done)
-
-- mapがsrcとdestで同じコンテナでなくてもよいようにする(done)
 
 - FIXME: deserializeバイナリの先頭バイトとコンテナ終端が曖昧になる
 
@@ -95,19 +119,12 @@ FIXME/TODO M1
 
 - is_intrusiveをis_polymorphicに改名
 
-- structからstructの継承は基底型がnon-restricted interfaceを継承して
-  いる場合に限定。さもないとintrusive countをもたせるかどうかが一致
-  しないから。常にintrusive countが埋め込まれる。(done)
-
 - メモ: struct同士で継承した場合はメソッドを派生型から直接呼べない。
 
 - structからstructへの継承を許可する。多重継承も。
 
 - interfaceからinterfaceを継承すると仮想基底クラスにしているのをやめ、
   菱型継承の基底クラスへのキャストはエラーにする。
-
-- cygwin: peflags -x0x400000 /usr/local/bin/pxc のようにしないとスタック
-  足りないことがある(done)
 
 - カスタムのシリアライズ関数を作るときに便利な
 
@@ -116,10 +133,6 @@ FIXME/TODO M1
 - 名前空間の分類
 
 - コンパクトなシリアライズ
-
-- farrayの境界チェック漏れてるのではないか(done)
-
-- pxc_core / pxc_ext の区別廃止(done)
 
 - 埋め込みインタプリタ用のvariant的なものを用意するか
 
@@ -137,14 +150,9 @@ FIXME/TODO M1
 - rawarrayをassignableにしたい。関数引数にrawarrayを使えないからそう
   してるのか？
 
-- thin interfaceがユーザ定義コンストラクタを持つと無駄なカウンタが
-  埋め込まれてしまう (done)
-
 - implicit_conversionの定義、import foo + によって拡張されると衝突
   して期待通りのメタ関数が利用されない問題
   pointer::raw::strlit___to で問題になる。
-
-- get_nsの実装を正しく(done)
 
 - コンパイルmainから間接的にimportされている名前空間もコンパイルされる
   ようにしたので、それら間接的importされた名前空間のグローバルスコープ
@@ -162,9 +170,6 @@ FIXME/TODO M1
 
 - drawer.pxの型定義を後ろに持っていくとblock is not compiled yet的
   エラーがでる
-
-- コンパイル異様に遅い。不要なリビルドが走ってる？(done)
-  maskに複数bit立っていると再コンパイル必要と判定してしまっていた。
 
 - varray::appendの速度をwindowsで測る
 
@@ -196,19 +201,6 @@ FIXME/TODO M1
   あるいはthreaded関数が副作用を持つかどうか別途指定できるようにするか。
   あるいはexport-unsafeならthreaded関数が副作用を持つとするか。
 
-- 型パラメータがmultithreadedでなくてもfuncptrはmultithreaded。
-  そのようなケース(スレッド属性をデグレードしない)のための属性を用意する。
-  (done)
-
-- threadedではない関数から関数ポインタを作るとthreaded関数として呼べて
-  しまうのではないか？(done)
-
-- func_wrap_call?の中にターゲット関数がインライン展開されていない。
-  0000000000000010 <int pxcrt::func_wrap_call1<pointer$n::func$n::func_wrap$s$p$fp
-    10:   e9 00 00 00 00          jmpq   15 <int pxcrt::func_wrap_call1<pointer$n:
-    15:   66 66 2e 0f 1f 84 00    data32 nopw %cs:0x0(%rax,%rax,1)
-    1c:   00 00 00 00 
-  直接cxxの関数ポインタを取得するコードをemitする方法を考える。(done)
 
 - 関数ポインタ型
   funcptr1___callなど、引数のbyrefはpxc側では付けずに宣言しているため
@@ -237,10 +229,6 @@ FIXME/TODO M1
   - rawarrayファミリを作る。初期化は { } で。引数に渡せない。
   - skip_154_rawarr
 
-- unsafe モードで new と delete を実行する手段がない
-  rawptr{foo} p = + extern "new" foo(...);
-  -> やめる。 p extern "new" foo(...)   (done)
-
 - rawptrのupcastが__base__を見るのは、その型がexternなときだけ。
 
 - 以下のエラーメッセージがわかりにくすぎる
@@ -258,9 +246,6 @@ FIXME/TODO M1
 
 - int{int} が通ってしまう。
 
-- __deref() (done)
-  これはoperator内関数でwrapしない。unaryは全てwrapしなくてよいか。
-
 - noncopyableのチェックがおかしい
   mutable font = scoped_nullable{TTF_CloseFont}(); // C++エラー
   scoped_nullable{TTF_CloseFont} font; // エラーにならない
@@ -270,10 +255,6 @@ FIXME/TODO M1
 - null終端文字列
   コンテナのアロケート長を1つ伸ばす。
 
-- scopedのget()を暗黙変換に (done)
-
-- SDL_RWread/SDL_RWcloseなどはマクロなのでラッパ関数を手動で生成(done)
-
 - コンテナの is_raw_array は is_dense_array に改名
 - is_pod_raw_array を is_pod_dense_array に
   - 真のときeqがpod_array_eqになることを確認する 
@@ -281,13 +262,7 @@ FIXME/TODO M1
 
 - cfarrayにはどういう意味があるのか？ farray{t} constと同じでは？
 
-- generate-single-cc(done)
-
-- swap(done)
-
 - interfaceがfieldを持てるようにする?
-
-- nochkプロファイル(done)
 
 - function_body_stmtにc_enumval_stmtを追加したことで問題起きないか確認
 
@@ -296,9 +271,6 @@ FIXME/TODO M1
 
 - expandをネストするとコピーされた内側のexpandの数だけ再帰呼び出し
   することになってしまう。expr_expand::check_errorの実装の都合。
-
-- import hoge でhogeが存在しなくてエラーになると、直してコンパイル
-  しても namespace '' not found になってしまう。inf生成の問題。(done)
 
 - metalistのカンマ区切りは、最後にカンマがついていても受理
 
@@ -332,8 +304,6 @@ FIXME/TODO M1
 
 - macosxでboostをbrewで入れるとboost pythonが入っていない
 
-- pod_array_compare等はxとyの型が異なっていても使えるように(done)
-
 - sstringはhash_sstring/eq_sstringがhashとeqのデフォルトになるように
   array_or_sliceでis_raw_array、要素が基本型ならばeq, hash, compareを
     pod_array_eq
@@ -341,8 +311,6 @@ FIXME/TODO M1
     pod_array_compare
   eq: array_or_sliceで要素が基本型ならvarray_eq等
   hash: array_or_sliceで要素が基本型なら
-
-- sort関数をcompare_strict_weak限定に(done)
 
 - darrayを、小さいときはスタック、ただしmake_darrayは常にヒープ
 
@@ -379,9 +347,6 @@ FIXME/TODO M1
     container::array
   構造の間に包含関係があっても下に入れないこともある？
 
-- numeric/quaternion削除(done)
-- quaternionをglmのものに(done)
-  
 - 一般化されたfold
 
 - __fooが定義されていたら..のような処理について、定義されているか
@@ -404,9 +369,6 @@ FIXME/TODO M1
 - tree_map_compareという名前になるのが面倒
 
 - algebraic整理 -> tupleとeitherに分離
-
-- コンテナの rebind{u} は m::baseなどを使って実現できるので要らない。
-  (done)
 
 - operator::eqなどのboolを返す演算のstructに対する定義
 
@@ -478,19 +440,7 @@ FIXME/TODO M1
 - evalmetaのシンボル取得メタ関数はcompiledチェックをしたうえで
   generatedなものも返すようにする
 
-- memfld引きは nogen モードを用意しなければならない。nogenは生成された
-  シンボルは見ないが、その型のコンパイル完了前でもエラーにならない。
-  (done)
-
 - resolve_nameのエラーメッセージ: 位置を示す
-
-- __getfld復活 (done)
-
-- 名前空間省略してグローバル名を参照したとき、curnsはno-generated,
-  allow-not-compiledでシンボルを探す。(042/lim) (done)
-
-- import meta::vararg va; として va::hoge と参照すると、後で定義した
-  名前空間vaを一度引いてしまう。 (108_fixme/va.px) (done)
 
 - __invokeみたいなのはgeneratedであったら無視しないと分割コンパイル
   不整合がおきる可能性がある? シンボルの有無で処理分岐する場合には
@@ -503,21 +453,6 @@ FIXME/TODO M1
 
 - boost::pythonの可変長引数にはリミットがあるので避ける
 
-- 関数オブジェクト __call(...) (done)
-- py/t16 tupleでないとしぬ (done)
-- pythonのキーワード引数 (done)
-
-- userdef opなどで生成したコードに一応fn_set_namespaceするように
-
-- python: pxc noncopyable (done)
-- python クラス二重登録防止 (done)
-
-- __has_fldop__ やめて foo___getfldの有無で判断 (done)
-- python del文 (done)
-- Expression 'py::module("sys").exc_type' is of type void (done)
-- pxcstringをpython::objectにwrapしないようにする？ (done)
-- 136/python (done)
-
 - C++に渡せる関数であるかどうか(closureではないか)判定するメタ関数
 
 - __attribute__ monitor 効いてるのか？
@@ -528,13 +463,6 @@ FIXME/TODO M1
   ように variadic metafunctionであっても引数型を渡すようにする?
 
 - serializeをvariadic metafunction使ってoptを無指定にできるように
-
-- 汎用tableパーザ
-  - 先にrcvector欲しい(done)
-  - 次: transform: fieldに関数適用(done)
-  - 次: regex split (done)
-  - 比較関数を指定できるように (done)
-  - container::tableに移動 (done)
 
 - forコンテナのmappedをmutable& にできるように
 
@@ -855,10 +783,6 @@ FIXME/TODO M1
 
 - expand型foreachを削除
 
-- 演算子オーバーロードは、組み込み型以外のopに対して関数呼び出し式を
-  evalすることによって実装チェック、その関数を呼ぶようにemit。
-  代入演算子は値を持たないように(done)
-
 - ccだけ吐くモード -> androidに必要
 - ヘッダファイルを吐くモード
 
@@ -989,18 +913,12 @@ FIXME/TODO M6
 ---------------------------------------------------------------------
 TODO
 
-- expandを再帰的に展開できるようにすればbinary searchのインライン化
-  が可能になるか？(done)
-- meta lambda(done)
-- 配列範囲チェックを非デバッグ時等に無効化するプラグマ?(done)
 - intの範囲を超えるenum/bitmask
 - 構造体の中でenumを定義できるようにする？
 - enumのint値を省略できるように
 - enum int値に型式を書けるように
 - enumがエラーメッセージではintとして見えてしまう
 - mutexのlock保持スレッドを記録する実装
-- 演算子を総称関数に自動で置き換え、ユーザが演算子定義できるように
-  (done)
 - check_overflow pragma? 実行時にオーバーフローを検出
 - if (int v : foo.fld) { ... } // unionのフィールドは左辺値取れない
 - C++が定義する関数については宣言だけはemitする(誤った宣言で問題を起
@@ -1116,6 +1034,93 @@ interfaceまわり
 ---------------------------------------------------------------------
 DONE
 
+- function extern宣言のC名の頭が"::"で始まっているかネストされた名前
+  空間だった場合におかしくなるのを修正(done)
+- pure関数から、非pureなオブジェクトのメンバ関数が呼べないことを確認。
+  (done)
+- 関数のpure属性。threaded関数はTLSにアクセスできるとする。pure関数は
+  TLSにもアクセスできない(従来のthreaded関数の意味)。(done)
+- インクリメント演算子をユーザ定義できるように (done)
+- 無名関数の後置の構文 (done)
+- 無名関数のthreaded装飾できない？ (done)
+- ネストされた関数はグローバルシンボルにしないほうが良いコード吐くはず
+  (done)
+- expr_struct_newの最後のopt_privateは何に使っているのか(done)
+- mapがsrcとdestで同じコンテナでなくてもよいようにする(done)
+- structからstructの継承は基底型がnon-restricted interfaceを継承して
+  いる場合に限定。さもないとintrusive countをもたせるかどうかが一致
+  しないから。常にintrusive countが埋め込まれる。(done)
+- cygwin: peflags -x0x400000 /usr/local/bin/pxc のようにしないとスタック
+  足りないことがある(done)
+- farrayの境界チェック漏れてるのではないか(done)
+- pxc_core / pxc_ext の区別廃止(done)
+- thin interfaceがユーザ定義コンストラクタを持つと無駄なカウンタが
+  埋め込まれてしまう (done)
+- get_nsの実装を正しく(done)
+- コンパイル異様に遅い。不要なリビルドが走ってる？(done)
+  maskに複数bit立っていると再コンパイル必要と判定してしまっていた。
+- 型パラメータがmultithreadedでなくてもfuncptrはmultithreaded。
+  そのようなケース(スレッド属性をデグレードしない)のための属性を用意する。
+  (done)
+- threadedではない関数から関数ポインタを作るとthreaded関数として呼べて
+  しまうのではないか？(done)
+- func_wrap_call?の中にターゲット関数がインライン展開されていない。
+  0000000000000010 <int pxcrt::func_wrap_call1<pointer$n::func$n::func_wrap$s$p$fp
+    10:   e9 00 00 00 00          jmpq   15 <int pxcrt::func_wrap_call1<pointer$n:
+    15:   66 66 2e 0f 1f 84 00    data32 nopw %cs:0x0(%rax,%rax,1)
+    1c:   00 00 00 00
+  直接cxxの関数ポインタを取得するコードをemitする方法を考える。(done)
+- unsafe モードで new と delete を実行する手段がない
+  rawptr{foo} p = + extern "new" foo(...);
+  -> やめる。 p extern "new" foo(...)   (done)
+- __deref() (done)
+  これはoperator内関数でwrapしない。unaryは全てwrapしなくてよいか。
+- scopedのget()を暗黙変換に (done)
+- SDL_RWread/SDL_RWcloseなどはマクロなのでラッパ関数を手動で生成(done)
+- generate-single-cc(done)
+- swap(done)
+- nochkプロファイル(done)
+- import hoge でhogeが存在しなくてエラーになると、直してコンパイル
+  しても namespace '' not found になってしまう。inf生成の問題。(done)
+- pod_array_compare等はxとyの型が異なっていても使えるように(done)
+- sort関数をcompare_strict_weak限定に(done)
+- numeric/quaternion削除(done)
+- quaternionをglmのものに(done)
+- コンテナの rebind{u} は m::baseなどを使って実現できるので要らない。
+  (done)
+- memfld引きは nogen モードを用意しなければならない。nogenは生成された
+  シンボルは見ないが、その型のコンパイル完了前でもエラーにならない。
+  (done)
+- __getfld復活 (done)
+- 名前空間省略してグローバル名を参照したとき、curnsはno-generated,
+  allow-not-compiledでシンボルを探す。(042/lim) (done)
+- import meta::vararg va; として va::hoge と参照すると、後で定義した
+  名前空間vaを一度引いてしまう。 (108_fixme/va.px) (done)
+- 関数オブジェクト __call(...) (done)
+- py/t16 tupleでないとしぬ (done)
+- pythonのキーワード引数 (done)
+- python: pxc noncopyable (done)
+- python クラス二重登録防止 (done)
+- __has_fldop__ やめて foo___getfldの有無で判断 (done)
+- python del文 (done)
+- Expression 'py::module("sys").exc_type' is of type void (done)
+- pxcstringをpython::objectにwrapしないようにする？ (done)
+- 136/python (done)
+- 汎用tableパーザ
+  - 先にrcvector欲しい(done)
+  - 次: transform: fieldに関数適用(done)
+  - 次: regex split (done)
+  - 比較関数を指定できるように (done)
+  - container::tableに移動 (done)
+- 演算子オーバーロードは、組み込み型以外のopに対して関数呼び出し式を
+  evalすることによって実装チェック、その関数を呼ぶようにemit。
+  代入演算子は値を持たないように(done)
+- expandを再帰的に展開できるようにすればbinary searchのインライン化
+  が可能になるか？(done)
+- meta lambda(done)
+- 配列範囲チェックを非デバッグ時等に無効化するプラグマ?(done)
+- 演算子を総称関数に自動で置き換え、ユーザが演算子定義できるように
+  (done)
 - append()の型チェックしていないせいでC++エラーが出るのを修正(done)
 - private namespace の中で定義した型をテンプレ引数としてテンプレートを
   インスタンス化しようとすると、テンプレを定義したnsからアクセスでき
@@ -4137,4 +4142,52 @@ resize
 
 function_body_stmt
   : opt_attribute TOK_EXTERN TOK_STRLIT type_arg ';'
+
+---------------------------------------------------------------------
+pure導入
+
+find . -name "*.px" -exec perl -pi -e 's/ threaded/ pure/g' {} \;
+find . -name "*.px" -exec perl -pi -e 's/multithreaded/pure multithreaded/g' {} \;
+find . -name "*.px" -exec perl -pi -e 's/tsvaluetype/pure tsvaluetype/g' {} \;
+find . -name "*.px" -exec perl -pi -e 's/mtvaluetype/pure mtvaluetype/g' {} \;
+find . -name "*.px" -exec perl -pi -e 's/ valuetype/ pure valuetype/g' {} \;
+find . -name "*.px" -exec perl -pi -e 's/pure namespace/threaded namespace/g' {} \;
+find . -name "*.px" -exec perl -pi -e 's/threaded function/pure function/g' {} \;
+find . -name "*.px" -exec perl -pi -e 's/^threaded /pure /g' {} \;
+
+---------------------------------------------------------------------
+削除可能な関数呼び出しを探す方法
+
+各関数本体について以下を実行
+- 上位値は常に"参照される"とみなす
+- 関数引数がmutable参照ならばその引数は"参照される"とみなす
+- 関数本体を後ろから調査。式は外側から調査。
+  - return文の式は"参照される"印をつける
+  - 代入式
+    - 左辺式の更新対象となる変数が"参照される"なら左辺式に"参照される"印
+    - 左辺式が"参照される"なら、右辺式も"参照される"印
+    - 左右の部分式もチェック
+  - それ以外の演算子
+  - 関数呼び出し式
+    - 関数がpureでないなら、その呼び出しの引数式に"参照される"印
+    - 式の結果が"参照される"かmutable参照引数に使われている変数が
+      "参照される"のであれば、その呼び出しの引数式に"参照される"印
+    - 引数となる部分式もチェック
+
+文をうしろから順に調査
+check_unused_stmt()
+- その文より後ろの文でrvalueとして使用しているsymdefの集まりを渡す。
+- その文がrvalueおよびlvalue参照しているsymdefの集まりを返す。
+- その文が呼んでいる関数のfuncの集まりを返す。
+もし文がlvalue参照している変数がその後ろでrvalueとして使用しているものが
+あるか、local変数でないものがあれば、その文は副作用をもつ。
+もし文がrvalue参照しているものが
+
+---------------------------------------------------------------------
+importの整理
+
+namespace foo で import bar b するとnsalias[('foo', 'b')]にbarが追加される
+alias名が +, -, * のいずれかなら nsalias[(foo, '')]にbarが追加される
++のとき、 nsextends['bar']にfooが追加される
+*のとき、nschains['foo']にbarが追加される
 

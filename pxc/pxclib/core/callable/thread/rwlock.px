@@ -1,0 +1,61 @@
+public threaded namespace core::callable::thread::rwlock "use-unsafe";
+public import core::numeric::integral -;
+public import core::numeric::cast -;
+public import core::pointer -;
+public import core::meta m;
+
+public pure tsvaluetype struct extern "pxcrt::rwlock" {t}
+rwlock(t const& value0) <rwlock_i>
+{
+  public metafunction __attribute__ {{"monitor", 0}};
+    /* does not implement wait/notify */
+  public metafunction __static_assert__
+    m::cond{m::characteristic{t, "pure tsvaluetype"},
+      1,
+      m::error{"t must be pure tsvaluetype"}};
+    /* requires t to be pure tsvaluetype so that methods on const references to
+     * 'value' can be called asynchronously without obtaining exclusive
+     * lock */
+  public t value = value0;
+}
+
+private pure multithreaded interface extern "pxcrt::rwlock_i"
+rwlock_i
+{ }
+
+extern "types" inline
+#include <boost/thread.hpp>
+namespace pxcrt {
+
+template <typename T> struct rwlock {
+  rwlock(T const& value0) : value(value0) { }
+  size_t refcnt$z() const { return count.refcnt$z(); }
+  void incref$z() const { count.incref$z(); }
+  void decref$z() const {
+    if (count.decref$z()) {
+      this->~rwlock();
+      this->deallocate(this);
+    }
+  }
+  void lockex$z() const { mtx.lock(); }
+  void unlockex$z() const { mtx.unlock(); }
+  void locksh$z() const { mtx.lock_shared(); }
+  void unlocksh$z() const { mtx.unlock_shared(); }
+  static rwlock<T> *allocate() {
+    return pxcrt::allocate_single<rwlock<T>>();
+  }
+  static void deallocate(rwlock<T> const *ptr) {
+    return pxcrt::deallocate_single<rwlock<T>>(ptr);
+  }
+  T value;
+  mutable boost::shared_mutex mtx;
+    // requires libboost_thread
+  mutable pxcrt::mtcount count;
+};
+
+};
+;
+
+extern "ldflags"
+  "-lboost_system -lboost_thread";
+

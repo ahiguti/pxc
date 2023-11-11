@@ -1,8 +1,8 @@
 public namespace split;
-import common -;
-import text::serialize -;
-import meta m;
-import meta::family mf;
+import core::common -;
+import core::text::serialize -;
+import core::meta m;
+import core::meta::family mf;
 
 public metafunction va_arg_name{i} m::concat{"a", i};
 public metafunction va_arg_names{lst} m::map{m::seq{m::size{lst}}, va_arg_name};
@@ -21,26 +21,26 @@ private metafunction va_arginfo_mutable_ref{lst, i}
 public function {lst} bool split(expand(
   m::join{
     m::list{m::list{"str", cstrref, 1, 0}, m::list{"delim", uchar, 0, 0}},
-    m::slice{va_argdecls_mutable_ref{lst}, 2}})) 
+    m::slice{va_argdecls_mutable_ref{lst}, 2}}))
 {
   size_t const sz = str.size();
   size_t curpos = 0;
   expand (arg, idx : m::slice{va_arg_names{lst}, 2}) {
     {
       if (m::ne{idx, 0}) {
-	if (curpos == sz) {
-	  return false;
-	}
-	++curpos;
+        if (curpos == sz) {
+          return false;
+        }
+        ++curpos;
       }
       size_t const dp = find_mapped(str, curpos, delim);
       metafunction telem m::at0{m::at{lst, m::add{idx, 2}}};
       if (mf::is_string_or_slice_type{telem}) {
-	arg = str[curpos .. dp];
+        arg = str[curpos .. dp];
       } else {
-	cstrref s1 = str[curpos .. dp];
-	deserialize_from_string_emplace{m::at0{m::at{lst, m::add{idx, 2}}}}(
-	  s1, arg);
+        cstrref s1 = str[curpos .. dp];
+        deserialize_from_string_emplace{m::at0{m::at{lst, m::add{idx, 2}}}}(
+          s1, arg);
       }
       curpos = dp;
     }

@@ -1,0 +1,186 @@
+public threaded namespace core::io::standard "use-unsafe";
+public import core::numeric::integral -;
+public import core::container::array -;
+public import core::io +;
+public import core::io::file +;
+public import core::io::errno -;
+public import core::text::serialize -;
+public import core::text::split -;
+public import core::generic::datatype -;
+public import core::meta::vararg v;
+public import core::meta m;
+public import core::meta::family -;
+
+public pure function extern "pxcrt::io_stdin"
+  file_st io_stdin(io const& iop);
+public pure function extern "pxcrt::io_stdout"
+  file_st io_stdout(io const& iop);
+public pure function extern "pxcrt::io_stderr"
+  file_st io_stderr(io const& iop);
+
+public pure function {tlist} void
+file_print(expand(v::arg_decls_bycref{tlist}))
+{
+  string s = string_join{" "}(
+    expand(a: m::slice{v::arg_names{m::size{tlist}}, 1}; a));
+  a0.write_all(s);
+}
+
+public pure function {tlist} void
+file_println(expand(v::arg_decls_bycref{tlist}))
+{
+  string s = string_join{" "}(
+    expand(a: m::slice{v::arg_names{m::size{tlist}}, 1}; a));
+  s.append("\n");
+  a0.write_all(s);
+}
+
+public threaded function {tlist} void
+print(expand(v::arg_decls_bycref{tlist}))
+{
+  string s = string_join{" "}(expand(a: v::arg_names{m::size{tlist}}; a));
+  thread_io().stdout().write_all(s);
+}
+
+public threaded function {tlist} void
+println(expand(v::arg_decls_bycref{tlist}))
+{
+  string s = string_join{" "}(expand(a: v::arg_names{m::size{tlist}}; a));
+  s.append("\n");
+  thread_io().stdout().write_all(s);
+}
+
+/* debug_log() does not require an io handle. 'keep' attribute is set
+  to prevent calling this function from being optimized away. */
+public pure function extern "" "keep" {tlist} void
+debug_log(expand(v::arg_decls_bycref{tlist}))
+{
+  string s = string_join{"\t"}(expand(a: v::arg_names{m::size{tlist}}; a));
+  s.push_back('\n');
+  debug_log_internal(s);
+}
+
+public function extern "pxcrt::set_debug_log_file"
+  void set_debug_log_file(cstrref const& fname);
+
+public function extern "pxcrt::set_debug_log_timestamp"
+  void set_debug_timestamp(bool v);
+
+private extern "pxcrt::dummy" option{file_st} dummy;
+  /* instantiate option{file} */
+private metafunction dummy_type_csymbol m::csymbol{option{file_st}};
+
+private pure function extern "pxcrt::debug_log_internal"
+  void debug_log_internal(cstrref const& s);
+
+extern "implementation" inline
+namespace pxcrt {
+
+typedef %{dummy_type_csymbol}% optfile;
+
+#ifdef _MSC_VER
+#include <sys/types.h>
+#include <sys/timeb.h>
+#endif
+#ifdef ANDROID
+#include <android/log.h>
+#endif
+
+/* TODO: slow */
+
+file_st io_stdin(io const& iop)  {
+  optfile pxc_stdin;
+  pxc_stdin.some$$l(make_file_st(0));
+  return pxc_stdin.some$$r();
+}
+
+file_st io_stdout(io const& iop) {
+  optfile pxc_stdout;
+  pxc_stdout.some$$l(make_file_st(1));
+  return pxc_stdout.some$$r();
+}
+
+file_st io_stderr(io const& iop) {
+  optfile pxc_stderr;
+  pxc_stderr.some$$l(make_file_st(2));
+  return pxc_stderr.some$$r();
+}
+
+int debug_log_file = 2;
+bool debug_log_timestamp = false;
+
+void debug_log_write(const void *buffer, size_t len)
+{
+#ifdef ANDROID
+  if (debug_log_file == 2) {
+    __android_log_print(ANDROID_LOG_INFO, "pxcrt", "%.*s", (int)len,
+      (const char *)buffer);
+    return;
+  }
+#endif
+#ifdef PXC_POSIX
+  ::write(debug_log_file, buffer, len);
+#else
+  _write(debug_log_file, buffer, (unsigned)len);
+#endif
+}
+
+void debug_log_internal(cstrref const& s)
+{
+  if (debug_log_timestamp) {
+    char buf[128] = { };
+    struct tm t = { };
+#ifdef PXC_POSIX
+    struct timeval tv = { };
+    gettimeofday(&tv, NULL);
+    time_t now = tv.tv_sec;
+    unsigned msec = tv.tv_usec / 1000;
+    localtime_r(&now, &t);
+#else
+    _timeb tv = { };
+    _ftime_s(&tv);
+    time_t now = tv.time;
+    unsigned msec = tv.millitm;
+    localtime_s(&t, &now);
+#endif
+    size_t len = strftime(buf, 64, "%Y%m%d-%H%M%S.", &t);
+    if (len > 0 && len < 64) {
+      snprintf(buf + len, 128 - len, "%03u ", msec);
+      debug_log_write(buf, strlen(buf));
+    }
+  }
+  debug_log_write(s.rawarr(), s.size());
+}
+
+void set_debug_log_file(cstrref const& fname)
+{
+  PXCRT_ALLOCA_NTSTRING(fn_nt, fname);
+  if (debug_log_file > 2) {
+#ifdef PXC_POSIX
+    close(debug_log_file);
+#else
+    _close(debug_log_file);
+#endif
+    debug_log_file = 2;
+  }
+#ifdef PXC_POSIX
+  debug_log_file = open(fn_nt.get(), O_WRONLY | O_CREAT | O_APPEND | O_TRUNC,
+    0644);
+#else
+  _sopen_s(&debug_log_file, fn_nt.get(),
+    _O_WRONLY | _O_CREAT | _O_APPEND | _O_TRUNC, _SH_DENYNO,
+    _S_IREAD | _S_IWRITE);
+#endif
+  if (debug_log_file == -1) {
+    debug_log_file = 2;
+  }
+}
+
+void set_debug_log_timestamp(bt_bool v)
+{
+  debug_log_timestamp = v;
+}
+
+};
+;
+

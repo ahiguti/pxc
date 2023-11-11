@@ -1,12 +1,10 @@
 #!/usr/bin/env pxc
 public namespace variant2;
-import common -;
-import meta m;
-import numeric::cast n;
+import core::common -;
+import core::meta m;
+import core::numeric::cast n;
 
-metafunction strlit container::array::strlit;
-
-public multithreaded union variant {
+public pure multithreaded union variant {
   public unit unitval;
   public long longval;
   public double doubleval;
@@ -14,12 +12,12 @@ public multithreaded union variant {
   public tptr{iinvoke} tptrval;
 }
 
-multithreaded interface iinvoke {
+pure multithreaded interface iinvoke {
   public function variant invoke(cstrref const& name,
     cslice{variant} const& args);
 }
 
-threaded function {t} variant to_variant(t const& x)
+pure function {t} variant to_variant(t const& x)
 {
   metafunction is_string_or_slice_family{t}
     m::or{
@@ -46,12 +44,12 @@ threaded function {t} variant to_variant(t const& x)
   return r;
 }
 
-threaded function {t} t from_variant(variant const& x)
+pure function {t} t from_variant(variant const& x)
 {
   return t(); // TODO
 }
 
-multithreaded struct foo {
+pure multithreaded struct foo {
   public int val;
   public function void add(int x) { val += x; }
   public function int get(int y) const { return val; }
@@ -63,14 +61,14 @@ multithreaded struct foo {
 }
 
 // TODO: generic
-multithreaded struct foo_iinvoke < iinvoke > {
+pure multithreaded struct foo_iinvoke < iinvoke > {
   foo value;
   public function variant invoke(cstrref const& name,
     cslice{variant} const& args)
   {
     variant r;
     if (name == "add") {
-      value.add(numeric::cast::static_cast{int, long}(args[0].longval));
+      value.add(static_cast{int, long}(args[0].longval));
     } else if (name == "get") {
       // r.longval = value.get();
     }
@@ -80,23 +78,23 @@ multithreaded struct foo_iinvoke < iinvoke > {
 
 
 /*
-multithreaded struct {t} stub_iinvoke : iinvoke : {
+pure multithreaded struct {t} stub_iinvoke : iinvoke : {
   t value;
   function variant invoke(cstrref const& name, cslice{variant} const& args) {
     metafunction mfuncstr{t} m::map{m::member_functions{t}, m::to_string};
     metafunction seqstr{n} m::map{m::seq{n}, m::to_string};
     expand(fsym : mfuncstr{t}) {
       if (m::to_string{fsym} == name) {
-	metafunction f m::symbol{t, m::to_string{fsym}};
-	if (m::eq{m::ret_type{f}, void}) {
-	  value.fsym(expand(i : seqstr{m::arg_size{f}};
-	    from_variant{m::arg_type{f, i}}(args[m::to_int{i}])));
-	  return variant();
-	} else {
-	  return to_variant{m::ret_type{f}}(
-	    value.fsym(expand(i : seqstr{m::arg_size{f}};
-	      from_variant{m::arg_type{f, i}}(args[m::to_int{i}]))));
-	}
+        metafunction f m::symbol{t, m::to_string{fsym}};
+        if (m::eq{m::ret_type{f}, void}) {
+          value.fsym(expand(i : seqstr{m::arg_size{f}};
+            from_variant{m::arg_type{f, i}}(args[m::to_int{i}])));
+          return variant();
+        } else {
+          return to_variant{m::ret_type{f}}(
+            value.fsym(expand(i : seqstr{m::arg_size{f}};
+              from_variant{m::arg_type{f, i}}(args[m::to_int{i}]))));
+        }
       }
     }
     return variant();
@@ -138,8 +136,8 @@ function {t} void dump_arginfo()
   metafunction argexp_list{fsym}
     m::map{
       m::transpose{{
-	m::seq{m::size{m::args{m::symbol{t, m::to_string{fsym}}}}},
-	m::args{m::symbol{t, m::to_string{fsym}}}}},
+        m::seq{m::size{m::args{m::symbol{t, m::to_string{fsym}}}}},
+        m::args{m::symbol{t, m::to_string{fsym}}}}},
       metafunction{v} argexp{m::at0{v}, m::at1{v}}};
   metafunction args_ae{fsym, ae}
     m::at{m::args{m::symbol{t, fsym}}, m::to_int{m::substring{ae, 1}}};
@@ -147,17 +145,17 @@ function {t} void dump_arginfo()
   expand(fsym : mfuncstr{t}) {
     expand(ae : argexp_list{fsym}) {
       println(m::concat{
-	"funcname=", m::to_string{fsym}, " pass=mv name=", ae,
-	" type=", arg_type_ae{fsym, ae}});
+        "funcname=", m::to_string{fsym}, " pass=mv name=", ae,
+        " type=", arg_type_ae{fsym, ae}});
       println(m::concat{
-	"funcname=", m::to_string{fsym}, " pass=cv name=", ae, 
-	" type=", arg_type_ae{fsym, ae}});
+        "funcname=", m::to_string{fsym}, " pass=cv name=", ae,
+        " type=", arg_type_ae{fsym, ae}});
       println(m::concat{
-	"funcname=", m::to_string{fsym}, " pass=mr name=", ae, 
-	" type=", arg_type_ae{fsym, ae}});
+        "funcname=", m::to_string{fsym}, " pass=mr name=", ae,
+        " type=", arg_type_ae{fsym, ae}});
       println(m::concat{
-	"funcname=", m::to_string{fsym}, " pass=cr name=", ae, 
-	" type=", arg_type_ae{fsym, ae}});
+        "funcname=", m::to_string{fsym}, " pass=cr name=", ae,
+        " type=", arg_type_ae{fsym, ae}});
     }
     // println(m::concat{fsym, ": ", argexp_list{fsym}});
   }

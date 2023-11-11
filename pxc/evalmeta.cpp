@@ -203,8 +203,8 @@ static term eval_meta_symbol_internal(const term_list_range& tlev,
   if (tlev[0].is_string()) {
     /* global symbol */
     if (tlev.size() > 1 && !tlev[1].is_string()) {
-      arena_error_throw(pos, "meta_symbol: Invalid argument '%s'", 
-	term_tostr_human(tlev[1]).c_str());
+      arena_error_throw(pos, "meta_symbol: Invalid argument '%s'",
+        term_tostr_human(tlev[1]).c_str());
     }
     /* find symbol from the specified namespace */
     sym_ns = tlev[0].get_string();
@@ -331,7 +331,7 @@ static term eval_meta_is_polymorphic_type(const term_list_range& tlev,
   return term(r);
 }
 
-static term eval_meta_inherits(const term_list_range& tlev, eval_context& ectx, 
+static term eval_meta_inherits(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
   if (tlev.size() != 2) {
@@ -632,7 +632,7 @@ static term eval_meta_imports(const term_list_range& tlev, eval_context& ectx,
     nspropmap_type::const_iterator j = nspropmap.find(tns);
     if (j == nspropmap.end()) {
       arena_error_throw(pos, "Internal error: namespace '%s' not imported",
-	tns.c_str());
+        tns.c_str());
     }
     if (!j->second.is_public) {
       continue;
@@ -722,8 +722,8 @@ static term eval_meta_types(const term_list_range& tlev, eval_context& ectx,
     if (est != 0 && est->typefamily_str != 0) {
       const std::string s(est->typefamily_str);
       if (!s.empty() && s[0] == '@') {
-	/* builtin metafunction */
-	continue;
+        /* builtin metafunction */
+        continue;
       }
     }
     bool is_type_flag = false;
@@ -816,17 +816,17 @@ static term eval_meta_member_functions(const term_list_range& tlev,
       = symtbl->get_local_names();
     for (i = local_names.begin(); i != local_names.end(); ++i) {
       symbol_table::locals_type::const_iterator j = symtbl->find(*i, false);
-	/* incl generated symbols */
+        /* incl generated symbols */
       assert(j != symtbl->end());
       const localvar_info lv = j->second;
       expr_i *const e = lv.edef;
       /* no need to skip generated symbols because this metafunctions is
        * allowed only for a compiled block. */
       if (lv.has_attrib_private()) {
-	continue;
+        continue;
       }
       if (e->get_esort() == expr_e_funcdef) {
-	tl.push_back(term(e));
+        tl.push_back(term(e));
       }
     }
   }
@@ -911,7 +911,7 @@ eval_meta_fields_internal(const term_list_range& tlev, eval_context& ectx,
       tl1.push_back((*i)->resolve_texpr()); /* type */
       tl1.push_back(term(0LL)); /* byref(=0) */
       tl1.push_back(term(is_passby_mutable((*i)->varinfo.passby)));
-	/* mutable */
+        /* mutable */
       term t1(tl1);
       tl.push_back(t1);
     } else if (mask == 0x1) {
@@ -1171,7 +1171,7 @@ static term eval_meta_join_list(const term_list_range& tlev,
     const term_list *const il = i->get_metalist();
     if (il == 0) {
       arena_error_throw(pos, "join: Invalid argument: %s",
-	term_tostr_human(*i).c_str());
+        term_tostr_human(*i).c_str());
       return term();
     }
     rtl.insert(rtl.end(), il->begin(), il->end());
@@ -1225,7 +1225,7 @@ static term eval_meta_transposev(const term_list_range& tlev,
     const term_list& tl1 = *tlev[i].get_metalist();
     for (size_t j = 0; j < tl1.size(); ++j) {
       if (mat.size() <= j) {
-	mat.push_back(term_list());
+        mat.push_back(term_list());
       }
       term_list& rtl1 = mat[j];
       rtl1.push_back(tl1[j]);
@@ -1571,11 +1571,11 @@ static term eval_meta_character(const term_list_range& tlev,
     const term_list& tl = *te.get_metalist();
     for (size_t i = 0; i < tl.size(); ++i) {
       if (!tl[i].is_long()) {
-	return term();
+        return term();
       }
       long long v = meta_term_to_long(tl[i]);
       if (v < 0 || v > 255) {
-	return term();
+        return term();
       }
       unsigned char cv = v;
       str.push_back(cv);
@@ -1646,6 +1646,9 @@ static term eval_meta_characteristic(const term_list_range& tlev,
   } else if (s == "threaded") {
     attribute_e attr = get_term_threading_attribute(tlev[0]);
     return term((attr & attribute_threaded) != 0);
+  } else if (s == "pure") {
+    attribute_e attr = get_term_threading_attribute(tlev[0]);
+    return term((attr & attribute_pure) != 0);
   } else if (s == "multithreaded") {
     attribute_e attr = get_term_threading_attribute(tlev[0]);
     return term((attr & attribute_multithr) != 0);
@@ -1691,9 +1694,9 @@ static term eval_meta_family(const term_list_range& tlev, eval_context& ectx,
     {
       expr_typedef *const etd = ptr_down_cast<expr_typedef>(einst);
       if (etd->is_enum) {
-	return term("enum");
+        return term("enum");
       } else if (etd->is_bitmask) {
-	return term("bitmask");
+        return term("bitmask");
       }
     }
     return term("builtin");
@@ -1784,8 +1787,8 @@ static term eval_meta_eq(const term_list_range& tlev, eval_context& ectx,
     for (term_list_range::const_iterator i = tlev.begin() + 1; i != tlev.end();
       ++i) {
       if (t != *i) {
-	v = 0;
-	break;
+        v = 0;
+        break;
       }
     }
   }
@@ -1887,8 +1890,8 @@ static term eval_meta_csymbol(const term_list_range& tlev, eval_context& ectx,
     for (flds_type::const_iterator i = flds.begin(); i != flds.end();
       ++i, ++j) {
       if (j == fldnum) {
-	v = *i;
-	break;
+        v = *i;
+        break;
       }
     }
     if (v != 0) {
@@ -2277,5 +2280,5 @@ term eval_mf_ret(const term& t, expr_i *pos)
   return r;
 }
 
-}; 
+};
 

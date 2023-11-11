@@ -185,29 +185,29 @@ static bool check_source_timestamp(const parser_options& po, module_info& mi,
     while (true) {
       struct stat sbuf;
       if (stat(fn.c_str(), &sbuf) != 0) {
-	if (errno == ENOENT) {
-	  break;
-	}
-	arena_error_throw(0, "%s:0: Failed to stat: errno=%d\n",
-	  fn.c_str(), errno);
+        if (errno == ENOENT) {
+          break;
+        }
+        arena_error_throw(0, "%s:0: Failed to stat: errno=%d\n",
+          fn.c_str(), errno);
       }
       if (sbuf.st_ctime > mi.source_checksum.timestamp) {
-	if (po.verbose > 1) {
-	  fprintf(stderr,
-	    "check_source_timestamp %s: st_ctime=%lu checksum=%lu\n",
-	    fn.c_str(), (unsigned long)sbuf.st_ctime,
-	    (unsigned long)mi.source_checksum.timestamp);
-	}
-	not_modified = false;
+        if (po.verbose > 1) {
+          fprintf(stderr,
+            "check_source_timestamp %s: st_ctime=%lu checksum=%lu\n",
+            fn.c_str(), (unsigned long)sbuf.st_ctime,
+            (unsigned long)mi.source_checksum.timestamp);
+        }
+        not_modified = false;
       }
       if (sbuf.st_mtime > mi.source_checksum.timestamp) {
-	if (po.verbose > 1) {
-	  fprintf(stderr,
-	    "check_source_timestamp %s: st_mtime=%lu checksum=%lu\n",
-	    fn.c_str(), (unsigned long)sbuf.st_mtime,
-	    (unsigned long)mi.source_checksum.timestamp);
-	}
-	not_modified = false;
+        if (po.verbose > 1) {
+          fprintf(stderr,
+            "check_source_timestamp %s: st_mtime=%lu checksum=%lu\n",
+            fn.c_str(), (unsigned long)sbuf.st_mtime,
+            (unsigned long)mi.source_checksum.timestamp);
+        }
+        not_modified = false;
       }
       src_mask |= src_mask_bit;
       break;
@@ -219,9 +219,9 @@ static bool check_source_timestamp(const parser_options& po, module_info& mi,
   if (src_mask != mi.src_mask) {
     if (po.verbose > 1) {
       fprintf(stderr,
-	"check_source_timestamp (%s,%s): src_mask=%llu mi.src_mask=%llu\n",
-	mi.unique_namespace.c_str(), mi.aux_filename.c_str(),
-	src_mask, mi.src_mask);
+        "check_source_timestamp (%s,%s): src_mask=%llu mi.src_mask=%llu\n",
+        mi.unique_namespace.c_str(), mi.aux_filename.c_str(),
+        src_mask, mi.src_mask);
     }
     return false;
   }
@@ -247,7 +247,7 @@ static bool load_infofile(const parser_options& po, module_info& mi)
   if (stat(cc_filename.c_str(), &sbuf) != 0) {
     if (errno != ENOENT) {
       arena_error_throw(0, "%s:0: Failed to stat: errno=%d\n",
-	cc_filename.c_str(), errno);
+        cc_filename.c_str(), errno);
     }
     return false;
   }
@@ -286,41 +286,41 @@ static bool load_infofile(const parser_options& po, module_info& mi)
       mi.source_checksum.md5sum = from_hexadecimal((*line)[4]);
       mi.src_mask = ulong_from_string_hexadecimal((*line)[5]);
       if (po.verbose > 1) {
-	fprintf(stderr, "'%s': source_checksum: %s\n", info_filename.c_str(),
-	  checksum_string(mi.source_checksum).c_str());
+        fprintf(stderr, "'%s': source_checksum: %s\n", info_filename.c_str(),
+          checksum_string(mi.source_checksum).c_str());
       }
       if (!check_source_timestamp(po, mi, info_filename)) {
-	DBG_INF(fprintf(stderr, "load_infofile: %s timestamp\n",
-	  info_filename.c_str()));
-	if (po.verbose > 1) {
-	  fprintf(stderr, "'%s': source_checksum: modified\n",
-	    info_filename.c_str());
-	}
-	return false;
+        DBG_INF(fprintf(stderr, "load_infofile: %s timestamp\n",
+          info_filename.c_str()));
+        if (po.verbose > 1) {
+          fprintf(stderr, "'%s': source_checksum: modified\n",
+            info_filename.c_str());
+        }
+        return false;
       }
     } else if (line->size() == 2 && (*line)[0] == "link") {
       /* link: link name */
       const std::string m = (*line)[1];
       mi.self_copts.link.append_if(m);
       if (po.verbose > 1) {
-	fprintf(stderr, "'%s': link %s\n", info_filename.c_str(),
-	  m.c_str());
+        fprintf(stderr, "'%s': link %s\n", info_filename.c_str(),
+          m.c_str());
       }
     } else if (line->size() == 2 && (*line)[0] == "libdir") {
       /* libdir: libdir name */
       const std::string m = (*line)[1];
       mi.self_copts.libdir.append_if(m);
       if (po.verbose > 1) {
-	fprintf(stderr, "'%s': libdir %s\n", info_filename.c_str(),
-	  m.c_str());
+        fprintf(stderr, "'%s': libdir %s\n", info_filename.c_str(),
+          m.c_str());
       }
     } else if (line->size() == 2 && (*line)[0] == "ldflags") {
       /* ldflags: ldflags name */
       const std::string m = (*line)[1];
       mi.self_copts.ldflags.append_if(m);
       if (po.verbose > 1) {
-	fprintf(stderr, "'%s': ldflags %s\n", info_filename.c_str(),
-	  m.c_str());
+        fprintf(stderr, "'%s': ldflags %s\n", info_filename.c_str(),
+          m.c_str());
       }
     } else if (line->size() == 5 && (*line)[0] == "import") {
       /* import: import ns pub src_timestamp src_md5 */
@@ -336,8 +336,8 @@ static bool load_infofile(const parser_options& po, module_info& mi)
       ii.ns = ns;
       ii.import_public = (sort == 1);
       if (po.verbose > 1) {
-	fprintf(stderr, "'%s': import %s: %s %lu\n", info_filename.c_str(),
-	  ns.c_str(), checksum_string(cs).c_str(), sort);
+        fprintf(stderr, "'%s': import %s: %s %lu\n", info_filename.c_str(),
+          ns.c_str(), checksum_string(cs).c_str(), sort);
       }
     } else if (line->size() == 4 && (*line)[0] == "indirect") {
       /* indirect: indirect ns src_timestamp src_md5 */
@@ -348,21 +348,21 @@ static bool load_infofile(const parser_options& po, module_info& mi)
       cs.timestamp = timestamp;
       cs.md5sum = md5sum;
       if (po.verbose > 1) {
-	fprintf(stderr, "'%s': indirect %s: %s\n", info_filename.c_str(),
-	  ns.c_str(), checksum_string(cs).c_str());
+        fprintf(stderr, "'%s': indirect %s: %s\n", info_filename.c_str(),
+          ns.c_str(), checksum_string(cs).c_str());
       }
     } else {
       if (po.verbose > 0) {
-	std::string ln;
-	for (std::vector<std::string>::const_iterator i = line->begin();
-	  i != line->end(); ++i) {
-	  if (!ln.empty()) {
-	    ln += "\t";
-	  }
-	  ln += (*i);
-	}
-	fprintf(stderr, "'%s': unrecognized line: %s\n", info_filename.c_str(),
-	  ln.c_str());
+        std::string ln;
+        for (std::vector<std::string>::const_iterator i = line->begin();
+          i != line->end(); ++i) {
+          if (!ln.empty()) {
+            ln += "\t";
+          }
+          ln += (*i);
+        }
+        fprintf(stderr, "'%s': unrecognized line: %s\n", info_filename.c_str(),
+          ln.c_str());
       }
     }
     ++line;
@@ -419,36 +419,36 @@ static void load_source_and_calc_checksum(const parser_options& po,
       const time_t time_now = time(0);
       struct stat sbuf1, sbuf2;
       if (stat(fn.c_str(), &sbuf1) != 0) {
-	if (errno == ENOENT) {
-	  if (po.verbose > 9) {
-	    fprintf(stderr, "loading source %s: not found\n", fn.c_str());
-	  }
-	  if (!notfound_fnlist.empty()) {
-	    notfound_fnlist += ",";
-	  }
-	  notfound_fnlist += fn;
-	  break;
-	}
-	arena_error_throw(0, "-:-: Failed to stat '%s': errno=%d\n",
-	  fn.c_str(), errno);
+        if (errno == ENOENT) {
+          if (po.verbose > 9) {
+            fprintf(stderr, "loading source %s: not found\n", fn.c_str());
+          }
+          if (!notfound_fnlist.empty()) {
+            notfound_fnlist += ",";
+          }
+          notfound_fnlist += fn;
+          break;
+        }
+        arena_error_throw(0, "-:-: Failed to stat '%s': errno=%d\n",
+          fn.c_str(), errno);
       }
       const std::string content = read_file_content(fn, true);
       if (po.verbose > 9 && !content.empty()) {
-	fprintf(stderr, "loading source %s: found\n", fn.c_str());
+        fprintf(stderr, "loading source %s: found\n", fn.c_str());
       }
       if (stat(fn.c_str(), &sbuf2) != 0) {
-	arena_error_throw(0, "-:-: Failed to stat '%s': errno=%d\n",
-	  fn.c_str(), errno);
+        arena_error_throw(0, "-:-: Failed to stat '%s': errno=%d\n",
+          fn.c_str(), errno);
       }
       if (sbuf1.st_mtime == sbuf2.st_mtime &&
-	sbuf1.st_ctime == sbuf2.st_ctime) {
-	const time_t tm1 = std::max(sbuf1.st_mtime, sbuf1.st_ctime);
-	if (tm1 < time_now - PXC_TIMESTAMP_MARGIN) {
-	  i->content = content;
-	  tstamp = std::max(tstamp, tm1);
-	  loaded = true;
-	  break;
-	}
+        sbuf1.st_ctime == sbuf2.st_ctime) {
+        const time_t tm1 = std::max(sbuf1.st_mtime, sbuf1.st_ctime);
+        if (tm1 < time_now - PXC_TIMESTAMP_MARGIN) {
+          i->content = content;
+          tstamp = std::max(tstamp, tm1);
+          loaded = true;
+          break;
+        }
       }
       /* reload the source file because it is possibly modified after we
        * stat()ed the file first. it is safe to set PSC_TIMESTAMP_MARGIN zero
@@ -484,15 +484,15 @@ static void load_source_content(const parser_options& po, module_info& mi)
     /* info is not loaded */
     if (!load_infofile(po, mi)) {
       DBG_MOD(fprintf(stderr, "load_source_content (%s,%s): no info file\n",
-	mi.ns.c_str(), mi.aux_filename.c_str()));
+        mi.ns.c_str(), mi.aux_filename.c_str()));
       if (po.verbose > 1) {
-	fprintf(stderr, "%s: info file not found => source modified\n",
-	  mi.get_name().c_str());
+        fprintf(stderr, "%s: info file not found => source modified\n",
+          mi.get_name().c_str());
       }
       source_modified = true;
     } else {
       DBG_MOD(fprintf(stderr, "load_source_content (%s,%s): found info file\n",
-	mi.ns.c_str(), mi.aux_filename.c_str()));
+        mi.ns.c_str(), mi.aux_filename.c_str()));
     }
   }
   module_info mi_copy = mi;
@@ -504,10 +504,10 @@ static void load_source_content(const parser_options& po, module_info& mi)
     source_modified = true;
     if (po.verbose > 1) {
       fprintf(stderr, "%s: loaded contet: source modified: "
-	"info-chksum:%s disk-chksum:%s\n",
-	mi.get_name().c_str(),
-	checksum_string(mi.source_checksum).c_str(),
-	checksum_string(mi_copy.source_checksum).c_str());
+        "info-chksum:%s disk-chksum:%s\n",
+        mi.get_name().c_str(),
+        checksum_string(mi.source_checksum).c_str(),
+        checksum_string(mi_copy.source_checksum).c_str());
     }
   }
   mi = mi_copy;
@@ -523,15 +523,15 @@ static void load_source_info(const parser_options& po, module_info& mi)
   if (mi.source_checksum.timestamp == 0) {
     if (!load_infofile(po, mi)) {
       if (po.verbose > 1) {
-	fprintf(stderr, "load_source_info (%s,%s): no info file\n",
-	  mi.get_name().c_str(), mi.aux_filename.c_str());
+        fprintf(stderr, "load_source_info (%s,%s): no info file\n",
+          mi.get_name().c_str(), mi.aux_filename.c_str());
       }
       load_source_content(po, mi);
       mi.source_modified = true;
     } else {
       if (po.verbose > 1) {
-	fprintf(stderr, "load_source_info (%s,%s): found info file\n",
-	  mi.get_name().c_str(), mi.aux_filename.c_str());
+        fprintf(stderr, "load_source_info (%s,%s): found info file\n",
+          mi.get_name().c_str(), mi.aux_filename.c_str());
       }
     }
   }
@@ -565,19 +565,19 @@ static void get_module_info_rec(const parser_options& po,
     } else {
       const std::string ns_filename = get_filename_for_ns(ns);
       for (strlist::const_iterator i = po.profile.incdir.begin();
-	i != po.profile.incdir.end(); ++i) {
-	std::string s = *i;
-	if (s.size() == 0) {
-	  continue;
-	}
-	if (s[s.size() - 1] != '/') {
-	  s += "/";
-	}
-	s += ns_filename;
-	mi.source_files.push_back(source_file_info());
-	source_file_info& si = mi.source_files.back();
-	si.filename = s;
-	si.filename_trim = trim_path(si.filename, po.trim_path);
+        i != po.profile.incdir.end(); ++i) {
+        std::string s = *i;
+        if (s.size() == 0) {
+          continue;
+        }
+        if (s[s.size() - 1] != '/') {
+          s += "/";
+        }
+        s += ns_filename;
+        mi.source_files.push_back(source_file_info());
+        source_file_info& si = mi.source_files.back();
+        si.filename = s;
+        si.filename_trim = trim_path(si.filename, po.trim_path);
       }
     }
   }
@@ -763,7 +763,7 @@ static bool need_to_relink(const parser_options& po,
     struct stat sbuf;
     if (stat(fn.c_str(), &sbuf) != 0) {
       arena_error_throw(0, "%s:0: Failed to stat: errno=%d\n",
-	fn.c_str(), errno);
+        fn.c_str(), errno);
     }
     const time_t fn_time = std::max(sbuf.st_mtime, sbuf.st_ctime);
     if (fn_time + PXC_TIMESTAMP_MARGIN >= ofn_time) {
@@ -804,7 +804,7 @@ static std::string get_link_flags(const parser_options& po,
     const strmap::const_iterator i = po.profile.mapval.find("platform");
     if (i != po.profile.mapval.end() && i->second == "Darwin") {
       genopt = " -fPIC -undefined dynamic_lookup -bundle -bundle_loader "
-	+ po.argv0 + " -lpthread ";
+        + po.argv0 + " -lpthread ";
     } else {
       genopt = " -fPIC -shared -lpthread ";
     }
@@ -914,18 +914,18 @@ static void compile_module_to_cc_srcs(const parser_options& po,
     pxc_parse_file(si, cursrc_imports);
     if (mi.unique_namespace != cursrc_imports.main_unique_namespace) {
       arena_error_throw(0,
-	"-:-: Invalid namespace declaration '%s' for expected namespace '%s'",
-	cursrc_imports.main_unique_namespace.c_str(),
-	mi.unique_namespace.c_str());
+        "-:-: Invalid namespace declaration '%s' for expected namespace '%s'",
+        cursrc_imports.main_unique_namespace.c_str(),
+        mi.unique_namespace.c_str());
     }
     if (si.mode == compile_mode_main && !mi.aux_filename.empty()) {
       const std::string exns = get_expected_namespace_for_file(
-	mi.aux_filename);
+        mi.aux_filename);
       if (cursrc_imports.main_unique_namespace != exns) {
-	arena_error_throw(0,
-	  "-:-: Invalid namespace declaration '%s' for '%s'",
-	  cursrc_imports.main_unique_namespace.c_str(),
-	  trim_path(mi.aux_filename, po.trim_path).c_str());
+        arena_error_throw(0,
+          "-:-: Invalid namespace declaration '%s' for '%s'",
+          cursrc_imports.main_unique_namespace.c_str(),
+          trim_path(mi.aux_filename, po.trim_path).c_str());
       }
     }
     #if 0
@@ -954,34 +954,34 @@ static void compile_module_to_cc_srcs(const parser_options& po,
       mi_main.self_copts, gmain);
     if (po.profile.safe_mode != 0) {
       for (all_modules_info::modules_type::const_iterator i
-	= ami.modules.begin(); i != ami.modules.end(); ++i) {
-	const module_info& mi = i->second;
-	const std::string uniqns = mi.unique_namespace;
-	nssafety_e const s = nspropmap[uniqns].safety;
-	if (!mi.aux_filename.empty()) {
-	  if (s != nssafety_e_safe) {
-	    arena_error_throw(0, "-:-: Unsafe namespace is not allowed: '%s'",
-	      mi.aux_filename.c_str());
-	  }
-	} else {
-	  size_t bmax = po.profile.incdir.size();
-	  if (bmax >= po.profile.safe_mode) {
-	    bmax -= po.profile.safe_mode;
-	  }
-	  /* first #bmax path elements are allowed to be unsafe */
-	  size_t const bmexp = 1ULL << bmax;
-	  if (bmexp < mi.src_mask) {
-	    arena_error_throw(0,
-	      "-:-: Unsafe namespace is not allowed: namespace '%s'",
-	      i->first.c_str());
-	  }
-	}
+        = ami.modules.begin(); i != ami.modules.end(); ++i) {
+        const module_info& mi = i->second;
+        const std::string uniqns = mi.unique_namespace;
+        nssafety_e const s = nspropmap[uniqns].safety;
+        if (!mi.aux_filename.empty()) {
+          if (s != nssafety_e_safe) {
+            arena_error_throw(0, "-:-: Unsafe namespace is not allowed: '%s'",
+              mi.aux_filename.c_str());
+          }
+        } else {
+          size_t bmax = po.profile.incdir.size();
+          if (bmax >= po.profile.safe_mode) {
+            bmax -= po.profile.safe_mode;
+          }
+          /* first #bmax path elements are allowed to be unsafe */
+          size_t const bmexp = 1ULL << bmax;
+          if (bmexp < mi.src_mask) {
+            arena_error_throw(0,
+              "-:-: Unsafe namespace is not allowed: namespace '%s'",
+              i->first.c_str());
+          }
+        }
       }
     }
     const double t2 = gettimeofday_double();
     if (po.verbose > 0) {
       fprintf(stderr, "compiled %s %f\n", mi_main.unique_namespace.c_str(),
-	t2 - t1);
+        t2 - t1);
     }
     if (!po.gen_cc_dir.empty()) {
       /* generate cc file to gen_cc_dir */
@@ -990,29 +990,29 @@ static void compile_module_to_cc_srcs(const parser_options& po,
       mkdir_hier(sfn);
       std::string f;
       if (!mi_main.aux_filename.empty()) {
-	/* filename instead of namespace */
-	f = mi_main.aux_filename;
-	std::string::size_type delim = f.rfind('/');
-	if (delim != f.npos) {
-	  f = f.substr(delim);
-	}
+        /* filename instead of namespace */
+        f = mi_main.aux_filename;
+        std::string::size_type delim = f.rfind('/');
+        if (delim != f.npos) {
+          f = f.substr(delim);
+        }
       } else {
-	f = mi_main.unique_namespace;
+        f = mi_main.unique_namespace;
       }
       for (size_t i = 0; i < f.size(); ++i) {
-	if (f[i] == ':') {
-	  f[i] = '_';
-	}
+        if (f[i] == ':') {
+          f[i] = '_';
+        }
       }
       /* note: filename uniqueness is not guaranteed */
       sfn += f + ".cc";
       if (compare_file_contents(tmp_fn, sfn) != 0) {
-	copy_file_atomic(tmp_fn, sfn, false);
+        copy_file_atomic(tmp_fn, sfn, false);
       }
     } else {
       if (rename(tmp_fn.c_str(), cc_filename.c_str()) != 0) {
-	arena_error_throw(0, "-:-: rename('%s', '%s') failed: errno=%d",
-	  tmp_fn.c_str(), cc_filename.c_str(), errno);
+        arena_error_throw(0, "-:-: rename('%s', '%s') failed: errno=%d",
+          tmp_fn.c_str(), cc_filename.c_str(), errno);
       }
     }
   }
@@ -1026,9 +1026,9 @@ static void compile_module_to_cc_srcs(const parser_options& po,
     if (po.gen_single_cc) {
       std::string bp;
       if (!mi_main.aux_filename.empty() && mi_main.aux_filename[0] == '/') {
-	bp = mi_main.aux_filename;
+        bp = mi_main.aux_filename;
       } else {
-	bp = po.gen_cc_dir + "/" + mi_main.aux_filename;
+        bp = po.gen_cc_dir + "/" + mi_main.aux_filename;
       }
       cfn = bp + ".cc";
       ofn = bp + ".o";
@@ -1055,7 +1055,7 @@ static void compile_module_to_cc_srcs(const parser_options& po,
     generate_info_file(po, ami, mi_main, tmp_fn);
     if (rename(tmp_fn.c_str(), info_filename.c_str()) != 0) {
       arena_error_throw(0, "-:-: Failed to rename('%s', '%s'): errno=%d",
-	tmp_fn.c_str(), info_filename.c_str(), errno);
+        tmp_fn.c_str(), info_filename.c_str(), errno);
     }
   }
 }
@@ -1101,14 +1101,14 @@ static bool compile_modules_rec(const parser_options& po,
     /* build imports first */
     if (!po.gen_single_cc) {
       for (imports_type::deps_type::const_iterator i = md.imports.deps.begin();
-	i != md.imports.deps.end(); ++i) {
-	const import_info& ii = *i;
-	modified |= compile_modules_rec(po, ami, ii.ns, generate_main_none);
+        i != md.imports.deps.end(); ++i) {
+        const import_info& ii = *i;
+        modified |= compile_modules_rec(po, ami, ii.ns, generate_main_none);
       }
       if (md.need_rebuild) {
-	compile_module_to_cc(po, ami, modname, gmain);
-	modified = true;
-	md.need_rebuild = false;
+        compile_module_to_cc(po, ami, modname, gmain);
+        modified = true;
+        md.need_rebuild = false;
       }
     } else {
       /* gen_single_cc mode */
@@ -1153,10 +1153,10 @@ static bool check_need_rebuild(const parser_options& po,
     module_info& mi_imp = ami.modules[*i];
     if (mi_imp.source_modified) {
       DBG_CHK(fprintf(stderr, "need_rebuild=%s import=%s\n", mi.ns.c_str(),
-	mi_imp.ns.c_str()));
+        mi_imp.ns.c_str()));
       if (po.verbose > 9) {
-	fprintf(stderr, "%s: source modified => %s: need rebuild\n",
-	  mi_imp.get_name().c_str(), mi.get_name().c_str());
+        fprintf(stderr, "%s: source modified => %s: need rebuild\n",
+          mi_imp.get_name().c_str(), mi.get_name().c_str());
       }
       mi.need_rebuild = true;
       break;
@@ -1168,13 +1168,13 @@ static bool check_need_rebuild(const parser_options& po,
     module_info& mi_dep = ami.modules[i->first];
     if (mi_dep.source_checksum != i->second) {
       DBG_CHK(fprintf(stderr, "need_rebuild=%s dep=%s\n", mi.ns.c_str(),
-	mi_dep.ns.c_str()));
+        mi_dep.ns.c_str()));
       if (po.verbose > 9) {
-	fprintf(stderr, "checksum mismatch %s:%s %s:%s\n",
-	  mi_dep.get_name().c_str(),
-	  checksum_string(mi_dep.source_checksum).c_str(),
-	  i->first.c_str(),
-	  checksum_string(i->second).c_str());
+        fprintf(stderr, "checksum mismatch %s:%s %s:%s\n",
+          mi_dep.get_name().c_str(),
+          checksum_string(mi_dep.source_checksum).c_str(),
+          i->first.c_str(),
+          checksum_string(i->second).c_str());
       }
       mi.need_rebuild = true;
       break;
@@ -1190,14 +1190,14 @@ static bool check_need_rebuild(const parser_options& po,
       ++i) {
       module_info& mi_dep = ami.modules[*i];
       if (!mi_dep.source_loaded) {
-	load_source_content(po, mi_dep);
-	loaded = true;
+        load_source_content(po, mi_dep);
+        loaded = true;
       }
     }
   } else {
     if (po.verbose > 9) {
       fprintf(stderr, "%s: need not to rebuild\n",
-	mi.get_name().c_str());
+        mi.get_name().c_str());
     }
   }
   return loaded;
@@ -1216,22 +1216,22 @@ struct filelock_lockobj {
     if (afp.get() == 0) {
       auto_fp fp(fopen(fn.c_str(), "a"));
       if (fp.get() == 0) {
-	arena_error_throw(0, "-:-: Failed to open '%s': errno=%d\n",
-	  fn.c_str(), errno);
+        arena_error_throw(0, "-:-: Failed to open '%s': errno=%d\n",
+          fn.c_str(), errno);
       }
       int flg = fcntl(fileno(fp.get()), F_GETFD, 0);
       if (flg == -1) {
-	arena_error_throw(0, "-:-: Failed to fcntl(F_GETFD) '%s': errno=%d\n",
-	  fn.c_str(), errno);
+        arena_error_throw(0, "-:-: Failed to fcntl(F_GETFD) '%s': errno=%d\n",
+          fn.c_str(), errno);
       }
       flg |= FD_CLOEXEC; /* close on exec */
       if (fcntl(fileno(fp.get()), F_SETFD, flg) == -1) {
-	arena_error_throw(0, "-:-: Failed to fcntl(F_SETFD) '%s': errno=%d\n",
-	  fn.c_str(), errno);
+        arena_error_throw(0, "-:-: Failed to fcntl(F_SETFD) '%s': errno=%d\n",
+          fn.c_str(), errno);
       }
       if (flock(fileno(fp.get()), LOCK_EX) != 0) {
-	arena_error_throw(0, "-:-: Failed to lock '%s': errno=%d\n",
-	  fn.c_str(), errno);
+        arena_error_throw(0, "-:-: Failed to lock '%s': errno=%d\n",
+          fn.c_str(), errno);
       }
       afp = fp;
     }
@@ -1257,15 +1257,15 @@ static std::string subst_variables(const std::string& str,
     if (ch == '%' && i + 2 < str.size() && str[i + 1] == '{') {
       size_t p = i + 2;
       while (i + 1 < str.size() && str[i] != '}') {
-	++i;
+        ++i;
       }
       if (str[i] == '}') {
-	std::string k = str.substr(p, i - p);
-	std::map<std::string, std::string>::const_iterator iter = m.find(k);
-	if (iter != m.end()) {
-	  r.insert(r.end(), iter->second.begin(), iter->second.end());
-	}
-	continue;
+        std::string k = str.substr(p, i - p);
+        std::map<std::string, std::string>::const_iterator iter = m.find(k);
+        if (iter != m.end()) {
+          r.insert(r.end(), iter->second.begin(), iter->second.end());
+        }
+        continue;
       }
     }
     r.push_back(ch);
@@ -1387,12 +1387,12 @@ static int compile_and_execute(parser_options& po,
       mi.cc_srcs.clear();
       mi.cc_srcs_ord.clear();
       if (mi.aux_filename.empty() && mi.unique_namespace.empty()) {
-	/* this ns is removed from the dependency list */
-	continue;
+        /* this ns is removed from the dependency list */
+        continue;
       }
       get_indirect_imports(po, ami,
-	!mi.aux_filename.empty() ? mi.aux_filename : mi.unique_namespace,
-	true, mi.cc_srcs, mi.cc_srcs_ord);
+        !mi.aux_filename.empty() ? mi.aux_filename : mi.unique_namespace,
+        true, mi.cc_srcs, mi.cc_srcs_ord);
       loaded |= check_need_rebuild(po, ami, mi);
     }
     if (!loaded) {
@@ -1457,11 +1457,11 @@ static int compile_and_execute(parser_options& po,
     copy_file(ofn, ofn_tmp); /* throws */
     if (chmod(ofn_tmp.c_str(), 0755) != 0) {
       arena_error_throw(0, "-:-: chmod('%s') failed: errno=%d",
-	ofn_tmp.c_str(), errno);
+        ofn_tmp.c_str(), errno);
     }
     if (rename(ofn_tmp.c_str(), gen_out.c_str()) != 0) {
       arena_error_throw(0, "-:-: rename('%s', '%s') failed: errno=%d",
-	ofn_tmp.c_str(), gen_out.c_str(), errno);
+        ofn_tmp.c_str(), gen_out.c_str(), errno);
     }
     #endif
   }
@@ -1523,7 +1523,7 @@ static int clean_workdir(parser_options const& po, const std::string& dn)
 {
   if (dn.size() < 8 || dn.substr(dn.size() - 8) != ".pxcwork") {
     /* for safety */
-    fprintf(stderr, "internal error: invalid working directory: '%s'\n", 
+    fprintf(stderr, "internal error: invalid working directory: '%s'\n",
       dn.c_str());
     return 1;
   }
@@ -1592,43 +1592,43 @@ static int prepare_options(parser_options& po, int argc, char **argv)
     }
     if (s[0] == '-') {
       if (param.empty()) {
-	if (s == "--clean" || s == "-c") {
-	  po.clean_flag = true;
-	} else if (s == "--clean-all" || s == "-C") {
-	  po.clean_all_flag = true;
-	} else if (s == "--generate" || s == "-g") {
-	  po.gen_out = true;
-	} else if (s == "--generate-single-cc" || s == "-gs") {
-	  po.gen_single_cc = true;
-	} else if (s == "--no-build" || s == "-nb") {
-	  po.no_build = true;
-	} else if (s == "--no-update" || s == "-nu") {
-	  po.no_update = true;
-	} else if (s == "--no-execute" || s == "-ne") {
-	  po.no_execute = true;
-	} else if (s == "--no-realpath") {
-	  po.no_realpath = true; /* for regression test */
-	} else {
-	  err = true;
-	}
-      } else { 
-	if (s == "--verbose" || s == "-v") {
-	  po.verbose = atoi(param.c_str());
-	} else if (s == "--profile" || s == "-p") {
-	  po.profile_name = param;
-	} else if (s == "--work-dir" || s == "-w") {
-	  po.work_dir = param;
-	} else if (s == "--generate-cc") {
-	  po.gen_cc_dir = param;
-	} else if (s == "--trim-path") {
-	  po.trim_path = atoi(param.c_str()); /* for regression test */
-	} else {
-	  err = true;
-	}
+        if (s == "--clean" || s == "-c") {
+          po.clean_flag = true;
+        } else if (s == "--clean-all" || s == "-C") {
+          po.clean_all_flag = true;
+        } else if (s == "--generate" || s == "-g") {
+          po.gen_out = true;
+        } else if (s == "--generate-single-cc" || s == "-gs") {
+          po.gen_single_cc = true;
+        } else if (s == "--no-build" || s == "-nb") {
+          po.no_build = true;
+        } else if (s == "--no-update" || s == "-nu") {
+          po.no_update = true;
+        } else if (s == "--no-execute" || s == "-ne") {
+          po.no_execute = true;
+        } else if (s == "--no-realpath") {
+          po.no_realpath = true; /* for regression test */
+        } else {
+          err = true;
+        }
+      } else {
+        if (s == "--verbose" || s == "-v") {
+          po.verbose = atoi(param.c_str());
+        } else if (s == "--profile" || s == "-p") {
+          po.profile_name = param;
+        } else if (s == "--work-dir" || s == "-w") {
+          po.work_dir = param;
+        } else if (s == "--generate-cc") {
+          po.gen_cc_dir = param;
+        } else if (s == "--trim-path") {
+          po.trim_path = atoi(param.c_str()); /* for regression test */
+        } else {
+          err = true;
+        }
       }
       if (err) {
-	fprintf(stderr, "Unknown option '%s'\n", arg.c_str());
-	break;
+        fprintf(stderr, "Unknown option '%s'\n", arg.c_str());
+        break;
       }
     } else {
       po.src_filename = s;
@@ -1677,7 +1677,7 @@ static int prepare_options(parser_options& po, int argc, char **argv)
       snprintf(buf, sizeof(buf), "PXC_ARG%d", c++);
       const char *p = getenv(buf);
       if (p == 0) {
-	break;
+        break;
       }
       unsetenv(buf);
     }
@@ -1692,18 +1692,18 @@ static int prepare_options(parser_options& po, int argc, char **argv)
       std::string dstr(*p);
       std::string prof_path;
       if (po.profile_name.empty()) {
-	prof_path = dstr + "/pxc/pxc.profile";
+        prof_path = dstr + "/pxc/pxc.profile";
       } else if (!po.no_realpath) {
-	if (po.profile_name.find('/') == std::string::npos) {
-	  prof_path = dstr + "/pxc/pxc_" + po.profile_name + ".profile";
-	} else {
-	  prof_path = po.profile_name;
-	}
-	prof_path = get_canonical_path(prof_path);
+        if (po.profile_name.find('/') == std::string::npos) {
+          prof_path = dstr + "/pxc/pxc_" + po.profile_name + ".profile";
+        } else {
+          prof_path = po.profile_name;
+        }
+        prof_path = get_canonical_path(prof_path);
       }
       if (file_access(prof_path)) {
-	po.profile_name = prof_path;
-	break;
+        po.profile_name = prof_path;
+        break;
       }
     }
   }
@@ -1741,13 +1741,13 @@ static int cdriver_main(int argc, char **argv)
     if (po.clean_flag) {
       r = clean_workdir(po, po.work_dir);
       if (r != 0) {
-	return r;
+        return r;
       }
     }
     if (!po.src_filename.empty()) {
       std::string fn = po.src_filename;
       if (!po.no_realpath) {
-	fn = get_canonical_path(fn);
+        fn = get_canonical_path(fn);
       }
       return compile_and_execute(po, fn);
     }

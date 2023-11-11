@@ -1,0 +1,28 @@
+public threaded namespace core::numeric::union_tag "use-unsafe";
+public import core::numeric::integral -;
+public import core::meta m;
+
+public pure function {t} uint union_tag(t const& x)
+{
+  if (m::eq{m::family{t}, "union"}) {
+    return union_tag_impl(x);
+  } else {
+    return m::error{m::concat{"not implemented for type '", t, "'"}};
+  }
+}
+
+private pure function extern "pxcrt::union_tag_impl" {t}
+  uint union_tag_impl(t const& x);
+
+extern "functions" inline
+
+namespace pxcrt {
+
+template <typename T> unsigned int union_tag_impl(const T& x)
+{
+  return x.get_$e();
+}
+
+}; // pxcrt
+
+;

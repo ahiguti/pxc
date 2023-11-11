@@ -1,8 +1,8 @@
 public threaded namespace opengl::base "export-unsafe";
-public import common -;
-public import pointer::raw -;
-public import meta m;
-public import exception -;
+public import core::common -;
+public import core::pointer::raw -;
+public import core::meta m;
+public import core::exception -;
 
 public metafunction GLvoid void;
 public metafunction GLchar char;
@@ -20,15 +20,15 @@ public metafunction GLclampf float;
 public metafunction GLclampd double;
 public metafunction GLclampx int;
 
-public tsvaluetype struct extern "GLenum" "extenum" GLenum { }
-public tsvaluetype struct extern "GLbitfield" "extbitmask" GLbitfield { }
-public tsvaluetype struct extern "GLint64" "extsint" GLint64 { }
-public tsvaluetype struct extern "GLuint64" "extuint" GLuint64 { }
-public tsvaluetype struct extern "GLsizeiptr" "extsint" GLsizeiptr { }
-public tsvaluetype struct extern "GLintptr" "extsint" GLintptr { }
-public tsvaluetype struct extern "GLfixed" "extsint" GLfixed { }
-public tsvaluetype struct extern "GLDEBUGPROC" GLDEBUGPROC { }
-public tsvaluetype struct extern "GLsync" "extenum" GLsync { }
+public pure tsvaluetype struct extern "GLenum" "extenum" GLenum { }
+public pure tsvaluetype struct extern "GLbitfield" "extbitmask" GLbitfield { }
+public pure tsvaluetype struct extern "GLint64" "extsint" GLint64 { }
+public pure tsvaluetype struct extern "GLuint64" "extuint" GLuint64 { }
+public pure tsvaluetype struct extern "GLsizeiptr" "extsint" GLsizeiptr { }
+public pure tsvaluetype struct extern "GLintptr" "extsint" GLintptr { }
+public pure tsvaluetype struct extern "GLfixed" "extsint" GLfixed { }
+public pure tsvaluetype struct extern "GLDEBUGPROC" GLDEBUGPROC { }
+public pure tsvaluetype struct extern "GLsync" "extenum" GLsync { }
 
 public function {gl_bfvals, gl_enumvals, gl_cmds} expand
 macro_define_api
@@ -42,25 +42,26 @@ macro_define_api
   expand(sym0, i : m::map{gl_cmds, m::at0}) {
     expand(sym1 : {m::concat{sym0, "_nocheck"}}) {
       expand(sym_c : {m::concat{"::", sym0}}) {
-	public threaded function extern "sym_c"
-	opengl::base::ent_to_ret_type{m::at{gl_cmds, i}}
-	  sym1(expand(opengl::base::ent_to_argdefs{m::at{gl_cmds, i}}));
-	public threaded function opengl::base::ent_to_ret_type{m::at{gl_cmds, i}}
-	  sym0(expand(opengl::base::ent_to_argdefs{m::at{gl_cmds, i}}))
-	{
-	  metafunction cmd m::at{gl_cmds, i};
-	  metafunction rt opengl::base::ent_to_ret_type{cmd};
-	  if (m::ne{rt, void}) {
-	    const r = sym1(expand(a: opengl::base::ent_to_argnames{cmd}; a));
-	    if (m::ne{sym0, "glGetError"}) {
-	      gl_check_error_if(m::to_string{sym0});
-	    }
-	    return r;
-	  } else {
-	    sym1(expand(a: opengl::base::ent_to_argnames{cmd}; a));
-	    gl_check_error_if(m::to_string{sym0});
-	  }
-	}
+        public threaded function extern "sym_c"
+        opengl::base::ent_to_ret_type{m::at{gl_cmds, i}}
+          sym1(expand(opengl::base::ent_to_argdefs{m::at{gl_cmds, i}}));
+        public threaded function
+          opengl::base::ent_to_ret_type{m::at{gl_cmds, i}}
+            sym0(expand(opengl::base::ent_to_argdefs{m::at{gl_cmds, i}}))
+        {
+          metafunction cmd m::at{gl_cmds, i};
+          metafunction rt opengl::base::ent_to_ret_type{cmd};
+          if (m::ne{rt, void}) {
+            const r = sym1(expand(a: opengl::base::ent_to_argnames{cmd}; a));
+            if (m::ne{sym0, "glGetError"}) {
+              gl_check_error_if(m::to_string{sym0});
+            }
+            return r;
+          } else {
+            sym1(expand(a: opengl::base::ent_to_argnames{cmd}; a));
+            gl_check_error_if(m::to_string{sym0});
+          }
+        }
       }
     }
   }
@@ -74,10 +75,10 @@ public metafunction ent_to_argdefs{ent}
     m::slice{ent, 2},
     metafunction{x} m::apply{
       metafunction{xt} m::list{
-	/* name */ m::at0{x},
-	/* type */ m::at1{xt},
-	/* byref - if it's a slice-wrapper */ 0,
-	/* mutable */ 0},
+        /* name */ m::at0{x},
+        /* type */ m::at1{xt},
+        /* byref - if it's a slice-wrapper */ 0,
+        /* mutable */ 0},
       /* xt := */ find_type{m::at1{x}}}};
 
 public metafunction ent_to_argnames{ent}
@@ -87,19 +88,19 @@ public metafunction ent_to_argnames{ent}
       metafunction{xt} m::at0{x},
       /* xt := */ find_type{m::at1{x}}}};
 
-public threaded function extern "pxcrt::gl::offset_to_void_cp" crawptr{void}
+public pure function extern "pxcrt::gl::offset_to_void_cp" crawptr{void}
 offset_to_void_cp(size_t x); /* for glVertexPointer() */
 
-public threaded function extern "pxcrt::gl::ccharptr_to_string" string
+public pure function extern "pxcrt::gl::ccharptr_to_string" string
 ccharptr_to_string(ccharptr x);
 
-public threaded function extern "pxcrt::gl::charptr_to_string" string
+public pure function extern "pxcrt::gl::charptr_to_string" string
 charptr_to_string(charptr x);
 
-public threaded function extern "pxcrt::gl::cubptr_to_string" string
+public pure function extern "pxcrt::gl::cubptr_to_string" string
 cubptr_to_string(crawptr{GLubyte} x);
 
-public threaded function extern "pxcrt::gl::ubptr_to_string" string
+public pure function extern "pxcrt::gl::ubptr_to_string" string
 ubptr_to_string(rawptr{GLubyte} x);
 
 public threaded function extern "pxcrt::gl::get_check_error_enabled" int
@@ -199,7 +200,7 @@ static inline bt_string cubptr_to_string(const GLubyte *x)
 static inline bt_string ubptr_to_string(GLubyte *x)
 { return ccharptr_to_string(reinterpret_cast<const char *>(x)); }
 
-extern int check_error_enabled;
+extern thread_local int check_error_enabled;
 
 static inline bt_int get_check_error_enabled()
 { return check_error_enabled; }
@@ -213,7 +214,7 @@ static inline void set_check_error_enabled(bt_int v)
 extern "implementation" inline
 namespace pxcrt { namespace gl {
 
-int check_error_enabled = 0;
+thread_local int check_error_enabled = 0;
 
 }; };
 ;

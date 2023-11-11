@@ -1,7 +1,7 @@
 namespace foreach3;
-public import common -;
-public import meta m;
-public import meta::vararg va;
+public import core::common -;
+public import core::meta m;
+public import core::meta::vararg va;
 
 metafunction range_foreach_xdecls{f} m::join_list{m::map{
   m::seq{m::size{m::arg_types{f}}},
@@ -11,7 +11,7 @@ metafunction range_foreach_xdecls{f} m::join_list{m::map{
       {m::concat{"x", m::add{i, i, 1}}, m::at{m::arg_types{f}, i}, 0, 0}
     }}};
 
-threaded function {f} void
+pure function {f} void
 range_foreach(expand(range_foreach_xdecls{f}))
 {
   metafunction tlist m::arg_types{f};
@@ -37,7 +37,7 @@ range_foreach(expand(range_foreach_xdecls{f}))
         m::seq{m::size{tlist1}},
         metafunction{i} m::concat{"a", i}};
       metafunction xnames1 m::slice{xnames, 2};
-      threaded function void f1(expand(adecls))
+      pure function void f1(expand(adecls))
       {
         f(x, expand(s: anames; s));
       }
@@ -46,7 +46,7 @@ range_foreach(expand(range_foreach_xdecls{f}))
   }
 }
 
-public threaded function uchar foo()
+public pure function uchar foo()
 {
   uchar v;
   /*
@@ -57,7 +57,7 @@ public threaded function uchar foo()
   }
   range_foreach{bar}(0, 3, 1, 6, 3, 44);
   */
-  range_foreach{threaded function void(uchar x, uchar y, uchar z) {
+  range_foreach{pure function void(uchar x, uchar y, uchar z) {
     v += x * y * z;
   }}(0, 3, 1, 6, 3, 44);
   return v;

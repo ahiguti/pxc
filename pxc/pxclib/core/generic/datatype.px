@@ -1,0 +1,75 @@
+public threaded namespace core::generic::datatype;
+public import core::numeric::integral -;
+public import core::meta -;
+public import core::meta m;
+public import core::meta::vararg va;
+
+public pure tsvaluetype struct {types, ord}
+n_tuple(expand(
+  m::map{
+    m::seq{m::size{types}},
+    metafunction{i} m::list{m::concat{"a", i}, m::at{types, i}, 1, 0}}))
+{
+  public metafunction __attribute__ {{"__order__", ord}};
+  public metafunction __static_assert__
+    m::cond{
+      m::fold{ord, metafunction{r, x} m::and{r, m::is_int{x}}, 1},
+      1,
+      m::error{"ord is invalid"}}; /* ord must be a list of int */
+  expand (s, i: va::field_names{m::size{types}}) {
+    expand (a: m::list{m::concat{"a", i}}) {
+      public m::at{types, i} s = a;
+    }
+  }
+}
+
+public pure function {tlist} n_tuple{m::map{tlist, m::at0}, m::nil}
+make_n_tuple(expand(va::arg_decls_bycref{tlist}))
+{
+  metafunction typ n_tuple{m::map{tlist, m::at0}, m::nil};
+  return typ(expand(a: va::arg_names{m::size{tlist}}; a));
+}
+
+public pure tsvaluetype union {types, ord}
+n_union
+{
+  public metafunction __attribute__ {{"__order__", ord}};
+  public metafunction __static_assert__
+    m::cond{
+      m::fold{ord, metafunction{r, x} m::and{r, m::is_int{x}}, 1},
+      1,
+      m::error{"ord is invalid"}}; /* ord must be a list of int */
+  expand (s, i: va::field_names{m::size{types}}) {
+    public m::at{types, i} s;
+  }
+}
+
+public pure tsvaluetype struct {t0, t1}
+pair(t0 const& a0, t1 const& a1)
+{
+  public t0 first = a0;
+  public t1 second = a1;
+}
+
+public pure tsvaluetype union {t0, t1}
+either
+{
+  public t0 first;
+  public t1 second;
+}
+
+public pure tsvaluetype union {t}
+option
+{
+  public unit none;
+  public t some;
+}
+
+public pure function {t} option{t}
+make_option(t const& v)
+{
+  option{t} r;
+  r.some = v;
+  return r;
+}
+

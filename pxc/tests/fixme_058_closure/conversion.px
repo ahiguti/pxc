@@ -1,15 +1,15 @@
 public namespace string::conversion;
-public import numeric::integral -;
-public import container::string -;
-public import meta m;
-public import meta::family mf;
-public import numeric::cast n;
+public import core::numeric::integral -;
+public import core::container::string -;
+public import core::meta m;
+public import core::meta::family mf;
+public import core::numeric::cast n;
 public import string::positional p;
 public import string::serialize -;
 public import string::deserialize -;
 public import string::url_encode u;
 
-public threaded function {t} string to_string(t const& x)
+public pure function {t} string to_string(t const& x)
 {
   if (is_string_or_slice_type{t}) {
     return x;
@@ -20,12 +20,12 @@ public threaded function {t} string to_string(t const& x)
   }
 }
 
-public threaded function {t} void serialize_to_string(t const& x, string& out)
+public pure function {t} void serialize_to_string(t const& x, string& out)
 {
   serialize{serialize_tpl, t}(x, out);
 }
 
-public threaded function {t} t from_string(cstrref const& s)
+public pure function {t} t from_string(cstrref const& s)
 {
   if (is_string_or_slice_type{t}) {
     return s;
@@ -36,13 +36,13 @@ public threaded function {t} t from_string(cstrref const& s)
   }
 }
 
-public threaded function {t} t deserialize_from_string(cstrref& s,
+public pure function {t} t deserialize_from_string(cstrref& s,
   size_t& epos_r)
 {
   return deserialize{deserialize_tpl, t}(s, epos_r);
 }
 
-private threaded function void bool_to_string(bool v, string& buf)
+private pure function void bool_to_string(bool v, string& buf)
 {
   if (v) {
     buf.append("true");
@@ -51,28 +51,28 @@ private threaded function void bool_to_string(bool v, string& buf)
   }
 }
 
-private threaded function {t} void string_append_escape(t const& x, string& v)
+private pure function {t} void string_append_escape(t const& x, string& v)
 {
   u::url_encode(v, x);
 }
-private threaded function {t} void string_append_noesc(t const& x, string& v)
+private pure function {t} void string_append_noesc(t const& x, string& v)
 {
   v.append(x);
 }
-private threaded function void string_append_brace_open(string& v)
+private pure function void string_append_brace_open(string& v)
 { v.push_back('{'); }
-private threaded function void string_append_brace_close(string& v)
+private pure function void string_append_brace_close(string& v)
 { v.push_back('}'); }
-private threaded function void string_append_comma(string& v)
+private pure function void string_append_comma(string& v)
 { v.push_back(','); }
-private threaded function void string_append_none(string& v)
-{ } 
-private threaded function {t} void string_append_star(t const& x, string& v)
+private pure function void string_append_none(string& v)
+{ }
+private pure function {t} void string_append_star(t const& x, string& v)
 { v.push_back('*'); }
-private threaded function {t} void string_append_unknown(t const& x, string& v)
+private pure function {t} void string_append_unknown(t const& x, string& v)
 { v.push_back('?'); }
 
-private threaded struct serialize_tpl {
+private pure struct serialize_tpl {
   metafunction target_type string;
   metafunction symstr{t} m::concat{t, "_append_to_string"};
   metafunction sym{t} m::symbol{m::nsof{t}, symstr{t}};
@@ -111,14 +111,14 @@ private threaded struct serialize_tpl {
   metafunction unknown{fam} string_append_unknown;
 }
 
-private threaded function size_t token_length(cstrref const& s)
+private pure function size_t token_length(cstrref const& s)
 {
   for (size_t i, uchar ch : s) {
     if (ch == '{') {
       if (i == 0) {
-	return find_brace_close(s[1 .. s.size()]) + 1;
+        return find_brace_close(s[1 .. s.size()]) + 1;
       } else {
-	return i;
+        return i;
       }
     }
     if (ch == '}' || ch == ',') {
@@ -127,13 +127,13 @@ private threaded function size_t token_length(cstrref const& s)
   }
   return s.size();
 }
-private threaded function size_t find_brace_close(cstrref const& s)
+private pure function size_t find_brace_close(cstrref const& s)
 {
   size_t level = 1;
   for (size_t i, uchar ch : s) {
     if (ch == '}') {
       if (--level == 0) {
-	return i + 1;
+        return i + 1;
       }
     } else if (ch == '{') {
       ++level;
@@ -141,33 +141,33 @@ private threaded function size_t find_brace_close(cstrref const& s)
   }
   return s.size();
 }
-private threaded function {t, f} t string_parse_token(cstrref& s)
+private pure function {t, f} t string_parse_token(cstrref& s)
 {
   size_t const toklen = token_length(s);
   cstrref stok = s[0 .. toklen];
   s.pop_front(toklen);
   return f(stok);
 }
-private threaded function string string_parse_string_unescape(cstrref& s)
+private pure function string string_parse_string_unescape(cstrref& s)
 {
-  threaded function string decode(cstrref const& stok) {
+  pure function string decode(cstrref const& stok) {
     string r;
     u::url_decode(r, stok);
     return r;
   }
   return string_parse_token{string, decode}(s);
 }
-private threaded function {t} t string_parse_integral(cstrref& s)
+private pure function {t} t string_parse_integral(cstrref& s)
 {
   string_parse_token{t, p::decimal_to_integral{t}}(s);
 }
-private threaded function {t} t string_parse_fp(cstrref& s)
+private pure function {t} t string_parse_fp(cstrref& s)
 {
   string_parse_token{t, p::decimal_to_fp{t}}(s);
 }
-private threaded function bool string_parse_bool(cstrref& s)
+private pure function bool string_parse_bool(cstrref& s)
 {
-  threaded function bool parse_bool(cstrref const& stok) {
+  pure function bool parse_bool(cstrref const& stok) {
     if (stok == "true") {
       return true;
     } else {
@@ -176,14 +176,14 @@ private threaded function bool string_parse_bool(cstrref& s)
   }
   return string_parse_token{bool, parse_bool}(s);
 }
-private threaded function void string_parse_symbol(cstrref& stok, cstrref& s)
+private pure function void string_parse_symbol(cstrref& stok, cstrref& s)
 {
   size_t const sz = stok.size();
   size_t const toklen = token_length(stok);
   stok.pop_back(sz - toklen);
   s.pop_front(toklen);
 }
-private threaded function bool string_parse_char_cond(cstrref& s, uchar ch)
+private pure function bool string_parse_char_cond(cstrref& s, uchar ch)
 {
   if (s.size() > 0 && s[0] == ch) {
     s.pop_front(1);
@@ -192,32 +192,32 @@ private threaded function bool string_parse_char_cond(cstrref& s, uchar ch)
     return false;
   }
 }
-private threaded function void string_parse_brace_close_skip(cstrref& s)
+private pure function void string_parse_brace_close_skip(cstrref& s)
 {
   size_t level = 1;
   for (size_t i, uchar ch : s) {
     if (ch == '}') {
       if (--level == 0) {
-	s.pop_front(i + 1);
-	return;
+        s.pop_front(i + 1);
+        return;
       }
     } else if (ch == '{') {
       ++level;
     }
   }
 }
-private threaded function void string_parse_token_skip(cstrref& s)
+private pure function void string_parse_token_skip(cstrref& s)
 {
   size_t const toklen = token_length(s);
   s.pop_front(toklen);
 }
-private threaded function bool string_parse_brace_open_cond(cstrref& s)
+private pure function bool string_parse_brace_open_cond(cstrref& s)
 { return string_parse_char_cond(s, '{'); }
-private threaded function bool string_parse_brace_close_cond(cstrref& s)
+private pure function bool string_parse_brace_close_cond(cstrref& s)
 { return string_parse_char_cond(s, '}'); }
-private threaded function bool string_parse_comma_cond(cstrref& s)
+private pure function bool string_parse_comma_cond(cstrref& s)
 { return string_parse_char_cond(s, ','); }
-private threaded struct deserialize_tpl {
+private pure struct deserialize_tpl {
   metafunction source_type cstrref;
   metafunction symstr{t} m::concat{t, "_parse_from_string"};
   metafunction sym{t} m::symbol{m::nsof{t}, symstr{t}};

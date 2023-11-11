@@ -1,0 +1,101 @@
+public threaded namespace core::fundamental::debug_object "use-unsafe";
+public import core::meta::initial -;
+public import core::numeric::integral -;
+
+public pure tsvaluetype struct {key} debug_count
+{
+  private debug_count_tmpl{s{key}} object;
+  public function long get() const { return object.get(); }
+}
+
+public pure tsvaluetype struct {key} debug_trace
+{
+  private debug_trace_tmpl{s{key}} object;
+}
+
+private pure tsvaluetype struct {key} s { }
+
+private pure tsvaluetype struct extern "::pxcrt::debug_count" {t}
+debug_count_tmpl
+{
+  public function extern "get" long get() const;
+}
+
+private pure tsvaluetype struct extern "::pxcrt::debug_trace" {t}
+debug_trace_tmpl
+{
+}
+
+extern "types" inline
+
+#include <cstdio>
+#include <cstdlib>
+#include <typeinfo>
+
+namespace pxcrt {
+
+template <typename T> struct debug_count_exit_hook {
+  debug_count_exit_hook();
+  ~debug_count_exit_hook();
+  void dummy() { }
+};
+
+template <typename T> struct debug_count {
+  debug_count() {
+    count.incref$z();
+    exit_hook.dummy();
+  }
+  debug_count(const debug_count&) {
+    count.incref$z();
+  }
+  debug_count(debug_count&&) {
+    count.incref$z();
+  }
+  ~debug_count() {
+    count.decref$z();
+  }
+  bt_long get() const {
+    return count.refcnt$z();
+  }
+  static mtcount count;
+  static debug_count_exit_hook<T> exit_hook;
+};
+
+template <typename T> mtcount debug_count<T>::count;
+template <typename T> debug_count_exit_hook<T> debug_count<T>::exit_hook;
+
+template <typename T> debug_count_exit_hook<T>::debug_count_exit_hook()
+{
+  // char buf[1024];
+  // snprintf(buf, 1024, "constr %s: %ld\n", typeid(T).name(),
+  //   debug_count<T>::count.load());
+  // ::write(1, buf, strlen(buf));
+}
+
+template <typename T> debug_count_exit_hook<T>::~debug_count_exit_hook()
+{
+  char buf[1024];
+  snprintf(buf, 1024, "%s: %ld\n", typeid(T).name(),
+    debug_count<T>::count.refcnt$z());
+  ::write(1, buf, strlen(buf));
+}
+
+template <typename T> struct debug_trace {
+  debug_trace() {
+    fprintf(stderr, "%s: def %p\n", typeid(T).name(), this);
+  }
+  debug_trace(const debug_trace&) {
+    fprintf(stderr, "%s: cpy %p\n", typeid(T).name(), this);
+  }
+  debug_trace(debug_trace&&) {
+    fprintf(stderr, "%s: mov %p\n", typeid(T).name(), this);
+  }
+  ~debug_trace() {
+    fprintf(stderr, "%s: des %p\n", typeid(T).name(), this);
+  }
+};
+
+};
+
+;
+

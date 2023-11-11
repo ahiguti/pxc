@@ -1,19 +1,19 @@
 public namespace echo_server;
-import common -;
-import io -;
-import io::file -;
-import io::errno -;
-import io::standard -;
-import io::buffered -;
+import core::common -;
+import core::io -;
+import core::io::file -;
+import core::io::errno -;
+import core::io::standard -;
+import core::io::buffered -;
 import string::conversion -;
-import io::net::addrinfo -;
-import io::net::socket -;
-import io::signal -;
-import meta -;
+import core::io::net::addrinfo -;
+import core::io::net::socket -;
+import core::io::signal -;
+import core::meta -;
 import error -;
 import thread -;
 
-threaded function void echo_server_worker(socket_acceptor const& acc)
+pure function void echo_server_worker(socket_acceptor const& acc)
 {
   var peer_addr = sockaddr_storage();
   var eh = errno_handler(handle_keep);
@@ -21,9 +21,9 @@ threaded function void echo_server_worker(socket_acceptor const& acc)
     try {
       var conn = accept(acc, peer_addr, eh);
       stream_foreach{file, parse_line}(conn, '\n', 4096, eh);
-      threaded function bool parse_line(cslice{uchar} const& line) {
-	conn.write(line, eh);
-	return true;
+      pure function bool parse_line(cslice{uchar} const& line) {
+        conn.write(line, eh);
+        return true;
       }
     } catch (exception e) {
       /* ignore */
@@ -31,7 +31,7 @@ threaded function void echo_server_worker(socket_acceptor const& acc)
   }
 }
 
-multithreaded struct echo_server_worker_thread(socket_acceptor const& a)
+pure multithreaded struct echo_server_worker_thread(socket_acceptor const& a)
 {
   socket_acceptor acc = a;
   function void main() {

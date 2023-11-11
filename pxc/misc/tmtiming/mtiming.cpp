@@ -18,10 +18,10 @@ struct compare {
     size_t cl = std::min(xl, yl);
     for (size_t i = 0; i * 8 < cl; ++i) {
       if (xp[i] < yp[i]) {
-	return true;
+        return true;
       }
       if (xp[i] > yp[i]) {
-	return false;
+        return false;
       }
     }
     if (xl < yl) {

@@ -1,14 +1,14 @@
 public namespace cube3 "export-unsafe";
-import common -;
-import pointer::raw -;
-import numeric::fpmath -;
-import numeric::quaternion -;
+import core::common -;
+import core::pointer::raw -;
+import core::numeric::fpmath -;
+import core::numeric::quaternion -;
 import SDL2 -;
 import SDL2::Image -;
 import GL::gles2 -;
 import GL::glm glm;
-import io::time -;
-import meta m;
+import core::io::time -;
+import core::meta m;
 import glutil -;
 
 metafunction debug_matrix 0;
@@ -145,7 +145,7 @@ function void draw_frame(vertices mutable& vs,
 }
 
 function void reshape(int width, int height)
-{ 
+{
   double h = static_cast{double}(height) / static_cast{double}(width);
   glViewport(0, 0, static_cast{GLsizei}(width), static_cast{GLsizei}(height));
   projection = glm::frustum{float}(-1.0, 1.0,
@@ -368,35 +368,35 @@ function void init_gl(vertices mutable& vs)
     while (SDL_PollEvent(ev)) {
       const etype = ev.type;
       if (etype == SDL_WINDOWEVENT) {
-	if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
-	  const w = ev.window.data1;
-	  const h = ev.window.data2;
-	  SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	    string_join{""}("resized w=", w, " h=", h));
-	  reshape(w, h);
-	}
+        if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
+          const w = ev.window.data1;
+          const h = ev.window.data2;
+          SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
+            string_join{""}("resized w=", w, " h=", h));
+          reshape(w, h);
+        }
       } else if (etype == SDL_FINGERMOTION) {
-	const dx = ev.tfinger.dx * 500.0;
-	const dy = ev.tfinger.dy * 500.0;
-	rotate(1.0, 0.0, 0.0, -dy);
-	rotate(0.0, 1.0, 0.0, -dx);
+        const dx = ev.tfinger.dx * 500.0;
+        const dy = ev.tfinger.dy * 500.0;
+        rotate(1.0, 0.0, 0.0, -dy);
+        rotate(0.0, 1.0, 0.0, -dx);
       } else if (etype == SDL_MULTIGESTURE) {
-	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	  string_join{""}("multigesture dTheta=", ev.mgesture.dTheta,
-	    " dDist=", ev.mgesture.dDist));
+        SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
+          string_join{""}("multigesture dTheta=", ev.mgesture.dTheta,
+            " dDist=", ev.mgesture.dDist));
       } else if (etype == SDL_APP_WILLENTERBACKGROUND) {
-	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("paused"));
-	paused = true;
+        SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("paused"));
+        paused = true;
       } else if (etype == SDL_APP_DIDENTERFOREGROUND) {
-	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("resumed"));
-	paused = false;
-	int w;
-	int h;
-	SDL_GetWindowSize(wnd, w, h);
-	reshape(w, h);
+        SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("resumed"));
+        paused = false;
+        int w;
+        int h;
+        SDL_GetWindowSize(wnd, w, h);
+        reshape(w, h);
       } else if (etype == SDL_QUIT) {
-	done = true;
-	break;
+        done = true;
+        break;
       }
     }
     if (paused) {
@@ -410,16 +410,16 @@ function void init_gl(vertices mutable& vs)
       ++frames;
       uint t = SDL_GetTicks();
       if (t - t0 >= 1000) {
-	const seconds = static_cast{float}(t - t0) / 1000.0;
-	const fps = static_cast{float}(frames) / seconds;
-	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	  string_join{" "}(frames, "frames in", seconds, "seconds =",
-	    fps, "fps"));
-	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	  string_join{" "}("ticks: ", ticks_sum));
-	ticks_sum = ticks_t();
-	t0 = t;
-	frames = 0;
+        const seconds = static_cast{float}(t - t0) / 1000.0;
+        const fps = static_cast{float}(frames) / seconds;
+        SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
+          string_join{" "}(frames, "frames in", seconds, "seconds =",
+            fps, "fps"));
+        SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
+          string_join{" "}("ticks: ", ticks_sum));
+        ticks_sum = ticks_t();
+        t0 = t;
+        frames = 0;
       }
       /*
       gears_angle += static_cast{float}(t - tprev) / 20.0;
@@ -427,15 +427,15 @@ function void init_gl(vertices mutable& vs)
       */
       tprev = t;
       if (t - t1 >= 10) {
-	if (t - t1 >= 10) {
-	  t1 += 10;
-	}
-	SDL_KeyboardState const ks;
-	if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) { done = true; }
-	if (ks.Key(SDL_SCANCODE_UP) != 0) { rotate(1.0, 0.0, 0.0, 2.0); }
-	if (ks.Key(SDL_SCANCODE_DOWN) != 0) { rotate(1.0, 0.0, 0.0, -2.0); }
-	if (ks.Key(SDL_SCANCODE_LEFT) != 0) { rotate(0.0, 1.0, 0.0, 2.0); }
-	if (ks.Key(SDL_SCANCODE_RIGHT) != 0) { rotate(0.0, 1.0, 0.0, -2.0); }
+        if (t - t1 >= 10) {
+          t1 += 10;
+        }
+        SDL_KeyboardState const ks;
+        if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) { done = true; }
+        if (ks.Key(SDL_SCANCODE_UP) != 0) { rotate(1.0, 0.0, 0.0, 2.0); }
+        if (ks.Key(SDL_SCANCODE_DOWN) != 0) { rotate(1.0, 0.0, 0.0, -2.0); }
+        if (ks.Key(SDL_SCANCODE_LEFT) != 0) { rotate(0.0, 1.0, 0.0, 2.0); }
+        if (ks.Key(SDL_SCANCODE_RIGHT) != 0) { rotate(0.0, 1.0, 0.0, -2.0); }
       }
     }
     save_ticks(3);

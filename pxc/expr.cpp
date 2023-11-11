@@ -142,32 +142,13 @@ expr_i *expr_tparams_new(const char *fn, int line, const char *sym,
 { return arena_push(new expr_tparams(fn, line, sym, is_variadic_metaf,
   rest)); }
 
-#if 0
-expr_i *expr_te_local_chain_new(expr_i *te1, expr_i *te2)
-{
-  // FIXME: remove. deprecated.
-  /* te1::te2expr{te2args, ...} => meta::local{te1, "te2expr", te2args, ...} */
-  expr_te *const tte2 = ptr_down_cast<expr_te>(te2);
-  std::string s = escape_c_str_literal(tte2->nssym->sym);
-  char *const te2expr = arena_strdup(s.c_str());
-  return expr_te_new(te1->fname, te1->line,
-    expr_nssym_new(te1->fname, te1->line,
-      expr_nssym_new(te1->fname, te1->line, 0, "meta"), "@local"),
-      expr_telist_new(te1->fname, te1->line,
-	te1,
-	expr_telist_new(te2->fname, te2->line,
-	  expr_str_literal_new(te2->fname, te2->line, te2expr),
-	  tte2->tlarg)));
-  abort();
-}
-#endif
-
 expr_i *expr_metalist_new(expr_i *tl)
 {
   return expr_te_new(tl->fname, tl->line,
     expr_nssym_new(tl->fname, tl->line,
-      expr_nssym_new(tl->fname, tl->line, 0, "meta"), "@list"),
-	// TODO: type::common does not exist
+      expr_nssym_new(tl->fname, tl->line,
+        expr_nssym_new(tl->fname, tl->line,
+          0, "core"), "meta"), "@list"),
     tl);
 }
 
@@ -422,10 +403,9 @@ static void define_builtins()
     const builtin_typedefs_type *const be = builtin_typedefs + i;
     expr_typedef *const etd = ptr_down_cast<expr_typedef>(
       expr_typedef_new("BUILTIN", 0, be->name,
-	be->cname, be->family, false, false, 0, be->num_tparams,
-	attribute_e(attribute_public |
-	  attribute_threaded | attribute_multithr | attribute_valuetype |
-	  attribute_tsvaluetype)));
+        be->cname, be->family, false, false, 0, be->num_tparams,
+        attribute_e(attribute_public | attribute_threaded | attribute_pure |
+          attribute_multithr | attribute_valuetype | attribute_tsvaluetype)));
     etd->tattr = be->tattr;
     (*be->tptr) = etd->get_value_texpr();
     stmts = expr_stmts_new("", 0, etd, stmts);
@@ -437,7 +417,7 @@ static void define_builtins()
   /* set namespace */
   {
     int block_id_ns = 0;
-    fn_set_namespace(stmts, "meta", block_id_ns, true);
+    fn_set_namespace(stmts, "core::meta", block_id_ns, true);
   }
   topvals.push_front(stmts);
   /* stubs for builtin metafunctions */
@@ -452,8 +432,8 @@ static void define_builtins()
       arena_strdup("@local"),
       expr_block_new("BUILTIN", 0, 0, 0, 0, 0, passby_e_mutable_value, 0),
       attribute_e(attribute_public |
-	attribute_threaded | attribute_multithr | attribute_valuetype |
-	attribute_tsvaluetype), false, false);
+        attribute_threaded | attribute_pure | attribute_multithr |
+        attribute_valuetype | attribute_tsvaluetype), false, false);
     stmts = expr_stmts_new("", 0, est, stmts);
     #endif
     est = expr_struct_new("BUILTIN", 0,
@@ -461,15 +441,15 @@ static void define_builtins()
       arena_strdup("@list"),
       arena_strdup("@list"),
       expr_block_new("BUILTIN", 0, 0, 0, 0, 0, passby_e_mutable_value, 0),
-      attribute_e(attribute_public |
-	attribute_threaded | attribute_multithr | attribute_valuetype |
-	attribute_tsvaluetype), false, false);
+      attribute_e(attribute_public | attribute_threaded | attribute_pure |
+        attribute_multithr | attribute_valuetype | attribute_tsvaluetype),
+        false, false);
     stmts = expr_stmts_new("", 0, est, stmts);
-  }  
+  }
   /* set namespace */
   {
     int block_id_ns = 0;
-    fn_set_namespace(stmts, "meta", block_id_ns, true);
+    fn_set_namespace(stmts, "core::meta", block_id_ns, true);
   }
   topvals.push_front(stmts);
 }
@@ -484,7 +464,7 @@ static bool define_builtin_string(expr_stmts *stmts_runtime)
     }
     const std::string s(def->sym);
     const std::string ns(def->get_unique_namespace());
-    if (s == "strlit" && ns == "container::array") {
+    if (s == "strlit" && ns == "core::container::array") {
       builtins.type_strlit = def->get_value_texpr();
     }
   }
@@ -517,18 +497,18 @@ void arena_append_topval(std::list<expr_i *>& tvs, bool is_main,
     for (std::list<expr_i *>::const_iterator i = tvs.begin();
       i != tvs.end(); ++i) {
       if ((*i) == 0) {
-	continue;
+        continue;
       }
       if (topval == 0) {
-	topval = (*i);
+        topval = (*i);
       }
       expr_stmts *stmts = ptr_down_cast<expr_stmts>(*i);
       if (last != 0) {
-	last->set_rest(stmts);
+        last->set_rest(stmts);
       }
       last = stmts;
       while (last->rest != 0) {
-	last = last->rest;
+        last = last->rest;
       }
     }
   }
@@ -541,17 +521,17 @@ void arena_append_topval(std::list<expr_i *>& tvs, bool is_main,
     if (stmt->get_esort() == expr_e_ns) {
       expr_ns *ns = ptr_down_cast<expr_ns>(stmt);
       if (!ns->import) {
-	if (!uniqns.empty()) {
-	  arena_error_push(ns, "Duplicate namespace declaration");
-	}
-	uniqns = ns->uniq_nsstr;
-	ns_is_thr = ns->thr;
-	imports_r.main_unique_namespace = uniqns;
+        if (!uniqns.empty()) {
+          arena_error_push(ns, "Duplicate namespace declaration");
+        }
+        uniqns = ns->uniq_nsstr;
+        ns_is_thr = ns->thr;
+        imports_r.main_unique_namespace = uniqns;
       } else {
-	import_info ii;
-	ii.ns = ns->uniq_nsstr;
-	ii.import_public = ns->pub;
-	imports_r.deps.push_back(ii);
+        import_info ii;
+        ii.ns = ns->uniq_nsstr;
+        ii.import_public = ns->pub;
+        imports_r.deps.push_back(ii);
       }
     }
     e = ptr_down_cast<expr_stmts>(e)->rest;
@@ -587,14 +567,14 @@ fprintf(stderr, "compiled_ns init %s %p\n", uniqns.c_str(), topval);
     expr_i *stmt = ptr_down_cast<expr_stmts>(e)->head;
     if (stmt->get_esort() == expr_e_expand) {
       if (e == topval) {
-	arena_error_push(e,
-	  "Implementation restriction: first statement of a namespace must "
-	  "not be an 'expand' statement");
+        arena_error_push(e,
+          "Implementation restriction: first statement of a namespace must "
+          "not be an 'expand' statement");
       }
       if (ptr_down_cast<expr_stmts>(e)->rest == 0) {
-	arena_error_push(e,
-	  "Implementation restriction: last statement of a namespace must "
-	  "not be an 'expand' statement");
+        arena_error_push(e,
+          "Implementation restriction: last statement of a namespace must "
+          "not be an 'expand' statement");
       }
     }
     e = ptr_down_cast<expr_stmts>(e)->rest;

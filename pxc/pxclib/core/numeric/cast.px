@@ -1,0 +1,71 @@
+public threaded namespace core::numeric::cast "use-unsafe";
+public import core::numeric::integral -;
+public import core::numeric::fp -;
+public import core::meta m;
+public import core::meta::family mf;
+
+public pure function {tto, tfrom} tto numeric_cast(tfrom const& x)
+{
+  if (m::and{
+    mf::is_numeric_enum_bitmask_type{tfrom},
+    mf::is_numeric_enum_bitmask_type{tto}}) {
+    numeric_cast_impl{tto, tfrom} c;
+    return c.convert(x);
+  } else {
+    return m::error{"invalid numeric cast"};
+  }
+}
+
+public pure function {tto, tfrom} tto static_cast(tfrom const& x)
+{
+  if (m::and{
+    mf::is_numeric_enum_bitmask_type{tfrom},
+    mf::is_numeric_enum_bitmask_type{tto}}) {
+    static_cast_impl{tto, tfrom} c;
+    return c.convert(x);
+  } else {
+    return m::error{"invalid numeric cast"};
+  }
+}
+
+public pure function {t} void value_unused(t const& x)
+{
+}
+
+private pure struct extern "pxcrt::numeric::numeric_cast_impl" {tto, tfrom}
+numeric_cast_impl {
+  public function extern "convert" tto convert(tfrom const& x);
+}
+
+private pure struct extern "pxcrt::numeric::static_cast_impl" {tto, tfrom}
+static_cast_impl {
+  public function extern "convert" tto convert(tfrom const& x);
+}
+
+extern "types" inline
+
+/* workaround for boost/cstdint.hpp:52 */
+#ifndef __GLIBC_PREREQ
+#define __GLIBC_PREREQ(x, y) 0
+#endif
+#include <boost/cast.hpp>
+
+namespace pxcrt {
+namespace numeric {
+
+template <typename Tto, typename Tfrom> struct numeric_cast_impl {
+  Tto convert(Tfrom const& x) const {
+    return boost::numeric_cast<Tto>(x);
+  }
+};
+template <typename Tto, typename Tfrom> struct static_cast_impl {
+  Tto convert(Tfrom const& x) const {
+    return static_cast<Tto>(x);
+  }
+};
+
+}; // numeric
+}; // pxcrt
+
+;
+

@@ -33,15 +33,15 @@
  */
 
 public namespace sdl2gears "use-unsafe";
-import common -;
-import numeric::fpmath -;
+import core::common -;
+import core::numeric::fpmath -;
 import GL::compat -;
 import SDL2::api_base -;
 import SDL2::api_types -;
 import SDL2::api_functions -;
 import SDL2::misc -;
-import io::time -;
-import pointer::raw_unsafe -;
+import core::io::time -;
+import core::pointer::raw_unsafe -;
 
 float const M_PI = 3.14159265;
 
@@ -68,7 +68,7 @@ function void gear(float inner_radius, float outer_radius, float width,
     if (i < teeth_i) {
       glVertex3f(r0 * cos(angle), r0 * sin(angle), width * 0.5);
       glVertex3f(r1 * cos(angle + da * 3.0), r1 * sin(angle + da * 3.0),
-	width * 0.5);
+        width * 0.5);
     }
   }
   glEnd();
@@ -97,7 +97,7 @@ function void gear(float inner_radius, float outer_radius, float width,
     glVertex3f(r0 * cos(angle), r0 * sin(angle), -width * 0.5);
     if (i < teeth_i) {
       glVertex3f(r1 * cos(angle + da * 3.0), r1 * sin(angle + da * 3.0),
-	-width * 0.5);
+        -width * 0.5);
       glVertex3f(r0 * cos(angle), r0 * sin(angle), -width * 0.5);
     }
   }
@@ -206,7 +206,7 @@ function void draw()
 }
 
 function void reshape(int width, int height)
-{ 
+{
   double h = static_cast{double}(height) / static_cast{double}(width);
   glViewport(0, 0, static_cast{GLsizei}(width), static_cast{GLsizei}(height));
   glMatrixMode(GL_PROJECTION);
@@ -279,15 +279,15 @@ function void init()
     while (SDL_PollEvent(address(ev)) != 0) {
       const etype = ev.type;
       if (etype == SDL_WINDOWEVENT) {
-	if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
-	  const w = ev.window.data1;
-	  const h = ev.window.data2;
-	  println(string_join{""}("w=", w, " h=", h));
-	  reshape(w, h);
-	}
+        if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
+          const w = ev.window.data1;
+          const h = ev.window.data2;
+          println(string_join{""}("w=", w, " h=", h));
+          reshape(w, h);
+        }
       } else if (etype == SDL_QUIT) {
-	done = true;
-	break;
+        done = true;
+        break;
       }
     }
     draw();
@@ -296,35 +296,35 @@ function void init()
       ++frames;
       uint t = SDL_GetTicks();
       if (t - t0 >= 1000) {
-	const seconds = static_cast{float}(t - t0) / 1000.0;
-	const fps = static_cast{float}(frames) / seconds;
-	println(string_join{" "}(frames, "frames in", seconds, "seconds =",
-	  fps, "fps"));
-	t0 = t;
-	frames = 0;
+        const seconds = static_cast{float}(t - t0) / 1000.0;
+        const fps = static_cast{float}(frames) / seconds;
+        println(string_join{" "}(frames, "frames in", seconds, "seconds =",
+          fps, "fps"));
+        t0 = t;
+        frames = 0;
       }
       gears_angle += static_cast{float}(t - tprev) / 10.0;
       tprev = t;
       if (gears_angle > 360.0) {
-	gears_angle -= 360.0;
+        gears_angle -= 360.0;
       }
       if (t - t1 >= 10 || nowait) {
-	if (t - t1 >= 10) {
-	  t1 += 10;
-	}
-	// gears_angle += 1.0;
-	int numkeys;
-	const ksp = SDL_GetKeyboardState(address(numkeys));
-	const ks = ksp.to_cslice(static_cast{size_t}(numkeys));
-	function uint get_key(SDL_Scancode k) {
-	  return ks[static_cast{uint}(k)];
-	}
-	if (get_key(SDL_SCANCODE_ESCAPE) != 0) { done = true; }
-	if (get_key(SDL_SCANCODE_UP) != 0) { view_rotx += 1.0; }
-	if (get_key(SDL_SCANCODE_DOWN) != 0) { view_rotx -= 1.0; }
-	if (get_key(SDL_SCANCODE_LEFT) != 0) { view_roty += 1.0; }
-	if (get_key(SDL_SCANCODE_RIGHT) != 0) { view_roty -= 1.0; }
-	nowait = (get_key(SDL_SCANCODE_SPACE) != 0);
+        if (t - t1 >= 10) {
+          t1 += 10;
+        }
+        // gears_angle += 1.0;
+        int numkeys;
+        const ksp = SDL_GetKeyboardState(address(numkeys));
+        const ks = ksp.to_cslice(static_cast{size_t}(numkeys));
+        function uint get_key(SDL_Scancode k) {
+          return ks[static_cast{uint}(k)];
+        }
+        if (get_key(SDL_SCANCODE_ESCAPE) != 0) { done = true; }
+        if (get_key(SDL_SCANCODE_UP) != 0) { view_rotx += 1.0; }
+        if (get_key(SDL_SCANCODE_DOWN) != 0) { view_rotx -= 1.0; }
+        if (get_key(SDL_SCANCODE_LEFT) != 0) { view_roty += 1.0; }
+        if (get_key(SDL_SCANCODE_RIGHT) != 0) { view_roty -= 1.0; }
+        nowait = (get_key(SDL_SCANCODE_SPACE) != 0);
       }
     }
   }

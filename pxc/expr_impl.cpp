@@ -93,16 +93,16 @@ expr_i *symbol_common::resolve_symdef(symbol_table *lookup)
     if (sdns != "" && sdns != smns) {
       nspropmap_type::const_iterator i = nspropmap.find(sdns);
       if (i == nspropmap.end()) {
-	arena_error_push(parent_expr,
-	  "Internal error: namespace '%s' not found", sdns.c_str());
+        arena_error_push(parent_expr,
+          "Internal error: namespace '%s' not found", sdns.c_str());
       }
       assert(i != nspropmap.end());
       if (!i->second.is_public) {
-	if (!is_accessible_namespace(sdns, smns)) {
-	  arena_error_push(parent_expr,
-	    "Symbol '%s' is defined in private namespace '%s'",
-	    this->get_fullsym().c_str(), sdns.c_str());
-	}
+        if (!is_accessible_namespace(sdns, smns)) {
+          arena_error_push(parent_expr,
+            "Symbol '%s' is defined in private namespace '%s'",
+            this->get_fullsym().c_str(), sdns.c_str());
+        }
       }
     }
     #endif
@@ -258,6 +258,11 @@ static void symdef_check_threading_attr_type_or_func(expr_i *e,
       "Type or function '%s' for symbol '%s' is not threaded",
       term_tostr_human(t).c_str(), sc->get_fullsym().c_str());
   }
+  if ((tattr & attribute_pure) == 0 && (cattr & attribute_pure) != 0) {
+    arena_error_push(e,
+      "Type or function '%s' for symbol '%s' is not pure",
+      term_tostr_human(t).c_str(), sc->get_fullsym().c_str());
+  }
   #if 0
   // FIXME: remove
   if (is_type_esort(e->get_esort())) {
@@ -266,20 +271,20 @@ static void symdef_check_threading_attr_type_or_func(expr_i *e,
     if ((tattr & attribute_multithr) == 0 &&
       (cattr & attribute_multithr) != 0) {
       arena_error_push(e,
-	"Type '%s' for symbol '%s' is not multithreaded",
-	term_tostr_human(t).c_str(), sc->get_fullsym().c_str());
+        "Type '%s' for symbol '%s' is not multithreaded",
+        term_tostr_human(t).c_str(), sc->get_fullsym().c_str());
     }
     if ((tattr & attribute_valuetype) == 0 &&
       (cattr & attribute_valuetype) != 0) {
       arena_error_push(e,
-	"Type '%s' for symbol '%s' is not valuetype",
-	term_tostr_human(t).c_str(), sc->get_fullsym().c_str());
+        "Type '%s' for symbol '%s' is not valuetype",
+        term_tostr_human(t).c_str(), sc->get_fullsym().c_str());
     }
     if ((tattr & attribute_tsvaluetype) == 0 &&
       (cattr & attribute_tsvaluetype) != 0) {
       arena_error_push(e,
-	"Type '%s' for symbol '%s' is not tsvaluetype",
-	term_tostr_human(t).c_str(), sc->get_fullsym().c_str());
+        "Type '%s' for symbol '%s' is not tsvaluetype",
+        term_tostr_human(t).c_str(), sc->get_fullsym().c_str());
     }
   }
 #if 0
@@ -492,17 +497,17 @@ expr_inline_c::expr_inline_c(const char *fn, int line, const char *label,
     size_t j = i + 2;
     for (; j + 1 < sz; ++j) {
       if (cstr[j] != '}' || cstr[j + 1] != '%') {
-	continue;
+        continue;
       }
       break;
     }
     if (j + 1 == sz) {
       std::string mess(cstr + i);
       for (size_t k = 0; k < mess.size(); ++k) {
-	if (mess[k] == '\n') mess[k] = ' ';
+        if (mess[k] == '\n') mess[k] = ' ';
       }
       arena_error_push(this,
-	"Invalid embedded expression '%s'", mess.c_str());
+        "Invalid embedded expression '%s'", mess.c_str());
       break;
     }
     const std::string es(cstr + i + 2, j - i - 2);
@@ -547,13 +552,13 @@ expr_ns::expr_ns(const char *fn, int line, expr_i *uniq_nssym, bool import,
     if (safety != 0) {
       std::string s(safety);
       if (s == "safe") {
-	v = nssafety_e_safe;
+        v = nssafety_e_safe;
       } else if (s == "export-unsafe") {
-	v = nssafety_e_export_unsafe;
+        v = nssafety_e_export_unsafe;
       } else if (s == "use-unsafe") {
-	v = nssafety_e_use_unsafe;
+        v = nssafety_e_use_unsafe;
       } else {
-	arena_error_throw(this, "Invalid attribute '%s'", safety);
+        arena_error_throw(this, "Invalid attribute '%s'", safety);
       }
     }
     nspropmap[uniq_nsstr].safety = v;
@@ -632,35 +637,35 @@ expr_int_literal::resolve_texpr()
   if (type_of_this_expr.is_null()) {
     if (is_unsigned) {
       if (str[0] == '\'') {
-	type_of_this_expr = builtins.type_uchar;
+        type_of_this_expr = builtins.type_uchar;
       } else {
-	const char *p = str;
-	type_of_this_expr = builtins.type_uint;
-	for (; *p != 0; ++p) {
-	  if (*p == 'L' || *p == 'l') {
-	    type_of_this_expr = builtins.type_ulong;
-	  } else if (*p == 'S' || *p == 's') {
-	    type_of_this_expr = builtins.type_ushort;
-	  } else if (*p == 'O' || *p == 's') {
-	    type_of_this_expr = builtins.type_uchar;
-	  } else if (*p == 'Z' || *p == 'z') {
-	    type_of_this_expr = builtins.type_size_t;
-	  }
-	}
+        const char *p = str;
+        type_of_this_expr = builtins.type_uint;
+        for (; *p != 0; ++p) {
+          if (*p == 'L' || *p == 'l') {
+            type_of_this_expr = builtins.type_ulong;
+          } else if (*p == 'S' || *p == 's') {
+            type_of_this_expr = builtins.type_ushort;
+          } else if (*p == 'O' || *p == 's') {
+            type_of_this_expr = builtins.type_uchar;
+          } else if (*p == 'Z' || *p == 'z') {
+            type_of_this_expr = builtins.type_size_t;
+          }
+        }
       }
     } else {
       const char *p = str;
       type_of_this_expr = builtins.type_int;
       for (; *p != 0; ++p) {
-	if (*p == 'L' || *p == 'l') {
-	  type_of_this_expr = builtins.type_long;
-	} else if (*p == 'S' || *p == 's') {
-	  type_of_this_expr = builtins.type_short;
-	} else if (*p == 'O' || *p == 'o') {
-	  type_of_this_expr = builtins.type_char;
-	} else if (*p == 'Z' || *p == 'o') {
-	  type_of_this_expr = builtins.type_ssize_t;
-	}
+        if (*p == 'L' || *p == 'l') {
+          type_of_this_expr = builtins.type_long;
+        } else if (*p == 'S' || *p == 's') {
+          type_of_this_expr = builtins.type_short;
+        } else if (*p == 'O' || *p == 'o') {
+          type_of_this_expr = builtins.type_char;
+        } else if (*p == 'Z' || *p == 'o') {
+          type_of_this_expr = builtins.type_ssize_t;
+        }
       }
     }
   }
@@ -792,46 +797,46 @@ std::string unescape_c_str_literal(const char *str, bool& success_r)
       ch = str[i + 1];
       ++i;
       if (ch == 'x') {
-	if (i + 2 < len) {
-	  const char c1 = str[i + 1];
-	  const char c2 = str[i + 2];
-	  if (!is_valid_hexadecimal_char(c1) ||
-	    !is_valid_hexadecimal_char(c2)) {
-	    success_r = false;
-	  }
-	  const unsigned char rch = (uchar_from_hexadecimal(c1) << 4) |
-	    uchar_from_hexadecimal(c2);
-	  s.push_back(rch);
-	  i += 2;
-	} else {
-	  success_r = false;
-	}
+        if (i + 2 < len) {
+          const char c1 = str[i + 1];
+          const char c2 = str[i + 2];
+          if (!is_valid_hexadecimal_char(c1) ||
+            !is_valid_hexadecimal_char(c2)) {
+            success_r = false;
+          }
+          const unsigned char rch = (uchar_from_hexadecimal(c1) << 4) |
+            uchar_from_hexadecimal(c2);
+          s.push_back(rch);
+          i += 2;
+        } else {
+          success_r = false;
+        }
       } else if (ch == 'a' || ch == 'A') {
-	s.push_back('\a');
+        s.push_back('\a');
       } else if (ch == 'b' || ch == 'B') {
-	s.push_back('\b');
+        s.push_back('\b');
       } else if (ch == 'f' || ch == 'F') {
-	s.push_back('\f');
+        s.push_back('\f');
       } else if (ch == 'n' || ch == 'N') {
-	s.push_back('\n');
+        s.push_back('\n');
       } else if (ch == 'r' || ch == 'R') {
-	s.push_back('\r');
+        s.push_back('\r');
       } else if (ch == 't' || ch == 'T') {
-	s.push_back('\t');
+        s.push_back('\t');
       } else if (ch == 'v' || ch == 'V') {
-	s.push_back('\v');
+        s.push_back('\v');
       } else if (ch == '\'') {
-	s.push_back('\'');
+        s.push_back('\'');
       } else if (ch == '\"') {
-	s.push_back('\"');
+        s.push_back('\"');
       } else if (ch == '\\') {
-	s.push_back('\\');
+        s.push_back('\\');
       } else if (ch == '\?') {
-	s.push_back('\?');
+        s.push_back('\?');
       } else if (ch == '0') {
-	s.push_back('\0');
+        s.push_back('\0');
       } else {
-	success_r = false;
+        success_r = false;
       }
     }
   }
@@ -961,10 +966,10 @@ expr_var::resolve_texpr()
     } else {
       /* type inference */
       if (parent_expr->get_esort() == expr_e_op) {
-	expr_op *eo = ptr_down_cast<expr_op>(parent_expr);
-	if (eo->op == '=' && eo->arg0 == this && eo->arg1 != 0) {
-	  type_of_this_expr = eo->arg1->resolve_texpr();
-	}
+        expr_op *eo = ptr_down_cast<expr_op>(parent_expr);
+        if (eo->op == '=' && eo->arg0 == this && eo->arg1 != 0) {
+          type_of_this_expr = eo->arg1->resolve_texpr();
+        }
       }
     }
     if (type_of_this_expr.is_null()) {
@@ -1014,11 +1019,11 @@ expr_enumval::resolve_texpr()
     if (type_uneval == 0) {
       expr_i *p = parent_expr;
       if (p->get_esort() == expr_e_enumval) {
-	type_of_this_expr = p->resolve_texpr();
+        type_of_this_expr = p->resolve_texpr();
       } else if (p->get_esort() == expr_e_typedef) {
-	type_of_this_expr = p->get_value_texpr();
+        type_of_this_expr = p->get_value_texpr();
       } else {
-	abort();
+        abort();
       }
     } else {
       type_of_this_expr = eval_expr(type_uneval);
@@ -1079,10 +1084,10 @@ static expr_tparams *convert_to_tparams(expr_i *tparams,
     if (head->get_esort() == expr_e_te) {
       expr_te *const te = ptr_down_cast<expr_te>(head);
       if (te->tlarg == 0 && te->nssym->prefix == 0) {
-	/* ok, it's a symbol */
-	return ptr_down_cast<expr_tparams>(
-	  expr_tparams_new(tparams->fname, tparams->line, te->nssym->sym,
-	    false, convert_to_tparams(tel->rest, tparams_error_r)));
+        /* ok, it's a symbol */
+        return ptr_down_cast<expr_tparams>(
+          expr_tparams_new(tparams->fname, tparams->line, te->nssym->sym,
+            false, convert_to_tparams(tel->rest, tparams_error_r)));
       }
     }
   }
@@ -1090,7 +1095,7 @@ static expr_tparams *convert_to_tparams(expr_i *tparams,
   return 0;
 }
 
-expr_block::expr_block(const char *fn, int line, expr_i *tparams,	
+expr_block::expr_block(const char *fn, int line, expr_i *tparams,
   expr_i *inherit, expr_i *argdecls, expr_i *rettype_uneval,
   passby_e ret_passby, expr_i *stmts)
   : expr_i(fn, line), block_id_ns(0),
@@ -1143,7 +1148,7 @@ static void calc_inherit_transitive_rec(expr_i *pos,
     /*
     } else if (einst->get_esort() != expr_e_interface) {
       arena_error_throw(pos, "Not an interface: '%s'",
-	term_tostr_human(t).c_str());
+        term_tostr_human(t).c_str());
     */
     } else {
       lst.push_back(einst);
@@ -1509,34 +1514,34 @@ expr_argdecls::resolve_texpr()
       /* type inference */
       expr_i *bl = parent_expr;
       while (bl->get_esort() != expr_e_block) {
-	bl = bl->parent_expr;
+        bl = bl->parent_expr;
       }
       expr_i *const ep = bl->parent_expr;
       if (ep->get_esort() == expr_e_feach) {
-	expr_feach *const efe = ptr_down_cast<expr_feach>(ep);
-	const bool is_key = parent_expr->get_esort() != expr_e_argdecls;
-	if (is_key) {
-	  type_of_this_expr = get_array_index_texpr(0,
-	    efe->ce->resolve_texpr());
-	} else {
-	  type_of_this_expr = get_array_elem_texpr(0,
-	    efe->ce->resolve_texpr());
-	}
+        expr_feach *const efe = ptr_down_cast<expr_feach>(ep);
+        const bool is_key = parent_expr->get_esort() != expr_e_argdecls;
+        if (is_key) {
+          type_of_this_expr = get_array_index_texpr(0,
+            efe->ce->resolve_texpr());
+        } else {
+          type_of_this_expr = get_array_elem_texpr(0,
+            efe->ce->resolve_texpr());
+        }
       } else if (ep->get_esort() == expr_e_forrange) {
-	expr_forrange *const efr = ptr_down_cast<expr_forrange>(ep);
-	term& t0 = efr->r0->resolve_texpr();
-	term& t1 = efr->r1->resolve_texpr();
-	const bool r0i = is_compiletime_intval(efr->r0);
-	if (r0i) {
-	  check_convert_type(efr->r0, t1);
-	  type_of_this_expr = t1;
-	} else {
-	  check_convert_type(efr->r1, t0);
-	  type_of_this_expr = t0;
-	}
+        expr_forrange *const efr = ptr_down_cast<expr_forrange>(ep);
+        term& t0 = efr->r0->resolve_texpr();
+        term& t1 = efr->r1->resolve_texpr();
+        const bool r0i = is_compiletime_intval(efr->r0);
+        if (r0i) {
+          check_convert_type(efr->r0, t1);
+          type_of_this_expr = t1;
+        } else {
+          check_convert_type(efr->r1, t0);
+          type_of_this_expr = t0;
+        }
       } else if (ep->get_esort() == expr_e_if) {
-	expr_if *const ei = ptr_down_cast<expr_if>(ep);
-	type_of_this_expr = ei->cond->resolve_texpr();
+        expr_if *const ei = ptr_down_cast<expr_if>(ep);
+        type_of_this_expr = ei->cond->resolve_texpr();
       }
     }
     if (type_of_this_expr.is_null()) {
@@ -1569,8 +1574,8 @@ expr_funcdef::expr_funcdef(const char *fn, int line, const char *sym,
   bool ext_pxc, bool no_def, attribute_e attr)
   : expr_i(fn, line), sym(sym), cnamei(cname), is_const(is_const),
     rettype_eval(), block(ptr_down_cast<expr_block>(block)),
-    ext_pxc(ext_pxc), no_def(no_def), c_proto_flag(true), value_texpr(),
-    attr(attr), used_as_cfuncobj(false)
+    ext_pxc(ext_pxc), no_def(no_def), c_proto_flag(true), c_keep_flag(false),
+    c_noop_flag(false), value_texpr(), attr(attr), used_as_cfuncobj(false)
 {
   assert(block);
   this->block->symtbl.set_block_esort(expr_e_funcdef);
@@ -1579,6 +1584,10 @@ expr_funcdef::expr_funcdef(const char *fn, int line, const char *sym,
     const std::string s(copt);
     if (s == "nocdecl") {
       c_proto_flag = false;
+    } else if (s == "keep") {
+      c_keep_flag = true;
+    } else if (s == "noop") {
+      c_noop_flag = true;
     } else {
       arena_error_throw(this, "Invalid c option '%s'", copt);
     }

@@ -4,7 +4,7 @@ CXX = g++
 OBJS =	pxc_y.o pxc_l.o expr.o expr_impl.o expr_misc.o eval.o evalmeta.o \
 	checktype.o term.o emit.o emit_context.o symbol.o symbol_table.o \
 	cdriver.o pxc_md5.o util.o sort_dep.o
-INSTALL_PREFIX=/usr/local
+INSTALL_PREFIX = /usr/local
 
 ifndef CXXFLAGS
 CXXFLAGS = -Wall -g -O -DNDEBUG
@@ -63,7 +63,7 @@ install:
 	rm -rf $(INSTALL_PREFIX)/etc/pxc.profile
 	rm -rf $(INSTALL_PREFIX)/share/pxc
 	rm -rf $(INSTALL_PREFIX)/share/pxclib
-	if [ "`uname | cut -d '_' -f 1`" == "CYGWIN" ]; then \
+	if [ "`uname | cut -d '_' -f 1`" = "CYGWIN" ]; then \
 		peflags -x0x400000 pxc; \
 	fi
 	install -m 755 pxc $(INSTALL_PREFIX)/bin/

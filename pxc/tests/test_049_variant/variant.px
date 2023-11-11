@@ -1,11 +1,10 @@
 public namespace variant;
-import common -;
-import meta m;
-import numeric::cast n;
-import meta -;
-import text::positional -;
-import pointer -;
-import meta::family -;
+import core::common -;
+import core::meta m;
+import core::numeric::cast n;
+import core::meta -;
+import core::text::positional -;
+import core::meta::family -;
 
 public union variant {
   public unit unitval;
@@ -92,7 +91,7 @@ public function {t} t from_variant(variant const& x)
   } else {
     return downcast_mutable{stub_object{t}, idynamic}(*(x.ptrval)).value;
   }
-  throw exception::invalid_field();
+  throw invalid_field();
 }
 
 /* wraps an object of type t */
@@ -110,7 +109,7 @@ stub_object(expand(stub_object_args{t})) < idynamic >
   function variant invoke(cstrref const& name, cslice{variant} const& args) {
     expand(fsym, idx : member_functions_str{t}) {
       if (name == m::to_string{fsym}) {
-	return variant_invoke_impl{t, idx, 0}(args, value);
+        return variant_invoke_impl{t, idx, 0}(args, value);
       }
     }
     return variant(); // TODO: throw
@@ -126,7 +125,7 @@ public struct {f} stub_function < idynamic >
     }
     return variant_invoke_impl{0, 0, f}(args);
   }
-} 
+}
 
 /* wraps a global variable */
 public struct {varname, ns, mutable_flag} stub_variable < idynamic >
@@ -137,14 +136,14 @@ public struct {varname, ns, mutable_flag} stub_variable < idynamic >
     }
     if (args.empty()) {
       return to_variant{m::typeof{m::symbol{ns, varname}}}
-	(m::symbol{ns, varname});
+        (m::symbol{ns, varname});
     } else {
       if (m::eq{mutable_flag, 1}) {
-	m::symbol{ns, varname} =
-	  from_variant{m::typeof{m::symbol{ns, varname}}}(args[0]);
-	return variant();
+        m::symbol{ns, varname} =
+          from_variant{m::typeof{m::symbol{ns, varname}}}(args[0]);
+        return variant();
       } else {
-	return variant(); // TODO: throw
+        return variant(); // TODO: throw
       }
     }
   }
@@ -158,9 +157,9 @@ private metafunction is_constructible{t}
   m::not{
     m::and{
       m::or{
-	m::eq{m::family{t}, "interface"},
-	m::eq{m::family{t}, "linear"},
-	m::eq{m::family{t}, "nodefault"}},
+        m::eq{m::family{t}, "interface"},
+        m::eq{m::family{t}, "linear"},
+        m::eq{m::family{t}, "nodefault"}},
       m::eq{m::size{m::args{t}}, 0}}};
 private metafunction filter_constructible{ts} m::filter{ts, is_constructible};
 
@@ -242,22 +241,22 @@ private function {tobj, methodidx, fsym} variant variant_invoke_impl(
     /* pattern #0: const value */
     func_arg_type_noneph{f, idx} const& ae =
       downcast_const{
-	stub_object{func_arg_type_noneph{f, idx}}, idynamic
+        stub_object{func_arg_type_noneph{f, idx}}, idynamic
       }(*(args[idx].ptrval)).value;
     /* pattern #1: mutable value */
     func_arg_type_noneph{f, idx} const& ae = /* need not to be mutable ref */
       downcast_const{
-	stub_object{func_arg_type_noneph{f, idx}}, idynamic
+        stub_object{func_arg_type_noneph{f, idx}}, idynamic
       }(*(args[idx].ptrval)).value;
     /* pattern #2: const reference */
     func_arg_type_noneph{f, idx} const& ae =
       downcast_const{
-	stub_object{func_arg_type_noneph{f, idx}}, idynamic
+        stub_object{func_arg_type_noneph{f, idx}}, idynamic
       }(*(args[idx].ptrval)).value;
     /* pattern #3: mutable reference */
     func_arg_type_noneph{f, idx} mutable& ae =
       downcast_mutable{
-	stub_object{func_arg_type_noneph{f, idx}}, idynamic
+        stub_object{func_arg_type_noneph{f, idx}}, idynamic
       }(*(args[idx].ptrval)).value;
     /* pattern #4: variant-valuetype, pass by const value */
     func_arg_type_noneph{f, idx} ae =
@@ -276,11 +275,11 @@ private function {tobj, methodidx, fsym} variant variant_invoke_impl(
     /* method call */
     expand (sym : m::list{m::list{m::to_string{f}, 0}}) {
       if (m::eq{m::ret_type{f}, void}) {
-	obj.sym(expand(a : func_arg_names{f}; a));
-	return variant();
+        obj.sym(expand(a : func_arg_names{f}; a));
+        return variant();
       } else {
-	return to_variant{m::ret_type{f}}(
-	  obj.sym(expand(a : func_arg_names{f}; a)));
+        return to_variant{m::ret_type{f}}(
+          obj.sym(expand(a : func_arg_names{f}; a)));
       }
     }
   } else {
@@ -295,7 +294,7 @@ private function {tobj, methodidx, fsym} variant variant_invoke_impl(
     } else {
       /* noncopyable object constructor */
       ptr{stub_object{f}} p = ptr{stub_object{f}}(
-	stub_object{f}(expand(a : func_arg_names{f}; a)));
+        stub_object{f}(expand(a : func_arg_names{f}; a)));
       variant r;
       r.ptrval = p;
       return r;

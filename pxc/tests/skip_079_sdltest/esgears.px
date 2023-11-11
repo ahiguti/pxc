@@ -33,12 +33,12 @@
  */
 
 public namespace esgears "use-unsafe";
-import common -;
-import numeric::fpmath -;
+import core::common -;
+import core::numeric::fpmath -;
 import SDL2 -;
 import GL::gl11 -;
-import io::time -;
-import meta m;
+import core::io::time -;
+import core::meta m;
 
 private metafunction is_gles m::eq{m::profile{"platform"}, "android"};
 
@@ -94,7 +94,7 @@ function void gear(float inner_radius, float outer_radius, float width,
     if (i < teeth_i) {
       glVertex3f(r0 * cosf(angle), r0 * sinf(angle), width * 0.5);
       glVertex3f(r1 * cosf(angle + da * 3.0), r1 * sinf(angle + da * 3.0),
-	width * 0.5);
+        width * 0.5);
     }
   }
   glEnd();
@@ -170,7 +170,7 @@ function void gear(float inner_radius, float outer_radius, float width,
     glVertex3f(r0 * cosf(angle), r0 * sinf(angle), -width * 0.5);
     if (i < teeth_i) {
       glVertex3f(r1 * cosf(angle + da * 3.0), r1 * sinf(angle + da * 3.0),
-	-width * 0.5);
+        -width * 0.5);
       glVertex3f(r0 * cosf(angle), r0 * sinf(angle), -width * 0.5);
     }
   }
@@ -451,7 +451,7 @@ function void draw_frame()
 }
 
 function void reshape(int width, int height)
-{ 
+{
   double h = static_cast{double}(height) / static_cast{double}(width);
   glViewport(0, 0, static_cast{GLsizei}(width), static_cast{GLsizei}(height));
   glMatrixMode(GL_PROJECTION);
@@ -504,15 +504,15 @@ function void init()
     while (SDL_PollEvent(ev)) {
       const etype = ev.type;
       if (etype == SDL_WINDOWEVENT) {
-	if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
-	  const w = ev.window.data1;
-	  const h = ev.window.data2;
-	  println(string_join{""}("w=", w, " h=", h));
-	  reshape(w, h);
-	}
+        if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
+          const w = ev.window.data1;
+          const h = ev.window.data2;
+          println(string_join{""}("w=", w, " h=", h));
+          reshape(w, h);
+        }
       } else if (etype == SDL_QUIT) {
-	done = true;
-	break;
+        done = true;
+        break;
       }
     }
     draw_frame();
@@ -521,25 +521,25 @@ function void init()
       ++frames;
       uint t = SDL_GetTicks();
       if (t - t0 >= 1000) {
-	const seconds = static_cast{float}(t - t0) / 1000.0;
-	const fps = static_cast{float}(frames) / seconds;
-	println(string_join{" "}(frames, "frames in", seconds, "seconds =",
-	  fps, "fps"));
-	t0 = t;
-	frames = 0;
+        const seconds = static_cast{float}(t - t0) / 1000.0;
+        const fps = static_cast{float}(frames) / seconds;
+        println(string_join{" "}(frames, "frames in", seconds, "seconds =",
+          fps, "fps"));
+        t0 = t;
+        frames = 0;
       }
       if (t - t1 >= 10 || nowait) {
-	if (t - t1 >= 10) {
-	  t1 += 10;
-	}
-	gears_angle += 1.0;
-	SDL_KeyboardState const ks;
-	if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) { done = true; }
-	if (ks.Key(SDL_SCANCODE_UP) != 0) { view_rotx += 1.0; }
-	if (ks.Key(SDL_SCANCODE_DOWN) != 0) { view_rotx -= 1.0; }
-	if (ks.Key(SDL_SCANCODE_LEFT) != 0) { view_roty += 1.0; }
-	if (ks.Key(SDL_SCANCODE_RIGHT) != 0) { view_roty -= 1.0; }
-	nowait = (ks.Key(SDL_SCANCODE_SPACE) != 0);
+        if (t - t1 >= 10) {
+          t1 += 10;
+        }
+        gears_angle += 1.0;
+        SDL_KeyboardState const ks;
+        if (ks.Key(SDL_SCANCODE_ESCAPE) != 0) { done = true; }
+        if (ks.Key(SDL_SCANCODE_UP) != 0) { view_rotx += 1.0; }
+        if (ks.Key(SDL_SCANCODE_DOWN) != 0) { view_rotx -= 1.0; }
+        if (ks.Key(SDL_SCANCODE_LEFT) != 0) { view_roty += 1.0; }
+        if (ks.Key(SDL_SCANCODE_RIGHT) != 0) { view_roty -= 1.0; }
+        nowait = (ks.Key(SDL_SCANCODE_SPACE) != 0);
       }
     }
   }

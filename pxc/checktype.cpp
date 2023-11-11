@@ -273,28 +273,28 @@ void expr_ns::check_type(symbol_table *lookup)
     nspropmap_type::const_iterator i = nspropmap.find(src_uniq_nsstr);
     if (i == nspropmap.end()) {
       arena_error_throw(this, "Internal error: namespace '%s' not found",
-	src_uniq_nsstr.c_str());
+        src_uniq_nsstr.c_str());
     }
     nspropmap_type::const_iterator j = nspropmap.find(uniq_nsstr);
     if (j == nspropmap.end()) {
       arena_error_throw(this, "Internal error: namespace '%s' not found",
-	uniq_nsstr.c_str());
+        uniq_nsstr.c_str());
     }
     if (i->second.safety == nssafety_e_safe &&
       j->second.safety == nssafety_e_export_unsafe) {
       arena_error_throw(this, "Can not import unsafe namespace '%s'",
-	uniq_nsstr.c_str());
+        uniq_nsstr.c_str());
     }
     if (i->second.safety == nssafety_e_use_unsafe &&
       j->second.safety == nssafety_e_export_unsafe && pub) {
       arena_error_throw(this,
-	"Importing unsafe namespace '%s' must be private",
-	uniq_nsstr.c_str());
+        "Importing unsafe namespace '%s' must be private",
+        uniq_nsstr.c_str());
     }
     if (!j->second.is_public) {
       if (!is_sibling_namespace(src_uniq_nsstr, uniq_nsstr)) {
-	arena_error_throw(this, "Can not import private namespace '%s'",
-	  uniq_nsstr.c_str());
+        arena_error_throw(this, "Can not import private namespace '%s'",
+          uniq_nsstr.c_str());
       }
     }
   }
@@ -323,7 +323,7 @@ void expr_inline_c::check_type(symbol_table *lookup)
   for (size_t i = 0; i < elems.size(); ++i) {
     elems[i].te->sdef.resolve_evaluated();
   }
-  if ((this->get_attribute() & attribute_threaded) != 0) {
+  if ((this->get_attribute() & (attribute_threaded | attribute_pure)) != 0) {
     arena_error_throw(this, "Invalid attribute for an inline expression");
   }
   if (value != 0) {
@@ -372,9 +372,9 @@ static bool check_term_validity(const term& t, bool allow_nontype,
     expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(e);
     if (efd != 0 && !efd->is_global_function()) {
       DBG_CTV(fprintf(stderr, "CTV %s false 2x\n",
-	term_tostr_human(t).c_str()));
+        term_tostr_human(t).c_str()));
       err_mess_r = "(template parameter '" + term_tostr_human(t) +
-	"' is a local function)";
+        "' is a local function)";
       return false;
     }
   }
@@ -382,14 +382,14 @@ static bool check_term_validity(const term& t, bool allow_nontype,
   if (is_noheap_flag) {
     if (!allow_noheap) {
       err_mess_r = "(template parameter '" + term_tostr_human(t) +
-	"' is a noheap type)";
+        "' is a noheap type)";
       return false;
     }
     if (!allow_noheap_container && is_container_family(t) &&
       get_family(t) != typefamily_e_darrayst &&
       get_family(t) != typefamily_e_cdarrayst) {
       err_mess_r = "(template parameter '" + term_tostr_human(t) +
-	"' is a noheap container type)";
+        "' is a noheap container type)";
       return false;
     }
   }
@@ -417,40 +417,40 @@ static bool check_term_validity(const term& t, bool allow_nontype,
        * so that template type/frunction can be used as a metafunction. */
       // abort(); // FIXME
       DBG_CTV(fprintf(stderr, "CTV %s false 4\n",
-	term_tostr_human(t).c_str()));
+        term_tostr_human(t).c_str()));
       err_mess_r = "(wrong number of template parameters: '" +
-	term_tostr_human(t) + "')";
+        term_tostr_human(t) + "')";
       return false;
     }
     expr_struct *const est = dynamic_cast<expr_struct *>(e);
     if (est != 0 && est->typefamily != typefamily_e_none) {
       const typefamily_e cat = est->typefamily;
       if (cat == typefamily_e_farray || cat == typefamily_e_cfarray) {
-	if (tlarg_len >= 1) {
-	  if (!check_term_validity(tl->front(), tp_allow_nontype,
-	    tp_allow_local_func, tp_allow_noheap, tp_allow_noheap_container,
-	    pos, err_mess_r)) {
-	    return false;
-	  }
-	}
-	if (tlarg_len >= 2) {
-	  const term& t2nd = *(++tl->begin());
-	  if (!t2nd.is_long()) {
-	    err_mess_r = "(2nd template parameter must be an integer literal)";
-	    return false;
-	  }
-	}
-	DBG_CTV(fprintf(stderr, "CTV %s true 6\n",
-	  term_tostr_human(t).c_str()));
-	return true;
+        if (tlarg_len >= 1) {
+          if (!check_term_validity(tl->front(), tp_allow_nontype,
+            tp_allow_local_func, tp_allow_noheap, tp_allow_noheap_container,
+            pos, err_mess_r)) {
+            return false;
+          }
+        }
+        if (tlarg_len >= 2) {
+          const term& t2nd = *(++tl->begin());
+          if (!t2nd.is_long()) {
+            err_mess_r = "(2nd template parameter must be an integer literal)";
+            return false;
+          }
+        }
+        DBG_CTV(fprintf(stderr, "CTV %s true 6\n",
+          term_tostr_human(t).c_str()));
+        return true;
       }
     }
   }
   if (tl != 0) {
     for (term_list::const_iterator i = tl->begin(); i != tl->end(); ++i) {
       if (!check_term_validity(*i, tp_allow_nontype, tp_allow_local_func,
-	tp_allow_noheap, tp_allow_noheap_container, pos, err_mess_r)) {
-	return false;
+        tp_allow_noheap, tp_allow_noheap_container, pos, err_mess_r)) {
+        return false;
       }
     }
   }
@@ -498,8 +498,8 @@ static void check_var_type(term& typ, expr_i *e, const char *sym,
     expr_var *const ev = ptr_down_cast<expr_var>(e);
     if (is_noheap_type(typ)) {
       arena_error_push(e,
-	"Type '%s' for field '%s' is a noheap type",
-	term_tostr_human(typ).c_str(), sym);
+        "Type '%s' for field '%s' is a noheap type",
+        term_tostr_human(typ).c_str(), sym);
     }
     if (is_passby_cm_reference(ev->varinfo.passby)) {
       arena_error_push(e, "Field '%s' can't be a reference", sym);
@@ -508,8 +508,8 @@ static void check_var_type(term& typ, expr_i *e, const char *sym,
 #if 0
 //    if (is_multithr_context(cur) && !term_is_multithr(typ)) {
 //      arena_error_push(e,
-//	"Type '%s' for field '%s' is not multithreaded",
-//	term_tostr_human(typ).c_str(), sym);
+//      "Type '%s' for field '%s' is not multithreaded",
+//      term_tostr_human(typ).c_str(), sym);
 //      /* note: argdecls need not to be multithreaded */
 //    }
 #endif
@@ -550,7 +550,7 @@ static bool is_default_constructible(const term& typ, expr_i *pos,
     }
     if (cat == typefamily_e_farray || cat == typefamily_e_cfarray) {
       return (args == 0 || args->empty()) ? false
-	: is_default_constructible(args->front(), pos, depth);
+        : is_default_constructible(args->front(), pos, depth);
     }
     if (cat == typefamily_e_darray || cat == typefamily_e_cdarray) {
       return false;
@@ -566,9 +566,9 @@ static bool is_default_constructible(const term& typ, expr_i *pos,
     if (cat != typefamily_e_none || est->cnamei.cname != 0) {
       /* extern c struct */
       for (term_list::const_iterator i = args->begin(); i != args->end(); ++i) {
-	if (!is_default_constructible(*i, pos, depth)) {
-	  return false;
-	}
+        if (!is_default_constructible(*i, pos, depth)) {
+          return false;
+        }
       }
       return true;
     }
@@ -655,14 +655,14 @@ fprintf(stderr, "check_defcon %s nc=%d anc=%d\n", term_tostr_human(typ).c_str(),
   if (is_global_var(this)) {
     if (is_noheap_type(typ)) {
       arena_error_push(this,
-	"Type '%s' for global variable '%s' is a noheap type",
-	term_tostr_human(typ).c_str(), sym);
+        "Type '%s' for global variable '%s' is a noheap type",
+        term_tostr_human(typ).c_str(), sym);
     }
     const attribute_e tattr = get_term_threading_attribute(typ);
     if ((tattr & attribute_threaded) == 0) {
       arena_error_push(this,
-	"Type '%s' for global variable '%s' is not threaded",
-	term_tostr_human(typ).c_str(), sym);
+        "Type '%s' for global variable '%s' is not threaded",
+        term_tostr_human(typ).c_str(), sym);
     }
     need_defcon = true;
   }
@@ -671,13 +671,13 @@ fprintf(stderr, "check_defcon %s nc=%d anc=%d\n", term_tostr_human(typ).c_str(),
     check_default_construct(typ, this, sym);
     if (is_passby_cm_reference(varinfo.passby)) {
       arena_error_push(this, "Reference variable '%s' is not initialized",
-	sym);
+        sym);
     }
     #if 0
     // TODO: remove. not necessary.
     if (is_noheap_type(typ)) {
       arena_error_push(this, "Ephemeral type variable '%s' is not initialized",
-	sym);
+        sym);
     }
     #endif
   }
@@ -711,7 +711,7 @@ void expr_enumval::define_vars_one(expr_stmts *stmt)
 
 void expr_enumval::check_type(symbol_table *lookup)
 {
-  if ((this->get_attribute() & attribute_threaded) != 0) {
+  if ((this->get_attribute() & (attribute_threaded | attribute_pure)) != 0) {
     arena_error_throw(this, "Invalid attribute for an external value");
   }
   if (is_void_type(resolve_texpr())) {
@@ -737,10 +737,10 @@ static void stmts_check_type(expr_stmts *stmts, symbol_table *lookup)
     try {
       fn_check_type(stmts->head, lookup);
       if (stmts->rest != 0 && stmts->rest->parent_expr != stmts) {
-	/* this happenes when head is a expr_expand. in this case, rest has
-	 * moved to the rest of the generated expr. */
-	DBG_RECHAIN(fprintf(stderr, "RE-CHAINED\n"));
-	return;
+        /* this happenes when head is a expr_expand. in this case, rest has
+         * moved to the rest of the generated expr. */
+        DBG_RECHAIN(fprintf(stderr, "RE-CHAINED\n"));
+        return;
       }
       switch (stmts->head->get_esort()) {
       case expr_e_int_literal:
@@ -748,43 +748,43 @@ static void stmts_check_type(expr_stmts *stmts, symbol_table *lookup)
       case expr_e_bool_literal:
       case expr_e_str_literal:
       case expr_e_symbol:
-	if (stmts->parent_expr != 0 && stmts->parent_expr->parent_expr != 0 &&
-	  stmts->parent_expr->parent_expr->get_esort() == expr_e_metafdef) {
-	  /* ok for macro rhs */
-	} else {
-	  arena_error_push(stmts, "Invalid statement");
-	}
-	break;
+        if (stmts->parent_expr != 0 && stmts->parent_expr->parent_expr != 0 &&
+          stmts->parent_expr->parent_expr->get_esort() == expr_e_metafdef) {
+          /* ok for macro rhs */
+        } else {
+          arena_error_push(stmts, "Invalid statement");
+        }
+        break;
       default:
-	break;
+        break;
       }
     } catch (const stmt_compilation_error& ex) {
       throw;
     } catch (const std::exception& ex) {
       if (stmts->rest != 0 && stmts->rest->parent_expr != stmts) {
-	/* re-chained */
-	throw;
+        /* re-chained */
+        throw;
       }
       std::string s = ex.what();
       if (s.size() > 0 && s[s.size() - 1] != '\n') {
-	s += "\n";
+        s += "\n";
       }
       std::string hstr = std::string(stmts->head->fname) + ":"
-	+ ulong_to_string(stmts->head->line) + ":";
+        + ulong_to_string(stmts->head->line) + ":";
       const std::string s1 = s.substr(0, s.size() - 1);
       std::string::size_type lastline = s1.rfind('\n');
       if (lastline == s1.npos) {
-	lastline = 0;
+        lastline = 0;
       } else {
-	++lastline;
+        ++lastline;
       }
       /*
       fprintf(stderr, "lastline=[%s]\n",
-	s.substr(lastline, hstr.size()).c_str());
+        s.substr(lastline, hstr.size()).c_str());
       */
       if (s.substr(lastline, hstr.size()) == hstr) {
-	/* no need to add */
-	throw;
+        /* no need to add */
+        throw;
       }
       s = hstr + " (while compiling this statement)\n" + s;
       throw stmt_compilation_error(s);
@@ -873,25 +873,25 @@ static void check_return_expr_block(expr_funcdef *fdef, expr_block *block)
     expr_if *ei = ptr_down_cast<expr_if>(last_stmt);
     while (true) {
       if (ei->cond_static != 0) {
-	check_return_expr_block(fdef, ei->block1);
+        check_return_expr_block(fdef, ei->block1);
       }
       if (ei->cond_static == 1) {
-	return;
+        return;
       }
       if (ei->block2 != 0) {
-	/* has 'else' clause */
-	if (ei->cond_static != 1) {
-	  check_return_expr_block(fdef, ei->block2);
-	}
-	return;
+        /* has 'else' clause */
+        if (ei->cond_static != 1) {
+          check_return_expr_block(fdef, ei->block2);
+        }
+        return;
       } else if (ei->rest != 0) {
-	/* has 'else if' clause */
-	ei = ei->rest;
-	continue;
+        /* has 'else if' clause */
+        ei = ei->rest;
+        continue;
       } else {
-	/* no 'else if' nor 'else' clause. error. */
-	error_pos = ei->block1;
-	break;
+        /* no 'else if' nor 'else' clause. error. */
+        error_pos = ei->block1;
+        break;
       }
     }
   } else if (last_stmt->get_esort() == expr_e_block) {
@@ -942,34 +942,6 @@ static void check_return_expr(expr_funcdef *fdef)
   check_return_expr_block(fdef, fdef->block);
 }
 
-#if 0
-static void inject_function_entry(expr_block *blk)
-{
-  expr_stmts *o_stmts = blk->stmts;
-  if (o_stmts == 0) {
-    return;
-  }
-  const char *fn = o_stmts->fname;
-  int ln = o_stmts->line;
-  expr_i *te = expr_te_new(fn, ln, 
-    expr_nssym_new(fn, ln,
-      expr_nssym_new(fn, ln,
-	expr_nssym_new(fn, ln, 0, "meta"),
-	"initial"),
-      "__macro_function_entry__"),
-    expr_telist_new(fn, ln, expr_int_literal_new(fn, ln,
-      arena_strdup("0"), false), 0));
-  expr_i *epnd = expr_expand_new(fn, ln, te, 0, 0, 0, 0, expand_e_statement,
-    0);
-  expr_stmts *stmts = static_cast<expr_stmts *>(
-    expr_stmts_new(fn, ln, epnd, o_stmts));
-  expr_i *parent = o_stmts->parent_expr;
-  fn_set_tree_and_define_static(stmts, parent, o_stmts->symtbl_lexical, 0, 
-    o_stmts->symtbl_lexical->block_backref->tinfo.template_descent);
-  blk->stmts = stmts;
-}
-#endif
-
 void expr_block::check_type(symbol_table *lookup)
 {
   if (tparams_error != 0) {
@@ -1006,7 +978,7 @@ void expr_block::check_type(symbol_table *lookup)
       check_return_expr(efd);
     } // FIXME: check_return_expr for struct constructor?
     /* set compiled_flag */
-    compiled_flag = true; 
+    compiled_flag = true;
     /* evaluate __static_assert__ */
     const bool no_private = false;
     const bool no_generated = false;
@@ -1014,10 +986,10 @@ void expr_block::check_type(symbol_table *lookup)
       no_private, no_generated, "", this);
     if (sa != 0 && sa->get_esort() == expr_e_metafdef) {
       const term t = eval_term(
-	term(ptr_down_cast<expr_metafdef>(sa)->get_rhs()), this);
+        term(ptr_down_cast<expr_metafdef>(sa)->get_rhs()), this);
       #if 0
       if (t != term(1LL)) {
-	arena_error_push(sa, "__static_assert__ failed");
+        arena_error_push(sa, "__static_assert__ failed");
       }
       #endif
     }
@@ -1209,7 +1181,7 @@ static void add_root_requirement(expr_i *e, passby_e passby,
       DBG_ROOT(fprintf(stderr, "add_root_requirement: byref conv\n"));
       /* possible to reach here? */
       arena_error_throw(e,
-	"Can not root by mutable reference because of conversion");
+        "Can not root by mutable reference because of conversion");
     }
     /* thru */
   }
@@ -1218,54 +1190,54 @@ static void add_root_requirement(expr_i *e, passby_e passby,
     if (is_noheap_type(e->resolve_texpr())) {
       /* function returning noheap type, which is only allowed for extern c
        * function. it must be a member function (or a member-like function) of
-       * a (possibly) container type, and the returned reference must be valid 
+       * a (possibly) container type, and the returned reference must be valid
        * while the container is valid and it is not resized. */
       expr_op *const eop = dynamic_cast<expr_op *>(efc->func);
       if (eop != 0 && (eop->op == '.' || eop->op == TOK_ARROW)) {
-	/* 'this' object is possibly a container. root the object and it's
-	 * elements */
-	add_root_requirement_container_elements(eop->arg0, blockscope_flag);
-	add_root_requirement(eop->arg0,
-	  is_passby_const(passby)
-	  ? passby_e_const_reference : passby_e_mutable_reference,
-	  blockscope_flag);
-	return;
+        /* 'this' object is possibly a container. root the object and it's
+         * elements */
+        add_root_requirement_container_elements(eop->arg0, blockscope_flag);
+        add_root_requirement(eop->arg0,
+          is_passby_const(passby)
+          ? passby_e_const_reference : passby_e_mutable_reference,
+          blockscope_flag);
+        return;
       }
       /* non-member function. it must be an 'extern' function */
       {
-	expr_i *memfunc_w_explicit_obj = 0;
-	term te = get_func_te_for_funccall(efc->func, memfunc_w_explicit_obj);
-	expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(
-	  term_get_instance(te));
-	if (efd != 0) {
-	  if (!efd->cnamei.has_cname()) {
-	    if (efd->block == 0 ||
-	      !efd->block->symtbl.pragma.disable_noheap_checking) {
-	      arena_error_throw(efc,
-		"Internal error: Non-member, non-extern function returning "
-		"a noheap type");
-	    }
-	  }
-	}
+        expr_i *memfunc_w_explicit_obj = 0;
+        term te = get_func_te_for_funccall(efc->func, memfunc_w_explicit_obj);
+        expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(
+          term_get_instance(te));
+        if (efd != 0) {
+          if (!efd->cnamei.has_cname()) {
+            if (efd->block == 0 ||
+              !efd->block->symtbl.pragma.disable_noheap_checking) {
+              arena_error_throw(efc,
+                "Internal error: Non-member, non-extern function returning "
+                "a noheap type");
+            }
+          }
+        }
       }
       /* when a non-member function returns a noheap type, its arguments must
        * be rooted. */
       typedef std::list<expr_i *> arglist_type;
       arglist_type arglist;
-      append_hidden_this(efc->func, arglist); /* noop */
+      append_hidden_this(efc->func, arglist); /* no op */
       append_comma_sep_list(efc->arg, arglist);
       for (arglist_type::const_iterator j = arglist.begin();
-	j != arglist.end(); ++j) {
-	if (is_container_family(e->resolve_texpr())) {
-	  /* this funccall returns a container of noheap type. root container
-	   * elements also, because it may be converted to .
-	   * ( 'const r = make_vector{cslice{int}}(iv0, iv1)' for example ) */
-	  add_root_requirement_container_elements(*j, blockscope_flag);
-	}
-	add_root_requirement(*j,
-	  is_passby_const(passby)
-	  ? passby_e_const_reference : passby_e_mutable_reference,
-	  blockscope_flag);
+        j != arglist.end(); ++j) {
+        if (is_container_family(e->resolve_texpr())) {
+          /* this funccall returns a container of noheap type. root container
+           * elements also, because it may be converted to .
+           * ( 'const r = make_vector{cslice{int}}(iv0, iv1)' for example ) */
+          add_root_requirement_container_elements(*j, blockscope_flag);
+        }
+        add_root_requirement(*j,
+          is_passby_const(passby)
+          ? passby_e_const_reference : passby_e_mutable_reference,
+          blockscope_flag);
       }
     }
     /* function returning reference? */
@@ -1276,43 +1248,43 @@ static void add_root_requirement(expr_i *e, passby_e passby,
     if (efd != 0 && is_passby_cm_reference(efd->block->ret_passby)) {
       expr_i *efcarg = 0;
       if (efd->is_virtual_or_member_function()) {
-	/* member function */
-	if (memfunc_w_explicit_obj != 0) {
-	  efcarg = memfunc_w_explicit_obj;
-	  /*
-	  arena_error_throw(efc,
-	    "Invalid function call (explicit object, returning reference)");
-	  */
-	}
-	/* member function call with implicit object. no need to root the
-	 * object. */
+        /* member function */
+        if (memfunc_w_explicit_obj != 0) {
+          efcarg = memfunc_w_explicit_obj;
+          /*
+          arena_error_throw(efc,
+            "Invalid function call (explicit object, returning reference)");
+          */
+        }
+        /* member function call with implicit object. no need to root the
+         * object. */
       } else {
-	/* non-member function */
-	efcarg = efc->arg;
-	if (efcarg == 0) {
-	  efcarg = func_get_hidden_this(efc->func);
-	  /* allow returning reference wo argument */
-	  /*
-	  if (efcarg == 0) {
-	    arena_error_throw(efc,
-	      "Invalid function call (no argument, returning reference)");
-	  }
-	  */
-	}
-	if (efcarg != 0 && efcarg->get_esort() == expr_e_op &&
-	  ptr_down_cast<expr_op>(efcarg)->op == ',') {
-	  arena_error_throw(efc,
-	    "Invalid function call (multiple arguments, returning reference)");
-	    /* TODO: remove this restriction (root the first arg) */
-	}
-	if (efd->is_virtual_or_member_function()) {
-	  arena_error_throw(efc,
-	    "Invalid function call (member function, returning reference)");
-	}
+        /* non-member function */
+        efcarg = efc->arg;
+        if (efcarg == 0) {
+          efcarg = func_get_hidden_this(efc->func);
+          /* allow returning reference wo argument */
+          /*
+          if (efcarg == 0) {
+            arena_error_throw(efc,
+              "Invalid function call (no argument, returning reference)");
+          }
+          */
+        }
+        if (efcarg != 0 && efcarg->get_esort() == expr_e_op &&
+          ptr_down_cast<expr_op>(efcarg)->op == ',') {
+          arena_error_throw(efc,
+            "Invalid function call (multiple arguments, returning reference)");
+            /* TODO: remove this restriction (root the first arg) */
+        }
+        if (efd->is_virtual_or_member_function()) {
+          arena_error_throw(efc,
+            "Invalid function call (member function, returning reference)");
+        }
       }
       if (efcarg != 0) {
-	add_root_requirement(efcarg, efd->block->ret_passby,
-	  blockscope_flag);
+        add_root_requirement(efcarg, efd->block->ret_passby,
+          blockscope_flag);
       }
       return;
     }
@@ -1320,9 +1292,9 @@ static void add_root_requirement(expr_i *e, passby_e passby,
       /* expr returns a value, and require blockscope passby-reference.
        * create a tempvar to root the value. 025/blockscope_val?.px */
       store_tempvar(e,
-	passby == passby_e_const_reference
-	  ? passby_e_const_value : passby_e_mutable_value,
-	blockscope_flag, false, "blpr"); /* ROOT */
+        passby == passby_e_const_reference
+          ? passby_e_const_value : passby_e_mutable_value,
+        blockscope_flag, false, "blpr"); /* ROOT */
     }
     return; /* function returning value */
   }
@@ -1356,7 +1328,7 @@ static void add_root_requirement(expr_i *e, passby_e passby,
       return; /* always rooted */
     } else {
       add_root_requirement(eop->arg0, passby_e_mutable_reference,
-	blockscope_flag);
+        blockscope_flag);
       add_root_requirement(eop->arg1, passby_e_const_value, blockscope_flag);
     }
     return;
@@ -1365,11 +1337,11 @@ static void add_root_requirement(expr_i *e, passby_e passby,
     if (is_dunion(eop->arg0->resolve_texpr())) {
       /* dunion field */
       if (passby == passby_e_mutable_reference) {
-	arena_error_throw(e, "Can not root an union field");
-	DBG_ROOT(fprintf(stderr, "add_root_requirement: dunion field\n"));
+        arena_error_throw(e, "Can not root an union field");
+        DBG_ROOT(fprintf(stderr, "add_root_requirement: dunion field\n"));
       } else {
-	store_tempvar(eop, passby_e_const_value, blockscope_flag, false,
-	  "vfld"); /* ROOT */
+        store_tempvar(eop, passby_e_const_value, blockscope_flag, false,
+          "vfld"); /* ROOT */
       }
     } else {
       /* struct field. root the struct. */
@@ -1387,14 +1359,14 @@ static void add_root_requirement(expr_i *e, passby_e passby,
       /* pointers */
       /* copy the pointer in order to own a refcount */
       const bool guard_elements = type_has_refguard(
-	eop->arg0->resolve_texpr());
+        eop->arg0->resolve_texpr());
       #if 0
       fprintf(stderr, "%s: guard=%d\n",
-	term_tostr_human(eop->arg0->resolve_texpr()).c_str(),
-	(int)guard_elements);
+        term_tostr_human(eop->arg0->resolve_texpr()).c_str(),
+        (int)guard_elements);
       #endif
       store_tempvar(eop->arg0, passby_e_const_value, blockscope_flag,
-	guard_elements, "ptrderef"); /* ROOT */
+        guard_elements, "ptrderef"); /* ROOT */
     }
     return;
   case '[':
@@ -1402,10 +1374,10 @@ static void add_root_requirement(expr_i *e, passby_e passby,
     {
       passby_e container_passby = passby_e_const_value;
       if (is_cm_range_family(eop->arg0->resolve_texpr())) {
-	container_passby = passby_e_const_value;
+        container_passby = passby_e_const_value;
       } else {
-	container_passby = is_passby_const(passby)
-	  ? passby_e_const_reference : passby_e_mutable_reference;
+        container_passby = is_passby_const(passby)
+          ? passby_e_const_reference : passby_e_mutable_reference;
       }
       add_root_requirement(eop->arg0, container_passby, blockscope_flag);
     }
@@ -1438,7 +1410,7 @@ static void add_root_requirement(expr_i *e, passby_e passby,
       /* can not store values of 2nd and 3rd exprs to a named temp variable
        * because they must be lazily evaluated. */
       arena_error_throw(e,
-	"Can not blockscope-root operator '?:' returning a noheap type");
+        "Can not blockscope-root operator '?:' returning a noheap type");
       /* no need to worry about '||' and '&&' because they always return
        * bool. */
     }
@@ -1464,9 +1436,9 @@ static void add_root_requirement(expr_i *e, passby_e passby,
   } else {
     if (eop->arg1 != 0) {
       add_root_requirement(eop->arg1,
-	is_passby_const(passby)
-	? passby_e_const_value : passby_e_mutable_value,
-	child_blockscope_flag);
+        is_passby_const(passby)
+        ? passby_e_const_value : passby_e_mutable_value,
+        child_blockscope_flag);
     }
   }
 }
@@ -1637,7 +1609,9 @@ static void subst_user_defined_op(expr_op *eop)
   case '~': func = "neg"; tc0 = is_boolean_type; break;
   case '!': func = "not"; tc0 = is_boolean_type; break;
   /* tuple */
+  /*
   case '{': func = "make_tuple"; break;
+  */
   /* pointer dereference */
   case TOK_PTR_DEREF: func = "deref"; tc0 = is_dereferencable; break;
   default: break;
@@ -1662,22 +1636,24 @@ static void subst_user_defined_op(expr_op *eop)
   if (eop->op == TOK_PTR_DEREF) {
     fc = expr_funccall_new(eop->fname, eop->line,
       expr_op_new(eop->fname, eop->line, '.',
-	eop->arg0,
-	expr_symbol_new(eop->fname, eop->line, 
-	  expr_nssym_new(eop->fname, eop->line, 0, "deref__"))), 0);
+        eop->arg0,
+        expr_symbol_new(eop->fname, eop->line,
+          expr_nssym_new(eop->fname, eop->line, 0, "deref__"))), 0);
   } else {
     fc = expr_funccall_new(eop->fname, eop->line,
       expr_symbol_new(eop->fname, eop->line,
-	expr_nssym_new(eop->fname, eop->line,
-	  expr_nssym_new(eop->fname, eop->line, 0, "operator"), func)),
+        expr_nssym_new(eop->fname, eop->line,
+          expr_nssym_new(eop->fname, eop->line,
+            expr_nssym_new(eop->fname, eop->line,
+              0, "core"), "operator"), func)),
       (tc1 != 0)
-	? expr_op_new(eop->fname, eop->line, ',', eop->arg0, eop->arg1)
-	: eop->arg0);
+        ? expr_op_new(eop->fname, eop->line, ',', eop->arg0, eop->arg1)
+        : eop->arg0);
   }
   eop->arg0 = fc;
   eop->arg1 = 0;
   eop->op = '(';
-  fn_set_tree_and_define_static(fc, eop, eop->symtbl_lexical, 0, 
+  fn_set_tree_and_define_static(fc, eop, eop->symtbl_lexical, 0,
     eop->symtbl_lexical->block_backref->tinfo.template_descent);
 }
 
@@ -1704,27 +1680,28 @@ static void subst_user_defined_fldop(expr_op *eop)
       /* to avoid compilation ordering problem, enable user-defined field
        * operator only when __has_fldop__ is defined in the struct */
       expr_i *const hf = tblk->symtbl.resolve_name_nothrow_memfld(
-	"__has_fldop__", true, no_generated, "", est0);
+        "__has_fldop__", true, no_generated, "", est0);
       if (hf != 0) {
-	DBG_DYNFLD(fprintf(stderr, "hasfldop!!! %s\n", eop->dump(0).c_str()));
-	expr_symbol *sym = ptr_down_cast<expr_symbol>(eop->arg1);
-	expr_i *fc = expr_funccall_new(eop->fname, eop->line,
-	  expr_te_new(eop->fname, eop->line,
-	    expr_nssym_new(eop->fname, eop->line,
-	      expr_nssym_new(eop->fname, eop->line, 0, "operator"),
-	      "getfld"),
-	    expr_telist_new(eop->fname, eop->line,
-	      expr_str_literal_new(eop->fname, eop->line,
-		arena_strdup(escape_c_str_literal(sym->nssym->sym).c_str())),
-	      0)),
-	  eop->arg0);
-	eop->arg0 = fc;
-	eop->arg1 = 0;
-	eop->op = '(';
-	fn_set_tree_and_define_static(fc, eop, eop->symtbl_lexical, 0, 
-	  eop->symtbl_lexical->block_backref->tinfo.template_descent);
-	DBG_DYNFLD(fprintf(stderr, "hasfldop!!! => %s\n",
-	  eop->dump(0).c_str()));
+        DBG_DYNFLD(fprintf(stderr, "hasfldop!!! %s\n", eop->dump(0).c_str()));
+        expr_symbol *sym = ptr_down_cast<expr_symbol>(eop->arg1);
+        expr_i *fc = expr_funccall_new(eop->fname, eop->line,
+          expr_te_new(eop->fname, eop->line,
+            expr_nssym_new(eop->fname, eop->line,
+              expr_nssym_new(eop->fname, eop->line,
+                expr_nssym_new(eop->fname, eop->line,
+                  0, "core"), "operator"), "getfld"),
+            expr_telist_new(eop->fname, eop->line,
+              expr_str_literal_new(eop->fname, eop->line,
+                arena_strdup(escape_c_str_literal(sym->nssym->sym).c_str())),
+              0)),
+          eop->arg0);
+        eop->arg0 = fc;
+        eop->arg1 = 0;
+        eop->op = '(';
+        fn_set_tree_and_define_static(fc, eop, eop->symtbl_lexical, 0,
+          eop->symtbl_lexical->block_backref->tinfo.template_descent);
+        DBG_DYNFLD(fprintf(stderr, "hasfldop!!! => %s\n",
+          eop->dump(0).c_str()));
       }
     }
     if (einst0 != 0 && einst0->get_esort() == expr_e_dunion && tblk != 0) {
@@ -1732,35 +1709,36 @@ static void subst_user_defined_fldop(expr_op *eop)
        * to throw detailed exception when it is invalid. */
       bool skip = false;
       if (eop->parent_expr->get_esort() == expr_e_if) {
-	expr_if *const eif = ptr_down_cast<expr_if>(eop->parent_expr);
-	if (eif->block1->argdecls != 0 && eif->cond == eop) {
-	  skip = true;
-	}
+        expr_if *const eif = ptr_down_cast<expr_if>(eop->parent_expr);
+        if (eif->block1->argdecls != 0 && eif->cond == eop) {
+          skip = true;
+        }
       } else if (eop->parent_expr->get_esort() == expr_e_op) {
-	expr_op *const peop = ptr_down_cast<expr_op>(eop->parent_expr);
-	if (peop->op == TOK_CASE) {
-	  skip = true;
-	}
+        expr_op *const peop = ptr_down_cast<expr_op>(eop->parent_expr);
+        if (peop->op == TOK_CASE) {
+          skip = true;
+        }
       }
       const symbol sym = get_ns(eop);
-      if (!skip && sym != "operator") {
-	/* operator::union_field{fld}(arg0) */
-	expr_symbol *sym = ptr_down_cast<expr_symbol>(eop->arg1);
-	expr_i *fc = expr_funccall_new(eop->fname, eop->line,
-	  expr_te_new(eop->fname, eop->line,
-	    expr_nssym_new(eop->fname, eop->line,
-	      expr_nssym_new(eop->fname, eop->line, 0, "operator"),
-	      "union_field"),
-	    expr_telist_new(eop->fname, eop->line,
-	      expr_str_literal_new(eop->fname, eop->line,
-		arena_strdup(escape_c_str_literal(sym->nssym->sym).c_str())),
-	      0)),
-	  eop->arg0);
-	eop->arg0 = fc;
-	eop->arg1 = 0;
-	eop->op = '(';
-	fn_set_tree_and_define_static(fc, eop, eop->symtbl_lexical, 0, 
-	  eop->symtbl_lexical->block_backref->tinfo.template_descent);
+      if (!skip && sym != "core::operator") {
+        /* operator::union_field{fld}(arg0) */
+        expr_symbol *sym = ptr_down_cast<expr_symbol>(eop->arg1);
+        expr_i *fc = expr_funccall_new(eop->fname, eop->line,
+          expr_te_new(eop->fname, eop->line,
+            expr_nssym_new(eop->fname, eop->line,
+              expr_nssym_new(eop->fname, eop->line,
+                expr_nssym_new(eop->fname, eop->line,
+                  0, "core"), "operator"), "union_field"),
+            expr_telist_new(eop->fname, eop->line,
+              expr_str_literal_new(eop->fname, eop->line,
+                arena_strdup(escape_c_str_literal(sym->nssym->sym).c_str())),
+              0)),
+          eop->arg0);
+        eop->arg0 = fc;
+        eop->arg1 = 0;
+        eop->op = '(';
+        fn_set_tree_and_define_static(fc, eop, eop->symtbl_lexical, 0,
+          eop->symtbl_lexical->block_backref->tinfo.template_descent);
       }
     }
   }
@@ -1777,32 +1755,33 @@ static void subst_user_defined_fldop(expr_op *eop)
       expr_block *const tblk = einst0 != 0 ? einst0->get_template_block() : 0;
       /* supports structs only. no additional ns lookup. */
       if (est0 != 0 && tblk != 0) {
-	const bool no_generated = true;
-	expr_i *const hf = tblk->symtbl.resolve_name_nothrow_memfld(
-	  "__has_fldop__", true, no_generated, "", est0);
-	if (hf != 0 && !hf->generated_flag) {
-	  DBG_DYNFLD(fprintf(stderr, "hasfldop!!! set %s\n",
-	    eop->dump(0).c_str()));
-	  expr_symbol *sym = ptr_down_cast<expr_symbol>(lhsop->arg1);
-	  expr_i *fc = expr_funccall_new(eop->fname, eop->line,
-	    expr_te_new(eop->fname, eop->line,
-	      expr_nssym_new(eop->fname, eop->line,
-		expr_nssym_new(eop->fname, eop->line, 0, "operator"),
-		"setfld"),
-	      expr_telist_new(eop->fname, eop->line,
-		expr_str_literal_new(eop->fname, eop->line,
-		  arena_strdup(escape_c_str_literal(sym->nssym->sym).c_str())),
-		0)),
-	    expr_op_new(eop->fname, eop->line, ',',
-	      lhsop->arg0, eop->arg1));
-	  eop->arg0 = fc;
-	  eop->arg1 = 0;
-	  eop->op = '(';
-	  fn_set_tree_and_define_static(fc, eop, eop->symtbl_lexical, 0, 
-	    eop->symtbl_lexical->block_backref->tinfo.template_descent);
-	  DBG_DYNFLD(fprintf(stderr, "hasfldop!!! set => %s\n",
-	    eop->dump(0).c_str()));
-	}
+        const bool no_generated = true;
+        expr_i *const hf = tblk->symtbl.resolve_name_nothrow_memfld(
+          "__has_fldop__", true, no_generated, "", est0);
+        if (hf != 0 && !hf->generated_flag) {
+          DBG_DYNFLD(fprintf(stderr, "hasfldop!!! set %s\n",
+            eop->dump(0).c_str()));
+          expr_symbol *sym = ptr_down_cast<expr_symbol>(lhsop->arg1);
+          expr_i *fc = expr_funccall_new(eop->fname, eop->line,
+            expr_te_new(eop->fname, eop->line,
+              expr_nssym_new(eop->fname, eop->line,
+                expr_nssym_new(eop->fname, eop->line,
+                  expr_nssym_new(eop->fname, eop->line,
+                    0, "core"), "operator"), "setfld"),
+              expr_telist_new(eop->fname, eop->line,
+                expr_str_literal_new(eop->fname, eop->line,
+                  arena_strdup(escape_c_str_literal(sym->nssym->sym).c_str())),
+                0)),
+            expr_op_new(eop->fname, eop->line, ',',
+              lhsop->arg0, eop->arg1));
+          eop->arg0 = fc;
+          eop->arg1 = 0;
+          eop->op = '(';
+          fn_set_tree_and_define_static(fc, eop, eop->symtbl_lexical, 0,
+            eop->symtbl_lexical->block_backref->tinfo.template_descent);
+          DBG_DYNFLD(fprintf(stderr, "hasfldop!!! set => %s\n",
+            eop->dump(0).c_str()));
+        }
       }
     }
   }
@@ -1815,15 +1794,17 @@ static void subst_user_defined_elemop(expr_op *eop)
     const term& ta0 = eop->arg0->resolve_texpr();
     if (!is_container_family(ta0) && !is_cm_range_family(ta0)) {
       expr_i *fc = expr_funccall_new(eop->fname, eop->line,
-	expr_symbol_new(eop->fname, eop->line,
-	  expr_nssym_new(eop->fname, eop->line,
-	    expr_nssym_new(eop->fname, eop->line, 0, "operator"), "getelem")),
-	expr_op_new(eop->fname, eop->line, ',', eop->arg0, eop->arg1));
+        expr_symbol_new(eop->fname, eop->line,
+          expr_nssym_new(eop->fname, eop->line,
+            expr_nssym_new(eop->fname, eop->line,
+              expr_nssym_new(eop->fname, eop->line,
+                0, "core"), "operator"), "getelem")),
+        expr_op_new(eop->fname, eop->line, ',', eop->arg0, eop->arg1));
       eop->arg0 = fc;
       eop->arg1 = 0;
       eop->op = '(';
-      fn_set_tree_and_define_static(fc, eop, eop->symtbl_lexical, 0, 
-	eop->symtbl_lexical->block_backref->tinfo.template_descent);
+      fn_set_tree_and_define_static(fc, eop, eop->symtbl_lexical, 0,
+        eop->symtbl_lexical->block_backref->tinfo.template_descent);
     }
   }
   if (eop->op == '=') {
@@ -1832,19 +1813,20 @@ static void subst_user_defined_elemop(expr_op *eop)
       fn_check_type(lhsop->arg0, lhsop->symtbl_lexical);
       const term& ta0 = lhsop->arg0->resolve_texpr();
       if (!is_container_family(ta0) && !is_cm_range_family(ta0)) {
-	expr_i *fc = expr_funccall_new(eop->fname, eop->line,
-	  expr_symbol_new(eop->fname, eop->line,
-	    expr_nssym_new(eop->fname, eop->line,
-	      expr_nssym_new(eop->fname, eop->line, 0, "operator"),
-	      "setelem")),
-	  expr_op_new(eop->fname, eop->line, ',',
-	    expr_op_new(eop->fname, eop->line, ',',
-	      lhsop->arg0, lhsop->arg1), eop->arg1));
-	eop->arg0 = fc;
-	eop->arg1 = 0;
-	eop->op = '(';
-	fn_set_tree_and_define_static(fc, eop, eop->symtbl_lexical, 0, 
-	  eop->symtbl_lexical->block_backref->tinfo.template_descent);
+        expr_i *fc = expr_funccall_new(eop->fname, eop->line,
+          expr_symbol_new(eop->fname, eop->line,
+            expr_nssym_new(eop->fname, eop->line,
+              expr_nssym_new(eop->fname, eop->line,
+                expr_nssym_new(eop->fname, eop->line,
+                  0, "core"), "operator"), "setelem")),
+          expr_op_new(eop->fname, eop->line, ',',
+            expr_op_new(eop->fname, eop->line, ',',
+              lhsop->arg0, lhsop->arg1), eop->arg1));
+        eop->arg0 = fc;
+        eop->arg1 = 0;
+        eop->op = '(';
+        fn_set_tree_and_define_static(fc, eop, eop->symtbl_lexical, 0,
+          eop->symtbl_lexical->block_backref->tinfo.template_descent);
       }
     }
   }
@@ -1894,8 +1876,8 @@ static void append_additional_lookups(expr_i *e, additional_lookups& als,
     if (blk != 0) {
       expr_block::inherit_list_type& ih = blk->resolve_inherit_transitive();
       for (expr_block::inherit_list_type::const_iterator i = ih.begin();
-	i != ih.end(); ++i) {
-	append_additional_lookups(*i, als, false);
+        i != ih.end(); ++i) {
+        append_additional_lookups(*i, als, false);
       }
     }
   }
@@ -1914,7 +1896,7 @@ void expr_op::check_type(symbol_table *lookup)
     expr_i *const einst = term_get_instance(t);
     if (einst == 0) {
       arena_error_throw(arg0, "Invalid type: '%s'",
-	term_tostr_human(t).c_str());
+        term_tostr_human(t).c_str());
     }
     expr_block *const blk = einst->get_template_block();
     symbol_table *const symtbl = blk != 0 ? &blk->symtbl : 0;
@@ -1929,35 +1911,35 @@ void expr_op::check_type(symbol_table *lookup)
     if (symtbl != 0) {
       symbol symstr = sc->get_fullsym();
       expr_i *fmem = symtbl->resolve_name_nothrow_memfld(symstr, no_private,
-	false, sc->uniqns, this);
+        false, sc->uniqns, this);
       bool is_generic_invoke = false;
       if (fmem == 0) {
-	/* "invoke__" member function */
-	symstr = "invoke__"; /* TODO: intern once */
-	fmem = symtbl->resolve_name_nothrow_memfld(symstr, no_private,
-	  false, sc->uniqns, this);
-	is_generic_invoke = true;
+        /* "invoke__" member function */
+        symstr = "invoke__"; /* TODO: intern once */
+        fmem = symtbl->resolve_name_nothrow_memfld(symstr, no_private,
+          false, sc->uniqns, this);
+        is_generic_invoke = true;
       }
       if (fmem != 0) {
-	/* symbol is defined as a field/mfunc */
-	DBG(fprintf(stderr, "found fld '%s' ns=%s\n",
-	  symstr.c_str(), sc->uniqns.c_str()));
-	if (is_generic_invoke) {
-	  sc->set_sym_prefix_fullsym(symstr, is_generic_invoke);
-	}
-	fn_check_type(arg1, symtbl); /* expr_symbol::check_type */
-	type_of_this_expr = arg1->resolve_texpr();
-	const expr_i *const fo = sc->get_symdef();
-	const expr_funcdef *const fo_efd =
-	  dynamic_cast<const expr_funcdef *>(fo);
-	if (fo_efd != 0 && !fo_efd->is_virtual_or_member_function()) {
-	  arena_error_throw(this, "Can not apply '%s' "
-	    "('%s' is not a member function)",
-	    tok_string(this, op), sc->get_fullsym().c_str());
-	  return;
-	}
-	assert(!type_of_this_expr.is_null());
-	return;
+        /* symbol is defined as a field/mfunc */
+        DBG(fprintf(stderr, "found fld '%s' ns=%s\n",
+          symstr.c_str(), sc->uniqns.c_str()));
+        if (is_generic_invoke) {
+          sc->set_sym_prefix_fullsym(symstr, is_generic_invoke);
+        }
+        fn_check_type(arg1, symtbl); /* expr_symbol::check_type */
+        type_of_this_expr = arg1->resolve_texpr();
+        const expr_i *const fo = sc->get_symdef();
+        const expr_funcdef *const fo_efd =
+          dynamic_cast<const expr_funcdef *>(fo);
+        if (fo_efd != 0 && !fo_efd->is_virtual_or_member_function()) {
+          arena_error_throw(this, "Can not apply '%s' "
+            "('%s' is not a member function)",
+            tok_string(this, op), sc->get_fullsym().c_str());
+          return;
+        }
+        assert(!type_of_this_expr.is_null());
+        return;
       }
     }
     /* find member-like non-member function (vector_size, map_size etc.) */
@@ -1967,55 +1949,55 @@ void expr_op::check_type(symbol_table *lookup)
       additional_lookups als;
       append_additional_lookups(einst, als);
       for (additional_lookups::const_iterator i = als.begin(); i != als.end();
-	++i) {
-	/* lookup with arg1_sym_prefix */
-	std::string funcname_w_prefix = i->sym_prefix
-	  + sc->get_fullsym().to_string(); /* TODO: don't use std::string */
-	const std::string uniqns = i->ns;
-	DBG(fprintf(stderr,
-	  "trying non-member arg0=%s fullsym=%s ns=%s parent_symtbl=%p\n",
-	  arg0->dump(0).c_str(), sc->get_fullsym().c_str(), uniqns.c_str(),
-	  parent_symtbl));
-	no_private = true;
-	expr_i *fo = parent_symtbl->resolve_name_nothrow_ns(
-	  uniqns + "::" + funcname_w_prefix, no_private, uniqns, this);
-	bool is_generic_invoke = false;
-	if (fo == 0) {
-	  /* "foo_invoke__" function */
-	  funcname_w_prefix = i->sym_prefix + "invoke__";
-	    /* TODO: don't use std::string. use symbol instead. */
-	  fo = parent_symtbl->resolve_name_nothrow_ns(
-	    uniqns + "::" + funcname_w_prefix, no_private, uniqns, this);
-	  is_generic_invoke = true;
-	}
-	if (fo != 0) {
-	  DBG(fprintf(stderr, "found %s\n", sc->get_fullsym().c_str()));
-	  sc->arg_hidden_this = arg0;
-	  sc->arg_hidden_this_ns = i->ns;
-	  sc->set_sym_prefix_fullsym(funcname_w_prefix, is_generic_invoke);
-	  fn_check_type(arg1, parent_symtbl); /* expr_symbol::check_type */
-	  type_of_this_expr = arg1->resolve_texpr();
-	  assert(!type_of_this_expr.is_null());
-	  return;
-	}
+        ++i) {
+        /* lookup with arg1_sym_prefix */
+        std::string funcname_w_prefix = i->sym_prefix
+          + sc->get_fullsym().to_string(); /* TODO: don't use std::string */
+        const std::string uniqns = i->ns;
+        DBG(fprintf(stderr,
+          "trying non-member arg0=%s fullsym=%s ns=%s parent_symtbl=%p\n",
+          arg0->dump(0).c_str(), sc->get_fullsym().c_str(), uniqns.c_str(),
+          parent_symtbl));
+        no_private = true;
+        expr_i *fo = parent_symtbl->resolve_name_nothrow_ns(
+          uniqns + "::" + funcname_w_prefix, no_private, uniqns, this);
+        bool is_generic_invoke = false;
+        if (fo == 0) {
+          /* "foo_invoke__" function */
+          funcname_w_prefix = i->sym_prefix + "invoke__";
+            /* TODO: don't use std::string. use symbol instead. */
+          fo = parent_symtbl->resolve_name_nothrow_ns(
+            uniqns + "::" + funcname_w_prefix, no_private, uniqns, this);
+          is_generic_invoke = true;
+        }
+        if (fo != 0) {
+          DBG(fprintf(stderr, "found %s\n", sc->get_fullsym().c_str()));
+          sc->arg_hidden_this = arg0;
+          sc->arg_hidden_this_ns = i->ns;
+          sc->set_sym_prefix_fullsym(funcname_w_prefix, is_generic_invoke);
+          fn_check_type(arg1, parent_symtbl); /* expr_symbol::check_type */
+          type_of_this_expr = arg1->resolve_texpr();
+          assert(!type_of_this_expr.is_null());
+          return;
+        }
       }
       /* not found */
       std::string s;
       for (additional_lookups::const_iterator i = als.begin(); i != als.end();
-	++i) {
-	if (!s.empty()) {
-	  s += ", ";
-	}
-	s += i->sym_prefix + sc->get_fullsym().to_string();
+        ++i) {
+        if (!s.empty()) {
+          s += ", ";
+        }
+        s += i->sym_prefix + sc->get_fullsym().to_string();
       }
       DBG(fprintf(stderr, "func %s notfound [%s])",
-	funcname_w_prefix.c_str(), uniqns.c_str()));
+        funcname_w_prefix.c_str(), uniqns.c_str()));
       arena_error_throw(this,
-	"Can not apply '%s' "
-	"(member function '%s' nor non-member function '%s' not found)",
-	tok_string(this, op),
-	sc->get_fullsym().c_str(),
-	s.c_str());
+        "Can not apply '%s' "
+        "(member function '%s' nor non-member function '%s' not found)",
+        tok_string(this, op),
+        sc->get_fullsym().c_str(),
+        s.c_str());
       return;
     }
     arena_error_throw(this, "Can not apply '%s' (field not found)",
@@ -2074,7 +2056,7 @@ void expr_op::check_type(symbol_table *lookup)
     {
       const bool incl_byref = true;
       if (!is_vardef_constructor_or_byref(this, incl_byref)) {
-	check_movable(this, arg1);
+        check_movable(this, arg1);
       }
     }
     /* assignment expressions don't have value */
@@ -2161,72 +2143,72 @@ void expr_op::check_type(symbol_table *lookup)
     } else {
       /* containers or ranges */
       term idxt = (op == '[')
-	? get_array_index_texpr(this, arg0->resolve_texpr())
-	: term();
+        ? get_array_index_texpr(this, arg0->resolve_texpr())
+        : term();
       if (arg1 != 0 && is_range_op(arg1)) {
-	/* array slice */
-	expr_op *const eoprange = ptr_down_cast<expr_op>(arg1);
-	expr_i *const range_begin = eoprange->arg0;
-	expr_i *const range_end = eoprange->arg1;
-	#if 0
-	if (is_integral_type(idxt) &&
-	  is_integral_type(range_begin->resolve_texpr())) {
-	  /* need not to convert */
-	} else {
-	#endif
-	  check_type_convert_to_lhs(this, range_begin, idxt);
-	#if 0
-	}
-	#endif
-	#if 0
-	if (is_integral_type(idxt) &&
-	  is_integral_type(range_end->resolve_texpr())) {
-	  /* need not to convert */
-	} else {
-	#endif
-	  check_type_convert_to_lhs(this, range_end, idxt);
-	#if 0
-	}
-	#endif
-	type_of_this_expr = get_array_range_texpr(this, arg0,
-	  arg0->resolve_texpr());
-	if (type_of_this_expr.is_null()) {
-	  arena_error_throw(this, "Using an array without type parameter");
-	}
+        /* array slice */
+        expr_op *const eoprange = ptr_down_cast<expr_op>(arg1);
+        expr_i *const range_begin = eoprange->arg0;
+        expr_i *const range_end = eoprange->arg1;
+        #if 0
+        if (is_integral_type(idxt) &&
+          is_integral_type(range_begin->resolve_texpr())) {
+          /* need not to convert */
+        } else {
+        #endif
+          check_type_convert_to_lhs(this, range_begin, idxt);
+        #if 0
+        }
+        #endif
+        #if 0
+        if (is_integral_type(idxt) &&
+          is_integral_type(range_end->resolve_texpr())) {
+          /* need not to convert */
+        } else {
+        #endif
+          check_type_convert_to_lhs(this, range_end, idxt);
+        #if 0
+        }
+        #endif
+        type_of_this_expr = get_array_range_texpr(this, arg0,
+          arg0->resolve_texpr());
+        if (type_of_this_expr.is_null()) {
+          arena_error_throw(this, "Using an array without type parameter");
+        }
       } else {
-	/* array or map element */
-	if (is_map_family(arg0->resolve_texpr())) {
-	  if (!is_ifdef_cond_expr(this)) {
-	    /* getting map element can cause implicit inserting */
-	    check_lvalue(this, arg0);
-	    /* operator [] for map requires mapped type to be defcon */
-	    term telem = get_array_elem_texpr(this, arg0->resolve_texpr());
-	    if (!is_default_constructible(telem)) {
-	      arena_error_push(this, "Type '%s' is not default-constructible",
-		term_tostr_human(telem).c_str());
-	    }
-	  } else {
-	    /* if (x : m[i]) { ... } */
-	    /* m need not to have lvalue */
-	  }
-	}
-	if (op == TOK_PTR_DEREF) {
-	  if (!is_cm_range_family(arg0->resolve_texpr())) {
-	    arena_error_throw(this, "Can not apply '%s'",
-	      tok_string(this, op));
-	  }
-	#if 0
-	} else if (is_integral_type(idxt) &&
-	  is_integral_type(arg1->resolve_texpr())) {
-	  /* need not to convert */
-	#endif
-	} else {
-	  check_type_convert_to_lhs(this, arg1, idxt);
-	}
-	type_of_this_expr = get_array_elem_texpr(this, arg0->resolve_texpr());
-	if (type_of_this_expr.is_null()) {
-	  arena_error_throw(this, "Using an array without type parameter");
-	}
+        /* array or map element */
+        if (is_map_family(arg0->resolve_texpr())) {
+          if (!is_ifdef_cond_expr(this)) {
+            /* getting map element can cause implicit inserting */
+            check_lvalue(this, arg0);
+            /* operator [] for map requires mapped type to be defcon */
+            term telem = get_array_elem_texpr(this, arg0->resolve_texpr());
+            if (!is_default_constructible(telem)) {
+              arena_error_push(this, "Type '%s' is not default-constructible",
+                term_tostr_human(telem).c_str());
+            }
+          } else {
+            /* if (x : m[i]) { ... } */
+            /* m need not to have lvalue */
+          }
+        }
+        if (op == TOK_PTR_DEREF) {
+          if (!is_cm_range_family(arg0->resolve_texpr())) {
+            arena_error_throw(this, "Can not apply '%s'",
+              tok_string(this, op));
+          }
+        #if 0
+        } else if (is_integral_type(idxt) &&
+          is_integral_type(arg1->resolve_texpr())) {
+          /* need not to convert */
+        #endif
+        } else {
+          check_type_convert_to_lhs(this, arg1, idxt);
+        }
+        type_of_this_expr = get_array_elem_texpr(this, arg0->resolve_texpr());
+        if (type_of_this_expr.is_null()) {
+          arena_error_throw(this, "Using an array without type parameter");
+        }
       }
     }
     break;
@@ -2257,61 +2239,61 @@ void expr_op::check_type(symbol_table *lookup)
     if (arg0->get_esort() == expr_e_var) {
       /* var x = ... */
       if (op != '=') {
-	arena_error_throw(this, "Invalid expression (invalid assignment)");
+        arena_error_throw(this, "Invalid expression (invalid assignment)");
       }
       expr_var *const ev = ptr_down_cast<expr_var>(arg0);
       if (ev->varinfo.passby == passby_e_mutable_reference) {
-	/* foo mutable & x = ... requires rhs to have lvalue */
-	check_lvalue(this, arg1);
+        /* foo mutable & x = ... requires rhs to have lvalue */
+        check_lvalue(this, arg1);
       }
       if (is_passby_cm_reference(ev->varinfo.passby) ||
-	(is_noheap_type(ev->resolve_texpr()) &&
-	  !is_cm_lock_guard_family(ev->resolve_texpr()))) {
-	/* require block scope root on rhs because the variable is a noheap
-	 * variable and is required to be valid while the block is finished.
-	 * this is the only case a block scope tempvar is required. */
-	/* note: no need (and should not) to create a copy of a lock guard. */
-	DBG_CON(fprintf(stderr, "block scope root rhs %s\n",
-	  arg1->dump(0).c_str()));
-	add_root_requirement(arg1, ev->varinfo.passby, true);
+        (is_noheap_type(ev->resolve_texpr()) &&
+          !is_cm_lock_guard_family(ev->resolve_texpr()))) {
+        /* require block scope root on rhs because the variable is a noheap
+         * variable and is required to be valid while the block is finished.
+         * this is the only case a block scope tempvar is required. */
+        /* note: no need (and should not) to create a copy of a lock guard. */
+        DBG_CON(fprintf(stderr, "block scope root rhs %s\n",
+          arg1->dump(0).c_str()));
+        add_root_requirement(arg1, ev->varinfo.passby, true);
       } else {
-	/* no need to root arg1 because lhs is a variable */
+        /* no need to root arg1 because lhs is a variable */
       }
     } else {
       /* asign op, lhs is not a vardef */
       term& a0t = arg0->resolve_texpr();
       if (!symtbl_lexical->pragma.disable_noheap_checking &&
-	is_noheap_type(a0t)) {
-	/* 'w1 = w2' is not allowed for noheap types, because these
-	 * variables may depend different objects */
-	arena_error_throw(this,
-	  "Invalid assignment ('%s' is a noheap type)",
-	  term_tostr_human(arg0->resolve_texpr()).c_str());
+        is_noheap_type(a0t)) {
+        /* 'w1 = w2' is not allowed for noheap types, because these
+         * variables may depend different objects */
+        arena_error_throw(this,
+          "Invalid assignment ('%s' is a noheap type)",
+          term_tostr_human(arg0->resolve_texpr()).c_str());
       }
       if (!is_assignable_allowing_unsafe(a0t)) {
-	/* 'v1 = v2' is not allowed. darray for example. */
-	arena_error_throw(this,
-	  "Invalid assignment ('%s' is not an assignable type)",
-	  term_tostr_human(arg0->resolve_texpr()).c_str());
+        /* 'v1 = v2' is not allowed. darray for example. */
+        arena_error_throw(this,
+          "Invalid assignment ('%s' is not an assignable type)",
+          term_tostr_human(arg0->resolve_texpr()).c_str());
       }
       if (arg1 != 0) {
-	if (expr_is_subexpression(this) ||
-	  (arg0 != 0 && expr_can_have_side_effect(arg0))) {
-	  /* arg1 can be invalidated by arg0 or other expr */
-	  passing_root_requirement_fast(this, arg1, false);
-	}
+        if (expr_is_subexpression(this) ||
+          (arg0 != 0 && expr_can_have_side_effect(arg0))) {
+          /* arg1 can be invalidated by arg0 or other expr */
+          passing_root_requirement_fast(this, arg1, false);
+        }
       }
       if (expr_is_subexpression(this) ||
-	(arg1 != 0 && expr_can_have_side_effect(arg1))) {
-	/* arg0 can be invalidated by arg1 or other expr */
-	expr_i *const evo = get_dunion_object_if_vfld(arg0);
-	if (evo != 0) {
-	  /* lhs is a dunion field. root the dunion object. */
-	  add_root_requirement(evo, passby_e_mutable_reference, false);
-	} else {
-	  /* lhs is not a dunion field. root the lhs. */
-	  add_root_requirement(arg0, passby_e_mutable_reference, false);
-	}
+        (arg1 != 0 && expr_can_have_side_effect(arg1))) {
+        /* arg0 can be invalidated by arg1 or other expr */
+        expr_i *const evo = get_dunion_object_if_vfld(arg0);
+        if (evo != 0) {
+          /* lhs is a dunion field. root the dunion object. */
+          add_root_requirement(evo, passby_e_mutable_reference, false);
+        } else {
+          /* lhs is not a dunion field. root the lhs. */
+          add_root_requirement(arg0, passby_e_mutable_reference, false);
+        }
       }
     }
   } else {
@@ -2397,8 +2379,8 @@ static void set_type_inference_result_for_funccall(expr_funccall *efc,
     if (!check_term_validity(einst->get_value_texpr(), true, true, true, true,
       efc, err_mess)) {
       arena_error_push(efc, "Incomplete template expression: '%s' %s",
-	term_tostr_human(einst->get_value_texpr()).c_str(),
-	err_mess.c_str());
+        term_tostr_human(einst->get_value_texpr()).c_str(),
+        err_mess.c_str());
     }
     real_func_expr->get_sdef()->set_evaluated(einst->get_value_texpr());
       /* set auto-matching result */
@@ -2427,21 +2409,21 @@ static void check_passing_memfunc_rec(expr_funccall *fc,
       ->is_virtual_or_member_function();
     if (estv != 0) {
       if (caller_up_est == 0) {
-	arena_error_throw(fc, "Passing invalid member function '%s'",
-	  term_tostr_human(te).c_str());
+        arena_error_throw(fc, "Passing invalid member function '%s'",
+          term_tostr_human(te).c_str());
       }
       if (estv->get_esort() == expr_e_struct) {
-	if (caller_up_est != estv) {
-	  arena_error_throw(fc, "Passing invalid member function '%s'",
-	    term_tostr_human(te).c_str());
-	}
+        if (caller_up_est != estv) {
+          arena_error_throw(fc, "Passing invalid member function '%s'",
+            term_tostr_human(te).c_str());
+        }
       #if 0
       } else {
-	const expr_interface *const ei =
-	  ptr_down_cast<const expr_interface>(estv);
-	if (!implements_interface(caller_up_est, ei)) {
-	  arena_error_throw(fc, "Passing invalid member function");
-	}
+        const expr_interface *const ei =
+          ptr_down_cast<const expr_interface>(estv);
+        if (!implements_interface(caller_up_est, ei)) {
+          arena_error_throw(fc, "Passing invalid member function");
+        }
       #endif
       }
     }
@@ -2473,7 +2455,8 @@ static void check_passing_memfunc(expr_funccall *fc, const term& te)
 static void check_ptr_constructor_syntax(expr_funccall *fc, const term& te)
 {
   expr_i *curfr_expr = get_current_frame_expr(fc->symtbl_lexical);
-  if (curfr_expr == 0 || curfr_expr->get_unique_namespace() != "pointer") {
+  if (curfr_expr == 0 ||
+    curfr_expr->get_unique_namespace() != "core::pointer") {
     const std::string s0 = term_tostr_human(te);
     arena_error_push(fc,
       "Can not call a pointer constructor. Use make_ptr family instead.");
@@ -2593,8 +2576,8 @@ void expr_funccall::check_type(symbol_table *lookup)
     eval_context ectx;
     if (has_unbound_tparam(func_te, ectx)) {
       arena_error_throw(func,
-	"Template expression '%s' has an unbound type parameter",
-	term_tostr_human(func_te).c_str());
+        "Template expression '%s' has an unbound type parameter",
+        term_tostr_human(func_te).c_str());
     }
   }
   if (is_vararg_function_or_struct(func_te.get_expr()) &&
@@ -2634,8 +2617,8 @@ void expr_funccall::check_type(symbol_table *lookup)
       tas.push_back(tis_ml);
     } else {
       arena_error_throw(this,
-	"Invalid template arguments for variadic template: '%s'",
-	  term_tostr_human(func_te).c_str());
+        "Invalid template arguments for variadic template: '%s'",
+          term_tostr_human(func_te).c_str());
     }
     const term t_un(func_te.get_expr(), tas);
     func_te = eval_term(t_un, this);
@@ -2671,7 +2654,7 @@ void expr_funccall::check_type(symbol_table *lookup)
     if (esym != 0 && esym->get_symdef()->get_esort() == expr_e_tparams) {
       /* func is passed as a template parameter. ok even when func is a
        * foreign member function. */
-      /* noop */
+      /* no op */
     } else {
       check_passing_memfunc(this, func_te);
     }
@@ -2693,19 +2676,19 @@ void expr_funccall::check_type(symbol_table *lookup)
     arglist_type::iterator j = arglist.begin();
     while (j != arglist.end() && ad != 0) {
       DBG(fprintf(stderr, "convert_type(%s -> %s)\n",
-	term_tostr((*j)->resolve_texpr(), term_tostr_sort_humanreadable)
-	  .c_str(),
-	term_tostr(ad->resolve_texpr(), term_tostr_sort_humanreadable)
-	  .c_str()));
+        term_tostr((*j)->resolve_texpr(), term_tostr_sort_humanreadable)
+          .c_str(),
+        term_tostr(ad->resolve_texpr(), term_tostr_sort_humanreadable)
+          .c_str()));
       /* check argument types */
       check_convert_type(*j, ad->resolve_texpr(), &tvmap);
       #if 0
-	const std::string s0 = term_tostr_human((*j)->resolve_texpr());
-	const std::string s1 = term_tostr_human(ad->resolve_texpr());
-	arena_error_push(this, "Invalid conversion from %s to %s",
-	  s0.c_str(), s1.c_str());
-	arena_error_push(this, "  initializing argument %u of '%s'",
-	  argcnt, efd_p_inst->sym);
+        const std::string s0 = term_tostr_human((*j)->resolve_texpr());
+        const std::string s1 = term_tostr_human(ad->resolve_texpr());
+        arena_error_push(this, "Invalid conversion from %s to %s",
+          s0.c_str(), s1.c_str());
+        arena_error_push(this, "  initializing argument %u of '%s'",
+          argcnt, efd_p_inst->sym);
       #endif
       /* check lvalue and root argument expressions */
       passing_root_requirement(ad->passby, this, *j, false);
@@ -2718,9 +2701,9 @@ void expr_funccall::check_type(symbol_table *lookup)
       /* check lvalue and root the foo of foo.bar(...) */
       expr_i *const thisexpr = ptr_down_cast<expr_op>(func)->arg0;
       passing_root_requirement(
-	efd_p_inst->is_const
-	  ? passby_e_const_reference : passby_e_mutable_reference,
-	this, thisexpr, false);
+        efd_p_inst->is_const
+          ? passby_e_const_reference : passby_e_mutable_reference,
+        this, thisexpr, false);
     }
     if (j != arglist.end()) {
       arena_error_push(this, "Too many argument for '%s'", efd_p_inst->sym);
@@ -2729,7 +2712,7 @@ void expr_funccall::check_type(symbol_table *lookup)
     }
     if (efd_p_inst->is_macro()) {
       arena_error_throw(this,
-	"Invalid function call: target function is for 'expand' statement");
+        "Invalid function call: target function is for 'expand' statement");
     }
     expr_i *einst = 0;
     size_t const efd_num_tparams = elist_length(
@@ -2750,10 +2733,10 @@ void expr_funccall::check_type(symbol_table *lookup)
       einst = efd_p_inst;
       std::string err_mess;
       if (!check_term_validity(efd_p_inst->get_value_texpr(), true, true, true,
-	true, this, err_mess)) {
-	arena_error_push(this, "Incomplete template expression: '%s' %s",
-	  term_tostr_human(efd_p_inst->get_value_texpr()).c_str(),
-	  err_mess.c_str());
+        true, this, err_mess)) {
+        arena_error_push(this, "Incomplete template expression: '%s' %s",
+          term_tostr_human(efd_p_inst->get_value_texpr()).c_str(),
+          err_mess.c_str());
       }
       type_of_this_expr = apply_tvmap(efd_p_inst->get_rettype(), tvmap);
     }
@@ -2762,45 +2745,45 @@ void expr_funccall::check_type(symbol_table *lookup)
     expr_funcdef *const caller_memfunc = get_up_member_func(symtbl_lexical);
     if (call_wo_obj && caller_memfunc != 0 && caller_memfunc->is_const) {
       if (efd_p_inst->is_virtual_or_member_function() &&
-	!efd_p_inst->is_const) {
-	arena_error_throw(this,
-	  "Calling a non-const member function from a const member function");
+        !efd_p_inst->is_const) {
+        arena_error_throw(this,
+          "Calling a non-const member function from a const member function");
       }
     }
     if (call_wo_obj) {
       /* caller's struct context */
       expr_i *const caller_memfunc_parent
-	= caller_memfunc != 0
-	  ? caller_memfunc->is_virtual_or_member_function()
-	    /* caller is in a member function or its local function. */
-	  : get_current_frame_expr(symtbl_lexical);
-	    /* caller is not a member function. can be a struct constr. */
+        = caller_memfunc != 0
+          ? caller_memfunc->is_virtual_or_member_function()
+            /* caller is in a member function or its local function. */
+          : get_current_frame_expr(symtbl_lexical);
+            /* caller is not a member function. can be a struct constr. */
       /* callee's struct context */
       expr_i *const callee_memfunc_parent
-	= efd_p_inst->is_virtual_or_member_function();
+        = efd_p_inst->is_virtual_or_member_function();
       if (caller_memfunc_parent == 0 ||
-	caller_memfunc_parent->get_esort() != expr_e_struct) {
-	#if 0
-	/* if caller is not inside a struct context, it's a function which
-	 * takes callee as a template parameter. if so, callee should be
-	 * called without an object. */
-	/* noop */
-	#endif
-	if (callee_memfunc_parent != 0) {
-	  arena_error_throw(this,
-	    "Calling a member function from a non-member function");
-	}
+        caller_memfunc_parent->get_esort() != expr_e_struct) {
+        #if 0
+        /* if caller is not inside a struct context, it's a function which
+         * takes callee as a template parameter. if so, callee should be
+         * called without an object. */
+        /* no op */
+        #endif
+        if (callee_memfunc_parent != 0) {
+          arena_error_throw(this,
+            "Calling a member function from a non-member function");
+        }
       } else if (callee_memfunc_parent != 0 &&
-	caller_memfunc_parent != callee_memfunc_parent) {
-	arena_error_throw(this,
-	  "Calling a member function without an object");
+        caller_memfunc_parent != callee_memfunc_parent) {
+        arena_error_throw(this,
+          "Calling a member function without an object");
       }
       /* calling a member function from a nested function? */
       if (caller_memfunc != 0 &&
-	caller_memfunc != get_current_frame_expr(symtbl_lexical) &&
-	callee_memfunc_parent != 0) {
-	arena_error_throw(this,
-	  "Calling a member function from a nested function");
+        caller_memfunc != get_current_frame_expr(symtbl_lexical) &&
+        callee_memfunc_parent != 0) {
+        arena_error_throw(this,
+          "Calling a member function from a nested function");
       }
     }
     /* add callee_funcs */
@@ -2831,7 +2814,7 @@ void expr_funccall::check_type(symbol_table *lookup)
     if (!is_default_constructible(func_te, this, 0)) {
       /* TODO: more user friendly error message */
       arena_error_push(this, "Type '%s' is not default-constructible",
-	term_tostr_human(func_te).c_str());
+        term_tostr_human(func_te).c_str());
     }
     return;
   }
@@ -2848,29 +2831,29 @@ void expr_funccall::check_type(symbol_table *lookup)
       unsigned int argcnt = 1;
       arglist_type::iterator j = arglist.begin();
       while (j != arglist.end() && ad != 0) {
-	DBG(fprintf(stderr, "convert_type(%s -> %s)\n",
-	  term_tostr((*j)->resolve_texpr(), term_tostr_sort_humanreadable)
-	    .c_str(),
-	  term_tostr(ad->resolve_texpr(), term_tostr_sort_humanreadable)
-	    .c_str()));
-	check_convert_type(*j, ad->resolve_texpr(), &tvmap);
-	#if 0
-	  const std::string s0 = term_tostr_human((*j)->resolve_texpr());
-	  const std::string s1 = term_tostr_human(ad->resolve_texpr());
-	  arena_error_push(this, "Invalid conversion from %s to %s",
-	    s0.c_str(), s1.c_str());
-	  arena_error_push(this, "  initializing argument %u of '%s'",
-	    argcnt, est_p_inst->sym);
-	#endif
-	passing_root_requirement(ad->passby, this, *j, false);
-	++j;
-	ad = ad->get_rest();
-	++argcnt;
+        DBG(fprintf(stderr, "convert_type(%s -> %s)\n",
+          term_tostr((*j)->resolve_texpr(), term_tostr_sort_humanreadable)
+            .c_str(),
+          term_tostr(ad->resolve_texpr(), term_tostr_sort_humanreadable)
+            .c_str()));
+        check_convert_type(*j, ad->resolve_texpr(), &tvmap);
+        #if 0
+          const std::string s0 = term_tostr_human((*j)->resolve_texpr());
+          const std::string s1 = term_tostr_human(ad->resolve_texpr());
+          arena_error_push(this, "Invalid conversion from %s to %s",
+            s0.c_str(), s1.c_str());
+          arena_error_push(this, "  initializing argument %u of '%s'",
+            argcnt, est_p_inst->sym);
+        #endif
+        passing_root_requirement(ad->passby, this, *j, false);
+        ++j;
+        ad = ad->get_rest();
+        ++argcnt;
       }
       if (j != arglist.end()) {
-	arena_error_push(this, "Too many argument for '%s'", est_p_inst->sym);
+        arena_error_push(this, "Too many argument for '%s'", est_p_inst->sym);
       } else if (ad != 0) {
-	arena_error_push(this, "Too few argument for '%s'", est_p_inst->sym);
+        arena_error_push(this, "Too few argument for '%s'", est_p_inst->sym);
       }
     } else if (est_p_inst->cnamei.cname != 0) {
       typedef std::list<expr_i *> arglist_type;
@@ -2878,90 +2861,90 @@ void expr_funccall::check_type(symbol_table *lookup)
       append_hidden_this(func, arglist);
       append_comma_sep_list(arg, arglist);
       if (is_cm_pointer_family(func_te)) {
-	if (arglist.size() != 1) {
-	  arena_error_push(this, "Too many argument for '%s'",
-	    est_p_inst->sym);
-	}
-	expr_i *const j = arglist.front();
-	if (is_cm_pointer_family(j->resolve_texpr())) {
-	  term tgto = get_pointer_target(func_te);
-	  term tgfrom = get_pointer_target(j->resolve_texpr());
-	  if (tgto == tgfrom &&
-	    pointer_conversion_allowed(
-	      get_family(j->resolve_texpr()), get_family(func_te))) {
-	    /* pointer from another pointer */
-	    passing_root_requirement(passby_e_const_reference, this, j, false);
-	      /* root the arg */
-	    type_of_this_expr = func_te;
-	    funccall_sort = funccall_e_struct_constructor;
-	    return;
-	  }
-	}
-	/* value to pointer */
-	const term_list *const al = func_te.get_args();
-	if (al != 0 && !al->empty()) {
-	  /* func_te is concrete */
-	  term tg = get_pointer_target(func_te);
-	  if (is_interface(tg)) {
-	    arena_error_push(this, "Pointer target is an interface: %s",
-	      term_tostr_human(func_te).c_str());
-	  }
-	  check_convert_type(j, tg, &tvmap);
-	  #if 0
-	    const std::string s0 = term_tostr_human(j->resolve_texpr());
-	    const std::string s1 = term_tostr_human(tg);
-	    arena_error_push(this, "Invalid conversion from %s to %s",
-	      s0.c_str(), s1.c_str());
-	  #endif
-	  passing_root_requirement(passby_e_const_reference, this, j, false);
-	    /* root the arg */
-	  type_of_this_expr = func_te;
-	} else {
-	  /* func_te has a tparam. expr is of the form ptr(x). */
-	  term_list tl;
-	  tl.push_back(j->resolve_texpr());
-	  term rt(func_te.get_expr(), tl);
-	  passing_root_requirement(passby_e_const_reference, this, j, false);
-	    /* root the arg */
-	  /* need not to eval rt, because it' always irreducible. */
-	  type_of_this_expr = rt;
-	}
-	check_ptr_constructor_syntax(this, type_of_this_expr);
-	  /* must be of the form var x = ptr(foo(...)) */
-	funccall_sort = funccall_e_struct_constructor;
-	return;
+        if (arglist.size() != 1) {
+          arena_error_push(this, "Too many argument for '%s'",
+            est_p_inst->sym);
+        }
+        expr_i *const j = arglist.front();
+        if (is_cm_pointer_family(j->resolve_texpr())) {
+          term tgto = get_pointer_target(func_te);
+          term tgfrom = get_pointer_target(j->resolve_texpr());
+          if (tgto == tgfrom &&
+            pointer_conversion_allowed(
+              get_family(j->resolve_texpr()), get_family(func_te))) {
+            /* pointer from another pointer */
+            passing_root_requirement(passby_e_const_reference, this, j, false);
+              /* root the arg */
+            type_of_this_expr = func_te;
+            funccall_sort = funccall_e_struct_constructor;
+            return;
+          }
+        }
+        /* value to pointer */
+        const term_list *const al = func_te.get_args();
+        if (al != 0 && !al->empty()) {
+          /* func_te is concrete */
+          term tg = get_pointer_target(func_te);
+          if (is_interface(tg)) {
+            arena_error_push(this, "Pointer target is an interface: %s",
+              term_tostr_human(func_te).c_str());
+          }
+          check_convert_type(j, tg, &tvmap);
+          #if 0
+            const std::string s0 = term_tostr_human(j->resolve_texpr());
+            const std::string s1 = term_tostr_human(tg);
+            arena_error_push(this, "Invalid conversion from %s to %s",
+              s0.c_str(), s1.c_str());
+          #endif
+          passing_root_requirement(passby_e_const_reference, this, j, false);
+            /* root the arg */
+          type_of_this_expr = func_te;
+        } else {
+          /* func_te has a tparam. expr is of the form ptr(x). */
+          term_list tl;
+          tl.push_back(j->resolve_texpr());
+          term rt(func_te.get_expr(), tl);
+          passing_root_requirement(passby_e_const_reference, this, j, false);
+            /* root the arg */
+          /* need not to eval rt, because it' always irreducible. */
+          type_of_this_expr = rt;
+        }
+        check_ptr_constructor_syntax(this, type_of_this_expr);
+          /* must be of the form var x = ptr(foo(...)) */
+        funccall_sort = funccall_e_struct_constructor;
+        return;
       } else if (is_numeric_type(func_te)) {
-	/* explicit conversion to external numeric type */
-	if (arglist.size() < 1) {
-	  arena_error_throw(this, "Too few argument for '%s'",
-	    est_p_inst->sym);
-	} else if (arglist.size() > 1) {
-	  arena_error_throw(this, "Too many argument for '%s'",
-	    est_p_inst->sym);
-	}
-	expr_i *const j = arglist.front();
-	check_convert_type(j, func_te, &tvmap);
-	#if 0
-	  const std::string s0 = term_tostr_human(j->resolve_texpr());
-	  const std::string s1 = term_tostr_human(func_te);
-	  arena_error_push(this, "Invalid conversion from %s to %s",
-	    s0.c_str(), s1.c_str());
-	#endif
-	passing_root_requirement_fast(this, j, false);
-	  /* root the arg. */
-	type_of_this_expr = func_te;
-	funccall_sort = funccall_e_struct_constructor;
+        /* explicit conversion to external numeric type */
+        if (arglist.size() < 1) {
+          arena_error_throw(this, "Too few argument for '%s'",
+            est_p_inst->sym);
+        } else if (arglist.size() > 1) {
+          arena_error_throw(this, "Too many argument for '%s'",
+            est_p_inst->sym);
+        }
+        expr_i *const j = arglist.front();
+        check_convert_type(j, func_te, &tvmap);
+        #if 0
+          const std::string s0 = term_tostr_human(j->resolve_texpr());
+          const std::string s1 = term_tostr_human(func_te);
+          arena_error_push(this, "Invalid conversion from %s to %s",
+            s0.c_str(), s1.c_str());
+        #endif
+        passing_root_requirement_fast(this, j, false);
+          /* root the arg. */
+        type_of_this_expr = func_te;
+        funccall_sort = funccall_e_struct_constructor;
       } else {
-	arena_error_push(this,
-	  "Can not call a constructor for an extern struct '%s'",
-	    est_p_inst->sym);
+        arena_error_push(this,
+          "Can not call a constructor for an extern struct '%s'",
+            est_p_inst->sym);
       }
     } else {
       /* plain constructor */
       if (est_p_inst->block->tinfo.is_uninstantiated()) {
-	arena_error_throw(this,
-	  "Can not call a plain constructor for an uninstantiated struct '%s'",
-	  est_p_inst->sym);
+        arena_error_throw(this,
+          "Can not call a plain constructor for an uninstantiated struct '%s'",
+          est_p_inst->sym);
       }
       typedef std::list<expr_var *> flds_type;
       flds_type flds;
@@ -2973,24 +2956,24 @@ void expr_funccall::check_type(symbol_table *lookup)
       flds_type::iterator i = flds.begin();
       arglist_type::iterator j = arglist.begin();
       while (i != flds.end() && j != arglist.end()) {
-	check_convert_type(*j, (*i)->resolve_texpr(), &tvmap);
-	#if 0
-	  const std::string s0 = term_tostr_human((*j)->resolve_texpr());
-	  const std::string s1 = term_tostr_human((*i)->resolve_texpr());
-	  arena_error_push(this, "Invalid conversion from %s to %s",
-	    s0.c_str(), s1.c_str());
-	  arena_error_push(this, "  initializing argument %u of '%s'",
-	    argcnt, est_p_inst->sym);
-	#endif
-	passing_root_requirement(passby_e_const_reference, this, *j, false);
-	++i;
-	++j;
-	++argcnt;
+        check_convert_type(*j, (*i)->resolve_texpr(), &tvmap);
+        #if 0
+          const std::string s0 = term_tostr_human((*j)->resolve_texpr());
+          const std::string s1 = term_tostr_human((*i)->resolve_texpr());
+          arena_error_push(this, "Invalid conversion from %s to %s",
+            s0.c_str(), s1.c_str());
+          arena_error_push(this, "  initializing argument %u of '%s'",
+            argcnt, est_p_inst->sym);
+        #endif
+        passing_root_requirement(passby_e_const_reference, this, *j, false);
+        ++i;
+        ++j;
+        ++argcnt;
       }
       if (j != arglist.end()) {
-	arena_error_push(this, "Too many argument for '%s'", est_p_inst->sym);
+        arena_error_push(this, "Too many argument for '%s'", est_p_inst->sym);
       } else if (i != flds.end() && !arglist.empty()) {
-	arena_error_push(this, "Too few argument for '%s'", est_p_inst->sym);
+        arena_error_push(this, "Too few argument for '%s'", est_p_inst->sym);
       }
     }
     size_t const est_num_tparams = elist_length(
@@ -3004,15 +2987,15 @@ void expr_funccall::check_type(symbol_table *lookup)
       /* instantiate template struct automatically */
       DBG(fprintf(stderr, "type is uninstantiated\n"));
       expr_i *const einst = create_tpfunc_texpr(est_p_inst, func_te_args,
-	tvmap, this);
+        tvmap, this);
       expr_i *real_func_expr = func;
       if (real_func_expr != 0 && real_func_expr->get_sdef() != 0) {
-	real_func_expr->get_sdef()->set_evaluated(einst->get_value_texpr());
-	  /* set auto-matching result */
-	expr_struct *est_inst = ptr_down_cast<expr_struct>(einst);
-	type_of_this_expr = est_inst->get_value_texpr();
+        real_func_expr->get_sdef()->set_evaluated(einst->get_value_texpr());
+          /* set auto-matching result */
+        expr_struct *est_inst = ptr_down_cast<expr_struct>(einst);
+        type_of_this_expr = est_inst->get_value_texpr();
       } else {
-	arena_error_throw(this, "Not a template type");
+        arena_error_throw(this, "Not a template type");
       }
     } else {
       type_of_this_expr = apply_tvmap(est_p_inst->value_texpr, tvmap);
@@ -3034,10 +3017,10 @@ void expr_funccall::check_type(symbol_table *lookup)
     append_comma_sep_list(arg, arglist);
     if (arglist.size() > 1) {
       arena_error_throw(this, "Too many argument for '%s'",
-	term_tostr(convto, term_tostr_sort_strict).c_str());
+        term_tostr(convto, term_tostr_sort_strict).c_str());
     } else if (arglist.size() < 1) {
       arena_error_throw(this, "Too few argument for '%s'",
-	term_tostr(convto, term_tostr_sort_strict).c_str());
+        term_tostr(convto, term_tostr_sort_strict).c_str());
     }
     tvmap_type tvmap;
     const arglist_type::iterator j = arglist.begin();
@@ -3046,9 +3029,9 @@ void expr_funccall::check_type(symbol_table *lookup)
       const std::string s0 = term_tostr_human((*j)->resolve_texpr());
       const std::string s1 = term_tostr_human(convto);
       arena_error_push(this, "Invalid conversion from %s to %s",
-	s0.c_str(), s1.c_str());
+        s0.c_str(), s1.c_str());
       arena_error_push(this, "  initializing argument %u of '%s'",
-	1, s1.c_str());
+        1, s1.c_str());
     #endif
     /* need not to root (*j) */ /* <---- WHY? */
     passing_root_requirement_fast(this, *j, false);
@@ -3082,7 +3065,7 @@ void expr_special::check_type(symbol_table *lookup)
     }
     if (arg == 0) {
       if (!is_void_type(fdef->get_rettype())) {
-	arena_error_push(this, "Return with no value");
+        arena_error_push(this, "Return with no value");
       }
       return;
     }
@@ -3096,11 +3079,11 @@ void expr_special::check_type(symbol_table *lookup)
     check_convert_type(arg, rettyp, &tvmap);
     #if 0
       const std::string s0 = term_tostr(rettyp,
-	term_tostr_sort_humanreadable);
+        term_tostr_sort_humanreadable);
       const std::string s1 = term_tostr(arg->resolve_texpr(),
-	term_tostr_sort_humanreadable);
+        term_tostr_sort_humanreadable);
       arena_error_push(this, "Can not convert from '%s' to '%s'",
-	s1.c_str(), s0.c_str());
+        s1.c_str(), s0.c_str());
     #endif
   } else if (tok == TOK_THROW) {
     if (is_void_type(arg->resolve_texpr())) {
@@ -3121,12 +3104,12 @@ void expr_if::check_type(symbol_table *lookup)
     if (sdef != 0) {
       const term& tev = sdef->resolve_evaluated();
       if (tev == term(0LL)) {
-	cond_static = 0;
-	block1->stmts = 0;
+        cond_static = 0;
+        block1->stmts = 0;
       } else if (tev == term(1LL)) {
-	cond_static = 1;
-	block2 = 0;
-	rest = 0;
+        cond_static = 1;
+        block2 = 0;
+        rest = 0;
       }
     }
   }
@@ -3140,14 +3123,14 @@ void expr_if::check_type(symbol_table *lookup)
       tce = ptr_down_cast<expr_op>(cond)->arg0->resolve_texpr();
     } else if (cond->get_esort() == expr_e_op &&
       (ptr_down_cast<expr_op>(cond)->op == '.' ||
-	ptr_down_cast<expr_op>(cond)->op == TOK_ARROW)) {
+        ptr_down_cast<expr_op>(cond)->op == TOK_ARROW)) {
       /* if (var x : u.fld) */
       tce = ptr_down_cast<expr_op>(cond)->arg0->resolve_texpr();
     } else {
       const std::string s0 = term_tostr(cond->resolve_texpr(),
-	term_tostr_sort_humanreadable);
+        term_tostr_sort_humanreadable);
       arena_error_push(this, "Map element or union field expected (got: %s)",
-	s0.c_str());
+        s0.c_str());
       return;
     }
     term telm = cond->resolve_texpr();
@@ -3155,9 +3138,9 @@ void expr_if::check_type(symbol_table *lookup)
     term& ta = block1->argdecls->resolve_texpr();
     if (!is_same_type(telm, ta)) {
       arena_error_push(this, "Invalid type for '%s' (got: %s, expected: %s)",
-	block1->get_argdecls()->sym,
-	term_tostr_human(ta).c_str(),
-	term_tostr_human(telm).c_str());
+        block1->get_argdecls()->sym,
+        term_tostr_human(ta).c_str(),
+        term_tostr_human(telm).c_str());
     }
     passing_root_requirement(block1->get_argdecls()->passby, this, cond, true);
   }
@@ -3210,12 +3193,12 @@ void expr_feach::check_type(symbol_table *lookup)
       check_lvalue(ce, ce);
     } else if (is_cm_range_family(tce)) {
       if (is_const_range_family(tce)) {
-	arena_error_push(ce, "Const range element can not be modified");
-	return;
+        arena_error_push(ce, "Const range element can not be modified");
+        return;
       }
     } else {
       arena_error_push(this,
-	"Internal error: expr_feach::check_type: not a container");
+        "Internal error: expr_feach::check_type: not a container");
     }
   }
   term tidx = get_array_index_texpr(0, tce);
@@ -3318,7 +3301,7 @@ static expr_i *create_te_from_string(const std::string& s, expr_i *pos);
 static expr_i *create_telist_from_string(const std::string& s, expr_i *pos)
 {
   std::string sym = s;
-  size_t i = s.find(','); 
+  size_t i = s.find(',');
   expr_i *rest = 0;
   if (i != s.npos) {
     const std::string reststr = s.substr(i + 1);
@@ -3363,7 +3346,7 @@ template <typename T>
 static void subst_symbol_sym_expr(T *e, const std::string& src,
   const term& dst)
 {
-  if (std::string(e->sym) == src) {
+  if (e->sym != 0 && std::string(e->sym) == src) {
     check_validity_for_symbol(dst.get_string(), e);
     e->sym = arena_strdup(dst.get_string().c_str());
   }
@@ -3399,27 +3382,27 @@ static expr_i *subst_symbol_name_rec(expr_i *e, expr_i *parent, int parent_pos,
     if (nsy->prefix == 0 && std::string(nsy->sym) == src) {
       DBG_EP(fprintf(stderr, "found '%s' expr_symbol\n", src.c_str()));
       if (dst.is_long()) {
-	expr_i *lit = expr_int_literal_new(nsy->fname, nsy->line,
-	  arena_strdup(long_to_string(dst.get_long()).c_str()),
-	  dst.get_long() < 0);
-	if (parent != 0) {
-	  parent->set_child(parent_pos, lit);
-	}
-	return lit;
+        expr_i *lit = expr_int_literal_new(nsy->fname, nsy->line,
+          arena_strdup(long_to_string(dst.get_long()).c_str()),
+          dst.get_long() < 0);
+        if (parent != 0) {
+          parent->set_child(parent_pos, lit);
+        }
+        return lit;
       } else if (dst.is_string() && to_symbol) {
-	expr_i *sycpy = create_symbol_from_string(dst.get_string(), sy);
-	if (parent != 0) {
-	  parent->set_child(parent_pos, sycpy);
-	}
-	return sycpy;
+        expr_i *sycpy = create_symbol_from_string(dst.get_string(), sy);
+        if (parent != 0) {
+          parent->set_child(parent_pos, sycpy);
+        }
+        return sycpy;
       } else {
-	expr_i *lit = expr_str_literal_new(nsy->fname, nsy->line,
-	  arena_strdup(escape_c_str_literal(dst.get_string()).c_str()));
-	DBG_FLDFE(fprintf(stderr, "lit: %s\n", lit->dump(0).c_str()));
-	if (parent != 0) {
-	  parent->set_child(parent_pos, lit);
-	}
-	return lit;
+        expr_i *lit = expr_str_literal_new(nsy->fname, nsy->line,
+          arena_strdup(escape_c_str_literal(dst.get_string()).c_str()));
+        DBG_FLDFE(fprintf(stderr, "lit: %s\n", lit->dump(0).c_str()));
+        if (parent != 0) {
+          parent->set_child(parent_pos, lit);
+        }
+        return lit;
       }
     }
   } else if (te != 0) { // TODO: fix copipe
@@ -3428,39 +3411,39 @@ static expr_i *subst_symbol_name_rec(expr_i *e, expr_i *parent, int parent_pos,
     if (nsy->prefix == 0 && std::string(nsy->sym) == src) {
       DBG_EP(fprintf(stderr, "found '%s' expr_te\n", src.c_str()));
       if (dst.is_long()) {
-	expr_i *lit = expr_int_literal_new(nsy->fname, nsy->line,
-	  arena_strdup(long_to_string(dst.get_long()).c_str()),
-	  dst.get_long() < 0);
-	if (parent != 0) {
-	  parent->set_child(parent_pos, lit);
-	}
-	return lit;
+        expr_i *lit = expr_int_literal_new(nsy->fname, nsy->line,
+          arena_strdup(long_to_string(dst.get_long()).c_str()),
+          dst.get_long() < 0);
+        if (parent != 0) {
+          parent->set_child(parent_pos, lit);
+        }
+        return lit;
       #if 0 /* not reached */
       } else if (to_symbol) {
-	expr_i *tecpy = create_te_from_string(dst.get_string(), te);
-	if (parent != 0) {
-	  kparent->set_child(parent_pos, tecpy);
-	}
-	return tecpy;
+        expr_i *tecpy = create_te_from_string(dst.get_string(), te);
+        if (parent != 0) {
+          kparent->set_child(parent_pos, tecpy);
+        }
+        return tecpy;
       #endif
       } else if (dst.is_string()) {
-	expr_i *lit = expr_str_literal_new(nsy->fname, nsy->line,
-	  arena_strdup(escape_c_str_literal(dst.get_string()).c_str()));
-	DBG_FLDFE(fprintf(stderr, "lit: %s\n", lit->dump(0).c_str()));
-	if (parent != 0) {
-	  parent->set_child(parent_pos, lit);
-	}
-	return lit;
+        expr_i *lit = expr_str_literal_new(nsy->fname, nsy->line,
+          arena_strdup(escape_c_str_literal(dst.get_string()).c_str()));
+        DBG_FLDFE(fprintf(stderr, "lit: %s\n", lit->dump(0).c_str()));
+        if (parent != 0) {
+          parent->set_child(parent_pos, lit);
+        }
+        return lit;
       } else if (dst.is_metalist()) {
-	expr_te *nte = ptr_down_cast<expr_te>(
-	  expr_te_new(te->fname, te->line,
-	    expr_nssym_new(te->fname, te->line, 0, arena_strdup("")), 0));
-	nte->set_symdef(nte); /* resolves to itself */
-	nte->sdef.set_evaluated(dst);
-	if (parent != 0) {
-	  parent->set_child(parent_pos, nte);
-	}
-	return nte;
+        expr_te *nte = ptr_down_cast<expr_te>(
+          expr_te_new(te->fname, te->line,
+            expr_nssym_new(te->fname, te->line, 0, arena_strdup("")), 0));
+        nte->set_symdef(nte); /* resolves to itself */
+        nte->sdef.set_evaluated(dst);
+        if (parent != 0) {
+          parent->set_child(parent_pos, nte);
+        }
+        return nte;
       }
     }
   } else if (fd != 0) {
@@ -3509,55 +3492,55 @@ static void subst_symbol_name(expr_i *e, const std::string& src,
       expr_nssym *nsy = sy->nssym;
       assert(nsy != 0);
       if (nsy->prefix == 0 && std::string(nsy->sym) == src) {
-	if (dst.is_long()) {
-	  expr_i *lit = expr_int_literal_new(nsy->fname, nsy->line,
-	    arena_strdup(long_to_string(dst.get_long()).c_str()),
-	    dst.get_long() < 0);
-	  e->set_child(i, lit);
-	} else if (dst.is_string() && to_symbol) {
-	  #if 0
-	  expr_i *nsycpy = expr_nssym_new(nsy->fname, nsy->line, 0,
-	    arena_strdup(dst.get_string().c_str()));
-	  expr_i *sycpy = expr_symbol_new(sy->fname, sy->line, nsycpy);
-	  #endif
-	  expr_i *sycpy = create_symbol_from_string(dst.get_string(), sy);
-	  e->set_child(i, sycpy);
-	#if 0
-	} else {
-	  expr_i *lit = expr_str_literal_new(nsy->fname, nsy->line,
-	    arena_strdup(escape_c_str_literal(dst.get_string())));
-	  DBG_FLDFE(fprintf(stderr, "lit: %s\n", lit->dump(0).c_str()));
-	  e->set_child(i, lit);
-	#endif
-	}
-	subst_node = true;
+        if (dst.is_long()) {
+          expr_i *lit = expr_int_literal_new(nsy->fname, nsy->line,
+            arena_strdup(long_to_string(dst.get_long()).c_str()),
+            dst.get_long() < 0);
+          e->set_child(i, lit);
+        } else if (dst.is_string() && to_symbol) {
+          #if 0
+          expr_i *nsycpy = expr_nssym_new(nsy->fname, nsy->line, 0,
+            arena_strdup(dst.get_string().c_str()));
+          expr_i *sycpy = expr_symbol_new(sy->fname, sy->line, nsycpy);
+          #endif
+          expr_i *sycpy = create_symbol_from_string(dst.get_string(), sy);
+          e->set_child(i, sycpy);
+        #if 0
+        } else {
+          expr_i *lit = expr_str_literal_new(nsy->fname, nsy->line,
+            arena_strdup(escape_c_str_literal(dst.get_string())));
+          DBG_FLDFE(fprintf(stderr, "lit: %s\n", lit->dump(0).c_str()));
+          e->set_child(i, lit);
+        #endif
+        }
+        subst_node = true;
       }
     } else if (te != 0) { // TODO: fix copipe
       expr_nssym *nsy = te->nssym;
       assert(nsy != 0);
       if (nsy->prefix == 0 && std::string(nsy->sym) == src) {
-	if (dst.is_long()) {
-	  expr_i *lit = expr_int_literal_new(nsy->fname, nsy->line,
-	    arena_strdup(long_to_string(dst.get_long()).c_str()),
-	    dst.get_long() < 0);
-	  e->set_child(i, lit);
-	} else if (dst.is_string() && to_symbol) {
-	  #if 0
-	  expr_i *nsycpy = expr_nssym_new(nsy->fname, nsy->line, 0,
-	    arena_strdup(dst.get_string().c_str()));
-	  expr_i *tecpy = expr_te_new(te->fname, te->line, nsycpy, 0);
-	  #endif
-	  expr_i *tecpy = create_te_from_string(dst.get_string(), te);
-	  e->set_child(i, tecpy);
-	#if 0
-	} else {
-	  expr_i *lit = expr_str_literal_new(nsy->fname, nsy->line,
-	    arena_strdup(escape_c_str_literal(dst.get_string())));
-	  DBG_FLDFE(fprintf(stderr, "lit: %s\n", lit->dump(0).c_str()));
-	  e->set_child(i, lit);
-	#endif
-	}
-	subst_node = true;
+        if (dst.is_long()) {
+          expr_i *lit = expr_int_literal_new(nsy->fname, nsy->line,
+            arena_strdup(long_to_string(dst.get_long()).c_str()),
+            dst.get_long() < 0);
+          e->set_child(i, lit);
+        } else if (dst.is_string() && to_symbol) {
+          #if 0
+          expr_i *nsycpy = expr_nssym_new(nsy->fname, nsy->line, 0,
+            arena_strdup(dst.get_string().c_str()));
+          expr_i *tecpy = expr_te_new(te->fname, te->line, nsycpy, 0);
+          #endif
+          expr_i *tecpy = create_te_from_string(dst.get_string(), te);
+          e->set_child(i, tecpy);
+        #if 0
+        } else {
+          expr_i *lit = expr_str_literal_new(nsy->fname, nsy->line,
+            arena_strdup(escape_c_str_literal(dst.get_string())));
+          DBG_FLDFE(fprintf(stderr, "lit: %s\n", lit->dump(0).c_str()));
+          e->set_child(i, lit);
+        #endif
+        }
+        subst_node = true;
       }
     }
     if (!subst_node) {
@@ -3648,11 +3631,11 @@ void expr_fldfe::check_type(symbol_table *lookup)
       const std::string s = meta_term_to_string(*i, true);
       #if 0
       if (!valid_for_symbol(s)) {
-	arena_error_push(this, "Invalid argument for 'foreach': '%s'",
-	  term_tostr_human(typ).c_str());
-	arena_error_push(this, "(string '%s' is invalid for a symbol)",
-	  s.c_str());
-	break;
+        arena_error_push(this, "Invalid argument for 'foreach': '%s'",
+          term_tostr_human(typ).c_str());
+        arena_error_push(this, "(string '%s' is invalid for a symbol)",
+          s.c_str());
+        break;
       }
       #endif
       syms.push_back(s);
@@ -3671,7 +3654,7 @@ void expr_fldfe::check_type(symbol_table *lookup)
       ev->get_fields(flds);
     } else {
       arena_error_push(this, "Invalid argument for 'foreach': '%s'",
-	term_tostr_human(typ).c_str());
+        term_tostr_human(typ).c_str());
       arena_error_push(this, "(not a struct nor an union)");
     }
     for (fields_type::const_iterator i = flds.begin(); i != flds.end(); ++i) {
@@ -3751,21 +3734,21 @@ static void subst_foldfe_one(expr_foldfe *ffe, expr_i *e,
       expr_op *const curop = ptr_down_cast<expr_op>(cur);
       expr_i *const arg1 = curop->arg1;
       if (arg1->get_esort() == expr_e_symbol &&
-	ptr_down_cast<expr_symbol>(arg1)->sdef.get_fullsym() == ffe->embedsym) {
-	for (exprlist_type::const_reverse_iterator i = ees_emb.rbegin();
-	  i != ees_emb.rend(); ++i) {
-	  ees.push_front(deep_clone_expr(*i));
-	}
+        ptr_down_cast<expr_symbol>(arg1)->sdef.get_fullsym() == ffe->embedsym) {
+        for (exprlist_type::const_reverse_iterator i = ees_emb.rbegin();
+          i != ees_emb.rend(); ++i) {
+          ees.push_front(deep_clone_expr(*i));
+        }
       } else {
-	ees.push_front(curop->arg1);
+        ees.push_front(curop->arg1);
       }
       cur = curop->arg0;
       continue;
     } else if (cur->get_esort() == expr_e_symbol &&
       ptr_down_cast<expr_symbol>(cur)->sdef.get_fullsym() == ffe->embedsym) {
       for (exprlist_type::const_reverse_iterator i = ees_emb.rbegin();
-	i != ees_emb.rend(); ++i) {
-	ees.push_front(deep_clone_expr(*i));
+        i != ees_emb.rend(); ++i) {
+        ees.push_front(deep_clone_expr(*i));
       }
     } else {
       ees.push_front(cur);
@@ -3827,14 +3810,14 @@ void expr_foldfe::check_type(symbol_table *lookup)
   const term_list *const targs = vtyp.is_metalist() ? vtyp.get_metalist()
     : vtyp.get_args();
   if (targs == 0) {
-    arena_error_throw(valueste, "Invalid parameter for 'foreach' : '%s'", 
+    arena_error_throw(valueste, "Invalid parameter for 'foreach' : '%s'",
       term_tostr_human(vtyp).c_str());
   }
   exprlist_type ees;
   for (term_list::const_iterator i = targs->begin(); i != targs->end(); ++i) {
     if (i->is_string() && i->get_string().empty()) {
-      arena_error_throw(valueste, "Invalid parameter for 'foreach' : '%s'", 
-	term_tostr_human(vtyp).c_str());
+      arena_error_throw(valueste, "Invalid parameter for 'foreach' : '%s'",
+        term_tostr_human(vtyp).c_str());
     }
     expr_i *const se = deep_clone_expr(embedexpr);
     // fprintf(stderr, "subst pre=%s\n", se->dump(0).c_str()); // FIXME
@@ -3844,7 +3827,7 @@ void expr_foldfe::check_type(symbol_table *lookup)
   }
   const int fop = check_foldop(foldop);
   if (fop == 0) {
-    arena_error_throw(this, "Unsupported fold operator for 'foreach' : '%s'", 
+    arena_error_throw(this, "Unsupported fold operator for 'foreach' : '%s'",
       foldop);
   }
   subst_foldfe(this, stmts, ees, fop);
@@ -3861,7 +3844,7 @@ static expr_i *chain_exprlist(exprlist_type const& ees, expand_e ex)
       i != ees.rend(); ++i) {
       expr_i *const cur = *i;
       ptr_down_cast<expr_argdecls>(cur)->rest
-	= ptr_down_cast<expr_argdecls>(rest);
+        = ptr_down_cast<expr_argdecls>(rest);
       rest = cur;
     }
     return rest;
@@ -3878,9 +3861,9 @@ static expr_i *chain_exprlist(exprlist_type const& ees, expand_e ex)
     for (exprlist_type::const_iterator i = ees.begin(); i != ees.end(); ++i) {
       expr_i *const cur = *i;
       if (e != 0) {
-	e = expr_op_new(cur->fname, cur->line, ',', e, cur);
+        e = expr_op_new(cur->fname, cur->line, ',', e, cur);
       } else {
-	e = cur;
+        e = cur;
       }
     }
     return e;
@@ -3937,26 +3920,26 @@ static term fill_stmt_selector(const term& te, expr_i *const baseexpr,
     const term_list *const ent = i->get_metalist();
     if (ent == 0 || ent->size() == 1) {
       for (size_t j = 0; j < num_stmts; ++j) {
-	term nent[3];
-	nent[0] = (ent == 0 ? (*i) : (*ent)[0]);
-	nent[1] = term(static_cast<long long>(j));
-	nent[2] = term(static_cast<long long>(idx));
-	tl.push_back(term(term_list_range(nent, 3)));
+        term nent[3];
+        nent[0] = (ent == 0 ? (*i) : (*ent)[0]);
+        nent[1] = term(static_cast<long long>(j));
+        nent[2] = term(static_cast<long long>(idx));
+        tl.push_back(term(term_list_range(nent, 3)));
       }
     } else if (ent->size() == 2) {
       const term_list *const sels = (*ent)[1].get_metalist();
       if (sels != 0) {
-	/* selector is a list of ints */
-	for (term_list::const_iterator j = sels->begin(); j != sels->end();
-	  ++j) {
-	  term nent[3];
-	  nent[0] = (*ent)[0];
-	  nent[1] = *j;
-	  nent[2] = term(static_cast<long long>(idx));
-	  tl.push_back(term(term_list_range(nent, 3)));
-	}
+        /* selector is a list of ints */
+        for (term_list::const_iterator j = sels->begin(); j != sels->end();
+          ++j) {
+          term nent[3];
+          nent[0] = (*ent)[0];
+          nent[1] = *j;
+          nent[2] = term(static_cast<long long>(idx));
+          tl.push_back(term(term_list_range(nent, 3)));
+        }
       } else {
-	tl.push_back(*i);
+        tl.push_back(*i);
       }
     }
   }
@@ -3994,23 +3977,23 @@ static void check_type_expr_expand(expr_expand *const epnd,
     expr_i *const sd = te->resolve_symdef(lookup);
     if (sd->get_esort() != expr_e_funcdef) {
       arena_error_throw(te,
-	"Invalid parameter for 'expand' : '%s' (function expected)",
-	te->nssym->sym);
+        "Invalid parameter for 'expand' : '%s' (function expected)",
+        te->nssym->sym);
     }
     expr_funcdef *const efd = ptr_down_cast<expr_funcdef>(sd);
     if (!efd->is_macro()) {
       arena_error_throw(te,
-	"Invalid function for 'expand' : '%s' "
-	"(function is not for 'expand' statement)",
-	te->nssym->sym);
+        "Invalid function for 'expand' : '%s' "
+        "(function is not for 'expand' statement)",
+        te->nssym->sym);
     }
     expr_stmts *const stmts = efd->block->stmts;
     expr_tparams *callee_tps = efd->block->tinfo.tparams;
     expr_telist *tlarg = te->tlarg;
     if (elist_length(tlarg) != elist_length(callee_tps)) {
       arena_error_throw(epnd,
-	"Wrong number of template parameters: '%s' (%d expected)",
-	te->dump(0).c_str(), static_cast<int>(elist_length(callee_tps)));
+        "Wrong number of template parameters: '%s' (%d expected)",
+        te->dump(0).c_str(), static_cast<int>(elist_length(callee_tps)));
     }
     term_list tal;
     while (tlarg != 0) {
@@ -4024,11 +4007,11 @@ static void check_type_expr_expand(expr_expand *const epnd,
     {
       long long i = 0;
       for (expr_stmts *s = stmts; s != 0; s = s->rest, ++i) {
-	term ent[2];
-	ent[0] = term(std::string(""));
-	ent[1] = term(i);
-	const term val(term_list_range(ent, 2));
-	vals.push_back(val);
+        term ent[2];
+        ent[0] = term(std::string(""));
+        ent[1] = term(i);
+        const term val(term_list_range(ent, 2));
+        vals.push_back(val);
       }
     }
     vtyp = term(vals);
@@ -4074,99 +4057,99 @@ static void check_type_expr_expand(expr_expand *const epnd,
     if (epnd->ex == expand_e_argdecls) {
       const term_list *const ent = te.get_metalist();
       if (ent == 0 || ent->size() != 4) {
-	arena_error_throw(epnd->valueste,
-	  "Invalid parameter for 'expand' : '%s' "
-	  "(must be a metalist of size 4)",
-	  term_tostr_human(te).c_str());
+        arena_error_throw(epnd->valueste,
+          "Invalid parameter for 'expand' : '%s' "
+          "(must be a metalist of size 4)",
+          term_tostr_human(te).c_str());
       }
       const std::string name = (*ent)[0].get_string();
       const term typ = (*ent)[1];
       const long long pass_byref = (*ent)[2].get_long();
       const long long arg_mutable = (*ent)[3].get_long();
       expr_argdecls *ad = ptr_down_cast<expr_argdecls>(
-	expr_argdecls_new(epnd->fname, epnd->line, "dummy",
-	expr_te_new(epnd->fname, epnd->line,
-	  expr_nssym_new(epnd->fname, epnd->line, 0, "dummy"), 0),
-	passby_e_const_value, 0));
+        expr_argdecls_new(epnd->fname, epnd->line, "dummy",
+        expr_te_new(epnd->fname, epnd->line,
+          expr_nssym_new(epnd->fname, epnd->line, 0, "dummy"), 0),
+        passby_e_const_value, 0));
       /* dirty hack ... */
       ad->sym = arena_strdup(name.c_str());
       ad->type_uneval->type_of_this_expr = typ;
       ad->type_of_this_expr = typ;
       ad->passby = pass_byref
-	? (arg_mutable ? passby_e_mutable_reference : passby_e_const_reference)
-	: (arg_mutable ? passby_e_mutable_value : passby_e_const_value);
+        ? (arg_mutable ? passby_e_mutable_reference : passby_e_const_reference)
+        : (arg_mutable ? passby_e_mutable_value : passby_e_const_value);
       se = ad;
     } else if (epnd->ex == expand_e_statement) {
       const term_list *const ent = te.get_metalist();
       term symte;
       expr_i *baseexpr_cur = 0;
       if (ent != 0) {
-	/* te is of the form {{"foo", 3, ...}, {"bar", 2, ...}} and baseexpr
-	 * is of type expr_stmts */
-	if (ent->size() >= 2) {
-	  symte = (*ent)[0];
-	  if ((*ent)[1].is_long()) {
-	    const int stnum = (*ent)[1].get_long();
-	    if (stnum >= 0 && epnd->baseexpr->get_esort() == expr_e_stmts) {
-	      DBG_EP(fprintf(stderr, "metalist 2 long stmts ent = %p\n", ent));
-	      expr_stmts *cur = ptr_down_cast<expr_stmts>(epnd->baseexpr);
-	      for (int i = 0; i < stnum && cur != 0; ++i, cur = cur->rest) { }
-	      if (cur == 0) {
-		arena_error_throw(epnd->valueste,
-		  "Expand: statement number %d not found", stnum);
-	      }
-	      baseexpr_cur = cur->head;
-	      DBG_EP(fprintf(stderr, "baseexpr_cur = %p\n", baseexpr_cur));
-	    }
-	  }
-	}
+        /* te is of the form {{"foo", 3, ...}, {"bar", 2, ...}} and baseexpr
+         * is of type expr_stmts */
+        if (ent->size() >= 2) {
+          symte = (*ent)[0];
+          if ((*ent)[1].is_long()) {
+            const int stnum = (*ent)[1].get_long();
+            if (stnum >= 0 && epnd->baseexpr->get_esort() == expr_e_stmts) {
+              DBG_EP(fprintf(stderr, "metalist 2 long stmts ent = %p\n", ent));
+              expr_stmts *cur = ptr_down_cast<expr_stmts>(epnd->baseexpr);
+              for (int i = 0; i < stnum && cur != 0; ++i, cur = cur->rest) { }
+              if (cur == 0) {
+                arena_error_throw(epnd->valueste,
+                  "Expand: statement number %d not found", stnum);
+              }
+              baseexpr_cur = cur->head;
+              DBG_EP(fprintf(stderr, "baseexpr_cur = %p\n", baseexpr_cur));
+            }
+          }
+        }
       } else {
-	/* te is of the form {"foo", "bar"} and baseexpr is a single stmt */
-	symte = te; /* TODO: convert to string */
-	if (epnd->baseexpr->get_esort() == expr_e_stmts) {
-	  baseexpr_cur = ptr_down_cast<expr_stmts>(epnd->baseexpr)->head;
-	} else {
-	  baseexpr_cur = epnd->baseexpr;
-	}
+        /* te is of the form {"foo", "bar"} and baseexpr is a single stmt */
+        symte = te; /* TODO: convert to string */
+        if (epnd->baseexpr->get_esort() == expr_e_stmts) {
+          baseexpr_cur = ptr_down_cast<expr_stmts>(epnd->baseexpr)->head;
+        } else {
+          baseexpr_cur = epnd->baseexpr;
+        }
       }
       se = deep_clone_expr(baseexpr_cur);
       if (epnd->callee != 0) {
-	/*
-	fprintf(stderr, "expand macro deep_clone uniqns=%s mainns=%s [%s]\n",
-	  epnd->uniqns.c_str(), main_namespace.c_str(),
-	  baseexpr_cur->dump(0).c_str());
-	*/
-	if (epnd->uniqns == main_namespace) {
-	  /* destination is the main namespace. drop the ext_pxc frag on
-	   * expr_funcdef. */
-	  subst_ext_pxc_rec(se);
-	}
+        /*
+        fprintf(stderr, "expand macro deep_clone uniqns=%s mainns=%s [%s]\n",
+          epnd->uniqns.c_str(), main_namespace.c_str(),
+          baseexpr_cur->dump(0).c_str());
+        */
+        if (epnd->uniqns == main_namespace) {
+          /* destination is the main namespace. drop the ext_pxc frag on
+           * expr_funcdef. */
+          subst_ext_pxc_rec(se);
+        }
       }
       if (epnd->itersym != 0) {
-	se = subst_symbol_name_rec(se, 0, 0, epnd->itersym, symte, true);
+        se = subst_symbol_name_rec(se, 0, 0, epnd->itersym, symte, true);
       }
       if (epnd->idxsym != 0) {
-	long long idxv = idx;
-	if (ent->size() >= 3) {
-	  idxv = (*ent)[2].get_long();
-	}
-	const term tidx = term(idxv);
-	se = subst_symbol_name_rec(se, 0, 0, epnd->idxsym, tidx, true);
+        long long idxv = idx;
+        if (ent->size() >= 3) {
+          idxv = (*ent)[2].get_long();
+        }
+        const term tidx = term(idxv);
+        se = subst_symbol_name_rec(se, 0, 0, epnd->idxsym, tidx, true);
       }
       for (expfunc_subst_type::const_iterator i = expfunc_subst.begin();
-	i != expfunc_subst.end(); ++i) {
-	se = subst_symbol_name_rec(se, 0, 0, i->first, i->second, true);
+        i != expfunc_subst.end(); ++i) {
+        se = subst_symbol_name_rec(se, 0, 0, i->first, i->second, true);
       }
       DBG_EP(fprintf(stderr, "subst = %s\n", se->dump(0).c_str()));
     } else {
       assert(epnd->ex == expand_e_comma);
       se = deep_clone_expr(epnd->baseexpr);
       if (epnd->itersym != 0) {
-	se = subst_symbol_name_rec(se, 0, 0, epnd->itersym, te, true);
+        se = subst_symbol_name_rec(se, 0, 0, epnd->itersym, te, true);
       }
       for (expfunc_subst_type::const_iterator i = expfunc_subst.begin();
-	i != expfunc_subst.end(); ++i) {
-	se = subst_symbol_name_rec(se, 0, 0, i->first, i->second, true);
+        i != expfunc_subst.end(); ++i) {
+        se = subst_symbol_name_rec(se, 0, 0, i->first, i->second, true);
       }
     }
     if (se == 0) {
@@ -4193,12 +4176,12 @@ static void check_type_expr_expand(expr_expand *const epnd,
     int i = 0;
     for (i = 0; i < n; ++i) {
       if (p->get_child(i) == pstmts) {
-	break;
+        break;
       }
     }
     if (i == n) {
       arena_error_throw(epnd,
-	"Expand stmts: internal error: not a child expr");
+        "Expand stmts: internal error: not a child expr");
     }
     set_child_parent(p, i, epnd->generated_expr);
     gparent_pos = i;
@@ -4211,7 +4194,7 @@ static void check_type_expr_expand(expr_expand *const epnd,
       assert(epnd->ex == expand_e_comma);
       expr_op *p_op = dynamic_cast<expr_op *>(epnd->parent_expr);
       if (p_op != 0 && p_op->op == ',' && p_op->arg1 == epnd) {
-	rest_expr = p_op->arg0;
+        rest_expr = p_op->arg0;
       }
     }
     expr_i *p = epnd->parent_expr;
@@ -4219,12 +4202,12 @@ static void check_type_expr_expand(expr_expand *const epnd,
     int i = 0;
     for (i = 0; i < n; ++i) {
       if (p->get_child(i) == epnd) {
-	break;
+        break;
       }
     }
     if (i == n) {
       arena_error_throw(epnd,
-	"Expand argdecls: internal error: not a child expr");
+        "Expand argdecls: internal error: not a child expr");
     }
     set_child_parent(p, i, epnd->generated_expr);
     gparent = p;
@@ -4242,74 +4225,74 @@ static void check_type_expr_expand(expr_expand *const epnd,
     /* chain rest */
     if (rest_expr != 0) {
       if (epnd->ex == expand_e_comma) {
-	expr_i *cur = epnd->generated_expr;
-	expr_i *cur_parent = gparent;
-	int cur_parent_pos = gparent_pos;
-	while (true) {
-	  expr_op *cur_op = dynamic_cast<expr_op *>(cur);
-	  if (cur_op == 0 || cur_op->op != ',') {
-	    break;
-	  }
-	  cur_parent = cur;
-	  cur_parent_pos = 0;
-	  cur = cur_op->arg0;
-	}
-	/* cur is the tail (left-most) non-comma expr */
-	expr_i *ne = expr_op_new(cur->fname, cur->line, ',', rest_expr, cur);
-	rest_expr->parent_expr = ne;
-	cur->parent_expr = ne;
-	set_child_parent(cur_parent, cur_parent_pos, ne);
-	expr_i *ntop = gparent->get_child(gparent_pos); /* combined expr */
-	expr_i *gpp = gparent->parent_expr;
-	int n = gpp->get_num_children();
-	int i = 0;
-	for (; i < n; ++i) {
-	  if (gpp->get_child(i) == gparent) {
-	    break;
-	  }
-	}
-	if (i == n) {
-	  arena_error_throw(epnd, "Expand: internal error: not a child expr");
-	}
-	set_child_parent(gpp, i, ntop);
-	assert_valid_tree(gpp);
-	fn_check_type(ntop, lookup);
+        expr_i *cur = epnd->generated_expr;
+        expr_i *cur_parent = gparent;
+        int cur_parent_pos = gparent_pos;
+        while (true) {
+          expr_op *cur_op = dynamic_cast<expr_op *>(cur);
+          if (cur_op == 0 || cur_op->op != ',') {
+            break;
+          }
+          cur_parent = cur;
+          cur_parent_pos = 0;
+          cur = cur_op->arg0;
+        }
+        /* cur is the tail (left-most) non-comma expr */
+        expr_i *ne = expr_op_new(cur->fname, cur->line, ',', rest_expr, cur);
+        rest_expr->parent_expr = ne;
+        cur->parent_expr = ne;
+        set_child_parent(cur_parent, cur_parent_pos, ne);
+        expr_i *ntop = gparent->get_child(gparent_pos); /* combined expr */
+        expr_i *gpp = gparent->parent_expr;
+        int n = gpp->get_num_children();
+        int i = 0;
+        for (; i < n; ++i) {
+          if (gpp->get_child(i) == gparent) {
+            break;
+          }
+        }
+        if (i == n) {
+          arena_error_throw(epnd, "Expand: internal error: not a child expr");
+        }
+        set_child_parent(gpp, i, ntop);
+        assert_valid_tree(gpp);
+        fn_check_type(ntop, lookup);
       } else if (epnd->ex == expand_e_statement) {
-	expr_stmts *st = ptr_down_cast<expr_stmts>(epnd->generated_expr);
-	assert(st != 0);
-	while (st->rest != 0) {
-	  st = st->rest;
-	}
-	st->rest = ptr_down_cast<expr_stmts>(rest_expr);
-	rest_expr->parent_expr = st;
-	DBG_RECHAIN(fprintf(stderr, "RE-CHAIN genrest rest_expr=%p\n",
-	  rest_expr));
-	assert_valid_tree(epnd->generated_expr);
-	DBG_TIMING(fprintf(stderr, "expand ch %s:%d begin\n", epnd->fname,
-	  epnd->line));
-	DBG_TIMING(double timing_x1 = gettimeofday_double());
-	fn_check_type(epnd->generated_expr, lookup);
-	DBG_TIMING(double timing_x2 = gettimeofday_double());
-	DBG_TIMING(fprintf(stderr, "expand ch %s:%d end %f\n", epnd->fname,
-	  epnd->line, timing_x2 - timing_x1));
+        expr_stmts *st = ptr_down_cast<expr_stmts>(epnd->generated_expr);
+        assert(st != 0);
+        while (st->rest != 0) {
+          st = st->rest;
+        }
+        st->rest = ptr_down_cast<expr_stmts>(rest_expr);
+        rest_expr->parent_expr = st;
+        DBG_RECHAIN(fprintf(stderr, "RE-CHAIN genrest rest_expr=%p\n",
+          rest_expr));
+        assert_valid_tree(epnd->generated_expr);
+        DBG_TIMING(fprintf(stderr, "expand ch %s:%d begin\n", epnd->fname,
+          epnd->line));
+        DBG_TIMING(double timing_x1 = gettimeofday_double());
+        fn_check_type(epnd->generated_expr, lookup);
+        DBG_TIMING(double timing_x2 = gettimeofday_double());
+        DBG_TIMING(fprintf(stderr, "expand ch %s:%d end %f\n", epnd->fname,
+          epnd->line, timing_x2 - timing_x1));
       } else if (epnd->ex == expand_e_argdecls) {
-	expr_argdecls *ad = ptr_down_cast<expr_argdecls>(epnd->generated_expr);
-	assert(ad != 0);
-	while (ad->rest != 0) {
-	  ad = ad->get_rest();
-	}
-	ad->rest = ptr_down_cast<expr_argdecls>(rest_expr);
-	rest_expr->parent_expr = ad;
-	assert_valid_tree(epnd->generated_expr);
-	fn_check_type(epnd->generated_expr, lookup);
+        expr_argdecls *ad = ptr_down_cast<expr_argdecls>(epnd->generated_expr);
+        assert(ad != 0);
+        while (ad->rest != 0) {
+          ad = ad->get_rest();
+        }
+        ad->rest = ptr_down_cast<expr_argdecls>(rest_expr);
+        rest_expr->parent_expr = ad;
+        assert_valid_tree(epnd->generated_expr);
+        fn_check_type(epnd->generated_expr, lookup);
       } else {
-	abort();
+        abort();
       }
     } else {
       /* generated_expr != 0 && rest_expr == 0 */
       assert_is_child(epnd->generated_expr, epnd->generated_expr->parent_expr);
       assert_is_child(epnd->generated_expr->parent_expr,
-	epnd->generated_expr->parent_expr->parent_expr);
+        epnd->generated_expr->parent_expr->parent_expr);
       assert_valid_tree(epnd->generated_expr);
       fn_check_type(epnd->generated_expr, lookup);
     }
@@ -4317,60 +4300,60 @@ static void check_type_expr_expand(expr_expand *const epnd,
     /* generated_expr == 0 */
     if (epnd->ex == expand_e_comma) {
       if (rest_expr != 0) {
-	expr_i *gpp = gparent->parent_expr;
-	int n = gpp->get_num_children();
-	int i = 0;
-	for (; i < n; ++i) {
-	  if (gpp->get_child(i) == gparent) {
-	    break;
-	  }
-	}
-	if (i == n) {
-	  arena_error_throw(epnd, "Expand: internal error: not a child expr");
-	}
-	set_child_parent(gpp, i, rest_expr);
-	assert_valid_tree(rest_expr);
-	fn_check_type(rest_expr, lookup);
-	#if 0
-	fprintf(stderr, "rest_expr = %s\n", gpp->dump(0).c_str());
-	#endif
+        expr_i *gpp = gparent->parent_expr;
+        int n = gpp->get_num_children();
+        int i = 0;
+        for (; i < n; ++i) {
+          if (gpp->get_child(i) == gparent) {
+            break;
+          }
+        }
+        if (i == n) {
+          arena_error_throw(epnd, "Expand: internal error: not a child expr");
+        }
+        set_child_parent(gpp, i, rest_expr);
+        assert_valid_tree(rest_expr);
+        fn_check_type(rest_expr, lookup);
+        #if 0
+        fprintf(stderr, "rest_expr = %s\n", gpp->dump(0).c_str());
+        #endif
       } else {
-	/* generated_expr == 0 && rest_expr == 0 */
-	expr_op *const gp_op = dynamic_cast<expr_op *>(gparent);
-	if (gp_op != 0 && gp_op->op == ',' && gparent_pos == 0) {
-	  /* 'this' is the tail (left-most) of the comma list */
-	  expr_i *gpp = gparent->parent_expr;
-	  #if 0
-	  fprintf(stderr, "empty empty gpp = %s\n", gpp->dump(0).c_str());
-	  #endif
-	  int n = gpp->get_num_children();
-	  int i = 0;
-	  for (; i < n; ++i) {
-	    if (gpp->get_child(i) == gparent) {
-	      break;
-	    }
-	  }
-	  if (i == n) {
-	    arena_error_throw(epnd, "Internal error: replace_child");
-	  }
-	  set_child_parent(gpp, i, gp_op->arg1);
-	} else {
-	  set_child_parent(gparent, gparent_pos, 0);
-	}
+        /* generated_expr == 0 && rest_expr == 0 */
+        expr_op *const gp_op = dynamic_cast<expr_op *>(gparent);
+        if (gp_op != 0 && gp_op->op == ',' && gparent_pos == 0) {
+          /* 'this' is the tail (left-most) of the comma list */
+          expr_i *gpp = gparent->parent_expr;
+          #if 0
+          fprintf(stderr, "empty empty gpp = %s\n", gpp->dump(0).c_str());
+          #endif
+          int n = gpp->get_num_children();
+          int i = 0;
+          for (; i < n; ++i) {
+            if (gpp->get_child(i) == gparent) {
+              break;
+            }
+          }
+          if (i == n) {
+            arena_error_throw(epnd, "Internal error: replace_child");
+          }
+          set_child_parent(gpp, i, gp_op->arg1);
+        } else {
+          set_child_parent(gparent, gparent_pos, 0);
+        }
       }
     } else {
       set_child_parent(gparent, gparent_pos, rest_expr);
       if (epnd->ex == expand_e_argdecls) {
-	/* need to check rest_expr here because it is a child of this expr */
-	assert_valid_tree(rest_expr);
-	fn_check_type(rest_expr, lookup);
+        /* need to check rest_expr here because it is a child of this expr */
+        assert_valid_tree(rest_expr);
+        fn_check_type(rest_expr, lookup);
       } else {
-	/* rest_expr is removed from the original parent. we need to call
-	 * check_type here. */
-	DBG_RECHAIN(fprintf(stderr, "RE-CHAIN emptygen rest_expr=%p\n",
-	  rest_expr));
-	assert_valid_tree(rest_expr);
-	fn_check_type(rest_expr, lookup);
+        /* rest_expr is removed from the original parent. we need to call
+         * check_type here. */
+        DBG_RECHAIN(fprintf(stderr, "RE-CHAIN emptygen rest_expr=%p\n",
+          rest_expr));
+        assert_valid_tree(rest_expr);
+        fn_check_type(rest_expr, lookup);
       }
     }
   }
@@ -4401,7 +4384,7 @@ void expr_argdecls::check_type(symbol_table *lookup)
     expr_block *const tbl = fr->get_template_block();
     if (!tbl->tinfo.is_uninstantiated()) {
       check_var_type(typ, this, sym, is_passby_cm_reference(passby), true,
-	!is_passby_mutable(passby));
+        !is_passby_mutable(passby));
     }
   }
   fn_check_type(rest, lookup);
@@ -4422,7 +4405,7 @@ void expr_funcdef::check_type(symbol_table *lookup)
     arena_error_throw(this, "Invalid attribute for a function");
   }
   if (this->is_virtual_or_member_function() &&
-    (this->get_attribute() & attribute_threaded) != 0) {
+    (this->get_attribute() & (attribute_threaded | attribute_pure)) != 0) {
     arena_error_throw(this,
       "Invalid attribute for a member/virtual function");
   }
@@ -4453,11 +4436,15 @@ void expr_funcdef::check_type(symbol_table *lookup)
     expr_i *fr = get_current_frame_expr(parent);
     if (fr != 0 && fr->get_esort() == expr_e_funcdef) {
       if ((get_expr_threading_attribute(fr) & attribute_threaded) == 0) {
-	arena_error_throw(this, "Parent function is not threaded");
+        arena_error_throw(this, "Parent function is not threaded");
+      }
+      if ((this->get_attribute() & attribute_pure) != 0 &&
+        (get_expr_threading_attribute(fr) & attribute_pure) == 0) {
+        arena_error_throw(this, "Parent function is not pure");
       }
     } else if (fr != 0) {
       arena_error_throw(this,
-	"Internal error: threaded function in an invalid context");
+        "Internal error: threaded function in an invalid context");
     }
   }
   if (ext_pxc && !block->tinfo.template_descent) {
@@ -4475,7 +4462,7 @@ void expr_typedef::check_type(symbol_table *lookup)
 
 void expr_metafdef::check_type(symbol_table *lookup)
 {
-  if ((this->get_attribute() & attribute_threaded) != 0) {
+  if ((this->get_attribute() & (attribute_threaded | attribute_pure)) != 0) {
     arena_error_throw(this, "Invalid attribute for a macro");
   }
   fn_check_type(block, lookup);
@@ -4495,7 +4482,7 @@ static void check_udcon_vardef_calling_memfunc(expr_struct *est, expr_i *e)
     expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(func_inst);
     if (efd != 0 && efd->is_virtual_or_member_function() && !w_explicit_obj) {
       arena_error_push(e,
-	"Calling member function before field initialization");
+        "Calling member function before field initialization");
     }
   }
   for (int i = 0; i < n; ++i) {
@@ -4518,19 +4505,19 @@ static void check_constr_restrictions(expr_struct *est)
     }
     if (is_vardef_or_vardefset(e)) {
       if (!has_udcon && e->get_esort() != expr_e_var) {
-	/* plain struct allows vardef only */
-	arena_error_push(e, "Invalid statement (field definition expected)");
+        /* plain struct allows vardef only */
+        arena_error_push(e, "Invalid statement (field definition expected)");
       } else if (exec_found != 0) {
-	arena_error_push(e, "Invalid statement before field initialization");
+        arena_error_push(e, "Invalid statement before field initialization");
       }
       check_udcon_vardef_calling_memfunc(est, e);
     } else if (!is_noexec_expr(e)) {
       if (exec_found == 0) {
-	exec_found = e;
+        exec_found = e;
       }
       if (!has_udcon) {
-	/* plain struct allows vardef only */
-	arena_error_push(e, "Invalid statement for a plain struct body");
+        /* plain struct allows vardef only */
+        arena_error_push(e, "Invalid statement for a plain struct body");
       }
     }
   }
@@ -4584,30 +4571,30 @@ void fn_check_misc(expr_i *glo, generate_main_e gmain)
     if (head->get_esort() == expr_e_ns) {
       expr_ns *const ens = ptr_down_cast<expr_ns>(head);
       if (!ens->import) {
-	cur_ns_thr = ens->thr;
+        cur_ns_thr = ens->thr;
 #if 0
 fprintf(stderr, "ns %s %d\n", ens->uniq_nsstr.c_str(), int(ens->thr));
 #endif
       } else {
-	/* import */
-	const std::string n = ens->uniq_nsstr;
-	nsthrmap_type::iterator i = nsthrmap.find(n);
-	if (i == nsthrmap.end()) {
-	  #if 0
-	  arena_error_push(head, "Internal error: nsthr_map.find %s",
-	    n.c_str());
-	  #endif
-	} else {
-	  if (cur_ns_thr && !i->second) {
-	    arena_error_push(head, "Importing a non-threaded namespace '%s' "
-	      "from a threaded namespace", n.c_str());
-	  }
-	}
+        /* import */
+        const std::string n = ens->uniq_nsstr;
+        nsthrmap_type::iterator i = nsthrmap.find(n);
+        if (i == nsthrmap.end()) {
+          #if 0
+          arena_error_push(head, "Internal error: nsthr_map.find %s",
+            n.c_str());
+          #endif
+        } else {
+          if (cur_ns_thr && !i->second) {
+            arena_error_push(head, "Importing a non-threaded namespace '%s' "
+              "from a threaded namespace", n.c_str());
+          }
+        }
       }
     }
     if (cur_ns_thr && !is_noexec_expr(head)) {
       arena_error_push(head, "Global statement is not allowed in a "
-	"threaded namespace");
+        "threaded namespace");
     }
   }
   /* emit_threaded_dll */
@@ -4621,10 +4608,10 @@ fprintf(stderr, "ns %s %d\n", ens->uniq_nsstr.c_str(), int(ens->thr));
       bool is_upvalue_dummy = false;
       const std::string nspart = get_namespace_part(etdstr);
       expr_i *const etd = glo_block->symtbl.resolve_name(etdstr,
-	get_namespace_part(etdstr), glo, is_global_dummy, is_upvalue_dummy);
+        get_namespace_part(etdstr), glo, is_global_dummy, is_upvalue_dummy);
       if (etd->get_esort() != expr_e_struct) {
-	arena_error_throw(glo, "Invalid configuration for emit_threaded_dll: "
-	  "symbol '%s' is not a struct", etdstr.c_str());
+        arena_error_throw(glo, "Invalid configuration for emit_threaded_dll: "
+          "symbol '%s' is not a struct", etdstr.c_str());
       }
       const term& te = ptr_down_cast<expr_struct>(etd)->get_value_texpr();
       term exp_args = eval_mf_symbol(te, "args", glo);
@@ -4632,38 +4619,38 @@ fprintf(stderr, "ns %s %d\n", ens->uniq_nsstr.c_str(), int(ens->thr));
       term efname = eval_mf_symbol(te, "name", glo);
       std::string efnstr = meta_term_to_string(efname, false);
       if (efnstr.empty()) {
-	arena_error_throw(glo, "Invalid configuration for emit_threaded_dll: "
-	  "symbol '%s:name' is not a string",
-	  etdstr.c_str());
+        arena_error_throw(glo, "Invalid configuration for emit_threaded_dll: "
+          "symbol '%s:name' is not a string",
+          etdstr.c_str());
       }
       std::string emfname = main_namespace + "::" + efnstr;
       is_global_dummy = false;
       is_upvalue_dummy = false;
       expr_i *emf = glo_block->symtbl.resolve_name(emfname,
-	get_namespace_part(emfname), glo, is_global_dummy, is_upvalue_dummy);
+        get_namespace_part(emfname), glo, is_global_dummy, is_upvalue_dummy);
       if (emf->get_esort() != expr_e_funcdef) {
-	arena_error_throw(glo, "Invalid configuration for emit_threaded_dll: "
-	  "symbol '%s' is not a function", emfname.c_str());
+        arena_error_throw(glo, "Invalid configuration for emit_threaded_dll: "
+          "symbol '%s' is not a function", emfname.c_str());
       }
       const term& fte = emf->get_value_texpr();
       term fte_args = eval_mf_args(fte, glo);
       term fte_ret = eval_mf_ret(fte, glo);
       if (exp_args != fte_args) {
-	arena_error_throw(glo, "Precondition failed for emit_threaded_dll: "
-	  "invalid arguments '%s' ('%s' expected)",
-	  term_tostr_human(fte_args).c_str(),
-	  term_tostr_human(exp_args).c_str());
+        arena_error_throw(glo, "Precondition failed for emit_threaded_dll: "
+          "invalid arguments '%s' ('%s' expected)",
+          term_tostr_human(fte_args).c_str(),
+          term_tostr_human(exp_args).c_str());
       }
       if (exp_ret != fte_ret) {
-	arena_error_throw(glo, "Precondition failed for emit_threaded_dll: "
-	  "invalid return type '%s' ('%s' expected)",
-	  term_tostr_human(fte_ret).c_str(),
-	  term_tostr_human(exp_ret).c_str());
+        arena_error_throw(glo, "Precondition failed for emit_threaded_dll: "
+          "invalid return type '%s' ('%s' expected)",
+          term_tostr_human(fte_ret).c_str(),
+          term_tostr_human(exp_ret).c_str());
       }
       const bool ns_thr = nsthrmap[main_namespace];
       if (!ns_thr) {
-	arena_error_throw(glo, "Precondition failed for emit_threaded_dll: "
-	  "namespace '%s' is not threaded", main_namespace.c_str());
+        arena_error_throw(glo, "Precondition failed for emit_threaded_dll: "
+          "namespace '%s' is not threaded", main_namespace.c_str());
       }
       emit_threaded_dll_func = term_tostr_cname(fte);
     }
@@ -4691,22 +4678,22 @@ static void check_type_validity_common(expr_i *e, const term& t)
     const attribute_e attr = tgt->get_attribute();
     #if 0
     fprintf(stderr, "ctvc %s mt=%d im=%d attr=%x\n", term_tostr_human(t).c_str(),
-      (int)is_mtptr, (int)is_imptr, (int)attr); // FIXME  
+      (int)is_mtptr, (int)is_imptr, (int)attr); // FIXME
     #endif
     if (is_mtptr && is_imptr && (attr & attribute_tsvaluetype) == 0) {
       arena_error_throw(e,
-	"Invalid type: '%s' (pointer target is not a tsvaluetype)",
-	term_tostr_human(t).c_str());
+        "Invalid type: '%s' (pointer target is not a tsvaluetype)",
+        term_tostr_human(t).c_str());
     }
     if (is_imptr && (attr & attribute_valuetype) == 0) {
       arena_error_throw(e,
-	"Invalid type: '%s' (pointer target is not a valuetype)",
-	term_tostr_human(t).c_str());
+        "Invalid type: '%s' (pointer target is not a valuetype)",
+        term_tostr_human(t).c_str());
     }
     if (is_mtptr && (attr & attribute_multithr) == 0) {
       arena_error_throw(e,
-	"Invalid type: '%s' (pointer target is not a multithreaded type)",
-	term_tostr_human(t).c_str());
+        "Invalid type: '%s' (pointer target is not a multithreaded type)",
+        term_tostr_human(t).c_str());
     }
   } else if (is_container_family(t) || is_cm_range_family(t)) {
     if (tl == 0 || tl->empty()) {
@@ -4715,7 +4702,7 @@ static void check_type_validity_common(expr_i *e, const term& t)
     const term& te = tl->front();
     if (!is_movable(te)) {
       arena_error_push(e, "Type '%s' is not movable",
-	term_tostr_human(te).c_str());
+        term_tostr_human(te).c_str());
     }
   }
 }

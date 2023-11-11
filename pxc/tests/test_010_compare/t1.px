@@ -1,0 +1,32 @@
+public namespace t1;
+public import core::common -;
+public import core::generic::ordered -;
+public import core::meta m;
+
+function {t} void test_one(t x, t y) {
+  const v = compare_weak(x, y);
+  println(m::to_string{t}, x, y, v);
+}
+
+{
+  test_one(0, 1);
+  test_one(1, 0);
+  test_one(1, 1);
+  test_one(1, 2);
+  test_one(2, 2);
+  test_one("aaa", "aab");
+  test_one("aab", "baa");
+  test_one("", "a");
+  test_one("a", "");
+  test_one("a", "a");
+}
+
+{
+  struct {t0, t1} pt(t0 v0_, t1 v1_) {
+    public t0 v0 = v0_;
+    public t1 v1 = v1_;
+  }
+  test_one(pt(1, 2), pt(1, 2));
+  test_one(pt(2, 1), pt(1, 2));
+  test_one(pt(1, 2), pt(2, 1));
+}

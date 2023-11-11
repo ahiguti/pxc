@@ -1,0 +1,36 @@
+public threaded namespace core::generic::hash "use-unsafe";
+public import core::numeric::integral -;
+public import core::numeric::fp -;
+public import core::numeric::fpmath -;
+public import core::numeric::union_tag  -;
+public import core::container::array -;
+public import core::generic::ordered;
+public import core::meta m;
+
+// TODO: better hash function?
+
+public pure function extern "::pxcrt::hash_c" {t} size_t
+hash_c(t const& x);
+
+public pure function void
+hash_combine(size_t mutable& x, size_t v)
+{
+  x ^= v + 0x9e3779b9 + (x << 6) + (x >> 2);
+}
+
+extern "functions" inline
+
+#include <boost/functional/hash.hpp>
+
+namespace pxcrt {
+
+template <typename T> static inline size_t hash_c(T const& x)
+{
+  ::boost::hash<T> fobj;
+  return fobj(x);
+};
+
+}; // namespace pxcrt
+
+;
+

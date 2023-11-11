@@ -1,0 +1,120 @@
+public threaded namespace core::io::text;
+public import core::numeric::integral -;
+public import core::container::array -;
+public import core::io +;
+public import core::io::file +;
+public import core::io::errno -;
+public import core::text::split -;
+public import core::text::serialize -;
+public import core::meta m;
+public import core::meta::family mf;
+
+public pure function {cb, opt} errno_t file_read_lines(file const& ifile)
+{
+  metafunction line_delim get_option{opt, "line_delim", '\n'};
+  metafunction read_block_size get_option{opt, "buffer_size", 16384};
+  string buffer;
+  bool cont_flag = true;
+  while (cont_flag) {
+    size_t pos = buffer.size();
+    size_t rlen = read_block_size;
+    const e = ifile.read(buffer, rlen);
+    if (const err : e.errno) {
+      return err;
+    }
+    if (e.value == 0) {
+      break;
+    }
+    while (cont_flag) {
+      const uchar delim = line_delim;
+      size_t const p = find_mapped{string}(buffer, pos, delim);
+      if (p == buffer.size()) {
+        break;
+      }
+      cstrref sr = buffer[pos .. p + 1];
+      cont_flag = cb(sr);
+      pos = p + 1;
+    }
+    buffer.erase(0, pos);
+  }
+  return EOK;
+}
+
+public pure function {cb, opt} errno_t
+file_read_table(file const& ifile)
+{
+  const err = file_read_lines{parse_line, opt}(ifile);
+  pure function bool parse_line(cstrref mutable line)
+  {
+    expand(sym, idx: m::map{m::seq{m::arg_size{cb}},
+      metafunction{i} m::list{
+        m::concat{"a", i},
+        mf::is_string_or_slice_type{m::arg_type{cb, i}}}})
+    {
+      /* not a string type */
+      m::arg_type{cb, idx} const sym = from_string{m::arg_type{cb, idx}}(
+        line.next_token('\t'));
+      /* string */
+      m::arg_type{cb, idx} const sym = line.next_token('\t');
+    }
+    /* cb(a0, a1, ...) */
+    return cb(expand(a: m::map{m::seq{m::arg_size{cb}},
+      metafunction{i} m::concat{"a", i}}; a));
+  }
+  return err;
+}
+
+public pure function bool is_space_or_tab(uchar ch)
+{
+  return ch == ' ' || ch == '\t';
+}
+
+public pure function {cb, opt} errno_t
+file_read_records(file const& ifile)
+{
+  metafunction enttype m::arg_type{cb, 0};
+  metafunction column_delim get_option{opt, "column_delim", is_space_or_tab};
+  const err = file_read_lines{parse_line, opt}(ifile);
+  pure function bool parse_line(cstrref const& line) {
+    enttype e;
+    string_split{column_delim}(line,
+      expand(fld: m::field_names{enttype}; e.fld));
+    return cb(e);
+  }
+  return err;
+}
+
+public pure function {opt, t} errno_t
+file_read_append_records(file const& ifile, t mutable& v)
+{
+  return ifile.read_records{record_cb, opt}();
+  pure function bool record_cb(m::symbol{t, "mapped_type"} const& e) {
+    v.push_back(e);
+    return true;
+  }
+}
+
+public pure function {cb, opt} errno_t
+io_read_records(io const& sys, cstrref const& fn)
+{
+  const ef = sys.open_st(fn, O_RDONLY, 0);
+  if (const e : ef.errno) {
+    return e;
+  }
+  return ef.value.read_records{cb, opt}();
+}
+
+public pure function {opt, t} errno_t
+io_read_append_records(io const& sys, cstrref const& fn, t mutable& v)
+{
+  const ef = sys.open_st(fn, O_RDONLY, 0);
+  if (const e : ef.errno) {
+    return e;
+  }
+  return ef.value.read_append_records{opt, t}(v);
+}
+
+private metafunction get_option{opt, k, def}
+  m::cond{m::and{m::is_type{opt}, m::symbol{opt, k}},
+    m::symbol{opt, k}, def};
+

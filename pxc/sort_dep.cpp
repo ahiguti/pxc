@@ -63,9 +63,9 @@ static std::list<expr_i *> get_dep_tparams(expr_struct *est)
   } else {
     if (args != 0) {
       for (term_list::const_iterator i = args->begin(); i != args->end();
-	++i) {
-	term t = *i; /* TODO: avoid copying */
-	r.push_back(term_get_instance(t));
+        ++i) {
+        term t = *i; /* TODO: avoid copying */
+        r.push_back(term_get_instance(t));
       }
     }
   }
@@ -102,7 +102,7 @@ void sort_dep(sorted_exprs& c, expr_i *e)
       i = st.find(*k, false);
       expr_var *const ev = dynamic_cast<expr_var *>(i->second.edef);
       if (ev == 0) {
-	continue;
+        continue;
       }
       term te = ev->get_texpr(); /* TODO: eliminate copying */
       expr_i *const einst = term_get_instance(te);

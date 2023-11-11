@@ -1,0 +1,135 @@
+public threaded namespace core::callable::callable;
+public import core::generic::datatype -;
+public import core::pointer -;
+public import core::meta m;
+
+public pure interface {rt, tlist} pure_callable
+{
+  public function rt call__(expand(ailist{tlist})); /* non-const */
+}
+
+public threaded interface {rt, tlist} threaded_callable
+{
+  public function rt call__(expand(ailist{tlist})); /* non-const */
+}
+
+public multithreaded interface {rt, tlist} multithreaded_callable
+{
+  public function rt call__(expand(ailist{tlist})); /* non-const */
+}
+
+public pure threaded struct {rt, tlist}
+pure_callable_ptr(ptr{pure_callable{rt, tlist}} const& p0)
+{
+  private ptr{pure_callable{rt, tlist}} const p = p0;
+  public function rt call__(expand(ailist{tlist})) const {
+    return p->call__(expand(a: anlist{tlist}; a));
+  }
+}
+
+public threaded struct {rt, tlist}
+threaded_callable_ptr(ptr{threaded_callable{rt, tlist}} const& p0)
+{
+  private ptr{threaded_callable{rt, tlist}} const p = p0;
+  public function rt call__(expand(ailist{tlist})) const {
+    return p->call__(expand(a: anlist{tlist}; a));
+  }
+}
+
+public multithreaded struct {rt, tlist}
+multithreaded_callable_ptr(tptr{multithreaded_callable{rt, tlist}} const& p0)
+{
+  private tptr{multithreaded_callable{rt, tlist}} const p = p0;
+  public function rt call__(expand(ailist{tlist})) const {
+    return p->call__(expand(a: anlist{tlist}; a));
+  }
+}
+
+public pure function {f, nbind}
+pure_callable_ptr{m::ret_type{f}, rest_atlist{f, nbind}}
+make_pure_callable_ptr(expand(m::slice{m::args{f}, 0, nbind}))
+{
+  return pure_callable_ptr{m::ret_type{f}, rest_atlist{f, nbind}}(
+    make_ptr{pure_callable_tpl{f, nbind}}(
+      expand(a: bind_anlist{f, nbind}; a)));
+}
+
+public pure function {f, nbind}
+threaded_callable_ptr{m::ret_type{f}, rest_atlist{f, nbind}}
+make_threaded_callable_ptr(expand(m::slice{m::args{f}, 0, nbind}))
+{
+  return threaded_callable_ptr{m::ret_type{f}, rest_atlist{f, nbind}}(
+    make_ptr{threaded_callable_tpl{f, nbind}}(
+      expand(a: bind_anlist{f, nbind}; a)));
+}
+
+public pure function {f, nbind}
+multithreaded_callable_ptr{m::ret_type{f}, rest_atlist{f, nbind}}
+make_multithreaded_callable_ptr(expand(m::slice{m::args{f}, 0, nbind}))
+{
+  return multithreaded_callable_ptr{m::ret_type{f}, rest_atlist{f, nbind}}(
+    make_tptr{multithreaded_callable_tpl{f, nbind}}(
+      expand(a: bind_anlist{f, nbind}; a)));
+}
+
+/* private */
+
+private pure threaded struct {f, nbind}
+pure_callable_tpl(expand(bind_ailist{f, nbind}))
+  <pure_callable{m::ret_type{f}, rest_atlist{f, nbind}}>
+{
+  private metafunction tfld n_tuple{bind_atlist{f, nbind}, m::nil};
+  public tfld const fld = tfld(expand(a: bind_anlist{f, nbind}; a));
+  public function m::ret_type{f} call__(expand(bargs_bycref{f, nbind})) {
+    return f(
+      expand(f: m::field_names{tfld}; fld.f),
+      expand(a: m::slice{m::arg_names{f}, nbind}; a));
+  }
+}
+
+private threaded struct {f, nbind}
+threaded_callable_tpl(expand(bind_ailist{f, nbind}))
+  <threaded_callable{m::ret_type{f}, rest_atlist{f, nbind}}>
+{
+  private metafunction tfld n_tuple{bind_atlist{f, nbind}, m::nil};
+  public tfld const fld = tfld(expand(a: bind_anlist{f, nbind}; a));
+  public function m::ret_type{f} call__(expand(bargs_bycref{f, nbind})) {
+    return f(
+      expand(f: m::field_names{tfld}; fld.f),
+      expand(a: m::slice{m::arg_names{f}, nbind}; a));
+  }
+}
+
+private multithreaded struct {f, nbind}
+multithreaded_callable_tpl(expand(bind_ailist{f, nbind}))
+  <multithreaded_callable{m::ret_type{f}, rest_atlist{f, nbind}}>
+{
+  private metafunction tfld n_tuple{bind_atlist{f, nbind}, m::nil};
+  public tfld const fld = tfld(expand(a: bind_anlist{f, nbind}; a));
+  public function m::ret_type{f} call__(expand(bargs_bycref{f, nbind})) {
+    return f(
+      expand(f: m::field_names{tfld}; fld.f),
+      expand(a: m::slice{m::arg_names{f}, nbind}; a));
+  }
+}
+
+private metafunction ailist{tlist}
+  m::map{
+    m::seq{m::size{tlist}},
+    metafunction{i} {m::concat{"a", i}, m::at{tlist, i}, 1, 0}};
+private metafunction anlist{tlist}
+  m::map{
+    m::seq{m::size{tlist}},
+    metafunction{i} m::concat{"a", i}};
+
+private metafunction rest_atlist{f, nbind} m::slice{m::arg_types{f}, nbind};
+private metafunction bind_atlist{f, nbind} m::slice{m::arg_types{f}, 0, nbind};
+private metafunction rest_anlist{f, nbind} m::slice{m::arg_names{f}, nbind};
+private metafunction bind_anlist{f, nbind} m::slice{m::arg_names{f}, 0, nbind};
+private metafunction rest_ailist{f, nbind} m::slice{m::args{f}, nbind};
+private metafunction bind_ailist{f, nbind} m::slice{m::args{f}, 0, nbind};
+
+private metafunction bargs_bycref{f, nbind}
+  m::map{m::slice{m::args{f}, nbind},
+    metafunction{e} {m::at0{e}, m::at1{e}, 1, 0}};
+

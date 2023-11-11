@@ -1,21 +1,20 @@
 public namespace svr;
-import common -;
-import io -;
-import io::file -;
-import io::errno -;
-import io::standard -;
-import io::addrinfo -;
-import io::socket -;
-import io::signal -;
-import exception -;
+import core::common -;
+import core::io -;
+import core::io::file -;
+import core::io::errno -;
+import core::io::standard -;
+import core::io::addrinfo -;
+import core::io::socket -;
+import core::io::signal -;
 
 private metafunction svr_host "127.0.0.1";
 private metafunction svr_port "5001";
 
-threaded function void
+pure function void
 server_main(io const& iop, tptr{bool} const& readyp, tptr{string} const& str_r)
 {
-  threaded function void notify()
+  pure function void notify()
   {
     mutable lck = lock_guard{bool}(readyp);
     *lck = true;
@@ -33,16 +32,16 @@ server_main(io const& iop, tptr{bool} const& readyp, tptr{string} const& str_r)
     size_t len = 10;
     sock.value.read(s, len);
     *str_r = s;
-  } catch (exception::c_exception e) {
+  } catch (c_exception e) {
     iop.stderr().println("thrown");
     notify();
-  } catch (io::errno::errno_t e) {
+  } catch (errno_t e) {
     iop.stderr().println("thrown errno");
     notify();
   }
 }
 
-threaded function void
+pure function void
 client_main(io const& iop, tptr{bool} const& readyp)
 {
   {
@@ -60,11 +59,11 @@ client_main(io const& iop, tptr{bool} const& readyp)
 
 function void t1()
 {
-  io::system.signal(SIGPIPE, SIG_IGN);
+  thread_io().signal(SIGPIPE, SIG_IGN);
   const readyp = make_tptr(bool(false));
   const strp = make_tptr(string());
-  const sthr = make_thread_ptr{server_main}(io::system, readyp, strp);
-  const cthr = make_thread_ptr{client_main}(io::system, readyp);
+  const sthr = make_thread_ptr{server_main}(thread_io(), readyp, strp);
+  const cthr = make_thread_ptr{client_main}(thread_io(), readyp);
   sthr();
   cthr();
   println(*strp);

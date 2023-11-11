@@ -1,23 +1,23 @@
 public namespace timing1_affinity;
-import common -;
-import meta -;
-import io -;
-import io::file -;
-import io::errno -;
-import io::standard -;
-import io::addrinfo -;
-import io::socket -;
-import io::signal -;
-import io::time -;
-import io::scheduler;
+import core::common -;
+import core::meta -;
+import core::io -;
+import core::io::file -;
+import core::io::errno -;
+import core::io::standard -;
+import core::io::addrinfo -;
+import core::io::socket -;
+import core::io::signal -;
+import core::io::time -;
+import core::io::scheduler;
 import orb -;
 import transport_file -;
 
-public threaded interface ibinop <remote> {
+public pure interface ibinop <remote> {
   public function int op(int x, int y);
 }
 
-public threaded struct binop_add <ibinop> {
+public pure struct binop_add <ibinop> {
   public function int op(int x, int y) {
     return x + y;
   }
@@ -26,31 +26,31 @@ public threaded struct binop_add <ibinop> {
 private function void client_test_main(file_mt const& f)
 {
   {
-    io::scheduler::cpu_set_t cs;
+    core::io::scheduler::cpu_set_t cs;
     cs.set(3);
-    io::scheduler::sched_setaffinity(io::system, 0, cs);
+    core::io::scheduler::sched_setaffinity(thread_io(), 0, cs);
   }
   const op = make_ptr(orb_handle{ibinop}(make_ptr{transport_file}(f)));
   const st = op->create_stub();
-  double const t0 = io::system.gettimeofday_double();
+  double const t0 = thread_io().gettimeofday_double();
   int z = 0;
   for (int i : 0 .. 1000) {
     for (int j : 0 .. 1000) {
       z += st->op(i, j);
     }
   }
-  double const t1 = io::system.gettimeofday_double();
+  double const t1 = thread_io().gettimeofday_double();
   println(z);
   debug_log("time", t1 - t0);
 }
 
-private threaded function void
+private pure function void
 server_thread(io const& sys, file_mt const& sock)
 {
   {
-    io::scheduler::cpu_set_t cs;
+    core::io::scheduler::cpu_set_t cs;
     cs.set(0);
-    io::scheduler::sched_setaffinity(sys, 0, cs);
+    core::io::scheduler::sched_setaffinity(sys, 0, cs);
   }
   const op = make_ptr{orb_handle{ibinop}}(make_ptr{transport_file}(sock));
   const obj = make_ptr(binop_add());
@@ -59,9 +59,11 @@ server_thread(io const& sys, file_mt const& sock)
 
 private function void main()
 {
-  io::system.signal(SIGPIPE, SIG_IGN);
-  mutable sp = io::system.socketpair(AF_UNIX, SOCK_STREAM, PROTO_UNSPEC);
-  const sthr = make_thread_ptr{server_thread}(io::system, sp.value.first);
+  thread_io().signal(SIGPIPE, SIG_IGN);
+  mutable sp = thread_io().socketpair(AF_UNIX, SOCK_STREAM,
+    PROTO_UNSPEC);
+  const sthr = make_thread_ptr{server_thread}(thread_io(),
+    sp.value.first);
   client_test_main(sp.value.second);
   sp.errno = errno_t(); /* closes fds */
 }

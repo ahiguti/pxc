@@ -1,10 +1,10 @@
 public namespace perl::impl "use-unsafe";
-public import numeric::integral -;
-public import numeric::fp -;
-public import container::array -;
-public import numeric::cast -;
-public import meta -;
-public import meta::family -;
+public import core::numeric::integral -;
+public import core::numeric::fp -;
+public import core::container::array -;
+public import core::numeric::cast -;
+public import core::meta -;
+public import core::meta::family -;
 
 public struct extern "pxperl::perlsv" sv { }
 public struct extern "pxperl::perlav" av {
@@ -161,7 +161,7 @@ private struct {f} pxfunc_obj {
       list{concat{"a", x}, is_valuetype{arg_type_noneph{f, x}}}}) {
       /* byref */
       arg_type_noneph{f, idx} mutable& sym =
-	perlsv_get_object{arg_type_noneph{f, idx}}(a.get(idx));
+        perlsv_get_object{arg_type_noneph{f, idx}}(a.get(idx));
       /* byval */
       value_or_ref{arg_type_noneph{f, idx}} mutable sym;
     }
@@ -177,13 +177,13 @@ private struct {f} pxfunc_obj {
       list{concat{"a", x}, is_ephemeral_type{arg_type{f, x}}}}) {
       /* not an ephemeral type */
       expand (esym: list{concat{"ea", idx}}) {
-	arg_type{f, idx} mutable& esym
-	  = arg_extract{arg_type_noneph{f, idx}}(sym);
+        arg_type{f, idx} mutable& esym
+          = arg_extract{arg_type_noneph{f, idx}}(sym);
       }
       /* ephemeral type */
       expand (esym: list{concat{"ea", idx}}) {
-	arg_type{f, idx} mutable esym
-	  = arg_extract{arg_type_noneph{f, idx}}(sym);
+        arg_type{f, idx} mutable esym
+          = arg_extract{arg_type_noneph{f, idx}}(sym);
       }
     }
     /* call the function or type constructor */
@@ -191,14 +191,14 @@ private struct {f} pxfunc_obj {
       mutable uptr = uninit_ptr{f}(0);
       f mutable& obj = uninit_ptr_getref(uptr);
       obj extern "placement-new"
-	f(expand(i: map{seq{arg_size{f}}, metafunction{x} arg_name_ne{f, x}}; i));
+        f(expand(i: map{seq{arg_size{f}}, metafunction{x} arg_name_ne{f, x}}; i));
       return perlsv_from_object{f}(uptr);
     } else if (eq{ret_type{f}, void}) {
       f(expand(i: map{seq{arg_size{f}}, metafunction{x} arg_name_ne{f, x}}; i));
       return sv();
     } else {
       return convert_to_perlsv{ret_type{f}}(
-	f(expand(i: map{seq{arg_size{f}}, metafunction{x} arg_name_ne{f, x}}; i)));
+        f(expand(i: map{seq{arg_size{f}}, metafunction{x} arg_name_ne{f, x}}; i)));
     }
   }
 }
@@ -314,7 +314,7 @@ static inline std::string generate_klass_name(const pxcrt::bt_string& s) {
     }
     if (nest > 0) {
       if (ch == '}') {
-	--nest;
+        --nest;
       }
       r.push_back(hexchar(ch >> 4U));
       r.push_back(hexchar(ch & 0x0f));
@@ -337,7 +337,7 @@ template <typename F> struct func_pl {
       perlsv rv = F().call$f(perlsvarr(args, items));
       rvraw = rv.get();
       if (rvraw == 0) {
-	rvraw = &PL_sv_undef;
+        rvraw = &PL_sv_undef;
       }
       SvREFCNT_inc(rvraw);
     } catch (const std::exception& e) {
@@ -390,28 +390,28 @@ template <typename T> struct type_pl {
   static bool get_value_iv(SV *sv, IV& r) { // no throw?
     if (sv == 0 || !SvROK(sv)) {
       DBG(fprintf(stderr, "get_value_iv: notrv %s sv=%p\n",
-	klass_name.c_str(), sv));
+        klass_name.c_str(), sv));
       return false;
     }
     SV *const svt = SvRV(sv);
     if (svt == 0 || !SvOBJECT(svt)) {
       DBG(fprintf(stderr, "get_value_iv: notobj %s sv=%p svt=%p\n",
-	klass_name.c_str(), sv, svt));
+        klass_name.c_str(), sv, svt));
       return false;
     }
     HV *const stash = SvSTASH(svt);
     if (stash == klass_stash) {
       DBG(fprintf(stderr, "get_value_iv: stash eq %s sv=%p svt=%p\n",
-	klass_name.c_str(), sv, svt));
+        klass_name.c_str(), sv, svt));
     } else {
       DBG(fprintf(stderr, "get_value_iv: stash ne %s sv=%p svt=%p\n",
-	klass_name.c_str(), sv, svt));
+        klass_name.c_str(), sv, svt));
       const char *const stname = HvNAME(stash);
       if (stname == 0 || strcmp(klass_name.c_str(), stname)) {
-	DBG(fprintf(stderr,
-	  "get_value_iv: stash ne %s sv=%p svt=%p stname=%s\n",
-	  klass_name.c_str(), sv, svt, stname));
-	return false;
+        DBG(fprintf(stderr,
+          "get_value_iv: stash ne %s sv=%p svt=%p stname=%s\n",
+          klass_name.c_str(), sv, svt, stname));
+        return false;
       }
     }
     r = SvIV(svt);
@@ -648,8 +648,8 @@ template <typename T> struct ptrlist_type {
   static void detach_all() {
     if (ptrlist != 0) {
       for (typename std::list<T *>::iterator i = ptrlist->begin();
-	i != ptrlist->end(); ++i) {
-	(*i)->reset();
+        i != ptrlist->end(); ++i) {
+        (*i)->reset();
       }
     }
   }

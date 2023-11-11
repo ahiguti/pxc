@@ -35,11 +35,11 @@ public namespace gears3 "export-unsafe";
 
 metafunction debug_matrix 0;
 
-import common -;
-import pointer::raw -;
-import pointer::raw_unsafe -;
-import numeric::fpmath -;
-import numeric::quaternion -;
+import core::common -;
+import core::pointer::raw -;
+import core::pointer::raw_unsafe -;
+import core::numeric::fpmath -;
+import core::numeric::quaternion -;
 import GL::compat -;
 import SDL2::api_base -;
 import SDL2::api_types -;
@@ -47,10 +47,10 @@ import SDL2::api_functions -;
 import SDL2::api_wrappers -;
 import SDL2::misc -;
 import GL::glm glm;
-import io::time -;
-import io::environ -;
-import meta m;
-private import container::array +; /* extends varray */
+import core::io::time -;
+import core::io::environ -;
+import core::meta m;
+private import core::container::array +; /* extends varray */
 import mainloop -;
 
 float const M_PI = 3.14159265;
@@ -348,7 +348,7 @@ function void draw_gear_vbo(uint vbo_name, farray{size_t, 6} const& ofs)
 
 float gears_angle = 0.0;
 
-tsvaluetype struct gear_vbo {
+pure tsvaluetype struct gear_vbo {
   public uint name;
   public farray{size_t, 6} ofs;
 }
@@ -410,7 +410,7 @@ function void draw_frame(quaternion{float} const& view_angle, float object_size)
     for (int j : 0 .. n) {
       draw_gear_vbo_one(i, mv, nm);
       if (j != n - 1) {
-	mv = mv.translate(glm::make_vec3(0.0, 0.0, 4.0));
+        mv = mv.translate(glm::make_vec3(0.0, 0.0, 4.0));
       }
     }
     if (m::ne{debug_matrix, 0}) {
@@ -422,7 +422,7 @@ function void draw_frame(quaternion{float} const& view_angle, float object_size)
   }
 
   glm::mat4 mutable mv;
-  
+
   mv = modelview_cur;
   int n_dup = 5;
   mv = mv.translate(glm::make_vec3(-3.0, -2.0, 0.0));
@@ -443,7 +443,7 @@ function void draw_frame(quaternion{float} const& view_angle, float object_size)
 }
 
 function void reshape(int width, int height)
-{ 
+{
   screen_width = width;
   screen_height = height;
   update_mvp();
@@ -753,65 +753,65 @@ struct gears_mainloop() <mainloop_i>
     while (SDL_PollEvent(address(ev)) != 0) {
       const etype = ev.type;
       if (etype == SDL_WINDOWEVENT) {
-	if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
-	  const w = ev.window.data1;
-	  const h = ev.window.data2;
-	  SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	    string_join{""}("resized w=", w, " h=", h));
-	  reshape(w, h);
-	}
+        if (ev.window.event == SDL_WINDOWEVENT_RESIZED) {
+          const w = ev.window.data1;
+          const h = ev.window.data2;
+          SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
+            string_join{""}("resized w=", w, " h=", h));
+          reshape(w, h);
+        }
       } else if (etype == SDL_FINGERMOTION) {
-	const fng = ev.tfinger.fingerId;
-	if (!touch.f1down) {
-	  const dx = ev.tfinger.dx * 500.0;
-	  const dy = ev.tfinger.dy * 500.0;
-	  SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	    string_join{" "}("motion", dx, dy, fng));
-	  view_angle_rotate(1.0, 0.0, 0.0, -dy);
-	  view_angle_rotate(0.0, 1.0, 0.0, -dx);
-	} else {
-	  const x = ev.tfinger.x;
-	  const y = ev.tfinger.y;
-	  const d0 = touch.distance();
-	  const ang0 = touch.angle();
-	  touch.update(fng, x, y);
-	  const d1 = touch.distance();
-	  const ang1 = touch.angle();
-	  SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	    string_join{" "}("object_size", d0, d1, x, y, view_object_size));
-	  view_object_size_multiply(d1 / d0);
-	  view_angle_rotate_rad(0.0, 0.0, 1.0, ang1 - ang0);
-	  SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	    string_join{" "}("touchangle", ang1));
-	}
+        const fng = ev.tfinger.fingerId;
+        if (!touch.f1down) {
+          const dx = ev.tfinger.dx * 500.0;
+          const dy = ev.tfinger.dy * 500.0;
+          SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
+            string_join{" "}("motion", dx, dy, fng));
+          view_angle_rotate(1.0, 0.0, 0.0, -dy);
+          view_angle_rotate(0.0, 1.0, 0.0, -dx);
+        } else {
+          const x = ev.tfinger.x;
+          const y = ev.tfinger.y;
+          const d0 = touch.distance();
+          const ang0 = touch.angle();
+          touch.update(fng, x, y);
+          const d1 = touch.distance();
+          const ang1 = touch.angle();
+          SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
+            string_join{" "}("object_size", d0, d1, x, y, view_object_size));
+          view_object_size_multiply(d1 / d0);
+          view_angle_rotate_rad(0.0, 0.0, 1.0, ang1 - ang0);
+          SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
+            string_join{" "}("touchangle", ang1));
+        }
       } else if (etype == SDL_FINGERDOWN) {
-	const x = ev.tfinger.x;
-	const y = ev.tfinger.y;
-	const fng = ev.tfinger.fingerId;
-	if (fng == 1) {
-	  touch.f1down = true;
-	}
-	touch.update(fng, x, y);
-	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	  string_join{" "}("down", x, y, fng));
+        const x = ev.tfinger.x;
+        const y = ev.tfinger.y;
+        const fng = ev.tfinger.fingerId;
+        if (fng == 1) {
+          touch.f1down = true;
+        }
+        touch.update(fng, x, y);
+        SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
+          string_join{" "}("down", x, y, fng));
       } else if (etype == SDL_FINGERUP) {
-	const fng = ev.tfinger.fingerId;
-	if (fng == 1) {
-	  touch.f1down = false;
-	}
+        const fng = ev.tfinger.fingerId;
+        if (fng == 1) {
+          touch.f1down = false;
+        }
       } else if (etype == SDL_APP_WILLENTERBACKGROUND) {
-	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("paused"));
-	paused = true;
+        SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("paused"));
+        paused = true;
       } else if (etype == SDL_APP_DIDENTERFOREGROUND) {
-	SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("resumed"));
-	paused = false;
-	int w;
-	int h;
-	SDL_GetWindowSize(wnd, address(w), address(h));
-	reshape(w, h);
+        SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("resumed"));
+        paused = false;
+        int w;
+        int h;
+        SDL_GetWindowSize(wnd, address(w), address(h));
+        reshape(w, h);
       } else if (etype == SDL_QUIT) {
-	done = true;
-	break;
+        done = true;
+        break;
       }
     }
     if (paused) {
@@ -829,61 +829,61 @@ struct gears_mainloop() <mainloop_i>
       ++frames;
       uint t = SDL_GetTicks();
       if (t - t0 >= 1000) {
-	const seconds = static_cast{float}(t - t0) / 1000.0;
-	const fps = static_cast{float}(frames) / seconds;
-	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	  string_join{" "}(frames, "frames in", seconds, "seconds =", fps,
-	    "fps"));
-	SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
-	  string_join{" "}("ticks: ", ticks_sum));
-	ticks_sum = ticks_t();
-	t0 = t;
-	frames = 0;
+        const seconds = static_cast{float}(t - t0) / 1000.0;
+        const fps = static_cast{float}(frames) / seconds;
+        SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
+          string_join{" "}(frames, "frames in", seconds, "seconds =", fps,
+            "fps"));
+        SDL_LogWarn(SDL_LOG_CATEGORY_TEST,
+          string_join{" "}("ticks: ", ticks_sum));
+        ticks_sum = ticks_t();
+        t0 = t;
+        frames = 0;
       }
       gears_angle += static_cast{float}(t - tprev) / 20.0;
       // gears_angle += static_cast{float}(1);
       gears_angle = fmod(gears_angle, 360.0);
       tprev = t;
       if (t - t1 >= 10) {
-	if (t - t1 >= 10) {
-	  t1 += 10;
-	}
-	int numkeys;
-	const ksp = SDL_GetKeyboardState(address(numkeys));
-	const ks = ksp.to_cslice(static_cast{size_t}(numkeys));
-	public function uint get_key(SDL_Scancode k)
-	{
-	  const i = static_cast{size_t}(k);
-	  return i < ks.size() ? ks[i] : 0U;
-	}
-	// SDL_KeyboardState const ks;
-	if (get_key(SDL_SCANCODE_ESCAPE) != 0) { done = true; }
-	if (get_key(SDL_SCANCODE_UP) != 0) {
-	  if (get_key(SDL_SCANCODE_LCTRL) != 0) {
-	    set_distance(perspective_distance + 0.01);
-	    SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("distance",
-	      perspective_distance));
-	  } else {
-	    view_angle_rotate(1.0, 0.0, 0.0, 2.0);
-	  }
-	}
-	if (get_key(SDL_SCANCODE_DOWN) != 0) {
-	  if (get_key(SDL_SCANCODE_LCTRL) != 0) {
-	    set_distance(perspective_distance - 0.01);
-	    SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("distance",
-	      perspective_distance));
-	  } else {
-	    view_angle_rotate(1.0, 0.0, 0.0, -2.0);
-	  }
-	}
-	if (get_key(SDL_SCANCODE_LEFT) != 0) {
-	  view_angle_rotate(0.0, 1.0, 0.0, 2.0); }
-	if (get_key(SDL_SCANCODE_RIGHT) != 0) {
-	  view_angle_rotate(0.0, 1.0, 0.0, -2.0); }
-	if (get_key(SDL_SCANCODE_SPACE) != 0) {
-	  view_object_size_multiply(1.01); }
-	if (get_key(SDL_SCANCODE_LSHIFT) != 0) {
-	  view_object_size_multiply(0.99); }
+        if (t - t1 >= 10) {
+          t1 += 10;
+        }
+        int numkeys;
+        const ksp = SDL_GetKeyboardState(address(numkeys));
+        const ks = ksp.to_cslice(static_cast{size_t}(numkeys));
+        public function uint get_key(SDL_Scancode k)
+        {
+          const i = static_cast{size_t}(k);
+          return i < ks.size() ? ks[i] : 0U;
+        }
+        // SDL_KeyboardState const ks;
+        if (get_key(SDL_SCANCODE_ESCAPE) != 0) { done = true; }
+        if (get_key(SDL_SCANCODE_UP) != 0) {
+          if (get_key(SDL_SCANCODE_LCTRL) != 0) {
+            set_distance(perspective_distance + 0.01);
+            SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("distance",
+              perspective_distance));
+          } else {
+            view_angle_rotate(1.0, 0.0, 0.0, 2.0);
+          }
+        }
+        if (get_key(SDL_SCANCODE_DOWN) != 0) {
+          if (get_key(SDL_SCANCODE_LCTRL) != 0) {
+            set_distance(perspective_distance - 0.01);
+            SDL_LogWarn(SDL_LOG_CATEGORY_TEST, string_join{""}("distance",
+              perspective_distance));
+          } else {
+            view_angle_rotate(1.0, 0.0, 0.0, -2.0);
+          }
+        }
+        if (get_key(SDL_SCANCODE_LEFT) != 0) {
+          view_angle_rotate(0.0, 1.0, 0.0, 2.0); }
+        if (get_key(SDL_SCANCODE_RIGHT) != 0) {
+          view_angle_rotate(0.0, 1.0, 0.0, -2.0); }
+        if (get_key(SDL_SCANCODE_SPACE) != 0) {
+          view_object_size_multiply(1.01); }
+        if (get_key(SDL_SCANCODE_LSHIFT) != 0) {
+          view_object_size_multiply(0.99); }
       }
     }
     save_ticks(4);

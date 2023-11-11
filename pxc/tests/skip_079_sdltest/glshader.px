@@ -1,11 +1,11 @@
 public namespace glshader "export-unsafe";
-public import common -;
-public import pointer::raw -;
-public import numeric::fpmath -;
+public import core::common -;
+public import core::pointer::raw -;
+public import core::numeric::fpmath -;
 public import GL::glm glm;
 public import GL::compat -;
-public import meta m;
-public import exception -;
+public import core::meta m;
+public import core::exception -;
 
 public metafunction is_ios m::eq{m::profile{"platform"}, "ios"};
 public metafunction is_android m::eq{m::profile{"platform"}, "android"};
@@ -57,7 +57,7 @@ shader private(cstrref const& prog_v, cstrref const& prog_f,
     glGetError(); /* ignore */
     if (vsym < 0) {
       vsym = glGetAttribLocation_nocheck(program,
-	m::to_string{sym}.crawptr().char());
+        m::to_string{sym}.crawptr().char());
       glGetError(); /* ignore */
       println("uniform(attr)", m::to_string{sym}, vsym);
     } else {
@@ -127,7 +127,7 @@ create_program(cstrref const& vertex_shader, cstrref const& fragment_shader,
     if (shader != 0) {
       glAttachShader(prog, shader);
       if (!attrib_to_avoid_0.empty()) {
-	glBindAttribLocation(prog, 1, attrib_to_avoid_0.crawptr().char());
+        glBindAttribLocation(prog, 1, attrib_to_avoid_0.crawptr().char());
       }
     } else {
       success = 0;
@@ -146,7 +146,7 @@ create_program(cstrref const& vertex_shader, cstrref const& fragment_shader,
       buf.resize(4096, 0);
       GLsizei len;
       glGetProgramInfoLog(prog, static_cast{GLsizei}(buf.size()), address(len),
-	buf.rawptr().char());
+        buf.rawptr().char());
       buf.resize(static_cast{size_t}(len), 0);
       debug_log("linkprogram failed:", string_join{"\t"}(prog, buf));
       debug_log("vert:", vertex_shader);

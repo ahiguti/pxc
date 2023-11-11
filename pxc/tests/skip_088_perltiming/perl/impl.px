@@ -1,10 +1,10 @@
 public namespace perl::impl "use-unsafe";
-public import numeric::integral -;
-public import numeric::fp -;
-public import container::array -;
-public import numeric::cast -;
-public import meta -;
-public import meta::family -;
+public import core::numeric::integral -;
+public import core::numeric::fp -;
+public import core::container::array -;
+public import core::numeric::cast -;
+public import core::meta -;
+public import core::meta::family -;
 
 public struct extern "pxperl::perlsv" sv {
   function extern "get" rawsv get() const;
@@ -191,7 +191,7 @@ private struct {f} pxfunc_obj {
       list{concat{"a", x}, is_valuetype{arg_type_noneph{f, x}}}}) {
       /* byref */
       arg_type_noneph{f, idx} mutable& sym =
-	rawsv_get_object{arg_type_noneph{f, idx}}(a.get(idx));
+        rawsv_get_object{arg_type_noneph{f, idx}}(a.get(idx));
       /* byval */
       value_or_ref{arg_type_noneph{f, idx}} mutable sym;
     }
@@ -207,13 +207,13 @@ private struct {f} pxfunc_obj {
       list{concat{"a", x}, is_ephemeral_type{arg_type{f, x}}}}) {
       /* not an ephemeral type */
       expand (esym: list{concat{"ea", idx}}) {
-	arg_type{f, idx} mutable& esym
-	  = arg_extract{arg_type_noneph{f, idx}}(sym);
+        arg_type{f, idx} mutable& esym
+          = arg_extract{arg_type_noneph{f, idx}}(sym);
       }
       /* ephemeral type */
       expand (esym: list{concat{"ea", idx}}) {
-	arg_type{f, idx} mutable esym
-	  = arg_extract{arg_type_noneph{f, idx}}(sym);
+        arg_type{f, idx} mutable esym
+          = arg_extract{arg_type_noneph{f, idx}}(sym);
       }
     }
     /* call the function or type constructor */
@@ -221,15 +221,15 @@ private struct {f} pxfunc_obj {
       mutable uptr = uninit_ptr{f}(0);
       f mutable& obj = uninit_ptr_getref(uptr);
       obj extern "placement-new"
-	f(expand(i: map{seq{arg_size{f}}, metafunction{x} arg_name_ne{f, x}}; i));
+        f(expand(i: map{seq{arg_size{f}}, metafunction{x} arg_name_ne{f, x}}; i));
       return rawsv_from_object_own{f}(uptr);
     } else if (eq{ret_type{f}, void}) {
       f(expand(i: map{seq{arg_size{f}}, metafunction{x} arg_name_ne{f, x}}; i));
       return rawsv_undef();
     } else {
       return convert_to_rawsv_own{ret_type{f}}(
-	f(expand(i: map{seq{arg_size{f}},
-	  metafunction{x} arg_name_ne{f, x}}; i)));
+        f(expand(i: map{seq{arg_size{f}},
+          metafunction{x} arg_name_ne{f, x}}; i)));
     }
   }
 }
@@ -242,27 +242,27 @@ private struct {t, i} pxfield_obj {
     t mutable& obj = rawsv_get_object{t}(a.get(0));
     if (a.size() > 1) {
       expand (sym, idx: list{list{"v", is_valuetype{fld_type}}}) {
-	/* byref */
-	fld_type mutable& v = rawsv_get_object{fld_type}(a.get(idx));
-	/* byval */
-	value_or_ref{fld_type} mutable v;
+        /* byref */
+        fld_type mutable& v = rawsv_get_object{fld_type}(a.get(idx));
+        /* byval */
+        value_or_ref{fld_type} mutable v;
       }
       expand (sym, idx: list{list{"v", is_valuetype{fld_type}}}) {
-	/* byref */
-	noop();
-	/* byval */
-	rawsv_get_value{fld_type}(a.get(1), v);
+        /* byref */
+        noop();
+        /* byval */
+        rawsv_get_value{fld_type}(a.get(1), v);
       }
       expand(sym : list{list{fld_name, is_valuetype{fld_type}}}) {
-	/*byref */
-	obj.sym = v;
-	/* byval */
-	obj.sym = v.get();
+        /*byref */
+        obj.sym = v;
+        /* byval */
+        obj.sym = v.get();
       }
       return rawsv_undef();
     } else {
       expand(sym : list{fld_name}) {
-	return convert_to_rawsv_own{fld_type}(obj.sym);
+        return convert_to_rawsv_own{fld_type}(obj.sym);
       }
     }
   }
@@ -451,28 +451,28 @@ template <typename T> struct type_pl {
   static bool get_value_iv(SV *sv, IV& r) { // no throw?
     if (sv == 0 || !SvROK(sv)) {
       DBG(fprintf(stderr, "get_value_iv: notrv %s sv=%p\n",
-	klass_name.c_str(), sv));
+        klass_name.c_str(), sv));
       return false;
     }
     SV *const svt = SvRV(sv);
     if (svt == 0 || !SvOBJECT(svt)) {
       DBG(fprintf(stderr, "get_value_iv: notobj %s sv=%p svt=%p\n",
-	klass_name.c_str(), sv, svt));
+        klass_name.c_str(), sv, svt));
       return false;
     }
     HV *const stash = SvSTASH(svt);
     if (stash == klass_stash) {
       DBG(fprintf(stderr, "get_value_iv: stash eq %s sv=%p svt=%p\n",
-	klass_name.c_str(), sv, svt));
+        klass_name.c_str(), sv, svt));
     } else {
       DBG(fprintf(stderr, "get_value_iv: stash ne %s sv=%p svt=%p\n",
-	klass_name.c_str(), sv, svt));
+        klass_name.c_str(), sv, svt));
       const char *const stname = HvNAME(stash);
       if (stname == 0 || strcmp(klass_name.c_str(), stname)) {
-	DBG(fprintf(stderr,
-	  "get_value_iv: stash ne %s sv=%p svt=%p stname=%s\n",
-	  klass_name.c_str(), sv, svt, stname));
-	return false;
+        DBG(fprintf(stderr,
+          "get_value_iv: stash ne %s sv=%p svt=%p stname=%s\n",
+          klass_name.c_str(), sv, svt, stname));
+        return false;
       }
     }
     r = SvIV(svt);
@@ -717,8 +717,8 @@ template <typename T> struct ptrlist_type {
   static void detach_all() {
     if (ptrlist != 0) {
       for (typename std::list<T *>::iterator i = ptrlist->begin();
-	i != ptrlist->end(); ++i) {
-	(*i)->reset();
+        i != ptrlist->end(); ++i) {
+        (*i)->reset();
       }
     }
   }

@@ -1,18 +1,18 @@
 public namespace filetest2;
-import common -;
-import io -;
-import io::errno -;
+import core::common -;
+import core::io -;
+import core::io::errno -;
 
 function void ft1(string const& fn)
 {
   println("ft1");
-  io::file::statbuf stbuf;
-  io::file::io_stat(io::system, fn, stbuf);
-  if (system.get_errno() != EOK) {
+  core::io::file::statbuf stbuf;
+  core::io::file::io_stat(core::io::thread_io(), fn, stbuf);
+  if (core::io::thread_io().get_errno() != EOK) {
     print("failed to stat: ");
     println(fn);
     print("error = ");
-    println(system.get_errno());
+    println(core::io::thread_io().get_errno());
   } else {
     println(stbuf.st_size);
   }
@@ -21,7 +21,7 @@ function void ft1(string const& fn)
 function void ft2(string const& fn)
 {
   println("ft2");
-  const s = io::file::io_read_file(io::system, fn);
+  const s = core::io::file::io_read_file(core::io::thread_io(), fn);
   print(*s.value);
 }
 

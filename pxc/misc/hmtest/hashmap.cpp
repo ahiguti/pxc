@@ -48,16 +48,16 @@ struct hashmap_buckets {
     for (size_type i = num_buckets; i > 0; --i) {
       node_type& bn = buckets[i - 1];
       if (bn.next == 0) {
-	continue;
+        continue;
       }
       bn.deinit_entry();
       node_type *p = &bn;
       node_type *const pend = buckets_end();
       while (p->next != pend) {
-	p->deinit_entry();
-	node_type *np = p->next;
-	free(p);
-	p = np;
+        p->deinit_entry();
+        node_type *np = p->next;
+        free(p);
+        p = np;
       }
     }
     free(buckets);
@@ -78,11 +78,11 @@ struct hashmap_buckets {
     while (true) {
       entry_type& pe = *p->get_entry();
       if (pe.first == k) {
-	pe.second = m;
-	return false; /* not created */
+        pe.second = m;
+        return false; /* not created */
       }
       if (p->next == pend) {
-	break;
+        break;
       }
       p = p->next;
     }
@@ -119,11 +119,11 @@ private:
     while (true) {
       entry_type& pe = *p->get_entry();
       if (pe.first == k) {
-	return &pe.second;
+        return &pe.second;
       }
       node_type *const pend = buckets_end();
       if (p->next == pend) {
-	return 0;
+        return 0;
       }
       p = p->next;
     }

@@ -220,7 +220,7 @@ struct template_info {
   expr_i *instantiated_context;
   std::string self_key;
   bool template_descent : 1;
-  bool instantiated : 1; 
+  bool instantiated : 1;
   template_info() : tparams(0), instances_backref(0), instantiated_context(0),
     template_descent(false), instantiated(false) { }
   bool has_tparams() const { return tparams != 0; }
@@ -273,8 +273,8 @@ private:
 };
 
 struct cname_info {
-  cname_info(const char *s) : cname(s) { }
-  const char *cname;  
+  cname_info(const char *s) : cname((s != 0 && s[0] != 0) ? s : 0) { }
+  const char *cname;
   bool has_cname() const { return cname != 0; }
 };
 
@@ -1226,6 +1226,8 @@ public:
   bool ext_pxc : 1;  /* an imported function (block may be null) */
   bool no_def : 1;    /* extern c function or virtual function decl */
   bool c_proto_flag : 1; /* emit prototype decl for this function */
+  bool c_keep_flag : 1; /* don't optimize away */
+  bool c_noop_flag : 1; /* drop argument expressions */
   term value_texpr;
   typedef std::pair<
     symbol_table * /* caller symtbl */,

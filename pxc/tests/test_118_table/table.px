@@ -1,13 +1,13 @@
 public namespace table;
-public import common -;
-public import meta m; 
-public import meta::family mf;
-public import exception -;
-public import io::text -;
-public import io::errno -;
+public import core::common -;
+public import core::meta m;
+public import core::meta::family mf;
+public import core::exception -;
+public import core::io::text -;
+public import core::io::errno -;
 public import regex::posix -;
 
-private threaded function ptr{regex}
+private pure function ptr{regex}
 make_regex(cstrref const& rex, cflags_t cflags)
 {
   regerror_t err;
@@ -18,7 +18,7 @@ make_regex(cstrref const& rex, cflags_t cflags)
   return r;
 }
 
-public threaded struct {tlist, opt}
+public pure struct {tlist, opt}
 table_ifile(file_st const& fp0)
 {
   private file_st const fp = fp0;
@@ -33,48 +33,48 @@ table_ifile(file_st const& fp0)
   public function {cb} void foreach() const
   {
     farray{regmatch_t, m::add{m::size{tlist}, 1}} mutable regex_match;
-    threaded function bool parse_line(cstrref mutable line)
+    pure function bool parse_line(cstrref mutable line)
     {
       if (m::is_string{rex}) {
-	const err = regex_ptr->exec(line, regex_match, 0);
-	if (err != REG_OK) {
-	  return true;
-	}
-	metafunction stmtnum{i}
-	  mf::is_string_or_slice_type{m::at{tlist, i}};
-	expand(sym, idx: m::map{m::seq{m::size{tlist}},
-	  metafunction{i} {m::concat{"a", i}, stmtnum{i}}})
-	{
-	/* not a string type */
-	const& sym = from_string{m::at{tlist, idx}}(line[
-	  static_cast{size_t}(regex_match[m::add{idx, 1}].rm_so) ..
-	  static_cast{size_t}(regex_match[m::add{idx, 1}].rm_eo)]);
-	/* string type */
-	const& sym = line[
-	  static_cast{size_t}(regex_match[m::add{idx, 1}].rm_so) ..
-	  static_cast{size_t}(regex_match[m::add{idx, 1}].rm_eo)];
-	}
-	return cb(expand(a: m::map{m::seq{m::size{tlist}},
-	  metafunction{i} m::concat{"a", i}}; a));
+        const err = regex_ptr->exec(line, regex_match, 0);
+        if (err != REG_OK) {
+          return true;
+        }
+        metafunction stmtnum{i}
+          mf::is_string_or_slice_type{m::at{tlist, i}};
+        expand(sym, idx: m::map{m::seq{m::size{tlist}},
+          metafunction{i} {m::concat{"a", i}, stmtnum{i}}})
+        {
+        /* not a string type */
+        const& sym = from_string{m::at{tlist, idx}}(line[
+          static_cast{size_t}(regex_match[m::add{idx, 1}].rm_so) ..
+          static_cast{size_t}(regex_match[m::add{idx, 1}].rm_eo)]);
+        /* string type */
+        const& sym = line[
+          static_cast{size_t}(regex_match[m::add{idx, 1}].rm_so) ..
+          static_cast{size_t}(regex_match[m::add{idx, 1}].rm_eo)];
+        }
+        return cb(expand(a: m::map{m::seq{m::size{tlist}},
+          metafunction{i} m::concat{"a", i}}; a));
       } else {
-	metafunction stmtnum{i}
-	  m::add{
-	    mf::is_string_or_slice_type{m::at{tlist, i}},
-	    m::mul{m::gt{m::size{tlist}, 1}, 2}};
-	expand(sym, idx: m::map{m::seq{m::size{tlist}},
-	  metafunction{i} {m::concat{"a", i}, stmtnum{i}}})
-	{ 
-	/* no need to split, not a string type */
-	const& sym = from_string{m::at{tlist, idx}}(line);
-	/* no need to split, string type */
-	const& sym = line;
-	/* need to split, not a string type */
-	const& sym = from_string{m::at{tlist, idx}}(line.next_token(delim));
-	/* need to split, string type */
-	const& sym = line.next_token(delim);
-	}
-	return cb(expand(a: m::map{m::seq{m::size{tlist}},
-	  metafunction{i} m::concat{"a", i}}; a));
+        metafunction stmtnum{i}
+          m::add{
+            mf::is_string_or_slice_type{m::at{tlist, i}},
+            m::mul{m::gt{m::size{tlist}, 1}, 2}};
+        expand(sym, idx: m::map{m::seq{m::size{tlist}},
+          metafunction{i} {m::concat{"a", i}, stmtnum{i}}})
+        {
+        /* no need to split, not a string type */
+        const& sym = from_string{m::at{tlist, idx}}(line);
+        /* no need to split, string type */
+        const& sym = line;
+        /* need to split, not a string type */
+        const& sym = from_string{m::at{tlist, idx}}(line.next_token(delim));
+        /* need to split, string type */
+        const& sym = line.next_token(delim);
+        }
+        return cb(expand(a: m::map{m::seq{m::size{tlist}},
+          metafunction{i} m::concat{"a", i}}; a));
       }
     }
     errno_t errno = fp.read_lines{parse_line, opt}();
@@ -84,7 +84,7 @@ table_ifile(file_st const& fp0)
   }
 }
 
-public threaded struct {tlist, opt}
+public pure struct {tlist, opt}
 table_ofile(file_st const& fp0)
 {
   private file_st const fp = fp0;
@@ -100,7 +100,7 @@ table_ofile(file_st const& fp0)
     string_append_join{delim}(
       obuffer,
       expand(a: m::map{m::seq{m::size{tlist}},
-	metafunction{i} m::concat{"a", i}}; a));
+        metafunction{i} m::concat{"a", i}}; a));
     obuffer.append(ldelim);
     if (obuffer.size() > buffer_size) {
       flush();
@@ -120,11 +120,11 @@ table_ofile(file_st const& fp0)
   }
 }
 
-public valuetype struct {key_types, mapped_types}
+public pure valuetype struct {key_types, mapped_types}
 table_map()
 {
-  public metafunction key_type tuple{key_types};
-  public metafunction mapped_type tuple{mapped_types};
+  public metafunction key_type n_tuple{key_types};
+  public metafunction mapped_type n_tuple{mapped_types};
   public metafunction field_types m::joinv{key_types, mapped_types};
   public metafunction map_type m::cond{
     m::empty{mapped_types},
@@ -138,23 +138,23 @@ table_map()
     if (m::empty{mapped_types}) {
       metafunction klen m::size{key_types};
       const k = key_type(expand(a: m::map{m::seq{klen}, metafunction{i}
-	m::concat{"a", i}}; a));
+        m::concat{"a", i}}; a));
       mapval.insert(k, unit());
     } else {
       metafunction klen m::size{key_types};
       metafunction mlen m::size{mapped_types};
       const k = key_type(expand(a: m::map{m::seq{klen}, metafunction{i}
-	m::concat{"a", i}}; a));
+        m::concat{"a", i}}; a));
       const m = mapped_type(expand(a: m::map{m::seq{mlen}, metafunction{i}
-	m::concat{"a", m::add{i, klen}}}; a));
+        m::concat{"a", m::add{i, klen}}}; a));
       if (mutable& m0 : mapval[k]) {
-	expand(sym, idx: m::map{m::seq{mlen}, metafunction{i}
-	  m::concat{"_", i}})
-	{
-	  m0.sym += m.sym;
-	}
+        expand(sym, idx: m::map{m::seq{mlen}, metafunction{i}
+          m::concat{"_", i}})
+        {
+          m0.sym += m.sym;
+        }
       } else {
-	mapval.insert(k, m);
+        mapval.insert(k, m);
       }
     }
     return true;
@@ -165,28 +165,28 @@ table_map()
     metafunction klen m::size{key_types};
     for (const k, const m : mapval) {
       expand (sym, idx: m::map{m::seq{m::arg_size{cb}}, metafunction{i}
-	m::list{m::concat{"x", i}, m::ge{i, klen}}})
+        m::list{m::concat{"x", i}, m::ge{i, klen}}})
       {
-	/* key */
-	expand (fldsym: m::list{m::concat{"_", idx}}) {
-	  const& sym = k.fldsym;
-	}
-	/* mapped */
-	expand (fldsym: m::list{m::concat{"_", m::sub{idx, klen}}}) {
-	  const& sym = m.fldsym;
-	}
+        /* key */
+        expand (fldsym: m::list{m::concat{"_", idx}}) {
+          const& sym = k.fldsym;
+        }
+        /* mapped */
+        expand (fldsym: m::list{m::concat{"_", m::sub{idx, klen}}}) {
+          const& sym = m.fldsym;
+        }
       }
       bool const r = cb(expand(a:
-	m::map{m::seq{m::arg_size{cb}}, metafunction{i}
-	  m::concat{"x", i}}; a));
+        m::map{m::seq{m::arg_size{cb}}, metafunction{i}
+          m::concat{"x", i}}; a));
       if (!r) {
-	break;
+        break;
       }
     }
   }
 }
 
-public threaded function {trans, tfrom, tto} void
+public pure function {trans, tfrom, tto} void
 transform(tfrom const& from, tto mutable& to)
 {
   metafunction to_insert m::symbol{tto, "insert"};
@@ -198,24 +198,24 @@ transform(tfrom const& from, tto mutable& to)
       metafunction{i} {m::concat{"a", i}, m::at{from_ftlist, i}, 1, 0}};
     metafunction out_argnames m::trace{m::map{m::seq{m::size{trans}},
       metafunction{i} m::concat{"o", i}}};
-    threaded function bool record_cb(expand(in_args)) {
+    pure function bool record_cb(expand(in_args)) {
       expand (sym, i: m::trace{m::map{m::seq{m::size{trans}},
-	metafunction{i} {m::concat{"o", i}, m::is_int{m::at{trans, i}}}}})
+        metafunction{i} {m::concat{"o", i}, m::is_int{m::at{trans, i}}}}})
       {
-	/* function */
-	const& sym = m::at0{m::at{trans, i}}(expand(a:
-	  m::map{m::slice{m::at{trans, i}, 1}, metafunction{j}
-	    m::concat{"a", j}}; a));
-	/* int */
-	expand (asym: {m::concat{"a", m::at{trans, i}}}) {
-	  const& sym = asym;
-	}
+        /* function */
+        const& sym = m::at0{m::at{trans, i}}(expand(a:
+          m::map{m::slice{m::at{trans, i}, 1}, metafunction{j}
+            m::concat{"a", j}}; a));
+        /* int */
+        expand (asym: {m::concat{"a", m::at{trans, i}}}) {
+          const& sym = asym;
+        }
       }
       return to.insert(expand(a: out_argnames; a));
     }
     from.foreach{record_cb}();
   } else {
-    threaded function bool record_cb(expand(to_args)) {
+    pure function bool record_cb(expand(to_args)) {
       return to.insert(expand(a: to_arg_names; a));
     }
     if (m::eq{trans, 0}) {

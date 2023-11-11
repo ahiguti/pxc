@@ -1,0 +1,235 @@
+public threaded namespace core::meta::family;
+public import core::numeric::integral -;
+public import core::numeric::fp -;
+public import core::meta m;
+
+public metafunction is_numeric_type{t}
+  is_numeric_family{t, m::family{t}};
+
+public metafunction is_numeric_enum_bitmask_type{t}
+  is_numeric_enum_bitmask_family{t, m::family{t}};
+
+public metafunction is_integral_type{t}
+  is_integral_family{t, m::family{t}};
+
+public metafunction is_boolean_type{t}
+  is_boolean_family{t, m::family{t}};
+
+public metafunction is_integral_enum_bitmask_type{t}
+  is_integral_enum_bitmask_family{t, m::family{t}};
+
+public metafunction is_signed_integral_type{t}
+  is_signed_integral_family{t, m::family{t}};
+
+public metafunction is_unsigned_integral_type{t}
+  is_unsigned_integral_family{t, m::family{t}};
+
+public metafunction is_unsigned_integral_enum_bitmask_type{t}
+  is_unsigned_integral_enum_bitmask_family{t, m::family{t}};
+
+public metafunction is_enum_type{t}
+  is_enum_family{m::family{t}};
+
+public metafunction is_bitmask_type{t}
+  is_bitmask_family{m::family{t}};
+
+public metafunction is_fp_type{t}
+  is_fp_family{t, m::family{t}};
+
+public metafunction is_range_type{t}
+  is_range_family{m::family{t}};
+
+public metafunction is_array_or_slice_type{t}
+  is_array_or_slice_family{m::family{t}};
+
+public metafunction is_string_or_slice_type{t}
+  is_string_or_slice_typestr{t, m::full_string{t}};
+
+public metafunction is_map_or_range_type{t}
+  is_map_or_range_family{m::family{t}};
+
+public metafunction is_container_or_range_type{t}
+  m::or{is_array_or_slice_type{t}, is_map_or_range_type{t}};
+
+public metafunction is_pointer_type{t}
+  is_pointer_family{m::family{t}};
+
+public metafunction is_mutable_pointer_type{t}
+  is_mutable_pointer_family{m::family{t}};
+
+public metafunction is_guard_type{t}
+  is_guard_family{m::family{t}};
+
+public metafunction is_struct_type{t}
+  is_struct_family{m::family{t}};
+
+public metafunction is_union_type{t}
+  is_union_family{m::family{t}};
+
+public metafunction is_ordered_type{t}
+  is_numeric_enum_bitmask_type{t};
+
+public metafunction is_equality_type{t}
+  m::or{
+    is_boolean_type{t},
+    is_ordered_type{t},
+    is_pointer_type{t}};
+
+public metafunction is_dereferencable_type{t}
+  m::or{
+    is_pointer_type{t},
+    is_range_type{t},
+    is_guard_type{t}};
+
+public metafunction is_ephemeral_type{t}
+  m::or{is_range_type{t}, m::eq{m::family{t}, "ephemeral"}};
+
+public metafunction to_non_ephemeral_type{t}
+  m::cond{is_ephemeral_type{t}, m::symbol{t, "non_ephemeral_type"}, t};
+
+/* private */
+
+private metafunction is_signed_integral_family{t, fam}
+  m::or{
+    m::eq{t, char},
+    m::eq{t, short},
+    m::eq{t, int},
+    m::eq{t, long},
+    m::eq{t, ssize_t},
+    m::eq{fam, "extsint"}};
+
+private metafunction is_unsigned_integral_family{t, fam}
+  m::or{
+    m::eq{t, uchar},
+    m::eq{t, ushort},
+    m::eq{t, uint},
+    m::eq{t, ulong},
+    m::eq{t, size_t},
+    m::eq{fam, "extuint"}};
+
+private metafunction is_integral_family{t, fam}
+  m::or{
+    is_signed_integral_family{t, fam},
+    is_unsigned_integral_family{t, fam},
+    m::eq{fam, "extint"}};
+
+private metafunction is_enum_family{fam}
+  m::or{
+    m::eq{fam, "enum"},
+    m::eq{fam, "extenum"}};
+
+private metafunction is_bitmask_family{fam}
+  m::or{
+    m::eq{fam, "bitmask"},
+    m::eq{fam, "extbitmask"}};
+
+private metafunction is_unsigned_integral_enum_bitmask_family{t, fam}
+  m::or{
+    is_unsigned_integral_family{t, fam},
+    is_enum_family{fam},
+    is_bitmask_family{fam}};
+
+private metafunction is_boolean_family{t, fam}
+  m::or{
+    m::eq{t, bool},
+    is_integral_family{t, fam},
+    is_bitmask_family{fam}};
+
+private metafunction is_integral_enum_bitmask_family{t, fam}
+  m::or{
+    is_integral_family{t, fam},
+    is_enum_family{fam},
+    is_bitmask_family{fam}};
+
+private metafunction is_fp_family{t, fam}
+  m::or{
+    m::eq{t, float},
+    m::eq{t, double},
+    m::eq{fam, "extfloat"}};
+
+private metafunction is_numeric_family{t, fam}
+  m::or{
+    is_integral_family{t, fam},
+    is_fp_family{t, fam},
+    m::eq{fam, "extnumeric"}};
+
+private metafunction is_numeric_enum_bitmask_family{t, fam}
+  m::or{
+    is_numeric_family{t, fam},
+    is_enum_family{fam},
+    is_bitmask_family{fam}};
+
+private metafunction is_array_or_slice_family{fam}
+  m::or{
+    m::eq{fam, "varray"},
+    m::eq{fam, "cvarray"},
+    m::eq{fam, "darray"},
+    m::eq{fam, "cdarray"},
+    m::eq{fam, "darrayst"},
+    m::eq{fam, "cdarrayst"},
+    m::eq{fam, "farray"},
+    m::eq{fam, "cfarray"},
+    m::eq{fam, "slice"},
+    m::eq{fam, "cslice"}};
+
+private metafunction is_string_or_slice_typestr{t, s}
+  m::or{
+    m::eq{s, "core::container::array::varray{core::meta::uchar}"},
+    m::eq{s, "core::container::array::cvarray{core::meta::uchar}"},
+    m::eq{s, "core::container::array::svarray{core::meta::uchar}"},
+    m::eq{s, "core::container::array::csvarray{core::meta::uchar}"},
+    m::eq{s, "core::container::array::darray{core::meta::uchar}"},
+    m::eq{s, "core::container::array::cdarray{core::meta::uchar}"},
+    m::eq{s, "core::container::array::darrayst{core::meta::uchar}"},
+    m::eq{s, "core::container::array::cdarrayst{core::meta::uchar}"},
+    m::eq{s, "core::container::array::slice{core::meta::uchar}"},
+    m::eq{s, "core::container::array::cslice{core::meta::uchar}"},
+    m::eq{s, "core::container::array::strlit"},
+    m::and{
+      m::or{
+        m::eq{m::nameof{t}, "core::container::array::farray"},
+        m::eq{m::nameof{t}, "core::container::array::cfarray"}},
+      m::eq{m::at0{t}, uchar}}};
+
+private metafunction is_map_or_range_family{fam}
+  m::or{
+    m::eq{fam, "map"},
+    m::eq{fam, "cmap"},
+    m::eq{fam, "map_range"},
+    m::eq{fam, "map_crange"}};
+
+private metafunction is_pointer_family{fam}
+  m::or{
+    m::eq{fam, "ptr"},
+    m::eq{fam, "cptr"},
+    m::eq{fam, "iptr"},
+    m::eq{fam, "tptr"},
+    m::eq{fam, "tcptr"},
+    m::eq{fam, "tiptr"}};
+
+private metafunction is_mutable_pointer_family{fam}
+  m::or{
+    m::eq{fam, "ptr"},
+    m::eq{fam, "tptr"}};
+
+private metafunction is_range_family{fam}
+  m::or{
+    m::eq{fam, "slice"},
+    m::eq{fam, "cslice"},
+    m::eq{fam, "map_range"},
+    m::eq{fam, "map_crange"}};
+
+private metafunction is_struct_family{fam}
+  m::eq{fam, "struct"};
+
+private metafunction is_union_family{fam}
+  m::eq{fam, "union"};
+
+private metafunction is_interface_family{fam}
+  m::eq{fam, "interface"};
+
+private metafunction is_guard_family{fam}
+  m::or{
+    m::eq{fam, "lock_guard"},
+    m::eq{fam, "lock_cguard"}};
+

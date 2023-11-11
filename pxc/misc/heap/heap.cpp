@@ -49,30 +49,30 @@ int main(int argc, char **argv)
   if (c == 0) {
     for (int j = 0; j < 20; ++j) {
       for (int i = 0; i < LEN; ++i) {
-	ptr[i] = malloc(32);
+        ptr[i] = malloc(32);
       }
       for (int i = 0; i < LEN; ++i) {
-	free(ptr[i]);
+        free(ptr[i]);
       }
     }
   } else if (c == 1) {
     for (int j = 0; j < 20; ++j) {
       for (int i = 0; i < LEN; ++i) {
-	ptr[i] = new char[32];
+        ptr[i] = new char[32];
       }
       for (int i = 0; i < LEN; ++i) {
-	char *p = (char *)ptr[i];
-	delete [] p;
+        char *p = (char *)ptr[i];
+        delete [] p;
       }
     }
   } else {
     tl_allocator<32> a;
     for (int j = 0; j < 20; ++j) {
       for (int i = 0; i < LEN; ++i) {
-	ptr[i] = a.allocate();
+        ptr[i] = a.allocate();
       }
       for (int i = 0; i < LEN; ++i) {
-	a.deallocate(ptr[i]);
+        a.deallocate(ptr[i]);
       }
     }
   }

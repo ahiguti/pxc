@@ -1,20 +1,20 @@
 public namespace glbuffer "export-unsafe";
-public import common -;
-public import pointer::raw -;
-public import numeric::fpmath -;
+public import core::common -;
+public import core::pointer::raw -;
+public import core::numeric::fpmath -;
 public import SDL2 -;
 public import SDL2::Image -;
 public import GL::glm glm;
 public import GL::compat -;
-public import io::time -;
-public import meta m;
-public import exception -;
+public import core::io::time -;
+public import core::meta m;
+public import core::exception -;
 public import glshader -;
 
 private metafunction use_primitive_restart 0;
 private metafunction use_draw_range 0;
 
-public multithreaded struct node_joint
+public pure multithreaded struct node_joint
 {
   public string joint_sort;
   public glm::mat4 trans; /* or quat and vec3 ? */
@@ -31,7 +31,7 @@ public metafunction num_float_fld{t}
     m::eq{t, glm::vec4}, 4,
     m::error{"invalid type"}};
 
-private threaded function {t} void
+private pure function {t} void
 push_float(varray{float} mutable& arr, t const& v)
 {
   if (m::eq{t, float}) {
@@ -43,7 +43,7 @@ push_float(varray{float} mutable& arr, t const& v)
   }
 }
 
-public multithreaded struct
+public pure multithreaded struct
 vertices(size_t num_float_per_vertex0)
 {
   public size_t const num_float_per_vertex = num_float_per_vertex0;
@@ -64,13 +64,13 @@ vertices(size_t num_float_per_vertex0)
     if (m::ne{use_primitive_restart, 0}) {
       elements.push_back(0xffffffffU);
       for (const i, const& val: vals) {
-	elements.push_back(static_cast{uint}(first_id + i));
+        elements.push_back(static_cast{uint}(first_id + i));
       }
     } else {
       for (const i: 0 .. vals.size() - 2) {
-	elements.push_back(static_cast{uint}(first_id));
-	elements.push_back(static_cast{uint}(first_id + i + 1));
-	elements.push_back(static_cast{uint}(first_id + i + 2));
+        elements.push_back(static_cast{uint}(first_id));
+        elements.push_back(static_cast{uint}(first_id + i + 1));
+        elements.push_back(static_cast{uint}(first_id + i + 2));
       }
     }
   }
@@ -80,7 +80,7 @@ vertices(size_t num_float_per_vertex0)
   }
 }
 
-public threaded struct vertex_set(size_t num_float_per_vertex0)
+public pure struct vertex_set(size_t num_float_per_vertex0)
 {
   public size_t vs_id;
   public string vs_name;
@@ -89,12 +89,12 @@ public threaded struct vertex_set(size_t num_float_per_vertex0)
   public size_t elements_offset;
 }
 
-private threaded struct instance_data {
+private pure struct instance_data {
   public uint vbo_inst;
   public varray{float} client_buffer;
 }
 
-public threaded struct
+public pure struct
 buffer_object(size_t num_float_per_vertex0)
 {
   // public metafunction vertex_attributes_type tattr;
@@ -161,15 +161,15 @@ buffer_object(size_t num_float_per_vertex0)
     num_e = 0;
     for (const i, mutable& be: vs_arr) {
       for (const j, const& v: be->vtxs->vertex_values) {
-	vertex_values[num_v + j] = v;
+        vertex_values[num_v + j] = v;
       }
       for (const j, const& e: be->vtxs->elements) {
-	if (e == 0xffffffffU) {
-	  elements[num_e + j] = e;
-	} else {
-	  elements[num_e + j] = e +
-	    static_cast{uint}(num_v / num_float_per_vertex);
-	}
+        if (e == 0xffffffffU) {
+          elements[num_e + j] = e;
+        } else {
+          elements[num_e + j] = e +
+            static_cast{uint}(num_v / num_float_per_vertex);
+        }
       }
       be->vertex_values_offset = num_v;
       be->elements_offset = num_e;
@@ -182,17 +182,17 @@ buffer_object(size_t num_float_per_vertex0)
       vbo_values = vbos[0];
       vbo_elems = vbos[1];
       if (vbos[0] == 0 || vbos[1] == 0) {
-	return false;
+        return false;
       }
       glBindBuffer(GL_ARRAY_BUFFER, vbos[0]);
       glBufferData(GL_ARRAY_BUFFER,
-	static_cast{GLsizeiptr}(vertex_values.size()) * 4,
-	vertex_values.crawptr().void(), GL_STATIC_DRAW);
+        static_cast{GLsizeiptr}(vertex_values.size()) * 4,
+        vertex_values.crawptr().void(), GL_STATIC_DRAW);
       glBindBuffer(GL_ARRAY_BUFFER, 0);
       glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbos[1]);
       glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-	static_cast{GLsizeiptr}(elements.size()) * 4,
-	elements.crawptr().void(), GL_STATIC_DRAW);
+        static_cast{GLsizeiptr}(elements.size()) * 4,
+        elements.crawptr().void(), GL_STATIC_DRAW);
       glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     }
     for (const i: 0 .. vs_arr.size()) {
@@ -200,12 +200,12 @@ buffer_object(size_t num_float_per_vertex0)
     }
     if (m::ne{is_gl3, 0}) {
       for (const i, const& vs: vs_arr) {
-	farray{uint, 1} vbos;
-	glGenBuffers(1, vbos.rawptr());
-	if (vbos[0] == 0) {
-	  return false;
-	}
-	instances[i]->vbo_inst = vbos[0];
+        farray{uint, 1} vbos;
+        glGenBuffers(1, vbos.rawptr());
+        if (vbos[0] == 0) {
+          return false;
+        }
+        instances[i]->vbo_inst = vbos[0];
       }
     }
     return true;
@@ -233,7 +233,7 @@ buffer_object_draw_pre(tbo const& bo, tshader const& sdr)
       glEnableVertexAttribArray(static_cast{uint}(sdr.sym));
       int const nfloat = num_float_fld{m::at{m::field_types{tattr_sh}, idx}};
       glVertexAttribPointer(static_cast{uint}(sdr.sym), nfloat, GL_FLOAT, 0,
-	stride_byte, offset_to_void_cp(offset));
+        stride_byte, offset_to_void_cp(offset));
       offset += static_cast{size_t}(nfloat) * 4;
     }
   }
@@ -275,7 +275,7 @@ buffer_object_draw_elems(buffer_object const& bo, size_t vs_id)
     /*
     if (elem_num > 0) {
       println("DrawRangeElements", arr_offset, arr_num,
-	be.vtxs->elements[elem_num-1]);
+        be.vtxs->elements[elem_num-1]);
     }
     */
     glDrawRangeElements(mode,

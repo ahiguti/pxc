@@ -1,24 +1,24 @@
 public namespace lckobj;
-import common -;
-import procedure::thread -;
+import core::common -;
+import core::callable::thread -;
 
-public threaded function void
-foo(int x, int y, io::io const& sys, tptr{int} const& sobj)
+public pure function void
+foo(int x, int y, io const& sys, tptr{int} const& sobj)
 {
   const stdout = sys.stdout();
-  io::standard::file_println(stdout, "my thread main");
-  io::standard::file_println(stdout, x);
-  io::standard::file_println(stdout, y);
+  file_println(stdout, "my thread main");
+  file_println(stdout, x);
+  file_println(stdout, y);
   lock_guard{int} lck = lock_guard{int}(sobj);
   int v = *lck;
-  io::standard::file_println(stdout, v);
+  file_println(stdout, v);
 }
 
 
 function void test1()
 {
   const sobj = make_tptr(int(56));
-  const thr = make_thread_ptr{foo}(123, 456, io::system, sobj);
+  const thr = make_thread_ptr{foo}(123, 456, thread_io(), sobj);
   thr();
 }
 

@@ -1,32 +1,32 @@
 public namespace sock1;
-import common -;
-import io -;
-import io::file -;
-import io::errno -;
-import io::standard -;
-import io::addrinfo -;
-import io::socket -;
-import io::signal -;
+import core::common -;
+import core::io -;
+import core::io::file -;
+import core::io::errno -;
+import core::io::standard -;
+import core::io::addrinfo -;
+import core::io::socket -;
+import core::io::signal -;
 import orb -;
 
-public threaded interface ifoo <remote> {
+public pure interface ifoo <remote> {
   public function int hoge(int x, int y) const;
   public function string fuga(cstrref const& x, cstrref const& y) const;
   public function ptr{ibar} create_bar(int x) const;
 }
 
-public threaded interface ibar <remote> {
+public pure interface ibar <remote> {
   public function int m1(int y);
 }
 
-public threaded struct bar(int x0) <ibar> {
+public pure struct bar(int x0) <ibar> {
   public int x = x0;
   public function int m1(int y) {
     return x * y;
   }
 }
 
-public threaded struct foo <ifoo> {
+public pure struct foo <ifoo> {
   public int intval;
   public string strval;
   public function int hoge(int x, int y) const {
@@ -44,7 +44,7 @@ public threaded struct foo <ifoo> {
   }
 }
 
-private threaded struct transport_file(file_mt const& f0) <orb_transport> {
+private pure struct transport_file(file_mt const& f0) <orb_transport> {
   public file_mt const f = f0;
   public bool ok = true;
   public errno_t en;
@@ -53,7 +53,7 @@ private threaded struct transport_file(file_mt const& f0) <orb_transport> {
     if (ok && !wbuf.empty()) {
       const wr = f.write_all(wbuf);
       if (case wr.errno || wr.value != wbuf.size()) {
-	ok = false;
+        ok = false;
       }
     }
     wbuf.clear();
@@ -61,10 +61,10 @@ private threaded struct transport_file(file_mt const& f0) <orb_transport> {
     while (ok) {
       const rr = f.read(rbuf, 1024);
       if (rbuf.size() > 0 && rbuf[rbuf.size() - 1] == '\n') {
-	break;
+        break;
       }
       if (case rr.errno || rr.value == 0) {
-	ok = false;
+        ok = false;
       }
     }
     if (!ok) {
@@ -74,12 +74,12 @@ private threaded struct transport_file(file_mt const& f0) <orb_transport> {
   }
 }
 
-private threaded function ptr{orb} create_orb_file(file_mt const& f)
+private pure function ptr{orb} create_orb_file(file_mt const& f)
 {
   return make_ptr{orb}(make_ptr{transport_file}(f));
 }
 
-private threaded function {tinterf, tklass} void
+private pure function {tinterf, tklass} void
 orb_server_loop(file_mt const& f)
 {
   ptr{orb_transport} tf = make_ptr(transport_file(f));
@@ -89,7 +89,7 @@ orb_server_loop(file_mt const& f)
   exchange_loop(op);
 }
 
-private threaded function {tinterf} ptr{tinterf} create_stub(file_mt const& f)
+private pure function {tinterf} ptr{tinterf} create_stub(file_mt const& f)
 {
   ptr{orb_transport} tf = make_ptr(transport_file(f));
   ptr{orb} op = make_ptr(orb(tf));
@@ -109,7 +109,7 @@ private function void client_test_main(file_mt const& f)
   println(w);
 }
 
-private threaded function void
+private pure function void
 server_thread(io const& sys, file_mt const& sock)
 {
   orb_server_loop{ifoo, foo}(sock);
@@ -118,9 +118,11 @@ server_thread(io const& sys, file_mt const& sock)
 private function void main()
 {
   errno_t ern;
-  io::system.signal(SIGPIPE, SIG_IGN);
-  mutable sp = io::system.socketpair(AF_UNIX, SOCK_STREAM, PROTO_UNSPEC);
-  const sthr = make_thread_ptr{server_thread}(io::system, sp.value.first);
+  thread_io().signal(SIGPIPE, SIG_IGN);
+  mutable sp = thread_io().socketpair(AF_UNIX, SOCK_STREAM,
+    PROTO_UNSPEC);
+  const sthr = make_thread_ptr{server_thread}(thread_io(),
+    sp.value.first);
   client_test_main(sp.value.second);
   sp.errno = errno_t(); /* closes fds */
 }

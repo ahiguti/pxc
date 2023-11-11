@@ -1,0 +1,113 @@
+public threaded namespace core::exception "use-unsafe";
+public import core::exception::impl;
+public import core::numeric::integral -;
+public import core::container::array -;
+public import core::meta m;
+public import core::pointer; // monitor
+
+/* C++ exceptions */
+public pure mtvaluetype interface extern "std::exception"
+  c_exception { }
+public pure mtvaluetype interface extern "std::logic_error"
+  c_logic_error <c_exception> { }
+public pure mtvaluetype interface extern "std::runtime_error"
+  c_runtime_error <c_exception> { }
+public pure mtvaluetype interface extern "std::bad_alloc"
+  c_bad_alloc <c_exception> { }
+
+/* PXC exceptions, with stack trace */
+private pure mtvaluetype interface extern "pxcrt::exception"
+  exception /* inherits std::exception */
+{
+  function extern "message" string message() const;
+}
+public pure mtvaluetype interface extern "pxcrt::logic_error"
+  logic_error <exception> { } /* inherits std::logic_error */
+public pure mtvaluetype interface extern "pxcrt::runtime_error"
+  runtime_error <exception> { } /* inherits std::runtime_error */
+public pure mtvaluetype interface extern "pxcrt::bad_alloc"
+  bad_alloc <exception> { } /* inherits std::bad_alloc */
+
+/* builtin exceptions */
+public pure mtvaluetype struct extern "pxcrt::invalid_index" ""
+  invalid_index <logic_error>
+{
+  function extern "message" string message() const;
+}
+public pure mtvaluetype struct extern "pxcrt::invalid_field" ""
+  invalid_field <logic_error>
+{
+  function extern "message" string message() const;
+}
+public pure mtvaluetype struct extern "pxcrt::would_invalidate" ""
+  would_invalidate <logic_error>
+{
+  function extern "message" string message() const;
+}
+
+/* templates */
+public pure mtvaluetype struct {str} logic_error_template <logic_error>
+{
+  function string message() const { return str; }
+}
+public pure mtvaluetype struct {str} bad_alloc_template <bad_alloc>
+{
+  function string message() const { return str; }
+}
+public pure mtvaluetype struct {str}
+runtime_error_template(cstrref const& m)
+  <runtime_error>
+{
+  string msg = m;
+  function string message() const {
+    string s = m::concat{"runtime_error{", str, "}("};
+    s.append(msg);
+    s.append(")");
+    return s;
+  }
+}
+public pure mtvaluetype struct {str}
+unexpected_value_template(cstrref const& m)
+  <runtime_error>
+{
+  string msg = m;
+  function string message() const {
+    string s = m::concat{"unexpected_value{", str, "}("};
+    s.append(msg);
+    s.append(")");
+    return s;
+  }
+}
+
+public pure function extern "pxcrt::c_exception_message" string
+c_exception_message(c_exception const& ex);
+public pure function extern "pxcrt::c_exception_stack_trace" string
+c_exception_stack_trace(c_exception const& ex);
+public pure function extern "pxcrt::exception_message" string
+exception_message(exception const& ex);
+public pure function extern "pxcrt::exception_stack_trace" string
+exception_stack_trace(exception const& ex);
+
+public pure function {tpl, t} void
+c_exception_append_to_string(c_exception const& ex, string mutable& str)
+{
+  str.append(c_exception_message(ex));
+  if (str.size() > 0 && str[str.size() - 1] != '\n') {
+    str.push_back('\n');
+  }
+  str.append(c_exception_stack_trace(ex));
+}
+
+public pure function {tpl, t} void
+exception_append_to_string(exception const& ex, string mutable& str)
+{
+  str.append(exception_message(ex));
+  if (str.size() > 0 && str[str.size() - 1] != '\n') {
+    str.push_back('\n');
+  }
+  str.append(exception_stack_trace(ex));
+}
+
+public function extern "pxcrt::set_stack_trace_limit" void
+set_stack_trace_limit(size_t sz);
+

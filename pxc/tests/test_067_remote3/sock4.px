@@ -1,21 +1,21 @@
 public namespace sock4;
-import common -;
-import meta -;
-import io -;
-import io::file -;
-import io::errno -;
-import io::standard -;
-import io::addrinfo -;
-import io::socket -;
-import io::signal -;
+import core::common -;
+import core::meta -;
+import core::io -;
+import core::io::file -;
+import core::io::errno -;
+import core::io::standard -;
+import core::io::addrinfo -;
+import core::io::socket -;
+import core::io::signal -;
 import orb -;
 import transport_file -;
 
-public threaded interface ifoo <remote> {
+public pure interface ifoo <remote> {
   public function int fold(cslice{int} const& x, int v0, ptr{ibinop} const& o);
 }
 
-public threaded struct foo <ifoo> {
+public pure struct foo <ifoo> {
   public function int fold(cslice{int} const& x, int v0, ptr{ibinop} const& o) {
     mutable r = v0;
     for (size_t i, int v : x) {
@@ -25,11 +25,11 @@ public threaded struct foo <ifoo> {
   }
 }
 
-public threaded interface ibinop <remote> {
+public pure interface ibinop <remote> {
   public function int op(int x, int y);
 }
 
-public threaded struct binop_add <ibinop> {
+public pure struct binop_add <ibinop> {
   public function int op(int x, int y) {
     return x + y;
   }
@@ -46,7 +46,7 @@ private function void client_test_main(file_mt const& f)
   println(z);
 }
 
-private threaded function void
+private pure function void
 server_thread(io const& sys, file_mt const& sock)
 {
   const op = make_ptr{orb_handle{ifoo}}(make_ptr{transport_file}(sock));
@@ -56,9 +56,11 @@ server_thread(io const& sys, file_mt const& sock)
 
 private function void main()
 {
-  io::system.signal(SIGPIPE, SIG_IGN);
-  mutable sp = io::system.socketpair(AF_UNIX, SOCK_STREAM, PROTO_UNSPEC);
-  const sthr = make_thread_ptr{server_thread}(io::system, sp.value.first);
+  thread_io().signal(SIGPIPE, SIG_IGN);
+  mutable sp = thread_io().socketpair(AF_UNIX, SOCK_STREAM,
+    PROTO_UNSPEC);
+  const sthr = make_thread_ptr{server_thread}(thread_io(),
+    sp.value.first);
   client_test_main(sp.value.second);
   sp.errno = errno_t(); /* closes fds */
 }

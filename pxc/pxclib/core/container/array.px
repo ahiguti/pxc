@@ -1,0 +1,809 @@
+public threaded namespace core::container::array "use-unsafe";
+public import core::numeric::integral -;
+public import core::numeric::cast -;
+public import core::container::array::array_common;
+public import core::container::array::refguard;
+public import core::container::array::varray;
+public import core::container::array::svarray;
+public import core::container::array::farray;
+public import core::container::array::darray;
+public import core::container::array::deque;
+public import core::container::array::util;
+public import core::meta m;
+public import core::meta::family mf;
+
+/* public */
+
+public pure tsvaluetype struct extern "::pxcrt::bt_slice" "slice" {t}
+slice {
+  public metafunction key_type size_t;
+  public metafunction mapped_type t;
+  public metafunction range_type slice{t};
+  public metafunction crange_type cslice{t};
+  public metafunction non_ephemeral_type varray{t};
+  public metafunction is_dense_array 1;
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "get" t get(size_t i) const;
+  public function extern "set" void set(size_t i, t const& v) const;
+  public function extern "increment_front" void increment_front(size_t i);
+  public function extern "decrement_back" void decrement_back(size_t i);
+  public function extern "next_token" slice{t} next_token(t const& delim);
+  public function extern "range" range_type range() const;
+  public function extern "crange" crange_type crange() const;
+}
+
+public pure tsvaluetype struct extern "::pxcrt::bt_cslice" "cslice" {t}
+cslice {
+  public metafunction key_type size_t;
+  public metafunction mapped_type t;
+  public metafunction range_type cslice{t};
+  public metafunction crange_type cslice{t};
+  public metafunction non_ephemeral_type varray{t};
+  public metafunction is_dense_array 1;
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "get" t get(size_t i) const;
+  public function extern "increment_front" void increment_front(size_t i);
+  public function extern "decrement_back" void decrement_back(size_t i);
+  public function extern "next_token" cslice{t} next_token(t const& delim);
+  public function extern "range" range_type range() const;
+  public function extern "crange" crange_type crange() const;
+}
+
+public pure mtvaluetype struct extern "::pxcrt::pxcvarray" "varray" {t}
+varray {
+  public metafunction key_type size_t;
+  public metafunction mapped_type t;
+  public metafunction range_type slice{t};
+  public metafunction crange_type cslice{t};
+  public metafunction is_dense_array 1;
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "clear" void clear();
+  public function extern "reserve" void reserve(size_t i);
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
+}
+
+public pure mtvaluetype struct extern "::pxcrt::pxcvarray" "cvarray" {t}
+cvarray {
+  public metafunction key_type size_t;
+  public metafunction mapped_type t;
+  public metafunction range_type cslice{t};
+  public metafunction crange_type cslice{t};
+  public metafunction is_dense_array 1;
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "clear" void clear();
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
+}
+
+public pure valuetype struct extern "::pxcrt::msvarray" "varray" {t}
+svarray {
+  public metafunction key_type size_t;
+  public metafunction mapped_type t;
+  public metafunction range_type slice{t};
+  public metafunction crange_type cslice{t};
+  public metafunction is_dense_array 1;
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "clear" void clear();
+  public function extern "reserve" void reserve(size_t i);
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
+}
+
+public pure valuetype struct extern "::pxcrt::csvarray" "varray" {t}
+csvarray {
+  public metafunction key_type size_t;
+  public metafunction mapped_type t;
+  public metafunction range_type cslice{t};
+  public metafunction crange_type cslice{t};
+  public metafunction is_dense_array 1;
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "clear" void clear();
+  public function extern "reserve" void reserve(size_t i);
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
+}
+
+public pure tsvaluetype struct extern "::pxcrt::farray" "farray" {t, n}
+farray {
+  public metafunction key_type size_t;
+  public metafunction mapped_type t;
+  public metafunction range_type slice{t};
+  public metafunction crange_type cslice{t};
+  public metafunction is_dense_array 1;
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
+}
+
+public pure tsvaluetype struct extern "::pxcrt::farray" "cfarray" {t, n}
+cfarray {
+  public metafunction key_type size_t;
+  public metafunction mapped_type t;
+  public metafunction range_type cslice{t};
+  public metafunction crange_type cslice{t};
+  public metafunction is_dense_array 1;
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
+}
+
+public pure tsvaluetype struct extern "::pxcrt::darray" "darray" {t}
+darray(size_t len, t const& value) {
+  public metafunction key_type size_t;
+  public metafunction mapped_type t;
+  public metafunction range_type slice{t};
+  public metafunction crange_type cslice{t};
+  public metafunction is_dense_array 1;
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
+}
+
+public pure tsvaluetype struct extern "::pxcrt::darray" "cdarray" {t}
+cdarray(size_t len, t const& value) {
+  public metafunction key_type size_t;
+  public metafunction mapped_type t;
+  public metafunction range_type cslice{t};
+  public metafunction crange_type cslice{t};
+  public metafunction is_dense_array 1;
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
+}
+
+public pure tsvaluetype struct extern "::pxcrt::darrayst" "darrayst" {t}
+darrayst(size_t len, t const& value) {
+  public metafunction key_type size_t;
+  public metafunction mapped_type t;
+  public metafunction range_type slice{t};
+  public metafunction crange_type cslice{t};
+  public metafunction is_dense_array 1;
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
+}
+
+public pure tsvaluetype struct extern "::pxcrt::darrayst" "cdarrayst" {t}
+cdarrayst(size_t len, t const& value) {
+  public metafunction key_type size_t;
+  public metafunction mapped_type t;
+  public metafunction range_type cslice{t};
+  public metafunction crange_type cslice{t};
+  public metafunction is_dense_array 1;
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
+}
+
+public pure tsvaluetype struct extern "::pxcrt::deque_slice" "slice" {t}
+deque_slice {
+  public metafunction key_type size_t;
+  public metafunction mapped_type t;
+  public metafunction range_type deque_slice{t};
+  public metafunction crange_type deque_cslice{t};
+  public metafunction non_ephemeral_type deque{t};
+  public metafunction is_dense_array 0;
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "get" t get(size_t i) const;
+  public function extern "set" void set(size_t i, t v) const;
+  public function extern "increment_front" void increment_front(size_t i);
+  public function extern "decrement_back" void decrement_back(size_t i);
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
+}
+
+public pure tsvaluetype struct extern "::pxcrt::deque_cslice" "cslice" {t}
+deque_cslice {
+  public metafunction key_type size_t;
+  public metafunction mapped_type t;
+  public metafunction range_type deque_cslice{t};
+  public metafunction crange_type deque_cslice{t};
+  public metafunction non_ephemeral_type deque{t};
+  public metafunction is_dense_array 0;
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "get" t get(size_t i) const;
+  public function extern "increment_front" void increment_front(size_t i);
+  public function extern "decrement_back" void decrement_back(size_t i);
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
+}
+
+public pure mtvaluetype struct extern "::pxcrt::pxcdeque" "varray" {t}
+deque {
+  public metafunction key_type size_t;
+  public metafunction mapped_type t;
+  public metafunction range_type deque_slice{t};
+  public metafunction crange_type deque_cslice{t};
+  public metafunction is_dense_array 0;
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "clear" void clear();
+  public function extern "reserve" void reserve(size_t i);
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
+}
+
+public pure mtvaluetype struct extern "::pxcrt::pxcdeque" "cvarray" {t}
+cdeque {
+  public metafunction key_type size_t;
+  public metafunction mapped_type t;
+  public metafunction range_type deque_cslice{t};
+  public metafunction crange_type deque_cslice{t};
+  public metafunction is_dense_array 0;
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "clear" void clear();
+  public function extern "reserve" void reserve(size_t i);
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
+}
+
+public pure tsvaluetype struct extern "::pxcrt::bt_strlit" "cfarray" strlit {
+  public metafunction key_type size_t;
+  public metafunction mapped_type uchar;
+  public metafunction range_type cslice{uchar};
+  public metafunction crange_type cslice{uchar};
+  public metafunction is_dense_array 1;
+  public function extern "empty" bool empty() const;
+  public function extern "size" size_t size() const;
+  public function extern "range" range_type range();
+  public function extern "crange" crange_type crange() const;
+}
+
+public metafunction strref slice{uchar};
+public metafunction cstrref cslice{uchar};
+public metafunction string varray{uchar};
+public metafunction dstring darray{uchar};
+public metafunction fstring{n} farray{uchar, n};
+
+public metafunction make_farray{typ, tlist}
+  make_farray_func{typ, m::size{tlist}};
+public metafunction make_cfarray{typ, tlist}
+  make_cfarray_func{typ, m::size{tlist}};
+public metafunction make_darray{typ, tlist}
+  make_darray_func{typ, m::size{tlist}};
+public metafunction make_cdarray{typ, tlist}
+  make_cdarray_func{typ, m::size{tlist}};
+public metafunction make_varray{typ, tlist}
+  make_varray_func{typ, m::size{tlist}};
+public metafunction make_cvarray{typ, tlist}
+  make_cvarray_func{typ, m::size{tlist}};
+public metafunction make_deque{typ, tlist}
+  make_deque_func{typ, m::size{tlist}};
+public metafunction make_cdeque{typ, tlist}
+  make_cdeque_func{typ, m::size{tlist}};
+
+public pure function {n, tc, tv} farray{m::symbol{tc, "crange_type"}, n}
+make_farray_split(tc const& c, tv const& v)
+{
+  metafunction key_type m::symbol{tc, "key_type"};
+  metafunction mapped_type m::symbol{tc, "mapped_type"};
+  metafunction crange_type m::symbol{tc, "crange_type"};
+  extern "disable-noheap-checking" 1;
+  farray{crange_type, n} arr;
+  key_type mutable p;
+  for (size_t i : 0 .. n) {
+    key_type const pend = find_mapped{tc, key_type, mapped_type}(c, p, v);
+    extern "disable-bounds-checking" 1;
+    extern "disable-noheap-checking" 1;
+    arr[i] = c[p .. pend];
+    if (pend == c.size()) {
+      break;
+    }
+    p = pend + 1;
+  }
+  return arr;
+}
+
+public pure function {tc, tv} darray{m::symbol{tc, "crange_type"}}
+make_darray_split(tc const& c, tv const& v)
+{
+  metafunction key_type m::symbol{tc, "key_type"};
+  metafunction mapped_type m::symbol{tc, "mapped_type"};
+  metafunction crange_type m::symbol{tc, "crange_type"};
+  size_t cnt = 1;
+  for (const i, const m : c) {
+    if (m == v) {
+      ++cnt;
+    }
+  }
+  extern "disable-noheap-checking" 1;
+  mutable arr = darray{crange_type}(cnt, crange_type());
+  key_type mutable p;
+  for (size_t i : 0 .. cnt) {
+    key_type const pend = find_mapped{tc, key_type, mapped_type}(c, p, v);
+    extern "disable-bounds-checking" 1;
+    extern "disable-noheap-checking" 1;
+    arr[i] = c[p .. pend];
+    p = pend + 1;
+  }
+  return arr;
+}
+
+public pure function {tc, tv} varray{m::symbol{tc, "crange_type"}}
+make_varray_split(tc const& c, tv const& v)
+{
+  metafunction key_type m::symbol{tc, "key_type"};
+  metafunction mapped_type m::symbol{tc, "mapped_type"};
+  metafunction crange_type m::symbol{tc, "crange_type"};
+  size_t cnt = 1;
+  for (const i, const m : c) {
+    if (m == v) {
+      ++cnt;
+    }
+  }
+  extern "disable-noheap-checking" 1;
+  varray{crange_type} mutable arr;
+  arr.resize(cnt, crange_type());
+  key_type mutable p;
+  for (size_t i : 0 .. cnt) {
+    key_type const pend = find_mapped{tc, key_type, mapped_type}(c, p, v);
+    extern "disable-bounds-checking" 1;
+    extern "disable-noheap-checking" 1;
+    arr[i] = c[p .. pend];
+    p = pend + 1;
+  }
+  return arr;
+}
+
+public pure function {t} void
+reverse(t const& x)
+{
+  metafunction size_type size_t;
+  metafunction mapped_type m::symbol{t, "mapped_type"};
+  size_type s = 0;
+  size_type f = x.size();
+  while (s < f) {
+    extern "disable-bounds-checking" 1;
+    --f;
+    mapped_type mutable v = x[s];
+    x[s] = x[f];
+    x[f] = v;
+    ++s;
+  }
+}
+
+public metafunction varray_push_back array_push_back;
+public metafunction varray_push_back_move array_push_back_move;
+public metafunction varray_pop_back array_pop_back;
+public metafunction varray_append array_append;
+public metafunction varray_insert array_insert;
+public metafunction varray_erase array_erase;
+
+public metafunction cvarray_push_back array_push_back;
+public metafunction cvarray_push_back_move array_push_back_move;
+public metafunction cvarray_pop_back array_pop_back;
+public metafunction cvarray_append array_append;
+public metafunction cvarray_insert array_insert;
+public metafunction cvarray_erase array_erase;
+
+public metafunction svarray_push_back array_push_back;
+public metafunction svarray_push_back_move array_push_back_move;
+public metafunction svarray_pop_back array_pop_back;
+public metafunction svarray_append array_append;
+public metafunction svarray_insert array_insert;
+public metafunction svarray_erase array_erase;
+
+public metafunction csvarray_push_back array_push_back;
+public metafunction csvarray_push_back_move array_push_back_move;
+public metafunction csvarray_pop_back array_pop_back;
+public metafunction csvarray_append array_append;
+public metafunction csvarray_insert array_insert;
+public metafunction csvarray_erase array_erase;
+
+public metafunction deque_push_back array_push_back;
+public metafunction deque_push_back_move array_push_back_move;
+public metafunction deque_push_front array_push_front;
+public metafunction deque_push_front_move array_push_front_move;
+public metafunction deque_pop_back array_pop_back;
+public metafunction deque_pop_front array_pop_front;
+public metafunction deque_append array_append;
+public metafunction deque_insert array_insert;
+public metafunction deque_erase array_erase;
+
+public pure function {ts} void
+varray_emplace_back(expand(emplace_back_arg_decls{ts}))
+{
+  metafunction t m::at0{m::at0{m::at0{ts}}};
+  t mutable& x = varray_push_back_uninitialized(a0);
+  x extern "placement-new" t(expand(a: emplace_back_arg_names{ts}; a));
+    /* no need to handle exceptions here */
+  varray_rawarr_set_valid_len(a0, a0.size() + 1);
+}
+
+public pure function extern "::pxcrt::pxcvarray_swap" {t} void
+varray_swap(varray{t} mutable& x, varray{t} mutable& y);
+
+public pure function extern "::pxcrt::pxcvarray_swap" {t} void
+cvarray_swap(cvarray{t} mutable& x, cvarray{t} mutable& y);
+
+public metafunction varray_resize array_resize;
+public metafunction cvarray_resize array_resize;
+public metafunction svarray_resize array_resize;
+public metafunction csvarray_resize array_resize;
+public metafunction deque_resize array_resize;
+public metafunction cdeque_resize array_resize;
+
+public metafunction varray_adda__{tx, ty} array_adda__{tx, ty};
+public metafunction cvarray_adda__{tx, ty} array_adda__{tx, ty};
+public metafunction strlit_add__{tx, ty} array_add__{tx, ty};
+public metafunction slice_add__{tx, ty} array_add__{tx, ty};
+public metafunction cslice_add__{tx, ty} array_add__{tx, ty};
+public metafunction darray_add__{tx, ty} array_add__{tx, ty};
+public metafunction cdarray_add__{tx, ty} array_add__{tx, ty};
+public metafunction darrayst_add__{tx, ty} array_add__{tx, ty};
+public metafunction cdarrayst_add__{tx, ty} array_add__{tx, ty};
+public metafunction farray_add__{tx, ty} array_add__{tx, ty};
+public metafunction cfarray_add__{tx, ty} array_add__{tx, ty};
+
+private pure function {tx, ty} void
+array_adda__(tx mutable& x, ty const& y)
+{
+  x.append(y);
+}
+
+private pure function {tx, ty} varray{m::symbol{tx, "mapped_type", 0}}
+array_add__(tx const& x, ty const& y)
+{
+  varray{m::symbol{tx, "mapped_type", 0}} r = x;
+  r.append(y);
+  return r;
+}
+
+public metafunction is_pod_dense_array_pair{tx, ty}
+  m::and{
+    is_pod_dense_array{tx},
+    is_pod_dense_array{ty},
+    m::eq{m::symbol{tx, "mapped_type", 0}, m::symbol{ty, "mapped_type", 0}}};
+
+public metafunction is_pod_dense_array{t}
+  m::and{
+    mf::is_array_or_slice_type{t},
+    m::symbol{t, "is_dense_array", 0},
+    mf::is_numeric_enum_bitmask_type{m::symbol{t, "mapped_type", 0}}};
+
+public metafunction is_pod_raw_sarray_pair{tx, ty}
+  m::and{
+    is_pod_raw_sarray{tx},
+    is_pod_raw_sarray{ty},
+    m::eq{m::symbol{tx, "mapped_type", 0}, m::symbol{ty, "mapped_type", 0}}};
+
+public metafunction is_pod_raw_sarray{t}
+  m::and{
+    is_pod_dense_array{t},
+    m::or{
+      m::eq{m::full_string{m::base{t}},
+        "core::container::array::svarray{}"},
+      m::eq{m::full_string{m::base{t}},
+        "core::container::array::csvarray{}"}}};
+
+public metafunction pod_array_eq{tx, ty}
+  m::cond{
+    is_pod_raw_sarray_pair{tx, ty}, pod_sarray_eq_impl{tx, ty},
+    is_pod_dense_array_pair{tx, ty}, pod_array_eq_impl{tx, ty},
+    m::error{m::concat{tx, ", ", ty, ": invalid type"}}};
+
+public metafunction pod_array_compare{tx, ty}
+  m::cond{
+    is_pod_raw_sarray_pair{tx, ty}, pod_sarray_compare_impl{tx, ty},
+    is_pod_dense_array_pair{tx, ty}, pod_array_compare_impl{tx, ty},
+    m::error{m::concat{tx, ", ", ty, ": invalid type"}}};
+
+public metafunction pod_array_hash{t}
+  m::cond{
+    is_pod_raw_sarray{t}, pod_sarray_hash_impl{t},
+    is_pod_dense_array{t}, pod_array_hash_impl{t},
+    m::error{m::concat{t, ": invalid type"}}};
+
+public metafunction pod_array_copy{tx, ty}
+  m::cond{
+    is_pod_dense_array_pair{tx, ty}, pod_array_copy_impl{tx, ty},
+    m::error{m::concat{tx, ", ", ty, ": invalid type"}}};
+
+public pure function {t, tk, tm} tk
+find_mapped(t const& c, tk k, tm const& x)
+{
+  if (m::and{mf::is_array_or_slice_type{t},
+    m::or{m::eq{tm, char}, m::eq{tm, uchar}}}) {
+    return find_mapped_memchr{t}(c, k, x);
+  } else {
+    tk i;
+    tk const sz = c.size();
+    for (i = k; i < sz; ++i) {
+      extern "disable-bounds-checking" 1;
+      if (c[i] == x) { break; }
+    }
+    return i;
+  }
+}
+
+public pure function {f, tc, tv} void
+split_foreach(tc const& c, tv const& v)
+{
+  metafunction key_type m::symbol{tc, "key_type"};
+  metafunction mapped_type m::symbol{tc, "mapped_type"};
+  key_type mutable p;
+  while (true) {
+    const pend = find_mapped{tc, key_type, mapped_type}(c, p, v);
+    extern "disable-bounds-checking" 1;
+    f(c[p .. pend]);
+    if (pend == c.size()) {
+      break;
+    }
+    p = pend + 1;
+  }
+}
+
+/* private */
+
+private pure function
+extern "::pxcrt::pxcvarray_push_back_uninitialized" {t}
+t mutable& varray_push_back_uninitialized(varray{t} mutable& v);
+
+private pure function
+extern "::pxcrt::pxcvarray_rawarr_set_valid_len" {t}
+void varray_rawarr_set_valid_len(varray{t} mutable& v, size_t len);
+
+private metafunction emplace_back_arg_decls{ts}
+  m::map{
+    m::seq{m::size{ts}},
+    metafunction{i}
+      m::list{m::concat{"a", i}, m::at0{m::at{ts, i}},
+        m::cond{m::eq{i, 0}, 1, 0}, 1}}; /* 1st arg is by mutable ref */
+
+private metafunction emplace_back_arg_names{ts}
+  m::map{m::seq{1, m::size{ts}}, metafunction{i} m::concat{"a", i}};
+
+private pure function extern "::pxcrt::find_mapped_memchr" {t}
+m::symbol{t, "key_type"}
+find_mapped_memchr(t const& c, m::symbol{t, "key_type"} const& k,
+  m::symbol{t, "mapped_type"} const& x);
+
+private function {typ, n, arr} expand macro_construct
+{
+  expand (a, idx: m::map{m::seq{n}, metafunction{i} m::concat{"a", i}}) {
+    extern "disable-noheap-checking" 1;
+    arr[idx] = a;
+  }
+}
+
+private metafunction arr_argdecls{typ, n}
+  m::map{m::seq{n}, metafunction{i} {m::concat{"a", i}, typ, 1, 0}};
+
+private pure function {typ, n} farray{typ, n}
+make_farray_func(expand(arr_argdecls{typ, n}))
+{
+  extern "disable-noheap-checking" 1;
+  farray{typ, n} arr;
+  expand macro_construct{typ, n, "arr"};
+  return arr;
+}
+
+private pure function {typ, n} cfarray{typ, n}
+make_cfarray_func(expand(arr_argdecls{typ, n}))
+{
+  extern "disable-noheap-checking" 1;
+  cfarray{typ, n} arr;
+  expand macro_construct{typ, n, "arr"};
+  return arr;
+}
+
+private pure function {typ, n} darray{typ}
+make_darray_func(expand(arr_argdecls{typ, n}))
+{
+  extern "disable-noheap-checking" 1;
+  mutable arr = darray{typ}(n, typ());
+  expand macro_construct{typ, n, "arr"};
+  return arr;
+}
+
+private pure function {typ, n} cdarray{typ}
+make_cdarray_func(expand(arr_argdecls{typ, n}))
+{
+  extern "disable-noheap-checking" 1;
+  mutable arr = darray{typ}(n, typ());
+  expand macro_construct{typ, tlist, "arr"};
+  return arr;
+}
+
+private pure function {typ, n} varray{typ}
+make_varray_func(expand(arr_argdecls{typ, n}))
+{
+  extern "disable-noheap-checking" 1;
+  mutable arr = varray{typ}();
+  array_resize_initial(arr, n, typ());
+  expand macro_construct{typ, n, "arr"};
+  return arr;
+}
+
+private pure function {typ, n} cvarray{typ}
+make_cvarray_func(expand(arr_argdecls{typ, n}))
+{
+  extern "disable-noheap-checking" 1;
+  mutable arr = varray{typ}();
+  array_resize_initial(arr, n, typ());
+  expand macro_construct{typ, n, "arr"};
+  return arr;
+}
+
+private pure function {typ, n} deque{typ}
+make_deque_func(expand(arr_argdecls{typ, n}))
+{
+  extern "disable-noheap-checking" 1;
+  mutable arr = deque{typ}();
+  array_resize_initial(arr, n, typ());
+  expand macro_construct{typ, n, "arr"};
+  return arr;
+}
+
+private pure function {typ, n} cdeque{typ}
+make_cdeque_func(expand(arr_argdecls{typ, n}))
+{
+  extern "disable-noheap-checking" 1;
+  mutable arr = deque{typ}();
+  array_resize_initial(arr, n, typ());
+  expand macro_construct{typ, tlist, "arr"};
+  return arr;
+}
+
+private pure function extern "::pxcrt::pod_array_eq" {tx, ty} bool
+pod_array_eq_impl(tx const& x, ty const& y);
+private pure function extern "::pxcrt::pod_array_compare" {tx, ty} int
+pod_array_compare_impl(tx const& x, ty const& y);
+private pure function extern "::pxcrt::pod_array_hash" {t} size_t
+pod_array_hash_impl(t const& x);
+private pure function extern "::pxcrt::pod_array_copy" {tx, ty} void
+pod_array_copy_impl(tx const& x, ty mutable& y);
+private pure function extern "::pxcrt::pod_sarray_eq" {tx, ty} bool
+pod_sarray_eq_impl(tx const& x, ty const& y);
+private pure function extern "::pxcrt::pod_sarray_compare" {tx, ty} int
+pod_sarray_compare_impl(tx const& x, ty const& y);
+private pure function extern "::pxcrt::pod_sarray_hash" {t} size_t
+pod_sarray_hash_impl(t const& x);
+
+private pure function extern "::pxcrt::array_resize" {tarr, tv}
+check_push_type{tarr, tv, void}
+array_resize(tarr mutable& arr, size_t i, tv const& v);
+
+private pure function extern "::pxcrt::array_resize" {tarr, tv}
+check_copyable{tarr, tv, void}
+array_resize_initial(tarr const& arr, size_t i, tv const& v);
+  /* used by make_varray family. arr is declared as const in order to avoid
+   * noheap checking. */
+
+private metafunction check_copyable{tarr, tv, rettype}
+  m::cond{
+    m::and{
+      m::is_copyable_type{tv},
+      m::or{
+        m::eq{m::family{tarr}, "varray"},
+        m::eq{m::family{tarr}, "cvarray"}}},
+    rettype,
+    m::error{m::concat{"invalid type: ", tarr, " ", tv}}};
+
+private metafunction check_varray_type{tx, rettype}
+  m::cond{
+    m::or{
+      m::eq{m::family{tx}, "varray"},
+      m::eq{m::family{tx}, "cvarray"}},
+    rettype,
+    m::error{m::concat{tx, ": invalid type"}}};
+
+private metafunction check_push_type{tx, tv, rettype}
+  m::cond{
+    m::and{
+      m::is_copyable_type{tv},
+      m::or{
+        m::eq{m::family{tx}, "varray"},
+        m::eq{m::family{tx}, "cvarray"}},
+      m::eq{m::symbol{tx, "mapped_type"}, tv}},
+    rettype,
+    m::error{m::concat{tv, ": invalid type"}}};
+
+private metafunction check_push_move_type{tx, tv, rettype}
+  m::cond{
+    m::and{
+      m::is_movable_type{tv},
+      m::or{
+        m::eq{m::family{tx}, "varray"},
+        m::eq{m::family{tx}, "cvarray"}},
+      m::eq{m::symbol{tx, "mapped_type"}, tv}},
+    rettype,
+    m::error{m::concat{tv, ": invalid type"}}};
+
+private metafunction check_append_type{tx, tv, rettype}
+  m::cond{
+    m::and{
+      m::is_copyable_type{m::symbol{tx, "mapped_type"}},
+      m::or{
+        m::eq{m::family{tx}, "varray"},
+        m::eq{m::family{tx}, "cvarray"}},
+      m::or{
+        m::eq{m::family{tv}, "varray"},
+        m::eq{m::family{tv}, "cvarray"},
+        m::eq{m::family{tv}, "farray"},
+        m::eq{m::family{tv}, "cfarray"},
+        m::eq{m::family{tv}, "darray"},
+        m::eq{m::family{tv}, "cdarray"},
+        m::eq{m::family{tv}, "darrayst"},
+        m::eq{m::family{tv}, "cdarrayst"},
+        m::eq{m::family{tv}, "slice"},
+        m::eq{m::family{tv}, "cslice"}},
+      m::eq{m::symbol{tx, "mapped_type"}, m::symbol{tv, "mapped_type"}},
+      m::eq{m::symbol{tx, "key_type"}, m::symbol{tv, "key_type"}}},
+    rettype,
+    m::error{m::concat{tv, ": invalid type"}}};
+
+private pure function extern "::pxcrt::array_push_back" {tx, tv}
+check_push_type{tx, tv, void}
+array_push_back_noconv(tx mutable& x, tv const& v);
+
+private pure function extern "::pxcrt::array_push_front" {tx, tv}
+check_push_type{tx, tv, void}
+array_push_front_noconv(tx mutable& x, tv const& v);
+
+private pure function {tx, tv} void
+array_push_back(tx mutable& x, tv const& v)
+{
+  if (m::eq{m::symbol{tx, "mapped_type"}, tv}) {
+    array_push_back_noconv(x, v);
+  } else {
+    m::symbol{tx, "mapped_type"} vc = v;
+    array_push_back_move(x, vc);
+  }
+}
+
+private pure function {tx, tv} void
+array_push_front(tx mutable& x, tv const& v)
+{
+  if (m::eq{m::symbol{tx, "mapped_type"}, tv}) {
+    array_push_front_noconv(x, v);
+  } else {
+    m::symbol{tx, "mapped_type"} vc = v;
+    array_push_front_move(x, vc);
+  }
+}
+
+private pure function extern "::pxcrt::array_push_back_move" {tx, tv}
+check_push_move_type{tx, tv, void}
+array_push_back_move(tx mutable& x, tv mutable& v);
+
+private pure function extern "::pxcrt::array_push_front_move" {tx, tv}
+check_push_move_type{tx, tv, void}
+array_push_front_move(tx mutable& x, tv mutable& v);
+
+private pure function extern "::pxcrt::array_pop_back" {tx}
+m::symbol{tx, "mapped_type"}
+array_pop_back(tx mutable& x);
+
+private pure function extern "::pxcrt::array_pop_front" {tx}
+m::symbol{tx, "mapped_type"}
+array_pop_front(tx mutable& x);
+
+private pure function extern "::pxcrt::array_append" {tx, tv}
+check_append_type{tx, tv, void}
+array_append(tx mutable& x, tv const& v);
+
+private pure function extern "::pxcrt::array_insert" {tx, tv}
+check_append_type{tx, tv, void}
+array_insert(tx mutable& x, size_t i, tv const& v);
+
+private pure function extern "::pxcrt::array_erase" {tx}
+check_varray_type{tx, void}
+array_erase(tx mutable& x, size_t first, size_t last);
+

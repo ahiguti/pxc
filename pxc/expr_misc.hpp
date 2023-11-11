@@ -148,8 +148,10 @@ bool is_threaded_context(symbol_table *lookup); // FIXME get_context_threading
 bool is_multithr_context(symbol_table *lookup); // FIXME get_context_threading
 attribute_e get_expr_threading_attribute(const expr_i *e);
 attribute_e get_context_threading_attribute(symbol_table *lookup);
+/*
 bool term_is_threaded(const term& t); // FIXME: get_term_threading
 bool term_is_multithr(const term& t); // FIXME: get_term_threading
+*/
 attribute_e get_term_threading_attribute(const term& t);
 expr_funcdef *get_up_member_func(symbol_table *lookup);
 // expr_i *get_up_struct(expr_funcdef *efd); // struct, funcdef etc. skips block.

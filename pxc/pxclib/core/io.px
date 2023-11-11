@@ -1,0 +1,58 @@
+public threaded namespace core::io "use-unsafe";
+
+public pure multithreaded struct extern "pxcrt::io" "nodefault" io { }
+  /* struct io is used to indicate that functions have side effect against
+   * the os or other resources. */
+
+public pure struct extern "pxcrt::io_main_thread" "nodefault" io_main_thread { }
+
+public function extern "pxcrt::get_io_main_thread" io_main_thread
+main_thread_io();
+  /* returns io handle for the main thread. can be called only from the main
+   * thread. */
+
+public threaded function extern "pxcrt::thread_io" io thread_io();
+  /* returns io handle for the current thread */
+
+public pure function extern "pxcrt::thread_io" io debug_io();
+  /* returns io handle for debugging */
+
+extern "types" inline
+namespace pxcrt {
+
+struct io_main_thread {
+  io_main_thread(int const dummy) { } /* disable default constructor */
+};
+
+struct io {
+};
+
+};
+;
+
+extern "functions" inline
+namespace pxcrt {
+
+extern io_main_thread io_main_thread_obj;
+
+inline io thread_io()
+{
+  return io();
+}
+
+};
+;
+
+extern "implementation" inline
+namespace pxcrt {
+
+io_main_thread io_main_thread_obj(0);
+
+io_main_thread get_io_main_thread()
+{
+  return io_main_thread_obj;
+}
+
+};
+;
+

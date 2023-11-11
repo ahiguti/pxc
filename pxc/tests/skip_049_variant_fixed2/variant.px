@@ -1,12 +1,12 @@
 public namespace variant;
-import common -;
-import meta m;
-import numeric::cast n;
-import meta -;
+import core::common -;
+import core::meta m;
+import core::numeric::cast n;
+import core::meta -;
 import string::positional -;
 import downcast -;
 
-public threaded union variant {
+public pure union variant {
   unit unitval;
   long longval;
   ulong ulongval;
@@ -15,7 +15,7 @@ public threaded union variant {
   ptr{idynamic} ptrval;
 }
 
-public threaded interface idynamic {
+public pure interface idynamic {
   function variant invoke(cstrref const& name, cslice{variant} const& args);
 }
 
@@ -38,7 +38,7 @@ private metafunction to_non_ephemeral{t}
   m::cond{is_range_type{t}, m::symbol{t, "non_ephemeral_type"},
   t}};
 
-public threaded function {t} variant to_variant(t const& x)
+public pure function {t} variant to_variant(t const& x)
 {
   variant r;
   if (m::eq{t, unit}) {
@@ -61,7 +61,7 @@ public threaded function {t} variant to_variant(t const& x)
   return r;
 }
 
-public threaded function {t} t from_variant(variant const& x)
+public pure function {t} t from_variant(variant const& x)
 {
   if (m::eq{t, unit}) {
     return unit();
@@ -134,7 +134,7 @@ private metafunction func_argexp_list{f} m::map{m::args{f}, argexp};
 private metafunction func_arg_type_noneph{f, idx}
   to_non_ephemeral{m::at{m::at{m::args{f}, idx}, 2}};
 
-public threaded struct {t}
+public pure struct {t}
 stub_object(expand(a : stub_object_args{t})) : idynamic :
 {
   expand(dummy : m::list{m::list{"dummy", m::is_copyable_type{t}}}) {
@@ -144,14 +144,14 @@ stub_object(expand(a : stub_object_args{t})) : idynamic :
   function variant invoke(cstrref const& name, cslice{variant} const& args) {
     expand(fsym, idx : mf_str{t}) {
       if (m::to_string{fsym} == name) {
-	return variant_invoke{t, idx, 0}(value, args);
+        return variant_invoke{t, idx, 0}(value, args);
       }
     }
     return variant(); // TODO: throw
   }
 }
 
-public threaded function {tobj, methodidx, fsym} variant variant_invoke(
+public pure function {tobj, methodidx, fsym} variant variant_invoke(
   expand(s : m::cond{
     m::is_type{tobj},
     m::list{m::list{0, "obj", tobj, 1, 1}},
@@ -172,22 +172,22 @@ public threaded function {tobj, methodidx, fsym} variant variant_invoke(
     /* const reference */
     func_arg_type_noneph{f, idx} const& ae =
       downcast_const{
-	stub_object{func_arg_type_noneph{f, idx}}, idynamic
+        stub_object{func_arg_type_noneph{f, idx}}, idynamic
       }(*(args[idx].ptrval)).value;
     /* mutable reference */
     func_arg_type_noneph{f, idx} mutable& ae =
       downcast_mutable{
-	stub_object{func_arg_type_noneph{f, idx}}, idynamic
+        stub_object{func_arg_type_noneph{f, idx}}, idynamic
       }(*(args[idx].ptrval)).value;
   }
   if (m::is_type{tobj}) {
     expand (sym : m::list{m::list{m::to_string{f}, 0}}) {
       if (m::eq{m::ret_type{f}, void}) {
-	obj.sym(expand(a : func_arg_names{f}; a));
-	return variant();
+        obj.sym(expand(a : func_arg_names{f}; a));
+        return variant();
       } else {
-	return to_variant{m::ret_type{f}}(
-	  obj.sym(expand(a : func_arg_names{f}; a)));
+        return to_variant{m::ret_type{f}}(
+          obj.sym(expand(a : func_arg_names{f}; a)));
       }
     }
   } else {
@@ -199,13 +199,13 @@ public threaded function {tobj, methodidx, fsym} variant variant_invoke(
     } else {
       variant r;
       r.ptrval = ptr{stub_object{f}}(
-	stub_object{f}(expand(a : func_arg_names{f}; a)));
+        stub_object{f}(expand(a : func_arg_names{f}; a)));
       return r;
     }
   }
 }
 
-public threaded struct {f} stub_function : idynamic :
+public pure struct {f} stub_function : idynamic :
 {
   function variant invoke(cstrref const& name, cslice{variant} const& args) {
     if (!name.empty()) {
@@ -213,5 +213,5 @@ public threaded struct {f} stub_function : idynamic :
     }
     return variant_invoke{0, 0, f}(args);
   }
-} 
+}
 

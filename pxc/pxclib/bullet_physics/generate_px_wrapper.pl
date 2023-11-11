@@ -636,7 +636,7 @@ sub px_type_str
   if ($sort eq 'FunctionType') {
     my $rt = px_type_str($te->{returns});
     my @args = map { px_type_str($_->{type}) } @{to_array($te->{Argument})};
-    return "meta::list{" . $rt . ", " . join(', ', @args) . "}";
+    return "m::list{" . $rt . ", " . join(', ', @args) . "}";
   }
   if ($sort eq 'Typedef') {
     my $ft = fundamental_type($te->{name});

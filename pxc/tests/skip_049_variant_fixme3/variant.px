@@ -1,8 +1,8 @@
 public namespace variant;
-import common -;
-import meta m;
-import numeric::cast n;
-import meta -;
+import core::common -;
+import core::meta m;
+import core::numeric::cast n;
+import core::meta -;
 import string::positional -;
 import downcast -;
 
@@ -108,7 +108,7 @@ stub_object(expand(stub_object_args{t})) < idynamic >
   function variant invoke(cstrref const& name, cslice{variant} const& args) {
     expand(fsym, idx : member_functions_str{t}) {
       if (m::to_string{fsym} == name) {
-	return variant_invoke_impl{t, idx, 0}(args, value);
+        return variant_invoke_impl{t, idx, 0}(args, value);
       }
     }
     return variant(); // TODO: throw
@@ -124,7 +124,7 @@ public struct {f} stub_function < idynamic >
     }
     return variant_invoke_impl{0, 0, f}(args);
   }
-} 
+}
 
 /* wraps a global variable */
 public struct {varname, ns, mutable_flag} stub_variable < idynamic >
@@ -135,14 +135,14 @@ public struct {varname, ns, mutable_flag} stub_variable < idynamic >
     }
     if (args.empty()) {
       return to_variant{m::typeof{m::symbol{ns, varname}}}
-	(m::symbol{ns, varname});
+        (m::symbol{ns, varname});
     } else {
       if (m::eq{mutable_flag, 1}) {
-	m::symbol{ns, varname} =
-	  from_variant{m::typeof{m::symbol{ns, varname}}}(args[0]);
-	return variant();
+        m::symbol{ns, varname} =
+          from_variant{m::typeof{m::symbol{ns, varname}}}(args[0]);
+        return variant();
       } else {
-	return variant(); // TODO: throw
+        return variant(); // TODO: throw
       }
     }
   }
@@ -181,7 +181,7 @@ prepare_namespace_map(tree_map{string, variant} mutable& elems)
     {
       variant x;
       x.ptrval = ptr{stub_variable{name, ns, m::at1{m::at{vars, idx}}}}(
-	stub_variable{name, ns, m::at1{m::at{vars, idx}}}());
+        stub_variable{name, ns, m::at1{m::at{vars, idx}}}());
       elems[m::to_string{name}] = x;
       // println(m::to_string{name});
     }
@@ -228,22 +228,22 @@ private function {tobj, methodidx, fsym} variant variant_invoke_impl(
     /* pattern #0: const value */
     func_arg_type_noneph{f, idx} const& ae =
       downcast_const{
-	stub_object{func_arg_type_noneph{f, idx}}, idynamic
+        stub_object{func_arg_type_noneph{f, idx}}, idynamic
       }(*(args[idx].ptrval)).value;
     /* pattern #1: mutable value */
     func_arg_type_noneph{f, idx} const& ae = /* need not to be mutable ref */
       downcast_const{
-	stub_object{func_arg_type_noneph{f, idx}}, idynamic
+        stub_object{func_arg_type_noneph{f, idx}}, idynamic
       }(*(args[idx].ptrval)).value;
     /* pattern #2: const reference */
     func_arg_type_noneph{f, idx} const& ae =
       downcast_const{
-	stub_object{func_arg_type_noneph{f, idx}}, idynamic
+        stub_object{func_arg_type_noneph{f, idx}}, idynamic
       }(*(args[idx].ptrval)).value;
     /* pattern #3: mutable reference */
     func_arg_type_noneph{f, idx} mutable& ae =
       downcast_mutable{
-	stub_object{func_arg_type_noneph{f, idx}}, idynamic
+        stub_object{func_arg_type_noneph{f, idx}}, idynamic
       }(*(args[idx].ptrval)).value;
     /* pattern #4: variant-valuetype, pass by const value */
     func_arg_type_noneph{f, idx} ae =
@@ -261,11 +261,11 @@ private function {tobj, methodidx, fsym} variant variant_invoke_impl(
   if (m::is_type{tobj}) {
     expand (sym : m::list{m::list{m::to_string{f}, 0}}) {
       if (m::eq{m::ret_type{f}, void}) {
-	obj.sym(expand(a : func_arg_names{f}; a));
-	return variant();
+        obj.sym(expand(a : func_arg_names{f}; a));
+        return variant();
       } else {
-	return to_variant{m::ret_type{f}}(
-	  obj.sym(expand(a : func_arg_names{f}; a)));
+        return to_variant{m::ret_type{f}}(
+          obj.sym(expand(a : func_arg_names{f}; a)));
       }
     }
   } else {
@@ -277,7 +277,7 @@ private function {tobj, methodidx, fsym} variant variant_invoke_impl(
     } else {
       variant r;
       r.ptrval = ptr{stub_object{f}}(
-	stub_object{f}(expand(a : func_arg_names{f}; a)));
+        stub_object{f}(expand(a : func_arg_names{f}; a)));
       return r;
     }
   }

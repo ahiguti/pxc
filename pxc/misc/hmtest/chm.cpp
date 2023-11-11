@@ -41,9 +41,9 @@ struct hashmap_buckets {
     for (size_type i = 0; i < num_buckets; ++i) {
       node_type *p = buckets[i];
       while (p != 0) {
-	node_type *np = p->next;
-	delete p;
-	p = np;
+        node_type *np = p->next;
+        delete p;
+        p = np;
       }
     }
     free(buckets);
@@ -54,8 +54,8 @@ struct hashmap_buckets {
     for (node_type *p = cur; p != 0; p = p->next) {
       entry_type& pe = p->entry;
       if (pe.first == k) {
-	pe.second = m;
-	return false; /* not created */
+        pe.second = m;
+        return false; /* not created */
       }
     }
     /* append to the end of the buket */
@@ -76,7 +76,7 @@ private:
     for (node_type *p = buckets[bkt]; p != 0; p = p->next) {
       entry_type& pe = p->entry;
       if (pe.first == k) {
-	return &pe.second;
+        return &pe.second;
       }
     }
     return 0;

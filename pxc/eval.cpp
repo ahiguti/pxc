@@ -129,8 +129,8 @@ static void downgrade_threading_attribute_rec(expr_i *e, attribute_e mask)
   if (es == expr_e_funcdef || es == expr_e_struct || es == expr_e_typedef ||
     es == expr_e_dunion || es == expr_e_interface) {
     const attribute_e oattr = e->get_attribute();
-    const int dmask = attribute_threaded | attribute_multithr |
-      attribute_valuetype | attribute_tsvaluetype;
+    const int dmask = attribute_threaded | attribute_pure |
+      attribute_multithr | attribute_valuetype | attribute_tsvaluetype;
     const int om = dmask & oattr & mask;
     attribute_e nattr = attribute_e((oattr & ~dmask) | om);
     e->set_attribute(nattr);
@@ -444,10 +444,10 @@ static term expr_to_term(expr_i *expr, eval_context& ectx, expr_i *pos)
       expr_te *const tete = ptr_down_cast<expr_te>(expr);
       rexpr = tete->resolve_symdef(tete->symtbl_lexical);
       for (expr_telist *tl = tete->tlarg; tl != 0; tl = tl->rest) {
-	rargs.push_back(expr_to_term(tl->head, ectx, pos));
+        rargs.push_back(expr_to_term(tl->head, ectx, pos));
       }
       DBG_TETERM(fprintf(stderr, "expr_to_term: tete!=0 %s rargslen=%d\n",
-	tete->dump(0).c_str(), (int)rargs.size()));
+        tete->dump(0).c_str(), (int)rargs.size()));
     }
     break;
   case expr_e_metafdef:
@@ -479,10 +479,10 @@ static void get_metafdef_upvalues(expr_i *e, std::vector<expr_tparams *>& r)
     switch (e->get_esort()) {
     case expr_e_metafdef:
       {
-	expr_metafdef *const mf = ptr_down_cast<expr_metafdef>(e);
-	for (expr_tparams *tp = mf->get_tparams(); tp != 0; tp = tp->rest) {
-	  r.push_back(tp);
-	}
+        expr_metafdef *const mf = ptr_down_cast<expr_metafdef>(e);
+        for (expr_tparams *tp = mf->get_tparams(); tp != 0; tp = tp->rest) {
+          r.push_back(tp);
+        }
       }
       e = e->parent_expr;
       break;
@@ -492,14 +492,14 @@ static void get_metafdef_upvalues(expr_i *e, std::vector<expr_tparams *>& r)
       break;
     case expr_e_stmts:
       if (e->parent_expr != 0) {
-	expr_i *p = e->parent_expr;
-	if (p->get_esort() == expr_e_block) {
-	  expr_i *pp = p->parent_expr;
-	  if (pp->get_esort() == expr_e_metafdef) {
-	    e = pp;
-	    break;
-	  }
-	}
+        expr_i *p = e->parent_expr;
+        if (p->get_esort() == expr_e_block) {
+          expr_i *pp = p->parent_expr;
+          if (pp->get_esort() == expr_e_metafdef) {
+            e = pp;
+            break;
+          }
+        }
       }
       e = 0;
       break;
@@ -569,9 +569,9 @@ static term save_upvalue_bind(term tm,
     expr_tparams *p = tpbind->get_bind_tparam();
     for (size_t i = 0; i < upvalues.size(); ++i) {
       if (upvalues[i] == p) {
-	term v = *tpbind->get_bind_tpvalue();
-	tm = term(p, v, term(), true, tm); /* term_bind upvalue */
-	break;
+        term v = *tpbind->get_bind_tpvalue();
+        tm = term(p, v, term(), true, tm); /* term_bind upvalue */
+        break;
       }
     }
     /* TODO: use evaluated value? */
@@ -593,7 +593,7 @@ static term eval_apply_internal(const term& tm, const term_list_range& args,
     expr_tparams *tp = cur->get_bind_tparam();
     while (tp != 0) {
       if (!*cur->get_bind_is_upvalue()) {
-	++nbind;
+        ++nbind;
       }
       cur = cur->get_bind_next();
       tp = cur->get_bind_tparam();
@@ -604,39 +604,39 @@ static term eval_apply_internal(const term& tm, const term_list_range& args,
     expr_tparams *ltpms = cur->get_lambda_tparams();
     while (ltpms != 0) {
       while (ltpms != 0 && nbind > 0) {
-	/* this param is already bound */
-	ltpms = ltpms->rest;
-	--nbind;
+        /* this param is already bound */
+        ltpms = ltpms->rest;
+        --nbind;
       }
       while (ltpms != 0 && args_bindcnt < args.size()) {
-	/* bind this param */
-	if (ltpms->is_variadic_metaf) {
-	  /* ltpms is a parameter for a variadic metafunction */
-	  term_list al;
-	  while (args_bindcnt < args.size()) {
-	    term arg = eval_if_unevaluated(args[args_bindcnt], targs_evaluated,
-	      ectx, pos); /* eager evaluation */
-	    al.push_back(arg);
-	    ++args_bindcnt;
-	  }
-	  term vas(al); /* term_metalist */
-	  ntm = term(ltpms, vas, term(), false, ntm); /* term_bind */
-	  ltpms = 0;
-	} else {
-	  /* not a variadic metafunction */
-	  term arg = eval_if_unevaluated(args[args_bindcnt], targs_evaluated,
-	    ectx, pos); /* eager evaluation */
-	  ntm = term(ltpms, arg, term(), false, ntm); /* term_bind */
-	  ltpms = ltpms->rest;
-	  ++args_bindcnt;
-	}
+        /* bind this param */
+        if (ltpms->is_variadic_metaf) {
+          /* ltpms is a parameter for a variadic metafunction */
+          term_list al;
+          while (args_bindcnt < args.size()) {
+            term arg = eval_if_unevaluated(args[args_bindcnt], targs_evaluated,
+              ectx, pos); /* eager evaluation */
+            al.push_back(arg);
+            ++args_bindcnt;
+          }
+          term vas(al); /* term_metalist */
+          ntm = term(ltpms, vas, term(), false, ntm); /* term_bind */
+          ltpms = 0;
+        } else {
+          /* not a variadic metafunction */
+          term arg = eval_if_unevaluated(args[args_bindcnt], targs_evaluated,
+            ectx, pos); /* eager evaluation */
+          ntm = term(ltpms, arg, term(), false, ntm); /* term_bind */
+          ltpms = ltpms->rest;
+          ++args_bindcnt;
+        }
       }
       if (ltpms != 0) {
-	/* not enough args supplied yet */
-	DBG_EVAL_TRACE(fprintf(stderr, "eval_apply (pushbind) %s . %s => %s\n",
-	  term_tostr_human(tm).c_str(), term_tostr_list_human(args).c_str(),
-	  term_tostr_human(ntm).c_str()));
-	return ntm;
+        /* not enough args supplied yet */
+        DBG_EVAL_TRACE(fprintf(stderr, "eval_apply (pushbind) %s . %s => %s\n",
+          term_tostr_human(tm).c_str(), term_tostr_list_human(args).c_str(),
+          term_tostr_human(ntm).c_str()));
+        return ntm;
       }
       cur = cur->get_lambda_body();
       ltpms = cur->get_lambda_tparams();
@@ -647,8 +647,8 @@ static term eval_apply_internal(const term& tm, const term_list_range& args,
     if (args_bindcnt == args.size()) {
       /* no more args to apply */
       DBG_EVAL_TRACE(fprintf(stderr, "eval_apply (reduce) %s . %s => %s\n",
-	term_tostr_human(tm).c_str(), term_tostr_list_human(args).c_str(),
-	term_tostr_human(et).c_str()));
+        term_tostr_human(tm).c_str(), term_tostr_list_human(args).c_str(),
+        term_tostr_human(et).c_str()));
       return et;
     }
     term_list_range remargs(args.begin() + args_bindcnt,
@@ -692,9 +692,9 @@ term eval_apply(const term& tm, const term_list_range& args,
       + ")\n";
     if (ectx.tpbind != 0) {
       s += std::string(pos->fname) + ":" + ulong_to_string(pos->line)
-	+ ": (where "
-	+ term_tostr_human(*ectx.tpbind)
-	+ ")\n";
+        + ": (where "
+        + term_tostr_human(*ectx.tpbind)
+        + ")\n";
     }
     throw std::runtime_error(s);
   }
@@ -747,12 +747,12 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
   case expr_e_te:
     {
       if (targs.size() > 0) {
-	arena_error_throw(pos, "Too many template arguments: '%s'",
-	  term_tostr_human(rebuild_term(tptr, texpr, targs)).c_str());
+        arena_error_throw(pos, "Too many template arguments: '%s'",
+          term_tostr_human(rebuild_term(tptr, texpr, targs)).c_str());
       }
       expr_te *const te = ptr_down_cast<expr_te>(texpr);
       if (te->is_term_literal()) {
-	return te->sdef.get_evaluated();
+        return te->sdef.get_evaluated();
       }
       return eval_te(te, ectx, pos);
     }
@@ -760,8 +760,8 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
   case expr_e_symbol:
     {
       if (targs.size() > 0) {
-	arena_error_throw(pos, "Too many template arguments: '%s'",
-	  term_tostr_human(rebuild_term(tptr, texpr, targs)).c_str());
+        arena_error_throw(pos, "Too many template arguments: '%s'",
+          term_tostr_human(rebuild_term(tptr, texpr, targs)).c_str());
       }
       expr_symbol *const esym = ptr_down_cast<expr_symbol>(texpr);
       expr_i *const symdef = esym->sdef.resolve_symdef();
@@ -774,23 +774,23 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
       expr_tparams *const tp = ptr_down_cast<expr_tparams>(texpr);
       term tbase;
       if (!tp->param_def.is_null()) {
-	DBG_NEWTE(fprintf(stderr, "tparam %p concrete\n", tp));
-	/* TODO: need to eval? */
-	DBG_EVAL(fprintf(stderr, "EVALI2 sort tparams pdef\n"));
-	tbase = tp->param_def;
+        DBG_NEWTE(fprintf(stderr, "tparam %p concrete\n", tp));
+        /* TODO: need to eval? */
+        DBG_EVAL(fprintf(stderr, "EVALI2 sort tparams pdef\n"));
+        tbase = tp->param_def;
       } else {
-	DBG_EVAL(fprintf(stderr, "EVALI2 sort tparams nopdef (tp=%p sym=%s)\n",
-	  tp, tp->sym));
-	const term p = find_tparam_bind(tp, ectx);
-	if (p.is_null()) {
-	  return rebuild_term(tptr, texpr, targs); /* unbound tparam */
-	}
-	tbase = p;
+        DBG_EVAL(fprintf(stderr, "EVALI2 sort tparams nopdef (tp=%p sym=%s)\n",
+          tp, tp->sym));
+        const term p = find_tparam_bind(tp, ectx);
+        if (p.is_null()) {
+          return rebuild_term(tptr, texpr, targs); /* unbound tparam */
+        }
+        tbase = p;
       }
       if (targs.size() > 0) {
-	return eval_apply(tbase, targs, targs_evaluated, ectx, pos);
+        return eval_apply(tbase, targs, targs_evaluated, ectx, pos);
       } else {
-	return tbase;
+        return tbase;
       }
     }
     break;
@@ -800,33 +800,33 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
       const term tmf = metafdef_to_term(ta, ectx, pos);
       term tmfev;
       if (!ta->evaluated_term.is_null()) {
-	tmfev = ta->evaluated_term;
+        tmfev = ta->evaluated_term;
       } else {
-	tmfev = eval_term_internal(tmf, false, ectx, pos);
-	DBG_METACACHE(fprintf(stderr, "ev %s\n", ta->sym));
-	if (ta->has_name() && ta->block->tinfo.tparams == 0) {
-	  /* named metafunction without params. cache the evaluated result. */
-	  ta->evaluated_term = tmfev;
-	}
+        tmfev = eval_term_internal(tmf, false, ectx, pos);
+        DBG_METACACHE(fprintf(stderr, "ev %s\n", ta->sym));
+        if (ta->has_name() && ta->block->tinfo.tparams == 0) {
+          /* named metafunction without params. cache the evaluated result. */
+          ta->evaluated_term = tmfev;
+        }
       }
       if (targs.size() != 0) {
-	#if 0
-	if (ta->is_variadic) {
-	  term_list vargs(targs.size());
-	  for (size_t i = 0; i < targs.size(); ++i) {
-	    vargs[i] = eval_if_unevaluated(targs[i], targs_evaluated, ectx,
-	      pos);
-	  }
-	  const term larg(vargs); /* metalist */
-	  return eval_apply(tmfev, term_list_range(&larg, 1), true, ectx, pos);
-	} else {
-	#endif
-	  return eval_apply(tmfev, targs, targs_evaluated, ectx, pos);
-	#if 0
-	}
-	#endif
+        #if 0
+        if (ta->is_variadic) {
+          term_list vargs(targs.size());
+          for (size_t i = 0; i < targs.size(); ++i) {
+            vargs[i] = eval_if_unevaluated(targs[i], targs_evaluated, ectx,
+              pos);
+          }
+          const term larg(vargs); /* metalist */
+          return eval_apply(tmfev, term_list_range(&larg, 1), true, ectx, pos);
+        } else {
+        #endif
+          return eval_apply(tmfev, targs, targs_evaluated, ectx, pos);
+        #if 0
+        }
+        #endif
       } else {
-	return tmfev;
+        return tmfev;
       }
     }
     break;
@@ -877,49 +877,49 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
       term_list tlev(targs.size());
       term_list_range tlev_range(tlev);
       try {
-	eval_term_list_internal(targs, targs_evaluated, tlev, ectx, pos);
-	if (is_partial_eval_uneval(tlev_range, ectx)) {
-	  DBG_EVAL(fprintf(stderr, "EVALI2 : found ubound tparam\n"));
-	  return rebuild_term(tptr, texpr, targs); /* incomplete expr */
-	}
-	r = (*es->metafunc_strict)(tlev_range, ectx, pos);
+        eval_term_list_internal(targs, targs_evaluated, tlev, ectx, pos);
+        if (is_partial_eval_uneval(tlev_range, ectx)) {
+          DBG_EVAL(fprintf(stderr, "EVALI2 : found ubound tparam\n"));
+          return rebuild_term(tptr, texpr, targs); /* incomplete expr */
+        }
+        r = (*es->metafunc_strict)(tlev_range, ectx, pos);
       } catch (const std::exception& e) {
-	std::string s = e.what();
-	if (s.size() > 0 && s[s.size() - 1] != '\n') {
-	  s += "\n";
-	}
-	s += std::string(pos->fname) + ":" + ulong_to_string(pos->line)
-	  + ": (while evaluating expression: "
-	  + incomplete_term_to_str(texpr, targs, tlev_range)
-	  + "";
-	s += get_ectx_bind_str(ectx);
-	s += ")\n";
-	throw std::runtime_error(s);
+        std::string s = e.what();
+        if (s.size() > 0 && s[s.size() - 1] != '\n') {
+          s += "\n";
+        }
+        s += std::string(pos->fname) + ":" + ulong_to_string(pos->line)
+          + ": (while evaluating expression: "
+          + incomplete_term_to_str(texpr, targs, tlev_range)
+          + "";
+        s += get_ectx_bind_str(ectx);
+        s += ")\n";
+        throw std::runtime_error(s);
       }
       if (r.is_null()) {
-	arena_error_throw(pos, "Invalid template expression: %s",
-	  term_tostr_human(term(texpr, tlev_range)).c_str());
+        arena_error_throw(pos, "Invalid template expression: %s",
+          term_tostr_human(term(texpr, tlev_range)).c_str());
       }
     } else {
       try {
-	r = (*es->metafunc_nonstrict)(texpr, targs, targs_evaluated, ectx,
-	  pos);
+        r = (*es->metafunc_nonstrict)(texpr, targs, targs_evaluated, ectx,
+          pos);
       } catch (const std::exception& e) {
-	std::string s = e.what();
-	if (s.size() > 0 && s[s.size() - 1] != '\n') {
-	  s += "\n";
-	}
-	s += std::string(pos->fname) + ":" + ulong_to_string(pos->line)
-	  + ": (while evaluating expression: "
-	  + term_tostr_human(term(texpr, targs))
-	  + "";
-	s += get_ectx_bind_str(ectx);
-	s += ")\n";
-	throw std::runtime_error(s);
+        std::string s = e.what();
+        if (s.size() > 0 && s[s.size() - 1] != '\n') {
+          s += "\n";
+        }
+        s += std::string(pos->fname) + ":" + ulong_to_string(pos->line)
+          + ": (while evaluating expression: "
+          + term_tostr_human(term(texpr, targs))
+          + "";
+        s += get_ectx_bind_str(ectx);
+        s += ")\n";
+        throw std::runtime_error(s);
       }
       if (r.is_null()) {
-	arena_error_throw(pos, "Invalid template expression: %s",
-	  term_tostr_human(term(texpr, targs)).c_str());
+        arena_error_throw(pos, "Invalid template expression: %s",
+          term_tostr_human(term(texpr, targs)).c_str());
       }
     }
     return r;
@@ -938,29 +938,29 @@ static term eval_apply_expr(expr_i *texpr, const term_list_range& targs,
     }
     if (targs.size() > tparams_len) {
       arena_error_throw(pos, "Too many template arguments: '%s'",
-	term_tostr_human(rebuild_term(tptr, texpr, targs)).c_str());
+        term_tostr_human(rebuild_term(tptr, texpr, targs)).c_str());
     } else if (targs.size() < tparams_len) {
-      return rebuild_term(tptr, texpr, targs); /* not filled yet */ 
+      return rebuild_term(tptr, texpr, targs); /* not filled yet */
       #if 0
       arena_error_throw(pos, "Too few template arguments: '%s'",
-	term_tostr(tm, term_tostr_sort_humanreadable).c_str());
+        term_tostr(tm, term_tostr_sort_humanreadable).c_str());
       #endif
     }
     if (tparams_len != 0) {
       term_list tlev(targs.size());
       eval_term_list_internal(targs, targs_evaluated, tlev, ectx, pos);
       DBG_INST(fprintf(stderr, "instantiate tm=%s evaluated_args=%s\n",
-	term_tostr_human(rebuild_term(tptr, texpr, targs)).c_str(),
-	term_tostr_list_human(term_list_range(tlev, targs.size())).c_str()));
+        term_tostr_human(rebuild_term(tptr, texpr, targs)).c_str(),
+        term_tostr_list_human(term_list_range(tlev, targs.size())).c_str()));
       if (!is_partial_eval_uneval(term_list_range(tlev), ectx)) {
-	DBG_INST(fprintf(stderr, "instantiate!\n"));
-	expr_i *const einst = instantiate_template(texpr,
-	  term_list_range(tlev), pos);
-	DBG_EVAL(fprintf(stderr, "EVALI2 sort tmpl instantiated %s\n",
-	  term_tostr(einst->get_value_texpr(), term_tostr_sort_strict)
-	    .c_str()
-	  ));
-	return einst->get_value_texpr();
+        DBG_INST(fprintf(stderr, "instantiate!\n"));
+        expr_i *const einst = instantiate_template(texpr,
+          term_list_range(tlev), pos);
+        DBG_EVAL(fprintf(stderr, "EVALI2 sort tmpl instantiated %s\n",
+          term_tostr(einst->get_value_texpr(), term_tostr_sort_strict)
+            .c_str()
+          ));
+        return einst->get_value_texpr();
       }
       assert(ectx.need_partial_eval);
       DBG_INST(fprintf(stderr, "not instantiated\n"));
@@ -983,9 +983,9 @@ term eval_term_internal(const term& tm, bool targs_evaluated,
     if (s == term_sort_lambda) {
       const term_lambda *lmd = tm.get_term_lambda();
       if (!lmd->upvalues.empty()) {
-	/* is it possible to fix that targs are evaluated again when
-	 * targs_evaluated is true? */
-	return save_upvalue_bind(tm, lmd->upvalues, ectx, pos);
+        /* is it possible to fix that targs are evaluated again when
+         * targs_evaluated is true? */
+        return save_upvalue_bind(tm, lmd->upvalues, ectx, pos);
       }
     }
     return tm;
@@ -1078,9 +1078,9 @@ static expr_i *term_get_instance_internal(const term& t, bool throw_if_noinst)
   if (i == bl->tinfo.instances.end()) {
     if (throw_if_noinst) {
       arena_error_throw(texpr, "Template expression '%s' is invalid "
-	  "(no instance is found for '%s')",
-	term_tostr_human(t).c_str(),
-	term_tostr_list(*targs, term_tostr_sort_humanreadable).c_str());
+          "(no instance is found for '%s')",
+        term_tostr_human(t).c_str(),
+        term_tostr_list(*targs, term_tostr_sort_humanreadable).c_str());
     } else {
       return texpr;
     }
@@ -1104,5 +1104,5 @@ const expr_i *term_get_instance_const(const term& t)
   return term_get_instance_internal(t, true);
 }
 
-}; 
+};
 
