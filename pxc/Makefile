@@ -1,6 +1,6 @@
 
 LANG=C
-CXX = g++
+CXX = g++ --std=gnu++11
 OBJS =	pxc_y.o pxc_l.o expr.o expr_impl.o expr_misc.o eval.o evalmeta.o \
 	checktype.o term.o emit.o emit_context.o symbol.o symbol_table.o \
 	cdriver.o pxc_md5.o util.o sort_dep.o
@@ -41,7 +41,7 @@ pxc: $(OBJS)
 	# $(CXX) -rdynamic $(CXXFLAGS) -o $@ $^ -ldl -lpthread
 	$(CXX) $(CXXFLAGS) -o $@ $^ -ldl -lpthread
 
-test:
+test: all
 	cd tests; $(MAKE)
 
 retest:

@@ -3,6 +3,32 @@
 ---------------------------------------------------------------------
 FIXME/TODO M1
 
+- struct, interface, functionの内側のfunctionのthreading属性は上位
+  のものを引き継ぐことを明確化した。余計なthreading属性がつけられて
+  いたらエラーにするように。
+
+- misc/test_tattr.px (done)
+  - func_childにthreadedを付けると通る
+  - dofunc{foo}がfunc_childに合わせてdowngradeされるから？
+  - expr_funcdef::check_typeでnestされた関数のthreading属性を追加
+    しているが、テンプレートインスタンスだとその前にdowngradeされて
+    しまう。インスタンス化する前にnestされた関数のthreading属性を
+    追加するように変更すべし
+    fn_set_implicit_threading_attr()
+    test_192_threading_attr
+
+- safeなstructのフィールドにunsafeな型があったとき、そのフィールドを
+  操作することができるのはunsafeな関数だけであることを確認。
+  - これによってuse-unsafeなstructにrawptrなどのunsafeなフィールドを
+    持たせることができる。
+
+- FIXME: sdl2/api_typesはexports-unsafeに
+  - しない。
+
+- FIMXE: rawptrはexports-unsafeにしないと間違える。rawptrはintから作成可能
+  なので、rawptrを引数に取りそれを参照外しするような関数はsafeにすることは
+  できない。
+
 - json.px, url_encode.px 等はcoreから外に出す？
 
 - text::json : append_to_string等のescapeと、json_encodeの16進コード。

@@ -1871,7 +1871,7 @@ void expr_int_literal::emit_value(emit_context& em)
     }
   } else {
     long long const v = get_value_ll();
-    if (v > 0x7fffffff || v < 0x80000000) {
+    if (v > 0x7fffffffll || v < -0x80000000ll) {
       if (v > 0) {
         em.printf("%lldLL", v);
       } else {
@@ -2357,7 +2357,7 @@ void emit_array_elem_or_range_expr(emit_context& em, expr_op *eop)
     em.puts(")");
   } else if (need_to_emit_expr_returning_value(eop)) {
     if (is_array_family(ct) || is_cm_slice_family(ct)) {
-      if (eop->symtbl_lexical->pragma.disable_bounds_checking) {
+      if (eop->symtbl_lexical->pragma.disable_bounds_check) {
         em.puts("pxcrt::get_elem_value_nocheck(");
       } else {
         em.puts("pxcrt::get_elem_value(");
@@ -2375,7 +2375,7 @@ void emit_array_elem_or_range_expr(emit_context& em, expr_op *eop)
     }
   } else {
     if ((is_array_family(ct) || is_cm_slice_family(ct)) &&
-      eop->symtbl_lexical->pragma.disable_bounds_checking) {
+      eop->symtbl_lexical->pragma.disable_bounds_check) {
       em.puts("(");
       fn_emit_value(em, eop->arg0);
       em.puts(".begin()[");
@@ -3153,12 +3153,12 @@ void expr_feach::emit_value(emit_context& em)
 {
   em.puts("{\n");
   em.add_indent(1);
-  em.indent('f');
   assert(block->get_argdecls() != 0);
   assert(block->get_argdecls()->rest != 0);
   expr_argdecls *const mapped = block->get_argdecls()->get_rest();
   const std::string cetstr = get_term_cname(ce->get_texpr());
   emit_split_expr(em, ce, true);
+  em.indent('f');
   #if 0
   const bool mapped_mutable_flag = arg_passby_mutable(mapped);
   #endif
@@ -3287,22 +3287,6 @@ void expr_feach::emit_value(emit_context& em)
   em.add_indent(-1);
   em.indent('f');
   em.puts("}");
-}
-
-void expr_fldfe::emit_value(emit_context& em)
-{
-  em.puts("/* foreach */\n");
-  fn_emit_value(em, stmts);
-  em.indent('f');
-  em.puts("/* foreach end */");
-}
-
-void expr_foldfe::emit_value(emit_context& em)
-{
-  em.puts("/* foreach */\n");
-  fn_emit_value(em, stmts);
-  em.indent('f');
-  em.puts("/* foreach end */");
 }
 
 std::string expr_argdecls::emit_symbol_str() const
@@ -3819,7 +3803,7 @@ void fn_emit_value(emit_context& em, expr_i *e, bool expand_composite,
   case conversion_e_container_range:
     emit_value_internal(em, e);
     break;
-  case conversion_e_boxing:
+  case conversion_e_boxing: /* note: unused */
     {
       /* emit ptr<te> instead of type_conv_to, so that fast boxing works. */
       const term& te = e->get_texpr();

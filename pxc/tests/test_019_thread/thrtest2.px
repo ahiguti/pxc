@@ -1,0 +1,22 @@
+public namespace thrtest2;
+import core::common -;
+import core::callable::thread -;
+
+threaded function void test1()
+{
+  int z;
+  threaded function void foo(int x, int y, io const& sys)
+  {
+    const stdout = sys.stdout();
+    file_println(stdout, "my thread main");
+    file_println(stdout, x);
+    file_println(stdout, y);
+    file_println(stdout, z);
+  }
+  const thr = make_thread_ptr{foo}(123, 456, thread_io());
+    // error: foo is a local function
+  thr();
+}
+
+test1();
+

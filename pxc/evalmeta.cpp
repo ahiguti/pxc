@@ -331,6 +331,17 @@ static term eval_meta_is_polymorphic_type(const term_list_range& tlev,
   return term(r);
 }
 
+static term eval_meta_is_ephemeral_type(const term_list_range& tlev,
+  eval_context& ectx, expr_i *pos)
+{
+  if (tlev.size() != 1) {
+    return term();
+  }
+  const term& ttyp = tlev[0];
+  const long long r = is_ephemeral_type(ttyp);
+  return term(r);
+}
+
 static term eval_meta_inherits(const term_list_range& tlev, eval_context& ectx,
   expr_i *pos)
 {
@@ -754,7 +765,6 @@ static term eval_meta_global_variables(const term_list_range& tlev,
   check_visible_namespace(name, pos);
   symbol_table *const symtbl = &global_block->symtbl;
   term_list tl;
-  long long idx = 0;
   std::list< std::pair<symbol, localvar_info> > syms;
   symtbl->get_ns_symbols(name, syms);
   for (std::list< std::pair<symbol, localvar_info> >::const_iterator i
@@ -783,7 +793,6 @@ static term eval_meta_global_variables(const term_list_range& tlev,
     rec.push_back(term(is_mutable)); /* mutable */
     term re(rec);
     tl.push_back(re);
-    ++idx;
   }
   return term(tl);
 }
@@ -1637,8 +1646,8 @@ static term eval_meta_characteristic(const term_list_range& tlev,
     return term();
   }
   std::string s = meta_term_to_string(tlev[1], false);
-  if (s == "noheap") {
-    return term(is_noheap_type(tlev[0]));
+  if (s == "ephemeral") {
+    return term(is_ephemeral_type(tlev[0]));
   } else if (s == "defcon") {
     return term(is_default_constructible(tlev[0]));
   } else if (s == "copyable") {
@@ -2145,6 +2154,7 @@ static const strict_metafunc_entry strict_metafunc_entries[] = {
   { "@is_default_constructible_type",
     &eval_meta_is_default_constructible_type },
   { "@is_polymorphic_type", &eval_meta_is_polymorphic_type },
+  { "@is_ephemeral_type", &eval_meta_is_ephemeral_type },
   { "@inherits", &eval_meta_inherits },
   { "@base_types", &eval_meta_base_types },
   { "@field_types", &eval_meta_field_types },

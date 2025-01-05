@@ -12,8 +12,8 @@ import core::io::fcntl -;
 import core::io::epoll -;
 import core::meta m;
 
-private metafunction svr_host "127.0.0.1";
-private metafunction svr_port "5001";
+private metafunction svr_host "0.0.0.0";
+private metafunction svr_port "5000";
 
 pure multithreaded struct
 worker_shared(io const& sys0, file_mt const& lsn0)
@@ -55,7 +55,7 @@ worker_main(tptr{worker_shared} const& shared, int thr_id)
   }
   try {
     const lsn = shared->lsn;
-    mutable pl = epoll(io::system);
+    mutable pl = epoll(shared->sys);
     pl.add(lsn, EPOLLIN);
     mutable peer_addr = sockaddr_storage();
     varray{epoll_event} events;
@@ -106,21 +106,21 @@ worker_main(tptr{worker_shared} const& shared, int thr_id)
         }
       }
     }
-  } catch (exception::c_exception e) {
+  } catch (core::exception::c_exception e) {
     err.println(string_join{" "}("thrown:", thr_id, to_string(e)));
-  } catch (io::errno::errno_t e) {
+  } catch (core::io::errno::errno_t e) {
     err.println(string_join{" "}("errno:", thr_id, to_string(e)));
   }
 }
 
 {
-  io::system.signal(SIGPIPE, SIG_IGN);
-  const lsn = io::system.listen(svr_host, svr_port, AF_INET,
+  thread_io().signal(SIGPIPE, SIG_IGN);
+  const lsn = thread_io().listen(svr_host, svr_port, AF_INET,
     SOCK_STREAM, IPPROTO_TCP, 1024, true);
   lsn.setfl(O_RDONLY | O_NONBLOCK);
-  varray{callable_ptr{void, m::nil}} workers;
+  varray{threaded_callable_ptr{void, m::nil}} workers;
   for (const i: 0 .. 2) {
-    const pshared = make_tptr{worker_shared}(io::system, lsn);
+    const pshared = make_tptr{worker_shared}(thread_io(), lsn);
     const sthr = make_thread_ptr{worker_main}(pshared, i);
     workers.push_back(sthr);
   }

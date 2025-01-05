@@ -20,6 +20,7 @@
 #define DBG_EXT(x)
 #define DBG_FIND(x)
 #define DBG_PRIV(x)
+#define DBG_INVISIBLE(x)
 
 namespace pxc {
 
@@ -37,6 +38,46 @@ symbol_table *symbol_table::get_lexical_parent() const
 symbol append_namespace(const symbol& ns, const symbol& name)
 {
   return ns.to_string() + "::" + name.to_string(); /* TODO */
+}
+
+void symbol_table::check_duplicated_name(const symbol& name, expr_i *e)
+{
+  locals_type::iterator i = locals.find(name);
+  DBG_FIND(fprintf(stderr, "symbol_table::find0 %s %d\n", name.c_str(),
+    int(i != locals.end())));
+  if (i == locals.end()) {
+    return;
+  }
+  expr_i *const e0 = i->second.edef;
+  if (e0->get_esort() == expr_e_funcdef && e->get_esort() == expr_e_funcdef) {
+    do {
+      expr_funcdef *const e0fd = dynamic_cast<expr_funcdef *>(e0);
+      expr_funcdef *const efd = dynamic_cast<expr_funcdef *>(e);
+      if (!e0fd->no_def || efd->no_def) {
+        break;
+      }
+      if (e0fd->is_const != efd->is_const) {
+        break;
+      }
+      expr_block *const e0b = e0fd->block;
+      expr_block *const eb = efd->block;
+      if (!fn_expr_equals(e0b->argdecls, eb->argdecls)) {
+        break;
+      }
+      if (!fn_expr_equals(e0b->rettype_uneval, eb->rettype_uneval)) {
+        break;
+      }
+      if (e0b->ret_passby != eb->ret_passby) {
+        break;
+      }
+      return;
+    } while (false);
+    arena_error_throw(e,
+      "Incompatible function definition of %s declared at %s:%d)",
+      name.c_str(), i->second.edef->fname, i->second.edef->line);
+  }
+  arena_error_throw(e, "Duplicated name %s (defined at %s:%d)",
+    name.c_str(), i->second.edef->fname, i->second.edef->line);
 }
 
 void symbol_table::define_name(const symbol& shortname,
@@ -58,13 +99,7 @@ void symbol_table::define_name(const symbol& shortname,
       "Internal error: symbol_table::define_name('%s'): "
       "block is compiled already", shortname.c_str());
   }
-  locals_type::iterator i = locals.find(name);
-  DBG_FIND(fprintf(stderr, "symbol_table::find0 %s %d\n", name.c_str(),
-    int(i != locals.end())));
-  if (i != locals.end()) {
-    arena_error_throw(e, "Duplicated name %s (defined at %s:%d)",
-      name.c_str(), i->second.edef->fname, i->second.edef->line);
-  }
+  check_duplicated_name(name, e);
   locals[name] = localvar_info(e, attr, stmt);
   local_names.push_back(name);
   if (is_global) {
@@ -311,9 +346,9 @@ localvar_info symbol_table::resolve_name_nothrow_internal(
           v = i->second;
           return v;
         } else {
-#if 0
-fprintf(stderr, "invisible '%s' from '%s' '%s'\n", fullname.c_str(), curns.c_str(), get_lexical_context_ns(pos).c_str()); // FIXME
-#endif
+          DBG_INVISIBLE(fprintf(stderr, "invisible '%s' from '%s' '%s'\n",
+            fullname.c_str(), curns.c_str(),
+            get_lexical_context_ns(pos).c_str()));
         }
       }
       /* missed */
@@ -537,15 +572,15 @@ fprintf(stderr, "invisible '%s' from '%s' '%s'\n", fullname.c_str(), curns.c_str
     block_backref->line, fullname.c_str(), curns.c_str(),
     is_upvalue_r ? "up" : "-", v.edef));
   DBG_TIMING(double tcur = gettimeofday_double());
-  #if 0
-  if (tcur - t[0] > 0.00002) {
-    fprintf(stderr, "slow reso [%s] [%s]", fullname.c_str(), curns.c_str());
-    for (int i = 1; i < 16; ++i) {
-      if (t[i] != 0) fprintf(stderr, " (%d) %f", i, t[i] - t[0]);
+  DBG_TIMING(
+    if (tcur - t[0] > 0.00002) {
+      fprintf(stderr, "slow reso [%s] [%s]", fullname.c_str(), curns.c_str());
+      for (int i = 1; i < 16; ++i) {
+        if (t[i] != 0) fprintf(stderr, " (%d) %f", i, t[i] - t[0]);
+      }
+      fprintf(stderr, "\n");
     }
-    fprintf(stderr, "\n");
-  }
-  #endif
+  )
   return v;
 }
 

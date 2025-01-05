@@ -95,15 +95,6 @@ expr_i *expr_forrange_new(const char *fn, int line, expr_i *r0, expr_i *r1,
 { return arena_push(new expr_forrange(fn, line, r0, r1, block)); }
 expr_i *expr_feach_new(const char *fn, int line, expr_i *ce, expr_i *block)
 { return arena_push(new expr_feach(fn, line, ce, block)); }
-expr_i *expr_fldfe_new(const char *fn, int line, const char *namesym,
-  const char *fldsym, const char *idxsym, expr_i *te, expr_i *stmts)
-{ return arena_push(new expr_fldfe(fn, line, namesym, fldsym, idxsym, te,
-  stmts)); }
-expr_i *expr_foldfe_new(const char *fn, int line, const char *itersym,
-  expr_i *valueste, const char *embedsym, expr_i *embedexpr,
-  const char *foldop, expr_i *stmts)
-{ return arena_push(new expr_foldfe(fn, line, itersym, valueste, embedsym,
-  embedexpr, foldop, stmts)); }
 expr_i *expr_expand_new(const char *fn, int line, expr_i *callee,
   const char *itersym, const char *idxsym, expr_i *valueste,
   expr_i *baseexpr, expand_e ex, expr_i *rest)
@@ -270,6 +261,20 @@ static std::string get_expr_info(const expr_i *e)
   return fn + ":" + ln + ": ";
 }
 
+std::string arena_get_compiling_expr()
+{
+  std::string r;
+  for (size_t i = 0; i < compiling_expr_stack.size(); ++i) {
+    const compiling_expr& ce = compiling_expr_stack[i];
+    std::string msg = ce.message.empty() ? "compiling" : ce.message;
+    std::string estr = ce.expr == nullptr ? "." : ce.expr->dump(0);
+    std::string tstr = ce.tm == term() ? "." : term_tostr_human(ce.tm);
+    r += get_expr_info(ce.expr) + "[" + msg + " e=" + estr + " t=" + tstr
+      + " " + ce.func + " " + ce.fname + " " + std::to_string(ce.line) + "]\n";
+  }
+  return r;
+}
+
 void arena_error_throw(const expr_i *e, const char *format, ...)
 {
   va_list ap;
@@ -292,7 +297,7 @@ void arena_error_throw(const expr_i *e, const char *format, ...)
   if (!s.empty() && s[s.size() - 1] != '\n') {
     s += "\n";
   }
-  throw std::runtime_error(get_expr_info(e) + s);
+  throw std::runtime_error(arena_get_compiling_expr() + get_expr_info(e) + s);
 }
 
 void arena_error_push(const expr_i *e, const char *format, ...)
@@ -314,7 +319,7 @@ void arena_error_push(const expr_i *e, const char *format, ...)
   va_end(ap);
   auto_free abuf(buf);
   const std::string s(buf);
-  cur_errors.push_back(get_expr_info(e) + s);
+  cur_errors.push_back(arena_get_compiling_expr() + get_expr_info(e) + s);
 }
 
 void arena_error_throw_pushed()
@@ -602,6 +607,13 @@ void arena_compile(const std::map<std::string, std::string>& prof_map,
   bool single_cc, const std::string& dest_filename, coptions& copt_apnd,
   generate_main_e gmain)
 {
+  detail_error = false;
+  {
+    auto iter = prof_map.find("detail_error");
+    if (iter != prof_map.end() && atoi(iter->second.c_str()) != 0) {
+      detail_error = true;
+    }
+  }
   compile_phase = 1;
   cur_profile = &prof_map;
   compile_mode_generate_single_cc = single_cc;
@@ -634,6 +646,7 @@ void arena_compile(const std::map<std::string, std::string>& prof_map,
   /* compile */
   compile_phase = 2;
   fn_prepare_imports();
+  fn_set_implicit_threading_attr(global);
   fn_compile(global, 0, false);
   arena_error_throw_pushed();
   compile_phase = 3;
@@ -689,6 +702,8 @@ void arena_clear()
   emit_threaded_dll_func = "";
   compiled_ns.clear();
   symbol::clear();
+  detail_error = false;
+  compiling_expr_stack.clear();
 }
 
 };

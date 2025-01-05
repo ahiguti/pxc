@@ -25,9 +25,10 @@ thread(expand(m::args{f}))
   private tfuncobj mutable fobj = tfuncobj(expand(a: m::arg_names{f}; a));
   private bool need_join = false;
   private thread_ptr thd;
+  private atomic_bool finished_flag;
   init();
   private function void init() {
-    const err = thread_create{tfuncobj}(thd, fobj);
+    const err = thread_create{tfuncobj}(thd, finished_flag, fobj);
     if (err != EOK) {
       throw runtime_error_template{"thread_create"}(to_string(err));
     }
@@ -36,17 +37,24 @@ thread(expand(m::args{f}))
   public function ~ {
     call__();
   }
+  public function bool finished() {
+    return atomic_bool_get(finished_flag);
+  }
   public function m::ret_type{f} call__() {
-    if (need_join) {
-      need_join = false;
-      const err = thread_join{tfuncobj}(thd);
-      if (err != EOK) {
-        throw runtime_error_template{"thread_join"}(to_string(err));
-      }
+    const err = join();
+    if (err != EOK) {
+      throw runtime_error_template{"thread_join"}(to_string(err));
     }
     if (m::ne{m::ret_type{f}, void}) {
       return fobj.ret.some;
     }
+  }
+  private function errno_t join() {
+    if (need_join) {
+      need_join = false;
+      return thread_join{tfuncobj}(thd);
+    }
+    return EOK;
   }
 }
 
@@ -68,19 +76,35 @@ thread_main_funcobj(expand(m::args{f}))
   }
 }
 
-private threaded struct extern "pxcrt::thread_ptr" "nonmovable" thread_ptr { }
+private threaded struct extern "::pxcrt::atomic_bool" "nonmovable"
+atomic_bool { }
 
-private threaded function extern "pxcrt::thread_create" {tfuncobj} errno_t
-thread_create(thread_ptr mutable& thd, tfuncobj mutable& funcobj);
-private threaded function extern "pxcrt::thread_join" {tfuncobj} errno_t
+private threaded function extern "::pxcrt::atomic_bool_get" bool
+atomic_bool_get(atomic_bool const& x);
+
+private threaded struct extern "::pxcrt::thread_ptr" "nonmovable"
+thread_ptr { }
+
+private threaded function extern "::pxcrt::thread_create" {tfuncobj} errno_t
+thread_create(thread_ptr mutable& thd, atomic_bool mutable& finished_flag,
+  tfuncobj mutable& funcobj);
+private threaded function extern "::pxcrt::thread_join" {tfuncobj} errno_t
 thread_join(thread_ptr mutable& thd);
 
 extern "types" inline
 
 #include <thread>
+#include <atomic>
 #include <system_error>
 
 namespace pxcrt {
+
+struct atomic_bool {
+  atomic_bool() : value(false) { }
+  std::atomic_bool value;
+  atomic_bool(atomic_bool const&) = delete;
+  atomic_bool& operator =(atomic_bool const&) = delete;
+};
 
 typedef std::thread *thread_ptr;
 
@@ -92,19 +116,26 @@ extern "functions" inline
 
 namespace pxcrt {
 
+static inline bool
+atomic_bool_get(atomic_bool const& x)
+{
+  return x.value;
+}
+
 template <typename Tfuncobj> static inline void *
-funcobj_wrap(void *arg)
+funcobj_wrap(atomic_bool *finished_flag, void *arg)
 {
   Tfuncobj *const a = static_cast<Tfuncobj *>(arg);
   a->call__$f();
+  finished_flag->value = true;
   return 0;
 }
 
 template <typename Tfuncobj> int
-thread_create(thread_ptr& thd, Tfuncobj& funcobj)
+thread_create(thread_ptr& thd, atomic_bool& finished_flag, Tfuncobj& funcobj)
 {
 #ifndef PXC_NO_THREAD
-  thd = new std::thread(&funcobj_wrap<Tfuncobj>, &funcobj);
+  thd = new std::thread(&funcobj_wrap<Tfuncobj>, &finished_flag, &funcobj);
 #endif
   return 0;
 }
@@ -112,10 +143,19 @@ thread_create(thread_ptr& thd, Tfuncobj& funcobj)
 template <typename Tfuncobj> int
 thread_join(thread_ptr& thd)
 {
+  int r = 0;
   if (thd) {
-    thd->join();
+    try {
+      thd->join();
+    } catch (std::system_error const& ex) {
+      r = ex.code().value();
+    } catch (...) {
+      r = -1;
+    }
   }
-  return 0;
+  delete thd;
+  thd = nullptr;
+  return r;
 }
 
 };

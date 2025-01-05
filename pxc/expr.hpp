@@ -34,6 +34,7 @@ enum attribute_e {
   attribute_valuetype      = 16,
   attribute_tsvaluetype    = 32,
   attribute_pure           = 64,
+  attribute_ephemeral      = 128,
 };
 
 enum passby_e {
@@ -89,11 +90,6 @@ expr_i *expr_for_new(const char *fn, int line, expr_i *e0, expr_i *e1,
 expr_i *expr_forrange_new(const char *fn, int line, expr_i *r0, expr_i *r1,
   expr_i *block);
 expr_i *expr_feach_new(const char *fn, int line, expr_i *ce, expr_i *block);
-expr_i *expr_fldfe_new(const char *fn, int line, const char *namesym,
-  const char *fldsym, const char *idxsym, expr_i *te, expr_i *stmts);
-expr_i *expr_foldfe_new(const char *fn, int line, const char *itersym,
-  expr_i *valueste, const char *embedsym, expr_i *embedexpr,
-  const char *foldop, expr_i *stmts);
 expr_i *expr_expand_new(const char *fn, int line, expr_i *callee,
   const char *itersym, const char *idxsym, expr_i *valueste, expr_i *baseexpr,
   expand_e ex, expr_i *rest);
@@ -123,15 +119,16 @@ expr_i *expr_add_te(const char *fn, int line, expr_i *expr, expr_i *te);
 
 /* TODO: move to parser.hpp */
 struct checksum_type {
-  time_t timestamp;
+  time_t timestamp = 0;
+  unsigned hdrbdy_mask = 0;
   std::string md5sum;
   bool operator ==(const checksum_type& x) const {
-    return timestamp == x.timestamp && md5sum == x.md5sum;
+    return timestamp == x.timestamp && hdrbdy_mask == x.hdrbdy_mask &&
+      md5sum == x.md5sum;
   }
   bool operator !=(const checksum_type& x) const {
     return !(*this == x);
   }
-  checksum_type() : timestamp(0) { }
 };
 
 struct import_info {

@@ -23,42 +23,42 @@
 namespace pxc {
 
 enum expr_e {
-  expr_e_te,
+  expr_e_te, // 0
   expr_e_telist,
   expr_e_inline_c,
   expr_e_ns,
   expr_e_nsmark,
-  expr_e_int_literal,
+  expr_e_int_literal, // 5
   expr_e_float_literal,
   expr_e_bool_literal,
   expr_e_str_literal,
   expr_e_symbol,
-  expr_e_nssym,
+  expr_e_nssym, // 10
   expr_e_var,
   expr_e_enumval,
   expr_e_stmts,
   expr_e_block,
-  expr_e_op,
+  expr_e_op, // 15
   expr_e_funccall,
   expr_e_if,
   expr_e_while,
   expr_e_for,
-  expr_e_forrange,
+  expr_e_forrange, // 20
   expr_e_feach,
   expr_e_fldfe,
   expr_e_foldfe,
   expr_e_expand,
-  expr_e_special,
+  expr_e_special, // 25
   expr_e_argdecls,
   expr_e_funcdef,
   expr_e_typedef,
   expr_e_metafdef,
-  expr_e_struct,
+  expr_e_struct, // 30
   expr_e_dunion,
   expr_e_interface,
   expr_e_try,
   expr_e_throw,
-  expr_e_tparams,
+  expr_e_tparams, // 35
 };
 
 struct expr_block;
@@ -90,12 +90,12 @@ struct localvar_info {
 };
 
 struct ext_pragma {
-  bool disable_bounds_checking : 1;
-  bool disable_noheap_checking : 1;
+  bool disable_bounds_check : 1;
+  bool disable_ephemeral_check : 1;
   bool disable_container_guard : 1;
   bool trace_meta : 1;
-  ext_pragma() : disable_bounds_checking(false),
-    disable_noheap_checking(false), disable_container_guard(false),
+  ext_pragma() : disable_bounds_check(false),
+    disable_ephemeral_check(false), disable_container_guard(false),
     trace_meta(false) { }
 };
 
@@ -141,6 +141,7 @@ public:
   void clear_symbols();
   int generate_tempvar();
 private:
+  void check_duplicated_name(const symbol& name, expr_i *e);
   localvar_info resolve_name_nothrow_internal(const symbol& fullname,
     const symbol& curns, expr_i *e, bool memfld_only, bool memfld_nogen,
     bool& is_global_r, bool& is_upvalue_r, bool& is_memfld_r);

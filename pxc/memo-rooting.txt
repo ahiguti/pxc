@@ -1,0 +1,280 @@
+
+----------------------------------------------
+rooting関連の現状の動作(2024/09/22)
+
+型チェックのフェーズで、プログラム全体のexprに対してcheck_type()を呼ぶと、
+それぞれの型のcheck_type()の実装が子要素についても再帰的にcheck_type()を
+呼ぶ。check_type()の実装は必要なときにadd_root_requirement()を呼ぶ。
+
+void add_root_requirement(expr_i *e, passby_e passby, bool blockscope_flag)
+{
+  // この関数は、式eが現在の文(blockscope_flag==falseのとき)またはブロック
+  // (blockscope_flag=trueのとき)の終端まで有効性を維持するためにどのような
+  // 処理が必要であるかを調べる。
+
+  // まず式eに変換が付随しているか確認する。
+  if (コンテナからrangeへの変換が式eに付随している) {
+    eに対しコンテナ要素のrootを要求。
+  } else if (なんらかの変換が式eに付随している) {
+    if (passbyがmutable参照渡し) {
+      エラー "Can not root by mutable reference because of conversion"
+    }
+  }
+
+  // 式eの種類によって場合分け。
+  if (eがfunccall式) {
+    if (eの型(関数の返す型)がnoheap型) {
+      if (関数がメンバ関数呼び出しの形式) {
+        呼び出し対象thisに対しコンテナ要素rootを要求。
+        (これは呼び出し対象がコンテナの中身かもしれないから。)
+        呼び出し対象thisがconst/mutable参照渡しされるのでroot要求。
+        return;
+      }
+#if 0
+      if (呼び出された関数が非extern, non-memberで!disable_noheap_checking) {
+        内部エラーを投げる。
+      }
+#endif
+      for (関数の各引数について) {
+        if (その引数がコンテナ型) {
+          その引数に対してコンテナ要素rootを要求。
+        }
+        その引数に対してrootを要求。(ここのpassbyはこれでよいのか？)
+      }
+    }
+    if (eがreferenceを返す関数呼び出し) {
+      if (呼び出し対象がメンバ関数) {
+        if (明示的thisがある) {
+          呼び出しのthisをrootを要求。
+        } else {
+          暗黙のthisはroot不要。
+        }
+      } else { // 呼び出し対象がメンバ関数ではない
+        if (明示的引数が複数ある) {
+          エラー。
+        }
+        if (引数がある) {
+          最初の引数をroot要求。
+        }
+        if (引数は無い、非明示のthisがある) {
+          非明示のthisをroot要求。
+        }
+      }
+    }
+    if (passbyがconst/mutable参照渡し && blockscope) {
+      一時変数を作ることによってrootする。
+    }
+    return; // eがfunccall式のとき
+  }
+  if (eが演算子適用ではない) {
+    return;
+  }
+  switch (演算子の種類) {
+  case ',':
+    左辺右辺のrootを要求(eに対する要求と同一のpassbyやblockscope)。
+    return;
+  case '='または副作用を持つ代入演算子:
+    if (演算子が'=' かつ 左辺が変数定義) {
+      return;
+    } else {
+      左辺をmutable referenceのroot要求。
+      右辺をconst valueのroot要求。
+      return;
+    }
+  case '.'または"->":
+    if (左辺がdunion) {
+      if (passby mutable reference) {
+        エラー。
+      } else {
+        一時変数をpassby const value, no guard_elementsで作る。
+      }
+    } else /* 左辺がstruct */ {
+      左辺をroot要求。
+    }
+    return;
+  case 参照外しの'*':
+    if (左辺がrange) {
+      左辺をconst valueでroot要求。
+    } else if (左辺がguard) {
+      左辺をconst valueでroot要求。
+    } else /* ポインタ */ {
+      左辺の一時変数をconst valueで作る。型にguard elementsがあれば
+      guard_elementsを指定。
+    }
+    return;
+  case '[':
+    if (左辺がrange) {
+      passby const valueで左辺をroot要求。
+    } else /* 左辺がコンテナ*/ {
+      if (passby const) {
+        passby const referenceでroot要求。
+      } else {
+        passby mutable referenceでroot要求。
+      }
+    }
+    if (passby cm referenceであるかrangeを返す式) {
+      コンテナの要素root要求。
+    } else {
+      一時変数をpassby value, no guard_elementsで作る。
+    }
+    return;
+  case '(':
+    中身を外見と同一条件でroot要求。
+    return;
+  }
+  /* ここに到達するのは値を返す演算子 */
+  if (passby mutable reference) {
+    エラーにする。
+  }
+  bool child_blockscope_flag = blockscope_flag;
+    // 子exprもblockscopeでrootする必要があるかどうか
+  if (blockscope_flag) {
+    一時変数をpassby value, no guard_elementsで作る。
+    if (opが'?'でnoheap型を返す) {
+      エラー。第二第三exprを文評価前に一時変数に置くと評価順序が変わるから。
+    }
+    child_blockscope_flag = false;
+  }
+  arg0をpassby value, child_blockscope_flagでroot要求する。
+  if (opが'?'のとき) {
+    eop->arg1->arg0をpassby value, child_blockscope_flag(==false)でroot要求。
+    eop->arg1->arg1をpassby value, child_blockscope_flag(==false)でroot要求。
+  } else /* それ以外の演算子 */ {
+    arg1をpassby value, child_blockscope_flagでroot要求する。
+  }
+}
+
+----------------------------------------------
+メモ: noheapの寿命
+
+function void append(varray{slice{int}}& x, varray{slice{int}} const& y)
+{
+  for (size_t i, const& e: y) {
+    x.push_back(e);
+  }
+}
+これがだめな理由: yに入っているsliceがxの寿命より短いことがありうる。
+{
+  varray{slice{int}} x = { };
+  {
+    varray{int} z;
+    varray{slice{int}} y = { z };
+    append(x, y);
+  }
+  // ここでxに寿命切れのエントリであるzが入っている
+}
+
+---整理1
+・noheap型の代入はlhsの寿命がrhsより小さいか同じときのみ可能。
+・noheap型のreturnは関数ブロックより大きい寿命のときのみ可能。
+・関数呼び出し式の寿命はnoheap引数の最も短いもの。
+・関数呼び出し式のmutable参照引数はnoheap引数の最も短いものより大きいと不可。
+・structのnoheap型fieldはstruct自身と同じ寿命を持つ。
+・noheap関数引数は一つ上のブロックの寿命を持つ。
+・noheap変数を空定義すると定義したブロックの一つ上のブロックの寿命を持つ。
+・noheap変数を代入定義するとrhsと同じ寿命を持つ。
+
+---整理2
+・expr_iにsymbol_table *escapableフィールドをもたせる。escapableのブロックを
+  抜けてもnoheap型の値が無効化されないこと、escapableより上のブロックから抜
+  けると無効化されることがあることを示す。
+・noheap型の代入はlhsのescがrhsのescより小さいか同じときのみ可能。
+・noheap型のreturnは式のescがnullでないときのみ可能。
+・関数呼び出し式のescはnoheap引数のescのうち最も短いもの。
+・関数のnoheap引数がmutable参照渡しのときはその引数は関数呼び出し式のescより
+  小さいか同じでないといけない(代入の制約と同様)。
+・structのfieldがnoheap型のとき、そのfieldはstructと同じescapable値を持つ。
+・unionのfieldもstructと同様。
+・noheap関数引数のescapable値は、呼ばれた側のブロック(のsymbol_table)。
+・noheap変数をrhs無しに定義するとそのブロックが変数のescapable値。
+・noheap変数を代入定義するとrhsと同じescapable値を持つ。
+・structとその直接のメンバ関数はescapable値としては同一(structとそのfieldは
+  同じ寿命を持つから)。代表としてメンバ関数のほうをescapable値にセットする。
+・(確認)globalスコープにはnoheap型変数を置けるのか？
+
+
+---実装方針
+- expr_i::check_typeの中で、各exprにセットするescapable値を計算する。
+  - expr_argdecls: 定義したblockがescapable値。(done)
+  - expr_var: rhsあるならそのrhsのescapable値、無いなら定義block。(done)
+  - expr_symbol: シンボル定義(expr_varかexpr_argdecls)のblockがescapable値。
+    (done)
+  - expr_funccall: 引数の最も小さいescapable値。引数が無いときは自分のblock。
+    (done)
+  - expr_op: フィールド参照のときは'.'の左辺のescapable値。それ以外のopはnull。
+    (done)
+- 正当性確認
+  - expr_funccall: mutable reference渡し引数の代入が小さい方へ代入しているか。
+    (done)
+  - expr_op: 定義ではない代入が小さいほうへ代入しているか。(done)
+  - return式: escapableがnullならエラー。(done)
+
+----------------------------------------------
+変更後
+
+- (無変更)コンテナのメンバ関数がnoheapを返すとき、そのコンテナを要素rootする。
+  これはコンテナのrange()メンバ関数が要素rootを必要とするから。そのような
+  メンバ関数はc++でしか実装できない。
+  - 仕様に明示すべし: noheapを返す関数を呼ぶと、明示的thisと
+  - この仕様は廃止できないか？ メンバ関数のrange()以外に必要か？
+
+
+----------------------------------------------
+メモ: expr_i::conv の変換
+
+  conversion_e_none,
+  conversion_e_cast,
+  conversion_e_implicit, /* calls convert_implicit{foo, bar} */
+  conversion_e_subtype_obj, /* foo to ifoo etc. converted value has lvalue. */
+  conversion_e_subtype_ptr, /* ptr{foo} to cptr{foo} etc. */
+  conversion_e_container_range, /* vector{foo} to range{foo} etc. */
+  conversion_e_boxing,
+
+convert_type_internal() でセットしている。
+
+    efrom->conv = conversion_e_cast;
+    efrom->type_conv_to = tconvto;
+
+    efrom->conv = conversion_e_subtype_obj;
+    // type_conv_toはここではセットしない。
+
+    efrom->conv = conversion_e_implicit;
+    efrom->type_conv_to = tconvto;
+    efrom->implicit_conversion_func = cf;
+
+    efrom->conv = conversion_e_subtype_ptr;
+    efrom->type_conv_to = tconvto;
+
+    efrom->conv = conversion_e_container_range;
+
+---やりなおし 整理3
+・expr_iにsymbol_table *noheap_scopeをつける。noheap_scopeのブロックを抜け
+  ると無効化されることがあることを示す。複文ブロックの間の代入についても
+  寿命チェックするためにはnoheapなすべての変数にnullではないscopeを記録する
+  必要が有る。
+・noheap型のreturnは式のscopeが関数ブロックより大きいときのみ可能。
+・関数呼び出し式のscopeはnoheap引数のscopeのうち最も短いもの。
+  ・ただし関数引数が無い呼び出しのときはglobal scope。
+  ・引数が有るがnoheapのものが無いときはlexical scope。
+・関数のnoheap引数がmutable参照渡しのときはその引数は関数呼び出し式のscopeより
+  小さいか同じでないといけない(代入の制約と同様)。
+・noheapの式x.yはxと同じscopeを持つ。
+・noheapの式(x)はxと同じscopeを持つ。
+・noheapの代入=でlhsがvarでないならlhsのscopeがrhsのscopeより小さいか同じとき
+  のみ可能。
+・noheapの代入=でlhsがvarならその変数のscopeはrhsのscope値をセットする。
+・代入のないvarならその変数のscopeは関数の一つ上。あるいはlexicalにするか？
+・argdeclのscopeは関数の一つ上。
+
+
+---やりなおし 整理4
+- phase2: ephemeralなexprがnon-ephemeralな引数だけを持つとき、exprがblockscope
+  なrootされているときのみexprのscopeをそのblockにする。blockscopeでrootされて
+  いないならexprのscopeはnullにする。
+  - 後者のケースありうるのか？
+    - 返値の無い関数呼び出しの引数式にa[..]という式があると、a[..]はstatement
+      scopeでrootされる。
+- FIXME: ephemeral typeのときはchild_blockscope_flag = falseにしないことが
+  正しいことをテストで確認。
+
+

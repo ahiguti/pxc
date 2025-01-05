@@ -4,22 +4,24 @@ import core::common -;
 
 function void test2(cslice{int} mutable& s1, cslice{int} mutable& s2)
 {
-  s2 = s1; // wrong because s1 refers to f and s2 refers to g
+  s2 = s1; // ok
 }
 
 function void test1() {
   varray{int} f;
   varray{int} g;
-  f.resize(100);
+  f.resize(10, 0);
   int i;
-  for (i = 0; i < 100; ++i) { f[i] = i * 2; }
-  g.resize(100);
+  for (i = 0; i < 10; ++i) { f[static_cast{size_t}(i)] = i * 2; }
+  g.resize(10, 0);
   int j;
-  for (j = 0; j < 100; ++j) { g[j] = j * 3; }
+  for (j = 0; j < 10; ++j) { g[static_cast{size_t}(j)] = j * 3; }
   {
-    cslice{int} s1 = f[0..50];
-    cslice{int} s2 = g[50..100];
+    cslice{int} s1 = f[0..5];
+    cslice{int} s2 = g[5..10];
+    thread_io().stdout().println(s2); // shows g[5..10]
     test2(s1, s2);
+    thread_io().stdout().println(s2); // shows f[0..5]
   }
 }
 

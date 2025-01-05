@@ -62,6 +62,15 @@ template <typename T> struct unique_vector {
   size_type size() const { return v.size(); }
 };
 
+struct compiling_expr {
+  std::string message;
+  expr_i *expr = nullptr;
+  term tm;
+  const char *func = nullptr;
+  const char *fname = nullptr;
+  int line = -1;
+};
+
 struct expr_te;
 
 typedef std::list<expr_i *> expr_arena_type;
@@ -70,6 +79,7 @@ typedef std::list<expr_i *> topvals_type;
 typedef std::map<std::string, imports_type> loaded_namespaces_type;
 typedef std::list<std::string> errors_type;
 typedef std::map<std::string, term> tvmap_type;
+typedef std::vector<compiling_expr> compiling_expr_stack_type;
 
 
 struct builtins_type {
@@ -123,15 +133,11 @@ enum term_tostr_sort {
 enum conversion_e {
   conversion_e_none,
   conversion_e_cast,
-  #if 0
-  conversion_e_to_string,
-  conversion_e_from_string,
-  #endif
   conversion_e_implicit, /* calls convert_implicit{foo, bar} */
   conversion_e_subtype_obj, /* foo to ifoo etc. converted value has lvalue. */
   conversion_e_subtype_ptr, /* ptr{foo} to cptr{foo} etc. */
   conversion_e_container_range, /* vector{foo} to range{foo} etc. */
-  conversion_e_boxing,
+  conversion_e_boxing, /* unused */
 };
 
 enum call_trait_e {
@@ -239,12 +245,11 @@ typedef std::map<symbol, symbol_list> nsextends_type;
 struct symbol_common {
   symbol_common(expr_i *parent_expr)
     : parent_expr(parent_expr), upvalue_flag(false),
-      symtbl_defined(0), arg_hidden_this(0), generic_invoke_flag(false),
+      arg_hidden_this(0), generic_invoke_flag(false),
       symbol_def(0) { }
   symbol uniqns;
   expr_i *parent_expr;
   bool upvalue_flag : 1;
-  symbol_table *symtbl_defined; // FIXME: remove
   expr_i *arg_hidden_this;
   symbol arg_hidden_this_ns;
 public:
@@ -285,6 +290,14 @@ struct inline_c_element {
   expr_te *te;
 };
 
+struct call_argtype {
+  call_argtype(expr_i *e0, passby_e p0, bool writeonly0 = false)
+    : arg_expr(e0), arg_passby(p0), writeonly(writeonly0) { }
+  expr_i *const arg_expr;
+  const passby_e arg_passby;
+  bool writeonly;
+};
+
 struct expr_i {
   expr_i(const char *fn, int line);
   virtual ~expr_i() { }
@@ -296,6 +309,7 @@ struct expr_i {
   virtual void set_child(int i, expr_i *e) = 0;
   virtual expr_block *get_template_block() { return 0; }
   virtual std::string dump(int indent = 0) const = 0;
+  virtual bool equals(expr_i *x) const = 0;
   virtual symbol_common *get_sdef() { return 0; }
   virtual term& resolve_texpr() { return type_of_this_expr; }
   virtual void set_texpr(const term& t);
@@ -340,6 +354,7 @@ public:
   int tempvar_id;
   variable_info tempvar_varinfo;
   bool generated_flag : 1; /* this expr is generated using expand */
+  symbol_table *ephemeral_scope;
 };
 
 struct expr_te : public expr_i {
@@ -359,6 +374,7 @@ public:
   bool is_term_literal() const;
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
   virtual symbol_common *get_sdef() { return &sdef; }
   const expr_i *get_symdef() const;
   expr_i *resolve_symdef(symbol_table *lookup);
@@ -390,6 +406,7 @@ public:
   bool is_expression() const { return true; }
   void emit_value(emit_context& em) { }
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   expr_i *head;
   expr_telist *rest;
@@ -416,6 +433,7 @@ struct expr_inline_c : public expr_i {
   bool is_expression() const { return false; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   const std::string posstr;
   const char *const cstr;
@@ -447,6 +465,7 @@ struct expr_ns : public expr_i {
   bool is_expression() const { return false; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   expr_i *uniq_nssym;
   const std::string uniq_nsstr;
@@ -471,6 +490,7 @@ struct expr_nsmark : public expr_i {
   bool is_expression() const { return false; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   std::string uniqns;
   const bool end_mark;
@@ -493,6 +513,7 @@ struct expr_int_literal : public expr_i {
   bool is_expression() const { return true; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   const char *const str;
   bool is_unsigned; /* true if this expr is of unsigned type. */
@@ -511,6 +532,7 @@ struct expr_float_literal : public expr_i {
   bool is_expression() const { return true; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   const char *const str;
 };
@@ -528,6 +550,7 @@ struct expr_bool_literal : public expr_i {
   bool is_expression() const { return true; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   const int value;
 };
@@ -545,6 +568,7 @@ struct expr_str_literal : public expr_i {
   bool is_expression() const { return true; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   const char *const raw_value; /* escaped */
   bool valid_flag;
@@ -563,6 +587,7 @@ struct expr_nssym : public expr_i {
   bool is_expression() const { return true; }
   void emit_value(emit_context& em) { }
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   expr_i *prefix;
   const char *const sym;
@@ -590,6 +615,7 @@ struct expr_symbol : public expr_i {
   expr_i *resolve_symdef(symbol_table *lookup);
   void set_symdef(expr_i *e) { sdef.set_symdef(e); }
   term& resolve_texpr();
+  bool equals(expr_i *x) const;
 public:
   expr_nssym *nssym;
   symbol_common sdef;
@@ -620,6 +646,7 @@ struct expr_var : public expr_i {
   void emit_symbol(emit_context& em) const;
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   const char *sym;
   expr_te *type_uneval;
@@ -662,6 +689,7 @@ struct expr_enumval : public expr_i {
   // void emit_cdecl(emit_context& em, bool is_argdecl) const;
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   const char *sym;
   expr_te *type_uneval;
@@ -712,6 +740,7 @@ struct expr_stmts : public expr_i {
   bool emit_local_decl_fastinit(emit_context& em);
   void emit_local_decl(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   // asgnstmt_list asts;
   expr_i *head;
@@ -735,6 +764,7 @@ struct expr_tparams : public expr_i {
     symtbl_lexical->define_name(sym, "", this, attribute_private, 0);
   }
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
   void check_type(symbol_table *lookup) { }
   bool has_expr_to_emit() const { return true; }
   bool is_expression() const { return true; }
@@ -774,6 +804,7 @@ struct expr_argdecls : public expr_i {
   void emit_symbol(emit_context& em) const;
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   const char *sym;
   std::string uniqns;
@@ -820,6 +851,7 @@ struct expr_block : public expr_i {
   void emit_local_decl(emit_context& em, bool is_funcbody);
   void emit_memberfunc_decl(emit_context& em, bool pure_virtual);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
   typedef std::vector<expr_i *> inherit_list_type;
   inherit_list_type& resolve_inherit_transitive();
 public:
@@ -851,14 +883,17 @@ struct expr_op : public expr_i {
   }
   void set_unique_namespace_one(const std::string& u, bool allow_unsafe);
   void check_type(symbol_table *lookup);
+  void check_type_phase1(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
   bool is_expression() const { return true; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   int op;
   std::string extop; /* "placement-new" for example */
   expr_i *arg0, *arg1;
+  std::vector<call_argtype> phase1_argtypes;
 };
 
 struct expr_funccall : public expr_i {
@@ -875,10 +910,12 @@ struct expr_funccall : public expr_i {
     uniqns = u; }
   std::string get_unique_namespace() const { return uniqns; }
   void check_type(symbol_table *lookup);
+  void check_type_phase1(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
   bool is_expression() const { return true; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   expr_i *func;
   expr_i *arg;
@@ -889,6 +926,7 @@ public:
     /* if nonnull, this term is emitted instead of the original one for some
      * reason */
   #endif
+  std::vector<call_argtype> phase1_argtypes;
 };
 
 struct expr_special : public expr_i {
@@ -906,6 +944,7 @@ struct expr_special : public expr_i {
   bool is_expression() const { return false; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   const int tok;
   expr_i *arg;
@@ -936,6 +975,7 @@ struct expr_if : public expr_i {
   bool is_expression() const { return false; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   expr_i *cond;
   expr_block *block1; /* then */
@@ -960,6 +1000,7 @@ struct expr_while : public expr_i {
   bool is_expression() const { return false; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   expr_i *cond;
   expr_block *block;
@@ -990,6 +1031,7 @@ struct expr_for : public expr_i {
   bool is_expression() const { return false; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   expr_i *e0;
   expr_i *e1;
@@ -1020,6 +1062,7 @@ struct expr_forrange : public expr_i {
   bool is_expression() const { return false; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   expr_i *r0;
   expr_i *r1;
@@ -1046,77 +1089,10 @@ struct expr_feach : public expr_i {
   bool is_expression() const { return false; }
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   expr_i *ce;
   expr_block *block;
-};
-
-// FIXME: remove
-struct expr_fldfe : public expr_i {
-  expr_fldfe(const char *fn, int line, const char *namesym,
-    const char *fldsym, const char *idxsym, expr_i *te, expr_i *stmts);
-  expr_i *clone() const { return new expr_fldfe(*this); }
-  expr_e get_esort() const { return expr_e_fldfe; }
-  int get_num_children() const { return 2; }
-  expr_i *get_child(int i) {
-    if (i == 0) { return te; }
-    if (i == 1) { return stmts; }
-    return 0;
-  }
-  void set_child(int i, expr_i *e) {
-    if (i == 0) { te = ptr_down_cast<expr_te>(e); }
-    if (i == 1) { stmts = ptr_down_cast<expr_stmts>(e); }
-  }
-  void set_unique_namespace_one(const std::string& u, bool allow_unsafe) {
-    uniqns = u; }
-  std::string get_unique_namespace() const { return uniqns; }
-  void check_type(symbol_table *lookup);
-  bool has_expr_to_emit() const { return true; }
-  bool is_expression() const { return false; }
-  void emit_value(emit_context& em);
-  std::string dump(int indent) const;
-public:
-  std::string uniqns;
-  const char *namesym;
-  const char *fldsym;
-  const char *idxsym;
-  expr_te *te;
-  expr_stmts *stmts;
-};
-
-// FIXME: remove
-struct expr_foldfe : public expr_i {
-  expr_foldfe(const char *fn, int line, const char *itersym,
-    expr_i *valueste, const char *embedsym, expr_i *embedexpr,
-    const char *foldop, expr_i *stmts);
-  expr_i *clone() const { return new expr_foldfe(*this); }
-  expr_e get_esort() const { return expr_e_foldfe; }
-  int get_num_children() const { return 2; }
-  expr_i *get_child(int i) {
-    if (i == 0) { return valueste; }
-    if (i == 1) { return stmts; }
-    return 0;
-  }
-  void set_child(int i, expr_i *e) {
-    if (i == 0) { valueste = ptr_down_cast<expr_te>(e); }
-    if (i == 1) { stmts = ptr_down_cast<expr_stmts>(e); }
-  }
-  void set_unique_namespace_one(const std::string& u, bool allow_unsafe) {
-    uniqns = u; }
-  std::string get_unique_namespace() const { return uniqns; }
-  void check_type(symbol_table *lookup);
-  bool has_expr_to_emit() const { return true; }
-  bool is_expression() const { return false; }
-  void emit_value(emit_context& em);
-  std::string dump(int indent) const;
-public:
-  std::string uniqns;
-  const char *itersym;
-  expr_te *valueste;
-  const char *embedsym;
-  expr_i *embedexpr;
-  const char *foldop;
-  expr_stmts *stmts;
 };
 
 struct expr_expand : public expr_i {
@@ -1147,6 +1123,7 @@ struct expr_expand : public expr_i {
   bool is_expression() const { return false; }
   void emit_value(emit_context& em) { }
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   std::string uniqns;
   const char *itersym;
@@ -1211,6 +1188,7 @@ struct expr_funcdef : public expr_i {
   void emit_symbol(emit_context& em) const;
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
   bool is_c_defined() const { return cnamei.has_cname() && no_def; }
 public:
   const char *sym;
@@ -1218,6 +1196,7 @@ public:
   cname_info cnamei;
   // const char *cname;
     /* can be modified if this function overrides a function with cname */
+  const char *copt;
   bool is_const;
 private:
   term rettype_eval;
@@ -1271,12 +1250,12 @@ struct expr_typedef : public expr_i {
   void emit_symbol(emit_context& em) const;
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   const char *const sym;
   std::string uniqns;
   cname_info cnamei;
-  // const char *const cname;
-  const char *const typefamily_str; // TODO: unused
+  const char *const typefamily_str;
   bool is_enum : 1;
   bool is_bitmask : 1;
   expr_enumval *enumvals;
@@ -1284,7 +1263,7 @@ public:
   attribute_e attr;
   type_attribute tattr;
   term value_texpr;
-  typefamily_e typefamily; // TODO: unused
+  typefamily_e typefamily;
 };
 
 struct expr_metafdef : public expr_i {
@@ -1317,6 +1296,7 @@ struct expr_metafdef : public expr_i {
   void emit_symbol(emit_context& em) const;
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
   expr_tparams *get_tparams() const { return block->tinfo.tparams; }
   expr_i *get_rhs() const { return block->stmts->head; }
   bool has_name() const {
@@ -1363,6 +1343,7 @@ struct expr_struct : public expr_i {
   void emit_symbol(emit_context& em) const;
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
   bool has_userdefined_constr() const;
 public:
   const char *sym;
@@ -1410,6 +1391,7 @@ struct expr_dunion : public expr_i {
   void emit_symbol(emit_context& em) const;
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   const char *sym;
   std::string uniqns;
@@ -1450,6 +1432,7 @@ struct expr_interface : public expr_i {
   void emit_symbol(emit_context& em) const;
   void emit_value(emit_context& em);
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
 public:
   const char *const sym;
   expr_symbol *impl_st;
@@ -1479,6 +1462,7 @@ struct expr_try : public expr_i {
     else if (i == 2) { rest = ptr_down_cast<expr_try>(e); }
   }
   std::string dump(int indent) const;
+  bool equals(expr_i *x) const;
   void check_type(symbol_table *lookup);
   bool has_expr_to_emit() const { return true; }
   bool is_expression() const { return false; }

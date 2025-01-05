@@ -17,14 +17,22 @@
 #include <string>
 #include <set>
 #include <deque>
+#include <memory>
 #include "expr.hpp"
 
 namespace pxc {
 
+struct source_file_content {
+  std::string content;
+  std::deque<std::pair<std::string, size_t>> fragment_sizes;
+};
+
+typedef std::shared_ptr<source_file_content> source_file_content_ptr;
+
 struct source_file_info {
   std::string filename;
   std::string filename_trim;
-  std::string content;
+  source_file_content_ptr content;
 };
 
 typedef std::set<std::string> strset;

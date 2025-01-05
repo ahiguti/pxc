@@ -14,7 +14,7 @@ public import core::meta::family mf;
 
 /* public */
 
-public pure tsvaluetype struct extern "::pxcrt::bt_slice" "slice" {t}
+public ephemeral tsvaluetype struct extern "::pxcrt::bt_slice" "slice" {t}
 slice {
   public metafunction key_type size_t;
   public metafunction mapped_type t;
@@ -33,7 +33,7 @@ slice {
   public function extern "crange" crange_type crange() const;
 }
 
-public pure tsvaluetype struct extern "::pxcrt::bt_cslice" "cslice" {t}
+public ephemeral tsvaluetype struct extern "::pxcrt::bt_cslice" "cslice" {t}
 cslice {
   public metafunction key_type size_t;
   public metafunction mapped_type t;
@@ -162,7 +162,7 @@ cdarray(size_t len, t const& value) {
   public function extern "crange" crange_type crange() const;
 }
 
-public pure tsvaluetype struct extern "::pxcrt::darrayst" "darrayst" {t}
+public ephemeral tsvaluetype struct extern "::pxcrt::darrayst" "darrayst" {t}
 darrayst(size_t len, t const& value) {
   public metafunction key_type size_t;
   public metafunction mapped_type t;
@@ -175,7 +175,7 @@ darrayst(size_t len, t const& value) {
   public function extern "crange" crange_type crange() const;
 }
 
-public pure tsvaluetype struct extern "::pxcrt::darrayst" "cdarrayst" {t}
+public ephemeral tsvaluetype struct extern "::pxcrt::darrayst" "cdarrayst" {t}
 cdarrayst(size_t len, t const& value) {
   public metafunction key_type size_t;
   public metafunction mapped_type t;
@@ -188,7 +188,7 @@ cdarrayst(size_t len, t const& value) {
   public function extern "crange" crange_type crange() const;
 }
 
-public pure tsvaluetype struct extern "::pxcrt::deque_slice" "slice" {t}
+public ephemeral tsvaluetype struct extern "::pxcrt::deque_slice" "slice" {t}
 deque_slice {
   public metafunction key_type size_t;
   public metafunction mapped_type t;
@@ -206,7 +206,7 @@ deque_slice {
   public function extern "crange" crange_type crange() const;
 }
 
-public pure tsvaluetype struct extern "::pxcrt::deque_cslice" "cslice" {t}
+public ephemeral tsvaluetype struct extern "::pxcrt::deque_cslice" "cslice" {t}
 deque_cslice {
   public metafunction key_type size_t;
   public metafunction mapped_type t;
@@ -288,19 +288,16 @@ public metafunction make_deque{typ, tlist}
 public metafunction make_cdeque{typ, tlist}
   make_cdeque_func{typ, m::size{tlist}};
 
-public pure function {n, tc, tv} farray{m::symbol{tc, "crange_type"}, n}
+public pure function {n, tc, tv} farray{tc, n}
 make_farray_split(tc const& c, tv const& v)
 {
   metafunction key_type m::symbol{tc, "key_type"};
   metafunction mapped_type m::symbol{tc, "mapped_type"};
-  metafunction crange_type m::symbol{tc, "crange_type"};
-  extern "disable-noheap-checking" 1;
-  farray{crange_type, n} arr;
+  farray{tc, n} arr;
   key_type mutable p;
   for (size_t i : 0 .. n) {
     key_type const pend = find_mapped{tc, key_type, mapped_type}(c, p, v);
-    extern "disable-bounds-checking" 1;
-    extern "disable-noheap-checking" 1;
+    extern "disable-bounds-check" 1;
     arr[i] = c[p .. pend];
     if (pend == c.size()) {
       break;
@@ -310,51 +307,46 @@ make_farray_split(tc const& c, tv const& v)
   return arr;
 }
 
-public pure function {tc, tv} darray{m::symbol{tc, "crange_type"}}
+public pure function {tc, tv} darray{tc}
 make_darray_split(tc const& c, tv const& v)
 {
   metafunction key_type m::symbol{tc, "key_type"};
   metafunction mapped_type m::symbol{tc, "mapped_type"};
-  metafunction crange_type m::symbol{tc, "crange_type"};
   size_t cnt = 1;
   for (const i, const m : c) {
     if (m == v) {
       ++cnt;
     }
   }
-  extern "disable-noheap-checking" 1;
-  mutable arr = darray{crange_type}(cnt, crange_type());
+  extern "disable-ephemeral-check" 1;
+  mutable arr = darray{tc}(cnt, tc());
   key_type mutable p;
   for (size_t i : 0 .. cnt) {
     key_type const pend = find_mapped{tc, key_type, mapped_type}(c, p, v);
-    extern "disable-bounds-checking" 1;
-    extern "disable-noheap-checking" 1;
+    extern "disable-bounds-check" 1;
     arr[i] = c[p .. pend];
     p = pend + 1;
   }
   return arr;
 }
 
-public pure function {tc, tv} varray{m::symbol{tc, "crange_type"}}
+public pure function {tc, tv} varray{tc}
 make_varray_split(tc const& c, tv const& v)
 {
   metafunction key_type m::symbol{tc, "key_type"};
   metafunction mapped_type m::symbol{tc, "mapped_type"};
-  metafunction crange_type m::symbol{tc, "crange_type"};
   size_t cnt = 1;
   for (const i, const m : c) {
     if (m == v) {
       ++cnt;
     }
   }
-  extern "disable-noheap-checking" 1;
-  varray{crange_type} mutable arr;
-  arr.resize(cnt, crange_type());
+  varray{tc} mutable arr;
+  arr.resize(cnt, tc());
   key_type mutable p;
   for (size_t i : 0 .. cnt) {
     key_type const pend = find_mapped{tc, key_type, mapped_type}(c, p, v);
-    extern "disable-bounds-checking" 1;
-    extern "disable-noheap-checking" 1;
+    extern "disable-bounds-check" 1;
     arr[i] = c[p .. pend];
     p = pend + 1;
   }
@@ -369,7 +361,7 @@ reverse(t const& x)
   size_type s = 0;
   size_type f = x.size();
   while (s < f) {
-    extern "disable-bounds-checking" 1;
+    extern "disable-bounds-check" 1;
     --f;
     mapped_type mutable v = x[s];
     x[s] = x[f];
@@ -525,7 +517,7 @@ find_mapped(t const& c, tk k, tm const& x)
     tk i;
     tk const sz = c.size();
     for (i = k; i < sz; ++i) {
-      extern "disable-bounds-checking" 1;
+      extern "disable-bounds-check" 1;
       if (c[i] == x) { break; }
     }
     return i;
@@ -540,7 +532,7 @@ split_foreach(tc const& c, tv const& v)
   key_type mutable p;
   while (true) {
     const pend = find_mapped{tc, key_type, mapped_type}(c, p, v);
-    extern "disable-bounds-checking" 1;
+    extern "disable-bounds-check" 1;
     f(c[p .. pend]);
     if (pend == c.size()) {
       break;
@@ -577,7 +569,7 @@ find_mapped_memchr(t const& c, m::symbol{t, "key_type"} const& k,
 private function {typ, n, arr} expand macro_construct
 {
   expand (a, idx: m::map{m::seq{n}, metafunction{i} m::concat{"a", i}}) {
-    extern "disable-noheap-checking" 1;
+    extern "disable-ephemeral-check" 1;
     arr[idx] = a;
   }
 }
@@ -588,7 +580,7 @@ private metafunction arr_argdecls{typ, n}
 private pure function {typ, n} farray{typ, n}
 make_farray_func(expand(arr_argdecls{typ, n}))
 {
-  extern "disable-noheap-checking" 1;
+  extern "disable-ephemeral-check" 1;
   farray{typ, n} arr;
   expand macro_construct{typ, n, "arr"};
   return arr;
@@ -597,7 +589,7 @@ make_farray_func(expand(arr_argdecls{typ, n}))
 private pure function {typ, n} cfarray{typ, n}
 make_cfarray_func(expand(arr_argdecls{typ, n}))
 {
-  extern "disable-noheap-checking" 1;
+  extern "disable-ephemeral-check" 1;
   cfarray{typ, n} arr;
   expand macro_construct{typ, n, "arr"};
   return arr;
@@ -606,7 +598,7 @@ make_cfarray_func(expand(arr_argdecls{typ, n}))
 private pure function {typ, n} darray{typ}
 make_darray_func(expand(arr_argdecls{typ, n}))
 {
-  extern "disable-noheap-checking" 1;
+  extern "disable-ephemeral-check" 1;
   mutable arr = darray{typ}(n, typ());
   expand macro_construct{typ, n, "arr"};
   return arr;
@@ -615,7 +607,7 @@ make_darray_func(expand(arr_argdecls{typ, n}))
 private pure function {typ, n} cdarray{typ}
 make_cdarray_func(expand(arr_argdecls{typ, n}))
 {
-  extern "disable-noheap-checking" 1;
+  extern "disable-ephemeral-check" 1;
   mutable arr = darray{typ}(n, typ());
   expand macro_construct{typ, tlist, "arr"};
   return arr;
@@ -624,8 +616,8 @@ make_cdarray_func(expand(arr_argdecls{typ, n}))
 private pure function {typ, n} varray{typ}
 make_varray_func(expand(arr_argdecls{typ, n}))
 {
-  extern "disable-noheap-checking" 1;
-  mutable arr = varray{typ}();
+  extern "disable-ephemeral-check" 1;
+  varray{typ} mutable arr;
   array_resize_initial(arr, n, typ());
   expand macro_construct{typ, n, "arr"};
   return arr;
@@ -634,7 +626,7 @@ make_varray_func(expand(arr_argdecls{typ, n}))
 private pure function {typ, n} cvarray{typ}
 make_cvarray_func(expand(arr_argdecls{typ, n}))
 {
-  extern "disable-noheap-checking" 1;
+  extern "disable-ephemeral-check" 1;
   mutable arr = varray{typ}();
   array_resize_initial(arr, n, typ());
   expand macro_construct{typ, n, "arr"};
@@ -644,7 +636,7 @@ make_cvarray_func(expand(arr_argdecls{typ, n}))
 private pure function {typ, n} deque{typ}
 make_deque_func(expand(arr_argdecls{typ, n}))
 {
-  extern "disable-noheap-checking" 1;
+  extern "disable-ephemeral-check" 1;
   mutable arr = deque{typ}();
   array_resize_initial(arr, n, typ());
   expand macro_construct{typ, n, "arr"};
@@ -654,7 +646,7 @@ make_deque_func(expand(arr_argdecls{typ, n}))
 private pure function {typ, n} cdeque{typ}
 make_cdeque_func(expand(arr_argdecls{typ, n}))
 {
-  extern "disable-noheap-checking" 1;
+  extern "disable-ephemeral-check" 1;
   mutable arr = deque{typ}();
   array_resize_initial(arr, n, typ());
   expand macro_construct{typ, tlist, "arr"};
@@ -684,7 +676,7 @@ private pure function extern "::pxcrt::array_resize" {tarr, tv}
 check_copyable{tarr, tv, void}
 array_resize_initial(tarr const& arr, size_t i, tv const& v);
   /* used by make_varray family. arr is declared as const in order to avoid
-   * noheap checking. */
+   * ephemeral check. */
 
 private metafunction check_copyable{tarr, tv, rettype}
   m::cond{

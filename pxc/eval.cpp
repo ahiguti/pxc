@@ -43,6 +43,8 @@
 #define DBG_TYPEOF(x)
 #define DBG_LAMBDA(x)
 #define DBG_EVAL_TRACE(x)
+#define DBG_CLOSURE(x)
+#define DBG_TATTR(x)
 
 namespace pxc {
 
@@ -133,6 +135,9 @@ static void downgrade_threading_attribute_rec(expr_i *e, attribute_e mask)
       attribute_multithr | attribute_valuetype | attribute_tsvaluetype;
     const int om = dmask & oattr & mask;
     attribute_e nattr = attribute_e((oattr & ~dmask) | om);
+    DBG_TATTR(fprintf(stderr,
+      "downgrade_tattr oattr=%x mask=%x nattr=%x e=(%p)%s\n", (unsigned)oattr,
+      (unsigned)mask, (unsigned)nattr, e, e->dump(0).c_str()));
     e->set_attribute(nattr);
   }
   const int num = e->get_num_children();
@@ -146,9 +151,8 @@ static void check_closure_cfuncobj(const term& t, const expr_i *einst)
   if (einst->get_esort() != expr_e_funcdef) {
     return;
   }
-#if 0
-//fprintf(stderr, "check_closure_cfuncobj %s\n", term_tostr_human(t).c_str());
-#endif
+  DBG_CLOSURE(fprintf(stderr, "check_closure_cfuncobj %s\n",
+    term_tostr_human(t).c_str()));
   const expr_funcdef *const efd_inst =
     ptr_down_cast<const expr_funcdef>(einst);
   if (!efd_inst->is_c_defined()) {
@@ -167,9 +171,8 @@ static void check_closure_cfuncobj(const term& t, const expr_i *einst)
     expr_funcdef *const efd = ptr_down_cast<expr_funcdef>(
       term_get_instance(cte));
       efd->used_as_cfuncobj = true;
-#if 0
-fprintf(stderr, "used_as_funcobj %s\n", term_tostr_human(*i).c_str());
-#endif
+    DBG_CLOSURE(fprintf(stderr, "used_as_funcobj %s\n",
+      term_tostr_human(*i).c_str()));
   }
 }
 
@@ -217,6 +220,12 @@ static expr_i *instantiate_template_internal(expr_i *tmpl_root,
   /* update value_texpr for the instance */
   const term rt(tmpl_root, targs);
   rcpy->set_value_texpr(rt);
+  DBG_TATTR(fprintf(stderr,
+    "instance tmpl_root=%p rcpy=(%p)%s tattr=%x tmpl_tattr=%x "
+    "rt.expr=(%p)%s rt_tattr=%x\n", tmpl_root, rcpy, rcpy->dump(0).c_str(),
+    (unsigned)rcpy->get_attribute(), (unsigned)tmpl_root->get_attribute(),
+    rt.get_expr(), rt.get_expr()->dump(0).c_str(),
+    (unsigned)get_term_threading_attribute(rt)));
   /* downgrade threading attribute if necessary */
   downgrade_threading_attribute_rec(rcpy, get_term_threading_attribute(rt));
   DBG_ATTR(fprintf(stderr, "%s: attr %x\n", term_tostr_human(rt).c_str(),

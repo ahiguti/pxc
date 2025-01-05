@@ -32,6 +32,22 @@ total=0
 err=0
 errnames=''
 export MUDFLAP_OPTIONS=-viol-segv
+
+compare_log_one() {
+  bn=$1
+  expsuf=$2
+  logsuf=$3
+  if [ -f "$bn.$expsuf" ]; then
+    if ! diff -u $bn.$expsuf $bn.$logsuf > /dev/null 2>&1; then
+      echo
+      diff -u $bn.$expsuf $bn.$logsuf 2>&1
+      echo "$bn failed";
+      err=$((err + 1))
+      errnames="$errnames $bn"
+    fi
+  fi
+}
+
 for i in $TESTS; do
   bn=`basename $i .px`
   # echo "$bn";
@@ -41,6 +57,7 @@ for i in $TESTS; do
     	> $bn.log 2> $bn.log2
     cp -f $bn.log2 $bn.log2d
     perl -pi -e 's/px\:[\d]+\:/px\:/' $bn.log2
+    perl -pi -e 's/pxh\:[\d]+\:/pxh\:/' $bn.log2
     if [ ! "$?" ]; then
       echo "$bn failed"
     fi
@@ -48,28 +65,9 @@ for i in $TESTS; do
     touch $bn.log
   fi
   bn=`basename $i .px`
-  if [ -f "$bn.exp" ]; then
-    if ! diff -u $bn.exp $bn.log > /dev/null 2>&1; then
-      echo
-      diff -u $bn.exp $bn.log 2>&1
-      echo "error output:"
-      cat $bn.log2d 2> /dev/null
-      echo "$bn failed"
-      err=$((err + 1))
-      errnames="$errnames $bn"
-      # exit 1
-    fi
-  fi
-  if [ -f "$bn.exp2" ]; then
-    if ! diff -u $bn.exp2 $bn.log2 > /dev/null 2>&1; then
-      echo
-      diff -u $bn.exp2 $bn.log2 2>&1
-      echo "$bn failed";
-      err=$((err + 1))
-      errnames="$errnames $bn"
-      # exit 1
-    fi
-  fi
+  compare_log_one $bn exp log
+  compare_log_one $bn exp2 log2
+  compare_log_one $bn exp2d log2d
   total=$((total + 1))
 done
 echo

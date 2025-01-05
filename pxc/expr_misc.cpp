@@ -35,6 +35,8 @@
 #define DBG_CALLEE(x)
 #define DBG_DEPUP(x)
 #define DBG_UBD(x)
+#define DBG_TATTR(x)
+#define DBG_EPH(x)
 
 namespace pxc {
 
@@ -63,6 +65,8 @@ nspropmap_type nspropmap;
 nsthrmap_type nsthrmap;
 std::string emit_threaded_dll_func;
 compiled_ns_type compiled_ns;
+bool detail_error = false;
+compiling_expr_stack_type compiling_expr_stack;
 /* end: global variables */
 
 static expr_i *string_to_nssym(expr_i *e, const std::string& str)
@@ -933,7 +937,7 @@ static bool is_range_guard_ephemeral(expr_i *e)
     || is_cm_lock_guard_family(e);
 }
 
-bool is_noheap_type(const term& t)
+bool is_ephemeral_type(const term& t)
 {
   expr_i *const e = t.get_expr();
   if (e == 0) {
@@ -942,28 +946,19 @@ bool is_noheap_type(const term& t)
   if (is_range_guard_ephemeral(e)) {
     return true;
   }
+  if ((e->get_attribute() & attribute_ephemeral) != 0) {
+    return true;
+  }
   const typefamily_e cat = get_family(e);
   if (cat == typefamily_e_darrayst || cat == typefamily_e_cdarrayst) {
     return true;
   }
-  #if 0
-  if (is_cm_range_family(e)) {
-    return true;
-  }
-  if (is_cm_lock_guard_family(e)) {
-    return true;
-  }
-  const typefamily_e cat = get_family(e);
-  if (cat == typefamily_e_ephemeral) {
-    return true;
-  }
-  #endif
-  if (is_container_family(t)) {
+  {
     const term_list *const targs = t.get_args();
     if (targs != 0) {
       for (term_list::const_iterator i = targs->begin(); i != targs->end();
         ++i) {
-        if (is_noheap_type(*i)) {
+        if (is_ephemeral_type(*i)) {
           return true;
         }
       }
@@ -2016,10 +2011,10 @@ static void check_convfunc_validity(term& convfunc, const term& tfrom,
       if (ad != 0 && ad->get_rest() == 0 && ad->resolve_texpr() == tfrom &&
         ad->passby != passby_e_mutable_reference &&
         efd->get_rettype() == tto &&
-        /* implicit conversion function must not return noheap or reference
+        /* implicit conversion function must not return ephemeral or reference
          * because rooting is not implemented for these cases */
         is_passby_cm_value(block->ret_passby) &&
-        !is_noheap_type(tto))
+        !is_ephemeral_type(tto))
       {
         /* ok */
         return;
@@ -2178,9 +2173,9 @@ static void convert_type_internal(expr_i *efrom, term& tto, tvmap_type& tvmap)
   const term cf = get_implicit_conversion_func(tfrom, tconvto, efrom);
   if (cf.is_expr()) {
     #if 0
-    if (is_noheap_type(tconvto)) {
+    if (is_ephemeral_type(tconvto)) {
       arena_error_throw(efrom,
-        "Implicit conversion to noheap type is prohibited");
+        "Implicit conversion to ephemeral type is prohibited");
     }
     #endif
     efrom->conv = conversion_e_implicit;
@@ -2453,7 +2448,7 @@ static attribute_e get_threading_attribute_mask(expr_e e)
   }
 }
 
-attribute_e get_expr_threading_attribute(const expr_i *e)
+attribute_e get_expr_threading_attribute(const expr_i *e, std::string *pusherr)
 {
   if (e == 0) {
     return attribute_unknown;
@@ -2471,13 +2466,21 @@ attribute_e get_expr_threading_attribute(const expr_i *e)
     }
   }
   attribute_e attr = eattr->get_attribute();
-  return attribute_e(attr & get_threading_attribute_mask(e->get_esort()));
+  attribute_e mask = get_threading_attribute_mask(e->get_esort());
+  attribute_e r = attribute_e(attr & mask);
+  if (pusherr != nullptr) {
+    std::string estr = (e == nullptr) ? "." : e->dump(0);
+    (*pusherr) += "[expr tattr attr=" + std::to_string(r) + " mask="
+      + std::to_string(mask) + " r=" + std::to_string(r) + " " + estr + "]\n";
+  }
+  return r;
 }
 
-attribute_e get_context_threading_attribute(symbol_table *cur)
+attribute_e get_context_threading_attribute(symbol_table *cur,
+  std::string *pusherr)
 {
   expr_i *const fe = get_current_frame_expr(cur);
-  return get_term_threading_attribute(fe->get_value_texpr());
+  return get_term_threading_attribute(fe->get_value_texpr(), pusherr);
 }
 
 bool is_threaded_context(symbol_table *cur)
@@ -2492,7 +2495,7 @@ bool is_multithr_context(symbol_table *cur)
   return (attr & attribute_multithr) != 0;
 }
 
-attribute_e get_term_threading_attribute(const term& t)
+attribute_e get_term_threading_attribute(const term& t, std::string *pusherr)
 {
   const int thr_mask_all = attribute_e(
     attribute_threaded | attribute_pure | attribute_multithr |
@@ -2505,7 +2508,7 @@ attribute_e get_term_threading_attribute(const term& t)
       attr = thr_mask_all;
     }
   } else {
-    attr = get_expr_threading_attribute(e);
+    attr = get_expr_threading_attribute(e, pusherr);
   }
   const typefamily_e cat = get_family(e);
   if (cat == typefamily_e_nocascade) {
@@ -2526,9 +2529,19 @@ attribute_e get_term_threading_attribute(const term& t)
     } else {
       mask = get_threading_attribute_mask(ce->get_esort());
     }
-    attr &= (get_term_threading_attribute(*i) | ~mask);
+    const attribute_e suba = get_term_threading_attribute(*i, pusherr);
+    attr &= (suba | ~mask);
+    if (pusherr != nullptr) {
+      std::string subestr = (ce == nullptr) ? "." : ce->dump(0);
+      *pusherr += "[term sub tattr suba=" + std::to_string(suba) + " maskn="
+        + std::to_string(~mask) + " " + subestr + "]\n";
+    }
   }
   attribute_e r = attribute_e(attr);
+  if (pusherr != nullptr) {
+    std::string estr = (e == nullptr) ? "." : e->dump(0);
+    *pusherr += "[term tattr r=" + std::to_string(r) + " " + estr + "]\n";
+  }
   return r;
 }
 
@@ -2700,6 +2713,35 @@ static void fn_check_syntax_one(expr_i *e)
       arena_error_throw(esp, "%s statement not within loop",
         esp->tok == TOK_CONTINUE ? "Continue" : "Break");
     }
+  }
+}
+
+void fn_set_implicit_threading_attr(expr_i *e, bool is_inside_funcdef,
+  attribute_e parent_tattr)
+{
+  if (e == 0) {
+    return;
+  }
+  const expr_e es = e->get_esort();
+  if (es == expr_e_funcdef || es == expr_e_struct || es == expr_e_interface) {
+    if (is_inside_funcdef) {
+      attribute_e cur_attr = e->get_attribute();
+      attribute_e nattr = attribute_e(cur_attr | parent_tattr);
+      if (cur_attr != nattr) {
+        DBG_TATTR(fprintf(stderr, "IMPLICIT %x -> %x %s\n", cur_attr, nattr,
+          efd->dump(0).c_str()));
+      }
+      e->set_attribute(nattr);
+    } else {
+      is_inside_funcdef = true;
+      parent_tattr = attribute_e(get_expr_threading_attribute(e)
+        & get_threading_attribute_mask(expr_e_funcdef));
+    }
+  }
+  const int num = e->get_num_children();
+  for (int i = 0; i < num; ++i) {
+    expr_i *c = e->get_child(i);
+    fn_set_implicit_threading_attr(c, is_inside_funcdef, parent_tattr);
   }
 }
 
@@ -3344,6 +3386,71 @@ static void check_noop_children(expr_i *e)
   }
 }
 
+static void check_ephemeral_field(expr_i *e)
+{
+  if (e->get_esort() != expr_e_block) {
+    return;
+  }
+  expr_block *const bl = ptr_down_cast<expr_block>(e);
+  if (!is_compiled(bl)) {
+    return;
+  }
+  auto const ep = bl->parent_expr;
+  if (ep == nullptr || (ep->get_attribute() & attribute_ephemeral) != 0) {
+    return;
+  }
+  std::list<expr_var *> flds;
+  ep->get_fields(flds);
+  DBG_EPH(fprintf(stderr, "check_eph %s:%d %zu\n", e->fname, e->line,
+    flds.size()));
+  for (auto const fld: flds) {
+    DBG_EPH(fprintf(stderr, "check_eph %s:%d %s\n", e->fname, e->line,
+      term_tostr_human(fld->get_texpr()).c_str()));
+    if (is_ephemeral_type(fld->get_texpr())) {
+      arena_error_throw(fld,
+        "Ephemeral field must be in an ephemeral struct/dunion");
+    }
+  }
+}
+
+static void check_destructor_ephemeral_rec(expr_funcdef *efd, expr_i *e)
+{
+  while (e != nullptr) {
+    expr_symbol *sym = dynamic_cast<expr_symbol *>(e);
+    if (sym != nullptr) {
+      if (is_ephemeral_type(sym->get_texpr())) {
+        expr_struct *est = efd->is_member_function();
+        assert(est != nullptr);
+        const expr_i *const sdef = sym->get_symdef();
+        if (sdef->symtbl_lexical == &est->block->symtbl) {
+          arena_error_throw(sym,
+            "Using an ephemeral field in a destructor is prohibited");
+        }
+      }
+    }
+    const int num = e->get_num_children();
+    if (num == 0) {
+      return;
+    }
+    for (int i = 0; i + 1 < num; ++i) {
+      expr_i *c = e->get_child(i);
+      check_destructor_ephemeral_rec(efd, c);
+    }
+    e = e->get_child(num - 1);
+  }
+}
+
+static void check_destructor_ephemeral(expr_i *e)
+{
+  if (e->get_esort() != expr_e_funcdef) {
+    return;
+  }
+  expr_funcdef *const efd = ptr_down_cast<expr_funcdef>(e);
+  if (efd->is_destructor()) {
+    check_destructor_ephemeral_rec(efd, efd);
+  }
+}
+
 void fn_check_final(expr_i *e)
 {
   while (e != 0) {
@@ -3353,6 +3460,8 @@ void fn_check_final(expr_i *e)
       check_interface_impl(e);
       check_use_before_def(e);
       check_noop_children(e);
+      check_ephemeral_field(e);
+      check_destructor_ephemeral(e);
       arena_error_throw_pushed();
     } catch (const std::exception& ex) {
       std::string s = ex.what();
@@ -3542,7 +3651,11 @@ bool expr_has_lvalue(const expr_i *epos, expr_i *a0, bool thro_flg)
     if (!thro_flg) {
       return false;
     }
-    arena_error_push(a0, "Can not be modified because of a conversion");
+    arena_error_push(a0, "Can not be modified because of a conversion "
+      "(%s from %s to %s)",
+      conversion_string(a0->conv).c_str(),
+      term_tostr_human(a0->get_texpr()).c_str(),
+      term_tostr_human(a0->type_conv_to).c_str());
   }
   if (a0->get_sdef() != 0) {
     /* symbol or te */
@@ -4046,6 +4159,75 @@ void fn_prepare_imports()
       add_imports_rec(i->first, j->first);
     }
   }
+}
+
+bool fn_str_equals(const char *x, const char *y) {
+  if (x == nullptr && y == nullptr) {
+    return true;
+  }
+  if (x == nullptr || y == nullptr) {
+    return false;
+  }
+  return strcmp(x, y) == 0;
+}
+
+bool fn_expr_equals(expr_i *x, expr_i *y) {
+  if (x == nullptr && y == nullptr) {
+    return true;
+  }
+  if (x == nullptr || y == nullptr) {
+    return false;
+  }
+  if (x->get_esort() != y->get_esort()) {
+    return false;
+  }
+  return x->equals(y);
+}
+
+bool is_ephemeral_assignable(symbol_table *lhs_scope, symbol_table *rhs_scope)
+{
+  /* returns true if lhs is 'smaller than' or equal to rhs */
+  if (lhs_scope == rhs_scope) {
+    return true;
+  }
+  if (rhs_scope == nullptr) {
+    return false;
+  }
+  if (is_ancestor_symtbl(rhs_scope, lhs_scope)) {
+    /* rhs is larger than lhs */
+    return true;
+  }
+  return false;
+}
+
+symbol_table *
+get_smaller_ephemeral_scope(symbol_table *a, symbol_table *b)
+{
+  if (a == nullptr || b == nullptr) {
+    return nullptr;
+  }
+  if (is_ancestor_symtbl(a, b)) {
+    return b;
+  }
+  if (is_ancestor_symtbl(b, a)) {
+    return a;
+  }
+  return nullptr;
+}
+
+std::string
+conversion_string(conversion_e c)
+{
+  switch (c) {
+  case conversion_e_none: return "none";
+  case conversion_e_cast: return "cast";
+  case conversion_e_implicit: return "implicit";
+  case conversion_e_subtype_obj: return "subtype_obj";
+  case conversion_e_subtype_ptr: return "subtype_ptr";
+  case conversion_e_container_range: return "container_range";
+  case conversion_e_boxing: return "boxing";
+  }
+  return "-";
 }
 
 };

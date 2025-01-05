@@ -1,0 +1,23 @@
+
+public namespace eph9;
+import core::common -;
+
+ephemeral struct foo(slice{int} x0) {
+  public slice{int} x = x0;
+  function ~{
+    const y = x; // error: using ephemeral value in a destructor
+  }
+}
+
+function slice{int} test_ephemeral_escape(int x)
+{
+  varray{int} a;
+  a.push_back(x);
+  foo fv = foo(a);
+  println(fv);
+  return slice{int}();
+}
+
+{
+  test_ephemeral_escape(3);
+}

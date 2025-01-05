@@ -57,15 +57,23 @@ for i in $TESTS; do
     echo "$bn failed"
     err=$((err + 1))
     errnames="$errnames $bn"
-    # exit 1
-  elif [ -f "$bn.exp2" ]; then
+  fi
+  if [ -f "$bn.exp2" ]; then
     if ! diff -u $bn.exp2 $bn.log2 > /dev/null 2>&1; then
       echo
       diff -u $bn.exp2 $bn.log2 2>&1
       echo "$bn failed";
       err=$((err + 1))
       errnames="$errnames $bn"
-      # exit 1
+    fi
+  fi
+  if [ -f "$bn.exp2d" ]; then
+    if ! diff -u $bn.exp2d $bn.log2d > /dev/null 2>&1; then
+      echo
+      diff -u $bn.exp2d $bn.log2d 2>&1
+      echo "$bn failed";
+      err=$((err + 1))
+      errnames="$errnames $bn"
     fi
   fi
   total=$((total + 1))

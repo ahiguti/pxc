@@ -12,6 +12,7 @@
 // vim:sw=2:ts=8:ai
 
 #include <stdio.h>
+#include <time.h>
 #include <set>
 #include <list>
 #include <deque>
@@ -31,12 +32,14 @@
 #include <stdexcept>
 
 #define DBG(x)
+#define DBG_SRC(x)
 #define DBG_SRCLIST(x)
 #define DBG_SUM(x)
 #define DBG_MOD(x)
 #define DBG_INF(x)
 #define DBG_CHK(x)
 #define DBG_LINK(x)
+#define DBG_READ(x)
 
 #define PXC_TIMESTAMP_MARGIN 0
 
@@ -56,10 +59,12 @@ struct profile_settings {
   bool gcc_compat;
   bool generate_dynamic; /* TODO */
   bool show_warnings;
+  bool error_detail;
   size_t recursion_limit;
   size_t safe_mode;
   profile_settings() : gcc_compat(true), generate_dynamic(false),
-    show_warnings(false), recursion_limit(0), safe_mode(1) { }
+    show_warnings(false), error_detail(false), recursion_limit(0),
+    safe_mode(1) { }
 };
 
 typedef std::list<source_info> sources_type;
@@ -81,7 +86,7 @@ struct parser_options {
   bool gen_out;
   bool gen_single_cc;
   std::string argv0;
-  time_t argv0_ctime;
+  time_t argv0_ctime; // TODO: remove. unused.
   parser_options() : verbose(0), clean_flag(false), clean_all_flag(false),
     no_build(false), no_update(false), no_execute(false), no_realpath(false),
     trim_path(0), gen_out(false), gen_single_cc(false), argv0_ctime(0) { }
@@ -142,34 +147,134 @@ static std::string get_work_filename(const parser_options& po,
   return r;
 }
 
+static std::string replace_or_append_suffix(const std::string& fn,
+  const std::string& suf)
+{
+  std::string rfn = fn;
+  size_t const sl = rfn.rfind('/');
+  size_t const dot = rfn.rfind('.');
+  if (dot != rfn.npos && (sl == rfn.npos || sl < dot)) {
+    rfn = rfn.substr(0, dot);
+  }
+  return rfn + suf;
+}
+
+static std::string get_filename_with_suf(const parser_options& po, const module_info& mi, const std::string& suf)
+{
+  return replace_or_append_suffix(get_work_filename(po, mi, false), suf);
+}
+
 static std::string get_cc_filename(const parser_options& po,
   const module_info& mi)
 {
-  return get_work_filename(po, mi, false) + ".cc";
+  return get_filename_with_suf(po, mi, ".cc");
 }
 
 static std::string get_o_filename(const parser_options& po,
   const module_info& mi)
 {
-  return get_work_filename(po, mi, false) + ".o";
+  return get_filename_with_suf(po, mi, ".o");
 }
 
 static std::string get_so_filename(const parser_options& po,
   const module_info& mi)
 {
-  return get_work_filename(po, mi, false) + ".so";
+  return get_filename_with_suf(po, mi, ".so");
 }
 
 static std::string get_exe_filename(const parser_options& po,
   const module_info& mi)
 {
-  return get_work_filename(po, mi, false) + ".exe";
+  return get_filename_with_suf(po, mi, ".exe");
 }
 
 static std::string get_info_filename(const parser_options& po,
   const module_info& mi)
 {
-  return get_work_filename(po, mi, false) + ".inf";
+  return get_filename_with_suf(po, mi, ".inf");
+}
+
+static size_t count_newline(std::string const& s)
+{
+  size_t n = 0;
+  for (char ch: s) {
+    if (ch == '\n') {
+      ++n;
+    }
+  }
+  return n;
+}
+
+static source_file_content_ptr read_source_file_content(const std::string& fn,
+  int trim)
+{
+  source_file_content r;
+  const std::string fnh = fn + "h";
+  if (file_access(fnh)) {
+    DBG_READ(fprintf(stderr, "read_file_content 1 %s\n", fnh.c_str()));
+    std::string s = read_file_content(fnh, true) + "\n";
+    r.fragment_sizes.push_back(std::make_pair(trim_path(fnh, trim),
+      count_newline(s)));
+    r.content += s;
+  }
+  if (file_access(fn)) {
+    DBG_READ(fprintf(stderr, "read_file_content 2 %s\n", fn.c_str()));
+    std::string s = read_file_content(fn, true) + "\n";
+    r.fragment_sizes.push_back(std::make_pair(trim_path(fn, trim),
+      count_newline(s)));
+    r.content += s;
+  }
+  return std::make_shared<source_file_content>(std::move(r));
+}
+
+struct source_statbuf {
+  struct stat sb_header = { };
+  struct stat sb_body = { };
+  unsigned hdrbdy_mask = 0;
+  bool time_eq(source_statbuf const& x) const {
+    return
+      sb_header.st_mtime == x.sb_header.st_mtime &&
+      sb_header.st_ctime == x.sb_header.st_ctime &&
+      sb_body.st_mtime == x.sb_body.st_mtime &&
+      sb_body.st_ctime == x.sb_body.st_ctime &&
+      hdrbdy_mask == x.hdrbdy_mask;
+  }
+  time_t time_max() const {
+    return std::max(
+      std::max(sb_header.st_mtime, sb_header.st_ctime),
+      std::max(sb_body.st_mtime, sb_body.st_ctime));
+  }
+};
+
+static int stat_source_file(const char *fn, source_statbuf& sbuf,
+  bool stat_header = true)
+{
+  sbuf = { };
+  int e = 0;
+  if (stat_header) {
+    const std::string fnh = std::string(fn) + "h";
+    const int r0 = stat(fnh.c_str(), &sbuf.sb_header);
+    if (r0 != 0) {
+      sbuf.sb_header = { };
+      if (errno != ENOENT) {
+        e = errno;
+      }
+    } else {
+      sbuf.hdrbdy_mask |= 1;
+    }
+  }
+  {
+    const int r1 = stat(fn, &sbuf.sb_body);
+    if (r1 != 0) {
+      sbuf.sb_body = { };
+      if (errno != ENOENT) {
+        e = errno;
+      }
+    } else {
+      sbuf.hdrbdy_mask |= 2;
+    }
+  }
+  return e;
 }
 
 static bool check_source_timestamp(const parser_options& po, module_info& mi,
@@ -183,29 +288,23 @@ static bool check_source_timestamp(const parser_options& po, module_info& mi,
     ++i, src_mask_bit <<= 1) {
     const std::string& fn = i->filename;
     while (true) {
-      struct stat sbuf;
-      if (stat(fn.c_str(), &sbuf) != 0) {
-        if (errno == ENOENT) {
-          break;
-        }
+      source_statbuf sbuf;
+      int e = stat_source_file(fn.c_str(), sbuf);
+      if (e != 0) {
         arena_error_throw(0, "%s:0: Failed to stat: errno=%d\n",
-          fn.c_str(), errno);
+          fn.c_str(), e);
       }
-      if (sbuf.st_ctime > mi.source_checksum.timestamp) {
+      if (sbuf.hdrbdy_mask == 0) {
+        break;
+      }
+      if (sbuf.time_max() != mi.source_checksum.timestamp ||
+        sbuf.hdrbdy_mask != mi.source_checksum.hdrbdy_mask) {
         if (po.verbose > 1) {
           fprintf(stderr,
-            "check_source_timestamp %s: st_ctime=%lu checksum=%lu\n",
-            fn.c_str(), (unsigned long)sbuf.st_ctime,
-            (unsigned long)mi.source_checksum.timestamp);
-        }
-        not_modified = false;
-      }
-      if (sbuf.st_mtime > mi.source_checksum.timestamp) {
-        if (po.verbose > 1) {
-          fprintf(stderr,
-            "check_source_timestamp %s: st_mtime=%lu checksum=%lu\n",
-            fn.c_str(), (unsigned long)sbuf.st_mtime,
-            (unsigned long)mi.source_checksum.timestamp);
+            "check_source_timestamp %s: mtime=%lu:%u checksum_mtime=%lu:%u\n",
+            fn.c_str(), (unsigned long)sbuf.time_max(), sbuf.hdrbdy_mask,
+            (unsigned long)mi.source_checksum.timestamp,
+            mi.source_checksum.hdrbdy_mask);
         }
         not_modified = false;
       }
@@ -233,6 +332,8 @@ static std::string checksum_string(const checksum_type& c)
   std::string r;
   r += ulong_to_string_hexadecimal(c.timestamp);
   r += ":";
+  r += ulong_to_string_hexadecimal(c.hdrbdy_mask);
+  r += ":";
   r += to_hexadecimal(c.md5sum);
   return r;
 }
@@ -243,7 +344,7 @@ static bool load_infofile(const parser_options& po, module_info& mi)
     return false;
   }
   const std::string cc_filename = get_cc_filename(po, mi);
-  struct stat sbuf;
+  struct stat sbuf = { };
   if (stat(cc_filename.c_str(), &sbuf) != 0) {
     if (errno != ENOENT) {
       arena_error_throw(0, "%s:0: Failed to stat: errno=%d\n",
@@ -278,13 +379,15 @@ static bool load_infofile(const parser_options& po, module_info& mi)
   }
   ++line;
   while (line != sa.end()) {
-    if (line->size() == 6 && (*line)[0] == "self") {
-      /* self: self ns fn src_timestamp src_md5 src_mask */
+    if (line->size() == 7 && (*line)[0] == "self") {
+      /* self: self ns fn src_timestamp src_hdrbdy src_md5 src_mask */
       mi.unique_namespace = (*line)[1];
       mi.aux_filename = (*line)[2];
       mi.source_checksum.timestamp = ulong_from_string_hexadecimal((*line)[3]);
-      mi.source_checksum.md5sum = from_hexadecimal((*line)[4]);
-      mi.src_mask = ulong_from_string_hexadecimal((*line)[5]);
+      mi.source_checksum.hdrbdy_mask =
+        ulong_from_string_hexadecimal((*line)[4]);
+      mi.source_checksum.md5sum = from_hexadecimal((*line)[5]);
+      mi.src_mask = ulong_from_string_hexadecimal((*line)[6]);
       if (po.verbose > 1) {
         fprintf(stderr, "'%s': source_checksum: %s\n", info_filename.c_str(),
           checksum_string(mi.source_checksum).c_str());
@@ -322,14 +425,16 @@ static bool load_infofile(const parser_options& po, module_info& mi)
         fprintf(stderr, "'%s': ldflags %s\n", info_filename.c_str(),
           m.c_str());
       }
-    } else if (line->size() == 5 && (*line)[0] == "import") {
-      /* import: import ns pub src_timestamp src_md5 */
+    } else if (line->size() == 6 && (*line)[0] == "import") {
+      /* import: import ns pub src_timestamp src_hdrbdy src_md5 */
       const std::string ns = (*line)[1];
       unsigned long sort = ulong_from_string_hexadecimal((*line)[2]);
       const time_t timestamp = ulong_from_string_hexadecimal((*line)[3]);
-      const std::string md5sum = from_hexadecimal((*line)[4]);
+      const unsigned hdrbdy_mask = ulong_from_string_hexadecimal((*line)[4]);
+      const std::string md5sum = from_hexadecimal((*line)[5]);
       checksum_type& cs = mi.depsrc_checksum[ns];
       cs.timestamp = timestamp;
+      cs.hdrbdy_mask = hdrbdy_mask;
       cs.md5sum = md5sum;
       mi.imports.deps.push_back(import_info());
       import_info& ii = mi.imports.deps.back();
@@ -339,13 +444,15 @@ static bool load_infofile(const parser_options& po, module_info& mi)
         fprintf(stderr, "'%s': import %s: %s %lu\n", info_filename.c_str(),
           ns.c_str(), checksum_string(cs).c_str(), sort);
       }
-    } else if (line->size() == 4 && (*line)[0] == "indirect") {
-      /* indirect: indirect ns src_timestamp src_md5 */
+    } else if (line->size() == 5 && (*line)[0] == "indirect") {
+      /* indirect: indirect ns src_timestamp src_hdrbdy src_md5 */
       const std::string ns = (*line)[1];
       const time_t timestamp = ulong_from_string_hexadecimal((*line)[2]);
-      const std::string md5sum = from_hexadecimal((*line)[3]);
+      const time_t hdrbdy_mask = ulong_from_string_hexadecimal((*line)[3]);
+      const std::string md5sum = from_hexadecimal((*line)[4]);
       checksum_type& cs = mi.depsrc_checksum[ns];
       cs.timestamp = timestamp;
+      cs.hdrbdy_mask = hdrbdy_mask;
       cs.md5sum = md5sum;
       if (po.verbose > 1) {
         fprintf(stderr, "'%s': indirect %s: %s\n", info_filename.c_str(),
@@ -402,6 +509,7 @@ static void load_source_and_calc_checksum(const parser_options& po,
   module_info& mi)
 {
   time_t tstamp = 0;
+  unsigned hdrbdy_mask = 0;
   md5_context md5;
   unsigned long long src_mask = 0;
   unsigned long long src_mask_bit = 1;
@@ -417,35 +525,46 @@ static void load_source_and_calc_checksum(const parser_options& po,
     }
     while (true) {
       const time_t time_now = time(0);
-      struct stat sbuf1, sbuf2;
-      if (stat(fn.c_str(), &sbuf1) != 0) {
-        if (errno == ENOENT) {
-          if (po.verbose > 9) {
-            fprintf(stderr, "loading source %s: not found\n", fn.c_str());
-          }
-          if (!notfound_fnlist.empty()) {
-            notfound_fnlist += ",";
-          }
-          notfound_fnlist += fn;
-          break;
-        }
+      source_statbuf sbuf1, sbuf2;
+      int e = stat_source_file(fn.c_str(), sbuf1);
+      if (e != 0) {
         arena_error_throw(0, "-:-: Failed to stat '%s': errno=%d\n",
-          fn.c_str(), errno);
+          fn.c_str(), e);
       }
-      const std::string content = read_file_content(fn, true);
-      if (po.verbose > 9 && !content.empty()) {
+      if (sbuf1.hdrbdy_mask == 0) {
+        if (po.verbose > 9) {
+          fprintf(stderr, "loading source %s: not found\n", fn.c_str());
+        }
+        if (!notfound_fnlist.empty()) {
+          notfound_fnlist += ",";
+        }
+        notfound_fnlist += fn;
+        break;
+      }
+      const source_file_content_ptr content = read_source_file_content(fn,
+        po.trim_path);
+      if (po.verbose > 9 && !content->content.empty()) {
         fprintf(stderr, "loading source %s: found\n", fn.c_str());
       }
-      if (stat(fn.c_str(), &sbuf2) != 0) {
+      e = stat_source_file(fn.c_str(), sbuf2);
+      if (e != 0) {
         arena_error_throw(0, "-:-: Failed to stat '%s': errno=%d\n",
-          fn.c_str(), errno);
+          fn.c_str(), e);
       }
-      if (sbuf1.st_mtime == sbuf2.st_mtime &&
-        sbuf1.st_ctime == sbuf2.st_ctime) {
-        const time_t tm1 = std::max(sbuf1.st_mtime, sbuf1.st_ctime);
+      if (sbuf2.hdrbdy_mask == 0) {
+        continue;
+      }
+      /* modified while loading? */
+      if (sbuf1.time_eq(sbuf2)) {
+        /* if time() equals to mtime/ctime, modifications cant be detected
+         * by comparing mtime/ctime. to avoid this situation, retry until
+         * time() larger than mtime/ctime.
+         */
+        const time_t tm1 = std::max(sbuf1.time_max(), sbuf1.time_max());
         if (tm1 < time_now - PXC_TIMESTAMP_MARGIN) {
           i->content = content;
           tstamp = std::max(tstamp, tm1);
+          hdrbdy_mask = sbuf1.hdrbdy_mask;
           loaded = true;
           break;
         }
@@ -455,7 +574,9 @@ static void load_source_and_calc_checksum(const parser_options& po,
        * if the system clock is never be skewed. */
       sleep(1);
     }
-    md5.update(i->content);
+    if (i->content != nullptr) {
+      md5.update(i->content->content);
+    }
     if (loaded) {
       src_mask |= src_mask_bit;
       break;
@@ -468,6 +589,7 @@ static void load_source_and_calc_checksum(const parser_options& po,
       mi.unique_namespace.c_str(), notfound_fnlist.c_str());
   }
   mi.source_checksum.timestamp = tstamp;
+  mi.source_checksum.hdrbdy_mask = hdrbdy_mask;
   mi.source_checksum.md5sum = md5.final();
   mi.src_mask = src_mask;
   get_module_deps_from_source(po, mi);
@@ -651,9 +773,10 @@ static void generate_info_file(const parser_options& po,
 {
   std::string str;
   time_t info_ts = 0;
-  /* self: ns fn src_timestamp src_md5 src_mask */
+  /* self: ns fn src_timestamp src_hdrbdy src_md5 src_mask */
   str += "self\t" + mi.unique_namespace + "\t" + mi.aux_filename + "\t" +
     ulong_to_string_hexadecimal(mi.source_checksum.timestamp) + "\t" +
+    ulong_to_string_hexadecimal(mi.source_checksum.hdrbdy_mask) + "\t" +
     to_hexadecimal(mi.source_checksum.md5sum) + "\t" +
     ulong_to_string_hexadecimal(mi.src_mask) + "\n";
   info_ts = std::max(mi.source_checksum.timestamp, info_ts);
@@ -681,16 +804,18 @@ static void generate_info_file(const parser_options& po,
     i != mi.imports.deps.end(); ++i) {
     all_modules_info::modules_type::const_iterator j = ami.modules.find(i->ns);
     assert(j != ami.modules.end());
-    /* import: ns pub src_timestamp src_md5 */
+    /* import: ns pub src_timestamp src_hdrbdy src_md5 */
     str += "import\t" + i->ns + "\t";
     str += i->import_public ? "1\t" : "0\t";
     str += ulong_to_string_hexadecimal(j->second.source_checksum.timestamp)
+      + "\t";
+    str += ulong_to_string_hexadecimal(j->second.source_checksum.hdrbdy_mask)
       + "\t";
     str += to_hexadecimal(j->second.source_checksum.md5sum) + "\n";
     info_ts = std::max(j->second.source_checksum.timestamp, info_ts);
     dimps.insert(i->ns);
   }
-  /* non-direct imports */
+  /* indirect imports */
   for (strset::const_iterator i = mi.cc_srcs.begin(); i != mi.cc_srcs.end();
     ++i) {
     if (dimps.find(*i) != dimps.end()) {
@@ -701,9 +826,11 @@ static void generate_info_file(const parser_options& po,
     }
     all_modules_info::modules_type::const_iterator j = ami.modules.find(*i);
     assert(j != ami.modules.end());
-    /* dep: ns 2 src_timestamp src_md5 */
+    /* dep: ns 2 src_timestamp src_hdrbdy src_md5 */
     str += "indirect\t" + (*i) + "\t";
     str += ulong_to_string_hexadecimal(j->second.source_checksum.timestamp)
+      + "\t";
+    str += ulong_to_string_hexadecimal(j->second.source_checksum.hdrbdy_mask)
       + "\t";
     str += to_hexadecimal(j->second.source_checksum.md5sum) + "\n";
     info_ts = std::max(j->second.source_checksum.timestamp, info_ts);
@@ -760,12 +887,14 @@ static bool need_to_relink(const parser_options& po,
   for (all_modules_info::modules_type::const_iterator i = ami.modules.begin();
     i != ami.modules.end(); ++i) {
     const std::string fn = get_o_filename(po, i->second);
-    struct stat sbuf;
-    if (stat(fn.c_str(), &sbuf) != 0) {
+    source_statbuf sbuf;
+    const bool stat_header = false;
+    int e = stat_source_file(fn.c_str(), sbuf, stat_header);
+    if (e != 0) {
       arena_error_throw(0, "%s:0: Failed to stat: errno=%d\n",
-        fn.c_str(), errno);
+        fn.c_str(), e);
     }
-    const time_t fn_time = std::max(sbuf.st_mtime, sbuf.st_ctime);
+    const time_t fn_time = sbuf.time_max();
     if (fn_time + PXC_TIMESTAMP_MARGIN >= ofn_time) {
       return true;
     }
@@ -820,7 +949,7 @@ static void compile_cxx_all(const parser_options& po,
 {
   std::string ofn;
   if (po.gen_single_cc) {
-    ofn = mi_main.aux_filename + ".exe";
+    ofn = replace_or_append_suffix(mi_main.aux_filename, ".exe");
   } else {
     ofn = po.profile.generate_dynamic ?
       get_so_filename(po, mi_main) : get_exe_filename(po, mi_main);
@@ -829,7 +958,7 @@ static void compile_cxx_all(const parser_options& po,
   std::string cmd = po.profile.cxx + " " + po.profile.cflags
     + " -o " + ofn_tmp;
   if (po.gen_single_cc) {
-    cmd += " " + mi_main.aux_filename + ".o";
+    cmd += " " + replace_or_append_suffix(mi_main.aux_filename, ".o");
   } else {
     for (all_modules_info::modules_type::const_iterator i
       = ami.modules.begin(); i != ami.modules.end(); ++i) {
@@ -838,13 +967,13 @@ static void compile_cxx_all(const parser_options& po,
     }
   }
   const std::string link_str = get_link_flags(po, ami, mi_main);
-  /*
-  if (po.gen_single_cc) {
-    const std::string cxx_str = get_cxx_and_cflags(po, mi_main);
-    printf("%s\n", cxx_str.c_str());
-    printf("%s\n", link_str.c_str());
-  }
-  */
+  DBG_SRC(
+    if (po.gen_single_cc) {
+      const std::string cxx_str = get_cxx_and_cflags(po, mi_main);
+      fprintf(stderr, "%s\n", cxx_str.c_str());
+      fprintf(stderr, "%s\n", link_str.c_str());
+    }
+  )
   cmd += link_str;
   int r = 0;
   std::string obuf;
@@ -877,6 +1006,8 @@ static std::string get_expected_namespace_for_file(std::string fn)
 
 static int compare_file_contents(const std::string& f0, const std::string& f1)
 {
+  DBG_READ(fprintf(stderr, "read_file_content 0 %s\n", f0.c_str()));
+  DBG_READ(fprintf(stderr, "read_file_content 0 %s\n", f1.c_str()));
   const std::string s0 = file_exist(f0) ? read_file_content(f0, true) : "";
   const std::string s1 = file_exist(f1) ? read_file_content(f1, true) : "";
   return s0 == s1 ? 0 : 1;
@@ -928,11 +1059,9 @@ static void compile_module_to_cc_srcs(const parser_options& po,
           trim_path(mi.aux_filename, po.trim_path).c_str());
       }
     }
-    #if 0
-    fprintf(stderr, "src=%s mins=%s srcns=%s fn=%s\n", i->c_str(),
+    DBG_SRC(fprintf(stderr, "src=%s mins=%s srcns=%s fn=%s\n", i->c_str(),
       mi.unique_namespace.c_str(),
-      cursrc_imports.main_unique_namespace.c_str(), mi.aux_filename.c_str());
-    #endif
+      cursrc_imports.main_unique_namespace.c_str(), mi.aux_filename.c_str()));
   }
   arena_error_throw_pushed();
   /* remove old files */
@@ -1005,7 +1134,7 @@ static void compile_module_to_cc_srcs(const parser_options& po,
         }
       }
       /* note: filename uniqueness is not guaranteed */
-      sfn += f + ".cc";
+      sfn += replace_or_append_suffix(f, ".cc");
       if (compare_file_contents(tmp_fn, sfn) != 0) {
         copy_file_atomic(tmp_fn, sfn, false);
       }
@@ -1030,8 +1159,8 @@ static void compile_module_to_cc_srcs(const parser_options& po,
       } else {
         bp = po.gen_cc_dir + "/" + mi_main.aux_filename;
       }
-      cfn = bp + ".cc";
-      ofn = bp + ".o";
+      cfn = replace_or_append_suffix(bp, ".cc");
+      ofn = replace_or_append_suffix(bp, ".o");
     } else {
       cfn = get_cc_filename(po, mi_main);
       ofn = get_o_filename(po, mi_main);
@@ -1348,6 +1477,10 @@ static void load_profile(parser_options& po)
   if (iter != po.profile.mapval.end()) {
     po.profile.show_warnings = true;
   }
+  iter = po.profile.mapval.find("error_detail");
+  if (iter != po.profile.mapval.end()) {
+    po.profile.error_detail = true;
+  }
   iter = po.profile.mapval.find("emit_threaded_dll");
   po.profile.emit_threaded_dll = iter != po.profile.mapval.end()
     ? iter->second : "";
@@ -1424,46 +1557,16 @@ static int compile_and_execute(parser_options& po,
     compile_cxx_all(po, ami, mi_main);
   }
   if (po.gen_out) {
-    #if 1
     std::string base_filename = po.src_filename;
     if (base_filename.size() > 3 &&
       base_filename.substr(base_filename.size() - 3) == ".px") {
       base_filename = base_filename.substr(0, base_filename.size() - 3);
     }
-    #if 0
-    std::string::size_type delim = base_filename.rfind('/');
-    if (delim != base_filename.npos) {
-      base_filename = base_filename.substr(delim + 1);
-    }
-    #endif
     base_filename += (po.profile.generate_dynamic ? ".so" : ".exe");
-    #if 0
-    std::string dn = po.src_filename + ".gen/";
-    mkdir_hier(dn);
-    const std::string gen_out = dn + base_filename;
-    #endif
     const std::string gen_out = base_filename;
-    #endif
-    #if 0
-    const std::string gen_out = src_filename +
-      (po.profile.generate_dynamic ? ".so" : ".exe");
-    #endif
     const std::string ofn = po.profile.generate_dynamic ?
       get_so_filename(po, mi_main) : get_exe_filename(po, mi_main);
     copy_file_atomic(ofn, gen_out, true);
-    #if 0
-    const std::string ofn_tmp = gen_out + ".tmp";
-    tmpfile_guard g(ofn_tmp);
-    copy_file(ofn, ofn_tmp); /* throws */
-    if (chmod(ofn_tmp.c_str(), 0755) != 0) {
-      arena_error_throw(0, "-:-: chmod('%s') failed: errno=%d",
-        ofn_tmp.c_str(), errno);
-    }
-    if (rename(ofn_tmp.c_str(), gen_out.c_str()) != 0) {
-      arena_error_throw(0, "-:-: rename('%s', '%s') failed: errno=%d",
-        ofn_tmp.c_str(), gen_out.c_str(), errno);
-    }
-    #endif
   }
   if (po.no_execute) {
     return 0;
@@ -1567,9 +1670,11 @@ static int prepare_options(parser_options& po, int argc, char **argv)
 {
   if (argc >= 1) {
     po.argv0 = argv[0];
-    struct stat sbuf;
-    if (stat(argv[0], &sbuf) == 0) {
-      po.argv0_ctime = sbuf.st_ctime;
+    source_statbuf sbuf;
+    const bool has_header = false;
+    int const e = stat_source_file(argv[0], sbuf, has_header);
+    if (e == 0) {
+      po.argv0_ctime = sbuf.time_max();
     }
   } else {
     po.argv0 = "pxc";
@@ -1764,8 +1869,12 @@ static int cdriver_main(int argc, char **argv)
 
 };
 
+void *stack_bottom = 0; // for debugging
+
 int main(int argc, char **argv)
 {
+  int dummy = 0;
+  stack_bottom = &dummy;
   return pxc::cdriver_main(argc, argv);
 }
 

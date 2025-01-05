@@ -1,8 +1,10 @@
-public threaded namespace core::pointer::raw "use-unsafe";
+public threaded namespace core::pointer::raw "export-unsafe";
 public import core::numeric::integral -;
 public import core::pointer +;
+public import core::operator;
 public import core::generic::datatype -;
 public import core::container::array +;
+public import core::meta::vararg va;
 public import core::meta m;
 
 public pure tsvaluetype struct extern "pxcrt::rawptr<>::type" "nocascade" {t}
@@ -242,6 +244,39 @@ rawptr_to_size_t(rawptr{t} x);
 public pure function extern "pxcrt::crawptr_to_size_t" {t} size_t
 crawptr_to_size_t(crawptr{t} x);
 
+public pure function extern "pxcrt::rawptr_deref__" {t} t mutable&
+rawptr_deref__(rawptr{t} x);
+public pure function extern "pxcrt::crawptr_deref__" {t} t const&
+crawptr_deref__(crawptr{t} x);
+
+public pure function extern "pxcrt::rawptr_to_slice" {t} slice{t}
+rawptr_to_slice(rawptr{t} x, size_t xlen);
+public pure function extern "pxcrt::crawptr_to_cslice" {t} cslice{t}
+crawptr_to_cslice(crawptr{t} x, size_t xlen);
+
+public pure function extern "pxcrt::reinterpret_cast_const" {tto, tfrom}
+crawptr{tto} reinterpret_cast_const(crawptr{tfrom} x);
+public pure function extern "pxcrt::reinterpret_cast_mutable" {tto, tfrom}
+rawptr{tto} reinterpret_cast_mutable(rawptr{tfrom} x);
+
+public pure function {t, tilist} rawptr{t}
+new(expand(va::arg_decls_byref{tilist}))
+{
+  rawptr{t} r;
+  r extern "new" t(expand(a: va::arg_names{m::size{tilist}}; a));
+  return r;
+}
+
+public pure function {t} void
+delete(t x)
+{
+  if (is_cm_rawptr{t}) {
+    delete_impl{t}(x);
+  } else {
+    m::error{m::concat{"invalid type: ", t}};
+  }
+}
+
 /* private */
 
 private metafunction check_rawptr{t}
@@ -279,6 +314,23 @@ private metafunction is_base_class{tderiv, tbase}
         m::nil,
         m::symbol{tderiv, "__base__", m::nil}},
       m::to_string}};
+
+private metafunction is_cm_rawptr{t}
+  m::or{
+    m::eq{m::nameof{t}, "core::pointer::raw::rawptr"},
+    m::eq{m::nameof{t}, "core::pointer::raw::crawptr"}};
+
+private pure function extern "pxcrt::delete_impl" {t} void
+delete_impl(t x);
+
+public pure function ccharptr varray_c_str(string mutable& x)
+{
+  const sz = x.size();
+  x.reserve(sz + 1);
+  const p = x.to_rawptr();
+  *(p + sz) = 0;
+  return x.to_crawptr().to_ccharptr();
+}
 
 extern "types" inline
 namespace pxcrt {
@@ -367,6 +419,26 @@ rawptr_upcast(Tfrom x)
 {
   return x;
 }
+
+template <typename T> static inline T&
+rawptr_deref__(T *x) { return *x; }
+template <typename T> static inline T const&
+crawptr_deref__(T const *x) { return *x; }
+
+template <typename T> static inline bt_slice<T>
+rawptr_to_slice(T *x, bt_size_t xlen) { return bt_slice<T>(x, xlen); }
+template <typename T> static inline bt_cslice<T>
+crawptr_to_cslice(T const *x, bt_size_t xlen) { return bt_cslice<T>(x, xlen); }
+
+template <typename Tto, typename Tfrom> static inline Tto const *
+reinterpret_cast_const(Tfrom const *x)
+{ return reinterpret_cast<Tto const *>(x); }
+template <typename Tto, typename Tfrom> static inline Tto *
+reinterpret_cast_mutable(Tfrom *x)
+{ return reinterpret_cast<Tto *>(x); }
+
+template <typename T> static inline void
+delete_impl(T x) { delete x; }
 
 };
 ;

@@ -24,18 +24,15 @@
 #define DBG_RES(x)
 #define DBG_SE(x)
 #define DBG_TE1(x)
+#define DBG_TATTR(x)
 
 namespace pxc {
 
 expr_i::expr_i(const char *fn, int line)
   : fname(fn), line(line), type_of_this_expr(), conv(conversion_e_none),
     type_conv_to(), parent_expr(0), symtbl_lexical(0), tempvar_id(-1),
-    generated_flag(false)
+    generated_flag(false), ephemeral_scope(nullptr)
 {
-  #if 0
-  // FIXME: remove. must be pushed after obj is successfully created
-  expr_arena.push_back(this);
-  #endif
   type_of_this_expr = builtins.type_void;
 }
 
@@ -83,7 +80,6 @@ expr_i *symbol_common::resolve_symdef(symbol_table *lookup)
     DBG_TE2(fprintf(stderr,
       "expr_te::resolve_symdef: this=%p symtbl=%p [%s] up=%d\n", this,
       lookup, symbol_def->dump(0).c_str(), (int)is_upvalue));
-    symtbl_defined = lookup;
     upvalue_flag = is_upvalue;
     assert(symbol_def);
     #if 0
@@ -247,6 +243,7 @@ const expr_i *expr_te::get_symdef() const
 static void symdef_check_threading_attr_type_or_func(expr_i *e,
   symbol_common *sc, term& t)
 {
+  PUSH_EXPR(dbg0, "", e, t);
   symbol_table *const cur = get_current_frame_symtbl(e->symtbl_lexical);
   if (cur == 0) {
     return;
@@ -254,19 +251,33 @@ static void symdef_check_threading_attr_type_or_func(expr_i *e,
   const attribute_e cattr = get_context_threading_attribute(cur);
   const attribute_e tattr = get_term_threading_attribute(t);
   if ((tattr & attribute_threaded) == 0 && (cattr & attribute_threaded) != 0) {
+    std::string dbgstr_c, dbgstr_t;
+    get_context_threading_attribute(cur, &dbgstr_c);
+    get_term_threading_attribute(t, &dbgstr_t);
+    PUSH_EXPR(dbg2, "cattr=" + std::to_string(cattr) + " " + dbgstr_c,
+      get_current_frame_expr(cur),
+      get_current_frame_expr(cur)->get_value_texpr());
+    PUSH_EXPR(dbg1, "tattr=" + std::to_string(tattr) + " " + dbgstr_t,
+      e, t);
+    DBG_TATTR(fprintf(stderr, "curframeexpr=(%p)%s\n",
+      get_current_frame_expr(cur),
+      get_current_frame_expr(cur)->dump(0).c_str()));
     arena_error_push(e,
       "Type or function '%s' for symbol '%s' is not threaded",
       term_tostr_human(t).c_str(), sc->get_fullsym().c_str());
   }
   if ((tattr & attribute_pure) == 0 && (cattr & attribute_pure) != 0) {
+    std::string dbgstr_c, dbgstr_t;
+    get_context_threading_attribute(cur, &dbgstr_c);
+    get_term_threading_attribute(t, &dbgstr_t);
+    PUSH_EXPR(dbg2, "cattr=" + std::to_string(cattr) + " " + dbgstr_c,
+      e, term());
+    PUSH_EXPR(dbg1, "tattr=" + std::to_string(tattr) + " " + dbgstr_t,
+      e, t);
     arena_error_push(e,
       "Type or function '%s' for symbol '%s' is not pure",
       term_tostr_human(t).c_str(), sc->get_fullsym().c_str());
   }
-  #if 0
-  // FIXME: remove
-  if (is_type_esort(e->get_esort())) {
-  #endif
   if (is_type(t)) {
     if ((tattr & attribute_multithr) == 0 &&
       (cattr & attribute_multithr) != 0) {
@@ -452,6 +463,15 @@ std::string expr_te::dump(int indent) const
     "(" + dump_expr(indent, tlarg) + ")]";
 }
 
+bool expr_te::equals(expr_i *x) const
+{
+  expr_te *p = ptr_down_cast<expr_te>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_expr_equals(nssym, p->nssym)) { return false; }
+  if (!fn_expr_equals(tlarg, p->tlarg)) { return false; }
+  return true;
+}
+
 expr_telist::expr_telist(const char *fn, int line, expr_i *head, expr_i *rest)
   : expr_i(fn, line), head(head), rest(ptr_down_cast<expr_telist>(rest))
 {
@@ -468,6 +488,15 @@ std::string expr_telist::dump(int indent) const
   return r;
 }
 
+bool expr_telist::equals(expr_i *x) const
+{
+  expr_telist *p = ptr_down_cast<expr_telist>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_expr_equals(head, p->head)) { return false; }
+  if (!fn_expr_equals(rest, p->rest)) { return false; }
+  return true;
+}
+
 expr_inline_c::expr_inline_c(const char *fn, int line, const char *label,
   const char *cstr, bool declonly, expr_i *val)
   : expr_i(fn, line), posstr(label), cstr(cstr), declonly(declonly), value(val),
@@ -481,9 +510,9 @@ expr_inline_c::expr_inline_c(const char *fn, int line, const char *label,
     posstr != "link" &&
     posstr != "cflags" &&
     posstr != "ldflags" &&
-    posstr != "disable-bounds-checking" &&
+    posstr != "disable-bounds-check" &&
     posstr != "disable-guard" &&
-    posstr != "disable-noheap-checking" &&
+    posstr != "disable-ephemeral-check" &&
     posstr != "emit"
     ) {
     arena_error_push(this,
@@ -539,6 +568,17 @@ std::string expr_inline_c::dump(int indent) const
   r += cstr;
   r += "end\n";
   return r;
+}
+
+bool expr_inline_c::equals(expr_i *x) const
+{
+  expr_inline_c *p = ptr_down_cast<expr_inline_c>(x);
+  if (p == nullptr) { return false; }
+  if (posstr != p->posstr) { return false; }
+  if (!fn_str_equals(cstr, p->cstr)) { return false; }
+  if (declonly != p->declonly) { return false; }
+  if (!fn_expr_equals(value, p->value)) { return false; }
+  return true;
 }
 
 expr_ns::expr_ns(const char *fn, int line, expr_i *uniq_nssym, bool import,
@@ -607,6 +647,19 @@ std::string expr_ns::dump(int indent) const
   }
 }
 
+bool expr_ns::equals(expr_i *x) const
+{
+  expr_ns *p = ptr_down_cast<expr_ns>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_expr_equals(uniq_nssym, p->uniq_nssym)) { return false; }
+  if (import != p->import) { return false; }
+  if (pub != p->pub) { return false; }
+  if (thr != p->thr) { return false; }
+  if (!fn_str_equals(nsalias, p->nsalias)) { return false; }
+  if (!fn_str_equals(safety, p->safety)) { return false; }
+  return true;
+}
+
 expr_nsmark::expr_nsmark(const char *fn, int line, bool end_mark)
   : expr_i(fn, line), end_mark(end_mark)
 {
@@ -621,6 +674,14 @@ void expr_nsmark::set_unique_namespace_one(const std::string& u,
 std::string expr_nsmark::dump(int indent) const
 {
   return "nsmark " + uniqns;
+}
+
+bool expr_nsmark::equals(expr_i *x) const
+{
+  expr_nsmark *p = ptr_down_cast<expr_nsmark>(x);
+  if (p == nullptr) { return false; }
+  if (end_mark != p->end_mark) { return false; }
+  return true;
 }
 
 expr_int_literal::expr_int_literal(const char *fn, int line, const char *str,
@@ -729,6 +790,15 @@ std::string expr_int_literal::dump(int indent) const
   return str;
 }
 
+bool expr_int_literal::equals(expr_i *x) const
+{
+  expr_int_literal *p = ptr_down_cast<expr_int_literal>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_str_equals(str, p->str)) { return false; }
+  if (is_unsigned != p->is_unsigned) { return false; }
+  return true;
+}
+
 expr_float_literal::expr_float_literal(const char *fn, int line,
   const char *str)
   : expr_i(fn, line), str(str)
@@ -751,6 +821,14 @@ std::string expr_float_literal::dump(int indent) const
   return str;
 }
 
+bool expr_float_literal::equals(expr_i *x) const
+{
+  expr_float_literal *p = ptr_down_cast<expr_float_literal>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_str_equals(str, p->str)) { return false; }
+  return true;
+}
+
 expr_bool_literal::expr_bool_literal(const char *fn, int line, bool v)
   : expr_i(fn, line), value(v)
 {
@@ -769,6 +847,14 @@ expr_bool_literal::resolve_texpr()
 std::string expr_bool_literal::dump(int indent) const
 {
   return value ? "true" : "false";
+}
+
+bool expr_bool_literal::equals(expr_i *x) const
+{
+  expr_bool_literal *p = ptr_down_cast<expr_bool_literal>(x);
+  if (p == nullptr) { return false; }
+  if (value != p->value) { return false; }
+  return true;
 }
 
 #if 0
@@ -885,6 +971,14 @@ std::string expr_str_literal::dump(int indent) const
   return escape_c_str_literal(value);
 }
 
+bool expr_str_literal::equals(expr_i *x) const
+{
+  expr_str_literal *p = ptr_down_cast<expr_str_literal>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_str_equals(raw_value, p->raw_value)) { return false; }
+  return true;
+}
+
 expr_nssym::expr_nssym(const char *fn, int line, expr_i *prefix,
   const char *sym)
   : expr_i(fn, line), prefix(prefix), sym(sym)
@@ -898,6 +992,15 @@ std::string expr_nssym::dump(int indent) const
   } else {
     return sym;
   }
+}
+
+bool expr_nssym::equals(expr_i *x) const
+{
+  expr_nssym *p = ptr_down_cast<expr_nssym>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_expr_equals(prefix, p->prefix)) { return false; }
+  if (!fn_str_equals(sym, p->sym)) { return false; }
+  return true;
 }
 
 expr_symbol::expr_symbol(const char *fn, int line, expr_i *nssym)
@@ -919,6 +1022,14 @@ expr_i *expr_symbol::clone() const
 std::string expr_symbol::dump(int indent) const
 {
   return sdef.get_fullsym().to_string();
+}
+
+bool expr_symbol::equals(expr_i *x) const
+{
+  expr_symbol *p = ptr_down_cast<expr_symbol>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_expr_equals(nssym, p->nssym)) { return false; }
+  return true;
 }
 
 expr_i *expr_symbol::resolve_symdef(symbol_table *lookup)
@@ -984,6 +1095,17 @@ std::string expr_var::dump(int indent) const
   return "var " + dump_expr(indent, type_uneval);
 }
 
+bool expr_var::equals(expr_i *x) const
+{
+  expr_var *p = ptr_down_cast<expr_var>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_str_equals(sym, p->sym)) { return false; }
+  if (!fn_expr_equals(type_uneval, p->type_uneval)) { return false; }
+  if (varinfo.passby != p->varinfo.passby) { return false; }
+  if (attr != p->attr) { return false; }
+  return true;
+}
+
 expr_enumval::expr_enumval(const char *fn, int line, const char *sym,
   expr_i *type_uneval, const char *cname, expr_i *val, attribute_e attr,
   expr_i *rest)
@@ -1037,6 +1159,20 @@ std::string expr_enumval::dump(int indent) const
   return "enumval " + dump_expr(indent, type_uneval);
 }
 
+bool expr_enumval::equals(expr_i *x) const
+{
+  expr_enumval *p = ptr_down_cast<expr_enumval>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_str_equals(sym, p->sym)) { return false; }
+  if (!fn_expr_equals(type_uneval, p->type_uneval)) { return false; }
+  if (!fn_str_equals(cnamei.cname, p->cnamei.cname)) { return false; }
+  if (!fn_expr_equals(value, p->value)) { return false; }
+  if (attr != p->attr) { return false; }
+  if (!fn_expr_equals(rest, p->rest)) { return false; }
+  if (attr != p->attr) { return false; }
+  return true;
+}
+
 expr_stmts::expr_stmts(const char *fn, int line, expr_i *head, expr_i *rest)
   : expr_i(fn, line), head(head), rest(ptr_down_cast<expr_stmts>(rest))
 {
@@ -1055,7 +1191,6 @@ std::string expr_stmts::dump(int indent) const
     case expr_e_for:
     case expr_e_forrange:
     case expr_e_feach:
-    case expr_e_fldfe:
     case expr_e_funcdef:
       r += "\n";
       break;
@@ -1066,6 +1201,43 @@ std::string expr_stmts::dump(int indent) const
   }
   r += dump_expr(indent, rest);
   return r;
+}
+
+bool expr_stmts::equals(expr_i *x) const
+{
+  expr_stmts *p = ptr_down_cast<expr_stmts>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_expr_equals(head, p->head)) { return false; }
+  if (!fn_expr_equals(rest, p->rest)) { return false; }
+  return true;
+}
+
+expr_tparams::expr_tparams(const char *fn, int line, const char *sym,
+  bool is_variadic_metaf, expr_i *rest)
+  : expr_i(fn, line), sym(sym), is_variadic_metaf(is_variadic_metaf),
+    rest(ptr_down_cast<expr_tparams>(rest)), param_def()
+{
+}
+
+std::string expr_tparams::dump(int indent) const
+{
+  std::string r;
+  r += std::string(sym);
+  if (rest != 0) {
+    r += ", ";
+    r += dump_expr(indent, rest);
+  }
+  return r;
+}
+
+bool expr_tparams::equals(expr_i *x) const
+{
+  expr_tparams *p = ptr_down_cast<expr_tparams>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_str_equals(sym, p->sym)) { return false; }
+  if (is_variadic_metaf != p->is_variadic_metaf) { return false; }
+  if (!fn_expr_equals(rest, p->rest)) { return false; }
+  return true;
 }
 
 static expr_tparams *convert_to_tparams(expr_i *tparams,
@@ -1093,6 +1265,104 @@ static expr_tparams *convert_to_tparams(expr_i *tparams,
   }
   tparams_error_r = tparams;
   return 0;
+}
+
+expr_argdecls::expr_argdecls(const char *fn, int line, const char *sym,
+  expr_i *type_uneval, passby_e passby, expr_i *rest)
+  : expr_i(fn, line), sym(sym),
+    type_uneval(ptr_down_cast<expr_te>(type_uneval)), passby(passby),
+    rest(rest), used_as_upvalue(false)
+{
+  type_of_this_expr.clear();
+}
+
+expr_i *expr_argdecls::clone() const
+{
+  expr_argdecls *r = new expr_argdecls(*this);
+  r->type_of_this_expr.clear();
+  return r;
+}
+
+expr_argdecls *expr_argdecls::get_rest() const
+{
+  return ptr_down_cast<expr_argdecls>(rest);
+}
+
+term&
+expr_argdecls::resolve_texpr()
+{
+  if (type_of_this_expr.is_null()) {
+    if (type_uneval != 0) {
+      const bool need_partial_eval = cur_frame_uninstantiated(symtbl_lexical);
+      type_of_this_expr = eval_expr(type_uneval, need_partial_eval);
+    } else {
+      /* type inference */
+      expr_i *bl = parent_expr;
+      while (bl->get_esort() != expr_e_block) {
+        bl = bl->parent_expr;
+      }
+      expr_i *const ep = bl->parent_expr;
+      if (ep->get_esort() == expr_e_feach) {
+        expr_feach *const efe = ptr_down_cast<expr_feach>(ep);
+        const bool is_key = parent_expr->get_esort() != expr_e_argdecls;
+        if (is_key) {
+          type_of_this_expr = get_array_index_texpr(0,
+            efe->ce->resolve_texpr());
+        } else {
+          type_of_this_expr = get_array_elem_texpr(0,
+            efe->ce->resolve_texpr());
+        }
+      } else if (ep->get_esort() == expr_e_forrange) {
+        expr_forrange *const efr = ptr_down_cast<expr_forrange>(ep);
+        term& t0 = efr->r0->resolve_texpr();
+        term& t1 = efr->r1->resolve_texpr();
+        const bool r0i = is_compiletime_intval(efr->r0);
+        if (r0i) {
+          check_convert_type(efr->r0, t1);
+          type_of_this_expr = t1;
+        } else {
+          check_convert_type(efr->r1, t0);
+          type_of_this_expr = t0;
+        }
+      } else if (ep->get_esort() == expr_e_if) {
+        expr_if *const ei = ptr_down_cast<expr_if>(ep);
+        type_of_this_expr = ei->cond->resolve_texpr();
+      }
+    }
+    if (type_of_this_expr.is_null()) {
+      arena_error_throw(this, "Type inference failed for variable '%s'", sym);
+    }
+    DBG_TE(fprintf(stderr,
+      "argdecls %p %s %s:%d resolve_texpr uneval=%p type_of_this_expr=%p\n",
+      this, sym, fname, line, type_uneval, type_of_this_expr.expr.expr));
+  } else {
+    DBG_TE(fprintf(stderr,
+      "argdecls %p resolve_texpr skip uneval=%p type_of_this_expr=%p\n",
+      this, type_uneval, type_of_this_expr.expr.expr));
+  }
+  return type_of_this_expr;
+}
+
+std::string expr_argdecls::dump(int indent) const
+{
+  std::string r = sym;
+  r += ":" + dump_expr(indent, type_uneval);
+  if (rest) {
+    r += ", ";
+    r += dump_expr(indent, rest);
+  }
+  return r;
+}
+
+bool expr_argdecls::equals(expr_i *x) const
+{
+  expr_argdecls *p = ptr_down_cast<expr_argdecls>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_str_equals(sym, p->sym)) { return false; }
+  if (!fn_expr_equals(type_uneval, p->type_uneval)) { return false; }
+  if (passby != p->passby) { return false; }
+  if (!fn_expr_equals(rest, p->rest)) { return false; }
+  return true;
 }
 
 expr_block::expr_block(const char *fn, int line, expr_i *tparams,
@@ -1184,6 +1454,19 @@ std::string expr_block::dump(int indent) const
   return r;
 }
 
+bool expr_block::equals(expr_i *x) const
+{
+  expr_block *p = ptr_down_cast<expr_block>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_expr_equals(tinfo.tparams, p->tinfo.tparams)) { return false; }
+  if (!fn_expr_equals(inherit, p->inherit)) { return false; }
+  if (!fn_expr_equals(argdecls, p->argdecls)) { return false; }
+  if (!fn_expr_equals(rettype_uneval, p->rettype_uneval)) { return false; }
+  if (ret_passby != p->ret_passby) { return false; }
+  if (!fn_expr_equals(stmts, p->stmts)) { return false; }
+  return true;
+}
+
 expr_op::expr_op(const char *fn, int line, int op, const char *extop,
   expr_i *arg0, expr_i *arg1)
   : expr_i(fn, line), op(op), extop(extop == 0 ? "" : extop), arg0(arg0),
@@ -1269,6 +1552,17 @@ std::string expr_op::dump(int indent) const
   return "";
 }
 
+bool expr_op::equals(expr_i *x) const
+{
+  expr_op *p = ptr_down_cast<expr_op>(x);
+  if (p == nullptr) { return false; }
+  if (op != p->op) { return false; }
+  if (extop != p->extop) { return false; }
+  if (!fn_expr_equals(arg0, p->arg0)) { return false; }
+  if (!fn_expr_equals(arg1, p->arg1)) { return false; }
+  return true;
+}
+
 expr_funccall::expr_funccall(const char *fn, int line, expr_i *func,
   expr_i *arg)
   : expr_i(fn, line), func(func), arg(arg), funccall_sort(funccall_e_funccall)
@@ -1294,6 +1588,15 @@ std::string expr_funccall::dump(int indent) const
   }
   r += ")";
   return r;
+}
+
+bool expr_funccall::equals(expr_i *x) const
+{
+  expr_funccall *p = ptr_down_cast<expr_funccall>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_expr_equals(func, p->func)) { return false; }
+  if (!fn_expr_equals(arg, p->arg)) { return false; }
+  return true;
 }
 
 expr_special::expr_special(const char *fn, int line, int tok, expr_i *arg)
@@ -1325,6 +1628,15 @@ std::string expr_special::dump(int indent) const
   return "";
 }
 
+bool expr_special::equals(expr_i *x) const
+{
+  expr_special *p = ptr_down_cast<expr_special>(x);
+  if (p == nullptr) { return false; }
+  if (tok != p->tok) { return false; }
+  if (!fn_expr_equals(arg, p->arg)) { return false; }
+  return true;
+}
+
 expr_if::expr_if(const char *fn, int line, expr_i *cond, expr_i *b1,
   expr_i *b2, expr_i *rest)
   : expr_i(fn, line), cond(cond),
@@ -1354,6 +1666,18 @@ std::string expr_if::dump(int indent) const
   return r;
 }
 
+bool expr_if::equals(expr_i *x) const
+{
+  expr_if *p = ptr_down_cast<expr_if>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_expr_equals(cond, p->cond)) { return false; }
+  if (!fn_expr_equals(block1, p->block1)) { return false; }
+  if (!fn_expr_equals(block2, p->block2)) { return false; }
+  if (!fn_expr_equals(cond, p->cond)) { return false; }
+  if (!fn_expr_equals(rest, p->rest)) { return false; }
+  return true;
+}
+
 expr_while::expr_while(const char *fn, int line, expr_i *cond, expr_i *block)
   : expr_i(fn, line), cond(cond),
     block(ptr_down_cast<expr_block>(block))
@@ -1368,6 +1692,15 @@ std::string expr_while::dump(int indent) const
   r += space_string(indent, 'w');
   r += dump_expr(indent, block);
   return r;
+}
+
+bool expr_while::equals(expr_i *x) const
+{
+  expr_while *p = ptr_down_cast<expr_while>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_expr_equals(cond, p->cond)) { return false; }
+  if (!fn_expr_equals(block, p->block)) { return false; }
+  return true;
 }
 
 expr_for::expr_for(const char *fn, int line, expr_i *e0, expr_i *e1,
@@ -1391,6 +1724,17 @@ std::string expr_for::dump(int indent) const
   return r;
 }
 
+bool expr_for::equals(expr_i *x) const
+{
+  expr_for *p = ptr_down_cast<expr_for>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_expr_equals(e0, p->e0)) { return false; }
+  if (!fn_expr_equals(e1, p->e1)) { return false; }
+  if (!fn_expr_equals(e2, p->e2)) { return false; }
+  if (!fn_expr_equals(block, p->block)) { return false; }
+  return true;
+}
+
 expr_forrange::expr_forrange(const char *fn, int line, expr_i *r0, expr_i *r1,
   expr_i *block)
   : expr_i(fn, line), r0(r0), r1(r1), block(ptr_down_cast<expr_block>(block))
@@ -1409,6 +1753,16 @@ std::string expr_forrange::dump(int indent) const
   return r;
 }
 
+bool expr_forrange::equals(expr_i *x) const
+{
+  expr_forrange *p = ptr_down_cast<expr_forrange>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_expr_equals(r0, p->r0)) { return false; }
+  if (!fn_expr_equals(r1, p->r1)) { return false; }
+  if (!fn_expr_equals(block, p->block)) { return false; }
+  return true;
+}
+
 expr_feach::expr_feach(const char *fn, int line, expr_i *ce, expr_i *block)
   : expr_i(fn, line), ce(ce), block(ptr_down_cast<expr_block>(block))
 {
@@ -1424,37 +1778,13 @@ std::string expr_feach::dump(int indent) const
   return r;
 }
 
-expr_fldfe::expr_fldfe(const char *fn, int line, const char *namesym,
-  const char *fldsym, const char *idxsym, expr_i *te, expr_i *stmts)
-  : expr_i(fn, line), namesym(namesym), fldsym(fldsym),
-    idxsym(idxsym),
-    te(ptr_down_cast<expr_te>(te)),
-    stmts(ptr_down_cast<expr_stmts>(stmts))
+bool expr_feach::equals(expr_i *x) const
 {
-}
-
-std::string expr_fldfe::dump(int indent) const
-{
-  std::string r = "fldfe ";
-  r += dump_expr(indent, stmts);
-  return r;
-}
-
-expr_foldfe::expr_foldfe(const char *fn, int line, const char *itersym,
-  expr_i *valueste, const char *embedsym, expr_i *embedexpr,
-  const char *foldop, expr_i *stmts)
-  : expr_i(fn, line), itersym(itersym),
-    valueste(ptr_down_cast<expr_te>(valueste)), embedsym(embedsym),
-    embedexpr(embedexpr), foldop(foldop),
-    stmts(ptr_down_cast<expr_stmts>(stmts))
-{
-}
-
-std::string expr_foldfe::dump(int indent) const
-{
-  std::string r = "foldfe ";
-  r += dump_expr(indent, stmts);
-  return r;
+  expr_feach *p = ptr_down_cast<expr_feach>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_expr_equals(ce, p->ce)) { return false; }
+  if (!fn_expr_equals(block, p->block)) { return false; }
+  return true;
 }
 
 expr_expand::expr_expand(const char *fn, int line, expr_i *callee,
@@ -1480,99 +1810,23 @@ std::string expr_expand::dump(int indent) const
   return r;
 }
 
-
-
-expr_argdecls::expr_argdecls(const char *fn, int line, const char *sym,
-  expr_i *type_uneval, passby_e passby, expr_i *rest)
-  : expr_i(fn, line), sym(sym),
-    type_uneval(ptr_down_cast<expr_te>(type_uneval)), passby(passby),
-    rest(rest), used_as_upvalue(false)
+bool expr_expand::equals(expr_i *x) const
 {
-  type_of_this_expr.clear();
-}
-
-expr_i *expr_argdecls::clone() const
-{
-  expr_argdecls *r = new expr_argdecls(*this);
-  r->type_of_this_expr.clear();
-  return r;
-}
-
-expr_argdecls *expr_argdecls::get_rest() const
-{
-  return ptr_down_cast<expr_argdecls>(rest);
-}
-
-term&
-expr_argdecls::resolve_texpr()
-{
-  if (type_of_this_expr.is_null()) {
-    if (type_uneval != 0) {
-      const bool need_partial_eval = cur_frame_uninstantiated(symtbl_lexical);
-      type_of_this_expr = eval_expr(type_uneval, need_partial_eval);
-    } else {
-      /* type inference */
-      expr_i *bl = parent_expr;
-      while (bl->get_esort() != expr_e_block) {
-        bl = bl->parent_expr;
-      }
-      expr_i *const ep = bl->parent_expr;
-      if (ep->get_esort() == expr_e_feach) {
-        expr_feach *const efe = ptr_down_cast<expr_feach>(ep);
-        const bool is_key = parent_expr->get_esort() != expr_e_argdecls;
-        if (is_key) {
-          type_of_this_expr = get_array_index_texpr(0,
-            efe->ce->resolve_texpr());
-        } else {
-          type_of_this_expr = get_array_elem_texpr(0,
-            efe->ce->resolve_texpr());
-        }
-      } else if (ep->get_esort() == expr_e_forrange) {
-        expr_forrange *const efr = ptr_down_cast<expr_forrange>(ep);
-        term& t0 = efr->r0->resolve_texpr();
-        term& t1 = efr->r1->resolve_texpr();
-        const bool r0i = is_compiletime_intval(efr->r0);
-        if (r0i) {
-          check_convert_type(efr->r0, t1);
-          type_of_this_expr = t1;
-        } else {
-          check_convert_type(efr->r1, t0);
-          type_of_this_expr = t0;
-        }
-      } else if (ep->get_esort() == expr_e_if) {
-        expr_if *const ei = ptr_down_cast<expr_if>(ep);
-        type_of_this_expr = ei->cond->resolve_texpr();
-      }
-    }
-    if (type_of_this_expr.is_null()) {
-      arena_error_throw(this, "Type inference failed for variable '%s'", sym);
-    }
-    DBG_TE(fprintf(stderr,
-      "argdecls %p %s %s:%d resolve_texpr uneval=%p type_of_this_expr=%p\n",
-      this, sym, fname, line, type_uneval, type_of_this_expr.expr.expr));
-  } else {
-    DBG_TE(fprintf(stderr,
-      "argdecls %p resolve_texpr skip uneval=%p type_of_this_expr=%p\n",
-      this, type_uneval, type_of_this_expr.expr.expr));
-  }
-  return type_of_this_expr;
-}
-
-std::string expr_argdecls::dump(int indent) const
-{
-  std::string r = sym;
-  r += ":" + dump_expr(indent, type_uneval);
-  if (rest) {
-    r += ", ";
-    r += dump_expr(indent, rest);
-  }
-  return r;
+  expr_expand *p = ptr_down_cast<expr_expand>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_str_equals(itersym, p->itersym)) { return false; }
+  if (!fn_str_equals(idxsym, p->idxsym)) { return false; }
+  if (!fn_expr_equals(valueste, p->valueste)) { return false; }
+  if (!fn_expr_equals(baseexpr, p->baseexpr)) { return false; }
+  if (ex != p->ex) { return false; }
+  if (!fn_expr_equals(rest, p->rest)) { return false; }
+  return true;
 }
 
 expr_funcdef::expr_funcdef(const char *fn, int line, const char *sym,
   const char *cname, const char *copt, bool is_const, expr_i *block,
   bool ext_pxc, bool no_def, attribute_e attr)
-  : expr_i(fn, line), sym(sym), cnamei(cname), is_const(is_const),
+  : expr_i(fn, line), sym(sym), cnamei(cname), copt(copt), is_const(is_const),
     rettype_eval(), block(ptr_down_cast<expr_block>(block)),
     ext_pxc(ext_pxc), no_def(no_def), c_proto_flag(true), c_keep_flag(false),
     c_noop_flag(false), value_texpr(), attr(attr), used_as_cfuncobj(false)
@@ -1690,6 +1944,21 @@ std::string expr_funcdef::dump(int indent) const
   return r;
 }
 
+bool expr_funcdef::equals(expr_i *x) const
+{
+  expr_funcdef *p = ptr_down_cast<expr_funcdef>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_str_equals(sym, p->sym)) { return false; }
+  if (!fn_str_equals(cnamei.cname, p->cnamei.cname)) { return false; }
+  if (!fn_str_equals(copt, p->copt)) { return false; }
+  if (is_const != p->is_const) { return false; }
+  if (!fn_expr_equals(block, p->block)) { return false; }
+  if (ext_pxc != p->ext_pxc) { return false; }
+  if (no_def != p->no_def) { return false; }
+  if (attr != p->attr) { return false; }
+  return true;
+}
+
 expr_typedef::expr_typedef(const char *fn, int line, const char *sym,
   const char *cname, const char *family, bool is_enum, bool is_bitmask,
   expr_i *enumvals, unsigned int num_tparams, attribute_e attr)
@@ -1720,6 +1989,21 @@ std::string expr_typedef::dump(int indent) const
     + " " + (typefamily_str != 0 ? typefamily_str : "");
 }
 
+bool expr_typedef::equals(expr_i *x) const
+{
+  expr_typedef *p = ptr_down_cast<expr_typedef>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_str_equals(sym, p->sym)) { return false; }
+  if (!fn_str_equals(cnamei.cname, p->cnamei.cname)) { return false; }
+  if (!fn_str_equals(typefamily_str, p->typefamily_str)) { return false; }
+  if (is_enum != p->is_enum) { return false; }
+  if (is_bitmask != p->is_bitmask) { return false; }
+  if (!fn_expr_equals(enumvals, p->enumvals)) { return false; }
+  if (num_tparams != p->num_tparams) { return false; }
+  if (attr != p->attr) { return false; }
+  return true;
+}
+
 expr_metafdef::expr_metafdef(const char *fn, int line, const char *sym,
   expr_i *tparams, expr_i *rhs, attribute_e attr)
   : expr_i(fn, line), sym(sym != 0 ? sym : ""),
@@ -1740,6 +2024,16 @@ expr_i *expr_metafdef::clone() const
 std::string expr_metafdef::dump(int indent) const
 {
   return std::string("macro '") + sym + "' " + dump_expr(indent, get_rhs());
+}
+
+bool expr_metafdef::equals(expr_i *x) const
+{
+  expr_metafdef *p = ptr_down_cast<expr_metafdef>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_str_equals(sym, p->sym)) { return false; }
+  if (!fn_expr_equals(block, p->block)) { return false; }
+  if (attr != p->attr) { return false; }
+  return true;
 }
 
 expr_struct::expr_struct(const char *fn, int line, const char *sym,
@@ -1824,6 +2118,18 @@ std::string expr_struct::dump(int indent) const
   r += "\n";
   r += dump_expr(indent, block);
   return r;
+}
+
+bool expr_struct::equals(expr_i *x) const
+{
+  expr_struct *p = ptr_down_cast<expr_struct>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_str_equals(sym, p->sym)) { return false; }
+  if (!fn_str_equals(cnamei.cname, p->cnamei.cname)) { return false; }
+  if (!fn_str_equals(typefamily_str, p->typefamily_str)) { return false; }
+  if (!fn_expr_equals(block, p->block)) { return false; }
+  if (attr != p->attr) { return false; }
+  return true;
 }
 
 expr_dunion::expr_dunion(const char *fn, int line, const char *sym,
@@ -1914,6 +2220,16 @@ std::string expr_dunion::dump(int indent) const
   return r;
 }
 
+bool expr_dunion::equals(expr_i *x) const
+{
+  expr_dunion *p = ptr_down_cast<expr_dunion>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_str_equals(sym, p->sym)) { return false; }
+  if (!fn_expr_equals(block, p->block)) { return false; }
+  if (attr != p->attr) { return false; }
+  return true;
+}
+
 expr_interface::expr_interface(const char *fn, int line, const char *sym,
   const char *cname, expr_i *impl_st, expr_i *block, attribute_e attr)
   : expr_i(fn, line), sym(sym), impl_st(ptr_down_cast<expr_symbol>(impl_st)),
@@ -1949,6 +2265,18 @@ std::string expr_interface::dump(int indent) const
   return r;
 }
 
+bool expr_interface::equals(expr_i *x) const
+{
+  expr_interface *p = ptr_down_cast<expr_interface>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_str_equals(sym, p->sym)) { return false; }
+  if (!fn_str_equals(cnamei.cname, p->cnamei.cname)) { return false; }
+  if (!fn_expr_equals(impl_st, p->impl_st)) { return false; }
+  if (!fn_expr_equals(block, p->block)) { return false; }
+  if (attr != p->attr) { return false; }
+  return true;
+}
+
 expr_try::expr_try(const char *fn, int line, expr_i *tblock, expr_i *cblock,
   expr_i *rest)
   : expr_i(fn, line), tblock(ptr_down_cast<expr_block>(tblock)),
@@ -1970,22 +2298,14 @@ std::string expr_try::dump(int indent) const
   return r;
 }
 
-expr_tparams::expr_tparams(const char *fn, int line, const char *sym,
-  bool is_variadic_metaf, expr_i *rest)
-  : expr_i(fn, line), sym(sym), is_variadic_metaf(is_variadic_metaf),
-    rest(ptr_down_cast<expr_tparams>(rest)), param_def()
+bool expr_try::equals(expr_i *x) const
 {
-}
-
-std::string expr_tparams::dump(int indent) const
-{
-  std::string r;
-  r += std::string(sym);
-  if (rest != 0) {
-    r += ", ";
-    r += dump_expr(indent, rest);
-  }
-  return r;
+  expr_try *p = ptr_down_cast<expr_try>(x);
+  if (p == nullptr) { return false; }
+  if (!fn_expr_equals(tblock, p->tblock)) { return false; }
+  if (!fn_expr_equals(cblock, p->cblock)) { return false; }
+  if (!fn_expr_equals(rest, p->rest)) { return false; }
+  return true;
 }
 
 };

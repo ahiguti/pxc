@@ -210,9 +210,10 @@ void c_exception_log_stderr(const std::exception& ex)
 {
   const std::string mess = c_exception_to_stdstring(ex);
 #ifdef PXC_POSIX
-  ::write(2, mess.data(), mess.size());
+  __attribute__((unused)) auto const r = ::write(2, mess.data(), mess.size());
 #else
-  _write(2, mess.data(), (unsigned)mess.size());
+  __attribute__((unused)) auto const r = _write(2, mess.data(),
+    (unsigned)mess.size());
 #endif
 }
 

@@ -1,0 +1,27 @@
+
+public namespace eph1;
+import core::common -;
+
+pure function cslice{int} longer(cslice{int} const& ax, cslice{int} const& ay)
+{
+  if (ax.size() > ay.size()) {
+    return ax;
+  } else {
+    return ay;
+  }
+}
+
+threaded function void test_ephemeral1()
+{
+  varray{int} arr;
+  arr.resize(100, 0);
+  cslice{int} xsli = arr[0 .. 10];
+  thread_io().stdout().println(xsli.size());
+  cslice{int} ysli = arr[10 .. 30];
+  const zsli = longer(xsli, ysli);
+  thread_io().stdout().println(zsli.size());
+}
+
+{
+  test_ephemeral1();
+}

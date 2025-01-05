@@ -124,7 +124,7 @@ unsigned long long ulong_from_string_hexadecimal(const std::string& s)
 {
   unsigned long long v = 0;
   const int r = sscanf(s.c_str(), "%llx", &v);
-  return r != 0 ? v : 0;
+  return r == 1 ? v : 0;
 }
 
 unsigned char uchar_from_hexadecimal(int c)
@@ -520,7 +520,7 @@ int popen_cmd(const std::string& cmd, std::string& out_r)
       args.push_back(tok);
     }
     for (size_t i = 0; i < args.size(); ++i) {
-      raw_args.push_back(args[i].data());
+      raw_args.push_back(&args[i][0]);
     }
     if (raw_args.empty()) {
       return -1;
@@ -556,6 +556,7 @@ int popen_cmd(const std::string& cmd, std::string& out_r)
     }
     out_r.append(buf.data(), rlen);
   }
+  int r = -1;
   while (true) {
     int st = 0;
     const int wpid = waitpid(pid, &st, 0);
@@ -563,13 +564,16 @@ int popen_cmd(const std::string& cmd, std::string& out_r)
       if (errno == EINTR) {
         continue;
       }
-      return -1;
+      return -2;
     }
     if (wpid == pid) {
+      if (WIFEXITED(st)) {
+        r = WEXITSTATUS(st);
+      }
       break;
     }
   }
-  return 0;
+  return r;
 }
 
 void unlink_recursive(const std::string& fn)

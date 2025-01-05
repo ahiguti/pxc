@@ -10,8 +10,8 @@ public struct extern "pxc_python::object" object {
 
 public function {t} object make_object(t const& v)
 {
-  if (m::characteristic{t, "noheap"}) {
-    m::error{"can not create a python object from a noheap type"};
+  if (m::characteristic{t, "ephemeral"}) {
+    m::error{"can not create a python object from an ephemeral type"};
   }
   extern "emit" m::concat{"return boost::python::object(v$)"};
   return object(); /* dummy */
@@ -20,8 +20,8 @@ public function {t} object make_object(t const& v)
 public function {t} object
 make_class()
 {
-  if (m::characteristic{t, "noheap"}) {
-    m::error{"can not create a python class from a noheap type"};
+  if (m::characteristic{t, "ephemeral"}) {
+    m::error{"can not create a python class from an ephemeral type"};
   }
   return make_class_internal{t}();
 }
@@ -227,8 +227,8 @@ public function {tto, tfrom} object long_to__(numeric::integral::long v)
 
 public function {tto, tfrom} tto object_to__(object const& v)
 {
-  if (m::characteristic{tto, "noheap"}) {
-    m::error{"can not convert a python object to a noheap type"};
+  if (m::characteristic{tto, "ephemeral"}) {
+    m::error{"can not convert a python object to an ephemeral type"};
   }
   extern "emit"
     m::concat{"return boost::python::extract< ", m::csymbol{tto}, " >(v$)"};

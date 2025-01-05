@@ -1,0 +1,17 @@
+namespace test_tattr;
+import core::numeric::integral -;
+import core::common -;
+
+metafunction dofunc{f} f;
+
+threaded function {t} void func_parent(t const& x) {
+  func_child(x);
+  function {ty} void func_child(ty const& y) { // implicitly threaded
+    threaded function void foo() {
+      println("foo");
+    }
+    dofunc{foo}();
+  }
+}
+
+func_parent(3);
